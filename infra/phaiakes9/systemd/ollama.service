@@ -1,0 +1,50 @@
+[Unit]
+# WhyMath / Phaiakes9 — Ollama systemd unit
+#
+# 설치:
+#   sudo cp infra/phaiakes9/systemd/ollama.service /etc/systemd/system/ollama.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ollama
+#   sudo systemctl status ollama
+#
+# 로그:
+#   sudo journalctl -u ollama -f
+#
+# 주의:
+#   - OLLAMA_HOST=0.0.0.0:11434 로 외부 호출 허용 (Phaiakes9는 폐쇄망 가정).
+#   - 외부 노출이 필요하면 reverse proxy + 인증 별도 구성.
+#   - GPU/CPU 자동 감지는 ollama 런타임이 수행. 별도 환경변수 불필요.
+Description=Ollama LLM Service (WhyMath / Phaiakes9)
+Documentation=https://github.com/ollama/ollama
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+# 공식 설치 스크립트가 보통 'ollama' 사용자/그룹을 만들어 둠.
+# 없으면 nobody/nogroup 으로 폴백되어도 동작.
+User=ollama
+Group=ollama
+ExecStart=/usr/local/bin/ollama serve
+Restart=always
+RestartSec=3
+# 0.0.0.0 바인딩 — 다른 머신(L5 백엔드)에서 호출
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+# 동시 모델 로드 한도 (128 GB RAM 기준 보수적 값)
+Environment="OLLAMA_MAX_LOADED_MODELS=2"
+# 워커 동시 요청 한도
+Environment="OLLAMA_NUM_PARALLEL=4"
+# 모델 캐시 위치 (기본 ~/.ollama; 별도 마운트 디스크 사용 시 덮어쓰기)
+# Environment="OLLAMA_MODELS=/var/lib/ollama/models"
+# Keep-alive (모델 메모리 상주 시간)
+Environment="OLLAMA_KEEP_ALIVE=10m"
+
+# 리소스 보호 (선택적)
+LimitNOFILE=1048576
+# 시스템 보호
+ProtectSystem=full
+ProtectHome=read-only
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target
