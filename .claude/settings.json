@@ -1,5 +1,5 @@
 {
-  "$schema": "https://docs.claude.com/schema/settings.json",
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
       "Bash(uv:*)",
@@ -37,9 +37,7 @@
       "Bash(psql:DROP*)",
       "Bash(redis-cli:FLUSHALL*)"
     ],
-    "deny": [
-      "Bash(:(){:|:&};:)"
-    ]
+    "deny": []
   },
   "model": "claude-opus-4-7",
   "env": {

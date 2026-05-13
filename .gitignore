@@ -53,3 +53,44 @@ logs/
 # Claude Code 임시
 .claude/cache/
 .claude/sessions/
+
+
+# WhyMath 추가 보안 패턴 (자동 생성)
+# 대용량 아카이브 파일 (의도적 추가 시 git add -f 사용)
+*.zip
+*.tar.gz
+*.tar.bz2
+*.7z
+*.rar
+
+# 비공개 사업/기획 문서 (민감 정보)
+*사업계획*
+*business_plan*
+*business-plan*
+internal/
+private/
+docs/private/
+docs/internal/
+
+# Office 임시 파일
+~$*.docx
+~$*.xlsx
+~$*.pptx
+
+# 환경변수, 시크릿 추가 패턴
+.env.*
+*.env
+config/secrets.yaml
+config/secrets.yml
+credentials.json
+service-account.json
+
+# LLM, API 키 캐시
+.openai_cache/
+.anthropic_cache/
+.langfuse_cache/
+
+# 데이터셋 캐시
+*.parquet.gz
+*.arrow
+data/cache/
