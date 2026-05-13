@@ -1,4 +1,4 @@
-# ROADMAP.md — 한국 중·고 수학 앱 로드맵
+# ROADMAP.md — WhyMath 로드맵
 
 > **Phase 0 → 5의 5단계 + 90일·1년·3년 마일스톤**
 

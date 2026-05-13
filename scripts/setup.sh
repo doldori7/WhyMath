@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 한국 중·고 수학 앱 하네스 셋업
+# WhyMath 하네스 셋업
 
 set -euo pipefail
 
-echo "🎯 한국 중·고 수학 앱 하네스 셋업 시작"
+echo "🎯 WhyMath (와이매스) 하네스 셋업 시작"
 
 # 1. 필수 도구 확인
 echo ""

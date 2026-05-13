@@ -1,13 +1,15 @@
-# 한국 중·고 수학 앱 하네스 (Korean Math App Harness)
+# WhyMath (와이매스) 하네스 (WhyMath Project Harness)
 
-> 한국 중·고등학생을 위한 메타인지·사고력 중심 AI 수학 학습 앱을 위한 Claude Code 하네스.
+> **"답이 아닌, 이유를 묻는 수학" — The math that asks why.**
+>
+> 한국 중·고등학생을 위한 메타인지·사고력 중심 AI 수학 학습 앱 **WhyMath**의 Claude Code 하네스.
 > Kiki의 CRAFT 프레임워크 + "AI 길들이기" 4시스템 호환.
 
 ## 빠른 시작
 
 ```bash
 # 1. Claude Code로 프로젝트 진입
-cd korean-math-app-harness
+cd whymath
 claude
 
 # 2. 첫 명령
@@ -28,7 +30,7 @@ claude
 ## 디렉토리 구조
 
 ```
-korean-math-app-harness/
+whymath/
 ├── CLAUDE.md                    # 마스터 가이드 (Claude Code 진입 시 자동 로드)
 ├── MEMORY.md                    # 결정 로그·현재 상태 (수동 업데이트)
 ├── ROADMAP.md                   # 90일 / 1년 / 3년 로드맵

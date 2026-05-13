@@ -1,7 +1,7 @@
 [project]
 name = "korean-math-backend"
 version = "0.1.0"
-description = "한국 중·고 수학 앱 백엔드"
+description = "WhyMath 백엔드"
 requires-python = ">=3.12"
 dependencies = [
     # 웹 프레임워크

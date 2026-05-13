@@ -6,6 +6,15 @@
 
 ---
 
+## 🏷️ 브랜드 (확정)
+
+- **앱명**: WhyMath (와이매스)
+- **슬로건 (KR)**: 답이 아닌, 이유를 묻는 수학
+- **슬로건 (EN)**: The math that asks why.
+- *상세는 아래 "2026-05-14: 브랜드명 확정" 결정 로그 참조*
+
+---
+
 ## 📍 현재 상태 (2026-05 시점)
 
 ### Phase
@@ -31,6 +40,20 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-14: 브랜드명 "WhyMath (와이매스)" 확정
+**컨텍스트**: Phase 0 종료 직전, 모든 외부·내부 문서가 일관된 브랜드명을 사용해야 함. 그동안 "한국 중·고 수학 앱"이라는 서술적 가칭 사용
+**결정**:
+- 정식 앱명: **WhyMath** (한글 표기: **와이매스**)
+- 메인 슬로건 (KR): **"답이 아닌, 이유를 묻는 수학"**
+- 메인 슬로건 (EN): **"The math that asks why."**
+**근거**:
+- 핵심 가치 제안(답 미루기·Polya·소크라테스)을 한 단어로 압축
+- "Why"는 메타인지·사고력 시장 진입점과 직결, 영문 확장(Phase 5) 시 그대로 사용 가능
+- 콴다·EBSi 등 한국 경쟁자와 *이름 단계*에서부터 차별화
+**적용 범위 (이번 작업)**: CLAUDE.md / README.md / MEMORY.md / ROADMAP.md / docs/strategy/{market_positioning,differentiation}.md / scripts/setup.sh / .claude/agents/data-engineer.md / .claude/commands/status.md / src/backend/pyproject.toml
+**미적용 (별도 작업 예정)**: Python 패키지명 `korean-math-backend`, DB명 `koreanmath`, 모바일 앱 ID 등 *코드 식별자*는 마이그레이션 영향 검토 후 일괄 변경
+**상태**: 확정
 
 ### 2026-05-13: 시장 진입점을 *메타인지 사고력*으로 결정
 **컨텍스트**: 콴다(사진 풀이)·EBSi(강의)·메가스터디(콘텐츠)와 정면 경쟁 불가  
