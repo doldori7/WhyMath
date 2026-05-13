@@ -12,6 +12,16 @@ venv/
 .env
 .env.local
 
+# Python 테스트·린터 캐시
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+
 # Flutter / Dart
 .dart_tool/
 .flutter-plugins
