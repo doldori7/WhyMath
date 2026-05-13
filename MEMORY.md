@@ -19,12 +19,14 @@
 
 ### Phase
 - [x] Phase 0: 청사진 수립 완료 (CLAUDE.md, ROADMAP.md, 7계층 아키텍처)
-- [ ] Phase 1: MVP 개발 (0~6개월) — *예정*
+- [~] **Phase 1: MVP 개발 (0~6개월) — *착수*** (2026-05-13)
 - [ ] Phase 2: 풀 K-12 (6~12개월)
 - [ ] Phase 3: 영재·B2B (12~24개월)
 
 ### 활성 작업
-- *없음* (Phase 1 착수 대기)
+- 🔄 **M1.0a Phaiakes9 머신 셋업** — Kiki 수동 (Ubuntu·SSH·드라이버, 가이드 `infra/phaiakes9/SETUP_GUIDE.md`)
+- ⏸️ **M1.1 Qwen 벤치마크** — M1.0a 완료 후 자동 (스크립트 준비 완료, 커밋 `b75730b`)
+- ⏭️ 독립 진행 후보: NCIC 크롤러 / `main` 보호 규칙 / L4 프롬프트 작성 / FastAPI 스캐폴딩
 
 ### 완료된 마일스톤
 - 2026-05: 7계층 아키텍처 확정
@@ -41,6 +43,29 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-13: M1.1 게이트를 *M1.0a 머신 셋업 + M1.1 벤치마크*로 분리
+**컨텍스트**: `/implement backend:phaiakes9-qwen3-math` 위임으로 Ollama 설치·systemd unit·헬스체크·벤치마크 스크립트(`infra/phaiakes9/`, 커밋 `b75730b`, 11 files +1725) 완성 후 Kiki에게 Phaiakes9 콘솔 실행 안내. 그러나 Phaiakes9 머신 자체가 *아직 셋업 안 된 상태*(OS 미설치·전원 OFF·미조립 중 하나)임이 확인됨. 기존 ROADMAP·MEMORY는 *기술 스택 결정*으로 Phaiakes9를 명시했을 뿐, *물리 머신의 부팅·SSH·드라이버 상태*는 별도 추적되지 않았음. 결과적으로 M1.1 게이트("Phaiakes9 Qwen3-Math p50<2s 측정")가 *두 가지 다른 단계*를 한 줄에 묶고 있었음 — (a) 물리·OS·드라이버 셋업, (b) Ollama 운영·벤치마크. 둘은 의존하지만 *책임 주체·자동화 가능성*이 다름.
+**결정**:
+- M1.1 게이트를 두 단계로 분리:
+  - **M1.0a — Phaiakes9 머신 셋업** (수동 + `bootstrap.sh`): Ubuntu 24.04 설치·계정·SSH 키·sshd 하드닝·ufw 방화벽·시간 동기·ROCm(또는 CPU 폴백)
+  - **M1.1 — Qwen 벤치마크 게이트**: 기존 README §2 빠른 시작 + `benchmark/run_bench.sh` → `gate_p50_under_2s == true` 판정
+- M1.0a 산출물: `infra/phaiakes9/SETUP_GUIDE.md`(약 200 lines, 6 Phase 체크리스트 + 트러블슈팅) + `infra/phaiakes9/bootstrap.sh`(8단계 멱등 부트스트랩, `WHYMATH_SKIP_ROCM`·`WHYMATH_LAN_CIDR` 환경변수)
+- M1.0a Phase는 Kiki 수동 작업 의존(하드웨어 상태). 그동안 *블로킹 없는* 독립 작업 진행 가능: NCIC 크롤러·main 보호 규칙·L4 프롬프트 작성·FastAPI 스캐폴딩
+**근거**:
+- **머신 셋업과 운영 분리의 책임 명확화**: bootstrap은 *재현 가능한 자동화*이지만 BIOS·파티션·SSH 키 등록은 *Kiki만 할 수 있는 결정*. 한 게이트에 묶이면 게이트 통과 정의가 모호해짐
+- **Strix Halo APU 특수성**: AMD Ryzen AI Max+ 395는 ROCm 정식 지원 목록에 *아직 미포함*(gfx1151). `HSA_OVERRIDE_GFX_VERSION=11.5.1` 강제 또는 CPU 폴백 결정이 필요한데, 이 판단은 *벤치마크 결과를 보고* 내려야 함. 즉 M1.0a → 1차 벤치마크 → 재조정 루프가 자연스러움
+- **컨텍스트 위생**(CLAUDE.md): M1.1 게이트가 *두 가지 다른 진실*을 가지면 진행 보고가 모호해짐. 분리하면 각각 binary pass/fail
+- **병렬 작업 금지 원칙과 양립**: M1.0a가 Kiki 수동 작업이므로 Claude/AI 측에서는 *다른 독립 작업* 진행이 정당함(같은 AI가 두 코드 영역 병행이 아님)
+**대안**:
+- *분리하지 않고 게이트 텍스트만 보강* — "Phaiakes9 머신 셋업 + 벤치마크 p50<2s"로 두 줄. 폐기 이유: 셋업 자체에 1~2주 소요 가능성, 별도 추적 필요
+- *Phaiakes9 셋업을 Phase 0 청사진 단계로 소급* — 청사진은 이미 종료. ROADMAP 재작성 부담 큼
+- *클라우드 GPU 인스턴스로 임시 우회* — Ryzen AI Max+ 395의 *실제 비용·지연*을 못 잡으므로 게이트 신뢰도 손상. CLAUDE.md "비용 구조를 로컬 LLM 우선" 결정의 검증 무력화
+**적용 범위 (이번 작업)**:
+- 신규 파일: `infra/phaiakes9/SETUP_GUIDE.md`, `infra/phaiakes9/bootstrap.sh`
+- 수정: `infra/phaiakes9/README.md` (M1.0a 안내 섹션 + 디렉토리 트리 갱신 + 자리표시자 `<whymath-root>` 명시화)
+- 후속 (이번 작업 범위 외): `ROADMAP.md` 90일 Day 1~14 항목에 *M1.0a 머신 셋업* 한 줄 추가 (별도 PR)
+**상태**: 확정. M1.0a 완료 시점에 *별도 결정 로그*로 결과 기록 예정.
 
 ### 2026-05-13: Phase 1 MVP 진입 학년 = *고1 내신*, 도메인 파트너 영입은 *M1.3까지 지연*
 **컨텍스트**: `/plan Phase1-MVP` 세션에서 두 가지 미해결 의사결정을 동시에 처리해야 했음 — (1) 첫 진입 학년 선택(중2 자유학기제 vs 고1 내신), (2) 도메인 파트너 영입 트랙(KAIST 영재교육원 / 한국수학교육학회 / 대학 수교과 개별 / 셋 다 동시). Phase 1은 *1개 학년·2개 모드*에 깊게 집중한다는 원칙(`docs/architecture/06_application_modes.md` Phase 1 진입점) 하에 결정 필요.

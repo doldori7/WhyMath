@@ -2,7 +2,19 @@
 
 > M1.1 게이트 작업: Phaiakes9에 Qwen 수학 LLM을 배포하고 *p50 < 2s* 응답 속도를 측정한다.
 >
-> 이 디렉토리는 Kiki가 Phaiakes9 머신에서 *처음부터 끝까지* 따라 실행할 수 있는 운영 자산입니다. SSH 접근 없이 로컬에서 실행하세요.
+> 이 디렉토리는 Kiki가 **Phaiakes9 머신 (Linux)** 에서 따라 실행할 운영 자산입니다.
+> Windows PowerShell·macOS 터미널이 아닌 *Phaiakes9 콘솔* 또는 *그 머신에 SSH 접속한 세션* 에서 실행하세요.
+
+---
+
+## ⏪ 머신이 아직 준비 안 됐다면 — M1.0a
+
+이 README는 *Phaiakes9가 이미 부팅·SSH 접속 가능* 한 상태를 가정합니다.
+머신 자체를 처음 셋업해야 하면 먼저 **[`SETUP_GUIDE.md`](./SETUP_GUIDE.md)** 부터 따라가세요.
+
+- 박스 부팅 → Ubuntu 24.04 설치 → SSH 키 등록 → `bootstrap.sh` 실행
+- 약 2~3시간 소요
+- 완료 후 이 README §2 "빠른 시작"으로 돌아옵니다
 
 ---
 
@@ -26,7 +38,9 @@
 
 ```
 infra/phaiakes9/
-├── README.md                  ← 이 문서
+├── README.md                  ← 이 문서 (Ollama·벤치마크 운영)
+├── SETUP_GUIDE.md             ← 머신 처음 셋업 (M1.0a)
+├── bootstrap.sh               ← Ubuntu 부팅 직후 자동 설정 (sshd·ufw·ROCm)
 ├── install_ollama.sh          ← Ollama 설치 (멱등)
 ├── pull_models.sh             ← Qwen 수학 모델 풀
 ├── healthcheck.sh             ← 헬스체크 (HTTP 200·모델 로드·간단 generate)
@@ -45,8 +59,9 @@ infra/phaiakes9/
 ## 2. 빠른 시작 (5단계, 약 30분)
 
 ```bash
-# 0) 작업 디렉토리로 이동
-cd /path/to/WhyMath/infra/phaiakes9
+# 0) Phaiakes9 콘솔(SSH 세션 포함)에서, WhyMath 클론 경로로 이동
+#    아래 <whymath-root> 부분은 본인 환경의 실제 경로로 대체 — 예: ~/whymath
+cd <whymath-root>/infra/phaiakes9
 
 # 1) Ollama 설치 (멱등 — 이미 설치되어 있으면 스킵)
 bash install_ollama.sh
