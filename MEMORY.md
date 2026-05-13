@@ -30,6 +30,7 @@
 - 2026-05: 7계층 아키텍처 확정
 - 2026-05: 기술 스택 확정 (Flutter + FastAPI + PostgreSQL + Phaiakes9)
 - 2026-05: Phase 진입 순서 확정 (메타인지 사고력 → 학교 진도 → 수능 → 영재 → B2B)
+- 2026-05-14: GitHub 레포 `doldori7/WhyMath` (Private) 생성 및 첫 푸시 완료
 
 ### 미해결 의사결정
 - [ ] 수학 교육 도메인 파트너 영입 (1순위)
@@ -40,6 +41,28 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-14: GitHub 원격 저장소 연결 (Private)
+**컨텍스트**: Phase 0 청사진(7계층·기술 스택·브랜드명)이 모두 확정된 시점. 로컬 git 저장소만 존재했고, 클라우드 백업·미래 협업·CI/CD 기반·코드 리뷰 워크플로의 인프라가 필요한 상태였음. 또한 `WhyMath_harness.zip`·`files.zip` 두 개의 대용량 아카이브가 git에 추적되어 있어 푸시 시 누적 부담이 됨.
+**결정**:
+- 호스팅: **GitHub**, 레포 URL `https://github.com/doldori7/WhyMath` (Private)
+- 기본 브랜치: `main` (GitHub 표준, 기존 `master`에서 변경)
+- 사전 정리: `files.zip`·`WhyMath_harness.zip` 추적 해제(working tree는 보존), 사업계획서 docx/pdf는 사용자가 별도 위치로 이동
+- `.gitignore` 보강: `*.zip`·`*사업계획*`·`*business_plan*`·`internal/`·`private/`·`.env.*`·`config/secrets.*`·`.openai_cache/`·`.anthropic_cache/`·`.langfuse_cache/`·`data/cache/` 등 약 25개 패턴 추가 (멱등 마커 `# WhyMath 추가 보안 패턴 (자동 생성)`로 중복 추가 방지)
+- 자동화: `scripts/01_git_local_setup.ps1`(로컬 정리)·`scripts/02_github_connect.ps1`(GitHub 연결) 두 PowerShell 스크립트로 재현 가능
+**근거**:
+- **Private 필수**: CLAUDE.md 절대 금기 — "미성년자 개인정보를 분석·마케팅 외부 공유 금지" 및 "학교·학년 정보로 개인 식별 가능한 분석 결과 외부 노출 금지" → 코드 자체에는 학생 데이터가 없지만 향후 시드 데이터·테스트 픽스처에서 실수 노출 가능. Public은 위험 비대칭
+- **`main` 브랜치 표준화**: GitHub Actions·외부 도구·튜토리얼 거의 모두 `main` 가정. Phase 1에서 CI/CD 구축 시 마찰 최소화
+- **zip 추적 해제**: 1.12 MiB 초기 푸시도 아카이브 없이 진행. 추후 LFS 도입 부담 사전 차단
+- **`.gitignore` 사전 보강**: 시크릿·민감 문서가 한 번 푸시되면 git history에 영구 박힘. 사전 패턴 차단이 사후 BFG/filter-repo 대응보다 압도적으로 저렴
+**대안**:
+- GitLab — 프라이빗 무료 한도가 크지만, 한국 시장에서 GitHub가 인재 풀·생태계 압도. 협업자 합류 시 추가 학습 비용
+- 자체 Gitea — Phaiakes9에 호스팅 가능하나 백업·가용성을 직접 관리해야 함. 1인 단계에서 비효율
+- 공개(Public) 레포 — 부분 오픈소스 전략은 매력적이나 *현 단계*에서는 도메인 노하우 누출 리스크가 더 큼. Phase 2 이후 *선별적* 공개 검토
+**적용 범위 (이번 작업)**:
+- 커밋 `0625cf5`: `.claude/settings.json`·`.gitignore`·zip 2개 삭제·사업계획서 docx/pdf 2개 삭제·스크립트 2개 추가
+- 푸시: 104 objects, 1.12 MiB, `main → origin/main` upstream 설정 완료
+**상태**: 확정. 다음 단계는 GitHub Settings → Branches 에서 `main` 보호 규칙(force-push 금지·PR 리뷰 필수) 적용 예정.
 
 ### 2026-05-14: 브랜드명 "WhyMath (와이매스)" 확정
 **컨텍스트**: Phase 0 종료 직전, 모든 외부·내부 문서가 일관된 브랜드명을 사용해야 함. 그동안 "한국 중·고 수학 앱"이라는 서술적 가칭 사용
@@ -189,5 +212,5 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 
 ---
 
-**최종 수정**: 2026-05-13  
+**최종 수정**: 2026-05-14  
 **다음 정기 리뷰**: Phase 1 착수 후 첫 월
