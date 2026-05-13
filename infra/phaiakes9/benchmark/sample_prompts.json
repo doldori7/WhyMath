@@ -1,0 +1,87 @@
+{
+  "$schema_note": "WhyMath M1.1 게이트 벤치마크 표본. 모든 문항은 본 프로젝트 자체 원작이며, 검정교과서 본문·예제·평가원/수능 문항 일체 복제하지 않음 (CLAUDE.md 절대 금기 준수).",
+  "license": "CC0-1.0 (WhyMath 자체 원작, 출처 표기 없이 자유 사용 가능)",
+  "target_grade": "고등학교 1학년 (한국 교육과정)",
+  "target_semester": "1학기",
+  "curriculum_standards": [
+    "10수학01 다항식",
+    "10수학02 방정식과 부등식",
+    "10수학03 도형의 방정식",
+    "10수학04 집합과 명제 (예고편)",
+    "10수학05 함수 (기초)"
+  ],
+  "author": "WhyMath (Claude L5 backend-engineer agent, 2026-05-13)",
+  "review_status": "M1.2 게이트의 사람 수학자 검수 대기 (현재는 LLM 응답 속도 측정용 표본)",
+  "samples": [
+    {
+      "id": "S01",
+      "unit": "다항식의 곱셈",
+      "difficulty": "easy",
+      "prompt": "(x + 3)(x - 5) 를 전개하고, 결과를 내림차순으로 정리하시오. 풀이 과정을 단계별로 보여 주세요.",
+      "expected_concepts": ["분배법칙", "동류항 정리"],
+      "expected_answer_keyword": "x^2 - 2x - 15"
+    },
+    {
+      "id": "S02",
+      "unit": "이차방정식의 근",
+      "difficulty": "easy",
+      "prompt": "이차방정식 x^2 - 6x + 8 = 0 의 두 근을 구하시오. 인수분해와 근의 공식 두 가지 방법으로 각각 풀어 보세요.",
+      "expected_concepts": ["인수분해", "근의 공식"],
+      "expected_answer_keyword": "x = 2, x = 4"
+    },
+    {
+      "id": "S03",
+      "unit": "이차함수의 최댓값·최솟값",
+      "difficulty": "medium",
+      "prompt": "이차함수 f(x) = -2x^2 + 8x - 3 의 최댓값과 그때의 x 값을 구하시오. 완전제곱식으로 변형하는 과정을 명확히 보여 주세요.",
+      "expected_concepts": ["완전제곱식", "꼭짓점 좌표", "이차함수 대칭축"],
+      "expected_answer_keyword": "최댓값 5, x = 2"
+    },
+    {
+      "id": "S04",
+      "unit": "절댓값 부등식",
+      "difficulty": "medium",
+      "prompt": "부등식 |2x - 1| < 5 를 푸시오. 절댓값의 정의(거리)와 그래프 두 관점에서 각각 설명하시오.",
+      "expected_concepts": ["절댓값의 정의", "구간 분할", "수직선 거리 해석"],
+      "expected_answer_keyword": "-2 < x < 3"
+    },
+    {
+      "id": "S05",
+      "unit": "점과 직선 사이의 거리",
+      "difficulty": "medium",
+      "prompt": "좌표평면 위의 점 P(3, -2) 에서 직선 4x - 3y + 1 = 0 까지의 거리를 구하시오. 공식 사용 전에 *왜* 그 공식이 성립하는지 한 줄로 설명한 뒤 계산하세요.",
+      "expected_concepts": ["점과 직선의 거리 공식", "수선의 발", "정규화"],
+      "expected_answer_keyword": "19/5"
+    },
+    {
+      "id": "S06",
+      "unit": "원의 방정식",
+      "difficulty": "medium",
+      "prompt": "중심이 (1, -2) 이고 점 (4, 2) 를 지나는 원의 방정식을 구하시오. 이어서 이 원이 x 축과 만나는 점의 개수를 판단하시오.",
+      "expected_concepts": ["원의 표준 방정식", "두 점 사이의 거리", "원과 직선의 위치 관계"],
+      "expected_answer_keyword": "(x - 1)^2 + (y + 2)^2 = 25"
+    },
+    {
+      "id": "S07",
+      "unit": "연립부등식",
+      "difficulty": "medium",
+      "prompt": "연립부등식  { x^2 - x - 6 ≤ 0,  2x + 1 > 3 }  의 해를 구하시오. 각 부등식의 해를 수직선에 표시하는 단계를 포함하세요.",
+      "expected_concepts": ["이차부등식", "일차부등식", "교집합"],
+      "expected_answer_keyword": "1 < x ≤ 3"
+    },
+    {
+      "id": "S08",
+      "unit": "함수 합성과 정의역",
+      "difficulty": "hard",
+      "prompt": "함수 f(x) = x^2 + 1 과 g(x) = 2x - 3 에 대하여, (f ∘ g)(x) 를 구하고, 그 정의역과 치역을 명시하시오. f ∘ g 와 g ∘ f 가 같지 않음을 구체적인 x 값 하나로 보이세요.",
+      "expected_concepts": ["함수의 합성", "정의역·치역", "교환법칙 불성립"],
+      "expected_answer_keyword": "(2x - 3)^2 + 1"
+    }
+  ],
+  "usage_notes": [
+    "이 표본은 *LLM 응답 속도(latency)* 와 *tokens/sec* 측정을 위한 자극(prompt)일 뿐, 답안 품질 평가용이 아닙니다.",
+    "답안 품질 평가는 M1.2 게이트에서 PRM(Qwen2.5-Math-PRM-72B) + 사람 검수로 별도 진행합니다.",
+    "expected_answer_keyword 는 단순 문자열 매칭이며, 학생용 정답 채점 로직이 아닙니다.",
+    "프롬프트 안에 의도적으로 *왜 그런가* 를 묻는 문장을 포함하여 모델이 추론 토큰을 길게 생성하도록 유도했습니다 (실사용 시나리오와 유사한 부하)."
+  ]
+}

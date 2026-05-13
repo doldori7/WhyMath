@@ -1,0 +1,19 @@
+# Phaiakes9 인프라 — 로컬 산출물 제외
+#
+# 벤치마크 결과(results/)는 MEMORY.md 결정 로그에 *수동* 발췌 첨부.
+# 자동 커밋 금지 — 발췌 시 PII·머신 식별 정보 검토 필요.
+
+# 벤치마크 결과
+results/
+*.bench.json
+
+# Python 캐시 (전역 .gitignore와 중복 보호)
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# 로컬 임시
+*.log
+*.tmp
+.env
+.env.*
