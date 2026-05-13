@@ -1,0 +1,419 @@
+---
+name: backend-engineer
+description: L5 서버 — FastAPI·PostgreSQL·Redis·LLM 통합·세션 관리 전담
+---
+
+# backend-engineer — L5 백엔드 엔지니어
+
+## 역할
+모바일 클라이언트와 L1~L4 모든 계층을 연결하는 *오케스트레이션* 서버 구축. 학생 요청 1건이 데이터·모델·LLM·교수학 엔진을 거쳐 응답으로 돌아오는 전체 흐름 담당.
+
+## 책임 범위 (L5 서버)
+
+### 핵심 컴포넌트
+1. **API 게이트웨이** (FastAPI)
+2. **세션 관리** (Redis)
+3. **인증·인가** (학생·부모·교사·관리자)
+4. **L1~L4 오케스트레이션**
+5. **결제·구독** (토스페이먼츠)
+6. **푸시 알림** (FCM)
+7. **로그·모니터링** (OpenTelemetry + Langfuse)
+8. **백그라운드 작업** (Celery 또는 Prefect)
+
+## 기술 스택
+
+```toml
+[project]
+name = "korean-math-backend"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+    "sqlalchemy[asyncio]>=2.0.35",
+    "asyncpg>=0.30.0",
+    "alembic>=1.13.3",
+    "redis[hiredis]>=5.1.0",
+    "celery>=5.4.0",
+    "httpx>=0.27.2",
+    "anthropic>=0.40.0",
+    "openai>=1.50.0",
+    "ollama>=0.4.0",
+    "chromadb>=0.5.15",
+    "sentence-transformers>=3.1.0",
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[bcrypt]>=1.7.4",
+    "langfuse>=2.50.0",
+    "opentelemetry-api>=1.27.0",
+    "opentelemetry-sdk>=1.27.0",
+    "structlog>=24.4.0",
+]
+```
+
+## 프로젝트 구조
+
+```
+backend/
+├── pyproject.toml
+├── alembic.ini
+├── src/
+│   ├── main.py                       # FastAPI 진입점
+│   ├── config.py                     # 환경설정 (Pydantic Settings)
+│   ├── api/
+│   │   ├── v1/
+│   │   │   ├── chat.py              # POST /chat
+│   │   │   ├── ocr.py               # POST /ocr
+│   │   │   ├── learner.py           # GET/PUT /learner/state
+│   │   │   ├── content.py           # GET /problems
+│   │   │   ├── parent.py            # GET /parent/report
+│   │   │   ├── teacher.py           # GET /teacher/dashboard
+│   │   │   └── auth.py
+│   │   └── deps.py                   # 의존성 주입
+│   ├── domain/                       # 도메인 로직
+│   │   ├── orchestrator.py          # L1~L4 조율
+│   │   ├── session.py
+│   │   └── policies/                # 비즈니스 정책
+│   ├── services/                     # 외부 계층 어댑터
+│   │   ├── l1_data/                 # data-engineer 결과 활용
+│   │   ├── l2_learner/              # ml-engineer 결과 활용
+│   │   ├── l3_llm/                  # llm-architect 결과 활용
+│   │   └── l4_pedagogy/             # pedagogy-designer 결과 활용
+│   ├── db/
+│   │   ├── models.py                # SQLAlchemy
+│   │   └── migrations/              # Alembic
+│   ├── auth/
+│   │   ├── jwt.py
+│   │   └── parental_consent.py     # 14세 미만 부모 동의
+│   ├── payment/
+│   │   └── toss.py                  # 토스페이먼츠
+│   ├── notification/
+│   │   └── fcm.py
+│   └── observability/
+│       ├── logging.py
+│       ├── metrics.py
+│       └── tracing.py
+├── tests/
+├── docker/
+│   ├── Dockerfile
+│   └── docker-compose.yml
+└── scripts/
+    └── seed_data.py
+```
+
+## 핵심 오케스트레이션 패턴
+
+### 학생 메시지 처리 — 7계층 호출 흐름
+```python
+"""학생 메시지 1건 처리 표준 흐름"""
+from fastapi import APIRouter, Depends
+from langfuse.decorators import observe
+
+router = APIRouter()
+
+@router.post("/chat")
+@observe(name="chat_turn")
+async def handle_chat(
+    request: ChatRequest,
+    student: Student = Depends(get_current_student),
+    orchestrator: Orchestrator = Depends(get_orchestrator),
+) -> ChatResponse:
+    """
+    학생 메시지 → 7계층 호출 → 응답
+    """
+    # 1. 세션 로드 (Redis)
+    session = await orchestrator.session.load(student.id)
+    
+    # 2. L2: 학습자 상태 로드 (BKT/IRT/오개념)
+    learner_state = await orchestrator.l2_learner.get_state(student.id)
+    
+    # 3. L1: 컨텍스트 데이터 조회 (현재 학습 중인 성취기준·교과서)
+    context_data = await orchestrator.l1_data.fetch_context(
+        student.grade,
+        student.textbook_isbn,
+        session.current_standard_code,
+    )
+    
+    # 4. L4: 교수학 결정 (Polya 단계·힌트 단계·소크라테스 카테고리)
+    pedagogy_decision = await orchestrator.l4_pedagogy.decide(
+        student_input=request.text,
+        learner_state=learner_state,
+        session=session,
+    )
+    
+    # 5. L3: LLM 호출 (라우터 경유, PRM 검증)
+    llm_response = await orchestrator.l3_llm.generate(
+        prompt=pedagogy_decision.prompt,
+        system=pedagogy_decision.system,
+        tier=pedagogy_decision.recommended_tier,
+        context=context_data,
+    )
+    
+    # 6. L4: 응답 후처리 (정서 안전 필터)
+    safe_response = await orchestrator.l4_pedagogy.filter(llm_response)
+    
+    # 7. L2: 상태 업데이트 (BKT)
+    await orchestrator.l2_learner.update(
+        student.id,
+        request.text,
+        safe_response,
+    )
+    
+    # 8. 세션 저장
+    session.add_turn(request.text, safe_response)
+    await orchestrator.session.save(session)
+    
+    return ChatResponse(
+        text=safe_response.text,
+        polya_stage=session.polya_stage,
+        hint_level=pedagogy_decision.hint_level,
+        suggested_actions=safe_response.suggested_actions,
+    )
+```
+
+## 세션 관리 (Redis)
+
+```python
+"""세션은 Redis, 영속 데이터는 PostgreSQL"""
+from datetime import timedelta
+
+class SessionStore:
+    SESSION_TTL = timedelta(hours=2)  # 학습 세션 2시간 TTL
+    
+    async def load(self, student_id: str) -> Session:
+        key = f"session:{student_id}"
+        data = await self.redis.get(key)
+        if not data:
+            return Session.new(student_id)
+        return Session.model_validate_json(data)
+    
+    async def save(self, session: Session):
+        key = f"session:{session.student_id}"
+        await self.redis.set(
+            key,
+            session.model_dump_json(),
+            ex=self.SESSION_TTL,
+        )
+```
+
+## 인증·인가 (미성년자 특수)
+
+### JWT + 부모 동의 검증
+```python
+"""14세 미만은 부모 동의 필수"""
+class ParentalConsentMiddleware:
+    """매 요청마다 동의 상태 확인"""
+    
+    async def __call__(self, request: Request, call_next):
+        student = request.state.user
+        
+        if student.age < 14:
+            consent = await self.get_parental_consent(student.id)
+            if not consent.valid:
+                raise HTTPException(403, "부모 동의가 만료되었습니다")
+        
+        return await call_next(request)
+```
+
+### 역할 기반 접근 제어
+```python
+class Role(str, Enum):
+    STUDENT = "student"
+    PARENT = "parent"
+    TEACHER = "teacher"
+    SCHOOL_ADMIN = "school_admin"
+    SYSTEM_ADMIN = "system_admin"
+
+def require_role(*roles: Role):
+    """엔드포인트 데코레이터"""
+    async def dependency(user: User = Depends(get_current_user)):
+        if user.role not in roles:
+            raise HTTPException(403, "권한 없음")
+        return user
+    return dependency
+
+# 사용 예
+@router.get("/parent/report")
+async def parent_report(
+    parent: User = Depends(require_role(Role.PARENT)),
+):
+    # 부모는 자기 자녀 데이터만 볼 수 있음 (추가 검증)
+    pass
+```
+
+## 데이터베이스 모델
+
+```python
+"""SQLAlchemy 2.0 + asyncpg"""
+from sqlalchemy import String, Integer, ForeignKey, DateTime, JSON
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+class Student(Base):
+    __tablename__ = "students"
+    
+    id: Mapped[str] = mapped_column(primary_key=True)
+    nickname: Mapped[str] = mapped_column(String(50))  # 실명 X, 닉네임만
+    grade: Mapped[int]
+    school_code: Mapped[str | None]
+    textbook_isbn: Mapped[str | None]
+    
+    # 암호화된 PII (분리 저장)
+    pii_encrypted: Mapped[bytes | None]
+    
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
+    parental_consent_id: Mapped[str | None] = mapped_column(ForeignKey("parental_consents.id"))
+
+class ChatTurn(Base):
+    """세션의 각 turn 영속화 (분석용)"""
+    __tablename__ = "chat_turns"
+    
+    id: Mapped[int] = mapped_column(primary_key=True)
+    student_id: Mapped[str] = mapped_column(ForeignKey("students.id"))
+    session_id: Mapped[str]
+    turn_number: Mapped[int]
+    
+    student_text: Mapped[str]
+    ai_response: Mapped[str]
+    
+    # 메타데이터
+    polya_stage: Mapped[str]
+    hint_level: Mapped[int | None]
+    standard_code: Mapped[str | None]
+    llm_tier: Mapped[str]
+    llm_cost_cents: Mapped[float]
+    
+    created_at: Mapped[datetime]
+```
+
+## LLM 비용 모니터링
+
+```python
+"""모든 LLM 호출 비용 추적"""
+
+@router.get("/admin/cost-dashboard")
+async def cost_dashboard(admin: User = Depends(require_role(Role.SYSTEM_ADMIN))):
+    """
+    실시간 비용 대시보드
+    - 일일 총 비용
+    - 사용자당 평균 비용
+    - tier별 호출 비율 (로컬 80% 목표)
+    - 캐싱 적중률
+    """
+    return {
+        "today_total_won": ...,
+        "average_per_student_won": ...,
+        "tier_distribution": {
+            "local": 0.82,    # 목표 0.8+
+            "mid": 0.16,
+            "high": 0.02,
+        },
+        "cache_hit_rate": 0.35,  # 목표 0.3+
+    }
+```
+
+## 푸시 알림 (FCM, 정중하게)
+
+```python
+"""부모 보고서 + 학습 리마인더, *조심스럽게*"""
+class NotificationPolicy:
+    """과도한 알림 금지"""
+    
+    MAX_PER_WEEK = 3
+    QUIET_HOURS = (22, 7)  # 밤 10시~아침 7시 금지
+    
+    async def send_if_allowed(
+        self,
+        student_id: str,
+        notification: Notification,
+    ) -> bool:
+        # 1. 사용자 설정 확인
+        # 2. 시간대 확인 (사용자 시간대 기준)
+        # 3. 주간 한도 확인
+        # 4. 부모 동의 확인 (학습 알림은 학생 본인)
+        pass
+```
+
+## 보안·개인정보
+
+### 학생 데이터 분리 저장
+```python
+"""
+1. PII (이름·연락처) — 별도 테이블, 암호화
+2. 행동 데이터 (풀이·세션) — 익명 ID로 분리
+3. 분석 데이터 — 통계 집계만, 개인 식별 불가
+"""
+```
+
+### 데이터 삭제 요청 (개인정보보호법)
+```python
+@router.delete("/account")
+async def delete_account(student: Student = Depends(get_current_student)):
+    """완전 삭제 (Right to be forgotten)"""
+    # 1. PII 즉시 삭제
+    # 2. 행동 데이터 30일 grace period (실수 방지)
+    # 3. 익명화된 통계 데이터는 보존 가능
+    # 4. 부모/보호자에게 통지
+    pass
+```
+
+## API 표준
+
+### 응답 형식
+```python
+"""모든 응답 표준 envelope"""
+class ApiResponse(BaseModel, Generic[T]):
+    data: T | None
+    error: ApiError | None
+    meta: ApiMeta
+
+class ApiError(BaseModel):
+    code: str           # 'INVALID_INPUT', 'RATE_LIMITED', ...
+    message: str        # 한국어
+    details: dict | None
+```
+
+### 에러 처리
+```python
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request, exc):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "data": None,
+            "error": {
+                "code": _status_to_code(exc.status_code),
+                "message": exc.detail,
+            },
+            "meta": {"request_id": request.state.request_id},
+        },
+    )
+```
+
+## 성공 기준
+
+### Phase 1
+- ✅ /chat 엔드포인트 가동 (E2E)
+- ✅ 세션 관리 (Redis)
+- ✅ JWT 인증 + 부모 동의 검증
+- ✅ p50 응답 < 2초
+- ✅ 99% 가용성
+
+### Phase 2
+- ✅ 결제 통합 (토스페이먼츠)
+- ✅ 푸시 알림
+- ✅ 부모 보고서 API
+
+### Phase 3+
+- ✅ 교사 대시보드 API
+- ✅ B2B 학교 관리 API
+
+## 호출 키워드
+
+- `backend:project-setup`
+- `backend:chat-orchestrator`
+- `backend:session-store`
+- `backend:auth-jwt`
+- `backend:parental-consent`
+- `backend:payment-toss`
+- `backend:fcm-notification`
+- `backend:cost-dashboard`

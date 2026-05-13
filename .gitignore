@@ -1,0 +1,55 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.venv/
+venv/
+.env
+.env.local
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+ios/Pods/
+android/.gradle/
+*.iml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (큰 파일 제외)
+data/raw/
+data/processed/
+*.csv.gz
+*.parquet
+checkpoints/
+
+# Secrets
+*.pem
+*.key
+secrets/
+
+# Logs
+*.log
+logs/
+
+# Claude Code 임시
+.claude/cache/
+.claude/sessions/

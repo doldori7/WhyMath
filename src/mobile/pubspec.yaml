@@ -1,0 +1,64 @@
+name: korean_math_app
+description: 한국 중·고 수학 메타인지 코칭 앱
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.5.0
+  flutter: ^3.24.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  # 상태관리
+  flutter_riverpod: ^2.5.0
+  riverpod_annotation: ^2.4.0
+  # 라우팅
+  go_router: ^14.0.0
+  # 모델·직렬화
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.9.0
+  # 네트워크
+  dio: ^5.4.0
+  retrofit: ^4.1.0
+  # 보안
+  flutter_secure_storage: ^9.2.0
+  # localization
+  intl: ^0.19.0
+  # 미디어
+  cached_network_image: ^3.3.1
+  image_picker: ^1.0.7
+  video_player: ^2.8.0
+  # 수식
+  flutter_math_fork: ^0.7.2
+  # 웹뷰 (Desmos·GeoGebra)
+  webview_flutter: ^4.7.0
+  # 음성
+  flutter_tts: ^4.0.2
+  speech_to_text: ^7.0.0
+  # 차트
+  fl_chart: ^0.69.0
+  # 푸시
+  firebase_messaging: ^15.0.0
+  firebase_core: ^3.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  build_runner: ^2.4.0
+  freezed: ^2.5.0
+  json_serializable: ^6.7.0
+  riverpod_generator: ^2.4.0
+  retrofit_generator: ^9.1.0
+  mocktail: ^1.0.3
+  golden_toolkit: ^0.15.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+  assets:
+    - assets/images/
+    - assets/animations/

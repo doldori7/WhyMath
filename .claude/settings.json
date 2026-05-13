@@ -1,0 +1,56 @@
+{
+  "$schema": "https://docs.claude.com/schema/settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(uv:*)",
+      "Bash(pytest:*)",
+      "Bash(ruff:*)",
+      "Bash(black:*)",
+      "Bash(mypy:*)",
+      "Bash(flutter:*)",
+      "Bash(dart:*)",
+      "Bash(git:status)",
+      "Bash(git:diff)",
+      "Bash(git:log)",
+      "Bash(git:add:*)",
+      "Bash(git:commit:*)",
+      "Bash(git:push:*)",
+      "Bash(docker:ps)",
+      "Bash(docker:logs:*)",
+      "Bash(docker compose:*)",
+      "Bash(psql:*)",
+      "Bash(redis-cli:*)",
+      "Bash(curl:*)",
+      "Bash(jq:*)",
+      "Bash(rg:*)",
+      "Read",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "ask": [
+      "Bash(rm:*)",
+      "Bash(git:reset:*)",
+      "Bash(git:rebase:*)",
+      "Bash(git:push:--force*)",
+      "Bash(docker:rm:*)",
+      "Bash(docker:rmi:*)",
+      "Bash(psql:DROP*)",
+      "Bash(redis-cli:FLUSHALL*)"
+    ],
+    "deny": [
+      "Bash(:(){:|:&};:)"
+    ]
+  },
+  "model": "claude-opus-4-7",
+  "env": {
+    "LANGUAGE": "ko",
+    "PROJECT_PHASE": "0",
+    "LLM_ROUTER_DEFAULT": "local-qwen3-math",
+    "PHAIAKES9_ENDPOINT": "http://phaiakes9.local:11434"
+  },
+  "hooks": {
+    "PreToolUse": [],
+    "PostToolUse": [],
+    "Stop": []
+  }
+}
