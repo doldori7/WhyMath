@@ -19,6 +19,9 @@
 - ✅ 성취기준 기반 정밀 진단 + 메타인지 코칭
 - ✅ 손글씨 풀이 단계별 검증
 - ✅ 학교 진도 + 수능 + 사고력 + 영재 통합
+- ✅ 개념 연결 그래프 기반 학습 (개념 점화 지도)
+- ✅ 다중 풀이의 *본질적 동치성* 체험
+- ✅ 자동 커리큘럼 정렬 — 학생 교과서·진도에 표기·깊이·풀이 스타일 자동 맞춤
 
 ### 우리가 만들지 않는 것
 - ❌ 단순 사진→답 풀이 앱 (콴다 영역)
@@ -55,28 +58,35 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | 계층 | 스택 | 비고 |
 |---|---|---|
 | 모바일 | Flutter 3.x + Riverpod 2.x | Atlas Odyssey·BeatBuddy 자산 |
+| 수식 입력 | MathLive | 학생 수식 입력 표준 |
 | 백엔드 | Python 3.12 + FastAPI + uvicorn | AVAC 자산 |
 | RDB | PostgreSQL 16 + TimescaleDB (시계열) | AVAC 자산 |
-| Vector DB | ChromaDB | 오개념·풀이 패턴 검색 |
+| Graph DB | Neo4j 5.x (Community) | 개념 연결 그래프 (노드·엣지) |
+| Vector DB | ChromaDB → Qdrant 전환 검토 | 임베딩·의미 검색 (미해결 의사결정) |
+| 행동 로그 | ClickHouse | 학습 행동 로그 분석 |
+| 객체 저장소 | S3 / MinIO | 영상·이미지 |
 | 캐시 | Redis 7 | 세션·핫 데이터 |
 | 로컬 LLM | Ollama + Qwen3-Math, DeepSeek-Math | Phaiakes9 |
 | 클라우드 LLM | Claude Sonnet/Opus, GPT-5, Gemini 2.5 | 라우터 경유 |
+| 임베딩 | OpenAI text-embedding-3-large | 의미 검색·클러스터링 |
 | OCR | Mathpix API | 수식·손글씨 표준 |
-| 시각화 | Manim (서버 렌더), Desmos/GeoGebra 임베드 | |
+| 시각화 | Manim (서버 렌더), Desmos/GeoGebra 임베드, D3.js·three.js·Plotly | 선언적 JSON 명세 |
+| 클러스터링 | HDBSCAN + UMAP | 풀이 유형 클러스터링 |
 | 도구 호출 | SymPy, Wolfram Alpha API | |
 | 인증·결제 | 카카오/네이버 로그인, 토스페이먼츠 | |
 | 모니터링 | Langfuse + OpenTelemetry | LLM 추적 표준 |
 | CI/CD | GitHub Actions | |
 | 인프라 | Phaiakes9 (개발), GCP/AWS (프로덕션) | |
 
-**변경하려면 MEMORY.md에 결정 로그 필수.**
+**변경하려면 MEMORY.md에 결정 로그 필수.** Graph DB·행동 로그·객체 저장소·시각화 스택 추가는 `2026-05-14 MathScope PRD v1.1 채택` 결정 로그 참조.
 
 ---
 
 ## ⚖️ 절대 금기 (NEVER)
 
 ### 데이터·저작권
-- ❌ 검정 교과서 본문·예제 *복제 절대 금지* — 단원명·목차만 사실정보로 인용
+- ❌ 검정 교과서 *본문·문제·풀이·그림·도표* 복제 절대 금지 — *구조 메타데이터*(단원명·목차·페이지 번호·교육과정 코드)만 사실정보로 인용. 교과서 문제는 자체 코퍼스의 *동등 문제*로 대체 노출 (PRD §13.2 저작권 정책)
+- ❌ 교과서 학습목표 텍스트 인용은 *변호사 검토 전제* — 교육과정 코드는 공공이나 교과서의 표현 자체는 출판사 저작물일 수 있음
 - ❌ EBS 영상·교재 본문 무단 활용 금지
 - ❌ 학원·인강 자료(메가스터디·시대인재 등) 데이터화 금지
 - ❌ 학생 풀이 데이터를 *명시적 동의 없이* 학습에 사용 금지
