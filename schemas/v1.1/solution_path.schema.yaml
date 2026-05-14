@@ -1,0 +1,217 @@
+# =============================================================================
+# solution_path.schema.yaml — 풀이 경로 (SolutionPath)
+# =============================================================================
+# 엔티티 목적:
+#   문제 1개에 대한 풀이 1개를, *자연어 텍스트*가 아니라 **개념 노드를 통과하는
+#   시퀀스**로 인코딩하는 엔티티. concept_sequence(개념 노드 통과 시퀀스)가 풀이의
+#   '골격'이고, 각 단계는 내용·힌트·흔한 오류·SymPy/Lean 검증 표시·임베딩을 가진다.
+#
+# 소유 7계층:
+#   L3 콘텐츠 생성·검증 (보유). 다중 풀이 생성의 출력 구조를 *구조화*한다.
+#
+# WhyMath solution_approaches 와의 관계 (경계 명시):
+#   WhyMath 의 solution_approaches(6가지 풀이 유형: 대수적·기하적·조합적·귀납적·
+#   시각적·역방향)는 *풀이의 분류 축*이다. SolutionPath 는 그 6가지 각 유형의 한
+#   인스턴스가 갖는 *내부 스키마*다. 한 문제에 대해 L3 는 여러 SolutionPath 를
+#   생성하고, 각 SolutionPath 는 approach_type 으로 6유형 중 하나에 태깅된다.
+#   "기하적 풀이"가 곧 하나의 SolutionPath 이며, 그 안에 개념 시퀀스·단계·힌트가 담긴다.
+#
+# 관련 아키텍처:
+#   docs/architecture/03_content_generation.md  (SolutionPath/SolutionStep 정의의 정본)
+#
+# 🚨 동치성 판정 주의:
+#   concept_sequence 는 두 풀이 동치성의 *필요조건도 충분조건도 아니다* (같은 노드를
+#   지나도 본질이 다를 수 있고, 다른 노드를 지나도 동치일 수 있음 — 미해결 연구 난제).
+#   WhyMath 는 "휴리스틱으로 좁히고 사람이 닫는다" — concept_sequence 는 동치성의
+#   강력한 단서이지 판정 그 자체가 아니다 (MEMORY.md PRD 허점 ⑤).
+#
+# 상태: 명세 단계. SolutionPath 구조로의 다중 풀이 생성은 Phase 2 성공 기준.
+# =============================================================================
+
+entity: SolutionPath
+layer: L3
+storage: "PostgreSQL 16 (solution_paths) + ChromaDB(embedding — 유사 풀이 검색·군집)"
+primary_key: solution_path_id
+phase_scope: "Phase 1 명세 / Phase 2 — SolutionPath 구조로 다중 풀이 생성"
+
+fields:
+
+  # --- 식별 ---------------------------------------------------------------
+  solution_path_id:
+    type: string
+    required: true
+    description: PK. 풀이 경로 식별자.
+
+  problem_id:
+    type: string
+    required: true
+    description: 이 풀이가 푸는 문제.
+    relation:
+      references: "Problem.problem_id  (problem.schema.yaml)"
+      cardinality: "N:1 — 한 문제에 여러 SolutionPath"
+
+  # --- 풀이 유형 ----------------------------------------------------------
+  approach_type:
+    type: enum
+    required: true
+    description: >-
+      WhyMath 6가지 solution_approaches 중 하나. "이 풀이가 어떤 유형인가"를 결정.
+      L2 MasteryState.preferred_solution_style 이 이 값을 그대로 취한다.
+    enum:
+      algebraic:    "대수적 — 식 변형·계산 중심"
+      geometric:    "기하적 — 도형·그래프 중심"
+      combinatorial: "조합적 — 경우의 수·셈 중심"
+      inductive:    "귀납적 — 패턴·수학적 귀납법 중심"
+      visual:       "시각적 — 그림·다이어그램으로 통찰"
+      backward:     "역방향 — 결론에서 거꾸로 추론"
+    note: >-
+      6유형 enum 은 03_content_generation.md 의 solution_approaches 와 1:1 일치해야
+      한다. 영문 키는 구현 표준, 한글은 설명.
+
+  # --- 개념 시퀀스 (풀이의 골격) ------------------------------------------
+  concept_sequence:
+    type: list<string>
+    required: true
+    description: >-
+      이 풀이가 통과하는 개념 노드 ID 의 *순서열* — 풀이의 골격.
+      "이 풀이는 [개념A] → [개념B] → [개념C] 순으로 개념을 통과한다"를 표현.
+      자연어 풀이 텍스트는 steps[].content 에 남지만, *비교·검색·분류의 기준*은
+      이 concept_sequence 다. 순서가 의미를 가짐 (set 이 아니라 list).
+    relation:
+      references: "concept.concept_id  (concept.schema.yaml — 동일 키 공간)"
+      cardinality: "N:M, 순서 있음"
+      integrity: >-
+        각 ID 는 실재하는 Concept 노드여야 함. 자유 텍스트 개념을 정식 노드 ID 로
+        매칭하는 것은 L3 LLM 5개 핵심 호출지점 중 "개념 ID 매칭"(4번) — 매칭 실패
+        시 사람 검수 큐로.
+
+  # --- 단계별 상세 --------------------------------------------------------
+  steps:
+    type: list<SolutionStep>
+    required: true
+    description: >-
+      단계별 상세 — 내용·힌트·흔한 오류·검증 표시. 아래 SolutionStep 구조.
+      steps 의 concept_node_id 들을 순서대로 모으면 대체로 concept_sequence 와 정합.
+    element_schema: SolutionStep
+
+  # --- 임베딩 ------------------------------------------------------------
+  embedding:
+    type: list<float>
+    required: false
+    description: >-
+      풀이 임베딩 벡터. 유사 풀이 검색(벡터 DB)·풀이 군집화에 사용.
+      임베딩 모델은 OpenAI text-embedding-3-large (CLAUDE.md / PRD v1.1 흡수 스택).
+      ChromaDB 저장. 동치성 휴리스틱의 코사인 유사도 입력으로도 쓰임.
+
+  # --- 검증 표시 ----------------------------------------------------------
+  verified_by_human:
+    type: boolean
+    required: true
+    default: false
+    description: >-
+      사람 검수 통과 여부. 환각 방어 ④(사람 표본 검수)와 연결 — 상시 10% 무작위
+      표본 + 신뢰도 낮은 건 + 사용자 신고분이 검수 큐로.
+
+  equivalence_cluster_id:
+    type: string | null
+    required: false
+    description: >-
+      동치 풀이 군집 식별자 — 휴리스틱(concept_sequence 편집거리 + embedding 코사인
+      유사도 + 최종 답 SymPy 동치 + approach_type 일치) + 사람 검수로 *분류*된 결과.
+      ⚠️ 이 필드 값이 있어도 "확정 동치"가 아니라 "검수 거친 동치 후보 군집". 동치성
+      판정을 학생에게 노출하기 전에는 반드시 사람 검수를 거친다.
+
+  created_at:
+    type: datetime
+    required: true
+    description: 풀이 경로 생성 시각.
+
+# =============================================================================
+# SolutionStep — 풀이 한 단계
+# =============================================================================
+SolutionStep:
+  description: 풀이 경로의 한 단계. 내용 + 막힌 학생용 힌트 + 흔한 오류 + 검증 표시.
+  fields:
+    order:
+      type: integer
+      required: true
+      description: 단계 순서 (1부터).
+    content:
+      type: string
+      required: true
+      description: 단계 내용 (자연어 + LaTeX 수식). 자연어 풀이 텍스트는 여기 남는다.
+    concept_node_id:
+      type: string
+      required: true
+      description: 이 단계가 통과하는 L1 개념 그래프 노드.
+      relation:
+        references: concept.concept_id
+    hint:
+      type: string
+      required: false
+      description: >-
+        이 단계에서 막힌 학생용 힌트. L4 교수학 엔진의 graded Hint 로 전달된다
+        (hint.schema.yaml). SolutionStep 은 힌트의 *원천 텍스트*를 담고, Hint
+        엔티티가 그것을 3단계 graded 척도로 구조화.
+      relation:
+        consumed_by: "Hint  (hint.schema.yaml) — L4 가 graded 척도로 변환"
+    common_errors:
+      type: list<string>
+      required: false
+      default: []
+      description: >-
+        이 단계에서 흔한 오류. L1 misconceptions 카탈로그·L2 오개념 매핑과 연결.
+        값은 오개념 카탈로그 코드 또는 오류 패턴 서술.
+      relation:
+        references: "misconception.code  (오개념 카탈로그) — L2 오개념 매핑 입력"
+    sympy_verified:
+      type: boolean
+      required: true
+      default: false
+      description: >-
+        이 단계가 SymPy 자동 검증을 통과했는지. 환각 방어 ②(SymPy/Lean 자동 검증).
+        수치·수식 계산은 LLM 이 아니라 SymPy 가 검증한다 (CLAUDE.md).
+    lean_verified:
+      type: boolean | null
+      required: false
+      description: >-
+        형식 증명 단계인 경우 Lean 검증 여부. 증명 단계가 아니면 null.
+        환각 방어 ② — Lean 형식 증명 검증은 Phase 3+ 성공 기준.
+
+# -----------------------------------------------------------------------------
+# 엔티티 간 관계 요약
+# -----------------------------------------------------------------------------
+relationships:
+  - target: "Problem (problem.schema.yaml)"
+    via: "problem_id ↔ Problem.solution_path_ids"
+    kind: "N:1 — 한 문제에 여러 풀이 경로 (6가지 접근)"
+  - target: "Concept (concept.schema.yaml)"
+    via: "concept_sequence[] 및 SolutionStep.concept_node_id"
+    kind: >-
+      N:M(순서 있음) — 풀이가 개념 노드를 순서대로 통과. 이것이 SolutionPath 의
+      핵심 설계 — 풀이를 텍스트가 아니라 개념 노드 시퀀스로 인코딩.
+  - target: "Hint (hint.schema.yaml)"
+    via: "SolutionStep.hint 가 Hint 엔티티의 원천 텍스트"
+    kind: "1:N — 한 단계의 힌트가 L4 에서 graded 3단계 Hint 로 구조화"
+  - target: "misconception (오개념 카탈로그 — 별도 자산)"
+    via: "SolutionStep.common_errors"
+    kind: "N:M — 단계별 흔한 오류가 오개념 카탈로그·L2 오개념 매핑과 연결"
+  - target: "MasteryState (mastery_state.schema.yaml)"
+    via: "approach_type ↔ MasteryState.preferred_solution_style"
+    kind: >-
+      값 공유 — L2 가 "이 학생은 geometric SolutionPath 에서 정답률·체류시간이
+      좋다"를 추적하면 그 approach_type 을 preferred_solution_style 에 기록.
+      L4 가 힌트·다중 풀이 제시 순서를 정할 때 그 유형의 SolutionPath 를 우선 노출.
+
+# -----------------------------------------------------------------------------
+# 검증 invariant (명세 — 테스트 미구현)
+# -----------------------------------------------------------------------------
+validation_invariants:
+  - "approach_type 이 6종 enum 밖이면 거부"
+  - "concept_sequence 의 모든 ID 가 실재하는 Concept 노드 (cross-dataset)"
+  - "SolutionStep.concept_node_id 가 실재하는 Concept 노드"
+  - "steps 의 order 가 1부터 연속"
+  - "problem_id 가 실재하는 Problem"
+  - >-
+    동치성 관련: equivalence_cluster_id 가 채워져 있어도 '확정 동치'로 단정하지
+    않음 — 학생 노출 전 사람 검수 필수 (CLAUDE.md "확실하지 않을 때 자신 있게 말함 금지")

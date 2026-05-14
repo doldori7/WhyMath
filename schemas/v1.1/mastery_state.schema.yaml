@@ -1,0 +1,241 @@
+# =============================================================================
+# mastery_state.schema.yaml — 학생 숙달 상태 (MasteryState)
+# =============================================================================
+# 엔티티 목적:
+#   학생 1명 × 개념 노드 1개의 *동적 숙달 상태*. 개념별 BKT 숙달 확률·IRT theta +
+#   신뢰구간·망각곡선 강도·선호 풀이 스타일을 담는다. LLM 이 못 하는 일 —
+#   시간축에 걸친 학습 곡선 추적 — 을 통계 모델로 수행한 결과.
+#
+# 소유 7계층:
+#   L2 학습자 모델 (보유·생산). L1 StudentProfile(정적 프로필)과는 다른 계층 —
+#   MasteryState 는 L2 가 풀이 결과로 *생산하는 동적 상태*다. L3·L4 는 L2 가
+#   집계한 LearnerState 로 이를 *읽는다*.
+#
+# 관련 아키텍처:
+#   docs/architecture/02_learner_model.md  "MasteryState — 개념별 숙달 상태 (L2 보유)"
+#
+# 🚨 BKT 유지 — IRT만 쓰지 않는다 (WhyMath 결정):
+#   PRD v1.1 은 학습자 모델로 IRT theta + 망각곡선 + 협업필터링만 채택하고 BKT 를
+#   제외했으나, WhyMath 는 BKT 단계 도입을 *유지*한다. 근거(02_learner_model.md):
+#     - BKT 는 콜드스타트 필수 — 적은 데이터로도 성취기준별 숙달 추적 (성취기준당
+#       4파라미터, 학생 1명 풀이 몇 건으로 베이지안 업데이트 동작).
+#     - IRT 는 데이터 다량 필요 — 문항 모수 추정에 다수 학생 응답 행렬 필요.
+#       Phase 1 β 100명 단계에서는 불안정.
+#   따라서: BKT(Phase 1) → IRT(Phase 2) → DKT(Phase 3+) 단계 도입. IRT theta·
+#   망각곡선·협업필터링은 그 위에 *보강*(대체 아님). bkt_mastery 는 Phase 1부터
+#   항상 채워지고, irt_* 필드는 Phase 2 데이터 누적 후 채워진다 (그 전엔 null).
+#
+# 상태: 명세 단계. BKT 가동·풀이→숙달도 업데이트는 Phase 1 성공 기준.
+# =============================================================================
+
+entity: MasteryState
+layer: L2
+storage: >-
+  PostgreSQL 16 + TimescaleDB (시계열 — mastery_history hypertable).
+  학생 데이터 = 민감정보 분류, 암호화 저장.
+composite_key: [student_id, concept_node_id, timestamp]
+phase_scope: "Phase 1 — BKT 가동. IRT(P2)·망각곡선(P2)·협업필터링(P3) 보강."
+
+fields:
+
+  # --- 식별 ---------------------------------------------------------------
+  student_id:
+    type: string
+    required: true
+    description: >-
+      학생 식별자. L1 StudentProfile.student_id 와 같은 값이지만, MasteryState 는
+      L2 가 보유하는 동적 상태 — StudentProfile(L1 정적)과 student_id 로만 연결.
+    relation:
+      references: "StudentProfile.student_id  (student_profile.schema.yaml — L1, 읽기만)"
+
+  concept_node_id:
+    type: string
+    required: true
+    description: >-
+      L1 개념 그래프 노드. 성취기준 코드와도 매핑됨. WhyMath 기존
+      LearnerState.mastery(성취기준별 BKT)를 *확장* — 성취기준뿐 아니라 개념 노드에도
+      숙달 상태를 부착.
+    relation:
+      references: "concept.concept_id  (concept.schema.yaml)"
+      note: "Concept.standard_codes 를 통해 NCIC AchievementStandard.code 와 간접 연결"
+
+  timestamp:
+    type: datetime
+    required: true
+    description: 이 숙달 상태 스냅샷의 시각. TimescaleDB hypertable 의 시간 축.
+
+  # --- BKT (Phase 1) — 콜드스타트 기본 엔진 -------------------------------
+  bkt_mastery:
+    type: float
+    required: true
+    range: [0.0, 1.0]
+    description: >-
+      베이지안 숙달 확률. **Phase 1부터 항상 채워진다.** 학생 풀이 결과로 베이지안
+      업데이트. 콜드스타트 숙달 추적의 기본 엔진 — Phase 2 이후에도 폐기되지 않고
+      IRT theta 로 보강되는 토대로 남는다.
+
+  bkt_parameters:
+    type: BKTParameters
+    required: false
+    description: >-
+      이 (학생, 개념)에 적용된 BKT 4파라미터. 성취기준당 1개 4-파라미터 모델.
+      아래 구조. P(L0) 초기값은 L1 StudentProfile.grade·curriculum 으로 보정됨
+      (예: 고1이 중3 성취기준을 다룰 때 사전지식 확률 상향).
+    element_schema: BKTParameters
+
+  # --- IRT (Phase 2 보강) — 데이터 누적 후 --------------------------------
+  irt_theta:
+    type: float | null
+    required: false
+    description: >-
+      개념별 능력 추정값. 보통 -3~+3. **Phase 2 데이터 누적 후 채워짐 — 그 전엔 null.**
+      학생 능력을 단일 스칼라가 아니라 *개념 노드별* theta 로 보유.
+      Problem.irt_parameters(문항측 모수)와 같은 IRT 모델의 양면.
+
+  irt_ci_lower:
+    type: float | null
+    required: false
+    description: >-
+      IRT theta 신뢰구간 하한. "이 학생이 이 개념에서 어느 정도 능력인지를 얼마나
+      확신하는가" — 데이터가 적으면 구간이 넓고(불확실), 누적될수록 좁아진다.
+      어댑티브 출제·개입 판단의 핵심 입력.
+
+  irt_ci_upper:
+    type: float | null
+    required: false
+    description: IRT theta 신뢰구간 상한. irt_ci_lower 와 짝.
+
+  # --- 망각곡선 (Phase 2 보강) -------------------------------------------
+  forgetting_strength:
+    type: float | null
+    required: false
+    description: >-
+      개념별·학생별 감쇠율 파라미터. 자주 복습한 개념은 강도가 낮고(천천히 잊음),
+      벼락치기로 익힌 개념은 강도가 높다. Phase 2 보강 — 그 전엔 null.
+
+  last_practiced_at:
+    type: datetime | null
+    required: false
+    description: 마지막 풀이 시각 — 시간 감쇠 계산의 기준점.
+
+  decayed_mastery:
+    type: float | null
+    required: false
+    range: [0.0, 1.0]
+    description: >-
+      시간 감쇠 반영 후 숙달도. BKT 숙달 확률에 (last_practiced_at 이후 경과 시간 ×
+      forgetting_strength) 기반 감쇠항을 곱한 값. BKT 자체를 *대체하지 않고 보강*.
+      복습 타이밍 추천(간격 반복)의 근거 신호로 L4 에 전달.
+
+  # --- 선호 풀이 스타일 ---------------------------------------------------
+  preferred_solution_style:
+    type: enum | null
+    required: false
+    description: >-
+      이 학생이 이 개념에서 *어떤 접근으로 풀 때 정답률·체류시간이 좋은지* 누적 추적.
+      값은 L3 SolutionPath.approach_type(6가지 solution_approaches)을 그대로 취한다.
+      L4 교수학 엔진이 힌트·다중 풀이 제시 순서를 정할 때 입력으로 사용 — L2 가
+      추적한 선호 유형의 SolutionPath 를 L4 가 우선 노출.
+    enum: [algebraic, geometric, combinatorial, inductive, visual, backward]
+    relation:
+      references: "SolutionPath.approach_type  (solution_path.schema.yaml — 동일 enum)"
+
+  # --- 협업필터링 (Phase 3+ 보강) ----------------------------------------
+  collaborative_prior:
+    type: float | null
+    required: false
+    description: >-
+      유사 학습 궤적 학생군에서 추론한 이 개념의 사전 분포. 콜드스타트 학생에게
+      유사군의 사전 분포를 제공하는 용도. **Phase 3+ — 사용자 N 이 충분히 누적되어
+      유사 학습자 군집이 통계적 의미를 가질 때만 채워짐.** 그 전엔 null.
+
+  # --- 운영 메타 ----------------------------------------------------------
+  n_attempts:
+    type: integer
+    required: true
+    default: 0
+    description: 이 (학생, 개념)에 대한 누적 시도 횟수.
+
+  model_stage:
+    type: enum
+    required: true
+    default: BKT
+    description: >-
+      현재 이 레코드에 적용된 학습자 모델 단계. 어느 필드가 신뢰 가능한지 표시.
+    enum:
+      BKT:        "Phase 1 — bkt_mastery 만 신뢰. irt_*·forgetting_*·collaborative_prior 는 null."
+      BKT_IRT:    "Phase 2 — bkt_mastery + irt_* + 망각곡선 보강."
+      BKT_IRT_DKT: "Phase 3+ — DKT·협업필터링까지 보강. BKT 는 여전히 콜드스타트 담당."
+
+# =============================================================================
+# BKTParameters — BKT 4파라미터
+# =============================================================================
+BKTParameters:
+  description: >-
+    Bayesian Knowledge Tracing 의 4파라미터. 성취기준/개념당 1개 모델.
+    도구: pyBKT 또는 자체 구현 (02_learner_model.md).
+  fields:
+    p_l0:
+      type: float
+      required: true
+      range: [0.0, 1.0]
+      description: >-
+        P(L0) — 사전 지식 확률 (학습 전 이미 알고 있을 확률).
+        L1 StudentProfile.grade·curriculum 으로 초기값 보정.
+    p_transit:
+      type: float
+      required: true
+      range: [0.0, 1.0]
+      description: P(T) — 전이 확률 (한 번의 학습 기회로 모르는 상태→아는 상태가 될 확률).
+    p_slip:
+      type: float
+      required: true
+      range: [0.0, 1.0]
+      description: P(S) — 실수 확률 (알면서도 틀릴 확률).
+    p_guess:
+      type: float
+      required: true
+      range: [0.0, 1.0]
+      description: P(G) — 추측 확률 (모르면서도 맞힐 확률).
+
+# -----------------------------------------------------------------------------
+# 엔티티 간 관계 요약
+# -----------------------------------------------------------------------------
+relationships:
+  - target: "StudentProfile (student_profile.schema.yaml — L1)"
+    via: "student_id"
+    kind: >-
+      N:1 (student_id 연결) — 한 학생에 개념별 MasteryState 다수. 단 계층이 다름:
+      StudentProfile 은 L1 정적 프로필, MasteryState 는 L2 동적 상태. L2 는
+      StudentProfile 을 읽되 수정하지 않는다.
+  - target: "Concept (concept.schema.yaml — L1)"
+    via: "concept_node_id"
+    kind: "N:1 — 한 개념에 학생별 숙달 레코드들. L1 개념 그래프 노드에 L2 상태를 부착."
+  - target: "AchievementStandard (NCIC)"
+    via: "concept_node_id → Concept.standard_codes → AchievementStandard.code"
+    kind: "간접 N:M — 개념 노드를 통해 NCIC 성취기준과 연결 (성취기준별 BKT 의 뿌리)"
+  - target: "SolutionPath (solution_path.schema.yaml — L3)"
+    via: "preferred_solution_style ↔ SolutionPath.approach_type"
+    kind: >-
+      값 공유 — L2 가 추적한 선호 approach_type 을 L4 가 읽어 그 유형의 SolutionPath 를
+      우선 노출.
+  - target: "Problem.irt_parameters (problem.schema.yaml)"
+    via: "같은 IRT 모델의 학생측(irt_theta)·문항측(difficulty_b 등) 양면"
+    kind: "간접 — L2 가 문제 응답으로 학생 theta 와 문항 모수를 함께 갱신."
+  - target: "LearnerState (02_learner_model.md — L2 출력)"
+    via: "MasteryState 들이 mastery_states dict 로 집계되어 LearnerState 에 실림"
+    kind: >-
+      집계 — LearnerState.mastery 는 얇은 요약(BKT 확률), mastery_states 는 두꺼운
+      상세(BKT·IRT·CI·망각곡선). 둘 다 BKT 를 토대로 함. L3·L4 가 이를 읽는다.
+
+# -----------------------------------------------------------------------------
+# 검증 invariant (명세 — 테스트 미구현)
+# -----------------------------------------------------------------------------
+validation_invariants:
+  - "bkt_mastery ∈ [0.0, 1.0] 이고 항상 채워짐 (Phase 1부터 — null 불가)"
+  - "model_stage='BKT' 이면 irt_*·forgetting_*·decayed_mastery·collaborative_prior 가 모두 null"
+  - "irt_ci_lower ≤ irt_theta ≤ irt_ci_upper (셋 다 채워진 경우)"
+  - "BKTParameters 의 4파라미터 모두 [0.0, 1.0]"
+  - "preferred_solution_style 이 6종 approach_type enum 밖이면 거부"
+  - "concept_node_id 가 실재하는 Concept 노드 (cross-dataset)"
+  - "student_id 가 실재하는 StudentProfile (cross-layer 참조)"
