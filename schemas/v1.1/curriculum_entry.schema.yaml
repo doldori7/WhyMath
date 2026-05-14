@@ -1,0 +1,289 @@
+# =============================================================================
+# curriculum_entry.schema.yaml — 다국 커리큘럼 매트릭스 셀 (CurriculumEntry)
+# =============================================================================
+# 엔티티 목적:
+#   같은 수학 개념이 나라마다 *몇 학년에·어떤 깊이로* 다뤄지는지를 담는, 매트릭스의
+#   한 셀. (개념 Universal Concept ID × 국가 코드) 한 쌍에 대한 30필드 레코드.
+#   기존 NCIC 성취기준(AchievementStandard)은 이 매트릭스의 "한국 열"이다 —
+#   매트릭스는 NCIC를 버리는 게 아니라 국제 비교 축에 끼워 넣는 구조.
+#
+# 소유 7계층:
+#   L1 데이터 기반 (보유). 매트릭스를 소비하는 자동 커리큘럼 정렬 엔진은 L6 소관.
+#
+# 관련 데이터 카드:
+#   docs/data/curriculum_matrix.md  (30필드 그룹별 요약·국가별 라이선스·검증의 정본)
+#
+# 기존 모델과의 관계 (중요):
+#   한국(KR) 셀은 src/data-pipeline/data_pipeline/ncic/models.py 의
+#   AchievementStandard 에서 *파생*된다. 새 한국 크롤러를 만드는 게 아니라,
+#   기존 NCIC 크롤러 산출물(standards.json)을 입력으로 KR 열 셀을 생성한다.
+#   - national_standard_codes <- AchievementStandard.code
+#   - domain_label / grade_band / introduced_grade <- AchievementStandard 의 동명 필드 매핑
+#   - source_name / source_code <- NCIC 고시 정보
+#
+# 상태: 명세 단계. Phase 1 구현 대상 — 단, 데이터는 한국 + 참고용 미국·IMO 3개 축만.
+#       9~12개국 풀스케일은 Phase 3 (PRD 본문 §1.6 vs §15.1 불일치 → 재배치,
+#       MEMORY.md PRD 허점 ②). 스키마는 풀스케일을 미리 수용하되 데이터는 P1 범위.
+# =============================================================================
+
+entity: CurriculumEntry
+layer: L1
+storage: "PostgreSQL (3차원 정규화 — Phase 2+ 확정)"
+composite_key: [concept_id, country_code]   # 셀 PK
+field_count: 30                              # PRD 부록 A 명시 — 아래 정확히 30개
+phase_scope: "Phase 1 — 한국(주축) + 미국 CCSS·IMO(참고 열) 2개. Phase 3에 9~12개국."
+
+fields:
+
+  # --- 그룹 1: 식별 (3) ---------------------------------------------------
+  concept_id:
+    type: string
+    required: true
+    description: >-
+      Universal Concept ID. concept.schema.yaml 의 concept_id 와 *동일 키 공간*.
+      두 자산이 같은 개념을 다른 ID로 부르면 정합 붕괴 — 키 공유 강제.
+    references: concept.concept_id   # FK — 개념 그래프 노드에 실재해야 함
+
+  country_code:
+    type: string
+    required: true
+    description: >-
+      ISO 3166-1 alpha-2 국가 코드. IMO는 국가가 아니므로 의사 코드 'IMO' 사용.
+    enum_phase1: ["KR", "US", "IMO"]   # Phase 1 산출물은 이 3개 외 금지 (범위 가드)
+    examples: ["KR", "US", "JP", "GB", "IMO"]
+
+  entry_id:
+    type: string
+    required: true
+    description: 셀의 표면 식별자. (concept_id, country_code) 복합키와 1:1 대응하는 단일 키.
+
+  # --- 그룹 2: 출처 (5) — 국가별 교육과정 표준 ----------------------------
+  source_name:
+    type: string
+    required: true
+    description: 국가별 교육과정 표준 명칭.
+    example_kr: "2022 개정 교육과정 — 수학과 교육과정"
+
+  source_code:
+    type: string
+    required: false
+    description: 표준 문서 식별 코드.
+    example_kr: "교육부 고시 제2022-33호 [별책 8]"   # 별책 8 — MEMORY.md PRD 허점 ⑧ 정정 반영
+
+  source_url:
+    type: string
+    required: true
+    description: >-
+      출처 URL — 출처 표시 의무. is_present=true 인데 이 필드가 비면 ValidationError
+      (존재한다고 주장하려면 근거 출처가 있어야 함).
+
+  source_document:
+    type: string
+    required: false
+    description: PDF/HWP 등 첨부 원문 문서 식별자.
+
+  license_id:
+    type: string
+    required: true
+    description: >-
+      국가별 원천 자원의 라이선스 매트릭스 키. 셀 단위로 라이선스 의무를 추적.
+    enum:
+      KR-NCIC:  "한국 2022 개정 교육과정 — 공공누리 1유형 (상업·가공 OK, 출처 표시 필수)"
+      US-CCSS:  "미국 Common Core — CCSSO/NGA 조건부 (출처 표시·비변형 배포)"
+      INT-IMO:  "IMO 신택터스 — 공식 표준 부재, WhyMath 자체 정리물"
+      JP-MEXT:  "일본 学習指導要領 — 정부 고시 (Phase 3)"
+      GB-NC:    "영국 National Curriculum — OGL v3.0, CC BY 호환 (Phase 3)"
+    note: "라이선스 미확인 국가는 셀을 만들지 않는다 (licensing_safety.md 결정 트리)."
+
+  # --- 그룹 3: 시점 (4) ---------------------------------------------------
+  introduced_grade:
+    type: integer | null
+    required: false
+    description: >-
+      그 나라에서 이 개념이 처음 도입되는 학년 (국가 내 학년 정수). 학제 차이는
+      clean 단계에서 정규화 (_GRADE_NORMALIZER). is_present=false 면 null.
+
+  grade_band:
+    type: string | null
+    required: false
+    description: >-
+      WhyMath 공통 학년대 (개념 그래프 grade_band_hint·NCIC grade_band 어휘와 정렬).
+      국가 간 비교를 위한 통일 축.
+
+  effective_from:
+    type: date | null
+    required: false
+    description: 해당 교육과정의 시행 시작일 (학년별 단계 시행 가능).
+
+  curriculum_revision:
+    type: string | null
+    required: false
+    description: 교육과정 개정 표시.
+    example_kr: "2022 개정"
+
+  # --- 그룹 4: 맥락 (3) ---------------------------------------------------
+  introduced_context:
+    type: string | null
+    required: false
+    description: 이 개념이 어떤 맥락/단원에서 처음 등장하는지.
+
+  domain_label:
+    type: string | null
+    required: false
+    description: 그 나라 교육과정의 영역명. 한국은 NCIC domain 에서 직접 매핑.
+
+  sub_domain_label:
+    type: string | null
+    required: false
+    description: 세부 영역명.
+
+  # --- 그룹 5: 깊이 (4) ---------------------------------------------------
+  required_depth:
+    type: enum | null
+    required: false
+    description: 그 나라 교육과정이 이 개념에 요구하는 깊이.
+    enum: [awareness, procedural, conceptual, mastery]
+
+  cognitive_level:
+    type: string | null
+    required: false
+    description: 인지 수준 (블룸 분류 등 — 국가별 원문 기준).
+
+  is_assessed:
+    type: boolean | null
+    required: false
+    description: 그 나라의 국가 단위 평가에서 이 개념이 다뤄지는가.
+
+  assessment_format:
+    type: string | null
+    required: false
+    description: 평가 형식 (지필·서술형·수행 등).
+
+  # --- 그룹 6: 표기 (3) ---------------------------------------------------
+  notation_local:
+    type: string | null
+    required: false
+    description: 그 나라에서 쓰는 수학 표기.
+
+  terminology_local:
+    type: string | null
+    required: false
+    description: 그 나라의 용어 (현지어 명칭).
+
+  notation_variants:
+    type: list<string>
+    required: false
+    default: []
+    description: 같은 개념의 표기 변형들 (Concept/Edge 의 notation_variant 관계와 정합).
+
+  # --- 그룹 7: 위계 (2) — 그 나라 교육과정 내 ----------------------------
+  prerequisite_concept_ids:
+    type: list<string>
+    required: false
+    default: []
+    description: >-
+      그 나라 교육과정 *내에서의* 선수개념. concept.schema.yaml 의 전역
+      prerequisite 와 다를 수 있음 (나라마다 위계가 다름).
+    references: concept.concept_id
+
+  followup_concept_ids:
+    type: list<string>
+    required: false
+    default: []
+    description: 그 나라 교육과정 내에서의 후속 개념.
+    references: concept.concept_id
+
+  # --- 그룹 8: 매핑 (2) ---------------------------------------------------
+  national_standard_codes:
+    type: list<string>
+    required: false
+    default: []
+    description: >-
+      국가 표준 코드 목록. **한국(KR) 셀의 경우 이 필드가 NCIC AchievementStandard.code
+      를 가리킨다** — 이것이 "한국 열 = NCIC 성취기준"의 구체적 연결 지점.
+    relation:
+      kr_references: "AchievementStandard.code  (src/data-pipeline/data_pipeline/ncic/models.py)"
+      kr_pattern: "STANDARD_CODE_PATTERN — 예 '[10공수1-01-01]'"
+      kr_integrity: "한국 열 코드는 NCIC standards.json 에 실재해야 함 (cross-dataset 검사)"
+      other_countries: "미국은 CCSS 코드, IMO는 신택터스 코드 등 — 국가별 상이"
+
+  textbook_unit_refs:
+    type: list<string>
+    required: false
+    default: []
+    description: 교과서 단원 참조.
+    references: "TextbookUnit.unit_id  (textbook_mapping.schema.yaml)"
+
+  # --- 그룹 9: 상태 (5) ---------------------------------------------------
+  is_present:
+    type: boolean
+    required: true
+    description: >-
+      그 나라 교육과정에 이 개념이 존재하는가. false 면 시점·깊이 필드들이 null.
+      false 가 "정말 없음"인지 "아직 안 채움"인지 검수에서 구분 (curriculum_matrix.md §6).
+
+  confidence:
+    type: float
+    required: true
+    range: [0.0, 1.0]
+    description: >-
+      이 셀 데이터의 신뢰도. INT-IMO 열은 보수적으로 ≤ 0.7 (관례는 표준만큼
+      확정적이지 않음 — curriculum_matrix.md §3.2).
+
+  verified_by:
+    type: string | null
+    required: false
+    description: 사람 검수자 식별자.
+
+  created_at:
+    type: datetime
+    required: true
+    description: 셀 생성 시각.
+
+  updated_at:
+    type: datetime
+    required: true
+    description: 셀 최종 수정 시각.
+
+# -----------------------------------------------------------------------------
+# 엔티티 간 관계 요약
+# -----------------------------------------------------------------------------
+relationships:
+  - target: Concept (concept.schema.yaml)
+    via: "concept_id (동일 키 공간), prerequisite_concept_ids, followup_concept_ids"
+    kind: "N:1 + N:M — 셀은 한 개념에 속하고, 위계 필드로 다른 개념을 참조"
+  - target: "AchievementStandard (NCIC, src/data-pipeline/data_pipeline/ncic/models.py)"
+    via: "national_standard_codes  (country_code='KR' 인 셀만)"
+    kind: >-
+      파생 관계 — KR 셀은 AchievementStandard 에서 변환되어 생성됨. NCIC 성취기준이
+      곧 매트릭스의 "한국 열". AchievementStandard 의 공공누리 1유형 출처 의무가
+      KR 셀에 license_id=KR-NCIC 로 승계됨.
+  - target: "TextbookUnit (textbook_mapping.schema.yaml)"
+    via: "textbook_unit_refs ↔ TextbookUnit.unit_id, 그리고 양쪽이 공유하는 concept_id"
+    kind: "N:M — 한 셀(개념,국가)이 여러 교과서 단원과 연결"
+
+# -----------------------------------------------------------------------------
+# 검증 invariant (curriculum_matrix.md §5 — 명세, 테스트 미구현)
+# -----------------------------------------------------------------------------
+validation_invariants:
+  - "concept_id 가 개념 그래프 노드에 실재 (키 공간 정합 — cross-dataset)"
+  - "country_code 가 ISO 3166-1 alpha-2 또는 'IMO'"
+  - "(concept_id, country_code) 셀 중복 없음 (복합키 유일성)"
+  - "is_present=true 이면 source_url 비어있지 않음"
+  - "license_id 가 정의된 enum 값"
+  - "confidence ∈ [0.0, 1.0]"
+  - "country_code='IMO' 셀의 confidence ≤ 0.7"
+  - "required_depth 가 4종 enum (awareness/procedural/conceptual/mastery)"
+  - "country_code='KR' 셀의 national_standard_codes 가 NCIC standards.json 에 실재"
+  - "Phase 1 산출물에 KR·US·IMO 외 국가 코드 없음 (범위 가드)"
+
+# -----------------------------------------------------------------------------
+# 라이선스 (curriculum_matrix.md §3)
+# -----------------------------------------------------------------------------
+license:
+  asset_nature: "WhyMath 자체 자산 (국가별 원천 라이선스는 license_id 로 셀 단위 추적)"
+  key_principle: >-
+    국가 교육과정의 "본문"과 "구조"를 구분한다. 매트릭스가 담는 건 *구조*(몇 학년에·
+    어떤 깊이로)와 *표준 코드*이지 해설 본문 전체가 아니다. statement 상당 텍스트의
+    수집 범위는 license_id 별로 다르게 잡는다 — 한국 NCIC 는 공공누리 1유형이라
+    statement 수집·변형이 허용되지만 다른 나라는 라이선스가 다름.

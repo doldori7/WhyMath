@@ -1,0 +1,276 @@
+# =============================================================================
+# textbook_mapping.schema.yaml — 교과서 매핑 (TextbookMapping)
+# =============================================================================
+# 엔티티 목적:
+#   검정 교과서의 *구조*를 다국 커리큘럼 매트릭스의 개념과 NCIC 성취기준에 연결한다.
+#   교과서 메타데이터·단원 트리·페이지 범위·교육과정 코드·매트릭스 개념 다대다 매핑·
+#   교과서 톤 프로필을 담는다.
+#
+# 🚨 저작권 안전선이 이 스키마의 핵심이다:
+#   ✅ 사용 — 구조 메타데이터만: 목차·단원명·차시명·단원번호·페이지 범위(번호)·
+#             학습 순서·교육과정 코드·서지(ISBN·출판사·서명·저자·개정연도)
+#   ❌ 미사용 — 일절 복제 안 함: 본문·개념 설명·예제·연습문제·단원평가·풀이·해설·
+#             그림·그래프·도표·삽화·폰트·디자인·레이아웃
+#   이는 CLAUDE.md 절대 금기 "검정 교과서 본문·예제 복제 금지" 와 동일선상 —
+#   새로운 예외를 만드는 게 아니라 그 원칙을 교과서 매핑 수준으로 구체화한 것.
+#   learning_objective_text 는 변호사 검토(legal_review_status='cleared') 전까지
+#   null 고정 (MEMORY.md PRD 허점 ⑥ — "페어유즈" 단정 위험).
+#
+# 소유 7계층:
+#   L1 데이터 기반 (보유). 매핑을 학생 맥락 정렬에 쓰는 엔진은 L6 소관.
+#
+# 관련 데이터 카드:
+#   docs/data/textbook_mapping.md  (저작권 정책 §4 = 카드의 본체·12단계 파이프라인)
+#
+# 상태: 명세 단계. Phase 1 구현 대상 — 단, 데이터는 미래엔·천재교육 2종 × 고1 단원
+#       파일럿만. 한국 9종 × 8과목 풀 매핑은 Phase 2~3.
+# =============================================================================
+
+entity: TextbookMapping
+layer: L1
+storage: "PostgreSQL 16 (Phase 2 배포 — textbook_mappings + textbook_units)"
+primary_key: isbn
+phase_scope: "Phase 1 파일럿 — 미래엔·천재교육 2종 × 고1 단원. 풀 매핑은 Phase 2~3."
+
+# =============================================================================
+# 1) TextbookMapping — 교과서 1권 (서지 = 사실정보)
+# =============================================================================
+fields:
+
+  # --- 교과서 메타데이터 (서지 = 사실정보, 저작권 보호 대상 아님) ----------
+  isbn:
+    type: string
+    required: true
+    description: PK. 13자리 ISBN.
+    constraint: "13자리 형식 검증"
+
+  publisher:
+    type: string
+    required: true
+    description: 출판사명.
+    enum_phase1: ["미래엔", "천재교육"]   # Phase 1 산출물은 이 2종 외 금지 (범위 가드)
+    examples: ["미래엔", "천재교육", "비상교육", "금성", "동아", "신사고", "지학사", "교학사"]
+
+  book_title:
+    type: string
+    required: true
+    description: 서명 (사실정보).
+    example: "고등학교 수학"
+
+  authors:
+    type: list<string>
+    required: false
+    default: []
+    description: 저자 표시 (사실정보).
+
+  subject:
+    type: string
+    required: true
+    description: >-
+      과목. NCIC 2022 개정 고등학교 8과목 체계와 정렬
+      (공통수학1·2, 대수, 미적분Ⅰ·Ⅱ, 확률과 통계, 기하 등 — ncic.md §2.3).
+    constraint: "8과목 enum"
+
+  grade:
+    type: integer
+    required: true
+    description: 학년. 10·11·12 (고1~3) | 7·8·9 (중1~3).
+
+  revision_year:
+    type: integer
+    required: true
+    description: 교과서 개정 연도.
+
+  curriculum_revision:
+    type: string
+    required: false
+    default: "2022 개정"
+    description: 교육과정 개정 표시.
+
+  # --- 단원 트리 (목차 = 사실정보) ----------------------------------------
+  unit_tree:
+    type: list<TextbookUnit>
+    required: true
+    description: >-
+      대단원→중단원→소단원 트리. 각 원소는 아래 TextbookUnit 구조.
+      유효한 트리여야 함 (사이클·고아 노드 없음).
+    element_schema: TextbookUnit   # 본 파일 2)절 참조
+
+  # --- 톤 프로필 (WhyMath 자체 분석물 — 본문 아님, 분류 라벨만) -----------
+  tone_profile:
+    type: TextbookToneProfile
+    required: true
+    description: >-
+      교과서마다 다른 서술 스타일을 WhyMath 가 *분류 라벨*로만 표현한 자산.
+      본문 텍스트를 일절 담지 않음 — 라벨을 만드는 분석 과정에서 본문을 *읽을* 수는
+      있으나 저장·재배포하지 않는다. element_schema 는 본 파일 3)절 참조.
+    element_schema: TextbookToneProfile
+
+  # --- 출처·격리 메타 ----------------------------------------------------
+  source_urls:
+    type: list<string>
+    required: true
+    description: 목차 출처 (출판사 공식 사이트·도서관 서지 메타데이터). 본문 페이지 URL 아님.
+
+  isolation_tag:
+    type: string
+    required: true
+    description: >-
+      즉시 격리용 태그 (출판사+ISBN 단위). 출판사가 특정 교과서 매핑에 이의를
+      제기하면 이 태그로 해당 교과서만 떼어낸다 (DB는 ON DELETE CASCADE 로 단원
+      동반 삭제). 격리 가능성은 사후 수습이 아니라 *설계 요구사항* — textbook_mapping.md §4.5.
+
+  legal_review_status:
+    type: enum
+    required: true
+    default: not_required
+    description: 변호사 검토 상태. learning_objective_text 활성화 여부를 결정.
+    enum:
+      not_required: "구조 메타데이터만 — 검토 불요"
+      pending:      "검토 진행 중 — learning_objective_text 는 여전히 null"
+      cleared:      "검토 통과 — learning_objective_text 활성화 가능"
+
+# =============================================================================
+# 2) TextbookUnit — 단원 트리 노드 (목차 = 사실정보)
+# =============================================================================
+TextbookUnit:
+  description: 대→중→소단원 트리의 한 노드. 단원명은 사실정보이지 본문이 아니다.
+  fields:
+    unit_id:
+      type: string
+      required: true
+      description: 단원 노드 PK.
+    parent_unit_id:
+      type: string | null
+      required: false
+      description: 상위 단원 (대→중→소 트리). 대단원이면 null.
+      references: TextbookUnit.unit_id   # 자기참조 — 트리
+    unit_number:
+      type: string
+      required: true
+      description: 단원 번호 (사실정보).
+      example: "1-2"
+    unit_title:
+      type: string
+      required: true
+      description: >-
+        단원명 — 사실정보, 본문 아님 (licensing_safety.md "단원명만"). 보통 명사구.
+        여러 문장·과도한 길이가 들어오면 본문 혼입 신호 → 검증 단계 경고.
+      example: "이차함수의 그래프"
+    page_range:
+      type: string | null
+      required: false
+      description: "페이지 *번호* 범위일 뿐 페이지 *내용*이 아님."
+      example: "12-35"
+    standard_codes:
+      type: list<string>
+      required: false
+      default: []
+      description: >-
+        매핑된 NCIC 성취기준 코드. truth source 연결 — 교과서 매핑의 매칭 타겟이
+        NCIC 성취기준이다. NCIC 는 애초에 공공누리 1유형.
+      relation:
+        references: "AchievementStandard.code  (src/data-pipeline/data_pipeline/ncic/models.py)"
+        pattern: "STANDARD_CODE_PATTERN — 예 '[10공수1-02-01]'"
+        integrity: "NCIC standards.json 에 실재해야 함 (cross-dataset 검사)"
+    concept_ids:
+      type: list<string>
+      required: false
+      default: []
+      description: >-
+        매트릭스·그래프와 같은 Universal Concept ID. 한 단원이 여러 개념을 다루고(N),
+        한 개념이 여러 교과서의 여러 단원에 흩어진다(M) — 다대다.
+      relation:
+        references: "concept.concept_id  (concept.schema.yaml — 동일 키 공간)"
+        cardinality: "N:M"
+        integrity: "concept_ids 가 개념 그래프/매트릭스 키 공간에 실재 (cross-dataset 검사)"
+    learning_objective_text:
+      type: string | null
+      required: false
+      default: null
+      description: >-
+        교과서가 단원 첫머리에 제시하는 "학습목표" 문장. **변호사 검토
+        (TextbookMapping.legal_review_status='cleared') 전까지 null 고정.**
+        스키마 필드는 미리 두되 데이터는 비운다 — 비-null 발견 시 적재 거부.
+        MEMORY.md PRD 허점 ⑥: "페어유즈" 단정 위험 (한국 저작권법에 미국식
+        fair use 법리가 그대로 있지 않음).
+
+# =============================================================================
+# 3) TextbookToneProfile — 톤 프로필 (WhyMath 분류 라벨, 본문 아님)
+# =============================================================================
+TextbookToneProfile:
+  description: >-
+    교과서 서술 스타일을 WhyMath 가 부여한 *분류 라벨·범주값*으로만 표현. 본문 텍스트
+    일절 미포함 (licensing_safety.md "EBS 메타데이터 = 분류"와 같은 논리 —
+    분류·메타데이터는 되고 본문은 안 된다).
+  fields:
+    formality_level:
+      type: string
+      required: true
+      description: 서술 격식 수준 (WhyMath 자체 라벨).
+      example: "높음"
+    notation_preferences:
+      type: list<string>
+      required: false
+      default: []
+      description: 선호 표기 경향 (라벨 목록).
+    sequencing_style:
+      type: string
+      required: true
+      description: 단원 배열 스타일 (WhyMath 자체 라벨).
+      example: "개념선행형"
+
+# -----------------------------------------------------------------------------
+# 엔티티 간 관계 요약
+# -----------------------------------------------------------------------------
+relationships:
+  - target: "AchievementStandard (NCIC, src/data-pipeline/data_pipeline/ncic/models.py)"
+    via: "TextbookUnit.standard_codes"
+    kind: >-
+      N:M — 교과서 단원이 NCIC 성취기준에 매핑됨. NCIC 가 교과서 매핑의 *매칭 타겟*.
+      NCIC 공공누리 1유형 출처 의무가 매핑에 승계됨 (SOURCE_CITATION 상수로 강제).
+  - target: "Concept (concept.schema.yaml)"
+    via: "TextbookUnit.concept_ids"
+    kind: "N:M — 단원 ↔ Universal Concept ID 다대다. 동일 키 공간 공유 강제."
+  - target: "CurriculumEntry (curriculum_entry.schema.yaml)"
+    via: "TextbookUnit.unit_id ↔ CurriculumEntry.textbook_unit_refs, 그리고 공유 concept_id"
+    kind: "N:M — 교과서 단원이 매트릭스 셀과 연결"
+  - target: "TextbookUnit (self)"
+    via: "parent_unit_id"
+    kind: "1:N 자기참조 — 대→중→소단원 트리"
+  - target: "StudentProfile (student_profile.schema.yaml)"
+    via: "isbn ↔ StudentProfile.active_textbook_isbn"
+    kind: >-
+      참조됨 — 학교알리미 채택 정보가 StudentProfile 의 "학교→교과서" 자동 채움을
+      떠받치고, 그 교과서가 이 TextbookMapping.isbn 을 가리킨다.
+
+# -----------------------------------------------------------------------------
+# 검증 invariant (textbook_mapping.md §6 — 명세, 테스트 미구현)
+# -----------------------------------------------------------------------------
+validation_invariants:
+  - "isbn 이 13자리 형식"
+  - "unit_tree 가 유효한 트리 (사이클·고아 노드 없음)"
+  - "standard_codes 가 NCIC standards.json 에 실재"
+  - "concept_ids 가 개념 그래프/매트릭스 키 공간에 실재"
+  - "learning_objective_text 가 모두 null (변호사 검토 전) — 비-null 발견 시 적재 거부"
+  - "본문 혼입 스캔: unit_title·톤 프로필 필드 길이 상한 + 문장부호 패턴 (휴리스틱 경고 → 사람 검수)"
+  - "isolation_tag 가 모든 레코드에 존재"
+  - "legal_review_status 가 3종 enum 밖이면 거부"
+  - "subject 가 8과목 enum"
+  - "Phase 1 산출물 출판사가 {미래엔, 천재교육} 뿐"
+
+# -----------------------------------------------------------------------------
+# 라이선스 (textbook_mapping.md §4.6)
+# -----------------------------------------------------------------------------
+license:
+  components:
+    - "ISBN·서명·저자·단원명·페이지·목차 → 사실정보 (저작권 보호 대상 아님)"
+    - "NCIC 성취기준 코드 → 공공누리 1유형 (출처 표시 의무 승계)"
+    - "단원↔개념↔성취기준 매핑 → WhyMath 창작물 (자체 자산)"
+    - "톤 프로필 라벨 → WhyMath 분석물 (자체 자산)"
+    - "학습목표 텍스트 → 교과서 저작물 — 보류, 변호사 검토 전 미수집"
+  textbook_problems: >-
+    교과서 예제·연습문제는 일절 담지 않는다. 학생이 "우리 교과서 같은 문제"를
+    원하면 그 단원의 standard_codes·concept_ids 를 키로 WhyMath 자체 문제 코퍼스
+    (problem.schema.yaml — NuminaMath 등 Apache/공개 + 자체 생성)에서 동등 문제를
+    꺼낸다. 12단계 파이프라인은 "교과서 문제 수집" 단계를 *아예 갖지 않는다* — 그게 설계.

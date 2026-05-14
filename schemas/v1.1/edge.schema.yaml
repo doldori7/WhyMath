@@ -1,0 +1,115 @@
+# =============================================================================
+# edge.schema.yaml — 개념 그래프 엣지 (ConceptEdge)
+# =============================================================================
+# 엔티티 목적:
+#   두 개념 노드 사이의 관계를 표현한다. 6가지 관계 유형 enum 중 하나로 분류되며,
+#   관계가 *얼마나 강한지*(strength)와 그 *판단 근거*(evidence)를 함께 가진다.
+#   "왜 이 개념을 배우는가"의 '왜'를 담당하는 엣지.
+#
+# 소유 7계층:
+#   L1 데이터 기반. 엣지 데이터와 단순 조회까지 — 엣지를 따라 학습 경로를 만드는
+#   순회 로직은 L4 교수학 엔진 소관.
+#
+# 관련 데이터 카드:
+#   docs/data/concept_graph.md  (6관계 enum 정의·검증 invariant의 정본)
+#
+# 관계 요약:
+#   - ConceptEdge.src_concept_id --> Concept.concept_id   (FK)
+#   - ConceptEdge.dst_concept_id --> Concept.concept_id   (FK)
+#   - relation enum 6종은 transform.py의 _RELATION_TYPES로 단일 관리
+#   - Neo4j에서는 6개 enum 값이 곧 Cypher 관계 타입:
+#       (:Concept)-[:PREREQUISITE {strength, evidence, evidence_source}]->(:Concept)
+#
+# 상태: 명세 단계. Phase 1 구현 대상 (목표 규모 2,000엣지 — Phase 3 도달).
+# =============================================================================
+
+entity: ConceptEdge
+layer: L1
+storage: Neo4j 5.x          # 6 enum 값 = Cypher 관계 타입
+composite_key: [src_concept_id, dst_concept_id, relation]
+phase_scope: "Phase 1 — 고1 미적분 영역 엣지. 목표 2,000엣지는 Phase 3"
+
+fields:
+
+  src_concept_id:
+    type: string
+    required: true
+    description: 관계의 출발 개념 노드.
+    references: concept.concept_id   # FK
+
+  dst_concept_id:
+    type: string
+    required: true
+    description: 관계의 도착 개념 노드.
+    references: concept.concept_id   # FK
+
+  relation:
+    type: enum
+    required: true
+    description: >-
+      관계 유형. 6종 중 하나. 이 enum은 concept_graph.md와 01_data_foundation.md가
+      정의한 것과 1:1 일치해야 하며, transform.py의 _RELATION_TYPES 한 곳에서 관리.
+    values:
+      prerequisite:
+        meaning: "선수 — src를 알아야 dst를 배움"
+        note: "Concept.prerequisite_concept_ids와 중복 저장됨 (조회 편의)"
+      generalization:
+        meaning: "일반화 — dst는 src의 더 일반적 형태"
+      specialization:
+        meaning: "특수화 — dst는 src의 특수 사례"
+        note: "generalization의 역방향 — 같은 개념쌍에 역쌍 존재 시 검증 경고"
+      contrast:
+        meaning: "대조 — src·dst는 헷갈리기 쉬워 구분 학습 필요"
+      application:
+        meaning: "응용 — src를 dst 상황에 적용"
+      composition:
+        meaning: "합성 — dst는 여러 개념(src 포함)의 결합"
+      notation_variant:
+        meaning: "표기 변형 — 같은 개념의 다른 표기"
+
+  strength:
+    type: float
+    required: true
+    range: [0.0, 1.0]
+    description: >-
+      관계 강도. 이 관계가 얼마나 강한지. 범위 밖이면 ValidationError.
+      prerequisite 엣지의 strength는 학습 경로 가중치로 L4가 활용 가능.
+
+  evidence:
+    type: string
+    required: true
+    min_length: 1
+    description: >-
+      관계 판단의 근거. *빈 문자열 금지* — 근거 없는 엣지를 차단하기 위한 필수 필드
+      (concept_graph.md §3.2 관계 판정의 주관성 방어).
+    example: "NCIC 성취기준 [10공수1-05-01]→[10공수1-05-02] 학년 인접 + 수학교육학 문헌 다수"
+
+  evidence_source:
+    type: enum
+    required: true
+    description: evidence가 어느 출처 계열에서 왔는지.
+    values:
+      - ncic                          # NCIC 성취기준 인접성
+      - curriculum_matrix             # 다국 커리큘럼 매트릭스 교차검증
+      - math_education_literature     # 수학교육학 문헌
+      - expert_review                 # 도메인 전문가 검수 판단
+
+# --- 검증 invariant (concept_graph.md §5 — tests 예정) ------------------------
+validation_invariants:
+  - "relation이 6종 enum 밖이면 ValidationError (test_edge_rejects_unknown_relation)"
+  - "strength가 0.0~1.0 범위 밖이면 거부 (test_edge_strength_bounds)"
+  - "evidence가 빈 문자열이면 거부 (test_edge_requires_evidence)"
+  - "generalization ↔ specialization 역방향 쌍 존재 시 경고 (test_validate_warns_inverse_pair)"
+  - "prerequisite 사이클 탐지 — 선수개념 순환 시 학습 경로 불능 (test_validate_detects_prerequisite_cycle)"
+  - >-
+    데이터 상관: prerequisite 엣지의 src·dst 성취기준 학년이 역전되지 않음
+    (test_prerequisite_grade_monotonic)
+
+# --- 동치성 판정 관련 주의 (concept_graph.md §3.2, MEMORY.md PRD 허점 ⑤) -------
+notes:
+  - >-
+    엣지 자동 제안은 NCIC 학년·영역 인접성에서 prerequisite 후보까지만 가능.
+    6종 관계 *확정*은 전문가 검수 — 휴리스틱 제안 + 사람 검수가 유일한 방어선.
+  - >-
+    같은 개념쌍에 작성자마다 다른 엣지(contrast vs application 등)를 달 수 있음.
+    evidence 필드 필수화가 그 주관성을 통제한다.

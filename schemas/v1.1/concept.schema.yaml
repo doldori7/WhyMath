@@ -1,0 +1,143 @@
+# =============================================================================
+# concept.schema.yaml — 개념 노드 (Concept)
+# =============================================================================
+# 엔티티 목적:
+#   수학 개념 하나를 그래프 노드로 표현한다. "왜 이 개념을 배우는가"를 구조로
+#   답하기 위한 자산의 최소 단위. 다국 정합성을 위해 한·영·일 3개 언어 표기를
+#   보유하고, 선수개념·흔한 오개념·시각화 카드를 *참조*로 연결한다.
+#
+# 소유 7계층:
+#   L1 데이터 기반 (보유·조회 API까지). 그래프 순회·학습 경로 생성은 L4/L6 소관 —
+#   L1은 노드·엣지 데이터와 단순 조회만 책임진다.
+#
+# 관련 데이터 카드:
+#   docs/data/concept_graph.md  (필드 상세·ID 규약·검증 invariant의 정본)
+#
+# 관계 요약:
+#   - Concept --(prerequisite_concept_ids)--> Concept   (자기참조, Edge와 중복 저장)
+#   - Concept --(misconception_codes)--> 오개념 카탈로그 (docs/data/misconceptions, Phase 1 30개)
+#   - Concept --(standard_codes)--> AchievementStandard  (NCIC truth source — FK)
+#   - Concept --(visualization_card_keys)--> L5 시각화 자산  (L1은 참조 키만 보유)
+#   - concept_id 키 공간은 curriculum_entry / textbook_mapping과 *공유* (join 가능해야 함)
+#
+# 상태: 명세 단계. Phase 1 구현 대상 (고1 미적분 영역 ~100개념).
+#       실제 코드 구현(Neo4j 적재·Pydantic 모델)은 본 명세의 범위 밖.
+# =============================================================================
+
+entity: Concept
+layer: L1
+storage: Neo4j 5.x          # 배포 토폴로지 DB 블록 (docs/architecture/00_overview.md 5블록)
+primary_key: concept_id
+phase_scope: "Phase 1 — 고1 미적분 영역 ~100개념"
+
+fields:
+
+  concept_id:
+    type: string
+    required: true
+    description: >-
+      Universal Concept ID. 개념 노드의 PK이자 curriculum_entry·textbook_mapping과
+      공유하는 키. 한 번 발급하면 변경 금지 (다른 자산이 이 키로 join).
+    pattern: "UC.<domain약칭>.<topic>.<concept-slug>"
+    examples:
+      - "UC.calc.limit.epsilon-delta"
+      - "UC.calc.deriv.definition"
+    notes: >-
+      curriculum_matrix.md 본문은 'WM-C-<domain>-<순번4자리>' 형식도 언급하나,
+      concept_graph.md(정본)의 'UC.<domain>.<topic>.<slug>'를 채택한다.
+      두 카드의 표기 차이는 Phase 1 구현 시 concept_graph.md 기준으로 통일.
+
+  name_ko:
+    type: string
+    required: true
+    description: 한국어 명칭. NCIC 성취기준 용어와 정렬.
+    example: "엡실론-델타 극한 정의"
+
+  name_en:
+    type: string
+    required: true
+    description: 영어 명칭. 다국 매트릭스 join·국제 비교 축.
+    example: "epsilon-delta definition of limit"
+
+  name_ja:
+    type: string
+    required: true
+    description: >-
+      일본어 명칭. 다국 정합성 키 — 01_data_foundation.md 자산 9번이 "표기(한·영·일)"를
+      필수로 명시. Phase 1 한국 중심이라도 필드는 채운다(빈 문자열 금지).
+    example: "イプシロン・デルタ論法"
+
+  domain:
+    type: string
+    required: true
+    description: 영역명. NCIC 영역명 어휘와 정렬 (예 '미적분', '수와 연산').
+    example: "미적분"
+
+  grade_band_hint:
+    type: string
+    required: false
+    description: >-
+      전형적 도입 학년군. NCIC grade_band 어휘 재사용
+      ('중학교 1~3학년군', '고등학교' 등). 단정이 아닌 힌트 — 매트릭스가 정밀 학년을 가짐.
+    example: "고등학교"
+
+  prerequisite_concept_ids:
+    type: list[string]
+    required: false
+    default: []
+    description: >-
+      선수개념의 concept_id 목록. Edge(relation=prerequisite)와 *중복 저장* —
+      그래프를 거치지 않는 조회 편의를 위함. 진실은 Edge, 이 필드는 캐시.
+    references: concept.concept_id   # 자기참조 FK
+
+  misconception_codes:
+    type: list[string]
+    required: false
+    default: []
+    description: >-
+      이 개념에서 전형적으로 발생하는 오개념의 카탈로그 키.
+      오개념 카탈로그(docs/data/misconceptions)는 Phase 1에 30개만 존재 —
+      dangling 참조 가능. 검증은 에러가 아닌 *경고*로 처리.
+    references: "misconception catalog code (docs/data/misconceptions — Phase 1 30개)"
+    example: ["distribution-over-power", "limit-equals-substitution"]
+
+  visualization_card_keys:
+    type: list[string]
+    required: false
+    default: []
+    description: >-
+      L5 시각화 자산 키. L1은 *참조만* 보유하고 렌더링은 L5 책임.
+      L5 시각화 자산은 별도 일정 — dangling 참조 가능, 검증은 경고 처리.
+    references: "L5 visualization asset key (docs/architecture/05_interaction.md)"
+
+  standard_codes:
+    type: list[string]
+    required: false
+    default: []
+    description: >-
+      매핑된 NCIC 성취기준 코드. truth source 연결 — 이 개념이 어떤 성취기준에
+      대응하는지. data_pipeline/ncic/models.py의 AchievementStandard.code를 가리킨다.
+    references: AchievementStandard.code   # FK → src/data-pipeline/data_pipeline/ncic/models.py
+    pattern: "STANDARD_CODE_PATTERN (NCIC) — 예 '[10공수1-01-01]', '[9수01-01]'"
+    example: ["[10공수1-05-02]"]
+
+  notes:
+    type: string
+    required: false
+    description: 전문가 검수 메모. 개념 합치기·쪼개기 이력도 여기에 기록(ID 안정성 §3.5).
+
+# --- 라이선스 승계 (concept_graph.md §1.1) ------------------------------------
+license:
+  asset_nature: "WhyMath 자체 자산"
+  inherited_obligation: >-
+    standard_codes가 NCIC에서 유래하므로 그래프 외부 노출·라이선싱 시 NCIC
+    공공누리 1유형 출처 문구 동봉 필수. data_pipeline.concept_graph.models.SOURCE_CITATION
+    상수로 강제 (NCIC 모듈과 동일 패턴).
+
+# --- 검증 invariant (concept_graph.md §5 — tests 예정) ------------------------
+validation_invariants:
+  - "concept_id가 'UC.<domain>.<topic>.<slug>' 규약 준수"
+  - "name_ko / name_en / name_ja 모두 비어있지 않음 (다국 정합성 키)"
+  - "prerequisite_concept_ids의 각 ID가 실재 (cross-node 참조)"
+  - "dangling misconception_codes / visualization_card_keys → 경고 (에러 아님)"
+  - "고립 노드(엣지 0개) → 경고"
