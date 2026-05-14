@@ -203,24 +203,56 @@ pytest --cov=data_pipeline.ncic --cov-report=term
 
 ## 6. 실 크롤링 절차 (Kiki용)
 
+> **실행 위치 주의**: 환경 구성은 `src/data-pipeline/`(pyproject 위치)에서,
+> 크롤러 *실행*은 **프로젝트 루트**에서 한다. editable 설치 후에는 어디서든
+> `data_pipeline` import 가능하므로, 루트에서 실행하면 `--output-dir data/ncic/`
+> 가 루트의 `data/ncic/`를 정확히 가리킨다.
+
+### 6.1 환경 구성 (1회)
+
+**Linux / macOS (bash)**
 ```bash
 cd src/data-pipeline
-uv venv && source .venv/bin/activate
-uv pip install -e ".[dev]"
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
 
-# 옵션 A: NCIC HTML 크롤링 시도 (사이트가 차단할 수 있음)
-python -m data_pipeline.ncic crawl \
-    --url "https://www.ncic.go.kr/<실제경로>" \
-    --output-dir data/ncic/
+**Windows (PowerShell) — conda 사용 시**
+```powershell
+conda create -y -n whymath python=3.12
+conda activate whymath
+cd src\data-pipeline
+pip install -e ".[dev]"
+```
+PowerShell 5.x는 `&&`·`\` 줄 연속·`source`를 지원하지 않으므로 *한 줄씩* 실행한다.
 
-# 옵션 B (권장): NCIC에서 PDF 수동 다운로드 후 파싱
-#   1. https://www.ncic.go.kr 접속
-#   2. 2022 개정 교육과정 → 수학과 → 교육부 고시 제2022-33호 [별책 8] 다운로드
-#   3. 로컬 저장: data/ncic/raw/curriculum_math_2022.pdf
-python -m data_pipeline.ncic crawl \
-    --pdf data/ncic/raw/curriculum_math_2022.pdf \
-    --pdf-source-document "교육부고시_2022-33호_별책8_수학과교육과정" \
-    --output-dir data/ncic/
+설치 확인: `python -m data_pipeline.ncic --help`
+
+### 6.2 크롤링 실행 (프로젝트 루트에서)
+
+**옵션 A — NCIC HTML 크롤링 시도** (사이트가 봇 차단할 수 있음)
+```bash
+# bash
+python -m data_pipeline.ncic crawl --url "https://www.ncic.go.kr/<실제경로>" --output-dir data/ncic/
+```
+```powershell
+# PowerShell
+python -m data_pipeline.ncic crawl --url "https://www.ncic.go.kr/<실제경로>" --output-dir data\ncic\
+```
+
+**옵션 B (권장) — NCIC에서 PDF 수동 다운로드 후 파싱**
+1. https://www.ncic.go.kr 접속 → 교육과정 자료실 → 2022 개정 교육과정 → 수학과
+2. **교육부 고시 제2022-33호 [별책 8] 수학과 교육과정** PDF 다운로드 (HWP만 있으면 한컴/LibreOffice로 PDF 변환)
+3. `data/ncic/raw/curriculum_math_2022.pdf` 로 저장 (`data/ncic/raw/` 디렉토리 없으면 생성)
+
+```bash
+# bash — 프로젝트 루트에서
+python -m data_pipeline.ncic crawl --pdf data/ncic/raw/curriculum_math_2022.pdf --pdf-source-document "교육부고시_2022-33호_별책8_수학과교육과정" --output-dir data/ncic/
+```
+```powershell
+# PowerShell — 프로젝트 루트에서 (한 줄)
+python -m data_pipeline.ncic crawl --pdf data\ncic\raw\curriculum_math_2022.pdf --pdf-source-document "교육부고시_2022-33호_별책8_수학과교육과정" --output-dir data\ncic\
 ```
 
 출력:
