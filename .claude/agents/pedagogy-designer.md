@@ -29,6 +29,17 @@ description: L4 교수학 엔진 — Polya 4단계·소크라테스·LTHC·오�
 4. **오개념 자동 진단**
 5. **답 미루기 메커니즘 (4단계 힌트)**
 6. **메타인지 코칭**
+7. **개념 점화 지도 판정** (PRD 신규 — 아래 참조)
+
+### PRD 신규 책임 (MathScope PRD v1.1 흡수 — L4 추가 책임)
+
+> 채택·재해석 근거는 `MEMORY.md` 2026-05-14 "MathScope PRD v1.1 채택" 결정 로그, 계층 상세는 `docs/architecture/04_pedagogy_engine.md` 참조. L4는 기존 골격과 *대체로 정합*하므로 추가는 최소다 — PRD의 graded `Hint`·Socratic 흐름은 WhyMath 답 미루기 4단계·Polya·소크라테스 6카테고리에 *하위 호환*되고, 신규는 개념 점화 지도 *판정*뿐.
+
+- **graded `Hint` 정렬 (기존 답 미루기 4단계가 상위 호환)** — PRD는 힌트를 graded 3단계(1=가장 은근, 3=거의 정답)로 정의하고 각 힌트가 *얼마나 노출하는지*를 `reveals` 필드로 정량화. WhyMath 답 미루기 4단계가 이를 상위 호환: PRD 1→방향, 2→의사코드, 3→부분 풀이로 1:1 정렬, **4단계(전체 풀이)는 WhyMath 고유 안전망**으로 PRD 척도 위에 한 칸 더 둠. 각 단계 산출 시 `reveals`를 함께 기록해 *세션당 평균 노출량*을 KPI(답 미루기 도달 깊이)로 추적. 척도 변환은 L4 내부 책임 — L5는 단계 라벨만 표시
+- **Socratic 풀이 흐름 정렬 (Polya·6카테고리에 하위 호환)** — PRD Socratic 흐름(관점 선택 → 전략 선택 → 단계별 풀이 + graded hint → 개념 점화)은 WhyMath Polya 4단계·소크라테스 6카테고리와 *충돌 없이 하위 호환*. PRD 흐름은 *콘텐츠 전개 순서*, WhyMath 6카테고리는 *매 발화의 질문 종류* — 직교한다. L4는 학생이 PRD 흐름의 어느 마디에 있든 그 마디에 맞는 소크라테스 카테고리를 `PedagogyDecision.socratic_category`로 반환
+- **개념 점화 지도 — 어떤 개념이 점화됐는가 *판정* (L4 책임)** — PRD는 풀이 완료 시 *그 풀이 과정에서 활성화된 개념 노드*를 학생에게 시각화한다. WhyMath는 **L4 판정 + L5 시각화**로 책임 분리:
+  - **L4의 책임 — 판정**: Polya 4단계(검토) 진입 시점에, 해당 세션의 풀이 흐름·`SolutionPath.concept_sequence`(L3 산출)·학생 발화를 근거로 *실제로 활성화된 개념 노드 집합*과 각 노드의 *점화 강도*(`primary`/`supporting`/`touched`)를 판정. 개념 노드의 식별자·인접 관계 자체는 L1 개념 그래프에서 옴 — L4는 그래프를 *구현하지 않고* "이번 풀이에서 이 노드들이 켜졌다"는 판정만 한다
+  - **경계**: L4는 *판정자*, L5는 *표시자*, L1은 *그래프 원천*. 점화 판정은 Polya 4단계에서만 일어나며 그 외 단계에서는 `None`. 판정 결과는 `PedagogyDecision.ignited_concepts`(`list[IgnitedConcept] | None`)로 반환. *세션당 점화 노드 수·강도 분포*는 L2 `MasteryState` 갱신 입력으로도 쓰일 수 있으나 그 갱신은 L2 책임 — L4는 판정 결과만 넘김
 
 ## Polya 4단계 — 모든 학습 경로의 골격
 
@@ -398,3 +409,4 @@ RECOMMENDED_PATTERNS = {
 - `pedagogy:misconception-dx`
 - `pedagogy:metacognition-coach`
 - `pedagogy:tone-filter`
+- `pedagogy:concept-ignition` (PRD 신규 — 개념 점화 지도 판정, Polya 4단계 검토 산출)
