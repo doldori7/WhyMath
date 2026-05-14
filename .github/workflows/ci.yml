@@ -1,0 +1,152 @@
+# WhyMath CI — push·PR마다 린터·타입·테스트 자동 실행
+#
+# 이 workflow가 생성하는 status check를 GitHub Settings → Branches → Branch
+# protection rules 의 "Require status checks to pass before merging" 에 등록하면
+# CI 통과 없이는 main 머지가 막힌다 (branch-protection-setup.md 참조).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# 동일 PR/브랜치에서 새 푸시가 오면 이전 실행 취소 (비용 절감)
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # L1 데이터 파이프라인 (현재 유일하게 패키지화된 영역)
+  # ─────────────────────────────────────────────────────────────────
+  data-pipeline:
+    name: data-pipeline — lint·type·test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/data-pipeline
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies (editable + dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff (lint)
+        run: ruff check .
+
+      - name: Black (format check)
+        run: black --check .
+
+      - name: Mypy (strict type check)
+        run: mypy --strict data_pipeline
+
+      - name: Pytest (with coverage)
+        run: |
+          pytest \
+            --cov=data_pipeline \
+            --cov-report=term \
+            --cov-report=xml \
+            --cov-fail-under=70
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-data-pipeline
+          path: src/data-pipeline/coverage.xml
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────────
+  # infra 쉘 스크립트 syntax 검사 (Phaiakes9 운영 자산 회귀 방지)
+  # ─────────────────────────────────────────────────────────────────
+  infra-shell:
+    name: infra/phaiakes9 — bash syntax
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Syntax check all infra shell scripts
+        run: |
+          set -euo pipefail
+          mapfile -t scripts < <(find infra -type f -name "*.sh")
+          if [ ${#scripts[@]} -eq 0 ]; then
+            echo "No shell scripts found under infra/. Skipping."
+            exit 0
+          fi
+          for s in "${scripts[@]}"; do
+            echo "::group::bash -n $s"
+            bash -n "$s"
+            echo "::endgroup::"
+          done
+
+      - name: Shellcheck (warnings only, non-blocking)
+        uses: ludeeus/action-shellcheck@master
+        continue-on-error: true
+        with:
+          scandir: infra
+          severity: warning
+
+  # ─────────────────────────────────────────────────────────────────
+  # CLAUDE.md 절대 금기 회귀 가드 — 검정교과서·시크릿 패턴 사전 차단
+  # ─────────────────────────────────────────────────────────────────
+  policy-guard:
+    name: policy-guard — CLAUDE.md 금기 가드
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 검정교과서 출판사명 + "본문" 또는 "예제" 동시 등장 패턴은 사전 차단
+      # (코드·문서에 의도적으로 사용된 경우는 # codeowner-ack 주석으로 우회)
+      - name: Forbid 검정교과서 본문 patterns
+        run: |
+          set -e
+          patterns='천재교육.*본문|비상교육.*본문|미래엔.*본문|동아출판.*예제|신사고.*예제'
+          if grep -rEn --include='*.py' --include='*.md' --include='*.json' \
+              --include='*.txt' --include='*.yaml' --include='*.yml' \
+              --exclude-dir='.git' --exclude-dir='node_modules' \
+              "$patterns" . ; then
+              echo "::error::검정교과서 본문/예제 직접 인용 의심 패턴 발견 (CLAUDE.md 절대 금기)"
+              exit 1
+          fi
+          echo "OK — 검정교과서 본문 패턴 없음"
+
+      # 시크릿 패턴 사전 차단 (의도된 .env.example 등은 .gitignore로 제외됨)
+      - name: Forbid hardcoded secret patterns
+        run: |
+          set -e
+          # 흔한 시크릿 패턴 (API 키·토큰)
+          # OpenAI sk-..., Anthropic sk-ant-..., GitHub ghp_..., AWS AKIA...
+          if grep -rEn --include='*.py' --include='*.yaml' --include='*.yml' \
+              --include='*.json' --include='*.toml' \
+              --exclude-dir='.git' --exclude-dir='node_modules' \
+              --exclude-dir='tests' \
+              -e 'sk-[A-Za-z0-9]{32,}' \
+              -e 'sk-ant-[A-Za-z0-9_-]{40,}' \
+              -e 'ghp_[A-Za-z0-9]{36}' \
+              -e 'AKIA[0-9A-Z]{16}' . ; then
+              echo "::error::하드코딩된 시크릿 의심 패턴 발견"
+              exit 1
+          fi
+          echo "OK — 하드코딩된 시크릿 패턴 없음"

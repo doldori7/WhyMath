@@ -1,0 +1,38 @@
+# WhyMath CODEOWNERS — PR 자동 리뷰어 지정
+#
+# 문법: <패턴> <@사용자|@팀>
+# 마지막 매칭 패턴이 적용 (가장 구체적인 패턴을 아래에 둘 것)
+#
+# Phase 1 (현재): 단일 메인테이너 (Kiki)
+# Phase 2+: 영역별 도메인 파트너·풀스택 합류 시 분기
+
+# ── 전역 디폴트 ────────────────────────────────────────────────────
+* @doldori7
+
+# ── L1 데이터 (data-engineer 영역) ─────────────────────────────────
+/src/data-pipeline/         @doldori7
+/docs/data/                 @doldori7
+/data/                      @doldori7
+
+# ── L3 LLM·L5 백엔드 (llm-architect·backend-engineer 영역) ────────
+/src/backend/               @doldori7
+/infra/                     @doldori7
+
+# ── L2 학습자 모델 (ml-engineer 영역) ─────────────────────────────
+/src/ml-models/             @doldori7
+
+# ── L5 모바일 (flutter-engineer 영역) ─────────────────────────────
+/src/mobile/                @doldori7
+
+# ── 프로젝트 문서·정책 (전원 검토) ────────────────────────────────
+/CLAUDE.md                  @doldori7
+/MEMORY.md                  @doldori7
+/ROADMAP.md                 @doldori7
+/docs/architecture/         @doldori7
+/docs/strategy/             @doldori7
+/docs/standards/            @doldori7
+
+# ── 보안·라이선스 (변경 시 반드시 검토) ────────────────────────────
+/.gitignore                 @doldori7
+/.github/                   @doldori7
+/docs/data/licensing_safety.md  @doldori7
