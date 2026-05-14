@@ -44,12 +44,14 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "pytest>=8.3.3",
+    # 상한 핀 — data-pipeline에서 검증된 상한을 동일 적용 (2026-05-14).
+    # 백엔드는 아직 CI 미연결이나, 동일 dev 도구·동일 floor라 일관성 위해 함께 핀.
+    "pytest>=8.3.3,<10",
     "pytest-asyncio>=0.24.0",
     "pytest-cov>=5.0.0",
-    "mypy>=1.13.0",
-    "ruff>=0.7.0",
-    "black>=24.10.0",
+    "mypy>=1.13.0,<3",
+    "ruff>=0.7.0,<0.16",
+    "black>=24.10.0,<27",
     "mocktail>=1.0.0",
 ]
 
