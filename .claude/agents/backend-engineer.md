@@ -19,6 +19,27 @@ description: L5 서버 — FastAPI·PostgreSQL·Redis·LLM 통합·세션 관리
 6. **푸시 알림** (FCM)
 7. **로그·모니터링** (OpenTelemetry + Langfuse)
 8. **백그라운드 작업** (Celery 또는 Prefect)
+9. **다중 저장소 운영** (PRD 신규 — Neo4j·Qdrant·ClickHouse·S3/MinIO)
+10. **PIPA 데이터 권한 매트릭스 시행** (PRD 신규 — 횡단 관심사)
+
+### PRD 신규 책임 (MathScope PRD v1.1 흡수 — L5 서버 추가 책임)
+
+> 채택·재해석 근거는 `MEMORY.md` 2026-05-14 "MathScope PRD v1.1 채택" 결정 로그, 배포 토폴로지는 `docs/architecture/00_overview.md` "배포 토폴로지 — PRD 5블록" 참조. PRD 채택으로 DB 블록에 저장소가 추가됐고, 그 운영·연결은 백엔드(L5 서버, 배포 토폴로지상 Backend 블록) 책임이다.
+
+#### 다중 저장소 운영
+PRD 채택으로 추가된 저장소를 FastAPI 서버가 운영·연결한다. 각 저장소는 *특정 7계층 자산의 영속 계층*이지만, 그 연결·세션·헬스체크·마이그레이션은 L5 서버 소관:
+- **Neo4j** — L1 개념 연결 그래프(`Concept` 노드·`Edge` 6관계)의 저장소. 그래프 쿼리 드라이버 연결·커넥션 풀 관리
+- **Qdrant** — 벡터 저장소. 기존 ChromaDB 대체 검토 대상 (ChromaDB 유지 vs Qdrant 전환은 PRD v1.1 채택으로 발생한 *미해결 의사결정* — `MEMORY.md` 미해결 의사결정 목록, 정렬 단계 L1/L5에서 확정). `SolutionPath.embedding`·오개념·풀이 패턴 검색에 사용
+- **ClickHouse** — 학습 행동 로그 저장소. 고볼륨 이벤트 적재·집계 쿼리 (기존 TimescaleDB는 숙달도 시계열, ClickHouse는 행동 로그 — 용도 분리)
+- **S3/MinIO** — 영상·이미지 오브젝트 스토리지. Manim 렌더 산출물·OCR 원본 이미지 등. 개발은 MinIO, 프로덕션은 S3
+- 기존 PostgreSQL+TimescaleDB·Redis와 함께 *다중 저장소 어댑터 계층*으로 추상화. 클라우드 LLM 호출 전 로컬 우선 원칙처럼, AWS Seoul ↔ Phaiakes9 하이브리드의 동기화 비용은 PRD가 누락한 항목(`MEMORY.md` PRD 허점 ⑦) — 저장소 배치 시 하이브리드 인식 유지
+
+#### PIPA 데이터 권한 매트릭스 시행
+PRD v1.1의 **PIPA(개인정보보호법) 데이터 권한 매트릭스** — *학생/교사/부모 3개 역할 × 9개 데이터 항목*에 대한 읽기·쓰기 권한 표 — 를 백엔드가 *시행*한다. 이는 횡단 관심사로 Client·Backend·DB 세 블록에 동시 적용되나, *권한 게이트를 실제로 거는* 책임은 L5 서버:
+- 기존 역할 기반 접근 제어(`Role` Enum·`require_role` 데코레이터)를 *역할 × 데이터 항목 2차원 매트릭스*로 확장. "교사는 학급 집계는 보되 개별 학생 PII는 못 본다", "부모는 자기 자녀 데이터만, 그것도 9개 항목 중 동의된 항목만" 등을 매트릭스로 표현
+- 매 요청마다 `(역할, 데이터 항목, 작업)` 3-튜플을 매트릭스에 대조 — 미허용 조합은 차단. 기존 `ParentalConsentMiddleware`(14세 미만 부모 동의)와 같은 미들웨어 계층에서 동작
+- 매트릭스는 코드 하드코딩이 아니라 *명세 테이블*로 관리 — 상세 항목·권한 정의는 `docs/legal/` 참조. CLAUDE.md 절대 금기 "학교·학년 정보로 개인 식별 가능한 분석 결과 외부 노출 금지"·"미성년자 개인정보 외부 공유 금지"의 기계적 시행 장치
+- 단일 앱 모드 분기(PRD 3개 앱 분리 반려, `docs/architecture/06_application_modes.md`)에서 학생·교사·부모가 *같은 데이터의 다른 뷰*를 보므로, 이 매트릭스가 뷰 경계를 가르는 핵심
 
 ## 기술 스택
 
@@ -417,3 +438,5 @@ async def http_exception_handler(request, exc):
 - `backend:payment-toss`
 - `backend:fcm-notification`
 - `backend:cost-dashboard`
+- `backend:multi-store-adapters` (PRD 신규 — Neo4j·Qdrant·ClickHouse·S3/MinIO 연결·운영)
+- `backend:pipa-permission-matrix` (PRD 신규 — 학생/교사/부모 × 9항목 데이터 권한 매트릭스 시행)
