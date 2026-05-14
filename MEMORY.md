@@ -44,6 +44,33 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-05-14: `main` 보호 — CODEOWNERS + CI status check 자동화, UI 단계는 별도 가이드
+**컨텍스트**: 2026-05-14 GitHub 연결 결정 로그의 후속 작업 "main 보호 규칙(force-push 금지·PR 리뷰 필수) 적용 예정"을 자동 처리하려 했으나, Claude의 GitHub MCP 도구셋에 *Branch Protection* / *Repository Ruleset* 엔드포인트 도구가 부재. 원격이 로컬 MCP 게이트웨이(`http://127.0.0.1:36037/git/doldori7/WhyMath`)라 토큰을 직접 쓸 수도 없음(MCP 도구 외 경로로 REST API 호출 불가). 따라서 *완전 자동*은 불가능, 정책의 *실효성 부분*만 코드로 강제하고 GitHub Settings UI 단계는 5분 수동 가이드로 분리.
+**결정**:
+- 자동(코드 표현):
+  - `.github/CODEOWNERS` — 영역별 자동 리뷰어. 디폴트 `@doldori7`, L1 데이터·L3/L5 인프라·문서·정책·`.github/` 등 영역별 매핑. Phase 2+ 합류 시 분기 가능한 구조
+  - `.github/workflows/ci.yml` — push/PR마다 3 job 실행:
+    - `data-pipeline — lint·type·test`: ruff·black·mypy-strict·pytest+coverage(fail-under=70)
+    - `infra/phaiakes9 — bash syntax`: 모든 infra `.sh` 파일 `bash -n` + shellcheck(non-blocking)
+    - `policy-guard — CLAUDE.md 금기 가드`: 검정교과서 본문 인용 패턴·하드코딩 시크릿(sk-/sk-ant-/ghp_/AKIA) 사전 차단
+  - concurrency group으로 비용 절감 (동일 ref 재푸시 시 이전 실행 취소)
+- 수동(GitHub Settings UI):
+  - `.github/branch-protection-setup.md` — 1페이지 체크리스트: PR 1+승인·Code Owners·필수 status check 3종·linear history·force-push 차단·deletion 차단·administrators 포함
+  - Kiki가 5분 작업, 완료 시 이 MEMORY 항목 *상태*를 갱신
+**근거**:
+- **CODEOWNERS 가치**: 보호 규칙 없이도 *PR 자동 리뷰어 지정* 자체 동작. 향후 영역별 도메인 파트너 합류 시 영역만 갱신하면 자동 라우팅
+- **CI workflow가 보호의 80%**: "필수 상태 검사 통과" 정책은 *워크플로 자체가 존재*해야 GitHub Settings에서 등록 가능. 즉 보호 규칙은 워크플로의 *적용 정책*이지 *내용*이 아님 — 내용을 미리 갖춰두면 UI 단계는 5분
+- **policy-guard job**: CLAUDE.md 절대 금기(검정교과서 본문·하드코딩 시크릿)를 사후 사람 리뷰가 아닌 *기계적 사전 차단*으로 강제. 1인 단계 휴먼 에러 방지
+- **MCP 도구 부재의 한계 인정**: 시도조차 안 한 게 아니라 *시도→불가→대안* 흐름을 명시. 향후 GitHub MCP가 branch_protection 도구를 추가하면 그때 자동화. 또는 GitHub App 토큰을 secret으로 받아 workflow 안에서 GH API 호출하는 자기참조 자동화도 가능 (Phase 2 검토)
+**대안**:
+- *GitHub Actions 워크플로 안에서 GH API로 보호 규칙 셀프 적용* — 자기 워크플로가 자기 보호 규칙을 만드는 *부트스트랩 문제* + Personal Access Token 필요. Phase 2에서 GitHub App 도입 시 검토
+- *Pre-receive hook* — GitHub 자체 호스팅 아닌 한 불가
+- *완전 수동* — CODEOWNERS·CI 없이 UI만으로는 *어떤 status check가 있는지 모름*. 폐기 이유: 자동화 가능한 80%를 굳이 미룰 이유 없음
+**적용 범위 (이번 작업)**:
+- 신규: `.github/CODEOWNERS` (27 lines), `.github/workflows/ci.yml` (3 jobs), `.github/branch-protection-setup.md` (UI 단계별 + 트러블슈팅)
+- 미적용 (이번 작업 범위 외): UI 보호 규칙 자체 — Kiki가 위 가이드 따라 5분 작업 후 이 항목 *상태* 갱신
+**상태**: 부분 확정. 자동 부분(CODEOWNERS·CI·policy-guard) 적용 완료, UI 보호 규칙은 *Kiki 수동 작업 대기*. 완료 시 본 항목 갱신 + 2026-05-14 GitHub 연결 로그의 마지막 줄도 동기 갱신.
+
 ### 2026-05-13: M1.1 게이트를 *M1.0a 머신 셋업 + M1.1 벤치마크*로 분리
 **컨텍스트**: `/implement backend:phaiakes9-qwen3-math` 위임으로 Ollama 설치·systemd unit·헬스체크·벤치마크 스크립트(`infra/phaiakes9/`, 커밋 `b75730b`, 11 files +1725) 완성 후 Kiki에게 Phaiakes9 콘솔 실행 안내. 그러나 Phaiakes9 머신 자체가 *아직 셋업 안 된 상태*(OS 미설치·전원 OFF·미조립 중 하나)임이 확인됨. 기존 ROADMAP·MEMORY는 *기술 스택 결정*으로 Phaiakes9를 명시했을 뿐, *물리 머신의 부팅·SSH·드라이버 상태*는 별도 추적되지 않았음. 결과적으로 M1.1 게이트("Phaiakes9 Qwen3-Math p50<2s 측정")가 *두 가지 다른 단계*를 한 줄에 묶고 있었음 — (a) 물리·OS·드라이버 셋업, (b) Ollama 운영·벤치마크. 둘은 의존하지만 *책임 주체·자동화 가능성*이 다름.
 **결정**:
