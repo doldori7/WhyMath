@@ -1,0 +1,47 @@
+# WhyMath — 줄바꿈·바이너리 정책
+#
+# 목적:
+#   Windows 클라이언트(git for Windows)의 core.autocrlf=true 기본값으로 인해
+#   .sh / .bash 등이 CRLF 로 체크아웃되어 WSL bash 실행이 거부되는 사고를 방지.
+#
+# 동작:
+#   - text eol=lf  → 저장소·체크아웃 모두 LF 로 고정 (OS 무관)
+#   - binary       → diff/merge 대상 제외, 변환 없음
+#
+# 적용 시점:
+#   .gitattributes 추가 직후, 이미 working tree 에 있는 파일은 자동 정규화되지
+#   않는다. 필요 시 'git add --renormalize .' 후 커밋, 또는 'git checkout -- <path>'
+#   로 재체크아웃.
+
+# 셸 스크립트 — WSL/Linux 실행 환경 호환
+*.sh        text eol=lf
+*.bash      text eol=lf
+
+# Python — Linux/macOS 빌드 호환 (Windows 에서도 LF 동작)
+*.py        text eol=lf
+*.pyi       text eol=lf
+
+# YAML/TOML/INI — LF 권장 (대부분의 파서는 무관하지만 통일)
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.toml      text eol=lf
+*.ini       text eol=lf
+
+# Markdown/JSON — Git 디폴트(text auto) 유지: 강제 LF 없이 자동 처리
+*.md        text
+*.json      text
+
+# 바이너리 — 변환·diff 금지
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.pdf       binary
+*.zip       binary
+*.zst       binary
+*.tar       binary
+*.gz        binary
+*.bin       binary
+*.gguf      binary
+*.safetensors binary
