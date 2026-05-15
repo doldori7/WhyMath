@@ -25,9 +25,10 @@
 
 ### 활성 작업
 - 🔄 **L1.NCIC.정제** (별도 PR) — `_PdfStandardExtractor` 영역 추출 + 본문/해설 분리 (2026-05-15 결정 로그 참조)
-- 🔄 **M1.0a Phaiakes9 머신 셋업** — Kiki 수동 (Ubuntu·SSH·드라이버, 가이드 `infra/phaiakes9/SETUP_GUIDE.md`)
-- ⏸️ **M1.1 Qwen 벤치마크** — M1.0a 완료 후 자동 (스크립트 준비 완료, 커밋 `b75730b`)
-- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그) / **`main` 보호 규칙 적용**(2026-05-15, PR #1로 CI 첫 가동·status check 등록)
+- 🔄 **Phaiakes9 GPU 활성화** (다음 세션) — A1 Ollama Windows native 또는 A2 BIOS+드라이버 후 WSL Vulkan 재시도. 출발점: `infra/phaiakes9/GPU_ACTIVATION_FOLLOWUP.md`
+- 📋 **Phaiakes9 카탈로그 cosmetic 정리** (별도 PR) — README.md 7군데, SETUP_GUIDE.md 1군데, 주석 4군데. 코드 동작 영향 없음, 문서 일관성만
+- 📋 **Phaiakes9 systemd unit `ProtectSystem=full` 완화** (별도 PR) — `failed to persist model recommendations snapshot ... read-only file system` 경고 해소. `ReadWritePaths=/usr/share/ollama` 추가
+- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그) / **`main` 보호 규칙 적용**(2026-05-15, PR #1로 CI 첫 가동·status check 등록) / **M1.0a Phaiakes9 1차 셋업** (2026-05-15, NucBox EVO-X2 + WSL2) / **M1.1 CPU baseline** (qwen2-math:7b, 12.62 tok/s @ concurrent 1, 게이트 FAIL — CPU 추론으로 예상대로)
 
 ### 완료된 마일스톤
 - 2026-05: 7계층 아키텍처 확정
@@ -45,6 +46,49 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-15: Phaiakes9 1차 셋업 완료 — CPU baseline 확보, GPU 후속 분리
+**컨텍스트**: M1.0a Phaiakes9 머신 셋업 (NucBox EVO-X2 / AMD Ryzen AI Max+ 395 + Radeon 8060S Strix Halo / WSL2 Ubuntu 24.04). 셋업 과정에서 인프라 스크립트 다수의 버그·잘못된 모델 카탈로그 발견·fix. 1차 셋업 종료 단계로 GPU 활성화 시도 — Vulkan 경로에서 RADV가 WSL2 DXG 패스스루를 인식 못 함 확인 (Mesa 25.2.8에 DZN ICD 미포함). Kiki가 *Strix Halo 활성화 정확 가이드* 제공 (BIOS UMA Frame Buffer Fixed 48~64GB + Linux Kernel 6.18.4+/Firmware 20260110+/ROCm 7.2.0+ + WSL2 librocdxg + AMD Adrenalin 26.x+).
+**결정**: 1차 셋업 종료 + CPU baseline을 *공식 M1.1 게이트 기록*으로 채택. GPU 활성화는 *다음 세션* A1(Ollama Windows native) 또는 A2(BIOS·드라이버 조치 후 WSL Vulkan 재시도)로 분리.
+**1차 셋업 산출 커밋**:
+- `7014bc7` fix(phaiakes9): pull_models.sh readonly OLLAMA_HOST + prefix 충돌 해소
+- `8e5202d` fix(phaiakes9): 잘못된 Qwen 카탈로그 (qwen2.5-math:* → qwen2-math:7b + 일반 Qwen2.5 32B/72B 폴백)
+- `962be1d` chore: .gitattributes — *.sh LF 고정 (Windows CRLF 재발 방지)
+- `d67f419` fix(phaiakes9): bench_latency.py DEFAULT_MODEL fix
+- (본 PR) docs(infra) + MEMORY 갱신
+**CPU baseline (2026-05-15 16:13 KST)**:
+- 환경: WSL2 Ubuntu 24.04 + Mesa 25.2.8 (Vulkan 1.3.275 — llvmpipe만 인식)
+- 머신: NucBox EVO-X2 / Ryzen AI Max+ 395 / Radeon 8060S (gfx1151, Vulkan 미인식 상태)
+- 모델: qwen2-math:7b (Q4_K_M, 4.4 GB)
+- systemd unit: Phaiakes9 특화 (0.0.0.0:11434, MAX_LOADED_MODELS=2, NUM_PARALLEL=4, KEEP_ALIVE=10m)
+- 표본: 고1 내신 원작 8문항 (`infra/phaiakes9/benchmark/sample_prompts.json`)
+- 동시도 1: p50=10,303ms / p90=10,521ms / p99=10,752ms / **12.62 tok/s**
+- 동시도 4: p50=20,654ms / p90=20,901ms / p99=20,903ms / **24.67 tok/s**
+- L3 SLA 게이트 (p50 < 2000ms): ❌ FAIL — *CPU 추론으로 예상된 결과*
+- 결과 JSON: `infra/phaiakes9/results/2026-05-15_161344.json` (.gitignore — 로컬 보관)
+**GPU 활성화 시도 결과**:
+- Ollama 자체 GPU 자동 감지: ❌ `total_vram="0 B"`, `inference compute id=cpu library=cpu`
+- Vulkan (RADV) 강제 (`VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/radeon_icd.json`): ❌ `Failed to detect any valid GPUs`
+- `/dev/dri` 부재 (Linux native GPU 노드 없음), `/dev/dxg` 존재 (DXG 패스스루 OK)
+- Mesa 25.2.8 패키지에 *DZN(DirectX-to-Vulkan) ICD 미포함*. RADV가 DXG 인식 불가
+- → 2026-05 기준 *WSL2 + Strix Halo + Vulkan*은 정식 지원 대기 단계 확인
+**근거**:
+- 1차 셋업이 이미 ~2시간 누적. GPU 활성화 추가 시도는 *Mesa 빌드*·*ROCm 셋업*·*Windows 드라이버 갱신* 등 큰 작업으로 *오늘 단락 짓는 게 효율적*
+- CPU baseline 자체가 *PRD M1.1 게이트 실측 데이터*로 가치 보유 (후속 GPU 개선치의 비교 기준)
+- Kiki 제공 Strix Halo 활성화 가이드가 *명확한 다음 세션 출발점* — 큰 발견을 *잃지 않고 보존* 필요
+**대안**:
+- GPU 활성화 이번 세션 계속 — 폐기: 시간 + 성공률 불확실. Strix Halo + Vulkan은 BIOS·드라이버 정합성까지 가야 함
+- baseline 측정 없이 GPU만 시도 — 폐기: 비교 기준 부재 시 *개선치 정량화* 불가
+- Ollama Windows native 즉시 전환 — 폐기: 큰 셋업 변경, 사용자 부담 누적
+**적용 범위**:
+- 신규 파일: `infra/phaiakes9/GPU_ACTIVATION_FOLLOWUP.md` (Kiki 가이드 보존 + 옵션 A/B/C 다음 세션 흐름)
+- MEMORY.md 활성 작업 갱신 (M1.0a/M1.1 완료 표시, GPU 후속·카탈로그 정리·systemd 완화 신규 항목)
+- 본 결정 로그
+**후속 작업 (별도 PR/세션)**:
+1. **A 후속 — Phaiakes9 GPU 활성화**: `GPU_ACTIVATION_FOLLOWUP.md` §3 옵션 A/B/C 중 선택해 진행. 다음 세션 시작점
+2. **B 후속 — Qwen 카탈로그 cosmetic 정리**: README.md 7군데, SETUP_GUIDE.md 1군데, 주석 4군데 (코드 동작 영향 없음, 문서 일관성)
+3. **C 후속 — Ollama systemd unit `ProtectSystem=full` 완화**: `failed to persist model recommendations snapshot ... read-only file system` 경고 해소. `ReadWritePaths=/usr/share/ollama` 추가
+**상태**: 1차 셋업 완료. M1.1 CPU baseline을 PRD M1.1 게이트 기록으로 채택. GPU 활성화는 다음 세션 시작 항목.
 
 ### 2026-05-15: NCIC 크롤링 baseline 완료 — 영역·본문/해설 정제는 후속 분리
 **컨텍스트**: Kiki가 별책 8 수학과 교육과정 PDF(1.94MB)를 git push로 반입(`aa29267`), Claude가 `python -m data_pipeline.ncic crawl --pdf ...` 실행 → 629건 추출, JSON·CSV·sidecar 저장. NCIC 사이트 자체는 이 환경 네트워크 allowlist 차단(`docs/data/ncic.md` §3.1).
