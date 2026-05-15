@@ -24,6 +24,9 @@ set -euo pipefail
 readonly MODE="${WHYMATH_MODELS:-default}"
 readonly OVERRIDE="${WHYMATH_MODELS_OVERRIDE:-}"
 readonly OLLAMA_HOST="${WHYMATH_OLLAMA_HOST:-http://localhost:11434}"
+# readonly 변수도 서브프로세스(ollama CLI)에 환경변수로 노출되어야 하므로 export.
+# 88·133번 줄에서 'OLLAMA_HOST=... ollama' prefix 패턴은 readonly와 충돌하므로 금지.
+export OLLAMA_HOST
 
 # ---- 모델 카탈로그 -----------------------------------------------------------
 # Qwen2.5-Math-Instruct 시리즈는 ollama.ai/library/qwen2-math 또는
@@ -85,7 +88,7 @@ pull_one() {
     local model="$1"
     echo ""
     echo "[pull_models] ⏬ ${model} 풀 시작..."
-    if OLLAMA_HOST="${OLLAMA_HOST}" ollama pull "${model}"; then
+    if ollama pull "${model}"; then
         echo "[pull_models] ✅ ${model} 완료"
         success_count+=1
         return 0
@@ -130,7 +133,7 @@ fi
 # ---- 풀된 모델 목록 출력 -----------------------------------------------------
 echo ""
 echo "[pull_models] 현재 로컬 모델 목록:"
-OLLAMA_HOST="${OLLAMA_HOST}" ollama list || true
+ollama list || true
 
 echo ""
 echo "[pull_models] 다음 단계: bash healthcheck.sh"
