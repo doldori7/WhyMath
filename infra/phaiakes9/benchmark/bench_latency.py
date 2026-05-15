@@ -39,7 +39,7 @@ from typing import Any, Final, Protocol
 
 # ---- 상수 -------------------------------------------------------------------
 DEFAULT_HOST: Final[str] = "http://localhost:11434"
-DEFAULT_MODEL: Final[str] = "qwen2.5-math:7b-instruct"
+DEFAULT_MODEL: Final[str] = "qwen2-math:7b"
 DEFAULT_CONCURRENCY: Final[tuple[int, ...]] = (1, 2, 4, 8)
 DEFAULT_NUM_PREDICT: Final[int] = 512
 DEFAULT_GATE_MS: Final[int] = 2000
