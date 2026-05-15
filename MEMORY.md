@@ -24,10 +24,10 @@
 - [ ] Phase 3: 영재·B2B (12~24개월)
 
 ### 활성 작업
-- 🔄 **MathScope PRD v1.1 정합성 정렬** — 5단계 문서 정렬 (단계1 MEMORY 결정 로그 → 단계2 CLAUDE·ROADMAP → 단계3 architecture 00~07 → 단계4 agents·data·strategy·legal → 단계5 schemas/v1.1)
+- 🔄 **L1.NCIC.정제** (별도 PR) — `_PdfStandardExtractor` 영역 추출 + 본문/해설 분리 (2026-05-15 결정 로그 참조)
 - 🔄 **M1.0a Phaiakes9 머신 셋업** — Kiki 수동 (Ubuntu·SSH·드라이버, 가이드 `infra/phaiakes9/SETUP_GUIDE.md`)
 - ⏸️ **M1.1 Qwen 벤치마크** — M1.0a 완료 후 자동 (스크립트 준비 완료, 커밋 `b75730b`)
-- ✅ 완료: NCIC 성취기준 크롤러(`e41e487`) / `main` 보호 자동 부분 CODEOWNERS·CI(`1207760`)
+- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그)
 
 ### 완료된 마일스톤
 - 2026-05: 7계층 아키텍처 확정
@@ -45,6 +45,30 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-15: NCIC 크롤링 baseline 완료 — 영역·본문/해설 정제는 후속 분리
+**컨텍스트**: Kiki가 별책 8 수학과 교육과정 PDF(1.94MB)를 git push로 반입(`aa29267`), Claude가 `python -m data_pipeline.ncic crawl --pdf ...` 실행 → 629건 추출, JSON·CSV·sidecar 저장. NCIC 사이트 자체는 이 환경 네트워크 allowlist 차단(`docs/data/ncic.md` §3.1).
+**결정**: 현 산출물을 baseline(v0)으로 수용, 영역 추출·본문/해설 분리는 후속 분리 작업. `data/ncic/` 통째로 `.gitignore` 처리(raw 입력 + 미완성 산출물 모두 git 비포함). PDF는 `git rm --cached`로 추적 제거(history는 잔존).
+**검수 결과 (5% 무작위 31건 + 자동 분석)**:
+- ✅ 코드 형식: 모두 정규식 통과 (`[10공수1-02-06]` 등)
+- ✅ 학교급 추론: 정확 (초등 155·중학 86·고등 388, 학년 대수 일치)
+- ❌ **영역(domain) 미추출**: 모두 "미지정" — `_PdfStandardExtractor`가 PDF 헤더("(1) 수와 연산" 등)를 영역으로 인식 안 함. HTML 추출기엔 추론 로직이 있으나 PDF는 미구현.
+- ❌ **본문 vs 해설 미분리**: 같은 코드가 본문 + 해설 두 번 등장 → 둘 다 statement로 저장. 예: `[2수03-10]` 본문("길이 단위 1cm와 1m를 알고…") + 해설("길이의 표준 단위를 도입하기 전에 구체물을 직접…"). 중복 194건 모두 statement가 서로 다른 것으로 확인.
+- 진짜 성취기준 수: 고유 코드 435개 → 본문/해설 분리하면 ~150-300개 (NCIC 예상치 150-180에 근접).
+**근거**:
+- Kiki가 명시한 작업 범위는 "crawl 실행 → 5% 검수" — 그건 완료. 정제는 별도 작업.
+- 정제는 코드 변경(`_PdfStandardExtractor` 확장 + `transform` 조정 + 테스트 갱신)이고 1-2시간. 별도 PR로 분리하는 게 깔끔.
+- 정제 전 산출물을 git에 truth source로 박으면 정제 후 큰 diff 발생, history 오염. baseline은 로컬에서만 운영하다 정제 완료 시 정식 커밋이 안전.
+**대안**:
+- 정제 먼저(코드 추가 후 재추출) — 폐기: 작업 시간 1-2시간, Kiki 일정과 무관하게 차후 가능
+- v0로 git에 커밋 + PDF만 `.gitignore` — 폐기: 부정확 데이터 영구 보관, 정제 후 큰 diff
+**적용 범위**:
+- `.gitignore` 추가: `data/ncic/raw/`, `data/ncic/*.json`, `data/ncic/*.csv`
+- `git rm --cached data/ncic/raw/curriculum_math_2022.pdf` (`aa29267` 추적 해제, history 잔존)
+- MEMORY.md 본 로그 + 활성 작업·후속 작업 갱신
+**후속 작업 (별도 PR)**:
+- **L1.NCIC.정제**: `_PdfStandardExtractor`가 페이지 헤더에서 영역명 추적, 같은 코드 두 번째 등장은 `commentary`로 분류(`AchievementStandard.commentary` 필드 활용). 재추출 후 ~150-300건 unique standards 검증.
+**상태**: baseline 확정. 정제는 후속 PR로 등록. 데이터 카드 `docs/data/ncic.md`는 유지(메타·라이선스·실행 절차).
 
 ### 2026-05-14: MathScope PRD v1.1 채택 — 비전·기능 흡수, 구조 골격 WhyMath 유지
 **컨텍스트**: Kiki가 별도로 발전시킨 *MathScope PRD v1.1*(1,410줄)이 도착. WhyMath 하네스 문서군(CLAUDE.md·MEMORY.md·ROADMAP.md·docs/architecture/01~07·.claude/agents/)과 같은 프로젝트 비전(메타인지·답 안 주기·Socratic·다중 풀이·Polya·Flutter+FastAPI·Phaiakes9 로컬 LLM)을 공유하나, 두 사고 라인이 갈라져 브랜드·아키텍처·DB 스택·로드맵·데이터 모델·첫 진입 전략이 곳곳에서 충돌. 그대로 두면 *진실의 원천*이 둘이 되어 컨텍스트 오염. PRD는 시장·사업·법률·UX·데이터 모델 면에서 하네스보다 풍부하나, 하네스는 7계층 책임 규율·교수학 깊이가 강함.

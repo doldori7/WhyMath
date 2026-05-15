@@ -51,6 +51,12 @@ data/processed/
 *.parquet
 checkpoints/
 
+# L1 NCIC: PDF는 사람이 수동 반입(공공누리 1유형이나 git 보관 부담),
+# JSON/CSV 산출물은 baseline 단계라 git truth source 아님 (데이터 카드는 docs/data/ncic.md)
+data/ncic/raw/
+data/ncic/*.json
+data/ncic/*.csv
+
 # Secrets
 *.pem
 *.key
