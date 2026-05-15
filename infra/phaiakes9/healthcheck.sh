@@ -20,7 +20,7 @@
 set -euo pipefail
 
 readonly HOST="${WHYMATH_OLLAMA_HOST:-http://localhost:11434}"
-readonly MODEL="${WHYMATH_BENCH_MODEL:-qwen2.5-math:7b-instruct}"
+readonly MODEL="${WHYMATH_BENCH_MODEL:-qwen2-math:7b}"
 readonly TIMEOUT_SEC="${WHYMATH_HEALTH_TIMEOUT:-30}"
 
 echo "[healthcheck] 대상 호스트: ${HOST}"

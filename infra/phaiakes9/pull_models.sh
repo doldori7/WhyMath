@@ -29,14 +29,17 @@ readonly OLLAMA_HOST="${WHYMATH_OLLAMA_HOST:-http://localhost:11434}"
 export OLLAMA_HOST
 
 # ---- 모델 카탈로그 -----------------------------------------------------------
-# Qwen2.5-Math-Instruct 시리즈는 ollama.ai/library/qwen2-math 또는
-# https://ollama.com/library/qwen2.5 계열에서 실재 확인 가능.
-# Qwen3-Math 가설 모델이 실재할 경우 WHYMATH_MODELS_OVERRIDE 로 직접 지정.
-readonly MODEL_7B="qwen2.5-math:7b-instruct"
-readonly MODEL_32B="qwen2.5-math:32b-instruct"
-# 72B 모델은 Qwen2.5-Math 라인에 72B가 없을 수 있어 일반 Qwen2.5 72B를 폴백으로 사용
-readonly MODEL_72B_PRIMARY="qwen2.5-math:72b-instruct"
-readonly MODEL_72B_FALLBACK="qwen2.5:72b-instruct"
+# Ollama 공식 라이브러리 모델명 (2026-05 검증, WSL2 Ubuntu 24.04 환경):
+#   - qwen2-math:1.5b / 7b  → Ollama 정식 등록 (https://ollama.com/library/qwen2-math)
+#   - qwen2.5-math:*        → Ollama 미등록 ('pull model manifest: file does not exist').
+#                             필요 시 HuggingFace GGUF 변환 후 Modelfile import.
+#   - qwen2.5:7b / 32b / 72b → Ollama 정식 등록 (일반 모델, 수학 특화 X but 강력)
+# Qwen2-Math는 7B까지만 공개 (32B/72B 라인업 없음) → mid/all 모드는 일반 Qwen2.5로 폴백.
+readonly MODEL_7B="qwen2-math:7b"
+readonly MODEL_32B="qwen2.5:32b"
+# 72B Math 모델 부재 — 일반 Qwen2.5 72B 사용. PRIMARY/FALLBACK 동일.
+readonly MODEL_72B_PRIMARY="qwen2.5:72b"
+readonly MODEL_72B_FALLBACK="qwen2.5:72b"
 
 # ---- 풀 대상 결정 ------------------------------------------------------------
 declare -a TARGETS=()
