@@ -27,7 +27,7 @@
 - 🔄 **L1.NCIC.정제** (별도 PR) — `_PdfStandardExtractor` 영역 추출 + 본문/해설 분리 (2026-05-15 결정 로그 참조)
 - 🔄 **M1.0a Phaiakes9 머신 셋업** — Kiki 수동 (Ubuntu·SSH·드라이버, 가이드 `infra/phaiakes9/SETUP_GUIDE.md`)
 - ⏸️ **M1.1 Qwen 벤치마크** — M1.0a 완료 후 자동 (스크립트 준비 완료, 커밋 `b75730b`)
-- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그)
+- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그) / **`main` 보호 규칙 적용**(2026-05-15, PR #1로 CI 첫 가동·status check 등록)
 
 ### 완료된 마일스톤
 - 2026-05: 7계층 아키텍처 확정
@@ -115,7 +115,7 @@
 **적용 범위 (이번 작업)**:
 - 신규: `.github/CODEOWNERS` (27 lines), `.github/workflows/ci.yml` (3 jobs), `.github/branch-protection-setup.md` (UI 단계별 + 트러블슈팅)
 - 미적용 (이번 작업 범위 외): UI 보호 규칙 자체 — Kiki가 위 가이드 따라 5분 작업 후 이 항목 *상태* 갱신
-**상태**: 부분 확정. 자동 부분(CODEOWNERS·CI·policy-guard) 적용 완료, UI 보호 규칙은 *Kiki 수동 작업 대기*. 완료 시 본 항목 갱신 + 2026-05-14 GitHub 연결 로그의 마지막 줄도 동기 갱신.
+**상태**: 확정. main 브랜치 보호 규칙 적용 완료 (2026-05-15): PR 1+승인·Code Owners·CI status check 3종(`data-pipeline`·`infra/phaiakes9`·`policy-guard`)·linear history·force-push 차단·deletion 차단·administrators 포함. 1인 단계 Code Owner 자기 승인 충돌은 Phase 2 합류 시 자연 해소(가이드 §트러블슈팅 참조). 검증용으로 PR #1(이 세션 10개 커밋 통합)을 생성하여 CI 첫 가동·status check 등록.
 
 ### 2026-05-13: M1.1 게이트를 *M1.0a 머신 셋업 + M1.1 벤치마크*로 분리
 **컨텍스트**: `/implement backend:phaiakes9-qwen3-math` 위임으로 Ollama 설치·systemd unit·헬스체크·벤치마크 스크립트(`infra/phaiakes9/`, 커밋 `b75730b`, 11 files +1725) 완성 후 Kiki에게 Phaiakes9 콘솔 실행 안내. 그러나 Phaiakes9 머신 자체가 *아직 셋업 안 된 상태*(OS 미설치·전원 OFF·미조립 중 하나)임이 확인됨. 기존 ROADMAP·MEMORY는 *기술 스택 결정*으로 Phaiakes9를 명시했을 뿐, *물리 머신의 부팅·SSH·드라이버 상태*는 별도 추적되지 않았음. 결과적으로 M1.1 게이트("Phaiakes9 Qwen3-Math p50<2s 측정")가 *두 가지 다른 단계*를 한 줄에 묶고 있었음 — (a) 물리·OS·드라이버 셋업, (b) Ollama 운영·벤치마크. 둘은 의존하지만 *책임 주체·자동화 가능성*이 다름.
@@ -179,7 +179,7 @@
 **적용 범위 (이번 작업)**:
 - 커밋 `0625cf5`: `.claude/settings.json`·`.gitignore`·zip 2개 삭제·사업계획서 docx/pdf 2개 삭제·스크립트 2개 추가
 - 푸시: 104 objects, 1.12 MiB, `main → origin/main` upstream 설정 완료
-**상태**: 확정. 다음 단계는 GitHub Settings → Branches 에서 `main` 보호 규칙(force-push 금지·PR 리뷰 필수) 적용 예정.
+**상태**: 확정. 후속 작업이었던 `main` 보호 규칙 적용은 2026-05-15 완료 (위 *2026-05-14: `main` 보호* 결정 로그 §상태 참조).
 
 ### 2026-05-14: 브랜드명 "WhyMath (와이매스)" 확정
 **컨텍스트**: Phase 0 종료 직전, 모든 외부·내부 문서가 일관된 브랜드명을 사용해야 함. 그동안 "한국 중·고 수학 앱"이라는 서술적 가칭 사용
