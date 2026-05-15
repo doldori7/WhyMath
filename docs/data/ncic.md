@@ -129,6 +129,7 @@ Phase 2에 Alembic 마이그레이션으로 정식 생성. 현재는 `load_to_po
 ### 3.1 사이트 접근성
 
 - **WebFetch 차단 확인** (2026-05-13): `https://www.ncic.go.kr`·`https://www.ncic.re.kr` 모두 403. 한국 정부 사이트는 일반 자동화 봇 UA를 차단하는 경향.
+- **Claude Code on web 환경 추가 제약** (2026-05-14 재확인): 이 개발 환경은 네트워크 allowlist 기반 — PyPI 등 등록 호스트만 허용하고 `ncic.go.kr`은 인프라 레벨에서 차단(`403 Host not in allowlist`). `curl`(sandbox·sandbox 우회)·`WebFetch` 3경로 모두 차단 확인. NCIC PDF는 *반드시 사람이 다른 환경에서 받아* 레포에 반입해야 한다 (`data/ncic/raw/`).
 - 대응: 
   - 정중한 UA(`WhyMath/0.1 (research; contact: ...)`) + Accept-Language 헤더
   - rate-limit 1초/요청 + exponential backoff

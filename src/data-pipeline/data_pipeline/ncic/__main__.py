@@ -114,16 +114,26 @@ def crawl(
         )
         raise typer.Exit(code=1)
 
-    standards = asyncio.run(
-        _run_crawl(
-            output_dir=output_dir,
-            urls=urls or [],
-            pdf=pdf,
-            pdf_source_url=pdf_source_url,
-            pdf_source_document=pdf_source_document,
-            rate_limit=rate_limit,
+    try:
+        standards = asyncio.run(
+            _run_crawl(
+                output_dir=output_dir,
+                urls=urls or [],
+                pdf=pdf,
+                pdf_source_url=pdf_source_url,
+                pdf_source_document=pdf_source_document,
+                rate_limit=rate_limit,
+            )
         )
-    )
+    except FileNotFoundError as exc:
+        # PDF 경로 오타·미반입 시 raw traceback 대신 안내
+        typer.echo(
+            f"[!] {exc}\n"
+            "    PDF 경로를 확인하세요. NCIC에서 PDF를 받는 절차는\n"
+            "    docs/data/ncic.md 6.2절 '옵션 B'를 참조하세요.",
+            err=True,
+        )
+        raise typer.Exit(code=2) from exc
 
     # 검증
     report = validate_standards(standards)
