@@ -22,6 +22,25 @@ description: L2 학습자 모델 — BKT·DKT·IRT·정서 신호·오개념 매
 4. **정서 신호 모델** — 이탈·재시도·체류시간 → 동기 상태
 5. **오개념 매핑** — 풀이 패턴 → 오개념 카탈로그 매칭
 
+### 🚨 모델 도입 순서 — BKT 유지 (MathScope PRD v1.1 흡수 시 결정)
+
+> 채택 근거는 `MEMORY.md` 2026-05-14 "MathScope PRD v1.1 채택" 결정 로그(PRD 허점 ④), 상세는 `docs/architecture/02_learner_model.md` 참조.
+
+PRD v1.1은 학습자 모델로 **IRT theta + 망각곡선 + 협업필터링**만 채택하고 **BKT를 제외**했으나, WhyMath는 BKT 단계 도입을 *유지*한다.
+
+- **BKT는 콜드스타트에 필수** — 성취기준당 4개 파라미터만 추정, 학생 1명의 풀이 몇 건으로도 베이지안 업데이트 동작. PRD가 BKT를 뺀 것은 *콜드스타트 위험*을 놓친 것
+- **IRT는 데이터 다량 필요** — 문항 모수 추정에 다수 학생 응답 행렬 필요. Phase 1 β 100명 단계에선 불안정
+- **협업필터링은 사용자 적으면 무력** — 임계 사용자 수 미만에서 신호 약함
+- **따라서**: **BKT (Phase 1) → IRT (Phase 2) → DKT (Phase 3+)** 단계 도입 유지. PRD의 *IRT theta·망각곡선·협업필터링*은 그 위에 **보강**(대체 아님). 각 단계는 이전을 폐기하지 않고 *공존* — Phase 2 이후에도 신규 성취기준·신규 학생의 콜드스타트는 BKT 담당
+
+### PRD 신규 책임 — `MasteryState` 보유 · `StudentProfile` 소비
+
+> 상세 엔티티 정의는 `docs/architecture/02_learner_model.md` "PRD v1.1 엔티티 통합" 및 `schemas/v1.1/` 참조.
+
+- **`MasteryState` 보유 (L2 책임)** — PRD v1.1의 `MasteryState`를 L2의 *개념 노드별 숙달 레코드*로 흡수. 기존 `LearnerState.mastery`(성취기준별 BKT 확률)를 *확장* — 성취기준 코드뿐 아니라 L1 개념 그래프의 개념 노드에도 숙달 상태 부착. 필드: `bkt_mastery`(Phase 1부터 항상 채움)·`irt_theta`+`irt_ci_lower/upper`(Phase 2 보강, IRT theta + **신뢰구간**)·`forgetting_strength`+`decayed_mastery`(Phase 2 망각곡선 보강)·`preferred_solution_style`(L3 `SolutionPath.approach_type` 값을 취해 학생 선호 풀이 추적 → L4 힌트·다중 풀이 순서 입력)
+- **`StudentProfile` 소비 (⚠️ L1 보유, L2는 *읽기만*)** — `StudentProfile`은 자동 커리큘럼 정렬의 입력이며 **L1 데이터 기반이 보유**한다. L2는 이를 *소유하지 않고* L1에서 **읽어서 학습자 상태 갱신에 활용**: ①활성 교과서·그림자 커리큘럼을 보고 *어떤 성취기준·개념 노드를 추적할지* 범위 결정 ②학년·교육과정으로 BKT 사전 분포 `P(L0)` 초기값 보정 ③목표(내신 등급 등)를 `LearnerState`에 실어 L4에 전달. **L2는 `StudentProfile`을 수정하지 않는다** — 위치·학교·교과서 변경은 L1 책임. L2가 생산하는 것은 어디까지나 *학습자의 동적 상태*(`MasteryState`·`LearnerState`)이지 *정적 프로필*이 아님 (7계층 경계)
+- **자동 정렬용 진단** — L2의 BKT/IRT 추정 결과는 자동 커리큘럼 정렬 엔진(L1+L6)이 "이 학생이 어느 개념까지 숙달했는가"를 판단하는 진단 신호로 쓰인다. L2는 진단 *결과*만 제공, 정렬 *로직*은 L6 소관
+
 ### 출력 (L3 LLM이 컨텍스트로 사용)
 ```python
 class LearnerState(BaseModel):
@@ -306,3 +325,6 @@ def to_llm_context(state: LearnerState) -> dict:
 - `ml:learning-curve`
 - `ml:adaptive-item-selection`
 - `ml:dkt-prototype` (Phase 3+)
+- `ml:mastery-state` (PRD 신규 — 개념 노드별 숙달 레코드)
+- `ml:forgetting-curve` (PRD 신규 — Phase 2 망각곡선 보강)
+- `ml:collaborative-filtering` (PRD 신규 — Phase 3+ 협업필터링 보강)

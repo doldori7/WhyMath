@@ -24,9 +24,10 @@
 - [ ] Phase 3: 영재·B2B (12~24개월)
 
 ### 활성 작업
+- 🔄 **MathScope PRD v1.1 정합성 정렬** — 5단계 문서 정렬 (단계1 MEMORY 결정 로그 → 단계2 CLAUDE·ROADMAP → 단계3 architecture 00~07 → 단계4 agents·data·strategy·legal → 단계5 schemas/v1.1)
 - 🔄 **M1.0a Phaiakes9 머신 셋업** — Kiki 수동 (Ubuntu·SSH·드라이버, 가이드 `infra/phaiakes9/SETUP_GUIDE.md`)
 - ⏸️ **M1.1 Qwen 벤치마크** — M1.0a 완료 후 자동 (스크립트 준비 완료, 커밋 `b75730b`)
-- ⏭️ 독립 진행 후보: NCIC 크롤러 / `main` 보호 규칙 / L4 프롬프트 작성 / FastAPI 스캐폴딩
+- ✅ 완료: NCIC 성취기준 크롤러(`e41e487`) / `main` 보호 자동 부분 CODEOWNERS·CI(`1207760`)
 
 ### 완료된 마일스톤
 - 2026-05: 7계층 아키텍처 확정
@@ -36,13 +37,34 @@
 
 ### 미해결 의사결정
 - [ ] 수학 교육 도메인 파트너 영입 (M1.3 게이트로 *지연 확정* — 트랙 미정)
-- [x] ~~첫 진입 학년~~ → **고1 내신** 확정 (2026-05-13)
+- [x] ~~첫 진입 학년~~ → **고1 내신** 확정 (2026-05-13, PRD v1.1 채택 후에도 유지)
+- [ ] 벡터 DB: ChromaDB 유지 vs Qdrant 전환 (PRD v1.1 채택으로 발생 — 정렬 단계3 L1/L5에서 결정)
 - [ ] 사단법인·재단·법인 형태
 - [ ] Cambridge MMP/NRICH 라이선스 협상 시작 시점
 
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-14: MathScope PRD v1.1 채택 — 비전·기능 흡수, 구조 골격 WhyMath 유지
+**컨텍스트**: Kiki가 별도로 발전시킨 *MathScope PRD v1.1*(1,410줄)이 도착. WhyMath 하네스 문서군(CLAUDE.md·MEMORY.md·ROADMAP.md·docs/architecture/01~07·.claude/agents/)과 같은 프로젝트 비전(메타인지·답 안 주기·Socratic·다중 풀이·Polya·Flutter+FastAPI·Phaiakes9 로컬 LLM)을 공유하나, 두 사고 라인이 갈라져 브랜드·아키텍처·DB 스택·로드맵·데이터 모델·첫 진입 전략이 곳곳에서 충돌. 그대로 두면 *진실의 원천*이 둘이 되어 컨텍스트 오염. PRD는 시장·사업·법률·UX·데이터 모델 면에서 하네스보다 풍부하나, 하네스는 7계층 책임 규율·교수학 깊이가 강함.
+**결정**: PRD의 *비전·신규 기능*을 정본으로 흡수하되, 3대 구조 결정은 *WhyMath 골격 유지*.
+- **브랜드 = WhyMath 유지**. PRD의 "MathScope (가칭)"는 미확정 가칭 — PRD가 브랜드를 정한 게 아님. WhyMath는 2026-05-14 브랜드 결정 로그에 근거와 함께 확정, GitHub 레포도 `doldori7/WhyMath`. PRD 인용 시 "MathScope" → "WhyMath" 치환.
+- **7계층 책임 모델 유지 + PRD 5블록 흡수**. 7계층=책임 레이어(.claude/agents 7개와 직결), PRD 5블록(Client/Backend/DB/ML/Pipeline)=배포 토폴로지 — 직교하는 두 축. 7계층 유지하고 PRD 5블록은 `00_overview.md`에 배포 관점 섹션으로 추가.
+- **첫 진입 = 고1 내신 유지**. PRD의 "미분 단원 파일럿"을 "고1 단원 중 하나"로 재해석. 2026-05-13 결정 로그 유지.
+- **DB 스택 변경** (CLAUDE.md 기술 스택 표 갱신 대상): Neo4j(개념 그래프)·Qdrant(벡터, 기존 ChromaDB 대체 검토)·ClickHouse(학습 행동 로그)·S3/MinIO(영상·이미지) 추가. 추가 스택: MathLive·D3.js·three.js·Plotly·HDBSCAN·UMAP·OpenAI text-embedding-3-large.
+- **PRD 신규 자산 → 7계층 매핑**: 개념 그래프·다국 커리큘럼 매트릭스·교과서 매핑 12단계 파이프라인·자동 커리큘럼 정렬 → L1; `SolutionPath.concept_sequence` → L3; `MasteryState`·`StudentProfile` → L2; 시각화 스택(선언적 `Visualization`) → L5; Socratic 흐름·graded `Hint`·개념 점화 지도 → L4; PIPA 데이터 권한 매트릭스 → 횡단; 사업·법률·5개 핵심 가정 → docs/strategy·docs/legal.
+**PRD 논리적 허점 8건과 보정 입장**: ①Phase 1 3개월 과부하 → WhyMath 6개월 Phase 1 유지 ②다국 매트릭스 9~12개국 Phase 1 과욕(본문 §1.6 vs §15.1 불일치) → Phase 3 재배치 ③3개 앱 동시 개발 부담 → 단일 앱 모드 분기 + 대시보드 Phase 3+ 유지 ④BKT 제거 위험 → BKT(P1)→IRT(P2)→DKT(P3) 단계 도입 유지 ⑤개념 시퀀스 동치성 판정 난이도 과소평가 → 휴리스틱+사람 검수 단서 ⑥교과서 학습목표 "페어유즈" 단정 위험 → 변호사 검토 전제 ⑦AWS Seoul 확정 vs Phaiakes9 하이브리드 지연·동기화 비용 미언급 → 기존 하이브리드 인식 유지 ⑧부록 E "별책 9"는 오타 — 수학과 교육과정은 *별책 8*.
+**근거**:
+- PRD가 "정본"인 것은 *비전·기능·시장·법률 사고의 깊이*에서이지 *구조 결정*에서가 아님. 브랜드·7계층·진입학년은 하네스에 이미 근거와 함께 확정된 사항 — PRD가 그것을 *논박한 게 아니라 모른 채로 작성*된 것.
+- 7계층은 서브에이전트 위임 워크플로의 단위 — 폐기하면 워크플로 전체가 흔들림. PRD 5블록과는 축이 달라 양립 가능.
+- PRD의 진짜 가치는 자동 커리큘럼 정렬·교과서 매핑 파이프라인·다국 매트릭스·개념 그래프·9개 데이터 엔티티·PIPA 매트릭스·5개 핵심 가정 검증법 — 하네스에 *없던* 자산이며 7계층 안에 깔끔히 들어감.
+**대안**:
+- *PRD를 완전 정본으로(브랜드·5블록·고2 미분까지)* — 폐기: 이미 확정된 결정 3건을 근거 없이 뒤집음, 서브에이전트 구조 재작성 부담
+- *PRD를 독립 문서로 방치* — 폐기: 진실의 원천 이중화, 컨텍스트 오염
+- *단일 통합본 신규 작성* — 폐기: 작업량 최대, 하네스의 검증된 구조를 버릴 이유 없음
+**적용 범위**: 정렬 실행 계획 5단계 — 단계1 본 결정 로그(MEMORY.md), 단계2 CLAUDE.md+ROADMAP.md, 단계3 docs/architecture/00~07, 단계4 .claude/agents+docs/data+docs/strategy+docs/legal, 단계5 schemas/v1.1/*.yaml 9개 엔티티. 범위 밖: PRD 와이어프레임 구현·엔티티 코드 구현·실제 DB 배포.
+**상태**: 확정. 단계별 진행 — 본 로그가 후속 모든 문서의 근거.
 
 ### 2026-05-14: `main` 보호 — CODEOWNERS + CI status check 자동화, UI 단계는 별도 가이드
 **컨텍스트**: 2026-05-14 GitHub 연결 결정 로그의 후속 작업 "main 보호 규칙(force-push 금지·PR 리뷰 필수) 적용 예정"을 자동 처리하려 했으나, Claude의 GitHub MCP 도구셋에 *Branch Protection* / *Repository Ruleset* 엔드포인트 도구가 부재. 원격이 로컬 MCP 게이트웨이(`http://127.0.0.1:36037/git/doldori7/WhyMath`)라 토큰을 직접 쓸 수도 없음(MCP 도구 외 경로로 REST API 호출 불가). 따라서 *완전 자동*은 불가능, 정책의 *실효성 부분*만 코드로 강제하고 GitHub Settings UI 단계는 5분 수동 가이드로 분리.

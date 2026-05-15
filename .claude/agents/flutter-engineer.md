@@ -19,7 +19,27 @@ description: L5 모바일 — Flutter+Riverpod UI·OCR·시각화·대화 인터
 6. **Manim 애니메이션 플레이어**
 7. **Desmos/GeoGebra 임베드**
 8. **학습 곡선 시각화**
-9. **부모 보고서 (별도 앱? 같은 앱 모드?)**
+9. **부모 보고서** — 단일 앱 모드 분기 (별도 앱 아님, 아래 참조)
+10. **선언적 시각화 렌더** (PRD 신규 — D3.js·three.js·Plotly)
+11. **자동 커리큘럼 정렬 입출력 UI** (PRD 신규 — 온보딩·교과서 좌표 메인 화면)
+
+### PRD 신규 책임 (MathScope PRD v1.1 흡수 — L5 모바일 추가 책임)
+
+> 채택·재해석 근거는 `MEMORY.md` 2026-05-14 "MathScope PRD v1.1 채택" 결정 로그, 계층 상세는 `docs/architecture/05_interaction.md` "자동 커리큘럼 정렬 — UI 레이어"·"시각화 스택" 참조.
+
+#### 시각화 스택 — 선언적 `Visualization` 렌더
+- **기존 스택 유지**: Mathpix OCR(손글씨·인쇄 수식 인식) / Manim(서버 렌더 사고 과정 애니메이션) / Desmos·GeoGebra(webview 임베드)
+- **PRD 신규 — 선언적 시각화**: PRD는 시각화를 *영상 파일*이 아니라 **선언적 JSON 명세**로 정의. 명세 한 벌이 클라이언트에서 렌더됨 — 영상이 아니라 렌더 파라미터·데이터·축·상호작용 규칙을 담은 JSON. 용량 작고 버전 관리 쉬움. **학생이 슬라이더·드래그로 파라미터를 조작**하면 즉시 다시 그려짐 (수동 시청이 아닌 능동 탐구). 라벨·캡션이 명세 안 텍스트 필드라 다국어 자유
+- `Visualization.type` 4종 → 렌더 도구 매핑: `interactive_graph_2d`(D3.js/Plotly/Desmos) · `interactive_surface_3d`(three.js) · `simulation_probabilistic`(D3.js/Plotly) · `animation_prerendered`(Manim, 조작 불가)
+- `animation_prerendered`만 기존 Manim 산출물에 대응, 나머지 3종이 PRD 신규 선언적 명세. 선언적 명세는 기존 Manim·Desmos·GeoGebra와 **공존** — 어느 하나가 다른 것을 대체하지 않음. L5는 `Visualization.type`을 보고 렌더 도구 선택
+- **MathLive** — 수식 *입력* 키보드. 학생이 LaTeX를 직접 치지 않고도 분수·근호·적분 기호 입력 (기존 `mathlive` 의존성을 시각화 스택 차원에서 명시)
+- **경계**: 명세의 *생성·검증*은 L3 책임, L5는 받은 명세를 *렌더·조작 처리*만 함 (7계층 경계). D3.js·three.js·Plotly는 `webview_flutter` 안에서 렌더
+
+#### 자동 커리큘럼 정렬 — 입출력 UI
+PRD 핵심 자산인 **자동 커리큘럼 정렬 엔진**은 *엔진 자체가 L1+L6 책임*. L5는 그 엔진의 *입력을 받는 화면*과 *출력을 보여주는 화면*만 담당:
+- **입력 UI — 온보딩 흐름 (3분 무마찰)**: 처음 앱 진입 시 `국가 → 학년 → 학교 → 교과서(출판사) → 현재 진도 → 학습 목표`를 순서대로 물어 `StudentProfile` 입력 수집. 각 단계는 *드롭다운·검색·탭* 위주 — 자유 입력 최소화. 학교는 학교알리미 연동 검색, 교과서는 출판사 리스트. 첫 진입(고1 내신)은 한국·고1이 사실상 고정 — 무마찰 원칙에 맞게 기본값 미리 채워 단계 건너뜀. 산출물은 L1 `StudentProfile`로 넘어가고 정렬 엔진(L1+L6)이 소비 — L5는 *수집·전달*만
+- **출력 UI — 학생 교과서에 맞춘 메인 화면**: 메인 화면은 학생 *본인의 교과서 좌표*로 콘텐츠 표시 (예: `미래엔 수학II · p.156~162 / 도함수의 정의`). 단원·페이지·개념명이 학생이 실제 들고 다니는 교과서와 같은 표현 — "추상적 단원명"이 아니라 *내 책의 그 페이지*. 표시 문자열·페이지 범위·개념명은 모두 정렬 엔진(L1+L6)이 만들어 내려준 값 — L5는 *렌더링*만
+- **경계**: 엔진(다국 커리큘럼 매트릭스·교과서 매핑 파이프라인·7차원 자동 조정 로직) = L1+L6 책임. UI(온보딩 화면·메인 화면 교과서 좌표 표시) = L5 책임. L5는 L1·L6을 *호출*해 입력 전달·출력 수신하지만 정렬 로직을 *구현하지 않음*
 
 ## 기술 스택
 
@@ -410,8 +430,8 @@ void main() {
 - ✅ 학습 곡선 시각화
 
 ### Phase 3+
-- ✅ 부모 보고서 모드
-- ✅ 교사 대시보드 모드 (별도 앱?)
+- ✅ 부모 보고서 모드 (단일 앱 내 역할별 UI·권한 레이어 — 별도 앱 아님)
+- ✅ 교사 대시보드 모드 (단일 앱 내 모드 분기 — PRD 3개 앱 분리는 반려, `docs/architecture/06_application_modes.md` 참조)
 
 ## 호출 키워드
 
@@ -424,3 +444,6 @@ void main() {
 - `mobile:learning-curve`
 - `mobile:parent-report`
 - `mobile:accessibility-audit`
+- `mobile:declarative-visualization` (PRD 신규 — 선언적 Visualization 렌더, D3.js·three.js·Plotly)
+- `mobile:onboarding-alignment` (PRD 신규 — 자동 커리큘럼 정렬 온보딩 3분 무마찰 흐름)
+- `mobile:textbook-coordinate-home` (PRD 신규 — 교과서 좌표 메인 화면)
