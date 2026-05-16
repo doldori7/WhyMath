@@ -25,10 +25,12 @@
 
 ### 활성 작업
 - 🔄 **L1.NCIC.정제** (별도 PR) — `_PdfStandardExtractor` 영역 추출 + 본문/해설 분리 (2026-05-15 결정 로그 참조)
-- 🔄 **Phaiakes9 GPU 활성화** (다음 세션) — A1 Ollama Windows native 또는 A2 BIOS+드라이버 후 WSL Vulkan 재시도. 출발점: `infra/phaiakes9/GPU_ACTIVATION_FOLLOWUP.md`
+- 🔄 **ROCm 7.2+ Linux native 시도** (옵션 F, 별도 세션) — DirectML 32 tok/s 의 *2-3x 잠재력* 시도. BIOS UMA Frame Buffer Fixed 48-64GB + Linux Kernel 6.18.4+ + ROCm 7.2.0+ 요구. 출발점: `infra/phaiakes9/GPU_ACTIVATION_FOLLOWUP.md` §3 옵션 A·C
+- 📋 **qwen2-math:1.5b GPU 측정** — 실시간 대화 SLA(p50 < 2초) 통과 가능성 검증. Windows Ollama 환경에서 1GB pull 후 같은 벤치 재실행. 10-15분
+- 📋 **L3 라우터 fast/quality 두 단계 설계** — `docs/architecture/03_content_llm.md` 갱신 또는 별도 설계서. 어떤 입력이 7B(fast) / 27B(quality) 로 분기되는지 결정 로직 명세
 - 📋 **Phaiakes9 카탈로그 cosmetic 정리** (별도 PR) — README.md 7군데, SETUP_GUIDE.md 1군데, 주석 4군데. 코드 동작 영향 없음, 문서 일관성만
 - 📋 **Phaiakes9 systemd unit `ProtectSystem=full` 완화** (별도 PR) — `failed to persist model recommendations snapshot ... read-only file system` 경고 해소. `ReadWritePaths=/usr/share/ollama` 추가
-- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그) / **`main` 보호 규칙 적용**(2026-05-15, PR #1로 CI 첫 가동·status check 등록) / **M1.0a Phaiakes9 1차 셋업** (2026-05-15, NucBox EVO-X2 + WSL2) / **M1.1 CPU baseline** (qwen2-math:7b, 12.62 tok/s @ concurrent 1, 게이트 FAIL — CPU 추론으로 예상대로)
+- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그) / **`main` 보호 규칙 적용**(2026-05-15, PR #1로 CI 첫 가동·status check 등록) / **M1.0a Phaiakes9 1차 셋업** (2026-05-15, NucBox EVO-X2 + WSL2) / **M1.1 CPU baseline** (qwen2-math:7b, 12.62 tok/s @ concurrent 1) / **M1.1 GPU 가속 활성화** (2026-05-16, Windows Ollama 경유 DirectML, qwen2-math:7b 32.63 tok/s + qwen3.5:27b 9.22 tok/s, CPU 대비 2.6x — 옵션 A1 채택)
 
 ### 완료된 마일스톤
 - 2026-05: 7계층 아키텍처 확정
@@ -46,6 +48,59 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-16: Phaiakes9 GPU 가속 활성화 완료 — Windows Ollama 경유 DirectML, 모델 라인업 데이터 확보
+**컨텍스트**: 2026-05-15 결정 로그 *옵션 A1* 진행. Windows측에 Ollama 0.24.0 native 이미 설치되어 있음 확인 + Radeon 8060S(Strix Halo) GPU 자동 인식 (`ollama ps` PROCESSOR=100% GPU, qwen2-math:7b 5.2GB GPU 적재). WSL 측 클라이언트가 `WHYMATH_OLLAMA_HOST=http://172.17.112.1:11434` (Windows 호스트 IP) 로 호출 — 환경변수 한 줄만 변경, WSL 측 인프라 코드 자체는 *완전 무수정*. WSL2 NAT networking에서 Windows Ollama API 즉시 도달 (별도 firewall·OLLAMA_HOST=0.0.0.0 설정 불필요).
+**결정**:
+- GPU 가속 *최소 viable* 환경 확보 — DirectML 경로로 7B 모델 CPU 대비 *2.6x 향상*
+- L3 LLM 라우터 설계: *fast tier (qwen2-math:7b GPU, 32.63 tok/s)* + *quality tier (qwen3.5:27b GPU, 9.22 tok/s)* 두 단계 라인업 후보 확정
+- ROCm 7.2+ Linux native (옵션 F) 는 *추가 잠재력 2-3x* 보유 — 후속 별도 세션 (BIOS UMA·드라이버 사전 조치 필요)
+**환경**:
+- Windows측: Ollama 0.24.0 (DirectML 추정, GPU 100% 활용 확인)
+- WSL 측: Ollama systemd 서비스 *유지* (사용 안 함, 환경변수 override 로 Windows Ollama 호출)
+- 기타 머신 사양 = 2026-05-15 1차 셋업 결정 로그와 동일 (NucBox EVO-X2 / Ryzen AI Max+ 395 / Radeon 8060S Strix Halo / WSL2 Ubuntu 24.04)
+**GPU baseline — qwen2-math:7b (2026-05-16 12:52 KST)**:
+- 동시도 1: p50=**3,917.67ms** / p90=3,965.7ms / p99=3,981.28ms / **32.63 tok/s**
+- 동시도 4: p50=15,015.31ms / p90=15,140.63ms / p99=15,143.33ms / 33.81 tok/s
+- L3 SLA 게이트 (p50 < 2000ms): ❌ FAIL — *DirectML on Strix Halo 환경 + 7B 로 게이트 통과 어려움 확인*
+- 결과 JSON: `infra/phaiakes9/results/2026-05-16_125209.json` (.gitignore — 로컬 보관)
+**GPU 큰 모델 비교 — qwen3.5:27b (2026-05-16 13:03 KST)**:
+- 동시도 1: p50=**13,885.85ms** / p90=13,992.73ms / p99=14,014.09ms / **9.22 tok/s**
+- 동시도 4: p50=55,126.10ms / p90=55,258.83ms / p99=55,277.86ms / 9.28 tok/s
+- L3 SLA 게이트: ❌ FAIL — *27B 는 실시간 대화용 X, 백그라운드 검증·고난도 추론용*
+- 동시도 1 vs 4 의 tok/s 가 거의 동일 (9.22 / 9.28) — *큰 모델의 throughput scaling 미작동* (GPU 한 요청에 100% 사용, 병렬 처리 안 됨)
+- 결과 JSON: `infra/phaiakes9/results/2026-05-16_130349.json`
+- 콜드 로드 시간 30초 초과로 헬스체크 디폴트 timeout(30초) 부족 — `WHYMATH_HEALTH_TIMEOUT=180` 추가 환경변수로 해소. 후속 PR 에서 디폴트 상향 검토
+**CPU vs GPU 비교 (qwen2-math:7b)**:
+| 지표 | CPU baseline (2026-05-15) | GPU baseline (2026-05-16) | 향상 |
+|---|---|---|---|
+| p50 latency (동시도 1) | 10,303ms | 3,918ms | **2.6x ↓** |
+| tok/s (동시도 1) | 12.62 | 32.63 | **2.6x ↑** |
+| tok/s (동시도 4) | 24.67 | 33.81 | 1.4x ↑ |
+**모델 비교 (GPU)**:
+| 모델 | 디스크 | p50 (동시도 1) | tok/s | 용도 후보 |
+|---|---|---|---|---|
+| qwen2-math:7b (Q4_K_M) | 4.4GB | 3,918ms | 32.63 | **fast tier** (실시간 대화·산술·1-2단계 추론) |
+| qwen3.5:27b | 17GB | 13,886ms | 9.22 | **quality tier** (백그라운드 검증·복잡 추론·답안 채점) |
+**근거**:
+- GPU 활성화로 *진정한 진전* 확인. 단 *기대치(5-12x)에는 미달 (실측 2.6x)* — DirectML on Strix Halo iGPU 의 정상 수준
+- 7B vs 27B 데이터로 *L3 라우터 fast/quality 두 단계* 설계 근거 확보 — *학생 대화 즉답* 은 7B, *답안 검증·복잡 추론* 은 27B 분리
+- p50 < 2초 게이트는 *7B GPU 로도 어렵다* 확인 → *qwen2-math:1.5b* (~1GB) 측정 또는 *ROCm Linux native* 가 다음 세션 핵심 시도
+- Kiki PC 에 *qwen3.5:27b·qwen3-coder:30b·llama3.3:42b·gpt-oss:20b·qwen3:30b-a3b(MoE)* 다수 이미 적재 — *모델 비교 실험* 추가 비용 거의 없음
+**대안**:
+- ROCm Linux native 이번 세션 진행 — 폐기: 2-4시간 추가 소요(BIOS UMA + 드라이버 갱신 등), 별도 세션이 효율
+- qwen2-math:1.5b 추가 측정 이번 세션 — 폐기: 데이터 점 3개로 *L3 라우터 두 단계 결정* 에 충분, 1.5b 는 다음 세션
+- DirectML 대신 Vulkan 명시 — 폐기: 현재 100% GPU 활용 확인됐고 두 백엔드 효율 차이 미미 추정 (Strix Halo 특성)
+**적용 범위**:
+- MEMORY.md 본 결정 로그 (CPU·GPU baseline + 모델 비교 데이터)
+- MEMORY.md 활성 작업: M1.1 GPU 가속 → ✅ 완료. ROCm Linux native·1.5b 측정·L3 라우터 설계 신규 후속 등록
+- `infra/phaiakes9/GPU_ACTIVATION_FOLLOWUP.md` 의 옵션 A1 *실증 완료*. 옵션 F(ROCm) 가 후속 세션 우선
+**후속 작업 (별도 PR/세션)**:
+1. **ROCm 7.2+ Linux native 시도** — 옵션 F. BIOS UMA Frame Buffer Fixed 48-64GB + Linux Kernel 6.18.4+ + ROCm 7.2.0+. 목표: tok/s 60-150 (현재 32 의 2-5x)
+2. **qwen2-math:1.5b GPU 측정** — 실시간 대화 SLA 통과 가능성 검증. 1GB pull + 동일 벤치
+3. **L3 라우터 fast/quality 두 단계 설계** — `docs/architecture/03_content_llm.md` 갱신 또는 별도 설계서
+4. **healthcheck.sh 디폴트 timeout 상향** — 30초 → 90초 (큰 모델 콜드 로드 대응)
+**상태**: GPU 가속 활성화 완료. Phaiakes9 가 *L3 LLM 라우터 두 단계 모두 운영 가능한 환경* 확보. 본격적 L3 라우터 구현은 다음 마일스톤(M1.2). 옵션 A1(Windows Ollama 경유) 가 *셋업 노력 vs 효과* 면에서 최적의 진입점이었음 확인.
 
 ### 2026-05-15: Phaiakes9 1차 셋업 완료 — CPU baseline 확보, GPU 후속 분리
 **컨텍스트**: M1.0a Phaiakes9 머신 셋업 (NucBox EVO-X2 / AMD Ryzen AI Max+ 395 + Radeon 8060S Strix Halo / WSL2 Ubuntu 24.04). 셋업 과정에서 인프라 스크립트 다수의 버그·잘못된 모델 카탈로그 발견·fix. 1차 셋업 종료 단계로 GPU 활성화 시도 — Vulkan 경로에서 RADV가 WSL2 DXG 패스스루를 인식 못 함 확인 (Mesa 25.2.8에 DZN ICD 미포함). Kiki가 *Strix Halo 활성화 정확 가이드* 제공 (BIOS UMA Frame Buffer Fixed 48~64GB + Linux Kernel 6.18.4+/Firmware 20260110+/ROCm 7.2.0+ + WSL2 librocdxg + AMD Adrenalin 26.x+).
