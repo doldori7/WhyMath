@@ -26,11 +26,11 @@
 ### 활성 작업
 - 🔄 **L1.NCIC.정제** (별도 PR) — `_PdfStandardExtractor` 영역 추출 + 본문/해설 분리 (2026-05-15 결정 로그 참조)
 - 🔄 **ROCm 7.2+ Linux native 시도** (옵션 F, 별도 세션) — DirectML 32 tok/s 의 *2-3x 잠재력* 시도. BIOS UMA Frame Buffer Fixed 48-64GB + Linux Kernel 6.18.4+ + ROCm 7.2.0+ 요구. 출발점: `infra/phaiakes9/GPU_ACTIVATION_FOLLOWUP.md` §3 옵션 A·C
-- 📋 **qwen2-math:1.5b GPU 측정** — 실시간 대화 SLA(p50 < 2초) 통과 가능성 검증. Windows Ollama 환경에서 1GB pull 후 같은 벤치 재실행. 10-15분
-- 📋 **L3 라우터 fast/quality 두 단계 설계** — `docs/architecture/03_content_llm.md` 갱신 또는 별도 설계서. 어떤 입력이 7B(fast) / 27B(quality) 로 분기되는지 결정 로직 명세
+- 📋 **L3 라우터 fast/mid/quality 3단계 설계** — `docs/architecture/03_content_llm.md` 갱신 또는 별도 설계서. 어떤 입력이 1.5B(fast) / 7B(mid) / 27B(quality) 로 분기되는지 결정 로직 명세 (2026-05-19 결정 로그 참조)
+- 📋 **fast tier 품질 검증** — qwen2-math:1.5b 가 *간단 산술·메타 응답·분류*에서 7B 대비 *품질 차이* 측정. L3 라우터 구현 시 진행
 - 📋 **Phaiakes9 카탈로그 cosmetic 정리** (별도 PR) — README.md 7군데, SETUP_GUIDE.md 1군데, 주석 4군데. 코드 동작 영향 없음, 문서 일관성만
 - 📋 **Phaiakes9 systemd unit `ProtectSystem=full` 완화** (별도 PR) — `failed to persist model recommendations snapshot ... read-only file system` 경고 해소. `ReadWritePaths=/usr/share/ollama` 추가
-- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그) / **`main` 보호 규칙 적용**(2026-05-15, PR #1로 CI 첫 가동·status check 등록) / **M1.0a Phaiakes9 1차 셋업** (2026-05-15, NucBox EVO-X2 + WSL2) / **M1.1 CPU baseline** (qwen2-math:7b, 12.62 tok/s @ concurrent 1) / **M1.1 GPU 가속 활성화** (2026-05-16, Windows Ollama 경유 DirectML, qwen2-math:7b 32.63 tok/s + qwen3.5:27b 9.22 tok/s, CPU 대비 2.6x — 옵션 A1 채택)
+- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그) / **`main` 보호 규칙 적용**(2026-05-15, PR #1로 CI 첫 가동·status check 등록) / **M1.0a Phaiakes9 1차 셋업** (2026-05-15, NucBox EVO-X2 + WSL2) / **M1.1 CPU baseline** (qwen2-math:7b, 12.62 tok/s @ concurrent 1) / **M1.1 GPU 가속 활성화** (2026-05-16, Windows Ollama 경유 DirectML, qwen2-math:7b 32.63 tok/s + qwen3.5:27b 9.22 tok/s, CPU 대비 2.6x — 옵션 A1 채택) / **M1.1 fast tier 후보 측정** (2026-05-19, qwen2-math:1.5b GPU 124.25 tok/s @ c=1, p50 1010ms — L3 SLA 게이트 PASS, fast/mid/quality 3단계 라인업 결정)
 
 ### 완료된 마일스톤
 - 2026-05: 7계층 아키텍처 확정
@@ -48,6 +48,52 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-19: qwen2-math:1.5b GPU 측정 완료 — L3 라우터 fast tier 후보 확정, 3단계 라인업 결정
+**컨텍스트**: 2026-05-16 GPU 활성화 후 후속 작업 1번. qwen2-math:7b GPU 32.63 tok/s · p50 3,918ms / qwen3.5:27b GPU 9.22 tok/s · p50 13,886ms 둘 다 L3 SLA(p50 < 2초) FAIL → *실시간 대화 즉답이 가능한 더 작은 모델 측정 필요*. Ollama Library의 `qwen2-math:1.5b` (934 MB, 2026-05 정식 등록) 후보. 동일 환경(Windows Ollama 0.24.0 + DirectML · Strix Halo Radeon 8060S · WSL2 클라이언트 `WHYMATH_OLLAMA_HOST=http://172.17.112.1:11434`) + 동일 벤치 스위트(고1 내신 원작 8문항)로 측정.
+**결정**:
+- L3 라우터 라인업을 *fast/quality 2단계*에서 ***fast/mid/quality 3단계***로 확장:
+  - **fast tier = qwen2-math:1.5b** (대화 즉답·분류·1단계 산술·관리적 응답) — *L3 SLA 게이트 PASS*
+  - **mid tier = qwen2-math:7b** (수학 풀이·2~3단계 추론·메인 학생 대화) — p50 ~4초, 게이트 FAIL이나 *허용 응답 시간 내*
+  - **quality tier = qwen3.5:27b** (답안 검증·복잡 추론·PRM 후보·백그라운드) — p50 ~14초, *동기 응답 불가*
+- Phaiakes9가 *L3 SLA 준수 환경* 보유 입증 — 옵션 F(ROCm Linux native) 의 *2-5x 잠재력*은 이 게이트 통과 후에도 *동시도 4·mid·quality* 개선 여지로 유효
+**환경**: 2026-05-16 결정 로그와 동일 (Windows Ollama 0.24.0 / DirectML / Radeon 8060S Strix Halo / WSL2 Ubuntu 24.04 클라이언트). 워밍업 1회 후 측정. 헬스체크 3단계 통과 (`'2+2=' → '...2 + 2 = 4...'`).
+**GPU baseline — qwen2-math:1.5b (2026-05-19 11:50 KST)**:
+- 동시도 1: p50=**1,009.99ms** / p90=1,088.56ms / p99=1,098.48ms / **124.25 tok/s**
+- 동시도 4: p50=3,522.03ms / p90=3,590.26ms / p99=3,658.16ms / **142.91 tok/s**
+- L3 SLA 게이트 (p50 < 2000ms): ✅ **PASS** (동시도 1)
+- Windows GPU 적재: 100% GPU, 1.4 GB VRAM (`ollama ps`)
+- 결과 JSON: `infra/phaiakes9/results/2026-05-19_115051.json` (.gitignore — 로컬 보관)
+**3점 비교 (GPU baseline 종합)**:
+| 모델 | 디스크 | p50 (c=1) | tok/s (c=1) | tok/s (c=4) | 게이트 (c=1) | 용도 후보 |
+|---|---|---|---|---|---|---|
+| qwen2-math:1.5b | 934 MB | **1,010ms** | **124.25** | 142.91 | ✅ PASS | **fast tier** (대화 즉답) |
+| qwen2-math:7b | 4.4 GB | 3,918ms | 32.63 | 33.81 | ❌ FAIL | **mid tier** (수학 풀이·메인 대화) |
+| qwen3.5:27b | 17 GB | 13,886ms | 9.22 | 9.28 | ❌ FAIL | **quality tier** (검증·백그라운드) |
+**병렬 처리 특성 (1.5b vs 7b vs 27b)**:
+- 1.5b: c=1 → c=4 tok/s **124 → 143 (+15%)** — *GPU throughput 활용 작동, 동시 4 처리 가능*
+- 7b: c=1 → c=4 tok/s 33 → 34 (+4%) — 한계 근접, c=4에서 p50 15초로 폭발
+- 27b: c=1 → c=4 tok/s 9.22 → 9.28 (~0%) — *GPU 한 요청 100% 점유, 병렬 미작동*
+- → **1.5b 가 fast tier 로서 *피크 트래픽 흡수* 역할까지 가능** (학생당 0.5-1 RPS 가정 시 단일 GPU로 수십 명 동시 대응)
+**근거**:
+- 1.5b 가 *L3 SLA 게이트 통과 + 동시도 4 throughput scaling 작동* — fast tier 의 *지연·처리량 동시 충족* 데이터 확보
+- 7b·27b 가 게이트 FAIL 인 것이 *문제가 아니라 역할 분기 근거* — 한 모델로 *즉답 + 정확성* 둘 다 충족 불가, 3단계 분기가 *비용·품질·지연의 파레토 최적*
+- 1.5b 의 *수학 특화(qwen2-math)* + *작은 크기* 결합으로 *분류·라우팅·간단 산술*에서 7b 와 *품질 차이 좁음* 가정 — 실제 품질 검증은 후속 (L3 라우터 구현 시)
+**대안**:
+- 단일 tier (7b 단독) 진행 — 폐기: p50 4초가 *즉답엔 길고 정밀 채점엔 짧음*. 두 요구 동시 충족 불가
+- fast = 7b 유지 (1.5b 폐기) — 폐기: 게이트 FAIL 사실 변하지 않음, 1.5b 의 *6배 throughput·4배 빠른 응답* 데이터 무시
+- 클라우드 Claude/GPT 로 fast tier 위탁 — 폐기: CLAUDE.md *로컬 LLM 우선* 원칙 위배, 학생당 일 50-100회 호출 시 비용 폭발
+- qwen2-math:0.5b 또는 다른 1B 후보 추가 측정 — *보류*: 1.5b 가 이미 SLA 충족, 추가 측정 ROI 낮음. 라우터 구현 후 *fast tier 품질 미흡* 시 재시도
+**적용 범위**:
+- MEMORY.md 본 결정 로그 (3점 비교 + 라우터 라인업 결정)
+- MEMORY.md 활성 작업: "qwen2-math:1.5b GPU 측정" → ✅ 완료, "L3 라우터 fast/quality 두 단계" → "fast/mid/quality 3단계"로 갱신, "fast tier 품질 검증" 신규 등록
+- `infra/phaiakes9/GPU_ACTIVATION_FOLLOWUP.md` 옵션 A1 *완전 실증 완료* (1.5b·7b·27b 3점 데이터로 라우터 라인업 결정 완료)
+**후속 작업 (별도 PR/세션)**:
+1. **L3 라우터 fast/mid/quality 3단계 설계** — `docs/architecture/03_content_llm.md` 갱신 또는 별도 설계서. *입력 분류기* + 분기 결정 로직 명세 (다음 트랙 A)
+2. **fast tier 품질 검증** — 1.5b 가 *간단 산술·메타 응답·분류* 에서 7b 대비 *품질 차이* 측정. L3 라우터 구현 시 진행
+3. **ROCm 7.2+ Linux native 시도** (옵션 F 유지) — *2-5x 잠재력*은 mid·quality tier 개선 여지로 유효 (BIOS UMA·드라이버 사전 조치 필요)
+4. **healthcheck.sh 디폴트 timeout 상향** (2026-05-16 후속 4번 유지) — 30초 → 90초 (큰 모델 콜드 로드 대응)
+**상태**: L3 라우터 fast tier 후보 확정. Phaiakes9 가 *3단계 라인업 모두 운영 가능한 환경* 보유. 본격적 L3 라우터 구현(M1.2) 의 *데이터 기반 설계 근거 확보 완료*.
 
 ### 2026-05-16: Phaiakes9 GPU 가속 활성화 완료 — Windows Ollama 경유 DirectML, 모델 라인업 데이터 확보
 **컨텍스트**: 2026-05-15 결정 로그 *옵션 A1* 진행. Windows측에 Ollama 0.24.0 native 이미 설치되어 있음 확인 + Radeon 8060S(Strix Halo) GPU 자동 인식 (`ollama ps` PROCESSOR=100% GPU, qwen2-math:7b 5.2GB GPU 적재). WSL 측 클라이언트가 `WHYMATH_OLLAMA_HOST=http://172.17.112.1:11434` (Windows 호스트 IP) 로 호출 — 환경변수 한 줄만 변경, WSL 측 인프라 코드 자체는 *완전 무수정*. WSL2 NAT networking에서 Windows Ollama API 즉시 도달 (별도 firewall·OLLAMA_HOST=0.0.0.0 설정 불필요).
