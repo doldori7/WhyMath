@@ -20,6 +20,13 @@ Protocol·lazy import·argparse main)를 미러링한다.
 핵심 설계:
     - **결정적(프로그램) 채점.** LLM-as-judge를 쓰지 않는다 — 채점기는 순수 함수
       (set_f1·exact_match·normalize_form)이며 호출지점별로 매핑된다.
+    - **extract만 임베딩 의미매칭(03a §H 후속8).** 개념 추출(extract)은 '다항식 전개'
+      vs gold '다항식의 곱셈'처럼 *의미는 같고 표현이 다른* 개념을 정확매칭이 0점
+      처리한다(실측 qwen2.5:7b extract 0%의 주원인). 그래서 extract만 임베딩 코사인
+      유사도(set_f1_semantic)로 채점한다 — LLM-as-judge가 아니라 *임베딩 거리*라
+      결정성은 유지된다. translate/match/산술은 코드·수식·정답이라 *정확매칭이
+      맞으므로* 그대로 둔다(정확해야 하는 출력에 의미매칭 금지). 임베딩 미가용·실패
+      시 extract도 정확매칭(set_f1)으로 폴백하고 보고서에 그 사실을 남긴다.
     - **결정성(재현 가능 측정).** LLM 샘플링은 비결정적이라 실행마다 점수가 출렁인다
       (실측 산술 37~62%). _call_once는 generate options에 temperature=0을 넣어
       실행 간 변동을 제거한다(측정 안정성).
@@ -51,6 +58,8 @@ Protocol·lazy import·argparse main)를 미러링한다.
     WHYMATH_QEVAL_SAMPLES     평가셋 JSON 경로 (디폴트: ./fast_tier_eval.json)
     WHYMATH_QEVAL_OUTPUT      결과 JSON 출력 경로 (디폴트: results/qeval_<ts>.json)
     WHYMATH_QEVAL_NUM_PREDICT 모델당 생성 토큰 한도 (디폴트: 512 — 수학 모델 과추론 잘림 방지)
+    WHYMATH_QEVAL_EMBED_MODEL     extract 의미매칭 임베딩 모델 (디폴트: bge-m3)
+    WHYMATH_QEVAL_EMBED_THRESHOLD extract 의미매칭 코사인 하한 (디폴트: 0.6)
 
 종료 코드:
     0 = 평가 완료 + 모든 호출지점 FAST 유지 권고
@@ -68,6 +77,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import math
 import os
 import platform
 import re
@@ -126,9 +136,34 @@ ABS_MIN: Final[float] = 0.60
 # 동치(예: 0.60 vs 0.67-0.07)가 FP 잡음으로 뒤집히지 않게 한다(결정 안정성).
 _EPS: Final[float] = 1e-9
 
+# 임베딩 의미매칭 기본값 (03a §H 후속8) --------------------------------------
+# ⚠️ extract(개념 추출)만 의미매칭으로 채점한다. translate/match/산술은 코드·수식·
+# 정답이라 *정확매칭이 맞으므로* 그대로 둔다(정확해야 하는 출력은 의미매칭 금지).
+#
+# extract는 '다항식 전개' vs gold '다항식의 곱셈'처럼 *의미는 같고 표현이 다른* 개념을
+# 정확매칭(set_f1)이 0점 처리한다(Phaiakes9 실측 qwen2.5:7b extract 0%의 주원인). 이를
+# 임베딩 코사인 유사도로 공정하게 채점한다. 임베딩 미가용(클라이언트가 embed 미지원·
+# 호출 실패) 시에는 정확매칭(set_f1)으로 *폴백*한다(측정이 멈추지 않도록).
+#
+#   DEFAULT_EMBED_MODEL : 의미 임베딩 모델. bge-m3는 다국·한국어 의미 임베딩에 강한
+#       오픈 모델로 Phaiakes9(Ollama)에서 실행 가능하다(`ollama pull bge-m3`).
+#   DEFAULT_EMBED_THRESHOLD : 두 개념을 '같다'고 볼 코사인 유사도 하한.
+#       ⚠️ 이 값은 fabricate가 아니라 *문서화된 튜닝 가능 상수*다 — bge-m3 기준의
+#       합리적 시작점(0.6)이며, Kiki가 Phaiakes9에서 동의어/비동의어 쌍의 코사인
+#       분포를 보고 보정한다(03a §H 후속8). 너무 낮으면 무관 개념을 동치로 오인하고
+#       (precision↓), 너무 높으면 표현 변형을 놓친다(recall↓). bge-m3는 정규화된
+#       임베딩에서 의미 동치 쌍이 대체로 0.6~0.85에 분포한다고 알려져 0.6을 보수적
+#       하한으로 둔다.
+DEFAULT_EMBED_MODEL: Final[str] = "bge-m3"
+DEFAULT_EMBED_THRESHOLD: Final[float] = 0.6
+
 # 채점기 식별자 (호출지점 → 채점기 매핑) --------------------------------------
 GRADER_SET_F1: Final[str] = "set_f1"
 GRADER_EXACT: Final[str] = "exact_match"
+# extract 의미매칭 채점기 — 임베딩 코사인 유사도 기반 그리디 이분 매칭(set_f1_semantic).
+# extract 항목이 *임베딩으로 채점됐을 때* ItemScore.grader에 기록되어, 정확매칭(set_f1)
+# 폴백과 구분된다(보고서에서 어느 경로로 채점됐는지 추적).
+GRADER_SET_F1_SEMANTIC: Final[str] = "set_f1_semantic"
 
 # 호출지점(03a §B.2 CallSite) → 채점기 매핑.
 # CONCEPT_EXTRACT(①)는 개념 *집합* → set_f1(부분 점수).
@@ -221,6 +256,20 @@ class ModelMatrix:
         return self.nlp_fast if is_fast else self.nlp_mid
 
 
+@dataclass(slots=True, frozen=True)
+class EmbedConfig:
+    """extract 의미매칭 임베딩 설정 (03a §H 후속8).
+
+    extract(개념 추출)만 임베딩 코사인 유사도로 채점한다. enabled=False면 임베딩을
+    아예 시도하지 않고 정확매칭(set_f1)으로 채점한다(--no-embed). enabled=True여도
+    임베딩 호출이 실패하면 러너가 정확매칭으로 *폴백*한다(측정 중단 방지).
+    """
+
+    enabled: bool = True
+    model: str = DEFAULT_EMBED_MODEL
+    threshold: float = DEFAULT_EMBED_THRESHOLD
+
+
 @dataclass(slots=True)
 class ModelResult:
     """한 역할(FAST 또는 MID)의 전체 평가 결과.
@@ -272,6 +321,15 @@ class EvaluationReport:
     mid_result: ModelResult
     verdicts: list[CallSiteVerdict]
     overall_keep_fast: bool  # 모든 호출지점에서 FAST 유지면 True
+    # extract 의미매칭(03a §H 후속8) 메타데이터 ----------------------------------
+    embed_enabled: bool  # --no-embed면 False(extract도 정확매칭)
+    embed_model: str  # 의미 임베딩 모델(예: bge-m3)
+    embed_threshold: float  # 매칭 인정 코사인 하한
+    # extract가 *실제로* 무엇으로 채점됐는지: 'set_f1_semantic'(의미매칭) 또는
+    # 'set_f1'(임베딩 미가용/비활성 폴백). fast/mid 역할별로 기록한다(폴백은 보통
+    # 둘 다 같지만, 한쪽만 임베딩 실패할 수도 있어 분리).
+    extract_grader_fast: str
+    extract_grader_mid: str
 
 
 # ---- Ollama 클라이언트 추상화 (테스트 주입용) -------------------------------
@@ -288,6 +346,19 @@ class _OllamaClientProtocol(Protocol):
         stream: bool = False,
         options: dict[str, Any] | None = None,
     ) -> dict[str, Any]: ...
+
+    async def embed(  # noqa: D401 — 외부 라이브러리 시그니처 보존
+        self,
+        model: str,
+        input: list[str],  # noqa: A002 — ollama.AsyncClient.embed 시그니처 보존
+    ) -> dict[str, Any]:
+        """문자열 리스트를 임베딩한다 (extract 의미매칭용).
+
+        실제 `ollama.AsyncClient.embed`와 동형 — 반환은 `{"embeddings": [[float],...]}`
+        (입력 순서와 1:1 대응). EmbedResponse는 SubscriptableBaseModel이라 .get으로
+        조회 가능(generate 응답과 동일 규약).
+        """
+        ...
 
 
 def _build_default_client(host: str) -> _OllamaClientProtocol:
@@ -689,6 +760,134 @@ def set_f1_parts(parsed: list[str], gold: list[str]) -> tuple[float, float, floa
     return precision, recall, f1
 
 
+def cosine(a: list[float], b: list[float]) -> float:
+    """두 벡터의 코사인 유사도 (순수 함수, stdlib math만 사용).
+
+    cos = (a·b) / (||a|| · ||b||). 길이가 다르면 *짧은 쪽 길이*까지만 내적한다
+    (방어적 — 실제로는 같은 모델 임베딩이라 동일 차원). 한쪽이라도 영벡터(노름 0)
+    이면 방향이 정의되지 않으므로 0.0을 반환한다(무관으로 간주, 분모 0 방지).
+    numpy를 쓰지 않는 이유: 이 모듈은 stdlib만으로 로드·테스트 가능해야 한다
+    (bench_latency.py·quality_eval.py 설계 원칙).
+    """
+    n = min(len(a), len(b))
+    dot = 0.0
+    norm_a = 0.0
+    norm_b = 0.0
+    for i in range(n):
+        dot += a[i] * b[i]
+    for x in a:
+        norm_a += x * x
+    for y in b:
+        norm_b += y * y
+    if norm_a <= 0.0 or norm_b <= 0.0:
+        return 0.0
+    return dot / (math.sqrt(norm_a) * math.sqrt(norm_b))
+
+
+def set_f1_semantic(
+    parsed: list[str],
+    gold: list[str],
+    emb: dict[str, list[float]],
+    threshold: float,
+) -> float:
+    """개념 *집합* F1 — 임베딩 코사인 유사도 의미매칭 (CONCEPT_EXTRACT ① 전용).
+
+    set_f1(정확매칭)의 의미매칭 판본. '다항식 전개' vs gold '다항식의 곱셈'처럼
+    표현이 다른 동의 개념을 정확매칭은 0점 처리하지만, 여기서는 임베딩 코사인
+    유사도가 threshold 이상이면 매칭으로 인정한다.
+
+    그리디 이분(1:1) 매칭:
+      1. 모든 (parsed, gold) 쌍의 코사인 유사도를 계산한다.
+      2. 유사도 내림차순으로 정렬한다.
+      3. 위에서부터, 양쪽(parsed 항목·gold 항목) 모두 아직 미매칭이고 유사도가
+         threshold 이상이면 그 쌍을 매칭하고 둘 다 '사용됨'으로 표시한다(1:1).
+      그리디라 전역 최적(헝가리안)은 아니지만, 채점 안정성·결정성·O(N²logN) 단순성
+      을 위해 충분하다(extract 개념 수는 보통 한 자릿수).
+
+    TP = 매칭 수, precision = TP/|parsed|, recall = TP/|gold|, F1 = 조화평균.
+    빈 집합 처리는 set_f1과 *동일 규약*: gold가 비면 parsed도 비어야 1.0, 아니면 0.0.
+
+    Args:
+        parsed: 모델이 추출한 개념 리스트(정규화 전 원문).
+        gold: 정답 개념 리스트(정규화 전 원문).
+        emb: 개념 문자열(정규화 후) → 임베딩 벡터의 *미리 계산된* 맵. 러너가
+            parsed·gold 유니크 집합을 한 번에 임베딩해 채운다. 키가 없는 개념은
+            영벡터로 간주(매칭 안 됨) — 방어적.
+        threshold: 매칭 인정 코사인 하한(DEFAULT_EMBED_THRESHOLD 참고).
+
+    Returns:
+        F1 점수(0.0~1.0).
+    """
+    _, _, f1 = set_f1_semantic_parts(parsed, gold, emb, threshold)
+    return f1
+
+
+def set_f1_semantic_parts(
+    parsed: list[str],
+    gold: list[str],
+    emb: dict[str, list[float]],
+    threshold: float,
+) -> tuple[float, float, float]:
+    """set_f1_semantic의 (precision, recall, f1) 3요소 반환 — 디버깅·리포트용.
+
+    매칭 알고리즘·빈 집합 규약은 set_f1_semantic 참조. 정규화(normalize_concept)
+    후 *유니크* 집합을 만들어, emb 맵 조회 키와 일치시킨다(러너의 임베딩 키와 동일).
+    """
+    p_list = _unique_normalized(parsed)
+    g_list = _unique_normalized(gold)
+    if not g_list:
+        v = 1.0 if not p_list else 0.0
+        return v, v, v
+    if not p_list:
+        return 0.0, 0.0, 0.0
+
+    # 모든 (p, g) 쌍의 코사인을 (유사도, p_idx, g_idx)로 모아 내림차순 정렬.
+    pairs: list[tuple[float, int, int]] = []
+    for pi, p in enumerate(p_list):
+        pv = emb.get(p, [])
+        for gi, g in enumerate(g_list):
+            gv = emb.get(g, [])
+            sim = cosine(pv, gv)
+            pairs.append((sim, pi, gi))
+    pairs.sort(key=lambda t: t[0], reverse=True)
+
+    p_used = [False] * len(p_list)
+    g_used = [False] * len(g_list)
+    tp = 0
+    for sim, pi, gi in pairs:
+        if sim < threshold:
+            break  # 정렬돼 있으므로 이후는 전부 threshold 미만 → 중단.
+        if not p_used[pi] and not g_used[gi]:
+            p_used[pi] = True
+            g_used[gi] = True
+            tp += 1
+
+    if tp == 0:
+        return 0.0, 0.0, 0.0
+    precision = tp / len(p_list)
+    recall = tp / len(g_list)
+    f1 = 2 * precision * recall / (precision + recall)
+    return precision, recall, f1
+
+
+def _unique_normalized(concepts: list[str]) -> list[str]:
+    """개념 리스트를 normalize_concept으로 정규화 + 빈 항목 제거 + 순서 보존 중복 제거.
+
+    set_f1의 *집합* 의미를 의미매칭에서도 유지하되(중복은 한 번만), 리스트로 돌려
+    그리디 매칭의 인덱스 기준으로 쓴다. 러너의 임베딩 키 생성과 동일 정규화를 써야
+    emb 맵 조회가 어긋나지 않는다.
+    """
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in concepts:
+        norm = normalize_concept(c)
+        if not norm or norm in seen:
+            continue
+        seen.add(norm)
+        out.append(norm)
+    return out
+
+
 def grade_item(item: EvalItem, raw_response: str) -> ItemScore:
     """한 항목의 raw 응답을 파싱·채점한다 (호출지점별 채점기 디스패치).
 
@@ -729,6 +928,48 @@ def grade_item(item: EvalItem, raw_response: str) -> ItemScore:
             item_id=item.id,
             call_site=item.call_site,
             grader=grader,
+            score=0.0,
+            correct=False,
+            raw_response=raw_response,
+            parsed="",
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+def grade_extract_semantic(
+    item: EvalItem,
+    raw_response: str,
+    emb: dict[str, list[float]],
+    threshold: float,
+) -> ItemScore:
+    """extract 항목을 *임베딩 의미매칭*(set_f1_semantic)으로 채점한다 (CONCEPT_EXTRACT ① 전용).
+
+    grade_item(정확매칭 set_f1)의 의미매칭 판본. 러너가 미리 계산한 emb 맵을 받아,
+    parse_concept_list로 파싱한 개념과 gold를 의미매칭한다. grader는
+    GRADER_SET_F1_SEMANTIC으로 기록되어 정확매칭 폴백과 구분된다.
+
+    이 함수는 *순수*다(emb는 인자로 주입) — 임베딩 호출은 러너가 한다. extract가
+    아닌 항목에 부르면 안 된다(호출 측 보장). 파싱·채점 예외는 grade_item과 동일하게
+    score=0·error로 흡수한다(러너 보호).
+    """
+    try:
+        assert isinstance(item.gold, list)
+        parsed_list = parse_concept_list(raw_response)
+        score = set_f1_semantic(parsed_list, item.gold, emb, threshold)
+        return ItemScore(
+            item_id=item.id,
+            call_site=item.call_site,
+            grader=GRADER_SET_F1_SEMANTIC,
+            score=score,
+            correct=score >= 1.0,
+            raw_response=raw_response,
+            parsed=parsed_list,
+        )
+    except Exception as exc:  # noqa: BLE001 — 채점 오류를 결과로 흡수
+        return ItemScore(
+            item_id=item.id,
+            call_site=item.call_site,
+            grader=GRADER_SET_F1_SEMANTIC,
             score=0.0,
             correct=False,
             raw_response=raw_response,
@@ -881,37 +1122,113 @@ async def _call_once(
         return f"ERROR: {type(exc).__name__}: {exc}"
 
 
+async def _embed_concepts(
+    client: _OllamaClientProtocol,
+    model: str,
+    concepts: list[str],
+) -> dict[str, list[float]] | None:
+    """개념 문자열 리스트를 한 번에 임베딩해 {개념: 벡터} 맵을 만든다 (extract 의미매칭).
+
+    concepts는 *정규화·유니크* 집합이어야 한다(러너가 _unique_normalized로 만든 것).
+    빈 리스트면 빈 맵을 돌려준다(임베딩 호출 생략 — 채점은 빈 집합 규약으로 처리).
+    임베딩 호출 실패·응답 형식 불일치(embeddings 개수가 입력과 다름 등)면 None을
+    돌려주고, 러너는 정확매칭으로 폴백한다(측정 중단 방지).
+
+    embed 반환은 ollama 동형 `{"embeddings": [[float],...]}` — 입력 순서와 1:1 대응.
+    클라이언트가 embed 메서드를 아예 갖지 않으면(구형 가짜 등) AttributeError가 나고,
+    그것도 None 폴백으로 흡수한다.
+    """
+    if not concepts:
+        return {}
+    try:
+        response = await client.embed(model=model, input=concepts)
+        vectors = response.get("embeddings", [])
+        # 응답이 입력과 1:1 대응하지 않으면 신뢰 불가 → 폴백.
+        if not isinstance(vectors, list) or len(vectors) != len(concepts):
+            return None
+        emb: dict[str, list[float]] = {}
+        for concept, vec in zip(concepts, vectors):
+            emb[concept] = [float(x) for x in vec]
+        return emb
+    except Exception:  # noqa: BLE001 — 임베딩 실패는 폴백 신호로 흡수
+        return None
+
+
 async def _evaluate_model(
     client: _OllamaClientProtocol,
     matrix: ModelMatrix,
     role: str,
     items: list[EvalItem],
     num_predict: int,
-) -> ModelResult:
+    embed: EmbedConfig,
+) -> tuple[ModelResult, str]:
     """한 역할(fast/mid)로 전체 항목을 순차 평가(호출 → 채점 → 집계).
 
     태스크 패밀리 인지: 각 항목의 family()로 matrix에서 (이 역할의) 모델을 골라
     호출한다. 즉 NLP 항목은 일반 모델, MATH 항목(산술)은 수학 특화 모델이 같은
     역할 안에서 섞여 쓰인다. models_used에 패밀리별 실제 모델을 기록한다.
 
+    extract 의미매칭(03a §H 후속8): extract 항목은 정확매칭(set_f1) 대신 임베딩
+    코사인 유사도(set_f1_semantic)로 채점한다. 흐름은 (1) 모든 항목을 호출해 raw
+    응답을 모으고, (2) extract 항목의 파싱된 개념 + gold 개념의 *유니크 집합*을 한
+    번에 임베딩해 emb 맵을 만든 뒤, (3) extract는 의미매칭으로, 그 외는 정확매칭으로
+    채점한다. 임베딩 비활성(embed.enabled=False)이거나 임베딩 실패 시 extract도
+    정확매칭으로 *폴백*한다(반환 튜플 두 번째 값에 실제 채점기 식별자 표기).
+
     순차 호출인 이유: 품질 평가는 throughput이 목적이 아니라 *결정성*이 중요하고,
     GPU 단일 점유 모델(특히 MID)에서 동시 호출은 의미가 없다(03a §A.1).
+
+    Returns:
+        (ModelResult, extract_grader) — extract_grader는 GRADER_SET_F1_SEMANTIC
+        (의미매칭 성공) 또는 GRADER_SET_F1(폴백/extract 항목 없음).
     """
-    scores: list[ItemScore] = []
     models_used: dict[str, str] = {}
+
+    # 1) 전 항목 호출 — raw 응답을 (항목, raw)로 모은다(extract는 채점을 뒤로 미룸).
+    raws: list[tuple[EvalItem, str]] = []
     for item in items:
         family = item.family()
         model = matrix.model_for(family, role)
         models_used[family] = model
         raw = await _call_once(client, model, item, num_predict)
-        scores.append(grade_item(item, raw))
-    return ModelResult(
+        raws.append((item, raw))
+
+    extract_items = [(it, raw) for it, raw in raws if it.grader() == GRADER_SET_F1]
+
+    # 2) extract 임베딩 맵 구성(활성 + extract 존재 시). 파싱 개념 + gold 유니크 집합.
+    emb: dict[str, list[float]] | None = None
+    if embed.enabled and extract_items:
+        concept_pool: list[str] = []
+        for it, raw in extract_items:
+            concept_pool.extend(parse_concept_list(raw))
+            if isinstance(it.gold, list):
+                concept_pool.extend(it.gold)
+        unique_concepts = _unique_normalized(concept_pool)
+        emb = await _embed_concepts(client, embed.model, unique_concepts)
+
+    # extract 실제 채점기: 임베딩 맵이 만들어졌으면 의미매칭, 아니면 정확매칭 폴백.
+    use_semantic = emb is not None
+    extract_grader = GRADER_SET_F1_SEMANTIC if use_semantic else GRADER_SET_F1
+
+    # 3) 채점 — extract는 의미매칭(or 폴백), 그 외는 기존 정확매칭(grade_item).
+    scores: list[ItemScore] = []
+    for item, raw in raws:
+        if item.grader() == GRADER_SET_F1:
+            if use_semantic and emb is not None:
+                scores.append(grade_extract_semantic(item, raw, emb, embed.threshold))
+            else:
+                scores.append(grade_item(item, raw))
+        else:
+            scores.append(grade_item(item, raw))
+
+    result = ModelResult(
         model=_summarize_models(models_used),
         role=role,
         item_scores=scores,
         by_call_site=aggregate_by_call_site(scores),
         models_used=models_used,
     )
+    return result, extract_grader
 
 
 def _summarize_models(models_used: dict[str, str]) -> str:
@@ -928,12 +1245,17 @@ async def run_evaluation(
     num_predict: int = DEFAULT_NUM_PREDICT,
     delta: float = DELTA,
     abs_min: float = ABS_MIN,
+    embed: EmbedConfig | None = None,
     client: _OllamaClientProtocol | None = None,
 ) -> EvaluationReport:
     """FAST vs MID 품질 평가 1회 수행. 단위 테스트는 client 인자로 주입.
 
     태스크 패밀리 인지: 각 항목은 family()에 따라 matrix에서 (fast, mid) 모델을 골라
     평가된다. FAST 결과 = 패밀리별 소형 모델, MID 결과 = 패밀리별 대형 모델.
+
+    extract 의미매칭(03a §H 후속8): extract 항목은 임베딩 코사인 유사도(set_f1_semantic)
+    로 채점한다. embed=None이면 기본 EmbedConfig(활성, bge-m3, 0.6)를 쓴다. 임베딩
+    비활성·실패 시 extract도 정확매칭(set_f1)으로 폴백하고 보고서에 그 사실을 남긴다.
 
     Args:
         matrix: 패밀리별 (fast, mid) 모델 매핑(ModelMatrix).
@@ -942,6 +1264,7 @@ async def run_evaluation(
         num_predict: 호출당 생성 토큰 한도.
         delta: 결정 규칙 상대 허용차(기본 DELTA).
         abs_min: 결정 규칙 절대 하한(기본 ABS_MIN).
+        embed: extract 의미매칭 설정(None이면 기본 EmbedConfig).
         client: 테스트에서 주입하는 모의 클라이언트. None이면 기본 생성.
 
     Returns:
@@ -950,10 +1273,15 @@ async def run_evaluation(
     if not items:
         raise ValueError("평가 항목이 비어 있습니다. fast_tier_eval.json 확인.")
 
+    embed_cfg = embed if embed is not None else EmbedConfig()
     real_client = client if client is not None else _build_default_client(host)
 
-    fast_result = await _evaluate_model(real_client, matrix, "fast", items, num_predict)
-    mid_result = await _evaluate_model(real_client, matrix, "mid", items, num_predict)
+    fast_result, extract_grader_fast = await _evaluate_model(
+        real_client, matrix, "fast", items, num_predict, embed_cfg
+    )
+    mid_result, extract_grader_mid = await _evaluate_model(
+        real_client, matrix, "mid", items, num_predict, embed_cfg
+    )
 
     verdicts = build_verdicts(
         fast_result.by_call_site,
@@ -976,6 +1304,11 @@ async def run_evaluation(
         mid_result=mid_result,
         verdicts=verdicts,
         overall_keep_fast=overall_keep_fast,
+        embed_enabled=embed_cfg.enabled,
+        embed_model=embed_cfg.model,
+        embed_threshold=embed_cfg.threshold,
+        extract_grader_fast=extract_grader_fast,
+        extract_grader_mid=extract_grader_mid,
     )
 
 
@@ -1052,6 +1385,26 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=ABS_MIN,
         help=f"결정 규칙 절대 하한 (디폴트: {ABS_MIN})",
     )
+    # extract 의미매칭(03a §H 후속8) -----------------------------------------
+    p.add_argument(
+        "--embed-model",
+        default=os.environ.get("WHYMATH_QEVAL_EMBED_MODEL", DEFAULT_EMBED_MODEL),
+        help=f"extract 의미매칭 임베딩 모델 (디폴트: {DEFAULT_EMBED_MODEL})",
+    )
+    p.add_argument(
+        "--embed-threshold",
+        type=float,
+        default=float(os.environ.get("WHYMATH_QEVAL_EMBED_THRESHOLD", DEFAULT_EMBED_THRESHOLD)),
+        help=(
+            f"extract 의미매칭 코사인 하한 (디폴트: {DEFAULT_EMBED_THRESHOLD}, "
+            "bge-m3 기준·Phaiakes9 보정 대상)"
+        ),
+    )
+    p.add_argument(
+        "--no-embed",
+        action="store_true",
+        help="extract 의미매칭을 끄고 정확매칭(set_f1)으로 채점(임베딩 미가용 환경)",
+    )
     return p
 
 
@@ -1074,6 +1427,17 @@ def _print_summary(report: EvaluationReport) -> None:
         f"FAST={m['nlp_fast']} / MID={m['nlp_mid']}"
     )
     print(f"[qeval] 결정 규칙: DELTA={report.delta} ABS_MIN={report.abs_min}")
+    # extract 채점 경로(의미매칭 성공 vs 정확매칭 폴백)를 노출한다(03a §H 후속8).
+    if report.embed_enabled:
+        semantic = GRADER_SET_F1_SEMANTIC
+        fast_path = "의미매칭" if report.extract_grader_fast == semantic else "정확매칭(폴백)"
+        mid_path = "의미매칭" if report.extract_grader_mid == semantic else "정확매칭(폴백)"
+        print(
+            f"[qeval] extract 채점: 임베딩={report.embed_model} "
+            f"threshold={report.embed_threshold} / FAST={fast_path} MID={mid_path}"
+        )
+    else:
+        print("[qeval] extract 채점: 정확매칭 set_f1 (의미매칭 비활성)")
     print("[qeval] 호출지점별 판정:")
     for v in report.verdicts:
         flag = "✅ FAST 유지" if v.keep_fast else "⬆️  MID 승급 권고"
@@ -1110,9 +1474,21 @@ def main(argv: list[str] | None = None) -> int:
         f"[qeval] NLP  패밀리(extract/translate/match): "
         f"FAST={matrix.nlp_fast} / MID={matrix.nlp_mid}"
     )
+    embed_cfg = EmbedConfig(
+        enabled=not args.no_embed,
+        model=args.embed_model,
+        threshold=args.embed_threshold,
+    )
     print(f"[qeval] 호스트: {args.host}")
     print(f"[qeval] 항목 수: {len(items)}")
     print(f"[qeval] num_predict: {args.num_predict}")
+    if embed_cfg.enabled:
+        print(
+            f"[qeval] extract 의미매칭: ON "
+            f"(임베딩={embed_cfg.model}, threshold={embed_cfg.threshold})"
+        )
+    else:
+        print("[qeval] extract 의미매칭: OFF (--no-embed → 정확매칭 set_f1)")
     print()
 
     try:
@@ -1124,6 +1500,7 @@ def main(argv: list[str] | None = None) -> int:
                 num_predict=args.num_predict,
                 delta=args.delta,
                 abs_min=args.abs_min,
+                embed=embed_cfg,
             )
         )
     except Exception as exc:  # noqa: BLE001

@@ -44,13 +44,17 @@ def qe() -> Any:
 
 # ---- 가짜 ollama 클라이언트 ------------------------------------------------
 class FakeOllamaClient:
-    """ollama.AsyncClient.generate 1메서드를 모방하는 가짜 객체.
+    """ollama.AsyncClient.generate/embed 를 모방하는 가짜 객체.
 
     Args:
         responses: 프롬프트 부분문자열 → 반환할 response 텍스트 매핑(부분 매칭).
         default: 매칭 실패 시 반환할 기본 텍스트.
         responses_by_model: (model, 프롬프트 부분문자열) 단위로 다른 답을 주고 싶을 때.
         fail_substrings: 프롬프트에 이 부분문자열이 있으면 RuntimeError 발생.
+        embeddings: 정규화된 개념 문자열 → 고정 임베딩 벡터 매핑. embed가 입력 순서
+            대로 이 맵을 조회해 벡터를 돌려준다(미등록 개념은 영벡터). None이면 임베딩
+            테스트를 안 하는 경우(기존 테스트)로, embed 호출 시 빈 매핑처럼 동작한다.
+        embed_fails: True면 embed가 RuntimeError를 던진다(임베딩 실패 → 폴백 검증용).
     """
 
     def __init__(
@@ -59,12 +63,17 @@ class FakeOllamaClient:
         default: str = "",
         responses_by_model: dict[tuple[str, str], str] | None = None,
         fail_substrings: set[str] | None = None,
+        embeddings: dict[str, list[float]] | None = None,
+        embed_fails: bool = False,
     ) -> None:
         self._responses = responses or {}
         self._default = default
         self._responses_by_model = responses_by_model or {}
         self._fail_substrings = fail_substrings or set()
+        self._embeddings = embeddings or {}
+        self._embed_fails = embed_fails
         self.calls: list[dict[str, Any]] = []
+        self.embed_calls: list[dict[str, Any]] = []
 
     async def generate(
         self,
@@ -86,6 +95,34 @@ class FakeOllamaClient:
             if sub in prompt:
                 return {"response": text, "done": True}
         return {"response": self._default, "done": True}
+
+    async def embed(
+        self,
+        model: str,
+        input: list[str],  # noqa: A002 — ollama.AsyncClient.embed 시그니처 보존
+    ) -> dict[str, Any]:
+        """입력 순서대로 고정 임베딩 벡터를 돌려준다(실제 ollama embed와 동형).
+
+        embeddings 맵에 없는 개념은 영벡터([0.0, 0.0])로 — 매칭되지 않음(방어적).
+        embed_fails=True면 RuntimeError(러너가 정확매칭으로 폴백하는지 검증).
+        """
+        self.embed_calls.append({"model": model, "input": list(input)})
+        if self._embed_fails:
+            raise RuntimeError("fake embed 실패")
+        vectors = [self._embeddings.get(c, [0.0, 0.0]) for c in input]
+        return {"embeddings": vectors}
+
+
+class _NoEmbedClient(FakeOllamaClient):
+    """embed 메서드가 *아예 없는* 구형 클라이언트 모사(AttributeError 폴백 검증).
+
+    embed 속성 접근 시 AttributeError를 내, 러너의 _embed_concepts가 그것을 잡고
+    None을 돌려 정확매칭으로 폴백하는 경로를 탄다(메서드 미존재와 동일한 효과).
+    """
+
+    @property
+    def embed(self) -> Any:
+        raise AttributeError("이 가짜 클라이언트는 embed를 지원하지 않습니다")
 
 
 def _matrix(qe: Any, **kw: Any) -> Any:
@@ -459,6 +496,138 @@ def test_set_f1_parts_no_overlap(qe: Any) -> None:
     assert qe.set_f1_parts(["a", "b"], ["c", "d"]) == (0.0, 0.0, 0.0)
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# 코사인 유사도 (cosine) — extract 의미매칭 기반 (03a §H 후속8)
+# ──────────────────────────────────────────────────────────────────────────
+def test_cosine_identical_vectors(qe: Any) -> None:
+    """동일 방향 벡터는 1.0(스케일 무관)."""
+    assert qe.cosine([1.0, 0.0], [1.0, 0.0]) == pytest.approx(1.0)
+    # 스케일이 달라도 방향이 같으면 1.0
+    assert qe.cosine([1.0, 2.0, 2.0], [2.0, 4.0, 4.0]) == pytest.approx(1.0)
+
+
+def test_cosine_orthogonal_and_opposite(qe: Any) -> None:
+    """직교 벡터는 0.0, 반대 방향은 -1.0."""
+    assert qe.cosine([1.0, 0.0], [0.0, 1.0]) == pytest.approx(0.0)
+    assert qe.cosine([1.0, 0.0], [-1.0, 0.0]) == pytest.approx(-1.0)
+
+
+def test_cosine_known_value(qe: Any) -> None:
+    """알려진 값: [1,1]·[1,0] = 1, 노름 √2·1 → cos = 1/√2 ≈ 0.7071."""
+    assert qe.cosine([1.0, 1.0], [1.0, 0.0]) == pytest.approx(1 / 2**0.5)
+    # [3,4]·[4,3] = 24, 노름 5·5=25 → 0.96
+    assert qe.cosine([3.0, 4.0], [4.0, 3.0]) == pytest.approx(0.96)
+
+
+def test_cosine_zero_vector_returns_zero(qe: Any) -> None:
+    """영벡터는 방향이 없으므로 0.0(분모 0 방지)."""
+    assert qe.cosine([0.0, 0.0], [1.0, 1.0]) == 0.0
+    assert qe.cosine([1.0, 1.0], [0.0, 0.0]) == 0.0
+    assert qe.cosine([], [1.0]) == 0.0
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 의미매칭 집합 F1 (set_f1_semantic / set_f1_semantic_parts) — 03a §H 후속8
+# ──────────────────────────────────────────────────────────────────────────
+def _syn_emb() -> dict[str, list[float]]:
+    """가짜 임베딩 맵(정규화된 키): 동의어는 고유사, 무관 개념은 직교.
+
+    키는 normalize_concept 결과(공백 제거·소문자)와 같아야 한다 — 러너의 emb 키와 동일.
+    '다항식의곱셈'·'다항식전개'는 거의 같은 방향(동의어), '무관개념'은 직교.
+    """
+    return {
+        "다항식의곱셈": [1.0, 0.0],
+        "다항식전개": [0.99, 0.14],  # cos ≈ 0.99 (동의어)
+        "인수분해": [0.0, 1.0],  # 위 둘과 직교
+        "무관개념": [0.0, 1.0],
+    }
+
+
+def test_set_f1_semantic_synonym_matches(qe: Any) -> None:
+    """표현이 다른 동의어(고 cosine)는 매칭 → F1=1.0 ('다항식 전개' vs '다항식의 곱셈')."""
+    emb = _syn_emb()
+    # 정확매칭(set_f1)이라면 불일치로 0.0이었을 케이스
+    assert qe.set_f1(["다항식 전개"], ["다항식의 곱셈"]) == 0.0
+    # 의미매칭은 동의어로 인정 → 1.0
+    assert qe.set_f1_semantic(["다항식 전개"], ["다항식의 곱셈"], emb, 0.6) == pytest.approx(1.0)
+
+
+def test_set_f1_semantic_unrelated_no_match(qe: Any) -> None:
+    """무관 개념(저 cosine)은 미매칭 → F1=0.0."""
+    emb = _syn_emb()
+    assert qe.set_f1_semantic(["무관 개념"], ["다항식의 곱셈"], emb, 0.6) == 0.0
+
+
+def test_set_f1_semantic_threshold_boundary(qe: Any) -> None:
+    """threshold 경계: cosine이 임계 이상이면 매칭, 미만이면 미매칭."""
+    # cos([1,0],[0.6,0.8]) = 0.6 정확히
+    emb = {"가": [1.0, 0.0], "나": [0.6, 0.8]}
+    # threshold=0.6 → 0.6 >= 0.6 매칭
+    assert qe.set_f1_semantic(["가"], ["나"], emb, 0.6) == pytest.approx(1.0)
+    # threshold를 0.6보다 살짝 위로 올리면 미매칭
+    assert qe.set_f1_semantic(["가"], ["나"], emb, 0.61) == 0.0
+
+
+def test_set_f1_semantic_empty_edges(qe: Any) -> None:
+    """빈 집합 규약은 set_f1과 동일: 둘 다 비면 1.0, 한쪽만 있으면 0.0."""
+    emb = _syn_emb()
+    assert qe.set_f1_semantic([], [], emb, 0.6) == 1.0
+    assert qe.set_f1_semantic(["다항식의 곱셈"], [], emb, 0.6) == 0.0
+    assert qe.set_f1_semantic([], ["다항식의 곱셈"], emb, 0.6) == 0.0
+
+
+def test_set_f1_semantic_partial(qe: Any) -> None:
+    """부분 매칭: parsed 2개 중 1개만 gold와 동의 → P=1/2, R=1/1, F1=2/3."""
+    emb = _syn_emb()
+    # '다항식 전개'(↔곱셈 동의), '무관 개념'(직교) vs gold ['다항식의 곱셈']
+    p, r, f1 = qe.set_f1_semantic_parts(["다항식 전개", "무관 개념"], ["다항식의 곱셈"], emb, 0.6)
+    assert p == pytest.approx(0.5)
+    assert r == pytest.approx(1.0)
+    assert f1 == pytest.approx(2 / 3)
+
+
+def test_set_f1_semantic_one_to_one_matching(qe: Any) -> None:
+    """그리디 1:1 이분 매칭: 한 gold가 두 parsed에 동시에 쓰이지 않는다.
+
+    parsed=[A1, A2] 둘 다 gold=[G] 하나와만 고유사일 때, G는 한 번만 매칭되어야
+    한다(중복 매칭 방지). TP=1 → P=1/2, R=1/1, F1=2/3.
+    """
+    emb = {"a1": [1.0, 0.0], "a2": [0.99, 0.14], "g": [1.0, 0.0]}
+    p, r, f1 = qe.set_f1_semantic_parts(["a1", "a2"], ["g"], emb, 0.6)
+    assert p == pytest.approx(0.5)  # 2개 중 1개만 매칭
+    assert r == pytest.approx(1.0)  # gold 1개 매칭됨
+    assert f1 == pytest.approx(2 / 3)
+
+
+def test_set_f1_semantic_greedy_picks_best_pair(qe: Any) -> None:
+    """그리디는 가장 높은 유사도 쌍부터 매칭한다(1:1 최적에 가까운 선택).
+
+    parsed=[X, Y], gold=[Gx, Gy]에서 X↔Gx(1.0), Y↔Gy(1.0)가 최선. 교차쌍은
+    유사도가 낮아야 하며, 그리디가 최고 쌍부터 잡아 둘 다 매칭 → F1=1.0.
+    """
+    emb = {
+        "x": [1.0, 0.0],
+        "gx": [1.0, 0.0],  # x와 동일(1.0)
+        "y": [0.0, 1.0],
+        "gy": [0.0, 1.0],  # y와 동일(1.0), x와는 직교(0.0)
+    }
+    assert qe.set_f1_semantic(["x", "y"], ["gx", "gy"], emb, 0.6) == pytest.approx(1.0)
+
+
+def test_set_f1_semantic_dedup_normalized(qe: Any) -> None:
+    """정규화 후 중복 개념은 한 번만 센다(집합 의미 유지)."""
+    emb = {"다항식의곱셈": [1.0, 0.0]}
+    # parsed에 '다항식의 곱셈'/'다항식의곱셈'(띄어쓰기만 다름)을 둘 다 줘도 1개로 취급
+    f1 = qe.set_f1_semantic(["다항식의 곱셈", "다항식의곱셈"], ["다항식의 곱셈"], emb, 0.6)
+    assert f1 == pytest.approx(1.0)
+
+
+def test_set_f1_semantic_missing_emb_key_no_match(qe: Any) -> None:
+    """emb 맵에 없는 개념은 영벡터로 간주 → 미매칭(방어적)."""
+    emb: dict[str, list[float]] = {}  # 아무 벡터도 없음
+    assert qe.set_f1_semantic(["다항식의 곱셈"], ["다항식의 곱셈"], emb, 0.6) == 0.0
+
+
 def test_grade_item_absorbs_exception(qe: Any) -> None:
     """채점 중 예외(gold 타입 불일치)는 score=0·error로 흡수된다(러너 보호).
 
@@ -507,6 +676,27 @@ def test_grade_item_extract_perfect_correct(qe: Any) -> None:
     score = qe.grade_item(item, "이 문제는 다항식.\n<ANSWER>분배법칙, 동류항정리</ANSWER>")
     assert score.score == pytest.approx(1.0)
     assert score.correct is True
+
+
+def test_grade_extract_semantic_synonym_correct(qe: Any) -> None:
+    """grade_extract_semantic: 동의어 표현도 매칭되어 grader=set_f1_semantic·correct."""
+    item = _item(qe, id="CE", call_site="extract", task_type="extract", gold=["다항식의 곱셈"])
+    emb = {"다항식의곱셈": [1.0, 0.0], "다항식전개": [0.99, 0.14]}
+    score = qe.grade_extract_semantic(item, "<ANSWER>다항식 전개</ANSWER>", emb, 0.6)
+    assert score.grader == qe.GRADER_SET_F1_SEMANTIC
+    assert score.score == pytest.approx(1.0)
+    assert score.correct is True
+    assert score.parsed == ["다항식 전개"]
+
+
+def test_grade_extract_semantic_absorbs_exception(qe: Any) -> None:
+    """gold가 str(타입 불일치)이면 assert 깨짐 → score=0·error로 흡수(grader 유지)."""
+    bad = _item(qe, id="BAD", call_site="extract", task_type="extract", gold="문자열_gold")
+    score = qe.grade_extract_semantic(bad, "<ANSWER>무엇이든</ANSWER>", {}, 0.6)
+    assert score.score == 0.0
+    assert score.correct is False
+    assert score.error is not None
+    assert score.grader == qe.GRADER_SET_F1_SEMANTIC
 
 
 def test_grade_item_translate_exact(qe: Any) -> None:
@@ -824,7 +1014,12 @@ def _mk_items(qe: Any) -> list[Any]:
 
 @pytest.mark.asyncio
 async def test_run_evaluation_fast_keeps_when_both_perfect(qe: Any) -> None:
-    """FAST·MID 둘 다 만점이면 전 호출지점 FAST 유지."""
+    """FAST·MID 둘 다 만점이면 전 호출지점 FAST 유지.
+
+    이 테스트는 *결정 규칙*(둘 다 만점 → 유지)을 본다. extract 의미매칭은 별도 테스트
+    (test_run_evaluation_extract_semantic_*)에서 검증하므로, 여기서는 --no-embed로
+    정확매칭을 써 extract 응답(gold와 동일 표현)을 만점 처리한다(임베딩 픽스처 불필요).
+    """
     # 모든 프롬프트에 정답을 주는 가짜 클라이언트(프롬프트 부분문자열로 매칭)
     client = FakeOllamaClient(
         responses={
@@ -838,6 +1033,7 @@ async def test_run_evaluation_fast_keeps_when_both_perfect(qe: Any) -> None:
         matrix=_matrix(qe),
         items=_mk_items(qe),
         client=client,
+        embed=qe.EmbedConfig(enabled=False),  # extract도 정확매칭(결정 규칙만 검증)
     )
     assert report.overall_keep_fast is True
     assert all(v.keep_fast for v in report.verdicts)
@@ -899,6 +1095,7 @@ async def test_run_evaluation_promotes_when_fast_worse(qe: Any) -> None:
         matrix=_matrix(qe),
         items=_mk_items(qe),
         client=client,
+        embed=qe.EmbedConfig(enabled=False),  # 승급 규칙만 검증 — extract는 정확매칭
     )
     by_key = {v.call_site: v for v in report.verdicts}
     # translate: FAST 0% vs MID 100% → 승급
@@ -937,7 +1134,10 @@ async def test_run_evaluation_call_error_scored_zero(qe: Any) -> None:
             gold="x^2 + 1",
         ),
     ]
-    report = await qe.run_evaluation(matrix=_matrix(qe), items=items, client=client)
+    # 호출 실패 흡수만 검증 — extract 대조군은 정확매칭(--no-embed)으로 만점 처리.
+    report = await qe.run_evaluation(
+        matrix=_matrix(qe), items=items, client=client, embed=qe.EmbedConfig(enabled=False)
+    )
     # translate는 호출 실패 → 'ERROR:...' → exact_match 0 → 정확도 0
     by_key = {v.call_site: v for v in report.verdicts}
     assert by_key["translate"].fast_accuracy == pytest.approx(0.0)
@@ -971,6 +1171,234 @@ async def test_run_evaluation_passes_num_predict_and_temperature(qe: Any) -> Non
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 러너 — extract 의미매칭 통합 (03a §H 후속8)
+# ──────────────────────────────────────────────────────────────────────────
+def _extract_only_item(qe: Any) -> Any:
+    """extract 단일 항목 — 모델이 gold와 *표현이 다른* 동의어를 답하도록 구성."""
+    return _item(
+        qe,
+        id="CE1",
+        call_site="extract",
+        task_type="extract",
+        prompt="개념을 쉼표로 나열하시오. 문제: (x+1)(x+2)",
+        gold=["다항식의 곱셈"],
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_evaluation_extract_semantic_match(qe: Any) -> None:
+    """🎯 핵심: extract가 임베딩 의미매칭으로 채점된다.
+
+    모델이 '다항식 전개'(gold '다항식의 곱셈'과 표현 다름)를 답해도, 동의어 임베딩
+    (고 cosine)으로 매칭되어 F1=1.0·correct=True가 된다. 정확매칭이라면 0점이었을 케이스.
+    embed_calls로 임베딩이 호출됐는지, grader가 set_f1_semantic인지 확인한다.
+    """
+    client = FakeOllamaClient(
+        responses={"개념을 쉼표로": "<ANSWER>다항식 전개</ANSWER>"},
+        embeddings={"다항식의곱셈": [1.0, 0.0], "다항식전개": [0.99, 0.14]},
+    )
+    report = await qe.run_evaluation(
+        matrix=_matrix(qe),
+        items=[_extract_only_item(qe)],
+        client=client,
+        embed=qe.EmbedConfig(enabled=True, model="bge-m3", threshold=0.6),
+    )
+    # extract 채점기가 의미매칭으로 기록된다(폴백 아님).
+    assert report.extract_grader_fast == qe.GRADER_SET_F1_SEMANTIC
+    assert report.extract_grader_mid == qe.GRADER_SET_F1_SEMANTIC
+    assert report.embed_enabled is True
+    assert report.embed_model == "bge-m3"
+    assert report.embed_threshold == pytest.approx(0.6)
+    # extract 항목이 의미매칭으로 만점 처리(정확매칭이면 0이었을 표현 차이).
+    by_key = {v.call_site: v for v in report.verdicts}
+    assert by_key["extract"].fast_accuracy == pytest.approx(1.0)
+    # extract item_score의 grader가 set_f1_semantic.
+    fast_extract = [s for s in report.fast_result.item_scores if s.call_site == "extract"]
+    assert fast_extract and fast_extract[0].grader == qe.GRADER_SET_F1_SEMANTIC
+    # 임베딩이 실제로 호출됐고, 입력에 정규화된 개념(곱셈·전개)이 들어갔다.
+    assert client.embed_calls
+    embedded = set(client.embed_calls[0]["input"])
+    assert "다항식의곱셈" in embedded and "다항식전개" in embedded
+    assert client.embed_calls[0]["model"] == "bge-m3"
+
+
+@pytest.mark.asyncio
+async def test_run_evaluation_extract_semantic_unrelated_zero(qe: Any) -> None:
+    """의미매칭이어도 무관 개념(저 cosine)은 미매칭 → extract 0점(거짓 양성 방지)."""
+    client = FakeOllamaClient(
+        responses={"개념을 쉼표로": "<ANSWER>완전히 무관한 개념</ANSWER>"},
+        embeddings={"다항식의곱셈": [1.0, 0.0], "완전히무관한개념": [0.0, 1.0]},
+    )
+    report = await qe.run_evaluation(
+        matrix=_matrix(qe),
+        items=[_extract_only_item(qe)],
+        client=client,
+    )
+    by_key = {v.call_site: v for v in report.verdicts}
+    assert by_key["extract"].fast_accuracy == pytest.approx(0.0)
+    assert report.extract_grader_fast == qe.GRADER_SET_F1_SEMANTIC  # 채점은 의미매칭 경로
+
+
+@pytest.mark.asyncio
+async def test_run_evaluation_no_embed_falls_back_to_exact(qe: Any) -> None:
+    """--no-embed(embed.enabled=False): extract도 정확매칭(set_f1)으로 채점, 임베딩 미호출.
+
+    동의어를 답해도 정확매칭이라 불일치 → 0점. embed_calls가 비어 있어야 한다.
+    """
+    client = FakeOllamaClient(
+        responses={"개념을 쉼표로": "<ANSWER>다항식 전개</ANSWER>"},
+        embeddings={"다항식의곱셈": [1.0, 0.0], "다항식전개": [0.99, 0.14]},
+    )
+    report = await qe.run_evaluation(
+        matrix=_matrix(qe),
+        items=[_extract_only_item(qe)],
+        client=client,
+        embed=qe.EmbedConfig(enabled=False),
+    )
+    assert report.embed_enabled is False
+    assert report.extract_grader_fast == qe.GRADER_SET_F1  # 폴백(정확매칭)
+    assert report.extract_grader_mid == qe.GRADER_SET_F1
+    # 정확매칭이라 동의어는 불일치 → 0점.
+    by_key = {v.call_site: v for v in report.verdicts}
+    assert by_key["extract"].fast_accuracy == pytest.approx(0.0)
+    # 임베딩은 아예 호출되지 않음.
+    assert client.embed_calls == []
+    # extract item_score의 grader도 정확매칭.
+    fast_extract = [s for s in report.fast_result.item_scores if s.call_site == "extract"]
+    assert fast_extract and fast_extract[0].grader == qe.GRADER_SET_F1
+
+
+@pytest.mark.asyncio
+async def test_run_evaluation_embed_failure_falls_back_to_exact(qe: Any) -> None:
+    """임베딩 호출 실패(embed_fails) 시 extract가 정확매칭으로 폴백(측정 중단 방지).
+
+    enabled=True지만 embed가 RuntimeError → _embed_concepts가 None → grade_item(정확)
+    으로 채점. 동의어를 답해도 0점이 되고, extract_grader는 set_f1(폴백)로 기록된다.
+    """
+    client = FakeOllamaClient(
+        responses={"개념을 쉼표로": "<ANSWER>다항식 전개</ANSWER>"},
+        embeddings={"다항식의곱셈": [1.0, 0.0], "다항식전개": [0.99, 0.14]},
+        embed_fails=True,
+    )
+    report = await qe.run_evaluation(
+        matrix=_matrix(qe),
+        items=[_extract_only_item(qe)],
+        client=client,
+    )
+    assert report.extract_grader_fast == qe.GRADER_SET_F1  # 임베딩 실패 → 폴백
+    # 임베딩을 *시도*는 했다(실패).
+    assert client.embed_calls
+    # 폴백 정확매칭이라 동의어 불일치 → 0점.
+    by_key = {v.call_site: v for v in report.verdicts}
+    assert by_key["extract"].fast_accuracy == pytest.approx(0.0)
+
+
+@pytest.mark.asyncio
+async def test_run_evaluation_embed_missing_method_falls_back(qe: Any) -> None:
+    """embed 메서드가 없는 구형 클라이언트(AttributeError) → 정확매칭 폴백."""
+    client = _NoEmbedClient(
+        responses={"개념을 쉼표로": "<ANSWER>다항식의 곱셈</ANSWER>"},
+    )
+    report = await qe.run_evaluation(
+        matrix=_matrix(qe),
+        items=[_extract_only_item(qe)],
+        client=client,
+    )
+    assert report.extract_grader_fast == qe.GRADER_SET_F1  # 폴백
+    # 정확매칭이라 동일 표현이면 매칭됨(이 케이스는 모델이 gold와 같은 표현을 답함).
+    by_key = {v.call_site: v for v in report.verdicts}
+    assert by_key["extract"].fast_accuracy == pytest.approx(1.0)
+
+
+@pytest.mark.asyncio
+async def test_run_evaluation_embed_response_length_mismatch_falls_back(qe: Any) -> None:
+    """embed 응답 개수가 입력과 안 맞으면(신뢰 불가) 정확매칭 폴백."""
+
+    class _BadLenClient(FakeOllamaClient):
+        async def embed(
+            self,
+            model: str,
+            input: list[str],  # noqa: A002 — 시그니처 보존
+        ) -> dict[str, Any]:
+            self.embed_calls.append({"model": model, "input": list(input)})
+            # 입력보다 적은 벡터를 돌려 길이 불일치 유발.
+            return {"embeddings": [[1.0, 0.0]]}
+
+    client = _BadLenClient(
+        responses={"개념을 쉼표로": "<ANSWER>다항식의 곱셈, 인수분해</ANSWER>"},
+    )
+    report = await qe.run_evaluation(
+        matrix=_matrix(qe),
+        items=[
+            _item(
+                qe,
+                id="CE1",
+                call_site="extract",
+                task_type="extract",
+                prompt="개념을 쉼표로 나열하시오.",
+                gold=["다항식의 곱셈", "인수분해"],
+            )
+        ],
+        client=client,
+    )
+    assert report.extract_grader_fast == qe.GRADER_SET_F1  # 길이 불일치 → 폴백
+
+
+@pytest.mark.asyncio
+async def test_run_evaluation_default_embed_config(qe: Any) -> None:
+    """embed 미지정 시 기본 EmbedConfig(활성·bge-m3·0.6)가 쓰인다."""
+    client = FakeOllamaClient(
+        responses={"개념을 쉼표로": "<ANSWER>다항식의 곱셈</ANSWER>"},
+        embeddings={"다항식의곱셈": [1.0, 0.0]},
+    )
+    report = await qe.run_evaluation(
+        matrix=_matrix(qe),
+        items=[_extract_only_item(qe)],
+        client=client,
+    )
+    assert report.embed_enabled is True
+    assert report.embed_model == qe.DEFAULT_EMBED_MODEL == "bge-m3"
+    assert report.embed_threshold == pytest.approx(qe.DEFAULT_EMBED_THRESHOLD)
+
+
+@pytest.mark.asyncio
+async def test_run_evaluation_no_extract_items_grader_default(qe: Any) -> None:
+    """extract 항목이 없으면 임베딩을 호출하지 않고 extract_grader는 기본 set_f1."""
+    client = FakeOllamaClient(default="<ANSWER>45</ANSWER>")
+    items = [_item(qe, id="AR1", call_site=None, gold="45")]
+    report = await qe.run_evaluation(matrix=_matrix(qe), items=items, client=client)
+    # extract 없음 → 임베딩 미호출, 폴백 식별자(set_f1).
+    assert client.embed_calls == []
+    assert report.extract_grader_fast == qe.GRADER_SET_F1
+
+
+@pytest.mark.asyncio
+async def test_run_evaluation_extract_empty_concept_pool(qe: Any) -> None:
+    """extract 개념 풀이 비면(파싱·gold 모두 빈 집합) 임베딩 호출을 생략하고 빈 맵으로 채점.
+
+    gold=[](빈 집합)이고 모델도 빈 답이면 unique_concepts가 비어 _embed_concepts가
+    빈 맵({})을 돌린다(None 아님 → 의미매칭 경로 유지). 빈 집합 규약으로 F1=1.0.
+    """
+    client = FakeOllamaClient(responses={"개념을 쉼표로": "<ANSWER></ANSWER>"})
+    item = _item(
+        qe,
+        id="CE1",
+        call_site="extract",
+        task_type="extract",
+        prompt="개념을 쉼표로 나열하시오.",
+        gold=[],
+    )
+    report = await qe.run_evaluation(matrix=_matrix(qe), items=[item], client=client)
+    # 개념 풀이 비어 임베딩은 호출되지 않는다(빈 맵 즉시 반환).
+    assert client.embed_calls == []
+    # 의미매칭 경로(빈 맵)로 채점됨 — 폴백 아님.
+    assert report.extract_grader_fast == qe.GRADER_SET_F1_SEMANTIC
+    by_key = {v.call_site: v for v in report.verdicts}
+    # 빈 집합 vs 빈 집합 → F1=1.0(set_f1_semantic 빈 엣지 규약).
+    assert by_key["extract"].fast_accuracy == pytest.approx(1.0)
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # report 직렬화 / detect_machine
 # ──────────────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
@@ -990,6 +1418,12 @@ async def test_report_to_dict_is_json_serializable(qe: Any) -> None:
     assert isinstance(parsed["fast_result"]["item_scores"], list)
     # models_used도 직렬화된다(패밀리별 실제 모델).
     assert parsed["fast_result"]["models_used"]["math"] == "math-fast"
+    # extract 의미매칭 메타데이터도 직렬화된다(03a §H 후속8).
+    assert parsed["embed_enabled"] is True
+    assert parsed["embed_model"] == qe.DEFAULT_EMBED_MODEL
+    assert parsed["embed_threshold"] == pytest.approx(qe.DEFAULT_EMBED_THRESHOLD)
+    assert "extract_grader_fast" in parsed
+    assert "extract_grader_mid" in parsed
 
 
 def test_detect_machine_has_platform(qe: Any) -> None:
@@ -1046,6 +1480,8 @@ def test_main_writes_output_and_returns_zero(
 
     실제 평가셋(fast_tier_eval.json)을 쓰되, _build_default_client를 모킹해
     모든 프롬프트에 정답을 반환하게 한다(FAST·MID 동일 → 전 호출지점 유지).
+    extract 의미매칭은 별도 테스트에서 검증하므로, 여기서는 --no-embed로 정확매칭을
+    써 main 흐름·출력 파일·종료 코드만 검증한다(임베딩 픽스처 불필요).
     """
     raw = json.loads(_SAMPLES_PATH.read_text(encoding="utf-8"))
     # 각 항목 id → 정답 응답 매핑(프롬프트 전체를 키로 쓰는 가짜 클라이언트).
@@ -1080,6 +1516,7 @@ def test_main_writes_output_and_returns_zero(
             str(_SAMPLES_PATH),
             "--out",
             str(out_file),
+            "--no-embed",  # extract 정확매칭(main 흐름·출력만 검증)
         ]
     )
     assert rc == 0
@@ -1089,6 +1526,68 @@ def test_main_writes_output_and_returns_zero(
     # 패밀리별 매트릭스가 CLI 인자대로 기록된다.
     assert data["matrix"]["math_fast"] == "mf"
     assert data["matrix"]["nlp_fast"] == "nf"
+    # --no-embed가 보고서에 반영된다(extract 정확매칭 폴백 기록).
+    assert data["embed_enabled"] is False
+    assert data["extract_grader_fast"] == qe.GRADER_SET_F1
+
+
+def test_main_embed_flags_flow_returns_zero(
+    qe: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--embed-model/--embed-threshold가 EmbedConfig로 전달되고 의미매칭으로 채점된다.
+
+    모델이 gold를 그대로 답하고(자기 자신과 cosine=1.0), embed가 모든 개념에 비영
+    벡터를 돌려 의미매칭이 성립 → 전 호출지점 만점 → rc=0. 보고서에 임베딩 설정과
+    extract=의미매칭 채점이 기록되는지 확인한다.
+    """
+    raw = json.loads(_SAMPLES_PATH.read_text(encoding="utf-8"))
+    prompt_to_answer: dict[str, str] = {}
+    for it in raw["items"]:
+        gold = it["gold"]
+        ans = ", ".join(gold) if isinstance(gold, list) else str(gold)
+        prompt_to_answer[it["prompt"]] = f"풀이 생략.\n<ANSWER>{ans}</ANSWER>"
+
+    class _ConstEmbedClient(FakeOllamaClient):
+        """모든 개념에 동일 비영 벡터를 돌린다(verbatim 답이라 자기매칭 1.0)."""
+
+        async def embed(
+            self,
+            model: str,
+            input: list[str],  # noqa: A002 — 시그니처 보존
+        ) -> dict[str, Any]:
+            self.embed_calls.append({"model": model, "input": list(input)})
+            return {"embeddings": [[1.0, 0.0] for _ in input]}
+
+    monkeypatch.setattr(
+        qe,
+        "_build_default_client",
+        lambda host: _ConstEmbedClient(responses=prompt_to_answer),
+    )
+    out_file = tmp_path / "qeval_embed.json"
+    rc = qe.main(
+        [
+            "--nlp-fast",
+            "nf",
+            "--nlp-mid",
+            "nm",
+            "--samples",
+            str(_SAMPLES_PATH),
+            "--out",
+            str(out_file),
+            "--embed-model",
+            "my-embed",
+            "--embed-threshold",
+            "0.5",
+        ]
+    )
+    assert rc == 0
+    data = json.loads(out_file.read_text(encoding="utf-8"))
+    assert data["embed_enabled"] is True
+    assert data["embed_model"] == "my-embed"
+    assert data["embed_threshold"] == pytest.approx(0.5)
+    # extract가 의미매칭으로 채점됐다(폴백 아님).
+    assert data["extract_grader_fast"] == qe.GRADER_SET_F1_SEMANTIC
+    assert data["overall_keep_fast"] is True
 
 
 def test_main_returns_one_when_promotion_recommended(
