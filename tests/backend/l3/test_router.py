@@ -219,11 +219,16 @@ class TestAxis2LocalTier:
         d = router.route(_req(conversation_phase="followup"))
         assert d.local_model == LocalModelTier.FAST
 
-    @pytest.mark.parametrize("task", ["extract", "match", "translate"])
-    def test_rule4_light_callsites_fast(self, router: Router, task: str) -> None:
-        """규칙4: extract/match/translate(①③④ 경량) → FAST."""
-        d = router.route(_req(task_type=task, difficulty="medium"))
+    def test_rule3_match_callsite_fast(self, router: Router) -> None:
+        """규칙3: ④ match(call_site) → FAST (GENERAL 3b=100%, 2026-05-20)."""
+        d = router.route(_req(call_site="match", task_type="match", difficulty="medium"))
         assert d.local_model == LocalModelTier.FAST
+
+    @pytest.mark.parametrize("cs", ["extract", "translate"])
+    def test_rule4_extract_translate_callsite_mid(self, router: Router, cs: str) -> None:
+        """규칙4: ①extract·③translate(call_site) → MID (GENERAL 3b 하한 미달, 2026-05-20)."""
+        d = router.route(_req(call_site=cs, task_type=cs, difficulty="medium"))
+        assert d.local_model == LocalModelTier.MID
 
     def test_rule4_easy_no_reasoning_fast(self, router: Router) -> None:
         """규칙4: easy + not requires_reasoning → FAST (1단계 산술)."""
@@ -276,7 +281,7 @@ class TestAxis3ModelFamily:
     )
     def test_nlp_call_sites_general(self, router: Router, call_site: CallSite) -> None:
         """C.0 규칙1: NLP 호출지점 ①③④ → GENERAL (수학모델은 7b조차 0%)."""
-        # match는 FAST(GENERAL 유지), extract/translate도 현재 크기로직상 FAST
+        # ①③④ 모두 GENERAL 패밀리; 크기는 match=FAST·extract/translate=MID(§C.2 규칙3·4)
         d = router.route(_req(call_site=call_site, task_type="coach"))
         assert d.cost_tier == CostTier.LOCAL
         assert d.local_family == ModelFamily.GENERAL
@@ -589,11 +594,11 @@ class TestEstimators:
 class TestLangfuseFields:
     def test_local_decision_fields(self, router: Router) -> None:
         """로컬 결정의 태그 — cost_tier·local_family·local_model·mode 포함."""
-        d = router.route(_req(task_type="extract"))
+        d = router.route(_req(task_type="extract", difficulty="medium"))
         f = langfuse_fields(d)
         assert f["cost_tier"] == "local"
         assert f["local_family"] == "general"  # extract = NLP → GENERAL
-        assert f["local_model"] == "fast"
+        assert f["local_model"] == "mid"  # extract(medium) → 규칙8 MID
         assert f["mode"] == "sync"
         assert f["cache_hit"] is False
         assert f["escalated_from"] is None

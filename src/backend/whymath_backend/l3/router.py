@@ -441,15 +441,18 @@ class Router:
         # 규칙 2·4·5: 그 외(②깊이추론·계산·풀이·증명·산술·미상) → MATH(안전 기본값)
         return ModelFamily.MATH
 
-    # ── 축2: 로컬 모델 크기 (03a §C.2 결정표 7규칙) ──
+    # ── 축2: 로컬 모델 크기 (03a §C.2 결정표 9규칙) ──
     def _decide_local_tier(self, req: RoutingRequest) -> tuple[LocalModelTier, str]:
-        """축2 결정 — FAST / MID / QUALITY + 모드 (03a §C.2).
+        """축2 결정 — FAST / MID / QUALITY + 모드 (03a §C.2 9규칙).
 
-        축1=LOCAL로 확정된 요청만 평가. 평가 순서 = 위에서 아래, 첫 매치 확정.
+        축1=LOCAL·축3(패밀리) 결정 후 평가. 평가 순서 = 위에서 아래, 첫 매치 확정.
+        규칙 3·4는 *GENERAL 호출지점 안에서도* 크기를 가른다 — match=FAST(3b=100%),
+        extract/translate=MID(3b 하한 미달, 2026-05-20 실측). call_site가 호출지점을
+        식별하므로 family 인자 없이 call_site로 분기한다.
         """
         call_site = _as_call_site(req.call_site)
 
-        # 규칙 1: ⑤ 자기검증 → QUALITY 비동기 (검증은 강한 모델·비동기)
+        # 규칙 1: ⑤ 자기검증 → QUALITY 비동기 (패밀리 무관)
         if call_site == CallSite.SELF_VERIFY:
             return LocalModelTier.QUALITY, "async"
         # 규칙 2: 비동기 + (verify/generate or hard/killer) → QUALITY (27b 비동기 전용)
@@ -457,21 +460,27 @@ class Router:
             req.task_type in ("verify", "generate") or req.difficulty in ("hard", "killer")
         ):
             return LocalModelTier.QUALITY, "async"
-        # 규칙 3: 동기 + SLA<2s → FAST (FAST만 게이트 통과, p50 1초)
+        # 규칙 3: ④ match → FAST (GENERAL match는 3b=100% → FAST로 충분, 2026-05-20)
+        if call_site == CallSite.CONCEPT_ID_MATCH:
+            return LocalModelTier.FAST, "sync"
+        # 규칙 4: ① extract·③ translate → MID (GENERAL이나 3b 하한 미달 → 7b 필요)
+        if call_site in (CallSite.CONCEPT_EXTRACT, CallSite.TRANSLATE_NORMALIZE):
+            return LocalModelTier.MID, "sync"
+        # 규칙 5: 동기 + SLA<2s → FAST (FAST만 게이트 통과, p50 1초)
         if req.sync and req.max_latency_ms < SLA_GATE_MS:
             return LocalModelTier.FAST, "sync"
-        # 규칙 4: 즉답·경량 호출지점 ①③④ → FAST
+        # 규칙 6: 즉답·분류·경량 매칭 → FAST
         if (
             req.conversation_phase in ("greeting", "followup")
-            or req.task_type in ("extract", "match", "translate")
+            or req.task_type in ("match", "classify")
             or (req.difficulty == "easy" and not req.requires_reasoning)
         ):
             return LocalModelTier.FAST, "sync"
-        # 규칙 5: 정밀 풀이·메인 대화(추론 필요) → MID (p50 4초 허용)
+        # 규칙 7: 정밀 풀이·메인 대화(추론 필요) → MID (p50 4초 허용)
         if req.task_type in ("explain", "coach", "diagnose") and req.requires_reasoning:
             return LocalModelTier.MID, "sync"
-        # 규칙 6: 동기인데 추론 필요(medium/hard) → MID
+        # 규칙 8: 동기인데 추론 필요(medium/hard) → MID
         if req.difficulty in ("medium", "hard") and req.sync:
             return LocalModelTier.MID, "sync"
-        # 규칙 7: 안전 기본값 → FAST (가장 빠르고 SLA 충족)
+        # 규칙 9: 안전 기본값 → FAST (가장 빠르고 SLA 충족)
         return LocalModelTier.FAST, "sync"
