@@ -9,9 +9,10 @@ LLM 호출의 *모든 책임*을 단일 계층으로 집약: 라우팅, 호출, 
 ## 핵심 컴포넌트
 
 ### 1. 모델 라우터
-- 입력: 작업 종류·난이도·예산·구독 티어
-- 출력: 사용할 LLM 티어 (LOCAL/MID/HIGH)
-- **목표 분포: 로컬 80% / 중급 18% / 최고 2%**
+- 입력: 작업 종류·난이도·예산·구독 티어 (+동기/비동기·대화 단계·호출지점)
+- 출력: 비용·위치 티어 (LOCAL/CLOUD_MID/CLOUD_HIGH) + LOCAL 선택 시 로컬 크기 티어 (fast/mid/quality)
+- **목표 분포(비용·위치 축): 로컬 80% / 중급 18% / 최고 2%**
+- **상세 분기 설계 → `docs/architecture/03a_l3_router_design.md`**: 두 라우팅 축의 통합·명칭 충돌 해소(§0)·입력 분류기(§B)·decision table·의사코드(§C)·에스컬레이션/폴백 체인(§D)·스키마 확장(§G). 본 문서가 *무엇을*이라면 03a는 *어떻게 분기하는가*다.
 
 ### 2. LLM 클라이언트 (단일 진입점)
 - 모든 LLM 호출은 이 클라이언트 경유
@@ -45,14 +46,21 @@ WhyMath의 다중 풀이는 6가지 `solution_approaches`(대수적·기하적·
 
 ## 모델 풀
 
-| 티어 | 모델 | 위치 | 비용/1k 토큰 |
-|---|---|---|---|
-| LOCAL | Qwen3-Math-72B | Phaiakes9 | 0원 |
-| LOCAL | DeepSeek-Math | Phaiakes9 | 0원 |
-| MID | Claude Sonnet 4.6 | API | ~$0.003/$0.015 |
-| MID | GPT-5-mini | API | 유사 |
-| HIGH | Claude Opus 4.7 | API | ~$0.015/$0.075 |
-| HIGH | GPT-5 / o3 | API | 비쌈 |
+라우팅에는 **두 축**이 있다 — *비용·위치 축*(어디서 생성하나)과 *로컬 모델 크기 축*(LOCAL일 때 어느 크기인가). 아래 표의 `CostTier` 열이 비용·위치 축이고, LOCAL 행의 `LocalModelTier`(fast/mid/quality)가 크기 축이다. 두 축의 통합·분기 결정 로직은 **`docs/architecture/03a_l3_router_design.md`**(라우터 상세 설계서) 참조.
+
+> **명칭 충돌 해소**: `mid`가 두 축에 모두 존재한다 — 비용·위치 축의 클라우드 중급(`CLOUD_MID`=Claude Sonnet)과 로컬 크기 축의 7b 모델(`LocalModelTier.MID`). 혼동 방지를 위해 *비용·위치 축의 클라우드 티어는 `CLOUD_` 접두사로 표기*하고(`CLOUD_MID`/`CLOUD_HIGH`, 기존 `LLMTier.MID`/`HIGH`에 대응), `mid`를 단독으로 쓰지 않는다. 상세 규칙은 03a §0.1.
+
+| CostTier (비용·위치 축) | LocalModelTier (로컬 크기) | 모델 | 위치 | 비용/1k 토큰 | p50(c=1)·용도 |
+|---|---|---|---|---|---|
+| LOCAL | fast | qwen2-math:1.5b | Phaiakes9 | 0원 | 1.0s · 동기 즉답·분류·1단계 산술 (SLA PASS) |
+| LOCAL | mid | qwen2-math:7b | Phaiakes9 | 0원 | 3.9s · 수학 풀이·2~3단계 추론·메인 대화 |
+| LOCAL | quality | qwen3.5:27b | Phaiakes9 | 0원 | 13.9s · 검증·복잡 추론·PRM·백그라운드(비동기 전용) |
+| CLOUD_MID | — | Claude Sonnet 4.6 | API | ~$0.003/$0.015 | 어려운 진단·일반 코칭 (목표 18%) |
+| CLOUD_MID | — | GPT-5-mini | API | 유사 | 대안 |
+| CLOUD_HIGH | — | Claude Opus 4.7 | API | ~$0.015/$0.075 | 어려운 진단 (목표 2%) |
+| CLOUD_HIGH | — | GPT-5 / o3 | API | 비쌈 | 킬러 문항·증명 |
+
+> LOCAL 3종 라인업(fast/mid/quality)은 2026-05-19 Phaiakes9 GPU 벤치(`MEMORY.md` 동일 일자 결정 로그)로 확정. **fast(1.5b)만 SLA 게이트(p50<2s) 통과** → 동기 즉답 기본 경로. quality(27b)는 *동기 불가, 비동기 큐 전용*. 분기 결정표는 03a §C.
 
 ## 환각 방어 (5중 + PRD 4중 레이어 통합)
 
@@ -138,7 +146,7 @@ PRD v1.1은 `concept_sequence` 비교만으로 두 풀이의 **"자동 동치성
 
 ## LLM 핵심 호출지점 (PRD v1.1)
 
-PRD v1.1은 시스템 전반에서 LLM이 *반드시 호출되는* 5개 핵심 지점을 식별했다. WhyMath L3는 이 5개를 *모델 라우터를 경유하는 표준 호출 유형*으로 흡수한다 (CLAUDE.md "LLM 호출은 항상 라우터 경유" 준수). 각 지점은 라우터에서 작업 종류·난이도에 따라 LOCAL/MID/HIGH 티어로 분기된다.
+PRD v1.1은 시스템 전반에서 LLM이 *반드시 호출되는* 5개 핵심 지점을 식별했다. WhyMath L3는 이 5개를 *모델 라우터를 경유하는 표준 호출 유형*으로 흡수한다 (CLAUDE.md "LLM 호출은 항상 라우터 경유" 준수). 각 지점은 라우터에서 작업 종류·난이도에 따라 비용·위치 티어(LOCAL/CLOUD_MID/CLOUD_HIGH)와 로컬 크기 티어(fast/mid/quality)로 분기된다 (지점별 기본 티어 매핑은 03a §B.2).
 
 | # | 호출지점 | 역할 | 비고 |
 |---|---|---|---|
