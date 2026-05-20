@@ -24,7 +24,7 @@ L3 라우터의 FAST 호출지점에서 **qwen2-math:1.5b(FAST) vs qwen2-math:7b
     WHYMATH_QEVAL_MID_MODEL   MID 모델 ID (디폴트: qwen2-math:7b)
     WHYMATH_QEVAL_SAMPLES     평가셋 JSON 경로 (디폴트: ./fast_tier_eval.json)
     WHYMATH_QEVAL_OUTPUT      결과 JSON 출력 경로 (디폴트: results/qeval_<ts>.json)
-    WHYMATH_QEVAL_NUM_PREDICT 모델당 생성 토큰 한도 (디폴트: 256)
+    WHYMATH_QEVAL_NUM_PREDICT 모델당 생성 토큰 한도 (디폴트: 512 — 수학 모델 과추론 잘림 방지)
 
 종료 코드:
     0 = 평가 완료 + 모든 호출지점 FAST 유지 권고
@@ -55,7 +55,7 @@ from typing import Any, Final, Protocol, cast
 DEFAULT_HOST: Final[str] = "http://localhost:11434"
 DEFAULT_FAST_MODEL: Final[str] = "qwen2-math:1.5b"
 DEFAULT_MID_MODEL: Final[str] = "qwen2-math:7b"
-DEFAULT_NUM_PREDICT: Final[int] = 256
+DEFAULT_NUM_PREDICT: Final[int] = 512
 
 # 결정 규칙 임계값 (03a §H 후속1) ----------------------------------------------
 # ⚠️ 03a §H 후속1은 이 임계값을 *미확정*으로 남겼다("품질 차이가 충분히 작은지").
