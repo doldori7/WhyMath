@@ -339,6 +339,8 @@ def normalize_form(text: str) -> str:
       0. 답 감싸기·앞장식 제거(_strip_answer_wrapping) — 선두 ':'·'=', 수식 감싸기
          '$...$'/'\\(...\\)' 를 벗겨 ': 45'·'$45$' 가 '45' 와 매칭되게 한다.
       1. 양끝 공백 제거(strip), 소문자화(lower).
+      1b. LaTeX 표기 정규화: '\\frac{a}{b}'→'a/b', '\\times'·'\\cdot'→'*', '\\div'→'/',
+          '^{n}'→'^n', '\\left'/'\\right' 제거 — '\\frac{5}{6}'가 '5/6'과 매칭되게.
       2. 유니코드 비교 연산자(≤·≥·≠·×·÷)를 ASCII(<=·>=·!=·*·/)로 치환.
       3. 모든 공백을 제거한 뒤, 이항 연산자 주위에 공백 한 칸을 *재삽입*하여
          'x^2+3x-4' 와 'x^2 + 3x - 4' 가 같은 정규형이 되도록 한다.
@@ -349,6 +351,11 @@ def normalize_form(text: str) -> str:
     """
     # 0. 감싸기·앞장식 제거(양쪽에 동일 적용 — 매칭 의미 불변).
     s = _strip_answer_wrapping(text).lower()
+    # 0b. LaTeX 수식 표기 → 평문 (gold·모델 양쪽 동일 적용: '\frac{5}{6}'가 '5/6'과 매칭).
+    s = re.sub(r"\\[dt]?frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}", r"\1/\2", s)
+    s = s.replace("\\times", "*").replace("\\cdot", "*").replace("\\div", "/")
+    s = re.sub(r"\\(?:left|right|quad|qquad|!|,|;)", "", s)
+    s = re.sub(r"\^\{([^{}]*)\}", r"^\1", s)
     # 유니코드 연산자 → ASCII
     replacements = {
         "≤": "<=",

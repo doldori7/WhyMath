@@ -114,6 +114,17 @@ def test_normalize_form_strips_leading_colon_and_math_wrap(qe: Any) -> None:
     assert qe.normalize_form(r"\(x >= -2\)") == qe.normalize_form("x >= -2")
 
 
+def test_normalize_form_latex(qe: Any) -> None:
+    """LaTeX 수식 표기를 평문으로 정규화 — '\\frac{5}{6}'가 '5/6'과 매칭(실측 AR05)."""
+    assert qe.normalize_form(r"\frac{5}{6}") == qe.normalize_form("5/6")
+    assert qe.normalize_form(r"\dfrac{1}{2}") == qe.normalize_form("1/2")
+    assert qe.normalize_form(r"3 \times 4") == qe.normalize_form("3 * 4")
+    assert qe.normalize_form(r"6 \div 2") == qe.normalize_form("6 / 2")
+    assert qe.normalize_form(r"2 \cdot 5") == qe.normalize_form("2 * 5")
+    assert qe.normalize_form(r"2^{10}") == qe.normalize_form("2^10")
+    assert qe.normalize_form(r"\left(x+1\right)") == qe.normalize_form("(x+1)")
+
+
 def test_normalize_concept_korean_spacing(qe: Any) -> None:
     """한국어 띄어쓰기 변형 흡수."""
     assert qe.normalize_concept("곱셈 공식") == qe.normalize_concept("곱셈공식")
