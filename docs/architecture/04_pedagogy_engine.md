@@ -166,7 +166,10 @@ class PedagogyDecision(BaseModel):
     socratic_category: str
     prompt: str
     system: str
-    recommended_tier: LLMTier
+    # 명칭 충돌 해소(2026-05-20, docs/architecture/03a_l3_router_design.md §0.1): 구 LLMTier 단일 enum이
+    # 두 축(비용·위치 / 로컬 크기)으로 분해됨. L4는 *교수학적 권장 비용 티어*(축1)만 힌트로 넘긴다 —
+    # 로컬 모델 크기(축2 FAST/MID/QUALITY) 세분·동기성은 L3 라우터가 신호로 최종 결정(계층 경계 준수).
+    recommended_cost_tier: CostTier  # 구 recommended_tier: LLMTier → CostTier(LOCAL/CLOUD_MID/CLOUD_HIGH)
     suggested_actions: list[str]
 ```
 

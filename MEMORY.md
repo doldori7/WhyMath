@@ -49,6 +49,46 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-05-20: Claude Max 구독 = *빌드타임 콘텐츠 생성*, Anthropic API = *런타임 서빙* — CostTier에 구독 미편입
+**컨텍스트**: CostTier(축1) 검토 중 "Kiki의 Claude Max 구독($100/$200)을 런타임 CLOUD_MID/HIGH에 활용해 비용 절감" 아이디어 제기. 검토 핵심: **Max 구독과 Anthropic API(개발자 플랫폼)는 별개 시스템**이다 — Max=개인 대화형(앱·Claude Code, 5시간 롤링·주간 상한 rate limit), API=제품 백엔드 토큰당 과금. Max 구독으로는 제품 백엔드가 학생(제3자)을 서빙할 수 없다: (a) 기술적으로 API 키 미발급, (b) 소비자 약관상 *개인 사용 한정*(제3자 서빙·제품 임베드 위반), (c) rate limit으로 다중 학생 동시 서빙 부적합.
+**결정**:
+- **Max 구독을 CostTier(런타임 라우터)에 편입하지 않는다.** CostTier는 런타임 서빙 채널(LOCAL Qwen / API CLOUD_MID·HIGH)만 표현 — 본 결정이 이를 *명문화*(enum 변경 없음).
+- **Max 구독의 자리 = 빌드타임 콘텐츠 생성 파이프라인 + 개발.** Kiki가 Claude Code/앱으로 직접: 프롬프트 설계·코드·**코퍼스 사전 생성**(동등문제·힌트·풀이경로·개념설명)·시드 품질 검증. 결과는 캐시/DB 저장 → 학생 런타임은 캐시 히트(0원).
+- 빌드타임 분담: 대량·반복 생성 = 로컬 Qwen / 고난도 검증·시드 품질 = Max-Claude (Max 한도 절약).
+- 런타임 비용 통제(03a §E·§F 유지): 80% LOCAL(0원) + 캐시 우선 + 18/2% API(프롬프트 캐싱·Batch API 50%↓·`budget_krw`/`guard_cloud` 일일 한도·⑤ 자기검증 샘플링).
+**근거**:
+- CLAUDE.md 의사결정 우선순위 **#2 법적·윤리적 준수 > #6 비용** — 약관 위반 절감은 채택 불가(소비자 구독을 제품 서빙에 전용 시 계정 정지·법적 리스크).
+- 최대 절감 레버는 "런타임에 클라우드를 *덜* 때리는 것" = **사전생성 + 캐싱**. 여기에 Max를 합법적으로 투입하면 런타임 API 비용을 구조적으로 낮춤(학생당 한계비용 0에 수렴).
+- 경계 분리(빌드타임 vs 런타임)가 깔끔: CostTier=런타임 정책, Max=상류 콘텐츠 자산 생성 — 계층·책임이 다름.
+**대안**:
+- *Max OAuth를 백엔드에 연결(Claude Code headless/Agent SDK)* — 폐기: 소비자 약관상 제3자 서빙 불가 + rate limit으로 프로덕션 부적합 + 계정 리스크. 개인 개발·테스트에만 한정.
+- *전량 API 런타임 생성(사전생성 없음)* — 폐기: 학생 수 증가 시 비용 선형 폭증. 사전생성+캐싱이 단가를 구조적으로 낮춤.
+- *전량 로컬(클라우드 0)* — 부분 폐기: 킬러·증명·고난도 진단 품질 천장. 80/18/2의 18/2% 클라우드 유지가 학습 효과(#4)상 합리적.
+**적용 범위**:
+- 본 결정 로그(문서). CostTier enum·03a 변경 없음(이미 런타임만 표현 — 본 결정이 명문화).
+- 후속: 빌드타임 사전생성 파이프라인 설계(코퍼스 생성 워크플로·캐시 전략) 별도 트랙. 프롬프트 캐싱·Batch API 도입은 M1.2 클라우드 연동 시.
+**상태**: 확정(2026-05-20). Max=빌드타임/개발, API=런타임 서빙. CostTier 불변. 비용 전략 = 사전생성+캐싱으로 런타임 API 최소화.
+
+### 2026-05-20: `main` 보호 자기 승인 데드락 *실제 발생* → 솔로 단계 설정으로 정정
+**컨텍스트**: 2026-05-15 `main` 보호 로그(아래)는 "1인 단계 Code Owner 자기 승인 충돌은 Phase 2 합류 시 자연 해소"로 *지연 처리*했으나, 이번 PR #3(아래 L3 라우터 3단계 설계, `2faf61a`) 머지 시점에 **실제 데드락 발생**. 보호 규칙이 (a) 승인 ≥1 + (b) Code Owners 검토를 요구하는데 `@doldori7`가 *유일한 Code Owner이자 PR 작성자* → GitHub은 자기 PR 승인을 금지 → 머지 불가. "administrators 포함(Do not allow bypassing)"까지 켜져 있어 관리자 우회 머지도 차단된 *하드 데드락*. 즉 "Phase 2에 자연 해소"는 문제를 *미룬 게 아니라 모든 솔로 머지를 즉시 봉쇄*하는 것이었음 — 가정 자체가 틀림.
+**결정**:
+- 보호 *일시 해제* → PR #3 머지(`2faf61a`, main 반영) → 보호를 **솔로 단계용으로 재구성**:
+  - **Require a pull request**: 유지(ON) — 직접 push는 계속 차단
+  - **Required approvals**: 1 → **0** (자기 승인 불가 회피)
+  - **Require review from Code Owners**: ON → **OFF** — 유일 Code Owner=작성자 충돌 제거
+  - **필수 status check 3종**(`data-pipeline`·`infra/phaiakes9`·`policy-guard`): 유지 — CI가 실질 게이트
+  - **linear history · force-push 차단 · deletion 차단**: 유지
+- `.github/CODEOWNERS` 파일은 *그대로 유지* — 자동 리뷰어 지정 기능 자체는 보호 규칙 없이도 동작. Phase 2 리뷰어 합류 시 "Require review from Code Owners" 체크박스 1개만 재활성하면 복원.
+**근거**:
+- 의사결정 우선순위상 *개발 흐름 봉쇄 해소*가 필요하되, 보호의 실질(직접 push 차단 + CI 3종 게이트 + linear/force-push/deletion 차단)은 **그대로 유지** — 안전을 양보하지 않음.
+- 솔로 단계에선 사람 승인보다 *기계적 검증*(lint·type·test·policy-guard 금기 가드)이 보호의 핵심. 승인 0이어도 CI 통과 없이는 머지 불가.
+- Code Owners를 *필수 요건에서만* 제외(파일 유지) → 비가역 결정 아님, Phase 2 복원이 체크박스 1개.
+**적용 범위**:
+- GitHub Settings UI(수동, 코드 변경 아님): `main` 보호 규칙 재구성 — 라이브 설정 read 도구가 MCP에 없어 Kiki 수동 확인·적용
+- 본 결정 로그 추가 + 아래 2026-05-15 보호 로그 §상태에 정정 포인터
+- **미반영(후속)**: `.github/branch-protection-setup.md`의 "PR 1+승인·Code Owners" 체크리스트는 *Phase 2 기준*임을 문서에 명시 — 솔로 단계는 본 로그가 우선
+**상태**: 확정(2026-05-20). `main` 보호 = PR 필수·승인0·Code Owners 미요구·CI 3종·linear·force-push/deletion 차단. 자기 승인 데드락 해소. Phase 2 리뷰어 합류 시 승인≥1 + Code Owners 재활성 예정.
+
 ### 2026-05-20: L3 라우터 fast/mid/quality 3단계 설계 — 두 라우팅 축 분리·`mid` 명칭 충돌 해소
 **컨텍스트**: 2026-05-19 qwen2-math:1.5b GPU 측정으로 fast/mid/quality 3단계 *로컬* 라인업(1.5b/7b/27b)이 확정된 뒤, "어떤 입력이 어느 모델로 분기되는가"의 결정 로직(입력 분류기 + decision table)을 명세하는 트랙 A 착수. 설계 착수 즉시 *아키텍처 긴장* 발견: 기존 문서(`03_content_generation.md`·`llm-architect.md`)의 라우터 티어는 `LLMTier{LOCAL, MID, HIGH}`(비용·위치 축, MID=Claude Sonnet·HIGH=Claude Opus 클라우드, 목표분포 80/18/2)인데, 새로 확정된 fast/mid/quality는 *전부 로컬 Qwen 모델*. 즉 **두 축이 서로 다름**에도 `mid`가 양쪽에 존재(클라우드 MID vs 로컬 7b)해 충돌.
 **결정**:
@@ -72,10 +112,10 @@
 - 신규: `docs/architecture/03a_l3_router_design.md`
 - 수정(최소): `docs/architecture/03_content_generation.md` 3곳(§1 출력 명세·모델풀 표 2축화·5호출지점 문단 + 03a cross-ref·명칭충돌 주석)
 - 본 결정 로그 + 활성 작업 갱신
-- **미적용(후속)**: `LLMTier`를 참조하는 `.claude/agents/llm-architect.md`(enum 정의·`Router.route()`)·`docs/architecture/04_pedagogy_engine.md`(`recommended_tier`)·`06_application_modes.md`(`default_llm_tier`)의 `CostTier`/`LocalModelTier` 분해 반영 — 본 결정이 근거, 별도 인터페이스 정렬 작업(03a §H #7). 현재 *문서 간 일시적 불일치* 존재(코드 영향 없음 — 어디서도 import 안 됨)
+- **적용 완료(2026-05-20)**: `LLMTier`를 참조하던 `.claude/agents/llm-architect.md`(enum→`CostTier`+`LocalModelTier`·`Router.route()`→`RoutingDecision` 반환)·`docs/architecture/04_pedagogy_engine.md`(`recommended_tier`→`recommended_cost_tier: CostTier`)·`06_application_modes.md`(`default_llm_tier`→`default_cost_tier: CostTier`)·`.claude/agents/backend-engineer.md`(호출처 `route()→generate(decision=)`로 일관 갱신)의 두 축 분해 반영 완료. `budget_cents`→`budget_krw`(03a E장)도 통일. L4/L6은 *축1(CostTier)만* 힌트로 보유, 축2(로컬 FAST/MID/QUALITY)는 L3 라우터가 결정(계층 경계). *문서 간 불일치 해소*. 구현은 M1.2.
 **후속 작업 (별도 PR/세션)**:
 1. **FAST tier 품질 검증** — 1.5b가 ①③④·간단 산술에서 7b 대비 품질 차이 측정. 차이 크면 03a §C.2 결정표 조정(M1.2)
-2. **인터페이스 정렬: `LLMTier` → `CostTier`/`LocalModelTier`** — llm-architect.md·04·06 문서의 `LLMTier` 참조를 두 축 분해로 갱신(별도 검토)
+2. **[완료 2026-05-20] 인터페이스 정렬: `LLMTier` → `CostTier`/`LocalModelTier`** — llm-architect.md·04·06·backend-engineer.md의 `LLMTier` 참조를 두 축 분해로 갱신 (위 §적용 범위 참조)
 3. **M1.2 라우터 구현** — 03a 설계를 `.py`로 구현 + 테스트(커버리지 70%+). `guard_cloud`·캐시키 2축화·Langfuse 필드·QUALITY 비동기 큐
 4. **클라우드 티어 실연동** — CLOUD_MID/HIGH API·비용 계측·`guard_cloud` 임계값 실측(Phase 1 후반)
 **상태**: 설계 완료(`feat/l3-router-3tier-design`). 두 축·명칭 충돌·decision table·에스컬레이션·스키마 명세 확정. 구현은 M1.2.
@@ -291,7 +331,7 @@
 **적용 범위 (이번 작업)**:
 - 신규: `.github/CODEOWNERS` (27 lines), `.github/workflows/ci.yml` (3 jobs), `.github/branch-protection-setup.md` (UI 단계별 + 트러블슈팅)
 - 미적용 (이번 작업 범위 외): UI 보호 규칙 자체 — Kiki가 위 가이드 따라 5분 작업 후 이 항목 *상태* 갱신
-**상태**: 확정. main 브랜치 보호 규칙 적용 완료 (2026-05-15): PR 1+승인·Code Owners·CI status check 3종(`data-pipeline`·`infra/phaiakes9`·`policy-guard`)·linear history·force-push 차단·deletion 차단·administrators 포함. 1인 단계 Code Owner 자기 승인 충돌은 Phase 2 합류 시 자연 해소(가이드 §트러블슈팅 참조). 검증용으로 PR #1(이 세션 10개 커밋 통합)을 생성하여 CI 첫 가동·status check 등록.
+**상태**: 확정. main 브랜치 보호 규칙 적용 완료 (2026-05-15): PR 1+승인·Code Owners·CI status check 3종(`data-pipeline`·`infra/phaiakes9`·`policy-guard`)·linear history·force-push 차단·deletion 차단·administrators 포함. 1인 단계 Code Owner 자기 승인 충돌은 Phase 2 합류 시 자연 해소(가이드 §트러블슈팅 참조). 검증용으로 PR #1(이 세션 10개 커밋 통합)을 생성하여 CI 첫 가동·status check 등록. → **2026-05-20 정정**: 이 '자연 해소' 가정은 PR #3 머지 시 실제 하드 데드락으로 드러나, 솔로 설정(승인0·Code Owners 미요구)으로 변경 — 위 *2026-05-20: `main` 보호 자기 승인 데드락* 로그 참조.
 
 ### 2026-05-13: M1.1 게이트를 *M1.0a 머신 셋업 + M1.1 벤치마크*로 분리
 **컨텍스트**: `/implement backend:phaiakes9-qwen3-math` 위임으로 Ollama 설치·systemd unit·헬스체크·벤치마크 스크립트(`infra/phaiakes9/`, 커밋 `b75730b`, 11 files +1725) 완성 후 Kiki에게 Phaiakes9 콘솔 실행 안내. 그러나 Phaiakes9 머신 자체가 *아직 셋업 안 된 상태*(OS 미설치·전원 OFF·미조립 중 하나)임이 확인됨. 기존 ROADMAP·MEMORY는 *기술 스택 결정*으로 Phaiakes9를 명시했을 뿐, *물리 머신의 부팅·SSH·드라이버 상태*는 별도 추적되지 않았음. 결과적으로 M1.1 게이트("Phaiakes9 Qwen3-Math p50<2s 측정")가 *두 가지 다른 단계*를 한 줄에 묶고 있었음 — (a) 물리·OS·드라이버 셋업, (b) Ollama 운영·벤치마크. 둘은 의존하지만 *책임 주체·자동화 가능성*이 다름.

@@ -59,41 +59,73 @@ description: L3 콘텐츠 생성·검증 — LLM 라우팅·PRM 단계검증·�
 ## 라우터 구현
 
 ### 라우팅 규칙
+
+> **명칭 충돌 해소 (2026-05-20, `docs/architecture/03a_l3_router_design.md` §0.1 근거)**: 기존 단일 enum `LLMTier{LOCAL, MID, HIGH}`는 *비용·위치*와 *로컬 모델 크기* 두 축을 한 단어(`mid`)로 겹쳐 써 모순 위험이 있었다. 이를 **두 축으로 분해**한다 — 축1 `CostTier`(비용·위치) × 축2 `LocalModelTier`(로컬 크기). 기존 `LLMTier.MID→CostTier.CLOUD_MID`, `LLMTier.HIGH→CostTier.CLOUD_HIGH`로 1:1 의미 보존(목표 분포 80/18/2 유지), `LOCAL` 내부 FAST/MID/QUALITY 세분만 신규 추가. 분기 로직·결정표·스키마 상세는 03a 설계서가 정본.
+
 ```python
 from enum import Enum
 from pydantic import BaseModel
 
-class LLMTier(str, Enum):
-    LOCAL = "local"
-    MID = "mid"
-    HIGH = "high"
+# ── 축1: 비용·위치 (기존 LLMTier.MID/HIGH → CLOUD_ 접두사로 개명) ──
+class CostTier(str, Enum):
+    LOCAL = "local"            # Phaiakes9 로컬 (0원) — 축2로 세분
+    CLOUD_MID = "cloud_mid"    # Claude Sonnet 4.6 등 (구 LLMTier.MID)
+    CLOUD_HIGH = "cloud_high"  # Claude Opus 4.7 / GPT-5 등 (구 LLMTier.HIGH)
+
+# ── 축2: 로컬 모델 크기 (2026-05-19 벤치 라인업, CostTier.LOCAL일 때만 적용) ──
+class LocalModelTier(str, Enum):
+    FAST = "fast"        # qwen2-math:1.5b — p50 1.0s, SLA PASS, 동기 즉답
+    MID = "mid"          # qwen2-math:7b  — p50 3.9s, 동기 가능(즉답엔 길다)
+    QUALITY = "quality"  # qwen3.5:27b    — p50 13.9s, 비동기 전용
 
 class RoutingRequest(BaseModel):
     task_type: str                # 'explain', 'diagnose', 'coach', 'generate', 'verify'
     difficulty: str               # 'easy', 'medium', 'hard', 'killer'
     requires_reasoning: bool      # 다단계 추론 필요?
-    budget_cents: float           # 이 호출 예산
+    budget_krw: float             # 이 호출 잔여 예산(원). 0이면 LOCAL 강제 (구 budget_cents 개명, 03a B.1)
     max_latency_ms: int          # 지연 허용치
     student_subscription: str    # 'free', 'basic', 'premium', 'gifted'
+    # 신규 신호(03a §G) — sync·conversation_phase·call_site 등은 축2 결정에 쓰임. 전체 명세는 03a 참조
+
+# ── 출력: 두 축을 합성한 결정 객체 (03a §G) ──
+class RoutingDecision(BaseModel):
+    cost_tier: CostTier                  # 축1
+    local_model: LocalModelTier | None   # 축2 (cost_tier=LOCAL일 때만, 아니면 None)
+    mode: str = "sync"                   # sync/async (QUALITY는 async 강제)
+    reason: str                          # 결정 근거(디버깅·Langfuse)
+    est_latency_ms: int                  # 예상 지연(FAST≈1010/MID≈3918/QUALITY≈13886/CLOUD≈가변)
+    est_cost_krw: float = 0.0           # 예상 비용(로컬=0)
+    # 불변식(03a §G): cost_tier==LOCAL ⟺ local_model is not None / local_model==QUALITY ⟹ mode=="async"
 
 class Router:
-    """비용·지연·품질 최적화 라우팅"""
+    """비용·지연·품질 최적화 라우팅. 축1(80/18/2) → 축2(FAST/MID/QUALITY) 순차 결정.
+    아래는 기존 4규칙의 *비용축(축1)* 의미를 보존한 골격이다. 로컬 내부 세분(FAST/MID/QUALITY)·
+    에스컬레이션·동기성 게이팅 등 전체 분기 로직은 03a 설계서 §C 결정표가 정본. (구현은 M1.2.)"""
     
-    def route(self, req: RoutingRequest) -> LLMTier:
+    def route(self, req: RoutingRequest) -> RoutingDecision:
+        # ── 축1: 비용·위치 결정 (기존 4규칙 의미 보존) ──
         # 규칙 1: 무료 사용자는 항상 로컬
         if req.student_subscription == "free":
-            return LLMTier.LOCAL
-        
-        # 규칙 2: 킬러 문항·증명 → 최고급
-        if req.difficulty == "killer" or req.task_type == "prove":
-            return LLMTier.HIGH
-        
-        # 규칙 3: 어려운 진단 → 중급 (premium 이상)
-        if req.requires_reasoning and req.student_subscription in ["premium", "gifted"]:
-            return LLMTier.MID
-        
+            cost = CostTier.LOCAL
+        # 규칙 2: 킬러 문항·증명 → 최고급 (구 LLMTier.HIGH → CLOUD_HIGH)
+        elif req.difficulty == "killer" or req.task_type == "prove":
+            cost = CostTier.CLOUD_HIGH
+        # 규칙 3: 어려운 진단 → 중급 (premium 이상) (구 LLMTier.MID → CLOUD_MID)
+        elif req.requires_reasoning and req.student_subscription in ["premium", "gifted"]:
+            cost = CostTier.CLOUD_MID
         # 규칙 4: 기본은 로컬
-        return LLMTier.LOCAL
+        else:
+            cost = CostTier.LOCAL
+        
+        # 클라우드 경로면 축2 없음 (local_model=None)
+        if cost != CostTier.LOCAL:
+            return RoutingDecision(cost_tier=cost, local_model=None, mode="sync",
+                                   reason="cloud escalation", est_latency_ms=0)
+        
+        # ── 축2: 로컬 모델 크기 결정 (FAST/MID/QUALITY) — 신규 추가분 ──
+        # 전체 결정표는 03a §C.2. 여기서는 안전 기본값만 표기.
+        return RoutingDecision(cost_tier=CostTier.LOCAL, local_model=LocalModelTier.FAST,
+                               mode="sync", reason="local/fast", est_latency_ms=1010)
 ```
 
 ### 호출 추상화
@@ -105,13 +137,13 @@ class LLMClient:
         self,
         prompt: str,
         system: str,
-        tier: LLMTier,
+        decision: RoutingDecision,   # 라우터 결정 (cost_tier+local_model 쌍). 구 tier: LLMTier 대체
         **kwargs
     ) -> LLMResponse:
-        # 1. Langfuse trace 시작
-        # 2. 캐싱 확인 (Redis)
-        # 3. 모델 선택 (tier 내에서 로드밸런싱)
-        # 4. 호출 (실패 시 재시도, 동일 tier 내 fallback)
+        # 1. Langfuse trace 시작 (cost_tier·local_model·mode 태그 기록, 03a §F.2)
+        # 2. 캐싱 확인 (Redis — 캐시 키에 {cost_tier}:{local_model} 포함, 03a §F.1)
+        # 3. 모델 선택 (decision으로 실제 모델 결정 — CLOUD_*는 클라우드 API, LOCAL은 FAST/MID/QUALITY)
+        # 4. 호출 (QUALITY는 비동기 큐 경유, 03a §D.3 / 실패 시 에스컬레이션 체인 03a §D)
         # 5. 응답 검증 (안전 필터)
         # 6. 캐싱 저장
         # 7. Langfuse trace 종료
