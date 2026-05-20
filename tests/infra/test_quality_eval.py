@@ -1,9 +1,11 @@
-"""quality_eval.py 단위 테스트 (FAST vs MID 품질 평가 하니스).
+"""quality_eval.py 단위 테스트 (태스크 패밀리 인지 FAST vs MID 품질 평가 하니스).
 
 - 실제 ollama 호출은 *반드시* 모킹. run_evaluation 의 `client` 인자로 가짜 주입.
 - 모델 실행은 Phaiakes9(Ollama·GPU)에서 Kiki가 수행하고, 이 테스트/CI는 *순수
   로직만* 검증한다(이 컨테이너엔 모델·GPU 없음). 따라서 채점기·파서·집계·결정
   규칙은 모델 없이 직접 검증하고, 러너는 응답을 정해주는 가짜 클라이언트로 검증.
+- 태스크 패밀리 라우팅 검증: 가짜 클라이언트의 `calls`로 NLP 항목은 nlp 모델,
+  MATH 항목(산술)은 math 모델로 호출되었는지 확인한다.
 - 패턴은 tests/infra/test_benchmark.py 미러링(importlib 동적 로드 + 가짜 클라이언트).
 """
 
@@ -86,6 +88,22 @@ class FakeOllamaClient:
         return {"response": self._default, "done": True}
 
 
+def _matrix(qe: Any, **kw: Any) -> Any:
+    """ModelMatrix 생성 헬퍼. 기본은 패밀리별로 구분 가능한 더미 모델명.
+
+    테스트에서 'NLP 항목 → nlp-* 모델, MATH 항목 → math-* 모델' 라우팅을 calls로
+    검증할 수 있도록 패밀리별로 다른 이름을 기본값으로 둔다.
+    """
+    base = dict(
+        math_fast="math-fast",
+        math_mid="math-mid",
+        nlp_fast="nlp-fast",
+        nlp_mid="nlp-mid",
+    )
+    base.update(kw)
+    return qe.ModelMatrix(**base)
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 정규화 (normalize_form / normalize_concept)
 # ──────────────────────────────────────────────────────────────────────────
@@ -112,6 +130,40 @@ def test_normalize_form_strips_leading_colon_and_math_wrap(qe: Any) -> None:
     assert qe.normalize_form("= x^2") == qe.normalize_form("x^2")
     assert qe.normalize_form("$45$") == qe.normalize_form("45")
     assert qe.normalize_form(r"\(x >= -2\)") == qe.normalize_form("x >= -2")
+
+
+def test_normalize_form_latex_frac(qe: Any) -> None:
+    r"""LaTeX '\frac{a}{b}' 가 *gold 표기* 'a/b'(괄호 없음)와 같은 정규형으로 수렴(실측 AR05)."""
+    assert qe.normalize_form(r"\frac{a}{b}") == qe.normalize_form("a/b")
+    assert qe.normalize_form(r"\frac{5}{6}") == qe.normalize_form("5/6")
+    assert qe.normalize_form(r"\frac{1}{x}") == qe.normalize_form("1/x")
+    # 다항 분자/분모는 괄호 보존(우선순위): \frac{a+b}{2} 는 '(a + b)/2' gold 와 일치
+    assert qe.normalize_form(r"\frac{a+b}{2}") == qe.normalize_form("(a + b)/2")
+
+
+def test_normalize_form_latex_operators_and_power(qe: Any) -> None:
+    r"""'\times'/'\cdot'→'*', '\div'→'/', 'x^{2}'→'x^2', '\left'/'\right' 제거."""
+    assert qe.normalize_form(r"a \times b") == qe.normalize_form("a * b")
+    assert qe.normalize_form(r"a \cdot b") == qe.normalize_form("a * b")
+    assert qe.normalize_form(r"6 \div 2") == qe.normalize_form("6 / 2")
+    assert qe.normalize_form(r"x^{2}") == qe.normalize_form("x^2")
+    assert qe.normalize_form(r"x^{10} + 1") == qe.normalize_form("x^10 + 1")
+    # \left( ... \right) 의 크기 명령만 제거되고 괄호는 보존
+    assert qe.normalize_form(r"\left(a + b\right)") == qe.normalize_form("(a + b)")
+
+
+def test_normalize_form_latex_applies_to_both_sides_via_exact_match(qe: Any) -> None:
+    r"""채점 의미 불변: 모델이 LaTeX, gold가 ASCII여도 exact_match 1.0."""
+    # \frac{x}{2} 모델 출력 vs 'x/2' gold (괄호 없는 gold 표기와 일치)
+    assert qe.exact_match(r"\frac{x}{2}", "x/2") == 1.0
+    assert qe.exact_match(r"x^{2} + 3x - 4", "x^2 + 3x - 4") == 1.0
+    assert qe.exact_match(r"2 \cdot 3", "2 * 3") == 1.0
+
+
+def test_normalize_form_latex_nested_frac(qe: Any) -> None:
+    r"""중첩 '\frac' 도 고정점 반복으로 안쪽부터 해소된다."""
+    # \frac{1}{\frac{1}{x}} → (1)/((1)/(x))
+    assert qe.normalize_form(r"\frac{1}{\frac{1}{x}}") == qe.normalize_form("(1)/((1)/(x))")
 
 
 def test_normalize_concept_korean_spacing(qe: Any) -> None:
@@ -161,8 +213,23 @@ def test_strip_wrapping_preserves_inner_operators(qe: Any) -> None:
 # ──────────────────────────────────────────────────────────────────────────
 # 답 구간 추출 폴백 (_extract_answer_span / _innermost_boxed / _last_label_value)
 # ──────────────────────────────────────────────────────────────────────────
+def test_extract_span_answer_tag_priority(qe: Any) -> None:
+    """1순위: 마지막 '<ANSWER>...</ANSWER>' 내용(앞에 ####·boxed·라벨이 있어도 우선)."""
+    raw = "풀이 \\boxed{99}\n#### 88\nANSWER: 77\n<ANSWER>45</ANSWER>"
+    assert qe._extract_answer_span(raw) == "45"
+    # 여러 개면 마지막 것
+    assert qe._extract_answer_span("<ANSWER>1</ANSWER> 다시 <ANSWER>2</ANSWER>") == "2"
+    # 대소문자 무관 + 여러 줄 내용 허용(개념 나열이 줄바꿈될 때)
+    assert (
+        qe._extract_answer_span("<answer>분배법칙,\n동류항 정리</answer>")
+        == "분배법칙,\n동류항 정리"
+    )
+    # 태그 안이 비면 빈 문자열(폴백 안 함 — 계약을 지킨 빈 답)
+    assert qe._extract_answer_span("설명\n<ANSWER></ANSWER>") == ""
+
+
 def test_extract_span_hashes_priority(qe: Any) -> None:
-    """1순위: 마지막 '####' 뒤 같은 줄(앞에 boxed·라벨이 있어도 #### 우선)."""
+    """2순위: '<ANSWER>' 없으면 마지막 '####' 뒤 같은 줄(앞에 boxed·라벨 있어도 #### 우선)."""
     raw = "풀이 \\boxed{99}\nANSWER: 88\n#### 45"
     assert qe._extract_answer_span(raw) == "45"
     # '####' 가 여러 번이면 마지막 것
@@ -217,8 +284,17 @@ def test_innermost_boxed_inner_braces(qe: Any) -> None:
 # ──────────────────────────────────────────────────────────────────────────
 # 출력 파서 (parse_concept_list / parse_single_answer) — 실측 qwen2-math 스타일
 # ──────────────────────────────────────────────────────────────────────────
+def test_parse_concept_list_answer_tag_contract(qe: Any) -> None:
+    """프롬프트 계약대로 '<ANSWER>개념1, 개념2, 개념3</ANSWER>' 를 파싱."""
+    raw = "이 문제는 다항식을 다룹니다.\n<ANSWER>분배법칙, 동류항 정리, 다항식의 곱셈</ANSWER>"
+    assert qe.parse_concept_list(raw) == ["분배법칙", "동류항 정리", "다항식의 곱셈"]
+    # 태그 안 내용이 줄바꿈으로 나뉘어도 쉼표 분할이 동작
+    raw2 = "<ANSWER>이차방정식,\n인수분해</ANSWER>"
+    assert qe.parse_concept_list(raw2) == ["이차방정식", "인수분해"]
+
+
 def test_parse_concept_list_hash_contract(qe: Any) -> None:
-    """프롬프트 계약대로 '#### 개념1, 개념2, 개념3' 한 줄을 파싱."""
+    """구 계약 폴백: '<ANSWER>' 없으면 '#### 개념1, 개념2, 개념3' 한 줄을 파싱."""
     raw = "이 문제는 다항식을 다룹니다.\n#### 분배법칙, 동류항 정리, 다항식의 곱셈"
     assert qe.parse_concept_list(raw) == ["분배법칙", "동류항 정리", "다항식의 곱셈"]
 
@@ -260,8 +336,16 @@ def test_parse_concept_list_empty(qe: Any) -> None:
     assert qe.parse_concept_list("   \n  ") == []
 
 
+def test_parse_single_answer_answer_tag_contract(qe: Any) -> None:
+    """프롬프트 계약대로 '<ANSWER><답></ANSWER>' 를 파싱(앞선 풀이·#### 무시)."""
+    raw = "144를 12로 나누면 12입니다.\n#### 99\n<ANSWER>12</ANSWER>"
+    assert qe.parse_single_answer(raw) == "12"
+    # 태그 안 식에 공백이 있어도 그대로(정규화는 채점기 몫)
+    assert qe.parse_single_answer("정규화\n<ANSWER>x^2 + 3x - 4</ANSWER>") == "x^2 + 3x - 4"
+
+
 def test_parse_single_answer_hash_contract(qe: Any) -> None:
-    """프롬프트 계약대로 '#### <답>' 한 줄을 파싱(앞선 풀이 줄 무시)."""
+    """구 계약 폴백: '<ANSWER>' 없으면 '#### <답>' 한 줄을 파싱(앞선 풀이 줄 무시)."""
     raw = "144를 12로 나누면 12입니다.\n#### 12"
     assert qe.parse_single_answer(raw) == "12"
 
@@ -406,11 +490,11 @@ def _item(qe: Any, **kw: Any) -> Any:
 
 
 def test_grade_item_extract_uses_set_f1(qe: Any) -> None:
-    """extract 항목은 set_f1로 채점되고 부분 점수가 나온다(####  계약 형식)."""
+    """extract 항목은 set_f1로 채점되고 부분 점수가 나온다(<ANSWER> 계약 형식)."""
     item = _item(
         qe, id="CE", call_site="extract", task_type="extract", gold=["인수분해", "근의 공식"]
     )
-    score = qe.grade_item(item, "#### 인수분해, 엉뚱")
+    score = qe.grade_item(item, "<ANSWER>인수분해, 엉뚱</ANSWER>")
     assert score.grader == qe.GRADER_SET_F1
     assert score.score == pytest.approx(0.5)
     assert score.correct is False  # F1 != 1.0
@@ -418,31 +502,33 @@ def test_grade_item_extract_uses_set_f1(qe: Any) -> None:
 
 
 def test_grade_item_extract_perfect_correct(qe: Any) -> None:
-    """extract 완전 일치면 correct=True(풀이 후 #### 줄)."""
+    """extract 완전 일치면 correct=True(풀이 후 <ANSWER> 줄)."""
     item = _item(qe, call_site="extract", task_type="extract", gold=["분배법칙", "동류항 정리"])
-    score = qe.grade_item(item, "이 문제는 다항식.\n#### 분배법칙, 동류항정리")
+    score = qe.grade_item(item, "이 문제는 다항식.\n<ANSWER>분배법칙, 동류항정리</ANSWER>")
     assert score.score == pytest.approx(1.0)
     assert score.correct is True
 
 
 def test_grade_item_translate_exact(qe: Any) -> None:
-    """translate 항목은 exact_match로 채점(####  계약 형식)."""
+    """translate 항목은 exact_match로 채점(<ANSWER> 계약 형식)."""
     item = _item(qe, call_site="translate", task_type="translate", gold="x^2 + 3x - 4")
-    ok = qe.grade_item(item, "정규화하면\n#### x^2+3x-4")
+    ok = qe.grade_item(item, "정규화하면\n<ANSWER>x^2+3x-4</ANSWER>")
     assert ok.grader == qe.GRADER_EXACT
     assert ok.correct is True
-    bad = qe.grade_item(item, "#### x^2+3x-5")
+    bad = qe.grade_item(item, "<ANSWER>x^2+3x-5</ANSWER>")
     assert bad.correct is False
 
 
 def test_grade_item_match_and_arithmetic(qe: Any) -> None:
-    """match·산술(call_site=None) 모두 exact_match — 실측 스타일(####/boxed/앞콜론)."""
+    """match·산술(call_site=None) 모두 exact_match — <ANSWER> 계약 + 폴백(boxed/앞콜론)."""
     m = _item(qe, call_site="match", task_type="match", gold="10수학02")
-    assert qe.grade_item(m, "#### 10수학02").correct is True
+    assert qe.grade_item(m, "<ANSWER>10수학02</ANSWER>").correct is True
     a = _item(qe, call_site=None, task_type="explain", gold="45")
-    # boxed 최종답
+    # <ANSWER> 계약 형식
+    assert qe.grade_item(a, "계산하면\n<ANSWER>45</ANSWER>").correct is True
+    # boxed 최종답(폴백)
     assert qe.grade_item(a, "계산하면 \\boxed{45}").correct is True
-    # 앞 콜론 실측 케이스도 정답 처리
+    # 앞 콜론 실측 케이스도 정답 처리(폴백)
     assert qe.grade_item(a, "계산 과정\n: 45").correct is True
 
 
@@ -452,6 +538,41 @@ def test_grade_item_grader_mapping(qe: Any) -> None:
     assert _item(qe, call_site="translate").grader() == qe.GRADER_EXACT
     assert _item(qe, call_site="match").grader() == qe.GRADER_EXACT
     assert _item(qe, call_site=None).grader() == qe.GRADER_EXACT
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 태스크 패밀리 — EvalItem.family() / ModelMatrix.model_for()
+# ──────────────────────────────────────────────────────────────────────────
+def test_item_family_mapping(qe: Any) -> None:
+    """extract/translate/match → NLP, 산술(call_site None) → MATH."""
+    assert _item(qe, call_site="extract").family() == qe.FAMILY_NLP
+    assert _item(qe, call_site="translate").family() == qe.FAMILY_NLP
+    assert _item(qe, call_site="match").family() == qe.FAMILY_NLP
+    assert _item(qe, call_site=None).family() == qe.FAMILY_MATH
+    # 알 수 없는 호출지점은 보수적으로 NLP(대부분의 호출지점이 NLP)
+    assert _item(qe, call_site="unknown_site").family() == qe.FAMILY_NLP
+
+
+def test_model_matrix_model_for(qe: Any) -> None:
+    """ModelMatrix가 (패밀리, 역할) → 모델 ID를 올바로 고른다."""
+    m = qe.ModelMatrix(math_fast="mf", math_mid="mm", nlp_fast="nf", nlp_mid="nm")
+    assert m.model_for(qe.FAMILY_MATH, "fast") == "mf"
+    assert m.model_for(qe.FAMILY_MATH, "mid") == "mm"
+    assert m.model_for(qe.FAMILY_NLP, "fast") == "nf"
+    assert m.model_for(qe.FAMILY_NLP, "mid") == "nm"
+    # 알 수 없는 패밀리는 NLP로 폴백
+    assert m.model_for("weird", "fast") == "nf"
+
+
+def test_model_matrix_defaults(qe: Any) -> None:
+    """기본 매트릭스: MATH=qwen2-math, NLP=qwen2.5(일반 모델)."""
+    m = qe.ModelMatrix()
+    assert m.math_fast == qe.DEFAULT_MATH_FAST_MODEL == "qwen2-math:1.5b"
+    assert m.math_mid == qe.DEFAULT_MATH_MID_MODEL == "qwen2-math:7b"
+    # NLP는 일반 모델이어야 한다(실측 교정의 핵심).
+    assert m.nlp_fast == qe.DEFAULT_NLP_FAST_MODEL == "qwen2.5:3b"
+    assert m.nlp_mid == qe.DEFAULT_NLP_MID_MODEL == "qwen2.5:7b"
+    assert "qwen2-math" not in m.nlp_fast and "qwen2-math" not in m.nlp_mid
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -615,6 +736,41 @@ def test_dataset_no_copyright_violation() -> None:
     assert "CC0" in raw["license"] or "원작" in raw["license"]
 
 
+def test_dataset_all_prompts_use_answer_contract() -> None:
+    """33문항 전부 '<ANSWER>...</ANSWER>' 출력 계약을 포함하고 '####'는 없다."""
+    raw = json.loads(_SAMPLES_PATH.read_text(encoding="utf-8"))
+    assert len(raw["items"]) == 33
+    for it in raw["items"]:
+        p = it["prompt"]
+        assert "<ANSWER>" in p and "</ANSWER>" in p, f"{it['id']}: <ANSWER> 계약 누락"
+        assert "####" not in p, f"{it['id']}: 구 '####' 계약이 남아 있음"
+
+
+def test_dataset_match_candidates_have_topic_names() -> None:
+    """match 후보 목록에 코드+주제명이 들어가되 gold는 코드(10수학NN)만 유지(닫힌 PR #8 keeper)."""
+    raw = json.loads(_SAMPLES_PATH.read_text(encoding="utf-8"))
+    match_items = [it for it in raw["items"] if it["call_site"] == "match"]
+    assert len(match_items) == 8
+    for it in match_items:
+        p = it["prompt"]
+        # 4개 주제명이 후보에 명시
+        for topic in ("(다항식)", "(방정식과 부등식)", "(도형의 방정식)", "(함수)"):
+            assert topic in p, f"{it['id']}: 후보 주제명 '{topic}' 누락"
+        # gold는 코드만(주제명·괄호 없음)
+        assert it["gold"].startswith("10수학")
+        assert "(" not in it["gold"]
+
+
+def test_dataset_extract_gold_is_list_others_str() -> None:
+    """gold 형태: extract는 list, 나머지는 str (채점기 디스패치 전제)."""
+    raw = json.loads(_SAMPLES_PATH.read_text(encoding="utf-8"))
+    for it in raw["items"]:
+        if it["call_site"] == "extract":
+            assert isinstance(it["gold"], list) and it["gold"]
+        else:
+            assert isinstance(it["gold"], str) and it["gold"]
+
+
 def test_load_items_missing_file(qe: Any, tmp_path: Path) -> None:
     """없는 파일은 FileNotFoundError."""
     with pytest.raises(FileNotFoundError):
@@ -672,15 +828,14 @@ async def test_run_evaluation_fast_keeps_when_both_perfect(qe: Any) -> None:
     # 모든 프롬프트에 정답을 주는 가짜 클라이언트(프롬프트 부분문자열로 매칭)
     client = FakeOllamaClient(
         responses={
-            "개념을 쉼표로": "ANSWER: 분배법칙",
-            "정규화": "ANSWER: x^2 + 1",
-            "단원 코드": "ANSWER: 10수학02",
-            "산술 문제": "ANSWER: 45",
+            "개념을 쉼표로": "<ANSWER>분배법칙</ANSWER>",
+            "정규화": "<ANSWER>x^2 + 1</ANSWER>",
+            "단원 코드": "<ANSWER>10수학02</ANSWER>",
+            "산술 문제": "<ANSWER>45</ANSWER>",
         }
     )
     report = await qe.run_evaluation(
-        fast_model="fast-x",
-        mid_model="mid-x",
+        matrix=_matrix(qe),
         items=_mk_items(qe),
         client=client,
     )
@@ -688,30 +843,60 @@ async def test_run_evaluation_fast_keeps_when_both_perfect(qe: Any) -> None:
     assert all(v.keep_fast for v in report.verdicts)
     # FAST·MID 각각 4항목 호출 → 총 8회
     assert len(client.calls) == 8
-    assert report.fast_model == "fast-x"
-    assert report.mid_model == "mid-x"
+    # 보고서는 패밀리별 매트릭스를 기록한다(단일 fast/mid 모델 아님).
+    assert report.matrix["nlp_fast"] == "nlp-fast"
+    assert report.matrix["math_mid"] == "math-mid"
+
+
+@pytest.mark.asyncio
+async def test_run_evaluation_routes_by_family(qe: Any) -> None:
+    """🎯 핵심: NLP 항목은 nlp-* 모델로, MATH 항목(산술)은 math-* 모델로 호출된다.
+
+    실측 근본 결함(수학 모델이 NLP 작업에 부적합) 교정의 검증 — 각 항목이 *패밀리에
+    맞는* (fast, mid) 모델로 라우팅되는지 가짜 클라이언트 calls로 확인한다.
+    """
+    client = FakeOllamaClient(default="<ANSWER>x</ANSWER>")
+    report = await qe.run_evaluation(matrix=_matrix(qe), items=_mk_items(qe), client=client)
+
+    # 프롬프트별로 어떤 모델들이 호출됐는지 수집(부분문자열 기준).
+    def models_for(sub: str) -> set[str]:
+        return {c["model"] for c in client.calls if sub in c["prompt"]}
+
+    # extract/translate/match(NLP) → nlp-fast, nlp-mid 두 모델만
+    assert models_for("개념을 쉼표로") == {"nlp-fast", "nlp-mid"}
+    assert models_for("정규화") == {"nlp-fast", "nlp-mid"}
+    assert models_for("단원 코드") == {"nlp-fast", "nlp-mid"}
+    # 산술(MATH) → math-fast, math-mid 두 모델만 (수학 특화 모델로!)
+    assert models_for("산술 문제") == {"math-fast", "math-mid"}
+
+    # models_used에도 패밀리별 실제 모델이 기록된다.
+    assert report.fast_result.models_used == {"nlp": "nlp-fast", "math": "math-fast"}
+    assert report.mid_result.models_used == {"nlp": "nlp-mid", "math": "math-mid"}
 
 
 @pytest.mark.asyncio
 async def test_run_evaluation_promotes_when_fast_worse(qe: Any) -> None:
-    """FAST는 translate를 틀리고 MID는 맞히면 → translate에서 MID 승급 권고."""
+    """FAST는 translate를 틀리고 MID는 맞히면 → translate에서 MID 승급 권고.
+
+    translate는 NLP 패밀리이므로 fast=nlp-fast, mid=nlp-mid 모델 키로 응답을 지정한다.
+    """
     client = FakeOllamaClient(
         responses_by_model={
-            # FAST: translate 틀림(나머지 정답)
-            ("fast-x", "개념을 쉼표로"): "ANSWER: 분배법칙",
-            ("fast-x", "정규화"): "ANSWER: 완전히 틀린 식",
-            ("fast-x", "단원 코드"): "ANSWER: 10수학02",
-            ("fast-x", "산술 문제"): "ANSWER: 45",
-            # MID: 전부 정답
-            ("mid-x", "개념을 쉼표로"): "ANSWER: 분배법칙",
-            ("mid-x", "정규화"): "ANSWER: x^2 + 1",
-            ("mid-x", "단원 코드"): "ANSWER: 10수학02",
-            ("mid-x", "산술 문제"): "ANSWER: 45",
+            # FAST(nlp-fast): translate 틀림(나머지 정답)
+            ("nlp-fast", "개념을 쉼표로"): "<ANSWER>분배법칙</ANSWER>",
+            ("nlp-fast", "정규화"): "<ANSWER>완전히 틀린 식</ANSWER>",
+            ("nlp-fast", "단원 코드"): "<ANSWER>10수학02</ANSWER>",
+            # MID(nlp-mid): 전부 정답
+            ("nlp-mid", "개념을 쉼표로"): "<ANSWER>분배법칙</ANSWER>",
+            ("nlp-mid", "정규화"): "<ANSWER>x^2 + 1</ANSWER>",
+            ("nlp-mid", "단원 코드"): "<ANSWER>10수학02</ANSWER>",
+            # 산술(MATH): fast·mid 모두 정답
+            ("math-fast", "산술 문제"): "<ANSWER>45</ANSWER>",
+            ("math-mid", "산술 문제"): "<ANSWER>45</ANSWER>",
         }
     )
     report = await qe.run_evaluation(
-        fast_model="fast-x",
-        mid_model="mid-x",
+        matrix=_matrix(qe),
         items=_mk_items(qe),
         client=client,
     )
@@ -730,9 +915,9 @@ async def test_run_evaluation_promotes_when_fast_worse(qe: Any) -> None:
 async def test_run_evaluation_call_error_scored_zero(qe: Any) -> None:
     """ollama 호출 실패가 'ERROR:' 문자열로 흡수되어 0점 처리(러너가 죽지 않음)."""
     client = FakeOllamaClient(
-        responses={"개념을 쉼표로": "ANSWER: 분배법칙"},
+        responses={"개념을 쉼표로": "<ANSWER>분배법칙</ANSWER>"},
         fail_substrings={"정규화"},  # translate 프롬프트만 실패
-        default="ANSWER: 10수학02",
+        default="<ANSWER>10수학02</ANSWER>",
     )
     items = [
         _item(
@@ -752,7 +937,7 @@ async def test_run_evaluation_call_error_scored_zero(qe: Any) -> None:
             gold="x^2 + 1",
         ),
     ]
-    report = await qe.run_evaluation(fast_model="f", mid_model="m", items=items, client=client)
+    report = await qe.run_evaluation(matrix=_matrix(qe), items=items, client=client)
     # translate는 호출 실패 → 'ERROR:...' → exact_match 0 → 정확도 0
     by_key = {v.call_site: v for v in report.verdicts}
     assert by_key["translate"].fast_accuracy == pytest.approx(0.0)
@@ -770,18 +955,19 @@ async def test_run_evaluation_empty_items_raises(qe: Any) -> None:
     """빈 평가셋은 ValueError."""
     client = FakeOllamaClient()
     with pytest.raises(ValueError, match="평가 항목"):
-        await qe.run_evaluation(fast_model="f", mid_model="m", items=[], client=client)
+        await qe.run_evaluation(matrix=_matrix(qe), items=[], client=client)
 
 
 @pytest.mark.asyncio
-async def test_run_evaluation_passes_num_predict(qe: Any) -> None:
-    """num_predict가 generate options로 전달되는지."""
-    client = FakeOllamaClient(default="ANSWER: 45")
+async def test_run_evaluation_passes_num_predict_and_temperature(qe: Any) -> None:
+    """num_predict와 temperature=0(결정성)이 generate options로 전달되는지.
+
+    temperature=0은 LLM 샘플링 비결정성을 제거해 재현 가능한 측정을 만든다.
+    """
+    client = FakeOllamaClient(default="<ANSWER>45</ANSWER>")
     items = [_item(qe, id="AR1", call_site=None, gold="45")]
-    await qe.run_evaluation(
-        fast_model="f", mid_model="m", items=items, client=client, num_predict=99
-    )
-    assert client.calls[0]["options"] == {"num_predict": 99}
+    await qe.run_evaluation(matrix=_matrix(qe), items=items, client=client, num_predict=99)
+    assert client.calls[0]["options"] == {"num_predict": 99, "temperature": 0}
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -789,18 +975,21 @@ async def test_run_evaluation_passes_num_predict(qe: Any) -> None:
 # ──────────────────────────────────────────────────────────────────────────
 @pytest.mark.asyncio
 async def test_report_to_dict_is_json_serializable(qe: Any) -> None:
-    """report_to_dict 출력이 json.dumps 가능해야 함."""
-    client = FakeOllamaClient(default="ANSWER: 45")
+    """report_to_dict 출력이 json.dumps 가능해야 함(패밀리별 매트릭스 포함)."""
+    client = FakeOllamaClient(default="<ANSWER>45</ANSWER>")
     items = [_item(qe, id="AR1", call_site=None, gold="45")]
-    report = await qe.run_evaluation(fast_model="f", mid_model="m", items=items, client=client)
+    report = await qe.run_evaluation(matrix=_matrix(qe), items=items, client=client)
     d = qe.report_to_dict(report)
     s = json.dumps(d, ensure_ascii=False)
     parsed = json.loads(s)
-    assert parsed["fast_model"] == "f"
-    assert parsed["mid_model"] == "m"
+    # 단일 fast/mid 모델 대신 패밀리별 매트릭스 4종을 기록한다.
+    assert parsed["matrix"]["math_fast"] == "math-fast"
+    assert parsed["matrix"]["nlp_mid"] == "nlp-mid"
     assert isinstance(parsed["verdicts"], list)
     assert "overall_keep_fast" in parsed
     assert isinstance(parsed["fast_result"]["item_scores"], list)
+    # models_used도 직렬화된다(패밀리별 실제 모델).
+    assert parsed["fast_result"]["models_used"]["math"] == "math-fast"
 
 
 def test_detect_machine_has_platform(qe: Any) -> None:
@@ -860,7 +1049,7 @@ def test_main_writes_output_and_returns_zero(
     """
     raw = json.loads(_SAMPLES_PATH.read_text(encoding="utf-8"))
     # 각 항목 id → 정답 응답 매핑(프롬프트 전체를 키로 쓰는 가짜 클라이언트).
-    # 실측 계약 형식('#### <답>')으로 응답해 1차 추출 경로를 그대로 탄다.
+    # 실측 계약 형식('<ANSWER>...</ANSWER>')으로 응답해 1차 추출 경로를 그대로 탄다.
     prompt_to_answer: dict[str, str] = {}
     for it in raw["items"]:
         gold = it["gold"]
@@ -868,7 +1057,7 @@ def test_main_writes_output_and_returns_zero(
             ans = ", ".join(gold)
         else:
             ans = str(gold)
-        prompt_to_answer[it["prompt"]] = f"풀이 생략.\n#### {ans}"
+        prompt_to_answer[it["prompt"]] = f"풀이 생략.\n<ANSWER>{ans}</ANSWER>"
 
     monkeypatch.setattr(
         qe,
@@ -879,10 +1068,14 @@ def test_main_writes_output_and_returns_zero(
     out_file = tmp_path / "qeval_out.json"
     rc = qe.main(
         [
-            "--fast-model",
-            "f",
-            "--mid-model",
-            "m",
+            "--math-fast",
+            "mf",
+            "--math-mid",
+            "mm",
+            "--nlp-fast",
+            "nf",
+            "--nlp-mid",
+            "nm",
             "--samples",
             str(_SAMPLES_PATH),
             "--out",
@@ -893,21 +1086,27 @@ def test_main_writes_output_and_returns_zero(
     assert out_file.exists()
     data = json.loads(out_file.read_text(encoding="utf-8"))
     assert data["overall_keep_fast"] is True
-    assert data["fast_model"] == "f"
+    # 패밀리별 매트릭스가 CLI 인자대로 기록된다.
+    assert data["matrix"]["math_fast"] == "mf"
+    assert data["matrix"]["nlp_fast"] == "nf"
 
 
 def test_main_returns_one_when_promotion_recommended(
     qe: Any, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """FAST가 전부 틀리고 MID가 전부 맞으면 종료 코드 1(승급 권고)."""
+    """FAST가 전부 틀리고 MID가 전부 맞으면 종료 코드 1(승급 권고).
+
+    두 패밀리의 fast를 동일 이름 'f', mid를 동일 이름 'm'으로 두어 모델별 응답을
+    한 쌍으로 지정한다(패밀리 라우팅은 다른 테스트에서 검증).
+    """
     raw = json.loads(_SAMPLES_PATH.read_text(encoding="utf-8"))
     correct: dict[tuple[str, str], str] = {}
     for it in raw["items"]:
         gold = it["gold"]
         ans = ", ".join(gold) if isinstance(gold, list) else str(gold)
-        # MID는 정답('#### <답>'), FAST는 오답
-        correct[("m", it["prompt"])] = f"#### {ans}"
-        correct[("f", it["prompt"])] = "#### 절대로아닌오답xyz"
+        # MID는 정답('<ANSWER>...</ANSWER>'), FAST는 오답
+        correct[("m", it["prompt"])] = f"<ANSWER>{ans}</ANSWER>"
+        correct[("f", it["prompt"])] = "<ANSWER>절대로아닌오답xyz</ANSWER>"
 
     monkeypatch.setattr(
         qe,
@@ -917,9 +1116,13 @@ def test_main_returns_one_when_promotion_recommended(
     out_file = tmp_path / "qeval_fail.json"
     rc = qe.main(
         [
-            "--fast-model",
+            "--math-fast",
             "f",
-            "--mid-model",
+            "--nlp-fast",
+            "f",
+            "--math-mid",
+            "m",
+            "--nlp-mid",
             "m",
             "--samples",
             str(_SAMPLES_PATH),
@@ -936,10 +1139,10 @@ def test_main_missing_samples_returns_error(qe: Any, tmp_path: Path) -> None:
     """없는 평가셋 경로 → 종료 코드 2."""
     rc = qe.main(
         [
-            "--fast-model",
+            "--math-fast",
             "f",
-            "--mid-model",
-            "m",
+            "--nlp-fast",
+            "n",
             "--samples",
             str(tmp_path / "missing.json"),
             "--out",
@@ -964,9 +1167,9 @@ def test_main_custom_thresholds_flow(
     for it in raw["items"]:
         gold = it["gold"]
         if isinstance(gold, list):
-            prompt_to_answer[it["prompt"]] = "#### " + ", ".join(gold) + ", 잉여개념"
+            prompt_to_answer[it["prompt"]] = "<ANSWER>" + ", ".join(gold) + ", 잉여개념</ANSWER>"
         else:
-            prompt_to_answer[it["prompt"]] = f"#### {gold}"
+            prompt_to_answer[it["prompt"]] = f"<ANSWER>{gold}</ANSWER>"
 
     monkeypatch.setattr(
         qe,
@@ -976,10 +1179,10 @@ def test_main_custom_thresholds_flow(
     out_file = tmp_path / "qeval_thresh.json"
     rc = qe.main(
         [
-            "--fast-model",
-            "f",
-            "--mid-model",
-            "m",
+            "--nlp-fast",
+            "nf",
+            "--nlp-mid",
+            "nm",
             "--samples",
             str(_SAMPLES_PATH),
             "--out",
