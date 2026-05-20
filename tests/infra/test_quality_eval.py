@@ -709,10 +709,23 @@ def test_grade_item_translate_exact(qe: Any) -> None:
     assert bad.correct is False
 
 
+def test_extract_unit_code(qe: Any) -> None:
+    """match 응답에서 단원 코드만 추출(§H#9) — 주제명 echo·잡텍스트 제거."""
+    assert qe.extract_unit_code("10수학02") == "10수학02"
+    assert qe.extract_unit_code("10수학02 (방정식과 부등식)") == "10수학02"
+    assert qe.extract_unit_code("정답은 10 수학 02 입니다") == "10수학02"  # 내부 공백 제거
+    assert qe.extract_unit_code("코드 없음") == "코드 없음"  # 폴백(원본)
+
+
 def test_grade_item_match_and_arithmetic(qe: Any) -> None:
-    """match·산술(call_site=None) 모두 exact_match — <ANSWER> 계약 + 폴백(boxed/앞콜론)."""
+    """match=코드추출 매칭(§H#9), 산술(call_site=None)=exact_match — <ANSWER> 계약 + 폴백."""
     m = _item(qe, call_site="match", task_type="match", gold="10수학02")
     assert qe.grade_item(m, "<ANSWER>10수학02</ANSWER>").correct is True
+    # §H#9: 모델(7b)이 후보 주제명을 함께 출력해도 코드만 추출해 매칭
+    echo = qe.grade_item(m, "<ANSWER>10수학02 (방정식과 부등식)</ANSWER>")
+    assert echo.correct is True and echo.parsed == "10수학02" and echo.grader == qe.GRADER_CODE
+    # 틀린 코드는 오답
+    assert qe.grade_item(m, "<ANSWER>10수학03</ANSWER>").correct is False
     a = _item(qe, call_site=None, task_type="explain", gold="45")
     # <ANSWER> 계약 형식
     assert qe.grade_item(a, "계산하면\n<ANSWER>45</ANSWER>").correct is True
@@ -726,7 +739,7 @@ def test_grade_item_grader_mapping(qe: Any) -> None:
     """EvalItem.grader()가 호출지점→채점기 매핑을 따른다."""
     assert _item(qe, call_site="extract").grader() == qe.GRADER_SET_F1
     assert _item(qe, call_site="translate").grader() == qe.GRADER_EXACT
-    assert _item(qe, call_site="match").grader() == qe.GRADER_EXACT
+    assert _item(qe, call_site="match").grader() == qe.GRADER_CODE
     assert _item(qe, call_site=None).grader() == qe.GRADER_EXACT
 
 
@@ -914,6 +927,8 @@ def test_load_items_grader_assignment(qe: Any) -> None:
     for it in items:
         if it.call_site == "extract":
             assert it.grader() == qe.GRADER_SET_F1
+        elif it.call_site == "match":
+            assert it.grader() == qe.GRADER_CODE
         else:
             assert it.grader() == qe.GRADER_EXACT
 

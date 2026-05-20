@@ -164,14 +164,17 @@ GRADER_EXACT: Final[str] = "exact_match"
 # extract 항목이 *임베딩으로 채점됐을 때* ItemScore.grader에 기록되어, 정확매칭(set_f1)
 # 폴백과 구분된다(보고서에서 어느 경로로 채점됐는지 추적).
 GRADER_SET_F1_SEMANTIC: Final[str] = "set_f1_semantic"
+# match 전용 채점기 — 응답에서 단원 코드(예 '10수학02')만 추출 후 정확 매칭. 모델(특히 7b)이
+# 후보의 주제명을 함께 출력(예 '10수학02 (방정식과 부등식)')해도 코드만 비교한다(03a §H#9).
+GRADER_CODE: Final[str] = "code_match"
 
 # 호출지점(03a §B.2 CallSite) → 채점기 매핑.
 # CONCEPT_EXTRACT(①)는 개념 *집합* → set_f1(부분 점수).
-# TRANSLATE(③)·CONCEPT_ID_MATCH(④)·산술(call_site 없음)은 단일 답 → exact_match.
+# TRANSLATE(③)·산술(call_site 없음)은 단일 답 → exact_match. CONCEPT_ID_MATCH(④)는 코드 추출 후 매칭.
 CALL_SITE_GRADER: Final[dict[str, str]] = {
     "extract": GRADER_SET_F1,  # ① 개념 추출 — 집합 F1
     "translate": GRADER_EXACT,  # ③ 번역·정규화 — 정규형 정확 매칭
-    "match": GRADER_EXACT,  # ④ 개념 ID 매칭 — 코드 정확 매칭
+    "match": GRADER_CODE,  # ④ 개념 ID 매칭 — 단원 코드 추출 후 정확 매칭(§H#9)
     "__arithmetic__": GRADER_EXACT,  # 간단 산술(call_site=null) — 정답 정확 매칭
 }
 """호출지점 → 채점기 식별자. call_site가 null이면 '__arithmetic__' 키 사용."""
@@ -701,6 +704,23 @@ def parse_single_answer(raw: str) -> str:
     return _strip_answer_wrapping(span)
 
 
+_UNIT_CODE_PATTERN: Final[str] = r"\d+\s*수학\s*\d+"
+"""교육과정 단원 코드 패턴(예 '10수학02'). match 응답에서 코드만 추출하는 데 쓴다."""
+
+
+def extract_unit_code(text: str) -> str:
+    """match 응답에서 단원 코드(예 '10수학02')만 추출한다 (03a §H#9).
+
+    모델(특히 7b)이 후보의 주제명을 함께 출력하는 경우(예 '10수학02 (방정식과 부등식)')
+    코드만 남겨 gold(민코드)와 매칭되게 한다. 코드 패턴이 없으면 원본을 그대로 반환(폴백).
+    여러 개면 *마지막* 코드(최종 답)를 택하고 내부 공백을 제거한다.
+    """
+    matches = re.findall(_UNIT_CODE_PATTERN, text)
+    if matches:
+        return re.sub(r"\s+", "", matches[-1])
+    return text.strip()
+
+
 def _last_answer_line(raw: str) -> str:
     """응답의 마지막 비어있지 않은 줄을 반환(없으면 빈 문자열)."""
     lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
@@ -909,6 +929,20 @@ def grade_item(item: EvalItem, raw_response: str) -> ItemScore:
                 correct=score >= 1.0,
                 raw_response=raw_response,
                 parsed=parsed_list,
+            )
+        if grader == GRADER_CODE:
+            # match — 단원 코드만 추출 후 정확 매칭 (모델의 주제명 echo 제거, §H#9)
+            assert isinstance(item.gold, str)
+            parsed_code = extract_unit_code(parse_single_answer(raw_response))
+            score = exact_match(parsed_code, item.gold)
+            return ItemScore(
+                item_id=item.id,
+                call_site=item.call_site,
+                grader=grader,
+                score=score,
+                correct=score >= 1.0,
+                raw_response=raw_response,
+                parsed=parsed_code,
             )
         # exact_match류
         assert isinstance(item.gold, str)
