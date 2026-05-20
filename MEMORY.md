@@ -26,10 +26,10 @@
 ### 활성 작업
 - 🔄 **L1.NCIC.정제** (별도 PR) — `_PdfStandardExtractor` 영역 추출 + 본문/해설 분리 (2026-05-15 결정 로그 참조)
 - 🔄 **ROCm 7.2+ Linux native 시도** (옵션 F, 별도 세션) — DirectML 32 tok/s 의 *2-3x 잠재력* 시도. BIOS UMA Frame Buffer Fixed 48-64GB + Linux Kernel 6.18.4+ + ROCm 7.2.0+ 요구. 출발점: `infra/phaiakes9/GPU_ACTIVATION_FOLLOWUP.md` §3 옵션 A·C
-- 📋 **다음 세션 후보 (서로 블로킹 없음)** — ① **M1.2 라이브 연동**(LLM Ollama/Anthropic·Redis·Langfuse·QUALITY 비동기 큐 실연동 — 현재 Protocol/스텁) ② **빌드타임 사전생성 파이프라인**(Max 활용 코퍼스·캐시 — 2026-05-20 Max/API 결정 로그) ③ **(Kiki·Phaiakes9) per-call-site 크기 재실측**(`ollama pull bge-m3` → `quality_eval.py` @`127.0.0.1` GPU — extract 임베딩 의미매칭 포함) ④ **클라우드 티어 실연동**(03a §H#4) ⑤ **24/7 서버 운영 설계**(Phaiakes9 상시 가동)
+- 📋 **다음 세션 후보 (서로 블로킹 없음)** — ① **빌드타임 사전생성 파이프라인**(Max 활용 코퍼스·캐시 — 2026-05-20 Max/API 결정 로그) ② **(Kiki·Phaiakes9) per-call-site 크기 재실측**(`ollama pull bge-m3` → `quality_eval.py` @`127.0.0.1` GPU — extract 임베딩 의미매칭 포함) ③ **클라우드 티어 *라이브 검증***(03a §H#4 — 어댑터 구현 완료, Anthropic 응답형태·비용 실측·`guard_cloud` 임계값 보정 잔여) ④ **QUALITY 워커 본체 결합**(03a §H#6 — `_quality_generate` 스텁에 qwen3.5:27b+환각방어, broker·GPU 필요) ⑤ **24/7 서버 운영 설계**(Phaiakes9 상시 가동)
 - 📋 **Phaiakes9 카탈로그 cosmetic 정리** (별도 PR) — README.md 7군데, SETUP_GUIDE.md 1군데, 주석 4군데. 코드 동작 영향 없음, 문서 일관성만
 - 📋 **Phaiakes9 systemd unit `ProtectSystem=full` 완화** (별도 PR) — `failed to persist model recommendations snapshot ... read-only file system` 경고 해소. `ReadWritePaths=/usr/share/ollama` 추가
-- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그) / **`main` 보호 규칙 적용**(2026-05-15, PR #1로 CI 첫 가동·status check 등록) / **M1.0a Phaiakes9 1차 셋업** (2026-05-15, NucBox EVO-X2 + WSL2) / **M1.1 CPU baseline** (qwen2-math:7b, 12.62 tok/s @ concurrent 1) / **M1.1 GPU 가속 활성화** (2026-05-16, Windows Ollama 경유 DirectML, qwen2-math:7b 32.63 tok/s + qwen3.5:27b 9.22 tok/s, CPU 대비 2.6x — 옵션 A1 채택) / **M1.1 fast tier 후보 측정** (2026-05-19, qwen2-math:1.5b GPU 124.25 tok/s @ c=1, p50 1010ms — L3 SLA 게이트 PASS, fast/mid/quality 3단계 라인업 결정) / **인터페이스 정렬·main 보호 데드락 정정·Max=빌드타임/API=런타임 결정** (2026-05-20, PR#4) / **L3 라우터 M1.2 구현** (2026-05-20, `whymath_backend/l3` 결정로직+타입 인터페이스+백엔드 CI 잡, PR#5) / **FAST tier 품질 검증 종결 + 태스크 패밀리 라우팅 확정** (2026-05-20, 결론: *수학=`qwen2-math`·NLP=`qwen2.5`* — 수학모델로 NLP는 7b조차 0%; 하니스(`<ANSWER>`·temperature=0·임베딩 의미매칭·코드추출) + 03a 축3 `ModelFamily`(§0.2·A.0·C.0·§H 후속8~12) + 라우터 코드 family 축·호출지점별 크기, PR#6~#14. 설계·인터페이스·코드·하니스 완전 정합)
+- ✅ 완료: PRD v1.1 정합성 정렬(단계 1~5, `fd23115`~`b8d6d3d`) / CI 툴체인 점검(`3b9ff72`) / 곁다리 2건(`df03eaa`) / **NCIC PDF crawl baseline**(629건 추출, 5% 검수 완료, 2026-05-15 결정 로그) / **`main` 보호 규칙 적용**(2026-05-15, PR #1로 CI 첫 가동·status check 등록) / **M1.0a Phaiakes9 1차 셋업** (2026-05-15, NucBox EVO-X2 + WSL2) / **M1.1 CPU baseline** (qwen2-math:7b, 12.62 tok/s @ concurrent 1) / **M1.1 GPU 가속 활성화** (2026-05-16, Windows Ollama 경유 DirectML, qwen2-math:7b 32.63 tok/s + qwen3.5:27b 9.22 tok/s, CPU 대비 2.6x — 옵션 A1 채택) / **M1.1 fast tier 후보 측정** (2026-05-19, qwen2-math:1.5b GPU 124.25 tok/s @ c=1, p50 1010ms — L3 SLA 게이트 PASS, fast/mid/quality 3단계 라인업 결정) / **인터페이스 정렬·main 보호 데드락 정정·Max=빌드타임/API=런타임 결정** (2026-05-20, PR#4) / **L3 라우터 M1.2 구현** (2026-05-20, `whymath_backend/l3` 결정로직+타입 인터페이스+백엔드 CI 잡, PR#5) / **FAST tier 품질 검증 종결 + 태스크 패밀리 라우팅 확정** (2026-05-20, 결론: *수학=`qwen2-math`·NLP=`qwen2.5`* — 수학모델로 NLP는 7b조차 0%; 하니스(`<ANSWER>`·temperature=0·임베딩 의미매칭·코드추출) + 03a 축3 `ModelFamily`(§0.2·A.0·C.0·§H 후속8~12) + 라우터 코드 family 축·호출지점별 크기, PR#6~#14. 설계·인터페이스·코드·하니스 완전 정합) / **M1.2 L3 라이브 연동** (2026-05-20, `whymath_backend/config.py` + `l3/{providers,cache,tracing,queue,service}.py` — 4 Protocol 실어댑터(Ollama·Anthropic·Redis·Langfuse·Celery) + 오케스트레이션 서비스, lazy import·가짜 주입 단위테스트, 4게이트 통과 195테스트·커버리지 100%, 라이브는 integration 마커 skip. 잔여: 워커 본체 §H#6·클라우드 라이브검증 §H#4)
 
 ### 완료된 마일스톤
 - 2026-05: 7계층 아키텍처 확정
@@ -47,6 +47,23 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-20: M1.2 L3 *라이브 연동* 구현 — 4 Protocol 실어댑터 + 오케스트레이션 서비스
+**컨텍스트**: M1.2 라우터(결정 로직+타입+Protocol 경계)는 완료됐으나 실제 LLM/Redis/Langfuse/큐는 *미구현*(interfaces.py의 Protocol/인메모리 스텁만)이었다. 이번에 그 4개 Protocol을 *실어댑터*로 구현하고 묶는 오케스트레이션 서비스·설정 모듈을 추가한다(Kiki 결정: "전체 4종 한 번에"). 단 이 컨테이너엔 Ollama/GPU·Redis·API키·Langfuse가 *없어* 라이브 E2E 검증 불가 → 프로젝트 확립 패턴(bench_latency.py·quality_eval.py의 `_OllamaClientProtocol`+lazy import+가짜 주입)을 미러링. backend-engineer 위임 후 메인이 4게이트 독립 재검증 + 핵심 파일 코드 리뷰.
+**결정**:
+- `src/backend/whymath_backend/` 신규: `config.py`(pydantic-settings, env_prefix `WHYMATH_`, 시크릿 기본 None·하드코딩 0, `get_settings()` lru_cache 싱글톤) + `l3/{providers,cache,tracing,queue,service}.py`.
+  - `providers.py`: `OllamaProvider`(`resolve_model()`로 패밀리×크기→모델 ID)·`AnthropicProvider`(CLOUD_MID→Sonnet 4.6/CLOUD_HIGH→Opus 4.7, system 파라미터+user 메시지)·`RoutingLLMProvider`(cost_tier 디스패처). SDK는 `_OllamaClientProtocol`/`_AnthropicClientProtocol` 뒤 lazy(importlib+cast).
+  - `cache.py`: `RedisCacheBackend`(set→`ex=ttl`)·`tracing.py`: `LangfuseTraceSink`(`event(name, metadata=fields)`) — 둘 다 클라이언트 주입+lazy build.
+  - `queue.py`: **Celery**(broker=`settings.redis_url`, deps 기존 보유·재시도·결과백엔드 기성품) — `_TaskSenderProtocol`(apply_async 래퍼) 주입 경계로 broker 없이 단위테스트. 워커 동시성=1은 *기동 옵션*(`celery ... worker --concurrency=1 -Q quality`, 모듈 docstring).
+  - `service.py`: `GenerationService.generate()` = route→`cache_key_for`→캐시조회→(히트반환|async-enqueue|동기생성+캐시저장)→`langfuse_fields` 기록. `GenerationResult`(text/decision/cache_hit/job_id/mode). 기존 라우터 순수 헬퍼 재사용.
+- 테스트: `tests/backend/l3/test_{config,providers,cache,tracing,queue,service}.py`(손수 짠 가짜 주입·모킹 라이브러리 0) + `test_integration_live.py`(`pytestmark=[integration, skipif(not WHYMATH_RUN_INTEGRATION)]` 기본 skip). `l3/__init__.py`에 신규 21개 심볼 export.
+**근거**:
+- 어댑터의 *로직*(모델 해석·디스패치·캐시 키·trace 필드·큐 enqueue·서비스 흐름)은 SDK를 Protocol 뒤로 밀고 가짜를 주입하면 라이브 없이 100% 단위테스트 가능 — CLAUDE.md "모든 PR 테스트 70%+" 충족하면서 라이브 의존 0. 라이브 결합부(`_build_default_*` shim)만 `pragma: no cover`(라이브 없이는 실행 불가, 한 줄 사유).
+- Celery 채택: Redis 리스트 자작 큐보다 재시도·결과백엔드·워커관리가 기성품이고 deps에 이미 있음. 테스트 난점(broker 연결)만 sender 추상화로 분리.
+**적용 범위**:
+- 신규 6 소스 + 7 테스트, `l3/__init__.py` 수정. 게이트 4종 독립 통과(ruff·black·mypy-strict 11파일·pytest **195 passed/2 skipped, 커버리지 100%**, 기존 135 회귀 없음).
+- **미적용(후속)**: ⓐ Celery 워커 본체(`_quality_generate`)는 `NotImplementedError` 스텁 — qwen3.5:27b 호출+환각 방어 결합은 §H#6(broker·GPU 필요). ⓑ Anthropic/Ollama 응답 형태 가정은 라이브 검증 필요(§H#4). ⓒ `apply_async` 동기→async 래핑은 부하 시 `to_thread` 이전 여지(docstring 명시). ⓓ 클라우드 비용·지연 상수 실측(§H#4).
+**상태**: 확정(2026-05-20). M1.2 라이브 연동 *어댑터·오케스트레이션* 완료, 4게이트 통과. 잔여는 워커 본체·라이브 검증·비용 실측(§H#4·#6, Phaiakes9/키 필요).
 
 ### 2026-05-20: L3 라우팅에 *태스크 패밀리 축* 도입 — 수학(qwen2-math) vs NLP(qwen2.5), 03a 확정(B)
 **컨텍스트**: FAST tier 품질 검증(03a §H 후속1)을 Phaiakes9 실측으로 진행한 결과, "1.5b vs 7b *크기*"가 아니라 **모델 패밀리가 태스크와 안 맞은 것**이 근본 원인으로 드러남(아래 *FAST tier 품질 평가 하니스* 로그의 재설계(A) 참조). NLP 호출지점(extract/translate/match)을 수학 특화 `qwen2-math`로 돌리면 7b조차 0%, 일반 모델 `qwen2.5`로 바꾸니 정상화. 이를 *설계*로 확정(B 트랙).
