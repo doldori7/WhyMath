@@ -49,6 +49,24 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-05-20: FAST tier 품질 평가 하니스 구축 — 1.5b vs 7b 결정적 채점 (03a §H 후속1, 실측은 Phaiakes9)
+**컨텍스트**: 03a §H 후속1 "FAST(1.5b)가 7b 대비 품질 차이가 충분히 작은지 측정 → 차이 크면 ①③④ 일부를 MID 승급(C.2 조정)". 실제 모델 실행은 Phaiakes9(Ollama·GPU)에서만 가능하므로(이 컨테이너엔 모델·GPU 없음), 이번엔 *하니스(데이터셋+채점기+러너+테스트)* 까지 만들고 실측은 Kiki가 Phaiakes9에서 수행한다. 채점은 *결정적(프로그램)* — LLM-as-judge 아님. llm-architect 위임 후 메인이 4게이트 독립 재검증.
+**결정**:
+- `infra/phaiakes9/benchmark/`에 `bench_latency.py`(지연 벤치) 자매 도구 추가(stdlib만·ollama lazy·`_OllamaClientProtocol` 추상화 → 테스트는 가짜 클라이언트 주입):
+  - `fast_tier_eval.json`: 자작 CC0 33항목 — extract 9(개념추출)·translate 8(정규화)·match 8(개념ID)·산술 8.
+  - `quality_eval.py`: 채점기 `set_f1`(extract 집합 F1)·`exact_match`(translate/match/산술, `normalize_form` 후 정확매칭)·출력 파서(마지막 줄/`ANSWER:` 라벨)·러너(FAST·MID 순차)·집계·결정규칙·CLI(종료코드 0/1/2).
+  - `tests/infra/test_quality_eval.py`: 56 테스트, quality_eval.py 커버리지 98%.
+- **결정 규칙(C.2 조정 신호)**: 호출지점별 `keep_fast = (FAST_acc >= MID_acc - DELTA) and (FAST_acc >= ABS_MIN)`. **DELTA=0.07**(FAST의 p50 1초 vs 4초 이점이 소폭 정확도차 상쇄)·**ABS_MIN=0.60**(절대 하한). 03a §H 후속1이 임계 미확정 → *문서화된 합리적 기본값*, Phaiakes9 실측 후 보정.
+**근거**:
+- 채점기·파서·결정규칙은 순수 함수라 모델 없이 테스트 가능(라이브 의존 분리) — bench_latency.py 동일 패턴. 모델 실행만 Phaiakes9.
+- 결정적 채점이 FAST 호출지점(추출/매칭/정규화/산술)에 적합(체크 가능한 출력) — LLM-judge 비결정·비용·추가모델 회피.
+**적용 범위**:
+- 신규 3파일(infra/benchmark 2 + tests/infra 1). 검증: ruff·black(line-length 100)·mypy-strict·pytest 56 통과·커버리지 98%.
+- **실측 대기(Kiki·Phaiakes9)**: `python quality_eval.py` → 호출지점별 verdict. 종료코드 1(일부 MID 승급 권고)이면 C.2 조정.
+- **gold 검수 필요**: 개념셋 gold는 결정적 채점용 잠정값(review_status "사람 수학자 검수 대기") — 강한 결론 전 검수 권장.
+- infra/는 `[tool.black]`/`[tool.ruff]` 설정 미도달·tests/infra CI 미게이트(bench_latency.py와 동일 상태) — 별도 CI 잡 미추가(범위 밖).
+**상태**: 하니스 확정(2026-05-20). 결정적 채점·결정규칙·56 테스트·커버리지 98%. **실제 1.5b vs 7b 비교 실측은 Phaiakes9에서 Kiki 수행 → 결과로 C.2 조정 판단**(후속1 잔여).
+
 ### 2026-05-20: M1.2 L3 라우터 구현 완료 — 결정 로직 + 타입 인터페이스 (.py + 테스트 100%)
 **컨텍스트**: 03a 설계서의 라우터를 `.py`로 구현하는 M1.2(03a §H 후속 #3·라우터 설계 후속 #3). 범위는 *결정 로직 + 타입 인터페이스*로 한정 — 실제 LLM/Redis/Langfuse/큐 연동은 라이브 서비스·API 키가 필요해 단위테스트·CI 게이트가 불가하므로 후속 분리. llm-architect 서브에이전트 위임 후 메인이 4게이트 독립 재실행으로 검수.
 **결정**:
@@ -132,7 +150,7 @@
 - 본 결정 로그 + 활성 작업 갱신
 - **적용 완료(2026-05-20)**: `LLMTier`를 참조하던 `.claude/agents/llm-architect.md`(enum→`CostTier`+`LocalModelTier`·`Router.route()`→`RoutingDecision` 반환)·`docs/architecture/04_pedagogy_engine.md`(`recommended_tier`→`recommended_cost_tier: CostTier`)·`06_application_modes.md`(`default_llm_tier`→`default_cost_tier: CostTier`)·`.claude/agents/backend-engineer.md`(호출처 `route()→generate(decision=)`로 일관 갱신)의 두 축 분해 반영 완료. `budget_cents`→`budget_krw`(03a E장)도 통일. L4/L6은 *축1(CostTier)만* 힌트로 보유, 축2(로컬 FAST/MID/QUALITY)는 L3 라우터가 결정(계층 경계). *문서 간 불일치 해소*. 구현은 M1.2.
 **후속 작업 (별도 PR/세션)**:
-1. **FAST tier 품질 검증** — 1.5b가 ①③④·간단 산술에서 7b 대비 품질 차이 측정. 차이 크면 03a §C.2 결정표 조정(M1.2)
+1. **[하니스 완료 2026-05-20, 실측 대기] FAST tier 품질 검증** — 평가 하니스(`quality_eval.py`·`fast_tier_eval.json`·테스트 56·커버리지 98%) 구축 완료. 실제 1.5b vs 7b 비교는 Phaiakes9에서 Kiki 실행 → C.2 조정 판단 (위 *FAST tier 품질 평가 하니스* 로그 참조)
 2. **[완료 2026-05-20] 인터페이스 정렬: `LLMTier` → `CostTier`/`LocalModelTier`** — llm-architect.md·04·06·backend-engineer.md의 `LLMTier` 참조를 두 축 분해로 갱신 (위 §적용 범위 참조)
 3. **[완료 2026-05-20] M1.2 라우터 구현** — 03a 설계를 `.py`로 구현 + 테스트(커버리지 100%). 결정 로직+인터페이스 범위(LLM/Redis/Langfuse/큐 라이브 연동은 후속). 위 *M1.2 L3 라우터 구현 완료* 로그 참조
 4. **클라우드 티어 실연동** — CLOUD_MID/HIGH API·비용 계측·`guard_cloud` 임계값 실측(Phase 1 후반)
