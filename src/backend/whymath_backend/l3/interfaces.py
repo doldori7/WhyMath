@@ -35,7 +35,7 @@ class LLMProvider(Protocol):
 class CacheBackend(Protocol):
     """응답 캐시 백엔드 경계 (실제로는 Redis, 03a §F.1).
 
-    캐시 키에 두 축 `{cost_tier}:{local_model}`이 포함되어야 한다
+    캐시 키에 세 축 `{cost_tier}:{local_family}:{local_model}`이 포함되어야 한다
     (라우터의 cache_key() 참조). M1.2에서는 경계만 선언.
     """
 

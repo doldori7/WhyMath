@@ -1,7 +1,9 @@
-"""L3 라우터 결정 로직 — 축1(C.1) → 축2(C.2) 순차 결정.
+"""L3 라우터 결정 로직 — 축1(C.1) → [LOCAL이면] 축3(C.0) → 축2(C.2) 순차 결정.
 
 설계 정본: `docs/architecture/03a_l3_router_design.md`
-  - §C.1 축1 결정표(6규칙) / §C.2 축2 결정표(7규칙) + §C.4 의사코드
+  - §C.1 축1 결정표(6규칙) / §C.0 축3 패밀리 결정표(5규칙) / §C.2 축2 결정표(7규칙)
+    + §C.4 의사코드
+  - §A.0 패밀리(축3)×크기(축2) 매트릭스 → 실제 모델 ID lookup
   - §D 에스컬레이션·폴백 체인 / §D.4 guard_cloud
   - §E 비용·예산·구독별 일일 한도 / §F 캐싱 키·Langfuse 필드
   - §A.1 벤치 지연(FAST≈1010ms·MID≈3918ms·QUALITY≈13886ms)
@@ -20,6 +22,7 @@ from whymath_backend.l3.models import (
     CallSite,
     CostTier,
     LocalModelTier,
+    ModelFamily,
     RoutingDecision,
     RoutingRequest,
 )
@@ -33,7 +36,48 @@ LOCAL_LATENCY_MS: Final[dict[LocalModelTier, int]] = {
     LocalModelTier.MID: 3918,  # qwen2-math:7b — p50 3,918ms
     LocalModelTier.QUALITY: 13886,  # qwen3.5:27b — p50 13,886ms, 비동기 전용
 }
-"""로컬 티어별 예상 지연(ms). 출처: 03a §A.1 벤치 p50."""
+"""로컬 티어별 예상 지연(ms). 출처: 03a §A.1 벤치 p50.
+
+지연은 *크기 등급별* 대표값이다(2026-05-19 벤치는 qwen2-math 라인업으로 측정).
+같은 크기 등급의 GENERAL(qwen2.5:3b/7b) 지연은 동급으로 가정한다(03a §A.1 메모,
+패밀리별 지연 재측정은 §H 후속).
+"""
+
+# ──────────────────────────────────────────────────────────────────────────
+# 축3 그라운딩 — 패밀리(축3)×크기(축2) → 실제 모델 ID 매트릭스 (03a §A.0·§C.4)
+# QUALITY(27b)는 패밀리 무관 상위 티어 — 매트릭스에 (패밀리, QUALITY)는 두지 않고
+# resolve_model()이 별도 처리한다(27b가 양 패밀리 포괄, 03a §A.0).
+# ──────────────────────────────────────────────────────────────────────────
+LOCAL_MODEL_MATRIX: Final[dict[tuple[ModelFamily, LocalModelTier], str]] = {
+    (ModelFamily.MATH, LocalModelTier.FAST): "qwen2-math:1.5b",
+    (ModelFamily.MATH, LocalModelTier.MID): "qwen2-math:7b",
+    (ModelFamily.GENERAL, LocalModelTier.FAST): "qwen2.5:3b",
+    (ModelFamily.GENERAL, LocalModelTier.MID): "qwen2.5:7b",
+}
+"""로컬 모델 ID = (패밀리 축3 × 크기 축2) lookup. 출처: 03a §A.0 매트릭스.
+
+QUALITY는 패밀리 무관 → 이 매트릭스에 없고 QUALITY_MODEL_ID로 해석한다.
+llm-architect.md A.0 매트릭스와 동일해야 한다.
+"""
+
+QUALITY_MODEL_ID: Final[str] = "qwen3.5:27b"
+"""QUALITY 티어 실제 모델 — 패밀리 무관(27b가 MATH/GENERAL 양쪽 포괄, 03a §A.0)."""
+
+# ──────────────────────────────────────────────────────────────────────────
+# 축3 결정 입력 집합 — NLP임이 분명한 호출지점·태스크 (03a §C.0 규칙1·3)
+# "NLP임이 분명할 때 GENERAL, 그 외 MATH(안전 기본값)" — 03a §C.0 메모.
+# ──────────────────────────────────────────────────────────────────────────
+NLP_CALL_SITES: Final[frozenset[CallSite]] = frozenset(
+    {
+        CallSite.CONCEPT_EXTRACT,  # ① 개념 추출
+        CallSite.TRANSLATE_NORMALIZE,  # ③ 번역·정규화
+        CallSite.CONCEPT_ID_MATCH,  # ④ 개념 ID 매칭
+    }
+)
+"""NLP 호출지점(축3=GENERAL) — ①③④ (03a §C.0 규칙1). ②(깊이추론)는 MATH."""
+
+NLP_TASK_TYPES: Final[frozenset[str]] = frozenset({"extract", "match", "translate", "classify"})
+"""NLP 계열 task_type(축3=GENERAL) — 추출·매칭·정규화·분류 (03a §C.0 규칙3)."""
 
 SLA_GATE_MS: Final[int] = 2000
 """동기 즉답 SLA 게이트(ms). FAST(p50 1,010ms)만 통과 (03a §A.1·C.2 규칙3)."""
@@ -102,6 +146,41 @@ def _as_call_site(value: object) -> CallSite | None:
     return CallSite(value)
 
 
+def _as_model_family(value: object) -> ModelFamily | None:
+    """문자열/enum/None 어느 쪽이 와도 ModelFamily|None으로 정규화."""
+    if value is None:
+        return None
+    if isinstance(value, ModelFamily):
+        return value
+    return ModelFamily(value)
+
+
+def resolve_model(
+    local_family: ModelFamily | None,
+    local_model: LocalModelTier | None,
+) -> str:
+    """(패밀리 축3 × 크기 축2) → 실제 로컬 모델 ID 해석 (03a §A.0 매트릭스 lookup).
+
+    호출 직전 LLMClient가 수행하는 lookup을 로직 헬퍼로 노출한다.
+      - QUALITY → 패밀리 무관 `qwen3.5:27b`(27b가 양 패밀리 포괄, 03a §A.0).
+      - FAST/MID → (패밀리, 크기) 매트릭스 lookup. 이때 패밀리가 None이면 오류
+        (불변식 4 위반 — LOCAL+FAST/MID는 패밀리가 반드시 있어야 한다).
+    클라우드(local_model None)에는 적용하지 않는다 — 호출 전 cost_tier로 분기.
+    """
+    local = _as_local_tier(local_model)
+    family = _as_model_family(local_family)
+    if local is None:
+        raise ValueError("resolve_model은 로컬 티어에만 적용된다(local_model이 None)")
+    if local is LocalModelTier.QUALITY:
+        return QUALITY_MODEL_ID  # 패밀리 무관
+    if family is None:
+        raise ValueError(
+            f"불변식 위반: local_model={local.value}(FAST/MID)는 local_family가 "
+            "필요하다 (03a §A.0·§G 불변식 4)"
+        )
+    return LOCAL_MODEL_MATRIX[(family, local)]
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 추정기 (estimators)
 # ──────────────────────────────────────────────────────────────────────────
@@ -151,23 +230,29 @@ def guard_cloud(req: RoutingRequest, desired: CostTier) -> CostTier:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 캐시 키 (03a §F.1 — 두 축 {cost_tier}:{local_model} 포함)
+# 캐시 키 (03a §F.1 — 세 축 {cost_tier}:{local_family}:{local_model} 포함)
 # ──────────────────────────────────────────────────────────────────────────
 def cache_key(
     prompt: str,
     system: str,
     cost_tier: CostTier,
+    local_family: ModelFamily | None,
     local_model: LocalModelTier | None,
 ) -> str:
-    """프롬프트+시스템+(두 축 합성 식별자) 기반 캐시 키 (03a §F.1).
+    """프롬프트+시스템+(세 축 합성 식별자) 기반 캐시 키 (03a §F.1).
 
-    같은 프롬프트라도 *어느 티어가 생성했는지*가 캐시 정체성의 일부다
-    (FAST 응답과 QUALITY 응답을 섞지 않는다). 학생 ID는 키에 포함하지 않는다
-    (llm-architect.md ResponseCache 규칙 — 개인화는 컨텍스트로).
+    같은 프롬프트라도 *어느 티어·패밀리가 생성했는지*가 캐시 정체성의 일부다 —
+    FAST 응답과 QUALITY 응답을, 그리고 MATH(qwen2-math) 응답과 GENERAL(qwen2.5)
+    응답을 섞지 않는다(패밀리가 다르면 출력 특성·신뢰도가 다르므로, 03a §F.1).
+    예: "local:general:fast"(qwen2.5:3b), "local:math:mid"(qwen2-math:7b),
+    "cloud_mid:-:-". 학생 ID는 키에 포함하지 않는다(개인화는 컨텍스트로).
     """
     cost = _as_cost_tier(cost_tier)
+    family = _as_model_family(local_family)
     local = _as_local_tier(local_model)
-    model_id = f"{cost.value}:{local.value if local is not None else '-'}"
+    family_id = family.value if family is not None else "-"
+    local_id = local.value if local is not None else "-"
+    model_id = f"{cost.value}:{family_id}:{local_id}"
     content = f"{system}|||{prompt}|||{model_id}"
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
     return f"{CACHE_KEY_PREFIX}{digest}"
@@ -175,7 +260,9 @@ def cache_key(
 
 def cache_key_for(prompt: str, system: str, decision: RoutingDecision) -> str:
     """RoutingDecision으로부터 캐시 키 생성 — cache_key()의 편의 래퍼."""
-    return cache_key(prompt, system, decision.cost_tier, decision.local_model)
+    return cache_key(
+        prompt, system, decision.cost_tier, decision.local_family, decision.local_model
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -196,6 +283,7 @@ def langfuse_fields(
     (라우터는 추정만 함), 추정치는 est_* 로 별도 노출한다.
     """
     cost = _as_cost_tier(decision.cost_tier)
+    family = _as_model_family(decision.local_family)
     local = _as_local_tier(decision.local_model)
     site = _as_call_site(call_site)
 
@@ -209,6 +297,7 @@ def langfuse_fields(
 
     return {
         "cost_tier": cost.value,  # 80/18/2 분포 모니터링
+        "local_family": family.value if family is not None else None,  # 패밀리별 분포
         "local_model": local.value if local is not None else None,  # 로컬 내부 분포
         "mode": decision.mode,  # SLA 평가 분리(동기만 게이트 대상)
         "est_latency_ms": decision.est_latency_ms,  # 추정 지연(실측은 latency_ms)
@@ -267,20 +356,23 @@ def next_tier(
 class Router:
     """비용·지연·품질 최적화 라우팅 (03a §C).
 
-    축1(C.1, 80/18/2) → 축2(C.2, FAST/MID/QUALITY)를 *순차* 평가한다.
+    축1(C.1, 80/18/2) → [LOCAL이면] 축3(C.0, MATH/GENERAL) → 축2(C.2, FAST/MID/
+    QUALITY)를 *순차* 평가한다. 패밀리(축3)를 크기(축2)보다 먼저 정한다 — 같은
+    크기 등급이라도 패밀리가 가리키는 실제 모델이 다르기 때문(03a §0.2·§C).
     `route()`는 *어디서 생성할지*만 정한다. 생성된 응답은 03 문서 환각 방어
     파이프라인을 *반드시* 통과해야 학생에게 노출된다(03a §C.4 메모,
     CLAUDE.md 절대 금기 "LLM 응답을 검증 없이 학생에게 제공 금지").
     """
 
     def route(self, req: RoutingRequest) -> RoutingDecision:
-        """라우팅 결정 — 축1(C.1) → 축2(C.2) (03a §C.4 의사코드)."""
+        """라우팅 결정 — 축1(C.1) → [LOCAL이면] 축3(C.0) → 축2(C.2) (03a §C.4)."""
         cost_tier = self._decide_cost_tier(req)
 
-        # CLOUD 경로면 축2(local_model) 없음 — 불변식 2(03a §G)
+        # CLOUD 경로면 축3·축2 없음 — 불변식 2·4(03a §G)
         if cost_tier != CostTier.LOCAL:
             return RoutingDecision(
                 cost_tier=cost_tier,
+                local_family=None,
                 local_model=None,
                 mode="sync",
                 reason="cloud escalation",
@@ -288,13 +380,20 @@ class Router:
                 est_cost_krw=cloud_cost(req, cost_tier),
             )
 
-        # LOCAL 경로 → 축2 결정
+        # LOCAL 경로 → 축3(패밀리) 먼저, 그다음 축2(크기)
+        family = self._decide_family(req)
         local_model, mode = self._decide_local_tier(req)
+
+        # QUALITY(27b)는 패밀리 무관 → local_family=None (불변식 4, 03a §A.0).
+        # 단 reason에는 결정된 패밀리를 남겨 추적성을 유지한다(QUALITY로 합류 전 의도).
+        family_applicable = local_model in (LocalModelTier.FAST, LocalModelTier.MID)
+        decision_family = family if family_applicable else None
         return RoutingDecision(
             cost_tier=CostTier.LOCAL,
+            local_family=decision_family,
             local_model=local_model,
             mode=mode,
-            reason=f"local/{local_model.value}",
+            reason=f"local/{family.value}/{local_model.value}",
             est_latency_ms=local_latency(local_model),
             est_cost_krw=0.0,  # 로컬은 0원
         )
@@ -321,6 +420,26 @@ class Router:
             return guard_cloud(req, CostTier.CLOUD_MID)
         # 규칙 6: 그 외 기본 LOCAL (목표 분포 80%)
         return CostTier.LOCAL
+
+    # ── 축3: 로컬 모델 패밀리 (03a §C.0 결정표 — 크기보다 먼저) ──
+    def _decide_family(self, req: RoutingRequest) -> ModelFamily:
+        """축3 결정 — MATH / GENERAL (03a §C.0).
+
+        축1=LOCAL로 확정된 요청만 평가. 태스크 *유형*(수학 vs NLP)으로 패밀리를
+        가른다(크기·SLA가 아니라, §0.2 규칙2). "NLP임이 분명할 때 GENERAL,
+        그 외 MATH(안전 기본값)" — WhyMath 호출 다수가 수학 계산이고, NLP를 수학
+        모델로 보내면 7b조차 0%였으므로 NLP 식별 규칙을 *넓게* 잡는다(§C.0 메모).
+
+        QUALITY로 합류할 요청도 패밀리를 정해두지만, route()에서 QUALITY면
+        local_family는 None으로 비운다(27b가 양 패밀리 포괄, §A.0 불변식 4).
+        """
+        call_site = _as_call_site(req.call_site)
+        # 규칙 1: NLP 호출지점 ①③④ → GENERAL (②=depth는 MATH)
+        # 규칙 3: NLP 계열 task_type(추출·매칭·정규화·분류) → GENERAL
+        if call_site in NLP_CALL_SITES or req.task_type in NLP_TASK_TYPES:
+            return ModelFamily.GENERAL
+        # 규칙 2·4·5: 그 외(②깊이추론·계산·풀이·증명·산술·미상) → MATH(안전 기본값)
+        return ModelFamily.MATH
 
     # ── 축2: 로컬 모델 크기 (03a §C.2 결정표 7규칙) ──
     def _decide_local_tier(self, req: RoutingRequest) -> tuple[LocalModelTier, str]:

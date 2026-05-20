@@ -1,15 +1,22 @@
-"""L3 라우터 스키마 — 두 라우팅 축의 enum + 입력/출력 모델 (Pydantic).
+"""L3 라우터 스키마 — 세 라우팅 축의 enum + 입력/출력 모델 (Pydantic).
 
-설계 정본: `docs/architecture/03a_l3_router_design.md` §G(스키마)·§0.1(명칭 충돌 해소).
+설계 정본: `docs/architecture/03a_l3_router_design.md` §G(스키마)·§0.1(명칭 충돌 해소)·
+§0.2(패밀리 축 도입)·§A.0(패밀리×크기 매트릭스).
 
-두 라우팅 축 (03a §0):
+세 라우팅 축 (03a §0):
   - 축1 `CostTier` (비용·위치): LOCAL / CLOUD_MID / CLOUD_HIGH — 목표 분포 80/18/2
-  - 축2 `LocalModelTier` (로컬 모델 크기): FAST(1.5b) / MID(7b) / QUALITY(27b)
+  - 축3 `ModelFamily` (로컬 모델 패밀리): MATH(qwen2-math) / GENERAL(qwen2.5)
+    — CostTier.LOCAL + FAST/MID일 때만 의미를 가진다(QUALITY는 패밀리 무관).
+  - 축2 `LocalModelTier` (로컬 모델 크기): FAST(1.5b/3b) / MID(7b) / QUALITY(27b)
     — CostTier.LOCAL일 때만 의미를 가진다.
+
+로컬 실제 모델 = (패밀리 축3 × 크기 축2) 매트릭스 lookup (03a §A.0, router.LOCAL_MODEL_MATRIX).
 
 명칭 충돌 해소: 기존 단일 enum `LLMTier{LOCAL,MID,HIGH}`를 (a) 축1 `CostTier`와
 (b) 축2 `LocalModelTier`로 분해한다. `LLMTier.MID → CostTier.CLOUD_MID`,
 `LLMTier.HIGH → CostTier.CLOUD_HIGH`로 1:1 의미 보존(03a §0.1).
+2026-05-20 Phaiakes9 태스크 인지 실측이 축3 `ModelFamily`를 추가로 강제했다 —
+NLP를 수학 모델로 돌리면 7b조차 0%였다(03a §0.2).
 """
 
 from __future__ import annotations
@@ -36,20 +43,40 @@ class CostTier(str, Enum):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 축3: 로컬 모델 패밀리 (2026-05-20 태스크 인지 실측, CostTier.LOCAL + FAST/MID일 때만)
+# 그라운딩 데이터: 03a §0.2·§A.0·§B.2 (Phaiakes9 GPU 127.0.0.1, temperature=0).
+# ──────────────────────────────────────────────────────────────────────────
+class ModelFamily(str, Enum):
+    """로컬 모델 패밀리 축 — 로컬에서 *어느 패밀리*(수학 vs 일반)인가? (03a §0.2·§A.0)
+
+    크기(축2)에 앞서 결정한다 — 같은 "FAST"라도 패밀리가 가리키는 실제 모델이
+    다르기 때문(MATH×FAST=qwen2-math:1.5b vs GENERAL×FAST=qwen2.5:3b, 03a §A.0).
+    QUALITY(27b)는 양 패밀리를 포괄하므로 패밀리 무관(축3 미적용, 03a §A.0).
+    """
+
+    MATH = "math"
+    """qwen2-math — 수학 계산·풀이·증명. 산술 7b 100%·1.5b 87.5% (03a §A.0)."""
+
+    GENERAL = "general"
+    """qwen2.5 — NLP: 추출·정규화·매칭·분류. match 3b 100%·translate 7b 75% (03a §A.0)."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 축2: 로컬 모델 크기 (2026-05-19 벤치 라인업, CostTier.LOCAL일 때만 적용)
 # 그라운딩 데이터: 03a §A.1 (Phaiakes9 / Radeon 8060S / Ollama 0.24.0).
+# 실제 모델은 (패밀리 축3 × 크기 축2)로 결정 — 03a §A.0 매트릭스 lookup.
 # ──────────────────────────────────────────────────────────────────────────
 class LocalModelTier(str, Enum):
     """로컬 모델 크기 축 — 로컬에서 *어느 크기* 모델인가? (03a §A.1)"""
 
     FAST = "fast"
-    """qwen2-math:1.5b — p50 1,010ms, SLA 게이트(p50<2s) PASS, 동기 즉답."""
+    """MATH=qwen2-math:1.5b / GENERAL=qwen2.5:3b — p50≈1,010ms, SLA PASS, 동기 즉답."""
 
     MID = "mid"
-    """qwen2-math:7b — p50 3,918ms, 동기 가능(즉답엔 길다). 정밀 풀이·메인 대화."""
+    """MATH=qwen2-math:7b / GENERAL=qwen2.5:7b — p50≈3,918ms, 동기 가능(즉답엔 길다)."""
 
     QUALITY = "quality"
-    """qwen3.5:27b — p50 13,886ms, 병렬 미작동(GPU 단일 점유) → 비동기 전용."""
+    """qwen3.5:27b (패밀리 무관) — p50 13,886ms, 병렬 미작동(GPU 단일 점유) → 비동기 전용."""
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -137,20 +164,30 @@ class RoutingRequest(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 출력: RoutingDecision — 두 축을 합성한 결정 객체 (03a §G)
+# 출력: RoutingDecision — 세 축을 합성한 결정 객체 (03a §G)
 # ──────────────────────────────────────────────────────────────────────────
 class RoutingDecision(BaseModel):
-    """라우팅 결정 — (축1, 축2) 쌍 + 모드·근거·추정치 (03a §G).
+    """라우팅 결정 — (축1, 축3, 축2) 합성 + 모드·근거·추정치 (03a §G).
 
-    불변식 (03a §G·§0.1, after-validator로 강제):
+    불변식 (03a §G·§0.1·§0.2, after-validator로 강제):
       1. cost_tier == LOCAL  ⟺  local_model is not None
       2. cost_tier in {CLOUD_MID, CLOUD_HIGH}  ⟺  local_model is None
       3. local_model == QUALITY  ⟹  mode == "async" (27b 동기 불가, 03a §A.1)
+      4. local_family is not None  ⟺  (cost_tier == LOCAL and local_model in {FAST, MID})
+         — 패밀리는 *FAST/MID일 때만* 모델 선택에 영향. QUALITY(27b)는 양 패밀리를
+         포괄하므로 패밀리 무관(local_family = None). CLOUD_*도 축3 없음(03a §A.0·§G).
     """
 
     model_config = ConfigDict(extra="forbid", use_enum_values=True)
 
     cost_tier: CostTier = Field(..., description="축1 — 비용·위치 결정")
+    local_family: ModelFamily | None = Field(
+        default=None,
+        description=(
+            "축3 — 로컬 모델 패밀리 (cost_tier=LOCAL + FAST/MID일 때만; "
+            "QUALITY·CLOUD_*는 None, 03a §A.0·§G)"
+        ),
+    )
     local_model: LocalModelTier | None = Field(
         default=None,
         description="축2 — 로컬 모델 크기 (cost_tier=LOCAL일 때만, 아니면 None)",
@@ -176,7 +213,7 @@ class RoutingDecision(BaseModel):
 
     @model_validator(mode="after")
     def _validate_axis_invariants(self) -> RoutingDecision:
-        """두 축 불변식 강제 (03a §G·§0.1).
+        """세 축 불변식 강제 (03a §G·§0.1·§0.2).
 
         use_enum_values=True 환경에서도 동작하도록 enum/문자열 양쪽을 비교한다.
         """
@@ -188,6 +225,11 @@ class RoutingDecision(BaseModel):
             self.local_model.value
             if isinstance(self.local_model, LocalModelTier)
             else self.local_model
+        )
+        family_value = (
+            self.local_family.value
+            if isinstance(self.local_family, ModelFamily)
+            else self.local_family
         )
 
         is_local = cost_value == CostTier.LOCAL.value
@@ -209,6 +251,23 @@ class RoutingDecision(BaseModel):
             raise ValueError(
                 f"불변식 위반: local_model=QUALITY(27b)는 mode='async'여야 한다 "
                 f"(현재 {self.mode!r}, 동기 불가 03a §A.1·§G 불변식 3)"
+            )
+
+        # 불변식 4: local_family는 LOCAL + FAST/MID일 때만 존재 (QUALITY·CLOUD_*는 None)
+        #   — QUALITY(27b)는 양 패밀리 포괄, CLOUD_*는 범용이라 축3 없음(03a §A.0·§G)
+        family_applicable = is_local and local_value in (
+            LocalModelTier.FAST.value,
+            LocalModelTier.MID.value,
+        )
+        if family_applicable and family_value is None:
+            raise ValueError(
+                "불변식 위반: cost_tier=LOCAL + local_model in {FAST, MID}이면 "
+                "local_family(MATH/GENERAL)가 반드시 있어야 한다 (03a §A.0·§G 불변식 4)"
+            )
+        if (not family_applicable) and family_value is not None:
+            raise ValueError(
+                f"불변식 위반: QUALITY 또는 CLOUD_*에서는 local_family가 None이어야 한다 "
+                f"(현재 {family_value!r}; QUALITY는 패밀리 무관, 03a §A.0·§G 불변식 4)"
             )
 
         # 모드 값 자체 검증

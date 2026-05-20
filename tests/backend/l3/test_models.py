@@ -12,13 +12,14 @@ from whymath_backend.l3.models import (
     CallSite,
     CostTier,
     LocalModelTier,
+    ModelFamily,
     RoutingDecision,
     RoutingRequest,
 )
 
 
 # ──────────────────────────────────────────────────────────────────────
-# enum 값 — 03a §0.1·§A.1·§B.2 명세와 정확히 일치해야 한다
+# enum 값 — 03a §0.1·§0.2·§A.0·§A.1·§B.2 명세와 정확히 일치해야 한다
 # ──────────────────────────────────────────────────────────────────────
 class TestEnumValues:
     def test_cost_tier_values(self) -> None:
@@ -26,6 +27,11 @@ class TestEnumValues:
         assert CostTier.LOCAL.value == "local"
         assert CostTier.CLOUD_MID.value == "cloud_mid"
         assert CostTier.CLOUD_HIGH.value == "cloud_high"
+
+    def test_model_family_values(self) -> None:
+        """축3 ModelFamily 값 — 2026-05-20 태스크 인지 실측 라인업(03a §0.2·§A.0)."""
+        assert ModelFamily.MATH.value == "math"
+        assert ModelFamily.GENERAL.value == "general"
 
     def test_local_model_tier_values(self) -> None:
         """축2 LocalModelTier 값 — 2026-05-19 벤치 라인업."""
@@ -45,6 +51,7 @@ class TestEnumValues:
         """str-Enum이므로 멤버는 그 문자열 값과 동등 (라우터 비교 안정성)."""
         assert CostTier.LOCAL == "local"
         assert LocalModelTier.FAST == "fast"
+        assert ModelFamily.MATH == "math"
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -116,47 +123,68 @@ class TestRoutingRequest:
 # ──────────────────────────────────────────────────────────────────────
 class TestRoutingDecisionValid:
     def test_local_with_fast_sync(self) -> None:
-        """LOCAL + FAST + sync — 불변식 1 충족."""
+        """LOCAL + MATH + FAST + sync — 불변식 1·4 충족."""
         d = RoutingDecision(
             cost_tier=CostTier.LOCAL,
+            local_family=ModelFamily.MATH,
             local_model=LocalModelTier.FAST,
             mode="sync",
-            reason="local/fast",
+            reason="local/math/fast",
             est_latency_ms=1010,
         )
         assert d.cost_tier == CostTier.LOCAL
+        assert d.local_family == ModelFamily.MATH
         assert d.local_model == LocalModelTier.FAST
 
-    def test_local_with_quality_async(self) -> None:
-        """LOCAL + QUALITY + async — 불변식 3 충족(QUALITY ⟹ async)."""
+    def test_local_general_mid_sync(self) -> None:
+        """LOCAL + GENERAL + MID + sync — 불변식 4 충족(NLP 패밀리)."""
         d = RoutingDecision(
             cost_tier=CostTier.LOCAL,
+            local_family=ModelFamily.GENERAL,
+            local_model=LocalModelTier.MID,
+            mode="sync",
+            reason="local/general/mid",
+            est_latency_ms=3918,
+        )
+        assert d.local_family == ModelFamily.GENERAL
+        assert d.local_model == LocalModelTier.MID
+
+    def test_local_with_quality_async_no_family(self) -> None:
+        """LOCAL + QUALITY + async + family None — 불변식 3·4 충족(QUALITY 패밀리 무관)."""
+        d = RoutingDecision(
+            cost_tier=CostTier.LOCAL,
+            local_family=None,  # QUALITY는 패밀리 무관(03a §A.0)
             local_model=LocalModelTier.QUALITY,
             mode="async",
             est_latency_ms=13886,
         )
         assert d.mode == "async"
+        assert d.local_family is None
 
     def test_cloud_mid_no_local(self) -> None:
-        """CLOUD_MID + local_model None — 불변식 2 충족."""
+        """CLOUD_MID + local_family·local_model None — 불변식 2·4 충족."""
         d = RoutingDecision(
             cost_tier=CostTier.CLOUD_MID,
+            local_family=None,
             local_model=None,
             mode="sync",
             est_latency_ms=3000,
             est_cost_krw=10.0,
         )
         assert d.local_model is None
+        assert d.local_family is None
 
     def test_cloud_high_no_local(self) -> None:
-        """CLOUD_HIGH + local_model None — 불변식 2 충족."""
+        """CLOUD_HIGH + local_family·local_model None — 불변식 2·4 충족."""
         d = RoutingDecision(
             cost_tier=CostTier.CLOUD_HIGH,
+            local_family=None,
             local_model=None,
             est_latency_ms=8000,
             est_cost_krw=50.0,
         )
         assert d.cost_tier == CostTier.CLOUD_HIGH
+        assert d.local_family is None
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -204,11 +232,55 @@ class TestRoutingDecisionInvariants:
             )
         assert "불변식" in str(exc.value)
 
+    def test_local_fast_without_family_rejected(self) -> None:
+        """불변식 4 위반: LOCAL + FAST인데 local_family None (패밀리 필수)."""
+        with pytest.raises(ValidationError) as exc:
+            RoutingDecision(
+                cost_tier=CostTier.LOCAL,
+                local_family=None,  # FAST/MID는 패밀리가 반드시 있어야 한다
+                local_model=LocalModelTier.FAST,
+                est_latency_ms=1010,
+            )
+        assert "불변식" in str(exc.value)
+
+    def test_local_mid_without_family_rejected(self) -> None:
+        """불변식 4 위반: LOCAL + MID인데 local_family None."""
+        with pytest.raises(ValidationError):
+            RoutingDecision(
+                cost_tier=CostTier.LOCAL,
+                local_family=None,
+                local_model=LocalModelTier.MID,
+                est_latency_ms=3918,
+            )
+
+    def test_quality_with_family_rejected(self) -> None:
+        """불변식 4 위반: QUALITY인데 local_family 존재 (27b는 패밀리 무관)."""
+        with pytest.raises(ValidationError) as exc:
+            RoutingDecision(
+                cost_tier=CostTier.LOCAL,
+                local_family=ModelFamily.MATH,  # QUALITY는 패밀리 무관 → None이어야
+                local_model=LocalModelTier.QUALITY,
+                mode="async",
+                est_latency_ms=13886,
+            )
+        assert "불변식" in str(exc.value)
+
+    def test_cloud_with_family_rejected(self) -> None:
+        """불변식 4 위반: CLOUD_MID인데 local_family 존재 (클라우드는 축3 없음)."""
+        with pytest.raises(ValidationError):
+            RoutingDecision(
+                cost_tier=CostTier.CLOUD_MID,
+                local_family=ModelFamily.GENERAL,
+                local_model=None,
+                est_latency_ms=3000,
+            )
+
     def test_invalid_mode_rejected(self) -> None:
         """mode는 'sync'/'async'만 허용."""
         with pytest.raises(ValidationError):
             RoutingDecision(
                 cost_tier=CostTier.LOCAL,
+                local_family=ModelFamily.MATH,
                 local_model=LocalModelTier.FAST,
                 mode="background",  # 잘못된 값
                 est_latency_ms=1010,
@@ -219,6 +291,7 @@ class TestRoutingDecisionInvariants:
         with pytest.raises(ValidationError):
             RoutingDecision(
                 cost_tier=CostTier.LOCAL,
+                local_family=ModelFamily.MATH,
                 local_model=LocalModelTier.FAST,
                 est_latency_ms=-1,
             )
@@ -228,6 +301,7 @@ class TestRoutingDecisionInvariants:
         with pytest.raises(ValidationError):
             RoutingDecision(
                 cost_tier=CostTier.LOCAL,
+                local_family=ModelFamily.MATH,
                 local_model=LocalModelTier.FAST,
                 est_latency_ms=1010,
                 est_cost_krw=-5.0,
