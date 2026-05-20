@@ -1,0 +1,289 @@
+{
+  "$schema_note": "WhyMath 03a §H 후속1 — FAST(qwen2-math:1.5b) vs MID(qwen2-math:7b) 품질 비교 평가셋. 모든 문항·개념·정규형·정답은 본 프로젝트 자체 원작이며, 검정교과서 본문·예제·평가원/수능 문항·EBS 본문 일체 복제하지 않음 (CLAUDE.md 절대 금기 준수). 결정적(프로그램) 채점 전용 — LLM-as-judge 아님.",
+  "license": "CC0-1.0 (WhyMath 자체 원작, 출처 표기 없이 자유 사용 가능)",
+  "target_grade": "고등학교 1학년 (한국 교육과정)",
+  "target_semester": "1학기",
+  "curriculum_standards": [
+    "10수학01 다항식",
+    "10수학02 방정식과 부등식",
+    "10수학03 도형의 방정식",
+    "10수학05 함수 (기초)"
+  ],
+  "author": "WhyMath (Claude L3 llm-architect agent, 2026-05-20)",
+  "review_status": "M1.2 게이트의 사람 수학자 검수 대기. gold는 결정적 채점용이며, FAST/MID 품질 차이 측정이 목적.",
+  "grading_note": "각 항목의 gold는 호출지점별 결정적 채점기로 평가한다 — CONCEPT_EXTRACT는 set_f1(개념 집합 F1), TRANSLATE_NORMALIZE·CONCEPT_ID_MATCH·arithmetic은 exact_match(정규화 후 정확 매칭). 채점기 명세는 quality_eval.py docstring 참조.",
+  "items": [
+    {
+      "id": "CE01",
+      "call_site": "extract",
+      "task_type": "extract",
+      "difficulty": "easy",
+      "prompt": "다음 문제가 다루는 수학 개념을 쉼표로 나열하시오. 개념 이름만 쓰고 다른 설명은 하지 마시오.\n문제: (x + 2)(x - 7) 을 전개하시오.",
+      "gold": ["다항식의 곱셈", "분배법칙", "동류항 정리"]
+    },
+    {
+      "id": "CE02",
+      "call_site": "extract",
+      "task_type": "extract",
+      "difficulty": "easy",
+      "prompt": "다음 문제가 다루는 수학 개념을 쉼표로 나열하시오. 개념 이름만 쓰고 다른 설명은 하지 마시오.\n문제: 이차방정식 x^2 - 5x + 6 = 0 의 두 근을 구하시오.",
+      "gold": ["이차방정식", "인수분해", "근과 계수의 관계"]
+    },
+    {
+      "id": "CE03",
+      "call_site": "extract",
+      "task_type": "extract",
+      "difficulty": "easy",
+      "prompt": "다음 문제가 다루는 수학 개념을 쉼표로 나열하시오. 개념 이름만 쓰고 다른 설명은 하지 마시오.\n문제: 이차함수 y = x^2 - 4x + 1 의 꼭짓점 좌표를 구하시오.",
+      "gold": ["이차함수", "완전제곱식", "꼭짓점"]
+    },
+    {
+      "id": "CE04",
+      "call_site": "extract",
+      "task_type": "extract",
+      "difficulty": "easy",
+      "prompt": "다음 문제가 다루는 수학 개념을 쉼표로 나열하시오. 개념 이름만 쓰고 다른 설명은 하지 마시오.\n문제: 두 점 A(1, 2) 와 B(4, 6) 사이의 거리를 구하시오.",
+      "gold": ["두 점 사이의 거리", "좌표평면", "피타고라스 정리"]
+    },
+    {
+      "id": "CE05",
+      "call_site": "extract",
+      "task_type": "extract",
+      "difficulty": "easy",
+      "prompt": "다음 문제가 다루는 수학 개념을 쉼표로 나열하시오. 개념 이름만 쓰고 다른 설명은 하지 마시오.\n문제: 부등식 |x - 3| < 2 를 푸시오.",
+      "gold": ["절댓값", "일차부등식", "구간 표현"]
+    },
+    {
+      "id": "CE06",
+      "call_site": "extract",
+      "task_type": "extract",
+      "difficulty": "easy",
+      "prompt": "다음 문제가 다루는 수학 개념을 쉼표로 나열하시오. 개념 이름만 쓰고 다른 설명은 하지 마시오.\n문제: 중심이 (0, 0) 이고 반지름이 5 인 원의 방정식을 구하시오.",
+      "gold": ["원의 방정식", "반지름", "좌표평면"]
+    },
+    {
+      "id": "CE07",
+      "call_site": "extract",
+      "task_type": "extract",
+      "difficulty": "easy",
+      "prompt": "다음 문제가 다루는 수학 개념을 쉼표로 나열하시오. 개념 이름만 쓰고 다른 설명은 하지 마시오.\n문제: 다항식 x^3 - 8 을 인수분해하시오.",
+      "gold": ["다항식", "인수분해", "곱셈 공식"]
+    },
+    {
+      "id": "CE08",
+      "call_site": "extract",
+      "task_type": "extract",
+      "difficulty": "easy",
+      "prompt": "다음 문제가 다루는 수학 개념을 쉼표로 나열하시오. 개념 이름만 쓰고 다른 설명은 하지 마시오.\n문제: 일차함수 y = 2x - 3 의 그래프가 x축과 만나는 점을 구하시오.",
+      "gold": ["일차함수", "그래프", "x절편"]
+    },
+    {
+      "id": "CE09",
+      "call_site": "extract",
+      "task_type": "extract",
+      "difficulty": "easy",
+      "prompt": "다음 문제가 다루는 수학 개념을 쉼표로 나열하시오. 개념 이름만 쓰고 다른 설명은 하지 마시오.\n문제: 연립부등식 x + 1 > 0, 2x - 4 < 0 의 해를 구하시오.",
+      "gold": ["연립부등식", "일차부등식", "교집합"]
+    },
+    {
+      "id": "TN01",
+      "call_site": "translate",
+      "task_type": "translate",
+      "difficulty": "easy",
+      "prompt": "다음 학생이 구어체·비정형으로 쓴 식을 표준 수식 표기로 정규화하시오. 정규화한 식만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n학생 입력: 엑스 제곱 더하기 삼엑스 빼기 사",
+      "gold": "x^2 + 3x - 4"
+    },
+    {
+      "id": "TN02",
+      "call_site": "translate",
+      "task_type": "translate",
+      "difficulty": "easy",
+      "prompt": "다음 학생이 구어체·비정형으로 쓴 식을 표준 수식 표기로 정규화하시오. 정규화한 식만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n학생 입력: 2엑스 + 1 은 5보다 작다",
+      "gold": "2x + 1 < 5"
+    },
+    {
+      "id": "TN03",
+      "call_site": "translate",
+      "task_type": "translate",
+      "difficulty": "easy",
+      "prompt": "다음 학생이 구어체·비정형으로 쓴 식을 표준 수식 표기로 정규화하시오. 정규화한 식만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n학생 입력: 루트 2 곱하기 루트 8",
+      "gold": "sqrt(2) * sqrt(8)"
+    },
+    {
+      "id": "TN04",
+      "call_site": "translate",
+      "task_type": "translate",
+      "difficulty": "easy",
+      "prompt": "다음 학생이 구어체·비정형으로 쓴 식을 표준 수식 표기로 정규화하시오. 정규화한 식만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n학생 입력: 엑스 분의 1 더하기 와이 분의 1",
+      "gold": "1/x + 1/y"
+    },
+    {
+      "id": "TN05",
+      "call_site": "translate",
+      "task_type": "translate",
+      "difficulty": "easy",
+      "prompt": "다음 학생이 구어체·비정형으로 쓴 식을 표준 수식 표기로 정규화하시오. 정규화한 식만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n학생 입력: 엑스의 세제곱 마이너스 27",
+      "gold": "x^3 - 27"
+    },
+    {
+      "id": "TN06",
+      "call_site": "translate",
+      "task_type": "translate",
+      "difficulty": "easy",
+      "prompt": "다음 학생이 구어체·비정형으로 쓴 식을 표준 수식 표기로 정규화하시오. 정규화한 식만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n학생 입력: 2분의 (a 더하기 b)",
+      "gold": "(a + b)/2"
+    },
+    {
+      "id": "TN07",
+      "call_site": "translate",
+      "task_type": "translate",
+      "difficulty": "easy",
+      "prompt": "다음 학생이 구어체·비정형으로 쓴 식을 표준 수식 표기로 정규화하시오. 정규화한 식만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n학생 입력: 엑스는 마이너스 2보다 크거나 같다",
+      "gold": "x >= -2"
+    },
+    {
+      "id": "TN08",
+      "call_site": "translate",
+      "task_type": "translate",
+      "difficulty": "easy",
+      "prompt": "다음 학생이 구어체·비정형으로 쓴 식을 표준 수식 표기로 정규화하시오. 정규화한 식만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n학생 입력: 와이는 엑스 제곱 더하기 1과 같다",
+      "gold": "y = x^2 + 1"
+    },
+    {
+      "id": "CM01",
+      "call_site": "match",
+      "task_type": "match",
+      "difficulty": "easy",
+      "prompt": "다음 개념 구절이 속한 정식 교육과정 단원 코드를 고르시오. 후보 코드: [10수학01, 10수학02, 10수학03, 10수학05]. 코드만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n개념 구절: 이차방정식의 근의 공식",
+      "gold": "10수학02"
+    },
+    {
+      "id": "CM02",
+      "call_site": "match",
+      "task_type": "match",
+      "difficulty": "easy",
+      "prompt": "다음 개념 구절이 속한 정식 교육과정 단원 코드를 고르시오. 후보 코드: [10수학01, 10수학02, 10수학03, 10수학05]. 코드만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n개념 구절: 다항식의 나눗셈과 나머지정리",
+      "gold": "10수학01"
+    },
+    {
+      "id": "CM03",
+      "call_site": "match",
+      "task_type": "match",
+      "difficulty": "easy",
+      "prompt": "다음 개념 구절이 속한 정식 교육과정 단원 코드를 고르시오. 후보 코드: [10수학01, 10수학02, 10수학03, 10수학05]. 코드만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n개념 구절: 점과 직선 사이의 거리",
+      "gold": "10수학03"
+    },
+    {
+      "id": "CM04",
+      "call_site": "match",
+      "task_type": "match",
+      "difficulty": "easy",
+      "prompt": "다음 개념 구절이 속한 정식 교육과정 단원 코드를 고르시오. 후보 코드: [10수학01, 10수학02, 10수학03, 10수학05]. 코드만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n개념 구절: 함수의 합성과 역함수",
+      "gold": "10수학05"
+    },
+    {
+      "id": "CM05",
+      "call_site": "match",
+      "task_type": "match",
+      "difficulty": "easy",
+      "prompt": "다음 개념 구절이 속한 정식 교육과정 단원 코드를 고르시오. 후보 코드: [10수학01, 10수학02, 10수학03, 10수학05]. 코드만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n개념 구절: 원의 방정식과 접선",
+      "gold": "10수학03"
+    },
+    {
+      "id": "CM06",
+      "call_site": "match",
+      "task_type": "match",
+      "difficulty": "easy",
+      "prompt": "다음 개념 구절이 속한 정식 교육과정 단원 코드를 고르시오. 후보 코드: [10수학01, 10수학02, 10수학03, 10수학05]. 코드만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n개념 구절: 연립이차방정식의 풀이",
+      "gold": "10수학02"
+    },
+    {
+      "id": "CM07",
+      "call_site": "match",
+      "task_type": "match",
+      "difficulty": "easy",
+      "prompt": "다음 개념 구절이 속한 정식 교육과정 단원 코드를 고르시오. 후보 코드: [10수학01, 10수학02, 10수학03, 10수학05]. 코드만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n개념 구절: 곱셈 공식과 인수분해",
+      "gold": "10수학01"
+    },
+    {
+      "id": "CM08",
+      "call_site": "match",
+      "task_type": "match",
+      "difficulty": "easy",
+      "prompt": "다음 개념 구절이 속한 정식 교육과정 단원 코드를 고르시오. 후보 코드: [10수학01, 10수학02, 10수학03, 10수학05]. 코드만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n개념 구절: 유리함수의 그래프와 점근선",
+      "gold": "10수학05"
+    },
+    {
+      "id": "AR01",
+      "call_site": null,
+      "task_type": "explain",
+      "difficulty": "easy",
+      "prompt": "다음 산술 문제의 답만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n문제: 17 + 28 을 계산하시오.",
+      "gold": "45"
+    },
+    {
+      "id": "AR02",
+      "call_site": null,
+      "task_type": "explain",
+      "difficulty": "easy",
+      "prompt": "다음 산술 문제의 답만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n문제: 144 를 12 로 나누시오.",
+      "gold": "12"
+    },
+    {
+      "id": "AR03",
+      "call_site": null,
+      "task_type": "explain",
+      "difficulty": "easy",
+      "prompt": "다음 산술 문제의 답만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n문제: 3의 4제곱을 계산하시오.",
+      "gold": "81"
+    },
+    {
+      "id": "AR04",
+      "call_site": null,
+      "task_type": "explain",
+      "difficulty": "easy",
+      "prompt": "다음 산술 문제의 답만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n문제: 7 곱하기 13 을 계산하시오.",
+      "gold": "91"
+    },
+    {
+      "id": "AR05",
+      "call_site": null,
+      "task_type": "explain",
+      "difficulty": "easy",
+      "prompt": "다음 산술 문제의 답만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n문제: 분수 2/3 더하기 1/6 을 기약분수로 나타내시오.",
+      "gold": "5/6"
+    },
+    {
+      "id": "AR06",
+      "call_site": null,
+      "task_type": "explain",
+      "difficulty": "easy",
+      "prompt": "다음 산술 문제의 답만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n문제: 100 의 35 퍼센트를 구하시오.",
+      "gold": "35"
+    },
+    {
+      "id": "AR07",
+      "call_site": null,
+      "task_type": "explain",
+      "difficulty": "easy",
+      "prompt": "다음 산술 문제의 답만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n문제: -5 더하기 12 를 계산하시오.",
+      "gold": "7"
+    },
+    {
+      "id": "AR08",
+      "call_site": null,
+      "task_type": "explain",
+      "difficulty": "easy",
+      "prompt": "다음 산술 문제의 답만 마지막 줄에 'ANSWER:' 뒤에 쓰시오.\n문제: 2의 10제곱을 계산하시오.",
+      "gold": "1024"
+    }
+  ],
+  "usage_notes": [
+    "이 평가셋은 03a §H 후속1 — FAST(1.5b)가 ①개념추출·③번역정규화·④개념ID매칭·간단산술에서 MID(7b) 대비 품질이 충분한지 측정하기 위한 자극이다.",
+    "실제 모델 실행은 Phaiakes9(Ollama·GPU)에서 Kiki가 수행한다. 이 컨테이너에는 Ollama·모델·GPU가 없으므로 quality_eval.py 테스트는 가짜 클라이언트 주입으로 순수 로직만 검증한다.",
+    "gold는 모두 결정적(프로그램) 채점이 가능한 형태다 — 개념 집합(F1) 또는 정규형/코드/정답(정확 매칭). LLM-as-judge를 쓰지 않는다.",
+    "CONCEPT_EXTRACT의 gold 개념 집합은 '핵심 개념의 합리적 집합'이며, 모델이 동의어(예: '곱셈 공식' vs '곱셈공식')를 쓸 수 있으므로 채점기는 공백·대소문자를 정규화한 뒤 집합 F1으로 부분 점수를 준다.",
+    "CONCEPT_ID_MATCH의 코드 체계는 sample_prompts.json의 '10수학NN' NCIC 코드와 일관된다 (자체 원작 매핑).",
+    "프롬프트에 출력 형식 지시('쉼표로 나열', \"'ANSWER:' 뒤에\")를 포함하여 결정적 파싱이 가능하도록 했다. 파서 가정은 quality_eval.py의 parse_* 함수 docstring에 명시되어 있다."
+  ]
+}
