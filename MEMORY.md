@@ -49,6 +49,24 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-05-20: M1.2 L3 라우터 구현 완료 — 결정 로직 + 타입 인터페이스 (.py + 테스트 100%)
+**컨텍스트**: 03a 설계서의 라우터를 `.py`로 구현하는 M1.2(03a §H 후속 #3·라우터 설계 후속 #3). 범위는 *결정 로직 + 타입 인터페이스*로 한정 — 실제 LLM/Redis/Langfuse/큐 연동은 라이브 서비스·API 키가 필요해 단위테스트·CI 게이트가 불가하므로 후속 분리. llm-architect 서브에이전트 위임 후 메인이 4게이트 독립 재실행으로 검수.
+**결정**:
+- `src/backend/whymath_backend/l3/` 신규 패키지(data-pipeline 구조 미러링):
+  - `models.py`: `CostTier`·`LocalModelTier`·`CallSite` enum + `RoutingRequest`·`RoutingDecision`(pydantic). 3불변식을 `@model_validator(after)`로 강제(`LOCAL⟺local_model`·`CLOUD⟹None`·`QUALITY⟹async`). `use_enum_values=True`에서도 enum/문자열 양쪽 정규화.
+  - `router.py`: `Router.route()` = 축1(C.1 6규칙)→축2(C.2 7규칙) 순차. C.1 규칙5(에스컬레이션)는 단발 입력이 아닌 *생성 결과 피드백* 트리거라 route()에서 제외하고 `next_tier()`/`ESCALATION_CHAIN`(§D.1)으로 분리. `guard_cloud`(§D.4·§E.2 구독 한도)·`cache_key`(§F.1 2축)·`langfuse_fields`(§F.2 dict만)·지연/비용 추정기.
+  - `interfaces.py`: `LLMProvider`·`CacheBackend`·`TraceSink`·`AsyncJobQueue` Protocol(미구현) + `InMemoryCache`·`RecordingTraceSink` 테스트 스텁.
+- 테스트 `tests/backend/`: 99개, 커버리지 **100%**(stmt+branch). 결정표 각 규칙·불변식·가드·추정·키·에스컬레이션·엣지 커버.
+- `src/backend/pyproject.toml` 완성(hatchling·black·pytest paths·coverage) + `.github/workflows/ci.yml`에 `backend — lint·type·test` 잡 추가(ruff·black·mypy-strict·pytest cov70).
+- 미설치 핀 `mocktail>=1.0.0` 제거(PyPI 최대 0.0.4·미사용 — `pip install -e .[dev]` 실패 방지).
+**근거**:
+- 결정 로직은 순수 함수라 라이브 의존 없이 100% 단위테스트 가능 — "모든 PR 테스트(70%+)"(CLAUDE.md) 충족하면서 비용 0. 외부 의존은 Protocol 경계로 분리해 후속 연동 시 교체.
+- C.1 규칙5를 route()에서 뺀 건 *계층 책임* — 신뢰 미달 트리거 감지는 생성 파이프라인(03 문서)의 일이고 라우터는 사슬 계산만(`next_tier`).
+**적용 범위**:
+- 신규: `whymath_backend/l3/{models,router,interfaces}.py`·`tests/backend/*`. 수정: `src/backend/pyproject.toml`·`ci.yml`.
+- **미적용(후속)**: 클라우드 비용·지연 상수 placeholder 실측(§H 후속 4)·LLM/Redis/Langfuse/큐 라이브 연동·`backend` CI 잡의 branch protection 필수 체크 등록(Kiki 수동, 현재 필수 3종).
+**상태**: 확정(2026-05-20). M1.2 라우터 결정 로직 구현 완료, 4게이트 통과(ruff·black·mypy-strict·pytest 99/100%). 라이브 연동·placeholder 실측은 후속.
+
 ### 2026-05-20: Claude Max 구독 = *빌드타임 콘텐츠 생성*, Anthropic API = *런타임 서빙* — CostTier에 구독 미편입
 **컨텍스트**: CostTier(축1) 검토 중 "Kiki의 Claude Max 구독($100/$200)을 런타임 CLOUD_MID/HIGH에 활용해 비용 절감" 아이디어 제기. 검토 핵심: **Max 구독과 Anthropic API(개발자 플랫폼)는 별개 시스템**이다 — Max=개인 대화형(앱·Claude Code, 5시간 롤링·주간 상한 rate limit), API=제품 백엔드 토큰당 과금. Max 구독으로는 제품 백엔드가 학생(제3자)을 서빙할 수 없다: (a) 기술적으로 API 키 미발급, (b) 소비자 약관상 *개인 사용 한정*(제3자 서빙·제품 임베드 위반), (c) rate limit으로 다중 학생 동시 서빙 부적합.
 **결정**:
@@ -116,7 +134,7 @@
 **후속 작업 (별도 PR/세션)**:
 1. **FAST tier 품질 검증** — 1.5b가 ①③④·간단 산술에서 7b 대비 품질 차이 측정. 차이 크면 03a §C.2 결정표 조정(M1.2)
 2. **[완료 2026-05-20] 인터페이스 정렬: `LLMTier` → `CostTier`/`LocalModelTier`** — llm-architect.md·04·06·backend-engineer.md의 `LLMTier` 참조를 두 축 분해로 갱신 (위 §적용 범위 참조)
-3. **M1.2 라우터 구현** — 03a 설계를 `.py`로 구현 + 테스트(커버리지 70%+). `guard_cloud`·캐시키 2축화·Langfuse 필드·QUALITY 비동기 큐
+3. **[완료 2026-05-20] M1.2 라우터 구현** — 03a 설계를 `.py`로 구현 + 테스트(커버리지 100%). 결정 로직+인터페이스 범위(LLM/Redis/Langfuse/큐 라이브 연동은 후속). 위 *M1.2 L3 라우터 구현 완료* 로그 참조
 4. **클라우드 티어 실연동** — CLOUD_MID/HIGH API·비용 계측·`guard_cloud` 임계값 실측(Phase 1 후반)
 **상태**: 설계 완료(`feat/l3-router-3tier-design`). 두 축·명칭 충돌·decision table·에스컬레이션·스키마 명세 확정. 구현은 M1.2.
 
