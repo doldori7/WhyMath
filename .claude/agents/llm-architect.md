@@ -19,16 +19,23 @@ description: L3 콘텐츠 생성·검증 — LLM 라우팅·PRM 단계검증·�
 
 ### 모델 풀
 
-| 티어 | 모델 | 위치 | 비용 (1k 토큰) | 용도 |
-|---|---|---|---|---|
-| **로컬** | Qwen3-Math-72B | Phaiakes9 | 0원 | 기본 풀이·설명 |
-| **로컬** | DeepSeek-Math | Phaiakes9 | 0원 | 수학 특화 |
-| **클라우드 중급** | Claude Sonnet | 4.6 | ~$0.003/$0.015 | 일반 코칭·자연어 |
-| **클라우드 중급** | GPT-5-mini | OpenAI | 유사 | 대안 |
-| **클라우드 고급** | Claude Opus 4.7 | Anthropic | ~$0.015/$0.075 | 어려운 진단 |
-| **클라우드 최고** | GPT-5 / o3 | OpenAI | 비쌈 | 킬러 문항·증명 |
+로컬은 **패밀리(MATH/GENERAL) × 크기(fast/mid/quality)** 로 갈린다. 패밀리·크기 결정 로직과 실제 모델 매트릭스는 `docs/architecture/03a_l3_router_design.md` §A.0·§C.0이 정본.
 
-목표 분포: **로컬 80% / 중급 18% / 최고 2%**
+| 비용·위치 | 패밀리 | 크기 | 모델 | 위치 | 비용 (1k) | 용도 |
+|---|---|---|---|---|---|---|
+| **로컬** | MATH | fast | qwen2-math:1.5b | Phaiakes9 | 0원 | 수학 산술·1단계 계산 (산술 87.5%) |
+| **로컬** | MATH | mid | qwen2-math:7b | Phaiakes9 | 0원 | 수학 풀이·2~3단계 추론·깊이추론 (산술 100%) |
+| **로컬** | GENERAL | fast | qwen2.5:3b | Phaiakes9 | 0원 | NLP 개념ID 매칭·분류 (match 100%) |
+| **로컬** | GENERAL | mid | qwen2.5:7b | Phaiakes9 | 0원 | NLP 개념추출·번역정규화 (translate 75%) |
+| **로컬** | (무관) | quality | qwen3.5:27b | Phaiakes9 | 0원 | 검증·복잡추론·PRM·백그라운드(비동기 전용) |
+| **클라우드 중급** | — | — | Claude Sonnet 4.6 | API | ~$0.003/$0.015 | 일반 코칭·자연어 |
+| **클라우드 중급** | — | — | GPT-5-mini | OpenAI | 유사 | 대안 |
+| **클라우드 고급** | — | — | Claude Opus 4.7 | Anthropic | ~$0.015/$0.075 | 어려운 진단 |
+| **클라우드 최고** | — | — | GPT-5 / o3 | OpenAI | 비쌈 | 킬러 문항·증명 |
+
+목표 분포(비용·위치 축): **로컬 80% / 중급 18% / 최고 2%**
+
+> **패밀리 축(2026-05-20 Phaiakes9 태스크 인지 실측 근거)**: 로컬은 *크기만*으로 부족 — 태스크 유형(수학 vs NLP)으로 *패밀리*를 먼저 갈라야 한다. NLP(추출·정규화·매칭·분류)를 수학 특화 모델(qwen2-math)로 돌리면 7b조차 0%, 일반 모델(qwen2.5)로 바꾸니 match 3b=100%·translate 7b=75%였다. 따라서 로컬 실제 모델 = (MATH/GENERAL) × (fast/mid). quality(27b)는 패밀리 무관. 상세는 03a §0.2·§A.0·§C.0.
 
 ### PRD 신규 책임 (MathScope PRD v1.1 흡수 — L3 추가 책임)
 
@@ -60,7 +67,7 @@ description: L3 콘텐츠 생성·검증 — LLM 라우팅·PRM 단계검증·�
 
 ### 라우팅 규칙
 
-> **명칭 충돌 해소 (2026-05-20, `docs/architecture/03a_l3_router_design.md` §0.1 근거)**: 기존 단일 enum `LLMTier{LOCAL, MID, HIGH}`는 *비용·위치*와 *로컬 모델 크기* 두 축을 한 단어(`mid`)로 겹쳐 써 모순 위험이 있었다. 이를 **두 축으로 분해**한다 — 축1 `CostTier`(비용·위치) × 축2 `LocalModelTier`(로컬 크기). 기존 `LLMTier.MID→CostTier.CLOUD_MID`, `LLMTier.HIGH→CostTier.CLOUD_HIGH`로 1:1 의미 보존(목표 분포 80/18/2 유지), `LOCAL` 내부 FAST/MID/QUALITY 세분만 신규 추가. 분기 로직·결정표·스키마 상세는 03a 설계서가 정본.
+> **명칭 충돌 해소 + 패밀리 축 (2026-05-20, `docs/architecture/03a_l3_router_design.md` §0.1·§0.2 근거)**: 기존 단일 enum `LLMTier{LOCAL, MID, HIGH}`는 *비용·위치*와 *로컬 모델 크기* 두 축을 한 단어(`mid`)로 겹쳐 써 모순 위험이 있었다. 이를 **세 축으로 분해**한다 — 축1 `CostTier`(비용·위치) × 축3 `ModelFamily`(로컬 패밀리, 신규) × 축2 `LocalModelTier`(로컬 크기). 기존 `LLMTier.MID→CostTier.CLOUD_MID`, `LLMTier.HIGH→CostTier.CLOUD_HIGH`로 1:1 의미 보존(목표 분포 80/18/2 유지). `LOCAL` 내부에 FAST/MID/QUALITY 크기 세분(2026-05-19 벤치) + **MATH/GENERAL 패밀리 세분(2026-05-20 태스크 인지 실측)** 추가. 로컬 실제 모델 = (패밀리 × 크기) 매트릭스. 분기 로직·결정표·스키마 상세는 03a 설계서가 정본.
 
 ```python
 from enum import Enum
@@ -68,15 +75,20 @@ from pydantic import BaseModel
 
 # ── 축1: 비용·위치 (기존 LLMTier.MID/HIGH → CLOUD_ 접두사로 개명) ──
 class CostTier(str, Enum):
-    LOCAL = "local"            # Phaiakes9 로컬 (0원) — 축2로 세분
+    LOCAL = "local"            # Phaiakes9 로컬 (0원) — 축3·축2로 세분
     CLOUD_MID = "cloud_mid"    # Claude Sonnet 4.6 등 (구 LLMTier.MID)
     CLOUD_HIGH = "cloud_high"  # Claude Opus 4.7 / GPT-5 등 (구 LLMTier.HIGH)
 
-# ── 축2: 로컬 모델 크기 (2026-05-19 벤치 라인업, CostTier.LOCAL일 때만 적용) ──
+# ── 축3: 로컬 모델 패밀리 (2026-05-20 태스크 인지 실측, CostTier.LOCAL일 때만) ──
+class ModelFamily(str, Enum):
+    MATH = "math"        # qwen2-math — 수학 계산·풀이·증명 (산술 7b 100%)
+    GENERAL = "general"  # qwen2.5    — NLP: 추출·정규화·매칭·분류 (match 3b 100%)
+
+# ── 축2: 로컬 모델 크기 (2026-05-19 벤치, 패밀리 무관 추상 등급; 실제 모델은 패밀리×크기) ──
 class LocalModelTier(str, Enum):
-    FAST = "fast"        # qwen2-math:1.5b — p50 1.0s, SLA PASS, 동기 즉답
-    MID = "mid"          # qwen2-math:7b  — p50 3.9s, 동기 가능(즉답엔 길다)
-    QUALITY = "quality"  # qwen3.5:27b    — p50 13.9s, 비동기 전용
+    FAST = "fast"        # MATH=qwen2-math:1.5b / GENERAL=qwen2.5:3b — p50≈1.0s, SLA PASS, 동기 즉답
+    MID = "mid"          # MATH=qwen2-math:7b  / GENERAL=qwen2.5:7b — p50≈3.9s, 동기 가능(즉답엔 길다)
+    QUALITY = "quality"  # qwen3.5:27b (패밀리 무관)                 — p50≈13.9s, 비동기 전용
 
 class RoutingRequest(BaseModel):
     task_type: str                # 'explain', 'diagnose', 'coach', 'generate', 'verify'
@@ -87,20 +99,22 @@ class RoutingRequest(BaseModel):
     student_subscription: str    # 'free', 'basic', 'premium', 'gifted'
     # 신규 신호(03a §G) — sync·conversation_phase·call_site 등은 축2 결정에 쓰임. 전체 명세는 03a 참조
 
-# ── 출력: 두 축을 합성한 결정 객체 (03a §G) ──
+# ── 출력: 세 축을 합성한 결정 객체 (03a §G) ──
 class RoutingDecision(BaseModel):
     cost_tier: CostTier                  # 축1
+    local_family: ModelFamily | None     # 축3 (cost_tier=LOCAL일 때만, 아니면 None) — MATH/GENERAL
     local_model: LocalModelTier | None   # 축2 (cost_tier=LOCAL일 때만, 아니면 None)
     mode: str = "sync"                   # sync/async (QUALITY는 async 강제)
-    reason: str                          # 결정 근거(디버깅·Langfuse)
+    reason: str                          # 결정 근거(디버깅·Langfuse) 예: "local/general/fast"
     est_latency_ms: int                  # 예상 지연(FAST≈1010/MID≈3918/QUALITY≈13886/CLOUD≈가변)
     est_cost_krw: float = 0.0           # 예상 비용(로컬=0)
-    # 불변식(03a §G): cost_tier==LOCAL ⟺ local_model is not None / local_model==QUALITY ⟹ mode=="async"
+    # 불변식(03a §G): cost_tier==LOCAL ⟺ local_model/local_family is not None
+    #   / local_model==QUALITY ⟹ mode=="async" (QUALITY면 패밀리는 모델 lookup에 무관, 27b가 양쪽 포괄)
 
 class Router:
-    """비용·지연·품질 최적화 라우팅. 축1(80/18/2) → 축2(FAST/MID/QUALITY) 순차 결정.
-    아래는 기존 4규칙의 *비용축(축1)* 의미를 보존한 골격이다. 로컬 내부 세분(FAST/MID/QUALITY)·
-    에스컬레이션·동기성 게이팅 등 전체 분기 로직은 03a 설계서 §C 결정표가 정본. (구현은 M1.2.)"""
+    """비용·지연·품질 최적화 라우팅. 축1(80/18/2) → 축3(MATH/GENERAL) → 축2(FAST/MID/QUALITY) 순차 결정.
+    아래는 기존 4규칙의 *비용축(축1)* 의미를 보존한 골격이다. 로컬 내부 세분(패밀리×크기)·
+    에스컬레이션·동기성 게이팅 등 전체 분기 로직은 03a 설계서 §C(§C.0 패밀리/§C.2 크기)가 정본. (구현은 M1.2.)"""
     
     def route(self, req: RoutingRequest) -> RoutingDecision:
         # ── 축1: 비용·위치 결정 (기존 4규칙 의미 보존) ──
@@ -117,15 +131,23 @@ class Router:
         else:
             cost = CostTier.LOCAL
         
-        # 클라우드 경로면 축2 없음 (local_model=None)
+        # 클라우드 경로면 축3·축2 없음 (local_family=local_model=None)
         if cost != CostTier.LOCAL:
-            return RoutingDecision(cost_tier=cost, local_model=None, mode="sync",
-                                   reason="cloud escalation", est_latency_ms=0)
+            return RoutingDecision(cost_tier=cost, local_family=None, local_model=None,
+                                   mode="sync", reason="cloud escalation", est_latency_ms=0)
+        
+        # ── 축3: 로컬 패밀리 결정 (MATH/GENERAL) — 크기보다 먼저, 신규 추가분 ──
+        # NLP(추출·정규화·매칭·분류)면 GENERAL, 그 외 수학이면 MATH. 전체 결정표는 03a §C.0.
+        if req.task_type in ("extract", "match", "translate", "classify"):
+            family = ModelFamily.GENERAL
+        else:
+            family = ModelFamily.MATH
         
         # ── 축2: 로컬 모델 크기 결정 (FAST/MID/QUALITY) — 신규 추가분 ──
         # 전체 결정표는 03a §C.2. 여기서는 안전 기본값만 표기.
-        return RoutingDecision(cost_tier=CostTier.LOCAL, local_model=LocalModelTier.FAST,
-                               mode="sync", reason="local/fast", est_latency_ms=1010)
+        return RoutingDecision(cost_tier=CostTier.LOCAL, local_family=family,
+                               local_model=LocalModelTier.FAST,
+                               mode="sync", reason=f"local/{family.value}/fast", est_latency_ms=1010)
 ```
 
 ### 호출 추상화
@@ -137,12 +159,13 @@ class LLMClient:
         self,
         prompt: str,
         system: str,
-        decision: RoutingDecision,   # 라우터 결정 (cost_tier+local_model 쌍). 구 tier: LLMTier 대체
+        decision: RoutingDecision,   # 라우터 결정 (cost_tier+local_family+local_model). 구 tier: LLMTier 대체
         **kwargs
     ) -> LLMResponse:
-        # 1. Langfuse trace 시작 (cost_tier·local_model·mode 태그 기록, 03a §F.2)
-        # 2. 캐싱 확인 (Redis — 캐시 키에 {cost_tier}:{local_model} 포함, 03a §F.1)
-        # 3. 모델 선택 (decision으로 실제 모델 결정 — CLOUD_*는 클라우드 API, LOCAL은 FAST/MID/QUALITY)
+        # 1. Langfuse trace 시작 (cost_tier·local_family·local_model·mode 태그 기록, 03a §F.2)
+        # 2. 캐싱 확인 (Redis — 캐시 키에 {cost_tier}:{local_family}:{local_model} 포함, 03a §F.1)
+        # 3. 모델 선택 (decision으로 실제 모델 결정 — CLOUD_*는 클라우드 API,
+        #    LOCAL은 (local_family × local_model) 매트릭스 lookup: 예 GENERAL×FAST=qwen2.5:3b, 03a §A.0)
         # 4. 호출 (QUALITY는 비동기 큐 경유, 03a §D.3 / 실패 시 에스컬레이션 체인 03a §D)
         # 5. 응답 검증 (안전 필터)
         # 6. 캐싱 저장
