@@ -162,11 +162,19 @@ async def handle_chat(
         session=session,
     )
     
-    # 5. L3: LLM 호출 (라우터 경유, PRM 검증)
+    # 5. L3: 라우팅 결정 → LLM 호출 (라우터 경유, PRM 검증)
+    #    L4는 권장 비용 티어(축1 CostTier)만 힌트로 넘기고, L3 라우터가 요청 신호로 축2(로컬
+    #    FAST/MID/QUALITY)·동기성까지 합쳐 RoutingDecision을 최종 결정한다 (03a §0.1·§B·§C).
+    routing_decision = orchestrator.l3_router.route(
+        RoutingRequest.from_context(           # 컨텍스트·구독·예산·동기성 신호로 구성 (03a §B)
+            context_data, learner_state, session,
+            recommended_cost_tier=pedagogy_decision.recommended_cost_tier,  # L4 힌트(축1)
+        )
+    )
     llm_response = await orchestrator.l3_llm.generate(
         prompt=pedagogy_decision.prompt,
         system=pedagogy_decision.system,
-        tier=pedagogy_decision.recommended_tier,
+        decision=routing_decision,             # 구 tier=...recommended_tier → RoutingDecision
         context=context_data,
     )
     

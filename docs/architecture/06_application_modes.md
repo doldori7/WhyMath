@@ -117,7 +117,10 @@ class ModeConfig(BaseModel):
     gamification_level: int   # 0(없음) ~ 3(중간), 4+ 금지
     
     # 비용·티어
-    default_llm_tier: LLMTier
+    # 명칭 충돌 해소(2026-05-20, docs/architecture/03a_l3_router_design.md §0.1): 구 LLMTier 단일 enum이
+    # 두 축으로 분해됨. 모드 기본값은 *비용·위치 축*(축1)만 정한다 — 로컬 모델 크기(축2 FAST/MID/QUALITY)는
+    # 모드가 아니라 요청별 신호로 L3 라우터가 결정.
+    default_cost_tier: CostTier  # 구 default_llm_tier: LLMTier → CostTier(LOCAL/CLOUD_MID/CLOUD_HIGH)
     daily_cost_limit_won: int
     
     # UI

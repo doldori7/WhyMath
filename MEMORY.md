@@ -92,10 +92,10 @@
 - 신규: `docs/architecture/03a_l3_router_design.md`
 - 수정(최소): `docs/architecture/03_content_generation.md` 3곳(§1 출력 명세·모델풀 표 2축화·5호출지점 문단 + 03a cross-ref·명칭충돌 주석)
 - 본 결정 로그 + 활성 작업 갱신
-- **미적용(후속)**: `LLMTier`를 참조하는 `.claude/agents/llm-architect.md`(enum 정의·`Router.route()`)·`docs/architecture/04_pedagogy_engine.md`(`recommended_tier`)·`06_application_modes.md`(`default_llm_tier`)의 `CostTier`/`LocalModelTier` 분해 반영 — 본 결정이 근거, 별도 인터페이스 정렬 작업(03a §H #7). 현재 *문서 간 일시적 불일치* 존재(코드 영향 없음 — 어디서도 import 안 됨)
+- **적용 완료(2026-05-20)**: `LLMTier`를 참조하던 `.claude/agents/llm-architect.md`(enum→`CostTier`+`LocalModelTier`·`Router.route()`→`RoutingDecision` 반환)·`docs/architecture/04_pedagogy_engine.md`(`recommended_tier`→`recommended_cost_tier: CostTier`)·`06_application_modes.md`(`default_llm_tier`→`default_cost_tier: CostTier`)·`.claude/agents/backend-engineer.md`(호출처 `route()→generate(decision=)`로 일관 갱신)의 두 축 분해 반영 완료. `budget_cents`→`budget_krw`(03a E장)도 통일. L4/L6은 *축1(CostTier)만* 힌트로 보유, 축2(로컬 FAST/MID/QUALITY)는 L3 라우터가 결정(계층 경계). *문서 간 불일치 해소*. 구현은 M1.2.
 **후속 작업 (별도 PR/세션)**:
 1. **FAST tier 품질 검증** — 1.5b가 ①③④·간단 산술에서 7b 대비 품질 차이 측정. 차이 크면 03a §C.2 결정표 조정(M1.2)
-2. **인터페이스 정렬: `LLMTier` → `CostTier`/`LocalModelTier`** — llm-architect.md·04·06 문서의 `LLMTier` 참조를 두 축 분해로 갱신(별도 검토)
+2. **[완료 2026-05-20] 인터페이스 정렬: `LLMTier` → `CostTier`/`LocalModelTier`** — llm-architect.md·04·06·backend-engineer.md의 `LLMTier` 참조를 두 축 분해로 갱신 (위 §적용 범위 참조)
 3. **M1.2 라우터 구현** — 03a 설계를 `.py`로 구현 + 테스트(커버리지 70%+). `guard_cloud`·캐시키 2축화·Langfuse 필드·QUALITY 비동기 큐
 4. **클라우드 티어 실연동** — CLOUD_MID/HIGH API·비용 계측·`guard_cloud` 임계값 실측(Phase 1 후반)
 **상태**: 설계 완료(`feat/l3-router-3tier-design`). 두 축·명칭 충돌·decision table·에스컬레이션·스키마 명세 확정. 구현은 M1.2.
