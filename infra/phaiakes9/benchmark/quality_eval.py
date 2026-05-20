@@ -1,13 +1,28 @@
 """Phaiakes9 — FAST vs MID 로컬 모델 *품질* 평가 하니스 (03a §H 후속1).
 
-L3 라우터의 FAST 호출지점에서 **qwen2-math:1.5b(FAST) vs qwen2-math:7b(MID)**
-품질을 비교해, FAST 기본값이 충분한지 / 일부를 MID로 승급(03a §C.2 조정)할지
-*결정*하기 위한 평가셋·채점기·러너. `bench_latency.py`(지연 벤치)의 자매 도구로,
-구조(데이터클래스·Protocol·lazy import·argparse main)를 미러링한다.
+L3 라우터의 FAST 호출지점에서 로컬 소형(FAST) vs 대형(MID) 모델 품질을 비교해,
+FAST 기본값이 충분한지 / 일부를 MID로 승급(03a §C.2 조정)할지 *결정*하기 위한
+평가셋·채점기·러너. `bench_latency.py`(지연 벤치)의 자매 도구로, 구조(데이터클래스·
+Protocol·lazy import·argparse main)를 미러링한다.
+
+**태스크 패밀리 인지(task-aware) 모델 매핑 — 이 하니스의 핵심 설계:**
+    Phaiakes9 실측이 드러낸 근본 결함은 *모델 패밀리*(수학 특화 vs 일반)와 *태스크*의
+    불일치였다. 정보 추출(extract)·표기 정규화(translate)·코드 매칭(match)은 본질이
+    NLP 작업이라, 수학 풀이 특화 모델(qwen2-math)은 7b조차 거의 0%였다. 즉 "1.5b vs
+    7b 크기" 문제가 아니라 *모델 패밀리가 태스크와 안 맞은 것*이었다. 그래서 항목을
+    두 패밀리로 가른다:
+      - **NLP**: call_site ∈ {extract, translate, match} → 일반 모델(qwen2.5).
+      - **MATH**: call_site is None(산술) → 수학 특화 모델(qwen2-math).
+    러너는 *각 항목의 패밀리*에 맞는 (fast, mid) 모델 쌍으로 호출한다. 따라서 결과의
+    FAST 열 = 패밀리별 소형, MID 열 = 패밀리별 대형이며, 각 패밀리는 자기에게 맞는
+    모델로만 평가된다. 패밀리별 (fast, mid) 모델은 CLI/env로 설정 가능하다(아래).
 
 핵심 설계:
     - **결정적(프로그램) 채점.** LLM-as-judge를 쓰지 않는다 — 채점기는 순수 함수
       (set_f1·exact_match·normalize_form)이며 호출지점별로 매핑된다.
+    - **결정성(재현 가능 측정).** LLM 샘플링은 비결정적이라 실행마다 점수가 출렁인다
+      (실측 산술 37~62%). _call_once는 generate options에 temperature=0을 넣어
+      실행 간 변동을 제거한다(측정 안정성).
     - **모델 호출은 `_OllamaClientProtocol` 경유.** 테스트는 가짜 클라이언트를 주입해
       Ollama·GPU 없이 통과한다. 실제 모델 실행은 Phaiakes9(Ollama·GPU)에서 Kiki가
       수행하며, 테스트/CI는 *순수 로직만* 검증한다(이 컨테이너엔 모델·GPU 없음).
@@ -15,13 +30,24 @@ L3 라우터의 FAST 호출지점에서 **qwen2-math:1.5b(FAST) vs qwen2-math:7b
       충분히 근접(`>= MID_acc - DELTA`)하고 절대 하한(`>= ABS_MIN`)을 넘으면
       "FAST 유지", 아니면 "MID 승급 권고". 임계값은 *문서화된 상수*다(아래 주석).
 
+호스트:
+    기본·권장 호스트는 `127.0.0.1:11434`(Windows Native GPU Ollama) — DEFAULT_HOST는
+    `http://localhost:11434`로 이를 가리킨다. ⚠️ 경고: `172.17.112.1`은 WSL2 CPU
+    Ollama라 *속도만* 느릴 뿐 정확도(품질 측정 결과)에는 영향이 없다 — 품질 측정은
+    어느 호스트에서든 동일한 결론을 내야 한다(temperature=0 결정성 + 결정적 채점).
+
 사용:
-    python quality_eval.py [--fast-model qwen2-math:1.5b] [--mid-model qwen2-math:7b]
+    # 패밀리별 (fast, mid) 모델을 따로 지정(기본값은 아래 DEFAULT_*):
+    python quality_eval.py \\
+        [--math-fast qwen2-math:1.5b] [--math-mid qwen2-math:7b] \\
+        [--nlp-fast qwen2.5:3b]       [--nlp-mid qwen2.5:7b]
 
 환경변수:
     WHYMATH_OLLAMA_HOST       ollama 호스트 (디폴트: http://localhost:11434)
-    WHYMATH_QEVAL_FAST_MODEL  FAST 모델 ID (디폴트: qwen2-math:1.5b)
-    WHYMATH_QEVAL_MID_MODEL   MID 모델 ID (디폴트: qwen2-math:7b)
+    WHYMATH_QEVAL_MATH_FAST   MATH 패밀리 FAST 모델 (디폴트: qwen2-math:1.5b)
+    WHYMATH_QEVAL_MATH_MID    MATH 패밀리 MID  모델 (디폴트: qwen2-math:7b)
+    WHYMATH_QEVAL_NLP_FAST    NLP  패밀리 FAST 모델 (디폴트: qwen2.5:3b)
+    WHYMATH_QEVAL_NLP_MID     NLP  패밀리 MID  모델 (디폴트: qwen2.5:7b)
     WHYMATH_QEVAL_SAMPLES     평가셋 JSON 경로 (디폴트: ./fast_tier_eval.json)
     WHYMATH_QEVAL_OUTPUT      결과 JSON 출력 경로 (디폴트: results/qeval_<ts>.json)
     WHYMATH_QEVAL_NUM_PREDICT 모델당 생성 토큰 한도 (디폴트: 512 — 수학 모델 과추론 잘림 방지)
@@ -52,10 +78,34 @@ from pathlib import Path
 from typing import Any, Final, Protocol, cast
 
 # ---- 상수 -------------------------------------------------------------------
+# DEFAULT_HOST는 그대로 Windows Native GPU Ollama(127.0.0.1:11434)를 가리킨다.
+# 172.17.112.1(WSL2 CPU)은 속도만 느리고 정확도엔 무관(모듈 docstring "호스트" 참조).
 DEFAULT_HOST: Final[str] = "http://localhost:11434"
-DEFAULT_FAST_MODEL: Final[str] = "qwen2-math:1.5b"
-DEFAULT_MID_MODEL: Final[str] = "qwen2-math:7b"
 DEFAULT_NUM_PREDICT: Final[int] = 512
+
+# 태스크 패밀리 식별자 -------------------------------------------------------
+# 실측 근본 결함(수학 특화 모델이 정보추출·매칭·형식변환 NLP 작업에 부적합)을
+# 바로잡기 위해, 항목을 두 패밀리로 나눠 *패밀리에 맞는* 모델로 평가한다.
+FAMILY_MATH: Final[str] = "math"  # 산술(call_site=None) — 수학 특화 모델
+FAMILY_NLP: Final[str] = "nlp"  # extract/translate/match — 일반 모델
+
+# 호출지점 → 패밀리 매핑. call_site가 None(산술)이면 MATH, 그 외는 NLP.
+# NLP 호출지점: 정보 추출(extract)·표기 정규화(translate)·코드 매칭(match)은
+# 수학 풀이가 아니라 정보처리/형식변환이라 일반 모델(qwen2.5)이 적합하다.
+CALL_SITE_FAMILY: Final[dict[str, str]] = {
+    "extract": FAMILY_NLP,  # ① 개념 추출 — NLP
+    "translate": FAMILY_NLP,  # ③ 번역·정규화 — NLP
+    "match": FAMILY_NLP,  # ④ 개념 ID 매칭 — NLP
+}
+"""호출지점 → 태스크 패밀리. call_site가 None(산술)이면 기본 FAMILY_MATH."""
+
+# 패밀리별 기본 (fast, mid) 모델 — CLI/env로 덮어쓸 수 있는 시작점.
+#   MATH: 수학 특화 qwen2-math (산술에 강함).
+#   NLP : 일반 qwen2.5 (정보추출·매칭·형식변환에 적합 — 실측이 요구한 교정).
+DEFAULT_MATH_FAST_MODEL: Final[str] = "qwen2-math:1.5b"
+DEFAULT_MATH_MID_MODEL: Final[str] = "qwen2-math:7b"
+DEFAULT_NLP_FAST_MODEL: Final[str] = "qwen2.5:3b"
+DEFAULT_NLP_MID_MODEL: Final[str] = "qwen2.5:7b"
 
 # 결정 규칙 임계값 (03a §H 후속1) ----------------------------------------------
 # ⚠️ 03a §H 후속1은 이 임계값을 *미확정*으로 남겼다("품질 차이가 충분히 작은지").
@@ -109,6 +159,16 @@ class EvalItem:
         key = self.call_site if self.call_site is not None else "__arithmetic__"
         return CALL_SITE_GRADER.get(key, GRADER_EXACT)
 
+    def family(self) -> str:
+        """이 항목의 태스크 패밀리 (CALL_SITE_FAMILY 매핑).
+
+        extract/translate/match → FAMILY_NLP(일반 모델), call_site None(산술) →
+        FAMILY_MATH(수학 특화 모델). 러너는 이 패밀리로 (fast, mid) 모델을 고른다.
+        """
+        if self.call_site is None:
+            return FAMILY_MATH
+        return CALL_SITE_FAMILY.get(self.call_site, FAMILY_NLP)
+
 
 @dataclass(slots=True, frozen=True)
 class ItemScore:
@@ -136,14 +196,45 @@ class CallSiteAggregate:
     n_errors: int
 
 
+@dataclass(slots=True, frozen=True)
+class ModelMatrix:
+    """패밀리별 (fast, mid) 모델 매핑 — 태스크 패밀리 인지 라우팅의 핵심.
+
+    러너는 각 항목의 family()로 이 매트릭스에서 (fast, mid) 모델을 골라 호출한다.
+    MATH 패밀리(산술)는 수학 특화 모델, NLP 패밀리(extract/translate/match)는
+    일반 모델을 쓴다. 값은 CLI/env로 주입된다(기본은 DEFAULT_* 상수).
+    """
+
+    math_fast: str = DEFAULT_MATH_FAST_MODEL
+    math_mid: str = DEFAULT_MATH_MID_MODEL
+    nlp_fast: str = DEFAULT_NLP_FAST_MODEL
+    nlp_mid: str = DEFAULT_NLP_MID_MODEL
+
+    def model_for(self, family: str, role: str) -> str:
+        """패밀리(math/nlp)·역할(fast/mid)에 해당하는 모델 ID를 반환.
+
+        알 수 없는 패밀리는 보수적으로 NLP로 간주한다(대부분의 호출지점이 NLP).
+        """
+        is_fast = role == "fast"
+        if family == FAMILY_MATH:
+            return self.math_fast if is_fast else self.math_mid
+        return self.nlp_fast if is_fast else self.nlp_mid
+
+
 @dataclass(slots=True)
 class ModelResult:
-    """한 모델(FAST 또는 MID)의 전체 평가 결과."""
+    """한 역할(FAST 또는 MID)의 전체 평가 결과.
 
-    model: str
+    태스크 패밀리 인지 라우팅에서는 한 역할이 *여러 모델*(패밀리별)을 쓰므로,
+    `model`은 대표 표기("nlp=...,math=...")이고, 항목별 실제 모델은 ItemScore와
+    by_call_site로 추적한다(아래 models_used).
+    """
+
+    model: str  # 역할의 사용 모델 요약 표기(패밀리별)
     role: str  # 'fast' 또는 'mid'
     item_scores: list[ItemScore]
     by_call_site: list[CallSiteAggregate]
+    models_used: dict[str, str]  # {family: model_id} — 이 역할에서 패밀리별 실제 모델
 
 
 @dataclass(slots=True)
@@ -162,11 +253,15 @@ class CallSiteVerdict:
 
 @dataclass(slots=True)
 class EvaluationReport:
-    """최종 품질 평가 보고서. JSON 직렬화 대상."""
+    """최종 품질 평가 보고서. JSON 직렬화 대상.
+
+    태스크 패밀리 인지 라우팅이므로 단일 fast/mid 모델 대신 *패밀리별 매트릭스*를
+    기록한다(math_fast/math_mid/nlp_fast/nlp_mid). 패밀리별 사용 모델은 각 ModelResult
+    의 models_used에도 남는다.
+    """
 
     timestamp: str
-    fast_model: str
-    mid_model: str
+    matrix: dict[str, str]  # ModelMatrix asdict — 패밀리별 (fast, mid) 모델 4종
     host: str
     machine: dict[str, Any]
     n_items: int
@@ -332,23 +427,60 @@ def _strip_answer_wrapping(text: str) -> str:
     return s.strip()
 
 
+def _normalize_latex(text: str) -> str:
+    """LaTeX 수식 표기를 ASCII 산술 표기로 변환한다 (정규화 전처리).
+
+    모델이 LaTeX(예: '\\frac{a}{b}', 'x^{2}', 'a \\times b')로 답하고 gold는 ASCII
+    ('a/b', 'x^2', 'a*b')일 때 채점이 어긋나는 것을 막는다. gold·모델 출력 *양쪽에
+    동일하게* 적용되므로 채점 의미는 불변이다(닫힌 PR #8 keeper 흡수).
+
+    변환:
+      - '\\frac{a}{b}' → '(a)/(b)'  — 분자·분모를 괄호로 감싸 우선순위 보존.
+      - '\\times' / '\\cdot' → '*'   — 곱셈 명령.
+      - '\\div' → '/'                — 나눗셈 명령.
+      - 'x^{n}' → 'x^n'              — 지수 중괄호 제거(한 글자/여러 글자 모두).
+      - '\\left' / '\\right' 제거    — 크기 조절 명령(괄호 자체는 보존).
+    """
+    s = text
+    # \frac{a}{b} → (a)/(b). 중첩이 있을 수 있으니 고정점까지 반복(안쪽부터 해소).
+    frac_pat = re.compile(r"\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}")
+    prev = None
+    while prev != s:
+        prev = s
+        s = frac_pat.sub(r"(\1)/(\2)", s)
+    # \left / \right 제거(괄호는 남김). 명령 뒤 백슬래시 구분자 보존 위해 \b 미사용.
+    s = re.sub(r"\\left", "", s)
+    s = re.sub(r"\\right", "", s)
+    # \times / \cdot → *, \div → / (긴 명령부터; 워드 경계로 '\cdotx' 오치환 방지).
+    s = re.sub(r"\\times\b", "*", s)
+    s = re.sub(r"\\cdot\b", "*", s)
+    s = re.sub(r"\\div\b", "/", s)
+    # ^{n} → ^n (지수 중괄호 제거).
+    s = re.sub(r"\^\{([^{}]*)\}", r"^\1", s)
+    return s
+
+
 def normalize_form(text: str) -> str:
     """수식·답 문자열을 정규화한다 (결정적 채점의 기준).
 
     규칙(파서 가정):
       0. 답 감싸기·앞장식 제거(_strip_answer_wrapping) — 선두 ':'·'=', 수식 감싸기
          '$...$'/'\\(...\\)' 를 벗겨 ': 45'·'$45$' 가 '45' 와 매칭되게 한다.
-      1. 양끝 공백 제거(strip), 소문자화(lower).
-      2. 유니코드 비교 연산자(≤·≥·≠·×·÷)를 ASCII(<=·>=·!=·*·/)로 치환.
-      3. 모든 공백을 제거한 뒤, 이항 연산자 주위에 공백 한 칸을 *재삽입*하여
+      1. LaTeX 표기 변환(_normalize_latex) — '\\frac{a}{b}'→'(a)/(b)', 'x^{2}'→'x^2',
+         '\\times'/'\\cdot'→'*', '\\div'→'/', '\\left'/'\\right' 제거.
+      2. 양끝 공백 제거(strip), 소문자화(lower).
+      3. 유니코드 비교 연산자(≤·≥·≠·×·÷)를 ASCII(<=·>=·!=·*·/)로 치환.
+      4. 모든 공백을 제거한 뒤, 이항 연산자 주위에 공백 한 칸을 *재삽입*하여
          'x^2+3x-4' 와 'x^2 + 3x - 4' 가 같은 정규형이 되도록 한다.
-      4. 곱셈 별표 'x*y' 와 'x * y' 도 동일하게 정규화된다.
+      5. 곱셈 별표 'x*y' 와 'x * y' 도 동일하게 정규화된다.
 
     주의: 단항 음수(예: '-2')도 이 규칙에서 ' - 2'가 되지만, gold와 모델 출력에
     *동일하게* 적용되므로 매칭에는 문제가 없다(정규화는 양쪽에 똑같이 적용).
     """
     # 0. 감싸기·앞장식 제거(양쪽에 동일 적용 — 매칭 의미 불변).
-    s = _strip_answer_wrapping(text).lower()
+    s = _strip_answer_wrapping(text)
+    # 1. LaTeX 표기 → ASCII (소문자화 전: '\Frac' 같은 변형은 없다고 가정, 명령은 소문자).
+    s = _normalize_latex(s).lower()
     # 유니코드 연산자 → ASCII
     replacements = {
         "≤": "<=",
@@ -362,6 +494,9 @@ def normalize_form(text: str) -> str:
         s = s.replace(src, dst)
     # 모든 공백 제거
     s = re.sub(r"\s+", "", s)
+    # 단일 토큰을 둘러싼 불필요한 괄호 제거: \frac 변환 산물 '(5)/(6)'를 gold 표기 '5/6'와
+    # 일치시킨다(실측 AR05). 연산자 포함 그룹('(a+b)')은 보존(우선순위 의미). 양쪽 동일 적용.
+    s = re.sub(r"\(([^()+\-*/]+)\)", r"\1", s)
     # 이항 연산자 주위 공백 한 칸 재삽입 → 표기 변형 흡수
     s = re.sub(_OPERATOR_PATTERN, r" \1 ", s)
     # 연산자 재삽입으로 생긴 중복 공백 정리
@@ -381,32 +516,38 @@ def normalize_concept(text: str) -> str:
 def _extract_answer_span(raw: str) -> str:
     """모델 응답에서 *최종답 구간*(문자열)을 추출한다 (단일·개념 공통 1차 추출).
 
-    실측 qwen2-math 출력 형식을 견고히 흡수하기 위해 *우선순위 폴백*을 따른다.
+    실측 로컬 모델 출력 형식을 견고히 흡수하기 위해 *우선순위 폴백*을 따른다.
     여기서는 답 구간을 한 덩어리 문자열로만 돌려주고, 단일답/개념 분할·정리는
     각 parse_* 가 후처리한다.
 
     우선순위(앞이 우선):
-      1. 마지막 '####' 뒤 내용(프롬프트가 강제하는 형식). 같은 줄만 취한다.
-      2. '\\boxed{...}' 의 *가장 안쪽* 내용(qwen2-math 가 최종답을 자주 넣는 곳).
-      3. 라벨('ANSWER:'/'정답:'/'답:'/'정답은') 중 *마지막* 뒤 같은 줄.
-      4. 마지막 비어있지 않은 줄 전체.
+      1. 마지막 '<ANSWER>...</ANSWER>' 내용(프롬프트가 강제하는 형식 계약). 태그 안의
+         내용만 취하며 여러 줄도 허용한다(개념 나열 시 줄바꿈 흡수).
+      2. 마지막 '####' 뒤 내용(구 계약·호환). 같은 줄만 취한다.
+      3. '\\boxed{...}' 의 *가장 안쪽* 내용(수학 모델이 최종답을 자주 넣는 곳).
+      4. 라벨('ANSWER:'/'정답:'/'답:'/'정답은') 중 *마지막* 뒤 같은 줄.
+      5. 마지막 비어있지 않은 줄 전체.
     어느 단계도 못 찾으면 빈 문자열.
     """
-    # 1. 마지막 '####' 뒤 같은 줄.
+    # 1. 마지막 '<ANSWER>...</ANSWER>' 내용(1순위 형식 계약).
+    answer_tags = list(re.finditer(r"<ANSWER>(.*?)</ANSWER>", raw, flags=re.DOTALL | re.IGNORECASE))
+    if answer_tags:
+        return answer_tags[-1].group(1).strip()
+    # 2. 마지막 '####' 뒤 같은 줄(구 계약 폴백).
     hashes = list(re.finditer(r"####", raw))
     if hashes:
         tail = raw[hashes[-1].end() :]
         first_line = tail.splitlines()[0] if tail.splitlines() else tail
         return first_line.strip()
-    # 2. 가장 안쪽 \boxed{...} (중첩 중괄호는 균형 스캔으로 안쪽을 택함).
+    # 3. 가장 안쪽 \boxed{...} (중첩 중괄호는 균형 스캔으로 안쪽을 택함).
     boxed = _innermost_boxed(raw)
     if boxed is not None:
         return boxed.strip()
-    # 3. 마지막 라벨 뒤 같은 줄.
+    # 4. 마지막 라벨 뒤 같은 줄.
     labeled = _last_label_value(raw)
     if labeled is not None:
         return labeled.strip()
-    # 4. 마지막 비어있지 않은 줄.
+    # 5. 마지막 비어있지 않은 줄.
     return _last_answer_line(raw)
 
 
@@ -456,8 +597,8 @@ def _last_label_value(raw: str) -> str | None:
 def parse_concept_list(raw: str) -> list[str]:
     """모델 응답에서 개념 *리스트*를 추출한다 (CONCEPT_EXTRACT ①).
 
-    1차로 _extract_answer_span 으로 답 구간을 얻은 뒤(프롬프트는 '#### 개념1,
-    개념2' 한 줄을 강제, 실측은 라벨·문장도 섞임 → 폴백으로 흡수), 다음을 한다:
+    1차로 _extract_answer_span 으로 답 구간을 얻은 뒤(프롬프트는 '<ANSWER>개념1,
+    개념2</ANSWER>'를 강제, 실측은 '####'·라벨·문장도 섞임 → 폴백으로 흡수), 다음을 한다:
       - 감싸기·앞장식(_strip_answer_wrapping)을 제거한다.
       - 쉼표(,)·한국어 가운뎃점(·)·세미콜론(;)으로 분할한다.
       - 각 항목의 글머리표('1.', '-', '*')·앞뒤 공백을 제거하고 빈 항목은 버린다.
@@ -480,9 +621,10 @@ def parse_concept_list(raw: str) -> list[str]:
 def parse_single_answer(raw: str) -> str:
     """모델 응답에서 *단일 답*을 추출한다 (TRANSLATE·MATCH·산술).
 
-    1차로 _extract_answer_span 으로 답 구간을 얻고(우선순위: '####' → '\\boxed{}'
-    → 라벨 → 마지막 줄), 감싸기·앞장식(_strip_answer_wrapping)을 벗겨 순수 답만
-    돌려준다. 정규화(공백·연산자·대소문자)는 채점기(normalize_form)에서 수행한다.
+    1차로 _extract_answer_span 으로 답 구간을 얻고(우선순위: '<ANSWER>..</ANSWER>'
+    → '####' → '\\boxed{}' → 라벨 → 마지막 줄), 감싸기·앞장식(_strip_answer_wrapping)을
+    벗겨 순수 답만 돌려준다. 정규화(공백·연산자·대소문자)는 채점기(normalize_form)에서
+    수행한다.
     """
     span = _extract_answer_span(raw)
     return _strip_answer_wrapping(span)
@@ -729,7 +871,10 @@ async def _call_once(
             model=model,
             prompt=item.prompt,
             stream=False,
-            options={"num_predict": num_predict},
+            # temperature=0: LLM 샘플링은 비결정적이라 실행마다 점수가 출렁인다
+            # (실측 산술 37~62%). 0으로 고정해 *재현 가능한 측정*을 만든다 — FAST/MID
+            # 품질 비교는 측정 잡음이 아니라 모델 차이를 봐야 하므로 결정성이 필수.
+            options={"num_predict": num_predict, "temperature": 0},
         )
         return str(response.get("response", ""))
     except Exception as exc:  # noqa: BLE001 — 모든 오류를 결과 문자열로 흡수
@@ -738,33 +883,46 @@ async def _call_once(
 
 async def _evaluate_model(
     client: _OllamaClientProtocol,
-    model: str,
+    matrix: ModelMatrix,
     role: str,
     items: list[EvalItem],
     num_predict: int,
 ) -> ModelResult:
-    """한 모델로 전체 항목을 순차 평가(호출 → 채점 → 집계).
+    """한 역할(fast/mid)로 전체 항목을 순차 평가(호출 → 채점 → 집계).
+
+    태스크 패밀리 인지: 각 항목의 family()로 matrix에서 (이 역할의) 모델을 골라
+    호출한다. 즉 NLP 항목은 일반 모델, MATH 항목(산술)은 수학 특화 모델이 같은
+    역할 안에서 섞여 쓰인다. models_used에 패밀리별 실제 모델을 기록한다.
 
     순차 호출인 이유: 품질 평가는 throughput이 목적이 아니라 *결정성*이 중요하고,
     GPU 단일 점유 모델(특히 MID)에서 동시 호출은 의미가 없다(03a §A.1).
     """
     scores: list[ItemScore] = []
+    models_used: dict[str, str] = {}
     for item in items:
+        family = item.family()
+        model = matrix.model_for(family, role)
+        models_used[family] = model
         raw = await _call_once(client, model, item, num_predict)
         scores.append(grade_item(item, raw))
     return ModelResult(
-        model=model,
+        model=_summarize_models(models_used),
         role=role,
         item_scores=scores,
         by_call_site=aggregate_by_call_site(scores),
+        models_used=models_used,
     )
+
+
+def _summarize_models(models_used: dict[str, str]) -> str:
+    """패밀리별 사용 모델을 'nlp=...,math=...' 한 줄 요약으로 — 보고서 가독용."""
+    return ",".join(f"{fam}={models_used[fam]}" for fam in sorted(models_used))
 
 
 # ---- 공개 API ---------------------------------------------------------------
 async def run_evaluation(
     *,
-    fast_model: str,
-    mid_model: str,
+    matrix: ModelMatrix,
     items: list[EvalItem],
     host: str = DEFAULT_HOST,
     num_predict: int = DEFAULT_NUM_PREDICT,
@@ -774,9 +932,11 @@ async def run_evaluation(
 ) -> EvaluationReport:
     """FAST vs MID 품질 평가 1회 수행. 단위 테스트는 client 인자로 주입.
 
+    태스크 패밀리 인지: 각 항목은 family()에 따라 matrix에서 (fast, mid) 모델을 골라
+    평가된다. FAST 결과 = 패밀리별 소형 모델, MID 결과 = 패밀리별 대형 모델.
+
     Args:
-        fast_model: FAST 모델 ID(qwen2-math:1.5b).
-        mid_model: MID 모델 ID(qwen2-math:7b).
+        matrix: 패밀리별 (fast, mid) 모델 매핑(ModelMatrix).
         items: 평가 항목 리스트.
         host: ollama 호스트(client 미주입 시 사용).
         num_predict: 호출당 생성 토큰 한도.
@@ -792,8 +952,8 @@ async def run_evaluation(
 
     real_client = client if client is not None else _build_default_client(host)
 
-    fast_result = await _evaluate_model(real_client, fast_model, "fast", items, num_predict)
-    mid_result = await _evaluate_model(real_client, mid_model, "mid", items, num_predict)
+    fast_result = await _evaluate_model(real_client, matrix, "fast", items, num_predict)
+    mid_result = await _evaluate_model(real_client, matrix, "mid", items, num_predict)
 
     verdicts = build_verdicts(
         fast_result.by_call_site,
@@ -805,8 +965,7 @@ async def run_evaluation(
 
     return EvaluationReport(
         timestamp=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        fast_model=fast_model,
-        mid_model=mid_model,
+        matrix=asdict(matrix),
         host=host,
         machine=detect_machine(),
         n_items=len(items),
@@ -831,14 +990,24 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         description="Phaiakes9 FAST vs MID 로컬 모델 품질 평가 (WhyMath 03a §H 후속1)",
     )
     p.add_argument(
-        "--fast-model",
-        default=os.environ.get("WHYMATH_QEVAL_FAST_MODEL", DEFAULT_FAST_MODEL),
-        help=f"FAST 모델 ID (디폴트: {DEFAULT_FAST_MODEL})",
+        "--math-fast",
+        default=os.environ.get("WHYMATH_QEVAL_MATH_FAST", DEFAULT_MATH_FAST_MODEL),
+        help=f"MATH 패밀리 FAST 모델 (산술, 디폴트: {DEFAULT_MATH_FAST_MODEL})",
     )
     p.add_argument(
-        "--mid-model",
-        default=os.environ.get("WHYMATH_QEVAL_MID_MODEL", DEFAULT_MID_MODEL),
-        help=f"MID 모델 ID (디폴트: {DEFAULT_MID_MODEL})",
+        "--math-mid",
+        default=os.environ.get("WHYMATH_QEVAL_MATH_MID", DEFAULT_MATH_MID_MODEL),
+        help=f"MATH 패밀리 MID 모델 (산술, 디폴트: {DEFAULT_MATH_MID_MODEL})",
+    )
+    p.add_argument(
+        "--nlp-fast",
+        default=os.environ.get("WHYMATH_QEVAL_NLP_FAST", DEFAULT_NLP_FAST_MODEL),
+        help=f"NLP 패밀리 FAST 모델 (extract/translate/match, 디폴트: {DEFAULT_NLP_FAST_MODEL})",
+    )
+    p.add_argument(
+        "--nlp-mid",
+        default=os.environ.get("WHYMATH_QEVAL_NLP_MID", DEFAULT_NLP_MID_MODEL),
+        help=f"NLP 패밀리 MID 모델 (extract/translate/match, 디폴트: {DEFAULT_NLP_MID_MODEL})",
     )
     p.add_argument(
         "--host",
@@ -896,10 +1065,14 @@ def _default_output_path() -> Path:
 
 def _print_summary(report: EvaluationReport) -> None:
     """사람이 읽는 호출지점별 판정 요약을 stdout에 출력."""
+    m = report.matrix
     print()
     print("[qeval] ─────────────────────────────────────")
-    print(f"[qeval] FAST 모델: {report.fast_model}")
-    print(f"[qeval] MID  모델: {report.mid_model}")
+    print(f"[qeval] MATH 패밀리(산술): FAST={m['math_fast']} / MID={m['math_mid']}")
+    print(
+        f"[qeval] NLP  패밀리(extract/translate/match): "
+        f"FAST={m['nlp_fast']} / MID={m['nlp_mid']}"
+    )
     print(f"[qeval] 결정 규칙: DELTA={report.delta} ABS_MIN={report.abs_min}")
     print("[qeval] 호출지점별 판정:")
     for v in report.verdicts:
@@ -926,8 +1099,17 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[qeval] ❌ 평가셋이 비어 있음: {args.samples}", file=sys.stderr)
         return 2
 
-    print(f"[qeval] FAST 모델: {args.fast_model}")
-    print(f"[qeval] MID  모델: {args.mid_model}")
+    matrix = ModelMatrix(
+        math_fast=args.math_fast,
+        math_mid=args.math_mid,
+        nlp_fast=args.nlp_fast,
+        nlp_mid=args.nlp_mid,
+    )
+    print(f"[qeval] MATH 패밀리(산술): FAST={matrix.math_fast} / MID={matrix.math_mid}")
+    print(
+        f"[qeval] NLP  패밀리(extract/translate/match): "
+        f"FAST={matrix.nlp_fast} / MID={matrix.nlp_mid}"
+    )
     print(f"[qeval] 호스트: {args.host}")
     print(f"[qeval] 항목 수: {len(items)}")
     print(f"[qeval] num_predict: {args.num_predict}")
@@ -936,8 +1118,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         report = asyncio.run(
             run_evaluation(
-                fast_model=args.fast_model,
-                mid_model=args.mid_model,
+                matrix=matrix,
                 items=items,
                 host=args.host,
                 num_predict=args.num_predict,
