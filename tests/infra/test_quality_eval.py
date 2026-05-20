@@ -106,6 +106,14 @@ def test_normalize_form_unicode_operators(qe: Any) -> None:
     assert qe.normalize_form("x − 1") == qe.normalize_form("x - 1")
 
 
+def test_normalize_form_strips_leading_colon_and_math_wrap(qe: Any) -> None:
+    """선두 ':'·'='·수식 감싸기('$','\\(\\)')를 제거해 장식 변형을 흡수한다."""
+    assert qe.normalize_form(": 45") == qe.normalize_form("45")
+    assert qe.normalize_form("= x^2") == qe.normalize_form("x^2")
+    assert qe.normalize_form("$45$") == qe.normalize_form("45")
+    assert qe.normalize_form(r"\(x >= -2\)") == qe.normalize_form("x >= -2")
+
+
 def test_normalize_concept_korean_spacing(qe: Any) -> None:
     """한국어 띄어쓰기 변형 흡수."""
     assert qe.normalize_concept("곱셈 공식") == qe.normalize_concept("곱셈공식")
@@ -113,10 +121,110 @@ def test_normalize_concept_korean_spacing(qe: Any) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 출력 파서 (parse_concept_list / parse_single_answer)
+# 답 감싸기·앞장식 strip (_strip_answer_wrapping)
 # ──────────────────────────────────────────────────────────────────────────
-def test_parse_concept_list_comma(qe: Any) -> None:
-    """쉼표 구분 개념 리스트 파싱."""
+def test_strip_wrapping_leading_colon_and_equals(qe: Any) -> None:
+    """실측 ': 45' / '= x^2' 의 선두 콜론·등호를 제거한다."""
+    assert qe._strip_answer_wrapping(": 45") == "45"
+    assert qe._strip_answer_wrapping("= x^2") == "x^2"
+    assert qe._strip_answer_wrapping("：10수학02") == "10수학02"  # 전각 콜론
+
+
+def test_strip_wrapping_inline_math(qe: Any) -> None:
+    """LaTeX 인라인 수식 감싸기 '$...$' / '\\(...\\)' 한 겹 제거."""
+    assert qe._strip_answer_wrapping("$45$") == "45"
+    assert qe._strip_answer_wrapping("$$x^2$$") == "x^2"
+    assert qe._strip_answer_wrapping(r"\(x >= -2\)") == "x >= -2"
+
+
+def test_strip_wrapping_markdown(qe: Any) -> None:
+    """마크다운 강조 '**..**' / '*..*' / '`..`' 한 겹 제거."""
+    assert qe._strip_answer_wrapping("**45**") == "45"
+    assert qe._strip_answer_wrapping("*x^2*") == "x^2"
+    assert qe._strip_answer_wrapping("`10수학02`") == "10수학02"
+
+
+def test_strip_wrapping_nested_and_combined(qe: Any) -> None:
+    """중첩 감싸기(예: '$**45**$', ': $x$')도 고정점까지 반복 제거."""
+    assert qe._strip_answer_wrapping("$**45**$") == "45"
+    assert qe._strip_answer_wrapping(": $x$") == "x"
+
+
+def test_strip_wrapping_preserves_inner_operators(qe: Any) -> None:
+    """내부 곱셈 별표·등식은 보존(감싸기만 제거, 내용 불변)."""
+    assert qe._strip_answer_wrapping("x*y") == "x*y"
+    assert qe._strip_answer_wrapping("y = x^2 + 1") == "y = x^2 + 1"
+    # 두 개의 분리된 인라인 수식은 전체 감싸기가 아니므로 보존
+    assert qe._strip_answer_wrapping("$a$ + $b$") == "$a$ + $b$"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 답 구간 추출 폴백 (_extract_answer_span / _innermost_boxed / _last_label_value)
+# ──────────────────────────────────────────────────────────────────────────
+def test_extract_span_hashes_priority(qe: Any) -> None:
+    """1순위: 마지막 '####' 뒤 같은 줄(앞에 boxed·라벨이 있어도 #### 우선)."""
+    raw = "풀이 \\boxed{99}\nANSWER: 88\n#### 45"
+    assert qe._extract_answer_span(raw) == "45"
+    # '####' 가 여러 번이면 마지막 것
+    assert qe._extract_answer_span("#### 1\n다시\n#### 2") == "2"
+
+
+def test_extract_span_boxed_fallback(qe: Any) -> None:
+    """2순위: '####' 없으면 '\\boxed{}' 가장 안쪽 내용."""
+    assert qe._extract_answer_span("따라서 답은 \\boxed{12} 입니다.") == "12"
+    # 중첩 boxed는 가장 안쪽
+    assert qe._extract_answer_span(r"\boxed{\boxed{42}}") == "42"
+    # 여러 boxed면 마지막 것
+    assert qe._extract_answer_span(r"\boxed{1} 그리고 \boxed{2}") == "2"
+
+
+def test_extract_span_label_fallback(qe: Any) -> None:
+    """3순위: '####'·boxed 없으면 라벨('ANSWER:'/'정답:'/'답:'/'정답은')."""
+    assert qe._extract_answer_span("풀이...\nANSWER: x^2 + 3x - 4") == "x^2 + 3x - 4"
+    assert qe._extract_answer_span("정답: 10수학02") == "10수학02"
+    assert qe._extract_answer_span("답: 91") == "91"
+    # 콜론 없는 한국어 라벨 '정답은'
+    assert qe._extract_answer_span("정답은 45") == "45"
+    # 라벨 여러 개면 마지막
+    assert qe._extract_answer_span("ANSWER: 틀린값\n다시\nANSWER: 45") == "45"
+
+
+def test_extract_span_last_line_fallback(qe: Any) -> None:
+    """4순위: 아무 표지도 없으면 마지막 비어있지 않은 줄."""
+    assert qe._extract_answer_span("계산 과정\n2x + 1 < 5") == "2x + 1 < 5"
+    assert qe._extract_answer_span("") == ""
+    assert qe._extract_answer_span("   \n  ") == ""
+
+
+def test_innermost_boxed_none_when_absent(qe: Any) -> None:
+    """boxed가 없으면 None(폴백 분기 진입 보장)."""
+    assert qe._innermost_boxed("답 없음") is None
+
+
+def test_innermost_boxed_unbalanced(qe: Any) -> None:
+    """닫는 중괄호가 없으면 열린 지점부터 끝까지를 내용으로 본다(견고성)."""
+    assert qe._innermost_boxed(r"\boxed{45") == "45"
+
+
+def test_innermost_boxed_inner_braces(qe: Any) -> None:
+    """내부에 일반 중괄호('\\frac{5}{6}')가 있어도 균형 스캔으로 전체 내용을 얻는다."""
+    # 내부 '{','}' 깊이 추적(depth += 1 / depth==0 break) 경로를 탄다.
+    assert qe._innermost_boxed(r"\boxed{\frac{5}{6}}") == r"\frac{5}{6}"
+    # 단일답 파서를 통한 end-to-end(감싸기 strip은 LaTeX 명령을 보존)
+    assert qe.parse_single_answer(r"답은 \boxed{\frac{5}{6}} 이다") == r"\frac{5}{6}"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 출력 파서 (parse_concept_list / parse_single_answer) — 실측 qwen2-math 스타일
+# ──────────────────────────────────────────────────────────────────────────
+def test_parse_concept_list_hash_contract(qe: Any) -> None:
+    """프롬프트 계약대로 '#### 개념1, 개념2, 개념3' 한 줄을 파싱."""
+    raw = "이 문제는 다항식을 다룹니다.\n#### 분배법칙, 동류항 정리, 다항식의 곱셈"
+    assert qe.parse_concept_list(raw) == ["분배법칙", "동류항 정리", "다항식의 곱셈"]
+
+
+def test_parse_concept_list_comma_no_marker(qe: Any) -> None:
+    """표지 없는 단순 쉼표 나열(마지막 줄 폴백)."""
     assert qe.parse_concept_list("분배법칙, 동류항 정리, 다항식의 곱셈") == [
         "분배법칙",
         "동류항 정리",
@@ -124,21 +232,44 @@ def test_parse_concept_list_comma(qe: Any) -> None:
     ]
 
 
-def test_parse_concept_list_last_line_and_label(qe: Any) -> None:
-    """앞선 설명 줄 무시 + 'ANSWER:'/'개념:' 라벨 제거 + 마지막 줄만."""
+def test_parse_concept_list_label_line(qe: Any) -> None:
+    """앞선 설명 줄 무시 + '개념:' 라벨 제거(개념 전용 라벨 strip)."""
     raw = "이 문제를 보면...\n다음과 같습니다.\n개념: 인수분해, 근의 공식"
     assert qe.parse_concept_list(raw) == ["인수분해", "근의 공식"]
 
 
+def test_parse_concept_list_sentence_format_no_split(qe: Any) -> None:
+    """문장형 응답(쉼표 없음)은 분할되지 않아 gold와 안 맞음(형식 미준수가 점수에 반영).
+
+    실측: "이 문제는 '전개'라는 수학 개념을 다루고 있습니다." → 한 덩어리로 남아
+    개념 집합과 매칭되지 않는다(set_f1 낮음). 이는 의도된 동작이다.
+    """
+    raw = "이 문제는 '전개'라는 수학 개념을 다루고 있습니다."
+    parsed = qe.parse_concept_list(raw)
+    assert parsed == ["이 문제는 '전개'라는 수학 개념을 다루고 있습니다."]
+
+
 def test_parse_concept_list_middot_and_bullets(qe: Any) -> None:
     """가운뎃점 분할 + 번호/글머리표 제거."""
-    assert qe.parse_concept_list("1. 절댓값 · 2. 일차부등식") == ["절댓값", "일차부등식"]
+    assert qe.parse_concept_list("#### 1. 절댓값 · 2. 일차부등식") == ["절댓값", "일차부등식"]
 
 
 def test_parse_concept_list_empty(qe: Any) -> None:
     """빈 응답은 빈 리스트."""
     assert qe.parse_concept_list("") == []
     assert qe.parse_concept_list("   \n  ") == []
+
+
+def test_parse_single_answer_hash_contract(qe: Any) -> None:
+    """프롬프트 계약대로 '#### <답>' 한 줄을 파싱(앞선 풀이 줄 무시)."""
+    raw = "144를 12로 나누면 12입니다.\n#### 12"
+    assert qe.parse_single_answer(raw) == "12"
+
+
+def test_parse_single_answer_boxed(qe: Any) -> None:
+    """qwen2-math 의 '\\boxed{}' 최종답 추출."""
+    raw = "계산하면 \\boxed{45} 이다."
+    assert qe.parse_single_answer(raw) == "45"
 
 
 def test_parse_single_answer_label(qe: Any) -> None:
@@ -152,6 +283,13 @@ def test_parse_single_answer_korean_label_and_multiple(qe: Any) -> None:
     raw = "ANSWER: 틀린값\n다시 계산\nANSWER: 45"
     assert qe.parse_single_answer(raw) == "45"
     assert qe.parse_single_answer("정답: 10수학02") == "10수학02"
+
+
+def test_parse_single_answer_leading_colon(qe: Any) -> None:
+    """실측 결과 ': 45'(앞 콜론)도 strip 되어 '45' 가 된다."""
+    assert qe.parse_single_answer(": 45") == "45"
+    # 마지막 줄이 ': 45' 인 경우
+    assert qe.parse_single_answer("계산 과정\n: 45") == "45"
 
 
 def test_parse_single_answer_no_label_last_line(qe: Any) -> None:
@@ -168,6 +306,12 @@ def test_exact_match_correct_with_spacing(qe: Any) -> None:
     """공백 변형이 있어도 정규화 후 일치 → 1.0."""
     assert qe.exact_match("x^2+3x-4", "x^2 + 3x - 4") == 1.0
     assert qe.exact_match("  45 ", "45") == 1.0
+
+
+def test_exact_match_leading_colon_equiv(qe: Any) -> None:
+    """실측 ': 45'(앞 콜론) 가 gold '45' 와 매칭된다(형식 불일치로 0점 되던 버그 방어)."""
+    assert qe.exact_match(": 45", "45") == 1.0
+    assert qe.exact_match("$45$", "45") == 1.0
 
 
 def test_exact_match_incorrect(qe: Any) -> None:
@@ -262,11 +406,11 @@ def _item(qe: Any, **kw: Any) -> Any:
 
 
 def test_grade_item_extract_uses_set_f1(qe: Any) -> None:
-    """extract 항목은 set_f1로 채점되고 부분 점수가 나온다."""
+    """extract 항목은 set_f1로 채점되고 부분 점수가 나온다(####  계약 형식)."""
     item = _item(
         qe, id="CE", call_site="extract", task_type="extract", gold=["인수분해", "근의 공식"]
     )
-    score = qe.grade_item(item, "ANSWER: 인수분해, 엉뚱")
+    score = qe.grade_item(item, "#### 인수분해, 엉뚱")
     assert score.grader == qe.GRADER_SET_F1
     assert score.score == pytest.approx(0.5)
     assert score.correct is False  # F1 != 1.0
@@ -274,29 +418,32 @@ def test_grade_item_extract_uses_set_f1(qe: Any) -> None:
 
 
 def test_grade_item_extract_perfect_correct(qe: Any) -> None:
-    """extract 완전 일치면 correct=True."""
+    """extract 완전 일치면 correct=True(풀이 후 #### 줄)."""
     item = _item(qe, call_site="extract", task_type="extract", gold=["분배법칙", "동류항 정리"])
-    score = qe.grade_item(item, "분배법칙, 동류항정리")
+    score = qe.grade_item(item, "이 문제는 다항식.\n#### 분배법칙, 동류항정리")
     assert score.score == pytest.approx(1.0)
     assert score.correct is True
 
 
 def test_grade_item_translate_exact(qe: Any) -> None:
-    """translate 항목은 exact_match로 채점."""
+    """translate 항목은 exact_match로 채점(####  계약 형식)."""
     item = _item(qe, call_site="translate", task_type="translate", gold="x^2 + 3x - 4")
-    ok = qe.grade_item(item, "ANSWER: x^2+3x-4")
+    ok = qe.grade_item(item, "정규화하면\n#### x^2+3x-4")
     assert ok.grader == qe.GRADER_EXACT
     assert ok.correct is True
-    bad = qe.grade_item(item, "ANSWER: x^2+3x-5")
+    bad = qe.grade_item(item, "#### x^2+3x-5")
     assert bad.correct is False
 
 
 def test_grade_item_match_and_arithmetic(qe: Any) -> None:
-    """match·산술(call_site=None) 모두 exact_match."""
+    """match·산술(call_site=None) 모두 exact_match — 실측 스타일(####/boxed/앞콜론)."""
     m = _item(qe, call_site="match", task_type="match", gold="10수학02")
-    assert qe.grade_item(m, "정답: 10수학02").correct is True
+    assert qe.grade_item(m, "#### 10수학02").correct is True
     a = _item(qe, call_site=None, task_type="explain", gold="45")
-    assert qe.grade_item(a, "계산하면\nANSWER: 45").correct is True
+    # boxed 최종답
+    assert qe.grade_item(a, "계산하면 \\boxed{45}").correct is True
+    # 앞 콜론 실측 케이스도 정답 처리
+    assert qe.grade_item(a, "계산 과정\n: 45").correct is True
 
 
 def test_grade_item_grader_mapping(qe: Any) -> None:
@@ -712,7 +859,8 @@ def test_main_writes_output_and_returns_zero(
     모든 프롬프트에 정답을 반환하게 한다(FAST·MID 동일 → 전 호출지점 유지).
     """
     raw = json.loads(_SAMPLES_PATH.read_text(encoding="utf-8"))
-    # 각 항목 id → 정답 응답 매핑(프롬프트 전체를 키로 쓰는 가짜 클라이언트)
+    # 각 항목 id → 정답 응답 매핑(프롬프트 전체를 키로 쓰는 가짜 클라이언트).
+    # 실측 계약 형식('#### <답>')으로 응답해 1차 추출 경로를 그대로 탄다.
     prompt_to_answer: dict[str, str] = {}
     for it in raw["items"]:
         gold = it["gold"]
@@ -720,7 +868,7 @@ def test_main_writes_output_and_returns_zero(
             ans = ", ".join(gold)
         else:
             ans = str(gold)
-        prompt_to_answer[it["prompt"]] = f"ANSWER: {ans}"
+        prompt_to_answer[it["prompt"]] = f"풀이 생략.\n#### {ans}"
 
     monkeypatch.setattr(
         qe,
@@ -757,9 +905,9 @@ def test_main_returns_one_when_promotion_recommended(
     for it in raw["items"]:
         gold = it["gold"]
         ans = ", ".join(gold) if isinstance(gold, list) else str(gold)
-        # MID는 정답, FAST는 오답
-        correct[("m", it["prompt"])] = f"ANSWER: {ans}"
-        correct[("f", it["prompt"])] = "ANSWER: 절대로아닌오답xyz"
+        # MID는 정답('#### <답>'), FAST는 오답
+        correct[("m", it["prompt"])] = f"#### {ans}"
+        correct[("f", it["prompt"])] = "#### 절대로아닌오답xyz"
 
     monkeypatch.setattr(
         qe,
@@ -816,9 +964,9 @@ def test_main_custom_thresholds_flow(
     for it in raw["items"]:
         gold = it["gold"]
         if isinstance(gold, list):
-            prompt_to_answer[it["prompt"]] = "ANSWER: " + ", ".join(gold) + ", 잉여개념"
+            prompt_to_answer[it["prompt"]] = "#### " + ", ".join(gold) + ", 잉여개념"
         else:
-            prompt_to_answer[it["prompt"]] = f"ANSWER: {gold}"
+            prompt_to_answer[it["prompt"]] = f"#### {gold}"
 
     monkeypatch.setattr(
         qe,
