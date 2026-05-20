@@ -73,6 +73,58 @@ jobs:
           retention-days: 14
 
   # ─────────────────────────────────────────────────────────────────
+  # L3 백엔드 (LLM 라우터 M1.2 — 결정 로직 + 타입 인터페이스)
+  # data-pipeline 잡을 미러링. 라이브 서비스·API 키 없이 단위테스트만.
+  # ─────────────────────────────────────────────────────────────────
+  backend:
+    name: backend — lint·type·test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/backend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies (editable + dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff (lint)
+        run: ruff check .
+
+      - name: Black (format check)
+        run: black --check .
+
+      - name: Mypy (strict type check)
+        run: mypy --strict whymath_backend
+
+      - name: Pytest (with coverage)
+        run: |
+          pytest \
+            --cov=whymath_backend \
+            --cov-report=term \
+            --cov-report=xml \
+            --cov-fail-under=70
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-backend
+          path: src/backend/coverage.xml
+          retention-days: 14
+
+  # ─────────────────────────────────────────────────────────────────
   # infra 쉘 스크립트 syntax 검사 (Phaiakes9 운영 자산 회귀 방지)
   # ─────────────────────────────────────────────────────────────────
   infra-shell:

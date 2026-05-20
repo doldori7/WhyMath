@@ -1,0 +1,111 @@
+"""L3 외부 의존 인터페이스 — Protocol(미구현) + 테스트용 인메모리 스텁.
+
+범위 메모 (M1.2): 실제 LLM 클라이언트(Ollama/Anthropic)·Redis·Langfuse·비동기
+큐는 *연동하지 않는다*. 라우터가 의존하는 *경계*만 `typing.Protocol`로 선언하고,
+단위테스트가 라이브 서비스 없이 통과하도록 인메모리 스텁만 제공한다.
+실제 구현은 후속 마일스톤(03a §H 후속 4 클라우드 연동·6 큐 SLA).
+"""
+
+from __future__ import annotations
+
+from typing import Protocol, runtime_checkable
+
+from whymath_backend.l3.models import RoutingDecision
+
+
+@runtime_checkable
+class LLMProvider(Protocol):
+    """LLM 호출 백엔드 경계 (Ollama 로컬 / Anthropic·OpenAI 클라우드).
+
+    라우터는 *결정*만 내리고, 실제 생성은 이 Protocol을 통해 위임된다.
+    M1.2에서는 시그니처만 정의 — 구현·라이브 호출 없음.
+    """
+
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+    ) -> str:
+        """라우터 결정(decision)에 따라 응답을 생성한다(미구현)."""
+        ...
+
+
+@runtime_checkable
+class CacheBackend(Protocol):
+    """응답 캐시 백엔드 경계 (실제로는 Redis, 03a §F.1).
+
+    캐시 키에 두 축 `{cost_tier}:{local_model}`이 포함되어야 한다
+    (라우터의 cache_key() 참조). M1.2에서는 경계만 선언.
+    """
+
+    async def get(self, key: str) -> str | None:
+        """키로 캐시 조회. 미스면 None(미구현)."""
+        ...
+
+    async def set(self, key: str, value: str, ttl_seconds: int) -> None:
+        """키-값 저장(TTL 초). (미구현)"""
+        ...
+
+
+@runtime_checkable
+class TraceSink(Protocol):
+    """관측성 싱크 경계 (실제로는 Langfuse, 03a §F.2).
+
+    라우터의 langfuse_fields()가 만든 태그 dict를 받아 기록한다.
+    M1.2에서는 경계만 선언 — 실제 호출 없음.
+    """
+
+    def record(self, fields: dict[str, object]) -> None:
+        """라우팅 결정 태그를 기록(미구현)."""
+        ...
+
+
+@runtime_checkable
+class AsyncJobQueue(Protocol):
+    """비동기 작업 큐 경계 (QUALITY 27b 비동기 전용 경로, 03a §D.3).
+
+    QUALITY로 라우팅된 요청은 동기 호출 불가 → 이 큐로 enqueue되고 job_id를
+    반환받는다. 동시성 1 제한은 워커 구현의 책임. M1.2에서는 경계만 선언.
+    """
+
+    async def enqueue(self, payload: dict[str, object]) -> str:
+        """작업을 큐에 넣고 job_id를 반환(미구현)."""
+        ...
+
+
+class InMemoryCache:
+    """테스트용 인메모리 캐시 스텁 — CacheBackend 충족.
+
+    Redis 없이 단위테스트에서 캐시 경계를 검증하기 위한 최소 구현.
+    TTL은 만료 로직 없이 *기록만* 한다(단위테스트 범위엔 만료 시뮬레이션 불필요).
+    프로덕션 사용 금지.
+    """
+
+    def __init__(self) -> None:
+        # 키 → (값, ttl_seconds). ttl은 기록만 (만료 미구현)
+        self._store: dict[str, tuple[str, int]] = {}
+
+    async def get(self, key: str) -> str | None:
+        """저장된 값 반환, 없으면 None."""
+        entry = self._store.get(key)
+        return entry[0] if entry is not None else None
+
+    async def set(self, key: str, value: str, ttl_seconds: int) -> None:
+        """값과 TTL 기록."""
+        self._store[key] = (value, ttl_seconds)
+
+
+class RecordingTraceSink:
+    """테스트용 관측성 싱크 스텁 — TraceSink 충족.
+
+    기록된 태그 dict들을 리스트로 보관하여 테스트에서 검증 가능하게 한다.
+    실제 Langfuse 전송 없음.
+    """
+
+    def __init__(self) -> None:
+        self.records: list[dict[str, object]] = []
+
+    def record(self, fields: dict[str, object]) -> None:
+        """태그 dict를 보관."""
+        self.records.append(fields)
