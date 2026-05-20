@@ -12,6 +12,7 @@ from whymath_backend.l3.models import (
     CallSite,
     CostTier,
     LocalModelTier,
+    ModelFamily,
     RoutingDecision,
     RoutingRequest,
 )
@@ -21,6 +22,8 @@ from whymath_backend.l3.router import (
     DAILY_LIMIT_KRW,
     ESCALATION_CHAIN,
     LOCAL_LATENCY_MS,
+    LOCAL_MODEL_MATRIX,
+    QUALITY_MODEL_ID,
     SLA_GATE_MS,
     Router,
     cache_key,
@@ -32,6 +35,7 @@ from whymath_backend.l3.router import (
     langfuse_fields,
     local_latency,
     next_tier,
+    resolve_model,
 )
 
 
@@ -259,6 +263,126 @@ class TestAxis2LocalTier:
 
 
 # ══════════════════════════════════════════════════════════════════════
+# 축3 결정표 (03a §C.0) — MATH / GENERAL (축1=LOCAL 전제, budget_krw=0)
+# ══════════════════════════════════════════════════════════════════════
+class TestAxis3ModelFamily:
+    @pytest.mark.parametrize(
+        "call_site",
+        [
+            CallSite.CONCEPT_EXTRACT,  # ①
+            CallSite.TRANSLATE_NORMALIZE,  # ③
+            CallSite.CONCEPT_ID_MATCH,  # ④
+        ],
+    )
+    def test_nlp_call_sites_general(self, router: Router, call_site: CallSite) -> None:
+        """C.0 규칙1: NLP 호출지점 ①③④ → GENERAL (수학모델은 7b조차 0%)."""
+        # match는 FAST(GENERAL 유지), extract/translate도 현재 크기로직상 FAST
+        d = router.route(_req(call_site=call_site, task_type="coach"))
+        assert d.cost_tier == CostTier.LOCAL
+        assert d.local_family == ModelFamily.GENERAL
+
+    def test_depth_call_site_math(self, router: Router) -> None:
+        """C.0 규칙2: ② 깊이추론 → MATH (위계·선수개념 의존성은 수학 추론)."""
+        # depth는 크기로직상 일반 분기 → FAST/MID 중 하나(패밀리는 MATH여야)
+        d = router.route(_req(call_site=CallSite.DEEP_REASON, task_type="diagnose"))
+        assert d.local_family == ModelFamily.MATH
+
+    @pytest.mark.parametrize("task", ["extract", "match", "translate", "classify"])
+    def test_nlp_task_types_general(self, router: Router, task: str) -> None:
+        """C.0 규칙3: NLP 계열 task_type → GENERAL (추출·매칭·정규화·분류)."""
+        d = router.route(_req(task_type=task, difficulty="medium"))
+        assert d.local_family == ModelFamily.GENERAL
+
+    @pytest.mark.parametrize(
+        "task", ["generate", "explain", "coach", "diagnose", "verify", "prove"]
+    )
+    def test_math_task_types_math(self, router: Router, task: str) -> None:
+        """C.0 규칙4: 수학 풀이·설명·코칭·진단·검증·증명 → MATH.
+
+        prove는 축1에서 CLOUD_HIGH 후보지만 budget_krw=0이라 LOCAL 강제되어
+        축3까지 평가된다(규칙1 우선). 따라서 LOCAL+MATH로 확정.
+        """
+        d = router.route(_req(task_type=task, difficulty="medium", budget_krw=0.0))
+        assert d.cost_tier == CostTier.LOCAL
+        # FAST/MID면 family 노출, QUALITY면 None(아래서 별도 검증)
+        if d.local_model in (LocalModelTier.FAST, LocalModelTier.MID):
+            assert d.local_family == ModelFamily.MATH
+
+    def test_default_unknown_is_math(self, router: Router) -> None:
+        """C.0 규칙5: 미상 task_type → MATH (안전 기본값, 수학 앱)."""
+        d = router.route(_req(task_type="unknown_task", difficulty="medium"))
+        assert d.local_family == ModelFamily.MATH
+
+    def test_quality_clears_family(self, router: Router) -> None:
+        """QUALITY로 합류하면 local_family=None (27b 패밀리 무관, 03a §A.0 불변식 4).
+
+        ② depth(패밀리 MATH) + 비동기 hard → 크기 규칙2가 QUALITY로 올림.
+        패밀리는 결정됐으나 QUALITY라 local_family는 비워진다(reason엔 남음).
+        """
+        d = router.route(
+            _req(call_site=CallSite.DEEP_REASON, difficulty="hard", sync=False)
+        )
+        assert d.local_model == LocalModelTier.QUALITY
+        assert d.local_family is None
+        assert "math" in d.reason  # reason에는 결정된 패밀리 흔적 유지
+
+    def test_self_verify_quality_no_family(self, router: Router) -> None:
+        """⑤ 자기검증 → QUALITY/async + local_family None (패밀리 무관)."""
+        d = router.route(_req(call_site=CallSite.SELF_VERIFY))
+        assert d.local_model == LocalModelTier.QUALITY
+        assert d.local_family is None
+
+    def test_reason_includes_family_and_size(self, router: Router) -> None:
+        """reason 포맷 = local/{family}/{size} (03a §C.4)."""
+        d = router.route(_req(task_type="match", difficulty="medium"))
+        # use_enum_values=True → d.local_model은 문자열 값("fast")
+        assert d.reason == f"local/{ModelFamily.GENERAL.value}/{d.local_model}"
+        assert d.reason == "local/general/fast"
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 패밀리×크기 매트릭스 (03a §A.0) — resolve_model lookup
+# ══════════════════════════════════════════════════════════════════════
+class TestResolveModel:
+    def test_matrix_exact_ids(self) -> None:
+        """A.0 매트릭스 — llm-architect.md와 동일한 4개 (패밀리×크기) → 모델 ID."""
+        assert LOCAL_MODEL_MATRIX[(ModelFamily.MATH, LocalModelTier.FAST)] == "qwen2-math:1.5b"
+        assert LOCAL_MODEL_MATRIX[(ModelFamily.MATH, LocalModelTier.MID)] == "qwen2-math:7b"
+        assert LOCAL_MODEL_MATRIX[(ModelFamily.GENERAL, LocalModelTier.FAST)] == "qwen2.5:3b"
+        assert LOCAL_MODEL_MATRIX[(ModelFamily.GENERAL, LocalModelTier.MID)] == "qwen2.5:7b"
+
+    def test_resolve_math_fast(self) -> None:
+        assert resolve_model(ModelFamily.MATH, LocalModelTier.FAST) == "qwen2-math:1.5b"
+
+    def test_resolve_general_mid(self) -> None:
+        assert resolve_model(ModelFamily.GENERAL, LocalModelTier.MID) == "qwen2.5:7b"
+
+    def test_resolve_quality_family_irrelevant(self) -> None:
+        """QUALITY는 패밀리 무관 → 항상 qwen3.5:27b (None이어도 동작)."""
+        assert resolve_model(None, LocalModelTier.QUALITY) == QUALITY_MODEL_ID
+        assert resolve_model(ModelFamily.MATH, LocalModelTier.QUALITY) == QUALITY_MODEL_ID
+
+    def test_resolve_fast_without_family_raises(self) -> None:
+        """FAST/MID인데 패밀리 None → 오류(불변식 4)."""
+        with pytest.raises(ValueError):
+            resolve_model(None, LocalModelTier.FAST)
+
+    def test_resolve_none_model_raises(self) -> None:
+        """클라우드(local_model None)에는 적용 불가."""
+        with pytest.raises(ValueError):
+            resolve_model(None, None)
+
+    def test_resolve_accepts_string_values(self) -> None:
+        """문자열 입력도 정규화하여 동작 (use_enum_values=True 대비)."""
+        assert resolve_model("general", "fast") == "qwen2.5:3b"  # type: ignore[arg-type]
+
+    def test_route_decision_resolves(self, router: Router) -> None:
+        """route() 결정을 resolve_model에 통과 — match=GENERAL/FAST → qwen2.5:3b."""
+        d = router.route(_req(task_type="match", difficulty="medium"))
+        assert resolve_model(d.local_family, d.local_model) == "qwen2.5:3b"
+
+
+# ══════════════════════════════════════════════════════════════════════
 # 축1·축2 상호작용 — 축1이 먼저, 권위적 (03a §C.4 순서)
 # ══════════════════════════════════════════════════════════════════════
 class TestAxisInteraction:
@@ -349,53 +473,67 @@ class TestGuardCloud:
 
 
 # ══════════════════════════════════════════════════════════════════════
-# 캐시 키 (03a §F.1) — 두 축 포함
+# 캐시 키 (03a §F.1) — 세 축 {cost_tier}:{local_family}:{local_model} 포함
 # ══════════════════════════════════════════════════════════════════════
 class TestCacheKey:
     def test_key_has_prefix(self) -> None:
-        key = cache_key("p", "s", CostTier.LOCAL, LocalModelTier.FAST)
+        key = cache_key("p", "s", CostTier.LOCAL, ModelFamily.MATH, LocalModelTier.FAST)
         assert key.startswith("llm:cache:")
 
     def test_local_tiers_produce_different_keys(self) -> None:
         """같은 프롬프트라도 FAST vs MID는 다른 키 (캐시 정체성에 축2 포함)."""
-        k_fast = cache_key("p", "s", CostTier.LOCAL, LocalModelTier.FAST)
-        k_mid = cache_key("p", "s", CostTier.LOCAL, LocalModelTier.MID)
+        k_fast = cache_key("p", "s", CostTier.LOCAL, ModelFamily.MATH, LocalModelTier.FAST)
+        k_mid = cache_key("p", "s", CostTier.LOCAL, ModelFamily.MATH, LocalModelTier.MID)
         assert k_fast != k_mid
+
+    def test_families_produce_different_keys(self) -> None:
+        """같은 크기라도 MATH vs GENERAL은 다른 키 (캐시 정체성에 축3 포함, 03a §F.1).
+
+        MATH(qwen2-math) 응답과 GENERAL(qwen2.5) 응답을 섞지 않는다.
+        """
+        k_math = cache_key("p", "s", CostTier.LOCAL, ModelFamily.MATH, LocalModelTier.FAST)
+        k_general = cache_key("p", "s", CostTier.LOCAL, ModelFamily.GENERAL, LocalModelTier.FAST)
+        assert k_math != k_general
 
     def test_cost_tiers_produce_different_keys(self) -> None:
         """LOCAL vs CLOUD는 다른 키 (축1 포함)."""
-        k_local = cache_key("p", "s", CostTier.LOCAL, LocalModelTier.FAST)
-        k_cloud = cache_key("p", "s", CostTier.CLOUD_MID, None)
+        k_local = cache_key("p", "s", CostTier.LOCAL, ModelFamily.MATH, LocalModelTier.FAST)
+        k_cloud = cache_key("p", "s", CostTier.CLOUD_MID, None, None)
         assert k_local != k_cloud
 
     def test_same_inputs_stable_key(self) -> None:
         """동일 입력 → 동일 키 (해시 안정성)."""
-        k1 = cache_key("p", "s", CostTier.LOCAL, LocalModelTier.FAST)
-        k2 = cache_key("p", "s", CostTier.LOCAL, LocalModelTier.FAST)
+        k1 = cache_key("p", "s", CostTier.LOCAL, ModelFamily.MATH, LocalModelTier.FAST)
+        k2 = cache_key("p", "s", CostTier.LOCAL, ModelFamily.MATH, LocalModelTier.FAST)
         assert k1 == k2
 
-    def test_none_local_model_uses_dash(self) -> None:
-        """local_model None(클라우드)도 안정적으로 키 생성."""
-        key = cache_key("p", "s", CostTier.CLOUD_HIGH, None)
+    def test_none_family_and_model_uses_dash(self) -> None:
+        """local_family·local_model None(클라우드)도 안정적으로 키 생성."""
+        key = cache_key("p", "s", CostTier.CLOUD_HIGH, None, None)
+        assert key.startswith("llm:cache:")
+
+    def test_quality_none_family_stable(self) -> None:
+        """QUALITY(패밀리 None)도 안정적으로 키 생성."""
+        key = cache_key("p", "s", CostTier.LOCAL, None, LocalModelTier.QUALITY)
         assert key.startswith("llm:cache:")
 
     def test_accepts_string_values(self) -> None:
         """use_enum_values=True로 문자열이 들어와도 동작 (정규화)."""
-        k_enum = cache_key("p", "s", CostTier.LOCAL, LocalModelTier.FAST)
-        k_str = cache_key("p", "s", "local", "fast")  # type: ignore[arg-type]
+        k_enum = cache_key("p", "s", CostTier.LOCAL, ModelFamily.GENERAL, LocalModelTier.FAST)
+        k_str = cache_key("p", "s", "local", "general", "fast")  # type: ignore[arg-type]
         assert k_enum == k_str
 
     def test_cache_key_for_decision(self, router: Router) -> None:
-        """cache_key_for(decision)는 cache_key와 동일 결과."""
+        """cache_key_for(decision)는 cache_key와 동일 결과 (세 축 모두 전달)."""
         d = router.route(_req(task_type="extract"))
         k1 = cache_key_for("p", "s", d)
-        k2 = cache_key("p", "s", d.cost_tier, d.local_model)
+        k2 = cache_key("p", "s", d.cost_tier, d.local_family, d.local_model)
         assert k1 == k2
 
     def test_different_prompt_different_key(self) -> None:
         """프롬프트가 다르면 키도 다르다."""
-        k1 = cache_key("p1", "s", CostTier.LOCAL, LocalModelTier.FAST)
-        k2 = cache_key("p2", "s", CostTier.LOCAL, LocalModelTier.FAST)
+        k1 = cache_key("p1", "s", CostTier.LOCAL, ModelFamily.MATH, LocalModelTier.FAST)
+        k2 = cache_key("p2", "s", CostTier.LOCAL, ModelFamily.MATH, LocalModelTier.FAST)
         assert k1 != k2
 
 
@@ -450,10 +588,11 @@ class TestEstimators:
 # ══════════════════════════════════════════════════════════════════════
 class TestLangfuseFields:
     def test_local_decision_fields(self, router: Router) -> None:
-        """로컬 결정의 태그 — cost_tier·local_model·mode 포함."""
+        """로컬 결정의 태그 — cost_tier·local_family·local_model·mode 포함."""
         d = router.route(_req(task_type="extract"))
         f = langfuse_fields(d)
         assert f["cost_tier"] == "local"
+        assert f["local_family"] == "general"  # extract = NLP → GENERAL
         assert f["local_model"] == "fast"
         assert f["mode"] == "sync"
         assert f["cache_hit"] is False
@@ -461,14 +600,28 @@ class TestLangfuseFields:
         assert f["call_site"] is None
         assert f["student_id_hash"] is None
 
-    def test_cloud_decision_local_model_null(self, router: Router) -> None:
-        """클라우드 결정 태그 — local_model None."""
+    def test_local_math_family_recorded(self, router: Router) -> None:
+        """수학 태스크 로컬 결정 — local_family=math 기록 (03a §F.2)."""
+        d = router.route(_req(task_type="explain", difficulty="medium", requires_reasoning=True))
+        f = langfuse_fields(d)
+        assert f["local_family"] == "math"
+
+    def test_cloud_decision_local_family_and_model_null(self, router: Router) -> None:
+        """클라우드 결정 태그 — local_family·local_model 모두 None."""
         d = router.route(
             _req(difficulty="killer", student_subscription="gifted", budget_krw=1000.0)
         )
         f = langfuse_fields(d)
         assert f["cost_tier"] == "cloud_high"
+        assert f["local_family"] is None
         assert f["local_model"] is None
+
+    def test_quality_local_family_null(self, router: Router) -> None:
+        """QUALITY 결정 태그 — local_family None(패밀리 무관)."""
+        d = router.route(_req(call_site=CallSite.SELF_VERIFY))
+        f = langfuse_fields(d)
+        assert f["local_model"] == "quality"
+        assert f["local_family"] is None
 
     def test_optional_fields_recorded(self, router: Router) -> None:
         """cache_hit·escalated_from·call_site·student_id_hash 기록."""
@@ -577,6 +730,14 @@ class TestRouteProducesValidDecisions:
         # 불변식 3: QUALITY ⟹ async
         if d.local_model == LocalModelTier.QUALITY:
             assert d.mode == "async"
+        # 불변식 4: local_family ⟺ (LOCAL and local_model in {FAST, MID})
+        if d.cost_tier == CostTier.LOCAL and d.local_model in (
+            LocalModelTier.FAST,
+            LocalModelTier.MID,
+        ):
+            assert d.local_family is not None
+        else:
+            assert d.local_family is None
         # 추정치 타당성
         assert d.est_latency_ms > 0
         assert d.est_cost_krw >= 0.0
