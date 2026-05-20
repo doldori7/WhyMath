@@ -49,6 +49,21 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-05-20: L3 라우팅에 *태스크 패밀리 축* 도입 — 수학(qwen2-math) vs NLP(qwen2.5), 03a 확정(B)
+**컨텍스트**: FAST tier 품질 검증(03a §H 후속1)을 Phaiakes9 실측으로 진행한 결과, "1.5b vs 7b *크기*"가 아니라 **모델 패밀리가 태스크와 안 맞은 것**이 근본 원인으로 드러남(아래 *FAST tier 품질 평가 하니스* 로그의 재설계(A) 참조). NLP 호출지점(extract/translate/match)을 수학 특화 `qwen2-math`로 돌리면 7b조차 0%, 일반 모델 `qwen2.5`로 바꾸니 정상화. 이를 *설계*로 확정(B 트랙).
+**결정**:
+- L3 LOCAL 라우팅에 **축3 = 모델 패밀리**(`ModelFamily{MATH, GENERAL}`) 도입. 로컬 실제 모델 = (패밀리 축3) × (크기 축2). 패밀리는 *태스크 유형*이 결정(NLP→GENERAL, 수학→MATH), 크기/SLA는 그 안에서.
+  - MATH=`qwen2-math`(1.5b/7b) · GENERAL=`qwen2.5`(3b/7b) · QUALITY=`qwen3.5:27b`(패밀리 무관 상위, 비동기). 클라우드(CLOUD_*)엔 미적용.
+- **5 호출지점 확정(실측)**: ①extract→GENERAL/MID(qwen2.5:7b)·②깊이추론→MATH/MID·③translate→GENERAL/MID(qwen2.5:7b)·④match→**GENERAL/FAST(qwen2.5:3b)**·⑤검증→QUALITY(27b·async)·산술→MATH/MID(qwen2-math:7b).
+- 03a 갱신(§0.2·§A.0 매트릭스·§B.2·§C.0 패밀리 결정·§G `local_family`·§H 후속), 03·llm-architect.md 모델 풀 최소 동기화.
+**근거(2026-05-20 실측, GPU 127.0.0.1, temperature=0)**:
+- NLP@수학모델=0%(7b도) ↔ NLP@qwen2.5: match 3b **100%**·translate 7b **75%**(3b 50%). 산술@qwen2-math: 7b 100%·1.5b 87.5%.
+- 호스트 교훈: `172.17.112.1`=WSL2 CPU(속도만), `127.0.0.1`=Windows GPU. temperature=0으로 실행 변동 제거.
+**적용 범위**:
+- 문서: `03a`·`03_content_generation.md`·`llm-architect.md`(설계·인터페이스).
+- **미반영(후속, 03a §H 8~11)**: (8) extract `set_f1` 의미≠문자열 측정 한계 → 동의어/임베딩/LLM-judge; (9) match 7b가 후보 주제명 echo → 파서 코드만 추출; (10) 산술 1.5b 87.5% DELTA 경계 튜닝; (11) **`whymath_backend/l3` 라우터 코드의 family 축 반영**(현재 코드 2축 — 인터페이스 doc이 코드를 선행, 별도 구현).
+**상태**: 확정(2026-05-20). 태스크 패밀리 라우팅을 03a 정본화. FAST tier 검증 여정 종료(결론: *수학≠NLP, 패밀리별 모델*). 잔여는 §H 후속.
+
 ### 2026-05-20: FAST tier 품질 평가 하니스 구축 — 1.5b vs 7b 결정적 채점 (03a §H 후속1, 실측은 Phaiakes9)
 **컨텍스트**: 03a §H 후속1 "FAST(1.5b)가 7b 대비 품질 차이가 충분히 작은지 측정 → 차이 크면 ①③④ 일부를 MID 승급(C.2 조정)". 실제 모델 실행은 Phaiakes9(Ollama·GPU)에서만 가능하므로(이 컨테이너엔 모델·GPU 없음), 이번엔 *하니스(데이터셋+채점기+러너+테스트)* 까지 만들고 실측은 Kiki가 Phaiakes9에서 수행한다. 채점은 *결정적(프로그램)* — LLM-as-judge 아님. llm-architect 위임 후 메인이 4게이트 독립 재검증.
 **결정**:
@@ -150,7 +165,7 @@
 - 본 결정 로그 + 활성 작업 갱신
 - **적용 완료(2026-05-20)**: `LLMTier`를 참조하던 `.claude/agents/llm-architect.md`(enum→`CostTier`+`LocalModelTier`·`Router.route()`→`RoutingDecision` 반환)·`docs/architecture/04_pedagogy_engine.md`(`recommended_tier`→`recommended_cost_tier: CostTier`)·`06_application_modes.md`(`default_llm_tier`→`default_cost_tier: CostTier`)·`.claude/agents/backend-engineer.md`(호출처 `route()→generate(decision=)`로 일관 갱신)의 두 축 분해 반영 완료. `budget_cents`→`budget_krw`(03a E장)도 통일. L4/L6은 *축1(CostTier)만* 힌트로 보유, 축2(로컬 FAST/MID/QUALITY)는 L3 라우터가 결정(계층 경계). *문서 간 불일치 해소*. 구현은 M1.2.
 **후속 작업 (별도 PR/세션)**:
-1. **[하니스 완료 2026-05-20, 실측 대기] FAST tier 품질 검증** — 평가 하니스(`quality_eval.py`·`fast_tier_eval.json`·테스트 56·커버리지 98%) 구축 완료. 실제 1.5b vs 7b 비교는 Phaiakes9에서 Kiki 실행 → C.2 조정 판단 (위 *FAST tier 품질 평가 하니스* 로그 참조)
+1. **[완료 2026-05-20] FAST tier 품질 검증** — Phaiakes9 실측 완료. 결론: *모델 패밀리* 미스매치(수학모델로 NLP=0%)가 근본 원인 → **태스크 패밀리 라우팅** 도입(위 *L3 라우팅에 태스크 패밀리 축 도입* 로그·03a §0.2 참조). 잔여: extract 지표·라우터 코드 family 반영(03a §H 8~11)
 2. **[완료 2026-05-20] 인터페이스 정렬: `LLMTier` → `CostTier`/`LocalModelTier`** — llm-architect.md·04·06·backend-engineer.md의 `LLMTier` 참조를 두 축 분해로 갱신 (위 §적용 범위 참조)
 3. **[완료 2026-05-20] M1.2 라우터 구현** — 03a 설계를 `.py`로 구현 + 테스트(커버리지 100%). 결정 로직+인터페이스 범위(LLM/Redis/Langfuse/큐 라이브 연동은 후속). 위 *M1.2 L3 라우터 구현 완료* 로그 참조
 4. **클라우드 티어 실연동** — CLOUD_MID/HIGH API·비용 계측·`guard_cloud` 임계값 실측(Phase 1 후반)
