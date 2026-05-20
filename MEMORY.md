@@ -26,7 +26,7 @@
 ### 활성 작업
 - 🔄 **L1.NCIC.정제** (별도 PR) — `_PdfStandardExtractor` 영역 추출 + 본문/해설 분리 (2026-05-15 결정 로그 참조)
 - 🔄 **ROCm 7.2+ Linux native 시도** (옵션 F, 별도 세션) — DirectML 32 tok/s 의 *2-3x 잠재력* 시도. BIOS UMA Frame Buffer Fixed 48-64GB + Linux Kernel 6.18.4+ + ROCm 7.2.0+ 요구. 출발점: `infra/phaiakes9/GPU_ACTIVATION_FOLLOWUP.md` §3 옵션 A·C
-- 📋 **L3 라우터 fast/mid/quality 3단계 설계** — `docs/architecture/03_content_llm.md` 갱신 또는 별도 설계서. 어떤 입력이 1.5B(fast) / 7B(mid) / 27B(quality) 로 분기되는지 결정 로직 명세 (2026-05-19 결정 로그 참조)
+- 🔄 **L3 라우터 3단계 설계 → 완료(구현 대기)** — 설계서 `docs/architecture/03a_l3_router_design.md` 작성 완료(두 라우팅 축 분리·`mid` 명칭 충돌 해소·입력 분류기·decision table·의사코드·스키마, 2026-05-20 결정 로그). 어떤 입력이 1.5b(FAST)/7b(MID)/27b(QUALITY)로 분기되는지 명세 확정. 구현(`.py`+테스트)은 M1.2
 - 📋 **fast tier 품질 검증** — qwen2-math:1.5b 가 *간단 산술·메타 응답·분류*에서 7B 대비 *품질 차이* 측정. L3 라우터 구현 시 진행
 - 📋 **Phaiakes9 카탈로그 cosmetic 정리** (별도 PR) — README.md 7군데, SETUP_GUIDE.md 1군데, 주석 4군데. 코드 동작 영향 없음, 문서 일관성만
 - 📋 **Phaiakes9 systemd unit `ProtectSystem=full` 완화** (별도 PR) — `failed to persist model recommendations snapshot ... read-only file system` 경고 해소. `ReadWritePaths=/usr/share/ollama` 추가
@@ -48,6 +48,37 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-20: L3 라우터 fast/mid/quality 3단계 설계 — 두 라우팅 축 분리·`mid` 명칭 충돌 해소
+**컨텍스트**: 2026-05-19 qwen2-math:1.5b GPU 측정으로 fast/mid/quality 3단계 *로컬* 라인업(1.5b/7b/27b)이 확정된 뒤, "어떤 입력이 어느 모델로 분기되는가"의 결정 로직(입력 분류기 + decision table)을 명세하는 트랙 A 착수. 설계 착수 즉시 *아키텍처 긴장* 발견: 기존 문서(`03_content_generation.md`·`llm-architect.md`)의 라우터 티어는 `LLMTier{LOCAL, MID, HIGH}`(비용·위치 축, MID=Claude Sonnet·HIGH=Claude Opus 클라우드, 목표분포 80/18/2)인데, 새로 확정된 fast/mid/quality는 *전부 로컬 Qwen 모델*. 즉 **두 축이 서로 다름**에도 `mid`가 양쪽에 존재(클라우드 MID vs 로컬 7b)해 충돌.
+**결정**:
+- L3 라우팅을 **두 축으로 분해**:
+  - 축1 *비용·위치* = `CostTier{LOCAL, CLOUD_MID, CLOUD_HIGH}` — 기존 `LLMTier.MID/HIGH`를 `CLOUD_` 접두사로 개명(1:1 의미 보존, 80/18/2 유지). "클라우드로 올라가나?"
+  - 축2 *로컬 모델 크기* = `LocalModelTier{FAST, MID, QUALITY}` = 1.5b/7b/27b — 축1이 LOCAL일 때만 적용. "로컬 어느 크기?"
+- **명칭 충돌 해소 규칙**: `mid`를 단독으로 쓰지 않는다 — 항상 `CLOUD_MID`(축1) 또는 `LocalModelTier.MID`·`로컬 mid(7b)`(축2)로 한정. 라우팅 결정은 `(cost_tier, local_model)` 쌍 + 불변식(`LOCAL ⟺ local_model 존재`, `QUALITY ⟹ async`)으로 표현.
+- **분기 근거 = SLA 실측**: FAST(1.5b)만 p50<2초 게이트 통과 → 동기 즉답 기본 경로(+ c=4 throughput scaling, 피크 흡수). MID(7b) p50≈4초 → 정밀 풀이·메인 대화(동기 허용). QUALITY(27b) p50≈14초+병렬 미작동 → **동기 불가, 비동기 큐 전용**(자기검증·복잡추론·PRM·백그라운드).
+- **5개 핵심 호출지점 기본 매핑**: ①개념추출·③번역정규화·④개념ID매칭 = FAST(캐싱 적중률 큼), ②깊이추론 = MID(hard↑면 QUALITY/CLOUD), ⑤자기검증 = QUALITY/async(샘플링).
+- 산출: 신규 설계서 `docs/architecture/03a_l3_router_design.md`(A~H 8개 섹션: 두 축 통합·입력분류기·decision table·의사코드·에스컬레이션/폴백·비용예산SLA·캐싱Langfuse·스키마·미해결). 03 문서 §1·모델풀표·5호출지점 문단 *최소* 정합성 보정(CLOUD_ 표기 + 03a cross-ref).
+**근거**:
+- 한 단어(`mid`)가 두 축을 겸하면 코드·문서·Langfuse 태그에서 *어느 축인지* 모호 → 환각·비용 오라우팅 위험. `CLOUD_` 접두사로 *맨이름 mid를 어디에도 단독으로 두지 않는* 게 가장 견고.
+- 2026-05-19 결정 로그가 명시한 "비용·품질·지연의 파레토 최적"을 *실행 가능한 분기 규칙*으로 번역. SLA 실측이 모든 분기의 근거(추측 아님 — CLAUDE.md "확실하지 않을 때 자신 있게 말함 금지").
+- 기존 `Router.route()` 4규칙을 *축1로 의미 보존* 후 로컬 세분(축2)만 신규 추가 → 기존 설계 무효화 없이 확장.
+- 설계/구현 분리: 본 트랙은 *명세*까지(설계 트랙). 실제 `.py`·테스트는 M1.2. 스키마는 마크다운 예시 코드블록으로만.
+**대안**:
+- 단일 enum 유지(`LLMTier`에 FAST/MID/QUALITY 추가) — 폐기: 비용축과 크기축이 한 enum에 섞여 80/18/2 분포 의미 붕괴, `mid` 충돌 미해소.
+- 로컬 세분을 라우터 밖(클라이언트)에서 처리 — 폐기: "모든 LLM 호출은 라우터 경유"(CLAUDE.md) 위배, 호출지점별 정책 일관성 상실.
+- fast/mid/quality를 그대로 최상위 티어로(클라우드 제거) — 폐기: 킬러·증명·어려운 진단의 클라우드 에스컬레이션 경로 상실, 80/18/2 전략 폐기.
+**적용 범위**:
+- 신규: `docs/architecture/03a_l3_router_design.md`
+- 수정(최소): `docs/architecture/03_content_generation.md` 3곳(§1 출력 명세·모델풀 표 2축화·5호출지점 문단 + 03a cross-ref·명칭충돌 주석)
+- 본 결정 로그 + 활성 작업 갱신
+- **미적용(후속)**: `LLMTier`를 참조하는 `.claude/agents/llm-architect.md`(enum 정의·`Router.route()`)·`docs/architecture/04_pedagogy_engine.md`(`recommended_tier`)·`06_application_modes.md`(`default_llm_tier`)의 `CostTier`/`LocalModelTier` 분해 반영 — 본 결정이 근거, 별도 인터페이스 정렬 작업(03a §H #7). 현재 *문서 간 일시적 불일치* 존재(코드 영향 없음 — 어디서도 import 안 됨)
+**후속 작업 (별도 PR/세션)**:
+1. **FAST tier 품질 검증** — 1.5b가 ①③④·간단 산술에서 7b 대비 품질 차이 측정. 차이 크면 03a §C.2 결정표 조정(M1.2)
+2. **인터페이스 정렬: `LLMTier` → `CostTier`/`LocalModelTier`** — llm-architect.md·04·06 문서의 `LLMTier` 참조를 두 축 분해로 갱신(별도 검토)
+3. **M1.2 라우터 구현** — 03a 설계를 `.py`로 구현 + 테스트(커버리지 70%+). `guard_cloud`·캐시키 2축화·Langfuse 필드·QUALITY 비동기 큐
+4. **클라우드 티어 실연동** — CLOUD_MID/HIGH API·비용 계측·`guard_cloud` 임계값 실측(Phase 1 후반)
+**상태**: 설계 완료(`feat/l3-router-3tier-design`). 두 축·명칭 충돌·decision table·에스컬레이션·스키마 명세 확정. 구현은 M1.2.
 
 ### 2026-05-19: qwen2-math:1.5b GPU 측정 완료 — L3 라우터 fast tier 후보 확정, 3단계 라인업 결정
 **컨텍스트**: 2026-05-16 GPU 활성화 후 후속 작업 1번. qwen2-math:7b GPU 32.63 tok/s · p50 3,918ms / qwen3.5:27b GPU 9.22 tok/s · p50 13,886ms 둘 다 L3 SLA(p50 < 2초) FAIL → *실시간 대화 즉답이 가능한 더 작은 모델 측정 필요*. Ollama Library의 `qwen2-math:1.5b` (934 MB, 2026-05 정식 등록) 후보. 동일 환경(Windows Ollama 0.24.0 + DirectML · Strix Halo Radeon 8060S · WSL2 클라이언트 `WHYMATH_OLLAMA_HOST=http://172.17.112.1:11434`) + 동일 벤치 스위트(고1 내신 원작 8문항)로 측정.
@@ -474,5 +505,5 @@ Phaiakes9를 단순 비용 절감이 아닌 *경쟁자가 못 가진 인프라*�
 
 ---
 
-**최종 수정**: 2026-05-14  
+**최종 수정**: 2026-05-20  
 **다음 정기 리뷰**: Phase 1 착수 후 첫 월
