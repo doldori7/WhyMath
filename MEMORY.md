@@ -61,7 +61,7 @@
 - 호스트 교훈: `172.17.112.1`=WSL2 CPU(속도만), `127.0.0.1`=Windows GPU. temperature=0으로 실행 변동 제거.
 **적용 범위**:
 - 문서: `03a`·`03_content_generation.md`·`llm-architect.md`(설계·인터페이스).
-- **후속(03a §H 8~11)**: (8) **✅구현(2026-05-20)** extract 임베딩 의미매칭(`set_f1_semantic`·Ollama `bge-m3` 코사인·threshold 0.6·exact 폴백) — 동의어 인정(검증: '다항식 전개'↔'다항식의 곱셈' semantic F1 0.8 vs exact 0.4); (9) match 7b가 후보 주제명 echo → 파서 코드만 추출; (10) 산술 1.5b 87.5% DELTA 경계 튜닝; (11) **`whymath_backend/l3` 라우터 코드의 family 축 반영**(현재 코드 2축 — 인터페이스 doc이 코드를 선행, 별도 구현).
+- **후속(03a §H 8~11)**: (8) **✅구현(2026-05-20)** extract 임베딩 의미매칭(`set_f1_semantic`·Ollama `bge-m3` 코사인·threshold 0.6·exact 폴백) — 동의어 인정(검증: '다항식 전개'↔'다항식의 곱셈' semantic F1 0.8 vs exact 0.4); (9) **✅구현(2026-05-20)** match 코드추출 채점(`extract_unit_code`·`GRADER_CODE`) — 모델이 후보 주제명 echo('10수학02 (방정식과 부등식)')해도 코드만 매칭; (10) 산술 1.5b 87.5% DELTA 경계 튜닝; (11) **`whymath_backend/l3` 라우터 코드의 family 축 반영**(현재 코드 2축 — 인터페이스 doc이 코드를 선행, 별도 구현).
 **상태**: 확정(2026-05-20). 태스크 패밀리 라우팅을 03a 정본화. FAST tier 검증 여정 종료(결론: *수학≠NLP, 패밀리별 모델*). 잔여는 §H 후속.
 
 ### 2026-05-20: FAST tier 품질 평가 하니스 구축 — 1.5b vs 7b 결정적 채점 (03a §H 후속1, 실측은 Phaiakes9)
