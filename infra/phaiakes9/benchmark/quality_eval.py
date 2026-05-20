@@ -279,10 +279,65 @@ def detect_machine() -> dict[str, Any]:
 _OPERATOR_PATTERN: Final[str] = r"(<=|>=|!=|==|[-+*/=<>])"
 
 
+def _strip_answer_wrapping(text: str) -> str:
+    """추출한 답 구간에서 *의미 없는 감싸기·앞장식*을 제거한다 (결정적 strip).
+
+    실측 qwen2-math 출력은 답을 콜론·등호·마크다운·LaTeX 인라인 수식으로 감싸는
+    일이 잦다(예: ": 45", "= x^2", "$x$", "\\(x\\)", "**x**", "`x`"). 이런 장식은
+    *정답 여부*와 무관하므로 모두 벗겨 순수 답만 남긴다. gold·모델 출력 어디에도
+    동일하게 적용되지 않고 *추출 후 한 번만* 수행하는 정리 단계다.
+
+    수행 순서(고정점까지 반복 — 중첩 감싸기 흡수):
+      1. 양끝 공백 제거.
+      2. LaTeX 인라인 수식 감싸기 '\\(...\\)' / '$...$' 의 *바깥 한 겹* 제거.
+      3. 마크다운 강조 '**...**' / '*...*' / '`...`' 의 *바깥 한 겹* 제거.
+      4. 선두 콜론(:·：)·등호(=) 제거(": 45" → "45", "= x" → "x").
+    """
+    prev = None
+    s = text
+    while prev != s:
+        prev = s
+        s = s.strip()
+        # LaTeX 인라인 수식 감싸기 한 겹 제거: \( ... \) (안쪽에 또 다른 \(·\) 없을 때만
+        # — '\(a\) + \(b\)' 같은 두 개의 분리 수식을 잘못 벗기지 않게 한다).
+        m = re.fullmatch(r"\\\((?:(?!\\[()]).)*\\\)", s, flags=re.DOTALL)
+        if m:
+            s = s[2:-2]
+            continue
+        # $ ... $ (안쪽에 '$' 없을 때만 — '$a$ + $b$' 오벗김 방지).
+        m = re.fullmatch(r"\$+([^$]*)\$+", s, flags=re.DOTALL)
+        if m:
+            s = m.group(1)
+            continue
+        # 마크다운 강조 한 겹 제거: **..** (안쪽에 '*' 없을 때만).
+        m = re.fullmatch(r"\*\*([^*]*)\*\*", s, flags=re.DOTALL)
+        if m:
+            s = m.group(1)
+            continue
+        # *..* (안쪽에 '*' 없을 때만 — 'x*y' 곱셈은 보존).
+        m = re.fullmatch(r"\*([^*]+)\*", s, flags=re.DOTALL)
+        if m:
+            s = m.group(1)
+            continue
+        # `..` (안쪽에 '`' 없을 때만).
+        m = re.fullmatch(r"`([^`]*)`", s, flags=re.DOTALL)
+        if m:
+            s = m.group(1)
+            continue
+        # 선두 콜론·등호 제거(": 45" / "= x" 같은 앞장식)
+        m = re.match(r"^\s*[:：=]\s*(.*)$", s, flags=re.DOTALL)
+        if m:
+            s = m.group(1)
+            continue
+    return s.strip()
+
+
 def normalize_form(text: str) -> str:
     """수식·답 문자열을 정규화한다 (결정적 채점의 기준).
 
     규칙(파서 가정):
+      0. 답 감싸기·앞장식 제거(_strip_answer_wrapping) — 선두 ':'·'=', 수식 감싸기
+         '$...$'/'\\(...\\)' 를 벗겨 ': 45'·'$45$' 가 '45' 와 매칭되게 한다.
       1. 양끝 공백 제거(strip), 소문자화(lower).
       2. 유니코드 비교 연산자(≤·≥·≠·×·÷)를 ASCII(<=·>=·!=·*·/)로 치환.
       3. 모든 공백을 제거한 뒤, 이항 연산자 주위에 공백 한 칸을 *재삽입*하여
@@ -292,7 +347,8 @@ def normalize_form(text: str) -> str:
     주의: 단항 음수(예: '-2')도 이 규칙에서 ' - 2'가 되지만, gold와 모델 출력에
     *동일하게* 적용되므로 매칭에는 문제가 없다(정규화는 양쪽에 똑같이 적용).
     """
-    s = text.strip().lower()
+    # 0. 감싸기·앞장식 제거(양쪽에 동일 적용 — 매칭 의미 불변).
+    s = _strip_answer_wrapping(text).lower()
     # 유니코드 연산자 → ASCII
     replacements = {
         "≤": "<=",
@@ -322,19 +378,97 @@ def normalize_concept(text: str) -> str:
     return re.sub(r"\s+", "", text.strip().lower())
 
 
+def _extract_answer_span(raw: str) -> str:
+    """모델 응답에서 *최종답 구간*(문자열)을 추출한다 (단일·개념 공통 1차 추출).
+
+    실측 qwen2-math 출력 형식을 견고히 흡수하기 위해 *우선순위 폴백*을 따른다.
+    여기서는 답 구간을 한 덩어리 문자열로만 돌려주고, 단일답/개념 분할·정리는
+    각 parse_* 가 후처리한다.
+
+    우선순위(앞이 우선):
+      1. 마지막 '####' 뒤 내용(프롬프트가 강제하는 형식). 같은 줄만 취한다.
+      2. '\\boxed{...}' 의 *가장 안쪽* 내용(qwen2-math 가 최종답을 자주 넣는 곳).
+      3. 라벨('ANSWER:'/'정답:'/'답:'/'정답은') 중 *마지막* 뒤 같은 줄.
+      4. 마지막 비어있지 않은 줄 전체.
+    어느 단계도 못 찾으면 빈 문자열.
+    """
+    # 1. 마지막 '####' 뒤 같은 줄.
+    hashes = list(re.finditer(r"####", raw))
+    if hashes:
+        tail = raw[hashes[-1].end() :]
+        first_line = tail.splitlines()[0] if tail.splitlines() else tail
+        return first_line.strip()
+    # 2. 가장 안쪽 \boxed{...} (중첩 중괄호는 균형 스캔으로 안쪽을 택함).
+    boxed = _innermost_boxed(raw)
+    if boxed is not None:
+        return boxed.strip()
+    # 3. 마지막 라벨 뒤 같은 줄.
+    labeled = _last_label_value(raw)
+    if labeled is not None:
+        return labeled.strip()
+    # 4. 마지막 비어있지 않은 줄.
+    return _last_answer_line(raw)
+
+
+def _innermost_boxed(raw: str) -> str | None:
+    """'\\boxed{...}' 의 *가장 안쪽* 중괄호 내용을 반환(없으면 None).
+
+    중첩 '\\boxed{\\boxed{42}}' 나 내부에 '{}' 가 섞인 경우에도 안쪽 내용을
+    얻기 위해, 각 '\\boxed{' 출현마다 균형 잡힌 닫는 괄호까지 스캔한 뒤,
+    그 안에 또 '\\boxed{' 가 있으면 더 안쪽을 택한다(재귀). 마지막 출현 우선.
+    """
+    starts = [m.end() for m in re.finditer(r"\\boxed\s*\{", raw)]
+    if not starts:
+        return None
+    # 마지막 \boxed 출현을 기준으로 균형 스캔.
+    open_idx = starts[-1]
+    depth = 1
+    i = open_idx
+    while i < len(raw) and depth > 0:
+        if raw[i] == "{":
+            depth += 1
+        elif raw[i] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    inner = raw[open_idx:i]
+    # 안쪽에 또 boxed 가 있으면 더 안쪽을 택함(중첩 흡수).
+    nested = _innermost_boxed(inner)
+    return nested if nested is not None else inner
+
+
+def _last_label_value(raw: str) -> str | None:
+    """라벨('ANSWER:'/'정답:'/'답:'/'정답은') 중 마지막 뒤 같은 줄을 반환.
+
+    없으면 None. '정답은' 처럼 콜론 없는 한국어 라벨도 흡수한다.
+    """
+    pattern = r"(?:answer|정답은|정답|답)\s*[:：]?\s*"
+    matches = list(re.finditer(pattern, raw, flags=re.IGNORECASE))
+    if not matches:
+        return None
+    last = matches[-1]
+    tail = raw[last.end() :]
+    first_line = tail.splitlines()[0] if tail.splitlines() else tail
+    return first_line
+
+
 def parse_concept_list(raw: str) -> list[str]:
     """모델 응답에서 개념 *리스트*를 추출한다 (CONCEPT_EXTRACT ①).
 
-    파서 가정(프롬프트가 "개념을 쉼표로 나열" 지시):
-      - 응답의 *마지막 비어있지 않은 줄*을 답 줄로 본다(앞선 설명 줄 무시).
-      - 'ANSWER:'·'개념:' 등 접두 라벨이 있으면 콜론 뒤만 취한다.
-      - 쉼표(,) 또는 한국어 가운뎃점(·)·세미콜론(;)으로 분할한다.
-      - 각 항목을 strip 하고 빈 항목·번호 접두("1.", "-")를 제거한다.
+    1차로 _extract_answer_span 으로 답 구간을 얻은 뒤(프롬프트는 '#### 개념1,
+    개념2' 한 줄을 강제, 실측은 라벨·문장도 섞임 → 폴백으로 흡수), 다음을 한다:
+      - 감싸기·앞장식(_strip_answer_wrapping)을 제거한다.
+      - 쉼표(,)·한국어 가운뎃점(·)·세미콜론(;)으로 분할한다.
+      - 각 항목의 글머리표('1.', '-', '*')·앞뒤 공백을 제거하고 빈 항목은 버린다.
     """
-    line = _last_answer_line(raw)
-    line = _strip_label(line)
+    span = _extract_answer_span(raw)
+    # 개념 전용 선두 라벨('개념:'/'concepts:')도 제거(_extract_answer_span 의 답 라벨
+    # 집합엔 없으므로 여기서 한 번 더). '####'/'\\boxed' 폴백을 거친 뒤에도 안전.
+    span = re.sub(r"^\s*(?:개념|concepts?)\s*[:：]\s*", "", span, flags=re.IGNORECASE)
+    span = _strip_answer_wrapping(span)
     # 쉼표·가운뎃점·세미콜론으로 분할
-    parts = re.split(r"[,·;]", line)
+    parts = re.split(r"[,·;]", span)
     out: list[str] = []
     for p in parts:
         cleaned = _strip_list_bullet(p).strip()
@@ -346,34 +480,18 @@ def parse_concept_list(raw: str) -> list[str]:
 def parse_single_answer(raw: str) -> str:
     """모델 응답에서 *단일 답*을 추출한다 (TRANSLATE·MATCH·산술).
 
-    파서 가정(프롬프트가 "답만 마지막 줄에 'ANSWER:' 뒤에" 지시):
-      - 응답에 'ANSWER:' 라벨이 있으면 *마지막* 'ANSWER:' 뒤 텍스트를 취한다.
-      - 없으면 *마지막 비어있지 않은 줄* 전체를 답으로 본다.
-      - 결과를 strip 한다(정규화는 채점기에서 수행).
+    1차로 _extract_answer_span 으로 답 구간을 얻고(우선순위: '####' → '\\boxed{}'
+    → 라벨 → 마지막 줄), 감싸기·앞장식(_strip_answer_wrapping)을 벗겨 순수 답만
+    돌려준다. 정규화(공백·연산자·대소문자)는 채점기(normalize_form)에서 수행한다.
     """
-    # 마지막 ANSWER: 라벨 우선
-    matches = list(re.finditer(r"(?:answer|정답)\s*[:：]\s*", raw, flags=re.IGNORECASE))
-    if matches:
-        last = matches[-1]
-        tail = raw[last.end() :]
-        # 라벨 뒤 첫 줄만(여러 줄이면 첫 줄)
-        first_line = tail.splitlines()[0] if tail.splitlines() else tail
-        return first_line.strip()
-    return _last_answer_line(raw)
+    span = _extract_answer_span(raw)
+    return _strip_answer_wrapping(span)
 
 
 def _last_answer_line(raw: str) -> str:
     """응답의 마지막 비어있지 않은 줄을 반환(없으면 빈 문자열)."""
     lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
     return lines[-1] if lines else ""
-
-
-def _strip_label(line: str) -> str:
-    """'ANSWER:'·'개념:' 등 선두 라벨을 제거하고 콜론 뒤만 반환."""
-    m = re.match(r"\s*(?:answer|정답|개념|concepts?)\s*[:：]\s*(.*)$", line, flags=re.IGNORECASE)
-    if m:
-        return m.group(1).strip()
-    return line
 
 
 def _strip_list_bullet(part: str) -> str:
