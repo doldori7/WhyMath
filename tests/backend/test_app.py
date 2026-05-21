@@ -218,13 +218,19 @@ class TestGenerateEndpoint:
 
 
 def test_create_app_defaults_are_real_implementations() -> None:
-    """기본 팩토리(주입 없음)는 OllamaProvider + 인메모리 스텁을 단다(S1)."""
+    """기본 팩토리(주입 없음)는 OllamaProvider + RedisCache(S2) + 트레이스 스텁을 단다.
+
+    S2에서 기본 캐시가 InMemoryCache → RedisCache로 바뀌었다. RedisCache는 *지연
+    연결*이라 isinstance 확인만으로는 라이브 Redis가 필요 없다(첫 캐시 접근 전엔
+    클라이언트를 만들지 않음) → 이 단정은 hermetic하다. 캐시 *동작*을 타는 테스트는
+    위 _client()가 InMemoryCache를 주입해 라이브 Redis를 피한다.
+    """
     from whymath_backend.app import _CACHE_KEY, _PROVIDER_KEY, _TRACE_KEY
-    from whymath_backend.l3.interfaces import InMemoryCache as _IMC
+    from whymath_backend.l3.cache import RedisCache as _RC
     from whymath_backend.l3.interfaces import RecordingTraceSink as _RTS
     from whymath_backend.l3.providers.ollama import OllamaProvider as _OP
 
     app = create_app()
     assert isinstance(getattr(app.state, _PROVIDER_KEY), _OP)
-    assert isinstance(getattr(app.state, _CACHE_KEY), _IMC)
+    assert isinstance(getattr(app.state, _CACHE_KEY), _RC)
     assert isinstance(getattr(app.state, _TRACE_KEY), _RTS)

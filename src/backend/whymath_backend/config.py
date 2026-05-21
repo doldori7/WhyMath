@@ -3,9 +3,10 @@
 모든 설정은 *환경변수*로 주입한다. 이 파일에는 호스트·시크릿을 하드코딩하지 않으며
 기본값은 *로컬 개발용 무해 디폴트*(예: Ollama 로컬 데몬 주소)만 둔다.
 
-범위 메모 (M1.2-live S1): 본 슬라이스는 L3 라우터 ↔ 실제 Ollama 백엔드 결선과
-FastAPI 앱만 다룬다. Redis·Langfuse·Celery·클라우드 LLM·DB 설정은 후속 슬라이스
-(S2~S5)에서 추가한다 — 여기서는 *Ollama 연동에 필요한 최소 설정*만 노출한다.
+범위 메모 (M1.2-live): S1은 L3 라우터 ↔ 실제 Ollama 결선 + FastAPI 앱을 다뤘고,
+S2가 Redis 캐시 설정(redis_url)을 추가한다. Langfuse·Celery·클라우드 LLM·DB 설정은
+후속 슬라이스(S3~S5)에서 추가한다 — 여기서는 가동 중인 슬라이스에 필요한 최소
+설정만 노출한다.
 """
 
 from __future__ import annotations
@@ -47,11 +48,22 @@ class Settings(BaseSettings):
         ),
     )
 
-    # ── 응답 캐시 (S1은 인메모리 스텁, Redis는 S2) ──
+    # ── 응답 캐시 (Redis, S2부터 실제 만료 적용) ──
+    redis_url: str = Field(
+        default="redis://127.0.0.1:6379/0",
+        description=(
+            "Redis 연결 URL. 로컬 개발 기본값은 무해한 로컬 루프백 DB 0. "
+            "프로덕션(Phaiakes9)은 환경변수 WHYMATH_REDIS_URL로 주입. 시크릿 아님 — "
+            "인증이 필요하면 URL에 환경변수로 자격증명을 담는다(코드 하드코딩 금지)"
+        ),
+    )
     cache_ttl_s: int = Field(
         default=3600,
         ge=0,
-        description="응답 캐시 TTL(초). S1은 인메모리 스텁이 기록만 함(만료 미구현, 03a §F.1)",
+        description=(
+            "응답 캐시 TTL(초). S2 RedisCache가 SET ... EX로 실제 만료 적용(03a §F.1). "
+            "0이면 RedisCache는 만료 없이 저장(무기한 폴백 — redis가 EX 0를 거부하므로)"
+        ),
     )
 
 
