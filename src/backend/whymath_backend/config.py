@@ -5,8 +5,9 @@
 
 범위 메모 (M1.2-live): S1은 L3 라우터 ↔ 실제 Ollama 결선 + FastAPI 앱을 다뤘고,
 S2가 Redis 캐시 설정(redis_url)을 추가했으며, S3가 Langfuse 관측성 설정(공개키·
-시크릿키·호스트)을 추가한다. Celery·클라우드 LLM·DB 설정은 후속 슬라이스(S4~S5)에서
-추가한다 — 여기서는 가동 중인 슬라이스에 필요한 최소 설정만 노출한다.
+시크릿키·호스트)을 추가했고, S4가 QUALITY(27b) 비동기 큐(Celery, broker=Redis)
+설정을 추가한다. 클라우드 LLM·DB 설정은 후속 슬라이스(S5)에서 추가한다 — 여기서는
+가동 중인 슬라이스에 필요한 최소 설정만 노출한다.
 
 시크릿 처리 (CLAUDE.md 보안 금기 "API 키·시크릿 코드 하드코딩 금지"): Langfuse
 시크릿 키는 `SecretStr`로 받아 *로그·repr에 평문 노출을 차단*한다. 공개키·시크릿키는
@@ -72,6 +73,28 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── QUALITY(27b) 비동기 큐 (Celery, broker=result backend=Redis, S4) ──
+    # QUALITY는 동기 호출 불가(p50≈14초·GPU 단일 점유, 03a §D.3) → 작업 큐 전용이다.
+    # broker·result-backend는 *기본값을 두지 않고*(빈 = "redis_url에서 파생") 명시
+    # 오버라이드가 없으면 redis_url을 그대로 재사용한다(아래 celery_* property).
+    # 별도 환경변수로 분리 인프라(전용 broker DB 등)를 가리키게 할 수 있다.
+    celery_broker_url: str = Field(
+        default="",
+        description=(
+            "Celery broker URL. 빈 값(기본)이면 redis_url을 재사용한다(단일 Redis로 "
+            "캐시+큐 운영). 전용 broker로 분리하려면 WHYMATH_CELERY_BROKER_URL로 주입. "
+            "시크릿 아님 — 인증이 필요하면 URL에 환경변수로 자격증명을 담는다(하드코딩 금지)."
+        ),
+    )
+    celery_result_backend: str = Field(
+        default="",
+        description=(
+            "Celery result backend URL. 빈 값(기본)이면 redis_url을 재사용한다. "
+            "job_id로 QUALITY 결과를 폴링하려면 result backend가 필요하다(03a §D.3 폴링). "
+            "분리하려면 WHYMATH_CELERY_RESULT_BACKEND로 주입."
+        ),
+    )
+
     # ── 관측성 (Langfuse, S3부터 실제 전송) ──
     # 시크릿: 공개키·시크릿키는 *기본값 없음*(빈 = 미설정). 둘 다 채워져야 LangfuseSink가
     # 활성화되고, 하나라도 비면 영구 no-op(03a §F.2 관측성은 best-effort). 시크릿 키는
@@ -107,6 +130,24 @@ class Settings(BaseSettings):
         `get_secret_value()`로만 평문을 꺼내며, 여기서는 *비어 있는지*만 본다(값 로그 X).
         """
         return bool(self.langfuse_public_key) and bool(self.langfuse_secret_key.get_secret_value())
+
+    @property
+    def effective_celery_broker_url(self) -> str:
+        """실제 Celery broker URL — celery_broker_url이 비어 있으면 redis_url로 폴백.
+
+        단일 Redis로 캐시(S2)와 큐(S4)를 함께 운영하는 것이 기본이다(03a §D.3). 전용
+        broker가 필요하면 WHYMATH_CELERY_BROKER_URL로 분리 인프라를 가리킨다.
+        """
+        return self.celery_broker_url or self.redis_url
+
+    @property
+    def effective_celery_result_backend(self) -> str:
+        """실제 Celery result backend URL — 비어 있으면 redis_url로 폴백.
+
+        job_id로 QUALITY 결과를 조회하려면(폴링, 03a §D.3) result backend가 필요하다.
+        기본은 broker와 같은 redis_url을 재사용한다.
+        """
+        return self.celery_result_backend or self.redis_url
 
 
 @lru_cache(maxsize=1)
