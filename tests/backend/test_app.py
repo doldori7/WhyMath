@@ -218,19 +218,28 @@ class TestGenerateEndpoint:
 
 
 def test_create_app_defaults_are_real_implementations() -> None:
-    """기본 팩토리(주입 없음)는 OllamaProvider + RedisCache(S2) + 트레이스 스텁을 단다.
+    """기본 팩토리(주입 없음)는 OllamaProvider + RedisCache(S2) + LangfuseSink(S3)를 단다.
 
-    S2에서 기본 캐시가 InMemoryCache → RedisCache로 바뀌었다. RedisCache는 *지연
-    연결*이라 isinstance 확인만으로는 라이브 Redis가 필요 없다(첫 캐시 접근 전엔
-    클라이언트를 만들지 않음) → 이 단정은 hermetic하다. 캐시 *동작*을 타는 테스트는
-    위 _client()가 InMemoryCache를 주입해 라이브 Redis를 피한다.
+    S2에서 기본 캐시가 InMemoryCache → RedisCache로, S3에서 기본 트레이스가
+    RecordingTraceSink → LangfuseSink로 바뀌었다. RedisCache·LangfuseSink는 모두
+    *지연*이라 isinstance 확인만으로는 라이브 Redis·Langfuse가 필요 없다(첫 사용 전엔
+    클라이언트를 만들지 않음) → 이 단정은 hermetic하다. 더구나 LangfuseSink는 키
+    미설정(CI)이면 영구 no-op이라 record()조차 네트워크를 타지 않는다. 캐시/트레이스
+    *동작*을 타는 테스트는 위 _client()가 InMemoryCache·RecordingTraceSink를 주입해
+    라이브 의존을 피한다.
     """
     from whymath_backend.app import _CACHE_KEY, _PROVIDER_KEY, _TRACE_KEY
     from whymath_backend.l3.cache import RedisCache as _RC
-    from whymath_backend.l3.interfaces import RecordingTraceSink as _RTS
     from whymath_backend.l3.providers.ollama import OllamaProvider as _OP
+    from whymath_backend.l3.trace import LangfuseSink as _LFS
 
     app = create_app()
     assert isinstance(getattr(app.state, _PROVIDER_KEY), _OP)
     assert isinstance(getattr(app.state, _CACHE_KEY), _RC)
-    assert isinstance(getattr(app.state, _TRACE_KEY), _RTS)
+    assert isinstance(getattr(app.state, _TRACE_KEY), _LFS)
+    # CI hermetic 보강: 기본 LangfuseSink는 키 미설정 시 비활성(전송 X)이어야 한다.
+    # (단, 환경에 WHYMATH_LANGFUSE_* 키가 실제로 있으면 활성일 수 있어 단정은 조건부.)
+    from whymath_backend.config import Settings
+
+    if not Settings().langfuse_configured:
+        assert getattr(app.state, _TRACE_KEY).configured is False

@@ -4,16 +4,22 @@
 기본값은 *로컬 개발용 무해 디폴트*(예: Ollama 로컬 데몬 주소)만 둔다.
 
 범위 메모 (M1.2-live): S1은 L3 라우터 ↔ 실제 Ollama 결선 + FastAPI 앱을 다뤘고,
-S2가 Redis 캐시 설정(redis_url)을 추가한다. Langfuse·Celery·클라우드 LLM·DB 설정은
-후속 슬라이스(S3~S5)에서 추가한다 — 여기서는 가동 중인 슬라이스에 필요한 최소
-설정만 노출한다.
+S2가 Redis 캐시 설정(redis_url)을 추가했으며, S3가 Langfuse 관측성 설정(공개키·
+시크릿키·호스트)을 추가한다. Celery·클라우드 LLM·DB 설정은 후속 슬라이스(S4~S5)에서
+추가한다 — 여기서는 가동 중인 슬라이스에 필요한 최소 설정만 노출한다.
+
+시크릿 처리 (CLAUDE.md 보안 금기 "API 키·시크릿 코드 하드코딩 금지"): Langfuse
+시크릿 키는 `SecretStr`로 받아 *로그·repr에 평문 노출을 차단*한다. 공개키·시크릿키는
+*기본값을 두지 않는다*(빈 문자열 = "미설정") — 키가 없으면 관측성은 영구 no-op으로
+스스로 비활성된다(LangfuseSink). 호스트는 무해한 공개 디폴트(cloud.langfuse.com)를
+둘 수 있다(시크릿 아님).
 """
 
 from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -65,6 +71,42 @@ class Settings(BaseSettings):
             "0이면 RedisCache는 만료 없이 저장(무기한 폴백 — redis가 EX 0를 거부하므로)"
         ),
     )
+
+    # ── 관측성 (Langfuse, S3부터 실제 전송) ──
+    # 시크릿: 공개키·시크릿키는 *기본값 없음*(빈 = 미설정). 둘 다 채워져야 LangfuseSink가
+    # 활성화되고, 하나라도 비면 영구 no-op(03a §F.2 관측성은 best-effort). 시크릿 키는
+    # SecretStr로 평문 repr/로그 노출을 차단한다(CLAUDE.md 보안 금기).
+    langfuse_public_key: str = Field(
+        default="",
+        description=(
+            "Langfuse 공개키(pk-...). 기본값 없음(빈 = 미설정). 환경변수 "
+            "WHYMATH_LANGFUSE_PUBLIC_KEY로 주입. 비면 관측성은 영구 no-op으로 비활성."
+        ),
+    )
+    langfuse_secret_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "Langfuse 시크릿키(sk-...). SecretStr — repr/로그에 평문 노출 안 됨. "
+            "기본값 없음(빈 = 미설정). 환경변수 WHYMATH_LANGFUSE_SECRET_KEY로만 주입 "
+            "(CLAUDE.md 보안 금기: 코드 하드코딩 금지). 비면 관측성 no-op."
+        ),
+    )
+    langfuse_host: str = Field(
+        default="https://cloud.langfuse.com",
+        description=(
+            "Langfuse 호스트 URL. 무해한 공개 디폴트(클라우드). 셀프호스트는 환경변수 "
+            "WHYMATH_LANGFUSE_HOST로 주입. 시크릿 아님 — 호스트만으로는 전송 불가(키 필요)."
+        ),
+    )
+
+    @property
+    def langfuse_configured(self) -> bool:
+        """Langfuse 공개키·시크릿키가 *둘 다* 채워졌는가(전송 가능 여부).
+
+        하나라도 비어 있으면 미설정으로 보고 LangfuseSink는 no-op이 된다. SecretStr는
+        `get_secret_value()`로만 평문을 꺼내며, 여기서는 *비어 있는지*만 본다(값 로그 X).
+        """
+        return bool(self.langfuse_public_key) and bool(self.langfuse_secret_key.get_secret_value())
 
 
 @lru_cache(maxsize=1)

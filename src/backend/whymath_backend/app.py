@@ -6,9 +6,10 @@
   - POST /v1/generate — 라우팅 → 캐시 → 생성 → 결정 메타데이터 + 생성 텍스트 반환
 
 `create_app()`은 의존성(provider·cache·trace)을 주입받는 팩토리다 — 테스트는 가짜를
-넣고, 프로덕션은 OllamaProvider + RedisCache(S2) + 인메모리 트레이스 스텁을 기본으로
-쓴다. RedisCache는 *지연 연결*이므로 앱 구성만으로 라이브 Redis가 필요하지 않다.
-Langfuse 싱크 교체는 후속 슬라이스(S3)다.
+넣고, 프로덕션은 OllamaProvider + RedisCache(S2) + LangfuseSink(S3)를 기본으로 쓴다.
+RedisCache·LangfuseSink는 모두 *지연*이라 앱 구성만으로 라이브 Redis·Langfuse가 필요
+하지 않다(첫 사용 시 연결). LangfuseSink는 키 미설정 시 영구 no-op이라 CI에서도 안전
+하다 — 트레이싱 장애는 학생 생성을 절대 깨뜨리지 않는다(CLAUDE.md 우선순위 #1 ≫ #6).
 
 경계 메모 (CLAUDE.md 절대 금기): /v1/generate가 돌려주는 텍스트는 *검증 전 원시 모델
 출력*이다. 03 문서 환각 방어 파이프라인 통과 전에는 학생에게 직접 노출 금지
@@ -26,12 +27,12 @@ from whymath_backend.l3.cache import RedisCache
 from whymath_backend.l3.interfaces import (
     CacheBackend,
     LLMProvider,
-    RecordingTraceSink,
     TraceSink,
 )
 from whymath_backend.l3.models import RoutingDecision, RoutingRequest
 from whymath_backend.l3.pipeline import QualityQueueUnavailableError
 from whymath_backend.l3.providers.ollama import OllamaProvider, OllamaStatus
+from whymath_backend.l3.trace import LangfuseSink
 
 # 앱 state에 의존성을 보관할 때 쓰는 키.
 _PROVIDER_KEY = "llm_provider"
@@ -111,10 +112,11 @@ def create_app(
 ) -> FastAPI:
     """FastAPI 앱 팩토리 — 의존성 주입 가능.
 
-    기본값: OllamaProvider + RedisCache(S2) + RecordingTraceSink. RedisCache는
-    *지연 연결*이라 앱 구성 시 라이브 Redis가 필요 없다(첫 캐시 접근 때 연결). 테스트는
-    가짜 provider/cache(InMemoryCache)/trace를 주입해 hermetic을 유지한다. Langfuse
-    기본값 교체는 S3.
+    기본값: OllamaProvider + RedisCache(S2) + LangfuseSink(S3). RedisCache·LangfuseSink
+    는 모두 *지연*이라 앱 구성 시 라이브 Redis·Langfuse가 필요 없다(첫 사용 때 연결).
+    LangfuseSink는 키(WHYMATH_LANGFUSE_*) 미설정 시 영구 no-op이므로 CI(키 없음)에서도
+    네트워크를 타지 않는다. 테스트는 가짜 provider/cache(InMemoryCache)/trace를 주입해
+    hermetic을 유지한다.
     """
     app = FastAPI(
         title="WhyMath Backend — L3 생성 표면",
@@ -124,7 +126,8 @@ def create_app(
     app.state.__setattr__(_PROVIDER_KEY, provider if provider is not None else OllamaProvider())
     # 기본 캐시는 RedisCache(지연 연결) — 구성 시 라이브 Redis 불필요(첫 접근 때 연결).
     app.state.__setattr__(_CACHE_KEY, cache if cache is not None else RedisCache())
-    app.state.__setattr__(_TRACE_KEY, trace if trace is not None else RecordingTraceSink())
+    # 기본 트레이스는 LangfuseSink(지연·자기비활성) — 키 미설정 시 영구 no-op(S3).
+    app.state.__setattr__(_TRACE_KEY, trace if trace is not None else LangfuseSink())
 
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, str]:
