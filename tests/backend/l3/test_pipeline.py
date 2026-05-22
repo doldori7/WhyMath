@@ -1,7 +1,7 @@
 """L3 파이프라인 단위테스트 — 라우팅→캐시→생성→관측 결선 (라이브 서비스 없음).
 
-가짜 provider + 인메모리 스텁(InMemoryCache·RecordingTraceSink)으로 캐시 적중/미스·
-QUALITY 차단·관측 기록을 검증한다.
+가짜 provider + 인메모리 스텁(InMemoryCache·RecordingTraceSink) + 가짜 큐로 캐시
+적중/미스·QUALITY 비동기 큐잉·관측 기록을 검증한다.
 
 설계 정본: docs/architecture/03a_l3_router_design.md §F.1·§F.2·§D.3.
 """
@@ -35,6 +35,26 @@ class RecordingProvider:
     ) -> str:
         self.calls.append((prompt, system, decision))
         return self._text
+
+
+class RecordingQueue:
+    """가짜 AsyncJobQueue — enqueue payload 기록 + 정해진 job_id 반환.
+
+    interfaces.AsyncJobQueue를 구조적으로 충족한다. `raises`를 주면 enqueue가 그 예외를
+    던져 broker 다운(디스패치 실패)을 모사한다 — 파이프라인이 QualityQueueUnavailableError
+    로 변환하는지 검증할 수 있게 한다.
+    """
+
+    def __init__(self, *, job_id: str = "job-123", raises: Exception | None = None) -> None:
+        self._job_id = job_id
+        self._raises = raises
+        self.payloads: list[dict[str, object]] = []
+
+    async def enqueue(self, payload: dict[str, object]) -> str:
+        self.payloads.append(payload)
+        if self._raises is not None:
+            raise self._raises
+        return self._job_id
 
 
 def _sync_local_request() -> RoutingRequest:
@@ -139,23 +159,123 @@ class TestCacheHitPath:
         assert len(provider.calls) == 1  # 두 번째는 캐시
 
 
-class TestQualityBlocked:
-    async def test_quality_raises_named_error(self) -> None:
-        """QUALITY(async) → QualityQueueUnavailableError, provider 미호출."""
-        provider = RecordingProvider()
+class TestQualityAsyncQueue:
+    """QUALITY(async) 비동기 큐 경로 — enqueue→job_id, provider 미호출 (03a §D.3)."""
+
+    async def test_queue_present_enqueues_and_returns_job_id(self) -> None:
+        """큐 주입 → enqueue 1회 → status=queued·job_id 반환, provider/캐시 미사용."""
+        provider = RecordingProvider(text="이건 안 쓰임")
         cache = InMemoryCache()
         trace = RecordingTraceSink()
+        queue = RecordingQueue(job_id="job-xyz")
 
+        result = await generate(
+            _quality_request(),
+            "검증할 풀이",
+            "시스템",
+            provider=provider,
+            cache=cache,
+            trace=trace,
+            queue=queue,
+        )
+
+        assert isinstance(result, GenerationResult)
+        assert result.is_queued is True
+        assert result.status == "queued"
+        assert result.job_id == "job-xyz"
+        assert result.text == ""  # 비동기 — 텍스트는 즉시 없음(폴링)
+        assert result.cache_hit is False
+        # QUALITY는 동기 호출 절대 금지 — provider 미호출.
+        assert provider.calls == []
+        # enqueue 정확히 1회, payload는 1건.
+        assert len(queue.payloads) == 1
+        # 결정은 QUALITY(async)여야 한다.
+        assert result.decision.mode == "async"
+        assert result.decision.local_model == "quality"
+
+    async def test_enqueued_payload_is_json_safe_and_complete(self) -> None:
+        """enqueue payload는 prompt·system·decision(dict) — JSON 직렬화 가능해야 한다."""
+        import json
+
+        queue = RecordingQueue()
+        result = await generate(
+            _quality_request(),
+            "프롬프트본문",
+            "시스템본문",
+            provider=RecordingProvider(),
+            cache=InMemoryCache(),
+            trace=RecordingTraceSink(),
+            queue=queue,
+        )
+        payload = queue.payloads[0]
+        assert payload["prompt"] == "프롬프트본문"
+        assert payload["system"] == "시스템본문"
+        # decision은 model_dump() dict — enum이 문자열로 직렬화(use_enum_values=True).
+        decision_data = payload["decision"]
+        assert isinstance(decision_data, dict)
+        assert decision_data["cost_tier"] == "local"
+        assert decision_data["local_model"] == "quality"
+        assert decision_data["mode"] == "async"
+        # payload 전체가 JSON 직렬화 가능(Celery JSON 직렬화 계약).
+        assert json.loads(json.dumps(payload)) == payload
+        # 재구성한 결정이 반환 결정과 동치(왕복 안전).
+        assert RoutingDecision.model_validate(decision_data) == result.decision
+
+    async def test_enqueue_records_trace_with_async_mode(self) -> None:
+        """enqueue도 관측 기록한다 — mode=async, cache_hit=False (03a §F.2)."""
+        trace = RecordingTraceSink()
+        await generate(
+            _quality_request(),
+            "p",
+            "s",
+            provider=RecordingProvider(),
+            cache=InMemoryCache(),
+            trace=trace,
+            queue=RecordingQueue(),
+        )
+        assert len(trace.records) == 1
+        assert trace.records[0]["mode"] == "async"
+        assert trace.records[0]["cache_hit"] is False
+
+    async def test_queue_none_raises_named_error(self) -> None:
+        """큐 미주입(미구성) → QualityQueueUnavailableError, provider 미호출(동기 폴백 금지)."""
+        provider = RecordingProvider()
         with pytest.raises(QualityQueueUnavailableError):
             await generate(
                 _quality_request(),
                 "p",
                 "s",
                 provider=provider,
-                cache=cache,
-                trace=trace,
+                cache=InMemoryCache(),
+                trace=RecordingTraceSink(),
+                # queue 미주입 → 기본 None
             )
         assert provider.calls == []  # 동기 호출 금지
+
+    async def test_enqueue_failure_raises_named_error(self) -> None:
+        """enqueue 자체 실패(broker 다운) → QualityQueueUnavailableError로 변환(API 503)."""
+        provider = RecordingProvider()
+        queue = RecordingQueue(raises=ConnectionError("broker refused"))
+        with pytest.raises(QualityQueueUnavailableError) as exc_info:
+            await generate(
+                _quality_request(),
+                "p",
+                "s",
+                provider=provider,
+                cache=InMemoryCache(),
+                trace=RecordingTraceSink(),
+                queue=queue,
+            )
+        # 원인이 보존돼야 한다(디버깅) — broker 도달 실패의 흔적.
+        assert exc_info.value.__cause__ is not None
+        assert provider.calls == []  # 동기 호출 금지
+        assert len(queue.payloads) == 1  # 시도는 했음
+
+    async def test_queue_satisfies_async_job_queue_protocol(self) -> None:
+        """가짜 큐가 AsyncJobQueue Protocol을 구조적으로 충족하는지 확인(테스트 위생)."""
+        from whymath_backend.l3.interfaces import AsyncJobQueue
+
+        assert isinstance(RecordingQueue(), AsyncJobQueue)
 
 
 class TestCloudRejectedThroughProvider:
