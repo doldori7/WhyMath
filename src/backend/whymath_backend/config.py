@@ -166,6 +166,34 @@ class Settings(BaseSettings):
             "ollama_request_timeout_s 미러. WHYMATH_ANTHROPIC_REQUEST_TIMEOUT_S로 조정."
         ),
     )
+    # ── 클라우드 품질·비용 튜닝 노브 (전부 기본 OFF = 현 동작 유지, 03a §H 후속 4) ──
+    # 최적값은 *라이브 측정* 후에야 정할 수 있어(키 필요·Kiki) 기본은 '생략/끔'이다 —
+    # 코드 변경 없이 env로 켜고 튜닝할 수 있게 *배선만* 해 둔다.
+    anthropic_effort: str = Field(
+        default="",
+        description=(
+            "클라우드 호출 effort(output_config.effort) — low/medium/high/xhigh/max. "
+            "빈 값(기본)이면 *생략*(현 동작 유지). Sonnet 4.6·Opus 4.7만 지원(구형 모델 핀 시 "
+            "400 주의). xhigh/max는 max_tokens 상향 권장. 최적값은 라이브 측정 후 "
+            "WHYMATH_ANTHROPIC_EFFORT로 설정(03a §H 후속 4)."
+        ),
+    )
+    anthropic_thinking: bool = Field(
+        default=False,
+        description=(
+            "True면 클라우드 호출에 adaptive thinking(thinking={'type':'adaptive'}) 적용. "
+            "기본 False(생략, 현 동작 유지) — thinking은 동기 지연·비용을 늘리므로 라이브 측정 "
+            "후 WHYMATH_ANTHROPIC_THINKING로 켠다(생성 텍스트는 type=='text' 블록만 사용)."
+        ),
+    )
+    anthropic_prompt_caching: bool = Field(
+        default=False,
+        description=(
+            "True면 messages.create에 top-level cache_control(ephemeral) 적용(prefix 캐시). "
+            "기본 False(현 동작 유지) — 적중은 라이브 키로만 검증 가능하고 system 프롬프트가 "
+            "L4/L5 미확정이라 효과 잠정. 짧은 프리픽스는 최소 토큰 미만이라 무효(silent no-op)."
+        ),
+    )
 
     @property
     def langfuse_configured(self) -> bool:

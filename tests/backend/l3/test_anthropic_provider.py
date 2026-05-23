@@ -53,6 +53,7 @@ class _FakeMessages:
         max_tokens: int,
         system: str,
         messages: list[dict[str, str]],
+        **kwargs: Any,
     ) -> Any:
         self.calls.append(
             {
@@ -60,6 +61,7 @@ class _FakeMessages:
                 "max_tokens": max_tokens,
                 "system": system,
                 "messages": messages,
+                "kwargs": kwargs,
             }
         )
         if self._raises is not None:
@@ -220,6 +222,56 @@ class TestGenerate:
         provider = AnthropicProvider(settings=_unconfigured_settings())
         with pytest.raises(RuntimeError, match="API 키"):
             await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 튜닝 노브 — effort/thinking/caching은 *설정된 경우에만* 전달 (기본 OFF, 03a §H#4)
+# ──────────────────────────────────────────────────────────────────────────
+class TestTuningKnobs:
+    async def _call_kwargs(self, settings: Settings) -> dict[str, Any]:
+        client = FakeAnthropicClient()
+        provider = AnthropicProvider(client=client, settings=settings)
+        await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
+        kwargs: dict[str, Any] = client.messages.calls[0]["kwargs"]
+        return kwargs
+
+    async def test_defaults_omit_all_tuning_args(self) -> None:
+        """기본값(전부 OFF)이면 output_config·thinking·cache_control 키를 싣지 않는다."""
+        kwargs = await self._call_kwargs(
+            Settings(
+                anthropic_effort="",
+                anthropic_thinking=False,
+                anthropic_prompt_caching=False,
+            )
+        )
+        assert kwargs == {}
+
+    async def test_effort_passed_when_set(self) -> None:
+        kwargs = await self._call_kwargs(Settings(anthropic_effort="high"))
+        assert kwargs["output_config"] == {"effort": "high"}
+        assert "thinking" not in kwargs
+        assert "cache_control" not in kwargs
+
+    async def test_thinking_passed_when_enabled(self) -> None:
+        kwargs = await self._call_kwargs(Settings(anthropic_thinking=True))
+        assert kwargs["thinking"] == {"type": "adaptive"}
+        assert "output_config" not in kwargs
+
+    async def test_caching_passed_when_enabled(self) -> None:
+        kwargs = await self._call_kwargs(Settings(anthropic_prompt_caching=True))
+        assert kwargs["cache_control"] == {"type": "ephemeral"}
+
+    async def test_all_three_together(self) -> None:
+        kwargs = await self._call_kwargs(
+            Settings(
+                anthropic_effort="xhigh",
+                anthropic_thinking=True,
+                anthropic_prompt_caching=True,
+            )
+        )
+        assert kwargs["output_config"] == {"effort": "xhigh"}
+        assert kwargs["thinking"] == {"type": "adaptive"}
+        assert kwargs["cache_control"] == {"type": "ephemeral"}
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -48,8 +48,14 @@ class _Messages(Protocol):
         max_tokens: int,
         system: str,
         messages: list[dict[str, str]],
+        **kwargs: Any,
     ) -> Any:
-        """메시지 생성 (anthropic messages.create API의 부분집합)."""
+        """메시지 생성 (anthropic messages.create API의 부분집합).
+
+        `**kwargs`는 선택적 튜닝 인자(output_config·thinking·cache_control)를 *설정된
+        경우에만* 전달하기 위함이다 — None을 넘기지 않고 키 자체를 생략한다(SDK NotGiven
+        규약 충돌 회피).
+        """
         ...
 
 
@@ -258,12 +264,23 @@ class AnthropicProvider:
                 "로컬 티어는 OllamaProvider 담당이다(03a §A.0)."
             )
 
-        model_id = resolve_cloud_model(cost, self._resolved_settings)
+        settings = self._resolved_settings
+        model_id = resolve_cloud_model(cost, settings)
+        # 선택적 튜닝 인자 — *설정된 경우에만* 키를 싣는다(기본 전부 OFF=현 동작, 03a §H#4).
+        extra: dict[str, Any] = {}
+        if settings.anthropic_effort:
+            extra["output_config"] = {"effort": settings.anthropic_effort}
+        if settings.anthropic_thinking:
+            extra["thinking"] = {"type": "adaptive"}
+        if settings.anthropic_prompt_caching:
+            extra["cache_control"] = {"type": "ephemeral"}
+
         response = await self._get_client().messages.create(
             model=model_id,
-            max_tokens=self._resolved_settings.anthropic_max_tokens,
+            max_tokens=settings.anthropic_max_tokens,
             system=system,
             messages=[{"role": "user", "content": prompt}],
+            **extra,
         )
         return _extract_text(response)
 
