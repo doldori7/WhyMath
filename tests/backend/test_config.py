@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import SecretStr
 
 from whymath_backend.config import Settings, get_settings
 
@@ -38,3 +39,69 @@ def test_unknown_env_keys_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WHYMATH_SOME_FUTURE_DB_URL", "postgres://x")
     s = Settings()  # extra=ignore → 예외 없이 생성
     assert s.ollama_host  # 정상 로드
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 클라우드 LLM (Anthropic, S5)
+# ──────────────────────────────────────────────────────────────────────────
+def test_anthropic_model_defaults() -> None:
+    """CLOUD_MID=Sonnet 4.6, CLOUD_HIGH=Opus 4.7 alias가 기본값(03a §A.0)."""
+    s = Settings()
+    assert s.anthropic_model_mid == "claude-sonnet-4-6"
+    assert s.anthropic_model_high == "claude-opus-4-7"
+    assert s.anthropic_max_tokens == 16000
+    assert s.anthropic_request_timeout_s > 0
+
+
+def test_anthropic_configured_false_when_empty() -> None:
+    """키가 비면 미설정(anthropic_configured=False) — 클라우드 생성 불가."""
+    s = Settings(anthropic_api_key=SecretStr(""))
+    assert s.anthropic_configured is False
+
+
+def test_anthropic_configured_true_when_set() -> None:
+    """키가 채워지면 설정 완료(anthropic_configured=True)."""
+    s = Settings(anthropic_api_key=SecretStr("sk-ant-xyz"))
+    assert s.anthropic_configured is True
+
+
+def test_anthropic_secret_not_leaked_in_repr() -> None:
+    """API 키는 SecretStr — repr/str에 평문이 새어나오지 않는다(보안 금기)."""
+    s = Settings(anthropic_api_key=SecretStr("sk-ant-supersecret"))
+    assert "sk-ant-supersecret" not in repr(s)
+    assert "sk-ant-supersecret" not in str(s.anthropic_api_key)
+    # 평문은 get_secret_value()로만 꺼낼 수 있다.
+    assert s.anthropic_api_key.get_secret_value() == "sk-ant-supersecret"
+
+
+def test_anthropic_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """WHYMATH_ANTHROPIC_* 환경변수로 키·모델·토큰이 덮어써진다."""
+    monkeypatch.setenv("WHYMATH_ANTHROPIC_API_KEY", "sk-ant-env")
+    monkeypatch.setenv("WHYMATH_ANTHROPIC_MODEL_MID", "claude-sonnet-x")
+    monkeypatch.setenv("WHYMATH_ANTHROPIC_MODEL_HIGH", "claude-opus-x")
+    monkeypatch.setenv("WHYMATH_ANTHROPIC_MAX_TOKENS", "2048")
+    s = Settings()
+    assert s.anthropic_api_key.get_secret_value() == "sk-ant-env"
+    assert s.anthropic_model_mid == "claude-sonnet-x"
+    assert s.anthropic_model_high == "claude-opus-x"
+    assert s.anthropic_max_tokens == 2048
+    assert s.anthropic_configured is True
+
+
+def test_anthropic_tuning_knobs_default_off() -> None:
+    """effort/thinking/caching 노브는 기본 OFF(생략) — 현 동작 유지(03a §H#4)."""
+    s = Settings(anthropic_effort="", anthropic_thinking=False, anthropic_prompt_caching=False)
+    assert s.anthropic_effort == ""
+    assert s.anthropic_thinking is False
+    assert s.anthropic_prompt_caching is False
+
+
+def test_anthropic_tuning_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    """WHYMATH_ANTHROPIC_EFFORT/THINKING/PROMPT_CACHING 환경변수로 켤 수 있다."""
+    monkeypatch.setenv("WHYMATH_ANTHROPIC_EFFORT", "xhigh")
+    monkeypatch.setenv("WHYMATH_ANTHROPIC_THINKING", "true")
+    monkeypatch.setenv("WHYMATH_ANTHROPIC_PROMPT_CACHING", "1")
+    s = Settings()
+    assert s.anthropic_effort == "xhigh"
+    assert s.anthropic_thinking is True
+    assert s.anthropic_prompt_caching is True

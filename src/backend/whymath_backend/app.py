@@ -34,6 +34,8 @@ from whymath_backend.l3.interfaces import (
 )
 from whymath_backend.l3.models import RoutingDecision, RoutingRequest
 from whymath_backend.l3.pipeline import QualityQueueUnavailableError
+from whymath_backend.l3.providers.anthropic import AnthropicProvider, AnthropicStatus
+from whymath_backend.l3.providers.composite import CompositeProvider
 from whymath_backend.l3.providers.ollama import OllamaProvider, OllamaStatus
 from whymath_backend.l3.queue import CeleryJobQueue
 from whymath_backend.l3.trace import LangfuseSink
@@ -106,13 +108,28 @@ class ModelAvailabilityBody(BaseModel):
 
 
 class StatusBody(BaseModel):
-    """GET /status 응답 — Ollama 레디니스 보고."""
+    """GET /status 응답 — Ollama(로컬) 레디니스 + 클라우드(Anthropic) 구성 보고.
 
-    ready: bool = Field(..., description="도달 가능 + 모든 라우팅 모델 설치 여부")
+    로컬 필드(ready/reachable/models/missing/error)는 S1 계약 그대로다. S5가 클라우드
+    필드(cloud_*)를 *선택적으로* 덧붙인다 — 기본 None이라 기존 응답·테스트와 호환된다.
+    클라우드 미노출 provider(가짜·로컬전용)면 cloud_* 필드는 None으로 남는다.
+    """
+
+    ready: bool = Field(..., description="도달 가능 + 모든 라우팅 모델 설치 여부(로컬)")
     reachable: bool = Field(..., description="Ollama 데몬 도달 가능 여부")
     models: list[ModelAvailabilityBody] = Field(..., description="라우팅 모델별 설치 여부")
     missing: list[str] = Field(..., description="미설치 모델 ID 목록")
     error: str | None = Field(default=None, description="도달 실패 시 사유(비크래시)")
+    # ── 클라우드(Anthropic, S5) — 선택적. None이면 클라우드 상태 미노출 ──
+    cloud_configured: bool | None = Field(
+        default=None, description="Anthropic API 키 설정 여부(전송 가능). None=미노출"
+    )
+    cloud_reachable: bool | None = Field(
+        default=None, description="Anthropic 도달·인증 확인(models.list). None=미노출"
+    )
+    cloud_error: str | None = Field(
+        default=None, description="클라우드 도달/인증 실패 사유(비크래시). None=미노출"
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -160,7 +177,16 @@ def create_app(
         version="0.1.0",
         summary="L3 라우터 ↔ Ollama·Celery 결선 (M1.2-live S1·S4)",
     )
-    app.state.__setattr__(_PROVIDER_KEY, provider if provider is not None else OllamaProvider())
+    # 기본 provider는 CompositeProvider — cost_tier로 로컬(Ollama)↔클라우드(Anthropic)
+    # 디스패치(S5). 둘 다 지연이라 구성 시 라이브 Ollama·Anthropic 키가 필요 없다.
+    app.state.__setattr__(
+        _PROVIDER_KEY,
+        (
+            provider
+            if provider is not None
+            else CompositeProvider(local=OllamaProvider(), cloud=AnthropicProvider())
+        ),
+    )
     # 기본 캐시는 RedisCache(지연 연결) — 구성 시 라이브 Redis 불필요(첫 접근 때 연결).
     app.state.__setattr__(_CACHE_KEY, cache if cache is not None else RedisCache())
     # 기본 트레이스는 LangfuseSink(지연·자기비활성) — 키 미설정 시 영구 no-op(S3).
@@ -175,11 +201,12 @@ def create_app(
 
     @app.get("/status", tags=["ops"], response_model=StatusBody)
     async def get_status(request: Request) -> StatusBody:
-        """레디니스 — Ollama 도달성 + 라우팅 모델 매트릭스 설치 여부 보고.
+        """레디니스 — Ollama(로컬) 도달성·모델 매트릭스 + 클라우드(Anthropic) 구성 보고.
 
-        Ollama가 죽어 있어도 500을 던지지 않는다 — `reachable=false`로 *보고*한다.
-        도달성 점검은 OllamaProvider만 노출하므로, 주입된 provider가 점검 메서드를
-        제공하지 않으면(가짜 등) 도달 불가로 간주한다.
+        Ollama·클라우드가 죽어 있어도 500을 던지지 않는다 — 상태로 *보고*한다. 로컬
+        도달성은 provider.check_status로, 클라우드 구성/도달성은 provider.check_cloud_status
+        (CompositeProvider만 노출)로 점검한다. provider가 해당 메서드를 노출하지 않으면
+        (가짜·로컬전용) 로컬은 도달 불가로, 클라우드는 미노출(None)로 간주한다.
         """
         provider = _get_provider(request)
         ollama_status: OllamaStatus
@@ -190,6 +217,20 @@ def create_app(
             )
         else:
             ollama_status = await check()
+
+        # 클라우드 상태(선택) — CompositeProvider만 check_cloud_status를 노출한다.
+        # 없으면(가짜·로컬전용 provider) cloud_* 필드는 None으로 남는다(기존 응답 호환).
+        cloud_configured: bool | None = None
+        cloud_reachable: bool | None = None
+        cloud_error: str | None = None
+        cloud_check = getattr(provider, "check_cloud_status", None)
+        if cloud_check is not None:
+            cloud_status: AnthropicStatus | None = await cloud_check()
+            if cloud_status is not None:
+                cloud_configured = cloud_status.configured
+                cloud_reachable = cloud_status.reachable
+                cloud_error = cloud_status.error
+
         return StatusBody(
             ready=ollama_status.all_present,
             reachable=ollama_status.reachable,
@@ -199,6 +240,9 @@ def create_app(
             ],
             missing=list(ollama_status.missing),
             error=ollama_status.error,
+            cloud_configured=cloud_configured,
+            cloud_reachable=cloud_reachable,
+            cloud_error=cloud_error,
         )
 
     @app.post("/v1/generate", tags=["l3"])
