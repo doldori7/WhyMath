@@ -6,8 +6,9 @@
 범위 메모 (M1.2-live): S1은 L3 라우터 ↔ 실제 Ollama 결선 + FastAPI 앱을 다뤘고,
 S2가 Redis 캐시 설정(redis_url)을 추가했으며, S3가 Langfuse 관측성 설정(공개키·
 시크릿키·호스트)을 추가했고, S4가 QUALITY(27b) 비동기 큐(Celery, broker=Redis)
-설정을 추가한다. 클라우드 LLM·DB 설정은 후속 슬라이스(S5)에서 추가한다 — 여기서는
-가동 중인 슬라이스에 필요한 최소 설정만 노출한다.
+설정을 추가했으며, S5가 클라우드 LLM(Anthropic Claude — API 키·모델 ID·타임아웃)
+설정을 추가한다(03a §H 후속 4 클라우드 연동). DB 설정은 후속 슬라이스에서 추가한다 —
+여기서는 가동 중인 슬라이스에 필요한 최소 설정만 노출한다.
 
 시크릿 처리 (CLAUDE.md 보안 금기 "API 키·시크릿 코드 하드코딩 금지"): Langfuse
 시크릿 키는 `SecretStr`로 받아 *로그·repr에 평문 노출을 차단*한다. 공개키·시크릿키는
@@ -122,6 +123,50 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 클라우드 LLM (Anthropic Claude, S5 — 03a §C.1·§A.0 CLOUD_MID/HIGH 경로) ──
+    # 라우터가 내리는 CLOUD_MID(Sonnet)·CLOUD_HIGH(Opus) 결정을 실제 생성으로 잇는다.
+    # API 키는 *기본값 없음*(빈 = 미설정) — 키가 없으면 AnthropicProvider는 클라우드
+    # 결정에 대해 명확한 오류를 던지고(조용한 강등 금지), /status는 cloud_configured=
+    # False로 보고한다. 모델 ID는 alias 기본값(env 오버라이드 가능, 03a §H 후속 4).
+    anthropic_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "Anthropic API 키(sk-ant-...). SecretStr — repr/로그에 평문 노출 안 됨. "
+            "기본값 없음(빈 = 미설정). 환경변수 WHYMATH_ANTHROPIC_API_KEY로만 주입 "
+            "(CLAUDE.md 보안 금기: 코드 하드코딩 금지). 비면 클라우드 생성 불가."
+        ),
+    )
+    anthropic_model_mid: str = Field(
+        default="claude-sonnet-4-6",
+        description=(
+            "CLOUD_MID 티어 모델 ID(축1, 03a §A.0). 기본 Claude Sonnet 4.6 alias. "
+            "환경변수 WHYMATH_ANTHROPIC_MODEL_MID로 핀/오버라이드. 시크릿 아님."
+        ),
+    )
+    anthropic_model_high: str = Field(
+        default="claude-opus-4-7",
+        description=(
+            "CLOUD_HIGH 티어 모델 ID(축1, 03a §A.0). 기본 Claude Opus 4.7 alias. "
+            "환경변수 WHYMATH_ANTHROPIC_MODEL_HIGH로 핀/오버라이드. 시크릿 아님."
+        ),
+    )
+    anthropic_max_tokens: int = Field(
+        default=16000,
+        ge=1,
+        description=(
+            "Anthropic messages.create의 max_tokens(필수 인자). 비스트리밍 동기 호출 "
+            "기준 안전 기본값(SDK ~10분 타임아웃 가드 미만). WHYMATH_ANTHROPIC_MAX_TOKENS로 조정."
+        ),
+    )
+    anthropic_request_timeout_s: float = Field(
+        default=60.0,
+        ge=0.0,
+        description=(
+            "Anthropic 단일 호출 타임아웃(초). 클라우드는 동기 경로(03a §C.4 mode=sync). "
+            "ollama_request_timeout_s 미러. WHYMATH_ANTHROPIC_REQUEST_TIMEOUT_S로 조정."
+        ),
+    )
+
     @property
     def langfuse_configured(self) -> bool:
         """Langfuse 공개키·시크릿키가 *둘 다* 채워졌는가(전송 가능 여부).
@@ -130,6 +175,16 @@ class Settings(BaseSettings):
         `get_secret_value()`로만 평문을 꺼내며, 여기서는 *비어 있는지*만 본다(값 로그 X).
         """
         return bool(self.langfuse_public_key) and bool(self.langfuse_secret_key.get_secret_value())
+
+    @property
+    def anthropic_configured(self) -> bool:
+        """Anthropic API 키가 채워졌는가(클라우드 생성 가능 여부, S5).
+
+        비어 있으면 미설정으로 보고 AnthropicProvider는 클라우드 결정에 명확한 오류를
+        던진다(조용한 LOCAL 강등 금지 — 라우터가 정당한 이유로 클라우드를 택했으므로).
+        SecretStr는 `get_secret_value()`로만 평문을 꺼내며, 여기서는 *비어 있는지*만 본다.
+        """
+        return bool(self.anthropic_api_key.get_secret_value())
 
     @property
     def effective_celery_broker_url(self) -> str:

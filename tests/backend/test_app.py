@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from whymath_backend.app import create_app
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.providers.anthropic import AnthropicStatus
 from whymath_backend.l3.providers.ollama import ModelAvailability, OllamaStatus
 from whymath_backend.l3.queue.celery_job_queue import JobStatus
 
@@ -42,6 +43,31 @@ class StubProvider:
         if self._status is not None:
             return self._status
         return OllamaStatus(reachable=True, models=())
+
+
+class StubCompositeProvider:
+    """가짜 복합 provider — check_status(로컬) + check_cloud_status(클라우드) 노출.
+
+    /status 클라우드 필드 매핑(S5)을 검증하기 위해 CompositeProvider 표면만 모사한다.
+    """
+
+    def __init__(
+        self,
+        *,
+        ollama_status: OllamaStatus,
+        cloud_status: AnthropicStatus | None,
+    ) -> None:
+        self._ollama_status = ollama_status
+        self._cloud_status = cloud_status
+
+    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+        return ""
+
+    async def check_status(self) -> OllamaStatus:
+        return self._ollama_status
+
+    async def check_cloud_status(self) -> AnthropicStatus | None:
+        return self._cloud_status
 
 
 class StubQueue:
@@ -170,6 +196,52 @@ class TestStatus:
         assert body["ready"] is False
         assert body["reachable"] is True
         assert body["missing"] == ["qwen3.5:27b"]
+
+    def test_status_includes_cloud_when_provider_exposes_it(self) -> None:
+        """CompositeProvider 표면(check_cloud_status) → /status에 cloud_* 필드가 채워진다(S5)."""
+        provider = StubCompositeProvider(
+            ollama_status=OllamaStatus(
+                reachable=True, models=(ModelAvailability("qwen2-math:1.5b", True),)
+            ),
+            cloud_status=AnthropicStatus(configured=True, reachable=True),
+        )
+        app = create_app(
+            provider=provider,
+            cache=InMemoryCache(),
+            trace=RecordingTraceSink(),
+            queue=StubQueue(),
+        )
+        body = TestClient(app).get("/status").json()
+        assert body["cloud_configured"] is True
+        assert body["cloud_reachable"] is True
+        assert body["cloud_error"] is None
+        assert body["reachable"] is True  # 로컬 필드는 그대로 보고
+
+    def test_status_cloud_unconfigured_reports_false(self) -> None:
+        """클라우드 키 미설정 → cloud_configured=False, cloud_reachable=False(비크래시)."""
+        provider = StubCompositeProvider(
+            ollama_status=OllamaStatus(reachable=True, models=()),
+            cloud_status=AnthropicStatus(
+                configured=False, reachable=False, error=None
+            ),
+        )
+        app = create_app(
+            provider=provider,
+            cache=InMemoryCache(),
+            trace=RecordingTraceSink(),
+            queue=StubQueue(),
+        )
+        body = TestClient(app).get("/status").json()
+        assert body["cloud_configured"] is False
+        assert body["cloud_reachable"] is False
+
+    def test_status_cloud_fields_none_when_provider_lacks_cloud_check(self) -> None:
+        """check_cloud_status 미노출 provider(로컬전용·가짜) → cloud_* 필드 None(기존 호환)."""
+        client = _client(StubProvider(status=OllamaStatus(reachable=True, models=())))
+        body = client.get("/status").json()
+        assert body["cloud_configured"] is None
+        assert body["cloud_reachable"] is None
+        assert body["cloud_error"] is None
 
 
 class TestGenerateEndpoint:
@@ -362,24 +434,29 @@ class TestJobsEndpoint:
 
 
 def test_create_app_defaults_are_real_implementations() -> None:
-    """기본 팩토리(주입 없음)는 OllamaProvider+RedisCache(S2)+LangfuseSink(S3)+CeleryJobQueue(S4)를 단다.
+    """기본 팩토리(주입 없음)는 CompositeProvider(Ollama+Anthropic, S5)+RedisCache(S2)+LangfuseSink(S3)+CeleryJobQueue(S4)를 단다.
 
     S2에서 기본 캐시가 InMemoryCache → RedisCache로, S3에서 기본 트레이스가
-    RecordingTraceSink → LangfuseSink로, S4에서 기본 큐가 CeleryJobQueue로 추가됐다.
-    RedisCache·LangfuseSink·CeleryJobQueue는 모두 *지연*이라 isinstance 확인만으로는
-    라이브 Redis·Langfuse·Celery broker가 필요 없다(첫 사용 전엔 클라이언트/앱을 만들지
-    않음) → 이 단정은 hermetic하다. 더구나 LangfuseSink는 키 미설정(CI)이면 영구 no-op이라
-    record()조차 네트워크를 타지 않는다. 동작을 타는 테스트는 위 _client()가
-    InMemoryCache·RecordingTraceSink·StubQueue를 주입해 라이브 의존을 피한다.
+    RecordingTraceSink → LangfuseSink로, S4에서 기본 큐가 CeleryJobQueue로, S5에서 기본
+    provider가 OllamaProvider → CompositeProvider(local=Ollama, cloud=Anthropic)로 바뀌었다.
+    모두 *지연*이라 isinstance 확인만으로는 라이브 Redis·Langfuse·Celery broker·Anthropic
+    키가 필요 없다(첫 사용 전엔 클라이언트/앱을 만들지 않음) → 이 단정은 hermetic하다.
+    동작을 타는 테스트는 위 _client()가 가짜 의존성을 주입해 라이브 의존을 피한다.
     """
     from whymath_backend.app import _CACHE_KEY, _PROVIDER_KEY, _QUEUE_KEY, _TRACE_KEY
     from whymath_backend.l3.cache import RedisCache as _RC
+    from whymath_backend.l3.providers.anthropic import AnthropicProvider as _AP
+    from whymath_backend.l3.providers.composite import CompositeProvider as _CP
     from whymath_backend.l3.providers.ollama import OllamaProvider as _OP
     from whymath_backend.l3.queue import CeleryJobQueue as _CJQ
     from whymath_backend.l3.trace import LangfuseSink as _LFS
 
     app = create_app()
-    assert isinstance(getattr(app.state, _PROVIDER_KEY), _OP)
+    composite = getattr(app.state, _PROVIDER_KEY)
+    assert isinstance(composite, _CP)
+    # 기본 복합 provider는 로컬=Ollama, 클라우드=Anthropic을 단다(S5 디스패치).
+    assert isinstance(composite._local, _OP)
+    assert isinstance(composite._cloud, _AP)
     assert isinstance(getattr(app.state, _CACHE_KEY), _RC)
     assert isinstance(getattr(app.state, _TRACE_KEY), _LFS)
     assert isinstance(getattr(app.state, _QUEUE_KEY), _CJQ)
