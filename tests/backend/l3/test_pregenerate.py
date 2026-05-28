@@ -25,12 +25,15 @@ from whymath_backend.l3.models import RoutingDecision, RoutingRequest
 from whymath_backend.l3.pregenerate import (
     BasicSeedValidator,
     CachePrewarmer,
+    ChainValidator,
     PregenItem,
     PrewarmItemResult,
     PrewarmReport,
     SeedValidator,
+    SymPyArithmeticValidator,
 )
 from whymath_backend.l3.pregenerate.__main__ import format_report, load_items
+from whymath_backend.l3.pregenerate.validator import _equality_is_false
 from whymath_backend.l3.router import Router, cache_key_for
 
 
@@ -186,6 +189,141 @@ class TestBasicSeedValidator:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# SymPyArithmeticValidator — 산술 등식 도구 검증 (보수적, false positive 0)
+# ──────────────────────────────────────────────────────────────────────────
+class TestSymPyArithmeticValidator:
+    def test_true_equality_passes(self) -> None:
+        assert SymPyArithmeticValidator().validate(_item(), "2 + 2 = 4") is None
+
+    def test_false_equality_fails(self) -> None:
+        reason = SymPyArithmeticValidator().validate(_item(), "2 + 2 = 5")
+        assert reason is not None
+        assert "arithmetic error" in reason
+
+    def test_unicode_multiplication_normalized(self) -> None:
+        v = SymPyArithmeticValidator()
+        assert v.validate(_item(), "3 × 4 = 12") is None
+        assert v.validate(_item(), "3 × 4 = 11") is not None
+
+    def test_unicode_division(self) -> None:
+        v = SymPyArithmeticValidator()
+        assert v.validate(_item(), "10 ÷ 2 = 5") is None
+        assert v.validate(_item(), "10 ÷ 2 = 6") is not None
+
+    def test_unicode_minus_sign_normalized(self) -> None:
+        v = SymPyArithmeticValidator()
+        # U+2212 MINUS SIGN (하이픈-마이너스 아님)
+        assert v.validate(_item(), "7 − 2 = 5") is None
+        assert v.validate(_item(), "7 − 2 = 4") is not None
+
+    def test_decimals(self) -> None:
+        v = SymPyArithmeticValidator()
+        assert v.validate(_item(), "0.5 + 0.5 = 1.0") is None
+        assert v.validate(_item(), "0.5 + 0.5 = 2") is not None
+
+    def test_fraction_equals_decimal(self) -> None:
+        assert SymPyArithmeticValidator().validate(_item(), "1/2 = 0.5") is None
+
+    def test_power_caret(self) -> None:
+        v = SymPyArithmeticValidator()
+        assert v.validate(_item(), "2^3 = 8") is None
+        assert v.validate(_item(), "2^3 = 9") is not None
+
+    def test_parentheses(self) -> None:
+        v = SymPyArithmeticValidator()
+        assert v.validate(_item(), "(2 + 3) * 2 = 10") is None
+        assert v.validate(_item(), "(2 + 3) * 2 = 11") is not None
+
+    def test_label_prefixed_equation_validated(self) -> None:
+        """콜론·공백으로 구분된 등식은 검사된다(독립 인정)."""
+        reason = SymPyArithmeticValidator().validate(_item(), "답: 2 + 2 = 5")
+        assert reason is not None
+
+    def test_multiline_each_line_checked(self) -> None:
+        """줄마다 독립 검사 — 둘째 줄의 거짓 등식도 잡는다."""
+        reason = SymPyArithmeticValidator().validate(_item(), "2 + 2 = 4\n5 + 5 = 11")
+        assert reason is not None
+        assert "5 + 5 = 11" in reason
+
+    def test_symbolic_equation_no_false_positive(self) -> None:
+        """심볼릭 등식(x+1=2)은 false positive 없이 통과(건너뜀)."""
+        v = SymPyArithmeticValidator()
+        assert v.validate(_item(), "방정식 x + 1 = 2 를 풀면 x = 1") is None
+        assert v.validate(_item(), "a*x^2 + b*x + c = 0") is None
+        # 연산자 인접 숫자("+ 1 = 2")를 떼어내 거짓 판정하지 않는다.
+        assert v.validate(_item(), "y + 1 = 2") is None
+
+    def test_no_arithmetic_passes(self) -> None:
+        assert SymPyArithmeticValidator().validate(_item(), "이차방정식의 개념을 설명합니다.") is None
+
+    def test_inline_prose_prefixed_is_skipped_conservatively(self) -> None:
+        """한글 단어가 공백으로 바로 앞에 붙은 인라인 등식은 보수적으로 건너뜀(통과)."""
+        # 거짓이지만 한글 인접이라 추출 불가 → 통과(미탐). 보수적: false positive 0 우선.
+        assert SymPyArithmeticValidator().validate(_item(), "정답은 2 + 2 = 5 입니다") is None
+
+    def test_max_checks_must_be_positive(self) -> None:
+        with pytest.raises(ValueError):
+            SymPyArithmeticValidator(max_checks=0)
+
+    def test_max_checks_limits_validation(self) -> None:
+        """max_checks 초과 시 이후 등식은 검사하지 않는다(break) — 둘째 줄 거짓을 미검사."""
+        v = SymPyArithmeticValidator(max_checks=1)
+        assert v.validate(_item(), "1 = 1\n2 = 3") is None
+
+    def test_satisfies_protocol(self) -> None:
+        assert isinstance(SymPyArithmeticValidator(), SeedValidator)
+
+
+class TestEqualityHelper:
+    """_equality_is_false 직접 단위테스트 — 정규식이 거르지 못하는 방어 분기 커버."""
+
+    def test_true_equality(self) -> None:
+        assert _equality_is_false("2+2", "4") is None
+
+    def test_false_equality(self) -> None:
+        reason = _equality_is_false("2+2", "5")
+        assert reason is not None and "arithmetic error" in reason
+
+    def test_symbolic_skipped(self) -> None:
+        """자유 변수가 있으면 판정 불가 → None (free_symbols 분기)."""
+        assert _equality_is_false("x", "1") is None
+
+    def test_parse_error_skipped(self) -> None:
+        """sympify 파싱 실패는 보수적으로 None (except 분기)."""
+        assert _equality_is_false("(1+", "2") is None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ChainValidator — AND 게이트
+# ──────────────────────────────────────────────────────────────────────────
+class TestChainValidator:
+    def test_all_pass_returns_none(self) -> None:
+        chain = ChainValidator([BasicSeedValidator(), SymPyArithmeticValidator()])
+        assert chain.validate(_item(), "2 + 2 = 4 입니다") is None
+
+    def test_first_failure_returned_in_order(self) -> None:
+        chain = ChainValidator([AlwaysFailValidator(), SymPyArithmeticValidator()])
+        assert chain.validate(_item(), "2 + 2 = 4") == "always fail"
+
+    def test_basic_then_sympy_basic_fails_first(self) -> None:
+        chain = ChainValidator([BasicSeedValidator(), SymPyArithmeticValidator()])
+        # 빈 응답 → Basic이 먼저 탈락
+        assert chain.validate(_item(), "") == "empty response"
+
+    def test_basic_passes_sympy_catches_arithmetic(self) -> None:
+        chain = ChainValidator([BasicSeedValidator(), SymPyArithmeticValidator()])
+        reason = chain.validate(_item(), "2 + 2 = 5")
+        assert reason is not None
+        assert "arithmetic error" in reason
+
+    def test_empty_chain_passes(self) -> None:
+        assert ChainValidator([]).validate(_item(), "anything") is None
+
+    def test_satisfies_protocol(self) -> None:
+        assert isinstance(ChainValidator([]), SeedValidator)
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # CachePrewarmer
 # ──────────────────────────────────────────────────────────────────────────
 class TestCachePrewarmer:
@@ -329,6 +467,22 @@ class TestCachePrewarmer:
         report = await prewarmer.prewarm([_item(precomputed="X")], overwrite=True)
         assert report.errored == 1
         assert "cache.set failed" in (report.items[0].error or "")
+
+    async def test_sympy_validator_rejects_bad_arithmetic_seed(self) -> None:
+        """프리워머 + SymPy 검증기: 산술 거짓 시드는 캐시에 적재되지 않는다."""
+        cache = InMemoryCache()
+        prewarmer = CachePrewarmer(
+            provider=FakePregenProvider(),
+            cache=cache,
+            validator=SymPyArithmeticValidator(),
+        )
+        item = _item(precomputed="답: 2 + 2 = 5")
+
+        report = await prewarmer.prewarm([item])
+
+        assert report.failed_validation == 1
+        assert report.written == 0
+        assert await cache.get(_expected_key(item)) is None
 
 
 # ──────────────────────────────────────────────────────────────────────────
