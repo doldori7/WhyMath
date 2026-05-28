@@ -135,9 +135,7 @@ class Problem(BaseModel):
     )
 
     # ===== 출처 =====
-    source_type: SourceType = Field(
-        ..., description="출처 — 평가원/EBS/AIHub/자체생성 등"
-    )
+    source_type: SourceType = Field(..., description="출처 — 평가원/EBS/AIHub/자체생성 등")
     source_detail: dict[str, Any] | None = Field(
         default=None,
         description="출처 구조 메타 {publisher, year, edition, page} 등(본문 X)",
@@ -168,9 +166,7 @@ class Problem(BaseModel):
     )
 
     # ===== 교육과정 버전 =====
-    curriculum_version: Curriculum = Field(
-        ..., description="교육과정 버전(2015/2022 개정 등)"
-    )
+    curriculum_version: Curriculum = Field(..., description="교육과정 버전(2015/2022 개정 등)")
     valid_from_year: int = Field(..., description="적용 시작 학년도(예: 2014)")
     valid_to_year: int | None = Field(
         default=None,
@@ -178,9 +174,7 @@ class Problem(BaseModel):
     )
 
     # ===== 과목·단원 =====
-    subject: Subject = Field(
-        ..., description="과목 — 공통/미적분/확통/기하/인공지능수학"
-    )
+    subject: Subject = Field(..., description="과목 — 공통/미적분/확통/기하/인공지능수학")
     unit_codes: list[str] = Field(
         ...,
         description="단원 코드 배열 (예: ['CAL-INT-DEF', 'FUN-COMPOSITE'])",
@@ -428,9 +422,7 @@ class Problem(BaseModel):
         enum/문자열 양쪽을 정규화해 비교한다(`l3/models.py` 패턴 답습).
         """
         source_value = (
-            self.source_type.value
-            if isinstance(self.source_type, SourceType)
-            else self.source_type
+            self.source_type.value if isinstance(self.source_type, SourceType) else self.source_type
         )
         metadata_only_values = {s.value for s in _METADATA_ONLY_SOURCES}
 
