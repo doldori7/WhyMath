@@ -50,7 +50,7 @@
 - [ ] 수학 교육 도메인 파트너 영입 (M1.3 게이트로 *지연 확정* — 트랙 미정)
 - [x] ~~첫 진입 학년~~ → **공유 메타인지 코어 + 고3 수능 우선 노출** (2026-05-28 PRD v1.2 재검토; 2026-05-13 "고1 내신"은 *폐기 아님, 노출 순서 재배치* — 공유 코어가 고1도 서빙). 결정 로그 참조
 - [ ] 벡터 DB: ChromaDB 유지 vs Qdrant 전환 (PRD v1.1 채택으로 발생 — 정렬 단계3 L1/L5에서 결정)
-- [ ] **스키마 통합 정본화**: `schemas/v1.1`(9 YAML) ↔ PRD Schema v1.0(8도메인 SQL) — 둘 다 미구현 (2026-05-28 재검토 발생, 후속 슬라이스)
+- [x] ~~스키마 통합 정본화~~ → **Schema v1.0 = 구현 정본** (v1.1 YAML 대체, `curriculum_entry`·`textbook_mapping`만 이식; source_type/license 법적 교정). 실 마이그레이션은 후속 (2026-05-28 속편 결정 로그)
 - [ ] **OCR 스택**: Mathpix 유지 vs PaddleOCR+Qwen3-VL 하이브리드 (2026-05-28 PRD v1.2 제안 — 비용/정확도 후속)
 - [ ] 사단법인·재단·법인 형태
 - [ ] Cambridge MMP/NRICH 라이선스 협상 시작 시점
@@ -58,6 +58,32 @@
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-28 (속편): PRD v1.2·Schema v1.0 원문 수령 — 정합 확인·스키마 정본화·P0 FR 계층 매핑
+**컨텍스트**: 재검토(아래 본편)는 외부 5문서를 *합성 분석*으로만 다뤘으나, Kiki가 **PRD v1.2 원문**과 **DB Schema v1.0 원문**을 레포에 제공. 원문 대조로 재검토 주장을 검증하고, 보류했던 페르소나·FR 매트릭스·스키마 통합을 진행.
+**정합 확인(원문 대조)**: 재검토 주장 전부 일치 — FR **31개(P0 14·P1 12·P2 5)**·**페르소나 5종**·로드맵 **v1.0~v3.0**·**MVP=페르소나 A(고3)**·시그니처 패턴(조건나열 FR-001·합성함수 FR-003·귀납수열 FR-004). PRD **§12.4 #3가 "평가원·EBS·AIHub만으로 충분한가?"를 미해결로 남김** → 재검토의 저작권 충돌 전제 확증.
+**페르소나 5종(PRD §3) ↔ 노출 순서**: A 일반고 고3(MVP·시장최대 52만)·C 검정고시 N수(v1.5·충성·수학의존 100%)·D 학종 고2(v1.5·세특/자유연구 차별화)·B 자사고 N수(v2.0·결제최대·경쟁치열)·E 홈스쿨링 영재(v2.0·시장작음·가치최대). → 재검토 "공유코어+고3 우선"과 정합.
+**스키마 정본화 결정**: **Schema v1.0(8도메인 ~25테이블, PostgreSQL+TimescaleDB+ChromaDB, DDL·인덱스·hypertable·ENUM 완비) = 구현 정본**. `schemas/v1.1`(9 YAML) = 개념 초안으로 *대체*. 단 v1.0에 없는 2개 **보존·이식**: ① `curriculum_entry`(NCIC 성취기준 1급 — L1 파이프라인 산출물, "콘텐츠는 성취기준 코드 1개+ 태그" 원칙) ② `textbook_mapping`(교과서 *구조 메타* 매핑 — 자동 커리큘럼 정렬, 법적 안전). v1.1 나머지는 v1.0이 흡수(problem·concept·edge→concept_edge·student_profile→user_profile·mastery_state→concept_mastery_history·hint/solution_path→problem_step).
+**스키마 법적 교정(필수·정본에 적용)**: v1.0의 `source_type_enum`(평가원·EBS·교과서)·`license_enum`(PUBLIC_DOMAIN="평가원 공개"·EBS_LICENSED)·`generation_type=ORIGINAL`은 *본문 저장* 전제 → 저작권 가이드 v2.0과 충돌. **교정**: 평가원·EBS·교과서 *본문 미보유*; `content_provenance.original_reference`에 **구조 메타(단원·코드·문항번호)만**; `problem.question_text`는 **WHYMATH_GENERATED 동등문제만** 채움; 지배 license=`WHYMATH_GENERATED`; `ORIGINAL`·`EBS_LICENSED`는 공식 제휴(Phase 3+) 전까지 미사용. (`content_provenance.generation_type`의 VARIANT/FULLY_GENERATED + `generation_log`가 `l3/pregenerate` 동등문제 엔진의 DB 모델)
+**P0 14 FR → 7계층·빌더빌리티(법적 교정 반영)**:
+| FR | 기능 | 계층 | 비고 |
+|---|---|---|---|
+| 001 | 조건 나열형 파서 | L3·L4 | **핵심 모트**, 신규 |
+| 003 | 합성함수 케이스 분류 | L3·L4 | **핵심 모트**, 신규 |
+| 004 | 귀납적 수열 추적 | L3·L4 | **핵심 모트**, 신규 |
+| 009 | AI 변형 모의고사 생성 | L3 | `l3/pregenerate` 확장(모트) |
+| 007 | ~~EBS 변형 DB~~ | L3 | **동등문제 자체생성으로 재정의**(EBS 본문 미사용) |
+| 005 | 자연수 답 변환 사전 | L3 | 신규(소) |
+| 006 | 단원융합 개념그래프 | L1·L2 | concept_edge+ChromaDB(DB 정본화) |
+| 008 | 평가원 가중치 분류 | L1 | exam_authority_weight(메타만, 본문 X) |
+| 013 | 인공지능수학 콘텐츠 | L1 | 콘텐츠 |
+| 014 | 내신+수능 통합 코칭 | L6 | 공유 코어 위 모드 |
+| 010 | 1년 사이클 자동계획 | L6·L2 | 신규 |
+| 012 | 실전 모의고사 시뮬 | L5 | UX |
+| 002 | 그래프 멀티모달 인식 | L5·L3 | **OCR 스택 결정 의존**(Qwen3-VL) |
+| 011 | 풀이 손글씨 OCR | L5 | **OCR 스택 결정 의존** |
+*1인 가드*: 핵심 모트(001·003·004·009 + L4 소크라테스) 최우선 → DB 정본화(006·008) → 멀티모달/OCR(002·011, 스택 결정 후) → 나머지.
+**적용**: `docs/strategy/prd_v1.2.md`·`schemas/v1.0/schema_v1.0.md` 레포 반영(원문 보존). **후속**: 스키마 정본 *실 마이그레이션*(alembic, DB 미구현 상태)·curriculum_entry/textbook_mapping 이식 DDL·OCR 스택 결정·CLAUDE.md 페르소나 5종 1줄 반영.
 
 ### 2026-05-28: MathScope PRD v1.2 재검토 — 7계층·로드맵 재정렬 (공유 코어 + 고3 우선, 법적 안전조합 콘텐츠)
 **컨텍스트**: 5종 신규 문서 입력(레포 외부) — **PRD v1.2**(입시특성 100→FR 31·페르소나 5종·버전 v1.0~v3.0), **DB Schema v1.0**(8도메인 SQL), **2022 개정 교육과정 보고서**, **MathScope v4**(데이터셋 21종), **저작권 종합가이드 v2.0**. 현 7계층/Phase 틀과 대조(갭분석)한 결과 두 충돌이 핵심: ① 저작권 가이드 v2.0이 **EBS·평가원 영리사용 금지**(저작권법 §32 단서·§136·§140·2024 대법원)로 못박아 PRD/ROADMAP의 *EBS·평가원 기출 직접 활용* 전제가 무효 ② **MVP 타깃 분기**(현 ROADMAP=고1 내신 ↔ PRD v1.2=고3 수능). PRD 범위 폭발(FR 31·페르소나 5·멀티모달·학종)이 1인 capacity·얇은 코드(L2·L4·L6·L7 미구현, DB 미구현)와 충돌.
