@@ -1,18 +1,20 @@
-"""WhyMath Schema v1.0 도메인 모델 (Pydantic) — 슬라이스 1·2·3.
+"""WhyMath Schema v1.0 도메인 모델 (Pydantic) — 슬라이스 1·2·3·4.
 
-설계 정본: `schemas/v1.0/schema_v1.0.md` §3(Problem)·§4(Concept Graph)·§10(Provenance)·
-§14.3(ENUM).
+설계 정본: `schemas/v1.0/schema_v1.0.md` §3(Problem)·§4(Concept Graph)·§5(User)·
+§10(Provenance)·§14.3(ENUM).
 
 Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이므로 이 슬라이스도
 순수 Pydantic 모델이다(SQLAlchemy/alembic은 후속 Phase).
 
 공개 심볼:
-  - enums: CognitiveType·ConceptLevel·ConceptRole·EdgeType·SourceType·ExamType·
-    Curriculum·Subject·QuestionFormat·AnswerFormat·SignaturePattern·Persona·
-    VisualType·LicenseType·GenerationType·ReviewStatus·StepType·RelationType
+  - enums: Accessibility·AnswerFormat·CognitiveType·ConceptLevel·ConceptRole·
+    Curriculum·Device·EdgeType·ExamType·GenerationType·LicenseType·MajorCategory·
+    NoteApp·Persona·QuestionFormat·RelationType·ReviewStatus·SchoolType·
+    SignaturePattern·SourceType·StepType·Subject·SubscriptionTier·TrackType·VisualType
   - problem(슬라이스 1): Condition·Problem·ProblemStep·ProblemRelation
   - provenance(슬라이스 2): ContentProvenance·GenerationLog
   - concept(슬라이스 3): Concept·ConceptEdge·ProblemConcept·ConceptFusion
+  - user(슬라이스 4): UserProfile·UserTrackHistory·UserPersonaHistory·UserStateSnapshot
 """
 
 from whymath_backend.schema.concept import (
@@ -22,23 +24,30 @@ from whymath_backend.schema.concept import (
     ProblemConcept,
 )
 from whymath_backend.schema.enums import (
+    Accessibility,
     AnswerFormat,
     CognitiveType,
     ConceptLevel,
     ConceptRole,
     Curriculum,
+    Device,
     EdgeType,
     ExamType,
     GenerationType,
     LicenseType,
+    MajorCategory,
+    NoteApp,
     Persona,
     QuestionFormat,
     RelationType,
     ReviewStatus,
+    SchoolType,
     SignaturePattern,
     SourceType,
     StepType,
     Subject,
+    SubscriptionTier,
+    TrackType,
     VisualType,
 )
 from whymath_backend.schema.problem import (
@@ -51,26 +60,39 @@ from whymath_backend.schema.provenance import (
     ContentProvenance,
     GenerationLog,
 )
+from whymath_backend.schema.user import (
+    UserPersonaHistory,
+    UserProfile,
+    UserStateSnapshot,
+    UserTrackHistory,
+)
 
 __all__ = [
     # enums
+    "Accessibility",
     "AnswerFormat",
     "CognitiveType",
     "ConceptLevel",
     "ConceptRole",
     "Curriculum",
+    "Device",
     "EdgeType",
     "ExamType",
     "GenerationType",
     "LicenseType",
+    "MajorCategory",
+    "NoteApp",
     "Persona",
     "QuestionFormat",
     "RelationType",
     "ReviewStatus",
+    "SchoolType",
     "SignaturePattern",
     "SourceType",
     "StepType",
     "Subject",
+    "SubscriptionTier",
+    "TrackType",
     "VisualType",
     # problem
     "Condition",
@@ -85,4 +107,9 @@ __all__ = [
     "ConceptEdge",
     "ConceptFusion",
     "ProblemConcept",
+    # user
+    "UserPersonaHistory",
+    "UserProfile",
+    "UserStateSnapshot",
+    "UserTrackHistory",
 ]
