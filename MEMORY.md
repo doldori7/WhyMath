@@ -74,7 +74,7 @@
 - L6/L7: 후속(L6 수능 단일모드 우선, L7 Phase 3+).
 **수정 로드맵 (PRD 버전 ↔ Phase)**: Phase 1=PRD v1.0 코어(고3 wedge), Phase 2=v1.5(검정고시·학종 세특·결제), Phase 3=v2.0(2028 수능·수리논술), Phase 4/5=v3.0(영재·면접·글로벌). *1인 가드*: Phase 1은 P0 FR 14 중 **핵심 모트 우선**(조건파서·시그니처 패턴·동등문제·소크라테스); 멀티모달·세특 후순위.
 **근거**: 의사결정 우선순위 #2(법적준수)>#6(비용)이 EBS/평가원 회피를 강제. #3(교수학)·#4(학습효과)는 공유 메타인지 코어로 충족(고3 노출은 GTM 선택). 2022 교육과정은 이미 반영(중3·고3 2015 병행→`curriculum_version` 유지).
-**적용 범위**: ROADMAP.md(Phase 1 정의·콘텐츠 전략·PRD 버전 갱신) — *본 결정과 함께 갱신*. **후속(미적용)**: docs/data/licensing_safety.md(가이드 v2.0 결론 반영)·CLAUDE.md(페르소나 5종·콘텐츠 안전조합 명문화)·schemas v1.0↔v1.1 통합 정본·FR 31 P0 매트릭스·OCR 스택 결정.
+**적용 범위(갱신 완료)**: ROADMAP.md(Phase 1 정의·콘텐츠 전략·PRD 버전)·docs/data/licensing_safety.md(가이드 v2.0 결론·EBS·평가원 영리금지·동등문제 정책·안전조합 allowlist)·CLAUDE.md(EBS·평가원 영리금지 금기·콘텐츠 안전조합 원칙). **후속(원문·결정 필요로 보류)**: CLAUDE.md 페르소나 5종 명문화(PRD v1.2 원문 필요 — 현재 A/C/D만 확보, B/E 미상이라 *날조 금지*)·schemas v1.0↔v1.1 통합 정본(Schema v1.0 SQL 원문 필요)·FR 31 P0 매트릭스(PRD 원문 필요 — 현재 FR-001/003/004/007만 확보)·OCR 스택 결정(Mathpix vs PaddleOCR+Qwen3-VL, Kiki 결정).
 **리스크**: 자체 동등문제의 킬러 난이도 재현·검수(SymPy는 산술만→PRM/사람검수 필요)·법적 안전조합만으로 MVP 콘텐츠 충분한지(변호사 검토 권장)·1인 6개월 capacity.
 
 ### 2026-05-20: L3 라우팅에 *태스크 패밀리 축* 도입 — 수학(qwen2-math) vs NLP(qwen2.5), 03a 확정(B)
