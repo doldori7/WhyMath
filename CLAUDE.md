@@ -40,7 +40,7 @@
 ```
 L7. 커뮤니티·소셜          [학생 풀이 공유, 학부모·교사 대시보드]
 L6. 응용 모드             [학교진도/수능/사고력/영재/메타인지]
-L5. 상호작용              [Mathpix OCR · Manim · Desmos · 대화]
+L5. 상호작용              [PaddleOCR+Qwen3-VL · Manim · Desmos · 대화]
 L4. 교수학 엔진            [Polya 4단계 · 소크라테스 · LTHC · 오개념]
 L3. 콘텐츠 생성·검증        [LLM 라우팅 · PRM · 도구호출 · 다중풀이]
 L2. 학습자 모델            [BKT/DKT · IRT · 정서신호 · 오개념 매핑]
@@ -69,10 +69,10 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | 행동 로그 | ClickHouse | 학습 행동 로그 분석 |
 | 객체 저장소 | S3 / MinIO | 영상·이미지 |
 | 캐시 | Redis 7 | 세션·핫 데이터 |
-| 로컬 LLM | Ollama + Qwen3-Math, DeepSeek-Math | Phaiakes9 |
+| 로컬 LLM | Ollama + Qwen3-Math, DeepSeek-Math, **Qwen3-VL**(멀티모달·그래프 개형) | Phaiakes9 |
 | 클라우드 LLM | Claude Sonnet/Opus, GPT-5, Gemini 2.5 | 라우터 경유 |
 | 임베딩 | OpenAI text-embedding-3-large | 의미 검색·클러스터링 |
-| OCR | Mathpix API | 수식·손글씨 표준 |
+| OCR | **PaddleOCR + Qwen3-VL 하이브리드** (로컬, PaddleOCR fallback) | 손글씨·그래프, Phaiakes9·미성년자 프라이버시. 2026-05-28 결정 (Mathpix 대체) |
 | 시각화 | Manim (서버 렌더), Desmos/GeoGebra 임베드, D3.js·three.js·Plotly | 선언적 JSON 명세 |
 | 클러스터링 | HDBSCAN + UMAP | 풀이 유형 클러스터링 |
 | 도구 호출 | SymPy, Wolfram Alpha API | |
@@ -81,7 +81,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | CI/CD | GitHub Actions | |
 | 인프라 | Phaiakes9 (개발), GCP/AWS (프로덕션) | |
 
-**변경하려면 MEMORY.md에 결정 로그 필수.** Graph DB·행동 로그·객체 저장소·시각화 스택 추가는 `2026-05-14 MathScope PRD v1.1 채택` 결정 로그 참조.
+**변경하려면 MEMORY.md에 결정 로그 필수.** Graph DB·행동 로그·객체 저장소·시각화 스택 추가는 `2026-05-14 MathScope PRD v1.1 채택`, OCR(Mathpix→PaddleOCR+Qwen3-VL)·Qwen3-VL 추가는 `2026-05-28` 결정 로그 참조.
 
 ---
 

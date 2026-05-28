@@ -51,13 +51,20 @@
 - [x] ~~첫 진입 학년~~ → **공유 메타인지 코어 + 고3 수능 우선 노출** (2026-05-28 PRD v1.2 재검토; 2026-05-13 "고1 내신"은 *폐기 아님, 노출 순서 재배치* — 공유 코어가 고1도 서빙). 결정 로그 참조
 - [ ] 벡터 DB: ChromaDB 유지 vs Qdrant 전환 (PRD v1.1 채택으로 발생 — 정렬 단계3 L1/L5에서 결정)
 - [x] ~~스키마 통합 정본화~~ → **Schema v1.0 = 구현 정본** (v1.1 YAML 대체, `curriculum_entry`·`textbook_mapping`만 이식; source_type/license 법적 교정). 실 마이그레이션은 후속 (2026-05-28 속편 결정 로그)
-- [ ] **OCR 스택**: Mathpix 유지 vs PaddleOCR+Qwen3-VL 하이브리드 (2026-05-28 PRD v1.2 제안 — 비용/정확도 후속)
+- [x] ~~OCR 스택~~ → **PaddleOCR + Qwen3-VL 하이브리드** 확정 (2026-05-28, Mathpix 대체; 한국어 정확도 L5 전 Phaiakes9 실측 필요). 결정 로그 참조
 - [ ] 사단법인·재단·법인 형태
 - [ ] Cambridge MMP/NRICH 라이선스 협상 시작 시점
 
 ---
 
 ## 🧭 핵심 결정 로그 (시간 역순)
+
+### 2026-05-28 (OCR): OCR 스택 = PaddleOCR + Qwen3-VL 하이브리드 (Mathpix 대체)
+**컨텍스트**: CLAUDE.md 기술스택(Mathpix) ↔ PRD v1.2 §8.1(PaddleOCR+Qwen3-VL 하이브리드) 충돌 — 재검토 후속의 마지막 미해결 결정.
+**결정(Kiki)**: **PaddleOCR + Qwen3-VL 하이브리드(로컬, PaddleOCR fallback)** 채택, Mathpix 대체. 로컬 LLM 풀에 **Qwen3-VL**(멀티모달·그래프 개형) 추가.
+**근거**: 의사결정 우선순위 **#1 학생안전·#2 법적**(미성년자 손글씨·풀이 이미지 *외부 전송 회피* → 로컬 처리)·**#6 비용**(무료 vs Mathpix per-call) + Kiki "로컬 LLM 우선(Phaiakes9)" 선호 + PRD v1.2 자체 채택과 정합. FR-002(그래프 멀티모달)·FR-011(손글씨 OCR)의 구현 스택.
+**리스크**: 한국어 손글씨·수식 인식 정확도 *미검증*(PRD §11.2 高리스크) → L5 착수 전 Phaiakes9 실측 벤치마크 필수(목표 90%, PRD §12.3). 미달 시 PaddleOCR fallback·부분 Mathpix hedge 재검토.
+**적용**: CLAUDE.md 기술스택(OCR row·로컬 LLM row·L5 다이어그램·변경 각주) 갱신. **후속**: Qwen3-VL Phaiakes9 배포·한국어 수학 OCR 정확도 벤치마크(PRD 액션 §12.2).
 
 ### 2026-05-28 (속편): PRD v1.2·Schema v1.0 원문 수령 — 정합 확인·스키마 정본화·P0 FR 계층 매핑
 **컨텍스트**: 재검토(아래 본편)는 외부 5문서를 *합성 분석*으로만 다뤘으나, Kiki가 **PRD v1.2 원문**과 **DB Schema v1.0 원문**을 레포에 제공. 원문 대조로 재검토 주장을 검증하고, 보류했던 페르소나·FR 매트릭스·스키마 통합을 진행.
