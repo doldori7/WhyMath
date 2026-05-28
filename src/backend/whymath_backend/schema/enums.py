@@ -277,3 +277,78 @@ class RelationType(str, Enum):
     선수 = "선수"
     심화 = "심화"
     대조 = "대조"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 개념 그래프 (§4.2 concept 도메인 인라인 DDL — 4종)
+# ──────────────────────────────────────────────────────────────────────────
+# §14.3에 별도 `CREATE TYPE`이 없어 §4.2 DDL의 컬럼 인라인 주석을 정본으로 채택한다
+# (slice1 ExamType/Subject가 §3.1 컬럼 주석을 정본으로 삼은 선례와 동일). ConceptLevel만
+# 한글 값(Persona처럼 한글 식별자 허용), 나머지 3종은 영어 값.
+class ConceptLevel(str, Enum):
+    """개념 노드 계층 — §4.2 `concept_level_enum`(L309 주석: 단원/소단원/세부개념).
+
+    3계층 위계(단원 > 소단원 > 세부개념). 값·식별자 모두 한글(`Persona` 선례).
+    use_enum_values=True 직렬화 시 한글 값이 그대로 보존된다(예: level="단원").
+    """
+
+    단원 = "단원"
+    소단원 = "소단원"
+    세부개념 = "세부개념"
+
+
+class CognitiveType(str, Enum):
+    """개념의 인지 유형 — §4.2 `cognitive_type_enum`(L320-321, 영어 5종).
+
+    한 개념이 여러 유형을 가질 수 있어 `concept.cognitive_type`은 배열이다.
+    """
+
+    DEFINITION = "DEFINITION"
+    """정의 — 수학적 개념의 엄밀한 규정."""
+
+    THEOREM = "THEOREM"
+    """정리 — 증명되는 명제(예: 미적분학의 기본정리)."""
+
+    TECHNIQUE = "TECHNIQUE"
+    """기법 — 계산·풀이 절차(예: 부분적분)."""
+
+    PATTERN = "PATTERN"
+    """패턴 — 반복되는 문제 구조·전형."""
+
+    VISUAL_REASONING = "VISUAL_REASONING"
+    """시각적 추론 — 그래프·도형 기반 사고."""
+
+
+class EdgeType(str, Enum):
+    """개념 간 관계(DAG 엣지) — §4.2 `edge_type_enum`(L345-350, 영어 5종)."""
+
+    PREREQUISITE = "PREREQUISITE"
+    """선수 — A를 알아야 B를 안다(A→B)."""
+
+    COMPOSED_OF = "COMPOSED_OF"
+    """구성 — A는 B,C,D로 이루어진다."""
+
+    ANALOGOUS_TO = "ANALOGOUS_TO"
+    """유사 — A와 B는 비슷한 사고를 요구한다."""
+
+    EXTENDS = "EXTENDS"
+    """확장 — A를 일반화하면 B가 된다."""
+
+    CONTRASTS = "CONTRASTS"
+    """대조 — A와 B는 혼동하기 쉽다."""
+
+
+class ConceptRole(str, Enum):
+    """문제 안에서 개념의 역할 — §4.2 `concept_role_enum`(L366-370, 영어 4종)."""
+
+    PRIMARY = "PRIMARY"
+    """핵심 개념 — 이 문제의 주된 개념."""
+
+    SUPPORTING = "SUPPORTING"
+    """보조 개념 — 계산 등에 필요한 부수 개념."""
+
+    IMPLICIT = "IMPLICIT"
+    """암묵적 사용 — 학생이 의식하지 못해도 쓰이는 개념."""
+
+    TESTED = "TESTED"
+    """평가 대상 개념 — 이 문제로 이해도를 측정하는 개념."""
