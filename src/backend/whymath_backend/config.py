@@ -56,6 +56,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 영속 DB (PostgreSQL 16 + asyncpg, 영속 슬라이스) ──
+    # 영속 레이어(SQLAlchemy 2.0 async + alembic)가 읽는 연결 URL. redis_url과 동일한
+    # plain-str + WHYMATH_ env 오버라이드 패턴 — 로컬 기본값은 자격증명 없는 무해 디폴트라
+    # 시크릿이 아니다(CLAUDE.md 보안 금기 비저촉). 프로덕션 자격증명은 코드 밖 환경변수로만.
+    database_url: str = Field(
+        default="postgresql+asyncpg://whymath@127.0.0.1:5432/whymath",
+        description=(
+            "PostgreSQL 연결 URL(asyncpg 드라이버, async). 로컬 개발 기본값은 자격증명 없는 "
+            "무해한 로컬 루프백(시크릿 아님). 프로덕션(Phaiakes9)은 WHYMATH_DATABASE_URL로 "
+            "주입하며 자격증명을 포함할 수 있다(→ 코드 밖). 풀 설정(pool_size 등)은 PoC 범위 밖."
+        ),
+    )
+
     # ── 응답 캐시 (Redis, S2부터 실제 만료 적용) ──
     redis_url: str = Field(
         default="redis://127.0.0.1:6379/0",
