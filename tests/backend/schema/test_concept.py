@@ -1,0 +1,434 @@
+"""Schema v1.0 Concept Graph 모델 단위 테스트 — 생성·extra forbid·범위·불변식.
+
+설계 정본: `schemas/v1.0/schema_v1.0.md` §4.2(concept·concept_edge·problem_concept·
+concept_fusion). 4테이블 + 신규 ENUM 4종(ConceptLevel·CognitiveType·EdgeType·ConceptRole).
+
+불변식 분기 커버리지:
+  - Concept._no_self_parent: 자기부모 거부 / 자기부모 아님 통과 / parent=None 통과
+  - ConceptEdge._no_self_edge: 자기엣지 거부 / 정상 통과
+범위·제약: intrinsic_difficulty·exam_frequency·edge_strength·relevance·semester 등 +
+ConceptFusion.concept_ids 빈 배열(min_length) 거부.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+
+import pytest
+from pydantic import ValidationError
+
+from whymath_backend.schema.concept import (
+    Concept,
+    ConceptEdge,
+    ConceptFusion,
+    ProblemConcept,
+)
+from whymath_backend.schema.enums import (
+    CognitiveType,
+    ConceptLevel,
+    ConceptRole,
+    Curriculum,
+    EdgeType,
+    Subject,
+)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 신규 ENUM 4종 — 값 검증(§4.2 인라인 DDL 정본)
+# ──────────────────────────────────────────────────────────────────────
+class TestConceptEnumValues:
+    def test_concept_level_values_korean(self) -> None:
+        """ConceptLevel — 한글 값(단원/소단원/세부개념)."""
+        assert ConceptLevel.단원.value == "단원"
+        assert ConceptLevel.소단원.value == "소단원"
+        assert ConceptLevel.세부개념.value == "세부개념"
+        assert {e.value for e in ConceptLevel} == {"단원", "소단원", "세부개념"}
+
+    def test_cognitive_type_values_english(self) -> None:
+        """CognitiveType — 영어 5종."""
+        assert {e.value for e in CognitiveType} == {
+            "DEFINITION",
+            "THEOREM",
+            "TECHNIQUE",
+            "PATTERN",
+            "VISUAL_REASONING",
+        }
+
+    def test_edge_type_values_english(self) -> None:
+        """EdgeType — 영어 5종."""
+        assert {e.value for e in EdgeType} == {
+            "PREREQUISITE",
+            "COMPOSED_OF",
+            "ANALOGOUS_TO",
+            "EXTENDS",
+            "CONTRASTS",
+        }
+
+    def test_concept_role_values_english(self) -> None:
+        """ConceptRole — 영어 4종."""
+        assert {e.value for e in ConceptRole} == {
+            "PRIMARY",
+            "SUPPORTING",
+            "IMPLICIT",
+            "TESTED",
+        }
+
+    def test_str_enum_equality(self) -> None:
+        """str-Enum — 문자열 값과 동등 비교(라우터·필터 안정성)."""
+        assert ConceptLevel.단원 == "단원"
+        assert EdgeType.PREREQUISITE == "PREREQUISITE"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Concept — 생성·기본값·roundtrip
+# ──────────────────────────────────────────────────────────────────────
+class TestConceptCreation:
+    def test_minimal_concept_valid(self) -> None:
+        """필수 필드(code·name_ko·level)만으로 생성 — 나머지 기본값."""
+        c = Concept(code="CAL-INT-DEF", name_ko="정적분", level=ConceptLevel.소단원)
+        assert isinstance(c.concept_id, uuid.UUID)
+        assert c.code == "CAL-INT-DEF"
+        assert c.name_ko == "정적분"
+        assert c.name_en is None
+        assert c.parent_concept_id is None
+        assert c.aliases == []
+        assert c.cognitive_type == []
+        assert c.common_misconceptions == []
+        assert c.is_signature_korean is False
+        assert c.embedding_id is None
+
+    def test_full_fields_roundtrip(self) -> None:
+        """전 필드를 채운 합법 인스턴스 — 값 보존 확인."""
+        parent = uuid.uuid4()
+        emb = uuid.uuid4()
+        now = datetime.now(timezone.utc)
+        c = Concept(
+            code="CAL-INT-DEF-FUNDAMENTAL",
+            name_ko="미적분학의 기본정리",
+            name_en="Fundamental Theorem of Calculus",
+            aliases=["FTC", "Fundamental Theorem of Calculus"],
+            level=ConceptLevel.세부개념,
+            parent_concept_id=parent,
+            subject=Subject.미적분,
+            curriculum_version=Curriculum.REVISION_2022,
+            grade_introduced=12,
+            semester_introduced=1,
+            is_signature_korean=True,
+            cognitive_type=[CognitiveType.THEOREM, CognitiveType.TECHNIQUE],
+            intrinsic_difficulty=4.5,
+            exam_frequency=0.82,
+            weight_in_curriculum=0.6,
+            description="적분과 미분의 관계를 잇는 정리(자체 작성).",
+            formal_definition="F'(x)=f(x)이면 ∫_a^b f = F(b)-F(a).",
+            intuitive_explanation="넓이의 변화율이 곧 함수값이다.",
+            common_misconceptions=[
+                {"misconception": "적분상수를 빼먹음", "correction": "+C를 항상 명시"}
+            ],
+            embedding_id=emb,
+            created_at=now,
+        )
+        assert c.parent_concept_id == parent
+        assert c.cognitive_type == [CognitiveType.THEOREM, CognitiveType.TECHNIQUE]
+        assert c.intrinsic_difficulty == pytest.approx(4.5)
+        assert c.embedding_id == emb
+        assert c.common_misconceptions[0]["misconception"] == "적분상수를 빼먹음"
+
+    def test_extra_forbidden(self) -> None:
+        """extra='forbid' — 알 수 없는 필드 거부."""
+        with pytest.raises(ValidationError):
+            Concept(  # type: ignore[call-arg]
+                code="X", name_ko="x", level=ConceptLevel.단원, bogus="x"
+            )
+
+    def test_missing_required_rejected(self) -> None:
+        """code·name_ko·level은 필수 — 누락 시 거부."""
+        with pytest.raises(ValidationError):
+            Concept(name_ko="정적분", level=ConceptLevel.단원)  # type: ignore[call-arg]
+
+    def test_enum_value_serialization_korean_level(self) -> None:
+        """use_enum_values → level이 한글 값('단원')으로 직렬화·보존."""
+        c = Concept(
+            code="C", name_ko="공통수학", level=ConceptLevel.단원, subject=Subject.공통
+        )
+        dumped = c.model_dump()
+        assert dumped["level"] == "단원"
+        assert dumped["subject"] == "공통"
+
+    def test_cognitive_type_list_serialization(self) -> None:
+        """use_enum_values → cognitive_type 배열이 문자열 값 배열로 직렬화."""
+        c = Concept(
+            code="C",
+            name_ko="개념",
+            level=ConceptLevel.세부개념,
+            cognitive_type=[CognitiveType.DEFINITION, CognitiveType.VISUAL_REASONING],
+        )
+        assert c.model_dump()["cognitive_type"] == ["DEFINITION", "VISUAL_REASONING"]
+
+    def test_code_max_length(self) -> None:
+        """code는 max_length=64 — 초과 거부."""
+        with pytest.raises(ValidationError):
+            Concept(code="x" * 65, name_ko="x", level=ConceptLevel.단원)
+
+    def test_name_ko_max_length(self) -> None:
+        """name_ko는 max_length=200 — 초과 거부."""
+        with pytest.raises(ValidationError):
+            Concept(code="C", name_ko="가" * 201, level=ConceptLevel.단원)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Concept — 범위 제약
+# ──────────────────────────────────────────────────────────────────────
+class TestConceptRanges:
+    def test_intrinsic_difficulty_too_high_rejected(self) -> None:
+        """intrinsic_difficulty는 1.0-5.0 — 5 초과 거부."""
+        with pytest.raises(ValidationError):
+            Concept(
+                code="C", name_ko="x", level=ConceptLevel.단원, intrinsic_difficulty=5.5
+            )
+
+    def test_intrinsic_difficulty_too_low_rejected(self) -> None:
+        """intrinsic_difficulty는 1.0-5.0 — 1 미만 거부."""
+        with pytest.raises(ValidationError):
+            Concept(
+                code="C", name_ko="x", level=ConceptLevel.단원, intrinsic_difficulty=0.5
+            )
+
+    def test_exam_frequency_too_high_rejected(self) -> None:
+        """exam_frequency는 0.0-1.0 — 1 초과 거부."""
+        with pytest.raises(ValidationError):
+            Concept(code="C", name_ko="x", level=ConceptLevel.단원, exam_frequency=1.5)
+
+    def test_weight_in_curriculum_too_high_rejected(self) -> None:
+        """weight_in_curriculum은 0.0-1.0(보수 설정) — 1 초과 거부."""
+        with pytest.raises(ValidationError):
+            Concept(
+                code="C", name_ko="x", level=ConceptLevel.단원, weight_in_curriculum=1.2
+            )
+
+    def test_semester_introduced_out_of_range_rejected(self) -> None:
+        """semester_introduced는 1-2 — 3 거부."""
+        with pytest.raises(ValidationError):
+            Concept(
+                code="C", name_ko="x", level=ConceptLevel.단원, semester_introduced=3
+            )
+
+    def test_grade_introduced_out_of_range_rejected(self) -> None:
+        """grade_introduced는 1-12(보수 설정) — 13 거부."""
+        with pytest.raises(ValidationError):
+            Concept(code="C", name_ko="x", level=ConceptLevel.단원, grade_introduced=13)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Concept — 불변식 _no_self_parent
+# ──────────────────────────────────────────────────────────────────────
+class TestConceptSelfParent:
+    def test_self_parent_rejected(self) -> None:
+        """parent_concept_id == concept_id → ValidationError(자기부모 금지)."""
+        cid = uuid.uuid4()
+        with pytest.raises(ValidationError, match="자기 자신이 부모"):
+            Concept(
+                concept_id=cid,
+                code="C",
+                name_ko="x",
+                level=ConceptLevel.소단원,
+                parent_concept_id=cid,
+            )
+
+    def test_distinct_parent_passes(self) -> None:
+        """parent_concept_id != concept_id → 통과."""
+        c = Concept(
+            code="C",
+            name_ko="x",
+            level=ConceptLevel.세부개념,
+            parent_concept_id=uuid.uuid4(),
+        )
+        assert c.parent_concept_id != c.concept_id
+
+    def test_none_parent_passes(self) -> None:
+        """parent_concept_id=None(루트 개념) → 검사 대상 아님 → 통과."""
+        c = Concept(code="C", name_ko="x", level=ConceptLevel.단원)
+        assert c.parent_concept_id is None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ConceptEdge — 생성·범위·불변식 _no_self_edge
+# ──────────────────────────────────────────────────────────────────────
+class TestConceptEdge:
+    def test_valid_edge(self) -> None:
+        """from·to·edge_type 필수 + 선택 필드 — 값 보존."""
+        frm = uuid.uuid4()
+        to = uuid.uuid4()
+        e = ConceptEdge(
+            from_concept_id=frm,
+            to_concept_id=to,
+            edge_type=EdgeType.PREREQUISITE,
+            edge_strength=0.9,
+            typical_gap_signal="B를 못 푸는 건 보통 A를 몰라서다",
+            notes="강한 선수 관계",
+        )
+        assert e.from_concept_id == frm
+        assert e.to_concept_id == to
+        assert e.edge_strength == pytest.approx(0.9)
+
+    def test_self_edge_rejected(self) -> None:
+        """from == to → ValidationError(자기엣지 금지)."""
+        same = uuid.uuid4()
+        with pytest.raises(ValidationError, match="자기 자신을 가리키는 엣지"):
+            ConceptEdge(
+                from_concept_id=same,
+                to_concept_id=same,
+                edge_type=EdgeType.ANALOGOUS_TO,
+            )
+
+    def test_edge_strength_range_rejected(self) -> None:
+        """edge_strength는 0.0-1.0 — 1 초과 거부."""
+        with pytest.raises(ValidationError):
+            ConceptEdge(
+                from_concept_id=uuid.uuid4(),
+                to_concept_id=uuid.uuid4(),
+                edge_type=EdgeType.EXTENDS,
+                edge_strength=1.5,
+            )
+
+    def test_missing_required_rejected(self) -> None:
+        """from·to·edge_type은 필수(NOT NULL) — 누락 거부."""
+        with pytest.raises(ValidationError):
+            ConceptEdge(from_concept_id=uuid.uuid4())  # type: ignore[call-arg]
+
+    def test_extra_forbidden(self) -> None:
+        """extra='forbid'."""
+        with pytest.raises(ValidationError):
+            ConceptEdge(  # type: ignore[call-arg]
+                from_concept_id=uuid.uuid4(),
+                to_concept_id=uuid.uuid4(),
+                edge_type=EdgeType.CONTRASTS,
+                bogus="x",
+            )
+
+    def test_edge_type_enum_value_serialization(self) -> None:
+        """use_enum_values → edge_type 문자열 저장."""
+        e = ConceptEdge(
+            from_concept_id=uuid.uuid4(),
+            to_concept_id=uuid.uuid4(),
+            edge_type=EdgeType.COMPOSED_OF,
+        )
+        assert e.model_dump()["edge_type"] == "COMPOSED_OF"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ProblemConcept — N:M, 복합 PK 요소 required
+# ──────────────────────────────────────────────────────────────────────
+class TestProblemConcept:
+    def test_valid_mapping(self) -> None:
+        """problem_id·concept_id·role 필수 + relevance 선택."""
+        pid = uuid.uuid4()
+        cid = uuid.uuid4()
+        pc = ProblemConcept(
+            problem_id=pid,
+            concept_id=cid,
+            relevance=0.95,
+            role=ConceptRole.PRIMARY,
+        )
+        assert pc.problem_id == pid
+        assert pc.concept_id == cid
+        assert pc.relevance == pytest.approx(0.95)
+
+    def test_role_required(self) -> None:
+        """role은 복합 PK 구성요소라 required — 누락 거부."""
+        with pytest.raises(ValidationError):
+            ProblemConcept(  # type: ignore[call-arg]
+                problem_id=uuid.uuid4(), concept_id=uuid.uuid4()
+            )
+
+    def test_relevance_range_rejected(self) -> None:
+        """relevance는 0.0-1.0 — 1 초과 거부."""
+        with pytest.raises(ValidationError):
+            ProblemConcept(
+                problem_id=uuid.uuid4(),
+                concept_id=uuid.uuid4(),
+                role=ConceptRole.SUPPORTING,
+                relevance=1.5,
+            )
+
+    def test_relevance_optional(self) -> None:
+        """relevance는 Optional — 생략 가능."""
+        pc = ProblemConcept(
+            problem_id=uuid.uuid4(),
+            concept_id=uuid.uuid4(),
+            role=ConceptRole.IMPLICIT,
+        )
+        assert pc.relevance is None
+
+    def test_extra_forbidden(self) -> None:
+        """extra='forbid'."""
+        with pytest.raises(ValidationError):
+            ProblemConcept(  # type: ignore[call-arg]
+                problem_id=uuid.uuid4(),
+                concept_id=uuid.uuid4(),
+                role=ConceptRole.TESTED,
+                bogus="x",
+            )
+
+    def test_role_enum_value_serialization(self) -> None:
+        """use_enum_values → role 문자열 저장."""
+        pc = ProblemConcept(
+            problem_id=uuid.uuid4(),
+            concept_id=uuid.uuid4(),
+            role=ConceptRole.TESTED,
+        )
+        assert pc.model_dump()["role"] == "TESTED"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ConceptFusion — concept_ids min_length, fusion_difficulty 범위
+# ──────────────────────────────────────────────────────────────────────
+class TestConceptFusion:
+    def test_minimal_fusion_valid(self) -> None:
+        """concept_ids(최소 1개)만으로 생성 — 나머지 기본값."""
+        cid = uuid.uuid4()
+        f = ConceptFusion(concept_ids=[cid])
+        assert isinstance(f.fusion_id, uuid.UUID)
+        assert f.concept_ids == [cid]
+        assert f.name is None
+        assert f.exemplar_problem_ids == []
+
+    def test_full_fields_roundtrip(self) -> None:
+        """전 필드 채운 융합 — 값 보존."""
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        ex = uuid.uuid4()
+        f = ConceptFusion(
+            name="수열의 극한 + 부등식",
+            concept_ids=[c1, c2],
+            fusion_difficulty=4.0,
+            typical_question_pattern="극한값을 부등식으로 가두어 샌드위치 정리 적용",
+            exemplar_problem_ids=[ex],
+        )
+        assert f.concept_ids == [c1, c2]
+        assert f.fusion_difficulty == pytest.approx(4.0)
+        assert f.exemplar_problem_ids == [ex]
+
+    def test_empty_concept_ids_rejected(self) -> None:
+        """concept_ids는 min_length=1(UUID[] NOT NULL) — 빈 배열 거부."""
+        with pytest.raises(ValidationError):
+            ConceptFusion(concept_ids=[])
+
+    def test_concept_ids_required(self) -> None:
+        """concept_ids는 required — 누락 거부."""
+        with pytest.raises(ValidationError):
+            ConceptFusion()  # type: ignore[call-arg]
+
+    def test_fusion_difficulty_range_rejected(self) -> None:
+        """fusion_difficulty는 1.0-5.0(난이도 척도 보수 설정) — 5 초과 거부."""
+        with pytest.raises(ValidationError):
+            ConceptFusion(concept_ids=[uuid.uuid4()], fusion_difficulty=5.5)
+
+    def test_name_max_length(self) -> None:
+        """name은 max_length=200 — 초과 거부."""
+        with pytest.raises(ValidationError):
+            ConceptFusion(concept_ids=[uuid.uuid4()], name="가" * 201)
+
+    def test_extra_forbidden(self) -> None:
+        """extra='forbid'."""
+        with pytest.raises(ValidationError):
+            ConceptFusion(concept_ids=[uuid.uuid4()], bogus="x")  # type: ignore[call-arg]
