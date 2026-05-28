@@ -689,3 +689,39 @@ class CurriculumLicense(str, Enum):
 
     GB_NC = "GB-NC"
     """영국 National Curriculum — OGL v3.0, CC BY 호환(Phase 3)."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 교과서 매핑 (v1.1 textbook_mapping.schema.yaml — 슬라이스 8b)
+# ──────────────────────────────────────────────────────────────────────────
+# v1.0 도메인 밖. v1.1에서 이식한 마지막 자산 TextbookMapping(검정 교과서 *구조*를 개념·
+# NCIC 성취기준에 잇는 매핑)이 *enum으로 명시한 한 필드*만 enum으로 만든다.
+# YAML이 enum으로 명시한 것은 legal_review_status(3종)뿐이다.
+#
+# ⚠️ subject·publisher는 enum으로 만들지 않는다. YAML이 subject를 "8과목 enum"으로,
+# publisher를 enum_phase1=[미래엔, 천재교육]로 *언급*하나 값을 완전히 열거하지 않았고
+# (subject는 8과목 체계를 예시로만 들고, publisher는 examples로 8종 이상을 더 든다),
+# 기존 NCIC AchievementStandard.subject가 str인 것과 정합하므로 모델에서 `str`로 둔다
+# (slice4 gender·slice8a country_code가 닫힌 enum 날조를 회피해 str로 둔 방침과 동일).
+# Phase 1 범위 가드(미래엔/천재교육 2종·8과목)는 *데이터/파이프라인* 책임이지 모델 강제 아님.
+class LegalReviewStatus(str, Enum):
+    """교과서 학습목표 텍스트 변호사 검토 상태 — YAML `legal_review_status.enum`(영어 3종).
+
+    `TextbookMapping.legal_review_status`가 `TextbookUnit.learning_objective_text`의 활성화
+    여부를 결정한다 — `cleared`가 아니면 학습목표 텍스트는 null 고정(비-null 발견 시 적재
+    거부). 근거: MEMORY PRD 허점 ⑥ — 한국 저작권법에 미국식 fair use 법리가 그대로 있지
+    않아 교과서 저작물인 학습목표 문장을 "페어유즈" 단정으로 수집할 수 없다.
+
+    ⚠️ 기존 `ReviewStatus`(pending/approved/rejected, §3.1 문제 검수)와 *다른* enum이다 —
+    이쪽은 교과서 학습목표 *저작권* 검토 상태다(혼동 주의). use_enum_values=True 직렬화 시
+    영어 값 보존(예: legal_review_status="not_required").
+    """
+
+    not_required = "not_required"
+    """구조 메타데이터만 — 검토 불요(learning_objective_text는 null이어야 함)."""
+
+    pending = "pending"
+    """검토 진행 중 — learning_objective_text는 여전히 null."""
+
+    cleared = "cleared"
+    """검토 통과 — learning_objective_text 활성화 가능."""

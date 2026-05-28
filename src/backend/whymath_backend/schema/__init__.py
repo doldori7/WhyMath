@@ -10,9 +10,9 @@ Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이�
 공개 심볼:
   - enums: Accessibility·AnswerFormat·AssessmentType·AttemptMode·CognitiveType·
     ConceptLevel·ConceptRole·ContentType·Curriculum·CurriculumLicense·Device·EdgeType·
-    EventType·ExamType·GenerationType·LicenseType·MajorCategory·MentalPhase·NoteApp·
-    Persona·QuestionFormat·RelationType·RequiredDepth·Resolution·ReviewStatus·SchoolType·
-    SessionType·SignaturePattern·SocraticStrategy·SourceType·StepType·StudentIntent·
+    EventType·ExamType·GenerationType·LegalReviewStatus·LicenseType·MajorCategory·MentalPhase·
+    NoteApp·Persona·QuestionFormat·RelationType·RequiredDepth·Resolution·ReviewStatus·
+    SchoolType·SessionType·SignaturePattern·SocraticStrategy·SourceType·StepType·StudentIntent·
     Subject·SubscriptionTier·TrackType·TurnRole·VisualType
   - problem(슬라이스 1): Condition·Problem·ProblemStep·ProblemRelation
   - provenance(슬라이스 2): ContentProvenance·GenerationLog
@@ -24,6 +24,7 @@ Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이�
   - timeseries(슬라이스 7): DailyLearningMetrics·ProblemSolveTimeDistribution·
     UserBehaviorMetrics
   - curriculum(슬라이스 8a, v1.1 이식): CurriculumEntry
+  - textbook(슬라이스 8b, v1.1 이식): TextbookMapping·TextbookToneProfile·TextbookUnit
 """
 
 from whymath_backend.schema.activity import (
@@ -64,6 +65,7 @@ from whymath_backend.schema.enums import (
     EventType,
     ExamType,
     GenerationType,
+    LegalReviewStatus,
     LicenseType,
     MajorCategory,
     MentalPhase,
@@ -97,6 +99,11 @@ from whymath_backend.schema.provenance import (
     ContentProvenance,
     GenerationLog,
 )
+from whymath_backend.schema.textbook_mapping import (
+    TextbookMapping,
+    TextbookToneProfile,
+    TextbookUnit,
+)
 from whymath_backend.schema.timeseries import (
     DailyLearningMetrics,
     ProblemSolveTimeDistribution,
@@ -126,6 +133,7 @@ __all__ = [
     "EventType",
     "ExamType",
     "GenerationType",
+    "LegalReviewStatus",
     "LicenseType",
     "MajorCategory",
     "MentalPhase",
@@ -182,4 +190,8 @@ __all__ = [
     "UserBehaviorMetrics",
     # curriculum
     "CurriculumEntry",
+    # textbook
+    "TextbookMapping",
+    "TextbookToneProfile",
+    "TextbookUnit",
 ]
