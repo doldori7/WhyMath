@@ -21,7 +21,11 @@ from pathlib import Path
 from whymath_backend.l3.cache import RedisCache
 from whymath_backend.l3.pregenerate.models import PregenItem, PrewarmReport
 from whymath_backend.l3.pregenerate.prewarmer import CachePrewarmer
-from whymath_backend.l3.pregenerate.validator import BasicSeedValidator
+from whymath_backend.l3.pregenerate.validator import (
+    BasicSeedValidator,
+    ChainValidator,
+    SymPyArithmeticValidator,
+)
 from whymath_backend.l3.providers.anthropic import AnthropicProvider
 from whymath_backend.l3.providers.composite import CompositeProvider
 from whymath_backend.l3.providers.ollama import OllamaProvider
@@ -73,7 +77,10 @@ async def _run(
     items = load_items(text)
     provider = CompositeProvider(local=OllamaProvider(), cloud=AnthropicProvider())
     cache = RedisCache()
-    validator = BasicSeedValidator(min_length=min_length)
+    # 기본 게이트: 위생(BasicSeedValidator) → 산술(SymPyArithmeticValidator) AND 체인.
+    validator = ChainValidator(
+        [BasicSeedValidator(min_length=min_length), SymPyArithmeticValidator()]
+    )
     prewarmer = CachePrewarmer(provider=provider, cache=cache, validator=validator)
     report = await prewarmer.prewarm(items, ttl_seconds=ttl_seconds, overwrite=overwrite)
     print(format_report(report))
