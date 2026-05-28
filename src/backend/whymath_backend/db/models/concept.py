@@ -1,0 +1,290 @@
+"""도메인2 Concept Graph ORM 모델 (SQLAlchemy 2.0 영속 레이어).
+
+설계 정본: `schemas/v1.0/schema_v1.0.md` §4.2(`concept`·`concept_edge`·`problem_concept`·
+`concept_fusion` DDL 4테이블)·§4.2 인덱스. 이 ORM은 `schema/concept.py`(Pydantic, 검증·API)와
+*별도*로 세운 영속 매핑이며 `from_schema`/`to_schema` 변환 헬퍼가 둘을 잇는다(슬라이스 1
+`problem.py` 동일 패턴 — SQLModel 미사용).
+
+타입 매핑(DDL → ORM, problem.py 선례 그대로):
+  - `UUID PRIMARY KEY` → `server_default gen_random_uuid()`(problem.py가 모든 UUID PK에 동일
+    적용한 선례 — schema의 `default_factory=uuid4`와 양면으로 PK를 채운다).
+  - `UUID REFERENCES`(NOT NULL 명시) → required `uuid.UUID` + FK; nullable FK → `uuid.UUID|None`.
+  - self-FK(`parent_concept_id REFERENCES concept`) → `sa.ForeignKey("concept.concept_id")`.
+  - `concept_role_enum`/`edge_type_enum`/`concept_level_enum` → `_pg_enum(...)`(values_callable).
+  - `cognitive_type_enum[]` → `ARRAY(_pg_enum(...))`(DDL NOT NULL 아님 → nullable list).
+  - `JSONB`(common_misconceptions) → schema가 NOT NULL 의미(default_factory=list)라 problem.py
+    `conditions_parsed`처럼 `nullable=False, server_default "'[]'::jsonb"`.
+  - `UUID[] NOT NULL`(concept_fusion.concept_ids) → `ARRAY(sa.Uuid)`(*배열이라 FK 아님* —
+    schema docstring 명시) + `nullable=False, server_default "'{}'::uuid[]"`.
+  - nullable `UUID[]`(exemplar_problem_ids) → `ARRAY(sa.Uuid)`(배열, FK 아님, nullable).
+  - 인덱스(§4.2 `CREATE INDEX`) → `__table_args__`.
+
+법적 메모: `description`·`formal_definition`·`intuitive_explanation`의 자체 작성 불변식은
+`schema.Concept`(자유 서술이라 구조 신호 없음 → 검수 책임) 소관이며, ORM에는 컬럼만 둔다
+(problem.py 본문 미보유 불변식이 schema 책임인 것과 동형).
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import datetime
+from typing import Any
+
+import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.orm import Mapped, mapped_column
+
+from whymath_backend.db.base import Base
+from whymath_backend.db.models._orm_enum import _pg_enum
+from whymath_backend.schema.concept import Concept as SchemaConcept
+from whymath_backend.schema.concept import ConceptEdge as SchemaConceptEdge
+from whymath_backend.schema.concept import ConceptFusion as SchemaConceptFusion
+from whymath_backend.schema.concept import ProblemConcept as SchemaProblemConcept
+from whymath_backend.schema.enums import (
+    CognitiveType,
+    ConceptLevel,
+    ConceptRole,
+    Curriculum,
+    EdgeType,
+    Subject,
+)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 핵심: Concept (§4.2 concept 테이블 — 개념 노드, 3계층 위계)
+# ──────────────────────────────────────────────────────────────────────────
+class Concept(Base):
+    """개념 노드 영속 ORM — §4.2 `concept`(단원 > 소단원 > 세부개념 3계층).
+
+    `code`는 `UNIQUE NOT NULL`(전역 식별), `parent_concept_id`는 self-FK(상위 개념).
+    자기 자신을 부모로 둘 수 없는 불변식은 `schema.Concept._no_self_parent`가 강제한다
+    (ORM에는 가짜 CHECK를 만들지 않음 — problem.py 방침).
+    """
+
+    __tablename__ = "concept"
+
+    # ===== 기본 식별 =====
+    concept_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid,
+        primary_key=True,
+        server_default=sa.text("gen_random_uuid()"),
+    )
+    code: Mapped[str] = mapped_column(sa.String(64), unique=True, nullable=False)
+    name_ko: Mapped[str] = mapped_column(sa.String(200), nullable=False)
+    name_en: Mapped[str | None] = mapped_column(sa.String(200))
+    aliases: Mapped[list[str] | None] = mapped_column(ARRAY(sa.Text))
+
+    # ===== 계층 정보 =====
+    level: Mapped[ConceptLevel] = mapped_column(
+        _pg_enum(ConceptLevel, "concept_level_enum"),
+        nullable=False,
+    )
+    parent_concept_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.Uuid, sa.ForeignKey("concept.concept_id")
+    )
+    subject: Mapped[Subject | None] = mapped_column(_pg_enum(Subject, "subject_enum"))
+    curriculum_version: Mapped[Curriculum | None] = mapped_column(
+        _pg_enum(Curriculum, "curriculum_enum")
+    )
+
+    # ===== 교육과정 매핑 =====
+    grade_introduced: Mapped[int | None] = mapped_column(sa.Integer)
+    semester_introduced: Mapped[int | None] = mapped_column(sa.Integer)
+
+    # ===== 개념의 특성 =====
+    is_signature_korean: Mapped[bool] = mapped_column(
+        sa.Boolean, nullable=False, server_default=sa.false()
+    )
+    # DDL은 cognitive_type_enum[](NOT NULL 아님) → nullable list. schema는 default_factory=list
+    # 라 실무상 항상 list를 넘기지만 DDL 충실성을 위해 nullable로 둔다.
+    cognitive_type: Mapped[list[CognitiveType] | None] = mapped_column(
+        ARRAY(_pg_enum(CognitiveType, "cognitive_type_enum"))
+    )
+
+    # ===== 난이도·중요도 =====
+    intrinsic_difficulty: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
+    exam_frequency: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
+    weight_in_curriculum: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
+
+    # ===== 설명·예제 (자체 작성 불변식은 schema.Concept 검수 책임) =====
+    description: Mapped[str | None] = mapped_column(sa.Text)
+    formal_definition: Mapped[str | None] = mapped_column(sa.Text)
+    intuitive_explanation: Mapped[str | None] = mapped_column(sa.Text)
+    # schema는 default_factory=list(NOT NULL 의미) → problem.py conditions_parsed 패턴.
+    common_misconceptions: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
+
+    # ===== 벡터 임베딩 ID (ChromaDB 외부 참조 — 벡터 저장 아님) =====
+    embedding_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)
+
+    # ===== 운영 메타 =====
+    created_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now()
+    )
+
+    # ── 인덱스 (§4.2 CREATE INDEX) ──
+    __table_args__ = (
+        sa.Index("idx_concept_code", "code"),
+        sa.Index("idx_concept_parent", "parent_concept_id"),
+        sa.Index("idx_concept_level", "level", "subject"),
+    )
+
+    # ── 변환 헬퍼 (schema↔db seam, problem.py 패턴) ──────────────────────
+    @classmethod
+    def from_schema(cls, schema: SchemaConcept) -> Concept:
+        """검증된 `schema.Concept` → 영속 ORM(mapper 컬럼키 필터)."""
+        data = schema.model_dump()
+        mapped_keys = {col.key for col in sa.inspect(cls).mapper.column_attrs}
+        kwargs = {k: v for k, v in data.items() if k in mapped_keys}
+        return cls(**kwargs)
+
+    def to_schema(self) -> SchemaConcept:
+        """영속 ORM → `schema.Concept`(Pydantic 검증 복원)."""
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        return SchemaConcept.model_validate(data)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 핵심: ConceptEdge (§4.2 concept_edge 테이블 — DAG 엣지)
+# ──────────────────────────────────────────────────────────────────────────
+class ConceptEdge(Base):
+    """개념 관계(DAG 엣지) 영속 ORM — §4.2 `concept_edge`.
+
+    `from_concept_id`·`to_concept_id`는 `REFERENCES concept NOT NULL`, `edge_type` NOT NULL.
+    복합 UNIQUE `(from_concept_id, to_concept_id, edge_type)` — DDL 제약. 자기 자신을 가리키는
+    엣지 금지는 `schema.ConceptEdge._no_self_edge`가 강제한다(ORM 가짜 CHECK 없음).
+    """
+
+    __tablename__ = "concept_edge"
+
+    edge_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid,
+        primary_key=True,
+        server_default=sa.text("gen_random_uuid()"),
+    )
+    from_concept_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid, sa.ForeignKey("concept.concept_id"), nullable=False
+    )
+    to_concept_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid, sa.ForeignKey("concept.concept_id"), nullable=False
+    )
+    edge_type: Mapped[EdgeType] = mapped_column(
+        _pg_enum(EdgeType, "edge_type_enum"),
+        nullable=False,
+    )
+    edge_strength: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
+    typical_gap_signal: Mapped[str | None] = mapped_column(sa.Text)
+    notes: Mapped[str | None] = mapped_column(sa.Text)
+    created_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now()
+    )
+
+    # ── 제약·인덱스 (§4.2 UNIQUE + CREATE INDEX) ──
+    __table_args__ = (
+        sa.UniqueConstraint("from_concept_id", "to_concept_id", "edge_type"),
+        sa.Index("idx_concept_edge_from", "from_concept_id", "edge_type"),
+        sa.Index("idx_concept_edge_to", "to_concept_id", "edge_type"),
+    )
+
+    @classmethod
+    def from_schema(cls, schema: SchemaConceptEdge) -> ConceptEdge:
+        """검증된 `schema.ConceptEdge` → 영속 ORM(schema↔db seam)."""
+        data = schema.model_dump()
+        mapped_keys = {col.key for col in sa.inspect(cls).mapper.column_attrs}
+        kwargs = {k: v for k, v in data.items() if k in mapped_keys}
+        return cls(**kwargs)
+
+    def to_schema(self) -> SchemaConceptEdge:
+        """영속 ORM → `schema.ConceptEdge`(Pydantic 검증 복원)."""
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        return SchemaConceptEdge.model_validate(data)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 보조: ProblemConcept (§4.2 problem_concept 테이블 — 문제↔개념 N:M)
+# ──────────────────────────────────────────────────────────────────────────
+class ProblemConcept(Base):
+    """문제 ↔ 개념 매핑 영속 ORM — §4.2 `problem_concept`(N:M).
+
+    복합 PK `(problem_id, concept_id, role)` — DDL 제약. `problem_id`는 메인의 problem 테이블,
+    `concept_id`는 이 배치의 concept 테이블을 참조한다(둘 다 문자열 FK 타깃).
+    """
+
+    __tablename__ = "problem_concept"
+
+    problem_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid, sa.ForeignKey("problem.problem_id"), primary_key=True
+    )
+    concept_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid, sa.ForeignKey("concept.concept_id"), primary_key=True
+    )
+    relevance: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
+    role: Mapped[ConceptRole] = mapped_column(
+        _pg_enum(ConceptRole, "concept_role_enum"), primary_key=True
+    )
+
+    # ── 인덱스 (§4.2 CREATE INDEX) ──
+    __table_args__ = (sa.Index("idx_problem_concept_pc", "problem_id", "concept_id"),)
+
+    @classmethod
+    def from_schema(cls, schema: SchemaProblemConcept) -> ProblemConcept:
+        """검증된 `schema.ProblemConcept` → 영속 ORM(schema↔db seam)."""
+        data = schema.model_dump()
+        mapped_keys = {col.key for col in sa.inspect(cls).mapper.column_attrs}
+        kwargs = {k: v for k, v in data.items() if k in mapped_keys}
+        return cls(**kwargs)
+
+    def to_schema(self) -> SchemaProblemConcept:
+        """영속 ORM → `schema.ProblemConcept`(Pydantic 검증 복원)."""
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        return SchemaProblemConcept.model_validate(data)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 보조: ConceptFusion (§4.2 concept_fusion 테이블 — 단원 융합 패턴, 특성 #16)
+# ──────────────────────────────────────────────────────────────────────────
+class ConceptFusion(Base):
+    """단원 융합 패턴 영속 ORM — §4.2 `concept_fusion`(특성 #16).
+
+    `concept_ids`(`UUID[] NOT NULL`)·`exemplar_problem_ids`(nullable `UUID[]`)는 *배열이라
+    FK가 아니다*(schema docstring 명시 — DB FK는 스칼라 컬럼에만 걸린다). concept_ids는
+    NOT NULL이므로 problem.py NOT NULL 배열 선례대로 server_default `'{}'::uuid[]`를 둔다.
+    """
+
+    __tablename__ = "concept_fusion"
+
+    fusion_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid,
+        primary_key=True,
+        server_default=sa.text("gen_random_uuid()"),
+    )
+    name: Mapped[str | None] = mapped_column(sa.String(200))
+    # UUID[] NOT NULL — 배열이라 FK 아님(concept를 *가리키는 값 묶음*일 뿐).
+    concept_ids: Mapped[list[uuid.UUID]] = mapped_column(
+        ARRAY(sa.Uuid), nullable=False, server_default=sa.text("'{}'::uuid[]")
+    )
+    fusion_difficulty: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
+    typical_question_pattern: Mapped[str | None] = mapped_column(sa.Text)
+    # nullable UUID[] — 배열이라 FK 아님.
+    exemplar_problem_ids: Mapped[list[uuid.UUID] | None] = mapped_column(ARRAY(sa.Uuid))
+
+    @classmethod
+    def from_schema(cls, schema: SchemaConceptFusion) -> ConceptFusion:
+        """검증된 `schema.ConceptFusion` → 영속 ORM(schema↔db seam)."""
+        data = schema.model_dump()
+        mapped_keys = {col.key for col in sa.inspect(cls).mapper.column_attrs}
+        kwargs = {k: v for k, v in data.items() if k in mapped_keys}
+        return cls(**kwargs)
+
+    def to_schema(self) -> SchemaConceptFusion:
+        """영속 ORM → `schema.ConceptFusion`(Pydantic 검증 복원)."""
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        return SchemaConceptFusion.model_validate(data)
+
+
+__all__ = ["Concept", "ConceptEdge", "ProblemConcept", "ConceptFusion"]

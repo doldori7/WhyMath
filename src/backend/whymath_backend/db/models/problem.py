@@ -10,7 +10,8 @@ ENUM 매핑 규칙(중요):
   매핑하되 `values_callable=lambda e: [m.value for m in e]`를 *반드시* 둔다 — 멤버명≠값인
   enum(예: `Curriculum.REVISION_2015 = "2015_REVISION"`)이 있어, 이게 없으면 SQLAlchemy가
   PostgreSQL enum을 *멤버명*('REVISION_2015')으로 만들어 §14.3 DDL 값('2015_REVISION')과
-  어긋난다. PG 타입명은 §3.1/§14.3 DDL의 `*_enum`명을 그대로 박는다(`name=`).
+  어긋난다. PG 타입명은 §3.1/§14.3 DDL의 `*_enum`명을 그대로 박는다(`name=`). 이 매핑
+  헬퍼(`_pg_enum`/`_enum_values`)는 6개 도메인 ORM이 공유하도록 `_orm_enum.py`로 추출했다.
 
 타입 매핑(DDL → ORM):
   - `UUID PK` → `Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True,
@@ -32,9 +33,7 @@ schema.Problem이다(영속 직전 변환 헬퍼가 schema를 거치므로 자�
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
 from datetime import datetime
-from enum import Enum
 from typing import Any
 
 import sqlalchemy as sa
@@ -42,6 +41,7 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
+from whymath_backend.db.models._orm_enum import _pg_enum
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,
@@ -58,30 +58,6 @@ from whymath_backend.schema.enums import (
 from whymath_backend.schema.problem import Problem as SchemaProblem
 from whymath_backend.schema.problem import ProblemRelation as SchemaProblemRelation
 from whymath_backend.schema.problem import ProblemStep as SchemaProblemStep
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# ENUM 매핑 헬퍼 — values_callable 필수(멤버명≠값 enum 정합), §14.3 PG 타입명 박기.
-# ──────────────────────────────────────────────────────────────────────────
-def _enum_values(enum_cls: type[Enum]) -> Callable[[type[Enum]], list[str]]:
-    """`sa.Enum`의 `values_callable` 인자 — enum의 *값*(멤버명 아님)으로 PG enum 생성.
-
-    `Curriculum.REVISION_2015 = "2015_REVISION"`처럼 멤버명≠값인 enum 때문에 *필수*다.
-    이게 없으면 SQLAlchemy가 멤버명('REVISION_2015')으로 PG enum 라벨을 만들어 §14.3
-    DDL 값('2015_REVISION')과 어긋난다. SQLAlchemy는 이 콜러블에 enum 클래스를 넘기므로
-    시그니처는 `(enum_cls) -> list[str]`이다.
-    """
-    # enum_cls를 닫아(closure) 받지만, SQLAlchemy가 전달하는 인자(동일 클래스)를 그대로
-    # 순회해도 결과가 같다. 명시적으로 enum_cls를 순회해 값 리스트를 만든다.
-    return lambda _e: [member.value for member in enum_cls]
-
-
-def _pg_enum(enum_cls: type[Enum], name: str) -> sa.Enum:
-    """`schema/enums.py` str-Enum을 PG native enum으로 — values_callable·타입명 고정.
-
-    `name`은 §3.1/§14.3 DDL의 `*_enum` 타입명을 그대로 박는다(예: 'source_type_enum').
-    """
-    return sa.Enum(enum_cls, name=name, values_callable=_enum_values(enum_cls))
 
 
 # ──────────────────────────────────────────────────────────────────────────
