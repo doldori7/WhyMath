@@ -464,3 +464,116 @@ class Accessibility(str, Enum):
     큰글씨 = "큰글씨"
     음성안내 = "음성안내"
     시간연장 = "시간연장"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 학습 활동 (§6.1 learning_session·problem_attempt·attempt_event 인라인 DDL — 3종)
+# ──────────────────────────────────────────────────────────────────────────
+# §14.3에 별도 `CREATE TYPE`이 없어 §6.1 DDL의 컬럼 인라인 주석을 정본으로 채택한다
+# (slice1 ExamType/Subject·slice3 ConceptLevel이 컬럼 주석을 정본으로 삼은 선례 동일).
+# 세 enum 모두 한글 값(한글 식별자 그대로 — Persona·ConceptLevel 선례).
+class SessionType(str, Enum):
+    """학습 세션 유형 — §6.1 `session_type_enum`(L602-603, 한글 5종).
+
+    use_enum_values=True 직렬화 시 한글 값 보존(예: session_type="자유학습").
+    """
+
+    자유학습 = "자유학습"
+    실전모의고사 = "실전모의고사"
+    단원집중 = "단원집중"
+    약점보완 = "약점보완"
+    AI추천 = "AI추천"
+
+
+class AttemptMode(str, Enum):
+    """문항 풀이 방식 — §6.1 `attempt_mode_enum`(L635-636, 한글 4종).
+
+    특성 #96(used_socratic vs used_solution_view)으로 콴다 대비 차별을 측정한다.
+    """
+
+    자유풀이 = "자유풀이"
+    Socratic대화 = "Socratic대화"
+    힌트제공 = "힌트제공"
+    풀이공개 = "풀이공개"
+
+
+class EventType(str, Enum):
+    """학생 풀이 단계 이벤트 유형 — §6.1 `event_type_enum`(L667-668, 한글 8종).
+
+    실시간 분석용(TimescaleDB hypertable `attempt_event`)의 이벤트 종류.
+    """
+
+    문제읽기 = "문제읽기"
+    조건분석 = "조건분석"
+    그래프그리기 = "그래프그리기"
+    계산 = "계산"
+    지움 = "지움"
+    막힘 = "막힘"
+    힌트요청 = "힌트요청"
+    답입력 = "답입력"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Socratic 대화 (§7.1 dialogue·dialogue_turn 인라인 DDL — 5종)
+# ──────────────────────────────────────────────────────────────────────────
+# §14.3에 별도 `CREATE TYPE`이 없어 §7.1 DDL의 컬럼 인라인 주석을 정본으로 채택한다
+# (위 활동 도메인·slice1·slice3 선례 동일). TurnRole만 영어 값(student/assistant/system),
+# 나머지 4종은 한글 값(한글 식별자 그대로 — Persona·ConceptLevel 선례).
+class Resolution(str, Enum):
+    """Socratic 대화 종결 결과 — §7.1 `resolution_enum`(L710-711, 한글 5종).
+
+    학생이 스스로 풀었는지·유도로 풀었는지·결국 풀이를 봤는지·포기했는지를 가른다.
+    """
+
+    학생자력해결 = "학생자력해결"
+    Socratic유도성공 = "Socratic유도성공"
+    힌트필요 = "힌트필요"
+    풀이공개로종결 = "풀이공개로종결"
+    포기 = "포기"
+
+
+class TurnRole(str, Enum):
+    """대화 턴 화자 — §7.1 `turn_role_enum`(L735, 영어 3종).
+
+    student(학생)·assistant(AI)·system(시스템 메시지). 값·식별자 모두 영어.
+    """
+
+    student = "student"
+    assistant = "assistant"
+    system = "system"
+
+
+class ContentType(str, Enum):
+    """대화 턴 콘텐츠 형식 — §7.1 `content_type_enum`(L737, 한글 4종)."""
+
+    텍스트 = "텍스트"
+    수식 = "수식"
+    이미지 = "이미지"
+    혼합 = "혼합"
+
+
+class SocraticStrategy(str, Enum):
+    """Socratic 발문 전략 — §7.1 `socratic_strategy_enum`(L740-741, 한글 6종).
+
+    AI 응답의 교수학적 전략(특성 #8/#18 조건확인·#21 단계분해).
+    """
+
+    조건확인 = "조건확인"
+    예시제시 = "예시제시"
+    반례제시 = "반례제시"
+    단계분해 = "단계분해"
+    유사문제 = "유사문제"
+    그래프그리기제안 = "그래프그리기제안"
+
+
+class StudentIntent(str, Enum):
+    """학생 발화 의도 — §7.1 `student_intent_enum`(L747-748, 한글 5종).
+
+    학생 턴을 분석해 분류한 의도(답시도/질문/막힘표현/포기/이해확인).
+    """
+
+    답시도 = "답시도"
+    질문 = "질문"
+    막힘표현 = "막힘표현"
+    포기 = "포기"
+    이해확인 = "이해확인"
