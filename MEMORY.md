@@ -59,6 +59,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-05-28 (원문검증): 저작권 가이드 v2.0·MathScope v4 수령 — 법적 서술 검증·데이터 백본 확증
+**컨텍스트**: Kiki가 원문 2종 추가 제공 — **저작권 종합가이드 v2.0**(2026-05-27, .docx→텍스트 추출)·**MathScope v4**(데이터 카탈로그, 2026-05-26). 앞서 *합성*으로 커밋한 법적 서술(licensing_safety·CLAUDE)을 원문 대조 검증.
+**검증 결과 — 전부 일치 ✓ (환각 0)**: §32 단서(영리 시험문제 금지→EBS·KICE·시도교육청·KMO 영리 차단)·§136·§140(영리 비친고죄, 합의해도 직권기소)·2024.8 대법원(KICE 사용료 의무)·공공누리 AI유형(2026-01-28)·AIHub 영리 명문허용·**한 줄 결론 "NCIC+AIHub+NuminaMath(Apache)+PRM800K(MIT)+PhET(CC BY)"**·NCIC §7 — 커밋 서술과 정확히 일치.
+**원문 보강(licensing_safety 반영)**: §93(DB제작자권)·§125-2(법정손배 1건당 최대 5천만)·**SA(ShareAlike) 함정**(AI 가중치 SA 전염 위험 → AoPS·LibreTexts ✅→⚠️ 교정, Khan NC+SA 완전격리)·**SA 우회**(Feist·대법원 2000다61664 — 사실만 추출+자체생성)·AIHub 4조건(출처표시·국외반출·재판매금지·환수)·AI유형 nuance(모델 상업이용 허용)·**NCIC 성취기준 §7(무제한) ↔ 해설서 공공누리 2유형(NC) 구분**·등급 A+/A/A-/B/C/D/E.
+**데이터 백본 확증(MathScope v4)**: 실제 수집 = **A-/A/A+ 21종·~4M 레코드, B/C/D/E 0건** — EBS·평가원·검정교과서 *미포함*. 재검토 "법적 안전조합" 교정은 *이미 데이터 엔지니어링이 실행 중인 현실*이었음(추가 A+: DLMF·Metamath, A: GSM8K·MATH·NuminaMath CoT/TIR·OpenMathInstruct 등).
+**신규 발견 — 제3의 스키마**: MathScope v4 `schema_v2.sql`(6테이블+3뷰: dataset_licenses·curriculum_standards·curriculum_alignments·problems·solution_steps·student_attempts + license 뷰)은 *L1 데이터/라이선스 거버넌스* 초점 → 앞서 정본화한 **Schema v1.0(앱 8도메인)과 상보적**(problems/solution_steps/curriculum 중복은 통합 필요). Schema v1.0=앱·런타임 정본 유지, schema_v2.sql=L1 학습데이터/다국가 교육과정 거버넌스 레이어.
+**적용**: `docs/legal/copyright_guide_v2.md`·`docs/data/dataset_catalog_v4.md` 레포 보존; licensing_safety.md 보강(SA 교정·§93/§125-2/§140·등급체계·AIHub 4조건·v4 백본). 2022 개정 보고서는 미수령이나 이미 코드 반영 ✓. **후속**: schema_v2.sql↔v1.0 통합·THIRD_PARTY_LICENSES 디렉토리·license_monitor cron.
+
 ### 2026-05-28 (OCR): OCR 스택 = PaddleOCR + Qwen3-VL 하이브리드 (Mathpix 대체)
 **컨텍스트**: CLAUDE.md 기술스택(Mathpix) ↔ PRD v1.2 §8.1(PaddleOCR+Qwen3-VL 하이브리드) 충돌 — 재검토 후속의 마지막 미해결 결정.
 **결정(Kiki)**: **PaddleOCR + Qwen3-VL 하이브리드(로컬, PaddleOCR fallback)** 채택, Mathpix 대체. 로컬 LLM 풀에 **Qwen3-VL**(멀티모달·그래프 개형) 추가.

@@ -26,11 +26,11 @@
 | CK-12 | CC BY-NC | ❌ | ✅ | ✅ | 비상업만 |
 | OpenStax | CC BY 4.0 | ✅ | ✅ | ✅ | 자유 |
 | Siyavula | CC BY | ✅ | ✅ | ✅ | 자유 |
-| LibreTexts | CC BY-SA | ✅ | ✅ | ✅ | Share-Alike |
+| LibreTexts | CC BY-SA | ⚠️ | ⚠️ | ✅ | **SA(B등급)** — AI 학습 위험(가중치 SA 전염), 서비스 콘텐츠만 |
 | NRICH | 자체 | ⚠️ 협상 | ❌ | ✅ | Cambridge MMP |
 | Mathigon | 비상업 | ❌ | ❌ | — | 영감만 |
-| AoPS Wiki | CC BY-SA | ✅ | ✅ | ✅ | Share-Alike 의무 |
-| Khan Academy | 자체 (CC BY-NC-SA) | ❌ | ✅ | ✅ | 비상업 |
+| AoPS Wiki | CC BY-SA | ⚠️ | ⚠️ | ✅ | **SA(B등급)** — 학습 직접사용 위험; *사실·구조만 추출+자체생성* 우회 |
+| Khan Academy | CC BY-NC-SA | ❌ | ❌ | — | **NC+SA 이중독성(C등급)** — 완전격리 |
 | 3Blue1Brown | YouTube 표준 | ❌ | ❌ | — | 영감만 |
 | Illustrative Math | CC BY 4.0 | ✅ | ✅ | ✅ | 자유 |
 
@@ -47,6 +47,12 @@
 | miniF2F | MIT | ✅ | 488 Lean |
 | OlymMATH | 공개 | ✅ | 올림피아드 |
 | Mathlib4 | Apache 2.0 | ✅ | Lean 형식화 |
+| NuminaMath-TIR | Apache 2.0 | ✅ | 72,540 도구통합추론(AIMO 우승셋) |
+| GSM8K · MATH | MIT | ✅ | 표준 벤치마크·학습 |
+| OpenMathInstruct-1 | NVIDIA License | ✅ | A- 상업 허용 |
+| DLMF | US Gov Work | ✅ | NIST 특수함수(퍼블릭 도메인, A+) |
+
+*전체 21종 카탈로그·레코드 수·등급: `docs/data/dataset_catalog_v4.md`.*
 
 ## 사용자 데이터
 
@@ -70,12 +76,12 @@
 
 ## 저작권 가이드 v2.0 — EBS·평가원·동등문제 정책 (2026-05-28)
 
-> 출처: 외부 **저작권 종합가이드 v2.0**. 본 절은 그 결론을 기록하며, *변호사 최종 검토 전제*다 (CLAUDE.md 데이터·저작권 §).
+> 출처: **저작권 종합가이드 v2.0**(2026-05-27) — 원문 `docs/legal/copyright_guide_v2.md`. 실제 데이터 백본 카탈로그 `docs/data/dataset_catalog_v4.md`(MathScope v4, 21종). 본 절은 결론 요약이며 *변호사 최종 검토 전제* (CLAUDE.md 데이터·저작권 §).
 
 ### 왜 EBS·평가원 본문을 상업적으로 못 쓰나
 - 저작권법 **§32(시험문제로서의 복제)**는 입학·자격 시험 등에 타인 저작물 이용을 허용하나, **단서에 "영리 목적인 경우 제외"** — 상업 앱(WhyMath)엔 적용 불가.
 - §25(학교교육 목적) 역시 *교육기관* 대상이라 상업 서비스엔 해당 없음.
-- 평가원 기출·EBS 교재의 *본문·문항*은 저작물이며, 무단 복제·변형 배포는 **§136(권리침해죄)·§140** 형사 책임 가능. 가이드 v2.0은 **2024 대법원 판례**로 이 해석을 보강.
+- 평가원 기출·EBS 교재의 *본문·문항*은 저작물이며, 무단 복제·변형 배포는 **§136(권리침해죄)·§140(영리·상습 비친고죄 — 합의해도 검찰 직권기소)** 형사 책임 + **§125-2 법정손해배상**(영리·고의 1건당 최대 5천만 원). DB 추출은 **§93(DB제작자권)** 별도 침해. 가이드는 **2024.8 대법원(KICE 사용료 지급 의무)**로 보강.
 - 결론: **상업 활용 불가**. 단, *단원명·교육과정 코드·문항번호* 등 **사실정보(구조 메타데이터)**는 인용 가능.
 
 ### 대체 전략 — 자체 생성 동등문제
@@ -87,6 +93,19 @@
 - **무제한·영리허용**: NCIC 성취기준(§7 사실정보)·공공누리 AI유형(2026-01)·AIHub 수학셋.
 - **LLM 학습·예시**: NuminaMath(Apache)·PRM800K(MIT)·PhET(CC BY)·Metamath(CC0)·Lean.
 - 이 조합만으로 Phase 1(고3 수능) 콘텐츠를 충족하는지 — **변호사 검토 권장**.
+
+### 등급 체계·실제 백본 (MathScope v4)
+- 등급: **A+**(NCIC 성취기준·Common Core·DLMF·Metamath·PISA/TIMSS) · **A**(GSM8K·MATH·OpenStax·NuminaMath 1.5/CoT/TIR·PRM800K·OlympiadBench·miniF2F·Mathlib4·PhET 등) · **A-**(UK·ACARA·AIHub·OpenMathInstruct, 조건부) · **B=SA**(위험) · **C=NC**(영리차단) · **D=독점**(EBS·검정교과서·KMO).
+- **실제 수집 백본 = A-/A/A+ 21종·약 4M 레코드, B/C/D/E 0건**(EBS·평가원·검정교과서 미포함) — `docs/data/dataset_catalog_v4.md`. 재검토 "법적 안전조합" 교정과 정합.
+
+### SA(ShareAlike) 함정과 우회
+- SA(CC BY-SA: AoPS·LibreTexts·Wikipedia·StackExchange·OpenWebMath) 자료를 **AI 학습에 직접 쓰면 모델 가중치를 SA로 공개**해야 한다는 해석 가능 → SaaS 모델 붕괴 위험. 보수적 IP 변호사는 직접 학습 비권장.
+- **우회(가이드 §6.3 Tier 2)**: Feist v. Rural·대법원 2000다61664 — *사실(facts)은 저작권 보호 대상 아님*. SA·EBS·평가원에서 **수학적 사실·구조만 추출하고 표현은 Claude/Qwen3로 자체 생성** → 동등문제 전략의 일반 원리.
+
+### AIHub 4조건 / NCIC 구분
+- **AIHub**(71718·71716·71859·479·71518): 영리 명문 허용 — ① 출처표시 "한국지능정보사회진흥원 사업결과"(2차 저작물도) ② 국외반출·국외법인 별도합의 ③ **데이터셋 재판매·양도·대여 금지**(AI 모델 형태 서비스는 가능) ④ 위법 시 환수.
+- **공공누리 AI유형**(2026-01-28): AI유형 마크 자료는 *데이터 재판매만 금지*, **학습된 모델의 상업 이용은 허용**.
+- **NCIC 구분**: 성취기준 *코드·고시 본문* = §7 보호대상 아님(무제한) ↔ NCIC *해설서·연구보고서* = 공공누리 2유형(영리 차단, C등급). 혼동 금지.
 
 ## 결정 트리
 
@@ -100,7 +119,7 @@
    - 명시 X → ⚠️ 사용 안 함이 기본
    - CC BY → ✅ 출처 표시
    - CC BY-NC → ⚠️ 비상업만
-   - CC BY-SA → ✅ Share-Alike 의무
+   - CC BY-SA → ⚠️ SA 전염성 — AI 학습 직접사용 위험, 사실만 추출+자체생성
    - Apache 2.0 / MIT → ✅ 자유
    - 사기업 독자 → ⚠️ 협상 필요
 5. 상업적 활용 가능한가?
@@ -151,4 +170,4 @@ sources:
 
 ---
 
-**최종 갱신**: 2026-05-28 (저작권 가이드 v2.0 반영 — EBS·평가원 영리금지·법적 안전조합·자체 동등문제 전략). 상세는 MEMORY.md 2026-05-28 결정 로그.
+**최종 갱신**: 2026-05-28 (저작권 가이드 v2.0 *원문*·MathScope v4 카탈로그 반영 — EBS·평가원 영리금지·법적 안전조합·SA 함정·AIHub 4조건·동등문제 전략). 원문: `docs/legal/copyright_guide_v2.md` · `docs/data/dataset_catalog_v4.md`. 상세 MEMORY.md 2026-05-28.
