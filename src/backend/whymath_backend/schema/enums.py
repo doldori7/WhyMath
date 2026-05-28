@@ -628,3 +628,64 @@ class MentalPhase(str, Enum):
 
     평상시 = "평상시"
     """입시 D-day 코칭 대상이 아닌 평상시(예: 고1·고2 학기 중)."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 다국 커리큘럼 매트릭스 (v1.1 curriculum_entry.schema.yaml — 슬라이스 8a)
+# ──────────────────────────────────────────────────────────────────────────
+# v1.0 도메인 밖. v1.1에서 이식한 CurriculumEntry(같은 개념이 나라마다 몇 학년에·어떤
+# 깊이로 다뤄지는지의 매트릭스 셀)가 *enum으로 명시한 두 필드*만 enum으로 만든다.
+# YAML이 enum으로 명시한 것은 required_depth(4종)·license_id(5종)뿐이다.
+#
+# ⚠️ country_code·grade_band·cognitive_level 등은 enum으로 만들지 않는다. YAML이
+# country_code를 ISO 3166-1 alpha-2(개방형 ~250개)+의사코드 'IMO'로 두고 "스키마는
+# 풀스케일 수용"이라 명시했고(Phase 3 9~12개국 확장 대비), Phase 1 KR/US/IMO 범위
+# 가드는 *데이터/파이프라인* 책임이지 모델 강제가 아니다. subject 류도 NCIC
+# AchievementStandard.subject가 str인 것과 정합 → `str`로 둔다(slice4 gender/
+# school_region이 닫힌 enum 날조를 회피해 str로 둔 방침과 동일).
+class RequiredDepth(str, Enum):
+    """국가 교육과정이 개념에 요구하는 깊이 — YAML `required_depth.enum`(영어 4종).
+
+    awareness < procedural < conceptual < mastery 순의 깊이 위계. use_enum_values=True
+    직렬화 시 영어 값 보존(예: required_depth="conceptual").
+    """
+
+    awareness = "awareness"
+    """인지 — 개념을 접하고 존재를 안다(가장 얕은 깊이)."""
+
+    procedural = "procedural"
+    """절차 — 정해진 절차·계산을 수행할 수 있다."""
+
+    conceptual = "conceptual"
+    """개념 — 원리를 이해하고 맥락에 적용할 수 있다."""
+
+    mastery = "mastery"
+    """숙달 — 능숙하게 다루고 새 상황에 전이할 수 있다(가장 깊은 깊이)."""
+
+
+class CurriculumLicense(str, Enum):
+    """국가별 원천 자원 라이선스 매트릭스 키 — YAML `license_id.enum`(5종).
+
+    셀 단위로 라이선스 의무를 추적한다(라이선스 미확인 국가는 셀을 만들지 않음 —
+    licensing_safety.md 결정 트리).
+
+    ⚠️ 식별자 주의: 값이 하이픈을 포함해(예 'KR-NCIC') Python 식별자로 쓸 수 없다. 따라서
+    멤버명만 언더스코어로 두고(`KR_NCIC`) *값은 하이픈 그대로*(`"KR-NCIC"`)다 — 값이 정본
+    이라 직렬화·역직렬화는 하이픈 값이 오간다(slice6 `AssessmentType.D_100예측` 선례 동일).
+    use_enum_values=True 직렬화 시 하이픈 값 보존(예: license_id="KR-NCIC").
+    """
+
+    KR_NCIC = "KR-NCIC"
+    """한국 2022 개정 교육과정 — 공공누리 1유형(상업·가공 OK, 출처 표시 필수)."""
+
+    US_CCSS = "US-CCSS"
+    """미국 Common Core — CCSSO/NGA 조건부(출처 표시·비변형 배포)."""
+
+    INT_IMO = "INT-IMO"
+    """IMO 신택터스 — 공식 표준 부재, WhyMath 자체 정리물."""
+
+    JP_MEXT = "JP-MEXT"
+    """일본 学習指導要領 — 정부 고시(Phase 3)."""
+
+    GB_NC = "GB-NC"
+    """영국 National Curriculum — OGL v3.0, CC BY 호환(Phase 3)."""

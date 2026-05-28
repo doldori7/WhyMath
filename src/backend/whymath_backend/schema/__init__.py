@@ -1,18 +1,19 @@
-"""WhyMath Schema v1.0 도메인 모델 (Pydantic) — 슬라이스 1·2·3·4·5·6·7(도메인 완결).
+"""WhyMath Schema 도메인 모델 (Pydantic) — 슬라이스 1~7(v1.0 도메인 완결) + 8a(v1.1 이식).
 
 설계 정본: `schemas/v1.0/schema_v1.0.md` §3(Problem)·§4(Concept Graph)·§5(User)·
-§6(Activity)·§7(Dialogue)·§8(Assessment)·§9(Time Series)·§10(Provenance)·§14.3(ENUM).
+§6(Activity)·§7(Dialogue)·§8(Assessment)·§9(Time Series)·§10(Provenance)·§14.3(ENUM);
+슬라이스 8a는 `schemas/v1.1/curriculum_entry.schema.yaml`(v1.0 도메인 밖 다국 커리큘럼 셀).
 
 Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이므로 이 슬라이스도
 순수 Pydantic 모델이다(SQLAlchemy/alembic은 후속 Phase).
 
 공개 심볼:
   - enums: Accessibility·AnswerFormat·AssessmentType·AttemptMode·CognitiveType·
-    ConceptLevel·ConceptRole·ContentType·Curriculum·Device·EdgeType·EventType·
-    ExamType·GenerationType·LicenseType·MajorCategory·MentalPhase·NoteApp·Persona·
-    QuestionFormat·RelationType·Resolution·ReviewStatus·SchoolType·SessionType·
-    SignaturePattern·SocraticStrategy·SourceType·StepType·StudentIntent·Subject·
-    SubscriptionTier·TrackType·TurnRole·VisualType
+    ConceptLevel·ConceptRole·ContentType·Curriculum·CurriculumLicense·Device·EdgeType·
+    EventType·ExamType·GenerationType·LicenseType·MajorCategory·MentalPhase·NoteApp·
+    Persona·QuestionFormat·RelationType·RequiredDepth·Resolution·ReviewStatus·SchoolType·
+    SessionType·SignaturePattern·SocraticStrategy·SourceType·StepType·StudentIntent·
+    Subject·SubscriptionTier·TrackType·TurnRole·VisualType
   - problem(슬라이스 1): Condition·Problem·ProblemStep·ProblemRelation
   - provenance(슬라이스 2): ContentProvenance·GenerationLog
   - concept(슬라이스 3): Concept·ConceptEdge·ProblemConcept·ConceptFusion
@@ -22,6 +23,7 @@ Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이�
   - assessment(슬라이스 6): Assessment·ConceptMasteryHistory
   - timeseries(슬라이스 7): DailyLearningMetrics·ProblemSolveTimeDistribution·
     UserBehaviorMetrics
+  - curriculum(슬라이스 8a, v1.1 이식): CurriculumEntry
 """
 
 from whymath_backend.schema.activity import (
@@ -39,6 +41,9 @@ from whymath_backend.schema.concept import (
     ConceptFusion,
     ProblemConcept,
 )
+from whymath_backend.schema.curriculum_entry import (
+    CurriculumEntry,
+)
 from whymath_backend.schema.dialogue import (
     Dialogue,
     DialogueTurn,
@@ -53,6 +58,7 @@ from whymath_backend.schema.enums import (
     ConceptRole,
     ContentType,
     Curriculum,
+    CurriculumLicense,
     Device,
     EdgeType,
     EventType,
@@ -65,6 +71,7 @@ from whymath_backend.schema.enums import (
     Persona,
     QuestionFormat,
     RelationType,
+    RequiredDepth,
     Resolution,
     ReviewStatus,
     SchoolType,
@@ -113,6 +120,7 @@ __all__ = [
     "ConceptRole",
     "ContentType",
     "Curriculum",
+    "CurriculumLicense",
     "Device",
     "EdgeType",
     "EventType",
@@ -125,6 +133,7 @@ __all__ = [
     "Persona",
     "QuestionFormat",
     "RelationType",
+    "RequiredDepth",
     "Resolution",
     "ReviewStatus",
     "SchoolType",
@@ -171,4 +180,6 @@ __all__ = [
     "DailyLearningMetrics",
     "ProblemSolveTimeDistribution",
     "UserBehaviorMetrics",
+    # curriculum
+    "CurriculumEntry",
 ]
