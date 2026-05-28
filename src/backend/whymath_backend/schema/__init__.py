@@ -7,24 +7,29 @@ Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이�
 순수 Pydantic 모델이다(SQLAlchemy/alembic은 후속 Phase).
 
 공개 심볼:
-  - enums: Accessibility·AnswerFormat·AttemptMode·CognitiveType·ConceptLevel·
-    ConceptRole·ContentType·Curriculum·Device·EdgeType·EventType·ExamType·
-    GenerationType·LicenseType·MajorCategory·NoteApp·Persona·QuestionFormat·
-    RelationType·Resolution·ReviewStatus·SchoolType·SessionType·SignaturePattern·
-    SocraticStrategy·SourceType·StepType·StudentIntent·Subject·SubscriptionTier·
-    TrackType·TurnRole·VisualType
+  - enums: Accessibility·AnswerFormat·AssessmentType·AttemptMode·CognitiveType·
+    ConceptLevel·ConceptRole·ContentType·Curriculum·Device·EdgeType·EventType·
+    ExamType·GenerationType·LicenseType·MajorCategory·MentalPhase·NoteApp·Persona·
+    QuestionFormat·RelationType·Resolution·ReviewStatus·SchoolType·SessionType·
+    SignaturePattern·SocraticStrategy·SourceType·StepType·StudentIntent·Subject·
+    SubscriptionTier·TrackType·TurnRole·VisualType
   - problem(슬라이스 1): Condition·Problem·ProblemStep·ProblemRelation
   - provenance(슬라이스 2): ContentProvenance·GenerationLog
   - concept(슬라이스 3): Concept·ConceptEdge·ProblemConcept·ConceptFusion
   - user(슬라이스 4): UserProfile·UserTrackHistory·UserPersonaHistory·UserStateSnapshot
   - activity(슬라이스 5): LearningSession·ProblemAttempt·AttemptEvent
   - dialogue(슬라이스 5): Dialogue·DialogueTurn
+  - assessment(슬라이스 6): Assessment·ConceptMasteryHistory
 """
 
 from whymath_backend.schema.activity import (
     AttemptEvent,
     LearningSession,
     ProblemAttempt,
+)
+from whymath_backend.schema.assessment import (
+    Assessment,
+    ConceptMasteryHistory,
 )
 from whymath_backend.schema.concept import (
     Concept,
@@ -39,6 +44,7 @@ from whymath_backend.schema.dialogue import (
 from whymath_backend.schema.enums import (
     Accessibility,
     AnswerFormat,
+    AssessmentType,
     AttemptMode,
     CognitiveType,
     ConceptLevel,
@@ -52,6 +58,7 @@ from whymath_backend.schema.enums import (
     GenerationType,
     LicenseType,
     MajorCategory,
+    MentalPhase,
     NoteApp,
     Persona,
     QuestionFormat,
@@ -92,6 +99,7 @@ __all__ = [
     # enums
     "Accessibility",
     "AnswerFormat",
+    "AssessmentType",
     "AttemptMode",
     "CognitiveType",
     "ConceptLevel",
@@ -105,6 +113,7 @@ __all__ = [
     "GenerationType",
     "LicenseType",
     "MajorCategory",
+    "MentalPhase",
     "NoteApp",
     "Persona",
     "QuestionFormat",
@@ -148,4 +157,7 @@ __all__ = [
     # dialogue
     "Dialogue",
     "DialogueTurn",
+    # assessment
+    "Assessment",
+    "ConceptMasteryHistory",
 ]
