@@ -26,6 +26,18 @@ def etag_for(model: BaseModel) -> str:
     return f'"{digest[:16]}"'
 
 
+def matches_if_none_match(if_none_match: str | None, current_etag: str) -> bool:
+    """If-None-Match가 현재 ETag와 매칭되면 True → 호출부가 304 Not Modified를 돌려준다.
+
+    조건부 GET(캐싱) 용도. `None`이면 조건 없음(False). `"*"`면 리소스 존재 시 매칭(True).
+    쉼표로 구분된 ETag 목록 중 하나라도 현재 ETag와 같으면 True.
+    """
+    if if_none_match is None:
+        return False
+    tokens = [token.strip() for token in if_none_match.split(",")]
+    return "*" in tokens or current_etag in tokens
+
+
 def ensure_if_match(if_match: str | None, current_etag: str) -> None:
     """If-Match 전제조건 검사 — 불일치면 412 Precondition Failed.
 

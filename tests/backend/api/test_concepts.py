@@ -358,3 +358,42 @@ class TestConcurrency:
         )
         assert resp.status_code == 412
         assert len(fake.deleted) == 0
+
+
+class TestConditionalGet:
+    """If-None-Match → 304 조건부 GET(캐싱)."""
+
+    def test_matching_if_none_match_returns_304(self) -> None:
+        concept = _sample_concept()
+        client = _client(FakeSession(get_map={concept.concept_id: concept}))
+        etag = client.get(f"/v1/concepts/{concept.concept_id}").headers["ETag"]
+        resp = client.get(
+            f"/v1/concepts/{concept.concept_id}", headers={"If-None-Match": etag}
+        )
+        assert resp.status_code == 304
+        assert resp.headers.get("ETag") == etag
+        assert resp.content == b""
+
+    def test_wildcard_if_none_match_returns_304(self) -> None:
+        concept = _sample_concept()
+        client = _client(FakeSession(get_map={concept.concept_id: concept}))
+        resp = client.get(
+            f"/v1/concepts/{concept.concept_id}", headers={"If-None-Match": "*"}
+        )
+        assert resp.status_code == 304
+
+    def test_stale_if_none_match_returns_200(self) -> None:
+        concept = _sample_concept()
+        client = _client(FakeSession(get_map={concept.concept_id: concept}))
+        resp = client.get(
+            f"/v1/concepts/{concept.concept_id}",
+            headers={"If-None-Match": '"deadbeefdeadbeef"'},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["code"] == concept.code
+
+    def test_no_if_none_match_returns_200(self) -> None:
+        concept = _sample_concept()
+        client = _client(FakeSession(get_map={concept.concept_id: concept}))
+        resp = client.get(f"/v1/concepts/{concept.concept_id}")
+        assert resp.status_code == 200

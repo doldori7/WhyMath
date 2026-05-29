@@ -24,7 +24,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.api._concurrency import ensure_if_match, etag_for
+from whymath_backend.api._concurrency import (
+    ensure_if_match,
+    etag_for,
+    matches_if_none_match,
+)
 from whymath_backend.db.models.problem import Problem, ProblemRelation, ProblemStep
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import Subject
@@ -70,9 +74,16 @@ async def create_problem(
 
 @router.get("/{problem_id}", response_model=ProblemSchema, summary="문제 단건 조회")
 async def read_problem(
-    problem_id: uuid.UUID, session: SessionDep, response: Response
-) -> ProblemSchema:
-    """UUID로 문제 단건 조회 — 없으면 404. 응답에 ETag(낙관적 동시성 검증자)를 싣는다."""
+    problem_id: uuid.UUID,
+    session: SessionDep,
+    response: Response,
+    if_none_match: Annotated[str | None, Header()] = None,
+) -> ProblemSchema | Response:
+    """UUID로 문제 단건 조회 — 없으면 404.
+
+    ETag를 싣고, `If-None-Match`가 현재 ETag와 일치하면 **304 Not Modified**(빈 본문)로
+    응답해 모바일 대역폭을 아낀다.
+    """
     orm = await session.get(Problem, problem_id)
     if orm is None:
         raise HTTPException(
@@ -80,7 +91,10 @@ async def read_problem(
             detail=f"문제를 찾을 수 없습니다: {problem_id}",
         )
     result = orm.to_schema()
-    response.headers["ETag"] = etag_for(result)
+    etag = etag_for(result)
+    if matches_if_none_match(if_none_match, etag):
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+    response.headers["ETag"] = etag
     return result
 
 

@@ -243,3 +243,38 @@ def test_concept_optimistic_lock_on_live_pg() -> None:
     finally:
         if concept_id is not None:
             asyncio.run(_delete_concept(uuid.UUID(concept_id)))
+
+
+def test_concept_conditional_get_304_on_live_pg() -> None:
+    """GET ETag→If-None-Match로 GET→304→PATCH 변경 후 옛 ETag→200(내용 바뀜)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    code = f"TEST-INM-{uuid.uuid4().hex[:8]}"
+    concept_id: str | None = None
+    try:
+        with TestClient(create_app()) as client:
+            concept_id = client.post(
+                "/v1/concepts", json={"code": code, "name_ko": "원본", "level": "단원"}
+            ).json()["concept_id"]
+            etag = client.get(f"/v1/concepts/{concept_id}").headers["ETag"]
+
+            # 변하지 않았으면 304(빈 본문)
+            not_mod = client.get(
+                f"/v1/concepts/{concept_id}", headers={"If-None-Match": etag}
+            )
+            assert not_mod.status_code == 304
+            assert not_mod.content == b""
+
+            # PATCH로 내용 변경 → 옛 ETag로 조건부 GET은 이제 200(본문)
+            client.patch(f"/v1/concepts/{concept_id}", json={"name_en": "Changed"})
+            refetched = client.get(
+                f"/v1/concepts/{concept_id}", headers={"If-None-Match": etag}
+            )
+            assert refetched.status_code == 200
+            assert refetched.json()["name_en"] == "Changed"
+    finally:
+        if concept_id is not None:
+            asyncio.run(_delete_concept(uuid.UUID(concept_id)))
