@@ -9,14 +9,34 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - 도메인2 Concept (§4.2): Concept·ConceptEdge·ProblemConcept·ConceptFusion.
   - 도메인8 Provenance (§10.1): ContentProvenance·GenerationLog.
   - 도메인3 User (§5.1·§5.2): UserProfile·UserTrackHistory·UserPersonaHistory·UserStateSnapshot.
+  - 도메인4 Activity (§6.1): LearningSession·ProblemAttempt·AttemptEvent.
+  - 도메인5 Dialogue (§7.1): Dialogue·DialogueTurn.
+  - 도메인6 Assessment (§8.1): Assessment·ConceptMasteryHistory.
+  - 도메인7 TimeSeries (§9.1): DailyLearningMetrics·ProblemSolveTimeDistribution·
+    UserBehaviorMetrics.
   - v1.1 CurriculumEntry (다국 커리큘럼 매트릭스 셀).
   - v1.1 TextbookMapping·TextbookUnit (교과서 매핑 — 중첩 → 관계형 2테이블).
 모든 테이블이 한 `Base.metadata`에 모여 문자열 FK 타깃(`problem.problem_id`·
-`concept.concept_id`·`user_profile.user_id`·`textbook_mapping.isbn` 등)이 해소된다.
+`concept.concept_id`·`user_profile.user_id`·`learning_session.session_id`·
+`problem_attempt.attempt_id`·`dialogue.dialogue_id`·`textbook_mapping.isbn` 등)이 해소된다.
+
+도메인4~7의 hypertable 5종(attempt_event·concept_mastery_history·daily_learning_metrics·
+problem_solve_time_distribution·user_behavior_metrics)은 ORM에선 *일반 테이블*이다
+(create_hypertable 변환은 마이그레이션 레벨 — 메인 처리). §6~§9 DDL이 REFERENCES를 명시하지
+않은 컬럼(target_concept_id·stuck_at_concept_id·attempt_event/시계열 FK들)은 FK가 아니다.
 """
 
 from __future__ import annotations
 
+from whymath_backend.db.models.activity import (
+    AttemptEvent,
+    LearningSession,
+    ProblemAttempt,
+)
+from whymath_backend.db.models.assessment import (
+    Assessment,
+    ConceptMasteryHistory,
+)
 from whymath_backend.db.models.concept import (
     Concept,
     ConceptEdge,
@@ -24,6 +44,10 @@ from whymath_backend.db.models.concept import (
     ProblemConcept,
 )
 from whymath_backend.db.models.curriculum_entry import CurriculumEntry
+from whymath_backend.db.models.dialogue import (
+    Dialogue,
+    DialogueTurn,
+)
 from whymath_backend.db.models.problem import (
     Problem,
     ProblemRelation,
@@ -36,6 +60,11 @@ from whymath_backend.db.models.provenance import (
 from whymath_backend.db.models.textbook_mapping import (
     TextbookMapping,
     TextbookUnit,
+)
+from whymath_backend.db.models.timeseries import (
+    DailyLearningMetrics,
+    ProblemSolveTimeDistribution,
+    UserBehaviorMetrics,
 )
 from whymath_backend.db.models.user import (
     UserPersonaHistory,
@@ -62,6 +91,20 @@ __all__ = [
     "UserTrackHistory",
     "UserPersonaHistory",
     "UserStateSnapshot",
+    # 도메인4 Activity
+    "LearningSession",
+    "ProblemAttempt",
+    "AttemptEvent",
+    # 도메인5 Dialogue
+    "Dialogue",
+    "DialogueTurn",
+    # 도메인6 Assessment
+    "Assessment",
+    "ConceptMasteryHistory",
+    # 도메인7 TimeSeries
+    "DailyLearningMetrics",
+    "ProblemSolveTimeDistribution",
+    "UserBehaviorMetrics",
     # v1.1 CurriculumEntry
     "CurriculumEntry",
     # v1.1 TextbookMapping

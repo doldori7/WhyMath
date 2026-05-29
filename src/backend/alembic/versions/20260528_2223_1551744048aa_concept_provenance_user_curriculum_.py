@@ -40,12 +40,26 @@ def upgrade() -> None:
         sa.Column("parent_concept_id", sa.Uuid(), nullable=True),
         sa.Column(
             "subject",
-            sa.Enum("공통", "미적분", "확통", "기하", "인공지능수학", name="subject_enum"),
+            postgresql.ENUM(
+                "공통",
+                "미적분",
+                "확통",
+                "기하",
+                "인공지능수학",
+                name="subject_enum",
+                create_type=False,
+            ),
             nullable=True,
         ),
         sa.Column(
             "curriculum_version",
-            sa.Enum("2009_REVISION", "2015_REVISION", "2022_REVISION", name="curriculum_enum"),
+            postgresql.ENUM(
+                "2009_REVISION",
+                "2015_REVISION",
+                "2022_REVISION",
+                name="curriculum_enum",
+                create_type=False,
+            ),
             nullable=True,
         ),
         sa.Column("grade_introduced", sa.Integer(), nullable=True),
@@ -390,7 +404,7 @@ def upgrade() -> None:
         sa.Column("problem_id", sa.Uuid(), nullable=True),
         sa.Column(
             "original_source",
-            sa.Enum(
+            postgresql.ENUM(
                 "평가원",
                 "EBS",
                 "AIHub",
@@ -400,6 +414,7 @@ def upgrade() -> None:
                 "사용자자작",
                 "교과서",
                 name="source_type_enum",
+                create_type=False,
             ),
             nullable=True,
         ),
@@ -660,4 +675,28 @@ def downgrade() -> None:
     op.drop_index("idx_concept_level", table_name="concept")
     op.drop_index("idx_concept_code", table_name="concept")
     op.drop_table("concept")
+    # 이 마이그레이션이 새로 만든 native ENUM 정리(create_table 자동 생성분 — drop_table로 안
+    # 사라짐, 안 떨구면 재-upgrade "type already exists"). 공유 3종(source_type_enum·subject_enum·
+    # curriculum_enum)은 problem 마이그레이션 소유라 여기서 안 떨굼(create_type=False로 재생성도
+    # 안 했음). checkfirst로 멱등.
+    for _enum_name in (
+        "concept_level_enum",
+        "cognitive_type_enum",
+        "edge_type_enum",
+        "concept_role_enum",
+        "license_enum",
+        "generation_type_enum",
+        "school_type_enum",
+        "track_type_enum",
+        "major_category_enum",
+        "device_enum",
+        "note_app_enum",
+        "subscription_tier_enum",
+        "accessibility_enum",
+        "persona_enum",
+        "required_depth_enum",
+        "curriculum_license_enum",
+        "legal_review_status_enum",
+    ):
+        postgresql.ENUM(name=_enum_name).drop(op.get_bind(), checkfirst=True)
     # ### end Alembic commands ###
