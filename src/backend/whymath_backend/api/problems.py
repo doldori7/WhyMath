@@ -23,10 +23,12 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.db.models.problem import Problem
+from whymath_backend.db.models.problem import Problem, ProblemRelation, ProblemStep
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import Subject
 from whymath_backend.schema.problem import Problem as ProblemSchema
+from whymath_backend.schema.problem import ProblemRelation as ProblemRelationSchema
+from whymath_backend.schema.problem import ProblemStep as ProblemStepSchema
 
 router = APIRouter(prefix="/v1/problems", tags=["problem"])
 
@@ -87,5 +89,56 @@ async def list_problems(
     if subject is not None:
         stmt = stmt.where(Problem.subject == subject)
     stmt = stmt.order_by(Problem.created_at.desc(), Problem.problem_id).limit(limit).offset(offset)
+    result = await session.execute(stmt)
+    return [row.to_schema() for row in result.scalars().all()]
+
+
+@router.get(
+    "/{problem_id}/steps",
+    response_model=list[ProblemStepSchema],
+    summary="문제 풀이 단계 목록",
+)
+async def list_problem_steps(problem_id: uuid.UUID, session: SessionDep) -> list[ProblemStepSchema]:
+    """문제의 풀이 단계(Polya·Socratic) 목록 — step_order 순. 문제 없으면 404.
+
+    하위 리소스 read 전용(단계 생성/수정은 범위 밖). 부모 부재를 빈 목록과 구분하기 위해
+    먼저 문제 존재를 확인한다.
+    """
+    if await session.get(Problem, problem_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"문제를 찾을 수 없습니다: {problem_id}",
+        )
+    stmt = (
+        select(ProblemStep)
+        .where(ProblemStep.problem_id == problem_id)
+        .order_by(ProblemStep.step_order)
+    )
+    result = await session.execute(stmt)
+    return [row.to_schema() for row in result.scalars().all()]
+
+
+@router.get(
+    "/{problem_id}/relations",
+    response_model=list[ProblemRelationSchema],
+    summary="문항 간 관계 목록",
+)
+async def list_problem_relations(
+    problem_id: uuid.UUID, session: SessionDep
+) -> list[ProblemRelationSchema]:
+    """이 문제가 출발점인(outgoing) 문항 관계 목록 — 문제 없으면 404.
+
+    `parent_problem_id == path`인 관계만(나가는 방향). 역방향·양방향은 후속.
+    """
+    if await session.get(Problem, problem_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"문제를 찾을 수 없습니다: {problem_id}",
+        )
+    stmt = (
+        select(ProblemRelation)
+        .where(ProblemRelation.parent_problem_id == problem_id)
+        .order_by(ProblemRelation.related_problem_id, ProblemRelation.relation_type)
+    )
     result = await session.execute(stmt)
     return [row.to_schema() for row in result.scalars().all()]

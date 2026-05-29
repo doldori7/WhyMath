@@ -28,9 +28,10 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.db.models.concept import Concept
+from whymath_backend.db.models.concept import Concept, ConceptEdge
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.concept import Concept as ConceptSchema
+from whymath_backend.schema.concept import ConceptEdge as ConceptEdgeSchema
 
 router = APIRouter(prefix="/v1/concepts", tags=["concept"])
 
@@ -88,5 +89,31 @@ async def list_concepts(
     정렬 키를 code(UNIQUE)로 고정해 페이지네이션이 안정적(동률 없는 전순서)이다.
     """
     stmt = select(Concept).order_by(Concept.code).limit(limit).offset(offset)
+    result = await session.execute(stmt)
+    return [row.to_schema() for row in result.scalars().all()]
+
+
+@router.get(
+    "/{concept_id}/edges",
+    response_model=list[ConceptEdgeSchema],
+    summary="개념 의존 엣지 목록",
+)
+async def list_concept_edges(concept_id: uuid.UUID, session: SessionDep) -> list[ConceptEdgeSchema]:
+    """이 개념에서 나가는(outgoing) 그래프 엣지 목록 — 개념 없으면 404.
+
+    `from_concept_id == path`인 엣지만(나가는 방향, `idx_concept_edge_from` 활용). 역방향은 후속.
+    주의: 이건 backend PG `concept_edge`이며, data-pipeline의 Neo4j concept_graph와 *별개*다
+    (다른 키 공간·다른 저장소).
+    """
+    if await session.get(Concept, concept_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"개념을 찾을 수 없습니다: {concept_id}",
+        )
+    stmt = (
+        select(ConceptEdge)
+        .where(ConceptEdge.from_concept_id == concept_id)
+        .order_by(ConceptEdge.to_concept_id, ConceptEdge.edge_type)
+    )
     result = await session.execute(stmt)
     return [row.to_schema() for row in result.scalars().all()]

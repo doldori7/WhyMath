@@ -20,9 +20,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 
 from whymath_backend.app import create_app
-from whymath_backend.db.models.concept import Concept
+from whymath_backend.db.models.concept import Concept, ConceptEdge
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.concept import Concept as ConceptSchema
+from whymath_backend.schema.concept import ConceptEdge as ConceptEdgeSchema
+from whymath_backend.schema.enums import EdgeType
 
 _VALID_BODY = {"code": "CAL-INT-FTC", "name_ko": "미적분학의 기본정리", "level": "단원"}
 
@@ -103,6 +105,16 @@ def _sample_concept(
     return Concept.from_schema(ConceptSchema(code=code, name_ko=name, level="단원"))
 
 
+def _sample_edge(from_id: uuid.UUID, to_id: uuid.UUID) -> ConceptEdge:
+    return ConceptEdge.from_schema(
+        ConceptEdgeSchema(
+            from_concept_id=from_id,
+            to_concept_id=to_id,
+            edge_type=EdgeType.PREREQUISITE,
+        )
+    )
+
+
 class TestCreate:
     def test_create_returns_201_and_commits(self) -> None:
         """정상 생성 → 201 + code 에코 + commit 호출."""
@@ -178,3 +190,26 @@ class TestList:
         assert client.get("/v1/concepts?limit=0").status_code == 422
         assert client.get("/v1/concepts?limit=999").status_code == 422
         assert client.get("/v1/concepts?offset=-1").status_code == 422
+
+
+class TestEdges:
+    def test_lists_edges_for_existing_concept(self) -> None:
+        concept = _sample_concept()
+        edge = _sample_edge(concept.concept_id, uuid.uuid4())
+        fake = FakeSession(get_map={concept.concept_id: concept}, list_rows=[edge])
+        resp = _client(fake).get(f"/v1/concepts/{concept.concept_id}/edges")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["edge_type"] == "PREREQUISITE"
+
+    def test_edges_404_when_concept_missing(self) -> None:
+        resp = _client(FakeSession()).get(f"/v1/concepts/{uuid.uuid4()}/edges")
+        assert resp.status_code == 404
+
+    def test_edges_empty_when_no_edges(self) -> None:
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).get(f"/v1/concepts/{concept.concept_id}/edges")
+        assert resp.status_code == 200
+        assert resp.json() == []

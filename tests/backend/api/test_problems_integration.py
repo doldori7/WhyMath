@@ -55,6 +55,33 @@ async def _delete_problem(problem_id: uuid.UUID) -> None:
         await engine.dispose()
 
 
+async def _insert_step(problem_id: uuid.UUID, order: int, title: str) -> None:
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO problem_step (problem_id, step_order, step_title) "
+                    "VALUES (:pid, :ord, :title)"
+                ),
+                {"pid": str(problem_id), "ord": order, "title": title},
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _delete_steps(problem_id: uuid.UUID) -> None:
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM problem_step WHERE problem_id = :pid"),
+                {"pid": str(problem_id)},
+            )
+    finally:
+        await engine.dispose()
+
+
 def test_problem_crud_roundtrip_on_live_pg() -> None:
     """POST→GET→subject 목록이 실 PG에서 왕복한다."""
     if not asyncio.run(_pg_reachable()):
@@ -85,4 +112,36 @@ def test_problem_crud_roundtrip_on_live_pg() -> None:
             assert problem_id not in {item["problem_id"] for item in other.json()}
     finally:
         if problem_id is not None:
+            asyncio.run(_delete_problem(uuid.UUID(problem_id)))
+
+
+def test_problem_steps_nested_read_on_live_pg() -> None:
+    """GET /problems/{id}/steps가 step_order 순으로 실 PG에서 반환·404·빈 relations."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    problem_id: str | None = None
+    try:
+        with TestClient(create_app()) as client:
+            problem_id = client.post("/v1/problems", json=_body()).json()["problem_id"]
+            # 단계 2건을 역순(2→1)으로 삽입 → 엔드포인트가 step_order로 정렬하는지 확인
+            asyncio.run(_insert_step(uuid.UUID(problem_id), 2, "둘째 단계"))
+            asyncio.run(_insert_step(uuid.UUID(problem_id), 1, "첫째 단계"))
+
+            steps = client.get(f"/v1/problems/{problem_id}/steps")
+            assert steps.status_code == 200
+            assert [s["step_order"] for s in steps.json()] == [1, 2]
+
+            # relations는 0건 → 200 + []
+            rels = client.get(f"/v1/problems/{problem_id}/relations")
+            assert rels.status_code == 200
+            assert rels.json() == []
+
+            # 없는 문제의 하위 리소스 → 404
+            assert client.get(f"/v1/problems/{uuid.uuid4()}/steps").status_code == 404
+    finally:
+        if problem_id is not None:
+            asyncio.run(_delete_steps(uuid.UUID(problem_id)))
             asyncio.run(_delete_problem(uuid.UUID(problem_id)))

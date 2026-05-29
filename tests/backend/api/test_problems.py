@@ -14,10 +14,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy.exc import IntegrityError
 
 from whymath_backend.app import create_app
-from whymath_backend.db.models.problem import Problem
+from whymath_backend.db.models.problem import Problem, ProblemRelation, ProblemStep
 from whymath_backend.db.session import get_session
-from whymath_backend.schema.enums import Curriculum, SourceType, Subject
+from whymath_backend.schema.enums import Curriculum, RelationType, SourceType, Subject
 from whymath_backend.schema.problem import Problem as ProblemSchema
+from whymath_backend.schema.problem import ProblemRelation as ProblemRelationSchema
+from whymath_backend.schema.problem import ProblemStep as ProblemStepSchema
 
 
 def _valid_schema() -> ProblemSchema:
@@ -103,6 +105,24 @@ def _sample_problem() -> Problem:
     return Problem.from_schema(_valid_schema())
 
 
+def _sample_step(problem_id: uuid.UUID, order: int) -> ProblemStep:
+    return ProblemStep.from_schema(
+        ProblemStepSchema(
+            problem_id=problem_id, step_order=order, step_title=f"단계{order}"
+        )
+    )
+
+
+def _sample_relation(parent: uuid.UUID, related: uuid.UUID) -> ProblemRelation:
+    return ProblemRelation.from_schema(
+        ProblemRelationSchema(
+            parent_problem_id=parent,
+            related_problem_id=related,
+            relation_type=RelationType.유사,
+        )
+    )
+
+
 class TestCreate:
     def test_create_returns_201_and_commits(self) -> None:
         fake = FakeSession()
@@ -176,3 +196,47 @@ class TestList:
         assert client.get("/v1/problems?limit=0").status_code == 422
         assert client.get("/v1/problems?limit=999").status_code == 422
         assert client.get("/v1/problems?offset=-1").status_code == 422
+
+
+class TestSteps:
+    def test_lists_steps_for_existing_problem(self) -> None:
+        problem = _sample_problem()
+        steps = [
+            _sample_step(problem.problem_id, 1),
+            _sample_step(problem.problem_id, 2),
+        ]
+        fake = FakeSession(get_map={problem.problem_id: problem}, list_rows=steps)
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}/steps")
+        assert resp.status_code == 200
+        assert len(resp.json()) == 2
+
+    def test_steps_404_when_problem_missing(self) -> None:
+        resp = _client(FakeSession()).get(f"/v1/problems/{uuid.uuid4()}/steps")
+        assert resp.status_code == 404
+
+    def test_steps_empty_when_no_steps(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).get(f"/v1/problems/{problem.problem_id}/steps")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_steps_invalid_uuid_returns_422(self) -> None:
+        resp = _client(FakeSession()).get("/v1/problems/not-a-uuid/steps")
+        assert resp.status_code == 422
+
+
+class TestRelations:
+    def test_lists_relations_for_existing_problem(self) -> None:
+        parent = _sample_problem()
+        rel = _sample_relation(parent.problem_id, uuid.uuid4())
+        fake = FakeSession(get_map={parent.problem_id: parent}, list_rows=[rel])
+        resp = _client(fake).get(f"/v1/problems/{parent.problem_id}/relations")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["relation_type"] == "유사"
+
+    def test_relations_404_when_problem_missing(self) -> None:
+        resp = _client(FakeSession()).get(f"/v1/problems/{uuid.uuid4()}/relations")
+        assert resp.status_code == 404

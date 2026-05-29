@@ -54,6 +54,81 @@ async def _delete_concept(concept_id: uuid.UUID) -> None:
         await engine.dispose()
 
 
+async def _insert_edge(from_id: uuid.UUID, to_id: uuid.UUID) -> None:
+    engine = create_async_engine(Settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text(
+                    "INSERT INTO concept_edge (from_concept_id, to_concept_id, edge_type) "
+                    "VALUES (:f, :t, 'PREREQUISITE')"
+                ),
+                {"f": str(from_id), "t": str(to_id)},
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _delete_concepts_and_edges(concept_ids: list[uuid.UUID]) -> None:
+    engine = create_async_engine(Settings().database_url)
+    ids = [str(c) for c in concept_ids]
+    try:
+        async with engine.begin() as conn:
+            # FK 순서: 엣지 먼저, 그다음 노드
+            await conn.execute(
+                text(
+                    "DELETE FROM concept_edge WHERE from_concept_id = ANY(:ids) "
+                    "OR to_concept_id = ANY(:ids)"
+                ),
+                {"ids": ids},
+            )
+            await conn.execute(
+                text("DELETE FROM concept WHERE concept_id = ANY(:ids)"),
+                {"ids": ids},
+            )
+    finally:
+        await engine.dispose()
+
+
+def test_concept_edges_nested_read_on_live_pg() -> None:
+    """GET /concepts/{id}/edges가 outgoing 엣지를 실 PG에서 반환·방향·404 검증."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    suffix = uuid.uuid4().hex[:8]
+    ids: list[str] = []
+    try:
+        with TestClient(create_app()) as client:
+            a = client.post(
+                "/v1/concepts",
+                json={"code": f"CG-A-{suffix}", "name_ko": "가", "level": "단원"},
+            ).json()["concept_id"]
+            b = client.post(
+                "/v1/concepts",
+                json={"code": f"CG-B-{suffix}", "name_ko": "나", "level": "단원"},
+            ).json()["concept_id"]
+            ids = [a, b]
+            asyncio.run(_insert_edge(uuid.UUID(a), uuid.UUID(b)))
+
+            # a의 나가는 엣지 1건(→b)
+            edges = client.get(f"/v1/concepts/{a}/edges")
+            assert edges.status_code == 200
+            body = edges.json()
+            assert len(body) == 1
+            assert body[0]["to_concept_id"] == b
+
+            # b는 나가는 엣지 없음 → [](방향성 확인)
+            assert client.get(f"/v1/concepts/{b}/edges").json() == []
+
+            # 없는 개념 → 404
+            assert client.get(f"/v1/concepts/{uuid.uuid4()}/edges").status_code == 404
+    finally:
+        if ids:
+            asyncio.run(_delete_concepts_and_edges([uuid.UUID(c) for c in ids]))
+
+
 def test_concept_crud_roundtrip_on_live_pg() -> None:
     """POST→GET→중복(409)→목록이 실 PG에서 HTTP→get_session→PG로 왕복한다."""
     if not asyncio.run(_pg_reachable()):
