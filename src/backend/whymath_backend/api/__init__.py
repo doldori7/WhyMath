@@ -13,5 +13,6 @@ from __future__ import annotations
 
 from whymath_backend.api.concepts import router as concepts_router
 from whymath_backend.api.problems import router as problems_router
+from whymath_backend.api.users import router as users_router
 
-__all__ = ["concepts_router", "problems_router"]
+__all__ = ["concepts_router", "problems_router", "users_router"]

@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from whymath_backend.api.concepts import router as concepts_router
 from whymath_backend.api.problems import router as problems_router
+from whymath_backend.api.users import router as users_router
 from whymath_backend.db.session import dispose_engine
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.cache import RedisCache
@@ -364,5 +365,6 @@ def create_app(
     # 메인의 실 PG 검증으로 동작을 확인한다.
     app.include_router(concepts_router)
     app.include_router(problems_router)
+    app.include_router(users_router)
 
     return app
