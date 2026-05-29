@@ -1,0 +1,91 @@
+"""문제(problem) 도메인 HTTP API — concept 라우터와 동형의 DB-backed CRUD-read.
+
+엔드포인트(prefix `/v1/problems`):
+  - POST   /v1/problems          — 문제 생성(검증된 schema.Problem → ORM → commit). 201.
+  - GET    /v1/problems/{id}     — 단건 조회(UUID). 없으면 404.
+  - GET    /v1/problems          — 목록(최신순, limit/offset, subject 선택 필터).
+
+세션 결선·트랜잭션 책임·Annotated 의존성 패턴은 concepts.py와 동일(session.py 계약).
+`external_id`/`slug`는 UNIQUE라 중복 시 IntegrityError→409.
+
+경계 메모(CLAUDE.md 절대 금기): 본문 보유 금지 불변식(평가원·EBS·교과서 출처는 question_text
+미저장·license=WHYMATH_GENERATED 강제 등)은 *schema.Problem after-validator*가 이미 강제한다
+— 이 라우터는 검증 통과한 모델만 영속화한다. 학생 표면화 전 LLM 생성물은 L3/app.py 소관.
+"""
+
+from __future__ import annotations
+
+import uuid
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from whymath_backend.db.models.problem import Problem
+from whymath_backend.db.session import get_session
+from whymath_backend.schema.enums import Subject
+from whymath_backend.schema.problem import Problem as ProblemSchema
+
+router = APIRouter(prefix="/v1/problems", tags=["problem"])
+
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+
+@router.post(
+    "",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ProblemSchema,
+    summary="문제 생성",
+)
+async def create_problem(body: ProblemSchema, session: SessionDep) -> ProblemSchema:
+    """검증된 schema.Problem을 영속화하고 복원해 반환한다(201).
+
+    `external_id`/`slug`는 UNIQUE이므로 중복이면 PG가 IntegrityError → 롤백 후 **409**.
+    본문 보유 금지 등 출처별 불변식은 schema.Problem이 이미 검증했다(경계 메모 참조).
+    """
+    orm = Problem.from_schema(body)
+    session.add(orm)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="이미 존재하는 external_id 또는 slug입니다.",
+        ) from exc
+    await session.refresh(orm)
+    return orm.to_schema()
+
+
+@router.get("/{problem_id}", response_model=ProblemSchema, summary="문제 단건 조회")
+async def read_problem(problem_id: uuid.UUID, session: SessionDep) -> ProblemSchema:
+    """UUID로 문제 단건 조회 — 없으면 404."""
+    orm = await session.get(Problem, problem_id)
+    if orm is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"문제를 찾을 수 없습니다: {problem_id}",
+        )
+    return orm.to_schema()
+
+
+@router.get("", response_model=list[ProblemSchema], summary="문제 목록")
+async def list_problems(
+    session: SessionDep,
+    subject: Annotated[Subject | None, Query(description="과목 필터(선택)")] = None,
+    limit: Annotated[int, Query(ge=1, le=200, description="페이지 크기")] = 50,
+    offset: Annotated[int, Query(ge=0, description="건너뛸 행 수")] = 0,
+) -> list[ProblemSchema]:
+    """문제 목록 — 최신순(created_at desc, problem_id로 안정 정렬), limit/offset.
+
+    `subject`를 주면 해당 과목만 필터한다. 정렬 보조키로 problem_id(UNIQUE)를 둬 동일
+    created_at에서도 페이지네이션이 안정적이다.
+    """
+    stmt = select(Problem)
+    if subject is not None:
+        stmt = stmt.where(Problem.subject == subject)
+    stmt = stmt.order_by(Problem.created_at.desc(), Problem.problem_id).limit(limit).offset(offset)
+    result = await session.execute(stmt)
+    return [row.to_schema() for row in result.scalars().all()]

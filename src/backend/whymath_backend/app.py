@@ -28,6 +28,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from whymath_backend.api.concepts import router as concepts_router
+from whymath_backend.api.problems import router as problems_router
 from whymath_backend.db.session import dispose_engine
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.cache import RedisCache
@@ -362,5 +363,6 @@ def create_app(
     # HTTP). L3 인라인 엔드포인트와 달리 살아있는 PG를 요구하므로 통합테스트(@integration)와
     # 메인의 실 PG 검증으로 동작을 확인한다.
     app.include_router(concepts_router)
+    app.include_router(problems_router)
 
     return app
