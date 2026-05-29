@@ -23,12 +23,13 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.api._concurrency import ensure_if_match, etag_for
 from whymath_backend.db.models.concept import Concept, ConceptEdge
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.concept import Concept as ConceptSchema
@@ -46,12 +47,15 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
     response_model=ConceptSchema,
     summary="개념 노드 생성",
 )
-async def create_concept(body: ConceptSchema, session: SessionDep) -> ConceptSchema:
+async def create_concept(
+    body: ConceptSchema, session: SessionDep, response: Response
+) -> ConceptSchema:
     """검증된 schema.Concept를 영속화하고 복원해 반환한다(201).
 
     `code`는 UNIQUE이므로 중복이면 PG가 IntegrityError를 던진다 → 롤백 후 **409**로
     명확히 보고한다(스택트레이스 노출 금지 — 시스템 경계 검증). commit은 핸들러 책임이며
-    여기서 명시적으로 부른다(get_session은 commit하지 않음).
+    여기서 명시적으로 부른다(get_session은 commit하지 않음). 응답에 ETag를 실어 이후
+    조건부 수정(If-Match)을 가능케 한다.
     """
     orm = Concept.from_schema(body)
     session.add(orm)
@@ -64,19 +68,25 @@ async def create_concept(body: ConceptSchema, session: SessionDep) -> ConceptSch
             detail=f"이미 존재하는 개념 code입니다: {body.code}",
         ) from exc
     await session.refresh(orm)
-    return orm.to_schema()
+    result = orm.to_schema()
+    response.headers["ETag"] = etag_for(result)
+    return result
 
 
 @router.get("/{concept_id}", response_model=ConceptSchema, summary="개념 단건 조회")
-async def read_concept(concept_id: uuid.UUID, session: SessionDep) -> ConceptSchema:
-    """UUID로 개념 단건 조회 — 없으면 404."""
+async def read_concept(
+    concept_id: uuid.UUID, session: SessionDep, response: Response
+) -> ConceptSchema:
+    """UUID로 개념 단건 조회 — 없으면 404. 응답에 ETag(낙관적 동시성 검증자)를 싣는다."""
     orm = await session.get(Concept, concept_id)
     if orm is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"개념을 찾을 수 없습니다: {concept_id}",
         )
-    return orm.to_schema()
+    result = orm.to_schema()
+    response.headers["ETag"] = etag_for(result)
+    return result
 
 
 @router.get("", response_model=list[ConceptSchema], summary="개념 목록")
@@ -122,13 +132,18 @@ async def list_concept_edges(concept_id: uuid.UUID, session: SessionDep) -> list
 
 @router.patch("/{concept_id}", response_model=ConceptSchema, summary="개념 부분 수정")
 async def patch_concept(
-    concept_id: uuid.UUID, body: dict[str, Any], session: SessionDep
+    concept_id: uuid.UUID,
+    body: dict[str, Any],
+    session: SessionDep,
+    response: Response,
+    if_match: Annotated[str | None, Header()] = None,
 ) -> ConceptSchema:
     """제공된 필드만 부분 수정 — 병합 결과를 schema로 *재검증*해 불변식을 유지한다.
 
     `concept_id`(PK)는 경로로 고정(본문이 덮어쓰지 못함). 없으면 404, 병합 결과가 스키마
-    위반(미정의 필드·잘못된 값)이면 422, `code` UNIQUE 충돌이면 409. 동시성은 last-write-wins
-    (낙관적 락 미적용 — 후속). `session.merge`로 PK 기준 갱신한다.
+    위반(미정의 필드·잘못된 값)이면 422, `code` UNIQUE 충돌이면 409. **낙관적 동시성**:
+    `If-Match`(GET ETag)를 보내면 그사이 변경됐을 때 412로 거부한다(미전송 시 무조건 진행 —
+    비파괴). `session.merge`로 PK 기준 갱신하고 응답에 새 ETag를 싣는다.
     """
     existing = await session.get(Concept, concept_id)
     if existing is None:
@@ -136,6 +151,7 @@ async def patch_concept(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"개념을 찾을 수 없습니다: {concept_id}",
         )
+    ensure_if_match(if_match, etag_for(existing.to_schema()))
     merged = existing.to_schema().model_dump()
     merged.update(body)
     merged["concept_id"] = concept_id  # PK는 경로 고정
@@ -158,14 +174,21 @@ async def patch_concept(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"이미 존재하는 개념 code입니다: {validated.code}",
         ) from exc
-    return updated.to_schema()
+    result = updated.to_schema()
+    response.headers["ETag"] = etag_for(result)
+    return result
 
 
 @router.delete("/{concept_id}", status_code=status.HTTP_204_NO_CONTENT, summary="개념 삭제")
-async def delete_concept(concept_id: uuid.UUID, session: SessionDep) -> Response:
+async def delete_concept(
+    concept_id: uuid.UUID,
+    session: SessionDep,
+    if_match: Annotated[str | None, Header()] = None,
+) -> Response:
     """개념 삭제 — 없으면 404. 이 개념을 참조하는 엣지·매핑이 있으면 FK 위반 → 409.
 
     cascade를 ORM에 두지 않았으므로(가짜 cascade 금지) 참조가 있으면 삭제를 거부한다.
+    `If-Match`를 보내면 그사이 변경된 리소스의 삭제를 412로 막는다(조건부 삭제).
     """
     existing = await session.get(Concept, concept_id)
     if existing is None:
@@ -173,6 +196,7 @@ async def delete_concept(concept_id: uuid.UUID, session: SessionDep) -> Response
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"개념을 찾을 수 없습니다: {concept_id}",
         )
+    ensure_if_match(if_match, etag_for(existing.to_schema()))
     await session.delete(existing)
     try:
         await session.commit()

@@ -325,3 +325,56 @@ class TestDelete:
         resp = _client(fake).delete(f"/v1/problems/{problem.problem_id}")
         assert resp.status_code == 409
         assert fake.rolled_back is True
+
+
+class TestConcurrency:
+    """낙관적 동시성 — ETag 노출 + If-Match 조건부 변경."""
+
+    def test_get_and_post_expose_etag(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        get_resp = _client(fake).get(f"/v1/problems/{problem.problem_id}")
+        assert get_resp.headers.get("ETag", "").startswith('"')
+        post_resp = _client(FakeSession()).post("/v1/problems", json=_valid_body())
+        assert post_resp.headers.get("ETag", "").startswith('"')
+
+    def test_patch_with_matching_if_match_succeeds(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        client = _client(fake)
+        etag = client.get(f"/v1/problems/{problem.problem_id}").headers["ETag"]
+        resp = client.patch(
+            f"/v1/problems/{problem.problem_id}",
+            json={"answer": "42"},
+            headers={"If-Match": etag},
+        )
+        assert resp.status_code == 200, resp.text
+
+    def test_patch_with_stale_if_match_returns_412(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).patch(
+            f"/v1/problems/{problem.problem_id}",
+            json={"answer": "42"},
+            headers={"If-Match": '"deadbeefdeadbeef"'},
+        )
+        assert resp.status_code == 412
+        assert fake.committed is False
+
+    def test_patch_without_if_match_proceeds(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).patch(
+            f"/v1/problems/{problem.problem_id}", json={"answer": "42"}
+        )
+        assert resp.status_code == 200
+
+    def test_delete_with_stale_if_match_returns_412(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).delete(
+            f"/v1/problems/{problem.problem_id}",
+            headers={"If-Match": '"deadbeefdeadbeef"'},
+        )
+        assert resp.status_code == 412
+        assert len(fake.deleted) == 0

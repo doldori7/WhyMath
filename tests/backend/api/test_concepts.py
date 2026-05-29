@@ -292,3 +292,69 @@ class TestDelete:
         resp = _client(fake).delete(f"/v1/concepts/{concept.concept_id}")
         assert resp.status_code == 409
         assert fake.rolled_back is True
+
+
+class TestConcurrency:
+    """낙관적 동시성 — ETag 노출 + If-Match 조건부 변경."""
+
+    def test_get_and_post_expose_etag(self) -> None:
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        get_resp = _client(fake).get(f"/v1/concepts/{concept.concept_id}")
+        assert get_resp.headers.get("ETag", "").startswith('"')
+        post_resp = _client(FakeSession()).post("/v1/concepts", json=_VALID_BODY)
+        assert post_resp.headers.get("ETag", "").startswith('"')
+
+    def test_patch_with_matching_if_match_succeeds(self) -> None:
+        """GET ETag를 If-Match로 보내면(그사이 미변경) 200."""
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        client = _client(fake)
+        etag = client.get(f"/v1/concepts/{concept.concept_id}").headers["ETag"]
+        resp = client.patch(
+            f"/v1/concepts/{concept.concept_id}",
+            json={"name_en": "X"},
+            headers={"If-Match": etag},
+        )
+        assert resp.status_code == 200, resp.text
+
+    def test_patch_with_stale_if_match_returns_412(self) -> None:
+        """엉뚱한 If-Match(그사이 변경 모사) → 412."""
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).patch(
+            f"/v1/concepts/{concept.concept_id}",
+            json={"name_en": "X"},
+            headers={"If-Match": '"deadbeefdeadbeef"'},
+        )
+        assert resp.status_code == 412
+        assert fake.committed is False
+
+    def test_patch_with_wildcard_if_match_succeeds(self) -> None:
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).patch(
+            f"/v1/concepts/{concept.concept_id}",
+            json={"name_en": "X"},
+            headers={"If-Match": "*"},
+        )
+        assert resp.status_code == 200
+
+    def test_patch_without_if_match_proceeds(self) -> None:
+        """If-Match 미전송 → 무조건 진행(비파괴)."""
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).patch(
+            f"/v1/concepts/{concept.concept_id}", json={"name_en": "X"}
+        )
+        assert resp.status_code == 200
+
+    def test_delete_with_stale_if_match_returns_412(self) -> None:
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).delete(
+            f"/v1/concepts/{concept.concept_id}",
+            headers={"If-Match": '"deadbeefdeadbeef"'},
+        )
+        assert resp.status_code == 412
+        assert len(fake.deleted) == 0

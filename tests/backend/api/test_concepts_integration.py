@@ -202,3 +202,44 @@ def test_concept_patch_delete_roundtrip_on_live_pg() -> None:
     finally:
         if concept_id is not None and not deleted:
             asyncio.run(_delete_concept(uuid.UUID(concept_id)))
+
+
+def test_concept_optimistic_lock_on_live_pg() -> None:
+    """GET ETag로 PATCH→200·ETag 갱신→옛 ETag 재PATCH→412(동시수정 차단)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    code = f"TEST-LOCK-{uuid.uuid4().hex[:8]}"
+    concept_id: str | None = None
+    try:
+        with TestClient(create_app()) as client:
+            created = client.post(
+                "/v1/concepts", json={"code": code, "name_ko": "원본", "level": "단원"}
+            )
+            concept_id = created.json()["concept_id"]
+            etag1 = client.get(f"/v1/concepts/{concept_id}").headers["ETag"]
+
+            # 일치 If-Match → 200, ETag가 새 값으로 바뀜
+            patched = client.patch(
+                f"/v1/concepts/{concept_id}",
+                json={"name_en": "First"},
+                headers={"If-Match": etag1},
+            )
+            assert patched.status_code == 200
+            etag2 = patched.headers["ETag"]
+            assert etag2 != etag1
+
+            # 옛 ETag(etag1)로 다시 PATCH → 412(그사이 변경됨)
+            stale = client.patch(
+                f"/v1/concepts/{concept_id}",
+                json={"name_en": "Second"},
+                headers={"If-Match": etag1},
+            )
+            assert stale.status_code == 412
+            # 412 후 내용 미변경 확인
+            assert client.get(f"/v1/concepts/{concept_id}").json()["name_en"] == "First"
+    finally:
+        if concept_id is not None:
+            asyncio.run(_delete_concept(uuid.UUID(concept_id)))

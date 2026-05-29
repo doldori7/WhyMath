@@ -18,12 +18,13 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.api._concurrency import ensure_if_match, etag_for
 from whymath_backend.db.models.problem import Problem, ProblemRelation, ProblemStep
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import Subject
@@ -42,11 +43,14 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
     response_model=ProblemSchema,
     summary="문제 생성",
 )
-async def create_problem(body: ProblemSchema, session: SessionDep) -> ProblemSchema:
+async def create_problem(
+    body: ProblemSchema, session: SessionDep, response: Response
+) -> ProblemSchema:
     """검증된 schema.Problem을 영속화하고 복원해 반환한다(201).
 
     `external_id`/`slug`는 UNIQUE이므로 중복이면 PG가 IntegrityError → 롤백 후 **409**.
     본문 보유 금지 등 출처별 불변식은 schema.Problem이 이미 검증했다(경계 메모 참조).
+    응답에 ETag를 실어 이후 조건부 수정(If-Match)을 가능케 한다.
     """
     orm = Problem.from_schema(body)
     session.add(orm)
@@ -59,19 +63,25 @@ async def create_problem(body: ProblemSchema, session: SessionDep) -> ProblemSch
             detail="이미 존재하는 external_id 또는 slug입니다.",
         ) from exc
     await session.refresh(orm)
-    return orm.to_schema()
+    result = orm.to_schema()
+    response.headers["ETag"] = etag_for(result)
+    return result
 
 
 @router.get("/{problem_id}", response_model=ProblemSchema, summary="문제 단건 조회")
-async def read_problem(problem_id: uuid.UUID, session: SessionDep) -> ProblemSchema:
-    """UUID로 문제 단건 조회 — 없으면 404."""
+async def read_problem(
+    problem_id: uuid.UUID, session: SessionDep, response: Response
+) -> ProblemSchema:
+    """UUID로 문제 단건 조회 — 없으면 404. 응답에 ETag(낙관적 동시성 검증자)를 싣는다."""
     orm = await session.get(Problem, problem_id)
     if orm is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"문제를 찾을 수 없습니다: {problem_id}",
         )
-    return orm.to_schema()
+    result = orm.to_schema()
+    response.headers["ETag"] = etag_for(result)
+    return result
 
 
 @router.get("", response_model=list[ProblemSchema], summary="문제 목록")
@@ -147,11 +157,16 @@ async def list_problem_relations(
 
 @router.patch("/{problem_id}", response_model=ProblemSchema, summary="문제 부분 수정")
 async def patch_problem(
-    problem_id: uuid.UUID, body: dict[str, Any], session: SessionDep
+    problem_id: uuid.UUID,
+    body: dict[str, Any],
+    session: SessionDep,
+    response: Response,
+    if_match: Annotated[str | None, Header()] = None,
 ) -> ProblemSchema:
     """제공된 필드만 부분 수정 — 병합 결과를 schema로 *재검증*해 불변식(본문 보유 금지 등)을
     유지한다. `problem_id`(PK)는 경로 고정. 없으면 404, 병합 결과 스키마 위반 422,
-    `external_id`/`slug` UNIQUE 충돌 409. 동시성 last-write-wins(낙관적 락 미적용 — 후속).
+    `external_id`/`slug` UNIQUE 충돌 409. **낙관적 동시성**: `If-Match`(GET ETag)를 보내면
+    그사이 변경됐을 때 412로 거부한다(미전송 시 무조건 진행 — 비파괴). 응답에 새 ETag를 싣는다.
     """
     existing = await session.get(Problem, problem_id)
     if existing is None:
@@ -159,6 +174,7 @@ async def patch_problem(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"문제를 찾을 수 없습니다: {problem_id}",
         )
+    ensure_if_match(if_match, etag_for(existing.to_schema()))
     merged = existing.to_schema().model_dump()
     merged.update(body)
     merged["problem_id"] = problem_id  # PK는 경로 고정
@@ -181,14 +197,21 @@ async def patch_problem(
             status_code=status.HTTP_409_CONFLICT,
             detail="이미 존재하는 external_id 또는 slug입니다.",
         ) from exc
-    return updated.to_schema()
+    result = updated.to_schema()
+    response.headers["ETag"] = etag_for(result)
+    return result
 
 
 @router.delete("/{problem_id}", status_code=status.HTTP_204_NO_CONTENT, summary="문제 삭제")
-async def delete_problem(problem_id: uuid.UUID, session: SessionDep) -> Response:
+async def delete_problem(
+    problem_id: uuid.UUID,
+    session: SessionDep,
+    if_match: Annotated[str | None, Header()] = None,
+) -> Response:
     """문제 삭제 — 없으면 404. 풀이단계·관계·시도 등 참조가 있으면 FK 위반 → 409.
 
     cascade를 ORM에 두지 않았으므로 참조가 있으면 삭제를 거부한다(가짜 cascade 금지).
+    `If-Match`를 보내면 그사이 변경된 리소스의 삭제를 412로 막는다(조건부 삭제).
     """
     existing = await session.get(Problem, problem_id)
     if existing is None:
@@ -196,6 +219,7 @@ async def delete_problem(problem_id: uuid.UUID, session: SessionDep) -> Response
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"문제를 찾을 수 없습니다: {problem_id}",
         )
+    ensure_if_match(if_match, etag_for(existing.to_schema()))
     await session.delete(existing)
     try:
         await session.commit()
