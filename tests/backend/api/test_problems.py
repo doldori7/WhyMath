@@ -67,6 +67,7 @@ class FakeSession:
         self._list_rows = list(list_rows or [])
         self._commit_error = commit_error
         self.added: list[Any] = []
+        self.deleted: list[Any] = []
         self.committed = False
         self.rolled_back = False
 
@@ -83,6 +84,12 @@ class FakeSession:
 
     async def refresh(self, obj: Any) -> None:
         return None
+
+    async def delete(self, obj: Any) -> None:
+        self.deleted.append(obj)
+
+    async def merge(self, obj: Any) -> Any:
+        return obj
 
     async def get(self, model: Any, pk: uuid.UUID) -> Problem | None:
         return self._get_map.get(pk)
@@ -240,3 +247,81 @@ class TestRelations:
     def test_relations_404_when_problem_missing(self) -> None:
         resp = _client(FakeSession()).get(f"/v1/problems/{uuid.uuid4()}/relations")
         assert resp.status_code == 404
+
+
+class TestPatch:
+    def test_patch_updates_field(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).patch(
+            f"/v1/problems/{problem.problem_id}", json={"answer": "42"}
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["answer"] == "42"
+        assert fake.committed is True
+
+    def test_patch_404_when_missing(self) -> None:
+        resp = _client(FakeSession()).patch(
+            f"/v1/problems/{uuid.uuid4()}", json={"answer": "x"}
+        )
+        assert resp.status_code == 404
+
+    def test_patch_invalid_enum_returns_422(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).patch(
+            f"/v1/problems/{problem.problem_id}", json={"subject": "없는과목"}
+        )
+        assert resp.status_code == 422
+        assert fake.committed is False
+
+    def test_patch_violating_legal_invariant_returns_422(self) -> None:
+        """본문 보유 문제를 평가원 출처로 변경 → 본문 보유 금지 불변식 재검증 → 422."""
+        with_text = Problem.from_schema(
+            ProblemSchema(
+                source_type=SourceType.자체생성,
+                curriculum_version=Curriculum.REVISION_2015,
+                valid_from_year=2014,
+                subject=Subject.미적분,
+                unit_codes=["CAL-INT-DEF"],
+                question_text="f(x)를 구하시오",
+            )
+        )
+        fake = FakeSession(get_map={with_text.problem_id: with_text})
+        resp = _client(fake).patch(
+            f"/v1/problems/{with_text.problem_id}", json={"source_type": "평가원"}
+        )
+        assert resp.status_code == 422
+        assert fake.committed is False
+
+    def test_patch_duplicate_returns_409(self) -> None:
+        problem = _sample_problem()
+        err = IntegrityError("UPDATE", {}, Exception("duplicate key"))
+        fake = FakeSession(get_map={problem.problem_id: problem}, commit_error=err)
+        resp = _client(fake).patch(
+            f"/v1/problems/{problem.problem_id}", json={"external_id": "X-1"}
+        )
+        assert resp.status_code == 409
+        assert fake.rolled_back is True
+
+
+class TestDelete:
+    def test_delete_returns_204(self) -> None:
+        problem = _sample_problem()
+        fake = FakeSession(get_map={problem.problem_id: problem})
+        resp = _client(fake).delete(f"/v1/problems/{problem.problem_id}")
+        assert resp.status_code == 204
+        assert fake.committed is True
+        assert len(fake.deleted) == 1
+
+    def test_delete_404_when_missing(self) -> None:
+        resp = _client(FakeSession()).delete(f"/v1/problems/{uuid.uuid4()}")
+        assert resp.status_code == 404
+
+    def test_delete_409_when_referenced(self) -> None:
+        problem = _sample_problem()
+        err = IntegrityError("DELETE", {}, Exception("FK violation"))
+        fake = FakeSession(get_map={problem.problem_id: problem}, commit_error=err)
+        resp = _client(fake).delete(f"/v1/problems/{problem.problem_id}")
+        assert resp.status_code == 409
+        assert fake.rolled_back is True

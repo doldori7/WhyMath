@@ -63,6 +63,7 @@ class FakeSession:
         self._list_rows = list(list_rows or [])
         self._commit_error = commit_error
         self.added: list[Any] = []
+        self.deleted: list[Any] = []
         self.committed = False
         self.rolled_back = False
 
@@ -79,6 +80,12 @@ class FakeSession:
 
     async def refresh(self, obj: Any) -> None:
         return None
+
+    async def delete(self, obj: Any) -> None:
+        self.deleted.append(obj)
+
+    async def merge(self, obj: Any) -> Any:
+        return obj
 
     async def get(self, model: Any, pk: uuid.UUID) -> Concept | None:
         return self._get_map.get(pk)
@@ -213,3 +220,75 @@ class TestEdges:
         resp = _client(fake).get(f"/v1/concepts/{concept.concept_id}/edges")
         assert resp.status_code == 200
         assert resp.json() == []
+
+
+class TestPatch:
+    def test_patch_updates_field(self) -> None:
+        """제공된 필드만 갱신 → 200 + 병합 결과."""
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).patch(
+            f"/v1/concepts/{concept.concept_id}", json={"name_en": "Updated FTC"}
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["name_en"] == "Updated FTC"
+        assert fake.committed is True
+
+    def test_patch_404_when_missing(self) -> None:
+        resp = _client(FakeSession()).patch(
+            f"/v1/concepts/{uuid.uuid4()}", json={"name_en": "x"}
+        )
+        assert resp.status_code == 404
+
+    def test_patch_invalid_value_returns_422(self) -> None:
+        """병합 결과가 스키마 위반(잘못된 enum) → 422."""
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).patch(
+            f"/v1/concepts/{concept.concept_id}", json={"level": "없는레벨"}
+        )
+        assert resp.status_code == 422
+        assert fake.committed is False
+
+    def test_patch_unknown_field_returns_422(self) -> None:
+        """미정의 필드(extra=forbid) → 422."""
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).patch(
+            f"/v1/concepts/{concept.concept_id}", json={"nonexistent": 1}
+        )
+        assert resp.status_code == 422
+
+    def test_patch_duplicate_code_returns_409(self) -> None:
+        """code 변경이 UNIQUE 충돌 → 롤백 후 409."""
+        concept = _sample_concept()
+        err = IntegrityError("UPDATE", {}, Exception("duplicate key"))
+        fake = FakeSession(get_map={concept.concept_id: concept}, commit_error=err)
+        resp = _client(fake).patch(
+            f"/v1/concepts/{concept.concept_id}", json={"code": "DUP-CODE"}
+        )
+        assert resp.status_code == 409
+        assert fake.rolled_back is True
+
+
+class TestDelete:
+    def test_delete_returns_204(self) -> None:
+        concept = _sample_concept()
+        fake = FakeSession(get_map={concept.concept_id: concept})
+        resp = _client(fake).delete(f"/v1/concepts/{concept.concept_id}")
+        assert resp.status_code == 204
+        assert fake.committed is True
+        assert len(fake.deleted) == 1
+
+    def test_delete_404_when_missing(self) -> None:
+        resp = _client(FakeSession()).delete(f"/v1/concepts/{uuid.uuid4()}")
+        assert resp.status_code == 404
+
+    def test_delete_409_when_referenced(self) -> None:
+        """참조(FK)로 IntegrityError → 롤백 후 409."""
+        concept = _sample_concept()
+        err = IntegrityError("DELETE", {}, Exception("FK violation"))
+        fake = FakeSession(get_map={concept.concept_id: concept}, commit_error=err)
+        resp = _client(fake).delete(f"/v1/concepts/{concept.concept_id}")
+        assert resp.status_code == 409
+        assert fake.rolled_back is True

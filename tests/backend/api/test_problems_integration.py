@@ -145,3 +145,31 @@ def test_problem_steps_nested_read_on_live_pg() -> None:
         if problem_id is not None:
             asyncio.run(_delete_steps(uuid.UUID(problem_id)))
             asyncio.run(_delete_problem(uuid.UUID(problem_id)))
+
+
+def test_problem_patch_delete_roundtrip_on_live_pg() -> None:
+    """POST→PATCH→GET→DELETE(204)→GET(404)이 실 PG에서 왕복."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    problem_id: str | None = None
+    deleted = False
+    try:
+        with TestClient(create_app()) as client:
+            problem_id = client.post("/v1/problems", json=_body()).json()["problem_id"]
+
+            patched = client.patch(f"/v1/problems/{problem_id}", json={"answer": "42"})
+            assert patched.status_code == 200, patched.text
+            assert patched.json()["answer"] == "42"
+            assert patched.json()["subject"] == "미적분"  # 기존 필드 보존
+
+            assert client.get(f"/v1/problems/{problem_id}").json()["answer"] == "42"
+
+            assert client.delete(f"/v1/problems/{problem_id}").status_code == 204
+            deleted = True
+            assert client.get(f"/v1/problems/{problem_id}").status_code == 404
+    finally:
+        if problem_id is not None and not deleted:
+            asyncio.run(_delete_problem(uuid.UUID(problem_id)))

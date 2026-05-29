@@ -16,9 +16,10 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -142,3 +143,66 @@ async def list_problem_relations(
     )
     result = await session.execute(stmt)
     return [row.to_schema() for row in result.scalars().all()]
+
+
+@router.patch("/{problem_id}", response_model=ProblemSchema, summary="문제 부분 수정")
+async def patch_problem(
+    problem_id: uuid.UUID, body: dict[str, Any], session: SessionDep
+) -> ProblemSchema:
+    """제공된 필드만 부분 수정 — 병합 결과를 schema로 *재검증*해 불변식(본문 보유 금지 등)을
+    유지한다. `problem_id`(PK)는 경로 고정. 없으면 404, 병합 결과 스키마 위반 422,
+    `external_id`/`slug` UNIQUE 충돌 409. 동시성 last-write-wins(낙관적 락 미적용 — 후속).
+    """
+    existing = await session.get(Problem, problem_id)
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"문제를 찾을 수 없습니다: {problem_id}",
+        )
+    merged = existing.to_schema().model_dump()
+    merged.update(body)
+    merged["problem_id"] = problem_id  # PK는 경로 고정
+    try:
+        validated = ProblemSchema.model_validate(merged)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "수정 본문 병합 결과가 스키마를 위반합니다(본문 보유 금지 등).",
+                "errors": [{"loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()],
+            },
+        ) from exc
+    updated = await session.merge(Problem.from_schema(validated))
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="이미 존재하는 external_id 또는 slug입니다.",
+        ) from exc
+    return updated.to_schema()
+
+
+@router.delete("/{problem_id}", status_code=status.HTTP_204_NO_CONTENT, summary="문제 삭제")
+async def delete_problem(problem_id: uuid.UUID, session: SessionDep) -> Response:
+    """문제 삭제 — 없으면 404. 풀이단계·관계·시도 등 참조가 있으면 FK 위반 → 409.
+
+    cascade를 ORM에 두지 않았으므로 참조가 있으면 삭제를 거부한다(가짜 cascade 금지).
+    """
+    existing = await session.get(Problem, problem_id)
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"문제를 찾을 수 없습니다: {problem_id}",
+        )
+    await session.delete(existing)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="이 문제를 참조하는 단계·관계·시도가 있어 삭제할 수 없습니다.",
+        ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

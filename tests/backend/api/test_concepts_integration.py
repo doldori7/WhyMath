@@ -164,3 +164,41 @@ def test_concept_crud_roundtrip_on_live_pg() -> None:
     finally:
         if concept_id is not None:
             asyncio.run(_delete_concept(uuid.UUID(concept_id)))
+
+
+def test_concept_patch_delete_roundtrip_on_live_pg() -> None:
+    """POST→PATCH(부분수정)→GET(반영확인)→DELETE(204)→GET(404)이 실 PG에서 왕복."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    code = f"TEST-PATCH-{uuid.uuid4().hex[:8]}"
+    concept_id: str | None = None
+    deleted = False
+    try:
+        with TestClient(create_app()) as client:
+            concept_id = client.post(
+                "/v1/concepts", json={"code": code, "name_ko": "원본", "level": "단원"}
+            ).json()["concept_id"]
+
+            # PATCH: name_en만 추가(부분 수정), 병합 재검증
+            patched = client.patch(
+                f"/v1/concepts/{concept_id}", json={"name_en": "Patched"}
+            )
+            assert patched.status_code == 200, patched.text
+            assert patched.json()["name_en"] == "Patched"
+            assert patched.json()["name_ko"] == "원본"  # 기존 필드 보존
+
+            # GET으로 영속 반영 확인
+            assert (
+                client.get(f"/v1/concepts/{concept_id}").json()["name_en"] == "Patched"
+            )
+
+            # DELETE → 204, 이후 GET → 404
+            assert client.delete(f"/v1/concepts/{concept_id}").status_code == 204
+            deleted = True
+            assert client.get(f"/v1/concepts/{concept_id}").status_code == 404
+    finally:
+        if concept_id is not None and not deleted:
+            asyncio.run(_delete_concept(uuid.UUID(concept_id)))

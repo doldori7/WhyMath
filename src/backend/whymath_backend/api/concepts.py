@@ -21,9 +21,10 @@ PG 행을 직접 만지지 않고 검증된 Pydantic 모델만 주고받는다.
 from __future__ import annotations
 
 import uuid
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -117,3 +118,68 @@ async def list_concept_edges(concept_id: uuid.UUID, session: SessionDep) -> list
     )
     result = await session.execute(stmt)
     return [row.to_schema() for row in result.scalars().all()]
+
+
+@router.patch("/{concept_id}", response_model=ConceptSchema, summary="개념 부분 수정")
+async def patch_concept(
+    concept_id: uuid.UUID, body: dict[str, Any], session: SessionDep
+) -> ConceptSchema:
+    """제공된 필드만 부분 수정 — 병합 결과를 schema로 *재검증*해 불변식을 유지한다.
+
+    `concept_id`(PK)는 경로로 고정(본문이 덮어쓰지 못함). 없으면 404, 병합 결과가 스키마
+    위반(미정의 필드·잘못된 값)이면 422, `code` UNIQUE 충돌이면 409. 동시성은 last-write-wins
+    (낙관적 락 미적용 — 후속). `session.merge`로 PK 기준 갱신한다.
+    """
+    existing = await session.get(Concept, concept_id)
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"개념을 찾을 수 없습니다: {concept_id}",
+        )
+    merged = existing.to_schema().model_dump()
+    merged.update(body)
+    merged["concept_id"] = concept_id  # PK는 경로 고정
+    try:
+        validated = ConceptSchema.model_validate(merged)
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "수정 본문 병합 결과가 스키마를 위반합니다.",
+                "errors": [{"loc": list(e["loc"]), "msg": e["msg"]} for e in exc.errors()],
+            },
+        ) from exc
+    updated = await session.merge(Concept.from_schema(validated))
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"이미 존재하는 개념 code입니다: {validated.code}",
+        ) from exc
+    return updated.to_schema()
+
+
+@router.delete("/{concept_id}", status_code=status.HTTP_204_NO_CONTENT, summary="개념 삭제")
+async def delete_concept(concept_id: uuid.UUID, session: SessionDep) -> Response:
+    """개념 삭제 — 없으면 404. 이 개념을 참조하는 엣지·매핑이 있으면 FK 위반 → 409.
+
+    cascade를 ORM에 두지 않았으므로(가짜 cascade 금지) 참조가 있으면 삭제를 거부한다.
+    """
+    existing = await session.get(Concept, concept_id)
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"개념을 찾을 수 없습니다: {concept_id}",
+        )
+    await session.delete(existing)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="이 개념을 참조하는 엣지·매핑이 있어 삭제할 수 없습니다.",
+        ) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
