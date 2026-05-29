@@ -208,6 +208,29 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 인증(JWT 집행 계층, L5) ──
+    # UserProfile엔 credential 필드가 없다 — JWT는 sub=user_id만 담는 *집행 토큰*이고, 실제
+    # 로그인(카카오/네이버 OAuth, 후속)이 create_access_token을 호출해 발급한다. 시크릿은 코드
+    # 하드코딩 금지(anthropic_api_key 패턴) — 비면 토큰 발급/검증이 명확한 오류를 던진다.
+    jwt_secret_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "JWT 서명 시크릿(HS256). SecretStr — repr/로그 평문 노출 안 됨. 기본값 없음(빈 = "
+            "미설정). 환경변수 WHYMATH_JWT_SECRET_KEY로만 주입(하드코딩 금지). 비면 인증 불가."
+        ),
+    )
+    jwt_algorithm: str = Field(
+        default="HS256",
+        description=(
+            "JWT 서명 알고리즘(기본 HS256 대칭). WHYMATH_JWT_ALGORITHM로 오버라이드. 시크릿 아님."
+        ),
+    )
+    jwt_expire_minutes: int = Field(
+        default=60 * 24,
+        ge=1,
+        description="액세스 토큰 만료(분). 기본 24시간. WHYMATH_JWT_EXPIRE_MINUTES로 조정.",
+    )
+
     @property
     def langfuse_configured(self) -> bool:
         """Langfuse 공개키·시크릿키가 *둘 다* 채워졌는가(전송 가능 여부).
@@ -226,6 +249,15 @@ class Settings(BaseSettings):
         SecretStr는 `get_secret_value()`로만 평문을 꺼내며, 여기서는 *비어 있는지*만 본다.
         """
         return bool(self.anthropic_api_key.get_secret_value())
+
+    @property
+    def jwt_configured(self) -> bool:
+        """JWT 시크릿이 채워졌는가(토큰 발급/검증 가능 여부).
+
+        비어 있으면 미설정 — `create_access_token`/`decode_access_token`이 명확한 오류를
+        던진다(빈 시크릿으로 토큰을 발급/검증하는 사고 방지). 값은 로그에 남기지 않는다.
+        """
+        return bool(self.jwt_secret_key.get_secret_value())
 
     @property
     def effective_celery_broker_url(self) -> str:
