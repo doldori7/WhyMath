@@ -12,7 +12,8 @@ EBS·평가원 본문은 담지 않는다(자체 동등 콘텐츠만). 학생 �
 from __future__ import annotations
 
 from whymath_backend.api.concepts import router as concepts_router
+from whymath_backend.api.me import router as me_router
 from whymath_backend.api.problems import router as problems_router
 from whymath_backend.api.users import router as users_router
 
-__all__ = ["concepts_router", "problems_router", "users_router"]
+__all__ = ["concepts_router", "me_router", "problems_router", "users_router"]
