@@ -20,6 +20,7 @@ S2가 Redis 캐시 설정(redis_url)을 추가했으며, S3가 Langfuse 관측�
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -239,6 +240,14 @@ class Settings(BaseSettings):
             "L4 코치 엔드포인트(/v1/coach·/v1/coach/sessions*)의 *사용자당 분당 요청 상한*. "
             "0=비활성(테스트·개발). 인메모리 sliding window — 단일 프로세스 한정. 분산/HA "
             "환경은 Redis-backed 후속."
+        ),
+    )
+    coach_rate_limit_backend: Literal["memory", "redis"] = Field(
+        default="memory",
+        description=(
+            "rate limit 백엔드 — `memory`=프로세스-로컬 deque(기본·테스트·로컬), "
+            "`redis`=Redis ZSET sliding window(분산/HA 정합·다중 워커/인스턴스 시 필수). "
+            "`redis` 선택 시 `redis_url`로 연결, 라이브 도달성은 lazy."
         ),
     )
 

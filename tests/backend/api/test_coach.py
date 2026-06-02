@@ -28,8 +28,14 @@ _UID = uuid.uuid4()
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limit_store() -> None:
-    """매 테스트 격리 — sliding window 카운트 리셋(다른 테스트로의 누수 차단)."""
-    reset_store()
+    """매 테스트 격리 — sliding window 카운트 리셋(다른 테스트로의 누수 차단).
+
+    `reset_store()`는 async — 모듈 전역 `_BACKEND`(기본 InMemoryBackend)에 위임. 테스트
+    별 새 이벤트 루프에서 호출되도록 `asyncio.run`으로 감싼다.
+    """
+    import asyncio
+
+    asyncio.run(reset_store())
 
 
 def _settings_override(limit: int = 0) -> Settings:
@@ -702,10 +708,187 @@ class TestRateLimit:
 
     def test_sliding_window_prunes_expired(self) -> None:
         # 클럭 seam — 60초 후엔 옛 히트가 만료돼 다시 통과
-        from whymath_backend.api._rate_limit import _SlidingWindow
+        import asyncio
 
-        window = _SlidingWindow()
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
         uid = uuid.uuid4()
-        assert window.hit(uid, limit=1, now=0.0) is True
-        assert window.hit(uid, limit=1, now=0.5) is False  # 같은 윈도우, 초과
-        assert window.hit(uid, limit=1, now=61.0) is True  # 60초+ → 옛 히트 prune
+        assert asyncio.run(backend.hit(uid, limit=1, now=0.0)) is True
+        assert asyncio.run(backend.hit(uid, limit=1, now=0.5)) is False
+        assert asyncio.run(backend.hit(uid, limit=1, now=61.0)) is True
+
+
+class _FakeRedisClient:
+    """Lua eval seam — `_LUA_HIT` 스크립트의 *의미*를 in-memory ZSET으로 재현.
+
+    실제 Redis 없이도 RedisBackend의 결선·키 네이밍·TTL 호출을 검증할 수 있게 한다
+    (Lua 스크립트 자체의 정확성은 통합 테스트에서 실 Redis로 검증 — 후속).
+    """
+
+    def __init__(self) -> None:
+        self.zsets: dict[str, list[tuple[float, str]]] = {}
+        self.expires: dict[str, int] = {}
+        self.eval_calls: list[tuple[str, int, tuple[Any, ...]]] = []
+
+    async def eval(self, script: str, numkeys: int, *args: Any) -> Any:
+        self.eval_calls.append((script, numkeys, args))
+        key = args[0]
+        now = float(args[1])
+        limit = int(args[2])
+        member = args[3]
+        cutoff = now - 60
+        bucket = self.zsets.setdefault(key, [])
+        bucket[:] = [(s, m) for (s, m) in bucket if s >= cutoff]
+        if len(bucket) >= limit:
+            return 0
+        bucket.append((now, member))
+        self.expires[key] = 60
+        return 1
+
+    async def ping(self) -> Any:
+        return True
+
+    async def delete(self, *names: str) -> Any:
+        for n in names:
+            self.zsets.pop(n, None)
+            self.expires.pop(n, None)
+        return len(names)
+
+    async def keys(self, pattern: str) -> Any:
+        prefix = pattern.rstrip("*")
+        return [k for k in self.zsets if k.startswith(prefix)]
+
+
+class TestRedisBackend:
+    """RedisBackend 결선 — fake `_RedisClient`로 Lua eval·키·TTL 검증."""
+
+    def test_hit_returns_true_under_limit(self) -> None:
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        uid = uuid.uuid4()
+        assert asyncio.run(backend.hit(uid, limit=2, now=0.0)) is True
+        assert asyncio.run(backend.hit(uid, limit=2, now=0.1)) is True
+        assert asyncio.run(backend.hit(uid, limit=2, now=0.2)) is False
+
+    def test_hit_uses_canonical_key_prefix(self) -> None:
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        uid = uuid.uuid4()
+        asyncio.run(backend.hit(uid, limit=1, now=0.0))
+        assert f"rate:coach:{uid}" in fake.zsets
+
+    def test_reset_clears_all_keys(self) -> None:
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.0))
+        asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.0))
+        assert len(fake.zsets) == 2
+        asyncio.run(backend.reset())
+        assert fake.zsets == {}
+
+    def test_prunes_expired_via_lua_semantics(self) -> None:
+        # cutoff = now - 60 → 옛 히트는 prune
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        uid = uuid.uuid4()
+        assert asyncio.run(backend.hit(uid, limit=1, now=0.0)) is True
+        # 같은 윈도우 — 초과
+        assert asyncio.run(backend.hit(uid, limit=1, now=0.5)) is False
+        # 60초+ — prune되어 통과
+        assert asyncio.run(backend.hit(uid, limit=1, now=61.0)) is True
+
+
+class TestRedisBackendLazyPaths:
+    """`RedisBackend` lazy 해석 경로 — 주입 없으면 settings/client 지연 생성."""
+
+    def test_resolved_settings_falls_back_to_global(self) -> None:
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        backend = RedisBackend()  # settings/client 모두 주입 X
+        # _resolved_settings는 get_settings() 캐시된 전역으로 폴백
+        assert backend._resolved_settings is not None  # type: ignore[truthy-bool]
+
+    def test_resolved_settings_uses_injection_when_provided(self) -> None:
+        # settings 주입 시 — get_settings() 미호출, 주입된 인스턴스 그대로 반환
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        injected = _settings_override(0)
+        backend = RedisBackend(client=_FakeRedisClient(), settings=injected)
+        assert backend._resolved_settings is injected
+
+    def test_reset_with_no_keys_noops(self) -> None:
+        # keys() 빈 결과 → delete 호출 분기 회피
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        asyncio.run(backend.reset())  # zsets 비어있음 → keys=[] → delete 미호출
+
+    def test_get_client_lazy_builds_default_when_not_injected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 주입된 client 없으면 `_build_default_redis_client`를 호출해 lazy 생성
+        import asyncio
+
+        from whymath_backend.api import _rate_limit as rl
+
+        fake = _FakeRedisClient()
+        monkeypatch.setattr(rl, "_build_default_redis_client", lambda s: fake)
+        backend = rl.RedisBackend()  # client 주입 X
+        # 첫 hit — lazy build 발화
+        assert asyncio.run(backend.hit(uuid.uuid4(), limit=2, now=0.0)) is True
+        assert len(fake.eval_calls) == 1
+        # 두번째 hit — 이미 build됨, lazy skip
+        assert asyncio.run(backend.hit(uuid.uuid4(), limit=2, now=0.1)) is True
+        assert len(fake.eval_calls) == 2
+
+
+class TestBackendSelection:
+    """`configure_backend_from_settings` — 설정으로 백엔드 선택."""
+
+    def test_memory_default(self) -> None:
+        from whymath_backend.api._rate_limit import (
+            InMemoryBackend,
+            configure_backend_from_settings,
+            get_backend,
+        )
+
+        configure_backend_from_settings(_settings_override(0))
+        assert isinstance(get_backend(), InMemoryBackend)
+
+    def test_redis_when_configured(self) -> None:
+        from whymath_backend.api._rate_limit import (
+            RedisBackend,
+            configure_backend_from_settings,
+            get_backend,
+        )
+
+        s = Settings(
+            jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+            coach_rate_limit_backend="redis",
+        )
+        configure_backend_from_settings(s)
+        try:
+            assert isinstance(get_backend(), RedisBackend)
+        finally:
+            # 다음 테스트 격리 — 기본 InMemory로 복원
+            configure_backend_from_settings(_settings_override(0))
