@@ -43,11 +43,13 @@ def _settings_override(
     write_limit: int | None = None,
     ip_limit: int = 0,
     ip_write_limit: int | None = None,
+    device_limit: int = 0,
+    device_write_limit: int | None = None,
 ) -> Settings:
-    """기본 read/write 모두 0(비활성). `*_limit=None`이면 같은 read 인자와 동일.
+    """기본 모든 한도 0(비활성). `*_limit=None`이면 같은 read 인자와 동일.
 
-    슬라이스 14 — 차등 한도. 슬라이스 17 — 사용자 + IP 동시(방어 심층). IP 한도도 기본
-    0으로 두어 기존 테스트가 IP dep을 의식하지 않고 통과하게 한다.
+    슬라이스 14/17/20 — 차등·방어 심층·3차원. 모든 한도를 기본 0으로 두어 기존 테스트가
+    어느 차원의 dep도 의식하지 않고 통과하게 한다.
     """
     return Settings(
         jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
@@ -56,6 +58,10 @@ def _settings_override(
         coach_rate_limit_ip_read_per_minute=ip_limit,
         coach_rate_limit_ip_write_per_minute=(
             ip_limit if ip_write_limit is None else ip_write_limit
+        ),
+        coach_rate_limit_device_read_per_minute=device_limit,
+        coach_rate_limit_device_write_per_minute=(
+            device_limit if device_write_limit is None else device_write_limit
         ),
     )
 
@@ -820,14 +826,47 @@ class _FakeRedisClient:
             ip_oldest = int(self.zsets[ip_key][0][0] * 1_000_000)
         return [allowed, user_count, user_oldest, ip_count, ip_oldest]
 
+    def _apply_hit_many_script(self, numkeys: int, args: tuple[Any, ...]) -> list[int]:
+        """Lua _LUA_HIT_MANY 의미 재현 — KEYS 가변·ARGV [now, member, limit1..limitN]."""
+        keys = list(args[:numkeys])
+        now = float(args[numkeys])
+        member = args[numkeys + 1]
+        limits = [int(x) for x in args[numkeys + 2 : numkeys + 2 + numkeys]]
+        cutoff = now - 60
+        for k in keys:
+            bucket = self.zsets.setdefault(k, [])
+            bucket[:] = [(s, m) for (s, m) in bucket if s >= cutoff]
+        counts = [len(self.zsets[k]) for k in keys]
+        all_ok = all(c < lim for c, lim in zip(counts, limits))
+        if all_ok:
+            for i, k in enumerate(keys):
+                self.zsets[k].append((now, member))
+                self.expires[k] = 60
+                counts[i] += 1
+        response: list[int] = [1 if all_ok else 0]
+        for i, k in enumerate(keys):
+            response.append(counts[i])
+            oldest = -1
+            if self.zsets[k]:
+                oldest = int(self.zsets[k][0][0] * 1_000_000)
+            response.append(oldest)
+        return response
+
     async def evalsha(self, sha: str, numkeys: int, *args: Any) -> Any:
         self.evalsha_calls.append((sha, numkeys, args))
         if sha not in self._loaded_shas:
             from redis.exceptions import NoScriptError
 
             raise NoScriptError("NOSCRIPT No matching script. Use SCRIPT LOAD.")
-        # numkeys=2면 _LUA_HIT_BOTH(원자 user+IP), 아니면 단일 키 _LUA_HIT
-        if numkeys == 2:
+        # SHA로 분기 — _LUA_HIT_MANY / _LUA_HIT_BOTH / _LUA_HIT
+        from whymath_backend.api._rate_limit import (
+            _LUA_HIT_BOTH_SHA1,
+            _LUA_HIT_MANY_SHA1,
+        )
+
+        if sha == _LUA_HIT_MANY_SHA1:
+            return self._apply_hit_many_script(numkeys, args)
+        if sha == _LUA_HIT_BOTH_SHA1:
             return self._apply_hit_both_script(args)
         return self._apply_hit_script(args)
 
@@ -1591,61 +1630,6 @@ class TestDefenseInDepth:
             assert "X-RateLimit-Limit" not in resp.headers
 
 
-class TestTightestHeadersHelper:
-    """`_tightest_headers` 단위 — 두 쌍 비교 로직 검증."""
-
-    def test_returns_user_when_ip_pair_none(self) -> None:
-        from whymath_backend.api._rate_limit import (
-            RateLimitResult,
-            _tightest_headers,
-        )
-
-        user = RateLimitResult(allowed=True, remaining=5, reset_seconds=60)
-        headers = _tightest_headers((10, user), None)
-        assert headers["X-RateLimit-Limit"] == "10"
-        assert headers["X-RateLimit-Remaining"] == "5"
-
-    def test_returns_ip_when_user_pair_none(self) -> None:
-        from whymath_backend.api._rate_limit import (
-            RateLimitResult,
-            _tightest_headers,
-        )
-
-        ip = RateLimitResult(allowed=True, remaining=3, reset_seconds=60)
-        headers = _tightest_headers(None, (20, ip))
-        assert headers["X-RateLimit-Limit"] == "20"
-
-    def test_returns_tighter_when_both_present(self) -> None:
-        from whymath_backend.api._rate_limit import (
-            RateLimitResult,
-            _tightest_headers,
-        )
-
-        user = RateLimitResult(allowed=True, remaining=8, reset_seconds=60)
-        ip = RateLimitResult(allowed=True, remaining=3, reset_seconds=60)
-        headers = _tightest_headers((10, user), (20, ip))
-        # IP가 remaining 더 작음(3 < 8) → IP 헤더
-        assert headers["X-RateLimit-Limit"] == "20"
-        assert headers["X-RateLimit-Remaining"] == "3"
-
-    def test_tie_prefers_user(self) -> None:
-        from whymath_backend.api._rate_limit import (
-            RateLimitResult,
-            _tightest_headers,
-        )
-
-        user = RateLimitResult(allowed=True, remaining=5, reset_seconds=60)
-        ip = RateLimitResult(allowed=True, remaining=5, reset_seconds=60)
-        headers = _tightest_headers((10, user), (20, ip))
-        # 동률(<=) → user 우선
-        assert headers["X-RateLimit-Limit"] == "10"
-
-    def test_empty_when_both_none(self) -> None:
-        from whymath_backend.api._rate_limit import _tightest_headers
-
-        assert _tightest_headers(None, None) == {}
-
-
 class TestHitBothAtomic:
     """슬라이스 18 — `hit_both` 원자 동시 검사. 한쪽 거부 시 양쪽 미증가."""
 
@@ -2026,3 +2010,240 @@ class TestPairHelperUnit:
         # IP만 활성 — User-* 미세팅
         assert "X-RateLimit-User-Limit" not in resp.headers
         assert resp.headers["X-RateLimit-Ip-Limit"] == "5"
+
+
+class TestTripleDimension:
+    """슬라이스 20 — 3차원 한도(user+IP+device). hit_many 원자성·X-Device-Id 추출."""
+
+    def test_hit_many_all_pass(self) -> None:
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend, Subject
+
+        backend = InMemoryBackend()
+        results = asyncio.run(
+            backend.hit_many(
+                [
+                    Subject(kind="user", id=str(uuid.uuid4()), limit=10),
+                    Subject(kind="ip", id="1.1.1.1", limit=20),
+                    Subject(kind="device", id="dev-abc", limit=5),
+                ],
+                category="read",
+                now=0.0,
+            )
+        )
+        assert results["user"].allowed is True
+        assert results["ip"].allowed is True
+        assert results["device"].allowed is True
+        assert results["user"].remaining == 9
+        assert results["device"].remaining == 4
+
+    def test_hit_many_atomic_device_blocks_others(self) -> None:
+        # device 한도 1 도달 시, 같은 호출의 user/ip는 미증가
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend, Subject
+
+        backend = InMemoryBackend()
+        uid = str(uuid.uuid4())
+        asyncio.run(
+            backend.hit_many(
+                [
+                    Subject(kind="user", id=uid, limit=10),
+                    Subject(kind="ip", id="1.1.1.1", limit=10),
+                    Subject(kind="device", id="dev-abc", limit=1),
+                ],
+                category="read",
+                now=0.0,
+            )
+        )
+        # 두번째 호출 — device 한도 도달이라 atomic deny
+        result = asyncio.run(
+            backend.hit_many(
+                [
+                    Subject(kind="user", id=uid, limit=10),
+                    Subject(kind="ip", id="1.1.1.1", limit=10),
+                    Subject(kind="device", id="dev-abc", limit=1),
+                ],
+                category="read",
+                now=0.1,
+            )
+        )
+        assert result["device"].allowed is False
+        # user/ip counter는 *미증가* — 다음 다른 device로 통과 시 user remaining=8(누적 2)
+        followup = asyncio.run(
+            backend.hit_many(
+                [
+                    Subject(kind="user", id=uid, limit=10),
+                    Subject(kind="ip", id="1.1.1.1", limit=10),
+                    Subject(kind="device", id="dev-xyz", limit=1),  # 다른 device
+                ],
+                category="read",
+                now=0.2,
+            )
+        )
+        assert followup["user"].allowed is True
+        assert followup["user"].remaining == 8  # 10 - 2(첫 + 세번째 통과)
+
+    def test_hit_many_empty_subjects(self) -> None:
+        # 빈 리스트 → 빈 dict no-op
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        results = asyncio.run(backend.hit_many([], category="read", now=0.0))
+        assert results == {}
+
+    def test_redis_hit_many_atomic(self) -> None:
+        # _LUA_HIT_MANY가 N개 키 원자 처리
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend, Subject
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        uid = str(uuid.uuid4())
+        results = asyncio.run(
+            backend.hit_many(
+                [
+                    Subject(kind="user", id=uid, limit=5),
+                    Subject(kind="ip", id="1.1.1.1", limit=5),
+                    Subject(kind="device", id="dev-1", limit=5),
+                ],
+                category="read",
+                now=0.0,
+            )
+        )
+        assert results["user"].allowed is True
+        # 세 키 모두 ZSET에 생성됨
+        from whymath_backend.api._rate_limit import RedisBackend as RB
+
+        assert f"{RB._KEY_PREFIX}read:user:{uid}" in fake.zsets
+        assert f"{RB._KEY_PREFIX}read:ip:1.1.1.1" in fake.zsets
+        assert f"{RB._KEY_PREFIX}read:device:dev-1" in fake.zsets
+
+    def test_device_id_header_extraction(self) -> None:
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_device_id
+
+        request = MagicMock()
+        request.headers = {"x-device-id": "dev-abc-123"}
+        assert _client_device_id(request) == "dev-abc-123"
+
+    def test_device_id_missing_returns_none(self) -> None:
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_device_id
+
+        request = MagicMock()
+        request.headers = {}
+        assert _client_device_id(request) is None
+
+    def test_device_id_empty_returns_none(self) -> None:
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_device_id
+
+        request = MagicMock()
+        request.headers = {"x-device-id": "  "}
+        assert _client_device_id(request) is None
+
+    def test_coach_endpoint_uses_device_limit(self) -> None:
+        # coach POST가 RateLimitedTripleWrite 부착 — device 한도 1 시 X-Device-Id로 2번째 429
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0,
+            write_limit=10,
+            ip_limit=0,
+            ip_write_limit=10,
+            device_limit=0,
+            device_write_limit=1,
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        # X-Device-Id 헤더 동봉
+        headers = {"x-device-id": "dev-test"}
+        r1 = client.post("/v1/coach", json={"student_input": "음"}, headers=headers)
+        assert r1.status_code == 200
+        # Device pair-header 노출
+        assert r1.headers["X-RateLimit-Device-Limit"] == "1"
+        assert r1.headers["X-RateLimit-Device-Remaining"] == "0"
+        # 두번째 — device 한도 도달
+        r2 = client.post("/v1/coach", json={"student_input": "음"}, headers=headers)
+        assert r2.status_code == 429
+        assert r2.headers["X-RateLimit-Limit"] == "1"  # blocker=device
+
+    def test_coach_endpoint_skips_device_when_header_absent(self) -> None:
+        # X-Device-Id 헤더 없으면 device 차원 검사 비활성 — user+IP만
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0,
+            write_limit=10,
+            ip_limit=0,
+            ip_write_limit=10,
+            device_limit=0,
+            device_write_limit=1,
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        # device 한도 1이지만 헤더 없음 → 5번 모두 통과(device 검사 안 함)
+        for _ in range(5):
+            resp = client.post("/v1/coach", json={"student_input": "음"})
+            assert resp.status_code == 200
+            assert "X-RateLimit-Device-Limit" not in resp.headers
+
+
+class TestHitManyEdgeCases:
+    """잔여 분기 커버 — hit_many prune·Redis 빈 subjects."""
+
+    def test_inmemory_hit_many_prunes_expired(self) -> None:
+        # 60초+ 후 hit_many — 옛 항목 prune(while bucket[0]<cutoff: popleft)
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend, Subject
+
+        backend = InMemoryBackend()
+        uid = str(uuid.uuid4())
+        asyncio.run(
+            backend.hit_many(
+                [Subject(kind="user", id=uid, limit=1)], category="read", now=0.0
+            )
+        )
+        # 같은 윈도우 — 거부
+        denied = asyncio.run(
+            backend.hit_many(
+                [Subject(kind="user", id=uid, limit=1)], category="read", now=0.5
+            )
+        )
+        assert denied["user"].allowed is False
+        # 60초+ — prune 분기 발화
+        passed = asyncio.run(
+            backend.hit_many(
+                [Subject(kind="user", id=uid, limit=1)], category="read", now=61.0
+            )
+        )
+        assert passed["user"].allowed is True
+
+    def test_redis_hit_many_empty_subjects_noop(self) -> None:
+        # Redis backend도 빈 subjects 시 no-op 반환(early return)
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        results = asyncio.run(backend.hit_many([], category="read", now=0.0))
+        assert results == {}
+        assert fake.evalsha_calls == []  # Redis 호출 자체가 없음

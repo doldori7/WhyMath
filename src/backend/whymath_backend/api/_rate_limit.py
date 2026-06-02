@@ -81,6 +81,18 @@ class CombinedRateLimitResult(NamedTuple):
     ip_result: RateLimitResult | None
 
 
+SubjectKind = Literal["user", "ip", "device"]
+"""차원 식별자(슬라이스 20) — `hit_many` 일반화 입력. 추가 차원은 enum 확장으로 도입."""
+
+
+class Subject(NamedTuple):
+    """한 차원의 rate limit 검사 단위 — kind·id·limit. `hit_many` 입력 원소."""
+
+    kind: SubjectKind
+    id: str
+    limit: int
+
+
 @runtime_checkable
 class RateLimitBackend(Protocol):
     """rate limit 백엔드 — sliding window 카운트의 저장·검사 추상.
@@ -127,6 +139,20 @@ class RateLimitBackend(Protocol):
 
         race window 0(인메모리는 단일 GIL 프레임·Redis는 단일 Lua 스크립트). 한쪽 limit=0
         또는 ip=None이면 해당 검사 비활성(`user_result`/`ip_result`는 None).
+        """
+        ...
+
+    async def hit_many(
+        self,
+        subjects: list[Subject],
+        *,
+        category: RateCategory,
+        now: float,
+    ) -> dict[SubjectKind, RateLimitResult]:
+        """*원자적* N-차원 동시 검사 — *전부* 통과해야 *전부* increment(슬라이스 20).
+
+        하나라도 거부면 어느 차원도 미증가. 반환: kind → RateLimitResult(검사된 차원만).
+        빈 리스트면 빈 dict(no-op). 한 kind가 중복되면 마지막이 우선(호출자 책임).
         """
         ...
 
@@ -263,6 +289,39 @@ class InMemoryBackend:
         )
         return CombinedRateLimitResult(allowed=atomic, user_result=user_result, ip_result=ip_result)
 
+    async def hit_many(
+        self,
+        subjects: list[Subject],
+        *,
+        category: RateCategory,
+        now: float,
+    ) -> dict[SubjectKind, RateLimitResult]:
+        if not subjects:
+            return {}
+        cutoff = now - _WINDOW_SECONDS
+        # 각 subject별 (bucket, limit) 매핑 — 한 kind당 한 번만(중복은 마지막 우선)
+        per_subject: list[tuple[Subject, deque[float]]] = []
+        for s in subjects:
+            bucket = self._by_key.setdefault((f"{s.kind}:{s.id}", category), deque())
+            while bucket and bucket[0] < cutoff:
+                bucket.popleft()
+            per_subject.append((s, bucket))
+        atomic = all(len(b) < s.limit for s, b in per_subject)
+        if atomic:
+            for _s, bucket in per_subject:
+                bucket.append(now)
+        results: dict[SubjectKind, RateLimitResult] = {}
+        for s, bucket in per_subject:
+            oldest = bucket[0] if bucket else None
+            results[s.kind] = _result_from_window(
+                allowed=atomic,
+                count_after=len(bucket),
+                limit=s.limit,
+                oldest_ts=oldest,
+                now=now,
+            )
+        return results
+
     async def reset(self) -> None:
         self._by_key.clear()
 
@@ -377,6 +436,49 @@ end
 return {allowed, user_count, user_oldest, ip_count, ip_oldest}
 """
 _LUA_HIT_BOTH_SHA1 = hashlib.sha1(_LUA_HIT_BOTH.encode("utf-8")).hexdigest()
+
+
+# 슬라이스 20 — N차원 일반화 원자 검사. KEYS는 가변, ARGV는 [now, member, limit1, ..., limitN].
+# 반환: [allowed, count1, oldest1, count2, oldest2, ..., countN, oldestN].
+# 차원 N=2면 _LUA_HIT_BOTH와 의미 동등(향후 hit_both 폐기 후보).
+_LUA_HIT_MANY = """
+local now = tonumber(ARGV[1])
+local member = ARGV[2]
+local cutoff = now - 60
+local n = #KEYS
+-- Prune 전부
+for i = 1, n do
+    redis.call('ZREMRANGEBYSCORE', KEYS[i], '-inf', cutoff)
+end
+-- 카운트 + 한도 검사
+local counts = {}
+local all_ok = 1
+for i = 1, n do
+    local limit = tonumber(ARGV[2 + i])
+    local count = redis.call('ZCARD', KEYS[i])
+    counts[i] = count
+    if count >= limit then all_ok = 0 end
+end
+-- 전부 OK면 전부 ZADD
+if all_ok == 1 then
+    for i = 1, n do
+        redis.call('ZADD', KEYS[i], now, member)
+        redis.call('EXPIRE', KEYS[i], 60)
+        counts[i] = counts[i] + 1
+    end
+end
+-- 응답 조립: [allowed, count1, oldest1, count2, oldest2, ...]
+local response = {all_ok}
+for i = 1, n do
+    table.insert(response, counts[i])
+    local r = redis.call('ZRANGE', KEYS[i], 0, 0, 'WITHSCORES')
+    local oldest = -1
+    if #r >= 2 then oldest = math.floor(tonumber(r[2]) * 1000000) end
+    table.insert(response, oldest)
+end
+return response
+"""
+_LUA_HIT_MANY_SHA1 = hashlib.sha1(_LUA_HIT_MANY.encode("utf-8")).hexdigest()
 
 
 def _build_default_redis_client(settings: Settings) -> _RedisClient:  # pragma: no cover
@@ -551,6 +653,41 @@ class RedisBackend:
             allowed=allowed, user_result=user_result, ip_result=ip_result
         )
 
+    async def hit_many(
+        self,
+        subjects: list[Subject],
+        *,
+        category: RateCategory,
+        now: float,
+    ) -> dict[SubjectKind, RateLimitResult]:
+        """N-차원 원자 검사 — 단일 Lua `_LUA_HIT_MANY`로 모든 차원 함께 결정."""
+        if not subjects:
+            return {}
+        client = self._get_client()
+        keys = [self._key(f"{s.kind}:{s.id}", category) for s in subjects]
+        member = f"{now}:{uuid.uuid4().hex}"
+        argv: list[float | int | str] = [now, member]
+        argv.extend(s.limit for s in subjects)
+        try:
+            raw = await client.evalsha(_LUA_HIT_MANY_SHA1, len(keys), *keys, *argv)
+        except NoScriptError:
+            await client.script_load(_LUA_HIT_MANY)
+            raw = await client.evalsha(_LUA_HIT_MANY_SHA1, len(keys), *keys, *argv)
+        allowed = int(raw[0]) == 1
+        results: dict[SubjectKind, RateLimitResult] = {}
+        for i, s in enumerate(subjects):
+            count_after = int(raw[1 + i * 2])
+            oldest_micros = int(raw[2 + i * 2])
+            oldest_ts = None if oldest_micros < 0 else oldest_micros / 1_000_000
+            results[s.kind] = _result_from_window(
+                allowed=allowed,
+                count_after=count_after,
+                limit=s.limit,
+                oldest_ts=oldest_ts,
+                now=now,
+            )
+        return results
+
     async def reset(self) -> None:
         """패턴 매칭 키 일괄 삭제 — 테스트 격리용. production 미호출."""
         client = self._get_client()
@@ -708,82 +845,75 @@ RateLimitedIpWrite = Depends(rate_limit_ip_write)
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 슬라이스 17 — 사용자 + IP 동시 적용(방어 심층)
-# 인증된 엔드포인트에 둘 다 부착해 ① 단일 사용자 학대 ② 공유 NAT의 단일 IP 학대 모두 차단.
-# 429는 *먼저 실패*한 쪽 헤더로(사용자 우선). 200 헤더는 *더 엄격한* 쪽 노출(클라이언트가
-# 가장 가까운 한도를 인식).
+# 슬라이스 20 — 3차원 한도(user+IP+device, X-Device-Id 헤더).
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _tightest_headers(
-    user_pair: tuple[int, RateLimitResult] | None,
-    ip_pair: tuple[int, RateLimitResult] | None,
-) -> dict[str, str]:
-    """두 검사 중 *더 엄격한*(remaining 작은) 쪽의 X-RateLimit 헤더 반환.
+def _client_device_id(request: Request) -> str | None:
+    """요청에서 디바이스 ID 추출 — `X-Device-Id` 헤더(클라이언트 발급 UUID/문자열).
 
-    한쪽만 있으면 그쪽. 둘 다 있으면 remaining 작은 쪽(동률은 user 우선).
-    둘 다 None이면 빈 dict(헤더 미세팅).
+    빈 값/미설정 시 None — 디바이스 차원 검사 비활성. 클라이언트는 첫 실행 시 안정 ID
+    (UUID4·KeyChain 저장)를 생성·전 요청에 동봉(Flutter `device_info_plus`·iOS
+    `identifierForVendor`·Android `Settings.Secure.ANDROID_ID` 등 권장).
     """
-    if user_pair is None and ip_pair is None:
-        return {}
-    if ip_pair is None:
-        assert user_pair is not None
-        return _rate_headers(*user_pair)
-    if user_pair is None:
-        return _rate_headers(*ip_pair)
-    user_limit, user_result = user_pair
-    ip_limit, ip_result = ip_pair
-    if user_result.remaining <= ip_result.remaining:
-        return _rate_headers(user_limit, user_result)
-    return _rate_headers(ip_limit, ip_result)
+    device_id = request.headers.get("x-device-id")
+    if device_id is None:
+        return None
+    stripped = device_id.strip()
+    return stripped if stripped else None
 
 
-async def _enforce_defense(
+async def _enforce_triple(
     user_id: uuid.UUID,
     ip: str | None,
+    device_id: str | None,
     *,
     category: RateCategory,
     user_limit: int,
     ip_limit: int,
+    device_limit: int,
     response: Response,
 ) -> None:
-    """사용자 + IP 한도 *원자적* 동시 검사(슬라이스 18). 둘 다 통과해야 200.
+    """*3차원* 원자 한도 검사 — user + IP + device. 활성 차원만 검사·전부 통과 시 200.
 
-    `hit_both` 단일 호출로 race window 0 + 한쪽 거부 시 다른 쪽 counter 낭비 0. 거부 시
-    429 헤더는 *blocker* 쪽(remaining=0인 쪽). 200 헤더는 *더 엄격한*(remaining 작은 쪽).
+    `hit_many` 호출로 race window 0 + 한쪽 거부 시 다른 차원 counter 낭비 0. 헤더는 세 쌍
+    `X-RateLimit-User-*`/`-Ip-*`/`-Device-*` + rollup(가장 엄격한 쪽) 동봉.
     """
-    if user_limit == 0 and (ip_limit == 0 or ip is None):
+    subjects: list[Subject] = []
+    if user_limit > 0:
+        subjects.append(Subject(kind="user", id=str(user_id), limit=user_limit))
+    if ip is not None and ip_limit > 0:
+        subjects.append(Subject(kind="ip", id=ip, limit=ip_limit))
+    if device_id is not None and device_limit > 0:
+        subjects.append(Subject(kind="device", id=device_id, limit=device_limit))
+    if not subjects:
         return
-    combined = await _BACKEND.hit_both(
-        user_id,
-        ip,
-        category=category,
-        user_limit=user_limit,
-        ip_limit=ip_limit,
-        now=time.monotonic(),
-    )
-    user_pair: tuple[int, RateLimitResult] | None = (
-        (user_limit, combined.user_result) if combined.user_result is not None else None
-    )
-    ip_pair: tuple[int, RateLimitResult] | None = (
-        (ip_limit, combined.ip_result) if combined.ip_result is not None else None
-    )
-    # 두 쌍 헤더(슬라이스 19) — 활성화된 차원만 동시 노출. 200·429 양쪽 모두.
+    results = await _BACKEND.hit_many(subjects, category=category, now=time.monotonic())
+    # kind → (limit, result) 매핑 — 헤더 조립 입력
+    pairs: dict[SubjectKind, tuple[int, RateLimitResult]] = {}
+    for s in subjects:
+        pairs[s.kind] = (s.limit, results[s.kind])
+    # 모든 차원의 pair-headers 동봉(슬라이스 19 패턴 확장)
     pair_headers: dict[str, str] = {}
-    if user_pair is not None:
-        pair_headers.update(_pair_headers("User", *user_pair))
-    if ip_pair is not None:
-        pair_headers.update(_pair_headers("Ip", *ip_pair))
-
-    if not combined.allowed:
-        # blocker = remaining=0인 쪽(=한도 도달). 둘 다 0이면(드물지만) user 우선.
-        blocker: tuple[int, RateLimitResult]
-        if user_pair is not None and user_pair[1].remaining == 0:
-            blocker = user_pair
-        elif ip_pair is not None and ip_pair[1].remaining == 0:
-            blocker = ip_pair
-        else:  # pragma: no cover — 정상 경로엔 blocker가 반드시 있음(거부 = 적어도 한쪽 도달)
-            blocker = user_pair or ip_pair  # type: ignore[assignment]
+    if "user" in pairs:
+        pair_headers.update(_pair_headers("User", *pairs["user"]))
+    if "ip" in pairs:
+        pair_headers.update(_pair_headers("Ip", *pairs["ip"]))
+    if "device" in pairs:
+        pair_headers.update(_pair_headers("Device", *pairs["device"]))
+    # 어느 차원이 통과/거부 → 첫 차원 결과는 모두 동일 atomic
+    first_result = next(iter(results.values()))
+    if not first_result.allowed:
+        # blocker = remaining=0인 쪽(다중 도달 시 user > ip > device 우선 — 더 강한 보호선)
+        candidates: tuple[SubjectKind, ...] = ("user", "ip", "device")
+        # 정상 거부 경로엔 적어도 한 차원이 remaining=0이라 break — fallback(next(iter))은
+        # 방어선(예: 동시 prune·rounding 등의 edge case). 우선순위: user > ip > device.
+        blocker_kind: SubjectKind = next(iter(pairs))
+        for kind in candidates:  # pragma: no branch — break 또는 정상 종료 둘 다 의도된 경로
+            if kind in pairs and pairs[kind][1].remaining == 0:
+                blocker_kind = kind
+                break
+        blocker = pairs[blocker_kind]
         rollup = _rate_headers(*blocker)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -794,49 +924,72 @@ async def _enforce_defense(
                 **pair_headers,
             },
         )
-    # 200: rollup(더 엄격한 쪽 — slice 15 호환) + 두 쌍 동시 노출.
-    for key, value in _tightest_headers(user_pair, ip_pair).items():
+    # 200: rollup(전체 차원 중 가장 엄격한 쪽) + 세 쌍 동봉
+    tight_pair = min(pairs.values(), key=lambda p: p[1].remaining)
+    for key, value in _rate_headers(*tight_pair).items():
         response.headers[key] = value
     for key, value in pair_headers.items():
         response.headers[key] = value
 
 
-async def rate_limit_defense_read(
+async def rate_limit_triple_read(
     user: ConsentedUser,
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
     response: Response,
 ) -> None:
-    """*사용자 + IP* 읽기 한도 동시 적용 — 인증 GET 엔드포인트의 방어 심층."""
-    await _enforce_defense(
+    """*3차원 읽기* 한도(user+IP+device) — 인증 GET 엔드포인트의 강화 방어."""
+    await _enforce_triple(
         user.user_id,
         _client_ip(request),
+        _client_device_id(request),
         category="read",
         user_limit=settings.coach_rate_limit_read_per_minute,
         ip_limit=settings.coach_rate_limit_ip_read_per_minute,
+        device_limit=settings.coach_rate_limit_device_read_per_minute,
         response=response,
     )
 
 
-async def rate_limit_defense_write(
+async def rate_limit_triple_write(
     user: ConsentedUser,
     request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
     response: Response,
 ) -> None:
-    """*사용자 + IP* 쓰기 한도 동시 적용 — 인증 POST 엔드포인트의 방어 심층."""
-    await _enforce_defense(
+    """*3차원 쓰기* 한도(user+IP+device) — 인증 POST 엔드포인트의 강화 방어."""
+    await _enforce_triple(
         user.user_id,
         _client_ip(request),
+        _client_device_id(request),
         category="write",
         user_limit=settings.coach_rate_limit_write_per_minute,
         ip_limit=settings.coach_rate_limit_ip_write_per_minute,
+        device_limit=settings.coach_rate_limit_device_write_per_minute,
         response=response,
     )
 
 
-RateLimitedDefenseRead = Depends(rate_limit_defense_read)
-"""인증 GET용 *사용자 + IP* 동시 의존성 — `dependencies=[RateLimitedDefenseRead]`."""
+RateLimitedTripleRead = Depends(rate_limit_triple_read)
+"""인증 GET용 *3차원*(user+IP+device) 의존성 — `dependencies=[RateLimitedTripleRead]`."""
 
-RateLimitedDefenseWrite = Depends(rate_limit_defense_write)
-"""인증 POST용 *사용자 + IP* 동시 의존성 — `dependencies=[RateLimitedDefenseWrite]`."""
+RateLimitedTripleWrite = Depends(rate_limit_triple_write)
+"""인증 POST용 *3차원*(user+IP+device) 의존성 — `dependencies=[RateLimitedTripleWrite]`."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 슬라이스 17 — 사용자 + IP 동시 적용(방어 심층)
+# 인증된 엔드포인트에 둘 다 부착해 ① 단일 사용자 학대 ② 공유 NAT의 단일 IP 학대 모두 차단.
+# 429는 *먼저 실패*한 쪽 헤더로(사용자 우선). 200 헤더는 *더 엄격한* 쪽 노출(클라이언트가
+# 가장 가까운 한도를 인식).
+# ──────────────────────────────────────────────────────────────────────────
+
+
+# 슬라이스 17-19의 `_tightest_headers`(2-pair)은 슬라이스 20의 3차원 일반화 인라인
+# `min(pairs.values(), key=remaining)`로 흡수. clean cut(CLAUDE.md "범위 밖 기능 금지").
+
+
+# 슬라이스 17-19의 Defense(user+IP 2차원) deps·`_enforce_defense`·`_tightest_headers`는
+# 슬라이스 20의 Triple(user+IP+device 3차원) deps 도입으로 *모두 대체*됨(clean cut).
+# 호출자 0 — 죽은 코드 제거(CLAUDE.md "범위 밖 기능 금지"). user+IP만 원하면 Triple에서
+# `device_limit=0`으로 동등 동작. hit_both Protocol 메서드는 유지(슬라이스 18 API).

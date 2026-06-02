@@ -267,6 +267,23 @@ class Settings(BaseSettings):
             "쓰기는 IP 단위에서도 상대적으로 엄격(공격·자동화 봇 방어). 인증 사용자 한도는 별도."
         ),
     )
+    coach_rate_limit_device_read_per_minute: int = Field(
+        default=90,
+        ge=0,
+        description=(
+            "L4 코치 *읽기* 엔드포인트의 *디바이스(X-Device-Id) 단위* 분당 요청 상한. "
+            "0=비활성. 사용자(60)와 IP(120) 사이 중간 — 한 사용자가 다중 디바이스 가능하나 "
+            "한 디바이스가 폭주하면 그 디바이스만 제한."
+        ),
+    )
+    coach_rate_limit_device_write_per_minute: int = Field(
+        default=45,
+        ge=0,
+        description=(
+            "L4 코치 *쓰기* 엔드포인트의 *디바이스 단위* 분당 요청 상한. 0=비활성. "
+            "사용자(30)와 IP(60) 사이 중간."
+        ),
+    )
     coach_rate_limit_backend: Literal["memory", "redis"] = Field(
         default="memory",
         description=(
