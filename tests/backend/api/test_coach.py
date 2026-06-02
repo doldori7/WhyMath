@@ -10,16 +10,34 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_consented_user
+from whymath_backend.api._rate_limit import reset_store
 from whymath_backend.app import create_app
+from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 _UID = uuid.uuid4()
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_store() -> None:
+    """매 테스트 격리 — sliding window 카운트 리셋(다른 테스트로의 누수 차단)."""
+    reset_store()
+
+
+def _settings_override(limit: int = 0) -> Settings:
+    """기본 rate_limit=0(비활성). 테스트가 명시적으로 limit 지정 시 활성."""
+    return Settings(
+        jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+        coach_rate_limit_per_minute=limit,
+    )
 
 
 def _user() -> UserProfile:
@@ -87,9 +105,10 @@ class _CapturingSession:
         return _Result(self._execute_rows)
 
 
-def _client() -> TestClient:
+def _client(rate_limit: int = 0) -> TestClient:
     app = create_app()
     app.dependency_overrides[get_consented_user] = _user
+    app.dependency_overrides[get_settings] = lambda: _settings_override(rate_limit)
 
     async def _sess() -> AsyncIterator[_FakeSession]:
         yield _FakeSession()
@@ -101,10 +120,12 @@ def _client() -> TestClient:
 def _session_client(
     preload: dict[Any, Any] | None = None,
     execute_rows: list[Any] | None = None,
+    rate_limit: int = 0,
 ) -> tuple[TestClient, _CapturingSession]:
     """`/v1/coach/sessions` hermetic — capturing session으로 add/commit/execute 검증."""
     app = create_app()
     app.dependency_overrides[get_consented_user] = _user
+    app.dependency_overrides[get_settings] = lambda: _settings_override(rate_limit)
     captured = _CapturingSession(preload=preload, execute_rows=execute_rows)
 
     async def _sess() -> AsyncIterator[_CapturingSession]:
@@ -116,6 +137,7 @@ def _session_client(
 
 def _no_auth_client() -> TestClient:
     app = create_app()
+    app.dependency_overrides[get_settings] = lambda: _settings_override(0)
 
     async def _sess() -> AsyncIterator[_FakeSession]:
         yield _FakeSession()
@@ -626,3 +648,64 @@ class TestSessionGetConditional:
         client_b, _ = _session_client(preload=preload, execute_rows=rows[:1])
         etag_b = client_b.get(f"/v1/coach/sessions/{did}").headers["ETag"]
         assert etag_a != etag_b
+
+
+class TestRateLimit:
+    """coach 엔드포인트 사용자당 분당 상한 — 초과 시 429 + Retry-After."""
+
+    def test_under_limit_passes(self) -> None:
+        # limit=3 → 3회까지 통과
+        client = _client(rate_limit=3)
+        for _ in range(3):
+            assert (
+                client.post("/v1/coach", json={"student_input": "음"}).status_code
+                == 200
+            )
+
+    def test_over_limit_returns_429(self) -> None:
+        # limit=2 → 3번째 요청 429 + Retry-After
+        client = _client(rate_limit=2)
+        assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
+        assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 429
+        assert resp.headers["Retry-After"] == "60"
+
+    def test_zero_means_disabled(self) -> None:
+        # limit=0 → 무제한(기본 테스트 모드)
+        client = _client(rate_limit=0)
+        for _ in range(20):
+            assert (
+                client.post("/v1/coach", json={"student_input": "음"}).status_code
+                == 200
+            )
+
+    def test_get_endpoint_also_limited(self) -> None:
+        # GET /v1/coach/sessions/{id}도 동일 버킷 카운트 — 임계 공유
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+        from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+
+        did = uuid.uuid4()
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(dialogue_id=did, user_id=_UID)
+        )
+        client, _ = _session_client(
+            preload={(DialogueORM, did): dialogue},
+            execute_rows=[],
+            rate_limit=1,
+        )
+        # 1번 통과
+        assert client.get(f"/v1/coach/sessions/{did}").status_code == 200
+        # 2번째 429
+        resp = client.get(f"/v1/coach/sessions/{did}")
+        assert resp.status_code == 429
+
+    def test_sliding_window_prunes_expired(self) -> None:
+        # 클럭 seam — 60초 후엔 옛 히트가 만료돼 다시 통과
+        from whymath_backend.api._rate_limit import _SlidingWindow
+
+        window = _SlidingWindow()
+        uid = uuid.uuid4()
+        assert window.hit(uid, limit=1, now=0.0) is True
+        assert window.hit(uid, limit=1, now=0.5) is False  # 같은 윈도우, 초과
+        assert window.hit(uid, limit=1, now=61.0) is True  # 60초+ → 옛 히트 prune

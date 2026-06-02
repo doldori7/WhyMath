@@ -231,6 +231,17 @@ class Settings(BaseSettings):
         description="액세스 토큰 만료(분). 기본 24시간. WHYMATH_JWT_EXPIRE_MINUTES로 조정.",
     )
 
+    # ── L4 코치 엔드포인트 rate limit ──
+    coach_rate_limit_per_minute: int = Field(
+        default=60,
+        ge=0,
+        description=(
+            "L4 코치 엔드포인트(/v1/coach·/v1/coach/sessions*)의 *사용자당 분당 요청 상한*. "
+            "0=비활성(테스트·개발). 인메모리 sliding window — 단일 프로세스 한정. 분산/HA "
+            "환경은 Redis-backed 후속."
+        ),
+    )
+
     @property
     def langfuse_configured(self) -> bool:
         """Langfuse 공개키·시크릿키가 *둘 다* 채워졌는가(전송 가능 여부).
