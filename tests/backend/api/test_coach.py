@@ -29,10 +29,31 @@ def _user() -> UserProfile:
 
 
 class _FakeSession:
+    """`/v1/coach`(stateless)용 — DB 호출 시 AssertionError."""
+
     async def execute(self, stmt: Any) -> None:
-        raise AssertionError(
-            "coach 라우터는 DB 쿼리하지 않아야 한다(stateless slice 6)."
-        )
+        raise AssertionError("coach 라우터(stateless)는 DB 쿼리하지 않아야 한다.")
+
+
+class _CapturingSession:
+    """`/v1/coach/sessions`용 — add/add_all/commit/refresh를 캡처해 DB 무없이 결선 검증."""
+
+    def __init__(self) -> None:
+        self.added: list[Any] = []
+        self.commits = 0
+        self.refreshes = 0
+
+    def add(self, obj: Any) -> None:
+        self.added.append(obj)
+
+    def add_all(self, objs: list[Any]) -> None:
+        self.added.extend(objs)
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+    async def refresh(self, obj: Any) -> None:
+        self.refreshes += 1
 
 
 def _client() -> TestClient:
@@ -44,6 +65,19 @@ def _client() -> TestClient:
 
     app.dependency_overrides[get_session] = _sess
     return TestClient(app)
+
+
+def _session_client() -> tuple[TestClient, _CapturingSession]:
+    """`/v1/coach/sessions` hermetic — capturing session으로 add/commit 검증."""
+    app = create_app()
+    app.dependency_overrides[get_consented_user] = _user
+    captured = _CapturingSession()
+
+    async def _sess() -> AsyncIterator[_CapturingSession]:
+        yield captured
+
+    app.dependency_overrides[get_session] = _sess
+    return TestClient(app), captured
 
 
 def _no_auth_client() -> TestClient:
@@ -191,4 +225,88 @@ class TestRequestValidation:
 
     def test_extra_field_forbidden(self) -> None:
         resp = _client().post("/v1/coach", json={"student_input": "음", "foo": "bar"})
+        assert resp.status_code == 422
+
+
+class TestSessionPersistence:
+    """`/v1/coach/sessions` — dialogue + 2 turn 영속 결선(hermetic)."""
+
+    def test_creates_dialogue_and_two_turns_201(self) -> None:
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "내 풀이는 (a+b)² = a² + b² 이렇게 했어"},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        # 응답 — decision/misconceptions/intervention + 영속 ID 3종
+        assert "dialogue_id" in body
+        assert "student_turn_id" in body
+        assert "assistant_turn_id" in body
+        assert body["intervention"]["pattern"] == "counterexample"
+
+        # 영속 — 1 dialogue + 2 turns, commit 2회(parent 먼저, child 다음).
+        from whymath_backend.db.models.dialogue import (
+            Dialogue as DialogueORM,
+        )
+        from whymath_backend.db.models.dialogue import (
+            DialogueTurn as DialogueTurnORM,
+        )
+
+        dialogues = [o for o in captured.added if isinstance(o, DialogueORM)]
+        turns = [o for o in captured.added if isinstance(o, DialogueTurnORM)]
+        assert len(dialogues) == 1
+        assert len(turns) == 2
+        assert captured.commits == 2  # dialogue → turns 순서
+        assert captured.refreshes == 1
+
+    def test_user_id_scoped_to_authenticated_user(self) -> None:
+        # 본인 데이터 차단 — dialogue.user_id는 인증된 user.user_id로 자동
+        client, captured = _session_client()
+        client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "음", "problem_id": str(uuid.uuid4())},
+        )
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+
+        dialogue = next(o for o in captured.added if isinstance(o, DialogueORM))
+        assert dialogue.user_id == _UID
+
+    def test_student_turn_content_matches_input(self) -> None:
+        client, captured = _session_client()
+        client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "내 풀이는 이렇게 했어"},
+        )
+        from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
+
+        turns = [o for o in captured.added if isinstance(o, DialogueTurnORM)]
+        student_t = next(t for t in turns if t.role == "student")
+        assistant_t = next(t for t in turns if t.role == "assistant")
+        assert student_t.content == "내 풀이는 이렇게 했어"
+        assert student_t.turn_order == 1
+        assert assistant_t.turn_order == 2
+        # AI 턴 content = decision.prompt — LLM 호출 없이 결정된 발화 보존
+        assert assistant_t.content  # 비공
+
+    def test_no_token_401(self) -> None:
+        resp = _no_auth_client().post(
+            "/v1/coach/sessions", json={"student_input": "음"}
+        )
+        assert resp.status_code == 401
+
+    def test_extra_field_forbidden(self) -> None:
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "음", "evil": "field"},
+        )
+        assert resp.status_code == 422
+
+    def test_bad_problem_id_422(self) -> None:
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "음", "problem_id": "not-a-uuid"},
+        )
         assert resp.status_code == 422

@@ -1,4 +1,4 @@
-"""L4 교수학 코치 HTTP 표면 — `POST /v1/coach`.
+"""L4 교수학 코치 HTTP 표면 — `POST /v1/coach` + `POST /v1/coach/sessions`.
 
 학생 발화·Polya 상태(+옵션 숙달도)를 받아 *통합 결정*을 반환한다. L4 슬라이스 1-5의 모든
 결정 함수를 한 발화로 묶는 엔드포인트:
@@ -8,19 +8,31 @@
 - `adapt_lthc()` — 숙달도 제공 시 진입점·확장·비계 조정
 
 **경계**:
-- *stateless* — state는 클라이언트가 보내고 받는다(세션 영속·`dialogue` DB 쓰기는 후속).
-- *LLM 호출 0* — `PolyaCoach.coach()`(LLM seam 사용)는 별도 슬라이스(라이브 키 필요).
+- `/v1/coach` — *stateless* (state in/out·DB 무접근·LLM 호출 0).
+- `/v1/coach/sessions` — *DB 쓰기*(새 dialogue + 학생/AI 2턴 영속). LLM 호출은 여전히 0
+  (decision.prompt를 AI 턴 content로 저장 — 결정된 발화 보존).
 - 인증 = `ConsentedUser`(미성년 동의 게이트 통과) — 학생 발화는 PII 가능(CLAUDE.md).
 - 응답에 `system`/`prompt` 본문이 노출되므로 *학생 발화를 그대로 에코하지 않음*(에코 시
   필터·검증 없이 표면화될 위험).
+- 미성년 채팅 평문 저장(CLAUDE.md 금기)은 *저장 계층 책임*(DB 암호화 at-rest·미들웨어).
+  본 라우터는 schema/ORM의 기존 방침을 따라 평문 저장 + docstring 상기만(슬라이스 1
+  schema 노트와 동일 — `schema/dialogue.py` 모듈 docstring 참조).
 """
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+import uuid
+from datetime import datetime, timezone
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
+from whymath_backend.db.session import get_session
 from whymath_backend.l4 import (
     LthcAdaptation,
     MasteryLevel,
@@ -35,8 +47,12 @@ from whymath_backend.l4.misconception import (
     diagnose,
     select_intervention,
 )
+from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
+from whymath_backend.schema.enums import ContentType, TurnRole
 
 router = APIRouter(prefix="/v1", tags=["coach"])
+SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 _coach = PolyaCoach()  # 상태 비저장 — 단일 인스턴스 재사용
 
@@ -89,22 +105,32 @@ class CoachResponse(BaseModel):
     )
 
 
-@router.post(
-    "/coach",
-    response_model=CoachResponse,
-    summary="L4 교수학 통합 결정",
-)
-async def coach_decide(
-    body: CoachRequest,
-    user: ConsentedUser,
-) -> CoachResponse:
-    """학생 발화 → Polya 결정 + 오개념 진단 + LTHC 조정안을 *한 번에* 반환.
+class SessionCreateRequest(CoachRequest):
+    """`/v1/coach/sessions` 요청 — `CoachRequest` + 선택적 problem_id(FK)."""
 
-    `user`는 사용자 식별·인가 게이트일 뿐, 본 슬라이스는 데이터를 *영속화하지 않는다*
-    (stateless — 세션 적재는 후속 슬라이스 `/v1/coach/sessions` 시).
-    """
-    _ = user.user_id  # 인증 게이트 통과 확인용(slice 6 stateless라 user 데이터 미사용)
+    problem_id: uuid.UUID | None = Field(
+        default=None,
+        description="이 대화가 속한 문제(있으면 dialogue.problem_id로 영속·없으면 NULL).",
+    )
 
+
+class SessionCreateResponse(CoachResponse):
+    """`/v1/coach/sessions` 응답 — `CoachResponse` + 영속된 dialogue/turn ID."""
+
+    dialogue_id: uuid.UUID = Field(description="새로 생성된 대화 PK.")
+    student_turn_id: uuid.UUID = Field(description="학생 발화 턴 PK(turn_order=1).")
+    assistant_turn_id: uuid.UUID = Field(
+        description="AI 결정 턴 PK(turn_order=2, content=decision.prompt)."
+    )
+
+
+def _build_response_payload(body: CoachRequest) -> tuple[
+    PedagogyDecision,
+    list[MisconceptionMatch],
+    InterventionDecision | None,
+    LthcAdaptation | None,
+]:
+    """공통 결정 계산 — `/v1/coach`·`/v1/coach/sessions` 둘 다 사용."""
     decision = _coach.decide(body.student_input, body.polya_state)
     matches = diagnose(body.student_input)
     intervention = select_intervention(matches[0]) if matches else None
@@ -113,10 +139,96 @@ async def coach_decide(
         if body.mastery_level is not None
         else None
     )
+    return decision, matches, intervention, lthc
 
+
+@router.post(
+    "/coach",
+    response_model=CoachResponse,
+    summary="L4 교수학 통합 결정(stateless)",
+)
+async def coach_decide(
+    body: CoachRequest,
+    user: ConsentedUser,
+) -> CoachResponse:
+    """학생 발화 → Polya 결정 + 오개념 진단 + LTHC 조정안을 *한 번에* 반환.
+
+    *DB 무접근* — 영속이 필요하면 `/v1/coach/sessions`를 호출. `user`는 인증 게이트만.
+    """
+    _ = user.user_id  # 인증 게이트 통과 확인용(stateless라 user 데이터 미사용)
+
+    decision, matches, intervention, lthc = _build_response_payload(body)
     return CoachResponse(
         decision=decision,
         misconceptions=matches,
         intervention=intervention,
         lthc=lthc,
+    )
+
+
+@router.post(
+    "/coach/sessions",
+    response_model=SessionCreateResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="L4 코치 세션 생성(dialogue + 학생/AI 2턴 영속)",
+)
+async def create_session(
+    body: SessionCreateRequest,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> SessionCreateResponse:
+    """새 대화 + 학생/AI 첫 2턴 영속. LLM 호출은 0 — AI 턴은 `decision.prompt` 저장.
+
+    트랜잭션: dialogue 먼저 commit(PK 확보) → turns commit(FK 의존). `user_id`는 인증된
+    `user.user_id`로 자동 설정(타인 데이터 차단). 미성년 채팅 평문 저장은 *저장 계층*
+    책임(모듈 docstring 참조 — DB 암호화 at-rest는 후속 인프라 슬라이스).
+    """
+    decision, matches, intervention, lthc = _build_response_payload(body)
+
+    now = datetime.now(timezone.utc)
+    dialogue = DialogueORM.from_schema(
+        DialogueSchema(
+            user_id=user.user_id,
+            problem_id=body.problem_id,
+            started_at=now,
+            total_turns=2,
+            student_turns=1,
+            assistant_turns=1,
+        )
+    )
+    session.add(dialogue)
+    await session.commit()
+    await session.refresh(dialogue)
+
+    student_turn = DialogueTurnORM.from_schema(
+        DialogueTurnSchema(
+            dialogue_id=dialogue.dialogue_id,
+            turn_order=1,
+            spoken_at=now,
+            role=TurnRole.student,
+            content=body.student_input,
+            content_type=ContentType.텍스트,
+        )
+    )
+    assistant_turn = DialogueTurnORM.from_schema(
+        DialogueTurnSchema(
+            dialogue_id=dialogue.dialogue_id,
+            turn_order=2,
+            spoken_at=now,
+            role=TurnRole.assistant,
+            content=decision.prompt,
+            content_type=ContentType.텍스트,
+        )
+    )
+    session.add_all([student_turn, assistant_turn])
+    await session.commit()
+
+    return SessionCreateResponse(
+        decision=decision,
+        misconceptions=matches,
+        intervention=intervention,
+        lthc=lthc,
+        dialogue_id=dialogue.dialogue_id,
+        student_turn_id=student_turn.turn_id,
+        assistant_turn_id=assistant_turn.turn_id,
     )
