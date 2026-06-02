@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -122,6 +122,19 @@ class SessionCreateResponse(CoachResponse):
     assistant_turn_id: uuid.UUID = Field(
         description="AI 결정 턴 PK(turn_order=2, content=decision.prompt)."
     )
+
+
+class TurnAppendResponse(CoachResponse):
+    """`/v1/coach/sessions/{id}/turns` 응답 — `CoachResponse` + 추가 턴 PK·turn_order."""
+
+    student_turn_id: uuid.UUID = Field(description="추가된 학생 턴 PK(turn_order=직전+1).")
+    assistant_turn_id: uuid.UUID = Field(
+        description="추가된 AI 턴 PK(turn_order=직전+2, content=decision.prompt)."
+    )
+    student_turn_order: int = Field(
+        ge=1, description="학생 턴 순번(append 후 dialogue.total_turns에 반영)."
+    )
+    assistant_turn_order: int = Field(ge=1, description="AI 턴 순번(=student_turn_order + 1).")
 
 
 def _build_response_payload(body: CoachRequest) -> tuple[
@@ -231,4 +244,77 @@ async def create_session(
         dialogue_id=dialogue.dialogue_id,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
+    )
+
+
+@router.post(
+    "/coach/sessions/{dialogue_id}/turns",
+    response_model=TurnAppendResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="L4 코치 세션에 학생/AI 2턴 추가",
+)
+async def append_turns(
+    dialogue_id: uuid.UUID,
+    body: CoachRequest,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> TurnAppendResponse:
+    """기존 dialogue에 학생/AI 2턴 추가.
+
+    소유권 검증: `dialogue.user_id != user.user_id`거나 dialogue 부재 시 **404**
+    (존재 노출 회피 — 타인 데이터 존재 여부 자체를 숨김; 403 분리는 정보 누출).
+    `turn_order`는 `dialogue.total_turns` 기반으로 계산(max 쿼리 회피·증분 정합).
+    LLM 호출 0 — AI 턴 content는 `decision.prompt` 그대로(slice 7 정합).
+    """
+    dialogue = await session.get(DialogueORM, dialogue_id)
+    if dialogue is None or dialogue.user_id != user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="대화를 찾을 수 없습니다."
+        )
+
+    decision, matches, intervention, lthc = _build_response_payload(body)
+
+    current_total = dialogue.total_turns or 0
+    student_order = current_total + 1
+    assistant_order = current_total + 2
+
+    now = datetime.now(timezone.utc)
+    student_turn = DialogueTurnORM.from_schema(
+        DialogueTurnSchema(
+            dialogue_id=dialogue_id,
+            turn_order=student_order,
+            spoken_at=now,
+            role=TurnRole.student,
+            content=body.student_input,
+            content_type=ContentType.텍스트,
+        )
+    )
+    assistant_turn = DialogueTurnORM.from_schema(
+        DialogueTurnSchema(
+            dialogue_id=dialogue_id,
+            turn_order=assistant_order,
+            spoken_at=now,
+            role=TurnRole.assistant,
+            content=decision.prompt,
+            content_type=ContentType.텍스트,
+        )
+    )
+    session.add_all([student_turn, assistant_turn])
+
+    # dialogue 카운트 증가 — 다음 append의 `total_turns` 입력.
+    dialogue.total_turns = current_total + 2
+    dialogue.student_turns = (dialogue.student_turns or 0) + 1
+    dialogue.assistant_turns = (dialogue.assistant_turns or 0) + 1
+
+    await session.commit()
+
+    return TurnAppendResponse(
+        decision=decision,
+        misconceptions=matches,
+        intervention=intervention,
+        lthc=lthc,
+        student_turn_id=student_turn.turn_id,
+        assistant_turn_id=assistant_turn.turn_id,
+        student_turn_order=student_order,
+        assistant_turn_order=assistant_order,
     )

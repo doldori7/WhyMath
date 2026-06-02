@@ -36,12 +36,16 @@ class _FakeSession:
 
 
 class _CapturingSession:
-    """`/v1/coach/sessions`용 — add/add_all/commit/refresh를 캡처해 DB 무없이 결선 검증."""
+    """`/v1/coach/sessions`용 — add/add_all/commit/refresh를 캡처해 DB 무없이 결선 검증.
 
-    def __init__(self) -> None:
+    `_preload`로 `.get(Model, pk)` 결과를 미리 주입(turn append용 dialogue 조회 모사).
+    """
+
+    def __init__(self, preload: dict[Any, Any] | None = None) -> None:
         self.added: list[Any] = []
         self.commits = 0
         self.refreshes = 0
+        self._preload = preload or {}
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
@@ -55,6 +59,9 @@ class _CapturingSession:
     async def refresh(self, obj: Any) -> None:
         self.refreshes += 1
 
+    async def get(self, model: Any, pk: Any) -> Any | None:
+        return self._preload.get((model, pk))
+
 
 def _client() -> TestClient:
     app = create_app()
@@ -67,11 +74,13 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _session_client() -> tuple[TestClient, _CapturingSession]:
+def _session_client(
+    preload: dict[Any, Any] | None = None,
+) -> tuple[TestClient, _CapturingSession]:
     """`/v1/coach/sessions` hermetic — capturing session으로 add/commit 검증."""
     app = create_app()
     app.dependency_overrides[get_consented_user] = _user
-    captured = _CapturingSession()
+    captured = _CapturingSession(preload=preload)
 
     async def _sess() -> AsyncIterator[_CapturingSession]:
         yield captured
@@ -310,3 +319,111 @@ class TestSessionPersistence:
             json={"student_input": "음", "problem_id": "not-a-uuid"},
         )
         assert resp.status_code == 422
+
+
+class TestTurnAppend:
+    """`/v1/coach/sessions/{id}/turns` — 2턴 추가 결선."""
+
+    def _preloaded_dialogue(
+        self,
+        dialogue_id: uuid.UUID,
+        owner: uuid.UUID,
+        total_turns: int = 2,
+    ) -> Any:
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+        from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+
+        return (DialogueORM, dialogue_id), DialogueORM.from_schema(
+            DialogueSchema(
+                dialogue_id=dialogue_id,
+                user_id=owner,
+                total_turns=total_turns,
+                student_turns=1,
+                assistant_turns=1,
+            )
+        )
+
+    def test_append_creates_two_turns_with_continuing_order(self) -> None:
+        from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
+
+        did = uuid.uuid4()
+        key, dialogue = self._preloaded_dialogue(did, _UID, total_turns=2)
+        client, captured = _session_client(preload={key: dialogue})
+
+        resp = client.post(
+            f"/v1/coach/sessions/{did}/turns",
+            json={"student_input": "이번엔 다른 풀이 해볼게"},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        # 다음 학생 turn_order = 직전 total_turns(2) + 1 = 3
+        assert body["student_turn_order"] == 3
+        assert body["assistant_turn_order"] == 4
+
+        # 영속 — 2 turns added, dialogue 카운트 업데이트, 1 commit
+        turns = [o for o in captured.added if isinstance(o, DialogueTurnORM)]
+        assert len(turns) == 2
+        assert captured.commits == 1
+        # dialogue 카운트가 증가됨
+        assert dialogue.total_turns == 4
+        assert dialogue.student_turns == 2
+        assert dialogue.assistant_turns == 2
+
+    def test_nonexistent_dialogue_404(self) -> None:
+        client, captured = _session_client()  # 빈 preload
+        resp = client.post(
+            f"/v1/coach/sessions/{uuid.uuid4()}/turns",
+            json={"student_input": "음"},
+        )
+        assert resp.status_code == 404
+        # DB 쓰기 발생 안 함
+        assert captured.added == []
+        assert captured.commits == 0
+
+    def test_other_users_dialogue_404(self) -> None:
+        # 타인 소유 dialogue → 404 (403 분리하지 않음 — 존재 노출 회피)
+        other_uid = uuid.uuid4()
+        did = uuid.uuid4()
+        key, dialogue = self._preloaded_dialogue(did, other_uid, total_turns=2)
+        client, captured = _session_client(preload={key: dialogue})
+
+        resp = client.post(
+            f"/v1/coach/sessions/{did}/turns",
+            json={"student_input": "타인 세션 가로채기 시도"},
+        )
+        assert resp.status_code == 404
+        assert captured.added == []
+
+    def test_no_token_401(self) -> None:
+        did = uuid.uuid4()
+        resp = _no_auth_client().post(
+            f"/v1/coach/sessions/{did}/turns",
+            json={"student_input": "음"},
+        )
+        assert resp.status_code == 401
+
+    def test_bad_dialogue_id_format_422(self) -> None:
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions/not-a-uuid/turns",
+            json={"student_input": "음"},
+        )
+        assert resp.status_code == 422
+
+    def test_total_turns_none_starts_from_1(self) -> None:
+        # 기존 dialogue.total_turns가 None이면 0으로 취급 → 학생=1·AI=2
+        did = uuid.uuid4()
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+        from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(dialogue_id=did, user_id=_UID, total_turns=None)
+        )
+        client, _ = _session_client(preload={(DialogueORM, did): dialogue})
+        resp = client.post(
+            f"/v1/coach/sessions/{did}/turns",
+            json={"student_input": "음"},
+        )
+        body = resp.json()
+        assert body["student_turn_order"] == 1
+        assert body["assistant_turn_order"] == 2

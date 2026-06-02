@@ -140,3 +140,54 @@ def test_create_session_persists_dialogue_and_two_turns_on_live_pg() -> None:
             )
     finally:
         asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+def test_append_turns_extends_existing_session_on_live_pg() -> None:
+    """세션 생성 → 턴 추가 → 실 PG에 dialogue_turn 4행·turn_order 1·2·3·4 증분."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # 세션 생성 (turn_order 1, 2)
+            create = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={"student_input": "처음 시도"},
+            )
+            assert create.status_code == 201
+            did = uuid.UUID(create.json()["dialogue_id"])
+            dialogue_ids.append(did)
+
+            # 턴 추가 (turn_order 3, 4)
+            append = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=auth,
+                json={"student_input": "두번째 시도, 잘 모르겠어"},
+            )
+            assert append.status_code == 201, append.text
+            body = append.json()
+            assert body["student_turn_order"] == 3
+            assert body["assistant_turn_order"] == 4
+            # 좌절 신호 → hint_level 상승(slice 3)
+            assert body["decision"]["hint_level"] >= 2
+
+            # 실 PG에 4행
+            assert asyncio.run(_count_turns(did)) == 4
+
+            # 존재하지 않는 dialogue → 404
+            missing = client.post(
+                f"/v1/coach/sessions/{uuid.uuid4()}/turns",
+                headers=auth,
+                json={"student_input": "음"},
+            )
+            assert missing.status_code == 404
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
