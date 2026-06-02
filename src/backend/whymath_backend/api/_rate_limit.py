@@ -21,7 +21,7 @@ import hashlib
 import time
 import uuid
 from collections import deque
-from typing import Annotated, Any, Protocol, cast, runtime_checkable
+from typing import Annotated, Any, Literal, Protocol, cast, runtime_checkable
 
 from fastapi import Depends, HTTPException, status
 
@@ -41,32 +41,53 @@ except ImportError:  # pragma: no cover — 라이브러리 미설치 환경
 
 _WINDOW_SECONDS = 60.0
 
+RateCategory = Literal["read", "write"]
+"""POST/GET 차등 한도 — 읽기/쓰기 분리 버킷(상호 영향 차단)."""
+
 
 @runtime_checkable
 class RateLimitBackend(Protocol):
-    """rate limit 백엔드 — sliding window 카운트의 저장·검사 추상."""
+    """rate limit 백엔드 — sliding window 카운트의 저장·검사 추상.
 
-    async def hit(self, user_id: uuid.UUID, *, limit: int, now: float) -> bool:
+    `category`(`"read"`/`"write"`)로 별도 버킷 — 한 카테고리 소진이 다른 카테고리에
+    영향 주지 않는다(읽기 폭주가 쓰기를 막거나, 그 반대 차단).
+    """
+
+    async def hit(
+        self,
+        user_id: uuid.UUID,
+        *,
+        category: RateCategory,
+        limit: int,
+        now: float,
+    ) -> bool:
         """요청을 기록하고 *제한 내*면 True, 초과면 False(요청 미기록)."""
         ...
 
     async def reset(self) -> None:
-        """모든 카운트 초기화 — 테스트 격리용. production 미호출."""
+        """모든 카테고리·모든 카운트 초기화 — 테스트 격리용. production 미호출."""
         ...
 
 
 class InMemoryBackend:
-    """프로세스-로컬 deque per user_id — 단일 인스턴스 한정.
+    """프로세스-로컬 deque per (user_id, category) — 단일 인스턴스 한정.
 
     분산 환경에서는 워커별 별도 카운트 → 효과 ÷ N. 그 경우 `RedisBackend` 사용.
     """
 
     def __init__(self) -> None:
-        self._by_user: dict[uuid.UUID, deque[float]] = {}
+        self._by_key: dict[tuple[uuid.UUID, str], deque[float]] = {}
 
-    async def hit(self, user_id: uuid.UUID, *, limit: int, now: float) -> bool:
+    async def hit(
+        self,
+        user_id: uuid.UUID,
+        *,
+        category: RateCategory,
+        limit: int,
+        now: float,
+    ) -> bool:
         cutoff = now - _WINDOW_SECONDS
-        bucket = self._by_user.setdefault(user_id, deque())
+        bucket = self._by_key.setdefault((user_id, category), deque())
         while bucket and bucket[0] < cutoff:
             bucket.popleft()
         if len(bucket) >= limit:
@@ -75,7 +96,7 @@ class InMemoryBackend:
         return True
 
     async def reset(self) -> None:
-        self._by_user.clear()
+        self._by_key.clear()
 
 
 # Redis 클라이언트 추상화 — l3/cache/redis_cache.py `_RedisClient` 패턴 답습.
@@ -178,12 +199,20 @@ class RedisBackend:
             self._client = _build_default_redis_client(self._resolved_settings)
         return self._client
 
-    def _key(self, user_id: uuid.UUID) -> str:
-        return f"{self._KEY_PREFIX}{user_id}"
+    def _key(self, user_id: uuid.UUID, category: RateCategory) -> str:
+        # 카테고리별 키 분리 — `rate:coach:read:{uid}` vs `rate:coach:write:{uid}`
+        return f"{self._KEY_PREFIX}{category}:{user_id}"
 
-    async def hit(self, user_id: uuid.UUID, *, limit: int, now: float) -> bool:
+    async def hit(
+        self,
+        user_id: uuid.UUID,
+        *,
+        category: RateCategory,
+        limit: int,
+        now: float,
+    ) -> bool:
         client = self._get_client()
-        key = self._key(user_id)
+        key = self._key(user_id, category)
         unique_member = f"{now}:{uuid.uuid4().hex}"
         try:
             raw = await client.evalsha(_LUA_HIT_SHA1, 1, key, now, limit, unique_member)
@@ -230,18 +259,16 @@ async def reset_store() -> None:
     await _BACKEND.reset()
 
 
-async def rate_limit_user(
-    user: ConsentedUser,
-    settings: Annotated[Settings, Depends(get_settings)],
+async def _enforce(
+    user_id: uuid.UUID,
+    *,
+    category: RateCategory,
+    limit: int,
 ) -> None:
-    """사용자당 분당 상한 검사. 초과 시 429 + Retry-After: 60.
-
-    `coach_rate_limit_per_minute=0`이면 비활성(테스트·개발). 인증된 사용자에만 적용.
-    """
-    limit = settings.coach_rate_limit_per_minute
+    """카테고리별 사용자당 상한 검사. 초과 시 429 + Retry-After: 60. limit=0이면 비활성."""
     if limit == 0:
         return
-    if not await _BACKEND.hit(user.user_id, limit=limit, now=time.monotonic()):
+    if not await _BACKEND.hit(user_id, category=category, limit=limit, now=time.monotonic()):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
@@ -249,5 +276,28 @@ async def rate_limit_user(
         )
 
 
-RateLimited = Depends(rate_limit_user)
-"""의존성 별칭 — coach 엔드포인트에 `dependencies=[RateLimited]`로 부착."""
+async def rate_limit_read(
+    user: ConsentedUser,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> None:
+    """*읽기* 한도 검사 — GET 엔드포인트(`coach_rate_limit_read_per_minute`)."""
+    await _enforce(user.user_id, category="read", limit=settings.coach_rate_limit_read_per_minute)
+
+
+async def rate_limit_write(
+    user: ConsentedUser,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> None:
+    """*쓰기* 한도 검사 — POST 엔드포인트(`coach_rate_limit_write_per_minute`)."""
+    await _enforce(
+        user.user_id,
+        category="write",
+        limit=settings.coach_rate_limit_write_per_minute,
+    )
+
+
+RateLimitedRead = Depends(rate_limit_read)
+"""GET 엔드포인트용 의존성 — `dependencies=[RateLimitedRead]`."""
+
+RateLimitedWrite = Depends(rate_limit_write)
+"""POST 엔드포인트용 의존성 — `dependencies=[RateLimitedWrite]`."""

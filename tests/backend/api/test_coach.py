@@ -38,11 +38,18 @@ def _reset_rate_limit_store() -> None:
     asyncio.run(reset_store())
 
 
-def _settings_override(limit: int = 0) -> Settings:
-    """기본 rate_limit=0(비활성). 테스트가 명시적으로 limit 지정 시 활성."""
+def _settings_override(
+    limit: int = 0,
+    write_limit: int | None = None,
+) -> Settings:
+    """기본 read/write 모두 0(비활성). `write_limit=None`이면 `limit`과 같게(편의).
+
+    슬라이스 14 — 차등 한도. 기존 테스트(read 단일 인자)는 그대로 통과(둘 다 같게 설정).
+    """
     return Settings(
         jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
-        coach_rate_limit_per_minute=limit,
+        coach_rate_limit_read_per_minute=limit,
+        coach_rate_limit_write_per_minute=limit if write_limit is None else write_limit,
     )
 
 
@@ -714,9 +721,9 @@ class TestRateLimit:
 
         backend = InMemoryBackend()
         uid = uuid.uuid4()
-        assert asyncio.run(backend.hit(uid, limit=1, now=0.0)) is True
-        assert asyncio.run(backend.hit(uid, limit=1, now=0.5)) is False
-        assert asyncio.run(backend.hit(uid, limit=1, now=61.0)) is True
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)) is True
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.5)) is False
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=61.0)) is True
 
 
 class _FakeRedisClient:
@@ -791,9 +798,9 @@ class TestRedisBackend:
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
         uid = uuid.uuid4()
-        assert asyncio.run(backend.hit(uid, limit=2, now=0.0)) is True
-        assert asyncio.run(backend.hit(uid, limit=2, now=0.1)) is True
-        assert asyncio.run(backend.hit(uid, limit=2, now=0.2)) is False
+        assert asyncio.run(backend.hit(uid, category="read", limit=2, now=0.0)) is True
+        assert asyncio.run(backend.hit(uid, category="read", limit=2, now=0.1)) is True
+        assert asyncio.run(backend.hit(uid, category="read", limit=2, now=0.2)) is False
 
     def test_hit_uses_canonical_key_prefix(self) -> None:
         import asyncio
@@ -803,8 +810,8 @@ class TestRedisBackend:
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
         uid = uuid.uuid4()
-        asyncio.run(backend.hit(uid, limit=1, now=0.0))
-        assert f"rate:coach:{uid}" in fake.zsets
+        asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0))
+        assert f"rate:coach:read:{uid}" in fake.zsets
 
     def test_reset_clears_all_keys(self) -> None:
         import asyncio
@@ -813,8 +820,8 @@ class TestRedisBackend:
 
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
-        asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.0))
-        asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.0))
+        asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=10, now=0.0))
+        asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=10, now=0.0))
         assert len(fake.zsets) == 2
         asyncio.run(backend.reset())
         assert fake.zsets == {}
@@ -828,11 +835,11 @@ class TestRedisBackend:
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
         uid = uuid.uuid4()
-        assert asyncio.run(backend.hit(uid, limit=1, now=0.0)) is True
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)) is True
         # 같은 윈도우 — 초과
-        assert asyncio.run(backend.hit(uid, limit=1, now=0.5)) is False
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.5)) is False
         # 60초+ — prune되어 통과
-        assert asyncio.run(backend.hit(uid, limit=1, now=61.0)) is True
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=61.0)) is True
 
 
 class TestRedisBackendLazyPaths:
@@ -875,12 +882,12 @@ class TestRedisBackendLazyPaths:
         monkeypatch.setattr(rl, "_build_default_redis_client", lambda s: fake)
         backend = rl.RedisBackend()  # client 주입 X
         # 첫 hit — lazy build 발화 + EVALSHA NOSCRIPT → script_load + 재시도
-        assert asyncio.run(backend.hit(uuid.uuid4(), limit=2, now=0.0)) is True
+        assert asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=2, now=0.0)) is True
         # 첫 hit: evalsha 2회(NOSCRIPT + 재시도), script_load 1회
         assert len(fake.evalsha_calls) == 2
         assert len(fake.script_loads) == 1
         # 두번째 hit — script 이미 캐시됨, evalsha 1회만(NOSCRIPT 없음)
-        assert asyncio.run(backend.hit(uuid.uuid4(), limit=2, now=0.1)) is True
+        assert asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=2, now=0.1)) is True
         assert len(fake.evalsha_calls) == 3
         assert len(fake.script_loads) == 1  # 추가 load 없음
 
@@ -938,7 +945,7 @@ class TestEvalshaOptimization:
 
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
-        assert asyncio.run(backend.hit(uuid.uuid4(), limit=2, now=0.0)) is True
+        assert asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=2, now=0.0)) is True
         assert fake.script_loads == [
             __import__(
                 "whymath_backend.api._rate_limit", fromlist=["_LUA_HIT"]
@@ -954,13 +961,13 @@ class TestEvalshaOptimization:
 
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
-        asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.0))
+        asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=10, now=0.0))
         evalsha_after_first = len(fake.evalsha_calls)
         loads_after_first = len(fake.script_loads)
 
         # 추가 5회 — 전부 evalsha 1회씩만
         for i in range(5):
-            asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.1 + i * 0.01))
+            asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=10, now=0.1 + i * 0.01))
         assert len(fake.evalsha_calls) == evalsha_after_first + 5
         assert len(fake.script_loads) == loads_after_first  # 변동 없음
 
@@ -973,10 +980,106 @@ class TestEvalshaOptimization:
 
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
-        asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.0))
+        asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=10, now=0.0))
         assert len(fake.script_loads) == 1  # 첫 적재
 
         # Redis SCRIPT FLUSH 시뮬레이션
         fake._loaded_shas.clear()
-        asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.1))
+        asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=10, now=0.1))
         assert len(fake.script_loads) == 2  # 재적재 발화
+
+
+class TestReadWriteSeparation:
+    """슬라이스 14 — POST/GET 차등 한도. 두 카테고리 *별도 버킷*."""
+
+    def test_write_limit_does_not_block_reads(self) -> None:
+        # write_limit=1 소진 + read_limit=10 → read는 여전히 통과
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+        from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+
+        did = uuid.uuid4()
+        dialogue = DialogueORM.from_schema(DialogueSchema(dialogue_id=did, user_id=_UID))
+
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=10, write_limit=1
+        )
+        captured = _CapturingSession(
+            preload={(DialogueORM, did): dialogue}, execute_rows=[]
+        )
+
+        async def _sess() -> AsyncIterator[_CapturingSession]:
+            yield captured
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+
+        # POST 1회 — write_limit=1 소진
+        assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
+        # POST 2회 — 429(write 한도 초과)
+        assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 429
+        # GET 여러 번 — read 한도(10)는 별도 버킷이라 영향 없음
+        for _ in range(5):
+            assert client.get(f"/v1/coach/sessions/{did}").status_code == 200
+
+    def test_read_limit_does_not_block_writes(self) -> None:
+        # read_limit=1 소진 + write_limit=10 → write는 여전히 통과
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+        from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+
+        did = uuid.uuid4()
+        dialogue = DialogueORM.from_schema(DialogueSchema(dialogue_id=did, user_id=_UID))
+
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=1, write_limit=10
+        )
+        captured = _CapturingSession(
+            preload={(DialogueORM, did): dialogue}, execute_rows=[]
+        )
+
+        async def _sess() -> AsyncIterator[_CapturingSession]:
+            yield captured
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+
+        # GET 1회 — read_limit=1 소진
+        assert client.get(f"/v1/coach/sessions/{did}").status_code == 200
+        # GET 2회 — 429(read 한도 초과)
+        assert client.get(f"/v1/coach/sessions/{did}").status_code == 429
+        # POST 여러 번 — write 한도(10)는 별도 버킷이라 영향 없음
+        for _ in range(5):
+            assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
+
+
+class TestRateCategoryBackend:
+    """`InMemoryBackend`·`RedisBackend`가 `category`별 *별도 버킷* 유지."""
+
+    def test_inmemory_categories_isolated(self) -> None:
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        uid = uuid.uuid4()
+        # write 1/1 한도 도달
+        assert asyncio.run(backend.hit(uid, category="write", limit=1, now=0.0)) is True
+        assert asyncio.run(backend.hit(uid, category="write", limit=1, now=0.1)) is False
+        # 같은 사용자의 read 버킷은 독립 — 영향 없음
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.2)) is True
+
+    def test_redis_key_prefix_includes_category(self) -> None:
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        uid = uuid.uuid4()
+        asyncio.run(backend.hit(uid, category="read", limit=10, now=0.0))
+        asyncio.run(backend.hit(uid, category="write", limit=10, now=0.0))
+        assert f"rate:coach:read:{uid}" in fake.zsets
+        assert f"rate:coach:write:{uid}" in fake.zsets

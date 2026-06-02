@@ -233,13 +233,21 @@ class Settings(BaseSettings):
     )
 
     # ── L4 코치 엔드포인트 rate limit ──
-    coach_rate_limit_per_minute: int = Field(
+    coach_rate_limit_read_per_minute: int = Field(
         default=60,
         ge=0,
         description=(
-            "L4 코치 엔드포인트(/v1/coach·/v1/coach/sessions*)의 *사용자당 분당 요청 상한*. "
-            "0=비활성(테스트·개발). 인메모리 sliding window — 단일 프로세스 한정. 분산/HA "
-            "환경은 Redis-backed 후속."
+            "L4 코치 *읽기* 엔드포인트(GET /v1/coach/sessions/{id})의 사용자당 분당 요청 "
+            "상한. 0=비활성. 읽기는 ETag/304 캐싱으로 경량 — 쓰기보다 높게 둔다."
+        ),
+    )
+    coach_rate_limit_write_per_minute: int = Field(
+        default=30,
+        ge=0,
+        description=(
+            "L4 코치 *쓰기* 엔드포인트(POST /v1/coach·POST /v1/coach/sessions·POST "
+            "/v1/coach/sessions/{id}/turns)의 사용자당 분당 요청 상한. 0=비활성. DB 쓰기·"
+            "후속 LLM 호출 비용을 고려해 읽기보다 낮게 둔다."
         ),
     )
     coach_rate_limit_backend: Literal["memory", "redis"] = Field(

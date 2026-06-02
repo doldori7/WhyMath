@@ -53,9 +53,9 @@ def test_redis_backend_enforces_limit_on_live_daemon() -> None:
         uid = uuid.uuid4()
         try:
             now = time.monotonic()
-            assert await backend.hit(uid, limit=2, now=now) is True
-            assert await backend.hit(uid, limit=2, now=now + 0.1) is True
-            assert await backend.hit(uid, limit=2, now=now + 0.2) is False
+            assert await backend.hit(uid, category="read", limit=2, now=now) is True
+            assert await backend.hit(uid, category="read", limit=2, now=now + 0.1) is True
+            assert await backend.hit(uid, category="read", limit=2, now=now + 0.2) is False
         finally:
             await backend.reset()
 
@@ -86,7 +86,7 @@ def test_evalsha_recovers_from_script_flush_on_live_daemon() -> None:
         uid = uuid.uuid4()
         try:
             # 첫 hit — 자동 SCRIPT LOAD + EVALSHA(NOSCRIPT 폴백)
-            assert await backend.hit(uid, limit=10, now=time.monotonic()) is True
+            assert await backend.hit(uid, category="read", limit=10, now=time.monotonic()) is True
             # Redis SCRIPT FLUSH로 캐시 강제 비움(운영 시 SCRIPT FLUSH·재시작 시나리오)
             admin = Redis.from_url("redis://127.0.0.1:6379/0", decode_responses=True)
             try:
@@ -94,7 +94,7 @@ def test_evalsha_recovers_from_script_flush_on_live_daemon() -> None:
             finally:
                 await admin.aclose()
             # 다음 hit — backend가 NoScriptError 잡아 자동 복구
-            assert await backend.hit(uid, limit=10, now=time.monotonic()) is True
+            assert await backend.hit(uid, category="read", limit=10, now=time.monotonic()) is True
         finally:
             await backend.reset()
 
@@ -125,12 +125,12 @@ def test_redis_backend_distributed_consistency_on_live_daemon() -> None:
         uid = uuid.uuid4()
         try:
             now = time.monotonic()
-            assert await worker_a.hit(uid, limit=2, now=now) is True
+            assert await worker_a.hit(uid, category="read", limit=2, now=now) is True
             # worker_b — 같은 사용자·같은 limit·다른 인스턴스. ZSET 공유라 카운트 누적
-            assert await worker_b.hit(uid, limit=2, now=now + 0.1) is True
+            assert await worker_b.hit(uid, category="read", limit=2, now=now + 0.1) is True
             # 세번째 — 글로벌 한도 초과로 거부(어느 워커든)
-            assert await worker_a.hit(uid, limit=2, now=now + 0.2) is False
-            assert await worker_b.hit(uid, limit=2, now=now + 0.3) is False
+            assert await worker_a.hit(uid, category="read", limit=2, now=now + 0.2) is False
+            assert await worker_b.hit(uid, category="read", limit=2, now=now + 0.3) is False
         finally:
             await worker_a.reset()
 
