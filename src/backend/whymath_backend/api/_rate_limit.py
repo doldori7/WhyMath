@@ -856,23 +856,26 @@ def _expected_device_signature(secret: str, device_id: str) -> str:
     return hmac.new(secret.encode("utf-8"), device_id.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def _client_device_id(request: Request, settings: Settings) -> str | None:
+async def _client_device_id(request: Request, settings: Settings) -> str | None:
     """요청에서 디바이스 ID 추출 — `X-Device-Id` 헤더(클라이언트 발급 UUID/문자열).
 
     빈 값/미설정 시 None — 디바이스 차원 검사 비활성. 클라이언트는 첫 실행 시 안정 ID
     (UUID4·KeyChain 저장)를 생성·전 요청에 동봉(Flutter `device_info_plus`·iOS
     `identifierForVendor`·Android `Settings.Secure.ANDROID_ID` 등 권장).
 
-    **검증 경로 우선순위**(슬라이스 22 도입):
+    **검증 경로 우선순위**(슬라이스 22 도입·23 async 전환):
     1. **디바이스별 store**(`set_device_store(store)`로 활성) — 등록된 device_id의 *고유*
        secret으로 X-Device-Sig 검증. slice 21 공유 secret 한계 해소(앱 바이너리 추출 시
-       *그 디바이스만* 영향, 다른 디바이스 secret 무관). 정식 운영 경로.
+       *그 디바이스만* 영향, 다른 디바이스 secret 무관). 정식 운영 경로(`PgDeviceStore`).
     2. **공유 HMAC secret**(`coach_device_hmac_secret`) — store 미설정 시 폴백. slice 21
        trivial-spoofing 방어. MVP/sandbox용·등록 인프라 없이 동작.
     3. **secret 미설정** — 서명 검증 생략(slice 20 동작·backward compat).
 
     누락·불일치 시 device_id를 None으로 *fail-safe* — device 차원 검사 비활성(요청 자체는
     통과·user+IP만 적용).
+
+    슬라이스 23: store.verify가 async(PG 라운드트립)라 본 함수도 `async def`로 전환. 호출처
+    (`_enforce_triple` → `rate_limit_triple_*`)는 이미 async — `await` 한 줄 추가뿐.
     """
     device_id = request.headers.get("x-device-id")
     if device_id is None:
@@ -886,7 +889,7 @@ def _client_device_id(request: Request, settings: Settings) -> str | None:
         provided = request.headers.get("x-device-sig", "").strip()
         if not provided:
             return None
-        if not store.verify(stripped, provided):
+        if not await store.verify(stripped, provided):
             return None
         return stripped
     # 폴백: 공유 HMAC secret(slice 21) 또는 검증 생략(slice 20)
@@ -981,7 +984,7 @@ async def rate_limit_triple_read(
     await _enforce_triple(
         user.user_id,
         _client_ip(request),
-        _client_device_id(request, settings),
+        await _client_device_id(request, settings),
         category="read",
         user_limit=settings.coach_rate_limit_read_per_minute,
         ip_limit=settings.coach_rate_limit_ip_read_per_minute,
@@ -1000,7 +1003,7 @@ async def rate_limit_triple_write(
     await _enforce_triple(
         user.user_id,
         _client_ip(request),
-        _client_device_id(request, settings),
+        await _client_device_id(request, settings),
         category="write",
         user_limit=settings.coach_rate_limit_write_per_minute,
         ip_limit=settings.coach_rate_limit_ip_write_per_minute,

@@ -24,7 +24,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.api._auth import ConsentedUser
-from whymath_backend.api._device_store import get_device_store
+from whymath_backend.api._device_store import DeviceCredentialStore, get_device_store
 
 router = APIRouter(prefix="/v1/devices", tags=["devices"])
 
@@ -52,7 +52,7 @@ class DeviceRevokeResponse(BaseModel):
     revoked: bool = Field(description="실제로 폐기됐는지(미존재 ID면 False).")
 
 
-def _require_store() -> object:
+def _require_store() -> DeviceCredentialStore:
     store = get_device_store()
     if store is None:
         raise HTTPException(
@@ -74,7 +74,7 @@ def _require_store() -> object:
 async def register_device(user: ConsentedUser) -> DeviceRegisterResponse:
     """새 디바이스 자격증명 발급 — 인증된 사용자만 가능. secret_plain은 응답에서만 노출."""
     store = _require_store()
-    device_id, secret_plain = store.register(user.user_id)  # type: ignore[attr-defined]
+    device_id, secret_plain = await store.register(user.user_id)
     return DeviceRegisterResponse(device_id=device_id, secret_plain=secret_plain)
 
 
@@ -92,5 +92,5 @@ async def revoke_device(
         user.user_id
     )  # 인증 게이트만 — 본인 소유 검증은 후속(현재는 모든 인증 사용자가 임의 폐기 가능)
     store = _require_store()
-    revoked = store.revoke(device_id)  # type: ignore[attr-defined]
+    revoked = await store.revoke(device_id)
     return DeviceRevokeResponse(revoked=revoked)
