@@ -602,6 +602,19 @@ def _rate_headers(limit: int, result: RateLimitResult) -> dict[str, str]:
     }
 
 
+def _pair_headers(prefix: str, limit: int, result: RateLimitResult) -> dict[str, str]:
+    """차원별(`User`/`Ip`) 헤더 — Defense에서 두 쌍 동시 노출(슬라이스 19).
+
+    `X-RateLimit-{prefix}-Limit/Remaining/Reset`. 클라이언트가 *어느 차원이 더 빠듯한지*
+    독립적으로 인식 가능(rollup만으로는 가려진 다른 차원의 상태도 동시 노출).
+    """
+    return {
+        f"X-RateLimit-{prefix}-Limit": str(limit),
+        f"X-RateLimit-{prefix}-Remaining": str(result.remaining),
+        f"X-RateLimit-{prefix}-Reset": str(result.reset_seconds),
+    }
+
+
 # 슬라이스 11-15의 user-only `rate_limit_read/write` 및 헬퍼 `_enforce`는 슬라이스 17의
 # Defense(사용자+IP) 도입으로 *모두 대체*됨(clean cut). 호출자 0 — 죽은 코드 제거(CLAUDE.md
 # "범위 밖 기능 금지"). 사용자 한도만 원하면 `ip_limit=0` 설정으로 Defense가 동등하게 동작.
@@ -634,18 +647,22 @@ async def _enforce_by_ip(
     limit: int,
     response: Response,
 ) -> None:
-    """IP 단위 한도 검사. 사용자 한도와 동일 시맨틱(429 + 헤더). limit=0이면 비활성."""
+    """IP 단위 한도 검사. 사용자 한도와 동일 시맨틱(429 + 헤더). limit=0이면 비활성.
+
+    슬라이스 19 — `X-RateLimit-Ip-*` 차원 헤더도 동시 노출(미인증 표면에선 user 차원 없음).
+    """
     if limit == 0:
         return
     result = await _BACKEND.hit_by_ip(ip, category=category, limit=limit, now=time.monotonic())
-    headers = _rate_headers(limit, result)
+    rollup = _rate_headers(limit, result)
+    pair = _pair_headers("Ip", limit, result)
     if not result.allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
-            headers={"Retry-After": str(result.reset_seconds or 60), **headers},
+            headers={"Retry-After": str(result.reset_seconds or 60), **rollup, **pair},
         )
-    for key, value in headers.items():
+    for key, value in {**rollup, **pair}.items():
         response.headers[key] = value
 
 
@@ -751,6 +768,13 @@ async def _enforce_defense(
     ip_pair: tuple[int, RateLimitResult] | None = (
         (ip_limit, combined.ip_result) if combined.ip_result is not None else None
     )
+    # 두 쌍 헤더(슬라이스 19) — 활성화된 차원만 동시 노출. 200·429 양쪽 모두.
+    pair_headers: dict[str, str] = {}
+    if user_pair is not None:
+        pair_headers.update(_pair_headers("User", *user_pair))
+    if ip_pair is not None:
+        pair_headers.update(_pair_headers("Ip", *ip_pair))
+
     if not combined.allowed:
         # blocker = remaining=0인 쪽(=한도 도달). 둘 다 0이면(드물지만) user 우선.
         blocker: tuple[int, RateLimitResult]
@@ -760,13 +784,20 @@ async def _enforce_defense(
             blocker = ip_pair
         else:  # pragma: no cover — 정상 경로엔 blocker가 반드시 있음(거부 = 적어도 한쪽 도달)
             blocker = user_pair or ip_pair  # type: ignore[assignment]
-        headers = _rate_headers(*blocker)
+        rollup = _rate_headers(*blocker)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
-            headers={"Retry-After": str(blocker[1].reset_seconds or 60), **headers},
+            headers={
+                "Retry-After": str(blocker[1].reset_seconds or 60),
+                **rollup,
+                **pair_headers,
+            },
         )
+    # 200: rollup(더 엄격한 쪽 — slice 15 호환) + 두 쌍 동시 노출.
     for key, value in _tightest_headers(user_pair, ip_pair).items():
+        response.headers[key] = value
+    for key, value in pair_headers.items():
         response.headers[key] = value
 
 

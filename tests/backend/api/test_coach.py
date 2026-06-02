@@ -1881,3 +1881,148 @@ class TestDefenseAtomicInRouter:
         assert r2.status_code == 429
         # blocker는 IP — Limit=1
         assert r2.headers["X-RateLimit-Limit"] == "1"
+
+
+class TestPairHeaders:
+    """슬라이스 19 — `X-RateLimit-User-*`/`-Ip-*` 두 쌍 헤더 동시 노출."""
+
+    def test_defense_200_emits_both_pairs_and_rollup(self) -> None:
+        # user=10, ip=2 → 200 응답에 User-*, Ip-*, rollup 모두 동봉
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0, write_limit=10, ip_limit=0, ip_write_limit=2
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 200
+        # rollup (더 엄격한 = IP)
+        assert resp.headers["X-RateLimit-Limit"] == "2"
+        assert resp.headers["X-RateLimit-Remaining"] == "1"
+        # 두 쌍 동시
+        assert resp.headers["X-RateLimit-User-Limit"] == "10"
+        assert resp.headers["X-RateLimit-User-Remaining"] == "9"
+        assert resp.headers["X-RateLimit-Ip-Limit"] == "2"
+        assert resp.headers["X-RateLimit-Ip-Remaining"] == "1"
+
+    def test_defense_429_emits_pairs_on_blocker(self) -> None:
+        # ip 한도 1 소진 후 429 — User-* 와 Ip-* 둘 다 동봉
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0, write_limit=10, ip_limit=0, ip_write_limit=1
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 429
+        # blocker(IP)의 rollup
+        assert resp.headers["X-RateLimit-Limit"] == "1"
+        assert resp.headers["X-RateLimit-Remaining"] == "0"
+        # 두 쌍 동시 — 첫 호출에서 user count=1, 두번째 atomic deny → user 그대로 1.
+        # User-Remaining = 10 - 1 = 9. Ip-Remaining = 0(blocker).
+        assert resp.headers["X-RateLimit-User-Limit"] == "10"
+        assert resp.headers["X-RateLimit-User-Remaining"] == "9"
+        assert resp.headers["X-RateLimit-Ip-Limit"] == "1"
+        assert resp.headers["X-RateLimit-Ip-Remaining"] == "0"
+
+    def test_user_only_active_emits_only_user_pair(self) -> None:
+        # ip_limit=0이면 User-*만 노출, Ip-*는 미세팅
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0, write_limit=5, ip_limit=0, ip_write_limit=0
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 200
+        assert resp.headers["X-RateLimit-User-Limit"] == "5"
+        assert "X-RateLimit-Ip-Limit" not in resp.headers
+
+    def test_ip_only_endpoint_emits_ip_pair(self) -> None:
+        # 미인증 IP-only dep도 X-RateLimit-Ip-* 동시 노출
+        from fastapi import APIRouter
+
+        from whymath_backend.api._rate_limit import RateLimitedIpRead
+
+        router = APIRouter()
+
+        @router.get("/_test/ip-headers", dependencies=[RateLimitedIpRead])
+        async def _hit() -> dict[str, bool]:
+            return {"ok": True}
+
+        app = create_app()
+        app.include_router(router)
+        app.dependency_overrides[get_settings] = lambda: Settings(
+            jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+            coach_rate_limit_ip_read_per_minute=3,
+        )
+        client = TestClient(app)
+        resp = client.get("/_test/ip-headers")
+        assert resp.status_code == 200
+        assert resp.headers["X-RateLimit-Ip-Limit"] == "3"
+        assert resp.headers["X-RateLimit-Ip-Remaining"] == "2"
+        # rollup도 동일
+        assert resp.headers["X-RateLimit-Limit"] == "3"
+        # User-* 차원은 IP-only라 미세팅
+        assert "X-RateLimit-User-Limit" not in resp.headers
+
+
+class TestPairHelperUnit:
+    """`_pair_headers` 헬퍼 — 프리픽스 조립 검증."""
+
+    def test_canonical_prefix_keys(self) -> None:
+        from whymath_backend.api._rate_limit import RateLimitResult, _pair_headers
+
+        result = RateLimitResult(allowed=True, remaining=5, reset_seconds=30)
+        headers = _pair_headers("User", 10, result)
+        assert set(headers.keys()) == {
+            "X-RateLimit-User-Limit",
+            "X-RateLimit-User-Remaining",
+            "X-RateLimit-User-Reset",
+        }
+        assert headers["X-RateLimit-User-Limit"] == "10"
+        assert headers["X-RateLimit-User-Remaining"] == "5"
+        assert headers["X-RateLimit-User-Reset"] == "30"
+
+    def test_different_prefix(self) -> None:
+        from whymath_backend.api._rate_limit import RateLimitResult, _pair_headers
+
+        result = RateLimitResult(allowed=True, remaining=2, reset_seconds=15)
+        headers = _pair_headers("Ip", 5, result)
+        assert "X-RateLimit-Ip-Limit" in headers
+        assert "X-RateLimit-User-Limit" not in headers
+
+    def test_defense_with_user_limit_zero_skips_user_pair(self) -> None:
+        # user_limit=0, ip_limit>0이면 Defense는 IP만 검사 — User-* 미세팅
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0, write_limit=0, ip_limit=0, ip_write_limit=5
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 200
+        # IP만 활성 — User-* 미세팅
+        assert "X-RateLimit-User-Limit" not in resp.headers
+        assert resp.headers["X-RateLimit-Ip-Limit"] == "5"
