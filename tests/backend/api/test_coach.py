@@ -720,19 +720,23 @@ class TestRateLimit:
 
 
 class _FakeRedisClient:
-    """Lua eval seam — `_LUA_HIT` 스크립트의 *의미*를 in-memory ZSET으로 재현.
+    """Lua evalsha/script_load seam — `_LUA_HIT` 스크립트의 *의미*를 in-memory ZSET으로 재현.
 
-    실제 Redis 없이도 RedisBackend의 결선·키 네이밍·TTL 호출을 검증할 수 있게 한다
-    (Lua 스크립트 자체의 정확성은 통합 테스트에서 실 Redis로 검증 — 후속).
+    실제 Redis 없이도 RedisBackend의 결선·키 네이밍·TTL 호출·EVALSHA 캐시 의미를 검증할 수
+    있게 한다(Lua 스크립트 자체의 정확성은 통합 테스트에서 실 Redis로 검증).
+
+    스크립트 캐시 모델: `script_load(script)`로 적재된 SHA만 evalsha가 인정. 적재 전 evalsha
+    호출은 `NoScriptError`(redis-py 정본 예외)로 거절.
     """
 
     def __init__(self) -> None:
         self.zsets: dict[str, list[tuple[float, str]]] = {}
         self.expires: dict[str, int] = {}
-        self.eval_calls: list[tuple[str, int, tuple[Any, ...]]] = []
+        self.evalsha_calls: list[tuple[str, int, tuple[Any, ...]]] = []
+        self.script_loads: list[str] = []
+        self._loaded_shas: set[str] = set()
 
-    async def eval(self, script: str, numkeys: int, *args: Any) -> Any:
-        self.eval_calls.append((script, numkeys, args))
+    def _apply_hit_script(self, args: tuple[Any, ...]) -> int:
         key = args[0]
         now = float(args[1])
         limit = int(args[2])
@@ -745,6 +749,22 @@ class _FakeRedisClient:
         bucket.append((now, member))
         self.expires[key] = 60
         return 1
+
+    async def evalsha(self, sha: str, numkeys: int, *args: Any) -> Any:
+        self.evalsha_calls.append((sha, numkeys, args))
+        if sha not in self._loaded_shas:
+            from redis.exceptions import NoScriptError
+
+            raise NoScriptError("NOSCRIPT No matching script. Use SCRIPT LOAD.")
+        return self._apply_hit_script(args)
+
+    async def script_load(self, script: str) -> Any:
+        self.script_loads.append(script)
+        import hashlib
+
+        sha = hashlib.sha1(script.encode("utf-8")).hexdigest()
+        self._loaded_shas.add(sha)
+        return sha
 
     async def ping(self) -> Any:
         return True
@@ -854,12 +874,15 @@ class TestRedisBackendLazyPaths:
         fake = _FakeRedisClient()
         monkeypatch.setattr(rl, "_build_default_redis_client", lambda s: fake)
         backend = rl.RedisBackend()  # client 주입 X
-        # 첫 hit — lazy build 발화
+        # 첫 hit — lazy build 발화 + EVALSHA NOSCRIPT → script_load + 재시도
         assert asyncio.run(backend.hit(uuid.uuid4(), limit=2, now=0.0)) is True
-        assert len(fake.eval_calls) == 1
-        # 두번째 hit — 이미 build됨, lazy skip
+        # 첫 hit: evalsha 2회(NOSCRIPT + 재시도), script_load 1회
+        assert len(fake.evalsha_calls) == 2
+        assert len(fake.script_loads) == 1
+        # 두번째 hit — script 이미 캐시됨, evalsha 1회만(NOSCRIPT 없음)
         assert asyncio.run(backend.hit(uuid.uuid4(), limit=2, now=0.1)) is True
-        assert len(fake.eval_calls) == 2
+        assert len(fake.evalsha_calls) == 3
+        assert len(fake.script_loads) == 1  # 추가 load 없음
 
 
 class TestBackendSelection:
@@ -892,3 +915,68 @@ class TestBackendSelection:
         finally:
             # 다음 테스트 격리 — 기본 InMemory로 복원
             configure_backend_from_settings(_settings_override(0))
+
+
+class TestEvalshaOptimization:
+    """슬라이스 13 — EVALSHA + NOSCRIPT 폴백 최적화 정합 검증."""
+
+    def test_sha1_matches_redis_canonical(self) -> None:
+        # `_LUA_HIT_SHA1`이 Redis SCRIPT LOAD가 반환할 정본 SHA와 같아야 EVALSHA 캐시 적중
+        import hashlib
+
+        from whymath_backend.api._rate_limit import _LUA_HIT, _LUA_HIT_SHA1
+
+        expected = hashlib.sha1(_LUA_HIT.encode("utf-8")).hexdigest()
+        assert _LUA_HIT_SHA1 == expected
+        assert len(_LUA_HIT_SHA1) == 40  # SHA1 hex
+
+    def test_first_hit_triggers_script_load_then_evalsha(self) -> None:
+        # 빈 스크립트 캐시 → 첫 evalsha NOSCRIPT → script_load → 재시도 → 성공
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        assert asyncio.run(backend.hit(uuid.uuid4(), limit=2, now=0.0)) is True
+        assert fake.script_loads == [
+            __import__(
+                "whymath_backend.api._rate_limit", fromlist=["_LUA_HIT"]
+            )._LUA_HIT
+        ]
+        assert len(fake.evalsha_calls) == 2  # 1회 NOSCRIPT + 1회 재시도
+
+    def test_subsequent_hits_use_cached_script(self) -> None:
+        # 두번째 호출부터는 evalsha 1회만(NOSCRIPT 없음·script_load 추가 호출 없음)
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.0))
+        evalsha_after_first = len(fake.evalsha_calls)
+        loads_after_first = len(fake.script_loads)
+
+        # 추가 5회 — 전부 evalsha 1회씩만
+        for i in range(5):
+            asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.1 + i * 0.01))
+        assert len(fake.evalsha_calls) == evalsha_after_first + 5
+        assert len(fake.script_loads) == loads_after_first  # 변동 없음
+
+    def test_recovers_from_script_flush(self) -> None:
+        # Redis가 SCRIPT FLUSH/재시작된 경우 시뮬레이션 — 캐시 비우면 다음 evalsha NOSCRIPT
+        # → 자동으로 script_load + 재시도
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.0))
+        assert len(fake.script_loads) == 1  # 첫 적재
+
+        # Redis SCRIPT FLUSH 시뮬레이션
+        fake._loaded_shas.clear()
+        asyncio.run(backend.hit(uuid.uuid4(), limit=10, now=0.1))
+        assert len(fake.script_loads) == 2  # 재적재 발화

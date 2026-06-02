@@ -62,6 +62,45 @@ def test_redis_backend_enforces_limit_on_live_daemon() -> None:
     asyncio.run(_run())
 
 
+def test_evalsha_recovers_from_script_flush_on_live_daemon() -> None:
+    """슬라이스 13 — 실 Redis에서 SCRIPT FLUSH 후에도 자동 복구.
+
+    NOSCRIPT 시 backend가 SCRIPT LOAD + EVALSHA 재시도로 자동 복구하는지 검증
+    (Redis 재시작·SCRIPT FLUSH의 운영 시나리오 정합).
+    """
+    if not asyncio.run(_redis_reachable()):
+        pytest.skip("Redis 미도달 — redis://127.0.0.1:6379 확인")
+
+    async def _run() -> None:
+        from pydantic import SecretStr
+        from redis.asyncio import Redis
+
+        from whymath_backend.api._rate_limit import RedisBackend
+        from whymath_backend.config import Settings
+
+        settings = Settings(
+            jwt_secret_key=SecretStr("integration-jwt-secret-0123456789abcdef"),
+            redis_url="redis://127.0.0.1:6379/0",
+        )
+        backend = RedisBackend(settings=settings)
+        uid = uuid.uuid4()
+        try:
+            # 첫 hit — 자동 SCRIPT LOAD + EVALSHA(NOSCRIPT 폴백)
+            assert await backend.hit(uid, limit=10, now=time.monotonic()) is True
+            # Redis SCRIPT FLUSH로 캐시 강제 비움(운영 시 SCRIPT FLUSH·재시작 시나리오)
+            admin = Redis.from_url("redis://127.0.0.1:6379/0", decode_responses=True)
+            try:
+                await admin.script_flush()
+            finally:
+                await admin.aclose()
+            # 다음 hit — backend가 NoScriptError 잡아 자동 복구
+            assert await backend.hit(uid, limit=10, now=time.monotonic()) is True
+        finally:
+            await backend.reset()
+
+    asyncio.run(_run())
+
+
 def test_redis_backend_distributed_consistency_on_live_daemon() -> None:
     """**분산 정합 핵심 검증** — 별도 `RedisBackend` 인스턴스가 같은 키 공간 공유.
 

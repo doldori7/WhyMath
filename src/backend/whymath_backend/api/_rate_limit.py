@@ -17,6 +17,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import time
 import uuid
 from collections import deque
@@ -26,6 +27,17 @@ from fastapi import Depends, HTTPException, status
 
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.config import Settings, get_settings
+
+# redis-py의 NoScriptError를 지연 import — 라이브러리 미설치 환경(CI 단위테스트)에서도
+# 모듈 import가 깨지지 않게 한다(`_build_default_redis_client` 패턴 정합). 미설치 환경
+# 에서는 RedisBackend 자체가 사용되지 않으므로 fallback 클래스는 실제로 raise되지 않는다.
+try:
+    from redis.exceptions import NoScriptError
+except ImportError:  # pragma: no cover — 라이브러리 미설치 환경
+
+    class NoScriptError(Exception):  # type: ignore[no-redef]
+        """fallback — redis 라이브러리 미설치 시 미사용 placeholder."""
+
 
 _WINDOW_SECONDS = 60.0
 
@@ -67,11 +79,15 @@ class InMemoryBackend:
 
 
 # Redis 클라이언트 추상화 — l3/cache/redis_cache.py `_RedisClient` 패턴 답습.
-# 우리가 실제로 쓰는 메서드만 좁게 선언(eval·ping).
+# 우리가 실제로 쓰는 메서드만 좁게 선언(evalsha·script_load·eval 폴백·ping·delete·keys).
 @runtime_checkable
 class _RedisClient(Protocol):
-    async def eval(self, script: str, numkeys: int, *args: Any) -> Any:
-        """Lua 스크립트 실행 — ZSET sliding window 원자 연산용."""
+    async def evalsha(self, sha: str, numkeys: int, *args: Any) -> Any:
+        """EVALSHA — 캐시된 Lua 스크립트 실행(스크립트 SHA1 기준)."""
+        ...
+
+    async def script_load(self, script: str) -> Any:
+        """SCRIPT LOAD — Lua 스크립트를 Redis 캐시에 적재, SHA1 반환."""
         ...
 
     async def ping(self) -> Any:
@@ -104,6 +120,10 @@ end
 return 0
 """
 
+# 결정론적 SHA1 — 모듈 로드 시 1회 계산. Redis의 SCRIPT LOAD 결과(40-char hex)와 *정확히
+# 일치*해야 EVALSHA가 캐시 적중한다(Redis는 같은 알고리즘 사용).
+_LUA_HIT_SHA1 = hashlib.sha1(_LUA_HIT.encode("utf-8")).hexdigest()
+
 
 def _build_default_redis_client(settings: Settings) -> _RedisClient:  # pragma: no cover
     """기본 redis.asyncio 클라이언트 — 지연 import(라이브러리 없는 환경 보호).
@@ -123,11 +143,17 @@ def _build_default_redis_client(settings: Settings) -> _RedisClient:  # pragma: 
 
 
 class RedisBackend:
-    """Redis ZSET sliding window — 분산/HA 정합.
+    """Redis ZSET sliding window — 분산/HA 정합 + EVALSHA 최적화.
 
     Lua 스크립트 `_LUA_HIT`가 ZREMRANGEBYSCORE→ZCARD→조건부 ZADD/EXPIRE를 원자로
-    수행해 race window 0. 키 prefix `rate:` + user_id(UUID). 60초 TTL 자동 만료로
+    수행해 race window 0. 키 prefix `rate:coach:` + user_id(UUID). 60초 TTL 자동 만료로
     유휴 사용자 키 누수 방지.
+
+    **EVALSHA 최적화**(슬라이스 13): EVAL 대신 EVALSHA(SHA1) 사용 — 매 호출 풀 스크립트
+    바이트 전송 회피(분산 환경 네트워크·Redis 파싱 비용 절감). `_LUA_HIT_SHA1`은 모듈 로드
+    시 결정론적으로 계산되며, Redis SCRIPT LOAD 결과와 *반드시 일치*한다(같은 SHA1 알고리즘).
+    `NoScriptError`(SCRIPT FLUSH·Redis 재시작 등으로 캐시에서 사라진 경우) 시 한 번
+    `script_load` + 재시도. 정상 경로는 EVALSHA 1회.
     """
 
     _KEY_PREFIX = "rate:coach:"
@@ -157,8 +183,14 @@ class RedisBackend:
 
     async def hit(self, user_id: uuid.UUID, *, limit: int, now: float) -> bool:
         client = self._get_client()
+        key = self._key(user_id)
         unique_member = f"{now}:{uuid.uuid4().hex}"
-        raw = await client.eval(_LUA_HIT, 1, self._key(user_id), now, limit, unique_member)
+        try:
+            raw = await client.evalsha(_LUA_HIT_SHA1, 1, key, now, limit, unique_member)
+        except NoScriptError:
+            # 스크립트가 Redis 캐시에 없음(SCRIPT FLUSH·재시작 후 첫 호출). 적재 후 재시도.
+            await client.script_load(_LUA_HIT)
+            raw = await client.evalsha(_LUA_HIT_SHA1, 1, key, now, limit, unique_member)
         return int(raw) == 1
 
     async def reset(self) -> None:
