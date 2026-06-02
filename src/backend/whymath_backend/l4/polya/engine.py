@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+from whymath_backend.l4.hint_deferral import REVEALS, decide_hint_level
 from whymath_backend.l4.models import (
     LLMSeam,
     PedagogyDecision,
@@ -59,8 +60,9 @@ class PolyaCoach:
         """LLM 없이 *결정*만. 다음 단계·프롬프트·system·권장 티어·보조 행동을 채운다.
 
         - 전이 판정 → next면 `_next_stage()`의 프롬프트, stay면 현 단계 프롬프트.
-        - `hint_level=1`(기본·가장 은근). 답 미루기 상승은 후속 슬라이스(turn_count 기반).
         - `socratic_category`: 단계·전이·발화 신호로 6카테고리 중 하나(슬라이스 2).
+        - `hint_level`: 답 미루기 4단계 — 좌절·답요구·5회+ 막힘 신호로 점진 상승(슬라이스 3).
+        - `reveals`: hint_level에서 파생된 노출량 라벨(KPI 입력).
         - `recommended_cost_tier=LOCAL`(기본 — Polya 코칭은 로컬 충분, CLAUDE.md "로컬 LLM 우선").
         """
         transition = should_advance(state, student_input)
@@ -69,12 +71,19 @@ class PolyaCoach:
         )
         sp = STAGE_PROMPTS[target_stage]
         category = select_category(state.current_stage, transition, student_input)
+        hint_level = decide_hint_level(
+            student_input=student_input,
+            turn_count=state.turn_count,
+            prev_hint_level=state.prev_hint_level,
+        )
         return PedagogyDecision(
             polya_stage_to_advance=transition,
+            hint_level=hint_level,
             socratic_category=category.value,
             prompt=sp.prompt,
             system=sp.system,
             suggested_actions=list(_STAGE_ACTIONS[target_stage]),
+            reveals=REVEALS[hint_level],
         )
 
     async def coach(

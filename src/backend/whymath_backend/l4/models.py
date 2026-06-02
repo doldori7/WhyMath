@@ -61,6 +61,15 @@ class PolyaState(BaseModel):
         ge=0,
         description="현재 단계서 누적 턴 수(전이 시 0 리셋). 막힘 길이의 신호.",
     )
+    prev_hint_level: int | None = Field(
+        default=None,
+        ge=1,
+        le=4,
+        description=(
+            "직전 응답의 답 미루기 단계(1-4). None이면 첫 결정(1부터 시작). "
+            "점진 상승 규칙(socratic_template 시나리오 3·4)의 입력."
+        ),
+    )
 
 
 class PedagogyDecision(BaseModel):
@@ -97,6 +106,14 @@ class PedagogyDecision(BaseModel):
     suggested_actions: list[str] = Field(
         default_factory=list,
         description="단계 보조 행동 라벨(UI 표시·내부 트리거 후보).",
+    )
+    reveals: str = Field(
+        default="",
+        description=(
+            "노출량 라벨(스펙 L41-50, PRD `Hint.reveals` 정렬). `hint_level`에서 파생 — "
+            "1=next_concept_to_focus·2=step_flow·3=partial_steps_demo·4=full_solution. "
+            "세션당 평균 노출량 KPI 입력."
+        ),
     )
 
 

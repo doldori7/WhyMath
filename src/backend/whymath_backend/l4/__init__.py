@@ -12,6 +12,7 @@ L3(생성)와 L5(상호작용) 사이의 *결정 계층*. 학생 발화·상태�
 
 from __future__ import annotations
 
+from whymath_backend.l4.hint_deferral import REVEALS, HintLevel, decide_hint_level
 from whymath_backend.l4.models import (
     LLMSeam,
     PedagogyDecision,
@@ -30,9 +31,12 @@ __all__ = [
     "PolyaCoach",
     "PolyaStage",
     "PolyaState",
+    "REVEALS",
     "SocraticCategory",
     "StageTransition",
+    "HintLevel",
     "ToneReport",
+    "decide_hint_level",
     "filter_tone",
     "select_category",
 ]

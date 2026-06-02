@@ -43,6 +43,39 @@ class TestDecideStays:
         assert d.socratic_category == "clarification"
 
 
+class TestHintDeferralWiring:
+    """슬라이스 3 — decide()가 PolyaState.prev_hint_level·turn_count를 읽어 hint_level/reveals 채움."""
+
+    def test_default_hint_level_1_with_reveals(self) -> None:
+        coach = PolyaCoach()
+        d = coach.decide("음", _state(PolyaStage.UNDERSTAND))
+        assert d.hint_level == 1
+        assert d.reveals == "next_concept_to_focus"
+
+    def test_frustration_signal_raises_hint_level(self) -> None:
+        coach = PolyaCoach()
+        s = PolyaState(current_stage=PolyaStage.PLAN, prev_hint_level=2)
+        d = coach.decide("너무 어려워서 모르겠어", s)
+        assert d.hint_level == 3
+        assert d.reveals == "partial_steps_demo"
+
+    def test_demand_answer_raises_hint_level(self) -> None:
+        coach = PolyaCoach()
+        s = PolyaState(current_stage=PolyaStage.PLAN, prev_hint_level=1)
+        d = coach.decide("그냥 답이 뭐야", s)
+        assert d.hint_level == 2
+        assert d.reveals == "step_flow"
+
+    def test_stuck_threshold_jumps_to_3(self) -> None:
+        coach = PolyaCoach()
+        s = PolyaState(
+            current_stage=PolyaStage.EXECUTE, turn_count=5, prev_hint_level=1
+        )
+        d = coach.decide("음...", s)
+        assert d.hint_level == 3
+        assert d.reveals == "partial_steps_demo"
+
+
 class TestSocraticCategory:
     """슬라이스 2 — `decide()`가 socratic_category를 단계·전이·발화 신호로 채운다."""
 
