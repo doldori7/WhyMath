@@ -41,15 +41,22 @@ def _reset_rate_limit_store() -> None:
 def _settings_override(
     limit: int = 0,
     write_limit: int | None = None,
+    ip_limit: int = 0,
+    ip_write_limit: int | None = None,
 ) -> Settings:
-    """기본 read/write 모두 0(비활성). `write_limit=None`이면 `limit`과 같게(편의).
+    """기본 read/write 모두 0(비활성). `*_limit=None`이면 같은 read 인자와 동일.
 
-    슬라이스 14 — 차등 한도. 기존 테스트(read 단일 인자)는 그대로 통과(둘 다 같게 설정).
+    슬라이스 14 — 차등 한도. 슬라이스 17 — 사용자 + IP 동시(방어 심층). IP 한도도 기본
+    0으로 두어 기존 테스트가 IP dep을 의식하지 않고 통과하게 한다.
     """
     return Settings(
         jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
         coach_rate_limit_read_per_minute=limit,
         coach_rate_limit_write_per_minute=limit if write_limit is None else write_limit,
+        coach_rate_limit_ip_read_per_minute=ip_limit,
+        coach_rate_limit_ip_write_per_minute=(
+            ip_limit if ip_write_limit is None else ip_write_limit
+        ),
     )
 
 
@@ -1449,3 +1456,145 @@ class TestIpRateLimitEdgeCases:
         asyncio.run(rate_limit_ip_read(request, settings, response))
         asyncio.run(rate_limit_ip_write(request, settings, response))
         assert "X-RateLimit-Limit" not in response.headers
+
+
+class TestDefenseInDepth:
+    """슬라이스 17 — 사용자 + IP 동시 적용. 둘 다 통과해야 200·뜨거운 쪽 헤더."""
+
+    def test_user_limit_fires_before_ip(self) -> None:
+        # user_limit=1, ip_limit=10 → 2번째 요청은 사용자 한도에서 429
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0, write_limit=1, ip_limit=0, ip_write_limit=10
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 429
+        # 사용자 한도가 발화 → 헤더는 user 기준(Limit=1)
+        assert resp.headers["X-RateLimit-Limit"] == "1"
+
+    def test_ip_limit_fires_when_user_loose(self) -> None:
+        # user_limit=100, ip_limit=1 → 두번째 요청은 IP 한도에서 429
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0, write_limit=100, ip_limit=0, ip_write_limit=1
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 429
+        # IP 한도가 발화 → 헤더는 IP 기준(Limit=1)
+        assert resp.headers["X-RateLimit-Limit"] == "1"
+
+    def test_tighter_remaining_shown_on_200(self) -> None:
+        # user_limit=10, ip_limit=2 → IP가 더 엄격 → 헤더에 IP의 remaining 노출
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0, write_limit=10, ip_limit=0, ip_write_limit=2
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        # IP는 remaining=1(2-1), user는 9(10-1). 더 엄격한 IP 노출.
+        assert resp.headers["X-RateLimit-Limit"] == "2"
+        assert resp.headers["X-RateLimit-Remaining"] == "1"
+
+    def test_user_only_when_ip_unknown(self) -> None:
+        # request.client = None인 상황은 hermetic으론 어렵지만, ip_limit=0이면 IP 검사
+        # 비활성. user 한도만 적용되어야 한다.
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0, write_limit=1, ip_limit=0, ip_write_limit=0
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 429
+        assert resp.headers["X-RateLimit-Limit"] == "1"
+
+    def test_both_zero_no_enforcement(self) -> None:
+        # 둘 다 0 → 무한 통과·헤더 없음
+        client = _client(rate_limit=0)  # 이미 ip_limit=0 기본
+        for _ in range(20):
+            resp = client.post("/v1/coach", json={"student_input": "음"})
+            assert resp.status_code == 200
+            assert "X-RateLimit-Limit" not in resp.headers
+
+
+class TestTightestHeadersHelper:
+    """`_tightest_headers` 단위 — 두 쌍 비교 로직 검증."""
+
+    def test_returns_user_when_ip_pair_none(self) -> None:
+        from whymath_backend.api._rate_limit import (
+            RateLimitResult,
+            _tightest_headers,
+        )
+
+        user = RateLimitResult(allowed=True, remaining=5, reset_seconds=60)
+        headers = _tightest_headers((10, user), None)
+        assert headers["X-RateLimit-Limit"] == "10"
+        assert headers["X-RateLimit-Remaining"] == "5"
+
+    def test_returns_ip_when_user_pair_none(self) -> None:
+        from whymath_backend.api._rate_limit import (
+            RateLimitResult,
+            _tightest_headers,
+        )
+
+        ip = RateLimitResult(allowed=True, remaining=3, reset_seconds=60)
+        headers = _tightest_headers(None, (20, ip))
+        assert headers["X-RateLimit-Limit"] == "20"
+
+    def test_returns_tighter_when_both_present(self) -> None:
+        from whymath_backend.api._rate_limit import (
+            RateLimitResult,
+            _tightest_headers,
+        )
+
+        user = RateLimitResult(allowed=True, remaining=8, reset_seconds=60)
+        ip = RateLimitResult(allowed=True, remaining=3, reset_seconds=60)
+        headers = _tightest_headers((10, user), (20, ip))
+        # IP가 remaining 더 작음(3 < 8) → IP 헤더
+        assert headers["X-RateLimit-Limit"] == "20"
+        assert headers["X-RateLimit-Remaining"] == "3"
+
+    def test_tie_prefers_user(self) -> None:
+        from whymath_backend.api._rate_limit import (
+            RateLimitResult,
+            _tightest_headers,
+        )
+
+        user = RateLimitResult(allowed=True, remaining=5, reset_seconds=60)
+        ip = RateLimitResult(allowed=True, remaining=5, reset_seconds=60)
+        headers = _tightest_headers((10, user), (20, ip))
+        # 동률(<=) → user 우선
+        assert headers["X-RateLimit-Limit"] == "10"
+
+    def test_empty_when_both_none(self) -> None:
+        from whymath_backend.api._rate_limit import _tightest_headers
+
+        assert _tightest_headers(None, None) == {}

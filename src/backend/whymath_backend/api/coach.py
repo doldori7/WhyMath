@@ -32,7 +32,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._concurrency import etag_for, matches_if_none_match
-from whymath_backend.api._rate_limit import RateLimitedRead, RateLimitedWrite
+from whymath_backend.api._rate_limit import RateLimitedDefenseRead, RateLimitedDefenseWrite
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.session import get_session
@@ -174,7 +174,7 @@ def _build_response_payload(body: CoachRequest) -> tuple[
     "/coach",
     response_model=CoachResponse,
     summary="L4 교수학 통합 결정(stateless)",
-    dependencies=[RateLimitedWrite],
+    dependencies=[RateLimitedDefenseWrite],
 )
 async def coach_decide(
     body: CoachRequest,
@@ -200,7 +200,7 @@ async def coach_decide(
     response_model=SessionCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="L4 코치 세션 생성(dialogue + 학생/AI 2턴 영속)",
-    dependencies=[RateLimitedWrite],
+    dependencies=[RateLimitedDefenseWrite],
 )
 async def create_session(
     body: SessionCreateRequest,
@@ -269,7 +269,7 @@ async def create_session(
     response_model=TurnAppendResponse,
     status_code=status.HTTP_201_CREATED,
     summary="L4 코치 세션에 학생/AI 2턴 추가",
-    dependencies=[RateLimitedWrite],
+    dependencies=[RateLimitedDefenseWrite],
 )
 async def append_turns(
     dialogue_id: uuid.UUID,
@@ -342,7 +342,7 @@ async def append_turns(
     "/coach/sessions/{dialogue_id}",
     response_model=SessionGetResponse,
     summary="L4 코치 세션 조회(dialogue 메타 + 턴 목록)",
-    dependencies=[RateLimitedRead],
+    dependencies=[RateLimitedDefenseRead],
 )
 async def get_session_detail(
     dialogue_id: uuid.UUID,

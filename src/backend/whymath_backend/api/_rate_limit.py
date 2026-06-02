@@ -381,58 +381,9 @@ def _rate_headers(limit: int, result: RateLimitResult) -> dict[str, str]:
     }
 
 
-async def _enforce(
-    user_id: uuid.UUID,
-    *,
-    category: RateCategory,
-    limit: int,
-    response: Response,
-) -> None:
-    """카테고리별 사용자당 상한 검사. 초과 시 429 + Retry-After. limit=0이면 비활성.
-
-    성공 시 응답에 `X-RateLimit-*` 헤더 동봉(클라이언트 throttle 입력). 거부 시 같은
-    헤더 + `Retry-After`를 HTTPException으로 동봉(429 본문과 함께).
-    """
-    if limit == 0:
-        return
-    result = await _BACKEND.hit(user_id, category=category, limit=limit, now=time.monotonic())
-    headers = _rate_headers(limit, result)
-    if not result.allowed:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
-            headers={"Retry-After": str(result.reset_seconds or 60), **headers},
-        )
-    for key, value in headers.items():
-        response.headers[key] = value
-
-
-async def rate_limit_read(
-    user: ConsentedUser,
-    settings: Annotated[Settings, Depends(get_settings)],
-    response: Response,
-) -> None:
-    """*읽기* 한도 검사 — GET 엔드포인트(`coach_rate_limit_read_per_minute`)."""
-    await _enforce(
-        user.user_id,
-        category="read",
-        limit=settings.coach_rate_limit_read_per_minute,
-        response=response,
-    )
-
-
-async def rate_limit_write(
-    user: ConsentedUser,
-    settings: Annotated[Settings, Depends(get_settings)],
-    response: Response,
-) -> None:
-    """*쓰기* 한도 검사 — POST 엔드포인트(`coach_rate_limit_write_per_minute`)."""
-    await _enforce(
-        user.user_id,
-        category="write",
-        limit=settings.coach_rate_limit_write_per_minute,
-        response=response,
-    )
+# 슬라이스 11-15의 user-only `rate_limit_read/write` 및 헬퍼 `_enforce`는 슬라이스 17의
+# Defense(사용자+IP) 도입으로 *모두 대체*됨(clean cut). 호출자 0 — 죽은 코드 제거(CLAUDE.md
+# "범위 밖 기능 금지"). 사용자 한도만 원하면 `ip_limit=0` 설정으로 Defense가 동등하게 동작.
 
 
 def _client_ip(request: Request) -> str | None:
@@ -511,14 +462,122 @@ async def rate_limit_ip_write(
     )
 
 
-RateLimitedRead = Depends(rate_limit_read)
-"""GET 엔드포인트용 의존성(사용자 단위) — `dependencies=[RateLimitedRead]`."""
-
-RateLimitedWrite = Depends(rate_limit_write)
-"""POST 엔드포인트용 의존성(사용자 단위) — `dependencies=[RateLimitedWrite]`."""
-
 RateLimitedIpRead = Depends(rate_limit_ip_read)
 """*미인증* GET 엔드포인트용 의존성(IP 단위) — `dependencies=[RateLimitedIpRead]`."""
 
 RateLimitedIpWrite = Depends(rate_limit_ip_write)
 """*미인증* POST 엔드포인트용 의존성(IP 단위) — `dependencies=[RateLimitedIpWrite]`."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 슬라이스 17 — 사용자 + IP 동시 적용(방어 심층)
+# 인증된 엔드포인트에 둘 다 부착해 ① 단일 사용자 학대 ② 공유 NAT의 단일 IP 학대 모두 차단.
+# 429는 *먼저 실패*한 쪽 헤더로(사용자 우선). 200 헤더는 *더 엄격한* 쪽 노출(클라이언트가
+# 가장 가까운 한도를 인식).
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _tightest_headers(
+    user_pair: tuple[int, RateLimitResult] | None,
+    ip_pair: tuple[int, RateLimitResult] | None,
+) -> dict[str, str]:
+    """두 검사 중 *더 엄격한*(remaining 작은) 쪽의 X-RateLimit 헤더 반환.
+
+    한쪽만 있으면 그쪽. 둘 다 있으면 remaining 작은 쪽(동률은 user 우선).
+    둘 다 None이면 빈 dict(헤더 미세팅).
+    """
+    if user_pair is None and ip_pair is None:
+        return {}
+    if ip_pair is None:
+        assert user_pair is not None
+        return _rate_headers(*user_pair)
+    if user_pair is None:
+        return _rate_headers(*ip_pair)
+    user_limit, user_result = user_pair
+    ip_limit, ip_result = ip_pair
+    if user_result.remaining <= ip_result.remaining:
+        return _rate_headers(user_limit, user_result)
+    return _rate_headers(ip_limit, ip_result)
+
+
+async def _enforce_defense(
+    user_id: uuid.UUID,
+    ip: str | None,
+    *,
+    category: RateCategory,
+    user_limit: int,
+    ip_limit: int,
+    response: Response,
+) -> None:
+    """사용자 + IP 한도 *둘 다* 검사. 사용자 먼저 — 둘 다 통과해야 200."""
+    user_pair: tuple[int, RateLimitResult] | None = None
+    if user_limit > 0:
+        user_result = await _BACKEND.hit(
+            user_id, category=category, limit=user_limit, now=time.monotonic()
+        )
+        if not user_result.allowed:
+            headers = _rate_headers(user_limit, user_result)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
+                headers={"Retry-After": str(user_result.reset_seconds or 60), **headers},
+            )
+        user_pair = (user_limit, user_result)
+
+    ip_pair: tuple[int, RateLimitResult] | None = None
+    if ip_limit > 0 and ip is not None:
+        ip_result = await _BACKEND.hit_by_ip(
+            ip, category=category, limit=ip_limit, now=time.monotonic()
+        )
+        if not ip_result.allowed:
+            headers = _rate_headers(ip_limit, ip_result)
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
+                headers={"Retry-After": str(ip_result.reset_seconds or 60), **headers},
+            )
+        ip_pair = (ip_limit, ip_result)
+
+    for key, value in _tightest_headers(user_pair, ip_pair).items():
+        response.headers[key] = value
+
+
+async def rate_limit_defense_read(
+    user: ConsentedUser,
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+) -> None:
+    """*사용자 + IP* 읽기 한도 동시 적용 — 인증 GET 엔드포인트의 방어 심층."""
+    await _enforce_defense(
+        user.user_id,
+        _client_ip(request),
+        category="read",
+        user_limit=settings.coach_rate_limit_read_per_minute,
+        ip_limit=settings.coach_rate_limit_ip_read_per_minute,
+        response=response,
+    )
+
+
+async def rate_limit_defense_write(
+    user: ConsentedUser,
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+) -> None:
+    """*사용자 + IP* 쓰기 한도 동시 적용 — 인증 POST 엔드포인트의 방어 심층."""
+    await _enforce_defense(
+        user.user_id,
+        _client_ip(request),
+        category="write",
+        user_limit=settings.coach_rate_limit_write_per_minute,
+        ip_limit=settings.coach_rate_limit_ip_write_per_minute,
+        response=response,
+    )
+
+
+RateLimitedDefenseRead = Depends(rate_limit_defense_read)
+"""인증 GET용 *사용자 + IP* 동시 의존성 — `dependencies=[RateLimitedDefenseRead]`."""
+
+RateLimitedDefenseWrite = Depends(rate_limit_defense_write)
+"""인증 POST용 *사용자 + IP* 동시 의존성 — `dependencies=[RateLimitedDefenseWrite]`."""
