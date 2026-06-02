@@ -1,0 +1,89 @@
+"""L4 단계 전이 휴리스틱 단위테스트.
+
+핵심: false-positive(잘못 next) 제로 — 모호 시 항상 stay(생산적 막힘 우선).
+"""
+
+from __future__ import annotations
+
+from whymath_backend.l4.models import PolyaStage, PolyaState
+from whymath_backend.l4.polya.transitions import should_advance
+
+
+def _state(stage: PolyaStage) -> PolyaState:
+    return PolyaState(current_stage=stage)
+
+
+class TestUnderstand:
+    """길이 + 문장 부호로 재진술 신호 감지."""
+
+    def test_long_restatement_with_punct_advances(self) -> None:
+        # 자기 언어로 충분히 길고 문장 부호 있음
+        s = _state(PolyaStage.UNDERSTAND)
+        text = "이 문제는 함수 f의 최댓값을 구하는 문제고, 조건은 x≥0이야."
+        assert should_advance(s, text) == "next"
+
+    def test_short_acknowledgement_stays(self) -> None:
+        s = _state(PolyaStage.UNDERSTAND)
+        assert should_advance(s, "네.") == "stay"
+        assert should_advance(s, "음") == "stay"
+
+    def test_long_but_no_punct_stays(self) -> None:
+        # 길지만 문장 구조 없음(단어 나열)
+        s = _state(PolyaStage.UNDERSTAND)
+        assert should_advance(s, "함수 최댓값 조건 미지수 정의역 부등식") == "stay"
+
+
+class TestPlan:
+    """전략 키워드 1+ → next."""
+
+    def test_strategy_keyword_advances(self) -> None:
+        s = _state(PolyaStage.PLAN)
+        for w in ("공식 쓸까", "비슷한 문제 본 적 있어", "그림 그려볼게", "치환해볼까"):
+            assert should_advance(s, w) == "next", w
+
+    def test_no_strategy_keyword_stays(self) -> None:
+        s = _state(PolyaStage.PLAN)
+        assert should_advance(s, "잘 모르겠어") == "stay"
+        assert should_advance(s, "어렵네") == "stay"
+
+
+class TestExecute:
+    """결과 토큰 + 등호 + 다중 줄 — 셋 모두 필요(보수적)."""
+
+    def test_all_signals_advances(self) -> None:
+        s = _state(PolyaStage.EXECUTE)
+        text = "f'(x) = 2x - 4\n2x - 4 = 0\n따라서 x = 2"
+        assert should_advance(s, text) == "next"
+
+    def test_missing_equals_stays(self) -> None:
+        s = _state(PolyaStage.EXECUTE)
+        text = "따라서 답은 2\n그러므로 끝"
+        assert should_advance(s, text) == "stay"
+
+    def test_missing_answer_token_stays(self) -> None:
+        s = _state(PolyaStage.EXECUTE)
+        text = "f'(x) = 2x - 4\n2x - 4 = 0"
+        assert should_advance(s, text) == "stay"
+
+    def test_single_line_stays(self) -> None:
+        s = _state(PolyaStage.EXECUTE)
+        text = "답 = 2"
+        assert should_advance(s, text) == "stay"
+
+
+class TestReview:
+    """REVIEW는 종착 — 어떤 입력이든 stay(자동 전이 없음)."""
+
+    def test_terminal_always_stays(self) -> None:
+        s = _state(PolyaStage.REVIEW)
+        for w in ("다른 방법으로도 풀려", "검산해보니 맞아", "왜 이렇게 풀었지", ""):
+            assert should_advance(s, w) == "stay", w
+
+
+class TestNeverAutoPrevious:
+    """자동 previous는 절대 없음(스펙 L101: 학생 *명시* 후퇴 신호로만)."""
+
+    def test_no_branch_returns_previous(self) -> None:
+        for stage in PolyaStage:
+            for text in ("", "모르겠어", "다시", "?"):
+                assert should_advance(_state(stage), text) != "previous"

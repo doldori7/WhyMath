@@ -1,0 +1,124 @@
+"""L4 PolyaCoach 단위테스트 — decide() 결정 + coach() LLM 좌석.
+
+LLM은 FakeLLM(Protocol 만족 — `async def generate`)으로 주입해 hermetic 검증.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from whymath_backend.l3.models import CostTier
+from whymath_backend.l4.models import PolyaStage, PolyaState
+from whymath_backend.l4.polya.engine import PolyaCoach, _next_stage
+from whymath_backend.l4.polya.prompts import STAGE_PROMPTS
+
+
+class FakeLLM:
+    """LLMSeam Protocol 만족 — 캡처된 입력·구성된 응답으로 검증 가능."""
+
+    def __init__(self, response: str) -> None:
+        self.response = response
+        self.calls: list[tuple[str, str]] = []
+
+    async def generate(self, prompt: str, system: str) -> str:
+        self.calls.append((prompt, system))
+        return self.response
+
+
+def _state(stage: PolyaStage) -> PolyaState:
+    return PolyaState(current_stage=stage)
+
+
+class TestDecideStays:
+    def test_understand_short_input_stays_with_stage1_prompt(self) -> None:
+        coach = PolyaCoach()
+        d = coach.decide("음", _state(PolyaStage.UNDERSTAND))
+        assert d.polya_stage_to_advance == "stay"
+        assert d.prompt == STAGE_PROMPTS[PolyaStage.UNDERSTAND].prompt
+        assert d.system == STAGE_PROMPTS[PolyaStage.UNDERSTAND].system
+        assert d.recommended_cost_tier is CostTier.LOCAL
+        assert d.hint_level == 1
+        assert "조건 나열" in d.suggested_actions
+
+
+class TestDecideAdvances:
+    def test_understand_restatement_advances_to_plan_prompt(self) -> None:
+        coach = PolyaCoach()
+        text = "함수 f의 최댓값을 구하는 문제고, 조건은 x≥0이야."
+        d = coach.decide(text, _state(PolyaStage.UNDERSTAND))
+        assert d.polya_stage_to_advance == "next"
+        # 다음 단계(PLAN) 프롬프트가 들어가야 함
+        assert d.prompt == STAGE_PROMPTS[PolyaStage.PLAN].prompt
+        assert "전략 후보 나열" in d.suggested_actions
+
+    def test_plan_strategy_keyword_advances_to_execute_prompt(self) -> None:
+        coach = PolyaCoach()
+        d = coach.decide("미분 공식 써볼게", _state(PolyaStage.PLAN))
+        assert d.polya_stage_to_advance == "next"
+        assert d.prompt == STAGE_PROMPTS[PolyaStage.EXECUTE].prompt
+
+    def test_execute_full_solution_advances_to_review_prompt(self) -> None:
+        coach = PolyaCoach()
+        text = "f'(x) = 2x - 4\n2x - 4 = 0\n따라서 x = 2"
+        d = coach.decide(text, _state(PolyaStage.EXECUTE))
+        assert d.polya_stage_to_advance == "next"
+        assert d.prompt == STAGE_PROMPTS[PolyaStage.REVIEW].prompt
+
+    def test_review_is_terminal_stays_with_stage4_prompt(self) -> None:
+        coach = PolyaCoach()
+        d = coach.decide("검산하니 맞고 다른 방법도 있어", _state(PolyaStage.REVIEW))
+        assert d.polya_stage_to_advance == "stay"
+        assert d.prompt == STAGE_PROMPTS[PolyaStage.REVIEW].prompt
+
+
+class TestNextStage:
+    """REVIEW가 종착임을 `_next_stage` 직접 호출로도 보장(미래 회귀 가드)."""
+
+    def test_review_next_stage_is_review(self) -> None:
+        assert _next_stage(PolyaStage.REVIEW) is PolyaStage.REVIEW
+
+    def test_non_terminal_advances(self) -> None:
+        assert _next_stage(PolyaStage.UNDERSTAND) is PolyaStage.PLAN
+        assert _next_stage(PolyaStage.PLAN) is PolyaStage.EXECUTE
+        assert _next_stage(PolyaStage.EXECUTE) is PolyaStage.REVIEW
+
+
+class TestSystemPromptShape:
+    def test_system_mentions_polya_and_safety(self) -> None:
+        coach = PolyaCoach()
+        d = coach.decide("음", _state(PolyaStage.UNDERSTAND))
+        # 5가지 원칙·금기 표현이 시스템 프롬프트에 명시되어 있어야(LLM에 주입)
+        assert "Polya" in d.system
+        assert "소크라테스" in d.system
+        assert "틀렸" in d.system  # 금기 목록에 포함되어야 — 모델 자기검열 유도
+
+
+class TestCoachWiring:
+    @pytest.mark.asyncio
+    async def test_coach_calls_llm_and_returns_clean_response(self) -> None:
+        coach = PolyaCoach()
+        llm = FakeLLM("좋은 시도네! 다음 단계로 가볼까?")
+        decision, response, report = await coach.coach(
+            "음", _state(PolyaStage.UNDERSTAND), llm=llm
+        )
+        assert len(llm.calls) == 1
+        called_prompt, called_system = llm.calls[0]
+        assert called_prompt == decision.prompt
+        assert called_system == decision.system
+        assert response == "좋은 시도네! 다음 단계로 가볼까?"
+        assert report.violations == []
+        assert report.rewritten is False
+
+    @pytest.mark.asyncio
+    async def test_coach_scrubs_banned_tokens_in_llm_output(self) -> None:
+        coach = PolyaCoach()
+        # LLM이 금지 패턴을 뱉어도 마지막 방어선이 차단
+        llm = FakeLLM("그건 틀렸어. 그런 실수는 흔해.")
+        _, response, report = await coach.coach(
+            "음", _state(PolyaStage.UNDERSTAND), llm=llm
+        )
+        assert "틀렸" not in response
+        assert "실수" not in response
+        assert report.rewritten is True
+        assert "틀렸" in report.violations
+        assert "실수" in report.violations
