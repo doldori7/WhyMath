@@ -68,6 +68,19 @@ class RateLimitResult(NamedTuple):
     reset_seconds: int
 
 
+class CombinedRateLimitResult(NamedTuple):
+    """`hit_both()` 반환 — user + IP 원자 동시 검사 결과(슬라이스 18).
+
+    `allowed`는 둘 다 통과해야 True. 한쪽이라도 거부면 *어느 쪽도 미증가*(원자성). 개별
+    `user_result`/`ip_result`는 *동일 atomic 결과*를 공유 — 둘 다 .allowed=False(거부) 또는
+    둘 다 .allowed=True(통과). 한쪽이 None이면 해당 한도 미적용(limit=0 또는 ip 미상).
+    """
+
+    allowed: bool
+    user_result: RateLimitResult | None
+    ip_result: RateLimitResult | None
+
+
 @runtime_checkable
 class RateLimitBackend(Protocol):
     """rate limit 백엔드 — sliding window 카운트의 저장·검사 추상.
@@ -98,6 +111,23 @@ class RateLimitBackend(Protocol):
         now: float,
     ) -> RateLimitResult:
         """*IP 단위* 요청 기록 시도 — 미인증 표면용. `RateLimitResult` 반환."""
+        ...
+
+    async def hit_both(
+        self,
+        user_id: uuid.UUID,
+        ip: str | None,
+        *,
+        category: RateCategory,
+        user_limit: int,
+        ip_limit: int,
+        now: float,
+    ) -> CombinedRateLimitResult:
+        """*원자적* user + IP 동시 검사 — 둘 다 통과해야 둘 다 increment(슬라이스 18).
+
+        race window 0(인메모리는 단일 GIL 프레임·Redis는 단일 Lua 스크립트). 한쪽 limit=0
+        또는 ip=None이면 해당 검사 비활성(`user_result`/`ip_result`는 None).
+        """
         ...
 
     async def reset(self) -> None:
@@ -173,6 +203,66 @@ class InMemoryBackend:
     ) -> RateLimitResult:
         return await self._hit_by_key(f"ip:{ip}", category=category, limit=limit, now=now)
 
+    async def hit_both(
+        self,
+        user_id: uuid.UUID,
+        ip: str | None,
+        *,
+        category: RateCategory,
+        user_limit: int,
+        ip_limit: int,
+        now: float,
+    ) -> CombinedRateLimitResult:
+        cutoff = now - _WINDOW_SECONDS
+        user_bucket = (
+            self._by_key.setdefault((f"user:{user_id}", category), deque())
+            if user_limit > 0
+            else None
+        )
+        ip_bucket = (
+            self._by_key.setdefault((f"ip:{ip}", category), deque())
+            if ip is not None and ip_limit > 0
+            else None
+        )
+        # 두 버킷 모두 prune
+        for bucket in (user_bucket, ip_bucket):
+            if bucket is not None:
+                while bucket and bucket[0] < cutoff:
+                    bucket.popleft()
+        # 원자 결정: 둘 다 슬롯이 있어야 추가
+        user_ok = user_bucket is None or len(user_bucket) < user_limit
+        ip_ok = ip_bucket is None or len(ip_bucket) < ip_limit
+        atomic = user_ok and ip_ok
+        if atomic:
+            if user_bucket is not None:
+                user_bucket.append(now)
+            if ip_bucket is not None:
+                ip_bucket.append(now)
+        # 결과 구성 — 둘 다 *동일* atomic 결정 공유
+        user_result = (
+            _result_from_window(
+                allowed=atomic,
+                count_after=len(user_bucket),
+                limit=user_limit,
+                oldest_ts=user_bucket[0] if user_bucket else None,
+                now=now,
+            )
+            if user_bucket is not None
+            else None
+        )
+        ip_result = (
+            _result_from_window(
+                allowed=atomic,
+                count_after=len(ip_bucket),
+                limit=ip_limit,
+                oldest_ts=ip_bucket[0] if ip_bucket else None,
+                now=now,
+            )
+            if ip_bucket is not None
+            else None
+        )
+        return CombinedRateLimitResult(allowed=atomic, user_result=user_result, ip_result=ip_result)
+
     async def reset(self) -> None:
         self._by_key.clear()
 
@@ -231,6 +321,62 @@ return {allowed, count, oldest_micros}
 # 결정론적 SHA1 — 모듈 로드 시 1회 계산. Redis의 SCRIPT LOAD 결과(40-char hex)와 *정확히
 # 일치*해야 EVALSHA가 캐시 적중한다(Redis는 같은 알고리즘 사용).
 _LUA_HIT_SHA1 = hashlib.sha1(_LUA_HIT.encode("utf-8")).hexdigest()
+
+
+# 슬라이스 18 — 원자적 user + IP 동시 검사. 두 키를 한 Lua 트랜잭션에서 검사·필요시 둘 다
+# 증가. 한 쪽이라도 거부면 *어느 쪽도 미증가*(낭비 counter 0·race window 0).
+# 한쪽 limit=0이면 그쪽 검사·증가 *모두* 스킵(키 미터치). 반환:
+#   {allowed, user_count_after, user_oldest_micros, ip_count_after, ip_oldest_micros}
+# 미사용 쪽은 count=-1·oldest=-1 sentinel(Python이 None으로 매핑).
+_LUA_HIT_BOTH = """
+local user_key = KEYS[1]
+local ip_key = KEYS[2]
+local now = tonumber(ARGV[1])
+local user_limit = tonumber(ARGV[2])
+local ip_limit = tonumber(ARGV[3])
+local member = ARGV[4]
+local cutoff = now - 60
+local user_count = -1
+local ip_count = -1
+local user_ok = 1
+local ip_ok = 1
+if user_limit > 0 then
+    redis.call('ZREMRANGEBYSCORE', user_key, '-inf', cutoff)
+    user_count = redis.call('ZCARD', user_key)
+    if user_count >= user_limit then user_ok = 0 end
+end
+if ip_limit > 0 then
+    redis.call('ZREMRANGEBYSCORE', ip_key, '-inf', cutoff)
+    ip_count = redis.call('ZCARD', ip_key)
+    if ip_count >= ip_limit then ip_ok = 0 end
+end
+local allowed = 0
+if user_ok == 1 and ip_ok == 1 then
+    allowed = 1
+    if user_limit > 0 then
+        redis.call('ZADD', user_key, now, member)
+        redis.call('EXPIRE', user_key, 60)
+        user_count = user_count + 1
+    end
+    if ip_limit > 0 then
+        redis.call('ZADD', ip_key, now, member)
+        redis.call('EXPIRE', ip_key, 60)
+        ip_count = ip_count + 1
+    end
+end
+local user_oldest = -1
+local ip_oldest = -1
+if user_limit > 0 then
+    local r = redis.call('ZRANGE', user_key, 0, 0, 'WITHSCORES')
+    if #r >= 2 then user_oldest = math.floor(tonumber(r[2]) * 1000000) end
+end
+if ip_limit > 0 then
+    local r = redis.call('ZRANGE', ip_key, 0, 0, 'WITHSCORES')
+    if #r >= 2 then ip_oldest = math.floor(tonumber(r[2]) * 1000000) end
+end
+return {allowed, user_count, user_oldest, ip_count, ip_oldest}
+"""
+_LUA_HIT_BOTH_SHA1 = hashlib.sha1(_LUA_HIT_BOTH.encode("utf-8")).hexdigest()
 
 
 def _build_default_redis_client(settings: Settings) -> _RedisClient:  # pragma: no cover
@@ -329,6 +475,81 @@ class RedisBackend:
         self, ip: str, *, category: RateCategory, limit: int, now: float
     ) -> RateLimitResult:
         return await self._hit_by_key(f"ip:{ip}", category=category, limit=limit, now=now)
+
+    async def hit_both(
+        self,
+        user_id: uuid.UUID,
+        ip: str | None,
+        *,
+        category: RateCategory,
+        user_limit: int,
+        ip_limit: int,
+        now: float,
+    ) -> CombinedRateLimitResult:
+        """원자적 user+IP 검사 — 단일 Lua 스크립트로 둘 다 *함께* 결정.
+
+        Redis MULTI 없이도 Lua가 원자성 보장. IP=None이면 ip_limit=0으로 강제(키 미터치).
+        NoScriptError 폴백은 hit()과 동일 패턴.
+        """
+        client = self._get_client()
+        # IP 미상이면 IP 키도 의미 없음 — limit=0 강제로 Lua가 검사 스킵
+        effective_ip_limit = ip_limit if ip is not None else 0
+        user_key = self._key(f"user:{user_id}", category)
+        ip_key = self._key(f"ip:{ip}", category) if ip is not None else "__unused__"
+        member = f"{now}:{uuid.uuid4().hex}"
+        try:
+            raw = await client.evalsha(
+                _LUA_HIT_BOTH_SHA1,
+                2,
+                user_key,
+                ip_key,
+                now,
+                user_limit,
+                effective_ip_limit,
+                member,
+            )
+        except NoScriptError:
+            await client.script_load(_LUA_HIT_BOTH)
+            raw = await client.evalsha(
+                _LUA_HIT_BOTH_SHA1,
+                2,
+                user_key,
+                ip_key,
+                now,
+                user_limit,
+                effective_ip_limit,
+                member,
+            )
+        allowed = int(raw[0]) == 1
+        user_count = int(raw[1])
+        user_oldest_micros = int(raw[2])
+        ip_count = int(raw[3])
+        ip_oldest_micros = int(raw[4])
+        user_result = (
+            _result_from_window(
+                allowed=allowed,
+                count_after=user_count,
+                limit=user_limit,
+                oldest_ts=None if user_oldest_micros < 0 else user_oldest_micros / 1_000_000,
+                now=now,
+            )
+            if user_limit > 0
+            else None
+        )
+        ip_result = (
+            _result_from_window(
+                allowed=allowed,
+                count_after=ip_count,
+                limit=effective_ip_limit,
+                oldest_ts=None if ip_oldest_micros < 0 else ip_oldest_micros / 1_000_000,
+                now=now,
+            )
+            if effective_ip_limit > 0
+            else None
+        )
+        return CombinedRateLimitResult(
+            allowed=allowed, user_result=user_result, ip_result=ip_result
+        )
 
     async def reset(self) -> None:
         """패턴 매칭 키 일괄 삭제 — 테스트 격리용. production 미호출."""
@@ -509,35 +730,42 @@ async def _enforce_defense(
     ip_limit: int,
     response: Response,
 ) -> None:
-    """사용자 + IP 한도 *둘 다* 검사. 사용자 먼저 — 둘 다 통과해야 200."""
-    user_pair: tuple[int, RateLimitResult] | None = None
-    if user_limit > 0:
-        user_result = await _BACKEND.hit(
-            user_id, category=category, limit=user_limit, now=time.monotonic()
-        )
-        if not user_result.allowed:
-            headers = _rate_headers(user_limit, user_result)
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
-                headers={"Retry-After": str(user_result.reset_seconds or 60), **headers},
-            )
-        user_pair = (user_limit, user_result)
+    """사용자 + IP 한도 *원자적* 동시 검사(슬라이스 18). 둘 다 통과해야 200.
 
-    ip_pair: tuple[int, RateLimitResult] | None = None
-    if ip_limit > 0 and ip is not None:
-        ip_result = await _BACKEND.hit_by_ip(
-            ip, category=category, limit=ip_limit, now=time.monotonic()
+    `hit_both` 단일 호출로 race window 0 + 한쪽 거부 시 다른 쪽 counter 낭비 0. 거부 시
+    429 헤더는 *blocker* 쪽(remaining=0인 쪽). 200 헤더는 *더 엄격한*(remaining 작은 쪽).
+    """
+    if user_limit == 0 and (ip_limit == 0 or ip is None):
+        return
+    combined = await _BACKEND.hit_both(
+        user_id,
+        ip,
+        category=category,
+        user_limit=user_limit,
+        ip_limit=ip_limit,
+        now=time.monotonic(),
+    )
+    user_pair: tuple[int, RateLimitResult] | None = (
+        (user_limit, combined.user_result) if combined.user_result is not None else None
+    )
+    ip_pair: tuple[int, RateLimitResult] | None = (
+        (ip_limit, combined.ip_result) if combined.ip_result is not None else None
+    )
+    if not combined.allowed:
+        # blocker = remaining=0인 쪽(=한도 도달). 둘 다 0이면(드물지만) user 우선.
+        blocker: tuple[int, RateLimitResult]
+        if user_pair is not None and user_pair[1].remaining == 0:
+            blocker = user_pair
+        elif ip_pair is not None and ip_pair[1].remaining == 0:
+            blocker = ip_pair
+        else:  # pragma: no cover — 정상 경로엔 blocker가 반드시 있음(거부 = 적어도 한쪽 도달)
+            blocker = user_pair or ip_pair  # type: ignore[assignment]
+        headers = _rate_headers(*blocker)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
+            headers={"Retry-After": str(blocker[1].reset_seconds or 60), **headers},
         )
-        if not ip_result.allowed:
-            headers = _rate_headers(ip_limit, ip_result)
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
-                headers={"Retry-After": str(ip_result.reset_seconds or 60), **headers},
-            )
-        ip_pair = (ip_limit, ip_result)
-
     for key, value in _tightest_headers(user_pair, ip_pair).items():
         response.headers[key] = value
 

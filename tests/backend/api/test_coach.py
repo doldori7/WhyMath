@@ -777,12 +777,58 @@ class _FakeRedisClient:
             oldest_micros = int(bucket[0][0] * 1_000_000)
         return [allowed, len(bucket), oldest_micros]
 
+    def _apply_hit_both_script(self, args: tuple[Any, ...]) -> list[int]:
+        """Lua _LUA_HIT_BOTH 의미 재현 — 원자 user+IP 검사. 5-튜플 반환."""
+        user_key = args[0]
+        ip_key = args[1]
+        now = float(args[2])
+        user_limit = int(args[3])
+        ip_limit = int(args[4])
+        member = args[5]
+        cutoff = now - 60
+        user_count = -1
+        ip_count = -1
+        user_ok = True
+        ip_ok = True
+        if user_limit > 0:
+            bucket = self.zsets.setdefault(user_key, [])
+            bucket[:] = [(s, m) for (s, m) in bucket if s >= cutoff]
+            user_count = len(bucket)
+            if user_count >= user_limit:
+                user_ok = False
+        if ip_limit > 0:
+            bucket = self.zsets.setdefault(ip_key, [])
+            bucket[:] = [(s, m) for (s, m) in bucket if s >= cutoff]
+            ip_count = len(bucket)
+            if ip_count >= ip_limit:
+                ip_ok = False
+        allowed = 1 if (user_ok and ip_ok) else 0
+        if allowed:
+            if user_limit > 0:
+                self.zsets[user_key].append((now, member))
+                self.expires[user_key] = 60
+                user_count += 1
+            if ip_limit > 0:
+                self.zsets[ip_key].append((now, member))
+                self.expires[ip_key] = 60
+                ip_count += 1
+        user_oldest = -1
+        ip_oldest = -1
+        if user_limit > 0 and self.zsets.get(user_key):
+            user_oldest = int(self.zsets[user_key][0][0] * 1_000_000)
+        if ip_limit > 0 and self.zsets.get(ip_key):
+            ip_oldest = int(self.zsets[ip_key][0][0] * 1_000_000)
+        return [allowed, user_count, user_oldest, ip_count, ip_oldest]
+
     async def evalsha(self, sha: str, numkeys: int, *args: Any) -> Any:
         self.evalsha_calls.append((sha, numkeys, args))
         if sha not in self._loaded_shas:
             from redis.exceptions import NoScriptError
 
             raise NoScriptError("NOSCRIPT No matching script. Use SCRIPT LOAD.")
+        # numkeys=2면 _LUA_HIT_BOTH(원자 user+IP), 아니면 단일 키 _LUA_HIT
+        if numkeys == 2:
+            return self._apply_hit_both_script(args)
         return self._apply_hit_script(args)
 
     async def script_load(self, script: str) -> Any:
@@ -1598,3 +1644,240 @@ class TestTightestHeadersHelper:
         from whymath_backend.api._rate_limit import _tightest_headers
 
         assert _tightest_headers(None, None) == {}
+
+
+class TestHitBothAtomic:
+    """슬라이스 18 — `hit_both` 원자 동시 검사. 한쪽 거부 시 양쪽 미증가."""
+
+    def test_inmemory_both_pass_increments_both(self) -> None:
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        uid = uuid.uuid4()
+        result = asyncio.run(
+            backend.hit_both(
+                uid,
+                "1.2.3.4",
+                category="read",
+                user_limit=5,
+                ip_limit=10,
+                now=100.0,
+            )
+        )
+        assert result.allowed is True
+        assert result.user_result is not None
+        assert result.ip_result is not None
+        assert result.user_result.remaining == 4  # 5-1
+        assert result.ip_result.remaining == 9  # 10-1
+
+    def test_inmemory_user_blocks_ip_not_incremented(self) -> None:
+        # user 한도 1 소진 후, 같은 user+다른 IP 시도 → 둘 다 증가 X
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        uid = uuid.uuid4()
+        # user에 1 추가(한도 도달)
+        asyncio.run(
+            backend.hit_both(
+                uid, "1.1.1.1", category="read", user_limit=1, ip_limit=10, now=0.0
+            )
+        )
+        # 같은 user, *다른* IP — user 한도 도달이라 atomic deny
+        result = asyncio.run(
+            backend.hit_both(
+                uid, "2.2.2.2", category="read", user_limit=1, ip_limit=10, now=0.1
+            )
+        )
+        assert result.allowed is False
+        # IP 2.2.2.2 버킷은 *미증가*(0개) → remaining = 10
+        assert result.ip_result is not None
+        assert result.ip_result.remaining == 10
+
+    def test_inmemory_prunes_expired_entries(self) -> None:
+        # 60초 후의 hit_both — 옛 항목 prune되어 카운트 0부터 다시(분기 커버)
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        uid = uuid.uuid4()
+        asyncio.run(
+            backend.hit_both(
+                uid, "1.1.1.1", category="read", user_limit=1, ip_limit=1, now=0.0
+            )
+        )
+        denied = asyncio.run(
+            backend.hit_both(
+                uid, "1.1.1.1", category="read", user_limit=1, ip_limit=1, now=0.5
+            )
+        )
+        assert denied.allowed is False
+        # 60초+ 후 — 옛 항목 prune되어 통과
+        passed = asyncio.run(
+            backend.hit_both(
+                uid, "1.1.1.1", category="read", user_limit=1, ip_limit=1, now=61.0
+            )
+        )
+        assert passed.allowed is True
+
+    def test_inmemory_atomic_no_waste_counter(self) -> None:
+        # 핵심 invariant — IP가 거부면 user counter 낭비 안 함
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        uid = uuid.uuid4()
+        # IP에 1 추가(한도 도달)
+        asyncio.run(
+            backend.hit_both(
+                uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.0
+            )
+        )
+        # 같은 uid+같은 ip → IP 한도 도달이라 atomic deny
+        result = asyncio.run(
+            backend.hit_both(
+                uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.1
+            )
+        )
+        assert result.allowed is False
+        # user counter는 *미증가* — 다음 다른 IP에서 user_limit 그대로
+        followup = asyncio.run(
+            backend.hit_both(
+                uid, "2.2.2.2", category="read", user_limit=10, ip_limit=10, now=0.2
+            )
+        )
+        # user_count가 누적 1(첫 호출만) — IP 거부된 두번째는 user 미증가
+        assert followup.allowed is True
+        assert followup.user_result is not None
+        assert followup.user_result.remaining == 8  # 10 - 2(첫+세번째)
+
+    def test_inmemory_user_only_when_ip_none(self) -> None:
+        # ip=None이면 user만 검사 — ip_result=None
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        result = asyncio.run(
+            backend.hit_both(
+                uuid.uuid4(),
+                None,
+                category="read",
+                user_limit=5,
+                ip_limit=10,
+                now=0.0,
+            )
+        )
+        assert result.allowed is True
+        assert result.user_result is not None
+        assert result.ip_result is None
+
+    def test_inmemory_ip_only_when_user_limit_zero(self) -> None:
+        # user_limit=0이면 IP만 검사
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        result = asyncio.run(
+            backend.hit_both(
+                uuid.uuid4(),
+                "1.1.1.1",
+                category="read",
+                user_limit=0,
+                ip_limit=5,
+                now=0.0,
+            )
+        )
+        assert result.allowed is True
+        assert result.user_result is None
+        assert result.ip_result is not None
+
+    def test_redis_hit_both_atomic_lua(self) -> None:
+        # Lua _LUA_HIT_BOTH가 원자성 보장 — fake로 의미 재현 확인
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        uid = uuid.uuid4()
+        # IP에 1 추가(한도 도달)
+        r1 = asyncio.run(
+            backend.hit_both(
+                uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.0
+            )
+        )
+        assert r1.allowed is True
+        # 같은 ip → IP 거부 → atomic 거부 → user counter 낭비 X
+        r2 = asyncio.run(
+            backend.hit_both(
+                uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.1
+            )
+        )
+        assert r2.allowed is False
+        # user 키엔 1개만 있어야 함(낭비 0)
+        from whymath_backend.api._rate_limit import RedisBackend as RB
+
+        user_key = f"{RB._KEY_PREFIX}read:user:{uid}"
+        assert len(fake.zsets[user_key]) == 1
+
+    def test_redis_noscript_fallback_for_hit_both(self) -> None:
+        # _LUA_HIT_BOTH도 NOSCRIPT 폴백 자동 적재
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        # 새 backend — _LUA_HIT_BOTH 캐시 비어있음
+        backend = RedisBackend(client=fake)
+        result = asyncio.run(
+            backend.hit_both(
+                uuid.uuid4(),
+                "1.1.1.1",
+                category="read",
+                user_limit=5,
+                ip_limit=5,
+                now=0.0,
+            )
+        )
+        assert result.allowed is True
+        # script_load 발화·재시도
+        assert len(fake.script_loads) >= 1
+
+
+class TestDefenseAtomicInRouter:
+    """슬라이스 18 결선 — _enforce_defense가 hit_both 사용해 낭비 0."""
+
+    def test_ip_block_does_not_consume_user_quota(self) -> None:
+        # user=10, ip=1로 첫 요청 → 통과. 두번째 → IP 거부.
+        # 세번째 *다른 IP*로 → user 한도 그대로(낭비 0이라 9 남아야 함, 8 아님)
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+
+        # 매 요청 시 settings를 새로 — 이상적이지만 여기선 동일 limit 고정.
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0, write_limit=10, ip_limit=0, ip_write_limit=1
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        # IP=testclient라 둘 다 같은 ip — 한 client는 같은 IP. 1회만 IP 통과.
+        r1 = client.post("/v1/coach", json={"student_input": "음"})
+        assert r1.status_code == 200
+        # X-RateLimit-Remaining(user 입장)이 9, ip 입장이 0
+        # 더 엄격한 ip가 노출 (Remaining=0)
+        assert r1.headers["X-RateLimit-Remaining"] == "0"
+        # 두번째 — IP 한도 도달, atomic 거부 → user counter 낭비 X
+        r2 = client.post("/v1/coach", json={"student_input": "음"})
+        assert r2.status_code == 429
+        # blocker는 IP — Limit=1
+        assert r2.headers["X-RateLimit-Limit"] == "1"
