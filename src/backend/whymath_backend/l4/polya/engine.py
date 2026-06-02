@@ -19,6 +19,7 @@ from whymath_backend.l4.models import (
 )
 from whymath_backend.l4.polya.prompts import STAGE_PROMPTS
 from whymath_backend.l4.polya.transitions import should_advance
+from whymath_backend.l4.socratic import select_category
 from whymath_backend.l4.tone_filter import filter_tone
 
 _STAGE_ORDER: tuple[PolyaStage, ...] = (
@@ -59,7 +60,7 @@ class PolyaCoach:
 
         - 전이 판정 → next면 `_next_stage()`의 프롬프트, stay면 현 단계 프롬프트.
         - `hint_level=1`(기본·가장 은근). 답 미루기 상승은 후속 슬라이스(turn_count 기반).
-        - `socratic_category=""`(슬라이스 2서 채움).
+        - `socratic_category`: 단계·전이·발화 신호로 6카테고리 중 하나(슬라이스 2).
         - `recommended_cost_tier=LOCAL`(기본 — Polya 코칭은 로컬 충분, CLAUDE.md "로컬 LLM 우선").
         """
         transition = should_advance(state, student_input)
@@ -67,8 +68,10 @@ class PolyaCoach:
             _next_stage(state.current_stage) if transition == "next" else state.current_stage
         )
         sp = STAGE_PROMPTS[target_stage]
+        category = select_category(state.current_stage, transition, student_input)
         return PedagogyDecision(
             polya_stage_to_advance=transition,
+            socratic_category=category.value,
             prompt=sp.prompt,
             system=sp.system,
             suggested_actions=list(_STAGE_ACTIONS[target_stage]),

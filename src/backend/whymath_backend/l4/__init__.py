@@ -21,6 +21,7 @@ from whymath_backend.l4.models import (
     ToneReport,
 )
 from whymath_backend.l4.polya.engine import PolyaCoach
+from whymath_backend.l4.socratic import SocraticCategory, select_category
 from whymath_backend.l4.tone_filter import filter_tone
 
 __all__ = [
@@ -29,7 +30,9 @@ __all__ = [
     "PolyaCoach",
     "PolyaStage",
     "PolyaState",
+    "SocraticCategory",
     "StageTransition",
     "ToneReport",
     "filter_tone",
+    "select_category",
 ]

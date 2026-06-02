@@ -39,6 +39,47 @@ class TestDecideStays:
         assert d.recommended_cost_tier is CostTier.LOCAL
         assert d.hint_level == 1
         assert "조건 나열" in d.suggested_actions
+        # 슬라이스 2: socratic_category 채워짐 — 단계 기본(CLARIFICATION)
+        assert d.socratic_category == "clarification"
+
+
+class TestSocraticCategory:
+    """슬라이스 2 — `decide()`가 socratic_category를 단계·전이·발화 신호로 채운다."""
+
+    def test_understand_default_is_clarification(self) -> None:
+        coach = PolyaCoach()
+        d = coach.decide("음", _state(PolyaStage.UNDERSTAND))
+        assert d.socratic_category == "clarification"
+
+    def test_plan_default_is_perspective(self) -> None:
+        coach = PolyaCoach()
+        d = coach.decide("음", _state(PolyaStage.PLAN))
+        assert d.socratic_category == "perspective"
+
+    def test_review_default_is_meta(self) -> None:
+        coach = PolyaCoach()
+        d = coach.decide("음", _state(PolyaStage.REVIEW))
+        assert d.socratic_category == "meta"
+
+    def test_evidence_signal_overrides_on_stay(self) -> None:
+        coach = PolyaCoach()
+        d = coach.decide("왜 그런지 모르겠어", _state(PolyaStage.PLAN))
+        assert d.polya_stage_to_advance == "stay"
+        assert d.socratic_category == "evidence"
+
+    def test_assumption_signal_overrides_on_stay(self) -> None:
+        coach = PolyaCoach()
+        d = coach.decide("양수라고 가정했어", _state(PolyaStage.PLAN))
+        assert d.polya_stage_to_advance == "stay"
+        assert d.socratic_category == "assumption"
+
+    def test_next_uses_target_stage_default(self) -> None:
+        # UNDERSTAND→PLAN 진입 시 PERSPECTIVE("관점 선택" 마디)
+        coach = PolyaCoach()
+        text = "함수 f의 최댓값을 구하는 문제고, 조건은 x≥0이야."
+        d = coach.decide(text, _state(PolyaStage.UNDERSTAND))
+        assert d.polya_stage_to_advance == "next"
+        assert d.socratic_category == "perspective"
 
 
 class TestDecideAdvances:
