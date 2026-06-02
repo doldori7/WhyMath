@@ -45,11 +45,12 @@ def _settings_override(
     ip_write_limit: int | None = None,
     device_limit: int = 0,
     device_write_limit: int | None = None,
+    device_hmac_secret: str = "",
 ) -> Settings:
     """기본 모든 한도 0(비활성). `*_limit=None`이면 같은 read 인자와 동일.
 
-    슬라이스 14/17/20 — 차등·방어 심층·3차원. 모든 한도를 기본 0으로 두어 기존 테스트가
-    어느 차원의 dep도 의식하지 않고 통과하게 한다.
+    슬라이스 14/17/20/21 — 차등·방어 심층·3차원·디바이스 HMAC 서명. 모든 한도와 서명 검증
+    secret을 기본 0/빈으로 두어 기존 테스트가 영향받지 않게 한다.
     """
     return Settings(
         jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
@@ -63,6 +64,7 @@ def _settings_override(
         coach_rate_limit_device_write_per_minute=(
             device_limit if device_write_limit is None else device_write_limit
         ),
+        coach_device_hmac_secret=SecretStr(device_hmac_secret),
     )
 
 
@@ -2130,7 +2132,9 @@ class TestTripleDimension:
 
         request = MagicMock()
         request.headers = {"x-device-id": "dev-abc-123"}
-        assert _client_device_id(request) == "dev-abc-123"
+        # secret 미설정 — slice 20 동작 그대로(서명 검증 생략)
+        settings = _settings_override(0)
+        assert _client_device_id(request, settings) == "dev-abc-123"
 
     def test_device_id_missing_returns_none(self) -> None:
         from unittest.mock import MagicMock
@@ -2139,7 +2143,7 @@ class TestTripleDimension:
 
         request = MagicMock()
         request.headers = {}
-        assert _client_device_id(request) is None
+        assert _client_device_id(request, _settings_override(0)) is None
 
     def test_device_id_empty_returns_none(self) -> None:
         from unittest.mock import MagicMock
@@ -2148,7 +2152,7 @@ class TestTripleDimension:
 
         request = MagicMock()
         request.headers = {"x-device-id": "  "}
-        assert _client_device_id(request) is None
+        assert _client_device_id(request, _settings_override(0)) is None
 
     def test_coach_endpoint_uses_device_limit(self) -> None:
         # coach POST가 RateLimitedTripleWrite 부착 — device 한도 1 시 X-Device-Id로 2번째 429
@@ -2247,3 +2251,162 @@ class TestHitManyEdgeCases:
         results = asyncio.run(backend.hit_many([], category="read", now=0.0))
         assert results == {}
         assert fake.evalsha_calls == []  # Redis 호출 자체가 없음
+
+
+class TestDeviceHmacSignature:
+    """슬라이스 21 — HMAC X-Device-Sig 검증."""
+
+    def _sig(self, secret: str, device_id: str) -> str:
+        from whymath_backend.api._rate_limit import _expected_device_signature
+
+        return _expected_device_signature(secret, device_id)
+
+    def test_valid_signature_accepts_device_id(self) -> None:
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_device_id
+
+        secret = "test-device-secret-123"
+        device_id = "dev-abc-123"
+        valid_sig = self._sig(secret, device_id)
+        request = MagicMock()
+        request.headers = {"x-device-id": device_id, "x-device-sig": valid_sig}
+        settings = _settings_override(0, device_hmac_secret=secret)
+        assert _client_device_id(request, settings) == device_id
+
+    def test_invalid_signature_returns_none(self) -> None:
+        # 서명 불일치 → fail-safe(device 차원 검사 비활성)
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_device_id
+
+        secret = "test-device-secret-123"
+        request = MagicMock()
+        request.headers = {
+            "x-device-id": "dev-abc-123",
+            "x-device-sig": "0" * 64,  # 형식 맞으나 잘못된 서명
+        }
+        settings = _settings_override(0, device_hmac_secret=secret)
+        assert _client_device_id(request, settings) is None
+
+    def test_missing_signature_when_secret_set_returns_none(self) -> None:
+        # secret 설정·X-Device-Sig 헤더 누락 → None(fail-safe)
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_device_id
+
+        request = MagicMock()
+        request.headers = {"x-device-id": "dev-abc-123"}
+        settings = _settings_override(0, device_hmac_secret="some-secret")
+        assert _client_device_id(request, settings) is None
+
+    def test_empty_secret_skips_verification(self) -> None:
+        # secret 비어있으면 서명 검증 생략(slice 20 backward compat)
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_device_id
+
+        request = MagicMock()
+        request.headers = {"x-device-id": "dev-abc-123"}  # X-Device-Sig 없음
+        settings = _settings_override(0, device_hmac_secret="")
+        assert _client_device_id(request, settings) == "dev-abc-123"
+
+    def test_case_insensitive_signature(self) -> None:
+        # 클라이언트가 대문자 hex로 보내도 일치 검증(.lower() 정규화)
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_device_id
+
+        secret = "test-device-secret-123"
+        device_id = "dev-abc"
+        valid_sig = self._sig(secret, device_id).upper()  # 대문자
+        request = MagicMock()
+        request.headers = {"x-device-id": device_id, "x-device-sig": valid_sig}
+        settings = _settings_override(0, device_hmac_secret=secret)
+        assert _client_device_id(request, settings) == device_id
+
+    def test_signature_for_different_device_id_rejected(self) -> None:
+        # 다른 device_id의 서명을 보내면 거부(서명·ID 페어 무결성)
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_device_id
+
+        secret = "test-secret"
+        sig_for_other = self._sig(secret, "other-device")
+        request = MagicMock()
+        request.headers = {"x-device-id": "this-device", "x-device-sig": sig_for_other}
+        settings = _settings_override(0, device_hmac_secret=secret)
+        assert _client_device_id(request, settings) is None
+
+    def test_expected_signature_deterministic_and_64char(self) -> None:
+        from whymath_backend.api._rate_limit import _expected_device_signature
+
+        s1 = _expected_device_signature("secret", "device-1")
+        s2 = _expected_device_signature("secret", "device-1")
+        assert s1 == s2
+        assert len(s1) == 64  # SHA-256 hex
+        # 다른 입력 → 다른 서명
+        assert s1 != _expected_device_signature("secret", "device-2")
+        assert s1 != _expected_device_signature("other-secret", "device-1")
+
+    def test_coach_endpoint_with_valid_sig_enforces_device_limit(self) -> None:
+        # secret 설정 + 유효 서명 → device 한도 정상 발화
+        from whymath_backend.api._rate_limit import _expected_device_signature
+
+        secret = "endpoint-test-secret"
+        device_id = "dev-1"
+        valid_sig = _expected_device_signature(secret, device_id)
+
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0,
+            write_limit=10,
+            ip_limit=0,
+            ip_write_limit=10,
+            device_limit=0,
+            device_write_limit=1,
+            device_hmac_secret=secret,
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        headers = {"x-device-id": device_id, "x-device-sig": valid_sig}
+        r1 = client.post("/v1/coach", json={"student_input": "음"}, headers=headers)
+        assert r1.status_code == 200
+        assert r1.headers["X-RateLimit-Device-Limit"] == "1"
+        r2 = client.post("/v1/coach", json={"student_input": "음"}, headers=headers)
+        assert r2.status_code == 429
+
+    def test_coach_endpoint_with_invalid_sig_skips_device(self) -> None:
+        # 잘못된 서명 → device 차원 비활성·user+IP만 적용
+        secret = "endpoint-test-secret"
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            limit=0,
+            write_limit=10,
+            ip_limit=0,
+            ip_write_limit=10,
+            device_limit=0,
+            device_write_limit=1,
+            device_hmac_secret=secret,
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        # 잘못된 서명을 매 호출 다른 device_id로 (spoofing 시도)
+        for i in range(5):
+            headers = {"x-device-id": f"dev-{i}", "x-device-sig": "0" * 64}
+            resp = client.post(
+                "/v1/coach", json={"student_input": "음"}, headers=headers
+            )
+            assert resp.status_code == 200
+            # device 차원 미활성 → Device-* 헤더 없음
+            assert "X-RateLimit-Device-Limit" not in resp.headers

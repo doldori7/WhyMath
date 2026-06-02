@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import math
 import time
 import uuid
@@ -849,18 +850,42 @@ RateLimitedIpWrite = Depends(rate_limit_ip_write)
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _client_device_id(request: Request) -> str | None:
+def _expected_device_signature(secret: str, device_id: str) -> str:
+    """`HMAC-SHA256(secret, device_id)` 의 hex digest — 64-char lowercase."""
+    return hmac.new(secret.encode("utf-8"), device_id.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def _client_device_id(request: Request, settings: Settings) -> str | None:
     """요청에서 디바이스 ID 추출 — `X-Device-Id` 헤더(클라이언트 발급 UUID/문자열).
 
     빈 값/미설정 시 None — 디바이스 차원 검사 비활성. 클라이언트는 첫 실행 시 안정 ID
     (UUID4·KeyChain 저장)를 생성·전 요청에 동봉(Flutter `device_info_plus`·iOS
     `identifierForVendor`·Android `Settings.Secure.ANDROID_ID` 등 권장).
+
+    **HMAC 서명 검증**(슬라이스 21·`coach_device_hmac_secret` 설정 시): `X-Device-Sig` 헤더에
+    `HMAC-SHA256(secret, device_id)` hex가 동봉되어야 한다. 누락·불일치 시 device_id를
+    None으로 *fail-safe* — device 차원 검사 비활성(요청 자체는 통과·user+IP만 적용).
+    secret 미설정 시 서명 검증 *생략*(빈 기본·하위 호환). 정식 디바이스 인증은 OAuth-style
+    등록 후속(`config.py` `coach_device_hmac_secret` docstring 위협 모델 참조).
     """
     device_id = request.headers.get("x-device-id")
     if device_id is None:
         return None
     stripped = device_id.strip()
-    return stripped if stripped else None
+    if not stripped:
+        return None
+    secret = settings.coach_device_hmac_secret.get_secret_value()
+    if not secret:
+        # secret 미설정 → 서명 검증 생략(슬라이스 20 동작·backward compat)
+        return stripped
+    provided = request.headers.get("x-device-sig", "").strip()
+    if not provided:
+        return None  # 서명 누락 — fail-safe
+    expected = _expected_device_signature(secret, stripped)
+    # 상수-시간 비교(타이밍 공격 방어 — secrets.compare_digest 동등)
+    if not hmac.compare_digest(provided.lower(), expected):
+        return None
+    return stripped
 
 
 async def _enforce_triple(
@@ -942,7 +967,7 @@ async def rate_limit_triple_read(
     await _enforce_triple(
         user.user_id,
         _client_ip(request),
-        _client_device_id(request),
+        _client_device_id(request, settings),
         category="read",
         user_limit=settings.coach_rate_limit_read_per_minute,
         ip_limit=settings.coach_rate_limit_ip_read_per_minute,
@@ -961,7 +986,7 @@ async def rate_limit_triple_write(
     await _enforce_triple(
         user.user_id,
         _client_ip(request),
-        _client_device_id(request),
+        _client_device_id(request, settings),
         category="write",
         user_limit=settings.coach_rate_limit_write_per_minute,
         ip_limit=settings.coach_rate_limit_ip_write_per_minute,

@@ -284,6 +284,17 @@ class Settings(BaseSettings):
             "사용자(30)와 IP(60) 사이 중간."
         ),
     )
+    coach_device_hmac_secret: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "디바이스 서명 검증용 HMAC 비밀키. 빈 기본=비활성(슬라이스 20 동작 그대로). "
+            "설정 시 클라이언트는 `X-Device-Sig: HMAC-SHA256(secret, device_id) hex`를 동봉 — "
+            "유효하지 않으면 device 차원 검사 비활성(fail-safe·user+IP만 적용). "
+            "**위협 모델**: 앱 바이너리에서 secret 추출 가능 — *trivial spoofing*(랜덤 ID "
+            "반복) 방어용. 정식 디바이스 인증은 OAuth-style 등록 후속. WHYMATH_COACH_DEVICE_"
+            "HMAC_SECRET env로만 주입(SecretStr — repr/로그 평문 차단·하드코딩 금지)."
+        ),
+    )
     coach_rate_limit_backend: Literal["memory", "redis"] = Field(
         default="memory",
         description=(
