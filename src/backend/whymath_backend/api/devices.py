@@ -1,0 +1,96 @@
+"""디바이스 등록·폐기 HTTP 표면 — 슬라이스 22 OAuth-style 인증.
+
+`POST /v1/devices/register` — `ConsentedUser`가 새 device_id + secret_plain 발급(서버 생성·
+저장소에 영구 보관·secret_plain은 *1회만* 응답으로 노출). 클라이언트는 KeyChain/Keystore에
+secret 저장 후 매 요청 `X-Device-Sig: HMAC-SHA256(secret, device_id)` 동봉(slice 21·22 검증
+경로 진입).
+
+`POST /v1/devices/{device_id}/revoke` — 등록 폐기(분실·도난·교체). 폐기 후 verify는 False.
+
+**경계**:
+- store 미설정(`set_device_store(None)`) 시 모든 엔드포인트가 **503 Service Unavailable**
+  (slice 21 폴백 모드는 등록 불필요·동작 대상 아님). 운영은 lifespan에서 `set_device_store`로
+  활성화 필수.
+- 등록은 *인증된 사용자만*(`ConsentedUser` 게이트) — 익명 등록 금지(미성년 등록 게이팅·CLAUDE.md).
+- secret_plain은 응답 body에만 노출·서버 로그/추적·DB 쿼리 응답에 *절대 미포함*(SecretStr 사용
+  안 함은 1회 응답이라 필요 없으나 운영 시 로그 마스킹 미들웨어 권장).
+- 본 슬라이스는 *rate limit 적용 안 함* — 등록 자체가 드물고(첫 실행 1회) 인증 게이트로 1차
+  방어. 등록 폭주 방어는 후속.
+"""
+
+from __future__ import annotations
+
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, ConfigDict, Field
+
+from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._device_store import get_device_store
+
+router = APIRouter(prefix="/v1/devices", tags=["devices"])
+
+
+class DeviceRegisterResponse(BaseModel):
+    """등록 응답 — `device_id` + `secret_plain`(*1회만* 노출)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    device_id: str = Field(description="발급된 디바이스 ID(UUID4 문자열).")
+    secret_plain: str = Field(
+        description=(
+            "디바이스 HMAC 서명 시크릿(URL-safe 32B 토큰). *이 응답에서만* 노출되며 이후 "
+            "조회 불가. 클라이언트는 KeyChain/Keystore에 *안전 저장*하고, 매 요청 "
+            "`X-Device-Sig: HMAC-SHA256(secret, device_id)` hex로 서명한다."
+        ),
+    )
+
+
+class DeviceRevokeResponse(BaseModel):
+    """폐기 응답 — 폐기 여부."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    revoked: bool = Field(description="실제로 폐기됐는지(미존재 ID면 False).")
+
+
+def _require_store() -> object:
+    store = get_device_store()
+    if store is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "디바이스 자격증명 저장소가 활성화되지 않았습니다. "
+                "운영자가 `set_device_store`로 활성화해야 합니다."
+            ),
+        )
+    return store
+
+
+@router.post(
+    "/register",
+    response_model=DeviceRegisterResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="디바이스 등록 — device_id + secret_plain 1회 발급",
+)
+async def register_device(user: ConsentedUser) -> DeviceRegisterResponse:
+    """새 디바이스 자격증명 발급 — 인증된 사용자만 가능. secret_plain은 응답에서만 노출."""
+    store = _require_store()
+    device_id, secret_plain = store.register(user.user_id)  # type: ignore[attr-defined]
+    return DeviceRegisterResponse(device_id=device_id, secret_plain=secret_plain)
+
+
+@router.post(
+    "/{device_id}/revoke",
+    response_model=DeviceRevokeResponse,
+    summary="디바이스 폐기 — 향후 서명 거부",
+)
+async def revoke_device(
+    device_id: str,
+    user: ConsentedUser,
+) -> DeviceRevokeResponse:
+    """등록된 디바이스 폐기. 미존재면 `revoked=false`(404가 아닌 idempotent 응답)."""
+    _ = (
+        user.user_id
+    )  # 인증 게이트만 — 본인 소유 검증은 후속(현재는 모든 인증 사용자가 임의 폐기 가능)
+    store = _require_store()
+    revoked = store.revoke(device_id)  # type: ignore[attr-defined]
+    return DeviceRevokeResponse(revoked=revoked)

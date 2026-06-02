@@ -36,6 +36,7 @@ from typing import (
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._device_store import get_device_store
 from whymath_backend.config import Settings, get_settings
 
 # redis-py의 NoScriptError를 지연 import — 라이브러리 미설치 환경(CI 단위테스트)에서도
@@ -862,11 +863,16 @@ def _client_device_id(request: Request, settings: Settings) -> str | None:
     (UUID4·KeyChain 저장)를 생성·전 요청에 동봉(Flutter `device_info_plus`·iOS
     `identifierForVendor`·Android `Settings.Secure.ANDROID_ID` 등 권장).
 
-    **HMAC 서명 검증**(슬라이스 21·`coach_device_hmac_secret` 설정 시): `X-Device-Sig` 헤더에
-    `HMAC-SHA256(secret, device_id)` hex가 동봉되어야 한다. 누락·불일치 시 device_id를
-    None으로 *fail-safe* — device 차원 검사 비활성(요청 자체는 통과·user+IP만 적용).
-    secret 미설정 시 서명 검증 *생략*(빈 기본·하위 호환). 정식 디바이스 인증은 OAuth-style
-    등록 후속(`config.py` `coach_device_hmac_secret` docstring 위협 모델 참조).
+    **검증 경로 우선순위**(슬라이스 22 도입):
+    1. **디바이스별 store**(`set_device_store(store)`로 활성) — 등록된 device_id의 *고유*
+       secret으로 X-Device-Sig 검증. slice 21 공유 secret 한계 해소(앱 바이너리 추출 시
+       *그 디바이스만* 영향, 다른 디바이스 secret 무관). 정식 운영 경로.
+    2. **공유 HMAC secret**(`coach_device_hmac_secret`) — store 미설정 시 폴백. slice 21
+       trivial-spoofing 방어. MVP/sandbox용·등록 인프라 없이 동작.
+    3. **secret 미설정** — 서명 검증 생략(slice 20 동작·backward compat).
+
+    누락·불일치 시 device_id를 None으로 *fail-safe* — device 차원 검사 비활성(요청 자체는
+    통과·user+IP만 적용).
     """
     device_id = request.headers.get("x-device-id")
     if device_id is None:
@@ -874,15 +880,23 @@ def _client_device_id(request: Request, settings: Settings) -> str | None:
     stripped = device_id.strip()
     if not stripped:
         return None
+    store = get_device_store()
+    if store is not None:
+        # 디바이스별 store 모드(우선) — 등록된 device_id만 유효
+        provided = request.headers.get("x-device-sig", "").strip()
+        if not provided:
+            return None
+        if not store.verify(stripped, provided):
+            return None
+        return stripped
+    # 폴백: 공유 HMAC secret(slice 21) 또는 검증 생략(slice 20)
     secret = settings.coach_device_hmac_secret.get_secret_value()
     if not secret:
-        # secret 미설정 → 서명 검증 생략(슬라이스 20 동작·backward compat)
         return stripped
     provided = request.headers.get("x-device-sig", "").strip()
     if not provided:
-        return None  # 서명 누락 — fail-safe
+        return None
     expected = _expected_device_signature(secret, stripped)
-    # 상수-시간 비교(타이밍 공격 방어 — secrets.compare_digest 동등)
     if not hmac.compare_digest(provided.lower(), expected):
         return None
     return stripped
