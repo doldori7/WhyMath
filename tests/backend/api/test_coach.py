@@ -35,17 +35,38 @@ class _FakeSession:
         raise AssertionError("coach 라우터(stateless)는 DB 쿼리하지 않아야 한다.")
 
 
-class _CapturingSession:
-    """`/v1/coach/sessions`용 — add/add_all/commit/refresh를 캡처해 DB 무없이 결선 검증.
+class _Scalars:
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
 
-    `_preload`로 `.get(Model, pk)` 결과를 미리 주입(turn append용 dialogue 조회 모사).
+    def all(self) -> list[Any]:
+        return list(self._rows)
+
+
+class _Result:
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> _Scalars:
+        return _Scalars(self._rows)
+
+
+class _CapturingSession:
+    """`/v1/coach/sessions`용 — add/add_all/commit/refresh/get/execute 캡처.
+
+    `_preload`로 `.get(Model, pk)`·`execute_rows`로 `.execute()` 결과를 미리 주입.
     """
 
-    def __init__(self, preload: dict[Any, Any] | None = None) -> None:
+    def __init__(
+        self,
+        preload: dict[Any, Any] | None = None,
+        execute_rows: list[Any] | None = None,
+    ) -> None:
         self.added: list[Any] = []
         self.commits = 0
         self.refreshes = 0
         self._preload = preload or {}
+        self._execute_rows = list(execute_rows or [])
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
@@ -62,6 +83,9 @@ class _CapturingSession:
     async def get(self, model: Any, pk: Any) -> Any | None:
         return self._preload.get((model, pk))
 
+    async def execute(self, stmt: Any) -> _Result:
+        return _Result(self._execute_rows)
+
 
 def _client() -> TestClient:
     app = create_app()
@@ -76,11 +100,12 @@ def _client() -> TestClient:
 
 def _session_client(
     preload: dict[Any, Any] | None = None,
+    execute_rows: list[Any] | None = None,
 ) -> tuple[TestClient, _CapturingSession]:
-    """`/v1/coach/sessions` hermetic — capturing session으로 add/commit 검증."""
+    """`/v1/coach/sessions` hermetic — capturing session으로 add/commit/execute 검증."""
     app = create_app()
     app.dependency_overrides[get_consented_user] = _user
-    captured = _CapturingSession(preload=preload)
+    captured = _CapturingSession(preload=preload, execute_rows=execute_rows)
 
     async def _sess() -> AsyncIterator[_CapturingSession]:
         yield captured
@@ -427,3 +452,95 @@ class TestTurnAppend:
         body = resp.json()
         assert body["student_turn_order"] == 1
         assert body["assistant_turn_order"] == 2
+
+
+class TestSessionGet:
+    """`GET /v1/coach/sessions/{id}` — dialogue 메타 + turn 목록 조회."""
+
+    def test_returns_dialogue_and_turns(self) -> None:
+        from whymath_backend.db.models.dialogue import (
+            Dialogue as DialogueORM,
+        )
+        from whymath_backend.db.models.dialogue import (
+            DialogueTurn as DialogueTurnORM,
+        )
+        from whymath_backend.schema.dialogue import (
+            Dialogue as DialogueSchema,
+        )
+        from whymath_backend.schema.dialogue import (
+            DialogueTurn as DialogueTurnSchema,
+        )
+        from whymath_backend.schema.enums import TurnRole
+
+        did = uuid.uuid4()
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(dialogue_id=did, user_id=_UID, total_turns=2)
+        )
+        t1 = DialogueTurnORM.from_schema(
+            DialogueTurnSchema(
+                dialogue_id=did,
+                turn_order=1,
+                role=TurnRole.student,
+                content="문제 시도",
+            )
+        )
+        t2 = DialogueTurnORM.from_schema(
+            DialogueTurnSchema(
+                dialogue_id=did, turn_order=2, role=TurnRole.assistant, content="질문"
+            )
+        )
+        client, _ = _session_client(
+            preload={(DialogueORM, did): dialogue},
+            execute_rows=[t1, t2],
+        )
+        resp = client.get(f"/v1/coach/sessions/{did}")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["dialogue"]["dialogue_id"] == str(did)
+        assert len(body["turns"]) == 2
+        assert body["turns"][0]["role"] == "student"
+        assert body["turns"][0]["content"] == "문제 시도"
+        assert body["turns"][1]["role"] == "assistant"
+
+    def test_empty_dialogue_returns_zero_turns(self) -> None:
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+        from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+
+        did = uuid.uuid4()
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(dialogue_id=did, user_id=_UID)
+        )
+        client, _ = _session_client(
+            preload={(DialogueORM, did): dialogue}, execute_rows=[]
+        )
+        resp = client.get(f"/v1/coach/sessions/{did}")
+        assert resp.status_code == 200
+        assert resp.json()["turns"] == []
+
+    def test_nonexistent_404(self) -> None:
+        client, _ = _session_client()
+        resp = client.get(f"/v1/coach/sessions/{uuid.uuid4()}")
+        assert resp.status_code == 404
+
+    def test_other_users_dialogue_404(self) -> None:
+        # 타인 소유 → 404(403 분리 안 함, 존재 노출 회피)
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+        from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+
+        did = uuid.uuid4()
+        other_uid = uuid.uuid4()
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(dialogue_id=did, user_id=other_uid)
+        )
+        client, _ = _session_client(preload={(DialogueORM, did): dialogue})
+        resp = client.get(f"/v1/coach/sessions/{did}")
+        assert resp.status_code == 404
+
+    def test_no_token_401(self) -> None:
+        resp = _no_auth_client().get(f"/v1/coach/sessions/{uuid.uuid4()}")
+        assert resp.status_code == 401
+
+    def test_bad_uuid_422(self) -> None:
+        client, _ = _session_client()
+        resp = client.get("/v1/coach/sessions/not-a-uuid")
+        assert resp.status_code == 422

@@ -142,6 +142,63 @@ def test_create_session_persists_dialogue_and_two_turns_on_live_pg() -> None:
         asyncio.run(_cleanup(uid, dialogue_ids))
 
 
+def test_get_session_returns_dialogue_with_ordered_turns_on_live_pg() -> None:
+    """세션 생성→append→GET — turn 4행이 turn_order 오름차순으로 반환."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            create = client.post(
+                "/v1/coach/sessions", headers=auth, json={"student_input": "처음"}
+            )
+            did = uuid.UUID(create.json()["dialogue_id"])
+            dialogue_ids.append(did)
+            client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=auth,
+                json={"student_input": "두번째"},
+            )
+
+            # GET — 4 turns 오름차순
+            resp = client.get(f"/v1/coach/sessions/{did}", headers=auth)
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            assert body["dialogue"]["dialogue_id"] == str(did)
+            turns = body["turns"]
+            assert len(turns) == 4
+            assert [t["turn_order"] for t in turns] == [1, 2, 3, 4]
+            # 학생/AI 교차 순서: 1=student·2=assistant·3=student·4=assistant
+            assert [t["role"] for t in turns] == [
+                "student",
+                "assistant",
+                "student",
+                "assistant",
+            ]
+            assert turns[0]["content"] == "처음"
+            assert turns[2]["content"] == "두번째"
+
+            # 존재하지 않는 dialogue → 404
+            assert (
+                client.get(
+                    f"/v1/coach/sessions/{uuid.uuid4()}", headers=auth
+                ).status_code
+                == 404
+            )
+
+            # 무토큰 401
+            assert client.get(f"/v1/coach/sessions/{did}").status_code == 401
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+
+
 def test_append_turns_extends_existing_session_on_live_pg() -> None:
     """세션 생성 → 턴 추가 → 실 PG에 dialogue_turn 4행·turn_order 1·2·3·4 증분."""
     if not asyncio.run(_pg_reachable()):

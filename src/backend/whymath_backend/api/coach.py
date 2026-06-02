@@ -27,6 +27,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
@@ -135,6 +136,18 @@ class TurnAppendResponse(CoachResponse):
         ge=1, description="학생 턴 순번(append 후 dialogue.total_turns에 반영)."
     )
     assistant_turn_order: int = Field(ge=1, description="AI 턴 순번(=student_turn_order + 1).")
+
+
+class SessionGetResponse(BaseModel):
+    """`GET /v1/coach/sessions/{id}` 응답 — dialogue 메타 + turn 목록(turn_order 정렬)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dialogue: DialogueSchema = Field(description="대화 세션 메타데이터.")
+    turns: list[DialogueTurnSchema] = Field(
+        default_factory=list,
+        description="대화 턴(turn_order ASC). 학생 발화·AI 결정 본문 포함 — PII 가능.",
+    )
 
 
 def _build_response_payload(body: CoachRequest) -> tuple[
@@ -318,3 +331,35 @@ async def append_turns(
         student_turn_order=student_order,
         assistant_turn_order=assistant_order,
     )
+
+
+@router.get(
+    "/coach/sessions/{dialogue_id}",
+    response_model=SessionGetResponse,
+    summary="L4 코치 세션 조회(dialogue 메타 + 턴 목록)",
+)
+async def get_session_detail(
+    dialogue_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> SessionGetResponse:
+    """세션 메타 + 정렬된 턴 목록 반환. 소유권 검증은 slice 8 패턴(404·존재 노출 회피).
+
+    `turn_order` 오름차순으로 학생/AI/system 모든 턴을 그대로 반환 — content는 학생 PII
+    가능(이미 본인 소유 확정·`ConsentedUser` 게이트 통과 후). 페이지네이션 없음(한 세션의
+    턴은 소량 가정·필요 시 후속).
+    """
+    dialogue = await session.get(DialogueORM, dialogue_id)
+    if dialogue is None or dialogue.user_id != user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="대화를 찾을 수 없습니다."
+        )
+
+    stmt = (
+        select(DialogueTurnORM)
+        .where(DialogueTurnORM.dialogue_id == dialogue_id)
+        .order_by(DialogueTurnORM.turn_order)
+    )
+    result = await session.execute(stmt)
+    turns = [row.to_schema() for row in result.scalars().all()]
+    return SessionGetResponse(dialogue=dialogue.to_schema(), turns=turns)
