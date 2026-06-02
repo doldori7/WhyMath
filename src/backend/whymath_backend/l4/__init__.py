@@ -13,6 +13,7 @@ L3(생성)와 L5(상호작용) 사이의 *결정 계층*. 학생 발화·상태�
 from __future__ import annotations
 
 from whymath_backend.l4.hint_deferral import REVEALS, HintLevel, decide_hint_level
+from whymath_backend.l4.lthc import LthcAdaptation, MasteryLevel, adapt_lthc
 from whymath_backend.l4.misconception import (
     CATALOG as MISCONCEPTION_CATALOG,
 )
@@ -41,7 +42,9 @@ __all__ = [
     "InterventionDecision",
     "InterventionPattern",
     "LLMSeam",
+    "LthcAdaptation",
     "MISCONCEPTION_CATALOG",
+    "MasteryLevel",
     "Misconception",
     "MisconceptionMatch",
     "PedagogyDecision",
@@ -52,6 +55,7 @@ __all__ = [
     "SocraticCategory",
     "StageTransition",
     "ToneReport",
+    "adapt_lthc",
     "decide_hint_level",
     "diagnose",
     "filter_tone",
