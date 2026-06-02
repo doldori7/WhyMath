@@ -721,9 +721,18 @@ class TestRateLimit:
 
         backend = InMemoryBackend()
         uid = uuid.uuid4()
-        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)) is True
-        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.5)) is False
-        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=61.0)) is True
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)).allowed
+            is True
+        )
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.5)).allowed
+            is False
+        )
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=1, now=61.0)).allowed
+            is True
+        )
 
 
 class _FakeRedisClient:
@@ -743,7 +752,8 @@ class _FakeRedisClient:
         self.script_loads: list[str] = []
         self._loaded_shas: set[str] = set()
 
-    def _apply_hit_script(self, args: tuple[Any, ...]) -> int:
+    def _apply_hit_script(self, args: tuple[Any, ...]) -> list[int]:
+        """Lua 스크립트 의미 재현 — `[allowed, count_after, oldest_micros]` 반환."""
         key = args[0]
         now = float(args[1])
         limit = int(args[2])
@@ -751,11 +761,14 @@ class _FakeRedisClient:
         cutoff = now - 60
         bucket = self.zsets.setdefault(key, [])
         bucket[:] = [(s, m) for (s, m) in bucket if s >= cutoff]
-        if len(bucket) >= limit:
-            return 0
-        bucket.append((now, member))
-        self.expires[key] = 60
-        return 1
+        allowed = 1 if len(bucket) < limit else 0
+        if allowed:
+            bucket.append((now, member))
+            self.expires[key] = 60
+        oldest_micros = -1
+        if bucket:
+            oldest_micros = int(bucket[0][0] * 1_000_000)
+        return [allowed, len(bucket), oldest_micros]
 
     async def evalsha(self, sha: str, numkeys: int, *args: Any) -> Any:
         self.evalsha_calls.append((sha, numkeys, args))
@@ -798,9 +811,18 @@ class TestRedisBackend:
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
         uid = uuid.uuid4()
-        assert asyncio.run(backend.hit(uid, category="read", limit=2, now=0.0)) is True
-        assert asyncio.run(backend.hit(uid, category="read", limit=2, now=0.1)) is True
-        assert asyncio.run(backend.hit(uid, category="read", limit=2, now=0.2)) is False
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=2, now=0.0)).allowed
+            is True
+        )
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=2, now=0.1)).allowed
+            is True
+        )
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=2, now=0.2)).allowed
+            is False
+        )
 
     def test_hit_uses_canonical_key_prefix(self) -> None:
         import asyncio
@@ -835,11 +857,20 @@ class TestRedisBackend:
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
         uid = uuid.uuid4()
-        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)) is True
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)).allowed
+            is True
+        )
         # 같은 윈도우 — 초과
-        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.5)) is False
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.5)).allowed
+            is False
+        )
         # 60초+ — prune되어 통과
-        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=61.0)) is True
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=1, now=61.0)).allowed
+            is True
+        )
 
 
 class TestRedisBackendLazyPaths:
@@ -882,12 +913,22 @@ class TestRedisBackendLazyPaths:
         monkeypatch.setattr(rl, "_build_default_redis_client", lambda s: fake)
         backend = rl.RedisBackend()  # client 주입 X
         # 첫 hit — lazy build 발화 + EVALSHA NOSCRIPT → script_load + 재시도
-        assert asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=2, now=0.0)) is True
+        assert (
+            asyncio.run(
+                backend.hit(uuid.uuid4(), category="read", limit=2, now=0.0)
+            ).allowed
+            is True
+        )
         # 첫 hit: evalsha 2회(NOSCRIPT + 재시도), script_load 1회
         assert len(fake.evalsha_calls) == 2
         assert len(fake.script_loads) == 1
         # 두번째 hit — script 이미 캐시됨, evalsha 1회만(NOSCRIPT 없음)
-        assert asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=2, now=0.1)) is True
+        assert (
+            asyncio.run(
+                backend.hit(uuid.uuid4(), category="read", limit=2, now=0.1)
+            ).allowed
+            is True
+        )
         assert len(fake.evalsha_calls) == 3
         assert len(fake.script_loads) == 1  # 추가 load 없음
 
@@ -945,7 +986,12 @@ class TestEvalshaOptimization:
 
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
-        assert asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=2, now=0.0)) is True
+        assert (
+            asyncio.run(
+                backend.hit(uuid.uuid4(), category="read", limit=2, now=0.0)
+            ).allowed
+            is True
+        )
         assert fake.script_loads == [
             __import__(
                 "whymath_backend.api._rate_limit", fromlist=["_LUA_HIT"]
@@ -967,7 +1013,9 @@ class TestEvalshaOptimization:
 
         # 추가 5회 — 전부 evalsha 1회씩만
         for i in range(5):
-            asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=10, now=0.1 + i * 0.01))
+            asyncio.run(
+                backend.hit(uuid.uuid4(), category="read", limit=10, now=0.1 + i * 0.01)
+            )
         assert len(fake.evalsha_calls) == evalsha_after_first + 5
         assert len(fake.script_loads) == loads_after_first  # 변동 없음
 
@@ -998,7 +1046,9 @@ class TestReadWriteSeparation:
         from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 
         did = uuid.uuid4()
-        dialogue = DialogueORM.from_schema(DialogueSchema(dialogue_id=did, user_id=_UID))
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(dialogue_id=did, user_id=_UID)
+        )
 
         app = create_app()
         app.dependency_overrides[get_consented_user] = _user
@@ -1029,7 +1079,9 @@ class TestReadWriteSeparation:
         from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 
         did = uuid.uuid4()
-        dialogue = DialogueORM.from_schema(DialogueSchema(dialogue_id=did, user_id=_UID))
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(dialogue_id=did, user_id=_UID)
+        )
 
         app = create_app()
         app.dependency_overrides[get_consented_user] = _user
@@ -1052,7 +1104,10 @@ class TestReadWriteSeparation:
         assert client.get(f"/v1/coach/sessions/{did}").status_code == 429
         # POST 여러 번 — write 한도(10)는 별도 버킷이라 영향 없음
         for _ in range(5):
-            assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
+            assert (
+                client.post("/v1/coach", json={"student_input": "음"}).status_code
+                == 200
+            )
 
 
 class TestRateCategoryBackend:
@@ -1066,10 +1121,19 @@ class TestRateCategoryBackend:
         backend = InMemoryBackend()
         uid = uuid.uuid4()
         # write 1/1 한도 도달
-        assert asyncio.run(backend.hit(uid, category="write", limit=1, now=0.0)) is True
-        assert asyncio.run(backend.hit(uid, category="write", limit=1, now=0.1)) is False
+        assert (
+            asyncio.run(backend.hit(uid, category="write", limit=1, now=0.0)).allowed
+            is True
+        )
+        assert (
+            asyncio.run(backend.hit(uid, category="write", limit=1, now=0.1)).allowed
+            is False
+        )
         # 같은 사용자의 read 버킷은 독립 — 영향 없음
-        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.2)) is True
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.2)).allowed
+            is True
+        )
 
     def test_redis_key_prefix_includes_category(self) -> None:
         import asyncio
@@ -1083,3 +1147,85 @@ class TestRateCategoryBackend:
         asyncio.run(backend.hit(uid, category="write", limit=10, now=0.0))
         assert f"rate:coach:read:{uid}" in fake.zsets
         assert f"rate:coach:write:{uid}" in fake.zsets
+
+
+class TestRateLimitHeaders:
+    """슬라이스 15 — X-RateLimit-* 응답 헤더(클라이언트 자체 throttle 입력)."""
+
+    def test_200_includes_rate_limit_headers(self) -> None:
+        client = _client(rate_limit=5)
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 200
+        assert resp.headers["X-RateLimit-Limit"] == "5"
+        # 1회 사용 → 4 남음
+        assert resp.headers["X-RateLimit-Remaining"] == "4"
+        # 즉시 1슬롯 비기까지의 시간 ≤ 60(같은 초에 발급된 1개 → ~60초 후 비어짐)
+        reset = int(resp.headers["X-RateLimit-Reset"])
+        assert 0 <= reset <= 60
+
+    def test_429_includes_rate_limit_headers_and_retry_after(self) -> None:
+        client = _client(rate_limit=1)
+        # 첫 호출 200
+        first = client.post("/v1/coach", json={"student_input": "음"})
+        assert first.status_code == 200
+        assert first.headers["X-RateLimit-Remaining"] == "0"
+        # 두번째 호출 — 429
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 429
+        assert resp.headers["X-RateLimit-Limit"] == "1"
+        assert resp.headers["X-RateLimit-Remaining"] == "0"
+        # Retry-After = reset_seconds(>= 0). 0이면 사양상 "즉시" 의미라 본 실패서 1+ 권장.
+        retry_after = int(resp.headers["Retry-After"])
+        assert retry_after >= 1
+        # X-RateLimit-Reset도 동봉
+        assert int(resp.headers["X-RateLimit-Reset"]) >= 0
+
+    def test_remaining_decrements_across_requests(self) -> None:
+        client = _client(rate_limit=3)
+        r1 = client.post("/v1/coach", json={"student_input": "음"})
+        r2 = client.post("/v1/coach", json={"student_input": "음"})
+        r3 = client.post("/v1/coach", json={"student_input": "음"})
+        assert r1.headers["X-RateLimit-Remaining"] == "2"
+        assert r2.headers["X-RateLimit-Remaining"] == "1"
+        assert r3.headers["X-RateLimit-Remaining"] == "0"
+
+    def test_zero_limit_no_headers_no_429(self) -> None:
+        # limit=0이면 dep는 짧게 반환·헤더 미세팅
+        client = _client(rate_limit=0)
+        resp = client.post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 200
+        assert "X-RateLimit-Limit" not in resp.headers
+        assert "X-RateLimit-Remaining" not in resp.headers
+
+
+class TestRateLimitResultStruct:
+    """`RateLimitResult` 결과 구조 — InMemoryBackend 직접 호출."""
+
+    def test_first_hit_allowed_remaining_and_reset(self) -> None:
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend, RateLimitResult
+
+        backend = InMemoryBackend()
+        result = asyncio.run(
+            backend.hit(uuid.uuid4(), category="read", limit=5, now=100.0)
+        )
+        assert isinstance(result, RateLimitResult)
+        assert result.allowed is True
+        assert result.remaining == 4  # limit - 1
+        # 60초 윈도우에 방금 추가 → reset ≈ 60
+        assert result.reset_seconds == 60
+
+    def test_denied_when_at_limit(self) -> None:
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        uid = uuid.uuid4()
+        asyncio.run(backend.hit(uid, category="read", limit=1, now=100.0))
+        result = asyncio.run(backend.hit(uid, category="read", limit=1, now=100.5))
+        assert result.allowed is False
+        assert result.remaining == 0
+        # 옛 항목이 100.0에 추가됨 → 100.5 시점엔 ~60초 후 만료
+        assert result.reset_seconds == 60

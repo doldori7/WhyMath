@@ -18,12 +18,13 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import time
 import uuid
 from collections import deque
-from typing import Annotated, Any, Literal, Protocol, cast, runtime_checkable
+from typing import Annotated, Any, Literal, NamedTuple, Protocol, cast, runtime_checkable
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Response, status
 
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.config import Settings, get_settings
@@ -45,6 +46,20 @@ RateCategory = Literal["read", "write"]
 """POST/GET 차등 한도 — 읽기/쓰기 분리 버킷(상호 영향 차단)."""
 
 
+class RateLimitResult(NamedTuple):
+    """`hit()` 반환 — 허용 여부 + 클라이언트 throttle 정보(X-RateLimit-* 헤더 입력).
+
+    - `allowed`: 한도 내면 True(요청 기록됨), 초과면 False(요청 미기록).
+    - `remaining`: 이 호출 후 *남은 슬롯* 수(0 이상). 거부 시 0.
+    - `reset_seconds`: 가장 오래된 항목이 만료되어 슬롯이 *하나 더 비기까지* 남은 초.
+      윈도우가 비어있으면 0(즉시 사용 가능 — 첫 요청). 거부 시에도 의미 있음.
+    """
+
+    allowed: bool
+    remaining: int
+    reset_seconds: int
+
+
 @runtime_checkable
 class RateLimitBackend(Protocol):
     """rate limit 백엔드 — sliding window 카운트의 저장·검사 추상.
@@ -60,13 +75,37 @@ class RateLimitBackend(Protocol):
         category: RateCategory,
         limit: int,
         now: float,
-    ) -> bool:
-        """요청을 기록하고 *제한 내*면 True, 초과면 False(요청 미기록)."""
+    ) -> RateLimitResult:
+        """요청을 기록 시도 — `RateLimitResult(allowed, remaining, reset_seconds)` 반환."""
         ...
 
     async def reset(self) -> None:
         """모든 카테고리·모든 카운트 초기화 — 테스트 격리용. production 미호출."""
         ...
+
+
+def _result_from_window(
+    *,
+    allowed: bool,
+    count_after: int,
+    limit: int,
+    oldest_ts: float | None,
+    now: float,
+) -> RateLimitResult:
+    """sliding window 상태에서 표준 결과 객체 구성 — 인메모리·Redis 백엔드 공통.
+
+    `allowed`는 호출자가 *명시*한다(`count_after ≤ limit`만으로는 *at-limit 미추가* 케이스를
+    구분 못 함 — bucket이 limit로 가득 차고 추가 안 한 경우와 추가 후 limit 도달이 같은
+    `count_after`로 보이기 때문).
+    """
+    remaining = max(0, limit - count_after)
+    if (
+        oldest_ts is None
+    ):  # pragma: no cover — 정상 경로는 항상 oldest 존재(at-limit 시 bucket 비공)
+        reset_seconds = 0
+    else:
+        reset_seconds = max(0, math.ceil(_WINDOW_SECONDS - (now - oldest_ts)))
+    return RateLimitResult(allowed=allowed, remaining=remaining, reset_seconds=reset_seconds)
 
 
 class InMemoryBackend:
@@ -85,15 +124,22 @@ class InMemoryBackend:
         category: RateCategory,
         limit: int,
         now: float,
-    ) -> bool:
+    ) -> RateLimitResult:
         cutoff = now - _WINDOW_SECONDS
         bucket = self._by_key.setdefault((user_id, category), deque())
         while bucket and bucket[0] < cutoff:
             bucket.popleft()
-        if len(bucket) >= limit:
-            return False
-        bucket.append(now)
-        return True
+        allowed = len(bucket) < limit
+        if allowed:
+            bucket.append(now)
+        oldest = bucket[0] if bucket else None
+        return _result_from_window(
+            allowed=allowed,
+            count_after=len(bucket),
+            limit=limit,
+            oldest_ts=oldest,
+            now=now,
+        )
 
     async def reset(self) -> None:
         self._by_key.clear()
@@ -126,6 +172,8 @@ class _RedisClient(Protocol):
 
 # Lua 스크립트 — *원자성* 핵심. ZREMRANGEBYSCORE → ZCARD → 조건부 ZADD/EXPIRE를
 # 한 명령으로 묶어 race window 0. `now` 동일 타임스탬프 충돌 대비 멤버는 `now:uuid`.
+# 반환 = {count_after, oldest_score_int_micros}. 백엔드가 RateLimitResult로 변환.
+# (oldest는 micros 정수로 직렬화 — Redis Lua의 정수 반환 제약 + Python float 복원.)
 _LUA_HIT = """
 local key = KEYS[1]
 local now = tonumber(ARGV[1])
@@ -133,12 +181,19 @@ local limit = tonumber(ARGV[2])
 local cutoff = now - 60
 redis.call('ZREMRANGEBYSCORE', key, '-inf', cutoff)
 local count = redis.call('ZCARD', key)
+local allowed = 0
 if count < limit then
     redis.call('ZADD', key, now, ARGV[3])
     redis.call('EXPIRE', key, 60)
-    return 1
+    count = count + 1
+    allowed = 1
 end
-return 0
+local oldest_micros = -1
+local oldest_range = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+if #oldest_range >= 2 then
+    oldest_micros = math.floor(tonumber(oldest_range[2]) * 1000000)
+end
+return {allowed, count, oldest_micros}
 """
 
 # 결정론적 SHA1 — 모듈 로드 시 1회 계산. Redis의 SCRIPT LOAD 결과(40-char hex)와 *정확히
@@ -210,7 +265,7 @@ class RedisBackend:
         category: RateCategory,
         limit: int,
         now: float,
-    ) -> bool:
+    ) -> RateLimitResult:
         client = self._get_client()
         key = self._key(user_id, category)
         unique_member = f"{now}:{uuid.uuid4().hex}"
@@ -220,7 +275,17 @@ class RedisBackend:
             # 스크립트가 Redis 캐시에 없음(SCRIPT FLUSH·재시작 후 첫 호출). 적재 후 재시도.
             await client.script_load(_LUA_HIT)
             raw = await client.evalsha(_LUA_HIT_SHA1, 1, key, now, limit, unique_member)
-        return int(raw) == 1
+        allowed = int(raw[0]) == 1
+        count_after = int(raw[1])
+        oldest_micros = int(raw[2])
+        oldest_ts = None if oldest_micros < 0 else oldest_micros / 1_000_000
+        return _result_from_window(
+            allowed=allowed,
+            count_after=count_after,
+            limit=limit,
+            oldest_ts=oldest_ts,
+            now=now,
+        )
 
     async def reset(self) -> None:
         """패턴 매칭 키 일괄 삭제 — 테스트 격리용. production 미호출."""
@@ -259,40 +324,71 @@ async def reset_store() -> None:
     await _BACKEND.reset()
 
 
+def _rate_headers(limit: int, result: RateLimitResult) -> dict[str, str]:
+    """표준 IETF 드래프트 RateLimit 헤더(GitHub-style 변형) — 클라이언트 자체 throttle 입력.
+
+    - `X-RateLimit-Limit`: 윈도우당 최대 요청 수.
+    - `X-RateLimit-Remaining`: *이 응답 시점* 남은 슬롯 수(0=다음 호출은 429 가능).
+    - `X-RateLimit-Reset`: 다음 슬롯이 비기까지 *남은 초*(0=즉시 가능). 거부 시에도 의미.
+    """
+    return {
+        "X-RateLimit-Limit": str(limit),
+        "X-RateLimit-Remaining": str(result.remaining),
+        "X-RateLimit-Reset": str(result.reset_seconds),
+    }
+
+
 async def _enforce(
     user_id: uuid.UUID,
     *,
     category: RateCategory,
     limit: int,
+    response: Response,
 ) -> None:
-    """카테고리별 사용자당 상한 검사. 초과 시 429 + Retry-After: 60. limit=0이면 비활성."""
+    """카테고리별 사용자당 상한 검사. 초과 시 429 + Retry-After. limit=0이면 비활성.
+
+    성공 시 응답에 `X-RateLimit-*` 헤더 동봉(클라이언트 throttle 입력). 거부 시 같은
+    헤더 + `Retry-After`를 HTTPException으로 동봉(429 본문과 함께).
+    """
     if limit == 0:
         return
-    if not await _BACKEND.hit(user_id, category=category, limit=limit, now=time.monotonic()):
+    result = await _BACKEND.hit(user_id, category=category, limit=limit, now=time.monotonic())
+    headers = _rate_headers(limit, result)
+    if not result.allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
-            headers={"Retry-After": "60"},
+            headers={"Retry-After": str(result.reset_seconds or 60), **headers},
         )
+    for key, value in headers.items():
+        response.headers[key] = value
 
 
 async def rate_limit_read(
     user: ConsentedUser,
     settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
 ) -> None:
     """*읽기* 한도 검사 — GET 엔드포인트(`coach_rate_limit_read_per_minute`)."""
-    await _enforce(user.user_id, category="read", limit=settings.coach_rate_limit_read_per_minute)
+    await _enforce(
+        user.user_id,
+        category="read",
+        limit=settings.coach_rate_limit_read_per_minute,
+        response=response,
+    )
 
 
 async def rate_limit_write(
     user: ConsentedUser,
     settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
 ) -> None:
     """*쓰기* 한도 검사 — POST 엔드포인트(`coach_rate_limit_write_per_minute`)."""
     await _enforce(
         user.user_id,
         category="write",
         limit=settings.coach_rate_limit_write_per_minute,
+        response=response,
     )
 
 
