@@ -142,6 +142,56 @@ def test_create_session_persists_dialogue_and_two_turns_on_live_pg() -> None:
         asyncio.run(_cleanup(uid, dialogue_ids))
 
 
+def test_etag_round_trip_304_then_invalidate_on_append_on_live_pg() -> None:
+    """GET → ETag → If-None-Match 304 → append → 옛 ETag로 200(자동 무효화)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            create = client.post(
+                "/v1/coach/sessions", headers=auth, json={"student_input": "처음"}
+            )
+            did = uuid.UUID(create.json()["dialogue_id"])
+            dialogue_ids.append(did)
+
+            # 첫 GET — ETag 캡처
+            r1 = client.get(f"/v1/coach/sessions/{did}", headers=auth)
+            assert r1.status_code == 200
+            etag = r1.headers["ETag"]
+
+            # 같은 ETag로 재요청 → 304(캐시 적중, 빈 본문)
+            r2 = client.get(
+                f"/v1/coach/sessions/{did}",
+                headers={**auth, "If-None-Match": etag},
+            )
+            assert r2.status_code == 304
+            assert r2.content == b""
+
+            # 턴 추가 → 옛 ETag 무효화
+            client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=auth,
+                json={"student_input": "두번째"},
+            )
+            r3 = client.get(
+                f"/v1/coach/sessions/{did}",
+                headers={**auth, "If-None-Match": etag},
+            )
+            assert r3.status_code == 200, "append 후 옛 ETag는 stale → 200"
+            assert r3.headers["ETag"] != etag
+            assert len(r3.json()["turns"]) == 4
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+
+
 def test_get_session_returns_dialogue_with_ordered_turns_on_live_pg() -> None:
     """세션 생성→append→GET — turn 4행이 turn_order 오름차순으로 반환."""
     if not asyncio.run(_pg_reachable()):

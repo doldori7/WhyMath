@@ -25,12 +25,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._concurrency import etag_for, matches_if_none_match
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.session import get_session
@@ -342,12 +343,19 @@ async def get_session_detail(
     dialogue_id: uuid.UUID,
     user: ConsentedUser,
     session: SessionDep,
-) -> SessionGetResponse:
+    response: Response,
+    if_none_match: Annotated[str | None, Header()] = None,
+) -> SessionGetResponse | Response:
     """세션 메타 + 정렬된 턴 목록 반환. 소유권 검증은 slice 8 패턴(404·존재 노출 회피).
 
     `turn_order` 오름차순으로 학생/AI/system 모든 턴을 그대로 반환 — content는 학생 PII
     가능(이미 본인 소유 확정·`ConsentedUser` 게이트 통과 후). 페이지네이션 없음(한 세션의
     턴은 소량 가정·필요 시 후속).
+
+    조건부 GET(RFC 7232): 응답에 ETag를 싣고, `If-None-Match`가 현재 ETag와 일치하면
+    **304 Not Modified**(빈 본문)로 응답해 모바일 대역폭을 아낀다. ETag는 *dialogue +
+    turns 전체 표현*의 해시라 턴 1개 추가만으로도 ETag가 바뀐다(slice 8 append 후 캐시
+    무효화 자동).
     """
     dialogue = await session.get(DialogueORM, dialogue_id)
     if dialogue is None or dialogue.user_id != user.user_id:
@@ -362,4 +370,9 @@ async def get_session_detail(
     )
     result = await session.execute(stmt)
     turns = [row.to_schema() for row in result.scalars().all()]
-    return SessionGetResponse(dialogue=dialogue.to_schema(), turns=turns)
+    payload = SessionGetResponse(dialogue=dialogue.to_schema(), turns=turns)
+    etag = etag_for(payload)
+    if matches_if_none_match(if_none_match, etag):
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers={"ETag": etag})
+    response.headers["ETag"] = etag
+    return payload

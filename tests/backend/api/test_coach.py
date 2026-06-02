@@ -544,3 +544,85 @@ class TestSessionGet:
         client, _ = _session_client()
         resp = client.get("/v1/coach/sessions/not-a-uuid")
         assert resp.status_code == 422
+
+
+class TestSessionGetConditional:
+    """`GET /v1/coach/sessions/{id}` — ETag + If-None-Match → 304(읽기 캐싱)."""
+
+    def _preloaded(self) -> tuple[uuid.UUID, dict[Any, Any], list[Any]]:
+        from whymath_backend.db.models.dialogue import (
+            Dialogue as DialogueORM,
+        )
+        from whymath_backend.db.models.dialogue import (
+            DialogueTurn as DialogueTurnORM,
+        )
+        from whymath_backend.schema.dialogue import (
+            Dialogue as DialogueSchema,
+        )
+        from whymath_backend.schema.dialogue import (
+            DialogueTurn as DialogueTurnSchema,
+        )
+        from whymath_backend.schema.enums import TurnRole
+
+        did = uuid.uuid4()
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(dialogue_id=did, user_id=_UID, total_turns=2)
+        )
+        t1 = DialogueTurnORM.from_schema(
+            DialogueTurnSchema(
+                dialogue_id=did, turn_order=1, role=TurnRole.student, content="A"
+            )
+        )
+        t2 = DialogueTurnORM.from_schema(
+            DialogueTurnSchema(
+                dialogue_id=did, turn_order=2, role=TurnRole.assistant, content="B"
+            )
+        )
+        return did, {(DialogueORM, did): dialogue}, [t1, t2]
+
+    def test_200_includes_etag_header(self) -> None:
+        did, preload, rows = self._preloaded()
+        client, _ = _session_client(preload=preload, execute_rows=rows)
+        resp = client.get(f"/v1/coach/sessions/{did}")
+        assert resp.status_code == 200
+        assert resp.headers.get("ETag")  # 따옴표 포함 강한 ETag
+
+    def test_matching_if_none_match_returns_304(self) -> None:
+        did, preload, rows = self._preloaded()
+        client, _ = _session_client(preload=preload, execute_rows=rows)
+        first = client.get(f"/v1/coach/sessions/{did}")
+        etag = first.headers["ETag"]
+
+        # 같은 ETag로 재요청 → 304, 빈 본문, ETag 유지
+        resp = client.get(f"/v1/coach/sessions/{did}", headers={"If-None-Match": etag})
+        assert resp.status_code == 304
+        assert resp.content == b""
+        assert resp.headers["ETag"] == etag
+
+    def test_wildcard_if_none_match_returns_304(self) -> None:
+        did, preload, rows = self._preloaded()
+        client, _ = _session_client(preload=preload, execute_rows=rows)
+        resp = client.get(f"/v1/coach/sessions/{did}", headers={"If-None-Match": "*"})
+        assert resp.status_code == 304
+
+    def test_stale_if_none_match_returns_200(self) -> None:
+        # 무관한 ETag → 본문 반환(현재 ETag와 다름)
+        did, preload, rows = self._preloaded()
+        client, _ = _session_client(preload=preload, execute_rows=rows)
+        resp = client.get(
+            f"/v1/coach/sessions/{did}",
+            headers={"If-None-Match": '"deadbeefdeadbeef"'},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["turns"]
+
+    def test_etag_changes_when_turns_change(self) -> None:
+        # 같은 dialogue·다른 turn 집합 → 다른 ETag(내용 해시이므로 자동 무효화)
+        did, preload, rows = self._preloaded()
+        client_a, _ = _session_client(preload=preload, execute_rows=rows)
+        etag_a = client_a.get(f"/v1/coach/sessions/{did}").headers["ETag"]
+
+        # turn 1개만 노출(짧은 결과) → 다른 ETag
+        client_b, _ = _session_client(preload=preload, execute_rows=rows[:1])
+        etag_b = client_b.get(f"/v1/coach/sessions/{did}").headers["ETag"]
+        assert etag_a != etag_b
