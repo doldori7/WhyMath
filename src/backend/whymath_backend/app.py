@@ -27,6 +27,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from whymath_backend.api.coach import router as coach_router
 from whymath_backend.api.concepts import router as concepts_router
 from whymath_backend.api.me import router as me_router
 from whymath_backend.api.problems import router as problems_router
@@ -368,5 +369,6 @@ def create_app(
     app.include_router(problems_router)
     app.include_router(users_router)
     app.include_router(me_router)
+    app.include_router(coach_router)
 
     return app
