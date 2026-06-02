@@ -250,6 +250,23 @@ class Settings(BaseSettings):
             "후속 LLM 호출 비용을 고려해 읽기보다 낮게 둔다."
         ),
     )
+    coach_rate_limit_ip_read_per_minute: int = Field(
+        default=120,
+        ge=0,
+        description=(
+            "L4 코치 *읽기* 엔드포인트의 *IP 단위* 분당 요청 상한(미인증 표면 노출 시). "
+            "0=비활성. 인증 사용자보다 *느슨하게* 둔다(공유 NAT·캠퍼스 IP 보호) — 인증된 "
+            "사용자 한도(`coach_rate_limit_read_per_minute`)는 별도 적용."
+        ),
+    )
+    coach_rate_limit_ip_write_per_minute: int = Field(
+        default=60,
+        ge=0,
+        description=(
+            "L4 코치 *쓰기* 엔드포인트의 *IP 단위* 분당 요청 상한. 0=비활성. "
+            "쓰기는 IP 단위에서도 상대적으로 엄격(공격·자동화 봇 방어). 인증 사용자 한도는 별도."
+        ),
+    )
     coach_rate_limit_backend: Literal["memory", "redis"] = Field(
         default="memory",
         description=(

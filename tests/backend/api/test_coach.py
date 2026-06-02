@@ -833,7 +833,7 @@ class TestRedisBackend:
         backend = RedisBackend(client=fake)
         uid = uuid.uuid4()
         asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0))
-        assert f"rate:coach:read:{uid}" in fake.zsets
+        assert f"rate:coach:read:user:{uid}" in fake.zsets
 
     def test_reset_clears_all_keys(self) -> None:
         import asyncio
@@ -1145,8 +1145,8 @@ class TestRateCategoryBackend:
         uid = uuid.uuid4()
         asyncio.run(backend.hit(uid, category="read", limit=10, now=0.0))
         asyncio.run(backend.hit(uid, category="write", limit=10, now=0.0))
-        assert f"rate:coach:read:{uid}" in fake.zsets
-        assert f"rate:coach:write:{uid}" in fake.zsets
+        assert f"rate:coach:read:user:{uid}" in fake.zsets
+        assert f"rate:coach:write:user:{uid}" in fake.zsets
 
 
 class TestRateLimitHeaders:
@@ -1229,3 +1229,223 @@ class TestRateLimitResultStruct:
         assert result.remaining == 0
         # 옛 항목이 100.0에 추가됨 → 100.5 시점엔 ~60초 후 만료
         assert result.reset_seconds == 60
+
+
+class TestIpRateLimit:
+    """슬라이스 16 — IP 단위 한도(미인증 표면). 사용자 키와 *네임스페이스 분리*."""
+
+    def test_inmemory_ip_isolated_from_user(self) -> None:
+        # 같은 prefix("read") 카테고리지만 user key와 ip key는 완전 분리
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        uid = uuid.uuid4()
+        # 사용자 한도 1 소진
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)).allowed
+            is True
+        )
+        assert (
+            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.1)).allowed
+            is False
+        )
+        # 같은 사용자 *as IP*가 별도 키 — IP 한도는 별개
+        assert (
+            asyncio.run(
+                backend.hit_by_ip(str(uid), category="read", limit=1, now=0.2)
+            ).allowed
+            is True
+        )
+
+    def test_redis_ip_key_prefix_explicit(self) -> None:
+        # IP 키는 `rate:coach:{cat}:ip:{addr}` — 사용자 키와 충돌 X
+        import asyncio
+
+        from whymath_backend.api._rate_limit import RedisBackend
+
+        fake = _FakeRedisClient()
+        backend = RedisBackend(client=fake)
+        ip = "203.0.113.42"
+        uid = uuid.uuid4()
+        asyncio.run(backend.hit_by_ip(ip, category="read", limit=10, now=0.0))
+        asyncio.run(backend.hit(uid, category="read", limit=10, now=0.0))
+        assert f"rate:coach:read:ip:{ip}" in fake.zsets
+        assert f"rate:coach:read:user:{uid}" in fake.zsets
+
+    def test_two_ips_independent_buckets(self) -> None:
+        # 다른 IP는 같은 한도를 독립적으로 쓴다
+        import asyncio
+
+        from whymath_backend.api._rate_limit import InMemoryBackend
+
+        backend = InMemoryBackend()
+        assert (
+            asyncio.run(
+                backend.hit_by_ip("1.1.1.1", category="write", limit=1, now=0.0)
+            ).allowed
+            is True
+        )
+        # 다른 IP는 별도 버킷
+        assert (
+            asyncio.run(
+                backend.hit_by_ip("2.2.2.2", category="write", limit=1, now=0.1)
+            ).allowed
+            is True
+        )
+
+    def test_x_forwarded_for_extraction(self) -> None:
+        # `_client_ip`가 X-Forwarded-For 첫 항목을 우선 사용
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_ip
+
+        request = MagicMock()
+        request.headers = {"x-forwarded-for": "198.51.100.1, 10.0.0.5"}
+        request.client = MagicMock()
+        request.client.host = "10.0.0.99"
+        assert _client_ip(request) == "198.51.100.1"
+
+    def test_direct_client_host_fallback(self) -> None:
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_ip
+
+        request = MagicMock()
+        request.headers = {}
+        request.client = MagicMock()
+        request.client.host = "192.0.2.99"
+        assert _client_ip(request) == "192.0.2.99"
+
+    def test_no_client_returns_none(self) -> None:
+        # request.client None → 알 수 없는 IP라 한도 미적용 신호
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_ip
+
+        request = MagicMock()
+        request.headers = {}
+        request.client = None
+        assert _client_ip(request) is None
+
+    def test_empty_xff_header_falls_back(self) -> None:
+        # X-Forwarded-For: "  " (공백) → 빈 head → request.client.host로 폴백
+        from unittest.mock import MagicMock
+
+        from whymath_backend.api._rate_limit import _client_ip
+
+        request = MagicMock()
+        request.headers = {"x-forwarded-for": "   "}
+        request.client = MagicMock()
+        request.client.host = "192.0.2.50"
+        assert _client_ip(request) == "192.0.2.50"
+
+    def test_ip_dep_enforces_limit_via_test_endpoint(self) -> None:
+        # 임시 미인증 엔드포인트로 IP dep 결선 검증
+        from fastapi import APIRouter
+
+        from whymath_backend.api._rate_limit import RateLimitedIpRead
+
+        router = APIRouter()
+
+        @router.get("/_test/ip-limited", dependencies=[RateLimitedIpRead])
+        async def _hit() -> dict[str, bool]:
+            return {"ok": True}
+
+        app = create_app()
+        app.include_router(router)
+        # IP read 한도 1, write 0(영향 없음)
+        app.dependency_overrides[get_settings] = lambda: Settings(
+            jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+            coach_rate_limit_read_per_minute=0,
+            coach_rate_limit_write_per_minute=0,
+            coach_rate_limit_ip_read_per_minute=1,
+        )
+        client = TestClient(app)
+        # 1회 통과
+        r1 = client.get("/_test/ip-limited")
+        assert r1.status_code == 200
+        # 2회 429 + 헤더
+        r2 = client.get("/_test/ip-limited")
+        assert r2.status_code == 429
+        assert r2.headers["X-RateLimit-Limit"] == "1"
+        assert r2.headers["X-RateLimit-Remaining"] == "0"
+
+
+class TestIpRateLimitEdgeCases:
+    """슬라이스 16 잔여 결선 — write IP·limit=0·IP None 폴백."""
+
+    def test_ip_write_dep_enforces_via_test_endpoint(self) -> None:
+        from fastapi import APIRouter
+
+        from whymath_backend.api._rate_limit import RateLimitedIpWrite
+
+        router = APIRouter()
+
+        @router.post("/_test/ip-write-limited", dependencies=[RateLimitedIpWrite])
+        async def _hit() -> dict[str, bool]:
+            return {"ok": True}
+
+        app = create_app()
+        app.include_router(router)
+        app.dependency_overrides[get_settings] = lambda: Settings(
+            jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+            coach_rate_limit_read_per_minute=0,
+            coach_rate_limit_write_per_minute=0,
+            coach_rate_limit_ip_write_per_minute=1,
+        )
+        client = TestClient(app)
+        assert client.post("/_test/ip-write-limited").status_code == 200
+        resp = client.post("/_test/ip-write-limited")
+        assert resp.status_code == 429
+        assert resp.headers["X-RateLimit-Limit"] == "1"
+
+    def test_ip_limit_zero_disables_enforcement(self) -> None:
+        # IP limit=0 → 의존성이 짧게 반환, 응답 헤더 미세팅
+        from fastapi import APIRouter
+
+        from whymath_backend.api._rate_limit import RateLimitedIpRead
+
+        router = APIRouter()
+
+        @router.get("/_test/ip-disabled", dependencies=[RateLimitedIpRead])
+        async def _hit() -> dict[str, bool]:
+            return {"ok": True}
+
+        app = create_app()
+        app.include_router(router)
+        app.dependency_overrides[get_settings] = lambda: Settings(
+            jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+            coach_rate_limit_ip_read_per_minute=0,  # 비활성
+        )
+        client = TestClient(app)
+        for _ in range(5):
+            resp = client.get("/_test/ip-disabled")
+            assert resp.status_code == 200
+            assert "X-RateLimit-Limit" not in resp.headers
+
+    def test_dep_skips_when_ip_unknown(self) -> None:
+        # request.client=None → IP 알 수 없음 → dep 짧게 반환(헤더 0건·예외 0건)
+        import asyncio
+        from unittest.mock import MagicMock
+
+        from fastapi import Response
+
+        from whymath_backend.api._rate_limit import (
+            rate_limit_ip_read,
+            rate_limit_ip_write,
+        )
+
+        request = MagicMock()
+        request.headers = {}
+        request.client = None
+        settings = Settings(
+            jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+            coach_rate_limit_ip_read_per_minute=1,
+            coach_rate_limit_ip_write_per_minute=1,
+        )
+        response = Response()
+        asyncio.run(rate_limit_ip_read(request, settings, response))
+        asyncio.run(rate_limit_ip_write(request, settings, response))
+        assert "X-RateLimit-Limit" not in response.headers

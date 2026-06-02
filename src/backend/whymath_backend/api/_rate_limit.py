@@ -22,9 +22,17 @@ import math
 import time
 import uuid
 from collections import deque
-from typing import Annotated, Any, Literal, NamedTuple, Protocol, cast, runtime_checkable
+from typing import (
+    Annotated,
+    Any,
+    Literal,
+    NamedTuple,
+    Protocol,
+    cast,
+    runtime_checkable,
+)
 
-from fastapi import Depends, HTTPException, Response, status
+from fastapi import Depends, HTTPException, Request, Response, status
 
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.config import Settings, get_settings
@@ -65,7 +73,9 @@ class RateLimitBackend(Protocol):
     """rate limit 백엔드 — sliding window 카운트의 저장·검사 추상.
 
     `category`(`"read"`/`"write"`)로 별도 버킷 — 한 카테고리 소진이 다른 카테고리에
-    영향 주지 않는다(읽기 폭주가 쓰기를 막거나, 그 반대 차단).
+    영향 주지 않는다(읽기 폭주가 쓰기를 막거나, 그 반대 차단). 슬라이스 16: `hit_by_ip`로
+    IP 단위 한도(미인증 표면)도 같은 backend로 처리 — 사용자 키와 IP 키는 *네임스페이스
+    분리*되어 충돌 없음(`user:<uid>` vs `ip:<addr>` 접두).
     """
 
     async def hit(
@@ -76,7 +86,18 @@ class RateLimitBackend(Protocol):
         limit: int,
         now: float,
     ) -> RateLimitResult:
-        """요청을 기록 시도 — `RateLimitResult(allowed, remaining, reset_seconds)` 반환."""
+        """*사용자 단위* 요청 기록 시도 — `RateLimitResult` 반환."""
+        ...
+
+    async def hit_by_ip(
+        self,
+        ip: str,
+        *,
+        category: RateCategory,
+        limit: int,
+        now: float,
+    ) -> RateLimitResult:
+        """*IP 단위* 요청 기록 시도 — 미인증 표면용. `RateLimitResult` 반환."""
         ...
 
     async def reset(self) -> None:
@@ -109,24 +130,20 @@ def _result_from_window(
 
 
 class InMemoryBackend:
-    """프로세스-로컬 deque per (user_id, category) — 단일 인스턴스 한정.
+    """프로세스-로컬 deque per (subject_key, category) — 단일 인스턴스 한정.
 
-    분산 환경에서는 워커별 별도 카운트 → 효과 ÷ N. 그 경우 `RedisBackend` 사용.
+    `subject_key`는 `f"user:{uid}"` 또는 `f"ip:{addr}"` 접두로 네임스페이스 분리. 분산
+    환경에서는 워커별 별도 카운트 → 효과 ÷ N. 그 경우 `RedisBackend` 사용.
     """
 
     def __init__(self) -> None:
-        self._by_key: dict[tuple[uuid.UUID, str], deque[float]] = {}
+        self._by_key: dict[tuple[str, str], deque[float]] = {}
 
-    async def hit(
-        self,
-        user_id: uuid.UUID,
-        *,
-        category: RateCategory,
-        limit: int,
-        now: float,
+    async def _hit_by_key(
+        self, subject_key: str, *, category: RateCategory, limit: int, now: float
     ) -> RateLimitResult:
         cutoff = now - _WINDOW_SECONDS
-        bucket = self._by_key.setdefault((user_id, category), deque())
+        bucket = self._by_key.setdefault((subject_key, category), deque())
         while bucket and bucket[0] < cutoff:
             bucket.popleft()
         allowed = len(bucket) < limit
@@ -140,6 +157,21 @@ class InMemoryBackend:
             oldest_ts=oldest,
             now=now,
         )
+
+    async def hit(
+        self,
+        user_id: uuid.UUID,
+        *,
+        category: RateCategory,
+        limit: int,
+        now: float,
+    ) -> RateLimitResult:
+        return await self._hit_by_key(f"user:{user_id}", category=category, limit=limit, now=now)
+
+    async def hit_by_ip(
+        self, ip: str, *, category: RateCategory, limit: int, now: float
+    ) -> RateLimitResult:
+        return await self._hit_by_key(f"ip:{ip}", category=category, limit=limit, now=now)
 
     async def reset(self) -> None:
         self._by_key.clear()
@@ -254,20 +286,16 @@ class RedisBackend:
             self._client = _build_default_redis_client(self._resolved_settings)
         return self._client
 
-    def _key(self, user_id: uuid.UUID, category: RateCategory) -> str:
-        # 카테고리별 키 분리 — `rate:coach:read:{uid}` vs `rate:coach:write:{uid}`
-        return f"{self._KEY_PREFIX}{category}:{user_id}"
+    def _key(self, subject_key: str, category: RateCategory) -> str:
+        # 카테고리·subject(user:/ip:)별 키 분리 — 예: `rate:coach:read:user:{uid}` /
+        # `rate:coach:write:ip:{addr}`. 사용자·IP 네임스페이스 충돌 없음.
+        return f"{self._KEY_PREFIX}{category}:{subject_key}"
 
-    async def hit(
-        self,
-        user_id: uuid.UUID,
-        *,
-        category: RateCategory,
-        limit: int,
-        now: float,
+    async def _hit_by_key(
+        self, subject_key: str, *, category: RateCategory, limit: int, now: float
     ) -> RateLimitResult:
         client = self._get_client()
-        key = self._key(user_id, category)
+        key = self._key(subject_key, category)
         unique_member = f"{now}:{uuid.uuid4().hex}"
         try:
             raw = await client.evalsha(_LUA_HIT_SHA1, 1, key, now, limit, unique_member)
@@ -286,6 +314,21 @@ class RedisBackend:
             oldest_ts=oldest_ts,
             now=now,
         )
+
+    async def hit(
+        self,
+        user_id: uuid.UUID,
+        *,
+        category: RateCategory,
+        limit: int,
+        now: float,
+    ) -> RateLimitResult:
+        return await self._hit_by_key(f"user:{user_id}", category=category, limit=limit, now=now)
+
+    async def hit_by_ip(
+        self, ip: str, *, category: RateCategory, limit: int, now: float
+    ) -> RateLimitResult:
+        return await self._hit_by_key(f"ip:{ip}", category=category, limit=limit, now=now)
 
     async def reset(self) -> None:
         """패턴 매칭 키 일괄 삭제 — 테스트 격리용. production 미호출."""
@@ -392,8 +435,90 @@ async def rate_limit_write(
     )
 
 
+def _client_ip(request: Request) -> str | None:
+    """요청에서 IP 추출 — `X-Forwarded-For` 첫 항목 우선(LB 뒤 운영), 없으면 직접 연결.
+
+    프록시 신뢰 모델: 본 함수는 *직전 신뢰 가능한 프록시*가 `X-Forwarded-For`를 설정했다는
+    *가정*에 의존한다(LB·CDN). 신뢰 없는 환경에선 클라이언트가 임의 헤더 주입 가능 — 운영
+    시 `uvicorn --proxy-headers` + 신뢰 IP 화이트리스트 필수. 헤더 미설정·`request.client`
+    None 이면 None 반환(rate limit 비활성 — 알 수 없는 IP는 차단도 통과도 안전한 fallback
+    선택, 본 함수는 None 시 호출자가 한도 미적용으로 처리).
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        # 콤마 구분 — 가장 좌측이 원본 클라이언트, 우측은 프록시 체인
+        head = forwarded.split(",")[0].strip()
+        if head:
+            return head
+    if request.client is not None:
+        return request.client.host
+    return None
+
+
+async def _enforce_by_ip(
+    ip: str,
+    *,
+    category: RateCategory,
+    limit: int,
+    response: Response,
+) -> None:
+    """IP 단위 한도 검사. 사용자 한도와 동일 시맨틱(429 + 헤더). limit=0이면 비활성."""
+    if limit == 0:
+        return
+    result = await _BACKEND.hit_by_ip(ip, category=category, limit=limit, now=time.monotonic())
+    headers = _rate_headers(limit, result)
+    if not result.allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="요청이 너무 많습니다(분당 한도 초과). 잠시 후 다시 시도하세요.",
+            headers={"Retry-After": str(result.reset_seconds or 60), **headers},
+        )
+    for key, value in headers.items():
+        response.headers[key] = value
+
+
+async def rate_limit_ip_read(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+) -> None:
+    """*IP 단위 읽기* 한도 — 미인증 GET 엔드포인트용. IP 추출 실패 시 적용 안 함."""
+    ip = _client_ip(request)
+    if ip is None:
+        return
+    await _enforce_by_ip(
+        ip,
+        category="read",
+        limit=settings.coach_rate_limit_ip_read_per_minute,
+        response=response,
+    )
+
+
+async def rate_limit_ip_write(
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+) -> None:
+    """*IP 단위 쓰기* 한도 — 미인증 POST 엔드포인트용. IP 추출 실패 시 적용 안 함."""
+    ip = _client_ip(request)
+    if ip is None:
+        return
+    await _enforce_by_ip(
+        ip,
+        category="write",
+        limit=settings.coach_rate_limit_ip_write_per_minute,
+        response=response,
+    )
+
+
 RateLimitedRead = Depends(rate_limit_read)
-"""GET 엔드포인트용 의존성 — `dependencies=[RateLimitedRead]`."""
+"""GET 엔드포인트용 의존성(사용자 단위) — `dependencies=[RateLimitedRead]`."""
 
 RateLimitedWrite = Depends(rate_limit_write)
-"""POST 엔드포인트용 의존성 — `dependencies=[RateLimitedWrite]`."""
+"""POST 엔드포인트용 의존성(사용자 단위) — `dependencies=[RateLimitedWrite]`."""
+
+RateLimitedIpRead = Depends(rate_limit_ip_read)
+"""*미인증* GET 엔드포인트용 의존성(IP 단위) — `dependencies=[RateLimitedIpRead]`."""
+
+RateLimitedIpWrite = Depends(rate_limit_ip_write)
+"""*미인증* POST 엔드포인트용 의존성(IP 단위) — `dependencies=[RateLimitedIpWrite]`."""
