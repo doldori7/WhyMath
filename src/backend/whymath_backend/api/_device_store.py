@@ -45,26 +45,36 @@ class DeviceInfo(NamedTuple):
     """본인 디바이스 목록 응답의 *내부* 표현 — store→라우터 seam.
 
     Pydantic 응답 schema는 `api/devices.py`가 별도 정의(레이어 분리: store는 *데이터 표면*,
-    라우터는 *HTTP 표면*). secret_plain·user_id·revoked 정보는 노출 안 함(보안·표면 최소화).
+    라우터는 *HTTP 표면*). secret_plain·user_id는 노출 안 함(보안·PII 표면 최소화).
 
     slice 32: `last_used_at` 추가 — 마지막 verify 성공 시각(없으면 None=한 번도 미사용).
     `CachedDeviceStore` 경유 시 cache miss에서만 갱신(정밀도 ≈ cache TTL).
+
+    slice 37: `revoked` + `revoked_at` 추가 — `include_revoked=True` 모드에서 *본인 폐기 이력*
+    노출용. 본인 데이터라 user_id PII 우려 없음. 폐기 시각으로 UI가 "3일 전 폐기됨" 등 표시.
     """
 
     device_id: str
     created_at: datetime
     last_used_at: datetime | None = None
+    revoked: bool = False
+    revoked_at: datetime | None = None
 
 
 class _CredRecord(NamedTuple):
     """InMemoryDeviceStore 내부 행 — 슬라이스 32에서 last_used_at 추가하며 NamedTuple로
-    리팩터(이전 4-tuple 인덱싱 → 이름 접근). `_replace`로 불변 업데이트 가능."""
+    리팩터(이전 4-tuple 인덱싱 → 이름 접근). `_replace`로 불변 업데이트 가능.
+
+    slice 37: `revoked_at` 추가 — Pg ORM과 parity(slice 23). revoke/cleanup_stale은
+    `datetime.now(UTC)` 채움·미폐기는 None.
+    """
 
     user_id: uuid.UUID
     secret_plain: str
     revoked: bool
     created_at: datetime
     last_used_at: datetime | None
+    revoked_at: datetime | None
 
 
 @runtime_checkable
@@ -96,11 +106,14 @@ class DeviceCredentialStore(Protocol):
         """
         ...
 
-    async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
-        """본인 소유 *활성*(미폐기) device 목록 — 최신 등록순(`created_at` DESC).
+    async def list_for_user(
+        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+    ) -> list[DeviceInfo]:
+        """본인 소유 device 목록 — 최신 등록순(`created_at` DESC).
 
-        slice 29 추가. 빈 리스트 가능(등록 없음). 폐기된 device는 *포함 안 함* — 사용자
-        대시보드의 "관리 가능 디바이스" UI 정합. 폐기 이력 조회는 후속(`include_revoked=True`).
+        slice 29 추가·기본 *활성*(미폐기) device만. slice 37: `include_revoked=True`면 폐기
+        이력 포함 — Flutter "기기 관리 → 폐기 이력" UI 결선. 본인 데이터라 PII 우려 없음
+        (DeviceInfo의 revoked/revoked_at 필드 활용).
         """
         ...
 
@@ -147,6 +160,7 @@ class InMemoryDeviceStore:
             revoked=False,
             created_at=datetime.now(UTC),
             last_used_at=None,
+            revoked_at=None,
         )
         return device_id, secret_plain
 
@@ -170,24 +184,35 @@ class InMemoryDeviceStore:
         # slice 24: 본인 소유 검증 — 타인 device면 False(404 등가·정보 비누설)
         if cred.user_id != owner_id:
             return False
-        self._creds[device_id] = cred._replace(revoked=True)
+        # slice 37: revoked_at 채움 — Pg ORM parity
+        self._creds[device_id] = cred._replace(revoked=True, revoked_at=datetime.now(UTC))
         return True
 
-    async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
-        # slice 29: 본인 소유 활성 device — created_at DESC 정렬
+    async def list_for_user(
+        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+    ) -> list[DeviceInfo]:
+        # slice 29: 본인 소유 device — created_at DESC 정렬
         # slice 32: last_used_at 함께 노출
-        active = [
-            DeviceInfo(device_id=d, created_at=c.created_at, last_used_at=c.last_used_at)
+        # slice 37: include_revoked=True면 폐기 이력 포함·revoked/revoked_at 노출
+        items = [
+            DeviceInfo(
+                device_id=d,
+                created_at=c.created_at,
+                last_used_at=c.last_used_at,
+                revoked=c.revoked,
+                revoked_at=c.revoked_at,
+            )
             for d, c in self._creds.items()
-            if c.user_id == owner_id and not c.revoked
+            if c.user_id == owner_id and (include_revoked or not c.revoked)
         ]
-        active.sort(key=lambda info: info.created_at, reverse=True)
-        return active
+        items.sort(key=lambda info: info.created_at, reverse=True)
+        return items
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         # slice 33+34: N일 이상 미사용 활성 device 식별 + 옵션 폐기. dry_run이면 식별만.
         threshold = datetime.now(UTC) - timedelta(days=max_age_days)
         affected: list[str] = []
+        now = datetime.now(UTC)
         for device_id, cred in list(self._creds.items()):
             if cred.revoked:
                 continue
@@ -196,7 +221,8 @@ class InMemoryDeviceStore:
             if last_active < threshold:
                 affected.append(device_id)
                 if not dry_run:
-                    self._creds[device_id] = cred._replace(revoked=True)
+                    # slice 37: revoked_at 채움(Pg ORM parity·slice 33의 누락 수정)
+                    self._creds[device_id] = cred._replace(revoked=True, revoked_at=now)
         return affected
 
     def reset(self) -> None:
@@ -275,28 +301,34 @@ class PgDeviceStore:
             rowcount = getattr(result, "rowcount", 0) or 0
             return bool(rowcount > 0)
 
-    async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
-        # slice 29: SELECT device_id, created_at WHERE user_id=X AND revoked=false
-        # ORDER BY created_at DESC. revoked=False 필터링은 *서버측*(network·메모리 절감).
-        # slice 32: last_used_at 함께 SELECT — UI가 "마지막 사용" 표시 가능.
+    async def list_for_user(
+        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+    ) -> list[DeviceInfo]:
+        # slice 29: SELECT WHERE user_id=X AND revoked=false ORDER BY created_at DESC.
+        # slice 32: last_used_at 함께 SELECT.
+        # slice 37: include_revoked=True면 revoked 필터 제거·revoked/revoked_at 컬럼 추가
         from whymath_backend.db.models.device import DeviceCredential
 
         async with self._sessionmaker() as session:
-            stmt = (
-                select(
-                    DeviceCredential.device_id,
-                    DeviceCredential.created_at,
-                    DeviceCredential.last_used_at,
-                )
-                .where(
-                    DeviceCredential.user_id == owner_id,
-                    DeviceCredential.revoked.is_(False),
-                )
-                .order_by(DeviceCredential.created_at.desc())
-            )
+            stmt = select(
+                DeviceCredential.device_id,
+                DeviceCredential.created_at,
+                DeviceCredential.last_used_at,
+                DeviceCredential.revoked,
+                DeviceCredential.revoked_at,
+            ).where(DeviceCredential.user_id == owner_id)
+            if not include_revoked:
+                stmt = stmt.where(DeviceCredential.revoked.is_(False))
+            stmt = stmt.order_by(DeviceCredential.created_at.desc())
             result = await session.execute(stmt)
             return [
-                DeviceInfo(device_id=row[0], created_at=row[1], last_used_at=row[2])
+                DeviceInfo(
+                    device_id=row[0],
+                    created_at=row[1],
+                    last_used_at=row[2],
+                    revoked=row[3],
+                    revoked_at=row[4],
+                )
                 for row in result.all()
             ]
 
@@ -431,9 +463,12 @@ class CachedDeviceStore:
             await self._cache.delete(_VERIFY_CACHE_KEY_PREFIX + device_id)
         return result
 
-    async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
+    async def list_for_user(
+        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+    ) -> list[DeviceInfo]:
         # 목록 조회는 캐시 안 함 — 등록/폐기 직후 신선도 우선(빈도 낮은 관리 표면).
-        return await self._inner.list_for_user(owner_id)
+        # slice 37: include_revoked 인자 그대로 전달
+        return await self._inner.list_for_user(owner_id, include_revoked=include_revoked)
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         # slice 34: inner가 폐기 device_id 목록을 반환하므로 *정확히* 그 키들만 캐시 invalidate.

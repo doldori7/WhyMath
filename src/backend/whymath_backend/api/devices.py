@@ -59,10 +59,12 @@ class DeviceRevokeResponse(BaseModel):
 
 
 class DeviceInfoSchema(BaseModel):
-    """본인 디바이스 정보 — 목록 응답 원소(slice 29). secret_plain·revoked 등 *내부 상태* 비노출.
+    """본인 디바이스 정보 — 목록 응답 원소(slice 29). secret_plain·user_id PII 비노출.
 
     slice 32: `last_used_at` 추가 — 마지막 verify 성공 시각(`null`=한 번도 미사용). 정밀도는
     `CachedDeviceStore` 사용 시 cache TTL(기본 60s) — UI "방금 사용/X분 전" 표시에 충분.
+    slice 37: `revoked` + `revoked_at` 추가 — `?include_revoked=true` 시 폐기 이력 식별·시각
+    표시(UI "3일 전 폐기" 등). 본인 데이터라 PII 우려 없음.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -75,6 +77,17 @@ class DeviceInfoSchema(BaseModel):
             "마지막 verify 성공 시각(UTC ISO8601). `null`이면 등록 후 한 번도 verify 안 됨. "
             "CachedDeviceStore 사용 시 cache miss 경로에서만 갱신(정밀도 ≈ cache TTL)."
         ),
+    )
+    revoked: bool = Field(
+        default=False,
+        description=(
+            "폐기 여부 — `?include_revoked=true` 모드에서만 의미 있음(기본 false). "
+            "기본 응답은 활성 device만이라 항상 false."
+        ),
+    )
+    revoked_at: datetime | None = Field(
+        default=None,
+        description="폐기 시각(UTC ISO8601). `null`이면 미폐기. revoked=true일 때만 값.",
     )
 
 
@@ -138,25 +151,32 @@ async def revoke_device(
 @router.get(
     "",
     response_model=DeviceListResponse,
-    summary="내 디바이스 목록 — 활성 자격증명만 (created_at DESC)",
+    summary="내 디바이스 목록 — 기본 활성만 (`?include_revoked=true`로 폐기 이력 포함)",
 )
-async def list_my_devices(user: ConsentedUser) -> DeviceListResponse:
-    """본인 *활성* 디바이스 목록 — `user.user_id`로 스코프(타인 device 노출 0).
+async def list_my_devices(
+    user: ConsentedUser,
+    include_revoked: bool = False,
+) -> DeviceListResponse:
+    """본인 디바이스 목록 — `user.user_id`로 스코프(타인 device 노출 0).
 
-    slice 29. Flutter "디바이스 관리" UI의 1차 결선 — 사용자가 자기 등록 device 목록 확인
-    후 분실/도난 디바이스를 `/v1/devices/{id}/revoke`로 폐기. 폐기된 device는 미포함(향후
-    `include_revoked=true` 쿼리 파라미터 추가 가능).
+    slice 29: 기본 활성만 — Flutter "디바이스 관리" UI의 1차 결선·사용자가 자기 등록 device
+    목록 확인 후 분실/도난 디바이스를 `/v1/devices/{id}/revoke`로 폐기.
 
-    응답에 *secret_plain·user_id·revoked 등 내부 상태 미포함* — 표면 최소화.
+    slice 37: `?include_revoked=true` → 폐기 이력 포함(시간순 DESC). Flutter "기기 관리 →
+    폐기 기록" UI 또는 보안 감사 화면 결선. `revoked`·`revoked_at` 필드로 이력 식별.
+
+    응답에 *secret_plain·user_id PII 미포함* — 표면 최소화. revoked/revoked_at은 본인 데이터.
     """
     store = _require_store()
-    infos = await store.list_for_user(user.user_id)
+    infos = await store.list_for_user(user.user_id, include_revoked=include_revoked)
     return DeviceListResponse(
         devices=[
             DeviceInfoSchema(
                 device_id=i.device_id,
                 created_at=i.created_at,
                 last_used_at=i.last_used_at,
+                revoked=i.revoked,
+                revoked_at=i.revoked_at,
             )
             for i in infos
         ]

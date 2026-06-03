@@ -453,13 +453,18 @@ class TestListDevicesEndpoint:
         body = resp.json()
         device_ids = [d["device_id"] for d in body["devices"]]
         assert device_ids == [d2]  # 폐기된 d1·타인 d_other 제외
-        # secret_plain·user_id·revoked 등 내부 상태 미노출
-        # slice 32: last_used_at 추가
+        # secret_plain·user_id PII 미노출
+        # slice 32: last_used_at·slice 37: revoked/revoked_at 추가
         assert set(body["devices"][0].keys()) == {
             "device_id",
             "created_at",
             "last_used_at",
+            "revoked",
+            "revoked_at",
         }
+        # 활성만 응답이므로 revoked=False·revoked_at=None
+        assert body["devices"][0]["revoked"] is False
+        assert body["devices"][0]["revoked_at"] is None
 
     async def test_ordered_by_created_at_desc(self) -> None:
         """여러 device 등록 시 최신 등록순(created_at DESC)."""
@@ -480,6 +485,29 @@ class TestListDevicesEndpoint:
         store = InMemoryDeviceStore()
         resp = _no_auth_client(store).get("/v1/devices")
         assert resp.status_code == 401
+
+    async def test_include_revoked_returns_revoked_devices(self) -> None:
+        """slice 37: `?include_revoked=true` → 폐기 이력 포함·revoked/revoked_at 노출."""
+        store = InMemoryDeviceStore()
+        d_active, _ = await store.register(_UID)
+        d_revoked, _ = await store.register(_UID)
+        await store.revoke(d_revoked, _UID)
+        # 기본: 활성 1개만
+        resp_default = _client(store).get("/v1/devices")
+        assert [d["device_id"] for d in resp_default.json()["devices"]] == [d_active]
+        # include_revoked=true: 둘 다(DESC)
+        resp_all = _client(store).get("/v1/devices?include_revoked=true")
+        body = resp_all.json()
+        device_ids = [d["device_id"] for d in body["devices"]]
+        assert sorted(device_ids) == sorted([d_active, d_revoked])
+        # 폐기된 device는 revoked=true·revoked_at 채워짐
+        revoked_entry = next(d for d in body["devices"] if d["device_id"] == d_revoked)
+        assert revoked_entry["revoked"] is True
+        assert revoked_entry["revoked_at"] is not None
+        # 활성 device는 revoked=false·revoked_at=null
+        active_entry = next(d for d in body["devices"] if d["device_id"] == d_active)
+        assert active_entry["revoked"] is False
+        assert active_entry["revoked_at"] is None
 
 
 class TestInMemoryDeviceStoreListForUser:
@@ -504,6 +532,23 @@ class TestInMemoryDeviceStoreListForUser:
         await store.revoke(d1, _UID)
         infos = await store.list_for_user(_UID)
         assert [i.device_id for i in infos] == [d2]
+
+    async def test_include_revoked_includes_polished(self) -> None:
+        """slice 37: include_revoked=True → 폐기 device도 포함·revoked/revoked_at 채움."""
+        store = InMemoryDeviceStore()
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        await store.revoke(d1, _UID)
+        infos = await store.list_for_user(_UID, include_revoked=True)
+        ids = [i.device_id for i in infos]
+        assert sorted(ids) == sorted([d1, d2])
+        # d1은 revoked·revoked_at 채워짐, d2는 활성
+        d1_info = next(i for i in infos if i.device_id == d1)
+        d2_info = next(i for i in infos if i.device_id == d2)
+        assert d1_info.revoked is True
+        assert d1_info.revoked_at is not None
+        assert d2_info.revoked is False
+        assert d2_info.revoked_at is None
 
 
 class TestInMemoryDeviceStoreLastUsedAt:
@@ -929,9 +974,13 @@ class _CountingInnerStore:
         self.revoke_calls += 1
         return await self._inner.revoke(device_id, owner_id)
 
-    async def list_for_user(self, owner_id: uuid.UUID) -> Any:
+    async def list_for_user(
+        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+    ) -> Any:
         self.list_calls += 1
-        return await self._inner.list_for_user(owner_id)
+        return await self._inner.list_for_user(
+            owner_id, include_revoked=include_revoked
+        )
 
     async def cleanup_stale(
         self, max_age_days: int, *, dry_run: bool = False
@@ -2052,6 +2101,25 @@ class TestPgDeviceStoreListForUser:
         # 잘못된 sig → False → last_used_at 갱신 0
         assert await store.verify(device_id, "0" * 64) is False
         assert store_dict[device_id].last_used_at is None
+
+    async def test_include_revoked_returns_revoked_rows(self) -> None:
+        """slice 37: include_revoked=True → WHERE revoked=False 절 제거·폐기 행 포함."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        await store.revoke(d1, _UID)
+        # 기본: 활성 1개만
+        active_only = await store.list_for_user(_UID)
+        assert [i.device_id for i in active_only] == [d2]
+        # include_revoked=True: 둘 다
+        all_infos = await store.list_for_user(_UID, include_revoked=True)
+        ids = sorted(i.device_id for i in all_infos)
+        assert ids == sorted([d1, d2])
+        # 폐기된 d1은 revoked=True·revoked_at 채워짐
+        d1_info = next(i for i in all_infos if i.device_id == d1)
+        assert d1_info.revoked is True
+        assert d1_info.revoked_at is not None
 
 
 class TestPgDeviceStoreCleanupStale:
