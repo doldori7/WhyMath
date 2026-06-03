@@ -431,8 +431,12 @@ def test_cleanup_stale_devices_on_live_pg() -> None:
                         },
                     )
 
-                # cleanup → 1건 폐기
-                assert await store.cleanup_stale(max_age_days=30) == 1
+                # slice 34: dry_run으로 미리보기 → 같은 stale id 반환·실제 폐기 0
+                preview = await store.cleanup_stale(max_age_days=30, dry_run=True)
+                assert preview == [d_stale]
+                # cleanup → 1건 폐기·반환 목록에 d_stale 포함
+                affected = await store.cleanup_stale(max_age_days=30)
+                assert affected == [d_stale]
 
                 # fresh는 활성·stale은 폐기
                 async with sm() as session:
