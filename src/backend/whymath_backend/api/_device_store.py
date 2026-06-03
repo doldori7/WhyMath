@@ -432,6 +432,7 @@ _DEVICE_STORE: DeviceCredentialStore | None = None
 
 
 _VERIFY_CACHE_KEY_PREFIX = "device_verify:"
+_COUNT_CACHE_KEY_PREFIX = "device_count:"  # slice 40: count_for_user 결과 캐시
 
 
 @runtime_checkable
@@ -488,8 +489,13 @@ class CachedDeviceStore:
         self._ttl = ttl_seconds
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
-        # 등록은 캐시와 무관 — 그대로 위임
-        return await self._inner.register(user_id)
+        result = await self._inner.register(user_id)
+        # slice 40: count 캐시 invalidate(active·all 두 키) — 새 device가 count에 반영
+        await self._cache.delete(
+            f"{_COUNT_CACHE_KEY_PREFIX}{user_id}:active",
+            f"{_COUNT_CACHE_KEY_PREFIX}{user_id}:all",
+        )
+        return result
 
     async def verify(self, device_id: str, signature_hex: str) -> bool:
         # 1) 캐시 GET — hit + 일치면 DB 라운드트립 0
@@ -511,7 +517,12 @@ class CachedDeviceStore:
         # revoke 성공 시 즉시 캐시 invalidate — stale window 최소화
         result = await self._inner.revoke(device_id, owner_id)
         if result:
-            await self._cache.delete(_VERIFY_CACHE_KEY_PREFIX + device_id)
+            # slice 26: verify 캐시 DEL + slice 40: count 캐시 두 키 모두 DEL(폐기로 active 감소)
+            await self._cache.delete(
+                _VERIFY_CACHE_KEY_PREFIX + device_id,
+                f"{_COUNT_CACHE_KEY_PREFIX}{owner_id}:active",
+                f"{_COUNT_CACHE_KEY_PREFIX}{owner_id}:all",
+            )
         return result
 
     async def list_for_user(
@@ -529,9 +540,18 @@ class CachedDeviceStore:
         )
 
     async def count_for_user(self, owner_id: uuid.UUID, *, include_revoked: bool = False) -> int:
-        # slice 39: count도 캐시 안 함(register/revoke 즉시 신선도 우선·자기 데이터 사용자별
-        # 키 폭발 위험·1 round-trip이라 부담 낮음).
-        return await self._inner.count_for_user(owner_id, include_revoked=include_revoked)
+        # slice 40: count 결과 캐시 — register/revoke가 즉시 invalidate하므로 stale 위험 ≈ 0
+        # (cleanup_stale은 시스템 호출·TTL 자연 만료로 회복). 키 접미사 active/all로
+        # include_revoked 분기 분리(서로 다른 값).
+        suffix = "all" if include_revoked else "active"
+        cache_key = f"{_COUNT_CACHE_KEY_PREFIX}{owner_id}:{suffix}"
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            cached_str = cached.decode("utf-8") if isinstance(cached, bytes) else cached
+            return int(cached_str)
+        result = await self._inner.count_for_user(owner_id, include_revoked=include_revoked)
+        await self._cache.setex(cache_key, self._ttl, str(result))
+        return result
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         # slice 34: inner가 폐기 device_id 목록을 반환하므로 *정확히* 그 키들만 캐시 invalidate.

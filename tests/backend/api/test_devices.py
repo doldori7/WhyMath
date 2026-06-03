@@ -1213,9 +1213,14 @@ class TestCachedDeviceStoreRevoke:
         store = CachedDeviceStore(counter, cache, ttl_seconds=60)
         await store.verify(device_id, sig)  # warm cache
         assert "device_verify:" + device_id in cache.store
-        # revoke → DEL
+        # slice 40: count 캐시도 미리 적재 — revoke가 두 키 모두 invalidate해야
+        cache.store[f"device_count:{_UID}:active"] = "5"
+        cache.store[f"device_count:{_UID}:all"] = "5"
+        # revoke → DEL(verify + count active + count all)
         assert await store.revoke(device_id, _UID) is True
         assert "device_verify:" + device_id not in cache.store
+        assert f"device_count:{_UID}:active" not in cache.store
+        assert f"device_count:{_UID}:all" not in cache.store
         # 후속 verify → cache miss + inner는 False(revoked)
         before_verify = counter.verify_calls
         assert await store.verify(device_id, sig) is False
@@ -1239,19 +1244,24 @@ class TestCachedDeviceStoreRevoke:
 
 
 class TestCachedDeviceStoreRegister:
-    """register는 캐시 무관 — 그대로 위임."""
+    """register는 inner 위임 + slice 40: count 캐시 invalidate(active·all 두 키)."""
 
-    async def test_register_passthrough(self) -> None:
+    async def test_register_passthrough_invalidates_count_cache(self) -> None:
         inner_real = InMemoryDeviceStore()
         counter = _CountingInnerStore(inner_real)
         cache = _FakeCacheClient()
         store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        # 미리 count 캐시 적재 — register가 invalidate해야 함
+        cache.store[f"device_count:{_UID}:active"] = "5"
+        cache.store[f"device_count:{_UID}:all"] = "5"
         device_id, secret_plain = await store.register(_UID)
         assert counter.register_calls == 1
-        # register는 cache 접근 안 함
+        # slice 40: count 캐시 두 키 모두 DEL
+        assert f"device_count:{_UID}:active" not in cache.store
+        assert f"device_count:{_UID}:all" not in cache.store
+        # verify 캐시는 무관(register는 verify 캐시 안 건드림)
         assert cache.get_calls == 0
         assert cache.setex_calls == 0
-        assert cache.delete_calls == 0
         # 라운드트립 검증 — 발급된 자격증명으로 verify True
         sig = _sign(secret_plain, device_id)
         assert await store.verify(device_id, sig) is True
@@ -1282,8 +1292,8 @@ class TestCachedDeviceStoreListForUser:
         assert cache.setex_calls == 0
         assert cache.delete_calls == 0
 
-    async def test_count_passthrough_no_cache_access(self) -> None:
-        """slice 39: count_for_user는 inner 위임·캐시 미접근(slice 26 정책 유지)."""
+    async def test_count_first_call_misses_cache_and_sets(self) -> None:
+        """slice 40: 첫 호출 → cache miss → inner.count + SETEX."""
         inner_real = InMemoryDeviceStore()
         await inner_real.register(_UID)
         await inner_real.register(_UID)
@@ -1291,9 +1301,64 @@ class TestCachedDeviceStoreListForUser:
         cache = _FakeCacheClient()
         store = CachedDeviceStore(counter, cache, ttl_seconds=60)
         assert await store.count_for_user(_UID) == 2
-        # 캐시 접근 0
-        assert cache.get_calls == 0
-        assert cache.setex_calls == 0
+        # cache miss → GET 1회·inner 호출·SETEX 1회
+        assert cache.get_calls == 1
+        assert counter.cleanup_calls == 0
+        assert cache.setex_calls == 1
+        # 캐시 키 형식: device_count:{uid}:active
+        assert cache.store[f"device_count:{_UID}:active"] == "2"
+
+    async def test_count_second_call_hits_cache_skips_inner(self) -> None:
+        """slice 40: 두 번째 호출 → cache hit → inner.count_for_user 호출 안 함."""
+        inner_real = InMemoryDeviceStore()
+        await inner_real.register(_UID)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        # warm
+        await store.count_for_user(_UID)
+        # 2번째 호출 — inner.count 호출 안 함
+        cached_result = await store.count_for_user(_UID)
+        assert cached_result == 1
+        # SETEX는 첫 호출 1회만(2번째는 캐시 hit)
+        assert cache.setex_calls == 1
+
+    async def test_count_include_revoked_uses_separate_key(self) -> None:
+        """slice 40: include_revoked=True/False는 별 캐시 키(active/all)."""
+        inner_real = InMemoryDeviceStore()
+        await inner_real.register(_UID)
+        d_revoke, _ = await inner_real.register(_UID)
+        await inner_real.revoke(d_revoke, _UID)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        # 활성: 1
+        assert await store.count_for_user(_UID, include_revoked=False) == 1
+        # 폐기 포함: 2 — 별 키
+        assert await store.count_for_user(_UID, include_revoked=True) == 2
+        # 두 키가 *별도로* 캐시됨
+        assert cache.store[f"device_count:{_UID}:active"] == "1"
+        assert cache.store[f"device_count:{_UID}:all"] == "2"
+
+    async def test_count_cache_bytes_response(self) -> None:
+        """slice 40: redis decode_responses=False(bytes 반환)도 처리."""
+        inner_real = InMemoryDeviceStore()
+        await inner_real.register(_UID)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        # bytes로 미리 캐시
+        cache.store[f"device_count:{_UID}:active"] = "1"
+        # get을 bytes 반환으로 monkey
+        original_get = cache.get
+
+        async def _get_bytes(key: str) -> bytes | None:
+            val = await original_get(key)
+            return val.encode("utf-8") if isinstance(val, str) else val
+
+        cache.get = _get_bytes  # type: ignore[method-assign]
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        # bytes → utf-8 decode → int(1)
+        assert await store.count_for_user(_UID) == 1
 
 
 class TestCachedDeviceStoreTTL:
