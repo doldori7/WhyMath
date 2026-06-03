@@ -994,10 +994,11 @@ class TestCachedDeviceStoreTTL:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _lifespan_settings(mode: str) -> Settings:
+def _lifespan_settings(mode: str, timeout_seconds: float = 5.0) -> Settings:
     return Settings(
         jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
         device_store_mode=mode,  # type: ignore[arg-type]
+        device_store_health_check_timeout_seconds=timeout_seconds,
     )
 
 
@@ -1335,6 +1336,87 @@ class TestPingDeviceStoreHealth:
         with pytest.raises(RuntimeError, match="Redis 미도달"):
             await ds_mod.ping_device_store_health(_lifespan_settings("pg_cached"))
         # ping 실패에도 cleanup 보장
+        assert aclose_called["hit"] is True
+
+    async def test_pg_ping_timeout_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """slice 31: PG ping이 timeout 초과 시 RuntimeError(timeout 메시지 명시)."""
+        import asyncio as _asyncio
+
+        from whymath_backend.api import _device_store as ds_mod
+
+        class _HangingSession:
+            async def __aenter__(self) -> _HangingSession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                # 무한 대기 — asyncio.timeout이 cancel
+                await _asyncio.sleep(60)
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _HangingSession()),
+            raising=True,
+        )
+        # timeout 0.01s — 즉시 발화
+        with pytest.raises(RuntimeError, match="PostgreSQL ping.*응답 없음"):
+            await ds_mod.ping_device_store_health(
+                _lifespan_settings("pg", timeout_seconds=0.01)
+            )
+
+    async def test_redis_ping_timeout_raises_runtime_error_and_closes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """slice 31: Redis ping timeout 시 RuntimeError + aclose 여전히 호출."""
+        import asyncio as _asyncio
+
+        from whymath_backend.api import _device_store as ds_mod
+
+        class _OkSession:
+            async def __aenter__(self) -> _OkSession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                pass
+
+        aclose_called: dict[str, bool] = {"hit": False}
+
+        class _HangingRedis:
+            async def ping(self) -> None:
+                await _asyncio.sleep(60)
+
+            async def get(self, _k: str) -> None:
+                return None
+
+            async def setex(self, _k: str, _s: int, _v: str) -> None:
+                pass
+
+            async def delete(self, *_k: str) -> int:
+                return 0
+
+            async def aclose(self) -> None:
+                aclose_called["hit"] = True
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _OkSession()),
+            raising=True,
+        )
+        monkeypatch.setattr(
+            ds_mod, "_build_redis_for_cache", lambda _s: _HangingRedis()
+        )
+        with pytest.raises(RuntimeError, match="Redis ping.*응답 없음"):
+            await ds_mod.ping_device_store_health(
+                _lifespan_settings("pg_cached", timeout_seconds=0.01)
+            )
+        # timeout 시에도 cleanup 보장(연결 leak 0)
         assert aclose_called["hit"] is True
 
 

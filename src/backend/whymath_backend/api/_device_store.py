@@ -434,7 +434,13 @@ async def ping_device_store_health(settings: Any) -> None:
 
     `pg`/`pg_cached` 모드면 PG ping(SELECT 1). `pg_cached`면 추가로 Redis ping. 메시지에
     어느 구성요소가 실패했는지·폴백 가능한 모드를 명시(운영 진단성).
+
+    슬라이스 31: 각 ping에 `asyncio.timeout(settings.device_store_health_check_timeout_seconds)`
+    적용 — 인프라 응답 지연 시 startup 무한 대기 방지. 초과 시 TimeoutError를 RuntimeError로
+    감싸 fail-fast(메시지에 timeout 값 명시).
     """
+    import asyncio
+
     from sqlalchemy import text
 
     from whymath_backend.db.session import get_sessionmaker
@@ -443,11 +449,20 @@ async def ping_device_store_health(settings: Any) -> None:
     if mode == "none":
         return
 
+    timeout = settings.device_store_health_check_timeout_seconds
+
     # PG 도달성
     try:
-        sm = get_sessionmaker(settings)
-        async with sm() as session:
-            await session.execute(text("SELECT 1"))
+        async with asyncio.timeout(timeout):
+            sm = get_sessionmaker(settings)
+            async with sm() as session:
+                await session.execute(text("SELECT 1"))
+    except TimeoutError as exc:
+        raise RuntimeError(
+            f"device_store_mode={mode}이나 PostgreSQL ping이 {timeout}s 내 응답 없음. "
+            "인프라 장애 의심 — `WHYMATH_DATABASE_URL`·네트워크 확인 또는 "
+            "`WHYMATH_DEVICE_STORE_HEALTH_CHECK_TIMEOUT_SECONDS` 상향."
+        ) from exc
     except Exception as exc:
         raise RuntimeError(
             f"device_store_mode={mode}이나 PostgreSQL 미도달: {exc}. "
@@ -458,7 +473,14 @@ async def ping_device_store_health(settings: Any) -> None:
     if mode == "pg_cached":
         client = _build_redis_for_cache(settings)
         try:
-            await client.ping()
+            async with asyncio.timeout(timeout):
+                await client.ping()
+        except TimeoutError as exc:
+            raise RuntimeError(
+                f"device_store_mode=pg_cached이나 Redis ping이 {timeout}s 내 응답 없음. "
+                "인프라 장애 의심 — `WHYMATH_REDIS_URL`·네트워크 확인 또는 "
+                "`WHYMATH_DEVICE_STORE_HEALTH_CHECK_TIMEOUT_SECONDS` 상향."
+            ) from exc
         except Exception as exc:
             raise RuntimeError(
                 f"device_store_mode=pg_cached이나 Redis 미도달: {exc}. "

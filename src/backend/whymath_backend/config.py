@@ -295,6 +295,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 슬라이스 31: startup health check 타임아웃 ──
+    device_store_health_check_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0.0,
+        description=(
+            "부팅 시 `ping_device_store_health`가 각 의존성(PG·Redis) ping에 허용하는 최대 "
+            "응답 시간(초). 초과 시 RuntimeError로 fail-fast — slice 30의 *무한 대기* 한계 "
+            "해소. 기본 5s — 정상 인프라엔 충분(>1s면 인프라 점검 필요)·네트워크 깜빡임은 "
+            "쿠버네티스 readiness probe로 외부 재시도."
+        ),
+    )
+
     # ── 슬라이스 26: verify 결과 Redis 캐시 TTL ──
     device_verify_cache_ttl_seconds: int = Field(
         default=60,
