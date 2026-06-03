@@ -538,6 +538,36 @@ def _build_redis_for_cache(settings: Any) -> _CacheClient:  # pragma: no cover
 # ──────────────────────────────────────────────────────────────────────────
 
 
+async def _retry_with_timeout(
+    operation: Callable[[], Awaitable[Any]],
+    *,
+    timeout_seconds: float,
+    max_retries: int,
+    backoff_seconds: float,
+) -> None:
+    """slice 35: operation을 timeout 안에서 실행·실패 시 exponential backoff 재시도.
+
+    각 시도는 독립 `asyncio.timeout`. 실패(TimeoutError/Exception 무관) 시 `backoff *
+    2^attempt`초 대기 후 재시도. 모든 시도 실패하면 *마지막 예외*를 raise(호출자가 timeout vs
+    기타 구분). 첫 시도 성공이면 backoff 0(정상 인프라 무영향).
+    """
+    import asyncio
+
+    last_exc: BaseException | None = None
+    for attempt in range(max_retries):
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                await operation()
+            return  # 성공
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                await asyncio.sleep(backoff_seconds * (2**attempt))
+    # 모든 재시도 소진 — 마지막 예외 raise
+    assert last_exc is not None  # unreachable(max_retries >= 1)
+    raise last_exc
+
+
 async def ping_device_store_health(settings: Any) -> None:
     """startup에 store 의존성(PG·Redis) 도달성 검증 — 실패 시 RuntimeError로 fail-fast.
 
@@ -545,11 +575,11 @@ async def ping_device_store_health(settings: Any) -> None:
     어느 구성요소가 실패했는지·폴백 가능한 모드를 명시(운영 진단성).
 
     슬라이스 31: 각 ping에 `asyncio.timeout(settings.device_store_health_check_timeout_seconds)`
-    적용 — 인프라 응답 지연 시 startup 무한 대기 방지. 초과 시 TimeoutError를 RuntimeError로
-    감싸 fail-fast(메시지에 timeout 값 명시).
-    """
-    import asyncio
+    적용 — 인프라 응답 지연 시 startup 무한 대기 방지.
 
+    슬라이스 35: 각 ping에 `max_retries`회 재시도(exponential backoff) — 일시적 인프라 깜빡
+    임(네트워크 일순 단절·DB 재시작 직후) 흡수. 정상 인프라엔 1회 통과(backoff 0).
+    """
     from sqlalchemy import text
 
     from whymath_backend.db.session import get_sessionmaker
@@ -559,41 +589,54 @@ async def ping_device_store_health(settings: Any) -> None:
         return
 
     timeout = settings.device_store_health_check_timeout_seconds
+    max_retries = settings.device_store_health_check_max_retries
+    backoff = settings.device_store_health_check_retry_backoff_seconds
 
     # PG 도달성
+    async def _pg_ping() -> None:
+        sm = get_sessionmaker(settings)
+        async with sm() as session:
+            await session.execute(text("SELECT 1"))
+
     try:
-        async with asyncio.timeout(timeout):
-            sm = get_sessionmaker(settings)
-            async with sm() as session:
-                await session.execute(text("SELECT 1"))
+        await _retry_with_timeout(
+            _pg_ping,
+            timeout_seconds=timeout,
+            max_retries=max_retries,
+            backoff_seconds=backoff,
+        )
     except TimeoutError as exc:
         raise RuntimeError(
-            f"device_store_mode={mode}이나 PostgreSQL ping이 {timeout}s 내 응답 없음. "
-            "인프라 장애 의심 — `WHYMATH_DATABASE_URL`·네트워크 확인 또는 "
-            "`WHYMATH_DEVICE_STORE_HEALTH_CHECK_TIMEOUT_SECONDS` 상향."
+            f"device_store_mode={mode}이나 PostgreSQL ping이 {timeout}s 내 응답 없음"
+            f"(재시도 {max_retries}회). 인프라 장애 의심 — `WHYMATH_DATABASE_URL`·"
+            "네트워크 확인 또는 `WHYMATH_DEVICE_STORE_HEALTH_CHECK_TIMEOUT_SECONDS` 상향."
         ) from exc
     except Exception as exc:
         raise RuntimeError(
-            f"device_store_mode={mode}이나 PostgreSQL 미도달: {exc}. "
-            "`WHYMATH_DATABASE_URL` 확인 또는 `WHYMATH_DEVICE_STORE_MODE=none`로 폴백."
+            f"device_store_mode={mode}이나 PostgreSQL 미도달(재시도 {max_retries}회): "
+            f"{exc}. `WHYMATH_DATABASE_URL` 확인 또는 `WHYMATH_DEVICE_STORE_MODE=none`로 폴백."
         ) from exc
 
     # Redis 도달성(`pg_cached`만)
     if mode == "pg_cached":
         client = _build_redis_for_cache(settings)
         try:
-            async with asyncio.timeout(timeout):
-                await client.ping()
+            await _retry_with_timeout(
+                client.ping,
+                timeout_seconds=timeout,
+                max_retries=max_retries,
+                backoff_seconds=backoff,
+            )
         except TimeoutError as exc:
             raise RuntimeError(
-                f"device_store_mode=pg_cached이나 Redis ping이 {timeout}s 내 응답 없음. "
-                "인프라 장애 의심 — `WHYMATH_REDIS_URL`·네트워크 확인 또는 "
-                "`WHYMATH_DEVICE_STORE_HEALTH_CHECK_TIMEOUT_SECONDS` 상향."
+                f"device_store_mode=pg_cached이나 Redis ping이 {timeout}s 내 응답 없음"
+                f"(재시도 {max_retries}회). 인프라 장애 의심 — `WHYMATH_REDIS_URL`·"
+                "네트워크 확인 또는 `WHYMATH_DEVICE_STORE_HEALTH_CHECK_TIMEOUT_SECONDS` 상향."
             ) from exc
         except Exception as exc:
             raise RuntimeError(
-                f"device_store_mode=pg_cached이나 Redis 미도달: {exc}. "
-                "`WHYMATH_REDIS_URL` 확인 또는 `WHYMATH_DEVICE_STORE_MODE=pg`로 폴백."
+                f"device_store_mode=pg_cached이나 Redis 미도달(재시도 {max_retries}회): "
+                f"{exc}. `WHYMATH_REDIS_URL` 확인 또는 `WHYMATH_DEVICE_STORE_MODE=pg`로 폴백."
             ) from exc
         finally:
             close = getattr(client, "aclose", None)

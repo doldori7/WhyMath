@@ -319,6 +319,25 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 슬라이스 35: startup health check 재시도(exponential backoff) ──
+    device_store_health_check_max_retries: int = Field(
+        default=3,
+        ge=1,
+        description=(
+            "부팅 시 각 ping을 최대 N회 시도(첫 시도 포함). 일시적 인프라 깜빡임 흡수 — "
+            "slice 30 한계 ③(재시도 없음) + slice 31 한계 ①(쿠버네티스 외부 재시도만) 해소. "
+            "기본 3 — 정상 인프라엔 1회 통과·일시 실패 시 backoff 후 재시도. 1=재시도 비활성."
+        ),
+    )
+    device_store_health_check_retry_backoff_seconds: float = Field(
+        default=2.0,
+        gt=0.0,
+        description=(
+            "재시도 사이 exponential backoff 기본 간격(초). 실제 대기는 `backoff * 2^attempt` "
+            "(attempt=0,1,...): 2s·4s·8s. max_retries=3 시 총 대기 ~6s(timeout 별도 합산)."
+        ),
+    )
+
     # ── 슬라이스 26: verify 결과 Redis 캐시 TTL ──
     device_verify_cache_ttl_seconds: int = Field(
         default=60,

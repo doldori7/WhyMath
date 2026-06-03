@@ -1138,11 +1138,20 @@ class TestCachedDeviceStoreTTL:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _lifespan_settings(mode: str, timeout_seconds: float = 5.0) -> Settings:
+def _lifespan_settings(
+    mode: str,
+    timeout_seconds: float = 5.0,
+    max_retries: int = 1,
+    backoff_seconds: float = 0.001,
+) -> Settings:
+    """slice 35: 테스트 기본은 `max_retries=1`(재시도 비활성·기존 timeout 테스트 ~0s) +
+    `backoff=0.001s`(재시도 테스트의 sleep 거의 0). 재시도 동작 검증은 명시 인자로."""
     return Settings(
         jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
         device_store_mode=mode,  # type: ignore[arg-type]
         device_store_health_check_timeout_seconds=timeout_seconds,
+        device_store_health_check_max_retries=max_retries,
+        device_store_health_check_retry_backoff_seconds=backoff_seconds,
     )
 
 
@@ -1562,6 +1571,121 @@ class TestPingDeviceStoreHealth:
             )
         # timeout 시에도 cleanup 보장(연결 leak 0)
         assert aclose_called["hit"] is True
+
+    async def test_pg_ping_retries_then_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """slice 35: PG ping 첫 2회 실패·3회째 성공 → ping_device_store_health 통과."""
+        from whymath_backend.api import _device_store as ds_mod
+
+        attempt_count = {"n": 0}
+
+        class _FlakySession:
+            async def __aenter__(self) -> _FlakySession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                attempt_count["n"] += 1
+                if attempt_count["n"] < 3:
+                    raise ConnectionError("transient PG flake")
+                # 3회째 성공
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _FlakySession()),
+            raising=True,
+        )
+        # max_retries=3, backoff=0.001s — 첫 2회 실패 후 3회째 성공
+        await ds_mod.ping_device_store_health(
+            _lifespan_settings("pg", max_retries=3, backoff_seconds=0.001)
+        )
+        assert attempt_count["n"] == 3
+
+    async def test_pg_ping_all_retries_fail_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """slice 35: 모든 재시도 실패 → 메시지에 '재시도 N회' 명시."""
+        from whymath_backend.api import _device_store as ds_mod
+
+        attempt_count = {"n": 0}
+
+        class _AlwaysBadSession:
+            async def __aenter__(self) -> _AlwaysBadSession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                attempt_count["n"] += 1
+                raise ConnectionError("PG down")
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _AlwaysBadSession()),
+            raising=True,
+        )
+        with pytest.raises(RuntimeError, match="재시도 3회"):
+            await ds_mod.ping_device_store_health(
+                _lifespan_settings("pg", max_retries=3, backoff_seconds=0.001)
+            )
+        # 정확히 3회 시도(첫 1회 + 재시도 2회)
+        assert attempt_count["n"] == 3
+
+    async def test_redis_ping_retries_then_succeeds(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """slice 35: Redis ping 일시 실패 후 재시도 성공·aclose는 한 번만 호출."""
+        from whymath_backend.api import _device_store as ds_mod
+
+        class _OkSession:
+            async def __aenter__(self) -> _OkSession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                pass
+
+        ping_attempts = {"n": 0}
+        aclose_count = {"n": 0}
+
+        class _FlakyRedis:
+            async def ping(self) -> bool:
+                ping_attempts["n"] += 1
+                if ping_attempts["n"] < 2:
+                    raise ConnectionError("transient Redis flake")
+                return True
+
+            async def get(self, _k: str) -> None:
+                return None
+
+            async def setex(self, _k: str, _s: int, _v: str) -> None:
+                pass
+
+            async def delete(self, *_k: str) -> int:
+                return 0
+
+            async def aclose(self) -> None:
+                aclose_count["n"] += 1
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _OkSession()),
+            raising=True,
+        )
+        monkeypatch.setattr(ds_mod, "_build_redis_for_cache", lambda _s: _FlakyRedis())
+        # 첫 1회 실패·2회째 성공
+        await ds_mod.ping_device_store_health(
+            _lifespan_settings("pg_cached", max_retries=2, backoff_seconds=0.001)
+        )
+        assert ping_attempts["n"] == 2
+        # aclose는 *최종* finally에서 한 번만 호출(per-attempt 호출 0)
+        assert aclose_count["n"] == 1
 
 
 # ─────────────────────────────────────────────────────────────────────────────
