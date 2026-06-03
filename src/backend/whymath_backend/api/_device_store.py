@@ -107,13 +107,19 @@ class DeviceCredentialStore(Protocol):
         ...
 
     async def list_for_user(
-        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+        self,
+        owner_id: uuid.UUID,
+        *,
+        include_revoked: bool = False,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[DeviceInfo]:
         """본인 소유 device 목록 — 최신 등록순(`created_at` DESC).
 
         slice 29 추가·기본 *활성*(미폐기) device만. slice 37: `include_revoked=True`면 폐기
-        이력 포함 — Flutter "기기 관리 → 폐기 이력" UI 결선. 본인 데이터라 PII 우려 없음
-        (DeviceInfo의 revoked/revoked_at 필드 활용).
+        이력 포함. slice 38: `limit/offset` 페이지네이션 — `include_revoked=True` 시 폐기
+        이력이 폭증할 수 있어 *페이지 단위* 응답. 라우터가 limit 상한 검증(`device_list_
+        max_limit`)·여기선 신뢰. 빈 리스트는 *해당 페이지에 결과 없음*(클라이언트가 stop).
         """
         ...
 
@@ -189,11 +195,17 @@ class InMemoryDeviceStore:
         return True
 
     async def list_for_user(
-        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+        self,
+        owner_id: uuid.UUID,
+        *,
+        include_revoked: bool = False,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[DeviceInfo]:
         # slice 29: 본인 소유 device — created_at DESC 정렬
         # slice 32: last_used_at 함께 노출
         # slice 37: include_revoked=True면 폐기 이력 포함·revoked/revoked_at 노출
+        # slice 38: limit/offset 페이지네이션
         items = [
             DeviceInfo(
                 device_id=d,
@@ -206,7 +218,7 @@ class InMemoryDeviceStore:
             if c.user_id == owner_id and (include_revoked or not c.revoked)
         ]
         items.sort(key=lambda info: info.created_at, reverse=True)
-        return items
+        return items[offset : offset + limit]
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         # slice 33+34: N일 이상 미사용 활성 device 식별 + 옵션 폐기. dry_run이면 식별만.
@@ -302,11 +314,17 @@ class PgDeviceStore:
             return bool(rowcount > 0)
 
     async def list_for_user(
-        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+        self,
+        owner_id: uuid.UUID,
+        *,
+        include_revoked: bool = False,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[DeviceInfo]:
         # slice 29: SELECT WHERE user_id=X AND revoked=false ORDER BY created_at DESC.
         # slice 32: last_used_at 함께 SELECT.
         # slice 37: include_revoked=True면 revoked 필터 제거·revoked/revoked_at 컬럼 추가
+        # slice 38: limit/offset 페이지네이션 — 서버측(SQL LIMIT/OFFSET, network 절감)
         from whymath_backend.db.models.device import DeviceCredential
 
         async with self._sessionmaker() as session:
@@ -319,7 +337,7 @@ class PgDeviceStore:
             ).where(DeviceCredential.user_id == owner_id)
             if not include_revoked:
                 stmt = stmt.where(DeviceCredential.revoked.is_(False))
-            stmt = stmt.order_by(DeviceCredential.created_at.desc())
+            stmt = stmt.order_by(DeviceCredential.created_at.desc()).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return [
                 DeviceInfo(
@@ -464,11 +482,18 @@ class CachedDeviceStore:
         return result
 
     async def list_for_user(
-        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+        self,
+        owner_id: uuid.UUID,
+        *,
+        include_revoked: bool = False,
+        limit: int = 50,
+        offset: int = 0,
     ) -> list[DeviceInfo]:
         # 목록 조회는 캐시 안 함 — 등록/폐기 직후 신선도 우선(빈도 낮은 관리 표면).
-        # slice 37: include_revoked 인자 그대로 전달
-        return await self._inner.list_for_user(owner_id, include_revoked=include_revoked)
+        # slice 37: include_revoked·slice 38: limit/offset 그대로 inner에 전달
+        return await self._inner.list_for_user(
+            owner_id, include_revoked=include_revoked, limit=limit, offset=offset
+        )
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         # slice 34: inner가 폐기 device_id 목록을 반환하므로 *정확히* 그 키들만 캐시 invalidate.

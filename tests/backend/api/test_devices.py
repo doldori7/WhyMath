@@ -509,6 +509,43 @@ class TestListDevicesEndpoint:
         assert active_entry["revoked"] is False
         assert active_entry["revoked_at"] is None
 
+    async def test_pagination_limit_offset(self) -> None:
+        """slice 38: ?limit=2&offset=1 → DESC 정렬에서 2번째부터 2개."""
+        store = InMemoryDeviceStore()
+        ids = [(await store.register(_UID))[0] for _ in range(5)]
+        client = _client(store)
+        # 기본 호출 — 5개 모두(limit=50 기본 ≫ 5)
+        all_resp = client.get("/v1/devices")
+        assert len(all_resp.json()["devices"]) == 5
+        # limit=2, offset=0 → 첫 2개(DESC: 가장 최근 등록 2개)
+        page1 = client.get("/v1/devices?limit=2&offset=0")
+        assert len(page1.json()["devices"]) == 2
+        # limit=2, offset=2 → 다음 2개
+        page2 = client.get("/v1/devices?limit=2&offset=2")
+        assert len(page2.json()["devices"]) == 2
+        # limit=2, offset=4 → 마지막 1개(len < limit → 마지막 페이지 시그널)
+        page3 = client.get("/v1/devices?limit=2&offset=4")
+        assert len(page3.json()["devices"]) == 1
+        # offset이 total 초과 → 빈 리스트
+        page4 = client.get("/v1/devices?limit=2&offset=10")
+        assert page4.json()["devices"] == []
+        # 모든 페이지 device_id 합집합 = 전체
+        collected = (
+            [d["device_id"] for d in page1.json()["devices"]]
+            + [d["device_id"] for d in page2.json()["devices"]]
+            + [d["device_id"] for d in page3.json()["devices"]]
+        )
+        assert sorted(collected) == sorted(ids)
+
+    def test_limit_validation_rejects_zero_and_too_large(self) -> None:
+        """limit는 1~200 — FastAPI Query validation."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        assert client.get("/v1/devices?limit=0").status_code == 422
+        assert client.get("/v1/devices?limit=201").status_code == 422
+        # offset 음수 거부
+        assert client.get("/v1/devices?offset=-1").status_code == 422
+
 
 class TestInMemoryDeviceStoreListForUser:
     """`list_for_user` 단위 — owner_id 스코프·revoked 제외·DESC 정렬."""
@@ -549,6 +586,19 @@ class TestInMemoryDeviceStoreListForUser:
         assert d1_info.revoked_at is not None
         assert d2_info.revoked is False
         assert d2_info.revoked_at is None
+
+    async def test_pagination_slices_sorted_result(self) -> None:
+        """slice 38: limit/offset이 created_at DESC 정렬 후 슬라이스."""
+        store = InMemoryDeviceStore()
+        ids = [(await store.register(_UID))[0] for _ in range(4)]
+        # 첫 페이지: limit=2, offset=0 — DESC라 가장 최근 등록 ids[-1], ids[-2]
+        page1 = await store.list_for_user(_UID, limit=2, offset=0)
+        assert [i.device_id for i in page1] == [ids[3], ids[2]]
+        # 두 번째: offset=2 — ids[1], ids[0]
+        page2 = await store.list_for_user(_UID, limit=2, offset=2)
+        assert [i.device_id for i in page2] == [ids[1], ids[0]]
+        # offset 초과 → 빈
+        assert await store.list_for_user(_UID, limit=2, offset=10) == []
 
 
 class TestInMemoryDeviceStoreLastUsedAt:
@@ -975,11 +1025,16 @@ class _CountingInnerStore:
         return await self._inner.revoke(device_id, owner_id)
 
     async def list_for_user(
-        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+        self,
+        owner_id: uuid.UUID,
+        *,
+        include_revoked: bool = False,
+        limit: int = 50,
+        offset: int = 0,
     ) -> Any:
         self.list_calls += 1
         return await self._inner.list_for_user(
-            owner_id, include_revoked=include_revoked
+            owner_id, include_revoked=include_revoked, limit=limit, offset=offset
         )
 
     async def cleanup_stale(
@@ -1905,9 +1960,12 @@ class _FakePgSession:
         return _Result(rowcount)
 
     def _exec_select(self, stmt: Any) -> Any:
-        """slice 29 — `select(c1, c2).where(...).order_by(c.desc())` 시뮬."""
+        """slice 29 — `select(c1, c2).where(...).order_by(c.desc())` 시뮬.
+
+        slice 38: `.limit(N).offset(M)` 처리 — stmt._limit_clause·_offset_clause의
+        BindParameter.value를 추출해 슬라이스 적용.
+        """
         constraints = self._iter_eq_constraints(stmt.whereclause)
-        # 필터: 모든 등식 제약 만족하는 행
         matched = [
             row
             for row in self._store.values()
@@ -1916,12 +1974,22 @@ class _FakePgSession:
                 for col_name, val in constraints.items()
             )
         ]
-        # ORDER BY: 우리 쿼리는 created_at DESC 하나뿐 — `.desc()`는 UnaryExpression.modifier가
-        # `desc_op`. 단순화: order_by 절 있으면 created_at DESC라고 가정.
         order_clauses = getattr(stmt, "_order_by_clauses", ())
         if order_clauses:
             matched.sort(key=lambda r: r.created_at, reverse=True)
-        # 컬럼 추출: select(c1, c2)의 _raw_columns에서 .key로 컬럼명을 얻음
+        # slice 38: LIMIT/OFFSET 적용(BindParameter에서 값 추출)
+        limit_clause = getattr(stmt, "_limit_clause", None)
+        offset_clause = getattr(stmt, "_offset_clause", None)
+        offset_val = (
+            getattr(offset_clause, "value", 0) if offset_clause is not None else 0
+        )
+        limit_val = (
+            getattr(limit_clause, "value", None) if limit_clause is not None else None
+        )
+        if limit_val is not None:
+            matched = matched[offset_val : offset_val + limit_val]
+        elif offset_val:
+            matched = matched[offset_val:]
         col_names = [c.key for c in stmt._raw_columns if hasattr(c, "key")]
         rows = [tuple(getattr(r, n) for n in col_names) for r in matched]
 
@@ -2120,6 +2188,20 @@ class TestPgDeviceStoreListForUser:
         d1_info = next(i for i in all_infos if i.device_id == d1)
         assert d1_info.revoked is True
         assert d1_info.revoked_at is not None
+
+    async def test_pagination_via_sql_limit_offset(self) -> None:
+        """slice 38: PgDeviceStore.list_for_user가 SQL LIMIT/OFFSET 발급(`_FakePgSession` 처리)."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        ids = [(await store.register(_UID))[0] for _ in range(4)]
+        # limit=2 offset=0 → 첫 2개(DESC 정렬·최근 등록 우선)
+        page1 = await store.list_for_user(_UID, limit=2, offset=0)
+        assert [i.device_id for i in page1] == [ids[3], ids[2]]
+        # offset=2 → 다음 2개
+        page2 = await store.list_for_user(_UID, limit=2, offset=2)
+        assert [i.device_id for i in page2] == [ids[1], ids[0]]
+        # offset 초과 → 빈
+        assert await store.list_for_user(_UID, limit=2, offset=10) == []
 
 
 class TestPgDeviceStoreCleanupStale:

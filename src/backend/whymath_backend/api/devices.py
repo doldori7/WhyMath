@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.api._auth import ConsentedUser
@@ -151,24 +151,41 @@ async def revoke_device(
 @router.get(
     "",
     response_model=DeviceListResponse,
-    summary="내 디바이스 목록 — 기본 활성만 (`?include_revoked=true`로 폐기 이력 포함)",
+    summary="내 디바이스 목록 — 기본 활성만·페이지네이션 지원",
 )
 async def list_my_devices(
     user: ConsentedUser,
     include_revoked: bool = False,
+    limit: int = Query(
+        default=50,
+        ge=1,
+        le=200,
+        description=(
+            "페이지 크기(slice 38). 1~200·기본 50. include_revoked=true 시 폐기 이력이 "
+            "폭증할 수 있어 페이지 단위 권장."
+        ),
+    ),
+    offset: int = Query(
+        default=0,
+        ge=0,
+        description=(
+            "건너뛸 행 수(slice 38). 다음 페이지는 `offset += len(이전 응답.devices)`. "
+            "응답 길이가 limit 미만이면 더 이상 결과 없음(`has_more=false` 명시 헤더 미제공)."
+        ),
+    ),
 ) -> DeviceListResponse:
     """본인 디바이스 목록 — `user.user_id`로 스코프(타인 device 노출 0).
 
-    slice 29: 기본 활성만 — Flutter "디바이스 관리" UI의 1차 결선·사용자가 자기 등록 device
-    목록 확인 후 분실/도난 디바이스를 `/v1/devices/{id}/revoke`로 폐기.
-
-    slice 37: `?include_revoked=true` → 폐기 이력 포함(시간순 DESC). Flutter "기기 관리 →
-    폐기 기록" UI 또는 보안 감사 화면 결선. `revoked`·`revoked_at` 필드로 이력 식별.
+    slice 29: 기본 활성만 — Flutter "디바이스 관리" UI의 1차 결선. slice 37:
+    `?include_revoked=true` → 폐기 이력 포함. slice 38: `?limit&offset` 페이지네이션 —
+    이력 폭증 대응. 응답 길이가 limit 미만이면 마지막 페이지(클라이언트가 stop).
 
     응답에 *secret_plain·user_id PII 미포함* — 표면 최소화. revoked/revoked_at은 본인 데이터.
     """
     store = _require_store()
-    infos = await store.list_for_user(user.user_id, include_revoked=include_revoked)
+    infos = await store.list_for_user(
+        user.user_id, include_revoked=include_revoked, limit=limit, offset=offset
+    )
     return DeviceListResponse(
         devices=[
             DeviceInfoSchema(
