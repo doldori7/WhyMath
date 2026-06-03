@@ -15,6 +15,7 @@ from __future__ import annotations
 import hmac
 import uuid
 from collections.abc import AsyncIterator, Iterator
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any
 from unittest.mock import MagicMock
@@ -547,6 +548,73 @@ class TestInMemoryDeviceStoreLastUsedAt:
         assert store._creds[device_id].last_used_at == first
 
 
+class TestInMemoryDeviceStoreCleanupStale:
+    """slice 33: N일 미사용 device 자동 폐기 — last_used_at(없으면 created_at) 기준."""
+
+    async def test_empty_returns_zero(self) -> None:
+        store = InMemoryDeviceStore()
+        assert await store.cleanup_stale(max_age_days=30) == 0
+
+    async def test_fresh_device_not_revoked(self) -> None:
+        """방금 등록·verify → cleanup_stale은 폐기 0 (최근 활동)."""
+        store = InMemoryDeviceStore()
+        device_id, secret_plain = await store.register(_UID)
+        await store.verify(device_id, _sign(secret_plain, device_id))
+        assert await store.cleanup_stale(max_age_days=30) == 0
+        # 활성 그대로
+        assert not store._creds[device_id].revoked
+
+    async def test_stale_by_last_used_at_revoked(self) -> None:
+        """last_used_at이 임계 초과 → 폐기."""
+        store = InMemoryDeviceStore()
+        device_id, secret_plain = await store.register(_UID)
+        await store.verify(device_id, _sign(secret_plain, device_id))
+        # last_used_at을 *과거*로 강제(31일 전)
+        cred = store._creds[device_id]
+        store._creds[device_id] = cred._replace(
+            last_used_at=datetime.now(UTC) - timedelta(days=31)
+        )
+        assert await store.cleanup_stale(max_age_days=30) == 1
+        assert store._creds[device_id].revoked is True
+
+    async def test_stale_by_created_at_when_never_used(self) -> None:
+        """한 번도 verify 안 됐고 created_at이 임계 초과 → 폐기(등록만 한 방치 device 차단)."""
+        store = InMemoryDeviceStore()
+        device_id, _ = await store.register(_UID)
+        # created_at을 강제로 31일 전
+        cred = store._creds[device_id]
+        store._creds[device_id] = cred._replace(
+            created_at=datetime.now(UTC) - timedelta(days=31)
+        )
+        assert await store.cleanup_stale(max_age_days=30) == 1
+        assert store._creds[device_id].revoked is True
+
+    async def test_already_revoked_skipped(self) -> None:
+        """이미 폐기된 device는 카운트 0(중복 폐기 안 함)."""
+        store = InMemoryDeviceStore()
+        device_id, _ = await store.register(_UID)
+        await store.revoke(device_id, _UID)
+        # created_at을 과거로 강제
+        cred = store._creds[device_id]
+        store._creds[device_id] = cred._replace(
+            created_at=datetime.now(UTC) - timedelta(days=100)
+        )
+        assert await store.cleanup_stale(max_age_days=30) == 0
+
+    async def test_mixed_only_stale_revoked(self) -> None:
+        store = InMemoryDeviceStore()
+        d_fresh, secret_fresh = await store.register(_UID)
+        await store.verify(d_fresh, _sign(secret_fresh, d_fresh))
+        d_stale, _ = await store.register(_UID)
+        cred_stale = store._creds[d_stale]
+        store._creds[d_stale] = cred_stale._replace(
+            created_at=datetime.now(UTC) - timedelta(days=31)
+        )
+        assert await store.cleanup_stale(max_age_days=30) == 1
+        assert store._creds[d_fresh].revoked is False
+        assert store._creds[d_stale].revoked is True
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # 3) _client_device_id store 모드 우선순위
 # ─────────────────────────────────────────────────────────────────────────────
@@ -817,7 +885,7 @@ class _FakeCacheClient:
 
 
 class _CountingInnerStore:
-    """`DeviceCredentialStore` 인스턴스 — 호출 횟수 기록(verify/revoke/register/list_for_user)."""
+    """`DeviceCredentialStore` 인스턴스 — 호출 횟수 기록."""
 
     def __init__(self, inner: InMemoryDeviceStore) -> None:
         self._inner = inner
@@ -825,6 +893,7 @@ class _CountingInnerStore:
         self.revoke_calls: int = 0
         self.register_calls: int = 0
         self.list_calls: int = 0
+        self.cleanup_calls: int = 0
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
         self.register_calls += 1
@@ -841,6 +910,10 @@ class _CountingInnerStore:
     async def list_for_user(self, owner_id: uuid.UUID) -> Any:
         self.list_calls += 1
         return await self._inner.list_for_user(owner_id)
+
+    async def cleanup_stale(self, max_age_days: int) -> int:
+        self.cleanup_calls += 1
+        return await self._inner.cleanup_stale(max_age_days)
 
 
 class TestCachedDeviceStoreVerify:
@@ -1736,3 +1809,73 @@ class TestPgDeviceStoreListForUser:
         # 잘못된 sig → False → last_used_at 갱신 0
         assert await store.verify(device_id, "0" * 64) is False
         assert store_dict[device_id].last_used_at is None
+
+
+class TestPgDeviceStoreCleanupStale:
+    """slice 33: SELECT 활성 → Python 필터 → UPDATE 반복(`_FakePgSession` 처리)."""
+
+    async def test_empty_returns_zero(self) -> None:
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        assert await store.cleanup_stale(max_age_days=30) == 0
+
+    async def test_fresh_devices_not_revoked(self) -> None:
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        device_id, _ = await store.register(_UID)
+        assert await store.cleanup_stale(max_age_days=30) == 0
+        assert store_dict[device_id].revoked is False
+
+    async def test_stale_by_created_at_revoked(self) -> None:
+        """한 번도 verify 안 된 device·created_at > 임계 → 폐기."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        device_id, _ = await store.register(_UID)
+        # created_at을 강제로 31일 전
+        store_dict[device_id].created_at = datetime.now(UTC) - timedelta(days=31)
+        assert await store.cleanup_stale(max_age_days=30) == 1
+        assert store_dict[device_id].revoked is True
+        assert store_dict[device_id].revoked_at is not None
+
+    async def test_stale_by_last_used_at_revoked(self) -> None:
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        device_id, secret_plain = await store.register(_UID)
+        # verify 성공 → last_used_at 채워짐
+        sig = _compute_signature(secret_plain, device_id)
+        await store.verify(device_id, sig)
+        # last_used_at을 강제로 31일 전
+        store_dict[device_id].last_used_at = datetime.now(UTC) - timedelta(days=31)
+        assert await store.cleanup_stale(max_age_days=30) == 1
+        assert store_dict[device_id].revoked is True
+
+    async def test_already_revoked_skipped_in_select(self) -> None:
+        """이미 폐기된 device는 SELECT WHERE revoked=False에서 제외."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        device_id, _ = await store.register(_UID)
+        await store.revoke(device_id, _UID)  # 미리 폐기
+        # created_at을 과거로 강제해도 SELECT에서 제외돼 다시 안 폐기
+        store_dict[device_id].created_at = datetime.now(UTC) - timedelta(days=100)
+        assert await store.cleanup_stale(max_age_days=30) == 0
+
+
+class TestCachedDeviceStoreCleanupStale:
+    """slice 33: cache는 invalidate 안 함(TTL 자연 만료) — inner 위임만."""
+
+    async def test_passthrough_to_inner(self) -> None:
+        inner_real = InMemoryDeviceStore()
+        device_id, _ = await inner_real.register(_UID)
+        # 강제 stale
+        cred = inner_real._creds[device_id]
+        inner_real._creds[device_id] = cred._replace(
+            created_at=datetime.now(UTC) - timedelta(days=31)
+        )
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        # cleanup → inner 호출·캐시 0 접근
+        assert await store.cleanup_stale(max_age_days=30) == 1
+        assert counter.cleanup_calls == 1
+        # 캐시 invalidate 안 함 — slice 33 docstring 트레이드오프
+        assert cache.delete_calls == 0

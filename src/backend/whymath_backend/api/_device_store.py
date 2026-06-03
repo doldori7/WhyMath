@@ -33,7 +33,7 @@ import hmac
 import secrets
 import uuid
 from collections.abc import Awaitable, Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any, NamedTuple, Protocol, cast, runtime_checkable
 
@@ -104,6 +104,17 @@ class DeviceCredentialStore(Protocol):
         """
         ...
 
+    async def cleanup_stale(self, max_age_days: int) -> int:
+        """slice 33: N일 이상 미사용 활성 device 자동 폐기 → 폐기 건수 반환.
+
+        조건: `revoked=False` AND `(last_used_at < now - N일) OR (last_used_at IS NULL AND
+        created_at < now - N일)` — 한 번도 verify 안 된 device는 created_at 기준(등록만 하고
+        방치된 device 차단). 정상 사용자 무영향(매월 1회 이상 verify는 보장). cron/Celery beat
+        에서 일일 호출 권장. revoke와 같은 효과(verify 거부)이나 `owner_id` 검증 없음(*시스템
+        호출*·관리자 권한 의미).
+        """
+        ...
+
 
 def _compute_signature(secret_plain: str, device_id: str) -> str:
     """`HMAC-SHA256(secret_plain, device_id)`의 hex digest(64자 lowercase)."""
@@ -167,6 +178,20 @@ class InMemoryDeviceStore:
         ]
         active.sort(key=lambda info: info.created_at, reverse=True)
         return active
+
+    async def cleanup_stale(self, max_age_days: int) -> int:
+        # slice 33: N일 이상 미사용 활성 device 일괄 폐기 — last_used_at(또는 created_at) 기준
+        threshold = datetime.now(UTC) - timedelta(days=max_age_days)
+        count = 0
+        for device_id, cred in list(self._creds.items()):
+            if cred.revoked:
+                continue
+            # 한 번도 verify 안 됐으면 등록 시각 기준 — 등록만 하고 방치된 device 차단
+            last_active = cred.last_used_at or cred.created_at
+            if last_active < threshold:
+                self._creds[device_id] = cred._replace(revoked=True)
+                count += 1
+        return count
 
     def reset(self) -> None:
         """테스트 격리용 — 모든 자격증명 초기화(sync — 호출자가 await 안 함)."""
@@ -268,6 +293,39 @@ class PgDeviceStore:
                 DeviceInfo(device_id=row[0], created_at=row[1], last_used_at=row[2])
                 for row in result.all()
             ]
+
+    async def cleanup_stale(self, max_age_days: int) -> int:
+        # slice 33: SELECT 활성 candidates → Python 필터 → UPDATE 반복. 일일 cron 호출이라
+        # O(N) 반복 허용(table 크기 bounded). func.coalesce/<로 단일 SQL 가능하나 fake 인프라
+        # 호환성·코드 가독성 우선해 두 단계로 분리.
+        from whymath_backend.db.models.device import DeviceCredential
+
+        threshold = datetime.now(UTC) - timedelta(days=max_age_days)
+        async with self._sessionmaker() as session:
+            sel = select(
+                DeviceCredential.device_id,
+                DeviceCredential.last_used_at,
+                DeviceCredential.created_at,
+            ).where(DeviceCredential.revoked.is_(False))
+            result = await session.execute(sel)
+            stale_ids = [
+                row[0]
+                for row in result.all()
+                # last_used_at 우선·없으면 created_at(한 번도 verify 안 됨)
+                if (row[1] or row[2]) < threshold
+            ]
+            count = 0
+            now = datetime.now(UTC)
+            for device_id in stale_ids:
+                upd = (
+                    update(DeviceCredential)
+                    .where(DeviceCredential.device_id == device_id)
+                    .values(revoked=True, revoked_at=now)
+                )
+                upd_result = await session.execute(upd)
+                count += getattr(upd_result, "rowcount", 0) or 0
+            await session.commit()
+        return count
 
 
 # 모듈 전역 — FastAPI 단일 프로세스/다중 워커 가정. `None`이면 store 모드 비활성
@@ -371,6 +429,12 @@ class CachedDeviceStore:
     async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
         # 목록 조회는 캐시 안 함 — 등록/폐기 직후 신선도 우선(빈도 낮은 관리 표면).
         return await self._inner.list_for_user(owner_id)
+
+    async def cleanup_stale(self, max_age_days: int) -> int:
+        # slice 33: inner에 위임. 폐기된 device의 캐시 키는 *어느 device가 폐기됐는지* 모르므로
+        # 일괄 invalidate 안 함 — TTL 자연 만료로 stale 기간 ≤ TTL(기본 60s). "N일 미사용 자동
+        # 폐기" 정책은 60s 오차 무관(slice 32의 lazy 패턴과 동일 트레이드오프).
+        return await self._inner.cleanup_stale(max_age_days)
 
 
 def set_device_store(store: DeviceCredentialStore | None) -> None:

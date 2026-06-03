@@ -396,6 +396,61 @@ def test_ping_health_succeeds_on_live_pg_and_redis() -> None:
     asyncio.run(ping_device_store_health(settings_cached))
 
 
+def test_cleanup_stale_devices_on_live_pg() -> None:
+    """slice 33: 실 PG에서 cleanup_stale이 N일 미사용 device를 일괄 폐기."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    import datetime as _dt
+
+    uid = uuid.uuid4()
+
+    async def _run() -> None:
+        await _insert_user(uid)
+        try:
+            engine = create_async_engine(_settings().database_url)
+            try:
+                sm = async_sessionmaker(engine, expire_on_commit=False)
+                store = PgDeviceStore(sm)
+
+                # 1 fresh + 1 stale 등록
+                d_fresh, _ = await store.register(uid)
+                d_stale, _ = await store.register(uid)
+
+                # d_stale의 created_at을 직접 SQL로 31일 전으로 강제
+                async with engine.begin() as conn:
+                    await conn.execute(
+                        text(
+                            "UPDATE device_credential "
+                            "SET created_at = :ts "
+                            "WHERE device_id = :did"
+                        ),
+                        {
+                            "ts": _dt.datetime.now(_dt.UTC) - _dt.timedelta(days=31),
+                            "did": d_stale,
+                        },
+                    )
+
+                # cleanup → 1건 폐기
+                assert await store.cleanup_stale(max_age_days=30) == 1
+
+                # fresh는 활성·stale은 폐기
+                async with sm() as session:
+                    from whymath_backend.db.models.device import DeviceCredential
+
+                    fresh_row = await session.get(DeviceCredential, d_fresh)
+                    stale_row = await session.get(DeviceCredential, d_stale)
+                    assert fresh_row is not None and fresh_row.revoked is False
+                    assert stale_row is not None and stale_row.revoked is True
+                    assert stale_row.revoked_at is not None
+            finally:
+                await engine.dispose()
+        finally:
+            await _cleanup(uid)
+
+    asyncio.run(_run())
+
+
 def test_cached_device_store_on_live_pg_and_redis() -> None:
     """슬라이스 26: CachedDeviceStore(PgDeviceStore) + 실 Redis e2e.
 

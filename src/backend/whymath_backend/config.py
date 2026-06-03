@@ -295,6 +295,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 슬라이스 33: 디바이스 자동 폐기 idle 임계 ──
+    device_credential_max_idle_days: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "`cleanup_stale_devices` 호출 시 *N일 이상 미사용*(last_used_at < now - N일·"
+            "한 번도 사용 안 했으면 created_at 기준)인 활성 device를 자동 폐기. 30일 기본 — "
+            "정상 사용자는 매월 1회 이상 verify(앱 사용)이라 무영향·잊혀진/분실 device만 폐기. "
+            "운영은 Celery beat·cron으로 일일 호출 권장. 0 미만은 비활성 의도라 ge=1로 금지."
+        ),
+    )
+
     # ── 슬라이스 31: startup health check 타임아웃 ──
     device_store_health_check_timeout_seconds: float = Field(
         default=5.0,
