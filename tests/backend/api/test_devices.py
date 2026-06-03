@@ -30,6 +30,7 @@ from whymath_backend.api._device_store import (
     InMemoryDeviceStore,
     PgDeviceStore,
     _compute_signature,
+    build_device_store_from_settings,
     get_device_store,
     set_device_store,
 )
@@ -753,6 +754,129 @@ class TestCachedDeviceStoreTTL:
         store = CachedDeviceStore(counter, cache, ttl_seconds=42)
         await store.verify(device_id, sig)
         assert cache.ttls["device_verify:" + device_id] == 42
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6) build_device_store_from_settings — lifespan 결선(슬라이스 27)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _lifespan_settings(mode: str) -> Settings:
+    return Settings(
+        jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+        device_store_mode=mode,  # type: ignore[arg-type]
+    )
+
+
+class TestBuildDeviceStoreFromSettings:
+    """모드 3종 × cleanup 책임 — `_DEVICE_STORE` 모듈 전역은 *호출자 책임*(본 함수 순수)."""
+
+    async def test_none_mode_returns_none_and_noop(self) -> None:
+        store, cleanup = build_device_store_from_settings(_lifespan_settings("none"))
+        assert store is None
+        # cleanup은 async no-op — 예외 없이 await 가능
+        await cleanup()
+
+    async def test_pg_mode_returns_pg_store_and_noop(self) -> None:
+        # PgDeviceStore는 sessionmaker만 받고 *connect 안 함* — 라이브 PG 없어도 안전
+        store, cleanup = build_device_store_from_settings(_lifespan_settings("pg"))
+        assert isinstance(store, PgDeviceStore)
+        await cleanup()  # noop
+
+    async def test_pg_cached_mode_returns_cached_store_and_closes_redis(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """pg_cached: Redis 클라이언트 생성 → CachedDeviceStore 래핑 → cleanup이 aclose 호출."""
+        import whymath_backend.api._device_store as ds_mod
+
+        # _build_redis_for_cache을 가짜로 — 실 Redis 의존성 회피
+        aclose_called: dict[str, bool] = {"called": False}
+
+        class _FakeAcloseable:
+            async def get(self, key: str) -> str | None:
+                return None
+
+            async def setex(self, key: str, seconds: int, value: str) -> None:
+                pass
+
+            async def delete(self, *keys: str) -> int:
+                return 0
+
+            async def aclose(self) -> None:
+                aclose_called["called"] = True
+
+        monkeypatch.setattr(
+            ds_mod, "_build_redis_for_cache", lambda settings: _FakeAcloseable()
+        )
+
+        store, cleanup = build_device_store_from_settings(
+            _lifespan_settings("pg_cached")
+        )
+        assert isinstance(store, CachedDeviceStore)
+        await cleanup()
+        assert aclose_called["called"] is True
+
+    async def test_pg_cached_cleanup_safe_when_aclose_missing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """aclose 미정의 fake 클라이언트도 cleanup이 예외 없이 통과(고대 redis 라이브러리 호환)."""
+        import whymath_backend.api._device_store as ds_mod
+
+        class _NoAcloseClient:
+            async def get(self, key: str) -> str | None:
+                return None
+
+            async def setex(self, key: str, seconds: int, value: str) -> None:
+                pass
+
+            async def delete(self, *keys: str) -> int:
+                return 0
+
+        monkeypatch.setattr(
+            ds_mod, "_build_redis_for_cache", lambda settings: _NoAcloseClient()
+        )
+
+        _store, cleanup = build_device_store_from_settings(
+            _lifespan_settings("pg_cached")
+        )
+        await cleanup()  # 예외 없이 종료
+
+
+class TestLifespanWiring:
+    """`create_app` 라이프스팬이 startup에서 store 활성·shutdown에서 해제."""
+
+    def test_lifespan_with_none_mode_keeps_store_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """기본 모드(none) — startup 후에도 `_DEVICE_STORE`는 None."""
+        from whymath_backend.config import get_settings as real_get_settings
+
+        monkeypatch.setattr(
+            "whymath_backend.app.get_settings",
+            lambda: _lifespan_settings("none"),
+            raising=True,
+        )
+        # 라이프스팬 발화 위해 컨텍스트매니저 사용
+        with TestClient(create_app()):
+            assert get_device_store() is None
+        # shutdown 후에도 None
+        assert get_device_store() is None
+        _ = real_get_settings  # silence unused import
+
+    def test_lifespan_with_pg_mode_activates_pg_store(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """pg 모드 — startup에서 `_DEVICE_STORE`가 PgDeviceStore, shutdown 후 None."""
+        monkeypatch.setattr(
+            "whymath_backend.app.get_settings",
+            lambda: _lifespan_settings("pg"),
+            raising=True,
+        )
+        with TestClient(create_app()):
+            store = get_device_store()
+            assert isinstance(store, PgDeviceStore)
+        # 종료 후 해제됨
+        assert get_device_store() is None
 
 
 # ─────────────────────────────────────────────────────────────────────────────

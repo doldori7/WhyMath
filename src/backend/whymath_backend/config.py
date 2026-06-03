@@ -284,6 +284,17 @@ class Settings(BaseSettings):
             "사용자(30)와 IP(60) 사이 중간."
         ),
     )
+    # ── 슬라이스 27: 디바이스 store 운영 모드(lifespan 결선) ──
+    device_store_mode: Literal["none", "pg", "pg_cached"] = Field(
+        default="none",
+        description=(
+            "디바이스 자격증명 store 활성 모드. `none`(기본)=비활성·slice 21 공유 secret 폴백. "
+            "`pg`=`PgDeviceStore` 단독(영속·HA, slice 23). "
+            "`pg_cached`=`CachedDeviceStore(PgDeviceStore, Redis)`(verify 캐시·고QPS 최적화, "
+            "slice 26). 운영 lifespan이 본 설정 읽어 store 자동 활성·종료 시 정리."
+        ),
+    )
+
     # ── 슬라이스 26: verify 결과 Redis 캐시 TTL ──
     device_verify_cache_ttl_seconds: int = Field(
         default=60,

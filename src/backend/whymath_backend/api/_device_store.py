@@ -32,9 +32,10 @@ from __future__ import annotations
 import hmac
 import secrets
 import uuid
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from hashlib import sha256
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, cast, runtime_checkable
 
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -289,3 +290,76 @@ def set_device_store(store: DeviceCredentialStore | None) -> None:
 def get_device_store() -> DeviceCredentialStore | None:
     """현재 store 반환(미설정 시 None)."""
     return _DEVICE_STORE
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 슬라이스 27 — lifespan 결선(Settings.device_store_mode 기반 자동 활성)
+#
+# 운영자는 `WHYMATH_DEVICE_STORE_MODE=pg_cached` 한 줄로 store 활성 — 라우터/lifespan에
+# `set_device_store` 코드 작성 불필요. 모드 3종(none/pg/pg_cached) × cleanup 책임(Redis
+# 클라이언트 닫기) 일관 처리.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def build_device_store_from_settings(
+    settings: Any,
+) -> tuple[DeviceCredentialStore | None, Callable[[], Awaitable[None]]]:
+    """`Settings.device_store_mode`에 맞춰 store + async cleanup 반환.
+
+    반환 `(store, cleanup_fn)`:
+      - `none` 모드 → `(None, noop)`. slice 21 공유 secret 폴백 동작.
+      - `pg` 모드 → `(PgDeviceStore, noop)`. PG sessionmaker는 지연 엔진 생성·dispose는
+        lifespan의 기존 `dispose_engine`이 책임(별도 cleanup 불필요).
+      - `pg_cached` 모드 → `(CachedDeviceStore(PgDeviceStore, Redis), redis.aclose)`. Redis
+        클라이언트는 본 함수가 생성 → cleanup_fn이 닫는다.
+
+    호출자(lifespan)는 startup에 `set_device_store(store)` + shutdown에 `await cleanup_fn()`
+    + `set_device_store(None)`. 본 함수는 *순수*(set_device_store는 호출자 책임).
+
+    `settings: Any` — `whymath_backend.config.Settings` 순환 import 회피(typing-only 명시).
+    """
+    from whymath_backend.db.session import get_sessionmaker
+
+    mode = settings.device_store_mode
+
+    async def _noop() -> None:
+        return None
+
+    if mode == "none":
+        return None, _noop
+
+    sm = get_sessionmaker(settings)
+    pg_store: DeviceCredentialStore = PgDeviceStore(sm)
+
+    if mode == "pg":
+        return pg_store, _noop
+
+    # mode == "pg_cached" — Redis 클라이언트 생성·CachedDeviceStore 래핑
+    redis_client = _build_redis_for_cache(settings)
+    cached = CachedDeviceStore(
+        pg_store, redis_client, ttl_seconds=settings.device_verify_cache_ttl_seconds
+    )
+
+    async def _close_redis() -> None:
+        # redis.asyncio.Redis.aclose() — 연결 풀 반납(라이브 통합 테스트가 검증)
+        close = getattr(redis_client, "aclose", None)
+        if close is not None:
+            await close()
+
+    return cached, _close_redis
+
+
+def _build_redis_for_cache(settings: Any) -> _CacheClient:  # pragma: no cover
+    """기본 redis.asyncio 클라이언트 — 지연 import(라이브러리 없는 환경 보호).
+
+    Redis 라이브러리·연결 의존성은 라이브 통합 테스트(@integration·실 Redis 데몬)에서
+    검증한다 — hermetic 테스트는 모드를 `pg`/`none`으로 두거나 가짜 클라이언트 주입한다.
+    """
+    try:
+        from redis.asyncio import Redis
+    except ImportError as exc:
+        raise RuntimeError(
+            "redis Python 클라이언트가 설치되지 않았습니다. "
+            "`pip install redis[hiredis]` 후 다시 시도하세요."
+        ) from exc
+    return cast(_CacheClient, Redis.from_url(settings.redis_url, decode_responses=True))
