@@ -55,6 +55,9 @@ class DeviceCredential(Base):
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
     # 폐기 시각 — 미폐기는 NULL. revoke 시 server-side는 안 두고 store 코드가 채운다(현재 시각).
     revoked_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    # slice 32: 마지막 verify 성공 시각 — "30일 미사용 자동 폐기" 정책·보안 이상 탐지 기반.
+    # CachedDeviceStore 사용 시 *cache miss*에서만 갱신되므로 정밀도는 cache TTL(기본 60s).
+    last_used_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
 
 
 __all__ = ["DeviceCredential"]

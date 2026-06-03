@@ -59,12 +59,23 @@ class DeviceRevokeResponse(BaseModel):
 
 
 class DeviceInfoSchema(BaseModel):
-    """본인 디바이스 정보 — 목록 응답 원소(slice 29). secret_plain·revoked 등 *내부 상태* 비노출."""
+    """본인 디바이스 정보 — 목록 응답 원소(slice 29). secret_plain·revoked 등 *내부 상태* 비노출.
+
+    slice 32: `last_used_at` 추가 — 마지막 verify 성공 시각(`null`=한 번도 미사용). 정밀도는
+    `CachedDeviceStore` 사용 시 cache TTL(기본 60s) — UI "방금 사용/X분 전" 표시에 충분.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     device_id: str = Field(description="등록된 디바이스 ID(UUID4 문자열).")
     created_at: datetime = Field(description="등록 시각(UTC ISO8601).")
+    last_used_at: datetime | None = Field(
+        default=None,
+        description=(
+            "마지막 verify 성공 시각(UTC ISO8601). `null`이면 등록 후 한 번도 verify 안 됨. "
+            "CachedDeviceStore 사용 시 cache miss 경로에서만 갱신(정밀도 ≈ cache TTL)."
+        ),
+    )
 
 
 class DeviceListResponse(BaseModel):
@@ -141,5 +152,12 @@ async def list_my_devices(user: ConsentedUser) -> DeviceListResponse:
     store = _require_store()
     infos = await store.list_for_user(user.user_id)
     return DeviceListResponse(
-        devices=[DeviceInfoSchema(device_id=i.device_id, created_at=i.created_at) for i in infos]
+        devices=[
+            DeviceInfoSchema(
+                device_id=i.device_id,
+                created_at=i.created_at,
+                last_used_at=i.last_used_at,
+            )
+            for i in infos
+        ]
     )

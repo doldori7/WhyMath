@@ -453,7 +453,12 @@ class TestListDevicesEndpoint:
         device_ids = [d["device_id"] for d in body["devices"]]
         assert device_ids == [d2]  # 폐기된 d1·타인 d_other 제외
         # secret_plain·user_id·revoked 등 내부 상태 미노출
-        assert set(body["devices"][0].keys()) == {"device_id", "created_at"}
+        # slice 32: last_used_at 추가
+        assert set(body["devices"][0].keys()) == {
+            "device_id",
+            "created_at",
+            "last_used_at",
+        }
 
     async def test_ordered_by_created_at_desc(self) -> None:
         """여러 device 등록 시 최신 등록순(created_at DESC)."""
@@ -498,6 +503,48 @@ class TestInMemoryDeviceStoreListForUser:
         await store.revoke(d1, _UID)
         infos = await store.list_for_user(_UID)
         assert [i.device_id for i in infos] == [d2]
+
+
+class TestInMemoryDeviceStoreLastUsedAt:
+    """slice 32: verify 성공 시 last_used_at 갱신·revoke·실패는 갱신 안 함."""
+
+    async def test_register_sets_last_used_at_none(self) -> None:
+        """등록 직후엔 last_used_at=None(아직 verify 안 됨)."""
+        store = InMemoryDeviceStore()
+        await store.register(_UID)
+        infos = await store.list_for_user(_UID)
+        assert infos[0].last_used_at is None
+
+    async def test_verify_success_updates_last_used_at(self) -> None:
+        store = InMemoryDeviceStore()
+        device_id, secret_plain = await store.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        assert (await store.list_for_user(_UID))[0].last_used_at is None
+        assert await store.verify(device_id, sig) is True
+        # verify 성공 → last_used_at 채워짐
+        infos = await store.list_for_user(_UID)
+        assert infos[0].last_used_at is not None
+
+    async def test_verify_failure_does_not_update_last_used_at(self) -> None:
+        store = InMemoryDeviceStore()
+        device_id, _secret = await store.register(_UID)
+        assert await store.verify(device_id, "0" * 64) is False
+        infos = await store.list_for_user(_UID)
+        # 잘못된 sig → 갱신 안 됨(None 유지)
+        assert infos[0].last_used_at is None
+
+    async def test_verify_after_revoke_does_not_update(self) -> None:
+        store = InMemoryDeviceStore()
+        device_id, secret_plain = await store.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        await store.verify(device_id, sig)  # 첫 갱신
+        first = (await store.list_for_user(_UID))[0].last_used_at
+        await store.revoke(device_id, _UID)
+        # revoke 후 verify는 False → last_used_at 갱신 0(list는 빈 — revoked 제외)
+        assert await store.verify(device_id, sig) is False
+        assert await store.list_for_user(_UID) == []
+        # 직접 dict 확인 — revoke가 last_used_at 건드리지 않음
+        assert store._creds[device_id].last_used_at == first
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1665,3 +1712,27 @@ class TestPgDeviceStoreListForUser:
         assert [i.device_id for i in infos] == [d2]
         # created_at도 함께 반환
         assert infos[0].created_at == store_dict[d2].created_at
+        # slice 32: last_used_at은 등록 직후 None(verify 안 됨)
+        assert infos[0].last_used_at is None
+
+    async def test_verify_success_updates_last_used_at(self) -> None:
+        """slice 32: PgDeviceStore.verify가 last_used_at 컬럼 UPDATE."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        device_id, secret_plain = await store.register(_UID)
+        assert store_dict[device_id].last_used_at is None
+        # verify 성공 → last_used_at 갱신
+        sig = _compute_signature(secret_plain, device_id)
+        assert await store.verify(device_id, sig) is True
+        assert store_dict[device_id].last_used_at is not None
+        # list_for_user 응답에도 노출
+        infos = await store.list_for_user(_UID)
+        assert infos[0].last_used_at == store_dict[device_id].last_used_at
+
+    async def test_verify_failure_does_not_update_last_used_at(self) -> None:
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        device_id, _ = await store.register(_UID)
+        # 잘못된 sig → False → last_used_at 갱신 0
+        assert await store.verify(device_id, "0" * 64) is False
+        assert store_dict[device_id].last_used_at is None

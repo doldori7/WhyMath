@@ -46,10 +46,25 @@ class DeviceInfo(NamedTuple):
 
     Pydantic 응답 schema는 `api/devices.py`가 별도 정의(레이어 분리: store는 *데이터 표면*,
     라우터는 *HTTP 표면*). secret_plain·user_id·revoked 정보는 노출 안 함(보안·표면 최소화).
+
+    slice 32: `last_used_at` 추가 — 마지막 verify 성공 시각(없으면 None=한 번도 미사용).
+    `CachedDeviceStore` 경유 시 cache miss에서만 갱신(정밀도 ≈ cache TTL).
     """
 
     device_id: str
     created_at: datetime
+    last_used_at: datetime | None = None
+
+
+class _CredRecord(NamedTuple):
+    """InMemoryDeviceStore 내부 행 — 슬라이스 32에서 last_used_at 추가하며 NamedTuple로
+    리팩터(이전 4-tuple 인덱싱 → 이름 접근). `_replace`로 불변 업데이트 가능."""
+
+    user_id: uuid.UUID
+    secret_plain: str
+    revoked: bool
+    created_at: datetime
+    last_used_at: datetime | None
 
 
 @runtime_checkable
@@ -103,44 +118,52 @@ class InMemoryDeviceStore:
     """
 
     def __init__(self) -> None:
-        # device_id → (user_id, secret_plain, revoked, created_at)
-        # slice 29: created_at 추가 — list_for_user의 ORDER BY created_at DESC 정합.
-        self._creds: dict[str, tuple[uuid.UUID, str, bool, datetime]] = {}
+        # slice 32: 내부 행을 `_CredRecord` NamedTuple로 리팩터(이전 4-tuple).
+        self._creds: dict[str, _CredRecord] = {}
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
         device_id = str(uuid.uuid4())
         # 32B URL-safe token — ~256-bit entropy(보안 충분·KDF 불필요)
         secret_plain = secrets.token_urlsafe(32)
-        self._creds[device_id] = (user_id, secret_plain, False, datetime.now(UTC))
+        self._creds[device_id] = _CredRecord(
+            user_id=user_id,
+            secret_plain=secret_plain,
+            revoked=False,
+            created_at=datetime.now(UTC),
+            last_used_at=None,
+        )
         return device_id, secret_plain
 
     async def verify(self, device_id: str, signature_hex: str) -> bool:
         cred = self._creds.get(device_id)
         if cred is None:
             return False
-        _user, secret_plain, revoked, _ = cred
-        if revoked:
+        if cred.revoked:
             return False
-        expected = _compute_signature(secret_plain, device_id)
-        return hmac.compare_digest(signature_hex.lower(), expected)
+        expected = _compute_signature(cred.secret_plain, device_id)
+        if not hmac.compare_digest(signature_hex.lower(), expected):
+            return False
+        # slice 32: last_used_at 갱신(성공 경로만)
+        self._creds[device_id] = cred._replace(last_used_at=datetime.now(UTC))
+        return True
 
     async def revoke(self, device_id: str, owner_id: uuid.UUID) -> bool:
         cred = self._creds.get(device_id)
         if cred is None:
             return False
-        user, secret_plain, _, created_at = cred
         # slice 24: 본인 소유 검증 — 타인 device면 False(404 등가·정보 비누설)
-        if user != owner_id:
+        if cred.user_id != owner_id:
             return False
-        self._creds[device_id] = (user, secret_plain, True, created_at)
+        self._creds[device_id] = cred._replace(revoked=True)
         return True
 
     async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
         # slice 29: 본인 소유 활성 device — created_at DESC 정렬
+        # slice 32: last_used_at 함께 노출
         active = [
-            DeviceInfo(device_id=d, created_at=c[3])
+            DeviceInfo(device_id=d, created_at=c.created_at, last_used_at=c.last_used_at)
             for d, c in self._creds.items()
-            if c[0] == owner_id and not c[2]
+            if c.user_id == owner_id and not c.revoked
         ]
         active.sort(key=lambda info: info.created_at, reverse=True)
         return active
@@ -194,7 +217,13 @@ class PgDeviceStore:
             if row is None or row.revoked:
                 return False
             expected = _compute_signature(row.secret_plain, device_id)
-        return hmac.compare_digest(signature_hex.lower(), expected)
+            if not hmac.compare_digest(signature_hex.lower(), expected):
+                return False
+            # slice 32: last_used_at 갱신(verify 성공 경로만). CachedDeviceStore의 cache
+            # miss 경로에서만 진입 — cache hit은 inner 우회라 last_used_at은 *대략* 신선.
+            row.last_used_at = datetime.now(UTC)
+            await session.commit()
+        return True
 
     async def revoke(self, device_id: str, owner_id: uuid.UUID) -> bool:
         from whymath_backend.db.models.device import DeviceCredential
@@ -218,11 +247,16 @@ class PgDeviceStore:
     async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
         # slice 29: SELECT device_id, created_at WHERE user_id=X AND revoked=false
         # ORDER BY created_at DESC. revoked=False 필터링은 *서버측*(network·메모리 절감).
+        # slice 32: last_used_at 함께 SELECT — UI가 "마지막 사용" 표시 가능.
         from whymath_backend.db.models.device import DeviceCredential
 
         async with self._sessionmaker() as session:
             stmt = (
-                select(DeviceCredential.device_id, DeviceCredential.created_at)
+                select(
+                    DeviceCredential.device_id,
+                    DeviceCredential.created_at,
+                    DeviceCredential.last_used_at,
+                )
                 .where(
                     DeviceCredential.user_id == owner_id,
                     DeviceCredential.revoked.is_(False),
@@ -230,7 +264,10 @@ class PgDeviceStore:
                 .order_by(DeviceCredential.created_at.desc())
             )
             result = await session.execute(stmt)
-            return [DeviceInfo(device_id=row[0], created_at=row[1]) for row in result.all()]
+            return [
+                DeviceInfo(device_id=row[0], created_at=row[1], last_used_at=row[2])
+                for row in result.all()
+            ]
 
 
 # 모듈 전역 — FastAPI 단일 프로세스/다중 워커 가정. `None`이면 store 모드 비활성
