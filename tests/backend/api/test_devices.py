@@ -1083,6 +1083,86 @@ class TestInMemoryDeviceStoreListForUser:
         assert await store.count_for_user(other) == 1
 
 
+class TestInMemoryDeviceStoreMonotonicOrdering:
+    """slice 54: 단조 등록 순번(seq)으로 시계 해상도와 무관한 결정론적 2차 정렬.
+
+    `datetime.now(UTC)`는 플랫폼에 따라 해상도가 거칠어(예: Windows ~15ms) 빠른 연속
+    등록이 *동일* created_at을 받을 수 있다. 그때도 seq tie-break이 등록 순서를 정렬
+    방향대로 보장한다 → 정렬·페이지네이션이 시계 해상도/dict 삽입순서에 의존하지 않음.
+    (`_replace`로 created_at만 동일하게 강제 — seq는 register 시점 값 그대로 보존.)
+    """
+
+    async def test_created_at_tie_desc_orders_by_registration_desc(self) -> None:
+        """created_at가 전부 같아도 desc는 나중 등록(d3)이 먼저 — seq 내림차순 tie-break."""
+        store = InMemoryDeviceStore()
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        d3, _ = await store.register(_UID)
+        # 거친 시계 시뮬: 세 등록이 동일 틱 → created_at 충돌 강제(_replace는 seq 보존)
+        tie = datetime.now(UTC)
+        for d in (d1, d2, d3):
+            store._creds[d] = store._creds[d]._replace(created_at=tie)
+        infos = await store.list_for_user(_UID, order_dir="desc")
+        assert [i.device_id for i in infos] == [d3, d2, d1]
+
+    async def test_created_at_tie_asc_orders_by_registration_asc(self) -> None:
+        """동일 created_at에서 asc는 먼저 등록(d1)이 먼저 — seq 오름차순 tie-break."""
+        store = InMemoryDeviceStore()
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        d3, _ = await store.register(_UID)
+        tie = datetime.now(UTC)
+        for d in (d1, d2, d3):
+            store._creds[d] = store._creds[d]._replace(created_at=tie)
+        infos = await store.list_for_user(_UID, order_dir="asc")
+        assert [i.device_id for i in infos] == [d1, d2, d3]
+
+    async def test_tie_break_on_last_used_at_column(self) -> None:
+        """order_by=last_used_at에서도 동일 last_used_at은 seq로 tie-break(desc=나중 등록 먼저)."""
+        store = InMemoryDeviceStore()
+        d1, s1 = await store.register(_UID)
+        d2, s2 = await store.register(_UID)
+        await store.verify(d1, _sign(s1, d1))
+        await store.verify(d2, _sign(s2, d2))
+        tie = datetime.now(UTC)
+        for d in (d1, d2):
+            store._creds[d] = store._creds[d]._replace(last_used_at=tie)
+        infos = await store.list_for_user(
+            _UID, order_by="last_used_at", order_dir="desc"
+        )
+        assert [i.device_id for i in infos] == [d2, d1]
+
+    async def test_null_group_keeps_registration_order(self) -> None:
+        """None 그룹(정렬 컬럼 값 없음)은 시간 차원이 없어 등록 순서(dict 삽입) 보존.
+
+        slice 47 동작(None 위치만 last/first로 옮김) 유지 — seq로 뒤집지 않는다.
+        """
+        store = InMemoryDeviceStore()
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        d3, _ = await store.register(_UID)
+        # 셋 다 한 번도 verify 안 함 → last_used_at 전부 None(null 그룹)
+        infos = await store.list_for_user(
+            _UID, order_by="last_used_at", order_dir="desc", nulls="last"
+        )
+        # null 그룹은 등록 순서 그대로(정렬 방향 무관)
+        assert [i.device_id for i in infos] == [d1, d2, d3]
+
+    async def test_counter_restarts_after_reset(self) -> None:
+        """reset()은 순번 발급기도 재시작 — 초기화 후 등록도 결정론적으로 정렬."""
+        store = InMemoryDeviceStore()
+        await store.register(_UID)
+        store.reset()
+        # reset 후 새 등록 — 동일 created_at에서도 등록 순서대로 정렬돼야
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        tie = datetime.now(UTC)
+        for d in (d1, d2):
+            store._creds[d] = store._creds[d]._replace(created_at=tie)
+        infos = await store.list_for_user(_UID, order_dir="desc")
+        assert [i.device_id for i in infos] == [d2, d1]
+
+
 class TestInMemoryDeviceStoreLastUsedAt:
     """slice 32: verify 성공 시 last_used_at 갱신·revoke·실패는 갱신 안 함."""
 
