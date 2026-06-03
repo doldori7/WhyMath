@@ -35,6 +35,7 @@ from whymath_backend.api._device_store import (
 from whymath_backend.api._rate_limit import (
     _client_device_id,
     _expected_device_signature,
+    reset_store,
 )
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
@@ -54,16 +55,31 @@ def _reset_device_store() -> Iterator[None]:
     set_device_store(None)
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_store() -> None:
+    """매 테스트 격리 — rate limit 카운터 리셋(슬라이스 25에서 register dep 사용)."""
+    import asyncio
+
+    asyncio.run(reset_store())
+
+
 def _user() -> UserProfile:
     return UserProfile.from_schema(
         UserProfileSchema(user_id=_UID, persona_primary=Persona.A_일반고고3)
     )
 
 
-def _settings_override(device_hmac_secret: str = "") -> Settings:
+def _settings_override(
+    device_hmac_secret: str = "",
+    register_user_limit: int = 0,
+    register_ip_limit: int = 0,
+) -> Settings:
+    """기본은 register rate limit *비활성*(0) — 기존 테스트 영향 0. slice 25 테스트만 활성."""
     return Settings(
         jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
         coach_device_hmac_secret=SecretStr(device_hmac_secret),
+        device_register_rate_limit_per_minute=register_user_limit,
+        device_register_rate_limit_ip_per_minute=register_ip_limit,
     )
 
 
@@ -265,6 +281,80 @@ class TestRegisterEndpoint:
         resp = _no_auth_client(store).post("/v1/devices/register")
         assert resp.status_code == 401
         assert "WWW-Authenticate" in resp.headers
+
+
+class TestRegisterRateLimit:
+    """슬라이스 25 — `/v1/devices/register`에 user+IP 한도 적용 검증.
+
+    별 keying(`category=device_register`)으로 coach `write`와 키 공간 분리 — 한쪽이 다른
+    쪽을 잠식하지 않는다. 기본 fixture가 limit 0(비활성)이라 기존 테스트 영향 0.
+    """
+
+    def _client_with_limits(
+        self,
+        store: DeviceCredentialStore,
+        user_limit: int = 0,
+        ip_limit: int = 0,
+    ) -> TestClient:
+        set_device_store(store)
+        app = create_app()
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = lambda: _settings_override(
+            register_user_limit=user_limit, register_ip_limit=ip_limit
+        )
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        return TestClient(app)
+
+    def test_user_limit_enforced(self) -> None:
+        """사용자 한도 2 — 첫 2회 201, 3회는 429."""
+        store = InMemoryDeviceStore()
+        client = self._client_with_limits(store, user_limit=2, ip_limit=0)
+        r1 = client.post("/v1/devices/register")
+        r2 = client.post("/v1/devices/register")
+        r3 = client.post("/v1/devices/register")
+        assert r1.status_code == 201
+        assert r2.status_code == 201
+        assert r3.status_code == 429
+        # blocker는 user 차원
+        assert "Retry-After" in r3.headers
+        assert r3.headers.get("X-RateLimit-User-Limit") == "2"
+
+    def test_ip_limit_enforced(self) -> None:
+        """IP 한도 1 — 첫 1회 201, 2회는 429."""
+        store = InMemoryDeviceStore()
+        client = self._client_with_limits(store, user_limit=0, ip_limit=1)
+        r1 = client.post("/v1/devices/register")
+        r2 = client.post("/v1/devices/register")
+        assert r1.status_code == 201
+        assert r2.status_code == 429
+        assert r2.headers.get("X-RateLimit-Ip-Limit") == "1"
+
+    def test_disabled_when_limit_zero(self) -> None:
+        """기본(=0) — 비활성·기존 테스트 동작 보존."""
+        store = InMemoryDeviceStore()
+        client = self._client_with_limits(store, user_limit=0, ip_limit=0)
+        # 10회 호출해도 모두 201(한도 0 = 비활성)
+        for _ in range(10):
+            assert client.post("/v1/devices/register").status_code == 201
+
+    def test_register_bucket_isolated_from_coach_write(self) -> None:
+        """device_register category가 coach write와 *분리* — 한쪽이 다른 쪽 잠식 안 함.
+
+        register limit=1 + 첫 register 200 → 2회는 429. *그 사이* coach POST는 영향 0
+        (별 키 공간). 본 테스트는 coach 엔드포인트 호출 안 하나, 별 category 결선만 확인.
+        """
+        store = InMemoryDeviceStore()
+        client = self._client_with_limits(store, user_limit=1, ip_limit=0)
+        r1 = client.post("/v1/devices/register")
+        r2 = client.post("/v1/devices/register")
+        assert r1.status_code == 201
+        assert r2.status_code == 429
+        # 429 응답 헤더 — Retry-After 포함
+        assert int(r2.headers["Retry-After"]) > 0
 
 
 class TestRevokeEndpoint:

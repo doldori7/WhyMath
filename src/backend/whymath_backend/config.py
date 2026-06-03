@@ -284,6 +284,26 @@ class Settings(BaseSettings):
             "사용자(30)와 IP(60) 사이 중간."
         ),
     )
+    # ── 슬라이스 25: 디바이스 등록 전용 rate limit (`/v1/devices/register`) ──
+    device_register_rate_limit_per_minute: int = Field(
+        default=5,
+        ge=0,
+        description=(
+            "디바이스 등록(`POST /v1/devices/register`)의 *사용자 단위* 분당 상한. 0=비활성. "
+            "등록은 드문 작업(첫 실행 1회·기기 변경)이라 매우 낮게 — sock-puppet 디바이스 "
+            "양산·DB 자격증명 폭증 차단. coach `write`와 *별 키 공간*"
+            "(category=device_register)."
+        ),
+    )
+    device_register_rate_limit_ip_per_minute: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "디바이스 등록의 *IP 단위* 분당 상한. 0=비활성. 공유 NAT/학교/공공 와이파이에서 "
+            "여러 사용자가 등록 가능하도록 사용자 한도(5)의 2배."
+        ),
+    )
+
     coach_device_hmac_secret: SecretStr = Field(
         default=SecretStr(""),
         description=(

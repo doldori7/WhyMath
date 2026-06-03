@@ -14,8 +14,9 @@ secret 저장 후 매 요청 `X-Device-Sig: HMAC-SHA256(secret, device_id)` 동�
 - 등록은 *인증된 사용자만*(`ConsentedUser` 게이트) — 익명 등록 금지(미성년 등록 게이팅·CLAUDE.md).
 - secret_plain은 응답 body에만 노출·서버 로그/추적·DB 쿼리 응답에 *절대 미포함*(SecretStr 사용
   안 함은 1회 응답이라 필요 없으나 운영 시 로그 마스킹 미들웨어 권장).
-- 본 슬라이스는 *rate limit 적용 안 함* — 등록 자체가 드물고(첫 실행 1회) 인증 게이트로 1차
-  방어. 등록 폭주 방어는 후속.
+- 슬라이스 25: `/register`에 `RateLimitedDeviceRegister`(user 5/min·IP 10/min, 별 키 공간)
+  부착 — 등록 폭주 방어(sock-puppet·DB 자격증명 폭증). `/revoke`는 *드물게* 호출되고 본인
+  소유 검증(slice 24)이 이미 1차 게이트라 일단 미적용(필요 시 후속).
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._device_store import DeviceCredentialStore, get_device_store
+from whymath_backend.api._rate_limit import RateLimitedDeviceRegister
 
 router = APIRouter(prefix="/v1/devices", tags=["devices"])
 
@@ -70,6 +72,7 @@ def _require_store() -> DeviceCredentialStore:
     response_model=DeviceRegisterResponse,
     status_code=status.HTTP_201_CREATED,
     summary="디바이스 등록 — device_id + secret_plain 1회 발급",
+    dependencies=[RateLimitedDeviceRegister],
 )
 async def register_device(user: ConsentedUser) -> DeviceRegisterResponse:
     """새 디바이스 자격증명 발급 — 인증된 사용자만 가능. secret_plain은 응답에서만 노출."""

@@ -52,8 +52,12 @@ except ImportError:  # pragma: no cover — 라이브러리 미설치 환경
 
 _WINDOW_SECONDS = 60.0
 
-RateCategory = Literal["read", "write"]
-"""POST/GET 차등 한도 — 읽기/쓰기 분리 버킷(상호 영향 차단)."""
+RateCategory = Literal["read", "write", "device_register"]
+"""POST/GET 차등 한도 — 읽기/쓰기 분리 버킷(상호 영향 차단).
+
+`device_register`(슬라이스 25): `/v1/devices/register`의 *전용* 버킷. coach `write`와 키 공간
+분리 — 한쪽 폭주가 다른 쪽 한도를 잠식하지 않는다(예: coach 글 쓰기 폭주가 register를 막거나
+그 반대). 등록은 *드문* 작업(첫 실행 1회·기기 변경)이라 낮은 한도(5/min user·10/min IP)."""
 
 
 class RateLimitResult(NamedTuple):
@@ -1017,6 +1021,39 @@ RateLimitedTripleRead = Depends(rate_limit_triple_read)
 
 RateLimitedTripleWrite = Depends(rate_limit_triple_write)
 """인증 POST용 *3차원*(user+IP+device) 의존성 — `dependencies=[RateLimitedTripleWrite]`."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 슬라이스 25 — 디바이스 등록 전용 rate limit (`/v1/devices/register`)
+#
+# 등록 폭주 방어 — sock-puppet 디바이스 양산·DB 자격증명 행 폭증 차단. *낮은 한도*
+# (user 5/min·IP 10/min)로 정상 사용자엔 무영향(첫 실행 1회·기기 변경)·자동화에만 발화.
+# device 차원은 *N/A*(등록 *전*이라 device_id가 아직 없음) — user+IP 2차원만 적용.
+# 별 category(`device_register`)로 coach write와 키 공간 분리 — 상호 영향 0.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+async def rate_limit_device_register(
+    user: ConsentedUser,
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+) -> None:
+    """디바이스 등록(`/v1/devices/register`) 전용 — user+IP 2차원·낮은 한도."""
+    await _enforce_triple(
+        user.user_id,
+        _client_ip(request),
+        None,  # device_id N/A — 등록 전엔 device가 없음(device 차원 자동 비활성)
+        category="device_register",
+        user_limit=settings.device_register_rate_limit_per_minute,
+        ip_limit=settings.device_register_rate_limit_ip_per_minute,
+        device_limit=0,
+        response=response,
+    )
+
+
+RateLimitedDeviceRegister = Depends(rate_limit_device_register)
+"""디바이스 등록 전용(slice 25) — `dependencies=[RateLimitedDeviceRegister]`."""
 
 
 # ──────────────────────────────────────────────────────────────────────────
