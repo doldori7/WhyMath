@@ -24,6 +24,7 @@ secret 저장 후 매 요청 `X-Device-Sig: HMAC-SHA256(secret, device_id)` 동�
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -164,6 +165,24 @@ async def revoke_device(
 async def list_my_devices(
     user: ConsentedUser,
     include_revoked: bool = False,
+    since: Annotated[
+        datetime | None,
+        Query(
+            description=(
+                "slice 41: created_at *이후* 등록된 device만(inclusive·ISO8601). UI '지난 30일 "
+                "활동'·보안 감사 화면 결선. None이면 무필터."
+            ),
+        ),
+    ] = None,
+    until: Annotated[
+        datetime | None,
+        Query(
+            description=(
+                "slice 41: created_at *이전* 등록된 device만(inclusive·ISO8601). since와 함께 "
+                "시간창 지정 가능."
+            ),
+        ),
+    ] = None,
     limit: int = Query(
         default=50,
         ge=1,
@@ -199,11 +218,21 @@ async def list_my_devices(
     """
     store = _require_store()
     infos = await store.list_for_user(
-        user.user_id, include_revoked=include_revoked, limit=limit, offset=offset
+        user.user_id,
+        include_revoked=include_revoked,
+        since=since,
+        until=until,
+        limit=limit,
+        offset=offset,
     )
     total: int | None = None
     if include_total:
-        total = await store.count_for_user(user.user_id, include_revoked=include_revoked)
+        total = await store.count_for_user(
+            user.user_id,
+            include_revoked=include_revoked,
+            since=since,
+            until=until,
+        )
     return DeviceListResponse(
         devices=[
             DeviceInfoSchema(

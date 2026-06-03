@@ -575,6 +575,31 @@ class TestListDevicesEndpoint:
         assert paged_body["total"] == 5
         assert len(paged_body["devices"]) == 2
 
+    async def test_since_until_query_params_filter_response(self) -> None:
+        """slice 41: ?since/?until ISO8601 → 시간창 필터.
+
+        URL의 `+`는 공백으로 파싱되므로 `params=` dict로 안전 전달(httpx 자동 인코딩).
+        """
+        store = InMemoryDeviceStore()
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        now = datetime.now(UTC)
+        store._creds[d2] = store._creds[d2]._replace(
+            created_at=now - timedelta(days=365)
+        )
+        client = _client(store)
+        since_iso = (now - timedelta(days=30)).isoformat()
+        # since=30일 전 → d1만
+        resp = client.get("/v1/devices", params={"since": since_iso})
+        assert resp.status_code == 200, resp.text
+        ids = [d["device_id"] for d in resp.json()["devices"]]
+        assert ids == [d1]
+        # since + include_total → 필터 적용 count(우회 캐시 경로)
+        resp_total = client.get(
+            "/v1/devices", params={"since": since_iso, "include_total": True}
+        )
+        assert resp_total.json()["total"] == 1
+
     async def test_include_total_false_default_returns_none(self) -> None:
         """기본 `?include_total` 미지정 → total=None(추가 COUNT 회피)."""
         store = InMemoryDeviceStore()
@@ -635,6 +660,33 @@ class TestInMemoryDeviceStoreListForUser:
         assert [i.device_id for i in page2] == [ids[1], ids[0]]
         # offset 초과 → 빈
         assert await store.list_for_user(_UID, limit=2, offset=10) == []
+
+    async def test_since_until_filters_created_at(self) -> None:
+        """slice 41: created_at 시간창 필터 — since/until 적용."""
+        store = InMemoryDeviceStore()
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        d3, _ = await store.register(_UID)
+        # d2의 created_at을 1년 전·d3은 1주 전·d1은 현재
+        now = datetime.now(UTC)
+        creds = store._creds
+        creds[d2] = creds[d2]._replace(created_at=now - timedelta(days=365))
+        creds[d3] = creds[d3]._replace(created_at=now - timedelta(days=7))
+        # since=30일 전 → d1 + d3
+        infos = await store.list_for_user(_UID, since=now - timedelta(days=30))
+        assert sorted(i.device_id for i in infos) == sorted([d1, d3])
+        # until=14일 전 → d2만(365일 전)
+        infos2 = await store.list_for_user(_UID, until=now - timedelta(days=14))
+        assert [i.device_id for i in infos2] == [d2]
+        # 시간창 [60일 전, 1일 전] → d3
+        infos3 = await store.list_for_user(
+            _UID,
+            since=now - timedelta(days=60),
+            until=now - timedelta(days=1),
+        )
+        assert [i.device_id for i in infos3] == [d3]
+        # count도 동일 필터
+        assert await store.count_for_user(_UID, since=now - timedelta(days=30)) == 2
 
     async def test_count_for_user_matches_list_filter(self) -> None:
         """slice 39: count_for_user는 list_for_user와 같은 필터(owner scope·include_revoked)."""
@@ -1081,19 +1133,31 @@ class _CountingInnerStore:
         owner_id: uuid.UUID,
         *,
         include_revoked: bool = False,
+        since: datetime | None = None,
+        until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> Any:
         self.list_calls += 1
         return await self._inner.list_for_user(
-            owner_id, include_revoked=include_revoked, limit=limit, offset=offset
+            owner_id,
+            include_revoked=include_revoked,
+            since=since,
+            until=until,
+            limit=limit,
+            offset=offset,
         )
 
     async def count_for_user(
-        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+        self,
+        owner_id: uuid.UUID,
+        *,
+        include_revoked: bool = False,
+        since: datetime | None = None,
+        until: datetime | None = None,
     ) -> int:
         return await self._inner.count_for_user(
-            owner_id, include_revoked=include_revoked
+            owner_id, include_revoked=include_revoked, since=since, until=until
         )
 
     async def cleanup_stale(
@@ -1339,6 +1403,22 @@ class TestCachedDeviceStoreListForUser:
         # 두 키가 *별도로* 캐시됨
         assert cache.store[f"device_count:{_UID}:active"] == "1"
         assert cache.store[f"device_count:{_UID}:all"] == "2"
+
+    async def test_count_with_since_until_bypasses_cache(self) -> None:
+        """slice 41: since/until 필터 있으면 캐시 우회 — 매 호출 inner.count."""
+        inner_real = InMemoryDeviceStore()
+        await inner_real.register(_UID)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        now = datetime.now(UTC)
+        await store.count_for_user(_UID, since=now - timedelta(days=30))
+        # 캐시 미접근(시간창 시 우회 경로)
+        assert cache.get_calls == 0
+        assert cache.setex_calls == 0
+        # 두 번째 호출도 inner 호출(캐시 안 함)
+        await store.count_for_user(_UID, since=now - timedelta(days=30))
+        assert cache.get_calls == 0
 
     async def test_count_cache_bytes_response(self) -> None:
         """slice 40: redis decode_responses=False(bytes 반환)도 처리."""
@@ -2101,15 +2181,14 @@ class _FakePgSession:
 
         slice 38: `.limit(N).offset(M)` 처리 — stmt._limit_clause·_offset_clause의
         BindParameter.value를 추출해 슬라이스 적용.
+
+        slice 41: where 절을 *재귀 row-matcher*로 평가 — eq/is_뿐 아니라 `>=`/`<=`
+        연산자도 처리(operator.__name__ dispatch). created_at >= since 등 시간창 필터 호환.
         """
-        constraints = self._iter_eq_constraints(stmt.whereclause)
         matched = [
             row
             for row in self._store.values()
-            if all(
-                getattr(row, col_name, None) == val
-                for col_name, val in constraints.items()
-            )
+            if self._row_matches(row, stmt.whereclause)
         ]
         order_clauses = getattr(stmt, "_order_by_clauses", ())
         if order_clauses:
@@ -2153,18 +2232,62 @@ class _FakePgSession:
 
     @staticmethod
     def _iter_eq_constraints(where: Any) -> dict[str, Any]:
-        """whereclause에서 `col == value` 등식들을 dict로 추출. AND 결합 재귀."""
+        """whereclause에서 `col == value` 등식들을 dict로 추출. AND 결합 재귀.
+
+        slice 24-40용 — eq/is_만 지원. slice 41은 일반화된 `_row_matches`로 대체.
+        """
         result: dict[str, Any] = {}
-        # 단일 BinaryExpression (BooleanClauseList가 아닌 경우)
         if hasattr(where, "left") and hasattr(where, "right"):
             col_name = where.left.key if hasattr(where.left, "key") else str(where.left)
             value = where.right.value if hasattr(where.right, "value") else where.right
             result[col_name] = value
             return result
-        # BooleanClauseList — children을 순회
         for child in getattr(where, "clauses", []):
             result.update(_FakePgSession._iter_eq_constraints(child))
         return result
+
+    @staticmethod
+    def _row_matches(row: Any, where: Any) -> bool:
+        """slice 41: row를 where 절에 대해 *재귀* 평가 — eq/is_·>=·<= 등 다양한 연산자 처리.
+
+        SQLAlchemy 2.0 `BinaryExpression.operator`는 호출 가능한 비교 함수(operator.eq·
+        operator.ge·sqlalchemy.sql.operators.is_ 등). `__name__`으로 dispatch — 알려진
+        연산자(`eq`/`ge`/`le`/`lt`/`gt`/`ne`/`is_`)는 Python 비교로 평가·미지원은 안전 True
+        (matched로 falsy 안 만들고 후속 슬라이스가 확장).
+        """
+        from operator import eq, ge, gt, le, lt, ne
+
+        op_dispatch: dict[str, Any] = {
+            "eq": eq,
+            "ne": ne,
+            "ge": ge,
+            "le": le,
+            "lt": lt,
+            "gt": gt,
+            "is_": eq,  # is_(False) → eq(actual, False)와 같은 의미(hermetic)
+        }
+
+        if where is None:
+            return True
+        # BooleanClauseList(AND) — children 모두 만족
+        if hasattr(where, "clauses"):
+            return all(
+                _FakePgSession._row_matches(row, child) for child in where.clauses
+            )
+        # BinaryExpression — left=column·right=BindParameter·operator=callable
+        if hasattr(where, "left") and hasattr(where, "right"):
+            col_name = where.left.key if hasattr(where.left, "key") else str(where.left)
+            actual = getattr(row, col_name, None)
+            value = where.right.value if hasattr(where.right, "value") else where.right
+            op = getattr(where, "operator", None)
+            op_name = getattr(op, "__name__", "eq") if op is not None else "eq"
+            handler = op_dispatch.get(op_name, eq)
+            try:
+                return bool(handler(actual, value))
+            except TypeError:
+                # None 비교 등 — 매치 실패
+                return False
+        return True
 
 
 def _fake_sessionmaker_for(store: dict[str, Any]) -> Any:
@@ -2366,6 +2489,28 @@ class TestPgDeviceStoreListForUser:
         assert await store.count_for_user(_UID) == 3
         # 본인 폐기 포함 → 4
         assert await store.count_for_user(_UID, include_revoked=True) == 4
+
+    async def test_since_until_via_sql_range(self) -> None:
+        """slice 41: PgDeviceStore가 created_at >= since / <= until WHERE 발급.
+
+        `_FakePgSession._row_matches`가 ge/le 연산자도 처리하므로 hermetic 검증 가능.
+        """
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        now = datetime.now(UTC)
+        # d2의 created_at을 1년 전으로 강제
+        store_dict[d2].created_at = now - timedelta(days=365)
+        # since=30일 전 → d1만(현재)
+        infos = await store.list_for_user(_UID, since=now - timedelta(days=30))
+        assert [i.device_id for i in infos] == [d1]
+        # until=14일 전 → d2만(1년 전)
+        infos2 = await store.list_for_user(_UID, until=now - timedelta(days=14))
+        assert [i.device_id for i in infos2] == [d2]
+        # count 동일 필터
+        assert await store.count_for_user(_UID, since=now - timedelta(days=30)) == 1
+        assert await store.count_for_user(_UID, until=now - timedelta(days=14)) == 1
 
 
 class TestPgDeviceStoreCleanupStale:

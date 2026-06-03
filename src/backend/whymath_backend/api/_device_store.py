@@ -111,6 +111,8 @@ class DeviceCredentialStore(Protocol):
         owner_id: uuid.UUID,
         *,
         include_revoked: bool = False,
+        since: datetime | None = None,
+        until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -123,7 +125,14 @@ class DeviceCredentialStore(Protocol):
         """
         ...
 
-    async def count_for_user(self, owner_id: uuid.UUID, *, include_revoked: bool = False) -> int:
+    async def count_for_user(
+        self,
+        owner_id: uuid.UUID,
+        *,
+        include_revoked: bool = False,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> int:
         """slice 39: 본인 소유 device *총 개수* — UI "Page X of Y"·"총 N개" 표시용.
 
         라우터에서 `?include_total=true` 옵션 시만 호출(추가 COUNT 쿼리 비용 회피). list_for_
@@ -207,6 +216,8 @@ class InMemoryDeviceStore:
         owner_id: uuid.UUID,
         *,
         include_revoked: bool = False,
+        since: datetime | None = None,
+        until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -214,6 +225,7 @@ class InMemoryDeviceStore:
         # slice 32: last_used_at 함께 노출
         # slice 37: include_revoked=True면 폐기 이력 포함·revoked/revoked_at 노출
         # slice 38: limit/offset 페이지네이션
+        # slice 41: since/until created_at 시간창 필터(inclusive)
         items = [
             DeviceInfo(
                 device_id=d,
@@ -223,17 +235,31 @@ class InMemoryDeviceStore:
                 revoked_at=c.revoked_at,
             )
             for d, c in self._creds.items()
-            if c.user_id == owner_id and (include_revoked or not c.revoked)
+            if c.user_id == owner_id
+            and (include_revoked or not c.revoked)
+            and (since is None or c.created_at >= since)
+            and (until is None or c.created_at <= until)
         ]
         items.sort(key=lambda info: info.created_at, reverse=True)
         return items[offset : offset + limit]
 
-    async def count_for_user(self, owner_id: uuid.UUID, *, include_revoked: bool = False) -> int:
+    async def count_for_user(
+        self,
+        owner_id: uuid.UUID,
+        *,
+        include_revoked: bool = False,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> int:
         # slice 39: list_for_user와 같은 필터·페이지네이션 적용 *전* 총 개수
+        # slice 41: since/until 동일 시간창 필터
         return sum(
             1
             for c in self._creds.values()
-            if c.user_id == owner_id and (include_revoked or not c.revoked)
+            if c.user_id == owner_id
+            and (include_revoked or not c.revoked)
+            and (since is None or c.created_at >= since)
+            and (until is None or c.created_at <= until)
         )
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
@@ -334,6 +360,8 @@ class PgDeviceStore:
         owner_id: uuid.UUID,
         *,
         include_revoked: bool = False,
+        since: datetime | None = None,
+        until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -353,6 +381,11 @@ class PgDeviceStore:
             ).where(DeviceCredential.user_id == owner_id)
             if not include_revoked:
                 stmt = stmt.where(DeviceCredential.revoked.is_(False))
+            # slice 41: since/until created_at 시간창 필터(inclusive)
+            if since is not None:
+                stmt = stmt.where(DeviceCredential.created_at >= since)
+            if until is not None:
+                stmt = stmt.where(DeviceCredential.created_at <= until)
             stmt = stmt.order_by(DeviceCredential.created_at.desc()).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return [
@@ -366,8 +399,16 @@ class PgDeviceStore:
                 for row in result.all()
             ]
 
-    async def count_for_user(self, owner_id: uuid.UUID, *, include_revoked: bool = False) -> int:
+    async def count_for_user(
+        self,
+        owner_id: uuid.UUID,
+        *,
+        include_revoked: bool = False,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> int:
         # slice 39: SELECT COUNT(*) WHERE user_id=X [AND revoked=False] — 같은 필터.
+        # slice 41: since/until 동일 시간창 필터
         from sqlalchemy import func
 
         from whymath_backend.db.models.device import DeviceCredential
@@ -380,6 +421,10 @@ class PgDeviceStore:
             )
             if not include_revoked:
                 stmt = stmt.where(DeviceCredential.revoked.is_(False))
+            if since is not None:
+                stmt = stmt.where(DeviceCredential.created_at >= since)
+            if until is not None:
+                stmt = stmt.where(DeviceCredential.created_at <= until)
             result = await session.execute(stmt)
             return int(result.scalar() or 0)
 
@@ -530,19 +575,37 @@ class CachedDeviceStore:
         owner_id: uuid.UUID,
         *,
         include_revoked: bool = False,
+        since: datetime | None = None,
+        until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
         # 목록 조회는 캐시 안 함 — 등록/폐기 직후 신선도 우선(빈도 낮은 관리 표면).
-        # slice 37: include_revoked·slice 38: limit/offset 그대로 inner에 전달
+        # slice 37: include_revoked·slice 38: limit/offset·slice 41: since/until 그대로 위임
         return await self._inner.list_for_user(
-            owner_id, include_revoked=include_revoked, limit=limit, offset=offset
+            owner_id,
+            include_revoked=include_revoked,
+            since=since,
+            until=until,
+            limit=limit,
+            offset=offset,
         )
 
-    async def count_for_user(self, owner_id: uuid.UUID, *, include_revoked: bool = False) -> int:
+    async def count_for_user(
+        self,
+        owner_id: uuid.UUID,
+        *,
+        include_revoked: bool = False,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> int:
         # slice 40: count 결과 캐시 — register/revoke가 즉시 invalidate하므로 stale 위험 ≈ 0
-        # (cleanup_stale은 시스템 호출·TTL 자연 만료로 회복). 키 접미사 active/all로
-        # include_revoked 분기 분리(서로 다른 값).
+        # slice 41: since/until 필터 있으면 *캐시 우회*(필터 조합이 무한대·키 폭발 위험·
+        # 시간 필터는 보통 보안 감사용 1회성 조회·캐시 효익 낮음).
+        if since is not None or until is not None:
+            return await self._inner.count_for_user(
+                owner_id, include_revoked=include_revoked, since=since, until=until
+            )
         suffix = "all" if include_revoked else "active"
         cache_key = f"{_COUNT_CACHE_KEY_PREFIX}{owner_id}:{suffix}"
         cached = await self._cache.get(cache_key)
