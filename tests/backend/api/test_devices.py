@@ -1856,6 +1856,33 @@ class TestCachedDeviceStoreTTL:
         await store.verify(device_id, sig)
         assert cache.ttls["device_verify:" + device_id] == 42
 
+    async def test_count_ttl_separate_from_verify_ttl(self) -> None:
+        """slice 48: count_ttl_seconds가 verify ttl과 *독립*으로 SETEX에 전달."""
+        inner_real = InMemoryDeviceStore()
+        device_id, secret_plain = await inner_real.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        # verify ttl=42·count ttl=999 (서로 다른 값)
+        store = CachedDeviceStore(counter, cache, ttl_seconds=42, count_ttl_seconds=999)
+        # verify → device_verify 키에 42
+        await store.verify(device_id, sig)
+        assert cache.ttls["device_verify:" + device_id] == 42
+        # count → device_count 키에 999
+        await store.count_for_user(_UID)
+        assert cache.ttls[f"device_count:{_UID}:active"] == 999
+
+    async def test_count_ttl_falls_back_to_verify_ttl_when_unspecified(self) -> None:
+        """slice 48: count_ttl_seconds=None(생략) → verify ttl로 폴백(slice 40 backward compat)."""
+        inner_real = InMemoryDeviceStore()
+        await inner_real.register(_UID)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        # count_ttl 인자 생략 → ttl_seconds=33로 통일
+        store = CachedDeviceStore(counter, cache, ttl_seconds=33)
+        await store.count_for_user(_UID)
+        assert cache.ttls[f"device_count:{_UID}:active"] == 33
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6) build_device_store_from_settings — lifespan 결선(슬라이스 27)
@@ -1927,6 +1954,8 @@ class TestBuildDeviceStoreFromSettings:
             _lifespan_settings("pg_cached")
         )
         assert isinstance(store, CachedDeviceStore)
+        # slice 48: lifespan이 count_ttl도 별도 전달 — Settings 기본값 300s
+        assert store._count_ttl == 300
         await cleanup()
         assert aclose_called["called"] is True
 

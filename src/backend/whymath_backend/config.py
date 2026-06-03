@@ -358,6 +358,17 @@ class Settings(BaseSettings):
             "ttl_seconds=settings.device_verify_cache_ttl_seconds)`로 주입."
         ),
     )
+    # ── 슬라이스 48: count 캐시 TTL(verify와 별 — count는 register/revoke만 영향) ──
+    device_count_cache_ttl_seconds: int = Field(
+        default=300,
+        ge=0,
+        description=(
+            "디바이스 count 캐시 TTL(초). count는 verify보다 갱신 빈도 *낮음*"
+            "(register/revoke만 영향·verify는 영향 0) → 더 긴 TTL로 cache hit rate 향상. "
+            "기본 300s(5분). register/revoke 시 즉시 invalidate되므로 stale 위험 ≈ 0. "
+            "0=count 캐시 비활성(verify_ttl로 폴백)."
+        ),
+    )
 
     # ── 슬라이스 25: 디바이스 등록 전용 rate limit (`/v1/devices/register`) ──
     device_register_rate_limit_per_minute: int = Field(

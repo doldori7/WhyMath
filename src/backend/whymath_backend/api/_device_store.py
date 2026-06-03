@@ -637,10 +637,13 @@ class CachedDeviceStore:
         inner: DeviceCredentialStore,
         cache: _CacheClient,
         ttl_seconds: int = 60,
+        count_ttl_seconds: int | None = None,
     ) -> None:
         self._inner = inner
         self._cache = cache
         self._ttl = ttl_seconds
+        # slice 48: count_ttl 분리 — None이면 verify ttl로 폴백(슬라이스 40 backward compat).
+        self._count_ttl = count_ttl_seconds if count_ttl_seconds is not None else ttl_seconds
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
         result = await self._inner.register(user_id)
@@ -748,7 +751,8 @@ class CachedDeviceStore:
             cached_str = cached.decode("utf-8") if isinstance(cached, bytes) else cached
             return int(cached_str)
         result = await self._inner.count_for_user(owner_id, include_revoked=include_revoked)
-        await self._cache.setex(cache_key, self._ttl, str(result))
+        # slice 48: count 전용 TTL(verify보다 길게)
+        await self._cache.setex(cache_key, self._count_ttl, str(result))
         return result
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
@@ -817,7 +821,10 @@ def build_device_store_from_settings(
     # mode == "pg_cached" — Redis 클라이언트 생성·CachedDeviceStore 래핑
     redis_client = _build_redis_for_cache(settings)
     cached = CachedDeviceStore(
-        pg_store, redis_client, ttl_seconds=settings.device_verify_cache_ttl_seconds
+        pg_store,
+        redis_client,
+        ttl_seconds=settings.device_verify_cache_ttl_seconds,
+        count_ttl_seconds=settings.device_count_cache_ttl_seconds,
     )
 
     async def _close_redis() -> None:
