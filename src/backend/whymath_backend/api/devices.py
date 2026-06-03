@@ -140,6 +140,28 @@ def _validate_tz_aware(value: datetime | None, field_name: str) -> datetime | No
     return value
 
 
+def _validate_time_window(
+    since: datetime | None,
+    until: datetime | None,
+    since_name: str,
+    until_name: str,
+) -> None:
+    """slice 45: 시간창 일관성 — `since > until`이면 불가능 조합·422.
+
+    빈 결과 자체는 자연스러우나 *클라이언트 버그를 조용히 통과시키지 않기 위해* 명시 거부.
+    한쪽만 None이면 검증 skip(단방향 시간창). 둘 다 None이면 적용 0.
+    """
+    if since is not None and until is not None and since > until:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"`{since_name}`({since.isoformat()})은 "
+                f"`{until_name}`({until.isoformat()})보다 이전(또는 같음)이어야 합니다. "
+                "since > until은 빈 시간창."
+            ),
+        )
+
+
 @router.post(
     "/register",
     response_model=DeviceRegisterResponse,
@@ -280,6 +302,10 @@ async def list_my_devices(
     revoked_until = _validate_tz_aware(revoked_until, "revoked_until")
     used_since = _validate_tz_aware(used_since, "used_since")
     used_until = _validate_tz_aware(used_until, "used_until")
+    # slice 45: 시간창 일관성 — since > until 거부(불가능 조합)
+    _validate_time_window(since, until, "since", "until")
+    _validate_time_window(revoked_since, revoked_until, "revoked_since", "revoked_until")
+    _validate_time_window(used_since, used_until, "used_since", "used_until")
     store = _require_store()
     infos = await store.list_for_user(
         user.user_id,

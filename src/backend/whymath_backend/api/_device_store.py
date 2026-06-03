@@ -556,6 +556,13 @@ _VERIFY_CACHE_KEY_PREFIX = "device_verify:"
 _COUNT_CACHE_KEY_PREFIX = "device_count:"  # slice 40: count_for_user 결과 캐시
 
 
+def _has_any_time_filter(*values: datetime | None) -> bool:
+    """slice 45: 시간 필터 페어 6종(since/until·revoked_since/until·used_since/until) 중
+    하나라도 *not None*인지 — CachedDeviceStore.count_for_user의 캐시 우회 판정·6-OR 분기
+    추출. 후속에 시간 필터 추가 시 호출만 확장(분기 비대화 회피)."""
+    return any(v is not None for v in values)
+
+
 @runtime_checkable
 class _CacheClient(Protocol):
     """디바이스 verify 캐시용 좁은 Redis 인터페이스 — GET/SETEX/DEL/PING(slice 30 health)."""
@@ -690,14 +697,8 @@ class CachedDeviceStore:
         # slice 40: count 결과 캐시 — register/revoke가 즉시 invalidate하므로 stale 위험 ≈ 0
         # slice 41/43/44: 시간 필터 6종 중 *하나라도* 있으면 *캐시 우회*(필터 조합 무한대·
         # 키 폭발 위험·시간 필터는 보통 보안 감사용 1회성 조회·캐시 효익 낮음).
-        if (
-            since is not None
-            or until is not None
-            or revoked_since is not None
-            or revoked_until is not None
-            or used_since is not None
-            or used_until is not None
-        ):
+        # slice 45: 6-OR 분기를 `_has_any_time_filter` helper로 추출 — 분기 비대화 회피.
+        if _has_any_time_filter(since, until, revoked_since, revoked_until, used_since, used_until):
             return await self._inner.count_for_user(
                 owner_id,
                 include_revoked=include_revoked,

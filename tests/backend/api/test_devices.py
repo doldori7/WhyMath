@@ -693,6 +693,77 @@ class TestListDevicesEndpoint:
         resp = client.get("/v1/devices", params={"since": "2024-01-01T00:00:00+09:00"})
         assert resp.status_code == 200
 
+    def test_since_greater_than_until_rejected_422(self) -> None:
+        """slice 45: since > until은 빈 시간창 → 422 명시 거부."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        # since=2024-12-31 > until=2024-01-01 (역전)
+        resp = client.get(
+            "/v1/devices",
+            params={
+                "since": "2024-12-31T00:00:00Z",
+                "until": "2024-01-01T00:00:00Z",
+            },
+        )
+        assert resp.status_code == 422
+        assert "since" in resp.json()["detail"]
+        assert "until" in resp.json()["detail"]
+
+    def test_since_equal_to_until_accepted(self) -> None:
+        """경계 — since == until은 *순간 시간창*(허용)."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        ts = "2024-06-01T00:00:00Z"
+        resp = client.get("/v1/devices", params={"since": ts, "until": ts})
+        assert resp.status_code == 200
+
+    def test_revoked_since_greater_than_until_rejected_422(self) -> None:
+        """slice 45: revoked_since > revoked_until도 동일 검증."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        resp = client.get(
+            "/v1/devices",
+            params={
+                "revoked_since": "2024-12-31T00:00:00Z",
+                "revoked_until": "2024-01-01T00:00:00Z",
+            },
+        )
+        assert resp.status_code == 422
+        assert "revoked_since" in resp.json()["detail"]
+
+    def test_used_since_greater_than_until_rejected_422(self) -> None:
+        """slice 45: used_since > used_until도 동일 검증."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        resp = client.get(
+            "/v1/devices",
+            params={
+                "used_since": "2024-12-31T00:00:00Z",
+                "used_until": "2024-01-01T00:00:00Z",
+            },
+        )
+        assert resp.status_code == 422
+        assert "used_since" in resp.json()["detail"]
+
+    def test_one_sided_window_accepted(self) -> None:
+        """`since`만 또는 `until`만 지정은 단방향 시간창(허용)."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        # since만
+        assert (
+            client.get(
+                "/v1/devices", params={"since": "2024-01-01T00:00:00Z"}
+            ).status_code
+            == 200
+        )
+        # until만
+        assert (
+            client.get(
+                "/v1/devices", params={"until": "2024-12-31T00:00:00Z"}
+            ).status_code
+            == 200
+        )
+
     async def test_include_total_false_default_returns_none(self) -> None:
         """기본 `?include_total` 미지정 → total=None(추가 COUNT 회피)."""
         store = InMemoryDeviceStore()
@@ -2831,6 +2902,30 @@ class TestPgDeviceStoreCleanupStale:
         # 실제 폐기 안 됨
         assert store_dict[device_id].revoked is False
         assert store_dict[device_id].revoked_at is None
+
+
+class TestHasAnyTimeFilterHelper:
+    """slice 45: `_has_any_time_filter` 단위."""
+
+    def test_all_none_returns_false(self) -> None:
+        from whymath_backend.api._device_store import _has_any_time_filter
+
+        assert _has_any_time_filter(None, None, None, None, None, None) is False
+
+    def test_any_non_none_returns_true(self) -> None:
+        from whymath_backend.api._device_store import _has_any_time_filter
+
+        now = datetime.now(UTC)
+        # 첫 인자만 채워도 True
+        assert _has_any_time_filter(now, None, None, None, None, None) is True
+        # 마지막 인자만 채워도 True
+        assert _has_any_time_filter(None, None, None, None, None, now) is True
+
+    def test_zero_args_returns_false(self) -> None:
+        """edge — 인자 0개 호출은 빈 시간 필터(False)."""
+        from whymath_backend.api._device_store import _has_any_time_filter
+
+        assert _has_any_time_filter() is False
 
 
 class TestCachedDeviceStoreCleanupStale:
