@@ -35,10 +35,21 @@ import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from hashlib import sha256
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Any, NamedTuple, Protocol, cast, runtime_checkable
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+
+class DeviceInfo(NamedTuple):
+    """본인 디바이스 목록 응답의 *내부* 표현 — store→라우터 seam.
+
+    Pydantic 응답 schema는 `api/devices.py`가 별도 정의(레이어 분리: store는 *데이터 표면*,
+    라우터는 *HTTP 표면*). secret_plain·user_id·revoked 정보는 노출 안 함(보안·표면 최소화).
+    """
+
+    device_id: str
+    created_at: datetime
 
 
 @runtime_checkable
@@ -70,6 +81,14 @@ class DeviceCredentialStore(Protocol):
         """
         ...
 
+    async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
+        """본인 소유 *활성*(미폐기) device 목록 — 최신 등록순(`created_at` DESC).
+
+        slice 29 추가. 빈 리스트 가능(등록 없음). 폐기된 device는 *포함 안 함* — 사용자
+        대시보드의 "관리 가능 디바이스" UI 정합. 폐기 이력 조회는 후속(`include_revoked=True`).
+        """
+        ...
+
 
 def _compute_signature(secret_plain: str, device_id: str) -> str:
     """`HMAC-SHA256(secret_plain, device_id)`의 hex digest(64자 lowercase)."""
@@ -84,21 +103,22 @@ class InMemoryDeviceStore:
     """
 
     def __init__(self) -> None:
-        # device_id → (user_id, secret_plain, revoked)
-        self._creds: dict[str, tuple[uuid.UUID, str, bool]] = {}
+        # device_id → (user_id, secret_plain, revoked, created_at)
+        # slice 29: created_at 추가 — list_for_user의 ORDER BY created_at DESC 정합.
+        self._creds: dict[str, tuple[uuid.UUID, str, bool, datetime]] = {}
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
         device_id = str(uuid.uuid4())
         # 32B URL-safe token — ~256-bit entropy(보안 충분·KDF 불필요)
         secret_plain = secrets.token_urlsafe(32)
-        self._creds[device_id] = (user_id, secret_plain, False)
+        self._creds[device_id] = (user_id, secret_plain, False, datetime.now(UTC))
         return device_id, secret_plain
 
     async def verify(self, device_id: str, signature_hex: str) -> bool:
         cred = self._creds.get(device_id)
         if cred is None:
             return False
-        _user, secret_plain, revoked = cred
+        _user, secret_plain, revoked, _ = cred
         if revoked:
             return False
         expected = _compute_signature(secret_plain, device_id)
@@ -108,12 +128,22 @@ class InMemoryDeviceStore:
         cred = self._creds.get(device_id)
         if cred is None:
             return False
-        user, secret_plain, _ = cred
+        user, secret_plain, _, created_at = cred
         # slice 24: 본인 소유 검증 — 타인 device면 False(404 등가·정보 비누설)
         if user != owner_id:
             return False
-        self._creds[device_id] = (user, secret_plain, True)
+        self._creds[device_id] = (user, secret_plain, True, created_at)
         return True
+
+    async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
+        # slice 29: 본인 소유 활성 device — created_at DESC 정렬
+        active = [
+            DeviceInfo(device_id=d, created_at=c[3])
+            for d, c in self._creds.items()
+            if c[0] == owner_id and not c[2]
+        ]
+        active.sort(key=lambda info: info.created_at, reverse=True)
+        return active
 
     def reset(self) -> None:
         """테스트 격리용 — 모든 자격증명 초기화(sync — 호출자가 await 안 함)."""
@@ -184,6 +214,23 @@ class PgDeviceStore:
             # CursorResult.rowcount는 Result 베이스에 노출 안 됨 — DML 결과 한정 속성
             rowcount = getattr(result, "rowcount", 0) or 0
             return bool(rowcount > 0)
+
+    async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
+        # slice 29: SELECT device_id, created_at WHERE user_id=X AND revoked=false
+        # ORDER BY created_at DESC. revoked=False 필터링은 *서버측*(network·메모리 절감).
+        from whymath_backend.db.models.device import DeviceCredential
+
+        async with self._sessionmaker() as session:
+            stmt = (
+                select(DeviceCredential.device_id, DeviceCredential.created_at)
+                .where(
+                    DeviceCredential.user_id == owner_id,
+                    DeviceCredential.revoked.is_(False),
+                )
+                .order_by(DeviceCredential.created_at.desc())
+            )
+            result = await session.execute(stmt)
+            return [DeviceInfo(device_id=row[0], created_at=row[1]) for row in result.all()]
 
 
 # 모듈 전역 — FastAPI 단일 프로세스/다중 워커 가정. `None`이면 store 모드 비활성
@@ -279,6 +326,10 @@ class CachedDeviceStore:
         if result:
             await self._cache.delete(_VERIFY_CACHE_KEY_PREFIX + device_id)
         return result
+
+    async def list_for_user(self, owner_id: uuid.UUID) -> list[DeviceInfo]:
+        # 목록 조회는 캐시 안 함 — 등록/폐기 직후 신선도 우선(빈도 낮은 관리 표면).
+        return await self._inner.list_for_user(owner_id)
 
 
 def set_device_store(store: DeviceCredentialStore | None) -> None:

@@ -17,9 +17,13 @@ secret 저장 후 매 요청 `X-Device-Sig: HMAC-SHA256(secret, device_id)` 동�
 - 슬라이스 25: `/register`에 `RateLimitedDeviceRegister`(user 5/min·IP 10/min, 별 키 공간)
   부착 — 등록 폭주 방어(sock-puppet·DB 자격증명 폭증). `/revoke`는 *드물게* 호출되고 본인
   소유 검증(slice 24)이 이미 1차 게이트라 일단 미적용(필요 시 후속).
+- 슬라이스 29: `GET /v1/devices` — 본인 *활성* 디바이스 목록(폐기는 미포함, created_at DESC).
+  Flutter "디바이스 관리" UI의 1차 결선. user.user_id로 *스코프*해 타인 device 노출 0.
 """
 
 from __future__ import annotations
+
+from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -52,6 +56,25 @@ class DeviceRevokeResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     revoked: bool = Field(description="실제로 폐기됐는지(미존재 ID면 False).")
+
+
+class DeviceInfoSchema(BaseModel):
+    """본인 디바이스 정보 — 목록 응답 원소(slice 29). secret_plain·revoked 등 *내부 상태* 비노출."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    device_id: str = Field(description="등록된 디바이스 ID(UUID4 문자열).")
+    created_at: datetime = Field(description="등록 시각(UTC ISO8601).")
+
+
+class DeviceListResponse(BaseModel):
+    """본인 활성 디바이스 목록 응답(slice 29) — created_at DESC."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    devices: list[DeviceInfoSchema] = Field(
+        description="본인 소유 *활성*(미폐기) 디바이스 목록. 폐기된 device는 미포함."
+    )
 
 
 def _require_store() -> DeviceCredentialStore:
@@ -99,3 +122,24 @@ async def revoke_device(
     store = _require_store()
     revoked = await store.revoke(device_id, user.user_id)
     return DeviceRevokeResponse(revoked=revoked)
+
+
+@router.get(
+    "",
+    response_model=DeviceListResponse,
+    summary="내 디바이스 목록 — 활성 자격증명만 (created_at DESC)",
+)
+async def list_my_devices(user: ConsentedUser) -> DeviceListResponse:
+    """본인 *활성* 디바이스 목록 — `user.user_id`로 스코프(타인 device 노출 0).
+
+    slice 29. Flutter "디바이스 관리" UI의 1차 결선 — 사용자가 자기 등록 device 목록 확인
+    후 분실/도난 디바이스를 `/v1/devices/{id}/revoke`로 폐기. 폐기된 device는 미포함(향후
+    `include_revoked=true` 쿼리 파라미터 추가 가능).
+
+    응답에 *secret_plain·user_id·revoked 등 내부 상태 미포함* — 표면 최소화.
+    """
+    store = _require_store()
+    infos = await store.list_for_user(user.user_id)
+    return DeviceListResponse(
+        devices=[DeviceInfoSchema(device_id=i.device_id, created_at=i.created_at) for i in infos]
+    )

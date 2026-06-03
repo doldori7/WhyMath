@@ -423,6 +423,84 @@ class TestRevokeEndpoint:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# 2b) 슬라이스 29 — `GET /v1/devices` 본인 목록
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestListDevicesEndpoint:
+    """`GET /v1/devices` — 본인 활성 디바이스 목록(created_at DESC)."""
+
+    async def test_empty_list_when_no_registrations(self) -> None:
+        store = InMemoryDeviceStore()
+        resp = _client(store).get("/v1/devices")
+        assert resp.status_code == 200
+        assert resp.json() == {"devices": []}
+
+    async def test_returns_only_own_active_devices(self) -> None:
+        """본인 + 타인 등록·본인 일부 폐기 → 본인 활성만 반환."""
+        store = InMemoryDeviceStore()
+        # 본인 2개 + 타인 1개 등록
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        other_uid = uuid.uuid4()
+        d_other, _ = await store.register(other_uid)
+        # 본인 1개 폐기
+        await store.revoke(d1, _UID)
+        # GET 호출 — 본인 *활성* 1개만
+        resp = _client(store).get("/v1/devices")
+        assert resp.status_code == 200
+        body = resp.json()
+        device_ids = [d["device_id"] for d in body["devices"]]
+        assert device_ids == [d2]  # 폐기된 d1·타인 d_other 제외
+        # secret_plain·user_id·revoked 등 내부 상태 미노출
+        assert set(body["devices"][0].keys()) == {"device_id", "created_at"}
+
+    async def test_ordered_by_created_at_desc(self) -> None:
+        """여러 device 등록 시 최신 등록순(created_at DESC)."""
+        store = InMemoryDeviceStore()
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        d3, _ = await store.register(_UID)
+        resp = _client(store).get("/v1/devices")
+        device_ids = [d["device_id"] for d in resp.json()["devices"]]
+        # 등록 역순 — d3가 가장 최신, d1이 가장 오래됨
+        assert device_ids == [d3, d2, d1]
+
+    def test_returns_503_when_store_not_configured(self) -> None:
+        resp = _client(None).get("/v1/devices")
+        assert resp.status_code == 503
+
+    def test_returns_401_without_auth(self) -> None:
+        store = InMemoryDeviceStore()
+        resp = _no_auth_client(store).get("/v1/devices")
+        assert resp.status_code == 401
+
+
+class TestInMemoryDeviceStoreListForUser:
+    """`list_for_user` 단위 — owner_id 스코프·revoked 제외·DESC 정렬."""
+
+    async def test_empty_returns_empty_list(self) -> None:
+        store = InMemoryDeviceStore()
+        assert await store.list_for_user(_UID) == []
+
+    async def test_scoped_to_owner(self) -> None:
+        store = InMemoryDeviceStore()
+        d_mine, _ = await store.register(_UID)
+        other_uid = uuid.uuid4()
+        await store.register(other_uid)  # 다른 사용자의 device
+        infos = await store.list_for_user(_UID)
+        assert [i.device_id for i in infos] == [d_mine]
+
+    async def test_revoked_excluded(self) -> None:
+        store = InMemoryDeviceStore()
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        await store.revoke(d1, _UID)
+        infos = await store.list_for_user(_UID)
+        assert [i.device_id for i in infos] == [d2]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # 3) _client_device_id store 모드 우선순위
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -692,13 +770,14 @@ class _FakeCacheClient:
 
 
 class _CountingInnerStore:
-    """`DeviceCredentialStore` 인스턴스 — verify/revoke/register 호출 횟수 기록."""
+    """`DeviceCredentialStore` 인스턴스 — 호출 횟수 기록(verify/revoke/register/list_for_user)."""
 
     def __init__(self, inner: InMemoryDeviceStore) -> None:
         self._inner = inner
         self.verify_calls: int = 0
         self.revoke_calls: int = 0
         self.register_calls: int = 0
+        self.list_calls: int = 0
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
         self.register_calls += 1
@@ -711,6 +790,10 @@ class _CountingInnerStore:
     async def revoke(self, device_id: str, owner_id: uuid.UUID) -> bool:
         self.revoke_calls += 1
         return await self._inner.revoke(device_id, owner_id)
+
+    async def list_for_user(self, owner_id: uuid.UUID) -> Any:
+        self.list_calls += 1
+        return await self._inner.list_for_user(owner_id)
 
 
 class TestCachedDeviceStoreVerify:
@@ -873,6 +956,24 @@ class TestCachedDeviceStoreProtocolConformance:
         cache = _FakeCacheClient()
         store = CachedDeviceStore(inner, cache, ttl_seconds=60)
         assert isinstance(store, DeviceCredentialStore)
+
+
+class TestCachedDeviceStoreListForUser:
+    """list_for_user는 캐시 무관 — 항상 inner 위임(목록 신선도 우선)."""
+
+    async def test_list_passthrough_no_cache_access(self) -> None:
+        inner_real = InMemoryDeviceStore()
+        await inner_real.register(_UID)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        # 두 번 호출 — inner는 두 번 호출됨(캐시 우회), cache는 0회 접근
+        await store.list_for_user(_UID)
+        await store.list_for_user(_UID)
+        assert counter.list_calls == 2
+        assert cache.get_calls == 0
+        assert cache.setex_calls == 0
+        assert cache.delete_calls == 0
 
 
 class TestCachedDeviceStoreTTL:
@@ -1044,21 +1145,24 @@ class _FakePgSession:
         return self._store.get(pk)
 
     async def execute(self, stmt: Any) -> Any:
-        """update(DeviceCredential).where(...).values(...) 적용 + 가짜 result.
+        """update/select 두 분기 처리 + 가짜 result.
 
-        slice 24 — where가 단일 BinaryExpression(device_id == X) 또는 다중 AND 결합
-        (device_id == X AND user_id == Y)일 수 있다. `_iter_eq_constraints`로 모든 등식
-        제약을 {col_name: value} dict로 추출 → 그 dict로 store에서 매칭 행 검색.
+        slice 24 — UPDATE: where(단일 BinaryExpression 또는 AND BooleanClauseList) +
+        values 적용. slice 29 — SELECT: where 필터링 + 옵션 ORDER BY → 가짜 `.all()`로
+        매칭 행 튜플 반환. select는 컬럼 매니페스트(`stmt._raw_columns`)에서 컬럼명을
+        뽑아 매칭 행의 해당 속성을 튜플로 조립.
         """
+        if hasattr(stmt, "_values"):  # Update
+            return self._exec_update(stmt)
+        return self._exec_select(stmt)  # Select
+
+    def _exec_update(self, stmt: Any) -> Any:
         constraints = self._iter_eq_constraints(stmt.whereclause)
-        # stmt._values 의 값은 BindParameter — .value로 raw Python 값을 꺼낸다.
-        values_to_set: dict[Any, Any] = dict(stmt._values)  # type: ignore[attr-defined]
-        # device_id PK로 빠르게 찾고, 나머지 제약 검증
+        values_to_set: dict[Any, Any] = dict(stmt._values)
         target_device_id = constraints.get("device_id")
         existing = (
             self._store.get(target_device_id) if target_device_id is not None else None
         )
-        # 제약 추가 검증(user_id 등) — 모두 일치해야 적용
         if existing is not None:
             for col_name, expected_value in constraints.items():
                 if col_name == "device_id":
@@ -1079,6 +1183,36 @@ class _FakePgSession:
                 self.rowcount = rc
 
         return _Result(rowcount)
+
+    def _exec_select(self, stmt: Any) -> Any:
+        """slice 29 — `select(c1, c2).where(...).order_by(c.desc())` 시뮬."""
+        constraints = self._iter_eq_constraints(stmt.whereclause)
+        # 필터: 모든 등식 제약 만족하는 행
+        matched = [
+            row
+            for row in self._store.values()
+            if all(
+                getattr(row, col_name, None) == val
+                for col_name, val in constraints.items()
+            )
+        ]
+        # ORDER BY: 우리 쿼리는 created_at DESC 하나뿐 — `.desc()`는 UnaryExpression.modifier가
+        # `desc_op`. 단순화: order_by 절 있으면 created_at DESC라고 가정.
+        order_clauses = getattr(stmt, "_order_by_clauses", ())
+        if order_clauses:
+            matched.sort(key=lambda r: r.created_at, reverse=True)
+        # 컬럼 추출: select(c1, c2)의 _raw_columns에서 .key로 컬럼명을 얻음
+        col_names = [c.key for c in stmt._raw_columns if hasattr(c, "key")]
+        rows = [tuple(getattr(r, n) for n in col_names) for r in matched]
+
+        class _SelectResult:
+            def __init__(self, data: list[Any]) -> None:
+                self._data = data
+
+            def all(self) -> list[Any]:
+                return self._data
+
+        return _SelectResult(rows)
 
     @staticmethod
     def _iter_eq_constraints(where: Any) -> dict[str, Any]:
@@ -1198,3 +1332,28 @@ class TestPgDeviceStoreRevoke:
         # 원 소유자는 여전히 폐기 가능
         assert await store.revoke(device_id, _UID) is True
         assert store_dict[device_id].revoked is True
+
+
+class TestPgDeviceStoreListForUser:
+    """SELECT WHERE user_id=X AND revoked=False ORDER BY created_at DESC — `_FakePgSession` 처리."""
+
+    async def test_empty_returns_empty_list(self) -> None:
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        assert await store.list_for_user(_UID) == []
+
+    async def test_scoped_to_owner_and_excludes_revoked(self) -> None:
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        # 다른 사용자의 device
+        other_uid = uuid.uuid4()
+        await store.register(other_uid)
+        # d1 폐기
+        await store.revoke(d1, _UID)
+        # 본인 활성 1개(d2)만
+        infos = await store.list_for_user(_UID)
+        assert [i.device_id for i in infos] == [d2]
+        # created_at도 함께 반환
+        assert infos[0].created_at == store_dict[d2].created_at

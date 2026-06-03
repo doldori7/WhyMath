@@ -301,6 +301,62 @@ def test_cross_user_revoke_isolation_on_live_pg() -> None:
         asyncio.run(_cleanup(uid_b))
 
 
+def test_list_devices_endpoint_on_live_pg() -> None:
+    """slice 29: `GET /v1/devices`가 본인 활성 device만 created_at DESC로 반환."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid_a = uuid.uuid4()
+    uid_b = uuid.uuid4()
+
+    async def _setup() -> None:
+        await _insert_user(uid_a)
+        await _insert_user(uid_b)
+
+    asyncio.run(_setup())
+
+    try:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            store = PgDeviceStore(sm)
+            set_device_store(store)
+            try:
+                app = create_app()
+                app.dependency_overrides[get_settings] = _settings
+                client = TestClient(app)
+
+                token_a = create_access_token(uid_a, settings=_settings())
+                token_b = create_access_token(uid_b, settings=_settings())
+                auth_a = {"Authorization": f"Bearer {token_a}"}
+                auth_b = {"Authorization": f"Bearer {token_b}"}
+
+                # A가 2 device 등록, B가 1 device 등록, A의 1번째 폐기
+                r1 = client.post("/v1/devices/register", headers=auth_a)
+                r2 = client.post("/v1/devices/register", headers=auth_a)
+                client.post("/v1/devices/register", headers=auth_b)
+                d1 = r1.json()["device_id"]
+                d2 = r2.json()["device_id"]
+                client.post(f"/v1/devices/{d1}/revoke", headers=auth_a)
+
+                # A의 GET — d2 1개만(d1 폐기·B의 device 미노출)
+                resp = client.get("/v1/devices", headers=auth_a)
+                assert resp.status_code == 200
+                devices = resp.json()["devices"]
+                assert [d["device_id"] for d in devices] == [d2]
+                assert set(devices[0].keys()) == {"device_id", "created_at"}
+
+                # 401 무토큰
+                assert client.get("/v1/devices").status_code == 401
+            finally:
+                set_device_store(None)
+        finally:
+            asyncio.run(engine.dispose())
+    finally:
+        asyncio.run(_cleanup(uid_a))
+        asyncio.run(_cleanup(uid_b))
+
+
 def test_cached_device_store_on_live_pg_and_redis() -> None:
     """슬라이스 26: CachedDeviceStore(PgDeviceStore) + 실 Redis e2e.
 
