@@ -25,7 +25,11 @@ from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from whymath_backend.api._device_store import PgDeviceStore, set_device_store
+from whymath_backend.api._device_store import (
+    CachedDeviceStore,
+    PgDeviceStore,
+    set_device_store,
+)
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.user import UserProfile
@@ -295,3 +299,72 @@ def test_cross_user_revoke_isolation_on_live_pg() -> None:
     finally:
         asyncio.run(_cleanup(uid_a))
         asyncio.run(_cleanup(uid_b))
+
+
+def test_cached_device_store_on_live_pg_and_redis() -> None:
+    """슬라이스 26: CachedDeviceStore(PgDeviceStore) + 실 Redis e2e.
+
+    register → verify(첫 회) → verify(두 번째 cache hit) → revoke → verify False(DEL 됨).
+    캐시 hit을 어떻게 *외부에서* 검증할까: counting wrapper로 inner.verify 호출 횟수를 세는
+    대신, Redis 키 직접 확인(EXISTS device_verify:{X}).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    try:
+        from redis.asyncio import Redis
+    except ImportError:
+        pytest.skip("redis 라이브러리 미설치")
+
+    uid = uuid.uuid4()
+
+    async def _run() -> None:
+        # Redis 도달성 확인 — 미도달시 skip
+        redis_client = Redis.from_url(_settings().redis_url, decode_responses=True)
+        try:
+            await redis_client.ping()
+        except Exception:
+            await redis_client.aclose()
+            pytest.skip("Redis 미도달 — 통합 테스트 건너뜀")
+
+        await _insert_user(uid)
+        try:
+            engine = create_async_engine(_settings().database_url)
+            try:
+                sm = async_sessionmaker(engine, expire_on_commit=False)
+                inner = PgDeviceStore(sm)
+                store = CachedDeviceStore(inner, redis_client, ttl_seconds=60)
+
+                device_id, secret_plain = await store.register(uid)
+                cache_key = "device_verify:" + device_id
+
+                # 초기: 캐시 비어있음
+                assert await redis_client.exists(cache_key) == 0
+
+                # 첫 verify — cache miss → DB 라운드트립 → 성공 → SETEX
+                sig = _sign(secret_plain, device_id)
+                assert await store.verify(device_id, sig) is True
+                # 캐시 채워졌고 sig 저장됨
+                cached_sig = await redis_client.get(cache_key)
+                assert cached_sig == sig.lower()
+                # TTL 설정됨(60s)
+                ttl = await redis_client.ttl(cache_key)
+                assert 0 < ttl <= 60
+
+                # revoke → 캐시 DEL
+                assert await store.revoke(device_id, uid) is True
+                assert await redis_client.exists(cache_key) == 0
+
+                # 폐기 후 verify → cache miss + DB False
+                assert await store.verify(device_id, sig) is False
+                # 실패는 캐시 안 함
+                assert await redis_client.exists(cache_key) == 0
+            finally:
+                await engine.dispose()
+        finally:
+            await _cleanup(uid)
+            # 캐시 잔여물 청소
+            await redis_client.delete("device_verify:" + str(uid))
+            await redis_client.aclose()
+
+    asyncio.run(_run())

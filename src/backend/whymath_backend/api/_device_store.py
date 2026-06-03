@@ -34,7 +34,7 @@ import secrets
 import uuid
 from datetime import UTC, datetime
 from hashlib import sha256
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -188,6 +188,96 @@ class PgDeviceStore:
 # 모듈 전역 — FastAPI 단일 프로세스/다중 워커 가정. `None`이면 store 모드 비활성
 # (slice 21 shared-secret 폴백). 운영 lifespan은 `set_device_store(PgDeviceStore(...))`로 활성.
 _DEVICE_STORE: DeviceCredentialStore | None = None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 슬라이스 26 — verify 결과 Redis 캐시(데코레이터)
+#
+# 슬라이스 23 한계 ③(매 verify가 PG 라운드트립 → connection pool 부담) 해소. *유효한*
+# (device_id, sig) 페어를 짧은 TTL로 캐시 → 정상 트래픽의 verify는 DB 0 라운드트립.
+# 실패(미등록·잘못된 sig)는 캐시 안 함 — 공격자의 캐시 poison 시도는 inner.verify로 차단.
+# revoke는 즉시 `DEL`로 invalidate — TTL 자연 만료 + 명시 DEL 이중 보장(stale window 최소).
+# ──────────────────────────────────────────────────────────────────────────
+
+
+_VERIFY_CACHE_KEY_PREFIX = "device_verify:"
+
+
+@runtime_checkable
+class _CacheClient(Protocol):
+    """디바이스 verify 캐시용 좁은 Redis 인터페이스 — GET/SETEX/DEL만 사용."""
+
+    async def get(self, key: str) -> Any:
+        """캐시 GET — 없으면 None. bytes/str 모두 호환(decode_responses 설정 무관)."""
+        ...
+
+    async def setex(self, key: str, seconds: int, value: str) -> Any:
+        """SETEX — TTL 동봉 SET(원자적·TTL 만료 시 자동 제거)."""
+        ...
+
+    async def delete(self, *keys: str) -> Any:
+        """키 삭제(가변 키)."""
+        ...
+
+
+class CachedDeviceStore:
+    """`DeviceCredentialStore` 데코레이터 — verify 결과를 Redis로 캐시.
+
+    슬라이스 26 — slice 23의 `PgDeviceStore`는 매 verify가 PK SELECT 라운드트립. 정상
+    트래픽(매 요청 `X-Device-Sig` 검증)은 *반복되는 동일 쿼리* → 캐시 효과 큼. 본 데코레이터는
+    *모든* `DeviceCredentialStore` 구현을 감쌀 수 있다(InMemory 감싸기는 무의미하나 무해).
+
+    캐시 의미:
+      - **key**: `device_verify:{device_id}` — 한 디바이스당 1개(정당 서명은 결정론적·HMAC).
+      - **value**: 마지막 성공한 *유효 서명*의 hex(lowercase) 문자열.
+      - **TTL**: 짧게(권장 60s) — revoke 후 stale 기간을 제한.
+      - **성공만 캐시**: 실패(미등록·잘못된 sig)는 SETEX 안 함 → 공격자의 잘못된 sig가 캐시 자리
+        차지 못 함(매 시도 DB 라운드트립). 정상 클라이언트의 정당 sig만 캐시·재요청은 0 RTT.
+
+    invalidation: `revoke(True)` 즉시 `DEL device_verify:{X}` → stale 즉시 0. DEL 실패에도 TTL
+    자연 만료로 stale window는 TTL 이내(이중 안전망).
+
+    캐시 클라이언트 보안: 캐시엔 *서명*만 저장(secret_plain·user_id·만료 정보 등 *추가 PII 0*).
+    Redis dump가 노출돼도 *그 디바이스의 정당 서명*만 알려지나, 그 서명은 어차피 매 요청에 평문
+    노출(`X-Device-Sig` 헤더)이라 *새 노출면 0*.
+    """
+
+    def __init__(
+        self,
+        inner: DeviceCredentialStore,
+        cache: _CacheClient,
+        ttl_seconds: int = 60,
+    ) -> None:
+        self._inner = inner
+        self._cache = cache
+        self._ttl = ttl_seconds
+
+    async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
+        # 등록은 캐시와 무관 — 그대로 위임
+        return await self._inner.register(user_id)
+
+    async def verify(self, device_id: str, signature_hex: str) -> bool:
+        # 1) 캐시 GET — hit + 일치면 DB 라운드트립 0
+        cache_key = _VERIFY_CACHE_KEY_PREFIX + device_id
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            cached_str = cached.decode("utf-8") if isinstance(cached, bytes) else cached
+            # 상수시간 비교 — 캐시 hit 경로도 타이밍 공격 방어
+            if hmac.compare_digest(cached_str, signature_hex.lower()):
+                return True
+        # 2) 캐시 미스/불일치 → inner(DB) 위임
+        result = await self._inner.verify(device_id, signature_hex)
+        # 3) 성공만 캐시 — 실패는 매번 DB(공격자의 poison 시도 차단)
+        if result:
+            await self._cache.setex(cache_key, self._ttl, signature_hex.lower())
+        return result
+
+    async def revoke(self, device_id: str, owner_id: uuid.UUID) -> bool:
+        # revoke 성공 시 즉시 캐시 invalidate — stale window 최소화
+        result = await self._inner.revoke(device_id, owner_id)
+        if result:
+            await self._cache.delete(_VERIFY_CACHE_KEY_PREFIX + device_id)
+        return result
 
 
 def set_device_store(store: DeviceCredentialStore | None) -> None:

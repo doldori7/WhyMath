@@ -284,6 +284,18 @@ class Settings(BaseSettings):
             "사용자(30)와 IP(60) 사이 중간."
         ),
     )
+    # ── 슬라이스 26: verify 결과 Redis 캐시 TTL ──
+    device_verify_cache_ttl_seconds: int = Field(
+        default=60,
+        ge=0,
+        description=(
+            "디바이스 verify 결과 캐시 TTL(초). `CachedDeviceStore` 사용 시만 의미. "
+            "낮을수록 revoke 후 stale 기간 짧음(권장 60s — DB 부담 절감과 invalidation "
+            "신선도 절충). 0=캐시 비활성. 운영 lifespan에서 `CachedDeviceStore(inner, cache, "
+            "ttl_seconds=settings.device_verify_cache_ttl_seconds)`로 주입."
+        ),
+    )
+
     # ── 슬라이스 25: 디바이스 등록 전용 rate limit (`/v1/devices/register`) ──
     device_register_rate_limit_per_minute: int = Field(
         default=5,

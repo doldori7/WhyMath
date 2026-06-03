@@ -25,6 +25,7 @@ from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api._device_store import (
+    CachedDeviceStore,
     DeviceCredentialStore,
     InMemoryDeviceStore,
     PgDeviceStore,
@@ -519,6 +520,239 @@ class TestClientDeviceIdStoreMode:
         request = self._make_request({})
         settings = _settings_override()
         assert await _client_device_id(request, settings) is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 5) CachedDeviceStore — verify 결과 Redis 캐시(슬라이스 26)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class _FakeCacheClient:
+    """좁은 Redis 가짜 — GET/SETEX/DEL만 지원. 호출 횟수 기록(검증용)."""
+
+    def __init__(self) -> None:
+        self.store: dict[str, str] = {}
+        # 키별 마지막 SETEX TTL — 생성자 ttl_seconds 인자 결선 검증용
+        self.ttls: dict[str, int] = {}
+        self.get_calls: int = 0
+        self.setex_calls: int = 0
+        self.delete_calls: int = 0
+
+    async def get(self, key: str) -> str | None:
+        self.get_calls += 1
+        return self.store.get(key)
+
+    async def setex(self, key: str, seconds: int, value: str) -> None:
+        self.setex_calls += 1
+        self.store[key] = value
+        self.ttls[key] = seconds
+
+    async def delete(self, *keys: str) -> int:
+        count = 0
+        for key in keys:
+            if key in self.store:
+                del self.store[key]
+                self.ttls.pop(key, None)
+                count += 1
+        self.delete_calls += 1
+        return count
+
+
+class _CountingInnerStore:
+    """`DeviceCredentialStore` 인스턴스 — verify/revoke/register 호출 횟수 기록."""
+
+    def __init__(self, inner: InMemoryDeviceStore) -> None:
+        self._inner = inner
+        self.verify_calls: int = 0
+        self.revoke_calls: int = 0
+        self.register_calls: int = 0
+
+    async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
+        self.register_calls += 1
+        return await self._inner.register(user_id)
+
+    async def verify(self, device_id: str, signature_hex: str) -> bool:
+        self.verify_calls += 1
+        return await self._inner.verify(device_id, signature_hex)
+
+    async def revoke(self, device_id: str, owner_id: uuid.UUID) -> bool:
+        self.revoke_calls += 1
+        return await self._inner.revoke(device_id, owner_id)
+
+
+class TestCachedDeviceStoreVerify:
+    """캐시 hit/miss/실패 비캐시 + 상수시간 비교 + TTL 결선."""
+
+    async def test_first_verify_misses_cache_calls_inner_and_sets(self) -> None:
+        inner_real = InMemoryDeviceStore()
+        device_id, secret_plain = await inner_real.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        # 1) 첫 verify — cache miss → inner 호출 → SETEX
+        assert await store.verify(device_id, sig) is True
+        assert counter.verify_calls == 1
+        assert cache.get_calls == 1
+        assert cache.setex_calls == 1
+        # 캐시에 sig(lowercase)가 저장됐고 TTL 60
+        assert cache.store["device_verify:" + device_id] == sig.lower()
+        assert cache.ttls["device_verify:" + device_id] == 60
+
+    async def test_second_verify_hits_cache_skips_inner(self) -> None:
+        inner_real = InMemoryDeviceStore()
+        device_id, secret_plain = await inner_real.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        await store.verify(device_id, sig)  # warm cache
+        # 2) 두 번째 verify — cache hit → inner 호출 0
+        before = counter.verify_calls
+        assert await store.verify(device_id, sig) is True
+        assert counter.verify_calls == before  # inner 호출 안 함
+
+    async def test_invalid_signature_falls_through_to_inner(self) -> None:
+        """캐시된 정당 sig와 다른 sig → 캐시 miss 등가(상수시간 비교 후 inner 위임)."""
+        inner_real = InMemoryDeviceStore()
+        device_id, secret_plain = await inner_real.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        await store.verify(device_id, sig)  # warm
+        # 잘못된 sig → inner 호출 + False
+        assert await store.verify(device_id, "0" * 64) is False
+        assert counter.verify_calls == 2  # warm + 잘못된 시도 둘 다
+
+    async def test_failure_not_cached(self) -> None:
+        """잘못된 sig → inner False → SETEX 호출 안 됨(공격자가 캐시 자리 차지 못함)."""
+        inner_real = InMemoryDeviceStore()
+        device_id, _secret = await inner_real.register(_UID)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        assert await store.verify(device_id, "0" * 64) is False
+        assert cache.setex_calls == 0  # 실패는 캐시 안 함
+        assert "device_verify:" + device_id not in cache.store
+
+    async def test_unknown_device_not_cached(self) -> None:
+        inner_real = InMemoryDeviceStore()
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        assert await store.verify("never-registered", "0" * 64) is False
+        assert cache.setex_calls == 0
+
+    async def test_uppercase_signature_cached_as_lowercase(self) -> None:
+        """sig 대문자로 와도 inner.verify가 True면 lowercase로 캐시(정규화)."""
+        inner_real = InMemoryDeviceStore()
+        device_id, secret_plain = await inner_real.register(_UID)
+        sig_upper = _sign(secret_plain, device_id).upper()
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        assert await store.verify(device_id, sig_upper) is True
+        assert cache.store["device_verify:" + device_id] == sig_upper.lower()
+
+    async def test_bytes_cached_value_handled(self) -> None:
+        """Redis 클라이언트가 bytes 반환(decode_responses=False)해도 처리."""
+        inner_real = InMemoryDeviceStore()
+        device_id, secret_plain = await inner_real.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        # 캐시에 직접 bytes로 적재(SETEX 우회) — Redis bytes 응답 시뮬레이션
+        cache.store["device_verify:" + device_id] = sig.lower()
+        # _FakeCacheClient.get가 str을 반환하나, 실코드 분기 검증 위해 bytes 주입
+        original_get = cache.get
+
+        async def _get_as_bytes(key: str) -> bytes | None:
+            val = await original_get(key)
+            return val.encode("utf-8") if val is not None else None
+
+        cache.get = _get_as_bytes  # type: ignore[method-assign]
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        # bytes 반환을 decode 후 비교 → cache hit
+        assert await store.verify(device_id, sig) is True
+        assert counter.verify_calls == 0  # cache hit
+
+
+class TestCachedDeviceStoreRevoke:
+    """revoke는 inner 위임 + 성공 시 캐시 invalidate."""
+
+    async def test_revoke_invalidates_cache(self) -> None:
+        inner_real = InMemoryDeviceStore()
+        device_id, secret_plain = await inner_real.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        await store.verify(device_id, sig)  # warm cache
+        assert "device_verify:" + device_id in cache.store
+        # revoke → DEL
+        assert await store.revoke(device_id, _UID) is True
+        assert "device_verify:" + device_id not in cache.store
+        # 후속 verify → cache miss + inner는 False(revoked)
+        before_verify = counter.verify_calls
+        assert await store.verify(device_id, sig) is False
+        assert counter.verify_calls == before_verify + 1
+
+    async def test_revoke_failure_does_not_invalidate(self) -> None:
+        """타인 소유 등 revoke False → DEL 호출 안 됨(캐시 보존)."""
+        inner_real = InMemoryDeviceStore()
+        device_id, secret_plain = await inner_real.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        await store.verify(device_id, sig)  # warm
+        # 타인 owner_id로 폐기 시도 → False
+        other = uuid.uuid4()
+        assert await store.revoke(device_id, other) is False
+        # 캐시 보존(여전히 cache hit)
+        assert "device_verify:" + device_id in cache.store
+        assert cache.delete_calls == 0
+
+
+class TestCachedDeviceStoreRegister:
+    """register는 캐시 무관 — 그대로 위임."""
+
+    async def test_register_passthrough(self) -> None:
+        inner_real = InMemoryDeviceStore()
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        device_id, secret_plain = await store.register(_UID)
+        assert counter.register_calls == 1
+        # register는 cache 접근 안 함
+        assert cache.get_calls == 0
+        assert cache.setex_calls == 0
+        assert cache.delete_calls == 0
+        # 라운드트립 검증 — 발급된 자격증명으로 verify True
+        sig = _sign(secret_plain, device_id)
+        assert await store.verify(device_id, sig) is True
+
+
+class TestCachedDeviceStoreProtocolConformance:
+    def test_satisfies_protocol(self) -> None:
+        inner = InMemoryDeviceStore()
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(inner, cache, ttl_seconds=60)
+        assert isinstance(store, DeviceCredentialStore)
+
+
+class TestCachedDeviceStoreTTL:
+    async def test_ttl_seconds_passed_to_setex(self) -> None:
+        """생성자 ttl_seconds 인자가 SETEX 호출의 TTL로 전달되는지."""
+        inner_real = InMemoryDeviceStore()
+        device_id, secret_plain = await inner_real.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=42)
+        await store.verify(device_id, sig)
+        assert cache.ttls["device_verify:" + device_id] == 42
 
 
 # ─────────────────────────────────────────────────────────────────────────────
