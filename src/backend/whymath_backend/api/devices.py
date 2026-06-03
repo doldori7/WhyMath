@@ -123,6 +123,23 @@ def _require_store() -> DeviceCredentialStore:
     return store
 
 
+def _validate_tz_aware(value: datetime | None, field_name: str) -> datetime | None:
+    """slice 42: naive datetime 거부 — PG의 TZ-aware created_at과 비교 시 의미 모호.
+
+    클라이언트는 *반드시* timezone 정보 포함 ISO8601 전송(`Z` 또는 `±HH:MM`). 위반 시 422.
+    """
+    if value is not None and value.tzinfo is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"`{field_name}`은 timezone 정보 포함 ISO8601 형식이 필요합니다 "
+                "(예: '2024-01-01T00:00:00Z' 또는 '2024-01-01T09:00:00+09:00'). "
+                "naive datetime은 PG의 TZ-aware created_at과 비교 시 의미 모호."
+            ),
+        )
+    return value
+
+
 @router.post(
     "/register",
     response_model=DeviceRegisterResponse,
@@ -215,7 +232,11 @@ async def list_my_devices(
     `?include_total=true` → 응답에 `total` 채움(opt-in·COUNT 쿼리).
 
     응답에 *secret_plain·user_id PII 미포함* — 표면 최소화. revoked/revoked_at은 본인 데이터.
+
+    slice 42: since/until은 *반드시 timezone 포함*(`Z` 또는 `±HH:MM`). naive 시 422.
     """
+    since = _validate_tz_aware(since, "since")
+    until = _validate_tz_aware(until, "until")
     store = _require_store()
     infos = await store.list_for_user(
         user.user_id,

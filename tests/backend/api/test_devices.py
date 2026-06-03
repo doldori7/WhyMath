@@ -600,6 +600,35 @@ class TestListDevicesEndpoint:
         )
         assert resp_total.json()["total"] == 1
 
+    def test_naive_datetime_since_rejected_422(self) -> None:
+        """slice 42: timezone 정보 없는 ISO8601(naive) → 422."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        # naive ISO — Z나 ±HH:MM 없음
+        resp = client.get("/v1/devices", params={"since": "2024-01-01T00:00:00"})
+        assert resp.status_code == 422
+        assert "timezone" in resp.json()["detail"].lower()
+
+    def test_naive_datetime_until_rejected_422(self) -> None:
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        resp = client.get("/v1/devices", params={"until": "2024-12-31T23:59:59"})
+        assert resp.status_code == 422
+
+    def test_tz_aware_with_z_accepted(self) -> None:
+        """`Z`(UTC 약식) 포함 → 정상 200."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        resp = client.get("/v1/devices", params={"since": "2024-01-01T00:00:00Z"})
+        assert resp.status_code == 200
+
+    def test_tz_aware_with_offset_accepted(self) -> None:
+        """`+09:00` 등 offset 포함 → 정상 200."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        resp = client.get("/v1/devices", params={"since": "2024-01-01T00:00:00+09:00"})
+        assert resp.status_code == 200
+
     async def test_include_total_false_default_returns_none(self) -> None:
         """기본 `?include_total` 미지정 → total=None(추가 COUNT 회피)."""
         store = InMemoryDeviceStore()
