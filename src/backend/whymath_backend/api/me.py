@@ -7,6 +7,10 @@
 
 slice 50: `PATCH /v1/me/sessions/{id}/end` — 본인 학습 세션 종료(ended_at 채움). idempotent
 (이미 종료된 세션은 ended_at 보존하고 200). 미존재·타인 소유 모두 404(정보 비누설·slice 24 패턴).
+
+slice 51: `DELETE /v1/me/sessions/{id}` — GDPR 본인 학습 세션 영구 삭제. 204 No Content.
+미존재·타인 소유 모두 404(슬라이스 50과 동일 비누설). 자식(attempt·turn) cascade는 DB 레벨
+정책(현재 ORM CASCADE 미지정·RESTRICT 기본) — 자식 존재 시 500 FK 위반. v1 한계로 명시.
 """
 
 from __future__ import annotations
@@ -108,3 +112,29 @@ async def end_my_session(
         row.ended_at = datetime.now(UTC)
         await session.commit()
     return row.to_schema()
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="내 학습 세션 영구 삭제(GDPR)",
+)
+async def delete_my_session(
+    session_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> None:
+    """slice 51: 본인 학습 세션을 영구 삭제 — GDPR 데이터 삭제권 결선.
+
+    미존재·타인 소유 모두 **404**(slice 24/50 패턴·정보 비누설). 자식 행(ProblemAttempt·
+    AttemptEvent·DialogueTurn)이 RESTRICT FK라 자식 존재 시 *DB가 FK 위반*으로 500 반환할
+    수 있음(v1 한계). 자식 cascade·자식 사전 삭제는 후속.
+    """
+    row = await session.get(LearningSession, session_id)
+    if row is None or row.user_id != user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="학습 세션을 찾을 수 없습니다.",
+        )
+    await session.delete(row)
+    await session.commit()

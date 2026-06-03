@@ -60,6 +60,8 @@ class FakeSession:
         # slice 50: session.get(LearningSession, session_id) 시뮬
         self._get_map = get_map or {}
         self.commits = 0
+        # slice 51: session.delete(row) 캡처
+        self.deleted: list[Any] = []
 
     async def execute(self, stmt: Any) -> _Result:
         return _Result(self._rows)
@@ -69,6 +71,14 @@ class FakeSession:
 
     async def commit(self) -> None:
         self.commits += 1
+
+    async def delete(self, obj: Any) -> None:
+        self.deleted.append(obj)
+        # PK로 찾아 get_map에서도 제거(후속 get은 None 반환·idempotent 검증용)
+        for pk, val in list(self._get_map.items()):
+            if val is obj:
+                del self._get_map[pk]
+                break
 
 
 def _client(
@@ -200,3 +210,52 @@ class TestEndSession:
         # 실제 ended_at는 *수정 안 됨*
         assert row.ended_at is None
         assert fake.commits == 0
+
+
+class TestDeleteSession:
+    """slice 51: `DELETE /v1/me/sessions/{id}` — GDPR 영구 삭제·404 미존재/타인."""
+
+    def _session_row(self, owner: uuid.UUID) -> LearningSession:
+        sid = uuid.uuid4()
+        schema = LearningSessionSchema(session_id=sid, user_id=owner)
+        return LearningSession.from_schema(schema)
+
+    def test_delete_own_session_returns_204(self) -> None:
+        """본인 세션 삭제 → 204 No Content·session.delete + commit 호출."""
+        row = self._session_row(_UID)
+        client, fake = _client([], get_map={row.session_id: row})
+        resp = client.delete(f"/v1/me/sessions/{row.session_id}")
+        assert resp.status_code == 204
+        assert resp.content == b""  # 204 응답 body 비어있음
+        assert fake.deleted == [row]
+        assert fake.commits == 1
+
+    def test_delete_nonexistent_returns_404(self) -> None:
+        fake_id = uuid.uuid4()
+        client, fake = _client([], get_map={})
+        resp = client.delete(f"/v1/me/sessions/{fake_id}")
+        assert resp.status_code == 404
+        assert fake.deleted == []
+        assert fake.commits == 0
+
+    def test_delete_other_users_session_returns_404(self) -> None:
+        """타인 소유 → 404 + 행 삭제 안 됨(상태 불변·정보 비누설)."""
+        other_uid = uuid.uuid4()
+        row = self._session_row(other_uid)
+        client, fake = _client([], get_map={row.session_id: row})
+        resp = client.delete(f"/v1/me/sessions/{row.session_id}")
+        assert resp.status_code == 404
+        assert fake.deleted == []
+        assert fake.commits == 0
+        # 행 그대로 존재
+        assert row.session_id in fake._get_map
+
+    def test_delete_then_get_returns_404(self) -> None:
+        """slice 51: 삭제 후 같은 ID 재호출은 404(idempotent 의미·DELETE *aFTER*는 두 번째 호출이 미존재)."""
+        row = self._session_row(_UID)
+        client, _ = _client([], get_map={row.session_id: row})
+        first = client.delete(f"/v1/me/sessions/{row.session_id}")
+        assert first.status_code == 204
+        # 두 번째 호출은 미존재 → 404
+        second = client.delete(f"/v1/me/sessions/{row.session_id}")
+        assert second.status_code == 404
