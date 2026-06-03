@@ -87,10 +87,12 @@ async def revoke_device(
     device_id: str,
     user: ConsentedUser,
 ) -> DeviceRevokeResponse:
-    """등록된 디바이스 폐기. 미존재면 `revoked=false`(404가 아닌 idempotent 응답)."""
-    _ = (
-        user.user_id
-    )  # 인증 게이트만 — 본인 소유 검증은 후속(현재는 모든 인증 사용자가 임의 폐기 가능)
+    """등록된 디바이스 폐기 — *본인 소유만*. 미존재·타인 소유면 `revoked=false`(404 등가).
+
+    slice 24: store에 `user.user_id`를 owner_id로 전달해 본인 소유 검증. 타인 device 폐기
+    시도 시 404가 아닌 `{revoked: false}` 반환 — 존재 여부 노출 차단(device_id 열거 공격
+    방어). idempotent 의미는 그대로(미존재·타인 소유·이미 폐기 모두 같은 응답 모양).
+    """
     store = _require_store()
-    revoked = await store.revoke(device_id)
+    revoked = await store.revoke(device_id, user.user_id)
     return DeviceRevokeResponse(revoked=revoked)

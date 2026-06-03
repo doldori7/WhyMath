@@ -171,27 +171,37 @@ class TestInMemoryDeviceStoreVerify:
         device_id, secret_plain = await store.register(_UID)
         sig = _sign(secret_plain, device_id)
         assert await store.verify(device_id, sig) is True
-        await store.revoke(device_id)
+        await store.revoke(device_id, _UID)
         assert await store.verify(device_id, sig) is False
 
 
 class TestInMemoryDeviceStoreRevoke:
-    """revoke — 존재하면 True·미존재 False·재폐기는 True(idempotent)."""
+    """revoke — 존재하면 True·미존재 False·재폐기는 True(idempotent)·타인 소유면 False(slice 24)."""
 
-    async def test_revoke_existing_returns_true(self) -> None:
+    async def test_revoke_existing_owner_returns_true(self) -> None:
         store = InMemoryDeviceStore()
         device_id, _ = await store.register(_UID)
-        assert await store.revoke(device_id) is True
+        assert await store.revoke(device_id, _UID) is True
 
     async def test_revoke_unknown_returns_false(self) -> None:
         store = InMemoryDeviceStore()
-        assert await store.revoke("never-registered") is False
+        assert await store.revoke("never-registered", _UID) is False
 
     async def test_revoke_is_idempotent(self) -> None:
         store = InMemoryDeviceStore()
         device_id, _ = await store.register(_UID)
-        assert await store.revoke(device_id) is True
-        assert await store.revoke(device_id) is True
+        assert await store.revoke(device_id, _UID) is True
+        assert await store.revoke(device_id, _UID) is True
+
+    async def test_revoke_other_owner_returns_false(self) -> None:
+        """slice 24: 타인 device 폐기 시도 → False(404 등가·정보 비누설)."""
+        store = InMemoryDeviceStore()
+        device_id, _ = await store.register(_UID)
+        other_uid = uuid.uuid4()
+        # 다른 사용자가 폐기 시도 → False
+        assert await store.revoke(device_id, other_uid) is False
+        # 원 소유자는 여전히 폐기 가능(앞 시도가 상태 변경 0)
+        assert await store.revoke(device_id, _UID) is True
 
 
 class TestInMemoryDeviceStoreReset:
@@ -291,6 +301,24 @@ class TestRevokeEndpoint:
         resp = _no_auth_client(store).post("/v1/devices/some-id/revoke")
         assert resp.status_code == 401
 
+    async def test_other_users_device_returns_revoked_false_not_404(self) -> None:
+        """slice 24: 인증된 다른 사용자가 타인 device 폐기 시도 → `{revoked: false}`(404 등가).
+
+        device가 실제 존재해도 응답은 *미존재와 동일* — 존재 여부 노출 차단(device_id 열거
+        공격 방어). 실제 폐기는 안 일어남(store에서 직접 verify로 확인).
+        """
+        store = InMemoryDeviceStore()
+        # *다른* 사용자(other_uid)가 등록한 device — _UID(라우터 인증된 사용자)는 폐기 권한 없음
+        other_uid = uuid.uuid4()
+        device_id, secret_plain = await store.register(other_uid)
+        client = _client(store)  # 인증 사용자는 _UID
+        resp = client.post(f"/v1/devices/{device_id}/revoke")
+        assert resp.status_code == 200
+        assert resp.json() == {"revoked": False}
+        # device는 실제로 폐기되지 *않음* — 원 소유자의 서명 여전히 유효
+        sig = _sign(secret_plain, device_id)
+        assert await store.verify(device_id, sig) is True
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 3) _client_device_id store 모드 우선순위
@@ -346,7 +374,7 @@ class TestClientDeviceIdStoreMode:
         set_device_store(store)
         device_id, secret_plain = await store.register(_UID)
         sig = _sign(secret_plain, device_id)
-        await store.revoke(device_id)
+        await store.revoke(device_id, _UID)
         request = self._make_request({"x-device-id": device_id, "x-device-sig": sig})
         settings = _settings_override()
         assert await _client_device_id(request, settings) is None
@@ -436,18 +464,28 @@ class _FakePgSession:
         return self._store.get(pk)
 
     async def execute(self, stmt: Any) -> Any:
-        """update(DeviceCredential).where(device_id == X).values(...) 적용 + 가짜 result.
+        """update(DeviceCredential).where(...).values(...) 적용 + 가짜 result.
 
-        stmt.compile(compile_kwargs={"literal_binds": True})의 SQL을 *해석하지 않고*, stmt의
-        `_where_criteria` + `_values`를 직접 들춘다. SQLAlchemy 2.0 update 객체 구조.
+        slice 24 — where가 단일 BinaryExpression(device_id == X) 또는 다중 AND 결합
+        (device_id == X AND user_id == Y)일 수 있다. `_iter_eq_constraints`로 모든 등식
+        제약을 {col_name: value} dict로 추출 → 그 dict로 store에서 매칭 행 검색.
         """
-        # update(DeviceCredential).where(DeviceCredential.device_id == "X").values(...)
-        # whereclause는 BinaryExpression(device_id == X) — right operand의 value를 꺼낸다.
-        where = stmt.whereclause
-        target_device_id = where.right.value
+        constraints = self._iter_eq_constraints(stmt.whereclause)
         # stmt._values 의 값은 BindParameter — .value로 raw Python 값을 꺼낸다.
         values_to_set: dict[Any, Any] = dict(stmt._values)  # type: ignore[attr-defined]
-        existing = self._store.get(target_device_id)
+        # device_id PK로 빠르게 찾고, 나머지 제약 검증
+        target_device_id = constraints.get("device_id")
+        existing = (
+            self._store.get(target_device_id) if target_device_id is not None else None
+        )
+        # 제약 추가 검증(user_id 등) — 모두 일치해야 적용
+        if existing is not None:
+            for col_name, expected_value in constraints.items():
+                if col_name == "device_id":
+                    continue
+                if getattr(existing, col_name, None) != expected_value:
+                    existing = None
+                    break
         rowcount = 0
         if existing is not None:
             for col, bind in values_to_set.items():
@@ -461,6 +499,21 @@ class _FakePgSession:
                 self.rowcount = rc
 
         return _Result(rowcount)
+
+    @staticmethod
+    def _iter_eq_constraints(where: Any) -> dict[str, Any]:
+        """whereclause에서 `col == value` 등식들을 dict로 추출. AND 결합 재귀."""
+        result: dict[str, Any] = {}
+        # 단일 BinaryExpression (BooleanClauseList가 아닌 경우)
+        if hasattr(where, "left") and hasattr(where, "right"):
+            col_name = where.left.key if hasattr(where.left, "key") else str(where.left)
+            value = where.right.value if hasattr(where.right, "value") else where.right
+            result[col_name] = value
+            return result
+        # BooleanClauseList — children을 순회
+        for child in getattr(where, "clauses", []):
+            result.update(_FakePgSession._iter_eq_constraints(child))
+        return result
 
 
 def _fake_sessionmaker_for(store: dict[str, Any]) -> Any:
@@ -527,11 +580,11 @@ class TestPgDeviceStoreVerify:
 
 
 class TestPgDeviceStoreRevoke:
-    async def test_revoke_existing_returns_true_and_marks_row(self) -> None:
+    async def test_revoke_existing_owner_returns_true_and_marks_row(self) -> None:
         store_dict: dict[str, Any] = {}
         store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
         device_id, _secret = await store.register(_UID)
-        assert await store.revoke(device_id) is True
+        assert await store.revoke(device_id, _UID) is True
         # 행이 폐기됐고 revoked_at이 채워졌는지
         row = store_dict[device_id]
         assert row.revoked is True
@@ -540,8 +593,8 @@ class TestPgDeviceStoreRevoke:
     async def test_revoke_unknown_returns_false(self) -> None:
         store_dict: dict[str, Any] = {}
         store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
-        # update WHERE device_id = ... 가 0행 매치 → rowcount 0 → False
-        assert await store.revoke("never-registered") is False
+        # update WHERE device_id = ... AND user_id = ... 가 0행 매치 → rowcount 0 → False
+        assert await store.revoke("never-registered", _UID) is False
 
     async def test_verify_after_revoke_returns_false(self) -> None:
         """revoke 후 같은 secret/서명이라도 verify는 False(slice 22 invariant 그대로)."""
@@ -550,5 +603,18 @@ class TestPgDeviceStoreRevoke:
         device_id, secret_plain = await store.register(_UID)
         sig = _compute_signature(secret_plain, device_id)
         assert await store.verify(device_id, sig) is True
-        await store.revoke(device_id)
+        await store.revoke(device_id, _UID)
         assert await store.verify(device_id, sig) is False
+
+    async def test_revoke_other_owner_returns_false(self) -> None:
+        """slice 24: 타인 owner_id로 폐기 시도 → WHERE 매치 0 → False(rowcount 0)."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        device_id, _secret = await store.register(_UID)
+        other_uid = uuid.uuid4()
+        assert await store.revoke(device_id, other_uid) is False
+        # 원 행은 *수정 안 됨*(revoked 그대로 False)
+        assert store_dict[device_id].revoked is False
+        # 원 소유자는 여전히 폐기 가능
+        assert await store.revoke(device_id, _UID) is True
+        assert store_dict[device_id].revoked is True

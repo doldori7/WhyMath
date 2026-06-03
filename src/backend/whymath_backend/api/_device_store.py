@@ -61,8 +61,12 @@ class DeviceCredentialStore(Protocol):
         """
         ...
 
-    async def revoke(self, device_id: str) -> bool:
-        """등록 폐기 — 향후 verify는 False. 미존재면 False, 폐기 성공이면 True. idempotent."""
+    async def revoke(self, device_id: str, owner_id: uuid.UUID) -> bool:
+        """등록 폐기 — *본인 소유 디바이스만*. 미존재·타인 소유면 False(idempotent + 정보 비누설).
+
+        타인 device 폐기 시도 시 False 반환 — 404와 동일 응답(존재 여부를 노출하지 않음·
+        device_id 열거 공격 방어). slice 24 추가: `owner_id` 인자(인증된 사용자의 user_id).
+        """
         ...
 
 
@@ -99,11 +103,14 @@ class InMemoryDeviceStore:
         expected = _compute_signature(secret_plain, device_id)
         return hmac.compare_digest(signature_hex.lower(), expected)
 
-    async def revoke(self, device_id: str) -> bool:
+    async def revoke(self, device_id: str, owner_id: uuid.UUID) -> bool:
         cred = self._creds.get(device_id)
         if cred is None:
             return False
         user, secret_plain, _ = cred
+        # slice 24: 본인 소유 검증 — 타인 device면 False(404 등가·정보 비누설)
+        if user != owner_id:
+            return False
         self._creds[device_id] = (user, secret_plain, True)
         return True
 
@@ -158,13 +165,17 @@ class PgDeviceStore:
             expected = _compute_signature(row.secret_plain, device_id)
         return hmac.compare_digest(signature_hex.lower(), expected)
 
-    async def revoke(self, device_id: str) -> bool:
+    async def revoke(self, device_id: str, owner_id: uuid.UUID) -> bool:
         from whymath_backend.db.models.device import DeviceCredential
 
         async with self._sessionmaker() as session:
+            # slice 24: WHERE에 user_id 추가 — 타인 device는 0행 매치 → False(404 등가)
             stmt = (
                 update(DeviceCredential)
-                .where(DeviceCredential.device_id == device_id)
+                .where(
+                    DeviceCredential.device_id == device_id,
+                    DeviceCredential.user_id == owner_id,
+                )
                 .values(revoked=True, revoked_at=datetime.now(UTC))
             )
             result = await session.execute(stmt)

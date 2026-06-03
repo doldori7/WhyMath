@@ -116,12 +116,15 @@ def test_pg_device_store_roundtrip_on_live_pg() -> None:
                 assert await store.verify(device_id, sig) is True
                 # verify wrong sig False
                 assert await store.verify(device_id, "0" * 64) is False
-                # revoke True
-                assert await store.revoke(device_id) is True
+                # slice 24: 타인 owner_id 폐기 시도 → False(404 등가·정보 비누설)
+                other_uid = uuid.uuid4()
+                assert await store.revoke(device_id, other_uid) is False
+                # 원 소유자는 여전히 가능
+                assert await store.revoke(device_id, uid) is True
                 # 폐기 후 verify False
                 assert await store.verify(device_id, sig) is False
                 # 미존재 revoke False (idempotent)
-                assert await store.revoke("never-registered") is False
+                assert await store.revoke("never-registered", uid) is False
             finally:
                 await engine.dispose()
         finally:
@@ -213,8 +216,8 @@ def test_pg_store_persists_across_instances_on_live_pg() -> None:
                 sig = _sign(secret_plain, device_id)
                 # 워커 B가 verify True (HA 핵심)
                 assert await store_b.verify(device_id, sig) is True
-                # 워커 B가 revoke
-                assert await store_b.revoke(device_id) is True
+                # 워커 B가 revoke (본인 uid로)
+                assert await store_b.revoke(device_id, uid) is True
                 # 워커 A에서도 폐기 반영(같은 PG)
                 assert await store_a.verify(device_id, sig) is False
             finally:
@@ -223,3 +226,72 @@ def test_pg_store_persists_across_instances_on_live_pg() -> None:
             await _cleanup(uid)
 
     asyncio.run(_run())
+
+
+def test_cross_user_revoke_isolation_on_live_pg() -> None:
+    """slice 24: 사용자 A가 등록한 device를 사용자 B는 폐기 못 함.
+
+    실 PG에서 두 사용자 행 + A의 device 1개 → B 토큰으로 `/revoke` → 200 `{revoked: false}`
+    → A의 secret으로 verify는 *여전히 True*(폐기 안 됨).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid_a = uuid.uuid4()
+    uid_b = uuid.uuid4()
+
+    async def _setup() -> None:
+        await _insert_user(uid_a)
+        await _insert_user(uid_b)
+
+    asyncio.run(_setup())
+
+    try:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            store = PgDeviceStore(sm)
+            set_device_store(store)
+            try:
+                app = create_app()
+                app.dependency_overrides[get_settings] = _settings
+                client = TestClient(app)
+
+                # A가 토큰 + device 등록
+                token_a = create_access_token(uid_a, settings=_settings())
+                reg = client.post(
+                    "/v1/devices/register",
+                    headers={"Authorization": f"Bearer {token_a}"},
+                )
+                assert reg.status_code == 201
+                device_id = reg.json()["device_id"]
+                secret_plain = reg.json()["secret_plain"]
+                sig = _sign(secret_plain, device_id)
+                assert asyncio.run(store.verify(device_id, sig)) is True
+
+                # B가 토큰으로 A의 device 폐기 시도 → 200 {revoked: false}
+                token_b = create_access_token(uid_b, settings=_settings())
+                rev = client.post(
+                    f"/v1/devices/{device_id}/revoke",
+                    headers={"Authorization": f"Bearer {token_b}"},
+                )
+                assert rev.status_code == 200
+                assert rev.json() == {"revoked": False}
+                # device는 폐기 *안 됨* — A의 서명 여전히 유효
+                assert asyncio.run(store.verify(device_id, sig)) is True
+
+                # A 본인은 정상적으로 폐기 가능
+                rev_a = client.post(
+                    f"/v1/devices/{device_id}/revoke",
+                    headers={"Authorization": f"Bearer {token_a}"},
+                )
+                assert rev_a.status_code == 200
+                assert rev_a.json() == {"revoked": True}
+                assert asyncio.run(store.verify(device_id, sig)) is False
+            finally:
+                set_device_store(None)
+        finally:
+            asyncio.run(engine.dispose())
+    finally:
+        asyncio.run(_cleanup(uid_a))
+        asyncio.run(_cleanup(uid_b))
