@@ -218,6 +218,25 @@ async def list_my_devices(
             ),
         ),
     ] = None,
+    used_since: Annotated[
+        datetime | None,
+        Query(
+            description=(
+                "slice 44: `last_used_at` 시간창 — 이 시각 이후 *마지막 verify된* device만"
+                "(inclusive·ISO8601). 한 번도 verify 안 된 device는 자동 제외. '지난 7일 사용된 "
+                "기기' UI·미사용 device 후보 추적용."
+            ),
+        ),
+    ] = None,
+    used_until: Annotated[
+        datetime | None,
+        Query(
+            description=(
+                "slice 44: `last_used_at` 시간창 — 이 시각 이전 마지막 verify된 device만"
+                "(inclusive·ISO8601). used_since와 함께 사용 시간창 지정 가능."
+            ),
+        ),
+    ] = None,
     limit: int = Query(
         default=50,
         ge=1,
@@ -251,13 +270,16 @@ async def list_my_devices(
 
     응답에 *secret_plain·user_id PII 미포함* — 표면 최소화. revoked/revoked_at은 본인 데이터.
 
-    slice 42: since/until은 *반드시 timezone 포함*(`Z` 또는 `±HH:MM`). naive 시 422.
-    slice 43: `?revoked_since`/`?revoked_until` 추가 — `revoked_at` 시간창 필터.
+    slice 42: 모든 datetime은 *반드시 timezone 포함*(`Z` 또는 `±HH:MM`). naive 시 422.
+    slice 43: `?revoked_since`/`?revoked_until` — `revoked_at` 시간창 필터.
+    slice 44: `?used_since`/`?used_until` — `last_used_at` 시간창 필터.
     """
     since = _validate_tz_aware(since, "since")
     until = _validate_tz_aware(until, "until")
     revoked_since = _validate_tz_aware(revoked_since, "revoked_since")
     revoked_until = _validate_tz_aware(revoked_until, "revoked_until")
+    used_since = _validate_tz_aware(used_since, "used_since")
+    used_until = _validate_tz_aware(used_until, "used_until")
     store = _require_store()
     infos = await store.list_for_user(
         user.user_id,
@@ -266,6 +288,8 @@ async def list_my_devices(
         until=until,
         revoked_since=revoked_since,
         revoked_until=revoked_until,
+        used_since=used_since,
+        used_until=used_until,
         limit=limit,
         offset=offset,
     )
@@ -278,6 +302,8 @@ async def list_my_devices(
             until=until,
             revoked_since=revoked_since,
             revoked_until=revoked_until,
+            used_since=used_since,
+            used_until=used_until,
         )
     return DeviceListResponse(
         devices=[

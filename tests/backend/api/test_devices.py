@@ -648,6 +648,34 @@ class TestListDevicesEndpoint:
         ids = [d["device_id"] for d in resp.json()["devices"]]
         assert ids == [d2]
 
+    async def test_used_since_filter_via_http(self) -> None:
+        """slice 44: `?used_since` → last_used_at 시간창 HTTP 라운드트립."""
+        store = InMemoryDeviceStore()
+        d_never, _ = await store.register(_UID)
+        d_used, secret = await store.register(_UID)
+        await store.verify(d_used, _sign(secret, d_used))
+        now = datetime.now(UTC)
+        store._creds[d_used] = store._creds[d_used]._replace(
+            last_used_at=now - timedelta(hours=1)
+        )
+        client = _client(store)
+        # used_since=1일전 → d_used만(d_never는 last_used_at=None 제외)
+        resp = client.get(
+            "/v1/devices",
+            params={"used_since": (now - timedelta(days=1)).isoformat()},
+        )
+        assert resp.status_code == 200
+        ids = [d["device_id"] for d in resp.json()["devices"]]
+        assert ids == [d_used]
+
+    def test_naive_used_since_rejected_422(self) -> None:
+        """slice 42 tz 검증이 slice 44 used_since에도 적용."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        resp = client.get("/v1/devices", params={"used_since": "2024-01-01T00:00:00"})
+        assert resp.status_code == 422
+        assert "used_since" in resp.json()["detail"]
+
     def test_naive_revoked_since_rejected_422(self) -> None:
         """slice 42 검증을 slice 43 필드(revoked_since)에도 적용."""
         store = InMemoryDeviceStore()
@@ -789,6 +817,40 @@ class TestInMemoryDeviceStoreListForUser:
                 _UID, include_revoked=True, revoked_since=now - timedelta(days=30)
             )
             == 1
+        )
+
+    async def test_used_since_until_filters_last_used_at(self) -> None:
+        """slice 44: used_since/until은 last_used_at 시간창 — 한 번도 verify 안 된 device 자동 제외."""
+        store = InMemoryDeviceStore()
+        d_never, _ = await store.register(_UID)
+        d_old_used, secret_old = await store.register(_UID)
+        d_recent_used, secret_recent = await store.register(_UID)
+        # d_old_used·d_recent_used만 verify (last_used_at 채워짐)
+        await store.verify(d_old_used, _sign(secret_old, d_old_used))
+        await store.verify(d_recent_used, _sign(secret_recent, d_recent_used))
+        now = datetime.now(UTC)
+        store._creds[d_old_used] = store._creds[d_old_used]._replace(
+            last_used_at=now - timedelta(days=365)
+        )
+        store._creds[d_recent_used] = store._creds[d_recent_used]._replace(
+            last_used_at=now - timedelta(days=1)
+        )
+        # used_since=30일전 → recent만(never는 last_used_at=None 제외·old는 1년 전이라 제외)
+        infos = await store.list_for_user(_UID, used_since=now - timedelta(days=30))
+        assert [i.device_id for i in infos] == [d_recent_used]
+        # 시간창 [400일전, 100일전] → old만
+        infos2 = await store.list_for_user(
+            _UID,
+            used_since=now - timedelta(days=400),
+            used_until=now - timedelta(days=100),
+        )
+        assert [i.device_id for i in infos2] == [d_old_used]
+        # count 두 분기
+        assert (
+            await store.count_for_user(_UID, used_since=now - timedelta(days=30)) == 1
+        )
+        assert (
+            await store.count_for_user(_UID, used_until=now - timedelta(days=100)) == 1
         )
 
     async def test_count_for_user_matches_list_filter(self) -> None:
@@ -1240,6 +1302,8 @@ class _CountingInnerStore:
         until: datetime | None = None,
         revoked_since: datetime | None = None,
         revoked_until: datetime | None = None,
+        used_since: datetime | None = None,
+        used_until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> Any:
@@ -1251,6 +1315,8 @@ class _CountingInnerStore:
             until=until,
             revoked_since=revoked_since,
             revoked_until=revoked_until,
+            used_since=used_since,
+            used_until=used_until,
             limit=limit,
             offset=offset,
         )
@@ -1264,6 +1330,8 @@ class _CountingInnerStore:
         until: datetime | None = None,
         revoked_since: datetime | None = None,
         revoked_until: datetime | None = None,
+        used_since: datetime | None = None,
+        used_until: datetime | None = None,
     ) -> int:
         return await self._inner.count_for_user(
             owner_id,
@@ -1272,6 +1340,8 @@ class _CountingInnerStore:
             until=until,
             revoked_since=revoked_since,
             revoked_until=revoked_until,
+            used_since=used_since,
+            used_until=used_until,
         )
 
     async def cleanup_stale(
@@ -2667,6 +2737,37 @@ class TestPgDeviceStoreListForUser:
                 revoked_until=now - timedelta(days=100),
             )
             == 1
+        )
+
+    async def test_used_since_until_via_sql_range(self) -> None:
+        """slice 44: PgDeviceStore가 last_used_at >= used_since / <= used_until WHERE 발급."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        d_never, _ = await store.register(_UID)
+        d_old, secret_old = await store.register(_UID)
+        d_recent, secret_recent = await store.register(_UID)
+        # verify로 last_used_at 채움
+        await store.verify(d_old, _compute_signature(secret_old, d_old))
+        await store.verify(d_recent, _compute_signature(secret_recent, d_recent))
+        now = datetime.now(UTC)
+        store_dict[d_old].last_used_at = now - timedelta(days=365)
+        store_dict[d_recent].last_used_at = now - timedelta(days=1)
+        # used_since=30일전 → recent만(d_never는 NULL 자동 제외)
+        infos = await store.list_for_user(_UID, used_since=now - timedelta(days=30))
+        assert [i.device_id for i in infos] == [d_recent]
+        # 시간창 [400d, 100d] → old만
+        infos2 = await store.list_for_user(
+            _UID,
+            used_since=now - timedelta(days=400),
+            used_until=now - timedelta(days=100),
+        )
+        assert [i.device_id for i in infos2] == [d_old]
+        # count 두 분기 cov
+        assert (
+            await store.count_for_user(_UID, used_since=now - timedelta(days=30)) == 1
+        )
+        assert (
+            await store.count_for_user(_UID, used_until=now - timedelta(days=100)) == 1
         )
 
 

@@ -115,6 +115,8 @@ class DeviceCredentialStore(Protocol):
         until: datetime | None = None,
         revoked_since: datetime | None = None,
         revoked_until: datetime | None = None,
+        used_since: datetime | None = None,
+        used_until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -136,6 +138,8 @@ class DeviceCredentialStore(Protocol):
         until: datetime | None = None,
         revoked_since: datetime | None = None,
         revoked_until: datetime | None = None,
+        used_since: datetime | None = None,
+        used_until: datetime | None = None,
     ) -> int:
         """slice 39: 본인 소유 device *총 개수* — UI "Page X of Y"·"총 N개" 표시용.
 
@@ -224,6 +228,8 @@ class InMemoryDeviceStore:
         until: datetime | None = None,
         revoked_since: datetime | None = None,
         revoked_until: datetime | None = None,
+        used_since: datetime | None = None,
+        used_until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -255,6 +261,12 @@ class InMemoryDeviceStore:
                 revoked_until is None
                 or (c.revoked_at is not None and c.revoked_at <= revoked_until)
             )
+            and (
+                used_since is None or (c.last_used_at is not None and c.last_used_at >= used_since)
+            )
+            and (
+                used_until is None or (c.last_used_at is not None and c.last_used_at <= used_until)
+            )
         ]
         items.sort(key=lambda info: info.created_at, reverse=True)
         return items[offset : offset + limit]
@@ -268,6 +280,8 @@ class InMemoryDeviceStore:
         until: datetime | None = None,
         revoked_since: datetime | None = None,
         revoked_until: datetime | None = None,
+        used_since: datetime | None = None,
+        used_until: datetime | None = None,
     ) -> int:
         # slice 39: list_for_user와 같은 필터·페이지네이션 적용 *전* 총 개수
         # slice 41: since/until 동일 시간창 필터
@@ -286,6 +300,12 @@ class InMemoryDeviceStore:
             and (
                 revoked_until is None
                 or (c.revoked_at is not None and c.revoked_at <= revoked_until)
+            )
+            and (
+                used_since is None or (c.last_used_at is not None and c.last_used_at >= used_since)
+            )
+            and (
+                used_until is None or (c.last_used_at is not None and c.last_used_at <= used_until)
             )
         )
 
@@ -391,6 +411,8 @@ class PgDeviceStore:
         until: datetime | None = None,
         revoked_since: datetime | None = None,
         revoked_until: datetime | None = None,
+        used_since: datetime | None = None,
+        used_until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -420,6 +442,12 @@ class PgDeviceStore:
                 stmt = stmt.where(DeviceCredential.revoked_at >= revoked_since)
             if revoked_until is not None:
                 stmt = stmt.where(DeviceCredential.revoked_at <= revoked_until)
+            # slice 44: used_since/until — last_used_at 시간창. 한 번도 verify 안 된 device는
+            # last_used_at IS NULL이라 SQL NULL 비교 자동 False로 제외
+            if used_since is not None:
+                stmt = stmt.where(DeviceCredential.last_used_at >= used_since)
+            if used_until is not None:
+                stmt = stmt.where(DeviceCredential.last_used_at <= used_until)
             stmt = stmt.order_by(DeviceCredential.created_at.desc()).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return [
@@ -442,6 +470,8 @@ class PgDeviceStore:
         until: datetime | None = None,
         revoked_since: datetime | None = None,
         revoked_until: datetime | None = None,
+        used_since: datetime | None = None,
+        used_until: datetime | None = None,
     ) -> int:
         # slice 39: SELECT COUNT(*) WHERE user_id=X [AND revoked=False] — 같은 필터.
         # slice 41: since/until 동일 시간창 필터
@@ -466,6 +496,11 @@ class PgDeviceStore:
                 stmt = stmt.where(DeviceCredential.revoked_at >= revoked_since)
             if revoked_until is not None:
                 stmt = stmt.where(DeviceCredential.revoked_at <= revoked_until)
+            # slice 44: used_since/until — last_used_at 시간창
+            if used_since is not None:
+                stmt = stmt.where(DeviceCredential.last_used_at >= used_since)
+            if used_until is not None:
+                stmt = stmt.where(DeviceCredential.last_used_at <= used_until)
             result = await session.execute(stmt)
             return int(result.scalar() or 0)
 
@@ -620,11 +655,13 @@ class CachedDeviceStore:
         until: datetime | None = None,
         revoked_since: datetime | None = None,
         revoked_until: datetime | None = None,
+        used_since: datetime | None = None,
+        used_until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
         # 목록 조회는 캐시 안 함 — 등록/폐기 직후 신선도 우선(빈도 낮은 관리 표면).
-        # slice 37/38/41/43 인자 그대로 위임
+        # slice 37/38/41/43/44 인자 그대로 위임
         return await self._inner.list_for_user(
             owner_id,
             include_revoked=include_revoked,
@@ -632,6 +669,8 @@ class CachedDeviceStore:
             until=until,
             revoked_since=revoked_since,
             revoked_until=revoked_until,
+            used_since=used_since,
+            used_until=used_until,
             limit=limit,
             offset=offset,
         )
@@ -645,15 +684,19 @@ class CachedDeviceStore:
         until: datetime | None = None,
         revoked_since: datetime | None = None,
         revoked_until: datetime | None = None,
+        used_since: datetime | None = None,
+        used_until: datetime | None = None,
     ) -> int:
         # slice 40: count 결과 캐시 — register/revoke가 즉시 invalidate하므로 stale 위험 ≈ 0
-        # slice 41/43: since/until/revoked_since/revoked_until 있으면 *캐시 우회*(필터 조합
-        # 무한대·키 폭발 위험·시간 필터는 보통 보안 감사용 1회성 조회·캐시 효익 낮음).
+        # slice 41/43/44: 시간 필터 6종 중 *하나라도* 있으면 *캐시 우회*(필터 조합 무한대·
+        # 키 폭발 위험·시간 필터는 보통 보안 감사용 1회성 조회·캐시 효익 낮음).
         if (
             since is not None
             or until is not None
             or revoked_since is not None
             or revoked_until is not None
+            or used_since is not None
+            or used_until is not None
         ):
             return await self._inner.count_for_user(
                 owner_id,
@@ -662,6 +705,8 @@ class CachedDeviceStore:
                 until=until,
                 revoked_since=revoked_since,
                 revoked_until=revoked_until,
+                used_since=used_since,
+                used_until=used_until,
             )
         suffix = "all" if include_revoked else "active"
         cache_key = f"{_COUNT_CACHE_KEY_PREFIX}{owner_id}:{suffix}"
