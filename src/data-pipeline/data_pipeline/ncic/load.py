@@ -1,10 +1,17 @@
 """성취기준 컬렉션을 파일·DB로 저장.
 
-Phase 1 (현재): PostgreSQL 미배포 → 파일 저장만 동작.
+파일 저장(의존성 없음):
   - `write_json`: 공공누리 출처 + 라이선스 + 메타데이터 + 데이터 (사람·기계 모두 가독)
   - `write_csv`: 표 분석용 (Excel·Pandas 친화)
 
-Phase 2 시그니처만 (`load_to_postgres`): 호출 시 NotImplementedError.
+PostgreSQL 적재(`load_to_postgres`): `[postgres]` extra(sqlalchemy[asyncio]+asyncpg)가
+필요하다. 이 모듈은 *extra 없이도 import 가능*해야 하므로(write_json/write_csv 사용자) sqlalchemy
+import는 `load_to_postgres` 안에서 *지연*한다 — 미설치 시 명확한 RuntimeError로 안내한다.
+
+`achievement_standards`는 이 로더가 소유하는 **L1 staging 테이블**이다 — WhyMath v1.0 앱 스키마
+(concept·problem 등, backend/alembic)와 *별개*이며, 성취기준→concept 변환은 후속 'A' 단계
+(pedagogy 동반) 책임이다. data-pipeline엔 alembic이 없으므로 테이블은 `create_all`(checkfirst,
+멱등)로 보장한다.
 """
 
 from __future__ import annotations
@@ -148,8 +155,20 @@ def write_csv(
 
 
 # ──────────────────────────────────────────────────────────────────────
-# Phase 2 PostgreSQL 적재 (시그니처만 — 미구현)
+# PostgreSQL 적재 ([postgres] extra 필요 — sqlalchemy import는 함수 내 지연)
 # ──────────────────────────────────────────────────────────────────────
+def _to_async_dsn(dsn: str) -> str:
+    """동기 `postgresql://` DSN을 asyncpg 드라이버 형식으로 정규화.
+
+    `create_async_engine`은 async 드라이버를 요구한다(`postgresql+asyncpg://`). 드라이버가
+    이미 명시된(`postgresql+<driver>://`) DSN은 그대로 둔다.
+    """
+    prefix = "postgresql://"
+    if dsn.startswith(prefix):
+        return "postgresql+asyncpg://" + dsn[len(prefix) :]
+    return dsn
+
+
 async def load_to_postgres(
     standards: Sequence[AchievementStandard],
     *,
@@ -157,26 +176,88 @@ async def load_to_postgres(
     table_name: str = "achievement_standards",
     upsert: bool = True,
 ) -> int:
-    """PostgreSQL `achievement_standards` 테이블에 적재.
+    """성취기준을 PostgreSQL `achievement_standards` 테이블에 적재(upsert).
 
-    Phase 1 (현재): *미구현*. Phase 2에 `[postgres]` extra + Alembic 마이그레이션
-    구축 후 backend-engineer가 구현.
+    `[postgres]` extra(sqlalchemy[asyncio]+asyncpg)가 필요하다 — 미설치 시 RuntimeError로
+    설치를 안내한다(모듈 import는 extra 없이도 가능하도록 sqlalchemy를 여기서 지연 import).
+    테이블은 이 로더가 소유하는 L1 staging 테이블이라 `create_all`(checkfirst, 멱등)로 보장한다.
+
+    `code`는 PK이므로 입력 내 중복은 *마지막 항목*으로 dedup한다(단일 INSERT의 ON CONFLICT가
+    같은 행을 두 번 건드리는 오류 방지). `upsert=True`면 code 충돌 시 나머지 컬럼을 UPDATE,
+    False면 무시한다(DO NOTHING). 빈 입력은 *연결 없이* 0을 돌려준다(조기 반환).
 
     Args:
         standards: 적재 대상.
-        dsn: PostgreSQL 연결 문자열 (asyncpg 형식).
-        table_name: 테이블명.
-        upsert: code PK 충돌 시 UPDATE 여부.
+        dsn: PostgreSQL 연결 문자열(`postgresql://` 또는 `postgresql+asyncpg://`).
+        table_name: 테이블명(기본 `achievement_standards`).
+        upsert: code PK 충돌 시 UPDATE 여부(False면 DO NOTHING).
 
     Returns:
-        적재된 행 수.
+        영향받은(적재·갱신된) 행 수.
 
     Raises:
-        NotImplementedError: 항상.
+        RuntimeError: `[postgres]` extra 미설치 시.
     """
-    raise NotImplementedError(
-        "Phase 2에 backend-engineer가 구현 예정. " "현재는 `write_json` / `write_csv` 사용."
+    if not standards:
+        return 0
+    try:
+        from sqlalchemy import Column, Date, MetaData, Table, Text
+        from sqlalchemy.dialects.postgresql import ARRAY
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+        from sqlalchemy.ext.asyncio import create_async_engine
+    except ModuleNotFoundError as exc:  # pragma: no cover - 환경 안내 경로
+        raise RuntimeError(
+            "load_to_postgres에는 [postgres] extra가 필요합니다 — "
+            "`pip install -e '.[postgres]'` 후 재시도하세요."
+        ) from exc
+
+    metadata = MetaData()
+    table = Table(
+        table_name,
+        metadata,
+        Column("code", Text, primary_key=True),
+        Column("school_type", Text, nullable=False),
+        Column("grade_band", Text, nullable=False),
+        Column("subject", Text, nullable=False),
+        Column("domain", Text, nullable=False),
+        Column("sub_domain", Text),
+        Column("statement", Text, nullable=False),
+        Column("commentary", Text),
+        Column("big_idea", Text),
+        Column("curriculum_revision", Text, nullable=False),
+        Column("effective_from", Date),
+        Column("parent_codes", ARRAY(Text), nullable=False),
+        Column("source_url", Text, nullable=False),
+        Column("source_document", Text),
     )
+
+    # code PK 기준 dedup(마지막 우선) — 단일 배치 INSERT의 ON CONFLICT 중복행 오류 방지.
+    by_code: dict[str, dict[str, object]] = {
+        std.code: std.model_dump(mode="python") for std in standards
+    }
+    rows = list(by_code.values())
+
+    engine = create_async_engine(_to_async_dsn(dsn))
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(metadata.create_all)  # 멱등 — staging 테이블 보장
+            stmt = pg_insert(table).values(rows)
+            if upsert:
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=["code"],
+                    set_={
+                        col.name: stmt.excluded[col.name]
+                        for col in table.columns
+                        if col.name != "code"
+                    },
+                )
+            else:
+                stmt = stmt.on_conflict_do_nothing(index_elements=["code"])
+            result = await conn.execute(stmt)
+    finally:
+        await engine.dispose()
+
+    return result.rowcount if result.rowcount >= 0 else len(rows)
 
 
 __all__ = ["load_to_postgres", "write_csv", "write_json"]

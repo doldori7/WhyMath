@@ -6,9 +6,12 @@ import csv
 import json
 from pathlib import Path
 
-import pytest
-
-from data_pipeline.ncic.load import load_to_postgres, write_csv, write_json
+from data_pipeline.ncic.load import (
+    _to_async_dsn,
+    load_to_postgres,
+    write_csv,
+    write_json,
+)
 from data_pipeline.ncic.models import (
     LICENSE_NOTICE,
     SOURCE_CITATION,
@@ -131,9 +134,21 @@ class TestWriteCsv:
         assert first["sub_domain"] == "소인수분해"
 
 
-class TestPostgresLoadStub:
-    async def test_postgres_load_not_yet_implemented(self) -> None:
-        """Phase 1에서는 시그니처만 — 호출 시 NotImplementedError."""
-        with pytest.raises(NotImplementedError) as exc_info:
-            await load_to_postgres(_samples(), dsn="postgresql://localhost/test")
-        assert "Phase 2" in str(exc_info.value)
+class TestPostgresLoad:
+    """load_to_postgres 단위(연결 없이 검증 가능한 부분만 — 실 PG 왕복은 통합테스트).
+
+    sqlalchemy 미설치(CI data-pipeline [dev])에서도 통과해야 하므로, 여기 테스트는 sqlalchemy
+    import 경로를 건드리지 않는다(빈 입력 조기 반환 + 순수 헬퍼).
+    """
+
+    async def test_empty_input_returns_zero_without_connecting(self) -> None:
+        """빈 입력은 DB 연결·sqlalchemy import 없이 0(조기 반환)."""
+        assert await load_to_postgres([], dsn="postgresql://invalid-host/none") == 0
+
+    def test_to_async_dsn_forces_asyncpg_driver(self) -> None:
+        """동기 `postgresql://`는 asyncpg 드라이버로 정규화."""
+        assert _to_async_dsn("postgresql://h:5432/db") == "postgresql+asyncpg://h:5432/db"
+
+    def test_to_async_dsn_preserves_explicit_driver(self) -> None:
+        """드라이버가 이미 명시된 DSN은 그대로 둔다."""
+        assert _to_async_dsn("postgresql+asyncpg://h/db") == "postgresql+asyncpg://h/db"

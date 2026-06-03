@@ -20,10 +20,18 @@ Langfuse·Celery broker가 필요하지 않다(첫 사용 시 연결). LangfuseS
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from whymath_backend.api.concepts import router as concepts_router
+from whymath_backend.api.me import router as me_router
+from whymath_backend.api.problems import router as problems_router
+from whymath_backend.api.users import router as users_router
+from whymath_backend.db.session import dispose_engine
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.cache import RedisCache
 from whymath_backend.l3.interfaces import (
@@ -157,6 +165,21 @@ def _get_queue(request: Request) -> AsyncJobQueue:
     return queue
 
 
+@asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """앱 수명 — 종료 시 DB 엔진 풀을 정리(dispose_engine)한다.
+
+    get_session이 첫 쿼리에서 *지연* 생성한 async 엔진/연결 풀을 앱 종료 시 반납한다.
+    엔진이 만들어진 적 없으면(DB 미사용 경로·의존성 오버라이드된 단위테스트) dispose_engine은
+    no-op이라 안전하다. 시작 시점엔 특별 작업이 없다(엔진은 첫 요청에서 lazy로 뜬다).
+
+    주의: `TestClient(app)`를 컨텍스트매니저 없이 쓰면 lifespan이 발화하지 않는다(Starlette
+    기본) — 기존 L3 단위테스트(가짜 의존성)는 영향받지 않는다.
+    """
+    yield
+    await dispose_engine()
+
+
 def create_app(
     *,
     provider: LLMProvider | None = None,
@@ -176,6 +199,7 @@ def create_app(
         title="WhyMath Backend — L3 생성 표면",
         version="0.1.0",
         summary="L3 라우터 ↔ Ollama·Celery 결선 (M1.2-live S1·S4)",
+        lifespan=_lifespan,
     )
     # 기본 provider는 CompositeProvider — cost_tier로 로컬(Ollama)↔클라우드(Anthropic)
     # 디스패치(S5). 둘 다 지연이라 구성 시 라이브 Ollama·Anthropic 키가 필요 없다.
@@ -336,5 +360,13 @@ def create_app(
             text=job_status.text,
             error=job_status.error,
         )
+
+    # DB-backed 라우터 결선 — get_session 의존성으로 PostgreSQL을 읽고 쓴다(영속 레이어 →
+    # HTTP). L3 인라인 엔드포인트와 달리 살아있는 PG를 요구하므로 통합테스트(@integration)와
+    # 메인의 실 PG 검증으로 동작을 확인한다.
+    app.include_router(concepts_router)
+    app.include_router(problems_router)
+    app.include_router(users_router)
+    app.include_router(me_router)
 
     return app
