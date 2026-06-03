@@ -337,6 +337,15 @@ class Settings(BaseSettings):
             "(attempt=0,1,...): 2s·4s·8s. max_retries=3 시 총 대기 ~6s(timeout 별도 합산)."
         ),
     )
+    device_store_health_check_retry_jitter: bool = Field(
+        default=False,
+        description=(
+            "slice 36: 재시도 backoff에 AWS-style *full jitter* 적용"
+            "(`uniform(0, base*2^attempt)`). k8s 다수 pod 동시 재시작 시 thundering herd"
+            "(인프라 회복 직후 동시 재폭주) 차단. 기본 False — 단일 노드/예측 가능 backoff "
+            "우선. 다중 pod 운영은 True 권장."
+        ),
+    )
 
     # ── 슬라이스 26: verify 결과 Redis 캐시 TTL ──
     device_verify_cache_ttl_seconds: int = Field(

@@ -544,14 +544,19 @@ async def _retry_with_timeout(
     timeout_seconds: float,
     max_retries: int,
     backoff_seconds: float,
+    jitter: bool = False,
 ) -> None:
     """slice 35: operation을 timeout 안에서 실행·실패 시 exponential backoff 재시도.
 
     각 시도는 독립 `asyncio.timeout`. 실패(TimeoutError/Exception 무관) 시 `backoff *
     2^attempt`초 대기 후 재시도. 모든 시도 실패하면 *마지막 예외*를 raise(호출자가 timeout vs
     기타 구분). 첫 시도 성공이면 backoff 0(정상 인프라 무영향).
+
+    slice 36: `jitter=True`면 AWS-style *full jitter* — `uniform(0, base * 2^attempt)`.
+    k8s 다수 pod 동시 재시작 시 thundering herd 차단(인프라 회복 직후 동시 폭주 방어).
     """
     import asyncio
+    import random
 
     last_exc: BaseException | None = None
     for attempt in range(max_retries):
@@ -562,7 +567,10 @@ async def _retry_with_timeout(
         except Exception as exc:
             last_exc = exc
             if attempt < max_retries - 1:
-                await asyncio.sleep(backoff_seconds * (2**attempt))
+                base = backoff_seconds * (2**attempt)
+                # slice 36: jitter면 [0, base) 균등 분포·아니면 deterministic base
+                delay = random.uniform(0, base) if jitter else base
+                await asyncio.sleep(delay)
     # 모든 재시도 소진 — 마지막 예외 raise
     assert last_exc is not None  # unreachable(max_retries >= 1)
     raise last_exc
@@ -591,6 +599,7 @@ async def ping_device_store_health(settings: Any) -> None:
     timeout = settings.device_store_health_check_timeout_seconds
     max_retries = settings.device_store_health_check_max_retries
     backoff = settings.device_store_health_check_retry_backoff_seconds
+    jitter = settings.device_store_health_check_retry_jitter
 
     # PG 도달성
     async def _pg_ping() -> None:
@@ -604,6 +613,7 @@ async def ping_device_store_health(settings: Any) -> None:
             timeout_seconds=timeout,
             max_retries=max_retries,
             backoff_seconds=backoff,
+            jitter=jitter,
         )
     except TimeoutError as exc:
         raise RuntimeError(
@@ -626,6 +636,7 @@ async def ping_device_store_health(settings: Any) -> None:
                 timeout_seconds=timeout,
                 max_retries=max_retries,
                 backoff_seconds=backoff,
+                jitter=jitter,
             )
         except TimeoutError as exc:
             raise RuntimeError(

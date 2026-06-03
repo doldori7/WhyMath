@@ -1143,15 +1143,18 @@ def _lifespan_settings(
     timeout_seconds: float = 5.0,
     max_retries: int = 1,
     backoff_seconds: float = 0.001,
+    jitter: bool = False,
 ) -> Settings:
     """slice 35: 테스트 기본은 `max_retries=1`(재시도 비활성·기존 timeout 테스트 ~0s) +
-    `backoff=0.001s`(재시도 테스트의 sleep 거의 0). 재시도 동작 검증은 명시 인자로."""
+    `backoff=0.001s`(재시도 테스트의 sleep 거의 0). slice 36: jitter 기본 False(결정론적·
+    기존 테스트 영향 0)."""
     return Settings(
         jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
         device_store_mode=mode,  # type: ignore[arg-type]
         device_store_health_check_timeout_seconds=timeout_seconds,
         device_store_health_check_max_retries=max_retries,
         device_store_health_check_retry_backoff_seconds=backoff_seconds,
+        device_store_health_check_retry_jitter=jitter,
     )
 
 
@@ -1686,6 +1689,98 @@ class TestPingDeviceStoreHealth:
         assert ping_attempts["n"] == 2
         # aclose는 *최종* finally에서 한 번만 호출(per-attempt 호출 0)
         assert aclose_count["n"] == 1
+
+    async def test_jitter_disabled_uses_deterministic_backoff(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """slice 36: jitter=False(기본) → `random.uniform` 호출 안 함·sleep 인자는 deterministic."""
+        from whymath_backend.api import _device_store as ds_mod
+
+        attempt = {"n": 0}
+
+        class _FlakySession:
+            async def __aenter__(self) -> _FlakySession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                attempt["n"] += 1
+                if attempt["n"] < 2:
+                    raise ConnectionError("flake")
+
+        sleep_args: list[float] = []
+
+        async def _spy_sleep(delay: float) -> None:
+            sleep_args.append(delay)
+
+        uniform_called = {"hit": False}
+
+        def _spy_uniform(_a: float, _b: float) -> float:
+            uniform_called["hit"] = True
+            return 0.0
+
+        monkeypatch.setattr("asyncio.sleep", _spy_sleep)
+        monkeypatch.setattr("random.uniform", _spy_uniform)
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _FlakySession()),
+            raising=True,
+        )
+        await ds_mod.ping_device_store_health(
+            _lifespan_settings("pg", max_retries=2, backoff_seconds=2.0, jitter=False)
+        )
+        # jitter=False → uniform 호출 0
+        assert uniform_called["hit"] is False
+        # sleep은 정확히 backoff * 2^0 = 2.0
+        assert sleep_args == [2.0]
+
+    async def test_jitter_enabled_uses_uniform_random(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """slice 36: jitter=True → `random.uniform(0, base)` 호출·sleep 인자는 그 결과."""
+        from whymath_backend.api import _device_store as ds_mod
+
+        attempt = {"n": 0}
+
+        class _FlakySession:
+            async def __aenter__(self) -> _FlakySession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                attempt["n"] += 1
+                if attempt["n"] < 3:
+                    raise ConnectionError("flake")
+
+        sleep_args: list[float] = []
+        uniform_calls: list[tuple[float, float]] = []
+
+        async def _spy_sleep(delay: float) -> None:
+            sleep_args.append(delay)
+
+        def _stub_uniform(low: float, high: float) -> float:
+            uniform_calls.append((low, high))
+            return high * 0.5  # mid-range — 결정론적 테스트
+
+        monkeypatch.setattr("asyncio.sleep", _spy_sleep)
+        monkeypatch.setattr("random.uniform", _stub_uniform)
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _FlakySession()),
+            raising=True,
+        )
+        await ds_mod.ping_device_store_health(
+            _lifespan_settings("pg", max_retries=3, backoff_seconds=2.0, jitter=True)
+        )
+        # 첫 2회 실패 → uniform 2회 호출(attempt=0,1)
+        # base=2.0*2^0=2.0, 2.0*2^1=4.0
+        assert uniform_calls == [(0.0, 2.0), (0.0, 4.0)]
+        # sleep 인자는 uniform 반환값(mid-range = high*0.5)
+        assert sleep_args == [1.0, 2.0]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
