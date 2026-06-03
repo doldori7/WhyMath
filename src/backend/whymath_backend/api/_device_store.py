@@ -123,6 +123,14 @@ class DeviceCredentialStore(Protocol):
         """
         ...
 
+    async def count_for_user(self, owner_id: uuid.UUID, *, include_revoked: bool = False) -> int:
+        """slice 39: 본인 소유 device *총 개수* — UI "Page X of Y"·"총 N개" 표시용.
+
+        라우터에서 `?include_total=true` 옵션 시만 호출(추가 COUNT 쿼리 비용 회피). list_for_
+        user와 *같은 필터 조건*(owner_id 스코프·include_revoked 필터) — pagination invariant.
+        """
+        ...
+
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         """slice 33: N일 이상 미사용 활성 device 자동 폐기 → 폐기된 device_id 목록 반환.
 
@@ -219,6 +227,14 @@ class InMemoryDeviceStore:
         ]
         items.sort(key=lambda info: info.created_at, reverse=True)
         return items[offset : offset + limit]
+
+    async def count_for_user(self, owner_id: uuid.UUID, *, include_revoked: bool = False) -> int:
+        # slice 39: list_for_user와 같은 필터·페이지네이션 적용 *전* 총 개수
+        return sum(
+            1
+            for c in self._creds.values()
+            if c.user_id == owner_id and (include_revoked or not c.revoked)
+        )
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         # slice 33+34: N일 이상 미사용 활성 device 식별 + 옵션 폐기. dry_run이면 식별만.
@@ -349,6 +365,23 @@ class PgDeviceStore:
                 )
                 for row in result.all()
             ]
+
+    async def count_for_user(self, owner_id: uuid.UUID, *, include_revoked: bool = False) -> int:
+        # slice 39: SELECT COUNT(*) WHERE user_id=X [AND revoked=False] — 같은 필터.
+        from sqlalchemy import func
+
+        from whymath_backend.db.models.device import DeviceCredential
+
+        async with self._sessionmaker() as session:
+            stmt = (
+                select(func.count())
+                .select_from(DeviceCredential)
+                .where(DeviceCredential.user_id == owner_id)
+            )
+            if not include_revoked:
+                stmt = stmt.where(DeviceCredential.revoked.is_(False))
+            result = await session.execute(stmt)
+            return int(result.scalar() or 0)
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         # slice 33+34: SELECT 활성 candidates → Python 필터 → 옵션 UPDATE 반복.
@@ -494,6 +527,11 @@ class CachedDeviceStore:
         return await self._inner.list_for_user(
             owner_id, include_revoked=include_revoked, limit=limit, offset=offset
         )
+
+    async def count_for_user(self, owner_id: uuid.UUID, *, include_revoked: bool = False) -> int:
+        # slice 39: count도 캐시 안 함(register/revoke 즉시 신선도 우선·자기 데이터 사용자별
+        # 키 폭발 위험·1 round-trip이라 부담 낮음).
+        return await self._inner.count_for_user(owner_id, include_revoked=include_revoked)
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         # slice 34: inner가 폐기 device_id 목록을 반환하므로 *정확히* 그 키들만 캐시 invalidate.

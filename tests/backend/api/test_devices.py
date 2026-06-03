@@ -435,7 +435,8 @@ class TestListDevicesEndpoint:
         store = InMemoryDeviceStore()
         resp = _client(store).get("/v1/devices")
         assert resp.status_code == 200
-        assert resp.json() == {"devices": []}
+        # slice 39: total=None(기본 false·include_total 미요청)
+        assert resp.json() == {"devices": [], "total": None}
 
     async def test_returns_only_own_active_devices(self) -> None:
         """본인 + 타인 등록·본인 일부 폐기 → 본인 활성만 반환."""
@@ -546,6 +547,41 @@ class TestListDevicesEndpoint:
         # offset 음수 거부
         assert client.get("/v1/devices?offset=-1").status_code == 422
 
+    async def test_include_total_returns_filtered_count(self) -> None:
+        """slice 39: ?include_total=true → total 채움(필터 조건 적용)."""
+        store = InMemoryDeviceStore()
+        # 3 활성 + 2 폐기
+        for _ in range(3):
+            await store.register(_UID)
+        for _ in range(2):
+            d, _ = await store.register(_UID)
+            await store.revoke(d, _UID)
+        client = _client(store)
+        # 기본(활성만)·include_total=true → total=3
+        resp = client.get("/v1/devices?include_total=true")
+        body = resp.json()
+        assert body["total"] == 3
+        assert len(body["devices"]) == 3
+        # include_revoked=true + include_total → total=5(폐기 포함)
+        resp_all = client.get("/v1/devices?include_revoked=true&include_total=true")
+        body_all = resp_all.json()
+        assert body_all["total"] == 5
+        assert len(body_all["devices"]) == 5
+        # 페이지네이션과 결합 — limit=2면 devices=2개·total=5 그대로
+        resp_paged = client.get(
+            "/v1/devices?include_revoked=true&include_total=true&limit=2"
+        )
+        paged_body = resp_paged.json()
+        assert paged_body["total"] == 5
+        assert len(paged_body["devices"]) == 2
+
+    async def test_include_total_false_default_returns_none(self) -> None:
+        """기본 `?include_total` 미지정 → total=None(추가 COUNT 회피)."""
+        store = InMemoryDeviceStore()
+        await store.register(_UID)
+        resp = _client(store).get("/v1/devices")
+        assert resp.json()["total"] is None
+
 
 class TestInMemoryDeviceStoreListForUser:
     """`list_for_user` 단위 — owner_id 스코프·revoked 제외·DESC 정렬."""
@@ -599,6 +635,22 @@ class TestInMemoryDeviceStoreListForUser:
         assert [i.device_id for i in page2] == [ids[1], ids[0]]
         # offset 초과 → 빈
         assert await store.list_for_user(_UID, limit=2, offset=10) == []
+
+    async def test_count_for_user_matches_list_filter(self) -> None:
+        """slice 39: count_for_user는 list_for_user와 같은 필터(owner scope·include_revoked)."""
+        store = InMemoryDeviceStore()
+        for _ in range(3):
+            await store.register(_UID)
+        d_revoke, _ = await store.register(_UID)
+        await store.revoke(d_revoke, _UID)
+        other = uuid.uuid4()
+        await store.register(other)
+        # 본인 활성만 → 3
+        assert await store.count_for_user(_UID) == 3
+        # 본인 폐기 포함 → 4(other 제외)
+        assert await store.count_for_user(_UID, include_revoked=True) == 4
+        # 타인 user는 본인 활성 1
+        assert await store.count_for_user(other) == 1
 
 
 class TestInMemoryDeviceStoreLastUsedAt:
@@ -1037,6 +1089,13 @@ class _CountingInnerStore:
             owner_id, include_revoked=include_revoked, limit=limit, offset=offset
         )
 
+    async def count_for_user(
+        self, owner_id: uuid.UUID, *, include_revoked: bool = False
+    ) -> int:
+        return await self._inner.count_for_user(
+            owner_id, include_revoked=include_revoked
+        )
+
     async def cleanup_stale(
         self, max_age_days: int, *, dry_run: bool = False
     ) -> list[str]:
@@ -1222,6 +1281,19 @@ class TestCachedDeviceStoreListForUser:
         assert cache.get_calls == 0
         assert cache.setex_calls == 0
         assert cache.delete_calls == 0
+
+    async def test_count_passthrough_no_cache_access(self) -> None:
+        """slice 39: count_for_user는 inner 위임·캐시 미접근(slice 26 정책 유지)."""
+        inner_real = InMemoryDeviceStore()
+        await inner_real.register(_UID)
+        await inner_real.register(_UID)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60)
+        assert await store.count_for_user(_UID) == 2
+        # 캐시 접근 0
+        assert cache.get_calls == 0
+        assert cache.setex_calls == 0
 
 
 class TestCachedDeviceStoreTTL:
@@ -1990,8 +2062,14 @@ class _FakePgSession:
             matched = matched[offset_val : offset_val + limit_val]
         elif offset_val:
             matched = matched[offset_val:]
-        col_names = [c.key for c in stmt._raw_columns if hasattr(c, "key")]
-        rows = [tuple(getattr(r, n) for n in col_names) for r in matched]
+        # slice 39: COUNT(*) 쿼리 처리 — _raw_columns 중 .key가 None/없는 표현(func.count())
+        # 이 있으면 매칭 행 *개수*를 단일 행 [(N,)]로 반환·`result.scalar()` 호환.
+        col_names = [c.key for c in stmt._raw_columns if getattr(c, "key", None)]
+        has_count = any(not getattr(c, "key", None) for c in stmt._raw_columns)
+        if has_count:
+            rows: list[Any] = [(len(matched),)]
+        else:
+            rows = [tuple(getattr(r, n) for n in col_names) for r in matched]
 
         class _SelectResult:
             def __init__(self, data: list[Any]) -> None:
@@ -1999,6 +2077,12 @@ class _FakePgSession:
 
             def all(self) -> list[Any]:
                 return self._data
+
+            def scalar(self) -> Any:
+                if not self._data:
+                    return None
+                first = self._data[0]
+                return first[0] if isinstance(first, tuple) else first
 
         return _SelectResult(rows)
 
@@ -2202,6 +2286,21 @@ class TestPgDeviceStoreListForUser:
         assert [i.device_id for i in page2] == [ids[1], ids[0]]
         # offset 초과 → 빈
         assert await store.list_for_user(_UID, limit=2, offset=10) == []
+
+    async def test_count_for_user_via_sql_count(self) -> None:
+        """slice 39: PgDeviceStore.count_for_user → SELECT COUNT(*) WHERE ... 발급."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        for _ in range(3):
+            await store.register(_UID)
+        d_revoke, _ = await store.register(_UID)
+        await store.revoke(d_revoke, _UID)
+        other = uuid.uuid4()
+        await store.register(other)
+        # 본인 활성만 → 3
+        assert await store.count_for_user(_UID) == 3
+        # 본인 폐기 포함 → 4
+        assert await store.count_for_user(_UID, include_revoked=True) == 4
 
 
 class TestPgDeviceStoreCleanupStale:

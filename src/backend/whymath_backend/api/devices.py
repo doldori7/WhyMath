@@ -92,12 +92,20 @@ class DeviceInfoSchema(BaseModel):
 
 
 class DeviceListResponse(BaseModel):
-    """본인 활성 디바이스 목록 응답(slice 29) — created_at DESC."""
+    """본인 활성 디바이스 목록 응답(slice 29) — created_at DESC. slice 39: total 옵션."""
 
     model_config = ConfigDict(extra="forbid")
 
     devices: list[DeviceInfoSchema] = Field(
         description="본인 소유 *활성*(미폐기) 디바이스 목록. 폐기된 device는 미포함."
+    )
+    total: int | None = Field(
+        default=None,
+        description=(
+            "필터 조건(`include_revoked`)을 적용한 *총 device 수*. `?include_total=true`일 "
+            '때만 채움(추가 COUNT 쿼리 비용 회피·기본 호출은 null). UI "Page X of Y" 또는 '
+            '"총 N개" 표시용. 페이지 자체 크기는 `len(devices)`로 확인.'
+        ),
     )
 
 
@@ -151,7 +159,7 @@ async def revoke_device(
 @router.get(
     "",
     response_model=DeviceListResponse,
-    summary="내 디바이스 목록 — 기본 활성만·페이지네이션 지원",
+    summary="내 디바이스 목록 — 기본 활성만·페이지네이션·옵션 total count",
 )
 async def list_my_devices(
     user: ConsentedUser,
@@ -173,12 +181,19 @@ async def list_my_devices(
             "응답 길이가 limit 미만이면 더 이상 결과 없음(`has_more=false` 명시 헤더 미제공)."
         ),
     ),
+    include_total: bool = Query(
+        default=False,
+        description=(
+            "slice 39: true면 `total` 필드에 *필터 조건* 적용 후 총 device 수 채움. "
+            "추가 COUNT 쿼리 비용 발생(opt-in)·UI 'Page X of Y' 표시용."
+        ),
+    ),
 ) -> DeviceListResponse:
     """본인 디바이스 목록 — `user.user_id`로 스코프(타인 device 노출 0).
 
     slice 29: 기본 활성만 — Flutter "디바이스 관리" UI의 1차 결선. slice 37:
-    `?include_revoked=true` → 폐기 이력 포함. slice 38: `?limit&offset` 페이지네이션 —
-    이력 폭증 대응. 응답 길이가 limit 미만이면 마지막 페이지(클라이언트가 stop).
+    `?include_revoked=true` → 폐기 이력 포함. slice 38: `?limit&offset` 페이지네이션. slice 39:
+    `?include_total=true` → 응답에 `total` 채움(opt-in·COUNT 쿼리).
 
     응답에 *secret_plain·user_id PII 미포함* — 표면 최소화. revoked/revoked_at은 본인 데이터.
     """
@@ -186,6 +201,9 @@ async def list_my_devices(
     infos = await store.list_for_user(
         user.user_id, include_revoked=include_revoked, limit=limit, offset=offset
     )
+    total: int | None = None
+    if include_total:
+        total = await store.count_for_user(user.user_id, include_revoked=include_revoked)
     return DeviceListResponse(
         devices=[
             DeviceInfoSchema(
@@ -196,5 +214,6 @@ async def list_my_devices(
                 revoked_at=i.revoked_at,
             )
             for i in infos
-        ]
+        ],
+        total=total,
     )
