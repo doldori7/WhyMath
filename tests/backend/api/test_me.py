@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -259,3 +260,74 @@ class TestDeleteSession:
         # 두 번째 호출은 미존재 → 404
         second = client.delete(f"/v1/me/sessions/{row.session_id}")
         assert second.status_code == 404
+
+
+class TestDialogueLifecycle:
+    """slice 52: Dialogue end + delete — slice 50/51 패턴 답습 invariant 3회차."""
+
+    def _dialogue_row(self, owner: uuid.UUID, ended: bool = False) -> Dialogue:
+        did = uuid.uuid4()
+        schema = DialogueSchema(
+            dialogue_id=did,
+            user_id=owner,
+            ended_at=datetime.now(UTC) if ended else None,
+        )
+        return Dialogue.from_schema(schema)
+
+    # ── PATCH end ──
+    def test_end_fresh_dialogue(self) -> None:
+        row = self._dialogue_row(_UID, ended=False)
+        client, fake = _client([], get_map={row.dialogue_id: row})
+        resp = client.patch(f"/v1/me/dialogues/{row.dialogue_id}/end")
+        assert resp.status_code == 200
+        assert resp.json()["ended_at"] is not None
+        assert fake.commits == 1
+
+    def test_end_idempotent_already_ended(self) -> None:
+        row = self._dialogue_row(_UID, ended=True)
+        original = row.ended_at
+        client, fake = _client([], get_map={row.dialogue_id: row})
+        resp = client.patch(f"/v1/me/dialogues/{row.dialogue_id}/end")
+        assert resp.status_code == 200
+        assert row.ended_at == original
+        assert fake.commits == 0
+
+    def test_end_nonexistent_returns_404(self) -> None:
+        fake_id = uuid.uuid4()
+        client, _ = _client([], get_map={})
+        resp = client.patch(f"/v1/me/dialogues/{fake_id}/end")
+        assert resp.status_code == 404
+
+    def test_end_other_users_dialogue_returns_404(self) -> None:
+        other_uid = uuid.uuid4()
+        row = self._dialogue_row(other_uid, ended=False)
+        client, fake = _client([], get_map={row.dialogue_id: row})
+        resp = client.patch(f"/v1/me/dialogues/{row.dialogue_id}/end")
+        assert resp.status_code == 404
+        assert row.ended_at is None
+        assert fake.commits == 0
+
+    # ── DELETE ──
+    def test_delete_own_dialogue_returns_204(self) -> None:
+        row = self._dialogue_row(_UID)
+        client, fake = _client([], get_map={row.dialogue_id: row})
+        resp = client.delete(f"/v1/me/dialogues/{row.dialogue_id}")
+        assert resp.status_code == 204
+        assert fake.deleted == [row]
+        assert fake.commits == 1
+
+    def test_delete_nonexistent_returns_404(self) -> None:
+        fake_id = uuid.uuid4()
+        client, fake = _client([], get_map={})
+        resp = client.delete(f"/v1/me/dialogues/{fake_id}")
+        assert resp.status_code == 404
+        assert fake.deleted == []
+
+    def test_delete_other_users_dialogue_returns_404(self) -> None:
+        other_uid = uuid.uuid4()
+        row = self._dialogue_row(other_uid)
+        client, fake = _client([], get_map={row.dialogue_id: row})
+        resp = client.delete(f"/v1/me/dialogues/{row.dialogue_id}")
+        assert resp.status_code == 404
+        assert fake.deleted == []
+        assert row.dialogue_id in fake._get_map

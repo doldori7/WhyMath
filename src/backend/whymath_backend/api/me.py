@@ -11,6 +11,9 @@ slice 50: `PATCH /v1/me/sessions/{id}/end` — 본인 학습 세션 종료(ended
 slice 51: `DELETE /v1/me/sessions/{id}` — GDPR 본인 학습 세션 영구 삭제. 204 No Content.
 미존재·타인 소유 모두 404(슬라이스 50과 동일 비누설). 자식(attempt·turn) cascade는 DB 레벨
 정책(현재 ORM CASCADE 미지정·RESTRICT 기본) — 자식 존재 시 500 FK 위반. v1 한계로 명시.
+
+slice 52: `PATCH /v1/me/dialogues/{id}/end` + `DELETE /v1/me/dialogues/{id}` — Dialogue
+도메인에 슬라이스 50/51 패턴 답습. 본인 소유 검증·404 비누설·idempotent end·204 delete 동형.
 """
 
 from __future__ import annotations
@@ -135,6 +138,52 @@ async def delete_my_session(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="학습 세션을 찾을 수 없습니다.",
+        )
+    await session.delete(row)
+    await session.commit()
+
+
+@router.patch(
+    "/dialogues/{dialogue_id}/end",
+    response_model=DialogueSchema,
+    summary="내 Socratic 대화 종료(ended_at 채움)",
+)
+async def end_my_dialogue(
+    dialogue_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> DialogueSchema:
+    """slice 52: 본인 Dialogue 종료(`ended_at` = now). 슬라이스 50 패턴 동형 — idempotent·
+    미존재/타인 소유 모두 404."""
+    row = await session.get(Dialogue, dialogue_id)
+    if row is None or row.user_id != user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="대화를 찾을 수 없습니다.",
+        )
+    if row.ended_at is None:
+        row.ended_at = datetime.now(UTC)
+        await session.commit()
+    return row.to_schema()
+
+
+@router.delete(
+    "/dialogues/{dialogue_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="내 Socratic 대화 영구 삭제(GDPR)",
+)
+async def delete_my_dialogue(
+    dialogue_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> None:
+    """slice 52: 본인 Dialogue 영구 삭제 — 슬라이스 51 패턴 동형. 자식(turn) RESTRICT FK
+    한계 동일(v1)."""
+    row = await session.get(Dialogue, dialogue_id)
+    if row is None or row.user_id != user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="대화를 찾을 수 없습니다.",
         )
     await session.delete(row)
     await session.commit()
