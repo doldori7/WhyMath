@@ -34,6 +34,10 @@ from whymath_backend.api._device_store import (
     get_device_store,
     set_device_store,
 )
+from whymath_backend.api._device_metrics import (
+    get_device_sig_failures,
+    reset_device_sig_failures,
+)
 from whymath_backend.api._rate_limit import (
     _client_device_id,
     _expected_device_signature,
@@ -63,6 +67,12 @@ def _reset_rate_limit_store() -> None:
     import asyncio
 
     asyncio.run(reset_store())
+
+
+@pytest.fixture(autouse=True)
+def _reset_device_metrics() -> None:
+    """매 테스트 격리 — 슬라이스 28 device sig 실패 카운터 리셋(누수 차단)."""
+    reset_device_sig_failures()
 
 
 def _user() -> UserProfile:
@@ -521,6 +531,128 @@ class TestClientDeviceIdStoreMode:
         request = self._make_request({})
         settings = _settings_override()
         assert await _client_device_id(request, settings) is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 4b) 슬라이스 28 — `_client_device_id` 실패 분기 metric 기록
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestDeviceSigFailureMetrics:
+    """`_client_device_id`의 4개 fail-safe 분기가 정확한 카운터 사유로 기록되는지.
+
+    정상 경로(유효 sig)는 카운터 0 — spoofing 시도 시에만 발화.
+    """
+
+    def _make_request(self, headers: dict[str, str]) -> Any:
+        request = MagicMock()
+        request.headers = headers
+        return request
+
+    async def test_store_mode_no_sig_records_store_no_sig(self) -> None:
+        store = InMemoryDeviceStore()
+        set_device_store(store)
+        device_id, _ = await store.register(_UID)
+        request = self._make_request({"x-device-id": device_id})  # sig 누락
+        await _client_device_id(request, _settings_override())
+        assert get_device_sig_failures() == {"store_no_sig": 1}
+
+    async def test_store_mode_invalid_sig_records_store_verify_failed(self) -> None:
+        store = InMemoryDeviceStore()
+        set_device_store(store)
+        device_id, _ = await store.register(_UID)
+        request = self._make_request(
+            {"x-device-id": device_id, "x-device-sig": "0" * 64}
+        )
+        await _client_device_id(request, _settings_override())
+        assert get_device_sig_failures() == {"store_verify_failed": 1}
+
+    async def test_store_mode_unregistered_records_store_verify_failed(self) -> None:
+        """미등록 device_id도 verify=False라 같은 사유(store_verify_failed)로 카운팅.
+
+        store 관점에서 미등록·잘못된 sig·폐기는 모두 verify False — 카운터 의미는 *해당 분기*
+        도달 여부. 세부 사유 분해는 OTel 후속 슬라이스에서.
+        """
+        store = InMemoryDeviceStore()
+        set_device_store(store)
+        request = self._make_request(
+            {"x-device-id": "never-registered", "x-device-sig": "0" * 64}
+        )
+        await _client_device_id(request, _settings_override())
+        assert get_device_sig_failures() == {"store_verify_failed": 1}
+
+    async def test_shared_secret_no_sig_records_shared_no_sig(self) -> None:
+        set_device_store(None)
+        request = self._make_request({"x-device-id": "some-device"})  # sig 누락
+        await _client_device_id(
+            request, _settings_override(device_hmac_secret="any-secret")
+        )
+        assert get_device_sig_failures() == {"shared_no_sig": 1}
+
+    async def test_shared_secret_invalid_sig_records_shared_invalid_sig(self) -> None:
+        set_device_store(None)
+        request = self._make_request(
+            {"x-device-id": "some-device", "x-device-sig": "0" * 64}
+        )
+        await _client_device_id(
+            request, _settings_override(device_hmac_secret="some-secret")
+        )
+        assert get_device_sig_failures() == {"shared_invalid_sig": 1}
+
+    async def test_valid_store_sig_records_no_failure(self) -> None:
+        """정상 sig — 카운터 0(spoofing 가시성 invariant: 정상 트래픽 노이즈 0)."""
+        store = InMemoryDeviceStore()
+        set_device_store(store)
+        device_id, secret_plain = await store.register(_UID)
+        sig = _sign(secret_plain, device_id)
+        request = self._make_request({"x-device-id": device_id, "x-device-sig": sig})
+        await _client_device_id(request, _settings_override())
+        assert get_device_sig_failures() == {}
+
+    async def test_valid_shared_sig_records_no_failure(self) -> None:
+        set_device_store(None)
+        secret = "valid-secret"
+        device_id = "device-x"
+        valid_sig = _expected_device_signature(secret, device_id)
+        request = self._make_request(
+            {"x-device-id": device_id, "x-device-sig": valid_sig}
+        )
+        await _client_device_id(request, _settings_override(device_hmac_secret=secret))
+        assert get_device_sig_failures() == {}
+
+    async def test_missing_device_id_header_no_failure_recorded(self) -> None:
+        """X-Device-Id 누락은 slice 20 의미(비활성) — *공격 시도 아님*·카운터 0."""
+        set_device_store(None)
+        request = self._make_request({})
+        await _client_device_id(request, _settings_override(device_hmac_secret="any"))
+        assert get_device_sig_failures() == {}
+
+    async def test_multiple_failures_accumulate_per_reason(self) -> None:
+        """같은 사유 반복 시 카운터 누적. 다른 사유는 독립 키."""
+        set_device_store(None)
+        # 3회 shared_no_sig
+        for _ in range(3):
+            request = self._make_request({"x-device-id": "x"})
+            await _client_device_id(request, _settings_override(device_hmac_secret="s"))
+        # 2회 shared_invalid_sig
+        for _ in range(2):
+            request = self._make_request({"x-device-id": "x", "x-device-sig": "0" * 64})
+            await _client_device_id(request, _settings_override(device_hmac_secret="s"))
+        assert get_device_sig_failures() == {
+            "shared_no_sig": 3,
+            "shared_invalid_sig": 2,
+        }
+
+    def test_reset_clears_all_counters(self) -> None:
+        from whymath_backend.api._device_metrics import (
+            record_device_sig_failure as _record,
+        )
+
+        _record("store_no_sig")
+        _record("shared_invalid_sig")
+        assert get_device_sig_failures()["store_no_sig"] == 1
+        reset_device_sig_failures()
+        assert get_device_sig_failures() == {}
 
 
 # ─────────────────────────────────────────────────────────────────────────────

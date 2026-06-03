@@ -36,6 +36,7 @@ from typing import (
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._device_metrics import record_device_sig_failure
 from whymath_backend.api._device_store import get_device_store
 from whymath_backend.config import Settings, get_settings
 
@@ -892,8 +893,10 @@ async def _client_device_id(request: Request, settings: Settings) -> str | None:
         # 디바이스별 store 모드(우선) — 등록된 device_id만 유효
         provided = request.headers.get("x-device-sig", "").strip()
         if not provided:
+            record_device_sig_failure("store_no_sig")  # slice 28
             return None
         if not await store.verify(stripped, provided):
+            record_device_sig_failure("store_verify_failed")  # slice 28
             return None
         return stripped
     # 폴백: 공유 HMAC secret(slice 21) 또는 검증 생략(slice 20)
@@ -902,9 +905,11 @@ async def _client_device_id(request: Request, settings: Settings) -> str | None:
         return stripped
     provided = request.headers.get("x-device-sig", "").strip()
     if not provided:
+        record_device_sig_failure("shared_no_sig")  # slice 28
         return None
     expected = _expected_device_signature(secret, stripped)
     if not hmac.compare_digest(provided.lower(), expected):
+        record_device_sig_failure("shared_invalid_sig")  # slice 28
         return None
     return stripped
 
