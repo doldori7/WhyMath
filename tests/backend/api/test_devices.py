@@ -1099,17 +1099,243 @@ class TestLifespanWiring:
     def test_lifespan_with_pg_mode_activates_pg_store(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """pg 모드 — startup에서 `_DEVICE_STORE`가 PgDeviceStore, shutdown 후 None."""
+        """pg 모드 — startup에서 `_DEVICE_STORE`가 PgDeviceStore, shutdown 후 None.
+
+        slice 30: PG ping을 monkeypatch — 본 테스트는 lifespan 결선만 검증·실 PG 무관.
+        """
         monkeypatch.setattr(
             "whymath_backend.app.get_settings",
             lambda: _lifespan_settings("pg"),
             raising=True,
+        )
+
+        async def _noop_ping(_settings: Any) -> None:
+            return None
+
+        monkeypatch.setattr(
+            "whymath_backend.app.ping_device_store_health", _noop_ping, raising=True
         )
         with TestClient(create_app()):
             store = get_device_store()
             assert isinstance(store, PgDeviceStore)
         # 종료 후 해제됨
         assert get_device_store() is None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 6b) 슬라이스 30 — ping_device_store_health (startup health check)
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class TestPingDeviceStoreHealth:
+    """모드별 ping 동작 + 실패 시 RuntimeError(메시지에 어느 구성요소·폴백 안내)."""
+
+    async def test_none_mode_skips_ping(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """none 모드 — PG/Redis 미도달이어도 ping 안 함(slice 21 폴백 동작 보존)."""
+        from whymath_backend.api import _device_store as ds_mod
+
+        called: dict[str, bool] = {"sm": False, "redis": False}
+
+        def _spy_sm(_s: Any) -> Any:
+            called["sm"] = True
+            raise AssertionError("none 모드는 sessionmaker 호출 안 해야 함")
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker", _spy_sm, raising=True
+        )
+        monkeypatch.setattr(
+            ds_mod,
+            "_build_redis_for_cache",
+            lambda s: (_ for _ in ()).throw(
+                AssertionError("none 모드는 Redis 빌더 호출 안 해야 함")
+            ),
+        )
+        # 예외 없이 통과
+        await ds_mod.ping_device_store_health(_lifespan_settings("none"))
+        assert called["sm"] is False
+
+    async def test_pg_mode_pings_pg_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from whymath_backend.api import _device_store as ds_mod
+
+        execute_called: dict[str, bool] = {"hit": False}
+
+        class _OkSession:
+            async def __aenter__(self) -> _OkSession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                execute_called["hit"] = True
+
+        def _ok_sm(_s: Any) -> Any:
+            return lambda: _OkSession()
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker", _ok_sm, raising=True
+        )
+        # pg 모드는 Redis 빌더 호출 0
+        monkeypatch.setattr(
+            ds_mod,
+            "_build_redis_for_cache",
+            lambda s: (_ for _ in ()).throw(
+                AssertionError("pg 모드는 Redis 빌더 호출 안 해야 함")
+            ),
+        )
+        await ds_mod.ping_device_store_health(_lifespan_settings("pg"))
+        assert execute_called["hit"] is True
+
+    async def test_pg_mode_unreachable_raises_runtime_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from whymath_backend.api import _device_store as ds_mod
+
+        def _bad_sm(_s: Any) -> Any:
+            class _BadSession:
+                async def __aenter__(self) -> _BadSession:
+                    raise ConnectionError("PG down")
+
+                async def __aexit__(self, *_e: Any) -> None:
+                    pass
+
+            return lambda: _BadSession()
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker", _bad_sm, raising=True
+        )
+        with pytest.raises(RuntimeError, match="PostgreSQL 미도달"):
+            await ds_mod.ping_device_store_health(_lifespan_settings("pg"))
+
+    async def test_pg_cached_mode_pings_both(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from whymath_backend.api import _device_store as ds_mod
+
+        class _OkSession:
+            async def __aenter__(self) -> _OkSession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                pass
+
+        ping_calls: dict[str, int] = {"count": 0, "aclose": 0}
+
+        class _OkRedis:
+            async def ping(self) -> bool:
+                ping_calls["count"] += 1
+                return True
+
+            async def get(self, _k: str) -> None:
+                return None
+
+            async def setex(self, _k: str, _s: int, _v: str) -> None:
+                pass
+
+            async def delete(self, *_k: str) -> int:
+                return 0
+
+            async def aclose(self) -> None:
+                ping_calls["aclose"] += 1
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _OkSession()),
+            raising=True,
+        )
+        monkeypatch.setattr(ds_mod, "_build_redis_for_cache", lambda _s: _OkRedis())
+        await ds_mod.ping_device_store_health(_lifespan_settings("pg_cached"))
+        assert ping_calls["count"] == 1
+        # aclose 호출됐는지(연결 leak 0)
+        assert ping_calls["aclose"] == 1
+
+    async def test_pg_cached_redis_without_aclose_safe(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """aclose 미정의 Redis 클라이언트(고대 redis-py 호환) — finally가 안전 통과."""
+        from whymath_backend.api import _device_store as ds_mod
+
+        class _OkSession:
+            async def __aenter__(self) -> _OkSession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                pass
+
+        class _NoAcloseRedis:
+            async def ping(self) -> bool:
+                return True
+
+            async def get(self, _k: str) -> None:
+                return None
+
+            async def setex(self, _k: str, _s: int, _v: str) -> None:
+                pass
+
+            async def delete(self, *_k: str) -> int:
+                return 0
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _OkSession()),
+            raising=True,
+        )
+        monkeypatch.setattr(
+            ds_mod, "_build_redis_for_cache", lambda _s: _NoAcloseRedis()
+        )
+        # 예외 없이 통과
+        await ds_mod.ping_device_store_health(_lifespan_settings("pg_cached"))
+
+    async def test_pg_cached_mode_redis_unreachable_raises_and_closes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Redis 미도달 시 RuntimeError·aclose는 *여전히* 호출(연결 leak 0)."""
+        from whymath_backend.api import _device_store as ds_mod
+
+        class _OkSession:
+            async def __aenter__(self) -> _OkSession:
+                return self
+
+            async def __aexit__(self, *_e: Any) -> None:
+                pass
+
+            async def execute(self, _stmt: Any) -> None:
+                pass
+
+        aclose_called: dict[str, bool] = {"hit": False}
+
+        class _BadRedis:
+            async def ping(self) -> None:
+                raise ConnectionError("Redis down")
+
+            async def get(self, _k: str) -> None:
+                return None
+
+            async def setex(self, _k: str, _s: int, _v: str) -> None:
+                pass
+
+            async def delete(self, *_k: str) -> int:
+                return 0
+
+            async def aclose(self) -> None:
+                aclose_called["hit"] = True
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _OkSession()),
+            raising=True,
+        )
+        monkeypatch.setattr(ds_mod, "_build_redis_for_cache", lambda _s: _BadRedis())
+        with pytest.raises(RuntimeError, match="Redis 미도달"):
+            await ds_mod.ping_device_store_health(_lifespan_settings("pg_cached"))
+        # ping 실패에도 cleanup 보장
+        assert aclose_called["hit"] is True
 
 
 # ─────────────────────────────────────────────────────────────────────────────

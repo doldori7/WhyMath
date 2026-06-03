@@ -253,7 +253,7 @@ _VERIFY_CACHE_KEY_PREFIX = "device_verify:"
 
 @runtime_checkable
 class _CacheClient(Protocol):
-    """디바이스 verify 캐시용 좁은 Redis 인터페이스 — GET/SETEX/DEL만 사용."""
+    """디바이스 verify 캐시용 좁은 Redis 인터페이스 — GET/SETEX/DEL/PING(slice 30 health)."""
 
     async def get(self, key: str) -> Any:
         """캐시 GET — 없으면 None. bytes/str 모두 호환(decode_responses 설정 무관)."""
@@ -265,6 +265,10 @@ class _CacheClient(Protocol):
 
     async def delete(self, *keys: str) -> Any:
         """키 삭제(가변 키)."""
+        ...
+
+    async def ping(self) -> Any:
+        """연결 도달성 확인 — startup health check(slice 30) 전용."""
         ...
 
 
@@ -414,3 +418,53 @@ def _build_redis_for_cache(settings: Any) -> _CacheClient:  # pragma: no cover
             "`pip install redis[hiredis]` 후 다시 시도하세요."
         ) from exc
     return cast(_CacheClient, Redis.from_url(settings.redis_url, decode_responses=True))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 슬라이스 30 — startup health check (PG/Redis 도달성)
+#
+# 슬라이스 27의 한계 ①(Redis 연결은 lazy·미도달 시 첫 요청에서야 오류) 해소. 부팅 시 store가
+# 의존하는 PG/Redis ping → 미도달 시 RuntimeError로 *fail-fast*(uvicorn이 startup 거부 →
+# 좀비 인스턴스 방지). `device_store_mode == "none"`이면 검증 0(slice 21 폴백 동작).
+# ──────────────────────────────────────────────────────────────────────────
+
+
+async def ping_device_store_health(settings: Any) -> None:
+    """startup에 store 의존성(PG·Redis) 도달성 검증 — 실패 시 RuntimeError로 fail-fast.
+
+    `pg`/`pg_cached` 모드면 PG ping(SELECT 1). `pg_cached`면 추가로 Redis ping. 메시지에
+    어느 구성요소가 실패했는지·폴백 가능한 모드를 명시(운영 진단성).
+    """
+    from sqlalchemy import text
+
+    from whymath_backend.db.session import get_sessionmaker
+
+    mode = settings.device_store_mode
+    if mode == "none":
+        return
+
+    # PG 도달성
+    try:
+        sm = get_sessionmaker(settings)
+        async with sm() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise RuntimeError(
+            f"device_store_mode={mode}이나 PostgreSQL 미도달: {exc}. "
+            "`WHYMATH_DATABASE_URL` 확인 또는 `WHYMATH_DEVICE_STORE_MODE=none`로 폴백."
+        ) from exc
+
+    # Redis 도달성(`pg_cached`만)
+    if mode == "pg_cached":
+        client = _build_redis_for_cache(settings)
+        try:
+            await client.ping()
+        except Exception as exc:
+            raise RuntimeError(
+                f"device_store_mode=pg_cached이나 Redis 미도달: {exc}. "
+                "`WHYMATH_REDIS_URL` 확인 또는 `WHYMATH_DEVICE_STORE_MODE=pg`로 폴백."
+            ) from exc
+        finally:
+            close = getattr(client, "aclose", None)
+            if close is not None:
+                await close()

@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from whymath_backend.api._device_store import (
     CachedDeviceStore,
     PgDeviceStore,
+    ping_device_store_health,
     set_device_store,
 )
 from whymath_backend.app import create_app
@@ -355,6 +356,44 @@ def test_list_devices_endpoint_on_live_pg() -> None:
     finally:
         asyncio.run(_cleanup(uid_a))
         asyncio.run(_cleanup(uid_b))
+
+
+def test_ping_health_succeeds_on_live_pg_and_redis() -> None:
+    """slice 30: 라이브 PG + Redis 모두 도달 시 ping_device_store_health가 예외 없이 통과.
+
+    pg 모드(PG ping만)·pg_cached 모드(PG + Redis ping) 둘 다 검증.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    settings_pg = Settings(jwt_secret_key=SecretStr(_SECRET), device_store_mode="pg")
+    settings_cached = Settings(
+        jwt_secret_key=SecretStr(_SECRET), device_store_mode="pg_cached"
+    )
+
+    # pg 모드 — PG ping만
+    asyncio.run(ping_device_store_health(settings_pg))
+
+    # pg_cached 모드 — Redis ping도. 미도달 시 skip
+    try:
+        from redis.asyncio import Redis
+
+        async def _redis_check() -> bool:
+            client = Redis.from_url(settings_cached.redis_url, decode_responses=True)
+            try:
+                await client.ping()
+                return True
+            except Exception:
+                return False
+            finally:
+                await client.aclose()
+
+        if not asyncio.run(_redis_check()):
+            pytest.skip("Redis 미도달 — pg_cached 통합 건너뜀")
+    except ImportError:
+        pytest.skip("redis 라이브러리 미설치")
+
+    asyncio.run(ping_device_store_health(settings_cached))
 
 
 def test_cached_device_store_on_live_pg_and_redis() -> None:

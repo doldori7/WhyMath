@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from whymath_backend.api._device_store import (
     build_device_store_from_settings,
+    ping_device_store_health,
     set_device_store,
 )
 from whymath_backend.api.coach import router as coach_router
@@ -190,6 +191,8 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     기본) — 기존 L3 단위테스트(가짜 의존성)는 영향받지 않는다.
     """
     settings = get_settings()
+    # 슬라이스 30: store 의존성(PG/Redis) 부팅 시 ping → 미도달이면 fail-fast.
+    await ping_device_store_health(settings)
     store, cleanup_fn = build_device_store_from_settings(settings)
     set_device_store(store)
     try:
