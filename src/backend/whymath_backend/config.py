@@ -369,6 +369,17 @@ class Settings(BaseSettings):
             "0=count 캐시 비활성(verify_ttl로 폴백)."
         ),
     )
+    # ── 슬라이스 49: include_revoked=True count 전용 TTL ──
+    device_count_all_cache_ttl_seconds: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "`include_revoked=True` count 전용 TTL(초). 폐기 이력 포함 count는 *훨씬 드물게* "
+            "조회됨(주로 보안 감사·관리자 화면) → 더 긴 TTL로 hit rate 향상 가능. None(기본)이면 "
+            "`device_count_cache_ttl_seconds` 그대로 사용(slice 48 backward compat). "
+            "운영 보고로 active와 all 사용 빈도 차이 확인 후 조정."
+        ),
+    )
 
     # ── 슬라이스 25: 디바이스 등록 전용 rate limit (`/v1/devices/register`) ──
     device_register_rate_limit_per_minute: int = Field(

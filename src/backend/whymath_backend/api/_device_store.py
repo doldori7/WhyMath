@@ -638,12 +638,17 @@ class CachedDeviceStore:
         cache: _CacheClient,
         ttl_seconds: int = 60,
         count_ttl_seconds: int | None = None,
+        count_all_ttl_seconds: int | None = None,
     ) -> None:
         self._inner = inner
         self._cache = cache
         self._ttl = ttl_seconds
         # slice 48: count_ttl 분리 — None이면 verify ttl로 폴백(슬라이스 40 backward compat).
         self._count_ttl = count_ttl_seconds if count_ttl_seconds is not None else ttl_seconds
+        # slice 49: include_revoked=True 전용 TTL — None이면 _count_ttl로 폴백(slice 48 그대로).
+        self._count_all_ttl = (
+            count_all_ttl_seconds if count_all_ttl_seconds is not None else self._count_ttl
+        )
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
         result = await self._inner.register(user_id)
@@ -751,8 +756,9 @@ class CachedDeviceStore:
             cached_str = cached.decode("utf-8") if isinstance(cached, bytes) else cached
             return int(cached_str)
         result = await self._inner.count_for_user(owner_id, include_revoked=include_revoked)
-        # slice 48: count 전용 TTL(verify보다 길게)
-        await self._cache.setex(cache_key, self._count_ttl, str(result))
+        # slice 48/49: 키별 TTL — `:all`(include_revoked)은 더 긴 TTL 옵션
+        ttl = self._count_all_ttl if include_revoked else self._count_ttl
+        await self._cache.setex(cache_key, ttl, str(result))
         return result
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
@@ -825,6 +831,7 @@ def build_device_store_from_settings(
         redis_client,
         ttl_seconds=settings.device_verify_cache_ttl_seconds,
         count_ttl_seconds=settings.device_count_cache_ttl_seconds,
+        count_all_ttl_seconds=settings.device_count_all_cache_ttl_seconds,
     )
 
     async def _close_redis() -> None:

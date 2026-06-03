@@ -1883,6 +1883,37 @@ class TestCachedDeviceStoreTTL:
         await store.count_for_user(_UID)
         assert cache.ttls[f"device_count:{_UID}:active"] == 33
 
+    async def test_count_all_ttl_separate_from_count_ttl(self) -> None:
+        """slice 49: include_revoked=True 키(`:all`)는 count_all_ttl·active 키는 count_ttl."""
+        inner_real = InMemoryDeviceStore()
+        await inner_real.register(_UID)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        store = CachedDeviceStore(
+            counter,
+            cache,
+            ttl_seconds=60,
+            count_ttl_seconds=300,
+            count_all_ttl_seconds=600,
+        )
+        # active 키 → 300
+        await store.count_for_user(_UID, include_revoked=False)
+        assert cache.ttls[f"device_count:{_UID}:active"] == 300
+        # all 키 → 600
+        await store.count_for_user(_UID, include_revoked=True)
+        assert cache.ttls[f"device_count:{_UID}:all"] == 600
+
+    async def test_count_all_ttl_falls_back_to_count_ttl_when_unspecified(self) -> None:
+        """slice 49: count_all_ttl_seconds=None → count_ttl로 폴백(slice 48 그대로)."""
+        inner_real = InMemoryDeviceStore()
+        await inner_real.register(_UID)
+        counter = _CountingInnerStore(inner_real)
+        cache = _FakeCacheClient()
+        # count_all_ttl 생략 → count_ttl=300으로 통일
+        store = CachedDeviceStore(counter, cache, ttl_seconds=60, count_ttl_seconds=300)
+        await store.count_for_user(_UID, include_revoked=True)
+        assert cache.ttls[f"device_count:{_UID}:all"] == 300
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 6) build_device_store_from_settings — lifespan 결선(슬라이스 27)
