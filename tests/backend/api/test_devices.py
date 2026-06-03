@@ -764,6 +764,42 @@ class TestListDevicesEndpoint:
             == 200
         )
 
+    async def test_order_by_query_param_changes_order(self) -> None:
+        """slice 46: `?order_by=last_used_at&order_dir=asc` HTTP 라운드트립."""
+        store = InMemoryDeviceStore()
+        d1, s1 = await store.register(_UID)
+        d2, s2 = await store.register(_UID)
+        await store.verify(d1, _sign(s1, d1))
+        await store.verify(d2, _sign(s2, d2))
+        now = datetime.now(UTC)
+        store._creds[d1] = store._creds[d1]._replace(
+            last_used_at=now - timedelta(days=10)
+        )
+        store._creds[d2] = store._creds[d2]._replace(
+            last_used_at=now - timedelta(days=1)
+        )
+        client = _client(store)
+        # last_used_at ASC → d1(10d ago) 먼저
+        resp = client.get(
+            "/v1/devices", params={"order_by": "last_used_at", "order_dir": "asc"}
+        )
+        assert resp.status_code == 200
+        ids = [d["device_id"] for d in resp.json()["devices"]]
+        assert ids == [d1, d2]
+
+    def test_invalid_order_by_rejected_422(self) -> None:
+        """slice 46: 허용 외 컬럼(`device_id` 등) → 422(FastAPI Literal 자동 검증)."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        resp = client.get("/v1/devices", params={"order_by": "device_id"})
+        assert resp.status_code == 422
+
+    def test_invalid_order_dir_rejected_422(self) -> None:
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        resp = client.get("/v1/devices", params={"order_dir": "random"})
+        assert resp.status_code == 422
+
     async def test_include_total_false_default_returns_none(self) -> None:
         """기본 `?include_total` 미지정 → total=None(추가 COUNT 회피)."""
         store = InMemoryDeviceStore()
@@ -923,6 +959,64 @@ class TestInMemoryDeviceStoreListForUser:
         assert (
             await store.count_for_user(_UID, used_until=now - timedelta(days=100)) == 1
         )
+
+    async def test_order_by_created_at_default_desc(self) -> None:
+        """slice 46: 기본은 created_at DESC(슬라이스 29 의미 보존)."""
+        store = InMemoryDeviceStore()
+        ids = [(await store.register(_UID))[0] for _ in range(3)]
+        infos = await store.list_for_user(_UID)
+        # 가장 최근 등록이 첫 번째 — ids 등록 역순
+        assert [i.device_id for i in infos] == list(reversed(ids))
+
+    async def test_order_by_created_at_asc(self) -> None:
+        """asc 방향 — 가장 오래된 등록이 첫 번째."""
+        store = InMemoryDeviceStore()
+        ids = [(await store.register(_UID))[0] for _ in range(3)]
+        infos = await store.list_for_user(_UID, order_dir="asc")
+        assert [i.device_id for i in infos] == ids
+
+    async def test_order_by_last_used_at_desc(self) -> None:
+        """slice 46: last_used_at DESC — 가장 최근 verify된 device가 첫 번째."""
+        store = InMemoryDeviceStore()
+        d1, s1 = await store.register(_UID)
+        d2, s2 = await store.register(_UID)
+        d3_never, _ = await store.register(_UID)  # 한 번도 verify 안 됨
+        await store.verify(d1, _sign(s1, d1))
+        await store.verify(d2, _sign(s2, d2))
+        now = datetime.now(UTC)
+        store._creds[d1] = store._creds[d1]._replace(
+            last_used_at=now - timedelta(days=10)
+        )
+        store._creds[d2] = store._creds[d2]._replace(
+            last_used_at=now - timedelta(days=1)
+        )
+        # DESC: d2(어제) → d1(10일전) → d3(None은 끝)
+        infos = await store.list_for_user(
+            _UID, order_by="last_used_at", order_dir="desc"
+        )
+        assert [i.device_id for i in infos] == [d2, d1, d3_never]
+        # ASC: d1(10일전) → d2(어제) → d3(None은 끝)
+        infos_asc = await store.list_for_user(
+            _UID, order_by="last_used_at", order_dir="asc"
+        )
+        assert infos_asc[-1].device_id == d3_never  # None은 항상 끝
+
+    async def test_order_by_revoked_at_desc_include_revoked(self) -> None:
+        """slice 46: revoked_at DESC + include_revoked=True — 가장 최근 폐기 첫 번째."""
+        store = InMemoryDeviceStore()
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        await store.revoke(d1, _UID)
+        await store.revoke(d2, _UID)
+        now = datetime.now(UTC)
+        store._creds[d1] = store._creds[d1]._replace(
+            revoked_at=now - timedelta(days=100)
+        )
+        store._creds[d2] = store._creds[d2]._replace(revoked_at=now - timedelta(days=1))
+        infos = await store.list_for_user(
+            _UID, include_revoked=True, order_by="revoked_at", order_dir="desc"
+        )
+        assert [i.device_id for i in infos] == [d2, d1]
 
     async def test_count_for_user_matches_list_filter(self) -> None:
         """slice 39: count_for_user는 list_for_user와 같은 필터(owner scope·include_revoked)."""
@@ -1375,6 +1469,8 @@ class _CountingInnerStore:
         revoked_until: datetime | None = None,
         used_since: datetime | None = None,
         used_until: datetime | None = None,
+        order_by: Any = "created_at",
+        order_dir: Any = "desc",
         limit: int = 50,
         offset: int = 0,
     ) -> Any:
@@ -1388,6 +1484,8 @@ class _CountingInnerStore:
             revoked_until=revoked_until,
             used_since=used_since,
             used_until=used_until,
+            order_by=order_by,
+            order_dir=order_dir,
             limit=limit,
             offset=offset,
         )
@@ -2445,9 +2543,21 @@ class _FakePgSession:
             for row in self._store.values()
             if self._row_matches(row, stmt.whereclause)
         ]
+        # slice 46: 동적 ORDER BY — UnaryExpression의 element=column·modifier=desc/asc.
+        # 단일 ORDER BY 절 가정·column.key로 정렬 필드·modifier.__name__으로 방향 결정.
+        # None은 *항상 끝*(InMemory와 동일·NULL-LAST UX).
         order_clauses = getattr(stmt, "_order_by_clauses", ())
         if order_clauses:
-            matched.sort(key=lambda r: r.created_at, reverse=True)
+            order = order_clauses[0]
+            col_name = getattr(getattr(order, "element", None), "key", "created_at")
+            modifier_name = getattr(
+                getattr(order, "modifier", None), "__name__", "desc_op"
+            )
+            reverse = "desc" in modifier_name
+            not_null = [r for r in matched if getattr(r, col_name, None) is not None]
+            nulls = [r for r in matched if getattr(r, col_name, None) is None]
+            not_null.sort(key=lambda r: getattr(r, col_name), reverse=reverse)
+            matched = not_null + nulls
         # slice 38: LIMIT/OFFSET 적용(BindParameter에서 값 추출)
         limit_clause = getattr(stmt, "_limit_clause", None)
         offset_clause = getattr(stmt, "_offset_clause", None)
@@ -2840,6 +2950,28 @@ class TestPgDeviceStoreListForUser:
         assert (
             await store.count_for_user(_UID, used_until=now - timedelta(days=100)) == 1
         )
+
+    async def test_order_by_dynamic_column_and_direction(self) -> None:
+        """slice 46: PgDeviceStore의 ORDER BY가 동적 컬럼·방향으로 변경됨."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        ids = [(await store.register(_UID))[0] for _ in range(3)]
+        # last_used_at 조정 — DESC면 d3, ASC면 d1 순(verify로 채움)
+        now = datetime.now(UTC)
+        for i, d in enumerate(ids):
+            store_dict[d].last_used_at = now - timedelta(days=10 - i)
+        # 기본 DESC created_at — 등록 역순
+        infos_desc = await store.list_for_user(_UID)
+        assert [i.device_id for i in infos_desc] == list(reversed(ids))
+        # ASC created_at
+        infos_asc = await store.list_for_user(_UID, order_dir="asc")
+        assert [i.device_id for i in infos_asc] == ids
+        # last_used_at DESC
+        infos_lua_desc = await store.list_for_user(
+            _UID, order_by="last_used_at", order_dir="desc"
+        )
+        # ids[2]가 가장 최근(now-8d), ids[0]가 가장 옛(now-10d)
+        assert [i.device_id for i in infos_lua_desc] == [ids[2], ids[1], ids[0]]
 
 
 class TestPgDeviceStoreCleanupStale:

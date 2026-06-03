@@ -35,7 +35,7 @@ import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from hashlib import sha256
-from typing import Any, NamedTuple, Protocol, cast, runtime_checkable
+from typing import Any, Literal, NamedTuple, Protocol, cast, runtime_checkable
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -117,6 +117,8 @@ class DeviceCredentialStore(Protocol):
         revoked_until: datetime | None = None,
         used_since: datetime | None = None,
         used_until: datetime | None = None,
+        order_by: OrderByField = "created_at",
+        order_dir: OrderDir = "desc",
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -230,6 +232,8 @@ class InMemoryDeviceStore:
         revoked_until: datetime | None = None,
         used_since: datetime | None = None,
         used_until: datetime | None = None,
+        order_by: OrderByField = "created_at",
+        order_dir: OrderDir = "desc",
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -268,7 +272,12 @@ class InMemoryDeviceStore:
                 used_until is None or (c.last_used_at is not None and c.last_used_at <= used_until)
             )
         ]
-        items.sort(key=lambda info: info.created_at, reverse=True)
+        # slice 46: 동적 order_by — *None은 항상 끝*(asc/desc 무관·UI 친화). 별 두 그룹 정렬
+        # 후 합치는 패턴 — datetime sentinel 트릭의 방향 불일치 회피.
+        not_null = [i for i in items if getattr(i, order_by) is not None]
+        nulls = [i for i in items if getattr(i, order_by) is None]
+        not_null.sort(key=lambda info: getattr(info, order_by), reverse=(order_dir == "desc"))
+        items = not_null + nulls
         return items[offset : offset + limit]
 
     async def count_for_user(
@@ -413,6 +422,8 @@ class PgDeviceStore:
         revoked_until: datetime | None = None,
         used_since: datetime | None = None,
         used_until: datetime | None = None,
+        order_by: OrderByField = "created_at",
+        order_dir: OrderDir = "desc",
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -448,7 +459,10 @@ class PgDeviceStore:
                 stmt = stmt.where(DeviceCredential.last_used_at >= used_since)
             if used_until is not None:
                 stmt = stmt.where(DeviceCredential.last_used_at <= used_until)
-            stmt = stmt.order_by(DeviceCredential.created_at.desc()).limit(limit).offset(offset)
+            # slice 46: 동적 order_by — 컬럼·방향 모두 동적
+            order_col = getattr(DeviceCredential, order_by)
+            order_expr = order_col.desc() if order_dir == "desc" else order_col.asc()
+            stmt = stmt.order_by(order_expr).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return [
                 DeviceInfo(
@@ -563,6 +577,11 @@ def _has_any_time_filter(*values: datetime | None) -> bool:
     return any(v is not None for v in values)
 
 
+# slice 46: order_by 가능 컬럼 — DeviceInfo의 시간 컬럼 3종(slice 41/43/44 시간 차원과 정합)
+OrderByField = Literal["created_at", "last_used_at", "revoked_at"]
+OrderDir = Literal["asc", "desc"]
+
+
 @runtime_checkable
 class _CacheClient(Protocol):
     """디바이스 verify 캐시용 좁은 Redis 인터페이스 — GET/SETEX/DEL/PING(slice 30 health)."""
@@ -664,11 +683,13 @@ class CachedDeviceStore:
         revoked_until: datetime | None = None,
         used_since: datetime | None = None,
         used_until: datetime | None = None,
+        order_by: OrderByField = "created_at",
+        order_dir: OrderDir = "desc",
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
         # 목록 조회는 캐시 안 함 — 등록/폐기 직후 신선도 우선(빈도 낮은 관리 표면).
-        # slice 37/38/41/43/44 인자 그대로 위임
+        # slice 37/38/41/43/44/46 인자 그대로 위임
         return await self._inner.list_for_user(
             owner_id,
             include_revoked=include_revoked,
@@ -678,6 +699,8 @@ class CachedDeviceStore:
             revoked_until=revoked_until,
             used_since=used_since,
             used_until=used_until,
+            order_by=order_by,
+            order_dir=order_dir,
             limit=limit,
             offset=offset,
         )

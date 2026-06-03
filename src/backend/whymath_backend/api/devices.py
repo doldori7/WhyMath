@@ -30,7 +30,12 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.api._auth import ConsentedUser
-from whymath_backend.api._device_store import DeviceCredentialStore, get_device_store
+from whymath_backend.api._device_store import (
+    DeviceCredentialStore,
+    OrderByField,
+    OrderDir,
+    get_device_store,
+)
 from whymath_backend.api._rate_limit import RateLimitedDeviceRegister
 
 router = APIRouter(prefix="/v1/devices", tags=["devices"])
@@ -259,6 +264,24 @@ async def list_my_devices(
             ),
         ),
     ] = None,
+    order_by: Annotated[
+        OrderByField,
+        Query(
+            description=(
+                "slice 46: 정렬 컬럼 — `created_at`(기본)·`last_used_at`·`revoked_at`. "
+                "DeviceInfo의 시간 차원 3축(slice 41/43/44)과 정합."
+            ),
+        ),
+    ] = "created_at",
+    order_dir: Annotated[
+        OrderDir,
+        Query(
+            description=(
+                "slice 46: 정렬 방향 — `desc`(기본·최근부터)·`asc`. UI '최근 사용순'·"
+                "'오래된 등록부터' 등 결선."
+            ),
+        ),
+    ] = "desc",
     limit: int = Query(
         default=50,
         ge=1,
@@ -316,6 +339,8 @@ async def list_my_devices(
         revoked_until=revoked_until,
         used_since=used_since,
         used_until=used_until,
+        order_by=order_by,
+        order_dir=order_dir,
         limit=limit,
         offset=offset,
     )
