@@ -51,22 +51,40 @@ class _Result:
 
 
 class FakeSession:
-    def __init__(self, rows: list[Any] | None = None) -> None:
+    def __init__(
+        self,
+        rows: list[Any] | None = None,
+        get_map: dict[uuid.UUID, Any] | None = None,
+    ) -> None:
         self._rows = list(rows or [])
+        # slice 50: session.get(LearningSession, session_id) 시뮬
+        self._get_map = get_map or {}
+        self.commits = 0
 
     async def execute(self, stmt: Any) -> _Result:
         return _Result(self._rows)
 
+    async def get(self, _model: Any, pk: Any) -> Any:
+        return self._get_map.get(pk)
 
-def _client(rows: list[Any]) -> TestClient:
+    async def commit(self) -> None:
+        self.commits += 1
+
+
+def _client(
+    rows: list[Any],
+    get_map: dict[uuid.UUID, Any] | None = None,
+) -> tuple[TestClient, FakeSession]:
+    """slice 50: get_map 지원 — `.get(LearningSession, id)` 호출 시뮬. 캡처 세션도 반환."""
     app = create_app()
     app.dependency_overrides[get_consented_user] = _user
+    fake = FakeSession(rows, get_map=get_map)
 
     async def _sess() -> AsyncIterator[FakeSession]:
-        yield FakeSession(rows)
+        yield fake
 
     app.dependency_overrides[get_session] = _sess
-    return TestClient(app)
+    return TestClient(app), fake
 
 
 def _no_auth_client() -> TestClient:
@@ -87,24 +105,27 @@ _ENDPOINTS = ("/v1/me/sessions", "/v1/me/assessments", "/v1/me/dialogues")
 class TestScopedLists:
     def test_sessions_returns_rows(self) -> None:
         rows = [LearningSession.from_schema(LearningSessionSchema(user_id=_UID))]
-        resp = _client(rows).get("/v1/me/sessions")
+        client, _ = _client(rows)
+        resp = client.get("/v1/me/sessions")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
     def test_assessments_returns_rows(self) -> None:
         rows = [Assessment.from_schema(AssessmentSchema(user_id=_UID))]
-        resp = _client(rows).get("/v1/me/assessments")
+        client, _ = _client(rows)
+        resp = client.get("/v1/me/assessments")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
     def test_dialogues_returns_rows(self) -> None:
         rows = [Dialogue.from_schema(DialogueSchema(user_id=_UID))]
-        resp = _client(rows).get("/v1/me/dialogues")
+        client, _ = _client(rows)
+        resp = client.get("/v1/me/dialogues")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
 
     def test_empty_lists(self) -> None:
-        client = _client([])
+        client, _ = _client([])
         for path in _ENDPOINTS:
             resp = client.get(path)
             assert resp.status_code == 200
@@ -120,7 +141,62 @@ class TestAuthRequired:
             assert "WWW-Authenticate" in resp.headers
 
     def test_pagination_out_of_range_422(self) -> None:
-        client = _client([])
+        client, _ = _client([])
         assert client.get("/v1/me/sessions?limit=0").status_code == 422
         assert client.get("/v1/me/sessions?limit=999").status_code == 422
         assert client.get("/v1/me/sessions?offset=-1").status_code == 422
+
+
+class TestEndSession:
+    """slice 50: `PATCH /v1/me/sessions/{id}/end` — 본인 세션 종료(idempotent·404 미존재/타인)."""
+
+    def _session_row(self, owner: uuid.UUID, ended: bool = False) -> LearningSession:
+        sid = uuid.uuid4()
+        from datetime import UTC, datetime
+
+        schema = LearningSessionSchema(
+            session_id=sid,
+            user_id=owner,
+            ended_at=datetime.now(UTC) if ended else None,
+        )
+        return LearningSession.from_schema(schema)
+
+    def test_ends_fresh_session(self) -> None:
+        """미종료 세션 → ended_at 채움·commit·200."""
+        row = self._session_row(_UID, ended=False)
+        client, fake = _client([], get_map={row.session_id: row})
+        resp = client.patch(f"/v1/me/sessions/{row.session_id}/end")
+        assert resp.status_code == 200
+        assert resp.json()["ended_at"] is not None
+        assert fake.commits == 1
+        # ORM row의 ended_at도 채워짐
+        assert row.ended_at is not None
+
+    def test_idempotent_already_ended(self) -> None:
+        """이미 종료된 세션 → 기존 ended_at 보존·commit 없음·200."""
+        row = self._session_row(_UID, ended=True)
+        original_ended = row.ended_at
+        client, fake = _client([], get_map={row.session_id: row})
+        resp = client.patch(f"/v1/me/sessions/{row.session_id}/end")
+        assert resp.status_code == 200
+        # 시각 변경 없음
+        assert row.ended_at == original_ended
+        assert fake.commits == 0  # 변경 없으면 commit 0
+
+    def test_nonexistent_returns_404(self) -> None:
+        """미존재 세션 → 404."""
+        fake_id = uuid.uuid4()
+        client, _ = _client([], get_map={})
+        resp = client.patch(f"/v1/me/sessions/{fake_id}/end")
+        assert resp.status_code == 404
+
+    def test_other_users_session_returns_404(self) -> None:
+        """타인 소유 세션 → 404(존재 여부 비누설·slice 24 패턴)."""
+        other_uid = uuid.uuid4()
+        row = self._session_row(other_uid, ended=False)
+        client, fake = _client([], get_map={row.session_id: row})
+        resp = client.patch(f"/v1/me/sessions/{row.session_id}/end")
+        assert resp.status_code == 404
+        # 실제 ended_at는 *수정 안 됨*
+        assert row.ended_at is None
+        assert fake.commits == 0

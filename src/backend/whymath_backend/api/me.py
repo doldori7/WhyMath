@@ -4,13 +4,18 @@
 조회한다 — 본인 데이터 스코핑(타인 데이터 차단, CLAUDE.md 미성년 PII·식별 분석 외부 노출 금지).
 읽기 전용·최신순(started_at desc, PK로 안정 정렬)·limit/offset. 쓰기·자식(turn 등) 상세·관리자
 (타인) 조회는 범위 밖.
+
+slice 50: `PATCH /v1/me/sessions/{id}/end` — 본인 학습 세션 종료(ended_at 채움). idempotent
+(이미 종료된 세션은 ended_at 보존하고 200). 미존재·타인 소유 모두 404(정보 비누설·slice 24 패턴).
 """
 
 from __future__ import annotations
 
+import uuid
+from datetime import UTC, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -76,3 +81,30 @@ async def list_my_dialogues(
     )
     result = await session.execute(stmt)
     return [row.to_schema() for row in result.scalars().all()]
+
+
+@router.patch(
+    "/sessions/{session_id}/end",
+    response_model=LearningSessionSchema,
+    summary="내 학습 세션 종료(ended_at 채움)",
+)
+async def end_my_session(
+    session_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> LearningSessionSchema:
+    """slice 50: 본인 학습 세션을 종료(`ended_at` = now).
+
+    *idempotent*: 이미 종료된 세션은 기존 `ended_at` 보존·재호출도 200(현 상태 반환).
+    미존재·타인 소유 모두 **404**(정보 비누설·slice 24 패턴 — 존재 여부 노출 차단).
+    """
+    row = await session.get(LearningSession, session_id)
+    if row is None or row.user_id != user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="학습 세션을 찾을 수 없습니다.",
+        )
+    if row.ended_at is None:
+        row.ended_at = datetime.now(UTC)
+        await session.commit()
+    return row.to_schema()
