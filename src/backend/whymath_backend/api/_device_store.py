@@ -119,6 +119,7 @@ class DeviceCredentialStore(Protocol):
         used_until: datetime | None = None,
         order_by: OrderByField = "created_at",
         order_dir: OrderDir = "desc",
+        nulls: NullsPosition = "last",
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -234,6 +235,7 @@ class InMemoryDeviceStore:
         used_until: datetime | None = None,
         order_by: OrderByField = "created_at",
         order_dir: OrderDir = "desc",
+        nulls: NullsPosition = "last",
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -272,12 +274,12 @@ class InMemoryDeviceStore:
                 used_until is None or (c.last_used_at is not None and c.last_used_at <= used_until)
             )
         ]
-        # slice 46: 동적 order_by — *None은 항상 끝*(asc/desc 무관·UI 친화). 별 두 그룹 정렬
-        # 후 합치는 패턴 — datetime sentinel 트릭의 방향 불일치 회피.
+        # slice 46: 동적 order_by — 별 두 그룹 정렬 후 합치는 패턴.
+        # slice 47: `nulls` 파라미터로 None 위치 명시 — last(기본·UI 친화) 또는 first.
         not_null = [i for i in items if getattr(i, order_by) is not None]
-        nulls = [i for i in items if getattr(i, order_by) is None]
+        nulls_items = [i for i in items if getattr(i, order_by) is None]
         not_null.sort(key=lambda info: getattr(info, order_by), reverse=(order_dir == "desc"))
-        items = not_null + nulls
+        items = not_null + nulls_items if nulls == "last" else nulls_items + not_null
         return items[offset : offset + limit]
 
     async def count_for_user(
@@ -424,6 +426,7 @@ class PgDeviceStore:
         used_until: datetime | None = None,
         order_by: OrderByField = "created_at",
         order_dir: OrderDir = "desc",
+        nulls: NullsPosition = "last",
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
@@ -460,8 +463,10 @@ class PgDeviceStore:
             if used_until is not None:
                 stmt = stmt.where(DeviceCredential.last_used_at <= used_until)
             # slice 46: 동적 order_by — 컬럼·방향 모두 동적
+            # slice 47: NULLS FIRST/LAST 명시 — PG/InMemory 일관성
             order_col = getattr(DeviceCredential, order_by)
             order_expr = order_col.desc() if order_dir == "desc" else order_col.asc()
+            order_expr = order_expr.nulls_last() if nulls == "last" else order_expr.nulls_first()
             stmt = stmt.order_by(order_expr).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return [
@@ -580,6 +585,8 @@ def _has_any_time_filter(*values: datetime | None) -> bool:
 # slice 46: order_by 가능 컬럼 — DeviceInfo의 시간 컬럼 3종(slice 41/43/44 시간 차원과 정합)
 OrderByField = Literal["created_at", "last_used_at", "revoked_at"]
 OrderDir = Literal["asc", "desc"]
+# slice 47: NULL 위치 — `last`(UI 친화 기본·아직 verify 안된 device 등 끝으로)·`first`
+NullsPosition = Literal["last", "first"]
 
 
 @runtime_checkable
@@ -685,11 +692,12 @@ class CachedDeviceStore:
         used_until: datetime | None = None,
         order_by: OrderByField = "created_at",
         order_dir: OrderDir = "desc",
+        nulls: NullsPosition = "last",
         limit: int = 50,
         offset: int = 0,
     ) -> list[DeviceInfo]:
         # 목록 조회는 캐시 안 함 — 등록/폐기 직후 신선도 우선(빈도 낮은 관리 표면).
-        # slice 37/38/41/43/44/46 인자 그대로 위임
+        # slice 37/38/41/43/44/46/47 인자 그대로 위임
         return await self._inner.list_for_user(
             owner_id,
             include_revoked=include_revoked,
@@ -701,6 +709,7 @@ class CachedDeviceStore:
             used_until=used_until,
             order_by=order_by,
             order_dir=order_dir,
+            nulls=nulls,
             limit=limit,
             offset=offset,
         )

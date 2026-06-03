@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._device_store import (
     DeviceCredentialStore,
+    NullsPosition,
     OrderByField,
     OrderDir,
     get_device_store,
@@ -282,6 +283,15 @@ async def list_my_devices(
             ),
         ),
     ] = "desc",
+    nulls: Annotated[
+        NullsPosition,
+        Query(
+            description=(
+                "slice 47: NULL 위치 — `last`(기본·UI 친화·아직 verify 안 된 device 등 끝)·"
+                "`first`. PG `NULLS LAST/FIRST` SQL 명시·InMemory 두 그룹 정렬과 정합."
+            ),
+        ),
+    ] = "last",
     limit: int = Query(
         default=50,
         ge=1,
@@ -341,6 +351,7 @@ async def list_my_devices(
         used_until=used_until,
         order_by=order_by,
         order_dir=order_dir,
+        nulls=nulls,
         limit=limit,
         offset=offset,
     )

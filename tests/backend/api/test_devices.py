@@ -787,6 +787,37 @@ class TestListDevicesEndpoint:
         ids = [d["device_id"] for d in resp.json()["devices"]]
         assert ids == [d1, d2]
 
+    async def test_nulls_query_param_changes_position(self) -> None:
+        """slice 47: `?nulls=first` HTTP 라운드트립."""
+        store = InMemoryDeviceStore()
+        d1, s1 = await store.register(_UID)
+        d_never, _ = await store.register(_UID)
+        await store.verify(d1, _sign(s1, d1))
+        client = _client(store)
+        # 기본 nulls=last: d1 먼저·d_never 끝
+        resp_last = client.get(
+            "/v1/devices", params={"order_by": "last_used_at", "order_dir": "desc"}
+        )
+        ids_last = [d["device_id"] for d in resp_last.json()["devices"]]
+        assert ids_last == [d1, d_never]
+        # nulls=first: d_never 먼저·d1 끝
+        resp_first = client.get(
+            "/v1/devices",
+            params={
+                "order_by": "last_used_at",
+                "order_dir": "desc",
+                "nulls": "first",
+            },
+        )
+        ids_first = [d["device_id"] for d in resp_first.json()["devices"]]
+        assert ids_first == [d_never, d1]
+
+    def test_invalid_nulls_rejected_422(self) -> None:
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        resp = client.get("/v1/devices", params={"nulls": "middle"})
+        assert resp.status_code == 422
+
     def test_invalid_order_by_rejected_422(self) -> None:
         """slice 46: 허용 외 컬럼(`device_id` 등) → 422(FastAPI Literal 자동 검증)."""
         store = InMemoryDeviceStore()
@@ -1017,6 +1048,23 @@ class TestInMemoryDeviceStoreListForUser:
             _UID, include_revoked=True, order_by="revoked_at", order_dir="desc"
         )
         assert [i.device_id for i in infos] == [d2, d1]
+
+    async def test_nulls_first_puts_none_at_start(self) -> None:
+        """slice 47: nulls='first' → None 값이 *맨 앞*(asc/desc 무관)."""
+        store = InMemoryDeviceStore()
+        d1, s1 = await store.register(_UID)
+        d_never, _ = await store.register(_UID)
+        await store.verify(d1, _sign(s1, d1))
+        # DESC last_used_at + nulls=first → d_never 먼저
+        infos = await store.list_for_user(
+            _UID, order_by="last_used_at", order_dir="desc", nulls="first"
+        )
+        assert [i.device_id for i in infos] == [d_never, d1]
+        # ASC + nulls=first도 None 먼저
+        infos_asc = await store.list_for_user(
+            _UID, order_by="last_used_at", order_dir="asc", nulls="first"
+        )
+        assert infos_asc[0].device_id == d_never
 
     async def test_count_for_user_matches_list_filter(self) -> None:
         """slice 39: count_for_user는 list_for_user와 같은 필터(owner scope·include_revoked)."""
@@ -1471,6 +1519,7 @@ class _CountingInnerStore:
         used_until: datetime | None = None,
         order_by: Any = "created_at",
         order_dir: Any = "desc",
+        nulls: Any = "last",
         limit: int = 50,
         offset: int = 0,
     ) -> Any:
@@ -1486,6 +1535,7 @@ class _CountingInnerStore:
             used_until=used_until,
             order_by=order_by,
             order_dir=order_dir,
+            nulls=nulls,
             limit=limit,
             offset=offset,
         )
@@ -2543,21 +2593,33 @@ class _FakePgSession:
             for row in self._store.values()
             if self._row_matches(row, stmt.whereclause)
         ]
-        # slice 46: 동적 ORDER BY — UnaryExpression의 element=column·modifier=desc/asc.
-        # 단일 ORDER BY 절 가정·column.key로 정렬 필드·modifier.__name__으로 방향 결정.
-        # None은 *항상 끝*(InMemory와 동일·NULL-LAST UX).
+        # slice 46/47: 동적 ORDER BY — UnaryExpression 체인을 재귀 unwrap.
+        # `col.desc().nulls_last()` → 외부 nulls_last_op → 내부 desc_op → column.
         order_clauses = getattr(stmt, "_order_by_clauses", ())
         if order_clauses:
-            order = order_clauses[0]
-            col_name = getattr(getattr(order, "element", None), "key", "created_at")
-            modifier_name = getattr(
-                getattr(order, "modifier", None), "__name__", "desc_op"
-            )
-            reverse = "desc" in modifier_name
+            col_name = "created_at"
+            reverse = False
+            nulls_last = True  # slice 47 기본
+            current = order_clauses[0]
+            while current is not None:
+                # UnaryExpression chains may have .key=None on intermediate nodes·
+                # column row에서만 truthy key 발견
+                key_attr = getattr(current, "key", None)
+                if isinstance(key_attr, str):
+                    col_name = key_attr
+                    break
+                mod_name = getattr(getattr(current, "modifier", None), "__name__", "")
+                if "desc" in mod_name:
+                    reverse = True
+                elif "nulls_first" in mod_name:
+                    nulls_last = False
+                elif "nulls_last" in mod_name:
+                    nulls_last = True
+                current = getattr(current, "element", None)
             not_null = [r for r in matched if getattr(r, col_name, None) is not None]
-            nulls = [r for r in matched if getattr(r, col_name, None) is None]
+            nulls_rows = [r for r in matched if getattr(r, col_name, None) is None]
             not_null.sort(key=lambda r: getattr(r, col_name), reverse=reverse)
-            matched = not_null + nulls
+            matched = not_null + nulls_rows if nulls_last else nulls_rows + not_null
         # slice 38: LIMIT/OFFSET 적용(BindParameter에서 값 추출)
         limit_clause = getattr(stmt, "_limit_clause", None)
         offset_clause = getattr(stmt, "_offset_clause", None)
@@ -2972,6 +3034,24 @@ class TestPgDeviceStoreListForUser:
         )
         # ids[2]가 가장 최근(now-8d), ids[0]가 가장 옛(now-10d)
         assert [i.device_id for i in infos_lua_desc] == [ids[2], ids[1], ids[0]]
+
+    async def test_nulls_first_via_sql_ordering(self) -> None:
+        """slice 47: PgDeviceStore가 NULLS FIRST/LAST SQL 발급 → `_FakePgSession` 재귀 unwrap."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        d1, secret1 = await store.register(_UID)
+        d_never, _ = await store.register(_UID)
+        await store.verify(d1, _compute_signature(secret1, d1))
+        # 기본 nulls=last
+        infos_last = await store.list_for_user(
+            _UID, order_by="last_used_at", order_dir="desc"
+        )
+        assert [i.device_id for i in infos_last] == [d1, d_never]
+        # nulls=first
+        infos_first = await store.list_for_user(
+            _UID, order_by="last_used_at", order_dir="desc", nulls="first"
+        )
+        assert [i.device_id for i in infos_first] == [d_never, d1]
 
 
 class TestPgDeviceStoreCleanupStale:
