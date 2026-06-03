@@ -622,6 +622,42 @@ class TestListDevicesEndpoint:
         resp = client.get("/v1/devices", params={"since": "2024-01-01T00:00:00Z"})
         assert resp.status_code == 200
 
+    async def test_revoked_since_filter_via_http(self) -> None:
+        """slice 43: `?revoked_since` → revoked_at 시간창 필터·HTTP 라운드트립."""
+        store = InMemoryDeviceStore()
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        await store.revoke(d1, _UID)
+        await store.revoke(d2, _UID)
+        now = datetime.now(UTC)
+        # d1은 1년 전 폐기·d2는 어제 폐기
+        store._creds[d1] = store._creds[d1]._replace(
+            revoked_at=now - timedelta(days=365)
+        )
+        store._creds[d2] = store._creds[d2]._replace(revoked_at=now - timedelta(days=1))
+        client = _client(store)
+        # ?include_revoked=true&revoked_since=30일전 → d2만
+        resp = client.get(
+            "/v1/devices",
+            params={
+                "include_revoked": "true",
+                "revoked_since": (now - timedelta(days=30)).isoformat(),
+            },
+        )
+        assert resp.status_code == 200
+        ids = [d["device_id"] for d in resp.json()["devices"]]
+        assert ids == [d2]
+
+    def test_naive_revoked_since_rejected_422(self) -> None:
+        """slice 42 검증을 slice 43 필드(revoked_since)에도 적용."""
+        store = InMemoryDeviceStore()
+        client = _client(store)
+        resp = client.get(
+            "/v1/devices", params={"revoked_since": "2024-01-01T00:00:00"}
+        )
+        assert resp.status_code == 422
+        assert "revoked_since" in resp.json()["detail"]
+
     def test_tz_aware_with_offset_accepted(self) -> None:
         """`+09:00` 등 offset 포함 → 정상 200."""
         store = InMemoryDeviceStore()
@@ -716,6 +752,44 @@ class TestInMemoryDeviceStoreListForUser:
         assert [i.device_id for i in infos3] == [d3]
         # count도 동일 필터
         assert await store.count_for_user(_UID, since=now - timedelta(days=30)) == 2
+
+    async def test_revoked_since_until_filters_revoked_at(self) -> None:
+        """slice 43: revoked_since/until은 revoked_at 시간창 — 미폐기는 자동 제외."""
+        store = InMemoryDeviceStore()
+        d_active, _ = await store.register(_UID)
+        d_old_revoked, _ = await store.register(_UID)
+        d_recent_revoked, _ = await store.register(_UID)
+        # d_old_revoked는 1년 전 폐기·d_recent_revoked는 어제 폐기·d_active는 미폐기
+        await store.revoke(d_old_revoked, _UID)
+        await store.revoke(d_recent_revoked, _UID)
+        now = datetime.now(UTC)
+        store._creds[d_old_revoked] = store._creds[d_old_revoked]._replace(
+            revoked_at=now - timedelta(days=365)
+        )
+        store._creds[d_recent_revoked] = store._creds[d_recent_revoked]._replace(
+            revoked_at=now - timedelta(days=1)
+        )
+        # include_revoked=True + revoked_since=30일전 → recent만(미폐기 d_active는
+        # revoked_at=None이라 자동 제외)
+        infos = await store.list_for_user(
+            _UID, include_revoked=True, revoked_since=now - timedelta(days=30)
+        )
+        assert [i.device_id for i in infos] == [d_recent_revoked]
+        # 시간창 [400일전, 100일전] → old만
+        infos2 = await store.list_for_user(
+            _UID,
+            include_revoked=True,
+            revoked_since=now - timedelta(days=400),
+            revoked_until=now - timedelta(days=100),
+        )
+        assert [i.device_id for i in infos2] == [d_old_revoked]
+        # count도 동일
+        assert (
+            await store.count_for_user(
+                _UID, include_revoked=True, revoked_since=now - timedelta(days=30)
+            )
+            == 1
+        )
 
     async def test_count_for_user_matches_list_filter(self) -> None:
         """slice 39: count_for_user는 list_for_user와 같은 필터(owner scope·include_revoked)."""
@@ -1164,6 +1238,8 @@ class _CountingInnerStore:
         include_revoked: bool = False,
         since: datetime | None = None,
         until: datetime | None = None,
+        revoked_since: datetime | None = None,
+        revoked_until: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> Any:
@@ -1173,6 +1249,8 @@ class _CountingInnerStore:
             include_revoked=include_revoked,
             since=since,
             until=until,
+            revoked_since=revoked_since,
+            revoked_until=revoked_until,
             limit=limit,
             offset=offset,
         )
@@ -1184,9 +1262,16 @@ class _CountingInnerStore:
         include_revoked: bool = False,
         since: datetime | None = None,
         until: datetime | None = None,
+        revoked_since: datetime | None = None,
+        revoked_until: datetime | None = None,
     ) -> int:
         return await self._inner.count_for_user(
-            owner_id, include_revoked=include_revoked, since=since, until=until
+            owner_id,
+            include_revoked=include_revoked,
+            since=since,
+            until=until,
+            revoked_since=revoked_since,
+            revoked_until=revoked_until,
         )
 
     async def cleanup_stale(
@@ -2540,6 +2625,49 @@ class TestPgDeviceStoreListForUser:
         # count 동일 필터
         assert await store.count_for_user(_UID, since=now - timedelta(days=30)) == 1
         assert await store.count_for_user(_UID, until=now - timedelta(days=14)) == 1
+
+    async def test_revoked_since_until_via_sql_range(self) -> None:
+        """slice 43: PgDeviceStore가 revoked_at >= revoked_since / <= revoked_until WHERE 발급."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        d1, _ = await store.register(_UID)
+        d2, _ = await store.register(_UID)
+        await store.revoke(d1, _UID)
+        await store.revoke(d2, _UID)
+        now = datetime.now(UTC)
+        # d1은 1년 전 폐기·d2는 어제 폐기
+        store_dict[d1].revoked_at = now - timedelta(days=365)
+        store_dict[d2].revoked_at = now - timedelta(days=1)
+        # revoked_since=30일전 → d2만(미폐기 행은 revoked_at IS NULL이라 자동 제외)
+        infos = await store.list_for_user(
+            _UID, include_revoked=True, revoked_since=now - timedelta(days=30)
+        )
+        assert [i.device_id for i in infos] == [d2]
+        # 시간창 [400일전, 100일전] → d1만
+        infos2 = await store.list_for_user(
+            _UID,
+            include_revoked=True,
+            revoked_since=now - timedelta(days=400),
+            revoked_until=now - timedelta(days=100),
+        )
+        assert [i.device_id for i in infos2] == [d1]
+        # count 동일 (revoked_since·revoked_until 둘 다 분기 cov)
+        assert (
+            await store.count_for_user(
+                _UID,
+                include_revoked=True,
+                revoked_since=now - timedelta(days=30),
+            )
+            == 1
+        )
+        assert (
+            await store.count_for_user(
+                _UID,
+                include_revoked=True,
+                revoked_until=now - timedelta(days=100),
+            )
+            == 1
+        )
 
 
 class TestPgDeviceStoreCleanupStale:

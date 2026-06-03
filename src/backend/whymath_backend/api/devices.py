@@ -200,6 +200,24 @@ async def list_my_devices(
             ),
         ),
     ] = None,
+    revoked_since: Annotated[
+        datetime | None,
+        Query(
+            description=(
+                "slice 43: `revoked_at` 시간창 — 이 시각 이후 폐기된 device만(inclusive·ISO8601). "
+                "미폐기 device는 자동 제외(보안 감사 '지난 7일 폐기' 조회용)."
+            ),
+        ),
+    ] = None,
+    revoked_until: Annotated[
+        datetime | None,
+        Query(
+            description=(
+                "slice 43: `revoked_at` 시간창 — 이 시각 이전 폐기된 device만(inclusive·ISO8601). "
+                "revoked_since와 함께 폐기 시간창 지정 가능."
+            ),
+        ),
+    ] = None,
     limit: int = Query(
         default=50,
         ge=1,
@@ -234,15 +252,20 @@ async def list_my_devices(
     응답에 *secret_plain·user_id PII 미포함* — 표면 최소화. revoked/revoked_at은 본인 데이터.
 
     slice 42: since/until은 *반드시 timezone 포함*(`Z` 또는 `±HH:MM`). naive 시 422.
+    slice 43: `?revoked_since`/`?revoked_until` 추가 — `revoked_at` 시간창 필터.
     """
     since = _validate_tz_aware(since, "since")
     until = _validate_tz_aware(until, "until")
+    revoked_since = _validate_tz_aware(revoked_since, "revoked_since")
+    revoked_until = _validate_tz_aware(revoked_until, "revoked_until")
     store = _require_store()
     infos = await store.list_for_user(
         user.user_id,
         include_revoked=include_revoked,
         since=since,
         until=until,
+        revoked_since=revoked_since,
+        revoked_until=revoked_until,
         limit=limit,
         offset=offset,
     )
@@ -253,6 +276,8 @@ async def list_my_devices(
             include_revoked=include_revoked,
             since=since,
             until=until,
+            revoked_since=revoked_since,
+            revoked_until=revoked_until,
         )
     return DeviceListResponse(
         devices=[
