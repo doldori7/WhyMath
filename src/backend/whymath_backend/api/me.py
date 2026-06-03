@@ -14,6 +14,12 @@ slice 51: `DELETE /v1/me/sessions/{id}` — GDPR 본인 학습 세션 영구 삭
 
 slice 52: `PATCH /v1/me/dialogues/{id}/end` + `DELETE /v1/me/dialogues/{id}` — Dialogue
 도메인에 슬라이스 50/51 패턴 답습. 본인 소유 검증·404 비누설·idempotent end·204 delete 동형.
+
+slice 53: `PATCH /v1/me/assessments/{id}/complete` + `DELETE /v1/me/assessments/{id}` —
+Assessment 도메인 lifecycle. *명칭은 `/complete`*(진단은 "종료"가 아니라 "완료"라 모델 컬럼
+`completed_at`을 따라간다 — slice 50/52의 `ended_at`과 의미 분리). idempotent complete·
+204 delete·404 비누설은 50/51/52와 동일 패턴. 세 도메인(LearningSession·Dialogue·Assessment)
+lifecycle 완비 — 이식 비용 minimization 4회차 검증.
 """
 
 from __future__ import annotations
@@ -184,6 +190,52 @@ async def delete_my_dialogue(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="대화를 찾을 수 없습니다.",
+        )
+    await session.delete(row)
+    await session.commit()
+
+
+@router.patch(
+    "/assessments/{assessment_id}/complete",
+    response_model=AssessmentSchema,
+    summary="내 진단 완료(completed_at 채움)",
+)
+async def complete_my_assessment(
+    assessment_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> AssessmentSchema:
+    """slice 53: 본인 Assessment 완료(`completed_at` = now). 슬라이스 50 패턴 동형이나 컬럼은
+    `completed_at`(`ended_at` 아님). idempotent·미존재/타인 소유 모두 404."""
+    row = await session.get(Assessment, assessment_id)
+    if row is None or row.user_id != user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="진단을 찾을 수 없습니다.",
+        )
+    if row.completed_at is None:
+        row.completed_at = datetime.now(UTC)
+        await session.commit()
+    return row.to_schema()
+
+
+@router.delete(
+    "/assessments/{assessment_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="내 진단 영구 삭제(GDPR)",
+)
+async def delete_my_assessment(
+    assessment_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> None:
+    """slice 53: 본인 Assessment 영구 삭제 — 슬라이스 51 패턴 동형. Assessment는 자식 테이블이
+    없어 FK 위반 우려 없음(LearningSession·Dialogue와 달리 cascade 한계 무관)."""
+    row = await session.get(Assessment, assessment_id)
+    if row is None or row.user_id != user.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="진단을 찾을 수 없습니다.",
         )
     await session.delete(row)
     await session.commit()

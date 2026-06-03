@@ -104,9 +104,7 @@ def _no_auth_client() -> TestClient:
     async def _sess() -> AsyncIterator[FakeSession]:
         yield FakeSession()
 
-    app.dependency_overrides[get_session] = (
-        _sess  # 무토큰 401은 세션 전 발생(엔진 격리)
-    )
+    app.dependency_overrides[get_session] = _sess  # 무토큰 401은 세션 전 발생(엔진 격리)
     return TestClient(app)
 
 
@@ -331,3 +329,77 @@ class TestDialogueLifecycle:
         assert resp.status_code == 404
         assert fake.deleted == []
         assert row.dialogue_id in fake._get_map
+
+
+class TestAssessmentLifecycle:
+    """slice 53: Assessment complete + delete — slice 50/51 패턴 답습 invariant 4회차.
+
+    *Assessment는 completed_at*(`ended_at` 아님). 경로도 `/complete`로 명칭만 컬럼 의미 추종.
+    """
+
+    def _assessment_row(self, owner: uuid.UUID, completed: bool = False) -> Assessment:
+        aid = uuid.uuid4()
+        schema = AssessmentSchema(
+            assessment_id=aid,
+            user_id=owner,
+            completed_at=datetime.now(UTC) if completed else None,
+        )
+        return Assessment.from_schema(schema)
+
+    # ── PATCH complete ──
+    def test_complete_fresh_assessment(self) -> None:
+        row = self._assessment_row(_UID, completed=False)
+        client, fake = _client([], get_map={row.assessment_id: row})
+        resp = client.patch(f"/v1/me/assessments/{row.assessment_id}/complete")
+        assert resp.status_code == 200
+        assert resp.json()["completed_at"] is not None
+        assert fake.commits == 1
+
+    def test_complete_idempotent_already_completed(self) -> None:
+        row = self._assessment_row(_UID, completed=True)
+        original = row.completed_at
+        client, fake = _client([], get_map={row.assessment_id: row})
+        resp = client.patch(f"/v1/me/assessments/{row.assessment_id}/complete")
+        assert resp.status_code == 200
+        assert row.completed_at == original
+        assert fake.commits == 0
+
+    def test_complete_nonexistent_returns_404(self) -> None:
+        fake_id = uuid.uuid4()
+        client, _ = _client([], get_map={})
+        resp = client.patch(f"/v1/me/assessments/{fake_id}/complete")
+        assert resp.status_code == 404
+
+    def test_complete_other_users_assessment_returns_404(self) -> None:
+        other_uid = uuid.uuid4()
+        row = self._assessment_row(other_uid, completed=False)
+        client, fake = _client([], get_map={row.assessment_id: row})
+        resp = client.patch(f"/v1/me/assessments/{row.assessment_id}/complete")
+        assert resp.status_code == 404
+        assert row.completed_at is None
+        assert fake.commits == 0
+
+    # ── DELETE ──
+    def test_delete_own_assessment_returns_204(self) -> None:
+        row = self._assessment_row(_UID)
+        client, fake = _client([], get_map={row.assessment_id: row})
+        resp = client.delete(f"/v1/me/assessments/{row.assessment_id}")
+        assert resp.status_code == 204
+        assert fake.deleted == [row]
+        assert fake.commits == 1
+
+    def test_delete_nonexistent_returns_404(self) -> None:
+        fake_id = uuid.uuid4()
+        client, fake = _client([], get_map={})
+        resp = client.delete(f"/v1/me/assessments/{fake_id}")
+        assert resp.status_code == 404
+        assert fake.deleted == []
+
+    def test_delete_other_users_assessment_returns_404(self) -> None:
+        other_uid = uuid.uuid4()
+        row = self._assessment_row(other_uid)
+        client, fake = _client([], get_map={row.assessment_id: row})
+        resp = client.delete(f"/v1/me/assessments/{row.assessment_id}")
+        assert resp.status_code == 404
+        assert fake.deleted == []
+        assert row.assessment_id in fake._get_map
