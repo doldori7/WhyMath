@@ -63,6 +63,11 @@ class FakeSession:
         self.commits = 0
         # slice 51: session.delete(row) 캡처
         self.deleted: list[Any] = []
+        # slice 57: session.add(DeletionAudit) 캡처(AsyncSession.add는 동기)
+        self.added: list[Any] = []
+
+    def add(self, obj: Any) -> None:
+        self.added.append(obj)
 
     async def execute(self, stmt: Any) -> _Result:
         return _Result(self._rows)
@@ -228,6 +233,12 @@ class TestDeleteSession:
         assert resp.content == b""  # 204 응답 body 비어있음
         assert fake.deleted == [row]
         assert fake.commits == 1
+        # slice 57: 삭제와 동일 트랜잭션으로 DeletionAudit 1행 적재
+        assert len(fake.added) == 1
+        audit = fake.added[0]
+        assert audit.resource_type == "learning_session"
+        assert audit.resource_id == row.session_id
+        assert audit.user_id == _UID
 
     def test_delete_nonexistent_returns_404(self) -> None:
         fake_id = uuid.uuid4()
@@ -236,6 +247,7 @@ class TestDeleteSession:
         assert resp.status_code == 404
         assert fake.deleted == []
         assert fake.commits == 0
+        assert fake.added == []  # slice 57: 404는 감사 미적재
 
     def test_delete_other_users_session_returns_404(self) -> None:
         """타인 소유 → 404 + 행 삭제 안 됨(상태 불변·정보 비누설)."""
@@ -246,6 +258,7 @@ class TestDeleteSession:
         assert resp.status_code == 404
         assert fake.deleted == []
         assert fake.commits == 0
+        assert fake.added == []  # slice 57: 타인 소유 404도 감사 미적재
         # 행 그대로 존재
         assert row.session_id in fake._get_map
 
@@ -313,6 +326,10 @@ class TestDialogueLifecycle:
         assert resp.status_code == 204
         assert fake.deleted == [row]
         assert fake.commits == 1
+        # slice 57: dialogue 삭제 감사 적재
+        assert len(fake.added) == 1
+        assert fake.added[0].resource_type == "dialogue"
+        assert fake.added[0].resource_id == row.dialogue_id
 
     def test_delete_nonexistent_returns_404(self) -> None:
         fake_id = uuid.uuid4()
@@ -387,6 +404,10 @@ class TestAssessmentLifecycle:
         assert resp.status_code == 204
         assert fake.deleted == [row]
         assert fake.commits == 1
+        # slice 57: assessment 삭제 감사 적재
+        assert len(fake.added) == 1
+        assert fake.added[0].resource_type == "assessment"
+        assert fake.added[0].resource_id == row.assessment_id
 
     def test_delete_nonexistent_returns_404(self) -> None:
         fake_id = uuid.uuid4()

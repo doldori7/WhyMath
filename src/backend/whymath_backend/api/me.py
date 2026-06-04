@@ -29,6 +29,10 @@ slice 56: GDPR 삭제 cascade 정책 — DB FK `ON DELETE CASCADE`로 직속 자
 (learning_session→problem_attempt·dialogue→dialogue_turn), attempt를 참조하던
 dialogue.attempt_id는 `SET NULL`(대화 보존). 슬라이스 51/52의 RESTRICT FK 한계 해소
 (라우터 코드 무변경 — DB 레벨 정책·alembic c3d4e5f6a7b8). attempt_event(loose ref)는 고아 잔존.
+
+slice 57: GDPR 삭제 감사 — delete 3종이 `_delete_owned_resource`에서 삭제와 *동일 트랜잭션*으로
+`DeletionAudit`(누가·무엇·언제, 콘텐츠 미저장) 1행 적재. 부모만 기록(자식 cascade는 DB 비가시).
+user_id는 FK 아님(사용자 삭제돼도 잔존). alembic d4e5f6a7b8c9.
 """
 
 from __future__ import annotations
@@ -44,11 +48,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import Assessment
+from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+from whymath_backend.schema.enums import AuditResourceType
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
 
@@ -105,13 +111,26 @@ async def _delete_owned_resource(
     model: type[_LifecycleRow],
     pk: uuid.UUID,
     owner_id: uuid.UUID,
+    resource_type: AuditResourceType,
     not_found_detail: str,
 ) -> None:
     """본인 소유 리소스 영구 삭제(GDPR) — 204. slice 51/52/53 동형. slice 56: 직속 자식은
     ON DELETE CASCADE로 자동 제거(session→attempt·dialogue→turn)·dialogue.attempt_id는
-    SET NULL. attempt_event(loose ref·FK 아님)는 고아 잔존(설계 한계)."""
+    SET NULL. attempt_event(loose ref·FK 아님)는 고아 잔존(설계 한계).
+
+    slice 57: 삭제와 *동일 트랜잭션*으로 DeletionAudit 1행 적재(GDPR 삭제 증빙·부모만 기록·
+    콘텐츠 미저장). user_id=소유자·resource_type/resource_id=대상. 같은 commit이라 삭제↔감사
+    원자적(부분 실패 없음).
+    """
     row = await _get_owned_or_404(session, model, pk, owner_id, not_found_detail)
     await session.delete(row)
+    session.add(
+        DeletionAudit(
+            user_id=owner_id,
+            resource_type=resource_type.value,
+            resource_id=pk,
+        )
+    )
     await session.commit()
 
 
@@ -205,6 +224,7 @@ async def delete_my_session(
         LearningSession,
         session_id,
         user.user_id,
+        AuditResourceType.learning_session,
         "학습 세션을 찾을 수 없습니다.",
     )
 
@@ -248,6 +268,7 @@ async def delete_my_dialogue(
         Dialogue,
         dialogue_id,
         user.user_id,
+        AuditResourceType.dialogue,
         "대화를 찾을 수 없습니다.",
     )
 
@@ -292,5 +313,6 @@ async def delete_my_assessment(
         Assessment,
         assessment_id,
         user.user_id,
+        AuditResourceType.assessment,
         "진단을 찾을 수 없습니다.",
     )

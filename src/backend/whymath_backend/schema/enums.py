@@ -725,3 +725,20 @@ class LegalReviewStatus(str, Enum):
 
     cleared = "cleared"
     """검토 통과 — learning_objective_text 활성화 가능."""
+
+
+class AuditResourceType(str, Enum):
+    """slice 57: `deletion_audit.resource_type` — GDPR 삭제 감사 대상 도메인.
+
+    값은 해당 ORM `__tablename__`과 일치(learning_session·dialogue·assessment). 삭제 *부모*
+    리소스만 기록(자식은 slice 56 DB cascade로 비가시 — 개별 감사 안 함).
+    """
+
+    learning_session = "learning_session"
+    """학습 세션 삭제(slice 51)."""
+
+    dialogue = "dialogue"
+    """Socratic 대화 삭제(slice 52)."""
+
+    assessment = "assessment"
+    """진단 삭제(slice 53)."""
