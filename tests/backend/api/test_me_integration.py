@@ -204,6 +204,23 @@ def test_me_deletions_resource_type_filter_on_live_pg() -> None:
             )
             assert resp.status_code == 200, resp.text
             assert resp.json() == []
+
+            # slice 68: 다중 OR(IN) — learning_session + dialogue → 3건(2+1)
+            resp = client.get(
+                "/v1/me/deletions",
+                headers=auth,
+                params=[
+                    ("resource_type", "learning_session"),
+                    ("resource_type", "dialogue"),
+                ],
+            )
+            assert resp.status_code == 200, resp.text
+            rows = resp.json()
+            assert len(rows) == 3
+            assert {r["resource_type"] for r in rows} == {
+                "learning_session",
+                "dialogue",
+            }
     finally:
         asyncio.run(_cleanup([uid_a]))
 

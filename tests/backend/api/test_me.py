@@ -197,6 +197,24 @@ class TestScopedLists:
         resp = client.get("/v1/me/deletions", params={"resource_type": "bogus"})
         assert resp.status_code == 422
 
+    def test_deletions_multiple_resource_types_accepted(self) -> None:
+        """slice 68: resource_type 반복 지정(OR/IN) 200 — 다중 도메인 결선."""
+        client, _ = _client([])
+        resp = client.get(
+            "/v1/me/deletions",
+            params=[("resource_type", "dialogue"), ("resource_type", "assessment")],
+        )
+        assert resp.status_code == 200, resp.text
+
+    def test_deletions_multiple_resource_types_one_invalid_rejected(self) -> None:
+        """slice 68: 다중 값 중 하나라도 enum 밖이면 422(부분 주입 차단)."""
+        client, _ = _client([])
+        resp = client.get(
+            "/v1/me/deletions",
+            params=[("resource_type", "dialogue"), ("resource_type", "bogus")],
+        )
+        assert resp.status_code == 422
+
     def test_deletions_time_window_accepted(self) -> None:
         """slice 66: TZ-aware since/until은 200 — 시간창 파라미터 결선."""
         client, _ = _client([])
