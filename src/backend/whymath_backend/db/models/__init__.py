@@ -37,6 +37,7 @@ from whymath_backend.db.models.assessment import (
     Assessment,
     ConceptMasteryHistory,
 )
+from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import (
     Concept,
     ConceptEdge,
@@ -113,4 +114,6 @@ __all__ = [
     "TextbookUnit",
     # 슬라이스 23: DeviceCredential
     "DeviceCredential",
+    # 슬라이스 57: DeletionAudit
+    "DeletionAudit",
 ]
