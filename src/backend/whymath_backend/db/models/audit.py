@@ -11,7 +11,7 @@ UUID) — 미성년 PII 비저촉(CLAUDE.md). 자식(cascade·slice 56)은 DB �
     하므로(FK CASCADE/RESTRICT 어느 쪽도 부적합). compliance 로그의 독립성.
   - `resource_type`은 `sa.String(32)`(네이티브 PG enum 미생성) — 코드 안전성은 Pydantic
     `AuditResourceType`(.value 저장)으로 확보, DB는 단순 문자열(감사 메타 태그).
-  - append-only — UPDATE/DELETE 라우터 없음(이 슬라이스는 write-only·읽기 엔드포인트는 후속).
+  - append-only — UPDATE/DELETE 라우터 없음. 읽기는 slice 58 `GET /v1/me/deletions`(본인 스코핑).
 """
 
 from __future__ import annotations
@@ -23,6 +23,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
+from whymath_backend.schema.audit import DeletionAudit as SchemaDeletionAudit
 
 
 class DeletionAudit(Base):
@@ -44,3 +45,18 @@ class DeletionAudit(Base):
         nullable=False,
         server_default=sa.func.now(),
     )
+
+    # ── 변환 헬퍼 (schema↔db seam, activity.py 패턴) — slice 58 조회 API용 ──
+    @classmethod
+    def from_schema(cls, schema: SchemaDeletionAudit) -> DeletionAudit:
+        """검증된 `schema.DeletionAudit` → 영속 ORM(mapper 컬럼키 필터)."""
+        data = schema.model_dump()
+        mapped_keys = {col.key for col in sa.inspect(cls).mapper.column_attrs}
+        kwargs = {k: v for k, v in data.items() if k in mapped_keys}
+        return cls(**kwargs)
+
+    def to_schema(self) -> SchemaDeletionAudit:
+        """영속 ORM → `schema.DeletionAudit`(Pydantic 검증 복원)."""
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        return SchemaDeletionAudit.model_validate(data)
