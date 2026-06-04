@@ -50,7 +50,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
-from whymath_backend.api._query_filters import _validate_time_window, _validate_tz_aware
+from whymath_backend.api._query_filters import apply_time_window
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import Assessment
 from whymath_backend.db.models.audit import DeletionAudit
@@ -73,15 +73,16 @@ ResourceTypeFilter = Annotated[
     AuditResourceType | None,
     Query(description="삭제 도메인 필터(learning_session·dialogue·assessment). 생략 시 전체."),
 ]
-# slice 66: deletions 조회의 deleted_at 시간창 필터(inclusive·TZ-aware ISO8601). device
-# 목록의 since/until(slice 41)과 동형. naive datetime·since>until은 _query_filters가 422.
-DeletedSince = Annotated[
+# slice 66/67: /me 리스트 공용 시간창 필터(inclusive·TZ-aware ISO8601). deletions는
+# deleted_at, sessions·assessments·dialogues는 started_at 기준. device 목록(slice 41)과
+# 동형. naive datetime·since>until은 _query_filters.apply_time_window가 422.
+SinceParam = Annotated[
     datetime | None,
-    Query(description="이 시각 *이후* 삭제분만(inclusive·TZ-aware ISO8601). until과 함께 시간창."),
+    Query(description="이 시각 *이후* 항목만(inclusive·TZ-aware ISO8601). until과 함께 시간창."),
 ]
-DeletedUntil = Annotated[
+UntilParam = Annotated[
     datetime | None,
-    Query(description="이 시각 *이전* 삭제분만(inclusive·TZ-aware ISO8601). since와 함께 시간창."),
+    Query(description="이 시각 *이전* 항목만(inclusive·TZ-aware ISO8601). since와 함께 시간창."),
 ]
 
 
@@ -158,13 +159,21 @@ async def _delete_owned_resource(
 
 @router.get("/sessions", response_model=list[LearningSessionSchema], summary="내 학습 세션")
 async def list_my_sessions(
-    user: ConsentedUser, session: SessionDep, limit: Limit = 50, offset: Offset = 0
+    user: ConsentedUser,
+    session: SessionDep,
+    limit: Limit = 50,
+    offset: Offset = 0,
+    since: SinceParam = None,
+    until: UntilParam = None,
 ) -> list[LearningSessionSchema]:
-    """본인 학습 세션 — 최신순. 타인 데이터는 조회 불가(user_id 스코핑)."""
+    """본인 학습 세션 — 최신순. 타인 데이터는 조회 불가(user_id 스코핑).
+
+    slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
+    """
+    stmt = select(LearningSession).where(LearningSession.user_id == user.user_id)
+    stmt = apply_time_window(stmt, LearningSession.started_at, since, until)
     stmt = (
-        select(LearningSession)
-        .where(LearningSession.user_id == user.user_id)
-        .order_by(LearningSession.started_at.desc(), LearningSession.session_id)
+        stmt.order_by(LearningSession.started_at.desc(), LearningSession.session_id)
         .limit(limit)
         .offset(offset)
     )
@@ -174,13 +183,21 @@ async def list_my_sessions(
 
 @router.get("/assessments", response_model=list[AssessmentSchema], summary="내 진단 이력")
 async def list_my_assessments(
-    user: ConsentedUser, session: SessionDep, limit: Limit = 50, offset: Offset = 0
+    user: ConsentedUser,
+    session: SessionDep,
+    limit: Limit = 50,
+    offset: Offset = 0,
+    since: SinceParam = None,
+    until: UntilParam = None,
 ) -> list[AssessmentSchema]:
-    """본인 진단(Assessment) 이력 — 최신순. user_id 스코핑."""
+    """본인 진단(Assessment) 이력 — 최신순. user_id 스코핑.
+
+    slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
+    """
+    stmt = select(Assessment).where(Assessment.user_id == user.user_id)
+    stmt = apply_time_window(stmt, Assessment.started_at, since, until)
     stmt = (
-        select(Assessment)
-        .where(Assessment.user_id == user.user_id)
-        .order_by(Assessment.started_at.desc(), Assessment.assessment_id)
+        stmt.order_by(Assessment.started_at.desc(), Assessment.assessment_id)
         .limit(limit)
         .offset(offset)
     )
@@ -190,15 +207,21 @@ async def list_my_assessments(
 
 @router.get("/dialogues", response_model=list[DialogueSchema], summary="내 대화 이력")
 async def list_my_dialogues(
-    user: ConsentedUser, session: SessionDep, limit: Limit = 50, offset: Offset = 0
+    user: ConsentedUser,
+    session: SessionDep,
+    limit: Limit = 50,
+    offset: Offset = 0,
+    since: SinceParam = None,
+    until: UntilParam = None,
 ) -> list[DialogueSchema]:
-    """본인 Socratic 대화 이력 — 최신순. user_id 스코핑(턴 상세는 범위 밖)."""
+    """본인 Socratic 대화 이력 — 최신순. user_id 스코핑(턴 상세는 범위 밖).
+
+    slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
+    """
+    stmt = select(Dialogue).where(Dialogue.user_id == user.user_id)
+    stmt = apply_time_window(stmt, Dialogue.started_at, since, until)
     stmt = (
-        select(Dialogue)
-        .where(Dialogue.user_id == user.user_id)
-        .order_by(Dialogue.started_at.desc(), Dialogue.dialogue_id)
-        .limit(limit)
-        .offset(offset)
+        stmt.order_by(Dialogue.started_at.desc(), Dialogue.dialogue_id).limit(limit).offset(offset)
     )
     result = await session.execute(stmt)
     return [row.to_schema() for row in result.scalars().all()]
@@ -215,8 +238,8 @@ async def list_my_deletions(
     limit: Limit = 50,
     offset: Offset = 0,
     resource_type: ResourceTypeFilter = None,
-    since: DeletedSince = None,
-    until: DeletedUntil = None,
+    since: SinceParam = None,
+    until: UntilParam = None,
 ) -> list[DeletionAuditSchema]:
     """slice 58: 본인 삭제 감사 이력 — 최신순(deleted_at desc·audit_id 안정 정렬).
 
@@ -230,17 +253,10 @@ async def list_my_deletions(
     기존 `idx_deletion_audit_user(user_id, deleted_at DESC)`가 user_id prefix + 정렬 + 시간 범위를
     그대로 충족(resource_type만 추가 필터).
     """
-    since = _validate_tz_aware(since, "since")
-    until = _validate_tz_aware(until, "until")
-    _validate_time_window(since, until, "since", "until")
-
     stmt = select(DeletionAudit).where(DeletionAudit.user_id == user.user_id)
     if resource_type is not None:
         stmt = stmt.where(DeletionAudit.resource_type == resource_type.value)
-    if since is not None:
-        stmt = stmt.where(DeletionAudit.deleted_at >= since)
-    if until is not None:
-        stmt = stmt.where(DeletionAudit.deleted_at <= until)
+    stmt = apply_time_window(stmt, DeletionAudit.deleted_at, since, until)
     stmt = (
         stmt.order_by(DeletionAudit.deleted_at.desc(), DeletionAudit.audit_id)
         .limit(limit)
