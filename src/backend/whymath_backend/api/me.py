@@ -9,8 +9,7 @@ slice 50: `PATCH /v1/me/sessions/{id}/end` — 본인 학습 세션 종료(ended
 (이미 종료된 세션은 ended_at 보존하고 200). 미존재·타인 소유 모두 404(정보 비누설·slice 24 패턴).
 
 slice 51: `DELETE /v1/me/sessions/{id}` — GDPR 본인 학습 세션 영구 삭제. 204 No Content.
-미존재·타인 소유 모두 404(슬라이스 50과 동일 비누설). 자식(attempt·turn) cascade는 DB 레벨
-정책(현재 ORM CASCADE 미지정·RESTRICT 기본) — 자식 존재 시 500 FK 위반. v1 한계로 명시.
+미존재·타인 소유 모두 404(슬라이스 50과 동일 비누설). 자식 cascade는 slice 56 참조.
 
 slice 52: `PATCH /v1/me/dialogues/{id}/end` + `DELETE /v1/me/dialogues/{id}` — Dialogue
 도메인에 슬라이스 50/51 패턴 답습. 본인 소유 검증·404 비누설·idempotent end·204 delete 동형.
@@ -25,6 +24,11 @@ slice 55: 슬라이스 50~53의 end/complete·delete 6 라우터가 *동형 반�
 commit)하던 중복을 제네릭 헬퍼 `_close_owned_resource`·`_delete_owned_resource`(공통
 `_get_owned_or_404`)로 추출 — 라우터는 헬퍼 1줄 호출로 축소. 동작·응답 불변(순수 리팩터).
 mypy strict 정합은 *제약 TypeVar*로 해소(아래 헬퍼 주석 참조).
+
+slice 56: GDPR 삭제 cascade 정책 — DB FK `ON DELETE CASCADE`로 직속 자식 자동 제거
+(learning_session→problem_attempt·dialogue→dialogue_turn), attempt를 참조하던
+dialogue.attempt_id는 `SET NULL`(대화 보존). 슬라이스 51/52의 RESTRICT FK 한계 해소
+(라우터 코드 무변경 — DB 레벨 정책·alembic c3d4e5f6a7b8). attempt_event(loose ref)는 고아 잔존.
 """
 
 from __future__ import annotations
@@ -103,8 +107,9 @@ async def _delete_owned_resource(
     owner_id: uuid.UUID,
     not_found_detail: str,
 ) -> None:
-    """본인 소유 리소스 영구 삭제(GDPR) — 204. slice 51/52/53 동형. 자식 RESTRICT FK 한계
-    동일(자식 존재 시 DB FK 위반 가능 — cascade 정책은 후속 슬라이스)."""
+    """본인 소유 리소스 영구 삭제(GDPR) — 204. slice 51/52/53 동형. slice 56: 직속 자식은
+    ON DELETE CASCADE로 자동 제거(session→attempt·dialogue→turn)·dialogue.attempt_id는
+    SET NULL. attempt_event(loose ref·FK 아님)는 고아 잔존(설계 한계)."""
     row = await _get_owned_or_404(session, model, pk, owner_id, not_found_detail)
     await session.delete(row)
     await session.commit()
@@ -192,8 +197,8 @@ async def delete_my_session(
 ) -> None:
     """slice 51 (slice 55 리팩터): 본인 학습 세션 영구 삭제(GDPR)·204·404 비누설.
 
-    자식 행(ProblemAttempt·AttemptEvent·DialogueTurn)이 RESTRICT FK라 자식 존재 시 DB가
-    FK 위반으로 500 반환할 수 있음(v1 한계). 자식 cascade는 후속 슬라이스.
+    slice 56: 자식 problem_attempt는 ON DELETE CASCADE로 함께 삭제(그 attempt를 참조하던
+    dialogue.attempt_id는 SET NULL — 대화 자체는 보존). attempt_event(loose ref)는 고아 잔존.
     """
     await _delete_owned_resource(
         session,
@@ -236,8 +241,8 @@ async def delete_my_dialogue(
     user: ConsentedUser,
     session: SessionDep,
 ) -> None:
-    """slice 52 (slice 55 리팩터): 본인 Dialogue 영구 삭제·204·404 비누설. 자식(turn)
-    RESTRICT FK 한계 동일(v1)."""
+    """slice 52 (slice 55 리팩터): 본인 Dialogue 영구 삭제·204·404 비누설. slice 56: 자식
+    dialogue_turn은 ON DELETE CASCADE로 함께 삭제."""
     await _delete_owned_resource(
         session,
         Dialogue,

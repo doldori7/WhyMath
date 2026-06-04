@@ -157,8 +157,9 @@ class ProblemAttempt(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         sa.Uuid, sa.ForeignKey("user_profile.user_id")
     )
+    # slice 56: 세션 삭제(GDPR) 시 자식 attempt 함께 제거 — ON DELETE CASCADE.
     session_id: Mapped[uuid.UUID | None] = mapped_column(
-        sa.Uuid, sa.ForeignKey("learning_session.session_id")
+        sa.Uuid, sa.ForeignKey("learning_session.session_id", ondelete="CASCADE")
     )
     problem_id: Mapped[uuid.UUID | None] = mapped_column(
         sa.Uuid, sa.ForeignKey("problem.problem_id")
