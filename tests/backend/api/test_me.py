@@ -171,6 +171,32 @@ class TestScopedLists:
             assert resp.status_code == 200
             assert resp.json() == []
 
+    def test_deletions_resource_type_filter_accepted(self) -> None:
+        """slice 65: 유효한 resource_type 값은 200 — 쿼리 결선 검증.
+
+        FakeSession은 stmt를 무시하므로 *실제 필터링*은 통합테스트가 검증한다. 여기선 enum
+        값이 파라미터로 수용되고 엔드포인트가 정상 응답하는지(결선)만 본다.
+        """
+        rows = [
+            DeletionAudit.from_schema(
+                DeletionAuditSchema(
+                    user_id=_UID,
+                    resource_type=AuditResourceType.dialogue,
+                    resource_id=uuid.uuid4(),
+                )
+            )
+        ]
+        client, _ = _client(rows)
+        for value in ("learning_session", "dialogue", "assessment"):
+            resp = client.get("/v1/me/deletions", params={"resource_type": value})
+            assert resp.status_code == 200, resp.text
+
+    def test_deletions_invalid_resource_type_rejected(self) -> None:
+        """slice 65: enum 밖 값은 422 — 임의 문자열 주입 차단."""
+        client, _ = _client([])
+        resp = client.get("/v1/me/deletions", params={"resource_type": "bogus"})
+        assert resp.status_code == 422
+
 
 class TestAuthRequired:
     def test_all_require_token_401(self) -> None:

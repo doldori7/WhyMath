@@ -66,6 +66,12 @@ router = APIRouter(prefix="/v1/me", tags=["me"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 Limit = Annotated[int, Query(ge=1, le=200, description="페이지 크기")]
 Offset = Annotated[int, Query(ge=0, description="건너뛸 행 수")]
+# slice 65: deletions 조회의 선택적 도메인 필터 — None이면 전체(slice 58 동작 보존).
+# enum이라 부정 값은 FastAPI가 422로 거부(임의 문자열 주입 차단).
+ResourceTypeFilter = Annotated[
+    AuditResourceType | None,
+    Query(description="삭제 도메인 필터(learning_session·dialogue·assessment). 생략 시 전체."),
+]
 
 
 # ── slice 55: 본인 소유 리소스 lifecycle 제네릭 헬퍼 ──────────────────────────
@@ -193,18 +199,27 @@ async def list_my_dialogues(
     summary="내 삭제 이력(GDPR 감사)",
 )
 async def list_my_deletions(
-    user: ConsentedUser, session: SessionDep, limit: Limit = 50, offset: Offset = 0
+    user: ConsentedUser,
+    session: SessionDep,
+    limit: Limit = 50,
+    offset: Offset = 0,
+    resource_type: ResourceTypeFilter = None,
 ) -> list[DeletionAuditSchema]:
     """slice 58: 본인 삭제 감사 이력 — 최신순(deleted_at desc·audit_id 안정 정렬).
 
     slice 57이 적재한 `deletion_audit`를 user_id 스코핑으로 조회(GDPR 투명성 — 학생이 자기
     삭제 이력 확인·타인 것 차단). 메타만 반환(콘텐츠 없음). 본인 user_id의 행이라 타인 삭제는
     노출되지 않음(다른 /me GET과 동일 스코핑).
+
+    slice 65: `resource_type`(선택)로 도메인 필터 — 한 유형(예: 대화)의 삭제 이력만 조회.
+    생략 시 전체(slice 58 동작 보존). 기존 `idx_deletion_audit_user(user_id, deleted_at DESC)`가
+    user_id prefix + 정렬을 그대로 충족(resource_type은 추가 필터).
     """
+    stmt = select(DeletionAudit).where(DeletionAudit.user_id == user.user_id)
+    if resource_type is not None:
+        stmt = stmt.where(DeletionAudit.resource_type == resource_type.value)
     stmt = (
-        select(DeletionAudit)
-        .where(DeletionAudit.user_id == user.user_id)
-        .order_by(DeletionAudit.deleted_at.desc(), DeletionAudit.audit_id)
+        stmt.order_by(DeletionAudit.deleted_at.desc(), DeletionAudit.audit_id)
         .limit(limit)
         .offset(offset)
     )
