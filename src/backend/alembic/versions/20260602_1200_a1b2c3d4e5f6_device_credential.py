@@ -52,7 +52,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        op.f("ix_device_credential_user_id"), table_name="device_credential"
-    )
+    op.drop_index(op.f("ix_device_credential_user_id"), table_name="device_credential")
     op.drop_table("device_credential")
