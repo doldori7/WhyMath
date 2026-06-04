@@ -58,6 +58,10 @@ class DeviceCredential(Base):
     # slice 32: 마지막 verify 성공 시각 — "30일 미사용 자동 폐기" 정책·보안 이상 탐지 기반.
     # CachedDeviceStore 사용 시 *cache miss*에서만 갱신되므로 정밀도는 cache TTL(기본 60s).
     last_used_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))
+    # slice 63: 등록 순번(DB 단조 증가·IDENTITY) — list_for_user 동률(같은 created_at/
+    # last_used_at) 2차 정렬키. InMemoryDeviceStore.seq(slice 54)와 parity. SELECT엔 미노출
+    # (ORDER BY 전용·DeviceInfo에 없음). INSERT 시 DB가 자동 할당(register는 미지정).
+    seq: Mapped[int] = mapped_column(sa.BigInteger, sa.Identity(), nullable=False)
 
 
 __all__ = ["DeviceCredential"]

@@ -38,7 +38,7 @@ from datetime import UTC, datetime, timedelta
 from hashlib import sha256
 from typing import Any, Literal, NamedTuple, Protocol, cast, runtime_checkable
 
-from sqlalchemy import select, update
+from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
@@ -490,7 +490,15 @@ class PgDeviceStore:
             order_col = getattr(DeviceCredential, order_by)
             order_expr = order_col.desc() if order_dir == "desc" else order_col.asc()
             order_expr = order_expr.nulls_last() if nulls == "last" else order_expr.nulls_first()
-            stmt = stmt.order_by(order_expr).limit(limit).offset(offset)
+            # slice 63: seq 2차 정렬키로 동률 tie-break — InMemory(slice 54) parity.
+            #  - 비-null 그룹: 정렬 방향과 같게(desc=나중 등록[큰 seq] 먼저·asc=먼저 등록 먼저).
+            #  - null 그룹: *항상* 등록순(seq ASC) — InMemory가 dict 삽입순 보존(slice 47/54).
+            # 두 CASE term은 각자 자기 그룹만 정렬(상대 그룹엔 NULL→무영향)이고 primary가 이미
+            # 그룹을 분리하므로 동일 primary 값 내에서만 작동(그룹 경계 침범 없음).
+            nonnull_case = case((order_col.isnot(None), DeviceCredential.seq))
+            nonnull_tie = nonnull_case.desc() if order_dir == "desc" else nonnull_case.asc()
+            null_tie = case((order_col.is_(None), DeviceCredential.seq)).asc()
+            stmt = stmt.order_by(order_expr, nonnull_tie, null_tie).limit(limit).offset(offset)
             result = await session.execute(stmt)
             return [
                 DeviceInfo(
