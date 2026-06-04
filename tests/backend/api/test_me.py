@@ -278,6 +278,40 @@ class TestScopedLists:
             )
             assert resp.status_code == 422, path
 
+    # slice 69: lifecycle 종료 시각 시간창 — 엔드포인트별 파라미터명(ended_/completed_).
+    _CLOSE_WINDOW_ENDPOINTS = (
+        ("/v1/me/sessions", "ended_since", "ended_until"),
+        ("/v1/me/dialogues", "ended_since", "ended_until"),
+        ("/v1/me/assessments", "completed_since", "completed_until"),
+    )
+
+    def test_close_time_window_accepted_all_endpoints(self) -> None:
+        """slice 69: ended_/completed_ 시간창 TZ-aware 수용(200·결선)."""
+        client, _ = _client([])
+        for path, lo, hi in self._CLOSE_WINDOW_ENDPOINTS:
+            resp = client.get(
+                path,
+                params={lo: "2024-01-01T00:00:00Z", hi: "2024-12-31T23:59:59+00:00"},
+            )
+            assert resp.status_code == 200, (path, resp.text)
+
+    def test_close_time_window_naive_rejected_all_endpoints(self) -> None:
+        """slice 69: 종료 시각 시간창도 naive datetime은 422(공용 검증)."""
+        client, _ = _client([])
+        for path, lo, _hi in self._CLOSE_WINDOW_ENDPOINTS:
+            resp = client.get(path, params={lo: "2024-01-01T00:00:00"})
+            assert resp.status_code == 422, path
+
+    def test_close_time_window_inverted_rejected_all_endpoints(self) -> None:
+        """slice 69: 종료 시각 시간창도 since > until은 422(공용 검증)."""
+        client, _ = _client([])
+        for path, lo, hi in self._CLOSE_WINDOW_ENDPOINTS:
+            resp = client.get(
+                path,
+                params={lo: "2024-12-31T00:00:00Z", hi: "2024-01-01T00:00:00Z"},
+            )
+            assert resp.status_code == 422, path
+
 
 class TestAuthRequired:
     def test_all_require_token_401(self) -> None:
