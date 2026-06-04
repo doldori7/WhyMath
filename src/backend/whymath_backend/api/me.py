@@ -20,13 +20,18 @@ Assessment 도메인 lifecycle. *명칭은 `/complete`*(진단은 "종료"가 �
 `completed_at`을 따라간다 — slice 50/52의 `ended_at`과 의미 분리). idempotent complete·
 204 delete·404 비누설은 50/51/52와 동일 패턴. 세 도메인(LearningSession·Dialogue·Assessment)
 lifecycle 완비 — 이식 비용 minimization 4회차 검증.
+
+slice 55: 슬라이스 50~53의 end/complete·delete 6 라우터가 *동형 반복*(fetch→소유검증→404→
+commit)하던 중복을 제네릭 헬퍼 `_close_owned_resource`·`_delete_owned_resource`(공통
+`_get_owned_or_404`)로 추출 — 라우터는 헬퍼 1줄 호출로 축소. 동작·응답 불변(순수 리팩터).
+mypy strict 정합은 *제약 TypeVar*로 해소(아래 헬퍼 주석 참조).
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated
+from typing import Annotated, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -46,6 +51,63 @@ router = APIRouter(prefix="/v1/me", tags=["me"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 Limit = Annotated[int, Query(ge=1, le=200, description="페이지 크기")]
 Offset = Annotated[int, Query(ge=0, description="건너뛸 행 수")]
+
+
+# ── slice 55: 본인 소유 리소스 lifecycle 제네릭 헬퍼 ──────────────────────────
+# 슬라이스 50~53이 LearningSession·Dialogue·Assessment 세 도메인에 end/complete·delete를
+# *동형 반복*(fetch→소유검증→404→commit)했다(4회차 답습). 그 중복을 헬퍼로 압축한다.
+# **mypy strict 정합**(slice 53이 짚은 dispatch 위험 해소): 제약(constrained) TypeVar로
+# 세 ORM만 허용 → `row.user_id`(셋 다 보유)·반환 `row.to_schema()`(호출자에서 구체 타입
+# 추론)가 타입 안전. close 컬럼은 도메인마다 달라(ended_at vs completed_at) 필드명을 인자로
+# 받아 get/setattr로 동적 접근(인자 변수라 ruff B009/B010 미해당).
+_LifecycleRow = TypeVar("_LifecycleRow", LearningSession, Dialogue, Assessment)
+
+
+async def _get_owned_or_404(
+    session: AsyncSession,
+    model: type[_LifecycleRow],
+    pk: uuid.UUID,
+    owner_id: uuid.UUID,
+    not_found_detail: str,
+) -> _LifecycleRow:
+    """PK 조회 후 본인 소유 검증 — 미존재·타인 소유 모두 404(정보 비누설·slice 24 패턴)."""
+    row = await session.get(model, pk)
+    if row is None or row.user_id != owner_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=not_found_detail)
+    return row
+
+
+async def _close_owned_resource(
+    session: AsyncSession,
+    model: type[_LifecycleRow],
+    pk: uuid.UUID,
+    owner_id: uuid.UUID,
+    close_field: str,
+    not_found_detail: str,
+) -> _LifecycleRow:
+    """본인 소유 리소스 lifecycle 종료 — `close_field`(ended_at/completed_at)를 now로.
+
+    *idempotent*: 이미 채워졌으면 보존하고 commit 안 함(현 상태 반환). slice 50/52/53 동형.
+    """
+    row = await _get_owned_or_404(session, model, pk, owner_id, not_found_detail)
+    if getattr(row, close_field) is None:
+        setattr(row, close_field, datetime.now(UTC))
+        await session.commit()
+    return row
+
+
+async def _delete_owned_resource(
+    session: AsyncSession,
+    model: type[_LifecycleRow],
+    pk: uuid.UUID,
+    owner_id: uuid.UUID,
+    not_found_detail: str,
+) -> None:
+    """본인 소유 리소스 영구 삭제(GDPR) — 204. slice 51/52/53 동형. 자식 RESTRICT FK 한계
+    동일(자식 존재 시 DB FK 위반 가능 — cascade 정책은 후속 슬라이스)."""
+    row = await _get_owned_or_404(session, model, pk, owner_id, not_found_detail)
+    await session.delete(row)
+    await session.commit()
 
 
 @router.get("/sessions", response_model=list[LearningSessionSchema], summary="내 학습 세션")
@@ -106,20 +168,15 @@ async def end_my_session(
     user: ConsentedUser,
     session: SessionDep,
 ) -> LearningSessionSchema:
-    """slice 50: 본인 학습 세션을 종료(`ended_at` = now).
-
-    *idempotent*: 이미 종료된 세션은 기존 `ended_at` 보존·재호출도 200(현 상태 반환).
-    미존재·타인 소유 모두 **404**(정보 비누설·slice 24 패턴 — 존재 여부 노출 차단).
-    """
-    row = await session.get(LearningSession, session_id)
-    if row is None or row.user_id != user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="학습 세션을 찾을 수 없습니다.",
-        )
-    if row.ended_at is None:
-        row.ended_at = datetime.now(UTC)
-        await session.commit()
+    """slice 50 (slice 55 리팩터): 본인 학습 세션 종료(`ended_at`=now)·idempotent·404 비누설."""
+    row = await _close_owned_resource(
+        session,
+        LearningSession,
+        session_id,
+        user.user_id,
+        "ended_at",
+        "학습 세션을 찾을 수 없습니다.",
+    )
     return row.to_schema()
 
 
@@ -133,20 +190,18 @@ async def delete_my_session(
     user: ConsentedUser,
     session: SessionDep,
 ) -> None:
-    """slice 51: 본인 학습 세션을 영구 삭제 — GDPR 데이터 삭제권 결선.
+    """slice 51 (slice 55 리팩터): 본인 학습 세션 영구 삭제(GDPR)·204·404 비누설.
 
-    미존재·타인 소유 모두 **404**(slice 24/50 패턴·정보 비누설). 자식 행(ProblemAttempt·
-    AttemptEvent·DialogueTurn)이 RESTRICT FK라 자식 존재 시 *DB가 FK 위반*으로 500 반환할
-    수 있음(v1 한계). 자식 cascade·자식 사전 삭제는 후속.
+    자식 행(ProblemAttempt·AttemptEvent·DialogueTurn)이 RESTRICT FK라 자식 존재 시 DB가
+    FK 위반으로 500 반환할 수 있음(v1 한계). 자식 cascade는 후속 슬라이스.
     """
-    row = await session.get(LearningSession, session_id)
-    if row is None or row.user_id != user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="학습 세션을 찾을 수 없습니다.",
-        )
-    await session.delete(row)
-    await session.commit()
+    await _delete_owned_resource(
+        session,
+        LearningSession,
+        session_id,
+        user.user_id,
+        "학습 세션을 찾을 수 없습니다.",
+    )
 
 
 @router.patch(
@@ -159,17 +214,15 @@ async def end_my_dialogue(
     user: ConsentedUser,
     session: SessionDep,
 ) -> DialogueSchema:
-    """slice 52: 본인 Dialogue 종료(`ended_at` = now). 슬라이스 50 패턴 동형 — idempotent·
-    미존재/타인 소유 모두 404."""
-    row = await session.get(Dialogue, dialogue_id)
-    if row is None or row.user_id != user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="대화를 찾을 수 없습니다.",
-        )
-    if row.ended_at is None:
-        row.ended_at = datetime.now(UTC)
-        await session.commit()
+    """slice 52 (slice 55 리팩터): 본인 Dialogue 종료(`ended_at`=now)·idempotent·404 비누설."""
+    row = await _close_owned_resource(
+        session,
+        Dialogue,
+        dialogue_id,
+        user.user_id,
+        "ended_at",
+        "대화를 찾을 수 없습니다.",
+    )
     return row.to_schema()
 
 
@@ -183,16 +236,15 @@ async def delete_my_dialogue(
     user: ConsentedUser,
     session: SessionDep,
 ) -> None:
-    """slice 52: 본인 Dialogue 영구 삭제 — 슬라이스 51 패턴 동형. 자식(turn) RESTRICT FK
-    한계 동일(v1)."""
-    row = await session.get(Dialogue, dialogue_id)
-    if row is None or row.user_id != user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="대화를 찾을 수 없습니다.",
-        )
-    await session.delete(row)
-    await session.commit()
+    """slice 52 (slice 55 리팩터): 본인 Dialogue 영구 삭제·204·404 비누설. 자식(turn)
+    RESTRICT FK 한계 동일(v1)."""
+    await _delete_owned_resource(
+        session,
+        Dialogue,
+        dialogue_id,
+        user.user_id,
+        "대화를 찾을 수 없습니다.",
+    )
 
 
 @router.patch(
@@ -205,17 +257,16 @@ async def complete_my_assessment(
     user: ConsentedUser,
     session: SessionDep,
 ) -> AssessmentSchema:
-    """slice 53: 본인 Assessment 완료(`completed_at` = now). 슬라이스 50 패턴 동형이나 컬럼은
-    `completed_at`(`ended_at` 아님). idempotent·미존재/타인 소유 모두 404."""
-    row = await session.get(Assessment, assessment_id)
-    if row is None or row.user_id != user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="진단을 찾을 수 없습니다.",
-        )
-    if row.completed_at is None:
-        row.completed_at = datetime.now(UTC)
-        await session.commit()
+    """slice 53 (slice 55 리팩터): 본인 Assessment 완료(`completed_at`=now). 컬럼은
+    `completed_at`(ended_at 아님). idempotent·404 비누설."""
+    row = await _close_owned_resource(
+        session,
+        Assessment,
+        assessment_id,
+        user.user_id,
+        "completed_at",
+        "진단을 찾을 수 없습니다.",
+    )
     return row.to_schema()
 
 
@@ -229,13 +280,12 @@ async def delete_my_assessment(
     user: ConsentedUser,
     session: SessionDep,
 ) -> None:
-    """slice 53: 본인 Assessment 영구 삭제 — 슬라이스 51 패턴 동형. Assessment는 자식 테이블이
-    없어 FK 위반 우려 없음(LearningSession·Dialogue와 달리 cascade 한계 무관)."""
-    row = await session.get(Assessment, assessment_id)
-    if row is None or row.user_id != user.user_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="진단을 찾을 수 없습니다.",
-        )
-    await session.delete(row)
-    await session.commit()
+    """slice 53 (slice 55 리팩터): 본인 Assessment 영구 삭제·204·404 비누설. Assessment는
+    자식 테이블이 없어 FK 위반 우려 없음(cascade 한계 무관)."""
+    await _delete_owned_resource(
+        session,
+        Assessment,
+        assessment_id,
+        user.user_id,
+        "진단을 찾을 수 없습니다.",
+    )
