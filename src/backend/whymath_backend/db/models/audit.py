@@ -46,6 +46,10 @@ class DeletionAudit(Base):
         server_default=sa.func.now(),
     )
 
+    # slice 60: list_my_deletions(user_id 필터·deleted_at desc 정렬) 접근 패턴 인덱스 —
+    # learning_session.idx_session_user·dialogue.idx_dialogue_user와 동형(parity).
+    __table_args__ = (sa.Index("idx_deletion_audit_user", "user_id", sa.desc("deleted_at")),)
+
     # ── 변환 헬퍼 (schema↔db seam, activity.py 패턴) — slice 58 조회 API용 ──
     @classmethod
     def from_schema(cls, schema: SchemaDeletionAudit) -> DeletionAudit:
