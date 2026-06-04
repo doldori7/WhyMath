@@ -75,8 +75,9 @@ class Dialogue(Base):
     user_id: Mapped[uuid.UUID | None] = mapped_column(
         sa.Uuid, sa.ForeignKey("user_profile.user_id")
     )
+    # slice 56: attempt가 cascade 삭제돼도 dialogue 자체는 보존 — 링크만 끊음(SET NULL).
     attempt_id: Mapped[uuid.UUID | None] = mapped_column(
-        sa.Uuid, sa.ForeignKey("problem_attempt.attempt_id")
+        sa.Uuid, sa.ForeignKey("problem_attempt.attempt_id", ondelete="SET NULL")
     )
     problem_id: Mapped[uuid.UUID | None] = mapped_column(
         sa.Uuid, sa.ForeignKey("problem.problem_id")
@@ -151,8 +152,9 @@ class DialogueTurn(Base):
         primary_key=True,
         server_default=sa.text("gen_random_uuid()"),
     )
+    # slice 56: 대화 삭제(GDPR) 시 자식 turn 함께 제거 — ON DELETE CASCADE.
     dialogue_id: Mapped[uuid.UUID | None] = mapped_column(
-        sa.Uuid, sa.ForeignKey("dialogue.dialogue_id")
+        sa.Uuid, sa.ForeignKey("dialogue.dialogue_id", ondelete="CASCADE")
     )
     # INTEGER NOT NULL → required(UNIQUE(dialogue_id, turn_order) 구성요소).
     turn_order: Mapped[int] = mapped_column(sa.Integer, nullable=False)
