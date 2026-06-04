@@ -27,11 +27,18 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from whymath_backend.api._device_store import (
+    build_device_store_from_settings,
+    ping_device_store_health,
+    set_device_store,
+)
 from whymath_backend.api.coach import router as coach_router
 from whymath_backend.api.concepts import router as concepts_router
+from whymath_backend.api.devices import router as devices_router
 from whymath_backend.api.me import router as me_router
 from whymath_backend.api.problems import router as problems_router
 from whymath_backend.api.users import router as users_router
+from whymath_backend.config import get_settings
 from whymath_backend.db.session import dispose_engine
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.cache import RedisCache
@@ -168,17 +175,32 @@ def _get_queue(request: Request) -> AsyncJobQueue:
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    """앱 수명 — 종료 시 DB 엔진 풀을 정리(dispose_engine)한다.
+    """앱 수명 — 시작 시 device store 활성(slice 27), 종료 시 store 해제 + DB 엔진 풀 반납.
+
+    **시작**: `Settings.device_store_mode`(none/pg/pg_cached) 기반으로 store 구성·
+    `set_device_store(store)`. `none`(기본)은 slice 21 폴백 그대로(set_device_store(None) 호출).
+
+    **종료**: store 해제(set_device_store(None) + Redis 클라이언트 닫기)·`dispose_engine`으로
+    PG async 엔진 풀 반납.
 
     get_session이 첫 쿼리에서 *지연* 생성한 async 엔진/연결 풀을 앱 종료 시 반납한다.
     엔진이 만들어진 적 없으면(DB 미사용 경로·의존성 오버라이드된 단위테스트) dispose_engine은
-    no-op이라 안전하다. 시작 시점엔 특별 작업이 없다(엔진은 첫 요청에서 lazy로 뜬다).
+    no-op이라 안전하다.
 
     주의: `TestClient(app)`를 컨텍스트매니저 없이 쓰면 lifespan이 발화하지 않는다(Starlette
     기본) — 기존 L3 단위테스트(가짜 의존성)는 영향받지 않는다.
     """
-    yield
-    await dispose_engine()
+    settings = get_settings()
+    # 슬라이스 30: store 의존성(PG/Redis) 부팅 시 ping → 미도달이면 fail-fast.
+    await ping_device_store_health(settings)
+    store, cleanup_fn = build_device_store_from_settings(settings)
+    set_device_store(store)
+    try:
+        yield
+    finally:
+        set_device_store(None)
+        await cleanup_fn()
+        await dispose_engine()
 
 
 def create_app(
@@ -370,5 +392,6 @@ def create_app(
     app.include_router(users_router)
     app.include_router(me_router)
     app.include_router(coach_router)
+    app.include_router(devices_router)
 
     return app

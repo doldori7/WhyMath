@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import math
 import time
 import uuid
@@ -35,6 +36,8 @@ from typing import (
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._device_metrics import record_device_sig_failure
+from whymath_backend.api._device_store import get_device_store
 from whymath_backend.config import Settings, get_settings
 
 # redis-py의 NoScriptError를 지연 import — 라이브러리 미설치 환경(CI 단위테스트)에서도
@@ -50,8 +53,12 @@ except ImportError:  # pragma: no cover — 라이브러리 미설치 환경
 
 _WINDOW_SECONDS = 60.0
 
-RateCategory = Literal["read", "write"]
-"""POST/GET 차등 한도 — 읽기/쓰기 분리 버킷(상호 영향 차단)."""
+RateCategory = Literal["read", "write", "device_register"]
+"""POST/GET 차등 한도 — 읽기/쓰기 분리 버킷(상호 영향 차단).
+
+`device_register`(슬라이스 25): `/v1/devices/register`의 *전용* 버킷. coach `write`와 키 공간
+분리 — 한쪽 폭주가 다른 쪽 한도를 잠식하지 않는다(예: coach 글 쓰기 폭주가 register를 막거나
+그 반대). 등록은 *드문* 작업(첫 실행 1회·기기 변경)이라 낮은 한도(5/min user·10/min IP)."""
 
 
 class RateLimitResult(NamedTuple):
@@ -849,18 +856,62 @@ RateLimitedIpWrite = Depends(rate_limit_ip_write)
 # ──────────────────────────────────────────────────────────────────────────
 
 
-def _client_device_id(request: Request) -> str | None:
+def _expected_device_signature(secret: str, device_id: str) -> str:
+    """`HMAC-SHA256(secret, device_id)` 의 hex digest — 64-char lowercase."""
+    return hmac.new(secret.encode("utf-8"), device_id.encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+async def _client_device_id(request: Request, settings: Settings) -> str | None:
     """요청에서 디바이스 ID 추출 — `X-Device-Id` 헤더(클라이언트 발급 UUID/문자열).
 
     빈 값/미설정 시 None — 디바이스 차원 검사 비활성. 클라이언트는 첫 실행 시 안정 ID
     (UUID4·KeyChain 저장)를 생성·전 요청에 동봉(Flutter `device_info_plus`·iOS
     `identifierForVendor`·Android `Settings.Secure.ANDROID_ID` 등 권장).
+
+    **검증 경로 우선순위**(슬라이스 22 도입·23 async 전환):
+    1. **디바이스별 store**(`set_device_store(store)`로 활성) — 등록된 device_id의 *고유*
+       secret으로 X-Device-Sig 검증. slice 21 공유 secret 한계 해소(앱 바이너리 추출 시
+       *그 디바이스만* 영향, 다른 디바이스 secret 무관). 정식 운영 경로(`PgDeviceStore`).
+    2. **공유 HMAC secret**(`coach_device_hmac_secret`) — store 미설정 시 폴백. slice 21
+       trivial-spoofing 방어. MVP/sandbox용·등록 인프라 없이 동작.
+    3. **secret 미설정** — 서명 검증 생략(slice 20 동작·backward compat).
+
+    누락·불일치 시 device_id를 None으로 *fail-safe* — device 차원 검사 비활성(요청 자체는
+    통과·user+IP만 적용).
+
+    슬라이스 23: store.verify가 async(PG 라운드트립)라 본 함수도 `async def`로 전환. 호출처
+    (`_enforce_triple` → `rate_limit_triple_*`)는 이미 async — `await` 한 줄 추가뿐.
     """
     device_id = request.headers.get("x-device-id")
     if device_id is None:
         return None
     stripped = device_id.strip()
-    return stripped if stripped else None
+    if not stripped:
+        return None
+    store = get_device_store()
+    if store is not None:
+        # 디바이스별 store 모드(우선) — 등록된 device_id만 유효
+        provided = request.headers.get("x-device-sig", "").strip()
+        if not provided:
+            record_device_sig_failure("store_no_sig")  # slice 28
+            return None
+        if not await store.verify(stripped, provided):
+            record_device_sig_failure("store_verify_failed")  # slice 28
+            return None
+        return stripped
+    # 폴백: 공유 HMAC secret(slice 21) 또는 검증 생략(slice 20)
+    secret = settings.coach_device_hmac_secret.get_secret_value()
+    if not secret:
+        return stripped
+    provided = request.headers.get("x-device-sig", "").strip()
+    if not provided:
+        record_device_sig_failure("shared_no_sig")  # slice 28
+        return None
+    expected = _expected_device_signature(secret, stripped)
+    if not hmac.compare_digest(provided.lower(), expected):
+        record_device_sig_failure("shared_invalid_sig")  # slice 28
+        return None
+    return stripped
 
 
 async def _enforce_triple(
@@ -942,7 +993,7 @@ async def rate_limit_triple_read(
     await _enforce_triple(
         user.user_id,
         _client_ip(request),
-        _client_device_id(request),
+        await _client_device_id(request, settings),
         category="read",
         user_limit=settings.coach_rate_limit_read_per_minute,
         ip_limit=settings.coach_rate_limit_ip_read_per_minute,
@@ -961,7 +1012,7 @@ async def rate_limit_triple_write(
     await _enforce_triple(
         user.user_id,
         _client_ip(request),
-        _client_device_id(request),
+        await _client_device_id(request, settings),
         category="write",
         user_limit=settings.coach_rate_limit_write_per_minute,
         ip_limit=settings.coach_rate_limit_ip_write_per_minute,
@@ -975,6 +1026,39 @@ RateLimitedTripleRead = Depends(rate_limit_triple_read)
 
 RateLimitedTripleWrite = Depends(rate_limit_triple_write)
 """인증 POST용 *3차원*(user+IP+device) 의존성 — `dependencies=[RateLimitedTripleWrite]`."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 슬라이스 25 — 디바이스 등록 전용 rate limit (`/v1/devices/register`)
+#
+# 등록 폭주 방어 — sock-puppet 디바이스 양산·DB 자격증명 행 폭증 차단. *낮은 한도*
+# (user 5/min·IP 10/min)로 정상 사용자엔 무영향(첫 실행 1회·기기 변경)·자동화에만 발화.
+# device 차원은 *N/A*(등록 *전*이라 device_id가 아직 없음) — user+IP 2차원만 적용.
+# 별 category(`device_register`)로 coach write와 키 공간 분리 — 상호 영향 0.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+async def rate_limit_device_register(
+    user: ConsentedUser,
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+) -> None:
+    """디바이스 등록(`/v1/devices/register`) 전용 — user+IP 2차원·낮은 한도."""
+    await _enforce_triple(
+        user.user_id,
+        _client_ip(request),
+        None,  # device_id N/A — 등록 전엔 device가 없음(device 차원 자동 비활성)
+        category="device_register",
+        user_limit=settings.device_register_rate_limit_per_minute,
+        ip_limit=settings.device_register_rate_limit_ip_per_minute,
+        device_limit=0,
+        response=response,
+    )
+
+
+RateLimitedDeviceRegister = Depends(rate_limit_device_register)
+"""디바이스 등록 전용(slice 25) — `dependencies=[RateLimitedDeviceRegister]`."""
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from whymath_backend.api.coach import router as coach_router
 from whymath_backend.api.concepts import router as concepts_router
+from whymath_backend.api.devices import router as devices_router
 from whymath_backend.api.me import router as me_router
 from whymath_backend.api.problems import router as problems_router
 from whymath_backend.api.users import router as users_router
@@ -20,6 +21,7 @@ from whymath_backend.api.users import router as users_router
 __all__ = [
     "coach_router",
     "concepts_router",
+    "devices_router",
     "me_router",
     "problems_router",
     "users_router",

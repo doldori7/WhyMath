@@ -284,6 +284,134 @@ class Settings(BaseSettings):
             "사용자(30)와 IP(60) 사이 중간."
         ),
     )
+    # ── 슬라이스 27: 디바이스 store 운영 모드(lifespan 결선) ──
+    device_store_mode: Literal["none", "pg", "pg_cached"] = Field(
+        default="none",
+        description=(
+            "디바이스 자격증명 store 활성 모드. `none`(기본)=비활성·slice 21 공유 secret 폴백. "
+            "`pg`=`PgDeviceStore` 단독(영속·HA, slice 23). "
+            "`pg_cached`=`CachedDeviceStore(PgDeviceStore, Redis)`(verify 캐시·고QPS 최적화, "
+            "slice 26). 운영 lifespan이 본 설정 읽어 store 자동 활성·종료 시 정리."
+        ),
+    )
+
+    # ── 슬라이스 33: 디바이스 자동 폐기 idle 임계 ──
+    device_credential_max_idle_days: int = Field(
+        default=30,
+        ge=1,
+        description=(
+            "`cleanup_stale_devices` 호출 시 *N일 이상 미사용*(last_used_at < now - N일·"
+            "한 번도 사용 안 했으면 created_at 기준)인 활성 device를 자동 폐기. 30일 기본 — "
+            "정상 사용자는 매월 1회 이상 verify(앱 사용)이라 무영향·잊혀진/분실 device만 폐기. "
+            "운영은 Celery beat·cron으로 일일 호출 권장. 0 미만은 비활성 의도라 ge=1로 금지."
+        ),
+    )
+
+    # ── 슬라이스 31: startup health check 타임아웃 ──
+    device_store_health_check_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0.0,
+        description=(
+            "부팅 시 `ping_device_store_health`가 각 의존성(PG·Redis) ping에 허용하는 최대 "
+            "응답 시간(초). 초과 시 RuntimeError로 fail-fast — slice 30의 *무한 대기* 한계 "
+            "해소. 기본 5s — 정상 인프라엔 충분(>1s면 인프라 점검 필요)·네트워크 깜빡임은 "
+            "쿠버네티스 readiness probe로 외부 재시도."
+        ),
+    )
+
+    # ── 슬라이스 35: startup health check 재시도(exponential backoff) ──
+    device_store_health_check_max_retries: int = Field(
+        default=3,
+        ge=1,
+        description=(
+            "부팅 시 각 ping을 최대 N회 시도(첫 시도 포함). 일시적 인프라 깜빡임 흡수 — "
+            "slice 30 한계 ③(재시도 없음) + slice 31 한계 ①(쿠버네티스 외부 재시도만) 해소. "
+            "기본 3 — 정상 인프라엔 1회 통과·일시 실패 시 backoff 후 재시도. 1=재시도 비활성."
+        ),
+    )
+    device_store_health_check_retry_backoff_seconds: float = Field(
+        default=2.0,
+        gt=0.0,
+        description=(
+            "재시도 사이 exponential backoff 기본 간격(초). 실제 대기는 `backoff * 2^attempt` "
+            "(attempt=0,1,...): 2s·4s·8s. max_retries=3 시 총 대기 ~6s(timeout 별도 합산)."
+        ),
+    )
+    device_store_health_check_retry_jitter: bool = Field(
+        default=False,
+        description=(
+            "slice 36: 재시도 backoff에 AWS-style *full jitter* 적용"
+            "(`uniform(0, base*2^attempt)`). k8s 다수 pod 동시 재시작 시 thundering herd"
+            "(인프라 회복 직후 동시 재폭주) 차단. 기본 False — 단일 노드/예측 가능 backoff "
+            "우선. 다중 pod 운영은 True 권장."
+        ),
+    )
+
+    # ── 슬라이스 26: verify 결과 Redis 캐시 TTL ──
+    device_verify_cache_ttl_seconds: int = Field(
+        default=60,
+        ge=0,
+        description=(
+            "디바이스 verify 결과 캐시 TTL(초). `CachedDeviceStore` 사용 시만 의미. "
+            "낮을수록 revoke 후 stale 기간 짧음(권장 60s — DB 부담 절감과 invalidation "
+            "신선도 절충). 0=캐시 비활성. 운영 lifespan에서 `CachedDeviceStore(inner, cache, "
+            "ttl_seconds=settings.device_verify_cache_ttl_seconds)`로 주입."
+        ),
+    )
+    # ── 슬라이스 48: count 캐시 TTL(verify와 별 — count는 register/revoke만 영향) ──
+    device_count_cache_ttl_seconds: int = Field(
+        default=300,
+        ge=0,
+        description=(
+            "디바이스 count 캐시 TTL(초). count는 verify보다 갱신 빈도 *낮음*"
+            "(register/revoke만 영향·verify는 영향 0) → 더 긴 TTL로 cache hit rate 향상. "
+            "기본 300s(5분). register/revoke 시 즉시 invalidate되므로 stale 위험 ≈ 0. "
+            "0=count 캐시 비활성(verify_ttl로 폴백)."
+        ),
+    )
+    # ── 슬라이스 49: include_revoked=True count 전용 TTL ──
+    device_count_all_cache_ttl_seconds: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "`include_revoked=True` count 전용 TTL(초). 폐기 이력 포함 count는 *훨씬 드물게* "
+            "조회됨(주로 보안 감사·관리자 화면) → 더 긴 TTL로 hit rate 향상 가능. None(기본)이면 "
+            "`device_count_cache_ttl_seconds` 그대로 사용(slice 48 backward compat). "
+            "운영 보고로 active와 all 사용 빈도 차이 확인 후 조정."
+        ),
+    )
+
+    # ── 슬라이스 25: 디바이스 등록 전용 rate limit (`/v1/devices/register`) ──
+    device_register_rate_limit_per_minute: int = Field(
+        default=5,
+        ge=0,
+        description=(
+            "디바이스 등록(`POST /v1/devices/register`)의 *사용자 단위* 분당 상한. 0=비활성. "
+            "등록은 드문 작업(첫 실행 1회·기기 변경)이라 매우 낮게 — sock-puppet 디바이스 "
+            "양산·DB 자격증명 폭증 차단. coach `write`와 *별 키 공간*"
+            "(category=device_register)."
+        ),
+    )
+    device_register_rate_limit_ip_per_minute: int = Field(
+        default=10,
+        ge=0,
+        description=(
+            "디바이스 등록의 *IP 단위* 분당 상한. 0=비활성. 공유 NAT/학교/공공 와이파이에서 "
+            "여러 사용자가 등록 가능하도록 사용자 한도(5)의 2배."
+        ),
+    )
+
+    coach_device_hmac_secret: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "디바이스 서명 검증용 HMAC 비밀키. 빈 기본=비활성(슬라이스 20 동작 그대로). "
+            "설정 시 클라이언트는 `X-Device-Sig: HMAC-SHA256(secret, device_id) hex`를 동봉 — "
+            "유효하지 않으면 device 차원 검사 비활성(fail-safe·user+IP만 적용). "
+            "**위협 모델**: 앱 바이너리에서 secret 추출 가능 — *trivial spoofing*(랜덤 ID "
+            "반복) 방어용. 정식 디바이스 인증은 OAuth-style 등록 후속. WHYMATH_COACH_DEVICE_"
+            "HMAC_SECRET env로만 주입(SecretStr — repr/로그 평문 차단·하드코딩 금지)."
+        ),
+    )
     coach_rate_limit_backend: Literal["memory", "redis"] = Field(
         default="memory",
         description=(

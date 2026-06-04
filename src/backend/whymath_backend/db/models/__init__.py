@@ -44,6 +44,7 @@ from whymath_backend.db.models.concept import (
     ProblemConcept,
 )
 from whymath_backend.db.models.curriculum_entry import CurriculumEntry
+from whymath_backend.db.models.device import DeviceCredential
 from whymath_backend.db.models.dialogue import (
     Dialogue,
     DialogueTurn,
@@ -110,4 +111,6 @@ __all__ = [
     # v1.1 TextbookMapping
     "TextbookMapping",
     "TextbookUnit",
+    # 슬라이스 23: DeviceCredential
+    "DeviceCredential",
 ]
