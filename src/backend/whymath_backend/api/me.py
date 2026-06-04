@@ -50,6 +50,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._query_filters import _validate_time_window, _validate_tz_aware
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import Assessment
 from whymath_backend.db.models.audit import DeletionAudit
@@ -71,6 +72,16 @@ Offset = Annotated[int, Query(ge=0, description="건너뛸 행 수")]
 ResourceTypeFilter = Annotated[
     AuditResourceType | None,
     Query(description="삭제 도메인 필터(learning_session·dialogue·assessment). 생략 시 전체."),
+]
+# slice 66: deletions 조회의 deleted_at 시간창 필터(inclusive·TZ-aware ISO8601). device
+# 목록의 since/until(slice 41)과 동형. naive datetime·since>until은 _query_filters가 422.
+DeletedSince = Annotated[
+    datetime | None,
+    Query(description="이 시각 *이후* 삭제분만(inclusive·TZ-aware ISO8601). until과 함께 시간창."),
+]
+DeletedUntil = Annotated[
+    datetime | None,
+    Query(description="이 시각 *이전* 삭제분만(inclusive·TZ-aware ISO8601). since와 함께 시간창."),
 ]
 
 
@@ -204,6 +215,8 @@ async def list_my_deletions(
     limit: Limit = 50,
     offset: Offset = 0,
     resource_type: ResourceTypeFilter = None,
+    since: DeletedSince = None,
+    until: DeletedUntil = None,
 ) -> list[DeletionAuditSchema]:
     """slice 58: 본인 삭제 감사 이력 — 최신순(deleted_at desc·audit_id 안정 정렬).
 
@@ -212,12 +225,22 @@ async def list_my_deletions(
     노출되지 않음(다른 /me GET과 동일 스코핑).
 
     slice 65: `resource_type`(선택)로 도메인 필터 — 한 유형(예: 대화)의 삭제 이력만 조회.
-    생략 시 전체(slice 58 동작 보존). 기존 `idx_deletion_audit_user(user_id, deleted_at DESC)`가
-    user_id prefix + 정렬을 그대로 충족(resource_type은 추가 필터).
+    slice 66: `since`/`until`(선택)로 `deleted_at` 시간창 필터(inclusive) — 특정 기간 삭제분만.
+    모두 생략 시 전체(slice 58 동작 보존). naive datetime·since>until은 422(_query_filters).
+    기존 `idx_deletion_audit_user(user_id, deleted_at DESC)`가 user_id prefix + 정렬 + 시간 범위를
+    그대로 충족(resource_type만 추가 필터).
     """
+    since = _validate_tz_aware(since, "since")
+    until = _validate_tz_aware(until, "until")
+    _validate_time_window(since, until, "since", "until")
+
     stmt = select(DeletionAudit).where(DeletionAudit.user_id == user.user_id)
     if resource_type is not None:
         stmt = stmt.where(DeletionAudit.resource_type == resource_type.value)
+    if since is not None:
+        stmt = stmt.where(DeletionAudit.deleted_at >= since)
+    if until is not None:
+        stmt = stmt.where(DeletionAudit.deleted_at <= until)
     stmt = (
         stmt.order_by(DeletionAudit.deleted_at.desc(), DeletionAudit.audit_id)
         .limit(limit)

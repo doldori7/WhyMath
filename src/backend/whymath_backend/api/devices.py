@@ -37,6 +37,7 @@ from whymath_backend.api._device_store import (
     OrderDir,
     get_device_store,
 )
+from whymath_backend.api._query_filters import _validate_time_window, _validate_tz_aware
 from whymath_backend.api._rate_limit import RateLimitedDeviceRegister
 
 router = APIRouter(prefix="/v1/devices", tags=["devices"])
@@ -127,45 +128,6 @@ def _require_store() -> DeviceCredentialStore:
             ),
         )
     return store
-
-
-def _validate_tz_aware(value: datetime | None, field_name: str) -> datetime | None:
-    """slice 42: naive datetime 거부 — PG의 TZ-aware created_at과 비교 시 의미 모호.
-
-    클라이언트는 *반드시* timezone 정보 포함 ISO8601 전송(`Z` 또는 `±HH:MM`). 위반 시 422.
-    """
-    if value is not None and value.tzinfo is None:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                f"`{field_name}`은 timezone 정보 포함 ISO8601 형식이 필요합니다 "
-                "(예: '2024-01-01T00:00:00Z' 또는 '2024-01-01T09:00:00+09:00'). "
-                "naive datetime은 PG의 TZ-aware created_at과 비교 시 의미 모호."
-            ),
-        )
-    return value
-
-
-def _validate_time_window(
-    since: datetime | None,
-    until: datetime | None,
-    since_name: str,
-    until_name: str,
-) -> None:
-    """slice 45: 시간창 일관성 — `since > until`이면 불가능 조합·422.
-
-    빈 결과 자체는 자연스러우나 *클라이언트 버그를 조용히 통과시키지 않기 위해* 명시 거부.
-    한쪽만 None이면 검증 skip(단방향 시간창). 둘 다 None이면 적용 0.
-    """
-    if since is not None and until is not None and since > until:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail=(
-                f"`{since_name}`({since.isoformat()})은 "
-                f"`{until_name}`({until.isoformat()})보다 이전(또는 같음)이어야 합니다. "
-                "since > until은 빈 시간창."
-            ),
-        )
 
 
 @router.post(
