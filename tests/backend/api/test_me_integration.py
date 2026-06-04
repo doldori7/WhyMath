@@ -19,9 +19,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.activity import LearningSession
+from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
-from whymath_backend.schema.enums import Persona
+from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
+from whymath_backend.schema.enums import AuditResourceType, Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 from whymath_backend.security import create_access_token
 
@@ -66,6 +68,11 @@ async def _cleanup(user_ids: list[uuid.UUID]) -> None:
                 text("DELETE FROM learning_session WHERE user_id = ANY(:ids)"),
                 {"ids": ids},
             )
+            # deletion_audit는 user_id가 FK 아님(독립 잔존 로그) — user_id로 정리.
+            await conn.execute(
+                text("DELETE FROM deletion_audit WHERE user_id = ANY(:ids)"),
+                {"ids": ids},
+            )
             await conn.execute(
                 text("DELETE FROM user_profile WHERE user_id = ANY(:ids)"), {"ids": ids}
             )
@@ -82,6 +89,16 @@ def _user(uid: uuid.UUID) -> UserProfile:
 def _session_row(sid: uuid.UUID, uid: uuid.UUID) -> LearningSession:
     return LearningSession.from_schema(
         LearningSessionSchema(session_id=sid, user_id=uid)
+    )
+
+
+def _deletion_row(uid: uuid.UUID, resource_type: AuditResourceType) -> DeletionAudit:
+    return DeletionAudit.from_schema(
+        DeletionAuditSchema(
+            user_id=uid,
+            resource_type=resource_type,
+            resource_id=uuid.uuid4(),
+        )
     )
 
 
@@ -121,3 +138,60 @@ def test_me_sessions_scoped_to_current_user_on_live_pg() -> None:
             assert client.get("/v1/me/sessions").status_code == 401  # 무토큰
     finally:
         asyncio.run(_cleanup([uid_a, uid_b]))
+
+
+def test_me_deletions_resource_type_filter_on_live_pg() -> None:
+    """slice 65: ?resource_type 필터가 실 PG에서 해당 도메인만 반환·생략 시 전체.
+
+    A의 삭제 감사를 도메인별로 적재(learning_session×2·dialogue×1) → ?resource_type=
+    learning_session은 2건·dialogue는 1건·필터 생략은 3건 모두. 본인 스코핑도 함께 확인.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid_a = uuid.uuid4()
+    try:
+        asyncio.run(_add_all(_user(uid_a)))
+        asyncio.run(
+            _add_all(
+                _deletion_row(uid_a, AuditResourceType.learning_session),
+                _deletion_row(uid_a, AuditResourceType.learning_session),
+                _deletion_row(uid_a, AuditResourceType.dialogue),
+            )
+        )
+        token_a = create_access_token(uid_a, settings=_settings())
+        auth = {"Authorization": f"Bearer {token_a}"}
+        with _client() as client:
+            # 필터 생략 → 3건 전체
+            resp = client.get("/v1/me/deletions", headers=auth)
+            assert resp.status_code == 200, resp.text
+            assert len(resp.json()) == 3
+
+            # learning_session 필터 → 2건, 모두 해당 도메인
+            resp = client.get(
+                "/v1/me/deletions",
+                headers=auth,
+                params={"resource_type": "learning_session"},
+            )
+            assert resp.status_code == 200, resp.text
+            rows = resp.json()
+            assert len(rows) == 2
+            assert {r["resource_type"] for r in rows} == {"learning_session"}
+
+            # dialogue 필터 → 1건
+            resp = client.get(
+                "/v1/me/deletions", headers=auth, params={"resource_type": "dialogue"}
+            )
+            assert resp.status_code == 200, resp.text
+            assert len(resp.json()) == 1
+
+            # 삭제 이력 없는 도메인 → []
+            resp = client.get(
+                "/v1/me/deletions", headers=auth, params={"resource_type": "assessment"}
+            )
+            assert resp.status_code == 200, resp.text
+            assert resp.json() == []
+    finally:
+        asyncio.run(_cleanup([uid_a]))
