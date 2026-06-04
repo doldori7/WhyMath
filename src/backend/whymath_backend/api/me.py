@@ -68,10 +68,16 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 Limit = Annotated[int, Query(ge=1, le=200, description="페이지 크기")]
 Offset = Annotated[int, Query(ge=0, description="건너뛸 행 수")]
 # slice 65: deletions 조회의 선택적 도메인 필터 — None이면 전체(slice 58 동작 보존).
-# enum이라 부정 값은 FastAPI가 422로 거부(임의 문자열 주입 차단).
+# slice 68: 다중 값 OR 필터 — `?resource_type=dialogue&resource_type=assessment`로 여러
+# 도메인 동시 조회(IN). 단일 값도 그대로 수용(하위 호환). enum이라 부정 값은 FastAPI가 422.
 ResourceTypeFilter = Annotated[
-    AuditResourceType | None,
-    Query(description="삭제 도메인 필터(learning_session·dialogue·assessment). 생략 시 전체."),
+    list[AuditResourceType] | None,
+    Query(
+        description=(
+            "삭제 도메인 필터(learning_session·dialogue·assessment). 반복 지정 시 OR(IN). "
+            "생략 시 전체."
+        )
+    ),
 ]
 # slice 66/67: /me 리스트 공용 시간창 필터(inclusive·TZ-aware ISO8601). deletions는
 # deleted_at, sessions·assessments·dialogues는 started_at 기준. device 목록(slice 41)과
@@ -248,14 +254,15 @@ async def list_my_deletions(
     노출되지 않음(다른 /me GET과 동일 스코핑).
 
     slice 65: `resource_type`(선택)로 도메인 필터 — 한 유형(예: 대화)의 삭제 이력만 조회.
+    slice 68: `resource_type` 반복 지정 시 OR(IN) — 여러 도메인 동시 조회(단일 값 하위 호환).
     slice 66: `since`/`until`(선택)로 `deleted_at` 시간창 필터(inclusive) — 특정 기간 삭제분만.
     모두 생략 시 전체(slice 58 동작 보존). naive datetime·since>until은 422(_query_filters).
     기존 `idx_deletion_audit_user(user_id, deleted_at DESC)`가 user_id prefix + 정렬 + 시간 범위를
     그대로 충족(resource_type만 추가 필터).
     """
     stmt = select(DeletionAudit).where(DeletionAudit.user_id == user.user_id)
-    if resource_type is not None:
-        stmt = stmt.where(DeletionAudit.resource_type == resource_type.value)
+    if resource_type:
+        stmt = stmt.where(DeletionAudit.resource_type.in_([rt.value for rt in resource_type]))
     stmt = apply_time_window(stmt, DeletionAudit.deleted_at, since, until)
     stmt = (
         stmt.order_by(DeletionAudit.deleted_at.desc(), DeletionAudit.audit_id)
