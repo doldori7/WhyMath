@@ -11,8 +11,13 @@ docstring만 일반화(created_at → 임의 시각 컬럼).
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any, TypeVar
 
 from fastapi import HTTPException, status
+from sqlalchemy import Select
+from sqlalchemy.orm import InstrumentedAttribute
+
+_SelectT = TypeVar("_SelectT", bound="Select[Any]")
 
 
 def _validate_tz_aware(value: datetime | None, field_name: str) -> datetime | None:
@@ -53,3 +58,31 @@ def _validate_time_window(
                 "since > until은 빈 시간창."
             ),
         )
+
+
+def apply_time_window(
+    stmt: _SelectT,
+    column: InstrumentedAttribute[Any],
+    since: datetime | None,
+    until: datetime | None,
+    *,
+    since_name: str = "since",
+    until_name: str = "until",
+) -> _SelectT:
+    """slice 67: `column`에 since/until 시간창(inclusive) WHERE를 *검증 후* 추가.
+
+    `column`은 datetime 매핑 컬럼(nullable 무관 — deleted_at은 non-null·started_at은
+    nullable이라 `InstrumentedAttribute[Any]`로 둘 다 수용·비교는 since/until datetime 기준).
+
+    `_validate_tz_aware`(naive 422) + `_validate_time_window`(since>until 422)를 적용한 뒤
+    not-None인 경계만 `>=`/`<=` 조건으로 붙여 입력 stmt를 그대로(체이닝) 반환한다. /me 리스트
+    네 곳(deletions·sessions·assessments·dialogues)이 동일 시간창 의미·에러 표면을 공유한다.
+    """
+    since = _validate_tz_aware(since, since_name)
+    until = _validate_tz_aware(until, until_name)
+    _validate_time_window(since, until, since_name, until_name)
+    if since is not None:
+        stmt = stmt.where(column >= since)
+    if until is not None:
+        stmt = stmt.where(column <= until)
+    return stmt

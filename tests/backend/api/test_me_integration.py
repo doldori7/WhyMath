@@ -87,9 +87,12 @@ def _user(uid: uuid.UUID) -> UserProfile:
     )
 
 
-def _session_row(sid: uuid.UUID, uid: uuid.UUID) -> LearningSession:
+def _session_row(
+    sid: uuid.UUID, uid: uuid.UUID, started_at: datetime | None = None
+) -> LearningSession:
+    # started_at 생략 시 server_default now(). 시간창 테스트는 명시 값 주입.
     return LearningSession.from_schema(
-        LearningSessionSchema(session_id=sid, user_id=uid)
+        LearningSessionSchema(session_id=sid, user_id=uid, started_at=started_at)
     )
 
 
@@ -250,6 +253,55 @@ def test_me_deletions_time_window_filter_on_live_pg() -> None:
             # since=6월 & until=6월 → 6월 1건(양끝 inclusive 경계)
             resp = client.get(
                 "/v1/me/deletions",
+                headers=auth,
+                params={"since": jun.isoformat(), "until": jun.isoformat()},
+            )
+            assert len(resp.json()) == 1, resp.text
+    finally:
+        asyncio.run(_cleanup([uid_a]))
+
+
+def test_me_sessions_time_window_filter_on_live_pg() -> None:
+    """slice 67: /me/sessions의 ?since/until이 실 PG에서 started_at 시간창으로 필터.
+
+    1·6·12월 세션 적재 → since=6월 2건·until=6월 2건·양끝=6월 1건·생략 3건. deletions와
+    동일한 시간창 의미(apply_time_window 공용)를 다른 도메인에서도 검증.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    jan = datetime(2024, 1, 15, tzinfo=UTC)
+    jun = datetime(2024, 6, 15, tzinfo=UTC)
+    dec = datetime(2024, 12, 15, tzinfo=UTC)
+    uid_a = uuid.uuid4()
+    try:
+        asyncio.run(_add_all(_user(uid_a)))
+        asyncio.run(
+            _add_all(
+                _session_row(uuid.uuid4(), uid_a, jan),
+                _session_row(uuid.uuid4(), uid_a, jun),
+                _session_row(uuid.uuid4(), uid_a, dec),
+            )
+        )
+        token_a = create_access_token(uid_a, settings=_settings())
+        auth = {"Authorization": f"Bearer {token_a}"}
+        with _client() as client:
+            assert len(client.get("/v1/me/sessions", headers=auth).json()) == 3
+
+            resp = client.get(
+                "/v1/me/sessions", headers=auth, params={"since": jun.isoformat()}
+            )
+            assert len(resp.json()) == 2, resp.text
+
+            resp = client.get(
+                "/v1/me/sessions", headers=auth, params={"until": jun.isoformat()}
+            )
+            assert len(resp.json()) == 2, resp.text
+
+            resp = client.get(
+                "/v1/me/sessions",
                 headers=auth,
                 params={"since": jun.isoformat(), "until": jun.isoformat()},
             )

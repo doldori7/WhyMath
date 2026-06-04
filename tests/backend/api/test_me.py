@@ -227,6 +227,39 @@ class TestScopedLists:
         )
         assert resp.status_code == 422
 
+    def test_list_time_window_accepted_all_endpoints(self) -> None:
+        """slice 67: sessions·assessments·dialogues도 TZ-aware since/until 수용(200·결선)."""
+        client, _ = _client([])
+        for path in ("/v1/me/sessions", "/v1/me/assessments", "/v1/me/dialogues"):
+            resp = client.get(
+                path,
+                params={
+                    "since": "2024-01-01T00:00:00Z",
+                    "until": "2024-12-31T23:59:59+00:00",
+                },
+            )
+            assert resp.status_code == 200, (path, resp.text)
+
+    def test_list_time_window_naive_rejected_all_endpoints(self) -> None:
+        """slice 67: 세 리스트도 naive datetime은 422(_query_filters 공용)."""
+        client, _ = _client([])
+        for path in ("/v1/me/sessions", "/v1/me/assessments", "/v1/me/dialogues"):
+            resp = client.get(path, params={"since": "2024-01-01T00:00:00"})
+            assert resp.status_code == 422, path
+
+    def test_list_time_window_inverted_rejected_all_endpoints(self) -> None:
+        """slice 67: 세 리스트도 since > until은 422(_query_filters 공용)."""
+        client, _ = _client([])
+        for path in ("/v1/me/sessions", "/v1/me/assessments", "/v1/me/dialogues"):
+            resp = client.get(
+                path,
+                params={
+                    "since": "2024-12-31T00:00:00Z",
+                    "until": "2024-01-01T00:00:00Z",
+                },
+            )
+            assert resp.status_code == 422, path
+
 
 class TestAuthRequired:
     def test_all_require_token_401(self) -> None:
