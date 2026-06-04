@@ -11,13 +11,11 @@ docstring만 일반화(created_at → 임의 시각 컬럼).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, TypeVar
+from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select
+from sqlalchemy import ColumnElement
 from sqlalchemy.orm import InstrumentedAttribute
-
-_SelectT = TypeVar("_SelectT", bound="Select[Any]")
 
 
 def _validate_tz_aware(value: datetime | None, field_name: str) -> datetime | None:
@@ -60,29 +58,31 @@ def _validate_time_window(
         )
 
 
-def apply_time_window(
-    stmt: _SelectT,
+def time_window_conditions(
     column: InstrumentedAttribute[Any],
     since: datetime | None,
     until: datetime | None,
     *,
     since_name: str = "since",
     until_name: str = "until",
-) -> _SelectT:
-    """slice 67: `column`에 since/until 시간창(inclusive) WHERE를 *검증 후* 추가.
+) -> list[ColumnElement[bool]]:
+    """slice 67/71: `column`의 since/until 시간창(inclusive) WHERE 조건을 *검증 후* 반환.
 
     `column`은 datetime 매핑 컬럼(nullable 무관 — deleted_at은 non-null·started_at은
     nullable이라 `InstrumentedAttribute[Any]`로 둘 다 수용·비교는 since/until datetime 기준).
 
     `_validate_tz_aware`(naive 422) + `_validate_time_window`(since>until 422)를 적용한 뒤
-    not-None인 경계만 `>=`/`<=` 조건으로 붙여 입력 stmt를 그대로(체이닝) 반환한다. /me 리스트
-    네 곳(deletions·sessions·assessments·dialogues)이 동일 시간창 의미·에러 표면을 공유한다.
+    not-None인 경계만 `>=`/`<=` 조건 리스트로 반환한다(`stmt.where(*conds)`로 적용). slice 67은
+    Select를 직접 변형(`apply_time_window`)했으나, slice 71 total count가 *같은 필터*를 list
+    stmt와 count stmt 둘 다에 적용해야 해서 **조건 리스트 반환**으로 일반화 — 한 번 검증한
+    조건을 두 stmt에 재사용(이중 검증 회피). /me 리스트 네 곳이 동일 의미·에러 표면 공유.
     """
     since = _validate_tz_aware(since, since_name)
     until = _validate_tz_aware(until, until_name)
     _validate_time_window(since, until, since_name, until_name)
+    conds: list[ColumnElement[bool]] = []
     if since is not None:
-        stmt = stmt.where(column >= since)
+        conds.append(column >= since)
     if until is not None:
-        stmt = stmt.where(column <= until)
-    return stmt
+        conds.append(column <= until)
+    return conds

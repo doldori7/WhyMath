@@ -227,6 +227,23 @@ def test_me_deletions_resource_type_filter_on_live_pg() -> None:
                 "learning_session",
                 "dialogue",
             }
+
+            # slice 71: include_total → X-Total-Count = 필터 적용 총 건수(limit/offset 무시)
+            resp = client.get(
+                "/v1/me/deletions", headers=auth, params={"include_total": "true"}
+            )
+            assert resp.headers["X-Total-Count"] == "3", resp.headers
+            # 필터 + 페이지 축소에도 total은 *전체 필터 건수* — learning_session 2건
+            resp = client.get(
+                "/v1/me/deletions",
+                headers=auth,
+                params={"resource_type": "learning_session", "limit": "1", "include_total": "true"},
+            )
+            assert len(resp.json()) == 1  # 페이지는 1건
+            assert resp.headers["X-Total-Count"] == "2", resp.headers  # 총 2건
+            # include_total 생략 → 헤더 없음
+            resp = client.get("/v1/me/deletions", headers=auth)
+            assert "X-Total-Count" not in resp.headers
     finally:
         asyncio.run(_cleanup([uid_a]))
 
