@@ -333,6 +333,46 @@ def test_me_sessions_time_window_filter_on_live_pg() -> None:
         asyncio.run(_cleanup([uid_a]))
 
 
+def test_me_sessions_order_param_on_live_pg() -> None:
+    """slice 70: ?order=asc/desc가 실 PG에서 started_at 정렬 방향을 뒤집는다.
+
+    1·6·12월 세션(고정 id) 적재 → desc(기본)=[12,6,1]월·asc=[1,6,12]월 순서. PK 2차키는
+    안정 정렬용(고유 시각이라 무영향).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    jan = datetime(2024, 1, 15, tzinfo=UTC)
+    jun = datetime(2024, 6, 15, tzinfo=UTC)
+    dec = datetime(2024, 12, 15, tzinfo=UTC)
+    uid_a = uuid.uuid4()
+    s_jan, s_jun, s_dec = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    try:
+        asyncio.run(_add_all(_user(uid_a)))
+        asyncio.run(
+            _add_all(
+                _session_row(s_jan, uid_a, jan),
+                _session_row(s_jun, uid_a, jun),
+                _session_row(s_dec, uid_a, dec),
+            )
+        )
+        token_a = create_access_token(uid_a, settings=_settings())
+        auth = {"Authorization": f"Bearer {token_a}"}
+        with _client() as client:
+            # 기본(생략) = desc = 최신순 [12,6,1]월
+            ids = [s["session_id"] for s in client.get("/v1/me/sessions", headers=auth).json()]
+            assert ids == [str(s_dec), str(s_jun), str(s_jan)], ids
+
+            # order=asc = 오래된순 [1,6,12]월
+            resp = client.get("/v1/me/sessions", headers=auth, params={"order": "asc"})
+            ids = [s["session_id"] for s in resp.json()]
+            assert ids == [str(s_jan), str(s_jun), str(s_dec)], ids
+    finally:
+        asyncio.run(_cleanup([uid_a]))
+
+
 def test_me_sessions_ended_at_window_filter_on_live_pg() -> None:
     """slice 69: /me/sessions의 ?ended_since/until이 ended_at 시간창으로 필터.
 

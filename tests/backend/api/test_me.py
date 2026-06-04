@@ -312,6 +312,22 @@ class TestScopedLists:
             )
             assert resp.status_code == 422, path
 
+    def test_order_param_accepted_all_endpoints(self) -> None:
+        """slice 70: order=asc/desc 모두 200(결선)·생략도 200(기본 desc)."""
+        client, _ = _client([])
+        for path in _ENDPOINTS:
+            for order in ("asc", "desc"):
+                resp = client.get(path, params={"order": order})
+                assert resp.status_code == 200, (path, order, resp.text)
+            assert client.get(path).status_code == 200, path  # 생략=기본 desc
+
+    def test_order_param_invalid_rejected_all_endpoints(self) -> None:
+        """slice 70: order Literal 밖 값은 422(asc/desc만 허용)."""
+        client, _ = _client([])
+        for path in _ENDPOINTS:
+            resp = client.get(path, params={"order": "sideways"})
+            assert resp.status_code == 422, path
+
 
 class TestAuthRequired:
     def test_all_require_token_401(self) -> None:
