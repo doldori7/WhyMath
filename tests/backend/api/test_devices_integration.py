@@ -578,3 +578,40 @@ def test_pg_list_for_user_seq_tiebreak_parity_on_live_pg() -> None:
         asyncio.run(_run())
     finally:
         asyncio.run(_cleanup(uid))
+
+
+def test_device_credential_user_index_swapped_on_live_pg() -> None:
+    """slice 64: 단일 user_id 인덱스 → 복합 (user_id, created_at DESC, seq DESC) 대체.
+
+    마이그레이션이 ① 복합 `idx_device_credential_user`를 만들고 ② 단일
+    `ix_device_credential_user_id`를 제거했는지 pg_indexes로 검증(중복 제거). 복합 인덱스
+    정의에 정렬 방향(created_at DESC, seq DESC)이 반영됐는지도 확인 — list_for_user 기본
+    정렬을 Sort 없이 충족함을 보장한다.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.connect() as conn:
+                rows = (
+                    await conn.execute(
+                        text(
+                            "SELECT indexname, indexdef FROM pg_indexes "
+                            "WHERE tablename = 'device_credential'"
+                        )
+                    )
+                ).all()
+            names = {r[0] for r in rows}
+            defs = {r[0]: r[1] for r in rows}
+            # 복합 인덱스 존재 + 단일 user_id 인덱스 제거(대체)
+            assert "idx_device_credential_user" in names, names
+            assert "ix_device_credential_user_id" not in names, names
+            # 정렬 방향까지 반영(prefix user_id + created_at DESC, seq DESC)
+            composite = defs["idx_device_credential_user"]
+            assert "user_id, created_at DESC, seq DESC" in composite, composite
+        finally:
+            await engine.dispose()
+
+    asyncio.run(_run())

@@ -14,7 +14,12 @@ OAuth-style 등록의 영속 표면(슬라이스 22 인메모리 → 23 PG-backe
 - **secret_plain은 평면 VARCHAR**: KDF 불능(`_device_store.py` 모듈 docstring 참조). KMS envelope는
   후속(`secret_encrypted bytea + nonce bytea`로 컬럼 추가하는 마이그레이션 + verify 분기).
 - **revoked 인덱스 미포함**: 매 verify가 PK lookup이고 revoke는 드물어 보조 인덱스 불필요.
-  user_id 인덱스는 `list_for_user`(관리자 표면 후속) 성능을 위해 미리 둔다.
+- **복합 인덱스 `idx_device_credential_user(user_id, created_at DESC, seq DESC)`**(slice 64):
+  `list_for_user`의 *기본* 접근 패턴(`WHERE user_id ORDER BY created_at DESC, seq DESC` —
+  slice 63 tie-break 포함)을 인덱스만으로 충족(Sort 노드 제거). 선두 컬럼 `user_id`가
+  단일 user_id 인덱스를 *포섭*하므로(`count_for_user`·revoke의 user_id 필터도 prefix로 충족)
+  slice 23의 단일 `ix_device_credential_user_id`를 *대체*(중복 제거 → register 쓰기 1개 인덱스
+  절감). last_used_at/revoked_at 정렬은 이 인덱스 미적용(후속·기본 정렬만 최적화).
 - **created_at NOT NULL**: 등록 시각 추적(보안 감사·디바이스 수명 분석). revoked_at은 nullable
   (미폐기는 NULL).
 """
@@ -42,8 +47,9 @@ class DeviceCredential(Base):
     # PK = device_id(서버 생성 UUID4 문자열). VARCHAR(64) — UUID 36 + 버퍼.
     device_id: Mapped[str] = mapped_column(sa.String(length=64), primary_key=True)
     # user_profile.user_id FK — 본인 소유 검증·관리자 조회용. CASCADE 미적용.
+    # slice 64: 단일 index=True 제거 — 복합 idx_device_credential_user(user_id, ...)가 포섭.
     user_id: Mapped[uuid.UUID] = mapped_column(
-        sa.Uuid, sa.ForeignKey("user_profile.user_id"), nullable=False, index=True
+        sa.Uuid, sa.ForeignKey("user_profile.user_id"), nullable=False
     )
     # HMAC 재계산에 원본 필요(KDF 불능). KMS envelope는 후속.
     secret_plain: Mapped[str] = mapped_column(sa.String(length=128), nullable=False)
@@ -62,6 +68,18 @@ class DeviceCredential(Base):
     # last_used_at) 2차 정렬키. InMemoryDeviceStore.seq(slice 54)와 parity. SELECT엔 미노출
     # (ORDER BY 전용·DeviceInfo에 없음). INSERT 시 DB가 자동 할당(register는 미지정).
     seq: Mapped[int] = mapped_column(sa.BigInteger, sa.Identity(), nullable=False)
+
+    # slice 64: list_for_user 기본 정렬(created_at DESC, seq DESC tie-break) 복합 인덱스.
+    # 선두 컬럼 user_id가 단일 user_id 인덱스를 포섭 → slice 23 ix_device_credential_user_id 대체.
+    # activity.idx_session_user·assessment.idx_assessment_user와 동형(user 스코프 시간 정렬).
+    __table_args__ = (
+        sa.Index(
+            "idx_device_credential_user",
+            "user_id",
+            sa.desc("created_at"),
+            sa.desc("seq"),
+        ),
+    )
 
 
 __all__ = ["DeviceCredential"]
