@@ -22,7 +22,8 @@
     recommended_path) → schema가 default_factory=list(NOT NULL 의미)라 problem.py
     conditions_parsed처럼 `nullable=False, server_default "'[]'::jsonb"`.
   - `TEXT`(notes) → `sa.Text`.
-  - §8.1에는 별도 CREATE INDEX가 없다(assessment·concept_mastery_history 모두 인덱스 없음).
+  - §8.1 DDL엔 별도 CREATE INDEX가 없으나, slice 61에서 `list_my_assessments` 접근 패턴용
+    `idx_assessment_user(user_id, started_at DESC)`를 추가(다른 /me 도메인과 parity).
 
 개인정보 메모(CLAUDE.md 절대 금기·개인정보보호법, `user.py`·`activity.py` 방침과 동일):
   `assessment`는 *미성년 학생 진단 데이터*(추정 등급·약점·합격 예측)다. 미성년 개인정보
@@ -123,6 +124,10 @@ class Assessment(Base):
 
     # ===== 메모 =====
     notes: Mapped[str | None] = mapped_column(sa.Text)
+
+    # slice 61: list_my_assessments(user_id 필터·started_at desc 정렬) 접근 패턴 인덱스 —
+    # learning_session.idx_session_user·dialogue.idx_dialogue_user와 동형(parity).
+    __table_args__ = (sa.Index("idx_assessment_user", "user_id", sa.desc("started_at")),)
 
     # ── 변환 헬퍼 (schema↔db seam, problem.py 패턴) ──────────────────────
     @classmethod
