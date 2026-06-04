@@ -20,6 +20,7 @@ S2가 Redis 캐시 설정(redis_url)을 추가했으며, S3가 Langfuse 관측�
 from __future__ import annotations
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -229,6 +230,67 @@ class Settings(BaseSettings):
         default=60 * 24,
         ge=1,
         description="액세스 토큰 만료(분). 기본 24시간. WHYMATH_JWT_EXPIRE_MINUTES로 조정.",
+    )
+
+    # ── L4 코치 엔드포인트 rate limit ──
+    coach_rate_limit_read_per_minute: int = Field(
+        default=60,
+        ge=0,
+        description=(
+            "L4 코치 *읽기* 엔드포인트(GET /v1/coach/sessions/{id})의 사용자당 분당 요청 "
+            "상한. 0=비활성. 읽기는 ETag/304 캐싱으로 경량 — 쓰기보다 높게 둔다."
+        ),
+    )
+    coach_rate_limit_write_per_minute: int = Field(
+        default=30,
+        ge=0,
+        description=(
+            "L4 코치 *쓰기* 엔드포인트(POST /v1/coach·POST /v1/coach/sessions·POST "
+            "/v1/coach/sessions/{id}/turns)의 사용자당 분당 요청 상한. 0=비활성. DB 쓰기·"
+            "후속 LLM 호출 비용을 고려해 읽기보다 낮게 둔다."
+        ),
+    )
+    coach_rate_limit_ip_read_per_minute: int = Field(
+        default=120,
+        ge=0,
+        description=(
+            "L4 코치 *읽기* 엔드포인트의 *IP 단위* 분당 요청 상한(미인증 표면 노출 시). "
+            "0=비활성. 인증 사용자보다 *느슨하게* 둔다(공유 NAT·캠퍼스 IP 보호) — 인증된 "
+            "사용자 한도(`coach_rate_limit_read_per_minute`)는 별도 적용."
+        ),
+    )
+    coach_rate_limit_ip_write_per_minute: int = Field(
+        default=60,
+        ge=0,
+        description=(
+            "L4 코치 *쓰기* 엔드포인트의 *IP 단위* 분당 요청 상한. 0=비활성. "
+            "쓰기는 IP 단위에서도 상대적으로 엄격(공격·자동화 봇 방어). 인증 사용자 한도는 별도."
+        ),
+    )
+    coach_rate_limit_device_read_per_minute: int = Field(
+        default=90,
+        ge=0,
+        description=(
+            "L4 코치 *읽기* 엔드포인트의 *디바이스(X-Device-Id) 단위* 분당 요청 상한. "
+            "0=비활성. 사용자(60)와 IP(120) 사이 중간 — 한 사용자가 다중 디바이스 가능하나 "
+            "한 디바이스가 폭주하면 그 디바이스만 제한."
+        ),
+    )
+    coach_rate_limit_device_write_per_minute: int = Field(
+        default=45,
+        ge=0,
+        description=(
+            "L4 코치 *쓰기* 엔드포인트의 *디바이스 단위* 분당 요청 상한. 0=비활성. "
+            "사용자(30)와 IP(60) 사이 중간."
+        ),
+    )
+    coach_rate_limit_backend: Literal["memory", "redis"] = Field(
+        default="memory",
+        description=(
+            "rate limit 백엔드 — `memory`=프로세스-로컬 deque(기본·테스트·로컬), "
+            "`redis`=Redis ZSET sliding window(분산/HA 정합·다중 워커/인스턴스 시 필수). "
+            "`redis` 선택 시 `redis_url`로 연결, 라이브 도달성은 lazy."
+        ),
     )
 
     @property
