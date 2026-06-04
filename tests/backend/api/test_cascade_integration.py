@@ -155,3 +155,78 @@ def test_delete_cascades_children_on_live_pg() -> None:
                 ]
             )
         )
+
+
+def test_session_delete_cleans_attempt_event_orphans_on_live_pg() -> None:
+    """slice 59: 세션 삭제 → attempt CASCADE → 트리거가 attempt_event(loose ref) 고아 정리."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid, sid, aid = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    try:
+        asyncio.run(
+            _exec(
+                [
+                    (
+                        "INSERT INTO user_profile (user_id, persona_primary) "
+                        "VALUES (:u, 'A_일반고고3')",
+                        {"u": str(uid)},
+                    ),
+                    (
+                        "INSERT INTO learning_session (session_id, user_id) VALUES (:s, :u)",
+                        {"s": str(sid), "u": str(uid)},
+                    ),
+                    (
+                        "INSERT INTO problem_attempt (attempt_id, user_id, session_id) "
+                        "VALUES (:a, :u, :s)",
+                        {"a": str(aid), "u": str(uid), "s": str(sid)},
+                    ),
+                    (
+                        "INSERT INTO attempt_event (event_at, attempt_id, user_id) "
+                        "VALUES (now(), :a, :u)",
+                        {"a": str(aid), "u": str(uid)},
+                    ),
+                    (
+                        "INSERT INTO attempt_event (event_at, attempt_id, user_id) "
+                        "VALUES (now(), :a, :u)",
+                        {"a": str(aid), "u": str(uid)},
+                    ),
+                ]
+            )
+        )
+        # 사전 조건: attempt_event 2건 존재
+        assert (
+            asyncio.run(
+                _count(
+                    "SELECT count(*) FROM attempt_event WHERE attempt_id=:a",
+                    {"a": str(aid)},
+                )
+            )
+            == 2
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            resp = client.delete(f"/v1/me/sessions/{sid}", headers=auth)
+            assert resp.status_code == 204, resp.text
+        # attempt CASCADE(slice 56) + 트리거(slice 59)로 attempt_event 고아도 제거(0)
+        assert (
+            asyncio.run(
+                _count(
+                    "SELECT count(*) FROM attempt_event WHERE attempt_id=:a",
+                    {"a": str(aid)},
+                )
+            )
+            == 0
+        )
+    finally:
+        asyncio.run(
+            _exec(
+                [
+                    ("DELETE FROM attempt_event WHERE attempt_id=:a", {"a": str(aid)}),
+                    ("DELETE FROM problem_attempt WHERE attempt_id=:a", {"a": str(aid)}),
+                    ("DELETE FROM learning_session WHERE session_id=:s", {"s": str(sid)}),
+                    ("DELETE FROM user_profile WHERE user_id=:u", {"u": str(uid)}),
+                ]
+            )
+        )
