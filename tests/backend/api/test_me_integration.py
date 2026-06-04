@@ -88,11 +88,17 @@ def _user(uid: uuid.UUID) -> UserProfile:
 
 
 def _session_row(
-    sid: uuid.UUID, uid: uuid.UUID, started_at: datetime | None = None
+    sid: uuid.UUID,
+    uid: uuid.UUID,
+    started_at: datetime | None = None,
+    ended_at: datetime | None = None,
 ) -> LearningSession:
     # started_at 생략 시 server_default now(). 시간창 테스트는 명시 값 주입.
+    # ended_at은 nullable(미종료 None) — slice 69 ended_at 시간창 테스트용.
     return LearningSession.from_schema(
-        LearningSessionSchema(session_id=sid, user_id=uid, started_at=started_at)
+        LearningSessionSchema(
+            session_id=sid, user_id=uid, started_at=started_at, ended_at=ended_at
+        )
     )
 
 
@@ -321,6 +327,52 @@ def test_me_sessions_time_window_filter_on_live_pg() -> None:
                 "/v1/me/sessions",
                 headers=auth,
                 params={"since": jun.isoformat(), "until": jun.isoformat()},
+            )
+            assert len(resp.json()) == 1, resp.text
+    finally:
+        asyncio.run(_cleanup([uid_a]))
+
+
+def test_me_sessions_ended_at_window_filter_on_live_pg() -> None:
+    """slice 69: /me/sessions의 ?ended_since/until이 ended_at 시간창으로 필터.
+
+    종료 시각 1·6월 세션 2개 + 미종료(ended_at NULL) 세션 1개 적재 → ended_since=6월은
+    6월 1건(NULL·1월 제외)·ended_until=3월은 1월 1건·필터 생략은 3건. 미종료는 종료 시간창에서
+    항상 제외(SQL NULL 비교).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    jan = datetime(2024, 1, 15, tzinfo=UTC)
+    mar = datetime(2024, 3, 15, tzinfo=UTC)
+    jun = datetime(2024, 6, 15, tzinfo=UTC)
+    uid_a = uuid.uuid4()
+    try:
+        asyncio.run(_add_all(_user(uid_a)))
+        asyncio.run(
+            _add_all(
+                _session_row(uuid.uuid4(), uid_a, jan, jan),  # 1월 종료
+                _session_row(uuid.uuid4(), uid_a, jan, jun),  # 6월 종료
+                _session_row(uuid.uuid4(), uid_a, jan, None),  # 미종료(NULL)
+            )
+        )
+        token_a = create_access_token(uid_a, settings=_settings())
+        auth = {"Authorization": f"Bearer {token_a}"}
+        with _client() as client:
+            # 필터 생략 → 3건(미종료 포함)
+            assert len(client.get("/v1/me/sessions", headers=auth).json()) == 3
+
+            # ended_since=6월 → 6월 종료 1건(1월 종료·미종료 제외)
+            resp = client.get(
+                "/v1/me/sessions", headers=auth, params={"ended_since": jun.isoformat()}
+            )
+            assert len(resp.json()) == 1, resp.text
+
+            # ended_until=3월 → 1월 종료 1건(6월 종료·미종료 제외)
+            resp = client.get(
+                "/v1/me/sessions", headers=auth, params={"ended_until": mar.isoformat()}
             )
             assert len(resp.json()) == 1, resp.text
     finally:

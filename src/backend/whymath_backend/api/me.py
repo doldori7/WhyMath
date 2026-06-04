@@ -90,6 +90,17 @@ UntilParam = Annotated[
     datetime | None,
     Query(description="이 시각 *이전* 항목만(inclusive·TZ-aware ISO8601). since와 함께 시간창."),
 ]
+# slice 69: lifecycle 종료 시각 시간창 — sessions·dialogues는 ended_at, assessments는
+# completed_at 기준(파라미터명으로 구분). started_at(SinceParam)과 *독립* 시간창이라 둘 다
+# 지정 시 AND(예: 1월 시작 & 3월 종료). 미종료(NULL) 행은 SQL NULL 비교로 자동 제외.
+CloseSince = Annotated[
+    datetime | None,
+    Query(description="이 시각 *이후* 종료/완료분만(inclusive·TZ-aware ISO8601)."),
+]
+CloseUntil = Annotated[
+    datetime | None,
+    Query(description="이 시각 *이전* 종료/완료분만(inclusive·TZ-aware ISO8601)."),
+]
 
 
 # ── slice 55: 본인 소유 리소스 lifecycle 제네릭 헬퍼 ──────────────────────────
@@ -171,13 +182,24 @@ async def list_my_sessions(
     offset: Offset = 0,
     since: SinceParam = None,
     until: UntilParam = None,
+    ended_since: CloseSince = None,
+    ended_until: CloseUntil = None,
 ) -> list[LearningSessionSchema]:
     """본인 학습 세션 — 최신순. 타인 데이터는 조회 불가(user_id 스코핑).
 
     slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
+    slice 69: `ended_since`/`ended_until`(선택)로 `ended_at` 시간창 — 미종료(NULL)는 제외.
     """
     stmt = select(LearningSession).where(LearningSession.user_id == user.user_id)
     stmt = apply_time_window(stmt, LearningSession.started_at, since, until)
+    stmt = apply_time_window(
+        stmt,
+        LearningSession.ended_at,
+        ended_since,
+        ended_until,
+        since_name="ended_since",
+        until_name="ended_until",
+    )
     stmt = (
         stmt.order_by(LearningSession.started_at.desc(), LearningSession.session_id)
         .limit(limit)
@@ -195,13 +217,24 @@ async def list_my_assessments(
     offset: Offset = 0,
     since: SinceParam = None,
     until: UntilParam = None,
+    completed_since: CloseSince = None,
+    completed_until: CloseUntil = None,
 ) -> list[AssessmentSchema]:
     """본인 진단(Assessment) 이력 — 최신순. user_id 스코핑.
 
     slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
+    slice 69: `completed_since`/`completed_until`(선택)로 `completed_at` 시간창 — 미완료는 제외.
     """
     stmt = select(Assessment).where(Assessment.user_id == user.user_id)
     stmt = apply_time_window(stmt, Assessment.started_at, since, until)
+    stmt = apply_time_window(
+        stmt,
+        Assessment.completed_at,
+        completed_since,
+        completed_until,
+        since_name="completed_since",
+        until_name="completed_until",
+    )
     stmt = (
         stmt.order_by(Assessment.started_at.desc(), Assessment.assessment_id)
         .limit(limit)
@@ -219,12 +252,23 @@ async def list_my_dialogues(
     offset: Offset = 0,
     since: SinceParam = None,
     until: UntilParam = None,
+    ended_since: CloseSince = None,
+    ended_until: CloseUntil = None,
 ) -> list[DialogueSchema]:
     """본인 Socratic 대화 이력 — 최신순. user_id 스코핑(턴 상세는 범위 밖).
 
     slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
+    slice 69: `ended_since`/`ended_until`(선택)로 `ended_at` 시간창 — 미종료(NULL)는 제외.
     """
     stmt = select(Dialogue).where(Dialogue.user_id == user.user_id)
+    stmt = apply_time_window(
+        stmt,
+        Dialogue.ended_at,
+        ended_since,
+        ended_until,
+        since_name="ended_since",
+        until_name="ended_until",
+    )
     stmt = apply_time_window(stmt, Dialogue.started_at, since, until)
     stmt = (
         stmt.order_by(Dialogue.started_at.desc(), Dialogue.dialogue_id).limit(limit).offset(offset)
