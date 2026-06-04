@@ -17,13 +17,15 @@ from whymath_backend.api._auth import get_consented_user
 from whymath_backend.app import create_app
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import Assessment
+from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
+from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
-from whymath_backend.schema.enums import Persona
+from whymath_backend.schema.enums import AuditResourceType, Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 _UID = uuid.uuid4()
@@ -113,7 +115,12 @@ def _no_auth_client() -> TestClient:
     return TestClient(app)
 
 
-_ENDPOINTS = ("/v1/me/sessions", "/v1/me/assessments", "/v1/me/dialogues")
+_ENDPOINTS = (
+    "/v1/me/sessions",
+    "/v1/me/assessments",
+    "/v1/me/dialogues",
+    "/v1/me/deletions",
+)
 
 
 class TestScopedLists:
@@ -137,6 +144,25 @@ class TestScopedLists:
         resp = client.get("/v1/me/dialogues")
         assert resp.status_code == 200
         assert len(resp.json()) == 1
+
+    def test_deletions_returns_rows(self) -> None:
+        """slice 58: 본인 삭제 감사 이력 조회 — resource_type enum 값 직렬화."""
+        rows = [
+            DeletionAudit.from_schema(
+                DeletionAuditSchema(
+                    user_id=_UID,
+                    resource_type=AuditResourceType.learning_session,
+                    resource_id=uuid.uuid4(),
+                )
+            )
+        ]
+        client, _ = _client(rows)
+        resp = client.get("/v1/me/deletions")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["resource_type"] == "learning_session"
+        assert str(body[0]["user_id"]) == str(_UID)
 
     def test_empty_lists(self) -> None:
         client, _ = _client([])

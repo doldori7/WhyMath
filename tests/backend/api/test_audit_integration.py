@@ -120,6 +120,16 @@ def test_delete_writes_audit_on_live_pg() -> None:
             )
         )
         assert still is not None and still[0] == 0
+
+        # slice 58: 본인 삭제 이력 조회 API가 그 감사를 반환(GDPR 투명성·end-to-end)
+        with _client() as client:
+            listed = client.get("/v1/me/deletions", headers=auth)
+            assert listed.status_code == 200, listed.text
+            assert any(
+                it["resource_id"] == str(sid)
+                and it["resource_type"] == "learning_session"
+                for it in listed.json()
+            )
     finally:
         asyncio.run(
             _exec(

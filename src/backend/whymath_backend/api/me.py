@@ -33,6 +33,10 @@ dialogue.attempt_id는 `SET NULL`(대화 보존). 슬라이스 51/52의 RESTRICT
 slice 57: GDPR 삭제 감사 — delete 3종이 `_delete_owned_resource`에서 삭제와 *동일 트랜잭션*으로
 `DeletionAudit`(누가·무엇·언제, 콘텐츠 미저장) 1행 적재. 부모만 기록(자식 cascade는 DB 비가시).
 user_id는 FK 아님(사용자 삭제돼도 잔존). alembic d4e5f6a7b8c9.
+
+slice 58: `GET /v1/me/deletions` — slice 57이 적재한 본인 삭제 감사 이력 조회(GDPR 투명성).
+다른 /me GET과 동일: ConsentedUser·user_id 스코핑·최신순(deleted_at desc)·페이지네이션.
+스키마 변경 0(읽기 전용·마이그레이션 없음).
 """
 
 from __future__ import annotations
@@ -53,6 +57,7 @@ from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
+from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import AuditResourceType
 
@@ -175,6 +180,31 @@ async def list_my_dialogues(
         select(Dialogue)
         .where(Dialogue.user_id == user.user_id)
         .order_by(Dialogue.started_at.desc(), Dialogue.dialogue_id)
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await session.execute(stmt)
+    return [row.to_schema() for row in result.scalars().all()]
+
+
+@router.get(
+    "/deletions",
+    response_model=list[DeletionAuditSchema],
+    summary="내 삭제 이력(GDPR 감사)",
+)
+async def list_my_deletions(
+    user: ConsentedUser, session: SessionDep, limit: Limit = 50, offset: Offset = 0
+) -> list[DeletionAuditSchema]:
+    """slice 58: 본인 삭제 감사 이력 — 최신순(deleted_at desc·audit_id 안정 정렬).
+
+    slice 57이 적재한 `deletion_audit`를 user_id 스코핑으로 조회(GDPR 투명성 — 학생이 자기
+    삭제 이력 확인·타인 것 차단). 메타만 반환(콘텐츠 없음). 본인 user_id의 행이라 타인 삭제는
+    노출되지 않음(다른 /me GET과 동일 스코핑).
+    """
+    stmt = (
+        select(DeletionAudit)
+        .where(DeletionAudit.user_id == user.user_id)
+        .order_by(DeletionAudit.deleted_at.desc(), DeletionAudit.audit_id)
         .limit(limit)
         .offset(offset)
     )
