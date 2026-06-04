@@ -197,6 +197,36 @@ class TestScopedLists:
         resp = client.get("/v1/me/deletions", params={"resource_type": "bogus"})
         assert resp.status_code == 422
 
+    def test_deletions_time_window_accepted(self) -> None:
+        """slice 66: TZ-aware since/until은 200 — 시간창 파라미터 결선."""
+        client, _ = _client([])
+        resp = client.get(
+            "/v1/me/deletions",
+            params={
+                "since": "2024-01-01T00:00:00Z",
+                "until": "2024-12-31T23:59:59+00:00",
+            },
+        )
+        assert resp.status_code == 200, resp.text
+
+    def test_deletions_naive_datetime_rejected(self) -> None:
+        """slice 66/42: timezone 없는 datetime은 422(PG TZ-aware 컬럼과 비교 모호)."""
+        client, _ = _client([])
+        resp = client.get("/v1/me/deletions", params={"since": "2024-01-01T00:00:00"})
+        assert resp.status_code == 422
+
+    def test_deletions_inverted_window_rejected(self) -> None:
+        """slice 66/45: since > until은 빈 시간창 — 클라이언트 버그 명시 거부(422)."""
+        client, _ = _client([])
+        resp = client.get(
+            "/v1/me/deletions",
+            params={
+                "since": "2024-12-31T00:00:00Z",
+                "until": "2024-01-01T00:00:00Z",
+            },
+        )
+        assert resp.status_code == 422
+
 
 class TestAuthRequired:
     def test_all_require_token_401(self) -> None:

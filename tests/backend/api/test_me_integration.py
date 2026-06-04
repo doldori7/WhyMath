@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -92,12 +93,19 @@ def _session_row(sid: uuid.UUID, uid: uuid.UUID) -> LearningSession:
     )
 
 
-def _deletion_row(uid: uuid.UUID, resource_type: AuditResourceType) -> DeletionAudit:
+def _deletion_row(
+    uid: uuid.UUID,
+    resource_type: AuditResourceType,
+    deleted_at: datetime | None = None,
+) -> DeletionAudit:
+    # from_schema는 deleted_at을 명시 전달하므로 None이면 NOT NULL 위반 위험(운영 경로는
+    # deleted_at 생략→server_default now()). 시드는 항상 명시 timestamp(미지정 시 현재) 주입.
     return DeletionAudit.from_schema(
         DeletionAuditSchema(
             user_id=uid,
             resource_type=resource_type,
             resource_id=uuid.uuid4(),
+            deleted_at=deleted_at or datetime.now(UTC),
         )
     )
 
@@ -193,5 +201,58 @@ def test_me_deletions_resource_type_filter_on_live_pg() -> None:
             )
             assert resp.status_code == 200, resp.text
             assert resp.json() == []
+    finally:
+        asyncio.run(_cleanup([uid_a]))
+
+
+def test_me_deletions_time_window_filter_on_live_pg() -> None:
+    """slice 66: ?since/until이 실 PG에서 deleted_at 시간창으로 필터(inclusive).
+
+    A의 삭제 감사를 1월·6월·12월로 적재 → since=6월은 6·12월 2건·until=6월은 1·6월 2건·
+    since=6월&until=6월은 6월 1건(inclusive 경계 확인)·필터 생략은 3건 전체.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    jan = datetime(2024, 1, 15, tzinfo=UTC)
+    jun = datetime(2024, 6, 15, tzinfo=UTC)
+    dec = datetime(2024, 12, 15, tzinfo=UTC)
+    uid_a = uuid.uuid4()
+    try:
+        asyncio.run(_add_all(_user(uid_a)))
+        asyncio.run(
+            _add_all(
+                _deletion_row(uid_a, AuditResourceType.dialogue, jan),
+                _deletion_row(uid_a, AuditResourceType.dialogue, jun),
+                _deletion_row(uid_a, AuditResourceType.dialogue, dec),
+            )
+        )
+        token_a = create_access_token(uid_a, settings=_settings())
+        auth = {"Authorization": f"Bearer {token_a}"}
+        with _client() as client:
+            # 필터 생략 → 3건
+            assert len(client.get("/v1/me/deletions", headers=auth).json()) == 3
+
+            # since=6월 → 6·12월(inclusive)
+            resp = client.get(
+                "/v1/me/deletions", headers=auth, params={"since": jun.isoformat()}
+            )
+            assert len(resp.json()) == 2, resp.text
+
+            # until=6월 → 1·6월(inclusive)
+            resp = client.get(
+                "/v1/me/deletions", headers=auth, params={"until": jun.isoformat()}
+            )
+            assert len(resp.json()) == 2, resp.text
+
+            # since=6월 & until=6월 → 6월 1건(양끝 inclusive 경계)
+            resp = client.get(
+                "/v1/me/deletions",
+                headers=auth,
+                params={"since": jun.isoformat(), "until": jun.isoformat()},
+            )
+            assert len(resp.json()) == 1, resp.text
     finally:
         asyncio.run(_cleanup([uid_a]))
