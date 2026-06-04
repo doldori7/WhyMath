@@ -52,6 +52,11 @@ class _Result:
     def scalars(self) -> _Scalars:
         return _Scalars(self._rows)
 
+    def scalar(self) -> int:
+        # slice 71: count(*) 쿼리 시뮬 — FakeSession은 stmt를 무시하므로 행 수를 총 건수로
+        # 흉내(정확한 필터 적용 count는 통합테스트가 실 PG로 검증). 헤더 결선·숫자성만 본다.
+        return len(self._rows)
+
 
 class FakeSession:
     def __init__(
@@ -327,6 +332,26 @@ class TestScopedLists:
         for path in _ENDPOINTS:
             resp = client.get(path, params={"order": "sideways"})
             assert resp.status_code == 422, path
+
+    def test_include_total_sets_header_all_endpoints(self) -> None:
+        """slice 71: include_total=true면 X-Total-Count 헤더 노출(숫자).
+
+        FakeSession은 stmt 무시·scalar()=행 수라 *필터 적용 count*는 통합테스트가 검증.
+        여기선 헤더 결선(존재·숫자성)만. 빈 시드라 len([])=0 → "0".
+        """
+        client, _ = _client([])
+        for path in _ENDPOINTS:
+            resp = client.get(path, params={"include_total": "true"})
+            assert resp.status_code == 200, path
+            assert resp.headers.get("X-Total-Count") == "0", path
+
+    def test_no_total_header_by_default_all_endpoints(self) -> None:
+        """slice 71: include_total 생략(기본 false)이면 X-Total-Count 헤더 없음(COUNT 비용 회피)."""
+        client, _ = _client([])
+        for path in _ENDPOINTS:
+            resp = client.get(path)
+            assert resp.status_code == 200, path
+            assert "X-Total-Count" not in resp.headers, path
 
 
 class TestAuthRequired:

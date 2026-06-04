@@ -43,14 +43,14 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
-from typing import Annotated, Literal, TypeVar
+from typing import Annotated, Any, Literal, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
-from whymath_backend.api._query_filters import apply_time_window
+from whymath_backend.api._query_filters import time_window_conditions
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import Assessment
 from whymath_backend.db.models.audit import DeletionAudit
@@ -81,7 +81,7 @@ ResourceTypeFilter = Annotated[
 ]
 # slice 66/67: /me 리스트 공용 시간창 필터(inclusive·TZ-aware ISO8601). deletions는
 # deleted_at, sessions·assessments·dialogues는 started_at 기준. device 목록(slice 41)과
-# 동형. naive datetime·since>until은 _query_filters.apply_time_window가 422.
+# 동형. naive datetime·since>until은 _query_filters.time_window_conditions가 422.
 SinceParam = Annotated[
     datetime | None,
     Query(description="이 시각 *이후* 항목만(inclusive·TZ-aware ISO8601). until과 함께 시간창."),
@@ -105,6 +105,26 @@ CloseUntil = Annotated[
 # (slice 46)과 동형. 1차 정렬 컬럼(started_at/deleted_at)에 적용·PK 2차키는 안정 정렬용 유지.
 OrderDir = Literal["asc", "desc"]
 OrderParam = Annotated[OrderDir, Query(description="정렬 방향 — desc(최신순·기본)·asc(오래된순).")]
+# slice 71: 총 개수 opt-in — true면 *같은 필터*(limit/offset 제외) 적용 후 총 건수를
+# `X-Total-Count` 응답 헤더로 노출(페이지네이션 "총 N건"·"Page X of Y"). 기본 false라 추가
+# COUNT 쿼리 비용 회피. device 목록(slice 39)은 응답 envelope의 total 필드를 쓰지만 /me는
+# bare array 응답이라 *비파괴적* 헤더 방식 채택(REST 관용·기존 클라이언트 무영향).
+IncludeTotal = Annotated[
+    bool, Query(description="true면 `X-Total-Count` 헤더에 필터 적용 총 건수(limit/offset 무시).")
+]
+_TOTAL_HEADER = "X-Total-Count"
+
+
+async def _maybe_set_total(
+    session: AsyncSession,
+    response: Response,
+    include_total: bool,
+    count_stmt: Any,
+) -> None:
+    """slice 71: include_total이면 count_stmt(같은 필터·limit/offset 없음) 실행 후 헤더 설정."""
+    if include_total:
+        total = (await session.execute(count_stmt)).scalar() or 0
+        response.headers[_TOTAL_HEADER] = str(total)
 
 
 # ── slice 55: 본인 소유 리소스 lifecycle 제네릭 헬퍼 ──────────────────────────
@@ -182,6 +202,7 @@ async def _delete_owned_resource(
 async def list_my_sessions(
     user: ConsentedUser,
     session: SessionDep,
+    response: Response,
     limit: Limit = 50,
     offset: Offset = 0,
     since: SinceParam = None,
@@ -189,35 +210,52 @@ async def list_my_sessions(
     ended_since: CloseSince = None,
     ended_until: CloseUntil = None,
     order: OrderParam = "desc",
+    include_total: IncludeTotal = False,
 ) -> list[LearningSessionSchema]:
     """본인 학습 세션 — 기본 최신순. 타인 데이터는 조회 불가(user_id 스코핑).
 
     slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
     slice 69: `ended_since`/`ended_until`(선택)로 `ended_at` 시간창 — 미종료(NULL)는 제외.
     slice 70: `order`(asc/desc)로 `started_at` 정렬 방향(기본 desc·최신순).
+    slice 71: `include_total=true`면 `X-Total-Count` 헤더에 필터 적용 총 건수.
     """
-    stmt = select(LearningSession).where(LearningSession.user_id == user.user_id)
-    stmt = apply_time_window(stmt, LearningSession.started_at, since, until)
-    stmt = apply_time_window(
-        stmt,
-        LearningSession.ended_at,
-        ended_since,
-        ended_until,
-        since_name="ended_since",
-        until_name="ended_until",
-    )
+    conds = [
+        LearningSession.user_id == user.user_id,
+        *time_window_conditions(LearningSession.started_at, since, until),
+        *time_window_conditions(
+            LearningSession.ended_at,
+            ended_since,
+            ended_until,
+            since_name="ended_since",
+            until_name="ended_until",
+        ),
+    ]
     primary = (
         LearningSession.started_at.asc() if order == "asc" else LearningSession.started_at.desc()
     )
-    stmt = stmt.order_by(primary, LearningSession.session_id).limit(limit).offset(offset)
+    stmt = (
+        select(LearningSession)
+        .where(*conds)
+        .order_by(primary, LearningSession.session_id)
+        .limit(limit)
+        .offset(offset)
+    )
     result = await session.execute(stmt)
-    return [row.to_schema() for row in result.scalars().all()]
+    rows = [row.to_schema() for row in result.scalars().all()]
+    await _maybe_set_total(
+        session,
+        response,
+        include_total,
+        select(func.count()).select_from(LearningSession).where(*conds),
+    )
+    return rows
 
 
 @router.get("/assessments", response_model=list[AssessmentSchema], summary="내 진단 이력")
 async def list_my_assessments(
     user: ConsentedUser,
     session: SessionDep,
+    response: Response,
     limit: Limit = 50,
     offset: Offset = 0,
     since: SinceParam = None,
@@ -225,33 +263,50 @@ async def list_my_assessments(
     completed_since: CloseSince = None,
     completed_until: CloseUntil = None,
     order: OrderParam = "desc",
+    include_total: IncludeTotal = False,
 ) -> list[AssessmentSchema]:
     """본인 진단(Assessment) 이력 — 기본 최신순. user_id 스코핑.
 
     slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
     slice 69: `completed_since`/`completed_until`(선택)로 `completed_at` 시간창 — 미완료는 제외.
     slice 70: `order`(asc/desc)로 `started_at` 정렬 방향(기본 desc·최신순).
+    slice 71: `include_total=true`면 `X-Total-Count` 헤더에 필터 적용 총 건수.
     """
-    stmt = select(Assessment).where(Assessment.user_id == user.user_id)
-    stmt = apply_time_window(stmt, Assessment.started_at, since, until)
-    stmt = apply_time_window(
-        stmt,
-        Assessment.completed_at,
-        completed_since,
-        completed_until,
-        since_name="completed_since",
-        until_name="completed_until",
-    )
+    conds = [
+        Assessment.user_id == user.user_id,
+        *time_window_conditions(Assessment.started_at, since, until),
+        *time_window_conditions(
+            Assessment.completed_at,
+            completed_since,
+            completed_until,
+            since_name="completed_since",
+            until_name="completed_until",
+        ),
+    ]
     primary = Assessment.started_at.asc() if order == "asc" else Assessment.started_at.desc()
-    stmt = stmt.order_by(primary, Assessment.assessment_id).limit(limit).offset(offset)
+    stmt = (
+        select(Assessment)
+        .where(*conds)
+        .order_by(primary, Assessment.assessment_id)
+        .limit(limit)
+        .offset(offset)
+    )
     result = await session.execute(stmt)
-    return [row.to_schema() for row in result.scalars().all()]
+    rows = [row.to_schema() for row in result.scalars().all()]
+    await _maybe_set_total(
+        session,
+        response,
+        include_total,
+        select(func.count()).select_from(Assessment).where(*conds),
+    )
+    return rows
 
 
 @router.get("/dialogues", response_model=list[DialogueSchema], summary="내 대화 이력")
 async def list_my_dialogues(
     user: ConsentedUser,
     session: SessionDep,
+    response: Response,
     limit: Limit = 50,
     offset: Offset = 0,
     since: SinceParam = None,
@@ -259,27 +314,43 @@ async def list_my_dialogues(
     ended_since: CloseSince = None,
     ended_until: CloseUntil = None,
     order: OrderParam = "desc",
+    include_total: IncludeTotal = False,
 ) -> list[DialogueSchema]:
     """본인 Socratic 대화 이력 — 기본 최신순. user_id 스코핑(턴 상세는 범위 밖).
 
     slice 67: `since`/`until`(선택)로 `started_at` 시간창 필터(inclusive·TZ-aware ISO8601).
     slice 69: `ended_since`/`ended_until`(선택)로 `ended_at` 시간창 — 미종료(NULL)는 제외.
     slice 70: `order`(asc/desc)로 `started_at` 정렬 방향(기본 desc·최신순).
+    slice 71: `include_total=true`면 `X-Total-Count` 헤더에 필터 적용 총 건수.
     """
-    stmt = select(Dialogue).where(Dialogue.user_id == user.user_id)
-    stmt = apply_time_window(
-        stmt,
-        Dialogue.ended_at,
-        ended_since,
-        ended_until,
-        since_name="ended_since",
-        until_name="ended_until",
-    )
-    stmt = apply_time_window(stmt, Dialogue.started_at, since, until)
+    conds = [
+        Dialogue.user_id == user.user_id,
+        *time_window_conditions(
+            Dialogue.ended_at,
+            ended_since,
+            ended_until,
+            since_name="ended_since",
+            until_name="ended_until",
+        ),
+        *time_window_conditions(Dialogue.started_at, since, until),
+    ]
     primary = Dialogue.started_at.asc() if order == "asc" else Dialogue.started_at.desc()
-    stmt = stmt.order_by(primary, Dialogue.dialogue_id).limit(limit).offset(offset)
+    stmt = (
+        select(Dialogue)
+        .where(*conds)
+        .order_by(primary, Dialogue.dialogue_id)
+        .limit(limit)
+        .offset(offset)
+    )
     result = await session.execute(stmt)
-    return [row.to_schema() for row in result.scalars().all()]
+    rows = [row.to_schema() for row in result.scalars().all()]
+    await _maybe_set_total(
+        session,
+        response,
+        include_total,
+        select(func.count()).select_from(Dialogue).where(*conds),
+    )
+    return rows
 
 
 @router.get(
@@ -290,12 +361,14 @@ async def list_my_dialogues(
 async def list_my_deletions(
     user: ConsentedUser,
     session: SessionDep,
+    response: Response,
     limit: Limit = 50,
     offset: Offset = 0,
     resource_type: ResourceTypeFilter = None,
     since: SinceParam = None,
     until: UntilParam = None,
     order: OrderParam = "desc",
+    include_total: IncludeTotal = False,
 ) -> list[DeletionAuditSchema]:
     """slice 58: 본인 삭제 감사 이력 — 기본 최신순(deleted_at desc·audit_id 안정 정렬).
 
@@ -307,18 +380,34 @@ async def list_my_deletions(
     slice 68: `resource_type` 반복 지정 시 OR(IN) — 여러 도메인 동시 조회(단일 값 하위 호환).
     slice 66: `since`/`until`(선택)로 `deleted_at` 시간창 필터(inclusive) — 특정 기간 삭제분만.
     slice 70: `order`(asc/desc)로 `deleted_at` 정렬 방향(기본 desc·최신순).
+    slice 71: `include_total=true`면 `X-Total-Count` 헤더에 필터 적용 총 건수.
     모두 생략 시 전체(slice 58 동작 보존). naive datetime·since>until은 422(_query_filters).
     기존 `idx_deletion_audit_user(user_id, deleted_at DESC)`가 user_id prefix + 정렬 + 시간 범위를
     그대로 충족(resource_type만 추가 필터).
     """
-    stmt = select(DeletionAudit).where(DeletionAudit.user_id == user.user_id)
+    conds = [
+        DeletionAudit.user_id == user.user_id,
+        *time_window_conditions(DeletionAudit.deleted_at, since, until),
+    ]
     if resource_type:
-        stmt = stmt.where(DeletionAudit.resource_type.in_([rt.value for rt in resource_type]))
-    stmt = apply_time_window(stmt, DeletionAudit.deleted_at, since, until)
+        conds.append(DeletionAudit.resource_type.in_([rt.value for rt in resource_type]))
     primary = DeletionAudit.deleted_at.asc() if order == "asc" else DeletionAudit.deleted_at.desc()
-    stmt = stmt.order_by(primary, DeletionAudit.audit_id).limit(limit).offset(offset)
+    stmt = (
+        select(DeletionAudit)
+        .where(*conds)
+        .order_by(primary, DeletionAudit.audit_id)
+        .limit(limit)
+        .offset(offset)
+    )
     result = await session.execute(stmt)
-    return [row.to_schema() for row in result.scalars().all()]
+    rows = [row.to_schema() for row in result.scalars().all()]
+    await _maybe_set_total(
+        session,
+        response,
+        include_total,
+        select(func.count()).select_from(DeletionAudit).where(*conds),
+    )
+    return rows
 
 
 @router.patch(
