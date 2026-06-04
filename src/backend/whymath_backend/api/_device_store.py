@@ -30,6 +30,7 @@ Protocol 일관성을 유지한다(인메모리 동작은 즉시 반환이라 �
 from __future__ import annotations
 
 import hmac
+import itertools
 import secrets
 import uuid
 from collections.abc import Awaitable, Callable
@@ -67,6 +68,10 @@ class _CredRecord(NamedTuple):
 
     slice 37: `revoked_at` 추가 — Pg ORM과 parity(slice 23). revoke/cleanup_stale은
     `datetime.now(UTC)` 채움·미폐기는 None.
+
+    slice 54: `seq` 추가 — 등록 시 부여하는 *단조 증가* 순번(시계 무관). created_at 등
+    정렬 컬럼이 거친 시계 해상도에서 동일 틱에 충돌해도(같은 created_at) 등록 순서로
+    결정론적 2차 정렬을 보장한다(`list_for_user`). `_replace`는 seq를 자동 보존(불변).
     """
 
     user_id: uuid.UUID
@@ -75,6 +80,7 @@ class _CredRecord(NamedTuple):
     created_at: datetime
     last_used_at: datetime | None
     revoked_at: datetime | None
+    seq: int
 
 
 @runtime_checkable
@@ -183,6 +189,11 @@ class InMemoryDeviceStore:
     def __init__(self) -> None:
         # slice 32: 내부 행을 `_CredRecord` NamedTuple로 리팩터(이전 4-tuple).
         self._creds: dict[str, _CredRecord] = {}
+        # slice 54: 단조 증가 등록 순번 발급기 — 시계 해상도와 무관한 *논리적 순서*.
+        # `datetime.now(UTC)`는 플랫폼에 따라 해상도가 거칠어(예: Windows ~15ms) 빠른
+        # 연속 등록이 동일 created_at을 받을 수 있다 → 정렬·페이지네이션이 dict 삽입순서
+        # (구현 세부)에 암묵 의존하게 된다. seq를 2차 정렬키로 써 등록 순서를 *명시*한다.
+        self._seq = itertools.count()
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
         device_id = str(uuid.uuid4())
@@ -195,6 +206,7 @@ class InMemoryDeviceStore:
             created_at=datetime.now(UTC),
             last_used_at=None,
             revoked_at=None,
+            seq=next(self._seq),  # slice 54: 등록 순번(단조 증가)
         )
         return device_id, secret_plain
 
@@ -246,13 +258,17 @@ class InMemoryDeviceStore:
         # slice 41: since/until created_at 시간창 필터(inclusive)
         # slice 43: revoked_since/until은 revoked_at 시간창 — 미폐기 device는 자동 제외
         # (revoked_at IS NULL이라 비교 False)
-        items = [
-            DeviceInfo(
-                device_id=d,
-                created_at=c.created_at,
-                last_used_at=c.last_used_at,
-                revoked=c.revoked,
-                revoked_at=c.revoked_at,
+        # slice 54: seq(단조 등록 순번)를 정렬 2차키로 쓰려고 (cred, DeviceInfo) 쌍으로 필터.
+        matched = [
+            (
+                c,
+                DeviceInfo(
+                    device_id=d,
+                    created_at=c.created_at,
+                    last_used_at=c.last_used_at,
+                    revoked=c.revoked,
+                    revoked_at=c.revoked_at,
+                ),
             )
             for d, c in self._creds.items()
             if c.user_id == owner_id
@@ -274,13 +290,18 @@ class InMemoryDeviceStore:
                 used_until is None or (c.last_used_at is not None and c.last_used_at <= used_until)
             )
         ]
-        # slice 46: 동적 order_by — 별 두 그룹 정렬 후 합치는 패턴.
-        # slice 47: `nulls` 파라미터로 None 위치 명시 — last(기본·UI 친화) 또는 first.
-        not_null = [i for i in items if getattr(i, order_by) is not None]
-        nulls_items = [i for i in items if getattr(i, order_by) is None]
-        not_null.sort(key=lambda info: getattr(info, order_by), reverse=(order_dir == "desc"))
-        items = not_null + nulls_items if nulls == "last" else nulls_items + not_null
-        return items[offset : offset + limit]
+        # slice 46: 동적 order_by — None 두 그룹 정렬 후 합치는 패턴.
+        # slice 47: `nulls`로 None 위치 명시 — last(기본·UI 친화) 또는 first.
+        # slice 54: 1차 정렬키가 동률(같은 시계 틱→같은 created_at)이면 seq로 tie-break —
+        # 등록 순서를 정렬 방향과 *같은 방향*으로 적용(desc=나중 등록 먼저). 이로써 정렬·
+        # 페이지네이션이 시계 해상도나 dict 삽입순서에 의존하지 않는다. None 그룹은 시간값이
+        # 없어(정렬 대상 아님) 등록 순서(dict 삽입) 그대로 둔다 — slice 47 동작 보존.
+        reverse = order_dir == "desc"
+        not_null = [(c, info) for c, info in matched if getattr(info, order_by) is not None]
+        nulls_items = [(c, info) for c, info in matched if getattr(info, order_by) is None]
+        not_null.sort(key=lambda pair: (getattr(pair[1], order_by), pair[0].seq), reverse=reverse)
+        ordered = not_null + nulls_items if nulls == "last" else nulls_items + not_null
+        return [info for _, info in ordered[offset : offset + limit]]
 
     async def count_for_user(
         self,
@@ -340,6 +361,8 @@ class InMemoryDeviceStore:
     def reset(self) -> None:
         """테스트 격리용 — 모든 자격증명 초기화(sync — 호출자가 await 안 함)."""
         self._creds.clear()
+        # slice 54: 순번 발급기도 재시작 — 초기화 후 등록은 0부터(테스트 결정론).
+        self._seq = itertools.count()
 
 
 class PgDeviceStore:
