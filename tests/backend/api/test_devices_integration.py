@@ -522,3 +522,59 @@ def test_cached_device_store_on_live_pg_and_redis() -> None:
             await redis_client.aclose()
 
     asyncio.run(_run())
+
+
+def test_pg_list_for_user_seq_tiebreak_parity_on_live_pg() -> None:
+    """slice 63: 같은 created_at이면 seq(등록순)로 tie-break — InMemory(slice 54) parity.
+
+    desc=나중 등록 먼저·asc=먼저 등록 먼저. null 그룹(last_used_at 전부 NULL)은 방향 무관
+    등록순(seq ASC) — InMemory dict 삽입순 보존과 동형.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    try:
+        asyncio.run(_insert_user(uid))
+
+        async def _run() -> None:
+            engine = create_async_engine(_settings().database_url)
+            try:
+                sm = async_sessionmaker(engine, expire_on_commit=False)
+                store = PgDeviceStore(sm)
+                # 등록 순서대로 seq 증가(d1<d2<d3). register는 created_at=now()라 서로 다름.
+                d1, _ = await store.register(uid)
+                d2, _ = await store.register(uid)
+                d3, _ = await store.register(uid)
+                # 같은 created_at으로 강제 → 동률 시뮬(seq는 등록순 그대로).
+                async with sm() as s:
+                    await s.execute(
+                        text(
+                            "UPDATE device_credential "
+                            "SET created_at = '2026-01-01T00:00:00+00' WHERE user_id = :u"
+                        ),
+                        {"u": str(uid)},
+                    )
+                    await s.commit()
+                # created_at 동률 → desc면 seq DESC = 나중 등록(d3) 먼저
+                desc_ids = [i.device_id for i in await store.list_for_user(uid)]
+                assert desc_ids == [d3, d2, d1], desc_ids
+                # asc면 seq ASC = 먼저 등록(d1) 먼저
+                asc_ids = [
+                    i.device_id for i in await store.list_for_user(uid, order_dir="asc")
+                ]
+                assert asc_ids == [d1, d2, d3], asc_ids
+                # last_used_at 전부 NULL(미verify) → null 그룹은 *방향 무관* 등록순(seq ASC)
+                null_ids = [
+                    i.device_id
+                    for i in await store.list_for_user(
+                        uid, order_by="last_used_at", order_dir="desc"
+                    )
+                ]
+                assert null_ids == [d1, d2, d3], null_ids
+            finally:
+                await engine.dispose()
+
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup(uid))
