@@ -400,6 +400,17 @@ class Settings(BaseSettings):
             "여러 사용자가 등록 가능하도록 사용자 한도(5)의 2배."
         ),
     )
+    device_secret_encryption_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "slice 72: 디바이스 secret at-rest 봉투 암호화 마스터 키(base64 인코딩 32바이트="
+            "AES-256). 빈 값=암호화 비활성(평문 저장·기존 동작 폴백). DB 밖(env/Settings)에 "
+            "두어 DB dump만으로는 secret 복호 불가하게 한다. `WHYMATH_DEVICE_SECRET_"
+            "ENCRYPTION_KEY` env로만 주입(SecretStr — repr/로그 평문 차단·하드코딩 금지). "
+            '키 생성: `python -c "import base64,os; '
+            'print(base64.b64encode(os.urandom(32)).decode())"`. 진짜 KMS(회전·HSM)는 후속.'
+        ),
+    )
 
     coach_device_hmac_secret: SecretStr = Field(
         default=SecretStr(""),
