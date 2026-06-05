@@ -17,6 +17,7 @@ from whymath_backend.l3.pregenerate.validator import (
     ChainValidator,
     SeedValidator,
     SymPyArithmeticValidator,
+    SymPyInequalityValidator,
 )
 
 __all__ = [
@@ -29,4 +30,5 @@ __all__ = [
     "PrewarmStatus",
     "SeedValidator",
     "SymPyArithmeticValidator",
+    "SymPyInequalityValidator",
 ]

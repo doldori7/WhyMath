@@ -31,9 +31,13 @@ from whymath_backend.l3.pregenerate import (
     PrewarmReport,
     SeedValidator,
     SymPyArithmeticValidator,
+    SymPyInequalityValidator,
 )
 from whymath_backend.l3.pregenerate.__main__ import format_report, load_items
-from whymath_backend.l3.pregenerate.validator import _equality_is_false
+from whymath_backend.l3.pregenerate.validator import (
+    _equality_is_false,
+    _inequality_is_false,
+)
 from whymath_backend.l3.router import Router, cache_key_for
 
 
@@ -41,12 +45,16 @@ from whymath_backend.l3.router import Router, cache_key_for
 # 가짜 dependencies
 # ──────────────────────────────────────────────────────────────────────────
 class FakePregenProvider:
-    def __init__(self, *, text: str = "GENERATED", raises: Exception | None = None) -> None:
+    def __init__(
+        self, *, text: str = "GENERATED", raises: Exception | None = None
+    ) -> None:
         self._text = text
         self._raises = raises
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> str:
         self.calls.append((prompt, system, decision))
         if self._raises is not None:
             raise self._raises
@@ -142,7 +150,9 @@ class TestPrewarmReport:
                 PrewarmItemResult(cache_key="k1", status="written"),
                 PrewarmItemResult(cache_key="k2", status="written"),
                 PrewarmItemResult(cache_key="k3", status="skipped_exists"),
-                PrewarmItemResult(cache_key="k4", status="failed_validation", error="r"),
+                PrewarmItemResult(
+                    cache_key="k4", status="failed_validation", error="r"
+                ),
                 PrewarmItemResult(cache_key="", status="error", error="e"),
             )
         )
@@ -254,12 +264,20 @@ class TestSymPyArithmeticValidator:
         assert v.validate(_item(), "y + 1 = 2") is None
 
     def test_no_arithmetic_passes(self) -> None:
-        assert SymPyArithmeticValidator().validate(_item(), "이차방정식의 개념을 설명합니다.") is None
+        assert (
+            SymPyArithmeticValidator().validate(
+                _item(), "이차방정식의 개념을 설명합니다."
+            )
+            is None
+        )
 
     def test_inline_prose_prefixed_is_skipped_conservatively(self) -> None:
         """한글 단어가 공백으로 바로 앞에 붙은 인라인 등식은 보수적으로 건너뜀(통과)."""
         # 거짓이지만 한글 인접이라 추출 불가 → 통과(미탐). 보수적: false positive 0 우선.
-        assert SymPyArithmeticValidator().validate(_item(), "정답은 2 + 2 = 5 입니다") is None
+        assert (
+            SymPyArithmeticValidator().validate(_item(), "정답은 2 + 2 = 5 입니다")
+            is None
+        )
 
     def test_max_checks_must_be_positive(self) -> None:
         with pytest.raises(ValueError):
@@ -272,6 +290,85 @@ class TestSymPyArithmeticValidator:
 
     def test_satisfies_protocol(self) -> None:
         assert isinstance(SymPyArithmeticValidator(), SeedValidator)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# SymPyInequalityValidator — 부등식 도구 검증 (slice 35·보수적, false positive 0)
+# ──────────────────────────────────────────────────────────────────────────
+class TestSymPyInequalityValidator:
+    def test_true_inequality_passes(self) -> None:
+        v = SymPyInequalityValidator()
+        assert v.validate(_item(), "3 < 5") is None
+        assert v.validate(_item(), "9 > 2") is None
+        assert v.validate(_item(), "3 <= 3") is None  # 경계 참
+
+    def test_false_inequality_fails(self) -> None:
+        reason = SymPyInequalityValidator().validate(_item(), "5 < 3")
+        assert reason is not None
+        assert "inequality error" in reason
+
+    def test_all_operators(self) -> None:
+        v = SymPyInequalityValidator()
+        assert v.validate(_item(), "7 > 9") is not None  # 거짓
+        assert v.validate(_item(), "9 >= 10") is not None
+        assert v.validate(_item(), "5 <= 4") is not None
+        assert v.validate(_item(), "2 < 1") is not None
+
+    def test_unicode_le_ge_normalized(self) -> None:
+        v = SymPyInequalityValidator()
+        assert v.validate(_item(), "5 ≤ 3") is not None  # 거짓
+        assert v.validate(_item(), "2 ≥ 9") is not None
+        assert v.validate(_item(), "3 ≤ 5") is None  # 참
+
+    def test_arithmetic_operand_inequality(self) -> None:
+        v = SymPyInequalityValidator()
+        assert v.validate(_item(), "2 + 2 < 3") is not None  # 4<3 거짓
+        assert v.validate(_item(), "2 + 2 > 3") is None  # 4>3 참
+
+    def test_symbolic_no_false_positive(self) -> None:
+        """심볼릭 부등식(x < 2)은 통과(판정 불가)."""
+        assert SymPyInequalityValidator().validate(_item(), "x < 2 이면") is None
+
+    def test_chained_fragment_skipped(self) -> None:
+        """연쇄 부등식 'a < b < c'의 조각을 떼어 거짓 판정하지 않는다(보수적)."""
+        # "2 < 5 < 3" — 첫 매치 '2 < 5'(참)만 검사·'5 < 3' 조각은 인접 <로 건너뜀
+        assert SymPyInequalityValidator().validate(_item(), "2 < 5 < 3") is None
+
+    def test_no_inequality_passes(self) -> None:
+        assert SymPyInequalityValidator().validate(_item(), "부등식 개념 설명") is None
+
+    def test_max_checks_must_be_positive(self) -> None:
+        with pytest.raises(ValueError):
+            SymPyInequalityValidator(max_checks=0)
+
+    def test_max_checks_limits_validation(self) -> None:
+        """max_checks 초과 시 break — 이후 거짓 부등식을 미검사(보수적)."""
+        v = SymPyInequalityValidator(max_checks=1)
+        assert v.validate(_item(), "1 < 2\n5 < 3") is None
+
+    def test_chain_with_arithmetic(self) -> None:
+        """등식·부등식 검증을 ChainValidator로 묶어 둘 다 적용(줄 독립으로 표면화)."""
+        chain = ChainValidator([SymPyArithmeticValidator(), SymPyInequalityValidator()])
+        assert chain.validate(_item(), "2 + 2 = 4\n3 < 5") is None  # 둘 다 참
+        assert chain.validate(_item(), "2 + 2 = 4\n5 < 3") is not None  # 부등식 거짓
+        assert chain.validate(_item(), "2 + 2 = 5\n3 < 5") is not None  # 등식 거짓
+
+    def test_satisfies_protocol(self) -> None:
+        assert isinstance(SymPyInequalityValidator(), SeedValidator)
+
+
+class TestInequalityHelper:
+    """_inequality_is_false 직접 단위테스트 — 정규식이 못 거르는 방어 분기 커버."""
+
+    def test_false_proven(self) -> None:
+        assert _inequality_is_false("5", "3", "<") is not None
+        assert _inequality_is_false("3", "5", "<") is None  # 참
+
+    def test_symbolic_skipped(self) -> None:
+        assert _inequality_is_false("x", "2", "<") is None  # 심볼릭 판정 불가
+
+    def test_unparseable_skipped(self) -> None:
+        assert _inequality_is_false("(", "2", "<") is None  # 파싱 실패 보수적 통과
 
 
 class TestEqualityHelper:
@@ -504,7 +601,14 @@ class TestPrewarmHitsRuntimeCache:
             validator=AlwaysPassValidator(),
         )
         report = await prewarmer.prewarm(
-            [PregenItem(prompt=prompt, system=system, request=req, precomputed_response="PREWARMED")]
+            [
+                PregenItem(
+                    prompt=prompt,
+                    system=system,
+                    request=req,
+                    precomputed_response="PREWARMED",
+                )
+            ]
         )
         assert report.written == 1
 
@@ -554,8 +658,7 @@ class TestLoadItems:
 
     def test_invalid_json_raises_with_line_number(self) -> None:
         text = (
-            f'{{"prompt":"p","system":"s","request":{_REQ_JSON}}}\n'
-            "not-json-here\n"
+            f'{{"prompt":"p","system":"s","request":{_REQ_JSON}}}\n' "not-json-here\n"
         )
         with pytest.raises(ValueError, match="line 2"):
             load_items(text)
@@ -577,7 +680,9 @@ class TestFormatReport:
         assert "boom" in out
 
     def test_written_items_not_individually_listed(self) -> None:
-        report = PrewarmReport(items=(PrewarmItemResult(cache_key="k1", status="written"),))
+        report = PrewarmReport(
+            items=(PrewarmItemResult(cache_key="k1", status="written"),)
+        )
         out = format_report(report)
         assert "[written]" not in out  # 정상 항목은 요약만
 

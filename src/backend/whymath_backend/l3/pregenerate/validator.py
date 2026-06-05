@@ -91,21 +91,24 @@ _EQUALITY_RE = re.compile(rf"({_NUM_TOKEN})[ \t]*=[ \t]*({_NUM_TOKEN})")
 _ADJACENT_MATH = frozenset("+-*/^=()")
 
 
-def _is_standalone_equality(text: str, start: int, end: int) -> bool:
-    """매치 양옆(스페이스·탭 제외 첫 글자)이 연산자·피연산자·변수가 아니면 독립 수치 등식.
+def _is_standalone(
+    text: str, start: int, end: int, adjacent: frozenset[str] = _ADJACENT_MATH
+) -> bool:
+    """매치 양옆(스페이스·탭 제외 첫 글자)이 연산자·피연산자·변수가 아니면 독립 수치 식.
 
     스페이스·탭만 건너뛰고 개행은 구분자로 취급한다 — 연산자 인접("x + 1")은 잡되,
-    줄이 다른 인접 등식의 숫자는 건너뛰지 않는다.
+    줄이 다른 인접 식의 숫자는 건너뛰지 않는다. `adjacent`는 "더 큰 식의 일부"로 볼
+    인접 문자 집합(등식=`_ADJACENT_MATH`·부등식은 `<>`까지 — 연쇄 부등식 조각 차단).
     """
     i = start - 1
     while i >= 0 and text[i] in " \t":
         i -= 1
-    if i >= 0 and text[i] not in "\r\n" and (text[i] in _ADJACENT_MATH or text[i].isalnum()):
+    if i >= 0 and text[i] not in "\r\n" and (text[i] in adjacent or text[i].isalnum()):
         return False
     j = end
     while j < len(text) and text[j] in " \t":
         j += 1
-    if j < len(text) and text[j] not in "\r\n" and (text[j] in _ADJACENT_MATH or text[j].isalnum()):
+    if j < len(text) and text[j] not in "\r\n" and (text[j] in adjacent or text[j].isalnum()):
         return False
     return True
 
@@ -149,9 +152,71 @@ class SymPyArithmeticValidator:
         for match in _EQUALITY_RE.finditer(normalized):
             if checked >= self._max_checks:
                 break
-            if not _is_standalone_equality(normalized, match.start(), match.end()):
+            if not _is_standalone(normalized, match.start(), match.end()):
                 continue  # 더 큰 식의 일부 → 건너뜀(false positive 방지)
             reason = _equality_is_false(match.group(1).strip(), match.group(2).strip())
+            if reason is not None:
+                return reason
+            checked += 1
+        return None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# SymPy 부등식 검증 — 산술 등식 검증의 *부등식 판*(거짓 부등식 "5 < 3" 환각 차단).
+# 등식과 동일 보수 원칙: 심볼릭·파싱 불가·판정 불가는 통과, *거짓 증명* 시에만 탈락.
+# ──────────────────────────────────────────────────────────────────────────
+# 유니코드 부등호(≤·≥)를 ASCII로 정규화(LLM 출력이 자주 씀) + 기본 연산자 정규화.
+_INEQ_NORMALIZE = {**_MATH_OP_NORMALIZE, ord("≤"): "<=", ord("≥"): ">="}
+# 부등식 정규식 — 수치 토큰 사이의 <·>·<=·>=(긴 연산자 우선 매칭).
+_INEQUALITY_RE = re.compile(rf"({_NUM_TOKEN})[ \t]*(<=|>=|<|>)[ \t]*({_NUM_TOKEN})")
+# 부등식은 인접 판정에 부등호(<>)도 포함 — "2 < 5 < 3"의 조각("5 < 3")을 잘못 떼지 않게.
+_INEQ_ADJACENT = _ADJACENT_MATH | frozenset("<>")
+# 부등호 → SymPy 관계 생성자(수치 인자면 S.true/S.false로 평가).
+_INEQ_FUNC = {"<": sympy.Lt, "<=": sympy.Le, ">": sympy.Gt, ">=": sympy.Ge}
+
+
+def _inequality_is_false(lhs_s: str, rhs_s: str, op: str) -> str | None:
+    """수치 부등식 `lhs op rhs`가 *거짓으로 증명*되면 사유, 아니면 None(참/미정/파싱불가).
+
+    `_equality_is_false`와 동형 보수 원칙: 자유 변수(심볼릭)·파싱 실패·판정 불가는 통과,
+    SymPy가 관계를 `S.false`로 *확정*할 때만 실패.
+    """
+    try:
+        lhs = sympy.sympify(lhs_s, convert_xor=True)
+        rhs = sympy.sympify(rhs_s, convert_xor=True)
+        if lhs.free_symbols or rhs.free_symbols:
+            return None  # 심볼릭 → 판정 불가(통과)
+        rel = _INEQ_FUNC[op](lhs, rhs)
+    except Exception:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 건너뜀(통과)
+        return None
+    if rel is sympy.false:  # 거짓 확정
+        return f"inequality error: '{lhs_s} {op} {rhs_s}' (sympy: false)"
+    return None
+
+
+class SymPyInequalityValidator:
+    """응답에 명시된 순수 수치 부등식을 SymPy로 검증 — 거짓이면 탈락 (SeedValidator 충족).
+
+    `SymPyArithmeticValidator`의 부등식 판: "5 < 3"·"7 ≥ 9" 같은 *부등식 환각*을 거른다.
+    심볼릭(`x < 2`)·파싱 불가·판정 불가는 통과(보수적)·`max_checks`로 검사 수 상한.
+    """
+
+    def __init__(self, *, max_checks: int = 100) -> None:
+        if max_checks < 1:
+            raise ValueError("max_checks는 1 이상이어야 합니다")
+        self._max_checks = max_checks
+
+    def validate(self, item: PregenItem, response: str) -> str | None:
+        normalized = response.translate(_INEQ_NORMALIZE)
+        checked = 0
+        for match in _INEQUALITY_RE.finditer(normalized):
+            if checked >= self._max_checks:
+                break
+            if not _is_standalone(normalized, match.start(), match.end(), _INEQ_ADJACENT):
+                continue
+            reason = _inequality_is_false(
+                match.group(1).strip(), match.group(3).strip(), match.group(2)
+            )
             if reason is not None:
                 return reason
             checked += 1
