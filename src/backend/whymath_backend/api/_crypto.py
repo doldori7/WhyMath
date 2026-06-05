@@ -22,12 +22,24 @@ from __future__ import annotations
 
 import base64
 import os
-from typing import Any
+from typing import Any, Protocol
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 _KEY_BYTES = 32  # AES-256
 _NONCE_BYTES = 12  # 96-bit — GCM 표준 권장 nonce 길이
+
+
+class SupportsEnvelope(Protocol):
+    """봉투 암호화기 인터페이스 — `SecretCipher`(단일 키)·`MultiKeyCipher`(회전) 공통.
+
+    PgDeviceStore·저장 헬퍼는 이 구조적 타입에 의존해 단일/다중 키 구현을 교체 가능.
+    """
+
+    def encrypt(self, plaintext: str) -> tuple[bytes, bytes]: ...
+
+    def decrypt(self, ciphertext: bytes, nonce: bytes) -> str: ...
 
 
 class SecretCipher:
@@ -60,23 +72,60 @@ class SecretCipher:
         return plaintext.decode("utf-8")
 
 
-def build_secret_cipher(settings: Any) -> SecretCipher | None:
-    """`Settings.device_secret_encryption_key`에서 `SecretCipher` 생성 — 미설정이면 None.
+class MultiKeyCipher:
+    """키 회전 지원 봉투 암호화기 — *primary*로 암호화·*primary+fallbacks*로 복호.
 
-    None은 *암호화 비활성*(평문 폴백·기존 동작) 신호다(호출자가 분기). 키는 base64 인코딩
-    32바이트. 잘못된 길이면 `SecretCipher.__init__`이 `ValueError`(부팅 시 fail-fast 가능).
+    키 회전 무중단 핵심: 새 키(primary)를 도입해도 기존 키(fallbacks)로 암호화된 행이
+    *lockout 없이* 복호된다. 회전 절차: ① 새 키 생성·primary로 승격·구 키를 fallback으로
+    이동 ② 재시작(신규 등록은 새 키로 암호화·구 행은 fallback으로 복호) ③ (후속) 구 행을
+    새 키로 재암호화해 fallback 제거. encrypt는 *항상 primary*만 사용한다.
+    """
+
+    def __init__(self, primary: SecretCipher, fallbacks: list[SecretCipher] | None = None) -> None:
+        self._primary = primary
+        self._fallbacks: list[SecretCipher] = list(fallbacks or [])
+
+    def encrypt(self, plaintext: str) -> tuple[bytes, bytes]:
+        """항상 primary 키로 암호화(신규/재암호화 모두 현재 키로 수렴)."""
+        return self._primary.encrypt(plaintext)
+
+    def decrypt(self, ciphertext: bytes, nonce: bytes) -> str:
+        """primary → fallbacks 순으로 복호 시도. 모든 키 실패 시 `InvalidTag`(변조/미지원 키)."""
+        for cipher in (self._primary, *self._fallbacks):
+            try:
+                return cipher.decrypt(ciphertext, nonce)
+            except InvalidTag:
+                continue
+        raise InvalidTag("어떤 복호 키로도 복호 실패 — 변조이거나 키 회전 fallback 누락.")
+
+
+def build_secret_cipher(settings: Any) -> MultiKeyCipher | None:
+    """`Settings`에서 `MultiKeyCipher` 생성 — primary 키 미설정이면 None.
+
+    None은 *암호화 비활성*(평문 폴백·기존 동작) 신호다(호출자가 분기). primary 키는 base64
+    인코딩 32바이트. `device_secret_decryption_fallback_keys`(쉼표 구분 base64·복호 전용)는
+    키 회전 중 구 키로 암호화된 행을 lockout 없이 복호하기 위한 fallback. 잘못된 길이면
+    `SecretCipher.__init__`이 `ValueError`(부팅 시 fail-fast).
 
     `settings: Any` — `whymath_backend.config.Settings` 순환 import 회피(typing-only 명시).
     """
     raw = settings.device_secret_encryption_key.get_secret_value()
     if not raw:
         return None
-    key = base64.b64decode(raw)
-    return SecretCipher(key)
+    primary = SecretCipher(base64.b64decode(raw))
+    # 키 회전 fallback(복호 전용·쉼표 구분 base64). 빈 토큰은 무시.
+    fallbacks: list[SecretCipher] = []
+    fb_raw = settings.device_secret_decryption_fallback_keys.get_secret_value()
+    if fb_raw:
+        for part in fb_raw.split(","):
+            token = part.strip()
+            if token:
+                fallbacks.append(SecretCipher(base64.b64decode(token)))
+    return MultiKeyCipher(primary, fallbacks)
 
 
 def encrypt_secret_for_storage(
-    cipher: SecretCipher | None, secret_plain: str
+    cipher: SupportsEnvelope | None, secret_plain: str
 ) -> tuple[str | None, bytes | None, bytes | None]:
     """slice 73: register용 — `(secret_plain, secret_encrypted, nonce)` 저장 3-튜플 결정.
 
@@ -90,7 +139,7 @@ def encrypt_secret_for_storage(
 
 
 def resolve_stored_secret(
-    cipher: SecretCipher | None,
+    cipher: SupportsEnvelope | None,
     secret_plain: str | None,
     secret_encrypted: bytes | None,
     nonce: bytes | None,
@@ -116,7 +165,9 @@ def resolve_stored_secret(
 
 
 __all__ = [
+    "MultiKeyCipher",
     "SecretCipher",
+    "SupportsEnvelope",
     "build_secret_cipher",
     "encrypt_secret_for_storage",
     "resolve_stored_secret",

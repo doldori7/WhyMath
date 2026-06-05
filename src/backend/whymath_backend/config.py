@@ -408,7 +408,16 @@ class Settings(BaseSettings):
             "두어 DB dump만으로는 secret 복호 불가하게 한다. `WHYMATH_DEVICE_SECRET_"
             "ENCRYPTION_KEY` env로만 주입(SecretStr — repr/로그 평문 차단·하드코딩 금지). "
             '키 생성: `python -c "import base64,os; '
-            'print(base64.b64encode(os.urandom(32)).decode())"`. 진짜 KMS(회전·HSM)는 후속.'
+            'print(base64.b64encode(os.urandom(32)).decode())"`. 진짜 KMS(HSM)는 후속.'
+        ),
+    )
+    device_secret_decryption_fallback_keys: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "slice 75: 키 회전용 *복호 전용* fallback 키 목록(쉼표 구분 base64 32바이트). "
+            "primary 키 회전 시 구 키를 여기 두면 구 키로 암호화된 행이 lockout 없이 복호된다 "
+            "(encrypt는 항상 primary). 전 행 재암호화 후 제거. 빈 값=fallback 없음. "
+            "`WHYMATH_DEVICE_SECRET_DECRYPTION_FALLBACK_KEYS` env(SecretStr·하드코딩 금지)."
         ),
     )
 
