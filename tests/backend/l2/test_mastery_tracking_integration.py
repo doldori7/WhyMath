@@ -18,8 +18,23 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from whymath_backend.config import Settings
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
+from whymath_backend.db.models.concept import Concept, ProblemConcept
+from whymath_backend.db.models.problem import Problem
 from whymath_backend.l2 import BktModel
-from whymath_backend.l2.mastery_tracking import record_attempt_mastery
+from whymath_backend.l2.mastery_tracking import (
+    record_attempt_mastery,
+    record_problem_attempt_mastery,
+)
+from whymath_backend.schema.concept import Concept as ConceptSchema
+from whymath_backend.schema.concept import ProblemConcept as ProblemConceptSchema
+from whymath_backend.schema.enums import (
+    ConceptLevel,
+    ConceptRole,
+    Curriculum,
+    SourceType,
+    Subject,
+)
+from whymath_backend.schema.problem import Problem as ProblemSchema
 
 pytestmark = pytest.mark.integration
 
@@ -101,3 +116,112 @@ def test_record_attempt_mastery_appends_and_reads_prior_on_live_pg() -> None:
         asyncio.run(_run())
     finally:
         asyncio.run(_cleanup(uid))
+
+
+async def _cleanup_problem(problem_id: uuid.UUID, concept_ids: list[uuid.UUID]) -> None:
+    engine = create_async_engine(_settings().database_url)
+    cids = [str(c) for c in concept_ids]
+    try:
+        async with engine.begin() as conn:
+            # 자식(problem_concept) → 부모(problem·concept) 순
+            await conn.execute(
+                text("DELETE FROM problem_concept WHERE problem_id = :pid"),
+                {"pid": str(problem_id)},
+            )
+            await conn.execute(
+                text("DELETE FROM problem WHERE problem_id = :pid"), {"pid": str(problem_id)}
+            )
+            await conn.execute(
+                text("DELETE FROM concept WHERE concept_id = ANY(:cids)"), {"cids": cids}
+            )
+    finally:
+        await engine.dispose()
+
+
+def _concept(cid: uuid.UUID, code: str) -> Concept:
+    return Concept.from_schema(
+        ConceptSchema(concept_id=cid, code=code, name_ko=f"개념{code}", level=ConceptLevel.세부개념)
+    )
+
+
+def test_record_problem_attempt_mastery_only_assessed_roles_on_live_pg() -> None:
+    """문제↔개념 중 PRIMARY·TESTED만 숙달 갱신·SUPPORTING은 제외(역할 필터)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid = uuid.uuid4()
+    c_primary, c_tested, c_supporting = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    suffix = pid.hex[:8]
+
+    async def _setup() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as s:
+                s.add(
+                    Problem.from_schema(
+                        ProblemSchema(
+                            problem_id=pid,
+                            source_type=SourceType.자체생성,
+                            curriculum_version=Curriculum.REVISION_2022,
+                            valid_from_year=2022,
+                            subject=Subject.공통,
+                            unit_codes=[f"U-{suffix}"],
+                        )
+                    )
+                )
+                s.add_all(
+                    [
+                        _concept(c_primary, f"P-{suffix}"),
+                        _concept(c_tested, f"T-{suffix}"),
+                        _concept(c_supporting, f"S-{suffix}"),
+                    ]
+                )
+                await s.commit()
+            async with sm() as s:
+                s.add_all(
+                    [
+                        ProblemConcept.from_schema(
+                            ProblemConceptSchema(
+                                problem_id=pid, concept_id=c_primary, role=ConceptRole.PRIMARY
+                            )
+                        ),
+                        ProblemConcept.from_schema(
+                            ProblemConceptSchema(
+                                problem_id=pid, concept_id=c_tested, role=ConceptRole.TESTED
+                            )
+                        ),
+                        ProblemConcept.from_schema(
+                            ProblemConceptSchema(
+                                problem_id=pid,
+                                concept_id=c_supporting,
+                                role=ConceptRole.SUPPORTING,
+                            )
+                        ),
+                    ]
+                )
+                await s.commit()
+        finally:
+            await engine.dispose()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as session:
+                records = await record_problem_attempt_mastery(session, uid, pid, True)
+            # PRIMARY·TESTED 2개만 갱신·SUPPORTING 제외
+            updated = {r.concept_id for r in records}
+            assert updated == {c_primary, c_tested}
+            assert c_supporting not in updated
+            assert all(float(r.mastery) == 0.69 for r in records)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup(uid))
+        asyncio.run(_cleanup_problem(pid, [c_primary, c_tested, c_supporting]))

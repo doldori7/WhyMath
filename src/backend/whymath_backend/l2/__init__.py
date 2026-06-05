@@ -24,6 +24,7 @@ from whymath_backend.l2.mastery_tracking import (
     MasteryRecord,
     compute_mastery_record,
     record_attempt_mastery,
+    record_problem_attempt_mastery,
 )
 
 __all__ = [
@@ -36,5 +37,6 @@ __all__ = [
     "posterior_mastery",
     "probability_correct",
     "record_attempt_mastery",
+    "record_problem_attempt_mastery",
     "update_mastery",
 ]

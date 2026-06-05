@@ -14,7 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.l2 import BktModel, BktParameters, compute_mastery_record, update_mastery
-from whymath_backend.l2.mastery_tracking import record_attempt_mastery
+from whymath_backend.l2.mastery_tracking import (
+    record_attempt_mastery,
+    record_problem_attempt_mastery,
+)
 
 _M = BktModel()  # 기본 파라미터(p_init=0.3 등)
 _UID = uuid.uuid4()
@@ -156,3 +159,76 @@ class TestRecordAttemptMastery:
         fake = _FakeSession(prior=None)
         row = await record_attempt_mastery(cast(AsyncSession, fake), _UID, _CID, True)
         assert row.mastery == 0.69
+
+
+class _QResult:
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> _QResult:
+        return self
+
+    def all(self) -> list[Any]:
+        return self._rows
+
+    def first(self) -> Any:
+        return self._rows[0] if self._rows else None
+
+
+class _QueueSession:
+    """execute 호출마다 미리 큐잉한 결과를 순서대로 반환 — 다중 쿼리(개념 조회 → 개념별
+    prior) 시뮬. record_problem_attempt_mastery: execute#1=개념 id들·이후 N=개념별 prior."""
+
+    def __init__(self, results: list[_QResult]) -> None:
+        self._results = results
+        self._i = 0
+        self.added: list[Any] = []
+        self.commits = 0
+
+    async def execute(self, _stmt: Any) -> _QResult:
+        result = self._results[self._i]
+        self._i += 1
+        return result
+
+    def add(self, obj: Any) -> None:
+        self.added.append(obj)
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+
+class TestRecordProblemAttemptMastery:
+    """채점 풀이 → 평가 개념 전파(개념 조회 → 개념별 갱신)."""
+
+    async def test_propagates_to_all_assessed_concepts(self) -> None:
+        cid1, cid2 = uuid.uuid4(), uuid.uuid4()
+        ts = datetime(2026, 3, 1, tzinfo=UTC)
+        # execute#1 → 두 개념·이후 각 개념 prior 없음
+        fake = _QueueSession([_QResult([cid1, cid2]), _QResult([]), _QResult([])])
+        records = await record_problem_attempt_mastery(
+            cast(AsyncSession, fake), _UID, uuid.uuid4(), True, model=_M, measured_at=ts
+        )
+        assert [r.concept_id for r in records] == [cid1, cid2]
+        assert all(r.mastery == 0.69 for r in records)  # 첫 관측·정답
+        assert all(r.measured_at == ts for r in records)  # 한 풀이=같은 시각
+        assert len(fake.added) == 2
+        assert fake.commits == 2
+
+    async def test_no_mapped_concepts_returns_empty(self) -> None:
+        """문제↔개념 매핑이 없으면 숙달 갱신 0(빈 리스트·add 0)."""
+        fake = _QueueSession([_QResult([])])
+        records = await record_problem_attempt_mastery(
+            cast(AsyncSession, fake), _UID, uuid.uuid4(), True
+        )
+        assert records == []
+        assert fake.added == []
+        assert fake.commits == 0
+
+    async def test_single_concept_incorrect(self) -> None:
+        cid = uuid.uuid4()
+        fake = _QueueSession([_QResult([cid]), _QResult([])])
+        records = await record_problem_attempt_mastery(
+            cast(AsyncSession, fake), _UID, uuid.uuid4(), False, model=_M
+        )
+        assert len(records) == 1
+        assert records[0].mastery == 0.15  # 오답
