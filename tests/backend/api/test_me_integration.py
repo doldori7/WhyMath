@@ -1353,3 +1353,71 @@ def test_me_ability_snapshot_per_concept_on_live_pg() -> None:
             assert byc[0]["theta"] == 4.0
     finally:
         asyncio.run(_cleanup_all())
+
+
+def test_me_session_end_auto_captures_snapshot_on_live_pg() -> None:
+    """slice 34: PATCH /sessions/{id}/end → θ 스냅샷 자동 적재·멱등 재호출은 미중복(실 PG)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid = uuid.uuid4()
+    sid = uuid.uuid4()
+    suffix = pid.hex[:8]
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(
+            Problem.from_schema(
+                ProblemSchema(
+                    problem_id=pid,
+                    source_type=SourceType.자체생성,
+                    curriculum_version=Curriculum.REVISION_2022,
+                    valid_from_year=2022,
+                    subject=Subject.공통,
+                    unit_codes=[f"U-{suffix}"],
+                    difficulty_overall=5.0,
+                )
+            )
+        )
+        await _add_all(
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True
+            )
+        )
+        await _add_all(_session_row(sid, uid))  # 미종료 세션
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                for sql in (
+                    "DELETE FROM ability_snapshot WHERE user_id=:u",
+                    "DELETE FROM problem_attempt WHERE user_id=:u",
+                    "DELETE FROM learning_session WHERE user_id=:u",
+                    "DELETE FROM problem WHERE problem_id=:p",
+                    "DELETE FROM user_profile WHERE user_id=:u",
+                ):
+                    await conn.execute(text(sql), {"u": str(uid), "p": str(pid)})
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # 처음 종료 → θ 스냅샷 자동 적재
+            r1 = client.patch(f"/v1/me/sessions/{sid}/end", headers=auth)
+            assert r1.status_code == 200, r1.text
+            snaps = client.get("/v1/me/ability/snapshots", headers=auth).json()
+            assert len(snaps) == 1
+            assert snaps[0]["theta"] == 4.0
+            assert snaps[0]["concept_id"] is None
+            # 멱등 재호출 → 이미 종료 → 스냅샷 미중복
+            r2 = client.patch(f"/v1/me/sessions/{sid}/end", headers=auth)
+            assert r2.status_code == 200
+            snaps2 = client.get("/v1/me/ability/snapshots", headers=auth).json()
+            assert len(snaps2) == 1  # 여전히 1개
+    finally:
+        asyncio.run(_cleanup_all())

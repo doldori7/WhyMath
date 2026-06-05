@@ -190,16 +190,19 @@ async def _close_owned_resource(
     owner_id: uuid.UUID,
     close_field: str,
     not_found_detail: str,
-) -> _LifecycleRow:
+) -> tuple[_LifecycleRow, bool]:
     """본인 소유 리소스 lifecycle 종료 — `close_field`(ended_at/completed_at)를 now로.
 
     *idempotent*: 이미 채워졌으면 보존하고 commit 안 함(현 상태 반환). slice 50/52/53 동형.
+    `(row, newly_closed)` 반환 — `newly_closed`는 *이번 호출에서 처음 종료*했는지(slice 34
+    세션 종료 자동 트리거가 멱등 재호출 시 중복 동작을 피하도록).
     """
     row = await _get_owned_or_404(session, model, pk, owner_id, not_found_detail)
-    if getattr(row, close_field) is None:
+    newly_closed = getattr(row, close_field) is None
+    if newly_closed:
         setattr(row, close_field, datetime.now(UTC))
         await session.commit()
-    return row
+    return row, newly_closed
 
 
 async def _delete_owned_resource(
@@ -1406,8 +1409,12 @@ async def end_my_session(
     user: ConsentedUser,
     session: SessionDep,
 ) -> LearningSessionSchema:
-    """slice 50 (slice 55 리팩터): 본인 학습 세션 종료(`ended_at`=now)·idempotent·404 비누설."""
-    row = await _close_owned_resource(
+    """slice 50 (slice 55 리팩터): 본인 학습 세션 종료(`ended_at`=now)·idempotent·404 비누설.
+
+    slice 34: *처음 종료*될 때 현재 전과목 θ를 `ability_snapshot`에 자동 적재(세션 종료 트리거 —
+    수동 POST 불요·성장 곡선 자연 샘플링). 멱등 재호출(이미 종료)이나 채점 이력 0이면 미적재.
+    """
+    row, newly_closed = await _close_owned_resource(
         session,
         LearningSession,
         session_id,
@@ -1415,7 +1422,31 @@ async def end_my_session(
         "ended_at",
         "학습 세션을 찾을 수 없습니다.",
     )
+    if newly_closed:
+        await _maybe_capture_ability_snapshot(session, user.user_id)
     return row.to_schema()
+
+
+async def _maybe_capture_ability_snapshot(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """현재 전과목 θ를 `ability_snapshot`에 적재 — 채점 이력 있을 때만(빈 θ 노이즈 회피).
+
+    slice 32 수동 캡처와 동일 산식·전과목 단일 θ(concept_id null). 세션 종료 트리거(slice 34)용.
+    """
+    theta, se, count = await _estimate_global_ability(session, user_id)
+    if count == 0:
+        return  # 채점 이력 0 → 의미 없는 θ=0 스냅샷 미적재
+    session.add(
+        AbilitySnapshot.from_schema(
+            AbilitySnapshotSchema(
+                user_id=user_id,
+                theta=theta,
+                standard_error=se,
+                response_count=count,
+                measured_at=datetime.now(UTC),
+            )
+        )
+    )
+    await session.commit()
 
 
 @router.delete(
@@ -1454,7 +1485,7 @@ async def end_my_dialogue(
     session: SessionDep,
 ) -> DialogueSchema:
     """slice 52 (slice 55 리팩터): 본인 Dialogue 종료(`ended_at`=now)·idempotent·404 비누설."""
-    row = await _close_owned_resource(
+    row, _ = await _close_owned_resource(
         session,
         Dialogue,
         dialogue_id,
@@ -1499,7 +1530,7 @@ async def complete_my_assessment(
 ) -> AssessmentSchema:
     """slice 53 (slice 55 리팩터): 본인 Assessment 완료(`completed_at`=now). 컬럼은
     `completed_at`(ended_at 아님). idempotent·404 비누설."""
-    row = await _close_owned_resource(
+    row, _ = await _close_owned_resource(
         session,
         Assessment,
         assessment_id,
