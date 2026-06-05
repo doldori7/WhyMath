@@ -1392,3 +1392,51 @@ class TestConceptDiagnosis:
         client = _diagnosis_client([], [])
         resp = client.get("/v1/me/diagnosis/concepts?agreement=bogus")
         assert resp.status_code == 422
+
+
+class TestDiagnosisSummary:
+    """slice L2-27: GET /v1/me/diagnosis/summary — 진단 집계(대시보드 헤더)."""
+
+    def test_empty_zeros(self) -> None:
+        body = _diagnosis_client([], []).get("/v1/me/diagnosis/summary").json()
+        assert body == {
+            "total_concepts": 0,
+            "agree": 0,
+            "irt_higher": 0,
+            "bkt_higher": 0,
+            "insufficient": 0,
+            "attention_count": 0,
+            "weakest_concept_id": None,
+            "weakest_concept_name": None,
+        }
+
+    def test_requires_auth(self) -> None:
+        app = create_app()
+
+        async def _sess() -> AsyncIterator[_QueueSession]:
+            yield _QueueSession([_AQResult([]), _AQResult([])])
+
+        app.dependency_overrides[get_session] = _sess
+        assert TestClient(app).get("/v1/me/diagnosis/summary").status_code == 401
+
+    def test_aggregates_and_weakest(self) -> None:
+        """c1 insufficient(BKT 0.3)·c2 agree(0.5+θ0)·c3 irt_higher(0.1+전부정답·θ4)."""
+        c1, c2, c3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        client = _diagnosis_client(
+            [(c1, "I", "불충분", 0.3), (c2, "A", "합의", 0.5), (c3, "H", "높θ", 0.1)],
+            [
+                (c2, "A", "합의", True, 3.0),
+                (c2, "A", "합의", False, 3.0),
+                (c3, "H", "높θ", True, 3.0),
+            ],
+        )
+        body = client.get("/v1/me/diagnosis/summary").json()
+        assert body["total_concepts"] == 3
+        assert body["agree"] == 1
+        assert body["irt_higher"] == 1
+        assert body["bkt_higher"] == 0
+        assert body["insufficient"] == 1
+        assert body["attention_count"] == 1  # irt_higher + bkt_higher
+        # 최약점 = 최저 신호 c3(0.1)
+        assert body["weakest_concept_id"] == str(c3)
+        assert body["weakest_concept_name"] == "높θ"
