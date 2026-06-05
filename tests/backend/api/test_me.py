@@ -1348,3 +1348,47 @@ class TestConceptDiagnosis:
         )
         body = client.get("/v1/me/diagnosis/concepts").json()
         assert [i["concept_id"] for i in body] == [str(c_low), str(c_high)]
+
+    def test_limit_returns_n_weakest(self) -> None:
+        """slice 26: ?limit=1 → 약점 먼저 정렬 후 상위 1개(가장 약한 개념)."""
+        c_low, c_mid, c_high = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        client = _diagnosis_client(
+            [
+                (c_high, "H", "상", 0.9),
+                (c_low, "L", "하", 0.1),
+                (c_mid, "M", "중", 0.5),
+            ],
+            [],
+        )
+        body = client.get("/v1/me/diagnosis/concepts?limit=1").json()
+        assert len(body) == 1
+        assert body[0]["concept_id"] == str(c_low)
+
+    def test_agreement_filter_only_matching(self) -> None:
+        """slice 26: ?agreement=insufficient → 해당 신호 개념만."""
+        # BKT만(insufficient) c1 · 합의(agree) c2
+        c_insuff, c_agree = uuid.uuid4(), uuid.uuid4()
+        client = _diagnosis_client(
+            [(c_insuff, "I", "불충분", 0.3), (c_agree, "A", "합의", 0.5)],
+            [(c_agree, "A", "합의", True, 3.0), (c_agree, "A", "합의", False, 3.0)],
+        )
+        body = client.get("/v1/me/diagnosis/concepts?agreement=insufficient").json()
+        assert [i["concept_id"] for i in body] == [str(c_insuff)]
+        assert all(i["agreement"] == "insufficient" for i in body)
+
+    def test_agreement_filter_multi_or(self) -> None:
+        """반복 지정 시 OR — 두 신호 모두 포함."""
+        c_insuff, c_agree = uuid.uuid4(), uuid.uuid4()
+        client = _diagnosis_client(
+            [(c_insuff, "I", "불충분", 0.3), (c_agree, "A", "합의", 0.5)],
+            [(c_agree, "A", "합의", True, 3.0), (c_agree, "A", "합의", False, 3.0)],
+        )
+        body = client.get(
+            "/v1/me/diagnosis/concepts?agreement=insufficient&agreement=agree"
+        ).json()
+        assert len(body) == 2
+
+    def test_invalid_agreement_rejected_422(self) -> None:
+        client = _diagnosis_client([], [])
+        resp = client.get("/v1/me/diagnosis/concepts?agreement=bogus")
+        assert resp.status_code == 422
