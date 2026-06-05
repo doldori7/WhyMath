@@ -44,6 +44,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
 from whymath_backend.db.models._orm_enum import _pg_enum
+from whymath_backend.schema.assessment import (
+    AbilitySnapshot as SchemaAbilitySnapshot,
+)
 from whymath_backend.schema.assessment import Assessment as SchemaAssessment
 from whymath_backend.schema.assessment import (
     ConceptMasteryHistory as SchemaConceptMasteryHistory,
@@ -187,4 +190,49 @@ class ConceptMasteryHistory(Base):
         return SchemaConceptMasteryHistory.model_validate(data)
 
 
-__all__ = ["Assessment", "ConceptMasteryHistory"]
+class AbilitySnapshot(Base):
+    """IRT 능력 θ 시계열 적재 ORM — slice 31(`ability_snapshot`). 성장 곡선 영속.
+
+    `concept_mastery_history`(BKT 숙달 시계열)와 *상보적*: 이쪽은 IRT 능력 θ(logit)를 시점별로
+    저장한다. surrogate PK `snapshot_id`(gen_random_uuid). `user_id`는 §느슨참조라 *FK 아님*
+    (concept_mastery_history 선례). `concept_id` null=전 과목 단일 θ. `theta`·`standard_error`는
+    실수(logit·SE)라 `Float`(Numeric 정밀도 제약 불요). `measured_at`은 server_default now()
+    (캡처 시각 자동). 접근 패턴(본인 시계열·시간순)용 `idx_ability_snapshot_user`.
+    """
+
+    __tablename__ = "ability_snapshot"
+
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        sa.Uuid,
+        primary_key=True,
+        server_default=sa.text("gen_random_uuid()"),
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, nullable=False)
+    concept_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)
+    theta: Mapped[float] = mapped_column(sa.Float, nullable=False)
+    standard_error: Mapped[float | None] = mapped_column(sa.Float)
+    response_count: Mapped[int] = mapped_column(sa.Integer, nullable=False)
+    measured_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True),
+        nullable=False,
+        server_default=sa.func.now(),
+    )
+
+    __table_args__ = (sa.Index("idx_ability_snapshot_user", "user_id", sa.desc("measured_at")),)
+
+    @classmethod
+    def from_schema(cls, schema: SchemaAbilitySnapshot) -> AbilitySnapshot:
+        """검증된 `schema.AbilitySnapshot` → 영속 ORM(schema↔db seam)."""
+        data = schema.model_dump()
+        mapped_keys = {col.key for col in sa.inspect(cls).mapper.column_attrs}
+        kwargs = {k: v for k, v in data.items() if k in mapped_keys and v is not None}
+        return cls(**kwargs)
+
+    def to_schema(self) -> SchemaAbilitySnapshot:
+        """영속 ORM → `schema.AbilitySnapshot`(Pydantic 검증 복원)."""
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        return SchemaAbilitySnapshot.model_validate(data)
+
+
+__all__ = ["AbilitySnapshot", "Assessment", "ConceptMasteryHistory"]
