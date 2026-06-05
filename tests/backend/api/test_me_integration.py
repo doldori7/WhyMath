@@ -771,3 +771,79 @@ def test_me_ability_estimates_theta_from_attempts_on_live_pg() -> None:
             assert client.get("/v1/me/ability").status_code == 401  # 무토큰
     finally:
         asyncio.run(_cleanup_all())
+
+
+def test_me_next_problem_recommends_unattempted_on_live_pg() -> None:
+    """GET /v1/me/next-problem — θ 근방·미응답 문항을 NOT IN 제외 후 정보량 최대로 추천."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid_done = uuid.uuid4()  # 이미 푼(정답·난이도 5) → θ 상한 + NOT IN 제외 대상
+    pid_mid = uuid.uuid4()  # 미응답 난이도 3
+    pid_hard = uuid.uuid4()  # 미응답 난이도 5 → θ=4에서 정보량 최대
+    suffix = pid_done.hex[:8]
+
+    def _problem(pid: uuid.UUID, difficulty: float) -> Problem:
+        return Problem.from_schema(
+            ProblemSchema(
+                problem_id=pid,
+                source_type=SourceType.자체생성,
+                curriculum_version=Curriculum.REVISION_2022,
+                valid_from_year=2022,
+                subject=Subject.공통,
+                unit_codes=[f"U-{suffix}"],
+                difficulty_overall=difficulty,
+            )
+        )
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(_problem(pid_done, 5.0))
+        await _add_all(_problem(pid_mid, 3.0))
+        await _add_all(_problem(pid_hard, 5.0))
+        await _add_all(
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(),
+                user_id=uid,
+                problem_id=pid_done,
+                is_correct=True,
+            )
+        )
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("DELETE FROM problem_attempt WHERE user_id=:u"),
+                    {"u": str(uid)},
+                )
+                for pid in (pid_done, pid_mid, pid_hard):
+                    await conn.execute(
+                        text("DELETE FROM problem WHERE problem_id=:p"),
+                        {"p": str(pid)},
+                    )
+                await conn.execute(
+                    text("DELETE FROM user_profile WHERE user_id=:u"), {"u": str(uid)}
+                )
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        with _client() as client:
+            resp = client.get(
+                "/v1/me/next-problem", headers={"Authorization": f"Bearer {token}"}
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            assert body["theta"] == 4.0  # 정답 1건 → 능력 상한
+            # 이미 푼 난이도-5 문항(pid_done)은 NOT IN 제외 → 미응답 난이도-5(pid_hard) 추천
+            assert body["problem_id"] == str(pid_hard)
+            assert body["problem_id"] != str(pid_done)
+            assert body["difficulty"] == 5.0
+            assert client.get("/v1/me/next-problem").status_code == 401  # 무토큰
+    finally:
+        asyncio.run(_cleanup_all())
