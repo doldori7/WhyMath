@@ -954,3 +954,114 @@ def test_me_next_problem_weak_concept_priority_on_live_pg() -> None:
             assert resp.json()["problem_id"] == str(pid_weak)
     finally:
         asyncio.run(_cleanup_all())
+
+
+def test_me_ability_by_concept_on_live_pg() -> None:
+    """GET /v1/me/ability/by-concept — 채점 풀이를 개념별로 묶어 θ 분리 추정·약점 먼저(end-to-end)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    p_strong, p_weak = uuid.uuid4(), uuid.uuid4()
+    c_strong, c_weak = uuid.uuid4(), uuid.uuid4()
+    suffix = uid.hex[:8]
+
+    def _problem(pid: uuid.UUID) -> Problem:
+        return Problem.from_schema(
+            ProblemSchema(
+                problem_id=pid,
+                source_type=SourceType.자체생성,
+                curriculum_version=Curriculum.REVISION_2022,
+                valid_from_year=2022,
+                subject=Subject.공통,
+                unit_codes=[f"U-{suffix}"],
+                difficulty_overall=3.0,
+            )
+        )
+
+    def _concept(cid: uuid.UUID, code: str, name: str) -> Concept:
+        return Concept.from_schema(
+            ConceptSchema(
+                concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념
+            )
+        )
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(
+            _concept(c_strong, f"S-{suffix}", "강점개념"),
+            _concept(c_weak, f"W-{suffix}", "약점개념"),
+        )
+        await _add_all(_problem(p_strong), _problem(p_weak))
+        await _add_all(
+            ProblemConcept.from_schema(
+                ProblemConceptSchema(
+                    problem_id=p_strong, concept_id=c_strong, role=ConceptRole.PRIMARY
+                )
+            ),
+            ProblemConcept.from_schema(
+                ProblemConceptSchema(
+                    problem_id=p_weak, concept_id=c_weak, role=ConceptRole.PRIMARY
+                )
+            ),
+        )
+        # 강점 문항 정답(θ↑)·약점 문항 오답(θ↓)
+        await _add_all(
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(),
+                user_id=uid,
+                problem_id=p_strong,
+                is_correct=True,
+            ),
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(),
+                user_id=uid,
+                problem_id=p_weak,
+                is_correct=False,
+            ),
+        )
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                for sql, params in (
+                    ("DELETE FROM problem_attempt WHERE user_id=:u", {"u": str(uid)}),
+                    (
+                        "DELETE FROM problem_concept WHERE problem_id = ANY(:p)",
+                        {"p": [str(p_strong), str(p_weak)]},
+                    ),
+                    (
+                        "DELETE FROM problem WHERE problem_id = ANY(:p)",
+                        {"p": [str(p_strong), str(p_weak)]},
+                    ),
+                    (
+                        "DELETE FROM concept WHERE concept_id = ANY(:c)",
+                        {"c": [str(c_strong), str(c_weak)]},
+                    ),
+                    ("DELETE FROM user_profile WHERE user_id=:u", {"u": str(uid)}),
+                ):
+                    await conn.execute(text(sql), params)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        with _client() as client:
+            resp = client.get(
+                "/v1/me/ability/by-concept",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 200, resp.text
+            rows = resp.json()
+            assert len(rows) == 2
+            # 약점(오답·θ=-4) 개념 먼저, 강점(정답·θ=4) 나중
+            assert rows[0]["concept_id"] == str(c_weak)
+            assert rows[0]["theta"] == -4.0
+            assert rows[0]["concept_name"] == "약점개념"
+            assert rows[1]["concept_id"] == str(c_strong)
+            assert rows[1]["theta"] == 4.0
+            assert client.get("/v1/me/ability/by-concept").status_code == 401
+    finally:
+        asyncio.run(_cleanup_all())
