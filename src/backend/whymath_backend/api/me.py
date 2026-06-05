@@ -750,6 +750,11 @@ AbilityHistoryLimit = Annotated[
     int | None,
     Query(ge=1, le=500, description="최근 N개 지점만(시간 오름차순 중 끝 N). 생략 시 전체."),
 ]
+# slice 33: 캡처 시 전과목 θ뿐 아니라 개념별 θ도 함께 적재(개념 곡선).
+IncludeConcepts = Annotated[
+    bool,
+    Query(description="true면 전과목 θ + *개념별* θ를 함께 적재(개념별 성장 곡선). 기본 false."),
+]
 
 
 @router.post(
@@ -761,22 +766,39 @@ AbilityHistoryLimit = Annotated[
 async def capture_ability_snapshot(
     user: ConsentedUser,
     session: SessionDep,
+    include_concepts: IncludeConcepts = False,
 ) -> AbilitySnapshotSchema:
     """현재 전 과목 θ를 계산해 `ability_snapshot`에 1행 적재 — 성장 곡선 시점 캡처.
 
     파생(slice 28 `/ability/history`·매 요청 재계산)과 달리 *적재형*: 호출 시점의 θ를 보존한다
-    (세션 종료·일/주 주기 등 호출자가 캡처 시점 결정). `concept_id`=null(전 과목 단일 θ). θ
-    계산은 `/ability`(slice 11)와 동일 헬퍼. user_id 스코핑.
+    (세션 종료·일/주 주기 등 호출자가 캡처 시점 결정). 전과목 행은 `concept_id`=null. θ 계산은
+    `/ability`(slice 11)와 동일 헬퍼. `include_concepts=true`면 개념별 θ(slice 18 계산)도 *같은
+    시각*으로 함께 적재(개념별 곡선·`concept_id` 값 보유). 응답은 전과목 스냅샷. user_id 스코핑.
     """
+    now = datetime.now(UTC)
     theta, se, count = await _estimate_global_ability(session, user.user_id)
     snap = AbilitySnapshotSchema(
         user_id=user.user_id,
         theta=theta,
         standard_error=se,
         response_count=count,
-        measured_at=datetime.now(UTC),
+        measured_at=now,
     )
     session.add(AbilitySnapshot.from_schema(snap))
+    if include_concepts:
+        for item in await _compute_concept_abilities(session, user.user_id):
+            session.add(
+                AbilitySnapshot.from_schema(
+                    AbilitySnapshotSchema(
+                        user_id=user.user_id,
+                        concept_id=item.concept_id,
+                        theta=item.theta,
+                        standard_error=item.standard_error,
+                        response_count=item.response_count,
+                        measured_at=now,
+                    )
+                )
+            )
     await session.commit()
     return snap
 
@@ -789,18 +811,21 @@ async def capture_ability_snapshot(
 async def list_ability_snapshots(
     user: ConsentedUser,
     session: SessionDep,
+    concept_id: ConceptIdFilter = None,
     limit: AbilityHistoryLimit = None,
 ) -> list[AbilitySnapshotSchema]:
     """적재된 θ 스냅샷을 *시간 오름차순*(성장 곡선)으로 조회. `?limit`이면 최근 N개(끝 N).
 
     파생 `/ability/history`(이력 재생)와 달리 *적재된* 시점들을 그대로 반환(캡처 당시 θ 보존).
-    user_id 스코핑·읽기.
+    `?concept_id` 생략 시 *전과목 곡선*(concept_id IS NULL)만·지정 시 그 개념 곡선만(slice 33
+    개념별 적재와 결선). 곡선이 섞이지 않게 기본 전과목. user_id 스코핑·읽기.
     """
-    stmt = (
-        select(AbilitySnapshot)
-        .where(AbilitySnapshot.user_id == user.user_id)
-        .order_by(AbilitySnapshot.measured_at.asc())
-    )
+    conds = [AbilitySnapshot.user_id == user.user_id]
+    if concept_id is not None:
+        conds.append(AbilitySnapshot.concept_id == concept_id)
+    else:
+        conds.append(AbilitySnapshot.concept_id.is_(None))  # 기본=전과목 곡선
+    stmt = select(AbilitySnapshot).where(*conds).order_by(AbilitySnapshot.measured_at.asc())
     snaps = [row.to_schema() for row in (await session.execute(stmt)).scalars().all()]
     if limit is not None:
         snaps = snaps[-limit:]
@@ -839,6 +864,16 @@ async def get_my_ability_by_concept(
     개념 먼저* 정렬(asc·동률은 concept_id)로 "무엇을 보완할지" 우선순위 노출. BKT 개념별 숙달과
     *상보적*(BKT=정오답 확률·IRT=난이도 보정 능력). user_id 스코핑·읽기(마이그레이션 불필요).
     """
+    items = await _compute_concept_abilities(session, user.user_id)
+    # 약점(저능력) 개념 먼저 — asc 정렬·동률은 concept_id로 안정화(결정론).
+    items.sort(key=lambda i: (i.theta, str(i.concept_id)))
+    return items
+
+
+async def _compute_concept_abilities(
+    session: AsyncSession, user_id: uuid.UUID
+) -> list[ConceptAbilityItem]:
+    """개념별 IRT θ·SE·응답수·메타 산출(정렬 전) — `/ability/by-concept`·snapshot 캡처 공유."""
     stmt = (
         select(
             ProblemConcept.concept_id,
@@ -851,7 +886,7 @@ async def get_my_ability_by_concept(
         .join(ProblemConcept, ProblemConcept.problem_id == Problem.problem_id)
         .outerjoin(Concept, ProblemConcept.concept_id == Concept.concept_id)
         .where(
-            ProblemAttempt.user_id == user.user_id,
+            ProblemAttempt.user_id == user_id,
             ProblemAttempt.is_correct.isnot(None),
             ProblemConcept.role.in_(_ASSESSED_ROLES),
             Problem.difficulty_overall.isnot(None),
@@ -879,8 +914,6 @@ async def get_my_ability_by_concept(
                 standard_error=None if math.isinf(se) else se,
             )
         )
-    # 약점(저능력) 개념 먼저 — asc 정렬·동률은 concept_id로 안정화(결정론).
-    items.sort(key=lambda i: (i.theta, str(i.concept_id)))
     return items
 
 

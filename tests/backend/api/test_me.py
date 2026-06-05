@@ -1124,6 +1124,48 @@ class TestAbilitySnapshots:
     def test_list_requires_auth(self) -> None:
         assert _no_auth_client().get("/v1/me/ability/snapshots").status_code == 401
 
+    def test_capture_include_concepts_writes_per_concept(self) -> None:
+        """slice 33: ?include_concepts=true → 전과목 1행 + 개념별 N행 적재(같은 시각)."""
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        # execute#1=전과목 attempt(is_correct,difficulty)·#2=개념별(concept_id,code,name,...)
+        session = _QueueSession(
+            [
+                _AQResult([(True, 3.0), (False, 3.0)]),
+                _AQResult(
+                    [
+                        (c1, "C1", "개념1", True, 3.0),
+                        (c2, "C2", "개념2", False, 3.0),
+                    ]
+                ),
+            ]
+        )
+        client = _attempts_client(session)
+        resp = client.post("/v1/me/ability/snapshots?include_concepts=true")
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["concept_id"] is None  # 응답은 전과목 스냅샷
+        assert len(session.added) == 3  # 전과목 1 + 개념 2
+        assert session.commits == 1
+        # 적재된 행 중 개념별 2행은 concept_id 보유
+        concept_ids = {s.concept_id for s in session.added if s.concept_id is not None}
+        assert concept_ids == {c1, c2}
+
+    def test_list_concept_id_filter_serializes(self) -> None:
+        """slice 33: ?concept_id 지정 → 그 개념 스냅샷(concept_id 직렬화)."""
+        cid = uuid.uuid4()
+        snap = AbilitySnapshot.from_schema(
+            AbilitySnapshotSchema(
+                user_id=_UID,
+                concept_id=cid,
+                theta=0.5,
+                response_count=1,
+                measured_at=datetime(2026, 1, 1, tzinfo=UTC),
+            )
+        )
+        client, _ = _client([snap])
+        body = client.get(f"/v1/me/ability/snapshots?concept_id={cid}").json()
+        assert len(body) == 1
+        assert body[0]["concept_id"] == str(cid)
+
 
 class TestAbilityByConcept:
     """slice L2-18: GET /v1/me/ability/by-concept — 개념별 θ 분리 추정.
