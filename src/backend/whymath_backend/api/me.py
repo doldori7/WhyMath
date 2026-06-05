@@ -806,6 +806,79 @@ async def get_my_ability_by_concept(
     return items
 
 
+# ── slice L2-28: GET /v1/me/ability/history (θ 성장 곡선 — 채점 이력 시간 재생) ─────
+AbilityHistoryLimit = Annotated[
+    int | None,
+    Query(ge=1, le=500, description="최근 N개 지점만(시간 오름차순 중 끝 N). 생략 시 전체."),
+]
+
+
+class AbilityHistoryPoint(BaseModel):
+    """`GET /v1/me/ability/history`의 한 시점 — k번째 채점 직후 누적 θ."""
+
+    as_of: datetime = Field(description="이 지점에 반영된 마지막 채점 시각(created_at).")
+    theta: float = Field(description="이 시점까지 누적 응답으로 추정한 θ(logit).")
+    standard_error: float | None = Field(
+        default=None, description="이 시점 θ의 표준오차. 측정 불가면 null."
+    )
+    response_count: int = Field(description="이 시점까지 누적된 채점 풀이 수(=k).")
+
+
+@router.get(
+    "/ability/history",
+    response_model=list[AbilityHistoryPoint],
+    summary="내 IRT 능력 성장 곡선(θ — 채점 이력 시간 재생)",
+)
+async def get_my_ability_history(
+    user: ConsentedUser,
+    session: SessionDep,
+    limit: AbilityHistoryLimit = None,
+) -> list[AbilityHistoryPoint]:
+    """채점 풀이 이력을 *시간순 재생*해 매 풀이 직후 누적 θ(성장 곡선)를 산출 — 적재 없이 파생.
+
+    `problem_attempt`(채점됨·난이도 보유)를 `created_at` 오름차순으로 모아, k번째까지의 응답으로
+    `estimate_ability`(slice 7)·`ability_standard_error`(slice 13)를 매 단계 계산해 시점 1개씩 방출.
+    θ 시계열을 *저장하지 않고* 기존 이력에서 재구성(마이그레이션 0). `?limit`이면 *끝* N개(최근)만.
+    전 과목 단일 θ(개념별·저장형 시계열은 후속). user_id 스코핑·읽기.
+
+    v1 한계: 매 단계 θ 전체 재추정(O(n²))·시점=풀이당 1개(다운샘플·증분 추정은 후속).
+    """
+    stmt = (
+        select(
+            ProblemAttempt.created_at,
+            ProblemAttempt.is_correct,
+            Problem.difficulty_overall,
+        )
+        .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
+        .where(
+            ProblemAttempt.user_id == user.user_id,
+            ProblemAttempt.is_correct.isnot(None),
+            ProblemAttempt.created_at.isnot(None),
+            Problem.difficulty_overall.isnot(None),
+        )
+        .order_by(ProblemAttempt.created_at.asc())
+    )
+    responses: list[tuple[IrtItem, bool]] = []
+    points: list[AbilityHistoryPoint] = []
+    for created_at, is_correct, difficulty in (await session.execute(stmt)).all():
+        responses.append(
+            (IrtItem(difficulty=_difficulty_to_logit(float(difficulty))), bool(is_correct))
+        )
+        theta = estimate_ability(responses)
+        se = ability_standard_error(theta, [it for it, _ in responses])
+        points.append(
+            AbilityHistoryPoint(
+                as_of=created_at,
+                theta=theta,
+                standard_error=None if math.isinf(se) else se,
+                response_count=len(responses),
+            )
+        )
+    if limit is not None:
+        points = points[-limit:]
+    return points
+
+
 # ── slice L2-19: GET /v1/me/diagnosis/concepts (BKT 숙달 ↔ IRT θ 교차검증) ────────
 # BKT 숙달 P(L)과 IRT 능력 프록시(logistic θ)의 차가 이 임계를 넘으면 *불일치 신호*로 분기.
 _DIAGNOSIS_TOL = 0.2

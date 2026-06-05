@@ -774,6 +774,17 @@ def test_me_ability_estimates_theta_from_attempts_on_live_pg() -> None:
             lo, hi = body["confidence_interval"]
             assert lo < body["theta"] < hi
             assert client.get("/v1/me/ability").status_code == 401  # 무토큰
+            # slice 28: θ 성장 곡선 — 채점 1건 → 시점 1개(response_count 1·θ 상한)
+            hist = client.get(
+                "/v1/me/ability/history", headers={"Authorization": f"Bearer {token}"}
+            )
+            assert hist.status_code == 200, hist.text
+            hpoints = hist.json()
+            assert len(hpoints) == 1
+            assert hpoints[0]["response_count"] == 1
+            assert hpoints[0]["theta"] == 4.0
+            assert hpoints[0]["as_of"]  # created_at 노출
+            assert client.get("/v1/me/ability/history").status_code == 401
     finally:
         asyncio.run(_cleanup_all())
 
