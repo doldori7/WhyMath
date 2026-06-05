@@ -1291,9 +1291,13 @@ class TestConceptDiagnosis:
         assert item["response_count"] == 2
         assert item["agreement"] == "agree"
         assert item["concept_name"] == "개념"
+        # slice 21: L4 코칭 처방 결선 — 합의·수준 0.5<0.6 → foundation
+        assert item["coaching"]["focus"] == "foundation"
+        assert item["coaching"]["prompt"]
+        assert item["coaching"]["rationale"]
 
     def test_irt_higher_signal(self) -> None:
-        """BKT 0.1인데 전부 정답(θ=4·프록시≈0.98) → irt_higher."""
+        """BKT 0.1인데 전부 정답(θ=4·프록시≈0.98) → irt_higher·코칭 consolidate."""
         cid = uuid.uuid4()
         client = _diagnosis_client(
             [(cid, "C", "개념", 0.1)], [(cid, "C", "개념", True, 3.0)]
@@ -1301,18 +1305,20 @@ class TestConceptDiagnosis:
         item = client.get("/v1/me/diagnosis/concepts").json()[0]
         assert item["agreement"] == "irt_higher"
         assert item["irt_theta"] == 4.0
+        assert item["coaching"]["focus"] == "consolidate"
 
     def test_bkt_higher_signal(self) -> None:
-        """BKT 0.9인데 전부 오답(θ=-4·프록시≈0.02) → bkt_higher."""
+        """BKT 0.9인데 전부 오답(θ=-4·프록시≈0.02) → bkt_higher·코칭 retrieval."""
         cid = uuid.uuid4()
         client = _diagnosis_client(
             [(cid, "C", "개념", 0.9)], [(cid, "C", "개념", False, 3.0)]
         )
         item = client.get("/v1/me/diagnosis/concepts").json()[0]
         assert item["agreement"] == "bkt_higher"
+        assert item["coaching"]["focus"] == "retrieval"
 
     def test_bkt_only_concept_insufficient(self) -> None:
-        """IRT 채점 없는 개념 → theta·proxy null·insufficient·count 0."""
+        """IRT 채점 없는 개념 → theta·proxy null·insufficient·코칭 diagnose."""
         cid = uuid.uuid4()
         client = _diagnosis_client([(cid, "C", "개념", 0.6)], [])
         item = client.get("/v1/me/diagnosis/concepts").json()[0]
@@ -1321,6 +1327,7 @@ class TestConceptDiagnosis:
         assert item["irt_mastery_proxy"] is None
         assert item["response_count"] == 0
         assert item["agreement"] == "insufficient"
+        assert item["coaching"]["focus"] == "diagnose"
 
     def test_irt_only_concept_insufficient(self) -> None:
         """BKT 숙달 없는 개념(IRT만) → bkt null·insufficient."""

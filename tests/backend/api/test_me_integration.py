@@ -1170,6 +1170,9 @@ def test_me_concept_diagnosis_cross_check_on_live_pg() -> None:
             assert by_concept[str(c2)]["agreement"] == "bkt_higher"  # 오답인데 BKT 높음
             assert by_concept[str(c1)]["bkt_mastery"] == 0.1
             assert by_concept[str(c2)]["irt_theta"] == -4.0
+            # slice 21: L4 코칭 처방 결선(L2→L4→L5 풀 스택)
+            assert by_concept[str(c1)]["coaching"]["focus"] == "consolidate"
+            assert by_concept[str(c2)]["coaching"]["focus"] == "retrieval"
             assert client.get("/v1/me/diagnosis/concepts").status_code == 401
     finally:
         asyncio.run(_cleanup_all())
