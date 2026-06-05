@@ -728,6 +728,83 @@ async def get_my_ability(
     )
 
 
+# ── slice L2-18: GET /v1/me/ability/by-concept (개념별 IRT 능력 θ 분리) ───────────
+class ConceptAbilityItem(BaseModel):
+    """개념별 IRT 능력 — `GET /v1/me/ability/by-concept`의 한 개념 항목."""
+
+    concept_id: uuid.UUID = Field(description="개념 id.")
+    concept_code: str | None = Field(default=None, description="개념 코드(orphan이면 null).")
+    concept_name: str | None = Field(default=None, description="개념명(orphan이면 null).")
+    theta: float = Field(description="이 개념 문항들로 추정한 능력 θ(logit).")
+    response_count: int = Field(description="이 개념 추정에 쓰인 채점 풀이 수.")
+    standard_error: float | None = Field(
+        default=None, description="θ 표준오차 SE=1/√I(θ). 측정 불가면 null."
+    )
+
+
+@router.get(
+    "/ability/by-concept",
+    response_model=list[ConceptAbilityItem],
+    summary="내 개념별 IRT 능력(θ — 개념마다 분리 추정)",
+)
+async def get_my_ability_by_concept(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> list[ConceptAbilityItem]:
+    """채점 풀이 이력을 *문항의 평가 개념별*로 묶어 개념마다 IRT 능력 θ를 분리 추정.
+
+    단일 전과목 θ(`/me/ability`)를 개념/도메인 축으로 쪼갠다(다차원 진단). `problem_attempt`(채점됨)
+    를 `problem`·`problem_concept`(role∈PRIMARY/TESTED)와 조인해 개념별 (난이도→b, 정답) 응답을
+    만들고 `estimate_ability`(slice 7)로 θ·`ability_standard_error`(slice 13)로 SE 추정. 개념명은
+    `concept` LEFT JOIN(orphan은 null·slice L2-5d 패턴). 난이도 NULL 문항 제외. *능력 낮은(약점)
+    개념 먼저* 정렬(asc·동률은 concept_id)로 "무엇을 보완할지" 우선순위 노출. BKT 개념별 숙달과
+    *상보적*(BKT=정오답 확률·IRT=난이도 보정 능력). user_id 스코핑·읽기(마이그레이션 불필요).
+    """
+    stmt = (
+        select(
+            ProblemConcept.concept_id,
+            Concept.code,
+            Concept.name_ko,
+            ProblemAttempt.is_correct,
+            Problem.difficulty_overall,
+        )
+        .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
+        .join(ProblemConcept, ProblemConcept.problem_id == Problem.problem_id)
+        .outerjoin(Concept, ProblemConcept.concept_id == Concept.concept_id)
+        .where(
+            ProblemAttempt.user_id == user.user_id,
+            ProblemAttempt.is_correct.isnot(None),
+            ProblemConcept.role.in_(_ASSESSED_ROLES),
+            Problem.difficulty_overall.isnot(None),
+        )
+    )
+    grouped: dict[uuid.UUID, list[tuple[IrtItem, bool]]] = {}
+    meta: dict[uuid.UUID, tuple[str | None, str | None]] = {}
+    for concept_id, code, name, is_correct, difficulty in (await session.execute(stmt)).all():
+        item = IrtItem(difficulty=_difficulty_to_logit(float(difficulty)))
+        grouped.setdefault(concept_id, []).append((item, bool(is_correct)))
+        meta[concept_id] = (code, name)
+
+    items = []
+    for concept_id, responses in grouped.items():
+        theta = estimate_ability(responses)
+        se = ability_standard_error(theta, [it for it, _ in responses])
+        code, name = meta[concept_id]
+        items.append(
+            ConceptAbilityItem(
+                concept_id=concept_id,
+                concept_code=code,
+                concept_name=name,
+                theta=theta,
+                response_count=len(responses),
+                standard_error=None if math.isinf(se) else se,
+            )
+        )
+    # 약점(저능력) 개념 먼저 — asc 정렬·동률은 concept_id로 안정화(결정론).
+    items.sort(key=lambda i: (i.theta, str(i.concept_id)))
+    return items
+
+
 # ── slice L2-12: GET /v1/me/next-problem (적응형 출제 — IRT 정보량 최대 미응답 문항) ──
 _CANDIDATE_POOL_SIZE = 50  # θ 근방 후보 풀 크기(SQL로 거리순 선별 후 파이썬 정보량 비교)
 # slice 15: CAT 중단 규칙 목표 표준오차 — 응답한 문항 기준 SE가 이 값 이하로 내려가면

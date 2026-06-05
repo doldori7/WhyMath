@@ -1004,6 +1004,65 @@ class TestAbility:
         assert se_many < se_few
 
 
+class TestAbilityByConcept:
+    """slice L2-18: GET /v1/me/ability/by-concept — 개념별 θ 분리 추정.
+
+    FakeSession._Result.all()이 (concept_id, code, name, is_correct, difficulty) 5튜플을 반환
+    (조인 시뮬). 그룹화·정렬·θ/SE 산출만 본다(실 JOIN/WHERE는 통합테스트).
+    """
+
+    def test_empty_returns_empty_list(self) -> None:
+        client, _ = _client([])
+        resp = client.get("/v1/me/ability/by-concept")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_requires_auth(self) -> None:
+        assert _no_auth_client().get("/v1/me/ability/by-concept").status_code == 401
+
+    def test_single_concept_theta_and_meta(self) -> None:
+        """한 개념 1정답·1오답(난이도3) → θ=0·count 2·SE=1/√0.5·개념 메타 노출."""
+        cid = uuid.uuid4()
+        client, _ = _client(
+            [
+                (cid, "TRIG-1", "삼각함수", True, 3.0),
+                (cid, "TRIG-1", "삼각함수", False, 3.0),
+            ]
+        )
+        body = client.get("/v1/me/ability/by-concept").json()
+        assert len(body) == 1
+        item = body[0]
+        assert item["concept_id"] == str(cid)
+        assert item["concept_code"] == "TRIG-1"
+        assert item["concept_name"] == "삼각함수"
+        assert item["theta"] == 0.0
+        assert item["response_count"] == 2
+        assert round(item["standard_error"], 5) == 1.41421
+
+    def test_multiple_concepts_sorted_weakest_first(self) -> None:
+        """능력 낮은(약점) 개념 먼저 — 전부오답(θ=-4) < 전부정답(θ=4)."""
+        c_weak, c_strong = uuid.uuid4(), uuid.uuid4()
+        client, _ = _client(
+            [
+                (c_strong, "S", "강점개념", True, 3.0),
+                (c_weak, "W", "약점개념", False, 3.0),
+            ]
+        )
+        body = client.get("/v1/me/ability/by-concept").json()
+        assert [i["concept_id"] for i in body] == [str(c_weak), str(c_strong)]
+        assert body[0]["theta"] == -4.0
+        assert body[1]["theta"] == 4.0
+
+    def test_orphan_concept_null_meta(self) -> None:
+        """concept 행 없는(orphan) 개념은 code·name null(LEFT JOIN)."""
+        cid = uuid.uuid4()
+        client, _ = _client([(cid, None, None, True, 3.0)])
+        item = client.get("/v1/me/ability/by-concept").json()[0]
+        assert item["concept_code"] is None
+        assert item["concept_name"] is None
+        assert item["theta"] == 4.0  # 단일 정답 → 상한
+
+
 class TestNextProblem:
     """slice L2-12: GET /v1/me/next-problem — IRT 정보량 최대 미응답 문항 추천.
 
