@@ -849,6 +849,9 @@ def test_me_next_problem_recommends_unattempted_on_live_pg() -> None:
             assert body["problem_id"] == str(pid_hard)
             assert body["problem_id"] != str(pid_done)
             assert body["difficulty"] == 5.0
+            # slice 15: 응답 1건뿐 → SE 노출(유한)·측정 불충분
+            assert body["standard_error"] is not None
+            assert body["measurement_sufficient"] is False
             assert client.get("/v1/me/next-problem").status_code == 401  # 무토큰
     finally:
         asyncio.run(_cleanup_all())

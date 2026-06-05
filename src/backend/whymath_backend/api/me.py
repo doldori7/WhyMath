@@ -730,10 +730,14 @@ async def get_my_ability(
 
 # ── slice L2-12: GET /v1/me/next-problem (적응형 출제 — IRT 정보량 최대 미응답 문항) ──
 _CANDIDATE_POOL_SIZE = 50  # θ 근방 후보 풀 크기(SQL로 거리순 선별 후 파이썬 정보량 비교)
+# slice 15: CAT 중단 규칙 목표 표준오차 — 응답한 문항 기준 SE가 이 값 이하로 내려가면
+# "충분히 정밀하게 측정됨"으로 보고 적응 검사 중단을 권고(measurement_sufficient=True).
+# 0.3은 통상적 CAT 종료 임계(θ ± ~0.6 95% 구간). 추후 모드/설정별 보정은 후속.
+_TARGET_SE = 0.3
 
 
 class NextProblemResponse(BaseModel):
-    """`GET /v1/me/next-problem` 응답 — IRT CAT(적응형 출제) 추천."""
+    """`GET /v1/me/next-problem` 응답 — IRT CAT(적응형 출제) 추천 + 측정 정밀도."""
 
     problem_id: uuid.UUID | None = Field(
         default=None,
@@ -743,6 +747,14 @@ class NextProblemResponse(BaseModel):
     difficulty: float | None = Field(
         default=None,
         description="추천 문항의 difficulty_overall(전문가 1~5). 없으면 null.",
+    )
+    standard_error: float | None = Field(
+        default=None,
+        description="현재 θ 추정의 표준오차(응답한 문항 기준·slice 13). 응답 없으면 null.",
+    )
+    measurement_sufficient: bool = Field(
+        default=False,
+        description=f"SE가 목표({_TARGET_SE}) 이하면 True — 적응 검사 중단 권고(CAT 중단 규칙).",
     )
 
 
@@ -761,6 +773,10 @@ async def recommend_next_problem(
     (difficulty_overall) 있는 *미응답* 문항을 θ 근방(|b-θ| 최소)으로 SQL 선별(`_CANDIDATE_POOL_SIZE`
     개)·`select_next_item`(slice 12)으로 정보량 최대 1개 선택. 후보 없으면 problem_id=null.
     난이도→b 매핑은 slice 11의 `_difficulty_to_logit`(보정 b는 fit_jmle 후속).
+
+    CAT 중단 규칙(slice 15): *응답한 문항* 기준 표준오차 SE(slice 13)와 `measurement_sufficient`
+    (SE≤`_TARGET_SE`)을 함께 반환 — 호출자는 충분하면 검사를 멈추고 아니면 추천 문항을 출제한다
+    (적응 검사 루프 구동). 추천(problem_id)은 중단 권고와 무관히 후보가 있으면 항상 제공.
     """
     attempt_stmt = (
         select(
@@ -783,6 +799,12 @@ async def recommend_next_problem(
     theta = estimate_ability(responses)
     attempted_ids = {pid for pid, _ic, _d in attempt_rows}
 
+    # slice 15: 응답한 문항(administered) 기준 측정 정밀도 — CAT 중단 규칙 신호.
+    administered_items = [item for item, _ in responses]
+    se = ability_standard_error(theta, administered_items)
+    standard_error = None if math.isinf(se) else se
+    measurement_sufficient = standard_error is not None and standard_error <= _TARGET_SE
+
     # θ(logit) → difficulty_overall(1~5) 척도로 역변환해 SQL 거리순 정렬: difficulty = b + 중앙값.
     candidate_stmt = select(Problem.problem_id, Problem.difficulty_overall).where(
         Problem.difficulty_overall.isnot(None)
@@ -797,12 +819,20 @@ async def recommend_next_problem(
     items = [IrtItem(difficulty=_difficulty_to_logit(float(d))) for _pid, d in candidate_rows]
     best = select_next_item(theta, items)
     if best is None:
-        return NextProblemResponse(problem_id=None, theta=theta, difficulty=None)
+        return NextProblemResponse(
+            problem_id=None,
+            theta=theta,
+            difficulty=None,
+            standard_error=standard_error,
+            measurement_sufficient=measurement_sufficient,
+        )
     chosen_id, chosen_difficulty = candidate_rows[best]
     return NextProblemResponse(
         problem_id=chosen_id,
         theta=theta,
         difficulty=float(chosen_difficulty),
+        standard_error=standard_error,
+        measurement_sufficient=measurement_sufficient,
     )
 
 
