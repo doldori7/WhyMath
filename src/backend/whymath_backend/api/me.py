@@ -556,6 +556,34 @@ async def list_my_mastery(
     return rows
 
 
+@router.get(
+    "/mastery/current",
+    response_model=list[ConceptMasteryHistorySchema],
+    summary="현재 개념별 숙달 스냅샷(개념마다 최신 측정 1건)",
+)
+async def list_my_current_mastery(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> list[ConceptMasteryHistorySchema]:
+    """본인의 *개념별 최신* 숙달 1건씩 — 현재 상태 스냅샷("한눈에"). `/mastery`는 전 측정
+    시계열(학습 곡선)이고, 본 엔드포인트는 개념마다 가장 최근 측정만.
+
+    Postgres `DISTINCT ON (concept_id)` + `ORDER BY concept_id, measured_at DESC`로 개념별
+    최신 행을 고른다(개념당 1행). 스냅샷이라 페이지네이션·필터 없음(연습한 개념 수로 한정).
+    """
+    stmt = (
+        select(ConceptMasteryHistory)
+        .where(ConceptMasteryHistory.user_id == user.user_id)
+        .distinct(ConceptMasteryHistory.concept_id)
+        .order_by(
+            ConceptMasteryHistory.concept_id,
+            ConceptMasteryHistory.measured_at.desc(),
+        )
+    )
+    result = await session.execute(stmt)
+    return [row.to_schema() for row in result.scalars().all()]
+
+
 @router.patch(
     "/sessions/{session_id}/end",
     response_model=LearningSessionSchema,
