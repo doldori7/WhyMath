@@ -14,6 +14,11 @@ from __future__ import annotations
 
 from whymath_backend.l4.hint_deferral import REVEALS, HintLevel, decide_hint_level
 from whymath_backend.l4.lthc import LthcAdaptation, MasteryLevel, adapt_lthc
+from whymath_backend.l4.metacognitive_trigger import (
+    CoachingFocus,
+    CoachingTrigger,
+    recommend_coaching,
+)
 from whymath_backend.l4.misconception import (
     CATALOG as MISCONCEPTION_CATALOG,
 )
@@ -38,6 +43,8 @@ from whymath_backend.l4.socratic import SocraticCategory, select_category
 from whymath_backend.l4.tone_filter import filter_tone
 
 __all__ = [
+    "CoachingFocus",
+    "CoachingTrigger",
     "HintLevel",
     "InterventionDecision",
     "InterventionPattern",
@@ -59,6 +66,7 @@ __all__ = [
     "decide_hint_level",
     "diagnose",
     "filter_tone",
+    "recommend_coaching",
     "select_category",
     "select_intervention",
 ]
