@@ -1008,6 +1008,62 @@ class TestAbility:
         assert se_many < se_few
 
 
+class TestAbilityHistory:
+    """slice L2-28: GET /v1/me/ability/history — θ 성장 곡선(시간 재생).
+
+    FakeSession._Result.all()이 (created_at, is_correct, difficulty) 튜플(시간 오름차순)을
+    반환. 누적 재생·시점 방출만 본다(실 ORDER BY는 통합테스트).
+    """
+
+    @staticmethod
+    def _ts(day: int) -> datetime:
+        return datetime(2026, 1, day, tzinfo=UTC)
+
+    def test_empty_returns_empty(self) -> None:
+        client, _ = _client([])
+        resp = client.get("/v1/me/ability/history")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_requires_auth(self) -> None:
+        assert _no_auth_client().get("/v1/me/ability/history").status_code == 401
+
+    def test_cumulative_growth_curve(self) -> None:
+        """1오답→θ-4, +1정답→θ0, +1정답→θ>0. response_count 1·2·3·as_of 보존."""
+        client, _ = _client(
+            [
+                (self._ts(1), False, 3.0),
+                (self._ts(2), True, 3.0),
+                (self._ts(3), True, 3.0),
+            ]
+        )
+        body = client.get("/v1/me/ability/history").json()
+        assert [p["response_count"] for p in body] == [1, 2, 3]
+        assert body[0]["theta"] == -4.0  # 전부 오답
+        assert body[1]["theta"] == 0.0  # 1F1T 대칭
+        assert body[2]["theta"] > 0.0  # 2T1F → 양수
+        assert body[0]["as_of"].startswith("2026-01-01")
+
+    def test_limit_returns_last_n(self) -> None:
+        """?limit=1 → 끝(최근) 1개 지점만."""
+        client, _ = _client(
+            [
+                (self._ts(1), False, 3.0),
+                (self._ts(2), True, 3.0),
+                (self._ts(3), True, 3.0),
+            ]
+        )
+        body = client.get("/v1/me/ability/history?limit=1").json()
+        assert len(body) == 1
+        assert body[0]["response_count"] == 3  # 마지막 지점
+
+    def test_standard_error_present(self) -> None:
+        client, _ = _client([(self._ts(1), True, 3.0), (self._ts(2), False, 3.0)])
+        body = client.get("/v1/me/ability/history").json()
+        # 응답 있으니 SE 유한(측정 가능)
+        assert all(p["standard_error"] is not None for p in body)
+
+
 class TestAbilityByConcept:
     """slice L2-18: GET /v1/me/ability/by-concept — 개념별 θ 분리 추정.
 
