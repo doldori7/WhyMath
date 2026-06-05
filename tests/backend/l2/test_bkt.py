@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 from pydantic import ValidationError
 
@@ -12,6 +14,7 @@ from whymath_backend.l2.bkt import (
     DEFAULT_BKT_PARAMETERS,
     BktModel,
     BktParameters,
+    apply_forgetting,
     apply_learning,
     posterior_mastery,
     probability_correct,
@@ -150,3 +153,50 @@ class TestBktModel:
         model = BktModel(params)
         assert model.initial_mastery == 0.6
         assert model.params is params
+
+
+class TestForgetting:
+    """slice L2-6: 망각(시간 감쇠) — 사전값 초과 숙달분을 경과일에 따라 지수 감쇠."""
+
+    def test_default_p_forget_zero(self) -> None:
+        assert _P.p_forget == 0.0
+
+    def test_p_forget_negative_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            BktParameters(p_forget=-0.1)
+
+    def test_p_forget_above_one_allowed(self) -> None:
+        # 확률이 아니라 *율*이라 1 초과 허용(빠른 감쇠).
+        assert BktParameters(p_forget=2.0).p_forget == 2.0
+
+    def test_no_decay_when_rate_zero(self) -> None:
+        assert apply_forgetting(0.9, 100.0, BktParameters()) == 0.9
+
+    def test_no_decay_when_elapsed_zero(self) -> None:
+        assert apply_forgetting(0.9, 0.0, BktParameters(p_forget=0.1)) == 0.9
+
+    def test_negative_elapsed_no_decay(self) -> None:
+        assert apply_forgetting(0.9, -5.0, BktParameters(p_forget=0.1)) == 0.9
+
+    def test_decays_toward_p_init(self) -> None:
+        """0.9(gain 0.6 위 p_init 0.3)·λ=0.05·10일 → 0.3 + 0.6·exp(-0.5)."""
+        p = BktParameters(p_forget=0.05)
+        expected = 0.3 + 0.6 * math.exp(-0.5)
+        assert apply_forgetting(0.9, 10.0, p) == pytest.approx(expected)
+        # 원래보다 낮고 사전보다 높음(완전 망각 아님)
+        assert p.p_init < apply_forgetting(0.9, 10.0, p) < 0.9
+
+    def test_more_elapsed_more_decay(self) -> None:
+        p = BktParameters(p_forget=0.05)
+        assert apply_forgetting(0.9, 30.0, p) < apply_forgetting(0.9, 10.0, p)
+
+    def test_below_p_init_unchanged(self) -> None:
+        """사전 이하(미숙달)는 망각이 건드리지 않음(얻은 것만 잃음)."""
+        p = BktParameters(p_forget=0.5)
+        assert apply_forgetting(0.2, 10.0, p) == 0.2  # 0.2 < p_init 0.3
+
+    def test_model_method_matches_function(self) -> None:
+        model = BktModel(BktParameters(p_forget=0.05))
+        assert model.apply_forgetting(0.9, 10.0) == apply_forgetting(
+            0.9, 10.0, model.params
+        )

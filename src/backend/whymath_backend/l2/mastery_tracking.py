@@ -56,13 +56,19 @@ def compute_mastery_record(
     prior_sample_size: int | None,
     correct: bool,
     model: BktModel,
+    elapsed_days: float = 0.0,
 ) -> MasteryRecord:
     """직전 측정 + 관측 → 다음 측정(순수·DB 무관).
 
     `prior_mastery`가 None이면(첫 관측) 모델의 사전 P(L0)에서 시작한다. mastery는 저장
     정밀도(2자리)로 반올림(다음 갱신이 같은 값을 prior로 읽도록). sample_size는 직전+1.
+
+    slice L2-6: `elapsed_days`(직전 측정 이후 경과일)만큼 *관측 갱신 전* prior에 망각 감쇠를
+    적용한다(`model.apply_forgetting`). p_forget=0(기본)이면 무영향(하위 호환). 첫 관측은
+    elapsed 무관(prior=P(L0)·감쇠 대상 없음).
     """
     prior = model.initial_mastery if prior_mastery is None else prior_mastery
+    prior = model.apply_forgetting(prior, elapsed_days)
     mastery = round(model.update(prior, correct), _MASTERY_DECIMALS)
     sample_size = (prior_sample_size or 0) + 1
     confidence = round(sample_size / (sample_size + _CONFIDENCE_HALFLIFE), _MASTERY_DECIMALS)
@@ -101,6 +107,7 @@ async def record_attempt_mastery(
     `measured_at` 생략 시 현재. 같은 트랜잭션으로 commit.
     """
     model = model or BktModel()
+    now = measured_at or datetime.now(UTC)
     prior_row = await _latest_mastery(session, user_id, concept_id)
     prior_mastery = (
         float(prior_row.mastery)
@@ -108,11 +115,15 @@ async def record_attempt_mastery(
         else None
     )
     prior_sample = prior_row.sample_size if prior_row is not None else None
-    rec = compute_mastery_record(prior_mastery, prior_sample, correct, model)
+    # slice L2-6: 직전 측정 이후 경과일(망각 감쇠 입력). 직전 없으면 0.
+    elapsed_days = (
+        (now - prior_row.measured_at).total_seconds() / 86400.0 if prior_row is not None else 0.0
+    )
+    rec = compute_mastery_record(prior_mastery, prior_sample, correct, model, elapsed_days)
     row = ConceptMasteryHistory(
         user_id=user_id,
         concept_id=concept_id,
-        measured_at=measured_at or datetime.now(UTC),
+        measured_at=now,
         mastery=rec.mastery,
         confidence=rec.confidence,
         sample_size=rec.sample_size,
