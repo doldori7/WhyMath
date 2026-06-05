@@ -1,0 +1,101 @@
+"""L4 메타인지 코칭 트리거 — L2 진단(BKT↔IRT) → 교수학적 코칭 포커스 결정.
+
+`docs/architecture/04_pedagogy_engine.md`: L4는 *결정* 계층(L3=생성·L5=노출). 본 모듈은 L2
+학습자 모델의 두 신호 — BKT 개념 숙달 P(L)과 IRT 능력 θ — 를 받아 *어떤 메타인지 코칭이
+적절한가*를 결정한다(실제 발화 생성·UI 노출은 각각 L3·L5 책임).
+
+핵심 통찰(slice L2-19 교차검증의 교수학적 후속): 두 신호의 *불일치*가 가장 값진 코칭 단서다.
+- 문항은 맞히나(θ↑) 숙달 추정은 낮음(BKT↓) → *우연·추측 의심* → 이해 진위를 메타인지로 점검.
+- 숙달했(BKT↑)으나 최근 능력은 낮음(θ↓) → *망각·슬럼프 의심* → 인출 연습으로 회복.
+- 둘 다 낮으면(합의) 기초 재교육(LTHC 낮은 진입점)·둘 다 높으면 심화(LTHC 높은 천장).
+- 한쪽 신호만 있으면 교차검증 불가 → 추가 진단.
+
+레이어 경계 준수: L4는 L2(숙달·θ)를 *안다*. L5(api)·DB는 모른다 — 입력은 원시 수치(float)뿐.
+순수·결정론(외부 의존 0). 발화는 *답을 주지 않는* 메타인지 유도(CLAUDE.md 답 미루기 원칙).
+"""
+
+from __future__ import annotations
+
+import math
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+CoachingFocus = Literal["consolidate", "retrieval", "foundation", "advance", "diagnose"]
+"""메타인지 코칭 포커스 5종.
+
+- `consolidate`: 이해 *공고화* — 맞히나 숙달 낮음(추측 의심). 풀이 근거를 스스로 설명.
+- `retrieval`: *인출 연습* — 숙달했으나 능력 낮음(망각·슬럼프). 핵심 아이디어 회상·복습.
+- `foundation`: *기초 재교육* — 두 신호 모두 낮음. LTHC 낮은 진입점부터 비계.
+- `advance`: *심화* — 두 신호 모두 높음. LTHC 높은 천장(일반화·증명·전이).
+- `diagnose`: *추가 진단* — 한쪽 신호만 존재(교차검증 불가). 문항 더 풀어 데이터 확보.
+"""
+
+# 포커스별 근거(rationale)·학생 노출 코칭 발화(prompt) — 답을 주지 않는 메타인지 유도.
+_RATIONALE: dict[CoachingFocus, str] = {
+    "consolidate": "문항은 맞혔지만 숙달 추정이 낮음 — 우연·추측이 아닌 진짜 이해인지 점검.",
+    "retrieval": "숙달했던 개념인데 최근 능력 추정이 낮음 — 망각·슬럼프 가능성, 인출로 회복.",
+    "foundation": "숙달·능력 두 신호 모두 낮음 — 기초 사례부터 비계(LTHC 낮은 진입점).",
+    "advance": "숙달·능력 두 신호 모두 높음 — 일반화·증명·전이로 심화(LTHC 높은 천장).",
+    "diagnose": "한쪽 신호만 있어 교차검증 불가 — 문항을 더 풀어 상태를 정확히 파악.",
+}
+_PROMPT: dict[CoachingFocus, str] = {
+    "consolidate": "방금 푼 방법을 *왜* 그렇게 했는지 한 단계씩 설명해볼래?",
+    "retrieval": "이 개념의 핵심 아이디어를 먼저 떠올려 한 줄로 적어볼래?",
+    "foundation": "이 개념의 *가장 기본 사례*부터 같이 차근차근 볼까?",
+    "advance": "조건을 바꾸거나 *왜 항상* 성립하는지 증명에 도전해볼래?",
+    "diagnose": "이 개념 문제를 몇 개 더 풀어보면 네 상태를 더 정확히 볼 수 있어.",
+}
+
+
+class CoachingTrigger(BaseModel):
+    """메타인지 코칭 결정 — 포커스 + 근거 + 학생 노출 발화. 불변(frozen)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    focus: CoachingFocus = Field(description="코칭 포커스 5종.")
+    rationale: str = Field(description="결정 근거(교사/학생 노출 가능 한국어).")
+    prompt: str = Field(description="학생에게 보일 수 있는 메타인지 유도 발화(답 미제공).")
+
+
+def _mastery_proxy(theta: float) -> float:
+    """IRT θ → [0,1] 숙달 프록시 — 중앙 난이도(b=0) 정답확률 logistic(θ). BKT 숙달과 비교용."""
+    return 1.0 / (1.0 + math.exp(-theta))
+
+
+def recommend_coaching(
+    bkt_mastery: float | None,
+    irt_theta: float | None,
+    *,
+    discrepancy_tol: float = 0.2,
+    mastery_threshold: float = 0.6,
+) -> CoachingTrigger:
+    """L2 두 신호(BKT 숙달·IRT θ)에서 메타인지 코칭 포커스를 결정 — 순수·결정론.
+
+    한쪽이라도 없으면 `diagnose`(교차검증 불가). 둘 다 있으면 θ를 숙달 프록시(logistic)로 환산해
+    BKT 숙달과 비교: 프록시-숙달 > `discrepancy_tol` → `consolidate`(맞히나 숙달 낮음)·
+    < -tol → `retrieval`(숙달했으나 능력 낮음). 차가 tol 이내면 *합의* — 두 신호 평균이
+    `mastery_threshold` 미만이면 `foundation`(기초)·이상이면 `advance`(심화).
+
+    `discrepancy_tol`·`mastery_threshold`는 *교수학* 임계(L5 표시 임계와 독립). 발화·근거는
+    포커스별 정본 카탈로그에서 조회(답 미제공·메타인지 유도).
+    """
+    if bkt_mastery is None or irt_theta is None:
+        return _build("diagnose")
+
+    proxy = _mastery_proxy(irt_theta)
+    diff = proxy - bkt_mastery
+    if diff > discrepancy_tol:
+        return _build("consolidate")
+    if diff < -discrepancy_tol:
+        return _build("retrieval")
+    # 합의 — 수준으로 기초/심화 분기.
+    level = (bkt_mastery + proxy) / 2.0
+    return _build("foundation" if level < mastery_threshold else "advance")
+
+
+def _build(focus: CoachingFocus) -> CoachingTrigger:
+    return CoachingTrigger(focus=focus, rationale=_RATIONALE[focus], prompt=_PROMPT[focus])
+
+
+__all__ = ["CoachingFocus", "CoachingTrigger", "recommend_coaching"]

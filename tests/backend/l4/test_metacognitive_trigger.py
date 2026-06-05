@@ -1,0 +1,67 @@
+"""L4 메타인지 코칭 트리거 단위테스트 (hermetic·순수 결정).
+
+L2 두 신호(BKT 숙달·IRT θ)에서 코칭 포커스 5종을 결정론적으로 검증한다.
+"""
+
+from __future__ import annotations
+
+from whymath_backend.l4.metacognitive_trigger import (
+    CoachingTrigger,
+    recommend_coaching,
+)
+
+
+class TestRecommendCoaching:
+    def test_missing_signal_diagnose(self) -> None:
+        """한쪽 신호라도 없으면 diagnose(교차검증 불가)."""
+        assert recommend_coaching(None, 1.0).focus == "diagnose"
+        assert recommend_coaching(0.5, None).focus == "diagnose"
+        assert recommend_coaching(None, None).focus == "diagnose"
+
+    def test_irt_higher_consolidate(self) -> None:
+        """맞히나(θ=4·프록시≈0.98) 숙달 낮음(0.1) → consolidate."""
+        trig = recommend_coaching(0.1, 4.0)
+        assert trig.focus == "consolidate"
+
+    def test_bkt_higher_retrieval(self) -> None:
+        """숙달 높(0.9)으나 능력 낮음(θ=-4·프록시≈0.02) → retrieval."""
+        assert recommend_coaching(0.9, -4.0).focus == "retrieval"
+
+    def test_agree_low_foundation(self) -> None:
+        """합의(θ=0·프록시 0.5 = BKT 0.5)·수준<0.6 → foundation."""
+        assert recommend_coaching(0.5, 0.0).focus == "foundation"
+
+    def test_agree_high_advance(self) -> None:
+        """합의(BKT 0.9·θ=2 프록시≈0.88)·수준≥0.6 → advance."""
+        assert recommend_coaching(0.9, 2.0).focus == "advance"
+
+    def test_threshold_boundary_advance(self) -> None:
+        """수준이 정확히 임계(0.6)면 advance(>= 분기)."""
+        # BKT=0.6·θ=0(프록시 0.5) 차 0.1≤tol → 합의·평균 0.55<0.6 → foundation
+        assert recommend_coaching(0.6, 0.0).focus == "foundation"
+        # BKT=0.7·θ=0(프록시 0.5) 차 -0.2 = -tol(엄격 < 아님) → 합의·평균 0.6≥0.6 → advance
+        assert recommend_coaching(0.7, 0.0).focus == "advance"
+
+    def test_custom_tolerance(self) -> None:
+        """discrepancy_tol을 키우면 같은 차이도 합의로 분류."""
+        # 차 0.382(프록시 0.882 - 0.5) — 기본 tol 0.2면 consolidate
+        assert recommend_coaching(0.5, 2.0).focus == "consolidate"
+        # tol 0.5면 합의 → 평균 0.69 ≥ 0.6 → advance
+        assert recommend_coaching(0.5, 2.0, discrepancy_tol=0.5).focus == "advance"
+
+    def test_returns_rationale_and_prompt(self) -> None:
+        """결정엔 근거·학생 발화가 채워지고 frozen."""
+        trig = recommend_coaching(0.1, 4.0)
+        assert isinstance(trig, CoachingTrigger)
+        assert trig.rationale
+        assert trig.prompt
+        # frozen
+        try:
+            trig.focus = "advance"  # type: ignore[misc]
+        except Exception as exc:  # pydantic ValidationError(frozen)
+            assert "frozen" in str(exc).lower() or "instance" in str(exc).lower()
+        else:  # pragma: no cover
+            raise AssertionError("frozen 모델이 변경을 허용함")
+
+    def test_deterministic(self) -> None:
+        assert recommend_coaching(0.3, 1.0) == recommend_coaching(0.3, 1.0)
