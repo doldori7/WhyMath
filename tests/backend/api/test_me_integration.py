@@ -588,6 +588,18 @@ async def _cleanup_mastery(user_ids: list[uuid.UUID]) -> None:
         await engine.dispose()
 
 
+async def _cleanup_concepts(concept_ids: list[uuid.UUID]) -> None:
+    engine = create_async_engine(_settings().database_url)
+    ids = [str(c) for c in concept_ids]
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM concept WHERE concept_id = ANY(:ids)"), {"ids": ids}
+            )
+    finally:
+        await engine.dispose()
+
+
 def _mastery_row(
     uid: uuid.UUID, cid: uuid.UUID, measured_at: datetime, mastery: float
 ) -> ConceptMasteryHistory:
@@ -656,9 +668,23 @@ def test_me_mastery_current_latest_per_concept_on_live_pg() -> None:
 
     uid = uuid.uuid4()
     c1, c2 = uuid.uuid4(), uuid.uuid4()
+    suffix = uid.hex[:8]
     t1 = datetime(2026, 1, 1, tzinfo=UTC)
     t2 = datetime(2026, 2, 1, tzinfo=UTC)
     try:
+        # 개념 메타(c1만 concept 행 존재·c2는 orphan → name null로 LEFT JOIN 검증)
+        asyncio.run(
+            _add_all(
+                Concept.from_schema(
+                    ConceptSchema(
+                        concept_id=c1,
+                        code=f"CAL-{suffix}",
+                        name_ko="정적분",
+                        level=ConceptLevel.세부개념,
+                    )
+                )
+            )
+        )
         # c1: 2측정(t1 0.5 → t2 0.69 최신)·c2: 1측정(0.3)
         asyncio.run(
             _add_all(
@@ -676,9 +702,13 @@ def test_me_mastery_current_latest_per_concept_on_live_pg() -> None:
             rows = resp.json()
             # 3측정이지만 개념별 최신 → 2행
             assert len(rows) == 2
-            latest = {r["concept_id"]: float(r["mastery"]) for r in rows}
-            assert latest[str(c1)] == 0.69  # t2(최신)
-            assert latest[str(c2)] == 0.3
+            by_concept = {r["concept_id"]: r for r in rows}
+            assert float(by_concept[str(c1)]["mastery"]) == 0.69  # t2(최신)
+            assert by_concept[str(c1)]["concept_name"] == "정적분"  # 조인된 개념명
+            assert by_concept[str(c1)]["concept_code"] == f"CAL-{suffix}"
+            assert float(by_concept[str(c2)]["mastery"]) == 0.3
+            assert by_concept[str(c2)]["concept_name"] is None  # orphan(LEFT JOIN)
             assert client.get("/v1/me/mastery/current").status_code == 401  # 무토큰
     finally:
         asyncio.run(_cleanup_mastery([uid]))
+        asyncio.run(_cleanup_concepts([c1]))
