@@ -768,6 +768,11 @@ def test_me_ability_estimates_theta_from_attempts_on_live_pg() -> None:
             body = resp.json()
             assert body["response_count"] == 1
             assert body["theta"] == 4.0  # 채점 1건 전부 정답 → 능력 상한
+            # slice 14: 측정 정밀도 — 응답 있으니 SE·CI 노출(유한)
+            assert body["standard_error"] is not None
+            assert body["standard_error"] > 0.0
+            lo, hi = body["confidence_interval"]
+            assert lo < body["theta"] < hi
             assert client.get("/v1/me/ability").status_code == 401  # 무토큰
     finally:
         asyncio.run(_cleanup_all())

@@ -41,6 +41,7 @@ slice 58: `GET /v1/me/deletions` — slice 57이 적재한 본인 삭제 감사 
 
 from __future__ import annotations
 
+import math
 import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeVar
@@ -59,7 +60,12 @@ from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
-from whymath_backend.l2.irt import IrtItem, estimate_ability, select_next_item
+from whymath_backend.l2.irt import (
+    IrtItem,
+    ability_standard_error,
+    estimate_ability,
+    select_next_item,
+)
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
@@ -657,11 +663,22 @@ def _difficulty_to_logit(difficulty: float) -> float:
     return difficulty - _DIFFICULTY_MIDPOINT
 
 
+_CI_Z_95 = 1.96  # 95% 신뢰구간 z값(표준정규 양측 0.025)
+
+
 class AbilityResponse(BaseModel):
-    """`GET /v1/me/ability` 응답 — IRT 능력 추정."""
+    """`GET /v1/me/ability` 응답 — IRT 능력 추정(θ + 측정 정밀도)."""
 
     theta: float = Field(description="IRT 능력 추정 θ(logit). 채점 응답 없으면 0.")
     response_count: int = Field(description="추정에 쓰인 채점(is_correct 있는) 풀이 수.")
+    standard_error: float | None = Field(
+        default=None,
+        description="θ 추정 표준오차 SE=1/√I(θ)(slice 13). 응답 없으면(측정 불가) null.",
+    )
+    confidence_interval: list[float] | None = Field(
+        default=None,
+        description="95% 신뢰구간 [하한, 상한] = θ ± 1.96·SE. SE 없으면 null.",
+    )
 
 
 @router.get(
@@ -679,6 +696,10 @@ async def get_my_ability(
     만들고 `estimate_ability`(slice 7)로 θ 추정. 난이도 없는(difficulty_overall NULL) 문항은
     제외. 채점 응답이 없으면 θ=0(정보 없음). v1: difficulty_overall(전문가 1~5)을 b 프록시로
     사용(보정 b는 fit_jmle 후속). BKT(개념별 숙달)와 *상보적* 단일 능력 척도.
+
+    측정 정밀도(slice 13): `ability_standard_error`로 표준오차 SE=1/√I(θ)·95% 신뢰구간
+    θ±1.96·SE를 함께 노출. 응답 0건(정보 0=SE 무한)이면 둘 다 null(측정 불가). 경계 θ
+    (전부 정답/오답)의 SE는 Fisher 정보 기반이라 *낙관적*(실 불확실성 과소·EAP는 후속).
     """
     stmt = (
         select(ProblemAttempt.is_correct, Problem.difficulty_overall)
@@ -695,7 +716,16 @@ async def get_my_ability(
         if difficulty is not None
     ]
     theta = estimate_ability(responses)
-    return AbilityResponse(theta=theta, response_count=len(responses))
+    items = [item for item, _ in responses]
+    se = ability_standard_error(theta, items)
+    if math.isinf(se):  # 정보 0(응답 없음) → 측정 불가
+        return AbilityResponse(theta=theta, response_count=len(responses))
+    return AbilityResponse(
+        theta=theta,
+        response_count=len(responses),
+        standard_error=se,
+        confidence_interval=[theta - _CI_Z_95 * se, theta + _CI_Z_95 * se],
+    )
 
 
 # ── slice L2-12: GET /v1/me/next-problem (적응형 출제 — IRT 정보량 최대 미응답 문항) ──
