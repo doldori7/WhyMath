@@ -186,6 +186,9 @@ jobs:
       - name: Pytest (통합테스트 — 실 PG·l3 외부서비스 제외)
         env:
           WHYMATH_RUN_INTEGRATION: "1"
+          # 전역 엔진이 테스트마다 다른 이벤트 루프에서 재사용될 때의 asyncpg 루프 바인딩
+          # 충돌(another operation is in progress) 회피 — NullPool(매 체크아웃 새 연결).
+          WHYMATH_DB_DISABLE_POOL: "1"
         # l3는 라이브 Ollama/Redis/Langfuse/Anthropic 필요(도달성 단정) → CI 제외.
         # api·l2 통합테스트는 PG만 필요(미도달 자원은 각자 graceful skip).
         run: pytest -m integration --ignore=../../tests/backend/l3

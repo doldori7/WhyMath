@@ -69,6 +69,17 @@ class Settings(BaseSettings):
             "주입하며 자격증명을 포함할 수 있다(→ 코드 밖). 풀 설정(pool_size 등)은 PoC 범위 밖."
         ),
     )
+    # 연결 풀 비활성(NullPool). 기본 False(프로덕션은 풀 사용). True면 매 체크아웃마다 새
+    # asyncpg 연결을 만들고 닫는다 — *테스트(통합) 환경*에서 모듈 전역 엔진이 여러 asyncio
+    # 이벤트 루프에 걸쳐 재사용될 때 발생하는 "another operation is in progress"(죽은 루프에
+    # 바인딩된 풀 연결 재사용)를 회피. CI 통합테스트가 WHYMATH_DB_DISABLE_POOL=1로 켠다.
+    db_disable_pool: bool = Field(
+        default=False,
+        description=(
+            "True면 NullPool(연결 풀 비활성·매 체크아웃 새 연결). 통합테스트가 다중 이벤트 "
+            "루프에서 전역 엔진을 재사용할 때의 asyncpg 루프 바인딩 충돌 회피용. 기본 False."
+        ),
+    )
 
     # ── 응답 캐시 (Redis, S2부터 실제 만료 적용) ──
     redis_url: str = Field(

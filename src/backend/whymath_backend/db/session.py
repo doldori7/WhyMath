@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from whymath_backend.config import Settings, get_settings
 
@@ -51,11 +52,18 @@ def get_engine(settings: Settings | None = None) -> AsyncEngine:
         resolved = settings if settings is not None else get_settings()
         # future=True는 SQLAlchemy 2.0 기본이라 명시 불필요. async 엔진은 asyncpg 드라이버
         # (database_url의 +asyncpg)를 통해 동작한다. echo는 PoC 기본 off.
-        _engine = create_async_engine(resolved.database_url)
+        # db_disable_pool(통합테스트)면 NullPool — 전역 엔진이 여러 이벤트 루프에 걸쳐
+        # 재사용될 때 죽은 루프의 풀 연결을 다시 쓰는 asyncpg 충돌을 회피(매 체크아웃 새 연결).
+        if resolved.db_disable_pool:
+            _engine = create_async_engine(resolved.database_url, poolclass=NullPool)
+        else:
+            _engine = create_async_engine(resolved.database_url)
     return _engine
 
 
-def get_sessionmaker(settings: Settings | None = None) -> async_sessionmaker[AsyncSession]:
+def get_sessionmaker(
+    settings: Settings | None = None,
+) -> async_sessionmaker[AsyncSession]:
     """async 세션 팩토리를 지연 생성·캐시해 반환한다.
 
     `expire_on_commit=False`: 커밋 후에도 ORM 객체 속성에 추가 쿼리 없이 접근할 수 있게
