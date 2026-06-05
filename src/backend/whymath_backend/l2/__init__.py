@@ -28,11 +28,13 @@ from whymath_backend.l2.bkt import (
 )
 from whymath_backend.l2.irt import (
     IrtItem,
+    ability_standard_error,
     estimate_ability,
     estimate_difficulty,
     fit_jmle,
     item_information,
     select_next_item,
+    total_information,
 )
 from whymath_backend.l2.mastery_tracking import (
     MasteryRecord,
@@ -47,6 +49,7 @@ __all__ = [
     "BktParameters",
     "IrtItem",
     "MasteryRecord",
+    "ability_standard_error",
     "apply_forgetting",
     "apply_learning",
     "compute_mastery_record",
@@ -59,5 +62,6 @@ __all__ = [
     "probability_correct",
     "record_attempt_mastery",
     "record_problem_attempt_mastery",
+    "total_information",
     "update_mastery",
 ]

@@ -200,6 +200,29 @@ def item_information(theta: float, item: IrtItem) -> float:
     return item.discrimination * item.discrimination * p * (1.0 - p)
 
 
+def total_information(theta: float, items: list[IrtItem]) -> float:
+    """검사 정보함수 I(θ) = Σ Iᵢ(θ) — 능력 θ에서 문항 집합이 주는 *총* 측정 정보량.
+
+    개별 문항정보(`item_information`)의 단순 합(문항 응답 독립 가정). 클수록 θ를 정밀하게
+    측정한다(표준오차↓). 적응형 검사(CAT)에서 *이미 출제한 문항들*의 정보를 누적해 측정
+    정밀도를 가늠한다(중단 규칙·신뢰구간의 입력). 빈 목록이면 0(정보 없음).
+    """
+    return sum(item_information(theta, item) for item in items)
+
+
+def ability_standard_error(theta: float, items: list[IrtItem]) -> float:
+    """능력 추정 θ의 표준오차 SE(θ) = 1/√I(θ) — 측정 *정밀도*(작을수록 정밀).
+
+    Fisher 정보의 역제곱근(MLE의 점근 표준오차). CAT 중단 규칙의 핵심: SE가 목표(예: 0.3)
+    아래로 내려가면 "충분히 정밀하게 측정됨"으로 보고 검사를 종료한다. θ 신뢰구간 θ ± z·SE
+    에도 쓰인다. 정보가 0(빈 목록)이면 측정 불가 → `math.inf`(무한 불확실).
+    """
+    info = total_information(theta, items)
+    if info <= 0.0:
+        return math.inf
+    return 1.0 / math.sqrt(info)
+
+
 def select_next_item(
     theta: float,
     items: list[IrtItem],
@@ -227,10 +250,12 @@ def select_next_item(
 
 __all__ = [
     "IrtItem",
+    "ability_standard_error",
     "estimate_ability",
     "estimate_difficulty",
     "fit_jmle",
     "item_information",
     "probability_correct",
     "select_next_item",
+    "total_information",
 ]
