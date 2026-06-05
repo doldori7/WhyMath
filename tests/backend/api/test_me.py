@@ -441,6 +441,38 @@ class TestEndSession:
         assert resp.status_code == 404
         # 실제 ended_at는 *수정 안 됨*
         assert row.ended_at is None
+
+    def test_end_captures_ability_snapshot_when_attempts_exist(self) -> None:
+        """slice 34: 처음 종료 + 채점 이력 있으면 θ 스냅샷 자동 적재(종료 1 + 스냅샷 1 commit)."""
+        row = self._session_row(_UID, ended=False)
+        # FakeSession.execute(θ 쿼리) → (is_correct, difficulty) 행
+        client, fake = _client(
+            [(True, 3.0), (False, 3.0)], get_map={row.session_id: row}
+        )
+        resp = client.patch(f"/v1/me/sessions/{row.session_id}/end")
+        assert resp.status_code == 200
+        snaps = [a for a in fake.added if isinstance(a, AbilitySnapshot)]
+        assert len(snaps) == 1
+        assert snaps[0].response_count == 2
+        assert snaps[0].concept_id is None  # 전과목 단일 θ
+        assert fake.commits == 2  # 종료 1 + 스냅샷 1
+
+    def test_end_no_attempts_skips_snapshot(self) -> None:
+        """채점 이력 0 → θ=0 노이즈 스냅샷 미적재(종료만)."""
+        row = self._session_row(_UID, ended=False)
+        client, fake = _client([], get_map={row.session_id: row})
+        resp = client.patch(f"/v1/me/sessions/{row.session_id}/end")
+        assert resp.status_code == 200
+        assert not any(isinstance(a, AbilitySnapshot) for a in fake.added)
+        assert fake.commits == 1  # 종료만
+
+    def test_idempotent_end_skips_snapshot(self) -> None:
+        """이미 종료된 세션 재호출 → 채점 이력 있어도 스냅샷 미적재(멱등 트리거)."""
+        row = self._session_row(_UID, ended=True)
+        client, fake = _client([(True, 3.0)], get_map={row.session_id: row})
+        resp = client.patch(f"/v1/me/sessions/{row.session_id}/end")
+        assert resp.status_code == 200
+        assert not any(isinstance(a, AbilitySnapshot) for a in fake.added)
         assert fake.commits == 0
 
 
