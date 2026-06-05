@@ -41,6 +41,13 @@ from typing import Any, Literal, NamedTuple, Protocol, cast, runtime_checkable
 from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from whymath_backend.api._crypto import (
+    SecretCipher,
+    build_secret_cipher,
+    encrypt_secret_for_storage,
+    resolve_stored_secret,
+)
+
 
 class DeviceInfo(NamedTuple):
     """본인 디바이스 목록 응답의 *내부* 표현 — store→라우터 seam.
@@ -379,8 +386,15 @@ class PgDeviceStore:
     가능. 인메모리(워커별 상태 분리)의 한계 해소.
     """
 
-    def __init__(self, sessionmaker: async_sessionmaker[AsyncSession]) -> None:
+    def __init__(
+        self,
+        sessionmaker: async_sessionmaker[AsyncSession],
+        cipher: SecretCipher | None = None,
+    ) -> None:
         self._sessionmaker = sessionmaker
+        # slice 73: 봉투 암호화기(None이면 평문 저장·기존 동작). register는 암호화 저장,
+        # verify는 복호화. 평문 행(기존·암호화 비활성)은 dual-read 폴백으로 그대로 동작.
+        self._cipher = cipher
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
         # 지연 import — 순환 import 방지(models가 schema를 import, 본 모듈은 models를 import)
@@ -388,17 +402,22 @@ class PgDeviceStore:
 
         device_id = str(uuid.uuid4())
         secret_plain = secrets.token_urlsafe(32)
+        # slice 73: cipher 있으면 암호화 저장(평문 컬럼 NULL)·없으면 평문 폴백.
+        plain_col, encrypted, nonce = encrypt_secret_for_storage(self._cipher, secret_plain)
         async with self._sessionmaker() as session:
             session.add(
                 DeviceCredential(
                     device_id=device_id,
                     user_id=user_id,
-                    secret_plain=secret_plain,
+                    secret_plain=plain_col,
+                    secret_encrypted=encrypted,
+                    secret_nonce=nonce,
                     revoked=False,
                     created_at=datetime.now(UTC),
                 )
             )
             await session.commit()
+        # 응답 secret은 *생성한 평문 토큰*(저장 표현과 무관·클라이언트가 서명에 사용)
         return device_id, secret_plain
 
     async def verify(self, device_id: str, signature_hex: str) -> bool:
@@ -408,7 +427,11 @@ class PgDeviceStore:
             row: DeviceCredential | None = await session.get(DeviceCredential, device_id)
             if row is None or row.revoked:
                 return False
-            expected = _compute_signature(row.secret_plain, device_id)
+            # slice 73: 저장 표현(암호화/평문)에서 HMAC용 평문 복원(암호화 행+키 미설정은 raise)
+            secret = resolve_stored_secret(
+                self._cipher, row.secret_plain, row.secret_encrypted, row.secret_nonce
+            )
+            expected = _compute_signature(secret, device_id)
             if not hmac.compare_digest(signature_hex.lower(), expected):
                 return False
             # slice 32: last_used_at 갱신(verify 성공 경로만). CachedDeviceStore의 cache
@@ -850,7 +873,10 @@ def build_device_store_from_settings(
         return None, _noop
 
     sm = get_sessionmaker(settings)
-    pg_store: DeviceCredentialStore = PgDeviceStore(sm)
+    # slice 73: 봉투 암호화기 주입(키 미설정 시 None=평문 폴백). 잘못된 키 길이는 여기서
+    # ValueError로 fail-fast(lifespan startup에서 표면화).
+    cipher = build_secret_cipher(settings)
+    pg_store: DeviceCredentialStore = PgDeviceStore(sm, cipher)
 
     if mode == "pg":
         return pg_store, _noop

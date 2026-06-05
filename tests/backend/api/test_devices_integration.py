@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import hmac
+import os
 import uuid
 from hashlib import sha256
 
@@ -25,6 +26,7 @@ from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
+from whymath_backend.api._crypto import SecretCipher
 from whymath_backend.api._device_store import (
     CachedDeviceStore,
     PgDeviceStore,
@@ -33,6 +35,7 @@ from whymath_backend.api._device_store import (
 )
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.device import DeviceCredential
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
@@ -578,6 +581,50 @@ def test_pg_list_for_user_seq_tiebreak_parity_on_live_pg() -> None:
         asyncio.run(_run())
     finally:
         asyncio.run(_cleanup(uid))
+
+
+def test_pg_device_store_envelope_encryption_round_trip_on_live_pg() -> None:
+    """slice 73: cipher 주입 PgDeviceStore — register는 암호화 저장·verify는 복호.
+
+    ① register 후 DB 행: secret_plain NULL·secret_encrypted/secret_nonce 채워짐·ciphertext에
+    평문 secret 미포함(at-rest 노출 0). ② verify True(복호→HMAC). ③ 하위 호환: 평문 행
+    (cipher 없이 등록)도 cipher-활성 store가 그대로 verify(dual-read 폴백).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    cipher = SecretCipher(os.urandom(32))
+
+    async def _run() -> None:
+        await _insert_user(uid)
+        try:
+            engine = create_async_engine(_settings().database_url)
+            try:
+                sm = async_sessionmaker(engine, expire_on_commit=False)
+                enc_store = PgDeviceStore(sm, cipher)
+                # ① 암호화 등록 + verify
+                device_id, secret_plain = await enc_store.register(uid)
+                sig = _sign(secret_plain, device_id)
+                assert await enc_store.verify(device_id, sig) is True
+                # ② DB 행 검사: 평문 NULL·암호문 존재·ciphertext에 평문 미포함
+                async with sm() as s:
+                    row = await s.get(DeviceCredential, device_id)
+                    assert row is not None
+                    assert row.secret_plain is None
+                    assert row.secret_encrypted is not None
+                    assert row.secret_nonce is not None
+                    assert secret_plain.encode("utf-8") not in row.secret_encrypted
+                # ③ 하위 호환: 평문 등록(cipher 없는 store) → cipher 활성 store가 verify
+                plain_store = PgDeviceStore(sm)
+                pid, psecret = await plain_store.register(uid)
+                assert await enc_store.verify(pid, _sign(psecret, pid)) is True
+            finally:
+                await engine.dispose()
+        finally:
+            await _cleanup(uid)
+
+    asyncio.run(_run())
 
 
 def test_device_credential_user_index_swapped_on_live_pg() -> None:

@@ -75,4 +75,49 @@ def build_secret_cipher(settings: Any) -> SecretCipher | None:
     return SecretCipher(key)
 
 
-__all__ = ["SecretCipher", "build_secret_cipher"]
+def encrypt_secret_for_storage(
+    cipher: SecretCipher | None, secret_plain: str
+) -> tuple[str | None, bytes | None, bytes | None]:
+    """slice 73: register용 — `(secret_plain, secret_encrypted, nonce)` 저장 3-튜플 결정.
+
+    cipher 있으면 `(None, ciphertext, nonce)`(평문 컬럼 비우고 암호화 저장), 없으면
+    `(secret_plain, None, None)`(평문 폴백·기존 동작). 셋 중 *정확히 한 표현*만 채워진다.
+    """
+    if cipher is None:
+        return secret_plain, None, None
+    ciphertext, nonce = cipher.encrypt(secret_plain)
+    return None, ciphertext, nonce
+
+
+def resolve_stored_secret(
+    cipher: SecretCipher | None,
+    secret_plain: str | None,
+    secret_encrypted: bytes | None,
+    nonce: bytes | None,
+) -> str:
+    """slice 73: verify용 — 저장 표현에서 HMAC용 평문 secret 복원.
+
+    암호화 행(secret_encrypted+nonce)이면 복호, 평문 행이면 그대로 반환. *암호화 행인데
+    cipher 미설정*이면 `RuntimeError`(조용한 401 lockout 대신 *시끄러운* 500 — 운영자가 키
+    유실/미설정을 즉시 인지). 둘 다 없으면 데이터 무결성 오류(RuntimeError).
+    """
+    if secret_encrypted is not None and nonce is not None:
+        if cipher is None:
+            raise RuntimeError(
+                "암호화된 device secret이나 복호 키가 미설정입니다 — "
+                "`WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY`를 확인하세요(키 유실 시 복호 불가)."
+            )
+        return cipher.decrypt(secret_encrypted, nonce)
+    if secret_plain is not None:
+        return secret_plain
+    raise RuntimeError(
+        "device 자격증명 행에 secret_plain·secret_encrypted가 모두 없습니다(데이터 무결성 오류)."
+    )
+
+
+__all__ = [
+    "SecretCipher",
+    "build_secret_cipher",
+    "encrypt_secret_for_storage",
+    "resolve_stored_secret",
+]
