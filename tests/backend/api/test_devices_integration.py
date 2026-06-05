@@ -349,7 +349,14 @@ def test_list_devices_endpoint_on_live_pg() -> None:
                 assert resp.status_code == 200
                 devices = resp.json()["devices"]
                 assert [d["device_id"] for d in devices] == [d2]
-                assert set(devices[0].keys()) == {"device_id", "created_at"}
+                # DeviceListItem 스키마(slice 29 + 32 last_used_at + 37 revoked/revoked_at).
+                assert set(devices[0].keys()) == {
+                    "device_id",
+                    "created_at",
+                    "last_used_at",
+                    "revoked",
+                    "revoked_at",
+                }
 
                 # 401 무토큰
                 assert client.get("/v1/devices").status_code == 401
