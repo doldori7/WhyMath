@@ -875,27 +875,14 @@ DiagnosisLimit = Annotated[
 ]
 
 
-@router.get(
-    "/diagnosis/concepts",
-    response_model=list[ConceptDiagnosisItem],
-    summary="내 개념별 BKT↔IRT 교차검증(통합 약점 진단)",
-)
-async def get_my_concept_diagnosis(
-    user: ConsentedUser,
-    session: SessionDep,
-    agreement: AgreementFilter = None,
-    limit: DiagnosisLimit = None,
+async def _compute_concept_diagnosis(
+    session: AsyncSession, user_id: uuid.UUID
 ) -> list[ConceptDiagnosisItem]:
-    """개념별 BKT 숙달(slice L2-5c)과 IRT 능력 θ(slice 18)를 *한 응답에 합쳐* 교차검증.
+    """개념별 BKT↔IRT 교차검증 항목을 계산·*약점 먼저* 정렬해 반환(필터·상한 미적용).
 
-    두 학습자 모델(L2)이 같은 개념 축에서 *합의/불일치*를 드러낸다 — `agreement`로 "θ는 높은데
-    BKT 숙달은 낮음(irt_higher·추측/BKT 지연)"·"BKT 숙달은 높은데 θ 낮음(bkt_higher·망각/고난도)"을
-    표면화(진단 신뢰도·메타인지 코칭 입력). ① BKT 최신 숙달 스냅샷(DISTINCT ON)·② 개념별 채점
-    풀이로 IRT θ(`estimate_ability`)·logistic 프록시. 둘 중 하나라도 있는 개념을 합집합으로 모아
-    *약점(저신호) 먼저* 정렬. 각 개념에 L4 메타인지 코칭 처방(`recommend_coaching`·slice 20)을
-    붙여 *무엇을 할지*(focus·발화)까지 노출 — L2 진단→L4 결정→L5 노출 풀 스택. user_id
-    스코핑·읽기(마이그레이션 불필요). `?agreement`(다중 OR·예: 불일치만)·`?limit`(약점 상위 N)으로
-    "주의 필요 개념" 질의 가능(slice 26).
+    `/diagnosis/concepts`(필터/상한)·`/diagnosis/summary`(집계)가 공유하는 핵심 계산.
+    ① BKT 최신 숙달 스냅샷(DISTINCT ON)·② 개념별 채점 풀이로 IRT θ·logistic 프록시·
+    L4 코칭 처방(`recommend_coaching`). 둘 중 하나라도 있는 개념 합집합.
     """
     mastery_stmt = (
         select(
@@ -905,7 +892,7 @@ async def get_my_concept_diagnosis(
             ConceptMasteryHistory.mastery,
         )
         .outerjoin(Concept, ConceptMasteryHistory.concept_id == Concept.concept_id)
-        .where(ConceptMasteryHistory.user_id == user.user_id)
+        .where(ConceptMasteryHistory.user_id == user_id)
         .distinct(ConceptMasteryHistory.concept_id)
         .order_by(
             ConceptMasteryHistory.concept_id,
@@ -930,7 +917,7 @@ async def get_my_concept_diagnosis(
         .join(ProblemConcept, ProblemConcept.problem_id == Problem.problem_id)
         .outerjoin(Concept, ProblemConcept.concept_id == Concept.concept_id)
         .where(
-            ProblemAttempt.user_id == user.user_id,
+            ProblemAttempt.user_id == user_id,
             ProblemAttempt.is_correct.isnot(None),
             ProblemConcept.role.in_(_ASSESSED_ROLES),
             Problem.difficulty_overall.isnot(None),
@@ -969,6 +956,32 @@ async def get_my_concept_diagnosis(
         return (min(signals) if signals else math.inf, str(i.concept_id))
 
     items.sort(key=_weakness)
+    return items
+
+
+@router.get(
+    "/diagnosis/concepts",
+    response_model=list[ConceptDiagnosisItem],
+    summary="내 개념별 BKT↔IRT 교차검증(통합 약점 진단)",
+)
+async def get_my_concept_diagnosis(
+    user: ConsentedUser,
+    session: SessionDep,
+    agreement: AgreementFilter = None,
+    limit: DiagnosisLimit = None,
+) -> list[ConceptDiagnosisItem]:
+    """개념별 BKT 숙달(slice L2-5c)과 IRT 능력 θ(slice 18)를 *한 응답에 합쳐* 교차검증.
+
+    두 학습자 모델(L2)이 같은 개념 축에서 *합의/불일치*를 드러낸다 — `agreement`로 "θ는 높은데
+    BKT 숙달은 낮음(irt_higher·추측/BKT 지연)"·"BKT 숙달은 높은데 θ 낮음(bkt_higher·망각/고난도)"을
+    표면화(진단 신뢰도·메타인지 코칭 입력). ① BKT 최신 숙달 스냅샷(DISTINCT ON)·② 개념별 채점
+    풀이로 IRT θ(`estimate_ability`)·logistic 프록시. 둘 중 하나라도 있는 개념을 합집합으로 모아
+    *약점(저신호) 먼저* 정렬. 각 개념에 L4 메타인지 코칭 처방(`recommend_coaching`·slice 20)을
+    붙여 *무엇을 할지*(focus·발화)까지 노출 — L2 진단→L4 결정→L5 노출 풀 스택. user_id
+    스코핑·읽기(마이그레이션 불필요). `?agreement`(다중 OR·예: 불일치만)·`?limit`(약점 상위 N)으로
+    "주의 필요 개념" 질의 가능(slice 26).
+    """
+    items = await _compute_concept_diagnosis(session, user.user_id)
     # slice 26: agreement OR 필터 → limit(약점 먼저 정렬 후 상위 N). 둘 다 선택적(기본 전체).
     if agreement:
         wanted = set(agreement)
@@ -976,6 +989,56 @@ async def get_my_concept_diagnosis(
     if limit is not None:
         items = items[:limit]
     return items
+
+
+# ── slice L2-27: GET /v1/me/diagnosis/summary (진단 집계 — 대시보드 헤더) ──────────
+class ConceptDiagnosisSummary(BaseModel):
+    """`GET /v1/me/diagnosis/summary` 응답 — 개념 진단 집계."""
+
+    total_concepts: int = Field(description="진단 신호(BKT 또는 IRT)가 있는 개념 수.")
+    agree: int = Field(description="BKT↔IRT 합의 개념 수.")
+    irt_higher: int = Field(description="θ는 높은데 BKT 낮음(추측/지연) 개념 수.")
+    bkt_higher: int = Field(description="BKT는 높은데 θ 낮음(망각/고난도) 개념 수.")
+    insufficient: int = Field(description="한쪽 신호만(교차검증 불가) 개념 수.")
+    attention_count: int = Field(description="주의 필요(불일치=irt_higher+bkt_higher) 개념 수.")
+    weakest_concept_id: uuid.UUID | None = Field(
+        default=None, description="가장 약한(저신호) 개념 id. 진단 개념 없으면 null."
+    )
+    weakest_concept_name: str | None = Field(
+        default=None, description="가장 약한 개념명(orphan·미진단이면 null)."
+    )
+
+
+@router.get(
+    "/diagnosis/summary",
+    response_model=ConceptDiagnosisSummary,
+    summary="내 개념 진단 집계(대시보드 헤더 — 주의 필요 수·최약점)",
+)
+async def get_my_diagnosis_summary(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> ConceptDiagnosisSummary:
+    """개념별 진단(`/diagnosis/concepts`)을 *집계* — 대시보드 헤더용 한 줄 요약.
+
+    일치 신호별 개념 수·*주의 필요*(불일치=irt_higher+bkt_higher) 수·*가장 약한* 개념(약점
+    정렬 1위)을 반환. 진단 개념이 없으면 모두 0·weakest는 null. 공유 계산(`_compute_concept_
+    diagnosis`)을 재사용(개념 리스트와 동일 데이터의 집계 뷰). user_id 스코핑·읽기.
+    """
+    items = await _compute_concept_diagnosis(session, user.user_id)
+    counts = {"agree": 0, "irt_higher": 0, "bkt_higher": 0, "insufficient": 0}
+    for i in items:
+        counts[i.agreement] += 1
+    weakest = items[0] if items else None  # 이미 약점 먼저 정렬됨
+    return ConceptDiagnosisSummary(
+        total_concepts=len(items),
+        agree=counts["agree"],
+        irt_higher=counts["irt_higher"],
+        bkt_higher=counts["bkt_higher"],
+        insufficient=counts["insufficient"],
+        attention_count=counts["irt_higher"] + counts["bkt_higher"],
+        weakest_concept_id=weakest.concept_id if weakest else None,
+        weakest_concept_name=weakest.concept_name if weakest else None,
+    )
 
 
 # ── slice L2-12: GET /v1/me/next-problem (적응형 출제 — IRT 정보량 최대 미응답 문항) ──
