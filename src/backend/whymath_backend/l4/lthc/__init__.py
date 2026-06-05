@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from whymath_backend.l4.lthc.adapt import adapt_lthc
+from whymath_backend.l4.lthc.adapt import adapt_lthc, mastery_to_level
 from whymath_backend.l4.lthc.models import LthcAdaptation, MasteryLevel
 
-__all__ = ["LthcAdaptation", "MasteryLevel", "adapt_lthc"]
+__all__ = ["LthcAdaptation", "MasteryLevel", "adapt_lthc", "mastery_to_level"]

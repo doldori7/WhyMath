@@ -11,9 +11,33 @@ from __future__ import annotations
 
 import pytest
 
-from whymath_backend.l4.lthc import LthcAdaptation, adapt_lthc
+from whymath_backend.l4.lthc import LthcAdaptation, adapt_lthc, mastery_to_level
 from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.models import PolyaStage
+
+
+class TestMasteryToLevel:
+    """slice 25: BKT 숙달도(0~1) → LTHC 라벨 — 3구간 임계·경계 포함."""
+
+    def test_bands(self) -> None:
+        assert mastery_to_level(0.0) == "초보"
+        assert mastery_to_level(0.39) == "초보"
+        assert mastery_to_level(0.4) == "발전 중"  # 경계 포함(상위)
+        assert mastery_to_level(0.79) == "발전 중"
+        assert mastery_to_level(0.8) == "숙달"  # 경계 포함(상위)
+        assert mastery_to_level(1.0) == "숙달"
+
+    def test_custom_thresholds(self) -> None:
+        assert mastery_to_level(0.5, mastered_threshold=0.5) == "숙달"
+        assert mastery_to_level(0.3, developing_threshold=0.2) == "발전 중"
+
+    def test_feeds_adapt_lthc(self) -> None:
+        """매핑 결과가 adapt_lthc 입력으로 그대로 쓰임(브릿지 계약)."""
+        level = mastery_to_level(0.1)  # 초보
+        adaptation = adapt_lthc(PolyaStage.PLAN, level)
+        assert adaptation.mastery_level == "초보"
+        assert adaptation.entry_suggestions  # 초보 → 진입점 노출
+        assert adaptation.extensions == ()  # 초보 → 확장 비공
 
 
 class TestNoviceLowThreshold:
