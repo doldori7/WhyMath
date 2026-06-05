@@ -13,7 +13,12 @@ import pytest
 from cryptography.exceptions import InvalidTag
 from pydantic import SecretStr
 
-from whymath_backend.api._crypto import SecretCipher, build_secret_cipher
+from whymath_backend.api._crypto import (
+    SecretCipher,
+    build_secret_cipher,
+    encrypt_secret_for_storage,
+    resolve_stored_secret,
+)
 from whymath_backend.config import Settings
 
 _KEY = os.urandom(32)
@@ -96,3 +101,43 @@ class TestBuildSecretCipher:
         bad_b64 = base64.b64encode(os.urandom(16)).decode()
         with pytest.raises(ValueError, match="32바이트"):
             build_secret_cipher(_settings(bad_b64))
+
+
+class TestStorageHelpers:
+    """slice 73: register/verify의 저장 표현 결정·복원 헬퍼(DB 무관·순수)."""
+
+    def test_encrypt_for_storage_with_cipher(self) -> None:
+        """cipher 있으면 (None, ciphertext, nonce) — 평문 컬럼 비움."""
+        cipher = SecretCipher(_KEY)
+        plain, enc, nonce = encrypt_secret_for_storage(cipher, "tok")
+        assert plain is None
+        assert enc is not None and nonce is not None
+        # 복호하면 원본
+        assert cipher.decrypt(enc, nonce) == "tok"
+
+    def test_encrypt_for_storage_without_cipher(self) -> None:
+        """cipher None이면 (secret_plain, None, None) — 평문 폴백."""
+        assert encrypt_secret_for_storage(None, "tok") == ("tok", None, None)
+
+    def test_resolve_encrypted_round_trip(self) -> None:
+        """암호화 저장 → resolve가 복호해 원본 secret 복원(register→verify 경로)."""
+        cipher = SecretCipher(_KEY)
+        _plain, enc, nonce = encrypt_secret_for_storage(cipher, "tok")
+        assert resolve_stored_secret(cipher, None, enc, nonce) == "tok"
+
+    def test_resolve_plaintext_fallback(self) -> None:
+        """평문 행(secret_plain만)은 cipher 유무와 무관하게 그대로 반환(하위 호환)."""
+        assert resolve_stored_secret(None, "tok", None, None) == "tok"
+        assert resolve_stored_secret(SecretCipher(_KEY), "tok", None, None) == "tok"
+
+    def test_resolve_encrypted_without_cipher_raises(self) -> None:
+        """암호화 행인데 cipher 미설정 → RuntimeError(조용한 401 lockout 대신 시끄러운 실패)."""
+        cipher = SecretCipher(_KEY)
+        _plain, enc, nonce = encrypt_secret_for_storage(cipher, "tok")
+        with pytest.raises(RuntimeError, match="복호 키"):
+            resolve_stored_secret(None, None, enc, nonce)
+
+    def test_resolve_no_secret_raises(self) -> None:
+        """평문·암호화 둘 다 없으면 데이터 무결성 오류(RuntimeError)."""
+        with pytest.raises(RuntimeError, match="무결성"):
+            resolve_stored_secret(SecretCipher(_KEY), None, None, None)

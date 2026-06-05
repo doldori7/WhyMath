@@ -51,8 +51,14 @@ class DeviceCredential(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         sa.Uuid, sa.ForeignKey("user_profile.user_id"), nullable=False
     )
-    # HMAC 재계산에 원본 필요(KDF 불능). KMS envelope는 후속.
-    secret_plain: Mapped[str] = mapped_column(sa.String(length=128), nullable=False)
+    # HMAC 재계산에 원본 필요(KDF 불능). slice 72/73: 봉투 암호화 시 평문 대신
+    # secret_encrypted+nonce에 저장하므로 nullable로 완화(암호화 행은 NULL). 기존/암호화
+    # 비활성 행은 평문 유지(dual-read 폴백).
+    secret_plain: Mapped[str | None] = mapped_column(sa.String(length=128), nullable=True)
+    # slice 73: AES-256-GCM 봉투 암호화 저장 — 마스터 키(DB 밖)로 암호화된 secret + 96-bit
+    # nonce. 둘 다 NULL이면 평문(secret_plain) 행. 키가 DB에 없어 dump 단독 복호 불가.
+    secret_encrypted: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
+    secret_nonce: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
     # 폐기 플래그 — verify는 revoked=True면 False 반환. revoke는 idempotent.
     revoked: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, server_default=sa.text("false")
