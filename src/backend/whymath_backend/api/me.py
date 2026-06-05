@@ -54,7 +54,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._query_filters import time_window_conditions
 from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
-from whymath_backend.db.models.assessment import Assessment, ConceptMasteryHistory
+from whymath_backend.db.models.assessment import (
+    AbilitySnapshot,
+    Assessment,
+    ConceptMasteryHistory,
+)
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
@@ -69,6 +73,7 @@ from whymath_backend.l2.irt import (
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
+from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
 from whymath_backend.schema.assessment import (
     ConceptMasteryHistory as ConceptMasteryHistorySchema,
@@ -702,31 +707,104 @@ async def get_my_ability(
     θ±1.96·SE를 함께 노출. 응답 0건(정보 0=SE 무한)이면 둘 다 null(측정 불가). 경계 θ
     (전부 정답/오답)의 SE는 Fisher 정보 기반이라 *낙관적*(실 불확실성 과소·EAP는 후속).
     """
+    theta, se, count = await _estimate_global_ability(session, user.user_id)
+    if se is None:  # 정보 0(응답 없음) → 측정 불가
+        return AbilityResponse(theta=theta, response_count=count)
+    return AbilityResponse(
+        theta=theta,
+        response_count=count,
+        standard_error=se,
+        confidence_interval=[theta - _CI_Z_95 * se, theta + _CI_Z_95 * se],
+    )
+
+
+async def _estimate_global_ability(
+    session: AsyncSession, user_id: uuid.UUID
+) -> tuple[float, float | None, int]:
+    """채점 풀이 이력에서 전 과목 단일 θ·SE·응답수 추정 — `/ability`·snapshot 캡처 공유.
+
+    `problem_attempt`(채점됨)를 `problem` JOIN해 (난이도→b, 정답) 응답을 만들고 θ·SE 산출.
+    SE는 정보 0(응답 없음)이면 None(측정 불가). 난이도 NULL 문항 제외.
+    """
     stmt = (
         select(ProblemAttempt.is_correct, Problem.difficulty_overall)
         .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
         .where(
-            ProblemAttempt.user_id == user.user_id,
+            ProblemAttempt.user_id == user_id,
             ProblemAttempt.is_correct.isnot(None),
         )
     )
-    result = await session.execute(stmt)
     responses = [
         (IrtItem(difficulty=_difficulty_to_logit(float(difficulty))), bool(is_correct))
-        for is_correct, difficulty in result.all()
+        for is_correct, difficulty in (await session.execute(stmt)).all()
         if difficulty is not None
     ]
     theta = estimate_ability(responses)
-    items = [item for item, _ in responses]
-    se = ability_standard_error(theta, items)
-    if math.isinf(se):  # 정보 0(응답 없음) → 측정 불가
-        return AbilityResponse(theta=theta, response_count=len(responses))
-    return AbilityResponse(
+    se = ability_standard_error(theta, [item for item, _ in responses])
+    return theta, (None if math.isinf(se) else se), len(responses)
+
+
+# ── slice L2-32: θ 시계열 적재 (POST 캡처 + GET 조회 — ability_snapshot) ──────────
+# θ 시계열(history·snapshots 공용) 상한 — 최근 N개(끝 N). 생략 시 전체.
+AbilityHistoryLimit = Annotated[
+    int | None,
+    Query(ge=1, le=500, description="최근 N개 지점만(시간 오름차순 중 끝 N). 생략 시 전체."),
+]
+
+
+@router.post(
+    "/ability/snapshots",
+    response_model=AbilitySnapshotSchema,
+    status_code=status.HTTP_201_CREATED,
+    summary="현재 IRT 능력 θ 스냅샷 적재(시계열 캡처)",
+)
+async def capture_ability_snapshot(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> AbilitySnapshotSchema:
+    """현재 전 과목 θ를 계산해 `ability_snapshot`에 1행 적재 — 성장 곡선 시점 캡처.
+
+    파생(slice 28 `/ability/history`·매 요청 재계산)과 달리 *적재형*: 호출 시점의 θ를 보존한다
+    (세션 종료·일/주 주기 등 호출자가 캡처 시점 결정). `concept_id`=null(전 과목 단일 θ). θ
+    계산은 `/ability`(slice 11)와 동일 헬퍼. user_id 스코핑.
+    """
+    theta, se, count = await _estimate_global_ability(session, user.user_id)
+    snap = AbilitySnapshotSchema(
+        user_id=user.user_id,
         theta=theta,
-        response_count=len(responses),
         standard_error=se,
-        confidence_interval=[theta - _CI_Z_95 * se, theta + _CI_Z_95 * se],
+        response_count=count,
+        measured_at=datetime.now(UTC),
     )
+    session.add(AbilitySnapshot.from_schema(snap))
+    await session.commit()
+    return snap
+
+
+@router.get(
+    "/ability/snapshots",
+    response_model=list[AbilitySnapshotSchema],
+    summary="내 IRT 능력 θ 스냅샷 시계열(적재된 성장 곡선)",
+)
+async def list_ability_snapshots(
+    user: ConsentedUser,
+    session: SessionDep,
+    limit: AbilityHistoryLimit = None,
+) -> list[AbilitySnapshotSchema]:
+    """적재된 θ 스냅샷을 *시간 오름차순*(성장 곡선)으로 조회. `?limit`이면 최근 N개(끝 N).
+
+    파생 `/ability/history`(이력 재생)와 달리 *적재된* 시점들을 그대로 반환(캡처 당시 θ 보존).
+    user_id 스코핑·읽기.
+    """
+    stmt = (
+        select(AbilitySnapshot)
+        .where(AbilitySnapshot.user_id == user.user_id)
+        .order_by(AbilitySnapshot.measured_at.asc())
+    )
+    snaps = [row.to_schema() for row in (await session.execute(stmt)).scalars().all()]
+    if limit is not None:
+        snaps = snaps[-limit:]
+    return snaps
 
 
 # ── slice L2-18: GET /v1/me/ability/by-concept (개념별 IRT 능력 θ 분리) ───────────
@@ -807,10 +885,6 @@ async def get_my_ability_by_concept(
 
 
 # ── slice L2-28: GET /v1/me/ability/history (θ 성장 곡선 — 채점 이력 시간 재생) ─────
-AbilityHistoryLimit = Annotated[
-    int | None,
-    Query(ge=1, le=500, description="최근 N개 지점만(시간 오름차순 중 끝 N). 생략 시 전체."),
-]
 
 
 class AbilityHistoryPoint(BaseModel):
