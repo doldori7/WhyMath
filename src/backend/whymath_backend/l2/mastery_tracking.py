@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import NamedTuple
 
@@ -25,7 +26,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
+from whymath_backend.db.models.concept import ProblemConcept
 from whymath_backend.l2.bkt import BktModel
+from whymath_backend.schema.enums import ConceptRole
+
+# slice 3: 채점된 풀이 정/오답이 *직접 평가*하는 개념 역할 — PRIMARY(주된 개념)·TESTED(평가
+# 대상). SUPPORTING(계산 부수)·IMPLICIT(무의식 사용)는 정/오답이 그 개념 숙달의 직접 증거가
+# 아니라 제외(오답이 보조 개념 탓일 수도·정답이 보조 개념 숙달을 확증하지 않음). 후속: role/
+# relevance 가중 부분 크레딧.
+_ASSESSED_ROLES: tuple[ConceptRole, ...] = (ConceptRole.PRIMARY, ConceptRole.TESTED)
 
 # confidence v1 휴리스틱: 표본 n개에서 `n/(n+HALFLIFE)` — 관측이 쌓일수록 측정 신뢰↑.
 # n=5에서 0.5·n=10에서 ≈0.67. BKT는 신뢰도를 직접 주지 않으므로 표본 크기로 근사(후속:
@@ -113,8 +122,59 @@ async def record_attempt_mastery(
     return row
 
 
+async def _assessed_concept_ids(
+    session: AsyncSession,
+    problem_id: uuid.UUID,
+    assessed_roles: Sequence[ConceptRole],
+) -> list[uuid.UUID]:
+    """문제가 *평가*하는 distinct 개념 id — `problem_concept` 중 role∈assessed_roles."""
+    stmt = (
+        select(ProblemConcept.concept_id)
+        .where(
+            ProblemConcept.problem_id == problem_id,
+            ProblemConcept.role.in_(list(assessed_roles)),
+        )
+        .distinct()
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def record_problem_attempt_mastery(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID,
+    correct: bool,
+    *,
+    model: BktModel | None = None,
+    measured_at: datetime | None = None,
+    assessed_roles: Sequence[ConceptRole] = _ASSESSED_ROLES,
+) -> list[ConceptMasteryHistory]:
+    """채점된 풀이(정/오답)를 문제가 평가하는 *모든 개념*의 숙달 갱신으로 전파 — 풀이 채점
+    파이프라인의 자동 결선 진입점.
+
+    `problem_concept`에서 role이 `assessed_roles`(기본 PRIMARY·TESTED)인 distinct 개념마다
+    `record_attempt_mastery`를 호출해 학습 곡선에 측정 1건씩 적재한다. 매핑이 없으면 빈 리스트
+    (숙달 갱신 0). 한 풀이의 모든 개념은 *같은 `measured_at`*(생략 시 현재)을 공유한다.
+
+    v1: 평가 개념 각각에 *동일* 정/오답 신호를 적용(role/relevance 가중 부분 크레딧은 후속).
+    개념별로 독립 commit(record_attempt_mastery 계약) — 다개념 원자성은 후속.
+    """
+    model = model or BktModel()
+    timestamp = measured_at or datetime.now(UTC)
+    concept_ids = await _assessed_concept_ids(session, problem_id, assessed_roles)
+    records: list[ConceptMasteryHistory] = []
+    for concept_id in concept_ids:
+        record = await record_attempt_mastery(
+            session, user_id, concept_id, correct, model=model, measured_at=timestamp
+        )
+        records.append(record)
+    return records
+
+
 __all__ = [
     "MasteryRecord",
     "compute_mastery_record",
     "record_attempt_mastery",
+    "record_problem_attempt_mastery",
 ]
