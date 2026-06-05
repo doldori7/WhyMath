@@ -19,6 +19,7 @@ from whymath_backend.l2.irt import (
     item_information,
     probability_correct,
     select_next_item,
+    select_weighted_item,
     total_information,
 )
 
@@ -208,6 +209,51 @@ class TestSelectNextItem:
             IrtItem(difficulty=0.0, discrimination=2.0),
         ]
         assert select_next_item(0.0, pool) == 1
+
+
+class TestSelectWeightedItem:
+    _POOL = [IrtItem(difficulty=-2.0), IrtItem(difficulty=0.0), IrtItem(difficulty=2.0)]
+
+    def test_none_weights_equals_select_next_item(self) -> None:
+        """weights=None은 균등 가중 → select_next_item과 동일."""
+        for theta in (-2.0, 0.0, 2.0):
+            assert select_weighted_item(theta, self._POOL) == select_next_item(
+                theta, self._POOL
+            )
+
+    def test_weight_biases_among_equal_info(self) -> None:
+        """정보량 같은 두 문항(b=0)이면 가중치 큰 쪽 선택."""
+        pool = [IrtItem(difficulty=0.0), IrtItem(difficulty=0.0)]
+        assert select_weighted_item(0.0, pool, weights=[1.0, 2.0]) == 1
+        assert select_weighted_item(0.0, pool, weights=[2.0, 1.0]) == 0
+
+    def test_weight_overrides_proximity(self) -> None:
+        """θ=0에서 b=0(정보 0.25)보다 b=2(정보 0.105)가 가중치로 역전."""
+        pool = [IrtItem(difficulty=0.0), IrtItem(difficulty=2.0)]
+        # 균등이면 b=0(인덱스0) 선택
+        assert select_weighted_item(0.0, pool) == 0
+        # b=2에 큰 가중치 → 0.105·3=0.315 > 0.25 → 인덱스1
+        assert select_weighted_item(0.0, pool, weights=[1.0, 3.0]) == 1
+
+    def test_excludes_administered(self) -> None:
+        assert select_weighted_item(0.0, self._POOL, administered={1}) == 0
+
+    def test_empty_pool_returns_none(self) -> None:
+        assert select_weighted_item(0.0, []) is None
+        assert select_weighted_item(0.0, [], weights=[]) is None
+
+    def test_ties_lowest_index(self) -> None:
+        pool = [IrtItem(difficulty=0.0), IrtItem(difficulty=0.0)]
+        assert select_weighted_item(0.0, pool, weights=[2.0, 2.0]) == 0
+
+    def test_zero_weight_still_selectable_as_fallback(self) -> None:
+        """가중치 0이라도(정보·가중 0) 후보가 그뿐이면 선택(None 아님)."""
+        pool = [IrtItem(difficulty=0.0)]
+        assert select_weighted_item(0.0, pool, weights=[0.0]) == 0
+
+    def test_length_mismatch_raises(self) -> None:
+        with pytest.raises(ValueError, match="weights 길이"):
+            select_weighted_item(0.0, self._POOL, weights=[1.0, 2.0])
 
 
 class TestTotalInformation:
