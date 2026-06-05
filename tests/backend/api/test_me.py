@@ -14,6 +14,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from whymath_backend.api._auth import get_consented_user
+from whymath_backend.api.me import _weak_concept_weights
 from whymath_backend.app import create_app
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import Assessment, ConceptMasteryHistory
@@ -1085,3 +1086,73 @@ class TestNextProblem:
         assert body["standard_error"] is None
         assert body["measurement_sufficient"] is False
         assert body["problem_id"] == str(cand)
+
+    def test_weak_concept_priority_reorders(self) -> None:
+        """slice 17: 동일 정보량 두 후보 중 약점 개념(저숙달) 문항이 가중으로 선택.
+
+        쿼리 4회: ①채점 이력 ②후보 ③숙달 스냅샷 ④후보 개념 매핑.
+        """
+        c_strong, c_weak = uuid.uuid4(), uuid.uuid4()
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([]),  # 채점 이력 없음 → θ=0
+                _AQResult([(pid_a, 3.0), (pid_b, 3.0)]),  # 동일 난이도(b=0)
+                _AQResult([(c_strong, 1.0), (c_weak, 0.0)]),  # 숙달: 강·약
+                _AQResult([(pid_a, c_strong), (pid_b, c_weak)]),  # 개념 매핑
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?prioritize_weak_concepts=true").json()
+        # 균등이면 동률→pid_a(낮은 인덱스)이나, 약점 가중으로 pid_b(저숙달) 선택
+        assert body["problem_id"] == str(pid_b)
+        assert body["theta"] == 0.0
+
+    def test_default_ignores_weak_concepts(self) -> None:
+        """기본(flag 미지정) → 가중 쿼리 없이 동률은 낮은 인덱스(slice 12 동작 보존)."""
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [_AQResult([]), _AQResult([(pid_a, 3.0), (pid_b, 3.0)])]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["problem_id"] == str(pid_a)
+
+    def test_weak_priority_no_candidates_skips_weight_queries(self) -> None:
+        """후보 없으면 flag=true라도 가중 쿼리 생략(2쿼리만)·problem_id null."""
+        # _QueueSession에 2건만 제공 — 가중 쿼리를 돌리면 IndexError(가드 검증)
+        session = _QueueSession([_AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?prioritize_weak_concepts=true").json()
+        assert body["problem_id"] is None
+
+
+class TestWeakConceptWeights:
+    """slice 17: `_weak_concept_weights` 순수 헬퍼 — 문항별 약점 가중치 산출."""
+
+    def test_no_concept_mapping_neutral(self) -> None:
+        pid = uuid.uuid4()
+        assert _weak_concept_weights([pid], {}, {}) == [1.0]
+
+    def test_mapped_but_no_mastery_neutral(self) -> None:
+        pid, c = uuid.uuid4(), uuid.uuid4()
+        assert _weak_concept_weights([pid], {pid: {c}}, {}) == [1.0]
+
+    def test_weakness_scales_weight(self) -> None:
+        pid, c = uuid.uuid4(), uuid.uuid4()
+        assert _weak_concept_weights([pid], {pid: {c}}, {c: 0.0}) == [2.0]  # 완전 약점
+        assert _weak_concept_weights([pid], {pid: {c}}, {c: 1.0}) == [1.0]  # 완전 숙달
+        assert _weak_concept_weights([pid], {pid: {c}}, {c: 0.25}) == [1.75]
+
+    def test_min_mastery_among_concepts(self) -> None:
+        """문항의 여러 평가 개념 중 *최저* 숙달로 weakness 산출."""
+        pid = uuid.uuid4()
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        weights = _weak_concept_weights([pid], {pid: {c1, c2}}, {c1: 0.8, c2: 0.2})
+        assert weights == [1.8]  # min(0.8, 0.2)=0.2 → 1+0.8
+
+    def test_order_and_independence(self) -> None:
+        p1, p2 = uuid.uuid4(), uuid.uuid4()
+        c = uuid.uuid4()
+        # p1 약점·p2 매핑 없음 → [2.0, 1.0] 순서 보존
+        assert _weak_concept_weights([p1, p2], {p1: {c}}, {c: 0.0}) == [2.0, 1.0]

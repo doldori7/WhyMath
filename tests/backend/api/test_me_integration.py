@@ -855,3 +855,102 @@ def test_me_next_problem_recommends_unattempted_on_live_pg() -> None:
             assert client.get("/v1/me/next-problem").status_code == 401  # 무토큰
     finally:
         asyncio.run(_cleanup_all())
+
+
+def test_me_next_problem_weak_concept_priority_on_live_pg() -> None:
+    """GET /v1/me/next-problem?prioritize_weak_concepts=true — 동일 난이도 두 문항 중
+    약점 개념(저숙달) 문항을 BKT 숙달 스냅샷 조인으로 우선 추천(BKT+IRT 융합·end-to-end)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid_strong = uuid.uuid4()  # 강점 개념 문항(난이도3)
+    pid_weak = uuid.uuid4()  # 약점 개념 문항(난이도3·저숙달)
+    c_strong, c_weak = uuid.uuid4(), uuid.uuid4()
+    suffix = uid.hex[:8]
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def _problem(pid: uuid.UUID) -> Problem:
+        return Problem.from_schema(
+            ProblemSchema(
+                problem_id=pid,
+                source_type=SourceType.자체생성,
+                curriculum_version=Curriculum.REVISION_2022,
+                valid_from_year=2022,
+                subject=Subject.공통,
+                unit_codes=[f"U-{suffix}"],
+                difficulty_overall=3.0,
+            )
+        )
+
+    def _concept(cid: uuid.UUID, code: str) -> Concept:
+        return Concept.from_schema(
+            ConceptSchema(
+                concept_id=cid, code=code, name_ko=code, level=ConceptLevel.세부개념
+            )
+        )
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(
+            _concept(c_strong, f"S-{suffix}"), _concept(c_weak, f"W-{suffix}")
+        )
+        await _add_all(_problem(pid_strong), _problem(pid_weak))
+        await _add_all(
+            ProblemConcept.from_schema(
+                ProblemConceptSchema(
+                    problem_id=pid_strong, concept_id=c_strong, role=ConceptRole.PRIMARY
+                )
+            ),
+            ProblemConcept.from_schema(
+                ProblemConceptSchema(
+                    problem_id=pid_weak, concept_id=c_weak, role=ConceptRole.PRIMARY
+                )
+            ),
+        )
+        # 숙달: 강점 1.0 · 약점 0.0
+        await _add_all(
+            _mastery_row(uid, c_strong, t1, 1.0),
+            _mastery_row(uid, c_weak, t1, 0.0),
+        )
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                for sql, params in (
+                    (
+                        "DELETE FROM concept_mastery_history WHERE user_id=:u",
+                        {"u": str(uid)},
+                    ),
+                    (
+                        "DELETE FROM problem_concept WHERE problem_id = ANY(:p)",
+                        {"p": [str(pid_strong), str(pid_weak)]},
+                    ),
+                    (
+                        "DELETE FROM problem WHERE problem_id = ANY(:p)",
+                        {"p": [str(pid_strong), str(pid_weak)]},
+                    ),
+                    (
+                        "DELETE FROM concept WHERE concept_id = ANY(:c)",
+                        {"c": [str(c_strong), str(c_weak)]},
+                    ),
+                    ("DELETE FROM user_profile WHERE user_id=:u", {"u": str(uid)}),
+                ):
+                    await conn.execute(text(sql), params)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        with _client() as client:
+            auth = {"Authorization": f"Bearer {token}"}
+            # 약점 우선 → 저숙달 개념(pid_weak) 추천(동일 난이도·가중으로 역전)
+            resp = client.get(
+                "/v1/me/next-problem?prioritize_weak_concepts=true", headers=auth
+            )
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["problem_id"] == str(pid_weak)
+    finally:
+        asyncio.run(_cleanup_all())
