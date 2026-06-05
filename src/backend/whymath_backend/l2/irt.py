@@ -88,8 +88,45 @@ def estimate_ability(
     return theta
 
 
+def item_information(theta: float, item: IrtItem) -> float:
+    """문항 정보함수 I(θ) = a²·P·(1-P) — 능력 θ에서 이 문항이 주는 측정 정보량.
+
+    P=0.5(θ=b)에서 최대 — 즉 *난이도가 능력과 일치*할 때 가장 정보가 많다(맞힐지 틀릴지
+    불확실한 문항이 변별력 최대). 변별도 a가 클수록 정보량↑(a² 가중). 적응형 출제의 핵심.
+    """
+    p = probability_correct(theta, item)
+    return item.discrimination * item.discrimination * p * (1.0 - p)
+
+
+def select_next_item(
+    theta: float,
+    items: list[IrtItem],
+    *,
+    administered: set[int] | None = None,
+) -> int | None:
+    """능력 θ에서 *정보량 최대* 문항의 인덱스 — 적응형 다음 문항(CAT 핵심).
+
+    `items` 중 `administered`(이미 출제한 인덱스 집합)를 제외하고 `item_information(θ, ·)`이
+    가장 큰 문항의 인덱스를 반환한다. 후보가 없으면(빈 목록·전부 출제) None. 동률은 *낮은
+    인덱스*(결정론). θ에 난이도가 가까운 문항이 대체로 선택된다(P≈0.5·정보 최대).
+    """
+    administered = administered or set()
+    best_index: int | None = None
+    best_info = -1.0
+    for index, item in enumerate(items):
+        if index in administered:
+            continue
+        info = item_information(theta, item)
+        if info > best_info:
+            best_info = info
+            best_index = index
+    return best_index
+
+
 __all__ = [
     "IrtItem",
     "estimate_ability",
+    "item_information",
     "probability_correct",
+    "select_next_item",
 ]

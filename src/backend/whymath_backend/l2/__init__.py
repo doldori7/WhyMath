@@ -26,7 +26,7 @@ from whymath_backend.l2.bkt import (
     probability_correct,
     update_mastery,
 )
-from whymath_backend.l2.irt import IrtItem, estimate_ability
+from whymath_backend.l2.irt import IrtItem, estimate_ability, item_information, select_next_item
 from whymath_backend.l2.mastery_tracking import (
     MasteryRecord,
     compute_mastery_record,
@@ -44,7 +44,9 @@ __all__ = [
     "apply_learning",
     "compute_mastery_record",
     "estimate_ability",
+    "item_information",
     "posterior_mastery",
+    "select_next_item",
     "probability_correct",
     "record_attempt_mastery",
     "record_problem_attempt_mastery",
