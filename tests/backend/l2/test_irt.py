@@ -12,6 +12,7 @@ from whymath_backend.l2.irt import (
     IrtItem,
     estimate_ability,
     estimate_difficulty,
+    fit_jmle,
     item_information,
     probability_correct,
     select_next_item,
@@ -253,3 +254,58 @@ class TestEstimateDifficulty:
         추정 b는 0~2 사이(능력 추정과 같은 로지스틱 척도)."""
         b = estimate_difficulty([(2.0, True), (0.0, False)])
         assert 0.0 < b < 2.0
+
+
+class TestFitJmle:
+    # Guttman 패턴: 학생0(저)=item0만·학생1(중)=item0,1·학생2(고)=item0,1,2
+    _GUTTMAN = [
+        (0, 0, True),
+        (0, 1, False),
+        (0, 2, False),
+        (1, 0, True),
+        (1, 1, True),
+        (1, 2, False),
+        (2, 0, True),
+        (2, 1, True),
+        (2, 2, True),
+    ]
+
+    def test_empty_returns_zeros(self) -> None:
+        assert fit_jmle([], 0, 0) == ([], [])
+        assert fit_jmle([], 3, 2) == ([0.0, 0.0, 0.0], [0.0, 0.0])
+
+    def test_recovers_ability_ordering(self) -> None:
+        """더 많이 맞힌 학생이 더 높은 능력으로 추정."""
+        abilities, _ = fit_jmle(self._GUTTMAN, 3, 3)
+        assert abilities[0] < abilities[1] < abilities[2]
+
+    def test_recovers_difficulty_ordering(self) -> None:
+        """더 적은 학생이 맞힌 문항이 더 높은 난이도로 추정."""
+        _, difficulties = fit_jmle(self._GUTTMAN, 3, 3)
+        assert difficulties[0] < difficulties[1] < difficulties[2]
+
+    def test_difficulties_centered(self) -> None:
+        """척도 위치 고정 — 난이도 평균 ≈ 0."""
+        _, difficulties = fit_jmle(self._GUTTMAN, 3, 3)
+        assert sum(difficulties) / len(difficulties) == pytest.approx(0.0, abs=1e-6)
+
+    def test_deterministic(self) -> None:
+        assert fit_jmle(self._GUTTMAN, 3, 3) == fit_jmle(self._GUTTMAN, 3, 3)
+
+    def test_student_without_responses_stays_zero(self) -> None:
+        """응답 없는 학생(인덱스 1)은 능력 0(정보 없음)."""
+        resp = [(0, 0, True), (0, 1, False), (2, 0, False), (2, 1, True)]
+        abilities, _ = fit_jmle(resp, 3, 2)
+        assert abilities[1] == 0.0
+
+    def test_two_by_two_separation(self) -> None:
+        """고능력 학생 둘 다 정답·저능력 쉬운 것만 → 능력·난이도 분리."""
+        resp = [
+            (0, 0, True),
+            (0, 1, False),  # 저: 쉬운 것만
+            (1, 0, True),
+            (1, 1, True),  # 고: 둘 다
+        ]
+        abilities, difficulties = fit_jmle(resp, 2, 2)
+        assert abilities[1] > abilities[0]
+        assert difficulties[1] > difficulties[0]

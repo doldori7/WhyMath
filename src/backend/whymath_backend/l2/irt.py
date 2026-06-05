@@ -131,6 +131,65 @@ def estimate_difficulty(
     return b
 
 
+def fit_jmle(
+    responses: list[tuple[int, int, bool]],
+    n_students: int,
+    n_items: int,
+    *,
+    discrimination: float = 1.0,
+    max_iter: int = 100,
+    tol: float = 1e-3,
+) -> tuple[list[float], list[float]]:
+    """JMLE(결합 최대우도) 교대 적합 — 응답만으로 능력 θ·난이도 b를 *동시* 추정(문항 자가 보정).
+
+    `responses`는 `(student_index, item_index, 정답)` 희소 삼중쌍(미응답 쌍은 생략 가능). 매 반복:
+      ① 현재 난이도로 각 학생 θ 추정(`estimate_ability`)
+      ② 현재 능력으로 각 문항 b 추정(`estimate_difficulty`)
+      ③ *척도 불확정성*(θ·b 동시 가산 이동 불변) 해소 — 난이도 평균을 0으로 중심화.
+    θ·b 변화 최대가 `tol` 미만이면 수렴 종료. `(abilities, difficulties)` 반환.
+
+    응답 없는 학생/문항은 0(추정 정보 없음). 전부 정답/오답 학생·문항은 경계값(clamp)으로 수렴.
+    소규모 프로토타입용(응답 1회 그룹화 후 반복은 룩업) — 대규모는 벡터화·MML 후속.
+    """
+    abilities = [0.0] * n_students
+    difficulties = [0.0] * n_items
+    if not responses or n_students == 0 or n_items == 0:
+        return abilities, difficulties
+
+    # 응답 1회 그룹화: 학생별 [(item_idx, 정답)]·문항별 [(student_idx, 정답)]
+    by_student: list[list[tuple[int, bool]]] = [[] for _ in range(n_students)]
+    by_item: list[list[tuple[int, bool]]] = [[] for _ in range(n_items)]
+    for s_idx, i_idx, correct in responses:
+        by_student[s_idx].append((i_idx, correct))
+        by_item[i_idx].append((s_idx, correct))
+
+    for _ in range(max_iter):
+        max_change = 0.0
+        # ① 능력 추정(난이도 고정)
+        for s_idx in range(n_students):
+            obs = [
+                (IrtItem(difficulty=difficulties[i], discrimination=discrimination), c)
+                for i, c in by_student[s_idx]
+            ]
+            new_theta = estimate_ability(obs)
+            max_change = max(max_change, abs(new_theta - abilities[s_idx]))
+            abilities[s_idx] = new_theta
+        # ② 난이도 추정(능력 고정)
+        for i_idx in range(n_items):
+            obs_b = [(abilities[s], c) for s, c in by_item[i_idx]]
+            new_b = estimate_difficulty(obs_b, discrimination=discrimination)
+            max_change = max(max_change, abs(new_b - difficulties[i_idx]))
+            difficulties[i_idx] = new_b
+        # ③ 난이도 중심화(척도 위치 고정) — 응답 있는 문항만 평균에 반영
+        active = [difficulties[i] for i in range(n_items) if by_item[i]]
+        if active:  # pragma: no branch — 응답 존재 시 항상 참(early return이 빈 응답 차단)
+            mean_b = sum(active) / len(active)
+            difficulties = [b - mean_b for b in difficulties]
+        if max_change < tol:
+            break
+    return abilities, difficulties
+
+
 def item_information(theta: float, item: IrtItem) -> float:
     """문항 정보함수 I(θ) = a²·P·(1-P) — 능력 θ에서 이 문항이 주는 측정 정보량.
 
@@ -170,6 +229,7 @@ __all__ = [
     "IrtItem",
     "estimate_ability",
     "estimate_difficulty",
+    "fit_jmle",
     "item_information",
     "probability_correct",
     "select_next_item",

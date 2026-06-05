@@ -30,6 +30,7 @@ from whymath_backend.l2.irt import (
     IrtItem,
     estimate_ability,
     estimate_difficulty,
+    fit_jmle,
     item_information,
     select_next_item,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "compute_mastery_record",
     "estimate_ability",
     "estimate_difficulty",
+    "fit_jmle",
     "item_information",
     "posterior_mastery",
     "select_next_item",
