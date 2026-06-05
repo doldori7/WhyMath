@@ -214,6 +214,54 @@ class TestBasicDecision:
         assert resp.json()["lthc"] is None
 
 
+class TestCoachingFocusSeed:
+    """slice 23: coaching_focus → entry_socratic_category 시드(L2 진단→coach 결선)."""
+
+    def test_none_focus_no_entry_category(self) -> None:
+        resp = _client().post("/v1/coach", json={"student_input": "음"})
+        assert resp.json()["entry_socratic_category"] is None
+
+    def test_focus_seeds_entry_category(self) -> None:
+        """consolidate → evidence(slice 22 매핑)."""
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "음", "coaching_focus": "consolidate"},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["entry_socratic_category"] == "evidence"
+
+    def test_all_focus_mappings(self) -> None:
+        cases = {
+            "consolidate": "evidence",
+            "retrieval": "meta",
+            "foundation": "clarification",
+            "advance": "perspective",
+            "diagnose": "clarification",
+        }
+        client = _client()
+        for focus, expected in cases.items():
+            resp = client.post(
+                "/v1/coach", json={"student_input": "음", "coaching_focus": focus}
+            )
+            assert resp.json()["entry_socratic_category"] == expected, focus
+
+    def test_invalid_focus_rejected_422(self) -> None:
+        resp = _client().post(
+            "/v1/coach", json={"student_input": "음", "coaching_focus": "bogus"}
+        )
+        assert resp.status_code == 422
+
+    def test_session_create_includes_entry_category(self) -> None:
+        """세션 생성 응답에도 진입 카테고리 시드 노출."""
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "음", "coaching_focus": "advance"},
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["entry_socratic_category"] == "perspective"
+
+
 class TestMisconceptionIntegration:
     def test_distribution_misconception_detected_with_intervention(self) -> None:
         # 슬라이스 4 카탈로그 — (a+b)² = a² + b² 신호로 풀 매칭(confidence 1.0)
