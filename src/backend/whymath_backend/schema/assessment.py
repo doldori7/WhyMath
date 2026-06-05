@@ -226,3 +226,34 @@ class ConceptMasteryHistory(BaseModel):
         "설정.",
         ge=0,
     )
+
+
+class AbilitySnapshot(BaseModel):
+    """IRT 능력 θ 시계열 적재 — slice 31(`ability_snapshot`). 성장 곡선 영속.
+
+    `concept_mastery_history`(BKT 숙달 시계열)와 *상보적* — 이쪽은 IRT 능력 θ(logit)를 시점별로
+    저장한다. 파생 계산(slice 28 `/me/ability/history`)과 달리 *적재형*(캡처 시점 보존·재계산
+    불요). `concept_id`가 null이면 전 과목 단일 θ, 값이 있으면 개념별 θ(후속). 미성년 진단
+    데이터(개인정보)는 저장·노출 계층 책임(assessment 모듈 docstring과 동일 방침).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    snapshot_id: uuid.UUID = Field(default_factory=uuid4, description="스냅샷 PK(surrogate·UUID4).")
+    user_id: uuid.UUID = Field(..., description="학생 id(느슨참조·FK 아님).")
+    concept_id: uuid.UUID | None = Field(
+        default=None, description="개념 id. null이면 전 과목 단일 θ(개념별은 후속)."
+    )
+    theta: float = Field(..., description="IRT 능력 θ(logit). 이 시점 추정값.")
+    standard_error: float | None = Field(
+        default=None, description="θ 표준오차 SE. 측정 불가면 null.", ge=0.0
+    )
+    response_count: int = Field(..., description="이 추정에 쓰인 채점 풀이 수.", ge=0)
+    measured_at: datetime | None = Field(
+        default=None,
+        description="측정(캡처) 시각. None이면 DB server_default now() 사용(insert 시각).",
+    )

@@ -65,7 +65,9 @@ def test_assessment_ddl_fk_jsonb_enum() -> None:
     assert "assessment_type_enum" in ddl
     assert "mental_phase_enum" in ddl
     assert "gen_random_uuid()" in ddl
-    assert "NUMERIC" in ddl  # estimated_grade·estimated_percentile·admission_probability
+    assert (
+        "NUMERIC" in ddl
+    )  # estimated_grade·estimated_percentile·admission_probability
 
 
 def test_assessment_loose_ref_target_university() -> None:
@@ -147,7 +149,9 @@ def test_assessment_roundtrip_d100_and_jsonb() -> None:
     assert orm.mental_phase == "D_100_50"
     assert orm.admission_probability == 0.72
     assert orm.weak_points == [{"concept": "수열의극한", "mastery": 0.3}]
-    assert orm.recommended_path == [{"week": 1, "concept": "극한", "estimated_hours": 5}]
+    assert orm.recommended_path == [
+        {"week": 1, "concept": "극한", "estimated_hours": 5}
+    ]
 
     back = orm.to_schema()
     assert back.assessment_id == aid
@@ -194,3 +198,49 @@ def test_concept_mastery_history_roundtrip() -> None:
     assert back.measured_at == at
     assert back.mastery == s.mastery
     assert back.confidence == s.confidence
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# AbilitySnapshot (slice 31) — 메타 등록·PG DDL 컴파일·roundtrip
+# ──────────────────────────────────────────────────────────────────────────
+from whymath_backend.db.models.assessment import (  # noqa: E402
+    AbilitySnapshot as OrmAbilitySnapshot,
+)
+from whymath_backend.schema.assessment import (  # noqa: E402
+    AbilitySnapshot as SchemaAbilitySnapshot,
+)
+
+
+def test_ability_snapshot_registered_and_compiles() -> None:
+    assert "ability_snapshot" in Base.metadata.tables
+    ddl = _pg_ddl(Base.metadata.tables["ability_snapshot"])
+    assert "ability_snapshot" in ddl
+    assert "gen_random_uuid()" in ddl  # surrogate PK 기본값
+    assert "theta" in ddl and "response_count" in ddl
+
+
+def test_ability_snapshot_roundtrip() -> None:
+    """schema → ORM → schema 왕복(measured_at 명시·None 필드 server_default 위임)."""
+    schema = SchemaAbilitySnapshot(
+        user_id=uuid.uuid4(),
+        theta=1.25,
+        standard_error=0.4,
+        response_count=7,
+        measured_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+    orm = OrmAbilitySnapshot.from_schema(schema)
+    assert orm.theta == 1.25
+    assert orm.response_count == 7
+    assert orm.concept_id is None  # 전 과목 단일 θ
+    back = orm.to_schema()
+    assert back.theta == 1.25
+    assert back.standard_error == 0.4
+    assert back.user_id == schema.user_id
+
+
+def test_ability_snapshot_from_schema_omits_none_for_server_default() -> None:
+    """measured_at=None(기본)이면 from_schema가 제외 → server_default now() 위임(NULL 미주입)."""
+    orm = OrmAbilitySnapshot.from_schema(
+        SchemaAbilitySnapshot(user_id=uuid.uuid4(), theta=0.0, response_count=0)
+    )
+    assert orm.measured_at is None  # 미설정 → INSERT 시 server_default 적용
