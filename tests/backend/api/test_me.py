@@ -1306,6 +1306,8 @@ class TestConceptDiagnosis:
         assert item["agreement"] == "irt_higher"
         assert item["irt_theta"] == 4.0
         assert item["coaching"]["focus"] == "consolidate"
+        # slice 22: 코칭에 대화 진입 소크라테스 카테고리 노출
+        assert item["coaching"]["socratic_category"] == "evidence"
 
     def test_bkt_higher_signal(self) -> None:
         """BKT 0.9인데 전부 오답(θ=-4·프록시≈0.02) → bkt_higher·코칭 retrieval."""

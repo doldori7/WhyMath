@@ -17,6 +17,7 @@ from whymath_backend.l4.lthc import LthcAdaptation, MasteryLevel, adapt_lthc
 from whymath_backend.l4.metacognitive_trigger import (
     CoachingFocus,
     CoachingTrigger,
+    focus_to_socratic_category,
     recommend_coaching,
 )
 from whymath_backend.l4.misconception import (
@@ -66,6 +67,7 @@ __all__ = [
     "decide_hint_level",
     "diagnose",
     "filter_tone",
+    "focus_to_socratic_category",
     "recommend_coaching",
     "select_category",
     "select_intervention",

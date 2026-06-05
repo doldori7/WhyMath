@@ -7,8 +7,10 @@ from __future__ import annotations
 
 from whymath_backend.l4.metacognitive_trigger import (
     CoachingTrigger,
+    focus_to_socratic_category,
     recommend_coaching,
 )
+from whymath_backend.l4.socratic.categories import SocraticCategory
 
 
 class TestRecommendCoaching:
@@ -65,3 +67,21 @@ class TestRecommendCoaching:
 
     def test_deterministic(self) -> None:
         assert recommend_coaching(0.3, 1.0) == recommend_coaching(0.3, 1.0)
+
+    def test_includes_socratic_category(self) -> None:
+        """결정에 대화 진입 소크라테스 카테고리가 포함(focus 매핑 일치)."""
+        # consolidate(맞히나 숙달↓) → EVIDENCE(근거·추측 검증)
+        trig = recommend_coaching(0.1, 4.0)
+        assert trig.focus == "consolidate"
+        assert trig.socratic_category == SocraticCategory.EVIDENCE
+
+
+class TestFocusToSocraticCategory:
+    def test_all_focus_mapped(self) -> None:
+        assert focus_to_socratic_category("consolidate") == SocraticCategory.EVIDENCE
+        assert focus_to_socratic_category("retrieval") == SocraticCategory.META
+        assert (
+            focus_to_socratic_category("foundation") == SocraticCategory.CLARIFICATION
+        )
+        assert focus_to_socratic_category("advance") == SocraticCategory.PERSPECTIVE
+        assert focus_to_socratic_category("diagnose") == SocraticCategory.CLARIFICATION
