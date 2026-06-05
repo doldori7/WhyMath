@@ -864,3 +864,47 @@ class TestMasteryCurve:
 
     def test_current_requires_auth(self) -> None:
         assert _no_auth_client().get("/v1/me/mastery/current").status_code == 401
+
+    def test_current_order_by_mastery_weakest_first(self) -> None:
+        """slice L2-5c: order_by=mastery&order=asc → 약점(낮은 숙달) 우선."""
+        rows = [_mastery_row(0.9), _mastery_row(0.3), _mastery_row(0.6)]
+        client, _ = _client(rows)
+        resp = client.get(
+            "/v1/me/mastery/current", params={"order_by": "mastery", "order": "asc"}
+        )
+        assert resp.status_code == 200, resp.text
+        assert [float(r["mastery"]) for r in resp.json()] == [0.3, 0.6, 0.9]
+
+    def test_current_order_by_mastery_strongest_first(self) -> None:
+        rows = [_mastery_row(0.3), _mastery_row(0.9)]
+        client, _ = _client(rows)
+        resp = client.get(
+            "/v1/me/mastery/current", params={"order_by": "mastery", "order": "desc"}
+        )
+        assert [float(r["mastery"]) for r in resp.json()] == [0.9, 0.3]
+
+    def test_current_mastery_null_always_last(self) -> None:
+        """mastery NULL은 정렬 방향 무관 항상 끝."""
+        none_row = ConceptMasteryHistory.from_schema(
+            ConceptMasteryHistorySchema(
+                user_id=_UID,
+                concept_id=uuid.uuid4(),
+                measured_at=datetime(2026, 1, 1, tzinfo=UTC),
+                mastery=None,
+            )
+        )
+        client, _ = _client([none_row, _mastery_row(0.5)])
+        resp = client.get(
+            "/v1/me/mastery/current", params={"order_by": "mastery", "order": "asc"}
+        )
+        body = resp.json()
+        assert body[-1]["mastery"] is None
+
+    def test_current_invalid_order_by_422(self) -> None:
+        client, _ = _client([])
+        assert (
+            client.get(
+                "/v1/me/mastery/current", params={"order_by": "bogus"}
+            ).status_code
+            == 422
+        )

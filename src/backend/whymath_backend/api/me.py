@@ -123,6 +123,12 @@ ConceptIdFilter = Annotated[
     uuid.UUID | None,
     Query(description="특정 개념의 학습 곡선만(선택). 생략 시 전 개념 측정 인터리브."),
 ]
+# slice L2-5c: 현재 숙달 스냅샷 정렬 기준 — concept_id(기본) 또는 mastery(약점/강점 우선).
+SnapshotOrderBy = Literal["concept_id", "mastery"]
+SnapshotOrderByParam = Annotated[
+    SnapshotOrderBy,
+    Query(description="스냅샷 정렬 기준 — concept_id(기본) 또는 mastery(order=asc면 약점 우선)."),
+]
 
 
 async def _maybe_set_total(
@@ -564,12 +570,18 @@ async def list_my_mastery(
 async def list_my_current_mastery(
     user: ConsentedUser,
     session: SessionDep,
+    order_by: SnapshotOrderByParam = "concept_id",
+    order: OrderParam = "asc",
 ) -> list[ConceptMasteryHistorySchema]:
     """본인의 *개념별 최신* 숙달 1건씩 — 현재 상태 스냅샷("한눈에"). `/mastery`는 전 측정
     시계열(학습 곡선)이고, 본 엔드포인트는 개념마다 가장 최근 측정만.
 
     Postgres `DISTINCT ON (concept_id)` + `ORDER BY concept_id, measured_at DESC`로 개념별
     최신 행을 고른다(개념당 1행). 스냅샷이라 페이지네이션·필터 없음(연습한 개념 수로 한정).
+
+    slice L2-5c: `order_by=mastery`로 약점/강점 우선 정렬("다음에 뭘 연습할지"). DISTINCT ON은
+    ORDER BY가 concept_id로 시작해야 해(최신 행 선택 불변) 결과(개념당 1행·소규모)를 Python에서
+    재정렬한다. mastery NULL은 *항상 끝*(방향 무관). 기본 concept_id asc(기존 동작 보존).
     """
     stmt = (
         select(ConceptMasteryHistory)
@@ -581,7 +593,19 @@ async def list_my_current_mastery(
         )
     )
     result = await session.execute(stmt)
-    return [row.to_schema() for row in result.scalars().all()]
+    rows = list(result.scalars().all())
+    reverse = order == "desc"
+    if order_by == "mastery":
+        # NULL 항상 끝(방향 무관) + 나머지는 mastery 기준 정렬(asc=약점 우선)
+        present = sorted(
+            (r for r in rows if r.mastery is not None),
+            key=lambda r: float(r.mastery) if r.mastery is not None else 0.0,
+            reverse=reverse,
+        )
+        rows = present + [r for r in rows if r.mastery is None]
+    else:  # concept_id — DISTINCT ON 자연 순(asc)·desc면 역순
+        rows.sort(key=lambda r: str(r.concept_id), reverse=reverse)
+    return [row.to_schema() for row in rows]
 
 
 @router.patch(
