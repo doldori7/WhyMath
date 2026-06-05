@@ -129,10 +129,12 @@ async def _cleanup_problem(problem_id: uuid.UUID, concept_ids: list[uuid.UUID]) 
                 {"pid": str(problem_id)},
             )
             await conn.execute(
-                text("DELETE FROM problem WHERE problem_id = :pid"), {"pid": str(problem_id)}
+                text("DELETE FROM problem WHERE problem_id = :pid"),
+                {"pid": str(problem_id)},
             )
             await conn.execute(
-                text("DELETE FROM concept WHERE concept_id = ANY(:cids)"), {"cids": cids}
+                text("DELETE FROM concept WHERE concept_id = ANY(:cids)"),
+                {"cids": cids},
             )
     finally:
         await engine.dispose()
@@ -140,7 +142,12 @@ async def _cleanup_problem(problem_id: uuid.UUID, concept_ids: list[uuid.UUID]) 
 
 def _concept(cid: uuid.UUID, code: str) -> Concept:
     return Concept.from_schema(
-        ConceptSchema(concept_id=cid, code=code, name_ko=f"개념{code}", level=ConceptLevel.세부개념)
+        ConceptSchema(
+            concept_id=cid,
+            code=code,
+            name_ko=f"개념{code}",
+            level=ConceptLevel.세부개념,
+        )
     )
 
 
@@ -184,12 +191,16 @@ def test_record_problem_attempt_mastery_only_assessed_roles_on_live_pg() -> None
                     [
                         ProblemConcept.from_schema(
                             ProblemConceptSchema(
-                                problem_id=pid, concept_id=c_primary, role=ConceptRole.PRIMARY
+                                problem_id=pid,
+                                concept_id=c_primary,
+                                role=ConceptRole.PRIMARY,
                             )
                         ),
                         ProblemConcept.from_schema(
                             ProblemConceptSchema(
-                                problem_id=pid, concept_id=c_tested, role=ConceptRole.TESTED
+                                problem_id=pid,
+                                concept_id=c_tested,
+                                role=ConceptRole.TESTED,
                             )
                         ),
                         ProblemConcept.from_schema(

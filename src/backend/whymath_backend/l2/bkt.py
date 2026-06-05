@@ -27,6 +27,7 @@
 
 from __future__ import annotations
 
+import math
 from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -36,6 +37,7 @@ _DEFAULT_P_INIT = 0.3
 _DEFAULT_P_TRANSIT = 0.1
 _DEFAULT_P_SLIP = 0.1
 _DEFAULT_P_GUESS = 0.2
+_DEFAULT_P_FORGET = 0.0  # 0=감쇠 없음(기본·하위 호환). >0이면 일/단위 망각률.
 
 
 class BktParameters(BaseModel):
@@ -58,6 +60,12 @@ class BktParameters(BaseModel):
     )
     p_guess: float = Field(
         default=_DEFAULT_P_GUESS, ge=0.0, le=1.0, description="P(G) 미숙달인데 맞힐 확률."
+    )
+    p_forget: float = Field(
+        default=_DEFAULT_P_FORGET,
+        ge=0.0,
+        description="망각률 λ(일 단위 지수 감쇠). 0=감쇠 없음(기본). 연습 공백 동안 *사전값을 "
+        "넘는* 숙달분이 `exp(-λ·경과일)`로 사전(P(L0))을 향해 감쇠.",
     )
 
     @model_validator(mode="after")
@@ -96,6 +104,20 @@ def posterior_mastery(prior: float, correct: bool, params: BktParameters) -> flo
 def apply_learning(posterior: float, params: BktParameters) -> float:
     """학습 전이 — 관측 후 학습 기회가 미숙달분을 p_transit만큼 숙달로 끌어올린다."""
     return posterior + (1.0 - posterior) * params.p_transit
+
+
+def apply_forgetting(mastery: float, elapsed_days: float, params: BktParameters) -> float:
+    """망각(시간 감쇠) — 연습 공백(`elapsed_days`) 동안 *사전값을 넘는* 숙달분을 지수 감쇠.
+
+    `P(L') = P(L0) + (P(L) - P(L0))·exp(-λ·경과일)` (단, P(L) > P(L0)일 때만). 학습으로 얻은
+    *초과* 숙달만 시간에 따라 사전(P(L0))을 향해 줄고, 사전 이하(미숙달)는 건드리지 않는다
+    (망각은 *얻은 것*을 잃는 것이지 더 나빠지는 게 아님). λ=0 또는 경과 0이면 변화 없음
+    (`exp(0)=1`·하위 호환). `elapsed_days<0`(시계 역행)은 0으로 클램프.
+    """
+    if params.p_forget == 0.0 or elapsed_days <= 0.0 or mastery <= params.p_init:
+        return mastery
+    gain = mastery - params.p_init
+    return params.p_init + gain * math.exp(-params.p_forget * elapsed_days)
 
 
 def update_mastery(prior: float, correct: bool, params: BktParameters) -> float:
@@ -140,11 +162,16 @@ class BktModel:
         """현재 숙달 확률에서 다음 정답 확률."""
         return probability_correct(mastery, self.params)
 
+    def apply_forgetting(self, mastery: float, elapsed_days: float) -> float:
+        """연습 공백(일)만큼 망각 감쇠 적용 — 다음 관측 갱신 *전* prior 보정용."""
+        return apply_forgetting(mastery, elapsed_days, self.params)
+
 
 __all__ = [
     "DEFAULT_BKT_PARAMETERS",
     "BktModel",
     "BktParameters",
+    "apply_forgetting",
     "apply_learning",
     "posterior_mastery",
     "probability_correct",

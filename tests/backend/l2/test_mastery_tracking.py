@@ -13,7 +13,12 @@ from typing import Any, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
-from whymath_backend.l2 import BktModel, BktParameters, compute_mastery_record, update_mastery
+from whymath_backend.l2 import (
+    BktModel,
+    BktParameters,
+    compute_mastery_record,
+    update_mastery,
+)
 from whymath_backend.l2.mastery_tracking import (
     record_attempt_mastery,
     record_problem_attempt_mastery,
@@ -61,7 +66,9 @@ class TestComputeMasteryRecord:
     def test_first_observation_uses_p_init(self) -> None:
         """prior None(첫 관측)이면 사전 P(L0)에서 갱신·표본 1."""
         rec = compute_mastery_record(None, None, True, _M)
-        assert rec.mastery == round(update_mastery(_M.initial_mastery, True, _M.params), 2)
+        assert rec.mastery == round(
+            update_mastery(_M.initial_mastery, True, _M.params), 2
+        )
         assert rec.mastery == 0.69
         assert rec.sample_size == 1
 
@@ -125,7 +132,9 @@ class TestRecordAttemptMastery:
     async def test_first_observation_no_prior(self) -> None:
         """직전 측정 없으면 P(L0)에서 갱신·표본 1·새 행 add·commit."""
         fake = _FakeSession(prior=None)
-        row = await record_attempt_mastery(cast(AsyncSession, fake), _UID, _CID, True, model=_M)
+        row = await record_attempt_mastery(
+            cast(AsyncSession, fake), _UID, _CID, True, model=_M
+        )
         assert row.mastery == 0.69
         assert row.sample_size == 1
         assert row.user_id == _UID and row.concept_id == _CID
@@ -135,14 +144,18 @@ class TestRecordAttemptMastery:
     async def test_reads_prior_and_updates(self) -> None:
         """직전 측정(0.69·표본1)을 prior로 → 0.92·표본 2."""
         fake = _FakeSession(prior=_prior_row(0.69, 1))
-        row = await record_attempt_mastery(cast(AsyncSession, fake), _UID, _CID, True, model=_M)
+        row = await record_attempt_mastery(
+            cast(AsyncSession, fake), _UID, _CID, True, model=_M
+        )
         assert row.mastery == 0.92
         assert row.sample_size == 2
 
     async def test_prior_with_null_mastery_falls_back_to_p_init(self) -> None:
         """직전 행은 있으나 mastery=NULL이면 P(L0)에서 시작."""
         fake = _FakeSession(prior=_prior_row(None, None))
-        row = await record_attempt_mastery(cast(AsyncSession, fake), _UID, _CID, True, model=_M)
+        row = await record_attempt_mastery(
+            cast(AsyncSession, fake), _UID, _CID, True, model=_M
+        )
         assert row.mastery == 0.69
 
     async def test_explicit_measured_at(self) -> None:
@@ -232,3 +245,46 @@ class TestRecordProblemAttemptMastery:
         )
         assert len(records) == 1
         assert records[0].mastery == 0.15  # 오답
+
+
+class TestForgettingInRecord:
+    """slice L2-6: 경과일 망각이 compute/record에 반영(p_forget=0 기본은 무영향)."""
+
+    def test_compute_elapsed_no_effect_default_model(self) -> None:
+        """기본 모델(p_forget=0)은 elapsed_days 무관."""
+        m = BktModel()
+        assert compute_mastery_record(
+            0.9, 1, True, m, elapsed_days=100
+        ) == compute_mastery_record(0.9, 1, True, m, elapsed_days=0)
+
+    def test_compute_forgetting_lowers_result(self) -> None:
+        """망각 모델: 경과일이 길수록 prior 감쇠 → 갱신 결과 낮아짐."""
+        m = BktModel(BktParameters(p_forget=0.1))
+        decayed = compute_mastery_record(0.9, 1, True, m, elapsed_days=20).mastery
+        fresh = compute_mastery_record(0.9, 1, True, m, elapsed_days=0).mastery
+        assert decayed < fresh
+
+    async def test_record_computes_elapsed_from_prior(self) -> None:
+        """record_attempt_mastery가 직전 측정~now 경과일로 망각 적용."""
+        model = BktModel(BktParameters(p_forget=0.1))
+        # 직전 측정 2026-01-01·mastery 0.9 → 30일 후 관측
+        fake_late = _FakeSession(prior=_prior_row(0.9, 1))
+        row_late = await record_attempt_mastery(
+            cast(AsyncSession, fake_late),
+            _UID,
+            _CID,
+            True,
+            model=model,
+            measured_at=datetime(2026, 1, 31, tzinfo=UTC),
+        )
+        # 같은 날 관측(경과 0·감쇠 없음)
+        fake_same = _FakeSession(prior=_prior_row(0.9, 1))
+        row_same = await record_attempt_mastery(
+            cast(AsyncSession, fake_same),
+            _UID,
+            _CID,
+            True,
+            model=model,
+            measured_at=datetime(2026, 1, 1, tzinfo=UTC),
+        )
+        assert row_late.mastery < row_same.mastery
