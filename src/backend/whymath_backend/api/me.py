@@ -55,6 +55,7 @@ from whymath_backend.api._query_filters import time_window_conditions
 from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
 from whymath_backend.db.models.assessment import Assessment, ConceptMasteryHistory
 from whymath_backend.db.models.audit import DeletionAudit
+from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.session import get_session
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
@@ -562,19 +563,38 @@ async def list_my_mastery(
     return rows
 
 
+class ConceptMasterySnapshotItem(BaseModel):
+    """현재 숙달 스냅샷 1개 — 측정값 + 개념 메타(이름·코드). 약점 목록 UI 표시용.
+
+    slice L2-5d: 기존 `ConceptMasteryHistorySchema`(concept_id만)에 concept 테이블의
+    `name_ko`·`code`를 조인해 클라이언트가 추가 조회 없이 개념명을 표시한다. 개념이 삭제돼
+    조인이 비면(loose ref·orphan) name/code는 null(LEFT JOIN·행 보존).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    concept_id: uuid.UUID
+    concept_code: str | None = Field(default=None, description="개념 코드(예: CAL-INT-...).")
+    concept_name: str | None = Field(default=None, description="개념 한글명(name_ko).")
+    mastery: float | None = None
+    confidence: float | None = None
+    sample_size: int | None = None
+    measured_at: datetime
+
+
 @router.get(
     "/mastery/current",
-    response_model=list[ConceptMasteryHistorySchema],
-    summary="현재 개념별 숙달 스냅샷(개념마다 최신 측정 1건)",
+    response_model=list[ConceptMasterySnapshotItem],
+    summary="현재 개념별 숙달 스냅샷(개념마다 최신 측정 1건·개념명 포함)",
 )
 async def list_my_current_mastery(
     user: ConsentedUser,
     session: SessionDep,
     order_by: SnapshotOrderByParam = "concept_id",
     order: OrderParam = "asc",
-) -> list[ConceptMasteryHistorySchema]:
-    """본인의 *개념별 최신* 숙달 1건씩 — 현재 상태 스냅샷("한눈에"). `/mastery`는 전 측정
-    시계열(학습 곡선)이고, 본 엔드포인트는 개념마다 가장 최근 측정만.
+) -> list[ConceptMasterySnapshotItem]:
+    """본인의 *개념별 최신* 숙달 1건씩 + 개념 메타(이름·코드) — 현재 상태 스냅샷("한눈에").
+    `/mastery`는 전 측정 시계열(학습 곡선)이고, 본 엔드포인트는 개념마다 가장 최근 측정만.
 
     Postgres `DISTINCT ON (concept_id)` + `ORDER BY concept_id, measured_at DESC`로 개념별
     최신 행을 고른다(개념당 1행). 스냅샷이라 페이지네이션·필터 없음(연습한 개념 수로 한정).
@@ -582,9 +602,11 @@ async def list_my_current_mastery(
     slice L2-5c: `order_by=mastery`로 약점/강점 우선 정렬("다음에 뭘 연습할지"). DISTINCT ON은
     ORDER BY가 concept_id로 시작해야 해(최신 행 선택 불변) 결과(개념당 1행·소규모)를 Python에서
     재정렬한다. mastery NULL은 *항상 끝*(방향 무관). 기본 concept_id asc(기존 동작 보존).
+    slice L2-5d: `concept`(name_ko·code) LEFT JOIN — 약점 목록에 개념명 노출(orphan은 null).
     """
     stmt = (
-        select(ConceptMasteryHistory)
+        select(ConceptMasteryHistory, Concept.code, Concept.name_ko)
+        .outerjoin(Concept, ConceptMasteryHistory.concept_id == Concept.concept_id)
         .where(ConceptMasteryHistory.user_id == user.user_id)
         .distinct(ConceptMasteryHistory.concept_id)
         .order_by(
@@ -593,19 +615,30 @@ async def list_my_current_mastery(
         )
     )
     result = await session.execute(stmt)
-    rows = list(result.scalars().all())
+    items = [
+        ConceptMasterySnapshotItem(
+            concept_id=cmh.concept_id,
+            concept_code=code,
+            concept_name=name_ko,
+            mastery=float(cmh.mastery) if cmh.mastery is not None else None,
+            confidence=float(cmh.confidence) if cmh.confidence is not None else None,
+            sample_size=cmh.sample_size,
+            measured_at=cmh.measured_at,
+        )
+        for cmh, code, name_ko in result.all()
+    ]
     reverse = order == "desc"
     if order_by == "mastery":
         # NULL 항상 끝(방향 무관) + 나머지는 mastery 기준 정렬(asc=약점 우선)
         present = sorted(
-            (r for r in rows if r.mastery is not None),
-            key=lambda r: float(r.mastery) if r.mastery is not None else 0.0,
+            (i for i in items if i.mastery is not None),
+            key=lambda i: i.mastery if i.mastery is not None else 0.0,
             reverse=reverse,
         )
-        rows = present + [r for r in rows if r.mastery is None]
+        items = present + [i for i in items if i.mastery is None]
     else:  # concept_id — DISTINCT ON 자연 순(asc)·desc면 역순
-        rows.sort(key=lambda r: str(r.concept_id), reverse=reverse)
-    return [row.to_schema() for row in rows]
+        items.sort(key=lambda i: str(i.concept_id), reverse=reverse)
+    return items
 
 
 @router.patch(

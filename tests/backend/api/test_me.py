@@ -60,6 +60,11 @@ class _Result:
         # 흉내(정확한 필터 적용 count는 통합테스트가 실 PG로 검증). 헤더 결선·숫자성만 본다.
         return len(self._rows)
 
+    def all(self) -> list[Any]:
+        # slice L2-5d: join 쿼리(select(CMH, code, name))는 result.all()로 Row 튜플 순회.
+        # /mastery/current 테스트는 (cmh, code, name) 튜플 리스트를 그대로 전달(_snapshot_row).
+        return list(self._rows)
+
 
 class FakeSession:
     def __init__(
@@ -780,6 +785,22 @@ def _mastery_row(mastery: float = 0.69, sample_size: int = 1) -> ConceptMasteryH
     )
 
 
+def _snapshot_row(
+    mastery: float | None = 0.69, code: str | None = "C-1", name: str | None = "개념"
+) -> tuple[ConceptMasteryHistory, str | None, str | None]:
+    """slice L2-5d: /mastery/current join 쿼리의 Row 튜플 시뮬 — (CMH, code, name_ko)."""
+    cmh = ConceptMasteryHistory.from_schema(
+        ConceptMasteryHistorySchema(
+            user_id=_UID,
+            concept_id=uuid.uuid4(),
+            measured_at=datetime(2026, 1, 1, tzinfo=UTC),
+            mastery=mastery,
+            sample_size=1,
+        )
+    )
+    return (cmh, code, name)
+
+
 class TestMasteryCurve:
     def test_returns_rows(self) -> None:
         client, _ = _client([_mastery_row()])
@@ -851,12 +872,25 @@ class TestMasteryCurve:
             == 422
         )
 
-    def test_current_returns_rows(self) -> None:
-        """slice L2-5b: 현재 개념별 숙달 스냅샷 — 200·직렬화(DISTINCT ON 정확성은 통합테스트)."""
-        client, _ = _client([_mastery_row()])
+    def test_current_returns_rows_with_concept_meta(self) -> None:
+        """slice L2-5b/5d: 스냅샷 — 200·개념 메타(name/code) 조인 노출."""
+        client, _ = _client([_snapshot_row(0.69, code="CAL-1", name="정적분")])
         resp = client.get("/v1/me/mastery/current")
         assert resp.status_code == 200, resp.text
-        assert len(resp.json()) == 1
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["concept_code"] == "CAL-1"
+        assert body[0]["concept_name"] == "정적분"
+        assert float(body[0]["mastery"]) == 0.69
+
+    def test_current_orphan_concept_null_meta(self) -> None:
+        """개념 삭제(orphan·LEFT JOIN) 시 name/code는 null이나 행은 보존."""
+        client, _ = _client([_snapshot_row(0.5, code=None, name=None)])
+        resp = client.get("/v1/me/mastery/current")
+        body = resp.json()
+        assert len(body) == 1
+        assert body[0]["concept_name"] is None
+        assert body[0]["concept_code"] is None
 
     def test_current_empty(self) -> None:
         client, _ = _client([])
@@ -867,7 +901,7 @@ class TestMasteryCurve:
 
     def test_current_order_by_mastery_weakest_first(self) -> None:
         """slice L2-5c: order_by=mastery&order=asc → 약점(낮은 숙달) 우선."""
-        rows = [_mastery_row(0.9), _mastery_row(0.3), _mastery_row(0.6)]
+        rows = [_snapshot_row(0.9), _snapshot_row(0.3), _snapshot_row(0.6)]
         client, _ = _client(rows)
         resp = client.get(
             "/v1/me/mastery/current", params={"order_by": "mastery", "order": "asc"}
@@ -876,7 +910,7 @@ class TestMasteryCurve:
         assert [float(r["mastery"]) for r in resp.json()] == [0.3, 0.6, 0.9]
 
     def test_current_order_by_mastery_strongest_first(self) -> None:
-        rows = [_mastery_row(0.3), _mastery_row(0.9)]
+        rows = [_snapshot_row(0.3), _snapshot_row(0.9)]
         client, _ = _client(rows)
         resp = client.get(
             "/v1/me/mastery/current", params={"order_by": "mastery", "order": "desc"}
@@ -885,15 +919,7 @@ class TestMasteryCurve:
 
     def test_current_mastery_null_always_last(self) -> None:
         """mastery NULL은 정렬 방향 무관 항상 끝."""
-        none_row = ConceptMasteryHistory.from_schema(
-            ConceptMasteryHistorySchema(
-                user_id=_UID,
-                concept_id=uuid.uuid4(),
-                measured_at=datetime(2026, 1, 1, tzinfo=UTC),
-                mastery=None,
-            )
-        )
-        client, _ = _client([none_row, _mastery_row(0.5)])
+        client, _ = _client([_snapshot_row(None), _snapshot_row(0.5)])
         resp = client.get(
             "/v1/me/mastery/current", params={"order_by": "mastery", "order": "asc"}
         )
