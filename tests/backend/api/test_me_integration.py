@@ -624,6 +624,8 @@ def test_me_mastery_curve_scoped_and_concept_filter_on_live_pg() -> None:
     t1 = datetime(2026, 1, 1, tzinfo=UTC)
     t2 = datetime(2026, 2, 1, tzinfo=UTC)
     try:
+        # 사용자 먼저(auth가 user_profile 존재를 요구 — 없으면 401). FK 순서·clean DB 정합.
+        asyncio.run(_add_all(_user(uid_a), _user(uid_b)))
         # A: c1 2측정(t1,t2)·c2 1측정 / B: c1 1측정(스코핑 차단 확인)
         asyncio.run(
             _add_all(
@@ -659,6 +661,7 @@ def test_me_mastery_curve_scoped_and_concept_filter_on_live_pg() -> None:
             assert client.get("/v1/me/mastery").status_code == 401
     finally:
         asyncio.run(_cleanup_mastery([uid_a, uid_b]))
+        asyncio.run(_cleanup([uid_a, uid_b]))  # user_profile 정리
 
 
 def test_me_mastery_current_latest_per_concept_on_live_pg() -> None:
@@ -672,6 +675,8 @@ def test_me_mastery_current_latest_per_concept_on_live_pg() -> None:
     t1 = datetime(2026, 1, 1, tzinfo=UTC)
     t2 = datetime(2026, 2, 1, tzinfo=UTC)
     try:
+        # 사용자 먼저(auth가 user_profile 존재 요구 — clean DB서 없으면 401).
+        asyncio.run(_add_all(_user(uid)))
         # 개념 메타(c1만 concept 행 존재·c2는 orphan → name null로 LEFT JOIN 검증)
         asyncio.run(
             _add_all(
@@ -712,6 +717,7 @@ def test_me_mastery_current_latest_per_concept_on_live_pg() -> None:
     finally:
         asyncio.run(_cleanup_mastery([uid]))
         asyncio.run(_cleanup_concepts([c1]))
+        asyncio.run(_cleanup([uid]))  # user_profile 정리
 
 
 def test_me_ability_estimates_theta_from_attempts_on_live_pg() -> None:

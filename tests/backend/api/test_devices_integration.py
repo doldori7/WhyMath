@@ -25,6 +25,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import NullPool
 
 from whymath_backend.api._crypto import SecretCipher
 from whymath_backend.api._device_store import (
@@ -51,7 +52,7 @@ def _settings() -> Settings:
 
 
 async def _pg_reachable() -> bool:
-    engine = create_async_engine(_settings().database_url)
+    engine = create_async_engine(_settings().database_url, poolclass=NullPool)
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
@@ -63,7 +64,7 @@ async def _pg_reachable() -> bool:
 
 
 async def _insert_user(user_id: uuid.UUID) -> None:
-    engine = create_async_engine(_settings().database_url)
+    engine = create_async_engine(_settings().database_url, poolclass=NullPool)
     try:
         async with async_sessionmaker(engine, expire_on_commit=False)() as session:
             user = UserProfile.from_schema(
@@ -80,7 +81,7 @@ async def _insert_user(user_id: uuid.UUID) -> None:
 
 
 async def _cleanup(user_id: uuid.UUID) -> None:
-    engine = create_async_engine(_settings().database_url)
+    engine = create_async_engine(_settings().database_url, poolclass=NullPool)
     try:
         async with engine.begin() as conn:
             await conn.execute(
@@ -111,7 +112,7 @@ def test_pg_device_store_roundtrip_on_live_pg() -> None:
     async def _run() -> None:
         await _insert_user(uid)
         try:
-            engine = create_async_engine(_settings().database_url)
+            engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
                 store = PgDeviceStore(sm)
@@ -154,7 +155,7 @@ def test_devices_router_with_pg_store_on_live_pg() -> None:
     asyncio.run(_setup())
 
     try:
-        engine = create_async_engine(_settings().database_url)
+        engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             store = PgDeviceStore(sm)
@@ -214,7 +215,7 @@ def test_pg_store_persists_across_instances_on_live_pg() -> None:
     async def _run() -> None:
         await _insert_user(uid)
         try:
-            engine = create_async_engine(_settings().database_url)
+            engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
                 store_a = PgDeviceStore(sm)  # "워커 A"
@@ -255,7 +256,7 @@ def test_cross_user_revoke_isolation_on_live_pg() -> None:
     asyncio.run(_setup())
 
     try:
-        engine = create_async_engine(_settings().database_url)
+        engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             store = PgDeviceStore(sm)
@@ -320,7 +321,7 @@ def test_list_devices_endpoint_on_live_pg() -> None:
     asyncio.run(_setup())
 
     try:
-        engine = create_async_engine(_settings().database_url)
+        engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             store = PgDeviceStore(sm)
@@ -348,7 +349,14 @@ def test_list_devices_endpoint_on_live_pg() -> None:
                 assert resp.status_code == 200
                 devices = resp.json()["devices"]
                 assert [d["device_id"] for d in devices] == [d2]
-                assert set(devices[0].keys()) == {"device_id", "created_at"}
+                # DeviceListItem 스키마(slice 29 + 32 last_used_at + 37 revoked/revoked_at).
+                assert set(devices[0].keys()) == {
+                    "device_id",
+                    "created_at",
+                    "last_used_at",
+                    "revoked",
+                    "revoked_at",
+                }
 
                 # 401 무토큰
                 assert client.get("/v1/devices").status_code == 401
@@ -411,7 +419,7 @@ def test_cleanup_stale_devices_on_live_pg() -> None:
     async def _run() -> None:
         await _insert_user(uid)
         try:
-            engine = create_async_engine(_settings().database_url)
+            engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
                 store = PgDeviceStore(sm)
@@ -486,7 +494,7 @@ def test_cached_device_store_on_live_pg_and_redis() -> None:
 
         await _insert_user(uid)
         try:
-            engine = create_async_engine(_settings().database_url)
+            engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
                 inner = PgDeviceStore(sm)
@@ -541,7 +549,7 @@ def test_pg_list_for_user_seq_tiebreak_parity_on_live_pg() -> None:
         asyncio.run(_insert_user(uid))
 
         async def _run() -> None:
-            engine = create_async_engine(_settings().database_url)
+            engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
                 store = PgDeviceStore(sm)
@@ -599,7 +607,7 @@ def test_pg_device_store_envelope_encryption_round_trip_on_live_pg() -> None:
     async def _run() -> None:
         await _insert_user(uid)
         try:
-            engine = create_async_engine(_settings().database_url)
+            engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
                 enc_store = PgDeviceStore(sm, cipher)
@@ -639,7 +647,7 @@ def test_device_credential_user_index_swapped_on_live_pg() -> None:
         pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
 
     async def _run() -> None:
-        engine = create_async_engine(_settings().database_url)
+        engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             async with engine.connect() as conn:
                 rows = (
@@ -679,7 +687,7 @@ def test_pg_device_store_reencrypt_backfill_on_live_pg() -> None:
     async def _run() -> None:
         await _insert_user(uid)
         try:
-            engine = create_async_engine(_settings().database_url)
+            engine = create_async_engine(_settings().database_url, poolclass=NullPool)
             try:
                 sm = async_sessionmaker(engine, expire_on_commit=False)
                 # 평문 등록(cipher 없는 store)

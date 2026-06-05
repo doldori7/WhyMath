@@ -125,16 +125,18 @@ jobs:
           retention-days: 14
 
   # ─────────────────────────────────────────────────────────────────
-  # 백엔드 alembic 마이그레이션 검증 (slice 28b)
+  # 백엔드 alembic 마이그레이션 검증 + 실 PG 통합테스트 (slice 28b·30)
   # 신규 PostgreSQL 16에 전 마이그레이션을 적용(upgrade head)하고 base까지 되돌렸다가
-  # 다시 올려(왕복) *적용·역적용 정합*을 검증한다. 기존 backend 잡은 hermetic이라
-  # 마이그레이션을 한 번도 실행하지 않으므로(통합테스트 기본 skip), 이 잡이 스키마 변경의
-  # 유일한 자동 안전망이다. DB URL은 Settings 기본값과 동일(자격증명 없는 trust 인증).
+  # 다시 올려(왕복) *적용·역적용 정합*을 검증한다. 이어 실 PG 위에서 통합테스트를 실행한다
+  # (그동안 CI 미실행이던 ~50 PG 통합테스트 활성화). 기존 backend 잡은 hermetic이라
+  # 마이그레이션·통합테스트를 한 번도 실행하지 않으므로, 이 잡이 스키마·실 DB 동작의 안전망이다.
+  # l3 통합테스트(ollama·redis·langfuse·anthropic·celery)는 *라이브 외부 서비스* 필요(도달성
+  # hard-assert)라 CI에서 제외(Phaiakes9 전용). DB URL은 Settings 기본값과 동일(trust 인증).
   # ─────────────────────────────────────────────────────────────────
   backend-migrations:
-    name: backend — alembic 마이그레이션 검증
+    name: backend — 마이그레이션·통합 (실 PG)
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     defaults:
       run:
         working-directory: src/backend
@@ -180,6 +182,16 @@ jobs:
         run: |
           alembic downgrade base
           alembic upgrade head
+
+      - name: Pytest (통합테스트 — 실 PG·l3 외부서비스 제외)
+        env:
+          WHYMATH_RUN_INTEGRATION: "1"
+          # 전역 엔진이 테스트마다 다른 이벤트 루프에서 재사용될 때의 asyncpg 루프 바인딩
+          # 충돌(another operation is in progress) 회피 — NullPool(매 체크아웃 새 연결).
+          WHYMATH_DB_DISABLE_POOL: "1"
+        # l3는 라이브 Ollama/Redis/Langfuse/Anthropic 필요(도달성 단정) → CI 제외.
+        # api·l2 통합테스트는 PG만 필요(미도달 자원은 각자 graceful skip).
+        run: pytest -m integration --ignore=../../tests/backend/l3
 
   # ─────────────────────────────────────────────────────────────────
   # infra 쉘 스크립트 syntax 검사 (Phaiakes9 운영 자산 회귀 방지)
