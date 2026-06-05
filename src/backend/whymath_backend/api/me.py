@@ -57,7 +57,9 @@ from whymath_backend.db.models.assessment import Assessment, ConceptMasteryHisto
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.dialogue import Dialogue
+from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
+from whymath_backend.l2.irt import IrtItem, estimate_ability
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
@@ -639,6 +641,60 @@ async def list_my_current_mastery(
     else:  # concept_id — DISTINCT ON 자연 순(asc)·desc면 역순
         items.sort(key=lambda i: str(i.concept_id), reverse=reverse)
     return items
+
+
+# ── slice L2-11: GET /v1/me/ability (IRT 능력 θ 추정 — 채점 풀이 이력 기반) ──────
+_DIFFICULTY_MIDPOINT = 3.0  # Problem.difficulty_overall(1~5)의 중앙 → logit 0
+
+
+def _difficulty_to_logit(difficulty: float) -> float:
+    """`difficulty_overall`(1~5) → IRT 난이도 b(logit). 휴리스틱 프록시(중앙 3=b0·범위 [-2,2]).
+
+    *보정된* b는 응답 데이터로 `fit_jmle`(slice 10) 적합이 정답이나, 그 전까지 전문가 난이도
+    라벨(1~5)을 선형 매핑해 능력 추정에 쓴다(difficulty 1=쉬움→b=-2·5=어려움→b=+2).
+    """
+    return difficulty - _DIFFICULTY_MIDPOINT
+
+
+class AbilityResponse(BaseModel):
+    """`GET /v1/me/ability` 응답 — IRT 능력 추정."""
+
+    theta: float = Field(description="IRT 능력 추정 θ(logit). 채점 응답 없으면 0.")
+    response_count: int = Field(description="추정에 쓰인 채점(is_correct 있는) 풀이 수.")
+
+
+@router.get(
+    "/ability",
+    response_model=AbilityResponse,
+    summary="내 IRT 능력 추정(θ — 채점 풀이 이력 기반)",
+)
+async def get_my_ability(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> AbilityResponse:
+    """본인의 채점된 풀이 이력에서 IRT 능력 θ를 추정 — 문항 난이도(difficulty_overall)와 정/오답.
+
+    `problem_attempt`(is_correct 있는 것)를 `problem`과 조인해 (난이도→logit b, 정답) 응답을
+    만들고 `estimate_ability`(slice 7)로 θ 추정. 난이도 없는(difficulty_overall NULL) 문항은
+    제외. 채점 응답이 없으면 θ=0(정보 없음). v1: difficulty_overall(전문가 1~5)을 b 프록시로
+    사용(보정 b는 fit_jmle 후속). BKT(개념별 숙달)와 *상보적* 단일 능력 척도.
+    """
+    stmt = (
+        select(ProblemAttempt.is_correct, Problem.difficulty_overall)
+        .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
+        .where(
+            ProblemAttempt.user_id == user.user_id,
+            ProblemAttempt.is_correct.isnot(None),
+        )
+    )
+    result = await session.execute(stmt)
+    responses = [
+        (IrtItem(difficulty=_difficulty_to_logit(float(difficulty))), bool(is_correct))
+        for is_correct, difficulty in result.all()
+        if difficulty is not None
+    ]
+    theta = estimate_ability(responses)
+    return AbilityResponse(theta=theta, response_count=len(responses))
 
 
 @router.patch(
