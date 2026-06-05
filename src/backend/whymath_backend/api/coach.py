@@ -37,12 +37,14 @@ from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.session import get_session
 from whymath_backend.l4 import (
+    CoachingFocus,
     LthcAdaptation,
     MasteryLevel,
     PedagogyDecision,
     PolyaCoach,
     PolyaState,
     adapt_lthc,
+    focus_to_socratic_category,
 )
 from whymath_backend.l4.misconception import (
     InterventionDecision,
@@ -50,6 +52,7 @@ from whymath_backend.l4.misconception import (
     diagnose,
     select_intervention,
 )
+from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
 from whymath_backend.schema.enums import ContentType, TurnRole
@@ -78,6 +81,13 @@ class CoachRequest(BaseModel):
         default=None,
         description="학생 숙달도 라벨(있을 때만 LTHC 조정안 반환).",
     )
+    coaching_focus: CoachingFocus | None = Field(
+        default=None,
+        description=(
+            "L2 진단(`/me/diagnosis/concepts`)이 권한 코칭 포커스(slice 20). 주면 응답의 "
+            "`entry_socratic_category`를 그 포커스에 맞춰 시드(대화 진입 질문 종류)."
+        ),
+    )
 
 
 class CoachResponse(BaseModel):
@@ -105,6 +115,13 @@ class CoachResponse(BaseModel):
     lthc: LthcAdaptation | None = Field(
         default=None,
         description="요청에 `mastery_level`이 있을 때만 LTHC 조정안. 없으면 None.",
+    )
+    entry_socratic_category: SocraticCategory | None = Field(
+        default=None,
+        description=(
+            "요청에 `coaching_focus`가 있을 때만 — 진단 포커스가 권한 대화 진입 소크라테스 "
+            "카테고리(slice 22). PolyaCoach의 매 턴 `decision.socratic_category`와 별개(진입 시드)."
+        ),
     )
 
 
@@ -157,8 +174,9 @@ def _build_response_payload(body: CoachRequest) -> tuple[
     list[MisconceptionMatch],
     InterventionDecision | None,
     LthcAdaptation | None,
+    SocraticCategory | None,
 ]:
-    """공통 결정 계산 — `/v1/coach`·`/v1/coach/sessions` 둘 다 사용."""
+    """공통 결정 계산 — `/v1/coach`·`/v1/coach/sessions`·turns append 셋 다 사용."""
     decision = _coach.decide(body.student_input, body.polya_state)
     matches = diagnose(body.student_input)
     intervention = select_intervention(matches[0]) if matches else None
@@ -167,7 +185,11 @@ def _build_response_payload(body: CoachRequest) -> tuple[
         if body.mastery_level is not None
         else None
     )
-    return decision, matches, intervention, lthc
+    # slice 23: 진단 코칭 포커스 → 대화 진입 소크라테스 카테고리 시드(L4 매핑·slice 22).
+    entry_category = (
+        focus_to_socratic_category(body.coaching_focus) if body.coaching_focus is not None else None
+    )
+    return decision, matches, intervention, lthc, entry_category
 
 
 @router.post(
@@ -186,12 +208,13 @@ async def coach_decide(
     """
     _ = user.user_id  # 인증 게이트 통과 확인용(stateless라 user 데이터 미사용)
 
-    decision, matches, intervention, lthc = _build_response_payload(body)
+    decision, matches, intervention, lthc, entry_category = _build_response_payload(body)
     return CoachResponse(
         decision=decision,
         misconceptions=matches,
         intervention=intervention,
         lthc=lthc,
+        entry_socratic_category=entry_category,
     )
 
 
@@ -213,7 +236,7 @@ async def create_session(
     `user.user_id`로 자동 설정(타인 데이터 차단). 미성년 채팅 평문 저장은 *저장 계층*
     책임(모듈 docstring 참조 — DB 암호화 at-rest는 후속 인프라 슬라이스).
     """
-    decision, matches, intervention, lthc = _build_response_payload(body)
+    decision, matches, intervention, lthc, entry_category = _build_response_payload(body)
 
     now = datetime.now(timezone.utc)
     dialogue = DialogueORM.from_schema(
@@ -258,6 +281,7 @@ async def create_session(
         misconceptions=matches,
         intervention=intervention,
         lthc=lthc,
+        entry_socratic_category=entry_category,
         dialogue_id=dialogue.dialogue_id,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
@@ -290,7 +314,7 @@ async def append_turns(
             status_code=status.HTTP_404_NOT_FOUND, detail="대화를 찾을 수 없습니다."
         )
 
-    decision, matches, intervention, lthc = _build_response_payload(body)
+    decision, matches, intervention, lthc, entry_category = _build_response_payload(body)
 
     current_total = dialogue.total_turns or 0
     student_order = current_total + 1
@@ -331,6 +355,7 @@ async def append_turns(
         misconceptions=matches,
         intervention=intervention,
         lthc=lthc,
+        entry_socratic_category=entry_category,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
         student_turn_order=student_order,
