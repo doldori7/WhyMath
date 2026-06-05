@@ -21,6 +21,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.l4.socratic.categories import SocraticCategory
+
 CoachingFocus = Literal["consolidate", "retrieval", "foundation", "advance", "diagnose"]
 """메타인지 코칭 포커스 5종.
 
@@ -46,6 +48,21 @@ _PROMPT: dict[CoachingFocus, str] = {
     "advance": "조건을 바꾸거나 *왜 항상* 성립하는지 증명에 도전해볼래?",
     "diagnose": "이 개념 문제를 몇 개 더 풀어보면 네 상태를 더 정확히 볼 수 있어.",
 }
+# 포커스 → 대화 진입 소크라테스 카테고리(slice 5·socratic 6분류). coach가 *어떤 질문 종류*로
+# 시작할지 — consolidate=근거(추측 검증)·retrieval=메타(예전 풀이 회상)·foundation/diagnose=
+# 명료화(기초·상태 파악)·advance=관점(다른 방법·일반화).
+_SOCRATIC_BY_FOCUS: dict[CoachingFocus, SocraticCategory] = {
+    "consolidate": SocraticCategory.EVIDENCE,
+    "retrieval": SocraticCategory.META,
+    "foundation": SocraticCategory.CLARIFICATION,
+    "advance": SocraticCategory.PERSPECTIVE,
+    "diagnose": SocraticCategory.CLARIFICATION,
+}
+
+
+def focus_to_socratic_category(focus: CoachingFocus) -> SocraticCategory:
+    """코칭 포커스 → 대화 진입 소크라테스 카테고리 — 순수 매핑(coach 발화 종류 결정 입력)."""
+    return _SOCRATIC_BY_FOCUS[focus]
 
 
 class CoachingTrigger(BaseModel):
@@ -56,6 +73,9 @@ class CoachingTrigger(BaseModel):
     focus: CoachingFocus = Field(description="코칭 포커스 5종.")
     rationale: str = Field(description="결정 근거(교사/학생 노출 가능 한국어).")
     prompt: str = Field(description="학생에게 보일 수 있는 메타인지 유도 발화(답 미제공).")
+    socratic_category: SocraticCategory = Field(
+        description="대화 진입 소크라테스 카테고리(coach 발화 종류·slice 5)."
+    )
 
 
 def _mastery_proxy(theta: float) -> float:
@@ -95,7 +115,17 @@ def recommend_coaching(
 
 
 def _build(focus: CoachingFocus) -> CoachingTrigger:
-    return CoachingTrigger(focus=focus, rationale=_RATIONALE[focus], prompt=_PROMPT[focus])
+    return CoachingTrigger(
+        focus=focus,
+        rationale=_RATIONALE[focus],
+        prompt=_PROMPT[focus],
+        socratic_category=_SOCRATIC_BY_FOCUS[focus],
+    )
 
 
-__all__ = ["CoachingFocus", "CoachingTrigger", "recommend_coaching"]
+__all__ = [
+    "CoachingFocus",
+    "CoachingTrigger",
+    "focus_to_socratic_category",
+    "recommend_coaching",
+]
