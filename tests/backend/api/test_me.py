@@ -1015,7 +1015,13 @@ class TestNextProblem:
         session = _QueueSession([_AQResult([]), _AQResult([])])
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem").json()
-        assert body == {"problem_id": None, "theta": 0.0, "difficulty": None}
+        assert body == {
+            "problem_id": None,
+            "theta": 0.0,
+            "difficulty": None,
+            "standard_error": None,
+            "measurement_sufficient": False,
+        }
 
     def test_requires_auth(self) -> None:
         app = create_app()
@@ -1053,3 +1059,29 @@ class TestNextProblem:
         assert body["theta"] == 4.0
         assert body["problem_id"] == str(pid_hard)
         assert body["difficulty"] == 5.0
+        # 응답 2건뿐 → SE 큼(>0.3)·측정 불충분
+        assert body["standard_error"] is not None
+        assert body["measurement_sufficient"] is False
+
+    def test_measurement_sufficient_when_many_responses(self) -> None:
+        """난이도3(b=0) 46건 절반 정답 → θ=0·SE=2/√46≈0.295 ≤ 0.3 → 중단 권고."""
+        attempts = [(uuid.uuid4(), i % 2 == 0, 3.0) for i in range(46)]
+        cand = uuid.uuid4()
+        session = _QueueSession([_AQResult(attempts), _AQResult([(cand, 3.0)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["theta"] == 0.0
+        assert round(body["standard_error"], 3) == 0.295
+        assert body["measurement_sufficient"] is True
+        # 중단 권고와 무관히 후보가 있으면 추천은 제공
+        assert body["problem_id"] == str(cand)
+
+    def test_no_responses_se_null_not_sufficient(self) -> None:
+        """응답 없음 → SE null·measurement_sufficient=False(측정 불가)."""
+        cand = uuid.uuid4()
+        session = _QueueSession([_AQResult([]), _AQResult([(cand, 3.0)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["standard_error"] is None
+        assert body["measurement_sufficient"] is False
+        assert body["problem_id"] == str(cand)
