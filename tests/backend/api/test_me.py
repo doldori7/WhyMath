@@ -850,3 +850,17 @@ class TestMasteryCurve:
             ).status_code
             == 422
         )
+
+    def test_current_returns_rows(self) -> None:
+        """slice L2-5b: 현재 개념별 숙달 스냅샷 — 200·직렬화(DISTINCT ON 정확성은 통합테스트)."""
+        client, _ = _client([_mastery_row()])
+        resp = client.get("/v1/me/mastery/current")
+        assert resp.status_code == 200, resp.text
+        assert len(resp.json()) == 1
+
+    def test_current_empty(self) -> None:
+        client, _ = _client([])
+        assert client.get("/v1/me/mastery/current").json() == []
+
+    def test_current_requires_auth(self) -> None:
+        assert _no_auth_client().get("/v1/me/mastery/current").status_code == 401

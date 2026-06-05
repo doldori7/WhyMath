@@ -647,3 +647,38 @@ def test_me_mastery_curve_scoped_and_concept_filter_on_live_pg() -> None:
             assert client.get("/v1/me/mastery").status_code == 401
     finally:
         asyncio.run(_cleanup_mastery([uid_a, uid_b]))
+
+
+def test_me_mastery_current_latest_per_concept_on_live_pg() -> None:
+    """GET /v1/me/mastery/current — 개념마다 최신 측정 1건만(DISTINCT ON)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    c1, c2 = uuid.uuid4(), uuid.uuid4()
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    t2 = datetime(2026, 2, 1, tzinfo=UTC)
+    try:
+        # c1: 2측정(t1 0.5 → t2 0.69 최신)·c2: 1측정(0.3)
+        asyncio.run(
+            _add_all(
+                _mastery_row(uid, c1, t1, 0.5),
+                _mastery_row(uid, c1, t2, 0.69),
+                _mastery_row(uid, c2, t1, 0.3),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        with _client() as client:
+            resp = client.get(
+                "/v1/me/mastery/current", headers={"Authorization": f"Bearer {token}"}
+            )
+            assert resp.status_code == 200, resp.text
+            rows = resp.json()
+            # 3측정이지만 개념별 최신 → 2행
+            assert len(rows) == 2
+            latest = {r["concept_id"]: float(r["mastery"]) for r in rows}
+            assert latest[str(c1)] == 0.69  # t2(최신)
+            assert latest[str(c2)] == 0.3
+            assert client.get("/v1/me/mastery/current").status_code == 401  # 무토큰
+    finally:
+        asyncio.run(_cleanup_mastery([uid]))
