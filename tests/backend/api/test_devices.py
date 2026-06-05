@@ -26,7 +26,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_consented_user
-from whymath_backend.api._crypto import SecretCipher
+from whymath_backend.api._crypto import MultiKeyCipher, SecretCipher
 from whymath_backend.api._device_store import (
     CachedDeviceStore,
     DeviceCredentialStore,
@@ -3417,3 +3417,25 @@ class TestPgDeviceStoreReencrypt:
         assert await enc_store.reencrypt_plaintext_secrets() == 0
         # 그대로 둠(암호화 안 함)
         assert store_dict[d].secret_encrypted is None
+
+
+class TestPgDeviceStoreKeyRotation:
+    """slice 75: 키 회전 — 구 키로 등록한 device를 회전 후(구 키=fallback) verify 가능."""
+
+    async def test_verify_after_rotation_no_lockout(self) -> None:
+        store_dict: dict[str, Any] = {}
+        old_key = SecretCipher(os.urandom(32))
+        new_key = SecretCipher(os.urandom(32))
+        # 회전 전: 구 키 store로 등록(구 키로 암호화 저장)
+        old_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), old_key)
+        device_id, secret = await old_store.register(_UID)
+        # 회전 후: 새 키 primary·구 키 fallback → lockout 없이 verify
+        rotated_store = PgDeviceStore(
+            _fake_sessionmaker_for(store_dict), MultiKeyCipher(new_key, [old_key])
+        )
+        assert await rotated_store.verify(device_id, _compute_signature(secret, device_id)) is True
+        # 회전 후 신규 등록은 새 키로 암호화 — 구 키 단독 store는 복호 불가(verify 시 raise)
+        new_id, new_secret = await rotated_store.register(_UID)
+        assert (
+            await rotated_store.verify(new_id, _compute_signature(new_secret, new_id)) is True
+        )

@@ -14,6 +14,7 @@ from cryptography.exceptions import InvalidTag
 from pydantic import SecretStr
 
 from whymath_backend.api._crypto import (
+    MultiKeyCipher,
     SecretCipher,
     build_secret_cipher,
     encrypt_secret_for_storage,
@@ -25,10 +26,11 @@ _KEY = os.urandom(32)
 _SECRET = "integration-jwt-secret-0123456789abcdef"
 
 
-def _settings(enc_key_b64: str = "") -> Settings:
+def _settings(enc_key_b64: str = "", fallback_keys_b64: str = "") -> Settings:
     return Settings(
         jwt_secret_key=SecretStr(_SECRET),
         device_secret_encryption_key=SecretStr(enc_key_b64),
+        device_secret_decryption_fallback_keys=SecretStr(fallback_keys_b64),
     )
 
 
@@ -101,6 +103,68 @@ class TestBuildSecretCipher:
         bad_b64 = base64.b64encode(os.urandom(16)).decode()
         with pytest.raises(ValueError, match="32바이트"):
             build_secret_cipher(_settings(bad_b64))
+
+    def test_fallback_keys_enable_rotation(self) -> None:
+        """slice 75: primary로 암호화한 행을, 키 회전 후(구 키=fallback) 복호 가능."""
+        old_b64 = base64.b64encode(os.urandom(32)).decode()
+        new_b64 = base64.b64encode(os.urandom(32)).decode()
+        # 회전 전: 구 키가 primary
+        old_cipher = build_secret_cipher(_settings(old_b64))
+        assert old_cipher is not None
+        ct, nonce = old_cipher.encrypt("tok")
+        # 회전 후: 새 키 primary·구 키 fallback → 구 키 암호문 복호 OK
+        rotated = build_secret_cipher(_settings(new_b64, old_b64))
+        assert rotated is not None
+        assert rotated.decrypt(ct, nonce) == "tok"
+        # 새 암호화는 새 키 사용(구 키 단독으로는 복호 불가)
+        ct2, nonce2 = rotated.encrypt("tok2")
+        with pytest.raises(InvalidTag):
+            old_cipher.decrypt(ct2, nonce2)
+
+    def test_fallback_keys_parsing_ignores_blanks(self) -> None:
+        """쉼표 구분·공백·빈 토큰 무시하고 fallback 키 파싱."""
+        primary_b64 = base64.b64encode(os.urandom(32)).decode()
+        f1, f2 = (base64.b64encode(os.urandom(32)).decode() for _ in range(2))
+        cipher = build_secret_cipher(_settings(primary_b64, f" {f1} , , {f2} "))
+        assert cipher is not None
+        # f1로 암호화한 값을 cipher가 복호(f1이 fallback에 포함됨)
+        f1_cipher = SecretCipher(base64.b64decode(f1))
+        ct, nonce = f1_cipher.encrypt("via-f1")
+        assert cipher.decrypt(ct, nonce) == "via-f1"
+
+
+class TestMultiKeyCipher:
+    """slice 75: 키 회전 — primary 암호화·primary+fallbacks 복호."""
+
+    def test_round_trip_primary_only(self) -> None:
+        cipher = MultiKeyCipher(SecretCipher(_KEY))
+        ct, nonce = cipher.encrypt("tok")
+        assert cipher.decrypt(ct, nonce) == "tok"
+
+    def test_decrypts_fallback_ciphertext(self) -> None:
+        """구 키(fallback)로 암호화된 값을 복호(lockout 없음)."""
+        old = SecretCipher(os.urandom(32))
+        new = SecretCipher(os.urandom(32))
+        ct, nonce = old.encrypt("legacy")
+        cipher = MultiKeyCipher(new, [old])
+        assert cipher.decrypt(ct, nonce) == "legacy"
+
+    def test_encrypt_always_uses_primary(self) -> None:
+        """encrypt는 항상 primary — fallback 단독으로는 새 암호문 복호 불가."""
+        old = SecretCipher(os.urandom(32))
+        new = SecretCipher(os.urandom(32))
+        cipher = MultiKeyCipher(new, [old])
+        ct, nonce = cipher.encrypt("fresh")
+        assert new.decrypt(ct, nonce) == "fresh"
+        with pytest.raises(InvalidTag):
+            old.decrypt(ct, nonce)
+
+    def test_no_matching_key_raises(self) -> None:
+        """primary·fallback 어느 키로도 복호 못 하면 InvalidTag."""
+        ct, nonce = SecretCipher(os.urandom(32)).encrypt("x")
+        cipher = MultiKeyCipher(SecretCipher(os.urandom(32)), [SecretCipher(os.urandom(32))])
+        with pytest.raises(InvalidTag):
+            cipher.decrypt(ct, nonce)
 
 
 class TestStorageHelpers:

@@ -42,7 +42,7 @@ from sqlalchemy import case, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from whymath_backend.api._crypto import (
-    SecretCipher,
+    SupportsEnvelope,
     build_secret_cipher,
     encrypt_secret_for_storage,
     resolve_stored_secret,
@@ -389,7 +389,7 @@ class PgDeviceStore:
     def __init__(
         self,
         sessionmaker: async_sessionmaker[AsyncSession],
-        cipher: SecretCipher | None = None,
+        cipher: SupportsEnvelope | None = None,
     ) -> None:
         self._sessionmaker = sessionmaker
         # slice 73: 봉투 암호화기(None이면 평문 저장·기존 동작). register는 암호화 저장,
