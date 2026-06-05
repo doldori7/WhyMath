@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
-from whymath_backend.db.models.activity import LearningSession
+from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
@@ -712,3 +712,62 @@ def test_me_mastery_current_latest_per_concept_on_live_pg() -> None:
     finally:
         asyncio.run(_cleanup_mastery([uid]))
         asyncio.run(_cleanup_concepts([c1]))
+
+
+def test_me_ability_estimates_theta_from_attempts_on_live_pg() -> None:
+    """GET /v1/me/ability — 채점 풀이(난이도 join)에서 IRT θ 추정(end-to-end)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid = uuid.uuid4()
+    suffix = pid.hex[:8]
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(
+            Problem.from_schema(
+                ProblemSchema(
+                    problem_id=pid,
+                    source_type=SourceType.자체생성,
+                    curriculum_version=Curriculum.REVISION_2022,
+                    valid_from_year=2022,
+                    subject=Subject.공통,
+                    unit_codes=[f"U-{suffix}"],
+                    difficulty_overall=5.0,  # 어려운 문항
+                )
+            )
+        )
+        await _add_all(
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True
+            )
+        )
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                for sql in (
+                    "DELETE FROM problem_attempt WHERE user_id=:u",
+                    "DELETE FROM problem WHERE problem_id=:p",
+                    "DELETE FROM user_profile WHERE user_id=:u",
+                ):
+                    await conn.execute(text(sql), {"u": str(uid), "p": str(pid)})
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        with _client() as client:
+            resp = client.get(
+                "/v1/me/ability", headers={"Authorization": f"Bearer {token}"}
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            assert body["response_count"] == 1
+            assert body["theta"] == 4.0  # 채점 1건 전부 정답 → 능력 상한
+            assert client.get("/v1/me/ability").status_code == 401  # 무토큰
+    finally:
+        asyncio.run(_cleanup_all())

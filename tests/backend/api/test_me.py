@@ -934,3 +934,45 @@ class TestMasteryCurve:
             ).status_code
             == 422
         )
+
+
+class TestAbility:
+    """slice L2-11: GET /v1/me/ability — 채점 풀이 이력에서 IRT θ 추정.
+
+    FakeSession._Result.all()이 (is_correct, difficulty_overall) 튜플 리스트를 반환(조인 쿼리
+    시뮬). 실제 JOIN/WHERE 정확성은 통합테스트가 검증.
+    """
+
+    def test_empty_zero_theta(self) -> None:
+        client, _ = _client([])
+        resp = client.get("/v1/me/ability")
+        assert resp.status_code == 200
+        assert resp.json() == {"theta": 0.0, "response_count": 0}
+
+    def test_requires_auth(self) -> None:
+        assert _no_auth_client().get("/v1/me/ability").status_code == 401
+
+    def test_all_correct_upper_bound(self) -> None:
+        """전부 정답 → θ 상한(4.0)·응답 수 반영."""
+        client, _ = _client([(True, 3.0), (True, 4.0)])
+        body = client.get("/v1/me/ability").json()
+        assert body["theta"] == 4.0
+        assert body["response_count"] == 2
+
+    def test_all_incorrect_lower_bound(self) -> None:
+        client, _ = _client([(False, 3.0), (False, 2.0)])
+        assert client.get("/v1/me/ability").json()["theta"] == -4.0
+
+    def test_correct_on_hard_higher_theta(self) -> None:
+        """어려운 문항을 맞히면(쉬운 문항 맞힘보다) 능력 추정 높음."""
+        hard, _ = _client([(True, 5.0), (False, 3.0)])  # 어려움 정답·중간 오답
+        easy, _ = _client([(True, 1.0), (False, 3.0)])  # 쉬움 정답·중간 오답
+        theta_hard = hard.get("/v1/me/ability").json()["theta"]
+        theta_easy = easy.get("/v1/me/ability").json()["theta"]
+        assert theta_hard > theta_easy
+
+    def test_skips_null_difficulty(self) -> None:
+        """difficulty_overall NULL 문항은 제외(추정에서 빠짐)."""
+        client, _ = _client([(True, 3.0), (True, None)])
+        body = client.get("/v1/me/ability").json()
+        assert body["response_count"] == 1  # NULL 난이도 1건 제외
