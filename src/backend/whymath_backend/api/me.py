@@ -858,6 +858,23 @@ class ConceptDiagnosisItem(BaseModel):
     )
 
 
+# slice 26: 진단 필터·상한 — "주의 필요 개념 대시보드" 질의(전 개념 반환은 페이로드 과대).
+# agreement 다중 OR(예: irt_higher·bkt_higher만=불일치 개념)·limit는 *약점 먼저* 정렬 후 상위 N.
+AgreementFilter = Annotated[
+    list[_Agreement] | None,
+    Query(
+        description=(
+            "일치 신호 필터(agree·irt_higher·bkt_higher·insufficient). 반복 지정 시 OR. "
+            "생략 시 전체(예: irt_higher·bkt_higher만 = 불일치 개념)."
+        )
+    ),
+]
+DiagnosisLimit = Annotated[
+    int | None,
+    Query(ge=1, le=200, description="약점(저신호) 먼저 정렬 후 상위 N개만. 생략 시 전체."),
+]
+
+
 @router.get(
     "/diagnosis/concepts",
     response_model=list[ConceptDiagnosisItem],
@@ -866,6 +883,8 @@ class ConceptDiagnosisItem(BaseModel):
 async def get_my_concept_diagnosis(
     user: ConsentedUser,
     session: SessionDep,
+    agreement: AgreementFilter = None,
+    limit: DiagnosisLimit = None,
 ) -> list[ConceptDiagnosisItem]:
     """개념별 BKT 숙달(slice L2-5c)과 IRT 능력 θ(slice 18)를 *한 응답에 합쳐* 교차검증.
 
@@ -875,7 +894,8 @@ async def get_my_concept_diagnosis(
     풀이로 IRT θ(`estimate_ability`)·logistic 프록시. 둘 중 하나라도 있는 개념을 합집합으로 모아
     *약점(저신호) 먼저* 정렬. 각 개념에 L4 메타인지 코칭 처방(`recommend_coaching`·slice 20)을
     붙여 *무엇을 할지*(focus·발화)까지 노출 — L2 진단→L4 결정→L5 노출 풀 스택. user_id
-    스코핑·읽기(마이그레이션 불필요).
+    스코핑·읽기(마이그레이션 불필요). `?agreement`(다중 OR·예: 불일치만)·`?limit`(약점 상위 N)으로
+    "주의 필요 개념" 질의 가능(slice 26).
     """
     mastery_stmt = (
         select(
@@ -949,6 +969,12 @@ async def get_my_concept_diagnosis(
         return (min(signals) if signals else math.inf, str(i.concept_id))
 
     items.sort(key=_weakness)
+    # slice 26: agreement OR 필터 → limit(약점 먼저 정렬 후 상위 N). 둘 다 선택적(기본 전체).
+    if agreement:
+        wanted = set(agreement)
+        items = [i for i in items if i.agreement in wanted]
+    if limit is not None:
+        items = items[:limit]
     return items
 
 
