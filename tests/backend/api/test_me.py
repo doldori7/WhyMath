@@ -14,7 +14,11 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from whymath_backend.api._auth import get_consented_user
-from whymath_backend.api.me import _weak_concept_weights
+from whymath_backend.api.me import (
+    _diagnosis_agreement,
+    _theta_to_mastery_proxy,
+    _weak_concept_weights,
+)
 from whymath_backend.app import create_app
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.assessment import Assessment, ConceptMasteryHistory
@@ -1215,3 +1219,123 @@ class TestWeakConceptWeights:
         c = uuid.uuid4()
         # p1 약점·p2 매핑 없음 → [2.0, 1.0] 순서 보존
         assert _weak_concept_weights([p1, p2], {p1: {c}}, {c: 0.0}) == [2.0, 1.0]
+
+
+class TestDiagnosisHelpers:
+    """slice L2-19: `_theta_to_mastery_proxy`·`_diagnosis_agreement` 순수 헬퍼."""
+
+    def test_proxy_logistic(self) -> None:
+        assert _theta_to_mastery_proxy(0.0) == 0.5
+        assert round(_theta_to_mastery_proxy(4.0), 4) == 0.982
+        assert round(_theta_to_mastery_proxy(-4.0), 4) == 0.018
+        # 단조 증가
+        assert _theta_to_mastery_proxy(-1.0) < _theta_to_mastery_proxy(1.0)
+
+    def test_agreement_insufficient_when_missing(self) -> None:
+        assert _diagnosis_agreement(None, 0.5) == "insufficient"
+        assert _diagnosis_agreement(0.5, None) == "insufficient"
+        assert _diagnosis_agreement(None, None) == "insufficient"
+
+    def test_agreement_agree_within_tol(self) -> None:
+        assert _diagnosis_agreement(0.5, 0.5) == "agree"
+        assert _diagnosis_agreement(0.5, 0.65) == "agree"  # 차 0.15 ≤ 0.2
+
+    def test_agreement_irt_higher(self) -> None:
+        # IRT 프록시가 BKT보다 tol 초과로 높음(맞히나 BKT는 미숙달)
+        assert _diagnosis_agreement(0.1, 0.9) == "irt_higher"
+
+    def test_agreement_bkt_higher(self) -> None:
+        assert _diagnosis_agreement(0.9, 0.1) == "bkt_higher"
+
+
+def _diagnosis_client(mastery_rows: list[Any], irt_rows: list[Any]) -> TestClient:
+    """slice 19: 진단 엔드포인트(쿼리 2회 — ①BKT 스냅샷 ②개념별 IRT) 큐 세션."""
+    return _attempts_client(
+        _QueueSession([_AQResult(mastery_rows), _AQResult(irt_rows)])
+    )
+
+
+class TestConceptDiagnosis:
+    """slice L2-19: GET /v1/me/diagnosis/concepts — BKT↔IRT 교차검증.
+
+    쿼리 2회: ①BKT 숙달 스냅샷(concept_id,code,name,mastery) ②개념별 IRT
+    (concept_id,code,name,is_correct,difficulty). 그룹화·합집합·신호 분류만 본다.
+    """
+
+    def test_empty_returns_empty(self) -> None:
+        body = _diagnosis_client([], []).get("/v1/me/diagnosis/concepts").json()
+        assert body == []
+
+    def test_requires_auth(self) -> None:
+        app = create_app()
+
+        async def _sess() -> AsyncIterator[_QueueSession]:
+            yield _QueueSession([_AQResult([]), _AQResult([])])
+
+        app.dependency_overrides[get_session] = _sess
+        assert TestClient(app).get("/v1/me/diagnosis/concepts").status_code == 401
+
+    def test_both_signals_agree(self) -> None:
+        """BKT 0.5 · IRT 1정답1오답(θ=0→프록시 0.5) → agree."""
+        cid = uuid.uuid4()
+        client = _diagnosis_client(
+            [(cid, "C", "개념", 0.5)],
+            [(cid, "C", "개념", True, 3.0), (cid, "C", "개념", False, 3.0)],
+        )
+        body = client.get("/v1/me/diagnosis/concepts").json()
+        assert len(body) == 1
+        item = body[0]
+        assert item["bkt_mastery"] == 0.5
+        assert item["irt_theta"] == 0.0
+        assert item["irt_mastery_proxy"] == 0.5
+        assert item["response_count"] == 2
+        assert item["agreement"] == "agree"
+        assert item["concept_name"] == "개념"
+
+    def test_irt_higher_signal(self) -> None:
+        """BKT 0.1인데 전부 정답(θ=4·프록시≈0.98) → irt_higher."""
+        cid = uuid.uuid4()
+        client = _diagnosis_client(
+            [(cid, "C", "개념", 0.1)], [(cid, "C", "개념", True, 3.0)]
+        )
+        item = client.get("/v1/me/diagnosis/concepts").json()[0]
+        assert item["agreement"] == "irt_higher"
+        assert item["irt_theta"] == 4.0
+
+    def test_bkt_higher_signal(self) -> None:
+        """BKT 0.9인데 전부 오답(θ=-4·프록시≈0.02) → bkt_higher."""
+        cid = uuid.uuid4()
+        client = _diagnosis_client(
+            [(cid, "C", "개념", 0.9)], [(cid, "C", "개념", False, 3.0)]
+        )
+        item = client.get("/v1/me/diagnosis/concepts").json()[0]
+        assert item["agreement"] == "bkt_higher"
+
+    def test_bkt_only_concept_insufficient(self) -> None:
+        """IRT 채점 없는 개념 → theta·proxy null·insufficient·count 0."""
+        cid = uuid.uuid4()
+        client = _diagnosis_client([(cid, "C", "개념", 0.6)], [])
+        item = client.get("/v1/me/diagnosis/concepts").json()[0]
+        assert item["bkt_mastery"] == 0.6
+        assert item["irt_theta"] is None
+        assert item["irt_mastery_proxy"] is None
+        assert item["response_count"] == 0
+        assert item["agreement"] == "insufficient"
+
+    def test_irt_only_concept_insufficient(self) -> None:
+        """BKT 숙달 없는 개념(IRT만) → bkt null·insufficient."""
+        cid = uuid.uuid4()
+        client = _diagnosis_client([], [(cid, "C", "개념", True, 3.0)])
+        item = client.get("/v1/me/diagnosis/concepts").json()[0]
+        assert item["bkt_mastery"] is None
+        assert item["irt_theta"] == 4.0
+        assert item["agreement"] == "insufficient"
+
+    def test_sorted_weakest_first(self) -> None:
+        """약점(저신호) 개념 먼저 — BKT 0.1 < 0.9."""
+        c_low, c_high = uuid.uuid4(), uuid.uuid4()
+        client = _diagnosis_client(
+            [(c_high, "H", "상", 0.9), (c_low, "L", "하", 0.1)], []
+        )
+        body = client.get("/v1/me/diagnosis/concepts").json()
+        assert [i["concept_id"] for i in body] == [str(c_low), str(c_high)]
