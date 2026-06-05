@@ -5,8 +5,13 @@
 `docs/architecture/02_learner_model.md` 참조.
 
 슬라이스 1: BKT(Bayesian Knowledge Tracing) 숙달 확률 추정(`bkt`). 슬라이스 2: BKT ↔
-`ConceptMasteryHistory` 시계열 영속 결선(`mastery_tracking`). 범위 밖(후속): IRT 문항/능력
-추정·DKT 신경망·파라미터 적합(EM)·정서 신호·오개념 매핑.
+`ConceptMasteryHistory` 시계열 영속 결선(`mastery_tracking`). 슬라이스 6: forgetting(시간
+감쇠). 슬라이스 7: IRT(문항 난이도·학생 능력 θ 추정·`irt`). 범위 밖(후속): IRT 난이도
+적합·DKT 신경망·파라미터 적합(EM)·정서 신호·오개념 매핑.
+
+이름 충돌 메모: `bkt`·`irt` 모두 `probability_correct`를 정의한다(서로 다른 모델). 패키지
+레벨에선 BKT의 것만 재노출하고, IRT 정답확률은 `whymath_backend.l2.irt.probability_correct`로
+명시 접근한다(모델 혼동 방지).
 """
 
 from __future__ import annotations
@@ -21,6 +26,7 @@ from whymath_backend.l2.bkt import (
     probability_correct,
     update_mastery,
 )
+from whymath_backend.l2.irt import IrtItem, estimate_ability
 from whymath_backend.l2.mastery_tracking import (
     MasteryRecord,
     compute_mastery_record,
@@ -32,10 +38,12 @@ __all__ = [
     "DEFAULT_BKT_PARAMETERS",
     "BktModel",
     "BktParameters",
+    "IrtItem",
     "MasteryRecord",
     "apply_forgetting",
     "apply_learning",
     "compute_mastery_record",
+    "estimate_ability",
     "posterior_mastery",
     "probability_correct",
     "record_attempt_mastery",
