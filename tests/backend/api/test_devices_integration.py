@@ -662,3 +662,47 @@ def test_device_credential_user_index_swapped_on_live_pg() -> None:
             await engine.dispose()
 
     asyncio.run(_run())
+
+
+def test_pg_device_store_reencrypt_backfill_on_live_pg() -> None:
+    """slice 74: 평문 등록(cipher 없이) → cipher store 백필 → 행 암호화·verify 유지·idempotent.
+
+    실 PG에서 ① 평문 행 2개 등록 ② cipher store가 백필(count=2) ③ DB 행 secret_plain NULL·
+    secret_encrypted 채워짐 ④ 백필 후에도 verify 성공(복호) ⑤ 재실행 0(idempotent).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    cipher = SecretCipher(os.urandom(32))
+
+    async def _run() -> None:
+        await _insert_user(uid)
+        try:
+            engine = create_async_engine(_settings().database_url)
+            try:
+                sm = async_sessionmaker(engine, expire_on_commit=False)
+                # 평문 등록(cipher 없는 store)
+                plain_store = PgDeviceStore(sm)
+                d1, s1 = await plain_store.register(uid)
+                d2, s2 = await plain_store.register(uid)
+                # 백필(cipher store)
+                enc_store = PgDeviceStore(sm, cipher)
+                assert await enc_store.reencrypt_plaintext_secrets() == 2
+                # DB 행: 평문 NULL·암호문 존재
+                async with sm() as s:
+                    row1 = await s.get(DeviceCredential, d1)
+                    assert row1 is not None
+                    assert row1.secret_plain is None
+                    assert row1.secret_encrypted is not None
+                # verify 유지(복호→HMAC)
+                assert await enc_store.verify(d1, _sign(s1, d1)) is True
+                assert await enc_store.verify(d2, _sign(s2, d2)) is True
+                # idempotent
+                assert await enc_store.reencrypt_plaintext_secrets() == 0
+            finally:
+                await engine.dispose()
+        finally:
+            await _cleanup(uid)
+
+    asyncio.run(_run())

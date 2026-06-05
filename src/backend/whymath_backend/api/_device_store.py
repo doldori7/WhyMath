@@ -609,6 +609,48 @@ class PgDeviceStore:
             await session.commit()
         return stale_ids
 
+    async def reencrypt_plaintext_secrets(self, *, batch_size: int = 100) -> int:
+        """slice 74: 평문 저장된 secret을 봉투 암호화로 전환(백필) — 재암호화한 행 수 반환.
+
+        slice 73은 *신규* register만 암호화했다(기존 평문 행은 잔존). 본 메서드는 마스터 키
+        도입 후 기존 행을 점진 전환한다 — `secret_encrypted IS NULL`(=평문 행) 중 secret_plain
+        있는 것을 batch_size개까지 암호화해 `secret_encrypted`/`secret_nonce`를 채우고
+        `secret_plain=NULL`로 비운다. 이미 암호화된 행은 자동 제외(idempotent). 호출자가 0
+        반환까지 반복해 전체 백필(대형 테이블 메모리/락 보호). cipher 미설정이면 0(no-op).
+
+        *운영 일회성/관리자 경로*(cleanup_stale와 동형) — 구체 PgDeviceStore로 호출(요청
+        경로 아님). secret_plain·secret_encrypted 둘 다 없는 이상 행은 건너뛴다(무결성 방어).
+        """
+        if self._cipher is None:
+            return 0
+        from whymath_backend.db.models.device import DeviceCredential
+
+        async with self._sessionmaker() as session:
+            sel = (
+                select(DeviceCredential.device_id, DeviceCredential.secret_plain)
+                .where(DeviceCredential.secret_encrypted.is_(None))
+                .limit(batch_size)
+            )
+            result = await session.execute(sel)
+            count = 0
+            for device_id, secret_plain in result.all():
+                if secret_plain is None:
+                    continue  # 평문·암호문 둘 다 없는 이상 행 — 건드리지 않음
+                ciphertext, nonce = self._cipher.encrypt(secret_plain)
+                upd = (
+                    update(DeviceCredential)
+                    .where(DeviceCredential.device_id == device_id)
+                    .values(
+                        secret_plain=None,
+                        secret_encrypted=ciphertext,
+                        secret_nonce=nonce,
+                    )
+                )
+                await session.execute(upd)
+                count += 1
+            await session.commit()
+            return count
+
 
 # 모듈 전역 — FastAPI 단일 프로세스/다중 워커 가정. `None`이면 store 모드 비활성
 # (slice 21 shared-secret 폴백). 운영 lifespan은 `set_device_store(PgDeviceStore(...))`로 활성.
