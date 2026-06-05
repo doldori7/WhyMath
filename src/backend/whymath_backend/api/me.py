@@ -56,7 +56,7 @@ from whymath_backend.api._query_filters import time_window_conditions
 from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
 from whymath_backend.db.models.assessment import Assessment, ConceptMasteryHistory
 from whymath_backend.db.models.audit import DeletionAudit
-from whymath_backend.db.models.concept import Concept
+from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
@@ -64,7 +64,7 @@ from whymath_backend.l2.irt import (
     IrtItem,
     ability_standard_error,
     estimate_ability,
-    select_next_item,
+    select_weighted_item,
 )
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
@@ -74,7 +74,7 @@ from whymath_backend.schema.assessment import (
 )
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
-from whymath_backend.schema.enums import AuditResourceType
+from whymath_backend.schema.enums import AuditResourceType, ConceptRole
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
 
@@ -734,6 +734,40 @@ _CANDIDATE_POOL_SIZE = 50  # θ 근방 후보 풀 크기(SQL로 거리순 선별
 # "충분히 정밀하게 측정됨"으로 보고 적응 검사 중단을 권고(measurement_sufficient=True).
 # 0.3은 통상적 CAT 종료 임계(θ ± ~0.6 95% 구간). 추후 모드/설정별 보정은 후속.
 _TARGET_SE = 0.3
+# slice 16/17: 약점 개념 가중 출제 — BKT 개념별 숙달이 낮을수록(약점) 후보 문항 정보량에
+# 곱하는 가중치를 키운다. weight = 1 + BOOST·(1 - 최저숙달). BOOST=1.0이면 완전 미숙달(숙달 0)
+# 문항은 가중 2배·완전 숙달(1.0)은 1배. 정책 상수(모드별 차등은 후속).
+_WEAK_CONCEPT_BOOST = 1.0
+# 약점 가중에 쓰는 개념 역할 — 문제가 *평가하는* 개념만(보조 SUPPORTING 제외). BKT 갱신
+# (mastery_tracking)과 동일 역할 집합이라 "푼 문항이 갱신한 개념"과 "출제 가중 개념"이 일관.
+_ASSESSED_ROLES = (ConceptRole.PRIMARY, ConceptRole.TESTED)
+# slice 17: ?prioritize_weak_concepts — 기본 false(slice 12~15 동작 보존). true면 BKT 약점
+# 개념 우선(개념 숙달 스냅샷·후보 문항 개념 매핑을 추가 조회해 가중).
+PrioritizeWeakConcepts = Annotated[
+    bool,
+    Query(description="true면 BKT 약점 개념(저숙달) 우선 출제(정보량×약점 가중). 기본 false."),
+]
+
+
+def _weak_concept_weights(
+    candidate_problem_ids: list[uuid.UUID],
+    problem_concepts: dict[uuid.UUID, set[uuid.UUID]],
+    mastery: dict[uuid.UUID, float],
+) -> list[float]:
+    """후보 문항별 약점 가중치 — 문항의 평가 개념 중 *최저 숙달*로 weakness 산출(BKT+IRT 융합).
+
+    각 후보의 평가 개념(`problem_concepts[pid]`) 중 숙달 기록(`mastery`)이 있는 것의 최저 숙달을
+    취해 `weight = 1 + _WEAK_CONCEPT_BOOST·(1 - 최저숙달)`. 약할수록 가중↑. 개념 매핑이 없거나
+    숙달 기록이 없으면 *중립*(1.0 — 정보 없는 개념을 벌하거나 우대하지 않음). 순수·결정론.
+    """
+    weights = []
+    for pid in candidate_problem_ids:
+        relevant = [mastery[c] for c in problem_concepts.get(pid, set()) if c in mastery]
+        if relevant:
+            weights.append(1.0 + _WEAK_CONCEPT_BOOST * (1.0 - min(relevant)))
+        else:
+            weights.append(1.0)
+    return weights
 
 
 class NextProblemResponse(BaseModel):
@@ -766,17 +800,24 @@ class NextProblemResponse(BaseModel):
 async def recommend_next_problem(
     user: ConsentedUser,
     session: SessionDep,
+    prioritize_weak_concepts: PrioritizeWeakConcepts = False,
 ) -> NextProblemResponse:
     """본인 능력 θ에 *정보량 최대*인 *미응답* 문항을 추천 — IRT CAT(적응형 출제) 루프.
 
     ① 채점 풀이 이력으로 θ 추정(slice 11과 동일 로직)·이미 푼 문항 id 수집. ② 난이도 라벨
     (difficulty_overall) 있는 *미응답* 문항을 θ 근방(|b-θ| 최소)으로 SQL 선별(`_CANDIDATE_POOL_SIZE`
-    개)·`select_next_item`(slice 12)으로 정보량 최대 1개 선택. 후보 없으면 problem_id=null.
+    개)·`select_weighted_item`(slice 16)으로 (가중)정보량 최대 1개 선택. 없으면 problem_id=null.
     난이도→b 매핑은 slice 11의 `_difficulty_to_logit`(보정 b는 fit_jmle 후속).
 
     CAT 중단 규칙(slice 15): *응답한 문항* 기준 표준오차 SE(slice 13)와 `measurement_sufficient`
     (SE≤`_TARGET_SE`)을 함께 반환 — 호출자는 충분하면 검사를 멈추고 아니면 추천 문항을 출제한다
     (적응 검사 루프 구동). 추천(problem_id)은 중단 권고와 무관히 후보가 있으면 항상 제공.
+
+    BKT+IRT 융합(slice 17·`prioritize_weak_concepts=true`): 후보 풀(θ 근방) 안에서 학생의 BKT
+    개념별 숙달 스냅샷(개념당 최신)을 후보 문항의 평가 개념과 대응해, *약점 개념*(저숙달) 문항의
+    정보량에 가중(`_weak_concept_weights`)을 줘 선택. 즉 "능력에 맞는 난이도" + "약한 개념 우선"을
+    동시 만족(CLAUDE.md 약점 진단). 후보 풀 자체는 여전히 θ 근방이라, 약점이라도 난이도가 θ에서
+    멀면 풀 밖일 수 있다(풀 확장은 후속). 기본 false면 균등 가중(slice 12~15 동작 보존).
     """
     attempt_stmt = (
         select(
@@ -817,7 +858,33 @@ async def recommend_next_problem(
     candidate_rows = (await session.execute(candidate_stmt)).all()
 
     items = [IrtItem(difficulty=_difficulty_to_logit(float(d))) for _pid, d in candidate_rows]
-    best = select_next_item(theta, items)
+
+    # slice 17: 약점 개념 가중(BKT+IRT 융합) — 후보가 있을 때만 추가 2쿼리로 가중치 산출.
+    weights: list[float] | None = None
+    if prioritize_weak_concepts and candidate_rows:
+        candidate_ids = [pid for pid, _d in candidate_rows]
+        mastery_stmt = (
+            select(ConceptMasteryHistory.concept_id, ConceptMasteryHistory.mastery)
+            .where(ConceptMasteryHistory.user_id == user.user_id)
+            .distinct(ConceptMasteryHistory.concept_id)
+            .order_by(
+                ConceptMasteryHistory.concept_id,
+                ConceptMasteryHistory.measured_at.desc(),
+            )
+        )
+        mastery = {
+            cid: float(m) for cid, m in (await session.execute(mastery_stmt)).all() if m is not None
+        }
+        pc_stmt = select(ProblemConcept.problem_id, ProblemConcept.concept_id).where(
+            ProblemConcept.problem_id.in_(candidate_ids),
+            ProblemConcept.role.in_(_ASSESSED_ROLES),
+        )
+        problem_concepts: dict[uuid.UUID, set[uuid.UUID]] = {}
+        for pid, cid in (await session.execute(pc_stmt)).all():
+            problem_concepts.setdefault(pid, set()).add(cid)
+        weights = _weak_concept_weights(candidate_ids, problem_concepts, mastery)
+
+    best = select_weighted_item(theta, items, weights=weights)
     if best is None:
         return NextProblemResponse(
             problem_id=None,
