@@ -1260,3 +1260,96 @@ def test_me_ability_snapshot_capture_and_list_on_live_pg() -> None:
             assert client.get("/v1/me/ability/snapshots").status_code == 401
     finally:
         asyncio.run(_cleanup_all())
+
+
+def test_me_ability_snapshot_per_concept_on_live_pg() -> None:
+    """POST ?include_concepts=true → 전과목+개념별 적재 → GET ?concept_id 분리 조회(실 PG)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid = uuid.uuid4()
+    cid = uuid.uuid4()
+    suffix = pid.hex[:8]
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(
+            Concept.from_schema(
+                ConceptSchema(
+                    concept_id=cid,
+                    code=f"S-{suffix}",
+                    name_ko="스냅개념",
+                    level=ConceptLevel.세부개념,
+                )
+            )
+        )
+        await _add_all(
+            Problem.from_schema(
+                ProblemSchema(
+                    problem_id=pid,
+                    source_type=SourceType.자체생성,
+                    curriculum_version=Curriculum.REVISION_2022,
+                    valid_from_year=2022,
+                    subject=Subject.공통,
+                    unit_codes=[f"U-{suffix}"],
+                    difficulty_overall=5.0,
+                )
+            )
+        )
+        await _add_all(
+            ProblemConcept.from_schema(
+                ProblemConceptSchema(
+                    problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY
+                )
+            )
+        )
+        await _add_all(
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True
+            )
+        )
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                for sql, params in (
+                    ("DELETE FROM ability_snapshot WHERE user_id=:u", {"u": str(uid)}),
+                    ("DELETE FROM problem_attempt WHERE user_id=:u", {"u": str(uid)}),
+                    (
+                        "DELETE FROM problem_concept WHERE problem_id=:p",
+                        {"p": str(pid)},
+                    ),
+                    ("DELETE FROM problem WHERE problem_id=:p", {"p": str(pid)}),
+                    ("DELETE FROM concept WHERE concept_id=:c", {"c": str(cid)}),
+                    ("DELETE FROM user_profile WHERE user_id=:u", {"u": str(uid)}),
+                ):
+                    await conn.execute(text(sql), params)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            cap = client.post(
+                "/v1/me/ability/snapshots?include_concepts=true", headers=auth
+            )
+            assert cap.status_code == 201, cap.text
+            assert cap.json()["concept_id"] is None  # 응답=전과목
+            # 기본(concept_id 생략) → 전과목 곡선만(1행·concept_id null)
+            glob = client.get("/v1/me/ability/snapshots", headers=auth).json()
+            assert len(glob) == 1
+            assert glob[0]["concept_id"] is None
+            assert glob[0]["theta"] == 4.0
+            # ?concept_id=cid → 그 개념 곡선(1행·concept_id=cid·θ4)
+            byc = client.get(
+                f"/v1/me/ability/snapshots?concept_id={cid}", headers=auth
+            ).json()
+            assert len(byc) == 1
+            assert byc[0]["concept_id"] == str(cid)
+            assert byc[0]["theta"] == 4.0
+    finally:
+        asyncio.run(_cleanup_all())
