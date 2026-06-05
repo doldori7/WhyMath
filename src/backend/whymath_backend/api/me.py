@@ -190,18 +190,24 @@ async def _close_owned_resource(
     owner_id: uuid.UUID,
     close_field: str,
     not_found_detail: str,
+    *,
+    commit: bool = True,
 ) -> tuple[_LifecycleRow, bool]:
     """본인 소유 리소스 lifecycle 종료 — `close_field`(ended_at/completed_at)를 now로.
 
     *idempotent*: 이미 채워졌으면 보존하고 commit 안 함(현 상태 반환). slice 50/52/53 동형.
     `(row, newly_closed)` 반환 — `newly_closed`는 *이번 호출에서 처음 종료*했는지(slice 34
     세션 종료 자동 트리거가 멱등 재호출 시 중복 동작을 피하도록).
+
+    slice 35: `commit=False`면 종료 컬럼만 세팅하고 *커밋은 호출자*에 맡긴다 — 같은
+    트랜잭션에 후속 쓰기(세션 종료 + θ 스냅샷)를 묶어 원자성 보장(부분 적용 방지).
     """
     row = await _get_owned_or_404(session, model, pk, owner_id, not_found_detail)
     newly_closed = getattr(row, close_field) is None
     if newly_closed:
         setattr(row, close_field, datetime.now(UTC))
-        await session.commit()
+        if commit:
+            await session.commit()
     return row, newly_closed
 
 
@@ -1413,6 +1419,7 @@ async def end_my_session(
 
     slice 34: *처음 종료*될 때 현재 전과목 θ를 `ability_snapshot`에 자동 적재(세션 종료 트리거 —
     수동 POST 불요·성장 곡선 자연 샘플링). 멱등 재호출(이미 종료)이나 채점 이력 0이면 미적재.
+    slice 35: 종료 컬럼 세팅·스냅샷 적재를 *한 트랜잭션*(단일 commit)으로 묶어 원자성 보장.
     """
     row, newly_closed = await _close_owned_resource(
         session,
@@ -1421,16 +1428,18 @@ async def end_my_session(
         user.user_id,
         "ended_at",
         "학습 세션을 찾을 수 없습니다.",
+        commit=False,  # 종료 + 스냅샷을 아래에서 단일 commit으로 원자 적용.
     )
     if newly_closed:
-        await _maybe_capture_ability_snapshot(session, user.user_id)
+        await _add_ability_snapshot_if_attempts(session, user.user_id)
+        await session.commit()  # 종료(ended_at) + (있으면)스냅샷 한 번에.
     return row.to_schema()
 
 
-async def _maybe_capture_ability_snapshot(session: AsyncSession, user_id: uuid.UUID) -> None:
-    """현재 전과목 θ를 `ability_snapshot`에 적재 — 채점 이력 있을 때만(빈 θ 노이즈 회피).
+async def _add_ability_snapshot_if_attempts(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """채점 이력이 있으면 현재 전과목 θ 스냅샷을 세션에 *추가만*(commit은 호출자) — 빈 θ 미적재.
 
-    slice 32 수동 캡처와 동일 산식·전과목 단일 θ(concept_id null). 세션 종료 트리거(slice 34)용.
+    slice 32 수동 캡처와 동일 산식·전과목 단일 θ(concept_id null). 세션 종료 트리거(slice 34/35).
     """
     theta, se, count = await _estimate_global_ability(session, user_id)
     if count == 0:
@@ -1446,7 +1455,6 @@ async def _maybe_capture_ability_snapshot(session: AsyncSession, user_id: uuid.U
             )
         )
     )
-    await session.commit()
 
 
 @router.delete(

@@ -455,7 +455,7 @@ class TestEndSession:
         assert len(snaps) == 1
         assert snaps[0].response_count == 2
         assert snaps[0].concept_id is None  # 전과목 단일 θ
-        assert fake.commits == 2  # 종료 1 + 스냅샷 1
+        assert fake.commits == 1  # slice 35: 종료 + 스냅샷 단일 트랜잭션
 
     def test_end_no_attempts_skips_snapshot(self) -> None:
         """채점 이력 0 → θ=0 노이즈 스냅샷 미적재(종료만)."""
