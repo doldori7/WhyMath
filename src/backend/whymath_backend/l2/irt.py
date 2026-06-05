@@ -88,6 +88,49 @@ def estimate_ability(
     return theta
 
 
+def estimate_difficulty(
+    responses: list[tuple[float, bool]],
+    *,
+    discrimination: float = 1.0,
+    initial: float = 0.0,
+    max_iter: int = 50,
+    tol: float = 1e-6,
+    lower: float = _THETA_LOWER,
+    upper: float = _THETA_UPPER,
+) -> float:
+    """관측 응답(학생 능력 θ, 정/오답)들에서 문항 난이도 b를 MLE로 추정 — `estimate_ability`의
+    *대칭* (능력 고정·난이도 추정). 문항 보정(item calibration)·JMLE의 b-단계.
+
+    `responses`는 `(학생 능력 θ, 정답 여부)` 쌍. 빈 응답이면 `initial`. *모두 정답*이면 `lower`
+    (누구나 맞힘 → 매우 쉬움)·*모두 오답*이면 `upper`(누구도 못 맞힘 → 매우 어려움). Newton:
+    `b ← b + Σ -a(정답-P)/Σ a²P(1-P)`(능력 추정과 부호만 반대·정답 많을수록 b↓=쉬워짐).
+    매 스텝 [lower, upper] clamp·결정론적. `discrimination`은 이 문항의 a(기본 1.0=Rasch).
+    """
+    if not responses:
+        return initial
+    if all(correct for _, correct in responses):
+        return lower
+    if not any(correct for _, correct in responses):
+        return upper
+
+    b = initial
+    a = discrimination
+    for _ in range(max_iter):
+        grad = 0.0
+        info = 0.0
+        for theta, correct in responses:
+            p = 1.0 / (1.0 + math.exp(-a * (theta - b)))
+            grad += -a * ((1.0 if correct else 0.0) - p)  # dL/db (능력 추정과 부호 반대)
+            info += a * a * p * (1.0 - p)
+        if info <= 1e-12:  # pragma: no cover — 방어적 수치 가드(정상 입력선 도달 불가)
+            break
+        step = grad / info
+        b = min(max(b + step, lower), upper)
+        if abs(step) < tol:
+            break
+    return b
+
+
 def item_information(theta: float, item: IrtItem) -> float:
     """문항 정보함수 I(θ) = a²·P·(1-P) — 능력 θ에서 이 문항이 주는 측정 정보량.
 
@@ -126,6 +169,7 @@ def select_next_item(
 __all__ = [
     "IrtItem",
     "estimate_ability",
+    "estimate_difficulty",
     "item_information",
     "probability_correct",
     "select_next_item",

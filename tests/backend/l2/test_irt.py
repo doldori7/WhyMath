@@ -11,6 +11,7 @@ from pydantic import ValidationError
 from whymath_backend.l2.irt import (
     IrtItem,
     estimate_ability,
+    estimate_difficulty,
     item_information,
     probability_correct,
     select_next_item,
@@ -202,3 +203,53 @@ class TestSelectNextItem:
             IrtItem(difficulty=0.0, discrimination=2.0),
         ]
         assert select_next_item(0.0, pool) == 1
+
+
+class TestEstimateDifficulty:
+    def test_empty_returns_initial(self) -> None:
+        assert estimate_difficulty([], initial=0.5) == 0.5
+
+    def test_all_correct_returns_lower_easy(self) -> None:
+        """누구나 맞힘 → 매우 쉬움(lower)."""
+        assert estimate_difficulty([(0.0, True), (1.0, True), (-1.0, True)]) == -4.0
+
+    def test_all_incorrect_returns_upper_hard(self) -> None:
+        """누구도 못 맞힘 → 매우 어려움(upper)."""
+        assert estimate_difficulty([(0.0, False), (1.0, False)]) == 4.0
+
+    def test_symmetric_responses_near_zero(self) -> None:
+        """능력 0 학생이 1정답·1오답 → 난이도 b=0."""
+        assert estimate_difficulty([(0.0, True), (0.0, False)]) == pytest.approx(
+            0.0, abs=1e-6
+        )
+
+    def test_only_high_ability_correct_is_harder(self) -> None:
+        """고능력 학생만 맞히면 난이도 높게(어려운 문항)."""
+        hard = estimate_difficulty([(2.0, True), (0.0, False), (-2.0, False)])
+        easy = estimate_difficulty([(2.0, True), (0.0, True), (-2.0, False)])
+        assert hard > easy
+        assert hard > 0.0  # 어려움
+        assert easy < 0.0  # 쉬움
+
+    def test_clamped_to_bounds(self) -> None:
+        b = estimate_difficulty([(0.0, True), (0.0, False)], lower=-1.5, upper=1.5)
+        assert -1.5 <= b <= 1.5
+
+    def test_discrimination_param(self) -> None:
+        """변별도 인자가 추정에 반영(수렴값 유효)."""
+        b = estimate_difficulty([(1.0, True), (-1.0, False)], discrimination=2.0)
+        assert -4.0 <= b <= 4.0
+
+    def test_deterministic(self) -> None:
+        resp = [(1.0, True), (0.0, False), (-1.0, True)]
+        assert estimate_difficulty(resp) == estimate_difficulty(resp)
+
+    def test_max_iter_caps(self) -> None:
+        b = estimate_difficulty([(1.0, True), (0.0, False), (-1.0, True)], max_iter=1)
+        assert -4.0 <= b <= 4.0
+
+    def test_round_trip_with_estimate_ability(self) -> None:
+        """난이도 추정 ↔ 능력 추정 일관성 — b=1 문항에 능력 2 학생 정답·능력 0 오답이면
+        추정 b는 0~2 사이(능력 추정과 같은 로지스틱 척도)."""
+        b = estimate_difficulty([(2.0, True), (0.0, False)])
+        assert 0.0 < b < 2.0
