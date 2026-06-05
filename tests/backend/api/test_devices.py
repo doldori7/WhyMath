@@ -13,6 +13,7 @@ pytest-asyncio `auto` 모드 가정(`asyncio_mode = "auto"` in pyproject.toml).
 from __future__ import annotations
 
 import hmac
+import os
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from datetime import UTC, datetime, timedelta
@@ -25,6 +26,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_consented_user
+from whymath_backend.api._crypto import SecretCipher
 from whymath_backend.api._device_store import (
     CachedDeviceStore,
     DeviceCredentialStore,
@@ -2845,7 +2847,14 @@ class _FakePgSession:
         if hasattr(where, "left") and hasattr(where, "right"):
             col_name = where.left.key if hasattr(where.left, "key") else str(where.left)
             actual = getattr(row, col_name, None)
-            value = where.right.value if hasattr(where.right, "value") else where.right
+            # slice 74: `col.is_(None)`는 우변이 Null() 노드(.value 없음) → value=None으로
+            # 정규화(IS NULL 평가). `.is_(False)` 등 BindParameter 우변(.value 보유)은 그대로.
+            if hasattr(where.right, "value"):
+                value = where.right.value
+            elif type(where.right).__name__ == "Null":
+                value = None
+            else:
+                value = where.right
             op = getattr(where, "operator", None)
             op_name = getattr(op, "__name__", "eq") if op is not None else "eq"
             handler = op_dispatch.get(op_name, eq)
@@ -3332,3 +3341,79 @@ class TestCachedDeviceStoreCleanupStale:
         # 캐시 그대로
         assert cache.delete_calls == 0
         assert "device_verify:" + device_id in cache.store
+
+
+class TestPgDeviceStoreReencrypt:
+    """slice 74: 평문 행 봉투 암호화 백필(`_FakePgSession` SELECT+UPDATE 시뮬)."""
+
+    async def test_no_cipher_is_noop(self) -> None:
+        """cipher 미설정 store는 0(no-op) — 평문 행 그대로."""
+        store_dict: dict[str, Any] = {}
+        store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        await store.register(_UID)
+        assert await store.reencrypt_plaintext_secrets() == 0
+        # 평문 그대로
+        row = next(iter(store_dict.values()))
+        assert row.secret_plain is not None
+        assert row.secret_encrypted is None
+
+    async def test_backfills_plaintext_rows(self) -> None:
+        """평문 등록 → cipher store 백필 → 행이 암호화(secret_plain NULL)·verify 유지."""
+        store_dict: dict[str, Any] = {}
+        plain_store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        d1, s1 = await plain_store.register(_UID)
+        d2, s2 = await plain_store.register(_UID)
+
+        cipher = SecretCipher(os.urandom(32))
+        enc_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), cipher)
+        assert await enc_store.reencrypt_plaintext_secrets() == 2
+        # 두 행 모두 암호화 표현으로 전환
+        for d, s in ((d1, s1), (d2, s2)):
+            row = store_dict[d]
+            assert row.secret_plain is None
+            assert row.secret_encrypted is not None
+            assert row.secret_nonce is not None
+            # 봉투에서 복호하면 원본·verify 성공
+            assert await enc_store.verify(d, _compute_signature(s, d)) is True
+
+    async def test_idempotent_second_run_zero(self) -> None:
+        """백필 후 재실행은 0(이미 암호화된 행 제외)."""
+        store_dict: dict[str, Any] = {}
+        plain_store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        await plain_store.register(_UID)
+        cipher = SecretCipher(os.urandom(32))
+        enc_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), cipher)
+        assert await enc_store.reencrypt_plaintext_secrets() == 1
+        assert await enc_store.reencrypt_plaintext_secrets() == 0
+
+    async def test_already_encrypted_rows_untouched(self) -> None:
+        """cipher store가 등록한 행(이미 암호화)은 백필 대상 아님 — 0."""
+        store_dict: dict[str, Any] = {}
+        cipher = SecretCipher(os.urandom(32))
+        enc_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), cipher)
+        await enc_store.register(_UID)  # 암호화 등록
+        assert await enc_store.reencrypt_plaintext_secrets() == 0
+
+    async def test_batch_size_limits_per_call(self) -> None:
+        """batch_size로 호출당 처리량 제한 — 반복 호출로 전체 백필."""
+        store_dict: dict[str, Any] = {}
+        plain_store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        for _ in range(3):
+            await plain_store.register(_UID)
+        cipher = SecretCipher(os.urandom(32))
+        enc_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), cipher)
+        assert await enc_store.reencrypt_plaintext_secrets(batch_size=2) == 2
+        assert await enc_store.reencrypt_plaintext_secrets(batch_size=2) == 1
+        assert await enc_store.reencrypt_plaintext_secrets(batch_size=2) == 0
+
+    async def test_both_null_row_skipped(self) -> None:
+        """이상 행(secret_plain·secret_encrypted 둘 다 NULL)은 건드리지 않음(방어·count 0)."""
+        store_dict: dict[str, Any] = {}
+        plain_store = PgDeviceStore(_fake_sessionmaker_for(store_dict))
+        d, _ = await plain_store.register(_UID)
+        store_dict[d].secret_plain = None  # 둘 다 NULL인 이상 상태 강제
+        cipher = SecretCipher(os.urandom(32))
+        enc_store = PgDeviceStore(_fake_sessionmaker_for(store_dict), cipher)
+        assert await enc_store.reencrypt_plaintext_secrets() == 0
+        # 그대로 둠(암호화 안 함)
+        assert store_dict[d].secret_encrypted is None
