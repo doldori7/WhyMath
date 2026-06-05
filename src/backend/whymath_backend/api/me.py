@@ -46,16 +46,18 @@ from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeVar
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._query_filters import time_window_conditions
-from whymath_backend.db.models.activity import LearningSession
+from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
 from whymath_backend.db.models.assessment import Assessment
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.session import get_session
+from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
@@ -408,6 +410,91 @@ async def list_my_deletions(
         select(func.count()).select_from(DeletionAudit).where(*conds),
     )
     return rows
+
+
+# ── slice L2-4: 풀이 채점 제출 → ProblemAttempt 적재 + BKT 숙달 자동 전파 ──────────
+class AttemptSubmitRequest(BaseModel):
+    """본인 풀이 채점 결과 제출 — `POST /v1/me/attempts` 요청 본문.
+
+    v1: `is_correct`는 *클라이언트 보고*(서버측 답안 채점[OCR·answer-check]은 L3/L5 후속).
+    `problem_id`는 존재하는 문제를 참조해야 한다(FK — 미존재 시 저장계층 무결성 오류).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    problem_id: uuid.UUID = Field(description="채점 대상 문제 FK.")
+    is_correct: bool = Field(description="정답 여부(v1 클라이언트 보고).")
+    student_answer: str | None = Field(default=None, description="학생 제출 답안(선택).")
+    duration_seconds: int | None = Field(default=None, ge=0, description="풀이 소요 시간(초).")
+    session_id: uuid.UUID | None = Field(default=None, description="소속 학습 세션(선택).")
+    confidence_self_reported: float | None = Field(
+        default=None, ge=0.0, le=1.0, description="학생 자기보고 확신도 0~1(선택)."
+    )
+
+
+class ConceptMasteryUpdate(BaseModel):
+    """채점으로 갱신된 한 개념의 숙달 측정 — 응답에 포함(학습 곡선 즉시 피드백)."""
+
+    concept_id: uuid.UUID
+    mastery: float
+    sample_size: int
+
+
+class AttemptSubmitResponse(BaseModel):
+    """`POST /v1/me/attempts` 응답 — 적재된 attempt + 갱신된 개념 숙달 목록."""
+
+    attempt_id: uuid.UUID
+    is_correct: bool
+    mastery_updates: list[ConceptMasteryUpdate]
+
+
+@router.post(
+    "/attempts",
+    response_model=AttemptSubmitResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="풀이 채점 제출(ProblemAttempt 적재 + 숙달 자동 갱신)",
+)
+async def submit_attempt(
+    body: AttemptSubmitRequest,
+    user: ConsentedUser,
+    session: SessionDep,
+) -> AttemptSubmitResponse:
+    """본인 풀이 채점 1건 제출 — `ProblemAttempt` 적재 후 문제의 평가 개념 BKT 숙달 자동 전파.
+
+    user_id는 인증에서 주입(본문 무시·타인 사칭 차단). attempt를 먼저 commit하고(주된 기록)
+    이어서 `record_problem_attempt_mastery`로 평가 개념(PRIMARY·TESTED) 숙달을 시계열에 누적
+    (L2 슬라이스 3). 응답에 갱신된 개념별 숙달을 담아 클라이언트가 학습 곡선을 즉시 반영.
+    """
+    attempt = ProblemAttempt(
+        attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
+        user_id=user.user_id,
+        problem_id=body.problem_id,
+        session_id=body.session_id,
+        is_correct=body.is_correct,
+        student_answer=body.student_answer,
+        duration_seconds=body.duration_seconds,
+        confidence_self_reported=body.confidence_self_reported,
+        ended_at=datetime.now(UTC),
+    )
+    session.add(attempt)
+    await session.commit()
+    # 숙달 전파(평가 개념별 측정 적재·개념 매핑 없으면 빈 리스트)
+    records = await record_problem_attempt_mastery(
+        session, user.user_id, body.problem_id, body.is_correct
+    )
+    return AttemptSubmitResponse(
+        attempt_id=attempt.attempt_id,
+        is_correct=body.is_correct,
+        mastery_updates=[
+            ConceptMasteryUpdate(
+                concept_id=r.concept_id,
+                # record_problem_attempt_mastery는 항상 mastery를 채우나 ORM 타입이 float|None.
+                mastery=float(r.mastery) if r.mastery is not None else 0.0,
+                sample_size=r.sample_size if r.sample_size is not None else 0,
+            )
+            for r in records
+        ],
+    )
 
 
 @router.patch(

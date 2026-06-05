@@ -21,10 +21,23 @@ from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.activity import LearningSession
 from whymath_backend.db.models.audit import DeletionAudit
+from whymath_backend.db.models.concept import Concept, ProblemConcept
+from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
-from whymath_backend.schema.enums import AuditResourceType, Persona
+from whymath_backend.schema.concept import Concept as ConceptSchema
+from whymath_backend.schema.concept import ProblemConcept as ProblemConceptSchema
+from whymath_backend.schema.enums import (
+    AuditResourceType,
+    ConceptLevel,
+    ConceptRole,
+    Curriculum,
+    Persona,
+    SourceType,
+    Subject,
+)
+from whymath_backend.schema.problem import Problem as ProblemSchema
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 from whymath_backend.security import create_access_token
 
@@ -237,7 +250,11 @@ def test_me_deletions_resource_type_filter_on_live_pg() -> None:
             resp = client.get(
                 "/v1/me/deletions",
                 headers=auth,
-                params={"resource_type": "learning_session", "limit": "1", "include_total": "true"},
+                params={
+                    "resource_type": "learning_session",
+                    "limit": "1",
+                    "include_total": "true",
+                },
             )
             assert len(resp.json()) == 1  # 페이지는 1건
             assert resp.headers["X-Total-Count"] == "2", resp.headers  # 총 2건
@@ -379,7 +396,10 @@ def test_me_sessions_order_param_on_live_pg() -> None:
         auth = {"Authorization": f"Bearer {token_a}"}
         with _client() as client:
             # 기본(생략) = desc = 최신순 [12,6,1]월
-            ids = [s["session_id"] for s in client.get("/v1/me/sessions", headers=auth).json()]
+            ids = [
+                s["session_id"]
+                for s in client.get("/v1/me/sessions", headers=auth).json()
+            ]
             assert ids == [str(s_dec), str(s_jun), str(s_jan)], ids
 
             # order=asc = 오래된순 [1,6,12]월
@@ -434,3 +454,118 @@ def test_me_sessions_ended_at_window_filter_on_live_pg() -> None:
             assert len(resp.json()) == 1, resp.text
     finally:
         asyncio.run(_cleanup([uid_a]))
+
+
+def test_submit_attempt_records_and_propagates_mastery_on_live_pg() -> None:
+    """POST /v1/me/attempts — ProblemAttempt 적재 + 평가 개념 숙달 갱신(end-to-end)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid = uuid.uuid4()
+    pid = uuid.uuid4()
+    cid = uuid.uuid4()
+    suffix = pid.hex[:8]
+
+    async def _setup() -> None:
+        # user(FK) + problem(FK) + concept + problem_concept(PRIMARY)
+        await _add_all(_user(uid))
+        await _add_all(
+            Problem.from_schema(
+                ProblemSchema(
+                    problem_id=pid,
+                    source_type=SourceType.자체생성,
+                    curriculum_version=Curriculum.REVISION_2022,
+                    valid_from_year=2022,
+                    subject=Subject.공통,
+                    unit_codes=[f"U-{suffix}"],
+                )
+            ),
+            Concept.from_schema(
+                ConceptSchema(
+                    concept_id=cid,
+                    code=f"C-{suffix}",
+                    name_ko="채점테스트개념",
+                    level=ConceptLevel.세부개념,
+                )
+            ),
+        )
+        await _add_all(
+            ProblemConcept.from_schema(
+                ProblemConceptSchema(
+                    problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY
+                )
+            )
+        )
+
+    async def _counts() -> tuple[int, int]:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.connect() as conn:
+                pa = (
+                    await conn.execute(
+                        text("SELECT count(*) FROM problem_attempt WHERE user_id=:u"),
+                        {"u": str(uid)},
+                    )
+                ).scalar()
+                cm = (
+                    await conn.execute(
+                        text(
+                            "SELECT count(*) FROM concept_mastery_history WHERE user_id=:u"
+                        ),
+                        {"u": str(uid)},
+                    )
+                ).scalar()
+            return int(pa or 0), int(cm or 0)
+        finally:
+            await engine.dispose()
+
+    async def _full_cleanup() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                for sql, params in (
+                    ("DELETE FROM problem_attempt WHERE user_id=:u", {"u": str(uid)}),
+                    (
+                        "DELETE FROM concept_mastery_history WHERE user_id=:u",
+                        {"u": str(uid)},
+                    ),
+                    (
+                        "DELETE FROM problem_concept WHERE problem_id=:p",
+                        {"p": str(pid)},
+                    ),
+                    ("DELETE FROM problem WHERE problem_id=:p", {"p": str(pid)}),
+                    ("DELETE FROM concept WHERE concept_id=:c", {"c": str(cid)}),
+                    ("DELETE FROM user_profile WHERE user_id=:u", {"u": str(uid)}),
+                ):
+                    await conn.execute(text(sql), params)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        with _client() as client:
+            resp = client.post(
+                "/v1/me/attempts",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"problem_id": str(pid), "is_correct": True},
+            )
+            assert resp.status_code == 201, resp.text
+            body = resp.json()
+            assert len(body["mastery_updates"]) == 1
+            assert body["mastery_updates"][0]["concept_id"] == str(cid)
+            assert body["mastery_updates"][0]["mastery"] == 0.69
+            # 무토큰 401
+            assert (
+                client.post(
+                    "/v1/me/attempts", json={"problem_id": str(pid), "is_correct": True}
+                ).status_code
+                == 401
+            )
+        pa_count, cm_count = asyncio.run(_counts())
+        assert pa_count == 1  # ProblemAttempt 1건
+        assert cm_count == 1  # ConceptMasteryHistory 1건
+    finally:
+        asyncio.run(_full_cleanup())

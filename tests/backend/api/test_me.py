@@ -116,7 +116,9 @@ def _no_auth_client() -> TestClient:
     async def _sess() -> AsyncIterator[FakeSession]:
         yield FakeSession()
 
-    app.dependency_overrides[get_session] = _sess  # 무토큰 401은 세션 전 발생(엔진 격리)
+    app.dependency_overrides[get_session] = (
+        _sess  # 무토큰 401은 세션 전 발생(엔진 격리)
+    )
     return TestClient(app)
 
 
@@ -632,3 +634,131 @@ class TestAssessmentLifecycle:
         assert resp.status_code == 404
         assert fake.deleted == []
         assert row.assessment_id in fake._get_map
+
+
+# ── slice L2-4: POST /v1/me/attempts (풀이 채점 제출 + 숙달 자동 갱신) ──────────
+class _AQResult:
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> "_AQResult":
+        return self
+
+    def all(self) -> list[Any]:
+        return self._rows
+
+    def first(self) -> Any:
+        return self._rows[0] if self._rows else None
+
+
+class _QueueSession:
+    """execute 호출마다 큐잉 결과를 순서대로 반환 — 채점 엔드포인트의 다중 쿼리(개념 조회 →
+    개념별 prior) 시뮬. add/commit 캡처."""
+
+    def __init__(self, results: list[_AQResult]) -> None:
+        self._results = results
+        self._i = 0
+        self.added: list[Any] = []
+        self.commits = 0
+
+    async def execute(self, _stmt: Any) -> _AQResult:
+        result = self._results[self._i]
+        self._i += 1
+        return result
+
+    def add(self, obj: Any) -> None:
+        self.added.append(obj)
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+
+def _attempts_client(session: _QueueSession) -> TestClient:
+    app = create_app()
+    app.dependency_overrides[get_consented_user] = _user
+
+    async def _sess() -> AsyncIterator[_QueueSession]:
+        yield session
+
+    app.dependency_overrides[get_session] = _sess
+    return TestClient(app)
+
+
+class TestSubmitAttempt:
+    def test_submit_with_assessed_concept(self) -> None:
+        """채점 제출 → ProblemAttempt 적재 + 평가 개념 숙달 갱신 응답."""
+        cid = uuid.uuid4()
+        # execute#1=개념 [cid]·execute#2=개념 prior 없음
+        session = _QueueSession([_AQResult([cid]), _AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={"problem_id": str(uuid.uuid4()), "is_correct": True},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        uuid.UUID(body["attempt_id"])  # 발급됨
+        assert body["is_correct"] is True
+        assert len(body["mastery_updates"]) == 1
+        upd = body["mastery_updates"][0]
+        assert upd["concept_id"] == str(cid)
+        assert upd["mastery"] == 0.69  # 첫 관측·정답
+        assert upd["sample_size"] == 1
+        # ProblemAttempt + 숙달행 add·attempt commit 발생
+        assert len(session.added) == 2
+
+    def test_submit_no_mapped_concepts(self) -> None:
+        """문제↔개념 매핑 없으면 attempt만 적재·mastery_updates 빈 리스트."""
+        session = _QueueSession([_AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={"problem_id": str(uuid.uuid4()), "is_correct": False},
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["mastery_updates"] == []
+        assert len(session.added) == 1  # attempt만
+
+    def test_submit_requires_auth(self) -> None:
+        """무토큰은 401(인증 게이트)."""
+        app = create_app()
+
+        async def _sess() -> AsyncIterator[_QueueSession]:
+            yield _QueueSession([_AQResult([])])
+
+        app.dependency_overrides[get_session] = _sess
+        client = TestClient(app)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={"problem_id": str(uuid.uuid4()), "is_correct": True},
+        )
+        assert resp.status_code == 401
+
+    def test_submit_missing_fields_422(self) -> None:
+        session = _QueueSession([_AQResult([])])
+        client = _attempts_client(session)
+        # is_correct 누락
+        assert (
+            client.post(
+                "/v1/me/attempts", json={"problem_id": str(uuid.uuid4())}
+            ).status_code
+            == 422
+        )
+        # problem_id 누락
+        assert (
+            client.post("/v1/me/attempts", json={"is_correct": True}).status_code == 422
+        )
+
+    def test_submit_extra_field_422(self) -> None:
+        """extra='forbid' — 모르는 필드 거부(예: user_id 사칭 시도)."""
+        session = _QueueSession([_AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,
+                "user_id": str(uuid.uuid4()),
+            },
+        )
+        assert resp.status_code == 422
