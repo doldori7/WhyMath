@@ -21,12 +21,17 @@ from whymath_backend.api.me import (
 )
 from whymath_backend.app import create_app
 from whymath_backend.db.models.activity import LearningSession
-from whymath_backend.db.models.assessment import Assessment, ConceptMasteryHistory
+from whymath_backend.db.models.assessment import (
+    AbilitySnapshot,
+    Assessment,
+    ConceptMasteryHistory,
+)
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
+from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
 from whymath_backend.schema.assessment import (
     ConceptMasteryHistory as ConceptMasteryHistorySchema,
@@ -1062,6 +1067,62 @@ class TestAbilityHistory:
         body = client.get("/v1/me/ability/history").json()
         # 응답 있으니 SE 유한(측정 가능)
         assert all(p["standard_error"] is not None for p in body)
+
+
+class TestAbilitySnapshots:
+    """slice L2-32: POST/GET /v1/me/ability/snapshots — θ 시계열 적재·조회."""
+
+    @staticmethod
+    def _snap(theta: float, day: int) -> AbilitySnapshot:
+        return AbilitySnapshot.from_schema(
+            AbilitySnapshotSchema(
+                user_id=_UID,
+                theta=theta,
+                response_count=1,
+                measured_at=datetime(2026, 1, day, tzinfo=UTC),
+            )
+        )
+
+    def test_capture_inserts_snapshot(self) -> None:
+        """POST → 현재 θ 계산(난이도3 1정답1오답→θ0)·1행 적재·201 + 스키마 반환."""
+        client, fake = _client([(True, 3.0), (False, 3.0)])
+        resp = client.post("/v1/me/ability/snapshots")
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["theta"] == 0.0
+        assert body["response_count"] == 2
+        assert body["standard_error"] is not None
+        assert body["concept_id"] is None  # 전 과목 단일 θ
+        uuid.UUID(body["snapshot_id"])  # 발급됨
+        assert len(fake.added) == 1  # AbilitySnapshot 1행 적재
+        assert fake.commits == 1
+
+    def test_capture_empty_history_se_null(self) -> None:
+        """채점 이력 0 → θ0·response_count0·SE null도 적재."""
+        client, fake = _client([])
+        body = client.post("/v1/me/ability/snapshots").json()
+        assert body["theta"] == 0.0
+        assert body["response_count"] == 0
+        assert body["standard_error"] is None
+        assert len(fake.added) == 1
+
+    def test_capture_requires_auth(self) -> None:
+        assert _no_auth_client().post("/v1/me/ability/snapshots").status_code == 401
+
+    def test_list_returns_chronological(self) -> None:
+        client, _ = _client([self._snap(0.2, 1), self._snap(1.1, 2)])
+        body = client.get("/v1/me/ability/snapshots").json()
+        assert [s["theta"] for s in body] == [0.2, 1.1]
+        assert body[0]["measured_at"].startswith("2026-01-01")
+
+    def test_list_limit_tail(self) -> None:
+        client, _ = _client([self._snap(0.2, 1), self._snap(1.1, 2)])
+        body = client.get("/v1/me/ability/snapshots?limit=1").json()
+        assert len(body) == 1
+        assert body[0]["theta"] == 1.1  # 끝(최근) 1개
+
+    def test_list_requires_auth(self) -> None:
+        assert _no_auth_client().get("/v1/me/ability/snapshots").status_code == 401
 
 
 class TestAbilityByConcept:

@@ -1193,3 +1193,70 @@ def test_me_concept_diagnosis_cross_check_on_live_pg() -> None:
             assert client.get("/v1/me/diagnosis/concepts").status_code == 401
     finally:
         asyncio.run(_cleanup_all())
+
+
+def test_me_ability_snapshot_capture_and_list_on_live_pg() -> None:
+    """POST /v1/me/ability/snapshots → 적재 → GET 시계열 조회(end-to-end·실 PG)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid = uuid.uuid4()
+    suffix = pid.hex[:8]
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(
+            Problem.from_schema(
+                ProblemSchema(
+                    problem_id=pid,
+                    source_type=SourceType.자체생성,
+                    curriculum_version=Curriculum.REVISION_2022,
+                    valid_from_year=2022,
+                    subject=Subject.공통,
+                    unit_codes=[f"U-{suffix}"],
+                    difficulty_overall=5.0,
+                )
+            )
+        )
+        await _add_all(
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True
+            )
+        )
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                for sql in (
+                    "DELETE FROM ability_snapshot WHERE user_id=:u",
+                    "DELETE FROM problem_attempt WHERE user_id=:u",
+                    "DELETE FROM problem WHERE problem_id=:p",
+                    "DELETE FROM user_profile WHERE user_id=:u",
+                ):
+                    await conn.execute(text(sql), {"u": str(uid), "p": str(pid)})
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # 캡처 — 정답 1건 → θ 상한 4.0 적재
+            cap = client.post("/v1/me/ability/snapshots", headers=auth)
+            assert cap.status_code == 201, cap.text
+            assert cap.json()["theta"] == 4.0
+            assert cap.json()["response_count"] == 1
+            # 조회 — 적재된 1행
+            lst = client.get("/v1/me/ability/snapshots", headers=auth)
+            assert lst.status_code == 200, lst.text
+            snaps = lst.json()
+            assert len(snaps) == 1
+            assert snaps[0]["theta"] == 4.0
+            assert snaps[0]["measured_at"]
+            assert client.post("/v1/me/ability/snapshots").status_code == 401
+            assert client.get("/v1/me/ability/snapshots").status_code == 401
+    finally:
+        asyncio.run(_cleanup_all())
