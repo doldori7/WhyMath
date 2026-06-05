@@ -5,17 +5,21 @@
 
 from __future__ import annotations
 
+import math
+
 import pytest
 from pydantic import ValidationError
 
 from whymath_backend.l2.irt import (
     IrtItem,
+    ability_standard_error,
     estimate_ability,
     estimate_difficulty,
     fit_jmle,
     item_information,
     probability_correct,
     select_next_item,
+    total_information,
 )
 
 
@@ -204,6 +208,53 @@ class TestSelectNextItem:
             IrtItem(difficulty=0.0, discrimination=2.0),
         ]
         assert select_next_item(0.0, pool) == 1
+
+
+class TestTotalInformation:
+    def test_empty_zero(self) -> None:
+        assert total_information(0.0, []) == 0.0
+
+    def test_single_equals_item_information(self) -> None:
+        item = IrtItem(difficulty=0.5, discrimination=1.3)
+        assert total_information(0.2, [item]) == item_information(0.2, item)
+
+    def test_additive(self) -> None:
+        """검사 정보 = 개별 문항정보의 합."""
+        a = IrtItem(difficulty=-1.0)
+        b = IrtItem(difficulty=1.0)
+        total = total_information(0.0, [a, b])
+        assert total == item_information(0.0, a) + item_information(0.0, b)
+
+    def test_more_items_more_information(self) -> None:
+        """문항이 많을수록 총 정보량↑(측정 정밀도↑)."""
+        item = IrtItem(difficulty=0.0)
+        one = total_information(0.0, [item])
+        three = total_information(0.0, [item, item, item])
+        assert three > one
+
+
+class TestAbilityStandardError:
+    def test_empty_infinite(self) -> None:
+        """정보 0(빈 목록)이면 측정 불가 → 무한 표준오차."""
+        assert ability_standard_error(0.0, []) == math.inf
+
+    def test_rasch_at_difficulty(self) -> None:
+        """θ=b Rasch 문항: 정보 0.25 → SE = 1/√0.25 = 2.0."""
+        item = IrtItem(difficulty=1.0)
+        assert ability_standard_error(1.0, [item]) == 2.0
+
+    def test_more_items_smaller_se(self) -> None:
+        """문항이 많을수록 표준오차↓(더 정밀)."""
+        item = IrtItem(difficulty=0.0)
+        se1 = ability_standard_error(0.0, [item])
+        se3 = ability_standard_error(0.0, [item, item, item])
+        assert se3 < se1
+
+    def test_se_is_inverse_sqrt_info(self) -> None:
+        """SE = 1/√I(θ) 정의 일치."""
+        items = [IrtItem(difficulty=-0.5), IrtItem(difficulty=0.5, discrimination=1.2)]
+        info = total_information(0.1, items)
+        assert ability_standard_error(0.1, items) == 1.0 / math.sqrt(info)
 
 
 class TestEstimateDifficulty:
