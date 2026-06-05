@@ -53,13 +53,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._query_filters import time_window_conditions
 from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
-from whymath_backend.db.models.assessment import Assessment
+from whymath_backend.db.models.assessment import Assessment, ConceptMasteryHistory
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.session import get_session
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
+from whymath_backend.schema.assessment import (
+    ConceptMasteryHistory as ConceptMasteryHistorySchema,
+)
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import AuditResourceType
@@ -115,6 +118,11 @@ IncludeTotal = Annotated[
     bool, Query(description="true면 `X-Total-Count` 헤더에 필터 적용 총 건수(limit/offset 무시).")
 ]
 _TOTAL_HEADER = "X-Total-Count"
+# slice L2-5: 학습곡선 조회의 개념 필터 — 특정 개념 1개의 측정 시계열(학습 곡선)만.
+ConceptIdFilter = Annotated[
+    uuid.UUID | None,
+    Query(description="특정 개념의 학습 곡선만(선택). 생략 시 전 개념 측정 인터리브."),
+]
 
 
 async def _maybe_set_total(
@@ -495,6 +503,57 @@ async def submit_attempt(
             for r in records
         ],
     )
+
+
+@router.get(
+    "/mastery",
+    response_model=list[ConceptMasteryHistorySchema],
+    summary="내 개념 숙달 학습 곡선(ConceptMasteryHistory 시계열)",
+)
+async def list_my_mastery(
+    user: ConsentedUser,
+    session: SessionDep,
+    response: Response,
+    limit: Limit = 50,
+    offset: Offset = 0,
+    concept_id: ConceptIdFilter = None,
+    since: SinceParam = None,
+    until: UntilParam = None,
+    order: OrderParam = "desc",
+    include_total: IncludeTotal = False,
+) -> list[ConceptMasteryHistorySchema]:
+    """본인 개념 숙달 측정 시계열 — 학습 곡선(특성 #16). 풀이 채점(slice L2-4)이 누적한
+    `concept_mastery_history`를 user_id 스코핑으로 조회(타인 차단).
+
+    `concept_id`(선택)로 한 개념의 곡선만·`since`/`until`로 `measured_at` 시간창·`order`로
+    방향(기본 desc 최신순)·`include_total`로 `X-Total-Count`. 2차 정렬키 concept_id로 동률
+    (같은 measured_at·다개념) 안정 정렬.
+    """
+    conds = [ConceptMasteryHistory.user_id == user.user_id]
+    if concept_id is not None:
+        conds.append(ConceptMasteryHistory.concept_id == concept_id)
+    conds += time_window_conditions(ConceptMasteryHistory.measured_at, since, until)
+    primary = (
+        ConceptMasteryHistory.measured_at.asc()
+        if order == "asc"
+        else ConceptMasteryHistory.measured_at.desc()
+    )
+    stmt = (
+        select(ConceptMasteryHistory)
+        .where(*conds)
+        .order_by(primary, ConceptMasteryHistory.concept_id)
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await session.execute(stmt)
+    rows = [row.to_schema() for row in result.scalars().all()]
+    await _maybe_set_total(
+        session,
+        response,
+        include_total,
+        select(func.count()).select_from(ConceptMasteryHistory).where(*conds),
+    )
+    return rows
 
 
 @router.patch(

@@ -16,13 +16,16 @@ from fastapi.testclient import TestClient
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.app import create_app
 from whymath_backend.db.models.activity import LearningSession
-from whymath_backend.db.models.assessment import Assessment
+from whymath_backend.db.models.assessment import Assessment, ConceptMasteryHistory
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
+from whymath_backend.schema.assessment import (
+    ConceptMasteryHistory as ConceptMasteryHistorySchema,
+)
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import AuditResourceType, Persona
@@ -762,3 +765,88 @@ class TestSubmitAttempt:
             },
         )
         assert resp.status_code == 422
+
+
+# ── slice L2-5: GET /v1/me/mastery (학습곡선 조회 — ConceptMasteryHistory 시계열) ──
+def _mastery_row(mastery: float = 0.69, sample_size: int = 1) -> ConceptMasteryHistory:
+    return ConceptMasteryHistory.from_schema(
+        ConceptMasteryHistorySchema(
+            user_id=_UID,
+            concept_id=uuid.uuid4(),
+            measured_at=datetime(2026, 1, 1, tzinfo=UTC),
+            mastery=mastery,
+            sample_size=sample_size,
+        )
+    )
+
+
+class TestMasteryCurve:
+    def test_returns_rows(self) -> None:
+        client, _ = _client([_mastery_row()])
+        resp = client.get("/v1/me/mastery")
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert len(body) == 1
+        assert float(body[0]["mastery"]) == 0.69
+        assert str(body[0]["user_id"]) == str(_UID)
+
+    def test_empty(self) -> None:
+        client, _ = _client([])
+        resp = client.get("/v1/me/mastery")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_requires_auth(self) -> None:
+        assert _no_auth_client().get("/v1/me/mastery").status_code == 401
+
+    def test_concept_id_filter_accepted(self) -> None:
+        """?concept_id=<uuid> 결선(200)·잘못된 uuid는 422."""
+        client, _ = _client([_mastery_row()])
+        assert (
+            client.get(
+                "/v1/me/mastery", params={"concept_id": str(uuid.uuid4())}
+            ).status_code
+            == 200
+        )
+        assert (
+            client.get(
+                "/v1/me/mastery", params={"concept_id": "not-a-uuid"}
+            ).status_code
+            == 422
+        )
+
+    def test_include_total_header(self) -> None:
+        client, _ = _client([_mastery_row()])
+        resp = client.get("/v1/me/mastery", params={"include_total": "true"})
+        assert resp.headers.get("X-Total-Count") == "1"
+
+    def test_order_accepted(self) -> None:
+        client, _ = _client([_mastery_row()])
+        for order in ("asc", "desc"):
+            assert (
+                client.get("/v1/me/mastery", params={"order": order}).status_code == 200
+            )
+        assert (
+            client.get("/v1/me/mastery", params={"order": "sideways"}).status_code
+            == 422
+        )
+
+    def test_time_window_validation(self) -> None:
+        """measured_at 시간창도 naive 422·since>until 422(공용 검증)."""
+        client, _ = _client([])
+        assert (
+            client.get(
+                "/v1/me/mastery", params={"since": "2024-01-01T00:00:00"}
+            ).status_code
+            == 422
+        )
+        assert (
+            client.get(
+                "/v1/me/mastery",
+                params={
+                    "since": "2024-12-31T00:00:00Z",
+                    "until": "2024-01-01T00:00:00Z",
+                },
+            ).status_code
+            == 422
+        )

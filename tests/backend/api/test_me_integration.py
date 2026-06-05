@@ -20,11 +20,15 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.activity import LearningSession
+from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
+from whymath_backend.schema.assessment import (
+    ConceptMasteryHistory as ConceptMasteryHistorySchema,
+)
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.concept import Concept as ConceptSchema
 from whymath_backend.schema.concept import ProblemConcept as ProblemConceptSchema
@@ -569,3 +573,77 @@ def test_submit_attempt_records_and_propagates_mastery_on_live_pg() -> None:
         assert cm_count == 1  # ConceptMasteryHistory 1건
     finally:
         asyncio.run(_full_cleanup())
+
+
+async def _cleanup_mastery(user_ids: list[uuid.UUID]) -> None:
+    engine = create_async_engine(_settings().database_url)
+    ids = [str(u) for u in user_ids]
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM concept_mastery_history WHERE user_id = ANY(:ids)"),
+                {"ids": ids},
+            )
+    finally:
+        await engine.dispose()
+
+
+def _mastery_row(
+    uid: uuid.UUID, cid: uuid.UUID, measured_at: datetime, mastery: float
+) -> ConceptMasteryHistory:
+    return ConceptMasteryHistory.from_schema(
+        ConceptMasteryHistorySchema(
+            user_id=uid,
+            concept_id=cid,
+            measured_at=measured_at,
+            mastery=mastery,
+            sample_size=1,
+        )
+    )
+
+
+def test_me_mastery_curve_scoped_and_concept_filter_on_live_pg() -> None:
+    """GET /v1/me/mastery — A 토큰은 A의 측정만(B 차단)·?concept_id로 한 개념 곡선."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid_a, uid_b = uuid.uuid4(), uuid.uuid4()
+    c1, c2 = uuid.uuid4(), uuid.uuid4()
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    t2 = datetime(2026, 2, 1, tzinfo=UTC)
+    try:
+        # A: c1 2측정(t1,t2)·c2 1측정 / B: c1 1측정(스코핑 차단 확인)
+        asyncio.run(
+            _add_all(
+                _mastery_row(uid_a, c1, t1, 0.5),
+                _mastery_row(uid_a, c1, t2, 0.69),
+                _mastery_row(uid_a, c2, t1, 0.3),
+                _mastery_row(uid_b, c1, t1, 0.9),
+            )
+        )
+        token_a = create_access_token(uid_a, settings=_settings())
+        auth = {"Authorization": f"Bearer {token_a}"}
+        with _client() as client:
+            # 전체: A의 3측정만(B 제외)
+            resp = client.get("/v1/me/mastery", headers=auth)
+            assert resp.status_code == 200, resp.text
+            assert len(resp.json()) == 3
+            # ?concept_id=c1 → c1의 2측정만
+            resp = client.get(
+                "/v1/me/mastery", headers=auth, params={"concept_id": str(c1)}
+            )
+            rows = resp.json()
+            assert len(rows) == 2
+            assert {str(c1)} == {r["concept_id"] for r in rows}
+            # order=asc → 오래된 측정 먼저(t1의 0.5)
+            resp = client.get(
+                "/v1/me/mastery",
+                headers=auth,
+                params={"concept_id": str(c1), "order": "asc"},
+            )
+            asc_rows = resp.json()
+            assert float(asc_rows[0]["mastery"]) == 0.5
+            # 무토큰 401
+            assert client.get("/v1/me/mastery").status_code == 401
+    finally:
+        asyncio.run(_cleanup_mastery([uid_a, uid_b]))
