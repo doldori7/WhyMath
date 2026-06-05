@@ -125,6 +125,63 @@ jobs:
           retention-days: 14
 
   # ─────────────────────────────────────────────────────────────────
+  # 백엔드 alembic 마이그레이션 검증 (slice 28b)
+  # 신규 PostgreSQL 16에 전 마이그레이션을 적용(upgrade head)하고 base까지 되돌렸다가
+  # 다시 올려(왕복) *적용·역적용 정합*을 검증한다. 기존 backend 잡은 hermetic이라
+  # 마이그레이션을 한 번도 실행하지 않으므로(통합테스트 기본 skip), 이 잡이 스키마 변경의
+  # 유일한 자동 안전망이다. DB URL은 Settings 기본값과 동일(자격증명 없는 trust 인증).
+  # ─────────────────────────────────────────────────────────────────
+  backend-migrations:
+    name: backend — alembic 마이그레이션 검증
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/backend
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: whymath
+          POSTGRES_DB: whymath
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U whymath"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Settings 기본값과 동일(asyncpg·자격증명 없음). env.py가 이 값을 읽어 연결.
+      WHYMATH_DATABASE_URL: postgresql+asyncpg://whymath@127.0.0.1:5432/whymath
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies (editable + dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Alembic upgrade head (fresh DB — 전 마이그레이션 적용)
+        run: alembic upgrade head
+
+      - name: Alembic downgrade base → upgrade head (역적용·재적용 왕복)
+        run: |
+          alembic downgrade base
+          alembic upgrade head
+
+  # ─────────────────────────────────────────────────────────────────
   # infra 쉘 스크립트 syntax 검사 (Phaiakes9 운영 자산 회귀 방지)
   # ─────────────────────────────────────────────────────────────────
   infra-shell:
