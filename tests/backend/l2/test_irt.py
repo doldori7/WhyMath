@@ -8,7 +8,13 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from whymath_backend.l2.irt import IrtItem, estimate_ability, probability_correct
+from whymath_backend.l2.irt import (
+    IrtItem,
+    estimate_ability,
+    item_information,
+    probability_correct,
+    select_next_item,
+)
 
 
 class TestIrtItem:
@@ -139,3 +145,60 @@ class TestEstimateAbility:
         ]
         theta = estimate_ability(resp, max_iter=1)
         assert -4.0 <= theta <= 4.0  # 유효 범위·예외 없이 종료
+
+
+class TestItemInformation:
+    def test_max_at_theta_equals_difficulty(self) -> None:
+        """정보는 θ=b(P=0.5)에서 최대 — 능력과 난이도 일치 시."""
+        item = IrtItem(difficulty=0.0)
+        at_b = item_information(0.0, item)
+        assert at_b == pytest.approx(0.25)  # a²·0.5·0.5
+        assert item_information(2.0, item) < at_b
+        assert item_information(-2.0, item) < at_b
+
+    def test_symmetric_around_difficulty(self) -> None:
+        item = IrtItem(difficulty=1.0)
+        assert item_information(0.0, item) == pytest.approx(item_information(2.0, item))
+
+    def test_discrimination_squared_weight(self) -> None:
+        """변별도 2배면 θ=b 정보는 4배(a² 가중)."""
+        low = item_information(0.0, IrtItem(difficulty=0.0, discrimination=1.0))
+        high = item_information(0.0, IrtItem(difficulty=0.0, discrimination=2.0))
+        assert high == pytest.approx(4.0 * low)
+
+    def test_non_negative(self) -> None:
+        item = IrtItem(difficulty=0.0)
+        assert item_information(-5.0, item) >= 0.0
+        assert item_information(5.0, item) >= 0.0
+
+
+class TestSelectNextItem:
+    _POOL = [IrtItem(difficulty=-2.0), IrtItem(difficulty=0.0), IrtItem(difficulty=2.0)]
+
+    def test_picks_difficulty_near_theta(self) -> None:
+        assert select_next_item(0.0, self._POOL) == 1  # b=0
+        assert select_next_item(2.0, self._POOL) == 2  # b=2
+        assert select_next_item(-2.0, self._POOL) == 0  # b=-2
+
+    def test_excludes_administered(self) -> None:
+        # b=0 제외 → θ=0에서 b=-2·b=2 동률 → 낮은 인덱스 0
+        assert select_next_item(0.0, self._POOL, administered={1}) == 0
+
+    def test_all_administered_returns_none(self) -> None:
+        assert select_next_item(0.0, self._POOL, administered={0, 1, 2}) is None
+
+    def test_empty_pool_returns_none(self) -> None:
+        assert select_next_item(0.0, []) is None
+
+    def test_ties_lowest_index(self) -> None:
+        """동일 정보량(같은 난이도)이면 낮은 인덱스."""
+        pool = [IrtItem(difficulty=0.0), IrtItem(difficulty=0.0)]
+        assert select_next_item(0.0, pool) == 0
+
+    def test_discrimination_breaks_proximity(self) -> None:
+        """난이도 같아도 변별도 높은 문항이 정보 많아 선택."""
+        pool = [
+            IrtItem(difficulty=0.0, discrimination=0.5),
+            IrtItem(difficulty=0.0, discrimination=2.0),
+        ]
+        assert select_next_item(0.0, pool) == 1
