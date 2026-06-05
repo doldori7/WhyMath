@@ -944,10 +944,16 @@ class TestAbility:
     """
 
     def test_empty_zero_theta(self) -> None:
+        """응답 0건 → θ=0·측정 불가(SE·CI null)."""
         client, _ = _client([])
         resp = client.get("/v1/me/ability")
         assert resp.status_code == 200
-        assert resp.json() == {"theta": 0.0, "response_count": 0}
+        assert resp.json() == {
+            "theta": 0.0,
+            "response_count": 0,
+            "standard_error": None,
+            "confidence_interval": None,
+        }
 
     def test_requires_auth(self) -> None:
         assert _no_auth_client().get("/v1/me/ability").status_code == 401
@@ -976,6 +982,25 @@ class TestAbility:
         client, _ = _client([(True, 3.0), (True, None)])
         body = client.get("/v1/me/ability").json()
         assert body["response_count"] == 1  # NULL 난이도 1건 제외
+
+    def test_standard_error_and_confidence_interval(self) -> None:
+        """혼합 응답(난이도3 1정답·1오답) → θ=0·SE=1/√0.5·대칭 95% CI(θ±1.96·SE)."""
+        client, _ = _client([(True, 3.0), (False, 3.0)])
+        body = client.get("/v1/me/ability").json()
+        assert body["theta"] == 0.0
+        # 두 문항 b=0·θ=0 → 정보 2·0.25=0.5 → SE=1/√0.5≈1.41421
+        assert round(body["standard_error"], 5) == 1.41421
+        lo, hi = body["confidence_interval"]
+        assert round(lo, 5) == -2.77186  # -1.96·SE
+        assert round(hi, 5) == 2.77186
+
+    def test_more_responses_smaller_standard_error(self) -> None:
+        """응답이 많을수록 SE↓(측정 정밀도↑)."""
+        few, _ = _client([(True, 3.0), (False, 3.0)])
+        many, _ = _client([(True, 3.0), (False, 3.0)] * 4)
+        se_few = few.get("/v1/me/ability").json()["standard_error"]
+        se_many = many.get("/v1/me/ability").json()["standard_error"]
+        assert se_many < se_few
 
 
 class TestNextProblem:
