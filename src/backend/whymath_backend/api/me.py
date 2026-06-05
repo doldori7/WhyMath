@@ -805,6 +805,146 @@ async def get_my_ability_by_concept(
     return items
 
 
+# ── slice L2-19: GET /v1/me/diagnosis/concepts (BKT 숙달 ↔ IRT θ 교차검증) ────────
+# BKT 숙달 P(L)과 IRT 능력 프록시(logistic θ)의 차가 이 임계를 넘으면 *불일치 신호*로 분기.
+_DIAGNOSIS_TOL = 0.2
+_Agreement = Literal["agree", "irt_higher", "bkt_higher", "insufficient"]
+
+
+def _theta_to_mastery_proxy(theta: float) -> float:
+    """IRT θ → [0,1] 숙달 프록시 — 중앙 난이도(b=0) 정답확률 logistic(θ). BKT 숙달과 비교용."""
+    return 1.0 / (1.0 + math.exp(-theta))
+
+
+def _diagnosis_agreement(bkt_mastery: float | None, irt_proxy: float | None) -> _Agreement:
+    """BKT 숙달과 IRT 능력 프록시의 일치 신호 — 둘 다 있을 때만 차이로 분기.
+
+    `irt_proxy - bkt_mastery` > tol → `irt_higher`(문항은 맞히나 BKT는 미숙달로 봄·BKT 지연/추측
+    의심)·< -tol → `bkt_higher`(BKT는 숙달이나 IRT 능력 낮음·망각/고난도 의심)·이내면 `agree`.
+    한쪽이라도 없으면 `insufficient`(교차검증 불가). 순수·결정론.
+    """
+    if bkt_mastery is None or irt_proxy is None:
+        return "insufficient"
+    diff = irt_proxy - bkt_mastery
+    if diff > _DIAGNOSIS_TOL:
+        return "irt_higher"
+    if diff < -_DIAGNOSIS_TOL:
+        return "bkt_higher"
+    return "agree"
+
+
+class ConceptDiagnosisItem(BaseModel):
+    """개념별 BKT↔IRT 교차검증 — `GET /v1/me/diagnosis/concepts`의 한 개념 항목."""
+
+    concept_id: uuid.UUID = Field(description="개념 id.")
+    concept_code: str | None = Field(default=None, description="개념 코드(orphan이면 null).")
+    concept_name: str | None = Field(default=None, description="개념명(orphan이면 null).")
+    bkt_mastery: float | None = Field(
+        default=None, description="BKT 최신 숙달 P(L). 측정 없으면 null."
+    )
+    irt_theta: float | None = Field(
+        default=None, description="개념별 IRT 능력 θ. 채점 풀이 없으면 null."
+    )
+    irt_mastery_proxy: float | None = Field(
+        default=None, description="logistic(θ)∈[0,1] — BKT 숙달과 비교용. θ 없으면 null."
+    )
+    response_count: int = Field(description="개념별 IRT 추정에 쓰인 채점 풀이 수.")
+    agreement: _Agreement = Field(
+        description="BKT↔IRT 일치 신호(agree·irt_higher·bkt_higher·insufficient)."
+    )
+
+
+@router.get(
+    "/diagnosis/concepts",
+    response_model=list[ConceptDiagnosisItem],
+    summary="내 개념별 BKT↔IRT 교차검증(통합 약점 진단)",
+)
+async def get_my_concept_diagnosis(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> list[ConceptDiagnosisItem]:
+    """개념별 BKT 숙달(slice L2-5c)과 IRT 능력 θ(slice 18)를 *한 응답에 합쳐* 교차검증.
+
+    두 학습자 모델(L2)이 같은 개념 축에서 *합의/불일치*를 드러낸다 — `agreement`로 "θ는 높은데
+    BKT 숙달은 낮음(irt_higher·추측/BKT 지연)"·"BKT 숙달은 높은데 θ 낮음(bkt_higher·망각/고난도)"을
+    표면화(진단 신뢰도·메타인지 코칭 입력). ① BKT 최신 숙달 스냅샷(DISTINCT ON)·② 개념별 채점
+    풀이로 IRT θ(`estimate_ability`)·logistic 프록시. 둘 중 하나라도 있는 개념을 합집합으로 모아
+    *약점(저신호) 먼저* 정렬. user_id 스코핑·읽기(마이그레이션 불필요).
+    """
+    mastery_stmt = (
+        select(
+            ConceptMasteryHistory.concept_id,
+            Concept.code,
+            Concept.name_ko,
+            ConceptMasteryHistory.mastery,
+        )
+        .outerjoin(Concept, ConceptMasteryHistory.concept_id == Concept.concept_id)
+        .where(ConceptMasteryHistory.user_id == user.user_id)
+        .distinct(ConceptMasteryHistory.concept_id)
+        .order_by(
+            ConceptMasteryHistory.concept_id,
+            ConceptMasteryHistory.measured_at.desc(),
+        )
+    )
+    bkt: dict[uuid.UUID, float | None] = {}
+    meta: dict[uuid.UUID, tuple[str | None, str | None]] = {}
+    for cid, code, name, mastery in (await session.execute(mastery_stmt)).all():
+        bkt[cid] = float(mastery) if mastery is not None else None
+        meta[cid] = (code, name)
+
+    irt_stmt = (
+        select(
+            ProblemConcept.concept_id,
+            Concept.code,
+            Concept.name_ko,
+            ProblemAttempt.is_correct,
+            Problem.difficulty_overall,
+        )
+        .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
+        .join(ProblemConcept, ProblemConcept.problem_id == Problem.problem_id)
+        .outerjoin(Concept, ProblemConcept.concept_id == Concept.concept_id)
+        .where(
+            ProblemAttempt.user_id == user.user_id,
+            ProblemAttempt.is_correct.isnot(None),
+            ProblemConcept.role.in_(_ASSESSED_ROLES),
+            Problem.difficulty_overall.isnot(None),
+        )
+    )
+    grouped: dict[uuid.UUID, list[tuple[IrtItem, bool]]] = {}
+    for cid, code, name, is_correct, difficulty in (await session.execute(irt_stmt)).all():
+        item = IrtItem(difficulty=_difficulty_to_logit(float(difficulty)))
+        grouped.setdefault(cid, []).append((item, bool(is_correct)))
+        meta.setdefault(cid, (code, name))
+
+    items = []
+    for cid in bkt.keys() | grouped.keys():
+        responses = grouped.get(cid, [])
+        theta = estimate_ability(responses) if responses else None
+        proxy = _theta_to_mastery_proxy(theta) if theta is not None else None
+        mastery = bkt.get(cid)
+        code, name = meta.get(cid, (None, None))
+        items.append(
+            ConceptDiagnosisItem(
+                concept_id=cid,
+                concept_code=code,
+                concept_name=name,
+                bkt_mastery=mastery,
+                irt_theta=theta,
+                irt_mastery_proxy=proxy,
+                response_count=len(responses),
+                agreement=_diagnosis_agreement(mastery, proxy),
+            )
+        )
+
+    def _weakness(i: ConceptDiagnosisItem) -> tuple[float, str]:
+        # 약점(두 신호 중 최저) 먼저. 비교 가능한 신호 없으면 맨 뒤(inf).
+        signals = [v for v in (i.bkt_mastery, i.irt_mastery_proxy) if v is not None]
+        return (min(signals) if signals else math.inf, str(i.concept_id))
+
+    items.sort(key=_weakness)
+    return items
+
+
 # ── slice L2-12: GET /v1/me/next-problem (적응형 출제 — IRT 정보량 최대 미응답 문항) ──
 _CANDIDATE_POOL_SIZE = 50  # θ 근방 후보 풀 크기(SQL로 거리순 선별 후 파이썬 정보량 비교)
 # slice 15: CAT 중단 규칙 목표 표준오차 — 응답한 문항 기준 SE가 이 값 이하로 내려가면

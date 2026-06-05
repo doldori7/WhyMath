@@ -1065,3 +1065,111 @@ def test_me_ability_by_concept_on_live_pg() -> None:
             assert client.get("/v1/me/ability/by-concept").status_code == 401
     finally:
         asyncio.run(_cleanup_all())
+
+
+def test_me_concept_diagnosis_cross_check_on_live_pg() -> None:
+    """GET /v1/me/diagnosis/concepts — BKT 숙달↔IRT θ 불일치(irt_higher·bkt_higher) 교차검증(end-to-end)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    # c1: BKT 낮음(0.1)인데 정답(θ↑) → irt_higher / c2: BKT 높음(0.9)인데 오답(θ↓) → bkt_higher
+    p1, p2 = uuid.uuid4(), uuid.uuid4()
+    c1, c2 = uuid.uuid4(), uuid.uuid4()
+    suffix = uid.hex[:8]
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+
+    def _problem(pid: uuid.UUID) -> Problem:
+        return Problem.from_schema(
+            ProblemSchema(
+                problem_id=pid,
+                source_type=SourceType.자체생성,
+                curriculum_version=Curriculum.REVISION_2022,
+                valid_from_year=2022,
+                subject=Subject.공통,
+                unit_codes=[f"U-{suffix}"],
+                difficulty_overall=3.0,
+            )
+        )
+
+    def _concept(cid: uuid.UUID, code: str, name: str) -> Concept:
+        return Concept.from_schema(
+            ConceptSchema(
+                concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념
+            )
+        )
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(
+            _concept(c1, f"A-{suffix}", "개념1"), _concept(c2, f"B-{suffix}", "개념2")
+        )
+        await _add_all(_problem(p1), _problem(p2))
+        await _add_all(
+            ProblemConcept.from_schema(
+                ProblemConceptSchema(
+                    problem_id=p1, concept_id=c1, role=ConceptRole.PRIMARY
+                )
+            ),
+            ProblemConcept.from_schema(
+                ProblemConceptSchema(
+                    problem_id=p2, concept_id=c2, role=ConceptRole.PRIMARY
+                )
+            ),
+        )
+        await _add_all(
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(), user_id=uid, problem_id=p1, is_correct=True
+            ),
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(), user_id=uid, problem_id=p2, is_correct=False
+            ),
+        )
+        # BKT: c1 낮음·c2 높음(IRT와 반대 → 불일치 신호)
+        await _add_all(_mastery_row(uid, c1, t1, 0.1), _mastery_row(uid, c2, t1, 0.9))
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                for sql, params in (
+                    ("DELETE FROM problem_attempt WHERE user_id=:u", {"u": str(uid)}),
+                    (
+                        "DELETE FROM concept_mastery_history WHERE user_id=:u",
+                        {"u": str(uid)},
+                    ),
+                    (
+                        "DELETE FROM problem_concept WHERE problem_id = ANY(:p)",
+                        {"p": [str(p1), str(p2)]},
+                    ),
+                    (
+                        "DELETE FROM problem WHERE problem_id = ANY(:p)",
+                        {"p": [str(p1), str(p2)]},
+                    ),
+                    (
+                        "DELETE FROM concept WHERE concept_id = ANY(:c)",
+                        {"c": [str(c1), str(c2)]},
+                    ),
+                    ("DELETE FROM user_profile WHERE user_id=:u", {"u": str(uid)}),
+                ):
+                    await conn.execute(text(sql), params)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        with _client() as client:
+            resp = client.get(
+                "/v1/me/diagnosis/concepts",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 200, resp.text
+            by_concept = {r["concept_id"]: r for r in resp.json()}
+            assert by_concept[str(c1)]["agreement"] == "irt_higher"  # 정답인데 BKT 낮음
+            assert by_concept[str(c2)]["agreement"] == "bkt_higher"  # 오답인데 BKT 높음
+            assert by_concept[str(c1)]["bkt_mastery"] == 0.1
+            assert by_concept[str(c2)]["irt_theta"] == -4.0
+            assert client.get("/v1/me/diagnosis/concepts").status_code == 401
+    finally:
+        asyncio.run(_cleanup_all())
