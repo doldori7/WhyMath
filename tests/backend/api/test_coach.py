@@ -315,6 +315,35 @@ class TestLthcIntegration:
         assert body["lthc"]["entry_suggestions"] == []
         assert body["lthc"]["extensions"]  # 비공
 
+    def test_bkt_mastery_derives_level(self) -> None:
+        """slice 25: mastery_level 미지정·BKT 숙달(0.1) → '초보'로 환산해 LTHC 도출."""
+        resp = _client().post(
+            "/v1/coach", json={"student_input": "음", "bkt_mastery": 0.1}
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["lthc"] is not None
+        assert body["lthc"]["mastery_level"] == "초보"
+
+    def test_explicit_level_overrides_bkt(self) -> None:
+        """mastery_level 명시값이 bkt_mastery보다 우선."""
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "음", "mastery_level": "숙달", "bkt_mastery": 0.1},
+        )
+        assert resp.json()["lthc"]["mastery_level"] == "숙달"
+
+    def test_no_signal_no_lthc(self) -> None:
+        """둘 다 없으면 LTHC None(기존 동작 보존)."""
+        resp = _client().post("/v1/coach", json={"student_input": "음"})
+        assert resp.json()["lthc"] is None
+
+    def test_bkt_mastery_out_of_range_422(self) -> None:
+        resp = _client().post(
+            "/v1/coach", json={"student_input": "음", "bkt_mastery": 1.5}
+        )
+        assert resp.status_code == 422
+
 
 class TestHintLevelWiring:
     def test_demand_answer_signal_raises_hint(self) -> None:

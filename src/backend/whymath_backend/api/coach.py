@@ -45,6 +45,7 @@ from whymath_backend.l4 import (
     PolyaState,
     adapt_lthc,
     focus_to_socratic_category,
+    mastery_to_level,
 )
 from whymath_backend.l4.misconception import (
     InterventionDecision,
@@ -80,6 +81,15 @@ class CoachRequest(BaseModel):
     mastery_level: MasteryLevel | None = Field(
         default=None,
         description="학생 숙달도 라벨(있을 때만 LTHC 조정안 반환).",
+    )
+    bkt_mastery: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "L2 BKT 숙달도(0~1). `mastery_level` 미지정 시 이 값을 라벨로 환산해 LTHC 도출"
+            "(slice 25 `mastery_to_level`). `mastery_level`이 있으면 그쪽 우선."
+        ),
     )
     coaching_focus: CoachingFocus | None = Field(
         default=None,
@@ -180,11 +190,11 @@ def _build_response_payload(body: CoachRequest) -> tuple[
     decision = _coach.decide(body.student_input, body.polya_state)
     matches = diagnose(body.student_input)
     intervention = select_intervention(matches[0]) if matches else None
-    lthc = (
-        adapt_lthc(body.polya_state.current_stage, body.mastery_level)
-        if body.mastery_level is not None
-        else None
-    )
+    # slice 25: mastery_level 명시값 우선·없으면 BKT 숙달(0~1)을 라벨로 환산(L2→L4 브릿지).
+    level = body.mastery_level
+    if level is None and body.bkt_mastery is not None:
+        level = mastery_to_level(body.bkt_mastery)
+    lthc = adapt_lthc(body.polya_state.current_stage, level) if level is not None else None
     # slice 23: 진단 코칭 포커스 → 대화 진입 소크라테스 카테고리 시드(L4 매핑·slice 22).
     entry_category = (
         focus_to_socratic_category(body.coaching_focus) if body.coaching_focus is not None else None

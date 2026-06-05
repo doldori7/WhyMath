@@ -116,3 +116,28 @@ def adapt_lthc(
         extensions=_EXTENSIONS_BY_STAGE[polya_stage] if extension_on else (),
         scaffolds=_SCAFFOLDS_BY_STAGE[polya_stage] if scaffold_on else (),
     )
+
+
+# L2 BKT/DKT 숙달도(0~1) → LTHC 숙달도 라벨 임계 — `lthc/models.py`가 "호출자(L2 연계 슬라이스)
+# 책임"으로 남긴 갭을 메운다. 3구간: <0.4 초보·0.4~0.8 발전 중·≥0.8 숙달(경계 포함은 상위 라벨).
+_DEVELOPING_THRESHOLD = 0.4
+_MASTERED_THRESHOLD = 0.8
+
+
+def mastery_to_level(
+    bkt_mastery: float,
+    *,
+    developing_threshold: float = _DEVELOPING_THRESHOLD,
+    mastered_threshold: float = _MASTERED_THRESHOLD,
+) -> MasteryLevel:
+    """L2 BKT 숙달도(0~1) → LTHC 숙달도 라벨 — `adapt_lthc` 입력 브릿지.
+
+    `mastered_threshold` 이상 → "숙달"·`developing_threshold` 이상 → "발전 중"·미만 → "초보".
+    경계값은 *상위* 라벨에 포함(≥). 기본 임계(0.4·0.8)는 정책값(모드·학년별 차등은 후속).
+    BKT 숙달은 [0,1]이라 별도 clamp 불필요(호출자 계약). 순수·결정론.
+    """
+    if bkt_mastery >= mastered_threshold:
+        return "숙달"
+    if bkt_mastery >= developing_threshold:
+        return "발전 중"
+    return "초보"
