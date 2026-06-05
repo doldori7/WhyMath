@@ -59,7 +59,7 @@ from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
-from whymath_backend.l2.irt import IrtItem, estimate_ability
+from whymath_backend.l2.irt import IrtItem, estimate_ability, select_next_item
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
@@ -118,7 +118,8 @@ OrderParam = Annotated[OrderDir, Query(description="정렬 방향 — desc(최�
 # COUNT 쿼리 비용 회피. device 목록(slice 39)은 응답 envelope의 total 필드를 쓰지만 /me는
 # bare array 응답이라 *비파괴적* 헤더 방식 채택(REST 관용·기존 클라이언트 무영향).
 IncludeTotal = Annotated[
-    bool, Query(description="true면 `X-Total-Count` 헤더에 필터 적용 총 건수(limit/offset 무시).")
+    bool,
+    Query(description="true면 `X-Total-Count` 헤더에 필터 적용 총 건수(limit/offset 무시)."),
 ]
 _TOTAL_HEADER = "X-Total-Count"
 # slice L2-5: 학습곡선 조회의 개념 필터 — 특정 개념 1개의 측정 시계열(학습 곡선)만.
@@ -695,6 +696,84 @@ async def get_my_ability(
     ]
     theta = estimate_ability(responses)
     return AbilityResponse(theta=theta, response_count=len(responses))
+
+
+# ── slice L2-12: GET /v1/me/next-problem (적응형 출제 — IRT 정보량 최대 미응답 문항) ──
+_CANDIDATE_POOL_SIZE = 50  # θ 근방 후보 풀 크기(SQL로 거리순 선별 후 파이썬 정보량 비교)
+
+
+class NextProblemResponse(BaseModel):
+    """`GET /v1/me/next-problem` 응답 — IRT CAT(적응형 출제) 추천."""
+
+    problem_id: uuid.UUID | None = Field(
+        default=None,
+        description="추천 문항 id. 후보(미응답·난이도 라벨 보유)가 없으면 null.",
+    )
+    theta: float = Field(description="추천에 쓰인 현재 능력 추정 θ(logit). 응답 없으면 0.")
+    difficulty: float | None = Field(
+        default=None,
+        description="추천 문항의 difficulty_overall(전문가 1~5). 없으면 null.",
+    )
+
+
+@router.get(
+    "/next-problem",
+    response_model=NextProblemResponse,
+    summary="적응형 다음 문항 추천(IRT 정보량 최대 — 미응답 문항)",
+)
+async def recommend_next_problem(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> NextProblemResponse:
+    """본인 능력 θ에 *정보량 최대*인 *미응답* 문항을 추천 — IRT CAT(적응형 출제) 루프.
+
+    ① 채점 풀이 이력으로 θ 추정(slice 11과 동일 로직)·이미 푼 문항 id 수집. ② 난이도 라벨
+    (difficulty_overall) 있는 *미응답* 문항을 θ 근방(|b-θ| 최소)으로 SQL 선별(`_CANDIDATE_POOL_SIZE`
+    개)·`select_next_item`(slice 12)으로 정보량 최대 1개 선택. 후보 없으면 problem_id=null.
+    난이도→b 매핑은 slice 11의 `_difficulty_to_logit`(보정 b는 fit_jmle 후속).
+    """
+    attempt_stmt = (
+        select(
+            ProblemAttempt.problem_id,
+            ProblemAttempt.is_correct,
+            Problem.difficulty_overall,
+        )
+        .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
+        .where(
+            ProblemAttempt.user_id == user.user_id,
+            ProblemAttempt.is_correct.isnot(None),
+        )
+    )
+    attempt_rows = (await session.execute(attempt_stmt)).all()
+    responses = [
+        (IrtItem(difficulty=_difficulty_to_logit(float(difficulty))), bool(is_correct))
+        for _pid, is_correct, difficulty in attempt_rows
+        if difficulty is not None
+    ]
+    theta = estimate_ability(responses)
+    attempted_ids = {pid for pid, _ic, _d in attempt_rows}
+
+    # θ(logit) → difficulty_overall(1~5) 척도로 역변환해 SQL 거리순 정렬: difficulty = b + 중앙값.
+    candidate_stmt = select(Problem.problem_id, Problem.difficulty_overall).where(
+        Problem.difficulty_overall.isnot(None)
+    )
+    if attempted_ids:
+        candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(attempted_ids))
+    candidate_stmt = candidate_stmt.order_by(
+        func.abs(Problem.difficulty_overall - (theta + _DIFFICULTY_MIDPOINT))
+    ).limit(_CANDIDATE_POOL_SIZE)
+    candidate_rows = (await session.execute(candidate_stmt)).all()
+
+    items = [IrtItem(difficulty=_difficulty_to_logit(float(d))) for _pid, d in candidate_rows]
+    best = select_next_item(theta, items)
+    if best is None:
+        return NextProblemResponse(problem_id=None, theta=theta, difficulty=None)
+    chosen_id, chosen_difficulty = candidate_rows[best]
+    return NextProblemResponse(
+        problem_id=chosen_id,
+        theta=theta,
+        difficulty=float(chosen_difficulty),
+    )
 
 
 @router.patch(

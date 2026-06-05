@@ -976,3 +976,55 @@ class TestAbility:
         client, _ = _client([(True, 3.0), (True, None)])
         body = client.get("/v1/me/ability").json()
         assert body["response_count"] == 1  # NULL 난이도 1건 제외
+
+
+class TestNextProblem:
+    """slice L2-12: GET /v1/me/next-problem — IRT 정보량 최대 미응답 문항 추천.
+
+    _QueueSession이 execute 2회(①채점 이력 ②후보 풀)를 큐로 반환. 실 JOIN/NOT IN/거리정렬은
+    통합테스트가 검증(FakeSession은 stmt 무시).
+    """
+
+    def test_no_candidates_null(self) -> None:
+        """이력 없음(θ=0)·후보 없음 → 추천 null."""
+        session = _QueueSession([_AQResult([]), _AQResult([])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body == {"problem_id": None, "theta": 0.0, "difficulty": None}
+
+    def test_requires_auth(self) -> None:
+        app = create_app()
+
+        async def _sess() -> AsyncIterator[_QueueSession]:
+            yield _QueueSession([_AQResult([]), _AQResult([])])
+
+        app.dependency_overrides[get_session] = _sess
+        assert TestClient(app).get("/v1/me/next-problem").status_code == 401
+
+    def test_recommends_nearest_difficulty(self) -> None:
+        """이력 없음(θ=0) → 난이도 2·3·5 후보 중 b=0(난이도 3)이 정보량 최대로 추천."""
+        pid_easy, pid_mid, pid_hard = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([]),
+                _AQResult([(pid_easy, 2.0), (pid_mid, 3.0), (pid_hard, 5.0)]),
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["problem_id"] == str(pid_mid)
+        assert body["difficulty"] == 3.0
+        assert body["theta"] == 0.0
+
+    def test_high_theta_picks_harder(self) -> None:
+        """전부 정답 → θ 상한(4.0). 난이도 3·5 후보 중 b=2(난이도 5)가 정보량 최대."""
+        pid_mid, pid_hard = uuid.uuid4(), uuid.uuid4()
+        attempts = [(uuid.uuid4(), True, 5.0), (uuid.uuid4(), True, 4.0)]
+        session = _QueueSession(
+            [_AQResult(attempts), _AQResult([(pid_mid, 3.0), (pid_hard, 5.0)])]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["theta"] == 4.0
+        assert body["problem_id"] == str(pid_hard)
+        assert body["difficulty"] == 5.0
