@@ -34,6 +34,7 @@ from whymath_backend.l2.irt import (
     fit_jmle,
     item_information,
     select_next_item,
+    select_weighted_item,
     total_information,
 )
 from whymath_backend.l2.mastery_tracking import (
@@ -59,6 +60,7 @@ __all__ = [
     "item_information",
     "posterior_mastery",
     "select_next_item",
+    "select_weighted_item",
     "probability_correct",
     "record_attempt_mastery",
     "record_problem_attempt_mastery",

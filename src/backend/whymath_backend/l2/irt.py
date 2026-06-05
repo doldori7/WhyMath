@@ -223,6 +223,36 @@ def ability_standard_error(theta: float, items: list[IrtItem]) -> float:
     return 1.0 / math.sqrt(info)
 
 
+def select_weighted_item(
+    theta: float,
+    items: list[IrtItem],
+    *,
+    weights: list[float] | None = None,
+    administered: set[int] | None = None,
+) -> int | None:
+    """정보량에 *가중치*를 곱해 최대인 미출제 문항 인덱스 — 가중 적응 출제(CAT 확장).
+
+    `item_information(θ, itemᵢ) · weightsᵢ`가 가장 큰 미출제 문항을 선택. 가중치로 *내용 균형*·
+    *약점 개념 우선*(BKT 융합)·*노출 통제*·a-층화 등을 IRT 정보량 위에 얹는다. `weights=None`이면
+    전부 1.0(= `select_next_item`과 동치). 가중치는 음이 아니어야 한다(가정·미검증). `administered`
+    제외·동률은 낮은 인덱스(결정론)·후보 없으면 None. `weights` 길이는 `items`와 같아야 한다.
+    """
+    if weights is not None and len(weights) != len(items):
+        raise ValueError("weights 길이는 items와 같아야 합니다")
+    administered = administered or set()
+    best_index: int | None = None
+    best_score = -math.inf
+    for index, item in enumerate(items):
+        if index in administered:
+            continue
+        weight = 1.0 if weights is None else weights[index]
+        score = item_information(theta, item) * weight
+        if score > best_score:
+            best_score = score
+            best_index = index
+    return best_index
+
+
 def select_next_item(
     theta: float,
     items: list[IrtItem],
@@ -234,18 +264,10 @@ def select_next_item(
     `items` 중 `administered`(이미 출제한 인덱스 집합)를 제외하고 `item_information(θ, ·)`이
     가장 큰 문항의 인덱스를 반환한다. 후보가 없으면(빈 목록·전부 출제) None. 동률은 *낮은
     인덱스*(결정론). θ에 난이도가 가까운 문항이 대체로 선택된다(P≈0.5·정보 최대).
+
+    `select_weighted_item`의 *균등 가중*(weights=None) 특수해 — 위임으로 구현(중복 제거).
     """
-    administered = administered or set()
-    best_index: int | None = None
-    best_info = -1.0
-    for index, item in enumerate(items):
-        if index in administered:
-            continue
-        info = item_information(theta, item)
-        if info > best_info:
-            best_info = info
-            best_index = index
-    return best_index
+    return select_weighted_item(theta, items, administered=administered)
 
 
 __all__ = [
@@ -257,5 +279,6 @@ __all__ = [
     "item_information",
     "probability_correct",
     "select_next_item",
+    "select_weighted_item",
     "total_information",
 ]
