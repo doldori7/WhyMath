@@ -345,6 +345,71 @@ class TestLthcIntegration:
         assert resp.status_code == 422
 
 
+class TestSolutionCoachingWiring:
+    """slice 53 — L3→L4 오케스트레이터(slice 52) HTTP 결선.
+
+    학생 발화의 *거짓 수치 관계*(계산 슬립)가 검출되면 `solution_coaching`에 검산(verify)
+    코칭 + L3 신호가 실리고, 아니면 None(기존 경로). `arithmetic_error` bool의 첫 실사용.
+    """
+
+    def test_calc_slip_surfaces_verify_coaching(self) -> None:
+        resp = _client().post("/v1/coach", json={"student_input": "2 + 3 = 6"})
+        assert resp.status_code == 200, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["arithmetic_error"] is True
+        assert sc["trigger"]["focus"] == "verify"
+        assert sc["trigger"]["socratic_category"] == "evidence"
+        assert sc["validation_signal"] is not None
+        assert "arithmetic error" in sc["validation_signal"]
+
+    def test_inequality_slip_surfaces_verify(self) -> None:
+        resp = _client().post("/v1/coach", json={"student_input": "5 < 3"})
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+        assert "inequality error" in sc["validation_signal"]
+
+    def test_clean_arithmetic_no_solution_coaching(self) -> None:
+        # 참 등식 → 슬립 아님 → None(기존 decision/coaching_focus 경로).
+        resp = _client().post("/v1/coach", json={"student_input": "3 × 4 = 12"})
+        assert resp.json()["solution_coaching"] is None
+
+    def test_question_no_solution_coaching(self) -> None:
+        # 수식 없는 질문 → 검증기 보수적 → None(false-positive 0).
+        resp = _client().post("/v1/coach", json={"student_input": "이거 어떻게 풀어요?"})
+        assert resp.json()["solution_coaching"] is None
+
+    def test_empty_input_no_solution_coaching(self) -> None:
+        resp = _client().post("/v1/coach", json={"student_input": ""})
+        assert resp.json()["solution_coaching"] is None
+
+    def test_slip_overrides_high_mastery(self) -> None:
+        # 고숙달이어도 계산 슬립이면 verify(슬립 우선 — slice 51 우선순위 실증).
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "2 + 3 = 6", "bkt_mastery": 0.95},
+        )
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+
+    def test_default_response_omits_solution_coaching(self) -> None:
+        # 기존 동작 불변 — 중립 입력은 solution_coaching None(필드는 항상 존재).
+        body = _client().post("/v1/coach", json={"student_input": "음"}).json()
+        assert "solution_coaching" in body
+        assert body["solution_coaching"] is None
+
+    def test_session_create_surfaces_solution_coaching(self) -> None:
+        # 영속 엔드포인트도 동일 신호 노출(공통 _build_response_payload).
+        client, _ = _session_client()
+        resp = client.post("/v1/coach/sessions", json={"student_input": "2 + 3 = 6"})
+        assert resp.status_code == 201, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+
+
 class TestHintLevelWiring:
     def test_demand_answer_signal_raises_hint(self) -> None:
         resp = _client().post(
