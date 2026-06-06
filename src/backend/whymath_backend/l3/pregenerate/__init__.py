@@ -10,6 +10,8 @@ from whymath_backend.l3.pregenerate.models import (
     PrewarmItemResult,
     PrewarmReport,
     PrewarmStatus,
+    ValidationSignal,
+    ValidationSignalKind,
 )
 from whymath_backend.l3.pregenerate.prewarmer import CachePrewarmer
 from whymath_backend.l3.pregenerate.validator import (
@@ -38,6 +40,8 @@ __all__ = [
     "SymPyInequalityValidator",
     "SymPyNotEqualValidator",
     "SymPySolutionValidator",
+    "ValidationSignal",
+    "ValidationSignalKind",
     "arithmetic_validator",
     "default_seed_validator",
     "validate_response",

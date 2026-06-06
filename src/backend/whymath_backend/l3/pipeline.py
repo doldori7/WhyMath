@@ -185,6 +185,9 @@ async def generate(
     # 런타임 shadow 검증(비차단·opt-in) — 거짓 수치 관계 등 환각 신호를 관측에 남긴다.
     # 캐시 적재 *전에* 검증해야 skip_cache_on_signal이 적재 여부를 결정할 수 있다.
     signal = validate_response(validator, output) if validator is not None else None
+    # 신호는 구조화 `ValidationSignal`(slice 59) — 문자열 경계(trace·GenerationResult)에는
+    # `.reason`을 흘린다(형식 불변·str 계약 유지). 캐시 위생 판정은 신호 *유무*(bool)만 본다.
+    reason = signal.reason if signal is not None else None
     # 캐시 위생: 신호 난 출력은 skip_cache_on_signal=True면 *적재하지 않는다*(증명된 거짓을
     # 캐시에 남기지 않음). 반환 텍스트·신호는 불변 — 캐시만 건너뛴다(다음 요청은 재생성).
     if not (skip_cache_on_signal and signal is not None):
@@ -194,9 +197,9 @@ async def generate(
             decision,
             cache_hit=False,
             student_id_hash=student_id_hash,
-            validation_signal=signal,
+            validation_signal=reason,
         )
     )
     return GenerationResult(
-        decision=decision, text=output, cache_hit=False, validation_signal=signal
+        decision=decision, text=output, cache_hit=False, validation_signal=reason
     )

@@ -121,7 +121,7 @@ def run_quality_generation_payload(
         if signal is not None:
             logger.warning(
                 "QUALITY 비동기 생성물 환각 신호 — %s (비차단·로그 관측, reason=%s)",
-                signal,
+                signal.reason,
                 decision.reason,
             )
 

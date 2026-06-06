@@ -7,6 +7,9 @@
 핵심 결합점 (`l3/pipeline.py:125·152`): 런타임은 `decision = Router().route(req)` →
 `key = cache_key_for(prompt, system, decision)` → `cache.get(key)`. 사전적재기도
 *동일한* (`req`, `prompt`, `system`)으로 같은 키를 만들어 `cache.set`한다.
+
+검증 신호 값 객체(`ValidationSignal`)도 여기 둔다 — 빌드타임 시드뿐 아니라 런타임 shadow
+검증·학생 풀이 슬립 검출이 같은 신호를 공유한다(`validator.validate_response` 경로).
 """
 
 from __future__ import annotations
@@ -95,3 +98,31 @@ class PrewarmReport:
     @property
     def errored(self) -> int:
         return sum(1 for i in self.items if i.status == "error")
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 검증 신호 — 검증기(validator.py)의 구조화 반환 값 객체 (slice 59).
+# str 사유 대신 {kind, span, reason}를 돌려 L4가 산문 접두사 파싱 없이 종류(kind)를
+# 읽고, L5가 span으로 오류를 하이라이트할 수 있게 한다. reason 문자열 형식은 불변이라
+# 로그·trace·HTTP 등 문자열 경계로 `.reason`을 그대로 흘릴 수 있다(후방호환).
+# ──────────────────────────────────────────────────────────────────────
+# 검증 신호 종류 — 각 검증기가 자기 종류를 *직접* 선언(접두사 파싱 제거).
+# L4 `SlipKind`와 동일 도메인(= 별칭으로 묶임).
+ValidationSignalKind = Literal["arithmetic", "inequality", "not_equal", "solution", "other"]
+
+
+@dataclass(slots=True, frozen=True)
+class ValidationSignal:
+    """검증 실패 신호 — 종류·사유·(선택) 원문 내 위치. 불변(frozen).
+
+    - `kind`: 슬립/환각 종류. 검증기가 *직접* 선언한다(산문 접두사 파싱 불필요).
+    - `reason`: 사람이 읽는 사유 문자열(예: "arithmetic error: '2 + 3 = 6' (sympy: 5 != 6)").
+      로그·trace·HTTP 등 문자열 경계로 `.reason`을 그대로 흘린다(`GenerationResult.
+      validation_signal`·`SolutionCoaching.validation_signal` 등 — 형식 불변·후방호환).
+    - `span`: 원문(response) 내 오류 위치 `[start, end)`(0-based·half-open). 하이라이트용.
+      None=위치 미상. slice 59a는 항상 None(span 생산은 후속 slice 59b).
+    """
+
+    kind: ValidationSignalKind
+    reason: str
+    span: tuple[int, int] | None = None

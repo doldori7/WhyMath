@@ -122,7 +122,8 @@ class CachePrewarmer:
             return PrewarmItemResult(
                 cache_key=key,
                 status="failed_validation",
-                error=failure_reason,
+                # 신호의 사유 문자열만 담는다(error: str | None 계약 유지·slice 59).
+                error=failure_reason.reason,
             )
 
         try:
