@@ -657,7 +657,7 @@ def _linear_solution(lhs: Any, rhs: Any, var: Any) -> Any | None:
         if not diff.is_polynomial(var) or sympy.degree(diff, var) != 1:
             return None
         sols = sympy.solve(diff, var)
-    except Exception:  # noqa: BLE001  # pragma: no cover — 예외는 보수적 skip(방어선·_common_solution 동형)
+    except Exception:  # noqa: BLE001  # pragma: no cover — 보수적 skip(방어선)
         return None
     if len(sols) != 1:  # 선형은 단일근 — 방어
         return None  # pragma: no cover

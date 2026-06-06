@@ -120,6 +120,18 @@ class Settings(BaseSettings):
         ),
     )
 
+    l4_step_shadow_enabled: bool = Field(
+        default=False,
+        description=(
+            "L4 중간 step 등가성 shadow 관측(slice 62~63) 활성 여부. True면 /v1/coach 경로가 학생 "
+            "풀이의 *단계-비보존*(인접 변환이 해집합을 안 지킴)을 `detect_step_breaks`로 검출해 "
+            "logger.info로 관측한다. **student-facing 미노출**(SolutionCoaching·HTTP 응답 불변) — "
+            "순차유도 오류(A)와 변수재사용(B)을 구문 분리 못 해 노이즈가 섞이므로 학생엔 안 보이고 "
+            "진단 데이터(향후 L7·교사 대시보드)로만 쓴다. **False(기본·opt-in)**: (A)/(B) 노이즈가 "
+            "구조적·sink 미구현이라 보수적 off. WHYMATH_L4_STEP_SHADOW_ENABLED=true로 켠다."
+        ),
+    )
+
     # ── QUALITY(27b) 비동기 큐 (Celery, broker=result backend=Redis, S4) ──
     # QUALITY는 동기 호출 불가(p50≈14초·GPU 단일 점유, 03a §D.3) → 작업 큐 전용이다.
     # broker·result-backend는 *기본값을 두지 않고*(빈 = "redis_url에서 파생") 명시

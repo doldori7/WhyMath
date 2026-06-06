@@ -28,6 +28,7 @@ from whymath_backend.l3.pregenerate.validator import (
     validate_response,
 )
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
+from whymath_backend.l4.step_shadow import observe_step_breaks
 
 SlipKind = ValidationSignalKind
 """검출된 슬립 종류 — L3 `ValidationSignalKind`와 동일 도메인(별칭). L5 UI 분기·L7 분석용.
@@ -119,13 +120,17 @@ def recommend_coaching_for_solution(
         discrepancy_tol=discrepancy_tol,
         mastery_threshold=mastery_threshold,
     )
-    return SolutionCoaching(
+    result = SolutionCoaching(
         trigger=trigger,
         arithmetic_error=arithmetic_error,
         validation_signal=signal.reason if signal is not None else None,
         error_kind=signal.kind if signal is not None else None,
         error_span=signal.span if signal is not None else None,
     )
+    # 중간 step 등가성 shadow 관측(slice 63) — fire-and-forget·반환 무반영(비노출·비차단).
+    # `result`를 *바꾸지 않는다* — observe_step_breaks는 None을 반환하고 로그로만 sink한다.
+    observe_step_breaks(student_solution)
+    return result
 
 
 __all__ = [
