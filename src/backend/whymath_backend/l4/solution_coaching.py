@@ -19,6 +19,8 @@ L4→L3 결합과 동형).
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.l3.pregenerate.validator import (
@@ -27,6 +29,31 @@ from whymath_backend.l3.pregenerate.validator import (
     validate_response,
 )
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
+
+SlipKind = Literal["arithmetic", "inequality", "not_equal", "solution", "other"]
+"""검출된 슬립 종류 — L3 검증기 신호 접두사에서 파생. L5 UI 분기·L7 분석용.
+
+- `arithmetic`: 거짓 수치 등식("2+3=6") · `inequality`: 거짓 부등식("5<3")
+- `not_equal`: 거짓 부등("12/4≠3") · `solution`: 틀린 방정식 해("2x+1=7 → x=5")
+- `other`: 위 접두사 외(예: 위생 신호 — 주입 검증기 사용 시).
+"""
+
+# 검증기 신호 접두사 → 슬립 종류. 검증기 출력 형식("<kind> error: …")에 결합 — 형식이
+# 바뀌면 분류 테스트가 잡는다(각 검증기 신호가 의도한 종류로 분류되는지 검증).
+_SIGNAL_KINDS: tuple[tuple[str, SlipKind], ...] = (
+    ("arithmetic error", "arithmetic"),
+    ("inequality error", "inequality"),
+    ("not-equal error", "not_equal"),
+    ("solution error", "solution"),
+)
+
+
+def _classify_slip(signal: str) -> SlipKind:
+    """L3 검증기 신호 → 슬립 종류(접두사 매칭). 미상 접두사는 `other`."""
+    for prefix, kind in _SIGNAL_KINDS:
+        if signal.startswith(prefix):
+            return kind
+    return "other"
 
 
 class SolutionCoaching(BaseModel):
@@ -49,6 +76,14 @@ class SolutionCoaching(BaseModel):
         description=(
             "검출된 거짓 관계 사유(L3 검증기 출력). None=계산오류 없음(통과·심볼릭·빈 풀이). "
             "trace의 validation_signal과 같은 형식(slice 40·50)."
+        ),
+    )
+    error_kind: SlipKind | None = Field(
+        default=None,
+        description=(
+            "검출된 슬립 종류(arithmetic·inequality·not_equal·solution·other) — None=오류 "
+            "없음. `validation_signal`에서 파생한 구조화 분류로, L5가 종류별 코칭 UI를, L7이 "
+            "오류 유형 분석을 할 수 있게 한다(원시 신호 문자열 파싱 불필요·slice 58)."
         ),
     )
 
@@ -90,10 +125,12 @@ def recommend_coaching_for_solution(
         trigger=trigger,
         arithmetic_error=arithmetic_error,
         validation_signal=signal,
+        error_kind=_classify_slip(signal) if signal is not None else None,
     )
 
 
 __all__ = [
+    "SlipKind",
     "SolutionCoaching",
     "recommend_coaching_for_solution",
 ]

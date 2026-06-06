@@ -184,3 +184,32 @@ class TestRecommendCoachingForSolution:
             assert "frozen" in str(exc).lower() or "instance" in str(exc).lower()
         else:  # pragma: no cover
             raise AssertionError("frozen 모델이 변경을 허용함")
+
+
+class TestErrorKindClassification:
+    """slice 58 — 슬립 종류 분류(검증기 신호 접두사 → SlipKind). L5 UI 분기·L7 분석용."""
+
+    def test_arithmetic_kind(self) -> None:
+        assert recommend_coaching_for_solution("2 + 3 = 6", 0.9, 2.0).error_kind == "arithmetic"
+
+    def test_inequality_kind(self) -> None:
+        assert recommend_coaching_for_solution("5 < 3", 0.9, 2.0).error_kind == "inequality"
+
+    def test_not_equal_kind(self) -> None:
+        assert recommend_coaching_for_solution("12 / 4 ≠ 3", 0.9, 2.0).error_kind == "not_equal"
+
+    def test_solution_kind(self) -> None:
+        result = recommend_coaching_for_solution("2x + 1 = 7 이므로 x = 5", 0.9, 2.0)
+        assert result.error_kind == "solution"
+
+    def test_no_error_kind_none(self) -> None:
+        # 오류 없음 → error_kind None(arithmetic_error False와 정합).
+        result = recommend_coaching_for_solution("3 × 4 = 12", 0.9, 2.0)
+        assert result.arithmetic_error is False
+        assert result.error_kind is None
+
+    def test_unknown_signal_classified_other(self) -> None:
+        # 비표준 사유(주입 검증기) → "other"(접두사 미상).
+        result = recommend_coaching_for_solution("내용", 0.9, 2.0, validator=_AlwaysFails())
+        assert result.arithmetic_error is True
+        assert result.error_kind == "other"

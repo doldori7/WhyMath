@@ -47,6 +47,7 @@ from whymath_backend.l4.models import (
 from whymath_backend.l4.polya.engine import PolyaCoach
 from whymath_backend.l4.socratic import SocraticCategory, select_category
 from whymath_backend.l4.solution_coaching import (
+    SlipKind,
     SolutionCoaching,
     recommend_coaching_for_solution,
 )
@@ -69,6 +70,7 @@ __all__ = [
     "PolyaStage",
     "PolyaState",
     "REVEALS",
+    "SlipKind",
     "SocraticCategory",
     "SolutionCoaching",
     "StageTransition",

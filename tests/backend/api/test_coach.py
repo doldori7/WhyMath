@@ -362,6 +362,7 @@ class TestSolutionCoachingWiring:
         assert sc["trigger"]["socratic_category"] == "evidence"
         assert sc["validation_signal"] is not None
         assert "arithmetic error" in sc["validation_signal"]
+        assert sc["error_kind"] == "arithmetic"  # slice 58 — 구조화 분류 노출
 
     def test_inequality_slip_surfaces_verify(self) -> None:
         resp = _client().post("/v1/coach", json={"student_input": "5 < 3"})
