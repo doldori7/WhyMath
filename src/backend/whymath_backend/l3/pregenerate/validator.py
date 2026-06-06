@@ -240,3 +240,20 @@ class ChainValidator:
             if reason is not None:
                 return reason
         return None
+
+
+def default_seed_validator(*, min_length: int = 1) -> ChainValidator:
+    """기본 사전적재 검증 체인 — 위생 → 산술 → 부등식 AND 게이트.
+
+    CLI(`__main__`)와 후속 호출자가 *같은 게이트*를 쓰도록 단일 정본으로 묶는다.
+    순서: `BasicSeedValidator`(비어있음·길이 위생) → `SymPyArithmeticValidator`
+    (거짓 등식 "3×4=11") → `SymPyInequalityValidator`(거짓 부등식 "5<3"). 셋 다
+    보수적이라 심볼릭·파싱 불가는 통과시키고, *거짓 증명*된 산술/부등식만 탈락시킨다.
+    """
+    return ChainValidator(
+        [
+            BasicSeedValidator(min_length=min_length),
+            SymPyArithmeticValidator(),
+            SymPyInequalityValidator(),
+        ]
+    )
