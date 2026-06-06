@@ -446,6 +446,50 @@ class TestNotEqualHelper:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 음수 피연산자 — `_NUM_TOKEN` 선두 부호([+-]?). 세 관계 검증기 공통 강화.
+# ──────────────────────────────────────────────────────────────────────────
+class TestNegativeOperands:
+    def test_arithmetic_true_negative_passes(self) -> None:
+        v = SymPyArithmeticValidator()
+        assert v.validate(_item(), "3 - 10 = -7") is None  # 참
+        assert v.validate(_item(), "-5 = -5") is None
+
+    def test_arithmetic_false_negative_flagged(self) -> None:
+        v = SymPyArithmeticValidator()
+        assert v.validate(_item(), "3 - 10 = -8") is not None  # -7≠-8 거짓
+        assert v.validate(_item(), "-5 = -4") is not None
+
+    def test_inequality_with_negatives(self) -> None:
+        v = SymPyInequalityValidator()
+        assert v.validate(_item(), "5 < -3") is not None  # 거짓
+        assert v.validate(_item(), "-5 < 3") is None  # 참
+        assert v.validate(_item(), "-2 >= -1") is not None  # 거짓
+
+    def test_not_equal_with_negatives(self) -> None:
+        v = SymPyNotEqualValidator()
+        assert v.validate(_item(), "-8 != -8") is not None  # 같음 → 거짓
+        assert v.validate(_item(), "8 != -8") is None  # 다름 → 참
+
+    def test_subtraction_not_misread_as_sign(self) -> None:
+        """'x - 5 = 3'의 '- 5'는 부호가 아니라 뺄셈 — 더 큰 식의 일부라 건너뜀(오판 없음)."""
+        # 좌변 'x - 5'는 심볼릭이고, '5 = 3' 조각은 좌측 '-' 인접이라 _is_standalone False.
+        assert SymPyArithmeticValidator().validate(_item(), "x - 5 = 3") is None
+        # 부호 뒤 공백이면 토큰 성립 안 함('- 5'는 뺄셈으로 남음) — 음수 리터럴 아님.
+        assert SymPyArithmeticValidator().validate(_item(), "10 - 5 = 5") is None  # 참
+
+    def test_plus_sign_prefix(self) -> None:
+        """선두 '+' 부호도 허용 — '+3 = 3' 참, '+3 = 4' 거짓."""
+        v = SymPyArithmeticValidator()
+        assert v.validate(_item(), "+3 = 3") is None
+        assert v.validate(_item(), "+3 = 4") is not None
+
+    def test_default_chain_catches_negative_false(self) -> None:
+        """기본 체인이 음수 결과 거짓 등식을 잡는다(통합)."""
+        reason = validate_response(default_seed_validator(), "계산:\n2 - 9 = -6")
+        assert reason is not None and "arithmetic error" in reason  # 2-9=-7≠-6
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # validate_response — PregenItem 없는 응답 단독 검증(런타임 재사용 진입점)
 # ──────────────────────────────────────────────────────────────────────────
 class TestValidateResponse:
