@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
@@ -399,6 +400,24 @@ class TestSolutionCoachingWiring:
         sol = "2x + 1 = 7 이므로 x = 5"
         s, e = sc["error_span"]
         assert sol[s:e] == "x = 5"
+
+    def test_step_shadow_not_exposed_in_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # slice 63 — 코칭도 생기고(대수 슬립) shadow도 검출되는("이므로"·해 {3}≠{5}) 입력에서,
+        # 게이트가 켜져 관측이 돌아도 HTTP 응답엔 step 신호 *부재*(비노출). observe_step_breaks는
+        # 실 get_settings()를 보므로 env+cache_clear로 게이트를 켠다.
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        try:
+            resp = _client().post(
+                "/v1/coach",
+                json={"student_input": "확인", "student_solution": "2x + 1 = 7 이므로 x = 5"},
+            )
+        finally:
+            get_settings.cache_clear()
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["solution_coaching"] is not None  # 코칭은 노출(대수 슬립 검출)
+        assert "step" not in json.dumps(body, ensure_ascii=False)  # shadow step 신호 누출 0
 
     def test_clean_arithmetic_no_solution_coaching(self) -> None:
         # 참 등식 → 슬립 아님 → None(기존 decision/coaching_focus 경로).

@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+import pytest
+
+from whymath_backend.config import get_settings
 from whymath_backend.l3.pregenerate.models import PregenItem, ValidationSignal
 from whymath_backend.l4.metacognitive_trigger import recommend_coaching
 from whymath_backend.l4.solution_coaching import (
@@ -274,3 +277,24 @@ class TestStepVerifyPrompt:
         result = recommend_coaching_for_solution("5 < 3", 0.9, 2.0)
         assert result.error_kind == "inequality"
         assert "한 줄씩" not in result.trigger.prompt
+
+
+class TestStepShadowNonExposure:
+    """slice 63 — 중간 step shadow 관측이 SolutionCoaching 반환을 *바꾸지 않음*(비노출)."""
+
+    def test_result_identical_gate_on_vs_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 단계 비보존 입력(shadow가 검출)에도 반환은 게이트 on/off 무관하게 동일(반환 무반영).
+        text = "2x = 6 따라서 3x = 12"
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "false")
+        get_settings.cache_clear()
+        try:
+            off = recommend_coaching_for_solution(text, 0.9, 2.0)
+        finally:
+            get_settings.cache_clear()
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        try:
+            on = recommend_coaching_for_solution(text, 0.9, 2.0)
+        finally:
+            get_settings.cache_clear()
+        assert on == off  # shadow는 None 반환·result 불변 — 게이트가 반환을 못 바꾼다
