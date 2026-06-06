@@ -132,6 +132,62 @@ class TestRunQualityGenerationPayload:
         assert provider.calls == []  # 검증 실패 → provider 미호출
 
 
+class TestWorkerShadowValidation:
+    """비동기 워커 shadow 검증 — 환각 신호를 *로그로만* 남기고 텍스트는 불변(비차단)."""
+
+    def test_false_output_logs_warning_and_returns_raw(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """거짓 수치 관계 생성물 → WARNING 로그, 그러나 반환 텍스트는 원시 그대로."""
+        from whymath_backend.l3.pregenerate.validator import default_seed_validator
+
+        # 등식이 *독립*이어야 검증기가 잡는다(한글 인접은 보수적 skip) — 줄 분리로 독립화.
+        provider = FakeProvider(text="계산 결과:\n2 + 2 = 5")
+        with caplog.at_level("WARNING", logger="whymath.l3.quality"):
+            text = run_quality_generation_payload(
+                _quality_payload(), provider=provider, validator=default_seed_validator()
+            )
+        # 비차단: 텍스트는 차단·치환 없이 원시 출력 그대로.
+        assert text == "계산 결과:\n2 + 2 = 5"
+        # 그러나 환각 신호는 로그에 남는다(조용히 넘어가지 않음). getMessage()=포맷 후 문자열.
+        assert any(
+            "환각 신호" in r.getMessage() and "arithmetic error" in r.getMessage()
+            for r in caplog.records
+        )
+
+    def test_clean_output_no_warning(self, caplog: pytest.LogCaptureFixture) -> None:
+        """검증 통과 생성물 → 경고 로그 없음."""
+        from whymath_backend.l3.pregenerate.validator import default_seed_validator
+
+        provider = FakeProvider(text="정답: 2 + 2 = 4")
+        with caplog.at_level("WARNING", logger="whymath.l3.quality"):
+            text = run_quality_generation_payload(
+                _quality_payload(), provider=provider, validator=default_seed_validator()
+            )
+        assert text == "정답: 2 + 2 = 4"
+        assert caplog.records == []
+
+    def test_no_validator_no_validation(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """validator 미주입(기본) → 검증 미실행 → 경고 없음·텍스트 반환."""
+        provider = FakeProvider(text="5 < 3 라는 거짓 부등식")
+        with caplog.at_level("WARNING", logger="whymath.l3.quality"):
+            text = run_quality_generation_payload(_quality_payload(), provider=provider)
+        assert text == "5 < 3 라는 거짓 부등식"
+        assert caplog.records == []
+
+    def test_worker_default_validator_is_chain(self) -> None:
+        """워커 기본 shadow 검증기는 default_seed_validator 체인이다(거짓 관계 탐지)."""
+        from whymath_backend.l3.pregenerate import ChainValidator, SeedValidator
+        from whymath_backend.l3.queue.tasks import _WORKER_SHADOW_VALIDATOR
+
+        assert isinstance(_WORKER_SHADOW_VALIDATOR, ChainValidator)
+        assert isinstance(_WORKER_SHADOW_VALIDATOR, SeedValidator)
+        # 거짓 부등(≠)도 잡는다(관계 패밀리 완성 확인).
+        assert _WORKER_SHADOW_VALIDATOR.validate(None, "8 != 8") is not None
+
+
 def test_task_name_is_stable_contract() -> None:
     """태스크 이름은 enqueue(send_task)와 공유하는 안정적 문자열 계약이다."""
     assert QUALITY_TASK_NAME == "whymath.l3.quality.generate"
@@ -184,10 +240,12 @@ def test_register_quality_task_body_delegates_to_plain_function(
     from whymath_backend.l3.queue.celery_app import build_celery_app
     from whymath_backend.l3.queue.tasks import register_quality_task
 
-    seen: list[dict[str, Any]] = []
+    seen: list[tuple[dict[str, Any], object]] = []
 
-    def _fake_payload_runner(payload: dict[str, Any]) -> str:
-        seen.append(payload)
+    def _fake_payload_runner(
+        payload: dict[str, Any], *, validator: object = None
+    ) -> str:
+        seen.append((payload, validator))
         return "위임됨"
 
     # 태스크 본체가 부르는 모듈 레벨 함수를 가짜로 교체(실제 ollama 호출 회피).
@@ -198,4 +256,7 @@ def test_register_quality_task_body_delegates_to_plain_function(
     # 태스크 본체를 직접 호출(.run은 데코레이트 전 원함수) — broker 우회.
     out = task.run({"prompt": "p", "system": "s", "decision": {}})
     assert out == "위임됨"
-    assert seen == [{"prompt": "p", "system": "s", "decision": {}}]
+    # payload 위임 + 워커 기본 shadow 검증기 전달(default-on·log-only).
+    assert len(seen) == 1
+    assert seen[0][0] == {"prompt": "p", "system": "s", "decision": {}}
+    assert seen[0][1] is tasks_mod._WORKER_SHADOW_VALIDATOR

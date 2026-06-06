@@ -17,24 +17,42 @@ asyncio 경계: Celery 태스크는 *동기* 함수다. OllamaProvider.generate�
 경계 메모 (CLAUDE.md 절대 금기): 이 태스크가 돌려주는 텍스트는 *검증 전 원시 모델
 출력*이다 — QUALITY(27b)라 해도 03 문서 환각 방어 파이프라인(스키마→SymPy/Lean→PRM→
 자기검증→사람검수)을 통과하기 전에는 학생에게 직접 노출 금지("LLM 응답을 검증 없이
-학생에게 제공 금지"). 비동기 결과를 폴링한 상위 계층이 검증 책임을 진다.
+학생에게 제공 금지"). 비동기 결과를 폴링한 상위 계층이 (게이트) 검증 책임을 진다.
+
+shadow 관측 (slice 43): 워커는 결정론 검증기로 생성물을 검사해 *거짓 수치 관계* 등
+환각 신호를 **로그로만** 남긴다(WARNING·비차단). 동기 파이프라인의 shadow 검증
+(`pipeline.generate`, slice 40)을 비동기 워커로 확장한 것 — 워커엔 TraceSink가 없어
+logging이 관측 경로다. 반환 텍스트는 *불변*(게이트가 아니라 관측, CLAUDE.md "환각
+발견 시 로그").
 """
 
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import TYPE_CHECKING, Any
 
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.pregenerate.validator import (
+    SeedValidator,
+    default_seed_validator,
+    validate_response,
+)
 from whymath_backend.l3.queue.celery_app import build_celery_app
 
 if TYPE_CHECKING:  # pragma: no cover — 타입 체크 전용(런타임 import 회피)
     from celery import Celery
 
+logger = logging.getLogger("whymath.l3.quality")
+
 # 태스크 이름 — send_task로 디스패치할 때 쓰는 안정적 식별자(네임스페이스 고정).
 # CeleryJobQueue가 이 이름으로 send_task를 호출하므로 *문자열 계약*으로 공유한다.
 QUALITY_TASK_NAME = "whymath.l3.quality.generate"
+
+# 워커 기본 shadow 검증기 — 결정론 관계 검증(=·<·>·≤·≥·≠). 모듈 import 시 1회 생성
+# (I/O 없음·재사용). 등록된 태스크가 이 검증기로 비동기 생성물을 *로그 관측*한다.
+_WORKER_SHADOW_VALIDATOR = default_seed_validator()
 
 # payload 키 — 파이프라인(enqueue)과 태스크(소비)가 공유하는 JSON 스키마.
 PAYLOAD_PROMPT = "prompt"
@@ -60,6 +78,7 @@ def run_quality_generation_payload(
     payload: dict[str, Any],
     *,
     provider: LLMProvider | None = None,
+    validator: SeedValidator | None = None,
 ) -> str:
     """QUALITY 생성 핵심 로직 (플레인 함수 — broker 없이 직접 테스트 가능).
 
@@ -70,9 +89,15 @@ def run_quality_generation_payload(
     Args:
         payload: `{prompt, system, decision}` — decision은 RoutingDecision.model_dump().
         provider: 생성 백엔드(테스트는 가짜 주입). None이면 OllamaProvider 지연 생성.
+        validator: 런타임 shadow 검증기(L3 결정론 도구). 주입 시 생성물의 거짓 수치 관계
+            등 환각 신호를 *로그로만* 남긴다(WARNING). **비차단** — 반환 텍스트는 원시
+            출력 *그대로*(바이트 동일·계약 불변). 동기 파이프라인의 shadow 검증(slice 40)
+            을 비동기 워커로 확장한 것 — 워커엔 TraceSink가 없어 logging이 관측 경로다
+            (CLAUDE.md "환각 발견 시 로그"). None이면 검증 미실행(오버헤드 0).
 
     Returns:
-        생성된 *검증 전 원시 텍스트*(모듈 docstring 경계 메모 참조).
+        생성된 *검증 전 원시 텍스트*(모듈 docstring 경계 메모 참조). validator가 신호를
+        내도 텍스트는 차단·치환되지 않는다(게이트는 폴링 상위 계층·L4/L5 책임).
 
     Raises:
         KeyError/ValidationError: payload 스키마가 깨졌을 때(워커가 실패로 기록).
@@ -87,7 +112,19 @@ def run_quality_generation_payload(
 
     resolved = _resolve_provider(provider)
     # Celery 태스크는 동기 → async generate를 새 이벤트 루프에서 실행(동시성 1, 루프 1개).
-    return asyncio.run(resolved.generate(prompt, system, decision))
+    output = asyncio.run(resolved.generate(prompt, system, decision))
+
+    # 런타임 shadow 검증(비차단·로그 관측) — 비동기 생성물의 환각 신호를 조용히 넘기지 않는다.
+    if validator is not None:
+        signal = validate_response(validator, output)
+        if signal is not None:
+            logger.warning(
+                "QUALITY 비동기 생성물 환각 신호 — %s (비차단·로그 관측, reason=%s)",
+                signal,
+                decision.reason,
+            )
+
+    return output
 
 
 def register_quality_task(app: Celery) -> Any:
@@ -99,7 +136,10 @@ def register_quality_task(app: Celery) -> Any:
     실행돼 태스크가 등록된다.
 
     태스크 본체는 플레인 함수 `run_quality_generation_payload`에 위임한다(provider
-    주입 없이 → 워커는 실제 OllamaProvider를 쓴다).
+    주입 없이 → 워커는 실제 OllamaProvider를 쓴다). 워커는 기본 shadow 검증기
+    (`_WORKER_SHADOW_VALIDATOR`)를 함께 넘겨 비동기 생성물의 환각 신호를 *로그로* 남긴다
+    (비차단·log-only이라 default-on이 안전 — 동기 파이프라인의 per-call opt-in과 달리
+    워커는 per-call 설정 경로가 없어 기본 활성).
     """
 
     # 무시 사유: celery는 py.typed를 제공하지 않아 `@app.task`가 mypy에 *untyped
@@ -109,8 +149,8 @@ def register_quality_task(app: Celery) -> Any:
     # 로직은 검증된 플레인 함수에 위임하므로 타입 안전성 손실은 사실상 없다.
     @app.task(name=QUALITY_TASK_NAME, bind=False)  # type: ignore[untyped-decorator]
     def run_quality_generation(payload: dict[str, Any]) -> str:
-        """워커 태스크 — payload로 QUALITY 생성(검증 전 원시 출력)."""
-        return run_quality_generation_payload(payload)
+        """워커 태스크 — payload로 QUALITY 생성(검증 전 원시 출력·shadow 신호 로그)."""
+        return run_quality_generation_payload(payload, validator=_WORKER_SHADOW_VALIDATOR)
 
     return run_quality_generation
 
