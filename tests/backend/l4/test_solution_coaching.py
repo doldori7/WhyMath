@@ -67,6 +67,14 @@ class TestRecommendCoachingForSolution:
         assert result.validation_signal is not None
         assert "not-equal error" in result.validation_signal
 
+    def test_algebra_solution_slip_routes_verify(self) -> None:
+        """slice 56 — 틀린 단변수 해("2x+1=7 이므로 x=5")도 verify로 처방(대수 슬립)."""
+        result = recommend_coaching_for_solution("2x + 1 = 7 이므로 x = 5", 0.9, 2.0)
+        assert result.arithmetic_error is True
+        assert result.trigger.focus == "verify"
+        assert result.validation_signal is not None
+        assert "solution error" in result.validation_signal
+
     def test_clean_solution_high_mastery_advance(self) -> None:
         """참 등식("3 × 4 = 12")·고숙달 → arithmetic_error 없이 BKT↔IRT 경로(advance)."""
         result = recommend_coaching_for_solution("3 × 4 = 12 이므로 끝.", 0.9, 2.0)

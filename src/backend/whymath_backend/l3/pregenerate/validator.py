@@ -14,9 +14,15 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from typing import Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 import sympy
+from sympy.parsing.sympy_parser import (
+    convert_xor,
+    implicit_multiplication,
+    parse_expr,
+    standard_transformations,
+)
 
 from whymath_backend.l3.pregenerate.models import PregenItem
 
@@ -337,6 +343,101 @@ class SymPyNotEqualValidator:
         return None
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# SymPy 풀이(해) 검증 — 단변수 방정식 + 주장된 해를 *대입*으로 확인 (slice 56).
+# "2x + 1 = 7 이므로 x = 5"처럼 *대수* 슬립(방정식의 해를 틀리게 주장)을 잡는다 —
+# 산술 검증기(순수 수치)가 못 보던 변수 방정식의 해를 검증한다. false-positive 0 설계:
+# 줄 단위 페어링(소문제 변수 재사용 안전)·단변수·단일값(두 근 등 건너뜀)·거짓 증명 시에만 탈락.
+# ──────────────────────────────────────────────────────────────────────────
+# 변수를 포함하는 식 토큰(정규화 후 ASCII): 숫자·라틴문자·연산자·괄호. 한글 등 산문은 경계.
+_EXPR_TOKEN = r"[+-]?(?:[0-9A-Za-z(][0-9A-Za-z \t+\-*/^().]*[0-9A-Za-z)]|[0-9A-Za-z])"
+_RELATION_RE = re.compile(rf"({_EXPR_TOKEN})[ \t]*=[ \t]*({_EXPR_TOKEN})")
+
+
+# 암묵적 곱셈("2x"→2*x)·"^"→거듭제곱 변환 포함 — 학생/LLM이 계수 병치를 자주 씀.
+# `implicit_multiplication`은 *계수 병치*만(함수 적용 "sin x"는 제외 — 더 보수적).
+_PARSE_TRANSFORMS = standard_transformations + (implicit_multiplication, convert_xor)
+
+
+def _parse_expr(text: str) -> Any:
+    """문자열을 SymPy 식으로 파싱(암묵 곱셈·^거듭제곱) — 실패하면 None(보수적 건너뜀).
+
+    반환은 SymPy 식(untyped → Any) 또는 None. 호출지가 None 검사 후 식 연산을 한다.
+    """
+    try:
+        return parse_expr(text, transformations=_PARSE_TRANSFORMS)
+    except Exception:  # noqa: BLE001 — 파싱 실패는 보수적으로 건너뜀(통과)
+        return None
+
+
+class SymPySolutionValidator:
+    """단변수 방정식과 주장된 해를 *대입*으로 검증 — 거짓이면 탈락 (SeedValidator 충족).
+
+    "2x + 1 = 7 이므로 x = 5"처럼 *대수* 슬립(방정식의 해를 틀리게 주장)을 잡는다. 순수
+    수치만 보던 산술 검증기를 *변수 방정식*으로 보완한다. **false-positive 0 보수 설계**:
+    - *줄 단위* 페어링 — 같은 줄의 방정식과 해 주장만 연결(다른 줄·소문제의 변수 재사용 안전).
+    - *단변수만* — 관계의 자유변수가 정확히 1개일 때만(다변수 연립은 건너뜀).
+    - *단일값만* — 한 줄에서 같은 변수가 2개 이상 값으로 주장되면 건너뜀(이차식 두 근 등).
+    - 대입 결과가 *거짓으로 증명*될 때만 탈락(파싱 불가·판정 불가·심볼릭 잔여는 통과).
+
+    `max_checks`는 스캔할 줄 수 상한(초장문 응답 과부하 방지). 정규화(×÷−·)는 산술 검증과 공유.
+    """
+
+    def __init__(self, *, max_checks: int = 100) -> None:
+        if max_checks < 1:
+            raise ValueError("max_checks는 1 이상이어야 합니다")
+        self._max_checks = max_checks
+
+    def validate(self, item: PregenItem | None, response: str) -> str | None:
+        normalized = response.translate(_MATH_OP_NORMALIZE)
+        for line_no, line in enumerate(normalized.split("\n")):
+            if line_no >= self._max_checks:
+                break
+            reason = self._check_line(line)
+            if reason is not None:
+                return reason
+        return None
+
+    def _check_line(self, line: str) -> str | None:
+        """한 줄의 (방정식, 해 주장)을 모아 대입 검증 — 거짓이면 사유."""
+        assignments: dict[Any, set[Any]] = {}
+        equations: list[tuple[Any, Any, Any, str]] = []
+        for match in _RELATION_RE.finditer(line):
+            lhs = _parse_expr(match.group(1).strip())
+            rhs = _parse_expr(match.group(2).strip())
+            if lhs is None or rhs is None:
+                continue
+            syms = lhs.free_symbols | rhs.free_symbols
+            if len(syms) != 1:
+                continue  # 순수 수치(0개)·다변수(2+)는 이 검증기 범위 밖
+            (var,) = tuple(syms)
+            # 해 주장("x = 5" 또는 "5 = x"): 한쪽이 그 변수 심볼·다른 쪽이 수치.
+            if lhs == var and not rhs.free_symbols:
+                assignments.setdefault(var, set()).add(rhs)
+            elif rhs == var and not lhs.free_symbols:
+                assignments.setdefault(var, set()).add(lhs)
+            else:
+                eq_str = f"{match.group(1).strip()} = {match.group(2).strip()}"
+                equations.append((var, lhs, rhs, eq_str))
+        for var, lhs, rhs, eq_str in equations:
+            values = assignments.get(var)
+            if values is None or len(values) != 1:
+                continue  # 해 주장 없음·또는 다중값(두 근 등) → 보수적 건너뜀
+            (value,) = tuple(values)
+            # 방어적 try: 단일 변수에 수치 대입 후 계산은 사실상 항상 numeric이라 예외가
+            # 나지 않는다(예기치 못한 SymPy 내부 실패만 흡수·보수적 통과).
+            try:
+                holds = sympy.simplify((lhs - rhs).subs(var, value)).is_zero
+            except Exception:  # noqa: BLE001  # pragma: no cover
+                continue
+            if holds is False:  # 대입 결과가 거짓으로 확정 → 해가 틀림
+                return (
+                    f"solution error: '{eq_str}' fails at {var}={value} "
+                    f"(sympy: {lhs.subs(var, value)} != {rhs.subs(var, value)})"
+                )
+        return None
+
+
 class ChainValidator:
     """여러 SeedValidator를 순서대로 실행하는 AND 게이트 — 첫 실패 사유 반환.
 
@@ -357,13 +458,14 @@ class ChainValidator:
 
 
 def default_seed_validator(*, min_length: int = 1) -> ChainValidator:
-    """기본 사전적재 검증 체인 — 위생 → 산술 → 부등식 → 부등(≠) AND 게이트.
+    """기본 사전적재 검증 체인 — 위생 → 산술 → 부등식 → 부등(≠) → 풀이(해) AND 게이트.
 
     CLI(`__main__`)와 후속 호출자가 *같은 게이트*를 쓰도록 단일 정본으로 묶는다.
     순서: `BasicSeedValidator`(비어있음·길이 위생) → `SymPyArithmeticValidator`
     (거짓 등식 "3×4=11") → `SymPyInequalityValidator`(거짓 부등식 "5<3") →
-    `SymPyNotEqualValidator`(거짓 부등 "12/4≠3"). 넷 다 보수적이라 심볼릭·파싱 불가는
-    통과시키고, *거짓 증명*된 수치 관계(=·<·>·≤·≥·≠)만 탈락시킨다.
+    `SymPyNotEqualValidator`(거짓 부등 "12/4≠3") → `SymPySolutionValidator`(틀린 해
+    "2x+1=7 이므로 x=5"). 다섯 다 보수적이라 심볼릭·파싱 불가는 통과시키고, *거짓 증명*된
+    수치 관계(=·<·>·≤·≥·≠)·*틀린 단변수 해*만 탈락시킨다.
     """
     return ChainValidator(
         [
@@ -371,25 +473,28 @@ def default_seed_validator(*, min_length: int = 1) -> ChainValidator:
             SymPyArithmeticValidator(),
             SymPyInequalityValidator(),
             SymPyNotEqualValidator(),
+            SymPySolutionValidator(),
         ]
     )
 
 
 def arithmetic_validator(*, max_checks: int = 100) -> ChainValidator:
-    """수치 관계 오류 검출 전용 체인 — 위생 검사 없이 SymPy 관계 검증기만(=·<·>·≤·≥·≠).
+    """수치 관계 + 단변수 해 오류 검출 전용 체인 — 위생 없이 SymPy 검증기만.
 
     `default_seed_validator`와 달리 `BasicSeedValidator`(비어있음·길이·오류 마커 위생)를
-    *빼고* SymPy 계산 검증기 셋만 묶는다. 용도가 *학생 풀이의 계산 슬립*("2+3=6") 검출이라
-    위생 신호("empty response")는 의미가 없기 때문이다 — 빈 풀이·짧은 풀이는 *슬립이 아니다*.
-    통과=None·*거짓이 증명된 수치 관계*만 사유 문자열(보수적: 심볼릭·파싱 불가·판정 불가는
-    통과). L3→L4 오케스트레이터(`l4.solution_coaching.recommend_coaching_for_solution`)가
-    이 신호 유무를 `arithmetic_error` bool로 환산해 L4 검산(verify) 코칭을 처방한다(slice 51).
+    *빼고* SymPy 검증기만 묶는다. 용도가 *학생 풀이의 계산/대수 슬립*("2+3=6"·"2x+1=7
+    이므로 x=5") 검출이라 위생 신호("empty response")는 의미가 없기 때문이다 — 빈 풀이·
+    짧은 풀이는 *슬립이 아니다*. 통과=None·*거짓이 증명된 수치 관계/틀린 해*만 사유 문자열
+    (보수적: 심볼릭·파싱 불가·판정 불가는 통과). L3→L4 오케스트레이터
+    (`l4.solution_coaching.recommend_coaching_for_solution`)가 이 신호 유무를
+    `arithmetic_error` bool로 환산해 L4 검산(verify) 코칭을 처방한다(slice 51).
     """
     return ChainValidator(
         [
             SymPyArithmeticValidator(max_checks=max_checks),
             SymPyInequalityValidator(max_checks=max_checks),
             SymPyNotEqualValidator(max_checks=max_checks),
+            SymPySolutionValidator(max_checks=max_checks),
         ]
     )
 

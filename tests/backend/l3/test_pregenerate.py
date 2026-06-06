@@ -33,6 +33,7 @@ from whymath_backend.l3.pregenerate import (
     SymPyArithmeticValidator,
     SymPyInequalityValidator,
     SymPyNotEqualValidator,
+    SymPySolutionValidator,
     arithmetic_validator,
     default_seed_validator,
     validate_response,
@@ -793,6 +794,109 @@ class TestHangulProseBoundary:
         reason = arithmetic_validator().validate(_item(), "답은 3 × 3 = 10 입니다")
         assert reason is not None
         assert "arithmetic error" in reason
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# SymPySolutionValidator — 단변수 방정식 + 주장된 해 대입 검증 (slice 56)
+# ──────────────────────────────────────────────────────────────────────────
+class TestSymPySolutionValidator:
+    def test_satisfies_protocol(self) -> None:
+        assert isinstance(SymPySolutionValidator(), SeedValidator)
+
+    def test_correct_linear_solution_passes(self) -> None:
+        assert SymPySolutionValidator().validate(_item(), "2x + 1 = 7 이므로 x = 3") is None
+
+    def test_wrong_linear_solution_caught(self) -> None:
+        reason = SymPySolutionValidator().validate(_item(), "2x + 1 = 7 이므로 x = 5")
+        assert reason is not None
+        assert "solution error" in reason
+        assert "x=5" in reason
+
+    def test_coefficient_juxtaposition_wrong_caught(self) -> None:
+        # 암묵적 곱셈 "3x" 파싱(implicit_multiplication) — 틀린 해 검출.
+        reason = SymPySolutionValidator().validate(_item(), "3x = 12 이므로 x = 5")
+        assert reason is not None
+        assert "solution error" in reason
+
+    def test_correct_quadratic_single_root_passes(self) -> None:
+        assert SymPySolutionValidator().validate(_item(), "x^2 = 9 이므로 x = 3") is None
+
+    def test_wrong_quadratic_root_caught(self) -> None:
+        reason = SymPySolutionValidator().validate(_item(), "x^2 = 9 이므로 x = 4")
+        assert reason is not None
+        assert "solution error" in reason
+
+    def test_two_roots_skipped_conservatively(self) -> None:
+        # 같은 줄에서 변수에 2개 값 주장(두 근) → 다중값 → 보수적 건너뜀(통과).
+        assert (
+            SymPySolutionValidator().validate(_item(), "x^2 = 9 이므로 x = 3 또는 x = -3")
+            is None
+        )
+
+    def test_multivariable_equation_skipped(self) -> None:
+        # 자유변수 2개(연립) → 단변수 아님 → 건너뜀.
+        assert SymPySolutionValidator().validate(_item(), "x + y = 5 이고 x = 2") is None
+
+    def test_cross_line_not_paired(self) -> None:
+        # 방정식과 해가 다른 줄 → 페어링 안 함(소문제 변수 재사용 안전·false-positive 0).
+        assert SymPySolutionValidator().validate(_item(), "2x + 1 = 7\nx = 5") is None
+
+    def test_pure_numeric_skipped(self) -> None:
+        # 변수 0개(순수 수치)는 이 검증기 범위 밖(산술 검증기 담당).
+        assert SymPySolutionValidator().validate(_item(), "2 + 3 = 6") is None
+
+    def test_assignment_only_passes(self) -> None:
+        # 방정식 없이 해 주장만 → 대입할 식 없음 → 통과.
+        assert SymPySolutionValidator().validate(_item(), "x = 5") is None
+
+    def test_reverse_assignment_wrong_caught(self) -> None:
+        # "5 = x" 역방향 할당도 인식 — 오해면 탈락.
+        reason = SymPySolutionValidator().validate(_item(), "x + 1 = 6 이고 4 = x")
+        assert reason is not None
+        assert "solution error" in reason
+
+    def test_different_variables_no_false_positive(self) -> None:
+        # 방정식 변수(x)와 해 주장 변수(r)가 다르면 페어링 안 함.
+        assert SymPySolutionValidator().validate(_item(), "반지름 r = 5, 그리고 2x = 8") is None
+
+    def test_symbolic_without_solution_passes(self) -> None:
+        # 해 주장이 없는 순수 심볼릭 식은 통과(판정 불가).
+        assert SymPySolutionValidator().validate(_item(), "f(x) = 2x + 1 는 일차함수") is None
+
+    def test_paren_expansion_wrong_caught(self) -> None:
+        reason = SymPySolutionValidator().validate(_item(), "2(x + 1) = 10 이므로 x = 3")
+        assert reason is not None
+        assert "solution error" in reason
+
+    def test_unparseable_token_skipped(self) -> None:
+        # 정규식은 매치하나 SymPy 파싱 실패(불균형 괄호 "x)") → 보수적 건너뜀(통과).
+        assert SymPySolutionValidator().validate(_item(), "x) = 5") is None
+
+    def test_max_checks_must_be_positive(self) -> None:
+        with pytest.raises(ValueError):
+            SymPySolutionValidator(max_checks=0)
+
+    def test_max_checks_limits_lines(self) -> None:
+        # max_checks=1 → 첫 줄만 스캔. 둘째 줄의 틀린 해는 미검사(통과).
+        v = SymPySolutionValidator(max_checks=1)
+        assert v.validate(_item(), "x = 3\n2x = 7 이므로 x = 5") is None
+
+
+class TestSolutionValidatorInChains:
+    """slice 56 — 풀이 검증기가 기본 체인 두 곳에 결선됐는지(빌드타임·학생 풀이)."""
+
+    def test_default_seed_validator_catches_wrong_solution(self) -> None:
+        reason = default_seed_validator().validate(_item(), "2x + 1 = 7 이므로 x = 5")
+        assert reason is not None
+        assert "solution error" in reason
+
+    def test_arithmetic_validator_catches_wrong_solution(self) -> None:
+        reason = arithmetic_validator().validate(_item(), "2x + 1 = 7 이므로 x = 5")
+        assert reason is not None
+        assert "solution error" in reason
+
+    def test_arithmetic_validator_passes_correct_solution(self) -> None:
+        assert arithmetic_validator().validate(_item(), "2x + 1 = 7 이므로 x = 3") is None
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -380,6 +380,17 @@ class TestSolutionCoachingWiring:
         assert sc["trigger"]["focus"] == "verify"
         assert "arithmetic error" in sc["validation_signal"]
 
+    def test_algebra_solution_slip_surfaces_verify(self) -> None:
+        # slice 56 — 틀린 단변수 해("2x+1=7 이므로 x=5")도 검산 코칭.
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "확인해주세요", "student_solution": "2x + 1 = 7 이므로 x = 5"},
+        )
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+        assert "solution error" in sc["validation_signal"]
+
     def test_clean_arithmetic_no_solution_coaching(self) -> None:
         # 참 등식 → 슬립 아님 → None(기존 decision/coaching_focus 경로).
         resp = _client().post("/v1/coach", json={"student_input": "3 × 4 = 12"})
