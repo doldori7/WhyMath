@@ -34,6 +34,7 @@ from whymath_backend.l3.pregenerate import (
     SymPyInequalityValidator,
     SymPyNotEqualValidator,
     SymPySolutionValidator,
+    ValidationSignal,
     arithmetic_validator,
     default_seed_validator,
     validate_response,
@@ -71,12 +72,12 @@ class FakePregenProvider:
 
 
 class AlwaysFailValidator:
-    def validate(self, item: PregenItem, response: str) -> str | None:
-        return "always fail"
+    def validate(self, item: PregenItem, response: str) -> ValidationSignal | None:
+        return ValidationSignal(kind="other", reason="always fail")
 
 
 class AlwaysPassValidator:
-    def validate(self, item: PregenItem, response: str) -> str | None:
+    def validate(self, item: PregenItem, response: str) -> ValidationSignal | None:
         return None
 
 
@@ -173,19 +174,48 @@ class TestPrewarmReport:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# ValidationSignal — 검증기 구조화 반환 값 객체 (slice 59)
+# ──────────────────────────────────────────────────────────────────────────
+class TestValidationSignal:
+    def test_carries_kind_reason_span(self) -> None:
+        sig = ValidationSignal(kind="arithmetic", reason="r", span=(2, 7))
+        assert sig.kind == "arithmetic" and sig.reason == "r" and sig.span == (2, 7)
+
+    def test_span_defaults_none(self) -> None:
+        # slice 59a는 span을 *생산하지 않는다*(항상 None — 생산은 후속 slice 59b).
+        assert ValidationSignal(kind="other", reason="r").span is None
+
+    def test_frozen(self) -> None:
+        sig = ValidationSignal(kind="solution", reason="r")
+        with pytest.raises(Exception):  # FrozenInstanceError(불변)
+            sig.kind = "arithmetic"  # type: ignore[misc]
+
+    def test_validators_produce_none_span_in_59a(self) -> None:
+        # 모든 검증기가 slice 59a에선 span=None(reason·kind만 채움). 대표 4종.
+        arith = SymPyArithmeticValidator().validate(_item(), "2 + 2 = 5")
+        ineq = SymPyInequalityValidator().validate(_item(), "5 < 3")
+        neq = SymPyNotEqualValidator().validate(_item(), "8 != 8")
+        soln = SymPySolutionValidator().validate(_item(), "2x + 1 = 7 이므로 x = 5")
+        for sig in (arith, ineq, neq, soln):
+            assert sig is not None and sig.span is None
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # BasicSeedValidator — 최소 시드 위생
 # ──────────────────────────────────────────────────────────────────────────
 class TestBasicSeedValidator:
     def test_empty_or_whitespace_fails(self) -> None:
         v = BasicSeedValidator()
-        assert v.validate(_item(), "") == "empty response"
-        assert v.validate(_item(), "   \n\t") == "empty response"
+        empty = v.validate(_item(), "")
+        assert empty is not None and empty.reason == "empty response" and empty.kind == "other"
+        ws = v.validate(_item(), "   \n\t")
+        assert ws is not None and ws.reason == "empty response"
 
     def test_short_response_fails(self) -> None:
         v = BasicSeedValidator(min_length=10)
         failure = v.validate(_item(), "short")
         assert failure is not None
-        assert "too short" in failure
+        assert "too short" in failure.reason
 
     def test_pass_normal_response(self) -> None:
         v = BasicSeedValidator(min_length=3)
@@ -194,7 +224,7 @@ class TestBasicSeedValidator:
     def test_error_marker_present_fails_case_insensitive(self) -> None:
         v = BasicSeedValidator(error_markers=("ERROR", "<error>"))
         failure = v.validate(_item(), "something <ERROR> in here")
-        assert failure is not None and "error marker" in failure
+        assert failure is not None and "error marker" in failure.reason
         # 다른 케이스의 marker도 잡힘
         assert v.validate(_item(), "all good <Error>") is not None
         assert v.validate(_item(), "all good") is None
@@ -217,7 +247,8 @@ class TestSymPyArithmeticValidator:
     def test_false_equality_fails(self) -> None:
         reason = SymPyArithmeticValidator().validate(_item(), "2 + 2 = 5")
         assert reason is not None
-        assert "arithmetic error" in reason
+        assert "arithmetic error" in reason.reason
+        assert reason.kind == "arithmetic"
 
     def test_unicode_multiplication_normalized(self) -> None:
         v = SymPyArithmeticValidator()
@@ -262,7 +293,7 @@ class TestSymPyArithmeticValidator:
         """줄마다 독립 검사 — 둘째 줄의 거짓 등식도 잡는다."""
         reason = SymPyArithmeticValidator().validate(_item(), "2 + 2 = 4\n5 + 5 = 11")
         assert reason is not None
-        assert "5 + 5 = 11" in reason
+        assert "5 + 5 = 11" in reason.reason
 
     def test_symbolic_equation_no_false_positive(self) -> None:
         """심볼릭 등식(x+1=2)은 false positive 없이 통과(건너뜀)."""
@@ -288,7 +319,7 @@ class TestSymPyArithmeticValidator:
         """
         reason = SymPyArithmeticValidator().validate(_item(), "정답은 2 + 2 = 5 입니다")
         assert reason is not None
-        assert "arithmetic error" in reason
+        assert "arithmetic error" in reason.reason
 
     def test_max_checks_must_be_positive(self) -> None:
         with pytest.raises(ValueError):
@@ -316,7 +347,8 @@ class TestSymPyInequalityValidator:
     def test_false_inequality_fails(self) -> None:
         reason = SymPyInequalityValidator().validate(_item(), "5 < 3")
         assert reason is not None
-        assert "inequality error" in reason
+        assert "inequality error" in reason.reason
+        assert reason.kind == "inequality"
 
     def test_all_operators(self) -> None:
         v = SymPyInequalityValidator()
@@ -344,7 +376,7 @@ class TestSymPyInequalityValidator:
         """연쇄 부등식 'a < b < c'는 각 인접 쌍을 검사한다(slice 46·룩어헤드)."""
         # "2 < 5 < 3" — '2 < 5'(참)·'5 < 3'(거짓) → 거짓 쌍 탈락(이전엔 보수적 skip).
         reason = SymPyInequalityValidator().validate(_item(), "2 < 5 < 3")
-        assert reason is not None and "5 < 3" in reason
+        assert reason is not None and "5 < 3" in reason.reason
         # 전부 참인 연쇄는 통과.
         assert SymPyInequalityValidator().validate(_item(), "2 < 5 < 9") is None
 
@@ -397,7 +429,8 @@ class TestSymPyNotEqualValidator:
     def test_false_not_equal_fails(self) -> None:
         reason = SymPyNotEqualValidator().validate(_item(), "8 != 8")
         assert reason is not None
-        assert "not-equal error" in reason
+        assert "not-equal error" in reason.reason
+        assert reason.kind == "not_equal"
 
     def test_arithmetic_operand_false(self) -> None:
         """수치식 양변이 같으면 거짓 — '12/4 ≠ 3'(3≠3)."""
@@ -496,7 +529,7 @@ class TestNegativeOperands:
     def test_default_chain_catches_negative_false(self) -> None:
         """기본 체인이 음수 결과 거짓 등식을 잡는다(통합)."""
         reason = validate_response(default_seed_validator(), "계산:\n2 - 9 = -6")
-        assert reason is not None and "arithmetic error" in reason  # 2-9=-7≠-6
+        assert reason is not None and "arithmetic error" in reason.reason  # 2-9=-7≠-6
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -512,12 +545,12 @@ class TestChainedEquality:
         """첫 쌍이 참이어도 뒤 쌍이 거짓이면 잡는다(연쇄 5=6)."""
         reason = SymPyArithmeticValidator().validate(_item(), "2 + 3 = 5 = 6")
         assert reason is not None
-        assert "5 = 6" in reason  # 거짓 쌍이 사유에 명시
+        assert "5 = 6" in reason.reason  # 거짓 쌍이 사유에 명시
 
     def test_chain_with_symbolic_head(self) -> None:
         """'x = 2+3 = 6' — 심볼릭 좌단은 건너뛰고 수치 쌍(2+3=6)은 검사."""
         reason = SymPyArithmeticValidator().validate(_item(), "x = 2 + 3 = 6")
-        assert reason is not None and "arithmetic error" in reason
+        assert reason is not None and "arithmetic error" in reason.reason
 
     def test_three_link_chain_middle_false(self) -> None:
         assert SymPyArithmeticValidator().validate(_item(), "4 = 4 = 5 = 5") is not None
@@ -528,7 +561,7 @@ class TestChainedEquality:
 
     def test_chain_via_default_chain(self) -> None:
         reason = validate_response(default_seed_validator(), "계산: 3 = 3 = 4")
-        assert reason is not None and "arithmetic error" in reason
+        assert reason is not None and "arithmetic error" in reason.reason
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -543,7 +576,7 @@ class TestChainedInequality:
     def test_chain_later_pair_false_flagged(self) -> None:
         """첫 쌍이 참이어도 뒤 쌍이 거짓이면 잡는다(2<5 참·5<3 거짓)."""
         reason = SymPyInequalityValidator().validate(_item(), "2 < 5 < 3")
-        assert reason is not None and "5 < 3" in reason
+        assert reason is not None and "5 < 3" in reason.reason
 
     def test_four_link_chain_last_false(self) -> None:
         assert SymPyInequalityValidator().validate(_item(), "1 < 2 < 3 < 2") is not None
@@ -551,7 +584,7 @@ class TestChainedInequality:
     def test_chain_with_le_operator(self) -> None:
         """`<=` 연쇄도 각 쌍 검사 — '3 <= 3 <= 2'의 '3<=2' 거짓."""
         reason = SymPyInequalityValidator().validate(_item(), "3 <= 3 <= 2")
-        assert reason is not None and "3 <= 2" in reason
+        assert reason is not None and "3 <= 2" in reason.reason
 
     def test_symbolic_middle_passes(self) -> None:
         """'1 < x < 3'은 수치 쌍이 없어 통과(심볼릭 구간 제약)."""
@@ -563,7 +596,7 @@ class TestChainedInequality:
 
     def test_chain_via_default_chain(self) -> None:
         reason = validate_response(default_seed_validator(), "범위: 2 < 5 < 3")
-        assert reason is not None and "inequality error" in reason
+        assert reason is not None and "inequality error" in reason.reason
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -575,22 +608,23 @@ class TestValidateResponse:
         assert SymPyArithmeticValidator().validate(None, "2 + 2 = 5") is not None
         assert SymPyInequalityValidator().validate(None, "5 < 3") is not None
         assert SymPyNotEqualValidator().validate(None, "8 != 8") is not None
-        assert BasicSeedValidator().validate(None, "") == "empty response"
+        empty = BasicSeedValidator().validate(None, "")
+        assert empty is not None and empty.reason == "empty response"
 
     def test_clean_response_passes(self) -> None:
         assert validate_response(default_seed_validator(), "2 + 2 = 4, 3 < 5") is None
 
     def test_catches_false_arithmetic(self) -> None:
         reason = validate_response(default_seed_validator(), "2 + 2 = 5")
-        assert reason is not None and "arithmetic error" in reason
+        assert reason is not None and "arithmetic error" in reason.reason
 
     def test_catches_false_inequality(self) -> None:
         reason = validate_response(default_seed_validator(), "7 >= 9")
-        assert reason is not None and "inequality error" in reason
+        assert reason is not None and "inequality error" in reason.reason
 
     def test_catches_false_not_equal(self) -> None:
         reason = validate_response(default_seed_validator(), "12/4 ≠ 3")
-        assert reason is not None and "not-equal error" in reason
+        assert reason is not None and "not-equal error" in reason.reason
 
     def test_works_with_single_validator(self) -> None:
         # ChainValidator뿐 아니라 임의 SeedValidator에도 동작(헬퍼는 protocol만 의존).
@@ -630,18 +664,22 @@ class TestChainValidator:
 
     def test_first_failure_returned_in_order(self) -> None:
         chain = ChainValidator([AlwaysFailValidator(), SymPyArithmeticValidator()])
-        assert chain.validate(_item(), "2 + 2 = 4") == "always fail"
+        first = chain.validate(_item(), "2 + 2 = 4")
+        # 첫 실패의 구조화 신호(kind·reason)가 그대로 전파된다(AND 게이트).
+        assert first is not None and first.reason == "always fail" and first.kind == "other"
 
     def test_basic_then_sympy_basic_fails_first(self) -> None:
         chain = ChainValidator([BasicSeedValidator(), SymPyArithmeticValidator()])
         # 빈 응답 → Basic이 먼저 탈락
-        assert chain.validate(_item(), "") == "empty response"
+        first = chain.validate(_item(), "")
+        assert first is not None and first.reason == "empty response"
 
     def test_basic_passes_sympy_catches_arithmetic(self) -> None:
         chain = ChainValidator([BasicSeedValidator(), SymPyArithmeticValidator()])
         reason = chain.validate(_item(), "2 + 2 = 5")
         assert reason is not None
-        assert "arithmetic error" in reason
+        assert "arithmetic error" in reason.reason
+        assert reason.kind == "arithmetic"  # SymPy 검증기가 선언한 종류 전파
 
     def test_empty_chain_passes(self) -> None:
         assert ChainValidator([]).validate(_item(), "anything") is None
@@ -667,26 +705,27 @@ class TestDefaultSeedValidator:
     def test_catches_false_arithmetic(self) -> None:
         reason = default_seed_validator().validate(_item(), "2 + 2 = 5")
         assert reason is not None
-        assert "arithmetic error" in reason
+        assert "arithmetic error" in reason.reason
 
     def test_catches_false_inequality(self) -> None:
         reason = default_seed_validator().validate(_item(), "5 < 3")
         assert reason is not None
-        assert "inequality error" in reason
+        assert "inequality error" in reason.reason
 
     def test_catches_false_not_equal(self) -> None:
         reason = default_seed_validator().validate(_item(), "12/4 ≠ 3")
         assert reason is not None
-        assert "not-equal error" in reason
+        assert "not-equal error" in reason.reason
 
     def test_hygiene_runs_first(self) -> None:
         # 위생(BasicSeedValidator)이 체인 선두 → 빈 응답은 산술/부등식 전에 탈락.
-        assert default_seed_validator().validate(_item(), "") == "empty response"
+        first = default_seed_validator().validate(_item(), "")
+        assert first is not None and first.reason == "empty response"
 
     def test_min_length_threaded_through(self) -> None:
         reason = default_seed_validator(min_length=10).validate(_item(), "짧음")
         assert reason is not None
-        assert "too short" in reason
+        assert "too short" in reason.reason
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -700,17 +739,17 @@ class TestArithmeticValidator:
     def test_catches_false_arithmetic(self) -> None:
         reason = arithmetic_validator().validate(_item(), "2 + 2 = 5")
         assert reason is not None
-        assert "arithmetic error" in reason
+        assert "arithmetic error" in reason.reason
 
     def test_catches_false_inequality(self) -> None:
         reason = arithmetic_validator().validate(_item(), "5 < 3")
         assert reason is not None
-        assert "inequality error" in reason
+        assert "inequality error" in reason.reason
 
     def test_catches_false_not_equal(self) -> None:
         reason = arithmetic_validator().validate(_item(), "12/4 ≠ 3")
         assert reason is not None
-        assert "not-equal error" in reason
+        assert "not-equal error" in reason.reason
 
     def test_clean_response_passes(self) -> None:
         assert arithmetic_validator().validate(_item(), "2 + 2 = 4, 그리고 3 < 5") is None
@@ -759,17 +798,17 @@ class TestHangulProseBoundary:
     def test_korean_prose_false_arithmetic_caught(self) -> None:
         reason = arithmetic_validator().validate(_item(), "계산하면 2 + 3 = 6 입니다")
         assert reason is not None
-        assert "arithmetic error" in reason
+        assert "arithmetic error" in reason.reason
 
     def test_korean_prose_false_inequality_caught(self) -> None:
         reason = arithmetic_validator().validate(_item(), "그러므로 5 < 3 이다")
         assert reason is not None
-        assert "inequality error" in reason
+        assert "inequality error" in reason.reason
 
     def test_korean_prose_false_not_equal_caught(self) -> None:
         reason = arithmetic_validator().validate(_item(), "따라서 12 / 4 ≠ 3 이다")
         assert reason is not None
-        assert "not-equal error" in reason
+        assert "not-equal error" in reason.reason
 
     def test_korean_prose_true_relation_passes(self) -> None:
         # 참인 관계는 한글 인접이어도 통과(거짓만 탈락).
@@ -787,13 +826,13 @@ class TestHangulProseBoundary:
         # 빌드타임 LLM 출력 검증도 동일 혜택 — 한국어 설명의 거짓 산술 차단.
         reason = default_seed_validator().validate(_item(), "정리하면 7 − 2 = 4 이다")
         assert reason is not None
-        assert "arithmetic error" in reason
+        assert "arithmetic error" in reason.reason
 
     def test_hangul_both_sides(self) -> None:
         # 양옆 모두 한글 — 가운데 거짓 관계 검출.
         reason = arithmetic_validator().validate(_item(), "답은 3 × 3 = 10 입니다")
         assert reason is not None
-        assert "arithmetic error" in reason
+        assert "arithmetic error" in reason.reason
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -809,14 +848,15 @@ class TestSymPySolutionValidator:
     def test_wrong_linear_solution_caught(self) -> None:
         reason = SymPySolutionValidator().validate(_item(), "2x + 1 = 7 이므로 x = 5")
         assert reason is not None
-        assert "solution error" in reason
-        assert "x=5" in reason
+        assert "solution error" in reason.reason
+        assert "x=5" in reason.reason
+        assert reason.kind == "solution"
 
     def test_coefficient_juxtaposition_wrong_caught(self) -> None:
         # 암묵적 곱셈 "3x" 파싱(implicit_multiplication) — 틀린 해 검출.
         reason = SymPySolutionValidator().validate(_item(), "3x = 12 이므로 x = 5")
         assert reason is not None
-        assert "solution error" in reason
+        assert "solution error" in reason.reason
 
     def test_correct_quadratic_single_root_passes(self) -> None:
         assert SymPySolutionValidator().validate(_item(), "x^2 = 9 이므로 x = 3") is None
@@ -824,7 +864,7 @@ class TestSymPySolutionValidator:
     def test_wrong_quadratic_root_caught(self) -> None:
         reason = SymPySolutionValidator().validate(_item(), "x^2 = 9 이므로 x = 4")
         assert reason is not None
-        assert "solution error" in reason
+        assert "solution error" in reason.reason
 
     def test_two_roots_skipped_conservatively(self) -> None:
         # 같은 줄에서 변수에 2개 값 주장(두 근) → 다중값 → 보수적 건너뜀(통과).
@@ -841,7 +881,7 @@ class TestSymPySolutionValidator:
         # slice 57 — 방정식과 해가 다른 줄이어도 단일 일관 방정식이면 검출(전체 텍스트).
         reason = SymPySolutionValidator().validate(_item(), "2x + 1 = 7\nx = 5")
         assert reason is not None
-        assert "solution error" in reason
+        assert "solution error" in reason.reason
 
     def test_multistep_consistent_derivation_correct_passes(self) -> None:
         # 일관된 다단계 유도(공통 해 x=3)·정해 → 통과.
@@ -853,7 +893,7 @@ class TestSymPySolutionValidator:
         # 일관된 다단계 유도지만 최종 해가 틀림(x=5, 정해 3) → 탈락.
         reason = SymPySolutionValidator().validate(_item(), "2x + 1 = 7\n2x = 6\nx = 5")
         assert reason is not None
-        assert "solution error" in reason
+        assert "solution error" in reason.reason
 
     def test_inconsistent_subproblems_skipped(self) -> None:
         # 같은 변수지만 방정식 상호 모순(공통 해 없음=서로 다른 소문제) → 보수적 skip.
@@ -867,7 +907,7 @@ class TestSymPySolutionValidator:
             _item(), "문제1: 2a = 6 이므로 a = 5\n문제2: 3b = 12 이므로 b = 4"
         )
         assert reason is not None  # a=5는 오해(정해 3)
-        assert "solution error" in reason
+        assert "solution error" in reason.reason
 
     def test_non_polynomial_skipped(self) -> None:
         # 비다항(유리식 1/x)은 풀이 보류 → 보수적 skip(false-positive 0).
@@ -889,7 +929,7 @@ class TestSymPySolutionValidator:
         # "5 = x" 역방향 할당도 인식 — 오해면 탈락.
         reason = SymPySolutionValidator().validate(_item(), "x + 1 = 6 이고 4 = x")
         assert reason is not None
-        assert "solution error" in reason
+        assert "solution error" in reason.reason
 
     def test_different_variables_no_false_positive(self) -> None:
         # 방정식 변수(x)와 해 주장 변수(r)가 다르면 페어링 안 함.
@@ -902,7 +942,7 @@ class TestSymPySolutionValidator:
     def test_paren_expansion_wrong_caught(self) -> None:
         reason = SymPySolutionValidator().validate(_item(), "2(x + 1) = 10 이므로 x = 3")
         assert reason is not None
-        assert "solution error" in reason
+        assert "solution error" in reason.reason
 
     def test_unparseable_token_skipped(self) -> None:
         # 정규식은 매치하나 SymPy 파싱 실패(불균형 괄호 "x)") → 보수적 건너뜀(통과).
@@ -924,12 +964,12 @@ class TestSolutionValidatorInChains:
     def test_default_seed_validator_catches_wrong_solution(self) -> None:
         reason = default_seed_validator().validate(_item(), "2x + 1 = 7 이므로 x = 5")
         assert reason is not None
-        assert "solution error" in reason
+        assert "solution error" in reason.reason
 
     def test_arithmetic_validator_catches_wrong_solution(self) -> None:
         reason = arithmetic_validator().validate(_item(), "2x + 1 = 7 이므로 x = 5")
         assert reason is not None
-        assert "solution error" in reason
+        assert "solution error" in reason.reason
 
     def test_arithmetic_validator_passes_correct_solution(self) -> None:
         assert arithmetic_validator().validate(_item(), "2x + 1 = 7 이므로 x = 3") is None

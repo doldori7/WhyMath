@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from whymath_backend.l3.pregenerate.models import PregenItem
+from whymath_backend.l3.pregenerate.models import PregenItem, ValidationSignal
 from whymath_backend.l4.metacognitive_trigger import recommend_coaching
 from whymath_backend.l4.solution_coaching import (
     SolutionCoaching,
@@ -16,16 +16,20 @@ from whymath_backend.l4.solution_coaching import (
 
 
 class _AlwaysFails:
-    """SeedValidator 충족 스텁 — 입력 무관 항상 사유 반환(주입 검증용)."""
+    """SeedValidator 충족 스텁 — 입력 무관 항상 신호 반환(주입 검증용).
 
-    def validate(self, item: PregenItem | None, response: str) -> str | None:
-        return "stub: always fails"
+    kind는 "other"(비표준 검증기) — 오케스트레이터가 `signal.kind`를 그대로 error_kind로
+    노출하므로, 주입 스텁의 종류가 error_kind="other"로 검증된다(slice 59).
+    """
+
+    def validate(self, item: PregenItem | None, response: str) -> ValidationSignal | None:
+        return ValidationSignal(kind="other", reason="stub: always fails")
 
 
 class _AlwaysPasses:
     """SeedValidator 충족 스텁 — 입력 무관 항상 통과(주입 검증용)."""
 
-    def validate(self, item: PregenItem | None, response: str) -> str | None:
+    def validate(self, item: PregenItem | None, response: str) -> ValidationSignal | None:
         return None
 
 
@@ -187,7 +191,7 @@ class TestRecommendCoachingForSolution:
 
 
 class TestErrorKindClassification:
-    """slice 58 — 슬립 종류 분류(검증기 신호 접두사 → SlipKind). L5 UI 분기·L7 분석용."""
+    """슬립 종류 분류 — 검증기가 `ValidationSignal.kind`로 직접 선언(slice 58→59). L5/L7용."""
 
     def test_arithmetic_kind(self) -> None:
         assert recommend_coaching_for_solution("2 + 3 = 6", 0.9, 2.0).error_kind == "arithmetic"
@@ -209,7 +213,7 @@ class TestErrorKindClassification:
         assert result.error_kind is None
 
     def test_unknown_signal_classified_other(self) -> None:
-        # 비표준 사유(주입 검증기) → "other"(접두사 미상).
+        # 비표준 검증기(kind="other" 선언) → error_kind="other"(검증기 선언 그대로).
         result = recommend_coaching_for_solution("내용", 0.9, 2.0, validator=_AlwaysFails())
         assert result.arithmetic_error is True
         assert result.error_kind == "other"

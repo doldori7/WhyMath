@@ -444,7 +444,7 @@ def create_app(
             state=job_status.state,
             text=job_status.text,
             error=job_status.error,
-            validation_signal=signal,
+            validation_signal=signal.reason if signal is not None else None,
         )
 
     # DB-backed 라우터 결선 — get_session 의존성으로 PostgreSQL을 읽고 쓴다(영속 레이어 →
