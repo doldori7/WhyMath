@@ -50,7 +50,10 @@ from whymath_backend.l3.interfaces import (
 )
 from whymath_backend.l3.models import RoutingDecision, RoutingRequest
 from whymath_backend.l3.pipeline import QualityQueueUnavailableError
-from whymath_backend.l3.pregenerate.validator import default_seed_validator
+from whymath_backend.l3.pregenerate.validator import (
+    SeedValidator,
+    default_seed_validator,
+)
 from whymath_backend.l3.providers.anthropic import AnthropicProvider, AnthropicStatus
 from whymath_backend.l3.providers.composite import CompositeProvider
 from whymath_backend.l3.providers.ollama import OllamaProvider, OllamaStatus
@@ -62,10 +65,12 @@ _PROVIDER_KEY = "llm_provider"
 _CACHE_KEY = "llm_cache"
 _TRACE_KEY = "trace_sink"
 _QUEUE_KEY = "job_queue"
+_VALIDATOR_KEY = "shadow_validator"
 
 # /v1/generate의 런타임 shadow 검증기 — 결정론 관계 검증(=·<·>·≤·≥·≠·연쇄). 모듈 1회
 # 생성(I/O 없음·재사용). 비차단(반환 텍스트·캐시 불변)이라 default-on이 안전 — 워커
 # (`_WORKER_SHADOW_VALIDATOR`, slice 43)와 같은 관측 정책을 동기 HTTP 경로에 적용한다.
+# 실제 활성 여부는 `Settings.l3_shadow_validation_enabled`로 게이트(create_app에서 결정).
 _SHADOW_VALIDATOR = default_seed_validator()
 
 
@@ -186,6 +191,12 @@ def _get_queue(request: Request) -> AsyncJobQueue:
     return queue
 
 
+def _get_validator(request: Request) -> SeedValidator | None:
+    """런타임 shadow 검증기 — Settings 게이트로 None(비활성)일 수 있다."""
+    validator: SeedValidator | None = getattr(request.app.state, _VALIDATOR_KEY)
+    return validator
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """앱 수명 — 시작 시 device store 활성(slice 27), 종료 시 store 해제 + DB 엔진 풀 반납.
@@ -253,6 +264,12 @@ def create_app(
     app.state.__setattr__(_TRACE_KEY, trace if trace is not None else LangfuseSink())
     # 기본 큐는 CeleryJobQueue(지연 연결) — 구성 시 broker 불필요(첫 디스패치 때 연결, S4).
     app.state.__setattr__(_QUEUE_KEY, queue if queue is not None else CeleryJobQueue())
+    # shadow 검증기 — Settings 게이트(l3_shadow_validation_enabled). 비활성이면 None이라
+    # /v1/generate가 validator 없이 호출(검증 미실행). 비차단이라 둘 다 안전.
+    app.state.__setattr__(
+        _VALIDATOR_KEY,
+        _SHADOW_VALIDATOR if get_settings().l3_shadow_validation_enabled else None,
+    )
 
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, str]:
@@ -331,7 +348,7 @@ def create_app(
                 cache=cache,
                 trace=trace,
                 queue=queue,
-                validator=_SHADOW_VALIDATOR,
+                validator=_get_validator(request),
             )
         except QualityQueueUnavailableError as exc:
             # 큐 미구성/ broker 도달 실패 — 명확한 503 JSON(스택트레이스 금지).

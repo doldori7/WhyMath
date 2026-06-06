@@ -99,6 +99,16 @@ class Settings(BaseSettings):
         ),
     )
 
+    l3_shadow_validation_enabled: bool = Field(
+        default=True,
+        description=(
+            "L3 런타임 shadow 검증(결정론 관계 검증·slice 40~47) 활성 여부. True(기본)면 "
+            "/v1/generate 동기 경로와 QUALITY 워커가 생성물의 거짓 수치 관계를 비차단으로 "
+            "관측(신호 기록·로그). False면 끈다(SymPy 검증 비용 제거·디버깅). 비차단이라 "
+            "반환 텍스트·캐시 동작은 어느 쪽이든 불변 — 관측 신호 유무만 달라진다."
+        ),
+    )
+
     # ── QUALITY(27b) 비동기 큐 (Celery, broker=result backend=Redis, S4) ──
     # QUALITY는 동기 호출 불가(p50≈14초·GPU 단일 점유, 03a §D.3) → 작업 큐 전용이다.
     # broker·result-backend는 *기본값을 두지 않고*(빈 = "redis_url에서 파생") 명시

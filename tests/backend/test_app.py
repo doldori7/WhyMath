@@ -10,9 +10,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from whymath_backend.app import create_app
+from whymath_backend.config import get_settings
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import RoutingDecision
 from whymath_backend.l3.providers.anthropic import AnthropicStatus
@@ -295,6 +297,33 @@ class TestGenerateEndpoint:
         # shadow 검증 신호가 응답에 노출(조용히 넘어가지 않음).
         assert body["validation_signal"] is not None
         assert "arithmetic error" in body["validation_signal"]
+
+    def test_generate_shadow_disabled_via_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Settings 게이트 off → 거짓 산술이어도 validation_signal=None(검증 미실행)."""
+        monkeypatch.setenv("WHYMATH_L3_SHADOW_VALIDATION_ENABLED", "false")
+        get_settings.cache_clear()
+        try:
+            provider = StubProvider(text="2 + 2 = 5")
+            client = _client(provider)
+            payload = {
+                "request": {
+                    "task_type": "explain",
+                    "difficulty": "easy",
+                    "requires_reasoning": False,
+                    "student_subscription": "free",
+                    "sync": True,
+                },
+                "prompt": "p",
+                "system": "s",
+            }
+            body = client.post("/v1/generate", json=payload).json()
+            # 비차단 동일: 텍스트는 원시 그대로. 단, 검증 비활성이라 신호 없음.
+            assert body["text"] == "2 + 2 = 5"
+            assert body["validation_signal"] is None
+        finally:
+            get_settings.cache_clear()  # 다음 테스트로 게이트 상태 누수 방지.
 
     def test_generate_cache_hit_on_second_call(self) -> None:
         """동일 요청 2회 → 2회차 cache_hit=true(같은 앱 인스턴스 캐시 공유)."""

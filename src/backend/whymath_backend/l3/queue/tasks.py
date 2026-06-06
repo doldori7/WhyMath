@@ -32,6 +32,7 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
+from whymath_backend.config import get_settings
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import RoutingDecision
 from whymath_backend.l3.pregenerate.validator import (
@@ -138,8 +139,9 @@ def register_quality_task(app: Celery) -> Any:
     태스크 본체는 플레인 함수 `run_quality_generation_payload`에 위임한다(provider
     주입 없이 → 워커는 실제 OllamaProvider를 쓴다). 워커는 기본 shadow 검증기
     (`_WORKER_SHADOW_VALIDATOR`)를 함께 넘겨 비동기 생성물의 환각 신호를 *로그로* 남긴다
-    (비차단·log-only이라 default-on이 안전 — 동기 파이프라인의 per-call opt-in과 달리
-    워커는 per-call 설정 경로가 없어 기본 활성).
+    (비차단·log-only이라 default-on이 안전). 활성 여부는 `Settings.
+    l3_shadow_validation_enabled`로 게이트 — 비활성이면 validator=None(검증 미실행)·
+    엔드포인트(`/v1/generate`)와 *같은 플래그*로 통제(태스크 실행 시점에 settings 조회).
     """
 
     # 무시 사유: celery는 py.typed를 제공하지 않아 `@app.task`가 mypy에 *untyped
@@ -150,7 +152,11 @@ def register_quality_task(app: Celery) -> Any:
     @app.task(name=QUALITY_TASK_NAME, bind=False)  # type: ignore[untyped-decorator]
     def run_quality_generation(payload: dict[str, Any]) -> str:
         """워커 태스크 — payload로 QUALITY 생성(검증 전 원시 출력·shadow 신호 로그)."""
-        return run_quality_generation_payload(payload, validator=_WORKER_SHADOW_VALIDATOR)
+        # Settings 게이트: 비활성이면 검증기 미주입(검증 미실행). 태스크당 1회 조회(캐시).
+        validator = (
+            _WORKER_SHADOW_VALIDATOR if get_settings().l3_shadow_validation_enabled else None
+        )
+        return run_quality_generation_payload(payload, validator=validator)
 
     return run_quality_generation
 
