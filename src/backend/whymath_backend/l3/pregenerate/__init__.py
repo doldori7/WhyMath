@@ -19,6 +19,8 @@ from whymath_backend.l3.pregenerate.validator import (
     SymPyArithmeticValidator,
     SymPyInequalityValidator,
     SymPyNotEqualValidator,
+    SymPySolutionValidator,
+    arithmetic_validator,
     default_seed_validator,
     validate_response,
 )
@@ -35,6 +37,8 @@ __all__ = [
     "SymPyArithmeticValidator",
     "SymPyInequalityValidator",
     "SymPyNotEqualValidator",
+    "SymPySolutionValidator",
+    "arithmetic_validator",
     "default_seed_validator",
     "validate_response",
 ]

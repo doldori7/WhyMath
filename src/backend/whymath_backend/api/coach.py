@@ -43,9 +43,11 @@ from whymath_backend.l4 import (
     PedagogyDecision,
     PolyaCoach,
     PolyaState,
+    SolutionCoaching,
     adapt_lthc,
     focus_to_socratic_category,
     mastery_to_level,
+    recommend_coaching_for_solution,
 )
 from whymath_backend.l4.misconception import (
     InterventionDecision,
@@ -73,6 +75,17 @@ class CoachRequest(BaseModel):
         min_length=0,
         max_length=4000,
         description="학생 발화(자연어). 빈 문자열 허용(첫 진입). 길이 상한은 남용·비용 방어.",
+    )
+    student_solution: str | None = Field(
+        default=None,
+        max_length=4000,
+        description=(
+            "학생의 *풀이/작업* 텍스트(예: L5 OCR로 인식한 손글씨 풀이) — 대화 발화"
+            "(`student_input`)와 분리. 계산 슬립 검증(`solution_coaching`)은 이 필드가 "
+            "있으면 *이 필드*를 대상으로 한다(없거나 빈 문자열이면 `student_input` 폴백 — "
+            "발화에 풀이가 인라인일 수 있음). L5 OCR 결과의 자연 착지점(slice 54 한글 산문 "
+            "검출과 결합). Polya·오개념·LTHC 결정은 여전히 `student_input` 기준(대화 흐름)."
+        ),
     )
     polya_state: PolyaState = Field(
         default_factory=PolyaState,
@@ -133,6 +146,17 @@ class CoachResponse(BaseModel):
             "카테고리(slice 22). PolyaCoach의 매 턴 `decision.socratic_category`와 별개(진입 시드)."
         ),
     )
+    solution_coaching: SolutionCoaching | None = Field(
+        default=None,
+        description=(
+            "학생 풀이(`student_solution` 우선·없으면 `student_input`)에서 *거짓 수치 관계*"
+            "(계산 슬립, 예: '2+3=6')가 L3 결정론 검증으로 "
+            "검출되면 검산(verify) 코칭 + L3 신호(slice 52 오케스트레이터). 없으면 None — "
+            "이때는 기존 `decision`/`coaching_focus`를 따른다. *실시간 슬립은 배경 진단보다 "
+            "우선*(slice 51: 구체적 계산 오류 > θ/숙달 추정). 검증기는 보수적이라 질문·산문은 "
+            "거의 발화하지 않는다(false-positive 0 우선)."
+        ),
+    )
 
 
 class SessionCreateRequest(CoachRequest):
@@ -185,6 +209,7 @@ def _build_response_payload(body: CoachRequest) -> tuple[
     InterventionDecision | None,
     LthcAdaptation | None,
     SocraticCategory | None,
+    SolutionCoaching | None,
 ]:
     """공통 결정 계산 — `/v1/coach`·`/v1/coach/sessions`·turns append 셋 다 사용."""
     decision = _coach.decide(body.student_input, body.polya_state)
@@ -199,7 +224,17 @@ def _build_response_payload(body: CoachRequest) -> tuple[
     entry_category = (
         focus_to_socratic_category(body.coaching_focus) if body.coaching_focus is not None else None
     )
-    return decision, matches, intervention, lthc, entry_category
+    # slice 53: L3→L4 오케스트레이터(slice 52) 첫 실사용 — 학생 발화의 *거짓 수치 관계*를 L3
+    # 결정론 검증으로 검출해 검산(verify) 코칭을 처방한다. 계산 슬립이 *검출될 때만* 노출하고
+    # (arithmetic_error=True), 아니면 None으로 두어 기존 decision/coaching_focus 경로와 중복을
+    # 피한다 — 실시간 슬립은 배경 진단보다 우선(slice 51). θ는 요청에 없어 None(검출 시
+    # verify는 숙달/θ 무관·미검출이면 어차피 노출 안 함).
+    # slice 55: 검증 대상은 *풀이 전용* student_solution 우선(L5 OCR 착지점)·없거나 비면
+    # student_input 폴백(발화 인라인 풀이). Polya/오개념/LTHC는 위에서 student_input 기준 유지.
+    solution_text = body.student_solution or body.student_input
+    sol = recommend_coaching_for_solution(solution_text, body.bkt_mastery, None)
+    solution_coaching = sol if sol.arithmetic_error else None
+    return decision, matches, intervention, lthc, entry_category, solution_coaching
 
 
 @router.post(
@@ -218,13 +253,16 @@ async def coach_decide(
     """
     _ = user.user_id  # 인증 게이트 통과 확인용(stateless라 user 데이터 미사용)
 
-    decision, matches, intervention, lthc, entry_category = _build_response_payload(body)
+    decision, matches, intervention, lthc, entry_category, solution_coaching = (
+        _build_response_payload(body)
+    )
     return CoachResponse(
         decision=decision,
         misconceptions=matches,
         intervention=intervention,
         lthc=lthc,
         entry_socratic_category=entry_category,
+        solution_coaching=solution_coaching,
     )
 
 
@@ -246,7 +284,9 @@ async def create_session(
     `user.user_id`로 자동 설정(타인 데이터 차단). 미성년 채팅 평문 저장은 *저장 계층*
     책임(모듈 docstring 참조 — DB 암호화 at-rest는 후속 인프라 슬라이스).
     """
-    decision, matches, intervention, lthc, entry_category = _build_response_payload(body)
+    decision, matches, intervention, lthc, entry_category, solution_coaching = (
+        _build_response_payload(body)
+    )
 
     now = datetime.now(timezone.utc)
     dialogue = DialogueORM.from_schema(
@@ -292,6 +332,7 @@ async def create_session(
         intervention=intervention,
         lthc=lthc,
         entry_socratic_category=entry_category,
+        solution_coaching=solution_coaching,
         dialogue_id=dialogue.dialogue_id,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
@@ -324,7 +365,9 @@ async def append_turns(
             status_code=status.HTTP_404_NOT_FOUND, detail="대화를 찾을 수 없습니다."
         )
 
-    decision, matches, intervention, lthc, entry_category = _build_response_payload(body)
+    decision, matches, intervention, lthc, entry_category, solution_coaching = (
+        _build_response_payload(body)
+    )
 
     current_total = dialogue.total_turns or 0
     student_order = current_total + 1
@@ -366,6 +409,7 @@ async def append_turns(
         intervention=intervention,
         lthc=lthc,
         entry_socratic_category=entry_category,
+        solution_coaching=solution_coaching,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
         student_turn_order=student_order,

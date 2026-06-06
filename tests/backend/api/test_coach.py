@@ -345,6 +345,124 @@ class TestLthcIntegration:
         assert resp.status_code == 422
 
 
+class TestSolutionCoachingWiring:
+    """slice 53 — L3→L4 오케스트레이터(slice 52) HTTP 결선.
+
+    학생 발화의 *거짓 수치 관계*(계산 슬립)가 검출되면 `solution_coaching`에 검산(verify)
+    코칭 + L3 신호가 실리고, 아니면 None(기존 경로). `arithmetic_error` bool의 첫 실사용.
+    """
+
+    def test_calc_slip_surfaces_verify_coaching(self) -> None:
+        resp = _client().post("/v1/coach", json={"student_input": "2 + 3 = 6"})
+        assert resp.status_code == 200, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["arithmetic_error"] is True
+        assert sc["trigger"]["focus"] == "verify"
+        assert sc["trigger"]["socratic_category"] == "evidence"
+        assert sc["validation_signal"] is not None
+        assert "arithmetic error" in sc["validation_signal"]
+        assert sc["error_kind"] == "arithmetic"  # slice 58 — 구조화 분류 노출
+
+    def test_inequality_slip_surfaces_verify(self) -> None:
+        resp = _client().post("/v1/coach", json={"student_input": "5 < 3"})
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+        assert "inequality error" in sc["validation_signal"]
+
+    def test_korean_prose_slip_surfaces_verify(self) -> None:
+        # slice 54 — 한국어 풀이("계산하면 2 + 3 = 6 입니다")의 슬립도 검출.
+        resp = _client().post(
+            "/v1/coach", json={"student_input": "계산하면 2 + 3 = 6 입니다"}
+        )
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+        assert "arithmetic error" in sc["validation_signal"]
+
+    def test_algebra_solution_slip_surfaces_verify(self) -> None:
+        # slice 56 — 틀린 단변수 해("2x+1=7 이므로 x=5")도 검산 코칭.
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "확인해주세요", "student_solution": "2x + 1 = 7 이므로 x = 5"},
+        )
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+        assert "solution error" in sc["validation_signal"]
+
+    def test_clean_arithmetic_no_solution_coaching(self) -> None:
+        # 참 등식 → 슬립 아님 → None(기존 decision/coaching_focus 경로).
+        resp = _client().post("/v1/coach", json={"student_input": "3 × 4 = 12"})
+        assert resp.json()["solution_coaching"] is None
+
+    def test_question_no_solution_coaching(self) -> None:
+        # 수식 없는 질문 → 검증기 보수적 → None(false-positive 0).
+        resp = _client().post("/v1/coach", json={"student_input": "이거 어떻게 풀어요?"})
+        assert resp.json()["solution_coaching"] is None
+
+    def test_empty_input_no_solution_coaching(self) -> None:
+        resp = _client().post("/v1/coach", json={"student_input": ""})
+        assert resp.json()["solution_coaching"] is None
+
+    def test_slip_overrides_high_mastery(self) -> None:
+        # 고숙달이어도 계산 슬립이면 verify(슬립 우선 — slice 51 우선순위 실증).
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "2 + 3 = 6", "bkt_mastery": 0.95},
+        )
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+
+    def test_default_response_omits_solution_coaching(self) -> None:
+        # 기존 동작 불변 — 중립 입력은 solution_coaching None(필드는 항상 존재).
+        body = _client().post("/v1/coach", json={"student_input": "음"}).json()
+        assert "solution_coaching" in body
+        assert body["solution_coaching"] is None
+
+    def test_session_create_surfaces_solution_coaching(self) -> None:
+        # 영속 엔드포인트도 동일 신호 노출(공통 _build_response_payload).
+        client, _ = _session_client()
+        resp = client.post("/v1/coach/sessions", json={"student_input": "2 + 3 = 6"})
+        assert resp.status_code == 201, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+
+    def test_student_solution_field_is_validated(self) -> None:
+        # slice 55 — 풀이 전용 필드의 슬립 검출(발화는 중립, 풀이에 거짓 산술).
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "이거 맞아요?", "student_solution": "2 + 3 = 6"},
+        )
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+
+    def test_student_solution_takes_precedence_over_input(self) -> None:
+        # 풀이가 깨끗하면 발화에 슬립이 있어도 무시(풀이 전용 필드 우선).
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "5 < 3 맞죠?", "student_solution": "3 × 4 = 12"},
+        )
+        assert resp.json()["solution_coaching"] is None
+
+    def test_falls_back_to_input_when_no_solution(self) -> None:
+        # student_solution 미지정 → student_input 검증(slice 53 동작 보존·하위 호환).
+        resp = _client().post("/v1/coach", json={"student_input": "2 + 3 = 6"})
+        assert resp.json()["solution_coaching"] is not None
+
+    def test_empty_solution_falls_back_to_input(self) -> None:
+        # 빈 문자열 풀이 → 폴백(truthiness) → 발화 인라인 슬립 검출.
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "2 + 3 = 6", "student_solution": ""},
+        )
+        assert resp.json()["solution_coaching"] is not None
+
+
 class TestHintLevelWiring:
     def test_demand_answer_signal_raises_hint(self) -> None:
         resp = _client().post(

@@ -46,6 +46,11 @@ from whymath_backend.l4.models import (
 )
 from whymath_backend.l4.polya.engine import PolyaCoach
 from whymath_backend.l4.socratic import SocraticCategory, select_category
+from whymath_backend.l4.solution_coaching import (
+    SlipKind,
+    SolutionCoaching,
+    recommend_coaching_for_solution,
+)
 from whymath_backend.l4.tone_filter import filter_tone
 
 __all__ = [
@@ -65,7 +70,9 @@ __all__ = [
     "PolyaStage",
     "PolyaState",
     "REVEALS",
+    "SlipKind",
     "SocraticCategory",
+    "SolutionCoaching",
     "StageTransition",
     "ToneReport",
     "adapt_lthc",
@@ -75,6 +82,7 @@ __all__ = [
     "focus_to_socratic_category",
     "mastery_to_level",
     "recommend_coaching",
+    "recommend_coaching_for_solution",
     "select_category",
     "select_intervention",
 ]
