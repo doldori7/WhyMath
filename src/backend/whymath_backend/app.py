@@ -53,6 +53,7 @@ from whymath_backend.l3.pipeline import QualityQueueUnavailableError
 from whymath_backend.l3.pregenerate.validator import (
     SeedValidator,
     default_seed_validator,
+    validate_response,
 )
 from whymath_backend.l3.providers.anthropic import AnthropicProvider, AnthropicStatus
 from whymath_backend.l3.providers.composite import CompositeProvider
@@ -133,6 +134,13 @@ class JobStatusBody(BaseModel):
     state: str = Field(..., description="pending/success/failure/unknown")
     text: str | None = Field(default=None, description="완료 시 원시 텍스트(검증 전)")
     error: str | None = Field(default=None, description="실패/판정불가 사유(스택트레이스 X)")
+    validation_signal: str | None = Field(
+        default=None,
+        description=(
+            "완료(success) 텍스트의 런타임 shadow 검증 신호(비차단·관측). None=통과/미검증/"
+            "미완료. 동기 /v1/generate와 동형 — 폴링 결과도 거짓 수치 관계를 노출한다."
+        ),
+    )
 
 
 class ModelAvailabilityBody(BaseModel):
@@ -420,11 +428,23 @@ def create_app(
                 error="queue does not support result polling",
             )
         job_status = result_fn(job_id)
+        # 완료 텍스트는 워커가 *로그로만* 관측했으므로(slice 43·bare str 결과 계약), 폴링
+        # 시점에 *재검증*해 신호를 노출한다 — 동기 경로와 HTTP 파리티. 결정론이라 재검증
+        # 비용 미미·비차단(text 불변). 검증기는 Settings 게이트(_get_validator: 비활성 시 None).
+        validator = _get_validator(request)
+        signal = (
+            validate_response(validator, job_status.text)
+            if validator is not None
+            and job_status.state == "success"
+            and job_status.text is not None
+            else None
+        )
         return JobStatusBody(
             job_id=job_status.job_id,
             state=job_status.state,
             text=job_status.text,
             error=job_status.error,
+            validation_signal=signal,
         )
 
     # DB-backed 라우터 결선 — get_session 의존성으로 PostgreSQL을 읽고 쓴다(영속 레이어 →

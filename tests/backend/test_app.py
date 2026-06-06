@@ -489,7 +489,7 @@ class TestJobsEndpoint:
         assert body["text"] is None
 
     def test_job_success_returns_text(self) -> None:
-        """완료(success) → 200 + text(검증 전 원시 출력)."""
+        """완료(success) → 200 + text(검증 전 원시 출력). 환각 없으면 신호 None."""
         queue = StubQueue(
             statuses={"j2": JobStatus(job_id="j2", state="success", text="27b 결과")}
         )
@@ -500,6 +500,47 @@ class TestJobsEndpoint:
         assert body["state"] == "success"
         assert body["text"] == "27b 결과"
         assert body["error"] is None
+        assert body["validation_signal"] is None
+
+    def test_job_success_surfaces_shadow_signal(self) -> None:
+        """완료 텍스트에 거짓 산술 → 폴링 응답이 validation_signal 노출(동기 파리티·재검증)."""
+        queue = StubQueue(
+            statuses={
+                "j2x": JobStatus(job_id="j2x", state="success", text="결과:\n2 + 2 = 5")
+            }
+        )
+        client = _client(StubProvider(), queue=queue)
+        body = client.get("/v1/jobs/j2x").json()
+        assert body["state"] == "success"
+        assert body["text"] == "결과:\n2 + 2 = 5"  # 비차단·텍스트 불변
+        assert body["validation_signal"] is not None
+        assert "arithmetic error" in body["validation_signal"]
+
+    def test_job_pending_has_no_signal(self) -> None:
+        """미완료(pending)는 텍스트가 없어 validation_signal None(재검증 안 함)."""
+        queue = StubQueue(statuses={"j5": JobStatus(job_id="j5", state="pending")})
+        client = _client(StubProvider(), queue=queue)
+        body = client.get("/v1/jobs/j5").json()
+        assert body["validation_signal"] is None
+
+    def test_job_signal_none_when_shadow_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Settings 게이트 off → 완료 텍스트가 거짓이어도 재검증 안 함(신호 None)."""
+        monkeypatch.setenv("WHYMATH_L3_SHADOW_VALIDATION_ENABLED", "false")
+        get_settings.cache_clear()
+        try:
+            queue = StubQueue(
+                statuses={
+                    "j6": JobStatus(job_id="j6", state="success", text="결과:\n2 + 2 = 5")
+                }
+            )
+            client = _client(StubProvider(), queue=queue)
+            body = client.get("/v1/jobs/j6").json()
+            assert body["text"] == "결과:\n2 + 2 = 5"
+            assert body["validation_signal"] is None
+        finally:
+            get_settings.cache_clear()
 
     def test_job_failure_returns_error_not_500(self) -> None:
         """실패(failure) → 200 + state=failure + error(사유), 500 스택트레이스 아님."""
