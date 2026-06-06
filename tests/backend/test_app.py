@@ -269,6 +269,32 @@ class TestGenerateEndpoint:
         assert body["decision"]["cost_tier"] == "local"
         assert body["decision"]["mode"] == "sync"
         assert len(provider.calls) == 1
+        # 환각 없는 출력 → shadow 검증 신호 None(필드 노출 확인).
+        assert body["validation_signal"] is None
+
+    def test_generate_surfaces_shadow_validation_signal(self) -> None:
+        """거짓 수치 관계 생성물 → validation_signal에 사유 노출(비차단·텍스트 불변)."""
+        provider = StubProvider(text="계산:\n2 + 2 = 5")
+        client = _client(provider)
+        payload = {
+            "request": {
+                "task_type": "explain",
+                "difficulty": "easy",
+                "requires_reasoning": False,
+                "student_subscription": "free",
+                "sync": True,
+            },
+            "prompt": "p",
+            "system": "s",
+        }
+        resp = client.post("/v1/generate", json=payload)
+        assert resp.status_code == 200
+        body = resp.json()
+        # 비차단: 원시 텍스트 그대로 반환.
+        assert body["text"] == "계산:\n2 + 2 = 5"
+        # shadow 검증 신호가 응답에 노출(조용히 넘어가지 않음).
+        assert body["validation_signal"] is not None
+        assert "arithmetic error" in body["validation_signal"]
 
     def test_generate_cache_hit_on_second_call(self) -> None:
         """동일 요청 2회 → 2회차 cache_hit=true(같은 앱 인스턴스 캐시 공유)."""
