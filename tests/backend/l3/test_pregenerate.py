@@ -32,12 +32,14 @@ from whymath_backend.l3.pregenerate import (
     SeedValidator,
     SymPyArithmeticValidator,
     SymPyInequalityValidator,
+    SymPyNotEqualValidator,
     default_seed_validator,
 )
 from whymath_backend.l3.pregenerate.__main__ import format_report, load_items
 from whymath_backend.l3.pregenerate.validator import (
     _equality_is_false,
     _inequality_is_false,
+    _not_equal_is_false,
 )
 from whymath_backend.l3.router import Router, cache_key_for
 
@@ -372,6 +374,76 @@ class TestInequalityHelper:
         assert _inequality_is_false("(", "2", "<") is None  # 파싱 실패 보수적 통과
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# SymPyNotEqualValidator — 부등(≠) 도구 검증 (관계 연산자 패밀리 완성·보수적)
+# ──────────────────────────────────────────────────────────────────────────
+class TestSymPyNotEqualValidator:
+    def test_true_not_equal_passes(self) -> None:
+        v = SymPyNotEqualValidator()
+        assert v.validate(_item(), "3 != 5") is None  # 다름 → 참
+        assert v.validate(_item(), "2 + 2 != 5") is None  # 4≠5 참
+
+    def test_false_not_equal_fails(self) -> None:
+        reason = SymPyNotEqualValidator().validate(_item(), "8 != 8")
+        assert reason is not None
+        assert "not-equal error" in reason
+
+    def test_arithmetic_operand_false(self) -> None:
+        """수치식 양변이 같으면 거짓 — '12/4 ≠ 3'(3≠3)."""
+        v = SymPyNotEqualValidator()
+        assert v.validate(_item(), "12/4 != 3") is not None  # 3≠3 거짓
+
+    def test_unicode_neq_normalized(self) -> None:
+        v = SymPyNotEqualValidator()
+        assert v.validate(_item(), "0.5 ≠ 0.50") is not None  # 같음 → 거짓
+        assert v.validate(_item(), "0.5 ≠ 0.6") is None  # 다름 → 참
+
+    def test_symbolic_no_false_positive(self) -> None:
+        """심볼릭 부등(x ≠ 2)은 통과(판정 불가)."""
+        assert SymPyNotEqualValidator().validate(_item(), "x ≠ 2 이면") is None
+
+    def test_factorial_not_misparsed(self) -> None:
+        """'5! != 120'은 팩토리얼 인접('!')이라 매치되지 않아 통과(보수적 skip)."""
+        assert SymPyNotEqualValidator().validate(_item(), "5! != 120 설명") is None
+
+    def test_non_standalone_skipped(self) -> None:
+        """더 큰 식의 일부('= 8 != 8')는 좌측 연산자 인접이라 떼지 않고 건너뜀(보수적)."""
+        # '8 != 8'(거짓)이지만 직전 '='로 더 큰 식의 조각 → _is_standalone False → 통과
+        assert SymPyNotEqualValidator().validate(_item(), "x = 8 != 8") is None
+
+    def test_no_not_equal_passes(self) -> None:
+        assert SymPyNotEqualValidator().validate(_item(), "부등 개념 설명") is None
+
+    def test_max_checks_must_be_positive(self) -> None:
+        with pytest.raises(ValueError):
+            SymPyNotEqualValidator(max_checks=0)
+
+    def test_max_checks_limits_validation(self) -> None:
+        """max_checks 초과 시 break — 이후 거짓 부등을 미검사(보수적)."""
+        v = SymPyNotEqualValidator(max_checks=1)
+        assert v.validate(_item(), "3 != 5\n8 != 8") is None  # 첫 매치(참)만 검사
+
+    def test_satisfies_protocol(self) -> None:
+        assert isinstance(SymPyNotEqualValidator(), SeedValidator)
+
+
+class TestNotEqualHelper:
+    """_not_equal_is_false 직접 단위테스트 — 정규식이 못 거르는 방어 분기 커버."""
+
+    def test_false_proven(self) -> None:
+        reason = _not_equal_is_false("12/4", "3")
+        assert reason is not None and "not-equal error" in reason
+
+    def test_true_not_equal(self) -> None:
+        assert _not_equal_is_false("3", "5") is None  # 다름 → 참
+
+    def test_symbolic_skipped(self) -> None:
+        assert _not_equal_is_false("x", "2") is None  # 심볼릭 판정 불가
+
+    def test_unparseable_skipped(self) -> None:
+        assert _not_equal_is_false("(1+", "2") is None  # 파싱 실패 보수적 통과
+
+
 class TestEqualityHelper:
     """_equality_is_false 직접 단위테스트 — 정규식이 거르지 못하는 방어 분기 커버."""
 
@@ -444,6 +516,11 @@ class TestDefaultSeedValidator:
         reason = default_seed_validator().validate(_item(), "5 < 3")
         assert reason is not None
         assert "inequality error" in reason
+
+    def test_catches_false_not_equal(self) -> None:
+        reason = default_seed_validator().validate(_item(), "12/4 ≠ 3")
+        assert reason is not None
+        assert "not-equal error" in reason
 
     def test_hygiene_runs_first(self) -> None:
         # 위생(BasicSeedValidator)이 체인 선두 → 빈 응답은 산술/부등식 전에 탈락.

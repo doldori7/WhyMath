@@ -223,6 +223,66 @@ class SymPyInequalityValidator:
         return None
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# SymPy 부등(≠) 검증 — 관계 연산자 패밀리 완성(=·<·>·≤·≥ 다음 ≠). 등식 검증의 *역*:
+# "a ≠ b"는 a와 b가 *같음*이 증명될 때 거짓("12/4 ≠ 3"·"0.5 ≠ 0.50" 류 환각 차단).
+# ──────────────────────────────────────────────────────────────────────────
+# 유니코드 ≠ → ASCII "!=" 정규화 + 기본 연산자 정규화(피연산자의 ×·÷ 등).
+_NOTEQ_NORMALIZE = {**_MATH_OP_NORMALIZE, ord("≠"): "!="}
+# 부등(≠) 정규식 — 수치 토큰 사이의 "!="(정규화 후 단일 표기).
+_NOTEQUAL_RE = re.compile(rf"({_NUM_TOKEN})[ \t]*(!=)[ \t]*({_NUM_TOKEN})")
+# 인접 판정에 "!"도 포함 — 연쇄 "5 != 3 != 5" 조각·팩토리얼("5!") 인접 오판정 차단.
+_NOTEQ_ADJACENT = _ADJACENT_MATH | frozenset("!")
+
+
+def _not_equal_is_false(lhs_s: str, rhs_s: str) -> str | None:
+    """수치 부등 `lhs != rhs`가 *거짓으로 증명*되면 사유, 아니면 None(참/미정/파싱불가).
+
+    `_equality_is_false`의 *역* — 등식은 차이≠0일 때 거짓이지만, 부등(≠)은 두 값이
+    *같음*(차이=0)이 확정될 때 거짓이다. 보수 원칙 동일: 심볼릭·파싱 실패·판정 불가는
+    통과, SymPy가 차이를 *0이라고 확정*할 때만 실패.
+    """
+    try:
+        lhs = sympy.sympify(lhs_s, convert_xor=True)
+        rhs = sympy.sympify(rhs_s, convert_xor=True)
+        if lhs.free_symbols or rhs.free_symbols:
+            return None  # 심볼릭 → 판정 불가(통과)
+        is_zero = sympy.simplify(lhs - rhs).is_zero
+    except Exception:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 건너뜀(통과)
+        return None
+    if is_zero is True:  # 두 값이 같음이 확정 → "a != b" 거짓
+        return f"not-equal error: '{lhs_s} != {rhs_s}' (sympy: {lhs} == {rhs})"
+    return None  # is_zero False(다름·참) 또는 None(미정) → 통과
+
+
+class SymPyNotEqualValidator:
+    """응답에 명시된 순수 수치 부등(≠)을 SymPy로 검증 — 거짓이면 탈락 (SeedValidator 충족).
+
+    관계 연산자 패밀리(`=`·`<`·`>`·`≤`·`≥`)를 `≠`로 완성: "12/4 ≠ 3"·"8 ≠ 8" 같은
+    *거짓 부등 환각*을 거른다. 심볼릭(`x ≠ 2`)·파싱 불가·판정 불가는 통과(보수적)·
+    `max_checks`로 검사 수 상한. 팩토리얼("5!")·연쇄("a≠b≠c") 인접은 보수적 skip.
+    """
+
+    def __init__(self, *, max_checks: int = 100) -> None:
+        if max_checks < 1:
+            raise ValueError("max_checks는 1 이상이어야 합니다")
+        self._max_checks = max_checks
+
+    def validate(self, item: PregenItem, response: str) -> str | None:
+        normalized = response.translate(_NOTEQ_NORMALIZE)
+        checked = 0
+        for match in _NOTEQUAL_RE.finditer(normalized):
+            if checked >= self._max_checks:
+                break
+            if not _is_standalone(normalized, match.start(), match.end(), _NOTEQ_ADJACENT):
+                continue
+            reason = _not_equal_is_false(match.group(1).strip(), match.group(3).strip())
+            if reason is not None:
+                return reason
+            checked += 1
+        return None
+
+
 class ChainValidator:
     """여러 SeedValidator를 순서대로 실행하는 AND 게이트 — 첫 실패 사유 반환.
 
@@ -243,17 +303,19 @@ class ChainValidator:
 
 
 def default_seed_validator(*, min_length: int = 1) -> ChainValidator:
-    """기본 사전적재 검증 체인 — 위생 → 산술 → 부등식 AND 게이트.
+    """기본 사전적재 검증 체인 — 위생 → 산술 → 부등식 → 부등(≠) AND 게이트.
 
     CLI(`__main__`)와 후속 호출자가 *같은 게이트*를 쓰도록 단일 정본으로 묶는다.
     순서: `BasicSeedValidator`(비어있음·길이 위생) → `SymPyArithmeticValidator`
-    (거짓 등식 "3×4=11") → `SymPyInequalityValidator`(거짓 부등식 "5<3"). 셋 다
-    보수적이라 심볼릭·파싱 불가는 통과시키고, *거짓 증명*된 산술/부등식만 탈락시킨다.
+    (거짓 등식 "3×4=11") → `SymPyInequalityValidator`(거짓 부등식 "5<3") →
+    `SymPyNotEqualValidator`(거짓 부등 "12/4≠3"). 넷 다 보수적이라 심볼릭·파싱 불가는
+    통과시키고, *거짓 증명*된 수치 관계(=·<·>·≤·≥·≠)만 탈락시킨다.
     """
     return ChainValidator(
         [
             BasicSeedValidator(min_length=min_length),
             SymPyArithmeticValidator(),
             SymPyInequalityValidator(),
+            SymPyNotEqualValidator(),
         ]
     )
