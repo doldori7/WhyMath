@@ -837,9 +837,45 @@ class TestSymPySolutionValidator:
         # 자유변수 2개(연립) → 단변수 아님 → 건너뜀.
         assert SymPySolutionValidator().validate(_item(), "x + y = 5 이고 x = 2") is None
 
-    def test_cross_line_not_paired(self) -> None:
-        # 방정식과 해가 다른 줄 → 페어링 안 함(소문제 변수 재사용 안전·false-positive 0).
-        assert SymPySolutionValidator().validate(_item(), "2x + 1 = 7\nx = 5") is None
+    def test_cross_line_single_equation_caught(self) -> None:
+        # slice 57 — 방정식과 해가 다른 줄이어도 단일 일관 방정식이면 검출(전체 텍스트).
+        reason = SymPySolutionValidator().validate(_item(), "2x + 1 = 7\nx = 5")
+        assert reason is not None
+        assert "solution error" in reason
+
+    def test_multistep_consistent_derivation_correct_passes(self) -> None:
+        # 일관된 다단계 유도(공통 해 x=3)·정해 → 통과.
+        assert (
+            SymPySolutionValidator().validate(_item(), "2x + 1 = 7\n2x = 6\nx = 3") is None
+        )
+
+    def test_multistep_consistent_derivation_wrong_caught(self) -> None:
+        # 일관된 다단계 유도지만 최종 해가 틀림(x=5, 정해 3) → 탈락.
+        reason = SymPySolutionValidator().validate(_item(), "2x + 1 = 7\n2x = 6\nx = 5")
+        assert reason is not None
+        assert "solution error" in reason
+
+    def test_inconsistent_subproblems_skipped(self) -> None:
+        # 같은 변수지만 방정식 상호 모순(공통 해 없음=서로 다른 소문제) → 보수적 skip.
+        assert (
+            SymPySolutionValidator().validate(_item(), "2x = 6\n3x = 12\nx = 4") is None
+        )
+
+    def test_distinct_variables_each_verified(self) -> None:
+        # 변수별 독립 검증 — 다른 변수의 소문제는 각자 일관성으로 판정(오해면 탈락).
+        reason = SymPySolutionValidator().validate(
+            _item(), "문제1: 2a = 6 이므로 a = 5\n문제2: 3b = 12 이므로 b = 4"
+        )
+        assert reason is not None  # a=5는 오해(정해 3)
+        assert "solution error" in reason
+
+    def test_non_polynomial_skipped(self) -> None:
+        # 비다항(유리식 1/x)은 풀이 보류 → 보수적 skip(false-positive 0).
+        assert SymPySolutionValidator().validate(_item(), "1/x = 2 이고 x = 5") is None
+
+    def test_complex_roots_skipped(self) -> None:
+        # 실수 해가 없는 방정식(x^2=-1·복소 근)은 보수적 skip.
+        assert SymPySolutionValidator().validate(_item(), "x^2 = -1 이고 x = 1") is None
 
     def test_pure_numeric_skipped(self) -> None:
         # 변수 0개(순수 수치)는 이 검증기 범위 밖(산술 검증기 담당).
@@ -876,8 +912,8 @@ class TestSymPySolutionValidator:
         with pytest.raises(ValueError):
             SymPySolutionValidator(max_checks=0)
 
-    def test_max_checks_limits_lines(self) -> None:
-        # max_checks=1 → 첫 줄만 스캔. 둘째 줄의 틀린 해는 미검사(통과).
+    def test_max_checks_limits_relations(self) -> None:
+        # max_checks=1 → 첫 관계만 스캔. 이후 방정식·해는 미수집(통과).
         v = SymPySolutionValidator(max_checks=1)
         assert v.validate(_item(), "x = 3\n2x = 7 이므로 x = 5") is None
 

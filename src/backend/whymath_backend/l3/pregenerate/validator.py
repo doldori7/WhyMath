@@ -370,17 +370,83 @@ def _parse_expr(text: str) -> Any:
         return None
 
 
+def _num_equal(a: Any, b: Any) -> bool:
+    """두 수치가 같은가 — 타입(정수/유리/실수) 차이를 simplify로 흡수."""
+    try:
+        return bool(sympy.simplify(a - b).is_zero is True)
+    except Exception:  # noqa: BLE001  # pragma: no cover — 수치 비교는 사실상 실패 없음
+        return False
+
+
+def _format_solset(solset: set[Any]) -> str:
+    """해집합을 정렬된 문자열로 표기(결정론·테스트 안정)."""
+    return "{" + ", ".join(str(sol) for sol in sorted(solset, key=str)) + "}"
+
+
+def _common_solution(var: Any, eqs: list[tuple[Any, Any, str]]) -> set[Any] | None:
+    """일관된 방정식들의 *공통 해집합*(유한·실수). 풀이 불가·비다항·비유한·복소면 None.
+
+    각 단변수 방정식을 풀어 해집합을 교집합한다 — 교집합이 비면(상호 모순=소문제·내부
+    오류) 호출자가 skip한다. 보수적: is_polynomial 아닌(초월·유리) 식·매개변수/복소 해는
+    검증 대상에서 제외(false-positive 0 — 풀 수 없는 건 틀렸다 하지 않는다).
+    """
+    common: set[Any] | None = None
+    for lhs, rhs, _ in eqs:
+        # is_polynomial로 비다항을 먼저 거르므로 solve는 사실상 실패하지 않는다 — except는
+        # 예기치 못한 SymPy 내부 오류만 흡수하는 방어선(보수적 skip).
+        try:
+            if not (lhs - rhs).is_polynomial(var):
+                return None  # 비다항(초월·유리)은 보수적 skip
+            sols = sympy.solve(sympy.Eq(lhs, rhs), var)
+        except Exception:  # noqa: BLE001  # pragma: no cover
+            return None
+        numeric: set[Any] = set()
+        for sol in sols:
+            if not (getattr(sol, "is_number", False) and getattr(sol, "is_real", False)):
+                return None  # 비수치·복소 해 → 보수적 skip
+            numeric.add(sol)
+        common = numeric if common is None else (common & numeric)
+    return common
+
+
+def _check_variable(
+    var: Any, eqs: list[tuple[Any, Any, str]], values: set[Any] | None
+) -> str | None:
+    """변수 하나의 방정식들·주장 해를 *일관성 기반* 검증 — 틀린 해면 사유.
+
+    주장 해가 *정확히 하나*일 때만(다중값=두 근·가설 재사용은 보수적 skip) 검증한다.
+    방정식들의 공통 해집합(일관 시 비어있지 않음)에 그 값이 없으면 탈락. 비일관(공통 해
+    없음)·비다항·비유한 해는 skip — 다단계 정답 유도(일관)는 검증하고, 소문제 변수 재사용
+    (비일관)은 건너뛰어 false-positive 0을 지킨다.
+    """
+    if values is None or len(values) != 1:
+        return None
+    (value,) = tuple(values)
+    solset = _common_solution(var, eqs)
+    if not solset:  # None(풀이 불가·비다항) 또는 빈 집합(상호 모순) → 보수적 skip
+        return None
+    if any(_num_equal(value, sol) for sol in solset):
+        return None  # 주장 해가 공통 해집합에 있음 → 정해
+    return (
+        f"solution error: '{eqs[0][2]}' has solution {var}={_format_solset(solset)}, "
+        f"not claimed {var}={value}"
+    )
+
+
 class SymPySolutionValidator:
-    """단변수 방정식과 주장된 해를 *대입*으로 검증 — 거짓이면 탈락 (SeedValidator 충족).
+    """단변수 방정식의 주장된 해를 *일관성 기반*으로 검증 — 틀리면 탈락 (SeedValidator 충족).
 
-    "2x + 1 = 7 이므로 x = 5"처럼 *대수* 슬립(방정식의 해를 틀리게 주장)을 잡는다. 순수
-    수치만 보던 산술 검증기를 *변수 방정식*으로 보완한다. **false-positive 0 보수 설계**:
-    - *줄 단위* 페어링 — 같은 줄의 방정식과 해 주장만 연결(다른 줄·소문제의 변수 재사용 안전).
+    "2x + 1 = 7 이므로 x = 5"(정해 3) 같은 *대수* 슬립을 잡는다. 전체 텍스트에서 변수별로
+    방정식과 해 주장을 모아, 방정식들의 *공통 해집합*(일관 시 비어있지 않음)에 주장 해가
+    없으면 탈락한다. 줄을 넘는 *다단계 정답 유도*("2x+1=7\\n2x=6\\nx=3")도 검증하되, 핵심은
+    **false-positive 0 보수 설계**:
+    - *공통 해집합(일관성) 검사* — 방정식들이 상호 모순(공통 해 없음)이면 *서로 다른 소문제*
+      로 보고 건너뜀(같은 변수 재사용의 오발화 차단). 일관된 방정식들만 해를 검증한다.
     - *단변수만* — 관계의 자유변수가 정확히 1개일 때만(다변수 연립은 건너뜀).
-    - *단일값만* — 한 줄에서 같은 변수가 2개 이상 값으로 주장되면 건너뜀(이차식 두 근 등).
-    - 대입 결과가 *거짓으로 증명*될 때만 탈락(파싱 불가·판정 불가·심볼릭 잔여는 통과).
+    - *단일값만* — 같은 변수가 2개 이상 값으로 주장되면 건너뜀(이차식 두 근·가설 재사용 안전).
+    - *다항·유한·실수 해만* — 비다항(초월·유리)·복소·매개변수 해는 풀이 보류(건너뜀).
 
-    `max_checks`는 스캔할 줄 수 상한(초장문 응답 과부하 방지). 정규화(×÷−·)는 산술 검증과 공유.
+    `max_checks`는 스캔할 관계 수 상한(초장문 응답 과부하 방지). 정규화(×÷−·)는 산술 검증과 공유.
     """
 
     def __init__(self, *, max_checks: int = 100) -> None:
@@ -390,19 +456,15 @@ class SymPySolutionValidator:
 
     def validate(self, item: PregenItem | None, response: str) -> str | None:
         normalized = response.translate(_MATH_OP_NORMALIZE)
-        for line_no, line in enumerate(normalized.split("\n")):
-            if line_no >= self._max_checks:
-                break
-            reason = self._check_line(line)
-            if reason is not None:
-                return reason
-        return None
-
-    def _check_line(self, line: str) -> str | None:
-        """한 줄의 (방정식, 해 주장)을 모아 대입 검증 — 거짓이면 사유."""
+        # 전체 텍스트에서 단변수 관계를 모아 변수별로 (방정식, 해 주장) 분류한다.
+        # 줄을 넘어 모으되, 일관성 검사(_check_variable)가 소문제 변수 재사용을 걸러낸다.
         assignments: dict[Any, set[Any]] = {}
-        equations: list[tuple[Any, Any, Any, str]] = []
-        for match in _RELATION_RE.finditer(line):
+        equations: dict[Any, list[tuple[Any, Any, str]]] = {}
+        checked = 0
+        for match in _RELATION_RE.finditer(normalized):
+            if checked >= self._max_checks:
+                break
+            checked += 1
             lhs = _parse_expr(match.group(1).strip())
             rhs = _parse_expr(match.group(2).strip())
             if lhs is None or rhs is None:
@@ -418,23 +480,11 @@ class SymPySolutionValidator:
                 assignments.setdefault(var, set()).add(lhs)
             else:
                 eq_str = f"{match.group(1).strip()} = {match.group(2).strip()}"
-                equations.append((var, lhs, rhs, eq_str))
-        for var, lhs, rhs, eq_str in equations:
-            values = assignments.get(var)
-            if values is None or len(values) != 1:
-                continue  # 해 주장 없음·또는 다중값(두 근 등) → 보수적 건너뜀
-            (value,) = tuple(values)
-            # 방어적 try: 단일 변수에 수치 대입 후 계산은 사실상 항상 numeric이라 예외가
-            # 나지 않는다(예기치 못한 SymPy 내부 실패만 흡수·보수적 통과).
-            try:
-                holds = sympy.simplify((lhs - rhs).subs(var, value)).is_zero
-            except Exception:  # noqa: BLE001  # pragma: no cover
-                continue
-            if holds is False:  # 대입 결과가 거짓으로 확정 → 해가 틀림
-                return (
-                    f"solution error: '{eq_str}' fails at {var}={value} "
-                    f"(sympy: {lhs.subs(var, value)} != {rhs.subs(var, value)})"
-                )
+                equations.setdefault(var, []).append((lhs, rhs, eq_str))
+        for var, eqs in equations.items():
+            reason = _check_variable(var, eqs, assignments.get(var))
+            if reason is not None:
+                return reason
         return None
 
 
