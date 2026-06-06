@@ -104,10 +104,11 @@ _EQUALITY_RE = re.compile(rf"({_NUM_TOKEN})[ \t]*=[ \t]*(?=({_NUM_TOKEN}))")
 # 문장 종지부 "= 4."를 잘못 건너뛰지 않게 한다.
 _ADJACENT_MATH = frozenset("+-*/^=()")
 
-# 등식 인접 검사용 집합 — `_ADJACENT_MATH`에서 `=`를 *뺀다*. 인접한 `=`는 *더 큰 식*이
-# 아니라 *연쇄 등식*("a = b = c")이므로 건너뛰지 않고 각 쌍을 검사한다. 다른 연산자
-# (+−*/^())는 여전히 차단 — "x + 1 = 2"의 "1 = 2"는 좌측 `+` 인접이라 그대로 skip.
-_EQ_ADJACENT = _ADJACENT_MATH - frozenset("=")
+# 연쇄 관계 인접 검사용 집합 — *순수 산술 연산자만*(관계 연산자 =·<·>는 제외).
+# 인접한 관계 연산자는 *더 큰 식*이 아니라 *연쇄*("a = b = c"·"2 < 5 < 3")이므로 건너뛰지
+# 않고 각 인접 쌍을 검사한다. 산술 연산자(+−*/^())는 여전히 차단 — "x + 1 = 2"의
+# "1 = 2"는 좌측 `+` 인접이라 그대로 skip(더 큰 산술식의 일부). 등식·부등식 연쇄 공용.
+_CHAIN_ADJACENT = frozenset("+-*/^()")
 
 
 def _is_standalone(
@@ -173,8 +174,8 @@ class SymPyArithmeticValidator:
             if checked >= self._max_checks:
                 break
             # 우변은 룩어헤드(group 2)라 미소비 — 독립 검사 span은 좌변 시작~우변 끝.
-            # 인접 `=`는 연쇄 등식이므로 허용(`_EQ_ADJACENT`), 다른 연산자는 차단.
-            if not _is_standalone(normalized, match.start(1), match.end(2), _EQ_ADJACENT):
+            # 인접 `=`는 연쇄 등식이므로 허용(`_CHAIN_ADJACENT`), 산술 연산자는 차단.
+            if not _is_standalone(normalized, match.start(1), match.end(2), _CHAIN_ADJACENT):
                 continue  # 더 큰 식의 일부 → 건너뜀(false positive 방지)
             reason = _equality_is_false(match.group(1).strip(), match.group(2).strip())
             if reason is not None:
@@ -189,10 +190,10 @@ class SymPyArithmeticValidator:
 # ──────────────────────────────────────────────────────────────────────────
 # 유니코드 부등호(≤·≥)를 ASCII로 정규화(LLM 출력이 자주 씀) + 기본 연산자 정규화.
 _INEQ_NORMALIZE = {**_MATH_OP_NORMALIZE, ord("≤"): "<=", ord("≥"): ">="}
-# 부등식 정규식 — 수치 토큰 사이의 <·>·<=·>=(긴 연산자 우선 매칭).
-_INEQUALITY_RE = re.compile(rf"({_NUM_TOKEN})[ \t]*(<=|>=|<|>)[ \t]*({_NUM_TOKEN})")
-# 부등식은 인접 판정에 부등호(<>)도 포함 — "2 < 5 < 3"의 조각("5 < 3")을 잘못 떼지 않게.
-_INEQ_ADJACENT = _ADJACENT_MATH | frozenset("<>")
+# 부등식 정규식 — 수치 토큰 사이의 <·>·<=·>=(긴 연산자 우선 매칭). 우변은 *룩어헤드*
+# (등식 slice 45와 동형)라 연쇄 부등식 "2 < 5 < 3"의 인접 쌍(2<5, 5<3)을 모두 검사한다.
+# group(1)=좌변·group(2)=연산자·group(3)=우변(룩어헤드 내)·`match.end(3)`로 우변 끝.
+_INEQUALITY_RE = re.compile(rf"({_NUM_TOKEN})[ \t]*(<=|>=|<|>)[ \t]*(?=({_NUM_TOKEN}))")
 # 부등호 → SymPy 관계 생성자(수치 인자면 S.true/S.false로 평가).
 _INEQ_FUNC = {"<": sympy.Lt, "<=": sympy.Le, ">": sympy.Gt, ">=": sympy.Ge}
 
@@ -221,6 +222,7 @@ class SymPyInequalityValidator:
 
     `SymPyArithmeticValidator`의 부등식 판: "5 < 3"·"7 ≥ 9" 같은 *부등식 환각*을 거른다.
     심볼릭(`x < 2`)·파싱 불가·판정 불가는 통과(보수적)·`max_checks`로 검사 수 상한.
+    연쇄 부등식("2 < 5 < 3")은 룩어헤드로 각 인접 쌍(2<5·5<3)을 모두 검사한다.
     """
 
     def __init__(self, *, max_checks: int = 100) -> None:
@@ -234,7 +236,9 @@ class SymPyInequalityValidator:
         for match in _INEQUALITY_RE.finditer(normalized):
             if checked >= self._max_checks:
                 break
-            if not _is_standalone(normalized, match.start(), match.end(), _INEQ_ADJACENT):
+            # 우변은 룩어헤드(group 3)라 미소비 — 독립 검사 span은 좌변 시작~우변 끝.
+            # 인접 관계 연산자(<>=)는 연쇄이므로 허용(`_CHAIN_ADJACENT`), 산술 연산자는 차단.
+            if not _is_standalone(normalized, match.start(1), match.end(3), _CHAIN_ADJACENT):
                 continue
             reason = _inequality_is_false(
                 match.group(1).strip(), match.group(3).strip(), match.group(2)
