@@ -66,6 +66,7 @@ _CACHE_KEY = "llm_cache"
 _TRACE_KEY = "trace_sink"
 _QUEUE_KEY = "job_queue"
 _VALIDATOR_KEY = "shadow_validator"
+_SKIP_CACHE_KEY = "skip_cache_on_signal"
 
 # /v1/generate의 런타임 shadow 검증기 — 결정론 관계 검증(=·<·>·≤·≥·≠·연쇄). 모듈 1회
 # 생성(I/O 없음·재사용). 비차단(반환 텍스트·캐시 불변)이라 default-on이 안전 — 워커
@@ -197,6 +198,12 @@ def _get_validator(request: Request) -> SeedValidator | None:
     return validator
 
 
+def _get_skip_cache_on_signal(request: Request) -> bool:
+    """환각 신호 난 미스 생성물을 캐시에 적재하지 않을지(Settings 게이트·캐시 위생)."""
+    skip: bool = getattr(request.app.state, _SKIP_CACHE_KEY)
+    return skip
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """앱 수명 — 시작 시 device store 활성(slice 27), 종료 시 store 해제 + DB 엔진 풀 반납.
@@ -266,10 +273,13 @@ def create_app(
     app.state.__setattr__(_QUEUE_KEY, queue if queue is not None else CeleryJobQueue())
     # shadow 검증기 — Settings 게이트(l3_shadow_validation_enabled). 비활성이면 None이라
     # /v1/generate가 validator 없이 호출(검증 미실행). 비차단이라 둘 다 안전.
+    _settings = get_settings()
     app.state.__setattr__(
         _VALIDATOR_KEY,
-        _SHADOW_VALIDATOR if get_settings().l3_shadow_validation_enabled else None,
+        _SHADOW_VALIDATOR if _settings.l3_shadow_validation_enabled else None,
     )
+    # 캐시 위생 정책(Settings 게이트·slice 49) — 신호 난 미스 생성물 캐시 적재 회피 여부.
+    app.state.__setattr__(_SKIP_CACHE_KEY, _settings.l3_skip_cache_on_signal)
 
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, str]:
@@ -349,6 +359,7 @@ def create_app(
                 trace=trace,
                 queue=queue,
                 validator=_get_validator(request),
+                skip_cache_on_signal=_get_skip_cache_on_signal(request),
             )
         except QualityQueueUnavailableError as exc:
             # 큐 미구성/ broker 도달 실패 — 명확한 503 JSON(스택트레이스 금지).

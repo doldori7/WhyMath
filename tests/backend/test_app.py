@@ -325,6 +325,61 @@ class TestGenerateEndpoint:
         finally:
             get_settings.cache_clear()  # 다음 테스트로 게이트 상태 누수 방지.
 
+    def test_skip_cache_on_signal_via_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """l3_skip_cache_on_signal=on → 거짓 산술은 캐시 미적재(재요청 시 재생성)."""
+        monkeypatch.setenv("WHYMATH_L3_SKIP_CACHE_ON_SIGNAL", "true")
+        get_settings.cache_clear()
+        try:
+            provider = StubProvider(text="계산:\n2 + 2 = 5")
+            client = _client(provider)
+            payload = {
+                "request": {
+                    "task_type": "explain",
+                    "difficulty": "easy",
+                    "requires_reasoning": False,
+                    "student_subscription": "free",
+                    "sync": True,
+                },
+                "prompt": "p",
+                "system": "s",
+            }
+            first = client.post("/v1/generate", json=payload).json()
+            second = client.post("/v1/generate", json=payload).json()
+            # 신호 노출은 그대로(비차단). 그러나 거짓이라 캐시에 안 남아 2회차도 미스·재호출.
+            assert first["validation_signal"] is not None
+            assert second["cache_hit"] is False
+            assert len(provider.calls) == 2  # 캐시 위생 → 재생성
+        finally:
+            get_settings.cache_clear()
+
+    def test_skip_cache_default_off_caches_flagged(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """기본(skip off) → 거짓 산술도 캐시 적재(2회차 히트·기존 동작)."""
+        get_settings.cache_clear()  # 환경 기본값(off) 확정.
+        try:
+            provider = StubProvider(text="계산:\n2 + 2 = 5")
+            client = _client(provider)
+            payload = {
+                "request": {
+                    "task_type": "explain",
+                    "difficulty": "easy",
+                    "requires_reasoning": False,
+                    "student_subscription": "free",
+                    "sync": True,
+                },
+                "prompt": "p",
+                "system": "s",
+            }
+            client.post("/v1/generate", json=payload)
+            second = client.post("/v1/generate", json=payload).json()
+            assert second["cache_hit"] is True  # 적재됨(기본 동작)
+            assert len(provider.calls) == 1
+        finally:
+            get_settings.cache_clear()
+
     def test_generate_cache_hit_on_second_call(self) -> None:
         """동일 요청 2회 → 2회차 cache_hit=true(같은 앱 인스턴스 캐시 공유)."""
         provider = StubProvider(text="동일")
