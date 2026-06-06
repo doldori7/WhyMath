@@ -30,6 +30,7 @@ from whymath_backend.l3.pregenerate import (
     PrewarmItemResult,
     PrewarmReport,
     SeedValidator,
+    StepBreak,
     SymPyArithmeticValidator,
     SymPyInequalityValidator,
     SymPyNotEqualValidator,
@@ -37,6 +38,7 @@ from whymath_backend.l3.pregenerate import (
     ValidationSignal,
     arithmetic_validator,
     default_seed_validator,
+    detect_step_breaks,
     validate_response,
 )
 from whymath_backend.l3.pregenerate.__main__ import format_report, load_items
@@ -1301,3 +1303,85 @@ class TestCli:
         spec_file = tmp_path / "empty.jsonl"
         spec_file.write_text("# 주석만\n\n", encoding="utf-8")
         assert main([str(spec_file)]) == 0
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# detect_step_breaks — 중간 step 등가성 검출 (shadow 도구·SeedValidator 아님·slice 62)
+# ──────────────────────────────────────────────────────────────────────────
+class TestDetectStepBreaks:
+    def test_nonpreserving_with_connective_detected(self) -> None:
+        # 마커(따라서) + 비보존(해 {3}≠{4}) → 검출. *변수재사용도 검출됨*(노이즈·비노출이라 무해).
+        breaks = detect_step_breaks("2x = 6 따라서 3x = 12")
+        assert len(breaks) == 1
+        b = breaks[0]
+        assert isinstance(b, StepBreak)
+        assert b.var == "x" and b.marker == "따라서"
+        assert b.solset_before == "{3}" and b.solset_after == "{4}"
+        assert b.step_index == 0
+
+    def test_preserving_with_marker_no_break(self) -> None:
+        # 마커 + 해집합 동일({3}={3}) → 비검출(등가 변환).
+        assert detect_step_breaks("2x = 6 따라서 x = 3") == []
+
+    def test_no_marker_no_break(self) -> None:
+        # 마커 없음(개행만) → 변수재사용 배제 불가 → 보수적 비검출.
+        assert detect_step_breaks("2x = 6\n3x = 12") == []
+
+    def test_squaring_excluded(self) -> None:
+        # 제곱(차수 2)은 _linear_solution None → 단계 비교에서 빠짐(해집합 변경 정당 변환).
+        assert detect_step_breaks("x - 1 = 2 따라서 (x - 1)^2 = 4") == []
+
+    def test_quadratic_excluded(self) -> None:
+        assert detect_step_breaks("x^2 = 9 따라서 x^2 = 16") == []
+
+    def test_nonpolynomial_excluded(self) -> None:
+        assert detect_step_breaks("1/x = 2 따라서 1/x = 3") == []
+
+    def test_different_variables_skipped(self) -> None:
+        # 인접 관계 변수가 다르면(x→y) 단계 아님 → 비검출.
+        assert detect_step_breaks("2x = 6 따라서 3y = 12") == []
+
+    def test_pure_numeric_or_multivar_skipped(self) -> None:
+        assert detect_step_breaks("2 + 3 = 5 따라서 4 = 4") == []  # 0 변수
+        assert detect_step_breaks("x + y = 5 따라서 x = 2") == []  # 다변수→단변수 짝 없음
+
+    def test_unicode_arrows_detected(self) -> None:
+        for arrow in ("→", "⟹", "⇒"):
+            breaks = detect_step_breaks(f"2x = 6 {arrow} x = 4")
+            assert len(breaks) == 1 and breaks[0].marker == arrow
+
+    def test_ascii_arrows_detected(self) -> None:
+        for arrow in ("->", "=>"):
+            breaks = detect_step_breaks(f"2x = 6 {arrow} x = 4")
+            assert len(breaks) == 1 and breaks[0].marker == arrow
+
+    def test_other_connectives_detected(self) -> None:
+        for conn in ("그러므로", "이므로", "즉"):
+            assert len(detect_step_breaks(f"2x = 6 {conn} x = 4")) == 1
+
+    def test_unparseable_relation_skipped(self) -> None:
+        # 파싱 불가 토큰("x)")은 수집에서 제외 → 짝 없음 → 빈.
+        assert detect_step_breaks("x) = 5 따라서 x = 3") == []
+
+    def test_max_relations_limits_collection(self) -> None:
+        # max_relations=1 → 관계 1개만 수집 → 짝 없음 → 빈.
+        assert detect_step_breaks("2x = 6 따라서 3x = 12", max_relations=1) == []
+
+    def test_span_points_at_after_relation(self) -> None:
+        # span은 *뒤* 관계(비보존이 드러난 지점)를 가리킨다(원문 좌표).
+        text = "2x = 6 따라서 3x = 12"
+        s, e = detect_step_breaks(text)[0].span
+        assert text[s:e] == "3x = 12"
+
+    def test_not_in_student_chain(self) -> None:
+        # 분리 증명: 변수재사용이 student-facing 체인에 들어가도 *여전히 None*
+        # (SymPySolutionValidator가 다중값 주장으로 skip) — shadow 도구만 노이즈로 검출.
+        reuse = "2x = 6 → x = 3 따라서 3x = 12 → x = 4"
+        assert arithmetic_validator().validate(None, reuse) is None
+        assert default_seed_validator().validate(None, reuse) is None
+        assert len(detect_step_breaks(reuse)) >= 1  # shadow는 검출(비노출·노이즈 무해)
+
+    def test_returns_frozen_dataclass(self) -> None:
+        b = detect_step_breaks("2x = 6 따라서 3x = 12")[0]
+        with pytest.raises(Exception):  # FrozenInstanceError(불변)
+            b.var = "y"  # type: ignore[misc]
