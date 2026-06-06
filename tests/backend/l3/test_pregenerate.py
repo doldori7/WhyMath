@@ -32,6 +32,7 @@ from whymath_backend.l3.pregenerate import (
     SeedValidator,
     SymPyArithmeticValidator,
     SymPyInequalityValidator,
+    default_seed_validator,
 )
 from whymath_backend.l3.pregenerate.__main__ import format_report, load_items
 from whymath_backend.l3.pregenerate.validator import (
@@ -418,6 +419,40 @@ class TestChainValidator:
 
     def test_satisfies_protocol(self) -> None:
         assert isinstance(ChainValidator([]), SeedValidator)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# default_seed_validator — CLI·호출자 공용 기본 게이트(위생→산술→부등식)
+# ──────────────────────────────────────────────────────────────────────────
+class TestDefaultSeedValidator:
+    def test_returns_chain_satisfying_protocol(self) -> None:
+        assert isinstance(default_seed_validator(), ChainValidator)
+        assert isinstance(default_seed_validator(), SeedValidator)
+
+    def test_clean_response_passes(self) -> None:
+        assert (
+            default_seed_validator().validate(_item(), "2 + 2 = 4, 그리고 3 < 5")
+            is None
+        )
+
+    def test_catches_false_arithmetic(self) -> None:
+        reason = default_seed_validator().validate(_item(), "2 + 2 = 5")
+        assert reason is not None
+        assert "arithmetic error" in reason
+
+    def test_catches_false_inequality(self) -> None:
+        reason = default_seed_validator().validate(_item(), "5 < 3")
+        assert reason is not None
+        assert "inequality error" in reason
+
+    def test_hygiene_runs_first(self) -> None:
+        # 위생(BasicSeedValidator)이 체인 선두 → 빈 응답은 산술/부등식 전에 탈락.
+        assert default_seed_validator().validate(_item(), "") == "empty response"
+
+    def test_min_length_threaded_through(self) -> None:
+        reason = default_seed_validator(min_length=10).validate(_item(), "짧음")
+        assert reason is not None
+        assert "too short" in reason
 
 
 # ──────────────────────────────────────────────────────────────────────────
