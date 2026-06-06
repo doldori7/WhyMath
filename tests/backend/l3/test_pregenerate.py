@@ -490,6 +490,38 @@ class TestNegativeOperands:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 연쇄 등식 — "a = b = c" 각 인접 쌍 검사(룩어헤드 + `_EQ_ADJACENT`)
+# ──────────────────────────────────────────────────────────────────────────
+class TestChainedEquality:
+    def test_chain_all_true_passes(self) -> None:
+        v = SymPyArithmeticValidator()
+        assert v.validate(_item(), "2 + 3 = 5 = 5") is None
+        assert v.validate(_item(), "1 = 1 = 1") is None
+
+    def test_chain_later_pair_false_flagged(self) -> None:
+        """첫 쌍이 참이어도 뒤 쌍이 거짓이면 잡는다(연쇄 5=6)."""
+        reason = SymPyArithmeticValidator().validate(_item(), "2 + 3 = 5 = 6")
+        assert reason is not None
+        assert "5 = 6" in reason  # 거짓 쌍이 사유에 명시
+
+    def test_chain_with_symbolic_head(self) -> None:
+        """'x = 2+3 = 6' — 심볼릭 좌단은 건너뛰고 수치 쌍(2+3=6)은 검사."""
+        reason = SymPyArithmeticValidator().validate(_item(), "x = 2 + 3 = 6")
+        assert reason is not None and "arithmetic error" in reason
+
+    def test_three_link_chain_middle_false(self) -> None:
+        assert SymPyArithmeticValidator().validate(_item(), "4 = 4 = 5 = 5") is not None
+
+    def test_fragment_guard_still_holds(self) -> None:
+        """'x + 1 = 2'의 '1 = 2'는 좌측 '+' 인접이라 여전히 skip(연쇄 아님)."""
+        assert SymPyArithmeticValidator().validate(_item(), "x + 1 = 2") is None
+
+    def test_chain_via_default_chain(self) -> None:
+        reason = validate_response(default_seed_validator(), "계산: 3 = 3 = 4")
+        assert reason is not None and "arithmetic error" in reason
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # validate_response — PregenItem 없는 응답 단독 검증(런타임 재사용 진입점)
 # ──────────────────────────────────────────────────────────────────────────
 class TestValidateResponse:
