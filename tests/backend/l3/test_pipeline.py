@@ -300,6 +300,8 @@ class TestShadowValidation:
         )
         assert result.text == "정답은 2 + 2 = 4 입니다"
         assert trace.records[0]["validation_signal"] is None
+        # 호출자도 신호를 프로그램적으로 읽을 수 있다(trace와 같은 값).
+        assert result.validation_signal is None
 
     async def test_false_output_records_signal_but_nonblocking(self) -> None:
         """거짓 산술 출력 → validation_signal에 사유 기록, 그러나 텍스트·캐시는 *그대로*."""
@@ -324,12 +326,14 @@ class TestShadowValidation:
         # 그러나 환각 신호는 *조용히 넘어가지 않고* 관측에 남는다(CLAUDE.md).
         signal = trace.records[0]["validation_signal"]
         assert isinstance(signal, str) and "arithmetic error" in signal
+        # 그리고 호출자도 같은 신호를 GenerationResult로 직접 받는다(관측 싱크에만 의존 X).
+        assert result.validation_signal == signal
 
     async def test_no_validator_signal_is_none(self) -> None:
         """validator 미주입(기본) → 검증 미실행 → validation_signal=None(오버헤드 0)."""
         provider = RecordingProvider(text="5 < 3 라는 거짓 부등식")
         trace = RecordingTraceSink()
-        await generate(
+        result = await generate(
             _sync_local_request(),
             "p",
             "s",
@@ -339,6 +343,7 @@ class TestShadowValidation:
             # validator 미주입
         )
         assert trace.records[0]["validation_signal"] is None
+        assert result.validation_signal is None
 
     async def test_cache_hit_not_shadow_validated(self) -> None:
         """캐시 히트 경로는 shadow 검증 대상이 아니다(미스 생성물만) — provider 미호출."""
@@ -364,6 +369,22 @@ class TestShadowValidation:
         assert result.cache_hit is True
         assert provider.calls == []
         assert trace.records[0]["validation_signal"] is None
+        assert result.validation_signal is None
+
+    async def test_queued_result_signal_is_none(self) -> None:
+        """비동기(QUALITY) 큐잉 결과는 텍스트가 없으므로 validation_signal=None."""
+        result = await generate(
+            _quality_request(),
+            "p",
+            "s",
+            provider=RecordingProvider(),
+            cache=InMemoryCache(),
+            trace=RecordingTraceSink(),
+            queue=RecordingQueue(),
+            validator=default_seed_validator(),
+        )
+        assert result.is_queued is True
+        assert result.validation_signal is None
 
 
 class TestCloudRejectedThroughProvider:

@@ -61,6 +61,12 @@ class GenerationResult:
         없음"을 뜻하며, 학생 노출 대상이 아니다.
 
     `text`(있을 때)는 *검증 전 원시 출력*이다(모듈 docstring 경계 메모 참조).
+
+    `validation_signal`은 런타임 shadow 검증(slice 40) 결과를 *호출자에게 노출*한다 —
+    None=통과 또는 미검증(validator 미주입·캐시 히트·비동기), 문자열=환각 사유(거짓 수치
+    관계 등). trace 기록과 *같은 값*이지만, fire-and-forget 관측 싱크와 달리 호출자
+    (엔드포인트·상위 계층)가 *프로그램적으로* 읽어 후속 결정(플래그·재생성·L4/L5 라우팅)에
+    쓸 수 있다. **비차단**: 신호가 있어도 text·cache_hit·status는 영향받지 않는다.
     """
 
     decision: RoutingDecision
@@ -70,6 +76,8 @@ class GenerationResult:
     job_id: str | None = None
     # "completed"(동기 완료) / "queued"(비동기 큐 적재). 엔드포인트가 202 vs 200 분기에 사용.
     status: str = "completed"
+    # 런타임 shadow 검증 환각 신호(비차단·관측). None=통과/미검증, 문자열=사유.
+    validation_signal: str | None = None
 
     @property
     def is_queued(self) -> bool:
@@ -179,4 +187,6 @@ async def generate(
             validation_signal=signal,
         )
     )
-    return GenerationResult(decision=decision, text=output, cache_hit=False)
+    return GenerationResult(
+        decision=decision, text=output, cache_hit=False, validation_signal=signal
+    )
