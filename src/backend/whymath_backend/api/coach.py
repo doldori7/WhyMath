@@ -76,6 +76,17 @@ class CoachRequest(BaseModel):
         max_length=4000,
         description="학생 발화(자연어). 빈 문자열 허용(첫 진입). 길이 상한은 남용·비용 방어.",
     )
+    student_solution: str | None = Field(
+        default=None,
+        max_length=4000,
+        description=(
+            "학생의 *풀이/작업* 텍스트(예: L5 OCR로 인식한 손글씨 풀이) — 대화 발화"
+            "(`student_input`)와 분리. 계산 슬립 검증(`solution_coaching`)은 이 필드가 "
+            "있으면 *이 필드*를 대상으로 한다(없거나 빈 문자열이면 `student_input` 폴백 — "
+            "발화에 풀이가 인라인일 수 있음). L5 OCR 결과의 자연 착지점(slice 54 한글 산문 "
+            "검출과 결합). Polya·오개념·LTHC 결정은 여전히 `student_input` 기준(대화 흐름)."
+        ),
+    )
     polya_state: PolyaState = Field(
         default_factory=PolyaState,
         description="세션의 현재 Polya 상태. 기본값=UNDERSTAND 진입.",
@@ -138,7 +149,8 @@ class CoachResponse(BaseModel):
     solution_coaching: SolutionCoaching | None = Field(
         default=None,
         description=(
-            "학생 발화에서 *거짓 수치 관계*(계산 슬립, 예: '2+3=6')가 L3 결정론 검증으로 "
+            "학생 풀이(`student_solution` 우선·없으면 `student_input`)에서 *거짓 수치 관계*"
+            "(계산 슬립, 예: '2+3=6')가 L3 결정론 검증으로 "
             "검출되면 검산(verify) 코칭 + L3 신호(slice 52 오케스트레이터). 없으면 None — "
             "이때는 기존 `decision`/`coaching_focus`를 따른다. *실시간 슬립은 배경 진단보다 "
             "우선*(slice 51: 구체적 계산 오류 > θ/숙달 추정). 검증기는 보수적이라 질문·산문은 "
@@ -217,7 +229,10 @@ def _build_response_payload(body: CoachRequest) -> tuple[
     # (arithmetic_error=True), 아니면 None으로 두어 기존 decision/coaching_focus 경로와 중복을
     # 피한다 — 실시간 슬립은 배경 진단보다 우선(slice 51). θ는 요청에 없어 None(검출 시
     # verify는 숙달/θ 무관·미검출이면 어차피 노출 안 함).
-    sol = recommend_coaching_for_solution(body.student_input, body.bkt_mastery, None)
+    # slice 55: 검증 대상은 *풀이 전용* student_solution 우선(L5 OCR 착지점)·없거나 비면
+    # student_input 폴백(발화 인라인 풀이). Polya/오개념/LTHC는 위에서 student_input 기준 유지.
+    solution_text = body.student_solution or body.student_input
+    sol = recommend_coaching_for_solution(solution_text, body.bkt_mastery, None)
     solution_coaching = sol if sol.arithmetic_error else None
     return decision, matches, intervention, lthc, entry_category, solution_coaching
 
