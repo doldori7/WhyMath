@@ -333,10 +333,13 @@ class TestSymPyInequalityValidator:
         """심볼릭 부등식(x < 2)은 통과(판정 불가)."""
         assert SymPyInequalityValidator().validate(_item(), "x < 2 이면") is None
 
-    def test_chained_fragment_skipped(self) -> None:
-        """연쇄 부등식 'a < b < c'의 조각을 떼어 거짓 판정하지 않는다(보수적)."""
-        # "2 < 5 < 3" — 첫 매치 '2 < 5'(참)만 검사·'5 < 3' 조각은 인접 <로 건너뜀
-        assert SymPyInequalityValidator().validate(_item(), "2 < 5 < 3") is None
+    def test_chained_inequality_checks_each_pair(self) -> None:
+        """연쇄 부등식 'a < b < c'는 각 인접 쌍을 검사한다(slice 46·룩어헤드)."""
+        # "2 < 5 < 3" — '2 < 5'(참)·'5 < 3'(거짓) → 거짓 쌍 탈락(이전엔 보수적 skip).
+        reason = SymPyInequalityValidator().validate(_item(), "2 < 5 < 3")
+        assert reason is not None and "5 < 3" in reason
+        # 전부 참인 연쇄는 통과.
+        assert SymPyInequalityValidator().validate(_item(), "2 < 5 < 9") is None
 
     def test_no_inequality_passes(self) -> None:
         assert SymPyInequalityValidator().validate(_item(), "부등식 개념 설명") is None
@@ -519,6 +522,41 @@ class TestChainedEquality:
     def test_chain_via_default_chain(self) -> None:
         reason = validate_response(default_seed_validator(), "계산: 3 = 3 = 4")
         assert reason is not None and "arithmetic error" in reason
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 연쇄 부등식 — "a < b < c" 각 인접 쌍 검사(룩어헤드 + `_CHAIN_ADJACENT`, slice 46)
+# ──────────────────────────────────────────────────────────────────────────
+class TestChainedInequality:
+    def test_chain_all_true_passes(self) -> None:
+        v = SymPyInequalityValidator()
+        assert v.validate(_item(), "1 < 2 < 3 < 4") is None
+        assert v.validate(_item(), "2 < 5 < 9") is None
+
+    def test_chain_later_pair_false_flagged(self) -> None:
+        """첫 쌍이 참이어도 뒤 쌍이 거짓이면 잡는다(2<5 참·5<3 거짓)."""
+        reason = SymPyInequalityValidator().validate(_item(), "2 < 5 < 3")
+        assert reason is not None and "5 < 3" in reason
+
+    def test_four_link_chain_last_false(self) -> None:
+        assert SymPyInequalityValidator().validate(_item(), "1 < 2 < 3 < 2") is not None
+
+    def test_chain_with_le_operator(self) -> None:
+        """`<=` 연쇄도 각 쌍 검사 — '3 <= 3 <= 2'의 '3<=2' 거짓."""
+        reason = SymPyInequalityValidator().validate(_item(), "3 <= 3 <= 2")
+        assert reason is not None and "3 <= 2" in reason
+
+    def test_symbolic_middle_passes(self) -> None:
+        """'1 < x < 3'은 수치 쌍이 없어 통과(심볼릭 구간 제약)."""
+        assert SymPyInequalityValidator().validate(_item(), "1 < x < 3") is None
+
+    def test_fragment_guard_holds(self) -> None:
+        """'a + 2 < 1'의 '2 < 1'은 좌측 '+' 인접이라 skip(더 큰 식의 일부)."""
+        assert SymPyInequalityValidator().validate(_item(), "a + 2 < 1") is None
+
+    def test_chain_via_default_chain(self) -> None:
+        reason = validate_response(default_seed_validator(), "범위: 2 < 5 < 3")
+        assert reason is not None and "inequality error" in reason
 
 
 # ──────────────────────────────────────────────────────────────────────────
