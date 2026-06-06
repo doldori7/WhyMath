@@ -108,10 +108,14 @@ def recommend_coaching_for_solution(
         student_solution,
     )
     arithmetic_error = signal is not None
+    # 다단계 대수 슬립(kind="solution")이면 verify 발화를 *단계 자가검산*으로 변형한다(slice 61).
+    # L3 kind→순수 bool 환산은 *오케스트레이터만* 수행(L4 recommend_coaching은 kind를 모름).
+    verify_steps = signal is not None and signal.kind == "solution"
     trigger = recommend_coaching(
         bkt_mastery,
         irt_theta,
         arithmetic_error=arithmetic_error,
+        verify_steps=verify_steps,
         discrepancy_tol=discrepancy_tol,
         mastery_threshold=mastery_threshold,
     )

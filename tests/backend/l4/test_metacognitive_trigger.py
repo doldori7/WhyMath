@@ -34,6 +34,25 @@ class TestRecommendCoaching:
         assert recommend_coaching(0.9, 2.0).focus == "advance"
         assert recommend_coaching(0.9, 2.0, arithmetic_error=False).focus == "advance"
 
+    def test_verify_steps_uses_step_self_check_prompt(self) -> None:
+        """verify_steps=True(다단계 대수 슬립) → verify·단계 자가검산 prompt·EVIDENCE 유지."""
+        trig = recommend_coaching(0.9, 2.0, arithmetic_error=True, verify_steps=True)
+        assert trig.focus == "verify"
+        assert trig.socratic_category == SocraticCategory.EVIDENCE  # 카테고리 불변
+        assert "한 줄씩" in trig.prompt  # 단계 자가검산 변형 발화
+
+    def test_verify_steps_default_keeps_generic_prompt(self) -> None:
+        """verify_steps 기본 False → 기존 계산 검산 prompt(backward-compat·위치 비변형)."""
+        generic = recommend_coaching(0.9, 2.0, arithmetic_error=True)
+        assert generic.focus == "verify"
+        assert "숫자가 어긋났는지" in generic.prompt and "한 줄씩" not in generic.prompt
+        # 명시 False도 동일(기존 verify 테스트와 동치).
+        assert recommend_coaching(0.9, 2.0, arithmetic_error=True, verify_steps=False) == generic
+
+    def test_verify_steps_ignored_without_arithmetic_error(self) -> None:
+        """arithmetic_error 없으면 verify 분기 미진입 → verify_steps 무효(mastery 경로)."""
+        assert recommend_coaching(0.9, 2.0, verify_steps=True).focus == "advance"
+
     def test_missing_signal_diagnose(self) -> None:
         """한쪽 신호라도 없으면 diagnose(교차검증 불가)."""
         assert recommend_coaching(None, 1.0).focus == "diagnose"

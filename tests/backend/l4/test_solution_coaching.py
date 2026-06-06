@@ -249,3 +249,28 @@ class TestErrorSpan:
         result = recommend_coaching_for_solution("5 ≤ 3", 0.9, 2.0)
         assert result.error_kind == "inequality"
         assert result.error_span is None
+
+
+class TestStepVerifyPrompt:
+    """slice 61 — solution 슬립(다단계 대수)일 때만 verify 발화가 단계 자가검산으로 변형."""
+
+    def test_solution_slip_uses_step_self_check(self) -> None:
+        # 대수 슬립(kind="solution") → 단계 자가검산 prompt(위치 비지목).
+        result = recommend_coaching_for_solution("2x + 1 = 7 이므로 x = 5", 0.9, 2.0)
+        assert result.error_kind == "solution"
+        assert result.trigger.focus == "verify"
+        assert "한 줄씩" in result.trigger.prompt
+
+    def test_arithmetic_slip_keeps_generic_verify(self) -> None:
+        # 순수 수치 슬립(kind="arithmetic") → 기존 계산 검산 prompt(단계 변형 아님).
+        result = recommend_coaching_for_solution("2 + 3 = 6", 0.9, 2.0)
+        assert result.error_kind == "arithmetic"
+        assert result.trigger.focus == "verify"
+        assert "숫자가 어긋났는지" in result.trigger.prompt
+        assert "한 줄씩" not in result.trigger.prompt
+
+    def test_inequality_slip_keeps_generic_verify(self) -> None:
+        # 부등식 슬립도 단계 변형 아님(solution kind만 변형).
+        result = recommend_coaching_for_solution("5 < 3", 0.9, 2.0)
+        assert result.error_kind == "inequality"
+        assert "한 줄씩" not in result.trigger.prompt

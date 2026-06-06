@@ -52,6 +52,10 @@ _PROMPT: dict[CoachingFocus, str] = {
     "advance": "조건을 바꾸거나 *왜 항상* 성립하는지 증명에 도전해볼래?",
     "diagnose": "이 개념 문제를 몇 개 더 풀어보면 네 상태를 더 정확히 볼 수 있어.",
 }
+# verify 포커스의 *단계 자가검산* 변형 — 다단계 대수 슬립(L3 error_kind="solution")일 때만 쓴다.
+# 위치를 *지목하지 않고* 학생이 스스로 인접 줄의 해 일관성을 확인하게 한다(답 미루기·slice 61).
+# 일반 verify("어디서 숫자가 어긋났는지")는 순수 수치 슬립용, 이건 다단계 변환의 등가 자가점검용.
+_PROMPT_VERIFY_STEPS = "각 줄이 바로 윗줄과 같은 답을 갖는지 한 줄씩 확인해볼래?"
 # 포커스 → 대화 진입 소크라테스 카테고리(slice 5·socratic 6분류). coach가 *어떤 질문 종류*로
 # 시작할지 — verify=근거(계산 재점검)·consolidate=근거(추측 검증)·retrieval=메타(예전 풀이
 # 회상)·foundation/diagnose=명료화(기초·상태 파악)·advance=관점(다른 방법·일반화).
@@ -93,6 +97,7 @@ def recommend_coaching(
     irt_theta: float | None,
     *,
     arithmetic_error: bool = False,
+    verify_steps: bool = False,
     discrepancy_tol: float = 0.2,
     mastery_threshold: float = 0.6,
 ) -> CoachingTrigger:
@@ -110,11 +115,13 @@ def recommend_coaching(
     `mastery_threshold` 미만이면 `foundation`(기초)·이상이면 `advance`(심화).
 
     `arithmetic_error`는 *L4가 직접 검출하지 않는다* — 호출자(오케스트레이터)가 L3 결정론
-    검증 결과를 bool로 전달(레이어 경계: L4는 원시 신호만 받음). 발화·근거는 포커스별 정본
-    카탈로그에서 조회(답 미제공·메타인지 유도).
+    검증 결과를 bool로 전달(레이어 경계: L4는 원시 신호만 받음). `verify_steps`도 같은 *순수 bool* —
+    True면 verify 발화를 *단계 자가검산* 변형으로 바꾼다(다단계 대수 슬립용·위치 비지목·slice 61).
+    오케스트레이터가 L3 kind="solution"을 이 bool로 환산해 전달(L4는 kind를 모름). 발화·근거는
+    포커스별 정본 카탈로그에서 조회(답 미제공·메타인지 유도).
     """
     if arithmetic_error:
-        return _build("verify")
+        return _build("verify", steps=verify_steps)
     if bkt_mastery is None or irt_theta is None:
         return _build("diagnose")
 
@@ -129,11 +136,13 @@ def recommend_coaching(
     return _build("foundation" if level < mastery_threshold else "advance")
 
 
-def _build(focus: CoachingFocus) -> CoachingTrigger:
+def _build(focus: CoachingFocus, *, steps: bool = False) -> CoachingTrigger:
+    # steps=True이고 verify면 단계 자가검산 변형 prompt(slice 61)·그 외는 포커스별 정본.
+    prompt = _PROMPT_VERIFY_STEPS if (focus == "verify" and steps) else _PROMPT[focus]
     return CoachingTrigger(
         focus=focus,
         rationale=_RATIONALE[focus],
-        prompt=_PROMPT[focus],
+        prompt=prompt,
         socratic_category=_SOCRATIC_BY_FOCUS[focus],
     )
 
