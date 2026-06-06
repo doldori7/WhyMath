@@ -111,6 +111,7 @@ async def generate(
     cache_ttl_s: int | None = None,
     student_id_hash: str | None = None,
     validator: SeedValidator | None = None,
+    skip_cache_on_signal: bool = False,
 ) -> GenerationResult:
     """라우팅 → (비동기면 큐잉 / 동기면 캐시·생성) → 관측을 조립한다.
 
@@ -131,6 +132,12 @@ async def generate(
             캐시 저장에 영향을 주지 않는다(학생 노출 차단은 L4/L5 책임, CLAUDE.md). None
             (기본)이면 검증을 돌리지 않아 오버헤드 0(opt-in). 캐시 히트·비동기 경로는
             shadow 검증 대상이 아니다(미스 생성물만 — 히트는 적재 시 이미 검증·중복 회피).
+        skip_cache_on_signal: True면 shadow 검증이 *환각 신호를 낸 미스 생성물*을 캐시에
+            적재하지 않는다(증명된 거짓 콘텐츠를 캐시에 *남기지 않음* — 캐시 위생). 신호가
+            없으면(통과·미검증) 정상 적재. `validator`가 없으면 신호 자체가 없어 무효과.
+            **반환 텍스트·신호는 불변** — 호출자엔 여전히 원시 출력+신호가 가고, *캐시*
+            만 건너뛴다(다음 동일 요청은 재생성). 기본 False(기존 동작·항상 적재). False
+            positive 시 비용(재생성)만 들고 정확성은 안전 — *결정론 검증 한정* 권장.
 
     Returns:
         GenerationResult — 동기면 텍스트(status="completed"), 비동기면 job_id(status="queued").
@@ -173,12 +180,15 @@ async def generate(
         trace.record(langfuse_fields(decision, cache_hit=True, student_id_hash=student_id_hash))
         return GenerationResult(decision=decision, text=cached, cache_hit=True)
 
-    # 캐시 미스 → 실제 생성(검증 전 원시 출력) → 캐시 저장 → (shadow 검증) → 기록.
+    # 캐시 미스 → 실제 생성(검증 전 원시 출력) → (shadow 검증) → 조건부 캐시 저장 → 기록.
     output = await provider.generate(prompt, system, decision)
-    await cache.set(key, output, ttl)
-    # 런타임 shadow 검증(비차단·opt-in) — 거짓 수치 관계 등 환각 신호를 관측에만 남긴다.
-    # 반환 텍스트·캐시는 *그대로*(원시 출력은 어차피 검증 전이며, 학생 노출 차단은 L4/L5).
+    # 런타임 shadow 검증(비차단·opt-in) — 거짓 수치 관계 등 환각 신호를 관측에 남긴다.
+    # 캐시 적재 *전에* 검증해야 skip_cache_on_signal이 적재 여부를 결정할 수 있다.
     signal = validate_response(validator, output) if validator is not None else None
+    # 캐시 위생: 신호 난 출력은 skip_cache_on_signal=True면 *적재하지 않는다*(증명된 거짓을
+    # 캐시에 남기지 않음). 반환 텍스트·신호는 불변 — 캐시만 건너뛴다(다음 요청은 재생성).
+    if not (skip_cache_on_signal and signal is not None):
+        await cache.set(key, output, ttl)
     trace.record(
         langfuse_fields(
             decision,

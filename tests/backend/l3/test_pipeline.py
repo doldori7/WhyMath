@@ -371,6 +371,82 @@ class TestShadowValidation:
         assert trace.records[0]["validation_signal"] is None
         assert result.validation_signal is None
 
+    async def test_skip_cache_on_signal_omits_flagged_output(self) -> None:
+        """skip_cache_on_signal=True + 거짓 출력 → 캐시 미적재, 그러나 텍스트·신호는 반환."""
+        provider = RecordingProvider(text="2 + 2 = 5")
+        cache = InMemoryCache()
+        result = await generate(
+            _sync_local_request(),
+            "프롬프트",
+            "시스템",
+            provider=provider,
+            cache=cache,
+            trace=RecordingTraceSink(),
+            validator=default_seed_validator(),
+            skip_cache_on_signal=True,
+        )
+        # 캐시에는 *남지 않는다*(증명된 거짓 콘텐츠 캐시 위생).
+        key = cache_key_for("프롬프트", "시스템", result.decision)
+        assert await cache.get(key) is None
+        # 그러나 호출자에겐 원시 출력+신호가 그대로 간다(비차단·캐시만 건너뜀).
+        assert result.text == "2 + 2 = 5"
+        assert isinstance(result.validation_signal, str)
+        assert "arithmetic error" in result.validation_signal
+
+    async def test_skip_cache_on_signal_keeps_clean_output(self) -> None:
+        """skip_cache_on_signal=True여도 신호 없으면(통과) 정상 적재."""
+        provider = RecordingProvider(text="2 + 2 = 4")
+        cache = InMemoryCache()
+        result = await generate(
+            _sync_local_request(),
+            "프롬프트",
+            "시스템",
+            provider=provider,
+            cache=cache,
+            trace=RecordingTraceSink(),
+            validator=default_seed_validator(),
+            skip_cache_on_signal=True,
+        )
+        key = cache_key_for("프롬프트", "시스템", result.decision)
+        assert await cache.get(key) == "2 + 2 = 4"  # 통과 → 적재됨
+        assert result.validation_signal is None
+
+    async def test_skip_disabled_caches_even_when_flagged(self) -> None:
+        """기본(skip=False) → 신호 나도 캐시 적재(기존 동작 불변·비차단)."""
+        provider = RecordingProvider(text="5 < 3")
+        cache = InMemoryCache()
+        result = await generate(
+            _sync_local_request(),
+            "프롬프트",
+            "시스템",
+            provider=provider,
+            cache=cache,
+            trace=RecordingTraceSink(),
+            validator=default_seed_validator(),
+            # skip_cache_on_signal 미지정 → 기본 False
+        )
+        key = cache_key_for("프롬프트", "시스템", result.decision)
+        assert await cache.get(key) == "5 < 3"  # 적재됨(기존 동작)
+        assert isinstance(result.validation_signal, str)
+
+    async def test_skip_without_validator_no_effect(self) -> None:
+        """validator 미주입 → 신호 없음 → skip=True여도 정상 적재(무효과)."""
+        provider = RecordingProvider(text="8 != 8")
+        cache = InMemoryCache()
+        result = await generate(
+            _sync_local_request(),
+            "프롬프트",
+            "시스템",
+            provider=provider,
+            cache=cache,
+            trace=RecordingTraceSink(),
+            skip_cache_on_signal=True,
+            # validator 미주입 → 신호 None → skip 무효과
+        )
+        key = cache_key_for("프롬프트", "시스템", result.decision)
+        assert await cache.get(key) == "8 != 8"
+        assert result.validation_signal is None
+
     async def test_queued_result_signal_is_none(self) -> None:
         """비동기(QUALITY) 큐잉 결과는 텍스트가 없으므로 validation_signal=None."""
         result = await generate(
