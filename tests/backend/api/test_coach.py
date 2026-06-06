@@ -394,6 +394,7 @@ class TestSolutionCoachingWiring:
         assert sc is not None
         assert sc["trigger"]["focus"] == "verify"
         assert "solution error" in sc["validation_signal"]
+        assert "한 줄씩" in sc["trigger"]["prompt"]  # slice 61 — 단계 자가검산 변형 발화(위치 비지목)
         # slice 60 — 해 주장("x = 5")을 가리키는 span 노출(방정식 아님).
         sol = "2x + 1 = 7 이므로 x = 5"
         s, e = sc["error_span"]
