@@ -71,6 +71,15 @@ class SolutionCoaching(BaseModel):
             "파싱 제거)으로, L5가 종류별 코칭 UI를, L7이 오류 유형 분석을 할 수 있게 한다."
         ),
     )
+    error_span: tuple[int, int] | None = Field(
+        default=None,
+        description=(
+            "틀린 관계/해주장의 학생 풀이 원문 내 위치 `[start, end)`(0-based·half-open·JSON "
+            "배열). None=위치 미상(오류 없음·위생 신호·유니코드 부등호 정규화로 오프셋 시프트). "
+            "L5가 학생 풀이에서 *어디가 틀렸는지* 하이라이트하는 데 쓴다(slice 60 — "
+            "`ValidationSignal.span` 노출)."
+        ),
+    )
 
 
 def recommend_coaching_for_solution(
@@ -111,6 +120,7 @@ def recommend_coaching_for_solution(
         arithmetic_error=arithmetic_error,
         validation_signal=signal.reason if signal is not None else None,
         error_kind=signal.kind if signal is not None else None,
+        error_span=signal.span if signal is not None else None,
     )
 
 
