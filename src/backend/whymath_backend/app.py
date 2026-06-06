@@ -50,6 +50,7 @@ from whymath_backend.l3.interfaces import (
 )
 from whymath_backend.l3.models import RoutingDecision, RoutingRequest
 from whymath_backend.l3.pipeline import QualityQueueUnavailableError
+from whymath_backend.l3.pregenerate.validator import default_seed_validator
 from whymath_backend.l3.providers.anthropic import AnthropicProvider, AnthropicStatus
 from whymath_backend.l3.providers.composite import CompositeProvider
 from whymath_backend.l3.providers.ollama import OllamaProvider, OllamaStatus
@@ -61,6 +62,11 @@ _PROVIDER_KEY = "llm_provider"
 _CACHE_KEY = "llm_cache"
 _TRACE_KEY = "trace_sink"
 _QUEUE_KEY = "job_queue"
+
+# /v1/generate의 런타임 shadow 검증기 — 결정론 관계 검증(=·<·>·≤·≥·≠·연쇄). 모듈 1회
+# 생성(I/O 없음·재사용). 비차단(반환 텍스트·캐시 불변)이라 default-on이 안전 — 워커
+# (`_WORKER_SHADOW_VALIDATOR`, slice 43)와 같은 관측 정책을 동기 HTTP 경로에 적용한다.
+_SHADOW_VALIDATOR = default_seed_validator()
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -88,6 +94,13 @@ class GenerateResponseBody(BaseModel):
     text: str = Field(..., description="생성된 원시 텍스트(검증 전 — 학생 직접 노출 금지)")
     cache_hit: bool = Field(..., description="캐시 적중 여부 (KPI, 03a §F.1)")
     decision: RoutingDecision = Field(..., description="라우팅 결정 메타데이터 (03a §G)")
+    validation_signal: str | None = Field(
+        default=None,
+        description=(
+            "런타임 shadow 검증 환각 신호(비차단·관측). None=통과/미검증(캐시 히트 포함), "
+            "문자열=거짓 수치 관계 등 사유. 상위 계층이 재생성·L4/L5 라우팅 결정에 활용."
+        ),
+    )
 
 
 class GenerateQueuedBody(BaseModel):
@@ -318,6 +331,7 @@ def create_app(
                 cache=cache,
                 trace=trace,
                 queue=queue,
+                validator=_SHADOW_VALIDATOR,
             )
         except QualityQueueUnavailableError as exc:
             # 큐 미구성/ broker 도달 실패 — 명확한 503 JSON(스택트레이스 금지).
@@ -344,11 +358,12 @@ def create_app(
                 content=queued.model_dump(mode="json"),
             )
 
-        # 동기 완료 → 200 + 텍스트.
+        # 동기 완료 → 200 + 텍스트(+ shadow 검증 신호·비차단 관측).
         completed = GenerateResponseBody(
             text=result.text,
             cache_hit=result.cache_hit,
             decision=result.decision,
+            validation_signal=result.validation_signal,
         )
         return JSONResponse(
             status_code=status.HTTP_200_OK,
