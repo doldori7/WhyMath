@@ -92,7 +92,10 @@ _MATH_OP_NORMALIZE = {
 # alnum·연산자면 *더 큰 식의 일부*로 보고 건너뜀). 부호 뒤 공백 없이 숫자/괄호가
 # 와야 토큰이 성립한다(예: "- 5"는 부호로 안 잡힘 — 뺄셈으로 남는다).
 _NUM_TOKEN = r"[+-]?(?:[0-9(][0-9 \t+\-*/^().]*[0-9)]|[0-9])"
-_EQUALITY_RE = re.compile(rf"({_NUM_TOKEN})[ \t]*=[ \t]*({_NUM_TOKEN})")
+# 우변을 *룩어헤드*(소비 안 함)로 잡아 연쇄 등식 "a = b = c"의 인접 쌍(a=b, b=c)을
+# 모두 검사할 수 있게 한다 — 일반 매칭은 우변을 소비해 다음 쌍을 놓친다(finditer 비중첩).
+# group(1)=좌변, group(2)=우변(룩어헤드 내부). match.end(2)로 우변 끝 위치를 얻는다.
+_EQUALITY_RE = re.compile(rf"({_NUM_TOKEN})[ \t]*=[ \t]*(?=({_NUM_TOKEN}))")
 
 # 매치 양옆(스페이스·탭 건너 첫 글자)에 이게 인접하면 *더 큰 식의 일부*라 건너뛴다 —
 # 예: "x + 1 = 2"에서 "1 = 2"만 떼어 거짓 판정하는 false positive를 막는다.
@@ -100,6 +103,11 @@ _EQUALITY_RE = re.compile(rf"({_NUM_TOKEN})[ \t]*=[ \t]*({_NUM_TOKEN})")
 # 소수점(.)은 제외 — 소수는 정규식 토큰이 통째로 잡으므로 인접 검사가 불필요하고,
 # 문장 종지부 "= 4."를 잘못 건너뛰지 않게 한다.
 _ADJACENT_MATH = frozenset("+-*/^=()")
+
+# 등식 인접 검사용 집합 — `_ADJACENT_MATH`에서 `=`를 *뺀다*. 인접한 `=`는 *더 큰 식*이
+# 아니라 *연쇄 등식*("a = b = c")이므로 건너뛰지 않고 각 쌍을 검사한다. 다른 연산자
+# (+−*/^())는 여전히 차단 — "x + 1 = 2"의 "1 = 2"는 좌측 `+` 인접이라 그대로 skip.
+_EQ_ADJACENT = _ADJACENT_MATH - frozenset("=")
 
 
 def _is_standalone(
@@ -150,6 +158,7 @@ class SymPyArithmeticValidator:
     수학 콘텐츠의 *산술 환각*(예: "3 × 4 = 11")을 빌드타임에 거른다. 보수적이라
     심볼릭 등식(`x+1=2`)·파싱 불가·판정 불가는 통과시키고, *거짓 증명* 시에만 실패.
     검사 수는 `max_checks`로 제한(악의적·초장문 응답의 ReDoS/과부하 방지).
+    연쇄 등식("2+3 = 5 = 6")은 룩어헤드로 각 인접 쌍(2+3=5·5=6)을 모두 검사한다.
     """
 
     def __init__(self, *, max_checks: int = 100) -> None:
@@ -163,7 +172,9 @@ class SymPyArithmeticValidator:
         for match in _EQUALITY_RE.finditer(normalized):
             if checked >= self._max_checks:
                 break
-            if not _is_standalone(normalized, match.start(), match.end()):
+            # 우변은 룩어헤드(group 2)라 미소비 — 독립 검사 span은 좌변 시작~우변 끝.
+            # 인접 `=`는 연쇄 등식이므로 허용(`_EQ_ADJACENT`), 다른 연산자는 차단.
+            if not _is_standalone(normalized, match.start(1), match.end(2), _EQ_ADJACENT):
                 continue  # 더 큰 식의 일부 → 건너뜀(false positive 방지)
             reason = _equality_is_false(match.group(1).strip(), match.group(2).strip())
             if reason is not None:
