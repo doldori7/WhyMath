@@ -347,6 +347,25 @@ def default_seed_validator(*, min_length: int = 1) -> ChainValidator:
     )
 
 
+def arithmetic_validator(*, max_checks: int = 100) -> ChainValidator:
+    """수치 관계 오류 검출 전용 체인 — 위생 검사 없이 SymPy 관계 검증기만(=·<·>·≤·≥·≠).
+
+    `default_seed_validator`와 달리 `BasicSeedValidator`(비어있음·길이·오류 마커 위생)를
+    *빼고* SymPy 계산 검증기 셋만 묶는다. 용도가 *학생 풀이의 계산 슬립*("2+3=6") 검출이라
+    위생 신호("empty response")는 의미가 없기 때문이다 — 빈 풀이·짧은 풀이는 *슬립이 아니다*.
+    통과=None·*거짓이 증명된 수치 관계*만 사유 문자열(보수적: 심볼릭·파싱 불가·판정 불가는
+    통과). L3→L4 오케스트레이터(`l4.solution_coaching.recommend_coaching_for_solution`)가
+    이 신호 유무를 `arithmetic_error` bool로 환산해 L4 검산(verify) 코칭을 처방한다(slice 51).
+    """
+    return ChainValidator(
+        [
+            SymPyArithmeticValidator(max_checks=max_checks),
+            SymPyInequalityValidator(max_checks=max_checks),
+            SymPyNotEqualValidator(max_checks=max_checks),
+        ]
+    )
+
+
 def validate_response(validator: SeedValidator, response: str) -> str | None:
     """`PregenItem` 없이 응답 문자열만 검증 — 런타임 재사용 진입점.
 

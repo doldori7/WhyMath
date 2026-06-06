@@ -33,6 +33,7 @@ from whymath_backend.l3.pregenerate import (
     SymPyArithmeticValidator,
     SymPyInequalityValidator,
     SymPyNotEqualValidator,
+    arithmetic_validator,
     default_seed_validator,
     validate_response,
 )
@@ -680,6 +681,53 @@ class TestDefaultSeedValidator:
         reason = default_seed_validator(min_length=10).validate(_item(), "짧음")
         assert reason is not None
         assert "too short" in reason
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# arithmetic_validator — 위생 없이 SymPy 관계 검증기만(학생 풀이 슬립 검출용·slice 52)
+# ──────────────────────────────────────────────────────────────────────────
+class TestArithmeticValidator:
+    def test_returns_chain_satisfying_protocol(self) -> None:
+        assert isinstance(arithmetic_validator(), ChainValidator)
+        assert isinstance(arithmetic_validator(), SeedValidator)
+
+    def test_catches_false_arithmetic(self) -> None:
+        reason = arithmetic_validator().validate(_item(), "2 + 2 = 5")
+        assert reason is not None
+        assert "arithmetic error" in reason
+
+    def test_catches_false_inequality(self) -> None:
+        reason = arithmetic_validator().validate(_item(), "5 < 3")
+        assert reason is not None
+        assert "inequality error" in reason
+
+    def test_catches_false_not_equal(self) -> None:
+        reason = arithmetic_validator().validate(_item(), "12/4 ≠ 3")
+        assert reason is not None
+        assert "not-equal error" in reason
+
+    def test_clean_response_passes(self) -> None:
+        assert arithmetic_validator().validate(_item(), "2 + 2 = 4, 그리고 3 < 5") is None
+
+    def test_no_hygiene_empty_passes(self) -> None:
+        # 위생(BasicSeedValidator) 미포함 → 빈/짧은 응답은 *탈락하지 않는다*
+        # (학생 풀이의 계산 슬립 검출이 목적 — 빈 풀이는 슬립이 아님). default_seed_validator
+        # 와의 핵심 차이.
+        assert arithmetic_validator().validate(_item(), "") is None
+        assert arithmetic_validator().validate(_item(), "짧음") is None
+
+    def test_symbolic_passes(self) -> None:
+        # 자유변수(심볼릭)는 판정 불가 → 통과(보수적).
+        assert arithmetic_validator().validate(_item(), "x + 1 = 2") is None
+
+    def test_max_checks_threaded_through(self) -> None:
+        # max_checks=0이면 ChainValidator 구성요소 생성 시 ValueError(1 이상 강제).
+        try:
+            arithmetic_validator(max_checks=0)
+        except ValueError as exc:
+            assert "max_checks" in str(exc)
+        else:  # pragma: no cover
+            raise AssertionError("max_checks=0이 허용됨")
 
 
 # ──────────────────────────────────────────────────────────────────────────
