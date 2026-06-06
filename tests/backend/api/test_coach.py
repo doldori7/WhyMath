@@ -363,6 +363,9 @@ class TestSolutionCoachingWiring:
         assert sc["validation_signal"] is not None
         assert "arithmetic error" in sc["validation_signal"]
         assert sc["error_kind"] == "arithmetic"  # slice 58 — 구조화 분류 노출
+        # slice 60 — 오류 위치 span 노출(JSON 배열·원문 슬라이스가 거짓 관계와 일치).
+        s, e = sc["error_span"]
+        assert "2 + 3 = 6"[s:e] == "2 + 3 = 6"
 
     def test_inequality_slip_surfaces_verify(self) -> None:
         resp = _client().post("/v1/coach", json={"student_input": "5 < 3"})
@@ -391,6 +394,10 @@ class TestSolutionCoachingWiring:
         assert sc is not None
         assert sc["trigger"]["focus"] == "verify"
         assert "solution error" in sc["validation_signal"]
+        # slice 60 — 해 주장("x = 5")을 가리키는 span 노출(방정식 아님).
+        sol = "2x + 1 = 7 이므로 x = 5"
+        s, e = sc["error_span"]
+        assert sol[s:e] == "x = 5"
 
     def test_clean_arithmetic_no_solution_coaching(self) -> None:
         # 참 등식 → 슬립 아님 → None(기존 decision/coaching_focus 경로).

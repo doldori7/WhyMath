@@ -217,3 +217,35 @@ class TestErrorKindClassification:
         result = recommend_coaching_for_solution("내용", 0.9, 2.0, validator=_AlwaysFails())
         assert result.arithmetic_error is True
         assert result.error_kind == "other"
+
+
+class TestErrorSpan:
+    """slice 60 — 오류 위치 span 노출(`ValidationSignal.span` → `error_span`·L5 하이라이트)."""
+
+    def test_arithmetic_span_points_at_relation(self) -> None:
+        # 한글 산문 속 거짓 관계도 span은 *관계만* 가리킨다.
+        text = "따라서 2 + 3 = 6 이다"
+        result = recommend_coaching_for_solution(text, 0.9, 2.0)
+        assert result.error_span is not None
+        s, e = result.error_span
+        assert text[s:e] == "2 + 3 = 6"
+
+    def test_solution_span_points_at_claim(self) -> None:
+        # 대수 슬립은 틀린 *해 주장*("x = 5")을 가리킨다(방정식 아님).
+        text = "2x + 1 = 7 이므로 x = 5"
+        result = recommend_coaching_for_solution(text, 0.9, 2.0)
+        assert result.error_span is not None
+        s, e = result.error_span
+        assert text[s:e] == "x = 5"
+
+    def test_no_error_span_none(self) -> None:
+        # 오류 없음 → error_span None(arithmetic_error False와 정합).
+        result = recommend_coaching_for_solution("3 × 4 = 12", 0.9, 2.0)
+        assert result.arithmetic_error is False
+        assert result.error_span is None
+
+    def test_unicode_span_none_but_kind_set(self) -> None:
+        # 유니코드 ≤는 1→2 정규화라 span=None(가드)이나 error_kind는 정상(slice 59b 계승).
+        result = recommend_coaching_for_solution("5 ≤ 3", 0.9, 2.0)
+        assert result.error_kind == "inequality"
+        assert result.error_span is None
