@@ -32,6 +32,7 @@ from whymath_backend.l3.interfaces import (
     TraceSink,
 )
 from whymath_backend.l3.models import RoutingDecision, RoutingRequest
+from whymath_backend.l3.pregenerate.validator import SeedValidator, validate_response
 from whymath_backend.l3.router import Router, cache_key_for, langfuse_fields
 
 
@@ -101,6 +102,7 @@ async def generate(
     queue: AsyncJobQueue | None = None,
     cache_ttl_s: int | None = None,
     student_id_hash: str | None = None,
+    validator: SeedValidator | None = None,
 ) -> GenerationResult:
     """라우팅 → (비동기면 큐잉 / 동기면 캐시·생성) → 관측을 조립한다.
 
@@ -115,6 +117,12 @@ async def generate(
             QualityQueueUnavailableError(미구성 폴백 → API 503).
         cache_ttl_s: 캐시 TTL(초). None이면 Settings.cache_ttl_s.
         student_id_hash: Langfuse 기록용 학생 ID 해시(직접 ID 금지, 03a §F.2).
+        validator: 런타임 shadow 검증기(L3 결정론 도구, 예: `default_seed_validator()`).
+            주입 시 *캐시 미스로 새로 생성된 출력*에만 적용해 거짓 수치 관계 등 환각
+            신호를 trace의 `validation_signal`로 기록한다. **비차단** — 반환 텍스트·
+            캐시 저장에 영향을 주지 않는다(학생 노출 차단은 L4/L5 책임, CLAUDE.md). None
+            (기본)이면 검증을 돌리지 않아 오버헤드 0(opt-in). 캐시 히트·비동기 경로는
+            shadow 검증 대상이 아니다(미스 생성물만 — 히트는 적재 시 이미 검증·중복 회피).
 
     Returns:
         GenerationResult — 동기면 텍스트(status="completed"), 비동기면 job_id(status="queued").
@@ -157,8 +165,18 @@ async def generate(
         trace.record(langfuse_fields(decision, cache_hit=True, student_id_hash=student_id_hash))
         return GenerationResult(decision=decision, text=cached, cache_hit=True)
 
-    # 캐시 미스 → 실제 생성(검증 전 원시 출력) → 캐시 저장 → 기록.
+    # 캐시 미스 → 실제 생성(검증 전 원시 출력) → 캐시 저장 → (shadow 검증) → 기록.
     output = await provider.generate(prompt, system, decision)
     await cache.set(key, output, ttl)
-    trace.record(langfuse_fields(decision, cache_hit=False, student_id_hash=student_id_hash))
+    # 런타임 shadow 검증(비차단·opt-in) — 거짓 수치 관계 등 환각 신호를 관측에만 남긴다.
+    # 반환 텍스트·캐시는 *그대로*(원시 출력은 어차피 검증 전이며, 학생 노출 차단은 L4/L5).
+    signal = validate_response(validator, output) if validator is not None else None
+    trace.record(
+        langfuse_fields(
+            decision,
+            cache_hit=False,
+            student_id_hash=student_id_hash,
+            validation_signal=signal,
+        )
+    )
     return GenerationResult(decision=decision, text=output, cache_hit=False)

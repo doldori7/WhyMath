@@ -275,12 +275,17 @@ def langfuse_fields(
     escalated_from: CostTier | LocalModelTier | str | None = None,
     call_site: CallSite | str | None = None,
     student_id_hash: str | None = None,
+    validation_signal: str | None = None,
 ) -> dict[str, object]:
     """Langfuse 기록 필드 dict 생성 (03a §F.2 표).
 
     범위 메모: *dict만* 반환한다. 실제 Langfuse 전송은 TraceSink 구현의 책임이며
     M1.2 범위 밖이다. `latency_ms`·`cost_krw`는 *실측* 필드라 여기서는 채우지 않고
     (라우터는 추정만 함), 추정치는 est_* 로 별도 노출한다.
+
+    `validation_signal`은 런타임 shadow 검증(L3 결정론 도구) 결과다 — None=통과(또는
+    미검증), 문자열=거짓 수치 관계 등 *환각 신호 사유*. 비차단 관측 전용이며 반환
+    텍스트·캐시 동작에 영향을 주지 않는다(학생 노출 경계는 L4/L5 책임, CLAUDE.md).
     """
     cost = _as_cost_tier(decision.cost_tier)
     family = _as_model_family(decision.local_family)
@@ -307,6 +312,7 @@ def langfuse_fields(
         "escalated_from": escalated,  # 에스컬레이션 빈도 분석
         "student_id_hash": student_id_hash,  # 직접 ID 금지(해시만)
         "reason": decision.reason,  # 결정 근거
+        "validation_signal": validation_signal,  # 런타임 shadow 검증 환각 신호(비차단)
     }
 
 

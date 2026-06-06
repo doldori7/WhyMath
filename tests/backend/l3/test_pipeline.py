@@ -17,6 +17,7 @@ from whymath_backend.l3.pipeline import (
     QualityQueueUnavailableError,
     generate,
 )
+from whymath_backend.l3.pregenerate.validator import default_seed_validator
 from whymath_backend.l3.router import cache_key_for
 
 
@@ -276,6 +277,93 @@ class TestQualityAsyncQueue:
         from whymath_backend.l3.interfaces import AsyncJobQueue
 
         assert isinstance(RecordingQueue(), AsyncJobQueue)
+
+
+class TestShadowValidation:
+    """런타임 shadow 검증(비차단·opt-in) — 미스 생성물의 환각 신호를 trace에 기록.
+
+    반환 텍스트·캐시는 *불변*(원시 출력은 검증 전이며 학생 노출 차단은 L4/L5 책임).
+    """
+
+    async def test_clean_output_records_none_signal(self) -> None:
+        """검증 통과 출력 → validation_signal=None, 텍스트 불변."""
+        provider = RecordingProvider(text="정답은 2 + 2 = 4 입니다")
+        trace = RecordingTraceSink()
+        result = await generate(
+            _sync_local_request(),
+            "p",
+            "s",
+            provider=provider,
+            cache=InMemoryCache(),
+            trace=trace,
+            validator=default_seed_validator(),
+        )
+        assert result.text == "정답은 2 + 2 = 4 입니다"
+        assert trace.records[0]["validation_signal"] is None
+
+    async def test_false_output_records_signal_but_nonblocking(self) -> None:
+        """거짓 산술 출력 → validation_signal에 사유 기록, 그러나 텍스트·캐시는 *그대로*."""
+        provider = RecordingProvider(text="2 + 2 = 5")
+        cache = InMemoryCache()
+        trace = RecordingTraceSink()
+        result = await generate(
+            _sync_local_request(),
+            "프롬프트",
+            "시스템",
+            provider=provider,
+            cache=cache,
+            trace=trace,
+            validator=default_seed_validator(),
+        )
+        # 비차단: 반환 텍스트는 원시 출력 그대로(차단·치환 없음).
+        assert result.text == "2 + 2 = 5"
+        assert result.cache_hit is False
+        # 캐시에도 그대로 적재(shadow는 관측 전용 — 캐시 동작 불변).
+        key = cache_key_for("프롬프트", "시스템", result.decision)
+        assert await cache.get(key) == "2 + 2 = 5"
+        # 그러나 환각 신호는 *조용히 넘어가지 않고* 관측에 남는다(CLAUDE.md).
+        signal = trace.records[0]["validation_signal"]
+        assert isinstance(signal, str) and "arithmetic error" in signal
+
+    async def test_no_validator_signal_is_none(self) -> None:
+        """validator 미주입(기본) → 검증 미실행 → validation_signal=None(오버헤드 0)."""
+        provider = RecordingProvider(text="5 < 3 라는 거짓 부등식")
+        trace = RecordingTraceSink()
+        await generate(
+            _sync_local_request(),
+            "p",
+            "s",
+            provider=provider,
+            cache=InMemoryCache(),
+            trace=trace,
+            # validator 미주입
+        )
+        assert trace.records[0]["validation_signal"] is None
+
+    async def test_cache_hit_not_shadow_validated(self) -> None:
+        """캐시 히트 경로는 shadow 검증 대상이 아니다(미스 생성물만) — provider 미호출."""
+        provider = RecordingProvider(text="안 쓰임")
+        cache = InMemoryCache()
+        trace = RecordingTraceSink()
+        req = _sync_local_request()
+        from whymath_backend.l3.router import Router
+
+        decision = Router().route(req)
+        key = cache_key_for("p", "s", decision)
+        await cache.set(key, "8 != 8", 60)  # 거짓이지만 히트는 검증 안 함
+
+        result = await generate(
+            req,
+            "p",
+            "s",
+            provider=provider,
+            cache=cache,
+            trace=trace,
+            validator=default_seed_validator(),
+        )
+        assert result.cache_hit is True
+        assert provider.calls == []
+        assert trace.records[0]["validation_signal"] is None
 
 
 class TestCloudRejectedThroughProvider:
