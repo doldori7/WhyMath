@@ -179,6 +179,21 @@ def _is_standalone(
     return True
 
 
+def _span_if_preserved(
+    normalized: str, response: str, span: tuple[int, int]
+) -> tuple[int, int] | None:
+    """정규화가 길이를 보존했을 때만 (start, end) span — 아니면 None (slice 59b).
+
+    검증기는 `response.translate(...)` 후 매칭하므로 match 오프셋은 *normalized* 좌표다.
+    `_MATH_OP_NORMALIZE`(×÷−·)는 1:1(길이 보존)이라 normalized==원문 좌표지만,
+    `_INEQ_NORMALIZE`(≤→"<=")·`_NOTEQ_NORMALIZE`(≠→"!=")는 1→2라 유니코드 부등호가 있으면
+    오프셋이 어긋난다. `len(normalized)==len(response)` ⟺ 1→2 치환 0회 ⟺ 오프셋 보존
+    (맵은 1→N(N≥1)만·길이 축소 매핑 금지 — 추가 시 이 명제가 깨짐). 보존이 아니면 None을
+    돌려 *틀린 하이라이트보다 무하이라이트*를 택한다(span은 비-load-bearing 힌트·검출 불변).
+    """
+    return span if len(normalized) == len(response) else None
+
+
 def _equality_is_false(lhs_s: str, rhs_s: str) -> str | None:
     """수치 등식 `lhs=rhs`가 *거짓으로 증명*되면 사유, 아니면(참/미정/파싱불가) None.
 
@@ -225,7 +240,8 @@ class SymPyArithmeticValidator:
                 continue  # 더 큰 식의 일부 → 건너뜀(false positive 방지)
             reason = _equality_is_false(match.group(1).strip(), match.group(2).strip())
             if reason is not None:
-                return ValidationSignal(kind="arithmetic", reason=reason)
+                span = _span_if_preserved(normalized, response, (match.start(1), match.end(2)))
+                return ValidationSignal(kind="arithmetic", reason=reason, span=span)
             checked += 1
         return None
 
@@ -290,7 +306,8 @@ class SymPyInequalityValidator:
                 match.group(1).strip(), match.group(3).strip(), match.group(2)
             )
             if reason is not None:
-                return ValidationSignal(kind="inequality", reason=reason)
+                span = _span_if_preserved(normalized, response, (match.start(1), match.end(3)))
+                return ValidationSignal(kind="inequality", reason=reason, span=span)
             checked += 1
         return None
 
@@ -350,7 +367,8 @@ class SymPyNotEqualValidator:
                 continue
             reason = _not_equal_is_false(match.group(1).strip(), match.group(3).strip())
             if reason is not None:
-                return ValidationSignal(kind="not_equal", reason=reason)
+                span = _span_if_preserved(normalized, response, (match.start(1), match.end(3)))
+                return ValidationSignal(kind="not_equal", reason=reason, span=span)
             checked += 1
         return None
 
@@ -422,27 +440,31 @@ def _common_solution(var: Any, eqs: list[tuple[Any, Any, str]]) -> set[Any] | No
 
 
 def _check_variable(
-    var: Any, eqs: list[tuple[Any, Any, str]], values: set[Any] | None
-) -> str | None:
-    """변수 하나의 방정식들·주장 해를 *일관성 기반* 검증 — 틀린 해면 사유.
+    var: Any, eqs: list[tuple[Any, Any, str]], claims: dict[Any, tuple[int, int]] | None
+) -> tuple[str, tuple[int, int]] | None:
+    """변수 하나의 방정식들·주장 해를 *일관성 기반* 검증 — 틀린 해면 (사유, 해주장 span).
 
     주장 해가 *정확히 하나*일 때만(다중값=두 근·가설 재사용은 보수적 skip) 검증한다.
     방정식들의 공통 해집합(일관 시 비어있지 않음)에 그 값이 없으면 탈락. 비일관(공통 해
     없음)·비다항·비유한 해는 skip — 다단계 정답 유도(일관)는 검증하고, 소문제 변수 재사용
     (비일관)은 건너뛰어 false-positive 0을 지킨다.
+
+    `claims`는 {해값: 원문 span}(slice 59b — first-wins). 검출 시 (사유, *그 해 주장*의 span)을
+    돌려 L5가 틀린 *주장*(예: "x = 5")을 하이라이트하게 한다(방정식은 맞고 주장이 오류 지점).
     """
-    if values is None or len(values) != 1:
+    if claims is None or len(claims) != 1:
         return None
-    (value,) = tuple(values)
+    (value,) = tuple(claims)
     solset = _common_solution(var, eqs)
     if not solset:  # None(풀이 불가·비다항) 또는 빈 집합(상호 모순) → 보수적 skip
         return None
     if any(_num_equal(value, sol) for sol in solset):
         return None  # 주장 해가 공통 해집합에 있음 → 정해
-    return (
+    reason = (
         f"solution error: '{eqs[0][2]}' has solution {var}={_format_solset(solset)}, "
         f"not claimed {var}={value}"
     )
+    return (reason, claims[value])
 
 
 class SymPySolutionValidator:
@@ -470,7 +492,8 @@ class SymPySolutionValidator:
         normalized = response.translate(_MATH_OP_NORMALIZE)
         # 전체 텍스트에서 단변수 관계를 모아 변수별로 (방정식, 해 주장) 분류한다.
         # 줄을 넘어 모으되, 일관성 검사(_check_variable)가 소문제 변수 재사용을 걸러낸다.
-        assignments: dict[Any, set[Any]] = {}
+        # 해값 → 원문 span (slice 59b — 검출 시 틀린 *주장*을 L5가 하이라이트).
+        assignments: dict[Any, dict[Any, tuple[int, int]]] = {}
         equations: dict[Any, list[tuple[Any, Any, str]]] = {}
         checked = 0
         for match in _RELATION_RE.finditer(normalized):
@@ -486,17 +509,20 @@ class SymPySolutionValidator:
                 continue  # 순수 수치(0개)·다변수(2+)는 이 검증기 범위 밖
             (var,) = tuple(syms)
             # 해 주장("x = 5" 또는 "5 = x"): 한쪽이 그 변수 심볼·다른 쪽이 수치.
+            # 해값→span 기록(first-wins) — `match.span()`은 관계 전체("x = 5") 위치.
             if lhs == var and not rhs.free_symbols:
-                assignments.setdefault(var, set()).add(rhs)
+                assignments.setdefault(var, {}).setdefault(rhs, match.span())
             elif rhs == var and not lhs.free_symbols:
-                assignments.setdefault(var, set()).add(lhs)
+                assignments.setdefault(var, {}).setdefault(lhs, match.span())
             else:
                 eq_str = f"{match.group(1).strip()} = {match.group(2).strip()}"
                 equations.setdefault(var, []).append((lhs, rhs, eq_str))
         for var, eqs in equations.items():
-            reason = _check_variable(var, eqs, assignments.get(var))
-            if reason is not None:
-                return ValidationSignal(kind="solution", reason=reason)
+            result = _check_variable(var, eqs, assignments.get(var))
+            if result is not None:
+                reason, claim_span = result
+                span = _span_if_preserved(normalized, response, claim_span)
+                return ValidationSignal(kind="solution", reason=reason, span=span)
         return None
 
 

@@ -182,7 +182,7 @@ class TestValidationSignal:
         assert sig.kind == "arithmetic" and sig.reason == "r" and sig.span == (2, 7)
 
     def test_span_defaults_none(self) -> None:
-        # slice 59a는 span을 *생산하지 않는다*(항상 None — 생산은 후속 slice 59b).
+        # span 미지정 시 기본 None(dataclass 기본값 — BasicSeedvalidator 등 위치 미상).
         assert ValidationSignal(kind="other", reason="r").span is None
 
     def test_frozen(self) -> None:
@@ -190,14 +190,49 @@ class TestValidationSignal:
         with pytest.raises(Exception):  # FrozenInstanceError(불변)
             sig.kind = "arithmetic"  # type: ignore[misc]
 
-    def test_validators_produce_none_span_in_59a(self) -> None:
-        # 모든 검증기가 slice 59a에선 span=None(reason·kind만 채움). 대표 4종.
-        arith = SymPyArithmeticValidator().validate(_item(), "2 + 2 = 5")
-        ineq = SymPyInequalityValidator().validate(_item(), "5 < 3")
-        neq = SymPyNotEqualValidator().validate(_item(), "8 != 8")
-        soln = SymPySolutionValidator().validate(_item(), "2x + 1 = 7 이므로 x = 5")
-        for sig in (arith, ineq, neq, soln):
-            assert sig is not None and sig.span is None
+    def test_relation_validators_produce_span(self) -> None:
+        # slice 59b — 4관계 검증기가 틀린 관계의 원문 위치를 span으로 돌려준다(half-open).
+        cases = [
+            (SymPyArithmeticValidator(), "2 + 2 = 5"),
+            (SymPyInequalityValidator(), "5 < 3"),
+            (SymPyNotEqualValidator(), "8 != 8"),
+        ]
+        for validator, text in cases:
+            sig = validator.validate(_item(), text)
+            assert sig is not None and sig.span is not None
+            s, e = sig.span
+            assert text[s:e] == text  # span이 정확히 틀린 관계를 가리킴
+
+    def test_relation_span_within_prose(self) -> None:
+        # 한글 산문에 둘러싸여도 span이 *관계만* 가리킨다(멀티바이트 오프셋 정확).
+        text = "계산하면 2 + 3 = 6 입니다"
+        sig = SymPyArithmeticValidator().validate(_item(), text)
+        assert sig is not None and sig.span is not None
+        s, e = sig.span
+        assert text[s:e] == "2 + 3 = 6"
+
+    def test_solution_validator_span_points_at_claim(self) -> None:
+        # slice 59b — 해 검증기는 *틀린 해 주장*("x = 5")을 가리킨다(방정식 2x+1=7 아님).
+        text = "2x + 1 = 7 이므로 x = 5"
+        sig = SymPySolutionValidator().validate(_item(), text)
+        assert sig is not None and sig.span is not None
+        s, e = sig.span
+        assert text[s:e] == "x = 5"
+
+    def test_solution_span_cross_line_claim(self) -> None:
+        # 교차줄(방정식·해가 다른 줄)에서도 해 주장 줄을 가리킨다(slice 57 + 59b).
+        text = "2x + 1 = 7\nx = 5"
+        sig = SymPySolutionValidator().validate(_item(), text)
+        assert sig is not None and sig.span is not None
+        s, e = sig.span
+        assert text[s:e] == "x = 5"
+
+    def test_unicode_normalization_yields_none_span(self) -> None:
+        # ≤·≠는 1→2 정규화라 오프셋 시프트 → span=None(가드)·reason·kind는 정상.
+        ineq = SymPyInequalityValidator().validate(_item(), "5 ≤ 3")
+        neq = SymPyNotEqualValidator().validate(_item(), "12 / 4 ≠ 3")
+        assert ineq is not None and ineq.span is None and "inequality error" in ineq.reason
+        assert neq is not None and neq.span is None and "not-equal error" in neq.reason
 
 
 # ──────────────────────────────────────────────────────────────────────────
