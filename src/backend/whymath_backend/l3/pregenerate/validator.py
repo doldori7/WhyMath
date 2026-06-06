@@ -13,7 +13,9 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
 import sympy
@@ -597,3 +599,122 @@ def validate_response(validator: SeedValidator, response: str) -> ValidationSign
     L3 런타임 shadow 검증(`pipeline.generate` 비차단 관측)의 결선 지점.
     """
     return validator.validate(None, response)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 중간 step 등가성 검출 — *shadow 전용 진단 도구* (slice 62). **SeedValidator가 아니다**:
+# `validate(item, response)` 시그니처를 구현하지 않으므로 `ChainValidator`·`default_seed_validator`·
+# `arithmetic_validator`에 들어갈 수 없다(mypy가 강제·student-facing 체인과 타입상 분리). 이 도구의
+# 신호는 학생-경유가 아니며 L4 shadow(비노출 로그·slice 63)만 소비한다. pedagogy-designer 결론:
+# 순차유도(A)와 변수재사용(B)은 정보이론적으로 구문 분리 불가 → *위치 지목은 student-facing 금지*,
+# 본 도구는 진단 데이터(노이즈 허용)만 낸다(게이팅은 노이즈 저감일 뿐 A/B를 가르지 못함).
+# ──────────────────────────────────────────────────────────────────────────
+# 순차 유도 명시 마커 — 인접 두 관계가 *등가 변환 단계*임을 시사(없으면 변수재사용 가능성 배제 불가
+# → 보수적 비검출). 연결어(한글)·화살표(유니코드/ASCII).
+_DERIVATION_CONNECTIVES = ("따라서", "그러므로", "이므로", "즉")
+_DERIVATION_ARROWS = ("⟹", "⇒", "→", "=>", "->")
+
+
+@dataclass(slots=True, frozen=True)
+class StepBreak:
+    """인접 단계 간 해집합 비보존 의심 — shadow 진단 신호(비노출). 불변(frozen).
+
+    `step_index`는 앞 관계의 0-based 소스 순서. `span`은 *뒤* 관계의 원문 위치(비보존이 드러난
+    지점). `solset_before/after`는 두 관계의 해집합(`_format_solset` 문자열·SymPy 객체 미보관·mypy
+    `Any` 누출 차단). `var`는 변수명, `marker`는 검출된 순차유도 마커(로그 가독). **student-facing
+    아님** — (A)순차유도오류/(B)변수재사용 구문 분리 불가라 학생 노출 금지·L4 shadow만 소비.
+    """
+
+    step_index: int
+    span: tuple[int, int]
+    solset_before: str
+    solset_after: str
+    var: str
+    marker: str
+
+
+def _derivation_marker(between: str) -> str | None:
+    """인접 두 관계 *사이* 텍스트에 순차유도 마커가 있으면 그 마커, 없으면 None.
+
+    NFC 정규화 후 검사 — 조합형(NFD) 한글 연결어("따라서")도 잡는다. 마커가 없으면 두 관계가 순차
+    유도인지 변수 재사용(독립 소문제)인지 알 수 없어 *보수적 None*(비검출·shadow 노이즈 저감).
+    """
+    text = unicodedata.normalize("NFC", between)
+    for marker in (*_DERIVATION_CONNECTIVES, *_DERIVATION_ARROWS):
+        if marker in text:
+            return marker
+    return None
+
+
+def _linear_solution(lhs: Any, rhs: Any, var: Any) -> Any | None:
+    """단변수 *선형*(차수 1) 방정식의 유일 실근 — 비선형·비다항·예외면 None(보수적 skip).
+
+    선형으로 한정해 *제곱·인수곱 등 차수 변경 변환*(해집합 보존을 깨는 정당 변환)을 배제한다 —
+    제곱한 식은 차수 2라 여기서 None이 되어 단계 비교에서 빠진다(false-positive 노이즈 차단).
+    """
+    try:
+        diff = lhs - rhs
+        if not diff.is_polynomial(var) or sympy.degree(diff, var) != 1:
+            return None
+        sols = sympy.solve(diff, var)
+    except Exception:  # noqa: BLE001  # pragma: no cover — 예외는 보수적 skip(방어선·_common_solution 동형)
+        return None
+    if len(sols) != 1:  # 선형은 단일근 — 방어
+        return None  # pragma: no cover
+    sol = sols[0]
+    if not (getattr(sol, "is_number", False) and getattr(sol, "is_real", False)):
+        return None  # pragma: no cover — 선형 실계수는 실근
+    return sol
+
+
+def detect_step_breaks(response: str, *, max_relations: int = 100) -> list[StepBreak]:
+    """다단계 풀이의 *인접* 단계 간 해집합 비보존 검출 — shadow 전용(비노출·SeedValidator 아님).
+
+    인접한 두 단변수 *선형* 관계가 ① 같은 변수 ② 사이에 순차유도 마커(연결어/화살표) ③ 둘 다 차수 1
+    이고 ④ 해집합이 다르면 `StepBreak`. 마커 없음·비선형·비다항·다변수·해집합 동일은 보수적 skip.
+
+    **false-positive(노이즈) 한계 명시**: 순차유도 오류(A)와 변수재사용(B)은 마커가 있어도 구문상
+    분리 불가하므로 (B)가 검출될 수 있다 — 그래서 이 신호는 student-facing이 아니라 L4 shadow 로그만
+    소비한다(slice 63·pedagogy-designer 결론). 게이팅은 노이즈를 줄일 뿐 (A)/(B)를 가르지 못한다.
+    """
+    normalized = response.translate(_MATH_OP_NORMALIZE)
+    # 단변수 관계를 소스 순서로 수집: (var, lhs, rhs, span). 마커는 원문에서 떼되 좌표는 normalized
+    # — `_MATH_OP_NORMALIZE`는 1:1 길이보존이라 좌표 동일·화살표는 정규화 대상이 아니다.
+    relations: list[tuple[Any, Any, Any, tuple[int, int]]] = []
+    for match in _RELATION_RE.finditer(normalized):
+        if len(relations) >= max_relations:
+            break
+        lhs = _parse_expr(match.group(1).strip())
+        rhs = _parse_expr(match.group(2).strip())
+        if lhs is None or rhs is None:
+            continue
+        syms = lhs.free_symbols | rhs.free_symbols
+        if len(syms) != 1:
+            continue  # 순수 수치(0)·다변수(2+)는 단계 등가 비교 밖
+        (var,) = tuple(syms)
+        relations.append((var, lhs, rhs, match.span()))
+    breaks: list[StepBreak] = []
+    for i in range(len(relations) - 1):
+        var_a, lhs_a, rhs_a, span_a = relations[i]
+        var_b, lhs_b, rhs_b, span_b = relations[i + 1]
+        if var_a != var_b:
+            continue  # 다른 변수 — 인접 단계 아님
+        marker = _derivation_marker(response[span_a[1] : span_b[0]])
+        if marker is None:
+            continue  # 순차유도 마커 없음 → 변수재사용 배제 불가 → 보수적 비검출
+        sol_a = _linear_solution(lhs_a, rhs_a, var_a)
+        sol_b = _linear_solution(lhs_b, rhs_b, var_b)
+        if sol_a is None or sol_b is None:
+            continue  # 비선형·비다항(제곱·인수곱 포함) → skip
+        if not _num_equal(sol_a, sol_b):
+            breaks.append(
+                StepBreak(
+                    step_index=i,
+                    span=span_b,
+                    solset_before=_format_solset({sol_a}),
+                    solset_after=_format_solset({sol_b}),
+                    var=str(var_a),
+                    marker=marker,
+                )
+            )
+    return breaks

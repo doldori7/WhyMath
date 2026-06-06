@@ -18,12 +18,14 @@ from whymath_backend.l3.pregenerate.validator import (
     BasicSeedValidator,
     ChainValidator,
     SeedValidator,
+    StepBreak,
     SymPyArithmeticValidator,
     SymPyInequalityValidator,
     SymPyNotEqualValidator,
     SymPySolutionValidator,
     arithmetic_validator,
     default_seed_validator,
+    detect_step_breaks,
     validate_response,
 )
 
@@ -36,6 +38,7 @@ __all__ = [
     "PrewarmReport",
     "PrewarmStatus",
     "SeedValidator",
+    "StepBreak",
     "SymPyArithmeticValidator",
     "SymPyInequalityValidator",
     "SymPyNotEqualValidator",
@@ -44,5 +47,6 @@ __all__ = [
     "ValidationSignalKind",
     "arithmetic_validator",
     "default_seed_validator",
+    "detect_step_breaks",
     "validate_response",
 ]
