@@ -187,6 +187,32 @@ class TestWorkerShadowValidation:
         # 거짓 부등(≠)도 잡는다(관계 패밀리 완성 확인).
         assert _WORKER_SHADOW_VALIDATOR.validate(None, "8 != 8") is not None
 
+    def test_settings_gate_off_skips_validation(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Settings 게이트 off → 워커 태스크가 검증기 미주입(거짓 출력에도 무로그)."""
+        import whymath_backend.l3.queue.tasks as tasks_mod
+        from whymath_backend.config import Settings, get_settings
+        from whymath_backend.l3.queue.celery_app import build_celery_app
+        from whymath_backend.l3.queue.tasks import register_quality_task
+
+        seen: list[object] = []
+
+        def _fake_runner(payload: dict[str, Any], *, validator: object = None) -> str:
+            seen.append(validator)
+            return "x"
+
+        monkeypatch.setenv("WHYMATH_L3_SHADOW_VALIDATION_ENABLED", "false")
+        get_settings.cache_clear()
+        monkeypatch.setattr(tasks_mod, "run_quality_generation_payload", _fake_runner)
+        try:
+            task = register_quality_task(build_celery_app(Settings()))
+            task.run({"prompt": "p", "system": "s", "decision": {}})
+            # 게이트 off → validator=None 전달(검증 미실행).
+            assert seen == [None]
+        finally:
+            get_settings.cache_clear()
+
 
 def test_task_name_is_stable_contract() -> None:
     """태스크 이름은 enqueue(send_task)와 공유하는 안정적 문자열 계약이다."""
