@@ -111,24 +111,52 @@ _ADJACENT_MATH = frozenset("+-*/^=()")
 _CHAIN_ADJACENT = frozenset("+-*/^()")
 
 
+def _is_hangul(ch: str) -> bool:
+    """한글 음절·자모인가 — 수식 변수가 아닌 *산문 문자*라 단어 경계로 취급(slice 54).
+
+    한국어 풀이는 "계산하면 2 + 3 = 6 입니다"처럼 수식이 한글에 인접한다. 한글은 결코
+    수식 변수(x·a)가 아니므로, 공백을 건너뛴 뒤 한글을 만나면 *더 큰 식의 일부*가 아니라
+    독립 수치 식의 경계로 본다(라틴 문자 변수 "x2"는 여전히 경계로 안 봄 — false-positive
+    0 유지). 음절(가–힣)·조합 자모·호환 자모를 포함한다.
+    """
+    return (
+        "가" <= ch <= "힣"  # 한글 음절 (가–힣)
+        or "ᄀ" <= ch <= "ᇿ"  # 한글 자모 (조합용)
+        or "㄰" <= ch <= "㆏"  # 호환 자모 (ㄱ, ㅏ 등)
+    )
+
+
+def _breaks_standalone(ch: str, adjacent: frozenset[str]) -> bool:
+    """인접 문자가 매치를 *더 큰 식의 일부*로 만드는가.
+
+    개행·한글은 *산문 경계*라 식을 끊지 않는다(False). 그 외에는 연산자(`adjacent`)이거나
+    영숫자(라틴 변수·이어지는 숫자)면 더 큰 식의 일부로 본다. 한글을 경계로 보는 것이
+    slice 54의 핵심 — 한국어 산문에 인접한 수치 관계도 검출 대상에 들어온다.
+    """
+    if ch in "\r\n" or _is_hangul(ch):
+        return False
+    return ch in adjacent or ch.isalnum()
+
+
 def _is_standalone(
     text: str, start: int, end: int, adjacent: frozenset[str] = _ADJACENT_MATH
 ) -> bool:
     """매치 양옆(스페이스·탭 제외 첫 글자)이 연산자·피연산자·변수가 아니면 독립 수치 식.
 
-    스페이스·탭만 건너뛰고 개행은 구분자로 취급한다 — 연산자 인접("x + 1")은 잡되,
-    줄이 다른 인접 식의 숫자는 건너뛰지 않는다. `adjacent`는 "더 큰 식의 일부"로 볼
-    인접 문자 집합(등식=`_ADJACENT_MATH`·부등식은 `<>`까지 — 연쇄 부등식 조각 차단).
+    스페이스·탭만 건너뛰고 개행·한글은 *산문 경계*로 취급한다 — 연산자 인접("x + 1")은
+    잡되, 줄이 다른/한글 산문에 인접한 식은 독립으로 인정한다(slice 54: 한국어 풀이 지원).
+    `adjacent`는 "더 큰 식의 일부"로 볼 인접 문자 집합(등식=`_ADJACENT_MATH`·연쇄는 `<>=`
+    제외 — 연쇄 관계 조각 허용). 한글 경계 판정은 `_breaks_standalone`에 위임.
     """
     i = start - 1
     while i >= 0 and text[i] in " \t":
         i -= 1
-    if i >= 0 and text[i] not in "\r\n" and (text[i] in adjacent or text[i].isalnum()):
+    if i >= 0 and _breaks_standalone(text[i], adjacent):
         return False
     j = end
     while j < len(text) and text[j] in " \t":
         j += 1
-    if j < len(text) and text[j] not in "\r\n" and (text[j] in adjacent or text[j].isalnum()):
+    if j < len(text) and _breaks_standalone(text[j], adjacent):
         return False
     return True
 

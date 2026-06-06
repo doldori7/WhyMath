@@ -39,8 +39,11 @@ from whymath_backend.l3.pregenerate import (
 )
 from whymath_backend.l3.pregenerate.__main__ import format_report, load_items
 from whymath_backend.l3.pregenerate.validator import (
+    _CHAIN_ADJACENT,
+    _breaks_standalone,
     _equality_is_false,
     _inequality_is_false,
+    _is_hangul,
     _not_equal_is_false,
 )
 from whymath_backend.l3.router import Router, cache_key_for
@@ -276,13 +279,15 @@ class TestSymPyArithmeticValidator:
             is None
         )
 
-    def test_inline_prose_prefixed_is_skipped_conservatively(self) -> None:
-        """한글 단어가 공백으로 바로 앞에 붙은 인라인 등식은 보수적으로 건너뜀(통과)."""
-        # 거짓이지만 한글 인접이라 추출 불가 → 통과(미탐). 보수적: false positive 0 우선.
-        assert (
-            SymPyArithmeticValidator().validate(_item(), "정답은 2 + 2 = 5 입니다")
-            is None
-        )
+    def test_inline_prose_prefixed_now_detected(self) -> None:
+        """slice 54 — 한글이 공백으로 앞에 붙은 인라인 등식도 검출(한글=산문 경계).
+
+        slice 34에서는 한글 인접이라 보수적으로 건너뛰었으나(미탐), slice 54가 한글을
+        *단어 경계*로 인식해 한국어 풀이("정답은 2 + 2 = 5 입니다")의 거짓 산술도 잡는다.
+        """
+        reason = SymPyArithmeticValidator().validate(_item(), "정답은 2 + 2 = 5 입니다")
+        assert reason is not None
+        assert "arithmetic error" in reason
 
     def test_max_checks_must_be_positive(self) -> None:
         with pytest.raises(ValueError):
@@ -728,6 +733,66 @@ class TestArithmeticValidator:
             assert "max_checks" in str(exc)
         else:  # pragma: no cover
             raise AssertionError("max_checks=0이 허용됨")
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 한글 산문 경계 — 한글을 단어 경계로 인식해 한국어 풀이의 수치 관계 검출 (slice 54)
+# ──────────────────────────────────────────────────────────────────────────
+class TestHangulProseBoundary:
+    def test_is_hangul_syllables_and_jamo(self) -> None:
+        assert _is_hangul("가") and _is_hangul("힣") and _is_hangul("계")
+        assert _is_hangul("ㄱ") and _is_hangul("ㅏ")
+        assert not _is_hangul("x")
+        assert not _is_hangul("2")
+        assert not _is_hangul("α")  # 그리스 변수는 경계 아님(여전히 식의 일부)
+
+    def test_breaks_standalone_hangul_and_newline_are_boundaries(self) -> None:
+        # 한글·개행은 식을 끊지 않음(경계) → False
+        assert _breaks_standalone("가", _CHAIN_ADJACENT) is False
+        assert _breaks_standalone("\n", _CHAIN_ADJACENT) is False
+        # 라틴 변수·연산자·숫자는 더 큰 식의 일부 → True
+        assert _breaks_standalone("x", _CHAIN_ADJACENT) is True
+        assert _breaks_standalone("+", _CHAIN_ADJACENT) is True
+        assert _breaks_standalone("2", _CHAIN_ADJACENT) is True
+
+    def test_korean_prose_false_arithmetic_caught(self) -> None:
+        reason = arithmetic_validator().validate(_item(), "계산하면 2 + 3 = 6 입니다")
+        assert reason is not None
+        assert "arithmetic error" in reason
+
+    def test_korean_prose_false_inequality_caught(self) -> None:
+        reason = arithmetic_validator().validate(_item(), "그러므로 5 < 3 이다")
+        assert reason is not None
+        assert "inequality error" in reason
+
+    def test_korean_prose_false_not_equal_caught(self) -> None:
+        reason = arithmetic_validator().validate(_item(), "따라서 12 / 4 ≠ 3 이다")
+        assert reason is not None
+        assert "not-equal error" in reason
+
+    def test_korean_prose_true_relation_passes(self) -> None:
+        # 참인 관계는 한글 인접이어도 통과(거짓만 탈락).
+        assert arithmetic_validator().validate(_item(), "계산하면 2 + 3 = 5 입니다") is None
+
+    def test_latin_variable_adjacency_still_skipped(self) -> None:
+        # "x2 = 4"는 라틴 변수 인접 → 여전히 건너뜀(false-positive 0 유지).
+        assert arithmetic_validator().validate(_item(), "x2 = 4") is None
+
+    def test_right_side_latin_adjacency_skipped(self) -> None:
+        # 우변이 더 큰 식의 일부(라틴 인접 "5y")면 우측 경계 검사로 건너뜀 — 거짓 등식이어도 통과.
+        assert arithmetic_validator().validate(_item(), "2 = 5y") is None
+
+    def test_default_seed_validator_catches_korean_prose(self) -> None:
+        # 빌드타임 LLM 출력 검증도 동일 혜택 — 한국어 설명의 거짓 산술 차단.
+        reason = default_seed_validator().validate(_item(), "정리하면 7 − 2 = 4 이다")
+        assert reason is not None
+        assert "arithmetic error" in reason
+
+    def test_hangul_both_sides(self) -> None:
+        # 양옆 모두 한글 — 가운데 거짓 관계 검출.
+        reason = arithmetic_validator().validate(_item(), "답은 3 × 3 = 10 입니다")
+        assert reason is not None
+        assert "arithmetic error" in reason
 
 
 # ──────────────────────────────────────────────────────────────────────────

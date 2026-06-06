@@ -46,18 +46,18 @@ class TestRecommendCoachingForSolution:
         assert result.validation_signal is not None
         assert "inequality error" in result.validation_signal
 
-    def test_prose_adjacent_number_conservatively_skipped(self) -> None:
-        """L3 보수성 계승 — 한글 산문에 인접한(공백 한 칸) 숫자 관계는 *건너뛴다*.
+    def test_prose_adjacent_slip_now_detected(self) -> None:
+        """slice 54 — 한글 산문에 인접한 계산 슬립도 검출(한글=산문 경계).
 
-        `_is_standalone`이 공백을 건너뛴 뒤 한글(alnum)을 만나면 "더 큰 식의 일부"로
-        보고 검사를 생략한다(false-positive 0 우선, slice 36~46). 오케스트레이터는 L3가
-        잡는 것만 잡으므로(잡는 범위 확장은 L3 후속), 산문 인접 오류는 verify로 가지
-        않고 BKT↔IRT 경로로 폴백한다. *이 슬라이스는 검증기 추출 로직을 바꾸지 않는다.*
+        slice 52에서는 `_is_standalone`이 공백 건너뛴 뒤 한글(alnum)을 만나 보수적으로
+        건너뛰었으나, slice 54가 한글을 *단어 경계*로 인식해 "따라서 2 + 3 = 6 이다."
+        같은 한국어 풀이의 슬립도 verify로 잡는다(한국 학생 실사용 핵심).
         """
         result = recommend_coaching_for_solution("따라서 2 + 3 = 6 이다.", 0.9, 2.0)
-        assert result.arithmetic_error is False
-        assert result.validation_signal is None
-        assert result.trigger.focus == "advance"  # 계산오류 미검출 → 고숙달 합의 경로
+        assert result.arithmetic_error is True
+        assert result.trigger.focus == "verify"
+        assert result.validation_signal is not None
+        assert "arithmetic error" in result.validation_signal
 
     def test_not_equal_slip_routes_verify(self) -> None:
         """거짓 부등("12 / 4 ≠ 3", 유니코드 ≠ 정규화) → arithmetic_error·verify."""

@@ -370,6 +370,16 @@ class TestSolutionCoachingWiring:
         assert sc["trigger"]["focus"] == "verify"
         assert "inequality error" in sc["validation_signal"]
 
+    def test_korean_prose_slip_surfaces_verify(self) -> None:
+        # slice 54 — 한국어 풀이("계산하면 2 + 3 = 6 입니다")의 슬립도 검출.
+        resp = _client().post(
+            "/v1/coach", json={"student_input": "계산하면 2 + 3 = 6 입니다"}
+        )
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+        assert "arithmetic error" in sc["validation_signal"]
+
     def test_clean_arithmetic_no_solution_coaching(self) -> None:
         # 참 등식 → 슬립 아님 → None(기존 decision/coaching_focus 경로).
         resp = _client().post("/v1/coach", json={"student_input": "3 × 4 = 12"})
