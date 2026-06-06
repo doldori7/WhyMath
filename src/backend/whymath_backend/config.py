@@ -109,6 +109,17 @@ class Settings(BaseSettings):
         ),
     )
 
+    l3_skip_cache_on_signal: bool = Field(
+        default=False,
+        description=(
+            "shadow 검증이 환각 신호를 낸 /v1/generate 미스 생성물을 캐시에 적재하지 않을지 "
+            "(slice 42 캐시 위생). True면 증명된 거짓 수치 관계 출력을 *영속화하지 않는다* "
+            "(다음 동일 요청은 재생성). False(기본)면 기존 동작(항상 적재). `l3_shadow_"
+            "validation_enabled`가 False면 신호 자체가 없어 무효과. 반환 텍스트는 불변 "
+            "(캐시만 건너뜀)·정확성 무해(false positive 시 재생성 비용만)."
+        ),
+    )
+
     # ── QUALITY(27b) 비동기 큐 (Celery, broker=result backend=Redis, S4) ──
     # QUALITY는 동기 호출 불가(p50≈14초·GPU 단일 점유, 03a §D.3) → 작업 큐 전용이다.
     # broker·result-backend는 *기본값을 두지 않고*(빈 = "redis_url에서 파생") 명시
