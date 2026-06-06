@@ -1,6 +1,6 @@
 """L4 메타인지 코칭 트리거 단위테스트 (hermetic·순수 결정).
 
-L2 두 신호(BKT 숙달·IRT θ)에서 코칭 포커스 5종을 결정론적으로 검증한다.
+L2 두 신호(BKT 숙달·IRT θ)+계산오류 신호에서 코칭 포커스 6종을 결정론적으로 검증한다.
 """
 
 from __future__ import annotations
@@ -14,6 +14,26 @@ from whymath_backend.l4.socratic.categories import SocraticCategory
 
 
 class TestRecommendCoaching:
+    def test_arithmetic_error_routes_verify(self) -> None:
+        """계산 오류 감지 → verify(검산), 다른 신호와 무관."""
+        trig = recommend_coaching(0.9, 2.0, arithmetic_error=True)
+        assert trig.focus == "verify"
+        assert trig.socratic_category == SocraticCategory.EVIDENCE
+        assert trig.rationale and trig.prompt
+
+    def test_arithmetic_error_priority_over_missing(self) -> None:
+        """신호가 없어도(둘 다 None) 계산 오류면 diagnose 아닌 verify(즉시 코칭)."""
+        assert recommend_coaching(None, None, arithmetic_error=True).focus == "verify"
+
+    def test_arithmetic_error_priority_over_mastery_focus(self) -> None:
+        """저숙달이라도 계산 오류 신호면 foundation 아닌 verify(슬립 우선)."""
+        assert recommend_coaching(0.1, -2.0, arithmetic_error=True).focus == "verify"
+
+    def test_no_arithmetic_error_default_unchanged(self) -> None:
+        """arithmetic_error 기본 False → 기존 mastery 기반 동작 불변."""
+        assert recommend_coaching(0.9, 2.0).focus == "advance"
+        assert recommend_coaching(0.9, 2.0, arithmetic_error=False).focus == "advance"
+
     def test_missing_signal_diagnose(self) -> None:
         """한쪽 신호라도 없으면 diagnose(교차검증 불가)."""
         assert recommend_coaching(None, 1.0).focus == "diagnose"
@@ -78,6 +98,7 @@ class TestRecommendCoaching:
 
 class TestFocusToSocraticCategory:
     def test_all_focus_mapped(self) -> None:
+        assert focus_to_socratic_category("verify") == SocraticCategory.EVIDENCE
         assert focus_to_socratic_category("consolidate") == SocraticCategory.EVIDENCE
         assert focus_to_socratic_category("retrieval") == SocraticCategory.META
         assert (
