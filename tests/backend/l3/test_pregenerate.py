@@ -34,6 +34,7 @@ from whymath_backend.l3.pregenerate import (
     SymPyInequalityValidator,
     SymPyNotEqualValidator,
     default_seed_validator,
+    validate_response,
 )
 from whymath_backend.l3.pregenerate.__main__ import format_report, load_items
 from whymath_backend.l3.pregenerate.validator import (
@@ -442,6 +443,41 @@ class TestNotEqualHelper:
 
     def test_unparseable_skipped(self) -> None:
         assert _not_equal_is_false("(1+", "2") is None  # 파싱 실패 보수적 통과
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# validate_response — PregenItem 없는 응답 단독 검증(런타임 재사용 진입점)
+# ──────────────────────────────────────────────────────────────────────────
+class TestValidateResponse:
+    def test_item_optional_validators_accept_none(self) -> None:
+        """모든 검증기가 item=None으로도 동작(응답 단독 검증)."""
+        assert SymPyArithmeticValidator().validate(None, "2 + 2 = 5") is not None
+        assert SymPyInequalityValidator().validate(None, "5 < 3") is not None
+        assert SymPyNotEqualValidator().validate(None, "8 != 8") is not None
+        assert BasicSeedValidator().validate(None, "") == "empty response"
+
+    def test_clean_response_passes(self) -> None:
+        assert validate_response(default_seed_validator(), "2 + 2 = 4, 3 < 5") is None
+
+    def test_catches_false_arithmetic(self) -> None:
+        reason = validate_response(default_seed_validator(), "2 + 2 = 5")
+        assert reason is not None and "arithmetic error" in reason
+
+    def test_catches_false_inequality(self) -> None:
+        reason = validate_response(default_seed_validator(), "7 >= 9")
+        assert reason is not None and "inequality error" in reason
+
+    def test_catches_false_not_equal(self) -> None:
+        reason = validate_response(default_seed_validator(), "12/4 ≠ 3")
+        assert reason is not None and "not-equal error" in reason
+
+    def test_works_with_single_validator(self) -> None:
+        # ChainValidator뿐 아니라 임의 SeedValidator에도 동작(헬퍼는 protocol만 의존).
+        assert validate_response(SymPyArithmeticValidator(), "3 × 4 = 12") is None
+
+    def test_no_item_dependency_at_call_site(self) -> None:
+        # 호출지가 PregenItem을 만들지 않고 문자열만으로 검증(레이어 결합 회피).
+        assert validate_response(default_seed_validator(), "수식 없는 설명문") is None
 
 
 class TestEqualityHelper:

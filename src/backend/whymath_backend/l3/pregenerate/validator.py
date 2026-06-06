@@ -23,9 +23,15 @@ from whymath_backend.l3.pregenerate.models import PregenItem
 
 @runtime_checkable
 class SeedValidator(Protocol):
-    """사전생성 응답 검증 경계 — 통과 시 None, 실패 시 짧은 사유 문자열."""
+    """사전생성 응답 검증 경계 — 통과 시 None, 실패 시 짧은 사유 문자열.
 
-    def validate(self, item: PregenItem, response: str) -> str | None:
+    `item`은 *선택적 컨텍스트*(`PregenItem | None`)다. 현재 구현은 모두 `response`만
+    보지만, 향후 item을 쓰는 검증기(예: 응답이 기대 답과 일치하는지)를 위해 인자를
+    남긴다. item이 None이면 *응답 단독 검증* — 빌드타임 시드뿐 아니라 런타임 생성물에도
+    같은 검증기를 재사용할 수 있다(`validate_response` 헬퍼 참조).
+    """
+
+    def validate(self, item: PregenItem | None, response: str) -> str | None:
         """응답을 검증한다. 통과 = `None`, 실패 = 사유 문자열(리포트·로그용)."""
         ...
 
@@ -49,7 +55,7 @@ class BasicSeedValidator:
         # 정규화는 1회 — 비교는 lowercase로
         self._error_markers = tuple(m.lower() for m in error_markers if m)
 
-    def validate(self, item: PregenItem, response: str) -> str | None:
+    def validate(self, item: PregenItem | None, response: str) -> str | None:
         """비어있음·짧음·오류 마커 검사 — 통과면 None, 실패면 사유."""
         stripped = response.strip()
         if not stripped:
@@ -146,7 +152,7 @@ class SymPyArithmeticValidator:
             raise ValueError("max_checks는 1 이상이어야 합니다")
         self._max_checks = max_checks
 
-    def validate(self, item: PregenItem, response: str) -> str | None:
+    def validate(self, item: PregenItem | None, response: str) -> str | None:
         normalized = response.translate(_MATH_OP_NORMALIZE)
         checked = 0
         for match in _EQUALITY_RE.finditer(normalized):
@@ -206,7 +212,7 @@ class SymPyInequalityValidator:
             raise ValueError("max_checks는 1 이상이어야 합니다")
         self._max_checks = max_checks
 
-    def validate(self, item: PregenItem, response: str) -> str | None:
+    def validate(self, item: PregenItem | None, response: str) -> str | None:
         normalized = response.translate(_INEQ_NORMALIZE)
         checked = 0
         for match in _INEQUALITY_RE.finditer(normalized):
@@ -268,7 +274,7 @@ class SymPyNotEqualValidator:
             raise ValueError("max_checks는 1 이상이어야 합니다")
         self._max_checks = max_checks
 
-    def validate(self, item: PregenItem, response: str) -> str | None:
+    def validate(self, item: PregenItem | None, response: str) -> str | None:
         normalized = response.translate(_NOTEQ_NORMALIZE)
         checked = 0
         for match in _NOTEQUAL_RE.finditer(normalized):
@@ -294,7 +300,7 @@ class ChainValidator:
     def __init__(self, validators: Sequence[SeedValidator]) -> None:
         self._validators: tuple[SeedValidator, ...] = tuple(validators)
 
-    def validate(self, item: PregenItem, response: str) -> str | None:
+    def validate(self, item: PregenItem | None, response: str) -> str | None:
         for validator in self._validators:
             reason = validator.validate(item, response)
             if reason is not None:
@@ -319,3 +325,14 @@ def default_seed_validator(*, min_length: int = 1) -> ChainValidator:
             SymPyNotEqualValidator(),
         ]
     )
+
+
+def validate_response(validator: SeedValidator, response: str) -> str | None:
+    """`PregenItem` 없이 응답 문자열만 검증 — 런타임 재사용 진입점.
+
+    빌드타임 검증기(`item`을 무시)를 *런타임 생성물*에 그대로 적용할 수 있게 한다.
+    `validator.validate(None, response)`의 얇은 래퍼 — 호출지가 빌드타임 전용 타입
+    `PregenItem`을 알 필요 없이(레이어 결합 회피) 결정론 검증을 돌린다. 통과=None·
+    실패=사유. L3 런타임 shadow 검증(`pipeline.generate` 비차단 관측)의 결선 지점.
+    """
+    return validator.validate(None, response)
