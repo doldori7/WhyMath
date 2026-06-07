@@ -15,6 +15,9 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime, timezone
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.config import get_settings
 from whymath_backend.l3.pregenerate.validator import (
@@ -24,6 +27,8 @@ from whymath_backend.l3.pregenerate.validator import (
 )
 
 logger = logging.getLogger("whymath.l4.step_shadow")  # 워커 "whymath.l3.quality" 네이밍 동형
+# 구조화 관측 레코드 sink(slice 67·harvest 입력) — 부모의 *자식* 로거라 평문과 분리 캡처/라우팅된다.
+record_logger = logging.getLogger("whymath.l4.step_shadow.record")
 
 # verdict(L3 사실판정) → A/B *후보*(L4 교수학 해석). "diverged"=정답서 이탈=(A) 후보의 양성
 # 증거. 나머지는 양성 아님/모호/판정불가다. (A)/(B)는 구문상 미분리라 *후보*일 뿐 — precision은
@@ -43,6 +48,29 @@ def candidate_for_verdict(verdict: StepAnswerVerdict) -> str:
     쓰도록 공개한다 — verdict→candidate가 `_VERDICT_TO_CANDIDATE` 한 곳에만 정의되게 한다.
     """
     return _VERDICT_TO_CANDIDATE[verdict]
+
+
+class StepBreakObservation(BaseModel):
+    """단계-비보존 관측 1건의 *구조화 레코드* — record_logger JSON emit(slice 67·harvest).
+
+    `observe_step_breaks`가 평문 로그와 *나란히* 이 레코드를 JSON으로 남겨, 향후 사람이 A/B 라벨링할
+    코퍼스(harvest → eval)로 수집되게 한다. **학생 풀이 원문(`solution_text`)을
+    담지 않는다** — slice 64~65 로그의 의도적 누락 계승(미성년자 프라이버시). 담는 건
+    추상화된 해집합(`solset_*`)·마커·변수·verdict/candidate(로그 sink 한정·비노출 불변).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    problem_id: uuid.UUID | None = None
+    expected_answer: str | None = None
+    verdict: StepAnswerVerdict
+    candidate: str
+    var: str
+    step_index: int
+    solset_before: str
+    solset_after: str
+    marker: str
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 def observe_step_breaks(
@@ -67,28 +95,46 @@ def observe_step_breaks(
     slice 65: 각 break를 `classify_step_break`로 기대정답 대비 분류(verdict)하고 verdict→A/B
     *후보*(candidate)를 로그에 남긴다 — 둘 다 로그 sink에만(반환 None·비노출 불변). 후보는
     (A)/(B) 미분리라 *양성 증거*일 뿐이며 precision은 사람 라벨 축적 후 측정한다.
+
+    slice 67: 평문 로그와 *나란히* 각 관측을 `StepBreakObservation` JSON 한 줄로 `record_logger`에도
+    남긴다(harvest 입력·로그 sink·반환 None). 학생 풀이 원문은 레코드에 안 담는다(프라이버시).
+    검출·분류·직렬화·로깅을 한 `try`로 감싸 어떤 예외도 본류를 안 깨게 한다(비차단 불변).
     """
     if not get_settings().l4_step_shadow_enabled:
         return
     try:
         breaks = detect_step_breaks(solution_text)
+        for b in breaks:
+            verdict = classify_step_break(b, expected_answer)
+            candidate = candidate_for_verdict(verdict)
+            logger.info(
+                "단계 비보존 의심(shadow·비노출) — problem_id=%s expected=%r "
+                "verdict=%s candidate=%s var=%s step=%d %s→%s marker=%r",
+                problem_id,
+                expected_answer,
+                verdict,
+                candidate,
+                b.var,
+                b.step_index,
+                b.solset_before,
+                b.solset_after,
+                b.marker,
+            )
+            record_logger.info(
+                StepBreakObservation(
+                    problem_id=problem_id,
+                    expected_answer=expected_answer,
+                    verdict=verdict,
+                    candidate=candidate,
+                    var=b.var,
+                    step_index=b.step_index,
+                    solset_before=b.solset_before,
+                    solset_after=b.solset_after,
+                    marker=b.marker,
+                ).model_dump_json()
+            )
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(방어선·테스트 커버)
         return
-    for b in breaks:
-        verdict = classify_step_break(b, expected_answer)
-        logger.info(
-            "단계 비보존 의심(shadow·비노출) — problem_id=%s expected=%r verdict=%s candidate=%s "
-            "var=%s step=%d %s→%s marker=%r",
-            problem_id,
-            expected_answer,
-            verdict,
-            candidate_for_verdict(verdict),
-            b.var,
-            b.step_index,
-            b.solset_before,
-            b.solset_after,
-            b.marker,
-        )
 
 
-__all__ = ["candidate_for_verdict", "observe_step_breaks"]
+__all__ = ["StepBreakObservation", "candidate_for_verdict", "observe_step_breaks"]

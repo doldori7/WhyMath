@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
 
@@ -13,7 +14,7 @@ import pytest
 
 from whymath_backend.config import get_settings
 from whymath_backend.l4 import step_shadow
-from whymath_backend.l4.step_shadow import observe_step_breaks
+from whymath_backend.l4.step_shadow import StepBreakObservation, observe_step_breaks
 
 # 단계 비보존(해 {3}≠{4}) + 순차유도 마커(따라서) → detect_step_breaks가 검출하는 입력.
 _NONPRESERVING = "2x = 6 따라서 3x = 12"
@@ -22,6 +23,11 @@ _NONPRESERVING = "2x = 6 따라서 3x = 12"
 def _shadow_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
     """step_shadow 로거가 낸 메시지만(다른 로거 노이즈 배제)."""
     return [r.getMessage() for r in caplog.records if r.name == "whymath.l4.step_shadow"]
+
+
+def _record_messages(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """구조화 record 로거(slice 67)가 낸 JSON 라인만 — 부모 평문 로거와 분리."""
+    return [r.getMessage() for r in caplog.records if r.name == "whymath.l4.step_shadow.record"]
 
 
 class TestObserveStepBreaks:
@@ -166,5 +172,59 @@ class TestObserveStepBreaks:
             msgs = _shadow_messages(caplog)
             assert any("verdict=indeterminate" in m for m in msgs)
             assert any("candidate=unknown" in m for m in msgs)
+        finally:
+            get_settings.cache_clear()
+
+
+class TestRecordObservation:
+    """slice 67: 평문 로그와 *나란히* 구조화 StepBreakObservation JSON을 record 로거로 emit."""
+
+    def test_gate_on_emits_structured_record(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # record 로거에 JSON 1줄 → 역파싱해 verdict/candidate/solset/맥락 단언.
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        pid = uuid.UUID("00000000-0000-0000-0000-0000000000bb")
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                observe_step_breaks(_NONPRESERVING, problem_id=pid, expected_answer="3")
+            records = _record_messages(caplog)
+            assert len(records) == 1
+            obs = StepBreakObservation.model_validate_json(records[0])
+            assert obs.verdict == "diverged_from_answer"
+            assert obs.candidate == "A"
+            assert obs.solset_before == "{3}" and obs.solset_after == "{4}"
+            assert obs.problem_id == pid and obs.expected_answer == "3"
+            assert obs.marker == "따라서" and obs.var == "x"
+        finally:
+            get_settings.cache_clear()
+
+    def test_record_omits_student_solution_text(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # 프라이버시: 구조화 레코드에 학생 풀이 원문 없음(solution_text 키 부재·원 방정식 미포함).
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                observe_step_breaks(_NONPRESERVING, expected_answer="3")
+            records = _record_messages(caplog)
+            assert len(records) == 1
+            assert "solution_text" not in json.loads(records[0])
+            assert "2x = 6" not in records[0]  # 학생 풀이 원문 미포함
+        finally:
+            get_settings.cache_clear()
+
+    def test_gate_off_no_record(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # 게이트 off → 평문도 구조화도 0줄.
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "false")
+        get_settings.cache_clear()
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                observe_step_breaks(_NONPRESERVING, expected_answer="3")
+            assert _record_messages(caplog) == []
         finally:
             get_settings.cache_clear()
