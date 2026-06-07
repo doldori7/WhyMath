@@ -10,12 +10,14 @@
 shadow 로그(slice 65)와 같은 필드라, 실제 로그를 사람이 라벨링하면 그대로 입력이 된다.
 
 사용법:
-    python -m whymath_backend.l4.step_shadow_eval <labels.jsonl> [--min-precision 0.99]
+    python -m whymath_backend.l4.step_shadow_eval <labels.jsonl> [--min-lower-bound 0.99]
 """
 
 from __future__ import annotations
 
 import argparse
+import math
+import statistics
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -99,6 +101,25 @@ def _div(numer: int, denom: int) -> float | None:
     return numer / denom if denom else None
 
 
+def _wilson_lower_bound(successes: int, trials: int, confidence: float) -> float:
+    """이항비율(successes/trials)의 **Wilson score 단측 신뢰하한**(confidence 수준).
+
+    게이트는 하한만 관심이라 *단측*(z=Φ⁻¹(confidence)). 작은 표본일수록 점추정보다 크게 깎여
+    (예: 5/5·95% → ≈0.65) 작은 표본의 거짓 해금을 막는다. successes=0이면 0.0이 자연 도출된다.
+    `statistics.NormalDist`(stdlib)로 z 산출·외부 의존성 0. trials>0은 호출자가 보장.
+    """
+    if not 0.0 < confidence < 1.0:
+        raise ValueError(f"confidence must be in (0, 1), got {confidence}")
+    z = statistics.NormalDist().inv_cdf(confidence)
+    n = float(trials)
+    phat = successes / n
+    z2 = z * z
+    denom = 1.0 + z2 / n
+    center = (phat + z2 / (2.0 * n)) / denom
+    margin = (z / denom) * math.sqrt(phat * (1.0 - phat) / n + z2 / (4.0 * n * n))
+    return max(0.0, center - margin)
+
+
 @dataclass(slots=True, frozen=True)
 class PrecisionReport:
     """A 후보 정밀도 평가 배치 결과 — outcome 리스트 + 파생 지표. 불변.
@@ -147,6 +168,17 @@ class PrecisionReport:
             return None
         return 2 * p * r / (p + r)
 
+    def precision_lower_bound(self, confidence: float = 0.95) -> float | None:
+        """A 정밀도의 Wilson 단측 신뢰하한(기본 95%) — 작은 표본 보정. 예측 양성 0이면 None.
+
+        해금 게이트는 점추정(`precision`)이 아니라 이 하한으로 판정해야 통계적으로 정직하다
+        (예: 5/5=1.0이라도 하한 ≈0.65라 0.99 게이트 통과 못 함).
+        """
+        n = self.true_positive + self.false_positive
+        if n == 0:
+            return None
+        return _wilson_lower_bound(self.true_positive, n, confidence)
+
     @property
     def confusion(self) -> dict[str, dict[str, int]]:
         """candidate → {A,B} 카운트(예측 후보별 사람 라벨 분포)."""
@@ -194,11 +226,14 @@ def _fmt(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.3f}"
 
 
-def format_report(report: PrecisionReport) -> str:
-    """사람읽는 요약 — A 후보 precision/recall/F1 + 혼동행렬 + FP/FN 상세."""
+def format_report(report: PrecisionReport, confidence: float = 0.95) -> str:
+    """사람읽는 요약 — A precision(+Wilson 하한)/recall/F1 + 혼동행렬 + FP/FN 상세."""
+    pct = round(confidence * 100)
+    n_pos = report.true_positive + report.false_positive
     lines: list[str] = [
         (
             f"total={report.total} A-precision={_fmt(report.precision)} "
+            f"({pct}%하한={_fmt(report.precision_lower_bound(confidence))} n={n_pos}) "
             f"recall={_fmt(report.recall)} f1={_fmt(report.f1)} "
             f"(TP={report.true_positive} FP={report.false_positive} "
             f"FN={report.false_negative} TN={report.true_negative})"
@@ -224,13 +259,19 @@ def format_report(report: PrecisionReport) -> str:
     return "\n".join(lines)
 
 
-def _run(specs_path: Path, *, min_precision: float) -> int:
+def _run(
+    specs_path: Path, *, min_precision: float, min_lower_bound: float, confidence: float
+) -> int:
     text = specs_path.read_text(encoding="utf-8")
     report = evaluate(load_labels(text))
-    print(format_report(report))
-    # 게이트: A precision이 임계 미만이면 종료코드 1. 기본 0.0=게이트 없음(리포트만).
-    # precision None(예측 양성 0)은 임계>0일 때 미달로 본다(증거 없음 = 게이트 통과 불가).
+    print(format_report(report, confidence=confidence))
+    # 게이트(둘 다 opt-in·기본 0.0=off): 설정 임계를 어기면 종료코드 1. None(예측 양성 0)은
+    # 임계>0일 때 미달로 본다(증거 없음 = 통과 불가). 점추정(min_precision)은 slice 66 하위호환,
+    # 하한(min_lower_bound)은 작은 표본 보정 게이트(slice 68·권장).
     if min_precision > 0.0 and (report.precision is None or report.precision < min_precision):
+        return 1
+    lower = report.precision_lower_bound(confidence)
+    if min_lower_bound > 0.0 and (lower is None or lower < min_lower_bound):
         return 1
     return 0
 
@@ -249,12 +290,31 @@ def main(argv: list[str] | None = None) -> int:
         "--min-precision",
         type=float,
         default=0.0,
-        help="A precision 임계 — 미만이면 종료코드 1(기본 0.0=게이트 없음·리포트만).",
+        help="A precision 점추정 임계 — 미만이면 exit 1(기본 0.0=off·하위호환).",
+    )
+    parser.add_argument(
+        "--min-lower-bound",
+        type=float,
+        default=0.0,
+        help="A precision Wilson 하한 임계 — 미만이면 exit 1(작은 표본 보정·기본 0.0=off).",
+    )
+    parser.add_argument(
+        "--confidence",
+        type=float,
+        default=0.95,
+        help="Wilson 하한 신뢰수준(단측·기본 0.95).",
     )
     args = parser.parse_args(argv)
     specs_path: str = args.specs_path
     min_precision: float = args.min_precision
-    return _run(Path(specs_path), min_precision=min_precision)
+    min_lower_bound: float = args.min_lower_bound
+    confidence: float = args.confidence
+    return _run(
+        Path(specs_path),
+        min_precision=min_precision,
+        min_lower_bound=min_lower_bound,
+        confidence=confidence,
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover — 엔트리포인트, _run/main이 테스트 대상

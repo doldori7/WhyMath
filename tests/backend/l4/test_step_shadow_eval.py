@@ -13,6 +13,7 @@ import pytest
 from whymath_backend.l4.step_shadow import candidate_for_verdict
 from whymath_backend.l4.step_shadow_eval import (
     StepBreakLabel,
+    _wilson_lower_bound,
     evaluate,
     format_report,
     load_labels,
@@ -149,6 +150,38 @@ class TestEvaluate:
         assert rep.precision is None and rep.recall is None and rep.f1 is None
 
 
+class TestPrecisionLowerBound:
+    def test_wilson_known_values(self) -> None:
+        # 독립 계산값(단측 95%). 작은 표본일수록 점추정보다 크게 깎인다.
+        assert _wilson_lower_bound(5, 5, 0.95) == pytest.approx(0.6489, abs=1e-3)
+        assert _wilson_lower_bound(5, 7, 0.95) == pytest.approx(0.4087, abs=1e-3)
+
+    def test_wilson_zero_successes_is_zero(self) -> None:
+        assert _wilson_lower_bound(0, 5, 0.95) == 0.0
+
+    def test_wilson_higher_confidence_lowers_bound(self) -> None:
+        # 신뢰수준↑ → 하한↓(더 보수적).
+        assert _wilson_lower_bound(5, 7, 0.90) > _wilson_lower_bound(5, 7, 0.99)
+
+    def test_wilson_invalid_confidence_raises(self) -> None:
+        with pytest.raises(ValueError, match="confidence"):
+            _wilson_lower_bound(5, 7, 1.5)
+        with pytest.raises(ValueError, match="confidence"):
+            _wilson_lower_bound(5, 7, 0.0)
+
+    def test_report_lower_bound_below_point_estimate(self) -> None:
+        # 시드 분포(5/7) → 하한 < 점추정.
+        rep = evaluate(load_labels(_SEED.read_text(encoding="utf-8")))
+        lb = rep.precision_lower_bound(0.95)
+        prec = rep.precision
+        assert lb is not None and prec is not None and lb < prec
+
+    def test_report_lower_bound_none_when_no_positives(self) -> None:
+        # 예측 양성 0(reached → not_A) → 하한 None.
+        rep = evaluate([_label("{3}", "{4}", "4", "B")])
+        assert rep.precision is None and rep.precision_lower_bound() is None
+
+
 class TestSeedCorpus:
     def test_seed_loads_and_has_locked_distribution(self) -> None:
         # 배포 시드가 파싱·평가되고, 의도한 분포(TP5·FP2·FN3·TN6)를 유지하는지 잠금(회귀 가드).
@@ -183,6 +216,10 @@ class TestFormatReport:
         out = format_report(evaluate([]))
         assert "A-precision=n/a" in out
 
+    def test_summary_includes_lower_bound_and_sample_size(self) -> None:
+        out = format_report(evaluate([_label("{3}", "{4}", "3", "A")]), confidence=0.95)
+        assert "하한=" in out and "n=1" in out
+
 
 class TestCli:
     def test_main_reports_and_exits_zero(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -196,6 +233,27 @@ class TestCli:
     def test_main_min_precision_gate_passes(self) -> None:
         # 0.5 ≤ 0.714 → 0.
         assert main([str(_SEED), "--min-precision", "0.5"]) == 0
+
+    def test_main_lower_bound_gate_fails_on_small_sample(self) -> None:
+        # 점추정 0.714라도 Wilson 하한(≈0.41)은 0.99 미달 → exit 1(작은 표본 보호).
+        assert main([str(_SEED), "--min-lower-bound", "0.99"]) == 1
+
+    def test_main_lower_bound_gate_passes_at_zero(self) -> None:
+        assert main([str(_SEED), "--min-lower-bound", "0.0"]) == 0
+
+    def test_main_confidence_flag_parsed(self) -> None:
+        # --confidence 파싱 + 낮은 하한 임계 → 통과.
+        assert main([str(_SEED), "--min-lower-bound", "0.1", "--confidence", "0.9"]) == 0
+
+    def test_main_lower_bound_gate_fails_when_no_positives(self, tmp_path: Path) -> None:
+        # 예측 양성 0(하한 None)인데 --min-lower-bound>0 → 증거 없음 = exit 1.
+        f = tmp_path / "labels.jsonl"
+        f.write_text(
+            '{"solset_before": "{3}", "solset_after": "{4}", '
+            '"expected_answer": "4", "human_label": "B"}\n',  # reached → not_A → 양성 0
+            encoding="utf-8",
+        )
+        assert main([str(f), "--min-lower-bound", "0.5"]) == 1
 
 
 class TestCandidateForVerdict:

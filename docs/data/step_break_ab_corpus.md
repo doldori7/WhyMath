@@ -26,6 +26,9 @@
 
 > v1 시드의 정밀도 수치는 **하니스 검증용 예시**이지 실측 결론이 아니다. 실제 해금 판정은
 > *실 shadow 로그를 사람이 라벨링한* 코퍼스를 같은 하니스에 넣어 산출한다(이 슬라이스는 *기구*를 만든다).
+>
+> **게이트(slice 68)**: 해금은 점추정이 아니라 **Wilson 단측 신뢰하한**(`--min-lower-bound`·기본 95%)으로
+> 판정한다 — 작은 표본에서 5/5=1.0 같은 값이 거짓 해금되는 것을 막는다(표본수 n도 리포트에 표기).
 
 ---
 
@@ -96,8 +99,11 @@
 
 ```bash
 cd src/backend && . .venv/bin/activate
-# 리포트만(게이트 없음)
+# 리포트만(게이트 없음) — A-precision 점추정 + Wilson 신뢰하한(표본수 n) 출력
 python -m whymath_backend.l4.step_shadow_eval ../../data/corpus/step_break_ab_seed_v1.jsonl
-# 게이트: A precision < 0.99면 종료코드 1 (미래 CI 해금 체크)
+# 권장 게이트(slice 68): 점추정이 아닌 *Wilson 신뢰하한*으로 판정 → 작은 표본 거짓 해금 방지.
+# 시드 16행은 하한이 낮아(≈0.41) 0.99 게이트를 일부러 통과 못 한다(exit 1).
+python -m whymath_backend.l4.step_shadow_eval ../../data/corpus/step_break_ab_seed_v1.jsonl --min-lower-bound 0.99 --confidence 0.95
+# (하위호환) 점추정 게이트
 python -m whymath_backend.l4.step_shadow_eval ../../data/corpus/step_break_ab_seed_v1.jsonl --min-precision 0.99
 ```
