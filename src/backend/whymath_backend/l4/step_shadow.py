@@ -17,9 +17,23 @@ import logging
 import uuid
 
 from whymath_backend.config import get_settings
-from whymath_backend.l3.pregenerate.validator import detect_step_breaks
+from whymath_backend.l3.pregenerate.validator import (
+    StepAnswerVerdict,
+    classify_step_break,
+    detect_step_breaks,
+)
 
 logger = logging.getLogger("whymath.l4.step_shadow")  # 워커 "whymath.l3.quality" 네이밍 동형
+
+# verdict(L3 사실판정) → A/B *후보*(L4 교수학 해석). "diverged"=정답서 이탈=(A) 후보의 양성
+# 증거. 나머지는 양성 아님/모호/판정불가다. (A)/(B)는 구문상 미분리라 *후보*일 뿐 — precision은
+# 사람 라벨 축적 후 측정한다(정책 2026-06-06 해금 경로 ①). 학생 단계 지목 금지 불변(로그 sink만).
+_VERDICT_TO_CANDIDATE: dict[StepAnswerVerdict, str] = {
+    "diverged_from_answer": "A",  # 변환오류 후보(정답서 이탈)
+    "reached_answer": "not_A",  # 정답 도달(양성 아님)
+    "unrelated": "ambiguous",  # (A)/(B) 미분리(모호)
+    "indeterminate": "unknown",  # 정답/해집합 파싱 불가
+}
 
 
 def observe_step_breaks(
@@ -40,6 +54,10 @@ def observe_step_breaks(
     로그 2026-06-06 해금 경로 ①). 둘 다 *서버 로그 sink에만* 흐른다 — 반환은 여전히 `None`이라
     비노출 불변이 보존된다(특히 `expected_answer`는 절대 student-facing이면 안 됨 = 정답 누출).
     `expected_answer`는 *서버 DB 조회*(api 계층)로만 얻고 요청/응답엔 결코 싣지 않는다.
+
+    slice 65: 각 break를 `classify_step_break`로 기대정답 대비 분류(verdict)하고 verdict→A/B
+    *후보*(candidate)를 로그에 남긴다 — 둘 다 로그 sink에만(반환 None·비노출 불변). 후보는
+    (A)/(B) 미분리라 *양성 증거*일 뿐이며 precision은 사람 라벨 축적 후 측정한다.
     """
     if not get_settings().l4_step_shadow_enabled:
         return
@@ -48,11 +66,14 @@ def observe_step_breaks(
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(방어선·테스트 커버)
         return
     for b in breaks:
+        verdict = classify_step_break(b, expected_answer)
         logger.info(
-            "단계 비보존 의심(shadow·비노출) — problem_id=%s expected=%r "
+            "단계 비보존 의심(shadow·비노출) — problem_id=%s expected=%r verdict=%s candidate=%s "
             "var=%s step=%d %s→%s marker=%r",
             problem_id,
             expected_answer,
+            verdict,
+            _VERDICT_TO_CANDIDATE[verdict],
             b.var,
             b.step_index,
             b.solset_before,
