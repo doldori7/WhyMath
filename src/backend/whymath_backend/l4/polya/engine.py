@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 from whymath_backend.l4.hint_deferral import REVEALS, decide_hint_level
+from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.models import (
     LLMSeam,
     PedagogyDecision,
@@ -56,7 +57,13 @@ class PolyaCoach:
     호출자(또는 후속 슬라이스의 세션 저장소) 책임.
     """
 
-    def decide(self, student_input: str, state: PolyaState) -> PedagogyDecision:
+    def decide(
+        self,
+        student_input: str,
+        state: PolyaState,
+        *,
+        mastery_level: MasteryLevel | None = None,
+    ) -> PedagogyDecision:
         """LLM 없이 *결정*만. 다음 단계·프롬프트·system·권장 티어·보조 행동을 채운다.
 
         - 전이 판정 → next면 `_next_stage()`의 프롬프트, stay면 현 단계 프롬프트.
@@ -75,6 +82,7 @@ class PolyaCoach:
             student_input=student_input,
             turn_count=state.turn_count,
             prev_hint_level=state.prev_hint_level,
+            mastery_level=mastery_level,
         )
         return PedagogyDecision(
             polya_stage_to_advance=transition,

@@ -225,13 +225,14 @@ def _build_response_payload(
     세션 엔드포인트는 서버 DB 조회값을 넘긴다 — `expected_answer`(정답)는 결코 응답에 노출하지
     않는다(student-facing이면 정답 누출).
     """
-    decision = _coach.decide(body.student_input, body.polya_state)
-    matches = diagnose(body.student_input)
-    intervention = select_intervention(matches[0]) if matches else None
     # slice 25: mastery_level 명시값 우선·없으면 BKT 숙달(0~1)을 라벨로 환산(L2→L4 브릿지).
+    # slice 69: level을 _coach.decide 이전에 계산해 hint level 보수화에도 전달(적응형 코칭).
     level = body.mastery_level
     if level is None and body.bkt_mastery is not None:
         level = mastery_to_level(body.bkt_mastery)
+    decision = _coach.decide(body.student_input, body.polya_state, mastery_level=level)
+    matches = diagnose(body.student_input)
+    intervention = select_intervention(matches[0]) if matches else None
     lthc = adapt_lthc(body.polya_state.current_stage, level) if level is not None else None
     # slice 23: 진단 코칭 포커스 → 대화 진입 소크라테스 카테고리 시드(L4 매핑·slice 22).
     entry_category = (

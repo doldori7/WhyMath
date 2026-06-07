@@ -506,6 +506,79 @@ class TestHintLevelWiring:
         assert body["decision"]["reveals"] == "step_flow"
 
 
+class TestMasteryHintConservatism:
+    """숙달도 → hint level 보수화(slice 69·L2→L4). 숙달은 한 단계 낮고, 비-숙달은 불변.
+
+    숙달도 라벨/수치는 `decision`에 *새로* 노출되지 않는다(노출 경계·우열 매기기 금지).
+    """
+
+    def test_master_demand_lowered(self) -> None:
+        # 답요구 prev=1: base 2 → 숙달이면 1(가장 은근).
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "그냥 답이 뭐야",
+                "polya_state": {"prev_hint_level": 1},
+                "mastery_level": "숙달",
+            },
+        )
+        body = resp.json()
+        assert body["decision"]["hint_level"] == 1
+        assert body["decision"]["reveals"] == "next_concept_to_focus"
+
+    def test_novice_demand_unchanged(self) -> None:
+        # 초보는 기존과 동일(base 2 유지) — 하위호환.
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "그냥 답이 뭐야",
+                "polya_state": {"prev_hint_level": 1},
+                "mastery_level": "초보",
+            },
+        )
+        body = resp.json()
+        assert body["decision"]["hint_level"] == 2
+        assert body["decision"]["reveals"] == "step_flow"
+
+    def test_no_mastery_unchanged(self) -> None:
+        # 숙달도 미지정 → slice 3 동작 그대로(TestHintLevelWiring과 동일).
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "그냥 답이 뭐야",
+                "polya_state": {"prev_hint_level": 1},
+            },
+        )
+        assert resp.json()["decision"]["hint_level"] == 2
+
+    def test_bkt_high_mastery_also_lowers(self) -> None:
+        # mastery_level 미지정·bkt≥0.8 → "숙달" 환산 → 보수화 적용(L2→L4 브릿지 일관).
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "그냥 답이 뭐야",
+                "polya_state": {"prev_hint_level": 1},
+                "bkt_mastery": 0.95,
+            },
+        )
+        assert resp.json()["decision"]["hint_level"] == 1
+
+    def test_mastery_not_exposed_in_decision(self) -> None:
+        # 숙달도 라벨/수치가 decision에 새로 실리지 않음(노출 경계).
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "그냥 답이 뭐야",
+                "polya_state": {"prev_hint_level": 1},
+                "mastery_level": "숙달",
+            },
+        )
+        decision = resp.json()["decision"]
+        assert "mastery_level" not in decision
+        assert "bkt_mastery" not in decision
+        assert "숙달" not in json.dumps(decision, ensure_ascii=False)
+
+
 class TestAuthGate:
     def test_no_token_401(self) -> None:
         resp = _no_auth_client().post("/v1/coach", json={"student_input": "음"})
