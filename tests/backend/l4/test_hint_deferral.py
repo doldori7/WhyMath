@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from whymath_backend.l4.hint_deferral import REVEALS, decide_hint_level
+from whymath_backend.l4.lthc.models import MasteryLevel
 
 
 class TestDefaultLevelOne:
@@ -143,4 +144,78 @@ class TestNoFalsePositives:
                 student_input="이 부분이 흥미롭네요", turn_count=2, prev_hint_level=2
             )
             == 1
+        )
+
+
+class TestMasteryConservatism:
+    """숙달도 보수화(slice 69·L2→L4) — '숙달'이면 base를 한 단계 내림. 비-숙달/None 불변."""
+
+    def test_master_demand_lowered_to_1(self) -> None:
+        # 답요구 prev=1: base 2 → max(1, 2-1)=1(가장 은근).
+        assert (
+            decide_hint_level(
+                student_input="답 알려줘",
+                turn_count=1,
+                prev_hint_level=1,
+                mastery_level="숙달",
+            )
+            == 1
+        )
+
+    def test_master_stuck_lowered_to_2(self) -> None:
+        # 5회+ 막힘 prev=1: base 3 → max(1, 3-1)=2.
+        assert (
+            decide_hint_level(
+                student_input="음...",
+                turn_count=5,
+                prev_hint_level=1,
+                mastery_level="숙달",
+            )
+            == 2
+        )
+
+    def test_master_neutral_stays_1(self) -> None:
+        # 중립 base 1 → max(1, 0)=1(클램프 — 숙달도 방향 힌트는 보장·정서 안전).
+        assert (
+            decide_hint_level(
+                student_input="네, 해볼게요",
+                turn_count=1,
+                prev_hint_level=1,
+                mastery_level="숙달",
+            )
+            == 1
+        )
+
+    def test_master_demand_prev3_lowered_to_3(self) -> None:
+        # 답요구 prev=3: base min(4,4)=4 → 3(전체풀이 안전망 회피).
+        assert (
+            decide_hint_level(
+                student_input="답 알려줘",
+                turn_count=1,
+                prev_hint_level=3,
+                mastery_level="숙달",
+            )
+            == 3
+        )
+
+    @pytest.mark.parametrize("level", [None, "초보", "발전 중"])
+    def test_non_master_unchanged(self, level: MasteryLevel | None) -> None:
+        # 비-숙달·None은 기존과 동일(답요구 prev=1 → 2) — 하위호환.
+        assert (
+            decide_hint_level(
+                student_input="답 알려줘",
+                turn_count=1,
+                prev_hint_level=1,
+                mastery_level=level,
+            )
+            == 2
+        )
+
+    def test_omitted_mastery_arg_unchanged(self) -> None:
+        # mastery_level 인자 생략 → 기존 동작(기본 None).
+        assert (
+            decide_hint_level(
+                student_input="답 알려줘", turn_count=1, prev_hint_level=1
+            )
+            == 2
         )

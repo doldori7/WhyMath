@@ -19,6 +19,8 @@ from __future__ import annotations
 
 from typing import Literal, cast
 
+from whymath_backend.l4.lthc.models import MasteryLevel
+
 HintLevel = Literal[1, 2, 3, 4]
 """답 미루기 단계 — 스펙 L31-37. 4는 PRD 척도 밖 WhyMath 고유 안전망(L52)."""
 
@@ -79,6 +81,7 @@ def decide_hint_level(
     student_input: str,
     turn_count: int,
     prev_hint_level: int | None,
+    mastery_level: MasteryLevel | None = None,
 ) -> HintLevel:
     """다음 응답의 hint_level을 결정한다 — 스펙 L31-40 표 + L39 "가장 빠른 단계에서 멈춤".
 
@@ -87,6 +90,8 @@ def decide_hint_level(
     2. 답 요구 신호 → min(4, prev+1) — 점진 상승, 즉시 답 차단.
     3. 좌절 신호 → min(4, prev+1) — 점진 상승(socratic_template 시나리오 4).
     4. 그 외 → 1(방향, 가장 빠른 단계).
+    5. `mastery_level='숙달'` → 위 base를 max(1, base-1)로 한 단계 보수화(slice 69·L2→L4·
+       생산적 고투/ZPD). 초보/발전중/None은 불변(하위호환).
 
     `prev_hint_level=None`(새 세션·첫 결정) → 1 시작. 후퇴는 자동 없음(prev 이하로 안 내림은
     1·2 규칙에서 보장; 4의 기본 1 복귀는 의도된 디폴트 — 막힘 신호 사라지면 다시 은근하게).
@@ -96,11 +101,17 @@ def decide_hint_level(
 
     # 1. 5회+ 막힘 — 임계 우선(스펙 L37). prev∈[1,4] → max(prev,3)∈{3,4}.
     if turn_count >= _STUCK_TURN_THRESHOLD:
-        return cast(HintLevel, max(prev, 3))
-
+        base: int = max(prev, 3)
     # 2·3. 답 요구(시나리오 3) 또는 좌절(시나리오 4) — 점진 상승, prev∈[1,4] → min(4,prev+1)∈[2,4].
-    if _has_any(text, _DEMAND_ANSWER_TOKENS) or _has_any(text, _FRUSTRATION_TOKENS):
-        return cast(HintLevel, min(4, prev + 1))
-
+    elif _has_any(text, _DEMAND_ANSWER_TOKENS) or _has_any(text, _FRUSTRATION_TOKENS):
+        base = min(4, prev + 1)
     # 4. 기본 — 1(방향). 신호 사라지면 가장 은근한 단계로 복귀(생산적 막힘 우선).
-    return 1
+    else:
+        base = 1
+
+    # 5. 숙달도 보수화(slice 69·L2→L4) — '숙달'이면 한 단계 내려 생산적 고투 유도.
+    #    max(1,…) 클램프로 방향 힌트(1)는 보장(정서 안전). 초보/발전중/None은 불변.
+    if mastery_level == "숙달":
+        base = max(1, base - 1)
+
+    return cast(HintLevel, base)
