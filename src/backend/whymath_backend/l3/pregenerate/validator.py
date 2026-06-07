@@ -16,7 +16,7 @@ import re
 import unicodedata
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 import sympy
 from sympy.parsing.sympy_parser import (
@@ -718,3 +718,84 @@ def detect_step_breaks(response: str, *, max_relations: int = 100) -> list[StepB
                 )
             )
     return breaks
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# A/B 수렴 후보 휴리스틱 — step break를 *문항 기대정답* 대비 분류 (shadow·slice 65)
+# ──────────────────────────────────────────────────────────────────────────
+# `detect_step_breaks`는 문항-free(원문만)다. 여기서 L4가 DB로 주입한 *기대정답*을 받아 각
+# break의 해집합 변화가 정답에 *수렴/이탈*하는지 본다. (A)순차유도오류/(B)변수재사용은 구문상
+# 완전 분리 불가하나(정책 2026-06-06), "정답에서 이탈"은 (A) 후보의 *양성 증거*다. verdict는
+# *사실 판정*(L3 결정론)이고 verdict→A/B *후보* 해석은 L4(step_shadow) 소관·여전히 비노출.
+StepAnswerVerdict = Literal[
+    "diverged_from_answer",  # after≠정답 + before=정답 → 정답서 이탈((A) 후보 양성)
+    "reached_answer",  # after=기대정답 → 정답 도달(양성 아님)
+    "unrelated",  # before·after 둘 다 정답 아님 → (A)/(B) 미분리(모호)
+    "indeterminate",  # 기대정답 없음·정답/해집합 파싱 불가 → 판정 불가(보수적)
+]
+
+
+def _extract_answer_solset(expected_answer: str) -> set[Any] | None:
+    """자유텍스트 기대정답 → 수치 해집합. *순수 수치*로 깔끔히 파싱될 때만, 아니면 None(보수적).
+
+    유니코드 연산자 정규화 후 ① "="가 있으면 *마지막* `=` 뒤(우변)만 취하고("x = 3"→"3")
+    ② `,`·"또는"·"or"로 분리 ③ 각 조각을 `_parse_expr`해 *전부* 수치(`.is_number`)면 집합
+    반환. 하나라도 파싱 실패·비수치면 None — 산문·객관식("③")·빈문자열은 후보에서 빠진다
+    (거짓 라벨 0: 못 읽는 정답으로는 후보를 만들지 않는다).
+    """
+    normalized = expected_answer.translate(_MATH_OP_NORMALIZE).strip()
+    if "=" in normalized:
+        normalized = normalized.rsplit("=", 1)[1].strip()  # 마지막 `=` 뒤 = 우변(값)
+    solset: set[Any] = set()
+    for piece in re.split(r",|또는|\bor\b", normalized):
+        piece = piece.strip()
+        if not piece:
+            continue
+        value = _parse_expr(piece)
+        if value is None or not getattr(value, "is_number", False):
+            return None  # 비수치·파싱 실패 → 전체 보수적 None
+        solset.add(value)
+    return solset or None
+
+
+def _parse_solset_str(solset_str: str) -> set[Any] | None:
+    """`_format_solset` 문자열("{3}"·"{-1, 2}")을 수치 해집합으로 역파싱. 실패·형식오류면 None.
+
+    `_format_solset`이 `str(sol)`로 만든 값이라 단변수 실근은 round-trip한다("3"→3·"1/2"→1/2).
+    중괄호를 떼고 `,`로 분리해 각 조각을 `_parse_expr`. 하나라도 실패·비수치(또는 비중괄호)면 None.
+    """
+    inner = solset_str.strip()
+    if not (inner.startswith("{") and inner.endswith("}")):
+        return None
+    solset: set[Any] = set()
+    for piece in inner[1:-1].split(","):
+        value = _parse_expr(piece.strip())
+        if value is None or not getattr(value, "is_number", False):
+            return None
+        solset.add(value)
+    return solset
+
+
+def _solset_value_in(value: Any, solset: set[Any]) -> bool:
+    """value가 해집합의 어느 원소와 수치적으로 같은가(`_num_equal`·정수/유리/실수 타입차 흡수)."""
+    return any(_num_equal(value, member) for member in solset)
+
+
+def classify_step_break(break_: StepBreak, expected_answer: str | None) -> StepAnswerVerdict:
+    """step break의 해집합 변화를 *기대정답* 대비 분류 — A/B 후보의 양성 증거(사실 판정·L3).
+
+    `reached_answer`(after 전부 정답)·`diverged_from_answer`(after≠정답·before 전부 정답)·
+    `unrelated`(둘 다 정답 아님)·`indeterminate`(기대정답 None·정답/해집합 파싱 불가). verdict→
+    A/B *후보* 해석은 L4(step_shadow) 소관 — 여긴 사실만 낸다. detect_step_breaks가 단일근
+    해집합을 만들어 비교는 사실상 단일값이다(다중값 expected도 부분집합 매칭으로 일반 처리).
+    """
+    expected = _extract_answer_solset(expected_answer) if expected_answer is not None else None
+    before = _parse_solset_str(break_.solset_before)
+    after = _parse_solset_str(break_.solset_after)
+    if expected is None or before is None or after is None:
+        return "indeterminate"
+    if all(_solset_value_in(v, expected) for v in after):
+        return "reached_answer"
+    if all(_solset_value_in(v, expected) for v in before):
+        return "diverged_from_answer"
+    return "unrelated"

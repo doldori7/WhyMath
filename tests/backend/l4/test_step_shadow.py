@@ -123,3 +123,48 @@ class TestObserveStepBreaks:
             assert observe_step_breaks(_NONPRESERVING) is None
         finally:
             get_settings.cache_clear()
+
+    def test_logs_diverged_candidate_a(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # slice 65: _NONPRESERVING은 before {3}·after {4} → expected "3"이면 정답서 이탈 = (A) 후보.
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                observe_step_breaks(_NONPRESERVING, expected_answer="3")
+            msgs = _shadow_messages(caplog)
+            assert any("verdict=diverged_from_answer" in m for m in msgs)
+            assert any("candidate=A" in m for m in msgs)
+        finally:
+            get_settings.cache_clear()
+
+    def test_logs_reached_candidate_not_a(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # after {4}가 기대정답이면 정답 도달 → candidate not_A(양성 아님).
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                observe_step_breaks(_NONPRESERVING, expected_answer="4")
+            msgs = _shadow_messages(caplog)
+            assert any("verdict=reached_answer" in m for m in msgs)
+            assert any("candidate=not_A" in m for m in msgs)
+        finally:
+            get_settings.cache_clear()
+
+    def test_logs_indeterminate_without_expected(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # expected_answer 없음(slice 63 호출 형태) → verdict=indeterminate·candidate=unknown.
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                observe_step_breaks(_NONPRESERVING)
+            msgs = _shadow_messages(caplog)
+            assert any("verdict=indeterminate" in m for m in msgs)
+            assert any("candidate=unknown" in m for m in msgs)
+        finally:
+            get_settings.cache_clear()

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import sympy
 
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
@@ -37,6 +38,7 @@ from whymath_backend.l3.pregenerate import (
     SymPySolutionValidator,
     ValidationSignal,
     arithmetic_validator,
+    classify_step_break,
     default_seed_validator,
     detect_step_breaks,
     validate_response,
@@ -46,9 +48,11 @@ from whymath_backend.l3.pregenerate.validator import (
     _CHAIN_ADJACENT,
     _breaks_standalone,
     _equality_is_false,
+    _extract_answer_solset,
     _inequality_is_false,
     _is_hangul,
     _not_equal_is_false,
+    _parse_solset_str,
 )
 from whymath_backend.l3.router import Router, cache_key_for
 
@@ -1385,3 +1389,103 @@ class TestDetectStepBreaks:
         b = detect_step_breaks("2x = 6 따라서 3x = 12")[0]
         with pytest.raises(Exception):  # FrozenInstanceError(불변)
             b.var = "y"  # type: ignore[misc]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# A/B 수렴 후보 휴리스틱 — classify_step_break + 정답/해집합 파싱 (shadow·slice 65)
+# ──────────────────────────────────────────────────────────────────────────
+class TestExtractAnswerSolset:
+    def test_bare_integer(self) -> None:
+        assert _extract_answer_solset("3") == {sympy.Integer(3)}
+
+    def test_variable_equals_form(self) -> None:
+        # "x = 3"·"x=3" → 마지막 `=` 뒤(우변)만 → {3}.
+        assert _extract_answer_solset("x = 3") == {sympy.Integer(3)}
+        assert _extract_answer_solset("x=3") == {sympy.Integer(3)}
+
+    def test_label_prefix_stripped(self) -> None:
+        # "정답: y=-2" → 우변 -2.
+        assert _extract_answer_solset("정답: y=-2") == {sympy.Integer(-2)}
+
+    def test_multiple_values_comma_and_connectives(self) -> None:
+        pair = {sympy.Integer(-1), sympy.Integer(3)}
+        assert _extract_answer_solset("-1, 3") == pair
+        assert _extract_answer_solset("x = -1, 3") == pair
+        assert _extract_answer_solset("2 또는 5") == {sympy.Integer(2), sympy.Integer(5)}
+        assert _extract_answer_solset("2 or 5") == {sympy.Integer(2), sympy.Integer(5)}
+
+    def test_rational(self) -> None:
+        assert _extract_answer_solset("3/2") == {sympy.Rational(3, 2)}
+
+    def test_unicode_minus_normalized(self) -> None:
+        # U+2212 MINUS SIGN → ASCII "-" 정규화 후 파싱.
+        assert _extract_answer_solset("−3") == {sympy.Integer(-3)}
+
+    def test_prose_returns_none(self) -> None:
+        assert _extract_answer_solset("정답은 3입니다") is None
+
+    def test_multiple_choice_returns_none(self) -> None:
+        assert _extract_answer_solset("③") is None
+
+    def test_empty_or_blank_rhs_returns_none(self) -> None:
+        assert _extract_answer_solset("") is None
+        assert _extract_answer_solset("x =") is None  # 우변 비어있음
+
+    def test_bare_variable_returns_none(self) -> None:
+        assert _extract_answer_solset("x") is None  # 비수치
+
+
+class TestParseSolsetStr:
+    def test_single(self) -> None:
+        assert _parse_solset_str("{3}") == {sympy.Integer(3)}
+
+    def test_negative_and_multi(self) -> None:
+        assert _parse_solset_str("{-1, 2}") == {sympy.Integer(-1), sympy.Integer(2)}
+
+    def test_rational_roundtrip(self) -> None:
+        assert _parse_solset_str("{1/2}") == {sympy.Rational(1, 2)}
+
+    def test_no_braces_returns_none(self) -> None:
+        assert _parse_solset_str("3") is None
+
+    def test_empty_braces_returns_none(self) -> None:
+        assert _parse_solset_str("{}") is None
+
+    def test_nonnumeric_returns_none(self) -> None:
+        assert _parse_solset_str("{oops}") is None
+
+
+def _break(before: str, after: str) -> StepBreak:
+    """테스트용 StepBreak(해집합 문자열만 의미 있음·나머지는 더미)."""
+    return StepBreak(
+        step_index=0,
+        span=(0, 0),
+        solset_before=before,
+        solset_after=after,
+        var="x",
+        marker="따라서",
+    )
+
+
+class TestClassifyStepBreak:
+    def test_diverged_from_answer(self) -> None:
+        # before {3}=정답, after {4}≠정답 → 정답서 이탈((A) 후보 양성).
+        assert classify_step_break(_break("{3}", "{4}"), "3") == "diverged_from_answer"
+
+    def test_reached_answer(self) -> None:
+        # after {4}=정답 → 정답 도달(before가 무엇이든 after 우선).
+        assert classify_step_break(_break("{3}", "{4}"), "4") == "reached_answer"
+        assert classify_step_break(_break("{3}", "{4}"), "x = 4") == "reached_answer"
+
+    def test_unrelated(self) -> None:
+        # before·after 둘 다 정답(5) 아님 → (A)/(B) 미분리(모호).
+        assert classify_step_break(_break("{3}", "{4}"), "5") == "unrelated"
+
+    def test_indeterminate_when_no_expected(self) -> None:
+        assert classify_step_break(_break("{3}", "{4}"), None) == "indeterminate"
+
+    def test_indeterminate_when_expected_unparseable(self) -> None:
+        assert classify_step_break(_break("{3}", "{4}"), "정답은 셋") == "indeterminate"
+
+    def test_indeterminate_when_solset_unparseable(self) -> None:
+        assert classify_step_break(_break("oops", "{4}"), "3") == "indeterminate"
