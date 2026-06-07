@@ -1,0 +1,24 @@
+# step_break A/B 시드 코퍼스 v1 — classify_step_break precision eval용 (합성·비노출·내부 eval 전용)
+# 데이터카드: docs/data/step_break_ab_corpus.md  |  하니스: whymath_backend.l4.step_shadow_eval
+# 한 줄당 StepBreakLabel JSON. 빈 줄·`#` 무시. human_label: A=변환오류 / B=변수재사용.
+# 합성 예제(학생 데이터·교과서 본문·PII 0). 정밀도는 *하니스 검증*용 예시이지 실측 결론이 아니다.
+# ── 진성 변환오류(diverged→candidate A·라벨 A = TP) ──
+{"solution_text": "2x = 6 따라서 2x = 8", "solset_before": "{3}", "solset_after": "{4}", "expected_answer": "3", "var": "x", "marker": "따라서", "human_label": "A", "source": "manual", "note": "2x=6(x=3)을 2x=8로 잘못 옮김 — 같은 문제 연속유도의 변환오류"}
+{"solution_text": "x + 1 = 3 따라서 x + 1 = 5", "solset_before": "{2}", "solset_after": "{4}", "expected_answer": "2", "var": "x", "marker": "따라서", "human_label": "A", "source": "manual", "note": "우변을 3에서 5로 잘못 베낌"}
+{"solution_text": "x - 1 = 4 따라서 x - 1 = 2", "solset_before": "{5}", "solset_after": "{3}", "expected_answer": "5", "var": "x", "marker": "따라서", "human_label": "A", "source": "manual", "note": "우변 부호/값 오기"}
+{"solution_text": "2x = 6 따라서 4x = 36", "solset_before": "{3}", "solset_after": "{9}", "expected_answer": "3", "var": "x", "marker": "따라서", "human_label": "A", "source": "manual", "note": "양변 2배는 4x=12여야 하나 4x=36으로 변환오류"}
+{"solution_text": "2x = 8 따라서 2x = 12", "solset_before": "{4}", "solset_after": "{6}", "expected_answer": "4", "var": "x", "marker": "따라서", "human_label": "A", "source": "manual", "note": "우변 8→12 변환오류"}
+# ── 변수재사용인데 diverged로 잡힘(candidate A·라벨 B = FP·휴리스틱 한계) ──
+{"solution_text": "2x = 6 따라서 3x = 12", "solset_before": "{3}", "solset_after": "{4}", "expected_answer": "3", "var": "x", "marker": "따라서", "human_label": "B", "source": "manual", "note": "두 소문제(x=3, x=4)·기대정답이 첫 소문제 답 3과 우연히 일치 → A로 오지목"}
+{"solution_text": "5x = 25 따라서 6x = 12", "solset_before": "{5}", "solset_after": "{2}", "expected_answer": "5", "var": "x", "marker": "따라서", "human_label": "B", "source": "manual", "note": "독립 소문제 재사용·기대정답이 첫 답 5와 일치 → FP"}
+# ── 라벨 A인데 못 잡음(candidate not_A/ambiguous/unknown·라벨 A = FN) ──
+{"solution_text": "2x = 10 따라서 2x = 14", "solset_before": "{5}", "solset_after": "{7}", "expected_answer": "9", "var": "x", "marker": "따라서", "human_label": "A", "source": "manual", "note": "진성 변환오류지만 기대정답 9가 두 중간해와 무관 → unrelated(앵커 실패)"}
+{"solution_text": "x + 1 = 3 따라서 x + 1 = 5", "solset_before": "{2}", "solset_after": "{4}", "expected_answer": null, "var": "x", "marker": "따라서", "human_label": "A", "source": "manual", "note": "변환오류지만 문항 기대정답 미상 → indeterminate(앵커 없음)"}
+{"solution_text": "x = 3 따라서 x = 5", "solset_before": "{3}", "solset_after": "{5}", "expected_answer": "정답은 그래프 참조", "var": "x", "marker": "따라서", "human_label": "A", "source": "manual", "note": "기대정답이 산문이라 파싱불가 → indeterminate"}
+# ── 변수재사용 & 못 잡음(candidate not_A/ambiguous/unknown·라벨 B = TN) ──
+{"solution_text": "2x = 6 따라서 3x = 12", "solset_before": "{3}", "solset_after": "{4}", "expected_answer": "4", "var": "x", "marker": "따라서", "human_label": "B", "source": "manual", "note": "둘째 소문제 답 4가 기대정답 → reached(양성 아님)"}
+{"solution_text": "2x = 6 따라서 3x = 12", "solset_before": "{3}", "solset_after": "{4}", "expected_answer": "5", "var": "x", "marker": "따라서", "human_label": "B", "source": "manual", "note": "기대정답 5가 두 소문제와 무관 → unrelated"}
+{"solution_text": "2x = 8 따라서 3x = 18", "solset_before": "{4}", "solset_after": "{6}", "expected_answer": null, "var": "x", "marker": "따라서", "human_label": "B", "source": "manual", "note": "독립 소문제·기대정답 미상 → indeterminate"}
+{"solution_text": "x = 2 따라서 2x = 10", "solset_before": "{2}", "solset_after": "{5}", "expected_answer": "7", "var": "x", "marker": "따라서", "human_label": "B", "source": "manual", "note": "소문제 재사용·기대정답 7 무관 → unrelated"}
+{"solution_text": "x = 3 따라서 2x = 8", "solset_before": "{3}", "solset_after": "{4}", "expected_answer": "4", "var": "x", "marker": "따라서", "human_label": "B", "source": "manual", "note": "둘째 식 답 4가 기대정답 → reached"}
+{"solution_text": "5x = 25 따라서 6x = 12", "solset_before": "{5}", "solset_after": "{2}", "expected_answer": null, "var": "x", "marker": "따라서", "human_label": "B", "source": "manual", "note": "독립 소문제·기대정답 미상 → indeterminate"}

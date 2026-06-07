@@ -36,6 +36,15 @@ _VERDICT_TO_CANDIDATE: dict[StepAnswerVerdict, str] = {
 }
 
 
+def candidate_for_verdict(verdict: StepAnswerVerdict) -> str:
+    """verdict(L3 사실판정) → A/B *후보* 라벨(L4 교수학 해석)의 단일 출처.
+
+    `observe_step_breaks` 로그와 precision eval 하니스(`step_shadow_eval`·slice 66)가 같은 매핑을
+    쓰도록 공개한다 — verdict→candidate가 `_VERDICT_TO_CANDIDATE` 한 곳에만 정의되게 한다.
+    """
+    return _VERDICT_TO_CANDIDATE[verdict]
+
+
 def observe_step_breaks(
     solution_text: str,
     *,
@@ -73,7 +82,7 @@ def observe_step_breaks(
             problem_id,
             expected_answer,
             verdict,
-            _VERDICT_TO_CANDIDATE[verdict],
+            candidate_for_verdict(verdict),
             b.var,
             b.step_index,
             b.solset_before,
@@ -82,4 +91,4 @@ def observe_step_breaks(
         )
 
 
-__all__ = ["observe_step_breaks"]
+__all__ = ["candidate_for_verdict", "observe_step_breaks"]
