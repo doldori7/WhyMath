@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 
 import pytest
 
@@ -36,6 +37,37 @@ class TestObserveStepBreaks:
             msgs = _shadow_messages(caplog)
             assert any("단계 비보존 의심" in m for m in msgs)
             assert any("var=x" in m for m in msgs)
+        finally:
+            get_settings.cache_clear()
+
+    def test_gate_on_logs_problem_context(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # slice 64: 문항 맥락(problem_id·expected_answer)이 shadow 로그에 주입된다(진단 라벨용).
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        pid = uuid.UUID("00000000-0000-0000-0000-0000000000aa")
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                observe_step_breaks(_NONPRESERVING, problem_id=pid, expected_answer="x = 3")
+            msgs = _shadow_messages(caplog)
+            assert any(str(pid) in m for m in msgs)
+            assert any("expected='x = 3'" in m for m in msgs)  # %r → repr(정답)
+        finally:
+            get_settings.cache_clear()
+
+    def test_context_defaults_none_backward_compat(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # slice 63 호출(맥락 인자 없음)도 그대로 동작 — problem_id=None expected=None으로 로그.
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                observe_step_breaks(_NONPRESERVING)
+            msgs = _shadow_messages(caplog)
+            assert any("problem_id=None" in m for m in msgs)
+            assert any("expected=None" in m for m in msgs)
         finally:
             get_settings.cache_clear()
 
