@@ -8,7 +8,8 @@
 
 - **현재 파일**: `data/corpus/step_break_ab_seed_v1.jsonl` (v1 시드)
 - **하니스**: `python -m whymath_backend.l4.step_shadow_eval <labels.jsonl> [--min-precision T]`
-- **관련**: slice 62(`detect_step_breaks`) · slice 65(`classify_step_break`) · slice 66(본 코퍼스+하니스)
+- **harvest**(slice 67): `python -m whymath_backend.l4.step_shadow_harvest <obs.jsonl>` → 라벨 미지정 draft
+- **관련**: slice 62(`detect_step_breaks`) · slice 65(`classify_step_break`) · slice 66(코퍼스+하니스) · slice 67(harvest)
 
 ---
 
@@ -46,6 +47,11 @@
 > (나머지는 추적·가독용). 이 스키마는 shadow 로그(slice 65)가 남기는 필드와 같은 모양이라, 실제 로그를
 > 사람이 A/B로 라벨링하면 그대로 한 레코드가 된다.
 
+> **harvest 경로(slice 67)**: `step_shadow_harvest`가 구조화 관측(`StepBreakObservation`) JSONL을 읽어
+> *라벨 미지정* draft 행으로 변환한다 — `human_label: null`(사람이 `"A"`/`"B"`로 채움) · `source:
+> "shadow-log"` · **`solution_text: ""`**(실 harvest는 원문을 비움 — 아래 §4 프라이버시). candidate·
+> observed_at은 `note`에 보존(eval이 candidate를 재계산하므로 draft 필드엔 없음).
+
 ---
 
 ## 3. 라벨 정의 (A vs B)
@@ -69,6 +75,10 @@
 - **노출 경계**: **내부 eval 전용·비-student-facing**. 런타임/HTTP/응답 경로에 싣지 않는다.
 - **실 데이터 확장 시**: shadow 로그→코퍼스 변환은 학생 풀이가 *민감정보*이므로 익명화·동의·암호화
   저장 절차(CLAUDE.md 데이터 원칙)를 따르고, `source`에 출처를 명시한다.
+- **프라이버시 비대칭(slice 67)**: 합성 시드는 `solution_text`(원 풀이)를 채우지만 *실 harvest*의 draft는
+  `solution_text=""`다 — 구조화 관측(`StepBreakObservation`)이 학생 풀이 원문을 **담지 않기** 때문(미성년자
+  프라이버시·slice 64~65 로그의 의도적 누락 계승). 라벨러는 추상 `solset_*`·marker·verdict/candidate 단서로
+  A/B를 판정한다. draft도 코퍼스와 같은 **내부 eval 전용·비-student-facing** 경계를 상속한다.
 
 ---
 
