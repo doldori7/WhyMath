@@ -33,8 +33,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._concurrency import etag_for, matches_if_none_match
 from whymath_backend.api._rate_limit import RateLimitedTripleRead, RateLimitedTripleWrite
+from whymath_backend.config import get_settings
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
+from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.session import get_session
 from whymath_backend.l4 import (
     CoachingFocus,
@@ -203,7 +205,12 @@ class SessionGetResponse(BaseModel):
     )
 
 
-def _build_response_payload(body: CoachRequest) -> tuple[
+def _build_response_payload(
+    body: CoachRequest,
+    *,
+    problem_id: uuid.UUID | None = None,
+    expected_answer: str | None = None,
+) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
     InterventionDecision | None,
@@ -211,7 +218,13 @@ def _build_response_payload(body: CoachRequest) -> tuple[
     SocraticCategory | None,
     SolutionCoaching | None,
 ]:
-    """공통 결정 계산 — `/v1/coach`·`/v1/coach/sessions`·turns append 셋 다 사용."""
+    """공통 결정 계산 — `/v1/coach`·`/v1/coach/sessions`·turns append 셋 다 사용.
+
+    `problem_id`·`expected_answer`(slice 64)는 step shadow 진단 맥락으로만 하류 전달되고
+    반환(노출 payload)엔 *싣지 않는다*. stateless `/v1/coach`는 DB가 없어 None(맥락 없음),
+    세션 엔드포인트는 서버 DB 조회값을 넘긴다 — `expected_answer`(정답)는 결코 응답에 노출하지
+    않는다(student-facing이면 정답 누출).
+    """
     decision = _coach.decide(body.student_input, body.polya_state)
     matches = diagnose(body.student_input)
     intervention = select_intervention(matches[0]) if matches else None
@@ -232,9 +245,31 @@ def _build_response_payload(body: CoachRequest) -> tuple[
     # slice 55: 검증 대상은 *풀이 전용* student_solution 우선(L5 OCR 착지점)·없거나 비면
     # student_input 폴백(발화 인라인 풀이). Polya/오개념/LTHC는 위에서 student_input 기준 유지.
     solution_text = body.student_solution or body.student_input
-    sol = recommend_coaching_for_solution(solution_text, body.bkt_mastery, None)
+    sol = recommend_coaching_for_solution(
+        solution_text,
+        body.bkt_mastery,
+        None,
+        problem_id=problem_id,
+        expected_answer=expected_answer,
+    )
     solution_coaching = sol if sol.arithmetic_error else None
     return decision, matches, intervention, lthc, entry_category, solution_coaching
+
+
+async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:
+    """문항 기대정답을 서버 DB에서 조회 — step shadow 진단 맥락 전용(slice 64·비노출).
+
+    shadow 게이트(`l4_step_shadow_enabled`)가 off(프로덕션 기본)거나 `problem_id`가 None이면
+    조회를 *건너뛴다*(None) — 소비처(`observe_step_breaks`)와 같은 게이트라, 안 쓸 정답을
+    불필요하게 DB에서 끌어와 메모리에 적재하지 않는다(비용·데이터 최소화). 문항 부재면 None
+    (graceful — 코퍼스 미적재·신규 문항도 안전). 반환값은 *절대 HTTP 응답에 싣지 않는다*
+    (정답 누출 차단) — `_build_response_payload`의 `expected_answer` 인자로만 흘러
+    `observe_step_breaks` 로그 sink에 도달한다.
+    """
+    if problem_id is None or not get_settings().l4_step_shadow_enabled:
+        return None
+    problem = await session.get(ProblemORM, problem_id)
+    return problem.answer if problem is not None else None
 
 
 @router.post(
@@ -284,8 +319,11 @@ async def create_session(
     `user.user_id`로 자동 설정(타인 데이터 차단). 미성년 채팅 평문 저장은 *저장 계층*
     책임(모듈 docstring 참조 — DB 암호화 at-rest는 후속 인프라 슬라이스).
     """
+    # slice 64: 문항 기대정답을 서버 DB에서 조회해 step shadow 진단 맥락으로 주입(비노출 — 응답엔
+    # 결코 싣지 않음·정답 누출 차단). 문항 부재/없음이면 None(graceful).
+    expected_answer = await _expected_answer_for(session, body.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
-        _build_response_payload(body)
+        _build_response_payload(body, problem_id=body.problem_id, expected_answer=expected_answer)
     )
 
     now = datetime.now(timezone.utc)
@@ -365,8 +403,13 @@ async def append_turns(
             status_code=status.HTTP_404_NOT_FOUND, detail="대화를 찾을 수 없습니다."
         )
 
+    # slice 64: 멀티턴 경로도 문항 맥락 주입 — dialogue에 이미 실린 problem_id로 기대정답 조회
+    # (비노출 진단 로그 전용). create_session과 동형(create는 body, append는 dialogue 출처).
+    expected_answer = await _expected_answer_for(session, dialogue.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
-        _build_response_payload(body)
+        _build_response_payload(
+            body, problem_id=dialogue.problem_id, expected_answer=expected_answer
+        )
     )
 
     current_total = dialogue.total_turns or 0

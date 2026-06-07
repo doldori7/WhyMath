@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
@@ -724,6 +725,121 @@ class TestTurnAppend:
         body = resp.json()
         assert body["student_turn_order"] == 1
         assert body["assistant_turn_order"] == 2
+
+
+class TestStepShadowProblemContext:
+    """slice 64 — 문항 맥락(problem_id·expected_answer) shadow 주입의 *비노출* 보장.
+
+    핵심 안전 불변식: 기대정답은 서버 DB 조회로만 얻어 shadow 로그 sink에만 흐르고, HTTP
+    응답에는 *절대* 실리지 않는다(student-facing이면 정답 누출 = 치명적). 게이트는
+    `observe_step_breaks`와 동일(`WHYMATH_L4_STEP_SHADOW_ENABLED`)하며 모듈 `get_settings()`를
+    직접 읽으므로 env+`cache_clear`로 켠다(test_step_shadow와 동형).
+    """
+
+    # 단계 비보존(해 {3}≠{4}) + 순차유도 마커 → step shadow가 검출하는 풀이.
+    _SOLUTION = "2x = 6 따라서 3x = 12"
+    _SENTINEL = "ANSWER_SENTINEL_DONOTLEAK"  # Problem.answer에만 존재 — 응답에 새면 누출
+
+    def _shadow_msgs(self, caplog: pytest.LogCaptureFixture) -> list[str]:
+        return [r.getMessage() for r in caplog.records if r.name == "whymath.l4.step_shadow"]
+
+    def test_create_session_answer_not_in_response(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from types import SimpleNamespace
+
+        from whymath_backend.db.models.problem import Problem as ProblemORM
+
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        pid = uuid.uuid4()
+        preload = {(ProblemORM, pid): SimpleNamespace(answer=self._SENTINEL)}
+        client, _ = _session_client(preload=preload)
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                resp = client.post(
+                    "/v1/coach/sessions",
+                    json={
+                        "student_input": "이거 맞아요?",
+                        "student_solution": self._SOLUTION,
+                        "problem_id": str(pid),
+                    },
+                )
+            assert resp.status_code == 201, resp.text
+            # 🔒 정답 비노출 — sentinel이 응답 본문 어디에도 없어야(직렬화 전체 검사)
+            assert self._SENTINEL not in resp.text
+            assert self._SENTINEL not in json.dumps(resp.json())
+            # 맥락은 shadow 로그엔 도달(정답이 shadow sink로만 흘렀음을 적극 증명)
+            msgs = self._shadow_msgs(caplog)
+            assert any(self._SENTINEL in m and str(pid) in m for m in msgs)
+        finally:
+            get_settings.cache_clear()
+
+    def test_append_turns_answer_not_in_response(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # 멀티턴 경로도 dialogue.problem_id로 맥락 주입 — 같은 비노출 불변.
+        from types import SimpleNamespace
+
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+        from whymath_backend.db.models.problem import Problem as ProblemORM
+        from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        did = uuid.uuid4()
+        pid = uuid.uuid4()
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(
+                dialogue_id=did,
+                user_id=_UID,
+                problem_id=pid,
+                total_turns=2,
+                student_turns=1,
+                assistant_turns=1,
+            )
+        )
+        preload = {
+            (DialogueORM, did): dialogue,
+            (ProblemORM, pid): SimpleNamespace(answer=self._SENTINEL),
+        }
+        client, _ = _session_client(preload=preload)
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                resp = client.post(
+                    f"/v1/coach/sessions/{did}/turns",
+                    json={"student_input": "검토", "student_solution": self._SOLUTION},
+                )
+            assert resp.status_code == 201, resp.text
+            assert self._SENTINEL not in resp.text
+            msgs = self._shadow_msgs(caplog)
+            assert any(self._SENTINEL in m and str(pid) in m for m in msgs)
+        finally:
+            get_settings.cache_clear()
+
+    def test_gate_off_skips_answer_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 게이트 off(프로덕션 기본) → 정답 조회·접근 자체를 안 함(불필요 적재 차단·비용).
+        from whymath_backend.db.models.problem import Problem as ProblemORM
+
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "false")
+        get_settings.cache_clear()
+        pid = uuid.uuid4()
+
+        class _ExplodingProblem:
+            @property
+            def answer(self) -> str:
+                raise AssertionError("게이트 off면 정답을 조회·접근하지 않아야 한다.")
+
+        preload = {(ProblemORM, pid): _ExplodingProblem()}
+        client, _ = _session_client(preload=preload)
+        try:
+            resp = client.post(
+                "/v1/coach/sessions",
+                json={"student_input": "음", "problem_id": str(pid)},
+            )
+            assert resp.status_code == 201, resp.text
+        finally:
+            get_settings.cache_clear()
 
 
 class TestSessionGet:

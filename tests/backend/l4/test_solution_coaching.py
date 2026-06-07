@@ -7,6 +7,9 @@
 
 from __future__ import annotations
 
+import logging
+import uuid
+
 import pytest
 
 from whymath_backend.config import get_settings
@@ -298,3 +301,41 @@ class TestStepShadowNonExposure:
         finally:
             get_settings.cache_clear()
         assert on == off  # shadow는 None 반환·result 불변 — 게이트가 반환을 못 바꾼다
+
+    def test_problem_context_does_not_change_result(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # slice 64: problem_id·expected_answer를 줘도 반환은 *동일*(맥락은 shadow 로그로만 흐름·
+        # 특히 expected_answer는 응답에 안 실림 = 정답 누출 차단).
+        text = "2x = 6 따라서 3x = 12"
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        pid = uuid.UUID("00000000-0000-0000-0000-0000000000bb")
+        try:
+            without = recommend_coaching_for_solution(text, 0.9, 2.0)
+            with_ctx = recommend_coaching_for_solution(
+                text, 0.9, 2.0, problem_id=pid, expected_answer="x = 3"
+            )
+        finally:
+            get_settings.cache_clear()
+        assert with_ctx == without
+
+    def test_problem_context_reaches_shadow_log(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # slice 64: 오케스트레이터가 맥락을 observe_step_breaks로 전달 → shadow 로그에 도달(결선).
+        text = "2x = 6 따라서 3x = 12"
+        monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "true")
+        get_settings.cache_clear()
+        pid = uuid.UUID("00000000-0000-0000-0000-0000000000cc")
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.step_shadow"):
+                recommend_coaching_for_solution(
+                    text, 0.9, 2.0, problem_id=pid, expected_answer="x = 3"
+                )
+            msgs = [
+                r.getMessage() for r in caplog.records if r.name == "whymath.l4.step_shadow"
+            ]
+            assert any(str(pid) in m and "expected='x = 3'" in m for m in msgs)
+        finally:
+            get_settings.cache_clear()

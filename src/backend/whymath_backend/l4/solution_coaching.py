@@ -19,6 +19,8 @@ L4→L3 결합과 동형).
 
 from __future__ import annotations
 
+import uuid
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.l3.pregenerate.models import ValidationSignalKind
@@ -88,6 +90,8 @@ def recommend_coaching_for_solution(
     bkt_mastery: float | None,
     irt_theta: float | None,
     *,
+    problem_id: uuid.UUID | None = None,
+    expected_answer: str | None = None,
     validator: SeedValidator | None = None,
     discrepancy_tol: float = 0.2,
     mastery_threshold: float = 0.6,
@@ -103,6 +107,10 @@ def recommend_coaching_for_solution(
     순수·결정론(같은 입력 → 같은 결정). `student_solution`이 비었거나 심볼릭이면 신호가
     없어 자연히 BKT↔IRT 경로로 폴백한다(false positive 0·보수적). `discrepancy_tol`·
     `mastery_threshold`는 `recommend_coaching`에 그대로 위임한다.
+
+    `problem_id`·`expected_answer`(slice 64)는 *step shadow 진단 맥락*으로만 쓰여 반환
+    `SolutionCoaching`을 *바꾸지 않는다*(비노출 불변). `expected_answer`는 호출자(api 계층)가
+    서버 DB에서 조회해 넘기며 요청/응답엔 결코 싣지 않는다 — student-facing이면 정답 누출.
     """
     signal = validate_response(
         validator if validator is not None else arithmetic_validator(),
@@ -129,7 +137,9 @@ def recommend_coaching_for_solution(
     )
     # 중간 step 등가성 shadow 관측(slice 63) — fire-and-forget·반환 무반영(비노출·비차단).
     # `result`를 *바꾸지 않는다* — observe_step_breaks는 None을 반환하고 로그로만 sink한다.
-    observe_step_breaks(student_solution)
+    # slice 64: 문항 맥락(problem_id·expected_answer)을 *shadow 로그에만* 주입(진단 라벨 정확도
+    # 측정용). `result`엔 싣지 않는다 — 특히 expected_answer는 student-facing이면 정답 누출.
+    observe_step_breaks(student_solution, problem_id=problem_id, expected_answer=expected_answer)
     return result
 
 
