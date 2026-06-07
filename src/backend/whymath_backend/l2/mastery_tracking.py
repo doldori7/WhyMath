@@ -183,9 +183,43 @@ async def record_problem_attempt_mastery(
     return records
 
 
+# ── slice 70: L4 코칭이 읽는 *현재 상태* 읽기 접근자 ──────────────────────────────
+# 위 record_*가 학습 곡선에 측정을 *쓴다*면, 아래 둘은 L4 교수학 엔진이 결정(hint 보수화·
+# LTHC)에 쓸 *현재 숙달도*를 읽는다(진짜 L2↔L4 피드백 루프·slice 70). 기존 private 헬퍼를
+# 얇게 래핑할 뿐 새 쿼리·마이그레이션은 없다(ConceptMasteryHistory PK가 이 조회를 커버).
+
+
+async def get_current_mastery(
+    session: AsyncSession, user_id: uuid.UUID, concept_id: uuid.UUID
+) -> float | None:
+    """(user, concept)의 *현재* 숙달도(가장 최근 측정) — 측정 없음·mastery NULL이면 None.
+
+    `_latest_mastery`(measured_at DESC LIMIT 1)를 래핑해 float만 노출한다. 첫 관측 전(행 없음)과
+    측정은 있으나 mastery 미기록(NULL)은 둘 다 "서버 진실 없음"(None)으로 합친다 — 호출자(L4)는
+    None을 "클라값 폴백"으로 다룬다(slice 70).
+    """
+    row = await _latest_mastery(session, user_id, concept_id)
+    return float(row.mastery) if row is not None and row.mastery is not None else None
+
+
+async def get_primary_concept_id(session: AsyncSession, problem_id: uuid.UUID) -> uuid.UUID | None:
+    """문항이 평가하는 *대표 개념* 1개 — PRIMARY 우선·없으면 TESTED 폴백·둘 다 없으면 None.
+
+    숙달 조회의 단일 개념 키를 정한다(문항당 한 학습 곡선을 코칭 결정에 쓰기 위함). PRIMARY가
+    복수면 첫째(역할 가중·다개념 합성은 후속). `_assessed_concept_ids`를 역할별로 재사용한다.
+    """
+    primary = await _assessed_concept_ids(session, problem_id, [ConceptRole.PRIMARY])
+    if primary:
+        return primary[0]
+    tested = await _assessed_concept_ids(session, problem_id, [ConceptRole.TESTED])
+    return tested[0] if tested else None
+
+
 __all__ = [
     "MasteryRecord",
     "compute_mastery_record",
+    "get_current_mastery",
+    "get_primary_concept_id",
     "record_attempt_mastery",
     "record_problem_attempt_mastery",
 ]

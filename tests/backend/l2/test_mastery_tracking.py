@@ -20,6 +20,8 @@ from whymath_backend.l2 import (
     update_mastery,
 )
 from whymath_backend.l2.mastery_tracking import (
+    get_current_mastery,
+    get_primary_concept_id,
     record_attempt_mastery,
     record_problem_attempt_mastery,
 )
@@ -288,3 +290,47 @@ class TestForgettingInRecord:
             measured_at=datetime(2026, 1, 1, tzinfo=UTC),
         )
         assert row_late.mastery < row_same.mastery
+
+
+class TestGetCurrentMastery:
+    """slice 70: L4가 읽는 현재 숙달도 — `_latest_mastery` 래퍼(값/None/NULL)."""
+
+    async def test_returns_latest_value(self) -> None:
+        fake = _FakeSession(prior=_prior_row(0.73, 3))
+        assert await get_current_mastery(cast(AsyncSession, fake), _UID, _CID) == 0.73
+
+    async def test_none_when_no_measurement(self) -> None:
+        """첫 관측 전(직전 행 없음)이면 None — 서버 진실 없음 신호."""
+        fake = _FakeSession(prior=None)
+        assert await get_current_mastery(cast(AsyncSession, fake), _UID, _CID) is None
+
+    async def test_none_when_mastery_null(self) -> None:
+        """행은 있으나 mastery=NULL이면 None(부재/미기록을 '모름'으로 합침)."""
+        fake = _FakeSession(prior=_prior_row(None, None))
+        assert await get_current_mastery(cast(AsyncSession, fake), _UID, _CID) is None
+
+
+class TestGetPrimaryConceptId:
+    """slice 70: 문항 대표 개념 — PRIMARY 우선·TESTED 폴백·None."""
+
+    async def test_primary_role_first(self) -> None:
+        cid = uuid.uuid4()
+        fake = _QueueSession([_QResult([cid])])  # PRIMARY 쿼리가 개념 반환(폴백 미발생)
+        assert await get_primary_concept_id(cast(AsyncSession, fake), uuid.uuid4()) == cid
+
+    async def test_falls_back_to_tested(self) -> None:
+        """PRIMARY 비면 TESTED 폴백(execute#1=PRIMARY 빈·#2=TESTED 반환)."""
+        cid = uuid.uuid4()
+        fake = _QueueSession([_QResult([]), _QResult([cid])])
+        assert await get_primary_concept_id(cast(AsyncSession, fake), uuid.uuid4()) == cid
+
+    async def test_none_when_no_mapping(self) -> None:
+        """PRIMARY·TESTED 둘 다 없으면 None(문항↔개념 매핑 부재)."""
+        fake = _QueueSession([_QResult([]), _QResult([])])
+        assert await get_primary_concept_id(cast(AsyncSession, fake), uuid.uuid4()) is None
+
+    async def test_multiple_primary_returns_first(self) -> None:
+        """PRIMARY 복수면 첫째(역할 가중·다개념 합성은 후속)."""
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        fake = _QueueSession([_QResult([c1, c2])])
+        assert await get_primary_concept_id(cast(AsyncSession, fake), uuid.uuid4()) == c1

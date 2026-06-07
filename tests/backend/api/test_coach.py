@@ -579,6 +579,124 @@ class TestMasteryHintConservatism:
         assert "숙달" not in json.dumps(decision, ensure_ascii=False)
 
 
+class TestServerMasteryOverride:
+    """slice 70 — 세션 코칭이 서버 L2 숙달도를 클라 bkt보다 우선(신뢰 경계 제거).
+
+    실 `_server_mastery_for`(게이트 포함)를 돌리되 L2 DB 함수만 패치한다(`_CapturingSession`은
+    execute를 한 종류 rows로만 답해 2단계 조회를 못 흉내냄 — L2 함수 자체는 test_mastery_tracking이
+    검증). 서버 숙달도는 *결정에만* 쓰고 응답엔 비노출(slice 69 경계). 모두 `/v1/coach/sessions`·
+    답요구 발화·prev_hint_level=1: "숙달"이면 hint 보수화(base 2→1)·"초보"면 불변(2).
+    """
+
+    @staticmethod
+    def _patch_l2(
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        concept_id: uuid.UUID | None,
+        mastery: float | None,
+    ) -> None:
+        async def _cid(*_a: Any, **_k: Any) -> uuid.UUID | None:
+            return concept_id
+
+        async def _mastery(*_a: Any, **_k: Any) -> float | None:
+            return mastery
+
+        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _cid)
+        monkeypatch.setattr("whymath_backend.api.coach.get_current_mastery", _mastery)
+
+    def test_server_mastery_overrides_client_bkt(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 서버 0.9("숙달") → 보수화 hint 1. 클라 0.1("초보")은 덮어쓰여 무시됨.
+        self._patch_l2(monkeypatch, concept_id=uuid.uuid4(), mastery=0.9)
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "그냥 답이 뭐야",
+                "polya_state": {"prev_hint_level": 1},
+                "bkt_mastery": 0.1,
+                "problem_id": str(uuid.uuid4()),
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["decision"]["hint_level"] == 1
+
+    def test_gate_off_uses_client_bkt(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 게이트 off면 concept·mastery가 있어도 조회 자체를 건너뜀 → 클라 0.1("초보") → hint 2.
+        monkeypatch.setenv("WHYMATH_L4_SERVER_MASTERY_ENABLED", "false")
+        get_settings.cache_clear()
+        self._patch_l2(monkeypatch, concept_id=uuid.uuid4(), mastery=0.9)
+        try:
+            client, _ = _session_client()
+            resp = client.post(
+                "/v1/coach/sessions",
+                json={
+                    "student_input": "그냥 답이 뭐야",
+                    "polya_state": {"prev_hint_level": 1},
+                    "bkt_mastery": 0.1,
+                    "problem_id": str(uuid.uuid4()),
+                },
+            )
+            assert resp.status_code == 201, resp.text
+            assert resp.json()["decision"]["hint_level"] == 2
+        finally:
+            get_settings.cache_clear()
+
+    def test_no_problem_id_uses_client_bkt(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # problem_id 없으면 개념 조회 미발생(_server_mastery_for 단락) → 클라 0.95("숙달") → hint 1.
+        async def _explode(*_a: Any, **_k: Any) -> uuid.UUID:
+            raise AssertionError("problem_id가 None이면 개념을 조회하지 않아야 한다.")
+
+        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _explode)
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "그냥 답이 뭐야",
+                "polya_state": {"prev_hint_level": 1},
+                "bkt_mastery": 0.95,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["decision"]["hint_level"] == 1
+
+    def test_concept_not_found_uses_client_bkt(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 문항↔개념 매핑 없음(concept None) → 서버 숙달 None → 클라 0.95("숙달") → hint 1.
+        self._patch_l2(monkeypatch, concept_id=None, mastery=None)
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "그냥 답이 뭐야",
+                "polya_state": {"prev_hint_level": 1},
+                "bkt_mastery": 0.95,
+                "problem_id": str(uuid.uuid4()),
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["decision"]["hint_level"] == 1
+
+    def test_server_mastery_not_exposed_in_decision(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 서버 숙달도(0.9)가 decision에 새 필드/수치로 노출되지 않음(slice 69 노출 경계 동형).
+        self._patch_l2(monkeypatch, concept_id=uuid.uuid4(), mastery=0.9)
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "그냥 답이 뭐야",
+                "polya_state": {"prev_hint_level": 1},
+                "problem_id": str(uuid.uuid4()),
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        decision = resp.json()["decision"]
+        assert "mastery_level" not in decision
+        assert "bkt_mastery" not in decision
+        assert "server_mastery" not in decision
+        assert "0.9" not in json.dumps(decision, ensure_ascii=False)
+
+
 class TestAuthGate:
     def test_no_token_401(self) -> None:
         resp = _no_auth_client().post("/v1/coach", json={"student_input": "음"})
