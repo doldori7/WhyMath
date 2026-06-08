@@ -38,7 +38,13 @@ from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.session import get_session
-from whymath_backend.l2 import get_current_mastery, get_current_theta, get_primary_concept_id
+from whymath_backend.l2 import (
+    AbilityReading,
+    get_current_ability,
+    get_current_mastery,
+    get_current_theta,
+    get_primary_concept_id,
+)
 from whymath_backend.l4 import (
     CoachingFocus,
     LthcAdaptation,
@@ -306,28 +312,45 @@ async def _server_mastery_for(
     return await get_current_mastery(session, user_id, concept_id)
 
 
+def _theta_reading_reliable(reading: AbilityReading) -> bool:
+    """개념 θ를 코칭 교차검증에 쓸 만큼 *신뢰*할 수 있나 — 응답수·SE 게이트(slice 76 노이즈 가드).
+
+    응답이 충분(`l4_theta_min_responses` 이상)하고 SE가 측정 가능(None 아님)하며 상한
+    (`l4_theta_max_se`) 이하일 때만 True. 응답 1~2개의 극단 θ(±4·SE inf→None)나 SE가 큰 개념
+    θ는 False → 호출자가 전과목 θ로 폴백한다. 임계는 config(운영 튜닝·기본 응답 3·SE 1.0).
+    """
+    settings = get_settings()
+    return (
+        reading.response_count >= settings.l4_theta_min_responses
+        and reading.standard_error is not None
+        and reading.standard_error <= settings.l4_theta_max_se
+    )
+
+
 async def _server_theta_for(
     session: AsyncSession, user_id: uuid.UUID, problem_id: uuid.UUID | None
 ) -> float | None:
     """학생의 *실제* IRT 능력 θ를 서버 L2(AbilitySnapshot)에서 조회 — coach 세션/턴
-    전용(slice 73·74·비노출).
+    전용(slice 73·74·76·비노출).
 
     게이트(`l4_server_theta_enabled`)가 off면 None(조회 skip). slice 74: 문항 PRIMARY 개념의
     *개념별* θ를 우선 조회해(같은 개념 BKT와 동일 개념끼리 교차검증·정밀) `_server_mastery_for`와
-    대칭을 이룬다. 개념 θ 스냅샷이 없거나(개념 θ는 희소) problem_id/개념 미해석이면 *전과목* θ로
-    폴백(slice 73 동작) — θ가 *하나라도* 있으면 교차검증, 둘 다 없으면 graceful None →
-    `recommend_coaching`이 diagnose 폴백(노출 안 함). 반환값(θ 수치)은 코칭 *결정에만* 쓰이고
-    HTTP 응답엔 싣지 않는다(slice 70 숙달도 비노출과 동일 — θ도 student-facing 비노출).
+    대칭을 이룬다. **slice 76 노이즈 가드**: 개념 θ는 *신뢰도*(응답수·SE)가 충분할 때만 쓴다
+    (`_theta_reading_reliable`) — 응답 1~2개의 극단 θ는 무시하고 전과목 θ로 폴백(허위
+    consolidate/retrieval 차단). 개념 θ가 없거나·불신뢰·problem_id/개념 미해석이면 *전과목* θ
+    폴백(slice 73 동작·전과목은 게이팅 안 함). 둘 다 없으면 graceful None → `recommend_coaching`이
+    diagnose 폴백(노출 안 함). 반환값(θ 수치)은 코칭 *결정에만* 쓰이고 HTTP 응답엔 싣지 않는다
+    (slice 70 숙달도 비노출과 동일 — θ도 student-facing 비노출).
     """
     if not get_settings().l4_server_theta_enabled:
         return None
     if problem_id is not None:
         concept_id = await get_primary_concept_id(session, problem_id)
         if concept_id is not None:
-            concept_theta = await get_current_theta(session, user_id, concept_id)
-            if concept_theta is not None:
-                return concept_theta  # 개념 θ 우선(정밀 교차검증)
-    return await get_current_theta(session, user_id)  # 전과목 폴백(slice 73)
+            reading = await get_current_ability(session, user_id, concept_id)
+            if reading is not None and _theta_reading_reliable(reading):
+                return reading.theta  # 신뢰도 충분한 개념 θ(정밀 교차검증)
+    return await get_current_theta(session, user_id)  # 전과목 폴백(slice 73·게이팅 안 함)
 
 
 @router.post(

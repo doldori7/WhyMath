@@ -398,19 +398,26 @@ class TestSolutionCoachingWiring:
         # slice 56 — 틀린 단변수 해("2x+1=7 이므로 x=5")도 검산 코칭.
         resp = _client().post(
             "/v1/coach",
-            json={"student_input": "확인해주세요", "student_solution": "2x + 1 = 7 이므로 x = 5"},
+            json={
+                "student_input": "확인해주세요",
+                "student_solution": "2x + 1 = 7 이므로 x = 5",
+            },
         )
         sc = resp.json()["solution_coaching"]
         assert sc is not None
         assert sc["trigger"]["focus"] == "verify"
         assert "solution error" in sc["validation_signal"]
-        assert "한 줄씩" in sc["trigger"]["prompt"]  # slice 61 — 단계 자가검산 변형 발화(위치 비지목)
+        assert (
+            "한 줄씩" in sc["trigger"]["prompt"]
+        )  # slice 61 — 단계 자가검산 변형 발화(위치 비지목)
         # slice 60 — 해 주장("x = 5")을 가리키는 span 노출(방정식 아님).
         sol = "2x + 1 = 7 이므로 x = 5"
         s, e = sc["error_span"]
         assert sol[s:e] == "x = 5"
 
-    def test_step_shadow_not_exposed_in_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_step_shadow_not_exposed_in_response(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # slice 63 — 코칭도 생기고(대수 슬립) shadow도 검출되는("이므로"·해 {3}≠{5}) 입력에서,
         # 게이트가 켜져 관측이 돌아도 HTTP 응답엔 step 신호 *부재*(비노출). observe_step_breaks는
         # 실 get_settings()를 보므로 env+cache_clear로 게이트를 켠다.
@@ -419,14 +426,19 @@ class TestSolutionCoachingWiring:
         try:
             resp = _client().post(
                 "/v1/coach",
-                json={"student_input": "확인", "student_solution": "2x + 1 = 7 이므로 x = 5"},
+                json={
+                    "student_input": "확인",
+                    "student_solution": "2x + 1 = 7 이므로 x = 5",
+                },
             )
         finally:
             get_settings.cache_clear()
         assert resp.status_code == 200
         body = resp.json()
         assert body["solution_coaching"] is not None  # 코칭은 노출(대수 슬립 검출)
-        assert "step" not in json.dumps(body, ensure_ascii=False)  # shadow step 신호 누출 0
+        assert "step" not in json.dumps(
+            body, ensure_ascii=False
+        )  # shadow step 신호 누출 0
 
     def test_clean_arithmetic_no_solution_coaching(self) -> None:
         # 참 등식 → 슬립 아님 → None(기존 decision/coaching_focus 경로).
@@ -435,7 +447,9 @@ class TestSolutionCoachingWiring:
 
     def test_question_no_solution_coaching(self) -> None:
         # 수식 없는 질문 → 검증기 보수적 → None(false-positive 0).
-        resp = _client().post("/v1/coach", json={"student_input": "이거 어떻게 풀어요?"})
+        resp = _client().post(
+            "/v1/coach", json={"student_input": "이거 어떻게 풀어요?"}
+        )
         assert resp.json()["solution_coaching"] is None
 
     def test_empty_input_no_solution_coaching(self) -> None:
@@ -630,7 +644,9 @@ class TestServerMastery:
         resp = self._post(client, bkt_mastery=0.1)
         assert resp.json()["decision"]["hint_level"] == 2
 
-    def test_gate_off_skips_server_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_gate_off_skips_server_lookup(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # 게이트 off → 서버조회 skip → 클라 0.1(초보) → hint 2. (실 _server_mastery_for·env)
         monkeypatch.setenv("WHYMATH_L4_SERVER_MASTERY_ENABLED", "false")
         get_settings.cache_clear()
@@ -690,13 +706,17 @@ class TestServerMasteryHelper:
         row = ConceptMasteryHistory(mastery=0.9)
         # execute#1=PRIMARY 개념 [cid] → #2=그 개념 최신 측정 row
         fake = _MasteryQueueSession([_MasteryQR([cid]), _MasteryQR([row])])
-        m = await coach._server_mastery_for(cast(AsyncSession, fake), _UID, uuid.uuid4())
+        m = await coach._server_mastery_for(
+            cast(AsyncSession, fake), _UID, uuid.uuid4()
+        )
         assert m == 0.9
 
     async def test_none_when_no_concept_mapping(self) -> None:
         # PRIMARY·TESTED 모두 없음 → 개념 None → 숙달도 조회 안 함·None.
         fake = _MasteryQueueSession([_MasteryQR([]), _MasteryQR([])])
-        m = await coach._server_mastery_for(cast(AsyncSession, fake), _UID, uuid.uuid4())
+        m = await coach._server_mastery_for(
+            cast(AsyncSession, fake), _UID, uuid.uuid4()
+        )
         assert m is None
 
 
@@ -721,7 +741,11 @@ class TestServerTheta:
         return client.post("/v1/coach/sessions", json=body)
 
     def _patch(
-        self, monkeypatch: pytest.MonkeyPatch, *, mastery: float | None, theta: float | None
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        mastery: float | None,
+        theta: float | None,
     ) -> None:
         async def _fm(session: Any, user_id: Any, problem_id: Any) -> float | None:
             return mastery
@@ -755,19 +779,25 @@ class TestServerTheta:
         assert sc is not None
         assert sc["trigger"]["focus"] == "retrieval"
 
-    def test_consensus_advance_not_surfaced(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_consensus_advance_not_surfaced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # θ=2.0(proxy≈0.88)·BKT=0.9 → 합의(diff 작음)·수준 높음 → advance → 비노출(LTHC 담당).
         self._patch(monkeypatch, mastery=0.9, theta=2.0)
         client, _ = _session_client()
         assert self._post(client).json()["solution_coaching"] is None
 
-    def test_consensus_foundation_not_surfaced(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_consensus_foundation_not_surfaced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # θ=-2.0(proxy≈0.12)·BKT=0.1 → 합의·수준 낮음 → foundation → 비노출.
         self._patch(monkeypatch, mastery=0.1, theta=-2.0)
         client, _ = _session_client()
         assert self._post(client).json()["solution_coaching"] is None
 
-    def test_no_theta_diagnose_not_surfaced(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_no_theta_diagnose_not_surfaced(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # θ None(스냅샷 없음) → 교차검증 불가 → diagnose → 비노출(기존 동작·하위호환).
         self._patch(monkeypatch, mastery=0.1, theta=None)
         client, _ = _session_client()
@@ -798,7 +828,8 @@ class TestServerTheta:
 
 
 class _ThetaQR:
-    """get_primary_concept_id(개념 list `.all()`)·get_current_theta(θ 스칼라 `.first()`) 겸용."""
+    """get_primary_concept_id(`.scalars().all()`)·get_current_ability(Row `.first()`)·
+    get_current_theta(스칼라 `.scalars().first()`) 겸용 — rows[0]가 Row/스칼라."""
 
     def __init__(self, rows: list[Any]) -> None:
         self._rows = rows
@@ -827,35 +858,66 @@ class _ThetaQueueSession:
 
 
 class TestServerThetaHelper:
-    """slice 73·74: `_server_theta_for` 실체 — 개념별 θ 우선·전과목 폴백(게이트 ON·패치 없이)."""
+    """slice 74·76: `_server_theta_for` — 개념 θ는 *신뢰도*(응답수·SE) 충분할 때만·아니면
+    전과목 폴백(게이트 ON·패치 없이·기본 임계 min_responses=3·max_se=1.0).
+
+    개념 ability Row = (theta, standard_error, response_count). 신뢰=count≥3 AND SE≤1.0.
+    """
 
     _PID = uuid.uuid4()
 
-    async def test_concept_theta_preferred(self) -> None:
-        # PRIMARY 개념 해석 → 그 개념 θ 존재 → 개념 θ(정밀 교차검증).
+    async def test_reliable_concept_theta_preferred(self) -> None:
+        # PRIMARY 개념 → 신뢰도 충분(count5·SE0.3) → 개념 θ(정밀 교차검증).
         cid = uuid.uuid4()
-        fake = _ThetaQueueSession([_ThetaQR([cid]), _ThetaQR([2.0])])
+        fake = _ThetaQueueSession([_ThetaQR([cid]), _ThetaQR([(2.0, 0.3, 5)])])
         t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
         assert t == 2.0
 
-    async def test_falls_back_to_global_when_no_concept_theta(self) -> None:
-        # 개념 해석되나 그 개념 θ 스냅샷 없음 → 전과목 θ 폴백.
+    async def test_low_response_count_falls_back_to_global(self) -> None:
+        # 개념 θ 응답 2개(<3·극단 θ) → 불신뢰 → 전과목 θ 폴백.
         cid = uuid.uuid4()
-        fake = _ThetaQueueSession([_ThetaQR([cid]), _ThetaQR([]), _ThetaQR([0.5])])
+        fake = _ThetaQueueSession(
+            [_ThetaQR([cid]), _ThetaQR([(4.0, 0.2, 2)]), _ThetaQR([0.5])]
+        )
         t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
         assert t == 0.5
 
-    async def test_falls_back_to_global_when_no_concept_mapping(self) -> None:
+    async def test_high_se_falls_back_to_global(self) -> None:
+        # 개념 θ SE 큼(1.5>1.0) → 불신뢰 → 전과목 θ 폴백.
+        cid = uuid.uuid4()
+        fake = _ThetaQueueSession(
+            [_ThetaQR([cid]), _ThetaQR([(1.0, 1.5, 8)]), _ThetaQR([0.6])]
+        )
+        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
+        assert t == 0.6
+
+    async def test_none_se_falls_back_to_global(self) -> None:
+        # 개념 θ SE 없음(정보 0·극단 θ) → 불신뢰 → 전과목 θ 폴백.
+        cid = uuid.uuid4()
+        fake = _ThetaQueueSession(
+            [_ThetaQR([cid]), _ThetaQR([(4.0, None, 5)]), _ThetaQR([0.4])]
+        )
+        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
+        assert t == 0.4
+
+    async def test_absent_concept_theta_falls_back_to_global(self) -> None:
+        # 개념 해석되나 그 개념 θ 스냅샷 없음 → 전과목 θ 폴백.
+        cid = uuid.uuid4()
+        fake = _ThetaQueueSession([_ThetaQR([cid]), _ThetaQR([]), _ThetaQR([0.7])])
+        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
+        assert t == 0.7
+
+    async def test_no_concept_mapping_falls_back_to_global(self) -> None:
         # PRIMARY·TESTED 모두 없음 → 개념 None → 전과목 θ 폴백.
         fake = _ThetaQueueSession([_ThetaQR([]), _ThetaQR([]), _ThetaQR([0.3])])
         t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
         assert t == 0.3
 
     async def test_global_when_problem_id_none(self) -> None:
-        # problem_id 없음 → 개념 조회 skip → 전과목 θ(slice 73 경로).
-        fake = _ThetaQueueSession([_ThetaQR([0.7])])
+        # problem_id 없음 → 개념 조회 skip → 전과목 θ(slice 73 경로·게이팅 안 함).
+        fake = _ThetaQueueSession([_ThetaQR([0.9])])
         t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, None)
-        assert t == 0.7
+        assert t == 0.9
 
     async def test_none_when_no_snapshot(self) -> None:
         # problem_id 없음 + 전과목 스냅샷도 없음 → None.
@@ -1096,10 +1158,14 @@ class TestStepShadowProblemContext:
 
     # 단계 비보존(해 {3}≠{4}) + 순차유도 마커 → step shadow가 검출하는 풀이.
     _SOLUTION = "2x = 6 따라서 3x = 12"
-    _SENTINEL = "ANSWER_SENTINEL_DONOTLEAK"  # Problem.answer에만 존재 — 응답에 새면 누출
+    _SENTINEL = (
+        "ANSWER_SENTINEL_DONOTLEAK"  # Problem.answer에만 존재 — 응답에 새면 누출
+    )
 
     def _shadow_msgs(self, caplog: pytest.LogCaptureFixture) -> list[str]:
-        return [r.getMessage() for r in caplog.records if r.name == "whymath.l4.step_shadow"]
+        return [
+            r.getMessage() for r in caplog.records if r.name == "whymath.l4.step_shadow"
+        ]
 
     def test_create_session_answer_not_in_response(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -1175,7 +1241,9 @@ class TestStepShadowProblemContext:
         finally:
             get_settings.cache_clear()
 
-    def test_gate_off_skips_answer_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_gate_off_skips_answer_lookup(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # 게이트 off(프로덕션 기본) → 정답 조회·접근 자체를 안 함(불필요 적재 차단·비용).
         from whymath_backend.db.models.problem import Problem as ProblemORM
 
