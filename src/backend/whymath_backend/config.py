@@ -145,6 +145,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    l4_server_theta_enabled: bool = Field(
+        default=True,
+        description=(
+            "L4 코칭(세션/턴)이 서버 L2 저장소(AbilitySnapshot)의 *실제* IRT 능력 θ를 조회해 "
+            "BKT↔θ 교차검증 코칭(slice 73)에 쓸지. True(기본·정식기능)면 /v1/coach/sessions·"
+            "turns가 학생의 최신 전과목 θ를 조회해, BKT 숙달과 *불일치*할 때(θ↑·BKT↓=추측 의심 "
+            "→ consolidate·BKT↑·θ↓=망각 의심 → retrieval) `solution_coaching`으로 메타인지 "
+            "코칭을 노출한다. **θ 수치는 student-facing 미노출**(결정에만 쓰고 노출되는 건 정성 "
+            "코칭 발화뿐). θ 스냅샷이 없거나(희소) False면 교차검증 불가 → diagnose → 비노출"
+            "(기존 동작). WHYMATH_L4_SERVER_THETA_ENABLED=false로 끈다."
+        ),
+    )
+
     # ── QUALITY(27b) 비동기 큐 (Celery, broker=result backend=Redis, S4) ──
     # QUALITY는 동기 호출 불가(p50≈14초·GPU 단일 점유, 03a §D.3) → 작업 큐 전용이다.
     # broker·result-backend는 *기본값을 두지 않고*(빈 = "redis_url에서 파생") 명시
