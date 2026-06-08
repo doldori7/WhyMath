@@ -48,6 +48,10 @@ _STRATEGY_TOKENS: frozenset[str] = frozenset(
     }
 )
 
+# slice 72: PLAN→EXECUTE에서 '초보'는 전략 키워드 + *최소 길이*(충실한 전략 진술)를 요구한다 —
+# 단답("공식")만으론 미진행(생산적 막힘). 숙달/발전중/None은 키워드만으로 진행(불변).
+_NOVICE_PLAN_MIN_LEN = 10
+
 # EXECUTE→REVIEW: 답에 도달한 신호. 결과·결론 토큰 + 등호 사용 + 다중 줄(단계 흔적).
 _ANSWER_TOKENS: frozenset[str] = frozenset(
     {
@@ -82,6 +86,8 @@ def should_advance(
     slice 71: `mastery_level='숙달'`은 UNDERSTAND 재진술 길이 임계를 −5(더 빨리 진행)·`'초보'`는
     +5(더 충실히)로 기울인다. 문장부호 요구·다른 단계·"모호 시 stay" 보수성은 불변(false-positive
     비대칭 보존). `'발전 중'`·None은 기본 임계.
+    slice 72: PLAN→EXECUTE는 '초보'에 전략 진술 최소 길이를 요구(충실)·EXECUTE→REVIEW는 '숙달'에
+    다중줄 요구를 면제(= + 답 토큰이면 진입·빨리). 보수성·비대칭은 동일하게 보존.
 
     `previous`는 이 함수가 반환하지 않는다(스펙 L101 명시 후퇴는 별도 신호).
     """
@@ -99,6 +105,9 @@ def should_advance(
 
     if state.current_stage is PolyaStage.PLAN:
         if _any_token(text, _STRATEGY_TOKENS):
+            # slice 72: 초보는 키워드 + 최소 길이(충실한 전략 진술) — 단답은 미진행.
+            if mastery_level == "초보" and len(text) < _NOVICE_PLAN_MIN_LEN:
+                return "stay"
             return "next"
         return "stay"
 
@@ -106,7 +115,8 @@ def should_advance(
         has_equals = "=" in text
         has_answer = _any_token(text, _ANSWER_TOKENS)
         is_multiline = text.count("\n") >= 1
-        if has_equals and has_answer and is_multiline:
+        # slice 72: 숙달은 다중줄 요구 면제(= + 답 토큰이면 검토 진입·빨리). 초보/발전중/None 불변.
+        if has_equals and has_answer and (is_multiline or mastery_level == "숙달"):
             return "next"
         return "stay"
 

@@ -116,8 +116,41 @@ class TestMasteryAdjustment:
         text = "이 문제는 f의 최댓값을 구하는 거야."
         assert should_advance(s, text, mastery_level=None) == should_advance(s, text)
 
-    def test_other_stages_unaffected(self) -> None:
-        # 범위 한정: EXECUTE는 숙달도 무관(다중줄 요구 불변·한 줄 → stay).
-        s = _state(PolyaStage.EXECUTE)
-        text = "2x = 4 따라서 x = 2"
+    def test_understand_adjustment_is_stage_scoped(self) -> None:
+        # slice 71 길이 임계는 UNDERSTAND 전용 — PLAN은 키워드 없으면 길이·숙달 무관 stay.
+        s = _state(PolyaStage.PLAN)
+        text = "특별한 신호가 하나도 없는 긴 문장입니다."
         assert should_advance(s, text, mastery_level="숙달") == "stay"
+
+
+class TestMasteryStageTransitions:
+    """slice 72: PLAN→EXECUTE 초보 길이 요구·EXECUTE→REVIEW 숙달 다중줄 면제."""
+
+    def test_novice_short_strategy_stays(self) -> None:
+        # 초보: 단답 키워드("공식")만으론 미진행(len<10).
+        s = _state(PolyaStage.PLAN)
+        assert should_advance(s, "공식") == "next"  # 기본(None)은 진행
+        assert should_advance(s, "공식", mastery_level="초보") == "stay"
+
+    def test_novice_full_strategy_advances(self) -> None:
+        s = _state(PolyaStage.PLAN)
+        text = "공식을 써서 양변을 정리해볼게"  # 16자 ≥ 10
+        assert should_advance(s, text, mastery_level="초보") == "next"
+
+    def test_master_short_strategy_advances(self) -> None:
+        # 숙달은 길이 요구 없음(키워드만으로 진행·불변).
+        s = _state(PolyaStage.PLAN)
+        assert should_advance(s, "공식", mastery_level="숙달") == "next"
+
+    def test_master_single_line_execute_advances(self) -> None:
+        # 숙달: = + 답 토큰이면 다중줄 없어도 REVIEW 진입.
+        s = _state(PolyaStage.EXECUTE)
+        text = "x = 2 따라서 답"  # 한 줄·등호+답
+        assert should_advance(s, text) == "stay"  # 기본은 다중줄 요구
+        assert should_advance(s, text, mastery_level="숙달") == "next"
+
+    def test_novice_execute_unchanged(self) -> None:
+        # 초보/발전중은 EXECUTE 다중줄 요구 불변(한 줄 → stay).
+        s = _state(PolyaStage.EXECUTE)
+        text = "x = 2 따라서 답"
+        assert should_advance(s, text, mastery_level="초보") == "stay"
