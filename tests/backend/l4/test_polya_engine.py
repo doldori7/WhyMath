@@ -43,7 +43,17 @@ class TestDecideStays:
         assert d.socratic_category == "clarification"
 
 
-class TestHintDeferralWiring:
+class TestMasteryTransitionWiring:
+    """slice 71 — decide()가 mastery_level을 should_advance에 전달(전이 가속/지연)."""
+
+    def test_mastery_accelerates_understand_advance(self) -> None:
+        coach = PolyaCoach()
+        s = _state(PolyaStage.UNDERSTAND)
+        text = "f의 최댓값을 구해, x>0."  # 16자 — 기본 stay·숙달 next(임계 15)
+        assert coach.decide(text, s).polya_stage_to_advance == "stay"
+        assert (
+            coach.decide(text, s, mastery_level="숙달").polya_stage_to_advance == "next"
+        )
     """슬라이스 3 — decide()가 PolyaState.prev_hint_level·turn_count를 읽어 hint_level/reveals 채움."""
 
     def test_default_hint_level_1_with_reveals(self) -> None:
