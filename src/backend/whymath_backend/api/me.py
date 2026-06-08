@@ -795,19 +795,7 @@ async def capture_ability_snapshot(
     )
     session.add(AbilitySnapshot.from_schema(snap))
     if include_concepts:
-        for item in await _compute_concept_abilities(session, user.user_id):
-            session.add(
-                AbilitySnapshot.from_schema(
-                    AbilitySnapshotSchema(
-                        user_id=user.user_id,
-                        concept_id=item.concept_id,
-                        theta=item.theta,
-                        standard_error=item.standard_error,
-                        response_count=item.response_count,
-                        measured_at=now,
-                    )
-                )
-            )
+        await _add_concept_ability_snapshots(session, user.user_id, now)
     await session.commit()
     return snap
 
@@ -924,6 +912,30 @@ async def _compute_concept_abilities(
             )
         )
     return items
+
+
+async def _add_concept_ability_snapshots(
+    session: AsyncSession, user_id: uuid.UUID, measured_at: datetime
+) -> None:
+    """개념별 θ 스냅샷을 세션에 *추가만*(commit은 호출자) — 수동 캡처·세션 종료 공유(slice 75).
+
+    `_compute_concept_abilities`(slice 18 산식)의 각 개념 θ를 *주어진 시각*으로 적재(전과목
+    스냅샷과 같은 measured_at). `capture_ability_snapshot(include_concepts)`와 세션 종료 자동
+    적재(`_add_ability_snapshot_if_attempts`)가 공유해 개념 θ 곡선을 자연 샘플링한다(중복 제거).
+    """
+    for item in await _compute_concept_abilities(session, user_id):
+        session.add(
+            AbilitySnapshot.from_schema(
+                AbilitySnapshotSchema(
+                    user_id=user_id,
+                    concept_id=item.concept_id,
+                    theta=item.theta,
+                    standard_error=item.standard_error,
+                    response_count=item.response_count,
+                    measured_at=measured_at,
+                )
+            )
+        )
 
 
 # ── slice L2-28: GET /v1/me/ability/history (θ 성장 곡선 — 채점 이력 시간 재생) ─────
@@ -1437,13 +1449,16 @@ async def end_my_session(
 
 
 async def _add_ability_snapshot_if_attempts(session: AsyncSession, user_id: uuid.UUID) -> None:
-    """채점 이력이 있으면 현재 전과목 θ 스냅샷을 세션에 *추가만*(commit은 호출자) — 빈 θ 미적재.
+    """채점 이력이 있으면 전과목+개념별 θ 스냅샷을 세션에 *추가만*(commit은 호출자)·빈 θ 미적재.
 
     slice 32 수동 캡처와 동일 산식·전과목 단일 θ(concept_id null). 세션 종료 트리거(slice 34/35).
+    slice 75: 전과목 θ에 더해 *개념별* θ도 같은 시각으로 함께 적재(개념 θ 자연 샘플링 → coach
+    BKT↔θ 교차검증이 폴백 없이 같은 개념끼리 정밀 비교). 채점 0이면 개념도 0(전과목의 부분집합).
     """
+    now = datetime.now(UTC)
     theta, se, count = await _estimate_global_ability(session, user_id)
     if count == 0:
-        return  # 채점 이력 0 → 의미 없는 θ=0 스냅샷 미적재
+        return  # 채점 이력 0 → 전과목·개념 θ 모두 미적재(개념은 전과목의 부분집합)
     session.add(
         AbilitySnapshot.from_schema(
             AbilitySnapshotSchema(
@@ -1451,10 +1466,11 @@ async def _add_ability_snapshot_if_attempts(session: AsyncSession, user_id: uuid
                 theta=theta,
                 standard_error=se,
                 response_count=count,
-                measured_at=datetime.now(UTC),
+                measured_at=now,
             )
         )
     )
+    await _add_concept_ability_snapshots(session, user_id, now)
 
 
 @router.delete(
