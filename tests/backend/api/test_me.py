@@ -9,12 +9,16 @@ from __future__ import annotations
 import uuid
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
+import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api.me import (
+    ConceptAbilityItem,
+    _add_ability_snapshot_if_attempts,
     _diagnosis_agreement,
     _theta_to_mastery_proxy,
     _weak_concept_weights,
@@ -442,8 +446,22 @@ class TestEndSession:
         # 실제 ended_at는 *수정 안 됨*
         assert row.ended_at is None
 
-    def test_end_captures_ability_snapshot_when_attempts_exist(self) -> None:
-        """slice 34: 처음 종료 + 채점 이력 있으면 θ 스냅샷 자동 적재(종료 1 + 스냅샷 1 commit)."""
+    def test_end_captures_ability_snapshot_when_attempts_exist(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """slice 34/75: 처음 종료 + 채점 이력 있으면 θ 스냅샷 자동 적재(종료 1 + 스냅샷 1 commit).
+
+        개념별 θ 적재(slice 75)는 `TestSessionEndConceptSnapshots`·통합테스트가 검증 — 여기선
+        전과목 캡처·단일 트랜잭션만 보려 `_compute_concept_abilities`를 빈 리스트로 고정한다
+        (FakeSession은 단일 행셋만 반환해 전과목 2-튜플과 개념 5-튜플을 동시에 못 줌).
+        """
+
+        async def _no_concepts(session: Any, user_id: Any) -> list[ConceptAbilityItem]:
+            return []
+
+        monkeypatch.setattr(
+            "whymath_backend.api.me._compute_concept_abilities", _no_concepts
+        )
         row = self._session_row(_UID, ended=False)
         # FakeSession.execute(θ 쿼리) → (is_correct, difficulty) 행
         client, fake = _client(
@@ -1631,3 +1649,79 @@ class TestDiagnosisSummary:
         # 최약점 = 최저 신호 c3(0.1)
         assert body["weakest_concept_id"] == str(c3)
         assert body["weakest_concept_name"] == "높θ"
+
+
+class TestSessionEndConceptSnapshots:
+    """slice 75: 세션 종료 자동 적재가 전과목 θ + 개념별 θ를 *같은 시각*으로 함께 추가."""
+
+    async def test_adds_global_and_concept_snapshots(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cid_x, cid_y = uuid.uuid4(), uuid.uuid4()
+
+        async def _fake_global(
+            session: Any, user_id: Any
+        ) -> tuple[float, float | None, int]:
+            return (1.2, 0.3, 5)
+
+        async def _fake_concepts(
+            session: Any, user_id: Any
+        ) -> list[ConceptAbilityItem]:
+            return [
+                ConceptAbilityItem(
+                    concept_id=cid_x,
+                    concept_code="A",
+                    concept_name="가",
+                    theta=0.8,
+                    response_count=3,
+                    standard_error=0.4,
+                ),
+                ConceptAbilityItem(
+                    concept_id=cid_y,
+                    concept_code="B",
+                    concept_name="나",
+                    theta=-0.5,
+                    response_count=2,
+                    standard_error=None,
+                ),
+            ]
+
+        monkeypatch.setattr(
+            "whymath_backend.api.me._estimate_global_ability", _fake_global
+        )
+        monkeypatch.setattr(
+            "whymath_backend.api.me._compute_concept_abilities", _fake_concepts
+        )
+        fake = FakeSession()
+        await _add_ability_snapshot_if_attempts(cast(AsyncSession, fake), _UID)
+
+        # 전과목 1(concept_id None) + 개념 2(concept_id 값)
+        assert len(fake.added) == 3
+        globals_ = [a for a in fake.added if a.concept_id is None]
+        concepts_ = [a for a in fake.added if a.concept_id is not None]
+        assert len(globals_) == 1
+        assert {a.concept_id for a in concepts_} == {cid_x, cid_y}
+        # 전과목·개념 전원 동일 measured_at(같은 시각 원자 적재)
+        assert len({a.measured_at for a in fake.added}) == 1
+        # commit은 호출자(end_my_session) 책임 — 헬퍼는 add만
+        assert fake.commits == 0
+
+    async def test_skips_all_when_no_attempts(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def _fake_global(
+            session: Any, user_id: Any
+        ) -> tuple[float, float | None, int]:
+            return (0.0, None, 0)
+
+        async def _boom(session: Any, user_id: Any) -> list[ConceptAbilityItem]:
+            raise AssertionError("count==0이면 개념 θ 계산조차 하지 않아야 함")
+
+        monkeypatch.setattr(
+            "whymath_backend.api.me._estimate_global_ability", _fake_global
+        )
+        monkeypatch.setattr("whymath_backend.api.me._compute_concept_abilities", _boom)
+        fake = FakeSession()
+        await _add_ability_snapshot_if_attempts(cast(AsyncSession, fake), _UID)
+        # 채점 0 → 전과목·개념 θ 모두 미적재(개념 계산도 skip)
+        assert fake.added == []

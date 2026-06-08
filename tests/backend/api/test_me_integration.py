@@ -25,6 +25,7 @@ from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
+from whymath_backend.l2.ability_tracking import get_current_theta
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import (
     ConceptMasteryHistory as ConceptMasteryHistorySchema,
@@ -1419,5 +1420,119 @@ def test_me_session_end_auto_captures_snapshot_on_live_pg() -> None:
             assert r2.status_code == 200
             snaps2 = client.get("/v1/me/ability/snapshots", headers=auth).json()
             assert len(snaps2) == 1  # 여전히 1개
+    finally:
+        asyncio.run(_cleanup_all())
+
+
+def test_me_session_end_auto_captures_concept_snapshots_on_live_pg() -> None:
+    """slice 75: PATCH /sessions/{id}/end → 전과목 θ + *개념별* θ 자동 적재(실 PG).
+
+    개념 매핑(PRIMARY)이 있는 문항을 풀고 세션을 종료하면 전과목 1행 + 개념 1행이 함께
+    적재된다. slice 74 루프 닫기: get_current_theta(session, uid, cid)가 그 개념 θ를 읽어
+    coach _server_theta_for의 정밀 경로(폴백 없이 같은 개념끼리)가 실제로 먹힘을 검증.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid = uuid.uuid4()
+    cid = uuid.uuid4()
+    sid = uuid.uuid4()
+    suffix = pid.hex[:8]
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(
+            Concept.from_schema(
+                ConceptSchema(
+                    concept_id=cid,
+                    code=f"S-{suffix}",
+                    name_ko="세션종료개념",
+                    level=ConceptLevel.세부개념,
+                )
+            )
+        )
+        await _add_all(
+            Problem.from_schema(
+                ProblemSchema(
+                    problem_id=pid,
+                    source_type=SourceType.자체생성,
+                    curriculum_version=Curriculum.REVISION_2022,
+                    valid_from_year=2022,
+                    subject=Subject.공통,
+                    unit_codes=[f"U-{suffix}"],
+                    difficulty_overall=5.0,
+                )
+            )
+        )
+        await _add_all(
+            ProblemConcept.from_schema(
+                ProblemConceptSchema(
+                    problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY
+                )
+            )
+        )
+        await _add_all(
+            ProblemAttempt(
+                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True
+            )
+        )
+        await _add_all(_session_row(sid, uid))  # 미종료 세션
+
+    async def _read_thetas() -> tuple[float | None, float | None]:
+        # slice 74 리더(coach _server_theta_for가 쓰는 바로 그 함수)로 개념·전과목 θ 확인.
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+                return (
+                    await get_current_theta(session, uid, cid),
+                    await get_current_theta(session, uid),
+                )
+        finally:
+            await engine.dispose()
+
+    async def _cleanup_all() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                for sql, params in (
+                    ("DELETE FROM ability_snapshot WHERE user_id=:u", {"u": str(uid)}),
+                    ("DELETE FROM problem_attempt WHERE user_id=:u", {"u": str(uid)}),
+                    ("DELETE FROM learning_session WHERE user_id=:u", {"u": str(uid)}),
+                    (
+                        "DELETE FROM problem_concept WHERE problem_id=:p",
+                        {"p": str(pid)},
+                    ),
+                    ("DELETE FROM problem WHERE problem_id=:p", {"p": str(pid)}),
+                    ("DELETE FROM concept WHERE concept_id=:c", {"c": str(cid)}),
+                    ("DELETE FROM user_profile WHERE user_id=:u", {"u": str(uid)}),
+                ):
+                    await conn.execute(text(sql), params)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            r = client.patch(f"/v1/me/sessions/{sid}/end", headers=auth)
+            assert r.status_code == 200, r.text
+            # 전과목 곡선(필터 없음) → 1행·concept_id null
+            glob = client.get("/v1/me/ability/snapshots", headers=auth).json()
+            assert len(glob) == 1
+            assert glob[0]["concept_id"] is None
+            assert glob[0]["theta"] == 4.0
+            # 개념 곡선(?concept_id=cid) → 1행·concept_id=cid (세션종료로 자동 적재됨)
+            byc = client.get(
+                f"/v1/me/ability/snapshots?concept_id={cid}", headers=auth
+            ).json()
+            assert len(byc) == 1
+            assert byc[0]["concept_id"] == str(cid)
+            assert byc[0]["theta"] == 4.0
+        # slice 74 루프: 리더가 개념 θ(non-None)·전과목 θ 모두 반환
+        concept_theta, global_theta = asyncio.run(_read_thetas())
+        assert concept_theta == pytest.approx(4.0)
+        assert global_theta == pytest.approx(4.0)
     finally:
         asyncio.run(_cleanup_all())
