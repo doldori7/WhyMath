@@ -132,6 +132,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    l4_server_mastery_enabled: bool = Field(
+        default=True,
+        description=(
+            "L4 코칭(세션/턴)이 서버 L2 저장소(ConceptMasteryHistory)의 *실제* 숙달도를 "
+            "클라이언트 전송 bkt_mastery보다 우선해 쓸지(slice 70·진짜 L2↔L4 루프). "
+            "True(기본·정식기능)면 /v1/coach/sessions·turns가 문항 PRIMARY 개념의 현재 "
+            "숙달도를 조회해 hint level 보수화·LTHC 조정에 반영한다(클라 전송값 변조·단절 제거). "
+            "명시 mastery_level(라벨)은 여전히 최우선. **student-facing 미노출**(결정에만 쓰고 "
+            "decision/CoachResponse 불변). stateless /v1/coach는 DB가 없어 무관(클라값). "
+            "False면 기존 동작(클라 bkt만). WHYMATH_L4_SERVER_MASTERY_ENABLED=false로 끈다."
+        ),
+    )
+
     # ── QUALITY(27b) 비동기 큐 (Celery, broker=result backend=Redis, S4) ──
     # QUALITY는 동기 호출 불가(p50≈14초·GPU 단일 점유, 03a §D.3) → 작업 큐 전용이다.
     # broker·result-backend는 *기본값을 두지 않고*(빈 = "redis_url에서 파생") 명시

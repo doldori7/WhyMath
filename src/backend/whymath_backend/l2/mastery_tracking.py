@@ -92,6 +92,18 @@ async def _latest_mastery(
     return result.scalars().first()
 
 
+async def get_current_mastery(
+    session: AsyncSession, user_id: uuid.UUID, concept_id: uuid.UUID
+) -> float | None:
+    """(user, concept)의 현재 숙달도 — 최신 측정 1건의 mastery 값(읽기 전용).
+
+    L4 coach가 서버에서 학생의 특정 개념 숙달도를 *클라이언트 전송값 대신* 조회할 때 쓴다
+    (slice 70·L2↔L4 서버 진실원천). 측정 이력이 없거나 mastery가 NULL이면 None(미학습 폴백).
+    """
+    row = await _latest_mastery(session, user_id, concept_id)
+    return float(row.mastery) if row is not None and row.mastery is not None else None
+
+
 async def record_attempt_mastery(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -151,6 +163,20 @@ async def _assessed_concept_ids(
     return list(result.scalars().all())
 
 
+async def get_primary_concept_id(session: AsyncSession, problem_id: uuid.UUID) -> uuid.UUID | None:
+    """문항의 *대표* 개념 1개 — coach가 "어느 개념 숙달도를 볼지" 정할 때(slice 70).
+
+    PRIMARY(주된 개념) 우선·없으면 TESTED 폴백·둘 다 없으면 None(문항-개념 미매핑). PRIMARY가
+    복수면 첫째(문항당 PRIMARY 1개 보장이 설계 전제·후속에서 가중). 기존 `_assessed_concept_ids`
+    재사용(role 필터·distinct).
+    """
+    primary = await _assessed_concept_ids(session, problem_id, [ConceptRole.PRIMARY])
+    if primary:
+        return primary[0]
+    tested = await _assessed_concept_ids(session, problem_id, [ConceptRole.TESTED])
+    return tested[0] if tested else None
+
+
 async def record_problem_attempt_mastery(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -186,6 +212,8 @@ async def record_problem_attempt_mastery(
 __all__ = [
     "MasteryRecord",
     "compute_mastery_record",
+    "get_current_mastery",
+    "get_primary_concept_id",
     "record_attempt_mastery",
     "record_problem_attempt_mastery",
 ]

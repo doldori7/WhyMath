@@ -40,6 +40,8 @@ from whymath_backend.l2.irt import (
 from whymath_backend.l2.mastery_tracking import (
     MasteryRecord,
     compute_mastery_record,
+    get_current_mastery,
+    get_primary_concept_id,
     record_attempt_mastery,
     record_problem_attempt_mastery,
 )
@@ -57,6 +59,8 @@ __all__ = [
     "estimate_ability",
     "estimate_difficulty",
     "fit_jmle",
+    "get_current_mastery",
+    "get_primary_concept_id",
     "item_information",
     "posterior_mastery",
     "select_next_item",
