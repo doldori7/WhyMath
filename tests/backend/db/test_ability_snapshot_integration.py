@@ -19,7 +19,7 @@ from sqlalchemy.pool import NullPool
 
 from whymath_backend.config import Settings
 from whymath_backend.db.models.assessment import AbilitySnapshot
-from whymath_backend.l2.ability_tracking import get_current_theta
+from whymath_backend.l2.ability_tracking import get_current_ability, get_current_theta
 
 pytestmark = pytest.mark.integration
 
@@ -169,6 +169,95 @@ def test_get_current_theta_global_and_concept_scoped_on_live_pg() -> None:
             assert theta_x == pytest.approx(-1.0)
             # 개념 Y: 0.9(X와 분리 — concept_id 필터 정확성)
             assert theta_y == pytest.approx(0.9)
+        finally:
+            await engine.dispose()
+
+    async def _cleanup() -> None:
+        engine = create_async_engine(_settings().database_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("DELETE FROM ability_snapshot WHERE user_id = :u"),
+                    {"u": str(uid)},
+                )
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup())
+
+
+def test_get_current_ability_reads_theta_se_count_on_live_pg() -> None:
+    """`get_current_ability` — 최신 스냅샷의 theta·standard_error·response_count 동시 조회.
+
+    slice 76 노이즈 가드 입력: 개념 θ의 신뢰도(SE·응답수)까지 *같은 행*에서 읽는지·개념별 최신
+    1건·없으면 None을 실 PG로 검증(hermetic 단위는 Row 래퍼만 봄).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    cid_x = uuid.uuid4()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url, poolclass=NullPool)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as session:
+                # 전과목 2건(시간순)·개념 X 2건(시간순·최신은 SE 보유·구 행은 SE None)
+                session.add_all(
+                    [
+                        AbilitySnapshot(
+                            user_id=uid,
+                            theta=0.3,
+                            standard_error=0.9,
+                            response_count=4,
+                            measured_at=datetime(2026, 1, 1, tzinfo=UTC),
+                        ),
+                        AbilitySnapshot(
+                            user_id=uid,
+                            theta=1.2,
+                            standard_error=0.25,
+                            response_count=10,
+                            measured_at=datetime(2026, 2, 1, tzinfo=UTC),
+                        ),
+                        AbilitySnapshot(
+                            user_id=uid,
+                            concept_id=cid_x,
+                            theta=-2.0,
+                            standard_error=None,
+                            response_count=2,
+                            measured_at=datetime(2026, 3, 1, tzinfo=UTC),
+                        ),
+                        AbilitySnapshot(
+                            user_id=uid,
+                            concept_id=cid_x,
+                            theta=0.4,
+                            standard_error=0.6,
+                            response_count=7,
+                            measured_at=datetime(2026, 4, 1, tzinfo=UTC),
+                        ),
+                    ]
+                )
+                await session.commit()
+            async with sm() as session:
+                glob = await get_current_ability(session, uid)
+                concept = await get_current_ability(session, uid, cid_x)
+                missing = await get_current_ability(session, uid, uuid.uuid4())
+            # 전과목: 최신 global(1.2·SE0.25·count10)
+            assert glob is not None
+            assert glob.theta == pytest.approx(1.2)
+            assert glob.standard_error == pytest.approx(0.25)
+            assert glob.response_count == 10
+            # 개념 X: 최신 X 행(0.4·SE0.6·count7 — 구 -2.0/SE None 아님)
+            assert concept is not None
+            assert concept.theta == pytest.approx(0.4)
+            assert concept.standard_error == pytest.approx(0.6)
+            assert concept.response_count == 7
+            # 매핑 없는 개념 → None
+            assert missing is None
         finally:
             await engine.dispose()
 

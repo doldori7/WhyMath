@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,4 +52,55 @@ async def get_current_theta(
     return float(theta) if theta is not None else None
 
 
-__all__ = ["get_current_theta"]
+@dataclass(frozen=True)
+class AbilityReading:
+    """최신 θ 스냅샷의 값 + *신뢰도*(SE·응답수) — coach 노이즈 가드(slice 76)용.
+
+    `get_current_theta`(θ 스칼라)와 달리 표준오차·응답수까지 *같은 행*에서 함께 읽어, 응답 1~2개의
+    극단 θ(SE 큼/None)를 코칭 교차검증에서 거를 수 있게 한다(`_theta_reading_reliable`).
+    """
+
+    theta: float
+    standard_error: float | None
+    response_count: int
+
+
+async def get_current_ability(
+    session: AsyncSession, user_id: uuid.UUID, concept_id: uuid.UUID | None = None
+) -> AbilityReading | None:
+    """학생의 현재 θ를 *신뢰도(SE·응답수)와 함께* 읽는다 — 최신 `AbilitySnapshot` 1건(읽기 전용).
+
+    `get_current_theta`와 동일 WHERE/정렬(concept_id None→`IS NULL`·값→`==X`)이되 theta 외
+    standard_error·response_count도 *같은 스냅샷 행*에서 함께 select. slice 76 노이즈 가드가
+    개념 θ의 신뢰도를 보고 쓸지/전과목 폴백할지 정한다. 측정 이력이 없으면 None.
+
+    필터/정렬 정확성은 통합테스트가 실 PG로 검증(`test_ability_snapshot_integration`) — 여기
+    hermetic 경로는 Row→AbilityReading|None 래퍼만 본다(단위/통합 분리 패턴).
+    """
+    concept_filter = (
+        AbilitySnapshot.concept_id.is_(None)
+        if concept_id is None
+        else AbilitySnapshot.concept_id == concept_id
+    )
+    stmt = (
+        select(
+            AbilitySnapshot.theta,
+            AbilitySnapshot.standard_error,
+            AbilitySnapshot.response_count,
+        )
+        .where(AbilitySnapshot.user_id == user_id, concept_filter)
+        .order_by(AbilitySnapshot.measured_at.desc())
+        .limit(1)
+    )
+    row = (await session.execute(stmt)).first()
+    if row is None:
+        return None
+    theta, standard_error, response_count = row
+    return AbilityReading(
+        theta=float(theta),
+        standard_error=float(standard_error) if standard_error is not None else None,
+        response_count=int(response_count),
+    )
+
+
+__all__ = ["AbilityReading", "get_current_ability", "get_current_theta"]

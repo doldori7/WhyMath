@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 
 from whymath_backend.config import Settings, get_settings
 
@@ -39,6 +39,26 @@ def test_unknown_env_keys_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("WHYMATH_SOME_FUTURE_DB_URL", "postgres://x")
     s = Settings()  # extra=ignore → 예외 없이 생성
     assert s.ollama_host  # 정상 로드
+
+
+def test_l4_theta_noise_guard_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
+    """slice 76: 개념 θ 노이즈 가드 임계 — 기본(응답 3·SE 1.0)·env 오버라이드."""
+    s = Settings()
+    assert s.l4_theta_min_responses == 3
+    assert s.l4_theta_max_se == 1.0
+    monkeypatch.setenv("WHYMATH_L4_THETA_MIN_RESPONSES", "5")
+    monkeypatch.setenv("WHYMATH_L4_THETA_MAX_SE", "0.5")
+    s2 = Settings()
+    assert s2.l4_theta_min_responses == 5
+    assert s2.l4_theta_max_se == 0.5
+
+
+def test_l4_theta_thresholds_validated() -> None:
+    """SE 상한 양수(gt=0)·최소 응답수 음수 불가(ge=0)."""
+    with pytest.raises(ValidationError):
+        Settings(l4_theta_max_se=0.0)
+    with pytest.raises(ValidationError):
+        Settings(l4_theta_min_responses=-1)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -90,7 +110,9 @@ def test_anthropic_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_anthropic_tuning_knobs_default_off() -> None:
     """effort/thinking/caching 노브는 기본 OFF(생략) — 현 동작 유지(03a §H#4)."""
-    s = Settings(anthropic_effort="", anthropic_thinking=False, anthropic_prompt_caching=False)
+    s = Settings(
+        anthropic_effort="", anthropic_thinking=False, anthropic_prompt_caching=False
+    )
     assert s.anthropic_effort == ""
     assert s.anthropic_thinking is False
     assert s.anthropic_prompt_caching is False

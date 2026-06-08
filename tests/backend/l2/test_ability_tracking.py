@@ -13,7 +13,7 @@ from typing import Any, cast
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.l2 import get_current_theta
+from whymath_backend.l2 import get_current_ability, get_current_theta
 
 _UID = uuid.uuid4()
 
@@ -40,6 +40,51 @@ class _FakeSession:
 
     async def execute(self, _stmt: Any) -> _FakeResult:
         return _FakeResult(self._theta)
+
+
+class _RowSession:
+    """`get_current_ability`의 SELECT(θ·SE·response_count Row 1건)만 시뮬(stmt 무시).
+
+    `.first()`로 Row(튜플)를 받는 경로 — 필터/정렬은 통합테스트가 실 PG로 검증.
+    """
+
+    def __init__(self, row: Any) -> None:
+        self._row = row
+
+    async def execute(self, _stmt: Any) -> _FakeResult:
+        return _FakeResult(self._row)
+
+
+class TestGetCurrentAbility:
+    """slice 76: θ + 신뢰도(SE·응답수) 읽기 — Row→AbilityReading·없으면 None(가드 입력)."""
+
+    async def test_returns_reading(self) -> None:
+        fake = _RowSession(row=(1.5, 0.4, 5))
+        reading = await get_current_ability(cast(AsyncSession, fake), _UID)
+        assert reading is not None
+        assert reading.theta == 1.5
+        assert reading.standard_error == 0.4
+        assert reading.response_count == 5
+
+    async def test_returns_none_when_no_snapshot(self) -> None:
+        fake = _RowSession(row=None)
+        assert await get_current_ability(cast(AsyncSession, fake), _UID) is None
+
+    async def test_handles_null_standard_error(self) -> None:
+        # 극단 θ(정보 0)면 SE가 None으로 저장 — 그대로 None 통과(가드가 불신뢰 판정).
+        fake = _RowSession(row=(4.0, None, 1))
+        reading = await get_current_ability(cast(AsyncSession, fake), _UID)
+        assert reading is not None
+        assert reading.standard_error is None
+        assert reading.theta == 4.0
+        assert reading.response_count == 1
+
+    async def test_accepts_concept_id(self) -> None:
+        # 개념별 조회(slice 74/76) — 래퍼는 Row 통과. WHERE(concept_id==X)는 통합 검증.
+        fake = _RowSession(row=(0.8, 0.5, 7))
+        cid = uuid.uuid4()
+        reading = await get_current_ability(cast(AsyncSession, fake), _UID, cid)
+        assert reading is not None and reading.theta == 0.8
 
 
 class TestGetCurrentTheta:

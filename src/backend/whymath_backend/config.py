@@ -157,6 +157,25 @@ class Settings(BaseSettings):
             "(기존 동작). WHYMATH_L4_SERVER_THETA_ENABLED=false로 끈다."
         ),
     )
+    l4_theta_min_responses: int = Field(
+        default=3,
+        ge=0,
+        description=(
+            "개념별 θ를 코칭 BKT↔θ 교차검증에 *쓰기 위한* 최소 응답수(slice 76 노이즈 가드). "
+            "개념 θ 스냅샷의 response_count가 이 미만이면(응답 1~2개의 극단 θ=±4 등) 신뢰하지 "
+            "않고 전과목 θ로 폴백한다. 0이면 응답수 게이트 사실상 해제. "
+            "WHYMATH_L4_THETA_MIN_RESPONSES로 조정."
+        ),
+    )
+    l4_theta_max_se: float = Field(
+        default=1.0,
+        gt=0.0,
+        description=(
+            "개념별 θ를 신뢰할 표준오차(SE) 상한(slice 76 노이즈 가드). 개념 θ의 SE가 이 초과거나 "
+            "측정 불가(SE 없음·정보 0의 극단 θ)면 전과목 θ로 폴백한다. 크게 두면 SE 게이트 완화. "
+            "WHYMATH_L4_THETA_MAX_SE로 조정."
+        ),
+    )
 
     # ── QUALITY(27b) 비동기 큐 (Celery, broker=result backend=Redis, S4) ──
     # QUALITY는 동기 호출 불가(p50≈14초·GPU 단일 점유, 03a §D.3) → 작업 큐 전용이다.
