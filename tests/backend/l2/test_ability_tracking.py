@@ -59,3 +59,9 @@ class TestGetCurrentTheta:
         result = await get_current_theta(cast(AsyncSession, fake), _UID)
         assert result == 2.0
         assert isinstance(result, float)
+
+    async def test_accepts_concept_id(self) -> None:
+        # 개념별 조회(slice 74) — 래퍼는 스칼라 통과. WHERE(concept_id==X) 정확성은 통합 검증.
+        fake = _FakeSession(theta=0.8)
+        cid = uuid.uuid4()
+        assert await get_current_theta(cast(AsyncSession, fake), _UID, cid) == 0.8

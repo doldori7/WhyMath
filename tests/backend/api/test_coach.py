@@ -726,7 +726,7 @@ class TestServerTheta:
         async def _fm(session: Any, user_id: Any, problem_id: Any) -> float | None:
             return mastery
 
-        async def _ft(session: Any, user_id: Any) -> float | None:
+        async def _ft(session: Any, user_id: Any, problem_id: Any) -> float | None:
             return theta
 
         monkeypatch.setattr("whymath_backend.api.coach._server_mastery_for", _fm)
@@ -798,18 +798,23 @@ class TestServerTheta:
 
 
 class _ThetaQR:
-    def __init__(self, value: Any) -> None:
-        self._value = value
+    """get_primary_concept_id(개념 list `.all()`)·get_current_theta(θ 스칼라 `.first()`) 겸용."""
+
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
 
     def scalars(self) -> _ThetaQR:
         return self
 
+    def all(self) -> list[Any]:
+        return self._rows
+
     def first(self) -> Any:
-        return self._value
+        return self._rows[0] if self._rows else None
 
 
 class _ThetaQueueSession:
-    """execute 호출마다 큐 결과 — `_server_theta_for`(θ 1회 조회) 직접 검증용."""
+    """execute 호출마다 큐 결과 — `_server_theta_for`(개념해석→개념θ→전과목θ) 직접 검증용."""
 
     def __init__(self, results: list[_ThetaQR]) -> None:
         self._results = results
@@ -822,16 +827,40 @@ class _ThetaQueueSession:
 
 
 class TestServerThetaHelper:
-    """slice 73: `_server_theta_for` 실체 — 게이트 ON·전과목 θ 1회 조회(패치 없이)."""
+    """slice 73·74: `_server_theta_for` 실체 — 개념별 θ 우선·전과목 폴백(게이트 ON·패치 없이)."""
 
-    async def test_returns_current_theta(self) -> None:
-        fake = _ThetaQueueSession([_ThetaQR(1.5)])
-        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID)
-        assert t == 1.5
+    _PID = uuid.uuid4()
+
+    async def test_concept_theta_preferred(self) -> None:
+        # PRIMARY 개념 해석 → 그 개념 θ 존재 → 개념 θ(정밀 교차검증).
+        cid = uuid.uuid4()
+        fake = _ThetaQueueSession([_ThetaQR([cid]), _ThetaQR([2.0])])
+        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
+        assert t == 2.0
+
+    async def test_falls_back_to_global_when_no_concept_theta(self) -> None:
+        # 개념 해석되나 그 개념 θ 스냅샷 없음 → 전과목 θ 폴백.
+        cid = uuid.uuid4()
+        fake = _ThetaQueueSession([_ThetaQR([cid]), _ThetaQR([]), _ThetaQR([0.5])])
+        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
+        assert t == 0.5
+
+    async def test_falls_back_to_global_when_no_concept_mapping(self) -> None:
+        # PRIMARY·TESTED 모두 없음 → 개념 None → 전과목 θ 폴백.
+        fake = _ThetaQueueSession([_ThetaQR([]), _ThetaQR([]), _ThetaQR([0.3])])
+        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
+        assert t == 0.3
+
+    async def test_global_when_problem_id_none(self) -> None:
+        # problem_id 없음 → 개념 조회 skip → 전과목 θ(slice 73 경로).
+        fake = _ThetaQueueSession([_ThetaQR([0.7])])
+        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, None)
+        assert t == 0.7
 
     async def test_none_when_no_snapshot(self) -> None:
-        fake = _ThetaQueueSession([_ThetaQR(None)])
-        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID)
+        # problem_id 없음 + 전과목 스냅샷도 없음 → None.
+        fake = _ThetaQueueSession([_ThetaQR([])])
+        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, None)
         assert t is None
 
 
