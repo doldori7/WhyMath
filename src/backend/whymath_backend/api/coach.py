@@ -38,7 +38,7 @@ from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.session import get_session
-from whymath_backend.l2 import get_current_mastery, get_primary_concept_id
+from whymath_backend.l2 import get_current_mastery, get_current_theta, get_primary_concept_id
 from whymath_backend.l4 import (
     CoachingFocus,
     LthcAdaptation,
@@ -67,6 +67,11 @@ router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 _coach = PolyaCoach()  # 상태 비저장 — 단일 인스턴스 재사용
+
+# slice 73: θ 기반 BKT↔θ 교차검증 코칭 중 *노출*할 포커스 — 불일치(consolidate·retrieval)만.
+# verify(계산오류)는 arithmetic_error 경로로 별도 노출·합의(foundation/advance)는 LTHC가 담당·
+# diagnose(한쪽 신호만·θ 희소)는 비노출. `_build_response_payload` 노출 게이트에서 사용.
+_THETA_SURFACED_FOCI: frozenset[str] = frozenset({"consolidate", "retrieval"})
 
 
 class CoachRequest(BaseModel):
@@ -212,6 +217,7 @@ def _build_response_payload(
     problem_id: uuid.UUID | None = None,
     expected_answer: str | None = None,
     server_mastery: float | None = None,
+    server_theta: float | None = None,
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -243,22 +249,26 @@ def _build_response_payload(
     entry_category = (
         focus_to_socratic_category(body.coaching_focus) if body.coaching_focus is not None else None
     )
-    # slice 53: L3→L4 오케스트레이터(slice 52) 첫 실사용 — 학생 발화의 *거짓 수치 관계*를 L3
-    # 결정론 검증으로 검출해 검산(verify) 코칭을 처방한다. 계산 슬립이 *검출될 때만* 노출하고
-    # (arithmetic_error=True), 아니면 None으로 두어 기존 decision/coaching_focus 경로와 중복을
-    # 피한다 — 실시간 슬립은 배경 진단보다 우선(slice 51). θ는 요청에 없어 None(검출 시
-    # verify는 숙달/θ 무관·미검출이면 어차피 노출 안 함).
+    # slice 53: L3→L4 오케스트레이터(slice 52) — 학생 풀이의 *거짓 수치 관계*를 L3 결정론
+    # 검증으로 검출해 검산(verify) 코칭을 처방(실시간 슬립은 배경 진단보다 우선·slice 51).
     # slice 55: 검증 대상은 *풀이 전용* student_solution 우선(L5 OCR 착지점)·없거나 비면
     # student_input 폴백(발화 인라인 풀이). Polya/오개념/LTHC는 위에서 student_input 기준 유지.
+    # slice 73: θ는 세션/턴에서 서버 L2(AbilitySnapshot) 소싱값(server_theta)을 주입 — BKT↔θ
+    # 교차검증 코칭(recommend_coaching)을 깨운다. stateless /v1/coach는 None(DB 없음).
     solution_text = body.student_solution or body.student_input
     sol = recommend_coaching_for_solution(
         solution_text,
         effective_bkt,
-        None,
+        server_theta,
         problem_id=problem_id,
         expected_answer=expected_answer,
     )
-    solution_coaching = sol if sol.arithmetic_error else None
+    # slice 73: 노출은 *불일치 신호만* — 계산오류 verify(기존·arithmetic_error) + BKT↔θ 불일치
+    # (consolidate·retrieval). 합의(foundation/advance)는 LTHC가 담당·한쪽 신호만(diagnose)은
+    # θ 희소 노이즈라 비노출. θ 수치 자체는 노출 안 함(노출되는 건 trigger의 정성 발화뿐).
+    solution_coaching = (
+        sol if (sol.arithmetic_error or sol.trigger.focus in _THETA_SURFACED_FOCI) else None
+    )
     return decision, matches, intervention, lthc, entry_category, solution_coaching
 
 
@@ -294,6 +304,21 @@ async def _server_mastery_for(
     if concept_id is None:
         return None
     return await get_current_mastery(session, user_id, concept_id)
+
+
+async def _server_theta_for(session: AsyncSession, user_id: uuid.UUID) -> float | None:
+    """학생의 *실제* 전과목 IRT 능력 θ를 서버 L2(AbilitySnapshot)에서 조회 — coach 세션/턴
+    전용(slice 73·비노출).
+
+    게이트(`l4_server_theta_enabled`)가 off면 None(조회 skip). θ는 *전과목*이라 problem_id가
+    필요 없다(개념별인 `_server_mastery_for`와 대비 — θ는 전반 능력, BKT 숙달은 개념별). 최신
+    global 스냅샷이 없으면 graceful None → `recommend_coaching`이 교차검증 불가로 diagnose
+    폴백(노출 안 함). 반환값(θ 수치)은 코칭 *결정에만* 쓰이고 HTTP 응답엔 싣지 않는다(slice 70
+    숙달도 비노출과 동일 — θ도 student-facing 비노출).
+    """
+    if not get_settings().l4_server_theta_enabled:
+        return None
+    return await get_current_theta(session, user_id)
 
 
 @router.post(
@@ -348,12 +373,15 @@ async def create_session(
     expected_answer = await _expected_answer_for(session, body.problem_id)
     # slice 70: 서버 L2 저장소의 실제 숙달도를 조회해 클라 bkt 대체(게이트 ON·비노출).
     server_mastery = await _server_mastery_for(session, user.user_id, body.problem_id)
+    # slice 73: 서버 L2의 실제 전과목 θ도 조회 — BKT↔θ 교차검증 코칭(게이트 ON·θ 수치 비노출).
+    server_theta = await _server_theta_for(session, user.user_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
             problem_id=body.problem_id,
             expected_answer=expected_answer,
             server_mastery=server_mastery,
+            server_theta=server_theta,
         )
     )
 
@@ -439,12 +467,15 @@ async def append_turns(
     expected_answer = await _expected_answer_for(session, dialogue.problem_id)
     # slice 70: 멀티턴도 서버 L2 숙달도 조회(dialogue.problem_id·user 출처)·클라 bkt 대체.
     server_mastery = await _server_mastery_for(session, user.user_id, dialogue.problem_id)
+    # slice 73: 멀티턴도 서버 L2 전과목 θ 조회 — BKT↔θ 교차검증 코칭(θ 수치 비노출).
+    server_theta = await _server_theta_for(session, user.user_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
             problem_id=dialogue.problem_id,
             expected_answer=expected_answer,
             server_mastery=server_mastery,
+            server_theta=server_theta,
         )
     )
 

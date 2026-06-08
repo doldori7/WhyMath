@@ -93,6 +93,11 @@ class _Scalars:
     def all(self) -> list[Any]:
         return list(self._rows)
 
+    def first(self) -> Any:
+        # slice 73: get_current_theta가 .scalars().first()로 최신 θ를 읽음 — 기본 빈 rows면
+        # None(서버 θ 없음·비노출). θ를 검증하는 테스트는 _server_theta_for를 monkeypatch.
+        return self._rows[0] if self._rows else None
+
 
 class _Result:
     def __init__(self, rows: list[Any]) -> None:
@@ -693,6 +698,141 @@ class TestServerMasteryHelper:
         fake = _MasteryQueueSession([_MasteryQR([]), _MasteryQR([])])
         m = await coach._server_mastery_for(cast(AsyncSession, fake), _UID, uuid.uuid4())
         assert m is None
+
+
+class TestServerTheta:
+    """slice 73: coach 세션이 서버 L2 θ를 조회해 BKT↔θ *불일치* 코칭을 노출(게이트 ON·θ 비노출).
+
+    `_server_mastery_for`·`_server_theta_for`를 monkeypatch로 고정(L2 함수 자체는 각각
+    test_mastery_tracking·test_ability_tracking이 검증). 노출은 *불일치만*(consolidate·
+    retrieval)이고 합의(advance/foundation)·diagnose는 비노출. student_input은 계산오류가
+    없어(arithmetic_error=False) θ 경로가 트리거를 결정한다.
+    """
+
+    _PID = uuid.uuid4()
+
+    def _post(self, client: TestClient, **extra: Any) -> Any:
+        body = {
+            "student_input": "그냥 답이 뭐야",
+            "polya_state": {"prev_hint_level": 1},
+            "problem_id": str(self._PID),
+            **extra,
+        }
+        return client.post("/v1/coach/sessions", json=body)
+
+    def _patch(
+        self, monkeypatch: pytest.MonkeyPatch, *, mastery: float | None, theta: float | None
+    ) -> None:
+        async def _fm(session: Any, user_id: Any, problem_id: Any) -> float | None:
+            return mastery
+
+        async def _ft(session: Any, user_id: Any) -> float | None:
+            return theta
+
+        monkeypatch.setattr("whymath_backend.api.coach._server_mastery_for", _fm)
+        monkeypatch.setattr("whymath_backend.api.coach._server_theta_for", _ft)
+
+    def test_high_theta_low_bkt_surfaces_consolidate(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # θ=2.0(proxy≈0.88)·BKT=0.1 → diff>0.2 → consolidate(추측 의심) 노출.
+        self._patch(monkeypatch, mastery=0.1, theta=2.0)
+        client, _ = _session_client()
+        resp = self._post(client)
+        assert resp.status_code == 201, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "consolidate"
+        assert sc["arithmetic_error"] is False
+
+    def test_low_theta_high_bkt_surfaces_retrieval(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # θ=-2.0(proxy≈0.12)·BKT=0.9 → diff<-0.2 → retrieval(망각 의심) 노출.
+        self._patch(monkeypatch, mastery=0.9, theta=-2.0)
+        client, _ = _session_client()
+        sc = self._post(client).json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "retrieval"
+
+    def test_consensus_advance_not_surfaced(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # θ=2.0(proxy≈0.88)·BKT=0.9 → 합의(diff 작음)·수준 높음 → advance → 비노출(LTHC 담당).
+        self._patch(monkeypatch, mastery=0.9, theta=2.0)
+        client, _ = _session_client()
+        assert self._post(client).json()["solution_coaching"] is None
+
+    def test_consensus_foundation_not_surfaced(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # θ=-2.0(proxy≈0.12)·BKT=0.1 → 합의·수준 낮음 → foundation → 비노출.
+        self._patch(monkeypatch, mastery=0.1, theta=-2.0)
+        client, _ = _session_client()
+        assert self._post(client).json()["solution_coaching"] is None
+
+    def test_no_theta_diagnose_not_surfaced(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # θ None(스냅샷 없음) → 교차검증 불가 → diagnose → 비노출(기존 동작·하위호환).
+        self._patch(monkeypatch, mastery=0.1, theta=None)
+        client, _ = _session_client()
+        assert self._post(client).json()["solution_coaching"] is None
+
+    def test_theta_value_not_exposed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # consolidate 노출 시에도 θ 수치(2.0)·"theta"는 응답에 없다(정성 코칭 발화만 노출).
+        self._patch(monkeypatch, mastery=0.1, theta=2.0)
+        client, _ = _session_client()
+        sc = self._post(client).json()["solution_coaching"]
+        blob = json.dumps(sc, ensure_ascii=False)
+        assert "2.0" not in blob
+        assert "theta" not in blob.lower()
+
+    def test_gate_off_skips_theta(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 게이트 off → θ 조회 skip → None → diagnose → 비노출. (실 _server_theta_for·env)
+        async def _fm(session: Any, user_id: Any, problem_id: Any) -> float | None:
+            return 0.1
+
+        monkeypatch.setattr("whymath_backend.api.coach._server_mastery_for", _fm)
+        monkeypatch.setenv("WHYMATH_L4_SERVER_THETA_ENABLED", "false")
+        get_settings.cache_clear()
+        try:
+            client, _ = _session_client()
+            assert self._post(client).json()["solution_coaching"] is None
+        finally:
+            get_settings.cache_clear()
+
+
+class _ThetaQR:
+    def __init__(self, value: Any) -> None:
+        self._value = value
+
+    def scalars(self) -> _ThetaQR:
+        return self
+
+    def first(self) -> Any:
+        return self._value
+
+
+class _ThetaQueueSession:
+    """execute 호출마다 큐 결과 — `_server_theta_for`(θ 1회 조회) 직접 검증용."""
+
+    def __init__(self, results: list[_ThetaQR]) -> None:
+        self._results = results
+        self._i = 0
+
+    async def execute(self, _stmt: Any) -> _ThetaQR:
+        result = self._results[self._i]
+        self._i += 1
+        return result
+
+
+class TestServerThetaHelper:
+    """slice 73: `_server_theta_for` 실체 — 게이트 ON·전과목 θ 1회 조회(패치 없이)."""
+
+    async def test_returns_current_theta(self) -> None:
+        fake = _ThetaQueueSession([_ThetaQR(1.5)])
+        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID)
+        assert t == 1.5
+
+    async def test_none_when_no_snapshot(self) -> None:
+        fake = _ThetaQueueSession([_ThetaQR(None)])
+        t = await coach._server_theta_for(cast(AsyncSession, fake), _UID)
+        assert t is None
 
 
 class TestAuthGate:

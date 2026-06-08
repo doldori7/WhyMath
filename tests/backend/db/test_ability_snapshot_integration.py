@@ -19,6 +19,7 @@ from sqlalchemy.pool import NullPool
 
 from whymath_backend.config import Settings
 from whymath_backend.db.models.assessment import AbilitySnapshot
+from whymath_backend.l2.ability_tracking import get_current_theta
 
 pytestmark = pytest.mark.integration
 
@@ -97,5 +98,70 @@ def test_ability_snapshot_insert_select_roundtrip_on_live_pg() -> None:
     try:
         asyncio.run(_run())
         assert captured["measured_at"] is not None
+    finally:
+        asyncio.run(_cleanup())
+
+
+def test_get_current_theta_returns_latest_global_on_live_pg() -> None:
+    """`get_current_theta` — 최신 *전과목*(concept_id IS NULL) θ만, 개념별/구 스냅샷은 무시.
+
+    slice 73: L4 coach가 BKT↔θ 교차검증에 쓰는 전과목 θ 리더의 WHERE(concept_id IS NULL)·
+    ORDER BY(measured_at DESC) 정확성을 실 PG로 검증(hermetic 단위는 스칼라 래퍼만 봄).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url, poolclass=NullPool)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as session:
+                # 전과목 스냅샷 2건(시간순)·개념별 1건(더 최신·무시 대상)
+                session.add_all(
+                    [
+                        AbilitySnapshot(
+                            user_id=uid,
+                            theta=0.5,
+                            response_count=3,
+                            measured_at=datetime(2026, 1, 1, tzinfo=UTC),
+                        ),
+                        AbilitySnapshot(
+                            user_id=uid,
+                            theta=1.8,
+                            response_count=9,
+                            measured_at=datetime(2026, 2, 1, tzinfo=UTC),
+                        ),
+                        AbilitySnapshot(
+                            user_id=uid,
+                            concept_id=uuid.uuid4(),
+                            theta=-3.0,
+                            response_count=4,
+                            measured_at=datetime(2026, 3, 1, tzinfo=UTC),
+                        ),
+                    ]
+                )
+                await session.commit()
+            async with sm() as session:
+                theta = await get_current_theta(session, uid)
+            # 최신 전과목 θ=1.8(개념별 -3.0은 더 최신이어도 무시·전과목 0.5는 더 옛날)
+            assert theta == pytest.approx(1.8)
+        finally:
+            await engine.dispose()
+
+    async def _cleanup() -> None:
+        engine = create_async_engine(_settings().database_url, poolclass=NullPool)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("DELETE FROM ability_snapshot WHERE user_id = :u"),
+                    {"u": str(uid)},
+                )
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_run())
     finally:
         asyncio.run(_cleanup())

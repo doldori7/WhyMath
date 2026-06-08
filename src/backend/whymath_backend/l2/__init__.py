@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+from whymath_backend.l2.ability_tracking import get_current_theta
 from whymath_backend.l2.bkt import (
     DEFAULT_BKT_PARAMETERS,
     BktModel,
@@ -60,6 +61,7 @@ __all__ = [
     "estimate_difficulty",
     "fit_jmle",
     "get_current_mastery",
+    "get_current_theta",
     "get_primary_concept_id",
     "item_information",
     "posterior_mastery",
