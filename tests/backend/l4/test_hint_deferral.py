@@ -148,7 +148,7 @@ class TestNoFalsePositives:
 
 
 class TestMasteryConservatism:
-    """숙달도 보수화(slice 69·L2→L4) — '숙달'이면 base를 한 단계 내림. 비-숙달/None 불변."""
+    """능력 라벨 양방향 조정(slice 69 숙달·slice 77 초보) — 숙달 −1·초보 +1·발전중/None 불변."""
 
     def test_master_demand_lowered_to_1(self) -> None:
         # 답요구 prev=1: base 2 → max(1, 2-1)=1(가장 은근).
@@ -198,9 +198,9 @@ class TestMasteryConservatism:
             == 3
         )
 
-    @pytest.mark.parametrize("level", [None, "초보", "발전 중"])
-    def test_non_master_unchanged(self, level: MasteryLevel | None) -> None:
-        # 비-숙달·None은 기존과 동일(답요구 prev=1 → 2) — 하위호환.
+    @pytest.mark.parametrize("level", [None, "발전 중"])
+    def test_neutral_levels_unchanged(self, level: MasteryLevel | None) -> None:
+        # 발전중·None은 조정 안 함(답요구 prev=1 → 2) — 하위호환(숙달/초보만 조정).
         assert (
             decide_hint_level(
                 student_input="답 알려줘",
@@ -209,6 +209,42 @@ class TestMasteryConservatism:
                 mastery_level=level,
             )
             == 2
+        )
+
+    def test_novice_demand_raised_to_3(self) -> None:
+        # slice 77: 답요구 prev=1 → base 2 → 초보 min(4, 2+1)=3(세분화·숙달의 대칭).
+        assert (
+            decide_hint_level(
+                student_input="답 알려줘",
+                turn_count=1,
+                prev_hint_level=1,
+                mastery_level="초보",
+            )
+            == 3
+        )
+
+    def test_novice_neutral_raised_to_2(self) -> None:
+        # slice 77: 중립 base 1 → 초보 min(4, 2)=2(능력 낮음 → 한 단계 구체화).
+        assert (
+            decide_hint_level(
+                student_input="네, 해볼게요",
+                turn_count=1,
+                prev_hint_level=1,
+                mastery_level="초보",
+            )
+            == 2
+        )
+
+    def test_novice_stuck_capped_at_4(self) -> None:
+        # slice 77: 5회+ 막힘 prev=3 → base 3 → 초보 min(4, 4)=4(클램프 — 전체풀이 상한).
+        assert (
+            decide_hint_level(
+                student_input="음...",
+                turn_count=5,
+                prev_hint_level=3,
+                mastery_level="초보",
+            )
+            == 4
         )
 
     def test_omitted_mastery_arg_unchanged(self) -> None:

@@ -90,8 +90,8 @@ def decide_hint_level(
     2. 답 요구 신호 → min(4, prev+1) — 점진 상승, 즉시 답 차단.
     3. 좌절 신호 → min(4, prev+1) — 점진 상승(socratic_template 시나리오 4).
     4. 그 외 → 1(방향, 가장 빠른 단계).
-    5. `mastery_level='숙달'` → 위 base를 max(1, base-1)로 한 단계 보수화(slice 69·L2→L4·
-       생산적 고투/ZPD). 초보/발전중/None은 불변(하위호환).
+    5. `mastery_level`로 양방향 조정(slice 69 숙달·slice 77 초보·L2→L4·ZPD): '숙달'→max(1,
+       base-1)(생산적 고투), '초보'→min(4, base+1)(능력 낮음→세분화). 발전중/None은 불변.
 
     `prev_hint_level=None`(새 세션·첫 결정) → 1 시작. 후퇴는 자동 없음(prev 이하로 안 내림은
     1·2 규칙에서 보장; 4의 기본 1 복귀는 의도된 디폴트 — 막힘 신호 사라지면 다시 은근하게).
@@ -109,9 +109,11 @@ def decide_hint_level(
     else:
         base = 1
 
-    # 5. 숙달도 보수화(slice 69·L2→L4) — '숙달'이면 한 단계 내려 생산적 고투 유도.
-    #    max(1,…) 클램프로 방향 힌트(1)는 보장(정서 안전). 초보/발전중/None은 불변.
+    # 5. 능력 라벨 양방향 조정(slice 69 숙달·slice 77 초보·L2→L4·ZPD). 숙달→완화(생산적 고투)·
+    #    초보→강화(세분화). [1,4] 클램프로 방향 힌트(1)·전체 풀이(4) 경계 유지. 발전중/None 불변.
     if mastery_level == "숙달":
         base = max(1, base - 1)
+    elif mastery_level == "초보":
+        base = min(4, base + 1)
 
     return cast(HintLevel, base)

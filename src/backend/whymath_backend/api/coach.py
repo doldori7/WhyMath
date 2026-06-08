@@ -58,6 +58,7 @@ from whymath_backend.l4 import (
     mastery_to_level,
     recommend_coaching_for_solution,
 )
+from whymath_backend.l4.metacognitive_trigger import _mastery_proxy
 from whymath_backend.l4.misconception import (
     InterventionDecision,
     MisconceptionMatch,
@@ -217,6 +218,21 @@ class SessionGetResponse(BaseModel):
     )
 
 
+def _ability_level(bkt_mastery: float | None, theta: float | None) -> MasteryLevel | None:
+    """BKT 숙달(0~1)과 신뢰 θ(logistic 프록시)를 평균해 적응형 스캐폴딩용 ability 라벨 산출.
+
+    힌트(`decide_hint_level`)·Polya 전이(`should_advance`)·LTHC(`adapt_lthc`)가 공유하는
+    `mastery_level` 라벨을 *능력 θ까지 반영*해 만든다(slice 77). 둘 다 None이면 None·한쪽만
+    있으면 그 신호·둘 다면 평균→`mastery_to_level`. θ는 `_build_response_payload`에서 이미
+    slice 76 게이트(`_server_theta_for`)를 통과한 값(신뢰 θ만)이라 여기선 추가 게이팅 불필요.
+    """
+    proxy = _mastery_proxy(theta) if theta is not None else None
+    parts = [v for v in (bkt_mastery, proxy) if v is not None]
+    if not parts:
+        return None
+    return mastery_to_level(sum(parts) / len(parts))
+
+
 def _build_response_payload(
     body: CoachRequest,
     *,
@@ -243,10 +259,12 @@ def _build_response_payload(
     # slice 69: level을 _coach.decide 이전에 계산해 hint level 보수화에도 전달(적응형 코칭).
     # slice 70: 세션/턴은 서버 L2 숙달도(server_mastery)로 클라 bkt를 대체(서버 진실원천)·명시
     # mastery_level은 여전히 최우선·stateless는 server_mastery=None(클라값). 숙달도는 비노출.
+    # slice 77: 능력 라벨에 신뢰 θ도 통합 — BKT+θ(logistic) 평균→라벨. 힌트·전이·LTHC가 같은
+    # 라벨을 쓰므로 θ가 적응형 스캐폴딩 전반에 일관 반영(θ None=stateless·희소면 BKT만·현행 동일).
     effective_bkt = server_mastery if server_mastery is not None else body.bkt_mastery
     level = body.mastery_level
-    if level is None and effective_bkt is not None:
-        level = mastery_to_level(effective_bkt)
+    if level is None:
+        level = _ability_level(effective_bkt, server_theta)
     decision = _coach.decide(body.student_input, body.polya_state, mastery_level=level)
     matches = diagnose(body.student_input)
     intervention = select_intervention(matches[0]) if matches else None

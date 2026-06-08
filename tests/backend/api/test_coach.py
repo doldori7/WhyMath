@@ -529,7 +529,7 @@ class TestHintLevelWiring:
 
 
 class TestMasteryHintConservatism:
-    """숙달도 → hint level 보수화(slice 69·L2→L4). 숙달은 한 단계 낮고, 비-숙달은 불변.
+    """능력 라벨 → hint level 조정(slice 69 숙달·slice 77 초보). 숙달 −1·초보 +1·발전중/None 불변.
 
     숙달도 라벨/수치는 `decision`에 *새로* 노출되지 않는다(노출 경계·우열 매기기 금지).
     """
@@ -548,8 +548,8 @@ class TestMasteryHintConservatism:
         assert body["decision"]["hint_level"] == 1
         assert body["decision"]["reveals"] == "next_concept_to_focus"
 
-    def test_novice_demand_unchanged(self) -> None:
-        # 초보는 기존과 동일(base 2 유지) — 하위호환.
+    def test_novice_demand_raised(self) -> None:
+        # slice 77: 초보는 한 단계 강화(세분화) — base 2 → 3.
         resp = _client().post(
             "/v1/coach",
             json={
@@ -559,8 +559,8 @@ class TestMasteryHintConservatism:
             },
         )
         body = resp.json()
-        assert body["decision"]["hint_level"] == 2
-        assert body["decision"]["reveals"] == "step_flow"
+        assert body["decision"]["hint_level"] == 3
+        assert body["decision"]["reveals"] == "partial_steps_demo"
 
     def test_no_mastery_unchanged(self) -> None:
         # 숙달도 미지정 → slice 3 동작 그대로(TestHintLevelWiring과 동일).
@@ -635,25 +635,25 @@ class TestServerMastery:
     def test_no_server_mastery_falls_back_to_client(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # 서버 None(개념/이력 없음) → 클라 0.1(초보) 사용 → hint 2(기존 동작).
+        # 서버 None(개념/이력 없음) → 클라 0.1(초보) 사용 → slice 77: 초보 강화 hint 3.
         async def _fake(session: Any, user_id: Any, problem_id: Any) -> float | None:
             return None
 
         monkeypatch.setattr("whymath_backend.api.coach._server_mastery_for", _fake)
         client, _ = _session_client()
         resp = self._post(client, bkt_mastery=0.1)
-        assert resp.json()["decision"]["hint_level"] == 2
+        assert resp.json()["decision"]["hint_level"] == 3
 
     def test_gate_off_skips_server_lookup(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # 게이트 off → 서버조회 skip → 클라 0.1(초보) → hint 2. (실 _server_mastery_for·env)
+        # 게이트 off → 서버조회 skip → 클라 0.1(초보) → slice 77: 초보 강화 hint 3.
         monkeypatch.setenv("WHYMATH_L4_SERVER_MASTERY_ENABLED", "false")
         get_settings.cache_clear()
         try:
             client, _ = _session_client()
             resp = self._post(client, bkt_mastery=0.1)
-            assert resp.json()["decision"]["hint_level"] == 2
+            assert resp.json()["decision"]["hint_level"] == 3
         finally:
             get_settings.cache_clear()
 
@@ -924,6 +924,60 @@ class TestServerThetaHelper:
         fake = _ThetaQueueSession([_ThetaQR([])])
         t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, None)
         assert t is None
+
+
+class TestAbilityLevelBlend:
+    """slice 77: BKT+신뢰 θ 평균 → 적응형 스캐폴딩 ability 라벨(`_ability_level`)."""
+
+    def test_none_both(self) -> None:
+        assert coach._ability_level(None, None) is None
+
+    def test_bkt_only(self) -> None:
+        assert coach._ability_level(0.2, None) == "초보"
+        assert coach._ability_level(0.9, None) == "숙달"
+
+    def test_theta_only(self) -> None:
+        # θ=2.0 → logistic≈0.88 → 숙달; θ=-2.0 → ≈0.12 → 초보.
+        assert coach._ability_level(None, 2.0) == "숙달"
+        assert coach._ability_level(None, -2.0) == "초보"
+
+    def test_blend_lifts_label(self) -> None:
+        # BKT 0.2(초보 단독) + θ 2.0(proxy≈0.88) → 평균 0.54 → 발전 중.
+        assert coach._ability_level(0.2, 2.0) == "발전 중"
+
+    def test_blend_lowers_label(self) -> None:
+        # BKT 0.9(숙달 단독) + θ -2.0(proxy≈0.12) → 평균 0.51 → 발전 중.
+        assert coach._ability_level(0.9, -2.0) == "발전 중"
+
+
+class TestThetaIntoScaffolding:
+    """slice 77: 통합 ability 라벨이 hint·Polya 전이 결정에 실제 반영(θ 有無 차이)."""
+
+    def test_theta_lifts_label_lowers_hint(self) -> None:
+        # 답요구 → base 2. BKT 0.2 단독=초보 → +1(=3). +θ 2.0=발전중 → 불변(=2).
+        body = coach.CoachRequest(student_input="답 알려줘")
+        dec_bkt, *_ = coach._build_response_payload(
+            body, server_mastery=0.2, server_theta=None
+        )
+        dec_theta, *_ = coach._build_response_payload(
+            body, server_mastery=0.2, server_theta=2.0
+        )
+        assert dec_bkt.hint_level == 3
+        assert dec_theta.hint_level == 2
+
+    def test_theta_lifts_label_advances_transition(self) -> None:
+        # UNDERSTAND 17자+마침표. BKT 0.7=발전중 → min_len 20 > 17 → stay.
+        # +θ 4.0 → 평균 0.84=숙달 → min_len 15 ≤ 17 → next(θ가 전이 임계를 낮춤).
+        text = "가" * 16 + "."
+        body = coach.CoachRequest(student_input=text)
+        dec_dev, *_ = coach._build_response_payload(
+            body, server_mastery=0.7, server_theta=None
+        )
+        dec_mas, *_ = coach._build_response_payload(
+            body, server_mastery=0.7, server_theta=4.0
+        )
+        assert dec_dev.polya_stage_to_advance == "stay"
+        assert dec_mas.polya_stage_to_advance == "next"
 
 
 class TestAuthGate:
