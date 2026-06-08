@@ -452,7 +452,7 @@ class TestEndSession:
         """slice 34/75: 처음 종료 + 채점 이력 있으면 θ 스냅샷 자동 적재(종료 1 + 스냅샷 1 commit).
 
         개념별 θ 적재(slice 75)는 `TestSessionEndConceptSnapshots`·통합테스트가 검증 — 여기선
-        전과목 캡처·단일 트랜잭션만 보려 `_compute_concept_abilities`를 빈 리스트로 고정한다
+        전과목 캡처·단일 트랜잭션만 보려 `compute_concept_abilities`를 빈 리스트로 고정한다
         (FakeSession은 단일 행셋만 반환해 전과목 2-튜플과 개념 5-튜플을 동시에 못 줌).
         """
 
@@ -460,7 +460,7 @@ class TestEndSession:
             return []
 
         monkeypatch.setattr(
-            "whymath_backend.api.me._compute_concept_abilities", _no_concepts
+            "whymath_backend.api.me.compute_concept_abilities", _no_concepts
         )
         row = self._session_row(_UID, ended=False)
         # FakeSession.execute(θ 쿼리) → (is_correct, difficulty) 행
@@ -1687,10 +1687,10 @@ class TestSessionEndConceptSnapshots:
             ]
 
         monkeypatch.setattr(
-            "whymath_backend.api.me._estimate_global_ability", _fake_global
+            "whymath_backend.api.me.estimate_global_ability", _fake_global
         )
         monkeypatch.setattr(
-            "whymath_backend.api.me._compute_concept_abilities", _fake_concepts
+            "whymath_backend.api.me.compute_concept_abilities", _fake_concepts
         )
         fake = FakeSession()
         await _add_ability_snapshot_if_attempts(cast(AsyncSession, fake), _UID)
@@ -1718,9 +1718,9 @@ class TestSessionEndConceptSnapshots:
             raise AssertionError("count==0이면 개념 θ 계산조차 하지 않아야 함")
 
         monkeypatch.setattr(
-            "whymath_backend.api.me._estimate_global_ability", _fake_global
+            "whymath_backend.api.me.estimate_global_ability", _fake_global
         )
-        monkeypatch.setattr("whymath_backend.api.me._compute_concept_abilities", _boom)
+        monkeypatch.setattr("whymath_backend.api.me.compute_concept_abilities", _boom)
         fake = FakeSession()
         await _add_ability_snapshot_if_attempts(cast(AsyncSession, fake), _UID)
         # 채점 0 → 전과목·개념 θ 모두 미적재(개념 계산도 skip)
