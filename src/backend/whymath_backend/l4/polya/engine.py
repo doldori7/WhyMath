@@ -72,7 +72,7 @@ class PolyaCoach:
         - `reveals`: hint_level에서 파생된 노출량 라벨(KPI 입력).
         - `recommended_cost_tier=LOCAL`(기본 — Polya 코칭은 로컬 충분, CLAUDE.md "로컬 LLM 우선").
         """
-        transition = should_advance(state, student_input)
+        transition = should_advance(state, student_input, mastery_level=mastery_level)
         target_stage = (
             _next_stage(state.current_stage) if transition == "next" else state.current_stage
         )

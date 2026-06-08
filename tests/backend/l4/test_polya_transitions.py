@@ -87,3 +87,37 @@ class TestNeverAutoPrevious:
         for stage in PolyaStage:
             for text in ("", "모르겠어", "다시", "?"):
                 assert should_advance(_state(stage), text) != "previous"
+
+
+class TestMasteryAdjustment:
+    """slice 71: UNDERSTAND→PLAN 재진술 길이 임계가 숙달도로 ∓5(숙달 빨리·초보 충실)."""
+
+    def test_mastery_lowers_threshold(self) -> None:
+        # 16자(∈[15,19])·문장부호 — 기본(20) stay·숙달(15) next.
+        s = _state(PolyaStage.UNDERSTAND)
+        text = "f의 최댓값을 구해, x>0."
+        assert should_advance(s, text) == "stay"
+        assert should_advance(s, text, mastery_level="숙달") == "next"
+
+    def test_novice_raises_threshold(self) -> None:
+        # 21자(∈[20,24])·문장부호 — 기본(20) next·초보(25) stay.
+        s = _state(PolyaStage.UNDERSTAND)
+        text = "이 문제는 f의 최댓값을 구하는 거야."
+        assert should_advance(s, text) == "next"
+        assert should_advance(s, text, mastery_level="초보") == "stay"
+
+    def test_developing_uses_default(self) -> None:
+        s = _state(PolyaStage.UNDERSTAND)
+        text = "이 문제는 f의 최댓값을 구하는 거야."
+        assert should_advance(s, text, mastery_level="발전 중") == "next"
+
+    def test_none_preserves_default(self) -> None:
+        s = _state(PolyaStage.UNDERSTAND)
+        text = "이 문제는 f의 최댓값을 구하는 거야."
+        assert should_advance(s, text, mastery_level=None) == should_advance(s, text)
+
+    def test_other_stages_unaffected(self) -> None:
+        # 범위 한정: EXECUTE는 숙달도 무관(다중줄 요구 불변·한 줄 → stay).
+        s = _state(PolyaStage.EXECUTE)
+        text = "2x = 4 따라서 x = 2"
+        assert should_advance(s, text, mastery_level="숙달") == "stay"

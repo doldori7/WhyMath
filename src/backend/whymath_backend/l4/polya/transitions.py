@@ -10,11 +10,16 @@ False-negative(stay 과다)는 교수학적으로 *안전*, false-positive(잘�
 
 from __future__ import annotations
 
+from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.models import PolyaStage, PolyaState, StageTransition
 
 # UNDERSTAND→PLAN: 학생이 자기 언어로 *재진술*했는가의 신호.
 # 길이 ≥20자(짧은 단답·"네"·"음"은 재진술 아님)·문장 구조 표시(마침표·물음표·쉼표 중 1+).
 _RESTATE_MIN_LEN = 20
+
+# slice 71: 숙달도별 재진술 길이 임계 가감폭 — '숙달'은 −delta(더 짧은 재진술로 진행)·'초보'는
+# +delta(더 충실한 재진술 요구). '발전 중'·None은 가감 없음(기본 임계).
+_MASTERY_LEN_DELTA = 5
 
 # PLAN→EXECUTE: 전략·접근 키워드 화이트리스트(한국어). 학생 발화에 *이 중 하나라도* 출현하면
 # "전략을 떠올렸다"의 신호로 본다.
@@ -60,7 +65,12 @@ def _any_token(text: str, tokens: frozenset[str]) -> bool:
     return any(t in text for t in tokens)
 
 
-def should_advance(state: PolyaState, student_input: str) -> StageTransition:
+def should_advance(
+    state: PolyaState,
+    student_input: str,
+    *,
+    mastery_level: MasteryLevel | None = None,
+) -> StageTransition:
     """현재 단계와 학생 발화에서 다음 전이를 판정한다.
 
     - UNDERSTAND: 자기 언어 재진술(길이 + 문장 부호) → `next`
@@ -69,12 +79,21 @@ def should_advance(state: PolyaState, student_input: str) -> StageTransition:
     - REVIEW: 메타 토큰 있어도 *전이 없음* (마지막 단계, 종착)
     - 모호: 항상 `stay`
 
+    slice 71: `mastery_level='숙달'`은 UNDERSTAND 재진술 길이 임계를 −5(더 빨리 진행)·`'초보'`는
+    +5(더 충실히)로 기울인다. 문장부호 요구·다른 단계·"모호 시 stay" 보수성은 불변(false-positive
+    비대칭 보존). `'발전 중'`·None은 기본 임계.
+
     `previous`는 이 함수가 반환하지 않는다(스펙 L101 명시 후퇴는 별도 신호).
     """
     text = student_input.strip()
 
     if state.current_stage is PolyaStage.UNDERSTAND:
-        if len(text) >= _RESTATE_MIN_LEN and any(p in text for p in ".?,"):
+        min_len = _RESTATE_MIN_LEN
+        if mastery_level == "숙달":
+            min_len -= _MASTERY_LEN_DELTA
+        elif mastery_level == "초보":
+            min_len += _MASTERY_LEN_DELTA
+        if len(text) >= min_len and any(p in text for p in ".?,"):
             return "next"
         return "stay"
 
