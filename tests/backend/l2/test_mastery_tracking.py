@@ -20,6 +20,8 @@ from whymath_backend.l2 import (
     update_mastery,
 )
 from whymath_backend.l2.mastery_tracking import (
+    get_current_mastery,
+    get_primary_concept_id,
     record_attempt_mastery,
     record_problem_attempt_mastery,
 )
@@ -208,6 +210,57 @@ class _QueueSession:
 
     async def commit(self) -> None:
         self.commits += 1
+
+
+class TestGetCurrentMastery:
+    """slice 70: (user, concept) 현재 숙달도 읽기 — 최신 측정 mastery·없으면 None."""
+
+    async def test_returns_latest_mastery(self) -> None:
+        prior = ConceptMasteryHistory(
+            user_id=_UID,
+            concept_id=_CID,
+            measured_at=datetime(2026, 1, 1, tzinfo=UTC),
+            mastery=0.75,
+            confidence=0.6,
+            sample_size=5,
+        )
+        fake = _FakeSession(prior=prior)
+        assert await get_current_mastery(cast(AsyncSession, fake), _UID, _CID) == 0.75
+
+    async def test_returns_none_when_no_history(self) -> None:
+        fake = _FakeSession(prior=None)
+        assert await get_current_mastery(cast(AsyncSession, fake), _UID, _CID) is None
+
+    async def test_returns_none_when_mastery_null(self) -> None:
+        prior = ConceptMasteryHistory(
+            user_id=_UID,
+            concept_id=_CID,
+            measured_at=datetime(2026, 1, 1, tzinfo=UTC),
+            mastery=None,
+            confidence=None,
+            sample_size=None,
+        )
+        fake = _FakeSession(prior=prior)
+        assert await get_current_mastery(cast(AsyncSession, fake), _UID, _CID) is None
+
+
+class TestGetPrimaryConceptId:
+    """slice 70: 문항 대표 개념 — PRIMARY 우선·없으면 TESTED 폴백·둘 다 없으면 None."""
+
+    async def test_primary_when_present(self) -> None:
+        cid = uuid.uuid4()
+        fake = _QueueSession([_QResult([cid])])
+        assert await get_primary_concept_id(cast(AsyncSession, fake), uuid.uuid4()) == cid
+
+    async def test_falls_back_to_tested(self) -> None:
+        tested = uuid.uuid4()
+        # execute#1=PRIMARY 없음 → #2=TESTED 폴백
+        fake = _QueueSession([_QResult([]), _QResult([tested])])
+        assert await get_primary_concept_id(cast(AsyncSession, fake), uuid.uuid4()) == tested
+
+    async def test_none_when_no_concept(self) -> None:
+        fake = _QueueSession([_QResult([]), _QResult([])])
+        assert await get_primary_concept_id(cast(AsyncSession, fake), uuid.uuid4()) is None
 
 
 class TestRecordProblemAttemptMastery:

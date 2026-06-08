@@ -38,6 +38,7 @@ from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.session import get_session
+from whymath_backend.l2 import get_current_mastery, get_primary_concept_id
 from whymath_backend.l4 import (
     CoachingFocus,
     LthcAdaptation,
@@ -210,6 +211,7 @@ def _build_response_payload(
     *,
     problem_id: uuid.UUID | None = None,
     expected_answer: str | None = None,
+    server_mastery: float | None = None,
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -227,9 +229,12 @@ def _build_response_payload(
     """
     # slice 25: mastery_level 명시값 우선·없으면 BKT 숙달(0~1)을 라벨로 환산(L2→L4 브릿지).
     # slice 69: level을 _coach.decide 이전에 계산해 hint level 보수화에도 전달(적응형 코칭).
+    # slice 70: 세션/턴은 서버 L2 숙달도(server_mastery)로 클라 bkt를 대체(서버 진실원천)·명시
+    # mastery_level은 여전히 최우선·stateless는 server_mastery=None(클라값). 숙달도는 비노출.
+    effective_bkt = server_mastery if server_mastery is not None else body.bkt_mastery
     level = body.mastery_level
-    if level is None and body.bkt_mastery is not None:
-        level = mastery_to_level(body.bkt_mastery)
+    if level is None and effective_bkt is not None:
+        level = mastery_to_level(effective_bkt)
     decision = _coach.decide(body.student_input, body.polya_state, mastery_level=level)
     matches = diagnose(body.student_input)
     intervention = select_intervention(matches[0]) if matches else None
@@ -248,7 +253,7 @@ def _build_response_payload(
     solution_text = body.student_solution or body.student_input
     sol = recommend_coaching_for_solution(
         solution_text,
-        body.bkt_mastery,
+        effective_bkt,
         None,
         problem_id=problem_id,
         expected_answer=expected_answer,
@@ -271,6 +276,24 @@ async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | No
         return None
     problem = await session.get(ProblemORM, problem_id)
     return problem.answer if problem is not None else None
+
+
+async def _server_mastery_for(
+    session: AsyncSession, user_id: uuid.UUID, problem_id: uuid.UUID | None
+) -> float | None:
+    """학생의 *실제* 숙달도를 서버 L2 저장소에서 조회 — coach 세션/턴 전용(slice 70·비노출).
+
+    게이트(`l4_server_mastery_enabled`)가 off거나 `problem_id`가 None이면 None(조회 skip).
+    문항의 PRIMARY 개념(없으면 TESTED 폴백)을 해석해 그 개념의 현재 숙달도를 돌려준다. 문항-개념
+    미매핑·측정 이력 없음이면 graceful None → 호출자는 클라이언트 bkt로 폴백. 반환값은 코칭
+    *결정에만* 쓰이고 HTTP 응답엔 싣지 않는다(slice 69 숙달도 비노출 불변).
+    """
+    if problem_id is None or not get_settings().l4_server_mastery_enabled:
+        return None
+    concept_id = await get_primary_concept_id(session, problem_id)
+    if concept_id is None:
+        return None
+    return await get_current_mastery(session, user_id, concept_id)
 
 
 @router.post(
@@ -323,8 +346,15 @@ async def create_session(
     # slice 64: 문항 기대정답을 서버 DB에서 조회해 step shadow 진단 맥락으로 주입(비노출 — 응답엔
     # 결코 싣지 않음·정답 누출 차단). 문항 부재/없음이면 None(graceful).
     expected_answer = await _expected_answer_for(session, body.problem_id)
+    # slice 70: 서버 L2 저장소의 실제 숙달도를 조회해 클라 bkt 대체(게이트 ON·비노출).
+    server_mastery = await _server_mastery_for(session, user.user_id, body.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
-        _build_response_payload(body, problem_id=body.problem_id, expected_answer=expected_answer)
+        _build_response_payload(
+            body,
+            problem_id=body.problem_id,
+            expected_answer=expected_answer,
+            server_mastery=server_mastery,
+        )
     )
 
     now = datetime.now(timezone.utc)
@@ -407,9 +437,14 @@ async def append_turns(
     # slice 64: 멀티턴 경로도 문항 맥락 주입 — dialogue에 이미 실린 problem_id로 기대정답 조회
     # (비노출 진단 로그 전용). create_session과 동형(create는 body, append는 dialogue 출처).
     expected_answer = await _expected_answer_for(session, dialogue.problem_id)
+    # slice 70: 멀티턴도 서버 L2 숙달도 조회(dialogue.problem_id·user 출처)·클라 bkt 대체.
+    server_mastery = await _server_mastery_for(session, user.user_id, dialogue.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
-            body, problem_id=dialogue.problem_id, expected_answer=expected_answer
+            body,
+            problem_id=dialogue.problem_id,
+            expected_answer=expected_answer,
+            server_mastery=server_mastery,
         )
     )
 

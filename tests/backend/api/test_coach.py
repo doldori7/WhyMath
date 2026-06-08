@@ -10,16 +10,19 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.api import coach
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api._rate_limit import reset_store
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import Persona
@@ -577,6 +580,119 @@ class TestMasteryHintConservatism:
         assert "mastery_level" not in decision
         assert "bkt_mastery" not in decision
         assert "숙달" not in json.dumps(decision, ensure_ascii=False)
+
+
+class TestServerMastery:
+    """slice 70: coach 세션이 서버 L2 숙달도를 조회해 클라 bkt를 대체(게이트 ON·비노출).
+
+    `_server_mastery_for`는 execute 2회(개념해석→숙달도)라 `_CapturingSession`(동일 rows 반환)으론
+    구분 불가 → monkeypatch로 고정 반환 패치(L2 함수 자체는 test_mastery_tracking에서 검증).
+    """
+
+    _PID = uuid.uuid4()
+
+    def _post(self, client: TestClient, **extra: Any) -> Any:
+        body = {
+            "student_input": "그냥 답이 뭐야",
+            "polya_state": {"prev_hint_level": 1},
+            "problem_id": str(self._PID),
+            **extra,
+        }
+        return client.post("/v1/coach/sessions", json=body)
+
+    def test_server_mastery_overrides_client_bkt(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 서버 0.9(숙달) — 클라가 0.1(초보)을 보내도 서버값으로 hint 보수화(2→1).
+        async def _fake(session: Any, user_id: Any, problem_id: Any) -> float | None:
+            return 0.9
+
+        monkeypatch.setattr("whymath_backend.api.coach._server_mastery_for", _fake)
+        client, _ = _session_client()
+        resp = self._post(client, bkt_mastery=0.1)
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["decision"]["hint_level"] == 1
+
+    def test_no_server_mastery_falls_back_to_client(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 서버 None(개념/이력 없음) → 클라 0.1(초보) 사용 → hint 2(기존 동작).
+        async def _fake(session: Any, user_id: Any, problem_id: Any) -> float | None:
+            return None
+
+        monkeypatch.setattr("whymath_backend.api.coach._server_mastery_for", _fake)
+        client, _ = _session_client()
+        resp = self._post(client, bkt_mastery=0.1)
+        assert resp.json()["decision"]["hint_level"] == 2
+
+    def test_gate_off_skips_server_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 게이트 off → 서버조회 skip → 클라 0.1(초보) → hint 2. (실 _server_mastery_for·env)
+        monkeypatch.setenv("WHYMATH_L4_SERVER_MASTERY_ENABLED", "false")
+        get_settings.cache_clear()
+        try:
+            client, _ = _session_client()
+            resp = self._post(client, bkt_mastery=0.1)
+            assert resp.json()["decision"]["hint_level"] == 2
+        finally:
+            get_settings.cache_clear()
+
+    def test_server_mastery_not_exposed_in_decision(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def _fake(session: Any, user_id: Any, problem_id: Any) -> float | None:
+            return 0.9
+
+        monkeypatch.setattr("whymath_backend.api.coach._server_mastery_for", _fake)
+        client, _ = _session_client()
+        decision = self._post(client).json()["decision"]
+        assert "mastery_level" not in decision
+        assert "bkt_mastery" not in decision
+        assert "숙달" not in json.dumps(decision, ensure_ascii=False)
+
+
+class _MasteryQR:
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> _MasteryQR:
+        return self
+
+    def all(self) -> list[Any]:
+        return self._rows
+
+    def first(self) -> Any:
+        return self._rows[0] if self._rows else None
+
+
+class _MasteryQueueSession:
+    """execute 호출마다 큐 결과 — `_server_mastery_for`(개념해석→숙달도) 직접 검증용."""
+
+    def __init__(self, results: list[_MasteryQR]) -> None:
+        self._results = results
+        self._i = 0
+
+    async def execute(self, _stmt: Any) -> _MasteryQR:
+        result = self._results[self._i]
+        self._i += 1
+        return result
+
+
+class TestServerMasteryHelper:
+    """slice 70: `_server_mastery_for` 실체 — 개념해석→현재 숙달도(게이트 ON·패치 없이)."""
+
+    async def test_resolves_primary_concept_then_mastery(self) -> None:
+        cid = uuid.uuid4()
+        row = ConceptMasteryHistory(mastery=0.9)
+        # execute#1=PRIMARY 개념 [cid] → #2=그 개념 최신 측정 row
+        fake = _MasteryQueueSession([_MasteryQR([cid]), _MasteryQR([row])])
+        m = await coach._server_mastery_for(cast(AsyncSession, fake), _UID, uuid.uuid4())
+        assert m == 0.9
+
+    async def test_none_when_no_concept_mapping(self) -> None:
+        # PRIMARY·TESTED 모두 없음 → 개념 None → 숙달도 조회 안 함·None.
+        fake = _MasteryQueueSession([_MasteryQR([]), _MasteryQR([])])
+        m = await coach._server_mastery_for(cast(AsyncSession, fake), _UID, uuid.uuid4())
+        assert m is None
 
 
 class TestAuthGate:
