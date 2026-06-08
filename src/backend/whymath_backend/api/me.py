@@ -64,6 +64,13 @@ from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
+from whymath_backend.l2.ability_estimation import (
+    _DIFFICULTY_MIDPOINT,
+    ConceptAbilityItem,
+    compute_concept_abilities,
+    difficulty_to_logit,
+    estimate_global_ability,
+)
 from whymath_backend.l2.irt import (
     IrtItem,
     ability_standard_error,
@@ -666,18 +673,6 @@ async def list_my_current_mastery(
 
 
 # ── slice L2-11: GET /v1/me/ability (IRT 능력 θ 추정 — 채점 풀이 이력 기반) ──────
-_DIFFICULTY_MIDPOINT = 3.0  # Problem.difficulty_overall(1~5)의 중앙 → logit 0
-
-
-def _difficulty_to_logit(difficulty: float) -> float:
-    """`difficulty_overall`(1~5) → IRT 난이도 b(logit). 휴리스틱 프록시(중앙 3=b0·범위 [-2,2]).
-
-    *보정된* b는 응답 데이터로 `fit_jmle`(slice 10) 적합이 정답이나, 그 전까지 전문가 난이도
-    라벨(1~5)을 선형 매핑해 능력 추정에 쓴다(difficulty 1=쉬움→b=-2·5=어려움→b=+2).
-    """
-    return difficulty - _DIFFICULTY_MIDPOINT
-
-
 _CI_Z_95 = 1.96  # 95% 신뢰구간 z값(표준정규 양측 0.025)
 
 
@@ -716,7 +711,7 @@ async def get_my_ability(
     θ±1.96·SE를 함께 노출. 응답 0건(정보 0=SE 무한)이면 둘 다 null(측정 불가). 경계 θ
     (전부 정답/오답)의 SE는 Fisher 정보 기반이라 *낙관적*(실 불확실성 과소·EAP는 후속).
     """
-    theta, se, count = await _estimate_global_ability(session, user.user_id)
+    theta, se, count = await estimate_global_ability(session, user.user_id)
     if se is None:  # 정보 0(응답 없음) → 측정 불가
         return AbilityResponse(theta=theta, response_count=count)
     return AbilityResponse(
@@ -725,32 +720,6 @@ async def get_my_ability(
         standard_error=se,
         confidence_interval=[theta - _CI_Z_95 * se, theta + _CI_Z_95 * se],
     )
-
-
-async def _estimate_global_ability(
-    session: AsyncSession, user_id: uuid.UUID
-) -> tuple[float, float | None, int]:
-    """채점 풀이 이력에서 전 과목 단일 θ·SE·응답수 추정 — `/ability`·snapshot 캡처 공유.
-
-    `problem_attempt`(채점됨)를 `problem` JOIN해 (난이도→b, 정답) 응답을 만들고 θ·SE 산출.
-    SE는 정보 0(응답 없음)이면 None(측정 불가). 난이도 NULL 문항 제외.
-    """
-    stmt = (
-        select(ProblemAttempt.is_correct, Problem.difficulty_overall)
-        .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
-        .where(
-            ProblemAttempt.user_id == user_id,
-            ProblemAttempt.is_correct.isnot(None),
-        )
-    )
-    responses = [
-        (IrtItem(difficulty=_difficulty_to_logit(float(difficulty))), bool(is_correct))
-        for is_correct, difficulty in (await session.execute(stmt)).all()
-        if difficulty is not None
-    ]
-    theta = estimate_ability(responses)
-    se = ability_standard_error(theta, [item for item, _ in responses])
-    return theta, (None if math.isinf(se) else se), len(responses)
 
 
 # ── slice L2-32: θ 시계열 적재 (POST 캡처 + GET 조회 — ability_snapshot) ──────────
@@ -785,7 +754,7 @@ async def capture_ability_snapshot(
     시각*으로 함께 적재(개념별 곡선·`concept_id` 값 보유). 응답은 전과목 스냅샷. user_id 스코핑.
     """
     now = datetime.now(UTC)
-    theta, se, count = await _estimate_global_ability(session, user.user_id)
+    theta, se, count = await estimate_global_ability(session, user.user_id)
     snap = AbilitySnapshotSchema(
         user_id=user.user_id,
         theta=theta,
@@ -830,19 +799,6 @@ async def list_ability_snapshots(
 
 
 # ── slice L2-18: GET /v1/me/ability/by-concept (개념별 IRT 능력 θ 분리) ───────────
-class ConceptAbilityItem(BaseModel):
-    """개념별 IRT 능력 — `GET /v1/me/ability/by-concept`의 한 개념 항목."""
-
-    concept_id: uuid.UUID = Field(description="개념 id.")
-    concept_code: str | None = Field(default=None, description="개념 코드(orphan이면 null).")
-    concept_name: str | None = Field(default=None, description="개념명(orphan이면 null).")
-    theta: float = Field(description="이 개념 문항들로 추정한 능력 θ(logit).")
-    response_count: int = Field(description="이 개념 추정에 쓰인 채점 풀이 수.")
-    standard_error: float | None = Field(
-        default=None, description="θ 표준오차 SE=1/√I(θ). 측정 불가면 null."
-    )
-
-
 @router.get(
     "/ability/by-concept",
     response_model=list[ConceptAbilityItem],
@@ -861,56 +817,9 @@ async def get_my_ability_by_concept(
     개념 먼저* 정렬(asc·동률은 concept_id)로 "무엇을 보완할지" 우선순위 노출. BKT 개념별 숙달과
     *상보적*(BKT=정오답 확률·IRT=난이도 보정 능력). user_id 스코핑·읽기(마이그레이션 불필요).
     """
-    items = await _compute_concept_abilities(session, user.user_id)
+    items = await compute_concept_abilities(session, user.user_id)
     # 약점(저능력) 개념 먼저 — asc 정렬·동률은 concept_id로 안정화(결정론).
     items.sort(key=lambda i: (i.theta, str(i.concept_id)))
-    return items
-
-
-async def _compute_concept_abilities(
-    session: AsyncSession, user_id: uuid.UUID
-) -> list[ConceptAbilityItem]:
-    """개념별 IRT θ·SE·응답수·메타 산출(정렬 전) — `/ability/by-concept`·snapshot 캡처 공유."""
-    stmt = (
-        select(
-            ProblemConcept.concept_id,
-            Concept.code,
-            Concept.name_ko,
-            ProblemAttempt.is_correct,
-            Problem.difficulty_overall,
-        )
-        .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
-        .join(ProblemConcept, ProblemConcept.problem_id == Problem.problem_id)
-        .outerjoin(Concept, ProblemConcept.concept_id == Concept.concept_id)
-        .where(
-            ProblemAttempt.user_id == user_id,
-            ProblemAttempt.is_correct.isnot(None),
-            ProblemConcept.role.in_(_ASSESSED_ROLES),
-            Problem.difficulty_overall.isnot(None),
-        )
-    )
-    grouped: dict[uuid.UUID, list[tuple[IrtItem, bool]]] = {}
-    meta: dict[uuid.UUID, tuple[str | None, str | None]] = {}
-    for concept_id, code, name, is_correct, difficulty in (await session.execute(stmt)).all():
-        item = IrtItem(difficulty=_difficulty_to_logit(float(difficulty)))
-        grouped.setdefault(concept_id, []).append((item, bool(is_correct)))
-        meta[concept_id] = (code, name)
-
-    items = []
-    for concept_id, responses in grouped.items():
-        theta = estimate_ability(responses)
-        se = ability_standard_error(theta, [it for it, _ in responses])
-        code, name = meta[concept_id]
-        items.append(
-            ConceptAbilityItem(
-                concept_id=concept_id,
-                concept_code=code,
-                concept_name=name,
-                theta=theta,
-                response_count=len(responses),
-                standard_error=None if math.isinf(se) else se,
-            )
-        )
     return items
 
 
@@ -919,11 +828,11 @@ async def _add_concept_ability_snapshots(
 ) -> None:
     """개념별 θ 스냅샷을 세션에 *추가만*(commit은 호출자) — 수동 캡처·세션 종료 공유(slice 75).
 
-    `_compute_concept_abilities`(slice 18 산식)의 각 개념 θ를 *주어진 시각*으로 적재(전과목
+    `compute_concept_abilities`(slice 18 산식)의 각 개념 θ를 *주어진 시각*으로 적재(전과목
     스냅샷과 같은 measured_at). `capture_ability_snapshot(include_concepts)`와 세션 종료 자동
     적재(`_add_ability_snapshot_if_attempts`)가 공유해 개념 θ 곡선을 자연 샘플링한다(중복 제거).
     """
-    for item in await _compute_concept_abilities(session, user_id):
+    for item in await compute_concept_abilities(session, user_id):
         session.add(
             AbilitySnapshot.from_schema(
                 AbilitySnapshotSchema(
@@ -990,7 +899,7 @@ async def get_my_ability_history(
     points: list[AbilityHistoryPoint] = []
     for created_at, is_correct, difficulty in (await session.execute(stmt)).all():
         responses.append(
-            (IrtItem(difficulty=_difficulty_to_logit(float(difficulty))), bool(is_correct))
+            (IrtItem(difficulty=difficulty_to_logit(float(difficulty))), bool(is_correct))
         )
         theta = estimate_ability(responses)
         se = ability_standard_error(theta, [it for it, _ in responses])
@@ -1126,7 +1035,7 @@ async def _compute_concept_diagnosis(
     )
     grouped: dict[uuid.UUID, list[tuple[IrtItem, bool]]] = {}
     for cid, code, name, is_correct, difficulty in (await session.execute(irt_stmt)).all():
-        item = IrtItem(difficulty=_difficulty_to_logit(float(difficulty)))
+        item = IrtItem(difficulty=difficulty_to_logit(float(difficulty)))
         grouped.setdefault(cid, []).append((item, bool(is_correct)))
         meta.setdefault(cid, (code, name))
 
@@ -1321,7 +1230,7 @@ async def recommend_next_problem(
     ① 채점 풀이 이력으로 θ 추정(slice 11과 동일 로직)·이미 푼 문항 id 수집. ② 난이도 라벨
     (difficulty_overall) 있는 *미응답* 문항을 θ 근방(|b-θ| 최소)으로 SQL 선별(`_CANDIDATE_POOL_SIZE`
     개)·`select_weighted_item`(slice 16)으로 (가중)정보량 최대 1개 선택. 없으면 problem_id=null.
-    난이도→b 매핑은 slice 11의 `_difficulty_to_logit`(보정 b는 fit_jmle 후속).
+    난이도→b 매핑은 slice 11의 `difficulty_to_logit`(보정 b는 fit_jmle 후속).
 
     CAT 중단 규칙(slice 15): *응답한 문항* 기준 표준오차 SE(slice 13)와 `measurement_sufficient`
     (SE≤`_TARGET_SE`)을 함께 반환 — 호출자는 충분하면 검사를 멈추고 아니면 추천 문항을 출제한다
@@ -1347,7 +1256,7 @@ async def recommend_next_problem(
     )
     attempt_rows = (await session.execute(attempt_stmt)).all()
     responses = [
-        (IrtItem(difficulty=_difficulty_to_logit(float(difficulty))), bool(is_correct))
+        (IrtItem(difficulty=difficulty_to_logit(float(difficulty))), bool(is_correct))
         for _pid, is_correct, difficulty in attempt_rows
         if difficulty is not None
     ]
@@ -1371,7 +1280,7 @@ async def recommend_next_problem(
     ).limit(_CANDIDATE_POOL_SIZE)
     candidate_rows = (await session.execute(candidate_stmt)).all()
 
-    items = [IrtItem(difficulty=_difficulty_to_logit(float(d))) for _pid, d in candidate_rows]
+    items = [IrtItem(difficulty=difficulty_to_logit(float(d))) for _pid, d in candidate_rows]
 
     # slice 17: 약점 개념 가중(BKT+IRT 융합) — 후보가 있을 때만 추가 2쿼리로 가중치 산출.
     weights: list[float] | None = None
@@ -1456,7 +1365,7 @@ async def _add_ability_snapshot_if_attempts(session: AsyncSession, user_id: uuid
     BKT↔θ 교차검증이 폴백 없이 같은 개념끼리 정밀 비교). 채점 0이면 개념도 0(전과목의 부분집합).
     """
     now = datetime.now(UTC)
-    theta, se, count = await _estimate_global_ability(session, user_id)
+    theta, se, count = await estimate_global_ability(session, user_id)
     if count == 0:
         return  # 채점 이력 0 → 전과목·개념 θ 모두 미적재(개념은 전과목의 부분집합)
     session.add(

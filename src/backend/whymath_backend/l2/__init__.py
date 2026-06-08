@@ -16,6 +16,12 @@
 
 from __future__ import annotations
 
+from whymath_backend.l2.ability_estimation import (
+    ConceptAbilityItem,
+    compute_concept_abilities,
+    difficulty_to_logit,
+    estimate_global_ability,
+)
 from whymath_backend.l2.ability_tracking import (
     AbilityReading,
     get_current_ability,
@@ -56,14 +62,18 @@ __all__ = [
     "AbilityReading",
     "BktModel",
     "BktParameters",
+    "ConceptAbilityItem",
     "IrtItem",
     "MasteryRecord",
     "ability_standard_error",
     "apply_forgetting",
     "apply_learning",
+    "compute_concept_abilities",
     "compute_mastery_record",
+    "difficulty_to_logit",
     "estimate_ability",
     "estimate_difficulty",
+    "estimate_global_ability",
     "fit_jmle",
     "get_current_ability",
     "get_current_mastery",
