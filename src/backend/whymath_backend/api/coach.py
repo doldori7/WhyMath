@@ -306,19 +306,28 @@ async def _server_mastery_for(
     return await get_current_mastery(session, user_id, concept_id)
 
 
-async def _server_theta_for(session: AsyncSession, user_id: uuid.UUID) -> float | None:
-    """학생의 *실제* 전과목 IRT 능력 θ를 서버 L2(AbilitySnapshot)에서 조회 — coach 세션/턴
-    전용(slice 73·비노출).
+async def _server_theta_for(
+    session: AsyncSession, user_id: uuid.UUID, problem_id: uuid.UUID | None
+) -> float | None:
+    """학생의 *실제* IRT 능력 θ를 서버 L2(AbilitySnapshot)에서 조회 — coach 세션/턴
+    전용(slice 73·74·비노출).
 
-    게이트(`l4_server_theta_enabled`)가 off면 None(조회 skip). θ는 *전과목*이라 problem_id가
-    필요 없다(개념별인 `_server_mastery_for`와 대비 — θ는 전반 능력, BKT 숙달은 개념별). 최신
-    global 스냅샷이 없으면 graceful None → `recommend_coaching`이 교차검증 불가로 diagnose
-    폴백(노출 안 함). 반환값(θ 수치)은 코칭 *결정에만* 쓰이고 HTTP 응답엔 싣지 않는다(slice 70
-    숙달도 비노출과 동일 — θ도 student-facing 비노출).
+    게이트(`l4_server_theta_enabled`)가 off면 None(조회 skip). slice 74: 문항 PRIMARY 개념의
+    *개념별* θ를 우선 조회해(같은 개념 BKT와 동일 개념끼리 교차검증·정밀) `_server_mastery_for`와
+    대칭을 이룬다. 개념 θ 스냅샷이 없거나(개념 θ는 희소) problem_id/개념 미해석이면 *전과목* θ로
+    폴백(slice 73 동작) — θ가 *하나라도* 있으면 교차검증, 둘 다 없으면 graceful None →
+    `recommend_coaching`이 diagnose 폴백(노출 안 함). 반환값(θ 수치)은 코칭 *결정에만* 쓰이고
+    HTTP 응답엔 싣지 않는다(slice 70 숙달도 비노출과 동일 — θ도 student-facing 비노출).
     """
     if not get_settings().l4_server_theta_enabled:
         return None
-    return await get_current_theta(session, user_id)
+    if problem_id is not None:
+        concept_id = await get_primary_concept_id(session, problem_id)
+        if concept_id is not None:
+            concept_theta = await get_current_theta(session, user_id, concept_id)
+            if concept_theta is not None:
+                return concept_theta  # 개념 θ 우선(정밀 교차검증)
+    return await get_current_theta(session, user_id)  # 전과목 폴백(slice 73)
 
 
 @router.post(
@@ -373,8 +382,9 @@ async def create_session(
     expected_answer = await _expected_answer_for(session, body.problem_id)
     # slice 70: 서버 L2 저장소의 실제 숙달도를 조회해 클라 bkt 대체(게이트 ON·비노출).
     server_mastery = await _server_mastery_for(session, user.user_id, body.problem_id)
-    # slice 73: 서버 L2의 실제 전과목 θ도 조회 — BKT↔θ 교차검증 코칭(게이트 ON·θ 수치 비노출).
-    server_theta = await _server_theta_for(session, user.user_id)
+    # slice 73·74: 서버 L2의 실제 θ도 조회 — BKT↔θ 교차검증(게이트 ON·θ 수치 비노출). slice 74:
+    # 문항 개념의 *개념별* θ 우선·없으면 전과목 폴백(_server_theta_for 내부).
+    server_theta = await _server_theta_for(session, user.user_id, body.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -467,8 +477,9 @@ async def append_turns(
     expected_answer = await _expected_answer_for(session, dialogue.problem_id)
     # slice 70: 멀티턴도 서버 L2 숙달도 조회(dialogue.problem_id·user 출처)·클라 bkt 대체.
     server_mastery = await _server_mastery_for(session, user.user_id, dialogue.problem_id)
-    # slice 73: 멀티턴도 서버 L2 전과목 θ 조회 — BKT↔θ 교차검증 코칭(θ 수치 비노출).
-    server_theta = await _server_theta_for(session, user.user_id)
+    # slice 73·74: 멀티턴도 서버 L2 θ 조회 — BKT↔θ 교차검증(θ 수치 비노출). slice 74: 개념별 θ
+    # 우선(dialogue.problem_id)·없으면 전과목 폴백.
+    server_theta = await _server_theta_for(session, user.user_id, dialogue.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,

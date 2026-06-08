@@ -20,24 +20,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.db.models.assessment import AbilitySnapshot
 
 
-async def get_current_theta(session: AsyncSession, user_id: uuid.UUID) -> float | None:
-    """학생의 현재 *전과목* IRT 능력 θ — 최신 global `AbilitySnapshot` 1건의 theta(읽기 전용).
+async def get_current_theta(
+    session: AsyncSession, user_id: uuid.UUID, concept_id: uuid.UUID | None = None
+) -> float | None:
+    """학생의 현재 IRT 능력 θ — 최신 `AbilitySnapshot` 1건의 theta(읽기 전용).
 
-    `get_current_mastery`(BKT 개념 숙달)와 대칭이되 θ는 *전과목*이라 concept_id가 필요 없다:
-    `concept_id IS NULL`(전 과목 단일 θ) 최신 스냅샷만 본다(개념별 θ 교차검증은 후속). L4
-    coach가 서버에서 학생 능력을 *클라 전송값 대신* 조회해 BKT↔θ 교차검증 코칭(slice 73)에
-    쓴다. 측정 이력이 없으면 None(graceful — 교차검증 불가 → diagnose 폴백·비노출).
+    `concept_id`로 *범위*를 고른다: None(기본)이면 *전과목*(`concept_id IS NULL`·전 과목 단일
+    θ·slice 73)·특정 개념 UUID면 *그 개념*(`concept_id == X`·slice 74 개념별 교차검증)의 최신
+    θ. L4 coach가 서버에서 학생 능력을 *클라 전송값 대신* 조회해 BKT↔θ 교차검증 코칭
+    (`recommend_coaching`)에 쓴다 — 개념별 θ면 같은 개념 BKT와 *동일 개념끼리* 비교(정밀).
+    측정 이력이 없으면 None(graceful — 교차검증 불가 → diagnose 폴백·비노출).
 
-    정렬(measured_at DESC)·`concept_id IS NULL` 필터의 정확성은 통합테스트가 실 PG로 검증한다
-    (`test_ability_snapshot_integration`) — 여기 hermetic 경로는 스칼라→float|None 래퍼만 본다
-    (`mastery_tracking`의 단위/통합 분리 패턴).
+    정렬(measured_at DESC)·concept_id 필터(`IS NULL` vs `== X`)의 정확성은 통합테스트가 실
+    PG로 검증한다(`test_ability_snapshot_integration`) — 여기 hermetic 경로는 스칼라→
+    float|None 래퍼만 본다(`mastery_tracking`의 단위/통합 분리 패턴).
     """
+    concept_filter = (
+        AbilitySnapshot.concept_id.is_(None)
+        if concept_id is None
+        else AbilitySnapshot.concept_id == concept_id
+    )
     stmt = (
         select(AbilitySnapshot.theta)
-        .where(
-            AbilitySnapshot.user_id == user_id,
-            AbilitySnapshot.concept_id.is_(None),
-        )
+        .where(AbilitySnapshot.user_id == user_id, concept_filter)
         .order_by(AbilitySnapshot.measured_at.desc())
         .limit(1)
     )

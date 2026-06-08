@@ -102,23 +102,25 @@ def test_ability_snapshot_insert_select_roundtrip_on_live_pg() -> None:
         asyncio.run(_cleanup())
 
 
-def test_get_current_theta_returns_latest_global_on_live_pg() -> None:
-    """`get_current_theta` — 최신 *전과목*(concept_id IS NULL) θ만, 개념별/구 스냅샷은 무시.
+def test_get_current_theta_global_and_concept_scoped_on_live_pg() -> None:
+    """`get_current_theta` — 전과목(concept_id IS NULL)·개념별(concept_id==X) θ 분리 조회.
 
-    slice 73: L4 coach가 BKT↔θ 교차검증에 쓰는 전과목 θ 리더의 WHERE(concept_id IS NULL)·
-    ORDER BY(measured_at DESC) 정확성을 실 PG로 검증(hermetic 단위는 스칼라 래퍼만 봄).
+    slice 73·74: L4 coach가 BKT↔θ 교차검증에 쓰는 θ 리더의 WHERE(IS NULL vs ==X)·ORDER BY
+    (measured_at DESC) 정확성을 실 PG로 검증(hermetic 단위는 스칼라 래퍼만 봄).
     """
     if not asyncio.run(_pg_reachable()):
         pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
 
     uid = uuid.uuid4()
+    cid_x = uuid.uuid4()
+    cid_y = uuid.uuid4()
 
     async def _run() -> None:
         engine = create_async_engine(_settings().database_url, poolclass=NullPool)
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
-                # 전과목 스냅샷 2건(시간순)·개념별 1건(더 최신·무시 대상)
+                # 전과목 2건(시간순)·개념 X 2건(시간순)·개념 Y 1건
                 session.add_all(
                     [
                         AbilitySnapshot(
@@ -135,18 +137,38 @@ def test_get_current_theta_returns_latest_global_on_live_pg() -> None:
                         ),
                         AbilitySnapshot(
                             user_id=uid,
-                            concept_id=uuid.uuid4(),
+                            concept_id=cid_x,
                             theta=-3.0,
                             response_count=4,
+                            measured_at=datetime(2026, 3, 1, tzinfo=UTC),
+                        ),
+                        AbilitySnapshot(
+                            user_id=uid,
+                            concept_id=cid_x,
+                            theta=-1.0,
+                            response_count=6,
+                            measured_at=datetime(2026, 4, 1, tzinfo=UTC),
+                        ),
+                        AbilitySnapshot(
+                            user_id=uid,
+                            concept_id=cid_y,
+                            theta=0.9,
+                            response_count=5,
                             measured_at=datetime(2026, 3, 1, tzinfo=UTC),
                         ),
                     ]
                 )
                 await session.commit()
             async with sm() as session:
-                theta = await get_current_theta(session, uid)
-            # 최신 전과목 θ=1.8(개념별 -3.0은 더 최신이어도 무시·전과목 0.5는 더 옛날)
-            assert theta == pytest.approx(1.8)
+                global_theta = await get_current_theta(session, uid)
+                theta_x = await get_current_theta(session, uid, cid_x)
+                theta_y = await get_current_theta(session, uid, cid_y)
+            # 전과목: 최신 global 1.8(개념 행은 무시·전과목 0.5는 더 옛날)
+            assert global_theta == pytest.approx(1.8)
+            # 개념 X: 최신 X 행 -1.0(구 -3.0·전과목·Y 아님 — concept_id 필터+정렬)
+            assert theta_x == pytest.approx(-1.0)
+            # 개념 Y: 0.9(X와 분리 — concept_id 필터 정확성)
+            assert theta_y == pytest.approx(0.9)
         finally:
             await engine.dispose()
 
