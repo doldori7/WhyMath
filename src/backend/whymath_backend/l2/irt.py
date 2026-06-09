@@ -48,6 +48,16 @@ def probability_correct(theta: float, item: IrtItem) -> float:
     return 1.0 / (1.0 + math.exp(-item.discrimination * (theta - item.difficulty)))
 
 
+def theta_to_mastery_proxy(theta: float) -> float:
+    """IRT θ → [0,1] 숙달 프록시 — 중앙 난이도(b=0)·단위 변별도(a=1) 정답확률 logistic(θ).
+
+    `probability_correct(θ, IrtItem(difficulty=0, discrimination=1))`의 특수형(Rasch). θ를 BKT
+    숙달 P(L)과 *같은 [0,1] 척도*로 환산해 비교한다 — L2 진단(BKT↔IRT 교차검증)·L4 코칭 결정·
+    L5 능력 라벨이 공유하는 단일 출처(slice 83에 L4 `_mastery_proxy`·L2 중복 통합).
+    """
+    return 1.0 / (1.0 + math.exp(-theta))
+
+
 def estimate_ability(
     responses: list[tuple[IrtItem, bool]],
     *,
@@ -280,5 +290,6 @@ __all__ = [
     "probability_correct",
     "select_next_item",
     "select_weighted_item",
+    "theta_to_mastery_proxy",
     "total_information",
 ]

@@ -44,6 +44,7 @@ from whymath_backend.l2 import (
     get_current_mastery,
     get_current_theta,
     get_primary_concept_id,
+    theta_to_mastery_proxy,
 )
 from whymath_backend.l4 import (
     CoachingFocus,
@@ -58,7 +59,6 @@ from whymath_backend.l4 import (
     mastery_to_level,
     recommend_coaching_for_solution,
 )
-from whymath_backend.l4.metacognitive_trigger import _mastery_proxy
 from whymath_backend.l4.misconception import (
     InterventionDecision,
     MisconceptionMatch,
@@ -226,7 +226,7 @@ def _ability_level(bkt_mastery: float | None, theta: float | None) -> MasteryLev
     있으면 그 신호·둘 다면 평균→`mastery_to_level`. θ는 `_build_response_payload`에서 이미
     slice 76 게이트(`_server_theta_for`)를 통과한 값(신뢰 θ만)이라 여기선 추가 게이팅 불필요.
     """
-    proxy = _mastery_proxy(theta) if theta is not None else None
+    proxy = theta_to_mastery_proxy(theta) if theta is not None else None
     parts = [v for v in (bkt_mastery, proxy) if v is not None]
     if not parts:
         return None
