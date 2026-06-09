@@ -22,16 +22,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.l2.ability_estimation import compute_concept_abilities
+from whymath_backend.l2.irt import theta_to_mastery_proxy
 
 # BKT 숙달 P(L)과 IRT 능력 프록시(logistic θ)의 차가 이 임계를 넘으면 *불일치 신호*로 분기.
 _DIAGNOSIS_TOL = 0.2
 
 Agreement = Literal["agree", "irt_higher", "bkt_higher", "insufficient"]
-
-
-def theta_to_mastery_proxy(theta: float) -> float:
-    """IRT θ → [0,1] 숙달 프록시 — 중앙 난이도(b=0) 정답확률 logistic(θ). BKT 숙달과 비교용."""
-    return 1.0 / (1.0 + math.exp(-theta))
 
 
 def diagnosis_agreement(bkt_mastery: float | None, irt_proxy: float | None) -> Agreement:
@@ -142,5 +138,4 @@ __all__ = [
     "ConceptDiagnosis",
     "compute_concept_diagnoses",
     "diagnosis_agreement",
-    "theta_to_mastery_proxy",
 ]

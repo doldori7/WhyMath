@@ -43,7 +43,6 @@ from whymath_backend.l2.concept_diagnosis import (
     ConceptDiagnosis,
     compute_concept_diagnoses,
     diagnosis_agreement,
-    theta_to_mastery_proxy,
 )
 from whymath_backend.l2.irt import (
     IrtItem,
@@ -54,6 +53,7 @@ from whymath_backend.l2.irt import (
     item_information,
     select_next_item,
     select_weighted_item,
+    theta_to_mastery_proxy,
     total_information,
 )
 from whymath_backend.l2.item_calibration import calibrate_item_difficulties

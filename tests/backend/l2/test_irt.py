@@ -20,6 +20,7 @@ from whymath_backend.l2.irt import (
     probability_correct,
     select_next_item,
     select_weighted_item,
+    theta_to_mastery_proxy,
     total_information,
 )
 
@@ -78,6 +79,25 @@ class TestProbabilityCorrect:
         item = IrtItem(difficulty=0.0)
         assert 0.0 < probability_correct(-10.0, item) < 0.01
         assert 0.99 < probability_correct(10.0, item) < 1.0
+
+
+class TestThetaToMasteryProxy:
+    """θ → logistic [0,1] 숙달 프록시(중앙 0.5·±4 경계·단조)·probability_correct(b=0) 특수형."""
+
+    def test_logistic_values(self) -> None:
+        assert theta_to_mastery_proxy(0.0) == 0.5
+        assert round(theta_to_mastery_proxy(4.0), 4) == 0.982
+        assert round(theta_to_mastery_proxy(-4.0), 4) == 0.018
+
+    def test_monotonic(self) -> None:
+        assert theta_to_mastery_proxy(-1.0) < theta_to_mastery_proxy(1.0)
+
+    def test_equals_probability_correct_at_b0(self) -> None:
+        # b=0·a=1 정답확률과 동일(Rasch 특수형 — 통합 출처 정합).
+        for theta in (-2.0, 0.0, 1.5):
+            assert theta_to_mastery_proxy(theta) == probability_correct(
+                theta, IrtItem(difficulty=0.0)
+            )
 
 
 _ITEMS = [IrtItem(difficulty=0.0), IrtItem(difficulty=1.0), IrtItem(difficulty=-1.0)]

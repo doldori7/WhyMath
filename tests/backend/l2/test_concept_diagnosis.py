@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.l2.concept_diagnosis import (
     compute_concept_diagnoses,
     diagnosis_agreement,
-    theta_to_mastery_proxy,
 )
 
 _UID = uuid.uuid4()
@@ -42,18 +41,6 @@ class _QueueSession:
 
 def _session(bkt_rows: list[Any], irt_rows: list[Any]) -> AsyncSession:
     return cast(AsyncSession, _QueueSession([bkt_rows, irt_rows]))
-
-
-class TestThetaToMasteryProxy:
-    """θ → logistic [0,1] 프록시(중앙 0.5·단조 증가)."""
-
-    def test_logistic_values(self) -> None:
-        assert theta_to_mastery_proxy(0.0) == 0.5
-        assert round(theta_to_mastery_proxy(4.0), 4) == 0.982
-        assert round(theta_to_mastery_proxy(-4.0), 4) == 0.018
-
-    def test_monotonic(self) -> None:
-        assert theta_to_mastery_proxy(-1.0) < theta_to_mastery_proxy(1.0)
 
 
 class TestDiagnosisAgreement:

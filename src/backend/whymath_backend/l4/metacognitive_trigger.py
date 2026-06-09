@@ -11,16 +11,17 @@
 - 한쪽 신호만 있으면 교차검증 불가 → 추가 진단.
 
 레이어 경계 준수: L4는 L2(숙달·θ)를 *안다*. L5(api)·DB는 모른다 — 입력은 원시 수치(float)뿐.
-순수·결정론(외부 의존 0). 발화는 *답을 주지 않는* 메타인지 유도(CLAUDE.md 답 미루기 원칙).
+순수·결정론(L2 `irt.theta_to_mastery_proxy` 재사용 외 의존 없음). 발화는 *답을 주지 않는*
+메타인지 유도(CLAUDE.md 답 미루기 원칙).
 """
 
 from __future__ import annotations
 
-import math
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.l2.irt import theta_to_mastery_proxy
 from whymath_backend.l4.socratic.categories import SocraticCategory
 
 CoachingFocus = Literal["verify", "consolidate", "retrieval", "foundation", "advance", "diagnose"]
@@ -87,11 +88,6 @@ class CoachingTrigger(BaseModel):
     )
 
 
-def _mastery_proxy(theta: float) -> float:
-    """IRT θ → [0,1] 숙달 프록시 — 중앙 난이도(b=0) 정답확률 logistic(θ). BKT 숙달과 비교용."""
-    return 1.0 / (1.0 + math.exp(-theta))
-
-
 def recommend_coaching(
     bkt_mastery: float | None,
     irt_theta: float | None,
@@ -125,7 +121,7 @@ def recommend_coaching(
     if bkt_mastery is None or irt_theta is None:
         return _build("diagnose")
 
-    proxy = _mastery_proxy(irt_theta)
+    proxy = theta_to_mastery_proxy(irt_theta)
     diff = proxy - bkt_mastery
     if diff > discrepancy_tol:
         return _build("consolidate")
