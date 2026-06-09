@@ -453,7 +453,7 @@ class TestEndSession:
 
         개념별 θ 적재(slice 75)는 `TestSessionEndConceptSnapshots`·통합테스트가 검증 — 여기선
         전과목 캡처·단일 트랜잭션만 보려 `compute_concept_abilities`를 빈 리스트로 고정한다
-        (FakeSession은 단일 행셋만 반환해 전과목 2-튜플과 개념 5-튜플을 동시에 못 줌).
+        (FakeSession은 단일 행셋만 반환해 전과목 3-튜플과 개념 6-튜플을 동시에 못 줌).
         """
 
         async def _no_concepts(session: Any, user_id: Any) -> list[ConceptAbilityItem]:
@@ -463,9 +463,9 @@ class TestEndSession:
             "whymath_backend.api.me.compute_concept_abilities", _no_concepts
         )
         row = self._session_row(_UID, ended=False)
-        # FakeSession.execute(θ 쿼리) → (is_correct, difficulty) 행
+        # FakeSession.execute(θ 쿼리) → (is_correct, difficulty, irt_difficulty_b) 행
         client, fake = _client(
-            [(True, 3.0), (False, 3.0)], get_map={row.session_id: row}
+            [(True, 3.0, None), (False, 3.0, None)], get_map={row.session_id: row}
         )
         resp = client.patch(f"/v1/me/sessions/{row.session_id}/end")
         assert resp.status_code == 200
@@ -487,7 +487,7 @@ class TestEndSession:
     def test_idempotent_end_skips_snapshot(self) -> None:
         """이미 종료된 세션 재호출 → 채점 이력 있어도 스냅샷 미적재(멱등 트리거)."""
         row = self._session_row(_UID, ended=True)
-        client, fake = _client([(True, 3.0)], get_map={row.session_id: row})
+        client, fake = _client([(True, 3.0, None)], get_map={row.session_id: row})
         resp = client.patch(f"/v1/me/sessions/{row.session_id}/end")
         assert resp.status_code == 200
         assert not any(isinstance(a, AbilitySnapshot) for a in fake.added)
@@ -999,8 +999,9 @@ class TestMasteryCurve:
 class TestAbility:
     """slice L2-11: GET /v1/me/ability — 채점 풀이 이력에서 IRT θ 추정.
 
-    FakeSession._Result.all()이 (is_correct, difficulty_overall) 튜플 리스트를 반환(조인 쿼리
-    시뮬). 실제 JOIN/WHERE 정확성은 통합테스트가 검증.
+    FakeSession._Result.all()이 (is_correct, difficulty_overall, irt_difficulty_b) 튜플 리스트를
+    반환(조인 쿼리 시뮬). 실제 JOIN/WHERE 정확성은 통합테스트가 검증. slice 79: 보정 b 컬럼 추가
+    (여기선 None=휴리스틱 폴백 — 보정 b 소비는 L2 단위테스트가 검증).
     """
 
     def test_empty_zero_theta(self) -> None:
@@ -1020,32 +1021,33 @@ class TestAbility:
 
     def test_all_correct_upper_bound(self) -> None:
         """전부 정답 → θ 상한(4.0)·응답 수 반영."""
-        client, _ = _client([(True, 3.0), (True, 4.0)])
+        client, _ = _client([(True, 3.0, None), (True, 4.0, None)])
         body = client.get("/v1/me/ability").json()
         assert body["theta"] == 4.0
         assert body["response_count"] == 2
 
     def test_all_incorrect_lower_bound(self) -> None:
-        client, _ = _client([(False, 3.0), (False, 2.0)])
+        client, _ = _client([(False, 3.0, None), (False, 2.0, None)])
         assert client.get("/v1/me/ability").json()["theta"] == -4.0
 
     def test_correct_on_hard_higher_theta(self) -> None:
         """어려운 문항을 맞히면(쉬운 문항 맞힘보다) 능력 추정 높음."""
-        hard, _ = _client([(True, 5.0), (False, 3.0)])  # 어려움 정답·중간 오답
-        easy, _ = _client([(True, 1.0), (False, 3.0)])  # 쉬움 정답·중간 오답
+        # 어려움(5.0) 정답·중간(3.0) 오답 vs 쉬움(1.0) 정답·중간 오답
+        hard, _ = _client([(True, 5.0, None), (False, 3.0, None)])
+        easy, _ = _client([(True, 1.0, None), (False, 3.0, None)])
         theta_hard = hard.get("/v1/me/ability").json()["theta"]
         theta_easy = easy.get("/v1/me/ability").json()["theta"]
         assert theta_hard > theta_easy
 
     def test_skips_null_difficulty(self) -> None:
-        """difficulty_overall NULL 문항은 제외(추정에서 빠짐)."""
-        client, _ = _client([(True, 3.0), (True, None)])
+        """difficulty_overall NULL·보정 b 없는 문항은 제외(추정에서 빠짐)."""
+        client, _ = _client([(True, 3.0, None), (True, None, None)])
         body = client.get("/v1/me/ability").json()
         assert body["response_count"] == 1  # NULL 난이도 1건 제외
 
     def test_standard_error_and_confidence_interval(self) -> None:
         """혼합 응답(난이도3 1정답·1오답) → θ=0·SE=1/√0.5·대칭 95% CI(θ±1.96·SE)."""
-        client, _ = _client([(True, 3.0), (False, 3.0)])
+        client, _ = _client([(True, 3.0, None), (False, 3.0, None)])
         body = client.get("/v1/me/ability").json()
         assert body["theta"] == 0.0
         # 두 문항 b=0·θ=0 → 정보 2·0.25=0.5 → SE=1/√0.5≈1.41421
@@ -1056,8 +1058,8 @@ class TestAbility:
 
     def test_more_responses_smaller_standard_error(self) -> None:
         """응답이 많을수록 SE↓(측정 정밀도↑)."""
-        few, _ = _client([(True, 3.0), (False, 3.0)])
-        many, _ = _client([(True, 3.0), (False, 3.0)] * 4)
+        few, _ = _client([(True, 3.0, None), (False, 3.0, None)])
+        many, _ = _client([(True, 3.0, None), (False, 3.0, None)] * 4)
         se_few = few.get("/v1/me/ability").json()["standard_error"]
         se_many = many.get("/v1/me/ability").json()["standard_error"]
         assert se_many < se_few
@@ -1135,7 +1137,7 @@ class TestAbilitySnapshots:
 
     def test_capture_inserts_snapshot(self) -> None:
         """POST → 현재 θ 계산(난이도3 1정답1오답→θ0)·1행 적재·201 + 스키마 반환."""
-        client, fake = _client([(True, 3.0), (False, 3.0)])
+        client, fake = _client([(True, 3.0, None), (False, 3.0, None)])
         resp = client.post("/v1/me/ability/snapshots")
         assert resp.status_code == 201, resp.text
         body = resp.json()
@@ -1177,14 +1179,14 @@ class TestAbilitySnapshots:
     def test_capture_include_concepts_writes_per_concept(self) -> None:
         """slice 33: ?include_concepts=true → 전과목 1행 + 개념별 N행 적재(같은 시각)."""
         c1, c2 = uuid.uuid4(), uuid.uuid4()
-        # execute#1=전과목 attempt(is_correct,difficulty)·#2=개념별(concept_id,code,name,...)
+        # execute#1=전과목 attempt 행·#2=개념별 행(둘 다 끝에 irt_b 컬럼 추가)
         session = _QueueSession(
             [
-                _AQResult([(True, 3.0), (False, 3.0)]),
+                _AQResult([(True, 3.0, None), (False, 3.0, None)]),
                 _AQResult(
                     [
-                        (c1, "C1", "개념1", True, 3.0),
-                        (c2, "C2", "개념2", False, 3.0),
+                        (c1, "C1", "개념1", True, 3.0, None),
+                        (c2, "C2", "개념2", False, 3.0, None),
                     ]
                 ),
             ]
@@ -1220,8 +1222,9 @@ class TestAbilitySnapshots:
 class TestAbilityByConcept:
     """slice L2-18: GET /v1/me/ability/by-concept — 개념별 θ 분리 추정.
 
-    FakeSession._Result.all()이 (concept_id, code, name, is_correct, difficulty) 5튜플을 반환
-    (조인 시뮬). 그룹화·정렬·θ/SE 산출만 본다(실 JOIN/WHERE는 통합테스트).
+    FakeSession._Result.all()이 (concept_id, code, name, is_correct, difficulty, irt_difficulty_b)
+    6튜플을 반환(조인 시뮬). 그룹화·정렬·θ/SE 산출만 본다(실 JOIN/WHERE는 통합테스트). slice 79:
+    보정 b 컬럼 추가(None=휴리스틱 폴백).
     """
 
     def test_empty_returns_empty_list(self) -> None:
@@ -1238,8 +1241,8 @@ class TestAbilityByConcept:
         cid = uuid.uuid4()
         client, _ = _client(
             [
-                (cid, "TRIG-1", "삼각함수", True, 3.0),
-                (cid, "TRIG-1", "삼각함수", False, 3.0),
+                (cid, "TRIG-1", "삼각함수", True, 3.0, None),
+                (cid, "TRIG-1", "삼각함수", False, 3.0, None),
             ]
         )
         body = client.get("/v1/me/ability/by-concept").json()
@@ -1257,8 +1260,8 @@ class TestAbilityByConcept:
         c_weak, c_strong = uuid.uuid4(), uuid.uuid4()
         client, _ = _client(
             [
-                (c_strong, "S", "강점개념", True, 3.0),
-                (c_weak, "W", "약점개념", False, 3.0),
+                (c_strong, "S", "강점개념", True, 3.0, None),
+                (c_weak, "W", "약점개념", False, 3.0, None),
             ]
         )
         body = client.get("/v1/me/ability/by-concept").json()
@@ -1269,7 +1272,7 @@ class TestAbilityByConcept:
     def test_orphan_concept_null_meta(self) -> None:
         """concept 행 없는(orphan) 개념은 code·name null(LEFT JOIN)."""
         cid = uuid.uuid4()
-        client, _ = _client([(cid, None, None, True, 3.0)])
+        client, _ = _client([(cid, None, None, True, 3.0, None)])
         item = client.get("/v1/me/ability/by-concept").json()[0]
         assert item["concept_code"] is None
         assert item["concept_name"] is None

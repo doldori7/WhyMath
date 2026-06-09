@@ -302,6 +302,13 @@ class Problem(BaseModel):
         ge=1.0,
         le=5.0,
     )
+    irt_difficulty_b: float | None = Field(
+        default=None,
+        description=(
+            "JMLE 보정 문항 난이도 b(logit). 응답 데이터로 적합(l2.fit_jmle), 없으면 전문가 "
+            "난이도(difficulty_overall) 휴리스틱 폴백. logit 척도(1~5 아님)·범위 비제한."
+        ),
+    )
 
     # ===== 정답률·통계 =====
     historical_correct_rate: float | None = Field(
