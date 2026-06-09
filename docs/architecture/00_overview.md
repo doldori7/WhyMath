@@ -123,7 +123,7 @@ L7 → L6 → L5 → L4 → L3 → L2 → L1
 | Polya 엔진 | L4 | P0 | 교수학 코어 |
 | 소크라테스 프롬프트 | L4 | P0 | 코어 IP |
 | 오개념 카탈로그 | L4 | P1 | 30개 → 100개 |
-| Flutter 앱 | L5 | P0 | 모바일 우선 |
+| Flutter 앱 | L5 | P0 | 웹·패드 우선·모바일 동반 |
 | FastAPI 서버 | L5 | P0 | 오케스트레이터 |
 | 학교진도 모드 | L6 | P1 | Phase 2 |
 | 수능 모드 | L6 | P1 | Phase 2 |
@@ -151,7 +151,7 @@ WhyMath 아키텍처는 *서로 직교하는 두 축*으로 본다:
 
 | 배포 블록 | 실행 주체 | 담는 7계층 코드 | 핵심 스택 |
 |---|---|---|---|
-| **Client** | Flutter 학생앱 (단일 앱, 모드 분기) | L5 일부, L6/L7 UI | Flutter 3.x + Riverpod 2.x, MathLive |
+| **Client** | 웹(Next.js) 1급 + 패드·모바일(Flutter) 학생앱 (모드 분기) | L5 일부, L6/L7 UI | 웹: Next.js 15/React 19 · 앱: Flutter 3.x+Riverpod, MathLive |
 | **Backend** | FastAPI + uvicorn | L1 서비스·L2·L3·L4·L5 오케스트레이터·L6 모드 로직 | Python 3.12 + FastAPI |
 | **DB** | 다중 저장소 | L1·L2 자산의 영속 계층 | PostgreSQL 16 + TimescaleDB, Neo4j, ChromaDB(→ Qdrant 전환 검토), ClickHouse, Redis 7, S3/MinIO |
 | **ML** | 추론·검증 런타임 | L3 모델 호출, L3 도구 검증 | Claude Sonnet/Opus, Qwen3-Math(Phaiakes9 로컬), SymPy, OpenAI text-embedding-3-large |
