@@ -13,7 +13,7 @@ Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이�
     EventType·ExamType·GenerationType·LegalReviewStatus·LicenseType·MajorCategory·MentalPhase·
     NoteApp·Persona·QuestionFormat·RelationType·RequiredDepth·Resolution·ReviewStatus·
     SchoolType·SessionType·SignaturePattern·SocraticStrategy·SourceType·StepType·StudentIntent·
-    Subject·SubscriptionTier·TrackType·TurnRole·VisualType
+    Subject·SubscriptionTier·TrackType·TurnRole·VisualType·VisualizationStyle
   - problem(슬라이스 1): Condition·Problem·ProblemStep·ProblemRelation
   - provenance(슬라이스 2): ContentProvenance·GenerationLog
   - concept(슬라이스 3): Concept·ConceptEdge·ProblemConcept·ConceptFusion
@@ -87,6 +87,7 @@ from whymath_backend.schema.enums import (
     SubscriptionTier,
     TrackType,
     TurnRole,
+    VisualizationStyle,
     VisualType,
 )
 from whymath_backend.schema.problem import (
@@ -156,6 +157,7 @@ __all__ = [
     "TrackType",
     "TurnRole",
     "VisualType",
+    "VisualizationStyle",
     # problem
     "Condition",
     "Problem",

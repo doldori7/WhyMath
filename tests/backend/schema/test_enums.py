@@ -22,6 +22,7 @@ from whymath_backend.schema.enums import (
     SourceType,
     StepType,
     Subject,
+    VisualizationStyle,
     VisualType,
 )
 
@@ -35,6 +36,7 @@ _ALL_ENUMS: list[type[Enum]] = [
     SignaturePattern,
     Persona,
     VisualType,
+    VisualizationStyle,
     LicenseType,
     GenerationType,
     ReviewStatus,
@@ -178,6 +180,33 @@ class TestVisualType:
     def test_values_match_ddl_comment(self) -> None:
         """§3.1 visual_type_enum 주석(그래프/도형/표/좌표평면)."""
         assert {v.value for v in VisualType} == {"그래프", "도형", "표", "좌표평면"}
+
+
+class TestVisualizationStyle:
+    def test_values_are_pedagogical_forms(self) -> None:
+        """슬라이스 87: 교수학적 표현 양식 통제 어휘(16종·한글)."""
+        assert {v.value for v in VisualizationStyle} == {
+            "수직선",
+            "함수그래프",
+            "단위원",
+            "평면도형",
+            "입체도형",
+            "넓이모델",
+            "수형도",
+            "부등식영역",
+            "벡터도",
+            "점화도",
+            "통계차트",
+            "산점도",
+            "상자그림",
+            "분포곡선",
+            "접선도함수",
+            "확률시뮬레이션",
+        }
+
+    def test_count(self) -> None:
+        """양식은 정확히 16종(v1 통제 어휘 — 변경은 의도적 결정)."""
+        assert len(list(VisualizationStyle)) == 16
 
 
 # ──────────────────────────────────────────────────────────────────────
