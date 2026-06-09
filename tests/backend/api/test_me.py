@@ -19,8 +19,6 @@ from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api.me import (
     ConceptAbilityItem,
     _add_ability_snapshot_if_attempts,
-    _diagnosis_agreement,
-    _theta_to_mastery_proxy,
     _weak_concept_weights,
 )
 from whymath_backend.app import create_app
@@ -1479,33 +1477,6 @@ class TestWeakConceptWeights:
         c = uuid.uuid4()
         # p1 약점·p2 매핑 없음 → [2.0, 1.0] 순서 보존
         assert _weak_concept_weights([p1, p2], {p1: {c}}, {c: 0.0}) == [2.0, 1.0]
-
-
-class TestDiagnosisHelpers:
-    """slice L2-19: `_theta_to_mastery_proxy`·`_diagnosis_agreement` 순수 헬퍼."""
-
-    def test_proxy_logistic(self) -> None:
-        assert _theta_to_mastery_proxy(0.0) == 0.5
-        assert round(_theta_to_mastery_proxy(4.0), 4) == 0.982
-        assert round(_theta_to_mastery_proxy(-4.0), 4) == 0.018
-        # 단조 증가
-        assert _theta_to_mastery_proxy(-1.0) < _theta_to_mastery_proxy(1.0)
-
-    def test_agreement_insufficient_when_missing(self) -> None:
-        assert _diagnosis_agreement(None, 0.5) == "insufficient"
-        assert _diagnosis_agreement(0.5, None) == "insufficient"
-        assert _diagnosis_agreement(None, None) == "insufficient"
-
-    def test_agreement_agree_within_tol(self) -> None:
-        assert _diagnosis_agreement(0.5, 0.5) == "agree"
-        assert _diagnosis_agreement(0.5, 0.65) == "agree"  # 차 0.15 ≤ 0.2
-
-    def test_agreement_irt_higher(self) -> None:
-        # IRT 프록시가 BKT보다 tol 초과로 높음(맞히나 BKT는 미숙달)
-        assert _diagnosis_agreement(0.1, 0.9) == "irt_higher"
-
-    def test_agreement_bkt_higher(self) -> None:
-        assert _diagnosis_agreement(0.9, 0.1) == "bkt_higher"
 
 
 def _diagnosis_client(mastery_rows: list[Any], irt_rows: list[Any]) -> TestClient:

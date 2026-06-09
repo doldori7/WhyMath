@@ -38,6 +38,13 @@ from whymath_backend.l2.bkt import (
     probability_correct,
     update_mastery,
 )
+from whymath_backend.l2.concept_diagnosis import (
+    Agreement,
+    ConceptDiagnosis,
+    compute_concept_diagnoses,
+    diagnosis_agreement,
+    theta_to_mastery_proxy,
+)
 from whymath_backend.l2.irt import (
     IrtItem,
     ability_standard_error,
@@ -62,9 +69,11 @@ from whymath_backend.l2.mastery_tracking import (
 __all__ = [
     "DEFAULT_BKT_PARAMETERS",
     "AbilityReading",
+    "Agreement",
     "BktModel",
     "BktParameters",
     "ConceptAbilityItem",
+    "ConceptDiagnosis",
     "IrtItem",
     "MasteryRecord",
     "ability_standard_error",
@@ -72,7 +81,9 @@ __all__ = [
     "apply_learning",
     "calibrate_item_difficulties",
     "compute_concept_abilities",
+    "compute_concept_diagnoses",
     "compute_mastery_record",
+    "diagnosis_agreement",
     "difficulty_to_logit",
     "estimate_ability",
     "estimate_difficulty",
@@ -90,6 +101,7 @@ __all__ = [
     "record_attempt_mastery",
     "record_problem_attempt_mastery",
     "resolve_item_difficulty_b",
+    "theta_to_mastery_proxy",
     "total_information",
     "update_mastery",
 ]
