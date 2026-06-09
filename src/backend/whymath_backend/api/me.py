@@ -79,10 +79,7 @@ from whymath_backend.l2.irt import (
     estimate_ability,
     select_weighted_item,
 )
-from whymath_backend.l2.mastery_tracking import (
-    _ASSESSED_ROLES,
-    record_problem_attempt_mastery,
-)
+from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
@@ -92,7 +89,7 @@ from whymath_backend.schema.assessment import (
 )
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
-from whymath_backend.schema.enums import AuditResourceType
+from whymath_backend.schema.enums import ASSESSED_ROLES, AuditResourceType
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
 
@@ -1081,8 +1078,8 @@ _TARGET_SE = 0.3
 # 곱하는 가중치를 키운다. weight = 1 + BOOST·(1 - 최저숙달). BOOST=1.0이면 완전 미숙달(숙달 0)
 # 문항은 가중 2배·완전 숙달(1.0)은 1배. 정책 상수(모드별 차등은 후속).
 _WEAK_CONCEPT_BOOST = 1.0
-# 약점 가중 개념 역할(PRIMARY/TESTED)은 `l2.mastery_tracking._ASSESSED_ROLES` import(BKT·IRT와
-# 동일 집합·단일 출처 — slice 82). 문제가 *평가하는* 개념만(SUPPORTING 제외).
+# 약점 가중 개념 역할은 `schema.enums.ASSESSED_ROLES`(PRIMARY/TESTED·BKT·IRT와 동일 집합·단일
+# 출처 — slice 84). 문제가 *평가하는* 개념만(SUPPORTING 제외).
 # slice 17: ?prioritize_weak_concepts — 기본 false(slice 12~15 동작 보존). true면 BKT 약점
 # 개념 우선(개념 숙달 스냅샷·후보 문항 개념 매핑을 추가 조회해 가중).
 PrioritizeWeakConcepts = Annotated[
@@ -1233,7 +1230,7 @@ async def recommend_next_problem(
         }
         pc_stmt = select(ProblemConcept.problem_id, ProblemConcept.concept_id).where(
             ProblemConcept.problem_id.in_(candidate_ids),
-            ProblemConcept.role.in_(_ASSESSED_ROLES),
+            ProblemConcept.role.in_(ASSESSED_ROLES),
         )
         problem_concepts: dict[uuid.UUID, set[uuid.UUID]] = {}
         for pid, cid in (await session.execute(pc_stmt)).all():

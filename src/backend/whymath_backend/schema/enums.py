@@ -354,6 +354,12 @@ class ConceptRole(str, Enum):
     """평가 대상 개념 — 이 문제로 이해도를 측정하는 개념."""
 
 
+# 문제가 *평가하는* 개념 역할(PRIMARY·TESTED) — BKT 숙달 갱신·IRT θ 추정·약점 가중의 단일
+# 대상 집합(보조 SUPPORTING·암묵 IMPLICIT 제외). L2(mastery_tracking·ability_estimation·진단)·
+# L5(me)가 공유하는 단일 출처(slice 84에 분산 정의 통합).
+ASSESSED_ROLES: tuple[ConceptRole, ...] = (ConceptRole.PRIMARY, ConceptRole.TESTED)
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 학생 학적·트랙 (§5.1 user_profile 인라인 DDL §14.3 school_type_enum — 슬라이스 4)
 # ──────────────────────────────────────────────────────────────────────────

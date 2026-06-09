@@ -28,13 +28,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.db.models.concept import ProblemConcept
 from whymath_backend.l2.bkt import BktModel
-from whymath_backend.schema.enums import ConceptRole
+from whymath_backend.schema.enums import ASSESSED_ROLES, ConceptRole
 
-# slice 3: 채점된 풀이 정/오답이 *직접 평가*하는 개념 역할 — PRIMARY(주된 개념)·TESTED(평가
-# 대상). SUPPORTING(계산 부수)·IMPLICIT(무의식 사용)는 정/오답이 그 개념 숙달의 직접 증거가
-# 아니라 제외(오답이 보조 개념 탓일 수도·정답이 보조 개념 숙달을 확증하지 않음). 후속: role/
-# relevance 가중 부분 크레딧.
-_ASSESSED_ROLES: tuple[ConceptRole, ...] = (ConceptRole.PRIMARY, ConceptRole.TESTED)
+# slice 3: 채점된 풀이 정/오답이 *직접 평가*하는 개념 역할은 `ASSESSED_ROLES`(PRIMARY·TESTED·
+# `schema.enums` 단일 출처). SUPPORTING(계산 부수)·IMPLICIT(무의식 사용)는 정/오답이 그 개념
+# 숙달의 직접 증거가 아니라 제외(오답이 보조 개념 탓일 수도·정답이 보조 개념 숙달을 확증 못함).
 
 # confidence v1 휴리스틱: 표본 n개에서 `n/(n+HALFLIFE)` — 관측이 쌓일수록 측정 신뢰↑.
 # n=5에서 0.5·n=10에서 ≈0.67. BKT는 신뢰도를 직접 주지 않으므로 표본 크기로 근사(후속:
@@ -185,7 +183,7 @@ async def record_problem_attempt_mastery(
     *,
     model: BktModel | None = None,
     measured_at: datetime | None = None,
-    assessed_roles: Sequence[ConceptRole] = _ASSESSED_ROLES,
+    assessed_roles: Sequence[ConceptRole] = ASSESSED_ROLES,
 ) -> list[ConceptMasteryHistory]:
     """채점된 풀이(정/오답)를 문제가 평가하는 *모든 개념*의 숙달 갱신으로 전파 — 풀이 채점
     파이프라인의 자동 결선 진입점.
