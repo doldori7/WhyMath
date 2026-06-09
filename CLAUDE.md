@@ -60,7 +60,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 
 | 계층 | 스택 | 비고 |
 |---|---|---|
-| 모바일 | Flutter 3.x + Riverpod 2.x | Atlas Odyssey·BeatBuddy 자산 |
+| 클라이언트(웹·패드 우선·모바일 동반) | Flutter 3.x + Riverpod 2.x | 단일 앱·크로스플랫폼. 웹·패드 1급·모바일=접근성/동반 (PRD §6.3·8.2, MEMORY 슬라이스 85). Atlas Odyssey·BeatBuddy 자산 |
 | 수식 입력 | MathLive | 학생 수식 입력 표준 |
 | 백엔드 | Python 3.12 + FastAPI + uvicorn | AVAC 자산 |
 | RDB | PostgreSQL 16 + TimescaleDB (시계열) | AVAC 자산 |
