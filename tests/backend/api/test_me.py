@@ -1068,8 +1068,9 @@ class TestAbility:
 class TestAbilityHistory:
     """slice L2-28: GET /v1/me/ability/history — θ 성장 곡선(시간 재생).
 
-    FakeSession._Result.all()이 (created_at, is_correct, difficulty) 튜플(시간 오름차순)을
-    반환. 누적 재생·시점 방출만 본다(실 ORDER BY는 통합테스트).
+    FakeSession._Result.all()이 (created_at, is_correct, difficulty, irt_difficulty_b) 튜플(시간
+    오름차순)을 반환. 누적 재생·시점 방출만 본다(실 ORDER BY는 통합테스트). slice 81: 보정 b 컬럼
+    추가(None=휴리스틱 폴백).
     """
 
     @staticmethod
@@ -1089,9 +1090,9 @@ class TestAbilityHistory:
         """1오답→θ-4, +1정답→θ0, +1정답→θ>0. response_count 1·2·3·as_of 보존."""
         client, _ = _client(
             [
-                (self._ts(1), False, 3.0),
-                (self._ts(2), True, 3.0),
-                (self._ts(3), True, 3.0),
+                (self._ts(1), False, 3.0, None),
+                (self._ts(2), True, 3.0, None),
+                (self._ts(3), True, 3.0, None),
             ]
         )
         body = client.get("/v1/me/ability/history").json()
@@ -1105,9 +1106,9 @@ class TestAbilityHistory:
         """?limit=1 → 끝(최근) 1개 지점만."""
         client, _ = _client(
             [
-                (self._ts(1), False, 3.0),
-                (self._ts(2), True, 3.0),
-                (self._ts(3), True, 3.0),
+                (self._ts(1), False, 3.0, None),
+                (self._ts(2), True, 3.0, None),
+                (self._ts(3), True, 3.0, None),
             ]
         )
         body = client.get("/v1/me/ability/history?limit=1").json()
@@ -1115,10 +1116,20 @@ class TestAbilityHistory:
         assert body[0]["response_count"] == 3  # 마지막 지점
 
     def test_standard_error_present(self) -> None:
-        client, _ = _client([(self._ts(1), True, 3.0), (self._ts(2), False, 3.0)])
+        client, _ = _client(
+            [(self._ts(1), True, 3.0, None), (self._ts(2), False, 3.0, None)]
+        )
         body = client.get("/v1/me/ability/history").json()
         # 응답 있으니 SE 유한(측정 가능)
         assert all(p["standard_error"] is not None for p in body)
+
+    def test_skips_attempt_without_b_source(self) -> None:
+        """slice 81: 난이도·보정 b 둘 다 없는 풀이는 θ 시점 생성에서 제외."""
+        client, _ = _client(
+            [(self._ts(1), True, 3.0, None), (self._ts(2), True, None, None)]
+        )
+        body = client.get("/v1/me/ability/history").json()
+        assert len(body) == 1  # None-b 풀이 제외 → 시점 1개
 
 
 class TestAbilitySnapshots:
@@ -1314,7 +1325,9 @@ class TestNextProblem:
         session = _QueueSession(
             [
                 _AQResult([]),
-                _AQResult([(pid_easy, 2.0), (pid_mid, 3.0), (pid_hard, 5.0)]),
+                _AQResult(
+                    [(pid_easy, 2.0, None), (pid_mid, 3.0, None), (pid_hard, 5.0, None)]
+                ),
             ]
         )
         client = _attempts_client(session)
@@ -1323,12 +1336,47 @@ class TestNextProblem:
         assert body["difficulty"] == 3.0
         assert body["theta"] == 0.0
 
+    def test_uses_calibrated_b_over_heuristic(self) -> None:
+        """slice 81: 후보 선택이 보정 b(irt_difficulty_b) 우선 — θ=0에서 보정 b=0 문항 선택.
+
+        A: 난이도 5(휴리스틱 b=2)이나 보정 b=0 · B: 난이도 3(휴리스틱 b=0)이나 보정 b=2.
+        휴리스틱이면 B(난이도3→b0)가 θ=0 정보량 최대지만, 보정 b를 쓰면 A(b=0)가 선택된다.
+        """
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([]),  # 이력 없음 → θ=0
+                _AQResult([(pid_a, 5.0, 0.0), (pid_b, 3.0, 2.0)]),
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["theta"] == 0.0
+        assert body["problem_id"] == str(pid_a)  # 보정 b=0 → θ 근접(휴리스틱이면 pid_b)
+
+    def test_skips_attempt_without_b_source(self) -> None:
+        """slice 81: 난이도·보정 b 둘 다 없는 풀이는 θ 추정에서 제외(θ=0)."""
+        cand = uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([(uuid.uuid4(), True, None, None)]),  # b 소스 없음 → 제외
+                _AQResult([(cand, 3.0, None)]),
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["theta"] == 0.0  # 유효 응답 0 → θ=0
+        assert body["problem_id"] == str(cand)
+
     def test_high_theta_picks_harder(self) -> None:
         """전부 정답 → θ 상한(4.0). 난이도 3·5 후보 중 b=2(난이도 5)가 정보량 최대."""
         pid_mid, pid_hard = uuid.uuid4(), uuid.uuid4()
-        attempts = [(uuid.uuid4(), True, 5.0), (uuid.uuid4(), True, 4.0)]
+        attempts = [(uuid.uuid4(), True, 5.0, None), (uuid.uuid4(), True, 4.0, None)]
         session = _QueueSession(
-            [_AQResult(attempts), _AQResult([(pid_mid, 3.0), (pid_hard, 5.0)])]
+            [
+                _AQResult(attempts),
+                _AQResult([(pid_mid, 3.0, None), (pid_hard, 5.0, None)]),
+            ]
         )
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem").json()
@@ -1341,9 +1389,9 @@ class TestNextProblem:
 
     def test_measurement_sufficient_when_many_responses(self) -> None:
         """난이도3(b=0) 46건 절반 정답 → θ=0·SE=2/√46≈0.295 ≤ 0.3 → 중단 권고."""
-        attempts = [(uuid.uuid4(), i % 2 == 0, 3.0) for i in range(46)]
+        attempts = [(uuid.uuid4(), i % 2 == 0, 3.0, None) for i in range(46)]
         cand = uuid.uuid4()
-        session = _QueueSession([_AQResult(attempts), _AQResult([(cand, 3.0)])])
+        session = _QueueSession([_AQResult(attempts), _AQResult([(cand, 3.0, None)])])
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem").json()
         assert body["theta"] == 0.0
@@ -1355,7 +1403,7 @@ class TestNextProblem:
     def test_no_responses_se_null_not_sufficient(self) -> None:
         """응답 없음 → SE null·measurement_sufficient=False(측정 불가)."""
         cand = uuid.uuid4()
-        session = _QueueSession([_AQResult([]), _AQResult([(cand, 3.0)])])
+        session = _QueueSession([_AQResult([]), _AQResult([(cand, 3.0, None)])])
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem").json()
         assert body["standard_error"] is None
@@ -1372,7 +1420,7 @@ class TestNextProblem:
         session = _QueueSession(
             [
                 _AQResult([]),  # 채점 이력 없음 → θ=0
-                _AQResult([(pid_a, 3.0), (pid_b, 3.0)]),  # 동일 난이도(b=0)
+                _AQResult([(pid_a, 3.0, None), (pid_b, 3.0, None)]),  # 동일 난이도(b=0)
                 _AQResult([(c_strong, 1.0), (c_weak, 0.0)]),  # 숙달: 강·약
                 _AQResult([(pid_a, c_strong), (pid_b, c_weak)]),  # 개념 매핑
             ]
@@ -1387,7 +1435,7 @@ class TestNextProblem:
         """기본(flag 미지정) → 가중 쿼리 없이 동률은 낮은 인덱스(slice 12 동작 보존)."""
         pid_a, pid_b = uuid.uuid4(), uuid.uuid4()
         session = _QueueSession(
-            [_AQResult([]), _AQResult([(pid_a, 3.0), (pid_b, 3.0)])]
+            [_AQResult([]), _AQResult([(pid_a, 3.0, None), (pid_b, 3.0, None)])]
         )
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem").json()
@@ -1471,7 +1519,8 @@ class TestConceptDiagnosis:
     """slice L2-19: GET /v1/me/diagnosis/concepts — BKT↔IRT 교차검증.
 
     쿼리 2회: ①BKT 숙달 스냅샷(concept_id,code,name,mastery) ②개념별 IRT
-    (concept_id,code,name,is_correct,difficulty). 그룹화·합집합·신호 분류만 본다.
+    (concept_id,code,name,is_correct,difficulty,irt_difficulty_b). 그룹화·합집합·신호 분류만 본다.
+    slice 81: IRT 행에 보정 b 컬럼 추가(None=휴리스틱 폴백).
     """
 
     def test_empty_returns_empty(self) -> None:
@@ -1492,7 +1541,7 @@ class TestConceptDiagnosis:
         cid = uuid.uuid4()
         client = _diagnosis_client(
             [(cid, "C", "개념", 0.5)],
-            [(cid, "C", "개념", True, 3.0), (cid, "C", "개념", False, 3.0)],
+            [(cid, "C", "개념", True, 3.0, None), (cid, "C", "개념", False, 3.0, None)],
         )
         body = client.get("/v1/me/diagnosis/concepts").json()
         assert len(body) == 1
@@ -1512,7 +1561,7 @@ class TestConceptDiagnosis:
         """BKT 0.1인데 전부 정답(θ=4·프록시≈0.98) → irt_higher·코칭 consolidate."""
         cid = uuid.uuid4()
         client = _diagnosis_client(
-            [(cid, "C", "개념", 0.1)], [(cid, "C", "개념", True, 3.0)]
+            [(cid, "C", "개념", 0.1)], [(cid, "C", "개념", True, 3.0, None)]
         )
         item = client.get("/v1/me/diagnosis/concepts").json()[0]
         assert item["agreement"] == "irt_higher"
@@ -1525,7 +1574,7 @@ class TestConceptDiagnosis:
         """BKT 0.9인데 전부 오답(θ=-4·프록시≈0.02) → bkt_higher·코칭 retrieval."""
         cid = uuid.uuid4()
         client = _diagnosis_client(
-            [(cid, "C", "개념", 0.9)], [(cid, "C", "개념", False, 3.0)]
+            [(cid, "C", "개념", 0.9)], [(cid, "C", "개념", False, 3.0, None)]
         )
         item = client.get("/v1/me/diagnosis/concepts").json()[0]
         assert item["agreement"] == "bkt_higher"
@@ -1546,10 +1595,21 @@ class TestConceptDiagnosis:
     def test_irt_only_concept_insufficient(self) -> None:
         """BKT 숙달 없는 개념(IRT만) → bkt null·insufficient."""
         cid = uuid.uuid4()
-        client = _diagnosis_client([], [(cid, "C", "개념", True, 3.0)])
+        client = _diagnosis_client([], [(cid, "C", "개념", True, 3.0, None)])
         item = client.get("/v1/me/diagnosis/concepts").json()[0]
         assert item["bkt_mastery"] is None
         assert item["irt_theta"] == 4.0
+        assert item["agreement"] == "insufficient"
+
+    def test_irt_row_without_b_source_skipped(self) -> None:
+        """slice 81: IRT 행의 난이도·보정 b 둘 다 없으면 제외 — 그 개념 IRT 신호 없음."""
+        cid = uuid.uuid4()
+        client = _diagnosis_client(
+            [(cid, "C", "개념", 0.6)], [(cid, "C", "개념", True, None, None)]
+        )
+        item = client.get("/v1/me/diagnosis/concepts").json()[0]
+        assert item["irt_theta"] is None  # 유일 IRT 행 제외 → θ 없음
+        assert item["response_count"] == 0
         assert item["agreement"] == "insufficient"
 
     def test_sorted_weakest_first(self) -> None:
@@ -1582,7 +1642,10 @@ class TestConceptDiagnosis:
         c_insuff, c_agree = uuid.uuid4(), uuid.uuid4()
         client = _diagnosis_client(
             [(c_insuff, "I", "불충분", 0.3), (c_agree, "A", "합의", 0.5)],
-            [(c_agree, "A", "합의", True, 3.0), (c_agree, "A", "합의", False, 3.0)],
+            [
+                (c_agree, "A", "합의", True, 3.0, None),
+                (c_agree, "A", "합의", False, 3.0, None),
+            ],
         )
         body = client.get("/v1/me/diagnosis/concepts?agreement=insufficient").json()
         assert [i["concept_id"] for i in body] == [str(c_insuff)]
@@ -1593,7 +1656,10 @@ class TestConceptDiagnosis:
         c_insuff, c_agree = uuid.uuid4(), uuid.uuid4()
         client = _diagnosis_client(
             [(c_insuff, "I", "불충분", 0.3), (c_agree, "A", "합의", 0.5)],
-            [(c_agree, "A", "합의", True, 3.0), (c_agree, "A", "합의", False, 3.0)],
+            [
+                (c_agree, "A", "합의", True, 3.0, None),
+                (c_agree, "A", "합의", False, 3.0, None),
+            ],
         )
         body = client.get(
             "/v1/me/diagnosis/concepts?agreement=insufficient&agreement=agree"
@@ -1637,9 +1703,9 @@ class TestDiagnosisSummary:
         client = _diagnosis_client(
             [(c1, "I", "불충분", 0.3), (c2, "A", "합의", 0.5), (c3, "H", "높θ", 0.1)],
             [
-                (c2, "A", "합의", True, 3.0),
-                (c2, "A", "합의", False, 3.0),
-                (c3, "H", "높θ", True, 3.0),
+                (c2, "A", "합의", True, 3.0, None),
+                (c2, "A", "합의", False, 3.0, None),
+                (c3, "H", "높θ", True, 3.0, None),
             ],
         )
         body = client.get("/v1/me/diagnosis/summary").json()
