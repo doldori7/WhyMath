@@ -20,7 +20,7 @@ from whymath_backend.db.models.activity import ProblemAttempt
 from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.l2.irt import IrtItem, ability_standard_error, estimate_ability
-from whymath_backend.l2.mastery_tracking import _ASSESSED_ROLES
+from whymath_backend.schema.enums import ASSESSED_ROLES
 
 _DIFFICULTY_MIDPOINT = 3.0  # Problem.difficulty_overall(1~5)의 중앙 → logit 0
 
@@ -114,7 +114,7 @@ async def compute_concept_abilities(
         .where(
             ProblemAttempt.user_id == user_id,
             ProblemAttempt.is_correct.isnot(None),
-            ProblemConcept.role.in_(_ASSESSED_ROLES),
+            ProblemConcept.role.in_(ASSESSED_ROLES),
             # 보정 b 또는 전문가 난이도 중 하나라도 있어야 b 결정 가능(보정 b만 있는 문항도 포함).
             Problem.irt_difficulty_b.isnot(None) | Problem.difficulty_overall.isnot(None),
         )
