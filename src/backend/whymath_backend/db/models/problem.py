@@ -166,6 +166,11 @@ class Problem(Base):
     diff_visual: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
     diff_integration: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
 
+    # IRT 보정 난이도 b(logit) — JMLE(`l2.fit_jmle`)가 응답 데이터로 적합한 문항 난이도.
+    # NULL=미보정 → θ 추정은 `difficulty_overall` 휴리스틱(`difficulty_to_logit`)으로 폴백.
+    # logit 척도(전문가 1~5 라벨과 다름)·a(변별도)는 1PL 고정이라 미저장.
+    irt_difficulty_b: Mapped[float | None] = mapped_column(sa.Float)
+
     # ===== 정답률·통계 =====
     historical_correct_rate: Mapped[float | None] = mapped_column(sa.Numeric(5, 4))
     rate_top_grade: Mapped[float | None] = mapped_column(sa.Numeric(5, 4))

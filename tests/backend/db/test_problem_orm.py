@@ -195,6 +195,17 @@ def test_problem_roundtrip_preserves_core_fields() -> None:
     assert back.keywords == s.keywords
 
 
+def test_problem_irt_difficulty_b_in_ddl_and_roundtrip() -> None:
+    """slice 79: irt_difficulty_b(보정 b)가 PG DDL(FLOAT)에 있고 schema↔ORM 왕복을 보존한다."""
+    ddl = _pg_ddl(OrmProblem.__table__)
+    assert "irt_difficulty_b" in ddl
+    assert "FLOAT" in ddl  # Numeric(전문가 난이도)과 달리 Float
+    s = _valid_schema_problem().model_copy(update={"irt_difficulty_b": -1.75})
+    orm = OrmProblem.from_schema(s)
+    assert orm.irt_difficulty_b == -1.75
+    assert orm.to_schema().irt_difficulty_b == -1.75  # 역변환도 보존
+
+
 def test_problem_step_roundtrip() -> None:
     """ProblemStep schema↔ORM 변환이 핵심 필드를 보존한다."""
     pid = uuid.uuid4()

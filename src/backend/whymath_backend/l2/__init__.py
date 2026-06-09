@@ -21,6 +21,7 @@ from whymath_backend.l2.ability_estimation import (
     compute_concept_abilities,
     difficulty_to_logit,
     estimate_global_ability,
+    resolve_item_difficulty_b,
 )
 from whymath_backend.l2.ability_tracking import (
     AbilityReading,
@@ -48,6 +49,7 @@ from whymath_backend.l2.irt import (
     select_weighted_item,
     total_information,
 )
+from whymath_backend.l2.item_calibration import calibrate_item_difficulties
 from whymath_backend.l2.mastery_tracking import (
     MasteryRecord,
     compute_mastery_record,
@@ -68,6 +70,7 @@ __all__ = [
     "ability_standard_error",
     "apply_forgetting",
     "apply_learning",
+    "calibrate_item_difficulties",
     "compute_concept_abilities",
     "compute_mastery_record",
     "difficulty_to_logit",
@@ -86,6 +89,7 @@ __all__ = [
     "probability_correct",
     "record_attempt_mastery",
     "record_problem_attempt_mastery",
+    "resolve_item_difficulty_b",
     "total_information",
     "update_mastery",
 ]
