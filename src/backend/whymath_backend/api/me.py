@@ -70,6 +70,7 @@ from whymath_backend.l2.ability_estimation import (
     compute_concept_abilities,
     difficulty_to_logit,
     estimate_global_ability,
+    resolve_item_difficulty_b,
 )
 from whymath_backend.l2.irt import (
     IrtItem,
@@ -885,22 +886,24 @@ async def get_my_ability_history(
             ProblemAttempt.created_at,
             ProblemAttempt.is_correct,
             Problem.difficulty_overall,
+            Problem.irt_difficulty_b,
         )
         .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
         .where(
             ProblemAttempt.user_id == user.user_id,
             ProblemAttempt.is_correct.isnot(None),
             ProblemAttempt.created_at.isnot(None),
-            Problem.difficulty_overall.isnot(None),
+            Problem.irt_difficulty_b.isnot(None) | Problem.difficulty_overall.isnot(None),
         )
         .order_by(ProblemAttempt.created_at.asc())
     )
     responses: list[tuple[IrtItem, bool]] = []
     points: list[AbilityHistoryPoint] = []
-    for created_at, is_correct, difficulty in (await session.execute(stmt)).all():
-        responses.append(
-            (IrtItem(difficulty=difficulty_to_logit(float(difficulty))), bool(is_correct))
-        )
+    for created_at, is_correct, difficulty, irt_b in (await session.execute(stmt)).all():
+        b = resolve_item_difficulty_b(irt_b, difficulty)
+        if b is None:
+            continue
+        responses.append((IrtItem(difficulty=b), bool(is_correct)))
         theta = estimate_ability(responses)
         se = ability_standard_error(theta, [it for it, _ in responses])
         points.append(
@@ -1022,6 +1025,7 @@ async def _compute_concept_diagnosis(
             Concept.name_ko,
             ProblemAttempt.is_correct,
             Problem.difficulty_overall,
+            Problem.irt_difficulty_b,
         )
         .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
         .join(ProblemConcept, ProblemConcept.problem_id == Problem.problem_id)
@@ -1030,13 +1034,15 @@ async def _compute_concept_diagnosis(
             ProblemAttempt.user_id == user_id,
             ProblemAttempt.is_correct.isnot(None),
             ProblemConcept.role.in_(_ASSESSED_ROLES),
-            Problem.difficulty_overall.isnot(None),
+            Problem.irt_difficulty_b.isnot(None) | Problem.difficulty_overall.isnot(None),
         )
     )
     grouped: dict[uuid.UUID, list[tuple[IrtItem, bool]]] = {}
-    for cid, code, name, is_correct, difficulty in (await session.execute(irt_stmt)).all():
-        item = IrtItem(difficulty=difficulty_to_logit(float(difficulty)))
-        grouped.setdefault(cid, []).append((item, bool(is_correct)))
+    for cid, code, name, is_correct, difficulty, irt_b in (await session.execute(irt_stmt)).all():
+        b = resolve_item_difficulty_b(irt_b, difficulty)
+        if b is None:
+            continue
+        grouped.setdefault(cid, []).append((IrtItem(difficulty=b), bool(is_correct)))
         meta.setdefault(cid, (code, name))
 
     items = []
@@ -1230,7 +1236,8 @@ async def recommend_next_problem(
     ① 채점 풀이 이력으로 θ 추정(slice 11과 동일 로직)·이미 푼 문항 id 수집. ② 난이도 라벨
     (difficulty_overall) 있는 *미응답* 문항을 θ 근방(|b-θ| 최소)으로 SQL 선별(`_CANDIDATE_POOL_SIZE`
     개)·`select_weighted_item`(slice 16)으로 (가중)정보량 최대 1개 선택. 없으면 problem_id=null.
-    난이도→b 매핑은 slice 11의 `difficulty_to_logit`(보정 b는 fit_jmle 후속).
+    난이도→b는 보정 b(`irt_difficulty_b`·slice 79 JMLE) 우선·없으면 `difficulty_to_logit`
+    휴리스틱 폴백(`resolve_item_difficulty_b`·SQL은 COALESCE).
 
     CAT 중단 규칙(slice 15): *응답한 문항* 기준 표준오차 SE(slice 13)와 `measurement_sufficient`
     (SE≤`_TARGET_SE`)을 함께 반환 — 호출자는 충분하면 검사를 멈추고 아니면 추천 문항을 출제한다
@@ -1247,6 +1254,7 @@ async def recommend_next_problem(
             ProblemAttempt.problem_id,
             ProblemAttempt.is_correct,
             Problem.difficulty_overall,
+            Problem.irt_difficulty_b,
         )
         .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
         .where(
@@ -1255,13 +1263,13 @@ async def recommend_next_problem(
         )
     )
     attempt_rows = (await session.execute(attempt_stmt)).all()
-    responses = [
-        (IrtItem(difficulty=difficulty_to_logit(float(difficulty))), bool(is_correct))
-        for _pid, is_correct, difficulty in attempt_rows
-        if difficulty is not None
-    ]
+    responses: list[tuple[IrtItem, bool]] = []
+    for _pid, is_correct, difficulty, irt_b in attempt_rows:
+        b = resolve_item_difficulty_b(irt_b, difficulty)
+        if b is not None:
+            responses.append((IrtItem(difficulty=b), bool(is_correct)))
     theta = estimate_ability(responses)
-    attempted_ids = {pid for pid, _ic, _d in attempt_rows}
+    attempted_ids = {pid for pid, _ic, _d, _b in attempt_rows}
 
     # slice 15: 응답한 문항(administered) 기준 측정 정밀도 — CAT 중단 규칙 신호.
     administered_items = [item for item, _ in responses]
@@ -1269,23 +1277,35 @@ async def recommend_next_problem(
     standard_error = None if math.isinf(se) else se
     measurement_sufficient = standard_error is not None and standard_error <= _TARGET_SE
 
-    # θ(logit) → difficulty_overall(1~5) 척도로 역변환해 SQL 거리순 정렬: difficulty = b + 중앙값.
-    candidate_stmt = select(Problem.problem_id, Problem.difficulty_overall).where(
-        Problem.difficulty_overall.isnot(None)
-    )
+    # 후보를 θ 근방(|b-θ| 최소)으로 SQL 정렬 — 보정 b(irt_difficulty_b) 우선·없으면 전문가
+    # 난이도→logit(difficulty_overall - 중앙값) 폴백(COALESCE). 응답 difficulty 노출을 위해
+    # difficulty_overall 보유 문항만 후보(보정-only 문항 후보화는 후속).
+    candidate_stmt = select(
+        Problem.problem_id, Problem.difficulty_overall, Problem.irt_difficulty_b
+    ).where(Problem.difficulty_overall.isnot(None))
     if attempted_ids:
         candidate_stmt = candidate_stmt.where(Problem.problem_id.notin_(attempted_ids))
     candidate_stmt = candidate_stmt.order_by(
-        func.abs(Problem.difficulty_overall - (theta + _DIFFICULTY_MIDPOINT))
+        func.abs(
+            func.coalesce(
+                Problem.irt_difficulty_b,
+                Problem.difficulty_overall - _DIFFICULTY_MIDPOINT,
+            )
+            - theta
+        )
     ).limit(_CANDIDATE_POOL_SIZE)
     candidate_rows = (await session.execute(candidate_stmt)).all()
 
-    items = [IrtItem(difficulty=difficulty_to_logit(float(d))) for _pid, d in candidate_rows]
+    # 보정 b 우선·없으면 휴리스틱(difficulty_overall NOT NULL 보장 → 항상 값·candidate_rows와 1:1).
+    items = [
+        IrtItem(difficulty=irt_b if irt_b is not None else difficulty_to_logit(float(d)))
+        for _pid, d, irt_b in candidate_rows
+    ]
 
     # slice 17: 약점 개념 가중(BKT+IRT 융합) — 후보가 있을 때만 추가 2쿼리로 가중치 산출.
     weights: list[float] | None = None
     if prioritize_weak_concepts and candidate_rows:
-        candidate_ids = [pid for pid, _d in candidate_rows]
+        candidate_ids = [pid for pid, _d, _b in candidate_rows]
         mastery_stmt = (
             select(ConceptMasteryHistory.concept_id, ConceptMasteryHistory.mastery)
             .where(ConceptMasteryHistory.user_id == user.user_id)
@@ -1316,7 +1336,7 @@ async def recommend_next_problem(
             standard_error=standard_error,
             measurement_sufficient=measurement_sufficient,
         )
-    chosen_id, chosen_difficulty = candidate_rows[best]
+    chosen_id, chosen_difficulty, _chosen_b = candidate_rows[best]
     return NextProblemResponse(
         problem_id=chosen_id,
         theta=theta,
