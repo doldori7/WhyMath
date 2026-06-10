@@ -13,6 +13,7 @@ slice 104: substring 거짓음성(패러프레이즈·동의어)을 보완하는
 from __future__ import annotations
 
 from whymath_backend.l4.misconception.catalog import CATALOG, CATALOG_BY_ID
+from whymath_backend.l4.misconception.combined import combine_diagnoses, combined_diagnose
 from whymath_backend.l4.misconception.diagnose import diagnose
 from whymath_backend.l4.misconception.intervene import select_intervention
 from whymath_backend.l4.misconception.models import (
@@ -51,6 +52,8 @@ __all__ = [
     "SemanticMatcher",
     "VectorIndex",
     "build_provider",
+    "combine_diagnoses",
+    "combined_diagnose",
     "diagnose",
     "select_intervention",
     "semantic_matches",

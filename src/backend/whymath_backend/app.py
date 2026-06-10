@@ -20,6 +20,8 @@ Langfuse·Celery broker가 필요하지 않다(첫 사용 시 연결). LangfuseS
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -56,6 +58,7 @@ from whymath_backend.api._l3_state import (
 from whymath_backend.api._l3_state import (
     get_trace as _get_trace,
 )
+from whymath_backend.api._misconception_state import get_semantic_matcher
 from whymath_backend.api.coach import router as coach_router
 from whymath_backend.api.concepts import router as concepts_router
 from whymath_backend.api.devices import router as devices_router
@@ -90,6 +93,8 @@ from whymath_backend.l3.trace import LangfuseSink
 # slice 96)해 위에서 별칭 import. validator/skip-cache는 /v1/generate 전용이라 여기 둔다.
 _VALIDATOR_KEY = "shadow_validator"
 _SKIP_CACHE_KEY = "skip_cache_on_signal"
+
+logger = logging.getLogger(__name__)
 
 # /v1/generate의 런타임 shadow 검증기 — 결정론 관계 검증(=·<·>·≤·≥·≠·연쇄). 모듈 1회
 # 생성(I/O 없음·재사용). 비차단(반환 텍스트·캐시 불변)이라 default-on이 안전 — 워커
@@ -236,6 +241,26 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await ping_device_store_health(settings)
     store, cleanup_fn = build_device_store_from_settings(settings)
     set_device_store(store)
+    # 슬라이스 106: 오개념 의미 매칭 게이트 ON일 때만 매처를 *단일 스레드에서* 웜업(첫 match
+    # 1회)해 `_ensure_built`(카탈로그 인덱스 1회 적재)를 미리 완료한다 — coach `_compute_matches`가
+    # `asyncio.to_thread`로 매처를 *워커 스레드 풀*에서 호출하므로, 웜업 없이 첫 동시 요청이 여러
+    # 워커에서 동시에 `_ensure_built`를 타면 인덱스 적재 경합이 생긴다. 단일 스레드 웜업이 그
+    # 경합 안전판이다. off(기본)면 skip(임베딩 로드 0). 웜업 실패도 *학생 경로를 막지 않으려*
+    # 삼키고 로그만 남긴다(첫 요청이 lazy 재시도·`_compute_matches`가 graceful 폴백) — 부팅을
+    # fail-fast시키지 않는다(의미 매칭은 보완재·CLAUDE.md 가용성 우선 #1≫#6).
+    if settings.misconception_semantic_enabled:
+        try:
+            # 짧은 비-빈 텍스트로 match를 1회 호출 — 빈 문자열은 `_ensure_built` 전에 early
+            # return(03 matcher.py `if not student_solution: return []`)이라 인덱스 적재가 안
+            # 되므로, 짧은 산문("워밍업")으로 호출해 카탈로그 임베딩·인덱스 적재를 강제한다.
+            await asyncio.to_thread(
+                get_semantic_matcher().match,
+                "워밍업",
+                top_k=1,
+                threshold=settings.misconception_semantic_threshold,
+            )
+        except Exception:
+            logger.warning("오개념 의미 매처 웜업 실패 — 첫 요청 시 lazy 재시도", exc_info=True)
     try:
         yield
     finally:
