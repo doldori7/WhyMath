@@ -144,6 +144,47 @@ v1.1 substring(AND)은 *기호식*(`(a+b)²=a²+b²`)은 잡지만, 학생이 �
   나머지 항목(부등식·로그·삼각 등)의 수치 정규식은 *후속* — 표기 변이가 더 다양해
   보수적 작성·교차검증이 필요(추측 작성 금지). `regex_signals` 미설정 항목은 동작 불변.
 
+### 의미(임베딩) 매칭 층 (slice 104) — substring 거짓음성 보완
+
+substring(AND)+정규식은 *표면 문자열*을 본다. 학생이 카탈로그 표현과 **다른 어휘로 같은
+오개념을 패러프레이즈**하면(예: "분모에 변수가 와도 늘 계산된다"처럼 `"0"` 토큰을 안 쓰고
+0 나눗셈 오개념을 적음) substring은 *거짓음성*(놓침)이 난다. slice 104는 이 한계를
+**임베딩 코사인 유사도**로 보완하는 *의미 매칭 층*을 `diagnose()`와 **독립된 추가 API**
+(`semantic_matches`)로 둔다 — `diagnose()`의 시그니처·동작은 **불변**(기본 비활성).
+
+- **좌석 구조(7계층 준수)**: L4 매처(`SemanticMatcher`)가 *하위 인프라 좌석*을 호출한다
+  (L_n→L_{n-1}). L4는 임베딩 구현을 모르고 Protocol만 본다.
+  - `EmbeddingProvider`(좌석) — `FakeEmbeddingProvider`(테스트·CI hermetic·결정론 해시)·
+    `LocalEmbeddingProvider`(sentence-transformers **bge-m3**·로컬 우선·지연 로드)·
+    `OpenAIEmbeddingProvider`(text-embedding-3-large·키 필요·지연). 기본 `local`(CLAUDE.md
+    비용·Phaiakes9). 라이브 모델 로드는 *지연 import*라 CI는 모델 다운로드·네트워크 0.
+  - `VectorIndex`(좌석) + `InMemoryVectorIndex`(코사인 선형 스캔) — 카탈로그 30종엔
+    인메모리가 정답. **pgvector 영속 백엔드는 명시적 후속**(슬105+): 벡터 컬럼 마이그레이션
+    + 통합 게이트. 슬98 `embedding_id`는 현재 참조 자리만(실 벡터 컬럼은 스키마 밖).
+- **매칭 절차**: 카탈로그 각 항목의 *표현* `f"{name_kr}. {canonical_statement}"`(틀린 믿음의
+  자연어)을 1회 사전 임베딩해 인덱스에 적재(캐시)하고, 학생 텍스트를 임베딩해 코사인 상위
+  후보 중 **임계값 이상**만 반환한다.
+- **confidence 매핑·임계값**: `confidence = min(1.0, max(0.0, cosine))`(코사인 [0,1] 클램프 —
+  음수·직교는 0, 부동소수 평행 초과는 1.0 상한). 원 코사인은 `MisconceptionMatch.
+  semantic_similarity`(선택 필드·substring 경로는 None)에 클램프 없이 보존. 임계값 기본
+  **0.55**(보수적·`config.misconception_semantic_threshold`) — 미만은 미매칭(짧은 공통
+  토큰의 의미 근접 오탐 억제). `(cos+1)/2` 대신 클램프를 택한 이유: 임계값과 confidence가
+  *같은 축*이고 무관 텍스트가 0.5로 부풀지 않음(보수).
+- **정직 스코프(O recall / X 방향·부정·등치) — 과장 금지(CLAUDE.md "확실하지 않을 때 자신
+  있게 말함 금지")**:
+  - **O (이 슬라이스의 가치)**: *패러프레이즈·동의어 recall* 개선. 어휘가 달라도 의미가
+    같으면 잡는다.
+  - **X (범위 밖·해결한다고 주장 금지)**: *방향·부정·등치*. "연속⇒미분"(오개념)과 올바른
+    역방향 "미분⇒연속"은 **두 문장이 의미상 가까워 임베딩만으로 못 가린다**(substring과
+    동일한 *방향맹*). "f∘g≠g∘f"(올바른 비가환)도 카탈로그 "f∘g=g∘f"와 가깝다 → 의미 매처는
+    *올바른 진술도 오개념 후보로 올릴 수 있다*(false positive). 이건 버그가 아니라 **한계**.
+  - **방향 판별의 정본 해법은 LLM-judged/NLI = 후속 슬라이스**(여기서 해결하지 않음). 의미
+    매처는 *후보를 넓히는* 보완재일 뿐, 개입 발화는 여전히 비난 없는 소크라테스형(직접
+    교정·라벨링 금지)이어야 false positive의 해가 작다.
+  - 이 한계는 단위테스트(`test_misconception_semantic.py` `TestDirectionBlindnessHonesty`)에
+    *방향맹 정직 테스트*로 결정론적으로 못 박혀 있다(어휘 집합이 같으면 방향/부정 쌍이 동일
+    유사도 → 구분 불가).
+
 ## 개입 결정 트리
 
 ```

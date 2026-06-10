@@ -78,6 +78,17 @@ class MisconceptionMatch(BaseModel):
             "분리해 보관하므로 기존 소비자의 matched_signals 단언은 불변."
         ),
     )
+    semantic_similarity: float | None = Field(
+        default=None,
+        description=(
+            "slice 104 — 의미(임베딩) 매칭 경로의 코사인 유사도. substring/regex 경로의 결과는 "
+            "*None*(이 필드 미설정)이고, `semantic_matches`가 만든 결과만 코사인 값을 담는다. "
+            "선택 필드(기본 None)라 기존 substring 결과·소비자 단언은 불변. **정직 스코프**: 의미 "
+            "유사도는 패러프레이즈·동의어 recall만 반영하고 *방향·부정·등치*는 못 가린다(임베딩 "
+            "방향맹 — LLM-judged 후속). confidence와 다른 축(이 값은 진단 신뢰가 아니라 표면 "
+            "근접도)이니 호출자는 둘을 혼동하지 말 것."
+        ),
+    )
 
 
 class InterventionPattern(str, Enum):
