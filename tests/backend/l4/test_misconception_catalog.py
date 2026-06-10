@@ -1,7 +1,7 @@
-"""오개념 카탈로그 정합성 단위테스트 — doc 정본 22종.
+"""오개념 카탈로그 정합성 단위테스트 — doc 정본 30종(Phase 1 목표).
 
-스코프 정직(False-attribute 금기): doc에 명시·상세화된 22종만 등록(기존 14 + 수능
-핵심 8: 미적분·수열·삼각함수·벡터), 미상세 항목 추정 작성 없음.
+스코프 정직(False-attribute 금기): doc에 명시·상세화된 30종만 등록(기존 22 + §5.4
+교차검증 후보 8: 대수+2·기하+1·확률통계+1·함수+2·미적분+2), 미상세 항목 추정 작성 없음.
 """
 
 from __future__ import annotations
@@ -16,10 +16,10 @@ from whymath_backend.l4.misconception import (
 
 
 class TestCatalogShape:
-    def test_twentytwo_entries_doc_explicit_only(self) -> None:
-        # doc 명시·상세화: 대수 7 + 기하 3 + 확률통계 3 + 함수 1
-        #                 + 미적분 3 + 수열 2 + 삼각함수 2 + 벡터 1 = 22
-        assert len(CATALOG) == 22
+    def test_thirty_entries_doc_explicit_only(self) -> None:
+        # doc 명시·상세화: 대수 9 + 기하 4 + 확률통계 4 + 함수 3
+        #                 + 미적분 5 + 수열 2 + 삼각함수 2 + 벡터 1 = 30 (Phase 1 목표)
+        assert len(CATALOG) == 30
 
     def test_all_ids_unique(self) -> None:
         ids = [m.id for m in CATALOG]
@@ -34,7 +34,8 @@ class TestCatalogShape:
 class TestCanonicalIdsFromDoc:
     """doc L24-50에 *명시*된 ID가 모두 존재 — 정본 정합."""
 
-    def test_algebra_seven(self) -> None:
+    def test_algebra_nine(self) -> None:
+        # 기존 7 + 슬 §5.4 추가 2(discriminant·root-loss)
         algebra_ids = {
             "distribution-over-power",
             "sign-flip-in-inequality",
@@ -43,33 +44,59 @@ class TestCanonicalIdsFromDoc:
             "exponent-zero",
             "fraction-cancellation",
             "log-distribution",
+            "discriminant-negative-no-real-root",
+            "root-loss-by-dividing",
         }
         assert algebra_ids.issubset(CATALOG_BY_ID.keys())
+        for mid in ("discriminant-negative-no-real-root", "root-loss-by-dividing"):
+            assert CATALOG_BY_ID[mid].domain == "대수"
 
-    def test_geometry_three(self) -> None:
+    def test_geometry_four(self) -> None:
+        # 기존 3 + 슬 §5.4 추가 1(circle-radius-squared)
         for mid in (
             "angle-sum-non-triangle",
             "similarity-vs-congruence",
             "area-perimeter-confusion",
+            "circle-radius-squared",
         ):
             assert mid in CATALOG_BY_ID
+        assert CATALOG_BY_ID["circle-radius-squared"].domain == "기하"
 
-    def test_probstat_three(self) -> None:
-        for mid in ("gambler-fallacy", "prosecutor-fallacy", "mean-vs-median"):
+    def test_probstat_four(self) -> None:
+        # 기존 3 + 슬 §5.4 추가 1(mutually-exclusive-implies-independent)
+        for mid in (
+            "gambler-fallacy",
+            "prosecutor-fallacy",
+            "mean-vs-median",
+            "mutually-exclusive-implies-independent",
+        ):
             assert mid in CATALOG_BY_ID
+        assert CATALOG_BY_ID["mutually-exclusive-implies-independent"].domain == "확률통계"
 
-    def test_function_one(self) -> None:
-        assert "invertibility-without-1-1" in CATALOG_BY_ID
+    def test_function_three(self) -> None:
+        # 기존 1 + 슬 §5.4 추가 2(composite·translation)
+        for mid in (
+            "invertibility-without-1-1",
+            "composite-function-commutes",
+            "translation-sign-flip",
+        ):
+            assert mid in CATALOG_BY_ID
+            assert CATALOG_BY_ID[mid].domain == "함수"
 
 
 class TestSuneungCanonicalIds:
     """doc #16-23에 *명시·상세화*된 수능 핵심 오개념 — domain별 정합."""
 
-    def test_calculus_three(self) -> None:
+    def test_calculus_five(self) -> None:
+        # 기존 3 + 슬 §5.4 추가 2(continuity·critical-point).
+        # continuity-implies-differentiability는 doc 함수 슬롯 #15에 상세되나
+        # domain은 미적분([H:12미적Ⅰ02-02] 정착)이라 본 도메인 집합에 포함.
         for mid in (
             "chain-rule-inner-derivative-omitted",
             "product-rule-naive",
             "limit-equals-function-value",
+            "continuity-implies-differentiability",
+            "critical-point-implies-extremum",
         ):
             assert mid in CATALOG_BY_ID
             assert CATALOG_BY_ID[mid].domain == "미적분"
