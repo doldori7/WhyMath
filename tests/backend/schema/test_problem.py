@@ -23,6 +23,7 @@ from whymath_backend.schema.enums import (
     SourceType,
     StepType,
     Subject,
+    VisualizationType,
     VisualType,
 )
 from whymath_backend.schema.problem import (
@@ -31,6 +32,7 @@ from whymath_backend.schema.problem import (
     ProblemRelation,
     ProblemStep,
 )
+from whymath_backend.schema.visualization import Visualization
 
 
 def _minimal_self_generated(**overrides: object) -> Problem:
@@ -154,6 +156,35 @@ class TestProblemCreation:
         assert p.source_detail == {"publisher": "WhyMath", "year": 2026}
         assert p.answer_constraint["is_natural"] is True  # type: ignore[index]
         assert p.cross_unit_pairs == [["수열", "극한"], ["미분", "함수"]]
+
+    def test_visualizations_default_empty(self) -> None:
+        """visualizations는 기본 빈 배열(슬라이스 91)."""
+        p = _minimal_self_generated()
+        assert p.visualizations == []
+
+    def test_visualizations_from_dict(self) -> None:
+        """dict로도 Visualization 강제 변환(JSONB 역직렬화 경로)·model_dump 직렬화."""
+        p = _minimal_self_generated(
+            visualizations=[
+                {
+                    "type": "interactive_graph_2d",
+                    "spec": {"function": "x**2"},
+                    "caption": "포물선",
+                }
+            ],
+        )
+        assert isinstance(p.visualizations[0], Visualization)
+        assert p.visualizations[0].type == VisualizationType.interactive_graph_2d
+        dumped = p.model_dump()
+        assert dumped["visualizations"][0]["type"] == "interactive_graph_2d"
+        assert dumped["visualizations"][0]["spec"]["function"] == "x**2"
+
+    def test_visualizations_nested_invariant_propagates(self) -> None:
+        """중첩 Visualization 불변식(animation_prerendered⟹조작불가)이 Problem 검증에 전파."""
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(
+                visualizations=[{"type": "animation_prerendered", "interactive": True}],
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────
