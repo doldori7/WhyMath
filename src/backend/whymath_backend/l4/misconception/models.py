@@ -48,6 +48,16 @@ class Misconception(BaseModel):
             "학생 풀이에 *공출현*해야 매칭되는 substring 토큰(AND). 모두 일치=confidence 1.0."
         ),
     )
+    regex_signals: tuple[str, ...] = Field(
+        default=(),
+        description=(
+            "v1.2 보조 탐지 경로 — *정규화된 텍스트*에 `re.search`로 검사하는 정규식(OR). "
+            "주로 *거짓 항등식의 수치 대입*(예: `(3+4)²=3²+4²`)을 잡는다. 미설정(기본 빈 튜플) 시 "
+            "기존 substring 동작 불변. confidence 분모는 substring `signals` 기준 유지하고 정규식 "
+            "매치는 분자에 *가산*(상한 1.0)하므로, 수치 정규식은 기호 substring 케이스와 "
+            "*겹치지 않게*(disjoint) 작성해 기존 confidence·matched_signals를 보존한다."
+        ),
+    )
 
 
 class MisconceptionMatch(BaseModel):
@@ -59,7 +69,14 @@ class MisconceptionMatch(BaseModel):
     confidence: float = Field(ge=0.0, le=1.0)
     matched_signals: tuple[str, ...] = Field(
         default_factory=tuple,
-        description="실제 매칭된 signals 부분집합(디버그·UI 표시 후보).",
+        description="실제 매칭된 substring signals 부분집합(디버그·UI 표시 후보).",
+    )
+    matched_regex_signals: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description=(
+            "v1.2 — 실제 매치된 `regex_signals` 부분집합(디버그·UI). substring `matched_signals`와 "
+            "분리해 보관하므로 기존 소비자의 matched_signals 단언은 불변."
+        ),
     )
 
 
