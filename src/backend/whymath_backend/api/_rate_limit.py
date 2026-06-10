@@ -53,12 +53,15 @@ except ImportError:  # pragma: no cover — 라이브러리 미설치 환경
 
 _WINDOW_SECONDS = 60.0
 
-RateCategory = Literal["read", "write", "device_register"]
+RateCategory = Literal["read", "write", "device_register", "visualization"]
 """POST/GET 차등 한도 — 읽기/쓰기 분리 버킷(상호 영향 차단).
 
 `device_register`(슬라이스 25): `/v1/devices/register`의 *전용* 버킷. coach `write`와 키 공간
 분리 — 한쪽 폭주가 다른 쪽 한도를 잠식하지 않는다(예: coach 글 쓰기 폭주가 register를 막거나
-그 반대). 등록은 *드문* 작업(첫 실행 1회·기기 변경)이라 낮은 한도(5/min user·10/min IP)."""
+그 반대). 등록은 *드문* 작업(첫 실행 1회·기기 변경)이라 낮은 한도(5/min user·10/min IP).
+
+`visualization`(슬라이스 97): `/v1/visualizations/weak-concept`의 *전용* 버킷. coach `write`와
+분리 — LLM 생성(비용)이라 더 낮은 한도(15/min user). coach는 프롬프트 결정만(LLM 미호출)."""
 
 
 class RateLimitResult(NamedTuple):
@@ -1059,6 +1062,29 @@ async def rate_limit_device_register(
 
 RateLimitedDeviceRegister = Depends(rate_limit_device_register)
 """디바이스 등록 전용(slice 25) — `dependencies=[RateLimitedDeviceRegister]`."""
+
+
+async def rate_limit_visualization(
+    user: ConsentedUser,
+    request: Request,
+    settings: Annotated[Settings, Depends(get_settings)],
+    response: Response,
+) -> None:
+    """시각화 생성(LLM·비용) 전용 — 3차원·coach write와 버킷 분리(slice 97)."""
+    await _enforce_triple(
+        user.user_id,
+        _client_ip(request),
+        await _client_device_id(request, settings),
+        category="visualization",
+        user_limit=settings.visualization_rate_limit_per_minute,
+        ip_limit=settings.visualization_rate_limit_ip_per_minute,
+        device_limit=settings.visualization_rate_limit_device_per_minute,
+        response=response,
+    )
+
+
+RateLimitedVisualization = Depends(rate_limit_visualization)
+"""시각화 LLM 엔드포인트 전용(slice 97) — `dependencies=[RateLimitedVisualization]`."""
 
 
 # ──────────────────────────────────────────────────────────────────────────

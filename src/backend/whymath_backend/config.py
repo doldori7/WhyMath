@@ -373,6 +373,28 @@ class Settings(BaseSettings):
             "사용자(30)와 IP(60) 사이 중간."
         ),
     )
+    # ── 슬라이스 97: 시각화 LLM 엔드포인트 전용 rate limit (LLM 비용 보호) ──
+    visualization_rate_limit_per_minute: int = Field(
+        default=15,
+        ge=0,
+        description=(
+            "시각화 생성(`POST /v1/visualizations/weak-concept`)의 *사용자 단위* 분당 상한. "
+            "0=비활성. coach write(30)보다 낮음 — LLM 호출(생성·검증)이라 비용↑(coach는 "
+            "프롬프트 결정만·LLM 미호출). 별 category로 coach write와 버킷 분리."
+        ),
+    )
+    visualization_rate_limit_ip_per_minute: int = Field(
+        default=30,
+        ge=0,
+        description=(
+            "시각화 생성의 *IP 단위* 분당 상한. 0=비활성. 공유 NAT 방어(사용자 한도의 2배)."
+        ),
+    )
+    visualization_rate_limit_device_per_minute: int = Field(
+        default=22,
+        ge=0,
+        description="시각화 생성의 *디바이스 단위* 분당 상한. 0=비활성. 사용자(15)와 IP(30) 사이.",
+    )
     # ── 슬라이스 27: 디바이스 store 운영 모드(lifespan 결선) ──
     device_store_mode: Literal["none", "pg", "pg_cached"] = Field(
         default="none",

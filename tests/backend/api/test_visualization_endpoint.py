@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_consented_user
+from whymath_backend.api._rate_limit import reset_store
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.user import UserProfile
@@ -31,6 +32,14 @@ _UID = uuid.uuid4()
 _PATH = "/v1/visualizations/weak-concept"
 _DIAG_FN = "whymath_backend.api.visualization.compute_concept_diagnoses"
 _VIZ_FN = "whymath_backend.api.visualization.visualize_for_concept_diagnosis"
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limit_store() -> None:
+    """매 테스트 격리 — 레이트 리밋 sliding window 카운트 리셋(test_coach 패턴)."""
+    import asyncio
+
+    asyncio.run(reset_store())
 
 
 class _StubProvider:
@@ -52,8 +61,14 @@ def _user() -> UserProfile:
     )
 
 
-def _settings() -> Settings:
-    return Settings(jwt_secret_key=SecretStr("test-secret-0123456789abcdef"))
+def _settings(viz_limit: int = 0) -> Settings:
+    """테스트 설정 — viz_limit>0이면 시각화 *사용자* 한도(분당) 활성(429 검증·IP/device 0)."""
+    return Settings(
+        jwt_secret_key=SecretStr("test-secret-0123456789abcdef"),
+        visualization_rate_limit_per_minute=viz_limit,
+        visualization_rate_limit_ip_per_minute=0,
+        visualization_rate_limit_device_per_minute=0,
+    )
 
 
 def _diagnosis() -> ConceptDiagnosis:
@@ -110,11 +125,13 @@ class _FakeVisualize:
         return self.result
 
 
-def _client(*, provider: _StubProvider, authed: bool = True) -> TestClient:
+def _client(
+    *, provider: _StubProvider, authed: bool = True, viz_limit: int = 0
+) -> TestClient:
     app = create_app(provider=provider)
     if authed:
         app.dependency_overrides[get_consented_user] = _user
-    app.dependency_overrides[get_settings] = _settings
+    app.dependency_overrides[get_settings] = lambda: _settings(viz_limit)
 
     async def _sess() -> AsyncIterator[_FakeSession]:
         yield _FakeSession()
@@ -176,3 +193,13 @@ def test_unauthenticated_401() -> None:
     assert (
         _client(provider=_StubProvider(), authed=False).post(_PATH).status_code == 401
     )
+
+
+def test_rate_limit_429(monkeypatch: pytest.MonkeyPatch) -> None:
+    """사용자 분당 한도(2) 초과 → 429 (슬97·LLM 비용 보호·전용 버킷)."""
+    monkeypatch.setattr(_DIAG_FN, _fake_diagnoses([_diagnosis()]))
+    monkeypatch.setattr(_VIZ_FN, _FakeVisualize(result=_viz()))
+    client = _client(provider=_StubProvider(), viz_limit=2)
+    assert client.post(_PATH).status_code == 200
+    assert client.post(_PATH).status_code == 200
+    assert client.post(_PATH).status_code == 429
