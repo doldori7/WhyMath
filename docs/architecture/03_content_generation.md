@@ -190,9 +190,12 @@ class L3LLMService:
         self, problem: str, steps: list[str]
     ) -> list[StepVerification]: ...
     
-    async def generate_visualization(
+    # 선언적 시각화 *명세*만 생성한다(05 §5.2·schema/visualization.py). 렌더(Manim·
+    # Desmos·three.js)는 L5 ④ 비상구 책임 — bytes(영상) 반환은 7계층 경계 위반이었다.
+    # 구현·검증 게이트: l3/visualization.py (슬라이스 92).
+    async def generate_visualization_spec(
         self, concept: str, level: str
-    ) -> bytes: ...  # mp4/gif
+    ) -> Visualization: ...  # 선언적 JSON 명세 (영상 아님)
     
     async def generate_multi_solutions(
         self, problem: str, n: int = 3
