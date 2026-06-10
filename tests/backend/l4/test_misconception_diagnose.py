@@ -29,6 +29,22 @@ class TestSingleMatch:
         assert diagnose("그냥 자연스러운 풀이") == []
         assert diagnose("") == []
 
+    def test_suneung_trig_period_entry_matches(self) -> None:
+        # 신규 수능 항목(삼각함수)이 매처를 통과하는지 — period-of-scaled-sine
+        text = "y=sin(2x)의 주기는 2π 라고 적었어"
+        matches = diagnose(text)
+        top = matches[0]
+        assert top.misconception.id == "period-of-scaled-sine"
+        assert top.confidence == 1.0
+        assert top.misconception.domain == "삼각함수"
+
+    def test_suneung_sine_distribution_full_match(self) -> None:
+        # sin(a+b) = sin a + sin b — 신규 삼각함수 오개념 풀 매칭
+        matches = diagnose("sin(a+b) = sin a + sin b 로 풀었어")
+        top = matches[0]
+        assert top.misconception.id == "sine-distributes-over-sum"
+        assert top.confidence == 1.0
+
 
 class TestRankingAndTopK:
     def test_higher_confidence_first(self) -> None:

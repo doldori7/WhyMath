@@ -14,8 +14,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-MisconceptionDomain = Literal["대수", "기하", "확률통계", "함수"]
-"""오개념 카탈로그 영역 — 정본 prompt doc 분류(`대수 영역`·`기하 영역`·`확률·통계`·`함수`)."""
+MisconceptionDomain = Literal[
+    "대수", "기하", "확률통계", "함수", "미적분", "수열", "삼각함수", "벡터"
+]
+"""오개념 카탈로그 영역 — 정본 prompt doc 분류. 슬: 대수·기하·확률통계·함수 +
+수능 핵심(미적분·수열·삼각함수·벡터). doc `### N 영역` 섹션과 1:1."""
 
 
 class Misconception(BaseModel):
