@@ -74,11 +74,15 @@ def test_concept_orm_tablenames() -> None:
 # 2) PG DDL 컴파일
 # ──────────────────────────────────────────────────────────────────────────
 def test_concept_ddl_compiles_to_postgres() -> None:
-    """Concept DDL에 JSONB·concept_level_enum·cognitive_type_enum·gen_random_uuid()·UUID 포함."""
+    """Concept DDL에 JSONB·concept_level_enum·cognitive_type_enum·visualization_style_enum·
+    gen_random_uuid()·UUID 포함."""
     ddl = _pg_ddl(OrmConcept.__table__)
     assert "JSONB" in ddl  # common_misconceptions
     assert "concept_level_enum" in ddl  # level
     assert "cognitive_type_enum" in ddl  # cognitive_type[] (enum 배열)
+    assert (
+        "visualization_style_enum" in ddl
+    )  # recommended_visual_styles[] (슬라이스 88)
     assert "gen_random_uuid()" in ddl
     assert "UUID" in ddl
 
@@ -135,6 +139,15 @@ def test_cognitive_type_array_enum_values() -> None:
     assert "VISUAL_REASONING" in item_type.enums
 
 
+def test_recommended_visual_styles_array_enum_values() -> None:
+    """recommended_visual_styles[] 원소 enum이 값('단위원'·'수형도' 등)을 갖는다(슬라이스 88)."""
+    col = OrmConcept.__table__.c.recommended_visual_styles
+    item_type = col.type.item_type  # type: ignore[attr-defined]
+    assert item_type.name == "visualization_style_enum"
+    assert "단위원" in item_type.enums
+    assert "수형도" in item_type.enums
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 4) 변환 roundtrip
 # ──────────────────────────────────────────────────────────────────────────
@@ -149,7 +162,9 @@ def test_concept_roundtrip_preserves_core_fields() -> None:
         level=ConceptLevel.세부개념,
         subject=Subject.미적분,
         cognitive_type=[CognitiveType.THEOREM, CognitiveType.TECHNIQUE],
-        common_misconceptions=[{"misconception": "정적분=넓이", "correction": "부호 있는 넓이"}],
+        common_misconceptions=[
+            {"misconception": "정적분=넓이", "correction": "부호 있는 넓이"}
+        ],
         aliases=["FTC"],
     )
     orm = OrmConcept.from_schema(s)

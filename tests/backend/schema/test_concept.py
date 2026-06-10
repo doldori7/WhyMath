@@ -31,6 +31,7 @@ from whymath_backend.schema.enums import (
     Curriculum,
     EdgeType,
     Subject,
+    VisualizationStyle,
 )
 
 
@@ -94,6 +95,7 @@ class TestConceptCreation:
         assert c.parent_concept_id is None
         assert c.aliases == []
         assert c.cognitive_type == []
+        assert c.recommended_visual_styles == []
         assert c.common_misconceptions == []
         assert c.is_signature_korean is False
         assert c.embedding_id is None
@@ -116,6 +118,10 @@ class TestConceptCreation:
             semester_introduced=1,
             is_signature_korean=True,
             cognitive_type=[CognitiveType.THEOREM, CognitiveType.TECHNIQUE],
+            recommended_visual_styles=[
+                VisualizationStyle.넓이모델,
+                VisualizationStyle.함수그래프,
+            ],
             intrinsic_difficulty=4.5,
             exam_frequency=0.82,
             weight_in_curriculum=0.6,
@@ -130,6 +136,10 @@ class TestConceptCreation:
         )
         assert c.parent_concept_id == parent
         assert c.cognitive_type == [CognitiveType.THEOREM, CognitiveType.TECHNIQUE]
+        assert c.recommended_visual_styles == [
+            VisualizationStyle.넓이모델,
+            VisualizationStyle.함수그래프,
+        ]
         assert c.intrinsic_difficulty == pytest.approx(4.5)
         assert c.embedding_id == emb
         assert c.common_misconceptions[0]["misconception"] == "적분상수를 빼먹음"
@@ -164,6 +174,19 @@ class TestConceptCreation:
             cognitive_type=[CognitiveType.DEFINITION, CognitiveType.VISUAL_REASONING],
         )
         assert c.model_dump()["cognitive_type"] == ["DEFINITION", "VISUAL_REASONING"]
+
+    def test_recommended_visual_styles_serialization(self) -> None:
+        """use_enum_values → recommended_visual_styles 배열이 한글 값 배열로 직렬화(슬라이스 88)."""
+        c = Concept(
+            code="C",
+            name_ko="삼각함수",
+            level=ConceptLevel.세부개념,
+            recommended_visual_styles=[
+                VisualizationStyle.단위원,
+                VisualizationStyle.함수그래프,
+            ],
+        )
+        assert c.model_dump()["recommended_visual_styles"] == ["단위원", "함수그래프"]
 
     def test_code_max_length(self) -> None:
         """code는 max_length=64 — 초과 거부."""
