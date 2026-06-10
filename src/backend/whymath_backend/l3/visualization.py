@@ -20,12 +20,14 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 
 from pydantic import ValidationError
 
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.pipeline import generate
+from whymath_backend.schema.concept import Concept as ConceptSchema
 from whymath_backend.schema.visualization import Visualization
 
 
@@ -86,17 +88,18 @@ _SYSTEM_PROMPT = (
     '"caption": "<한 줄 캡션>", "interactive": <true|false>}\n'
     "규칙: type은 위 4종 중 하나의 영문 값. animation_prerendered는 조작 불가이므로 "
     "interactive=false. spec은 해당 type에 맞는 자유 JSON(예: interactive_graph_2d → "
-    "함수식·정의역·슬라이더 파라미터)."
+    "함수식·정의역·슬라이더 파라미터). 사용자가 '권장 시각화 양식'을 주면 그 교수학적 "
+    "양식을 최대한 반영해 spec을 구성하라."
 )
 
 
-def _user_prompt(concept: str, level: str) -> str:
-    """개념·수준 → 사용자 프롬프트(시각화 명세 1개 요청)."""
-    return (
-        f"개념: {concept}\n"
-        f"대상 수준: {level}\n"
-        "이 개념을 가장 잘 드러내는 시각화 명세 JSON 하나를 출력하라."
-    )
+def _user_prompt(concept: str, level: str, recommended_styles: Sequence[str] | None = None) -> str:
+    """개념·수준(+권장 양식 힌트) → 사용자 프롬프트(시각화 명세 1개 요청)."""
+    lines = [f"개념: {concept}", f"대상 수준: {level}"]
+    if recommended_styles:
+        lines.append(f"권장 시각화 양식(참고): {', '.join(recommended_styles)}")
+    lines.append("이 개념을 가장 잘 드러내는 시각화 명세 JSON 하나를 출력하라.")
+    return "\n".join(lines)
 
 
 async def generate_visualization_spec(
@@ -107,6 +110,7 @@ async def generate_visualization_spec(
     provider: LLMProvider,
     cache: CacheBackend,
     trace: TraceSink,
+    recommended_styles: Sequence[str] | None = None,
 ) -> Visualization:
     """개념·수준 → 선언적 `Visualization` 명세(05 §5.2)를 라우터 경유로 생성·검증.
 
@@ -121,6 +125,8 @@ async def generate_visualization_spec(
             호출자 책임 — QUALITY 비동기로 라우팅되면 `generate`가 큐 미주입 시
             `QualityQueueUnavailableError`를 던진다(이 함수는 동기 경로 전제).
         provider/cache/trace: `pipeline.generate` DI(라우터 경유 생성·캐시·관측).
+        recommended_styles: 개념 권장 시각화 양식(슬88 `recommended_visual_styles`) — 주어지면
+            프롬프트에 *참고 힌트*로 주입(예: 단위원·수형도). None/빈 배열이면 미주입.
 
     Returns:
         검증된 `Visualization` 명세.
@@ -130,10 +136,37 @@ async def generate_visualization_spec(
     """
     result = await generate(
         req,
-        _user_prompt(concept, level),
+        _user_prompt(concept, level, recommended_styles),
         _SYSTEM_PROMPT,
         provider=provider,
         cache=cache,
         trace=trace,
     )
     return parse_visualization_spec(result.text)
+
+
+async def visualization_spec_for_concept(
+    concept: ConceptSchema,
+    level: str,
+    req: RoutingRequest,
+    *,
+    provider: LLMProvider,
+    cache: CacheBackend,
+    trace: TraceSink,
+) -> Visualization:
+    """`Concept`(슬88) → 그 `recommended_visual_styles`를 힌트로 주입해 시각화 명세 생성.
+
+    슬88(개념↔교수 양식 매핑)과 슬92(명세 생성)를 잇는 다리 — 개념의 `name_ko`를 대상으로
+    `recommended_visual_styles`(예: 삼각함수→단위원·확률→수형도)를 프롬프트 *참고 힌트*로
+    넘겨 `generate_visualization_spec`에 위임한다(빈 양식이면 힌트 없이 동작). 진단된 약점
+    개념을 시각화할 때 호출자가 Concept를 넘기면 권장 양식이 자동 반영된다.
+    """
+    return await generate_visualization_spec(
+        concept.name_ko,
+        level,
+        req,
+        provider=provider,
+        cache=cache,
+        trace=trace,
+        recommended_styles=concept.recommended_visual_styles,
+    )
