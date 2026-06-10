@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._l3_state import get_cache, get_provider, get_trace
+from whymath_backend.api._rate_limit import RateLimitedVisualization
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.session import get_session
 from whymath_backend.l2.concept_diagnosis import (
@@ -78,6 +79,9 @@ async def visualize_for_concept_diagnosis(
         difficulty="medium",
         requires_reasoning=True,
         student_subscription=student_subscription,
+        # sync 강제(슬97): parse_visualization_spec 게이트가 텍스트를 *즉시* 필요로 하므로
+        # QUALITY 비동기(빈 text·job_id)로 가면 안 된다 — sync=True면 라우터가 async 미선택.
+        sync=True,
     )
     return await visualization_spec_for_concept(
         concept_orm.to_schema(),
@@ -100,6 +104,7 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
     "/weak-concept",
     response_model=Visualization,
     summary="내 약점 개념 맞춤 시각화 생성 (L2 진단 → L3 시각화)",
+    dependencies=[RateLimitedVisualization],
 )
 async def post_weak_concept_visualization(
     user: ConsentedUser,
