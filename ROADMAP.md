@@ -64,8 +64,8 @@
 - [ ] 오개념 DB v0 — 중2~고1 핵심 오개념 30개 카탈로그
 - [ ] **사람 수학자 1명 검수 라운드** (Phase 1 진입 전 필수)
 
-### Day 61~75: 클라이언트(웹 1급 Next.js + 패드·모바일 Flutter)·서버 스캐폴딩 (L5)
-- [ ] 웹(Next.js·App Router) + 패드·모바일(Flutter·Riverpod) 프로젝트 초기화
+### Day 61~75: 클라이언트(Flutter 단일·패드 중심)·서버 스캐폴딩 (L5)
+- [ ] Flutter(패드 중심·Riverpod) 프로젝트 초기화 + 반응형(360px) + 입력 계층 추상화 + 2 비상구(MathLive·three.js) WebView 시드
 - [ ] FastAPI 백엔드 초기화 + PostgreSQL + Redis (+ Neo4j 개념 그래프 연결)
 - [ ] Mathpix OCR 통합 (사진 → LaTeX)
 - [ ] 기본 채팅 UI + 학습자 상태 표시
@@ -95,7 +95,7 @@
 - M1.2 (월 2): L1+L2+L3 통합, 첫 5개 시나리오 (`SolutionPath` 다중 풀이 포함)
   - L3 라우터 라이브 연동 *진행*: Ollama(S1)·Redis(S2)·Langfuse(S3)·Celery QUALITY 큐(S4)·클라우드 Anthropic(S5) 완료 (2026-05, 상세 MEMORY.md). 잔여: 비용/지연 실측 보정·프롬프트 캐싱(라이브 키 후속)
 - M1.3 (월 3): L4 교수학 엔진 안정화, 사용자 10명. 도메인 파트너 검수 라운드
-- M1.4 (월 4): L5 웹 앱 베타 (Next.js 웹 1급·반응형 큰 화면; 패드·모바일 Flutter 동반; 온보딩+자동 정렬), 사용자 50명
+- M1.4 (월 4): L5 학생 앱 베타 (Flutter 단일·패드 중심·반응형 큰 화면; 폰 동반; 온보딩+자동 정렬), 사용자 50명
 - M1.5 (월 5): 사용자 100~200명, KPI 수집 (D7 retention·답 미루기 단계 깊이)
 - M1.6 (월 6): Phase 2 진입 결정 게이트
 

@@ -51,6 +51,8 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - L_n은 L_{n-1}을 *호출*할 수 있지만 *구현*하지 않는다
 - L_n은 L_{n+1}을 *알지 못한다* (역방향 의존 금지)
 - 횡단 관심사(로깅·모니터링·에러)는 별도 인프라
+- **L1-L4 = 독립 수학 코어**(UI 밖 독립 플랫폼) — 클라이언트(L5: Flutter 학생앱·별도 웹·국소 임베드)는 API로만 소비, *수학 로직을 클라에 넣지 않는다* (슬라이스 89)
+- **표현 ≠ 의미** — 문항·수식·해설은 화면 문자열이 아니라 항상 구조(AST/JSON)로 코어에 저장; 렌더는 클라(Flutter·웹·PDF·AI)가 각자 (문항 스키마·`figure.spec`·05 §5.2 선언적 명세)
 
 각 계층 상세는 `docs/architecture/0{N}_*.md` 참조.
 
@@ -60,8 +62,9 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 
 | 계층 | 스택 | 비고 |
 |---|---|---|
-| 웹 클라이언트(1급) | Next.js 15 (App Router) + React 19 + TS | 큰 화면 분석·계산기·equity 저사양/a11y 1급. MathLive·Desmos·KaTeX web-native (PRD §6.3·8.2, MEMORY 슬라이스 86) |
-| 패드·모바일 클라이언트 | Flutter 3.x + Riverpod 2.x | 패드=Pencil 손글씨 플래그십·모바일=저사양 안드로이드 미션 하한선. 공유=백엔드 API 계약. Atlas Odyssey·BeatBuddy 자산 |
+| 학생 클라이언트 | Flutter 3.x + Riverpod 2.x | 패드 중심 네이티브 태블릿·View Layer·패드+폰 한 코드·수학 로직 미포함(독립 코어 API). Atlas Odyssey·BeatBuddy 자산 (MEMORY 슬라이스 89) |
+| 별도 웹 | React 19 + Next.js 15 (App Router) | 교사 대시보드·SEO·검색유입·공유 (Phase 3+)·학생 경험 아님 |
+| 국소 임베드(2 비상구) | MathLive·three.js (WebView) | 수식 입력·3D 시각화만 모듈 한정·전체 앱 아님 |
 | 수식 입력 | MathLive | 학생 수식 입력 표준 |
 | 백엔드 | Python 3.12 + FastAPI + uvicorn | AVAC 자산 |
 | RDB | PostgreSQL 16 + TimescaleDB (시계열) | AVAC 자산 |

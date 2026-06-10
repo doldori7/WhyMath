@@ -43,6 +43,8 @@ L7 → L6 → L5 → L4 → L3 → L2 → L1
                (이 둘은 자주 같이 호출됨)
 ```
 
+> **L1-L4 = 독립 수학 코어(UI-agnostic)** · L5 = 클라이언트. 구조(AST/JSON)는 코어, 렌더는 클라(Flutter·웹·PDF·AI) — *표현≠의미* (슬라이스 89).
+
 ### 경계 침범 예시
 
 ❌ **나쁜 예**: L3가 BKT 업데이트 직접 호출하여 학습자 상태 변경  
@@ -123,7 +125,7 @@ L7 → L6 → L5 → L4 → L3 → L2 → L1
 | Polya 엔진 | L4 | P0 | 교수학 코어 |
 | 소크라테스 프롬프트 | L4 | P0 | 코어 IP |
 | 오개념 카탈로그 | L4 | P1 | 30개 → 100개 |
-| Flutter 앱 | L5 | P0 | 웹·패드 우선·모바일 동반 |
+| Flutter 학생앱 | L5 | P0 | 패드 중심·폰 동반·View Layer(별도 웹=교사 Phase3+) |
 | FastAPI 서버 | L5 | P0 | 오케스트레이터 |
 | 학교진도 모드 | L6 | P1 | Phase 2 |
 | 수능 모드 | L6 | P1 | Phase 2 |
@@ -151,7 +153,7 @@ WhyMath 아키텍처는 *서로 직교하는 두 축*으로 본다:
 
 | 배포 블록 | 실행 주체 | 담는 7계층 코드 | 핵심 스택 |
 |---|---|---|---|
-| **Client** | 웹(Next.js) 1급 + 패드·모바일(Flutter) 학생앱 (모드 분기) | L5 일부, L6/L7 UI | 웹: Next.js 15/React 19 · 앱: Flutter 3.x+Riverpod, MathLive |
+| **Client** | Flutter 단일 학생앱(패드 중심·모드 분기) + 별도 웹(교사·SEO·Phase3+) | L5 일부, L6/L7 UI | 앱: Flutter 3.x+Riverpod·MathLive/three.js WebView · 별도 웹: React/Next |
 | **Backend** | FastAPI + uvicorn | L1 서비스·L2·L3·L4·L5 오케스트레이터·L6 모드 로직 | Python 3.12 + FastAPI |
 | **DB** | 다중 저장소 | L1·L2 자산의 영속 계층 | PostgreSQL 16 + TimescaleDB, Neo4j, ChromaDB(→ Qdrant 전환 검토), ClickHouse, Redis 7, S3/MinIO |
 | **ML** | 추론·검증 런타임 | L3 모델 호출, L3 도구 검증 | Claude Sonnet/Opus, Qwen3-Math(Phaiakes9 로컬), SymPy, OpenAI text-embedding-3-large |
@@ -159,7 +161,7 @@ WhyMath 아키텍처는 *서로 직교하는 두 축*으로 본다:
 
 ### 블록별 보충 메모
 
-- **Client — 단일 앱 모드 분기**: PRD의 3개 앱(학생·학부모·교사) 동시 개발은 Phase 1 부담(MEMORY.md PRD 허점 ③). Phase 1은 *학생앱 1개* 안에서 응용 모드(L6)를 분기하고, 학부모·교사 대시보드는 Phase 3+로 미룬다.
+- **Client — Flutter 단일 학생앱 + 별도 웹**: PRD의 3개 앱(학생·학부모·교사) 동시 개발은 Phase 1 부담(MEMORY.md PRD 허점 ③). Phase 1은 *Flutter 학생앱 1개*(패드 중심·학생+학부모 모드 분기 L6)에 집중하고, **교사 대시보드는 별도 웹(React/Next)으로 Phase 3+** (슬라이스 89). 수학 로직은 클라에 두지 않고 독립 코어(L1-L4) API로 소비.
 - **DB — 벡터 저장소 미결**: ChromaDB 유지 vs Qdrant 전환은 PRD v1.1 채택으로 발생한 미해결 의사결정(MEMORY.md 미해결 의사결정 목록). 정렬 단계 L1/L5에서 확정.
 - **DB — 신규 저장소**: Neo4j(개념 연결 그래프), ClickHouse(학습 행동 로그), S3/MinIO(영상·이미지)는 PRD 채택으로 추가. 상세 용도는 `01_data_foundation.md` 및 각 계층 문서 참조.
 - **ML — 로컬 우선**: 클라우드 LLM 호출 전 항상 Phaiakes9 로컬(Qwen3-Math) 가능성 검토(CLAUDE.md 절대 원칙). AWS Seoul ↔ Phaiakes9 하이브리드의 동기화 비용은 PRD가 누락한 항목(MEMORY.md PRD 허점 ⑦) — 기존 하이브리드 인식 유지.
