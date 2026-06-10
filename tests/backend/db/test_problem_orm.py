@@ -41,6 +41,7 @@ from whymath_backend.schema.enums import (
     SourceType,
     StepType,
     Subject,
+    VisualizationType,
 )
 from whymath_backend.schema.problem import (
     Condition,
@@ -48,6 +49,7 @@ from whymath_backend.schema.problem import (
     ProblemRelation as SchemaProblemRelation,
     ProblemStep as SchemaProblemStep,
 )
+from whymath_backend.schema.visualization import Visualization
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -96,6 +98,14 @@ def test_problem_ddl_has_array_and_numeric() -> None:
     assert "NUMERIC" in ddl
     # signature_patterns signature_pattern_enum[] — enum 배열 타입명
     assert "signature_pattern_enum" in ddl
+
+
+def test_problem_visualizations_jsonb_in_ddl() -> None:
+    """slice 91: visualizations 컬럼이 PG DDL에 JSONB로 들어간다(ARRAY enum 아닌 자유 JSON)."""
+    ddl = _pg_ddl(OrmProblem.__table__)
+    assert "visualizations" in ddl
+    # 같은 테이블 DDL에 JSONB 존재(conditions_parsed·cross_unit_pairs와 동형 컬럼).
+    assert "JSONB" in ddl
 
 
 def test_step_and_relation_ddl_compile() -> None:
@@ -193,6 +203,31 @@ def test_problem_roundtrip_preserves_core_fields() -> None:
     assert back.conditions_parsed == s.conditions_parsed
     assert back.tags == s.tags
     assert back.keywords == s.keywords
+
+
+def test_problem_visualizations_roundtrip() -> None:
+    """slice 91: list[Visualization] → JSONB list[dict] → list[Visualization] 왕복(seam 무수정)."""
+    vid = uuid.uuid4()
+    s = _valid_schema_problem().model_copy(
+        update={
+            "visualizations": [
+                Visualization(
+                    visualization_id=vid,
+                    type=VisualizationType.interactive_surface_3d,
+                    spec={"surface": "z=x**2+y**2"},
+                )
+            ]
+        }
+    )
+    orm = OrmProblem.from_schema(s)
+    # ORM 단계: list[Visualization] → list[dict] (JSONB 대상·model_dump)
+    assert isinstance(orm.visualizations, list)
+    assert orm.visualizations[0]["visualization_id"] == vid
+    assert orm.visualizations[0]["type"] == "interactive_surface_3d"
+    # 역변환: list[dict] → list[Visualization] 재검증
+    back = orm.to_schema()
+    assert isinstance(back.visualizations[0], Visualization)
+    assert back.visualizations[0].visualization_id == vid
 
 
 def test_problem_irt_difficulty_b_in_ddl_and_roundtrip() -> None:

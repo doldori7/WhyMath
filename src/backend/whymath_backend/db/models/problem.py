@@ -157,6 +157,10 @@ class Problem(Base):
         server_default=sa.text("'{}'::visual_type_enum[]"),
     )
     visual_complexity: Mapped[int | None] = mapped_column(sa.Integer)
+    # visualizations: schema는 list[Visualization] — model_dump()로 list[dict]가 되어 JSONB.
+    visualizations: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+    )
 
     # ===== 다차원 난이도 (5축) =====
     difficulty_overall: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))

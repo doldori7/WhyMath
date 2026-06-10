@@ -45,6 +45,7 @@ from whymath_backend.schema.enums import (
     Subject,
     VisualType,
 )
+from whymath_backend.schema.visualization import Visualization
 
 # ──────────────────────────────────────────────────────────────────────────
 # 본문 미보유(구조 메타 전용) source_type — 법적 교정의 대상 집합
@@ -263,6 +264,13 @@ class Problem(BaseModel):
         description="시각자료 복잡도 1-5",
         ge=1,
         le=5,
+    )
+    visualizations: list[Visualization] = Field(
+        default_factory=list,
+        description=(
+            "선언적 시각화 명세 배열(05 §5.2 — type·spec·caption·interactive). "
+            "has_visual/visual_type(메타 태그)와 다른 축 — L5 ④ 비상구가 렌더(슬라이스 91)"
+        ),
     )
 
     # ===== 다차원 난이도 (5축, 원칙 2) =====
