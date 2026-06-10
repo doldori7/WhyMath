@@ -13,7 +13,7 @@ Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이�
     EventType·ExamType·GenerationType·LegalReviewStatus·LicenseType·MajorCategory·MentalPhase·
     NoteApp·Persona·QuestionFormat·RelationType·RequiredDepth·Resolution·ReviewStatus·
     SchoolType·SessionType·SignaturePattern·SocraticStrategy·SourceType·StepType·StudentIntent·
-    Subject·SubscriptionTier·TrackType·TurnRole·VisualType·VisualizationStyle
+    Subject·SubscriptionTier·TrackType·TurnRole·VisualType·VisualizationStyle·VisualizationType
   - problem(슬라이스 1): Condition·Problem·ProblemStep·ProblemRelation
   - provenance(슬라이스 2): ContentProvenance·GenerationLog
   - concept(슬라이스 3): Concept·ConceptEdge·ProblemConcept·ConceptFusion
@@ -25,6 +25,7 @@ Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이�
     UserBehaviorMetrics
   - curriculum(슬라이스 8a, v1.1 이식): CurriculumEntry
   - textbook(슬라이스 8b, v1.1 이식): TextbookMapping·TextbookToneProfile·TextbookUnit
+  - visualization(슬라이스 90): Visualization
 """
 
 from whymath_backend.schema.activity import (
@@ -88,6 +89,7 @@ from whymath_backend.schema.enums import (
     TrackType,
     TurnRole,
     VisualizationStyle,
+    VisualizationType,
     VisualType,
 )
 from whymath_backend.schema.problem import (
@@ -115,6 +117,9 @@ from whymath_backend.schema.user import (
     UserProfile,
     UserStateSnapshot,
     UserTrackHistory,
+)
+from whymath_backend.schema.visualization import (
+    Visualization,
 )
 
 __all__ = [
@@ -158,6 +163,7 @@ __all__ = [
     "TurnRole",
     "VisualType",
     "VisualizationStyle",
+    "VisualizationType",
     # problem
     "Condition",
     "Problem",
@@ -196,4 +202,6 @@ __all__ = [
     "TextbookMapping",
     "TextbookToneProfile",
     "TextbookUnit",
+    # visualization (슬라이스 90)
+    "Visualization",
 ]
