@@ -17,6 +17,7 @@ from whymath_backend.l4.misconception.models import (
     MisconceptionDomain,
     MisconceptionMatch,
 )
+from whymath_backend.l4.misconception.visualize import visualize_misconception
 
 __all__ = [
     "CATALOG",
@@ -28,4 +29,5 @@ __all__ = [
     "MisconceptionMatch",
     "diagnose",
     "select_intervention",
+    "visualize_misconception",
 ]

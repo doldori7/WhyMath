@@ -35,6 +35,7 @@ from whymath_backend.l4.misconception import (
     MisconceptionMatch,
     diagnose,
     select_intervention,
+    visualize_misconception,
 )
 from whymath_backend.l4.models import (
     LLMSeam,
@@ -85,4 +86,5 @@ __all__ = [
     "recommend_coaching_for_solution",
     "select_category",
     "select_intervention",
+    "visualize_misconception",
 ]
