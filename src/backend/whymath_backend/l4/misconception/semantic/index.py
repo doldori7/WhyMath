@@ -5,16 +5,21 @@
 정답이다 — 좌석을 Protocol로 두어 *대규모 시 pgvector로 교체*할 자리만 확보한다.
 
 ────────────────────────────────────────────────────────────────────────────
-후속 슬라이스 (slice 105+, 명시적 미구현)
+pgvector 영속 백엔드 (slice 105, 구현됨 — `pgvector_index.PgVectorIndex`)
 ────────────────────────────────────────────────────────────────────────────
-PgVectorIndex(pgvector 백엔드 영속화)는 *후속*이다. 본 슬라이스는 좌석(VectorIndex
-Protocol)과 인메모리 구현만 둔다. 후속에서 추가할 것:
-  - `Misconception` 표현 임베딩을 PostgreSQL `vector` 컬럼에 적재(슬98 `embedding_id`는
-    현재 참조 자리만 — 실 벡터 컬럼은 스키마 밖).
-  - alembic 마이그레이션(pgvector 확장 활성 + 벡터 컬럼 + ivfflat/hnsw 인덱스).
-  - 통합 게이트(`WHYMATH_RUN_INTEGRATION`)로 라이브 PG 도달성 검증.
-무리한 pgvector 영속화 코드를 *지금* 작성하지 않는다(카탈로그 30종엔 인메모리가 최적이며,
-조기 영속화는 슬98 벡터 store 의사결정[pgvector vs Qdrant]과 결선돼야 함).
+PgVectorIndex(pgvector 백엔드 영속화)는 슬105에서 *이 좌석의 영속 구현*으로 추가됐다(슬104는
+좌석 Protocol + 인메모리 구현만 뒀다). 슬105가 더한 것:
+  - `Misconception` 표현 임베딩을 PostgreSQL `vector` 컬럼(`misconception_embedding` 테이블)에
+    적재(`pgvector_index.PgVectorIndex`·`populate_pgvector`). 슬98 결정(벡터 DB=pgvector)의
+    첫 실 결선 — 슬98 `embedding_id`(concept/user의 참조 필드)와는 별 테이블이다.
+  - alembic 마이그레이션(`CREATE EXTENSION vector` + `vector(1024)` 컬럼). **30종은 seq-scan이
+    최적이라 HNSW/IVFFlat 인덱스는 두지 않는다** — 스케일 코퍼스(개념그래프 401+·문제은행·학생
+    풀이)가 *fixed-dim + HNSW cosine 인덱스*의 자리다(후속·과장 금지: pgvector는 30종에서
+    인메모리보다 빠르지 않고 *영속화 + 스케일 groundwork*다).
+  - 통합 게이트(`WHYMATH_RUN_INTEGRATION`)로 라이브 PG 도달성·add/search·recall 검증.
+`build_vector_index(settings)` 팩토리가 `config.vector_store`(기본 `memory`)에 따라 인메모리/
+pgvector를 만든다(기본 동작 무변경 — pgvector는 opt-in). 카탈로그 30종엔 여전히 인메모리가
+최적이고, PgVectorIndex는 사전 임베딩을 *프로세스 밖에 영속*(재기동·다중 워커 공유)하는 값이다.
 
 7계층: 이 인덱스도 L4가 호출하는 *하위 인프라 좌석*이다(임베딩 저장·검색 = 영속/검색
 계층). L4 SemanticMatcher는 인덱스 구현을 모르고 VectorIndex Protocol만 본다.
@@ -24,9 +29,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from whymath_backend.config import Settings, get_settings
 from whymath_backend.l4.misconception.semantic.provider import cosine_similarity
+
+if TYPE_CHECKING:
+    from whymath_backend.l4.misconception.semantic.pgvector_index import PgVectorIndex
 
 
 @dataclass(slots=True, frozen=True)
@@ -96,3 +105,34 @@ class InMemoryVectorIndex:
     def __len__(self) -> int:
         """적재된 항목 수(테스트·디버그용)."""
         return len(self._entries)
+
+
+def build_vector_index(
+    settings: Settings | None = None,
+    *,
+    provider_name: str,
+    model_name: str,
+) -> VectorIndex:
+    """`Settings.vector_store`에 따라 벡터 인덱스를 만든다(좌석 팩토리·build_provider 미러).
+
+    `memory`(기본)=`InMemoryVectorIndex`(코사인 선형 스캔·라이브 의존 0). `pgvector`=
+    `PgVectorIndex`(영속·sync psycopg 엔진·지연 import). **기본 동작 무변경** — pgvector는
+    opt-in이고, memory 경로는 psycopg/pgvector를 import하지 않는다(PgVectorIndex import는 이
+    함수의 pgvector 분기 *안*에서만).
+
+    `provider_name`·`model_name`은 pgvector의 *임베딩 공간 식별자*다(같은 공간 행만 비교).
+    memory 분기는 이 둘을 무시한다(인메모리는 단일 프로세스·단일 공간이라 식별 불요) — 인터페이스
+    대칭을 위해 양쪽에 받되 pgvector만 쓴다. 호출자(매처)는 add/search에 일관된 식별자를 넘겨야
+    한다(provider별 model 해석은 호출자 책임 — 보통 `_provider_model_identity`).
+    """
+    resolved = settings if settings is not None else get_settings()
+    if resolved.vector_store == "pgvector":
+        # 지연 import — memory 경로(기본)는 psycopg/pgvector·sync 드라이버를 안 끌어온다.
+        from whymath_backend.l4.misconception.semantic.pgvector_index import PgVectorIndex
+
+        index: PgVectorIndex = PgVectorIndex(
+            provider_name=provider_name, model_name=model_name, settings=resolved
+        )
+        return index
+    # 기본 memory — 카탈로그 30종 최적·라이브 의존 0.
+    return InMemoryVectorIndex()

@@ -12,6 +12,11 @@ dependencies = [
     # 데이터베이스
     "sqlalchemy[asyncio]>=2.0.35",
     "asyncpg>=0.30.0",
+    # psycopg(sync) — 슬105 PgVectorIndex 전용(벡터 store 좌석에 한정된 sync 드라이버).
+    # 앱 본체는 async(asyncpg)이고, 이 sync 드라이버는 VectorIndex Protocol이 sync라 *영속
+    # 벡터 인덱스 좌석에만* 도입한다. import는 PgVectorIndex 내부 lazy — 기본(memory) 경로는
+    # psycopg 불요. async 앱 엔진은 무변경 (MEMORY 2026-06-10 슬105 결정 로그).
+    "psycopg[binary]>=3.1",
     "alembic>=1.13.3",
     # 캐시·큐
     "redis[hiredis]>=5.1.0",

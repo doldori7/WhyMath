@@ -22,11 +22,17 @@ from whymath_backend.l4.misconception.semantic.index import (
     IndexHit,
     InMemoryVectorIndex,
     VectorIndex,
+    build_vector_index,
 )
 from whymath_backend.l4.misconception.semantic.matcher import (
     SemanticMatcher,
     catalog_text,
     semantic_matches,
+)
+from whymath_backend.l4.misconception.semantic.pgvector_index import (
+    PgVectorIndex,
+    populate_pgvector,
+    text_hash,
 )
 from whymath_backend.l4.misconception.semantic.provider import (
     EmbeddingProvider,
@@ -44,10 +50,14 @@ __all__ = [
     "InMemoryVectorIndex",
     "LocalEmbeddingProvider",
     "OpenAIEmbeddingProvider",
+    "PgVectorIndex",
     "SemanticMatcher",
     "VectorIndex",
     "build_provider",
+    "build_vector_index",
     "catalog_text",
     "cosine_similarity",
+    "populate_pgvector",
     "semantic_matches",
+    "text_hash",
 ]
