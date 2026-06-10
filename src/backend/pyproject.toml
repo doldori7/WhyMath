@@ -22,8 +22,8 @@ dependencies = [
     "anthropic>=0.40.0",
     "openai>=1.50.0",
     "ollama>=0.4.0",
-    # 벡터 DB·임베딩
-    "chromadb>=0.5.15",
+    # 벡터 DB(pgvector·Postgres 통합)·임베딩
+    "pgvector>=0.3.0",
     "sentence-transformers>=3.1.0",
     # 인증·보안
     "python-jose[cryptography]>=3.3.0",

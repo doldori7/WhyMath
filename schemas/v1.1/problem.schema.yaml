@@ -29,7 +29,7 @@
 
 entity: Problem
 layer: "L1/L3"
-storage: "PostgreSQL 16 (problems) + ChromaDB(문제 임베딩 — 유사 문제 검색)"
+storage: "PostgreSQL 16 (problems) + pgvector(문제 임베딩 동거 — 유사 문제 검색·슬98)"
 primary_key: problem_id
 phase_scope: "Phase 1 — 평가원 기출 5년치 + NuminaMath/OmniMath + 자체 생성"
 
@@ -157,7 +157,7 @@ fields:
     required: false
     description: >-
       문제 임베딩 벡터. 유사 문제 검색·유형 클러스터링용. 임베딩 모델은
-      OpenAI text-embedding-3-large (PRD v1.1 흡수 스택). ChromaDB 저장.
+      OpenAI text-embedding-3-large (PRD v1.1 흡수 스택). pgvector 동거 저장(슬98).
 
   created_at:
     type: datetime

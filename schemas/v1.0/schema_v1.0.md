@@ -6,7 +6,7 @@
 **작성일**: 2026-05-28
 **기반 문서**: WhyMath PRD v1.2
 **대상**: 백엔드·데이터 엔지니어, AI 엔진 개발자
-**범위**: PostgreSQL + TimescaleDB + ChromaDB 통합 스키마
+**범위**: PostgreSQL 16 (+ TimescaleDB·pgvector) 통합 스키마
 
 ---
 
@@ -64,7 +64,7 @@
 - IDX: Index
 - ENUM: 열거형 (PostgreSQL 14+ 또는 CHECK 제약)
 - JSONB: PostgreSQL JSONB 타입
-- VECTOR: 벡터 임베딩 (ChromaDB)
+- VECTOR: 벡터 임베딩 (pgvector·Postgres 동거·슬98)
 - TS: 시계열 (TimescaleDB hypertable)
 ```
 
@@ -95,7 +95,7 @@
 | 도메인 | 책임 | 저장소 | 데이터 크기 |
 |---|---|---|---|
 | ① Problem | 문제·정답·풀이 + 50+ 메타데이터 | PostgreSQL | 약 100만 행 (5년) |
-| ② Concept Graph | 단원/개념 노드와 관계 (DAG) | PostgreSQL + ChromaDB | 약 2,000 노드 |
+| ② Concept Graph | 단원/개념 노드와 관계 (DAG) | PostgreSQL + pgvector | 약 2,000 노드 |
 | ③ User | 학생·페르소나·학습 목표 | PostgreSQL | 약 50만 행 (5년) |
 | ④ Activity | 풀이·시도·결과 이벤트 | PostgreSQL (요약) + TimescaleDB (raw) | 수억 행 |
 | ⑤ Dialogue | Socratic 대화 이력 | PostgreSQL + JSONB | 수십억 행 |
@@ -331,8 +331,8 @@ CREATE TABLE concept (
     intuitive_explanation TEXT,                     -- 직관적 설명 (Socratic용)
     common_misconceptions JSONB,                    -- [{"misconception":"...", "correction":"..."}]
 
-    -- 벡터 임베딩 ID (ChromaDB 외부 참조)
-    embedding_id        UUID,                       -- ChromaDB collection의 ID
+    -- 벡터 임베딩 (pgvector·Postgres 동거·슬98; embedding_id는 ChromaDB 잔재→통합 시 embedding 컬럼)
+    embedding_id        UUID,                       -- §4.3 참조 (pgvector 통합 시 정리)
 
     created_at          TIMESTAMPTZ DEFAULT NOW()
 );
@@ -391,32 +391,41 @@ CREATE INDEX idx_concept_edge_to ON concept_edge(to_concept_id, edge_type);
 CREATE INDEX idx_problem_concept_pc ON problem_concept(problem_id, concept_id);
 ```
 
-### 4.3 ChromaDB 통합
+### 4.3 pgvector 통합 (벡터 임베딩 — 슬98 결정)
 
-```python
-# ChromaDB Collection 설계
-collections = {
-    "concept_embeddings": {
-        "purpose": "개념 임베딩 (의미적 유사도 검색)",
-        "embedding_model": "BGE-M3 또는 Qwen3-Embedding-8B",
-        "metadata": ["concept_id", "code", "subject", "level", "curriculum_version"],
-        "size_estimate": "약 2,000 노드"
-    },
-    "problem_embeddings": {
-        "purpose": "문제 임베딩 (유사 문제 검색)",
-        "embedding_model": "BGE-M3 (한국어 수학 fine-tuned)",
-        "metadata": ["problem_id", "exam_year", "subject", "signature_patterns",
-                     "difficulty_overall"],
-        "size_estimate": "약 100만 행 (5년)"
-    },
-    "student_state_embeddings": {
-        "purpose": "학생 학습 상태 임베딩 (유사 학생 매칭, 추천)",
-        "embedding_model": "Custom (학습 활동 시퀀스 → 벡터)",
-        "metadata": ["user_id", "snapshot_at", "grade_estimate"],
-        "size_estimate": "약 100만 스냅샷"
-    }
-}
+벡터는 **별도 store가 아니라 PostgreSQL 16의 `pgvector` 확장**으로 *해당 테이블에 동거*한다 —
+메타데이터(subject·exam_year·difficulty·level)가 이미 같은 행의 컬럼이라 *하이브리드 검색이
+단일 SQL*이 된다(메타 중복·동기화 0). 6번째 store 회피·미성년 PII 통제 DB 유지. 대규모/고QPS
+시 Qdrant 이관(지연 트리거). ChromaDB는 개발용(SQLite)이라 비채택.
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;  -- pgvector (1회)
+
+-- ① 개념 임베딩 (~2천 노드) — concept 테이블 동거 컬럼
+ALTER TABLE concept ADD COLUMN embedding halfvec(3072);   -- text-embedding-3-large(3072)
+CREATE INDEX ON concept USING hnsw (embedding halfvec_cosine_ops);
+
+-- ② 문제 임베딩 (~100만) — problem 테이블 동거 (메타는 이미 컬럼)
+ALTER TABLE problem ADD COLUMN embedding halfvec(3072);
+CREATE INDEX ON problem USING hnsw (embedding halfvec_cosine_ops);
+-- 하이브리드(메타 필터 + k-NN)를 *단일 쿼리*로:
+--   SELECT problem_id FROM problem
+--   WHERE subject = '미적분' AND exam_year >= 2022
+--   ORDER BY embedding <=> :q LIMIT :k;
+
+-- ③ 학생 상태 임베딩 (~100만 스냅샷) — user_state_snapshot 동거
+ALTER TABLE user_state_snapshot ADD COLUMN embedding halfvec(1024);
+CREATE INDEX ON user_state_snapshot USING hnsw (embedding halfvec_cosine_ops);
 ```
+
+메모:
+- **차원**: `vector`는 인덱스 ≤2000차원 → 3072/4096은 `halfvec`(반정밀·≤4000) 또는
+  text-embedding-3-large `dimensions=1536` 축소. 임베딩 *모델* 확정(OpenAI 3072 vs BGE-M3
+  1024 vs Qwen3-Embedding-8B 4096)은 *별개 결정*(차원만 위 호환 경로 따름).
+- **`embedding_id` 필드**: 현 schema/ORM의 `embedding_id`(외부참조 UUID)는 ChromaDB 전제의
+  잔재 — pgvector 동거에선 벡터 컬럼이 *같은 행*이라 외부 ID 불필요. 통합 슬라이스에서
+  `embedding` 컬럼으로 대체·`embedding_id` 정리(후속).
+- **거리/인덱스**: cosine(`<=>`)·HNSW(m·ef_construction 튜닝은 실측 후).
 
 ### 4.4 매핑된 특성
 
@@ -565,7 +574,7 @@ CREATE TABLE user_state_snapshot (
     consecutive_active_days INTEGER,                -- 연속 학습일
     avg_session_quality DECIMAL(3,2),               -- 집중도 평균
 
-    -- 임베딩 (ChromaDB 외부 참조)
+    -- 임베딩 (pgvector·Postgres 동거·슬98; 통합 시 embedding halfvec 컬럼·embedding_id는 잔재)
     embedding_id        UUID
 );
 
@@ -981,13 +990,13 @@ CREATE INDEX idx_generation_problem ON generation_log(problem_id);
 
 ## 11. DB 분산 전략
 
-### 11.1 3개 DB 역할 분담
+### 11.1 DB 역할 분담 (TimescaleDB·pgvector는 Postgres 16 확장·슬98)
 
 | DB | 역할 | 데이터 |
 |---|---|---|
 | **PostgreSQL** | 트랜잭션·관계 데이터의 진실 원천 | Problem, Concept, User, Assessment, Dialogue (요약), Provenance |
-| **TimescaleDB** | 고빈도 시계열 데이터 | attempt_event, daily_metrics, mastery_history, behavior_metrics |
-| **ChromaDB** | 벡터 임베딩 의미 검색 | concept_embeddings, problem_embeddings, student_state_embeddings |
+| **TimescaleDB** (PG 확장) | 고빈도 시계열 데이터 | attempt_event, daily_metrics, mastery_history, behavior_metrics |
+| **pgvector** (PG 확장) | 벡터 임베딩 의미 검색 — 메타 동거 하이브리드(단일 SQL) | concept·problem·user_state_snapshot의 `embedding` 컬럼 |
 
 ### 11.2 데이터 흐름
 
@@ -1005,7 +1014,7 @@ CREATE INDEX idx_generation_problem ON generation_log(problem_id);
     ▼
 [학생 막힘 → Socratic 호출]
     │
-    └─► [ChromaDB: problem_embeddings 유사 문제 검색]
+    └─► [pgvector(Postgres 동거): problem.embedding 유사 문제 검색 — 메타 필터 단일 SQL]
     │
     └─► [Postgres: dialogue + dialogue_turn INSERT]
     │
@@ -1018,16 +1027,16 @@ CREATE INDEX idx_generation_problem ON generation_log(problem_id);
     │
     └─► [Postgres: concept_mastery_history UPDATE]
     │
-    └─► [ChromaDB: student_state_embeddings UPDATE (시간당 배치)]
+    └─► [pgvector(Postgres 동거): user_state_snapshot.embedding UPDATE (시간당 배치)]
 ```
 
 ### 11.3 트랜잭션·일관성 전략
 
 - **Postgres 내부**: ACID 트랜잭션 (예: `problem_attempt` + `dialogue` 동시 INSERT)
 - **Postgres ↔ TimescaleDB**: TimescaleDB는 Postgres 확장이므로 같은 트랜잭션 사용 가능
-- **Postgres ↔ ChromaDB**: 비동기 동기화 (Eventual Consistency)
+- **Postgres ↔ pgvector**: pgvector도 Postgres 확장(벡터 동거)이라 같은 트랜잭션 가능 — 단 임베딩 *생성*(모델 호출)은 비동기 → `embedding` 컬럼 지연 채움 허용(Eventual Consistency)
   - 5분 이내 일관성 보장이면 충분
-  - ChromaDB 임베딩 갱신 실패해도 메인 트랜잭션은 성공
+  - 임베딩 생성 실패해도 메인 트랜잭션은 성공 (`embedding` NULL→후속 배치 채움)
 
 ### 11.4 백업·복구
 
@@ -1035,7 +1044,7 @@ CREATE INDEX idx_generation_problem ON generation_log(problem_id);
 |---|---|---|---|
 | PostgreSQL | 일 1회 풀백업 + 시간당 WAL | 1시간 | 1시간 |
 | TimescaleDB | 일 1회 (오래된 청크 압축) | 4시간 | 1일 |
-| ChromaDB | 일 1회 스냅샷 | 6시간 | 1일 (재생성 가능) |
+| pgvector (Postgres 동거) | PostgreSQL 백업에 포함 (별도 불필요) | — | — (`embedding`은 재생성 가능) |
 
 ---
 
@@ -1246,13 +1255,14 @@ def diagnose_and_recommend(user_id):
         WHERE ce.to_concept_id = ? AND ce.edge_type = 'PREREQUISITE'
     """, weak_concept_id)
 
-    # 5. ChromaDB로 유사한 학생들의 회복 경로 탐색
-    similar_students = chromadb.query(
-        collection='student_state_embeddings',
-        query_embedding=user_embedding,
-        n_results=100,
-        where={'persona': 'A_일반고고3', 'recovered_from': 'COMPOSITE_DIFF'}
-    )
+    # 5. pgvector로 유사한 학생들의 회복 경로 탐색 (메타 필터+k-NN 단일 SQL·Postgres 동거)
+    similar_students = postgres.query("""
+        SELECT snapshot_id, user_id
+        FROM user_state_snapshot
+        WHERE persona = 'A_일반고고3' AND recovered_from = 'COMPOSITE_DIFF'
+        ORDER BY embedding <=> ?   -- cosine 거리(동일 행 메타 필터와 한 쿼리)
+        LIMIT 100
+    """, user_embedding)
 
     # 6. 추천 문제 생성
     recommended = postgres.query("""
@@ -1354,7 +1364,7 @@ def recommend_research_topic(user_id):
 ### Phase 1: MVP (v1.0, 3개월)
 - [ ] PostgreSQL 스키마 전체 생성
 - [ ] `problem`, `concept`, `user_profile`, `problem_attempt`, `dialogue` 5개 핵심 테이블 작동
-- [ ] ChromaDB `concept_embeddings`, `problem_embeddings` 컬렉션 구축
+- [ ] pgvector 확장 설치 + `concept`·`problem` `embedding` 컬럼·HNSW 인덱스(cosine) 구축
 - [ ] TimescaleDB `attempt_event` hypertable 운영
 - [ ] 평가원 30년치 데이터 ETL
 

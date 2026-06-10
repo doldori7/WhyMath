@@ -19,7 +19,7 @@ collect  clean  transform validate load    index
 | ETL | Prefect 또는 Airflow |
 | 임베딩 | sentence-transformers (한국어: BM-K/KoSimCSE) |
 | 저장 (RDB) | PostgreSQL 16 + TimescaleDB |
-| 저장 (벡터) | ChromaDB |
+| 저장 (벡터) | pgvector (PostgreSQL 16 확장·슬98) |
 | 캐시 | Redis 7 |
 
 ## 데이터 카드 (의무)

@@ -150,7 +150,7 @@ StudentProfile(12) ←── 학교알리미(3)로 "학교→교과서" 자동 �
 ```
 수집 → 정제 → 정형화 → 검증 → 저장 → 인덱싱
  ↓     ↓      ↓        ↓      ↓       ↓
-httpx pandas pydantic  GE   PG+Chroma  ANN
+httpx pandas pydantic  GE  PG+pgvector ANN
 ```
 
 ## 데이터 카드 — 필수

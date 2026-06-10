@@ -69,7 +69,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | 백엔드 | Python 3.12 + FastAPI + uvicorn | AVAC 자산 |
 | RDB | PostgreSQL 16 + TimescaleDB (시계열) | AVAC 자산 |
 | Graph DB | Neo4j 5.x (Community) | 개념 연결 그래프 (노드·엣지) |
-| Vector DB | ChromaDB → Qdrant 전환 검토 | 임베딩·의미 검색 (미해결 의사결정) |
+| Vector DB | **pgvector** (PostgreSQL 16 확장) | 임베딩·의미 검색 — 메타 동거 하이브리드(단일 SQL)·6번째 store 회피. 대규모 시 Qdrant 이관 (MEMORY 슬98) |
 | 행동 로그 | ClickHouse | 학습 행동 로그 분석 |
 | 객체 저장소 | S3 / MinIO | 영상·이미지 |
 | 캐시 | Redis 7 | 세션·핫 데이터 |
@@ -85,7 +85,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | CI/CD | GitHub Actions | |
 | 인프라 | Phaiakes9 (개발), GCP/AWS (프로덕션) | |
 
-**변경하려면 MEMORY.md에 결정 로그 필수.** Graph DB·행동 로그·객체 저장소·시각화 스택 추가는 `2026-05-14 MathScope PRD v1.1 채택`, OCR(Mathpix→PaddleOCR+Qwen3-VL)·Qwen3-VL 추가는 `2026-05-28` 결정 로그 참조.
+**변경하려면 MEMORY.md에 결정 로그 필수.** Graph DB·행동 로그·객체 저장소·시각화 스택 추가는 `2026-05-14 MathScope PRD v1.1 채택`, OCR(Mathpix→PaddleOCR+Qwen3-VL)·Qwen3-VL 추가는 `2026-05-28`, 벡터 DB(ChromaDB→**pgvector** Postgres 통합)는 `2026-06-10 슬98` 결정 로그 참조.
 
 ---
 
