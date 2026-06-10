@@ -33,29 +33,37 @@
 5. **exponent-zero**: a⁰ = 0
 6. **fraction-cancellation**: (a+b)/a = b
 7. **log-distribution**: log(a+b) = log a + log b
+24. **discriminant-negative-no-real-root**: 판별식 D<0이면 "해가 없다" (실근은 없으나 복소근 2개 — 불능으로 단정, [HK07])
+25. **root-loss-by-dividing**: ax²=bx의 양변을 x로 나눠 x=0 근 손실 (x(ax−b)=0로 인수분해해야, [J0220])
 ...
 
 ### 기하 영역
 8. **angle-sum-non-triangle**: 비삼각형 도형 각 합 혼동
 9. **similarity-vs-congruence**: 닮음과 합동 혼동
 10. **area-perimeter-confusion**: 둘레 늘면 넓이 늘 거라 가정
+26. **circle-radius-squared**: x²+y²=r²의 반지름을 r²로 착각 (반지름은 r, [HK22])
 ...
 
 ### 확률·통계
 11. **gambler-fallacy**: 동전 H 5번 후 T 더 자주 나올 거
 12. **prosecutor-fallacy**: P(A|B) = P(B|A)
 13. **mean-vs-median**: 평균과 중앙값 혼동
+27. **mutually-exclusive-implies-independent**: 배반사건이면 독립이라 가정 (P>0인 배반은 오히려 종속, [H:12확통02-05])
 ...
 
 ### 함수
 14. **invertibility-without-1-1**: 함수가 항상 역함수 가짐 가정
-15. **continuity-vs-differentiability**
+15. **continuity-implies-differentiability**: 연속이면 미분가능하다고 가정 (역은 거짓 — f(x)=|x|는 0에서 연속·미분불가, [H:12미적Ⅰ02-02]). *주의*: ① 본래 stub 명 `continuity-vs-differentiability`를 함의 방향을 명시한 케밥 id로 상세화·확정. ② 도식상 번호는 함수 슬롯(#15)에 두되 *카탈로그 domain은 미적분*(`[H:12미적Ⅰ02-02]` 정착) — 아래 미적분 영역에서 재참조.
+28. **composite-function-commutes**: 합성함수 f∘g = g∘f라 가정 (합성은 일반적으로 비가환, [HK35])
+29. **translation-sign-flip**: y=f(x−a)를 왼쪽으로 평행이동이라 가정 (x−a는 +a만큼 오른쪽 이동, [HK24])
 ...
 
 ### 미적분 영역
 16. **chain-rule-inner-derivative-omitted**: d/dx[sin(2x)] = cos(2x) (내부 도함수 ×2 누락)
 17. **product-rule-naive**: (f·g)′ = f′·g′ (곱의 미분을 각각 미분의 곱으로)
 18. **limit-equals-function-value**: lim_{x→a} f(x) = f(a) (불연속점 무시)
+15. **continuity-implies-differentiability** (domain=미적분 — 위 함수 슬롯 #15에서 상세, 여기 재참조): 연속이면 미분가능 가정, f(x)=|x| 반례 [H:12미적Ⅰ02-02]
+30. **critical-point-implies-extremum**: f′(a)=0이면 극값이라 단정 (f′=0은 극값의 필요조건일 뿐 — f(x)=x³은 f′(0)=0이나 변곡점, [H:12미적Ⅰ02-07])
 ...
 
 ### 수열 영역

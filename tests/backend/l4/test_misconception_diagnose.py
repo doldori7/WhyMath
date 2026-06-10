@@ -46,6 +46,82 @@ class TestSingleMatch:
         assert top.confidence == 1.0
 
 
+class TestSliceCatalogExpansionMatches:
+    """슬 §5.4 신규 8종의 *진단 매칭* — 학생의 틀린 주장 텍스트 → 해당 id 매칭(confidence 1.0).
+
+    각 텍스트는 *positive 오류 단편*(학생이 틀린 명제를 직접 적은 형태)으로, 두 signal
+    토큰이 모두 공출현해 풀매칭(1.0)이 떠야 한다.
+    """
+
+    def _find(self, text: str, mid: str) -> MisconceptionMatch | None:
+        return next((m for m in diagnose(text, top_k=8) if m.misconception.id == mid), None)
+
+    def test_discriminant_negative_no_real_root(self) -> None:
+        m = self._find("판별식이 음수라서 해가 없다고 했어", "discriminant-negative-no-real-root")
+        assert m is not None
+        assert m.confidence == 1.0
+        assert m.misconception.domain == "대수"
+
+    def test_root_loss_by_dividing(self) -> None:
+        m = self._find("x²=2x에서 양변을 x로 나누면 x=2", "root-loss-by-dividing")
+        assert m is not None
+        assert m.confidence == 1.0
+
+    def test_circle_radius_squared(self) -> None:
+        m = self._find("x²+y²=9의 반지름은 r²=9 라고 적었어", "circle-radius-squared")
+        assert m is not None
+        assert m.confidence == 1.0
+        assert m.misconception.domain == "기하"
+
+    def test_mutually_exclusive_implies_independent(self) -> None:
+        m = self._find("두 사건이 배반이니까 독립이야", "mutually-exclusive-implies-independent")
+        assert m is not None
+        assert m.confidence == 1.0
+        assert m.misconception.domain == "확률통계"
+
+    def test_composite_function_commutes(self) -> None:
+        m = self._find("f∘g = g∘f 라서 합성 순서는 상관없어", "composite-function-commutes")
+        assert m is not None
+        assert m.confidence == 1.0
+        assert m.misconception.domain == "함수"
+
+    def test_translation_sign_flip(self) -> None:
+        m = self._find("y=f(x-a)는 왼쪽으로 평행이동한 거야", "translation-sign-flip")
+        assert m is not None
+        assert m.confidence == 1.0
+        assert m.misconception.domain == "함수"
+
+    def test_continuity_implies_differentiability(self) -> None:
+        # doc 함수 슬롯 #15이나 domain=미적분([H:12미적Ⅰ02-02])
+        m = self._find("이 함수는 연속이니까 미분가능해", "continuity-implies-differentiability")
+        assert m is not None
+        assert m.confidence == 1.0
+        assert m.misconception.domain == "미적분"
+
+    def test_critical_point_implies_extremum(self) -> None:
+        m = self._find("f′=0이면 극값을 가져", "critical-point-implies-extremum")
+        assert m is not None
+        assert m.confidence == 1.0
+        assert m.misconception.domain == "미적분"
+
+    def test_unrelated_solution_matches_no_new_entry(self) -> None:
+        # 무관한 풀이는 신규 8종 어디에도 풀매칭(1.0)되지 않는다(두 토큰 AND·과잉 단일토큰 회피).
+        new_ids = {
+            "discriminant-negative-no-real-root",
+            "root-loss-by-dividing",
+            "circle-radius-squared",
+            "mutually-exclusive-implies-independent",
+            "composite-function-commutes",
+            "translation-sign-flip",
+            "continuity-implies-differentiability",
+            "critical-point-implies-extremum",
+        }
+        text = "일차함수 y=2x+3의 그래프를 그리고 기울기를 구했어"
+        for m in diagnose(text, top_k=10):
+            if m.misconception.id in new_ids:
+                assert m.confidence < 1.0
+
+
 class TestRankingAndTopK:
     def test_higher_confidence_first(self) -> None:
         # 두 오개념 동시 등장(부분/전체 매칭)
@@ -119,11 +195,7 @@ class TestSignalPrecision:
         # (v1 신호 "모든"이었다면 역함수+모든 → 1.0 거짓양성)
         benign = "이 함수의 역함수를 모든 구간에서 구했어"
         m = next(
-            (
-                x
-                for x in diagnose(benign)
-                if x.misconception.id == "invertibility-without-1-1"
-            ),
+            (x for x in diagnose(benign) if x.misconception.id == "invertibility-without-1-1"),
             None,
         )
         assert m is None or m.confidence < 1.0
@@ -136,9 +208,7 @@ class TestNumericSubstitutionDetection:
     """
 
     def _find(self, text: str, mid: str) -> MisconceptionMatch | None:
-        return next(
-            (m for m in diagnose(text, top_k=5) if m.misconception.id == mid), None
-        )
+        return next((m for m in diagnose(text, top_k=5) if m.misconception.id == mid), None)
 
     def test_distribution_numeric_substitution_detected(self) -> None:
         # 기호 signals "(a+b)"·"a² + b²" 부재(학생은 *수*를 적음) → v1.1이면 미탐지.
@@ -192,9 +262,7 @@ class TestRegexBackwardCompatibility:
 
     def test_symbolic_distribution_unchanged_partial(self) -> None:
         m = next(
-            x
-            for x in diagnose("(a+b)² 까지만")
-            if x.misconception.id == "distribution-over-power"
+            x for x in diagnose("(a+b)² 까지만") if x.misconception.id == "distribution-over-power"
         )
         assert m.confidence == 0.5
         assert m.matched_regex_signals == ()

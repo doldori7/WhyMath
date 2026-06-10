@@ -1,9 +1,10 @@
 r"""오개념 카탈로그 — `docs/prompts/misconception_diagnosis.md` "오개념 카탈로그" 정본.
 
-**스코프 정직**(False-attribute 금기, CLAUDE.md): doc에 *명시되고 상세화된* 항목만 코딩(22종).
+**스코프 정직**(False-attribute 금기, CLAUDE.md): doc에 *명시되고 상세화된* 항목만 코딩(30종).
 슬: doc에 수능 핵심 4영역(미적분·수열·삼각함수·벡터, doc #16-23)을 *먼저 정본화*한 뒤
-코드로 인코딩(doc-first). 아직 이름만 있고 미상세인 #15(continuity-vs-differentiability)·기타
-"..." 자리표시자(30개 목표까지)는 후속 — *미상세 항목을 추정 작성하지 않는다*.
+코드로 인코딩(doc-first). 슬: §5.4 교차검증 후보 8종을 doc에 상세화(stub #15
+continuity-implies-differentiability 포함·#24-30 신규)한 뒤 인코딩 — Phase 1 30종 목표 달성.
+여전히 *미상세 항목을 추정 작성하지 않는다*(doc-first 불변).
 
 각 `canonical_statement`·`counterexample`은 *자체 생성 기본 수학 사실*(교과서/EBS 본문 복제
 금지·CLAUDE.md). 반례는 canonical을 실제로 반증한다(수학적 정합 검증 완료).
@@ -25,7 +26,7 @@ from __future__ import annotations
 
 from whymath_backend.l4.misconception.models import Misconception
 
-# 대수 영역 — doc L24-32 (7종).
+# 대수 영역 — doc "대수 영역"(#1-7, #24-25) (9종).
 _ALGEBRA: tuple[Misconception, ...] = (
     Misconception(
         id="distribution-over-power",
@@ -99,9 +100,30 @@ _ALGEBRA: tuple[Misconception, ...] = (
         counterexample="a=b=1: log 2 ≠ log 1 + log 1 = 0",
         signals=("log(a+b)", "log a + log b"),
     ),
+    Misconception(
+        id="discriminant-negative-no-real-root",
+        name_kr="판별식 음수 해 부재 단정",
+        domain="대수",
+        # 학생이 "해가 없다"로 *불능* 단정. 올바른 명제는 "실근이 없다"(복소근 2개 존재).
+        canonical_statement="판별식 D<0이면 해가 없다",
+        counterexample="x²+1=0은 실근은 없으나 x=±i (복소근 2개)",
+        # 신호 정밀화: 단독 "판별식"은 정답에도 흔하므로 *틀린 결론* "해가 없"과 공출현 요구.
+        # 올바른 풀이는 "실근이 없"이라 적어 "해가 없"과 구분된다(positive 오류 단편).
+        signals=("판별식", "해가 없"),
+    ),
+    Misconception(
+        id="root-loss-by-dividing",
+        name_kr="양변 나눗셈 근 손실",
+        domain="대수",
+        canonical_statement="ax²=bx의 양변을 x로 나누면 x=b/a (x=0 근 손실)",
+        counterexample="x²=2x를 x로 나누면 x=2만 — 실제 x(x-2)=0이라 x=0도 근",
+        # "양변"+"x로 나누"(변수로 나눔)의 공출현이 근 손실의 양성 단편. 상수로 나누는
+        # 올바른 조작("양변을 2로 나누")은 "x로 나누"를 포함하지 않아 구분된다.
+        signals=("양변", "x로 나누"),
+    ),
 )
 
-# 기하 영역 — doc L36-39 (3종).
+# 기하 영역 — doc "기하 영역"(#8-10, #26) (4종).
 _GEOMETRY: tuple[Misconception, ...] = (
     Misconception(
         id="angle-sum-non-triangle",
@@ -127,9 +149,21 @@ _GEOMETRY: tuple[Misconception, ...] = (
         counterexample="가늘고 긴 직사각형은 둘레 大, 넓이 小 가능",
         signals=("둘레", "넓이"),
     ),
+    Misconception(
+        id="circle-radius-squared",
+        name_kr="원 반지름 제곱 혼동",
+        domain="기하",
+        canonical_statement="x²+y²=r²의 반지름은 r²",
+        counterexample="x²+y²=9는 반지름 3 (=√9), 9가 아님",
+        # "반지름"+"r²"(NFKC로 'r2') 공출현 — 반지름을 r²로 표기한 양성 단편. 한계(§5.3):
+        # 일반형 정답("x²+y²=r², r²=9, 반지름 3")도 두 토큰 공출현→오탐 가능
+        # (substring은 반지름·r²의 *등치*를 못 가림). 두 토큰 AND라 무관 풀이엔 미발화.
+        # 정본 해법(등치 판별)은 임베딩/LLM-judged 후속 — 개입은 비난 없는 소크라테스형.
+        signals=("반지름", "r²"),
+    ),
 )
 
-# 확률·통계 — doc L42-45 (3종).
+# 확률·통계 — doc "확률·통계"(#11-13, #27) (4종).
 _PROBSTAT: tuple[Misconception, ...] = (
     Misconception(
         id="gambler-fallacy",
@@ -155,9 +189,19 @@ _PROBSTAT: tuple[Misconception, ...] = (
         counterexample="치우친 분포(소득)에서 평균 ≠ 중앙값",
         signals=("평균", "중앙값"),
     ),
+    Misconception(
+        id="mutually-exclusive-implies-independent",
+        name_kr="배반·독립 혼동",
+        domain="확률통계",
+        canonical_statement="배반사건이면 독립이다",
+        counterexample="주사위 A={1}, B={2}: P(A∩B)=0 ≠ P(A)P(B)=1/36 (배반은 오히려 종속)",
+        # "배반"+"독립" 공출현 — 둘을 동일시한 양성 단편. 올바른 진술("배반이면 종속")은
+        # "독립"을 포함하지 않아 구분된다.
+        signals=("배반", "독립"),
+    ),
 )
 
-# 함수 — doc L48-50 (1종 명시 + "..." 자리표시자).
+# 함수 — doc "함수"(#14, #28-29) (3종).
 _FUNCTION: tuple[Misconception, ...] = (
     Misconception(
         id="invertibility-without-1-1",
@@ -169,10 +213,34 @@ _FUNCTION: tuple[Misconception, ...] = (
         # 좁힘. concept_graph_dataset_v1.md §5.3 신호 정밀도 평가.
         signals=("역함수", "모든 함수"),
     ),
+    Misconception(
+        id="composite-function-commutes",
+        name_kr="합성함수 교환 가정",
+        domain="함수",
+        canonical_statement="f∘g = g∘f (합성은 교환법칙 성립)",
+        counterexample="f=x+1, g=x²: f∘g=x²+1 ≠ (x+1)²=g∘f",
+        # "f∘g"+"g∘f" 공출현 — 둘을 등치한 양성 단편(∘는 NFKC 불변). 한계(§5.3): substring은
+        # *부정*("f∘g≠g∘f")을 못 가려 두 합성을 대조한 올바른 진술에도 공출현→오탐 가능.
+        # 그러나 두 토큰 AND라 *무관 풀이*엔 미발화하고, 공출현은 학생이 두 합성을 직접
+        # 견준 맥락(오개념 개연 높음)이라 비난 없는 소크라테스 확인이 적절. 부정 판별은 임베딩 후속.
+        signals=("f∘g", "g∘f"),
+    ),
+    Misconception(
+        id="translation-sign-flip",
+        name_kr="평행이동 부호 혼동",
+        domain="함수",
+        canonical_statement="y=f(x−a)는 왼쪽으로 a만큼 평행이동",
+        counterexample="y=(x−2)²의 꼭짓점은 x=2 (오른쪽으로 +2 이동)",
+        # "x-a"(인수의 음부호)+"왼쪽"의 공출현 — x−a를 왼쪽 이동이라 단정한 양성 단편.
+        # 올바른 풀이는 "x-a"를 "오른쪽"과 잇거나 "x+a"를 "왼쪽"과 이어 구분된다.
+        signals=("x-a", "왼쪽"),
+    ),
 )
 
 
-# 미적분 — doc L56-59 (3종·수능 핵심). 슬 추가.
+# 미적분 — doc "미적분 영역"(#16-18, #15 재참조·#30) (5종·수능 핵심).
+# 주: continuity-implies-differentiability는 doc 함수 슬롯 #15에 상세하나 domain=미적분
+# ([H:12미적Ⅰ02-02] 정착)이라 본 튜플에 둔다(doc 미적분 영역에서 재참조).
 _CALCULUS: tuple[Misconception, ...] = (
     Misconception(
         id="chain-rule-inner-derivative-omitted",
@@ -197,6 +265,28 @@ _CALCULUS: tuple[Misconception, ...] = (
         canonical_statement="lim_{x→a} f(x) = f(a) (항상)",
         counterexample="f(x)=(x²-1)/(x-1)는 x→1 극한 2지만 f(1) 무정의 (불연속점)",
         signals=("극한", "함숫값"),
+    ),
+    Misconception(
+        id="continuity-implies-differentiability",
+        name_kr="연속·미분가능 함의 혼동",
+        domain="미적분",
+        canonical_statement="연속이면 미분가능하다",
+        counterexample="f(x)=|x|는 x=0에서 연속이나 미분불가 (뾰족점)",
+        # "연속"+"미분가능"의 공출현 — 함의를 단정한 양성 단편. 한계(§5.3): 올바른 역방향
+        # 진술("미분가능하면 연속")에도 두 토큰이 공출현→오탐 가능(substring은 방향·부정 무판별).
+        # 두 토큰 AND로 무관 풀이엔 미발화하며, 정본 해법(방향성 판별)은 임베딩/LLM-judged 후속.
+        signals=("연속", "미분가능"),
+    ),
+    Misconception(
+        id="critical-point-implies-extremum",
+        name_kr="임계점 극값 단정",
+        domain="미적분",
+        canonical_statement="f′(a)=0이면 그 점에서 극값을 갖는다",
+        counterexample="f(x)=x³는 f′(0)=0이나 극값 아님 (변곡점)",
+        # "f′=0"(인수 표기 없는 일반 진술형·NFKC 불변)+"극값"의 공출현 — f′=0에서 극값을
+        # *단정*한 양성 단편. 한계(§5.3): 부호변화를 함께 본 올바른 진술("f′=0이고 부호변화→극값")
+        # 에도 공출현→오탐 가능. 필요조건/충분조건 구별은 임베딩/LLM-judged 후속.
+        signals=("f′=0", "극값"),
     ),
 )
 
@@ -256,10 +346,15 @@ _VECTOR: tuple[Misconception, ...] = (
 CATALOG: tuple[Misconception, ...] = (
     _ALGEBRA + _GEOMETRY + _PROBSTAT + _FUNCTION + _CALCULUS + _SEQUENCE + _TRIG + _VECTOR
 )
-"""정본 카탈로그(22종) — doc 명시·상세화 항목만. 30개 목표까지 나머지는 후속.
+"""정본 카탈로그(30종·Phase 1 목표 달성) — doc 명시·상세화 항목만.
 
-순서 안정성: 신규 수능 영역은 기존 14종 *뒤에* 붙인다(진단 동률 정렬이 대수
-distribution-over-power를 첫째로 유지 — 회귀 가드)."""
+슬: §5.4 교차검증 고가치 후보 8종 추가(대수+2·기하+1·확률통계+1·함수+2·미적분+2).
+positive-signal형(학생이 *틀린 주장을 직접 적는* 유형)만 채택 — omission형(적분상수 누락·
+정의역 끝점)은 substring이 *오류 부재*를 못 잡으므로(§5.3 한계) 의도적 회피(임베딩 후속).
+
+순서 안정성: 신규 항목은 각 도메인 *기존 항목 뒤에* 붙인다(진단 동률 정렬이 대수
+distribution-over-power를 첫째로 유지 — 회귀 가드). 도메인 튜플 합성 순서도 불변
+(_ALGEBRA 먼저)."""
 
 
 CATALOG_BY_ID: dict[str, Misconception] = {m.id: m for m in CATALOG}
