@@ -17,8 +17,14 @@ from whymath_backend.l3.visualization import (
     InvalidVisualizationSpecError,
     generate_visualization_spec,
     parse_visualization_spec,
+    visualization_spec_for_concept,
 )
-from whymath_backend.schema.enums import VisualizationType
+from whymath_backend.schema.concept import Concept
+from whymath_backend.schema.enums import (
+    ConceptLevel,
+    VisualizationStyle,
+    VisualizationType,
+)
 from whymath_backend.schema.visualization import Visualization
 
 
@@ -143,3 +149,86 @@ async def test_generate_rejects_invalid_output() -> None:
             cache=InMemoryCache(),
             trace=RecordingTraceSink(),
         )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# recommended_styles 힌트 주입 + Concept 래퍼 (슬88↔슬92 연결)
+# ──────────────────────────────────────────────────────────────────────
+@pytest.mark.asyncio
+async def test_recommended_styles_injected_into_prompt() -> None:
+    """recommended_styles → 사용자 프롬프트에 '권장 시각화 양식' 힌트로 주입."""
+    provider = _FakeProvider(_VALID_JSON)
+    await generate_visualization_spec(
+        "삼각함수의 주기성",
+        "고2",
+        _req(),
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+        recommended_styles=["단위원", "함수그래프"],
+    )
+    prompt = provider.calls[0][0]
+    assert "권장 시각화 양식" in prompt
+    assert "단위원" in prompt
+
+
+@pytest.mark.asyncio
+async def test_no_styles_no_hint_line() -> None:
+    """recommended_styles 미지정 → 힌트 줄 없음(기존 동작 보존)."""
+    provider = _FakeProvider(_VALID_JSON)
+    await generate_visualization_spec(
+        "원의 방정식",
+        "고2",
+        _req(),
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert "권장 시각화 양식" not in provider.calls[0][0]
+
+
+@pytest.mark.asyncio
+async def test_for_concept_injects_recommended_visual_styles() -> None:
+    """visualization_spec_for_concept → Concept.recommended_visual_styles(슬88)를 자동 주입."""
+    concept = Concept(
+        code="TRIG-PERIOD",
+        name_ko="삼각함수의 주기성",
+        level=ConceptLevel.세부개념,
+        recommended_visual_styles=[
+            VisualizationStyle.단위원,
+            VisualizationStyle.함수그래프,
+        ],
+    )
+    provider = _FakeProvider(_VALID_JSON)
+    v = await visualization_spec_for_concept(
+        concept,
+        "고2",
+        _req(),
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert isinstance(v, Visualization)
+    prompt = provider.calls[0][0]
+    assert "삼각함수의 주기성" in prompt  # name_ko가 개념으로
+    assert "단위원" in prompt  # recommended_visual_styles 힌트
+
+
+@pytest.mark.asyncio
+async def test_for_concept_empty_styles_no_hint() -> None:
+    """recommended_visual_styles 빈 Concept → 힌트 줄 없음(no-hint 분기)."""
+    concept = Concept(
+        code="CIRC-EQ",
+        name_ko="원의 방정식",
+        level=ConceptLevel.세부개념,
+    )
+    provider = _FakeProvider(_VALID_JSON)
+    await visualization_spec_for_concept(
+        concept,
+        "고2",
+        _req(),
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert "권장 시각화 양식" not in provider.calls[0][0]
