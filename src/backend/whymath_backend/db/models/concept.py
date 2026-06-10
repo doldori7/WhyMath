@@ -11,7 +11,8 @@
   - `UUID REFERENCES`(NOT NULL 명시) → required `uuid.UUID` + FK; nullable FK → `uuid.UUID|None`.
   - self-FK(`parent_concept_id REFERENCES concept`) → `sa.ForeignKey("concept.concept_id")`.
   - `concept_role_enum`/`edge_type_enum`/`concept_level_enum` → `_pg_enum(...)`(values_callable).
-  - `cognitive_type_enum[]` → `ARRAY(_pg_enum(...))`(DDL NOT NULL 아님 → nullable list).
+  - `cognitive_type_enum[]`·`visualization_style_enum[]`(슬라이스 88) → `ARRAY(_pg_enum(...))`
+    (DDL NOT NULL 아님 → nullable list).
   - `JSONB`(common_misconceptions) → schema가 NOT NULL 의미(default_factory=list)라 problem.py
     `conditions_parsed`처럼 `nullable=False, server_default "'[]'::jsonb"`.
   - `UUID[] NOT NULL`(concept_fusion.concept_ids) → `ARRAY(sa.Uuid)`(*배열이라 FK 아님* —
@@ -47,6 +48,7 @@ from whymath_backend.schema.enums import (
     Curriculum,
     EdgeType,
     Subject,
+    VisualizationStyle,
 )
 
 
@@ -99,6 +101,11 @@ class Concept(Base):
     # 라 실무상 항상 list를 넘기지만 DDL 충실성을 위해 nullable로 둔다.
     cognitive_type: Mapped[list[CognitiveType] | None] = mapped_column(
         ARRAY(_pg_enum(CognitiveType, "cognitive_type_enum"))
+    )
+    # 슬라이스 88: 개념↔시각화 양식 매핑 — cognitive_type 동형(enum[] nullable·schema는
+    # default_factory=list). visualization_style_enum은 본 슬라이스 마이그레이션이 새로 만든다.
+    recommended_visual_styles: Mapped[list[VisualizationStyle] | None] = mapped_column(
+        ARRAY(_pg_enum(VisualizationStyle, "visualization_style_enum"))
     )
 
     # ===== 난이도·중요도 =====

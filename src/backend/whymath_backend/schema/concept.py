@@ -57,6 +57,7 @@ from whymath_backend.schema.enums import (
     Curriculum,
     EdgeType,
     Subject,
+    VisualizationStyle,
 )
 
 
@@ -158,6 +159,11 @@ class Concept(BaseModel):
     cognitive_type: list[CognitiveType] = Field(
         default_factory=list,
         description="인지 유형 배열 — DEFINITION/THEOREM/TECHNIQUE/PATTERN/VISUAL_REASONING",
+    )
+    recommended_visual_styles: list[VisualizationStyle] = Field(
+        default_factory=list,
+        description="권장 시각화 양식 배열 — 개념을 가장 잘 드러내는 교수학적 표현 형식 "
+        "(예: 삼각함수→단위원·확률→수형도). 슬라이스 88·visualization_style_enum[] nullable.",
     )
 
     # ===== 난이도·중요도 =====
