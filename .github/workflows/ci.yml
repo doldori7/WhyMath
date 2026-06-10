@@ -194,6 +194,64 @@ jobs:
         run: pytest -m integration --ignore=../../tests/backend/l3
 
   # ─────────────────────────────────────────────────────────────────
+  # data-pipeline 실 PG 적재 통합테스트 (슬99) — NCIC load_to_postgres 경로
+  # 기본 data-pipeline 잡은 [dev]만 설치(sqlalchemy 없음)·PG 서비스 없으므로
+  # load_to_postgres 통합테스트(test_load_postgres_integration)가 한 번도 실행되지
+  # 않는다(importorskip + conftest env 게이트 이중 skip). 이 잡이 [postgres] extra +
+  # 실 PG로 적재 경로(신규 INSERT·upsert UPDATE·DO NOTHING)를 상시 검증하는 안전망이다.
+  # backend-migrations 잡과 동형(실 PG service·trust 인증). data-pipeline은 alembic
+  # 미포함(로더가 create_all로 staging 테이블 소유)이라 마이그레이션 단계는 없다.
+  # ─────────────────────────────────────────────────────────────────
+  data-pipeline-integration:
+    name: data-pipeline — 적재 통합 (실 PG)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: src/data-pipeline
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: whymath
+          POSTGRES_DB: whymath
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U whymath"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # 통합테스트가 읽는 DSN(asyncpg·자격증명 없음·trust). load._to_async_dsn이 정규화.
+      WHYMATH_DATABASE_URL: postgresql+asyncpg://whymath@127.0.0.1:5432/whymath
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies (editable + dev + postgres extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev,postgres]"
+
+      - name: Pytest (NCIC 적재 통합테스트 — 실 PG)
+        env:
+          # conftest env 게이트 해제(integration 마크 활성화). [postgres] extra가 설치돼
+          # importorskip 통과 + 실 PG 도달 → 적재 왕복 검증.
+          WHYMATH_RUN_INTEGRATION: "1"
+        run: pytest -m integration
+
+  # ─────────────────────────────────────────────────────────────────
   # infra 쉘 스크립트 syntax 검사 (Phaiakes9 운영 자산 회귀 방지)
   # ─────────────────────────────────────────────────────────────────
   infra-shell:
