@@ -141,7 +141,9 @@ _FUNCTION: tuple[Misconception, ...] = (
         domain="함수",
         canonical_statement="모든 함수는 역함수를 갖는다",
         counterexample="f(x) = x²는 일대일 아님(전 정의역에서) → 역함수 없음",
-        signals=("역함수", "모든"),
+        # 슬 101 정밀화: 바른 "모든"(거짓양성·예: "모든 x에서") → canonical 그대로 "모든 함수"로
+        # 좁힘. concept_graph_dataset_v1.md §5.3 신호 정밀도 평가.
+        signals=("역함수", "모든 함수"),
     ),
 )
 

@@ -1,0 +1,540 @@
+{"from_id": "N1", "from_name": "수 개념과 세기(0~100)", "relation": "선수(prereq)", "to_id": "N2", "to_name": "자릿값·위치적 기수법"}
+{"from_id": "N1", "from_name": "수 개념과 세기(0~100)", "relation": "선수(prereq)", "to_id": "N4", "to_name": "수의 분해·합성(수감각)"}
+{"from_id": "N2", "from_name": "자릿값·위치적 기수법", "relation": "선수(prereq)", "to_id": "N3", "to_name": "수의 계열·크기 비교"}
+{"from_id": "N2", "from_name": "자릿값·위치적 기수법", "relation": "선수(prereq)", "to_id": "N5", "to_name": "큰 수(10000 이상)"}
+{"from_id": "N5", "from_name": "큰 수(10000 이상)", "relation": "선수(prereq)", "to_id": "N6", "to_name": "큰 수의 계열·비교"}
+{"from_id": "N3", "from_name": "수의 계열·크기 비교", "relation": "선수(prereq)", "to_id": "N6", "to_name": "큰 수의 계열·비교"}
+{"from_id": "N4", "from_name": "수의 분해·합성(수감각)", "relation": "선수(prereq)", "to_id": "A1", "to_name": "덧셈·뺄셈의 의미"}
+{"from_id": "N1", "from_name": "수 개념과 세기(0~100)", "relation": "선수(prereq)", "to_id": "A1", "to_name": "덧셈·뺄셈의 의미"}
+{"from_id": "A1", "from_name": "덧셈·뺄셈의 의미", "relation": "선수(prereq)", "to_id": "A2", "to_name": "두 자리 덧셈·뺄셈"}
+{"from_id": "A1", "from_name": "덧셈·뺄셈의 의미", "relation": "선수(prereq)", "to_id": "A3", "to_name": "덧셈과 뺄셈의 관계"}
+{"from_id": "A2", "from_name": "두 자리 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "A4", "to_name": "세 수의 덧셈·뺄셈"}
+{"from_id": "A1", "from_name": "덧셈·뺄셈의 의미", "relation": "선수(prereq)", "to_id": "A5", "to_name": "□가 있는 식(미지수)"}
+{"from_id": "A2", "from_name": "두 자리 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "A6", "to_name": "세 자리 덧셈·뺄셈"}
+{"from_id": "N2", "from_name": "자릿값·위치적 기수법", "relation": "선수(prereq)", "to_id": "A2", "to_name": "두 자리 덧셈·뺄셈"}
+{"from_id": "A1", "from_name": "덧셈·뺄셈의 의미", "relation": "선수(prereq)", "to_id": "M1", "to_name": "곱셈의 의미"}
+{"from_id": "A2", "from_name": "두 자리 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "M1", "to_name": "곱셈의 의미"}
+{"from_id": "M1", "from_name": "곱셈의 의미", "relation": "선수(prereq)", "to_id": "M2", "to_name": "곱셈구구"}
+{"from_id": "M2", "from_name": "곱셈구구", "relation": "선수(prereq)", "to_id": "M3", "to_name": "여러 자리 수의 곱셈"}
+{"from_id": "A6", "from_name": "세 자리 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "M3", "to_name": "여러 자리 수의 곱셈"}
+{"from_id": "M1", "from_name": "곱셈의 의미", "relation": "선수(prereq)", "to_id": "D1", "to_name": "나눗셈의 의미·곱셈과의 관계"}
+{"from_id": "M2", "from_name": "곱셈구구", "relation": "선수(prereq)", "to_id": "D1", "to_name": "나눗셈의 의미·곱셈과의 관계"}
+{"from_id": "D1", "from_name": "나눗셈의 의미·곱셈과의 관계", "relation": "선수(prereq)", "to_id": "D2", "to_name": "나눗셈(÷한 자리)·몫과 나머지"}
+{"from_id": "D2", "from_name": "나눗셈(÷한 자리)·몫과 나머지", "relation": "선수(prereq)", "to_id": "D3", "to_name": "나눗셈(÷두 자리)"}
+{"from_id": "M3", "from_name": "여러 자리 수의 곱셈", "relation": "선수(prereq)", "to_id": "D3", "to_name": "나눗셈(÷두 자리)"}
+{"from_id": "A6", "from_name": "세 자리 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "E1", "to_name": "어림셈"}
+{"from_id": "M3", "from_name": "여러 자리 수의 곱셈", "relation": "선수(prereq)", "to_id": "E1", "to_name": "어림셈"}
+{"from_id": "D2", "from_name": "나눗셈(÷한 자리)·몫과 나머지", "relation": "선수(prereq)", "to_id": "E1", "to_name": "어림셈"}
+{"from_id": "N6", "from_name": "큰 수의 계열·비교", "relation": "선수(prereq)", "to_id": "R1", "to_name": "수의 범위(이상·이하·초과·미만)"}
+{"from_id": "N3", "from_name": "수의 계열·크기 비교", "relation": "선수(prereq)", "to_id": "R1", "to_name": "수의 범위(이상·이하·초과·미만)"}
+{"from_id": "E1", "from_name": "어림셈", "relation": "선수(prereq)", "to_id": "R2", "to_name": "어림(올림·버림·반올림)"}
+{"from_id": "N6", "from_name": "큰 수의 계열·비교", "relation": "선수(prereq)", "to_id": "R2", "to_name": "어림(올림·버림·반올림)"}
+{"from_id": "M3", "from_name": "여러 자리 수의 곱셈", "relation": "선수(prereq)", "to_id": "B1", "to_name": "약수·공약수·최대공약수"}
+{"from_id": "M2", "from_name": "곱셈구구", "relation": "선수(prereq)", "to_id": "B1", "to_name": "약수·공약수·최대공약수"}
+{"from_id": "M3", "from_name": "여러 자리 수의 곱셈", "relation": "선수(prereq)", "to_id": "B2", "to_name": "배수·공배수·최소공배수"}
+{"from_id": "M2", "from_name": "곱셈구구", "relation": "선수(prereq)", "to_id": "B2", "to_name": "배수·공배수·최소공배수"}
+{"from_id": "N1", "from_name": "수 개념과 세기(0~100)", "relation": "선수(prereq)", "to_id": "F1", "to_name": "분수의 의미"}
+{"from_id": "D1", "from_name": "나눗셈의 의미·곱셈과의 관계", "relation": "선수(prereq)", "to_id": "F1", "to_name": "분수의 의미"}
+{"from_id": "F1", "from_name": "분수의 의미", "relation": "선수(prereq)", "to_id": "F2", "to_name": "단위분수"}
+{"from_id": "F1", "from_name": "분수의 의미", "relation": "선수(prereq)", "to_id": "F3", "to_name": "진분수·가분수·대분수"}
+{"from_id": "F1", "from_name": "분수의 의미", "relation": "선수(prereq)", "to_id": "F4", "to_name": "분모가 같은 분수의 크기 비교"}
+{"from_id": "F3", "from_name": "진분수·가분수·대분수", "relation": "선수(prereq)", "to_id": "F5", "to_name": "분모가 같은 분수의 덧셈·뺄셈"}
+{"from_id": "F4", "from_name": "분모가 같은 분수의 크기 비교", "relation": "선수(prereq)", "to_id": "F5", "to_name": "분모가 같은 분수의 덧셈·뺄셈"}
+{"from_id": "F1", "from_name": "분수의 의미", "relation": "선수(prereq)", "to_id": "F7", "to_name": "동치분수"}
+{"from_id": "M2", "from_name": "곱셈구구", "relation": "선수(prereq)", "to_id": "F7", "to_name": "동치분수"}
+{"from_id": "B1", "from_name": "약수·공약수·최대공약수", "relation": "선수(prereq)", "to_id": "F8", "to_name": "약분"}
+{"from_id": "F7", "from_name": "동치분수", "relation": "선수(prereq)", "to_id": "F8", "to_name": "약분"}
+{"from_id": "B2", "from_name": "배수·공배수·최소공배수", "relation": "선수(prereq)", "to_id": "F9", "to_name": "통분"}
+{"from_id": "F7", "from_name": "동치분수", "relation": "선수(prereq)", "to_id": "F9", "to_name": "통분"}
+{"from_id": "F9", "from_name": "통분", "relation": "선수(prereq)", "to_id": "F10", "to_name": "분모가 다른 분수의 크기 비교"}
+{"from_id": "F4", "from_name": "분모가 같은 분수의 크기 비교", "relation": "선수(prereq)", "to_id": "F10", "to_name": "분모가 다른 분수의 크기 비교"}
+{"from_id": "F9", "from_name": "통분", "relation": "선수(prereq)", "to_id": "F11", "to_name": "분모가 다른 분수의 덧셈·뺄셈"}
+{"from_id": "F5", "from_name": "분모가 같은 분수의 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "F11", "to_name": "분모가 다른 분수의 덧셈·뺄셈"}
+{"from_id": "M3", "from_name": "여러 자리 수의 곱셈", "relation": "선수(prereq)", "to_id": "F12", "to_name": "분수의 곱셈"}
+{"from_id": "F1", "from_name": "분수의 의미", "relation": "선수(prereq)", "to_id": "F12", "to_name": "분수의 곱셈"}
+{"from_id": "F8", "from_name": "약분", "relation": "선수(prereq)", "to_id": "F12", "to_name": "분수의 곱셈"}
+{"from_id": "D1", "from_name": "나눗셈의 의미·곱셈과의 관계", "relation": "선수(prereq)", "to_id": "F13", "to_name": "(자연수)÷(자연수)의 몫을 분수로"}
+{"from_id": "F13", "from_name": "(자연수)÷(자연수)의 몫을 분수로", "relation": "선수(prereq)", "to_id": "F14", "to_name": "분수의 나눗셈"}
+{"from_id": "F12", "from_name": "분수의 곱셈", "relation": "선수(prereq)", "to_id": "F14", "to_name": "분수의 나눗셈"}
+{"from_id": "F7", "from_name": "동치분수", "relation": "선수(prereq)", "to_id": "F15", "to_name": "분수와 소수의 관계"}
+{"from_id": "F1", "from_name": "분수의 의미", "relation": "선수(prereq)", "to_id": "S1", "to_name": "소수 한 자리(분모 10 연결)"}
+{"from_id": "N3", "from_name": "수의 계열·크기 비교", "relation": "선수(prereq)", "to_id": "S1", "to_name": "소수 한 자리(분모 10 연결)"}
+{"from_id": "S1", "from_name": "소수 한 자리(분모 10 연결)", "relation": "선수(prereq)", "to_id": "S2", "to_name": "소수 두·세 자리(자릿값)"}
+{"from_id": "N2", "from_name": "자릿값·위치적 기수법", "relation": "선수(prereq)", "to_id": "S2", "to_name": "소수 두·세 자리(자릿값)"}
+{"from_id": "S2", "from_name": "소수 두·세 자리(자릿값)", "relation": "선수(prereq)", "to_id": "S3", "to_name": "소수의 크기 비교"}
+{"from_id": "S2", "from_name": "소수 두·세 자리(자릿값)", "relation": "선수(prereq)", "to_id": "S4", "to_name": "소수의 덧셈·뺄셈"}
+{"from_id": "A6", "from_name": "세 자리 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "S4", "to_name": "소수의 덧셈·뺄셈"}
+{"from_id": "S4", "from_name": "소수의 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "S5", "to_name": "소수의 곱셈"}
+{"from_id": "M3", "from_name": "여러 자리 수의 곱셈", "relation": "선수(prereq)", "to_id": "S5", "to_name": "소수의 곱셈"}
+{"from_id": "S2", "from_name": "소수 두·세 자리(자릿값)", "relation": "선수(prereq)", "to_id": "S6", "to_name": "(자연수)÷(자연수)의 몫을 소수로"}
+{"from_id": "D2", "from_name": "나눗셈(÷한 자리)·몫과 나머지", "relation": "선수(prereq)", "to_id": "S6", "to_name": "(자연수)÷(자연수)의 몫을 소수로"}
+{"from_id": "S6", "from_name": "(자연수)÷(자연수)의 몫을 소수로", "relation": "선수(prereq)", "to_id": "S7", "to_name": "소수의 나눗셈"}
+{"from_id": "S5", "from_name": "소수의 곱셈", "relation": "선수(prereq)", "to_id": "S7", "to_name": "소수의 나눗셈"}
+{"from_id": "F1", "from_name": "분수의 의미", "relation": "선수(prereq)", "to_id": "F6", "to_name": "분수와 소수(분모 10) 연결"}
+{"from_id": "F6", "from_name": "분수와 소수(분모 10) 연결", "relation": "선수(prereq)", "to_id": "F15", "to_name": "분수와 소수의 관계"}
+{"from_id": "S1", "from_name": "소수 한 자리(분모 10 연결)", "relation": "선수(prereq)", "to_id": "F15", "to_name": "분수와 소수의 관계"}
+{"from_id": "A6", "from_name": "세 자리 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "X1", "to_name": "혼합 계산(사칙 순서)"}
+{"from_id": "M3", "from_name": "여러 자리 수의 곱셈", "relation": "선수(prereq)", "to_id": "X1", "to_name": "혼합 계산(사칙 순서)"}
+{"from_id": "D2", "from_name": "나눗셈(÷한 자리)·몫과 나머지", "relation": "선수(prereq)", "to_id": "X1", "to_name": "혼합 계산(사칙 순서)"}
+{"from_id": "G01", "from_name": "입체도형 직관(직육면체·원기둥·구)", "relation": "선수(prereq)", "to_id": "G02", "to_name": "쌓기나무로 입체 만들기"}
+{"from_id": "G03", "from_name": "평면도형 직관(삼각형·사각형·원)", "relation": "선수(prereq)", "to_id": "G04", "to_name": "평면도형 그리기"}
+{"from_id": "G04", "from_name": "평면도형 그리기", "relation": "선수(prereq)", "to_id": "G05", "to_name": "삼각형·사각형의 공통점"}
+{"from_id": "G06", "from_name": "직선·선분·반직선", "relation": "선수(prereq)", "to_id": "G07", "to_name": "각·직각·예각·둔각"}
+{"from_id": "G07", "from_name": "각·직각·예각·둔각", "relation": "선수(prereq)", "to_id": "G08", "to_name": "수직과 평행"}
+{"from_id": "G07", "from_name": "각·직각·예각·둔각", "relation": "선수(prereq)", "to_id": "G25", "to_name": "삼각형·사각형 내각의 합"}
+{"from_id": "G06", "from_name": "직선·선분·반직선", "relation": "선수(prereq)", "to_id": "G09", "to_name": "원의 중심·반지름·지름"}
+{"from_id": "G09", "from_name": "원의 중심·반지름·지름", "relation": "선수(prereq)", "to_id": "G10", "to_name": "컴퍼스로 원 그리기"}
+{"from_id": "G04", "from_name": "평면도형 그리기", "relation": "선수(prereq)", "to_id": "G11", "to_name": "밀기·뒤집기·돌리기"}
+{"from_id": "G04", "from_name": "평면도형 그리기", "relation": "선수(prereq)", "to_id": "G12", "to_name": "점의 이동(위치·방향)"}
+{"from_id": "G05", "from_name": "삼각형·사각형의 공통점", "relation": "선수(prereq)", "to_id": "G13", "to_name": "삼각형 분류(변): 이등변·정삼각형"}
+{"from_id": "G05", "from_name": "삼각형·사각형의 공통점", "relation": "선수(prereq)", "to_id": "G14", "to_name": "삼각형 분류(각): 직각·예각·둔각"}
+{"from_id": "G05", "from_name": "삼각형·사각형의 공통점", "relation": "선수(prereq)", "to_id": "G15", "to_name": "사각형 분류"}
+{"from_id": "G15", "from_name": "사각형 분류", "relation": "선수(prereq)", "to_id": "G16", "to_name": "다각형·정다각형"}
+{"from_id": "G16", "from_name": "다각형·정다각형", "relation": "선수(prereq)", "to_id": "G17", "to_name": "모양 만들기(테셀레이션)"}
+{"from_id": "G16", "from_name": "다각형·정다각형", "relation": "선수(prereq)", "to_id": "G25", "to_name": "삼각형·사각형 내각의 합"}
+{"from_id": "G15", "from_name": "사각형 분류", "relation": "선수(prereq)", "to_id": "G18", "to_name": "도형의 합동"}
+{"from_id": "G16", "from_name": "다각형·정다각형", "relation": "선수(prereq)", "to_id": "G18", "to_name": "도형의 합동"}
+{"from_id": "G18", "from_name": "도형의 합동", "relation": "선수(prereq)", "to_id": "G19", "to_name": "선대칭·점대칭"}
+{"from_id": "G01", "from_name": "입체도형 직관(직육면체·원기둥·구)", "relation": "선수(prereq)", "to_id": "G20", "to_name": "직육면체·정육면체"}
+{"from_id": "G20", "from_name": "직육면체·정육면체", "relation": "선수(prereq)", "to_id": "G21", "to_name": "겨냥도·전개도(직육면체)"}
+{"from_id": "G20", "from_name": "직육면체·정육면체", "relation": "선수(prereq)", "to_id": "G22", "to_name": "각기둥·각뿔"}
+{"from_id": "G22", "from_name": "각기둥·각뿔", "relation": "선수(prereq)", "to_id": "G23", "to_name": "각기둥의 전개도"}
+{"from_id": "G20", "from_name": "직육면체·정육면체", "relation": "선수(prereq)", "to_id": "G24", "to_name": "원기둥·원뿔·구"}
+{"from_id": "G24", "from_name": "원기둥·원뿔·구", "relation": "선수(prereq)", "to_id": "G26", "to_name": "원기둥의 전개도"}
+{"from_id": "G02", "from_name": "쌓기나무로 입체 만들기", "relation": "선수(prereq)", "to_id": "G27", "to_name": "쌓기나무 개수 구하기"}
+{"from_id": "G27", "from_name": "쌓기나무 개수 구하기", "relation": "선수(prereq)", "to_id": "G28", "to_name": "쌓기나무 위·앞·옆 모양"}
+{"from_id": "T1", "from_name": "시각 읽기(몇 시 몇 분)", "relation": "선수(prereq)", "to_id": "T2", "to_name": "시간의 단위와 관계"}
+{"from_id": "T2", "from_name": "시간의 단위와 관계", "relation": "선수(prereq)", "to_id": "T3", "to_name": "시간의 덧셈·뺄셈"}
+{"from_id": "A1", "from_name": "덧셈·뺄셈의 의미", "relation": "선수(prereq)", "to_id": "T3", "to_name": "시간의 덧셈·뺄셈"}
+{"from_id": "L0", "from_name": "양의 비교(길이·들이·무게·넓이)", "relation": "선수(prereq)", "to_id": "L1", "to_name": "길이 단위 cm·m"}
+{"from_id": "L1", "from_name": "길이 단위 cm·m", "relation": "선수(prereq)", "to_id": "L2", "to_name": "길이 단위 관계·표현"}
+{"from_id": "L2", "from_name": "길이 단위 관계·표현", "relation": "선수(prereq)", "to_id": "L5", "to_name": "길이 단위 mm·km와 관계"}
+{"from_id": "L1", "from_name": "길이 단위 cm·m", "relation": "선수(prereq)", "to_id": "L3", "to_name": "길이 어림(양감)"}
+{"from_id": "L1", "from_name": "길이 단위 cm·m", "relation": "선수(prereq)", "to_id": "L4", "to_name": "길이의 덧셈·뺄셈"}
+{"from_id": "A1", "from_name": "덧셈·뺄셈의 의미", "relation": "선수(prereq)", "to_id": "L4", "to_name": "길이의 덧셈·뺄셈"}
+{"from_id": "L0", "from_name": "양의 비교(길이·들이·무게·넓이)", "relation": "선수(prereq)", "to_id": "V1", "to_name": "들이 단위 L·mL·관계"}
+{"from_id": "V1", "from_name": "들이 단위 L·mL·관계", "relation": "선수(prereq)", "to_id": "V2", "to_name": "들이의 덧셈·뺄셈"}
+{"from_id": "A1", "from_name": "덧셈·뺄셈의 의미", "relation": "선수(prereq)", "to_id": "V2", "to_name": "들이의 덧셈·뺄셈"}
+{"from_id": "L0", "from_name": "양의 비교(길이·들이·무게·넓이)", "relation": "선수(prereq)", "to_id": "W1", "to_name": "무게 단위 g·kg·t·관계"}
+{"from_id": "W1", "from_name": "무게 단위 g·kg·t·관계", "relation": "선수(prereq)", "to_id": "W2", "to_name": "무게의 덧셈·뺄셈"}
+{"from_id": "A1", "from_name": "덧셈·뺄셈의 의미", "relation": "선수(prereq)", "to_id": "W2", "to_name": "무게의 덧셈·뺄셈"}
+{"from_id": "G07", "from_name": "각·직각·예각·둔각", "relation": "선수(prereq)", "to_id": "AD", "to_name": "각의 크기 측정(도·각도기)"}
+{"from_id": "L1", "from_name": "길이 단위 cm·m", "relation": "선수(prereq)", "to_id": "ME1", "to_name": "평면도형의 둘레"}
+{"from_id": "G15", "from_name": "사각형 분류", "relation": "선수(prereq)", "to_id": "ME1", "to_name": "평면도형의 둘레"}
+{"from_id": "G16", "from_name": "다각형·정다각형", "relation": "선수(prereq)", "to_id": "ME1", "to_name": "평면도형의 둘레"}
+{"from_id": "ME2", "from_name": "넓이 단위(㎠·㎡·㎢)", "relation": "선수(prereq)", "to_id": "ME3", "to_name": "직사각형·정사각형의 넓이"}
+{"from_id": "M3", "from_name": "여러 자리 수의 곱셈", "relation": "선수(prereq)", "to_id": "ME3", "to_name": "직사각형·정사각형의 넓이"}
+{"from_id": "G15", "from_name": "사각형 분류", "relation": "선수(prereq)", "to_id": "ME3", "to_name": "직사각형·정사각형의 넓이"}
+{"from_id": "ME3", "from_name": "직사각형·정사각형의 넓이", "relation": "선수(prereq)", "to_id": "ME4", "to_name": "평행사변형·삼각형·사다리꼴·마름모의 넓이"}
+{"from_id": "G14", "from_name": "삼각형 분류(각): 직각·예각·둔각", "relation": "선수(prereq)", "to_id": "ME4", "to_name": "평행사변형·삼각형·사다리꼴·마름모의 넓이"}
+{"from_id": "G09", "from_name": "원의 중심·반지름·지름", "relation": "선수(prereq)", "to_id": "ME5", "to_name": "원주율"}
+{"from_id": "ME5", "from_name": "원주율", "relation": "선수(prereq)", "to_id": "ME6", "to_name": "원주와 원의 넓이"}
+{"from_id": "ME3", "from_name": "직사각형·정사각형의 넓이", "relation": "선수(prereq)", "to_id": "ME6", "to_name": "원주와 원의 넓이"}
+{"from_id": "G21", "from_name": "겨냥도·전개도(직육면체)", "relation": "선수(prereq)", "to_id": "ME7", "to_name": "겉넓이"}
+{"from_id": "ME3", "from_name": "직사각형·정사각형의 넓이", "relation": "선수(prereq)", "to_id": "ME7", "to_name": "겉넓이"}
+{"from_id": "ME8", "from_name": "부피 단위(㎤·㎥)", "relation": "선수(prereq)", "to_id": "ME9", "to_name": "직육면체·정육면체의 부피"}
+{"from_id": "ME3", "from_name": "직사각형·정사각형의 넓이", "relation": "선수(prereq)", "to_id": "ME9", "to_name": "직육면체·정육면체의 부피"}
+{"from_id": "G20", "from_name": "직육면체·정육면체", "relation": "선수(prereq)", "to_id": "ME9", "to_name": "직육면체·정육면체의 부피"}
+{"from_id": "Q1", "from_name": "규칙 찾기·표현", "relation": "선수(prereq)", "to_id": "Q2", "to_name": "규칙에 따라 배열"}
+{"from_id": "Q1", "from_name": "규칙 찾기·표현", "relation": "선수(prereq)", "to_id": "Q3", "to_name": "변화 규칙을 수·식으로"}
+{"from_id": "Q3", "from_name": "변화 규칙을 수·식으로", "relation": "선수(prereq)", "to_id": "Q4", "to_name": "계산식의 배열 규칙"}
+{"from_id": "Q3", "from_name": "변화 규칙을 수·식으로", "relation": "선수(prereq)", "to_id": "Q5", "to_name": "등호·같은 양의 관계"}
+{"from_id": "Q1", "from_name": "규칙 찾기·표현", "relation": "선수(prereq)", "to_id": "Q6", "to_name": "대응 관계"}
+{"from_id": "D1", "from_name": "나눗셈의 의미·곱셈과의 관계", "relation": "선수(prereq)", "to_id": "Q7", "to_name": "비의 개념"}
+{"from_id": "F1", "from_name": "분수의 의미", "relation": "선수(prereq)", "to_id": "Q7", "to_name": "비의 개념"}
+{"from_id": "Q7", "from_name": "비의 개념", "relation": "선수(prereq)", "to_id": "Q8", "to_name": "비율(분수·소수·백분율)"}
+{"from_id": "F15", "from_name": "분수와 소수의 관계", "relation": "선수(prereq)", "to_id": "Q8", "to_name": "비율(분수·소수·백분율)"}
+{"from_id": "Q5", "from_name": "등호·같은 양의 관계", "relation": "선수(prereq)", "to_id": "Q9", "to_name": "비례식과 그 성질"}
+{"from_id": "Q8", "from_name": "비율(분수·소수·백분율)", "relation": "선수(prereq)", "to_id": "Q9", "to_name": "비례식과 그 성질"}
+{"from_id": "Q9", "from_name": "비례식과 그 성질", "relation": "선수(prereq)", "to_id": "Q10", "to_name": "비례배분"}
+{"from_id": "P1", "from_name": "분류하고 개수 세기", "relation": "선수(prereq)", "to_id": "P2", "to_name": "표로 나타내기"}
+{"from_id": "P1", "from_name": "분류하고 개수 세기", "relation": "선수(prereq)", "to_id": "P3", "to_name": "○×/ 그래프"}
+{"from_id": "P2", "from_name": "표로 나타내기", "relation": "선수(prereq)", "to_id": "P4", "to_name": "그림그래프·막대그래프"}
+{"from_id": "P4", "from_name": "그림그래프·막대그래프", "relation": "선수(prereq)", "to_id": "P5", "to_name": "꺾은선그래프"}
+{"from_id": "P4", "from_name": "그림그래프·막대그래프", "relation": "선수(prereq)", "to_id": "P6", "to_name": "탐구: 막대·꺾은선 활용"}
+{"from_id": "P5", "from_name": "꺾은선그래프", "relation": "선수(prereq)", "to_id": "P6", "to_name": "탐구: 막대·꺾은선 활용"}
+{"from_id": "D1", "from_name": "나눗셈의 의미·곱셈과의 관계", "relation": "선수(prereq)", "to_id": "P7", "to_name": "평균"}
+{"from_id": "P4", "from_name": "그림그래프·막대그래프", "relation": "선수(prereq)", "to_id": "P7", "to_name": "평균"}
+{"from_id": "P4", "from_name": "그림그래프·막대그래프", "relation": "선수(prereq)", "to_id": "P8", "to_name": "띠그래프·원그래프"}
+{"from_id": "Q8", "from_name": "비율(분수·소수·백분율)", "relation": "선수(prereq)", "to_id": "P8", "to_name": "띠그래프·원그래프"}
+{"from_id": "P6", "from_name": "탐구: 막대·꺾은선 활용", "relation": "선수(prereq)", "to_id": "P9", "to_name": "탐구: 적절한 그래프 선택"}
+{"from_id": "P8", "from_name": "띠그래프·원그래프", "relation": "선수(prereq)", "to_id": "P9", "to_name": "탐구: 적절한 그래프 선택"}
+{"from_id": "P10", "from_name": "가능성 말로 표현", "relation": "선수(prereq)", "to_id": "P11", "to_name": "가능성 수로 표현"}
+{"from_id": "P11", "from_name": "가능성 수로 표현", "relation": "선수(prereq)", "to_id": "P12", "to_name": "가능성 근거 판단"}
+{"from_id": "F1", "from_name": "분수의 의미", "relation": "선수(prereq)", "to_id": "P11", "to_name": "가능성 수로 표현"}
+{"from_id": "B1", "from_name": "약수·공약수·최대공약수", "relation": "선수(prereq)", "to_id": "J0101", "to_name": "소인수분해"}
+{"from_id": "J0101", "from_name": "소인수분해", "relation": "선수(prereq)", "to_id": "J0102", "to_name": "최대공약수·최소공배수(소인수분해)"}
+{"from_id": "B2", "from_name": "배수·공배수·최소공배수", "relation": "선수(prereq)", "to_id": "J0102", "to_name": "최대공약수·최소공배수(소인수분해)"}
+{"from_id": "N3", "from_name": "수의 계열·크기 비교", "relation": "선수(prereq)", "to_id": "J0103", "to_name": "음수·정수·유리수의 개념"}
+{"from_id": "F15", "from_name": "분수와 소수의 관계", "relation": "선수(prereq)", "to_id": "J0103", "to_name": "음수·정수·유리수의 개념"}
+{"from_id": "J0103", "from_name": "음수·정수·유리수의 개념", "relation": "선수(prereq)", "to_id": "J0104", "to_name": "정수·유리수의 대소"}
+{"from_id": "J0104", "from_name": "정수·유리수의 대소", "relation": "선수(prereq)", "to_id": "J0105", "to_name": "정수·유리수의 사칙계산"}
+{"from_id": "F11", "from_name": "분모가 다른 분수의 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "J0105", "to_name": "정수·유리수의 사칙계산"}
+{"from_id": "S7", "from_name": "소수의 나눗셈", "relation": "선수(prereq)", "to_id": "J0105", "to_name": "정수·유리수의 사칙계산"}
+{"from_id": "J0105", "from_name": "정수·유리수의 사칙계산", "relation": "선수(prereq)", "to_id": "J0106", "to_name": "순환소수"}
+{"from_id": "F15", "from_name": "분수와 소수의 관계", "relation": "선수(prereq)", "to_id": "J0106", "to_name": "순환소수"}
+{"from_id": "ME3", "from_name": "직사각형·정사각형의 넓이", "relation": "선수(prereq)", "to_id": "J0107", "to_name": "제곱근"}
+{"from_id": "J0105", "from_name": "정수·유리수의 사칙계산", "relation": "선수(prereq)", "to_id": "J0107", "to_name": "제곱근"}
+{"from_id": "J0107", "from_name": "제곱근", "relation": "선수(prereq)", "to_id": "J0108", "to_name": "무리수"}
+{"from_id": "J0108", "from_name": "무리수", "relation": "선수(prereq)", "to_id": "J0109", "to_name": "실수의 대소"}
+{"from_id": "J0104", "from_name": "정수·유리수의 대소", "relation": "선수(prereq)", "to_id": "J0109", "to_name": "실수의 대소"}
+{"from_id": "J0107", "from_name": "제곱근", "relation": "선수(prereq)", "to_id": "J0110", "to_name": "근호를 포함한 식의 계산"}
+{"from_id": "Q3", "from_name": "변화 규칙을 수·식으로", "relation": "선수(prereq)", "to_id": "J0201", "to_name": "문자를 사용한 식·식의 값"}
+{"from_id": "Q5", "from_name": "등호·같은 양의 관계", "relation": "선수(prereq)", "to_id": "J0201", "to_name": "문자를 사용한 식·식의 값"}
+{"from_id": "J0201", "from_name": "문자를 사용한 식·식의 값", "relation": "선수(prereq)", "to_id": "J0202", "to_name": "일차식의 덧셈·뺄셈"}
+{"from_id": "J0202", "from_name": "일차식의 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "J0203", "to_name": "방정식과 해·등식의 성질"}
+{"from_id": "A5", "from_name": "□가 있는 식(미지수)", "relation": "선수(prereq)", "to_id": "J0203", "to_name": "방정식과 해·등식의 성질"}
+{"from_id": "J0203", "from_name": "방정식과 해·등식의 성질", "relation": "선수(prereq)", "to_id": "J0204", "to_name": "일차방정식 풀이·활용"}
+{"from_id": "M3", "from_name": "여러 자리 수의 곱셈", "relation": "선수(prereq)", "to_id": "J0208", "to_name": "지수법칙"}
+{"from_id": "J0201", "from_name": "문자를 사용한 식·식의 값", "relation": "선수(prereq)", "to_id": "J0208", "to_name": "지수법칙"}
+{"from_id": "J0201", "from_name": "문자를 사용한 식·식의 값", "relation": "선수(prereq)", "to_id": "J0209", "to_name": "다항식의 덧셈·뺄셈"}
+{"from_id": "J0209", "from_name": "다항식의 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "J0210", "to_name": "단항식×다항식, 다항식÷단항식"}
+{"from_id": "J0208", "from_name": "지수법칙", "relation": "선수(prereq)", "to_id": "J0210", "to_name": "단항식×다항식, 다항식÷단항식"}
+{"from_id": "R1", "from_name": "수의 범위(이상·이하·초과·미만)", "relation": "선수(prereq)", "to_id": "J0211", "to_name": "부등식과 해·성질"}
+{"from_id": "J0203", "from_name": "방정식과 해·등식의 성질", "relation": "선수(prereq)", "to_id": "J0211", "to_name": "부등식과 해·성질"}
+{"from_id": "J0211", "from_name": "부등식과 해·성질", "relation": "선수(prereq)", "to_id": "J0212", "to_name": "일차부등식"}
+{"from_id": "J0204", "from_name": "일차방정식 풀이·활용", "relation": "선수(prereq)", "to_id": "J0212", "to_name": "일차부등식"}
+{"from_id": "J0204", "from_name": "일차방정식 풀이·활용", "relation": "선수(prereq)", "to_id": "J0213", "to_name": "연립일차방정식"}
+{"from_id": "J0210", "from_name": "단항식×다항식, 다항식÷단항식", "relation": "선수(prereq)", "to_id": "J0219", "to_name": "다항식의 곱셈·인수분해"}
+{"from_id": "J0219", "from_name": "다항식의 곱셈·인수분해", "relation": "선수(prereq)", "to_id": "J0220", "to_name": "이차방정식"}
+{"from_id": "J0107", "from_name": "제곱근", "relation": "선수(prereq)", "to_id": "J0220", "to_name": "이차방정식"}
+{"from_id": "Q6", "from_name": "대응 관계", "relation": "선수(prereq)", "to_id": "J0205", "to_name": "순서쌍과 좌표"}
+{"from_id": "J0103", "from_name": "음수·정수·유리수의 개념", "relation": "선수(prereq)", "to_id": "J0205", "to_name": "순서쌍과 좌표"}
+{"from_id": "J0205", "from_name": "순서쌍과 좌표", "relation": "선수(prereq)", "to_id": "J0206", "to_name": "그래프의 해석"}
+{"from_id": "Q7", "from_name": "비의 개념", "relation": "선수(prereq)", "to_id": "J0207", "to_name": "정비례·반비례"}
+{"from_id": "Q8", "from_name": "비율(분수·소수·백분율)", "relation": "선수(prereq)", "to_id": "J0207", "to_name": "정비례·반비례"}
+{"from_id": "J0205", "from_name": "순서쌍과 좌표", "relation": "선수(prereq)", "to_id": "J0207", "to_name": "정비례·반비례"}
+{"from_id": "J0205", "from_name": "순서쌍과 좌표", "relation": "선수(prereq)", "to_id": "J0214", "to_name": "함수의 개념·함숫값"}
+{"from_id": "J0207", "from_name": "정비례·반비례", "relation": "선수(prereq)", "to_id": "J0214", "to_name": "함수의 개념·함숫값"}
+{"from_id": "J0214", "from_name": "함수의 개념·함숫값", "relation": "선수(prereq)", "to_id": "J0215", "to_name": "일차함수와 그래프"}
+{"from_id": "J0204", "from_name": "일차방정식 풀이·활용", "relation": "선수(prereq)", "to_id": "J0215", "to_name": "일차함수와 그래프"}
+{"from_id": "J0215", "from_name": "일차함수와 그래프", "relation": "선수(prereq)", "to_id": "J0216", "to_name": "일차함수 그래프의 성질·활용"}
+{"from_id": "J0215", "from_name": "일차함수와 그래프", "relation": "선수(prereq)", "to_id": "J0217", "to_name": "일차함수와 일차방정식의 관계"}
+{"from_id": "J0204", "from_name": "일차방정식 풀이·활용", "relation": "선수(prereq)", "to_id": "J0217", "to_name": "일차함수와 일차방정식의 관계"}
+{"from_id": "J0217", "from_name": "일차함수와 일차방정식의 관계", "relation": "선수(prereq)", "to_id": "J0218", "to_name": "두 일차함수와 연립방정식"}
+{"from_id": "J0213", "from_name": "연립일차방정식", "relation": "선수(prereq)", "to_id": "J0218", "to_name": "두 일차함수와 연립방정식"}
+{"from_id": "J0215", "from_name": "일차함수와 그래프", "relation": "선수(prereq)", "to_id": "J0221", "to_name": "이차함수의 개념"}
+{"from_id": "J0219", "from_name": "다항식의 곱셈·인수분해", "relation": "선수(prereq)", "to_id": "J0221", "to_name": "이차함수의 개념"}
+{"from_id": "J0221", "from_name": "이차함수의 개념", "relation": "선수(prereq)", "to_id": "J0222", "to_name": "이차함수의 그래프·성질"}
+{"from_id": "G06", "from_name": "직선·선분·반직선", "relation": "선수(prereq)", "to_id": "J0301", "to_name": "점·선·면·각·위치 관계"}
+{"from_id": "G07", "from_name": "각·직각·예각·둔각", "relation": "선수(prereq)", "to_id": "J0301", "to_name": "점·선·면·각·위치 관계"}
+{"from_id": "G08", "from_name": "수직과 평행", "relation": "선수(prereq)", "to_id": "J0302", "to_name": "동위각·엇각"}
+{"from_id": "G07", "from_name": "각·직각·예각·둔각", "relation": "선수(prereq)", "to_id": "J0302", "to_name": "동위각·엇각"}
+{"from_id": "G10", "from_name": "컴퍼스로 원 그리기", "relation": "선수(prereq)", "to_id": "J0303", "to_name": "삼각형의 작도"}
+{"from_id": "G06", "from_name": "직선·선분·반직선", "relation": "선수(prereq)", "to_id": "J0303", "to_name": "삼각형의 작도"}
+{"from_id": "G18", "from_name": "도형의 합동", "relation": "선수(prereq)", "to_id": "J0304", "to_name": "삼각형의 합동 조건"}
+{"from_id": "J0303", "from_name": "삼각형의 작도", "relation": "선수(prereq)", "to_id": "J0304", "to_name": "삼각형의 합동 조건"}
+{"from_id": "G16", "from_name": "다각형·정다각형", "relation": "선수(prereq)", "to_id": "J0305", "to_name": "다각형의 성질"}
+{"from_id": "G25", "from_name": "삼각형·사각형 내각의 합", "relation": "선수(prereq)", "to_id": "J0305", "to_name": "다각형의 성질"}
+{"from_id": "G09", "from_name": "원의 중심·반지름·지름", "relation": "선수(prereq)", "to_id": "J0306", "to_name": "부채꼴(중심각·호·넓이)"}
+{"from_id": "AD", "from_name": "각의 크기 측정(도·각도기)", "relation": "선수(prereq)", "to_id": "J0306", "to_name": "부채꼴(중심각·호·넓이)"}
+{"from_id": "G22", "from_name": "각기둥·각뿔", "relation": "선수(prereq)", "to_id": "J0307", "to_name": "다면체와 회전체"}
+{"from_id": "G24", "from_name": "원기둥·원뿔·구", "relation": "선수(prereq)", "to_id": "J0307", "to_name": "다면체와 회전체"}
+{"from_id": "J0307", "from_name": "다면체와 회전체", "relation": "선수(prereq)", "to_id": "J0308", "to_name": "입체도형의 겉넓이·부피"}
+{"from_id": "ME7", "from_name": "겉넓이", "relation": "선수(prereq)", "to_id": "J0308", "to_name": "입체도형의 겉넓이·부피"}
+{"from_id": "ME9", "from_name": "직육면체·정육면체의 부피", "relation": "선수(prereq)", "to_id": "J0308", "to_name": "입체도형의 겉넓이·부피"}
+{"from_id": "ME6", "from_name": "원주와 원의 넓이", "relation": "선수(prereq)", "to_id": "J0308", "to_name": "입체도형의 겉넓이·부피"}
+{"from_id": "G13", "from_name": "삼각형 분류(변): 이등변·정삼각형", "relation": "선수(prereq)", "to_id": "J0309", "to_name": "이등변삼각형의 성질"}
+{"from_id": "J0304", "from_name": "삼각형의 합동 조건", "relation": "선수(prereq)", "to_id": "J0309", "to_name": "이등변삼각형의 성질"}
+{"from_id": "J0304", "from_name": "삼각형의 합동 조건", "relation": "선수(prereq)", "to_id": "J0310", "to_name": "삼각형의 외심·내심"}
+{"from_id": "G15", "from_name": "사각형 분류", "relation": "선수(prereq)", "to_id": "J0311", "to_name": "사각형의 성질"}
+{"from_id": "J0304", "from_name": "삼각형의 합동 조건", "relation": "선수(prereq)", "to_id": "J0311", "to_name": "사각형의 성질"}
+{"from_id": "G18", "from_name": "도형의 합동", "relation": "선수(prereq)", "to_id": "J0312", "to_name": "도형의 닮음·닮음비"}
+{"from_id": "Q8", "from_name": "비율(분수·소수·백분율)", "relation": "선수(prereq)", "to_id": "J0312", "to_name": "도형의 닮음·닮음비"}
+{"from_id": "J0312", "from_name": "도형의 닮음·닮음비", "relation": "선수(prereq)", "to_id": "J0313", "to_name": "삼각형의 닮음 조건"}
+{"from_id": "J0313", "from_name": "삼각형의 닮음 조건", "relation": "선수(prereq)", "to_id": "J0314", "to_name": "평행선 사이 선분의 길이 비"}
+{"from_id": "ME3", "from_name": "직사각형·정사각형의 넓이", "relation": "선수(prereq)", "to_id": "J0315", "to_name": "피타고라스 정리"}
+{"from_id": "J0304", "from_name": "삼각형의 합동 조건", "relation": "선수(prereq)", "to_id": "J0315", "to_name": "피타고라스 정리"}
+{"from_id": "J0107", "from_name": "제곱근", "relation": "선수(prereq)", "to_id": "J0315", "to_name": "피타고라스 정리"}
+{"from_id": "J0315", "from_name": "피타고라스 정리", "relation": "선수(prereq)", "to_id": "J0316", "to_name": "삼각비"}
+{"from_id": "J0312", "from_name": "도형의 닮음·닮음비", "relation": "선수(prereq)", "to_id": "J0316", "to_name": "삼각비"}
+{"from_id": "J0316", "from_name": "삼각비", "relation": "선수(prereq)", "to_id": "J0317", "to_name": "삼각비의 활용"}
+{"from_id": "G09", "from_name": "원의 중심·반지름·지름", "relation": "선수(prereq)", "to_id": "J0318", "to_name": "원의 현·접선"}
+{"from_id": "J0318", "from_name": "원의 현·접선", "relation": "선수(prereq)", "to_id": "J0319", "to_name": "원주각"}
+{"from_id": "J0304", "from_name": "삼각형의 합동 조건", "relation": "선수(prereq)", "to_id": "J0319", "to_name": "원주각"}
+{"from_id": "P7", "from_name": "평균", "relation": "선수(prereq)", "to_id": "J0401", "to_name": "대푯값(중앙값·최빈값)"}
+{"from_id": "P4", "from_name": "그림그래프·막대그래프", "relation": "선수(prereq)", "to_id": "J0402", "to_name": "도수분포표·히스토그램"}
+{"from_id": "P8", "from_name": "띠그래프·원그래프", "relation": "선수(prereq)", "to_id": "J0402", "to_name": "도수분포표·히스토그램"}
+{"from_id": "J0402", "from_name": "도수분포표·히스토그램", "relation": "선수(prereq)", "to_id": "J0403", "to_name": "상대도수"}
+{"from_id": "Q8", "from_name": "비율(분수·소수·백분율)", "relation": "선수(prereq)", "to_id": "J0403", "to_name": "상대도수"}
+{"from_id": "P9", "from_name": "탐구: 적절한 그래프 선택", "relation": "선수(prereq)", "to_id": "J0404", "to_name": "통계적 탐구"}
+{"from_id": "J0402", "from_name": "도수분포표·히스토그램", "relation": "선수(prereq)", "to_id": "J0404", "to_name": "통계적 탐구"}
+{"from_id": "M1", "from_name": "곱셈의 의미", "relation": "선수(prereq)", "to_id": "J0405", "to_name": "경우의 수"}
+{"from_id": "P11", "from_name": "가능성 수로 표현", "relation": "선수(prereq)", "to_id": "J0406", "to_name": "확률"}
+{"from_id": "J0405", "from_name": "경우의 수", "relation": "선수(prereq)", "to_id": "J0406", "to_name": "확률"}
+{"from_id": "J0401", "from_name": "대푯값(중앙값·최빈값)", "relation": "선수(prereq)", "to_id": "J0407", "to_name": "분산·표준편차"}
+{"from_id": "J0402", "from_name": "도수분포표·히스토그램", "relation": "선수(prereq)", "to_id": "J0408", "to_name": "상자그림"}
+{"from_id": "P5", "from_name": "꺾은선그래프", "relation": "선수(prereq)", "to_id": "J0409", "to_name": "산점도·상관관계"}
+{"from_id": "J0207", "from_name": "정비례·반비례", "relation": "선수(prereq)", "to_id": "J0409", "to_name": "산점도·상관관계"}
+{"from_id": "HK01", "from_name": "다항식의 사칙연산", "relation": "선수(prereq)", "to_id": "HK02", "to_name": "항등식과 미정계수"}
+{"from_id": "HK02", "from_name": "항등식과 미정계수", "relation": "선수(prereq)", "to_id": "HK03", "to_name": "나머지정리·인수정리"}
+{"from_id": "HK01", "from_name": "다항식의 사칙연산", "relation": "선수(prereq)", "to_id": "HK04", "to_name": "다항식의 인수분해(고급)"}
+{"from_id": "HK03", "from_name": "나머지정리·인수정리", "relation": "선수(prereq)", "to_id": "HK04", "to_name": "다항식의 인수분해(고급)"}
+{"from_id": "HK04", "from_name": "다항식의 인수분해(고급)", "relation": "선수(prereq)", "to_id": "HK12", "to_name": "삼·사차방정식"}
+{"from_id": "HK05", "from_name": "복소수", "relation": "선수(prereq)", "to_id": "HK06", "to_name": "이차방정식의 근(실근·허근)"}
+{"from_id": "HK06", "from_name": "이차방정식의 근(실근·허근)", "relation": "선수(prereq)", "to_id": "HK07", "to_name": "판별식"}
+{"from_id": "HK06", "from_name": "이차방정식의 근(실근·허근)", "relation": "선수(prereq)", "to_id": "HK08", "to_name": "근과 계수의 관계"}
+{"from_id": "HK06", "from_name": "이차방정식의 근(실근·허근)", "relation": "선수(prereq)", "to_id": "HK09", "to_name": "이차방정식과 이차함수의 관계"}
+{"from_id": "HK09", "from_name": "이차방정식과 이차함수의 관계", "relation": "선수(prereq)", "to_id": "HK10", "to_name": "이차함수의 그래프와 직선"}
+{"from_id": "HK07", "from_name": "판별식", "relation": "선수(prereq)", "to_id": "HK10", "to_name": "이차함수의 그래프와 직선"}
+{"from_id": "HK09", "from_name": "이차방정식과 이차함수의 관계", "relation": "선수(prereq)", "to_id": "HK11", "to_name": "이차함수의 최대·최소"}
+{"from_id": "HK06", "from_name": "이차방정식의 근(실근·허근)", "relation": "선수(prereq)", "to_id": "HK12", "to_name": "삼·사차방정식"}
+{"from_id": "HK06", "from_name": "이차방정식의 근(실근·허근)", "relation": "선수(prereq)", "to_id": "HK13", "to_name": "연립이차방정식"}
+{"from_id": "HK14", "from_name": "연립일차부등식", "relation": "선수(prereq)", "to_id": "HK15", "to_name": "절댓값 포함 부등식"}
+{"from_id": "HK14", "from_name": "연립일차부등식", "relation": "선수(prereq)", "to_id": "HK16", "to_name": "이차부등식·연립이차부등식"}
+{"from_id": "HK11", "from_name": "이차함수의 최대·최소", "relation": "선수(prereq)", "to_id": "HK16", "to_name": "이차부등식·연립이차부등식"}
+{"from_id": "HK17", "from_name": "두 점 사이의 거리", "relation": "선수(prereq)", "to_id": "HK18", "to_name": "내분점·외분점"}
+{"from_id": "HK17", "from_name": "두 점 사이의 거리", "relation": "선수(prereq)", "to_id": "HK19", "to_name": "직선의 방정식"}
+{"from_id": "HK19", "from_name": "직선의 방정식", "relation": "선수(prereq)", "to_id": "HK20", "to_name": "두 직선의 평행·수직"}
+{"from_id": "HK19", "from_name": "직선의 방정식", "relation": "선수(prereq)", "to_id": "HK21", "to_name": "점과 직선 사이의 거리"}
+{"from_id": "HK17", "from_name": "두 점 사이의 거리", "relation": "선수(prereq)", "to_id": "HK21", "to_name": "점과 직선 사이의 거리"}
+{"from_id": "HK17", "from_name": "두 점 사이의 거리", "relation": "선수(prereq)", "to_id": "HK22", "to_name": "원의 방정식"}
+{"from_id": "HK22", "from_name": "원의 방정식", "relation": "선수(prereq)", "to_id": "HK23", "to_name": "원과 직선의 위치 관계"}
+{"from_id": "HK19", "from_name": "직선의 방정식", "relation": "선수(prereq)", "to_id": "HK23", "to_name": "원과 직선의 위치 관계"}
+{"from_id": "HK07", "from_name": "판별식", "relation": "선수(prereq)", "to_id": "HK23", "to_name": "원과 직선의 위치 관계"}
+{"from_id": "HK19", "from_name": "직선의 방정식", "relation": "선수(prereq)", "to_id": "HK24", "to_name": "평행이동"}
+{"from_id": "HK22", "from_name": "원의 방정식", "relation": "선수(prereq)", "to_id": "HK24", "to_name": "평행이동"}
+{"from_id": "HK24", "from_name": "평행이동", "relation": "선수(prereq)", "to_id": "HK25", "to_name": "대칭이동"}
+{"from_id": "HK26", "from_name": "집합과 표현", "relation": "선수(prereq)", "to_id": "HK27", "to_name": "부분집합·포함관계"}
+{"from_id": "HK27", "from_name": "부분집합·포함관계", "relation": "선수(prereq)", "to_id": "HK28", "to_name": "집합의 연산"}
+{"from_id": "HK26", "from_name": "집합과 표현", "relation": "선수(prereq)", "to_id": "HK29", "to_name": "명제와 조건"}
+{"from_id": "HK29", "from_name": "명제와 조건", "relation": "선수(prereq)", "to_id": "HK30", "to_name": "명제의 역·대우"}
+{"from_id": "HK30", "from_name": "명제의 역·대우", "relation": "선수(prereq)", "to_id": "HK31", "to_name": "충분조건·필요조건"}
+{"from_id": "HK27", "from_name": "부분집합·포함관계", "relation": "선수(prereq)", "to_id": "HK31", "to_name": "충분조건·필요조건"}
+{"from_id": "HK30", "from_name": "명제의 역·대우", "relation": "선수(prereq)", "to_id": "HK32", "to_name": "대우증명·귀류법"}
+{"from_id": "HK32", "from_name": "대우증명·귀류법", "relation": "선수(prereq)", "to_id": "HK33", "to_name": "절대부등식 증명"}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "HK35", "to_name": "합성함수"}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "HK36", "to_name": "역함수"}
+{"from_id": "HK20", "from_name": "두 직선의 평행·수직", "relation": "선수(prereq)", "to_id": "HK36", "to_name": "역함수"}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "HK37", "to_name": "유리함수"}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "HK38", "to_name": "무리함수"}
+{"from_id": "HK39", "from_name": "합의법칙·곱의법칙", "relation": "선수(prereq)", "to_id": "HK40", "to_name": "순열"}
+{"from_id": "HK40", "from_name": "순열", "relation": "선수(prereq)", "to_id": "HK41", "to_name": "조합"}
+{"from_id": "J0209", "from_name": "다항식의 덧셈·뺄셈", "relation": "선수(prereq)", "to_id": "HK01", "to_name": "다항식의 사칙연산"}
+{"from_id": "J0210", "from_name": "단항식×다항식, 다항식÷단항식", "relation": "선수(prereq)", "to_id": "HK01", "to_name": "다항식의 사칙연산"}
+{"from_id": "J0219", "from_name": "다항식의 곱셈·인수분해", "relation": "선수(prereq)", "to_id": "HK04", "to_name": "다항식의 인수분해(고급)"}
+{"from_id": "J0220", "from_name": "이차방정식", "relation": "선수(prereq)", "to_id": "HK06", "to_name": "이차방정식의 근(실근·허근)"}
+{"from_id": "J0222", "from_name": "이차함수의 그래프·성질", "relation": "선수(prereq)", "to_id": "HK09", "to_name": "이차방정식과 이차함수의 관계"}
+{"from_id": "J0107", "from_name": "제곱근", "relation": "선수(prereq)", "to_id": "HK05", "to_name": "복소수"}
+{"from_id": "J0108", "from_name": "무리수", "relation": "선수(prereq)", "to_id": "HK05", "to_name": "복소수"}
+{"from_id": "J0213", "from_name": "연립일차방정식", "relation": "선수(prereq)", "to_id": "HK13", "to_name": "연립이차방정식"}
+{"from_id": "J0212", "from_name": "일차부등식", "relation": "선수(prereq)", "to_id": "HK14", "to_name": "연립일차부등식"}
+{"from_id": "J0205", "from_name": "순서쌍과 좌표", "relation": "선수(prereq)", "to_id": "HK17", "to_name": "두 점 사이의 거리"}
+{"from_id": "J0315", "from_name": "피타고라스 정리", "relation": "선수(prereq)", "to_id": "HK17", "to_name": "두 점 사이의 거리"}
+{"from_id": "J0215", "from_name": "일차함수와 그래프", "relation": "선수(prereq)", "to_id": "HK19", "to_name": "직선의 방정식"}
+{"from_id": "G19", "from_name": "선대칭·점대칭", "relation": "선수(prereq)", "to_id": "HK25", "to_name": "대칭이동"}
+{"from_id": "J0214", "from_name": "함수의 개념·함숫값", "relation": "선수(prereq)", "to_id": "HK34", "to_name": "함수의 개념·그래프"}
+{"from_id": "J0207", "from_name": "정비례·반비례", "relation": "선수(prereq)", "to_id": "HK37", "to_name": "유리함수"}
+{"from_id": "J0405", "from_name": "경우의 수", "relation": "선수(prereq)", "to_id": "HK39", "to_name": "합의법칙·곱의법칙"}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "H:12경수02-01", "to_name": "여러 가지 경제 현상을 함수로 나타낼 수 있다."}
+{"from_id": "P7", "from_name": "평균", "relation": "선수(prereq)", "to_id": "H:12경수01-01", "to_name": "통계 자료를 활용하여 경제지표의 의미를 이해하고, 경제지표의 변화를"}
+{"from_id": "Q8", "from_name": "비율(분수·소수·백분율)", "relation": "선수(prereq)", "to_id": "H:12경수01-02", "to_name": "환율과 관련된 실생활 문제를 해결할 수 있다."}
+{"from_id": "Q8", "from_name": "비율(분수·소수·백분율)", "relation": "선수(prereq)", "to_id": "H:12경수01-03", "to_name": "세금과 관련된 실생활 문제를 해결할 수 있다."}
+{"from_id": "Q8", "from_name": "비율(분수·소수·백분율)", "relation": "선수(prereq)", "to_id": "H:12경수01-04", "to_name": "단리와 복리를 이용하여 이자와 원리 합계를 구하고, 미래에 받 202"}
+{"from_id": "H:12경수01-04", "from_name": "단리와 복리를 이용하여 이자와 원리 합계를 구하고, 미래에 받 202", "relation": "선수(prereq)", "to_id": "H:12경수01-05", "to_name": "연금의 뜻을 알고, 연금의 현재가치를 구할 수 있다. 394 (2)"}
+{"from_id": "H:12경수02-01", "from_name": "여러 가지 경제 현상을 함수로 나타낼 수 있다.", "relation": "선수(prereq)", "to_id": "H:12경수02-02", "to_name": "함수와 그래프를 활용하여 수요곡선과 공급곡선의 의미를 탐구하고 이해한"}
+{"from_id": "H:12경수02-01", "from_name": "여러 가지 경제 현상을 함수로 나타낼 수 있다.", "relation": "선수(prereq)", "to_id": "H:12경수02-03", "to_name": "효용의 의미를 이해하고, 효용을 함 수와 그래프로 나타낼 수 있다."}
+{"from_id": "HK19", "from_name": "직선의 방정식", "relation": "선수(prereq)", "to_id": "H:12경수02-02", "to_name": "함수와 그래프를 활용하여 수요곡선과 공급곡선의 의미를 탐구하고 이해한"}
+{"from_id": "H:12경수02-02", "from_name": "함수와 그래프를 활용하여 수요곡선과 공급곡선의 의미를 탐구하고 이해한", "relation": "선수(prereq)", "to_id": "H:12경수02-04", "to_name": "수요와 공급의 상호 작용에 의해 균형가격이 결정되는 경제 현상을 설명"}
+{"from_id": "H:12경수02-04", "from_name": "수요와 공급의 상호 작용에 의해 균형가격이 결정되는 경제 현상을 설명", "relation": "선수(prereq)", "to_id": "H:12경수02-05", "to_name": "세금과 소득의 변화가 균형가격에 미치는 영향을 탐구하고 이해한다. 2"}
+{"from_id": "HK16", "from_name": "이차부등식·연립이차부등식", "relation": "선수(prereq)", "to_id": "H:12경수02-06", "to_name": "부등식의 영역의 개념을 이해하고, 이를 활용하여 경제 현상의 문제를"}
+{"from_id": "H:12경수03-01", "from_name": "여러 가지 경제 현상을 행렬로 나타내 고, 연산할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12경수03-02", "to_name": "역행렬의 뜻을 알고, 2×2 행렬의 역행렬을 구할 수 있다."}
+{"from_id": "H:12경수03-02", "from_name": "역행렬의 뜻을 알고, 2×2 행렬의 역행렬을 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12경수03-03", "to_name": "행렬의 연산과 역행렬을 활용하여 경제 현상의 문제를 해결할 수 있다."}
+{"from_id": "P2", "from_name": "표로 나타내기", "relation": "선수(prereq)", "to_id": "H:12경수03-01", "to_name": "여러 가지 경제 현상을 행렬로 나타내 고, 연산할 수 있다."}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "H:12경수04-01", "to_name": "미분의 개념을 이해하고 경제 현상을 나타내는 함수를 미분할 수 있다."}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "H:12경수04-01", "to_name": "미분의 개념을 이해하고 경제 현상을 나타내는 함수를 미분할 수 있다."}
+{"from_id": "H:12경수04-01", "from_name": "미분의 개념을 이해하고 경제 현상을 나타내는 함수를 미분할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12경수04-02", "to_name": "미분을 이용하여 그래프의 개형을 탐 구하고 해석할 수 있다."}
+{"from_id": "H:12경수04-01", "from_name": "미분의 개념을 이해하고 경제 현상을 나타내는 함수를 미분할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12경수04-03", "to_name": "미분을 활용하여 탄력성의 의미를 탐 구하고 이해한다."}
+{"from_id": "H:12경수04-02", "from_name": "미분을 이용하여 그래프의 개형을 탐 구하고 해석할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12경수04-04", "to_name": "미분을 활용하여 경제 현상의 최적화 문제를 해결할 수 있다. 398"}
+{"from_id": "H:12경수04-03", "from_name": "미분을 활용하여 탄력성의 의미를 탐 구하고 이해한다.", "relation": "선수(prereq)", "to_id": "H:12경수04-04", "to_name": "미분을 활용하여 경제 현상의 최적화 문제를 해결할 수 있다. 398"}
+{"from_id": "H:12인수01-01", "from_name": "인공지능의 개념을 이해하고 학습 방식을 수학적으로 해석할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12인수01-03", "to_name": "빅데이터의 개념과 특성을 알고 인 공지능에서 빅데이터를 활용한 사례를"}
+{"from_id": "HK28", "from_name": "집합의 연산", "relation": "선수(prereq)", "to_id": "H:12인수02-01", "to_name": "집합과 벡터를 이용하여 텍스트 데이터를 목적에 맞게 표현할 수 있다."}
+{"from_id": "H:12인수02-01", "from_name": "집합과 벡터를 이용하여 텍스트 데이터를 목적에 맞게 표현할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12인수02-02", "to_name": "빈도수벡터를 이용하여 텍스트 데이터를 요약하고 유용한 정보를 추출할"}
+{"from_id": "H:12인수02-02", "from_name": "빈도수벡터를 이용하여 텍스트 데이터를 요약하고 유용한 정보를 추출할", "relation": "선수(prereq)", "to_id": "H:12인수02-03", "to_name": "인공지능이 텍스트를 특성에 따라 분석하는 수학적 방법을 설명할 수 있"}
+{"from_id": "H:12경수03-01", "from_name": "여러 가지 경제 현상을 행렬로 나타내 고, 연산할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12인수03-01", "to_name": "행렬을 이용하여 이미지 데이터를 목적에 맞게 표현할 수 있다."}
+{"from_id": "H:12인수03-01", "from_name": "행렬을 이용하여 이미지 데이터를 목적에 맞게 표현할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12인수03-02", "to_name": "행렬의 연산을 이용하여 이미지 데이터를 다양하게 변환할 수 있다."}
+{"from_id": "H:12인수03-02", "from_name": "행렬의 연산을 이용하여 이미지 데이터를 다양하게 변환할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12인수03-03", "to_name": "인공지능이 이미지를 자동으로 분류하는 수학적 방법을 설명할 수 있다."}
+{"from_id": "J0406", "from_name": "확률", "relation": "선수(prereq)", "to_id": "H:12인수04-01", "to_name": "데이터를 분석하여 사건이 일어날 확률을 구하고 이를 예측에 이용할 수"}
+{"from_id": "J0409", "from_name": "산점도·상관관계", "relation": "선수(prereq)", "to_id": "H:12인수04-02", "to_name": "공학도구를 사용하여 데이터의 경향성을 추세선으로 나타 내고 이를 예측"}
+{"from_id": "H:12인수04-02", "from_name": "공학도구를 사용하여 데이터의 경향성을 추세선으로 나타 내고 이를 예측", "relation": "선수(prereq)", "to_id": "H:12인수04-03", "to_name": "손실함수를 이해하고 최적화된 추세 선을 찾을 수 있다."}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "H:12인수04-03", "to_name": "손실함수를 이해하고 최적화된 추세 선을 찾을 수 있다."}
+{"from_id": "H:12인수04-03", "from_name": "손실함수를 이해하고 최적화된 추세 선을 찾을 수 있다.", "relation": "선수(prereq)", "to_id": "H:12인수04-04", "to_name": "경사하강법을 이해하고 최적화된 예측을 위한 인공지능의 학습 방법을 설"}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "H:12인수04-04", "to_name": "경사하강법을 이해하고 최적화된 예측을 위한 인공지능의 학습 방법을 설"}
+{"from_id": "H:12인수04-04", "from_name": "경사하강법을 이해하고 최적화된 예측을 위한 인공지능의 학습 방법을 설", "relation": "선수(prereq)", "to_id": "H:12인수05-01", "to_name": "수학적 원리를 이용하여 인공지능이 실생활 문제를 합리적으로 해결하는"}
+{"from_id": "H:12인수05-01", "from_name": "수학적 원리를 이용하여 인공지능이 실생활 문제를 합리적으로 해결하는", "relation": "선수(prereq)", "to_id": "H:12인수05-02", "to_name": "인공지능과 관련된 수학 주제를 선정하여 탐구할 수 있다. 2022 2"}
+{"from_id": "H:12인수01-01", "from_name": "인공지능의 개념을 이해하고 학습 방식을 수학적으로 해석할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12인수05-01", "to_name": "수학적 원리를 이용하여 인공지능이 실생활 문제를 합리적으로 해결하는"}
+{"from_id": "M3", "from_name": "여러 자리 수의 곱셈", "relation": "선수(prereq)", "to_id": "H:12직수01-01", "to_name": "직무상황에서 수 개념과 사칙연산의 문제를 해결하고 그 유용성을 인식할"}
+{"from_id": "R2", "from_name": "어림(올림·버림·반올림)", "relation": "선수(prereq)", "to_id": "H:12직수01-02", "to_name": "큰 수를 어림하여 문제를 해결하고, 어림값을 이용하여 수의 크기를 비"}
+{"from_id": "L5", "from_name": "길이 단위 mm·km와 관계", "relation": "선수(prereq)", "to_id": "H:12직수01-03", "to_name": "시간, 길이, 무게, 들이의 표준단위를 알고, 단위를 환산할 수 있다"}
+{"from_id": "Q7", "from_name": "비의 개념", "relation": "선수(prereq)", "to_id": "H:12직수02-01", "to_name": "비의 개념을 직무 상황에 연결하여 적용할 수 있다."}
+{"from_id": "Q8", "from_name": "비율(분수·소수·백분율)", "relation": "선수(prereq)", "to_id": "H:12직수02-02", "to_name": "비율을 백분율로 표현할 수 있고 직무 상황에 연결하여 적용할 수 있다"}
+{"from_id": "Q6", "from_name": "대응 관계", "relation": "선수(prereq)", "to_id": "H:12직수02-03", "to_name": "두 양사이의 대응 관계를 나타낸 표에서 규칙을 찾아 설명할 수 있다."}
+{"from_id": "P5", "from_name": "꺾은선그래프", "relation": "선수(prereq)", "to_id": "H:12직수02-04", "to_name": "증가와 감 소, 주기적 변화 등의 관계를 나타내는 그래프를 설명할 수"}
+{"from_id": "J0212", "from_name": "일차부등식", "relation": "선수(prereq)", "to_id": "H:12직수02-05", "to_name": "일차방정식 또는 일차부등식을 활용하여 직무 상황의 문제를 해결할 수"}
+{"from_id": "G21", "from_name": "겨냥도·전개도(직육면체)", "relation": "선수(prereq)", "to_id": "H:12직수03-01", "to_name": "입체도형의 겨냥도와 전개도를 그릴 수 있고, 겨냥도와 전개도 를 이용"}
+{"from_id": "G28", "from_name": "쌓기나무 위·앞·옆 모양", "relation": "선수(prereq)", "to_id": "H:12직수03-02", "to_name": "입체도형의 위, 앞, 옆에서 본 모양을 표현할 수 있고, 이러한 표현"}
+{"from_id": "J0312", "from_name": "도형의 닮음·닮음비", "relation": "선수(prereq)", "to_id": "H:12직수03-03", "to_name": "도형의 이동, 합동과 닮음을 직무상황에 연결하여 문제를 해결할 수 있"}
+{"from_id": "ME4", "from_name": "평행사변형·삼각형·사다리꼴·마름모의 넓이", "relation": "선수(prereq)", "to_id": "H:12직수03-04", "to_name": "직무상황에서 나타나는 평면도형의 둘레와 넓이를 구할 수 있다. 542"}
+{"from_id": "ME9", "from_name": "직육면체·정육면체의 부피", "relation": "선수(prereq)", "to_id": "H:12직수03-05", "to_name": "직무 상황에서 나타나는 입체도형의 겉넓이와 부피를 구할 수 있다. 2"}
+{"from_id": "J0405", "from_name": "경우의 수", "relation": "선수(prereq)", "to_id": "H:12직수04-01", "to_name": "직무 상황에서 경우의 수를 구할 수 있다."}
+{"from_id": "J0406", "from_name": "확률", "relation": "선수(prereq)", "to_id": "H:12직수04-02", "to_name": "어떤 현상이 나타날 가능성을 수치화하여 설명할 수 있다."}
+{"from_id": "P6", "from_name": "탐구: 막대·꺾은선 활용", "relation": "선수(prereq)", "to_id": "H:12직수04-03", "to_name": "직무상황의 자료를 목적에 맞게 표와 그래프로 정리할 수 있다."}
+{"from_id": "H:12직수04-03", "from_name": "직무상황의 자료를 목적에 맞게 표와 그래프로 정리할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12직수04-04", "to_name": "직무 상황의 다양한 표와 그래프를 해석할 수 있다."}
+{"from_id": "H:12직수04-04", "from_name": "직무 상황의 다양한 표와 그래프를 해석할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12직수04-05", "to_name": "다양한 자료의 특성을 파악하여, 직무 목적에 적합한 표나 그래프로 나"}
+{"from_id": "Q7", "from_name": "비의 개념", "relation": "선수(prereq)", "to_id": "H:12수문01-01", "to_name": "음악과 관련된 수학적 내용을 조사하고, 관련 활동을 수행할 수 있다."}
+{"from_id": "G19", "from_name": "선대칭·점대칭", "relation": "선수(prereq)", "to_id": "H:12수문01-02", "to_name": "미술과관련된 수학적 내용을 조사하고, 관련 활동을 수행할 수 있다."}
+{"from_id": "ME5", "from_name": "원주율", "relation": "선수(prereq)", "to_id": "H:12수문01-02", "to_name": "미술과관련된 수학적 내용을 조사하고, 관련 활동을 수행할 수 있다."}
+{"from_id": "J0406", "from_name": "확률", "relation": "선수(prereq)", "to_id": "H:12수문02-02", "to_name": "게임과 관련된 수학적 내용을 조사하고 관련 활동을 수행할 수 있다."}
+{"from_id": "J0101", "from_name": "소인수분해", "relation": "선수(prereq)", "to_id": "H:12수문02-03", "to_name": "디지털기술에 활용된 수학적 내용을 조사하여 설명할 수 있다."}
+{"from_id": "P12", "from_name": "가능성 근거 판단", "relation": "선수(prereq)", "to_id": "H:12수문02-04", "to_name": "투표와 관련된 수학적 내용을 조사하고 이를 활용하여 합리적 의사 결정"}
+{"from_id": "G16", "from_name": "다각형·정다각형", "relation": "선수(prereq)", "to_id": "H:12수문03-01", "to_name": "민속 수학과 건축 양식 속에 나타 난 수학적 원리에 대해 탐 구하고"}
+{"from_id": "HK40", "from_name": "순열", "relation": "선수(prereq)", "to_id": "H:12수문03-02", "to_name": "점자표에 사용된 수학적 원리에 대해 탐구하고 이를 활용하여 산출물을"}
+{"from_id": "P8", "from_name": "띠그래프·원그래프", "relation": "선수(prereq)", "to_id": "H:12수문03-03", "to_name": "대중매체로부터 얻은 데이터를 정리, 분석하여 그 의미와 가 치를 해석"}
+{"from_id": "P12", "from_name": "가능성 근거 판단", "relation": "선수(prereq)", "to_id": "H:12수문03-04", "to_name": "가치소비를 위한 의사 결정 방법을 탐구하고 실천 방법을 제시할 수 있"}
+{"from_id": "P9", "from_name": "탐구: 적절한 그래프 선택", "relation": "선수(prereq)", "to_id": "H:12수문04-01", "to_name": "식생활과 관련된 문제를 수학적으로 분석하고 이를 개선하기 위한 방법을"}
+{"from_id": "P9", "from_name": "탐구: 적절한 그래프 선택", "relation": "선수(prereq)", "to_id": "H:12수문04-02", "to_name": "대기 오염과 관련된 문제를 수학적으로 분석하고 이를 개선하기 위한 방"}
+{"from_id": "P9", "from_name": "탐구: 적절한 그래프 선택", "relation": "선수(prereq)", "to_id": "H:12수문04-03", "to_name": "사막화현상과 관련된 문제를 수학적으로 분석하고 이를 개선하기 위한 방"}
+{"from_id": "P9", "from_name": "탐구: 적절한 그래프 선택", "relation": "선수(prereq)", "to_id": "H:12수문04-04", "to_name": "생물 다양성과 생명권 관련 자료를 수학적으로 분석하고 이를 통해 생태"}
+{"from_id": "H:12수과01-01", "from_name": "수학과 제 탐구의 의미와 필요성을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과01-02", "to_name": "올바른 연구윤리를 이해하고, 탐 구의 전 과정에서 이를 준수한다. 2"}
+{"from_id": "H:12수과01-01", "from_name": "수학과 제 탐구의 의미와 필요성을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과02-01", "to_name": "문헌 조사를 통해 탐구하는 방법과 절차를 이해하고 설명할 수 있다."}
+{"from_id": "H:12수과01-01", "from_name": "수학과 제 탐구의 의미와 필요성을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과02-02", "to_name": "사례 조사를 통해 탐구하는 방법과 절차를 이해하고 설명할 수 있다."}
+{"from_id": "H:12수과01-01", "from_name": "수학과 제 탐구의 의미와 필요성을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과02-03", "to_name": "수학 실험을 통해 탐구하는 방법과 절차를 이해하고 설명할 수 있다."}
+{"from_id": "H:12수과01-01", "from_name": "수학과 제 탐구의 의미와 필요성을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과02-04", "to_name": "개발 연구를 통해 탐구하는 방법과 절차를 이해하고 설명할 수 있다."}
+{"from_id": "H:12수과02-01", "from_name": "문헌 조사를 통해 탐구하는 방법과 절차를 이해하고 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과03-01", "to_name": "여러 가지 현상에서 수학 탐구 주제를 선정하고 탐구 계획을 수립할 수"}
+{"from_id": "H:12수과02-02", "from_name": "사례 조사를 통해 탐구하는 방법과 절차를 이해하고 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과03-01", "to_name": "여러 가지 현상에서 수학 탐구 주제를 선정하고 탐구 계획을 수립할 수"}
+{"from_id": "H:12수과02-03", "from_name": "수학 실험을 통해 탐구하는 방법과 절차를 이해하고 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과03-01", "to_name": "여러 가지 현상에서 수학 탐구 주제를 선정하고 탐구 계획을 수립할 수"}
+{"from_id": "H:12수과02-04", "from_name": "개발 연구를 통해 탐구하는 방법과 절차를 이해하고 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과03-01", "to_name": "여러 가지 현상에서 수학 탐구 주제를 선정하고 탐구 계획을 수립할 수"}
+{"from_id": "H:12수과03-01", "from_name": "여러 가지 현상에서 수학 탐구 주제를 선정하고 탐구 계획을 수립할 수", "relation": "선수(prereq)", "to_id": "H:12수과03-02", "to_name": "적절한 탐 구 방법과 절차에 따라 탐 구를 수행할 수 있다."}
+{"from_id": "H:12수과03-02", "from_name": "적절한 탐 구 방법과 절차에 따라 탐 구를 수행할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과03-03", "to_name": "탐구 결과를 정리하여 산출물을 만들고 발표할 수 있다."}
+{"from_id": "H:12수과03-03", "from_name": "탐구 결과를 정리하여 산출물을 만들고 발표할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12수과03-04", "to_name": "탐구 과정과 결과를 반성하고 평가할 수 있다. 2022 2 (1) 과"}
+{"from_id": "H:12실통01-01", "from_name": "통계와 통계적 방법의 유용성과 필요성을 인식할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12실통01-02", "to_name": "통계적 문제해결 과정을 이해하고 각 단계의 역할을 설명할 수 있다."}
+{"from_id": "H:12실통01-02", "from_name": "통계적 문제해결 과정을 이해하고 각 단계의 역할을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12실통01-03", "to_name": "모집단과 표본의 뜻을 알고, 표본추출의 방법을 이해하여 문제 상황에"}
+{"from_id": "J0406", "from_name": "확률", "relation": "선수(prereq)", "to_id": "H:12실통01-03", "to_name": "모집단과 표본의 뜻을 알고, 표본추출의 방법을 이해하여 문제 상황에"}
+{"from_id": "H:12실통02-01", "from_name": "자료의 종류를 알고 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12실통02-02", "to_name": "자료의 수집 방법을 이해하고 문제 상황에 맞는 자료 수집 방법을 선택"}
+{"from_id": "H:12실통02-02", "from_name": "자료의 수집 방법을 이해하고 문제 상황에 맞는 자료 수집 방법을 선택", "relation": "선수(prereq)", "to_id": "H:12실통02-03", "to_name": "그래프의 종류를 알고 자료의 특성을 나타내는 적절한 그래프를 그릴 수"}
+{"from_id": "P8", "from_name": "띠그래프·원그래프", "relation": "선수(prereq)", "to_id": "H:12실통02-03", "to_name": "그래프의 종류를 알고 자료의 특성을 나타내는 적절한 그래프를 그릴 수"}
+{"from_id": "H:12실통02-02", "from_name": "자료의 수집 방법을 이해하고 문제 상황에 맞는 자료 수집 방법을 선택", "relation": "선수(prereq)", "to_id": "H:12실통02-04", "to_name": "대푯값과 산포도의 종류를 알고 자료의 특성을 나타내는 값으로 요약할"}
+{"from_id": "J0401", "from_name": "대푯값(중앙값·최빈값)", "relation": "선수(prereq)", "to_id": "H:12실통02-04", "to_name": "대푯값과 산포도의 종류를 알고 자료의 특성을 나타내는 값으로 요약할"}
+{"from_id": "J0407", "from_name": "분산·표준편차", "relation": "선수(prereq)", "to_id": "H:12실통02-04", "to_name": "대푯값과 산포도의 종류를 알고 자료의 특성을 나타내는 값으로 요약할"}
+{"from_id": "J0406", "from_name": "확률", "relation": "선수(prereq)", "to_id": "H:12실통03-01", "to_name": "정규분포와 t분포를 공학 도구를 이용하여 탐구할 수 있다."}
+{"from_id": "H:12실통03-01", "from_name": "정규분포와 t분포를 공학 도구를 이용하여 탐구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12실통03-02", "to_name": "실생활에 서 공학 도구를 이용하여 모평균을 추정할 수 있다."}
+{"from_id": "H:12실통01-03", "from_name": "모집단과 표본의 뜻을 알고, 표본추출의 방법을 이해하여 문제 상황에", "relation": "선수(prereq)", "to_id": "H:12실통03-02", "to_name": "실생활에 서 공학 도구를 이용하여 모평균을 추정할 수 있다."}
+{"from_id": "H:12실통03-01", "from_name": "정규분포와 t분포를 공학 도구를 이용하여 탐구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12실통03-03", "to_name": "실생활에 서 공학 도구를 이용하여 모비율을 추정할 수 있다."}
+{"from_id": "H:12실통03-02", "from_name": "실생활에 서 공학 도구를 이용하여 모평균을 추정할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12실통03-04", "to_name": "가설검정을 이해하고, 실생활에서 공학 도구를 이용하여 가설을 검정할"}
+{"from_id": "H:12실통03-02", "from_name": "실생활에 서 공학 도구를 이용하여 모평균을 추정할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12실통04-01", "to_name": "실생활에 서 통계적 탐구 과정에 따 라 문제를 해결하고 합리적인 의사"}
+{"from_id": "H:12실통03-04", "from_name": "가설검정을 이해하고, 실생활에서 공학 도구를 이용하여 가설을 검정할", "relation": "선수(prereq)", "to_id": "H:12실통04-01", "to_name": "실생활에 서 통계적 탐구 과정에 따 라 문제를 해결하고 합리적인 의사"}
+{"from_id": "H:12실통04-01", "from_name": "실생활에 서 통계적 탐구 과정에 따 라 문제를 해결하고 합리적인 의사", "relation": "선수(prereq)", "to_id": "H:12실통04-02", "to_name": "통계적 탐 구 과정과 그 결과를 비판적으로 성찰할 수 있다. 698"}
+{"from_id": "H:12인수01-01", "from_name": "인공지능의 개념을 이해하고 학습 방식을 수학적으로 해석할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12인수01-02", "to_name": "인공지능에서 수학을 활용한 역사적 사례를 탐구하고 설명할 수 있다."}
+{"from_id": "Q1", "from_name": "규칙 찾기·표현", "relation": "선수(prereq)", "to_id": "H:12수문01-03", "to_name": "문학과 관련된 수학적 내용을 조사하고, 관련 활동을 수행할 수 있다."}
+{"from_id": "G11", "from_name": "밀기·뒤집기·돌리기", "relation": "선수(prereq)", "to_id": "H:12수문01-04", "to_name": "영화와 관련된 수학적 내용을 조사하고, 관련 활동을 수행할 수 있다."}
+{"from_id": "P9", "from_name": "탐구: 적절한 그래프 선택", "relation": "선수(prereq)", "to_id": "H:12수문02-01", "to_name": "스포츠와 관련된 수학적 내용을 조사하여 그 유용성을 인식할 수 있다."}
+{"from_id": "H:12대수01-01", "from_name": "거듭제곱과 거듭제곱근의 뜻을 알고, 그 성질을 이용하여 계산할 수 있", "relation": "선수(prereq)", "to_id": "H:12대수01-02", "to_name": "지수가 유리수, 실수까지 확장될 수 있음을 이해하고, 이를 설명할 수"}
+{"from_id": "H:12대수01-02", "from_name": "지수가 유리수, 실수까지 확장될 수 있음을 이해하고, 이를 설명할 수", "relation": "선수(prereq)", "to_id": "H:12대수01-03", "to_name": "지수법칙을 이해하고, 이를 이용하여 식을 간단히 나타낼 수 있다. 2"}
+{"from_id": "H:12대수01-03", "from_name": "지수법칙을 이해하고, 이를 이용하여 식을 간단히 나타낼 수 있다. 2", "relation": "선수(prereq)", "to_id": "H:12대수01-06", "to_name": "지수함수와 로그함수의 뜻을 알고, 이를 설명할 수 있다."}
+{"from_id": "H:12대수01-04", "from_name": "로그의 뜻을 알고, 그 성질을 이용하여 계산할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12대수01-05", "to_name": "상용로그를 이해하고, 이를 실생활과 연결하여 문제를 해결할 수 있다."}
+{"from_id": "H:12대수01-04", "from_name": "로그의 뜻을 알고, 그 성질을 이용하여 계산할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12대수01-06", "to_name": "지수함수와 로그함수의 뜻을 알고, 이를 설명할 수 있다."}
+{"from_id": "H:12대수01-06", "from_name": "지수함수와 로그함수의 뜻을 알고, 이를 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12대수01-07", "to_name": "지수함수와 로그함수의 그래프를 그릴 수 있고, 그 성질을 설명할 수"}
+{"from_id": "H:12대수01-07", "from_name": "지수함수와 로그함수의 그래프를 그릴 수 있고, 그 성질을 설명할 수", "relation": "선수(prereq)", "to_id": "H:12대수01-08", "to_name": "지수함수, 로그함수를 활용하여 문제를 해결할 수 있다. 68 (2)"}
+{"from_id": "H:12대수01-05", "from_name": "상용로그를 이해하고, 이를 실생활과 연결하여 문제를 해결할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12대수01-08", "to_name": "지수함수, 로그함수를 활용하여 문제를 해결할 수 있다. 68 (2)"}
+{"from_id": "H:12대수02-01", "from_name": "일반각과 호도법의 뜻을 알고, 그 관계를 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12대수02-02", "to_name": "삼각함수의 개념을 이해하여 사인함 수, 코사인함수, 탄젠트함수의 그래"}
+{"from_id": "H:12대수02-02", "from_name": "삼각함수의 개념을 이해하여 사인함 수, 코사인함수, 탄젠트함수의 그래", "relation": "선수(prereq)", "to_id": "H:12대수02-03", "to_name": "사인법칙과 코사인법칙을 이해하고, 실생활 문제를 해결할 수 있다. 2"}
+{"from_id": "H:12대수03-01", "from_name": "수열의 뜻을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12대수03-02", "to_name": "등차수열의 뜻을 알고, 일반항, 첫째 항부터 제n항까지의 합을 구할"}
+{"from_id": "H:12대수03-01", "from_name": "수열의 뜻을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12대수03-03", "to_name": "등비수열의 뜻을 알고, 일반항, 첫째 항부터 제n항까지의 합을 구할"}
+{"from_id": "H:12대수03-02", "from_name": "등차수열의 뜻을 알고, 일반항, 첫째 항부터 제n항까지의 합을 구할", "relation": "선수(prereq)", "to_id": "H:12대수03-04", "to_name": "Σ의 뜻과 성질을 이해하고, 이를 활용하여 문제를 해결할 수 있다."}
+{"from_id": "H:12대수03-03", "from_name": "등비수열의 뜻을 알고, 일반항, 첫째 항부터 제n항까지의 합을 구할", "relation": "선수(prereq)", "to_id": "H:12대수03-04", "to_name": "Σ의 뜻과 성질을 이해하고, 이를 활용하여 문제를 해결할 수 있다."}
+{"from_id": "H:12대수03-04", "from_name": "Σ의 뜻과 성질을 이해하고, 이를 활용하여 문제를 해결할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12대수03-05", "to_name": "여러 가지 수열의 첫째항부터 제n항까지의 합을 구하는 방법을 70 설"}
+{"from_id": "H:12대수03-01", "from_name": "수열의 뜻을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12대수03-06", "to_name": "수열의 귀납적 정의를 설명할 수 있다."}
+{"from_id": "H:12대수03-06", "from_name": "수열의 귀납적 정의를 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12대수03-07", "to_name": "수학적 귀납법의 원리를 이해하고, 이를 이용하여 명제를 증명할 수 있"}
+{"from_id": "J0208", "from_name": "지수법칙", "relation": "선수(prereq)", "to_id": "H:12대수01-01", "to_name": "거듭제곱과 거듭제곱근의 뜻을 알고, 그 성질을 이용하여 계산할 수 있"}
+{"from_id": "HK22", "from_name": "원의 방정식", "relation": "선수(prereq)", "to_id": "H:12대수02-01", "to_name": "일반각과 호도법의 뜻을 알고, 그 관계를 설명할 수 있다."}
+{"from_id": "Q6", "from_name": "대응 관계", "relation": "선수(prereq)", "to_id": "H:12대수03-01", "to_name": "수열의 뜻을 설명할 수 있다."}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "H:12대수01-06", "to_name": "지수함수와 로그함수의 뜻을 알고, 이를 설명할 수 있다."}
+{"from_id": "H:12미적Ⅰ01-01", "from_name": "함수의 극한의 뜻을 알고, 이를 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ01-02", "to_name": "함수의 극한에 대한 성질을 이해하고, 함수의 극한값을 구할 수 있다."}
+{"from_id": "H:12미적Ⅰ01-02", "from_name": "함수의 극한에 대한 성질을 이해하고, 함수의 극한값을 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ01-03", "to_name": "함수의 연속을 극한으로 탐구하고 이해한다."}
+{"from_id": "H:12미적Ⅰ01-03", "from_name": "함수의 연속을 극한으로 탐구하고 이해한다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ01-04", "to_name": "연속 함수의 성질을 이해하고, 이를 활용하여 문제를 해결할 수 있다."}
+{"from_id": "H:12미적Ⅰ01-02", "from_name": "함수의 극한에 대한 성질을 이해하고, 함수의 극한값을 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-01", "to_name": "미분 계수를 이해하고, 이를 구할 수 있다."}
+{"from_id": "H:12미적Ⅰ02-01", "from_name": "미분 계수를 이해하고, 이를 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-02", "to_name": "함수의 미분가능성과 연속성의 관계를 설명하고, 이를 활용할 수 있다."}
+{"from_id": "H:12미적Ⅰ02-01", "from_name": "미분 계수를 이해하고, 이를 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-03", "to_name": "함수 y=xn (n은 양의 정수) 의도함수를 구할 수 있다."}
+{"from_id": "H:12미적Ⅰ02-03", "from_name": "함수 y=xn (n은 양의 정수) 의도함수를 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-04", "to_name": "함수의 실수배, 합, 차, 곱의 미분법을 알고, 다항함수의 도함수를"}
+{"from_id": "H:12미적Ⅰ02-01", "from_name": "미분 계수를 이해하고, 이를 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-05", "to_name": "미분 계수와 접선의 기울기의 관계를 이해하고, 접선의 방정식을 구할"}
+{"from_id": "H:12미적Ⅰ02-04", "from_name": "함수의 실수배, 합, 차, 곱의 미분법을 알고, 다항함수의 도함수를", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-06", "to_name": "함수에 대한 평균값 정리를 설명하고, 이를 활용할 수 있다."}
+{"from_id": "H:12미적Ⅰ02-04", "from_name": "함수의 실수배, 합, 차, 곱의 미분법을 알고, 다항함수의 도함수를", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-07", "to_name": "함수의 증가와 감소, 극대와 극소를 판정하고 설명할 수 있다."}
+{"from_id": "H:12미적Ⅰ02-07", "from_name": "함수의 증가와 감소, 극대와 극소를 판정하고 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-08", "to_name": "함수의 그래프의 개형을 그릴 수 있다."}
+{"from_id": "H:12미적Ⅰ02-07", "from_name": "함수의 증가와 감소, 극대와 극소를 판정하고 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-09", "to_name": "방정식과 부등식에 대한 문제를 해결할 수 있다."}
+{"from_id": "H:12미적Ⅰ02-04", "from_name": "함수의 실수배, 합, 차, 곱의 미분법을 알고, 다항함수의 도함수를", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-10", "to_name": "미분을 속도와 가속도에 대한 2022 개정 문제에 활용하고, 그 유용"}
+{"from_id": "H:12미적Ⅰ02-04", "from_name": "함수의 실수배, 합, 차, 곱의 미분법을 알고, 다항함수의 도함수를", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ03-01", "to_name": "부정적분의 뜻을 알고, 이를 설명할 수 있다."}
+{"from_id": "H:12미적Ⅰ03-01", "from_name": "부정적분의 뜻을 알고, 이를 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ03-02", "to_name": "함수의 실수배, 합, 차의 부정적분을 알고, 다항함수의 부정적분을 구"}
+{"from_id": "H:12미적Ⅰ03-02", "from_name": "함수의 실수배, 합, 차의 부정적분을 알고, 다항함수의 부정적분을 구", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ03-03", "to_name": "정적 분의 개념을 탐구하고, 그 성질을 이해한다."}
+{"from_id": "H:12미적Ⅰ03-03", "from_name": "정적 분의 개념을 탐구하고, 그 성질을 이해한다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ03-04", "to_name": "부정적분과 정적분의 관계를 이해하고, 다항함수의 정적분을 구할 수 있"}
+{"from_id": "H:12미적Ⅰ03-04", "from_name": "부정적분과 정적분의 관계를 이해하고, 다항함수의 정적분을 구할 수 있", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ03-05", "to_name": "곡선으로 둘러싸인 도형의 넓이에 대한 문제를 해결할 수 있다. 202"}
+{"from_id": "H:12미적Ⅰ03-04", "from_name": "부정적분과 정적분의 관계를 이해하고, 다항함수의 정적분을 구할 수 있", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ03-06", "to_name": "적분을 속도와 거리에 대한 문제에 활용하고, 그 유용성을 인식할 수"}
+{"from_id": "HK34", "from_name": "함수의 개념·그래프", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ01-01", "to_name": "함수의 극한의 뜻을 알고, 이를 설명할 수 있다."}
+{"from_id": "HK37", "from_name": "유리함수", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ01-01", "to_name": "함수의 극한의 뜻을 알고, 이를 설명할 수 있다."}
+{"from_id": "HK38", "from_name": "무리함수", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ01-01", "to_name": "함수의 극한의 뜻을 알고, 이를 설명할 수 있다."}
+{"from_id": "HK19", "from_name": "직선의 방정식", "relation": "선수(prereq)", "to_id": "H:12미적Ⅰ02-05", "to_name": "미분 계수와 접선의 기울기의 관계를 이해하고, 접선의 방정식을 구할"}
+{"from_id": "H:12미적Ⅱ01-01", "from_name": "수열의 수렴, 발산의 뜻을 알고, 이를 판정할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ01-02", "to_name": "수열의 극한에 대한 성질을 이해하고, 이를 활용하여 극한값을 구하는"}
+{"from_id": "H:12미적Ⅱ01-02", "from_name": "수열의 극한에 대한 성질을 이해하고, 이를 활용하여 극한값을 구하는", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ01-03", "to_name": "등비수열의 수렴, 발산을 판정하고, 수렴하는 경우 그 극한값을 구할"}
+{"from_id": "H:12미적Ⅱ01-03", "from_name": "등비수열의 수렴, 발산을 판정하고, 수렴하는 경우 그 극한값을 구할", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ01-04", "to_name": "급수의 수렴, 발산의 뜻을 알고, 이를 판정할 수 있다."}
+{"from_id": "H:12미적Ⅱ01-04", "from_name": "급수의 수렴, 발산의 뜻을 알고, 이를 판정할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ01-05", "to_name": "등비급수의 합을 구하고, 이를 활용할 수 있다. 266 (2) 미분법"}
+{"from_id": "H:12미적Ⅱ02-01", "from_name": "지수 함수와 로그함수의 극한을 구하고 미분할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-04", "to_name": "함수의 몫을 미분할 수 있다."}
+{"from_id": "H:12미적Ⅱ02-02", "from_name": "삼각 함수의 덧셈정리를 설명하고, 이를 활용할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-03", "to_name": "삼각 함수의 극한을 구하고, 사인함수와 코사인함수를 미 분할 수 있다"}
+{"from_id": "H:12미적Ⅱ02-03", "from_name": "삼각 함수의 극한을 구하고, 사인함수와 코사인함수를 미 분할 수 있다", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-04", "to_name": "함수의 몫을 미분할 수 있다."}
+{"from_id": "H:12미적Ⅱ02-04", "from_name": "함수의 몫을 미분할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-05", "to_name": "합성 함수를 미분할 수 있다. 2022 개정"}
+{"from_id": "H:12미적Ⅱ02-05", "from_name": "합성 함수를 미분할 수 있다. 2022 개정", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-06", "to_name": "매개 변수로 나타낸 함수를 미분할 수 있다."}
+{"from_id": "H:12미적Ⅱ02-05", "from_name": "합성 함수를 미분할 수 있다. 2022 개정", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-07", "to_name": "음함 수와 역함수를 미분할 수 있다."}
+{"from_id": "H:12미적Ⅱ02-04", "from_name": "함수의 몫을 미분할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-08", "to_name": "다양한 곡선의 접선의 방정식을 구할 수 있다."}
+{"from_id": "H:12미적Ⅱ02-08", "from_name": "다양한 곡선의 접선의 방정식을 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-09", "to_name": "함수의 그래프의 개형을 그릴 수 있다."}
+{"from_id": "H:12미적Ⅱ02-09", "from_name": "함수의 그래프의 개형을 그릴 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-10", "to_name": "방정식과 부등식에 대한 문제를 해결할 수 있다. 268"}
+{"from_id": "H:12미적Ⅱ02-07", "from_name": "음함 수와 역함수를 미분할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-11", "to_name": "미분을 속도와 가속도에 대한 문제에 활용하고, 그 유용성을 인식할 수"}
+{"from_id": "H:12미적Ⅱ02-01", "from_name": "지수 함수와 로그함수의 극한을 구하고 미분할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ03-01", "to_name": "y=xn (n은 실수), 지수함 수, 삼각함수의 부정적분과 정적분을"}
+{"from_id": "H:12미적Ⅱ02-03", "from_name": "삼각 함수의 극한을 구하고, 사인함수와 코사인함수를 미 분할 수 있다", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ03-01", "to_name": "y=xn (n은 실수), 지수함 수, 삼각함수의 부정적분과 정적분을"}
+{"from_id": "H:12미적Ⅱ03-01", "from_name": "y=xn (n은 실수), 지수함 수, 삼각함수의 부정적분과 정적분을", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ03-02", "to_name": "치환적분법을 이해하고, 이를 활용할 수 있다."}
+{"from_id": "H:12미적Ⅱ03-02", "from_name": "치환적분법을 이해하고, 이를 활용할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ03-03", "to_name": "부분적분법을 이해하고, 이를 활용할 수 있다."}
+{"from_id": "H:12미적Ⅱ03-01", "from_name": "y=xn (n은 실수), 지수함 수, 삼각함수의 부정적분과 정적분을", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ03-04", "to_name": "정적 분과 급수의 합 사이의 관계를 탐구하고 이해한다."}
+{"from_id": "H:12미적Ⅱ03-01", "from_name": "y=xn (n은 실수), 지수함 수, 삼각함수의 부정적분과 정적분을", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ03-05", "to_name": "곡선으로 둘러싸인 도형의 넓이에 대한 문제를 해결할 수 있다. 270"}
+{"from_id": "H:12미적Ⅱ03-05", "from_name": "곡선으로 둘러싸인 도형의 넓이에 대한 문제를 해결할 수 있다. 270", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ03-06", "to_name": "입체 도형의 부피에 대한 문제를 해결할 수 있다."}
+{"from_id": "H:12미적Ⅱ03-01", "from_name": "y=xn (n은 실수), 지수함 수, 삼각함수의 부정적분과 정적분을", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ03-07", "to_name": "적분을 속도와 거리에 대한 문제에 활용하고, 그 유용성을 인식할 수"}
+{"from_id": "H:12미적Ⅰ01-04", "from_name": "연속 함수의 성질을 이해하고, 이를 활용하여 문제를 해결할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ01-01", "to_name": "수열의 수렴, 발산의 뜻을 알고, 이를 판정할 수 있다."}
+{"from_id": "H:12대수03-03", "from_name": "등비수열의 뜻을 알고, 일반항, 첫째 항부터 제n항까지의 합을 구할", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ01-03", "to_name": "등비수열의 수렴, 발산을 판정하고, 수렴하는 경우 그 극한값을 구할"}
+{"from_id": "H:12미적Ⅰ02-04", "from_name": "함수의 실수배, 합, 차, 곱의 미분법을 알고, 다항함수의 도함수를", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-04", "to_name": "함수의 몫을 미분할 수 있다."}
+{"from_id": "H:12대수01-07", "from_name": "지수함수와 로그함수의 그래프를 그릴 수 있고, 그 성질을 설명할 수", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-01", "to_name": "지수 함수와 로그함수의 극한을 구하고 미분할 수 있다."}
+{"from_id": "H:12대수02-02", "from_name": "삼각함수의 개념을 이해하여 사인함 수, 코사인함수, 탄젠트함수의 그래", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ02-02", "to_name": "삼각 함수의 덧셈정리를 설명하고, 이를 활용할 수 있다."}
+{"from_id": "H:12미적Ⅰ03-04", "from_name": "부정적분과 정적분의 관계를 이해하고, 다항함수의 정적분을 구할 수 있", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ03-01", "to_name": "y=xn (n은 실수), 지수함 수, 삼각함수의 부정적분과 정적분을"}
+{"from_id": "H:12대수03-04", "from_name": "Σ의 뜻과 성질을 이해하고, 이를 활용하여 문제를 해결할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12미적Ⅱ03-04", "to_name": "정적 분과 급수의 합 사이의 관계를 탐구하고 이해한다."}
+{"from_id": "H:12확통01-01", "from_name": "중복순열, 같은 것이 있는 순열을 이해하고, 그 순열의 수를 구하는", "relation": "선수(prereq)", "to_id": "H:12확통01-02", "to_name": "중복조합을 이해하고, 중복조합의 수를 구하는 방법을 설명할 수 있다."}
+{"from_id": "H:12확통01-02", "from_name": "중복조합을 이해하고, 중복조합의 수를 구하는 방법을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12확통01-03", "to_name": "이항정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다. 2022"}
+{"from_id": "H:12확통02-01", "from_name": "확률의 개념을 이해하고 기본 성질을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12확통02-02", "to_name": "확률의 덧셈정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다."}
+{"from_id": "H:12확통02-02", "from_name": "확률의 덧셈정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12확통02-03", "to_name": "여사건의 확률을 이해하고, 이를 활용하여 문제를 해결할 수 있다."}
+{"from_id": "H:12확통02-01", "from_name": "확률의 개념을 이해하고 기본 성질을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12확통02-04", "to_name": "조건부확률을 이해하고, 이를 실생활과 연결하여 문제를 해결할 수 있다"}
+{"from_id": "H:12확통02-04", "from_name": "조건부확률을 이해하고, 이를 실생활과 연결하여 문제를 해결할 수 있다", "relation": "선수(prereq)", "to_id": "H:12확통02-05", "to_name": "사건의 독립과 종속을 이해하고, 이를 판단할 수 있다."}
+{"from_id": "H:12확통02-05", "from_name": "사건의 독립과 종속을 이해하고, 이를 판단할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12확통02-06", "to_name": "확률의 곱셈정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다."}
+{"from_id": "H:12확통03-01", "from_name": "확률변수와 확률분포의 뜻을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12확통03-02", "to_name": "이산확률 변수의 기댓값(평균)과표준편차를 구할 수 있다."}
+{"from_id": "H:12확통03-02", "from_name": "이산확률 변수의 기댓값(평균)과표준편차를 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12확통03-03", "to_name": "이항분포의 뜻과 성질을 이해하고, 평균과 표준편차를 구할 수 있다."}
+{"from_id": "H:12확통03-03", "from_name": "이항분포의 뜻과 성질을 이해하고, 평균과 표준편차를 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12확통03-04", "to_name": "정규분포의 뜻과 성질을 이해하고, 이항분포와의 관계를 설명할 수 있다"}
+{"from_id": "H:12확통03-05", "from_name": "모집단과 표본의 뜻을 알고, 표본추출의 방법을 설명할 수 있다. 20", "relation": "선수(prereq)", "to_id": "H:12확통03-06", "to_name": "표본평균과 모평균, 표본비율과 모 비율의 관계를 이해하고 설명할 수"}
+{"from_id": "H:12확통03-06", "from_name": "표본평균과 모평균, 표본비율과 모 비율의 관계를 이해하고 설명할 수", "relation": "선수(prereq)", "to_id": "H:12확통03-07", "to_name": "공학 도구를 이용하여 모평균 및 모 비율을 추정하고 그 결과를 해석할"}
+{"from_id": "H:12확통02-01", "from_name": "확률의 개념을 이해하고 기본 성질을 설명할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12확통03-01", "to_name": "확률변수와 확률분포의 뜻을 설명할 수 있다."}
+{"from_id": "H:12확통01-03", "from_name": "이항정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다. 2022", "relation": "선수(prereq)", "to_id": "H:12확통03-03", "to_name": "이항분포의 뜻과 성질을 이해하고, 평균과 표준편차를 구할 수 있다."}
+{"from_id": "H:12확통03-04", "from_name": "정규분포의 뜻과 성질을 이해하고, 이항분포와의 관계를 설명할 수 있다", "relation": "선수(prereq)", "to_id": "H:12확통03-06", "to_name": "표본평균과 모평균, 표본비율과 모 비율의 관계를 이해하고 설명할 수"}
+{"from_id": "HK41", "from_name": "조합", "relation": "선수(prereq)", "to_id": "H:12확통01-01", "to_name": "중복순열, 같은 것이 있는 순열을 이해하고, 그 순열의 수를 구하는"}
+{"from_id": "HK40", "from_name": "순열", "relation": "선수(prereq)", "to_id": "H:12확통01-01", "to_name": "중복순열, 같은 것이 있는 순열을 이해하고, 그 순열의 수를 구하는"}
+{"from_id": "J0406", "from_name": "확률", "relation": "선수(prereq)", "to_id": "H:12확통02-01", "to_name": "확률의 개념을 이해하고 기본 성질을 설명할 수 있다."}
+{"from_id": "J0401", "from_name": "대푯값(중앙값·최빈값)", "relation": "선수(prereq)", "to_id": "H:12확통03-01", "to_name": "확률변수와 확률분포의 뜻을 설명할 수 있다."}
+{"from_id": "H:12기하01-01", "from_name": "포물선의 뜻을 알고, 포물선을 방정식으로 표현할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12기하01-04", "to_name": "이차곡선의 접선의 방정식을 구할 수 있다. 2022 개정 (2) 공간"}
+{"from_id": "H:12기하01-02", "from_name": "타원의 뜻을 알고, 타원을 방정식으 로 표현할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12기하01-04", "to_name": "이차곡선의 접선의 방정식을 구할 수 있다. 2022 개정 (2) 공간"}
+{"from_id": "H:12기하01-03", "from_name": "쌍곡선의 뜻을 알고, 쌍곡선을 방정식으로 표현할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12기하01-04", "to_name": "이차곡선의 접선의 방정식을 구할 수 있다. 2022 개정 (2) 공간"}
+{"from_id": "H:12기하02-01", "from_name": "직선과 직선, 직선과 평면, 평면과 평면의 위치 관계에 대한 간단한", "relation": "선수(prereq)", "to_id": "H:12기하02-02", "to_name": "삼수선 정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다."}
+{"from_id": "H:12기하02-02", "from_name": "삼수선 정리를 이해하고, 이를 활용하여 문제를 해결할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12기하02-03", "to_name": "도형의 정사영의 뜻을 알고, 도형과 정사영의 관계를 탐구할 수 있다."}
+{"from_id": "H:12기하02-04", "from_name": "좌표공간에서 두 점 사이의 거리와 선분의 내분점의 좌표를 구할 수 있", "relation": "선수(prereq)", "to_id": "H:12기하02-05", "to_name": "구를 방정식으로 표현할 수 있다. 2022 개정 (3) 벡터"}
+{"from_id": "H:12기하03-01", "from_name": "벡터의 뜻을 알고, 벡터의 덧셈, 뺄셈, 실수배를 할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12기하03-02", "to_name": "위치벡터의 뜻을 알고, 벡터와 좌표를 대응시켜 표현할 수 있다."}
+{"from_id": "H:12기하03-02", "from_name": "위치벡터의 뜻을 알고, 벡터와 좌표를 대응시켜 표현할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12기하03-03", "to_name": "내적의 뜻을 알고, 두 벡터의 내적을 구할 수 있다."}
+{"from_id": "H:12기하03-02", "from_name": "위치벡터의 뜻을 알고, 벡터와 좌표를 대응시켜 표현할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12기하03-04", "to_name": "벡터를 이용하여 직선의 방정식을 구할 수 있다."}
+{"from_id": "H:12기하03-04", "from_name": "벡터를 이용하여 직선의 방정식을 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12기하03-05", "to_name": "좌표공간 330 에서 벡터를 이용하여 평면의 방정식과 구의 방정식을"}
+{"from_id": "H:12기하03-03", "from_name": "내적의 뜻을 알고, 두 벡터의 내적을 구할 수 있다.", "relation": "선수(prereq)", "to_id": "H:12기하03-05", "to_name": "좌표공간 330 에서 벡터를 이용하여 평면의 방정식과 구의 방정식을"}
+{"from_id": "HK22", "from_name": "원의 방정식", "relation": "선수(prereq)", "to_id": "H:12기하01-01", "to_name": "포물선의 뜻을 알고, 포물선을 방정식으로 표현할 수 있다."}
+{"from_id": "HK22", "from_name": "원의 방정식", "relation": "선수(prereq)", "to_id": "H:12기하01-02", "to_name": "타원의 뜻을 알고, 타원을 방정식으 로 표현할 수 있다."}
+{"from_id": "HK23", "from_name": "원과 직선의 위치 관계", "relation": "선수(prereq)", "to_id": "H:12기하01-04", "to_name": "이차곡선의 접선의 방정식을 구할 수 있다. 2022 개정 (2) 공간"}
+{"from_id": "HK17", "from_name": "두 점 사이의 거리", "relation": "선수(prereq)", "to_id": "H:12기하02-04", "to_name": "좌표공간에서 두 점 사이의 거리와 선분의 내분점의 좌표를 구할 수 있"}
+{"from_id": "HK22", "from_name": "원의 방정식", "relation": "선수(prereq)", "to_id": "H:12기하02-05", "to_name": "구를 방정식으로 표현할 수 있다. 2022 개정 (3) 벡터"}
+{"from_id": "HK17", "from_name": "두 점 사이의 거리", "relation": "선수(prereq)", "to_id": "H:12기하03-01", "to_name": "벡터의 뜻을 알고, 벡터의 덧셈, 뺄셈, 실수배를 할 수 있다."}
+{"from_id": "HK19", "from_name": "직선의 방정식", "relation": "선수(prereq)", "to_id": "H:12기하03-04", "to_name": "벡터를 이용하여 직선의 방정식을 구할 수 있다."}

@@ -1,0 +1,16 @@
+{
+  "source_sha256": "1274533ce8f2b040bb25ba071646d7295d279708c5858e970182aa73aa8488d1",
+  "uploaded": "2026-06-10",
+  "sheets": {
+    "concepts": 401,
+    "edges": 540,
+    "smap": 401,
+    "cards": 113,
+    "intl": 13
+  },
+  "redacted": [
+    "concepts.description",
+    "concepts.formal_definition",
+    "intl.ccss_statement_en"
+  ]
+}
