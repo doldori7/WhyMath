@@ -21,6 +21,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import uuid
 from datetime import datetime, timezone
 from typing import Annotated
@@ -32,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._concurrency import etag_for, matches_if_none_match
+from whymath_backend.api._misconception_state import get_semantic_matcher
 from whymath_backend.api._rate_limit import RateLimitedTripleRead, RateLimitedTripleWrite
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
@@ -62,9 +65,11 @@ from whymath_backend.l4 import (
 from whymath_backend.l4.misconception import (
     InterventionDecision,
     MisconceptionMatch,
+    combine_diagnoses,
     diagnose,
     select_intervention,
 )
+from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
@@ -73,7 +78,17 @@ from whymath_backend.schema.enums import ContentType, TurnRole
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
+logger = logging.getLogger(__name__)
+
 _coach = PolyaCoach()  # 상태 비저장 — 단일 인스턴스 재사용
+
+# slice 106: 오개념 진단 결합(substring + 의미)에서 *결합 끝* top_k 컷에 쓰는 상수.
+# `_DEFAULT_TOP_K`=3은 diagnose 기본(노출 상한 top-3·CoachResponse.misconceptions 계약)과 정합.
+# `_FANOUT`은 결합 *전* 양쪽을 넉넉히 뽑는 폭 — substr/semantic을 미리 top_k로 자르면 한쪽이
+# 다른 쪽을 밀어내므로, 카탈로그 전수(len(CATALOG)=30종·선형 스캔이라 저렴)로 뽑아 결합 끝에서만
+# 자른다. substring도 _FANOUT으로 뽑아 semantic-only가 substr를 부당히 잘라내지 않게 한다.
+_DEFAULT_TOP_K = 3
+_FANOUT = len(CATALOG)
 
 # slice 73: θ 기반 BKT↔θ 교차검증 코칭 중 *노출*할 포커스 — 불일치(consolidate·retrieval)만.
 # verify(계산오류)는 arithmetic_error 경로로 별도 노출·합의(foundation/advance)는 LTHC가 담당·
@@ -240,6 +255,7 @@ def _build_response_payload(
     expected_answer: str | None = None,
     server_mastery: float | None = None,
     server_theta: float | None = None,
+    matches: list[MisconceptionMatch] | None = None,
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -254,6 +270,13 @@ def _build_response_payload(
     반환(노출 payload)엔 *싣지 않는다*. stateless `/v1/coach`는 DB가 없어 None(맥락 없음),
     세션 엔드포인트는 서버 DB 조회값을 넘긴다 — `expected_answer`(정답)는 결코 응답에 노출하지
     않는다(student-facing이면 정답 누출).
+
+    slice 106: `matches`(오개념 후보)를 *주입*받으면 그 리스트를 그대로 쓴다(핸들러가
+    `_compute_matches`로 substring+의미 결합을 미리 비블로킹 계산). **미주입(기본 None)이면
+    `diagnose(body.student_input)`로 폴백** — 게이트 off·직접 호출(`TestThetaIntoScaffolding`
+    sync 직접호출) 시 *현행 동작과 비트동일*이다(추가 인자는 기본값 only·sync성·반환 튜플 형태
+    불변). `intervention`은 *결합 후* matches[0] 기준(combine_diagnoses가 substr 우선이라
+    substr 진단이 있으면 그대로 1위 유지).
     """
     # slice 25: mastery_level 명시값 우선·없으면 BKT 숙달(0~1)을 라벨로 환산(L2→L4 브릿지).
     # slice 69: level을 _coach.decide 이전에 계산해 hint level 보수화에도 전달(적응형 코칭).
@@ -266,8 +289,11 @@ def _build_response_payload(
     if level is None:
         level = _ability_level(effective_bkt, server_theta)
     decision = _coach.decide(body.student_input, body.polya_state, mastery_level=level)
-    matches = diagnose(body.student_input)
-    intervention = select_intervention(matches[0]) if matches else None
+    # slice 106: 주입된 결합 matches 우선·미주입(sync 직접호출·게이트 off 경로)이면 substring
+    # diagnose 폴백(현행 비트동일). combine_diagnoses가 substr 우선이라 resolved[0]은 substr가
+    # 있으면 substr → select_intervention이 substring 진단(검증된 표면 신호) 기준으로 구동.
+    resolved = matches if matches is not None else diagnose(body.student_input)
+    intervention = select_intervention(resolved[0]) if resolved else None
     lthc = adapt_lthc(body.polya_state.current_stage, level) if level is not None else None
     # slice 23: 진단 코칭 포커스 → 대화 진입 소크라테스 카테고리 시드(L4 매핑·slice 22).
     entry_category = (
@@ -293,7 +319,45 @@ def _build_response_payload(
     solution_coaching = (
         sol if (sol.arithmetic_error or sol.trigger.focus in _THETA_SURFACED_FOCI) else None
     )
-    return decision, matches, intervention, lthc, entry_category, solution_coaching
+    return decision, resolved, intervention, lthc, entry_category, solution_coaching
+
+
+async def _compute_matches(student_input: str) -> list[MisconceptionMatch]:
+    """오개념 후보 계산 — 게이트 off면 substring만·on이면 substring+의미 결합(비블로킹·폴백).
+
+    slice 106: 핸들러가 호출해 `_build_response_payload(matches=...)`로 주입한다(직접 sync
+    호출 경로는 미주입→`diagnose` 폴백이라 잠긴 `_build_response_payload(body)` 계약 불변).
+
+    **게이트 off(기본)**: `diagnose(student_input)`만 — 의미 매처를 *호출하지 않는다*(임베딩
+    로드 0·현행 비트동일). substring 결과를 그대로 반환.
+
+    **게이트 on**: 의미 매처를 `asyncio.to_thread`로 *워커 스레드*에서 호출한다 — 블로킹 임베딩
+    (bge-m3 등)이 이벤트 루프를 막지 않게(CLAUDE.md p50<2s·동시 요청 보호). 결과를
+    `combine_diagnoses`로 substring 위·semantic-only 아래로 결합한다(substr 우선·재정렬 없음).
+    substr/semantic 둘 다 `_FANOUT`(카탈로그 전수)으로 뽑아 *결합 끝에서만* `_DEFAULT_TOP_K`로
+    자른다(한쪽이 다른 쪽을 미리 잘라내지 않게).
+
+    **graceful 폴백(CLAUDE.md 가용성 우선 #1≫#6)**: 의미 매칭이 *어떤 이유로든* 실패하면
+    (모델 미설치·DB 미도달·임베딩 오류) 예외를 삼키고 substring 결과로 폴백한다(500이 아니라
+    200·진단 1위는 substr라 학생 경험 유지). 실패는 *조용히 넘기지 않고* warning 로그로 남긴다
+    (CLAUDE.md "환각/장애 조용히 넘어가지 말고 로그").
+    """
+    substr = diagnose(student_input, top_k=_FANOUT)
+    if not get_settings().misconception_semantic_enabled:
+        # 게이트 off — substring만(의미 매처 미호출). 노출 상한 top-3로 자른다(결합 없음).
+        return substr[:_DEFAULT_TOP_K]
+    try:
+        sem = await asyncio.to_thread(
+            get_semantic_matcher().match,
+            student_input,
+            top_k=_FANOUT,
+            threshold=get_settings().misconception_semantic_threshold,
+        )
+        return combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K)
+    except Exception:
+        # 의미 매칭 실패 — substring 폴백(가용성 우선·200 유지). 조용히 넘기지 않고 로그.
+        logger.warning("의미 매칭 실패 — substring 폴백", exc_info=True)
+        return substr[:_DEFAULT_TOP_K]
 
 
 async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:
@@ -387,8 +451,10 @@ async def coach_decide(
     """
     _ = user.user_id  # 인증 게이트 통과 확인용(stateless라 user 데이터 미사용)
 
+    # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
+    matches = await _compute_matches(body.student_input)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
-        _build_response_payload(body)
+        _build_response_payload(body, matches=matches)
     )
     return CoachResponse(
         decision=decision,
@@ -426,6 +492,8 @@ async def create_session(
     # slice 73·74: 서버 L2의 실제 θ도 조회 — BKT↔θ 교차검증(게이트 ON·θ 수치 비노출). slice 74:
     # 문항 개념의 *개념별* θ 우선·없으면 전과목 폴백(_server_theta_for 내부).
     server_theta = await _server_theta_for(session, user.user_id, body.problem_id)
+    # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
+    matches = await _compute_matches(body.student_input)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -433,6 +501,7 @@ async def create_session(
             expected_answer=expected_answer,
             server_mastery=server_mastery,
             server_theta=server_theta,
+            matches=matches,
         )
     )
 
@@ -521,6 +590,8 @@ async def append_turns(
     # slice 73·74: 멀티턴도 서버 L2 θ 조회 — BKT↔θ 교차검증(θ 수치 비노출). slice 74: 개념별 θ
     # 우선(dialogue.problem_id)·없으면 전과목 폴백.
     server_theta = await _server_theta_for(session, user.user_id, dialogue.problem_id)
+    # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
+    matches = await _compute_matches(body.student_input)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -528,6 +599,7 @@ async def append_turns(
             expected_answer=expected_answer,
             server_mastery=server_mastery,
             server_theta=server_theta,
+            matches=matches,
         )
     )
 

@@ -601,6 +601,21 @@ class Settings(BaseSettings):
         ),
     )
 
+    misconception_semantic_enabled: bool = Field(
+        default=False,
+        description=(
+            "L4 coach 오개념 진단에 *의미(임베딩) 매칭 결합*(slice 106)을 켤지. **False(기본·"
+            "opt-in)**면 coach는 substring `diagnose()`만 쓴다(현행 비트동일·의미 매처 미호출·"
+            "임베딩 로드 0). True면 substring 결과 아래에 semantic-only 후보를 결합해 노출한다"
+            "(combine_diagnoses — substring 우선·재정렬 없음). 결합은 *비블로킹*(asyncio.to_thread "
+            "워커)이고 의미 매칭 실패 시 substring으로 *graceful 폴백*(200 유지)이라 켜도 가용성·"
+            "기존 1위 진단은 불변. **student-facing 영향 최소**: matches[0]은 substr가 있으면 항상 "
+            "substr라 `select_intervention` 구동 동일. 기본 off는 ① 라이브 임베딩(bge-m3) 로드 "
+            "비용 ② 방향맹 false-positive(03 정직 스코프)를 보수적으로 막기 위함. `l4_step_shadow_"
+            "enabled` 미러. WHYMATH_MISCONCEPTION_SEMANTIC_ENABLED=true로 켠다."
+        ),
+    )
+
     # ── 슬라이스 105: 오개념 임베딩 *영속(pgvector) 백엔드* 좌석 선택 ──
     # 슬104 VectorIndex 좌석에 PgVectorIndex(pgvector 백엔드)를 추가한다. **기본은 `memory`**
     # (InMemoryVectorIndex·기본 동작 무변경) — pgvector는 *opt-in*이다. 카탈로그 30종엔

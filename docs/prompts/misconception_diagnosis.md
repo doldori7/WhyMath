@@ -195,6 +195,42 @@ substring(AND)+정규식은 *표면 문자열*을 본다. 학생이 카탈로그
     *방향맹 정직 테스트*로 결정론적으로 못 박혀 있다(어휘 집합이 같으면 방향/부정 쌍이 동일
     유사도 → 구분 불가).
 
+### 결합 랭킹 + coach 게이트 배선 (slice 106) — substring + 의미를 한 후보 리스트로
+
+slice 104/105가 의미 매처를 *독립 추가 API*로 뒀고, slice 106은 그 둘을 substring `diagnose()`와
+*결합*해 coach API(`/v1/coach`·`/v1/coach/sessions`·`/v1/coach/sessions/{id}/turns`)에 배선한다 —
+**기본 off**(opt-in).
+
+- **결합 랭킹(`combine_diagnoses` — 순수·`l4/misconception/combined.py`)**: 사용자 확정 결정으로
+  **substring 우선·semantic 후순**이다.
+  - substring 매치를 *순서 그대로 위*(`diagnose`가 confidence 내림차순 정렬한 결과 신뢰).
+  - 그 아래에 **semantic-only**(substring이 못 잡은 `misconception.id`만) 의미 유사도 순서대로
+    append. 같은 id는 *dedup·substring 우선*(semantic 중복 버림).
+  - **재정렬 금지(핵심 불변)**: substring confidence(신호 비율)와 semantic confidence(코사인
+    클램프)는 *다른 축*이라(`semantic_similarity` = 표면 근접도 ≠ 진단 신뢰) 한 키로 섞어
+    재정렬하지 않는다. 블록 우선(substr 블록 → semantic 블록)으로만 정렬 → substr가 하나라도
+    있으면 `matches[0]`은 **반드시 substr**. 따라서 개입(`select_intervention(matches[0])`)이
+    항상 substring 진단(검증된 표면 신호) 기준으로 구동되고, cos 0.99 의미 후보가 substr conf
+    0.5 *확정 진단*을 추월하는 *축 혼합 거짓 랭킹*이 생기지 않는다.
+  - top_k는 **결합 *끝에서만*** 적용(substr를 미리 자르면 semantic이 substr를 밀어냄 — 양쪽을
+    넉넉히 받아 결합 후 한 번만 컷).
+- **게이트(`config.misconception_semantic_enabled`·기본 `False`)**: off면 coach는 substring
+  `diagnose()`만 쓴다(현행 비트동일·의미 매처 미호출·임베딩 로드 0). on이면 결합한다.
+  `l4_step_shadow_enabled` 미러(opt-in·env `WHYMATH_MISCONCEPTION_SEMANTIC_ENABLED`).
+- **비블로킹**: on일 때 coach `_compute_matches`는 의미 매처를 `asyncio.to_thread`로 *워커
+  스레드*에서 호출한다 — 블로킹 임베딩(bge-m3 등)이 이벤트 루프를 막지 않게(p50<2s·동시 요청
+  보호). 매처는 프로세스 싱글톤(`api/_misconception_state.py`·lazy·double-checked locking)으로
+  카탈로그 사전 임베딩을 1회만 만든다. app lifespan은 게이트 on일 때만 단일 스레드 웜업으로
+  `_ensure_built`(인덱스 적재)를 미리 완료(멀티스레드 경합 안전판).
+- **graceful 폴백(CLAUDE.md 가용성 우선 #1≫#6)**: 의미 매칭이 *어떤 이유로든* 실패하면(모델
+  미설치·DB 미도달·임베딩 오류) substring 결과로 폴백한다(500이 아니라 200·진단 1위는 substr라
+  학생 경험 유지). 실패는 *조용히 넘기지 않고* warning 로그(CLAUDE.md "장애 조용히 넘어가지 말고
+  로그").
+- **잠긴 계약 보존**: `_build_response_payload`에 `matches`(기본 None) 인자만 추가했다 —
+  미주입(직접 sync 호출·게이트 off 경로)이면 `diagnose()`로 폴백해 *현행 비트동일*(sync성·반환
+  6-튜플 형태 불변). 결합 랭킹·게이트·to_thread·폴백·잠긴 계약은 단위테스트
+  (`test_misconception_combined.py`·`test_coach_semantic.py`)로 못 박혀 있다.
+
 ## 개입 결정 트리
 
 ```
