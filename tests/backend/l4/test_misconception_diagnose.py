@@ -49,10 +49,7 @@ class TestSingleMatch:
 class TestRankingAndTopK:
     def test_higher_confidence_first(self) -> None:
         # 두 오개념 동시 등장(부분/전체 매칭)
-        text = (
-            "(a+b)² = a² + b²로 전개했어. "
-            "그리고 log(a+b)는 그냥 log a + log b 정도일 거 같아"
-        )
+        text = "(a+b)² = a² + b²로 전개했어. 그리고 log(a+b)는 그냥 log a + log b 정도일 거 같아"
         matches = diagnose(text)
         # 둘 다 매칭(둘 다 1.0 신뢰도)
         ids = [m.misconception.id for m in matches]
@@ -85,3 +82,44 @@ class TestStableOrderingOnTie:
         # 둘 다 1.0이면 catalog 순서(algebra 먼저)
         assert matches[0].misconception.id == "distribution-over-power"
         assert any(m.misconception.id == "similarity-vs-congruence" for m in matches)
+
+
+class TestNotationNormalization:
+    """v1.1 표기 정규화 — 공백·유니코드 변이에 의한 거짓음성 제거(슬 101)."""
+
+    def test_whitespace_insensitive_full_match(self) -> None:
+        # 학생이 공백 없이 쓴 표기: signal "a² + b²"(공백)도 "a²+b²"에 매칭돼야 함
+        matches = diagnose("(a+b)²=a²+b²")
+        top = matches[0]
+        assert top.misconception.id == "distribution-over-power"
+        assert top.confidence == 1.0  # v1(공백 민감)이라면 0.5에 그쳤을 케이스
+
+    def test_superscript_normalized_to_digit(self) -> None:
+        # NFKC: 위첨자 "²" → "2". signal "a² + b²"가 평문 "a2 + b2"에도 매칭
+        matches = diagnose("(a+b)2 = a2 + b2 로 전개")
+        ids = {m.misconception.id for m in matches}
+        assert "distribution-over-power" in ids
+
+    def test_matched_signals_keep_original_form(self) -> None:
+        # 정규화는 비교에만 — 표시되는 matched_signals는 원본 신호 문자열 유지
+        top = diagnose("(a+b)²=a²+b²")[0]
+        assert set(top.matched_signals) == {"(a+b)", "a² + b²"}
+
+
+class TestSignalPrecision:
+    """v1.1 신호 정밀화 — 공통어 거짓양성 축소(슬 101·invertibility)."""
+
+    def test_invertibility_full_match_on_real_misconception(self) -> None:
+        top = diagnose("모든 함수는 역함수를 갖는다고 생각했어")[0]
+        assert top.misconception.id == "invertibility-without-1-1"
+        assert top.confidence == 1.0
+
+    def test_invertibility_not_confident_on_benign_modeun(self) -> None:
+        # "모든 구간"처럼 무관한 '모든'은 더 이상 풀매칭을 만들지 않음
+        # (v1 신호 "모든"이었다면 역함수+모든 → 1.0 거짓양성)
+        benign = "이 함수의 역함수를 모든 구간에서 구했어"
+        m = next(
+            (x for x in diagnose(benign) if x.misconception.id == "invertibility-without-1-1"),
+            None,
+        )
+        assert m is None or m.confidence < 1.0
