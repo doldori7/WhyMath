@@ -271,8 +271,9 @@ class UserStateSnapshot(Base):
     """학생 시점별 학습 상태 스냅샷 영속 ORM — §5.2 `user_state_snapshot`.
 
     `concept_mastery`·`pattern_mastery`는 {코드: 숙련도0-1} 맵(JSONB), `avg_solve_time_by_
-    difficulty`는 난이도 키 자유형 JSONB. `embedding_id`는 ChromaDB 외부 참조 UUID(벡터 저장
-    아님). PK `snapshot_id`만 있고 나머지는 nullable(DDL 그대로). `user_id`→user_profile FK.
+    difficulty`는 난이도 키 자유형 JSONB. `embedding_id`는 벡터 저장소(pgvector·Postgres
+    동거·슬98) 참조(벡터 저장 아님). PK `snapshot_id`만 있고 나머지는 nullable(DDL 그대로).
+    `user_id`→user_profile FK.
 
     인덱스 `idx_snapshot_user_time`는 DDL에서 `(user_id, snapshot_at DESC)`이므로 snapshot_at에
     내림차순을 부여한다(`sa.desc()`).
@@ -309,7 +310,7 @@ class UserStateSnapshot(Base):
     consecutive_active_days: Mapped[int | None] = mapped_column(sa.Integer)
     avg_session_quality: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
 
-    # ===== 임베딩 (ChromaDB 외부 참조 — 벡터 저장 아님) =====
+    # ===== 임베딩 (pgvector·Postgres 동거 참조 — 벡터 저장 아님·슬98) =====
     embedding_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)
 
     # ── 인덱스 (§5.2 CREATE INDEX — snapshot_at DESC) ──

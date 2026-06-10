@@ -80,8 +80,8 @@ class Concept(BaseModel):
     않는다(CLAUDE.md 금기·저작권 가이드 v2.0). 자유 서술 텍스트라 구조 validator로 강제할
     신호가 없으므로 *검수(review) 단계 책임*이며 여기서는 문서화만 한다(가짜 validator 금지).
 
-    `embedding_id`는 ChromaDB collection의 외부 참조 UUID일 뿐 *임베딩 벡터 저장이 아니다*
-    (§4.3 ChromaDB 컬렉션 설계는 인프라 설정이라 이 모델 대상이 아님).
+    `embedding_id`는 벡터 저장소(pgvector·Postgres 동거·슬98) 참조일 뿐 *임베딩 벡터 저장이
+    아니다* (§4.3 pgvector 설계는 인프라 설정·이 모델 밖; 통합 시 동일 테이블 벡터 컬럼으로 정리).
     """
 
     model_config = ConfigDict(
@@ -207,10 +207,10 @@ class Concept(BaseModel):
         description='흔한 오개념 목록 [{"misconception":"...","correction":"..."}](자유형 JSONB)',
     )
 
-    # ===== 벡터 임베딩 ID (ChromaDB 외부 참조) =====
+    # ===== 벡터 임베딩 ID (pgvector·Postgres 동거 참조·슬98) =====
     embedding_id: uuid.UUID | None = Field(
         default=None,
-        description="ChromaDB collection의 외부 참조 ID(임베딩 벡터 저장 아님)",
+        description="벡터 저장소(pgvector·Postgres) 참조 ID(임베딩 벡터 저장 아님)",
     )
 
     # ===== 운영 메타 =====

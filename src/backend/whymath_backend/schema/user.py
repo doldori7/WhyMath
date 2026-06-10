@@ -385,8 +385,8 @@ class UserStateSnapshot(BaseModel):
     `dict[str, float]`로 둔다. `avg_solve_time_by_difficulty`는 {easy:60, medium:180,
     hard:600}처럼 값이 초(int) 단위지만 난이도 키 집합이 자유형이라 `dict[str, Any]`로 둔다.
 
-    `embedding_id`는 ChromaDB collection의 외부 참조 UUID일 뿐 *임베딩 벡터 저장이 아니다*
-    (`concept.py` `Concept.embedding_id`와 동일).
+    `embedding_id`는 벡터 저장소(pgvector·Postgres 동거·슬98) 참조일 뿐 *임베딩 벡터 저장이
+    아니다* (`concept.py` `Concept.embedding_id`와 동일).
     """
 
     model_config = ConfigDict(
@@ -459,8 +459,8 @@ class UserStateSnapshot(BaseModel):
         le=1.0,
     )
 
-    # ===== 임베딩 (ChromaDB 외부 참조) =====
+    # ===== 임베딩 (pgvector·Postgres 동거 참조·슬98) =====
     embedding_id: uuid.UUID | None = Field(
         default=None,
-        description="ChromaDB collection의 외부 참조 ID(임베딩 벡터 저장 아님)",
+        description="벡터 저장소(pgvector·Postgres) 참조 ID(임베딩 벡터 저장 아님)",
     )

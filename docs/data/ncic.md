@@ -284,7 +284,7 @@ for std in sample:
 
 - [ ] PostgreSQL 배포 + Alembic 마이그레이션
 - [ ] `load_to_postgres` 구현 (backend-engineer 위임)
-- [ ] ChromaDB 임베딩 (statement 한국어 SBERT — `BM-K/KoSimCSE-roberta`)
+- [ ] pgvector 임베딩 (statement 한국어 SBERT — `BM-K/KoSimCSE-roberta`)
 - [ ] 선수 성취기준(`parent_codes`) 자동 추출 (학년·영역 그래프 기반)
 - [ ] 교육과정 해설서(별책 8 부속)도 수집 → `big_idea`·`commentary` 보강
 - [ ] HWP 직접 지원 (한컴 변환 의존 또는 `pyhwp`)

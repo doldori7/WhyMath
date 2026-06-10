@@ -155,14 +155,14 @@ WhyMath 아키텍처는 *서로 직교하는 두 축*으로 본다:
 |---|---|---|---|
 | **Client** | Flutter 단일 학생앱(패드 중심·모드 분기) + 별도 웹(교사·SEO·Phase3+) | L5 일부, L6/L7 UI | 앱: Flutter 3.x+Riverpod·MathLive/three.js WebView · 별도 웹: React/Next |
 | **Backend** | FastAPI + uvicorn | L1 서비스·L2·L3·L4·L5 오케스트레이터·L6 모드 로직 | Python 3.12 + FastAPI |
-| **DB** | 다중 저장소 | L1·L2 자산의 영속 계층 | PostgreSQL 16 + TimescaleDB, Neo4j, ChromaDB(→ Qdrant 전환 검토), ClickHouse, Redis 7, S3/MinIO |
+| **DB** | 다중 저장소 | L1·L2 자산의 영속 계층 | PostgreSQL 16 + TimescaleDB + pgvector, Neo4j, ClickHouse, Redis 7, S3/MinIO |
 | **ML** | 추론·검증 런타임 | L3 모델 호출, L3 도구 검증 | Claude Sonnet/Opus, Qwen3-Math(Phaiakes9 로컬), SymPy, OpenAI text-embedding-3-large |
 | **Content Pipeline** | 배치·ETL | L1 수집·정형화·검증 | Prefect/Airflow, httpx + playwright, Mathpix API, pdfplumber |
 
 ### 블록별 보충 메모
 
 - **Client — Flutter 단일 학생앱 + 별도 웹**: PRD의 3개 앱(학생·학부모·교사) 동시 개발은 Phase 1 부담(MEMORY.md PRD 허점 ③). Phase 1은 *Flutter 학생앱 1개*(패드 중심·학생+학부모 모드 분기 L6)에 집중하고, **교사 대시보드는 별도 웹(React/Next)으로 Phase 3+** (슬라이스 89). 수학 로직은 클라에 두지 않고 독립 코어(L1-L4) API로 소비.
-- **DB — 벡터 저장소 미결**: ChromaDB 유지 vs Qdrant 전환은 PRD v1.1 채택으로 발생한 미해결 의사결정(MEMORY.md 미해결 의사결정 목록). 정렬 단계 L1/L5에서 확정.
+- **DB — 벡터 저장소 = pgvector(확정·슬98)**: 기존 Postgres 16에 pgvector 확장으로 통합 — 메타데이터(subject·exam_year·difficulty)가 이미 PG 컬럼이라 하이브리드 검색이 단일 SQL·6번째 store 회피·미성년 PII 통제 DB 유지. 대규모/고QPS 시 Qdrant 이관(지연 트리거). ChromaDB는 개발용(SQLite)이라 프로덕션 비채택.
 - **DB — 신규 저장소**: Neo4j(개념 연결 그래프), ClickHouse(학습 행동 로그), S3/MinIO(영상·이미지)는 PRD 채택으로 추가. 상세 용도는 `01_data_foundation.md` 및 각 계층 문서 참조.
 - **ML — 로컬 우선**: 클라우드 LLM 호출 전 항상 Phaiakes9 로컬(Qwen3-Math) 가능성 검토(CLAUDE.md 절대 원칙). AWS Seoul ↔ Phaiakes9 하이브리드의 동기화 비용은 PRD가 누락한 항목(MEMORY.md PRD 허점 ⑦) — 기존 하이브리드 인식 유지.
 - **Content Pipeline ↔ L1**: 이 블록은 거의 전적으로 L1(data-engineer)의 코드를 실행한다. PRD 신규 자산(개념 그래프·다국 매트릭스·교과서 매핑 12단계)의 수집·정형화가 모두 여기서 돈다.

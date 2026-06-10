@@ -122,7 +122,7 @@ class Concept(Base):
         JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
     )
 
-    # ===== 벡터 임베딩 ID (ChromaDB 외부 참조 — 벡터 저장 아님) =====
+    # ===== 벡터 임베딩 ID (pgvector·Postgres 동거 참조 — 벡터 저장 아님·슬98) =====
     embedding_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)
 
     # ===== 운영 메타 =====
