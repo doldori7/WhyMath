@@ -32,12 +32,37 @@ from whymath_backend.api._device_store import (
     ping_device_store_health,
     set_device_store,
 )
+from whymath_backend.api._l3_state import (
+    CACHE_KEY as _CACHE_KEY,
+)
+from whymath_backend.api._l3_state import (
+    PROVIDER_KEY as _PROVIDER_KEY,
+)
+from whymath_backend.api._l3_state import (
+    QUEUE_KEY as _QUEUE_KEY,
+)
+from whymath_backend.api._l3_state import (
+    TRACE_KEY as _TRACE_KEY,
+)
+from whymath_backend.api._l3_state import (
+    get_cache as _get_cache,
+)
+from whymath_backend.api._l3_state import (
+    get_provider as _get_provider,
+)
+from whymath_backend.api._l3_state import (
+    get_queue as _get_queue,
+)
+from whymath_backend.api._l3_state import (
+    get_trace as _get_trace,
+)
 from whymath_backend.api.coach import router as coach_router
 from whymath_backend.api.concepts import router as concepts_router
 from whymath_backend.api.devices import router as devices_router
 from whymath_backend.api.me import router as me_router
 from whymath_backend.api.problems import router as problems_router
 from whymath_backend.api.users import router as users_router
+from whymath_backend.api.visualization import router as visualization_router
 from whymath_backend.config import get_settings
 from whymath_backend.db.session import dispose_engine
 from whymath_backend.l3 import pipeline
@@ -61,11 +86,8 @@ from whymath_backend.l3.providers.ollama import OllamaProvider, OllamaStatus
 from whymath_backend.l3.queue import CeleryJobQueue
 from whymath_backend.l3.trace import LangfuseSink
 
-# 앱 state에 의존성을 보관할 때 쓰는 키.
-_PROVIDER_KEY = "llm_provider"
-_CACHE_KEY = "llm_cache"
-_TRACE_KEY = "trace_sink"
-_QUEUE_KEY = "job_queue"
+# 앱 state 의존 키 — provider/cache/trace/queue는 `api/_l3_state.py`로 추출(라우터 공유,
+# slice 96)해 위에서 별칭 import. validator/skip-cache는 /v1/generate 전용이라 여기 둔다.
 _VALIDATOR_KEY = "shadow_validator"
 _SKIP_CACHE_KEY = "skip_cache_on_signal"
 
@@ -176,30 +198,10 @@ class StatusBody(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 의존성 접근자 — app.state에 주입된 구현을 꺼낸다.
-# Request.app.state 경유(FastAPI 관용 패턴) — 팩토리 클로저 변수에 의존하지 않아
-# TestClient/스레드풀 컨텍스트에서도 안전하다.
+# 의존성 접근자 — provider/cache/trace/queue는 `api/_l3_state.py`로 추출해 라우터와 공유
+# (slice 96·위에서 _get_* 별칭 import). validator/skip-cache는 /v1/generate 전용이라 여기 둔다.
+# Request.app.state 경유(FastAPI 관용 패턴) — 팩토리 클로저에 의존하지 않아 TestClient에서도 안전.
 # ──────────────────────────────────────────────────────────────────────────
-def _get_provider(request: Request) -> LLMProvider:
-    provider: LLMProvider = getattr(request.app.state, _PROVIDER_KEY)
-    return provider
-
-
-def _get_cache(request: Request) -> CacheBackend:
-    cache: CacheBackend = getattr(request.app.state, _CACHE_KEY)
-    return cache
-
-
-def _get_trace(request: Request) -> TraceSink:
-    trace: TraceSink = getattr(request.app.state, _TRACE_KEY)
-    return trace
-
-
-def _get_queue(request: Request) -> AsyncJobQueue:
-    queue: AsyncJobQueue = getattr(request.app.state, _QUEUE_KEY)
-    return queue
-
-
 def _get_validator(request: Request) -> SeedValidator | None:
     """런타임 shadow 검증기 — Settings 게이트로 None(비활성)일 수 있다."""
     validator: SeedValidator | None = getattr(request.app.state, _VALIDATOR_KEY)
@@ -456,5 +458,6 @@ def create_app(
     app.include_router(me_router)
     app.include_router(coach_router)
     app.include_router(devices_router)
+    app.include_router(visualization_router)
 
     return app
