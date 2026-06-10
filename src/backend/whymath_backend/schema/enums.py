@@ -252,6 +252,34 @@ class VisualizationStyle(str, Enum):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 시각화 렌더 기술 (슬라이스 90: 05 §5.2 Visualization.type — 선언적 명세 렌더 도구 축)
+# ──────────────────────────────────────────────────────────────────────────
+class VisualizationType(str, Enum):
+    """시각화 *렌더 기술* — 05 §5.2 `Visualization.type` 정본(4종·영문 값).
+
+    `VisualType`(그래프/도형/표 — 문제 콘텐츠 *태그*)·`VisualizationStyle`(단위원·수형도 —
+    개념 권장 *교수학적 양식*·슬라이스 87)과는 **다른 축**: 이 enum은 선언적 명세를 *어떤
+    렌더 도구로 그리는가*를 규정한다(L5 ④ 국소 비상구가 type을 보고 D3/Plotly/three.js/Manim
+    선택, 05 §5.2). 값은 영문(05 §5.2 표기 그대로).
+
+    `animation_prerendered`만 기존 Manim 산출물(조작 불가)이고, 나머지 3종이 학생 파라미터
+    조작이 가능한 PRD 신규 선언적 명세(05 §5.2). 슬라이스 89 "표현≠의미"의 렌더 기술 축.
+    """
+
+    interactive_graph_2d = "interactive_graph_2d"
+    """2D 함수·관계 그래프 — 학생이 파라미터 조작(슬라이더·드래그). 렌더: D3.js/Plotly/Desmos."""
+
+    interactive_surface_3d = "interactive_surface_3d"
+    """3D 곡면·입체 — 회전·단면 조작. 렌더: three.js."""
+
+    simulation_probabilistic = "simulation_probabilistic"
+    """확률 시뮬레이션 — 시행 반복·누적. 렌더: D3.js/Plotly."""
+
+    animation_prerendered = "animation_prerendered"
+    """미리 렌더된 사고 과정 애니메이션(조작 불가). 렌더: Manim."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 저작권·생성 이력 (§13.2 license_enum·§10.1 generation_type_enum)
 # ──────────────────────────────────────────────────────────────────────────
 class LicenseType(str, Enum):
