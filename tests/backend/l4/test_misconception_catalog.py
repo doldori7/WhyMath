@@ -6,6 +6,8 @@
 
 from __future__ import annotations
 
+import re
+
 from whymath_backend.l4.misconception import (
     CATALOG,
     CATALOG_BY_ID,
@@ -130,6 +132,33 @@ class TestNameClarity:
         banned = ("바보", "틀린", "잘못", "실수")
         for m in CATALOG:
             assert not any(b in m.name_kr for b in banned), m.id
+
+
+class TestRegexSignals:
+    """v1.2 `regex_signals` — 선택 필드(기본 빈 튜플)·시연 3종·전부 컴파일 가능(슬 102)."""
+
+    _DEMO_IDS = {
+        "distribution-over-power",
+        "square-root-positivity",
+        "fraction-cancellation",
+    }
+
+    def test_field_defaults_empty_and_is_tuple(self) -> None:
+        # 미설정 항목은 빈 튜플(하위호환 — substring 동작 불변)
+        for m in CATALOG:
+            assert isinstance(m.regex_signals, tuple)
+            if m.id not in self._DEMO_IDS:
+                assert m.regex_signals == (), m.id
+
+    def test_demo_entries_have_regex(self) -> None:
+        for mid in self._DEMO_IDS:
+            assert CATALOG_BY_ID[mid].regex_signals, mid
+
+    def test_all_regex_signals_compile(self) -> None:
+        # 카탈로그의 모든 정규식은 컴파일 가능해야(런타임 re.error 회귀 가드)
+        for m in CATALOG:
+            for pat in m.regex_signals:
+                re.compile(pat)  # 실패 시 re.error → 테스트 실패
 
 
 class TestExposedSurface:

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from whymath_backend.l4.misconception import diagnose
+from whymath_backend.l4.misconception import MisconceptionMatch, diagnose
 
 
 class TestSingleMatch:
@@ -119,7 +119,92 @@ class TestSignalPrecision:
         # (v1 신호 "모든"이었다면 역함수+모든 → 1.0 거짓양성)
         benign = "이 함수의 역함수를 모든 구간에서 구했어"
         m = next(
-            (x for x in diagnose(benign) if x.misconception.id == "invertibility-without-1-1"),
+            (
+                x
+                for x in diagnose(benign)
+                if x.misconception.id == "invertibility-without-1-1"
+            ),
             None,
         )
         assert m is None or m.confidence < 1.0
+
+
+class TestNumericSubstitutionDetection:
+    """v1.2 정규식 보조 탐지 — *거짓 항등식의 수치 대입*(슬 102 헤드라인).
+
+    학생이 기호 substring 없이 *구체 수치로* 거짓 항등식을 계산한 흔적을 잡는다.
+    """
+
+    def _find(self, text: str, mid: str) -> MisconceptionMatch | None:
+        return next(
+            (m for m in diagnose(text, top_k=5) if m.misconception.id == mid), None
+        )
+
+    def test_distribution_numeric_substitution_detected(self) -> None:
+        # 기호 signals "(a+b)"·"a² + b²" 부재(학생은 *수*를 적음) → v1.1이면 미탐지.
+        # v1.2 정규식이 (3+4)²=3²+4² 흔적을 잡아 *추가* 탐지.
+        m = self._find("(3+4)² = 3² + 4² = 25", "distribution-over-power")
+        assert m is not None
+        # 분모=2(substr signals), 정규식만 매치 → 0/2 + 1/2 = 0.5
+        assert m.confidence == 0.5
+        assert m.matched_signals == ()  # 기호 substring 0
+        assert len(m.matched_regex_signals) == 1
+
+    def test_square_root_numeric_substitution_detected(self) -> None:
+        # √((-3)²)=-3 — 음수 대입으로 거짓 항등식이 드러난 흔적
+        m = self._find("√((-3)²) = -3", "square-root-positivity")
+        assert m is not None
+        assert len(m.matched_regex_signals) == 1
+
+    def test_fraction_numeric_substitution_detected(self) -> None:
+        # (2+4)/2=4 — 분자 합에서 분모와 같은 항을 통째로 약분한 수치 흔적
+        m = self._find("(2+4)/2 = 4", "fraction-cancellation")
+        assert m is not None
+        assert m.confidence == 0.5
+        assert m.matched_signals == ()
+        assert len(m.matched_regex_signals) == 1
+
+    def test_correct_computation_not_flagged_by_regex(self) -> None:
+        # 거짓양성 가드: *올바른* 계산은 정규식이 잡지 않는다(역참조 불일치).
+        for text, mid in (
+            ("(3+4)² = 49 로 계산", "distribution-over-power"),
+            ("√((-3)²) = 3", "square-root-positivity"),
+            ("(2+4)/2 = 3", "fraction-cancellation"),
+        ):
+            m = self._find(text, mid)
+            # 후보가 떠도(다른 weak substring 때문) 정규식은 미발화여야 함
+            assert m is None or m.matched_regex_signals == ()
+
+
+class TestRegexBackwardCompatibility:
+    """v1.2 정규식 도입이 v1.1 기호식 매칭(confidence·matched_signals)을 *불변*으로 유지."""
+
+    def test_symbolic_distribution_unchanged_full(self) -> None:
+        # 기호 풀매칭은 여전히 1.0·동일 matched_signals, 정규식은 미발화
+        m = next(
+            x
+            for x in diagnose("(a+b)² = a² + b²로 전개")
+            if x.misconception.id == "distribution-over-power"
+        )
+        assert m.confidence == 1.0
+        assert set(m.matched_signals) == {"(a+b)", "a² + b²"}
+        assert m.matched_regex_signals == ()
+
+    def test_symbolic_distribution_unchanged_partial(self) -> None:
+        m = next(
+            x
+            for x in diagnose("(a+b)² 까지만")
+            if x.misconception.id == "distribution-over-power"
+        )
+        assert m.confidence == 0.5
+        assert m.matched_regex_signals == ()
+
+    def test_symbolic_fraction_unchanged_full(self) -> None:
+        m = next(
+            x
+            for x in diagnose("(a+b)/a = b 로 약분")
+            if x.misconception.id == "fraction-cancellation"
+        )
+        assert m.confidence == 1.0
+        assert set(m.matched_signals) == {"(a+b)/a", "b"}
+        assert m.matched_regex_signals == ()

@@ -1,4 +1,4 @@
-"""오개념 카탈로그 — `docs/prompts/misconception_diagnosis.md` "오개념 카탈로그" 정본.
+r"""오개념 카탈로그 — `docs/prompts/misconception_diagnosis.md` "오개념 카탈로그" 정본.
 
 **스코프 정직**(False-attribute 금기, CLAUDE.md): doc에 *명시되고 상세화된* 항목만 코딩(22종).
 슬: doc에 수능 핵심 4영역(미적분·수열·삼각함수·벡터, doc #16-23)을 *먼저 정본화*한 뒤
@@ -11,6 +11,14 @@
 각 항목의 `signals`(공출현 substring)는 *전형적인 학생 표기*에서 발견되는 토큰. v1은 규칙 기반
 — 임베딩·LLM-judged 매칭은 후속(범위 밖). 토큰은 한국어/ASCII/유니코드(²) 형태를 포괄하기
 위해 *공통 분모*(여러 표기 모두에 등장하는 단편)를 선택.
+
+v1.2(슬 102): 일부 항목에 `regex_signals`를 추가해 *거짓 항등식의 수치 대입*을 탐지한다(예:
+distribution `(3+4)²=3²+4²`·square-root `√((-3)²)=-3`·fraction `(2+4)/2=4`). 정규식은 *정규화된
+텍스트*(`_normalize`: NFKC+공백제거, `²`→`2`)에 `re.search`로 검사하며, 명명그룹 역참조로 피연산자
+일치를 강제해 ① 올바른 계산과 ② 기호식(`\d`가 문자 미매치) 모두에 *매치되지 않게*(disjoint)
+작성한다 — 따라서 기존 substring `matched_signals`·confidence(1.0/0.5)는 불변이고 정규식은 *추가*
+탐지가 된다(분모는 substring `signals` 기준, 정규식 가산분은 상한 1.0). 수치화가 명확한 3종에
+시연하고 나머지 확장은 doc(misconception_diagnosis.md §매칭 알고리즘 v1.2) 후속.
 """
 
 from __future__ import annotations
@@ -26,6 +34,12 @@ _ALGEBRA: tuple[Misconception, ...] = (
         canonical_statement="(a+b)² = a² + b²",
         counterexample="a=1, b=1",
         signals=("(a+b)", "a² + b²"),
+        # v1.2 수치 대입 탐지(슬 102): 학생이 *구체 수치로* 거짓 항등식을 계산한 흔적
+        # `(3+4)²=3²+4²`을 잡는다. NFKC로 `²`→`2`이므로 정규형 `(d+d)2=d2+d2`를 겨냥하고,
+        # 명명그룹 역참조로 좌변 두 피연산자(x,y)가 우변 두 제곱항과 *글자 그대로 일치*할 때만
+        # 매치 → 올바른 전개 `(3+4)²=49`나 기호식 `(a+b)²=a²+b²`(\d가 글자 미매치)엔 미스(disjoint).
+        # 근거: 데이터셋 [H:12대수01-03] ◎ 정확대응(concept_graph_dataset_v1.md §5.2).
+        regex_signals=(r"\((?P<x>\d+)\+(?P<y>\d+)\)2=(?P=x)2\+(?P=y)2",),
     ),
     Misconception(
         id="sign-flip-in-inequality",
@@ -50,6 +64,11 @@ _ALGEBRA: tuple[Misconception, ...] = (
         canonical_statement="√(x²) = x",
         counterexample="x=-3이면 √(x²) = 3 = |x|, x가 아님",
         signals=("√", "x²"),
+        # v1.2 수치 대입 탐지(슬 102): 음수를 대입해 거짓 항등식을 드러낸 흔적
+        # `√((-3)²)=-3`을 잡는다. 정규형 `√((-d)2)=-d`(NFKC `²`→`2`)에서 역참조로 피개수가
+        # 좌·우변 동일할 때만 매치 → 올바른 `√((-3)²)=3`이나 기호 `√(x²)=x`엔 미스(disjoint).
+        # 근거: 데이터셋 [J0107]·[H:12대수01-01] ◎ 정확대응(§5.2).
+        regex_signals=(r"√\(\(-(?P<a>\d+)\)2\)=-(?P=a)",),
     ),
     Misconception(
         id="exponent-zero",
@@ -66,6 +85,11 @@ _ALGEBRA: tuple[Misconception, ...] = (
         canonical_statement="(a+b)/a = b",
         counterexample="a=2, b=4: (2+4)/2 = 3 ≠ 4",
         signals=("(a+b)/a", "b"),
+        # v1.2 수치 대입 탐지(슬 102): 분자 합에서 분모와 같은 항을 *통째로 약분*해버린
+        # 수치 흔적 `(2+4)/2=4`를 잡는다. 정규형 `(p+q)/p=q`에서 분모가 첫 피연산자(p)와 같고
+        # 결과가 둘째 피연산자(q)일 때만 매치 → 올바른 `(2+4)/2=3`이나 기호 `(a+b)/a=b`엔
+        # 미스(disjoint). 데이터셋 직접진술 미수록(§5.2 '미대응')이나 canonical로 자명한 기본수학.
+        regex_signals=(r"\((?P<p>\d+)\+(?P<q>\d+)\)/(?P=p)=(?P=q)",),
     ),
     Misconception(
         id="log-distribution",
