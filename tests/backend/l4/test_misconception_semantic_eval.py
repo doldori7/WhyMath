@@ -1,0 +1,427 @@
+"""오개념 의미 매칭 측정 하니스 단위테스트 — slice 107 (hermetic·라이브 0·결정론).
+
+세 갈래로 검증한다:
+  ① **스코어링**: 합성 `ProbeOutcome`로 `evaluate`·recall/FP율·Wilson 하한/상한·kind/도메인
+     분해·`format_report`를 *수치까지* 단언한다(라이브 임베딩 불요). Wilson 경계(n=0 None·전부
+     정답 시 하한<1·전부 FP 시 상한>0·하한≤점추정≤상한)도 못 박는다.
+  ② **프로브셋 구조**(실파일 로드): 92줄 파싱·모든 expected_id/near_id ∈ CATALOG_BY_ID·30종
+     recall·FP 둘 다 커버·kind 유효·**recall 프로브 substring 풀매칭 0**(임베딩 측정 유효성
+     회귀 가드 — substring이 잡으면 의미 매처를 측정할 수 없다).
+  ③ **배선 end-to-end**: `run_probes`를 FakeEmbeddingProvider로 1건 돌려 스코어링 배선을 증명한다
+     (실 품질이 아니라 *결선*만 — Fake는 어휘 해시라 의미 recall이 아님).
+
+게이트·coach·`diagnose`·`semantic_matches`는 무변경(이 하니스는 *소비*만 한다).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import FrozenInstanceError
+from pathlib import Path
+
+import pytest
+
+from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.diagnose import diagnose
+from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProvider
+from whymath_backend.l4.misconception.semantic_eval import (
+    MisconceptionProbe,
+    ProbeOutcome,
+    SemanticEvalReport,
+    _wilson_lower_bound,
+    _wilson_upper_bound,
+    evaluate,
+    format_report,
+    load_probes,
+    run_probes,
+)
+
+# 프로브셋 실파일(검증된 92줄) — 구조 검증·end-to-end 배선이 읽는다.
+_PROBES_PATH = (
+    Path(__file__).resolve().parent / "fixtures" / "misconception_semantic_probes.jsonl"
+)
+
+# 유효 kind 집합 — 프로브셋 스키마 계약(분해 라벨).
+_VALID_KINDS = frozenset(
+    {"paraphrase", "direction-reverse", "negation", "correct-near"}
+)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 합성 프로브/아웃컴 헬퍼 — 스코어링을 라이브 없이 정밀 단언
+# ──────────────────────────────────────────────────────────────────────────
+def _recall_probe(expected_id: str, *, kind: str = "paraphrase") -> MisconceptionProbe:
+    """recall 프로브 합성 — expected_id 설정·near_id null(틀린 진술을 잡아야 함)."""
+    return MisconceptionProbe(
+        statement=f"틀린 진술 {expected_id}",
+        expected_id=expected_id,
+        near_id=None,
+        kind=kind,
+    )
+
+
+def _fp_probe(near_id: str, *, kind: str = "correct-near") -> MisconceptionProbe:
+    """FP 프로브 합성 — expected_id null·near_id 설정(올바른 진술·매칭되면 거짓양성)."""
+    return MisconceptionProbe(
+        statement=f"올바른 진술 {near_id}", expected_id=None, near_id=near_id, kind=kind
+    )
+
+
+def _outcome(
+    probe: MisconceptionProbe,
+    *,
+    semantic_ids: tuple[str, ...] = (),
+    substring_ids: tuple[str, ...] = (),
+) -> ProbeOutcome:
+    """ProbeOutcome 합성 — 매처 결과를 *직접* 지정해 스코어링을 통제."""
+    return ProbeOutcome(
+        probe=probe, semantic_ids=semantic_ids, substring_ids=substring_ids
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 결정론 제어 제공자 — run_probes 배선 end-to-end용(어떤 카탈로그 id를 끌지 통제)
+# ──────────────────────────────────────────────────────────────────────────
+class _NameKrOneHotProvider:
+    """텍스트에 카탈로그 항목의 `name_kr`가 들어 있으면 그 항목과 평행(코사인 1.0)으로 만든다.
+
+    카탈로그 표현(`catalog_text` = `"{name_kr}. {canonical}"`)은 자기 `name_kr`를 *포함*하므로,
+    각 카탈로그 항목의 벡터는 자기 차원이 1인 원-핫이 된다. probe statement에 *타깃의 name_kr*를
+    심으면 그 statement도 같은 차원이 1 → 타깃과 평행(cos 1.0)·나머지와 직교(0.0). 이로써
+    run_probes의 배선(매처 호출→예측 가능한 semantic_ids 조립)을 결정론으로 증명한다. 실 임베딩이
+    아니라 *배선 테스트용 시임*이다(품질 측정 아님).
+    """
+
+    def __init__(self, name_krs: tuple[str, ...]) -> None:
+        # 긴 name_kr를 먼저 검사(부분 포함 충돌 방지 — 여기선 충돌이 없지만 안정).
+        self._name_krs = tuple(sorted(name_krs, key=len, reverse=True))
+        self._idx = {nk: i for i, nk in enumerate(self._name_krs)}
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        rows: list[list[float]] = []
+        for text in texts:
+            vec = [0.0] * len(self._name_krs)
+            for nk in self._name_krs:
+                if nk in text:
+                    vec[self._idx[nk]] = 1.0
+            rows.append(vec)
+        return rows
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ① Wilson 하한/상한 — 경계·정직성
+# ══════════════════════════════════════════════════════════════════════════
+class TestWilsonBounds:
+    def test_lower_bound_zero_successes_is_zero(self) -> None:
+        # 성공 0이면 하한 0(자연 도출).
+        assert _wilson_lower_bound(0, 10, 0.95) == 0.0
+
+    def test_upper_bound_all_successes_is_one(self) -> None:
+        # 전부 성공이면 상한 1.0(Wilson 대수상 정확히 1.0·부동소수 잔차만 허용).
+        assert _wilson_upper_bound(10, 10, 0.95) == pytest.approx(1.0)
+        # [0,1] 상한 클램프가 1.0을 넘기지 않음을 보장.
+        assert _wilson_upper_bound(10, 10, 0.95) <= 1.0
+
+    def test_lower_bound_all_successes_below_one(self) -> None:
+        # 5/5=1.0이라도 하한은 1 미만(작은 표본 보정) — step_shadow 문서 예(≈0.65)와 정합.
+        lb = _wilson_lower_bound(5, 5, 0.95)
+        assert 0.0 < lb < 1.0
+        assert lb == pytest.approx(0.6489, abs=1e-3)
+
+    def test_upper_bound_zero_successes_above_zero(self) -> None:
+        # 관측 FP가 0이어도 상한>0(과신 방지·FP는 보수적). 0/10@.95 ≈ 0.21.
+        ub = _wilson_upper_bound(0, 10, 0.95)
+        assert 0.0 < ub < 1.0
+        assert ub == pytest.approx(0.2129, abs=1e-3)
+
+    def test_bound_ordering_lower_le_point_le_upper(self) -> None:
+        # 하한 ≤ 점추정 ≤ 상한(같은 Wilson 공식의 ∓ 마진).
+        for successes, trials in [(3, 10), (7, 12), (1, 4), (9, 20)]:
+            lb = _wilson_lower_bound(successes, trials, 0.95)
+            ub = _wilson_upper_bound(successes, trials, 0.95)
+            phat = successes / trials
+            assert lb <= phat <= ub
+
+    def test_invalid_confidence_raises(self) -> None:
+        for bad in (0.0, 1.0, -0.1, 1.5):
+            with pytest.raises(ValueError):
+                _wilson_lower_bound(1, 10, bad)
+            with pytest.raises(ValueError):
+                _wilson_upper_bound(1, 10, bad)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ① 스코어링 — recall/FP율·분해(합성 outcome)
+# ══════════════════════════════════════════════════════════════════════════
+class TestScoring:
+    def test_empty_report_metrics_are_none(self) -> None:
+        # 프로브 0이면 recall·fp_rate·하한·상한 모두 None(분모 0).
+        report = evaluate([])
+        assert report.total == 0
+        assert report.recall is None
+        assert report.false_positive_rate is None
+        assert report.recall_lower_bound() is None
+        assert report.fp_rate_upper_bound() is None
+
+    def test_recall_counts_only_semantic_catch(self) -> None:
+        # recall 프로브 3개 중 2개를 의미 매처가 잡음 → recall 2/3.
+        a, b, c = "div", "log", "sin"
+        outcomes = [
+            _outcome(_recall_probe(a), semantic_ids=(a,)),  # 잡힘
+            _outcome(
+                _recall_probe(b), semantic_ids=("other",)
+            ),  # 다른 id만 끌림 → 미스
+            _outcome(_recall_probe(c), semantic_ids=(c,)),  # 잡힘
+        ]
+        report = evaluate(outcomes)
+        assert report.total_recall == 3
+        assert report.caught_recall == 2
+        assert report.recall == pytest.approx(2 / 3)
+        # 하한은 점추정보다 낮다(정직).
+        lb = report.recall_lower_bound()
+        assert lb is not None and lb < report.recall
+
+    def test_false_positive_rate_any_match_counts(self) -> None:
+        # FP 프로브 4개 중 1개에서 *아무* 오개념이나 끌림 → fp_rate 1/4.
+        ids = ("a", "b", "c", "d")
+        outcomes = [
+            _outcome(_fp_probe(ids[0]), semantic_ids=("z",)),  # 아무거나 끌림 → FP
+            _outcome(_fp_probe(ids[1]), semantic_ids=()),  # 안 끌림 → 정상
+            _outcome(_fp_probe(ids[2]), semantic_ids=()),
+            _outcome(_fp_probe(ids[3]), semantic_ids=()),
+        ]
+        report = evaluate(outcomes)
+        assert report.total_fp == 4
+        assert report.semantic_false_positives == 1
+        assert report.false_positive_rate == pytest.approx(1 / 4)
+        # 상한은 점추정보다 높다(보수).
+        ub = report.fp_rate_upper_bound()
+        assert ub is not None and ub > report.false_positive_rate
+
+    def test_near_false_positive_is_subset_of_fp(self) -> None:
+        # near_id가 끌리면 near-FP이자 일반 FP. 다른 id만 끌리면 FP이되 near-FP 아님.
+        outcomes = [
+            _outcome(
+                _fp_probe("target"), semantic_ids=("target",)
+            ),  # near 끌림 → near-FP
+            _outcome(
+                _fp_probe("other"), semantic_ids=("zzz",)
+            ),  # 다른 id → FP, not near
+        ]
+        report = evaluate(outcomes)
+        assert report.semantic_false_positives == 2
+        assert report.near_false_positives == 1
+        assert report.false_positive_rate == pytest.approx(1.0)
+        assert report.near_false_positive_rate == pytest.approx(0.5)
+
+    def test_substring_baseline_tracked_separately(self) -> None:
+        # substring 기준선 recall/FP를 별도로 집계(의미 매처 순기여 대조).
+        outcomes = [
+            # recall 프로브: 의미는 잡고 substring도 잡음.
+            _outcome(_recall_probe("x"), semantic_ids=("x",), substring_ids=("x",)),
+            # FP 프로브: substring이 올바른 진술을 잘못 잡음(기준선 FP).
+            _outcome(_fp_probe("y"), semantic_ids=(), substring_ids=("y",)),
+        ]
+        report = evaluate(outcomes)
+        assert report.substring_recall == pytest.approx(1.0)  # 1/1
+        assert report.substring_false_positive_rate == pytest.approx(1.0)  # 1/1
+
+    def test_breakdown_by_kind_and_domain(self) -> None:
+        # 실 카탈로그 id로 도메인 분해를 단언(division-by-zero=대수, gambler-fallacy=확률통계).
+        algebra_id = "division-by-zero"
+        prob_id = "gambler-fallacy"
+        assert CATALOG_BY_ID[algebra_id].domain == "대수"
+        assert CATALOG_BY_ID[prob_id].domain == "확률통계"
+        outcomes = [
+            _outcome(
+                _recall_probe(algebra_id, kind="paraphrase"), semantic_ids=(algebra_id,)
+            ),
+            _outcome(
+                _recall_probe(prob_id, kind="paraphrase"), semantic_ids=()
+            ),  # 미스
+            _outcome(
+                _fp_probe(algebra_id, kind="correct-near"), semantic_ids=("zz",)
+            ),  # FP
+        ]
+        report = evaluate(outcomes)
+        # kind 분해: paraphrase recall 1/2.
+        assert report.recall_by_kind["paraphrase"] == (1, 2)
+        # 도메인 분해: 대수 recall 1/1, 확률통계 recall 0/1.
+        assert report.recall_by_domain["대수"] == (1, 1)
+        assert report.recall_by_domain["확률통계"] == (0, 1)
+        # FP 도메인 분해: 대수 1/1(near_id=대수 항목).
+        assert report.fp_by_domain["대수"] == (1, 1)
+        assert report.fp_by_kind["correct-near"] == (1, 1)
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ① format_report — 비빈 문자열·FP 상세 포함
+# ══════════════════════════════════════════════════════════════════════════
+class TestFormatReport:
+    def test_format_non_empty_with_summary(self) -> None:
+        outcomes = [
+            _outcome(_recall_probe("x"), semantic_ids=("x",)),
+            _outcome(_fp_probe("y"), semantic_ids=()),
+        ]
+        text = format_report(evaluate(outcomes))
+        assert text  # 비빈 문자열
+        assert "recall=" in text
+        assert "fp_rate=" in text
+
+    def test_format_includes_fp_detail(self) -> None:
+        # FP가 있으면 *올바른* statement가 어떤 near_id로 끌렸는지 상세에 나온다(플립 근거).
+        probe = _fp_probe("dot-product-is-vector", kind="negation")
+        outcomes = [_outcome(probe, semantic_ids=("dot-product-is-vector",))]
+        text = format_report(evaluate(outcomes))
+        assert "false positives" in text
+        # near 끌림은 NEAR-FP로 태깅.
+        assert "NEAR-FP" in text
+        assert "dot-product-is-vector" in text
+        assert probe.statement in text
+
+    def test_format_includes_recall_miss_detail(self) -> None:
+        # 놓친 recall 프로브는 MISS 상세에(약점 진단).
+        probe = _recall_probe("log-distribution")
+        outcomes = [_outcome(probe, semantic_ids=("wrong-id",))]
+        text = format_report(evaluate(outcomes))
+        assert "recall miss" in text
+        assert "[MISS]" in text
+        assert "log-distribution" in text
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ② 프로브셋 구조 검증(실파일 로드)
+# ══════════════════════════════════════════════════════════════════════════
+class TestProbeSetStructure:
+    def test_loads_92_probes(self) -> None:
+        probes = load_probes(_PROBES_PATH)
+        assert len(probes) == 92
+
+    def test_recall_and_fp_split(self) -> None:
+        probes = load_probes(_PROBES_PATH)
+        recall = [p for p in probes if p.is_recall_probe]
+        fp = [p for p in probes if p.is_fp_probe]
+        assert len(recall) == 60
+        assert len(fp) == 32
+        # 상호배타·완전분할(recall ⊕ fp = 전체).
+        assert len(recall) + len(fp) == len(probes)
+
+    def test_all_ids_in_catalog(self) -> None:
+        # 모든 expected_id/near_id가 카탈로그에 존재(역참조 무결성).
+        probes = load_probes(_PROBES_PATH)
+        for p in probes:
+            if p.expected_id is not None:
+                assert p.expected_id in CATALOG_BY_ID, p.expected_id
+            if p.near_id is not None:
+                assert p.near_id in CATALOG_BY_ID, p.near_id
+            # 정확히 한쪽만 설정(recall=expected, fp=near).
+            assert (p.expected_id is None) != (p.near_id is None)
+
+    def test_covers_all_30_misconceptions_both_ways(self) -> None:
+        # 30종 전부 recall·FP 프로브를 *둘 다* 보유(전수 커버).
+        probes = load_probes(_PROBES_PATH)
+        recall_ids = {p.expected_id for p in probes if p.is_recall_probe}
+        fp_ids = {p.near_id for p in probes if p.is_fp_probe}
+        catalog_ids = set(CATALOG_BY_ID)
+        assert recall_ids == catalog_ids
+        assert fp_ids == catalog_ids
+
+    def test_kinds_valid(self) -> None:
+        probes = load_probes(_PROBES_PATH)
+        for p in probes:
+            assert p.kind in _VALID_KINDS, p.kind
+
+    def test_recall_probes_evade_substring_full_match(self) -> None:
+        """**임베딩 측정 유효성 회귀 가드**: recall 프로브가 substring 풀매칭(confidence 1.0)으로
+        잡히면 안 된다 — 잡히면 의미 매처를 *측정할 수 없다*(substring이 먼저 다 잡으므로). 각
+        recall 프로브를 `diagnose`로 진단해 expected_id가 confidence 1.0으로 매칭되지 않음을 확인.
+        """
+        probes = load_probes(_PROBES_PATH)
+        offenders: list[tuple[str | None, str]] = []
+        for p in probes:
+            if not p.is_recall_probe:
+                continue
+            for match in diagnose(p.statement, top_k=5):
+                if match.misconception.id == p.expected_id and match.confidence >= 1.0:
+                    offenders.append((p.expected_id, p.statement))
+        assert offenders == [], f"substring 풀매칭된 recall 프로브: {offenders}"
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ③ run_probes 배선 end-to-end(Fake/제어 제공자 — 결선 증명, 실 품질 아님)
+# ══════════════════════════════════════════════════════════════════════════
+class TestRunProbesWiring:
+    def test_run_probes_assembles_outcomes_with_fake_provider(self) -> None:
+        # FakeEmbeddingProvider로 전 프로브를 돌려 스코어링 배선을 증명한다(실 의미 recall 아님).
+        probes = load_probes(_PROBES_PATH)
+        outcomes = run_probes(
+            probes, provider=FakeEmbeddingProvider(), threshold=0.3, top_k=5
+        )
+        assert len(outcomes) == len(probes)
+        report = evaluate(outcomes)
+        # 구조 단언만(품질 hard-fail 아님): 비율은 [0,1] 또는 None.
+        assert report.total == 92
+        for value in (report.recall, report.false_positive_rate):
+            assert value is None or 0.0 <= value <= 1.0
+        # outcome의 semantic_ids/substring_ids는 카탈로그 id이거나 빈 튜플.
+        catalog_ids = set(CATALOG_BY_ID)
+        for o in outcomes:
+            assert set(o.semantic_ids) <= catalog_ids
+            assert set(o.substring_ids) <= catalog_ids
+
+    def test_run_probes_controlled_recall_catch(self) -> None:
+        # 제어 제공자로 *예측 가능한* recall 잡힘을 만든다 — statement에 박은 name_kr가 끌리는지.
+        target = "division-by-zero"
+        target_name_kr = CATALOG_BY_ID[target].name_kr
+        probe = MisconceptionProbe(
+            # statement에 타깃 name_kr를 심어 제공자가 그 항목과 평행하게 만든다.
+            statement=f"이 진술은 '{target_name_kr}' 오개념과 같은 의미다",
+            expected_id=target,
+            near_id=None,
+            kind="paraphrase",
+        )
+        # 전 카탈로그 name_kr로 제공자를 만든다(각 항목이 distinct one-hot이 되도록).
+        provider = _NameKrOneHotProvider(
+            name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values())
+        )
+        outcomes = run_probes([probe], provider=provider, threshold=0.5, top_k=5)
+        assert len(outcomes) == 1
+        report = evaluate(outcomes)
+        # 제공자가 타깃과 평행(cos 1.0 ≥ threshold) → 의미 매처가 그 id를 끌어올림.
+        assert outcomes[0].caught_by_semantic
+        assert target in outcomes[0].semantic_ids
+        assert report.recall == pytest.approx(1.0)
+
+    def test_run_probes_reuses_injected_matcher(self) -> None:
+        # matcher 주입 시 그것을 쓴다(카탈로그 재임베딩 회피) — 호출 카운트로 증명.
+        from whymath_backend.l4.misconception.semantic.matcher import SemanticMatcher
+
+        provider = FakeEmbeddingProvider()
+        matcher = SemanticMatcher(provider=provider)
+        probe = _recall_probe("division-by-zero")
+        # 동일 matcher로 두 번 — 두 번째도 사전 임베딩 캐시를 재사용(예외 없이 동작).
+        out1 = run_probes([probe], provider=provider, matcher=matcher, threshold=0.3)
+        out2 = run_probes([probe], provider=provider, matcher=matcher, threshold=0.3)
+        assert out1[0].semantic_ids == out2[0].semantic_ids
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 불변·계약 — Report items가 source-of-truth(파생 일관성)
+# ══════════════════════════════════════════════════════════════════════════
+class TestReportInvariants:
+    def test_report_is_frozen(self) -> None:
+        report = evaluate([_outcome(_recall_probe("x"), semantic_ids=("x",))])
+        with pytest.raises(FrozenInstanceError):  # frozen dataclass — 할당 차단
+            report.items = ()  # type: ignore[misc]
+
+    def test_items_are_source_of_truth(self) -> None:
+        # 같은 items면 같은 파생값(파생 프로퍼티는 순수 함수).
+        items = (
+            _outcome(_recall_probe("a"), semantic_ids=("a",)),
+            _outcome(_fp_probe("b"), semantic_ids=("b",)),
+        )
+        r1 = SemanticEvalReport(items=items)
+        r2 = SemanticEvalReport(items=items)
+        assert r1.recall == r2.recall
+        assert r1.false_positive_rate == r2.false_positive_rate
+        assert r1.total == r2.total == 2

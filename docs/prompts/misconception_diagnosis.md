@@ -231,6 +231,53 @@ slice 104/105가 의미 매처를 *독립 추가 API*로 뒀고, slice 106은 �
   6-튜플 형태 불변). 결합 랭킹·게이트·to_thread·폴백·잠긴 계약은 단위테스트
   (`test_misconception_combined.py`·`test_coach_semantic.py`)로 못 박혀 있다.
 
+### 측정 하니스 (slice 107) — 결합 recall·방향맹 FP를 *수치로* 잰다
+
+slice 106의 게이트는 **기본 off**다. 켤지(=의미 매처를 coach에 결합할지)는 *추측이 아니라
+측정*으로 정해야 한다 — slice 107은 그 측정 도구(`l4/misconception/semantic_eval.py`)를 더한다.
+**게이트는 여전히 off**(`config.misconception_semantic_enabled` 무변경)이고, 본 모듈은 `diagnose`·
+`semantic_matches`를 *소비*만 하는 오프라인·비노출 측정기다(`step_shadow_eval.py` 미러 — 같은
+`PrecisionReport`/Wilson/CLI 구조).
+
+- **프로브셋**(`tests/backend/l4/fixtures/misconception_semantic_probes.jsonl`·92줄·검증됨):
+  - **recall 프로브 60**(`expected_id` 설정·`near_id` null): *틀린* 진술을 substring signals를
+    피해(임베딩만 잡게) 패러프레이즈 → 의미 매처가 `expected_id`를 끌어올리면 성공.
+  - **FP 프로브 32**(`expected_id` null·`near_id` 설정): *올바른* 진술(해당 오개념과 주제만
+    가까움)이라 *아무 오개념이나* 매칭되면 거짓양성, 그중 `near_id`가 끌리면 *겨냥한* 방향맹.
+  - 30종 전부 recall·FP를 둘 다 보유. `kind` ∈ {paraphrase, direction-reverse, negation,
+    correct-near}.
+- **두 축을 분리해 측정**(정직 스코프 — 임베딩 방향맹):
+  - **recall**(틀린 진술을 의미로 잡음·높을수록 좋음) → **Wilson 하한**으로 보고(recall ≥ R 정직).
+  - **false_positive_rate**(올바른 진술을 오개념으로 끌어올림·낮을수록 좋음) → **Wilson 상한**으로
+    보고(FP ≤ F 보수). `_wilson_upper_bound`는 slice 107 신규(step_shadow엔 하한만) — 관측 FP가
+    0이어도 상한>0이라 작은 표본의 과신을 막는다(예: 0/32·95% → ≈0.08).
+  - **substring 기준선**도 함께 낸다(순기여 대조). *발견*: substring `diagnose`도 FP 프로브
+    28/32에서 발화한다 — 올바른/near 진술이 *같은 signal 토큰*을 공유하므로(substring도
+    방향맹·catalog.py 신호 한계 주석과 정합). 즉 의미 매처의 FP는 "substring이 이미 높은 FP를
+    가진" 기저 위에서 평가해야 한다(둘 다 방향 판별 불가 — LLM-judged/NLI가 정본 해법).
+- **CLI**: `python -m whymath_backend.l4.misconception.semantic_eval <probes.jsonl> [--threshold
+  0.55] [--sweep 0.4,0.5,0.6] [--min-recall R] [--max-fp F]`. `--sweep`는 임계값별 recall/FP 한
+  줄(운영점 곡선 — 임계값↑이면 recall↓·FP↓). 게이트(min-recall/max-fp)는 *측정 도구의 옵션*일
+  뿐 coach 게이트와 무관하다: `recall_lower_bound ≥ R AND fp_rate_upper_bound ≤ F`면 exit 0.
+  라이브 측정은 `build_provider`(기본 local=bge-m3) — Phaiakes9에서 Kiki가 돌린다.
+
+#### 플립 decision 기준 (제안 — 수치는 Kiki 측정 후 확정)
+
+coach 게이트를 켜는(=의미 매처를 결합하는) **플립 조건**을 다음으로 제안한다:
+
+> **recall_lower_bound ≥ R AND fp_rate_upper_bound ≤ F** (라이브 bge-m3·운영 임계값에서)
+
+- **F는 보수적으로** 잡는다 — student-facing *틀린 개입*이 #1 리스크다(CLAUDE.md 의사결정
+  우선순위 1≫6: 학생 안전·웰빙 ≫ 비용·효율). 의미 매처가 올바른 풀이를 오개념으로 끌어올려
+  학생에게 *틀린 소크라테스 개입*을 하는 것은, 패러프레이즈를 몇 개 더 잡는 recall 이득보다
+  나쁘다. 단, FP가 student-facing 손해로 *직결되는지*는 결합 랭킹이 완화한다 — slice 106의
+  **블록 우선**(substr가 있으면 `matches[0]`은 반드시 substr)이 의미 매치를 *후보 확장*으로만
+  노출하므로, 의미-only FP가 곧장 개입이 되려면 substring이 *비어 있어야* 한다.
+- **R·F 수치는 Kiki가 라이브 측정 후 확정**한다(이 하니스의 출력으로). 플립 자체는 *후속
+  슬라이스*다 — 본 슬라이스는 게이트를 켜지 않고 *근거만* 만든다.
+- **FP가 F를 못 맞추면**: 플립하지 않고 방향 판별(LLM-judged/NLI) 슬라이스를 먼저 한다 —
+  임베딩 방향맹은 *측정으로 확인*된 한계이지 튜닝으로 없앨 수 있는 게 아니다.
+
 ## 개입 결정 트리
 
 ```
