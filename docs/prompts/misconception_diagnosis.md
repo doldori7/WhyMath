@@ -52,6 +52,26 @@
 15. **continuity-vs-differentiability**
 ...
 
+### 미적분 영역
+16. **chain-rule-inner-derivative-omitted**: d/dx[sin(2x)] = cos(2x) (내부 도함수 ×2 누락)
+17. **product-rule-naive**: (f·g)′ = f′·g′ (곱의 미분을 각각 미분의 곱으로)
+18. **limit-equals-function-value**: lim_{x→a} f(x) = f(a) (불연속점 무시)
+...
+
+### 수열 영역
+19. **geometric-series-always-converges**: 무한등비급수는 항상 수렴 (|공비|≥1 발산 무시)
+20. **term-to-zero-implies-convergence**: 일반항→0이면 급수 수렴 (조화급수 반례)
+...
+
+### 삼각함수 영역
+21. **sine-distributes-over-sum**: sin(a+b) = sin a + sin b
+22. **period-of-scaled-sine**: y=sin(2x)의 주기는 2π (계수에 따른 주기 변화 무시)
+...
+
+### 벡터 영역
+23. **dot-product-is-vector**: 두 벡터의 내적은 벡터 (내적은 스칼라)
+...
+
 ## 매칭 알고리즘
 
 ```python

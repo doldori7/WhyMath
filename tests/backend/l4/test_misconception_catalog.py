@@ -1,6 +1,7 @@
-"""오개념 카탈로그 정합성 단위테스트 — doc 정본 14종.
+"""오개념 카탈로그 정합성 단위테스트 — doc 정본 22종.
 
-스코프 정직(False-attribute 금기): doc에 명시된 14종만 등록, 추정 작성 없음.
+스코프 정직(False-attribute 금기): doc에 명시·상세화된 22종만 등록(기존 14 + 수능
+핵심 8: 미적분·수열·삼각함수·벡터), 미상세 항목 추정 작성 없음.
 """
 
 from __future__ import annotations
@@ -13,9 +14,10 @@ from whymath_backend.l4.misconception import (
 
 
 class TestCatalogShape:
-    def test_fourteen_entries_doc_explicit_only(self) -> None:
-        # doc 명시: 대수 7 + 기하 3 + 확률통계 3 + 함수 1 = 14
-        assert len(CATALOG) == 14
+    def test_twentytwo_entries_doc_explicit_only(self) -> None:
+        # doc 명시·상세화: 대수 7 + 기하 3 + 확률통계 3 + 함수 1
+        #                 + 미적분 3 + 수열 2 + 삼각함수 2 + 벡터 1 = 22
+        assert len(CATALOG) == 22
 
     def test_all_ids_unique(self) -> None:
         ids = [m.id for m in CATALOG]
@@ -58,6 +60,35 @@ class TestCanonicalIdsFromDoc:
         assert "invertibility-without-1-1" in CATALOG_BY_ID
 
 
+class TestSuneungCanonicalIds:
+    """doc #16-23에 *명시·상세화*된 수능 핵심 오개념 — domain별 정합."""
+
+    def test_calculus_three(self) -> None:
+        for mid in (
+            "chain-rule-inner-derivative-omitted",
+            "product-rule-naive",
+            "limit-equals-function-value",
+        ):
+            assert mid in CATALOG_BY_ID
+            assert CATALOG_BY_ID[mid].domain == "미적분"
+
+    def test_sequence_two(self) -> None:
+        for mid in (
+            "geometric-series-always-converges",
+            "term-to-zero-implies-convergence",
+        ):
+            assert mid in CATALOG_BY_ID
+            assert CATALOG_BY_ID[mid].domain == "수열"
+
+    def test_trig_two(self) -> None:
+        for mid in ("sine-distributes-over-sum", "period-of-scaled-sine"):
+            assert mid in CATALOG_BY_ID
+            assert CATALOG_BY_ID[mid].domain == "삼각함수"
+
+    def test_vector_one(self) -> None:
+        assert CATALOG_BY_ID["dot-product-is-vector"].domain == "벡터"
+
+
 class TestEntryFields:
     def test_every_entry_has_required_fields(self) -> None:
         for m in CATALOG:
@@ -78,7 +109,16 @@ class TestEntryFields:
         raise AssertionError("frozen=True인데 수정됨")
 
     def test_domain_is_valid_literal(self) -> None:
-        valid = {"대수", "기하", "확률통계", "함수"}
+        valid = {
+            "대수",
+            "기하",
+            "확률통계",
+            "함수",
+            "미적분",
+            "수열",
+            "삼각함수",
+            "벡터",
+        }
         for m in CATALOG:
             assert m.domain in valid
 
