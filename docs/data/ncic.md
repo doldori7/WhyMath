@@ -82,7 +82,10 @@ CREATE INDEX idx_standards_domain     ON achievement_standards(domain);
 CREATE INDEX idx_standards_subject    ON achievement_standards(subject);
 ```
 
-Phase 2에 Alembic 마이그레이션으로 정식 생성. 현재는 `load_to_postgres` 시그니처만 두고 `NotImplementedError`.
+정식 테이블의 Alembic 마이그레이션·프로덕션 배포는 Phase 2다. 단 `load_to_postgres`는
+**구현 완료**(`[postgres]` extra·`create_all`로 staging 테이블 멱등 보장·code PK upsert/DO
+NOTHING)이며, 슬99에서 실 PostgreSQL 통합테스트(`test_load_postgres_integration`)를 CI 전용
+잡(`data-pipeline — 적재 통합 (실 PG)`)으로 상시 검증한다.
 
 ### 2.3 코드 패턴
 
@@ -177,7 +180,7 @@ Phase 2에 Alembic 마이그레이션으로 정식 생성. 현재는 `load_to_po
 
 ---
 
-## 5. 검증 결과 (모킹 테스트로 확인한 invariants)
+## 5. 검증 결과 (모킹 단위테스트 + 실 PG 통합테스트)
 
 `tests/data_pipeline/ncic/` 테스트 스위트가 다음을 보장:
 
@@ -193,6 +196,7 @@ Phase 2에 Alembic 마이그레이션으로 정식 생성. 현재는 `load_to_po
 | CSV sidecar 메타데이터 생성 | `test_write_csv_creates_sidecar` |
 | PDF 합성 픽스처에서 e2e | `test_collect_pdf_synthetic_fixture` |
 | respx로 HTTP 모킹 (실 호출 없음) | `test_crawler_http_mocked` |
+| 실 PG 적재 왕복 (신규 INSERT·upsert UPDATE·DO NOTHING) | `test_load_postgres_integration` (슬99·실 PG CI 잡) |
 
 테스트 실행:
 ```bash
@@ -282,8 +286,8 @@ for std in sample:
 
 ## 7. Phase 2 후속 작업 (이번 작업 범위 외)
 
-- [ ] PostgreSQL 배포 + Alembic 마이그레이션
-- [ ] `load_to_postgres` 구현 (backend-engineer 위임)
+- [ ] PostgreSQL *프로덕션* 배포 + Alembic 정식 마이그레이션 (현재 로더는 `create_all` 멱등)
+- [x] `load_to_postgres` 구현 + 실 PG 통합테스트 CI 검증 (슬99)
 - [ ] pgvector 임베딩 (statement 한국어 SBERT — `BM-K/KoSimCSE-roberta`)
 - [ ] 선수 성취기준(`parent_codes`) 자동 추출 (학년·영역 그래프 기반)
 - [ ] 교육과정 해설서(별책 8 부속)도 수집 → `big_idea`·`commentary` 보강
