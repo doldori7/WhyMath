@@ -1,0 +1,92 @@
+{"statement": "두 수를 더한 다음 전체를 제곱하면, 각각을 제곱해서 더한 값과 똑같이 나온다", "expected_id": "distribution-over-power", "near_id": null, "kind": "paraphrase", "note": "제곱이 합에 분배된다는 틀린 믿음 — signals (a+b)·a² + b² 회피"}
+{"statement": "괄호 안에서 두 항을 합친 걸 거듭제곱할 때는 항마다 따로 거듭제곱해서 합쳐도 결과가 보존된다고 봤어", "expected_id": "distribution-over-power", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "두 수의 합을 제곱하면 각 제곱의 합에 두 수 곱의 두 배를 더해야 맞다", "expected_id": null, "near_id": "distribution-over-power", "kind": "correct-near", "note": "(a+b)²=a²+2ab+b² — 곱셈공식으로 올바름"}
+{"statement": "괄호로 묶은 합을 제곱한 값은 보통 각 항을 따로 제곱해 더한 값보다 크다", "expected_id": null, "near_id": "distribution-over-power", "kind": "negation", "note": "양수일 때 2ab>0이라 (a+b)²>a²+b² — 분배 부정이 올바름"}
+{"statement": "부등호 양쪽에 음의 수를 곱하더라도 부등호 방향은 그대로 유지된다고 적었어", "expected_id": "sign-flip-in-inequality", "near_id": null, "kind": "paraphrase", "note": "부호 미반전 오개념 — signals 부등식·음수·곱 회피(부등호·음의 수·곱하다 변형)"}
+{"statement": "마이너스 값을 양변에 똑같이 걸어줘도 대소 관계는 바뀌지 않는다", "expected_id": "sign-flip-in-inequality", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "부등호 양변에 음의 수를 곱하면 부등호 방향이 반대로 뒤집힌다", "expected_id": null, "near_id": "sign-flip-in-inequality", "kind": "correct-near", "note": "음수를 곱하면 부등호가 반전되는 것이 올바른 규칙"}
+{"statement": "대소 관계가 있는 두 수에 같은 마이너스 값을 걸면 크고 작음이 서로 자리를 바꾼다", "expected_id": null, "near_id": "sign-flip-in-inequality", "kind": "negation", "note": "음수배 시 대소가 역전되는 것이 참(미반전을 부정)"}
+{"statement": "식의 아래쪽에 미지수가 들어 있어도 어떤 값을 넣든 항상 값이 잘 정해진다고 생각했어", "expected_id": "division-by-zero", "near_id": null, "kind": "paraphrase", "note": "0 나눗셈 놓침 — signals 분모·0 회피(아래쪽·미지수 등 변형)"}
+{"statement": "변수가 든 나눗셈 꼴은 변수에 무엇을 대입해도 언제나 계산이 가능하다고 봤어", "expected_id": "division-by-zero", "near_id": null, "kind": "paraphrase", "note": "동일 오개념, 통합테스트와 같은 결의 패러프레이즈"}
+{"statement": "분모를 0으로 만드는 값에서는 그 식이 정의되지 않으므로 정의역에서 제외해야 한다", "expected_id": null, "near_id": "division-by-zero", "kind": "correct-near", "note": "0으로 나눌 수 없어 그 점을 제외하는 것이 올바름"}
+{"statement": "음수를 제곱한 다음 루트를 풀면 양수가 아니라 원래의 음수 값 그대로 다시 나온다고 생각했어", "expected_id": "square-root-positivity", "near_id": null, "kind": "paraphrase", "note": "√(x²)=x로 단정해 음수 입력에서 부호를 그대로 둠(틀림) — signals √·x² 회피"}
+{"statement": "어떤 수를 제곱한 뒤 루트를 씌우면 부호와 상관없이 무조건 처음 그 수 자체로 돌아온다", "expected_id": "square-root-positivity", "near_id": null, "kind": "paraphrase", "note": "√(x²)=x로 단정하는 틀린 믿음 — signals √·x² 회피(루트·제곱 변형)"}
+{"statement": "어떤 수의 제곱에 근호를 씌운 값은 그 수의 절댓값과 같다", "expected_id": null, "near_id": "square-root-positivity", "kind": "correct-near", "note": "√(x²)=|x|가 올바른 항등식"}
+{"statement": "0이 아닌 어떤 수를 0제곱하면 결과는 1이 아니라 0이 된다고 생각했어", "expected_id": "exponent-zero", "near_id": null, "kind": "paraphrase", "note": "a⁰=0 오개념 — signals a⁰·0 중 a⁰ 회피('0제곱'으로 풀어 씀)"}
+{"statement": "밑이 무엇이든 지수가 0이면 그 거듭제곱의 값은 영이 된다고 봤어", "expected_id": "exponent-zero", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "0이 아닌 수를 0제곱하면 그 값은 항상 1이다", "expected_id": null, "near_id": "exponent-zero", "kind": "correct-near", "note": "a≠0이면 a⁰=1이 올바름"}
+{"statement": "분자가 두 항의 합인 분수에서 분모와 똑같이 생긴 항을 통째로 지워버리면 나머지 항만 남는다고 계산했어", "expected_id": "fraction-cancellation", "near_id": null, "kind": "paraphrase", "note": "(a+b)/a=b 오개념 — signals (a+b)/a·b 회피(말로 풀어 씀)"}
+{"statement": "위쪽이 덧셈으로 된 분수는 아래쪽과 겹치는 부분을 서로 소거하면 남은 항이 답이 된다", "expected_id": "fraction-cancellation", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "분자가 합으로 되어 있을 때는 분모를 각 항에 나눠 준 뒤에야 약분할 수 있고, 합째로 한 항만 지울 수는 없다", "expected_id": null, "near_id": "fraction-cancellation", "kind": "correct-near", "note": "(a+b)/a=1+b/a라 한 항만 소거 불가 — 올바른 분수 규칙"}
+{"statement": "두 수의 합에 로그를 취한 값은 각각에 로그를 취해서 더한 것과 같다고 생각했어", "expected_id": "log-distribution", "near_id": null, "kind": "paraphrase", "note": "log(a+b)=log a+log b 오개념 — signals log(a+b)·log a + log b 회피(말로 풀어 씀)"}
+{"statement": "덧셈한 결과에 로그를 씌우면 로그를 각 항에 따로 씌워 합한 것으로 분리된다고 적었어", "expected_id": "log-distribution", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "두 수의 곱에 로그를 취하면 각각에 로그를 취해서 더한 값과 같아진다", "expected_id": null, "near_id": "log-distribution", "kind": "correct-near", "note": "log(ab)=log a+log b는 올바른 로그 법칙(합이 아니라 곱일 때)"}
+{"statement": "이차방정식에서 판별식이 음수로 나오면 그 방정식은 아예 풀리지 않아 근이 하나도 없다고 결론지었어", "expected_id": "discriminant-negative-no-real-root", "near_id": null, "kind": "paraphrase", "note": "D<0이면 해 없음 단정 오개념 — signals 판별식·해가 없 중 '해가 없'을 '근이 하나도 없'으로 우회"}
+{"statement": "판별식 값이 0보다 작으면 이 식을 만족시키는 답은 존재하지 않는다고 봤어", "expected_id": "discriminant-negative-no-real-root", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "판별식이 음수이면 실수 범위의 근은 없지만 켤레인 복소수 근 두 개가 존재한다", "expected_id": null, "near_id": "discriminant-negative-no-real-root", "kind": "correct-near", "note": "D<0이면 실근은 없고 복소근 2개 — 올바른 진술(불능이 아님)"}
+{"statement": "ax²=bx 꼴에서 양변을 미지수로 나눠 한 개의 해만 구하고 끝냈어", "expected_id": "root-loss-by-dividing", "near_id": null, "kind": "paraphrase", "note": "변수 나눗셈 근 손실 오개념 — signals 양변·x로 나누 중 'x로 나누'를 '미지수로 나눠'로 우회"}
+{"statement": "방정식의 두 변을 똑같은 문자로 약분해서 정리하면 답이 깔끔하게 하나로 줄어든다고 생각했어", "expected_id": "root-loss-by-dividing", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — 변수로 나눠 근 손실"}
+{"statement": "ax²=bx 같은 식은 모두 한쪽으로 옮겨 공통인수로 묶어 풀어야 변수가 0인 해까지 빠짐없이 구할 수 있다", "expected_id": null, "near_id": "root-loss-by-dividing", "kind": "correct-near", "note": "인수분해로 풀면 x=0 근을 잃지 않음 — 올바른 풀이법"}
+{"statement": "꼭짓점이 셋이든 넷이든 도형이라면 안쪽 각들을 다 더하면 언제나 180도가 된다고 적었어", "expected_id": "angle-sum-non-triangle", "near_id": null, "kind": "paraphrase", "note": "모든 다각형 내각합 180° 오개념 — signals 내각·180 중 '내각'을 '안쪽 각'으로 우회"}
+{"statement": "어떤 다각형이든 모서리 안쪽 각을 전부 합치면 결국 세모와 똑같은 합이 나온다고 봤어", "expected_id": "angle-sum-non-triangle", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "다각형의 안쪽 각을 모두 더하면 변의 개수에서 둘을 뺀 수에 180도를 곱한 값이 된다", "expected_id": null, "near_id": "angle-sum-non-triangle", "kind": "correct-near", "note": "(n-2)×180°가 올바른 내각합 공식(삼각형만 180°)"}
+{"statement": "모양이 서로 비슷하게 생긴 두 도형은 크기까지 완전히 포개진다고 생각했어", "expected_id": "similarity-vs-congruence", "near_id": null, "kind": "paraphrase", "note": "닮음=합동 오개념 — signals 닮음·합동 회피('비슷하게 생긴'·'완전히 포개진다')"}
+{"statement": "비율만 같으면 두 도형은 자를 대보았을 때 변 길이까지 전부 일치한다고 봤어", "expected_id": "similarity-vs-congruence", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "두 도형이 닮음이어도 닮음비가 1이 아니면 합동은 아니다", "expected_id": null, "near_id": "similarity-vs-congruence", "kind": "negation", "note": "닮음이라고 합동은 아님(닮음비=1일 때만 합동) — 올바른 구분"}
+{"statement": "테두리 길이가 더 긴 도형은 안에 담기는 면적도 반드시 더 넓다고 단정했어", "expected_id": "area-perimeter-confusion", "near_id": null, "kind": "paraphrase", "note": "둘레 크면 넓이 크다 오개념 — signals 둘레·넓이 회피('테두리 길이'·'면적')"}
+{"statement": "가장자리 길이가 클수록 그 안의 넓은 정도도 따라서 커진다고 생각했어", "expected_id": "area-perimeter-confusion", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "둘레가 더 길어도 가늘고 긴 모양이면 넓이는 오히려 더 작을 수 있다", "expected_id": null, "near_id": "area-perimeter-confusion", "kind": "negation", "note": "둘레와 넓이가 비례하지 않음 — 올바른 진술(오개념을 부정)"}
+{"statement": "원의 방정식이 두 좌표 제곱의 합이 어떤 수와 같다고 주어지면 그 어떤 수 자체가 곧 반지름이라고 읽었어", "expected_id": "circle-radius-squared", "near_id": null, "kind": "paraphrase", "note": "x²+y²=r²의 반지름을 r²로 봄 — signals 반지름·r² 중 'r²'를 '어떤 수 자체'로 우회"}
+{"statement": "원을 나타내는 식의 우변에 있는 상수가 그대로 원의 반지름 길이라고 생각했어", "expected_id": "circle-radius-squared", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — 우변 상수(=r²)를 반지름으로 혼동"}
+{"statement": "원의 방정식 우변 상수는 반지름을 제곱한 값이므로 반지름은 그 상수에 근호를 씌워 구한다", "expected_id": null, "near_id": "circle-radius-squared", "kind": "correct-near", "note": "x²+y²=r²에서 반지름은 √(상수) — 올바른 해석"}
+{"statement": "동전을 던져 앞이 다섯 번 잇따라 나왔으니 이제는 뒤가 나올 차례라 뒤가 나올 가능성이 더 높다고 봤어", "expected_id": "gambler-fallacy", "near_id": null, "kind": "paraphrase", "note": "도박사의 오류 — signals 동전·다음 중 '다음'을 '이제는'으로 우회(동전은 주제상 등장 불가피하나 '다음' 토큰 회피)"}
+{"statement": "같은 면이 여러 번 연달아 나왔다면 균형을 맞추려고 반대 면이 나올 확률이 점점 커진다고 생각했어", "expected_id": "gambler-fallacy", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — '동전'·'다음' 토큰 모두 회피"}
+{"statement": "동전 던지기는 매번 독립이라 앞이 다섯 번 나왔어도 그다음 던질 때 뒤가 나올 확률은 여전히 2분의 1이다", "expected_id": null, "near_id": "gambler-fallacy", "kind": "correct-near", "note": "독립시행이라 과거와 무관하게 1/2 — 올바른 진술"}
+{"statement": "어떤 조건에서 사건이 일어날 확률은 그 사건이 일어났을 때 조건이 성립할 확률과 서로 바꿔 써도 같다고 봤어", "expected_id": "prosecutor-fallacy", "near_id": null, "kind": "paraphrase", "note": "P(A|B)=P(B|A) 오개념 — signals P(A|B)·P(B|A)(기호) 회피, 말로 풀어 씀"}
+{"statement": "조건부확률은 조건과 결과의 자리를 맞바꾸어도 값이 동일하게 유지된다고 생각했어", "expected_id": "prosecutor-fallacy", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "조건부확률에서 조건과 결과의 자리를 바꾼 두 값은 일반적으로 서로 다르며 베이즈 정리로 연결된다", "expected_id": null, "near_id": "prosecutor-fallacy", "kind": "negation", "note": "P(A|B)≠P(B|A)이며 베이즈로 환산 — 올바른 진술(등치를 부정)"}
+{"statement": "어떤 자료든 한가운데 값과 전체를 고르게 나눈 값은 늘 일치한다고 적었어", "expected_id": "mean-vs-median", "near_id": null, "kind": "paraphrase", "note": "평균=중앙값 오개념 — signals 평균·중앙값 회피('고르게 나눈 값'·'한가운데 값')"}
+{"statement": "데이터를 더해서 개수로 나눈 값이나 크기순 가운데 놓인 값이나 결국 같은 수가 된다고 봤어", "expected_id": "mean-vs-median", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "소득처럼 한쪽으로 치우친 분포에서는 평균과 중앙값이 서로 다르게 나온다", "expected_id": null, "near_id": "mean-vs-median", "kind": "negation", "note": "비대칭 분포에서 평균≠중앙값 — 올바른 진술(등치를 부정)"}
+{"statement": "두 사건이 동시에 일어날 수 없다면 그 둘은 서로 영향을 주지 않는 독립 관계라고 생각했어", "expected_id": "mutually-exclusive-implies-independent", "near_id": null, "kind": "paraphrase", "note": "배반⇒독립 오개념 — signals 배반·독립 중 '배반'을 '동시에 일어날 수 없다'로 우회"}
+{"statement": "한쪽이 일어나면 다른 쪽이 절대 못 일어나는 사건들은 서로 독립이라고 봤어", "expected_id": "mutually-exclusive-implies-independent", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — '배반' 토큰 회피"}
+{"statement": "확률이 0이 아닌 두 사건이 서로 배반이면 오히려 독립이 아니라 종속이다", "expected_id": null, "near_id": "mutually-exclusive-implies-independent", "kind": "negation", "note": "배반이면 종속(P(A∩B)=0≠P(A)P(B)) — 올바른 진술(독립을 부정)"}
+{"statement": "정의역만 있으면 어떤 함수라도 거꾸로 되돌리는 함수를 항상 만들 수 있다고 생각했어", "expected_id": "invertibility-without-1-1", "near_id": null, "kind": "paraphrase", "note": "모든 함수 역함수 존재 오개념 — signals 역함수·모든 함수 회피('거꾸로 되돌리는 함수')"}
+{"statement": "어떤 대응 관계든 입력과 출력을 뒤집으면 그대로 새로운 함수가 된다고 봤어", "expected_id": "invertibility-without-1-1", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — '역함수'·'모든 함수' 토큰 회피"}
+{"statement": "함수가 일대일이 아니면 입출력을 뒤집은 대응은 함수가 되지 못해 역함수가 존재하지 않는다", "expected_id": null, "near_id": "invertibility-without-1-1", "kind": "correct-near", "note": "일대일일 때만 역함수 존재 — 올바른 조건"}
+{"statement": "두 변환을 잇따라 적용할 때 어느 것을 먼저 하든 최종 결과가 똑같다고 생각했어", "expected_id": "composite-function-commutes", "near_id": null, "kind": "paraphrase", "note": "f∘g=g∘f 오개념 — signals f∘g·g∘f(기호) 회피, 말로 풀어 씀"}
+{"statement": "함수를 이어 붙여 합성할 때 순서를 서로 바꿔도 같은 함수가 만들어진다고 봤어", "expected_id": "composite-function-commutes", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "함수를 합성할 때는 보통 순서를 바꾸면 결과가 달라져 교환법칙이 성립하지 않는다", "expected_id": null, "near_id": "composite-function-commutes", "kind": "negation", "note": "합성은 일반적으로 비가환 — 올바른 진술(교환을 부정)"}
+{"statement": "함수 식 안에서 입력에 상수를 빼 주면 그래프가 그 값만큼 왼쪽으로 옮겨 간다고 적었어", "expected_id": "translation-sign-flip", "near_id": null, "kind": "paraphrase", "note": "y=f(x-a)를 왼쪽 이동으로 봄 — signals x-a·왼쪽 중 'x-a'를 '입력에 상수를 빼'로 우회"}
+{"statement": "괄호 안 변수에서 어떤 수를 뺀 꼴로 바꾸면 그래프가 음의 방향으로 그만큼 평행이동한다고 생각했어", "expected_id": "translation-sign-flip", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — 'x-a'·'왼쪽' 토큰 회피"}
+{"statement": "함수 식의 입력에서 양수를 빼 주면 그래프는 그만큼 오른쪽으로 평행이동한다", "expected_id": null, "near_id": "translation-sign-flip", "kind": "correct-near", "note": "y=f(x-a)는 오른쪽으로 a 이동 — 올바른 방향"}
+{"statement": "안쪽에 다른 식이 들어간 함수를 미분할 때 겉함수만 미분하고 안쪽 식의 미분은 곱하지 않아도 된다고 봤어", "expected_id": "chain-rule-inner-derivative-omitted", "near_id": null, "kind": "paraphrase", "note": "연쇄법칙 내부도함수 누락 — signals d/dx·cos(2x) 회피(말로 풀어 씀)"}
+{"statement": "합성된 함수를 미분하면 바깥 함수만 미분한 결과가 그대로 답이라 안쪽 도함수는 따로 안 붙여도 된다고 생각했어", "expected_id": "chain-rule-inner-derivative-omitted", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "합성함수를 미분할 때는 바깥 함수의 도함수에 안쪽 함수의 도함수를 곱해 주어야 한다", "expected_id": null, "near_id": "chain-rule-inner-derivative-omitted", "kind": "correct-near", "note": "연쇄법칙: 내부 도함수를 곱함 — 올바른 진술"}
+{"statement": "두 함수를 곱한 것을 미분하면 각각을 미분해서 그대로 곱한 게 답이라고 적었어", "expected_id": "product-rule-naive", "near_id": null, "kind": "paraphrase", "note": "(fg)'=f'g' 오개념 — signals (f·g)′·f′·g′(기호) 회피, 말로 풀어 씀"}
+{"statement": "함수끼리 곱해 놓은 식의 도함수는 두 함수의 도함수를 곱하기만 하면 구해진다고 봤어", "expected_id": "product-rule-naive", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "두 함수의 곱을 미분하면 앞을 미분해 뒤를 곱한 것과 앞에 뒤를 미분해 곱한 것을 더해야 한다", "expected_id": null, "near_id": "product-rule-naive", "kind": "correct-near", "note": "(fg)'=f'g+fg'가 올바른 곱의 미분법"}
+{"statement": "어떤 점으로 다가갈 때의 극한값은 그 점에서의 함수 결과와 언제나 똑같다고 생각했어", "expected_id": "limit-equals-function-value", "near_id": null, "kind": "paraphrase", "note": "극한=함숫값 오개념 — signals 극한·함숫값 중 '함숫값'을 '함수 결과'로 우회"}
+{"statement": "x가 어떤 값에 한없이 가까워질 때 다가가는 값은 그 자리에 직접 대입한 값과 항상 일치한다고 봤어", "expected_id": "limit-equals-function-value", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "함수가 그 점에서 연속이어야만 극한값과 함숫값이 서로 같아진다", "expected_id": null, "near_id": "limit-equals-function-value", "kind": "correct-near", "note": "연속의 정의가 극한=함숫값 — 조건부로 올바름(항상 같은 건 아님)"}
+{"statement": "함수가 끊김 없이 쭉 이어지면 어느 지점에서든 접선을 그을 수 있다고 생각했어", "expected_id": "continuity-implies-differentiability", "near_id": null, "kind": "paraphrase", "note": "연속⇒미분가능 오개념 — signals 연속·미분가능 회피('끊김 없이 이어지면'·'접선을 그을 수 있다')"}
+{"statement": "그래프가 빈틈 없이 매끄럽게 연결돼 있으면 모든 점에서 기울기를 정의할 수 있다고 봤어", "expected_id": "continuity-implies-differentiability", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — '연속'·'미분가능' 토큰 회피"}
+{"statement": "어떤 점에서 미분이 가능하면 그 점에서는 반드시 연속이다", "expected_id": null, "near_id": "continuity-implies-differentiability", "kind": "direction-reverse", "note": "미분가능⇒연속은 참(역은 거짓) — 올바른 역방향"}
+{"statement": "도함수가 0이 되는 점에서는 그 함수가 반드시 가장 크거나 작은 값을 가진다고 적었어", "expected_id": "critical-point-implies-extremum", "near_id": null, "kind": "paraphrase", "note": "임계점⇒극값 오개념 — signals f′=0·극값 회피('도함수가 0'·'가장 크거나 작은 값')"}
+{"statement": "접선의 기울기가 0이 되는 자리는 무조건 봉우리나 골짜기처럼 극값이 되는 지점이라고 봤어", "expected_id": "critical-point-implies-extremum", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — 'f′=0'·'극값' 토큰 회피"}
+{"statement": "도함수가 0인 점이라도 그 좌우로 도함수의 부호가 바뀌지 않으면 극값이 아니다", "expected_id": null, "near_id": "critical-point-implies-extremum", "kind": "correct-near", "note": "부호 변화가 있어야 극값(f'(0)=0이라도 변곡점일 수 있음) — 올바른 판정"}
+{"statement": "무한히 더해 가는 등비 형태의 합은 공비가 무엇이든 결국 일정한 값으로 모인다고 생각했어", "expected_id": "geometric-series-always-converges", "near_id": null, "kind": "paraphrase", "note": "등비급수 무조건 수렴 오개념 — signals 등비급수·수렴 회피('등비 형태의 합'·'일정한 값으로 모인다')"}
+{"statement": "같은 비율을 계속 곱해 끝없이 더하면 어떤 경우든 발산하지 않고 유한한 값에 도달한다고 봤어", "expected_id": "geometric-series-always-converges", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "무한등비급수는 공비의 절댓값이 1보다 작을 때에만 수렴하고 그 밖에는 발산한다", "expected_id": null, "near_id": "geometric-series-always-converges", "kind": "correct-near", "note": "|r|<1일 때만 수렴 — 올바른 수렴 조건"}
+{"statement": "더해 가는 항이 점점 작아져 0으로 다가가면 그 무한합도 반드시 일정한 값으로 모인다고 적었어", "expected_id": "term-to-zero-implies-convergence", "near_id": null, "kind": "paraphrase", "note": "항→0이면 수렴 오개념 — signals 급수·수렴 회피('무한합'·'일정한 값으로 모인다')"}
+{"statement": "일반항이 0에 가까워지기만 하면 그것들을 끝없이 합한 결과도 발산하지 않는다고 봤어", "expected_id": "term-to-zero-implies-convergence", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — '급수'·'수렴' 토큰 회피"}
+{"statement": "일반항이 0으로 가더라도 조화급수처럼 무한합이 발산하는 경우가 있다", "expected_id": null, "near_id": "term-to-zero-implies-convergence", "kind": "negation", "note": "항→0이 수렴의 충분조건이 아님(조화급수 발산) — 올바른 진술(오개념을 부정)"}
+{"statement": "두 각을 더한 것의 사인 값은 각각의 사인 값을 따로 구해 합한 것과 같다고 생각했어", "expected_id": "sine-distributes-over-sum", "near_id": null, "kind": "paraphrase", "note": "sin(a+b)=sin a+sin b 오개념 — signals sin(a+b)·sin a + sin b(기호) 회피, 말로 풀어 씀"}
+{"statement": "사인 함수는 안에 든 각들의 합에 대해 각 각의 사인으로 분리해 더할 수 있다고 봤어", "expected_id": "sine-distributes-over-sum", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
+{"statement": "두 각을 더한 것의 사인은 한 각의 사인에 다른 각의 코사인을 곱한 것끼리 더한 값이다", "expected_id": null, "near_id": "sine-distributes-over-sum", "kind": "correct-near", "note": "sin(a+b)=sin a cos b+cos a sin b가 올바른 덧셈정리"}
+{"statement": "사인 함수 안의 변수에 2를 곱하든 말든 한 번 반복되는 길이는 그대로 2파이라고 적었어", "expected_id": "period-of-scaled-sine", "near_id": null, "kind": "paraphrase", "note": "y=sin(2x) 주기를 2π로 봄 — signals 주기·2π 중 '주기'를 '한 번 반복되는 길이'로 우회"}
+{"statement": "변수 앞에 계수가 붙어도 사인 그래프가 한 바퀴 도는 간격은 변하지 않고 360도 그대로라고 봤어", "expected_id": "period-of-scaled-sine", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — '주기'·'2π' 토큰 회피"}
+{"statement": "사인 함수 안 변수에 2를 곱하면 한 주기의 길이가 절반으로 줄어 파이가 된다", "expected_id": null, "near_id": "period-of-scaled-sine", "kind": "correct-near", "note": "y=sin(2x)의 주기는 π(=2π/2) — 올바른 진술"}
+{"statement": "두 방향량을 내적하면 그 답도 방향과 크기를 함께 가진 화살표 형태로 나온다고 생각했어", "expected_id": "dot-product-is-vector", "near_id": null, "kind": "paraphrase", "note": "내적 결과를 벡터로 봄 — signals 내적·벡터 중 '벡터' 토큰을 빼 substring AND 미발화('방향량'·'화살표 형태')"}
+{"statement": "화살표 두 개를 점 찍어 곱하면 그 답 역시 화살표 형태로 방향을 가진다고 봤어", "expected_id": "dot-product-is-vector", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — '내적'·'벡터' 토큰 회피('화살표를 점 찍어 곱하면')"}
+{"statement": "두 벡터를 내적하면 방향 없이 크기만 가지는 하나의 실수, 곧 스칼라가 나온다", "expected_id": null, "near_id": "dot-product-is-vector", "kind": "negation", "note": "내적 결과는 스칼라(|a||b|cosθ) — 올바른 진술(벡터임을 부정)"}
