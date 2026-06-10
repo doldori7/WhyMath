@@ -601,6 +601,54 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 슬라이스 105: 오개념 임베딩 *영속(pgvector) 백엔드* 좌석 선택 ──
+    # 슬104 VectorIndex 좌석에 PgVectorIndex(pgvector 백엔드)를 추가한다. **기본은 `memory`**
+    # (InMemoryVectorIndex·기본 동작 무변경) — pgvector는 *opt-in*이다. 카탈로그 30종엔
+    # in-memory 선형 스캔이 최적이고(슬104 docstring), pgvector는 *영속화 + 스케일 코퍼스
+    # groundwork*다(과장 금지 — 30종에 pgvector가 더 빠르다고 주장하지 않는다). 슬98 결정
+    # (벡터 DB=pgvector·Postgres 16 통합)의 첫 실 결선 자리.
+    vector_store: Literal["memory", "pgvector"] = Field(
+        default="memory",
+        description=(
+            "오개념 의미 매칭 벡터 인덱스 백엔드. `memory`(기본)=InMemoryVectorIndex(코사인 "
+            "선형 스캔·카탈로그 30종 최적·라이브 의존 0). `pgvector`=PgVectorIndex(PostgreSQL "
+            "pgvector 영속화·스케일 groundwork·sync psycopg 격리 엔진). `pgvector` 선택 시에만 "
+            "psycopg/pgvector를 *지연 import*하므로 기본(memory) 경로는 sync 드라이버 불요. "
+            "WHYMATH_VECTOR_STORE로 조정."
+        ),
+    )
+    embedding_dim: int = Field(
+        default=1024,
+        ge=1,
+        description=(
+            "PgVectorIndex `misconception_embedding.embedding` 컬럼 차원(pgvector `vector(N)`). "
+            "기본 1024(bge-m3). 임베딩 *모델*과 일치해야 한다(Fake 64·OpenAI te-3-large 3072). "
+            "30종 코퍼스는 seq-scan이라 고정 차원이 검색 성능엔 무관하나, SQLAlchemy `Vector` "
+            "타입·마이그레이션이 차원을 박으므로 모델 교체 시 이 값과 마이그레이션을 함께 "
+            "맞춘다(in-memory 경로는 무관 — 차원 무지정 동작). WHYMATH_EMBEDDING_DIM로 조정."
+        ),
+    )
+
+    @property
+    def sync_database_url(self) -> str:
+        """`database_url`(async asyncpg)에서 *sync psycopg* 드라이버 URL을 파생(슬105).
+
+        PgVectorIndex는 슬104 `VectorIndex` Protocol이 *동기*라 sync SQLAlchemy 엔진을
+        쓴다(03a 로컬-우선처럼 *벡터 store 좌석에 한정*해 sync 드라이버 도입 — async 앱
+        엔진은 무변경). 자격증명·호스트·DB명은 그대로 보존하고 *드라이버만* `+psycopg`로
+        바꾼다. 문자열 치환이 아니라 `make_url(...).set(drivername=...)`로 파싱·재조립해
+        패스워드 인코딩·포트 등 엣지를 안전 처리한다(시크릿은 코드에 0 — `database_url`이
+        env에서 오고 이 프로퍼티는 변환만). asyncpg가 아닌 다른 드라이버(예: 이미 psycopg)면
+        그대로 psycopg로 정규화한다(드라이버 토큰만 교체).
+        """
+        from sqlalchemy.engine import make_url
+
+        return (
+            make_url(self.database_url)
+            .set(drivername="postgresql+psycopg")
+            .render_as_string(hide_password=False)
+        )
+
     @property
     def openai_configured(self) -> bool:
         """OpenAI API 키가 채워졌는가(임베딩 클라우드 호출 가능 여부, 슬104).

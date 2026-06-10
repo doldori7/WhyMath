@@ -159,8 +159,18 @@ substring(AND)+정규식은 *표면 문자열*을 본다. 학생이 카탈로그
     `OpenAIEmbeddingProvider`(text-embedding-3-large·키 필요·지연). 기본 `local`(CLAUDE.md
     비용·Phaiakes9). 라이브 모델 로드는 *지연 import*라 CI는 모델 다운로드·네트워크 0.
   - `VectorIndex`(좌석) + `InMemoryVectorIndex`(코사인 선형 스캔) — 카탈로그 30종엔
-    인메모리가 정답. **pgvector 영속 백엔드는 명시적 후속**(슬105+): 벡터 컬럼 마이그레이션
-    + 통합 게이트. 슬98 `embedding_id`는 현재 참조 자리만(실 벡터 컬럼은 스키마 밖).
+    인메모리가 정답(기본). **pgvector 영속 백엔드(`PgVectorIndex`)는 슬105에서 구현**(슬98
+    벡터 DB=pgvector 결정의 첫 실 결선): `misconception_embedding` 테이블(`vector(1024)`)에
+    표현 임베딩을 upsert(`populate_pgvector`)하고 코사인 거리(`<=>`)로 검색한다. `config.
+    vector_store`(기본 `memory`)가 in-memory/pgvector를 가르고 **기본 동작은 무변경**(pgvector는
+    opt-in). 슬104 `VectorIndex` Protocol이 *동기*라 PgVectorIndex(sync psycopg 격리 엔진)가
+    그대로 드롭인(매처 리팩터 0). **정직 스코프(과장 금지)**: 30종엔 in-memory가 최적이고
+    pgvector는 *영속화(재기동·다중 워커 공유) + 스케일 코퍼스 groundwork*다 — 30종에서
+    더 빠르지 않다. **HNSW/IVFFlat 인덱스는 두지 않는다**(30종 seq-scan 최적); 스케일 코퍼스
+    (개념그래프 401+·문제은행·학생 풀이)가 *fixed-dim + HNSW cosine 인덱스*의 자리다(후속·
+    같은 좌석에 인덱스·차원만 추가). 슬98 `embedding_id`(concept/user 참조 필드)는 이 테이블과
+    별개다(실 벡터 컬럼은 `misconception_embedding`가 소유). 실 pgvector add/search·recall은
+    통합 게이트(`WHYMATH_RUN_INTEGRATION`·CI pgvector PG)로 검증한다.
 - **매칭 절차**: 카탈로그 각 항목의 *표현* `f"{name_kr}. {canonical_statement}"`(틀린 믿음의
   자연어)을 1회 사전 임베딩해 인덱스에 적재(캐시)하고, 학생 텍스트를 임베딩해 코사인 상위
   후보 중 **임계값 이상**만 반환한다.

@@ -143,7 +143,10 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        # pgvector/pgvector:pg16 = postgres:16 superset(pgvector 프리설치) — 슬105
+        # PgVectorIndex 마이그레이션이 `CREATE EXTENSION vector`를 alembic upgrade/왕복에서
+        # 성공시키려면 pgvector가 깔린 이미지가 필요하다(드롭인·기존 backend 스키마 무영향).
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: whymath
           POSTGRES_DB: whymath
@@ -212,7 +215,9 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        # pgvector/pgvector:pg16 = postgres:16 superset(드롭인). data-pipeline은 pgvector를
+        # 아직 안 쓰지만 두 PG 잡 이미지를 동일하게 맞춰(슬105) 환경 표류를 막는다(무위험).
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: whymath
           POSTGRES_DB: whymath
