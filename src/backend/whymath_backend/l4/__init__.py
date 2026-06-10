@@ -6,8 +6,11 @@ L3(생성)와 L5(상호작용) 사이의 *결정 계층*. 학생 발화·상태�
 "L3 LLM은 *생성*, L4는 *결정*").
 
 첫 슬라이스 범위: Polya 4단계 코칭 엔진(`polya/`) + 정서 안전 톤필터(`tone_filter`).
-범위 밖(후속): Socratic 50+ 카탈로그·답 미루기 4단계 graded hint·오개념 30·LTHC·
-개념 점화 지도·HTTP 노출·L2 학습자 모델 통합.
+오개념 진단(카탈로그 30·substring+정규식 매칭)·LTHC·소크라테스·메타인지 트리거는 후속
+슬라이스에서 채워졌다. slice 104: 오개념 의미(임베딩) 매칭 좌석(`misconception.semantic`)을
+추가 — substring 거짓음성(패러프레이즈·동의어 recall) 보완. *정직 스코프*: 의미 매칭은
+recall만 개선하고 방향·부정·등치는 못 가린다(임베딩 방향맹 — LLM-judged/NLI 후속).
+범위 밖(후속): pgvector 영속화·LLM-judged 방향 판별·HTTP 노출.
 """
 
 from __future__ import annotations
@@ -29,12 +32,21 @@ from whymath_backend.l4.misconception import (
     CATALOG as MISCONCEPTION_CATALOG,
 )
 from whymath_backend.l4.misconception import (
+    EmbeddingProvider,
+    FakeEmbeddingProvider,
+    InMemoryVectorIndex,
     InterventionDecision,
     InterventionPattern,
+    LocalEmbeddingProvider,
     Misconception,
     MisconceptionMatch,
+    OpenAIEmbeddingProvider,
+    SemanticMatcher,
+    VectorIndex,
+    build_provider,
     diagnose,
     select_intervention,
+    semantic_matches,
     visualize_misconception,
 )
 from whymath_backend.l4.models import (
@@ -57,26 +69,34 @@ from whymath_backend.l4.tone_filter import filter_tone
 __all__ = [
     "CoachingFocus",
     "CoachingTrigger",
+    "EmbeddingProvider",
+    "FakeEmbeddingProvider",
     "HintLevel",
+    "InMemoryVectorIndex",
     "InterventionDecision",
     "InterventionPattern",
     "LLMSeam",
+    "LocalEmbeddingProvider",
     "LthcAdaptation",
     "MISCONCEPTION_CATALOG",
     "MasteryLevel",
     "Misconception",
     "MisconceptionMatch",
+    "OpenAIEmbeddingProvider",
     "PedagogyDecision",
     "PolyaCoach",
     "PolyaStage",
     "PolyaState",
     "REVEALS",
+    "SemanticMatcher",
     "SlipKind",
     "SocraticCategory",
     "SolutionCoaching",
     "StageTransition",
     "ToneReport",
+    "VectorIndex",
     "adapt_lthc",
+    "build_provider",
     "decide_hint_level",
     "diagnose",
     "filter_tone",
@@ -86,5 +106,6 @@ __all__ = [
     "recommend_coaching_for_solution",
     "select_category",
     "select_intervention",
+    "semantic_matches",
     "visualize_misconception",
 ]

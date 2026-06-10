@@ -552,6 +552,64 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 슬라이스 104: L4 오개념 *의미(임베딩) 매칭* 좌석 (substring 거짓음성 보완) ──
+    # L4 SemanticMatcher가 카탈로그 표현·학생 텍스트를 임베딩해 코사인 유사도로 패러프레이즈·
+    # 동의어를 잡는다(substring AND가 못 잡던 *의미 recall*). **정직 스코프**: 임베딩은 의미
+    # recall만 개선하고 *방향·부정·등치*("연속⇒미분" vs 역)는 substring과 똑같이 못 가린다
+    # (방향 판별은 LLM-judged/NLI 후속 — docs/prompts/misconception_diagnosis.md §의미 매칭 층).
+    # 기본은 `local`(bge-m3·로컬 우선·CLAUDE.md 비용·Phaiakes9). 라이브 로드는 *지연 import*라
+    # 이 설정만으로는 모델 다운로드·네트워크가 일어나지 않는다(CI hermetic).
+    embedding_provider: Literal["local", "openai", "fake"] = Field(
+        default="local",
+        description=(
+            "오개념 의미 매칭 임베딩 제공자. `local`(기본)=sentence-transformers bge-m3(로컬 "
+            "우선·Phaiakes9). `openai`=text-embedding-3-large(클라우드·키 필요). `fake`=결정론 "
+            "해시 벡터(테스트·CI hermetic 전용·라이브 의존 0). 좌석 선택만이고 실제 모델 로드는 "
+            "지연(import 시점이 아니라 첫 embed 호출 시)."
+        ),
+    )
+    embedding_model_local: str = Field(
+        default="BAAI/bge-m3",
+        description=(
+            "로컬(sentence-transformers) 임베딩 모델 ID. 기본 bge-m3(다국어·한국어 강건). "
+            "WHYMATH_EMBEDDING_MODEL_LOCAL로 오버라이드. 시크릿 아님."
+        ),
+    )
+    embedding_model_openai: str = Field(
+        default="text-embedding-3-large",
+        description=(
+            "OpenAI 임베딩 모델 ID(embedding_provider=openai일 때). 기본 text-embedding-3-large "
+            "(CLAUDE.md 임베딩 표준). WHYMATH_EMBEDDING_MODEL_OPENAI로 오버라이드. 시크릿 아님."
+        ),
+    )
+    openai_api_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "OpenAI API 키(sk-...). SecretStr — repr/로그 평문 노출 안 됨. 기본값 없음(빈 = "
+            "미설정). 환경변수 WHYMATH_OPENAI_API_KEY로만 주입(CLAUDE.md 보안 금기: 하드코딩 "
+            "금지). 비면 OpenAIEmbeddingProvider는 명확한 오류(조용한 폴백 금지)."
+        ),
+    )
+    misconception_semantic_threshold: float = Field(
+        default=0.55,
+        ge=-1.0,
+        le=1.0,
+        description=(
+            "오개념 의미 매칭 코사인 임계값(이 *미만*은 미매칭). 보수적 기본 0.55 — 거짓양성 "
+            "억제(짧은 공통 토큰의 의미 근접 오탐 방지). semantic_matches(threshold=)로 호출별 "
+            "오버라이드 가능. WHYMATH_MISCONCEPTION_SEMANTIC_THRESHOLD로 전역 조정."
+        ),
+    )
+
+    @property
+    def openai_configured(self) -> bool:
+        """OpenAI API 키가 채워졌는가(임베딩 클라우드 호출 가능 여부, 슬104).
+
+        비어 있으면 미설정 — OpenAIEmbeddingProvider는 첫 embed에서 명확한 오류를 던진다
+        (조용한 폴백 금지·CLAUDE.md "모르면 모른다고"). 값은 로그에 남기지 않는다.
+        """
+        return bool(self.openai_api_key.get_secret_value())
+
     @property
     def langfuse_configured(self) -> bool:
         """Langfuse 공개키·시크릿키가 *둘 다* 채워졌는가(전송 가능 여부).
