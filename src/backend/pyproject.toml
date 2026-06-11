@@ -27,9 +27,11 @@ dependencies = [
     "anthropic>=0.40.0",
     "openai>=1.50.0",
     "ollama>=0.4.0",
-    # 벡터 DB(pgvector·Postgres 통합)·임베딩
+    # 벡터 DB(pgvector·Postgres 통합) — 마이그레이션·ORM이 top-level import라 메인 의존성 유지.
     "pgvector>=0.3.0",
-    "sentence-transformers>=3.1.0",
+    # 임베딩(sentence-transformers·bge-m3→torch 수 GB)은 [embedding] extra로 분리(슬110 #6) —
+    # 기본(memory·게이트 off) 경로는 lazy import라 미사용. provider.py가 함수내 lazy import하고
+    # mypy는 ignore_missing_imports=true라, extra 미설치 환경에서도 collection·hermetic·mypy green.
     # 인증·보안
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
@@ -48,6 +50,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# 임베딩(로컬 bge-m3) — sentence-transformers→torch(수 GB). 의미 매칭(슬104~)·라이브 통합
+# 측정에 필요. 기본 배포·hermetic CI는 불요(lazy import·FakeEmbeddingProvider). 설치:
+# `pip install -e ".[dev,embedding]"`. (OpenAI 임베딩은 openai 메인 의존성으로 별도.)
+embedding = [
+    "sentence-transformers>=3.1.0",
+]
 dev = [
     # 상한 핀 — data-pipeline에서 검증된 상한을 동일 적용 (2026-05-14).
     # 백엔드 CI 4스텝(ruff·black·mypy·pytest)을 동일 floor·동일 도구로 핀해
