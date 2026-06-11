@@ -22,12 +22,58 @@ permissions:
 
 jobs:
   # ─────────────────────────────────────────────────────────────────
+  # 변경 경로 판별 (슬112·CI 비용 절감) — doc-only PR이면 무거운 잡 skip
+  # GitHub는 `if`로 skip된 잡을 required status check *충족*으로 처리하므로
+  # branch protection과 호환된다. push(main)는 항상 전체 실행(다운스트림 if가
+  # event로 우회). policy-guard·infra-shell은 초 단위라 게이트하지 않는다
+  # (특히 policy-guard는 docs 변경이야말로 검사 대상이라 항상 실행).
+  # ─────────────────────────────────────────────────────────────────
+  changes:
+    name: changes — 변경 경로 판별
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      data_pipeline: ${{ steps.filter.outputs.data_pipeline }}
+    steps:
+      - name: Checkout (merge commit + 부모 — PR diff용)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 변경 파일 → 영역 플래그
+        id: filter
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            # push(main) — 전체 실행(다운스트림 if가 event로 우회·이 값은 미사용 안전값).
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "data_pipeline=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # pull_request의 HEAD는 merge commit — ^1(=base tip) 대비 diff가 곧 PR 변경 전량.
+          files=$(git diff --name-only HEAD^1 HEAD)
+          printf '변경 파일:\n%s\n' "$files"
+          be=false; dp=false
+          if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
+            be=true
+          fi
+          if printf '%s\n' "$files" | grep -qE '^(src/data-pipeline/|tests/data_pipeline/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
+            dp=true
+          fi
+          echo "backend=$be" >> "$GITHUB_OUTPUT"
+          echo "data_pipeline=$dp" >> "$GITHUB_OUTPUT"
+
+  # ─────────────────────────────────────────────────────────────────
   # L1 데이터 파이프라인 (현재 유일하게 패키지화된 영역)
   # ─────────────────────────────────────────────────────────────────
   data-pipeline:
     name: data-pipeline — lint·type·test
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: changes
+    # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.data_pipeline == 'true'
     defaults:
       run:
         working-directory: src/data-pipeline
@@ -80,6 +126,9 @@ jobs:
     name: backend — lint·type·test
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: changes
+    # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true'
     defaults:
       run:
         working-directory: src/backend
@@ -137,6 +186,9 @@ jobs:
     name: backend — 마이그레이션·통합 (실 PG)
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    needs: changes
+    # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true'
     defaults:
       run:
         working-directory: src/backend
@@ -173,12 +225,14 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies (editable + dev + embedding extras)
+      - name: Install dependencies (editable + dev extras)
         run: |
           python -m pip install --upgrade pip
-          # 슬110 #6: 통합 잡은 라이브 bge-m3 측정 테스트가 sentence-transformers를 쓰므로
-          # [embedding] extra 포함. (lint·type·test 잡은 .[dev]만 — torch 미설치·속도↑.)
-          pip install -e ".[dev,embedding]"
+          # 슬112(비용): [embedding](sentence-transformers→torch 수 GB)은 CI에서 설치하지
+          # 않는다 — 라이브 bge-m3 통합은 CI에서 *항상 skip*(HF 미도달·Phaiakes9 전용)이라
+          # torch 설치가 분당 과금만 태웠다. 슬110의 find_spec 사전체크가 미설치를 깨끗이
+          # skip 처리한다. 라이브 측정은 Kiki가 Phaiakes9에서 .[dev,embedding]으로 실행.
+          pip install -e ".[dev]"
 
       - name: Alembic upgrade head (fresh DB — 전 마이그레이션 적용)
         run: alembic upgrade head
@@ -211,6 +265,9 @@ jobs:
     name: data-pipeline — 적재 통합 (실 PG)
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    needs: changes
+    # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.data_pipeline == 'true'
     defaults:
       run:
         working-directory: src/data-pipeline
