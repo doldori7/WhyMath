@@ -43,6 +43,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.diagnose import diagnose
+from whymath_backend.l4.misconception.judge import JudgeProtocol, judge_filter
 from whymath_backend.l4.misconception.models import MisconceptionDomain
 from whymath_backend.l4.misconception.semantic.matcher import SemanticMatcher
 from whymath_backend.l4.misconception.semantic.provider import (
@@ -129,11 +130,21 @@ class ProbeOutcome:
       - recall 프로브: `caught_by_semantic` = expected_id ∈ semantic_ids.
       - FP 프로브: `semantic_false_positive` = bool(semantic_ids)(*아무* 오개념이나 끌어올림)·
         `near_false_positive` = near_id ∈ semantic_ids(*겨냥한* 방향맹).
+
+    **judge 필드(슬108)**: `judge_kept_ids`/`judge_removed_ids`는 LLM-judge가 `semantic_ids` 중
+    *유지*(예·불확실)/*제거*(아니오)한 것이다(judge 미적용 시 기본 빈 튜플 — 슬107 동작 불변).
+    judge가 적용됐으면 `judge_kept_ids ⊕ judge_removed_ids = semantic_ids`(분할). 파생 judge 판정:
+      - FP 프로브: `judge_false_positive` = judge 통과(kept)한 semantic_ids가 *남았나*(judge 후 FP).
+      - recall 프로브: `judge_kept_expected` = expected_id가 *judge를 통과*했나(judge 후 recall TP).
     """
 
     probe: MisconceptionProbe
     semantic_ids: tuple[str, ...]
     substring_ids: tuple[str, ...]
+    # judge 적용 결과(슬108·미적용 시 기본 빈 튜플=슬107 동작 불변). judge가 semantic_ids를
+    # 유지/제거로 분할한 것. `run_probes_with_judge`만 채우고 sync `run_probes`는 비운다.
+    judge_kept_ids: tuple[str, ...] = ()
+    judge_removed_ids: tuple[str, ...] = ()
 
     @property
     def caught_by_semantic(self) -> bool:
@@ -162,6 +173,27 @@ class ProbeOutcome:
     def substring_false_positive(self) -> bool:
         """FP 프로브: substring 기준선이 올바른 진술을 오개념으로 잘못 잡았는가(기준선 대조)."""
         return self.probe.is_fp_probe and bool(self.substring_ids)
+
+    # ── judge 파생(슬108·judge 적용 시만 유의미) ──────────────────────────────
+    @property
+    def judge_false_positive(self) -> bool:
+        """FP 프로브: judge 후에도 *남은*(kept) semantic_ids가 있는가(judge 후 거짓양성).
+
+        judge가 `아니오`로 거른 뒤에도 통과한 후보가 있으면 judge 후 FP다. judge 미적용이면
+        kept가 비어 항상 False(슬107 경로엔 영향 0 — judge 지표는 judge 적용 시만 읽는다).
+        """
+        return self.probe.is_fp_probe and bool(self.judge_kept_ids)
+
+    @property
+    def judge_kept_expected(self) -> bool:
+        """recall 프로브: expected_id가 *judge를 통과*(kept)했는가(judge 후 recall TP).
+
+        의미 매처가 expected_id를 끌어올린(`caught_by_semantic`) 뒤 judge가 그것을 *유지*해야
+        judge 후 recall로 인정된다. judge가 expected_id를 `아니오`로 잘못 거르면 recall 손실
+        (`judge_recall_loss`의 단위). judge 미적용이면 kept가 비어 항상 False.
+        """
+        eid = self.probe.expected_id
+        return eid is not None and eid in self.judge_kept_ids
 
 
 def _div(numer: int, denom: int) -> float | None:
@@ -311,6 +343,81 @@ class SemanticEvalReport:
         fp = sum(1 for o in self.fp_probes if o.substring_false_positive)
         return _div(fp, self.total_fp)
 
+    # ── judge 후 지표(슬108·judge 적용 시만 유의미·미적용이면 의미 매처와 동일/0) ────
+    @property
+    def judge_false_positives(self) -> int:
+        """judge 후에도 거짓양성이 남은 FP 프로브 수(judge가 못 거른 FP)."""
+        return sum(1 for o in self.fp_probes if o.judge_false_positive)
+
+    @property
+    def judge_fp_rate(self) -> float | None:
+        """judge 후 FP율 = judge 후 거짓양성 FP 프로브 / 전체 FP 프로브. FP 프로브 0이면 None.
+
+        의미 FP율(`false_positive_rate`)에 judge 필터를 *추가로* 건 뒤의 FP율이다. judge가
+        방향·부정·등치를 제대로 거르면 이 값이 의미 FP율보다 낮아진다(judge 효과의 핵심 지표).
+        """
+        return _div(self.judge_false_positives, self.total_fp)
+
+    def judge_fp_rate_upper_bound(self, confidence: float = 0.95) -> float | None:
+        """judge 후 FP율의 Wilson 단측 신뢰상한(기본 95%) — judge FP ≤ Y 보수. FP 프로브 0이면 None.
+
+        의미 FP와 같은 이유로 *상한*으로 본다(`_wilson_upper_bound`) — student-facing 틀린 개입이
+        #1 리스크라 judge 후 FP도 과신하지 않는다(작은 표본 보정). 후속 coach 배선 판단의 근거.
+        """
+        n = self.total_fp
+        if n == 0:
+            return None
+        return _wilson_upper_bound(self.judge_false_positives, n, confidence)
+
+    @property
+    def judge_fp_reduction(self) -> float | None:
+        """judge가 줄인 FP 비율 = (의미 FP − judge 후 FP) / 의미 FP. 의미 FP 0이면 None.
+
+        judge가 의미 매처의 거짓양성을 *얼마나* 걷어냈는지의 상대 감소율. 1.0=의미 FP를 전부
+        제거, 0.0=하나도 못 줄임, 음수=judge가 *오히려* 늘림(불가능 — judge는 제거만 하므로
+        judge 후 FP ≤ 의미 FP, 따라서 [0,1]). 의미 FP가 0이면(거를 게 없으면) None(미정).
+        """
+        sem_fp = self.semantic_false_positives
+        if sem_fp == 0:
+            return None
+        return (sem_fp - self.judge_false_positives) / sem_fp
+
+    @property
+    def judge_caught_recall(self) -> int:
+        """judge 후에도 잡힌 recall 프로브 수 — 의미가 잡고 judge가 유지(예·불확실)한 것."""
+        return sum(1 for o in self.recall_probes if o.judge_kept_expected)
+
+    @property
+    def judge_recall(self) -> float | None:
+        """judge 후 recall = judge 통과 recall / 전체 recall 프로브. recall 프로브 0이면 None.
+
+        의미 recall(`recall`)에 judge 필터를 건 뒤의 recall. judge는 *제거만* 하므로 judge 후
+        recall ≤ 의미 recall(judge가 잘못 거르면 recall 손실). 이상적으로 judge는 FP만 줄이고
+        recall은 보존(예·불확실 유지)해야 한다.
+        """
+        return _div(self.judge_caught_recall, self.total_recall)
+
+    def judge_recall_lower_bound(self, confidence: float = 0.95) -> float | None:
+        """judge 후 recall의 Wilson 단측 신뢰하한(기본 95%) — judge recall ≥ X 정직. 0이면 None."""
+        n = self.total_recall
+        if n == 0:
+            return None
+        return _wilson_lower_bound(self.judge_caught_recall, n, confidence)
+
+    @property
+    def judge_recall_loss(self) -> float | None:
+        """judge가 *잘못 제거한* recall TP 비율 = (의미가 잡은 − judge가 유지한) / 의미가 잡은.
+
+        의미 매처가 끌어올린 진짜 오개념(recall TP) 중 judge가 `아니오`로 *잘못 거른* 비율.
+        0.0=judge가 recall을 온전히 보존(이상), 1.0=judge가 잡힌 것을 전부 제거(최악). 분모는
+        *의미가 잡은* recall(`caught_recall`)이다(judge가 손댈 수 있는 모수). 의미가 하나도 못
+        잡았으면(분모 0) None. judge의 *부작용*(recall 침해)을 FP 감소와 대조해 본다.
+        """
+        sem_caught = self.caught_recall
+        if sem_caught == 0:
+            return None
+        return (sem_caught - self.judge_caught_recall) / sem_caught
+
     # ── 분해(kind별·도메인별) ────────────────────────────────────────────────
     @property
     def recall_by_kind(self) -> dict[str, tuple[int, int]]:
@@ -413,6 +520,52 @@ def run_probes(
     return outcomes
 
 
+async def run_probes_with_judge(
+    probes: Iterable[MisconceptionProbe],
+    *,
+    provider: EmbeddingProvider,
+    judge: JudgeProtocol,
+    matcher: SemanticMatcher | None = None,
+    threshold: float = _DEFAULT_THRESHOLD,
+    top_k: int = _DEFAULT_TOP_K,
+) -> list[ProbeOutcome]:
+    """`run_probes`의 **judge 변형**(async) — 의미 매칭 후 `judge_filter`로 후보를 거른다.
+
+    슬108: 슬107 sync `run_probes`(judge None)는 *불변*으로 두고, judge 경로는 *별도 async
+    함수*로 분리한다(`judge_filter`가 async라 sync 시그니처를 깨지 않기 위함). 각 프로브에:
+      ① 의미 매처(`.match`)로 `MisconceptionMatch` 후보를 뽑고(substring 기준선도 함께),
+      ② 그 후보에 `judge_filter`(judge가 `아니오`인 것만 제거)를 적용해 *유지된* 후보를 얻고,
+      ③ `judge_kept_ids`(유지)·`judge_removed_ids`(제거)를 *의미 매처 순서 그대로* 기록한다.
+
+    `semantic_ids`/`substring_ids`는 슬107과 동일하게 채운다(judge 적용 *이전* 의미 매칭 결과를
+    보존 — judge 전후 대조의 기준선). 따라서 한 outcome에서 `recall`/`fp_rate`(judge 전)와
+    `judge_recall`/`judge_fp_rate`(judge 후)를 *모두* 계산할 수 있다(before/after 한 줄 대조).
+    게이트·coach·`semantic_matches`·sync `run_probes`는 무변경.
+    """
+    resolved_matcher = matcher if matcher is not None else SemanticMatcher(provider=provider)
+    outcomes: list[ProbeOutcome] = []
+    for probe in probes:
+        sem_matches = resolved_matcher.match(probe.statement, top_k=top_k, threshold=threshold)
+        substr_matches = diagnose(probe.statement, top_k=top_k)
+        semantic_ids = tuple(m.misconception.id for m in sem_matches)
+        # judge가 `아니오`로 거른 것만 제외 → 유지된 후보(예·불확실)만 남는다(순서 보존).
+        kept_matches = await judge_filter(sem_matches, probe.statement, judge=judge)
+        kept_ids = tuple(m.misconception.id for m in kept_matches)
+        kept_set = set(kept_ids)
+        # 제거 = 의미 후보 중 유지되지 않은 것(의미 매처 순서 그대로 — 분할 보존).
+        removed_ids = tuple(mid for mid in semantic_ids if mid not in kept_set)
+        outcomes.append(
+            ProbeOutcome(
+                probe=probe,
+                semantic_ids=semantic_ids,
+                substring_ids=tuple(m.misconception.id for m in substr_matches),
+                judge_kept_ids=kept_ids,
+                judge_removed_ids=removed_ids,
+            )
+        )
+    return outcomes
+
+
 def evaluate(outcomes: Iterable[ProbeOutcome]) -> SemanticEvalReport:
     """ProbeOutcome 리스트를 SemanticEvalReport로 집계(순수·결정론).
 
@@ -428,6 +581,18 @@ def evaluate(outcomes: Iterable[ProbeOutcome]) -> SemanticEvalReport:
 # ──────────────────────────────────────────────────────────────────────────
 def _fmt(value: float | None) -> str:
     return "n/a" if value is None else f"{value:.3f}"
+
+
+def _judge_applied(report: SemanticEvalReport) -> bool:
+    """judge가 적용됐는지 — 어떤 outcome이라도 judge가 후보를 *유지/제거*한 흔적이 있으면 True.
+
+    judge 미적용(슬107 sync `run_probes`) outcome은 judge_kept/removed가 모두 빈 튜플이라 False
+    → judge 줄을 *생략*(슬107 출력 불변). `run_probes_with_judge`로 만든 outcome은 의미 매처가
+    낸 후보가 *하나라도* 있으면(유지 또는 제거) True. 의미 매처가 *아무것도 안 낸* 극단(전부
+    빈 semantic_ids)에선 False가 될 수 있으나, 그 경우 judge 지표가 전부 0/None이라 무의미해
+    생략이 합당하다(실 프로브셋은 매칭이 다수라 정상적으로 True).
+    """
+    return any(o.judge_kept_ids or o.judge_removed_ids for o in report.items)
 
 
 def _fmt_breakdown(breakdown: dict[str, tuple[int, int]]) -> str:
@@ -461,6 +626,24 @@ def format_report(report: SemanticEvalReport, confidence: float = 0.95) -> str:
             f"near_fp_rate={_fmt(report.near_false_positive_rate)} "
             f"substr_fp_rate={_fmt(report.substring_false_positive_rate)}"
         ),
+    ]
+    # judge 적용 시(슬108)만 before/after 대조 줄 추가 — judge 미적용이면 슬107과 동일 출력.
+    if _judge_applied(report):
+        lines.append(
+            f"judge_fp_rate={_fmt(report.judge_fp_rate)} "
+            f"({pct}%상한={_fmt(report.judge_fp_rate_upper_bound(confidence))} "
+            f"judge_fp={report.judge_false_positives}) "
+            f"fp_reduction={_fmt(report.judge_fp_reduction)} "
+            f"[before={_fmt(report.false_positive_rate)} -> after={_fmt(report.judge_fp_rate)}]"
+        )
+        lines.append(
+            f"judge_recall={_fmt(report.judge_recall)} "
+            f"({pct}%하한={_fmt(report.judge_recall_lower_bound(confidence))} "
+            f"judge_caught={report.judge_caught_recall}) "
+            f"recall_loss={_fmt(report.judge_recall_loss)} "
+            f"[before={_fmt(report.recall)} -> after={_fmt(report.judge_recall)}]"
+        )
+    lines += [
         f"recall by kind:   {_fmt_breakdown(report.recall_by_kind)}",
         f"recall by domain: {_fmt_breakdown(report.recall_by_domain)}",
         f"fp by kind:       {_fmt_breakdown(report.fp_by_kind)}",
@@ -522,6 +705,7 @@ def _run(
     top_k: int,
     confidence: float,
     provider: EmbeddingProvider | None = None,
+    judge: JudgeProtocol | None = None,
 ) -> int:
     """프로브셋 로드 → 라이브 측정 → 리포트(또는 스윕) → 게이트 판정.
 
@@ -529,6 +713,11 @@ def _run(
     recall/FP 한 줄씩(운영점 곡선) 출력하고, 게이트(min-recall/max-fp)는 *고정 threshold*에 적용한다
     (스윕은 곡선 관찰용·게이트와 분리). 게이트: recall_lower_bound ≥ min-recall AND
     fp_rate_upper_bound ≤ max-fp면 exit 0, 아니면 1(step_shadow 게이트 미러·둘 다 opt-in).
+
+    `judge` 주입 시(슬108·`--judge`) *고정 threshold* 리포트를 `run_probes_with_judge`(async)로
+    측정해 judge 후 FP 감소·recall 손실을 함께 낸다(format_report가 before/after 줄 추가). 스윕은
+    의미 매처만(judge 미적용·threshold 곡선이 목적) 유지한다 — judge는 운영점 곡선이 아니라
+    *고정점에서의 추가 필터 효과* 측정이다(judge 호출이 임계값마다 N배 늘면 측정 비용 과다).
     """
     probes = load_probes(probes_path)
     resolved_provider = provider if provider is not None else build_provider()
@@ -554,13 +743,28 @@ def _run(
             )
 
     resolved_threshold = _resolved_threshold(threshold)
-    outcomes = run_probes(
-        probes,
-        provider=resolved_provider,
-        matcher=matcher,
-        threshold=resolved_threshold,
-        top_k=top_k,
-    )
+    if judge is not None:
+        # judge 경로(async) — 의미 매칭 후 judge 필터 적용. asyncio.run으로 동기 CLI에서 구동.
+        import asyncio
+
+        outcomes = asyncio.run(
+            run_probes_with_judge(
+                probes,
+                provider=resolved_provider,
+                judge=judge,
+                matcher=matcher,
+                threshold=resolved_threshold,
+                top_k=top_k,
+            )
+        )
+    else:
+        outcomes = run_probes(
+            probes,
+            provider=resolved_provider,
+            matcher=matcher,
+            threshold=resolved_threshold,
+            top_k=top_k,
+        )
     report = evaluate(outcomes)
     print(f"\n=== threshold={resolved_threshold:.3f} ===")
     print(format_report(report, confidence=confidence))
@@ -631,6 +835,15 @@ def main(argv: list[str] | None = None) -> int:
         default=0.95,
         help="Wilson 하한/상한 신뢰수준(단측·기본 0.95).",
     )
+    parser.add_argument(
+        "--judge",
+        action="store_true",
+        help=(
+            "라이브 LLM-judge 활성(슬108) — 의미 매칭 후보에 방향 판별 judge를 걸어 judge 후 "
+            "FP 감소·recall 손실을 측정한다. L3 백킹(로컬 FAST·라우터 경유). 미지정 시 슬107 "
+            "동작(의미 매칭만)."
+        ),
+    )
     args = parser.parse_args(argv)
     probes_path: str = args.probes_path
     threshold: float | None = args.threshold
@@ -640,6 +853,15 @@ def main(argv: list[str] | None = None) -> int:
     max_fp: float = args.max_fp
     top_k: int = args.top_k
     confidence: float = args.confidence
+    use_judge: bool = args.judge
+    judge: JudgeProtocol | None = None
+    if use_judge:
+        # L3 백킹 judge(로컬 FAST·라우터 경유) 구성 — L3 import는 judge_seam에 격리.
+        # 지연 import: judge 미사용 시 L3 의존성 로드 0(슬107 경로 비결합).
+        from whymath_backend.l4.misconception.judge import LLMJudge
+        from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
+
+        judge = LLMJudge(seam=L3JudgeSeam())
     return _run(
         Path(probes_path),
         threshold=threshold,
@@ -648,6 +870,7 @@ def main(argv: list[str] | None = None) -> int:
         max_fp=max_fp,
         top_k=top_k,
         confidence=confidence,
+        judge=judge,
     )
 
 
@@ -664,4 +887,5 @@ __all__ = [
     "load_probes",
     "main",
     "run_probes",
+    "run_probes_with_judge",
 ]

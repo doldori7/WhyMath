@@ -23,17 +23,20 @@ import pytest
 
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.diagnose import diagnose
+from whymath_backend.l4.misconception.judge import FakeJudge, JudgeVerdict
 from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProvider
 from whymath_backend.l4.misconception.semantic_eval import (
     MisconceptionProbe,
     ProbeOutcome,
     SemanticEvalReport,
+    _judge_applied,
     _wilson_lower_bound,
     _wilson_upper_bound,
     evaluate,
     format_report,
     load_probes,
     run_probes,
+    run_probes_with_judge,
 )
 
 # 프로브셋 실파일(검증된 92줄) — 구조 검증·end-to-end 배선이 읽는다.
@@ -403,6 +406,253 @@ class TestRunProbesWiring:
         out1 = run_probes([probe], provider=provider, matcher=matcher, threshold=0.3)
         out2 = run_probes([probe], provider=provider, matcher=matcher, threshold=0.3)
         assert out1[0].semantic_ids == out2[0].semantic_ids
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ④ judge 하니스(슬108) — judge 후 FP 감소·recall 손실(합성 + 배선)
+# ══════════════════════════════════════════════════════════════════════════
+def _judge_outcome(
+    probe: MisconceptionProbe,
+    *,
+    semantic_ids: tuple[str, ...] = (),
+    judge_kept_ids: tuple[str, ...] = (),
+    judge_removed_ids: tuple[str, ...] = (),
+) -> ProbeOutcome:
+    """judge 필드를 채운 ProbeOutcome 합성 — judge 후 지표를 라이브 없이 정밀 단언."""
+    return ProbeOutcome(
+        probe=probe,
+        semantic_ids=semantic_ids,
+        substring_ids=(),
+        judge_kept_ids=judge_kept_ids,
+        judge_removed_ids=judge_removed_ids,
+    )
+
+
+class TestJudgeScoring:
+    def test_judge_fp_reduction_when_judge_removes_fp(self) -> None:
+        # 의미 FP 2건 중 judge가 1건을 거름(아니오) → judge_fp_rate↓·fp_reduction=0.5.
+        removed = _judge_outcome(
+            _fp_probe("a", kind="direction-reverse"),
+            semantic_ids=("a",),
+            judge_removed_ids=("a",),  # judge 제거 → judge FP 없음
+        )
+        kept = _judge_outcome(
+            _fp_probe("b"),
+            semantic_ids=("b",),
+            judge_kept_ids=("b",),  # judge 유지 → 여전히 FP
+        )
+        report = evaluate([removed, kept])
+        assert report.semantic_false_positives == 2
+        assert report.judge_false_positives == 1
+        assert report.false_positive_rate == pytest.approx(1.0)
+        assert report.judge_fp_rate == pytest.approx(0.5)
+        assert report.judge_fp_reduction == pytest.approx(0.5)  # (2-1)/2
+
+    def test_judge_fp_reduction_full_when_all_removed(self) -> None:
+        # judge가 의미 FP를 전부 제거 → fp_reduction=1.0·judge_fp_rate=0.
+        outs = [
+            _judge_outcome(_fp_probe(i), semantic_ids=(i,), judge_removed_ids=(i,))
+            for i in ("a", "b", "c")
+        ]
+        report = evaluate(outs)
+        assert report.judge_false_positives == 0
+        assert report.judge_fp_rate == pytest.approx(0.0)
+        assert report.judge_fp_reduction == pytest.approx(1.0)
+
+    def test_judge_fp_reduction_none_when_no_semantic_fp(self) -> None:
+        # 의미 FP가 0이면(거를 게 없음) fp_reduction None(미정).
+        clean = _judge_outcome(_fp_probe("a"), semantic_ids=(), judge_kept_ids=())
+        report = evaluate([clean])
+        assert report.semantic_false_positives == 0
+        assert report.judge_fp_reduction is None
+
+    def test_judge_recall_loss_when_judge_wrongly_removes(self) -> None:
+        # 의미가 잡은 recall 2건 중 judge가 1건을 잘못 거름 → judge_recall↓·recall_loss=0.5.
+        kept = _judge_outcome(
+            _recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)
+        )
+        lost = _judge_outcome(
+            _recall_probe("y"),
+            semantic_ids=("y",),
+            judge_removed_ids=("y",),  # judge가 진짜 오개념을 잘못 제거
+        )
+        report = evaluate([kept, lost])
+        assert report.caught_recall == 2  # 의미는 둘 다 잡음
+        assert report.judge_caught_recall == 1  # judge 후 하나만
+        assert report.recall == pytest.approx(1.0)
+        assert report.judge_recall == pytest.approx(0.5)
+        assert report.judge_recall_loss == pytest.approx(0.5)  # (2-1)/2
+
+    def test_judge_recall_loss_zero_when_all_kept(self) -> None:
+        # judge가 잡힌 recall을 모두 유지(예·불확실) → recall_loss=0(이상적).
+        outs = [
+            _judge_outcome(_recall_probe(i), semantic_ids=(i,), judge_kept_ids=(i,))
+            for i in ("x", "y")
+        ]
+        report = evaluate(outs)
+        assert report.judge_caught_recall == 2
+        assert report.judge_recall_loss == pytest.approx(0.0)
+
+    def test_judge_recall_loss_none_when_nothing_caught(self) -> None:
+        # 의미가 아무것도 못 잡았으면(분모 0) recall_loss None.
+        miss = _judge_outcome(_recall_probe("x"), semantic_ids=(), judge_kept_ids=())
+        report = evaluate([miss])
+        assert report.caught_recall == 0
+        assert report.judge_recall_loss is None
+
+    def test_judge_wilson_bounds(self) -> None:
+        # judge FP는 상한(보수)·judge recall은 하한(정직)으로 보고.
+        outs = [
+            _judge_outcome(_fp_probe("a"), semantic_ids=("a",), judge_kept_ids=("a",)),
+            _judge_outcome(_recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)),
+        ]
+        report = evaluate(outs)
+        fub = report.judge_fp_rate_upper_bound()
+        rlb = report.judge_recall_lower_bound()
+        assert fub is not None and report.judge_fp_rate is not None and fub >= report.judge_fp_rate
+        assert rlb is not None and report.judge_recall is not None and rlb <= report.judge_recall
+
+    def test_judge_metrics_none_on_empty(self) -> None:
+        report = evaluate([])
+        assert report.judge_fp_rate is None
+        assert report.judge_recall is None
+        assert report.judge_fp_reduction is None
+        assert report.judge_recall_loss is None
+
+    def test_format_report_includes_judge_lines_when_applied(self) -> None:
+        # judge 적용 outcome이면 before/after 줄이 나온다.
+        outs = [
+            _judge_outcome(_fp_probe("a"), semantic_ids=("a",), judge_removed_ids=("a",)),
+            _judge_outcome(_recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)),
+        ]
+        report = evaluate(outs)
+        assert _judge_applied(report) is True
+        text = format_report(report)
+        assert "judge_fp_rate" in text
+        assert "fp_reduction" in text
+        assert "recall_loss" in text
+        assert "-> after=" in text
+
+    def test_format_report_omits_judge_lines_when_not_applied(self) -> None:
+        # judge 미적용(슬107 outcome)이면 judge 줄 생략(슬107 출력 불변).
+        outs = [_outcome(_recall_probe("x"), semantic_ids=("x",))]
+        report = evaluate(outs)
+        assert _judge_applied(report) is False
+        text = format_report(report)
+        assert "judge_fp_rate" not in text
+
+
+class TestRunProbesWithJudgeWiring:
+    """`run_probes_with_judge` end-to-end 배선 — 제어 제공자 + FakeJudge(라이브 0·결정론)."""
+
+    def _one_hot_provider(self) -> object:
+        # 전 카탈로그 name_kr로 제공자 구성(각 항목 distinct one-hot).
+        return _NameKrOneHotProvider(
+            name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values())
+        )
+
+    @pytest.mark.asyncio
+    async def test_judge_removes_caught_fp_via_filter(self) -> None:
+        # FP 프로브의 near_id를 제공자가 끌어올리고, judge가 아니오로 거른다 → judge 후 FP 0.
+        import asyncio as _asyncio
+
+        assert _asyncio  # async 컨텍스트 확인용(no-op)
+        target = "continuity-implies-differentiability"
+        nk = CATALOG_BY_ID[target].name_kr
+        probe = MisconceptionProbe(
+            statement=f"'{nk}' 주제의 올바른 역방향 진술",
+            expected_id=None,
+            near_id=target,
+            kind="direction-reverse",
+        )
+        provider = self._one_hot_provider()
+        judge = FakeJudge({target: JudgeVerdict.NOT_EXPRESSES})
+        outcomes = await run_probes_with_judge(
+            [probe], provider=provider, judge=judge, threshold=0.5, top_k=5  # type: ignore[arg-type]
+        )
+        o = outcomes[0]
+        assert target in o.semantic_ids  # 의미는 끌어올림(FP 후보)
+        assert o.judge_removed_ids == (target,)  # judge가 거름
+        assert o.judge_kept_ids == ()
+        report = evaluate(outcomes)
+        assert report.semantic_false_positives == 1  # judge 전 FP
+        assert report.judge_false_positives == 0  # judge 후 FP 0
+        assert report.judge_fp_reduction == pytest.approx(1.0)
+
+    @pytest.mark.asyncio
+    async def test_judge_keeps_uncertain_preserves_recall(self) -> None:
+        # recall 프로브를 제공자가 잡고, judge가 불확실(유지) → recall 보존(손실 0).
+        target = "division-by-zero"
+        nk = CATALOG_BY_ID[target].name_kr
+        probe = MisconceptionProbe(
+            statement=f"'{nk}' 오개념과 같은 틀린 진술",
+            expected_id=target,
+            near_id=None,
+            kind="paraphrase",
+        )
+        provider = self._one_hot_provider()
+        judge = FakeJudge({target: JudgeVerdict.UNCERTAIN})
+        outcomes = await run_probes_with_judge(
+            [probe], provider=provider, judge=judge, threshold=0.5, top_k=5  # type: ignore[arg-type]
+        )
+        o = outcomes[0]
+        assert o.caught_by_semantic is True
+        assert o.judge_kept_expected is True  # 불확실 → 유지
+        report = evaluate(outcomes)
+        assert report.judge_recall == pytest.approx(1.0)
+        assert report.judge_recall_loss == pytest.approx(0.0)
+
+    @pytest.mark.asyncio
+    async def test_semantic_ids_preserved_for_before_after(self) -> None:
+        # semantic_ids는 judge 전 값을 보존(before/after 대조 기준선).
+        target = "division-by-zero"
+        nk = CATALOG_BY_ID[target].name_kr
+        probe = MisconceptionProbe(
+            statement=f"'{nk}' 진술",
+            expected_id=target,
+            near_id=None,
+            kind="paraphrase",
+        )
+        provider = self._one_hot_provider()
+        # judge가 거르더라도 semantic_ids엔 여전히 target이 남는다(judge 전 기록).
+        judge = FakeJudge({target: JudgeVerdict.NOT_EXPRESSES})
+        outcomes = await run_probes_with_judge(
+            [probe], provider=provider, judge=judge, threshold=0.5, top_k=5  # type: ignore[arg-type]
+        )
+        o = outcomes[0]
+        assert target in o.semantic_ids  # judge 전 의미 매칭 보존
+        assert target in o.judge_removed_ids  # judge가 거름
+        report = evaluate(outcomes)
+        # before recall(의미) 1.0 → after recall(judge) 0.0(judge가 잘못 거름).
+        assert report.recall == pytest.approx(1.0)
+        assert report.judge_recall == pytest.approx(0.0)
+
+    @pytest.mark.asyncio
+    async def test_full_probeset_with_fake_judge_structure(self) -> None:
+        # 실 프로브셋 92줄 + FakeEmbeddingProvider + FakeJudge로 배선 구조 단언(품질 아님).
+        probes = load_probes(_PROBES_PATH)
+        # 전부 불확실 → judge가 아무것도 안 거름(유지) → judge 후 = 의미 후 동일.
+        judge = FakeJudge(default=JudgeVerdict.UNCERTAIN)
+        outcomes = await run_probes_with_judge(
+            probes,
+            provider=FakeEmbeddingProvider(),
+            judge=judge,
+            threshold=0.3,
+            top_k=5,
+        )
+        assert len(outcomes) == len(probes)
+        report = evaluate(outcomes)
+        assert report.total == 92
+        # 전부 유지(불확실)이므로 judge 후 지표 = 의미 지표(거른 게 없음).
+        assert report.judge_false_positives == report.semantic_false_positives
+        assert report.judge_caught_recall == report.caught_recall
+        # 각 outcome: kept ⊕ removed = semantic_ids(분할 불변).
+        for o in outcomes:
+            assert set(o.judge_kept_ids) | set(o.judge_removed_ids) == set(o.semantic_ids)
+            assert set(o.judge_kept_ids) & set(o.judge_removed_ids) == set()
+            # 전부 불확실 → removed 비어 있고 kept == semantic_ids.
+            assert o.judge_removed_ids == ()
+            assert o.judge_kept_ids == o.semantic_ids
 
 
 # ══════════════════════════════════════════════════════════════════════════
