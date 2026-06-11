@@ -616,6 +616,21 @@ class Settings(BaseSettings):
         ),
     )
 
+    misconception_judge_enabled: bool = Field(
+        default=False,
+        description=(
+            "L4 coach 오개념 진단에 *방향 판별 LLM-judge 필터*(slice 108)를 켤지. **False(기본·"
+            "opt-in)·이번 슬라이스 미사용**: 슬108은 judge 코어 + 측정 하니스만 만들고 coach에 "
+            "*배선하지 않는다*(라이브 judge 효과를 Kiki Phaiakes9 측정 후 후속 슬라이스에서 결정). "
+            "이 플래그는 그 후속 coach 배선용 *예약*이다 — 현재 어떤 런타임 경로도 읽지 않는다"
+            "(`_compute_matches` 무변경). True여도 이번 슬라이스엔 동작 변화 0. judge는 substring·"
+            "임베딩이 못 가리는 방향(⇒ 역)·부정(≠)·등치(=)를 언어 추론으로 판별해 `아니오`(올바름/"
+            "다른 말) 후보만 거른다(예·불확실 유지·recall 보존). 라우팅/모델은 L3 재사용(로컬 "
+            "FAST·라우터 경유). `l4_step_shadow_enabled`·`misconception_semantic_enabled` 미러. "
+            "WHYMATH_MISCONCEPTION_JUDGE_ENABLED=true로 켠다(후속)."
+        ),
+    )
+
     # ── 슬라이스 105: 오개념 임베딩 *영속(pgvector) 백엔드* 좌석 선택 ──
     # 슬104 VectorIndex 좌석에 PgVectorIndex(pgvector 백엔드)를 추가한다. **기본은 `memory`**
     # (InMemoryVectorIndex·기본 동작 무변경) — pgvector는 *opt-in*이다. 카탈로그 30종엔
