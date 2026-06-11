@@ -22,6 +22,10 @@ from pathlib import Path
 
 import pytest
 
+from ._live_resources import (
+    require_local_embedding,
+    require_ollama_reachable,
+)
 from whymath_backend.l4.misconception.judge import LLMJudge
 from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
 from whymath_backend.l4.misconception.semantic.matcher import SemanticMatcher
@@ -35,9 +39,7 @@ from whymath_backend.l4.misconception.semantic_eval import (
 
 pytestmark = pytest.mark.integration
 
-_PROBES_PATH = (
-    Path(__file__).resolve().parent / "fixtures" / "misconception_semantic_probes.jsonl"
-)
+_PROBES_PATH = Path(__file__).resolve().parent / "fixtures" / "misconception_semantic_probes.jsonl"
 
 
 class TestJudgeLive:
@@ -48,28 +50,21 @@ class TestJudgeLive:
         probes = load_probes(_PROBES_PATH)
         assert len(probes) == 92
 
+        # 슬110(#5): bge-m3·Ollama 자원 미도달은 사전체크로 skip(judge=UNCERTAIN 무의미 측정
+        # 회피)·측정 경로 코드 버그는 fail로 전파. judge 측정은 임베딩(후보)+Ollama(판정) 둘 다 필요.
+        require_local_embedding()
+        await require_ollama_reachable()
         provider = LocalEmbeddingProvider()
         matcher = SemanticMatcher(provider=provider)
-        # L3 백킹 judge(로컬 FAST·라우터 경유) — Ollama 미도달이면 LLMJudge가 UNCERTAIN 폴백하나,
-        # *임베딩* 가중치 미도달은 매칭 자체를 막으므로 그쪽을 먼저 try로 감싸 skip한다.
         judge = LLMJudge(seam=L3JudgeSeam())
-        try:
-            # 임베딩 가중치 도달 확인(미도달이면 측정 불가 → skip).
-            provider.embed(["도달 확인"])
-        except Exception as exc:  # noqa: BLE001 — 라이브 자원 미도달은 skip
-            pytest.skip(f"bge-m3 가중치 미도달 — judge 라이브 측정 skip: {exc}")
-
-        try:
-            outcomes = await run_probes_with_judge(
-                probes,
-                provider=provider,
-                judge=judge,
-                matcher=matcher,
-                threshold=0.55,
-                top_k=5,
-            )
-        except Exception as exc:  # noqa: BLE001 — 라이브 매칭/judge 경로 미도달은 skip
-            pytest.skip(f"라이브 judge 측정 경로 미도달 — skip: {exc}")
+        outcomes = await run_probes_with_judge(
+            probes,
+            provider=provider,
+            judge=judge,
+            matcher=matcher,
+            threshold=0.55,
+            top_k=5,
+        )
 
         report = evaluate(outcomes)
         # Kiki 확인용 출력(-s) — judge 후속 coach 배선 결정 근거.

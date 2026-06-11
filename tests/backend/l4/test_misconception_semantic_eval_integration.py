@@ -17,6 +17,7 @@ from pathlib import Path
 
 import pytest
 
+from ._live_resources import require_local_embedding
 from whymath_backend.l4.misconception.semantic.matcher import SemanticMatcher
 from whymath_backend.l4.misconception.semantic.provider import LocalEmbeddingProvider
 from whymath_backend.l4.misconception.semantic_eval import (
@@ -28,9 +29,7 @@ from whymath_backend.l4.misconception.semantic_eval import (
 
 pytestmark = pytest.mark.integration
 
-_PROBES_PATH = (
-    Path(__file__).resolve().parent / "fixtures" / "misconception_semantic_probes.jsonl"
-)
+_PROBES_PATH = Path(__file__).resolve().parent / "fixtures" / "misconception_semantic_probes.jsonl"
 
 
 class TestSemanticEvalLive:
@@ -40,17 +39,11 @@ class TestSemanticEvalLive:
         probes = load_probes(_PROBES_PATH)
         assert len(probes) == 92
 
+        # 슬110(#5): bge-m3 자원 미도달은 사전체크로 skip·측정 코드 버그는 fail로 전파.
+        require_local_embedding()
         provider = LocalEmbeddingProvider()
         matcher = SemanticMatcher(provider=provider)
-        # 카탈로그 사전 임베딩(첫 embed)에서 HF 가중치를 받는다 — 미도달이면 skip(코드 결함 아님).
-        try:
-            outcomes = run_probes(
-                probes, provider=provider, matcher=matcher, threshold=0.55, top_k=5
-            )
-        except Exception as exc:  # noqa: BLE001 — 라이브 모델 미도달은 skip
-            pytest.skip(
-                f"bge-m3 가중치 미도달(HF 다운로드 실패) — 라이브 측정 skip: {exc}"
-            )
+        outcomes = run_probes(probes, provider=provider, matcher=matcher, threshold=0.55, top_k=5)
 
         report = evaluate(outcomes)
         # Kiki 확인용 출력(-s) — 플립 임계 R·F 결정 근거.
@@ -75,13 +68,9 @@ class TestSemanticEvalLive:
     def test_threshold_sweep_operating_curve(self) -> None:
         """임계값 스윕 — 운영점 곡선(recall↓·FP↓ as threshold↑)을 Kiki가 눈으로 본다."""
         probes = load_probes(_PROBES_PATH)
+        require_local_embedding()
         provider = LocalEmbeddingProvider()
         matcher = SemanticMatcher(provider=provider)
-        try:
-            # 첫 embed로 가중치 도달 확인(미도달 skip).
-            provider.embed(["도달 확인"])
-        except Exception as exc:  # noqa: BLE001 — 라이브 미도달 skip
-            pytest.skip(f"bge-m3 가중치 미도달 — 스윕 skip: {exc}")
 
         print("\n" + "=" * 70)
         print("slice 107 임계값 스윕 (운영점 곡선)")

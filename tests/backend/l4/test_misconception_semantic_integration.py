@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import pytest
 
+from ._live_resources import require_local_embedding
 from whymath_backend.config import get_settings
 from whymath_backend.l4.misconception.semantic import (
     LocalEmbeddingProvider,
@@ -27,16 +28,12 @@ class TestLocalEmbeddingLive:
     """bge-m3 라이브 — 가중치 로드·실 차원·의미 recall."""
 
     def test_bge_m3_real_dimension_and_recall(self) -> None:
+        # 슬110(#5): 자원 미도달은 사전체크로 skip·코드 버그는 fail. 종전 generic except는
+        # bge-m3 미도달뿐 아니라 embed 후 단언 버그까지 은폐했다(reachability 사전체크로 분리).
+        require_local_embedding()
         provider = LocalEmbeddingProvider()
         # 실 임베딩 차원 확인(bge-m3=1024). 모델 버전에 따라 변할 수 있어 *양수·일정*만 단언.
-        # bge-m3 가중치는 첫 embed에서 HuggingFace에서 다운로드된다 — HF 미도달(오프라인·네트워크·
-        # HTTP 429 rate-limit)이면 *fail이 아니라 skip*한다(Redis/OpenAI 형제 테스트의 미도달
-        # skip 패턴과 동일·라이브 자원 부재는 환경 이슈이지 코드 결함이 아님). Phaiakes9처럼
-        # 가중치가 캐시된 환경에서만 실제로 돈다.
-        try:
-            vecs = provider.embed(["연속이면 미분가능하다", "분모가 0이 될 수 있다"])
-        except Exception as exc:  # noqa: BLE001 — 라이브 모델 미도달은 skip(코드 결함 아님)
-            pytest.skip(f"bge-m3 가중치 미도달(HF 다운로드 실패) — 라이브 테스트 skip: {exc}")
+        vecs = provider.embed(["연속이면 미분가능하다", "분모가 0이 될 수 있다"])
         assert len(vecs) == 2
         assert len(vecs[0]) > 0
         assert len(vecs[0]) == len(vecs[1])  # 한 제공자는 차원 일정

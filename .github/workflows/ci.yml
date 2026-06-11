@@ -173,10 +173,12 @@ jobs:
           python-version: "3.12"
           cache: "pip"
 
-      - name: Install dependencies (editable + dev extras)
+      - name: Install dependencies (editable + dev + embedding extras)
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          # 슬110 #6: 통합 잡은 라이브 bge-m3 측정 테스트가 sentence-transformers를 쓰므로
+          # [embedding] extra 포함. (lint·type·test 잡은 .[dev]만 — torch 미설치·속도↑.)
+          pip install -e ".[dev,embedding]"
 
       - name: Alembic upgrade head (fresh DB — 전 마이그레이션 적용)
         run: alembic upgrade head
