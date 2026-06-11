@@ -123,28 +123,29 @@ def parse_verdict(text: str) -> JudgeResult:
 
 
 def _token_to_verdict(token: str | None) -> JudgeVerdict:
-    """`판정:` 토큰(한국어)→`JudgeVerdict`. 모호·미식별은 `UNCERTAIN`(보수 폴백).
+    """`판정:` 토큰(한국어)→`JudgeVerdict`. **정확 일치만** 인정 — 그 외 전부 `UNCERTAIN`.
 
-    토큰이 *정확히 하나의* 판정만 가리킬 때 그 값을 쓴다. 순서가 중요: "불확실"은 부분문자열
-    "확실"을 포함하고 "아니오"는 "예"와 무관하지만, *여러 라벨이 동시에 매칭되면* 모호로 보고
-    UNCERTAIN으로 폴백한다(거짓 단정 금지). 빈/None 토큰도 UNCERTAIN.
+    슬109 교정: 종전의 *부분 문자열 포함* 검사는 LLM의 헤징 응답을 **잘못된 방향**으로
+    오파싱했다 — "판정: 아니오라고 단정하기 어렵다"(의도=불확실·유지)가 `'아니오' in token`으로
+    NOT_EXPRESSES가 되어 후보를 *제거*했다(보수성 불변식 파괴·제거는 가장 위험한 방향).
+    "판정: 예라고 보기 어려움"도 EXPRESSES로 오파싱됐다.
+
+    교정 규칙: 토큰을 공백·후행 문장부호만 정리한 뒤 `예`/`아니오`/`불확실`과 **정확히
+    일치**할 때만 그 값을 쓴다. 헤징·수식어·복합 표현·그 외 모든 변형은 형식 위반으로 보고
+    `UNCERTAIN`(후보 유지)으로 폴백한다 — 출력 형식은 doc(`misconception_judge.md`)이 고정한
+    계약이고, 계약을 벗어난 응답에서 판정을 *추측하지 않는 것*이 보수성 원칙이다.
     """
     if token is None:
         return JudgeVerdict.UNCERTAIN
-    has_no = "아니오" in token
-    has_uncertain = "불확실" in token
-    # "예"는 "아니오"·"불확실"의 부분문자열이 아니므로 단순 포함 검사. 단 "예"가 다른 두 토큰과
-    # 동시에 나오면(이상 응답) 모호 → UNCERTAIN.
-    has_yes = "예" in token
-    matched = sum((has_yes, has_no, has_uncertain))
-    if matched != 1:
-        # 0개(미식별) 또는 2개+(모호·충돌) → 보수적 폴백.
-        return JudgeVerdict.UNCERTAIN
-    if has_no:
+    # 후행 문장부호(마침표류)만 관용 — "예."·"아니오." 같은 사소한 변형은 수용한다.
+    cleaned = token.strip().rstrip(".。!?")
+    if cleaned == "아니오":
         return JudgeVerdict.NOT_EXPRESSES
-    if has_uncertain:
+    if cleaned == "불확실":
         return JudgeVerdict.UNCERTAIN
-    return JudgeVerdict.EXPRESSES
+    if cleaned == "예":
+        return JudgeVerdict.EXPRESSES
+    return JudgeVerdict.UNCERTAIN
 
 
 class LLMJudge:
