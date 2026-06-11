@@ -1,6 +1,6 @@
 """L4 coach 오개념 *의미 매칭 결합* HTTP 결선 단위테스트 — slice 106 (hermetic·매처 주입).
 
-게이트(`misconception_semantic_enabled`)·결합 랭킹·to_thread 경유·graceful 폴백·3 엔드포인트
+게이트(`misconception_semantic_mode`)·결합 랭킹·to_thread 경유·graceful 폴백·3 엔드포인트
 일관성·잠긴 `_build_response_payload(body)` 불변을 라이브 모델 없이 검증한다.
 
 **게이트 토글**: coach `_compute_matches`는 *실* `get_settings()`(Depends 아님·모듈 직호출)를
@@ -73,10 +73,16 @@ def _reset_matcher_singleton() -> Iterator[None]:
 
 
 def _enable_gate(monkeypatch: pytest.MonkeyPatch) -> None:
-    """게이트 ON — env+cache_clear(실 get_settings를 읽는 _compute_matches용). 호출자가 finally로
+    """모드 ON — env+cache_clear(실 get_settings를 읽는 _compute_matches용). 호출자가 finally로
     `get_settings.cache_clear()`를 다시 부르도록 monkeypatch.setenv가 테스트 종료 시 env를 되돌리고
     여기서 한 번 더 명시 클리어를 보장한다(test_step_shadow 패턴)."""
-    monkeypatch.setenv("WHYMATH_MISCONCEPTION_SEMANTIC_ENABLED", "true")
+    monkeypatch.setenv("WHYMATH_MISCONCEPTION_SEMANTIC_MODE", "on")
+    get_settings.cache_clear()
+
+
+def _enable_shadow(monkeypatch: pytest.MonkeyPatch) -> None:
+    """모드 SHADOW — 의미 매처는 돌되 노출은 substring 그대로(off 동일)·불일치만 로깅(slice 111)."""
+    monkeypatch.setenv("WHYMATH_MISCONCEPTION_SEMANTIC_MODE", "shadow")
     get_settings.cache_clear()
 
 
@@ -240,6 +246,45 @@ class TestGateOff:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# ①-b shadow — 의미 매처는 돌되 노출은 substring 그대로(off 비트동일)·불일치만 로깅 (slice 111)
+# ──────────────────────────────────────────────────────────────────────────
+class TestShadowMode:
+    def test_shadow_runs_matcher_but_exposes_substring_only(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        stub = _StubMatcher()
+        set_semantic_matcher(stub)  # type: ignore[arg-type]
+        _enable_shadow(monkeypatch)
+        try:
+            with caplog.at_level(logging.INFO, logger="whymath.l4.misconception.shadow"):
+                body = _client().post("/v1/coach", json={"student_input": _SUBSTR_FULL}).json()
+        finally:
+            get_settings.cache_clear()
+        # shadow도 의미 매처를 *돌린다*(off와 달리 호출 1회).
+        assert stub.calls == 1
+        # 그러나 노출은 substring 그대로 — semantic-only(division-by-zero) 미노출(off와 비트동일).
+        ids = [m["misconception"]["id"] for m in body["misconceptions"]]
+        assert "distribution-over-power" in ids
+        assert _SEMANTIC_ID not in ids
+        assert all(m["semantic_similarity"] is None for m in body["misconceptions"])
+        # 불일치는 *로그로만* 관측한다(비노출·실 분포 플립 근거·학생 원문 미포함).
+        assert any("의미 매칭 shadow" in r.message for r in caplog.records)
+
+    def test_shadow_neutral_exposes_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 중립 발화: on이면 semantic-only가 노출됐을 것(TestGateOn 참조). shadow는 노출 0.
+        stub = _StubMatcher()
+        set_semantic_matcher(stub)  # type: ignore[arg-type]
+        _enable_shadow(monkeypatch)
+        try:
+            body = _client().post("/v1/coach", json={"student_input": _NEUTRAL}).json()
+        finally:
+            get_settings.cache_clear()
+        assert stub.calls == 1  # 매처는 돌았다(shadow)
+        ids = [m["misconception"]["id"] for m in body["misconceptions"]]
+        assert _SEMANTIC_ID not in ids  # shadow: 노출 안 함(on이면 [division-by-zero])
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # ② 게이트 on — semantic-only 후순 등장
 # ──────────────────────────────────────────────────────────────────────────
 class TestGateOnSemanticSurfaces:
@@ -389,9 +434,7 @@ class TestSessionAndTurnsCombine:
         _enable_gate(monkeypatch)
         client, _ = _session_client(preload={(DialogueORM, did): dialogue})
         try:
-            resp = client.post(
-                f"/v1/coach/sessions/{did}/turns", json={"student_input": _NEUTRAL}
-            )
+            resp = client.post(f"/v1/coach/sessions/{did}/turns", json={"student_input": _NEUTRAL})
         finally:
             get_settings.cache_clear()
         assert resp.status_code == 201, resp.text

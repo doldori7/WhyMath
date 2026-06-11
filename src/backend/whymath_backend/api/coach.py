@@ -70,6 +70,7 @@ from whymath_backend.l4.misconception import (
     select_intervention,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG
+from whymath_backend.l4.misconception.shadow import observe_misconception_shadow
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
@@ -323,19 +324,23 @@ def _build_response_payload(
 
 
 async def _compute_matches(student_input: str) -> list[MisconceptionMatch]:
-    """오개념 후보 계산 — 게이트 off면 substring만·on이면 substring+의미 결합(비블로킹·폴백).
+    """오개념 후보 계산 — `misconception_semantic_mode` 3값 분기(off/shadow/on·slice 106·111).
 
     slice 106: 핸들러가 호출해 `_build_response_payload(matches=...)`로 주입한다(직접 sync
     호출 경로는 미주입→`diagnose` 폴백이라 잠긴 `_build_response_payload(body)` 계약 불변).
 
-    **게이트 off(기본)**: `diagnose(student_input)`만 — 의미 매처를 *호출하지 않는다*(임베딩
-    로드 0·현행 비트동일). substring 결과를 그대로 반환.
+    **`off`(기본)**: `diagnose(student_input)`만 — 의미 매처를 *호출하지 않는다*(임베딩 로드 0·
+    현행 비트동일). substring 결과를 그대로 반환.
 
-    **게이트 on**: 의미 매처를 `asyncio.to_thread`로 *워커 스레드*에서 호출한다 — 블로킹 임베딩
+    **`shadow`(slice 111)**: 의미 매처를 라이브로 *돌리되* 노출은 substring 그대로(off와 비트동일
+    반환)이고, `observe_misconception_shadow`로 substring↔semantic *불일치만 로깅*한다(비노출·
+    실 분포 플립 근거 수집·학생 원문 미포함). 의미 매처 호출·폴백은 `on`과 동일(아래).
+
+    **`on`**: 의미 매처를 `asyncio.to_thread`로 *워커 스레드*에서 호출한다 — 블로킹 임베딩
     (bge-m3 등)이 이벤트 루프를 막지 않게(CLAUDE.md p50<2s·동시 요청 보호). 결과를
-    `combine_diagnoses`로 substring 위·semantic-only 아래로 결합한다(substr 우선·재정렬 없음).
-    substr/semantic 둘 다 `_FANOUT`(카탈로그 전수)으로 뽑아 *결합 끝에서만* `_DEFAULT_TOP_K`로
-    자른다(한쪽이 다른 쪽을 미리 잘라내지 않게).
+    `combine_diagnoses`로 substring 위·semantic-only 아래로 결합해 *노출*한다(substr 우선·재정렬
+    없음). substr/semantic 둘 다 `_FANOUT`(카탈로그 전수)으로 뽑아 *결합 끝에서만*
+    `_DEFAULT_TOP_K`로 자른다(한쪽이 다른 쪽을 미리 잘라내지 않게).
 
     **graceful 폴백(CLAUDE.md 가용성 우선 #1≫#6)**: 의미 매칭이 *어떤 이유로든* 실패하면
     (모델 미설치·DB 미도달·임베딩 오류) 예외를 삼키고 substring 결과로 폴백한다(500이 아니라
@@ -343,9 +348,11 @@ async def _compute_matches(student_input: str) -> list[MisconceptionMatch]:
     (CLAUDE.md "환각/장애 조용히 넘어가지 말고 로그").
     """
     substr = diagnose(student_input, top_k=_FANOUT)
-    if not get_settings().misconception_semantic_enabled:
-        # 게이트 off — substring만(의미 매처 미호출). 노출 상한 top-3로 자른다(결합 없음).
+    mode = get_settings().misconception_semantic_mode
+    if mode == "off":
+        # off — substring만(의미 매처 미호출). 노출 상한 top-3로 자른다(결합 없음·현행 비트동일).
         return substr[:_DEFAULT_TOP_K]
+    # shadow·on — 의미 매처를 비블로킹(워커 스레드)으로 돌린다. 실패는 substring graceful 폴백.
     try:
         sem = await asyncio.to_thread(
             get_semantic_matcher().match,
@@ -353,11 +360,17 @@ async def _compute_matches(student_input: str) -> list[MisconceptionMatch]:
             top_k=_FANOUT,
             threshold=get_settings().misconception_semantic_threshold,
         )
-        return combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K)
     except Exception:
         # 의미 매칭 실패 — substring 폴백(가용성 우선·200 유지). 조용히 넘기지 않고 로그.
         logger.warning("의미 매칭 실패 — substring 폴백", exc_info=True)
         return substr[:_DEFAULT_TOP_K]
+    if mode == "shadow":
+        # shadow — 노출은 substring 그대로(off 비트동일)·substring↔semantic 불일치만 로깅한다
+        # (비노출·실 분포 플립 근거 수집·slice 111). 학생 원문은 로그에 안 담는다(프라이버시).
+        observe_misconception_shadow(substr, sem)
+        return substr[:_DEFAULT_TOP_K]
+    # on — substring 아래에 semantic-only 후보를 결합해 *노출*(substring 우선·재정렬 없음).
+    return combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K)
 
 
 async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:

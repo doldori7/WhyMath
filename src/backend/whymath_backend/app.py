@@ -241,14 +241,15 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     await ping_device_store_health(settings)
     store, cleanup_fn = build_device_store_from_settings(settings)
     set_device_store(store)
-    # 슬라이스 106: 오개념 의미 매칭 게이트 ON일 때만 매처를 *단일 스레드에서* 웜업(첫 match
-    # 1회)해 `_ensure_built`(카탈로그 인덱스 1회 적재)를 미리 완료한다 — coach `_compute_matches`가
-    # `asyncio.to_thread`로 매처를 *워커 스레드 풀*에서 호출하므로, 웜업 없이 첫 동시 요청이 여러
-    # 워커에서 동시에 `_ensure_built`를 타면 인덱스 적재 경합이 생긴다. 단일 스레드 웜업이 그
-    # 경합 안전판이다. off(기본)면 skip(임베딩 로드 0). 웜업 실패도 *학생 경로를 막지 않으려*
-    # 삼키고 로그만 남긴다(첫 요청이 lazy 재시도·`_compute_matches`가 graceful 폴백) — 부팅을
-    # fail-fast시키지 않는다(의미 매칭은 보완재·CLAUDE.md 가용성 우선 #1≫#6).
-    if settings.misconception_semantic_enabled:
+    # 슬라이스 106·111: 오개념 의미 매칭 mode가 *off가 아닐 때*(shadow·on 둘 다 라이브 매처
+    # 사용) 매처를 *단일 스레드에서* 웜업(첫 match 1회)해 `_ensure_built`(카탈로그 인덱스 1회
+    # 적재)를 미리 완료한다 — coach `_compute_matches`가 `asyncio.to_thread`로 매처를 *워커 스레드
+    # 풀*에서 호출하므로, 웜업 없이 첫 동시 요청이 여러 워커에서 동시에 `_ensure_built`를 타면
+    # 인덱스 적재 경합이 생긴다. 단일 스레드 웜업이 그 경합 안전판이다. off(기본)면 skip(임베딩
+    # 로드 0). 웜업 실패도 *학생 경로를 막지 않으려* 삼키고 로그만 남긴다(첫 요청이 lazy 재시도·
+    # `_compute_matches`가 graceful 폴백) — 부팅을 fail-fast시키지 않는다(의미 매칭은 보완재·
+    # CLAUDE.md 가용성 우선 #1≫#6).
+    if settings.misconception_semantic_mode != "off":
         try:
             # 짧은 비-빈 텍스트로 match를 1회 호출 — 빈 문자열은 `_ensure_built` 전에 early
             # return(03 matcher.py `if not student_solution: return []`)이라 인덱스 적재가 안
