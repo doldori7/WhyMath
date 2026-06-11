@@ -298,3 +298,34 @@ class TestJudgePrompts:
         # doc USER 템플릿(L93-104)의 식별 문구 정합.
         assert "다음 학생 진술이 이 오개념(틀린 믿음)을 표현하는가?" in JUDGE_USER_TEMPLATE
         assert "정확히 두 줄(판정/근거)로만 답하라." in JUDGE_USER_TEMPLATE
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 슬109 — 파서 정확 일치 교정: 헤징 응답 오파싱(보수성 불변식 파괴)의 회귀 잠금
+# ──────────────────────────────────────────────────────────────────────────
+class TestParseVerdictStrictHedging:
+    """전문가 리뷰가 실증한 파서 결함의 회귀 가드.
+
+    결함: 부분 문자열 포함 검사로 "아니오라고 단정하기 어렵다"(의도=불확실·유지)가
+    NOT_EXPRESSES로 오파싱돼 후보를 *제거* — 가장 위험한 방향. 교정: 정확 일치만 인정.
+    """
+
+    def test_hedged_no_falls_back_to_uncertain(self) -> None:
+        # 실증 케이스: 헤징된 '아니오'는 제거가 아니라 유지(UNCERTAIN)여야 한다.
+        r = parse_verdict("판정: 아니오라고 단정하기 어렵다\n근거: 모호함")
+        assert r.verdict is JudgeVerdict.UNCERTAIN
+
+    def test_hedged_yes_falls_back_to_uncertain(self) -> None:
+        r = parse_verdict("판정: 예라고 보기 어려움\n근거: 모호함")
+        assert r.verdict is JudgeVerdict.UNCERTAIN
+
+    def test_trailing_period_tolerated(self) -> None:
+        # 후행 문장부호는 사소한 변형으로 관용(정확 일치의 실용 완화).
+        assert parse_verdict("판정: 예.\n근거: 단정").verdict is JudgeVerdict.EXPRESSES
+        assert parse_verdict("판정: 아니오.\n근거: 역방향").verdict is JudgeVerdict.NOT_EXPRESSES
+        assert parse_verdict("판정: 불확실.\n근거: 모호").verdict is JudgeVerdict.UNCERTAIN
+
+    def test_modifier_suffix_falls_back_to_uncertain(self) -> None:
+        # '아니오입니다'·'예요' 같은 수식 변형도 계약 밖 → UNCERTAIN(추측 금지).
+        assert parse_verdict("판정: 아니오입니다").verdict is JudgeVerdict.UNCERTAIN
+        assert parse_verdict("판정: 예요").verdict is JudgeVerdict.UNCERTAIN

@@ -276,3 +276,84 @@ class TestRegexBackwardCompatibility:
         assert m.confidence == 1.0
         assert set(m.matched_signals) == {"(a+b)/a", "b"}
         assert m.matched_regex_signals == ()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# v1.3 (슬109) — 짧은 영숫자 signal 경계 매칭: 실증 라이브 FP의 영구 회귀 잠금
+# ──────────────────────────────────────────────────────────────────────────
+class TestSignalBoundaryV13:
+    """전문가 리뷰가 실증한 라이브 결함의 회귀 가드.
+
+    결함: `'0' ∈ '10'` 같은 *토큰 내부* 부분문자열 매칭으로, 완전히 올바른 진술
+    ("분모가 10인 분수를 약분했어요")이 division-by-zero **풀매칭(1.0) → COUNTEREXAMPLE
+    개입 발화**. v1.3은 숫자-only·단일 ASCII 문자 signal을 영숫자 경계로 매칭해 차단한다.
+    """
+
+    def _by_id(self, text: str, mid: str) -> MisconceptionMatch | None:
+        return next((m for m in diagnose(text, top_k=30) if m.misconception.id == mid), None)
+
+    def test_demonstrated_live_fp_no_longer_full_matches(self) -> None:
+        # 실증 케이스 그대로: '10'의 '0'이 더는 매칭되지 않아 풀매칭(1.0)이 사라진다.
+        m = self._by_id("분모가 10인 분수를 약분했어요", "division-by-zero")
+        assert m is not None  # '분모'는 여전히 부분매칭(알려진 트레이드오프)
+        assert m.matched_signals == ("분모",)  # '0'은 미매칭
+        assert m.confidence == 0.5  # 1.0 풀매칭 소멸
+
+    def test_demonstrated_live_fp_counterexample_no_longer_fires(self) -> None:
+        # 피해 지점 회귀: conf 1.0 → COUNTEREXAMPLE(단정적 개입)이 더는 발화하지 않는다.
+        # 부분매칭 0.5 → REVERSE_REASONING은 substring 설계의 문서화된 잔여 트레이드오프
+        # (정밀 해법은 semantic/judge 계층 — 슬104~108·측정 대기)라 여기선 "단정 개입 소멸"만 잠근다.
+        from whymath_backend.l4.misconception import select_intervention
+        from whymath_backend.l4.misconception.models import InterventionPattern
+
+        matches = diagnose("분모가 10인 분수를 약분했어요")
+        assert matches, "부분매칭은 존재(트레이드오프)"
+        iv = select_intervention(matches[0])
+        assert iv is None or iv.pattern is not InterventionPattern.COUNTEREXAMPLE
+
+    def test_zero_inside_decimal_not_matched(self) -> None:
+        # '0.5'·'1.0' 내부의 0은 소수점 경계로 차단.
+        m = self._by_id("계산하면 0.5가 나와요", "exponent-zero")
+        assert m is None or "0" not in m.matched_signals
+
+    def test_zero_after_nfkc_subscript_not_matched(self) -> None:
+        # 'a₀'는 NFKC로 'a0'이 된다 — 식별자 내부 0은 차단(수열 첨자 오매칭 방지).
+        m = self._by_id("수열 a₀의 값을 구했다", "division-by-zero")
+        assert m is None  # '분모'도 '0'도 없음
+
+    def test_legitimate_zero_still_matches(self) -> None:
+        # 정당한 사용처(한글 조사 이웃)는 계속 풀매칭 — 거짓음성 추가 없음 회귀.
+        m = self._by_id("분모가 0이 되어도 항상 정의된다고 생각했어", "division-by-zero")
+        assert m is not None
+        assert set(m.matched_signals) == {"분모", "0"}
+        assert m.confidence == 1.0
+
+    def test_single_latin_b_inside_identifier_not_matched(self) -> None:
+        # 'b'가 'ab' 내부(다른 식별자의 일부)면 미매칭 — 임의 텍스트의 b 오매칭 차단.
+        m = self._by_id("ab를 전개해서 정리했어요", "fraction-cancellation")
+        assert m is None or "b" not in m.matched_signals
+
+    def test_180_inside_larger_number_not_matched(self) -> None:
+        # '1800' 내부의 '180'은 차단·정당한 '180'(비숫자 이웃)은 유지.
+        wrong = self._by_id("내각의 합이 1800이라고 적었다", "angle-sum-non-triangle")
+        assert wrong is not None and "180" not in wrong.matched_signals
+        right = self._by_id("내각의 합은 180이라고 했다", "angle-sum-non-triangle")
+        assert right is not None and "180" in right.matched_signals
+
+    def test_catalog_short_signal_ratchet(self) -> None:
+        # 래칫 가드: 경계 매칭 대상(숫자-only·단일 문자) signal의 전수 스냅숏.
+        # 새 항목이 짧은/숫자 signal을 추가하면 이 테스트가 깨져 의식적 리뷰를 강제한다
+        # (v1.1 "signals 작성 원칙"의 코드 강제 — 종전엔 권고뿐이라 라이브 FP가 들어왔다).
+        from whymath_backend.l4.misconception.catalog import CATALOG
+
+        short_or_digit = {
+            (m.id, s) for m in CATALOG for s in m.signals if len(s) <= 1 or s.isdigit()
+        }
+        assert short_or_digit == {
+            ("sign-flip-in-inequality", "곱"),  # 한글 형태소 — substring 유지(내용성)
+            ("division-by-zero", "0"),  # 경계 매칭
+            ("square-root-positivity", "√"),  # 연산자 기호 — substring 유지(내용성)
+            ("exponent-zero", "0"),  # 경계 매칭
+            ("fraction-cancellation", "b"),  # 경계 매칭(단일 ASCII)
+            ("angle-sum-non-triangle", "180"),  # 경계 매칭(숫자-only)
+        }

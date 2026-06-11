@@ -20,9 +20,21 @@ confidence 의미 보존(중요): 분모는 substring `signals` 개수로 *유�
 집합·기존 confidence를 보존한다(예: distribution 정규식은 `(3+4)²=3²+4²` *숫자*만 매치,
 기호 `(a+b)²=a²+b²`엔 매치되지 않음).
 
+v1.3 정밀화(슬 109·라이브 FP 교정): **짧은 영숫자 signal의 경계 매칭**. `"0"` 같은 숫자-only
+signal과 `"b"` 같은 단일 ASCII 문자 signal은 plain substring으로 두면 *다른 토큰 내부*에
+오매칭된다 — 실증된 라이브 결함: `"분모가 10인 분수를 약분했어요"`(완전히 올바른 진술)가
+`'0'∈'10'`으로 division-by-zero **풀매칭(1.0) → COUNTEREXAMPLE 개입 발화**. v1.3은 이런
+signal을 영숫자 경계 정규식(`(?<![0-9A-Za-z.])sig(?![0-9A-Za-z.])`)으로 매칭해 `10`·`0.5`·
+`a₀`(NFKC→`a0`)·`ab` 내부 오매칭을 차단한다. 내용성 있는 signal(한글 형태소 `"곱"`·연산자
+`"√"`·복합 토큰)은 기존 substring 유지. confidence 식·분모·반환 계약은 전부 불변 —
+*매칭 정밀도만* 올린다(매칭이 줄어드는 방향이라 거짓양성 감소·거짓음성 추가 없음: 정당한
+사용처는 비영숫자 이웃[한글 조사·등호·괄호·쉼표]이라 계속 매칭된다).
+
 후속(범위 밖, doc 명시): ① 풀이 단계별 파싱(PRM 활용) ② 처음 틀린 단계 식별 ③ 임베딩
-유사도 매칭(text-embedding-3-large 등) ④ LLM-judged 패턴 추출. ③④는 짧은 공통 토큰
-(`"0"`·`"다음"`)의 *거짓양성* 및 *오류 부재* 미탐지 같은 substring 구조적 한계의 정본 해법.
+유사도 매칭(text-embedding-3-large 등) ④ LLM-judged 패턴 추출. ③④는 *의미·방향* 차원
+한계(방향맹)의 정본 해법이고, *어휘* 차원 거짓양성(짧은 토큰 오매칭)은 v1.3이 직접 줄인다.
+잔여: 부분매칭(0.5) 자체의 정밀도 한계(예: `'분모'` 단독 0.5)는 substring 설계의 알려진
+트레이드오프 — semantic/judge 계층(슬104~108)이 그 자리다.
 """
 
 from __future__ import annotations
@@ -59,14 +71,32 @@ def _compile(pattern: str) -> re.Pattern[str]:
     return re.compile(pattern)
 
 
+def _signal_hit(signal: str, norm_text: str) -> bool:
+    """단일 signal 매칭 — v1.3: 짧은 영숫자 signal은 경계 검사, 그 외 substring.
+
+    숫자-only(`"0"`·`"180"`)·단일 ASCII 문자(`"b"`) signal은 다른 토큰 내부에 오매칭된다
+    (`'0'∈'10'/'0.5'/'a₀'`·`'b'∈'ab'` — 올바른 진술에 풀매칭→개입 발화한 실증 라이브 결함).
+    이런 signal만 영숫자·소수점 경계 정규식으로 매칭하고, 내용성 있는 signal(한글 형태소·
+    연산자 기호·복합 토큰)은 기존 substring을 유지한다. 비교는 양변 정규화(`_normalize`) 후.
+    """
+    norm_sig = _normalize(signal)
+    if norm_sig.isdigit() or (len(norm_sig) == 1 and norm_sig.isascii() and norm_sig.isalpha()):
+        # 경계: 영숫자·'.'가 이웃이면 다른 수/식별자의 일부로 보고 미매칭. 정당한 사용처
+        # (한글 조사·`=`·`≠`·괄호·쉼표 이웃)는 전부 비영숫자라 계속 매칭된다.
+        pattern = rf"(?<![0-9A-Za-z.]){re.escape(norm_sig)}(?![0-9A-Za-z.])"
+        return _compile(pattern).search(norm_text) is not None
+    return norm_sig in norm_text
+
+
 def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | None:
     """단일 misconception 매칭 — substring 부분집합(정규형 비교) + 정규식 보조 경로(OR).
 
     confidence = min(1.0, (substr매치 + regex매치) / len(signals)). 둘 다 0이면 None.
     분모는 substring `signals` 기준 유지(v1.1 의미 보존) — 정규식은 분자에 *가산*·상한 1.0.
+    v1.3: 개별 signal 매칭은 `_signal_hit`(짧은 영숫자 signal 경계 검사) 경유.
     """
     norm_text = _normalize(text)
-    matched = tuple(s for s in misconception.signals if _normalize(s) in norm_text)
+    matched = tuple(s for s in misconception.signals if _signal_hit(s, norm_text))
     matched_regex = tuple(
         rs for rs in misconception.regex_signals if _compile(rs).search(norm_text) is not None
     )
