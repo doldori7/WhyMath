@@ -319,13 +319,75 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5e. 개념 의미검색 조회 좌석 + backend search API (L1 적재 아크 슬라이스 4 — 2026-06-12)
+
+> **조회 슬라이스(backend)**: 슬3이 개념 임베딩을 pgvector(`concept_embedding`)에 *적재*한 뒤,
+> 슬4는 그 적재 임베딩을 *조회 가능*하게 만든다 — 슬3 `ConceptEmbeddingIndex.search`를 백킹
+> 프리미티브로 한 **검색 좌석 + HTTP 엔드포인트**. 슬3 `search` docstring이 예고한 "조회 좌석이
+> 생기면 그 타입으로 흡수한다"의 그 좌석이다. 모듈: `whymath_backend/l1/concept_graph/retrieval.py`,
+> `whymath_backend/api/concepts.py`(search 엔드포인트 추가).
+
+### 5e.1 검색 좌석 (`search_concepts`·L1 데이터 서빙)
+
+- **흐름**: `search_concepts(query_text, *, top_k, provider, index=None, settings=None)` → ① provider로
+  query_text 임베딩(1건) ② `ConceptEmbeddingIndex.search(vector, top_k)`로 코사인 상위 top_k ③
+  `ConceptSearchHit(concept_id, similarity)` 랭킹 반환(유사도 내림차순). 임계값 필터 없음(순수 랭킹·
+  점수 컷은 소비처 몫).
+- **반환 타입 = `concept_id + similarity`만**(name_ko 등 enrichment 미포함). 사유: `concept_embedding.
+  concept_id`는 **UC 키**(슬2 Neo4j 노드 키와 동일 공간)인데 backend PG `concept` 테이블은 **UUID PK
+  + `code`**라 *UC 컬럼이 없다*(다른 키 공간). UC↔PG/Neo4j 메타 브리지는 *별도 설계 결정*이라 풍부
+  메타 enrichment는 **후속 슬라이스**(backend↔Neo4j 결합·무거운 프로젝션 금지).
+- **provider seam 재사용**(신규 0): 적재(슬3)와 *같은* `_provider_model_identity`(provider→model 규약)·
+  `ConceptEmbeddingIndex`를 쓴다 — 같은 임베딩 공간 행만 봐야 적재 결과가 잡힌다. provider·index 주입
+  가능(테스트 격리·Fake).
+- **memory 모드 graceful**(조용한 무동작 금지): `vector_store != pgvector`면 영속 store 부재로 적재가
+  불가능했으므로 **빈 리스트**를 돌려준다(예외·None 아님·embed도 생략). 호출자가 명시 신호로 표면화.
+
+### 5e.2 HTTP 엔드포인트 (`GET /v1/concepts/search`·L5 API 표면)
+
+- **계약**: `GET /v1/concepts/search?q=<질의>&k=<1~50>` → `{query, results:[{concept_id, similarity}],
+  vector_store_enabled}`. q 필수·비공백(min_length=1)·max_length=500·k 범위 → 위반 시 422(기존 list
+  엔드포인트 Query 제약 패턴 미러). 라우트는 `/{concept_id}`(UUID)보다 *먼저* 선언해 "search"가 UUID로
+  파싱되지 않게 한다.
+- **블로킹 격리**: 검색 좌석은 sync(블로킹 임베딩 + sync psycopg)라 `asyncio.to_thread`로 워커
+  스레드에서 돌린다(이벤트 루프 보호·coach `_compute_matches` 패턴 미러).
+- **노출 계약**(CLAUDE.md): *학생 직접 노출 아닌* 조회 좌석 — L2(약개념 추천)·L4(오개념↔개념 연결)·
+  교사 도구가 *소비*(그 소비 로직은 후속). 반환은 UC concept_id + 코사인 점수뿐(본문 0·우열 매기기·
+  정답 빠르게 등 금기 표현 0). memory 모드면 `vector_store_enabled=false` + 빈 results로 *명시* 안내.
+- provider는 `build_provider`(좌석 팩토리·신규 0) 의존성으로 주입 — 테스트는 `dependency_overrides`로
+  Fake 주입(라이브 0·모델 로드 0).
+
+### 5e.3 명시적 범위 밖 (후속 슬라이스)
+
+- **enrichment**(name_ko 외 전체 속성·Neo4j traversal): backend 메타 접근 방식(Neo4j 연결 vs PG UC
+  프로젝션)이 *별도 설계 결정*이라 후속(§5e.1 키 공간 차이).
+- **검수 게이팅**(reviewed 우선 노출): `review_status`가 backend에서 조회되려면 위 메타 접근 결정
+  선행. 적재는 전량+플래그 완료(§5d).
+- **L2/L4 결선**(약개념 추천·오개념 자동 연결): 좌석만 제공·L2/L4가 *호출*하는 건 후속(7계층 — L1은
+  조회 서빙·역방향 의존 금지).
+
+### 5e.4 산출물·게이트
+
+- 4게이트 통과(`cd src/backend`): `ruff check .`·`black --check .`·`mypy --strict whymath_backend`·
+  `pytest --cov`(70%+). 신규 테스트: `test_concept_retrieval.py`(좌석 단위·11·Fake provider+엔진)·
+  `test_concepts_search.py`(엔드포인트 단위·9·TestClient+DI override)·`test_concept_retrieval_
+  integration.py`(populate→search 라운드트립·실 PG 게이트).
+- **통합테스트(실 PG+pgvector)는 기본 SKIP** — `@pytest.mark.integration`+`WHYMATH_RUN_INTEGRATION`
+  게이트 + PG 미도달 graceful skip. **CI 신규 잡 불요** — 기존 **`backend — 마이그레이션·통합 (실 PG)`
+  잡**이 `pytest -m integration --ignore=l3`로 `tests/backend/l1/`를 자동 수집·실행. **Phaiakes9**에서도 실행.
+
+---
+
 ## 6. 향후 활용
 
 1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·
    541 선수엣지→`prerequisite` 엣지 · 검수 표식(reviewed 114·pending 289)은 **슬라이스 1에서
    완료**(§5b·무저장소 transform·검증) · **Neo4j 멱등 적재는 슬라이스 2에서 완료**(§5c·403 노드·541
    엣지·MERGE 멱등·env 접속) · **개념 pgvector 임베딩 적재는 슬라이스 3에서 완료**(§5d·UC 키 이중
-   store·name_ko+metaphor+accepted 임베딩·멱등 upsert·backend 패키지). **후속(슬4+)**: backend concept
-   API(의미검색 *조회* 좌석) · L2/L4 결선 · 검수 게이팅 *조회* 정책(적재는 전량+플래그 완료).
+   store·name_ko+metaphor+accepted 임베딩·멱등 upsert·backend 패키지) · **개념 의미검색 조회 좌석 +
+   backend search API는 슬라이스 4에서 완료**(§5e·`search_concepts`·`GET /v1/concepts/search`·UC
+   concept_id+similarity 반환). **후속(슬5+)**: 메타 enrichment(name_ko 외·Neo4j traversal·UC↔PG 브리지
+   설계 결정 선행) · L2/L4 결선(약개념 추천·오개념↔개념 자동 연결) · 검수 게이팅 *조회* 정책(reviewed
+   우선 노출·적재는 전량+플래그 완료).
 2. **L4 오개념 확장**(후속): §5.4 후보를 doc-first로 카탈로그에 추가(30종+ 목표).
 3. **암기카드**(L6): 113장 — `exposure_condition`("이해 마스터 후 노출")이 메타인지 정책과 정합.
