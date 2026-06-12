@@ -49,8 +49,10 @@ from whymath_backend.l2 import (
     get_primary_concept_id,
     theta_to_mastery_proxy,
 )
+from whymath_backend.l2.prerequisite_recommendation import recommend_prerequisite_gaps
 from whymath_backend.l4 import (
     CoachingFocus,
+    CoachingTrigger,
     LthcAdaptation,
     MasteryLevel,
     PedagogyDecision,
@@ -71,6 +73,7 @@ from whymath_backend.l4.misconception import (
 )
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.shadow import observe_misconception_shadow
+from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
@@ -186,6 +189,13 @@ class CoachResponse(BaseModel):
             "이때는 기존 `decision`/`coaching_focus`를 따른다. *실시간 슬립은 배경 진단보다 "
             "우선*(slice 51: 구체적 계산 오류 > θ/숙달 추정). 검증기는 보수적이라 질문·산문은 "
             "거의 발화하지 않는다(false-positive 0 우선)."
+        ),
+    )
+    prerequisite_coaching: CoachingTrigger | None = Field(
+        default=None,
+        description=(
+            "이 문제 개념의 막힌 선수가 있으면 '선수 복습 먼저' 코칭(L4 prerequisite_review)·"
+            "없으면 null. Polya 결정과 *별개의 추가 신호* — 클라/L5가 우선 제시 여부 결정."
         ),
     )
 
@@ -448,6 +458,51 @@ async def _server_theta_for(
     return await get_current_theta(session, user_id)  # 전과목 폴백(slice 73·게이팅 안 함)
 
 
+async def _prerequisite_coaching_for(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    *,
+    mastery_threshold: float = 0.7,
+    max_depth: int = 1,
+) -> CoachingTrigger | None:
+    """이 문제 개념의 *막힌 선수*가 있으면 "선수 복습 먼저" 코칭을 반환 — coach 세션/턴 전용.
+
+    `GET /v1/me/weak-concepts/{id}/coaching`과 *동일 오케스트레이션*(L5가 L2 fetch + L4 decide를
+    배선·L2/L4 좌석 무변경 재사용·역의존 0)을 상호작용 코칭 흐름에 옮긴 것이다. 학생이 어떤 문제를
+    풀 때 그 문제 개념의 막힌 선수가 있으면 응답에 *별개 추가 신호*로 "선수 복습 먼저"를 실어준다
+    (Polya 결정을 *대체하지 않음*·클라/L5가 우선 제시 여부 결정·코칭 턴을 가로채 풀이를 끊지 않음).
+
+    흐름:
+      ① `problem_id` None → None(문제 맥락 없음·stateless·매핑 불가).
+      ② `get_primary_concept_id`로 문항 PRIMARY 개념(없으면 TESTED 폴백) 해석 → None이면 None
+         (문항-개념 미매핑).
+      ③ L2 `recommend_prerequisite_gaps(weak_only=True)`로 그 개념의 *막힌 선수*(weakness asc·
+         `gaps[0]`=top blocker)를 조회.
+      ④ L4 `recommend_prerequisite_coaching(gaps)` — 막힌 선수가 있으면 `prerequisite_review`
+         코칭 trigger·없으면 None(순수 결정·L5는 fetch만).
+
+    redaction: `CoachingTrigger`의 rationale/prompt에는 *안전 표시 필드*(name_ko)만 들어가고
+    개념 본문·정답은 구조적으로 흐를 수 없다(`PrerequisiteGap`/`recommend_prerequisite_coaching`이
+    이미 보장). 톤은 재사용 함수가 격려·비난 0(직전 슬 톤 가드)으로 추가 문구 생성 없음. 반환값은
+    HTTP 응답의 `prerequisite_coaching`으로 노출되나 *추가 신호*일 뿐이다.
+    """
+    if problem_id is None:
+        return None  # 문제 맥락 없음 → 선수 코칭 불가(stateless·매핑 없음).
+    concept_id = await get_primary_concept_id(session, problem_id)
+    if concept_id is None:
+        return None  # 문항-개념 미매핑 → 선수 traversal 불가.
+    gaps = await recommend_prerequisite_gaps(
+        session,
+        user_id,
+        concept_id,
+        mastery_threshold=mastery_threshold,
+        weak_only=True,
+        max_depth=max_depth,
+    )
+    return recommend_prerequisite_coaching(gaps)  # 막힌 선수 없으면 None.
+
+
 @router.post(
     "/coach",
     response_model=CoachResponse,
@@ -505,6 +560,9 @@ async def create_session(
     # slice 73·74: 서버 L2의 실제 θ도 조회 — BKT↔θ 교차검증(게이트 ON·θ 수치 비노출). slice 74:
     # 문항 개념의 *개념별* θ 우선·없으면 전과목 폴백(_server_theta_for 내부).
     server_theta = await _server_theta_for(session, user.user_id, body.problem_id)
+    # 선수 복습 코칭 — 이 문제 개념의 막힌 선수가 있으면 "선수 복습 먼저" 신호(L2 fetch + L4 decide
+    # 배선·`/me/.../coaching`과 동형). Polya 결정과 *별개의 추가 신호*(non-override·턴 비가로채기).
+    prereq = await _prerequisite_coaching_for(session, user.user_id, body.problem_id)
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     matches = await _compute_matches(body.student_input)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
@@ -563,6 +621,7 @@ async def create_session(
         lthc=lthc,
         entry_socratic_category=entry_category,
         solution_coaching=solution_coaching,
+        prerequisite_coaching=prereq,
         dialogue_id=dialogue.dialogue_id,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
@@ -603,6 +662,9 @@ async def append_turns(
     # slice 73·74: 멀티턴도 서버 L2 θ 조회 — BKT↔θ 교차검증(θ 수치 비노출). slice 74: 개념별 θ
     # 우선(dialogue.problem_id)·없으면 전과목 폴백.
     server_theta = await _server_theta_for(session, user.user_id, dialogue.problem_id)
+    # 선수 복습 코칭 — dialogue에 실린 problem_id로 막힌 선수 조회(create_session과 동형·dialogue
+    # 출처). 별개 추가 신호(non-override·턴 비가로채기).
+    prereq = await _prerequisite_coaching_for(session, user.user_id, dialogue.problem_id)
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     matches = await _compute_matches(body.student_input)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
@@ -657,6 +719,7 @@ async def append_turns(
         lthc=lthc,
         entry_socratic_category=entry_category,
         solution_coaching=solution_coaching,
+        prerequisite_coaching=prereq,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
         student_turn_order=student_order,

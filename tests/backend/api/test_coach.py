@@ -3237,3 +3237,162 @@ class TestDeviceHmacSignature:
             assert resp.status_code == 200
             # device 차원 미활성 → Device-* 헤더 없음
             assert "X-RateLimit-Device-Limit" not in resp.headers
+
+
+class TestPrerequisiteCoachingHelper:
+    """선수 복습 코칭 헬퍼(`_prerequisite_coaching_for`) 단위 — coach 세션/턴 전용.
+
+    L2 fetch(`recommend_prerequisite_gaps`)·개념 해석(`get_primary_concept_id`)·L4 decide
+    (`recommend_prerequisite_coaching`)를 monkeypatch로 고정해 *오케스트레이션 분기*만 검증한다
+    (L2/L4 좌석 자체는 test_prerequisite_recommendation·test_prerequisite_coaching이 검증).
+    problem_id None→None·concept None→None·gaps 없음→None·gaps 있음→trigger.
+    """
+
+    _PID = uuid.uuid4()
+
+    async def test_problem_id_none_returns_none(self) -> None:
+        # problem_id 없음 → 문제 맥락 없음 → 개념/선수 조회 자체를 건너뜀(None).
+        result = await coach._prerequisite_coaching_for(
+            cast(AsyncSession, _FakeSession()), _UID, None
+        )
+        assert result is None
+
+    async def test_concept_none_returns_none(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 문항-개념 미매핑(get_primary_concept_id None) → 선수 traversal 불가 → None.
+        async def _no_concept(session: Any, problem_id: Any) -> uuid.UUID | None:
+            return None
+
+        monkeypatch.setattr(
+            "whymath_backend.api.coach.get_primary_concept_id", _no_concept
+        )
+        result = await coach._prerequisite_coaching_for(
+            cast(AsyncSession, _FakeSession()), _UID, self._PID
+        )
+        assert result is None
+
+    async def test_no_gaps_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 개념은 해석되나 막힌 선수 없음(gaps=[]) → L4 decide가 None.
+        cid = uuid.uuid4()
+
+        async def _concept(session: Any, problem_id: Any) -> uuid.UUID | None:
+            return cid
+
+        async def _gaps(*args: Any, **kwargs: Any) -> list[Any]:
+            return []
+
+        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _concept)
+        monkeypatch.setattr(
+            "whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps
+        )
+        result = await coach._prerequisite_coaching_for(
+            cast(AsyncSession, _FakeSession()), _UID, self._PID
+        )
+        assert result is None
+
+    async def test_gaps_present_returns_trigger(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 막힌 선수 있음 → L4 decide가 prerequisite_review trigger를 돌려준다(선수 이름 포함).
+        from whymath_backend.l2.prerequisite_recommendation import PrerequisiteGap
+
+        cid = uuid.uuid4()
+        gap = PrerequisiteGap(
+            concept_id=uuid.uuid4(),
+            concept_code="UC.test.pre",
+            concept_name="일차함수",
+            bkt_mastery=0.2,
+            weakness=0.2,
+            agreement="insufficient",
+            name_ko="일차함수",
+        )
+
+        async def _concept(session: Any, problem_id: Any) -> uuid.UUID | None:
+            return cid
+
+        async def _gaps(*args: Any, **kwargs: Any) -> list[PrerequisiteGap]:
+            return [gap]
+
+        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _concept)
+        monkeypatch.setattr(
+            "whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps
+        )
+        result = await coach._prerequisite_coaching_for(
+            cast(AsyncSession, _FakeSession()), _UID, self._PID
+        )
+        assert result is not None
+        assert result.focus == "prerequisite_review"
+        assert "일차함수" in result.prompt
+        # redaction·톤 — 본문 부재·금기 표현 부재(재사용 L4 함수 보장).
+        for forbidden in ("빨리", "정답", "틀렸"):
+            assert forbidden not in result.prompt
+
+
+class TestPrerequisiteCoachingField:
+    """`prerequisite_coaching` 필드 직렬화 — CoachResponse 기본 None·trigger 직렬화·핸들러 배선."""
+
+    def test_field_present_default_none(self) -> None:
+        # CoachResponse 스키마에 필드 존재·기본 None(추가 신호·미설정 시 null).
+        assert "prerequisite_coaching" in coach.CoachResponse.model_fields
+        field = coach.CoachResponse.model_fields["prerequisite_coaching"]
+        assert field.default is None
+
+    def test_stateless_coach_always_none(self) -> None:
+        # stateless /v1/coach는 DB/user 미사용 → prerequisite_coaching 항상 None(계약 보존).
+        resp = _client().post("/v1/coach", json={"student_input": "음"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["prerequisite_coaching"] is None
+
+    def test_session_create_wires_prereq_trigger(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 세션 생성 핸들러가 _prerequisite_coaching_for 결과를 응답에 싣는다(배선 검증).
+        from whymath_backend.l4.metacognitive_trigger import CoachingTrigger
+        from whymath_backend.l4.socratic.categories import SocraticCategory
+
+        trigger = CoachingTrigger(
+            focus="prerequisite_review",
+            rationale="선수 '일차함수' 미숙달",
+            prompt="먼저 '일차함수'부터 떠올려 볼까?",
+            socratic_category=SocraticCategory.CLARIFICATION,
+        )
+
+        async def _fake(
+            session: Any, user_id: Any, problem_id: Any, **kwargs: Any
+        ) -> CoachingTrigger | None:
+            return trigger
+
+        monkeypatch.setattr(
+            "whymath_backend.api.coach._prerequisite_coaching_for", _fake
+        )
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "음", "problem_id": str(uuid.uuid4())},
+        )
+        assert resp.status_code == 201, resp.text
+        pc = resp.json()["prerequisite_coaching"]
+        assert pc is not None
+        assert pc["focus"] == "prerequisite_review"
+        assert "일차함수" in pc["prompt"]
+
+    def test_session_create_none_when_no_blocked_prereq(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 막힌 선수 없음(헬퍼 None) → 응답 prerequisite_coaching None.
+        async def _fake(
+            session: Any, user_id: Any, problem_id: Any, **kwargs: Any
+        ) -> Any:
+            return None
+
+        monkeypatch.setattr(
+            "whymath_backend.api.coach._prerequisite_coaching_for", _fake
+        )
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "음", "problem_id": str(uuid.uuid4())},
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["prerequisite_coaching"] is None

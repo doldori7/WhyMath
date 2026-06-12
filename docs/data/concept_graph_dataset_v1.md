@@ -740,6 +740,46 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5l. 선수 코칭을 상호작용 코칭 흐름에 통합 (`POST /v1/coach/sessions` — 2026-06-12)
+
+> **L5 통합 슬라이스(backend)**: L4 결선(§5k)이 진단 drill-in(`GET /v1/me/.../coaching`)에 선수 코칭을 노출했다면,
+> 이 슬라이스는 *학생이 실제 푸는* 상호작용 코칭 응답(`/v1/coach/sessions`)에도 선수 차단 신호를 함께 실어준다.
+>
+> **데이터 현실 확인(다른 후속 후보 기각)**: 데이터셋 v1 엣지는 **541 전량 prerequisite**(비-prereq relation 0)·
+> strength는 transform이 `_DEFAULT_EDGE_STRENGTH` **균일 합성**(소스 미보유·변별력 0) → "비-prereq EdgeType 적재"·
+> "edge_strength 임계 필터"는 v1에선 no-op이라 기각. `/v1/coach` 통합을 후속으로 선택.
+
+### 5l.1 구현 (`api/coach.py`)
+
+- `CoachResponse.prerequisite_coaching: CoachingTrigger | None`(기본 None) 필드 추가 — "이 문제 개념의 막힌 선수가
+  있으면 선수 복습 코칭·없으면 null. Polya 결정과 *별개의 추가 신호*."
+- 헬퍼 `_prerequisite_coaching_for(session, user_id, problem_id, *, mastery_threshold=0.7, max_depth=1) ->
+  CoachingTrigger | None`: problem_id None→None / `get_primary_concept_id`(PRIMARY·TESTED 폴백) None→None /
+  `recommend_prerequisite_gaps(weak_only=True)`→`recommend_prerequisite_coaching(gaps)`(막힌 선수 없으면 None).
+- **stateful 배선**: `create_session`(body.problem_id)·`append_turns`(dialogue.problem_id)가 헬퍼 호출→응답 필드 주입.
+- **stateless `/v1/coach`(`coach_decide`)는 불변** — `prerequisite_coaching` 미전달(기본 None·DB·user 미사용·계약 보존).
+  `_build_response_payload`(공유 결정 계산·6-튜플)·반환·호출부 **전혀 무변경**(stateless 비트동일).
+
+### 5l.2 계층·교수학 안전·redaction
+
+- **계층**: L5(api/coach)가 L2 fetch(`recommend_prerequisite_gaps`) + L4 decide(`recommend_prerequisite_coaching`)
+  배선 — §5k `GET /v1/me/.../coaching`과 동일 오케스트레이션. L2/L4 좌석 순수 재사용·역의존 0·**마이그레이션 0**.
+- **교수학 안전**: 선수 코칭은 *별개 추가 신호*(non-override) — Polya `decision`을 대체하지 않고, 코칭 턴을 가로채
+  학생 풀이를 끊지 않는다(클라/L5가 우선 제시 결정). 톤은 재사용 L4 함수가 보장(비난 0).
+- **redaction**: `CoachingTrigger.rationale/prompt`엔 name_ko(안전 표시)만·본문 0(`PrerequisiteGap` 슬롯 부재).
+  `expected_answer`(정답)는 이 경로 미관여.
+
+### 5l.3 산출물·게이트
+
+- 4게이트 통과(`cd src/backend`·py3.12): `ruff`·`black`(158)·`mypy`(**136 src·이슈 0**)·`pytest`(**2556 passed/107
+  skip**·회귀 0·coach 단위 186). 신규 단위 8(`_prerequisite_coaching_for` 4분기 + 필드/배선/stateless-None)·통합 1
+  (실 PG: problem→concept→막힌 선수→`/v1/coach/sessions`가 `prerequisite_coaching.focus=="prerequisite_review"`·
+  없으면 None·stateless 항상 None·redaction). 커버리지 측정은 환경의 pgvector→numpy 이중임포트(C 트레이서) 제약으로
+  우회(verbose 실행으로 신규 분기 전수 도달 확인·CI 실 PG 잡에서 통합 실측).
+- **다음**: 커버리지 하니스 복구(pgvector 더블임포트 회피)·실 PG 통합 실행 검증·클라(Flutter) 선수 코칭 *우선 제시* UX 계약.
+
+---
+
 ## 6. 향후 활용
 
 1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·

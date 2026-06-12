@@ -298,3 +298,256 @@ def test_append_turns_extends_existing_session_on_live_pg() -> None:
             assert missing.status_code == 404
     finally:
         asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+# ── 선수 복습 코칭 결선: POST /v1/coach/sessions가 막힌 선수 신호를 응답에 싣는다 ──
+# 직전 슬(`GET /v1/me/.../coaching`) 통합 헬퍼와 동형 — 문제→개념(PRIMARY)·그 개념의 막힌
+# 선수(concept_edge·약 mastery·concept_node 메타)를 실 PG에 적재하고 coach 세션 응답을 검증.
+
+from datetime import datetime, timezone  # noqa: E402
+
+from sqlalchemy.ext.asyncio import async_sessionmaker  # noqa: E402
+
+from whymath_backend.db.models.assessment import ConceptMasteryHistory  # noqa: E402
+from whymath_backend.db.models.concept import (  # noqa: E402
+    Concept,
+    ConceptEdge,
+    ProblemConcept,
+)
+from whymath_backend.db.models.concept_node import ConceptNode  # noqa: E402
+from whymath_backend.db.models.problem import Problem  # noqa: E402
+from whymath_backend.schema.assessment import (  # noqa: E402
+    ConceptMasteryHistory as ConceptMasteryHistorySchema,
+)
+from whymath_backend.schema.concept import Concept as ConceptSchema  # noqa: E402
+from whymath_backend.schema.concept import (  # noqa: E402
+    ProblemConcept as ProblemConceptSchema,
+)
+from whymath_backend.schema.enums import (  # noqa: E402
+    ConceptLevel,
+    ConceptRole,
+    Curriculum,
+    EdgeType,
+    SourceType,
+    Subject,
+)
+from whymath_backend.schema.problem import Problem as ProblemSchema  # noqa: E402
+
+
+async def _add_all(*objs: object) -> None:
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with async_sessionmaker(engine, expire_on_commit=False)() as session:
+            session.add_all(list(objs))
+            await session.commit()
+    finally:
+        await engine.dispose()
+
+
+def _concept_with_code(cid: uuid.UUID, code: str, name: str) -> Concept:
+    return Concept.from_schema(
+        ConceptSchema(
+            concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념
+        )
+    )
+
+
+def _node_meta(uc: str, name_ko: str, domain: str, review_status: str) -> ConceptNode:
+    return ConceptNode(
+        concept_id=uc, name_ko=name_ko, domain=domain, review_status=review_status
+    )
+
+
+def _prereq_edge(from_id: uuid.UUID, to_id: uuid.UUID, strength: float) -> ConceptEdge:
+    """선수 엣지 — from(선수)이 to(후행)의 선수."""
+    return ConceptEdge(
+        from_concept_id=from_id,
+        to_concept_id=to_id,
+        edge_type=EdgeType.PREREQUISITE.value,
+        edge_strength=strength,
+    )
+
+
+def _mastery_row(
+    uid: uuid.UUID, cid: uuid.UUID, measured_at: datetime, mastery: float
+) -> ConceptMasteryHistory:
+    return ConceptMasteryHistory.from_schema(
+        ConceptMasteryHistorySchema(
+            user_id=uid,
+            concept_id=cid,
+            measured_at=measured_at,
+            mastery=mastery,
+            sample_size=1,
+        )
+    )
+
+
+def _problem(pid: uuid.UUID, suffix: str) -> Problem:
+    return Problem.from_schema(
+        ProblemSchema(
+            problem_id=pid,
+            source_type=SourceType.자체생성,
+            curriculum_version=Curriculum.REVISION_2022,
+            valid_from_year=2022,
+            subject=Subject.공통,
+            unit_codes=[f"U-{suffix}"],
+        )
+    )
+
+
+def _problem_concept(pid: uuid.UUID, cid: uuid.UUID) -> ProblemConcept:
+    return ProblemConcept.from_schema(
+        ProblemConceptSchema(problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY)
+    )
+
+
+async def _cleanup_prereq(
+    uid: uuid.UUID,
+    *,
+    problem_ids: list[uuid.UUID],
+    concept_ids: list[uuid.UUID],
+    uc_ids: list[str],
+    dialogue_ids: list[uuid.UUID],
+) -> None:
+    """FK 순서 정리 — dialogue_turn→dialogue→problem_concept·concept_edge·mastery→
+    concept_node→problem·concept→user_profile."""
+    engine = create_async_engine(_settings().database_url)
+    dids = [str(d) for d in dialogue_ids]
+    pids = [str(p) for p in problem_ids]
+    cids = [str(c) for c in concept_ids]
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM dialogue_turn WHERE dialogue_id = ANY(:ids)"),
+                {"ids": dids},
+            )
+            await conn.execute(
+                text("DELETE FROM dialogue WHERE dialogue_id = ANY(:ids)"), {"ids": dids}
+            )
+            await conn.execute(
+                text("DELETE FROM problem_concept WHERE problem_id = ANY(:ids)"),
+                {"ids": pids},
+            )
+            await conn.execute(
+                text("DELETE FROM concept_edge WHERE from_concept_id = ANY(:ids)"),
+                {"ids": cids},
+            )
+            await conn.execute(
+                text("DELETE FROM concept_mastery_history WHERE user_id = :uid"),
+                {"uid": str(uid)},
+            )
+            await conn.execute(
+                text("DELETE FROM concept_node WHERE concept_id = ANY(:ids)"),
+                {"ids": uc_ids},
+            )
+            await conn.execute(
+                text("DELETE FROM problem WHERE problem_id = ANY(:ids)"), {"ids": pids}
+            )
+            await conn.execute(
+                text("DELETE FROM concept WHERE concept_id = ANY(:ids)"), {"ids": cids}
+            )
+            await conn.execute(
+                text("DELETE FROM user_profile WHERE user_id = :uid"), {"uid": str(uid)}
+            )
+    finally:
+        await engine.dispose()
+
+
+def test_coach_session_surfaces_prerequisite_coaching_on_live_pg() -> None:
+    """POST /v1/coach/sessions(problem_id) — 막힌 선수 있으면 prerequisite_coaching 노출.
+
+    end-to-end:
+      ① 문제→개념 C(PRIMARY)·C의 막힌 선수 P(concept_edge to=C·from=P·약 mastery·메타) 적재 →
+         코칭 응답 `prerequisite_coaching.focus=='prerequisite_review'`·선수 이름(일차함수) 포함.
+      ② 막힌 선수 없는 문제(개념엔 선수 엣지 없음) → `prerequisite_coaching is None`.
+      ③ stateless /v1/coach는 problem_id 없어 항상 None.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    sfx = uid.hex[:8]
+    uc_c = f"UC.test.{sfx}.co.post"  # 후행(문제 개념)
+    uc_pw = f"UC.test.{sfx}.co.preweak"  # 막힌 선수
+    uc_nolink = f"UC.test.{sfx}.co.nolink"  # 선수 없는 개념(②)
+    c_post, c_pw, c_nolink = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    pid_blocked, pid_clear = uuid.uuid4(), uuid.uuid4()
+    t1 = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        asyncio.run(
+            _add_all(
+                _concept_with_code(c_post, uc_c, "이차함수"),  # 문제 개념(후행)
+                _concept_with_code(c_pw, uc_pw, "일차함수"),  # 막힌 선수
+                _concept_with_code(c_nolink, uc_nolink, "집합"),  # 선수 없는 개념
+            )
+        )
+        asyncio.run(_add_all(_node_meta(uc_pw, "일차함수", "[중]함수", "reviewed")))
+        asyncio.run(
+            _add_all(
+                _problem(pid_blocked, sfx + "b"),
+                _problem(pid_clear, sfx + "c"),
+            )
+        )
+        asyncio.run(
+            _add_all(
+                _problem_concept(pid_blocked, c_post),  # 막힌 선수 있는 문제
+                _problem_concept(pid_clear, c_nolink),  # 선수 없는 문제
+            )
+        )
+        # concept_edge — P는 C의 선수(to==c_post·from==c_pw). c_nolink엔 선수 없음.
+        asyncio.run(_add_all(_prereq_edge(c_pw, c_post, 0.9)))
+        # mastery — 선수 P 약점(0.2·막힘).
+        asyncio.run(_add_all(_mastery_row(uid, c_pw, t1, 0.2)))
+
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # ① 막힌 선수 있는 문제 → 선수 복습 코칭 노출.
+            resp = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={"student_input": "이거 어떻게 풀어?", "problem_id": str(pid_blocked)},
+            )
+            assert resp.status_code == 201, resp.text
+            body = resp.json()
+            dialogue_ids.append(uuid.UUID(body["dialogue_id"]))
+            pc = body["prerequisite_coaching"]
+            assert pc is not None
+            assert pc["focus"] == "prerequisite_review"
+            assert "일차함수" in pc["prompt"]  # 선수 이름(자체 코칭 문구)
+            assert "일차함수" in pc["rationale"]
+            # 톤 가드 — 금기 표현 부재(재사용 L4 함수 보장).
+            for forbidden in ("빨리", "정답", "틀렸"):
+                assert forbidden not in pc["prompt"]
+
+            # ② 막힌 선수 없는 문제 → None.
+            resp = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={"student_input": "이거는?", "problem_id": str(pid_clear)},
+            )
+            assert resp.status_code == 201, resp.text
+            body = resp.json()
+            dialogue_ids.append(uuid.UUID(body["dialogue_id"]))
+            assert body["prerequisite_coaching"] is None
+
+            # ③ stateless /v1/coach → 항상 None(problem_id 없음·DB 미사용).
+            resp = client.post(
+                "/v1/coach",
+                headers=auth,
+                json={"student_input": "이거 어떻게 풀어?"},
+            )
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["prerequisite_coaching"] is None
+    finally:
+        asyncio.run(
+            _cleanup_prereq(
+                uid,
+                problem_ids=[pid_blocked, pid_clear],
+                concept_ids=[c_post, c_pw, c_nolink],
+                uc_ids=[uc_c, uc_pw, uc_nolink],
+                dialogue_ids=dialogue_ids,
+            )
+        )
