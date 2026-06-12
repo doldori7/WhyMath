@@ -18,6 +18,7 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - v1.1 TextbookMapping·TextbookUnit (교과서 매핑 — 중첩 → 관계형 2테이블).
   - 슬105 MisconceptionEmbedding (L4 오개념 의미 매칭 pgvector 영속 — `vector` 컬럼 소유).
   - 슬3(개념그래프 아크) ConceptEmbedding (L1 개념 의미검색 pgvector 영속 — UC 키·`vector` 컬럼).
+  - 개념그래프 소비 슬1 ConceptNode (L1 개념 메타 PG 프로젝션 — UC 키·검색 enrichment 백킹).
 모든 테이블이 한 `Base.metadata`에 모여 문자열 FK 타깃(`problem.problem_id`·
 `concept.concept_id`·`user_profile.user_id`·`learning_session.session_id`·
 `problem_attempt.attempt_id`·`dialogue.dialogue_id`·`textbook_mapping.isbn` 등)이 해소된다.
@@ -47,6 +48,7 @@ from whymath_backend.db.models.concept import (
     ProblemConcept,
 )
 from whymath_backend.db.models.concept_embedding import ConceptEmbedding
+from whymath_backend.db.models.concept_node import ConceptNode
 from whymath_backend.db.models.curriculum_entry import CurriculumEntry
 from whymath_backend.db.models.device import DeviceCredential
 from whymath_backend.db.models.dialogue import (
@@ -124,4 +126,6 @@ __all__ = [
     "MisconceptionEmbedding",
     # 슬라이스 3(개념그래프 아크): ConceptEmbedding (L1 개념 의미검색 pgvector 영속·UC 키)
     "ConceptEmbedding",
+    # 개념그래프 소비 슬1: ConceptNode (L1 개념 메타 PG 프로젝션·UC 키·검색 enrichment 백킹)
+    "ConceptNode",
 ]

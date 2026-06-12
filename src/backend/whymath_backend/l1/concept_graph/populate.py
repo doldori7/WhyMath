@@ -1,17 +1,24 @@
-"""개념 임베딩 영속 적재 CLI — `python -m whymath_backend.l1.concept_graph.populate` (슬3).
+"""개념 임베딩+메타 영속 적재 CLI — `whymath_backend.l1.concept_graph.populate` (슬3·소비 슬1).
 
-슬1 산출 `graph.json`(UC 키·정제)의 개념을 설정된 임베딩 제공자(`config.embedding_provider`)로
-임베딩해 `ConceptEmbeddingIndex`(pgvector `concept_embedding` 테이블)에 멱등 upsert한다. 운영
-(Phaiakes9)에서 개념 사전 임베딩을 *프로세스 밖에 영속*하는 진입점이다. L4 오개념 적재 CLI
-(`l4.misconception.semantic.populate`)와 동형이되, 입력이 카탈로그가 아니라 `graph.json`이다.
+슬1 산출 `graph.json`(UC 키·정제)의 개념을 *두 투영*으로 동시 적재한다(같은 graph.json·동일 UC 키):
+  ① **임베딩 벡터**(슬3): 설정된 임베딩 제공자(`config.embedding_provider`)로 안전 표현을 임베딩해
+     `ConceptEmbeddingIndex`(pgvector `concept_embedding` 테이블)에 멱등 upsert.
+  ② **메타 프로젝션**(소비 슬1): 개념의 *안전 메타*(name_ko·domain·review_status·코드·교수 주석)를
+     `ConceptNodeStore`(`concept_node` 테이블)에 멱등 upsert — 검색 enrichment·게이팅 PG 조인 백킹.
+한 CLI에서 둘 다 적재가 자연스럽다(같은 입력·같은 UC 키·같은 sync 엔진 좌석). L4 오개념 적재
+CLI(`l4.misconception.semantic.populate`)와 동형이되, 입력이 카탈로그가 아니라 `graph.json`이다.
 
-전제: `WHYMATH_VECTOR_STORE=pgvector` + 마이그레이션 head 적용된 실 PG 도달 + `graph.json` 존재
-(슬1 `transform-v1 --output-dir`로 생성). 기본(memory)에선 영속 store가 없으므로 이 CLI는 의미가
-없다(pgvector 명시 시에만). 자격증명은 env(시크릿 0 하드코딩). 라이브 임베딩 모델 로드(bge-m3
-다운로드·OpenAI 키)는 첫 embed에서 발생한다.
+전제: `WHYMATH_VECTOR_STORE=pgvector` + 마이그레이션 head 적용된 실 PG 도달(`concept_embedding`·
+`concept_node` 테이블) + `graph.json` 존재(슬1 `transform-v1 --output-dir`로 생성). 기본(memory)에선
+영속 store가 없으므로 이 CLI는 의미가 없다(pgvector 명시 시에만). 자격증명은 env(시크릿 0 하드코딩).
+라이브 임베딩 모델 로드(bge-m3 다운로드·OpenAI 키)는 첫 embed에서 발생한다. 메타 적재는 임베딩
+호출이 없다(provider 불요·순수 메타 upsert).
 
 CI hermetic: 이 모듈 import만으로는 임베딩·PG 연결이 없다(provider·엔진 모두 지연). 실제
 적재는 CLI 실행(`__main__`) 또는 통합테스트에서만.
+
+redaction(우선순위 #2): 두 투영 모두 *안전 필드만* — description·formal_definition은 임베딩 입력에도
+메타 컬럼에도 없다(graph.json 부재·로더 미독·테이블 미수록의 삼중 방어).
 
 사용:
     WHYMATH_VECTOR_STORE=pgvector \
@@ -29,6 +36,10 @@ from whymath_backend.l1.concept_graph.embedding import (
     load_concepts_from_graph_json,
     populate_concept_embeddings,
 )
+from whymath_backend.l1.concept_graph.node_projection import (
+    load_concept_nodes_from_graph_json,
+    populate_concept_nodes,
+)
 from whymath_backend.l4.misconception.semantic.provider import build_provider
 
 # graph.json 기본 경로(슬1 transform-v1 --output-dir 관례). 명시 --graph로 오버라이드.
@@ -36,14 +47,18 @@ _DEFAULT_GRAPH_PATH = Path("data/concept_graph/graph.json")
 
 
 def main(argv: list[str] | None = None) -> int:
-    """graph.json 개념을 임베딩해 ConceptEmbeddingIndex에 적재하고 적재 행 수를 출력(CLI 본체).
+    """graph.json 개념을 임베딩+메타 두 투영으로 적재하고 각 적재 행 수를 출력(CLI 본체).
 
-    설정된 provider(local/openai/fake)를 만들어 `populate_concept_embeddings`로 upsert한다.
-    반환은 프로세스 종료 코드(0=성공·2=설정/입력 오류). 적재 건수를 stdout으로 보고한다.
+    ① 안전 표현을 임베딩해 `ConceptEmbeddingIndex`(concept_embedding)에, ② 안전 메타를
+    `ConceptNodeStore`(concept_node)에 멱등 upsert한다(같은 graph.json·동일 UC 키). 반환은
+    프로세스 종료 코드(0=성공·2=설정/입력 오류). 두 적재 건수를 stdout으로 보고한다.
     """
     parser = argparse.ArgumentParser(
-        prog="whymath-concept-embedding-populate",
-        description="개념그래프 graph.json → pgvector 의미 임베딩 멱등 적재(슬3).",
+        prog="whymath-concept-populate",
+        description=(
+            "개념그래프 graph.json → pgvector 의미 임베딩(concept_embedding) + 메타 프로젝션"
+            "(concept_node) 멱등 적재(슬3·소비 슬1)."
+        ),
     )
     parser.add_argument(
         "--graph",
@@ -69,12 +84,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    # ① 임베딩 벡터 적재(슬3) — 안전 표현 임베딩 → concept_embedding upsert.
     concepts = load_concepts_from_graph_json(graph_path)
     provider = build_provider(settings)
-    count = populate_concept_embeddings(concepts, provider, settings=settings)
+    embedding_count = populate_concept_embeddings(concepts, provider, settings=settings)
+
+    # ② 메타 프로젝션 적재(소비 슬1) — 안전 메타 → concept_node upsert(임베딩 호출 없음).
+    nodes = load_concept_nodes_from_graph_json(graph_path)
+    node_count = populate_concept_nodes(nodes, settings=settings)
+
     print(
-        f"개념 임베딩 적재 완료: {count}건 "
-        f"(provider={settings.embedding_provider}·graph={graph_path})."
+        f"개념 임베딩 적재 완료: {embedding_count}건 "
+        f"(provider={settings.embedding_provider})·"
+        f"메타 프로젝션 적재 완료: {node_count}건 (graph={graph_path})."
     )
     return 0
 

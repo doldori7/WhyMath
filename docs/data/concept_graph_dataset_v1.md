@@ -378,6 +378,82 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5f. 개념 메타 PG 프로젝션 + 검색 enrichment·검수 게이팅 (개념그래프 *소비* 아크 슬라이스 1 — 2026-06-12)
+
+> **소비 슬라이스(backend)**: 적재 아크(슬1~4)가 개념을 Neo4j(슬2)·pgvector(슬3)에 UC 키로 적재했고,
+> 슬4 검색은 UC concept_id+similarity만 돌려줬다(name_ko 등 enrichment는 §5e.3에서 "후속"으로 명시 —
+> UC↔backend-PG 키 공간 차이가 가로막음). 소비 슬1이 그 다리를 놓는다. **확정 설계 결정(사용자 승인)**:
+> 메타 브리지 = **PG 프로젝션**(backend↔Neo4j 런타임 연결 *안 함* — backend는 async-PG 단일 평면 유지).
+> graph.json 개념 메타를 **UC 키 PG 테이블(`concept_node`)로 프로젝션**하고, 검색 enrichment·게이팅을
+> **PG 조인**으로 한다. 모듈: `whymath_backend/db/models/concept_node.py`, alembic
+> `…_concept_node_meta_projection.py`, `whymath_backend/l1/concept_graph/{node_projection,retrieval}.py`,
+> `whymath_backend/api/concepts.py`(search 확장).
+
+### 5f.1 메타 프로젝션 ORM·마이그레이션 (`concept_node`)
+
+- **PK=`concept_id`(TEXT·UC)**: 슬2 Neo4j 노드 키·슬3 `concept_embedding.concept_id`와 *동일 키 공간*
+  → 한 UC 키가 *삼중 투영*(Neo4j 그래프·pgvector 벡터·PG 메타)을 잇는다. upsert가 PK 충돌로 멱등
+  (`ON CONFLICT(concept_id) DO UPDATE`). (backend PG `concept` 테이블[UUID PK+code]과는 여전히 *별개* —
+  이 테이블은 UC 공간 전용 프로젝션.)
+- **수록 컬럼(전부 안전)**: `name_ko`·`domain`(표시·식별)·`review_status`(게이팅 플래그·plain TEXT —
+  PG native enum 미생성·graph.json use_enum_values로 이미 'reviewed'/'pending' 문자열·concept_embedding
+  동형)·`standard_codes`(NCIC 코드 TEXT[])·`ccss_code`·`difficulty_tier`·`metaphor`·
+  `accepted_expressions`·`updated_at`. **`description`·`formal_definition` 컬럼 부재**(redaction·우선순위
+  #2 — 성취기준 본문 근접 필드를 *둘 곳 자체를 두지 않음*. graph.json 부재·로더 미독·테이블 미수록의
+  삼중 방어. 슬3 임베딩 ORM이 원문 미저장한 것과 같은 규약).
+- **마이그레이션 체인**: `down_revision=e8f9a0b1c2d3`(슬3 concept_embedding head 위·단일 head 유지·신
+  head `f9a0b1c2d3e4`). pgvector 확장 무관(벡터 컬럼 0). upgrade=CREATE TABLE·downgrade=DROP TABLE만
+  (왕복 안전·CI `downgrade base→upgrade head` 검증). 인덱스 없음(403 규모·PK로 충분·게이팅은 필터).
+  오프라인 SQL 검증: `upgrade --sql`=CREATE TABLE(본문 컬럼 0 확인)·`downgrade --sql`=DROP TABLE·
+  `heads`=단일 head.
+
+### 5f.2 적재기 (`node_projection`·신규 seam 0)
+
+- **입력 원천 = 슬1 산출 `graph.json`**(슬3과 동일). `load_concept_nodes_from_graph_json`이 `concepts`
+  배열에서 **안전 메타 키만** 읽어 `ConceptNodeRecord` 목록을 만든다 — description·formal_definition은
+  읽지 않고(graph.json 부재·무시) 레코드 슬롯도 없다. 슬3 임베딩 로더와 달리 *전량 적재*(빈 옵션 필드도
+  적재 — enrichment·게이팅 recall). name_ko/domain/review_status 누락(오염 입력)은 NOT NULL 위반 대신
+  *건너뜀*(정직·정상 graph.json은 셋 다 필수 보유).
+- **sync 엔진 재사용**(신규 seam 0): 슬3 `embedding._build_sync_engine`(sync psycopg·지연 import·
+  `db_disable_pool` NullPool 가드)을 그대로 import. `ConceptNodeStore.upsert`는 `INSERT ... ON
+  CONFLICT(concept_id) DO UPDATE`(멱등). `populate_concept_nodes`는 provider 불요(순수 메타 upsert).
+- **CLI 통합**: 슬3 `populate.py`가 *임베딩+메타 둘 다* 적재한다(같은 graph.json·동일 UC 키·한 진입점).
+  `WHYMATH_VECTOR_STORE=pgvector python -m whymath_backend.l1.concept_graph.populate --graph …`. 멱등.
+
+### 5f.3 검색 enrichment + 검수 게이팅 (`retrieval`·`api/concepts`)
+
+- **enrichment(PG 조인)**: `search_concepts`가 pgvector 검색(슬3·UC+similarity)으로 잡은 UC들을
+  `fetch_node_meta`(단일 IN 쿼리·N+1 없음·검색 좌석과 *같은 sync 엔진* 공유)로 조회해 `name_ko`·
+  `domain`·`review_status`를 `ConceptSearchHit`에 붙인다. `concept_node`에 없는 UC(메타 적재 누락)는
+  **None graceful**(검색 계속). 안전 필드만 SELECT(본문 컬럼 자체가 없어 흐를 경로 0).
+- **게이팅(`reviewed_only: bool=False`)**: 기본 False=recall 보존(pending 개념도 노출). True면 상위 top_k
+  창에서 `review_status=='reviewed'`인 hit만 남긴다(*필터*·유사도 정렬 유지). 메타가 없어 reviewed
+  확인 불가인 UC는 gated 모드에서 *보수적 제외*(정직 — 확실치 않으면 노출 안 함). §5e.3이 "후속"으로
+  남긴 게이팅이 여기서 *조회* 정책으로 결선(적재는 전량+플래그·슬3에서 완료).
+- **HTTP 계약 확장**: `GET /v1/concepts/search?q=…&k=…&reviewed_only=<bool>` → `results[]`에 `name_ko`·
+  `domain`·`review_status` 추가(미적재 UC는 null). 검색 좌석은 sync(임베딩+psycopg 검색+메타 조인)라
+  `asyncio.to_thread`로 격리(이벤트 루프 보호).
+- **노출 계약 유지**(CLAUDE.md): *학생 직접 노출 아닌* 조회 좌석(L2/L4·교사 도구 소비). enrich는 안전
+  표시·게이팅 필드뿐 — **본문(description·formal_definition) 0**(`concept_node`에 컬럼 자체 없음)·금기
+  표현 0. 키 일관성: concept_id=UC(슬2·3 동일 — 삼중 store 단일 키).
+
+### 5f.4 산출물·게이트
+
+- 4게이트 통과(`cd src/backend`): `ruff check .`·`black --check .`(153파일)·`mypy --strict whymath_backend`
+  (131 src·이슈 0)·`pytest --cov`(전체 **96%**·**2454 passed/93 skip**). 신규 테스트:
+  `test_concept_node_projection.py`(적재기 단위·22·Fake 엔진·redaction·fetch_node_meta SQL)·
+  `test_concept_retrieval.py`(좌석 단위·enrich+게이팅 추가·`fetch_node_meta` 패치)·
+  `test_concepts_search.py`(엔드포인트 단위·reviewed_only+enrich 응답)·`test_concept_node_projection_
+  integration.py`(적재→enrich→게이팅→메타 누락 graceful·실 PG 게이트·5).
+- **통합테스트(실 PG)는 기본 SKIP** — `@pytest.mark.integration`+`WHYMATH_RUN_INTEGRATION` 게이트 + PG
+  미도달 graceful skip. **CI 신규 잡 불요** — 기존 **`backend — 마이그레이션·통합 (실 PG)` 잡**이
+  `alembic upgrade head`(→`concept_node` 생성)·`downgrade base→upgrade head` 왕복 후 `pytest -m
+  integration --ignore=l3`로 `tests/backend/l1/`를 자동 수집·실행. **Phaiakes9**에서도 실행.
+- 시크릿 0(자격증명 env 전용·하드코딩 0)·멱등 적재·7계층(L1 데이터 서빙+L5 표면·L2/L4 소비 로직
+  미구현 — 좌석만).
+
+---
+
 ## 6. 향후 활용
 
 1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·
@@ -386,8 +462,11 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
    엣지·MERGE 멱등·env 접속) · **개념 pgvector 임베딩 적재는 슬라이스 3에서 완료**(§5d·UC 키 이중
    store·name_ko+metaphor+accepted 임베딩·멱등 upsert·backend 패키지) · **개념 의미검색 조회 좌석 +
    backend search API는 슬라이스 4에서 완료**(§5e·`search_concepts`·`GET /v1/concepts/search`·UC
-   concept_id+similarity 반환). **후속(슬5+)**: 메타 enrichment(name_ko 외·Neo4j traversal·UC↔PG 브리지
-   설계 결정 선행) · L2/L4 결선(약개념 추천·오개념↔개념 자동 연결) · 검수 게이팅 *조회* 정책(reviewed
-   우선 노출·적재는 전량+플래그 완료).
+   concept_id+similarity 반환) · **메타 enrichment + 검수 게이팅은 *소비* 아크 슬라이스 1에서 완료**
+   (§5f·메타 브리지=**PG 프로젝션**[backend↔Neo4j 런타임 연결 0]·`concept_node` UC 키 메타·검색이
+   name_ko·domain·review_status를 PG 조인으로 enrich·`reviewed_only` 게이팅 필터·삼중 store 단일 UC 키).
+   **후속(소비 슬2+)**: L2 결선(약개념 추천이 이 좌석 호출) · L4 결선(오개념↔개념 자동 연결) · 풍부
+   메타 enrichment(standard_codes·difficulty_tier 등 표면 노출·Neo4j traversal은 *여전히 미도입*·필요 시
+   별도 결정).
 2. **L4 오개념 확장**(후속): §5.4 후보를 doc-first로 카탈로그에 추가(30종+ 목표).
 3. **암기카드**(L6): 113장 — `exposure_condition`("이해 마스터 후 노출")이 메타인지 정책과 정합.
