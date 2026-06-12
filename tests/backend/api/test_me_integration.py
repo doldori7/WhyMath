@@ -23,6 +23,7 @@ from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
+from whymath_backend.db.models.concept_node import ConceptNode
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.l2.ability_tracking import get_current_theta
@@ -1536,3 +1537,126 @@ def test_me_session_end_auto_captures_concept_snapshots_on_live_pg() -> None:
         assert global_theta == pytest.approx(4.0)
     finally:
         asyncio.run(_cleanup_all())
+
+
+# ── 개념그래프 소비 슬2: GET /v1/me/weak-concepts (약개념 추천 — 진단 약점 + UC 메타 enrich) ──
+async def _cleanup_concept_nodes(uc_ids: list[str]) -> None:
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM concept_node WHERE concept_id = ANY(:ids)"),
+                {"ids": uc_ids},
+            )
+    finally:
+        await engine.dispose()
+
+
+def _concept_with_code(cid: uuid.UUID, code: str, name: str) -> Concept:
+    """backend `concept` 행(code=UC 브리지 키) — 진단이 mastery→concept join에 쓴다."""
+    return Concept.from_schema(
+        ConceptSchema(
+            concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념
+        )
+    )
+
+
+def _node_meta(uc: str, name_ko: str, domain: str, review_status: str) -> ConceptNode:
+    """concept_node(UC PK) 안전 메타 행 — fetch_node_meta enrich가 sync 조회로 읽는다."""
+    return ConceptNode(
+        concept_id=uc, name_ko=name_ko, domain=domain, review_status=review_status
+    )
+
+
+def test_me_weak_concepts_enrich_and_gating_on_live_pg() -> None:
+    """GET /v1/me/weak-concepts — 약점(BKT) 식별 → code(UC) → concept_node 메타 enrich.
+
+    end-to-end: mastery 약점 → backend `concept`(code=UC) join → `concept_node`(UC) 안전 메타
+    enrich(name_ko·domain·review_status)·검수 게이팅·limit·redaction(본문 0)·401. 강개념(고숙달)
+    은 제외, 메타 미적재 UC는 enrich None(graceful), reviewed_only=true면 reviewed만.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    # 약개념 후보 3 + 강개념 1. UC는 uid 접미사로 유니크(실 403 데이터셋과 충돌 회피).
+    sfx = uid.hex[:8]
+    uc_a, uc_b, uc_c = f"UC.test.{sfx}.a", f"UC.test.{sfx}.b", f"UC.test.{sfx}.c"
+    uc_d = f"UC.test.{sfx}.d"
+    c_a, c_b, c_c, c_d = (uuid.uuid4() for _ in range(4))
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        # backend concept(code=UC) — a/b/c/d 4개념
+        asyncio.run(
+            _add_all(
+                _concept_with_code(c_a, uc_a, "일차함수"),
+                _concept_with_code(c_b, uc_b, "이차함수"),
+                _concept_with_code(c_c, uc_c, "삼각비"),
+                _concept_with_code(c_d, uc_d, "집합"),
+            )
+        )
+        # concept_node 메타 — a(reviewed)·b(pending)·c는 미적재(enrich None)·d(reviewed·강개념)
+        asyncio.run(
+            _add_all(
+                _node_meta(uc_a, "일차함수", "[중]함수", "reviewed"),
+                _node_meta(uc_b, "이차함수", "[중]함수", "pending"),
+                _node_meta(uc_d, "집합", "[고]집합과명제", "reviewed"),
+            )
+        )
+        # mastery — a/b/c 약점(<0.7)·d 강개념(0.9). 약점 정렬: a(0.2)<b(0.3)<c(0.4)
+        asyncio.run(
+            _add_all(
+                _mastery_row(uid, c_a, t1, 0.2),
+                _mastery_row(uid, c_b, t1, 0.3),
+                _mastery_row(uid, c_c, t1, 0.4),
+                _mastery_row(uid, c_d, t1, 0.9),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # ① 기본(recall) — 약점 3개만(강개념 d 제외)·약점 정렬·enrich
+            resp = client.get("/v1/me/weak-concepts", headers=auth)
+            assert resp.status_code == 200, resp.text
+            rows = resp.json()
+            assert [r["concept_code"] for r in rows] == [uc_a, uc_b, uc_c]  # 약점 정렬
+            assert rows[0]["name_ko"] == "일차함수"  # concept_node enrich
+            assert rows[0]["domain"] == "[중]함수"
+            assert rows[0]["review_status"] == "reviewed"
+            assert rows[0]["weakness"] == 0.2
+            assert rows[1]["review_status"] == "pending"  # b
+            # c는 concept_node 미적재 → enrich None graceful(추천은 유지)
+            assert rows[2]["concept_code"] == uc_c
+            assert rows[2]["name_ko"] is None
+            assert rows[2]["domain"] is None
+            assert rows[2]["review_status"] is None
+            # redaction — 본문 필드 부재
+            assert "description" not in rows[0]
+            assert "formal_definition" not in rows[0]
+
+            # ② reviewed_only=true — reviewed만(a)·pending(b)·미적재(c) 제외
+            resp = client.get(
+                "/v1/me/weak-concepts", headers=auth, params={"reviewed_only": "true"}
+            )
+            assert [r["concept_code"] for r in resp.json()] == [uc_a]
+
+            # ③ limit=1 — 약점 정렬 보존 상위 1(a)
+            resp = client.get(
+                "/v1/me/weak-concepts", headers=auth, params={"limit": "1"}
+            )
+            assert [r["concept_code"] for r in resp.json()] == [uc_a]
+
+            # ④ threshold=0.35 — 0.35 미만만(a 0.2·b 0.3·c 0.4 제외)
+            resp = client.get(
+                "/v1/me/weak-concepts", headers=auth, params={"threshold": "0.35"}
+            )
+            assert [r["concept_code"] for r in resp.json()] == [uc_a, uc_b]
+
+            # ⑤ 무토큰 401
+            assert client.get("/v1/me/weak-concepts").status_code == 401
+    finally:
+        asyncio.run(_cleanup_mastery([uid]))
+        asyncio.run(_cleanup_concepts([c_a, c_b, c_c, c_d]))
+        asyncio.run(_cleanup_concept_nodes([uc_a, uc_b, uc_c, uc_d]))
+        asyncio.run(_cleanup([uid]))  # user_profile 정리

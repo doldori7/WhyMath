@@ -531,6 +531,62 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5h. 약개념 추천 — L2 약점 + `concept_node` UC 메타 enrich (개념그래프 *소비* 아크 슬라이스 2 — 2026-06-12)
+
+> **소비 슬라이스(backend·L2)**: 소비 슬1(§5f·`concept_node` 메타 프로젝션)·브리지(§5g·backend `concept`
+> `code`=UC)가 *사중 store 단일 UC 키*를 닫았다. 그러나 *런타임 소비 경로*는 아직 한 단계 더 닫아야 했다 —
+> L2 학습자 모델이 약점(낮은 BKT/IRT)을 식별해도 그 약점을 *그래프 메타와 함께* 돌려주는 좌석이 없었다.
+> 이 슬라이스가 그 경로를 닫는다: **L2 약점 → `concept.code`(UC) → `concept_node` 안전 메타 enrich → 추천**.
+
+### 5h.1 약개념 추천 좌석 (`l2/weak_concept_recommendation`·L2 학습자 모델)
+
+- **재사용(신규 진단·정렬 로직 0)**: ① `l2.concept_diagnosis.compute_concept_diagnoses`(BKT 최신 숙달 +
+  IRT θ 융합·agreement·*약점 먼저* 정렬·각 항목 `concept_code`=UC[orphan None])를 *그대로 입력*으로 쓴다.
+  ② `l1.concept_graph.node_projection.fetch_node_meta`(UC→`concept_node` 안전 메타 단일 IN 조회)를 enrich에
+  재사용 — 검색 좌석(§5e·`search_concepts`)이 쓴 *같은* 좌석.
+- `WeakConceptRecommendation`(Pydantic): concept_id·concept_code(UC)·concept_name·bkt_mastery·
+  irt_mastery_proxy·`weakness`(두 신호 최저·정렬·필터 기준)·agreement + **enrich** name_ko·domain·review_status.
+- `recommend_weak_concepts(session, user_id, *, limit=10, mastery_threshold=0.7, reviewed_only=False,
+  meta_engine=None)` 흐름: ①진단(약점 정렬 보존)→②**약점 필터**(비교 가능 신호 최저 < 임계·신호 0건 제외)→
+  ③**UC dedupe enrich**(`fetch_node_meta` 단일 IN·N+1 0)→④**검수 게이팅**(`reviewed_only=True`면 reviewed만·
+  메타 없으면 보수적 제외[§5f.3 규약과 일관])→⑤**상한**(정렬 보존 상위 N).
+- **sync 좌석 격리**: `fetch_node_meta`는 sync 엔진(블로킹 psycopg)이고 이 함수는 async — 검색 좌석(api/
+  concepts)이 sync 좌석을 `asyncio.to_thread`로 워커 스레드에 격리하는 *바로 그 패턴*을 따른다(신규 동시성 0·
+  이벤트 루프 보호·p50<2s).
+
+### 5h.2 HTTP 엔드포인트 (`GET /v1/me/weak-concepts`·L5 API 표면)
+
+- query: `limit`(1~50·기본 10)·`threshold`(0~1·기본 0.7)·`reviewed_only`(기본 false=recall). `ConsentedUser`·
+  user_id 스코핑·읽기. 응답 `list[WeakConceptRecommendation]`.
+- **노출 계약**: 학생 직접 노출 아닌 *조회 좌석*(소비 슬1과 일관·L2/L4·교사 소비). enrich는 안전 표시·게이팅
+  필드뿐 — **본문(description·formal_definition) 0**(`concept_node`에 컬럼 자체 없음·redaction 구조적 차단·
+  추천 스키마에 슬롯 부재). 우열 매기기·정답 빠르게 등 금기 표현 0.
+
+### 5h.3 계층·범위
+
+- **7계층**: L2가 L1 `fetch_node_meta`를 *호출*(L_n→L_{n-1} 준수). L4 코칭·L5 노출은 부착하지 않음(역방향
+  의존 회피 — 코칭은 L4·HTTP 표면은 api/me). **마이그레이션 0**(기존 테이블 조회만·스키마 변경 불요).
+- **명시적 범위 밖(후속)**: 선수엣지(`concept_edge` PREREQUISITE·이미 backend PG 보유) traversal로 "막힌
+  선수개념" 추천 · 풍부 메타 노출(standard_codes·difficulty_tier·`fetch_node_meta` 확장) · L4 오개념↔약개념
+  결선(이 좌석 호출). **Neo4j 런타임 traversal은 여전히 미도입**(PG 단일 평면 유지).
+
+### 5h.4 산출물·게이트
+
+- 4게이트 통과(`cd src/backend`·py3.12): `ruff`(green)·`black --check`(155파일 green)·`mypy whymath_backend`
+  (**133 src·이슈 0**)·`pytest`(**2493 passed/98 skip**·회귀 0)·신규 모듈 cov **100%**(46 stmts·14 branch·
+  0 miss).
+- 신규 테스트 2: `test_weak_concept_recommendation.py`(16 단위·약점 필터[임계 경계·신호 0건]·정렬 보존·
+  limit·enrich[부착·미적재 None·orphan·dedupe 단일 호출]·reviewed_only 게이팅[pending/메타없음 제외·기본
+  recall·게이팅 후 limit]·redaction) · `test_me_integration.py`에 `test_me_weak_concepts_enrich_and_gating_
+  on_live_pg` 추가(실 PG: 약점→code[UC]→`concept_node` enrich·게이팅·limit·threshold·redaction NULL·401·
+  강개념 제외·메타 미적재 graceful).
+- **통합테스트(실 PG)는 기본 SKIP**(`@pytest.mark.integration`+`WHYMATH_RUN_INTEGRATION` 게이트 + PG 미도달
+  graceful skip). **CI 신규 잡 불요** — 기존 **`backend — 마이그레이션·통합 (실 PG)` 잡**이 `tests/backend/
+  api/`·`l2/`를 자동 수집. **마이그레이션 0**(단일 head `f9a0b1c2d3e4` 불변). **Phaiakes9**에서도 실행.
+- 시크릿 0·7계층(L2 소비 좌석·L1 호출만). **다음**: 선수엣지 traversal·L4 오개념↔약개념 결선·풍부 메타 노출.
+
+---
+
 ## 6. 향후 활용
 
 1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·
@@ -542,8 +598,11 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
    concept_id+similarity 반환) · **메타 enrichment + 검수 게이팅은 *소비* 아크 슬라이스 1에서 완료**
    (§5f·메타 브리지=**PG 프로젝션**[backend↔Neo4j 런타임 연결 0]·`concept_node` UC 키 메타·검색이
    name_ko·domain·review_status를 PG 조인으로 enrich·`reviewed_only` 게이팅 필터·삼중 store 단일 UC 키).
-   **후속(소비 슬2+)**: L2 결선(약개념 추천이 이 좌석 호출) · L4 결선(오개념↔개념 자동 연결) · 풍부
-   메타 enrichment(standard_codes·difficulty_tier 등 표면 노출·Neo4j traversal은 *여전히 미도입*·필요 시
-   별도 결정).
+   · **브리지(backend `concept` 적재·`code`=UC)는 *소비* 아크 브리지 슬라이스에서 완료**(§5g·사중 store
+   단일 UC 키·런타임 경로 닫힘) · **약개념 추천(L2 약점 + `concept_node` UC 메타 enrich)은 *소비* 아크
+   슬라이스 2에서 완료**(§5h·`recommend_weak_concepts`·`GET /v1/me/weak-concepts`·L2 약점→`concept.code`
+   [UC]→그래프 메타·검수 게이팅·`asyncio.to_thread` 격리). **후속(소비 슬3+)**: 선수엣지(`concept_edge`
+   PREREQUISITE) traversal로 막힌 선수개념 추천 · L4 결선(오개념↔약개념 자동 연결) · 풍부 메타 노출
+   (standard_codes·difficulty_tier 등·Neo4j traversal은 *여전히 미도입*·필요 시 별도 결정).
 2. **L4 오개념 확장**(후속): §5.4 후보를 doc-first로 카탈로그에 추가(30종+ 목표).
 3. **암기카드**(L6): 113장 — `exposure_condition`("이해 마스터 후 노출")이 메타인지 정책과 정합.

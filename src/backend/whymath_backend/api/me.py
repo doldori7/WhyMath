@@ -80,6 +80,10 @@ from whymath_backend.l2.irt import (
     select_weighted_item,
 )
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
+from whymath_backend.l2.weak_concept_recommendation import (
+    WeakConceptRecommendation,
+    recommend_weak_concepts,
+)
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
@@ -1065,6 +1069,65 @@ async def get_my_diagnosis_summary(
         attention_count=counts["irt_higher"] + counts["bkt_higher"],
         weakest_concept_id=weakest.concept_id if weakest else None,
         weakest_concept_name=weakest.concept_name if weakest else None,
+    )
+
+
+# ── 개념그래프 소비 슬2: GET /v1/me/weak-concepts (약개념 추천 — 진단 약점 + UC 메타 enrich) ──
+# L2 약점 진단(`recommend_weak_concepts`·BKT/IRT 융합·약점 정렬·약점 필터)에 `concept_node`(UC)
+# 안전 그래프 메타(name_ko·domain·review_status)를 enrich해 "지금 무엇을 복습할지" 후보를 돌려준다.
+# *학생 직접 노출이 아니라* 내부 조회 좌석(소비 슬1 노출 계약과 일관 — 안전 필드만·본문 0). 진단·
+# enrich·게이팅 로직은 L2 좌석이 소유(L5는 표면·user_id 스코핑·읽기 전용·마이그레이션 0).
+WeakLimit = Annotated[int, Query(ge=1, le=50, description="약점(저신호) 먼저 정렬 후 상위 N개만.")]
+WeakThreshold = Annotated[
+    float,
+    Query(
+        ge=0.0,
+        le=1.0,
+        description="이 숙달 미만(비교 가능한 두 신호 중 최저값 기준)인 개념만 약점으로 추천.",
+    ),
+]
+WeakReviewedOnly = Annotated[
+    bool,
+    Query(
+        description=(
+            "검수 게이팅. false(기본)=recall 보존(pending·메타 미적재 개념도 노출). true="
+            "review_status='reviewed'인 개념만(메타 없어 확인 불가인 UC는 보수적 제외·필터)."
+        ),
+    ),
+]
+
+
+@router.get(
+    "/weak-concepts",
+    response_model=list[WeakConceptRecommendation],
+    summary="내 약개념 추천(BKT/IRT 약점 + 개념그래프 안전 메타 enrich)",
+)
+async def get_my_weak_concepts(
+    user: ConsentedUser,
+    session: SessionDep,
+    limit: WeakLimit = 10,
+    threshold: WeakThreshold = 0.7,
+    reviewed_only: WeakReviewedOnly = False,
+) -> list[WeakConceptRecommendation]:
+    """학습자 약점(BKT/IRT)을 식별해 개념그래프(`concept_node`·UC) 안전 메타를 붙여 추천.
+
+    L2 진단(`compute_concept_diagnoses`·BKT 최신 + IRT θ 융합·*약점 먼저* 정렬)을 재사용해
+    약점(비교 가능한 두 신호 중 최저값 < `threshold`)인 개념만 거르고, 그 개념의 `concept_code`
+    (=UC)로 `concept_node`(PG 프로젝션·소비 슬1 브리지) 안전 메타(name_ko·domain·review_status)를
+    *단일 IN 조회*로 enrich한다(N+1 0·UC 없거나 메타 미적재면 None graceful). `reviewed_only=true`
+    면 검수 안 된 개념을 *필터*(약점 정렬 유지)하고, `limit`로 상위 N만 돌려준다. 진단·enrich·
+    게이팅은 L2 좌석이 소유(`recommend_weak_concepts`)·user_id 스코핑·읽기 전용.
+
+    **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 *조회 좌석*(소비 슬1과 일관)이다. enrich
+    되는 건 안전 표시·게이팅 필드뿐 — **본문(description·formal_definition) 0**(concept_node에
+    컬럼 자체가 없음·redaction). 우열 매기기·정답 빠르게 등 금기 표현 0.
+    """
+    return await recommend_weak_concepts(
+        session,
+        user.user_id,
+        limit=limit,
+        mastery_threshold=threshold,
+        reviewed_only=reviewed_only,
     )
 
 
