@@ -66,17 +66,39 @@ class EvidenceSource(str, Enum):
     EXPERT_REVIEW = "expert_review"
 
 
-# 관계·출처 enum의 단일 진실(§2.2 "한 곳에서 관리"). 추가 시 위 Enum만 갱신.
+class ReviewStatus(str, Enum):
+    """개념 검수 상태 — 적재 보류 표식(concept_graph_dataset_v1.md §4).
+
+    데이터셋 `definition_provenance`가 "수기 검수"면 `REVIEWED`(우선 적재 후보·114건),
+    그 외 자동생성·검수필요 계열이면 `PENDING`(전문가 검수 후 적재·289건). 슬라이스 1은
+    이 표식만 *부여*하고 게이팅(보류분 제외 적재)은 후속 슬라이스(적재) 몫이다.
+    """
+
+    REVIEWED = "reviewed"
+    PENDING = "pending"
+
+
+# 관계·출처·검수상태 enum의 단일 진실(§2.2 "한 곳에서 관리"). 추가 시 위 Enum만 갱신.
 RELATION_TYPES: Final[tuple[str, ...]] = tuple(r.value for r in Relation)
 EVIDENCE_SOURCES: Final[tuple[str, ...]] = tuple(e.value for e in EvidenceSource)
+REVIEW_STATUSES: Final[tuple[str, ...]] = tuple(s.value for s in ReviewStatus)
 
 
 class Concept(BaseModel):
-    """개념 그래프 노드 — `concept.schema.yaml`.
+    """개념 그래프 노드 — `concept.schema.yaml` + 데이터셋 v1 풍부 필드 확장.
 
-    `concept_id`는 UC 규약 PK(curriculum_entry·textbook_mapping과 공유 키). 다국 표기
-    `name_ko/en/ja`는 셋 다 비어있을 수 없다(다국 정합성 키). `standard_codes`는 NCIC
-    성취기준 코드 참조(truth source) — 본문은 복제하지 않는다.
+    `concept_id`는 UC 규약 PK(curriculum_entry·textbook_mapping과 공유 키). `name_ko`는
+    필수, `name_en/ja`는 **선택(Phase 1 KR 단일언어 데이터 수용)** — 다국 표기는 후속.
+    `standard_codes`는 NCIC 성취기준 코드 참조(truth source) — 본문은 복제하지 않는다.
+
+    풍부 필드(데이터셋 v1·concept_graph_dataset_v1.md §2 — 2026-06-12 모델 확장 결정):
+    `metaphor`(은유)·`accepted_expressions`(허용표현)·`ccss_code`(매칭 CCSS)·
+    `misconception_text`(자유텍스트 오개념 — 카탈로그 코드 `misconception_codes`와 *별개*)·
+    `difficulty_tier`(난이도층 0~24)·`review_status`(적재 보류 표식).
+
+    법적·redaction(concept_graph_dataset_v1.md §3·CLAUDE.md): 성취기준 *본문* 근접 복제
+    위험인 `description`·`formal_definition`은 이 모델에 **일부러 부재** — 모델에 슬롯이
+    없어 구조적으로 재유입이 차단된다(누수 0). 이 부재는 의도이므로 추가 금지.
     """
 
     model_config = ConfigDict(
@@ -90,9 +112,15 @@ class Concept(BaseModel):
         description="Universal Concept ID (PK). 'UC.<domain>.<topic>.<slug>'. 발급 후 변경 금지.",
     )
     name_ko: str = Field(..., min_length=1, description="한국어 명칭(빈 문자열 금지).")
-    name_en: str = Field(..., min_length=1, description="영어 명칭(다국 join 축, 빈 문자열 금지).")
-    name_ja: str = Field(
-        ..., min_length=1, description="일본어 명칭(다국 정합성 키, 빈 문자열 금지)."
+    name_en: str | None = Field(
+        default=None,
+        min_length=1,
+        description="영어 명칭(다국 join 축). Phase 1 KR은 미보유 — None 허용·빈 문자열 금지.",
+    )
+    name_ja: str | None = Field(
+        default=None,
+        min_length=1,
+        description="일본어 명칭(다국 정합성 키). Phase 1 KR은 미보유 — None 허용·빈 문자열 금지.",
     )
     domain: str = Field(
         ..., min_length=1, description="영역명(NCIC 영역 어휘와 정렬, 예 '미적분')."
@@ -116,6 +144,38 @@ class Concept(BaseModel):
     standard_codes: list[str] = Field(
         default_factory=list,
         description="매핑된 NCIC 성취기준 코드(truth source 연결). 본문은 복제 금지.",
+    )
+    metaphor: str | None = Field(
+        default=None,
+        description="개념을 직관화하는 은유(데이터셋 v1 교수학 주석). 비어있을 수 있음.",
+    )
+    accepted_expressions: str | None = Field(
+        default=None,
+        description="학생이 개념을 '이해했다'고 볼 허용표현(데이터셋 v1). 비어있을 수 있음.",
+    )
+    ccss_code: str | None = Field(
+        default=None,
+        description="매칭 미국 CCSS 코드(국제 비교 축). CCSS 본문(statement)은 복제 금지.",
+    )
+    misconception_text: str | None = Field(
+        default=None,
+        description=(
+            "자유텍스트 오개념(데이터셋 v1). misconception_codes(카탈로그 키)와 *별개* — "
+            "자유텍스트라 30-카탈로그 코드로 강제 매핑하지 않는다(코드화는 후속)."
+        ),
+    )
+    difficulty_tier: int | None = Field(
+        default=None,
+        ge=0,
+        le=24,
+        description="난이도층 [0, 24](데이터셋 v1). 0=가장 기초.",
+    )
+    review_status: ReviewStatus = Field(
+        default=ReviewStatus.PENDING,
+        description=(
+            "적재 보류 표식. definition_provenance가 '수기 검수'면 reviewed, "
+            "그 외 자동·검수필요면 pending(§4). 게이팅은 후속 적재 슬라이스 몫."
+        ),
     )
     notes: str | None = Field(
         default=None,

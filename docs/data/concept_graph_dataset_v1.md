@@ -142,9 +142,79 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5b. 정형화·검증 상태 (L1 적재 아크 슬라이스 1 — 2026-06-12)
+
+> **무저장소 슬라이스**: 데이터셋 → 정본 `Concept`/`ConceptEdge` 정형화 + 그래프 검증까지.
+> Neo4j/pgvector 적재·드라이버·임베딩은 **이번 범위 밖**(후속 슬라이스 2~3). 모듈:
+> `data_pipeline/concept_graph/{idmap,transform,validate}.py`, CLI `transform-v1`.
+
+### 5b.1 src_id → UC 매핑 (`idmap.py`)
+
+- 데이터셋 `src_id`(N1·HK01·H:12대수01-01 …)는 UC 규약(`UC.<domain>.<topic>.<slug>`)과 다르다(§2 주의).
+  **결정론적 매핑** 규칙: 도메인·토픽은 첫 `standard_code`에서 파생(`parse_standard_code`+과목약칭 —
+  교육과정 의미 보존), **slug는 `src_id`에서 파생**(유일성 보장).
+- **충돌 해소(핵심)**: 성취기준 코드만으로 UC를 만들면 **충돌 7건**이 난다 — 여러 개념이 *같은*
+  성취기준을 공유한다(예 `F7`·`F8`·`F9` → 모두 `[6수01-06]`). slug에 `src_id`를 쓰므로
+  **403 src_id → 403 유일 UC(충돌 0)**. 폴백 `UC.x.misc.<slug>`(코드 없음/파싱 실패 — 실데이터 0건).
+- 전문가 재명명은 `overrides`(src_id→UC) 주입으로 가능(결정론이되 교체 가능). 산출 UC는 전부
+  `CONCEPT_ID_PATTERN` 통과. 매핑 테이블은 `id_map.csv`(`src_id`,`concept_id`)로 검토·인계.
+- **한계(슬2 인계)**: 한글 src_id(`H:12미적Ⅰ01-01`)는 slug에서 과목한글이 소실(`h-12-01-01`)된다 —
+  유일성·결정론·규약은 보존되고 `src_id`는 매핑 테이블에 보존. 가독 UC 재명명은 적재 시 override로.
+
+### 5b.2 정형화 (`transform.py`)
+
+| 데이터셋 | → 모델 | 비고 |
+|---|---|---|
+| `concepts.jsonl`(403) | `Concept`(403) | `category`→`domain`·첫 코드 학년→`grade_band_hint`·풍부필드 직결 |
+| `prerequisite_edges.jsonl`(541) | `ConceptEdge`(541) | relation `선수(prereq)`→`PREREQUISITE`·UC 변환 |
+| `standard_ccss_map.jsonl`(403) | — | `concept.ccss_code`로 흡수(ccss 완전 일치 검증) |
+| `flashcards.jsonl`(113) | raw 패스스루 | L6 — 억지 매핑 안 함(후속) |
+| `ccss_only_intl.jsonl`(13) | raw 패스스루 | 국제트랙 — 후속 |
+
+- **풍부 필드 모델 확장**(2026-06-12 결정): `metaphor`·`accepted_expressions`·`ccss_code`·
+  `misconception_text`(자유텍스트 — 카탈로그 코드 `misconception_codes`와 *별개*·코드화 후속)·
+  `difficulty_tier`(0~24)·`review_status`. `name_en/ja`는 Phase 1 KR이라 Optional(None 허용·빈 문자열 금지).
+- **엣지 evidence 합성**: 데이터셋 엣지엔 evidence/strength가 없는데 모델은 `evidence` 비공백·
+  `strength` 필수 → `evidence="전문가 작성 개념그래프 v1"`·`evidence_source=expert_review`·`strength=0.8` 합성.
+- **prerequisite 캐시**: 엣지(src=선수→dst=후행)로 각 후행 개념의 `prerequisite_concept_ids` 역채움(§2.1 조회 캐시).
+- **검수 게이팅 표식**(§4): `definition_provenance`='수기 검수' → `review_status=reviewed`(114건),
+  그 외 자동·검수필요 → `pending`(289건). 적재 보류 게이팅 자체는 후속 적재 슬라이스 몫.
+
+### 5b.3 redaction 불변 (우선순위 #2)
+
+- `description`·`formal_definition`은 **`Concept` 모델에 슬롯이 없어 구조적으로 차단**(extra='forbid') —
+  정형화 코드가 *읽지도 않는다*. 전체 개념 dump·`graph.json`에 두 키 0건(테스트 단언).
+- 패스스루(flashcards·intl)는 각 레코드 `_redacted_fields` 마커를 읽어 동적 제외 → intl
+  `ccss_statement_en` 누수 차단(테스트가 잡은 갭 보강).
+
+### 5b.4 검증 리포트 (`validate.py` — §5 10 invariant, 실데이터)
+
+`transform-v1`이 정형화 직후 그래프 검증을 돌린다. **실데이터(403노드·541엣지) 결과: PASS** —
+
+| 항목 | 결과 |
+|---|---|
+| error(fail) | **0** (prerequisite 사이클 없음) |
+| warning | **0** (dangling 끝점·고립 노드·역방향 쌍·prerequisite 캐시 dangling·학년 단조성 역전 모두 0) |
+| 구조 invariant(UC 규약·relation enum·strength 범위·evidence 비공백) | 정형화 시점(Pydantic) 강제 |
+| Neo4j 멱등성(§5 #9) | N/A — 슬라이스 2(적재) |
+
+> Phase 1은 warning을 *통과 처리*한다(§3 — 그래프 구축을 다른 자산 일정에 막지 않음). 데이터셋이
+> 매우 정제돼 실데이터엔 warning도 0이나, 각 invariant는 인위적 fail 픽스처로 *위반 탐지*를 단위 검증.
+
+### 5b.5 산출물·게이트
+
+- CLI: `python -m data_pipeline.concept_graph transform-v1 --corpus-dir data/corpus/concept_graph_v1 [--output-dir DIR]`.
+  `--output-dir` 주면 `graph.json`(개념·엣지 + raw 패스스루·redaction 유지)·`id_map.csv`(src_id→UC) 저장.
+- 4게이트 통과: `ruff check .`·`black --check .`·`mypy --strict data_pipeline`·`pytest --cov`(전체 89.38%·
+  271 passed/1 skip). 테스트 `tests/data_pipeline/concept_graph/{test_idmap,test_transform,test_validate,test_models,test_main_cli}.py`.
+
+---
+
 ## 6. 향후 활용
 
-1. **L1 개념그래프 적재**(대형·후속): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·
-   541 선수엣지→`prerequisite` 엣지 · 검수 게이팅(289건).
+1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·
+   541 선수엣지→`prerequisite` 엣지 · 검수 표식(reviewed 114·pending 289)은 **슬라이스 1에서
+   완료**(§5b·무저장소 transform·검증). **후속**: Neo4j/pgvector 적재(슬2~3) · 검수 게이팅 적재정책 ·
+   pgvector 임베딩 · backend concept API.
 2. **L4 오개념 확장**(후속): §5.4 후보를 doc-first로 카탈로그에 추가(30종+ 목표).
 3. **암기카드**(L6): 113장 — `exposure_condition`("이해 마스터 후 노출")이 메타인지 정책과 정합.

@@ -111,6 +111,47 @@ class TestHelp:
         assert "seed" in out
         assert "validate" in out
         assert "load" in out
+        assert "transform-v1" in out
+
+
+class TestTransformV1:
+    def test_validates_real_corpus(self, corpus_dir: Path) -> None:
+        """실데이터 transform-v1(검증만) → PASS 종료코드 0."""
+        result = runner.invoke(app, ["transform-v1", "--corpus-dir", str(corpus_dir)])
+        assert result.exit_code == 0, result.output
+        assert "개념 403개" in result.stdout
+        assert "엣지 541개" in result.stdout
+        assert "PASS" in result.stdout
+
+    def test_writes_outputs(self, corpus_dir: Path, tmp_path: Path) -> None:
+        """--output-dir 주면 graph.json·id_map.csv 저장 + redaction 유지."""
+        out = tmp_path / "out"
+        result = runner.invoke(
+            app,
+            ["transform-v1", "--corpus-dir", str(corpus_dir), "--output-dir", str(out)],
+        )
+        assert result.exit_code == 0, result.output
+        graph = out / "graph.json"
+        idmap = out / "id_map.csv"
+        assert graph.exists()
+        assert idmap.exists()
+        text = graph.read_text(encoding="utf-8")
+        # redaction: 산출 JSON에 본문 키 없음
+        assert '"description"' not in text
+        assert "formal_definition" not in text
+        with idmap.open(encoding="utf-8-sig") as f:
+            rows = list(csv.DictReader(f))
+        assert len(rows) == 403  # src_id → UC 매핑
+
+    def test_missing_corpus_exits_2(self, tmp_path: Path) -> None:
+        result = runner.invoke(app, ["transform-v1", "--corpus-dir", str(tmp_path / "nope")])
+        assert result.exit_code == 2
+
+    def test_missing_concepts_file_exits_2(self, tmp_path: Path) -> None:
+        """디렉토리는 있으나 concepts.jsonl 없음 → 종료코드 2."""
+        (tmp_path / "empty").mkdir()
+        result = runner.invoke(app, ["transform-v1", "--corpus-dir", str(tmp_path / "empty")])
+        assert result.exit_code == 2
 
 
 class TestSeed:

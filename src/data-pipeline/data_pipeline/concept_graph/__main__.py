@@ -16,6 +16,7 @@ validate는 *채워진* CSV를 strict 모델로 파싱해 §5 그래프 invarian
 from __future__ import annotations
 
 import csv
+import json
 import logging
 import sys
 from pathlib import Path
@@ -24,6 +25,7 @@ from typing import Annotated
 import typer
 from pydantic import ValidationError
 
+from data_pipeline.concept_graph.idmap import build_id_map, to_csv_rows
 from data_pipeline.concept_graph.models import SOURCE_CITATION, Concept, ConceptEdge
 from data_pipeline.concept_graph.seed import (
     seed_concepts,
@@ -31,7 +33,8 @@ from data_pipeline.concept_graph.seed import (
     write_concepts_csv,
     write_edges_csv,
 )
-from data_pipeline.concept_graph.validate import validate_graph
+from data_pipeline.concept_graph.transform import TransformResult, transform_dataset
+from data_pipeline.concept_graph.validate import validate_dataset, validate_graph
 from data_pipeline.ncic.models import AchievementStandardCollection
 
 app = typer.Typer(
@@ -186,6 +189,110 @@ def validate(
 
     if parse_errors or not report.success:
         raise typer.Exit(code=1)
+
+
+def _read_jsonl(path: Path) -> list[dict[str, object]]:
+    """jsonl 파일 → dict 목록(빈 줄 무시)."""
+    records: list[dict[str, object]] = []
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            stripped = line.strip()
+            if stripped:
+                records.append(json.loads(stripped))
+    return records
+
+
+@app.command(name="transform-v1")
+def transform_v1(
+    corpus_dir: Annotated[
+        Path,
+        typer.Option(
+            "--corpus-dir",
+            "-i",
+            help="데이터셋 v1 디렉토리(concepts.jsonl·prerequisite_edges.jsonl 등 5종).",
+        ),
+    ] = Path("data/corpus/concept_graph_v1"),
+    output_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="graph.json·id_map.csv 저장 디렉토리(생략 시 저장 안 함, 검증만).",
+        ),
+    ] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="DEBUG 로그.")] = False,
+) -> None:
+    """데이터셋 v1(5종 jsonl) → 확장 Concept/ConceptEdge 정형화 + §5 그래프 검증.
+
+    무저장소 슬라이스 1: Neo4j/PG 적재는 하지 않는다(--output-dir 주면 graph.json 백업만).
+    flashcards·intl은 raw 패스스루로 보존한다(L6/국제트랙은 후속). warning은 통과 처리(§3),
+    error 또는 정형화 skip 발생 시 비정상 종료.
+    """
+    _setup_logging(verbose)
+    print(SOURCE_CITATION)
+    print()
+
+    if not corpus_dir.is_dir():
+        typer.echo(f"[!] 데이터셋 디렉토리 없음: {corpus_dir}", err=True)
+        raise typer.Exit(code=2)
+    concepts_path = corpus_dir / "concepts.jsonl"
+    edges_path = corpus_dir / "prerequisite_edges.jsonl"
+    for label, p in (("concepts.jsonl", concepts_path), ("prerequisite_edges.jsonl", edges_path)):
+        if not p.exists():
+            typer.echo(f"[!] {label} 없음: {p}", err=True)
+            raise typer.Exit(code=2)
+
+    flashcards_path = corpus_dir / "flashcards.jsonl"
+    intl_path = corpus_dir / "ccss_only_intl.jsonl"
+
+    result = transform_dataset(
+        concept_records=_read_jsonl(concepts_path),
+        edge_records=_read_jsonl(edges_path),
+        flashcard_records=_read_jsonl(flashcards_path) if flashcards_path.exists() else None,
+        intl_records=_read_jsonl(intl_path) if intl_path.exists() else None,
+    )
+    report = validate_dataset(result)
+
+    print(f"[정형화] {result.summary()}")
+    if result.skipped:
+        print(f"[정형화] skip {len(result.skipped)}건:")
+        for msg in result.skipped[:10]:
+            print(f"  - {msg}")
+    print(f"[검증] {report.report_text()}")
+
+    if output_dir is not None:
+        _write_graph_json(result, output_dir / "graph.json")
+        _write_id_map_csv(_read_jsonl(concepts_path), output_dir / "id_map.csv")
+        print(f"[저장] {output_dir / 'graph.json'} · {output_dir / 'id_map.csv'}")
+
+    if result.skipped or not report.success:
+        raise typer.Exit(code=1)
+
+
+def _write_graph_json(result: TransformResult, path: Path) -> None:
+    """정형화 산출(개념·엣지 + raw 패스스루) → graph.json 백업(검증·인계용).
+
+    redaction 불변: Concept 모델에 description/formal_definition 슬롯이 없어 dump에 미포함.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "source_citation": SOURCE_CITATION,
+        "concepts": [c.model_dump() for c in result.concepts],
+        "edges": [e.model_dump() for e in result.edges],
+        "flashcards_raw": result.passthrough_flashcards,
+        "intl_raw": result.passthrough_intl,
+    }
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _write_id_map_csv(concept_records: list[dict[str, object]], path: Path) -> None:
+    """src_id → UC 매핑 테이블 → id_map.csv(검토·슬라이스 2 적재 입력)."""
+    id_map = build_id_map(concept_records)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["src_id", "concept_id"])
+        writer.writeheader()
+        writer.writerows(to_csv_rows(id_map))
 
 
 @app.command()

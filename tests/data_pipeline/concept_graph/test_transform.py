@@ -1,0 +1,280 @@
+"""transform 단위테스트 — 필드 매핑·redaction 부재·evidence 합성·review_status 분류·UC 변환.
+
+정본: docs/data/concept_graph.md §2·§4 + docs/data/concept_graph_dataset_v1.md §2·§3·§4.
+"""
+
+from __future__ import annotations
+
+from data_pipeline.concept_graph.models import EvidenceSource, Relation, ReviewStatus
+from data_pipeline.concept_graph.transform import (
+    transform_concepts,
+    transform_dataset,
+    transform_edges,
+)
+
+# 최소 합성 레코드(단위테스트용 — 실데이터는 fixture).
+_CONCEPT_A = {
+    "src_id": "HK01",
+    "name_ko": "다항식의 연산",
+    "category": "[공통]식·방정식·부등식",
+    "difficulty_tier": "6",
+    "standard_codes": ["[10공수1-01-01]"],
+    "ccss_code": "A-APR.A.1",
+    "metaphor": "수처럼 더하고 곱하기",
+    "misconception": "(a+b)²=a²+b²로 전개",
+    "accepted_expressions": "동류항끼리 정리",
+    "definition_provenance": "수기 검수",
+    "flashcard_count": "0",
+    "_redacted_fields": ["description", "formal_definition"],
+}
+_CONCEPT_B = {
+    "src_id": "HK02",
+    "name_ko": "나머지정리",
+    "category": "[공통]식·방정식·부등식",
+    "difficulty_tier": "7",
+    "standard_codes": ["[10공수1-01-02]"],
+    "ccss_code": "A-APR.B.2",
+    "metaphor": "",
+    "misconception": "",
+    "accepted_expressions": "",
+    "definition_provenance": "자동(설명기반)·검수필요",
+    "flashcard_count": "0",
+}
+
+
+def _id_map() -> dict[str, str]:
+    return {"HK01": "UC.common1.a01.hk01", "HK02": "UC.common1.a01.hk02"}
+
+
+class TestTransformConcepts:
+    def test_maps_core_fields(self) -> None:
+        concepts, skipped = transform_concepts([_CONCEPT_A], _id_map())
+        assert skipped == []
+        c = concepts[0]
+        assert c.concept_id == "UC.common1.a01.hk01"  # UC 변환
+        assert c.name_ko == "다항식의 연산"
+        assert c.domain == "[공통]식·방정식·부등식"  # category → domain
+        assert c.standard_codes == ["[10공수1-01-01]"]
+
+    def test_maps_enriched_fields(self) -> None:
+        c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
+        assert c.metaphor == "수처럼 더하고 곱하기"
+        assert c.misconception_text == "(a+b)²=a²+b²로 전개"  # 자유텍스트 오개념
+        assert c.accepted_expressions == "동류항끼리 정리"
+        assert c.ccss_code == "A-APR.A.1"
+        assert c.difficulty_tier == 6  # 문자열 "6" → int
+
+    def test_grade_band_hint_inferred(self) -> None:
+        """첫 standard_code 학년 → NCIC 학년군 추론."""
+        c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
+        assert c.grade_band_hint == "고등학교"  # [10...] → 고등학교
+
+    def test_name_en_ja_none_phase1(self) -> None:
+        """Phase 1 KR 단일언어 — name_en/ja는 None."""
+        c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
+        assert c.name_en is None
+        assert c.name_ja is None
+
+    def test_empty_enriched_become_none(self) -> None:
+        """빈 문자열 풍부 필드는 None으로 정규화(B는 metaphor 등이 빈 문자열)."""
+        c = transform_concepts([_CONCEPT_B], _id_map())[0][0]
+        assert c.metaphor is None
+        assert c.misconception_text is None
+        assert c.accepted_expressions is None
+
+    def test_review_status_reviewed_for_manual(self) -> None:
+        """definition_provenance='수기 검수' → reviewed."""
+        c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
+        assert c.review_status == ReviewStatus.REVIEWED.value
+
+    def test_review_status_pending_for_auto(self) -> None:
+        """그 외(자동·검수필요) → pending."""
+        c = transform_concepts([_CONCEPT_B], _id_map())[0][0]
+        assert c.review_status == ReviewStatus.PENDING.value
+
+    def test_skips_unmapped_src_id(self) -> None:
+        """id_map에 없는 src_id → skip."""
+        concepts, skipped = transform_concepts([_CONCEPT_A], {})
+        assert concepts == []
+        assert len(skipped) == 1
+
+    def test_redacted_keys_not_read(self) -> None:
+        """입력에 description/formal_definition이 있어도 산출 모델엔 미포함(슬롯 부재)."""
+        record = dict(_CONCEPT_A)
+        record["description"] = "성취기준 본문 근접 복제"
+        record["formal_definition"] = "교과서 정의"
+        c = transform_concepts([record], _id_map())[0][0]
+        dump = c.model_dump()
+        assert "description" not in dump
+        assert "formal_definition" not in dump
+
+    def test_non_integer_difficulty_tier_becomes_none(self) -> None:
+        """비정수 difficulty_tier는 None(검증은 Pydantic ge/le에 위임)."""
+        record = dict(_CONCEPT_A)
+        record["difficulty_tier"] = "N/A"
+        c = transform_concepts([record], _id_map())[0][0]
+        assert c.difficulty_tier is None
+
+    def test_grade_band_hint_none_when_unparseable(self) -> None:
+        """파싱 불가 standard_code만 있으면 grade_band_hint=None(단정 아닌 힌트)."""
+        record = dict(_CONCEPT_A)
+        record["standard_codes"] = ["not-a-code"]
+        id_map = {"HK01": "UC.x.misc.hk01"}
+        c = transform_concepts([record], id_map)[0][0]
+        assert c.grade_band_hint is None
+
+    def test_missing_name_ko_is_skipped(self) -> None:
+        """name_ko 빈 레코드는 Concept 생성 실패 → skip(예외 흡수)."""
+        record = dict(_CONCEPT_A)
+        record["name_ko"] = ""
+        concepts, skipped = transform_concepts([record], _id_map())
+        assert concepts == []
+        assert len(skipped) == 1
+
+    def test_record_without_src_id_skipped(self) -> None:
+        concepts, skipped = transform_concepts([{"name_ko": "x"}], _id_map())
+        assert concepts == []
+        assert len(skipped) == 1
+
+
+class TestTransformEdges:
+    def test_maps_prerequisite_with_synthesized_evidence(self) -> None:
+        """선수 엣지 → PREREQUISITE + evidence/strength/source 합성."""
+        records = [
+            {
+                "from_id": "HK01",
+                "from_name": "다항식의 연산",
+                "relation": "선수(prereq)",
+                "to_id": "HK02",
+                "to_name": "나머지정리",
+            }
+        ]
+        edges, skipped = transform_edges(records, _id_map())
+        assert skipped == []
+        e = edges[0]
+        assert e.src_concept_id == "UC.common1.a01.hk01"  # UC 변환
+        assert e.dst_concept_id == "UC.common1.a01.hk02"
+        assert e.relation == Relation.PREREQUISITE.value
+        assert e.evidence  # 비공백(합성)
+        assert e.evidence_source == EvidenceSource.EXPERT_REVIEW.value
+        assert 0.0 <= e.strength <= 1.0
+
+    def test_skips_unsupported_relation(self) -> None:
+        records = [
+            {"from_id": "HK01", "relation": "일반화", "to_id": "HK02"},
+        ]
+        edges, skipped = transform_edges(records, _id_map())
+        assert edges == []
+        assert len(skipped) == 1
+
+    def test_skips_dangling_endpoint(self) -> None:
+        """id_map에 없는 끝점 → skip(억지 매핑 금지)."""
+        records = [
+            {"from_id": "HK01", "relation": "선수(prereq)", "to_id": "ZZZ"},
+        ]
+        edges, skipped = transform_edges(records, _id_map())
+        assert edges == []
+        assert len(skipped) == 1
+
+
+class TestTransformDataset:
+    def test_prerequisite_cache_filled(self) -> None:
+        """엣지(src=선수→dst=후행) → dst 개념의 prerequisite_concept_ids 캐시 채움."""
+        edge = {
+            "from_id": "HK01",
+            "relation": "선수(prereq)",
+            "to_id": "HK02",
+        }
+        result = transform_dataset(
+            concept_records=[_CONCEPT_A, _CONCEPT_B],
+            edge_records=[edge],
+        )
+        by_id = {c.concept_id: c for c in result.concepts}
+        assert by_id["UC.common1.a01.hk02"].prerequisite_concept_ids == ["UC.common1.a01.hk01"]
+        assert by_id["UC.common1.a01.hk01"].prerequisite_concept_ids == []
+
+    def test_passthrough_redacts_intl(self) -> None:
+        """intl 패스스루는 redaction 키(ccss_statement_en) 제외."""
+        intl = [
+            {
+                "node_id": "US:HSG-MG.A.1",
+                "ccss_code": "HSG-MG.A.1",
+                "ccss_statement_en": "LEAKED",
+                "_redacted_fields": ["ccss_statement_en"],
+            }
+        ]
+        result = transform_dataset(
+            concept_records=[_CONCEPT_A],
+            edge_records=[],
+            intl_records=intl,
+        )
+        assert "ccss_statement_en" not in result.passthrough_intl[0]
+
+    def test_flashcards_passthrough_preserved(self) -> None:
+        cards = [{"src_id": "HK01", "front": "Q", "back": "A"}]
+        result = transform_dataset(
+            concept_records=[_CONCEPT_A],
+            edge_records=[],
+            flashcard_records=cards,
+        )
+        assert len(result.passthrough_flashcards) == 1
+
+
+class TestTransformRealData:
+    """실데이터 1회 전체 정형화 — 카운트·분류·redaction 단언."""
+
+    def test_full_counts(
+        self,
+        concept_records: list[dict[str, object]],
+        edge_records: list[dict[str, object]],
+        flashcard_records: list[dict[str, object]],
+        intl_records: list[dict[str, object]],
+    ) -> None:
+        result = transform_dataset(
+            concept_records=concept_records,
+            edge_records=edge_records,
+            flashcard_records=flashcard_records,
+            intl_records=intl_records,
+        )
+        assert len(result.concepts) == 403
+        assert len(result.edges) == 541
+        assert result.skipped == []  # 실데이터는 전량 매핑
+
+    def test_review_status_distribution_114_289(
+        self, concept_records: list[dict[str, object]]
+    ) -> None:
+        """§4 분포: 수기 검수 114 → reviewed, 나머지 289 → pending."""
+        concepts, _ = transform_concepts(
+            concept_records, _real_id_map(concept_records)
+        )
+        reviewed = sum(1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value)
+        assert reviewed == 114
+        assert len(concepts) - reviewed == 289
+
+    def test_no_redaction_leak_in_full_dump(
+        self, concept_records: list[dict[str, object]]
+    ) -> None:
+        """전체 개념 dump에 description/formal_definition 키 0건."""
+        concepts, _ = transform_concepts(
+            concept_records, _real_id_map(concept_records)
+        )
+        keys: set[str] = set()
+        for c in concepts:
+            keys.update(c.model_dump().keys())
+        assert "description" not in keys
+        assert "formal_definition" not in keys
+
+    def test_all_concepts_have_standard_code(
+        self, concept_records: list[dict[str, object]]
+    ) -> None:
+        """모든 개념은 성취기준 코드 1개+ 태그(CLAUDE.md ALWAYS)."""
+        concepts, _ = transform_concepts(
+            concept_records, _real_id_map(concept_records)
+        )
+        assert all(len(c.standard_codes) >= 1 for c in concepts)
+
+
+def _real_id_map(records: list[dict[str, object]]) -> dict[str, str]:
+    from data_pipeline.concept_graph.idmap import build_id_map
+
+    return build_id_map(records)

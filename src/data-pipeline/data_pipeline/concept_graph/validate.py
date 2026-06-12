@@ -20,6 +20,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 
 from data_pipeline.concept_graph.models import Concept, ConceptEdge, Relation
+from data_pipeline.concept_graph.transform import TransformResult
 from data_pipeline.ncic.transform import TransformError, parse_standard_code
 
 _ERROR = "error"
@@ -59,12 +60,40 @@ class GraphValidationReport:
         """error가 없으면 성공(warning 허용)."""
         return len(self.errors) == 0
 
+    def counts_by_rule(self) -> dict[str, int]:
+        """rule별 이슈 건수(결정론적 — rule 이름 정렬). 리포트 집계용."""
+        tally: dict[str, int] = {}
+        for issue in self.issues:
+            tally[issue.rule] = tally.get(issue.rule, 0) + 1
+        return dict(sorted(tally.items()))
+
     def summary(self) -> str:
-        """사람 가독 요약."""
+        """사람 가독 요약(pass/warn/fail = success/warning/error)."""
+        verdict = "PASS" if self.success else "FAIL"
         return (
-            f"그래프 검증: 노드 {self.node_count}개, 엣지 {self.edge_count}개, "
+            f"그래프 검증[{verdict}]: 노드 {self.node_count}개, 엣지 {self.edge_count}개, "
             f"error {len(self.errors)}개, warning {len(self.warnings)}개"
         )
+
+    def report_text(self, *, max_examples: int = 10) -> str:
+        """pass/warn/fail 카운트 + rule별 집계 + 구체 위반 예시(실데이터 리포트).
+
+        Phase 1은 warning을 *통과 처리*한다(§3 — 그래프 구축을 막지 않음). error만 실패.
+        """
+        lines = [self.summary()]
+        tally = self.counts_by_rule()
+        if tally:
+            lines.append("  [rule별 집계]")
+            for rule, count in tally.items():
+                lines.append(f"    - {rule}: {count}건")
+        for severity, label in ((_ERROR, "error"), (_WARNING, "warning")):
+            picked = [i for i in self.issues if i.severity == severity]
+            if not picked:
+                continue
+            lines.append(f"  [{label} 예시 (최대 {max_examples})]")
+            for issue in picked[:max_examples]:
+                lines.append(f"    [{label}] {issue.rule} | {issue.ref} | {issue.detail}")
+        return "\n".join(lines)
 
 
 def _grade_of(concept: Concept) -> int | None:
@@ -263,4 +292,28 @@ def _check_dangling_catalog(
                 )
 
 
-__all__ = ["GraphValidationReport", "ValidationIssue", "validate_graph"]
+def validate_dataset(
+    result: TransformResult,
+    *,
+    known_misconception_codes: Iterable[str] | None = None,
+    known_visualization_keys: Iterable[str] | None = None,
+) -> GraphValidationReport:
+    """`TransformResult`(정형화 산출)의 개념·엣지를 그래프 검증(§5)으로 통과시키는 편의 함수.
+
+    transform → validate를 잇는 얇은 어댑터. 구조 invariant은 정형화 시점(Pydantic)에서 이미
+    강제되었고, 여기서는 그래프 레벨 invariant(사이클·dangling·역쌍·고립·학년 단조성)를 본다.
+    """
+    return validate_graph(
+        result.concepts,
+        result.edges,
+        known_misconception_codes=known_misconception_codes,
+        known_visualization_keys=known_visualization_keys,
+    )
+
+
+__all__ = [
+    "GraphValidationReport",
+    "ValidationIssue",
+    "validate_dataset",
+    "validate_graph",
+]
