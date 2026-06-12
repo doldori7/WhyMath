@@ -454,6 +454,83 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5g. 개념그래프 → backend `concept` 런타임 엔티티 브리지 (개념그래프 *소비* 아크 **브리지** 슬라이스 — 2026-06-12)
+
+> **브리지 슬라이스(backend)**: 적재 아크(슬1~4)·소비 슬1(슬117·§5f)이 개념을 Neo4j(슬2)·pgvector
+> `concept_embedding`(슬3)·`concept_node`(슬117) **세 투영에 UC 키**로 적재했으나, *런타임 개념 엔티티*
+> backend `concept` 테이블(UUID PK·`code` unique)은 **비어 있고 UC와 미연결**이었다(§5f.1 주석: "backend
+> PG `concept` 테이블[UUID PK+code]과는 여전히 *별개*"). 런타임 소비처 — L2 `mastery_tracking`
+> (`concept_mastery_history.concept_id`=UUID)·`problem_concept`(concept_id=UUID FK)·L4 coach — 가
+> backend `concept` UUID를 참조하므로 개념그래프가 런타임에서 보이지 않았다. **확정 설계 결정 A(사용자
+> 승인)**: backend `concept`를 개념그래프로 적재하고 **`code`=UC**로 브리지 → 한 논리키 UC가 *사중 store*
+> (Neo4j·pgvector·concept_node·backend concept)를 잇고 런타임 경로가 닫힌다: L2 mastery(UUID concept) →
+> `concept.code`(UC) → concept_node/concept_embedding/Neo4j 도달. 모듈:
+> `whymath_backend/l1/concept_graph/backend_concept.py`, `populate.py`(③ 투영 통합). **마이그레이션 0**
+> (스키마 변경 불요 — 아래 `level` 유도).
+
+### 5g.1 적재기 (`backend_concept`·신규 seam 0)
+
+- **입력 원천 = 슬1 산출 `graph.json`**(슬3·슬117과 동일). `load_backend_concepts_from_graph_json`이
+  `concepts` 배열에서 **`concept_id`(UC)→`code`** 브리지 키 + `name_ko` 직결 + 유도 필드를 읽어
+  `BackendConceptRecord` 목록을 만든다. name_ko 누락(오염)은 NOT NULL 위반 대신 *건너뜀*. 전량(403)
+  적재(review_status 무관·게이팅은 조회 몫·슬2/3/117 동형).
+- **sync 엔진 재사용**(신규 seam 0): 슬3 `embedding._build_sync_engine`(슬117과 동일 좌석)을 그대로
+  import. `BackendConceptStore.upsert`는 `INSERT ... ON CONFLICT(code) DO UPDATE`(멱등).
+- **CLI 통합**: `populate.py`가 *임베딩+메타+런타임엔티티 셋 다* 적재한다(같은 graph.json·동일 UC 키·한
+  진입점·`WHYMATH_VECTOR_STORE=pgvector`). ①②는 UC 공간 전용 투영, ③이 UC↔UUID 브리지를 놓는다.
+
+### 5g.2 필드 매핑 (graph.json `Concept` → backend `Concept`)
+
+| graph.json 필드 | backend `Concept` 컬럼 | 처리 | 비고 |
+|---|---|---|---|
+| `concept_id`(UC) | **`code`** | 직결 | **브리지 키**(UNIQUE·UC↔UUID) |
+| `name_ko` | `name_ko` | 직결 | 필수 |
+| `difficulty_tier`[0,24] | `intrinsic_difficulty`[1,5] | **유도**(선형 0→1.0·24→5.0·2자리) | Numeric(3,2)·schema ge=1 le=5 정합 |
+| `domain`(category) | `subject` | **유도** 매핑 | 고4과목+`[공통]…`→공통(131/403)·그 외 **NULL**(272·억지 매핑 0) |
+| `misconception_text` | `common_misconceptions`(JSONB) | **선택** 1원소 | 자유형 `{"misconception":…}`·correction 미작성(검수 책임)·카탈로그 `misconception_codes`와 별개 |
+| *(소스 부재)* | `level`(NOT NULL enum) | **유도 `세부개념`** 고정 | graph 403은 전부 세부 개념(평면 목록·단원/소단원 위계 아님)→교수학적으로 정확·날조 0·스키마 변경 회피 |
+| *(소스 부재)* | `description`·`formal_definition`·`intuitive_explanation` | **NULL 유지** | **redaction**(검수 책임·아래 §5g.3) |
+| *(대응 없음·날조 0)* | `name_en`·`aliases`·`parent_concept_id`·`curriculum_version`·`grade_introduced`·`semester_introduced`·`cognitive_type`·`recommended_visual_styles`·`exam_frequency`·`weight_in_curriculum`·`embedding_id` | NULL/기본 | `is_signature_korean`=기본 False·나머지 검수 대기 |
+
+- **미매핑 처리 사유**: ① **필수 NOT NULL `level`** = 소스에도·합당한 기본값에도 없으나 graph 노드가
+  전부 세부 개념이라 `세부개념` 고정 유도가 *교수학적으로 정확*(마이그레이션·'unspecified' enum 추가
+  회피). ② **`subject`** = nullable이라 깔끔히 대응하는 고4과목·공통만 매핑하고 초·중 영역·기타 고
+  과목(대수·경제 수학 등 enum 부재)은 NULL(억지 매핑·날조 금지). ③ graph의 `grade_band_hint`·
+  `standard_codes`·`ccss_code`·`metaphor`·`accepted_expressions`·`review_status`·
+  `prerequisite_concept_ids`·`misconception_codes`·`visualization_card_keys`·`notes`는 backend
+  `Concept`에 *대응 컬럼이 없다* — `concept_node`(슬117)가 그 메타를 UC 키로 이미 보관하므로, 런타임
+  엔티티엔 *결선 최소 식별*(code=UC·name_ko·subject·난이도·오개념)만 적재(이중 보관 회피·후속
+  consolidation 후보).
+
+### 5g.3 redaction·멱등 (우선순위 #2)
+
+- **redaction**: `description`·`formal_definition`·`intuitive_explanation`은 *건드리지 않는다*(NULL
+  유지)·`BackendConceptRecord`에 슬롯 자체가 없다(구조적 차단)·적재기가 읽지도·채우지도 않는다(삼중
+  방어). `metaphor` 같은 안전 자체작성 필드도 `intuitive_explanation`에 *욱여넣지 않는다*(검수 통과
+  직관 설명용 컬럼·혼동/검수책임 회피). ON CONFLICT SET에도 본문 3컬럼이 없어 *재적재가 검수 작성한
+  본문을 덮어쓰지 않는다*. graph 부재(`_provenance.json` redacted)이므로 교과서 본문 유입 경로 0.
+- **멱등·UUID 보존**: `code`(UC) UNIQUE 충돌 upsert — 같은 UC 재적재는 기존 행 갱신하고 **UUID
+  PK(concept_id)는 SET하지 않아 보존**(신규 행만 `gen_random_uuid()` server_default 발급). L2 mastery·
+  problem_concept이 이미 그 UUID를 FK 참조 중일 수 있어 *재적재가 UUID를 바꾸면 안 된다* — 브리지
+  키 안정성의 핵심. `created_at`도 SET 제외(생성시각 보존).
+
+### 5g.4 산출물·게이트
+
+- 4게이트 통과(`cd src/backend`·변경 파일 기준): `ruff check`(green)·`black --check`(green)·`mypy
+  --strict whymath_backend`(132 src·이슈 0)·`pytest`(신규 단위 **23 passed**·new 모듈 cov **96%**).
+  신규 테스트: `test_concept_backend_load.py`(적재기 단위·23·Fake 엔진·UC→code 브리지·subject 매핑·
+  difficulty 스케일·redaction 미유입·ON CONFLICT(code)·PK 미-SET·멱등)·`test_concept_backend_load_
+  integration.py`(적재→row·code=UC·redaction NULL·재적재 UUID 보존·**L2 mastery 결선 가능성**·실 PG
+  게이트·4).
+- **통합테스트(실 PG)는 기본 SKIP** — `@pytest.mark.integration`+`WHYMATH_RUN_INTEGRATION` 게이트 + PG
+  미도달 graceful skip. **CI 신규 잡 불요** — 기존 **`backend — 마이그레이션·통합 (실 PG)` 잡**이
+  `alembic upgrade head` 후 `tests/backend/l1/`를 자동 수집·실행. **마이그레이션 0**(단일 head
+  `f9a0b1c2d3e4` 불변). **Phaiakes9**에서도 실행.
+- 시크릿 0(env 전용·하드코딩 0)·멱등 적재·7계층(L1 런타임 엔티티 적재·L2/L4 소비 로직 미구현 —
+  브리지만). **다음**: 약개념 추천(L2 약점 UUID→`concept.code`(UC)→그래프 메타).
+
+---
+
 ## 6. 향후 활용
 
 1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·
