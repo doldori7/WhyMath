@@ -253,6 +253,7 @@ class TestL2MasteryBridge:
     def test_loaded_concept_uuid_usable_as_mastery_key(self) -> None:
         _skip_if_unreachable()
         import asyncio
+        from datetime import UTC, datetime
 
         from sqlalchemy import text
         from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -287,6 +288,7 @@ class TestL2MasteryBridge:
                             ConceptMasteryHistory(
                                 user_id=user_id,
                                 concept_id=concept_uuid,
+                                measured_at=datetime.now(UTC),
                                 mastery=0.42,
                                 confidence=0.5,
                                 sample_size=1,
