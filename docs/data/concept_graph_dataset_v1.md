@@ -1,9 +1,14 @@
 # 와이매스 개념그래프 데이터셋 v1 (자체작성) — 데이터 카드
 
 > **요약**: 한국 2022 개정 교육과정 전 범위(초등~고교 선택)를 덮는 **자체작성 개념그래프**
-> 시드. 401 개념 · 540 선수엣지 · 성취기준↔CCSS 코드 매핑 · 114 암기카드 · 13 국제트랙(CCSS전용).
+> 시드. 403 개념 · 541 선수엣지 · 성취기준↔CCSS 코드 매핑 · 113 암기카드 · 13 국제트랙(CCSS전용).
 > 본 슬라이스(101)에서는 그중 **오개념 114건을 L4 오개념 카탈로그(22종)와 교차검증**하는 데
 > 사용했다(아래 §5). 전체 적재(L1 concept_graph 파이프라인)는 후속 슬라이스 결정 사항.
+>
+> **2026-06-12 수정본 교체**: 사용자가 원본 입력 오류(절단된 개념명·어미 등)를 바로잡은 수정본
+> xlsx로 5개 jsonl + provenance를 *전량 재생성*했다(§1 버전 이력). 개념 401→403·선수엣지
+> 540→541·오개념 114→116으로 소폭 증가. §5 교차검증 수치는 *초기 업로드(06-10)* 기준의
+> 슬라이스 101 산출물이며 재계산하지 않았다(아래 §5 주석 참조).
 
 ---
 
@@ -11,14 +16,21 @@
 
 | 항목 | 값 |
 |---|---|
-| 형태 | 사용자 업로드 xlsx(5 시트) |
-| 업로드일 | 2026-06-10 |
-| 원본 sha256 | `1274533ce8f2b040bb25ba071646d7295d279708c5858e970182aa73aa8488d1` |
+| 형태 | 사용자 업로드 xlsx(수정본·13 시트 중 5종 사용) |
+| 업로드일 | 2026-06-12 (수정본) |
+| 원본 sha256 | `062695cef261386ec880313631aa349f624fcace1b7eb3d52bc031025536f90d` |
 | 저작 | 와이매스 자체작성(교수학 주석) + 공공 표준 *코드* 참조 |
 | 추출 산출물 | `data/corpus/concept_graph_v1/*.jsonl` (5종) + `_provenance.json` |
 
 > 원본 xlsx는 **커밋하지 않는다**(§3 redaction 대상 자유텍스트를 포함하므로). 진실 원천은
 > redaction을 적용한 jsonl이다. 재추출이 필요하면 동일 sha256 원본을 사용자에게 재요청한다.
+
+### 버전 이력
+
+| 일자 | sha256 | 개념 | 선수엣지 | 비고 |
+|---|---|---|---|---|
+| 2026-06-10 | `1274533c…8488d1` | 401 | 540 | 최초 업로드 |
+| 2026-06-12 | `062695ce…36f90d` | 403 | 541 | **수정본 전량 교체** — 절단 개념명·어미 복원 등 입력 오류 정정(원본 검수보고 시트 기준). 동일 redaction 정책(§3) 적용·재생성 |
 
 ---
 
@@ -26,9 +38,9 @@
 
 | jsonl | 레코드 | 핵심 필드 |
 |---|---|---|
-| `concepts.jsonl` | 401 | `src_id`(G01·N1·HK01·J0105·H:…), `name_ko`, `category`, `difficulty_tier`(0~24), `standard_codes`[], `ccss_code`, `metaphor`, **`misconception`**, `accepted_expressions`, `definition_provenance`, `flashcard_count` |
-| `prerequisite_edges.jsonl` | 540 | `from_id`, `from_name`, `relation`(선수), `to_id`, `to_name` |
-| `standard_ccss_map.jsonl` | 401 | `src_id`, `name_ko`, `standard_code_kr`, `ccss_code` |
+| `concepts.jsonl` | 403 | `src_id`(G01·N1·HK01·J0105·H:…), `name_ko`, `category`, `difficulty_tier`(0~24), `standard_codes`[], `ccss_code`, `metaphor`, **`misconception`**, `accepted_expressions`, `definition_provenance`, `flashcard_count` |
+| `prerequisite_edges.jsonl` | 541 | `from_id`, `from_name`, `relation`(선수), `to_id`, `to_name` |
+| `standard_ccss_map.jsonl` | 403 | `src_id`, `name_ko`, `standard_code_kr`, `ccss_code` |
 | `flashcards.jsonl` | 113 | `grade`(A·…), `category`, `difficulty_tier`, `src_id`, `name_ko`, `front`, `back`, `mnemonic`, `exposure_condition` |
 | `ccss_only_intl.jsonl` | 13 | `node_id`, `ccss_code`, `scope`, `kr_adjacent_area`, `kr_interpretation`, `kr_absence_reason` |
 
@@ -60,19 +72,25 @@ CCSS 코드)는 **안전**(자체 코퍼스 + 사실정보). 단, 두 자유텍�
 
 ## 4. 검수 상태 (적재 전 게이트)
 
-`definition_provenance` 분포 — **287/401이 자동생성·검수필요**:
+`definition_provenance` 분포 — **289/403이 자동생성·검수필요**(수정본 기준):
 
 | 출처 | 개수 | 적재 가능성 |
 |---|---|---|
 | 수기 검수 | 114 | 검수 완료 — 우선 적재 후보 |
 | 자동(설명기반)·검수필요 | 197 | 전문가 검수 후 |
 | 자동 초안·검수필요 | 90 | 전문가 검수 후 |
+| 신규 작성(2022 신설)·검수필요 | 2 | 전문가 검수 후 |
 
-오개념(114건)이 채워진 개념은 대부분 "수기 검수"군과 겹쳐 신뢰도가 상대적으로 높다.
+오개념(116건)이 채워진 개념은 대부분 "수기 검수"군과 겹쳐 신뢰도가 상대적으로 높다.
 
 ---
 
 ## 5. 교차검증 — 오개념 114 ↔ L4 카탈로그 22 (본 슬라이스 산출)
+
+> **주석(2026-06-12)**: 이 절의 수치(오개념 114·대응 12종)는 *초기 업로드(2026-06-10)* 기준
+> 슬라이스 101 산출물이다. 수정본 교체(§1 버전 이력)로 오개념은 116건으로 늘었으나, §5.2 대응은
+> *성취기준 코드* 기준이라 코드가 보존된 한 결론은 유효하다. 전면 재계산은 카탈로그가 30종으로
+> 확장된 시점에 별도 슬라이스로 수행한다.
 
 ### 5.1 결론
 - 데이터셋 오개념은 **각 성취기준 코드에 정착**(curriculum-anchored)되어 있어, 카탈로그
