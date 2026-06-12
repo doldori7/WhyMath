@@ -6,7 +6,8 @@
 from __future__ import annotations
 
 from data_pipeline.concept_graph.models import Concept, ConceptEdge
-from data_pipeline.concept_graph.validate import validate_graph
+from data_pipeline.concept_graph.transform import transform_dataset
+from data_pipeline.concept_graph.validate import validate_dataset, validate_graph
 
 
 def _concept(
@@ -145,3 +146,68 @@ class TestReport:
         report = validate_graph([_concept(_A), _concept(_B)], [_edge(_A, _B)])
         assert "노드 2개" in report.summary()
         assert "엣지 1개" in report.summary()
+
+    def test_summary_pass_verdict(self) -> None:
+        report = validate_graph([_concept(_A), _concept(_B)], [_edge(_A, _B)])
+        assert "PASS" in report.summary()
+
+    def test_summary_fail_verdict_on_cycle(self) -> None:
+        report = validate_graph([_concept(_A), _concept(_B)], [_edge(_A, _B), _edge(_B, _A)])
+        assert "FAIL" in report.summary()
+
+    def test_counts_by_rule(self) -> None:
+        """rule별 집계 — 고립 2건이면 isolated_node: 2."""
+        report = validate_graph([_concept(_A), _concept(_B), _concept(_C)], [])
+        tally = report.counts_by_rule()
+        assert tally.get("isolated_node") == 3
+
+    def test_report_text_lists_examples(self) -> None:
+        """report_text에 rule별 집계와 예시가 포함된다."""
+        report = validate_graph([_concept(_A)], [_edge(_A, _B)])  # dangling 끝점
+        text = report.report_text()
+        assert "dangling_edge_endpoint" in text
+        assert "rule별 집계" in text
+
+
+class TestValidateDataset:
+    def test_wraps_transform_result(self) -> None:
+        """validate_dataset은 TransformResult의 개념·엣지를 검증한다."""
+        records = [
+            {"src_id": "HK01", "name_ko": "다항식", "category": "[공통]식", "standard_codes": ["[10공수1-01-01]"]},
+            {"src_id": "HK02", "name_ko": "나머지정리", "category": "[공통]식", "standard_codes": ["[10공수1-01-02]"]},
+        ]
+        edges = [{"from_id": "HK01", "relation": "선수(prereq)", "to_id": "HK02"}]
+        result = transform_dataset(concept_records=records, edge_records=edges)
+        report = validate_dataset(result)
+        assert report.node_count == 2
+        assert report.edge_count == 1
+        assert report.success is True
+
+
+class TestRealDataValidation:
+    """실데이터 1회 전체 검증 — PASS(error 0) 단언 + 리포트 산출."""
+
+    def test_full_dataset_passes(
+        self,
+        concept_records: list[dict[str, object]],
+        edge_records: list[dict[str, object]],
+    ) -> None:
+        result = transform_dataset(concept_records=concept_records, edge_records=edge_records)
+        report = validate_dataset(result)
+        assert report.node_count == 403
+        assert report.edge_count == 541
+        assert report.success is True  # error 0 (Phase 1: warning은 통과)
+        assert report.errors == []
+
+    def test_full_dataset_report_text_renders(
+        self,
+        concept_records: list[dict[str, object]],
+        edge_records: list[dict[str, object]],
+    ) -> None:
+        """리포트 텍스트가 PASS 판정과 카운트를 담는다."""
+        result = transform_dataset(concept_records=concept_records, edge_records=edge_records)
+        report = validate_dataset(result)
+        text = report.report_text()
+        assert "PASS" in text
+        assert "노드 403개" in text
+        assert "엣지 541개" in text

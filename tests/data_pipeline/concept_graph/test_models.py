@@ -11,11 +11,13 @@ from pydantic import ValidationError
 from data_pipeline.concept_graph.models import (
     EVIDENCE_SOURCES,
     RELATION_TYPES,
+    REVIEW_STATUSES,
     SOURCE_CITATION,
     Concept,
     ConceptEdge,
     EvidenceSource,
     Relation,
+    ReviewStatus,
 )
 
 
@@ -82,7 +84,7 @@ class TestConcept:
 
     @pytest.mark.parametrize("field", ["name_ko", "name_en", "name_ja"])
     def test_rejects_empty_multilingual_name(self, field: str) -> None:
-        """name_ko/en/ja 중 하나라도 비면 거부(다국 정합성 키)."""
+        """빈 문자열 이름은 거부 — name_ko 필수, name_en/ja는 Optional이나 *있다면* 비공백."""
         with pytest.raises(ValidationError):
             _concept(**{field: ""})
 
@@ -91,6 +93,20 @@ class TestConcept:
         """공백만 있는 이름은 strip 후 빈 문자열 → 거부."""
         with pytest.raises(ValidationError):
             _concept(**{field: "   "})
+
+    @pytest.mark.parametrize("field", ["name_en", "name_ja"])
+    def test_allows_none_for_en_ja(self, field: str) -> None:
+        """name_en/ja는 None 허용(Phase 1 KR 단일언어 데이터 수용)."""
+        c = _concept(**{field: None})
+        assert getattr(c, field) is None
+
+    def test_name_ko_required(self) -> None:
+        """name_ko는 여전히 필수(누락 시 거부)."""
+        with pytest.raises(ValidationError):
+            Concept(
+                concept_id="UC.calc.limit.epsilon-delta",  # type: ignore[call-arg]
+                domain="미적분",
+            )
 
     def test_rejects_extra_field(self) -> None:
         """extra='forbid' — 미정의 필드 거부."""
@@ -101,6 +117,69 @@ class TestConcept:
         """standard_codes는 NCIC 코드 참조만(본문 복제 아님)."""
         c = _concept(standard_codes=["[10공수1-05-02]"])
         assert c.standard_codes == ["[10공수1-05-02]"]
+
+
+class TestConceptEnrichedFields:
+    """데이터셋 v1 풍부 필드 — metaphor·accepted_expressions·ccss_code·misconception_text·
+    difficulty_tier·review_status (concept_graph_dataset_v1.md §2 모델 확장)."""
+
+    def test_enriched_fields_roundtrip(self) -> None:
+        """풍부 필드가 그대로 보존된다."""
+        c = _concept(
+            metaphor="가까워짐",
+            accepted_expressions="극한을 ε-δ로 설명",
+            ccss_code="HSF-IF.A.1",
+            misconception_text="극한값=함숫값으로 단정",
+            difficulty_tier=12,
+        )
+        assert c.metaphor == "가까워짐"
+        assert c.ccss_code == "HSF-IF.A.1"
+        assert c.misconception_text == "극한값=함숫값으로 단정"
+        assert c.difficulty_tier == 12
+
+    def test_enriched_fields_default_none(self) -> None:
+        """풍부 필드는 모두 선택(기본 None)."""
+        c = _concept()
+        assert c.metaphor is None
+        assert c.accepted_expressions is None
+        assert c.ccss_code is None
+        assert c.misconception_text is None
+        assert c.difficulty_tier is None
+
+    def test_misconception_text_is_separate_from_codes(self) -> None:
+        """자유텍스트 misconception_text와 카탈로그 misconception_codes는 *별개* 슬롯."""
+        c = _concept(misconception_text="자유텍스트 오개념", misconception_codes=["mc-code"])
+        assert c.misconception_text == "자유텍스트 오개념"
+        assert c.misconception_codes == ["mc-code"]
+
+    @pytest.mark.parametrize("ok", [0, 12, 24])
+    def test_difficulty_tier_in_range(self, ok: int) -> None:
+        """difficulty_tier ∈ [0, 24] 허용."""
+        assert _concept(difficulty_tier=ok).difficulty_tier == ok
+
+    @pytest.mark.parametrize("bad", [-1, 25, 100])
+    def test_difficulty_tier_out_of_range_rejected(self, bad: int) -> None:
+        """difficulty_tier ∉ [0, 24] 거부."""
+        with pytest.raises(ValidationError):
+            _concept(difficulty_tier=bad)
+
+    def test_review_status_default_pending(self) -> None:
+        """review_status 기본값은 pending(적재 보류 — 명시 검수 전)."""
+        assert _concept().review_status == ReviewStatus.PENDING
+
+    @pytest.mark.parametrize("status", ["reviewed", "pending"])
+    def test_review_status_accepts_both(self, status: str) -> None:
+        assert _concept(review_status=status).review_status == status
+
+    def test_review_status_rejects_unknown(self) -> None:
+        with pytest.raises(ValidationError):
+            _concept(review_status="approved")
+
+    @pytest.mark.parametrize("redacted", ["description", "formal_definition"])
+    def test_redacted_fields_have_no_slot(self, redacted: str) -> None:
+        """redaction 구조적 차단: description/formal_definition 슬롯 부재 → extra='forbid' 거부."""
+        with pytest.raises(ValidationError):
+            _concept(**{redacted: "성취기준 본문 근접 복제"})
 
 
 class TestConceptEdge:
@@ -162,6 +241,11 @@ class TestConstants:
 
     def test_evidence_sources_match_enum(self) -> None:
         assert EVIDENCE_SOURCES == tuple(e.value for e in EvidenceSource)
+
+    def test_review_statuses_match_enum(self) -> None:
+        """REVIEW_STATUSES는 ReviewStatus enum 값과 1:1(단일 진실)."""
+        assert REVIEW_STATUSES == tuple(s.value for s in ReviewStatus)
+        assert set(REVIEW_STATUSES) == {"reviewed", "pending"}
 
     def test_source_citation_mentions_ncic(self) -> None:
         """승계 출처 문구에 NCIC·교육부 고시 명시(공공누리 1유형)."""
