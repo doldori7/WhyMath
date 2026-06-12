@@ -270,6 +270,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-12 (계획·L1): 개념그래프 적재 아크 착수 — transform·검증 우선(무저장소) → Neo4j·pgvector
+**컨텍스트**: 데이터셋 v1 수정본 교체(위 항목) 직후, 사용자가 다음 트랙으로 **L1 개념그래프 적재** 선택(`/plan`). Explore 조사 결론: 적재 인프라가 *대부분 존재* — 정본 스키마(`schema/concept.py`)·ORM(`db/models/concept.py`)·마이그레이션·UC 규약+검증 정규식(`concept_graph/models.py`)·NCIC 시드(`seed.py`)·검증 로직(`validate.py`)·정본 문서(`docs/data/concept_graph.md` §4 9단계·§5 10 invariant)·통합테스트 게이트 모두 구비. **공백 = 5(정형화)·6(검증 실데이터)·7(Neo4j 적재 — `__main__.py:load()`는 가드만, 드라이버·config·CI서비스 전무)**.
+**아크(4슬라이스)**: ① *(이번)* `src_id→UC` 매핑 + 데이터셋→정본 `Concept`/`ConceptEdge` transform + 10 invariant 테스트 **(무저장소·1일)** → ② Neo4j 드라이버+`load()` 멱등 MERGE+통합테스트 → ③ 개념 pgvector 좌석(misconception_embedding 미러)+임베딩 적재 → ④ backend concept API + L2/L4 결선. **transform·검증을 적재보다 먼저** 두는 이유: src_id→UC 매핑·스키마 적합이 적재의 선행조건이고 Neo4j 미설치라, 무저장소 슬라이스로 매핑·검증을 못박아 fudge 없이 적재 안전화 + 데이터 품질(사이클·dangling·학년 단조성) 사전 노출.
+**결정(2026-06-12)**: **풍부 필드 = 모델 확장** — 데이터셋이 정본 모델보다 풍부(은유·허용표현·CCSS·*자유텍스트* 오개념·난이도층 0~24)해, notes squash 아닌 **일급 구조 필드로 확장**(CLAUDE.md 표현≠의미·은유/허용표현/오개념=WhyMath 핵심가치). 폐기안: notes squash(구조손실)·최소적재(핵심자산 버림).
+**핵심 frictions(슬1에서 해소)**: ① 자유텍스트 오개념 ≠ 카탈로그 코드 → `misconception_text` 별도 보존(코드화 후속) ② 엣지 evidence 공백인데 모델은 min_length=1 강제 → 기본값 `"전문가 작성 개념그래프 v1"`+`evidence_source=EXPERT_REVIEW` 합성 ③ 다국 표기 필수 vs KR-only → Phase1 `name_en/ja` 선택화 ④ 검수상태 보존: 289 자동·검수필요=`review_status=pending`(적재보류 표식)·114 수기=`EXPERT_REVIEW` ⑤ redaction: description·formal_definition은 모델에 부재=구조적 차단.
+**미결(슬2)**: 첫 적재 저장소 Neo4j(정본·인프라 standup) vs PostgreSQL(구축됨·런타임)·검수게이팅 적재정책(114만 vs 403+flag).
+**진행**: data-engineer 위임·슬1 즉시 착수(브랜치 `claude/dazzling-cerf-IFbxq`). 정본 워크플로우 `docs/data/concept_graph.md` 준수·추정 작성 금지.
+
 ### 2026-06-12 (데이터): 개념그래프 데이터셋 v1 *수정본 전량 교체* — 입력 오류 정정·redaction 정책 보존
 **컨텍스트**: 사용자가 초기 업로드(2026-06-10·슬101)의 입력 오류(절단된 개념명·어미 누락 등, 원본 xlsx 검수보고 시트 기록)를 정정한 **수정본 xlsx**(13시트) 제공 → "이전 자료 오류를 수정, 원본데이터를 모두 교체" 요청.
 **무엇을**: `data/corpus/concept_graph_v1/` 5개 jsonl + `_provenance.json` **전량 재생성**(`/tmp/cg_convert.py`, 커밋 안 함). 개념 **401→403**·선수엣지 **540→541**·오개념 **114→116**(신규 2건 "신규 작성(2022 신설)·검수필요" 포함)·암기카드 113·국제트랙 13(불변). sha256 `1274533c…`→`062695ce…`.
