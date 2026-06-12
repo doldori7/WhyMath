@@ -7,10 +7,12 @@
     python -m data_pipeline.concept_graph validate \
         --concepts data/concept_graph/seed/concepts.csv \
         --edges data/concept_graph/seed/edges.csv
-    python -m data_pipeline.concept_graph load ...   # Neo4j — 후속 Phase(가드)
+    python -m data_pipeline.concept_graph load \
+        --graph data/concept_graph/graph.json   # Neo4j 멱등 적재(env 접속)
 
 seed는 NCIC 산출물에서 *후보* 노드·엣지 CSV를 만든다(전문가가 표기·관계·근거 채움).
 validate는 *채워진* CSV를 strict 모델로 파싱해 §5 그래프 invariant를 점검한다.
+load는 transform-v1이 만든 graph.json을 Neo4j에 멱등 MERGE 적재한다(접속은 env 전용).
 """
 
 from __future__ import annotations
@@ -19,6 +21,7 @@ import csv
 import json
 import logging
 import sys
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Annotated
 
@@ -295,30 +298,78 @@ def _write_id_map_csv(concept_records: list[dict[str, object]], path: Path) -> N
         writer.writerows(to_csv_rows(id_map))
 
 
+def _graph_json_to_result(path: Path) -> TransformResult:
+    """graph.json(transform-v1 산출) → TransformResult(개념·엣지 모델 복원).
+
+    dump는 `use_enum_values=True`라 enum이 문자열이지만 Pydantic이 enum 값으로 재구성한다(라운드트립
+    확인됨). flashcards_raw·intl_raw는 그래프 적재 대상이 아니므로 패스스루에 복원만 한다.
+    """
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    concepts = [Concept(**record) for record in payload.get("concepts", [])]
+    edges = [ConceptEdge(**record) for record in payload.get("edges", [])]
+    return TransformResult(
+        concepts=concepts,
+        edges=edges,
+        passthrough_flashcards=list(payload.get("flashcards_raw", [])),
+        passthrough_intl=list(payload.get("intl_raw", [])),
+    )
+
+
 @app.command()
 def load(
-    concepts: Annotated[
-        Path | None, typer.Option("--concepts", "-c", help="검증 통과 concepts.csv.")
+    graph: Annotated[
+        Path,
+        typer.Option("--graph", "-g", help="transform-v1이 만든 graph.json 경로."),
+    ],
+    database: Annotated[
+        str | None,
+        typer.Option("--database", help="대상 Neo4j DB명(멀티-DB 환경). 생략 시 기본 DB."),
     ] = None,
-    edges: Annotated[
-        Path | None, typer.Option("--edges", "-e", help="검증 통과 edges.csv.")
-    ] = None,
-    neo4j_uri: Annotated[
-        str, typer.Option("--neo4j-uri", help="Neo4j bolt URI.")
-    ] = "bolt://localhost:7687",
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="DEBUG 로그.")] = False,
 ) -> None:
-    """Neo4j 적재 — 후속 Phase(가드).
+    """graph.json → Neo4j 멱등 적재(단계 7·§5 #9). 접속은 env 전용(시크릿 하드코딩 금지).
 
-    Neo4j 드라이버는 아직 의존성이 아니고, 적재는 *검증 통과한 전문가 작성 CSV*(단계 4~6)를
-    선행 요구한다. 따라서 현재는 명령 표면만 두고 가드로 종료한다(load_to_postgres 스텁과 동일
-    철학 — 실행 불가 DB 코드 대신 명확한 안내).
+    적재는 멱등(MERGE)이라 재실행해도 노드·엣지 수가 불변이다. pending 노드도 전량 적재하되
+    review_status 속성으로 표식한다(끝점 고아 방지·게이팅은 조회/후속). 접속 자격은
+    NEO4J_URI·NEO4J_USER·NEO4J_PASSWORD env에서만 읽는다(CLAUDE.md 보안).
     """
-    typer.echo(
-        "[!] Neo4j 적재는 후속 Phase입니다 — neo4j 드라이버 의존성 추가 + 전문가 작성·검증\n"
-        "    통과한 CSV(단계 4~6) 선행이 필요합니다. 현재는 seed/validate까지 지원합니다.",
-        err=True,
+    _setup_logging(verbose)
+    print(SOURCE_CITATION)
+    print()
+
+    # neo4j 드라이버 사전체크(미설치 시 친절 안내 — find_spec은 import 부작용 없음).
+    if find_spec("neo4j") is None:
+        typer.echo(
+            "[!] neo4j 드라이버가 없습니다 — `pip install -e '.[neo4j]'` 후 재시도하세요.",
+            err=True,
+        )
+        raise typer.Exit(code=3)
+
+    if not graph.exists():
+        typer.echo(f"[!] graph.json 없음: {graph}", err=True)
+        raise typer.Exit(code=2)
+
+    # 지연 import(드라이버 사전체크 통과 후) — extra 미설치 환경에서 모듈 import 막지 않기 위함.
+    from data_pipeline.concept_graph.load import connect_driver, load_graph
+
+    try:
+        driver = connect_driver()
+    except ValueError as exc:
+        # 접속 env 누락 — 시크릿 안내(절대 하드코딩 금지).
+        typer.echo(f"[!] {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    result = _graph_json_to_result(graph)
+    try:
+        report = load_graph(result, driver=driver, database=database)
+    finally:
+        driver.close()
+
+    print(f"[적재] {report.summary()}")
+    print(
+        "[멱등] MERGE 기반 — 재실행해도 노드·엣지 수 불변(§5 #9). "
+        f"개념 {report.nodes_merged}개·엣지 {report.edges_merged}개."
     )
-    raise typer.Exit(code=3)
 
 
 if __name__ == "__main__":  # pragma: no cover

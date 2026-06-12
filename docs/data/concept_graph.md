@@ -170,7 +170,7 @@ UC.<domain약칭>.<topic>.<concept-slug>
 | `prerequisite` 사이클 탐지 (선수개념이 순환하면 학습 경로 불능) | `test_validate_detects_prerequisite_cycle` |
 | 고립 노드(엣지 0개) 탐지 → 경고 | `test_validate_warns_isolated_node` |
 | dangling `misconception_codes` → 경고(에러 아님) | `test_validate_warns_dangling_misconception` |
-| Neo4j 적재가 멱등 (MERGE 2회 = 1회) | `test_load_neo4j_idempotent` |
+| Neo4j 적재가 멱등 (MERGE 2회 = 1회) | **구현됨**(슬2): 단위 `test_load.py::TestIdempotency`(FAKE 드라이버·발행 Cypher 동일)·통합 `test_load_neo4j_integration.py::test_load_is_idempotent_on_live_neo4j`(실 Neo4j·2회 적재 → 노드 403·엣지 541 불변·기본 SKIP·CI/Phaiakes9) |
 | 데이터 상관: `prerequisite` 엣지의 src·dst 성취기준 학년이 역전되지 않음 | `test_prerequisite_grade_monotonic` |
 
 ### 데이터 상관 검수 (전문가 + 자동 — 단계 8)

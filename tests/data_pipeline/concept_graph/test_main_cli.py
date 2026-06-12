@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import csv
+import json
+from importlib.util import find_spec
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
 from data_pipeline.concept_graph.__main__ import app
@@ -241,8 +244,50 @@ class TestValidate:
         assert result.exit_code == 2
 
 
-class TestLoadGuard:
-    def test_load_is_guarded(self) -> None:
-        """Neo4j 적재는 후속 Phase 가드 → 종료코드 3."""
-        result = runner.invoke(app, ["load"])
+class TestLoad:
+    """load 명령 — graph.json → Neo4j 멱등 적재. CI(neo4j 미설치)는 드라이버 사전체크에서 안내.
+
+    실 적재 왕복은 test_load_neo4j_integration.py(통합·기본 SKIP)가 검증한다. 여기서는 드라이버
+    부재·입력 누락 등 *CLI 표면*만 확인한다(라이브 Neo4j 불요).
+    """
+
+    def _graph_json(self, tmp_path: Path) -> Path:
+        """transform-v1 산출과 동형의 최소 graph.json(개념 1·엣지 0)."""
+        out = tmp_path / "graph.json"
+        out.write_text(
+            json.dumps(
+                {
+                    "source_citation": "x",
+                    "concepts": [
+                        {
+                            "concept_id": "UC.calc.limit.epsilon-delta",
+                            "name_ko": "극한",
+                            "domain": "미적분",
+                            "review_status": "reviewed",
+                        }
+                    ],
+                    "edges": [],
+                    "flashcards_raw": [],
+                    "intl_raw": [],
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return out
+
+    @pytest.mark.skipif(
+        find_spec("neo4j") is not None,
+        reason="neo4j 드라이버가 설치돼 사전체크 안내 경로가 아님(통합테스트가 적재 검증)",
+    )
+    def test_load_without_driver_guides_install(self, tmp_path: Path) -> None:
+        """neo4j 미설치 → 드라이버 사전체크에서 extra 설치 안내·종료코드 3."""
+        graph = self._graph_json(tmp_path)
+        result = runner.invoke(app, ["load", "--graph", str(graph)])
         assert result.exit_code == 3
+        assert "[neo4j]" in result.output
+
+    def test_load_requires_graph_option(self) -> None:
+        """--graph 미지정 → typer 필수 옵션 오류(종료코드 2)."""
+        result = runner.invoke(app, ["load"])
+        assert result.exit_code == 2

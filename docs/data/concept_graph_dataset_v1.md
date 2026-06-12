@@ -210,11 +210,59 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5c. Neo4j 멱등 적재 상태 (L1 적재 아크 슬라이스 2 — 2026-06-12)
+
+> **저장소 슬라이스**: 슬1 산출 `graph.json` → 실 **Neo4j 그래프 저장소에 멱등 MERGE 적재**.
+> pgvector 좌석·임베딩은 **이번 범위 밖**(슬3). 모듈: `data_pipeline/concept_graph/load.py`,
+> CLI `load`, 통합 `test_load_neo4j_integration.py`.
+
+### 5c.1 적재 모델 (`load.py`)
+
+- **순서**(멱등·`concept_graph.md` §4 단계7): ① 제약·인덱스 DDL(§2.3) ② 노드 전량 MERGE(403·pending
+  포함) ③ 엣지 MERGE(541·양끝 MATCH 후). 모두 `MERGE`라 재실행해도 노드·엣지 수 불변(§5 #9).
+- **노드**: `MERGE (c:Concept {concept_id}) SET c += $props` — `concept_id`는 MERGE 키(props 제외·중복
+  SET 방지)·`review_status` 등 전 속성 SET. `use_enum_values=True`라 enum은 이미 문자열. None 속성은
+  제거(Neo4j null 속성 미생성).
+- **엣지**: `MATCH (src)…MATCH (dst)…MERGE (src)-[r:PREREQUISITE]->(dst) SET r += $props` —
+  `strength`·`evidence`·`evidence_source` 적재. **reltype 주입 차단**: Cypher 관계타입은 파라미터화
+  불가 → 닫힌 `Relation` enum(7종) allowlist에서만 대문자 reltype 포맷. 데이터셋은 전 엣지 `prerequisite`
+  → 전부 `PREREQUISITE` 관계.
+- **검수게이팅 = 403 전량 적재 + 플래그**: pending 289도 *적재*하되 `review_status='pending'` 속성으로
+  표식한다(끝점이 pending인 엣지의 고아 방지). 적재 자체는 게이팅하지 않고 **조회/후속에서** 거른다.
+- **드라이버 주입 seam**: `load_graph(result, driver=…)` — 단위테스트가 FAKE 드라이버를 주입해 *실 Neo4j
+  없이* 발행 Cypher를 검증한다(미설치 환경에서도 import·테스트 가능). `[postgres]`처럼 `neo4j` import는
+  `connect_driver` 안에서만(지연).
+
+### 5c.2 접속·시크릿 (우선순위 #2)
+
+- 접속 자격은 **env 전용**: `NEO4J_URI`·`NEO4J_USER`·`NEO4J_PASSWORD`. 소스는 *env 키 이름만* 참조하고
+  **시크릿 리터럴은 0**(CLAUDE.md 보안). `connect_driver`가 env 누락 시 ValueError로 안내.
+- `[neo4j]` optional extra(`neo4j>=5,<6`) — 메인 deps 미오염. CLI `load`는 `find_spec("neo4j")` 사전체크로
+  미설치 시 `pip install -e '.[neo4j]'` 안내.
+
+### 5c.3 redaction 불변
+
+- `graph.json`은 슬1 정형화에서 이미 청결(description·formal_definition 슬롯 부재)이고, 로더는 *모델 dump
+  키만* 적재하므로 본문이 **구조적으로 재유입 불가**. 단위테스트가 노드 props에 두 키 0건 단언.
+
+### 5c.4 산출물·게이트
+
+- CLI: `python -m data_pipeline.concept_graph load --graph data/concept_graph/graph.json [--database DB]`
+  (접속은 NEO4J_* env). 적재 멱등(MERGE) — 재실행 안전.
+- 4게이트 통과: `ruff`·`black --check`(17파일)·`mypy --strict`(17 src)·`pytest --cov`(전체 87.96%·
+  **292 passed/2 skip**). 신규 테스트 `test_load.py`(20·FAKE 드라이버)·`test_load_neo4j_integration.py`.
+- **통합테스트(실 Neo4j)는 기본 SKIP** — `@pytest.mark.integration`+`WHYMATH_RUN_INTEGRATION` 게이트 +
+  `importorskip("neo4j")`. **CI `data-pipeline-neo4j` 잡**(`neo4j:5` 서비스 컨테이너)·**Phaiakes9**에서
+  실행: 2회 적재 → 노드 403·엣지 541 불변(§5 #9)·제약 `concept_id_unique` 존재 단언.
+
+---
+
 ## 6. 향후 활용
 
 1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·
    541 선수엣지→`prerequisite` 엣지 · 검수 표식(reviewed 114·pending 289)은 **슬라이스 1에서
-   완료**(§5b·무저장소 transform·검증). **후속**: Neo4j/pgvector 적재(슬2~3) · 검수 게이팅 적재정책 ·
-   pgvector 임베딩 · backend concept API.
+   완료**(§5b·무저장소 transform·검증) · **Neo4j 멱등 적재는 슬라이스 2에서 완료**(§5c·403 노드·541
+   엣지·MERGE 멱등·env 접속). **후속(슬3~4)**: pgvector 좌석+개념 임베딩 적재 · backend concept API ·
+   L2/L4 결선 · 검수 게이팅 *조회* 정책(적재는 전량+플래그 완료).
 2. **L4 오개념 확장**(후속): §5.4 후보를 doc-first로 카탈로그에 추가(30종+ 목표).
 3. **암기카드**(L6): 113장 — `exposure_condition`("이해 마스터 후 노출")이 메타인지 정책과 정합.

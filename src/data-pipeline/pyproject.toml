@@ -44,6 +44,11 @@ postgres = [
     "sqlalchemy[asyncio]>=2.0.35",
     "asyncpg>=0.30.0",
 ]
+# 개념 그래프 Neo4j 멱등 적재용(concept_graph load). 메인 deps 오염 금지 → optional extra.
+# [postgres] 선례처럼 드라이버는 지연 import — extra 없이도 모듈 import 가능해야 한다.
+neo4j = [
+    "neo4j>=5,<6",
+]
 
 [project.scripts]
 whymath-ncic = "data_pipeline.ncic.__main__:app"
