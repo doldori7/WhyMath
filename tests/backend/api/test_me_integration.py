@@ -1778,4 +1778,91 @@ def test_me_prerequisite_gaps_traversal_and_gating_on_live_pg() -> None:
         asyncio.run(_cleanup_mastery([uid]))
         asyncio.run(_cleanup_concepts([c_post, c_pw, c_ps]))
         asyncio.run(_cleanup_concept_nodes([uc_c, uc_pw, uc_ps]))
+
+
+def test_me_prerequisite_gaps_multi_hop_traversal_on_live_pg() -> None:
+    """GET /v1/me/weak-concepts/{C}/prerequisites?max_depth=N — 다단계(재귀 CTE) 선수 traversal.
+
+    체인 C ← P1(depth1) ← P2(depth2) ← P3(depth3)을 concept_edge로 적재(from=선수·to=후행)하고,
+    셋 다 약점(weak_only 통과)으로 둔 뒤 max_depth별 노출과 응답의 depth 필드를 검증한다:
+      - max_depth=1(기본): P1만(기존 1-hop 계약).
+      - max_depth=2: P1·P2(depth 1·2)·P3 제외.
+      - max_depth=3: P1·P2·P3 전부(depth 1·2·3).
+    정렬은 weakness 동률이라 depth asc(가까운 선수 먼저) → P1·P2·P3 순. depth는 응답에 노출.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    sfx = uid.hex[:8]
+    uc_c = f"UC.test.{sfx}.mh.post"
+    uc_p1 = f"UC.test.{sfx}.mh.p1"
+    uc_p2 = f"UC.test.{sfx}.mh.p2"
+    uc_p3 = f"UC.test.{sfx}.mh.p3"
+    c_post, c_p1, c_p2, c_p3 = (uuid.uuid4() for _ in range(4))
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(
+            _add_all(
+                _concept_with_code(c_post, uc_c, "후행개념"),
+                _concept_with_code(c_p1, uc_p1, "선수1"),
+                _concept_with_code(c_p2, uc_p2, "선수2"),
+                _concept_with_code(c_p3, uc_p3, "선수3"),
+            )
+        )
+        asyncio.run(
+            _add_all(
+                _node_meta(uc_p1, "선수1", "[중]함수", "reviewed"),
+                _node_meta(uc_p2, "선수2", "[중]함수", "reviewed"),
+                _node_meta(uc_p3, "선수3", "[초]수와연산", "reviewed"),
+            )
+        )
+        # 선수 체인 — P1은 C의 선수·P2는 P1의 선수·P3는 P2의 선수(from=선수·to=후행).
+        asyncio.run(
+            _add_all(
+                _prereq_edge(c_p1, c_post, 0.9),
+                _prereq_edge(c_p2, c_p1, 0.8),
+                _prereq_edge(c_p3, c_p2, 0.7),
+            )
+        )
+        # 셋 다 약점(0.2)으로 둬 weak_only 통과. weakness 동률이라 depth asc 정렬 검증 가능.
+        asyncio.run(
+            _add_all(
+                _mastery_row(uid, c_p1, t1, 0.2),
+                _mastery_row(uid, c_p2, t1, 0.2),
+                _mastery_row(uid, c_p3, t1, 0.2),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            base = f"/v1/me/weak-concepts/{c_post}/prerequisites"
+            # ① 기본(max_depth 미지정=1) — 직접 선수 P1만(1-hop 계약).
+            resp = client.get(base, headers=auth)
+            assert resp.status_code == 200, resp.text
+            rows = resp.json()
+            assert [r["concept_code"] for r in rows] == [uc_p1]
+            assert rows[0]["depth"] == 1
+
+            # ② max_depth=2 — P1(depth1)·P2(depth2)·P3 제외.
+            resp = client.get(base, headers=auth, params={"max_depth": "2"})
+            rows = resp.json()
+            assert [r["concept_code"] for r in rows] == [uc_p1, uc_p2]
+            assert [r["depth"] for r in rows] == [1, 2]  # 동률 weakness → depth asc
+
+            # ③ max_depth=3 — P1·P2·P3 전부·depth 정확.
+            resp = client.get(base, headers=auth, params={"max_depth": "3"})
+            rows = resp.json()
+            assert [r["concept_code"] for r in rows] == [uc_p1, uc_p2, uc_p3]
+            assert [r["depth"] for r in rows] == [1, 2, 3]
+
+            # ④ max_depth 경계 — 0은 422(ge=1)·6은 422(le=5).
+            assert client.get(base, headers=auth, params={"max_depth": "0"}).status_code == 422
+            assert client.get(base, headers=auth, params={"max_depth": "6"}).status_code == 422
+    finally:
+        asyncio.run(_cleanup_concept_edges([c_p1, c_p2, c_p3]))
+        asyncio.run(_cleanup_mastery([uid]))
+        asyncio.run(_cleanup_concepts([c_post, c_p1, c_p2, c_p3]))
+        asyncio.run(_cleanup_concept_nodes([uc_c, uc_p1, uc_p2, uc_p3]))
         asyncio.run(_cleanup([uid]))  # user_profile 정리

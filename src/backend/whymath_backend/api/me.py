@@ -1149,6 +1149,20 @@ WeakOnly = Annotated[
         ),
     ),
 ]
+# 다단계(multi-hop) 선수 traversal 깊이 — 1=직접 선수만(기본·후방 호환)·2~5=선수의 선수…까지.
+# 선수 그래프는 DAG 보장(data-pipeline validate.py가 prerequisite_cycle hard error)이라 재귀는
+# 자연 종료하나, 비용·노이즈를 막으려 상한 5(부분 적재·미래 데이터 대비 방어 bound).
+MaxDepth = Annotated[
+    int,
+    Query(
+        ge=1,
+        le=5,
+        description=(
+            "선수 traversal 최대 깊이 — 1=직접 선수만(기본)·2~5=다단계 선수(선수의 선수…). "
+            "DAG 보장이라 종료, 비용·노이즈 상한 5."
+        ),
+    ),
+]
 
 
 @router.get(
@@ -1163,6 +1177,7 @@ async def get_my_prerequisite_gaps(
     threshold: WeakThreshold = 0.7,
     reviewed_only: WeakReviewedOnly = False,
     weak_only: WeakOnly = True,
+    max_depth: MaxDepth = 1,
 ) -> list[PrerequisiteGap]:
     """약개념 C(`concept_id`)의 선수개념 중 *막힌*(약한) 것을 골라 "먼저 복습할 선수"로 추천.
 
@@ -1171,9 +1186,17 @@ async def get_my_prerequisite_gaps(
     L2 진단(`compute_concept_diagnoses`)으로 lookup해 `weak_only=true`(기본)면 막힌(숙달 <
     `threshold`) 선수만 남긴다. 선수의 `concept_code`(=UC)로 `concept_node` 안전 메타(name_ko·
     domain·review_status)를 *단일 IN 조회*로 enrich하고(N+1 0·미적재 None graceful),
-    `reviewed_only=true`면 검수 안 된 선수를 *필터*한다. 정렬은 weakness 오름차순(가장 약한
-    선수=root blocker 먼저)·tie는 선수관계 강도(edge_strength) 내림차순. traversal·약점·enrich·
-    게이팅은 L2 좌석이 소유(`recommend_prerequisite_gaps`)·user_id 스코핑·읽기 전용.
+    `reviewed_only=true`면 검수 안 된 선수를 *필터*한다.
+
+    **다단계(multi-hop) traversal**: `max_depth=1`(기본)이면 직접 선수만(기존 1-hop·후방 호환)·
+    `max_depth=2~5`면 "선수의 선수…"까지 재귀 CTE로 따라간다 — 후행 개념이 안 되는 *근본 결손*이
+    여러 단계 아래일 수 있기 때문(LTHC). 응답 각 항목의 `depth`(1=직접 선수·2=선수의 선수…)로
+    선수 거리를 노출한다(그래프 구조 메타·안전). 같은 선수가 여러 경로로 닿으면 가장 가까운(MIN)
+    거리만 1건. 선수 그래프는 DAG 보장이라 재귀는 종료하며 `max_depth`로 방어적 bound.
+
+    정렬은 weakness 오름차순(가장 약한 선수=root blocker 먼저)·동률은 **depth 오름차순**(가까운
+    선수 먼저·더 직접 실행 가능)·그 다음 선수관계 강도(edge_strength) 내림차순. traversal·약점·
+    enrich·게이팅은 L2 좌석이 소유(`recommend_prerequisite_gaps`)·user_id 스코핑·읽기 전용.
 
     **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 *조회 좌석*(약개념 추천과 일관)이다. enrich
     되는 건 안전 표시·게이팅 필드뿐 — **본문(description·formal_definition) 0**(concept_node·
@@ -1186,6 +1209,7 @@ async def get_my_prerequisite_gaps(
         mastery_threshold=threshold,
         reviewed_only=reviewed_only,
         weak_only=weak_only,
+        max_depth=max_depth,
     )
 
 

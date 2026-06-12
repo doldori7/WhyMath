@@ -653,6 +653,50 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5j. 다단계(transitive) 선수 traversal — 재귀 CTE (개념그래프 *소비* 선수 슬라이스 2 — 2026-06-12)
+
+> **확장 슬라이스(backend·L2)**: 선수 슬라이스(§5i)가 약개념의 **1-hop 직접 선수**만 추천했다면, 이 슬라이스는
+> "선수의 선수의 …"까지 따라가 **깊은 선수 체인**을 추천한다(근본 결손이 여러 단계 아래일 수 있음). backend는
+> **PG 단일 평면**(Neo4j 런타임 미도입)이라 **SQLAlchemy 재귀 CTE**(`cte(recursive=True)`·Core·원시 SQL 0)로 따른다.
+
+### 5j.1 재귀 CTE traversal (`fetch_prerequisites` 일반화)
+
+- `fetch_prerequisites(session, concept_id, *, max_depth: int = 1)`:
+  - **base**(depth=1·앵커): `to_concept_id == concept_id AND edge_type == PREREQUISITE`인 `from_concept_id`·
+    `edge_strength`·`literal(1) as depth` → `.cte("prereq_traversal", recursive=True)`.
+  - **recursive**(depth+1): `ConceptEdge JOIN base ON ConceptEdge.to_concept_id == base.c.concept_id`(이전 깊이
+    선수를 *후행*으로 삼아 한 단계 더)·같은 edge_type·**`WHERE base.c.depth < max_depth`**(bound).
+  - `base.union_all(recursive)` → `Concept` join(code·name_ko) → `ORDER BY depth asc, edge_strength desc
+    nullslast, concept_id`(안정 정렬).
+- **`max_depth=1` ⇒ 기존 1-hop 계약 보존**: recursive 가지의 `depth(=1) < 1 = false`라 recursive가 *전혀
+  실행되지 않고* base(직접 선수)만 남는다. 통합 테스트가 실 PG에서 `max_depth=1 → 직접 선수만` 못 박음.
+- **dedup(MIN depth)**: diamond(여러 경로)로 같은 선수가 여러 깊이로 나올 수 있어 Python에서 정렬(depth asc) 후
+  첫 등장(=MIN depth·동률이면 강도 큰 것)만 유지. **origin C 자체는 방어적으로 제외**(DAG라 안 나오나 안전).
+- **DAG 안전**: `validate.py`가 `prerequisite_cycle`을 **hard error**로 막아 데이터셋 v1은 비순환 → 재귀 자연
+  종료. 그래도 `max_depth`(API 상한 5)로 방어적 bound(부분 적재·미래 데이터 대비).
+
+### 5j.2 depth 노출·정렬·API
+
+- `PrerequisiteRow`·`PrerequisiteGap`에 **`depth: int`** 추가(1=직접·2=선수의 선수…·MIN 거리·그래프 구조 메타·
+  안전). **redaction 불변 유지**(본문 슬롯 여전히 0).
+- **정렬**(`recommend_prerequisite_gaps`): `weakness asc`(root blocker 먼저)·None 뒤 → 동률 **`depth asc`**(가까운
+  선수 먼저) → `edge_strength desc` → `concept_id`(결정론·4-튜플 키).
+- `GET /v1/me/weak-concepts/{concept_id}/prerequisites`에 **`max_depth`**(`Query(ge=1, le=5)`·기본 1) 추가 →
+  `recommend_prerequisite_gaps(..., max_depth=max_depth)`. mastery·weak_only·enrich·게이팅은 각 깊이 선수에 동일.
+
+### 5j.3 산출물·게이트
+
+- 4게이트 통과(`cd src/backend`·py3.12): `ruff`(green)·`black`(157)·`mypy`(**135 src·이슈 0**·sort key `tuple[float,
+  int, float, str]` 정합)·`pytest`(**2533 passed/105 skip**·회귀 0). 변경 *로직 surface*(max_depth 배선·depth
+  tie-break·전파·gap 조립) cov 100%·재귀 CTE *본문*은 integration 전용(실 SQL·PG 게이트·§5i 1-hop 본문과 동일 자세).
+- 테스트: `test_prerequisite_recommendation.py`(수정·depth 필드셋·정렬 동률[depth>강도·같은 depth면 강도]·
+  redaction)·`test_prerequisite_traversal_integration.py`(신규·실 PG: 3단계 체인 C←P1←P2←P3·max_depth=1/2/3
+  경계·diamond MIN-depth·origin 제외)·`test_me_integration.py`(수정·API max_depth 케이스).
+- **마이그레이션 0**(기존 `concept_edge`·`idx_concept_edge_to` 조회만). 계층 L2 조회·L5 표면·원시 SQL 0(재귀 CTE도
+  Core). **다음**: L4 코칭 결선·비-prereq EdgeType 적재·edge_strength 임계 필터·깊은 체인 EXPLAIN 확인.
+
+---
+
 ## 6. 향후 활용
 
 1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·

@@ -16,6 +16,26 @@ PG 단일 평면). 각 선수의 `code`(UC)·`name_ko`도 `Concept` join으로 �
 표시·enrich에 UC 필요).
 
 ────────────────────────────────────────────────────────────────────────────
+다단계(transitive·multi-hop) 선수 traversal — 재귀 CTE (이 슬라이스 확장)
+────────────────────────────────────────────────────────────────────────────
+직접 선수(1-hop)만으로는 *근본 결손*을 못 짚는다 — 후행이 안 되는 진짜 원인이 "선수의 선수의 …"
+여러 단계 아래일 수 있다(LTHC·깊은 선수 체인). 그래서 `fetch_prerequisites`를 `max_depth`로
+일반화해 **선수의 선수까지** 따라간다. PG 단일 평면(Neo4j 미도입)이라 **SQLAlchemy Core 재귀
+CTE**(`select(...).cte(recursive=True)`·`union_all`·`literal`)로 traversal한다(원시 SQL 0):
+  - base(depth=1): `to_concept_id == C AND PREREQUISITE`인 from(직접 선수).
+  - recursive(depth+1): `concept_edge JOIN cte ON concept_edge.to_concept_id == cte.concept_id`
+    (이전 깊이 선수를 *후행*으로 삼아 한 단계 더)·`WHERE cte.depth < max_depth`(재귀 bound).
+  - `max_depth=1`이면 recursive 가지가 `depth < 1`=false라 base만 실행 = **기존 1-hop과 동일**
+    (계약 보존).
+
+**DAG 안전**: 선수 그래프는 데이터셋 v1에서 *비순환 보장*이다 —
+`data-pipeline/.../concept_graph/validate.py`가 prerequisite 사이클을 hard error
+(`prerequisite_cycle`·"순환 선수관계=학습 경로 불능")로 막는다. 따라서 transitive traversal은
+자연 종료한다. 그래도 **방어적으로 `max_depth` 상한**으로 재귀를 bound한다(부분 적재·미래 데이터
+대비). 같은 선수가 여러 경로/깊이로 나오면 Python에서 **MIN depth** 1건만 유지하고(가장 가까운
+경로), origin 개념 C 자체는 결과에서 제외한다(DAG라 안 나오지만 방어적).
+
+────────────────────────────────────────────────────────────────────────────
 재사용 좌석 (신규 진단·정렬 로직 0)
 ────────────────────────────────────────────────────────────────────────────
 ① mastery — `l2.concept_diagnosis.compute_concept_diagnoses`를 *한 번* 호출해 `{concept_id:
@@ -46,7 +66,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.concept import Concept, ConceptEdge
@@ -67,17 +87,19 @@ _REVIEWED: str = "reviewed"
 
 @dataclass(frozen=True, slots=True)
 class PrerequisiteRow:
-    """선수 traversal 단일 결과 — 선수 concept_id(UUID)·code(UC)·name_ko·edge_strength.
+    """선수 traversal 단일 결과 — 선수 concept_id(UUID)·code(UC)·name_ko·edge_strength·depth.
 
     `concept_edge`(to==후행) join `concept`(from-side) 조회 한 행이다. mastery·enrich 부착 전
-    *그래프 구조* 값만 담는다(선수 식별 + 선수관계 강도). 별도 dataclass로 빼 traversal 조회를
-    단위테스트에서 패치 가능하게 한다(실 SQL 격리).
+    *그래프 구조* 값만 담는다(선수 식별 + 선수관계 강도 + 선수 거리). 별도 dataclass로 빼
+    traversal 조회를 단위테스트에서 패치 가능하게 한다(실 SQL 격리). `depth`는 1=직접 선수·
+    2=선수의 선수…(다단계 traversal의 hop 수). 같은 선수가 여러 경로로 나오면 MIN depth만 유지.
     """
 
     concept_id: uuid.UUID  # 선수개념 backend UUID(from_concept_id)
     concept_code: str | None  # 선수개념 UC(concept.code·orphan이면 None)
     name_ko: str | None  # 선수개념 한국어명(concept.name_ko)
     edge_strength: float | None  # 선수관계 강도(edge_strength·미기재 None)
+    depth: int = 1  # 선수 거리(1=직접 선수·2=선수의 선수…·MIN depth 유지)
 
 
 class PrerequisiteGap(BaseModel):
@@ -131,6 +153,11 @@ class PrerequisiteGap(BaseModel):
         description="선수관계 강도 [0,1](concept_edge.edge_strength·강한 선수일수록 결정적). "
         "미기재 시 null.",
     )
+    depth: int = Field(
+        default=1,
+        description="선수 거리 — 1=직접 선수·2=선수의 선수…(다단계 traversal hop 수). "
+        "여러 경로로 닿으면 가장 가까운(MIN) 거리. 그래프 구조 메타(안전·본문 아님).",
+    )
 
 
 def _weakness_of(diagnosis: ConceptDiagnosis) -> float | None:
@@ -144,43 +171,97 @@ def _weakness_of(diagnosis: ConceptDiagnosis) -> float | None:
 
 
 async def fetch_prerequisites(
-    session: AsyncSession, concept_id: uuid.UUID
+    session: AsyncSession, concept_id: uuid.UUID, *, max_depth: int = 1
 ) -> list[PrerequisiteRow]:
-    """후행 개념 C의 선수개념들을 `concept_edge`(to==C·PREREQUISITE) traversal로 조회.
+    """후행 개념 C의 선수개념들을 `concept_edge`(to==C·PREREQUISITE) **재귀 CTE** traversal로 조회.
 
     **방향**: `to_concept_id == concept_id AND edge_type == PREREQUISITE`인 행의
-    `from_concept_id`(선수)들을 `Concept` join으로 code(UC)·name_ko와 함께 가져온다(미측정 선수도
-    표시·enrich에 UC 필요). 정렬은 `edge_strength` 내림차순(강한 선수 먼저)·tie는 concept_id 문자열
-    (결정론). 실 SQL이라 단위테스트는 이 함수를 패치한다(traversal 격리·ORM 쿼리빌더만).
+    `from_concept_id`(선수)가 직접 선수다(depth=1). `max_depth>1`이면 그 선수를 다시 *후행*으로
+    삼아 "선수의 선수…"까지 따라간다(depth 2·3…). 각 선수의 `code`(UC)·`name_ko`는 `Concept`
+    join으로 함께 가져온다(미측정 선수도 표시·enrich에 UC 필요).
+
+    **재귀 CTE 구조**(SQLAlchemy Core·원시 SQL 0):
+      - base(depth=1): `to_concept_id == concept_id AND PREREQUISITE`인 from·edge_strength·
+        `literal(1)` as depth.
+      - recursive(depth+1): `concept_edge JOIN cte ON concept_edge.to_concept_id == cte.concept_id`
+        (이전 깊이 선수를 후행으로)·같은 edge_type 필터·**`WHERE cte.depth < max_depth`**(bound).
+        새 행 = from·edge_strength·`cte.depth + 1`.
+      - `base.union_all(recursive)` → cte. **`max_depth=1`이면 recursive가 `depth < 1`=false라
+        base만 = 기존 1-hop과 동일**(계약 보존).
+
+    **dedup**: 같은 선수가 여러 경로/깊이로 나올 수 있어(DAG의 diamond) Python에서 **MIN depth**
+    1건만 유지한다(동률 깊이면 edge_strength 큰 것·결정론). origin C 자체는 제외(DAG라 안 나오나
+    방어적). 정렬은 호출부(`recommend_prerequisite_gaps`)가 weakness 기준으로 다시 하므로 여기선
+    안정적 순서(depth asc·edge_strength desc·concept_id)만 보장한다.
+
+    DAG 보장(validate.py prerequisite_cycle hard error)이라 재귀는 자연 종료하나, `max_depth`로
+    방어적으로 bound한다(부분 적재·미래 데이터 대비). 실 SQL이라 단위테스트는 이 함수를 패치한다.
     """
-    stmt = (
+    # base 앵커(depth=1) — C의 직접 선수(to==C→from). recursive와 union하려 CTE로 만든다.
+    base = (
         select(
-            ConceptEdge.from_concept_id,
-            Concept.code,
-            Concept.name_ko,
-            ConceptEdge.edge_strength,
+            ConceptEdge.from_concept_id.label("concept_id"),
+            ConceptEdge.edge_strength.label("edge_strength"),
+            literal(1).label("depth"),
         )
-        .join(Concept, ConceptEdge.from_concept_id == Concept.concept_id)
         .where(
             ConceptEdge.to_concept_id == concept_id,
             ConceptEdge.edge_type == EdgeType.PREREQUISITE.value,
         )
-        # 강한 선수 먼저(NULL 강도는 뒤)·tie는 from_concept_id로 결정론.
+        .cte(name="prereq_traversal", recursive=True)
+    )
+    # recursive 가지(depth+1) — 이전 깊이 선수(cte.concept_id)를 *후행*으로 삼아 그 선수를 한 단계
+    # 더. `cte.depth < max_depth`로 bound(max_depth=1이면 false라 base만 = 1-hop 계약 보존).
+    recursive = (
+        select(
+            ConceptEdge.from_concept_id.label("concept_id"),
+            ConceptEdge.edge_strength.label("edge_strength"),
+            (base.c.depth + 1).label("depth"),
+        )
+        .join(base, ConceptEdge.to_concept_id == base.c.concept_id)
+        .where(
+            ConceptEdge.edge_type == EdgeType.PREREQUISITE.value,
+            base.c.depth < max_depth,
+        )
+    )
+    traversal = base.union_all(recursive)
+    # 최종 SELECT — cte를 Concept join(concept_id→code·name_ko). 안정 정렬(depth asc→강도 desc→
+    # concept_id)로 dedup MIN depth 선택을 결정론적으로 만든다.
+    stmt = (
+        select(
+            traversal.c.concept_id,
+            Concept.code,
+            Concept.name_ko,
+            traversal.c.edge_strength,
+            traversal.c.depth,
+        )
+        .join(Concept, traversal.c.concept_id == Concept.concept_id)
         .order_by(
-            ConceptEdge.edge_strength.desc().nullslast(),
-            ConceptEdge.from_concept_id,
+            traversal.c.depth.asc(),
+            traversal.c.edge_strength.desc().nullslast(),
+            traversal.c.concept_id,
         )
     )
     rows = (await session.execute(stmt)).all()
-    return [
-        PrerequisiteRow(
-            concept_id=cid,
-            concept_code=code,
-            name_ko=name,
-            edge_strength=float(strength) if strength is not None else None,
+
+    # dedup — 같은 선수가 여러 경로/깊이로 나오면 MIN depth 1건만(정렬이 depth asc라 첫 등장이
+    # MIN depth·동률이면 강도 큰 것). origin C 자체는 방어적으로 제외(DAG라 안 나오나 안전).
+    seen: set[uuid.UUID] = set()
+    result: list[PrerequisiteRow] = []
+    for cid, code, name, strength, depth in rows:
+        if cid == concept_id or cid in seen:
+            continue
+        seen.add(cid)
+        result.append(
+            PrerequisiteRow(
+                concept_id=cid,
+                concept_code=code,
+                name_ko=name,
+                edge_strength=float(strength) if strength is not None else None,
+                depth=int(depth),
+            )
         )
-        for cid, code, name, strength in rows
-    ]
+    return result
 
 
 async def recommend_prerequisite_gaps(
@@ -191,13 +272,16 @@ async def recommend_prerequisite_gaps(
     mastery_threshold: float = 0.7,
     reviewed_only: bool = False,
     weak_only: bool = True,
+    max_depth: int = 1,
     meta_engine: Engine | None = None,
 ) -> list[PrerequisiteGap]:
     """약개념 C의 선수개념 중 *막힌*(약한) 것 → mastery·메타 enrich → 정렬 추천(선수 복습 우선).
 
     흐름:
-      ① **선수 traversal** — `fetch_prerequisites`로 C의 선수개념(to==C·PREREQUISITE의 from)들 +
-         code(UC)·name_ko·edge_strength를 조회한다(미측정 선수도 포함·강도 desc 정렬·방향 일치).
+      ① **선수 traversal** — `fetch_prerequisites(max_depth=max_depth)`로 C의 선수개념(to==C·
+         PREREQUISITE의 from)들 + code(UC)·name_ko·edge_strength·depth를 조회한다. `max_depth=1`
+         (기본)이면 직접 선수만(기존 1-hop 계약·후방 호환)·`max_depth>1`이면 "선수의 선수…"까지
+         다단계로 따라간다(근본 결손이 여러 단계 아래일 수 있음·LTHC). 미측정 선수도 포함.
       ② **mastery 조회** — `compute_concept_diagnoses`를 *한 번* 호출해 `{concept_id: diagnosis}`
          맵으로 선수들의 BKT/IRT 숙달을 lookup한다(없으면 None·insufficient·graceful).
       ③ **weak_only**(기본 True) — weakness(두 신호 최저)가 `mastery_threshold` *미만*인 선수만
@@ -207,15 +291,18 @@ async def recommend_prerequisite_gaps(
          sync라 `asyncio.to_thread`로 격리)로 concept_node 안전 메타를 붙인다(미적재 None graceful).
       ⑤ **reviewed_only 게이팅** — True면 `review_status == "reviewed"`인 선수만(메타 없으면 보수적
          제외 — 소비 슬1 규약). 기본 False는 recall 보존.
-      정렬: weakness 오름차순(가장 약한 선수 = root blocker 먼저)·weakness None은 뒤·tie는
-      edge_strength desc(강한 선수 우선·None 뒤)로 결정론.
+      정렬: weakness 오름차순(가장 약한 선수 = root blocker 먼저)·weakness None은 뒤·동률은
+      **depth asc**(가까운 선수 먼저 — 더 직접 실행 가능)·그 다음 edge_strength desc(강한 선수
+      우선·None 뒤)·concept_id로 결정론. 각 깊이의 선수는 mastery·weak_only·enrich·게이팅을
+      *모두 동일하게* 처리한다(깊이는 정렬 tie-break에만 관여·필터링엔 무관).
 
     user_id 스코핑·읽기 전용(마이그레이션 0). `meta_engine` 주입 가능(테스트 격리). enrich되는 건
     안전 필드뿐 — 본문(description·formal_definition)은 컬럼·스키마에 슬롯이 없어 구조적으로 0
     (redaction·노출 계약).
     """
-    # ① 선수 traversal(to==C → from·강도 desc·미측정 포함).
-    prerequisites = await fetch_prerequisites(session, concept_id)
+    # ① 선수 traversal(to==C → from·재귀 CTE·max_depth bound·미측정 포함). max_depth=1이면
+    # base만 = 직접 선수(기존 1-hop 계약)·>1이면 선수의 선수…(다단계).
+    prerequisites = await fetch_prerequisites(session, concept_id, max_depth=max_depth)
     if not prerequisites:
         return []
 
@@ -261,15 +348,17 @@ async def recommend_prerequisite_gaps(
                 review_status=node.review_status if node is not None else None,
                 name_ko=node.name_ko if node is not None else None,
                 edge_strength=row.edge_strength,
+                depth=row.depth,
             )
         )
 
-    # 정렬 — weakness asc(가장 약한 선수=root blocker 먼저)·None은 뒤·tie는 edge_strength desc.
-    def _sort_key(gap: PrerequisiteGap) -> tuple[float, float, str]:
+    # 정렬 — weakness asc(가장 약한 선수=root blocker 먼저)·None은 뒤·동률은 depth asc(가까운
+    # 선수 먼저·더 직접 실행 가능)·그 다음 edge_strength desc(강한 선수 우선·None 뒤)·concept_id.
+    def _sort_key(gap: PrerequisiteGap) -> tuple[float, int, float, str]:
         weak = gap.weakness if gap.weakness is not None else float("inf")
         # edge_strength desc → 음수화(None은 가장 약하게 뒤로 = +inf의 음수 = -inf 대신 0 처리).
         strength = -gap.edge_strength if gap.edge_strength is not None else float("inf")
-        return (weak, strength, str(gap.concept_id))
+        return (weak, gap.depth, strength, str(gap.concept_id))
 
     gaps.sort(key=_sort_key)
     return gaps
