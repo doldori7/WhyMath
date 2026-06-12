@@ -4,7 +4,7 @@ slice 107: 의미(임베딩) 매처(`semantic_matches`/`SemanticMatcher`)가 sub
 거짓음성(패러프레이즈·동의어)을 *얼마나* 메우는지, 그리고 임베딩 방향맹이 *올바른* 진술을
 오개념으로 *얼마나* 잘못 끌어올리는지(거짓양성)를 **수치로** 잰다. 본 모듈은 게이트를 켜지
 않는다 — `combined.py`의 플립 decision(coach가 의미 매처를 결합할지)을 *Kiki가 측정 후 확정*할
-근거를 만드는 측정 도구다(`config.misconception_semantic_enabled`는 무변경·기본 off 유지).
+근거를 만드는 측정 도구다(`config.misconception_semantic_mode`는 무변경·기본 off 유지).
 
 **비노출·오프라인**: 런타임/HTTP/DB 경로와 무관한 측정 도구다. L4 `semantic_matches`(의미 매칭)
 + `diagnose`(substring 기준선)를 *소비*만 한다(재구현 0·게이트·coach 무변경). 입력은 프로브셋
@@ -788,7 +788,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI 엔트리 — 프로브셋 JSONL → 의미 매칭 recall/FP 측정. 종료 0(통과)/1(게이트 미달).
 
     게이트(min-recall/max-fp)는 *측정 도구의 옵션*일 뿐 coach 게이트
-    (`misconception_semantic_enabled`)와 무관하다 — 본 CLI는 플립 *근거*를 내고, 실제 플립은
+    (`misconception_semantic_mode`)와 무관하다 — 본 CLI는 플립 *근거*를 내고, 실제 플립은
     Kiki가 측정 후 별도 슬라이스로 한다.
     """
     parser = argparse.ArgumentParser(

@@ -601,18 +601,19 @@ class Settings(BaseSettings):
         ),
     )
 
-    misconception_semantic_enabled: bool = Field(
-        default=False,
+    misconception_semantic_mode: Literal["off", "shadow", "on"] = Field(
+        default="off",
         description=(
-            "L4 coach 오개념 진단에 *의미(임베딩) 매칭 결합*(slice 106)을 켤지. **False(기본·"
-            "opt-in)**면 coach는 substring `diagnose()`만 쓴다(현행 비트동일·의미 매처 미호출·"
-            "임베딩 로드 0). True면 substring 결과 아래에 semantic-only 후보를 결합해 노출한다"
-            "(combine_diagnoses — substring 우선·재정렬 없음). 결합은 *비블로킹*(asyncio.to_thread "
-            "워커)이고 의미 매칭 실패 시 substring으로 *graceful 폴백*(200 유지)이라 켜도 가용성·"
-            "기존 1위 진단은 불변. **student-facing 영향 최소**: matches[0]은 substr가 있으면 항상 "
-            "substr라 `select_intervention` 구동 동일. 기본 off는 ① 라이브 임베딩(bge-m3) 로드 "
-            "비용 ② 방향맹 false-positive(03 정직 스코프)를 보수적으로 막기 위함. `l4_step_shadow_"
-            "enabled` 미러. WHYMATH_MISCONCEPTION_SEMANTIC_ENABLED=true로 켠다."
+            "L4 coach 오개념 진단의 *의미(임베딩) 매칭 결합* 모드(slice 106·111). 3값: "
+            "**`off`(기본·opt-in)** = coach는 substring `diagnose()`만(현행 비트동일·의미 매처 "
+            "미호출·임베딩 로드 0). **`shadow`** = 의미 매처를 *라이브로 돌리되* 노출은 substring "
+            "그대로(off와 동일)이고 substring↔semantic *불일치만 로깅*한다(slice 111·step_shadow "
+            "미러·비노출·학생 원문 미포함) — 합성 프로브가 아닌 *실 분포*에서 플립 근거 수집. "
+            "**`on`** = substring 아래에 semantic-only 후보를 결합해 *노출*(combine_diagnoses·"
+            "substring 우선·재정렬 없음). shadow·on의 의미 매칭은 *비블로킹*(asyncio.to_thread)·"
+            "실패 시 substring graceful 폴백(200 유지)·matches[0]은 substr면 항상 substr. 기본 "
+            "off는 ① bge-m3 로드 비용 ② 방향맹 FP를 보수적으로 막기 위함. `l4_step_shadow_enabled` "
+            "미러. WHYMATH_MISCONCEPTION_SEMANTIC_MODE=shadow|on으로 켠다."
         ),
     )
 
@@ -626,7 +627,7 @@ class Settings(BaseSettings):
             "(`_compute_matches` 무변경). True여도 이번 슬라이스엔 동작 변화 0. judge는 substring·"
             "임베딩이 못 가리는 방향(⇒ 역)·부정(≠)·등치(=)를 언어 추론으로 판별해 `아니오`(올바름/"
             "다른 말) 후보만 거른다(예·불확실 유지·recall 보존). 라우팅/모델은 L3 재사용(로컬 "
-            "FAST·라우터 경유). `l4_step_shadow_enabled`·`misconception_semantic_enabled` 미러. "
+            "FAST·라우터 경유). `l4_step_shadow_enabled`·`misconception_semantic_mode` 미러. "
             "WHYMATH_MISCONCEPTION_JUDGE_ENABLED=true로 켠다(후속)."
         ),
     )
