@@ -257,12 +257,75 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5d. 개념 pgvector 임베딩 적재 상태 (L1 적재 아크 슬라이스 3 — 2026-06-12)
+
+> **저장소 슬라이스(backend)**: 슬2가 개념을 Neo4j 그래프에 적재한 뒤, 개념의 *의미 임베딩*을
+> **pgvector(`concept_embedding` 테이블)에 멱등 upsert**한다. 슬1·2(`data-pipeline` 패키지)와 달리
+> **backend 패키지**(`src/backend`·`whymath_backend`) 소관이다(L5 서버가 다중 저장소 운영). 슬2
+> Neo4j와 *동일 UC 키*라 그래프↔벡터가 한 키로 join된다(이중 store 단일 키). 슬98 결정(벡터
+> DB=pgvector·Postgres 16 통합)을 개념 자산으로 확장한 두 번째 결선(첫 결선은 L4
+> `misconception_embedding`·슬105 — 이 슬라이스가 그 ORM·마이그레이션·적재기를 *개념용으로 미러링*).
+> 모듈: `whymath_backend/db/models/concept_embedding.py`, alembic
+> `…_concept_embedding_pgvector.py`, `whymath_backend/l1/concept_graph/{embedding,populate}.py`.
+
+### 5d.1 ORM·마이그레이션 (`concept_embedding`)
+
+- **PK=`concept_id`(TEXT·UC)**: 슬1 idmap 발급 Universal Concept ID = 슬2 Neo4j 노드 키와 *동일
+  키 공간* → 이중 store 단일 키 join. upsert가 PK 충돌로 멱등(`ON CONFLICT(concept_id) DO UPDATE`).
+- **컬럼**: `embedding pgvector vector(1024)`(`config.embedding_dim` 기본·bge-m3)·`provider`·`model`·
+  `dim`·`text_hash`·`updated_at`. **원문(source_text) 컬럼 부재** — 임베딩 원문은 저장하지 않고
+  *표현 해시*(`text_hash`)만 둔다(redaction 방어·중복 제거·원문은 Neo4j 노드 속성에 이미 존재).
+- **마이그레이션 체인**: `down_revision=d7e8f9a0b1c2`(슬105 misconception_embedding head 위). upgrade는
+  `CREATE EXTENSION IF NOT EXISTS vector`(슬105가 이미 생성·재사용·자기완결 안전) + `concept_embedding`
+  테이블. **downgrade는 `vector` 확장을 드롭하지 않는다** — 슬105 `misconception_embedding`이 여전히
+  `vector` 컬럼을 소유하므로(확장 소유권은 *도입* 마이그레이션[슬105]에 있음). 오프라인 SQL 검증:
+  `upgrade --sql`=CREATE EXTENSION+CREATE TABLE·`downgrade --sql`=DROP TABLE만·`heads`=단일 head.
+- **HNSW/IVFFlat 인덱스 없음**: misconception_embedding과 동일 — 401+ 규모는 seq-scan 정합(스케일
+  코퍼스는 fixed-dim + HNSW cosine 인덱스가 정석·후속·이 테이블은 *영속화 + 의미검색 groundwork*).
+
+### 5d.2 임베딩 텍스트 — 안전 필드만 (redaction·우선순위 #2)
+
+- **임베딩 입력 = `name_ko` + `metaphor` + `accepted_expressions`**(자체 작성 안전 필드·`". "` join).
+  L4 `catalog_text`의 개념판. `concept_embedding_text(...)`는 **`description`·`formal_definition`을
+  인자로 받지도 않는다**(시그니처 부재=구조적 차단). graph.json엔 본디 두 키가 없고(슬1 모델 슬롯
+  부재·`_provenance.json` redacted), 있더라도 로더가 *읽지 않는다*(이중 방어). 교과서 본문 0.
+- 안전 필드가 전부 빈 개념은 적재에서 제외(빈 벡터 방지).
+
+### 5d.3 적재기·provider 재사용 (신규 seam 0)
+
+- **입력 원천 = 슬1 산출 `graph.json`**(UC 키·정제). `load_concepts_from_graph_json`이 `concepts`
+  배열에서 UC `concept_id` + 안전 필드만 읽어 `(concept_id, 표현)` 목록을 만든다(flashcards_raw·
+  intl_raw 등 그래프 외 자산은 읽지 않음).
+- **임베딩 provider seam 재사용**(신규 금지·CLAUDE.md 로컬 우선): L4 `misconception/semantic/provider`
+  (`build_provider`·`FakeEmbeddingProvider`·local bge-m3·OpenAI)·`text_hash`·`_provider_model_identity`를
+  그대로 import한다(같은 임베딩 공간 규약·Fake 주입·지연 로드). `ConceptEmbeddingIndex`(sync psycopg
+  lazy 엔진·upsert/search)는 `PgVectorIndex`를 개념 테이블용으로 미러링.
+- **멱등 upsert**: `populate_concept_embeddings`가 표현을 배치 1회 임베딩해 UC 키로 upsert(재실행 시
+  갱신). **403 전량 적재**(review_status 무관 — 임베딩은 의미검색용·게이팅은 *조회* 몫).
+- 자격증명 0 하드코딩(OpenAI 키 등 env 전용·SecretStr)·로컬 provider 우선(비용).
+
+### 5d.4 산출물·게이트
+
+- CLI: `WHYMATH_VECTOR_STORE=pgvector python -m whymath_backend.l1.concept_graph.populate
+  --graph data/concept_graph/graph.json`(env 접속·pgvector 모드 전용). 적재 멱등 — 재실행 안전.
+- 4게이트 통과(`cd src/backend`): `ruff check .`·`black --check .`(149파일)·`mypy --strict
+  whymath_backend`(128 src)·`pytest --cov`(전체 **96.19%**·**2408 passed/85 skip**). 신규 테스트
+  `test_concept_embedding.py`(24·Fake provider·가짜 엔진)·`test_concept_embedding_integration.py`(5).
+- **통합테스트(실 PG+pgvector)는 기본 SKIP** — `@pytest.mark.integration`+`WHYMATH_RUN_INTEGRATION`
+  게이트 + PG 미도달 graceful skip. **CI 신규 잡 불요** — 기존 **`backend — 마이그레이션·통합 (실 PG)`
+  잡**(`pgvector/pgvector:pg16` 서비스)이 `alembic upgrade head`(→`concept_embedding` 생성)·
+  `downgrade base→upgrade head` 왕복 후 `pytest -m integration --ignore=l3`로 이 통합테스트를 자동
+  수집·실행한다(upsert→search 라운드트립·멱등·provider/model 필터·dim 일치·UC 키). **Phaiakes9**에서도 실행.
+
+---
+
 ## 6. 향후 활용
 
 1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·
    541 선수엣지→`prerequisite` 엣지 · 검수 표식(reviewed 114·pending 289)은 **슬라이스 1에서
    완료**(§5b·무저장소 transform·검증) · **Neo4j 멱등 적재는 슬라이스 2에서 완료**(§5c·403 노드·541
-   엣지·MERGE 멱등·env 접속). **후속(슬3~4)**: pgvector 좌석+개념 임베딩 적재 · backend concept API ·
-   L2/L4 결선 · 검수 게이팅 *조회* 정책(적재는 전량+플래그 완료).
+   엣지·MERGE 멱등·env 접속) · **개념 pgvector 임베딩 적재는 슬라이스 3에서 완료**(§5d·UC 키 이중
+   store·name_ko+metaphor+accepted 임베딩·멱등 upsert·backend 패키지). **후속(슬4+)**: backend concept
+   API(의미검색 *조회* 좌석) · L2/L4 결선 · 검수 게이팅 *조회* 정책(적재는 전량+플래그 완료).
 2. **L4 오개념 확장**(후속): §5.4 후보를 doc-first로 카탈로그에 추가(30종+ 목표).
 3. **암기카드**(L6): 113장 — `exposure_condition`("이해 마스터 후 노출")이 메타인지 정책과 정합.
