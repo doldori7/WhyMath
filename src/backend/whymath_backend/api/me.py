@@ -80,6 +80,10 @@ from whymath_backend.l2.irt import (
     select_weighted_item,
 )
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
+from whymath_backend.l2.prerequisite_recommendation import (
+    PrerequisiteGap,
+    recommend_prerequisite_gaps,
+)
 from whymath_backend.l2.weak_concept_recommendation import (
     WeakConceptRecommendation,
     recommend_weak_concepts,
@@ -1128,6 +1132,60 @@ async def get_my_weak_concepts(
         limit=limit,
         mastery_threshold=threshold,
         reviewed_only=reviewed_only,
+    )
+
+
+# ── 개념그래프 소비 선수 슬1: GET /v1/me/weak-concepts/{concept_id}/prerequisites ──
+# 약개념 C의 *막힌 선수개념* 추천 — concept_edge(to==C·PREREQUISITE) traversal로 선수를 찾고,
+# 그 중 학습자가 약한(막힌) 것을 mastery·concept_node 안전 메타와 함께 돌려준다(선수 복습 우선).
+# 후행 개념이 안 되는 *근본 원인*이 선수 결손일 수 있으므로 "먼저 복습할 선수"를 가린다(LTHC).
+# traversal·약점 필터·enrich·게이팅 로직은 L2 좌석이 소유(L5는 표면·user_id 스코핑·읽기 전용).
+WeakOnly = Annotated[
+    bool,
+    Query(
+        description=(
+            "true(기본)=막힌(약한·숙달 미만) 선수만(측정 없는 선수 제외). false=모든 선수"
+            "(약점 무관·미측정 포함)."
+        ),
+    ),
+]
+
+
+@router.get(
+    "/weak-concepts/{concept_id}/prerequisites",
+    response_model=list[PrerequisiteGap],
+    summary="약개념의 막힌 선수개념 추천(선수 traversal + BKT/IRT 약점 + 안전 메타 enrich)",
+)
+async def get_my_prerequisite_gaps(
+    concept_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+    threshold: WeakThreshold = 0.7,
+    reviewed_only: WeakReviewedOnly = False,
+    weak_only: WeakOnly = True,
+) -> list[PrerequisiteGap]:
+    """약개념 C(`concept_id`)의 선수개념 중 *막힌*(약한) 것을 골라 "먼저 복습할 선수"로 추천.
+
+    `concept_edge`에서 `to_concept_id == concept_id AND edge_type == PREREQUISITE`인 행의
+    `from_concept_id`(선수)들을 traversal하고(방향: from은 to의 선수), 각 선수의 BKT/IRT 숙달을
+    L2 진단(`compute_concept_diagnoses`)으로 lookup해 `weak_only=true`(기본)면 막힌(숙달 <
+    `threshold`) 선수만 남긴다. 선수의 `concept_code`(=UC)로 `concept_node` 안전 메타(name_ko·
+    domain·review_status)를 *단일 IN 조회*로 enrich하고(N+1 0·미적재 None graceful),
+    `reviewed_only=true`면 검수 안 된 선수를 *필터*한다. 정렬은 weakness 오름차순(가장 약한
+    선수=root blocker 먼저)·tie는 선수관계 강도(edge_strength) 내림차순. traversal·약점·enrich·
+    게이팅은 L2 좌석이 소유(`recommend_prerequisite_gaps`)·user_id 스코핑·읽기 전용.
+
+    **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 *조회 좌석*(약개념 추천과 일관)이다. enrich
+    되는 건 안전 표시·게이팅 필드뿐 — **본문(description·formal_definition) 0**(concept_node·
+    PrerequisiteGap 스키마에 컬럼/슬롯 자체가 없음·redaction). 우열 매기기·정답 빠르게 등 금기 0.
+    """
+    return await recommend_prerequisite_gaps(
+        session,
+        user.user_id,
+        concept_id,
+        mastery_threshold=threshold,
+        reviewed_only=reviewed_only,
+        weak_only=weak_only,
     )
 
 

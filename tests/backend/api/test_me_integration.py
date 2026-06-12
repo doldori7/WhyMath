@@ -22,7 +22,7 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.db.models.audit import DeletionAudit
-from whymath_backend.db.models.concept import Concept, ProblemConcept
+from whymath_backend.db.models.concept import Concept, ConceptEdge, ProblemConcept
 from whymath_backend.db.models.concept_node import ConceptNode
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
@@ -39,6 +39,7 @@ from whymath_backend.schema.enums import (
     ConceptLevel,
     ConceptRole,
     Curriculum,
+    EdgeType,
     Persona,
     SourceType,
     Subject,
@@ -1659,4 +1660,122 @@ def test_me_weak_concepts_enrich_and_gating_on_live_pg() -> None:
         asyncio.run(_cleanup_mastery([uid]))
         asyncio.run(_cleanup_concepts([c_a, c_b, c_c, c_d]))
         asyncio.run(_cleanup_concept_nodes([uc_a, uc_b, uc_c, uc_d]))
+        asyncio.run(_cleanup([uid]))  # user_profile 정리
+
+
+# ── 소비 선수 슬1: GET /v1/me/weak-concepts/{concept_id}/prerequisites (막힌 선수개념 추천) ──
+async def _cleanup_concept_edges(from_ids: list[uuid.UUID]) -> None:
+    """concept_edge 정리 — concept FK 삭제 전에 엣지부터(FK 순서)."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM concept_edge WHERE from_concept_id = ANY(:ids)"),
+                {"ids": from_ids},
+            )
+    finally:
+        await engine.dispose()
+
+
+def _prereq_edge(
+    from_id: uuid.UUID, to_id: uuid.UUID, strength: float
+) -> ConceptEdge:
+    """선수 엣지 — from(선수)이 to(후행)의 선수. edge_id·created_at은 server_default."""
+    return ConceptEdge(
+        from_concept_id=from_id,
+        to_concept_id=to_id,
+        edge_type=EdgeType.PREREQUISITE.value,
+        edge_strength=strength,
+    )
+
+
+def test_me_prerequisite_gaps_traversal_and_gating_on_live_pg() -> None:
+    """GET /v1/me/weak-concepts/{concept_id}/prerequisites — 약개념의 막힌 선수 추천.
+
+    end-to-end: 약개념 C + 선수 2(하나 weak·하나 strong) + concept_edge(to=C·from=선수)·
+    concept_node 메타·mastery 적재 → 방향(to==C→from)·weak_only(약한 선수만)·enrich·게이팅·
+    정렬(weakness asc)·redaction·401 왕복.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    sfx = uid.hex[:8]
+    # 후행(약개념) C + 선수 P_weak·P_strong. UC는 uid 접미사로 유니크(실 403 충돌 회피).
+    uc_c = f"UC.test.{sfx}.post"
+    uc_pw = f"UC.test.{sfx}.preweak"
+    uc_ps = f"UC.test.{sfx}.prestrong"
+    c_post, c_pw, c_ps = (uuid.uuid4() for _ in range(3))
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(
+            _add_all(
+                _concept_with_code(c_post, uc_c, "이차함수"),  # 후행(약개념)
+                _concept_with_code(c_pw, uc_pw, "일차함수"),  # 선수(약함)
+                _concept_with_code(c_ps, uc_ps, "사칙연산"),  # 선수(강함)
+            )
+        )
+        # concept_node 메타 — 선수 둘 다 reviewed(게이팅 통과·enrich).
+        asyncio.run(
+            _add_all(
+                _node_meta(uc_pw, "일차함수", "[중]함수", "reviewed"),
+                _node_meta(uc_ps, "사칙연산", "[초]수와연산", "reviewed"),
+            )
+        )
+        # concept_edge — 둘 다 C의 선수(to==c_post·from==선수). 강도 pw 0.9·ps 0.5.
+        asyncio.run(
+            _add_all(
+                _prereq_edge(c_pw, c_post, 0.9),
+                _prereq_edge(c_ps, c_post, 0.5),
+            )
+        )
+        # mastery — pw 약점(0.2)·ps 강함(0.9). 후행 C 자신도 약점(추천 대상이지만 traversal은 선수).
+        asyncio.run(
+            _add_all(
+                _mastery_row(uid, c_pw, t1, 0.2),
+                _mastery_row(uid, c_ps, t1, 0.9),
+                _mastery_row(uid, c_post, t1, 0.3),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            base = f"/v1/me/weak-concepts/{c_post}/prerequisites"
+            # ① 기본(weak_only=true) — 막힌 선수 pw만(ps는 강함 0.9 제외)·enrich
+            resp = client.get(base, headers=auth)
+            assert resp.status_code == 200, resp.text
+            rows = resp.json()
+            assert [r["concept_code"] for r in rows] == [uc_pw]  # 약한 선수만
+            assert rows[0]["name_ko"] == "일차함수"  # concept_node enrich
+            assert rows[0]["domain"] == "[중]함수"
+            assert rows[0]["review_status"] == "reviewed"
+            assert rows[0]["weakness"] == 0.2
+            assert rows[0]["edge_strength"] == 0.9
+            # redaction — 본문 필드 부재
+            assert "description" not in rows[0]
+            assert "formal_definition" not in rows[0]
+
+            # ② weak_only=false — 두 선수 모두(강한 ps 포함)·정렬 weakness asc(pw 0.2 먼저)
+            resp = client.get(base, headers=auth, params={"weak_only": "false"})
+            codes = [r["concept_code"] for r in resp.json()]
+            assert codes == [uc_pw, uc_ps]  # 약한 선수(root blocker) 먼저
+
+            # ③ threshold=0.25 — 0.25 미만만(pw 0.2 유지·ps 0.9 제외)
+            resp = client.get(base, headers=auth, params={"threshold": "0.25"})
+            assert [r["concept_code"] for r in resp.json()] == [uc_pw]
+
+            # ④ 선수 없는 개념(c_pw를 후행으로) — 빈 목록
+            resp = client.get(
+                f"/v1/me/weak-concepts/{c_pw}/prerequisites", headers=auth
+            )
+            assert resp.json() == []
+
+            # ⑤ 무토큰 401
+            assert client.get(base).status_code == 401
+    finally:
+        asyncio.run(_cleanup_concept_edges([c_pw, c_ps]))
+        asyncio.run(_cleanup_mastery([uid]))
+        asyncio.run(_cleanup_concepts([c_post, c_pw, c_ps]))
+        asyncio.run(_cleanup_concept_nodes([uc_c, uc_pw, uc_ps]))
         asyncio.run(_cleanup([uid]))  # user_profile 정리

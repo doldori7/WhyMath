@@ -587,6 +587,72 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5i. 선수엣지 적재 + 막힌 선수개념 추천 (개념그래프 *소비* 선수 슬라이스 — 2026-06-12)
+
+> **선수 슬라이스(backend·L1 적재 + L2 추천)**: 약개념 추천(§5h)이 "지금 무엇을 복습할지" 약개념을 골랐다면,
+> 이 슬라이스는 그 약개념의 **선수개념(prerequisite) 중 학습자가 약한 것**을 "*먼저* 복습할 막힌 선수"로
+> 돌려준다(후행 결손의 *근본 원인*이 선수 결손일 수 있음·LTHC). 두 부분: ① backend `concept_edge` **적재기
+> 신규**(마이그레이션은 있었으나 적재 로직 부재·노드만 적재돼 있었음) ② 선수 traversal + mastery + enrich 좌석·API.
+
+### 5i.1 선수엣지 적재기 (`l1/concept_graph/backend_edge`·L1·신규 seam 0)
+
+- **현황 교정**: `concept_edge` 테이블은 마이그레이션(`1551744048aa`·2026-05-28)에 *있었으나* 적재기가 없어
+  **비어 있었다**(브리지 §5g는 노드만 적재). 이 슬라이스가 엣지 투영을 채운다.
+- `BackendConceptEdgeRecord`(frozen): src_code(UC·선수)·dst_code(UC·후행)·edge_type(EdgeType)·edge_strength.
+  **evidence·notes·typical_gap_signal 슬롯 부재**(graph.json `evidence`는 gap_signal 의미 부정합·날조 회피·
+  NULL 유지·redaction).
+- `load_backend_edges_from_graph_json(path) -> (records, skips)`: `payload["edges"]`에서 `relation==
+  "prerequisite"`만 `EdgeType.PREREQUISITE`로 적재(그 외 relation·self-edge·양끝 누락은 skip+메시지).
+  **방향**: graph.json `src_concept_id`(선수)→`from_concept_id`, `dst_concept_id`(후행)→`to_concept_id`
+  (backend EdgeType.PREREQUISITE "A를 알아야 B[A→B]" 규약과 일치).
+- `BackendEdgeStore.populate`: backend `concept` 전량 `SELECT concept_id, code` 단일 조회로 **code→UUID
+  맵**(N+1 0) 구축 → src/dst UC를 UUID로 해석(orphan은 skip+로그) → `INSERT ... ON CONFLICT(from_concept_id,
+  to_concept_id, edge_type) DO UPDATE SET edge_strength`(**edge_id·created_at 미-SET → 재적재 멱등·edge_id
+  보존**). 슬3 `_build_sync_engine` 재사용. `edge_type`은 `.value`(문자열)로 바인딩(PG enum·적재/조회 일관).
+- `populate.py`에 **④ 선수엣지 적재** 추가(③ 노드 적재 *다음* — 노드가 있어야 code→UUID·FK 가능). CLI가 엣지
+  적재 건수 + 로딩 skip 수 출력.
+
+### 5i.2 막힌 선수개념 추천 좌석 (`l2/prerequisite_recommendation`·L2)
+
+- `fetch_prerequisites(session, concept_id) -> list[PrerequisiteRow]`: **방향 traversal** — `concept_edge`에서
+  `to_concept_id == concept_id AND edge_type == PREREQUISITE`인 행의 `from_concept_id`(선수)들을 `Concept`
+  join으로 code(UC)·name_ko·edge_strength와 함께 조회(미측정 선수도 포함·enrich에 UC 필요·강도 desc 정렬).
+  별도 함수로 분리해 단위테스트가 traversal을 패치(실 SQL 격리).
+- `PrerequisiteGap`(Pydantic·11 안전 필드): concept_id·concept_code(UC)·concept_name·bkt_mastery·
+  irt_mastery_proxy·weakness·agreement·domain·review_status·name_ko·**edge_strength**(선수관계 강도). **본문
+  슬롯 부재**(redaction).
+- `recommend_prerequisite_gaps(session, user_id, concept_id, *, mastery_threshold=0.7, reviewed_only=False,
+  weak_only=True, meta_engine=None)`: ①선수 traversal→②`compute_concept_diagnoses` *한 번* 호출→
+  `{concept_id: diagnosis}` 맵으로 선수 mastery lookup(없으면 None·insufficient)→③**weak_only**(기본 True·
+  weakness < 임계인 막힌 선수만·미측정 제외; False면 전 선수)→④UC dedupe enrich(`fetch_node_meta` 단일 IN·
+  `asyncio.to_thread` 격리)→⑤reviewed_only 게이팅. 정렬: weakness asc(root blocker 먼저)·None 뒤·tie는
+  edge_strength desc.
+
+### 5i.3 HTTP 엔드포인트·계층
+
+- `GET /v1/me/weak-concepts/{concept_id}/prerequisites?threshold&reviewed_only&weak_only`(api/me·`ConsentedUser`·
+  user_id 스코핑·읽기). 약개념 추천(`/weak-concepts`)과 합성: 클라가 약개념을 고르면 그 선수로 drill-in.
+  **노출 계약**: 조회 좌석(안전 필드만·본문 0).
+- **7계층**: L1 적재(`concept_edge` ORM·sync 엔진 재사용·신규 seam 0) → L2 조회(`concept_edge`·`fetch_node_meta`
+  *호출*·ORM 쿼리빌더만·원시 SQL 0) → L5 표면. 역방향 의존 0. **마이그레이션 0**(테이블 기존재). Neo4j 런타임
+  미도입(PG 단일 평면).
+
+### 5i.4 산출물·게이트
+
+- 4게이트 통과(`cd src/backend`·py3.12): `ruff`(green)·`black`(157 unchanged)·`mypy`(**135 src·이슈 0**)·
+  `pytest`(**2528 passed/102 skip**·회귀 0)·신규 모듈 cov **backend_edge 96%·prerequisite_recommendation 97%**.
+- 신규 테스트 2(+통합 2): `test_concept_backend_edge_load.py`(적재기 단위·파싱[prereq만·self/누락 skip]·방향·
+  strength·code→UUID[orphan skip]·ON CONFLICT·edge_id 미-SET 멱등) · `test_prerequisite_recommendation.py`
+  (traversal 방향·weak_only·정렬[weakness asc·strength tie]·enrich·게이팅·redaction) · `test_me_integration.py`
+  (실 PG: concept_edge 적재→`/prerequisites` 왕복·방향·weak_only·enrich·게이팅·401) · `test_concept_backend_
+  load_integration.py`(엣지 적재→row·방향·멱등 재적재 edge_id 보존).
+- **통합테스트 기본 SKIP**(`WHYMATH_RUN_INTEGRATION` + PG 미도달 graceful). **CI 신규 잡 불요**(기존 통합 잡이
+  `tests/backend/l1/`·`l2/`·`api/` 자동 수집·`alembic upgrade head`엔 concept_edge 기존재). **마이그레이션 0**.
+- 시크릿 0·날조 0(evidence 미적재·비-prereq relation skip 가시화). **다음**: 다단계(transitive) 선수 traversal·
+  L4 코칭 결선(`PrerequisiteGap`→"선수 복습 먼저" 결정)·비-prereq EdgeType 적재 확장·edge_strength 임계 필터.
+
+---
+
 ## 6. 향후 활용
 
 1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·
