@@ -89,6 +89,7 @@ from whymath_backend.l2.weak_concept_recommendation import (
     recommend_weak_concepts,
 )
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
+from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
@@ -1211,6 +1212,66 @@ async def get_my_prerequisite_gaps(
         weak_only=weak_only,
         max_depth=max_depth,
     )
+
+
+# ── L4 코칭 결선: GET /v1/me/weak-concepts/{concept_id}/coaching (선수 차단 우선 코칭) ──
+# 첫 L4→L2 결선이다(L_n→L_{n-1} 허용). L2 선수 추천(막힌 선수)이 있으면 후행을 바로 코칭하지
+# 않고 *선수 복습을 먼저 권하는* L4 코칭(prerequisite_review)을 돌려준다(LTHC·기초 우선). 막힌
+# 선수가 없으면 일반 메타인지 코칭(`recommend_coaching`·BKT/IRT)으로 fallback한다. 오케스트레이션
+# (L2 fetch + L4 decide 배선)은 L5(여기)·순수 결정은 L4가 소유(역방향 의존 0).
+@router.get(
+    "/weak-concepts/{concept_id}/coaching",
+    response_model=CoachingTrigger,
+    summary="약개념 코칭 결정(막힌 선수 있으면 선수 복습 우선·없으면 메타인지 코칭)",
+)
+async def get_my_concept_coaching(
+    concept_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+    threshold: WeakThreshold = 0.7,
+    max_depth: MaxDepth = 1,
+) -> CoachingTrigger:
+    """약개념 C(`concept_id`)에 대한 L4 코칭 결정 — **선수 차단 우선·없으면 메타인지 코칭**.
+
+    첫 L4→L2 결선(L_n→L_{n-1} 허용). 오케스트레이션:
+      ① **L2 fetch** — `recommend_prerequisite_gaps(weak_only=True)`로 C의 *막힌 선수개념*을
+         조회한다(weakness asc 정렬·`gaps[0]`=top blocker).
+      ② **선수 차단 우선** — `recommend_prerequisite_coaching(gaps)`이 *막힌 선수가 있으면*
+         `prerequisite_review` 코칭(선수부터 복습 권유)을 돌려준다. 이걸 *최우선*으로 반환한다 —
+         후행을 바로 코칭하면 비계가 허공에 뜨기 때문(LTHC·기초 우선·CLAUDE.md 교수학 #1·#3).
+      ③ **fallback(막힌 선수 없음)** — `compute_concept_diagnoses`에서 이 개념의 BKT/IRT 진단을
+         찾아 일반 메타인지 코칭(`recommend_coaching`)으로 넘어간다(verify/foundation/advance 등).
+         진단이 아예 없으면 `recommend_coaching(None, None)`(→ diagnose·추가 진단 권유).
+
+    `threshold`(막힘 판정 숙달 임계)·`max_depth`(다단계 선수 traversal 깊이)는 선수 슬1과 동일
+    재사용. user_id 스코핑·읽기 전용(마이그레이션 0). L4 순수 결정은 `recommend_prerequisite_
+    coaching`·`recommend_coaching`이 소유하고, 여기(L5)는 L2 fetch + L4 decide *배선*만 한다.
+
+    **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 *조회 좌석*(소비 슬 일관)이다. rationale·
+    prompt는 *자체 작성 코칭 문구*이며 개념 *본문(description·formal_definition·evidence)은 0* —
+    선수 이름(name_ko·concept_name·안전 표시 필드)만 삽입된다(`PrerequisiteGap`에 본문 슬롯 없음).
+    학생 prompt는 격려·메타인지 유도이며 막힌 선수를 *비난하지 않는다*(부정 강화·우열·"정답 빠르게"
+    금지·바로 정답 제공 아님).
+    """
+    # ① L2 fetch — 막힌 선수(weak_only=True·weakness asc 정렬). ② 선수 차단 *최우선*.
+    gaps = await recommend_prerequisite_gaps(
+        session,
+        user.user_id,
+        concept_id,
+        mastery_threshold=threshold,
+        weak_only=True,
+        max_depth=max_depth,
+    )
+    trigger = recommend_prerequisite_coaching(gaps)
+    if trigger is not None:
+        return trigger  # 막힌 선수 있음 → 선수 복습 우선(후행 코칭 보류).
+
+    # ③ fallback — 막힌 선수 없음 → 이 개념 자체의 BKT/IRT로 일반 메타인지 코칭.
+    diagnoses = await compute_concept_diagnoses(session, user.user_id)
+    diag = next((d for d in diagnoses if d.concept_id == concept_id), None)
+    if diag is None:
+        return recommend_coaching(None, None)  # 진단 없음 → diagnose(추가 진단 권유).
+    return recommend_coaching(diag.bkt_mastery, diag.irt_theta)
 
 
 # ── slice L2-12: GET /v1/me/next-problem (적응형 출제 — IRT 정보량 최대 미응답 문항) ──

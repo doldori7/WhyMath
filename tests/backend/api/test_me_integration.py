@@ -1677,9 +1677,7 @@ async def _cleanup_concept_edges(from_ids: list[uuid.UUID]) -> None:
         await engine.dispose()
 
 
-def _prereq_edge(
-    from_id: uuid.UUID, to_id: uuid.UUID, strength: float
-) -> ConceptEdge:
+def _prereq_edge(from_id: uuid.UUID, to_id: uuid.UUID, strength: float) -> ConceptEdge:
     """선수 엣지 — from(선수)이 to(후행)의 선수. edge_id·created_at은 server_default."""
     return ConceptEdge(
         from_concept_id=from_id,
@@ -1858,11 +1856,99 @@ def test_me_prerequisite_gaps_multi_hop_traversal_on_live_pg() -> None:
             assert [r["depth"] for r in rows] == [1, 2, 3]
 
             # ④ max_depth 경계 — 0은 422(ge=1)·6은 422(le=5).
-            assert client.get(base, headers=auth, params={"max_depth": "0"}).status_code == 422
-            assert client.get(base, headers=auth, params={"max_depth": "6"}).status_code == 422
+            assert (
+                client.get(base, headers=auth, params={"max_depth": "0"}).status_code
+                == 422
+            )
+            assert (
+                client.get(base, headers=auth, params={"max_depth": "6"}).status_code
+                == 422
+            )
     finally:
         asyncio.run(_cleanup_concept_edges([c_p1, c_p2, c_p3]))
         asyncio.run(_cleanup_mastery([uid]))
         asyncio.run(_cleanup_concepts([c_post, c_p1, c_p2, c_p3]))
         asyncio.run(_cleanup_concept_nodes([uc_c, uc_p1, uc_p2, uc_p3]))
+        asyncio.run(_cleanup([uid]))  # user_profile 정리
+
+
+# ── L4 코칭 결선: GET /v1/me/weak-concepts/{concept_id}/coaching (선수 차단 우선 코칭) ──
+def test_me_concept_coaching_prereq_block_and_fallback_on_live_pg() -> None:
+    """GET /v1/me/weak-concepts/{C}/coaching — 막힌 선수 있으면 선수 복습 우선·없으면 메타인지.
+
+    end-to-end:
+      ① 약개념 C + 막힌 선수 P(약함)를 concept_edge(to=C·from=P)·메타·mastery로 적재 →
+         `/coaching`이 focus=='prerequisite_review'·rationale/prompt에 선수 이름(일차함수) 포함.
+      ② 선수 없는(또는 막힌 선수 없는) 개념 → 메타인지 focus(verify/foundation/advance 등) fallback.
+      ③ 무토큰 401.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    sfx = uid.hex[:8]
+    uc_c = f"UC.test.{sfx}.co.post"  # 후행(약개념)
+    uc_pw = f"UC.test.{sfx}.co.preweak"  # 막힌 선수
+    c_post, c_pw = uuid.uuid4(), uuid.uuid4()
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(
+            _add_all(
+                _concept_with_code(c_post, uc_c, "이차함수"),  # 후행
+                _concept_with_code(c_pw, uc_pw, "일차함수"),  # 막힌 선수
+            )
+        )
+        asyncio.run(_add_all(_node_meta(uc_pw, "일차함수", "[중]함수", "reviewed")))
+        # concept_edge — P는 C의 선수(to==c_post·from==c_pw).
+        asyncio.run(_add_all(_prereq_edge(c_pw, c_post, 0.9)))
+        # mastery — 선수 P 약점(0.2)·후행 C도 약점(0.3·fallback 경로 검증용).
+        asyncio.run(
+            _add_all(
+                _mastery_row(uid, c_pw, t1, 0.2),
+                _mastery_row(uid, c_post, t1, 0.3),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # ① 막힌 선수 있음 → 선수 복습 우선 코칭.
+            resp = client.get(f"/v1/me/weak-concepts/{c_post}/coaching", headers=auth)
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            assert body["focus"] == "prerequisite_review"
+            assert "일차함수" in body["prompt"]  # 선수 이름 노출(자체 코칭 문구)
+            assert "일차함수" in body["rationale"]
+            assert body["socratic_category"] == "clarification"
+            # 톤 가드 — 학생 prompt에 금기 표현 부재.
+            for forbidden in ("빨리", "정답", "틀렸"):
+                assert forbidden not in body["prompt"]
+            # redaction — 본문 필드 부재(자체 작성 코칭 문구).
+            assert "description" not in body
+            assert "formal_definition" not in body
+
+            # ② 막힌 선수 없는 개념(선수 P를 후행으로 — P엔 선수 엣지 없음) → 메타인지 fallback.
+            resp = client.get(f"/v1/me/weak-concepts/{c_pw}/coaching", headers=auth)
+            assert resp.status_code == 200, resp.text
+            fb = resp.json()
+            assert fb["focus"] != "prerequisite_review"  # 선수 차단 아님
+            # P 자신은 BKT만 있고 IRT 없음 → diagnose 또는 mastery 기반 메타인지 focus.
+            assert fb["focus"] in {
+                "verify",
+                "consolidate",
+                "retrieval",
+                "foundation",
+                "advance",
+                "diagnose",
+            }
+
+            # ③ 무토큰 401.
+            assert (
+                client.get(f"/v1/me/weak-concepts/{c_post}/coaching").status_code == 401
+            )
+    finally:
+        asyncio.run(_cleanup_concept_edges([c_pw]))
+        asyncio.run(_cleanup_mastery([uid]))
+        asyncio.run(_cleanup_concepts([c_post, c_pw]))
+        asyncio.run(_cleanup_concept_nodes([uc_c, uc_pw]))
         asyncio.run(_cleanup([uid]))  # user_profile 정리
