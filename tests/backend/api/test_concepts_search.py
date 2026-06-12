@@ -94,18 +94,33 @@ class TestRequestValidation:
 # ──────────────────────────────────────────────────────────────────────────
 class TestResponseShape:
     def test_returns_ranked_results(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 좌석(search_concepts)을 가짜로 패치 — HTTP 표면이 좌석 결과를 응답 모델로 옳게 싣는지.
+        # 좌석(search_concepts)을 가짜로 패치 — HTTP 표면이 좌석 결과(enrich 메타 포함)를 응답
+        # 모델로 옳게 싣는지. _UC_A는 메타 enrich·_UC_B는 메타 없음(None graceful)로 둘 다 검증.
         captured: dict[str, Any] = {}
 
         def _fake_search(
-            query_text: str, *, top_k: int, provider: object, **_kw: Any
+            query_text: str,
+            *,
+            top_k: int,
+            provider: object,
+            reviewed_only: bool = False,
+            **_kw: Any,
         ) -> list[ConceptSearchHit]:
             captured["query"] = query_text
             captured["top_k"] = top_k
             captured["provider"] = provider
+            captured["reviewed_only"] = reviewed_only
             return [
-                ConceptSearchHit(concept_id=_UC_A, similarity=0.91),
-                ConceptSearchHit(concept_id=_UC_B, similarity=0.42),
+                ConceptSearchHit(
+                    concept_id=_UC_A,
+                    similarity=0.91,
+                    name_ko="극한",
+                    domain="[고]미적분",
+                    review_status="reviewed",
+                ),
+                ConceptSearchHit(
+                    concept_id=_UC_B, similarity=0.42
+                ),  # 메타 미적재 → null
             ]
 
         monkeypatch.setattr(concepts_api, "search_concepts", _fake_search)
@@ -119,13 +134,48 @@ class TestResponseShape:
         assert body["query"] == "극한 수렴"
         assert body["vector_store_enabled"] is True
         assert body["results"] == [
-            {"concept_id": _UC_A, "similarity": 0.91},
-            {"concept_id": _UC_B, "similarity": 0.42},
+            {
+                "concept_id": _UC_A,
+                "similarity": 0.91,
+                "name_ko": "극한",
+                "domain": "[고]미적분",
+                "review_status": "reviewed",
+            },
+            {
+                "concept_id": _UC_B,
+                "similarity": 0.42,
+                "name_ko": None,
+                "domain": None,
+                "review_status": None,
+            },
         ]
-        # 좌석에 질의·top_k·주입 provider가 그대로 전달됐다.
+        # 좌석에 질의·top_k·주입 provider가 그대로 전달됐다. reviewed_only 기본 False.
         assert captured["query"] == "극한 수렴"
         assert captured["top_k"] == 5
         assert captured["provider"] is provider
+        assert captured["reviewed_only"] is False
+
+    def test_reviewed_only_param_passed_to_seat(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # ?reviewed_only=true 쿼리가 좌석에 그대로 전달된다(게이팅 필터 위임).
+        captured: dict[str, Any] = {}
+
+        def _fake_search(
+            query_text: str,
+            *,
+            top_k: int,
+            provider: object,
+            reviewed_only: bool = False,
+            **_kw: Any,
+        ) -> list[ConceptSearchHit]:
+            captured["reviewed_only"] = reviewed_only
+            return []
+
+        monkeypatch.setattr(concepts_api, "search_concepts", _fake_search)
+        resp = _client().get("/v1/concepts/search?q=극한&reviewed_only=true")
+        assert resp.status_code == 200
+        assert captured["reviewed_only"] is True
 
     def test_default_k_is_applied(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured: dict[str, Any] = {}

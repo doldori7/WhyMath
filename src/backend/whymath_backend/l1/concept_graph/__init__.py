@@ -13,11 +13,15 @@ L1 개념그래프 적재 아크의 백엔드 부분이다. 슬1(정형화·UC �
   - `load_concepts_from_graph_json` — 슬1 산출 `graph.json`(UC 키·정제) → (concept_id, 표현) 목록.
   - `populate_concept_embeddings` — 표현을 임베딩(기존 provider seam 재사용)해 멱등 upsert.
   - `search_concepts`·`ConceptSearchHit` (슬4) — 질의 텍스트를 임베딩해 `ConceptEmbeddingIndex.
-    search`로 코사인 상위 top_k 랭킹(조회 좌석). 반환은 UC concept_id + similarity만(본문 0·
-    name_ko enrichment는 UC↔PG 키 공간 차이로 후속·retrieval.py 노출 계약).
+    search`로 코사인 상위 top_k 랭킹(조회 좌석). 소비 슬1부터 안전 메타(name_ko·domain·
+    review_status)를 PG 조인으로 enrich하고, `reviewed_only` 게이팅을 지원한다.
+  - `ConceptNodeRecord`·`ConceptNodeStore`·`load_concept_nodes_from_graph_json`·
+    `populate_concept_nodes` (소비 슬1) — graph.json 개념 *안전 메타*를 `concept_node`(PG)에 UC
+    키로 멱등 적재(메타 브리지=PG 프로젝션·backend↔Neo4j 런타임 연결 0). 검색 enrichment·게이팅
+    PG 조인의 백킹. **description·formal_definition 미적재**(redaction·안전 필드만).
 
 7계층: L1 데이터 기반의 *영속/검색 인프라*. 의미검색 *소비* 로직(L2/L4가 이 좌석으로 무엇을
-하는지)은 이 좌석을 호출하되 여기서 구현하지 않는다(슬4+ 후속·역방향 의존 금지).
+하는지)은 이 좌석을 호출하되 여기서 구현하지 않는다(후속·역방향 의존 금지).
 """
 
 from __future__ import annotations
@@ -28,6 +32,14 @@ from whymath_backend.l1.concept_graph.embedding import (
     load_concepts_from_graph_json,
     populate_concept_embeddings,
 )
+from whymath_backend.l1.concept_graph.node_projection import (
+    ConceptNodeMeta,
+    ConceptNodeRecord,
+    ConceptNodeStore,
+    fetch_node_meta,
+    load_concept_nodes_from_graph_json,
+    populate_concept_nodes,
+)
 from whymath_backend.l1.concept_graph.retrieval import (
     ConceptSearchHit,
     search_concepts,
@@ -35,9 +47,15 @@ from whymath_backend.l1.concept_graph.retrieval import (
 
 __all__ = [
     "ConceptEmbeddingIndex",
+    "ConceptNodeMeta",
+    "ConceptNodeRecord",
+    "ConceptNodeStore",
     "ConceptSearchHit",
     "concept_embedding_text",
+    "fetch_node_meta",
+    "load_concept_nodes_from_graph_json",
     "load_concepts_from_graph_json",
     "populate_concept_embeddings",
+    "populate_concept_nodes",
     "search_concepts",
 ]

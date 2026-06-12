@@ -17,11 +17,14 @@ PG 행을 직접 만지지 않고 검증된 Pydantic 모델만 주고받는다.
 하며(검정교과서·EBS 본문 복제 금지) — 이 불변식은 schema.Concept 검수 단계 책임이고 이
 라우터는 이미 검증된 모델을 영속화할 뿐이다.
 
-의미검색(슬라이스 4): `GET /v1/concepts/search`가 적재된 개념 임베딩(`concept_embedding`
-pgvector·슬3)을 조회한다. 이건 *조회 좌석*(L1 데이터 서빙)을 HTTP로 노출하는 표면이고,
-검색 로직 자체는 `l1/concept_graph/retrieval.search_concepts`가 소유한다(L5는 표면·L1은
-서빙). **학생 직접 노출이 아니라** L2/L4·교사 도구가 소비하는 내부 표면이고, 반환은 UC
-concept_id + 코사인 점수뿐(본문 0·name_ko enrichment는 UC↔PG 키 공간 차이로 후속).
+의미검색(슬라이스 4 + 소비 슬1): `GET /v1/concepts/search`가 적재된 개념 임베딩
+(`concept_embedding` pgvector·슬3)을 조회하고, 잡힌 UC들의 안전 메타(name_ko·domain·
+review_status)를 `concept_node`(PG 프로젝션·소비 슬1) 조인으로 enrich한다. `reviewed_only`
+쿼리로 검수 게이팅(필터)을 건다. 이건 *조회 좌석*(L1 데이터 서빙)을 HTTP로 노출하는 표면이고,
+검색·enrich·게이팅 로직은 `l1/concept_graph/retrieval.search_concepts`가 소유한다(L5는 표면·
+L1은 서빙). 메타 브리지는 **PG 프로젝션**(backend↔Neo4j 런타임 연결 0 — 확정 설계 결정).
+**학생 직접 노출이 아니라** L2/L4·교사 도구가 소비하는 내부 표면이고, enrich는 안전 표시·
+게이팅 필드뿐(본문 0 — concept_node에 description·formal_definition 컬럼 자체가 없음·redaction).
 """
 
 from __future__ import annotations
@@ -83,22 +86,37 @@ EmbeddingProviderDep = Annotated[EmbeddingProvider, Depends(get_embedding_provid
 
 
 class ConceptSearchResultItem(BaseModel):
-    """개념 의미검색 결과 1건(HTTP) — UC concept_id + 코사인 유사도.
+    """개념 의미검색 결과 1건(HTTP) — UC concept_id + 코사인 유사도 + *안전* 메타(enrich·소비 슬1).
 
     `retrieval.ConceptSearchHit`의 HTTP 직렬화 형태다. `concept_id`는 Universal Concept ID
-    (UC.<domain>.<topic>.<slug>·슬2 Neo4j 노드 키와 동일 공간), `similarity`는 코사인 [-1, 1].
-    **name_ko 등 풍부 메타·본문은 미포함** — 검색은 임베딩 위에서만 돌고(본문 0), UC↔PG 키
-    공간 차이로 enrichment는 후속(retrieval.py 노출 계약). 소비처(L2/L4·교사 도구)가 UC 키로
-    그래프/메타를 별도 해석한다.
+    (UC.<domain>.<topic>.<slug>·슬2 Neo4j 노드 키·슬3 concept_embedding과 동일 공간), `similarity`는
+    코사인 [-1, 1]. `name_ko`·`domain`·`review_status`는 `concept_node`(PG 프로젝션) 조인으로 붙인
+    *안전 표시·게이팅 필드*다 — 메타 미적재 UC는 **null**(graceful). **본문(description·
+    formal_definition)은 미포함** — 프로젝션 테이블에 컬럼 자체가 없다(redaction·노출 계약). 소비처
+    (L2/L4·교사 도구)가 UC 키 + 안전 메타로 동작한다.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     concept_id: str = Field(
-        description="Universal Concept ID(UC 키·슬2 Neo4j 노드 키와 동일 공간)."
+        description="Universal Concept ID(UC 키·슬2 Neo4j 노드 키·슬3 임베딩과 동일 공간)."
     )
     similarity: float = Field(
         description="질의 임베딩과의 코사인 유사도 [-1, 1](클수록 의미 근접)."
+    )
+    name_ko: str | None = Field(
+        default=None,
+        description="개념 한국어 명칭(concept_node 조인·안전 표시 필드). 메타 미적재 시 null.",
+    )
+    domain: str | None = Field(
+        default=None,
+        description="개념 영역명(concept_node 조인·안전 표시 필드). 메타 미적재 시 null.",
+    )
+    review_status: str | None = Field(
+        default=None,
+        description=(
+            "검수 상태('reviewed'/'pending'·concept_node 조인·게이팅 플래그). 메타 미적재 시 null."
+        ),
     )
 
 
@@ -139,28 +157,48 @@ async def search_concepts_endpoint(
         int,
         Query(ge=1, le=_SEARCH_MAX_K, description=f"반환 후보 수(1~{_SEARCH_MAX_K})."),
     ] = _SEARCH_DEFAULT_K,
+    reviewed_only: Annotated[
+        bool,
+        Query(
+            description=(
+                "검수 게이팅. false(기본)=recall 보존(pending 개념도 노출). true=상위 k 창에서 "
+                "review_status='reviewed'만 남김(필터·유사도 정렬 유지)."
+            ),
+        ),
+    ] = False,
 ) -> ConceptSearchResponse:
-    """적재된 개념 임베딩(pgvector·슬3)에 대한 의미검색 — 코사인 상위 k(랭킹된 결과).
+    """적재된 개념 임베딩(pgvector·슬3)에 대한 의미검색 — 코사인 상위 k + 메타 enrich·검수 게이팅.
 
-    질의 `q`를 임베딩해 `search_concepts`(L1 조회 좌석)로 코사인 상위 k를 받는다. 검색 좌석은
-    *블로킹*(임베딩 + sync psycopg)이라 `asyncio.to_thread`로 워커 스레드에서 돌린다 — 블로킹
-    임베딩(bge-m3 등)·DB 왕복이 이벤트 루프를 막지 않게(CLAUDE.md p50<2s·동시 요청 보호·coach
-    `_compute_matches` 패턴 미러). 요청 검증은 Query 제약(q 필수·비공백·k 범위)이 한다(위반 시
-    FastAPI가 422 — list 엔드포인트의 limit/offset 범위 검증과 동형).
+    질의 `q`를 임베딩해 `search_concepts`(L1 조회 좌석)로 코사인 상위 k를 받고, 잡힌 UC들의 안전
+    메타(name_ko·domain·review_status)를 `concept_node`(PG 프로젝션) 조인으로 enrich한다(소비 슬1 —
+    메타 브리지=PG 프로젝션·backend↔Neo4j 런타임 연결 0). `reviewed_only=true`면 검수 안 된 개념을
+    *필터*한다(유사도 정렬 유지). 검색 좌석은 *블로킹*(임베딩 + sync psycopg 검색·메타 조인)이라
+    `asyncio.to_thread`로 워커 스레드에서 돌린다 — 이벤트 루프를 막지 않게(CLAUDE.md p50<2s·동시
+    요청 보호·coach `_compute_matches` 패턴 미러). 요청 검증은 Query 제약(q 필수·비공백·k 범위)이
+    한다(위반 시 422 — list 엔드포인트 패턴 동형).
 
     **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 L2/L4·교사 도구가 소비하는 *조회 좌석*이다.
-    반환은 UC concept_id + 코사인 점수뿐(본문 0·우열 매기기·정답 빠르게 등 금기 표현 0). memory
-    모드면 `vector_store_enabled=false` + 빈 `results`로 *명시* 안내한다(조용한 무동작 금지 — 좌석이
-    정직하게 "미가용/없음"을 반환하고 표면이 그 신호를 그대로 노출).
+    enrich되는 건 안전 표시·게이팅 필드(name_ko·domain·review_status)뿐 — **본문(description·
+    formal_definition) 0**(concept_node에 컬럼 자체가 없음·redaction). 우열 매기기·정답 빠르게 등
+    금기 표현 0. memory 모드면 `vector_store_enabled=false` + 빈 `results`로 *명시* 안내한다(조용한
+    무동작 금지 — 좌석이 정직하게 "미가용/없음"을 반환하고 표면이 그 신호를 그대로 노출).
     """
     enabled = get_settings().vector_store == "pgvector"
-    # 검색 좌석은 동기(블로킹 임베딩·sync psycopg) → 워커 스레드로(이벤트 루프 보호). memory
-    # 모드면 search_concepts가 즉시 빈 리스트를 돌려준다(좌석 내부 graceful — to_thread 무해).
-    hits = await asyncio.to_thread(search_concepts, q, top_k=k, provider=provider)
+    # 검색 좌석은 동기(블로킹 임베딩·sync psycopg 검색+메타 조인) → 워커 스레드로(이벤트 루프
+    # 보호). memory 모드면 search_concepts가 즉시 빈 리스트를 돌려준다(좌석 내부 graceful).
+    hits = await asyncio.to_thread(
+        search_concepts, q, top_k=k, provider=provider, reviewed_only=reviewed_only
+    )
     return ConceptSearchResponse(
         query=q,
         results=[
-            ConceptSearchResultItem(concept_id=hit.concept_id, similarity=hit.similarity)
+            ConceptSearchResultItem(
+                concept_id=hit.concept_id,
+                similarity=hit.similarity,
+                name_ko=hit.name_ko,
+                domain=hit.domain,
+                review_status=hit.review_status,
+            )
             for hit in hits
         ],
         vector_store_enabled=enabled,

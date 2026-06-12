@@ -1,33 +1,38 @@
-"""개념 의미검색 *조회 좌석* 단위테스트 — 슬라이스 4 (hermetic·PG 불요·Fake provider+index).
+"""개념 의미검색 *조회 좌석* 단위테스트 — 슬4 + 소비 슬1 (hermetic·PG 불요·Fake provider+index).
 
-이 샌드박스·CI hermetic 잡엔 PostgreSQL·pgvector가 없으므로 `search_concepts`의 *실 라운드트립*
-(질의→pgvector search→랭킹)은 통합테스트(`test_concept_retrieval_integration.py`·실 PG 게이트)로
-미룬다. 여기서는 PG 없이 검증 가능한 좌석 *배선*만 못 박는다(슬3 `test_concept_embedding.py`의
-가짜 엔진 패턴 재사용):
+이 샌드박스·CI hermetic 잡엔 PostgreSQL이 없으므로 `search_concepts`의 *실 라운드트립*(질의→
+pgvector search→메타 조인→랭킹)은 통합테스트(`test_concept_retrieval_integration.py`·실 PG 게이트)로
+미룬다. 여기서는 PG 없이 검증 가능한 좌석 *배선*만 못 박는다(슬3 가짜 엔진 패턴 + `fetch_node_meta`
+패치):
 
-  ① 좌석 흐름 — query 임베딩(1건)→`ConceptEmbeddingIndex.search`→`ConceptSearchHit` 랭킹 반환
-  ② top_k 경계 — top_k<=0이면 빈 리스트(search 미실행·임베딩 미실행)
+  ① 좌석 흐름 — query 임베딩(1건)→`ConceptEmbeddingIndex.search`→메타 enrich→`ConceptSearchHit` 랭킹
+  ② top_k 경계 — top_k<=0이면 빈 리스트(search·임베딩 미실행)
   ③ memory 모드 graceful — vector_store!=pgvector면 빈 리스트(예외·None 아님·조용한 무동작 금지)
   ④ provider 공간 식별 재사용 — index 미주입 시 _provider_model_identity로 같은 공간 인덱스 구성
-  ⑤ 반환 타입 — concept_id+similarity만(name_ko 등 enrichment 미포함·노출 계약)
+  ⑤ enrichment — concept_node 메타(name_ko·domain·review_status)를 hit에 붙임·미적재 UC는 None
+  ⑥ 검수 게이팅(reviewed_only) — True면 reviewed 아닌(또는 메타 없는) hit 필터·정렬 유지
+  ⑦ 반환 타입 — concept_id+similarity+안전 메타만(본문 0·노출 계약)
 
-가짜 엔진(`_FakeEngine`)은 search에 canned 행을 돌려주고 실행 statement를 기록한다 — psycopg/PG
-없이 좌석이 search 결과를 그대로 랭킹·매핑하는지 검증한다(실 코사인·실 적재는 통합테스트).
+`fetch_node_meta`(PG 조인)는 가짜 엔진에 붙으므로 *패치*해 enrichment 메타를 제어한다 — 실 메타
+조인은 통합테스트 몫(여기선 좌석이 메타를 hit에 옳게 합치고 게이팅을 거는지).
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 from types import TracebackType
+from typing import Any
 
 import pytest
 
+import whymath_backend.l1.concept_graph.retrieval as retrieval_mod
 from whymath_backend.config import Settings
 from whymath_backend.l1.concept_graph.embedding import ConceptEmbeddingIndex
+from whymath_backend.l1.concept_graph.node_projection import ConceptNodeMeta
 from whymath_backend.l1.concept_graph.retrieval import ConceptSearchHit, search_concepts
 from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProvider
 
-# 슬2 idmap이 발급하는 UC 규약 키 예시(슬2 Neo4j 노드 키와 동일 공간).
+# 슬2 idmap이 발급하는 UC 규약 키 예시(슬2 Neo4j 노드 키·슬3 concept_embedding과 동일 공간).
 _UC_A = "UC.calc.alimit.epsilon-delta"
 _UC_B = "UC.alg.afunction.composition"
 
@@ -103,19 +108,43 @@ def _index_with_rows(
     return index, engine
 
 
+def _patch_meta(
+    monkeypatch: pytest.MonkeyPatch, meta: dict[str, ConceptNodeMeta] | None = None
+) -> dict[str, Any]:
+    """`fetch_node_meta`를 패치해 enrichment 메타를 제어(가짜 엔진엔 concept_node 행이 없으므로).
+
+    반환 captured에 호출 인자(concept_ids·engine)를 기록한다 — 좌석이 검색이 잡은 UC들·같은
+    엔진을 메타 조회에 넘기는지 관찰. meta 미지정이면 빈 dict(enrichment 없음·기존 None 동작).
+    """
+    captured: dict[str, Any] = {}
+    resolved_meta = meta if meta is not None else {}
+
+    def _fake_fetch(
+        concept_ids: Sequence[str], *, engine: object = None, settings: object = None
+    ) -> dict[str, ConceptNodeMeta]:
+        captured["concept_ids"] = list(concept_ids)
+        captured["engine"] = engine
+        return resolved_meta
+
+    monkeypatch.setattr(retrieval_mod, "fetch_node_meta", _fake_fetch)
+    return captured
+
+
 # ──────────────────────────────────────────────────────────────────────────
-# ① 좌석 흐름 — query 임베딩→search→ConceptSearchHit 랭킹 반환
+# ① 좌석 흐름 — query 임베딩→search→메타 enrich→ConceptSearchHit 랭킹 반환
 # ──────────────────────────────────────────────────────────────────────────
 class TestSearchFlow:
-    def test_returns_ranked_hits_from_search(self) -> None:
+    def test_returns_ranked_hits_from_search(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # search가 거리 오름차순(=유사도 내림차순)으로 돌려주는 행을 그대로 ConceptSearchHit로.
+        _patch_meta(monkeypatch)  # enrichment 없음 — 메타 None
         rows = [_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.25)]
         index, engine = _index_with_rows(rows)
-        provider = FakeEmbeddingProvider()
         hits = search_concepts(
             "극한 수렴",
             top_k=3,
-            provider=provider,
+            provider=FakeEmbeddingProvider(),
             index=index,
             settings=_pgvector_settings(),
         )
@@ -123,11 +152,12 @@ class TestSearchFlow:
             ConceptSearchHit(concept_id=_UC_A, similarity=1.0),
             ConceptSearchHit(concept_id=_UC_B, similarity=0.75),
         ]
-        # search statement가 1회 실행됐다(질의 임베딩→search).
+        # search statement가 1회 실행됐다(질의 임베딩→search). 메타 조회는 패치돼 엔진 미실행.
         assert len(engine.executed) == 1
 
-    def test_embeds_query_as_single_item(self) -> None:
+    def test_embeds_query_as_single_item(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 질의 1건을 임베딩한다(배치 API에 단건). Scripted provider로 입력·길이를 관찰.
+        _patch_meta(monkeypatch)
         seen: list[Sequence[str]] = []
 
         class _Scripted:
@@ -145,8 +175,11 @@ class TestSearchFlow:
         )
         assert seen == [["합성함수"]]  # 정확히 질의 1건만 임베딩
 
-    def test_empty_search_result_is_empty_list(self) -> None:
-        # 적재 행 없음(또는 같은 공간 행 없음)이면 빈 리스트(정직 — 매칭 없음).
+    def test_empty_search_result_is_empty_list(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 적재 행 없음(또는 같은 공간 행 없음)이면 빈 리스트(정직 — 매칭 없음). 메타 조회 생략.
+        captured = _patch_meta(monkeypatch)
         index, _engine = _index_with_rows([])
         hits = search_concepts(
             "없는개념",
@@ -156,9 +189,13 @@ class TestSearchFlow:
             settings=_pgvector_settings(),
         )
         assert hits == []
+        # hits가 비면 메타 조회도 안 한다(early return).
+        assert "concept_ids" not in captured
 
-    def test_null_distance_is_zero_similarity(self) -> None:
-        # 영벡터 등 거리 NULL은 0 유사도로 안전 처리(embedding.search 계약 통과).
+    def test_null_distance_is_zero_similarity(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _patch_meta(monkeypatch)
         index, _engine = _index_with_rows([_FakeRow(_UC_A, None)])
         hits = search_concepts(
             "x",
@@ -174,7 +211,10 @@ class TestSearchFlow:
 # ② top_k 경계 — top_k<=0이면 빈 리스트(search·임베딩 미실행)
 # ──────────────────────────────────────────────────────────────────────────
 class TestTopKBoundary:
-    def test_top_k_zero_returns_empty_without_search(self) -> None:
+    def test_top_k_zero_returns_empty_without_search(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _patch_meta(monkeypatch)
         index, engine = _index_with_rows([_FakeRow(_UC_A, 0.0)])
         assert (
             search_concepts(
@@ -186,10 +226,12 @@ class TestTopKBoundary:
             )
             == []
         )
-        # search statement 미실행(좌석이 top_k<=0에서 조기 반환).
         assert engine.executed == []
 
-    def test_negative_top_k_returns_empty(self) -> None:
+    def test_negative_top_k_returns_empty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _patch_meta(monkeypatch)
         index, engine = _index_with_rows([_FakeRow(_UC_A, 0.0)])
         assert (
             search_concepts(
@@ -208,8 +250,11 @@ class TestTopKBoundary:
 # ③ memory 모드 graceful — vector_store!=pgvector면 빈 리스트(조용한 무동작 금지)
 # ──────────────────────────────────────────────────────────────────────────
 class TestMemoryModeGraceful:
-    def test_memory_mode_returns_empty_without_search(self) -> None:
+    def test_memory_mode_returns_empty_without_search(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # 기본 Settings는 vector_store=memory → 영속 store 부재 → 빈 리스트(예외 아님).
+        captured = _patch_meta(monkeypatch)
         index, engine = _index_with_rows([_FakeRow(_UC_A, 0.0)])
         hits = search_concepts(
             "극한",
@@ -219,8 +264,9 @@ class TestMemoryModeGraceful:
             settings=Settings(),  # 기본 memory
         )
         assert hits == []
-        # search·임베딩 경로를 아예 안 탄다(memory 가드가 최우선).
+        # search·임베딩·메타 경로를 아예 안 탄다(memory 가드가 최우선).
         assert engine.executed == []
+        assert "concept_ids" not in captured
 
     def test_memory_mode_does_not_embed(self) -> None:
         # memory면 provider.embed도 호출하지 않는다(불필요한 모델 로드 방지).
@@ -245,6 +291,7 @@ class TestProviderSpaceIdentity:
         # 실 엔진 생성을 막으려 _build_sync_engine을 가짜 엔진으로 패치(PG 불요).
         import whymath_backend.l1.concept_graph.embedding as emb
 
+        _patch_meta(monkeypatch)
         fake_engine = _FakeEngine(search_rows=[_FakeRow(_UC_A, 0.0)])
         monkeypatch.setattr(emb, "_build_sync_engine", lambda _settings: fake_engine)
 
@@ -260,21 +307,161 @@ class TestProviderSpaceIdentity:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# ⑤ 반환 타입 — concept_id+similarity만(enrichment 미포함·노출 계약)
+# ⑤ enrichment — concept_node 메타를 hit에 붙임·미적재 UC는 None graceful
 # ──────────────────────────────────────────────────────────────────────────
-def test_hit_has_only_concept_id_and_similarity() -> None:
-    # ConceptSearchHit는 안전 식별자(concept_id)+점수(similarity)만 — name_ko·본문 필드 없음.
+class TestEnrichment:
+    def test_enriches_hits_with_node_meta(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        meta = {
+            _UC_A: ConceptNodeMeta(
+                name_ko="극한", domain="[고]미적분", review_status="reviewed"
+            ),
+            _UC_B: ConceptNodeMeta(
+                name_ko="합성함수", domain="[고]대수", review_status="pending"
+            ),
+        }
+        captured = _patch_meta(monkeypatch, meta)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.2)])
+        hits = search_concepts(
+            "극한",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        assert hits == [
+            ConceptSearchHit(
+                concept_id=_UC_A,
+                similarity=1.0,
+                name_ko="극한",
+                domain="[고]미적분",
+                review_status="reviewed",
+            ),
+            ConceptSearchHit(
+                concept_id=_UC_B,
+                similarity=0.8,
+                name_ko="합성함수",
+                domain="[고]대수",
+                review_status="pending",
+            ),
+        ]
+        # 좌석이 검색이 잡은 UC들·같은 엔진(index._engine)을 메타 조회에 넘긴다(N+1 없음·엔진 공유).
+        assert captured["concept_ids"] == [_UC_A, _UC_B]
+        assert captured["engine"] is index._engine
+
+    def test_missing_meta_is_none_graceful(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # concept_node에 _UC_B 메타가 없으면(적재 누락) None으로 채운다(검색 계속·graceful).
+        meta = {
+            _UC_A: ConceptNodeMeta(name_ko="극한", domain="d", review_status="reviewed")
+        }
+        _patch_meta(monkeypatch, meta)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.2)])
+        hits = search_concepts(
+            "극한",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        assert hits[0].name_ko == "극한"
+        # _UC_B는 메타 없음 → 모든 메타 필드 None(but 여전히 결과에 포함·기본 비게이팅).
+        assert hits[1].concept_id == _UC_B
+        assert hits[1].name_ko is None
+        assert hits[1].domain is None
+        assert hits[1].review_status is None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑥ 검수 게이팅(reviewed_only) — reviewed만 통과·메타 없음 제외·정렬 유지
+# ──────────────────────────────────────────────────────────────────────────
+class TestReviewedOnlyGating:
+    def test_reviewed_only_filters_pending(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        meta = {
+            _UC_A: ConceptNodeMeta(
+                name_ko="극한", domain="d", review_status="reviewed"
+            ),
+            _UC_B: ConceptNodeMeta(
+                name_ko="합성함수", domain="d", review_status="pending"
+            ),
+        }
+        _patch_meta(monkeypatch, meta)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.2)])
+        hits = search_concepts(
+            "극한",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            reviewed_only=True,
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        # pending(_UC_B)은 필터·reviewed(_UC_A)만 남음. 정렬(유사도 내림차순)은 유지.
+        assert [h.concept_id for h in hits] == [_UC_A]
+        assert hits[0].review_status == "reviewed"
+
+    def test_reviewed_only_excludes_missing_meta(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 메타가 없어 reviewed 확인 불가인 UC는 gated 모드에서 보수적으로 제외(정직).
+        meta = {
+            _UC_A: ConceptNodeMeta(name_ko="극한", domain="d", review_status="reviewed")
+        }
+        _patch_meta(monkeypatch, meta)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.2)])
+        hits = search_concepts(
+            "극한",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            reviewed_only=True,
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        assert [h.concept_id for h in hits] == [_UC_A]  # _UC_B(메타 없음) 제외
+
+    def test_default_keeps_all_recall(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 기본 reviewed_only=False면 pending·메타 없음도 모두 노출(recall 보존).
+        meta = {
+            _UC_A: ConceptNodeMeta(name_ko="극한", domain="d", review_status="pending")
+        }
+        _patch_meta(monkeypatch, meta)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.2)])
+        hits = search_concepts(
+            "극한",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        assert [h.concept_id for h in hits] == [
+            _UC_A,
+            _UC_B,
+        ]  # 둘 다(pending·메타없음 포함)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑦ 반환 타입 — concept_id+similarity+안전 메타만(본문 0·노출 계약)
+# ──────────────────────────────────────────────────────────────────────────
+def test_hit_has_only_safe_fields() -> None:
+    # ConceptSearchHit는 안전 식별자(concept_id)+점수(similarity)+안전 메타만 — 본문 필드 없음.
     fields = set(ConceptSearchHit.__dataclass_fields__)
-    assert fields == {"concept_id", "similarity"}
+    assert fields == {"concept_id", "similarity", "name_ko", "domain", "review_status"}
+    assert "description" not in fields
+    assert "formal_definition" not in fields
 
 
-def test_accepts_any_embedding_provider() -> None:
+def test_accepts_any_embedding_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     # 구조적 타이핑 — 신규 provider 없이 임의 embed 좌석을 받는다(provider seam 재사용).
+    _patch_meta(monkeypatch)
+
     class _Scripted:
         def embed(self, texts: Sequence[str]) -> list[list[float]]:
             return [[0.3, 0.4] for _ in texts]
 
-    index, engine = _index_with_rows(
+    index, _engine = _index_with_rows(
         [_FakeRow(_UC_A, 0.1)], provider_name="_Scripted", model_name="_Scripted"
     )
     hits = search_concepts(
