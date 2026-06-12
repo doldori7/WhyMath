@@ -278,3 +278,7 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 |벡터               |**pgvector**(ChromaDB 폐기·§8 비교표 교정)                 |Postgres 16 확장 통합                     |
 
 `solution_nodes`·`Verified Lemma/Solution Store`·`Dead-End Log`는 *향후 스키마*(구현 시 alembic 마이그레이션). 도입은 ROADMAP상 **S0~S1(검증기 Tier1+2·솔버 루프)은 Phase 2 모트, 자기진화·PRM(S2~S3)·Lean4 Tier3(S5)는 Phase 2~3**으로 단계화한다(1인 capacity 가드).
+
+### 용어 정합: "545노드" (편집자 부기)
+
+§5 난이도 사다리의 "545노드 연계 문항"에서 545는 *설계 추정치*다. 구현 커리큘럼 계층은 개념그래프 **403 개념(UC) + 541 선수엣지**이며, "545"는 레포에 실체가 없다(상세는 WH-1 문서 "용어·수치 정합" 절). 시그니처 패턴 55+108은 ROADMAP Phase 1 자산으로 유효하다.

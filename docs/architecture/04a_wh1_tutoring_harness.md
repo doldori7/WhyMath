@@ -501,3 +501,20 @@ CREATE TABLE strategy_evidence (
 |커리큘럼 노드                       |개념그래프 **403개념**(`concept` code=UC)·NCIC 성취기준                                |설계안 "545노드"와 용어·수치 정합 필요                         |
 
 미구현 테이블(`evidence_links`·`strategy_nodes`·`strategy_evidence`)은 *향후 스키마*다 — 구현 시 alembic 마이그레이션과 §2.3 개인정보 설계(14세 미만 동의·retention·삭제권 연쇄)를 1차에 포함한다. 본 하네스 도입은 ROADMAP상 **0단계(평가 하네스)·verify_step·match_misconception은 Phase 1~2, 전체 도구 루프·전략 계층·자체 모델 학습은 Phase 2~3**으로 단계화한다(1인 capacity 가드·"측정 없는 도입 없음").
+
+### `evidence_links` 스키마 — 실제 테이블 매핑 (편집자 부기)
+
+§2.3의 `evidence_links` DDL은 *설계 시점 추상 스키마*다. 구현 시 실제 backend 테이블에 맞춘다(`learning_events`·`curriculum_nodes` 신설 불요):
+
+|설계 DDL 참조                                       |실제 테이블 (현 backend)                                                       |정합 메모                                                          |
+|------------------------------------------------|-----------------------------------------------------------------------|---------------------------------------------------------------|
+|`event_id BIGINT REFERENCES learning_events(event_id)`|**`attempt_event`**(BIGSERIAL `event_id` + `event_at` **복합 PK**·TimescaleDB hypertable)|`learning_events` 테이블 *미존재* → `attempt_event`로. 복합 PK라 FK는 (event_id, event_at) 또는 대리키 필요(hypertable 제약)|
+|`misconception_id TEXT REFERENCES misconceptions(id)`|오개념 카탈로그 TEXT id(kebab-case)·`misconception_embedding(misconception_id TEXT PK)`|TEXT 일치 ✓·카탈로그 현 **30종**(설계 "400"=목표)                          |
+|`node_id INT REFERENCES curriculum_nodes(id)`     |**`concept(concept_id UUID PK·code=UC TEXT)`**                         |`curriculum_nodes(INT)` *미존재* → `concept.concept_id`(UUID) 또는 `concept.code`(UC). **INT→UUID/TEXT 형 변경**|
+|`student_id UUID`                                |`user_profile.user_id`(UUID)                                           |명칭만 다름(student_id≈user_id) ✓                                  |
+
+`evidence_links`는 *신규 테이블*이되 FK 타깃을 위 실제 테이블로 정정해 마이그레이션한다.
+
+### 용어·수치 정합: "545 노드" → 구현 403 개념
+
+본문의 "545노드 커리큘럼 그래프"는 *설계 시점 추정치*이며 현 저장소에 해당 실체가 없다(레포 grep 결과 "545"는 본 문서 외 0). 구현된 커리큘럼/개념 계층은 **개념그래프 v1 — 403 개념(`concept`·code=UC) + 541 선수엣지(`concept_edge` PREREQUISITE)** + NCIC 성취기준이다. 성취기준 노드를 별도 차원으로 둘 경우 수치를 실측으로 확정한다("545"는 미반영 추정치).
