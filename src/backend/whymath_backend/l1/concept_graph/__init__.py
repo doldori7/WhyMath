@@ -26,6 +26,12 @@ L1 개념그래프 적재 아크의 백엔드 부분이다. 슬1(정형화·UC �
 
 from __future__ import annotations
 
+from whymath_backend.l1.concept_graph.backend_edge import (
+    BackendConceptEdgeRecord,
+    BackendEdgeStore,
+    load_backend_edges_from_graph_json,
+    populate_backend_edges,
+)
 from whymath_backend.l1.concept_graph.embedding import (
     ConceptEmbeddingIndex,
     concept_embedding_text,
@@ -46,6 +52,8 @@ from whymath_backend.l1.concept_graph.retrieval import (
 )
 
 __all__ = [
+    "BackendConceptEdgeRecord",
+    "BackendEdgeStore",
     "ConceptEmbeddingIndex",
     "ConceptNodeMeta",
     "ConceptNodeRecord",
@@ -53,8 +61,10 @@ __all__ = [
     "ConceptSearchHit",
     "concept_embedding_text",
     "fetch_node_meta",
+    "load_backend_edges_from_graph_json",
     "load_concept_nodes_from_graph_json",
     "load_concepts_from_graph_json",
+    "populate_backend_edges",
     "populate_concept_embeddings",
     "populate_concept_nodes",
     "search_concepts",

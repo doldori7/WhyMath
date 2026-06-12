@@ -80,6 +80,14 @@ from whymath_backend.l2.irt import (
     select_weighted_item,
 )
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
+from whymath_backend.l2.prerequisite_recommendation import (
+    PrerequisiteGap,
+    recommend_prerequisite_gaps,
+)
+from whymath_backend.l2.weak_concept_recommendation import (
+    WeakConceptRecommendation,
+    recommend_weak_concepts,
+)
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
@@ -1065,6 +1073,143 @@ async def get_my_diagnosis_summary(
         attention_count=counts["irt_higher"] + counts["bkt_higher"],
         weakest_concept_id=weakest.concept_id if weakest else None,
         weakest_concept_name=weakest.concept_name if weakest else None,
+    )
+
+
+# ── 개념그래프 소비 슬2: GET /v1/me/weak-concepts (약개념 추천 — 진단 약점 + UC 메타 enrich) ──
+# L2 약점 진단(`recommend_weak_concepts`·BKT/IRT 융합·약점 정렬·약점 필터)에 `concept_node`(UC)
+# 안전 그래프 메타(name_ko·domain·review_status)를 enrich해 "지금 무엇을 복습할지" 후보를 돌려준다.
+# *학생 직접 노출이 아니라* 내부 조회 좌석(소비 슬1 노출 계약과 일관 — 안전 필드만·본문 0). 진단·
+# enrich·게이팅 로직은 L2 좌석이 소유(L5는 표면·user_id 스코핑·읽기 전용·마이그레이션 0).
+WeakLimit = Annotated[int, Query(ge=1, le=50, description="약점(저신호) 먼저 정렬 후 상위 N개만.")]
+WeakThreshold = Annotated[
+    float,
+    Query(
+        ge=0.0,
+        le=1.0,
+        description="이 숙달 미만(비교 가능한 두 신호 중 최저값 기준)인 개념만 약점으로 추천.",
+    ),
+]
+WeakReviewedOnly = Annotated[
+    bool,
+    Query(
+        description=(
+            "검수 게이팅. false(기본)=recall 보존(pending·메타 미적재 개념도 노출). true="
+            "review_status='reviewed'인 개념만(메타 없어 확인 불가인 UC는 보수적 제외·필터)."
+        ),
+    ),
+]
+
+
+@router.get(
+    "/weak-concepts",
+    response_model=list[WeakConceptRecommendation],
+    summary="내 약개념 추천(BKT/IRT 약점 + 개념그래프 안전 메타 enrich)",
+)
+async def get_my_weak_concepts(
+    user: ConsentedUser,
+    session: SessionDep,
+    limit: WeakLimit = 10,
+    threshold: WeakThreshold = 0.7,
+    reviewed_only: WeakReviewedOnly = False,
+) -> list[WeakConceptRecommendation]:
+    """학습자 약점(BKT/IRT)을 식별해 개념그래프(`concept_node`·UC) 안전 메타를 붙여 추천.
+
+    L2 진단(`compute_concept_diagnoses`·BKT 최신 + IRT θ 융합·*약점 먼저* 정렬)을 재사용해
+    약점(비교 가능한 두 신호 중 최저값 < `threshold`)인 개념만 거르고, 그 개념의 `concept_code`
+    (=UC)로 `concept_node`(PG 프로젝션·소비 슬1 브리지) 안전 메타(name_ko·domain·review_status)를
+    *단일 IN 조회*로 enrich한다(N+1 0·UC 없거나 메타 미적재면 None graceful). `reviewed_only=true`
+    면 검수 안 된 개념을 *필터*(약점 정렬 유지)하고, `limit`로 상위 N만 돌려준다. 진단·enrich·
+    게이팅은 L2 좌석이 소유(`recommend_weak_concepts`)·user_id 스코핑·읽기 전용.
+
+    **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 *조회 좌석*(소비 슬1과 일관)이다. enrich
+    되는 건 안전 표시·게이팅 필드뿐 — **본문(description·formal_definition) 0**(concept_node에
+    컬럼 자체가 없음·redaction). 우열 매기기·정답 빠르게 등 금기 표현 0.
+    """
+    return await recommend_weak_concepts(
+        session,
+        user.user_id,
+        limit=limit,
+        mastery_threshold=threshold,
+        reviewed_only=reviewed_only,
+    )
+
+
+# ── 개념그래프 소비 선수 슬1: GET /v1/me/weak-concepts/{concept_id}/prerequisites ──
+# 약개념 C의 *막힌 선수개념* 추천 — concept_edge(to==C·PREREQUISITE) traversal로 선수를 찾고,
+# 그 중 학습자가 약한(막힌) 것을 mastery·concept_node 안전 메타와 함께 돌려준다(선수 복습 우선).
+# 후행 개념이 안 되는 *근본 원인*이 선수 결손일 수 있으므로 "먼저 복습할 선수"를 가린다(LTHC).
+# traversal·약점 필터·enrich·게이팅 로직은 L2 좌석이 소유(L5는 표면·user_id 스코핑·읽기 전용).
+WeakOnly = Annotated[
+    bool,
+    Query(
+        description=(
+            "true(기본)=막힌(약한·숙달 미만) 선수만(측정 없는 선수 제외). false=모든 선수"
+            "(약점 무관·미측정 포함)."
+        ),
+    ),
+]
+# 다단계(multi-hop) 선수 traversal 깊이 — 1=직접 선수만(기본·후방 호환)·2~5=선수의 선수…까지.
+# 선수 그래프는 DAG 보장(data-pipeline validate.py가 prerequisite_cycle hard error)이라 재귀는
+# 자연 종료하나, 비용·노이즈를 막으려 상한 5(부분 적재·미래 데이터 대비 방어 bound).
+MaxDepth = Annotated[
+    int,
+    Query(
+        ge=1,
+        le=5,
+        description=(
+            "선수 traversal 최대 깊이 — 1=직접 선수만(기본)·2~5=다단계 선수(선수의 선수…). "
+            "DAG 보장이라 종료, 비용·노이즈 상한 5."
+        ),
+    ),
+]
+
+
+@router.get(
+    "/weak-concepts/{concept_id}/prerequisites",
+    response_model=list[PrerequisiteGap],
+    summary="약개념의 막힌 선수개념 추천(선수 traversal + BKT/IRT 약점 + 안전 메타 enrich)",
+)
+async def get_my_prerequisite_gaps(
+    concept_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+    threshold: WeakThreshold = 0.7,
+    reviewed_only: WeakReviewedOnly = False,
+    weak_only: WeakOnly = True,
+    max_depth: MaxDepth = 1,
+) -> list[PrerequisiteGap]:
+    """약개념 C(`concept_id`)의 선수개념 중 *막힌*(약한) 것을 골라 "먼저 복습할 선수"로 추천.
+
+    `concept_edge`에서 `to_concept_id == concept_id AND edge_type == PREREQUISITE`인 행의
+    `from_concept_id`(선수)들을 traversal하고(방향: from은 to의 선수), 각 선수의 BKT/IRT 숙달을
+    L2 진단(`compute_concept_diagnoses`)으로 lookup해 `weak_only=true`(기본)면 막힌(숙달 <
+    `threshold`) 선수만 남긴다. 선수의 `concept_code`(=UC)로 `concept_node` 안전 메타(name_ko·
+    domain·review_status)를 *단일 IN 조회*로 enrich하고(N+1 0·미적재 None graceful),
+    `reviewed_only=true`면 검수 안 된 선수를 *필터*한다.
+
+    **다단계(multi-hop) traversal**: `max_depth=1`(기본)이면 직접 선수만(기존 1-hop·후방 호환)·
+    `max_depth=2~5`면 "선수의 선수…"까지 재귀 CTE로 따라간다 — 후행 개념이 안 되는 *근본 결손*이
+    여러 단계 아래일 수 있기 때문(LTHC). 응답 각 항목의 `depth`(1=직접 선수·2=선수의 선수…)로
+    선수 거리를 노출한다(그래프 구조 메타·안전). 같은 선수가 여러 경로로 닿으면 가장 가까운(MIN)
+    거리만 1건. 선수 그래프는 DAG 보장이라 재귀는 종료하며 `max_depth`로 방어적 bound.
+
+    정렬은 weakness 오름차순(가장 약한 선수=root blocker 먼저)·동률은 **depth 오름차순**(가까운
+    선수 먼저·더 직접 실행 가능)·그 다음 선수관계 강도(edge_strength) 내림차순. traversal·약점·
+    enrich·게이팅은 L2 좌석이 소유(`recommend_prerequisite_gaps`)·user_id 스코핑·읽기 전용.
+
+    **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 *조회 좌석*(약개념 추천과 일관)이다. enrich
+    되는 건 안전 표시·게이팅 필드뿐 — **본문(description·formal_definition) 0**(concept_node·
+    PrerequisiteGap 스키마에 컬럼/슬롯 자체가 없음·redaction). 우열 매기기·정답 빠르게 등 금기 0.
+    """
+    return await recommend_prerequisite_gaps(
+        session,
+        user.user_id,
+        concept_id,
+        mastery_threshold=threshold,
+        reviewed_only=reviewed_only,
+        weak_only=weak_only,
+        max_depth=max_depth,
     )
 
 

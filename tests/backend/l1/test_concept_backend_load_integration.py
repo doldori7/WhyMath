@@ -26,7 +26,11 @@ from whymath_backend.l1.concept_graph.backend_concept import (
     BackendConceptRecord,
     populate_backend_concepts,
 )
-from whymath_backend.schema.enums import ConceptLevel, Subject
+from whymath_backend.l1.concept_graph.backend_edge import (
+    BackendConceptEdgeRecord,
+    populate_backend_edges,
+)
+from whymath_backend.schema.enums import ConceptLevel, EdgeType, Subject
 
 pytestmark = pytest.mark.integration
 
@@ -325,3 +329,175 @@ class TestL2MasteryBridge:
 
             _aio.run(_cleanup_mastery())
             _cleanup(keys)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 선수엣지 적재 통합 — 노드 적재 → 엣지 적재 → row·방향·멱등(edge_id 보존)
+# ──────────────────────────────────────────────────────────────────────────
+_UC_PRE = "UC.x.it.backend-edge-pre"  # 선수
+_UC_POST = "UC.x.it.backend-edge-post"  # 후행
+
+
+def _cleanup_edges_and_concepts(keys: list[str]) -> None:
+    """concept_edge(양끝이 keys인 행) → concept 정리(FK 순서)."""
+    from sqlalchemy import text
+
+    engine = _sync_engine()
+    try:
+        with engine.begin() as conn:  # type: ignore[attr-defined]
+            conn.execute(
+                text(
+                    "DELETE FROM concept_edge WHERE from_concept_id IN "
+                    "(SELECT concept_id FROM concept WHERE code = ANY(:keys)) "
+                    "OR to_concept_id IN "
+                    "(SELECT concept_id FROM concept WHERE code = ANY(:keys))"
+                ),
+                {"keys": keys},
+            )
+            conn.execute(
+                text("DELETE FROM concept WHERE code = ANY(:keys)"), {"keys": keys}
+            )
+    finally:
+        engine.dispose()  # type: ignore[attr-defined]
+
+
+class TestBackendEdgeRoundtrip:
+    """선수엣지 적재 — 방향(from=선수→to=후행)·orphan skip·멱등(edge_id 보존)."""
+
+    def test_populate_creates_prerequisite_edge_with_direction(self) -> None:
+        _skip_if_unreachable()
+        from sqlalchemy import text
+
+        keys = [_UC_PRE, _UC_POST]
+        try:
+            # 노드 먼저(③) — code→UUID 해석·FK 충족.
+            populate_backend_concepts(
+                [_record(_UC_PRE, name_ko="선수"), _record(_UC_POST, name_ko="후행")],
+                settings=Settings(),
+            )
+            # 엣지(④) — 선수→후행.
+            count = populate_backend_edges(
+                [
+                    BackendConceptEdgeRecord(
+                        src_code=_UC_PRE,
+                        dst_code=_UC_POST,
+                        edge_type=EdgeType.PREREQUISITE,
+                        edge_strength=0.75,
+                    )
+                ],
+                settings=Settings(),
+            )
+            assert count == 1
+
+            engine = _sync_engine()
+            try:
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    row = conn.execute(
+                        text(
+                            "SELECT e.edge_type, e.edge_strength, "
+                            "e.typical_gap_signal, e.notes, "
+                            "f.code AS from_code, t.code AS to_code "
+                            "FROM concept_edge e "
+                            "JOIN concept f ON e.from_concept_id = f.concept_id "
+                            "JOIN concept t ON e.to_concept_id = t.concept_id "
+                            "WHERE f.code = :pre AND t.code = :post"
+                        ),
+                        {"pre": _UC_PRE, "post": _UC_POST},
+                    ).one()
+                # 방향: from=선수·to=후행.
+                assert row.from_code == _UC_PRE
+                assert row.to_code == _UC_POST
+                assert row.edge_type == "PREREQUISITE"
+                assert float(row.edge_strength) == pytest.approx(0.75)
+                # 날조 회피: gap_signal·notes는 NULL.
+                assert row.typical_gap_signal is None
+                assert row.notes is None
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+        finally:
+            _cleanup_edges_and_concepts(keys)
+
+    def test_orphan_edge_skipped(self) -> None:
+        _skip_if_unreachable()
+
+        keys = [_UC_PRE]
+        try:
+            # 선수만 적재(후행 노드 미적재 → orphan).
+            populate_backend_concepts(
+                [_record(_UC_PRE, name_ko="선수")], settings=Settings()
+            )
+            count = populate_backend_edges(
+                [
+                    BackendConceptEdgeRecord(
+                        src_code=_UC_PRE,
+                        dst_code=_UC_POST,  # 미적재
+                        edge_type=EdgeType.PREREQUISITE,
+                        edge_strength=0.5,
+                    )
+                ],
+                settings=Settings(),
+            )
+            assert count == 0  # orphan skip(FK 위반 방지)
+        finally:
+            _cleanup_edges_and_concepts(keys)
+
+    def test_reload_preserves_edge_id(self) -> None:
+        _skip_if_unreachable()
+        from sqlalchemy import text
+
+        keys = [_UC_PRE, _UC_POST]
+        try:
+            populate_backend_concepts(
+                [_record(_UC_PRE, name_ko="선수"), _record(_UC_POST, name_ko="후행")],
+                settings=Settings(),
+            )
+            populate_backend_edges(
+                [
+                    BackendConceptEdgeRecord(
+                        src_code=_UC_PRE,
+                        dst_code=_UC_POST,
+                        edge_type=EdgeType.PREREQUISITE,
+                        edge_strength=0.5,
+                    )
+                ],
+                settings=Settings(),
+            )
+            engine = _sync_engine()
+            try:
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    first_edge_id = conn.execute(
+                        text(
+                            "SELECT e.edge_id FROM concept_edge e "
+                            "JOIN concept f ON e.from_concept_id = f.concept_id "
+                            "WHERE f.code = :pre"
+                        ),
+                        {"pre": _UC_PRE},
+                    ).scalar_one()
+                # 재적재(강도 변경) → 멱등·edge_id 보존.
+                populate_backend_edges(
+                    [
+                        BackendConceptEdgeRecord(
+                            src_code=_UC_PRE,
+                            dst_code=_UC_POST,
+                            edge_type=EdgeType.PREREQUISITE,
+                            edge_strength=0.9,
+                        )
+                    ],
+                    settings=Settings(),
+                )
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    rows = conn.execute(
+                        text(
+                            "SELECT e.edge_id, e.edge_strength FROM concept_edge e "
+                            "JOIN concept f ON e.from_concept_id = f.concept_id "
+                            "WHERE f.code = :pre"
+                        ),
+                        {"pre": _UC_PRE},
+                    ).all()
+                assert len(rows) == 1  # 멱등(행 1개)
+                assert rows[0].edge_id == first_edge_id  # PK 보존
+                assert float(rows[0].edge_strength) == pytest.approx(0.9)  # 강도 갱신
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+        finally:
+            _cleanup_edges_and_concepts(keys)

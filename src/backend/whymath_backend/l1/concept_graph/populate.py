@@ -42,6 +42,10 @@ from whymath_backend.l1.concept_graph.backend_concept import (
     load_backend_concepts_from_graph_json,
     populate_backend_concepts,
 )
+from whymath_backend.l1.concept_graph.backend_edge import (
+    load_backend_edges_from_graph_json,
+    populate_backend_edges,
+)
 from whymath_backend.l1.concept_graph.embedding import (
     load_concepts_from_graph_json,
     populate_concept_embeddings,
@@ -108,11 +112,18 @@ def main(argv: list[str] | None = None) -> int:
     backend_records = load_backend_concepts_from_graph_json(graph_path)
     backend_count = populate_backend_concepts(backend_records, settings=settings)
 
+    # ④ 선수엣지 적재(선수 슬1) — graph 선수 관계 → backend concept_edge upsert. 노드(③)가 먼저
+    #    적재돼야 code→UUID 해석·FK가 가능하므로 ③ 다음에 온다(orphan은 건너뜀). 선수만 적재.
+    edge_records, edge_skips = load_backend_edges_from_graph_json(graph_path)
+    edge_count = populate_backend_edges(edge_records, settings=settings)
+
     print(
         f"개념 임베딩 적재 완료: {embedding_count}건 "
         f"(provider={settings.embedding_provider})·"
         f"메타 프로젝션 적재 완료: {node_count}건·"
-        f"런타임 엔티티(concept·code=UC) 적재 완료: {backend_count}건 (graph={graph_path})."
+        f"런타임 엔티티(concept·code=UC) 적재 완료: {backend_count}건·"
+        f"선수엣지(concept_edge·PREREQUISITE) 적재 완료: {edge_count}건"
+        f"(로딩 skip {len(edge_skips)}건) (graph={graph_path})."
     )
     return 0
 

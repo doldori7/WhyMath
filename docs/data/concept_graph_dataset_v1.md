@@ -531,6 +531,172 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 
 ---
 
+## 5h. 약개념 추천 — L2 약점 + `concept_node` UC 메타 enrich (개념그래프 *소비* 아크 슬라이스 2 — 2026-06-12)
+
+> **소비 슬라이스(backend·L2)**: 소비 슬1(§5f·`concept_node` 메타 프로젝션)·브리지(§5g·backend `concept`
+> `code`=UC)가 *사중 store 단일 UC 키*를 닫았다. 그러나 *런타임 소비 경로*는 아직 한 단계 더 닫아야 했다 —
+> L2 학습자 모델이 약점(낮은 BKT/IRT)을 식별해도 그 약점을 *그래프 메타와 함께* 돌려주는 좌석이 없었다.
+> 이 슬라이스가 그 경로를 닫는다: **L2 약점 → `concept.code`(UC) → `concept_node` 안전 메타 enrich → 추천**.
+
+### 5h.1 약개념 추천 좌석 (`l2/weak_concept_recommendation`·L2 학습자 모델)
+
+- **재사용(신규 진단·정렬 로직 0)**: ① `l2.concept_diagnosis.compute_concept_diagnoses`(BKT 최신 숙달 +
+  IRT θ 융합·agreement·*약점 먼저* 정렬·각 항목 `concept_code`=UC[orphan None])를 *그대로 입력*으로 쓴다.
+  ② `l1.concept_graph.node_projection.fetch_node_meta`(UC→`concept_node` 안전 메타 단일 IN 조회)를 enrich에
+  재사용 — 검색 좌석(§5e·`search_concepts`)이 쓴 *같은* 좌석.
+- `WeakConceptRecommendation`(Pydantic): concept_id·concept_code(UC)·concept_name·bkt_mastery·
+  irt_mastery_proxy·`weakness`(두 신호 최저·정렬·필터 기준)·agreement + **enrich** name_ko·domain·review_status.
+- `recommend_weak_concepts(session, user_id, *, limit=10, mastery_threshold=0.7, reviewed_only=False,
+  meta_engine=None)` 흐름: ①진단(약점 정렬 보존)→②**약점 필터**(비교 가능 신호 최저 < 임계·신호 0건 제외)→
+  ③**UC dedupe enrich**(`fetch_node_meta` 단일 IN·N+1 0)→④**검수 게이팅**(`reviewed_only=True`면 reviewed만·
+  메타 없으면 보수적 제외[§5f.3 규약과 일관])→⑤**상한**(정렬 보존 상위 N).
+- **sync 좌석 격리**: `fetch_node_meta`는 sync 엔진(블로킹 psycopg)이고 이 함수는 async — 검색 좌석(api/
+  concepts)이 sync 좌석을 `asyncio.to_thread`로 워커 스레드에 격리하는 *바로 그 패턴*을 따른다(신규 동시성 0·
+  이벤트 루프 보호·p50<2s).
+
+### 5h.2 HTTP 엔드포인트 (`GET /v1/me/weak-concepts`·L5 API 표면)
+
+- query: `limit`(1~50·기본 10)·`threshold`(0~1·기본 0.7)·`reviewed_only`(기본 false=recall). `ConsentedUser`·
+  user_id 스코핑·읽기. 응답 `list[WeakConceptRecommendation]`.
+- **노출 계약**: 학생 직접 노출 아닌 *조회 좌석*(소비 슬1과 일관·L2/L4·교사 소비). enrich는 안전 표시·게이팅
+  필드뿐 — **본문(description·formal_definition) 0**(`concept_node`에 컬럼 자체 없음·redaction 구조적 차단·
+  추천 스키마에 슬롯 부재). 우열 매기기·정답 빠르게 등 금기 표현 0.
+
+### 5h.3 계층·범위
+
+- **7계층**: L2가 L1 `fetch_node_meta`를 *호출*(L_n→L_{n-1} 준수). L4 코칭·L5 노출은 부착하지 않음(역방향
+  의존 회피 — 코칭은 L4·HTTP 표면은 api/me). **마이그레이션 0**(기존 테이블 조회만·스키마 변경 불요).
+- **명시적 범위 밖(후속)**: 선수엣지(`concept_edge` PREREQUISITE·이미 backend PG 보유) traversal로 "막힌
+  선수개념" 추천 · 풍부 메타 노출(standard_codes·difficulty_tier·`fetch_node_meta` 확장) · L4 오개념↔약개념
+  결선(이 좌석 호출). **Neo4j 런타임 traversal은 여전히 미도입**(PG 단일 평면 유지).
+
+### 5h.4 산출물·게이트
+
+- 4게이트 통과(`cd src/backend`·py3.12): `ruff`(green)·`black --check`(155파일 green)·`mypy whymath_backend`
+  (**133 src·이슈 0**)·`pytest`(**2493 passed/98 skip**·회귀 0)·신규 모듈 cov **100%**(46 stmts·14 branch·
+  0 miss).
+- 신규 테스트 2: `test_weak_concept_recommendation.py`(16 단위·약점 필터[임계 경계·신호 0건]·정렬 보존·
+  limit·enrich[부착·미적재 None·orphan·dedupe 단일 호출]·reviewed_only 게이팅[pending/메타없음 제외·기본
+  recall·게이팅 후 limit]·redaction) · `test_me_integration.py`에 `test_me_weak_concepts_enrich_and_gating_
+  on_live_pg` 추가(실 PG: 약점→code[UC]→`concept_node` enrich·게이팅·limit·threshold·redaction NULL·401·
+  강개념 제외·메타 미적재 graceful).
+- **통합테스트(실 PG)는 기본 SKIP**(`@pytest.mark.integration`+`WHYMATH_RUN_INTEGRATION` 게이트 + PG 미도달
+  graceful skip). **CI 신규 잡 불요** — 기존 **`backend — 마이그레이션·통합 (실 PG)` 잡**이 `tests/backend/
+  api/`·`l2/`를 자동 수집. **마이그레이션 0**(단일 head `f9a0b1c2d3e4` 불변). **Phaiakes9**에서도 실행.
+- 시크릿 0·7계층(L2 소비 좌석·L1 호출만). **다음**: 선수엣지 traversal·L4 오개념↔약개념 결선·풍부 메타 노출.
+
+---
+
+## 5i. 선수엣지 적재 + 막힌 선수개념 추천 (개념그래프 *소비* 선수 슬라이스 — 2026-06-12)
+
+> **선수 슬라이스(backend·L1 적재 + L2 추천)**: 약개념 추천(§5h)이 "지금 무엇을 복습할지" 약개념을 골랐다면,
+> 이 슬라이스는 그 약개념의 **선수개념(prerequisite) 중 학습자가 약한 것**을 "*먼저* 복습할 막힌 선수"로
+> 돌려준다(후행 결손의 *근본 원인*이 선수 결손일 수 있음·LTHC). 두 부분: ① backend `concept_edge` **적재기
+> 신규**(마이그레이션은 있었으나 적재 로직 부재·노드만 적재돼 있었음) ② 선수 traversal + mastery + enrich 좌석·API.
+
+### 5i.1 선수엣지 적재기 (`l1/concept_graph/backend_edge`·L1·신규 seam 0)
+
+- **현황 교정**: `concept_edge` 테이블은 마이그레이션(`1551744048aa`·2026-05-28)에 *있었으나* 적재기가 없어
+  **비어 있었다**(브리지 §5g는 노드만 적재). 이 슬라이스가 엣지 투영을 채운다.
+- `BackendConceptEdgeRecord`(frozen): src_code(UC·선수)·dst_code(UC·후행)·edge_type(EdgeType)·edge_strength.
+  **evidence·notes·typical_gap_signal 슬롯 부재**(graph.json `evidence`는 gap_signal 의미 부정합·날조 회피·
+  NULL 유지·redaction).
+- `load_backend_edges_from_graph_json(path) -> (records, skips)`: `payload["edges"]`에서 `relation==
+  "prerequisite"`만 `EdgeType.PREREQUISITE`로 적재(그 외 relation·self-edge·양끝 누락은 skip+메시지).
+  **방향**: graph.json `src_concept_id`(선수)→`from_concept_id`, `dst_concept_id`(후행)→`to_concept_id`
+  (backend EdgeType.PREREQUISITE "A를 알아야 B[A→B]" 규약과 일치).
+- `BackendEdgeStore.populate`: backend `concept` 전량 `SELECT concept_id, code` 단일 조회로 **code→UUID
+  맵**(N+1 0) 구축 → src/dst UC를 UUID로 해석(orphan은 skip+로그) → `INSERT ... ON CONFLICT(from_concept_id,
+  to_concept_id, edge_type) DO UPDATE SET edge_strength`(**edge_id·created_at 미-SET → 재적재 멱등·edge_id
+  보존**). 슬3 `_build_sync_engine` 재사용. `edge_type`은 `.value`(문자열)로 바인딩(PG enum·적재/조회 일관).
+- `populate.py`에 **④ 선수엣지 적재** 추가(③ 노드 적재 *다음* — 노드가 있어야 code→UUID·FK 가능). CLI가 엣지
+  적재 건수 + 로딩 skip 수 출력.
+
+### 5i.2 막힌 선수개념 추천 좌석 (`l2/prerequisite_recommendation`·L2)
+
+- `fetch_prerequisites(session, concept_id) -> list[PrerequisiteRow]`: **방향 traversal** — `concept_edge`에서
+  `to_concept_id == concept_id AND edge_type == PREREQUISITE`인 행의 `from_concept_id`(선수)들을 `Concept`
+  join으로 code(UC)·name_ko·edge_strength와 함께 조회(미측정 선수도 포함·enrich에 UC 필요·강도 desc 정렬).
+  별도 함수로 분리해 단위테스트가 traversal을 패치(실 SQL 격리).
+- `PrerequisiteGap`(Pydantic·11 안전 필드): concept_id·concept_code(UC)·concept_name·bkt_mastery·
+  irt_mastery_proxy·weakness·agreement·domain·review_status·name_ko·**edge_strength**(선수관계 강도). **본문
+  슬롯 부재**(redaction).
+- `recommend_prerequisite_gaps(session, user_id, concept_id, *, mastery_threshold=0.7, reviewed_only=False,
+  weak_only=True, meta_engine=None)`: ①선수 traversal→②`compute_concept_diagnoses` *한 번* 호출→
+  `{concept_id: diagnosis}` 맵으로 선수 mastery lookup(없으면 None·insufficient)→③**weak_only**(기본 True·
+  weakness < 임계인 막힌 선수만·미측정 제외; False면 전 선수)→④UC dedupe enrich(`fetch_node_meta` 단일 IN·
+  `asyncio.to_thread` 격리)→⑤reviewed_only 게이팅. 정렬: weakness asc(root blocker 먼저)·None 뒤·tie는
+  edge_strength desc.
+
+### 5i.3 HTTP 엔드포인트·계층
+
+- `GET /v1/me/weak-concepts/{concept_id}/prerequisites?threshold&reviewed_only&weak_only`(api/me·`ConsentedUser`·
+  user_id 스코핑·읽기). 약개념 추천(`/weak-concepts`)과 합성: 클라가 약개념을 고르면 그 선수로 drill-in.
+  **노출 계약**: 조회 좌석(안전 필드만·본문 0).
+- **7계층**: L1 적재(`concept_edge` ORM·sync 엔진 재사용·신규 seam 0) → L2 조회(`concept_edge`·`fetch_node_meta`
+  *호출*·ORM 쿼리빌더만·원시 SQL 0) → L5 표면. 역방향 의존 0. **마이그레이션 0**(테이블 기존재). Neo4j 런타임
+  미도입(PG 단일 평면).
+
+### 5i.4 산출물·게이트
+
+- 4게이트 통과(`cd src/backend`·py3.12): `ruff`(green)·`black`(157 unchanged)·`mypy`(**135 src·이슈 0**)·
+  `pytest`(**2528 passed/102 skip**·회귀 0)·신규 모듈 cov **backend_edge 96%·prerequisite_recommendation 97%**.
+- 신규 테스트 2(+통합 2): `test_concept_backend_edge_load.py`(적재기 단위·파싱[prereq만·self/누락 skip]·방향·
+  strength·code→UUID[orphan skip]·ON CONFLICT·edge_id 미-SET 멱등) · `test_prerequisite_recommendation.py`
+  (traversal 방향·weak_only·정렬[weakness asc·strength tie]·enrich·게이팅·redaction) · `test_me_integration.py`
+  (실 PG: concept_edge 적재→`/prerequisites` 왕복·방향·weak_only·enrich·게이팅·401) · `test_concept_backend_
+  load_integration.py`(엣지 적재→row·방향·멱등 재적재 edge_id 보존).
+- **통합테스트 기본 SKIP**(`WHYMATH_RUN_INTEGRATION` + PG 미도달 graceful). **CI 신규 잡 불요**(기존 통합 잡이
+  `tests/backend/l1/`·`l2/`·`api/` 자동 수집·`alembic upgrade head`엔 concept_edge 기존재). **마이그레이션 0**.
+- 시크릿 0·날조 0(evidence 미적재·비-prereq relation skip 가시화). **다음**: 다단계(transitive) 선수 traversal·
+  L4 코칭 결선(`PrerequisiteGap`→"선수 복습 먼저" 결정)·비-prereq EdgeType 적재 확장·edge_strength 임계 필터.
+
+---
+
+## 5j. 다단계(transitive) 선수 traversal — 재귀 CTE (개념그래프 *소비* 선수 슬라이스 2 — 2026-06-12)
+
+> **확장 슬라이스(backend·L2)**: 선수 슬라이스(§5i)가 약개념의 **1-hop 직접 선수**만 추천했다면, 이 슬라이스는
+> "선수의 선수의 …"까지 따라가 **깊은 선수 체인**을 추천한다(근본 결손이 여러 단계 아래일 수 있음). backend는
+> **PG 단일 평면**(Neo4j 런타임 미도입)이라 **SQLAlchemy 재귀 CTE**(`cte(recursive=True)`·Core·원시 SQL 0)로 따른다.
+
+### 5j.1 재귀 CTE traversal (`fetch_prerequisites` 일반화)
+
+- `fetch_prerequisites(session, concept_id, *, max_depth: int = 1)`:
+  - **base**(depth=1·앵커): `to_concept_id == concept_id AND edge_type == PREREQUISITE`인 `from_concept_id`·
+    `edge_strength`·`literal(1) as depth` → `.cte("prereq_traversal", recursive=True)`.
+  - **recursive**(depth+1): `ConceptEdge JOIN base ON ConceptEdge.to_concept_id == base.c.concept_id`(이전 깊이
+    선수를 *후행*으로 삼아 한 단계 더)·같은 edge_type·**`WHERE base.c.depth < max_depth`**(bound).
+  - `base.union_all(recursive)` → `Concept` join(code·name_ko) → `ORDER BY depth asc, edge_strength desc
+    nullslast, concept_id`(안정 정렬).
+- **`max_depth=1` ⇒ 기존 1-hop 계약 보존**: recursive 가지의 `depth(=1) < 1 = false`라 recursive가 *전혀
+  실행되지 않고* base(직접 선수)만 남는다. 통합 테스트가 실 PG에서 `max_depth=1 → 직접 선수만` 못 박음.
+- **dedup(MIN depth)**: diamond(여러 경로)로 같은 선수가 여러 깊이로 나올 수 있어 Python에서 정렬(depth asc) 후
+  첫 등장(=MIN depth·동률이면 강도 큰 것)만 유지. **origin C 자체는 방어적으로 제외**(DAG라 안 나오나 안전).
+- **DAG 안전**: `validate.py`가 `prerequisite_cycle`을 **hard error**로 막아 데이터셋 v1은 비순환 → 재귀 자연
+  종료. 그래도 `max_depth`(API 상한 5)로 방어적 bound(부분 적재·미래 데이터 대비).
+
+### 5j.2 depth 노출·정렬·API
+
+- `PrerequisiteRow`·`PrerequisiteGap`에 **`depth: int`** 추가(1=직접·2=선수의 선수…·MIN 거리·그래프 구조 메타·
+  안전). **redaction 불변 유지**(본문 슬롯 여전히 0).
+- **정렬**(`recommend_prerequisite_gaps`): `weakness asc`(root blocker 먼저)·None 뒤 → 동률 **`depth asc`**(가까운
+  선수 먼저) → `edge_strength desc` → `concept_id`(결정론·4-튜플 키).
+- `GET /v1/me/weak-concepts/{concept_id}/prerequisites`에 **`max_depth`**(`Query(ge=1, le=5)`·기본 1) 추가 →
+  `recommend_prerequisite_gaps(..., max_depth=max_depth)`. mastery·weak_only·enrich·게이팅은 각 깊이 선수에 동일.
+
+### 5j.3 산출물·게이트
+
+- 4게이트 통과(`cd src/backend`·py3.12): `ruff`(green)·`black`(157)·`mypy`(**135 src·이슈 0**·sort key `tuple[float,
+  int, float, str]` 정합)·`pytest`(**2533 passed/105 skip**·회귀 0). 변경 *로직 surface*(max_depth 배선·depth
+  tie-break·전파·gap 조립) cov 100%·재귀 CTE *본문*은 integration 전용(실 SQL·PG 게이트·§5i 1-hop 본문과 동일 자세).
+- 테스트: `test_prerequisite_recommendation.py`(수정·depth 필드셋·정렬 동률[depth>강도·같은 depth면 강도]·
+  redaction)·`test_prerequisite_traversal_integration.py`(신규·실 PG: 3단계 체인 C←P1←P2←P3·max_depth=1/2/3
+  경계·diamond MIN-depth·origin 제외)·`test_me_integration.py`(수정·API max_depth 케이스).
+- **마이그레이션 0**(기존 `concept_edge`·`idx_concept_edge_to` 조회만). 계층 L2 조회·L5 표면·원시 SQL 0(재귀 CTE도
+  Core). **다음**: L4 코칭 결선·비-prereq EdgeType 적재·edge_strength 임계 필터·깊은 체인 EXPLAIN 확인.
+
+---
+
 ## 6. 향후 활용
 
 1. **L1 개념그래프 적재**(대형·진행 중): src_id→UC 매핑 · 스키마 확장(CCSS·은유·허용표현) ·
@@ -542,8 +708,11 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
    concept_id+similarity 반환) · **메타 enrichment + 검수 게이팅은 *소비* 아크 슬라이스 1에서 완료**
    (§5f·메타 브리지=**PG 프로젝션**[backend↔Neo4j 런타임 연결 0]·`concept_node` UC 키 메타·검색이
    name_ko·domain·review_status를 PG 조인으로 enrich·`reviewed_only` 게이팅 필터·삼중 store 단일 UC 키).
-   **후속(소비 슬2+)**: L2 결선(약개념 추천이 이 좌석 호출) · L4 결선(오개념↔개념 자동 연결) · 풍부
-   메타 enrichment(standard_codes·difficulty_tier 등 표면 노출·Neo4j traversal은 *여전히 미도입*·필요 시
-   별도 결정).
+   · **브리지(backend `concept` 적재·`code`=UC)는 *소비* 아크 브리지 슬라이스에서 완료**(§5g·사중 store
+   단일 UC 키·런타임 경로 닫힘) · **약개념 추천(L2 약점 + `concept_node` UC 메타 enrich)은 *소비* 아크
+   슬라이스 2에서 완료**(§5h·`recommend_weak_concepts`·`GET /v1/me/weak-concepts`·L2 약점→`concept.code`
+   [UC]→그래프 메타·검수 게이팅·`asyncio.to_thread` 격리). **후속(소비 슬3+)**: 선수엣지(`concept_edge`
+   PREREQUISITE) traversal로 막힌 선수개념 추천 · L4 결선(오개념↔약개념 자동 연결) · 풍부 메타 노출
+   (standard_codes·difficulty_tier 등·Neo4j traversal은 *여전히 미도입*·필요 시 별도 결정).
 2. **L4 오개념 확장**(후속): §5.4 후보를 doc-first로 카탈로그에 추가(30종+ 목표).
 3. **암기카드**(L6): 113장 — `exposure_condition`("이해 마스터 후 노출")이 메타인지 정책과 정합.
