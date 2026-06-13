@@ -288,13 +288,17 @@ class TestMisconceptionIntegration:
         assert body["intervention"]["pattern"] == "counterexample"
         assert "a=1, b=1" in body["intervention"]["prompt"]
 
-    def test_partial_match_holds_intervention(self) -> None:
-        # 부분 매칭 confidence 0.5 → REVERSE_REASONING 패턴
+    def test_partial_match_gated_out(self) -> None:
+        # WH-1 1단계 슬라이스 1 §3.3 품질 게이트: 부분 매칭(confidence 0.5)은 top-1 신뢰도
+        # floor(0.65) 미만이라 *게이트에서 비워진다*(억지 매칭 금지). 이전엔 0.5가
+        # reverse_reasoning 개입을 발화했으나, 게이트 도입으로 약한 매칭은 하류로 새지 않는다
+        # (의도된 품질 개선·회귀 아님·CLAUDE.md "확실하지 않으면 모른다").
         resp = _client().post("/v1/coach", json={"student_input": "(a+b) 까지만"})
+        assert resp.status_code == 200, resp.text
         body = resp.json()
-        # 부분 매칭은 0.5 — reverse 패턴 또는 보류(임계 정확히 0.5는 reverse)
-        if body["intervention"] is not None:
-            assert body["intervention"]["pattern"] == "reverse_reasoning"
+        # top-1<0.65 → 후보 비움·개입 보류.
+        assert body["misconceptions"] == []
+        assert body["intervention"] is None
 
 
 class TestLthcIntegration:

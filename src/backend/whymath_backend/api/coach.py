@@ -80,6 +80,7 @@ from whymath_backend.l4.misconception import (
     select_intervention,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG
+from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
 from whymath_backend.l4.misconception.shadow import observe_misconception_shadow
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.l4.socratic.categories import SocraticCategory
@@ -341,8 +342,22 @@ def _build_response_payload(
     return decision, resolved, intervention, lthc, entry_category, solution_coaching
 
 
-async def _compute_matches(student_input: str) -> list[MisconceptionMatch]:
-    """오개념 후보 계산 — `misconception_semantic_mode` 3값 분기(off/shadow/on·slice 106·111).
+async def _compute_matches(
+    student_input: str, *, ocr_confidence: float | None = None
+) -> list[MisconceptionMatch]:
+    """오개념 후보 계산 + §3.3 품질 게이트 — `misconception_semantic_mode` 3값 분기(off/shadow/on).
+
+    WH-1 1단계 슬라이스 1(`match_misconception` 도구화): 모드별 후보 산출 *직후* 결과에
+    `apply_match_quality_gate`를 *후처리*로 적용한다(`_gate` 헬퍼). 게이트는 매칭 *알고리즘*
+    (`diagnose`/의미 매처/`combine_diagnoses`)을 전혀 바꾸지 않고, top-1 신뢰도<0.65면 후보를
+    *비운다*(억지 매칭 금지·CLAUDE.md "확실하지 않으면 모른다"). 따라서 세 모드(off/shadow/on)
+    *모두* 동일한 게이트를 거쳐 약한 top-1 매칭이 하류(가설·intervention)로 새지 않는다.
+
+    `ocr_confidence`는 OCR 산출물일 때 인식 신뢰도(0~1)다. **본 슬라이스에서 `CoachRequest`에는
+    OCR confidence 필드가 *없으므로* 호출자가 항상 None을 넘겨 게이트 ②(OCR low_quality)는
+    *dormant*(인터페이스만)다** — 요청 스키마에 필드가 추가되는 후속 슬라이스에서 깨운다.
+    `low_quality`/`no_confident_match` 플래그의 HTTP 응답 *노출*도 범위 밖(게이트 적용=하류
+    차단까지만).
 
     slice 106: 핸들러가 호출해 `_build_response_payload(matches=...)`로 주입한다(직접 sync
     호출 경로는 미주입→`diagnose` 폴백이라 잠긴 `_build_response_payload(body)` 계약 불변).
@@ -365,11 +380,18 @@ async def _compute_matches(student_input: str) -> list[MisconceptionMatch]:
     200·진단 1위는 substr라 학생 경험 유지). 실패는 *조용히 넘기지 않고* warning 로그로 남긴다
     (CLAUDE.md "환각/장애 조용히 넘어가지 말고 로그").
     """
+
+    def _gate(candidates: list[MisconceptionMatch]) -> list[MisconceptionMatch]:
+        # §3.3 품질 게이트 후처리 — 세 모드 공통 출구. top-1<floor면 후보를 비운다(억지 매칭
+        # 금지). OCR confidence는 본 슬라이스에서 항상 None이라 게이트 ②는 dormant(인터페이스만).
+        # 게이트는 *재정렬·변형 없이* 통과분만 그대로 통과시킨다(`combine_diagnoses` 순서 보존).
+        return apply_match_quality_gate(candidates, ocr_confidence=ocr_confidence).matches
+
     substr = diagnose(student_input, top_k=_FANOUT)
     mode = get_settings().misconception_semantic_mode
     if mode == "off":
         # off — substring만(의미 매처 미호출). 노출 상한 top-3로 자른다(결합 없음·현행 비트동일).
-        return substr[:_DEFAULT_TOP_K]
+        return _gate(substr[:_DEFAULT_TOP_K])
     # shadow·on — 의미 매처를 비블로킹(워커 스레드)으로 돌린다. 실패는 substring graceful 폴백.
     try:
         sem = await asyncio.to_thread(
@@ -381,14 +403,15 @@ async def _compute_matches(student_input: str) -> list[MisconceptionMatch]:
     except Exception:
         # 의미 매칭 실패 — substring 폴백(가용성 우선·200 유지). 조용히 넘기지 않고 로그.
         logger.warning("의미 매칭 실패 — substring 폴백", exc_info=True)
-        return substr[:_DEFAULT_TOP_K]
+        return _gate(substr[:_DEFAULT_TOP_K])
     if mode == "shadow":
         # shadow — 노출은 substring 그대로(off 비트동일)·substring↔semantic 불일치만 로깅한다
         # (비노출·실 분포 플립 근거 수집·slice 111). 학생 원문은 로그에 안 담는다(프라이버시).
+        # shadow 로깅은 *게이트 전* 원본 substr/sem으로 수행(게이트가 비교 분포를 왜곡하지 않게).
         observe_misconception_shadow(substr, sem)
-        return substr[:_DEFAULT_TOP_K]
+        return _gate(substr[:_DEFAULT_TOP_K])
     # on — substring 아래에 semantic-only 후보를 결합해 *노출*(substring 우선·재정렬 없음).
-    return combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K)
+    return _gate(combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K))
 
 
 async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:
