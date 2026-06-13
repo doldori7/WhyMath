@@ -32,8 +32,10 @@ CoachingFocus = Literal[
     "advance",
     "diagnose",
     "prerequisite_review",
+    "calibration_overconfident",
+    "calibration_underconfident",
 ]
-"""메타인지 코칭 포커스 7종.
+"""메타인지 코칭 포커스 9종.
 
 - `verify`: *검산* — 구체적 계산 오류가 감지됨(슬립). 개념 재교육 전에 스스로 계산을 다시
   짚게 한다(슬립 vs 오개념 구분 — 이해는 있는데 계산만 틀린 경우 재교육은 역효과).
@@ -47,6 +49,15 @@ CoachingFocus = Literal[
   *이 포커스를 반환하지 않는다*(BKT/IRT만으로 결정 불가·선수 그래프 입력 필요) — 별도 순수
   결정 함수 `recommend_prerequisite_coaching`(`l4.prerequisite_coaching`)이 선수 갭에서 빌드한다.
   여기 dict 항목은 일관성·exhaustiveness(키 집합 == CoachingFocus)용 일반 템플릿이다.
+- `calibration_overconfident`: *과신 구간* — 틀렸으나 자기보고 확신이 높음(예측 vs 실제 불일치).
+  자기점검·가정 재검토를 유도한다(소크라테스 강화·ASSUMPTION). `recommend_coaching`은 *이 포커스를
+  반환하지 않는다*(BKT/IRT가 아니라 *확신도↔정오답* 보정 입력 필요) — 별도 순수 결정 함수
+  `recommend_calibration_coaching`(`l4.calibration_coaching`)이 보정 신호에서 빌드한다. 측정 단계
+  (⑥ Brier 보정 점수·`harness`)가 *얼마나* 어긋났는지 잰다면, 이 코칭은 그 어긋남을 *학생별 행동*
+  으로 잇는다(측정→코칭).
+- `calibration_underconfident`: *과소신 구간* — 맞았으나 확신이 낮음. 성취를 명시해 효능감을
+  회복시킨다(META). prerequisite_review·overconfident와 동일하게 `recommend_coaching` 밖·별도
+  결정 함수가 빌드한다(아래 dict 항목은 exhaustiveness용 정본 템플릿).
 """
 
 # 포커스별 근거(rationale)·학생 노출 코칭 발화(prompt) — 답을 주지 않는 메타인지 유도.
@@ -59,6 +70,9 @@ _RATIONALE: dict[CoachingFocus, str] = {
     "diagnose": "한쪽 신호만 있어 교차검증 불가 — 문항을 더 풀어 상태를 정확히 파악.",
     "prerequisite_review": "선수개념 미숙달이 후행 개념의 근본 장애물 — 선수부터 복습 권장"
     "(LTHC·기초 우선).",
+    "calibration_overconfident": "과신 구간(틀렸으나 확신 높음) — 자기점검·가정 재검토 유도"
+    "(소크라테스 강화).",
+    "calibration_underconfident": "과소신 구간(맞았으나 확신 낮음) — 성취 명시·효능감 회복.",
 }
 _PROMPT: dict[CoachingFocus, str] = {
     "verify": "계산을 한 단계씩 다시 짚어보면서 어디서 숫자가 어긋났는지 찾아볼래?",
@@ -69,6 +83,10 @@ _PROMPT: dict[CoachingFocus, str] = {
     "diagnose": "이 개념 문제를 몇 개 더 풀어보면 네 상태를 더 정확히 볼 수 있어.",
     "prerequisite_review": "지금 개념 전에, 먼저 막힌 선수개념부터 한 번 같이 복습해 볼까? "
     "기초가 탄탄해지면 훨씬 수월할 거야.",
+    "calibration_overconfident": "이번엔 아쉽게 안 맞았네. 어디서 그렇게 확신했는지 "
+    "같이 한 줄씩 짚어볼까?",
+    "calibration_underconfident": "맞았어! 충분히 잘 풀었는데 스스로는 자신이 없었구나. "
+    "다음엔 네 풀이를 좀 더 믿어도 돼.",
 }
 # verify 포커스의 *단계 자가검산* 변형 — 다단계 대수 슬립(L3 error_kind="solution")일 때만 쓴다.
 # 위치를 *지목하지 않고* 학생이 스스로 인접 줄의 해 일관성을 확인하게 한다(답 미루기·slice 61).
@@ -85,6 +103,8 @@ _SOCRATIC_BY_FOCUS: dict[CoachingFocus, SocraticCategory] = {
     "advance": SocraticCategory.PERSPECTIVE,
     "diagnose": SocraticCategory.CLARIFICATION,
     "prerequisite_review": SocraticCategory.CLARIFICATION,  # 기초 지향(선수 명료화)
+    "calibration_overconfident": SocraticCategory.ASSUMPTION,  # 가정 재검토(왜 확신?)
+    "calibration_underconfident": SocraticCategory.META,  # 메타인지·효능감
 }
 
 

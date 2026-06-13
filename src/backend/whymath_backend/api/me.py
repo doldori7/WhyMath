@@ -96,6 +96,7 @@ from whymath_backend.l2.weak_concept_recommendation import (
     WeakConceptRecommendation,
     recommend_weak_concepts,
 )
+from whymath_backend.l4.calibration_coaching import recommend_calibration_coaching
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
@@ -511,6 +512,14 @@ class AttemptSubmitResponse(BaseModel):
     attempt_id: uuid.UUID
     is_correct: bool
     mastery_updates: list[ConceptMasteryUpdate]
+    calibration_coaching: CoachingTrigger | None = Field(
+        default=None,
+        description=(
+            "보정(calibration) 코칭(WH-1 §11.4) — 자기보고 확신도↔정오답 불일치 시 처방. "
+            "과신(틀렸으나 확신↑)·과소신(맞았으나 확신↓) 구간에서만 채워지고, 잘 보정됐거나 "
+            "확신 미제출(None)이면 null. 적재 로직과 무관한 순수 L4 결정(측정→코칭)."
+        ),
+    )
 
 
 @router.post(
@@ -547,6 +556,11 @@ async def submit_attempt(
     records = await record_problem_attempt_mastery(
         session, user.user_id, body.problem_id, body.is_correct
     )
+    # WH-1 §11.4 보정 루프: 이미 받은 자기보고 확신도↔정오답에서 과신/과소신 코칭 결정.
+    # 순수 L4 결정(DB 무접근·적재 로직 불변)·확신 미제출(None)이면 None(자연).
+    calibration_coaching = recommend_calibration_coaching(
+        body.confidence_self_reported, body.is_correct
+    )
     return AttemptSubmitResponse(
         attempt_id=attempt.attempt_id,
         is_correct=body.is_correct,
@@ -559,6 +573,7 @@ async def submit_attempt(
             )
             for r in records
         ],
+        calibration_coaching=calibration_coaching,
     )
 
 
