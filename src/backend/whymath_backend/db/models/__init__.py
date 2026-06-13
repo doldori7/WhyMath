@@ -65,6 +65,10 @@ from whymath_backend.db.models.provenance import (
     ContentProvenance,
     GenerationLog,
 )
+from whymath_backend.db.models.solution_node import (
+    NodeVerifyStatus,
+    SolutionNode,
+)
 from whymath_backend.db.models.textbook_mapping import (
     TextbookMapping,
     TextbookUnit,
@@ -128,4 +132,7 @@ __all__ = [
     "ConceptEmbedding",
     # 개념그래프 소비 슬1: ConceptNode (L1 개념 메타 PG 프로젝션·UC 키·검색 enrichment 백킹)
     "ConceptNode",
+    # WH-S S1: SolutionNode (풀이 경로 트리 노드·§2.1·오프라인 솔버 상태) + 검증 상태 enum
+    "SolutionNode",
+    "NodeVerifyStatus",
 ]
