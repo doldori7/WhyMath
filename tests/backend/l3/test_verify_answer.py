@@ -117,11 +117,6 @@ class TestUnverifiable:
         assert result.state == "unverifiable"
         assert result.reason is not None
 
-    def test_inequality_relation_is_unverifiable(self) -> None:
-        # 부등식은 Tier1 등식 잔차 모델 밖 — 보수적 unverifiable(pass 위장 금지).
-        result = verify_answer("x**2 < 10", {"x": "3"})
-        assert result.state == "unverifiable"
-
     def test_unparseable_answer_is_unverifiable(self) -> None:
         result = verify_answer("x = 1", {"x": ")(+"})
         assert result.state == "unverifiable"
@@ -199,3 +194,195 @@ class TestResultShape:
         result = verify_answer("x = 1", {"x": "1"})
         assert result.state == "pass"
         assert result.reason is None
+
+
+class TestInequalityRelations:
+    """부등식·≠ 관계 — 잔차 진리값 평가 경로(>,<,>=,<=,!=)."""
+
+    def test_strict_greater_pass(self) -> None:
+        # x > 0 의 답 x=3 — 잔차 3 > tol → True → pass.
+        result = verify_answer("x > 0", {"x": "3"})
+        assert result.state == "pass"
+        assert result.reason is None
+
+    def test_geq_pass(self) -> None:
+        # x² >= 4 의 답 x=3 — 잔차 5 >= 0 → pass.
+        result = verify_answer("x**2 >= 4", {"x": "3"})
+        assert result.state == "pass"
+
+    def test_strict_greater_fail(self) -> None:
+        # x > 0 의 답 x=-1 — 잔차 -1 < -tol → False → fail.
+        result = verify_answer("x > 0", {"x": "-1"})
+        assert result.state == "fail"
+        assert result.reason is not None
+
+    def test_less_than_pass(self) -> None:
+        result = verify_answer("x < 10", {"x": "3"})
+        assert result.state == "pass"
+
+    def test_leq_fail(self) -> None:
+        # x <= 0 의 답 x=5 — 잔차 5 > tol → 위반 → fail.
+        result = verify_answer("x <= 0", {"x": "5"})
+        assert result.state == "fail"
+
+    def test_not_equal_pass(self) -> None:
+        # x != 1 의 답 x=2 — 잔차 1 ≠ 0 → 만족 → pass.
+        result = verify_answer("x != 1", {"x": "2"})
+        assert result.state == "pass"
+
+    def test_not_equal_fail(self) -> None:
+        # x != 1 의 답 x=1 — 잔차 ≈ 0 → 위반(같음) → fail.
+        result = verify_answer("x != 1", {"x": "1"})
+        assert result.state == "fail"
+
+    def test_geq_boundary_is_pass(self) -> None:
+        # 등호 부등식 경계 — x >= 2 의 답 x=2: 잔차 0, 경계 포함 → pass(tol 감안).
+        result = verify_answer("x >= 2", {"x": "2"})
+        assert result.state == "pass"
+
+    def test_strict_boundary_is_unverifiable(self) -> None:
+        # 엄격 부등식 경계 — x > 2 의 답 x=2: 잔차 0, 엄격이라 모호 → pass 위장 금지·unverifiable.
+        result = verify_answer("x > 2", {"x": "2"})
+        assert result.state == "unverifiable"
+
+    def test_parametric_inequality_pass(self) -> None:
+        # a*x <= 0 의 답 x=0 — 모든 a에서 0 <= 0 → 경계 포함 만족(샘플링) → pass.
+        result = verify_answer("a*x <= 0", {"x": "0"})
+        assert result.state == "pass"
+        assert result.samples_checked >= 1
+
+    def test_parametric_inequality_fail(self) -> None:
+        # a² >= 0 은 항상 참이나, a² <= -1 은 어느 샘플서든 위반 → fail.
+        result = verify_answer("a**2 <= -1", {})
+        assert result.state == "fail"
+
+    def test_inequality_complex_is_unverifiable(self) -> None:
+        # 부등식 잔차가 복소(실수 부등식 평가 불가) → unverifiable(pass/fail 위장 금지).
+        result = verify_answer("x > 0", {"x": "sqrt(-4)"})
+        assert result.state == "unverifiable"
+
+    def test_inequality_deterministic(self) -> None:
+        r1 = verify_answer("a*x <= 0", {"x": "0"})
+        r2 = verify_answer("a*x <= 0", {"x": "0"})
+        assert r1.state == r2.state
+        assert r1.samples_checked == r2.samples_checked
+
+    def test_strict_less_fail(self) -> None:
+        # x < 10 의 답 x=20 — 잔차 10 > tol → 위반(<의 반대) → fail.
+        result = verify_answer("x < 10", {"x": "20"})
+        assert result.state == "fail"
+
+    def test_strict_less_boundary_is_unverifiable(self) -> None:
+        # x < 5 의 답 x=5 — 잔차 0, 엄격이라 경계 모호 → unverifiable.
+        result = verify_answer("x < 5", {"x": "5"})
+        assert result.state == "unverifiable"
+
+    def test_leq_boundary_is_pass(self) -> None:
+        # x <= 5 의 답 x=5 — 경계 포함 → pass.
+        result = verify_answer("x <= 5", {"x": "5"})
+        assert result.state == "pass"
+
+    def test_geq_below_is_fail(self) -> None:
+        # x >= 5 의 답 x=1 — 잔차 -4 < -tol → 위반 → fail.
+        result = verify_answer("x >= 5", {"x": "1"})
+        assert result.state == "fail"
+
+    def test_parametric_strict_boundary_all_skipped_is_unverifiable(self) -> None:
+        # x > 0 의 답 x=a*0=0 — 모든 a에서 잔차 0(엄격 경계 모호) → 유효 샘플 0 → unverifiable.
+        result = verify_answer("x > 0", {"x": "a*0"})
+        assert result.state == "unverifiable"
+        assert result.samples_checked == 0
+
+    def test_eval_relation_unknown_op_raises(self) -> None:
+        # 방어적 — _eval_relation에 미지원 연산자는 예외(내부 가드·공개 API선 도달 불가).
+        from whymath_backend.l3 import verify_answer as mod
+
+        try:
+            mod._eval_relation(1.0, "??", 1e-9)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("미지원 연산자는 ValueError")
+
+    def test_parse_unsupported_relation_is_unverifiable(self) -> None:
+        # 진리값으로 접히는 상수 관계(2 > 1)는 잔차 모델 환원 불가 → unverifiable.
+        result = verify_answer("2 > 1", {"x": "1"})
+        assert result.state == "unverifiable"
+
+    def test_parametric_inequality_singular_skipped_still_pass(self) -> None:
+        # b/a > -1 형태 — a=0 경계 샘플은 0 나눔(특이점)이라 건너뛰고, 나머지 유효 샘플로 판정.
+        # 잔차 b/a - (-1)에서 일부 샘플 특이점 → continue 경로(건너뜀) 후 유효 샘플 평가.
+        result = verify_answer("a*x >= a*x", {"x": "1"})  # 항상 등호 성립 → pass.
+        assert result.state == "pass"
+
+    def test_parametric_inequality_complex_samples_skipped(self) -> None:
+        # sqrt(-a²-1) > 0 — 모든 실수 a에서 복소 → 유효 샘플 0 → unverifiable(복소 건너뜀).
+        result = verify_answer("sqrt(-a**2 - 1) > 0", {})
+        assert result.state == "unverifiable"
+
+    def test_parametric_inequality_mixed_boundary_decides(self) -> None:
+        # a > 0 (자유변수 a) — 음수 샘플(a=-1 등)에서 위반 검출 → fail(경계 0은 건너뛰되 반례 존재).
+        result = verify_answer("a > 0", {})
+        assert result.state == "fail"
+
+
+class TestConjunction:
+    """연립(여러 조건 AND) — 하위호환(단일 str 불변)·AND 결합·보수적 unverifiable."""
+
+    def test_system_all_satisfied_is_pass(self) -> None:
+        # x+y=3, x-y=1 의 해 x=2, y=1 — 두 조건 모두 만족 → pass.
+        result = verify_answer(["x + y = 3", "x - y = 1"], {"x": "2", "y": "1"})
+        assert result.state == "pass"
+        assert result.reason is None
+
+    def test_system_one_violated_is_fail(self) -> None:
+        # 한 조건(x-y=5)을 위반 → 연립 전체 fail. reason에 조건 인덱스 표기.
+        result = verify_answer(["x + y = 3", "x - y = 5"], {"x": "2", "y": "1"})
+        assert result.state == "fail"
+        assert result.reason is not None
+        assert "1번" in result.reason  # 인덱스 1번 조건이 위반.
+
+    def test_system_mixed_inequality_pass(self) -> None:
+        # 등식 + 부등식 혼합 연립 — x=3: x>0 만족 그리고 x²-9=0 만족 → pass.
+        result = verify_answer(["x > 0", "x**2 - 9 = 0"], {"x": "3"})
+        assert result.state == "pass"
+
+    def test_system_unverifiable_no_fail_is_unverifiable(self) -> None:
+        # 한 조건은 만족, 다른 조건은 판정 불가(파싱 불가)·fail 없음 → 보수적 unverifiable.
+        result = verify_answer(["x = 1", "@@@nonsense@@@"], {"x": "1"})
+        assert result.state == "unverifiable"
+        assert result.reason is not None
+
+    def test_system_fail_takes_priority_over_unverifiable(self) -> None:
+        # fail과 unverifiable이 섞이면 fail 우선(답이 한 조건이라도 명백히 위반).
+        result = verify_answer(["x = 2", "@@@nonsense@@@"], {"x": "1"})
+        assert result.state == "fail"
+
+    def test_empty_sequence_is_unverifiable(self) -> None:
+        # 빈 시퀀스 — 검증할 조건 없음. pass 위장 금지·unverifiable.
+        result = verify_answer([], {"x": "1"})
+        assert result.state == "unverifiable"
+        assert result.samples_checked == 0
+
+    def test_single_element_sequence_matches_str(self) -> None:
+        # 단일 원소 시퀀스는 단일 str과 동일 판정(일관성).
+        as_str = verify_answer("x**2 - 5*x + 6 = 0", {"x": "3"})
+        as_seq = verify_answer(["x**2 - 5*x + 6 = 0"], {"x": "3"})
+        assert as_str.state == as_seq.state == "pass"
+
+    def test_samples_checked_is_summed(self) -> None:
+        # 연립 samples_checked는 각 조건 유효 샘플의 합산(검증 노력 척도).
+        result = verify_answer(["x + y = 3", "x - y = 1"], {"x": "2", "y": "1"})
+        assert result.state == "pass"
+        assert result.samples_checked >= 2  # 두 직접대입 조건 합산.
+
+    def test_tuple_input_supported(self) -> None:
+        # Sequence면 tuple도 허용(str만 단일 경로·나머지 Sequence 연립).
+        result = verify_answer(("x = 2", "y = 1"), {"x": "2", "y": "1"})
+        assert result.state == "pass"
+
+    def test_system_deterministic(self) -> None:
+        r1 = verify_answer(["a*x = b", "x + y = 0"], {"x": "b/a", "y": "-b/a"})
+        r2 = verify_answer(["a*x = b", "x + y = 0"], {"x": "b/a", "y": "-b/a"})
+        assert r1.state == r2.state
+        assert r1.samples_checked == r2.samples_checked
