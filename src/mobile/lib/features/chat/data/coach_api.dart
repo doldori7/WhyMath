@@ -1,8 +1,8 @@
-/// L4 코치 API 클라이언트 — `POST /v1/coach`(스테이트리스 통합 결정) 호출.
-///
-/// 경계(CLAUDE.md): 요청을 보내고 `CoachResponse`를 구조 그대로 받는다. 수학·교수학 결정은
-/// 전부 서버(L4)가 내리고, 클라는 결과를 렌더링만 한다(표현≠의미). 인증 헤더·세션 토큰은
-/// 후속 슬라이스(인증 플로우 도입 시 인터셉터로 추가).
+// L4 코치 API 클라이언트 — `POST /v1/coach`(스테이트리스 통합 결정) 호출.
+//
+// 경계(CLAUDE.md): 요청을 보내고 `CoachResponse`를 구조 그대로 받는다. 수학·교수학 결정은
+// 전부 서버(L4)가 내리고, 클라는 결과를 렌더링만 한다(표현≠의미). 인증 헤더·세션 토큰은
+// 후속 슬라이스(인증 플로우 도입 시 인터셉터로 추가).
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 

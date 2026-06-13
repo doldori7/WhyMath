@@ -1,17 +1,17 @@
-/// L4 교수학 코치 API 데이터 모델 — 백엔드 `POST /v1/coach` 계약을 *구조 그대로* 옮긴다.
-///
-/// 정본: `src/backend/whymath_backend/api/coach.py`(`CoachRequest`·`CoachResponse`) +
-/// 중첩 모델(`PedagogyDecision`·`CoachingTrigger`·`SolutionCoaching`·`MisconceptionMatch`·
-/// `InterventionDecision`·`LthcAdaptation`·`SolutionVerificationResult`).
-///
-/// **경계(CLAUDE.md)**: 이 클래스들은 *수신 컨테이너*일 뿐이다 — 검증·진단·결정 *로직*은
-/// 전부 서버(L1-L4)에 있고, 클라는 결정된 신호를 구조 그대로 받아 렌더링만 한다(표현≠의미).
-/// 정답·검증 사유 같은 누출 위험 필드는 백엔드가 애초에 응답에 싣지 않는다(coach.py 계약).
-///
-/// **enum 표현 방침**: 백엔드 문자열 enum(focus·socratic_category·intervention pattern 등)은
-/// 대부분 `String`으로 유지한다(과확장 회피·백엔드 값 그대로 보존·codegen 리스크 최소화).
-/// 라벨·표기는 백엔드가 한국어 문자열(rationale·prompt)로 내려주므로 클라가 enum을 해석할
-/// 필요가 적다. 향후 UI 분기에서 필요하면 @JsonValue enum으로 좁힌다.
+// L4 교수학 코치 API 데이터 모델 — 백엔드 `POST /v1/coach` 계약을 *구조 그대로* 옮긴다.
+//
+// 정본: `src/backend/whymath_backend/api/coach.py`(`CoachRequest`·`CoachResponse`) +
+// 중첩 모델(`PedagogyDecision`·`CoachingTrigger`·`SolutionCoaching`·`MisconceptionMatch`·
+// `InterventionDecision`·`LthcAdaptation`·`SolutionVerificationResult`).
+//
+// **경계(CLAUDE.md)**: 이 클래스들은 *수신 컨테이너*일 뿐이다 — 검증·진단·결정 *로직*은
+// 전부 서버(L1-L4)에 있고, 클라는 결정된 신호를 구조 그대로 받아 렌더링만 한다(표현≠의미).
+// 정답·검증 사유 같은 누출 위험 필드는 백엔드가 애초에 응답에 싣지 않는다(coach.py 계약).
+//
+// **enum 표현 방침**: 백엔드 문자열 enum(focus·socratic_category·intervention pattern 등)은
+// 대부분 `String`으로 유지한다(과확장 회피·백엔드 값 그대로 보존·codegen 리스크 최소화).
+// 라벨·표기는 백엔드가 한국어 문자열(rationale·prompt)로 내려주므로 클라가 enum을 해석할
+// 필요가 적다. 향후 UI 분기에서 필요하면 @JsonValue enum으로 좁힌다.
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 part 'coach_models.freezed.dart';

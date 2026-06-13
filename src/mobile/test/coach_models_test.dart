@@ -1,10 +1,10 @@
-/// coach_models 역직렬화·라운드트립 테스트.
-///
-/// 백엔드 `CoachResponse` 샘플 JSON(이 세션 WH-1 1단계 신호 전부 포함)을 `fromJson`으로
-/// 파싱해 필드를 단언하고, `toJson` 라운드트립으로 키·값 보존을 검증한다. 백엔드 계약과
-/// 클라 모델이 *비트 정합*하는지(필드명·nullable·중첩) 확인하는 게이트다.
-///
-/// 로컬 SDK 부재로 이 테스트는 CI Flutter 잡에서만 실행된다(build_runner codegen 후).
+// coach_models 역직렬화·라운드트립 테스트.
+//
+// 백엔드 `CoachResponse` 샘플 JSON(이 세션 WH-1 1단계 신호 전부 포함)을 `fromJson`으로
+// 파싱해 필드를 단언하고, `toJson` 라운드트립으로 키·값 보존을 검증한다. 백엔드 계약과
+// 클라 모델이 *비트 정합*하는지(필드명·nullable·중첩) 확인하는 게이트다.
+//
+// 로컬 SDK 부재로 이 테스트는 CI Flutter 잡에서만 실행된다(build_runner codegen 후).
 import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/features/chat/data/coach_models.dart';
 

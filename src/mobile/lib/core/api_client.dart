@@ -1,8 +1,8 @@
-/// Dio HTTP 클라이언트 — 독립 수학 코어(L1-L4) API 소비 단일 경로.
-///
-/// 모든 백엔드 호출은 이 Dio 인스턴스를 거친다(baseUrl·타임아웃·공통 헤더 일원화).
-/// LLM·수학 검증은 *서버에서만* 수행되고, 클라이언트는 결과 JSON을 구조 그대로 수신한다
-/// (CLAUDE.md: 수학 로직을 클라에 넣지 않는다·표현≠의미).
+// Dio HTTP 클라이언트 — 독립 수학 코어(L1-L4) API 소비 단일 경로.
+//
+// 모든 백엔드 호출은 이 Dio 인스턴스를 거친다(baseUrl·타임아웃·공통 헤더 일원화).
+// LLM·수학 검증은 *서버에서만* 수행되고, 클라이언트는 결과 JSON을 구조 그대로 수신한다
+// (CLAUDE.md: 수학 로직을 클라에 넣지 않는다·표현≠의미).
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
