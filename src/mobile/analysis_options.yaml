@@ -1,0 +1,13 @@
+# Flutter 정적 분석 설정 — flutter_lints 권장 규칙 채택(보수적·관용적 Flutter).
+#
+# codegen 산출물(*.freezed.dart·*.g.dart)은 손으로 쓰지 않으므로 분석에서 제외한다 —
+# 생성기 출력은 종종 린트 규칙을 어겨 `flutter analyze`를 실패시킬 수 있다(우리 코드 아님).
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  exclude:
+    - "**/*.freezed.dart"
+    - "**/*.g.dart"
+  errors:
+    # 생성 코드 관련 잡음을 줄이되, 우리 코드 품질 게이트는 유지.
+    invalid_annotation_target: ignore

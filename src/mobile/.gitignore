@@ -1,0 +1,26 @@
+# Flutter/Dart 표준 .gitignore — codegen 산출물은 *커밋하지 않고* CI build_runner가 생성한다.
+
+# Dart/Flutter 빌드·도구 산출물
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+pubspec.lock
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# codegen 산출물 (freezed·json_serializable·riverpod) — CI가 build_runner로 생성.
+# 생성물을 커밋하면 손 검증 불가 환경에서 *낡은 산출물*이 진실을 가린다 → 항상 CI 생성.
+*.freezed.dart
+*.g.dart
+
+# macOS·잡동사니
+.DS_Store
