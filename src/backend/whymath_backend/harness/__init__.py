@@ -19,15 +19,19 @@
 from __future__ import annotations
 
 from whymath_backend.harness.wh1_evaluation import (
+    HelpReductionValidation,
     Metric,
     MetricStatus,
+    R15Verdict,
     SurrogateMetrics,
     compute_wh1_surrogate_metrics,
 )
 
 __all__ = [
+    "HelpReductionValidation",
     "Metric",
     "MetricStatus",
+    "R15Verdict",
     "SurrogateMetrics",
     "compute_wh1_surrogate_metrics",
 ]

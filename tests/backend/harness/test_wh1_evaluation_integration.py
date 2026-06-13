@@ -27,10 +27,15 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
-from whymath_backend.db.models.activity import AttemptEvent, LearningSession
+from whymath_backend.db.models.activity import (
+    AttemptEvent,
+    LearningSession,
+    ProblemAttempt,
+)
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
+from whymath_backend.schema.activity import ProblemAttempt as ProblemAttemptSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import EventType, Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
@@ -72,9 +77,14 @@ async def _cleanup(user_ids: list[uuid.UUID]) -> None:
     ids = [str(u) for u in user_ids]
     try:
         async with engine.begin() as conn:
-            # FK 순서: 자식(dialogue·learning_session·attempt_event) 먼저, 부모(user_profile) 나중.
+            # FK 순서: 자식(dialogue·problem_attempt·learning_session·attempt_event) 먼저,
+            # 부모(user_profile) 나중. problem_attempt는 learning_session 자식이므로 먼저 지운다.
             await conn.execute(
                 text("DELETE FROM dialogue WHERE user_id = ANY(:ids)"), {"ids": ids}
+            )
+            await conn.execute(
+                text("DELETE FROM problem_attempt WHERE user_id = ANY(:ids)"),
+                {"ids": ids},
             )
             await conn.execute(
                 text("DELETE FROM attempt_event WHERE user_id = ANY(:ids)"),
@@ -146,6 +156,23 @@ def _hint_event_row(uid: uuid.UUID, *, hint_level: int, order: int) -> AttemptEv
     )
 
 
+def _attempt_row(uid: uuid.UUID, *, is_correct: bool, order: int) -> ProblemAttempt:
+    """ProblemAttempt 1행(is_correct) — R15 정답률 추세 표본.
+
+    `order`로 started_at을 서로 다르게 어긋내(now + order초) started_at 오름차순 정렬이
+    결정적이게 한다 — 정답률 OLS x축이 적재 순서와 일치하도록. problem_id는 nullable FK라
+    None으로 둔다(별도 problem 행 적재 회피·집계는 is_correct만 본다).
+    """
+    return ProblemAttempt.from_schema(
+        ProblemAttemptSchema(
+            attempt_id=uuid.uuid4(),
+            user_id=uid,
+            started_at=datetime.now(UTC) + timedelta(seconds=order),
+            is_correct=is_correct,
+        )
+    )
+
+
 def _client() -> TestClient:
     app = create_app()
     app.dependency_overrides[get_settings] = _settings
@@ -204,6 +231,17 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
                 _hint_event_row(uid_b, hint_level=4, order=0),
             )
         )
+        # A: ProblemAttempt 4개(is_correct F→T→T→T·started_at 순서) → 정답률 추세 상승(양수
+        # 기울기). 도움↓(−1.0)·정답률↑ 교차 → R15 GENUINE_IMPROVEMENT. B는 1개(스코핑·제외).
+        asyncio.run(
+            _add_all(
+                _attempt_row(uid_a, is_correct=False, order=0),
+                _attempt_row(uid_a, is_correct=True, order=1),
+                _attempt_row(uid_a, is_correct=True, order=2),
+                _attempt_row(uid_a, is_correct=True, order=3),
+                _attempt_row(uid_b, is_correct=False, order=0),
+            )
+        )
         token_a = create_access_token(uid_a, settings=_settings())
         auth = {"Authorization": f"Bearer {token_a}"}
         with _client() as client:
@@ -239,6 +277,14 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
             assert body["sample_hint_events"] == 4
             assert "R15" in hrs["note"]  # 정확률 교차검증 미반영 정직 표기
             assert "종단" in hrs["note"]
+
+            # R15 결합 판정 — 도움↓(−1.0)·정답률↑(F→T→T→T) → GENUINE_IMPROVEMENT·표본 4
+            # (B의 1건 제외 — 스코핑). is_correct 추세(① 검산 proxy 아님)로 교차.
+            hrv = body["help_reduction_validated"]
+            assert hrv["verdict"] == "genuine_improvement"
+            assert hrv["help_slope"] == -1.0
+            assert hrv["accuracy_slope"] is not None and hrv["accuracy_slope"] > 0
+            assert body["sample_accuracy_attempts"] == 4
 
             # 미계측 3종(②⑥⑦) — value None·고정 status(날조 0).
             assert body["diagnosis_agreement_rate"]["status"] == "requires_data"
@@ -284,9 +330,15 @@ def test_harness_metrics_no_data_when_empty_on_live_pg() -> None:
             # ⑤ 도움 감소 곡선 — 힌트제공 0건 → NO_DATA·value None(가짜 기울기/0 금지).
             assert body["help_reduction_slope"]["status"] == "no_data"
             assert body["help_reduction_slope"]["value"] is None
+            # R15 결합 판정 — 도움/정답률 둘 다 표본 0 → INSUFFICIENT_DATA(날조 판정 금지).
+            hrv = body["help_reduction_validated"]
+            assert hrv["verdict"] == "insufficient_data"
+            assert hrv["help_slope"] is None
+            assert hrv["accuracy_slope"] is None
             assert body["sample_sessions"] == 0
             assert body["sample_dialogues"] == 0
             assert body["sample_verify_events"] == 0
             assert body["sample_hint_events"] == 0
+            assert body["sample_accuracy_attempts"] == 0
     finally:
         asyncio.run(_cleanup([uid]))

@@ -20,9 +20,13 @@ from typing import Any, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.harness.wh1_evaluation import (
+    HelpReductionValidation,
     Metric,
     MetricStatus,
+    R15Verdict,
     SurrogateMetrics,
+    _judge_r15,
+    _ols_slope,
     compute_wh1_surrogate_metrics,
 )
 
@@ -56,7 +60,8 @@ class _FakeSession:
       3) token row(AVG, count·one 튜플)
       4) verify row(passed_count, total·one 튜플)
       5) hint rows(event_at 오름차순 hint_level 행 목록·all)
-    이 5개를 큐로 주입한다 — 정렬·실 SQL은 통합테스트가 실 PG로 검증.
+      6) accuracy rows(started_at 오름차순 is_correct 행 목록·all)
+    이 6개를 큐로 주입한다 — 정렬·실 SQL은 통합테스트가 실 PG로 검증.
     """
 
     def __init__(self, results: list[_FakeScalarResult]) -> None:
@@ -78,10 +83,13 @@ def _make_session(
     verify_passed: int = 0,
     verify_total: int = 0,
     hint_levels: list[int | None] | None = None,
+    accuracy_correct: list[bool | None] | None = None,
 ) -> AsyncSession:
     # ⑤ 힌트 쿼리는 단일 컬럼(.as_integer())을 event_at 오름차순으로 뽑으므로 행은 (level,) 튜플.
     # None(JSONB 파싱 실패)도 섞일 수 있게 그대로 (None,)으로 주입 — 본문이 None을 걸러낸다.
     hint_rows = [(lvl,) for lvl in (hint_levels or [])]
+    # R15 정답률 쿼리는 단일 컬럼(is_correct)을 started_at 오름차순으로 뽑으므로 행은 (bool,) 튜플.
+    accuracy_rows = [(c,) for c in (accuracy_correct or [])]
     return cast(
         AsyncSession,
         _FakeSession(
@@ -91,6 +99,7 @@ def _make_session(
                 _FakeScalarResult(one=(avg_tokens, token_sample)),
                 _FakeScalarResult(one=(verify_passed, verify_total)),
                 _FakeScalarResult(all_rows=hint_rows),
+                _FakeScalarResult(all_rows=accuracy_rows),
             ]
         ),
     )
@@ -349,13 +358,14 @@ class TestUnmeasuredMetrics:
 # ── 메타·필드셋·스코핑 ───────────────────────────────────────────────────────
 class TestMetaAndFieldSet:
     async def test_field_set_complete(self) -> None:
-        """SurrogateMetrics가 7 지표 + 메타(sample_hint_events 포함)를 모두 보유."""
+        """SurrogateMetrics가 7 지표 + R15 결합 판정 + 메타(표본 수 포함)를 모두 보유."""
         session = _make_session(
             total_sessions=2,
             completed_sessions=1,
             avg_tokens=12.0,
             token_sample=4,
             hint_levels=[4, 3, 2],
+            accuracy_correct=[True, True, True],
         )
         m = await compute_wh1_surrogate_metrics(session)
         for name in (
@@ -368,9 +378,11 @@ class TestMetaAndFieldSet:
             "transfer_score",
         ):
             assert isinstance(getattr(m, name), Metric)
+        assert isinstance(m.help_reduction_validated, HelpReductionValidation)
         assert m.sample_sessions == 2
         assert m.sample_dialogues == 4
         assert m.sample_hint_events == 3  # 유효 hint_level 행 수
+        assert m.sample_accuracy_attempts == 3  # is_correct NOT NULL 행 수
 
     async def test_user_scoped_true_when_user_id(self) -> None:
         session = _make_session(
@@ -396,3 +408,172 @@ class TestMetaAndFieldSet:
         m = await compute_wh1_surrogate_metrics(session, since=since, until=until)
         assert m.window_start == since
         assert m.window_end == until
+
+
+# ── _ols_slope 공유 헬퍼(⑤ 리팩터 후 ⑤·R15 공유 코어) ───────────────────────────
+class TestOlsSlope:
+    def test_decreasing_slope(self) -> None:
+        """완전 등차 하강(4,3,2,1) → 기울기 −1.0."""
+        assert _ols_slope([4.0, 3.0, 2.0, 1.0]) == -1.0
+
+    def test_increasing_slope(self) -> None:
+        """완전 등차 상승(1,2,3) → 기울기 +1.0."""
+        assert _ols_slope([1.0, 2.0, 3.0]) == 1.0
+
+    def test_flat_is_zero_not_none(self) -> None:
+        """동일값(3,3,3) → x 분산 양수라 기울기 0.0(실측 평탄·날조 0 아님)."""
+        assert _ols_slope([3.0, 3.0, 3.0]) == 0.0
+
+    def test_too_few_points_is_none(self) -> None:
+        """포인트 < _MIN_SLOPE_POINTS(3) → None(가짜 기울기/0 금지)."""
+        assert _ols_slope([4.0, 2.0]) is None
+        assert _ols_slope([1.0]) is None
+        assert _ols_slope([]) is None
+
+
+# ── _judge_r15 결합 판정(R15 4분기) ──────────────────────────────────────────────
+class TestJudgeR15:
+    def test_genuine_improvement_help_down_accuracy_up(self) -> None:
+        """도움↓(−1)·정답률↑(+0.5) → GENUINE_IMPROVEMENT(진짜 개선)."""
+        v = _judge_r15(-1.0, 0.5)
+        assert v.verdict is R15Verdict.GENUINE_IMPROVEMENT
+        assert v.help_slope == -1.0
+        assert v.accuracy_slope == 0.5
+        assert "진짜 개선" in v.note
+
+    def test_genuine_improvement_accuracy_flat_boundary(self) -> None:
+        """도움↓·정답률 유지(0·경계 포함) → GENUINE_IMPROVEMENT(slope 0 임계)."""
+        v = _judge_r15(-0.3, 0.0)
+        assert v.verdict is R15Verdict.GENUINE_IMPROVEMENT
+
+    def test_gaming_suspect_help_down_accuracy_down(self) -> None:
+        """도움↓(−1)이나 정답률↓(−0.5) → GAMING_SUSPECT(교정기 함정·힌트 회피 의심)."""
+        v = _judge_r15(-1.0, -0.5)
+        assert v.verdict is R15Verdict.GAMING_SUSPECT
+        assert "교정기 함정" in v.note
+
+    def test_no_help_reduction_positive_help_slope(self) -> None:
+        """도움 기울기 >= 0(안 줄어듦) → NO_HELP_REDUCTION(개선 신호 아님)."""
+        assert _judge_r15(0.5, -1.0).verdict is R15Verdict.NO_HELP_REDUCTION
+        # 경계 0도 도움 안 줄어듦(>= 0) — 정답률 부호 무관.
+        assert _judge_r15(0.0, 0.9).verdict is R15Verdict.NO_HELP_REDUCTION
+
+    def test_insufficient_data_when_help_none(self) -> None:
+        """도움 기울기 None(표본 부족) → INSUFFICIENT_DATA(날조 판정 금지)."""
+        v = _judge_r15(None, 0.5)
+        assert v.verdict is R15Verdict.INSUFFICIENT_DATA
+        assert v.help_slope is None
+        assert v.accuracy_slope == 0.5
+
+    def test_insufficient_data_when_accuracy_none(self) -> None:
+        """정답률 기울기 None(표본 부족) → INSUFFICIENT_DATA(한쪽이라도 부족이면)."""
+        v = _judge_r15(-1.0, None)
+        assert v.verdict is R15Verdict.INSUFFICIENT_DATA
+
+    def test_insufficient_data_when_both_none(self) -> None:
+        assert _judge_r15(None, None).verdict is R15Verdict.INSUFFICIENT_DATA
+
+
+# ── R15 결합 판정 — compute_wh1_surrogate_metrics 통합(FakeSession is_correct 주입) ──
+class TestHelpReductionValidatedIntegratedWithCompute:
+    async def _validate(
+        self,
+        *,
+        hint_levels: list[int | None] | None,
+        accuracy_correct: list[bool | None] | None,
+    ) -> HelpReductionValidation:
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            hint_levels=hint_levels,
+            accuracy_correct=accuracy_correct,
+        )
+        return (await compute_wh1_surrogate_metrics(session)).help_reduction_validated
+
+    async def test_genuine_improvement(self) -> None:
+        """도움↓(4→3→2→1)·정답률↑(F→T→T→T) → GENUINE_IMPROVEMENT."""
+        v = await self._validate(
+            hint_levels=[4, 3, 2, 1],
+            accuracy_correct=[False, True, True, True],
+        )
+        assert v.verdict is R15Verdict.GENUINE_IMPROVEMENT
+        assert v.help_slope is not None and v.help_slope < 0
+        assert v.accuracy_slope is not None and v.accuracy_slope > 0
+
+    async def test_gaming_suspect(self) -> None:
+        """도움↓(4→3→2→1)이나 정답률↓(T→T→F→F) → GAMING_SUSPECT(힌트 회피 의심)."""
+        v = await self._validate(
+            hint_levels=[4, 3, 2, 1],
+            accuracy_correct=[True, True, False, False],
+        )
+        assert v.verdict is R15Verdict.GAMING_SUSPECT
+        assert v.help_slope is not None and v.help_slope < 0
+        assert v.accuracy_slope is not None and v.accuracy_slope < 0
+
+    async def test_no_help_reduction(self) -> None:
+        """도움↑(1→2→3) → NO_HELP_REDUCTION(정답률 무관)."""
+        v = await self._validate(
+            hint_levels=[1, 2, 3],
+            accuracy_correct=[True, True, True],
+        )
+        assert v.verdict is R15Verdict.NO_HELP_REDUCTION
+
+    async def test_insufficient_when_accuracy_too_few(self) -> None:
+        """도움↓ 충분하나 정답률 표본 부족(2점<3) → INSUFFICIENT_DATA(날조 판정 금지)."""
+        v = await self._validate(
+            hint_levels=[4, 3, 2, 1],
+            accuracy_correct=[True, False],
+        )
+        assert v.verdict is R15Verdict.INSUFFICIENT_DATA
+        assert v.accuracy_slope is None
+
+    async def test_insufficient_when_hint_too_few(self) -> None:
+        """정답률 충분하나 도움 표본 부족(2점<3) → INSUFFICIENT_DATA."""
+        v = await self._validate(
+            hint_levels=[4, 2],
+            accuracy_correct=[True, True, True],
+        )
+        assert v.verdict is R15Verdict.INSUFFICIENT_DATA
+        assert v.help_slope is None
+
+    async def test_accuracy_none_rows_filtered(self) -> None:
+        """is_correct None 행은 본문이 거르므로 sample_accuracy_attempts에서 제외(방어적)."""
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            hint_levels=[4, 3, 2, 1],
+            accuracy_correct=[True, None, True, True],
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        # None 1개 제외 → 유효 3개.
+        assert m.sample_accuracy_attempts == 3
+
+
+# ── ⑤ 리팩터 회귀(비트동일) — _help_reduction_from_levels는 _ols_slope 위임 후도 불변 ──
+class TestHelpReductionRefactorRegression:
+    async def _slope(self, hint_levels: list[int | None]) -> Metric:
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            hint_levels=hint_levels,
+        )
+        return (await compute_wh1_surrogate_metrics(session)).help_reduction_slope
+
+    async def test_measured_value_unchanged(self) -> None:
+        """리팩터 후도 4→3→2→1 기울기 −1.0·MEASURED(⑤ 동작 비트동일)."""
+        m = await self._slope([4, 3, 2, 1])
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == -1.0
+
+    async def test_too_few_note_unchanged(self) -> None:
+        """표본 부족 NO_DATA·'표본 부족' note 보존(가드 분기 비트동일)."""
+        m = await self._slope([4, 2])
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+        assert "표본 부족" in m.note
