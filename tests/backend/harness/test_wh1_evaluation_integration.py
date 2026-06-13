@@ -42,6 +42,7 @@ from whymath_backend.schema.enums import (
     Curriculum,
     EventType,
     Persona,
+    SignaturePattern,
     SourceType,
     Subject,
 )
@@ -251,6 +252,27 @@ def _attempt_on_problem(
     )
 
 
+def _problem_with_patterns(
+    pid: uuid.UUID, *, patterns: list[SignaturePattern]
+) -> Problem:
+    """⑦ 근사 전이 점수용 problem 행(signature_patterns 지정) — 본문 미보유 자체생성 메타.
+
+    같은 시그니처 패턴·다른 problem_id 시퀀스를 만들어 전이 프로브(사전 노출 후 초견)를 적재할
+    때 쓴다. source_type=자체생성·최소 필수 필드만(난이도/본문 불요·패턴 태그만 중요).
+    """
+    return Problem.from_schema(
+        ProblemSchema(
+            problem_id=pid,
+            source_type=SourceType.자체생성,
+            curriculum_version=Curriculum.REVISION_2015,
+            valid_from_year=2024,
+            subject=Subject.공통,
+            unit_codes=["UNIT-1"],
+            signature_patterns=patterns,
+        )
+    )
+
+
 def _client() -> TestClient:
     app = create_app()
     app.dependency_overrides[get_settings] = _settings
@@ -364,15 +386,18 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
             assert hrv["accuracy_slope"] is not None and hrv["accuracy_slope"] > 0
             assert body["sample_accuracy_attempts"] == 4
 
-            # 미계측 2종(②⑦) — value None·고정 status(날조 0).
-            assert body["diagnosis_agreement_rate"]["status"] == "requires_data"
-            assert body["transfer_score"]["status"] == "requires_tool"
+            # ② 진단정확도 — 라벨 프로브 substring recall(오프라인·시스템 지표)로 격상돼
+            # MEASURED(전 user 동일값·user/기간 무관). requires_data stub 아님.
+            assert body["diagnosis_agreement_rate"]["status"] == "measured"
+            # ⑦ 전이 점수 — 위 _attempt_row 4건은 problem_id None이라 전이 프로브 0 → NO_DATA
+            # (근사 전이로 격상·REQUIRES_TOOL stale 교정·가짜 0 금지). 값 있는 경우 별도 테스트.
+            assert body["transfer_score"]["status"] == "no_data"
+            assert body["sample_transfer_probes"] == 0
             # ⑥ 보정 점수 — 위 _attempt_row 4건은 confidence 미지정이라 보정 쌍 0 → NO_DATA
             # (REQUIRES_TOOL stale 진단 교정·가짜 0 금지). 값 있는 경우는 별도 테스트.
             assert body["calibration_brier"]["status"] == "no_data"
             assert body["sample_calibration_pairs"] == 0
             for key in (
-                "diagnosis_agreement_rate",
                 "calibration_brier",
                 "transfer_score",
             ):
@@ -543,3 +568,60 @@ def test_harness_metrics_calibration_brier_measured_on_live_pg() -> None:
             assert body["sample_calibration_pairs"] == 5
     finally:
         asyncio.run(_cleanup([uid]))
+
+
+def test_harness_metrics_transfer_score_measured_on_live_pg() -> None:
+    """⑦ 근사 전이 점수 — 같은 시그니처 패턴·다른 problem_id·사전 노출 후 초견 정답률 MEASURED.
+
+    이 슬라이스 핵심: ProblemAttempt ⨝ Problem.signature_patterns에서 *같은 패턴을 다른
+    문항에서 만난 뒤 새 동형 문항을 처음 풀어 맞혔는가*를 근사한다(설계 §11.5 완전판의
+    assign_transfer_probe·BKT≥0.95+2주 스케줄과 다른 근사). 실 PG에 같은 패턴(CONDITION_LIST)을
+    가진 문항 4개 + started_at 순서 attempt(P1 첫 등장→P2·P3·P4 초견·사전 노출)를 적재해
+    전이 프로브 3건(P2·P3·P4)·정답률 2/3·MEASURED를 확인한다.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid = uuid.uuid4()
+    # 같은 패턴(CONDITION_LIST)을 가진 문항 4개(다른 problem_id) — 동형 시퀀스.
+    pids = [uuid.uuid4() for _ in range(4)]
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(
+            _add_all(
+                *(
+                    _problem_with_patterns(p, patterns=[SignaturePattern.CONDITION_LIST])
+                    for p in pids
+                )
+            )
+        )
+        # P1 첫 등장(사전 노출 0·프로브 아님)→ P2·P3·P4 초견(사전 노출 후 초견 동형).
+        # 정오답: P2 정답·P3 정답·P4 오답 → 전이 프로브 3건·정답률 2/3.
+        asyncio.run(
+            _add_all(
+                _attempt_on_problem(uid, problem_id=pids[0], is_correct=False, order=0),
+                _attempt_on_problem(uid, problem_id=pids[1], is_correct=True, order=1),
+                _attempt_on_problem(uid, problem_id=pids[2], is_correct=True, order=2),
+                _attempt_on_problem(uid, problem_id=pids[3], is_correct=False, order=3),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            resp = client.get("/v1/me/harness-metrics", headers=auth)
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            ts = body["transfer_score"]
+            assert ts["status"] == "measured"
+            assert ts["value"] is not None
+            assert abs(ts["value"] - 2 / 3) < 1e-9  # P2,P3 정답·P4 오답 → 2/3
+            # 전이 프로브 3건(P2·P3·P4 초견·사전 노출·P1 첫 등장 제외).
+            assert body["sample_transfer_probes"] == 3
+            # 근사 정직 표기 — §11.5 완전판과 다른 근사·BKT·2주 스케줄 미반영.
+            assert "근사" in ts["note"]
+            assert "§11.5" in ts["note"]
+    finally:
+        asyncio.run(_cleanup([uid]))
+        asyncio.run(_cleanup_problems(pids))

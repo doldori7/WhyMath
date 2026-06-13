@@ -21,16 +21,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.harness.wh1_evaluation import (
     _MIN_CALIBRATION_SAMPLES,
+    _MIN_TRANSFER_PROBES,
     HelpReductionValidation,
     Metric,
     MetricStatus,
     R15Verdict,
     SurrogateMetrics,
     _calibration_from_pairs,
+    _diagnosis_agreement_offline,
+    _identify_transfer_probes,
     _judge_r15,
     _ols_slope,
+    _transfer_from_probes,
     compute_wh1_surrogate_metrics,
 )
+from whymath_backend.schema.enums import SignaturePattern
+
+# ⑦ 전이 테스트 단축 별칭(긴 enum 이름 회피·가독).
+_P_COND = SignaturePattern.CONDITION_LIST
+_P_GRAPH = SignaturePattern.GRAPH_SHAPE_INFERENCE
+_P_SEQ = SignaturePattern.INDUCTIVE_SEQUENCE
 
 
 class _FakeScalarResult:
@@ -65,7 +75,9 @@ class _FakeSession:
       6) accuracy rows(started_at 오름차순 is_correct 행 목록·all)
       7) difficulty rows(started_at 오름차순 (irt_b, difficulty_overall) 행 목록·all·Problem join)
       8) calibration rows((confidence_self_reported, is_correct) 쌍 목록·all)
-    이 8개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
+      9) transfer rows(started_at 오름차순 (problem_id, signature_patterns, is_correct) 행
+         목록·all·Problem join) — ⑦ 근사 전이 점수 식별 입력.
+    이 9개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
     """
 
     def __init__(self, results: list[_FakeScalarResult]) -> None:
@@ -90,6 +102,7 @@ def _make_session(
     accuracy_correct: list[bool | None] | None = None,
     difficulty_rows: list[tuple[float | None, float | None]] | None = None,
     calibration_pairs: list[tuple[float | None, bool | None]] | None = None,
+    transfer_rows: list[tuple[Any, Any, bool]] | None = None,
 ) -> AsyncSession:
     # ⑤ 힌트 쿼리는 단일 컬럼(.as_integer())을 event_at 오름차순으로 뽑으므로 행은 (level,) 튜플.
     # None(JSONB 파싱 실패)도 섞일 수 있게 그대로 (None,)으로 주입 — 본문이 None을 걸러낸다.
@@ -103,6 +116,11 @@ def _make_session(
     # ⑥ 보정 쿼리는 (confidence_self_reported, is_correct) 쌍을 뽑으므로 행은 (conf, correct) 튜플.
     # 둘 중 하나라도 None인 행도 주입할 수 있게 그대로 둔다 — 본문이 None 쌍을 걸러낸다.
     calib_rows = list(calibration_pairs or [])
+    # ⑦ 전이 쿼리는 Problem join으로 (problem_id, signature_patterns, is_correct)를 started_at
+    # 오름차순으로 뽑는다 — 행은 (problem_id, patterns, is_correct) 튜플. is_correct는 본문이
+    # accuracy_conds(IS NOT NULL)로 좁혀 join하므로 bool만 들어온다. problem_id None·패턴 빈 행도
+    # 주입할 수 있게 그대로 둔다 — 본문/식별 함수가 초견·사전노출 규칙으로 처리한다.
+    xfer_rows = list(transfer_rows or [])
     return cast(
         AsyncSession,
         _FakeSession(
@@ -115,6 +133,7 @@ def _make_session(
                 _FakeScalarResult(all_rows=accuracy_rows),
                 _FakeScalarResult(all_rows=diff_rows),
                 _FakeScalarResult(all_rows=calib_rows),
+                _FakeScalarResult(all_rows=xfer_rows),
             ]
         ),
     )
@@ -330,7 +349,7 @@ class TestHelpReductionSlope:
         assert "종단" in m.note
 
 
-# ── ②⑦ 미계측 2종 (⑥은 R15 슬라이스 이후 MEASURED/NO_DATA로 격상) ──────────────────
+# ── 미계측 격상 회귀 (②⑥⑦ 모두 더는 REQUIRES_TOOL/REQUIRES_DATA stub 아님) ──────────────
 class TestUnmeasuredMetrics:
     async def _metrics(self) -> SurrogateMetrics:
         session = _make_session(
@@ -338,17 +357,19 @@ class TestUnmeasuredMetrics:
         )
         return await compute_wh1_surrogate_metrics(session)
 
-    async def test_diagnosis_agreement_requires_data(self) -> None:
-        m = (await self._metrics()).diagnosis_agreement_rate
-        assert m.status is MetricStatus.REQUIRES_DATA
-        assert m.value is None
-        assert "ground-truth" in m.note
+    async def test_transfer_no_longer_requires_tool(self) -> None:
+        """⑦ 전이 점수 — 전이 프로브 0건(전이 행 미주입)이면 REQUIRES_TOOL이 아니라 NO_DATA.
 
-    async def test_transfer_requires_tool(self) -> None:
+        근사 전이 점수로 격상돼 더는 고정 REQUIRES_TOOL stub이 아니다 — 데이터(전이 프로브)가
+        없으면 NO_DATA(가짜 0 금지)·쌓이면 MEASURED.
+        """
         m = (await self._metrics()).transfer_score
-        assert m.status is MetricStatus.REQUIRES_TOOL
+        assert m.status is MetricStatus.NO_DATA  # REQUIRES_TOOL 아님
         assert m.value is None
         assert "전이" in m.note
+        assert (
+            "assign_transfer_probe" not in m.note or "다른" in m.note
+        )  # 근사 표기 존재
 
     async def test_calibration_no_longer_requires_tool(self) -> None:
         """⑥ 보정 점수 — 보정 쌍 0건이면 REQUIRES_TOOL이 아니라 NO_DATA(stale 진단 교정)."""
@@ -357,17 +378,97 @@ class TestUnmeasuredMetrics:
         assert m.value is None
         assert "elicit_prediction" not in m.note
 
-    async def test_all_unmeasured_value_none(self) -> None:
-        """미계측 2종(②⑦) *전부* value None — 단 하나도 0/stub이 아님(날조 0 불변)."""
-        m = await self._metrics()
-        for metric in (
-            m.diagnosis_agreement_rate,
-            m.transfer_score,
-        ):
-            assert isinstance(metric, Metric)
-            assert metric.value is None
-            assert metric.status is not MetricStatus.MEASURED
-            assert metric.note  # 한국어 note 비어있지 않음
+    async def test_transfer_value_none_when_no_data(self) -> None:
+        """전이 프로브 부족 ⑦ value None — 0/stub 아님(날조 0 불변)."""
+        m = (await self._metrics()).transfer_score
+        assert isinstance(m, Metric)
+        assert m.value is None
+        assert m.status is not MetricStatus.MEASURED
+        assert m.note  # 한국어 note 비어있지 않음
+
+
+# ── ② 진단-실제 오개념 일치율 (오프라인 진단정확도·substring recall) ─────────────────
+class TestDiagnosisAgreementOffline:
+    """`_diagnosis_agreement_offline`(canned hit/miss)·MEASURED/NO_DATA·정직 note·시스템 지표.
+
+    실 프로브 파일 로드는 L4 통합 테스트(`tests/backend/l4/test_misconception_probes.py`)가
+    검증한다 — 여기선 (hit, total) 튜플을 직접 넣어 *Metric 변환*(비율·상태·note)만 못 박는다.
+    """
+
+    def test_measured_recall_value_and_status(self) -> None:
+        """hit 45/total 60 → MEASURED·value 0.75·표본은 호출자(하네스) 책임."""
+        m = _diagnosis_agreement_offline(45, 60)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 0.75
+
+    def test_all_hit(self) -> None:
+        m = _diagnosis_agreement_offline(60, 60)
+        assert m.value == 1.0
+        assert m.status is MetricStatus.MEASURED
+
+    def test_no_hit_is_measured_zero_not_no_data(self) -> None:
+        """recall 프로브는 있는데 hit 0 → MEASURED value 0.0(*실측된* 0이지 날조 0 아님)."""
+        m = _diagnosis_agreement_offline(0, 60)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 0.0
+
+    def test_zero_probes_is_no_data_not_fabricated_zero(self) -> None:
+        """recall 프로브 0건(라벨셋 부재/전부 FP) → NO_DATA·value None(가짜 0 금지)."""
+        m = _diagnosis_agreement_offline(0, 0)
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+        assert "0건" in m.note
+
+    def test_note_is_honest_offline_system_metric(self) -> None:
+        """정직 note — 오프라인·substring·시스템 지표(LIVE per-user 아님)·precision 미반영 명시."""
+        m = _diagnosis_agreement_offline(45, 60)
+        assert m.note  # 비어있지 않음
+        # LIVE 학생별 ground-truth가 아님(시스템 지표) 명시
+        assert "ground-truth" in m.note
+        assert "전 user 동일" in m.note
+        # substring 보수적 기준선·precision은 semantic_eval 별도 명시
+        assert "substring" in m.note
+        assert "precision" in m.note or "FP율" in m.note
+
+    async def test_harness_surfaces_offline_recall_measured(self) -> None:
+        """하네스 통합 — DB와 무관하게 ②가 실 프로브셋(60건)으로 MEASURED가 된다(시스템 지표).
+
+        `compute_diagnostic_recall`이 실 패키지 프로브셋을 로드하므로 FakeSession이어도 ②는
+        MEASURED다(user/기간 무관·전 user 동일값). value∈[0,1]·표본=recall 프로브 수만 단언
+        (구체 recall 값은 substring 매처 품질이라 L4 통합이 검증·여기선 배선·구조).
+        """
+        session = _make_session(
+            total_sessions=1, completed_sessions=1, avg_tokens=10.0, token_sample=5
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        diag = m.diagnosis_agreement_rate
+        assert diag.status is MetricStatus.MEASURED
+        assert diag.value is not None and 0.0 <= diag.value <= 1.0
+        # 표본 메타 = recall 프로브 수(DB 표본 아님·프로브셋 크기·현재 60건)
+        assert m.sample_diagnostic_probes == 60
+        assert "오프라인 진단정확도" in diag.note
+
+    async def test_offline_metric_invariant_to_user_and_window(self) -> None:
+        """② 시스템 지표 — user_id/since/until을 바꿔도 value가 불변(전 user 동일값)."""
+        session_a = _make_session(
+            total_sessions=1, completed_sessions=1, avg_tokens=10.0, token_sample=5
+        )
+        session_b = _make_session(
+            total_sessions=3, completed_sessions=2, avg_tokens=20.0, token_sample=9
+        )
+        m_cohort = await compute_wh1_surrogate_metrics(session_a)
+        m_user = await compute_wh1_surrogate_metrics(
+            session_b,
+            user_id=uuid.uuid4(),
+            since=datetime(2026, 1, 1, tzinfo=UTC),
+            until=datetime(2026, 6, 1, tzinfo=UTC),
+        )
+        # 진단정확도는 user/기간과 무관(시스템 지표) — value·표본 동일.
+        assert (
+            m_cohort.diagnosis_agreement_rate.value
+            == m_user.diagnosis_agreement_rate.value
+        )
+        assert m_cohort.sample_diagnostic_probes == m_user.sample_diagnostic_probes
 
 
 # ── ⑥ 보정 점수(Brier) — _calibration_from_pairs 순수 단위 ────────────────────────
@@ -526,6 +627,236 @@ class TestCalibrationBrierIntegratedWithCompute:
         assert m.calibration_brier.status is MetricStatus.MEASURED
 
 
+# ── ⑦ 근사 전이 점수 — _identify_transfer_probes 순수 식별 단위 ──────────────────────
+class TestIdentifyTransferProbes:
+    """전이 프로브 식별(같은 패턴·다른 problem_id·사전 노출 후 초견) 순수 로직.
+
+    입력은 started_at 오름차순 (problem_id, signature_patterns, is_correct) 시퀀스. 반환은
+    전이 프로브로 인정된 attempt의 is_correct 목록(패턴별 독립 카운트).
+    """
+
+    def test_basic_transfer_probe_after_prior_exposure(self) -> None:
+        """패턴 P를 P1에서 본 뒤 *다른* 문항 P2 초견 → P2가 전이 프로브(is_correct 집계)."""
+        pa, pb = uuid.uuid4(), uuid.uuid4()
+        rows = [
+            (pa, [_P_COND], False),  # P1 첫 등장(사전 노출 없음) → 프로브 아님
+            (pb, [_P_COND], True),  # P2 초견·P1에서 패턴 본 적 있음 → 전이 프로브(True)
+        ]
+        assert _identify_transfer_probes(rows) == [True]
+
+    def test_first_pattern_appearance_excluded(self) -> None:
+        """사전 노출 없는 첫 패턴 등장은 전이 프로브 아님(같은 패턴 다른 문항 이력 없음)."""
+        pa = uuid.uuid4()
+        rows = [(pa, [_P_COND], True)]  # 첫 등장·사전 노출 없음
+        assert _identify_transfer_probes(rows) == []
+
+    def test_same_problem_retry_excluded(self) -> None:
+        """같은 problem_id 재시도는 초견이 아니므로 전이 프로브 제외(첫 등장만)."""
+        pa, pb = uuid.uuid4(), uuid.uuid4()
+        rows = [
+            (pa, [_P_COND], False),  # P1 첫 등장
+            (pb, [_P_COND], True),  # P2 초견·사전 노출 → 전이 프로브(True)
+            (pb, [_P_COND], False),  # P2 *재시도*(초견 아님) → 제외
+        ]
+        assert _identify_transfer_probes(rows) == [True]
+
+    def test_same_attempt_pattern_not_self_exposure(self) -> None:
+        """같은 패턴을 처음 보는 문항이 두 번째로 등장해야 사전 노출 — 한 문항 안에선 아님.
+
+        P1·P2가 모두 P_COND. P1은 첫 등장(사전 노출 0)·P2는 초견이고 P1이 사전 노출 →
+        P2만 전이 프로브.
+        """
+        pa, pb, pc = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        rows = [
+            (pa, [_P_COND], True),  # 첫 등장
+            (pb, [_P_COND], True),  # 초견·사전 노출(pa) → 프로브
+            (pc, [_P_COND], False),  # 초견·사전 노출(pa,pb) → 프로브
+        ]
+        assert _identify_transfer_probes(rows) == [True, False]
+
+    def test_multiple_patterns_independent_count(self) -> None:
+        """한 attempt가 여러 패턴 전이 프로브면 패턴별 독립 카운트(중복·같은 is_correct 공유)."""
+        pa, pb, pc = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        rows = [
+            (pa, [_P_COND, _P_GRAPH], True),  # 두 패턴 첫 등장(사전 노출 0)
+            # pb 초견·두 패턴 모두 pa에서 사전 노출 → 전이 프로브 2건(둘 다 is_correct=True)
+            (pb, [_P_COND, _P_GRAPH], True),
+            (pc, [_P_COND], False),  # 초견·P_COND 사전 노출(pa,pb) → 프로브 1건(False)
+        ]
+        # pb가 2건(True,True)·pc가 1건(False).
+        assert _identify_transfer_probes(rows) == [True, True, False]
+
+    def test_different_pattern_no_cross_exposure(self) -> None:
+        """다른 패턴은 사전 노출로 치지 않음 — P_COND 노출이 P_SEQ 초견을 프로브로 만들지 않음."""
+        pa, pb = uuid.uuid4(), uuid.uuid4()
+        rows = [
+            (pa, [_P_COND], True),  # P_COND 노출
+            (pb, [_P_SEQ], True),  # P_SEQ 초견·P_SEQ 사전 노출 없음 → 프로브 아님
+        ]
+        assert _identify_transfer_probes(rows) == []
+
+    def test_none_problem_id_excluded(self) -> None:
+        """problem_id None(느슨참조 미설정) attempt는 초견/사전노출 식별 불가 → 전체 제외."""
+        pa = uuid.uuid4()
+        rows = [
+            (pa, [_P_COND], True),
+            (None, [_P_COND], True),  # problem_id None → 제외(식별 불가)
+            (pa, [_P_COND], True),  # pa 재시도(초견 아님) → 제외
+        ]
+        assert _identify_transfer_probes(rows) == []
+
+    def test_empty_patterns_contributes_nothing(self) -> None:
+        """패턴 태그 0개 문항은 전이 사건 없음(기여 0)."""
+        pa, pb = uuid.uuid4(), uuid.uuid4()
+        rows: list[tuple[uuid.UUID | None, list[SignaturePattern], bool]] = [
+            (pa, [], True),
+            (pb, [], False),
+        ]
+        assert _identify_transfer_probes(rows) == []
+
+    def test_none_patterns_treated_as_empty(self) -> None:
+        """signature_patterns None(방어적)도 빈 리스트로 취급 — 기여 0(예외 없음)."""
+        pa, pb = uuid.uuid4(), uuid.uuid4()
+        rows = [(pa, None, True), (pb, None, False)]
+        assert _identify_transfer_probes(rows) == []
+
+
+# ── ⑦ 근사 전이 점수 — _transfer_from_probes 순수 단위(정답률·MIN 가드) ─────────────────
+class TestTransferFromProbes:
+    def test_all_correct_score_one(self) -> None:
+        """전이 프로브 전부 정답(3건) → MEASURED·value 1.0."""
+        m = _transfer_from_probes([True, True, True])
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 1.0
+
+    def test_partial_correct_ratio(self) -> None:
+        """전이 프로브 2/4 정답 → MEASURED·value 0.5."""
+        m = _transfer_from_probes([True, False, True, False])
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 0.5
+
+    def test_none_correct_is_measured_zero(self) -> None:
+        """전이 프로브 있는데 전부 오답(>=MIN) → MEASURED value 0.0(*실측* 0·날조 아님)."""
+        m = _transfer_from_probes([False, False, False])
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 0.0
+
+    def test_too_few_probes_is_no_data_not_fake(self) -> None:
+        """전이 프로브 < _MIN_TRANSFER_PROBES → NO_DATA·value None(가짜 0/정답률 금지)."""
+        m = _transfer_from_probes([True] * (_MIN_TRANSFER_PROBES - 1))
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+        assert "표본 부족" in m.note
+
+    def test_exactly_min_is_measured(self) -> None:
+        """정확히 _MIN_TRANSFER_PROBES → MEASURED(경계 inclusive)."""
+        m = _transfer_from_probes([True] * _MIN_TRANSFER_PROBES)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value is not None
+
+    def test_empty_is_no_data(self) -> None:
+        m = _transfer_from_probes([])
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+
+    def test_measured_note_is_honest_approximation(self) -> None:
+        """MEASURED note에 §11.5 완전판과 다른 *근사*·BKT·2주 스케줄 미반영 정직 표기."""
+        m = _transfer_from_probes([True, True, True])
+        assert "근사" in m.note
+        assert "§11.5" in m.note
+        assert "assign_transfer_probe" in m.note
+        assert "BKT" in m.note
+
+
+# ── ⑦ 근사 전이 점수 — compute_wh1_surrogate_metrics 통합(FakeSession 전이 행 주입) ────────
+class TestTransferScoreIntegratedWithCompute:
+    async def _transfer(
+        self, transfer_rows: list[tuple[Any, Any, bool]] | None
+    ) -> SurrogateMetrics:
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            transfer_rows=transfer_rows,
+        )
+        return await compute_wh1_surrogate_metrics(session)
+
+    async def test_measured_transfer_ratio_and_sample(self) -> None:
+        """사전 노출 후 초견 동형 3건(2정답·1오답) → MEASURED·value≈0.667·표본 3."""
+        pa, pb, pc, pd = (uuid.uuid4() for _ in range(4))
+        m = await self._transfer(
+            [
+                (pa, [_P_COND], False),  # P_COND 첫 등장(사전 노출 0)
+                (pb, [_P_COND], True),  # 초견·사전 노출 → 프로브(True)
+                (pc, [_P_COND], True),  # 초견·사전 노출 → 프로브(True)
+                (pd, [_P_COND], False),  # 초견·사전 노출 → 프로브(False)
+            ]
+        )
+        ts = m.transfer_score
+        assert ts.status is MetricStatus.MEASURED
+        assert ts.value is not None
+        assert abs(ts.value - 2 / 3) < 1e-9  # 2/3 전이 프로브 정답
+        assert m.sample_transfer_probes == 3
+
+    async def test_no_data_when_no_prior_exposure(self) -> None:
+        """사전 노출 없는 첫 패턴 등장만 있으면 전이 프로브 0 → NO_DATA(가짜 0 금지)."""
+        pa, pb = uuid.uuid4(), uuid.uuid4()
+        m = await self._transfer(
+            [(pa, [_P_COND], True), (pb, [_P_SEQ], True)]  # 서로 다른 패턴 첫 등장
+        )
+        assert m.transfer_score.status is MetricStatus.NO_DATA
+        assert m.transfer_score.value is None
+        assert m.sample_transfer_probes == 0
+
+    async def test_same_problem_retry_not_counted(self) -> None:
+        """같은 problem_id 재시도는 전이 프로브 아님 — 초견만(부족하면 NO_DATA)."""
+        pa, pb = uuid.uuid4(), uuid.uuid4()
+        m = await self._transfer(
+            [
+                (pa, [_P_COND], False),  # 첫 등장
+                (pb, [_P_COND], True),  # 초견·사전 노출 → 프로브 1건
+                (pb, [_P_COND], True),  # pb 재시도(초견 아님) → 제외
+            ]
+        )
+        # 전이 프로브 1건(< MIN 3) → NO_DATA. 표본도 1.
+        assert m.sample_transfer_probes == 1
+        assert m.transfer_score.status is MetricStatus.NO_DATA
+
+    async def test_multiple_patterns_counted_independently(self) -> None:
+        """복수 패턴 attempt — 패턴별 독립 전이 프로브로 카운트(표본·정답률 반영)."""
+        pa, pb, pc = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        m = await self._transfer(
+            [
+                (pa, [_P_COND, _P_GRAPH], True),  # 두 패턴 첫 등장(사전 노출 0)
+                (
+                    pb,
+                    [_P_COND, _P_GRAPH],
+                    True,
+                ),  # 초견·두 패턴 사전 노출 → 프로브 2건(True,True)
+                (pc, [_P_COND], False),  # 초견·P_COND 사전 노출 → 프로브 1건(False)
+            ]
+        )
+        ts = m.transfer_score
+        assert m.sample_transfer_probes == 3  # 2 + 1(패턴별 독립)
+        assert ts.status is MetricStatus.MEASURED
+        assert ts.value is not None
+        assert abs(ts.value - 2 / 3) < 1e-9  # True,True,False → 2/3
+
+    async def test_none_problem_id_rows_excluded(self) -> None:
+        """problem_id None 행은 식별에서 제외 — 표본에 안 들어감(날조 0)."""
+        pa, pb = uuid.uuid4(), uuid.uuid4()
+        m = await self._transfer(
+            [
+                (pa, [_P_COND], True),  # 첫 등장
+                (None, [_P_COND], True),  # problem_id None → 제외
+                (pb, [_P_COND], True),  # 초견·사전 노출(pa) → 프로브 1건
+            ]
+        )
+        assert m.sample_transfer_probes == 1  # None 행 제외 → 프로브 1건
+        assert m.transfer_score.status is MetricStatus.NO_DATA  # 1 < 3
+
+
 # ── 메타·필드셋·스코핑 ───────────────────────────────────────────────────────
 class TestMetaAndFieldSet:
     async def test_field_set_complete(self) -> None:
@@ -546,6 +877,13 @@ class TestMetaAndFieldSet:
                 (0.1, False),
                 (0.7, True),
             ],
+            # ⑦ 전이 — P1 첫 등장 후 P2·P3·P4 초견 동형(사전 노출) 3건 → MEASURED·표본 3.
+            transfer_rows=[
+                (uuid.uuid4(), [_P_COND], True),  # 첫 등장(사전 노출 0)
+                (uuid.uuid4(), [_P_COND], True),  # 초견·사전 노출 → 프로브
+                (uuid.uuid4(), [_P_COND], True),  # 초견·사전 노출 → 프로브
+                (uuid.uuid4(), [_P_COND], False),  # 초견·사전 노출 → 프로브
+            ],
         )
         m = await compute_wh1_surrogate_metrics(session)
         for name in (
@@ -565,12 +903,20 @@ class TestMetaAndFieldSet:
         assert m.sample_accuracy_attempts == 3  # is_correct NOT NULL 행 수
         assert m.sample_difficulty_attempts == 3  # 유효 b(Problem join) 행 수
         assert m.sample_calibration_pairs == 5  # 유효 보정 쌍 수
+        assert m.sample_transfer_probes == 3  # ⑦ 전이 프로브 수(초견·사전 노출·패턴별)
+        assert (
+            m.sample_diagnostic_probes == 60
+        )  # ② recall 프로브 수(시스템 지표·프로브셋 크기)
         # difficulty_slope 필드 노출(양수=난이도 상승·음수=쉬워짐). 여기선 하강(1→0.5→0)이라 음수.
         assert m.help_reduction_validated.difficulty_slope is not None
         # ⑥ 보정 점수 — 5쌍 >= MIN → MEASURED·value 실수(Brier∈[0,1]).
         assert m.calibration_brier.status is MetricStatus.MEASURED
         assert m.calibration_brier.value is not None
         assert 0.0 <= m.calibration_brier.value <= 1.0
+        # ⑦ 전이 점수 — 전이 프로브 3건(>= MIN) → MEASURED·value 실수(정답률∈[0,1]).
+        assert m.transfer_score.status is MetricStatus.MEASURED
+        assert m.transfer_score.value is not None
+        assert 0.0 <= m.transfer_score.value <= 1.0
 
     async def test_user_scoped_true_when_user_id(self) -> None:
         session = _make_session(

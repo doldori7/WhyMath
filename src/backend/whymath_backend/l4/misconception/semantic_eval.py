@@ -8,9 +8,9 @@ slice 107: 의미(임베딩) 매처(`semantic_matches`/`SemanticMatcher`)가 sub
 
 **비노출·오프라인**: 런타임/HTTP/DB 경로와 무관한 측정 도구다. L4 `semantic_matches`(의미 매칭)
 + `diagnose`(substring 기준선)를 *소비*만 한다(재구현 0·게이트·coach 무변경). 입력은 프로브셋
-(`tests/backend/l4/fixtures/misconception_semantic_probes.jsonl`)이며, recall 프로브(틀린
-진술·expected_id 설정·substring 회피)와 FP 프로브(*올바른* 진술·expected_id null·near_id 설정)를
-한 파일에 담는다.
+(프로덕션 패키지 데이터 `probes_v1.jsonl` — `probes.probes_path()`로 로드. 단일 source of
+truth로 패키지 안에 둔다)이며, recall 프로브(틀린 진술·expected_id 설정·substring 회피)와
+FP 프로브(*올바른* 진술·expected_id null·near_id 설정)를 한 파일에 담는다.
 
 ────────────────────────────────────────────────────────────────────────────
 정직 스코프 (CLAUDE.md "확실하지 않을 때 자신 있게 말함 금지")
