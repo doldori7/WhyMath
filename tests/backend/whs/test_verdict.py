@@ -9,7 +9,7 @@ canned AnswerVerdict·SolutionVerificationResult를 직접 주입한다(verify_a
 
 from __future__ import annotations
 
-from whymath_backend.l3.verify_answer import AnswerVerdict
+from whymath_backend.l3.verify_answer import AnswerVerdict, verify_answer
 from whymath_backend.l3.verify_solution import SolutionVerificationResult
 from whymath_backend.whs import WhsVerdict, final_verdict
 
@@ -121,3 +121,46 @@ class TestVerdictShape:
         assert result.answer_state == "pass"
         assert result.n_unverifiable_steps == 1
         assert result.has_incorrect is False
+
+
+class TestInequalityAndSystemIntegration:
+    """부등식·연립 AnswerVerdict → final_verdict 등급 일관(combiner 불변·자동 호환).
+
+    `final_verdict`는 AnswerVerdict.state만 보므로 부등식·연립도 변경 없이 호환된다 —
+    실제 `verify_answer` 출력을 주입해 등급이 일관됨을 회귀로 못박는다(combiner 변경 0 확인).
+    """
+
+    def test_inequality_pass_verifies(self) -> None:
+        # 부등식 pass(x>0·x=3) + 전 단계 correct → verified.
+        answer = verify_answer("x > 0", {"x": "3"})
+        assert answer.state == "pass"
+        result = final_verdict(answer, _steps(n_correct=2))
+        assert result.grade == "verified"
+
+    def test_inequality_fail_is_failed(self) -> None:
+        # 부등식 fail(x>0·x=-1) → 단계 무관 failed.
+        answer = verify_answer("x > 0", {"x": "-1"})
+        assert answer.state == "fail"
+        result = final_verdict(answer, _steps(n_correct=2))
+        assert result.grade == "failed"
+
+    def test_strict_boundary_unverifiable_is_unverified(self) -> None:
+        # 엄격 경계(x>2·x=2) unverifiable → 격리(unverified).
+        answer = verify_answer("x > 2", {"x": "2"})
+        assert answer.state == "unverifiable"
+        result = final_verdict(answer, _steps(n_correct=2))
+        assert result.grade == "unverified"
+
+    def test_system_pass_verifies(self) -> None:
+        # 연립 pass + 전 단계 correct → verified.
+        answer = verify_answer(["x + y = 3", "x - y = 1"], {"x": "2", "y": "1"})
+        assert answer.state == "pass"
+        result = final_verdict(answer, _steps(n_correct=3))
+        assert result.grade == "verified"
+
+    def test_system_fail_is_failed(self) -> None:
+        # 연립 한 조건 위반 → failed.
+        answer = verify_answer(["x + y = 3", "x - y = 5"], {"x": "2", "y": "1"})
+        assert answer.state == "fail"
+        result = final_verdict(answer, _steps(n_correct=3))
+        assert result.grade == "failed"
