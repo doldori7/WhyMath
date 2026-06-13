@@ -226,9 +226,10 @@ def test_create_get_tree_and_visits_on_live_pg() -> None:
                 assert fetched.state_repr == {"step": "root"}
                 assert await get_node(session, uuid.uuid4()) is None
 
-                # get_children: 루트의 자식 2개(생성순)
+                # get_children: 루트의 자식 2개(형제 순서는 무의미 — 같은 트랜잭션 INSERT는
+                # created_at[now()]이 동일하고 tiebreak id가 랜덤 UUID라 순서 비결정적·집합 비교).
                 children = await get_children(session, root.id)
-                assert [c.id for c in children] == [child_a.id, child_b.id]
+                assert {c.id for c in children} == {child_a.id, child_b.id}
                 # 자식은 자식이 없음
                 assert await get_children(session, child_a.id) == []
 

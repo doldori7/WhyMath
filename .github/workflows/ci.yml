@@ -35,6 +35,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend }}
       data_pipeline: ${{ steps.filter.outputs.data_pipeline }}
+      mobile: ${{ steps.filter.outputs.mobile }}
     steps:
       - name: Checkout (merge commit + 부모 — PR diff용)
         uses: actions/checkout@v4
@@ -49,20 +50,25 @@ jobs:
             # push(main) — 전체 실행(다운스트림 if가 event로 우회·이 값은 미사용 안전값).
             echo "backend=true" >> "$GITHUB_OUTPUT"
             echo "data_pipeline=true" >> "$GITHUB_OUTPUT"
+            echo "mobile=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # pull_request의 HEAD는 merge commit — ^1(=base tip) 대비 diff가 곧 PR 변경 전량.
           files=$(git diff --name-only HEAD^1 HEAD)
           printf '변경 파일:\n%s\n' "$files"
-          be=false; dp=false
+          be=false; dp=false; mo=false
           if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
             be=true
           fi
           if printf '%s\n' "$files" | grep -qE '^(src/data-pipeline/|tests/data_pipeline/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
             dp=true
           fi
+          if printf '%s\n' "$files" | grep -qE '^(src/mobile/|\.github/workflows/ci\.yml$)'; then
+            mo=true
+          fi
           echo "backend=$be" >> "$GITHUB_OUTPUT"
           echo "data_pipeline=$dp" >> "$GITHUB_OUTPUT"
+          echo "mobile=$mo" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────────────────────────────
   # L1 데이터 파이프라인 (현재 유일하게 패키지화된 영역)
@@ -380,6 +386,48 @@ jobs:
           # importorskip 통과 + 실 Neo4j 도달 → 멱등 적재(노드 403·엣지 541) 검증.
           WHYMATH_RUN_INTEGRATION: "1"
         run: pytest -m integration
+
+  # ─────────────────────────────────────────────────────────────────
+  # L5 모바일 (Flutter 학생 클라이언트 — coach API 통합 + 모델 정합)
+  # backend/data-pipeline 잡을 미러링하되 Flutter 툴체인을 쓴다. 이 환경엔 Dart/Flutter
+  # SDK가 없어 로컬 검증(codegen·analyze·test)이 불가하므로 *이 잡이 유일한 검증 게이트*다
+  # (마이그레이션 슬라이스가 실 PG CI로 검증된 것과 동형). codegen 산출물(*.freezed.dart·
+  # *.g.dart)은 커밋하지 않고(.gitignore) 여기서 build_runner로 생성한 뒤 analyze·test한다 —
+  # 스텝 순서(pub get → build_runner → analyze → test)가 생성 선행을 보장한다.
+  # ─────────────────────────────────────────────────────────────────
+  mobile:
+    name: mobile — flutter analyze·test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: changes
+    # doc-only/타 영역 PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.mobile == 'true'
+    defaults:
+      run:
+        working-directory: src/mobile
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter 3.24.x (stable)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: "3.24.5"
+          cache: true
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      - name: Codegen (freezed·json_serializable·riverpod)
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      - name: Flutter test
+        run: flutter test
 
   # ─────────────────────────────────────────────────────────────────
   # infra 쉘 스크립트 syntax 검사 (Phaiakes9 운영 자산 회귀 방지)
