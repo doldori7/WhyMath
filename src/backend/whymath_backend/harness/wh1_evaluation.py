@@ -38,7 +38,15 @@
                              쌍이 `_MIN_CALIBRATION_SAMPLES` 미만이면 NO_DATA(종단 노이즈
                              회피). `POST /v1/me/attempts`가 confidence+result를 동시 수집해
                              ProblemAttempt에 이미 적재 — 새 도구·새 수집 불요(기존 필드 파생만).
-  ⑦ 전이 점수             — 🔴 REQUIRES_TOOL: 시그니처 패턴 태깅·전이 출제 미구현.
+  ⑦ 전이 점수             — 🟡 MEASURED(근사)/NO_DATA: *근사 전이 점수*. 같은 시그니처 패턴
+                             (`Problem.signature_patterns`)·**다른 problem_id**·사전 노출 후
+                             **초견(첫 시도) 정답률**. = "이 패턴을 다른 문항에서 이미 만난 뒤
+                             *새* 동형 문항을 처음 풀어 맞혔는가". **설계 §11.5 완전판
+                             (assign_transfer_probe·노드 BKT≥0.95 + 2주 후 자동 출제)과 다름**
+                             — 전이 프로브 마킹/스케줄 도구가 미구현이라 *풀이 이력*에서 근사한다
+                             (표면 상이는 *다른 problem_id*로 근사·심층구조 동일성은 패턴 태그에
+                             의존·BKT 숙달 게이팅 미반영). 전이 프로브가 `_MIN_TRANSFER_PROBES`
+                             미만이면 NO_DATA(날조 0)·후속은 마킹/스케줄 도구.
 
 계층 메모(CLAUDE.md 7계층·설계안 §1): WH-1 하네스는 *새 계층이 아니라 횡단 인프라*다. 본
 모듈은 L1(활동 로그 `LearningSession`)·L2/L5(대화 `Dialogue`) 데이터를 *조회만* 하고(역방향
@@ -48,6 +56,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 
@@ -64,7 +73,7 @@ from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.l2.ability_estimation import resolve_item_difficulty_b
 from whymath_backend.l4.misconception.probes import compute_diagnostic_recall
-from whymath_backend.schema.enums import EventType
+from whymath_backend.schema.enums import EventType, SignaturePattern
 
 __all__ = [
     "HelpReductionValidation",
@@ -84,6 +93,12 @@ _MIN_SLOPE_POINTS = 3
 # ProblemAttempt 쌍이 이보다 적으면 NO_DATA(가짜 0/Brier 금지). Brier는 평균이라 N>=1이면
 # 값 자체는 나오지만, 표본이 한두 개면 종단 노이즈로 보정 추세를 오도하므로 최소 5쌍을 요구한다.
 _MIN_CALIBRATION_SAMPLES = 5
+
+# ⑦ 근사 전이 점수의 *최소 전이 프로브 수*. 전이 프로브(같은 시그니처 패턴·다른 problem_id·
+# 사전 노출 후 초견(첫 시도))가 이보다 적으면 NO_DATA(가짜 0/정답률 금지). 정답률은 평균이라
+# N>=1이면 값은 나오지만, 표본이 한두 개면 우연(한 문항 맞고 틀림)으로 전이 능력을 오도하므로
+# 최소 3건을 요구한다. 완전판(§11.5)의 BKT≥0.95+2주 스케줄과 달리 풀이 이력 기반 *근사*다.
+_MIN_TRANSFER_PROBES = 3
 
 
 def _ols_slope(ys: list[float]) -> float | None:
@@ -243,9 +258,11 @@ class HelpReductionValidation(BaseModel):
 class SurrogateMetrics(BaseModel):
     """WH-1 0단계 대리 지표 7종 + 표본 메타 — 커버리지 맵 한 장.
 
-    계측 가능분(① verify 통과율·③ 세션 완주율·④ 턴당 토큰·⑤⑥, 그리고 ② 오프라인 진단정확도)은
-    실값(또는 표본 0이면 NO_DATA), 미계측 ⑦은 고정 상태 + note로 갭을 표면화한다. 메타(표본 수·
-    시간창·user 스코핑)로 이 베이스라인이 *어느 모집단/기간*을 잰 것인지 함께 기록한다. ②는
+    계측 가능분(① verify 통과율·③ 세션 완주율·④ 턴당 토큰·⑤⑥, ② 오프라인 진단정확도, 그리고
+    ⑦ *근사* 전이 점수)은 실값(또는 표본 0/부족이면 NO_DATA)으로 낸다 — 이제 7종 모두 좌석이
+    살아 있다. ⑦은 설계 §11.5 완전판이 아니라 풀이 이력 기반 *근사*임을 note에 정직 표기한다.
+    메타(표본 수·시간창·user 스코핑)로 이 베이스라인이 *어느 모집단/기간*을 잰 것인지 함께
+    기록한다. ②는
     *시스템 지표*(라벨 프로브 substring recall)라 user/시간창 메타와 무관하다(전 user 동일값·
     LIVE per-user ground-truth 아님 — `sample_diagnostic_probes`는 DB 표본이 아니라 프로브셋 크기).
     """
@@ -277,7 +294,11 @@ class SurrogateMetrics(BaseModel):
         )
     )
     transfer_score: Metric = Field(
-        description="⑦ 전이 점수 — 학습 직후 미학습 시그니처 패턴 전이 출제 정답률."
+        description=(
+            "⑦ 전이 점수(근사) — 같은 시그니처 패턴·다른 problem_id·사전 노출 후 초견(첫 시도) "
+            "정답률. 설계 §11.5 완전판(assign_transfer_probe·BKT≥0.95+2주 스케줄)과 다른 *근사*"
+            "(풀이 이력 기반)·전이 프로브 부족이면 NO_DATA(가짜 0 금지)."
+        )
     )
 
     # ── R15 파생 결합 판정(⑤ 도움 감소 × 정답률 추세) ──
@@ -321,6 +342,15 @@ class SurrogateMetrics(BaseModel):
         description=(
             "⑥ 보정 점수(Brier) 집계 대상 ProblemAttempt 쌍 수(confidence_self_reported·"
             "is_correct 둘 다 NOT NULL). `_MIN_CALIBRATION_SAMPLES` 미만이면 NO_DATA."
+        ),
+    )
+    sample_transfer_probes: int = Field(
+        default=0,
+        description=(
+            "⑦ 근사 전이 점수 집계 대상 *전이 프로브* 수(같은 시그니처 패턴·다른 problem_id·"
+            "사전 노출 후 초견[첫 시도]·패턴별 독립 카운트). `_MIN_TRANSFER_PROBES` 미만이면 "
+            "NO_DATA(가짜 0 금지). 설계 §11.5 완전판(BKT≥0.95+2주 스케줄)과 다른 *근사*(풀이 "
+            "이력 기반·마킹/스케줄 도구 미구현)."
         ),
     )
     sample_diagnostic_probes: int = Field(
@@ -587,13 +617,107 @@ def _calibration_from_pairs(pairs: list[tuple[float, bool]]) -> Metric:
     )
 
 
-def _transfer_unmeasured() -> Metric:
+def _identify_transfer_probes(
+    rows: Sequence[tuple[uuid.UUID | None, Sequence[SignaturePattern] | None, bool]],
+) -> list[bool]:
+    """근사 전이 프로브 식별(순수·날조 0) — 같은 패턴·다른 문항·사전 노출 후 초견(첫 시도).
+
+    입력 `rows`는 *started_at 오름차순*으로 정렬된 (problem_id, signature_patterns, is_correct)
+    시퀀스다(호출부가 is_correct NOT NULL·user/시간창 필터 후 ORM join으로 조회). 시간순으로
+    훑으며 **전이 프로브**를 골라 그 is_correct를 모아 반환한다.
+
+    전이 프로브 정의(설계 §11.5 *근사*): 어떤 attempt의 문항이 패턴 P를 가질 때, 그 attempt가
+      ⓐ **그 problem_id의 첫 등장**(초견 — 이전에 같은 problem_id를 본 적 없음)이고
+      ⓑ **사전 노출**: 이전에 *다른* problem_id를 패턴 P로 *이미* 본 적이 있으면
+    → 이 (attempt, P)를 전이 프로브 1건으로 집계한다(is_correct). = "이 패턴을 다른 문항에서
+    이미 만난 뒤 *새* 동형 문항을 처음 풀어 맞혔는가". 표면(소재/숫자/맥락) 상이는 *다른
+    problem_id*로 근사하고, 심층 구조 동일성은 패턴 태그(`signature_patterns`)에 의존한다.
+
+    **집계 단위(명확 정의)**: *패턴별 독립*이다 — 전이 프로브 1건 = 특정 (problem_id, 패턴 P)
+    초견. 한 attempt의 문항이 여러 패턴을 갖고 각각 사전 노출이 있으면, 그 attempt는 패턴 수
+    만큼의 전이 프로브로 *중복 카운트*된다(각 패턴이 독립 전이 사건이라). is_correct는 attempt
+    공통이라 같은 attempt가 낳은 프로브들은 같은 정오답을 공유한다.
+
+    상태 추적(순수·O(n·평균패턴수)):
+      - `seen_problem_ids`: 지금까지 등장한 problem_id 집합(초견 판정 ⓐ).
+      - `seen_pattern_problem`: 패턴 P → 그 패턴으로 본 problem_id 집합(사전 노출 판정 ⓑ —
+        *다른* problem_id로 본 적 있는지). 현재 problem_id를 *제외*한 사전 노출만 인정한다.
+    같은 attempt가 여러 패턴이면 각 패턴을 독립 평가하고, 한 패스의 끝에서 상태를 갱신한다
+    (같은 attempt 안의 패턴끼리는 서로의 사전 노출로 치지 않는다 — 한 시점 사건이라).
+
+    problem_id가 None(느슨참조 미설정)이면 초견/중복을 구분할 수 없어 *그 attempt 전체를 제외*
+    한다(날조 회피). 패턴이 비었으면(태그 0개) 전이 사건이 없으므로 자연히 기여 0.
+    """
+    transfer_outcomes: list[bool] = []
+    seen_problem_ids: set[uuid.UUID] = set()
+    # 패턴 → 그 패턴으로 *이미 본* problem_id 집합(사전 노출 판정용).
+    seen_pattern_problem: dict[SignaturePattern, set[uuid.UUID]] = {}
+
+    for problem_id, patterns, is_correct in rows:
+        # problem_id 없으면 초견/사전노출을 가릴 수 없어 이 attempt는 전이 식별에서 제외(날조 0).
+        if problem_id is None:
+            continue
+        is_first_sight = problem_id not in seen_problem_ids
+        pattern_list = patterns or []
+
+        # 초견인 경우에만 전이 프로브 후보 — 패턴별로 *다른* problem_id의 사전 노출이 있으면 집계.
+        if is_first_sight:
+            for pattern in pattern_list:
+                prior_problems = seen_pattern_problem.get(pattern)
+                # 현재 problem_id를 제외한 *다른* 문항으로 이 패턴을 이미 본 적 있는가(사전 노출 ⓑ).
+                if prior_problems and (prior_problems - {problem_id}):
+                    transfer_outcomes.append(is_correct)
+
+        # 상태 갱신(이 attempt 평가 후) — 다음 attempt부터 이 problem_id·패턴 노출이 사전 노출이 됨.
+        seen_problem_ids.add(problem_id)
+        for pattern in pattern_list:
+            seen_pattern_problem.setdefault(pattern, set()).add(problem_id)
+
+    return transfer_outcomes
+
+
+def _transfer_from_probes(transfer_outcomes: list[bool]) -> Metric:
+    """⑦ 근사 전이 점수 — 전이 프로브 정답률을 Metric으로(순수·날조 0).
+
+    입력 `transfer_outcomes`는 `_identify_transfer_probes`가 고른 전이 프로브들의 is_correct
+    목록이다. transfer_score = 맞은 전이 프로브 / 전체 전이 프로브(높을수록 전이 잘 됨).
+
+    종단 표본 가드(날조 0): 전이 프로브가 `_MIN_TRANSFER_PROBES` 미만이면 정답률을 산출하지
+    않고 **NO_DATA**(value None)로 둔다 — 정답률은 평균이라 N>=1이어도 값은 나오지만, 한두
+    건이면 우연(한 문항 맞고 틀림)이 전이 능력을 오도하므로 가짜 0/정답률을 내지 않는다.
+
+    정직 note(중요): 이는 *근사 전이 점수*다 — **설계 §11.5 완전판(assign_transfer_probe·노드
+    BKT≥0.95 + 2주 후 자동 출제)과 다르다**. 전이 프로브 마킹/스케줄 도구가 미구현이라 풀이
+    이력에서 근사한다: 같은 시그니처 패턴·*다른 problem_id*·사전 노출 후 초견(첫 시도) 정답률.
+    표면 상이는 다른 problem_id로 근사·심층구조 동일성은 패턴 태그에 의존·BKT 숙달 게이팅·2주
+    스케줄 미반영(후속은 마킹/스케줄 도구).
+    """
+    n = len(transfer_outcomes)
+    if n < _MIN_TRANSFER_PROBES:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                f"근사 전이 프로브(같은 시그니처 패턴·다른 problem_id·사전 노출 후 초견) {n}건 — "
+                f"표본 부족(최소 {_MIN_TRANSFER_PROBES}건)으로 전이 정답률 미산출(가짜 0/정답률 "
+                "금지). 같은 패턴을 다른 문항에서 만난 뒤 *새* 동형 문항을 처음 푸는 이력이 쌓이면 "
+                "계측. **설계 §11.5 완전판(assign_transfer_probe·BKT≥0.95+2주 스케줄)과 다른 근사**"
+                "(마킹/스케줄 도구 미구현·후속)."
+            ),
+        )
+    hits = sum(1 for correct in transfer_outcomes if correct)
+    score = hits / n
     return Metric(
-        value=None,
-        status=MetricStatus.REQUIRES_TOOL,
+        value=score,
+        status=MetricStatus.MEASURED,
         note=(
-            "시그니처 패턴(55+108) 문항 태깅·전이 출제(assign_transfer_probe) 미구현 — 학습 직후 "
-            "미학습 동형 문항을 내는 흐름이 있어야 전이 정답률 산출."
+            f"근사 전이 점수 — 같은 시그니처 패턴·다른 problem_id·사전 노출 후 초견(첫 시도) "
+            f"정답률 {hits}/{n}={score:.4f}(높을수록 전이 잘 됨). **설계 §11.5 완전판"
+            "(assign_transfer_probe·노드 BKT≥0.95 + 2주 후 자동 출제)과 다름** — 전이 프로브 "
+            "마킹/스케줄 도구 미구현이라 풀이 이력에서 근사한다(표면 상이는 *다른 problem_id*로 "
+            "근사·심층구조 동일성은 패턴 태그에 의존·BKT 숙달 게이팅·2주 스케줄 미반영)·"
+            f"표본<{_MIN_TRANSFER_PROBES} NO_DATA·패턴별 독립 집계(전이 프로브 1건=특정 "
+            "(problem,패턴) 초견). 후속은 assign_transfer_probe 마킹/스케줄 도구."
         ),
     )
 
@@ -605,11 +729,15 @@ async def compute_wh1_surrogate_metrics(
     since: datetime | None = None,
     until: datetime | None = None,
 ) -> SurrogateMetrics:
-    """WH-1 0단계 대리 지표 7종을 계산 — 계측 가능분 실측 + 미계측 1종(⑦) 정직 표시.
+    """WH-1 0단계 대리 지표 7종을 계산 — 7종 모두 계측 좌석 가동(⑦은 *근사*·정직 표기).
 
-    설계안 §8.4 0단계 베이스라인. **계측 가능(①②③④⑤⑥)만 실값**으로 내고, **미계측(⑦)은
-    value=None + status + note**로 갭을 가시화한다(CLAUDE.md "모르면 모른다"·설계안 "측정 없는
-    도입 없음" — 0/stub 날조 금지). ⑤(도움 감소 곡선)는 힌트제공 이벤트 적재 슬라이스로
+    설계안 §8.4 0단계 베이스라인. **계측 가능(①②③④⑤⑥⑦)을 실값**으로 내되, 표본 0/부족이면
+    value=None + status(NO_DATA) + note로 갭을 가시화한다(CLAUDE.md "모르면 모른다"·설계안 "측정
+    없는 도입 없음" — 0/stub 날조 금지). ⑦(전이 점수)은 ProblemAttempt ⨝ Problem.signature_
+    patterns에서 *같은 패턴·다른 problem_id·사전 노출 후 초견(첫 시도) 정답률*을 근사해
+    REQUIRES_TOOL→MEASURED(근사)가 됐다 — **설계 §11.5 완전판(assign_transfer_probe·BKT≥0.95+2주
+    스케줄)과 다른 근사**(마킹/스케줄 도구 미구현·전이 프로브<`_MIN_TRANSFER_PROBES`면 NO_DATA·새
+    적재 0). ⑤(도움 감소 곡선)는 힌트제공 이벤트 적재 슬라이스로
     NOT_INSTRUMENTED→MEASURED가 됐다(표본 부족이면 NO_DATA·R15 교차검증 미반영). ⑥(보정 점수
     Brier)는 ProblemAttempt.confidence_self_reported·is_correct 기존 필드 파생으로
     REQUIRES_TOOL→MEASURED가 됐다(유효 쌍<`_MIN_CALIBRATION_SAMPLES`면 NO_DATA·새 수집 0).
@@ -649,10 +777,13 @@ async def compute_wh1_surrogate_metrics(
            top-1 매치 id==expected_id 비율(recall)을 낸다. **LIVE 학생별 ground-truth 아님**(전
            user 동일값·user_id/since/until 무관)·recall 프로브 0건이면 NO_DATA(가짜 0 회피)·
            substring은 보수적 기준선·FP율/precision은 semantic_eval 별도(여기선 recall 프로브만).
-
-    미계측(고정 status·value None):
-        ⑦ REQUIRES_TOOL.
-        사유는 note 한국어로 명시(무엇을 만들면 계측되는지).
+        ⑦ transfer_score: *근사* 전이 점수. is_correct NOT NULL ProblemAttempt를 Problem(problem_id
+           join)에 붙여 (problem_id, signature_patterns, is_correct)를 started_at 오름차순으로 뽑아,
+           Python 순수로 전이 프로브(같은 패턴 P·다른 problem_id·사전 노출 후 초견[첫 시도])를
+           식별하고 그 정답률을 낸다. 전이 프로브가 `_MIN_TRANSFER_PROBES` 미만이면 NO_DATA(가짜
+           0/정답률 금지)·아니면 MEASURED. **설계 §11.5 완전판(assign_transfer_probe·노드 BKT≥0.95
+           +2주 후 자동 출제)과 다른 근사**(마킹/스케줄 도구 미구현이라 풀이 이력에서 근사·표면
+           상이는 *다른 problem_id*로 근사·심층구조 동일성은 패턴 태그 의존·BKT 게이팅 미반영·후속).
     """
     # ── ③ 세션 완주율 (LearningSession.ended_at NOT NULL 비율) ──
     session_conds = []
@@ -893,6 +1024,35 @@ async def compute_wh1_surrogate_metrics(
     ]
     calibration_brier = _calibration_from_pairs(calibration_pairs)
 
+    # ── ⑦ 근사 전이 점수 (ProblemAttempt ⨝ Problem.signature_patterns·초견 동형 정답률) ──
+    # 같은 시그니처 패턴·다른 problem_id·사전 노출 후 초견(첫 시도) 정답률을 *근사*한다(설계 §11.5
+    # 완전판의 assign_transfer_probe·BKT≥0.95+2주 스케줄과 다름 — 마킹/스케줄 도구 미구현). user의
+    # is_correct NOT NULL ProblemAttempt를 Problem(problem_id join)에 붙여 (problem_id, signature_
+    # patterns, is_correct)를 **started_at 오름차순**으로 뽑고(정답률·난이도 쿼리와 동일 필터·
+    # 정렬·R15와 동형), Python 순수로 전이 프로브를 식별한다(_identify_transfer_probes). ORM join
+    # 만(원시 SQL 0). is_correct는 NOT NULL이라 bool로 좁혀 받는다(R15 정답률 필터 조건 재사용).
+    transfer_rows = (
+        await session.execute(
+            select(
+                ProblemAttempt.problem_id,
+                Problem.signature_patterns,
+                ProblemAttempt.is_correct,
+            )
+            .select_from(ProblemAttempt)
+            .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
+            .where(*accuracy_conds)
+            .order_by(ProblemAttempt.started_at.asc())
+        )
+    ).all()
+    # is_correct는 accuracy_conds(IS NOT NULL)로 이미 좁혀졌으나 방어적으로 bool() 변환(None→False
+    # 가 아니라 필터로 None이 없음을 신뢰·타입 좁히기). 식별은 순수 함수에 위임(날조 0).
+    transfer_input: list[tuple[uuid.UUID | None, list[SignaturePattern] | None, bool]] = [
+        (problem_id, patterns, bool(is_correct))
+        for problem_id, patterns, is_correct in transfer_rows
+    ]
+    transfer_outcomes = _identify_transfer_probes(transfer_input)
+    transfer_score = _transfer_from_probes(transfer_outcomes)
+
     # ── ② 진단-실제 오개념 일치율 (오프라인 진단정확도·substring recall) ──
     # 시스템 지표라 DB·user/기간과 무관(라벨 프로브에 substring 매처 recall) — 전 user 동일값.
     diagnostic_hits, diagnostic_total = compute_diagnostic_recall()
@@ -904,7 +1064,7 @@ async def compute_wh1_surrogate_metrics(
         tokens_per_turn=tokens_metric,
         help_reduction_slope=help_reduction,
         calibration_brier=calibration_brier,
-        transfer_score=_transfer_unmeasured(),
+        transfer_score=transfer_score,
         help_reduction_validated=help_reduction_validated,
         sample_sessions=int(total_sessions),
         sample_dialogues=sample_dialogues,
@@ -913,6 +1073,7 @@ async def compute_wh1_surrogate_metrics(
         sample_accuracy_attempts=len(accuracy_series),
         sample_difficulty_attempts=len(difficulty_series),
         sample_calibration_pairs=len(calibration_pairs),
+        sample_transfer_probes=len(transfer_outcomes),
         sample_diagnostic_probes=diagnostic_total,
         window_start=since,
         window_end=until,
