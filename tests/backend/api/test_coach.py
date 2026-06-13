@@ -419,6 +419,31 @@ class TestSolutionCoachingWiring:
         s, e = sc["error_span"]
         assert sol[s:e] == "x = 5"
 
+    def test_solution_steps_surface_focus_step_index(self) -> None:
+        # 단계 incorrect 전이 → trigger.focus_step_index 노출 + 위치 인지 발화(정답 부재).
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "확인해주세요",
+                "student_solution": "풀이",
+                "solution_steps": ["x + 1", "x + 1", "x + 2"],
+                "bkt_mastery": 0.9,
+            },
+        )
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+        assert sc["trigger"]["focus_step_index"] == 1  # 전이 1(steps[1]→steps[2])
+        assert "잘 따라왔어" in sc["trigger"]["prompt"]
+        assert "틀렸" not in sc["trigger"]["prompt"]
+
+    def test_text_slip_focus_step_index_null(self) -> None:
+        # 단계 미제공 → focus_step_index None(하위호환·위치 비지목).
+        resp = _client().post("/v1/coach", json={"student_input": "2 + 3 = 6"})
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus_step_index"] is None
+
     def test_step_shadow_not_exposed_in_response(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -440,9 +465,13 @@ class TestSolutionCoachingWiring:
         assert resp.status_code == 200
         body = resp.json()
         assert body["solution_coaching"] is not None  # 코칭은 노출(대수 슬립 검출)
-        assert "step" not in json.dumps(
-            body, ensure_ascii=False
-        )  # shadow step 신호 누출 0
+        # shadow step-break 관측(StepBreakObservation·slice 63)은 record_logger에만 sink하고
+        # HTTP 응답엔 *절대* 싣지 않는다 — shadow 고유 토큰의 부재로 누출 0을 확정한다. (단,
+        # 위치 인지 코칭 메타데이터 `focus_step_index`는 *정상 노출* 필드이므로 'step' 부분
+        # 문자열 전역 금지가 아니라 shadow 고유 키만 금지한다 — 위치 인덱스뿐·정답/본문 0.)
+        dumped = json.dumps(body, ensure_ascii=False)
+        for shadow_token in ("step_break", "StepBreak", "step_shadow", "observation"):
+            assert shadow_token not in dumped
 
     def test_clean_arithmetic_no_solution_coaching(self) -> None:
         # 참 등식 → 슬립 아님 → None(기존 decision/coaching_focus 경로).

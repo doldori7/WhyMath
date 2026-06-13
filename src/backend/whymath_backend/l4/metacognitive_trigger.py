@@ -92,6 +92,37 @@ _PROMPT: dict[CoachingFocus, str] = {
 # 위치를 *지목하지 않고* 학생이 스스로 인접 줄의 해 일관성을 확인하게 한다(답 미루기·slice 61).
 # 일반 verify("어디서 숫자가 어긋났는지")는 순수 수치 슬립용, 이건 다단계 변환의 등가 자가점검용.
 _PROMPT_VERIFY_STEPS = "각 줄이 바로 윗줄과 같은 답을 갖는지 한 줄씩 확인해볼래?"
+# verify 포커스의 *위치 인지 단계 자가검산* 변형 — `verify_solution`이 첫 incorrect 전이
+# 인덱스를 함께 줄 때만 쓴다(다단계 대수 슬립·전이 인덱스 제공·WH-1 1단계). 위 비지목 변형보다
+# *주의를 좁히되* CLAUDE.md 답 미루기·LTHC 최소도움·정서안전을 엄수한다:
+#   - **앞 단계 통과 확인**: first_incorrect_index 이전 전이는 verify_solution이 correct/
+#     unverifiable로 통과시킨 것 → "처음 {k}줄까지는 잘 따라왔어"로 *효능감*을 준다.
+#   - **그 지점부터 *스스로* 재검산**: 위치(몇 번째 줄)는 알려주되 *무엇이 왜 어긋났는지·
+#     고치는 법은 미제공* — 학생이 스스로 찾게 한다(LTHC 최소도움·답 미루기).
+#   - **단정·부정 강화 금지**: "N번째 줄이 *틀렸다*"가 아니라 "그 줄이 바로 윗줄과 같은 값인지
+#     거기서부터 다시 확인해볼까?"로 *의심 결과 줄을 스스로 검산*하게 한다(소크라테스·질문형).
+# off-by-one(전이 인덱스 → 사람 줄번호): 전이 i는 steps[i]→steps[i+1]이고 i 이전 전이가
+# 모두 통과 → steps[0..i](1-indexed 1..i+1)까지는 *잘 따라온* 줄이므로 k = i+1. *의심 결과 줄*
+# 은 전이 i의 도착 줄 steps[i+1](1-indexed i+2)이므로 m = i+2. (테스트 `test_*off_by_one`가 핀.)
+_PROMPT_VERIFY_STEPS_AT = (
+    "처음 {k}줄까지는 잘 따라왔어. {m}번째 줄이 바로 윗줄과 같은 값인지 "
+    "거기서부터 한 줄씩 다시 확인해볼까?"
+)
+
+
+def _verify_steps_at_prompt(step_index: int) -> str:
+    """위치 인지 단계 자가검산 발화 빌드 — 전이 인덱스(0-based)를 사람 줄번호로 환산.
+
+    `step_index`(=`verify_solution.first_incorrect_index`)는 전이 i(steps[i]→steps[i+1])다.
+    i 이전 전이는 모두 통과했으므로 1..i+1번째 줄까지 *잘 따라온* 것(k=i+1)·*의심 결과 줄*은
+    전이 i의 도착 줄(1-indexed i+2, m=i+2). 위치만 좁혀줄 뿐 *무엇이 왜 어긋났는지·고치는
+    법은 주지 않는다*(답 미루기·LTHC 최소도움·스스로 검산).
+    """
+    k = step_index + 1  # 잘 따라온 줄 수(1-indexed 마지막 통과 줄 = i+1).
+    m = step_index + 2  # 스스로 재검산할 의심 결과 줄(1-indexed steps[i+1]).
+    return _PROMPT_VERIFY_STEPS_AT.format(k=k, m=m)
+
+
 # 포커스 → 대화 진입 소크라테스 카테고리(slice 5·socratic 6분류). coach가 *어떤 질문 종류*로
 # 시작할지 — verify=근거(계산 재점검)·consolidate=근거(추측 검증)·retrieval=메타(예전 풀이
 # 회상)·foundation/diagnose=명료화(기초·상태 파악)·advance=관점(다른 방법·일반화).
@@ -124,6 +155,16 @@ class CoachingTrigger(BaseModel):
     socratic_category: SocraticCategory = Field(
         description="대화 진입 소크라테스 카테고리(coach 발화 종류·slice 5)."
     )
+    focus_step_index: int | None = Field(
+        default=None,
+        description=(
+            "verify 포커스가 가리키는 *첫 incorrect 전이* 인덱스(0-based·steps[i]→steps[i+1]). "
+            "`verify_solution.first_incorrect_index`를 그대로 옮긴 *구조화 메타데이터*로, 발화"
+            "(prompt)와 *별도 채널*이다 — L5가 학생 풀이의 해당 줄 하이라이트·점층 유도·교사 "
+            "대시보드에 쓴다. verify 포커스가 아니거나 인덱스 미제공이면 None(하위호환). 위치만 "
+            "담을 뿐 정답/본문은 아니다(학생 자기 풀이 구조·노출 안전)."
+        ),
+    )
 
 
 def recommend_coaching(
@@ -132,6 +173,7 @@ def recommend_coaching(
     *,
     arithmetic_error: bool = False,
     verify_steps: bool = False,
+    incorrect_step_index: int | None = None,
     discrepancy_tol: float = 0.2,
     mastery_threshold: float = 0.6,
 ) -> CoachingTrigger:
@@ -153,9 +195,17 @@ def recommend_coaching(
     True면 verify 발화를 *단계 자가검산* 변형으로 바꾼다(다단계 대수 슬립용·위치 비지목·slice 61).
     오케스트레이터가 L3 kind="solution"을 이 bool로 환산해 전달(L4는 kind를 모름). 발화·근거는
     포커스별 정본 카탈로그에서 조회(답 미제공·메타인지 유도).
+
+    `incorrect_step_index`(verify_solution 첫 incorrect 전이 인덱스·0-based·None이면 위치
+    미지정)도 같은 *순수 신호* — 오케스트레이터가 `verify_solution.first_incorrect_index`를
+    그대로 전달한다(L4는 verify_solution을 모름). verify 발화가 단계 자가검산 변형일 때 이
+    인덱스가 있으면 *위치 인지 점층 발화*(앞 단계 통과 확인 + 그 지점부터 스스로 재검산)로
+    좁히되, *무엇이 왜 어긋났는지·고치는 법은 주지 않는다*(답 미루기·LTHC 최소도움·정서안전).
+    인덱스가 None이면 기존 위치 비지목 발화 그대로(하위호환). 또한 verify 포커스면 이 인덱스를
+    `CoachingTrigger.focus_step_index`(구조화 메타데이터·발화와 별도 채널)로도 옮긴다.
     """
     if arithmetic_error:
-        return _build("verify", steps=verify_steps)
+        return _build("verify", steps=verify_steps, step_index=incorrect_step_index)
     if bkt_mastery is None or irt_theta is None:
         return _build("diagnose")
 
@@ -170,14 +220,33 @@ def recommend_coaching(
     return _build("foundation" if level < mastery_threshold else "advance")
 
 
-def _build(focus: CoachingFocus, *, steps: bool = False) -> CoachingTrigger:
-    # steps=True이고 verify면 단계 자가검산 변형 prompt(slice 61)·그 외는 포커스별 정본.
-    prompt = _PROMPT_VERIFY_STEPS if (focus == "verify" and steps) else _PROMPT[focus]
+def _build(
+    focus: CoachingFocus,
+    *,
+    steps: bool = False,
+    step_index: int | None = None,
+) -> CoachingTrigger:
+    # verify 발화 변형 결정(우선순위 명확):
+    #   1) verify + steps + step_index 제공 → *위치 인지* 단계 자가검산(앞단계 확인 + 그 지점
+    #      재검산·정답/수정/"틀렸다" 미포함·답 미루기).
+    #   2) verify + steps + step_index 없음 → 위치 비지목 단계 자가검산(_PROMPT_VERIFY_STEPS).
+    #   3) 그 외 → 포커스별 정본 발화(_PROMPT).
+    if focus == "verify" and steps:
+        prompt = (
+            _verify_steps_at_prompt(step_index) if step_index is not None else _PROMPT_VERIFY_STEPS
+        )
+    else:
+        prompt = _PROMPT[focus]
+    # focus_step_index는 *구조화 메타데이터*(발화와 별도 채널) — verify 포커스일 때만 step_index를
+    # 그대로 옮긴다(steps bool 여부 무관: L5 하이라이트/교사 대시보드는 발화 변형과 독립). verify가
+    # 아니거나 인덱스 미제공이면 None(하위호환).
+    focus_step_index = step_index if focus == "verify" else None
     return CoachingTrigger(
         focus=focus,
         rationale=_RATIONALE[focus],
         prompt=prompt,
         socratic_category=_SOCRATIC_BY_FOCUS[focus],
+        focus_step_index=focus_step_index,
     )
 
 

@@ -336,6 +336,31 @@ class TestSolutionStepsWiring:
         assert result.solution_verification is not None
         assert result.solution_verification.first_incorrect_index == 1
 
+    def test_incorrect_steps_position_aware_prompt(self) -> None:
+        """단계 incorrect → 발화가 *위치 인지*(앞단계 확인+그 지점 재검산)·focus_step_index 전달."""
+        # 전이 1(steps[1]→steps[2])이 incorrect → 2줄 통과(k=2)·3번째 줄 재검산(m=3).
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["x + 1", "x + 1", "x + 2"]
+        )
+        assert result.trigger.focus == "verify"
+        assert result.solution_verification is not None
+        assert result.solution_verification.first_incorrect_index == 1
+        # 위치 인지 발화 + 구조화 메타데이터(first_incorrect_index 그대로).
+        assert "잘 따라왔어" in result.trigger.prompt
+        assert "처음 2줄까지는 잘 따라왔어" in result.trigger.prompt
+        assert "3번째 줄" in result.trigger.prompt
+        assert result.trigger.focus_step_index == 1
+        # 교수학 금기 가드 — 정답·수정·'틀렸다' 부재.
+        for forbidden in ("틀렸", "정답은", "고치", "수정", "="):
+            assert forbidden not in result.trigger.prompt
+
+    def test_text_only_slip_no_focus_step_index(self) -> None:
+        """텍스트 슬립만(단계 미제공) → focus_step_index None·기존 일반 발화(하위호환)."""
+        result = recommend_coaching_for_solution("2 + 3 = 6", 0.9, 2.0)
+        assert result.trigger.focus == "verify"
+        assert result.trigger.focus_step_index is None
+        assert "잘 따라왔어" not in result.trigger.prompt
+
     def test_correct_steps_no_step_signal(self) -> None:
         """전부 correct 전이 → 단계 신호 없음(텍스트 신호만)·verification은 채워지되 has_incorrect False."""
         result = recommend_coaching_for_solution(

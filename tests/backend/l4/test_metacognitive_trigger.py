@@ -53,6 +53,71 @@ class TestRecommendCoaching:
         """arithmetic_error 없으면 verify 분기 미진입 → verify_steps 무효(mastery 경로)."""
         assert recommend_coaching(0.9, 2.0, verify_steps=True).focus == "advance"
 
+    def test_position_aware_verify_prompt(self) -> None:
+        """verify_steps=True + incorrect_step_index → *위치 인지* 점층 발화·focus_step_index."""
+        trig = recommend_coaching(
+            0.9, 2.0, arithmetic_error=True, verify_steps=True, incorrect_step_index=2
+        )
+        assert trig.focus == "verify"
+        assert trig.socratic_category == SocraticCategory.EVIDENCE  # 카테고리 불변
+        # 위치 인지형 — 앞단계 통과 확인 + 그 지점부터 스스로 재검산(질문형·소크라테스).
+        assert "잘 따라왔어" in trig.prompt
+        assert "다시 확인해볼까" in trig.prompt
+        # 구조화 메타데이터(발화와 별도 채널) — 전이 인덱스 그대로.
+        assert trig.focus_step_index == 2
+
+    def test_position_aware_off_by_one_mapping(self) -> None:
+        """off-by-one 핀 — 전이 i → 사람 줄번호 k=i+1(통과)·m=i+2(재검산 대상 줄)."""
+        # 전이 0(steps[0]→steps[1]): 1줄까지 통과(k=1)·2번째 줄 재검산(m=2).
+        p0 = recommend_coaching(
+            0.9, 2.0, arithmetic_error=True, verify_steps=True, incorrect_step_index=0
+        ).prompt
+        assert "처음 1줄까지는 잘 따라왔어" in p0
+        assert "2번째 줄" in p0
+        # 전이 3(steps[3]→steps[4]): 4줄까지 통과(k=4)·5번째 줄 재검산(m=5).
+        p3 = recommend_coaching(
+            0.9, 2.0, arithmetic_error=True, verify_steps=True, incorrect_step_index=3
+        ).prompt
+        assert "처음 4줄까지는 잘 따라왔어" in p3
+        assert "5번째 줄" in p3
+
+    def test_position_aware_no_answer_or_negation(self) -> None:
+        """교수학 금기 가드 — 위치 인지 발화에 정답·수정·'틀렸다' 부정 단정 부재."""
+        prompt = recommend_coaching(
+            0.9, 2.0, arithmetic_error=True, verify_steps=True, incorrect_step_index=1
+        ).prompt
+        for forbidden in ("틀렸", "틀린", "오답", "정답은", "고치", "수정", "이렇게 하면", "="):
+            assert forbidden not in prompt
+        # 효능감(앞단계 확인) + 질문형(소크라테스) 존재.
+        assert "잘 따라왔어" in prompt and prompt.rstrip().endswith("?")
+
+    def test_index_none_keeps_generic_step_prompt(self) -> None:
+        """incorrect_step_index 없음 → 기존 위치 비지목 _PROMPT_VERIFY_STEPS·focus_step_index None."""
+        trig = recommend_coaching(
+            0.9, 2.0, arithmetic_error=True, verify_steps=True, incorrect_step_index=None
+        )
+        assert "한 줄씩" in trig.prompt
+        assert "잘 따라왔어" not in trig.prompt  # 위치 인지형 아님
+        assert trig.focus_step_index is None
+        # 인덱스 키워드 미지정도 동일(완전 하위호환).
+        assert recommend_coaching(0.9, 2.0, arithmetic_error=True, verify_steps=True) == trig
+
+    def test_index_without_verify_steps_metadata_only(self) -> None:
+        """verify_steps=False + index → 발화는 일반 verify(위치 비지목)·focus_step_index만 채움."""
+        trig = recommend_coaching(
+            0.9, 2.0, arithmetic_error=True, verify_steps=False, incorrect_step_index=2
+        )
+        assert trig.focus == "verify"
+        assert "숫자가 어긋났는지" in trig.prompt  # 일반 verify 발화(변형 아님)
+        assert "잘 따라왔어" not in trig.prompt and "한 줄씩" not in trig.prompt
+        assert trig.focus_step_index == 2  # 메타데이터만 노출(발화 별도 채널)
+
+    def test_index_ignored_when_not_verify_focus(self) -> None:
+        """verify 포커스가 아니면(mastery 경로) focus_step_index는 항상 None."""
+        trig = recommend_coaching(0.9, 2.0, incorrect_step_index=2)
+        assert trig.focus == "advance"
+        assert trig.focus_step_index is None
+
     def test_missing_signal_diagnose(self) -> None:
         """한쪽 신호라도 없으면 diagnose(교차검증 불가)."""
         assert recommend_coaching(None, 1.0).focus == "diagnose"
