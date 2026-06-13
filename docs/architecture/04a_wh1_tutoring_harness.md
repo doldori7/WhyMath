@@ -545,4 +545,10 @@ CREATE TABLE strategy_evidence (
 
 ### 1단계 (도구 삽입) — 진행 (2026-06-13)
 
-§8.4 1단계: `verify_step`·`match_misconception` 2도구를 기존 파이프라인에 삽입(0단계 게이트 통과 후). **슬라이스 1 — `match_misconception` 도구화(§3.3 품질 게이트) 구현됨**: `l4/misconception/match_gate.py` `apply_match_quality_gate(matches, *, ocr_confidence, confidence_floor=0.65, ocr_threshold=0.8) -> MatchGateResult` — **① top-1 신뢰도(confidence)<0.65 → 후보 전체 비움**(`no_confident_match=True`·억지 매칭 금지·R6·CLAUDE.md "확실하지 않으면 모른다") · **② OCR confidence<0.8 → `low_quality` 플래그**(재확인 유도·`CoachRequest` OCR 필드 없어 현재 dormant·인터페이스만). `api/coach.py` `_compute_matches` 세 모드(off/shadow/on) 공통 출구에 *후처리*로 삽입 — `diagnose`/의미매처/`combine_diagnoses` **알고리즘 불변**(shadow 로깅은 게이트 전 원본)·약한 매칭이 하류(가설·intervention)에서 차단(의도된 품질 개선). 마이그레이션 0·`_build_response_payload` 6-튜플 불변. **후속(슬라이스 2)**: `verify_step` 3-state(정답/오답/검증불가·step 단위 SymPy·현 `validate_response`는 2-state) · OCR confidence 요청 필드 → 게이트 ② 활성 · `low_quality`/`no_confident_match` HTTP 노출 · 단원별 verify 커버리지 ≥70% 게이팅.
+§8.4 1단계: `verify_step`·`match_misconception` 2도구를 기존 파이프라인에 삽입(0단계 게이트 통과 후). **2도구 모두 도구화 구현됨.**
+
+**슬라이스 1 — `match_misconception` 도구화(§3.3 품질 게이트)**: `l4/misconception/match_gate.py` `apply_match_quality_gate(matches, *, ocr_confidence, confidence_floor=0.65, ocr_threshold=0.8)` — **top-1 신뢰도<0.65 → 후보 비움**(`no_confident_match`·억지 매칭 금지·R6) · **OCR<0.8 → `low_quality`**(현재 dormant). `api/coach.py` `_compute_matches` 세 모드 공통 출구에 후처리 삽입 — `diagnose`/`combine_diagnoses` **알고리즘 불변**·약한 매칭 하류 차단. 마이그레이션 0·6-튜플 불변.
+
+**슬라이스 2 — `verify_step` 3-state 도구화**: `l3/verify_step.py` `verify_step(expr_before, expr_after, step_type=None) -> VerifyStepResult`(순수·결정론)·`POST /v1/verify-step`(stateless·`ConsentedUser`). **비대수 step_type**(조건해석·케이스분류·그래프스케치)→`unverifiable`; **대수**(계산·검산·None)→SymPy 동치 — `expand(diff)==0`/`simplify.is_zero is True`→**correct**·`is_zero is False`/*같은 자유변수의 0-아닌 다항식*(예: `(a+b)²≠a²+b²`)→**incorrect**·비다항 미정(예 `√(x²)`)·**변수 집합 달라 맥락 의존**(예 치환 `a`→`b+1`)·파싱예외·빈입력→**unverifiable**(weight 0.5). **정확성 #1**: *같은 자유변수* 가드로 치환·산문을 *거짓 incorrect 오판 않음*(학생 올바른 단계 보호). PRM·step 파싱·coach 결선은 후속.
+
+**후속(1단계 잔여)**: OCR confidence 요청 필드→게이트 ② 활성 · `low_quality`/`no_confident_match`·verify_step HTTP 소비→coach/가설 결선 · 학생 솔루션 step 파싱 · 단원별 verify 커버리지 ≥70% 게이팅 · PRM800K 한국 분포 보정.

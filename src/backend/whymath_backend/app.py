@@ -65,6 +65,7 @@ from whymath_backend.api.devices import router as devices_router
 from whymath_backend.api.me import router as me_router
 from whymath_backend.api.problems import router as problems_router
 from whymath_backend.api.users import router as users_router
+from whymath_backend.api.verify import router as verify_router
 from whymath_backend.api.visualization import router as visualization_router
 from whymath_backend.config import get_settings
 from whymath_backend.db.session import dispose_engine
@@ -483,6 +484,7 @@ def create_app(
     app.include_router(users_router)
     app.include_router(me_router)
     app.include_router(coach_router)
+    app.include_router(verify_router)
     app.include_router(devices_router)
     app.include_router(visualization_router)
 
