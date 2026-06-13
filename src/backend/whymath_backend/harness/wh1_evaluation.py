@@ -15,7 +15,13 @@
 7종 대리 지표 커버리지(설계안 §8.4):
   ① verify 통과율          — 🟢 MEASURED/NO_DATA: attempt_event(event_type=검산결과)의
                              passed=거짓 수치관계 *미적발* 비율(binary 검산·3-state 아님).
-  ② 진단-실제 오개념 일치율 — 🔴 REQUIRES_DATA: ground-truth 오개념 라벨 부재.
+  ② 진단-실제 오개념 일치율 — 🟡 MEASURED(오프라인)/NO_DATA: 라벨 프로브(틀린 진술→expected_id
+                             오개념)에 substring 매처 `diagnose` top-1 recall(오프라인 진단정확도).
+                             **LIVE 학생별 ground-truth가 아니라 시스템 진단엔진 품질 지표**(전
+                             user 동일값·user/기간 무관). LIVE per-user 일치율은 문항-오개념 태깅·
+                             attempt별 진단 기록 부재로 여전히 데이터 기반 없음(후속). substring은
+                             보수적 기준선(의미 매처는 더 높은 recall이나 임베딩 의존)·FP율/
+                             precision은 semantic_eval 별도(recall 프로브만)·프로브 0건이면 NO_DATA.
   ③ 세션 완주율            — 🟢 MEASURED: LearningSession.ended_at NOT NULL 비율.
   ④ 턴당 토큰              — 🟡 MEASURED/NO_DATA: Dialogue.total_tokens/total_turns 평균.
   ⑤ 도움 감소 곡선         — 🟡 MEASURED/NO_DATA: attempt_event(event_type=힌트제공)의
@@ -57,6 +63,7 @@ from whymath_backend.db.models.activity import (
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.l2.ability_estimation import resolve_item_difficulty_b
+from whymath_backend.l4.misconception.probes import compute_diagnostic_recall
 from whymath_backend.schema.enums import EventType
 
 __all__ = [
@@ -129,7 +136,10 @@ class MetricStatus(str, Enum):
     REQUIRES_DATA = "requires_data"
     """🔴 ground-truth 라벨 부재 — 신호는 있으나 *정답(실제)* 라벨이 없어 일치율을 못 냄.
 
-    문항-오개념 태깅·정답 라벨 코퍼스가 채워져야 계측 가능(② 진단-실제 오개념 일치율).
+    문항-오개념 태깅·정답 라벨 코퍼스가 채워져야 계측 가능. ②(진단-실제 오개념 일치율)의 *LIVE
+    per-user* 버전이 여기 해당하나, 이 슬라이스에서 ②는 *오프라인 진단정확도*(라벨 프로브
+    substring recall·시스템 지표)로 MEASURED가 됐다 — LIVE per-user 일치율만 여전히 REQUIRES_DATA
+    (현재 어떤 지표도 이 상태를 쓰지 않음·후속 LIVE 태깅 슬라이스가 점화할 좌석).
     """
 
     REQUIRES_TOOL = "requires_tool"
@@ -233,9 +243,11 @@ class HelpReductionValidation(BaseModel):
 class SurrogateMetrics(BaseModel):
     """WH-1 0단계 대리 지표 7종 + 표본 메타 — 커버리지 맵 한 장.
 
-    계측 가능분(① verify 통과율·③ 세션 완주율·④ 턴당 토큰)은 실값(또는 표본 0이면 NO_DATA),
-    미계측 4종(②⑤⑥⑦)은 고정 상태 + note로 갭을 표면화한다. 메타(표본 수·시간창·user 스코핑)로
-    이 베이스라인이 *어느 모집단/기간*을 잰 것인지 함께 기록한다.
+    계측 가능분(① verify 통과율·③ 세션 완주율·④ 턴당 토큰·⑤⑥, 그리고 ② 오프라인 진단정확도)은
+    실값(또는 표본 0이면 NO_DATA), 미계측 ⑦은 고정 상태 + note로 갭을 표면화한다. 메타(표본 수·
+    시간창·user 스코핑)로 이 베이스라인이 *어느 모집단/기간*을 잰 것인지 함께 기록한다. ②는
+    *시스템 지표*(라벨 프로브 substring recall)라 user/시간창 메타와 무관하다(전 user 동일값·
+    LIVE per-user ground-truth 아님 — `sample_diagnostic_probes`는 DB 표본이 아니라 프로브셋 크기).
     """
 
     # ── 7종 대리 지표 ──
@@ -243,7 +255,11 @@ class SurrogateMetrics(BaseModel):
         description="① verify 통과율 — 검산결과 이벤트 중 passed=거짓관계 미적발 비율(binary)."
     )
     diagnosis_agreement_rate: Metric = Field(
-        description="② 진단-실제 오개념 일치율 — 진단 오개념 vs ground-truth 라벨."
+        description=(
+            "② 진단-실제 오개념 일치율 — *오프라인 진단정확도*(라벨 프로브에 substring 매처 "
+            "`diagnose` top-1 recall). LIVE 학생별 ground-truth가 아니라 시스템 진단엔진 품질 "
+            "지표(전 user 동일값)·recall 프로브 0건이면 NO_DATA."
+        )
     )
     session_completion_rate: Metric = Field(
         description="③ 세션 완주율 — LearningSession 중 ended_at 채워진 비율(실측)."
@@ -307,6 +323,14 @@ class SurrogateMetrics(BaseModel):
             "is_correct 둘 다 NOT NULL). `_MIN_CALIBRATION_SAMPLES` 미만이면 NO_DATA."
         ),
     )
+    sample_diagnostic_probes: int = Field(
+        default=0,
+        description=(
+            "② 진단-실제 오개념 일치율(오프라인) 대상 *recall 프로브* 수(expected_id 설정·라벨된 "
+            "틀린 진술). 0이면 NO_DATA. **시스템 지표**라 user/시간창과 무관(전 user 동일값) — "
+            "DB 표본이 아니라 라벨 프로브셋 크기다(LIVE per-user ground-truth 아님)."
+        ),
+    )
     window_start: datetime | None = Field(
         default=None, description="집계 시간창 시작(since·생략 시 None=무한 과거)."
     )
@@ -318,15 +342,47 @@ class SurrogateMetrics(BaseModel):
     )
 
 
-# ── 미계측 5종 고정 Metric(value None·상태 enum·한국어 note) ──────────────────────
+# ── 미계측 고정 Metric(value None·상태 enum·한국어 note) ──────────────────────────
 # 날조 금지: 신호가 적재/라벨/도구로 생산되기 전까지 value=None을 유지한다(0/stub 금지).
-def _diagnosis_agreement_unmeasured() -> Metric:
+
+
+def _diagnosis_agreement_offline(hits: int, total: int) -> Metric:
+    """② 진단-실제 오개념 일치율 — *오프라인 진단정확도*(라벨 프로브 substring recall).
+
+    `probes.compute_diagnostic_recall`이 낸 (hit 수, recall 프로브 총수)로 top-1 recall을
+    Metric으로 싼다. recall 프로브가 0건이면(라벨셋 비거나 전부 FP) **NO_DATA**(value None·날조
+    회피) — 실제 프로브셋은 60건의 recall 프로브를 담아 MEASURED가 된다.
+
+    **정직 스코프(중요)** — 이 값은 *오프라인·시스템 지표*다. LIVE 학생별 ground-truth가 아니다:
+      - **오프라인·시스템 지표**: 라벨된 프로브(틀린 진술→expected_id 오개념)에 substring 매처
+        `diagnose`를 돌려 *top-1 매치 id == expected_id* 비율을 낸다. *시스템 진단엔진 품질*을
+        재므로 user_id/since/until과 무관하다(전 user 동일값·`user_scoped`·시간창에 안 묶임).
+      - **LIVE per-user 진단정확도가 아니다**: 실제 학생의 진짜 오개념은 자가보고되지 않고
+        (문항-오개념 태깅·attempt별 진단 기록 부재) 학생별 일치율은 여전히 데이터 기반이 없다.
+      - **substring은 보수적 기준선**: 의미 매처(pgvector 임베딩)는 패러프레이즈까지 잡아 더 높은
+        recall을 내지만 임베딩 의존이다. 여기선 항상 가용한 결정론 substring만 쓴다.
+      - **FP율/precision은 범위 밖**: 거짓양성·정밀도는 `semantic_eval`이 별도 측정한다(여기선
+        recall 프로브만). 따라서 이 값을 진단엔진의 *정밀도*로 읽으면 안 된다.
+    """
+    if total <= 0:  # recall 프로브 0건 — 라벨셋 부재/전부 FP(날조 0 회피)
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                "라벨 프로브셋에 recall 프로브(expected_id 설정)가 0건 — 오프라인 진단정확도 "
+                "산출 불가(가짜 0 아님). 라벨 프로브가 채워지면 substring 매처 recall 계측."
+            ),
+        )
+    recall = hits / total
     return Metric(
-        value=None,
-        status=MetricStatus.REQUIRES_DATA,
+        value=recall,
+        status=MetricStatus.MEASURED,
         note=(
-            "문항-오개념 ground-truth 태깅 부재(카탈로그 30종·정답 라벨 없음) — 진단 오개념과 "
-            "대조할 실제 라벨이 있어야 일치율 산출(L2 agreement는 BKT↔IRT 신호일 뿐)."
+            f"오프라인 진단정확도 — 라벨 프로브 {total}건에 substring 매처 recall(top-1 "
+            f"expected_id 일치율 {hits}/{total}={recall:.4f}). **LIVE 학생별 ground-truth가 "
+            "아님**(시스템 진단엔진 품질·전 user 동일값·user/기간 무관). substring은 보수적 "
+            "기준선(의미 매처[pgvector]는 더 높은 recall이나 임베딩 의존)·FP율/precision은 "
+            "semantic_eval 별도(여기선 recall 프로브만)·표본은 프로브셋 크기."
         ),
     )
 
@@ -549,14 +605,18 @@ async def compute_wh1_surrogate_metrics(
     since: datetime | None = None,
     until: datetime | None = None,
 ) -> SurrogateMetrics:
-    """WH-1 0단계 대리 지표 7종을 계산 — 계측 가능분 실측 + 미계측 3종 정직 표시.
+    """WH-1 0단계 대리 지표 7종을 계산 — 계측 가능분 실측 + 미계측 1종(⑦) 정직 표시.
 
-    설계안 §8.4 0단계 베이스라인. **계측 가능(①③④⑤⑥)만 실값**으로 내고, **미계측(②⑦)은
+    설계안 §8.4 0단계 베이스라인. **계측 가능(①②③④⑤⑥)만 실값**으로 내고, **미계측(⑦)은
     value=None + status + note**로 갭을 가시화한다(CLAUDE.md "모르면 모른다"·설계안 "측정 없는
     도입 없음" — 0/stub 날조 금지). ⑤(도움 감소 곡선)는 힌트제공 이벤트 적재 슬라이스로
     NOT_INSTRUMENTED→MEASURED가 됐다(표본 부족이면 NO_DATA·R15 교차검증 미반영). ⑥(보정 점수
     Brier)는 ProblemAttempt.confidence_self_reported·is_correct 기존 필드 파생으로
     REQUIRES_TOOL→MEASURED가 됐다(유효 쌍<`_MIN_CALIBRATION_SAMPLES`면 NO_DATA·새 수집 0).
+    ②(진단-실제 오개념 일치율)는 *오프라인 진단정확도*(라벨 프로브 substring recall)로
+    REQUIRES_DATA→MEASURED(오프라인)가 됐다 — **LIVE 학생별 ground-truth가 아니라 시스템 진단엔진
+    품질 지표**(전 user 동일값·user/since/until 무관·DB 0). LIVE per-user 일치율은 문항-오개념
+    태깅·attempt별 진단 기록 부재로 여전히 데이터 기반 없음(후속)·recall 프로브 0건이면 NO_DATA.
 
     Args:
         session: 조회 전용 AsyncSession(쓰기 없음·ORM/쿼리빌더만·원시 SQL 회피).
@@ -584,10 +644,15 @@ async def compute_wh1_surrogate_metrics(
            NULL인 쌍에서 Brier=mean((confidence−is_correct)²)(낮을수록 잘 보정). 유효 쌍이
            `_MIN_CALIBRATION_SAMPLES` 미만이면 NO_DATA(가짜 0/Brier 금지)·아니면 MEASURED.
            기존 필드 파생일 뿐 과신/과소신 구간 코칭(§11.4)은 미반영(후속).
+        ② diagnosis_agreement_rate: *오프라인·시스템 지표*(DB 0). `probes.compute_diagnostic_recall`
+           이 라벨 recall 프로브(expected_id 설정·틀린 진술)에 substring 매처 `diagnose`를 돌려
+           top-1 매치 id==expected_id 비율(recall)을 낸다. **LIVE 학생별 ground-truth 아님**(전
+           user 동일값·user_id/since/until 무관)·recall 프로브 0건이면 NO_DATA(가짜 0 회피)·
+           substring은 보수적 기준선·FP율/precision은 semantic_eval 별도(여기선 recall 프로브만).
 
     미계측(고정 status·value None):
-        ② REQUIRES_DATA · ⑦ REQUIRES_TOOL.
-        각 사유는 note 한국어로 명시(무엇을 만들면 계측되는지).
+        ⑦ REQUIRES_TOOL.
+        사유는 note 한국어로 명시(무엇을 만들면 계측되는지).
     """
     # ── ③ 세션 완주율 (LearningSession.ended_at NOT NULL 비율) ──
     session_conds = []
@@ -828,9 +893,13 @@ async def compute_wh1_surrogate_metrics(
     ]
     calibration_brier = _calibration_from_pairs(calibration_pairs)
 
+    # ── ② 진단-실제 오개념 일치율 (오프라인 진단정확도·substring recall) ──
+    # 시스템 지표라 DB·user/기간과 무관(라벨 프로브에 substring 매처 recall) — 전 user 동일값.
+    diagnostic_hits, diagnostic_total = compute_diagnostic_recall()
+
     return SurrogateMetrics(
         verify_pass_rate=verify_metric,
-        diagnosis_agreement_rate=_diagnosis_agreement_unmeasured(),
+        diagnosis_agreement_rate=_diagnosis_agreement_offline(diagnostic_hits, diagnostic_total),
         session_completion_rate=session_completion,
         tokens_per_turn=tokens_metric,
         help_reduction_slope=help_reduction,
@@ -844,6 +913,7 @@ async def compute_wh1_surrogate_metrics(
         sample_accuracy_attempts=len(accuracy_series),
         sample_difficulty_attempts=len(difficulty_series),
         sample_calibration_pairs=len(calibration_pairs),
+        sample_diagnostic_probes=diagnostic_total,
         window_start=since,
         window_end=until,
         user_scoped=user_id is not None,

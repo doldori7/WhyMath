@@ -18,8 +18,6 @@ CI는 `WHYMATH_RUN_INTEGRATION`을 설정하지 않으므로 자동 skip(conftes
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from ._live_resources import (
@@ -28,6 +26,7 @@ from ._live_resources import (
 )
 from whymath_backend.l4.misconception.judge import LLMJudge
 from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
+from whymath_backend.l4.misconception.probes import probes_path
 from whymath_backend.l4.misconception.semantic.matcher import SemanticMatcher
 from whymath_backend.l4.misconception.semantic.provider import LocalEmbeddingProvider
 from whymath_backend.l4.misconception.semantic_eval import (
@@ -39,15 +38,16 @@ from whymath_backend.l4.misconception.semantic_eval import (
 
 pytestmark = pytest.mark.integration
 
-_PROBES_PATH = Path(__file__).resolve().parent / "fixtures" / "misconception_semantic_probes.jsonl"
-
 
 class TestJudgeLive:
     """라이브 L3(로컬 Ollama) judge로 전체 프로브셋 측정 — 출력은 측정용, 단언은 loose smoke."""
 
     @pytest.mark.asyncio
     async def test_full_probeset_judge_fp_reduction_measurement(self) -> None:
-        probes = load_probes(_PROBES_PATH)
+        # 프로브셋은 프로덕션 패키지 데이터(`probes_v1.jsonl`)로 단일화됐다 — `probes_path()`로
+        # 실파일을 빌려 `load_probes`에 넘긴다(설치 트리·개발 트리 공통).
+        with probes_path() as path:
+            probes = load_probes(path)
         assert len(probes) == 92
 
         # 슬110(#5): bge-m3·Ollama 자원 미도달은 사전체크로 skip(judge=UNCERTAIN 무의미 측정

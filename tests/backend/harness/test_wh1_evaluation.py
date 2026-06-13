@@ -27,6 +27,7 @@ from whymath_backend.harness.wh1_evaluation import (
     R15Verdict,
     SurrogateMetrics,
     _calibration_from_pairs,
+    _diagnosis_agreement_offline,
     _judge_r15,
     _ols_slope,
     compute_wh1_surrogate_metrics,
@@ -330,19 +331,13 @@ class TestHelpReductionSlope:
         assert "종단" in m.note
 
 
-# ── ②⑦ 미계측 2종 (⑥은 R15 슬라이스 이후 MEASURED/NO_DATA로 격상) ──────────────────
+# ── ⑦ 미계측 1종 (②는 오프라인 진단정확도로 MEASURED·⑥은 R15 이후 격상) ──────────────
 class TestUnmeasuredMetrics:
     async def _metrics(self) -> SurrogateMetrics:
         session = _make_session(
             total_sessions=1, completed_sessions=1, avg_tokens=10.0, token_sample=5
         )
         return await compute_wh1_surrogate_metrics(session)
-
-    async def test_diagnosis_agreement_requires_data(self) -> None:
-        m = (await self._metrics()).diagnosis_agreement_rate
-        assert m.status is MetricStatus.REQUIRES_DATA
-        assert m.value is None
-        assert "ground-truth" in m.note
 
     async def test_transfer_requires_tool(self) -> None:
         m = (await self._metrics()).transfer_score
@@ -357,17 +352,97 @@ class TestUnmeasuredMetrics:
         assert m.value is None
         assert "elicit_prediction" not in m.note
 
-    async def test_all_unmeasured_value_none(self) -> None:
-        """미계측 2종(②⑦) *전부* value None — 단 하나도 0/stub이 아님(날조 0 불변)."""
-        m = await self._metrics()
-        for metric in (
-            m.diagnosis_agreement_rate,
-            m.transfer_score,
-        ):
-            assert isinstance(metric, Metric)
-            assert metric.value is None
-            assert metric.status is not MetricStatus.MEASURED
-            assert metric.note  # 한국어 note 비어있지 않음
+    async def test_transfer_unmeasured_value_none(self) -> None:
+        """미계측 ⑦ value None — 0/stub 아님(날조 0 불변·이제 ②는 측정됨)."""
+        m = (await self._metrics()).transfer_score
+        assert isinstance(m, Metric)
+        assert m.value is None
+        assert m.status is not MetricStatus.MEASURED
+        assert m.note  # 한국어 note 비어있지 않음
+
+
+# ── ② 진단-실제 오개념 일치율 (오프라인 진단정확도·substring recall) ─────────────────
+class TestDiagnosisAgreementOffline:
+    """`_diagnosis_agreement_offline`(canned hit/miss)·MEASURED/NO_DATA·정직 note·시스템 지표.
+
+    실 프로브 파일 로드는 L4 통합 테스트(`tests/backend/l4/test_misconception_probes.py`)가
+    검증한다 — 여기선 (hit, total) 튜플을 직접 넣어 *Metric 변환*(비율·상태·note)만 못 박는다.
+    """
+
+    def test_measured_recall_value_and_status(self) -> None:
+        """hit 45/total 60 → MEASURED·value 0.75·표본은 호출자(하네스) 책임."""
+        m = _diagnosis_agreement_offline(45, 60)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 0.75
+
+    def test_all_hit(self) -> None:
+        m = _diagnosis_agreement_offline(60, 60)
+        assert m.value == 1.0
+        assert m.status is MetricStatus.MEASURED
+
+    def test_no_hit_is_measured_zero_not_no_data(self) -> None:
+        """recall 프로브는 있는데 hit 0 → MEASURED value 0.0(*실측된* 0이지 날조 0 아님)."""
+        m = _diagnosis_agreement_offline(0, 60)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 0.0
+
+    def test_zero_probes_is_no_data_not_fabricated_zero(self) -> None:
+        """recall 프로브 0건(라벨셋 부재/전부 FP) → NO_DATA·value None(가짜 0 금지)."""
+        m = _diagnosis_agreement_offline(0, 0)
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+        assert "0건" in m.note
+
+    def test_note_is_honest_offline_system_metric(self) -> None:
+        """정직 note — 오프라인·substring·시스템 지표(LIVE per-user 아님)·precision 미반영 명시."""
+        m = _diagnosis_agreement_offline(45, 60)
+        assert m.note  # 비어있지 않음
+        # LIVE 학생별 ground-truth가 아님(시스템 지표) 명시
+        assert "ground-truth" in m.note
+        assert "전 user 동일" in m.note
+        # substring 보수적 기준선·precision은 semantic_eval 별도 명시
+        assert "substring" in m.note
+        assert "precision" in m.note or "FP율" in m.note
+
+    async def test_harness_surfaces_offline_recall_measured(self) -> None:
+        """하네스 통합 — DB와 무관하게 ②가 실 프로브셋(60건)으로 MEASURED가 된다(시스템 지표).
+
+        `compute_diagnostic_recall`이 실 패키지 프로브셋을 로드하므로 FakeSession이어도 ②는
+        MEASURED다(user/기간 무관·전 user 동일값). value∈[0,1]·표본=recall 프로브 수만 단언
+        (구체 recall 값은 substring 매처 품질이라 L4 통합이 검증·여기선 배선·구조).
+        """
+        session = _make_session(
+            total_sessions=1, completed_sessions=1, avg_tokens=10.0, token_sample=5
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        diag = m.diagnosis_agreement_rate
+        assert diag.status is MetricStatus.MEASURED
+        assert diag.value is not None and 0.0 <= diag.value <= 1.0
+        # 표본 메타 = recall 프로브 수(DB 표본 아님·프로브셋 크기·현재 60건)
+        assert m.sample_diagnostic_probes == 60
+        assert "오프라인 진단정확도" in diag.note
+
+    async def test_offline_metric_invariant_to_user_and_window(self) -> None:
+        """② 시스템 지표 — user_id/since/until을 바꿔도 value가 불변(전 user 동일값)."""
+        session_a = _make_session(
+            total_sessions=1, completed_sessions=1, avg_tokens=10.0, token_sample=5
+        )
+        session_b = _make_session(
+            total_sessions=3, completed_sessions=2, avg_tokens=20.0, token_sample=9
+        )
+        m_cohort = await compute_wh1_surrogate_metrics(session_a)
+        m_user = await compute_wh1_surrogate_metrics(
+            session_b,
+            user_id=uuid.uuid4(),
+            since=datetime(2026, 1, 1, tzinfo=UTC),
+            until=datetime(2026, 6, 1, tzinfo=UTC),
+        )
+        # 진단정확도는 user/기간과 무관(시스템 지표) — value·표본 동일.
+        assert (
+            m_cohort.diagnosis_agreement_rate.value
+            == m_user.diagnosis_agreement_rate.value
+        )
+        assert m_cohort.sample_diagnostic_probes == m_user.sample_diagnostic_probes
 
 
 # ── ⑥ 보정 점수(Brier) — _calibration_from_pairs 순수 단위 ────────────────────────
@@ -565,6 +640,7 @@ class TestMetaAndFieldSet:
         assert m.sample_accuracy_attempts == 3  # is_correct NOT NULL 행 수
         assert m.sample_difficulty_attempts == 3  # 유효 b(Problem join) 행 수
         assert m.sample_calibration_pairs == 5  # 유효 보정 쌍 수
+        assert m.sample_diagnostic_probes == 60  # ② recall 프로브 수(시스템 지표·프로브셋 크기)
         # difficulty_slope 필드 노출(양수=난이도 상승·음수=쉬워짐). 여기선 하강(1→0.5→0)이라 음수.
         assert m.help_reduction_validated.difficulty_slope is not None
         # ⑥ 보정 점수 — 5쌍 >= MIN → MEASURED·value 실수(Brier∈[0,1]).

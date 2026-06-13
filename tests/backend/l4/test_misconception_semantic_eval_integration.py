@@ -13,14 +13,14 @@ bge-m3 가중치 미도달(오프라인·HF 429 rate-limit)이면 *fail이 아�
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from ._live_resources import require_local_embedding
+from whymath_backend.l4.misconception.probes import probes_path
 from whymath_backend.l4.misconception.semantic.matcher import SemanticMatcher
 from whymath_backend.l4.misconception.semantic.provider import LocalEmbeddingProvider
 from whymath_backend.l4.misconception.semantic_eval import (
+    MisconceptionProbe,
     evaluate,
     format_report,
     load_probes,
@@ -29,14 +29,19 @@ from whymath_backend.l4.misconception.semantic_eval import (
 
 pytestmark = pytest.mark.integration
 
-_PROBES_PATH = Path(__file__).resolve().parent / "fixtures" / "misconception_semantic_probes.jsonl"
+
+# 프로브셋은 프로덕션 패키지 데이터(`probes_v1.jsonl`)로 단일화됐다(prod→tests 역방향 의존
+# 회피) — `probes_path()`로 실파일을 빌려 `load_probes`에 넘긴다(설치 트리·개발 트리 공통).
+def _load_real_probes() -> list[MisconceptionProbe]:
+    with probes_path() as path:
+        return load_probes(path)
 
 
 class TestSemanticEvalLive:
     """bge-m3 라이브로 전체 프로브셋 측정 — 출력은 측정용, 단언은 loose smoke."""
 
     def test_full_probeset_recall_and_fp_measurement(self) -> None:
-        probes = load_probes(_PROBES_PATH)
+        probes = _load_real_probes()
         assert len(probes) == 92
 
         # 슬110(#5): bge-m3 자원 미도달은 사전체크로 skip·측정 코드 버그는 fail로 전파.
@@ -67,7 +72,7 @@ class TestSemanticEvalLive:
 
     def test_threshold_sweep_operating_curve(self) -> None:
         """임계값 스윕 — 운영점 곡선(recall↓·FP↓ as threshold↑)을 Kiki가 눈으로 본다."""
-        probes = load_probes(_PROBES_PATH)
+        probes = _load_real_probes()
         require_local_embedding()
         provider = LocalEmbeddingProvider()
         matcher = SemanticMatcher(provider=provider)

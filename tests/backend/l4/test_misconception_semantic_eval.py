@@ -17,13 +17,13 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import FrozenInstanceError
-from pathlib import Path
 
 import pytest
 
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.diagnose import diagnose
 from whymath_backend.l4.misconception.judge import FakeJudge, JudgeVerdict
+from whymath_backend.l4.misconception.probes import probes_path
 from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProvider
 from whymath_backend.l4.misconception.semantic_eval import (
     MisconceptionProbe,
@@ -39,10 +39,14 @@ from whymath_backend.l4.misconception.semantic_eval import (
     run_probes_with_judge,
 )
 
-# 프로브셋 실파일(검증된 92줄) — 구조 검증·end-to-end 배선이 읽는다.
-_PROBES_PATH = (
-    Path(__file__).resolve().parent / "fixtures" / "misconception_semantic_probes.jsonl"
-)
+
+# 프로브셋 실파일(검증된 92줄·프로덕션 패키지 데이터 `probes_v1.jsonl`) — 구조 검증·end-to-end
+# 배선이 읽는다. 프로브셋은 tests/fixtures가 아니라 *패키지 데이터*로 단일화됐으므로(prod→tests
+# 역방향 의존 회피), 설치 트리·개발 트리 공통으로 `probes_path()`(importlib.resources) 경유로
+# 실파일 `Path`를 빌려 `load_probes`에 넘긴다.
+def _load_real_probes() -> list[MisconceptionProbe]:
+    with probes_path() as path:
+        return load_probes(path)
 
 # 유효 kind 집합 — 프로브셋 스키마 계약(분해 라벨).
 _VALID_KINDS = frozenset(
@@ -297,11 +301,11 @@ class TestFormatReport:
 # ══════════════════════════════════════════════════════════════════════════
 class TestProbeSetStructure:
     def test_loads_92_probes(self) -> None:
-        probes = load_probes(_PROBES_PATH)
+        probes = _load_real_probes()
         assert len(probes) == 92
 
     def test_recall_and_fp_split(self) -> None:
-        probes = load_probes(_PROBES_PATH)
+        probes = _load_real_probes()
         recall = [p for p in probes if p.is_recall_probe]
         fp = [p for p in probes if p.is_fp_probe]
         assert len(recall) == 60
@@ -311,7 +315,7 @@ class TestProbeSetStructure:
 
     def test_all_ids_in_catalog(self) -> None:
         # 모든 expected_id/near_id가 카탈로그에 존재(역참조 무결성).
-        probes = load_probes(_PROBES_PATH)
+        probes = _load_real_probes()
         for p in probes:
             if p.expected_id is not None:
                 assert p.expected_id in CATALOG_BY_ID, p.expected_id
@@ -322,7 +326,7 @@ class TestProbeSetStructure:
 
     def test_covers_all_30_misconceptions_both_ways(self) -> None:
         # 30종 전부 recall·FP 프로브를 *둘 다* 보유(전수 커버).
-        probes = load_probes(_PROBES_PATH)
+        probes = _load_real_probes()
         recall_ids = {p.expected_id for p in probes if p.is_recall_probe}
         fp_ids = {p.near_id for p in probes if p.is_fp_probe}
         catalog_ids = set(CATALOG_BY_ID)
@@ -330,7 +334,7 @@ class TestProbeSetStructure:
         assert fp_ids == catalog_ids
 
     def test_kinds_valid(self) -> None:
-        probes = load_probes(_PROBES_PATH)
+        probes = _load_real_probes()
         for p in probes:
             assert p.kind in _VALID_KINDS, p.kind
 
@@ -339,7 +343,7 @@ class TestProbeSetStructure:
         잡히면 안 된다 — 잡히면 의미 매처를 *측정할 수 없다*(substring이 먼저 다 잡으므로). 각
         recall 프로브를 `diagnose`로 진단해 expected_id가 confidence 1.0으로 매칭되지 않음을 확인.
         """
-        probes = load_probes(_PROBES_PATH)
+        probes = _load_real_probes()
         offenders: list[tuple[str | None, str]] = []
         for p in probes:
             if not p.is_recall_probe:
@@ -356,7 +360,7 @@ class TestProbeSetStructure:
 class TestRunProbesWiring:
     def test_run_probes_assembles_outcomes_with_fake_provider(self) -> None:
         # FakeEmbeddingProvider로 전 프로브를 돌려 스코어링 배선을 증명한다(실 의미 recall 아님).
-        probes = load_probes(_PROBES_PATH)
+        probes = _load_real_probes()
         outcomes = run_probes(
             probes, provider=FakeEmbeddingProvider(), threshold=0.3, top_k=5
         )
@@ -630,7 +634,7 @@ class TestRunProbesWithJudgeWiring:
     @pytest.mark.asyncio
     async def test_full_probeset_with_fake_judge_structure(self) -> None:
         # 실 프로브셋 92줄 + FakeEmbeddingProvider + FakeJudge로 배선 구조 단언(품질 아님).
-        probes = load_probes(_PROBES_PATH)
+        probes = _load_real_probes()
         # 전부 불확실 → judge가 아무것도 안 거름(유지) → judge 후 = 의미 후 동일.
         judge = FakeJudge(default=JudgeVerdict.UNCERTAIN)
         outcomes = await run_probes_with_judge(
