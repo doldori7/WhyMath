@@ -4,6 +4,7 @@
 // 채팅(`/`)에 도달하는지 확인한다. 채팅 화면은 coachApiProvider를 읽으므로(컨트롤러가 주입)
 // 네트워크 없이 빌드되도록 fake로 override한다(이 테스트는 네트워크 호출을 하지 않는다).
 import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/app.dart';
