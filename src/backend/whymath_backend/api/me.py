@@ -52,7 +52,11 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
-from whymath_backend.api._query_filters import time_window_conditions
+from whymath_backend.api._query_filters import (
+    _validate_time_window,
+    _validate_tz_aware,
+    time_window_conditions,
+)
 from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
 from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
@@ -64,6 +68,10 @@ from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
+from whymath_backend.harness.wh1_evaluation import (
+    SurrogateMetrics,
+    compute_wh1_surrogate_metrics,
+)
 from whymath_backend.l2.ability_estimation import (
     _DIFFICULTY_MIDPOINT,
     ConceptAbilityItem,
@@ -1629,4 +1637,44 @@ async def delete_my_assessment(
         user.user_id,
         AuditResourceType.assessment,
         "진단을 찾을 수 없습니다.",
+    )
+
+
+# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종 커버리지 맵 — 본인 스코핑) ──
+# 설계안 04a §8.4 "0단계 대리 지표 베이스라인 좌석"의 노출 표면. 계측 가능분(③ 세션 완주율·
+# ④ 턴당 토큰)은 실측, 미계측 5종(①②⑤⑥⑦)은 None + status + note로 갭을 표면화한다(날조 금지·
+# CLAUDE.md "모르면 모른다"). 코호트 전체 집계(user_id=None)는 ops/스크립트가 직접 호출 —
+# 이 엔드포인트는 *본인 집계 신호만* 노출(타 학생 0·admin auth 범위 밖).
+@router.get(
+    "/harness-metrics",
+    response_model=SurrogateMetrics,
+    summary="내 WH-1 0단계 대리 지표(실측 가능분 + 미계측 갭 커버리지 맵)",
+)
+async def get_my_harness_metrics(
+    user: ConsentedUser,
+    session: SessionDep,
+    since: SinceParam = None,
+    until: UntilParam = None,
+) -> SurrogateMetrics:
+    """WH-1 튜터링 하네스 0단계 대리 지표 7종 — *본인* 집계의 커버리지 맵.
+
+    설계안 04a §8.4 "측정 없는 도입 없음" 0단계 베이스라인. 현재 데이터로 *계측 가능한*
+    ③ 세션 완주율(LearningSession.ended_at NOT NULL 비율)·④ 턴당 토큰(Dialogue 토큰/턴 평균)은
+    실측(또는 표본 0이면 NO_DATA)으로 내고, *미계측* 5종(① verify 통과율·② 진단-실제 오개념
+    일치율·⑤ 도움 감소 곡선·⑥ 보정 점수·⑦ 전이 점수)은 value=None + status + note로 "무엇을
+    만들면 잴 수 있는지"를 정직하게 표면화한다(가짜 0/stub 금지).
+
+    `since`/`until`(선택)로 `started_at` 시간창(inclusive·TZ-aware ISO8601·naive·since>until은
+    422). user_id는 인증에서 주입(본인 집계만).
+
+    **노출 계약(CLAUDE.md 미성년 PII·식별 분석 금기)**: 본인 집계 신호(완주율·턴당 토큰 등)만
+    반환 — 타 학생 데이터 0·개념 본문 0·정답 0. 코호트 전체 집계는 admin auth 범위라 이
+    엔드포인트에 미포함(ops/스크립트가 `compute_wh1_surrogate_metrics(user_id=None)` 직접 호출).
+    """
+    # 시간창 검증(noexpose 계층): naive·since>until 거부. 검증된 경계를 harness에 그대로 전달.
+    since = _validate_tz_aware(since, "since")
+    until = _validate_tz_aware(until, "until")
+    _validate_time_window(since, until, "since", "until")
+    return await compute_wh1_surrogate_metrics(
+        session, user_id=user.user_id, since=since, until=until
     )

@@ -596,7 +596,7 @@ class AttemptMode(str, Enum):
 
 
 class EventType(str, Enum):
-    """학생 풀이 단계 이벤트 유형 — §6.1 `event_type_enum`(L667-668, 한글 8종).
+    """학생 풀이 단계 이벤트 — §6.1 `event_type_enum`(한글 8종 + 검산결과 + 힌트제공).
 
     실시간 분석용(TimescaleDB hypertable `attempt_event`)의 이벤트 종류.
     """
@@ -609,6 +609,21 @@ class EventType(str, Enum):
     막힘 = "막힘"
     힌트요청 = "힌트요청"
     답입력 = "답입력"
+    검산결과 = "검산결과"
+    """WH-1 검산(verify) 결과 이벤트·event_data={passed:bool, error_kind}.
+
+    binary 검산(3-state 아님): passed=거짓 수치관계 *미적발*(통과)·아니면 적발.
+    스테이트풀 coach가 풀이 제출 턴에만 적재한다.
+    """
+
+    힌트제공 = "힌트제공"
+    """WH-1 도움 감소 곡선 이벤트(지표 ⑤)·event_data={hint_level:int}(1~4·1=가장 은근/4=전체 풀이).
+
+    *supply*(AI가 제공한 hint_level) 신호다 — `힌트요청`(학생이 *요청*한 demand)과 의미가 다르다.
+    도움 감소 곡선은 AI가 *제공한* 노출량(graded 1~4)의 시간 추세이므로 supply가 정본이다.
+    스테이트풀 coach가 매 응답 턴에 `decision.hint_level`을 그대로 적재한다(재계산 없음).
+    `AttemptMode.힌트제공`(attempt_mode_enum·풀이 방식)과는 *다른 enum*이니 혼동 주의.
+    """
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -538,3 +538,7 @@ CREATE TABLE strategy_evidence (
 |11|`assign_transfer_probe`|전략  |(자산) 시그니처 패턴 55+108(ROADMAP Phase 1)                                                                    |🔴 전이 측정·간격 출제 미구현                            |
 
 **판독**: 코어 진단·코칭·선수 좌석(#1·#3·#5·#8 일부)은 *이미 가동*하며 이번 세션 소비 아크로 강화됐다. 하네스가 추가하는 건 ① **상태 외부화**(가설 세트·evidence_links·#4·#7) ② **도구 루프 오케스트레이션**(end_turn 도구 루프·#8) ③ **전략 계층**(#9~#11). 즉 WH-1 도입은 *기존 좌석을 도구로 노출 + 상태/루프/전략 신설*이며, 진단·코칭 로직을 새로 짜는 게 아니다.
+
+### 0단계 평가 하네스 — 구현 현황 (2026-06-13, 편집자 부기)
+
+§8.4 0단계의 *대리 지표 베이스라인 좌석*이 **구현됨** — `whymath_backend/harness/wh1_evaluation.py`(`compute_wh1_surrogate_metrics`)·`GET /v1/me/harness-metrics`. **날조 0 원칙**: 계측 가능분만 실값, 미계측은 `value=None` + `MetricStatus`(NOT_INSTRUMENTED·REQUIRES_DATA·REQUIRES_TOOL) + note로 *커버리지 맵*을 낸다(가짜 0 금지). 현 커버리지: **🟢 ① verify 통과율**(검산결과 `attempt_event` 적재→집계·단 binary 검산[거짓 수치관계 *미적발*]·3-state 아님·unverifiable 미구분)·**🟢 ③ 세션 완주율**·**🟡 ④ 턴당 토큰**·**🟡 ⑤ 도움 감소 곡선**(힌트제공 `attempt_event` 적재→hint_level OLS 기울기·음수=도움 감소)·**🟢 ⑤+R15 결합 판정**(`help_reduction_validated` — ⑤ 도움 기울기 × 정답률[`ProblemAttempt.is_correct`] OLS 추세 교차: 도움↓·정답률 유지→`GENUINE_IMPROVEMENT`·도움↓·정답률↓→`GAMING_SUSPECT`[교정기 함정]·표본 부족→`INSUFFICIENT_DATA`·마이그레이션 0) = 계측; **🔴 ②⑥⑦** = 미계측(REQUIRES_DATA/REQUIRES_TOOL). 미계측 실계측은 후속(⑥ elicit_prediction→⑦ 패턴 태깅→② 오개념 ground-truth)·R15 정밀화(난이도 IRT b 보정·이탈/노이즈 신호)·0단계 나머지(verify 커버리지·오개념 audit·Langfuse·PRM 오탐률)도 후속(MEMORY 2026-06-13 참조).

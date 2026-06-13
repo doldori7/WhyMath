@@ -35,8 +35,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._concurrency import etag_for, matches_if_none_match
 from whymath_backend.api._misconception_state import get_semantic_matcher
-from whymath_backend.api._rate_limit import RateLimitedTripleRead, RateLimitedTripleWrite
+from whymath_backend.api._rate_limit import (
+    RateLimitedTripleRead,
+    RateLimitedTripleWrite,
+)
 from whymath_backend.config import get_settings
+from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
@@ -50,6 +54,10 @@ from whymath_backend.l2 import (
     theta_to_mastery_proxy,
 )
 from whymath_backend.l2.prerequisite_recommendation import recommend_prerequisite_gaps
+from whymath_backend.l3.pregenerate.validator import (
+    arithmetic_validator,
+    validate_response,
+)
 from whymath_backend.l4 import (
     CoachingFocus,
     CoachingTrigger,
@@ -77,7 +85,7 @@ from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coac
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
-from whymath_backend.schema.enums import ContentType, TurnRole
+from whymath_backend.schema.enums import ContentType, EventType, TurnRole
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -503,6 +511,92 @@ async def _prerequisite_coaching_for(
     return recommend_prerequisite_coaching(gaps)  # 막힌 선수 없으면 None.
 
 
+async def _log_verify_event(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    attempt_id: uuid.UUID | None,
+    student_solution: str | None,
+) -> None:
+    """학생 풀이의 검산(verify) 결과를 `attempt_event`(event_type=검산결과)로 1행 적재.
+
+    WH-1 0단계 지표 ①(verify 통과율)을 NOT_INSTRUMENTED→MEASURED로 끌어올리는 *적재 좌석*.
+    스테이트풀 coach(`create_session`·`append_turns`)에서만 호출하며, stateless `/v1/coach`
+    (`coach_decide`)는 DB 무접근 계약이라 적재하지 않는다.
+
+    적재 조건(false-pass 방지): `student_solution`(풀이 전용 필드)이 *비어 있으면 적재 안 함* —
+    풀이를 제출한 턴만 검산 신호로 기록한다(빈/대화 턴이 '통과'로 오집계되는 걸 차단). 검증은
+    coach 본문(`recommend_coaching_for_solution`)이 쓰는 것과 *동일한* 결정론 검증기를 다시
+    호출한다(순수·결정론·저비용 — `_build_response_payload`를 건드리지 않고 신호만 재산출하는
+    게 목적). `signal is None`=거짓 수치관계 *미적발*(passed=True), `signal is not None`=적발
+    (passed=False). **binary 검산**이지 3-state(정답/오답/검증불가) verify가 아니다.
+
+    트랜잭션: ORM 1행을 `session.add`만 하고 *commit은 하지 않는다* — 호출 핸들러가 이미 자기
+    트랜잭션을 commit하므로 그 트랜잭션에 합류한다(별도 commit 금지). `event_at`은 핸들러와 동일
+    시각으로 명시(server_default 의존 회피·복합 PK 구성요소).
+    """
+    solution_text = student_solution or ""
+    if not solution_text.strip():
+        return  # 풀이 제출 턴이 아님(빈/대화 턴) → 적재 안 함(false-pass 방지).
+
+    signal = validate_response(arithmetic_validator(), solution_text)
+    passed = signal is None  # None=거짓관계 미적발(통과)·아니면 적발(실패).
+
+    event = AttemptEventORM(
+        event_at=datetime.now(timezone.utc),
+        attempt_id=attempt_id,
+        user_id=user_id,
+        problem_id=problem_id,
+        event_type=EventType.검산결과,
+        event_data={"passed": passed, "error_kind": (signal.kind if signal else None)},
+    )
+    session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
+
+
+async def _log_hint_event(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    attempt_id: uuid.UUID | None,
+    hint_level: int | None,
+) -> None:
+    """AI가 제공한 힌트 노출량(hint_level)을 `attempt_event`(event_type=힌트제공)로 1행 적재.
+
+    WH-1 0단계 지표 ⑤(도움 감소 곡선)을 NOT_INSTRUMENTED→MEASURED로 끌어올리는 *적재 좌석*.
+    직전 verify 슬라이스(`_log_verify_event`·검산결과) **동형**: 스테이트풀 coach
+    (`create_session`·`append_turns`)에서만 호출하고, stateless `/v1/coach`(`coach_decide`)는
+    DB 무접근 계약이라 적재하지 않는다.
+
+    **재계산 0**: `hint_level`은 핸들러가 이미 보유한 `decision.hint_level`을 그대로 전달받는다
+    (`decision`은 `_build_response_payload`가 반환하는 6-튜플의 첫 요소). verify와 달리 검증기를
+    다시 부를 필요 없이 *이미 계산된* 값만 적재한다 — `_build_response_payload` 시그니처·반환을
+    건드리지 않는다(읽기만).
+
+    적재 신호의 의미: 이 hint_level은 AI가 *제공한* 노출량(supply·graded 1~4·1=가장 은근/
+    4=전체 풀이)이지 학생이 *요청*한 demand(`힌트요청`)가 아니다 — 도움 감소 곡선은 supply 추세를
+    본다. `hint_level`이 None이면(이론적 경계·decision은 항상 int지만 방어적) early return으로
+    적재하지 않는다(날조 회피 — 신호 없는 행 미생성).
+
+    트랜잭션: `_log_verify_event`와 동일하게 ORM 1행을 `session.add`만 하고 *commit은 하지
+    않는다* — 호출 핸들러가 자기 트랜잭션을 commit하므로 그 트랜잭션에 합류한다(별도 commit 금지).
+    `event_at`은 핸들러와 동일하게 now(복합 PK 구성요소·시계열 순서축).
+    """
+    if hint_level is None:
+        return  # 힌트 레벨 없음(이론적 경계) → 적재 안 함(날조 회피).
+
+    event = AttemptEventORM(
+        event_at=datetime.now(timezone.utc),
+        attempt_id=attempt_id,
+        user_id=user_id,
+        problem_id=problem_id,
+        event_type=EventType.힌트제공,
+        event_data={"hint_level": hint_level},
+    )
+    session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
+
+
 @router.post(
     "/coach",
     response_model=CoachResponse,
@@ -612,6 +706,24 @@ async def create_session(
         )
     )
     session.add_all([student_turn, assistant_turn])
+    # WH-1 지표 ① 적재 — 풀이 제출(student_solution 비어있지 않음)이면 검산 결과를 attempt_event로
+    # 기록(같은 트랜잭션 합류·별도 commit 없음). stateless /v1/coach는 미적재(DB 무접근 계약).
+    await _log_verify_event(
+        session,
+        user_id=user.user_id,
+        problem_id=body.problem_id,
+        attempt_id=dialogue.attempt_id,
+        student_solution=body.student_solution,
+    )
+    # WH-1 지표 ⑤ 적재 — 이미 계산된 decision.hint_level(supply·1~4)을 그대로 기록(재계산 0·
+    # _build_response_payload 불변). verify 적재 바로 옆·같은 트랜잭션 합류(별도 commit 없음).
+    await _log_hint_event(
+        session,
+        user_id=user.user_id,
+        problem_id=body.problem_id,
+        attempt_id=dialogue.attempt_id,
+        hint_level=decision.hint_level,
+    )
     await session.commit()
 
     return SessionCreateResponse(
@@ -710,6 +822,25 @@ async def append_turns(
     dialogue.student_turns = (dialogue.student_turns or 0) + 1
     dialogue.assistant_turns = (dialogue.assistant_turns or 0) + 1
 
+    # WH-1 지표 ① 적재 — create_session과 동형(풀이 제출 턴만·같은 트랜잭션 합류). problem_id·
+    # attempt_id는 dialogue에서 출처(append는 dialogue 컨텍스트).
+    await _log_verify_event(
+        session,
+        user_id=user.user_id,
+        problem_id=dialogue.problem_id,
+        attempt_id=dialogue.attempt_id,
+        student_solution=body.student_solution,
+    )
+    # WH-1 지표 ⑤ 적재 — create_session과 동형(이미 계산된 decision.hint_level·supply 1~4을 그대로
+    # 기록·재계산 0·_build_response_payload 불변). verify 적재 바로 옆·같은 트랜잭션 합류(별도
+    # commit 없음). problem_id·attempt_id는 dialogue 출처(append는 dialogue 컨텍스트).
+    await _log_hint_event(
+        session,
+        user_id=user.user_id,
+        problem_id=dialogue.problem_id,
+        attempt_id=dialogue.attempt_id,
+        hint_level=decision.hint_level,
+    )
     await session.commit()
 
     return TurnAppendResponse(

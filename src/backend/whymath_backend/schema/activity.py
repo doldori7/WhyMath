@@ -348,7 +348,8 @@ class AttemptEvent(BaseModel):
     # ===== 이벤트 내용 =====
     event_type: EventType | None = Field(
         default=None,
-        description="이벤트 유형 — 문제읽기/조건분석/그래프그리기/계산/지움/막힘/힌트요청/답입력",
+        description="이벤트 유형 — 문제읽기/조건분석/그래프그리기/계산/지움/막힘/힌트요청/답입력/"
+        "검산결과",
     )
     event_data: dict[str, Any] | None = Field(
         default=None,
