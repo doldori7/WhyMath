@@ -3396,3 +3396,111 @@ class TestPrerequisiteCoachingField:
         )
         assert resp.status_code == 201, resp.text
         assert resp.json()["prerequisite_coaching"] is None
+
+
+# ── WH-1 지표 ① 적재: _log_verify_event 단위테스트 (FakeSession add 캡처) ──────────
+class _CaptureSession:
+    """`add`된 ORM 인스턴스를 캡처하는 최소 가짜 세션(검증은 실 함수가 결정론으로 수행)."""
+
+    def __init__(self) -> None:
+        self.added: list[Any] = []
+
+    def add(self, obj: Any) -> None:
+        self.added.append(obj)
+
+
+class TestLogVerifyEvent:
+    """`_log_verify_event` — 검산결과 attempt_event 적재 단위(스테이트풀 coach 전용).
+
+    검증기(`arithmetic_validator`)는 결정론·순수라 패치하지 않고 실제 호출한다 — 거짓 수치관계
+    포함/미포함 풀이로 passed False/True가 갈리는지·빈 풀이면 적재 0인지·event_type이 검산결과
+    인지를 add 캡처로 확인한다.
+    """
+
+    _UID = uuid.uuid4()
+    _PID = uuid.uuid4()
+
+    async def test_empty_solution_no_event(self) -> None:
+        """student_solution이 None이면 적재 0(early return·false-pass 방지)."""
+        from whymath_backend.api.coach import _log_verify_event
+
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution=None,
+        )
+        assert sess.added == []
+
+    async def test_blank_solution_no_event(self) -> None:
+        """공백만 있는 풀이도 적재 0(strip 후 빈 문자열)."""
+        from whymath_backend.api.coach import _log_verify_event
+
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution="   ",
+        )
+        assert sess.added == []
+
+    async def test_false_relation_passed_false(self) -> None:
+        """거짓 수치관계(2+3=6) 포함 → passed False·event_type 검산결과·error_kind 채워짐."""
+        from whymath_backend.api.coach import _log_verify_event
+        from whymath_backend.schema.enums import EventType
+
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution="계산하면 2+3=6 이다",
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.검산결과
+        assert event.event_data["passed"] is False
+        assert event.event_data["error_kind"] is not None
+        assert event.user_id == self._UID
+        assert event.problem_id == self._PID
+
+    async def test_true_relation_passed_true(self) -> None:
+        """거짓관계 없는 풀이 → passed True·error_kind None."""
+        from whymath_backend.api.coach import _log_verify_event
+        from whymath_backend.schema.enums import EventType
+
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            student_solution="2+3=5 이므로 답은 5입니다",
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.검산결과
+        assert event.event_data["passed"] is True
+        assert event.event_data["error_kind"] is None
+
+    async def test_attempt_id_passthrough(self) -> None:
+        """attempt_id가 있으면 이벤트에 그대로 실린다."""
+        from whymath_backend.api.coach import _log_verify_event
+
+        aid = uuid.uuid4()
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=None,
+            attempt_id=aid,
+            student_solution="2+3=5",
+        )
+        assert len(sess.added) == 1
+        assert sess.added[0].attempt_id == aid
+        assert sess.added[0].problem_id is None

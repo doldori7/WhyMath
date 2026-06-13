@@ -596,7 +596,7 @@ class AttemptMode(str, Enum):
 
 
 class EventType(str, Enum):
-    """학생 풀이 단계 이벤트 유형 — §6.1 `event_type_enum`(L667-668, 한글 8종).
+    """학생 풀이 단계 이벤트 유형 — §6.1 `event_type_enum`(L667-668, 한글 8종 + 검산결과).
 
     실시간 분석용(TimescaleDB hypertable `attempt_event`)의 이벤트 종류.
     """
@@ -609,6 +609,12 @@ class EventType(str, Enum):
     막힘 = "막힘"
     힌트요청 = "힌트요청"
     답입력 = "답입력"
+    검산결과 = "검산결과"
+    """WH-1 검산(verify) 결과 이벤트·event_data={passed:bool, error_kind}.
+
+    binary 검산(3-state 아님): passed=거짓 수치관계 *미적발*(통과)·아니면 적발.
+    스테이트풀 coach가 풀이 제출 턴에만 적재한다.
+    """
 
 
 # ──────────────────────────────────────────────────────────────────────────

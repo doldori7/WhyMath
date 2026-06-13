@@ -1,9 +1,10 @@
 """WH-1 0단계 대리 지표 — 실 PG 통합테스트 (기본 SKIP).
 
 `GET /v1/me/harness-metrics`를 실 PostgreSQL로 검증한다:
+  - ① verify 통과율: user A의 검산결과 attempt_event N개(passed 일부) → MEASURED·정확값.
   - ③ 세션 완주율: user A의 세션 N개(일부 ended·일부 NULL) 적재 → MEASURED·정확값.
   - ④ 턴당 토큰: user A의 Dialogue(일부 total_tokens/total_turns 채움) → MEASURED 또는 NO_DATA.
-  - ①②⑤⑥⑦ 미계측 5종: 고정 status·value None(날조 0).
+  - ②⑤⑥⑦ 미계측 4종: 고정 status·value None(날조 0).
   - 401(무토큰)·user 스코핑(타 user B 세션은 A 집계에서 제외).
 
 직전 슬라이스(`api/test_me_integration.py`) 헬퍼 패턴 재사용 — 독립 엔진으로 ORM 적재·정리,
@@ -24,12 +25,12 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
-from whymath_backend.db.models.activity import LearningSession
+from whymath_backend.db.models.activity import AttemptEvent, LearningSession
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
-from whymath_backend.schema.enums import Persona
+from whymath_backend.schema.enums import EventType, Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 from whymath_backend.security import create_access_token
 
@@ -69,9 +70,13 @@ async def _cleanup(user_ids: list[uuid.UUID]) -> None:
     ids = [str(u) for u in user_ids]
     try:
         async with engine.begin() as conn:
-            # FK 순서: 자식(dialogue·learning_session) 먼저, 부모(user_profile) 나중.
+            # FK 순서: 자식(dialogue·learning_session·attempt_event) 먼저, 부모(user_profile) 나중.
             await conn.execute(
                 text("DELETE FROM dialogue WHERE user_id = ANY(:ids)"), {"ids": ids}
+            )
+            await conn.execute(
+                text("DELETE FROM attempt_event WHERE user_id = ANY(:ids)"),
+                {"ids": ids},
             )
             await conn.execute(
                 text("DELETE FROM learning_session WHERE user_id = ANY(:ids)"),
@@ -115,6 +120,16 @@ def _dialogue_row(
     )
 
 
+def _verify_event_row(uid: uuid.UUID, *, passed: bool) -> AttemptEvent:
+    """검산결과 attempt_event 1행(event_data.passed) — ① 통과율 표본."""
+    return AttemptEvent(
+        event_at=datetime.now(UTC),
+        user_id=uid,
+        event_type=EventType.검산결과,
+        event_data={"passed": passed, "error_kind": (None if passed else "arithmetic")},
+    )
+
+
 def _client() -> TestClient:
     app = create_app()
     app.dependency_overrides[get_settings] = _settings
@@ -124,7 +139,9 @@ def _client() -> TestClient:
 def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
     """A: 세션 4개(완주 3·미완주 1)·대화 토큰 채움 → ③ MEASURED 0.75·④ MEASURED. B는 제외. 401."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
 
     uid_a, uid_b = uuid.uuid4(), uuid.uuid4()
     try:
@@ -150,6 +167,16 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
                 _dialogue_row(uid_a, total_tokens=None, total_turns=None),
             )
         )
+        # A: 검산결과 이벤트 4개(passed 3·실패 1) → ① 통과율 0.75. B는 1개(섞이면 안 됨·스코핑).
+        asyncio.run(
+            _add_all(
+                _verify_event_row(uid_a, passed=True),
+                _verify_event_row(uid_a, passed=True),
+                _verify_event_row(uid_a, passed=True),
+                _verify_event_row(uid_a, passed=False),
+                _verify_event_row(uid_b, passed=False),
+            )
+        )
         token_a = create_access_token(uid_a, settings=_settings())
         auth = {"Authorization": f"Bearer {token_a}"}
         with _client() as client:
@@ -169,9 +196,14 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
             assert tpt["value"] == 10.0
             assert body["sample_dialogues"] == 2
 
-            # 미계측 5종 — value None·고정 status(날조 0).
-            assert body["verify_pass_rate"]["status"] == "not_instrumented"
-            assert body["verify_pass_rate"]["value"] is None
+            # ① verify 통과율 — MEASURED·passed 3/4=0.75·표본 4(B의 1건 제외 — 스코핑).
+            vpr = body["verify_pass_rate"]
+            assert vpr["status"] == "measured"
+            assert vpr["value"] == 0.75
+            assert body["sample_verify_events"] == 4
+            assert "미적발" in vpr["note"]  # binary 검산 정직 note(3-state 아님)
+
+            # 미계측 4종 — value None·고정 status(날조 0).
             assert body["diagnosis_agreement_rate"]["status"] == "requires_data"
             assert body["help_reduction_slope"]["status"] == "not_instrumented"
             assert body["calibration_brier"]["status"] == "requires_tool"
@@ -193,9 +225,11 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
 
 
 def test_harness_metrics_no_data_when_empty_on_live_pg() -> None:
-    """데이터 없는 user → ③④ NO_DATA·value None(가짜 0 금지)·표본 0."""
+    """데이터 없는 user → ①③④ NO_DATA·value None(가짜 0 금지)·표본 0."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
 
     uid = uuid.uuid4()
     try:
@@ -210,7 +244,10 @@ def test_harness_metrics_no_data_when_empty_on_live_pg() -> None:
             assert body["session_completion_rate"]["value"] is None
             assert body["tokens_per_turn"]["status"] == "no_data"
             assert body["tokens_per_turn"]["value"] is None
+            assert body["verify_pass_rate"]["status"] == "no_data"
+            assert body["verify_pass_rate"]["value"] is None
             assert body["sample_sessions"] == 0
             assert body["sample_dialogues"] == 0
+            assert body["sample_verify_events"] == 0
     finally:
         asyncio.run(_cleanup([uid]))

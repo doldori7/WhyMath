@@ -66,10 +66,14 @@ async def _cleanup(uid: uuid.UUID, dialogue_ids: list[uuid.UUID]) -> None:
     dids = [str(d) for d in dialogue_ids]
     try:
         async with engine.begin() as conn:
-            # FK 순서: 자식(dialogue_turn) → 부모(dialogue) → 부모(user_profile).
+            # FK 순서: 자식(dialogue_turn·attempt_event) → 부모(dialogue) → 부모(user_profile).
             await conn.execute(
                 text("DELETE FROM dialogue_turn WHERE dialogue_id = ANY(:ids)"),
                 {"ids": dids},
+            )
+            await conn.execute(
+                text("DELETE FROM attempt_event WHERE user_id = :uid"),
+                {"uid": str(uid)},
             )
             await conn.execute(
                 text("DELETE FROM dialogue WHERE dialogue_id = ANY(:ids)"),
@@ -92,6 +96,25 @@ async def _count_turns(dialogue_id: uuid.UUID) -> int:
                 {"did": str(dialogue_id)},
             )
             return int(row.scalar_one())
+    finally:
+        await engine.dispose()
+
+
+async def _verify_events(uid: uuid.UUID) -> list[tuple[str, bool]]:
+    """user의 검산결과 attempt_event를 (event_type, passed) 목록으로 — ① 적재 검증용."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT event_type::text, (event_data->>'passed')::bool "
+                    "FROM attempt_event "
+                    "WHERE user_id = :uid AND event_type = '검산결과' "
+                    "ORDER BY event_at"
+                ),
+                {"uid": str(uid)},
+            )
+            return [(str(r[0]), bool(r[1])) for r in rows.all()]
     finally:
         await engine.dispose()
 
@@ -422,7 +445,8 @@ async def _cleanup_prereq(
                 {"ids": dids},
             )
             await conn.execute(
-                text("DELETE FROM dialogue WHERE dialogue_id = ANY(:ids)"), {"ids": dids}
+                text("DELETE FROM dialogue WHERE dialogue_id = ANY(:ids)"),
+                {"ids": dids},
             )
             await conn.execute(
                 text("DELETE FROM problem_concept WHERE problem_id = ANY(:ids)"),
@@ -508,7 +532,10 @@ def test_coach_session_surfaces_prerequisite_coaching_on_live_pg() -> None:
             resp = client.post(
                 "/v1/coach/sessions",
                 headers=auth,
-                json={"student_input": "이거 어떻게 풀어?", "problem_id": str(pid_blocked)},
+                json={
+                    "student_input": "이거 어떻게 풀어?",
+                    "problem_id": str(pid_blocked),
+                },
             )
             assert resp.status_code == 201, resp.text
             body = resp.json()
@@ -551,3 +578,63 @@ def test_coach_session_surfaces_prerequisite_coaching_on_live_pg() -> None:
                 dialogue_ids=dialogue_ids,
             )
         )
+
+
+def test_session_create_logs_verify_event_on_live_pg() -> None:
+    """student_solution 제출 → 검산결과 attempt_event 1행 적재(passed= 거짓관계 유무).
+
+    WH-1 지표 ① 적재 결선: 거짓 수치관계(2+3=6) 포함 풀이는 passed False·미포함은 passed True.
+    빈 풀이(student_solution 없음)는 적재 0(false-pass 방지). stateless /v1/coach는 미적재.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # ① 거짓 수치관계 풀이 → passed False.
+            r1 = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={
+                    "student_input": "풀었어",
+                    "student_solution": "2+3=6 이므로 답은 6",
+                },
+            )
+            assert r1.status_code == 201, r1.text
+            dialogue_ids.append(uuid.UUID(r1.json()["dialogue_id"]))
+
+            # ② 참 풀이 → passed True.
+            r2 = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={
+                    "student_input": "풀었어",
+                    "student_solution": "2+3=5 이므로 답은 5",
+                },
+            )
+            assert r2.status_code == 201, r2.text
+            dialogue_ids.append(uuid.UUID(r2.json()["dialogue_id"]))
+
+            # ③ 빈 풀이(student_solution 없음) → 적재 0(false-pass 방지).
+            r3 = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={"student_input": "그냥 대화만"},
+            )
+            assert r3.status_code == 201, r3.text
+            dialogue_ids.append(uuid.UUID(r3.json()["dialogue_id"]))
+
+            events = asyncio.run(_verify_events(uid))
+            # 정확히 2행(빈 풀이는 미적재)·event_type 검산결과·passed [False, True].
+            assert len(events) == 2
+            assert all(et == "검산결과" for et, _ in events)
+            assert sorted(p for _, p in events) == [False, True]
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))

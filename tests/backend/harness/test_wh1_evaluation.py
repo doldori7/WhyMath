@@ -46,7 +46,8 @@ class _FakeSession:
       1) total_sessions(count·scalar)
       2) completed_sessions(count·scalar)
       3) token row(AVG, count·one 튜플)
-    이 3개를 큐로 주입한다 — 정렬·실 SQL은 통합테스트가 실 PG로 검증.
+      4) verify row(passed_count, total·one 튜플)
+    이 4개를 큐로 주입한다 — 정렬·실 SQL은 통합테스트가 실 PG로 검증.
     """
 
     def __init__(self, results: list[_FakeScalarResult]) -> None:
@@ -65,6 +66,8 @@ def _make_session(
     completed_sessions: int,
     avg_tokens: float | None,
     token_sample: int,
+    verify_passed: int = 0,
+    verify_total: int = 0,
 ) -> AsyncSession:
     return cast(
         AsyncSession,
@@ -73,6 +76,7 @@ def _make_session(
                 _FakeScalarResult(scalar=total_sessions),
                 _FakeScalarResult(scalar=completed_sessions),
                 _FakeScalarResult(one=(avg_tokens, token_sample)),
+                _FakeScalarResult(one=(verify_passed, verify_total)),
             ]
         ),
     )
@@ -151,19 +155,86 @@ class TestTokensPerTurn:
         assert m.tokens_per_turn.value is None
 
 
-# ── ①②⑤⑥⑦ 미계측 5종 ──────────────────────────────────────────────────────
+# ── ① verify 통과율 ──────────────────────────────────────────────────────────
+class TestVerifyPassRate:
+    async def test_measured_ratio(self) -> None:
+        """검산결과 이벤트 passed 3/4 → MEASURED·value 0.75·표본 4."""
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            verify_passed=3,
+            verify_total=4,
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.verify_pass_rate.status is MetricStatus.MEASURED
+        assert m.verify_pass_rate.value == 0.75
+        assert m.sample_verify_events == 4
+
+    async def test_all_passed(self) -> None:
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            verify_passed=2,
+            verify_total=2,
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.verify_pass_rate.value == 1.0
+        assert m.verify_pass_rate.status is MetricStatus.MEASURED
+
+    async def test_none_passed(self) -> None:
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            verify_passed=0,
+            verify_total=5,
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.verify_pass_rate.value == 0.0
+        assert m.verify_pass_rate.status is MetricStatus.MEASURED
+
+    async def test_zero_events_is_no_data_not_zero(self) -> None:
+        """검산결과 이벤트 0건 → NO_DATA·value None(가짜 0 금지)."""
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            verify_passed=0,
+            verify_total=0,
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.verify_pass_rate.status is MetricStatus.NO_DATA
+        assert m.verify_pass_rate.value is None  # 0이 아님!
+        assert m.sample_verify_events == 0
+
+    async def test_note_is_honest_binary_verify(self) -> None:
+        """MEASURED note에 '미적발'·'unverifiable 미구분'(binary·3-state 아님) 정직 표기."""
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            verify_passed=1,
+            verify_total=2,
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert "미적발" in m.verify_pass_rate.note
+        assert "unverifiable 미구분" in m.verify_pass_rate.note
+
+
+# ── ②⑤⑥⑦ 미계측 4종 ────────────────────────────────────────────────────────
 class TestUnmeasuredMetrics:
     async def _metrics(self) -> SurrogateMetrics:
         session = _make_session(
             total_sessions=1, completed_sessions=1, avg_tokens=10.0, token_sample=5
         )
         return await compute_wh1_surrogate_metrics(session)
-
-    async def test_verify_pass_rate_not_instrumented(self) -> None:
-        m = (await self._metrics()).verify_pass_rate
-        assert m.status is MetricStatus.NOT_INSTRUMENTED
-        assert m.value is None
-        assert "verify_result" in m.note
 
     async def test_diagnosis_agreement_requires_data(self) -> None:
         m = (await self._metrics()).diagnosis_agreement_rate
@@ -190,10 +261,9 @@ class TestUnmeasuredMetrics:
         assert "전이" in m.note
 
     async def test_all_unmeasured_value_none(self) -> None:
-        """미계측 5종 *전부* value None — 단 하나도 0/stub이 아님(날조 0 불변)."""
+        """미계측 4종 *전부* value None — 단 하나도 0/stub이 아님(날조 0 불변)."""
         m = await self._metrics()
         for metric in (
-            m.verify_pass_rate,
             m.diagnosis_agreement_rate,
             m.help_reduction_slope,
             m.calibration_brier,

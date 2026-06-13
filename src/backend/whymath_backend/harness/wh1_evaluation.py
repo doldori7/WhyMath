@@ -13,7 +13,8 @@
   목적이다(0/stub은 날조다).
 
 7종 대리 지표 커버리지(설계안 §8.4):
-  ① verify 통과율          — 🔴 NOT_INSTRUMENTED: verify 결과가 이벤트로 적재되지 않음.
+  ① verify 통과율          — 🟢 MEASURED/NO_DATA: attempt_event(event_type=검산결과)의
+                             passed=거짓 수치관계 *미적발* 비율(binary 검산·3-state 아님).
   ② 진단-실제 오개념 일치율 — 🔴 REQUIRES_DATA: ground-truth 오개념 라벨 부재.
   ③ 세션 완주율            — 🟢 MEASURED: LearningSession.ended_at NOT NULL 비율.
   ④ 턴당 토큰              — 🟡 MEASURED/NO_DATA: Dialogue.total_tokens/total_turns 평균.
@@ -36,8 +37,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy import Float, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.db.models.activity import LearningSession
+from whymath_backend.db.models.activity import AttemptEvent, LearningSession
 from whymath_backend.db.models.dialogue import Dialogue
+from whymath_backend.schema.enums import EventType
 
 __all__ = [
     "Metric",
@@ -101,13 +103,15 @@ class Metric(BaseModel):
 class SurrogateMetrics(BaseModel):
     """WH-1 0단계 대리 지표 7종 + 표본 메타 — 커버리지 맵 한 장.
 
-    계측 가능분(③ 세션 완주율·④ 턴당 토큰)은 실값(또는 표본 0이면 NO_DATA), 미계측 5종
-    (①②⑤⑥⑦)은 고정 상태 + note로 갭을 표면화한다. 메타(표본 수·시간창·user 스코핑)로 이
-    베이스라인이 *어느 모집단/기간*을 잰 것인지 함께 기록한다.
+    계측 가능분(① verify 통과율·③ 세션 완주율·④ 턴당 토큰)은 실값(또는 표본 0이면 NO_DATA),
+    미계측 4종(②⑤⑥⑦)은 고정 상태 + note로 갭을 표면화한다. 메타(표본 수·시간창·user 스코핑)로
+    이 베이스라인이 *어느 모집단/기간*을 잰 것인지 함께 기록한다.
     """
 
     # ── 7종 대리 지표 ──
-    verify_pass_rate: Metric = Field(description="① verify 통과율 — coach verify 신호 정답률.")
+    verify_pass_rate: Metric = Field(
+        description="① verify 통과율 — 검산결과 이벤트 중 passed=거짓관계 미적발 비율(binary)."
+    )
     diagnosis_agreement_rate: Metric = Field(
         description="② 진단-실제 오개념 일치율 — 진단 오개념 vs ground-truth 라벨."
     )
@@ -134,6 +138,9 @@ class SurrogateMetrics(BaseModel):
     sample_dialogues: int = Field(
         default=0, description="④ 집계 대상 Dialogue 수(토큰·턴 채워진 행만)."
     )
+    sample_verify_events: int = Field(
+        default=0, description="① 집계 대상 검산결과 attempt_event 수(passed 채워진 행)."
+    )
     window_start: datetime | None = Field(
         default=None, description="집계 시간창 시작(since·생략 시 None=무한 과거)."
     )
@@ -147,17 +154,6 @@ class SurrogateMetrics(BaseModel):
 
 # ── 미계측 5종 고정 Metric(value None·상태 enum·한국어 note) ──────────────────────
 # 날조 금지: 신호가 적재/라벨/도구로 생산되기 전까지 value=None을 유지한다(0/stub 금지).
-def _verify_pass_rate_unmeasured() -> Metric:
-    return Metric(
-        value=None,
-        status=MetricStatus.NOT_INSTRUMENTED,
-        note=(
-            "verify_result 이벤트 미적재 — coach verify 신호를 attempt_event로 적재해야 "
-            "통과율 계측 가능(recommend_coaching_for_solution은 Pydantic 신호일 뿐)."
-        ),
-    )
-
-
 def _diagnosis_agreement_unmeasured() -> Metric:
     return Metric(
         value=None,
@@ -209,9 +205,9 @@ async def compute_wh1_surrogate_metrics(
     since: datetime | None = None,
     until: datetime | None = None,
 ) -> SurrogateMetrics:
-    """WH-1 0단계 대리 지표 7종을 계산 — 계측 가능분 실측 + 미계측 5종 정직 표시.
+    """WH-1 0단계 대리 지표 7종을 계산 — 계측 가능분 실측 + 미계측 4종 정직 표시.
 
-    설계안 §8.4 0단계 베이스라인. **계측 가능(③④)만 실값**으로 내고, **미계측(①②⑤⑥⑦)은
+    설계안 §8.4 0단계 베이스라인. **계측 가능(①③④)만 실값**으로 내고, **미계측(②⑤⑥⑦)은
     value=None + status + note**로 갭을 가시화한다(CLAUDE.md "모르면 모른다"·설계안 "측정 없는
     도입 없음" — 0/stub 날조 금지).
 
@@ -225,6 +221,9 @@ async def compute_wh1_surrogate_metrics(
         SurrogateMetrics — 7 지표(각 Metric) + 표본 수·시간창·user 스코핑 메타.
 
     계측 가능(MEASURED 가능):
+        ① verify_pass_rate: attempt_event(event_type=검산결과) 중 event_data->>'passed'=true
+           비율(passed=거짓 수치관계 *미적발*·binary 검산·3-state 아님). total==0이면 NO_DATA
+           (값 None·날조 회피)·아니면 MEASURED(passed/total). event_at 기준 시간창·user 필터.
         ③ session_completion_rate: LearningSession 중 ended_at IS NOT NULL 비율. total==0이면
            NO_DATA(value None·날조 회피)·아니면 MEASURED(completed/total).
         ④ tokens_per_turn: total_tokens IS NOT NULL AND total_turns > 0인 Dialogue에서
@@ -232,8 +231,8 @@ async def compute_wh1_surrogate_metrics(
            NO_DATA·0 아님)·있으면 MEASURED.
 
     미계측(고정 status·value None):
-        ① NOT_INSTRUMENTED · ② REQUIRES_DATA · ⑤ NOT_INSTRUMENTED · ⑥ REQUIRES_TOOL ·
-        ⑦ REQUIRES_TOOL. 각 사유는 note 한국어로 명시(무엇을 만들면 계측되는지).
+        ② REQUIRES_DATA · ⑤ NOT_INSTRUMENTED · ⑥ REQUIRES_TOOL · ⑦ REQUIRES_TOOL.
+        각 사유는 note 한국어로 명시(무엇을 만들면 계측되는지).
     """
     # ── ③ 세션 완주율 (LearningSession.ended_at NOT NULL 비율) ──
     session_conds = []
@@ -319,8 +318,50 @@ async def compute_wh1_surrogate_metrics(
             ),
         )
 
+    # ── ① verify 통과율 (attempt_event event_type=검산결과 중 passed=true 비율) ──
+    # 한 행으로 (passed_count, total_count)를 뽑는다 — passed는 event_data->>'passed'를 boolean으로
+    # 캐스팅(JSONB 접근도 쿼리빌더로·원시 SQL 문자열 회피). FILTER로 passed=true만 센다.
+    verify_conds = [AttemptEvent.event_type == EventType.검산결과]
+    if user_id is not None:
+        verify_conds.append(AttemptEvent.user_id == user_id)
+    if since is not None:
+        verify_conds.append(AttemptEvent.event_at >= since)
+    if until is not None:
+        verify_conds.append(AttemptEvent.event_at <= until)
+
+    verify_row = (
+        await session.execute(
+            select(
+                func.count().filter(AttemptEvent.event_data["passed"].as_boolean().is_(True)),
+                func.count(),
+            )
+            .select_from(AttemptEvent)
+            .where(*verify_conds)
+        )
+    ).one()
+    passed_count_raw, verify_total_raw = verify_row
+    passed_count = int(passed_count_raw or 0)
+    verify_total = int(verify_total_raw or 0)
+
+    if verify_total == 0:
+        verify_metric = Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=("검산결과 이벤트 0건 — coach 풀이 제출이 쌓이면 통과율 계측(가짜 0 아님)."),
+        )
+    else:
+        verify_metric = Metric(
+            value=passed_count / verify_total,
+            status=MetricStatus.MEASURED,
+            note=(
+                f"검산결과 이벤트 기반 — passed(거짓 수치관계 *미적발*) {passed_count}/"
+                f"{verify_total}건. binary 검산(3-state verify 아님·unverifiable 미구분·"
+                "풀이 제출 턴 한정)."
+            ),
+        )
+
     return SurrogateMetrics(
-        verify_pass_rate=_verify_pass_rate_unmeasured(),
+        verify_pass_rate=verify_metric,
         diagnosis_agreement_rate=_diagnosis_agreement_unmeasured(),
         session_completion_rate=session_completion,
         tokens_per_turn=tokens_metric,
@@ -329,6 +370,7 @@ async def compute_wh1_surrogate_metrics(
         transfer_score=_transfer_unmeasured(),
         sample_sessions=int(total_sessions),
         sample_dialogues=sample_dialogues,
+        sample_verify_events=verify_total,
         window_start=since,
         window_end=until,
         user_scoped=user_id is not None,
