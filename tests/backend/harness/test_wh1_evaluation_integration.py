@@ -4,7 +4,9 @@
   - ① verify 통과율: user A의 검산결과 attempt_event N개(passed 일부) → MEASURED·정확값.
   - ③ 세션 완주율: user A의 세션 N개(일부 ended·일부 NULL) 적재 → MEASURED·정확값.
   - ④ 턴당 토큰: user A의 Dialogue(일부 total_tokens/total_turns 채움) → MEASURED 또는 NO_DATA.
-  - ②⑤⑥⑦ 미계측 4종: 고정 status·value None(날조 0).
+  - ⑤ 도움 감소 곡선: user A의 힌트제공 attempt_event N개(event_at 순서·hint_level 하강) →
+    MEASURED·음수 기울기. 데이터 없으면 NO_DATA(날조 0).
+  - ②⑥⑦ 미계측 3종: 고정 status·value None(날조 0).
   - 401(무토큰)·user 스코핑(타 user B 세션은 A 집계에서 제외).
 
 직전 슬라이스(`api/test_me_integration.py`) 헬퍼 패턴 재사용 — 독립 엔진으로 ORM 적재·정리,
@@ -15,7 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -130,6 +132,20 @@ def _verify_event_row(uid: uuid.UUID, *, passed: bool) -> AttemptEvent:
     )
 
 
+def _hint_event_row(uid: uuid.UUID, *, hint_level: int, order: int) -> AttemptEvent:
+    """힌트제공 attempt_event 1행(event_data.hint_level) — ⑤ 도움 감소 곡선 표본.
+
+    `order`로 event_at을 서로 다르게 어긋내(now + order초) event_at 오름차순 정렬이 결정적이게
+    한다 — OLS x축이 적재 순서와 일치하도록.
+    """
+    return AttemptEvent(
+        event_at=datetime.now(UTC) + timedelta(seconds=order),
+        user_id=uid,
+        event_type=EventType.힌트제공,
+        event_data={"hint_level": hint_level},
+    )
+
+
 def _client() -> TestClient:
     app = create_app()
     app.dependency_overrides[get_settings] = _settings
@@ -177,6 +193,17 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
                 _verify_event_row(uid_b, passed=False),
             )
         )
+        # A: 힌트제공 이벤트 4개(event_at 순서 hint_level 4→3→2→1·등차) → ⑤ OLS 기울기 −1.0.
+        # B는 1개(섞이면 안 됨·스코핑).
+        asyncio.run(
+            _add_all(
+                _hint_event_row(uid_a, hint_level=4, order=0),
+                _hint_event_row(uid_a, hint_level=3, order=1),
+                _hint_event_row(uid_a, hint_level=2, order=2),
+                _hint_event_row(uid_a, hint_level=1, order=3),
+                _hint_event_row(uid_b, hint_level=4, order=0),
+            )
+        )
         token_a = create_access_token(uid_a, settings=_settings())
         auth = {"Authorization": f"Bearer {token_a}"}
         with _client() as client:
@@ -203,14 +230,22 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
             assert body["sample_verify_events"] == 4
             assert "미적발" in vpr["note"]  # binary 검산 정직 note(3-state 아님)
 
-            # 미계측 4종 — value None·고정 status(날조 0).
+            # ⑤ 도움 감소 곡선 — MEASURED·기울기 −1.0(4→3→2→1 등차 하강·도움 감소)·표본 4
+            # (B의 1건 제외 — 스코핑). raw 기울기·R15 미반영 정직 note.
+            hrs = body["help_reduction_slope"]
+            assert hrs["status"] == "measured"
+            assert hrs["value"] == -1.0
+            assert hrs["value"] < 0  # 음수=도움 감소=개선
+            assert body["sample_hint_events"] == 4
+            assert "R15" in hrs["note"]  # 정확률 교차검증 미반영 정직 표기
+            assert "종단" in hrs["note"]
+
+            # 미계측 3종(②⑥⑦) — value None·고정 status(날조 0).
             assert body["diagnosis_agreement_rate"]["status"] == "requires_data"
-            assert body["help_reduction_slope"]["status"] == "not_instrumented"
             assert body["calibration_brier"]["status"] == "requires_tool"
             assert body["transfer_score"]["status"] == "requires_tool"
             for key in (
                 "diagnosis_agreement_rate",
-                "help_reduction_slope",
                 "calibration_brier",
                 "transfer_score",
             ):
@@ -225,7 +260,7 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
 
 
 def test_harness_metrics_no_data_when_empty_on_live_pg() -> None:
-    """데이터 없는 user → ①③④ NO_DATA·value None(가짜 0 금지)·표본 0."""
+    """데이터 없는 user → ①③④⑤ NO_DATA·value None(가짜 0 금지)·표본 0."""
     if not asyncio.run(_pg_reachable()):
         pytest.skip(
             "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
@@ -246,8 +281,12 @@ def test_harness_metrics_no_data_when_empty_on_live_pg() -> None:
             assert body["tokens_per_turn"]["value"] is None
             assert body["verify_pass_rate"]["status"] == "no_data"
             assert body["verify_pass_rate"]["value"] is None
+            # ⑤ 도움 감소 곡선 — 힌트제공 0건 → NO_DATA·value None(가짜 기울기/0 금지).
+            assert body["help_reduction_slope"]["status"] == "no_data"
+            assert body["help_reduction_slope"]["value"] is None
             assert body["sample_sessions"] == 0
             assert body["sample_dialogues"] == 0
             assert body["sample_verify_events"] == 0
+            assert body["sample_hint_events"] == 0
     finally:
         asyncio.run(_cleanup([uid]))

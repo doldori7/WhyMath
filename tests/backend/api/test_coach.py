@@ -3282,7 +3282,9 @@ class TestPrerequisiteCoachingHelper:
         async def _gaps(*args: Any, **kwargs: Any) -> list[Any]:
             return []
 
-        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _concept)
+        monkeypatch.setattr(
+            "whymath_backend.api.coach.get_primary_concept_id", _concept
+        )
         monkeypatch.setattr(
             "whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps
         )
@@ -3314,7 +3316,9 @@ class TestPrerequisiteCoachingHelper:
         async def _gaps(*args: Any, **kwargs: Any) -> list[PrerequisiteGap]:
             return [gap]
 
-        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _concept)
+        monkeypatch.setattr(
+            "whymath_backend.api.coach.get_primary_concept_id", _concept
+        )
         monkeypatch.setattr(
             "whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps
         )
@@ -3504,3 +3508,67 @@ class TestLogVerifyEvent:
         assert len(sess.added) == 1
         assert sess.added[0].attempt_id == aid
         assert sess.added[0].problem_id is None
+
+
+class TestLogHintEvent:
+    """`_log_hint_event` — 힌트제공 attempt_event 적재 단위(스테이트풀 coach 전용·지표 ⑤).
+
+    `hint_level`은 핸들러가 이미 보유한 decision.hint_level을 그대로 받는다(재계산 0). None이면
+    적재 0(early return·날조 회피)·정수면 event_type=힌트제공·event_data={hint_level}로 1행
+    적재되는지를 add 캡처로 확인한다(verify 단위 패턴 미러).
+    """
+
+    _UID = uuid.uuid4()
+    _PID = uuid.uuid4()
+
+    async def test_none_hint_level_no_event(self) -> None:
+        """hint_level이 None이면 적재 0(early return·신호 없는 행 미생성)."""
+        from whymath_backend.api.coach import _log_hint_event
+
+        sess = _CaptureSession()
+        await _log_hint_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            hint_level=None,
+        )
+        assert sess.added == []
+
+    async def test_int_hint_level_logs_event(self) -> None:
+        """hint_level 정수 → event_type 힌트제공·event_data hint_level·user/problem 실림."""
+        from whymath_backend.api.coach import _log_hint_event
+        from whymath_backend.schema.enums import EventType
+
+        sess = _CaptureSession()
+        await _log_hint_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=self._PID,
+            attempt_id=None,
+            hint_level=3,
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.힌트제공
+        assert event.event_data == {"hint_level": 3}
+        assert event.user_id == self._UID
+        assert event.problem_id == self._PID
+
+    async def test_attempt_id_passthrough(self) -> None:
+        """attempt_id가 있으면 이벤트에 그대로 실린다(problem_id None 허용)."""
+        from whymath_backend.api.coach import _log_hint_event
+
+        aid = uuid.uuid4()
+        sess = _CaptureSession()
+        await _log_hint_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID,
+            problem_id=None,
+            attempt_id=aid,
+            hint_level=1,
+        )
+        assert len(sess.added) == 1
+        assert sess.added[0].attempt_id == aid
+        assert sess.added[0].problem_id is None
+        assert sess.added[0].event_data == {"hint_level": 1}

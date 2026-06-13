@@ -18,7 +18,8 @@
   ② 진단-실제 오개념 일치율 — 🔴 REQUIRES_DATA: ground-truth 오개념 라벨 부재.
   ③ 세션 완주율            — 🟢 MEASURED: LearningSession.ended_at NOT NULL 비율.
   ④ 턴당 토큰              — 🟡 MEASURED/NO_DATA: Dialogue.total_tokens/total_turns 평균.
-  ⑤ 도움 감소 곡선         — 🔴 NOT_INSTRUMENTED: 힌트 시계열 부재(used_hint bool flag만).
+  ⑤ 도움 감소 곡선         — 🟡 MEASURED/NO_DATA: attempt_event(event_type=힌트제공)의
+                             hint_level 시계열 OLS 기울기(음수=도움 감소). R15 교차검증 미반영.
   ⑥ 보정 점수(Brier)      — 🔴 REQUIRES_TOOL: elicit_prediction 도구 미구현.
   ⑦ 전이 점수             — 🔴 REQUIRES_TOOL: 시그니처 패턴 태깅·전이 출제 미구현.
 
@@ -47,6 +48,11 @@ __all__ = [
     "SurrogateMetrics",
     "compute_wh1_surrogate_metrics",
 ]
+
+
+# ⑤ 도움 감소 곡선 OLS 기울기의 *최소 종단 표본*. 이보다 적으면 NO_DATA(날조 회피).
+# 종단 지표는 점이 2개뿐이면 기울기가 의미를 갖지 못하므로(과적합·노이즈) 최소 3점을 요구한다.
+_MIN_SLOPE_POINTS = 3
 
 
 class MetricStatus(str, Enum):
@@ -139,7 +145,12 @@ class SurrogateMetrics(BaseModel):
         default=0, description="④ 집계 대상 Dialogue 수(토큰·턴 채워진 행만)."
     )
     sample_verify_events: int = Field(
-        default=0, description="① 집계 대상 검산결과 attempt_event 수(passed 채워진 행)."
+        default=0,
+        description="① 집계 대상 검산결과 attempt_event 수(passed 채워진 행).",
+    )
+    sample_hint_events: int = Field(
+        default=0,
+        description="⑤ 집계 대상 힌트제공 attempt_event 수(hint_level 채워진 행·OLS 포인트 수).",
     )
     window_start: datetime | None = Field(
         default=None, description="집계 시간창 시작(since·생략 시 None=무한 과거)."
@@ -165,13 +176,57 @@ def _diagnosis_agreement_unmeasured() -> Metric:
     )
 
 
-def _help_reduction_unmeasured() -> Metric:
+def _help_reduction_from_levels(hint_levels: list[int]) -> Metric:
+    """⑤ 도움 감소 곡선 — 힌트제공 hint_level 시계열의 OLS 단순선형회귀 기울기를 Metric으로.
+
+    입력 `hint_levels`는 *event_at 오름차순*으로 정렬된 hint_level(1~4·supply) 시계열이다.
+    x는 순서 인덱스(0,1,2,…), y는 hint_level. OLS 기울기 = Σ(x-x̄)(y-ȳ)/Σ(x-x̄)² —
+    **음수면 시간이 갈수록 AI가 더 은근한(낮은) 힌트로 충분 = 도움 감소 = 개선**이다.
+
+    종단 표본 가드(날조 0): 유효 포인트가 `_MIN_SLOPE_POINTS` 미만이거나 x 분산이 0이면
+    기울기를 산출하지 않고 **NO_DATA**(value None)로 둔다 — 가짜 0/날조 기울기 금지. x는
+    0..n-1 등차라 n>=2면 분산은 항상 양수지만, 방어적으로 0 분산도 NO_DATA로 막는다.
+
+    정직 note: 이 기울기는 *raw* 힌트 노출량 추세일 뿐, **R15(정확률 교차검증) 미반영**이다 —
+    학생이 힌트를 *회피*해서(틀려도) 레벨이 낮아진 것과 *실력으로* 낮아진 것을 구분하지 못한다.
+    힌트 회피만으로 개선 판정하지 않는 교차검증은 후속 슬라이스 책임. 종단 지표라 표본이 적으면
+    NO_DATA이고, hint_level은 graded 노출량(1~4·1=가장 은근/4=전체 풀이)이다.
+    """
+    n = len(hint_levels)
+    if n < _MIN_SLOPE_POINTS:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                f"힌트제공 이벤트 {n}건 — 종단 표본 부족(최소 {_MIN_SLOPE_POINTS}점) 으로 OLS "
+                "기울기 산출 불가. 힌트제공이 쌓이면 도움 감소 곡선 계측(가짜 0/기울기 아님). "
+                "R15 정확률 교차검증 미반영(후속)·종단 지표."
+            ),
+        )
+
+    xs = list(range(n))
+    x_mean = sum(xs) / n
+    y_mean = sum(hint_levels) / n
+    x_var = sum((x - x_mean) ** 2 for x in xs)
+    if x_var == 0:  # 방어적 — n>=2 등차 인덱스라면 도달 불가하나 분산 0이면 NO_DATA(날조 회피).
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                "힌트제공 시계열의 시간축 분산 0 — OLS 기울기 산출 불가(가짜 0 아님). "
+                "R15 정확률 교차검증 미반영(후속)·종단 지표."
+            ),
+        )
+
+    covariance = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, hint_levels, strict=True))
+    slope = covariance / x_var
     return Metric(
-        value=None,
-        status=MetricStatus.NOT_INSTRUMENTED,
+        value=slope,
+        status=MetricStatus.MEASURED,
         note=(
-            "힌트 이벤트 시계열 부재 — ProblemAttempt.used_hint는 bool flag만이라 횟수·시간축이 "
-            "없어 감소 기울기 산출 불가(힌트 이벤트 적재 필요)."
+            f"힌트제공 {n}건 hint_level OLS 기울기 {slope:+.4f}(event_at 순서·음수=도움 감소). "
+            "R15 정확률 교차검증 미반영(힌트 회피만으로 개선 판정 안 함은 후속)·종단 지표라 "
+            "표본 적으면 NO_DATA·hint_level은 graded 노출량(1~4)."
         ),
     )
 
@@ -205,11 +260,12 @@ async def compute_wh1_surrogate_metrics(
     since: datetime | None = None,
     until: datetime | None = None,
 ) -> SurrogateMetrics:
-    """WH-1 0단계 대리 지표 7종을 계산 — 계측 가능분 실측 + 미계측 4종 정직 표시.
+    """WH-1 0단계 대리 지표 7종을 계산 — 계측 가능분 실측 + 미계측 3종 정직 표시.
 
-    설계안 §8.4 0단계 베이스라인. **계측 가능(①③④)만 실값**으로 내고, **미계측(②⑤⑥⑦)은
+    설계안 §8.4 0단계 베이스라인. **계측 가능(①③④⑤)만 실값**으로 내고, **미계측(②⑥⑦)은
     value=None + status + note**로 갭을 가시화한다(CLAUDE.md "모르면 모른다"·설계안 "측정 없는
-    도입 없음" — 0/stub 날조 금지).
+    도입 없음" — 0/stub 날조 금지). ⑤(도움 감소 곡선)는 힌트제공 이벤트 적재 슬라이스로
+    NOT_INSTRUMENTED→MEASURED가 됐다(표본 부족이면 NO_DATA·R15 교차검증 미반영).
 
     Args:
         session: 조회 전용 AsyncSession(쓰기 없음·ORM/쿼리빌더만·원시 SQL 회피).
@@ -229,9 +285,13 @@ async def compute_wh1_surrogate_metrics(
         ④ tokens_per_turn: total_tokens IS NOT NULL AND total_turns > 0인 Dialogue에서
            AVG(total_tokens/total_turns). 해당 행 0이면 NO_DATA(현재 토큰 미적재면 정직하게
            NO_DATA·0 아님)·있으면 MEASURED.
+        ⑤ help_reduction_slope: attempt_event(event_type=힌트제공)의 hint_level을 event_at
+           오름차순으로 뽑아 OLS 단순선형회귀 기울기(음수=도움 감소=개선). 유효 포인트가
+           `_MIN_SLOPE_POINTS` 미만이거나 x 분산 0이면 NO_DATA(날조 회피)·아니면 MEASURED.
+           raw 기울기일 뿐 R15 정확률 교차검증은 미반영(후속).
 
     미계측(고정 status·value None):
-        ② REQUIRES_DATA · ⑤ NOT_INSTRUMENTED · ⑥ REQUIRES_TOOL · ⑦ REQUIRES_TOOL.
+        ② REQUIRES_DATA · ⑥ REQUIRES_TOOL · ⑦ REQUIRES_TOOL.
         각 사유는 note 한국어로 명시(무엇을 만들면 계측되는지).
     """
     # ── ③ 세션 완주율 (LearningSession.ended_at NOT NULL 비율) ──
@@ -360,17 +420,42 @@ async def compute_wh1_surrogate_metrics(
             ),
         )
 
+    # ── ⑤ 도움 감소 곡선 (attempt_event event_type=힌트제공의 hint_level OLS 기울기) ──
+    # event_at 오름차순으로 hint_level(event_data->>'hint_level'을 integer 캐스팅·쿼리빌더로 접근·
+    # 원시 SQL 문자열 회피) 시계열을 뽑아 Python에서 순수 OLS 기울기를 계산한다. 기울기 산출은
+    # _help_reduction_from_levels(종단 표본 가드·날조 0)에 위임.
+    hint_conds = [AttemptEvent.event_type == EventType.힌트제공]
+    if user_id is not None:
+        hint_conds.append(AttemptEvent.user_id == user_id)
+    if since is not None:
+        hint_conds.append(AttemptEvent.event_at >= since)
+    if until is not None:
+        hint_conds.append(AttemptEvent.event_at <= until)
+
+    hint_rows = (
+        await session.execute(
+            select(AttemptEvent.event_data["hint_level"].as_integer())
+            .select_from(AttemptEvent)
+            .where(*hint_conds)
+            .order_by(AttemptEvent.event_at.asc())
+        )
+    ).all()
+    # JSONB 파싱 실패(키 부재 등)로 None이 섞일 수 있으니 정수만 채택(날조 회피·결손 행 제외).
+    hint_levels = [int(row[0]) for row in hint_rows if row[0] is not None]
+    help_reduction = _help_reduction_from_levels(hint_levels)
+
     return SurrogateMetrics(
         verify_pass_rate=verify_metric,
         diagnosis_agreement_rate=_diagnosis_agreement_unmeasured(),
         session_completion_rate=session_completion,
         tokens_per_turn=tokens_metric,
-        help_reduction_slope=_help_reduction_unmeasured(),
+        help_reduction_slope=help_reduction,
         calibration_brier=_calibration_unmeasured(),
         transfer_score=_transfer_unmeasured(),
         sample_sessions=int(total_sessions),
         sample_dialogues=sample_dialogues,
         sample_verify_events=verify_total,
+        sample_hint_events=len(hint_levels),
         window_start=since,
         window_end=until,
         user_scoped=user_id is not None,

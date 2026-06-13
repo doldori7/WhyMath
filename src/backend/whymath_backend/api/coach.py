@@ -35,7 +35,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._concurrency import etag_for, matches_if_none_match
 from whymath_backend.api._misconception_state import get_semantic_matcher
-from whymath_backend.api._rate_limit import RateLimitedTripleRead, RateLimitedTripleWrite
+from whymath_backend.api._rate_limit import (
+    RateLimitedTripleRead,
+    RateLimitedTripleWrite,
+)
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
@@ -51,7 +54,10 @@ from whymath_backend.l2 import (
     theta_to_mastery_proxy,
 )
 from whymath_backend.l2.prerequisite_recommendation import recommend_prerequisite_gaps
-from whymath_backend.l3.pregenerate.validator import arithmetic_validator, validate_response
+from whymath_backend.l3.pregenerate.validator import (
+    arithmetic_validator,
+    validate_response,
+)
 from whymath_backend.l4 import (
     CoachingFocus,
     CoachingTrigger,
@@ -548,6 +554,49 @@ async def _log_verify_event(
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
 
 
+async def _log_hint_event(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    problem_id: uuid.UUID | None,
+    attempt_id: uuid.UUID | None,
+    hint_level: int | None,
+) -> None:
+    """AI가 제공한 힌트 노출량(hint_level)을 `attempt_event`(event_type=힌트제공)로 1행 적재.
+
+    WH-1 0단계 지표 ⑤(도움 감소 곡선)을 NOT_INSTRUMENTED→MEASURED로 끌어올리는 *적재 좌석*.
+    직전 verify 슬라이스(`_log_verify_event`·검산결과) **동형**: 스테이트풀 coach
+    (`create_session`·`append_turns`)에서만 호출하고, stateless `/v1/coach`(`coach_decide`)는
+    DB 무접근 계약이라 적재하지 않는다.
+
+    **재계산 0**: `hint_level`은 핸들러가 이미 보유한 `decision.hint_level`을 그대로 전달받는다
+    (`decision`은 `_build_response_payload`가 반환하는 6-튜플의 첫 요소). verify와 달리 검증기를
+    다시 부를 필요 없이 *이미 계산된* 값만 적재한다 — `_build_response_payload` 시그니처·반환을
+    건드리지 않는다(읽기만).
+
+    적재 신호의 의미: 이 hint_level은 AI가 *제공한* 노출량(supply·graded 1~4·1=가장 은근/
+    4=전체 풀이)이지 학생이 *요청*한 demand(`힌트요청`)가 아니다 — 도움 감소 곡선은 supply 추세를
+    본다. `hint_level`이 None이면(이론적 경계·decision은 항상 int지만 방어적) early return으로
+    적재하지 않는다(날조 회피 — 신호 없는 행 미생성).
+
+    트랜잭션: `_log_verify_event`와 동일하게 ORM 1행을 `session.add`만 하고 *commit은 하지
+    않는다* — 호출 핸들러가 자기 트랜잭션을 commit하므로 그 트랜잭션에 합류한다(별도 commit 금지).
+    `event_at`은 핸들러와 동일하게 now(복합 PK 구성요소·시계열 순서축).
+    """
+    if hint_level is None:
+        return  # 힌트 레벨 없음(이론적 경계) → 적재 안 함(날조 회피).
+
+    event = AttemptEventORM(
+        event_at=datetime.now(timezone.utc),
+        attempt_id=attempt_id,
+        user_id=user_id,
+        problem_id=problem_id,
+        event_type=EventType.힌트제공,
+        event_data={"hint_level": hint_level},
+    )
+    session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
+
+
 @router.post(
     "/coach",
     response_model=CoachResponse,
@@ -666,6 +715,15 @@ async def create_session(
         attempt_id=dialogue.attempt_id,
         student_solution=body.student_solution,
     )
+    # WH-1 지표 ⑤ 적재 — 이미 계산된 decision.hint_level(supply·1~4)을 그대로 기록(재계산 0·
+    # _build_response_payload 불변). verify 적재 바로 옆·같은 트랜잭션 합류(별도 commit 없음).
+    await _log_hint_event(
+        session,
+        user_id=user.user_id,
+        problem_id=body.problem_id,
+        attempt_id=dialogue.attempt_id,
+        hint_level=decision.hint_level,
+    )
     await session.commit()
 
     return SessionCreateResponse(
@@ -772,6 +830,16 @@ async def append_turns(
         problem_id=dialogue.problem_id,
         attempt_id=dialogue.attempt_id,
         student_solution=body.student_solution,
+    )
+    # WH-1 지표 ⑤ 적재 — create_session과 동형(이미 계산된 decision.hint_level·supply 1~4을 그대로
+    # 기록·재계산 0·_build_response_payload 불변). verify 적재 바로 옆·같은 트랜잭션 합류(별도
+    # commit 없음). problem_id·attempt_id는 dialogue 출처(append는 dialogue 컨텍스트).
+    await _log_hint_event(
+        session,
+        user_id=user.user_id,
+        problem_id=dialogue.problem_id,
+        attempt_id=dialogue.attempt_id,
+        hint_level=decision.hint_level,
     )
     await session.commit()
 
