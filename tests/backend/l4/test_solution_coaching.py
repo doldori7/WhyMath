@@ -443,6 +443,128 @@ class TestSolutionStepsWiring:
         assert a == b
 
 
+class TestOcrConfidenceGating:
+    """WH-1 1단계 — 저신뢰 OCR이면 step-incorrect 신호를 verify 코칭에서 누그러뜨린다.
+
+    분해 단계 텍스트가 OCR 오인식일 수 있어, verify가 낸 incorrect가 *학생 오류가 아니라 OCR
+    오류*일 수 있다(정확성 #1·거짓 지적 방지). 저신뢰 OCR이면 결정에서 보류하되 원 verdict는
+    투명성 위해 노출하고 `verification_ocr_gated`로 보류 사실을 정직히 알린다. 텍스트 레벨 신호는
+    게이팅하지 않는다(OCR 분해와 무관).
+    """
+
+    def test_low_confidence_suppresses_step_signal(self) -> None:
+        """incorrect 단계 + 저신뢰 OCR(0.5) → step 기인 arithmetic_error 안 됨·verify 아님."""
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["2*x + 4", "2*x + 5"], ocr_confidence=0.5
+        )
+        # 텍스트 신호 없음 + 저신뢰 OCR로 step 보류 → arithmetic_error False(고숙달 advance).
+        assert result.arithmetic_error is False
+        assert result.trigger.focus != "verify"
+        assert result.trigger.focus == "advance"
+
+    def test_low_confidence_no_position_pointing(self) -> None:
+        """저신뢰 OCR → incorrect_step_index/위치 발화 없음(거짓 위치 지목 방지)."""
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["x + 1", "x + 1", "x + 2"], ocr_confidence=0.5
+        )
+        assert result.trigger.focus_step_index is None
+        assert "잘 따라왔어" not in result.trigger.prompt
+        assert "번째 줄" not in result.trigger.prompt
+
+    def test_low_confidence_sets_ocr_gated_flag(self) -> None:
+        """저신뢰 OCR + step incorrect → verification_ocr_gated True(보류 사실 노출)."""
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["2*x + 4", "2*x + 5"], ocr_confidence=0.5
+        )
+        assert result.verification_ocr_gated is True
+
+    def test_low_confidence_preserves_raw_verdict(self) -> None:
+        """투명성 — 보류해도 solution_verification 원 verdict는 has_incorrect True 그대로."""
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["2*x + 4", "2*x + 5"], ocr_confidence=0.5
+        )
+        assert result.solution_verification is not None
+        assert result.solution_verification.has_incorrect is True
+        assert result.solution_verification.first_incorrect_index == 0
+
+    def test_high_confidence_keeps_verify(self) -> None:
+        """고신뢰 OCR(0.9) → 기존대로 verify·위치 발화·gated False."""
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["x + 1", "x + 1", "x + 2"], ocr_confidence=0.9
+        )
+        assert result.arithmetic_error is True
+        assert result.trigger.focus == "verify"
+        assert result.trigger.focus_step_index == 1
+        assert "잘 따라왔어" in result.trigger.prompt
+        assert result.verification_ocr_gated is False
+
+    def test_confidence_none_unchanged(self) -> None:
+        """OCR 미제공(None) → 기존 동작 완전 불변(verify·위치)·gated False(하위호환)."""
+        baseline = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["x + 1", "x + 1", "x + 2"]
+        )
+        explicit = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["x + 1", "x + 1", "x + 2"], ocr_confidence=None
+        )
+        # 미제공 = None 명시 → 완전 동일(gated 포함).
+        assert explicit == baseline
+        assert explicit.arithmetic_error is True
+        assert explicit.trigger.focus == "verify"
+        assert explicit.trigger.focus_step_index == 1
+        assert explicit.verification_ocr_gated is False
+
+    def test_text_signal_not_gated_by_low_ocr(self) -> None:
+        """텍스트 거짓 등식 + 저신뢰 OCR → 텍스트 신호는 *여전히* verify(게이팅 안 됨)."""
+        # 텍스트 슬립("2 + 3 = 6") + 저신뢰 OCR + step도 incorrect.
+        result = recommend_coaching_for_solution(
+            "2 + 3 = 6", 0.9, 2.0, solution_steps=["x", "x + 1"], ocr_confidence=0.5
+        )
+        # 텍스트 신호는 OCR 분해와 무관 → 게이팅 안 됨 → verify 유지.
+        assert result.arithmetic_error is True
+        assert result.trigger.focus == "verify"
+        assert result.error_kind == "arithmetic"
+        assert result.validation_signal is not None
+        # step은 저신뢰로 보류됐으나(verification_ocr_gated) verdict는 노출.
+        assert result.verification_ocr_gated is True
+        assert result.solution_verification is not None
+        assert result.solution_verification.has_incorrect is True
+
+    def test_threshold_boundary_exactly_at_floor(self) -> None:
+        """임계 경계(0.8) — 정확히 0.8은 *신뢰*(< 0.8만 저신뢰)·0.79는 저신뢰."""
+        at_floor = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["2*x + 4", "2*x + 5"], ocr_confidence=0.8
+        )
+        # 0.8은 임계 *미만*이 아님 → 신뢰 → verify·gated False.
+        assert at_floor.arithmetic_error is True
+        assert at_floor.trigger.focus == "verify"
+        assert at_floor.verification_ocr_gated is False
+        below = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["2*x + 4", "2*x + 5"], ocr_confidence=0.79
+        )
+        # 0.79는 임계 미만 → 저신뢰 → 보류·gated True.
+        assert below.arithmetic_error is False
+        assert below.verification_ocr_gated is True
+
+    def test_correct_steps_low_ocr_not_gated(self) -> None:
+        """전부 correct 단계 + 저신뢰 OCR → 보류할 신호 없음·gated False(step-incorrect 없음)."""
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["2*x + 4", "2*(x + 2)"], ocr_confidence=0.5
+        )
+        assert result.verification_ocr_gated is False
+        assert result.solution_verification is not None
+        assert result.solution_verification.has_incorrect is False
+
+    def test_gated_deterministic(self) -> None:
+        """같은 저신뢰 OCR 입력 → 같은 결과(순수)."""
+        a = recommend_coaching_for_solution(
+            "풀이", 0.3, 1.0, solution_steps=["2*x + 4", "2*x + 5"], ocr_confidence=0.5
+        )
+        b = recommend_coaching_for_solution(
+            "풀이", 0.3, 1.0, solution_steps=["2*x + 4", "2*x + 5"], ocr_confidence=0.5
+        )
+        assert a == b
+
+
 class TestStepShadowNonExposure:
     """slice 63 — 중간 step shadow 관측이 SolutionCoaching 반환을 *바꾸지 않음*(비노출)."""
 

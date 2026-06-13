@@ -378,6 +378,10 @@ def _build_response_payload(
     solution_text = body.student_solution or body.student_input
     # WH-1 1단계 결선: L5가 분해한 단계 시퀀스(solution_steps)가 있으면 verify_solution으로
     # 단계별 검증해 검산 코칭을 정밀화한다(텍스트 신호와 추가적 OR 결합·미제공 시 동작 불변).
+    # WH-1 1단계 OCR 게이팅: ocr_confidence를 함께 넘겨, 저신뢰 OCR이면 step-incorrect 신호를
+    # 코칭 결정에서 누그러뜨리고(거짓 지적 방지·정확성 #1) verification_ocr_gated로 노출한다.
+    # 텍스트 레벨 신호·미제공/고신뢰 OCR은 게이팅 안 됨(하위호환). 이미 _compute_matches(게이트
+    # ②)에 전달 중인 동일 값을 solution coaching에도 thread한다.
     sol = recommend_coaching_for_solution(
         solution_text,
         effective_bkt,
@@ -386,6 +390,7 @@ def _build_response_payload(
         expected_answer=expected_answer,
         solution_steps=body.solution_steps,
         solution_step_types=body.solution_step_types,
+        ocr_confidence=body.ocr_confidence,
     )
     # slice 73: 노출은 *불일치 신호만* — 계산오류 verify(기존·arithmetic_error) + BKT↔θ 불일치
     # (consolidate·retrieval). 합의(foundation/advance)는 LTHC가 담당·한쪽 신호만(diagnose)은

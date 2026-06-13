@@ -654,6 +654,103 @@ class TestSolutionStepsWiring:
         assert sv["steps"][0]["state"] == "incorrect"
 
 
+class TestOcrConfidenceGatingWiring:
+    """WH-1 1단계 — `CoachRequest.ocr_confidence` 저신뢰 시 step-incorrect 코칭 보류 노출.
+
+    저신뢰 OCR이면 분해 단계 텍스트가 오인식일 수 있어 verify 코칭에서 step 신호를 누그러뜨리고
+    `solution_coaching.verification_ocr_gated`로 노출한다(거짓 지적 방지·정확성 #1). 고신뢰/미제공은
+    기존 동작 불변(하위호환). 응답 계약(필드 추가만·6-튜플 형태 불변)은 보존된다.
+    """
+
+    def test_low_confidence_gates_step_and_surfaces_flag(self) -> None:
+        # 텍스트 깨끗·고숙달 + step incorrect지만 저신뢰 OCR → step 보류(advance) → 노출 게이트로
+        # solution_coaching None(advance focus는 _THETA_SURFACED_FOCI 밖·arithmetic_error False).
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "확인",
+                "bkt_mastery": 0.95,
+                "solution_steps": ["2*x + 4", "2*x + 5"],
+                "ocr_confidence": 0.5,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        # step이 저신뢰로 보류돼 advance → solution_coaching 미노출(기존 노출 게이트 동작).
+        assert resp.json()["solution_coaching"] is None
+
+    def test_low_confidence_flag_surfaced_when_text_slip(self) -> None:
+        # 텍스트 슬립(게이팅 안 됨)으로 verify가 노출되는 응답에서 verification_ocr_gated=True 확인.
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "2 + 3 = 6",
+                "bkt_mastery": 0.95,
+                "solution_steps": ["x", "x + 1"],
+                "ocr_confidence": 0.5,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None  # 텍스트 슬립으로 verify 노출
+        assert sc["trigger"]["focus"] == "verify"
+        # 텍스트 신호는 OCR 게이팅 안 됨 → 보존. step은 저신뢰로 보류 → gated True.
+        assert sc["error_kind"] == "arithmetic"
+        assert sc["verification_ocr_gated"] is True
+        # 원 verdict는 투명성 위해 노출(has_incorrect 그대로).
+        assert sc["solution_verification"]["has_incorrect"] is True
+
+    def test_high_confidence_keeps_verify(self) -> None:
+        # 고신뢰 OCR(0.9) → 기존대로 verify·위치 발화·gated False.
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "확인",
+                "bkt_mastery": 0.95,
+                "solution_steps": ["x + 1", "x + 1", "x + 2"],
+                "ocr_confidence": 0.9,
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+        assert sc["trigger"]["focus_step_index"] == 1
+        assert sc["verification_ocr_gated"] is False
+
+    def test_confidence_omitted_unchanged(self) -> None:
+        # OCR 미제공 → 기존 동작 불변(verify·위치)·gated False(하위호환).
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "확인",
+                "bkt_mastery": 0.95,
+                "solution_steps": ["x + 1", "x + 1", "x + 2"],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["trigger"]["focus"] == "verify"
+        assert sc["verification_ocr_gated"] is False
+
+    def test_session_create_gates_step_flag(self) -> None:
+        # 영속 엔드포인트도 동일 — 공통 _build_response_payload 경유(텍스트 슬립으로 노출 확보).
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "2 + 3 = 6",
+                "bkt_mastery": 0.95,
+                "solution_steps": ["x", "x + 1"],
+                "ocr_confidence": 0.5,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["verification_ocr_gated"] is True
+
+
 class TestHintLevelWiring:
     def test_demand_answer_signal_raises_hint(self) -> None:
         resp = _client().post(
