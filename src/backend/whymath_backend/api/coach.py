@@ -25,7 +25,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, NamedTuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -173,6 +173,17 @@ class CoachRequest(BaseModel):
             "위임). 미제공 시 모든 전이를 타입 미지정으로 검증."
         ),
     )
+    ocr_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "학생 풀이가 L5 OCR 산출물일 때 인식 신뢰도(0~1). 제공+<0.8이면 §3.3 게이트 ②로 "
+            "`match_low_quality`를 표시해 L5가 재확인을 유도. None=OCR 아님/미제공→dormant "
+            "(low_quality 항상 False·기존 동작 완전 불변). 이 값은 *입력 품질* 신호지 매칭 "
+            "오류가 아니며, 매칭을 비우지 않는다(플래그만)."
+        ),
+    )
 
 
 class CoachResponse(BaseModel):
@@ -226,6 +237,24 @@ class CoachResponse(BaseModel):
         description=(
             "이 문제 개념의 막힌 선수가 있으면 '선수 복습 먼저' 코칭(L4 prerequisite_review)·"
             "없으면 null. Polya 결정과 *별개의 추가 신호* — 클라/L5가 우선 제시 여부 결정."
+        ),
+    )
+    match_low_quality: bool = Field(
+        default=False,
+        description=(
+            "§3.3 게이트 ② — 요청 `ocr_confidence`가 제공되고 0.8 미만이면 True. 학생 풀이가 "
+            "OCR로 오염됐을 수 있으니 L5/LLM이 *재확인을 유도*하라는 신호다. 매칭은 *유지*되고 "
+            "(이 플래그는 매칭을 비우지 않는다) intervention도 변경하지 않는다 — 백엔드는 신호만 "
+            "노출하고 재확인 발화 생성·intervention 보류는 후속(L5)이 맡는다. `ocr_confidence` "
+            "미제공(None)이면 항상 False(기존 동작 불변)."
+        ),
+    )
+    no_confident_match: bool = Field(
+        default=False,
+        description=(
+            "§3.3 게이트 ① — top-1 신뢰도가 0.65 미만이라 후보를 *비웠는지* 여부(억지 매칭 금지). "
+            "True면 `misconceptions`는 빈 리스트다 — '매칭 없음'(애초에 후보 0)과 '약해서 비움'을 "
+            "구분하는 신호. 게이트가 비우던 기존 동작의 *노출*일 뿐 매칭 결과 자체는 불변."
         ),
     )
 
@@ -367,9 +396,23 @@ def _build_response_payload(
     return decision, resolved, intervention, lthc, entry_category, solution_coaching
 
 
+class _MatchOutcome(NamedTuple):
+    """`_compute_matches` 반환 — 게이트 통과 매칭 + §3.3 게이트 플래그 2종.
+
+    WH-1 1단계 슬라이스: 직전 슬라이스에서 `_gate`가 `MatchGateResult.matches`만 반환하고
+    `low_quality`/`no_confident_match`를 *드롭*했다. 이 컨테이너로 플래그를 핸들러까지 thread해
+    `CoachResponse`(`match_low_quality`/`no_confident_match`)로 노출한다 — 매칭 *알고리즘*과
+    리스트 내용은 불변, 반환 *형태*만 확장(드롭 제거)이다.
+    """
+
+    matches: list[MisconceptionMatch]
+    low_quality: bool
+    no_confident_match: bool
+
+
 async def _compute_matches(
     student_input: str, *, ocr_confidence: float | None = None
-) -> list[MisconceptionMatch]:
+) -> _MatchOutcome:
     """오개념 후보 계산 + §3.3 품질 게이트 — `misconception_semantic_mode` 3값 분기(off/shadow/on).
 
     WH-1 1단계 슬라이스 1(`match_misconception` 도구화): 모드별 후보 산출 *직후* 결과에
@@ -378,14 +421,25 @@ async def _compute_matches(
     *비운다*(억지 매칭 금지·CLAUDE.md "확실하지 않으면 모른다"). 따라서 세 모드(off/shadow/on)
     *모두* 동일한 게이트를 거쳐 약한 top-1 매칭이 하류(가설·intervention)로 새지 않는다.
 
-    `ocr_confidence`는 OCR 산출물일 때 인식 신뢰도(0~1)다. **본 슬라이스에서 `CoachRequest`에는
-    OCR confidence 필드가 *없으므로* 호출자가 항상 None을 넘겨 게이트 ②(OCR low_quality)는
-    *dormant*(인터페이스만)다** — 요청 스키마에 필드가 추가되는 후속 슬라이스에서 깨운다.
-    `low_quality`/`no_confident_match` 플래그의 HTTP 응답 *노출*도 범위 밖(게이트 적용=하류
-    차단까지만).
+    **게이트 플래그 thread(이 슬라이스)**: 직전엔 `_gate`가 `MatchGateResult.matches`만 반환해
+    `low_quality`/`no_confident_match`를 드롭했다. 이제 게이트를 *한 번만* 적용해 `MatchGateResult`
+    전체를 받고 matches+플래그를 `_MatchOutcome`으로 함께 반환한다(드롭 제거). 매칭 리스트·재정렬은
+    불변 — 반환 *형태*만 확장된다. 세 모드 모두 *같은* `_gate`를 통과하므로 플래그 의미가 일관된다.
 
-    slice 106: 핸들러가 호출해 `_build_response_payload(matches=...)`로 주입한다(직접 sync
-    호출 경로는 미주입→`diagnose` 폴백이라 잠긴 `_build_response_payload(body)` 계약 불변).
+    `ocr_confidence`는 OCR 산출물일 때 인식 신뢰도(0~1)다. 제공+<0.8이면 게이트 ②가 `low_quality`를
+    세운다(매칭은 *유지*·플래그만). **None(미제공)이면 게이트 ②는 dormant** — `low_quality=False`로
+    기존 동작 완전 불변. `low_quality`는 *입력 OCR 품질* 신호라 매칭 유무와 *독립*이다(매칭이 있어도
+    low_quality 가능). `no_confident_match`는 top-1<0.65로 후보가 비워졌는지(매칭 결과는 게이트 ①의
+    기존 동작 그대로·노출만 추가)다.
+
+    slice 106: 핸들러가 호출해 `_build_response_payload(matches=...)`로 *matches만* 주입한다(직접
+    sync 호출 경로는 미주입→`diagnose` 폴백이라 잠긴 `_build_response_payload(body)` 계약 불변).
+    플래그는 핸들러가 `_MatchOutcome`에서 직접 꺼내 응답에 싣는다(payload 6-튜플 계약과 분리).
+
+    **§3.3 범위(정직)**: 이 슬라이스는 *신호 노출까지*다 — low OCR→`match_low_quality=True` 노출.
+    *재확인 발화 생성*·*intervention 보류*는 L5/LLM·후속(백엔드는 신호 제공·답 미루기 원칙 유지).
+    intervention/matches 자체는 여기서 *변경하지 않는다*(억지매칭 차단[no_confident_match]은 기존
+    게이트 동작 그대로).
 
     **`off`(기본)**: `diagnose(student_input)`만 — 의미 매처를 *호출하지 않는다*(임베딩 로드 0·
     현행 비트동일). substring 결과를 그대로 반환.
@@ -406,11 +460,18 @@ async def _compute_matches(
     (CLAUDE.md "환각/장애 조용히 넘어가지 말고 로그").
     """
 
-    def _gate(candidates: list[MisconceptionMatch]) -> list[MisconceptionMatch]:
-        # §3.3 품질 게이트 후처리 — 세 모드 공통 출구. top-1<floor면 후보를 비운다(억지 매칭
-        # 금지). OCR confidence는 본 슬라이스에서 항상 None이라 게이트 ②는 dormant(인터페이스만).
-        # 게이트는 *재정렬·변형 없이* 통과분만 그대로 통과시킨다(`combine_diagnoses` 순서 보존).
-        return apply_match_quality_gate(candidates, ocr_confidence=ocr_confidence).matches
+    def _gate(candidates: list[MisconceptionMatch]) -> _MatchOutcome:
+        # §3.3 품질 게이트 후처리 — 세 모드 공통 출구. 게이트를 *한 번만* 적용해 결과 전체를 받고
+        # matches+플래그를 함께 반환한다(직전엔 .matches만 반환해 플래그를 드롭했음). 게이트 ①은
+        # top-1<floor면 후보를 비우고(억지 매칭 금지) no_confident_match=True를, 게이트 ②는 OCR
+        # confidence<0.8(None이면 dormant)면 low_quality=True를 세운다(매칭은 유지). 게이트는
+        # *재정렬·변형 없이* 통과분만 그대로 통과시킨다(`combine_diagnoses` 순서 보존).
+        result = apply_match_quality_gate(candidates, ocr_confidence=ocr_confidence)
+        return _MatchOutcome(
+            matches=result.matches,
+            low_quality=result.low_quality,
+            no_confident_match=result.no_confident_match,
+        )
 
     substr = diagnose(student_input, top_k=_FANOUT)
     mode = get_settings().misconception_semantic_mode
@@ -662,9 +723,10 @@ async def coach_decide(
     _ = user.user_id  # 인증 게이트 통과 확인용(stateless라 user 데이터 미사용)
 
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
-    matches = await _compute_matches(body.student_input)
+    # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
+    outcome = await _compute_matches(body.student_input, ocr_confidence=body.ocr_confidence)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
-        _build_response_payload(body, matches=matches)
+        _build_response_payload(body, matches=outcome.matches)
     )
     return CoachResponse(
         decision=decision,
@@ -673,6 +735,8 @@ async def coach_decide(
         lthc=lthc,
         entry_socratic_category=entry_category,
         solution_coaching=solution_coaching,
+        match_low_quality=outcome.low_quality,
+        no_confident_match=outcome.no_confident_match,
     )
 
 
@@ -706,7 +770,8 @@ async def create_session(
     # 배선·`/me/.../coaching`과 동형). Polya 결정과 *별개의 추가 신호*(non-override·턴 비가로채기).
     prereq = await _prerequisite_coaching_for(session, user.user_id, body.problem_id)
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
-    matches = await _compute_matches(body.student_input)
+    # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
+    outcome = await _compute_matches(body.student_input, ocr_confidence=body.ocr_confidence)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -714,7 +779,7 @@ async def create_session(
             expected_answer=expected_answer,
             server_mastery=server_mastery,
             server_theta=server_theta,
-            matches=matches,
+            matches=outcome.matches,
         )
     )
 
@@ -782,6 +847,8 @@ async def create_session(
         entry_socratic_category=entry_category,
         solution_coaching=solution_coaching,
         prerequisite_coaching=prereq,
+        match_low_quality=outcome.low_quality,
+        no_confident_match=outcome.no_confident_match,
         dialogue_id=dialogue.dialogue_id,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
@@ -826,7 +893,8 @@ async def append_turns(
     # 출처). 별개 추가 신호(non-override·턴 비가로채기).
     prereq = await _prerequisite_coaching_for(session, user.user_id, dialogue.problem_id)
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
-    matches = await _compute_matches(body.student_input)
+    # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
+    outcome = await _compute_matches(body.student_input, ocr_confidence=body.ocr_confidence)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -834,7 +902,7 @@ async def append_turns(
             expected_answer=expected_answer,
             server_mastery=server_mastery,
             server_theta=server_theta,
-            matches=matches,
+            matches=outcome.matches,
         )
     )
 
@@ -899,6 +967,8 @@ async def append_turns(
         entry_socratic_category=entry_category,
         solution_coaching=solution_coaching,
         prerequisite_coaching=prereq,
+        match_low_quality=outcome.low_quality,
+        no_confident_match=outcome.no_confident_match,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
         student_turn_order=student_order,
