@@ -169,11 +169,20 @@ def recommend_coaching_for_solution(
     # 단계 레벨 incorrect도 *단계 자가검산* 프레이밍과 자연 정합 → 같은 변형으로 OR 결합한다.
     # L3 kind→순수 bool 환산은 *오케스트레이터만* 수행(L4 recommend_coaching은 kind를 모름).
     verify_steps = (signal is not None and signal.kind == "solution") or step_incorrect
+    # 단계 레벨 incorrect가 있으면 첫 incorrect 전이 인덱스를 *위치 신호*로 전달한다(slice 후속).
+    # verify 발화를 *위치 인지* 점층(앞단계 통과 확인 + 그 지점 자가검산)으로 좁히되 정답/수정은
+    # 주지 않는다(답 미루기·LTHC). 텍스트 레벨만 있고 단계 신호가 없으면 None(위치 비지목·하위호환).
+    incorrect_step_index = (
+        verification.first_incorrect_index
+        if verification is not None and verification.has_incorrect
+        else None
+    )
     trigger = recommend_coaching(
         bkt_mastery,
         irt_theta,
         arithmetic_error=arithmetic_error,
         verify_steps=verify_steps,
+        incorrect_step_index=incorrect_step_index,
         discrepancy_tol=discrepancy_tol,
         mastery_threshold=mastery_threshold,
     )
