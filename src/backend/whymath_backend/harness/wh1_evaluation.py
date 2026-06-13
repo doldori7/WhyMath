@@ -26,7 +26,12 @@
                              회피)·**쉬운 문제 회피(난이도↓로 정답률 유지)**를 가린다(새 적재
                              0·기존 신호 결합만). 난이도 추세는 R15의 *부분* 정밀화(난이도 회피
                              1종 추가)일 뿐 — 이탈/무작위/세션 정렬 등 다른 gaming은 여전히 미반영.
-  ⑥ 보정 점수(Brier)      — 🔴 REQUIRES_TOOL: elicit_prediction 도구 미구현.
+  ⑥ 보정 점수(Brier)      — 🟢 MEASURED/NO_DATA: ProblemAttempt.confidence_self_reported(0~1
+                             자기보고 확신도=예측) vs is_correct(실제 정오답)의 Brier
+                             score=mean((confidence−is_correct)²)(낮을수록 잘 보정). 유효
+                             쌍이 `_MIN_CALIBRATION_SAMPLES` 미만이면 NO_DATA(종단 노이즈
+                             회피). `POST /v1/me/attempts`가 confidence+result를 동시 수집해
+                             ProblemAttempt에 이미 적재 — 새 도구·새 수집 불요(기존 필드 파생만).
   ⑦ 전이 점수             — 🔴 REQUIRES_TOOL: 시그니처 패턴 태깅·전이 출제 미구현.
 
 계층 메모(CLAUDE.md 7계층·설계안 §1): WH-1 하네스는 *새 계층이 아니라 횡단 인프라*다. 본
@@ -67,6 +72,11 @@ __all__ = [
 # ⑤ 도움 감소 곡선 OLS 기울기의 *최소 종단 표본*. 이보다 적으면 NO_DATA(날조 회피).
 # 종단 지표는 점이 2개뿐이면 기울기가 의미를 갖지 못하므로(과적합·노이즈) 최소 3점을 요구한다.
 _MIN_SLOPE_POINTS = 3
+
+# ⑥ 보정 점수(Brier)의 *최소 유효 쌍 수*. (confidence_self_reported, is_correct) 둘 다 채워진
+# ProblemAttempt 쌍이 이보다 적으면 NO_DATA(가짜 0/Brier 금지). Brier는 평균이라 N>=1이면
+# 값 자체는 나오지만, 표본이 한두 개면 종단 노이즈로 보정 추세를 오도하므로 최소 5쌍을 요구한다.
+_MIN_CALIBRATION_SAMPLES = 5
 
 
 def _ols_slope(ys: list[float]) -> float | None:
@@ -245,7 +255,10 @@ class SurrogateMetrics(BaseModel):
         description="⑤ 도움 감소 곡선 — 시간에 따른 힌트 의존 감소 기울기."
     )
     calibration_brier: Metric = Field(
-        description="⑥ 보정 점수(Brier) — 자기 예측 확신도 vs 실제 정오답."
+        description=(
+            "⑥ 보정 점수(Brier) — 자기보고 확신도(0~1) vs 실제 정오답 mean((conf−correct)²)"
+            "(낮을수록 잘 보정·실측). 유효 쌍 부족이면 NO_DATA(가짜 0 금지)."
+        )
     )
     transfer_score: Metric = Field(
         description="⑦ 전이 점수 — 학습 직후 미학습 시그니처 패턴 전이 출제 정답률."
@@ -285,6 +298,13 @@ class SurrogateMetrics(BaseModel):
         description=(
             "R15 난이도 추세 집계 대상 ProblemAttempt 수(problem join·유효 b NOT NULL·OLS "
             "포인트 수). 정답률 표본과 다를 수 있음(b 없는 문항·problem_id NULL 제외)."
+        ),
+    )
+    sample_calibration_pairs: int = Field(
+        default=0,
+        description=(
+            "⑥ 보정 점수(Brier) 집계 대상 ProblemAttempt 쌍 수(confidence_self_reported·"
+            "is_correct 둘 다 NOT NULL). `_MIN_CALIBRATION_SAMPLES` 미만이면 NO_DATA."
         ),
     )
     window_start: datetime | None = Field(
@@ -466,13 +486,47 @@ def _judge_r15(
     )
 
 
-def _calibration_unmeasured() -> Metric:
+def _calibration_from_pairs(pairs: list[tuple[float, bool]]) -> Metric:
+    """⑥ 보정 점수(Brier) — (자기보고 확신도, 실제 정오답) 쌍의 Brier score를 Metric으로(순수).
+
+    입력 `pairs`는 (confidence_self_reported∈[0,1], is_correct: bool) 쌍 목록이다 — 둘 다
+    NOT NULL인 ProblemAttempt 행만(호출부가 필터). Brier = mean((confidence − outcome)²),
+    outcome은 is_correct를 1.0/0.0으로 본 *실제 정오답*이다. confidence가 *예측*(학생이 풀기
+    전/직후 자기보고한 맞힐 확신도)이고 outcome이 *실제*라, 이 둘의 제곱오차 평균이 보정 점수다.
+    **Brier∈[0,1]·낮을수록 잘 보정**(예측 확신도가 실제 정오답과 일치). 완벽 보정(conf=outcome)
+    이면 0, 완전 오보정(conf=1인데 틀림 또는 conf=0인데 맞음)이면 1이다.
+
+    종단 표본 가드(날조 0): 유효 쌍이 `_MIN_CALIBRATION_SAMPLES` 미만이면 Brier를 산출하지 않고
+    **NO_DATA**(value None)로 둔다 — Brier는 평균이라 N>=1이어도 값은 나오지만, 표본이 한두 개면
+    종단 노이즈로 보정 추세를 오도하므로 가짜 0/Brier를 내지 않는다(0/stub 금지).
+
+    정직 note: Brier는 *보정 점수*일 뿐 §11.4의 과신/과소신 구간 코칭·종단 추적·학부모 리포트
+    항목은 미구현(후속)이다. 또 `POST /v1/me/attempts`가 confidence와 result를 *동시* 제출하므로
+    *엄밀한 사전 예측*(풀기 전 확신도 격리 수집)은 클라 흐름 책임이고, 현재는 자기보고 확신도다.
+    """
+    n = len(pairs)
+    if n < _MIN_CALIBRATION_SAMPLES:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                f"보정 쌍(confidence·is_correct 둘 다 채워진 ProblemAttempt) {n}건 — 종단 표본 "
+                f"부족(최소 {_MIN_CALIBRATION_SAMPLES}쌍)으로 Brier 미산출(가짜 0/Brier 금지). "
+                "POST /v1/me/attempts가 confidence+result를 쌓으면 보정 점수 계측. Brier는 "
+                "보정 점수일 뿐 과신/과소신 구간 코칭(§11.4)은 후속."
+            ),
+        )
+
+    # Brier = mean((confidence − outcome)²) — outcome은 is_correct를 1.0/0.0으로(순수 평균·날조 0).
+    brier = sum((conf - (1.0 if correct else 0.0)) ** 2 for conf, correct in pairs) / n
     return Metric(
-        value=None,
-        status=MetricStatus.REQUIRES_TOOL,
+        value=brier,
+        status=MetricStatus.MEASURED,
         note=(
-            "elicit_prediction 도구 미구현 — confidence_self_reported 필드는 있으나 풀이 전 "
-            "예측을 verify 결과와 대조하는 출제 흐름이 없어 Brier 산출 불가."
+            f"자기보고 확신도(0~1) vs 실제 정오답 Brier {brier:.4f}(낮을수록 잘 보정·{n}쌍 평균). "
+            "POST /v1/me/attempts가 confidence+result 동시 제출이라 *엄밀한 사전 예측*은 클라 "
+            f"흐름 책임(현재는 자기보고 확신도)·표본<{_MIN_CALIBRATION_SAMPLES} NO_DATA·"
+            "과신/과소신 구간 코칭(§11.4)은 후속."
         ),
     )
 
@@ -497,10 +551,12 @@ async def compute_wh1_surrogate_metrics(
 ) -> SurrogateMetrics:
     """WH-1 0단계 대리 지표 7종을 계산 — 계측 가능분 실측 + 미계측 3종 정직 표시.
 
-    설계안 §8.4 0단계 베이스라인. **계측 가능(①③④⑤)만 실값**으로 내고, **미계측(②⑥⑦)은
+    설계안 §8.4 0단계 베이스라인. **계측 가능(①③④⑤⑥)만 실값**으로 내고, **미계측(②⑦)은
     value=None + status + note**로 갭을 가시화한다(CLAUDE.md "모르면 모른다"·설계안 "측정 없는
     도입 없음" — 0/stub 날조 금지). ⑤(도움 감소 곡선)는 힌트제공 이벤트 적재 슬라이스로
-    NOT_INSTRUMENTED→MEASURED가 됐다(표본 부족이면 NO_DATA·R15 교차검증 미반영).
+    NOT_INSTRUMENTED→MEASURED가 됐다(표본 부족이면 NO_DATA·R15 교차검증 미반영). ⑥(보정 점수
+    Brier)는 ProblemAttempt.confidence_self_reported·is_correct 기존 필드 파생으로
+    REQUIRES_TOOL→MEASURED가 됐다(유효 쌍<`_MIN_CALIBRATION_SAMPLES`면 NO_DATA·새 수집 0).
 
     Args:
         session: 조회 전용 AsyncSession(쓰기 없음·ORM/쿼리빌더만·원시 SQL 회피).
@@ -524,9 +580,13 @@ async def compute_wh1_surrogate_metrics(
            오름차순으로 뽑아 OLS 단순선형회귀 기울기(음수=도움 감소=개선). 유효 포인트가
            `_MIN_SLOPE_POINTS` 미만이거나 x 분산 0이면 NO_DATA(날조 회피)·아니면 MEASURED.
            raw 기울기일 뿐 R15 정확률 교차검증은 미반영(후속).
+        ⑥ calibration_brier: ProblemAttempt 중 confidence_self_reported·is_correct 둘 다 NOT
+           NULL인 쌍에서 Brier=mean((confidence−is_correct)²)(낮을수록 잘 보정). 유효 쌍이
+           `_MIN_CALIBRATION_SAMPLES` 미만이면 NO_DATA(가짜 0/Brier 금지)·아니면 MEASURED.
+           기존 필드 파생일 뿐 과신/과소신 구간 코칭(§11.4)은 미반영(후속).
 
     미계측(고정 status·value None):
-        ② REQUIRES_DATA · ⑥ REQUIRES_TOOL · ⑦ REQUIRES_TOOL.
+        ② REQUIRES_DATA · ⑦ REQUIRES_TOOL.
         각 사유는 note 한국어로 명시(무엇을 만들면 계측되는지).
     """
     # ── ③ 세션 완주율 (LearningSession.ended_at NOT NULL 비율) ──
@@ -733,13 +793,48 @@ async def compute_wh1_surrogate_metrics(
 
     help_reduction_validated = _judge_r15(help_slope, accuracy_slope, difficulty_slope)
 
+    # ── ⑥ 보정 점수(Brier) (ProblemAttempt.confidence_self_reported × is_correct) ──
+    # 자기보고 확신도(0~1·예측)와 실제 정오답(is_correct·실제)이 *둘 다 채워진* 행만 뽑아
+    # Brier=mean((conf−correct)²)를 Python 순수 계산(_calibration_from_pairs·날조 0)에 위임한다.
+    # func.power 이식성 우려를 피해 쌍을 fetch→순수 평균(원시 SQL 문자열 0·ORM/쿼리빌더만).
+    # confidence_self_reported는 Numeric(3,2)라 런타임 Decimal일 수 있어 float로 변환한다.
+    # user_id/since/until은 started_at 기준(정답률·난이도 쿼리와 동일 필터 패턴·R15와 동형).
+    calibration_conds: list[ColumnElement[bool]] = [
+        ProblemAttempt.confidence_self_reported.isnot(None),
+        ProblemAttempt.is_correct.isnot(None),
+    ]
+    if user_id is not None:
+        calibration_conds.append(ProblemAttempt.user_id == user_id)
+    if since is not None:
+        calibration_conds.append(ProblemAttempt.started_at >= since)
+    if until is not None:
+        calibration_conds.append(ProblemAttempt.started_at <= until)
+
+    calibration_rows = (
+        await session.execute(
+            select(
+                ProblemAttempt.confidence_self_reported,
+                ProblemAttempt.is_correct,
+            )
+            .select_from(ProblemAttempt)
+            .where(*calibration_conds)
+        )
+    ).all()
+    # (conf, is_correct) 쌍 — 둘 다 NOT NULL 필터를 통과한 행만(방어적 재확인·None 제외).
+    calibration_pairs: list[tuple[float, bool]] = [
+        (float(conf), bool(correct))
+        for conf, correct in calibration_rows
+        if conf is not None and correct is not None
+    ]
+    calibration_brier = _calibration_from_pairs(calibration_pairs)
+
     return SurrogateMetrics(
         verify_pass_rate=verify_metric,
         diagnosis_agreement_rate=_diagnosis_agreement_unmeasured(),
         session_completion_rate=session_completion,
         tokens_per_turn=tokens_metric,
         help_reduction_slope=help_reduction,
-        calibration_brier=_calibration_unmeasured(),
+        calibration_brier=calibration_brier,
         transfer_score=_transfer_unmeasured(),
         help_reduction_validated=help_reduction_validated,
         sample_sessions=int(total_sessions),
@@ -748,6 +843,7 @@ async def compute_wh1_surrogate_metrics(
         sample_hint_events=len(hint_levels),
         sample_accuracy_attempts=len(accuracy_series),
         sample_difficulty_attempts=len(difficulty_series),
+        sample_calibration_pairs=len(calibration_pairs),
         window_start=since,
         window_end=until,
         user_scoped=user_id is not None,

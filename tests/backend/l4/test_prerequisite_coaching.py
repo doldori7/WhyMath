@@ -148,12 +148,14 @@ class TestRecommendPrerequisiteCoaching:
 
 class TestCoachingFocusExhaustiveness:
     def test_dict_keys_match_coaching_focus(self) -> None:
-        """_RATIONALE/_PROMPT/_SOCRATIC_BY_FOCUS 키 집합 == CoachingFocus 7종(exhaustiveness)."""
+        """_RATIONALE/_PROMPT/_SOCRATIC_BY_FOCUS 키 집합 == CoachingFocus 9종(exhaustiveness)."""
         import typing
 
         focuses = set(typing.get_args(CoachingFocus))
         assert "prerequisite_review" in focuses
-        assert len(focuses) == 7
+        assert "calibration_overconfident" in focuses
+        assert "calibration_underconfident" in focuses
+        assert len(focuses) == 9
         assert set(_RATIONALE) == focuses
         assert set(_PROMPT) == focuses
         assert set(_SOCRATIC_BY_FOCUS) == focuses

@@ -20,11 +20,13 @@ from typing import Any, cast
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.harness.wh1_evaluation import (
+    _MIN_CALIBRATION_SAMPLES,
     HelpReductionValidation,
     Metric,
     MetricStatus,
     R15Verdict,
     SurrogateMetrics,
+    _calibration_from_pairs,
     _judge_r15,
     _ols_slope,
     compute_wh1_surrogate_metrics,
@@ -62,7 +64,8 @@ class _FakeSession:
       5) hint rows(event_at 오름차순 hint_level 행 목록·all)
       6) accuracy rows(started_at 오름차순 is_correct 행 목록·all)
       7) difficulty rows(started_at 오름차순 (irt_b, difficulty_overall) 행 목록·all·Problem join)
-    이 7개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
+      8) calibration rows((confidence_self_reported, is_correct) 쌍 목록·all)
+    이 8개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
     """
 
     def __init__(self, results: list[_FakeScalarResult]) -> None:
@@ -86,6 +89,7 @@ def _make_session(
     hint_levels: list[int | None] | None = None,
     accuracy_correct: list[bool | None] | None = None,
     difficulty_rows: list[tuple[float | None, float | None]] | None = None,
+    calibration_pairs: list[tuple[float | None, bool | None]] | None = None,
 ) -> AsyncSession:
     # ⑤ 힌트 쿼리는 단일 컬럼(.as_integer())을 event_at 오름차순으로 뽑으므로 행은 (level,) 튜플.
     # None(JSONB 파싱 실패)도 섞일 수 있게 그대로 (None,)으로 주입 — 본문이 None을 걸러낸다.
@@ -96,6 +100,9 @@ def _make_session(
     # 오름차순으로 뽑는다 — 행은 (irt_b, difficulty) 튜플. problem_id NULL·미매칭 행은 join이
     # 이미 떨군 상태(실 PG)이므로 여기엔 매칭된 행만 주입한다(둘 다 None이면 본문이 유효 b로 제외).
     diff_rows = list(difficulty_rows or [])
+    # ⑥ 보정 쿼리는 (confidence_self_reported, is_correct) 쌍을 뽑으므로 행은 (conf, correct) 튜플.
+    # 둘 중 하나라도 None인 행도 주입할 수 있게 그대로 둔다 — 본문이 None 쌍을 걸러낸다.
+    calib_rows = list(calibration_pairs or [])
     return cast(
         AsyncSession,
         _FakeSession(
@@ -107,6 +114,7 @@ def _make_session(
                 _FakeScalarResult(all_rows=hint_rows),
                 _FakeScalarResult(all_rows=accuracy_rows),
                 _FakeScalarResult(all_rows=diff_rows),
+                _FakeScalarResult(all_rows=calib_rows),
             ]
         ),
     )
@@ -322,7 +330,7 @@ class TestHelpReductionSlope:
         assert "종단" in m.note
 
 
-# ── ②⑥⑦ 미계측 3종 ──────────────────────────────────────────────────────────
+# ── ②⑦ 미계측 2종 (⑥은 R15 슬라이스 이후 MEASURED/NO_DATA로 격상) ──────────────────
 class TestUnmeasuredMetrics:
     async def _metrics(self) -> SurrogateMetrics:
         session = _make_session(
@@ -336,30 +344,186 @@ class TestUnmeasuredMetrics:
         assert m.value is None
         assert "ground-truth" in m.note
 
-    async def test_calibration_requires_tool(self) -> None:
-        m = (await self._metrics()).calibration_brier
-        assert m.status is MetricStatus.REQUIRES_TOOL
-        assert m.value is None
-        assert "elicit_prediction" in m.note
-
     async def test_transfer_requires_tool(self) -> None:
         m = (await self._metrics()).transfer_score
         assert m.status is MetricStatus.REQUIRES_TOOL
         assert m.value is None
         assert "전이" in m.note
 
+    async def test_calibration_no_longer_requires_tool(self) -> None:
+        """⑥ 보정 점수 — 보정 쌍 0건이면 REQUIRES_TOOL이 아니라 NO_DATA(stale 진단 교정)."""
+        m = (await self._metrics()).calibration_brier
+        assert m.status is MetricStatus.NO_DATA  # REQUIRES_TOOL 아님
+        assert m.value is None
+        assert "elicit_prediction" not in m.note
+
     async def test_all_unmeasured_value_none(self) -> None:
-        """미계측 3종(②⑥⑦) *전부* value None — 단 하나도 0/stub이 아님(날조 0 불변)."""
+        """미계측 2종(②⑦) *전부* value None — 단 하나도 0/stub이 아님(날조 0 불변)."""
         m = await self._metrics()
         for metric in (
             m.diagnosis_agreement_rate,
-            m.calibration_brier,
             m.transfer_score,
         ):
             assert isinstance(metric, Metric)
             assert metric.value is None
             assert metric.status is not MetricStatus.MEASURED
             assert metric.note  # 한국어 note 비어있지 않음
+
+
+# ── ⑥ 보정 점수(Brier) — _calibration_from_pairs 순수 단위 ────────────────────────
+class TestCalibrationFromPairs:
+    """Brier=mean((conf−outcome)²)·MIN 가드·MEASURED/NO_DATA(순수·FakeSession 불요)."""
+
+    def _pairs(self, n: int, conf: float, correct: bool) -> list[tuple[float, bool]]:
+        return [(conf, correct)] * n
+
+    def test_perfect_calibration_is_zero(self) -> None:
+        """완벽 보정(conf=outcome) → Brier 0. conf=1 정답·conf=0 오답 섞어도 0."""
+        pairs: list[tuple[float, bool]] = [
+            (1.0, True),
+            (1.0, True),
+            (0.0, False),
+            (0.0, False),
+            (1.0, True),
+        ]
+        m = _calibration_from_pairs(pairs)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 0.0  # (1−1)²·(0−0)² 평균 = 0
+
+    def test_total_miscalibration_is_one(self) -> None:
+        """완전 오보정(conf=1인데 오답·conf=0인데 정답) → Brier 1."""
+        pairs: list[tuple[float, bool]] = [
+            (1.0, False),
+            (1.0, False),
+            (0.0, True),
+            (0.0, True),
+            (1.0, False),
+        ]
+        m = _calibration_from_pairs(pairs)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 1.0  # (1−0)²·(0−1)² 평균 = 1
+
+    def test_mixed_average(self) -> None:
+        """혼합 — conf 0.5·outcome 다양 → 정확한 평균 제곱오차.
+
+        5쌍: (0.5,T)=0.25·(0.5,F)=0.25·(1.0,T)=0·(0.0,F)=0·(0.8,T)=0.04 → 합 0.54/5=0.108.
+        """
+        pairs: list[tuple[float, bool]] = [
+            (0.5, True),
+            (0.5, False),
+            (1.0, True),
+            (0.0, False),
+            (0.8, True),
+        ]
+        m = _calibration_from_pairs(pairs)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value is not None
+        assert abs(m.value - 0.108) < 1e-9
+
+    def test_too_few_pairs_is_no_data_not_fake_zero(self) -> None:
+        """쌍 < _MIN_CALIBRATION_SAMPLES → NO_DATA·value None(가짜 0/Brier 금지)."""
+        m = _calibration_from_pairs(
+            self._pairs(_MIN_CALIBRATION_SAMPLES - 1, 0.5, True)
+        )
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None  # 0이 아님!
+        assert "표본 부족" in m.note
+
+    def test_exactly_min_pairs_is_measured(self) -> None:
+        """정확히 _MIN_CALIBRATION_SAMPLES 쌍 → MEASURED(경계 inclusive)."""
+        m = _calibration_from_pairs(self._pairs(_MIN_CALIBRATION_SAMPLES, 0.5, True))
+        assert m.status is MetricStatus.MEASURED
+        assert m.value is not None
+
+    def test_empty_is_no_data(self) -> None:
+        m = _calibration_from_pairs([])
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+
+    def test_measured_note_is_honest(self) -> None:
+        """MEASURED note에 자기보고·과신/과소신 코칭 후속·§11.4 정직 표기."""
+        m = _calibration_from_pairs(self._pairs(_MIN_CALIBRATION_SAMPLES, 0.6, True))
+        assert "자기보고" in m.note
+        assert "과신/과소신" in m.note
+        assert "§11.4" in m.note
+
+
+# ── ⑥ 보정 점수 — compute_wh1_surrogate_metrics 통합(FakeSession 쌍 주입) ──────────
+class TestCalibrationBrierIntegratedWithCompute:
+    async def _brier(
+        self, calibration_pairs: list[tuple[float | None, bool | None]] | None
+    ) -> Metric:
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            calibration_pairs=calibration_pairs,
+        )
+        return (await compute_wh1_surrogate_metrics(session)).calibration_brier
+
+    async def test_measured_perfect(self) -> None:
+        """완벽 보정 5쌍 → MEASURED·Brier 0."""
+        m = await self._brier(
+            [(1.0, True), (1.0, True), (0.0, False), (0.0, False), (1.0, True)]
+        )
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 0.0
+
+    async def test_measured_total_miscalibration(self) -> None:
+        """완전 오보정 5쌍 → MEASURED·Brier 1."""
+        m = await self._brier(
+            [(1.0, False), (1.0, False), (0.0, True), (0.0, True), (1.0, False)]
+        )
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 1.0
+
+    async def test_too_few_pairs_no_data(self) -> None:
+        """유효 쌍 < MIN → NO_DATA·value None(날조 0 금지)."""
+        m = await self._brier([(0.5, True), (0.5, False)])  # 2쌍 < 5
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+
+    async def test_none_confidence_excluded(self) -> None:
+        """confidence None 행은 제외 — 유효 쌍만 카운트(둘 다 채워진 쌍만)."""
+        # 유효 4쌍(< 5)만 — confidence None 2개는 제외되어 표본에 안 들어감 → NO_DATA.
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            calibration_pairs=[
+                (0.9, True),
+                (None, True),
+                (0.8, False),
+                (None, False),
+                (0.7, True),
+                (0.6, True),
+            ],
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.sample_calibration_pairs == 4  # None confidence 2개 제외
+        assert m.calibration_brier.status is MetricStatus.NO_DATA  # 4 < 5
+
+    async def test_none_is_correct_excluded(self) -> None:
+        """is_correct None 행은 제외 — 5쌍 중 None 섞이면 유효 쌍만."""
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            calibration_pairs=[
+                (0.9, True),
+                (0.8, None),
+                (0.2, False),
+                (0.1, False),
+                (0.7, True),
+                (0.6, True),
+            ],
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.sample_calibration_pairs == 5  # is_correct None 1개 제외 → 5 유효
+        assert m.calibration_brier.status is MetricStatus.MEASURED
 
 
 # ── 메타·필드셋·스코핑 ───────────────────────────────────────────────────────
@@ -374,6 +538,14 @@ class TestMetaAndFieldSet:
             hint_levels=[4, 3, 2],
             accuracy_correct=[True, True, True],
             difficulty_rows=[(1.0, None), (0.5, None), (0.0, None)],
+            # ⑥ 보정 쌍 5개(>= _MIN_CALIBRATION_SAMPLES) → calibration_brier MEASURED.
+            calibration_pairs=[
+                (0.9, True),
+                (0.8, True),
+                (0.2, False),
+                (0.1, False),
+                (0.7, True),
+            ],
         )
         m = await compute_wh1_surrogate_metrics(session)
         for name in (
@@ -392,8 +564,13 @@ class TestMetaAndFieldSet:
         assert m.sample_hint_events == 3  # 유효 hint_level 행 수
         assert m.sample_accuracy_attempts == 3  # is_correct NOT NULL 행 수
         assert m.sample_difficulty_attempts == 3  # 유효 b(Problem join) 행 수
+        assert m.sample_calibration_pairs == 5  # 유효 보정 쌍 수
         # difficulty_slope 필드 노출(양수=난이도 상승·음수=쉬워짐). 여기선 하강(1→0.5→0)이라 음수.
         assert m.help_reduction_validated.difficulty_slope is not None
+        # ⑥ 보정 점수 — 5쌍 >= MIN → MEASURED·value 실수(Brier∈[0,1]).
+        assert m.calibration_brier.status is MetricStatus.MEASURED
+        assert m.calibration_brier.value is not None
+        assert 0.0 <= m.calibration_brier.value <= 1.0
 
     async def test_user_scoped_true_when_user_id(self) -> None:
         session = _make_session(

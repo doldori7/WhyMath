@@ -215,6 +215,27 @@ def _problem_row(pid: uuid.UUID, *, irt_difficulty_b: float) -> Problem:
     )
 
 
+def _calibration_attempt_row(
+    uid: uuid.UUID, *, confidence: float | None, is_correct: bool | None, order: int
+) -> ProblemAttempt:
+    """ProblemAttempt 1행(confidence_self_reported + is_correct) — ⑥ 보정 점수(Brier) 표본.
+
+    confidence_self_reported(0~1 자기보고 확신도=예측)와 is_correct(실제 정오답)가 *둘 다*
+    채워지면 보정 쌍이 된다. 한쪽이 None이면 Brier 집계에서 제외(둘 다 NOT NULL 필터). `order`로
+    started_at을 어긋내 시간창 필터가 결정적이게 한다. problem_id는 nullable FK라 None으로 둔다
+    (Brier는 problem join 불요·confidence·is_correct만 본다·R15 정답률 표본과 동형).
+    """
+    return ProblemAttempt.from_schema(
+        ProblemAttemptSchema(
+            attempt_id=uuid.uuid4(),
+            user_id=uid,
+            started_at=datetime.now(UTC) + timedelta(seconds=order),
+            is_correct=is_correct,
+            confidence_self_reported=confidence,
+        )
+    )
+
+
 def _attempt_on_problem(
     uid: uuid.UUID, *, problem_id: uuid.UUID, is_correct: bool, order: int
 ) -> ProblemAttempt:
@@ -343,10 +364,13 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
             assert hrv["accuracy_slope"] is not None and hrv["accuracy_slope"] > 0
             assert body["sample_accuracy_attempts"] == 4
 
-            # 미계측 3종(②⑥⑦) — value None·고정 status(날조 0).
+            # 미계측 2종(②⑦) — value None·고정 status(날조 0).
             assert body["diagnosis_agreement_rate"]["status"] == "requires_data"
-            assert body["calibration_brier"]["status"] == "requires_tool"
             assert body["transfer_score"]["status"] == "requires_tool"
+            # ⑥ 보정 점수 — 위 _attempt_row 4건은 confidence 미지정이라 보정 쌍 0 → NO_DATA
+            # (REQUIRES_TOOL stale 진단 교정·가짜 0 금지). 값 있는 경우는 별도 테스트.
+            assert body["calibration_brier"]["status"] == "no_data"
+            assert body["sample_calibration_pairs"] == 0
             for key in (
                 "diagnosis_agreement_rate",
                 "calibration_brier",
@@ -400,6 +424,10 @@ def test_harness_metrics_no_data_when_empty_on_live_pg() -> None:
             # R15 난이도 추세 — problem 미적재 → 난이도 표본 0(정답률도 0이라 INSUFFICIENT).
             assert hrv["difficulty_slope"] is None
             assert body["sample_difficulty_attempts"] == 0
+            # ⑥ 보정 점수 — 보정 쌍 0 → NO_DATA·value None(가짜 0/Brier 금지).
+            assert body["calibration_brier"]["status"] == "no_data"
+            assert body["calibration_brier"]["value"] is None
+            assert body["sample_calibration_pairs"] == 0
     finally:
         asyncio.run(_cleanup([uid]))
 
@@ -465,3 +493,53 @@ def test_harness_metrics_easy_problem_avoidance_gaming_on_live_pg() -> None:
     finally:
         asyncio.run(_cleanup([uid]))
         asyncio.run(_cleanup_problems(pids))
+
+
+def test_harness_metrics_calibration_brier_measured_on_live_pg() -> None:
+    """⑥ 보정 점수 — confidence + is_correct 쌍 5개 → MEASURED·정확 Brier·confidence 없는 행 제외.
+
+    이 슬라이스 핵심: ProblemAttempt.confidence_self_reported(예측)와 is_correct(실제)가 둘 다
+    채워진 쌍에서 Brier=mean((conf−correct)²)를 실측한다(REQUIRES_TOOL stale 교정·새 수집 0).
+    완벽 보정(conf=outcome) 5쌍 → Brier 0. confidence 없는 1행은 보정 집계에서 제외(둘 다 NOT
+    NULL 필터). 5 >= _MIN_CALIBRATION_SAMPLES이므로 NO_DATA가 아니라 MEASURED.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid = uuid.uuid4()
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        # 완벽 보정 5쌍(conf=outcome → 각 제곱오차 0 → Brier 0) + confidence 없는 1행(제외).
+        asyncio.run(
+            _add_all(
+                _calibration_attempt_row(uid, confidence=1.0, is_correct=True, order=0),
+                _calibration_attempt_row(uid, confidence=1.0, is_correct=True, order=1),
+                _calibration_attempt_row(
+                    uid, confidence=0.0, is_correct=False, order=2
+                ),
+                _calibration_attempt_row(
+                    uid, confidence=0.0, is_correct=False, order=3
+                ),
+                _calibration_attempt_row(uid, confidence=1.0, is_correct=True, order=4),
+                # confidence None — 보정 쌍 아님(둘 다 NOT NULL 필터로 제외).
+                _calibration_attempt_row(
+                    uid, confidence=None, is_correct=True, order=5
+                ),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            resp = client.get("/v1/me/harness-metrics", headers=auth)
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            cb = body["calibration_brier"]
+            assert cb["status"] == "measured"
+            assert cb["value"] == 0.0  # 완벽 보정 → Brier 0
+            assert "자기보고" in cb["note"]
+            # confidence 없는 1행 제외 → 유효 쌍 5개.
+            assert body["sample_calibration_pairs"] == 5
+    finally:
+        asyncio.run(_cleanup([uid]))

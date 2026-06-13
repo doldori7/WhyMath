@@ -785,6 +785,52 @@ class TestSubmitAttempt:
         assert resp.json()["mastery_updates"] == []
         assert len(session.added) == 1  # attempt만
 
+    def test_submit_overconfident_returns_coaching(self) -> None:
+        """과신 제출(틀림 + 확신≥0.7) → calibration_coaching.focus==overconfident(§11.4)."""
+        session = _QueueSession([_AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": False,
+                "confidence_self_reported": 0.9,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        coaching = resp.json()["calibration_coaching"]
+        assert coaching is not None
+        assert coaching["focus"] == "calibration_overconfident"
+        assert coaching["socratic_category"] == "assumption"
+        # 적재 로직 불변 — attempt 1건만 add(개념 매핑 없음).
+        assert len(session.added) == 1
+
+    def test_submit_well_calibrated_no_coaching(self) -> None:
+        """잘 보정됨(맞음 + 확신 높음) → calibration_coaching==null."""
+        session = _QueueSession([_AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={
+                "problem_id": str(uuid.uuid4()),
+                "is_correct": True,
+                "confidence_self_reported": 0.9,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["calibration_coaching"] is None
+
+    def test_submit_no_confidence_no_coaching(self) -> None:
+        """확신 미제출(confidence 없음) → calibration_coaching==null(보정 평가 불가)."""
+        session = _QueueSession([_AQResult([])])
+        client = _attempts_client(session)
+        resp = client.post(
+            "/v1/me/attempts",
+            json={"problem_id": str(uuid.uuid4()), "is_correct": False},
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["calibration_coaching"] is None
+
     def test_submit_requires_auth(self) -> None:
         """무토큰은 401(인증 게이트)."""
         app = create_app()
