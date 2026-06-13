@@ -15,11 +15,18 @@ L4→L3 결합과 동형).
 비차단·보수적: 검증기는 *거짓이 증명된* 수치 관계만 신호로 내고(심볼릭·파싱 불가·빈 풀이는
 통과), 신호가 없으면 기존 BKT↔IRT 기반 코칭으로 자연 폴백한다(slice 51 backward-compat).
 답을 *직접* 주지 않는 검산 유도가 목적이다(CLAUDE.md 답 미루기 원칙).
+
+WH-1 1단계 결선: `solution_steps`(L5가 분해한 단계 시퀀스)가 제공되면 `verify_solution`을
+호출해 *단계별(전이별)* 검증을 추가한다. 단계 레벨 신호는 기존 텍스트 레벨 신호와 **추가적
+(OR)** 으로 결합돼 검산 코칭을 정밀화하되 기존 신호를 *약화하지 않는다*. 단계 미제공 시
+모든 기존 동작이 *완전 불변*이다(하위호환). 텍스트→단계 *분해*(NLP)는 L5 OCR·공간정보
+책임으로 본 모듈 범위 밖 — 백엔드는 제공된 단계만 검증한다.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -29,8 +36,13 @@ from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
 )
+from whymath_backend.l3.verify_solution import (
+    SolutionVerificationResult,
+    verify_solution,
+)
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.step_shadow import observe_step_breaks
+from whymath_backend.schema.enums import StepType
 
 SlipKind = ValidationSignalKind
 """검출된 슬립 종류 — L3 `ValidationSignalKind`와 동일 도메인(별칭). L5 UI 분기·L7 분석용.
@@ -83,6 +95,17 @@ class SolutionCoaching(BaseModel):
             "`ValidationSignal.span` 노출)."
         ),
     )
+    solution_verification: SolutionVerificationResult | None = Field(
+        default=None,
+        description=(
+            "L5가 *분해한 단계 시퀀스*(`solution_steps`)를 `verify_solution`으로 연쇄 검증한 "
+            "결과(상태 카운트·`unverified_ratio`·`first_incorrect_index`·`has_incorrect`). "
+            "단계 미제공 시 None(텍스트 레벨 폴백 — 기존 동작 완전 불변). **노출 안전**: 입력은 "
+            "*학생 자신의 단계*이고 `verify_step`의 `reason`('동치 아님 — SymPy: before ≠ "
+            "after')은 검증 사유일 뿐 정답/본문이 아니다(verify_step은 정답을 알지도 못함). "
+            "단계 레벨 incorrect는 텍스트 신호와 *추가적(OR)*으로 결합돼 검산 코칭을 정밀화한다."
+        ),
+    )
 
 
 def recommend_coaching_for_solution(
@@ -93,6 +116,8 @@ def recommend_coaching_for_solution(
     problem_id: uuid.UUID | None = None,
     expected_answer: str | None = None,
     validator: SeedValidator | None = None,
+    solution_steps: Sequence[str] | None = None,
+    solution_step_types: Sequence[StepType | None] | None = None,
     discrepancy_tol: float = 0.2,
     mastery_threshold: float = 0.6,
 ) -> SolutionCoaching:
@@ -108,6 +133,21 @@ def recommend_coaching_for_solution(
     없어 자연히 BKT↔IRT 경로로 폴백한다(false positive 0·보수적). `discrepancy_tol`·
     `mastery_threshold`는 `recommend_coaching`에 그대로 위임한다.
 
+    **단계 결선(WH-1 1단계)**: `solution_steps`가 제공되고 전이가 1개 이상(즉 len≥2)이면
+    `verify_solution(solution_steps, solution_step_types)`로 *L5가 분해한 단계 시퀀스*를
+    연쇄 검증한다(텍스트→단계 *분해*는 L5 OCR·공간정보 책임으로 본 함수 범위 밖 — 백엔드는
+    제공된 단계만 검증). 신호 결합은 **추가적(OR)**으로, 기존 텍스트 레벨 신호를 *약화하지
+    않는다*: `arithmetic_error = (텍스트 신호 있음) or verification.has_incorrect`·`verify_steps
+    = (텍스트 신호가 kind="solution") or verification.has_incorrect`(단계 레벨 incorrect는
+    *단계 자가검산* 프레이밍과 자연 정합). 이 bool들을 *그대로* 기존 `recommend_coaching`에
+    넘긴다(결정 함수 시그니처·로직 불변). `solution_steps` 미제공·전이 0개면 `verification=None`·
+    신호는 기존 텍스트 레벨 그대로 — **모든 기존 동작 완전 불변**(하위호환).
+
+    **redaction**: `verify_solution` 결과(`solution_verification`)의 `reason`('동치 아님 —
+    SymPy: before ≠ after')은 *학생 자신의 단계*(solution_steps 입력)에 대한 검증 사유라
+    노출이 안전하다 — 정답/본문이 아니다(`verify_step`은 정답을 알지도 못함). `SolutionCoaching`
+    에 채워 L5가 단계별 검산 UI(has_incorrect·first_incorrect_index)를 그릴 수 있게 한다.
+
     `problem_id`·`expected_answer`(slice 64)는 *step shadow 진단 맥락*으로만 쓰여 반환
     `SolutionCoaching`을 *바꾸지 않는다*(비노출 불변). `expected_answer`는 호출자(api 계층)가
     서버 DB에서 조회해 넘기며 요청/응답엔 결코 싣지 않는다 — student-facing이면 정답 누출.
@@ -116,10 +156,19 @@ def recommend_coaching_for_solution(
         validator if validator is not None else arithmetic_validator(),
         student_solution,
     )
-    arithmetic_error = signal is not None
+    # 단계 결선 — L5가 분해한 단계 시퀀스가 있고 전이가 1개 이상(len≥2)일 때만 verify_solution
+    # 호출(분해는 L5 책임·범위 밖). 미제공·전이 0개면 None(기존 텍스트 레벨 동작 완전 불변).
+    verification: SolutionVerificationResult | None = None
+    if solution_steps is not None and len(solution_steps) >= 2:
+        verification = verify_solution(solution_steps, solution_step_types)
+
+    # 신호 결합은 *추가적(OR)* — 텍스트 레벨 신호를 약화하지 않고 단계 레벨 incorrect만 더한다.
+    step_incorrect = verification is not None and verification.has_incorrect
+    arithmetic_error = (signal is not None) or step_incorrect
     # 다단계 대수 슬립(kind="solution")이면 verify 발화를 *단계 자가검산*으로 변형한다(slice 61).
+    # 단계 레벨 incorrect도 *단계 자가검산* 프레이밍과 자연 정합 → 같은 변형으로 OR 결합한다.
     # L3 kind→순수 bool 환산은 *오케스트레이터만* 수행(L4 recommend_coaching은 kind를 모름).
-    verify_steps = signal is not None and signal.kind == "solution"
+    verify_steps = (signal is not None and signal.kind == "solution") or step_incorrect
     trigger = recommend_coaching(
         bkt_mastery,
         irt_theta,
@@ -134,6 +183,7 @@ def recommend_coaching_for_solution(
         validation_signal=signal.reason if signal is not None else None,
         error_kind=signal.kind if signal is not None else None,
         error_span=signal.span if signal is not None else None,
+        solution_verification=verification,
     )
     # 중간 step 등가성 shadow 관측(slice 63) — fire-and-forget·반환 무반영(비노출·비차단).
     # `result`를 *바꾸지 않는다* — observe_step_breaks는 None을 반환하고 로그로만 sink한다.

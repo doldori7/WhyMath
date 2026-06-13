@@ -19,6 +19,7 @@ from whymath_backend.l4.solution_coaching import (
     SolutionCoaching,
     recommend_coaching_for_solution,
 )
+from whymath_backend.schema.enums import StepType
 
 
 class _AlwaysFails:
@@ -28,14 +29,18 @@ class _AlwaysFails:
     노출하므로, 주입 스텁의 종류가 error_kind="other"로 검증된다(slice 59).
     """
 
-    def validate(self, item: PregenItem | None, response: str) -> ValidationSignal | None:
+    def validate(
+        self, item: PregenItem | None, response: str
+    ) -> ValidationSignal | None:
         return ValidationSignal(kind="other", reason="stub: always fails")
 
 
 class _AlwaysPasses:
     """SeedValidator 충족 스텁 — 입력 무관 항상 통과(주입 검증용)."""
 
-    def validate(self, item: PregenItem | None, response: str) -> ValidationSignal | None:
+    def validate(
+        self, item: PregenItem | None, response: str
+    ) -> ValidationSignal | None:
         return None
 
 
@@ -154,20 +159,30 @@ class TestRecommendCoachingForSolution:
     def test_forwards_discrepancy_tol(self) -> None:
         """discrepancy_tol을 recommend_coaching에 위임 — 같은 차이도 분류가 바뀐다."""
         # 차 0.382(프록시 0.882 - 0.5): 기본 tol 0.2면 불일치(consolidate).
-        assert recommend_coaching_for_solution("끝.", 0.5, 2.0).trigger.focus == "consolidate"
+        assert (
+            recommend_coaching_for_solution("끝.", 0.5, 2.0).trigger.focus
+            == "consolidate"
+        )
         # tol 0.5면 합의 → 평균 0.69 ≥ 0.6 → advance.
         assert (
-            recommend_coaching_for_solution("끝.", 0.5, 2.0, discrepancy_tol=0.5).trigger.focus
+            recommend_coaching_for_solution(
+                "끝.", 0.5, 2.0, discrepancy_tol=0.5
+            ).trigger.focus
             == "advance"
         )
 
     def test_forwards_mastery_threshold(self) -> None:
         """mastery_threshold 위임 — 합의 시 기초/심화 임계 조정."""
         # 합의(BKT 0.5·θ=0 프록시 0.5)·평균 0.5: 기본 임계 0.6이면 foundation.
-        assert recommend_coaching_for_solution("끝.", 0.5, 0.0).trigger.focus == "foundation"
+        assert (
+            recommend_coaching_for_solution("끝.", 0.5, 0.0).trigger.focus
+            == "foundation"
+        )
         # 임계 0.4로 낮추면 0.5 ≥ 0.4 → advance.
         assert (
-            recommend_coaching_for_solution("끝.", 0.5, 0.0, mastery_threshold=0.4).trigger.focus
+            recommend_coaching_for_solution(
+                "끝.", 0.5, 0.0, mastery_threshold=0.4
+            ).trigger.focus
             == "advance"
         )
 
@@ -200,13 +215,22 @@ class TestErrorKindClassification:
     """슬립 종류 분류 — 검증기가 `ValidationSignal.kind`로 직접 선언(slice 58→59). L5/L7용."""
 
     def test_arithmetic_kind(self) -> None:
-        assert recommend_coaching_for_solution("2 + 3 = 6", 0.9, 2.0).error_kind == "arithmetic"
+        assert (
+            recommend_coaching_for_solution("2 + 3 = 6", 0.9, 2.0).error_kind
+            == "arithmetic"
+        )
 
     def test_inequality_kind(self) -> None:
-        assert recommend_coaching_for_solution("5 < 3", 0.9, 2.0).error_kind == "inequality"
+        assert (
+            recommend_coaching_for_solution("5 < 3", 0.9, 2.0).error_kind
+            == "inequality"
+        )
 
     def test_not_equal_kind(self) -> None:
-        assert recommend_coaching_for_solution("12 / 4 ≠ 3", 0.9, 2.0).error_kind == "not_equal"
+        assert (
+            recommend_coaching_for_solution("12 / 4 ≠ 3", 0.9, 2.0).error_kind
+            == "not_equal"
+        )
 
     def test_solution_kind(self) -> None:
         result = recommend_coaching_for_solution("2x + 1 = 7 이므로 x = 5", 0.9, 2.0)
@@ -220,7 +244,9 @@ class TestErrorKindClassification:
 
     def test_unknown_signal_classified_other(self) -> None:
         # 비표준 검증기(kind="other" 선언) → error_kind="other"(검증기 선언 그대로).
-        result = recommend_coaching_for_solution("내용", 0.9, 2.0, validator=_AlwaysFails())
+        result = recommend_coaching_for_solution(
+            "내용", 0.9, 2.0, validator=_AlwaysFails()
+        )
         assert result.arithmetic_error is True
         assert result.error_kind == "other"
 
@@ -282,10 +308,122 @@ class TestStepVerifyPrompt:
         assert "한 줄씩" not in result.trigger.prompt
 
 
+class TestSolutionStepsWiring:
+    """WH-1 1단계 결선 — `solution_steps` 제공 시 verify_solution 연쇄 검증을 OR 결합.
+
+    텍스트→단계 *분해*는 L5 책임(범위 밖)이라 여기선 *이미 분해된* 표현식 리스트를 직접 준다.
+    """
+
+    def test_incorrect_steps_route_verify(self) -> None:
+        """단계 시퀀스에 incorrect 전이 → arithmetic_error·verify·solution_verification 채워짐."""
+        # 텍스트는 깨끗(슬립 없음)·고숙달이라 단계 없으면 advance지만, 단계 incorrect가 verify로.
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["2*x + 4", "2*x + 5"]
+        )
+        assert result.arithmetic_error is True
+        assert result.trigger.focus == "verify"
+        assert result.solution_verification is not None
+        assert result.solution_verification.has_incorrect is True
+        assert result.solution_verification.first_incorrect_index == 0
+
+    def test_incorrect_steps_use_step_self_check_prompt(self) -> None:
+        """단계 레벨 incorrect → verify 발화가 단계 자가검산 변형(verify_steps OR)."""
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["x + 1", "x + 1", "x + 2"]
+        )
+        assert result.trigger.focus == "verify"
+        assert "한 줄씩" in result.trigger.prompt
+        assert result.solution_verification is not None
+        assert result.solution_verification.first_incorrect_index == 1
+
+    def test_correct_steps_no_step_signal(self) -> None:
+        """전부 correct 전이 → 단계 신호 없음(텍스트 신호만)·verification은 채워지되 has_incorrect False."""
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["2*x + 4", "2*(x + 2)"]
+        )
+        assert result.arithmetic_error is False
+        assert result.trigger.focus == "advance"  # 단계 신호 0 → 기존 BKT↔IRT 경로
+        assert result.solution_verification is not None
+        assert result.solution_verification.has_incorrect is False
+        assert result.solution_verification.n_correct == 1
+
+    def test_or_combination_text_clean_step_incorrect(self) -> None:
+        """OR 결합 — 텍스트 OK여도 단계 incorrect면 verify(추가적·기존 신호 약화 안 함)."""
+        # 텍스트 신호 없음(validation_signal None) + 단계 incorrect → arithmetic_error True.
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["2*x + 4", "2*x + 5"]
+        )
+        assert result.validation_signal is None  # 텍스트 레벨 신호 없음
+        assert (
+            result.error_kind is None
+        )  # 텍스트 슬립 없음(단계 신호는 error_kind를 안 채움)
+        assert result.arithmetic_error is True  # 단계 incorrect가 OR로 추가
+        assert result.trigger.focus == "verify"
+
+    def test_or_combination_text_slip_steps_correct(self) -> None:
+        """OR 결합 — 텍스트 슬립이 있으면 단계가 correct여도 텍스트 신호 보존(약화 안 함)."""
+        result = recommend_coaching_for_solution(
+            "2 + 3 = 6", 0.9, 2.0, solution_steps=["x", "x"]
+        )
+        assert result.arithmetic_error is True
+        assert result.error_kind == "arithmetic"  # 텍스트 신호 그대로 보존
+        assert result.validation_signal is not None
+        assert result.solution_verification is not None
+        assert result.solution_verification.has_incorrect is False
+
+    def test_steps_not_provided_fully_unchanged(self) -> None:
+        """단계 미제공 → solution_verification None·기존 동작 완전 불변(하위호환)."""
+        with_steps = recommend_coaching_for_solution("3 × 4 = 12 이므로 끝.", 0.9, 2.0)
+        assert with_steps.solution_verification is None
+        assert with_steps.arithmetic_error is False
+        assert with_steps.trigger.focus == "advance"
+        # 단계 None 명시도 동일(완전 불변).
+        explicit = recommend_coaching_for_solution(
+            "3 × 4 = 12 이므로 끝.", 0.9, 2.0, solution_steps=None
+        )
+        assert explicit == with_steps
+
+    def test_single_step_no_transition_verification_none(self) -> None:
+        """단계 1개(전이 0) → verification None(검증할 전이 없음)·기존 동작 불변."""
+        result = recommend_coaching_for_solution(
+            "풀이", 0.9, 2.0, solution_steps=["2*x + 4"]
+        )
+        assert result.solution_verification is None
+        assert result.arithmetic_error is False
+        assert result.trigger.focus == "advance"
+
+    def test_step_types_forwarded(self) -> None:
+        """solution_step_types 전달 — 비대수 단계는 unverifiable로 보수 처리(거짓 incorrect 회피)."""
+        # 케이스분류 전이는 SymPy 검증 안 함 → unverifiable(incorrect 아님).
+        result = recommend_coaching_for_solution(
+            "풀이",
+            0.9,
+            2.0,
+            solution_steps=["2*x + 4", "2*x + 5"],
+            solution_step_types=[StepType.케이스분류],
+        )
+        assert result.solution_verification is not None
+        assert result.solution_verification.has_incorrect is False
+        assert result.solution_verification.n_unverifiable == 1
+        assert result.arithmetic_error is False  # 단계 신호 없음 → 기존 경로
+
+    def test_solution_verification_deterministic(self) -> None:
+        """같은 단계 입력 → 같은 결과(순수)."""
+        a = recommend_coaching_for_solution(
+            "풀이", 0.3, 1.0, solution_steps=["2*x + 4", "2*x + 5"]
+        )
+        b = recommend_coaching_for_solution(
+            "풀이", 0.3, 1.0, solution_steps=["2*x + 4", "2*x + 5"]
+        )
+        assert a == b
+
+
 class TestStepShadowNonExposure:
     """slice 63 — 중간 step shadow 관측이 SolutionCoaching 반환을 *바꾸지 않음*(비노출)."""
 
-    def test_result_identical_gate_on_vs_off(self, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_result_identical_gate_on_vs_off(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         # 단계 비보존 입력(shadow가 검출)에도 반환은 게이트 on/off 무관하게 동일(반환 무반영).
         text = "2x = 6 따라서 3x = 12"
         monkeypatch.setenv("WHYMATH_L4_STEP_SHADOW_ENABLED", "false")
@@ -334,7 +472,9 @@ class TestStepShadowNonExposure:
                     text, 0.9, 2.0, problem_id=pid, expected_answer="x = 3"
                 )
             msgs = [
-                r.getMessage() for r in caplog.records if r.name == "whymath.l4.step_shadow"
+                r.getMessage()
+                for r in caplog.records
+                if r.name == "whymath.l4.step_shadow"
             ]
             assert any(str(pid) in m and "expected='x = 3'" in m for m in msgs)
         finally:

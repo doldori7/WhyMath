@@ -86,7 +86,7 @@ from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coac
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
-from whymath_backend.schema.enums import ContentType, EventType, TurnRole
+from whymath_backend.schema.enums import ContentType, EventType, StepType, TurnRole
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -154,6 +154,25 @@ class CoachRequest(BaseModel):
             "`entry_socratic_category`를 그 포커스에 맞춰 시드(대화 진입 질문 종류)."
         ),
     )
+    solution_steps: list[str] | None = Field(
+        default=None,
+        description=(
+            "L5가 공간정보로 분해한 풀이 단계 시퀀스(표현식 리스트). 제공 시 "
+            "`verify_solution`으로 단계별(전이별) 검증을 수행해 검산 코칭을 정밀화하고 "
+            "`solution_coaching.solution_verification`으로 노출한다(텍스트 신호와 *추가적 OR* "
+            "결합). 미제공 시 텍스트 레벨 폴백 — 기존 동작 완전 불변. 텍스트→단계 *분해*는 "
+            "L5 OCR 책임이라 백엔드는 제공된 단계만 검증한다."
+        ),
+    )
+    solution_step_types: list[StepType] | None = Field(
+        default=None,
+        description=(
+            "전이별 단계 유형(조건해석/케이스분류/그래프스케치/계산/검산). 제공 시 "
+            "`verify_solution`이 비대수 단계를 unverifiable로 보수 처리하는 데 쓴다. 길이는 "
+            "전이 수(`len(solution_steps)-1`)와 같아야 한다(규약·길이 검증은 `verify_solution` "
+            "위임). 미제공 시 모든 전이를 타입 미지정으로 검증."
+        ),
+    )
 
 
 class CoachResponse(BaseModel):
@@ -197,7 +216,9 @@ class CoachResponse(BaseModel):
             "검출되면 검산(verify) 코칭 + L3 신호(slice 52 오케스트레이터). 없으면 None — "
             "이때는 기존 `decision`/`coaching_focus`를 따른다. *실시간 슬립은 배경 진단보다 "
             "우선*(slice 51: 구체적 계산 오류 > θ/숙달 추정). 검증기는 보수적이라 질문·산문은 "
-            "거의 발화하지 않는다(false-positive 0 우선)."
+            "거의 발화하지 않는다(false-positive 0 우선). 요청에 `solution_steps`가 있으면 "
+            "`solution_verification`(verify_solution 단계별 결과)이 채워지고 단계 레벨 incorrect는 "
+            "텍스트 신호와 *추가적 OR*로 결합돼 verify 코칭을 깨운다(미제공 시 None·동작 불변)."
         ),
     )
     prerequisite_coaching: CoachingTrigger | None = Field(
@@ -326,12 +347,16 @@ def _build_response_payload(
     # slice 73: θ는 세션/턴에서 서버 L2(AbilitySnapshot) 소싱값(server_theta)을 주입 — BKT↔θ
     # 교차검증 코칭(recommend_coaching)을 깨운다. stateless /v1/coach는 None(DB 없음).
     solution_text = body.student_solution or body.student_input
+    # WH-1 1단계 결선: L5가 분해한 단계 시퀀스(solution_steps)가 있으면 verify_solution으로
+    # 단계별 검증해 검산 코칭을 정밀화한다(텍스트 신호와 추가적 OR 결합·미제공 시 동작 불변).
     sol = recommend_coaching_for_solution(
         solution_text,
         effective_bkt,
         server_theta,
         problem_id=problem_id,
         expected_answer=expected_answer,
+        solution_steps=body.solution_steps,
+        solution_step_types=body.solution_step_types,
     )
     # slice 73: 노출은 *불일치 신호만* — 계산오류 verify(기존·arithmetic_error) + BKT↔θ 불일치
     # (consolidate·retrieval). 합의(foundation/advance)는 LTHC가 담당·한쪽 신호만(diagnose)은

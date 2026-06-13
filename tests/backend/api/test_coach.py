@@ -517,6 +517,114 @@ class TestSolutionCoachingWiring:
         assert resp.json()["solution_coaching"] is not None
 
 
+class TestSolutionStepsWiring:
+    """WH-1 1단계 결선 — `CoachRequest.solution_steps` → verify_solution 단계 검증 노출.
+
+    L5가 분해한 단계 시퀀스를 받으면 `solution_coaching.solution_verification`이 채워지고
+    단계 레벨 incorrect는 텍스트 신호와 *추가적 OR*로 결합돼 검산 코칭을 깨운다. 미제공 시
+    `solution_verification` None(기존 동작 완전 불변·하위호환).
+    """
+
+    def test_incorrect_steps_surface_verification(self) -> None:
+        # 텍스트 깨끗·고숙달이라 단계 없으면 advance지만, 단계 incorrect가 verify를 깨운다.
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "확인",
+                "bkt_mastery": 0.95,
+                "solution_steps": ["2*x + 4", "2*x + 5"],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["arithmetic_error"] is True
+        assert sc["trigger"]["focus"] == "verify"
+        sv = sc["solution_verification"]
+        assert sv is not None
+        assert sv["has_incorrect"] is True
+        assert sv["first_incorrect_index"] == 0
+        assert "한 줄씩" in sc["trigger"]["prompt"]  # 단계 자가검산 변형 발화
+
+    def test_correct_steps_no_step_signal(self) -> None:
+        # 전부 correct 전이 → 단계 신호 0 → 기존 BKT↔IRT 경로(노출 게이트로 None).
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "확인",
+                "bkt_mastery": 0.95,
+                "solution_steps": ["2*x + 4", "2*(x + 2)"],
+            },
+        )
+        # advance focus는 노출 게이트(_THETA_SURFACED_FOCI) 밖 → solution_coaching None.
+        assert resp.json()["solution_coaching"] is None
+
+    def test_steps_omitted_verification_none(self) -> None:
+        # 단계 미제공 → solution_verification 노출 안 됨(기존 텍스트 슬립 신호만)·하위호환.
+        resp = _client().post("/v1/coach", json={"student_input": "2 + 3 = 6"})
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None  # 텍스트 슬립은 그대로 검출
+        assert sc["solution_verification"] is None  # 단계 미제공 → None
+
+    def test_or_combination_text_slip_steps_correct(self) -> None:
+        # OR 결합 — 텍스트 슬립이 있으면 단계가 correct여도 텍스트 신호 보존(약화 0).
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "2 + 3 = 6", "solution_steps": ["x", "x"]},
+        )
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["error_kind"] == "arithmetic"  # 텍스트 신호 보존
+        assert sc["solution_verification"]["has_incorrect"] is False
+
+    def test_step_types_forwarded_non_algebraic_unverifiable(self) -> None:
+        # 비대수 단계 유형(케이스분류)은 unverifiable로 보수 처리(거짓 incorrect 회피).
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "확인",
+                "bkt_mastery": 0.95,
+                "solution_steps": ["2*x + 4", "2*x + 5"],
+                "solution_step_types": ["케이스분류"],
+            },
+        )
+        # 단계 신호 0(unverifiable) → 기존 경로(advance) → solution_coaching None.
+        assert resp.json()["solution_coaching"] is None
+
+    def test_session_create_surfaces_step_verification(self) -> None:
+        # 영속 엔드포인트도 동일 — 공통 _build_response_payload 경유.
+        client, _ = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "확인",
+                "bkt_mastery": 0.95,
+                "solution_steps": ["2*x + 4", "2*x + 5"],
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        sc = resp.json()["solution_coaching"]
+        assert sc is not None
+        assert sc["solution_verification"]["has_incorrect"] is True
+
+    def test_solution_verification_not_exposing_answer(self) -> None:
+        # redaction — solution_verification은 학생 *자기 단계*만(정답/본문 누출 0). reason은
+        # 검증 사유일 뿐. 학생 입력 외 텍스트가 노출되지 않음을 구조적으로 확인.
+        resp = _client().post(
+            "/v1/coach",
+            json={
+                "student_input": "확인",
+                "bkt_mastery": 0.95,
+                "solution_steps": ["2*x + 4", "2*x + 5"],
+            },
+        )
+        sv = resp.json()["solution_coaching"]["solution_verification"]
+        # steps의 각 결과는 verify_step 산출(state·reason·evidence_weight) — 정답 필드 없음.
+        assert sv["n_transitions"] == 1
+        assert len(sv["steps"]) == 1
+        assert sv["steps"][0]["state"] == "incorrect"
+
+
 class TestHintLevelWiring:
     def test_demand_answer_signal_raises_hint(self) -> None:
         resp = _client().post(
