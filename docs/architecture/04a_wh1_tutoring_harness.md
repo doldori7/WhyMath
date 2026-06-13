@@ -518,3 +518,23 @@ CREATE TABLE strategy_evidence (
 ### 용어·수치 정합: "545 노드" → 구현 403 개념
 
 본문의 "545노드 커리큘럼 그래프"는 *설계 시점 추정치*이며 현 저장소에 해당 실체가 없다(레포 grep 결과 "545"는 본 문서 외 0). 구현된 커리큘럼/개념 계층은 **개념그래프 v1 — 403 개념(`concept`·code=UC) + 541 선수엣지(`concept_edge` PREREQUISITE)** + NCIC 성취기준이다. 성취기준 노드를 별도 차원으로 둘 경우 수치를 실측으로 확정한다("545"는 미반영 추정치).
+
+### 도구 11종 → 실제 좌석 1:1 매핑 (편집자 부기)
+
+§3(8종)·§11.3(전략 3종)의 도구를 *현 backend 좌석*에 매핑한다. 상태: 🟢 가동 · 🟡 부분 · 🔴 미구현.
+
+|# |도구                   |계층    |실 구현 좌석 (현 backend)                                                                                       |상태                                             |
+|--|---------------------|------|--------------------------------------------------------------------------------------------------------|-----------------------------------------------|
+|1 |`read_student_state` |L2    |`get_current_mastery`(BKT)·`compute_concept_diagnoses`(BKT+IRT)·`get_current_theta`/`compute_concept_abilities`(θ)·`concept_mastery_history`|🟡 정서 프록시 미구현                                  |
+|2 |`verify_step`        |L3    |L4 `recommend_coaching_for_solution`(verify_steps 신호)·L3 SymPy 검증·PRM(PRM800K)                            |🟡 3-state(unverifiable)·한국 PRM 보정은 0단계         |
+|3 |`match_misconception`|L2/L3 |L4 `misconception/diagnose`(substring+정규식+의미)·pgvector `misconception_embedding`(slice104+)              |🟢 카탈로그 30종·top-1<0.65 게이트                     |
+|4 |`curate_hypothesis`  |하네스   |(근접) L2 `recommend_weak_concepts`                                                                         |🔴 가설 세트·감쇠 ×0.85·ε-탐색·최대 5 미구현             |
+|5 |`query_curriculum`   |L1+L2 |`concept_edge` PREREQUISITE·`fetch_prerequisites`(재귀 CTE 다단계)·`recommend_prerequisite_gaps`             |🟢 선수(후속/형제 EdgeType은 후속)                      |
+|6 |`select_probe`       |L4    |`GET /v1/me/next-problem`·`select_weighted_item`(IRT 정보량 CAT·slice L2-12/16)                              |🟡 정보량 출제 가동·가설 판별 태깅/ε 미구현                  |
+|7 |`log_evidence`       |하네스   |(근접) `record_attempt_mastery`·`attempt_event`(이벤트 소싱·TimescaleDB)                                       |🔴 `evidence_links`(polarity·weight) 미구현        |
+|8 |`end_turn`           |L4→L5 |`recommend_coaching`·`recommend_prerequisite_coaching`·`GET /v1/me/.../coaching`·`/v1/coach(/sessions)`·BKT 커밋 `record_problem_attempt_mastery`|🟢 코칭 결정+커밋(도구 루프 오케스트레이션은 미구현)             |
+|9 |`log_strategy_event` |전략    |—                                                                                                       |🔴 `strategy_nodes`·`strategy_evidence` 미구현     |
+|10|`elicit_prediction`  |전략    |—                                                                                                       |🔴 보정 루프(Brier·과신/과소신) 미구현                   |
+|11|`assign_transfer_probe`|전략  |(자산) 시그니처 패턴 55+108(ROADMAP Phase 1)                                                                    |🔴 전이 측정·간격 출제 미구현                            |
+
+**판독**: 코어 진단·코칭·선수 좌석(#1·#3·#5·#8 일부)은 *이미 가동*하며 이번 세션 소비 아크로 강화됐다. 하네스가 추가하는 건 ① **상태 외부화**(가설 세트·evidence_links·#4·#7) ② **도구 루프 오케스트레이션**(end_turn 도구 루프·#8) ③ **전략 계층**(#9~#11). 즉 WH-1 도입은 *기존 좌석을 도구로 노출 + 상태/루프/전략 신설*이며, 진단·코칭 로직을 새로 짜는 게 아니다.
