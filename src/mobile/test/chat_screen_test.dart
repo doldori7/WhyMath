@@ -31,6 +31,7 @@ class _FakeCoachApi extends CoachApi {
 CoachResponse _response({
   String prompt = '먼저 무엇이 주어졌는지 정리해 볼까요?',
   String socraticCategory = '조건확인',
+  SolutionCoaching? coaching,
 }) {
   return CoachResponse(
     decision: PedagogyDecision(
@@ -39,6 +40,7 @@ CoachResponse _response({
       system: '시스템(테스트)',
       socraticCategory: socraticCategory,
     ),
+    solutionCoaching: coaching,
   );
 }
 
@@ -78,6 +80,39 @@ void main() {
     expect(find.text('판별식이 헷갈려요'), findsOneWidget);
     expect(find.text('주어진 조건을 먼저 적어 볼까요?'), findsOneWidget);
     expect(find.text('조건확인'), findsOneWidget);
+  });
+
+  testWidgets('코치 응답에 검산 신호가 있으면 채팅에 신호 카드가 노출된다', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        _FakeCoachApi(
+          response: _response(
+            prompt: '같이 한 번 더 살펴볼까요?',
+            socraticCategory: '검증',
+            coaching: const SolutionCoaching(
+              // trigger.prompt는 비워 추가 코치 버블을 만들지 않는다(카드만 검증).
+              trigger: CoachingTrigger(
+                focus: 'verify',
+                rationale: '근거(테스트)',
+                prompt: '',
+                socraticCategory: '검증',
+              ),
+              arithmeticError: true,
+              errorKind: 'arithmetic',
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.enterText(find.byType(TextField), '이 계산 맞나요?');
+    await tester.tap(find.byIcon(Icons.send));
+    await tester.pumpAndSettle();
+
+    // 코치 버블 아래 신호 카드(검산 cue)가 채팅에 보인다.
+    expect(find.textContaining('스스로 검산해볼까?'), findsOneWidget);
+    // 답 미루기 — "틀렸다" 단정은 노출하지 않는다.
+    expect(find.textContaining('틀렸'), findsNothing);
   });
 
   testWidgets('API 실패 시 SnackBar로 에러를 알린다(앱은 유지)', (tester) async {

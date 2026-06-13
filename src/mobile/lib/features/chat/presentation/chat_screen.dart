@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../application/chat_controller.dart';
 import '../domain/chat_message.dart';
+import 'coach_signal_card.dart';
 
 /// 슬로건 — 앱바 부제로 노출(브랜드 정체성·답이 아닌 이유).
 const String _slogan = '답이 아닌, 이유를 묻는 수학';
@@ -132,7 +133,7 @@ class _MessageBubble extends StatelessWidget {
     final category = message.socraticCategory;
     final showBadge = isCoach && category != null && category.isNotEmpty;
 
-    return Align(
+    final bubble = Align(
       alignment: alignment,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
@@ -156,6 +157,23 @@ class _MessageBubble extends StatelessWidget {
         ),
       ),
     );
+
+    // 코치 발화에 원본 응답이 있으면 버블 아래에 verify 신호 카드를 덧붙인다.
+    // (학생 버블엔 response가 없어 카드가 붙지 않는다. 카드는 신호가 없으면 스스로
+    //  빈 위젯을 반환하므로 여기선 단순히 존재 여부만 보고 끼워 넣는다.)
+    final response = message.response;
+    if (isCoach && response != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          bubble,
+          CoachSignalCard(response: response),
+        ],
+      );
+    }
+
+    return bubble;
   }
 }
 
