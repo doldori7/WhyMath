@@ -51,33 +51,80 @@ class ChatController extends _$ChatController {
   @override
   ChatState build() => const ChatState();
 
-  /// 학생 발화를 보내고 코치 응답으로 상태를 갱신한다.
+  /// 학생 발화(대화 모드)를 보내고 코치 응답으로 상태를 갱신한다.
   ///
   /// 흐름: ① 학생 메시지 append·전송중 표시·에러 클리어 → ② 서버 호출 →
   /// ③ 성공 시 코치 발화 append·단계 전이 반영·검산 코칭 추가 발화 →
   /// ④ 실패 시 에러만 기록(앱은 죽지 않는다·가용성).
+  ///
+  /// 이 메서드는 *대화 모드* 전용 — 풀이 단계 전송은 [sendSolution]을 쓴다.
   Future<void> send(String text) async {
     final trimmed = text.trim();
     if (trimmed.isEmpty || state.isSending) {
       return; // 빈 입력·전송 중 재진입 방지.
     }
 
+    // 대화 모드는 단계 신호 없이 학생 발화만 보낸다(solutionSteps 미전송).
+    await _dispatch(
+      studentMessage: ChatMessage.student(trimmed),
+      request: CoachRequest(
+        studentInput: trimmed,
+        polyaState: PolyaState(currentStage: state.polyaState),
+      ),
+    );
+  }
+
+  /// 풀이 단계 모드 — 학생이 *한 줄에 한 단계씩* 적은 풀이를 보낸다.
+  ///
+  /// 줄 분해(수동 세그먼트)만 L5가 한다(CLAUDE.md): [rawSolution]을 줄(`\n`)로 나눠
+  /// 각 줄을 trim하고 빈 줄을 버린 `steps`를 만들어 `solution_steps`로 전송한다.
+  /// *수학 검증·단계 의미 추론은 절대 하지 않는다* — 백엔드 `verify_solution`이 단계별
+  /// 검증을 수행하고, 응답의 `solution_verification`·`focus_step_index`가 채워지면
+  /// 기존 코치 발화·신호 카드가 그대로 동작한다.
+  ///
+  /// 단계 수 가드: 전이가 0개(steps가 1개 이하)여도 *그대로 전송*한다 — 백엔드가 빈
+  /// 검증 결과(n_transitions=0)를 안전하게 처리한다. 단, 유효한 줄이 하나도 없으면
+  /// (전부 공백) 보낼 게 없으므로 무시한다.
+  Future<void> sendSolution(String rawSolution) async {
+    if (state.isSending) {
+      return; // 전송 중 재진입 방지.
+    }
+    final steps = _splitSteps(rawSolution);
+    if (steps.isEmpty) {
+      return; // 유효한 줄이 하나도 없으면 보낼 게 없다.
+    }
+
+    // 학생 메시지는 원문 그대로 표시하되 풀이임을 구분 가능하게 표시한다(isSolution).
+    final raw = rawSolution.trim();
+    await _dispatch(
+      studentMessage: ChatMessage.student(raw, isSolution: true),
+      request: CoachRequest(
+        studentInput: raw,
+        solutionSteps: steps,
+        polyaState: PolyaState(currentStage: state.polyaState),
+      ),
+    );
+  }
+
+  /// 학생 메시지를 반영하고 [request]를 서버로 보낸 뒤 응답을 상태에 적용하는 공통 흐름.
+  ///
+  /// [send]·[sendSolution]이 공유한다 — 성공 시 코치 발화·단계 전이·검산 코칭 추가
+  /// 발화, 실패 시 graceful 에러 처리를 *한 곳*에서 한다(중복 구현 금지).
+  Future<void> _dispatch({
+    required ChatMessage studentMessage,
+    required CoachRequest request,
+  }) async {
     // ① 학생 메시지를 즉시 반영하고 로딩 상태로 전환한다.
     state = state.copyWith(
-      messages: [...state.messages, ChatMessage.student(trimmed)],
+      messages: [...state.messages, studentMessage],
       isSending: true,
       error: null,
     );
 
     try {
-      // ② 서버 호출 — 현재 Polya 단계를 함께 보낸다(나머지 신호는 후속 슬라이스).
+      // ② 서버 호출.
       final api = ref.read(coachApiProvider);
-      final response = await api.coach(
-        CoachRequest(
-          studentInput: trimmed,
-          polyaState: PolyaState(currentStage: state.polyaState),
-        ),
-      );
+      final response = await api.coach(request);
 
       // ③ 코치 발화를 만든다 — `decision.prompt`(메타인지 유도 발화)를 그대로 표시한다.
       final decision = response.decision;
@@ -119,6 +166,18 @@ class ChatController extends _$ChatController {
         error: '코치와 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',
       );
     }
+  }
+
+  /// 풀이 원문을 줄 단위 단계 리스트로 분해하는 *순수* 함수(부수효과 없음).
+  ///
+  /// 줄바꿈(`\n`)으로 나눠 각 줄을 trim하고 빈 줄을 제외한다 — 수학 의미 추론·세그먼트
+  /// 추정은 하지 않는다(CLAUDE.md: 줄 분해만·검증은 백엔드). `\r\n`도 안전하게 처리한다.
+  static List<String> _splitSteps(String rawSolution) {
+    return rawSolution
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
   }
 
   /// 표시된 에러를 지운다(SnackBar 닫힘 등에서 호출).
