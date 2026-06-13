@@ -61,7 +61,8 @@ class _FakeSession:
       4) verify row(passed_count, total·one 튜플)
       5) hint rows(event_at 오름차순 hint_level 행 목록·all)
       6) accuracy rows(started_at 오름차순 is_correct 행 목록·all)
-    이 6개를 큐로 주입한다 — 정렬·실 SQL은 통합테스트가 실 PG로 검증.
+      7) difficulty rows(started_at 오름차순 (irt_b, difficulty_overall) 행 목록·all·Problem join)
+    이 7개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
     """
 
     def __init__(self, results: list[_FakeScalarResult]) -> None:
@@ -84,12 +85,17 @@ def _make_session(
     verify_total: int = 0,
     hint_levels: list[int | None] | None = None,
     accuracy_correct: list[bool | None] | None = None,
+    difficulty_rows: list[tuple[float | None, float | None]] | None = None,
 ) -> AsyncSession:
     # ⑤ 힌트 쿼리는 단일 컬럼(.as_integer())을 event_at 오름차순으로 뽑으므로 행은 (level,) 튜플.
     # None(JSONB 파싱 실패)도 섞일 수 있게 그대로 (None,)으로 주입 — 본문이 None을 걸러낸다.
     hint_rows = [(lvl,) for lvl in (hint_levels or [])]
     # R15 정답률 쿼리는 단일 컬럼(is_correct)을 started_at 오름차순으로 뽑으므로 행은 (bool,) 튜플.
     accuracy_rows = [(c,) for c in (accuracy_correct or [])]
+    # R15 난이도 쿼리는 Problem join으로 (irt_difficulty_b, difficulty_overall)을 started_at
+    # 오름차순으로 뽑는다 — 행은 (irt_b, difficulty) 튜플. problem_id NULL·미매칭 행은 join이
+    # 이미 떨군 상태(실 PG)이므로 여기엔 매칭된 행만 주입한다(둘 다 None이면 본문이 유효 b로 제외).
+    diff_rows = list(difficulty_rows or [])
     return cast(
         AsyncSession,
         _FakeSession(
@@ -100,6 +106,7 @@ def _make_session(
                 _FakeScalarResult(one=(verify_passed, verify_total)),
                 _FakeScalarResult(all_rows=hint_rows),
                 _FakeScalarResult(all_rows=accuracy_rows),
+                _FakeScalarResult(all_rows=diff_rows),
             ]
         ),
     )
@@ -366,6 +373,7 @@ class TestMetaAndFieldSet:
             token_sample=4,
             hint_levels=[4, 3, 2],
             accuracy_correct=[True, True, True],
+            difficulty_rows=[(1.0, None), (0.5, None), (0.0, None)],
         )
         m = await compute_wh1_surrogate_metrics(session)
         for name in (
@@ -383,6 +391,9 @@ class TestMetaAndFieldSet:
         assert m.sample_dialogues == 4
         assert m.sample_hint_events == 3  # 유효 hint_level 행 수
         assert m.sample_accuracy_attempts == 3  # is_correct NOT NULL 행 수
+        assert m.sample_difficulty_attempts == 3  # 유효 b(Problem join) 행 수
+        # difficulty_slope 필드 노출(양수=난이도 상승·음수=쉬워짐). 여기선 하강(1→0.5→0)이라 음수.
+        assert m.help_reduction_validated.difficulty_slope is not None
 
     async def test_user_scoped_true_when_user_id(self) -> None:
         session = _make_session(
@@ -431,47 +442,85 @@ class TestOlsSlope:
         assert _ols_slope([]) is None
 
 
-# ── _judge_r15 결합 판정(R15 4분기) ──────────────────────────────────────────────
+# ── _judge_r15 결합 판정(R15 3신호: 도움·정답률·난이도) ──────────────────────────
 class TestJudgeR15:
-    def test_genuine_improvement_help_down_accuracy_up(self) -> None:
-        """도움↓(−1)·정답률↑(+0.5) → GENUINE_IMPROVEMENT(진짜 개선)."""
-        v = _judge_r15(-1.0, 0.5)
+    # ─ 도움↓·정답률 유지/↑ × 난이도 분기(이 슬라이스 정밀화 핵심) ─
+    def test_genuine_improvement_help_down_accuracy_up_difficulty_up(self) -> None:
+        """도움↓(−1)·정답률↑(+0.5)·난이도↑(+0.4) → GENUINE_IMPROVEMENT(진짜 개선)."""
+        v = _judge_r15(-1.0, 0.5, 0.4)
         assert v.verdict is R15Verdict.GENUINE_IMPROVEMENT
         assert v.help_slope == -1.0
         assert v.accuracy_slope == 0.5
+        assert v.difficulty_slope == 0.4
         assert "진짜 개선" in v.note
 
-    def test_genuine_improvement_accuracy_flat_boundary(self) -> None:
-        """도움↓·정답률 유지(0·경계 포함) → GENUINE_IMPROVEMENT(slope 0 임계)."""
-        v = _judge_r15(-0.3, 0.0)
+    def test_genuine_improvement_difficulty_flat_boundary(self) -> None:
+        """도움↓·정답률 유지·난이도 유지(0·경계) → GENUINE(난이도 slope 0 임계는 회피 아님)."""
+        v = _judge_r15(-0.3, 0.0, 0.0)
         assert v.verdict is R15Verdict.GENUINE_IMPROVEMENT
+        assert v.difficulty_slope == 0.0
 
-    def test_gaming_suspect_help_down_accuracy_down(self) -> None:
-        """도움↓(−1)이나 정답률↓(−0.5) → GAMING_SUSPECT(교정기 함정·힌트 회피 의심)."""
-        v = _judge_r15(-1.0, -0.5)
+    def test_gaming_suspect_easy_problem_avoidance_difficulty_down(self) -> None:
+        """도움↓(−1)·정답률 유지(+0.0)지만 난이도↓(−0.5) → GAMING_SUSPECT(쉬운 문제 회피).
+
+        이 슬라이스 핵심 정밀화: 정답률이 유지돼도 문항이 쉬워지면 진짜 개선이 아니다.
+        """
+        v = _judge_r15(-1.0, 0.0, -0.5)
         assert v.verdict is R15Verdict.GAMING_SUSPECT
-        assert "교정기 함정" in v.note
+        assert v.difficulty_slope == -0.5
+        assert "쉬운 문제 회피" in v.note
+        assert "난이도↓" in v.note
 
+    def test_gaming_suspect_easy_avoidance_accuracy_up_difficulty_down(self) -> None:
+        """정답률↑여도 난이도↓면 회피 — 쉬운 문제로 갈아타며 정답률까지 올린 경우."""
+        v = _judge_r15(-1.0, 0.5, -0.3)
+        assert v.verdict is R15Verdict.GAMING_SUSPECT
+        assert "쉬운 문제 회피" in v.note
+
+    def test_genuine_with_caveat_when_difficulty_none(self) -> None:
+        """도움↓·정답률 유지·난이도 추세 None(b 부족) → GENUINE + blind spot 캐비엇 note."""
+        v = _judge_r15(-1.0, 0.2, None)
+        assert v.verdict is R15Verdict.GENUINE_IMPROVEMENT
+        assert v.difficulty_slope is None
+        assert "난이도 추세 미가용" in v.note
+        assert "쉬운문제 회피 미검증" in v.note
+
+    # ─ 정답률↓ 분기(기존·난이도 무관) ─
+    def test_gaming_suspect_accuracy_down_regardless_of_difficulty(self) -> None:
+        """도움↓이나 정답률↓ → GAMING_SUSPECT(정답률 하락·기존). 난이도 부호 무관."""
+        v = _judge_r15(-1.0, -0.5, 0.9)
+        assert v.verdict is R15Verdict.GAMING_SUSPECT
+        assert "정답률 하락" in v.note
+        # 난이도가 None이어도 정답률↓면 동일.
+        assert _judge_r15(-1.0, -0.5, None).verdict is R15Verdict.GAMING_SUSPECT
+
+    # ─ NO_HELP_REDUCTION·INSUFFICIENT_DATA(기존 회귀) ─
     def test_no_help_reduction_positive_help_slope(self) -> None:
         """도움 기울기 >= 0(안 줄어듦) → NO_HELP_REDUCTION(개선 신호 아님)."""
-        assert _judge_r15(0.5, -1.0).verdict is R15Verdict.NO_HELP_REDUCTION
-        # 경계 0도 도움 안 줄어듦(>= 0) — 정답률 부호 무관.
-        assert _judge_r15(0.0, 0.9).verdict is R15Verdict.NO_HELP_REDUCTION
+        assert _judge_r15(0.5, -1.0, -0.5).verdict is R15Verdict.NO_HELP_REDUCTION
+        # 경계 0도 도움 안 줄어듦(>= 0) — 정답률·난이도 부호 무관.
+        assert _judge_r15(0.0, 0.9, 0.9).verdict is R15Verdict.NO_HELP_REDUCTION
 
     def test_insufficient_data_when_help_none(self) -> None:
         """도움 기울기 None(표본 부족) → INSUFFICIENT_DATA(날조 판정 금지)."""
-        v = _judge_r15(None, 0.5)
+        v = _judge_r15(None, 0.5, -0.5)
         assert v.verdict is R15Verdict.INSUFFICIENT_DATA
         assert v.help_slope is None
         assert v.accuracy_slope == 0.5
+        assert v.difficulty_slope == -0.5
 
     def test_insufficient_data_when_accuracy_none(self) -> None:
         """정답률 기울기 None(표본 부족) → INSUFFICIENT_DATA(한쪽이라도 부족이면)."""
-        v = _judge_r15(-1.0, None)
+        v = _judge_r15(-1.0, None, -0.5)
         assert v.verdict is R15Verdict.INSUFFICIENT_DATA
 
     def test_insufficient_data_when_both_none(self) -> None:
-        assert _judge_r15(None, None).verdict is R15Verdict.INSUFFICIENT_DATA
+        assert _judge_r15(None, None, None).verdict is R15Verdict.INSUFFICIENT_DATA
+
+    def test_difficulty_none_does_not_trigger_insufficient(self) -> None:
+        """난이도만 None(help·accuracy는 충분)이면 INSUFFICIENT 아님 — 난이도는 선택 신호."""
+        v = _judge_r15(-1.0, 0.5, None)
+        assert v.verdict is R15Verdict.GENUINE_IMPROVEMENT
 
 
 # ── R15 결합 판정 — compute_wh1_surrogate_metrics 통합(FakeSession is_correct 주입) ──
@@ -481,6 +530,7 @@ class TestHelpReductionValidatedIntegratedWithCompute:
         *,
         hint_levels: list[int | None] | None,
         accuracy_correct: list[bool | None] | None,
+        difficulty_rows: list[tuple[float | None, float | None]] | None = None,
     ) -> HelpReductionValidation:
         session = _make_session(
             total_sessions=1,
@@ -489,11 +539,12 @@ class TestHelpReductionValidatedIntegratedWithCompute:
             token_sample=0,
             hint_levels=hint_levels,
             accuracy_correct=accuracy_correct,
+            difficulty_rows=difficulty_rows,
         )
         return (await compute_wh1_surrogate_metrics(session)).help_reduction_validated
 
     async def test_genuine_improvement(self) -> None:
-        """도움↓(4→3→2→1)·정답률↑(F→T→T→T) → GENUINE_IMPROVEMENT."""
+        """도움↓(4→3→2→1)·정답률↑(F→T→T→T)·난이도 추세 없음 → GENUINE + 캐비엇."""
         v = await self._validate(
             hint_levels=[4, 3, 2, 1],
             accuracy_correct=[False, True, True, True],
@@ -501,6 +552,69 @@ class TestHelpReductionValidatedIntegratedWithCompute:
         assert v.verdict is R15Verdict.GENUINE_IMPROVEMENT
         assert v.help_slope is not None and v.help_slope < 0
         assert v.accuracy_slope is not None and v.accuracy_slope > 0
+        # 난이도 행 미주입 → difficulty_slope None·blind spot 캐비엇.
+        assert v.difficulty_slope is None
+        assert "난이도 추세 미가용" in v.note
+
+    async def test_genuine_improvement_with_rising_difficulty(self) -> None:
+        """도움↓·정답률 유지·난이도 상승(b 보정 −1→0→1) → GENUINE(쉬운문제 회피 아님)."""
+        v = await self._validate(
+            hint_levels=[4, 3, 2, 1],
+            accuracy_correct=[True, True, True, True],
+            difficulty_rows=[(-1.0, None), (0.0, None), (1.0, None), (2.0, None)],
+        )
+        assert v.verdict is R15Verdict.GENUINE_IMPROVEMENT
+        assert v.difficulty_slope is not None and v.difficulty_slope > 0
+
+    async def test_gaming_suspect_easy_problem_avoidance(self) -> None:
+        """도움↓·정답률 유지지만 난이도↓(b 보정 2→1→0→−1) → GAMING_SUSPECT(쉬운문제 회피)."""
+        v = await self._validate(
+            hint_levels=[4, 3, 2, 1],
+            accuracy_correct=[True, True, True, True],
+            difficulty_rows=[(2.0, None), (1.0, None), (0.0, None), (-1.0, None)],
+        )
+        assert v.verdict is R15Verdict.GAMING_SUSPECT
+        assert v.difficulty_slope is not None and v.difficulty_slope < 0
+        assert "쉬운 문제 회피" in v.note
+
+    async def test_difficulty_uses_heuristic_when_no_calibrated_b(self) -> None:
+        """보정 b 없고 difficulty_overall(5→4→3→2)만 있어도 휴리스틱 b로 난이도↓ → 회피."""
+        v = await self._validate(
+            hint_levels=[4, 3, 2, 1],
+            accuracy_correct=[True, True, True, True],
+            # irt_b None·difficulty_overall 하강(어려움→쉬움) → 휴리스틱 b도 하강.
+            difficulty_rows=[(None, 5.0), (None, 4.0), (None, 3.0), (None, 2.0)],
+        )
+        assert v.verdict is R15Verdict.GAMING_SUSPECT
+        assert v.difficulty_slope is not None and v.difficulty_slope < 0
+
+    async def test_difficulty_excludes_rows_with_both_none(self) -> None:
+        """irt_b·difficulty_overall 둘 다 None인 행은 난이도 시계열에서 제외(유효 b만)."""
+        # 유효 b는 (2,1,0) 3점 하강만 — 둘 다 None인 행 2개는 제외되어 표본에 안 들어감.
+        v = await self._validate(
+            hint_levels=[4, 3, 2, 1],
+            accuracy_correct=[True, True, True, True],
+            difficulty_rows=[
+                (2.0, None),
+                (None, None),
+                (1.0, None),
+                (None, None),
+                (0.0, None),
+            ],
+        )
+        assert v.verdict is R15Verdict.GAMING_SUSPECT
+        assert v.difficulty_slope is not None and v.difficulty_slope < 0
+
+    async def test_difficulty_too_few_valid_b_is_none_caveat(self) -> None:
+        """유효 b 2점(<3)뿐이면 difficulty_slope None → 2신호 GENUINE + 캐비엇(날조 0 금지)."""
+        v = await self._validate(
+            hint_levels=[4, 3, 2, 1],
+            accuracy_correct=[True, True, True, True],
+            difficulty_rows=[(2.0, None), (1.0, None)],  # 유효 2점 < 3
+        )
+        assert v.verdict is R15Verdict.GENUINE_IMPROVEMENT
+        assert v.difficulty_slope is None
+        assert "난이도 추세 미가용" in v.note
 
     async def test_gaming_suspect(self) -> None:
         """도움↓(4→3→2→1)이나 정답률↓(T→T→F→F) → GAMING_SUSPECT(힌트 회피 의심)."""

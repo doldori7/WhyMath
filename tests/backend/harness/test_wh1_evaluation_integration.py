@@ -33,11 +33,19 @@ from whymath_backend.db.models.activity import (
     ProblemAttempt,
 )
 from whymath_backend.db.models.dialogue import Dialogue
+from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.activity import ProblemAttempt as ProblemAttemptSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
-from whymath_backend.schema.enums import EventType, Persona
+from whymath_backend.schema.enums import (
+    Curriculum,
+    EventType,
+    Persona,
+    SourceType,
+    Subject,
+)
+from whymath_backend.schema.problem import Problem as ProblemSchema
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 from whymath_backend.security import create_access_token
 
@@ -96,6 +104,21 @@ async def _cleanup(user_ids: list[uuid.UUID]) -> None:
             )
             await conn.execute(
                 text("DELETE FROM user_profile WHERE user_id = ANY(:ids)"), {"ids": ids}
+            )
+    finally:
+        await engine.dispose()
+
+
+async def _cleanup_problems(problem_ids: list[uuid.UUID]) -> None:
+    """난이도 추세 테스트용 problem 행 정리(problem은 user FK가 없어 별도 정리)."""
+    if not problem_ids:
+        return
+    engine = create_async_engine(_settings().database_url)
+    ids = [str(p) for p in problem_ids]
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM problem WHERE problem_id = ANY(:ids)"), {"ids": ids}
             )
     finally:
         await engine.dispose()
@@ -167,6 +190,40 @@ def _attempt_row(uid: uuid.UUID, *, is_correct: bool, order: int) -> ProblemAtte
         ProblemAttemptSchema(
             attempt_id=uuid.uuid4(),
             user_id=uid,
+            started_at=datetime.now(UTC) + timedelta(seconds=order),
+            is_correct=is_correct,
+        )
+    )
+
+
+def _problem_row(pid: uuid.UUID, *, irt_difficulty_b: float) -> Problem:
+    """난이도 추세용 problem 행(보정 IRT b 지정) — 본문 미보유 자체생성 메타 전용 레코드.
+
+    source_type=자체생성(본문 미보유 불변식 대상 아님)·최소 필수 필드만. irt_difficulty_b로
+    보정 b를 직접 박아 resolve_item_difficulty_b가 보정값을 우선 쓰게 한다(휴리스틱 폴백 아님).
+    """
+    return Problem.from_schema(
+        ProblemSchema(
+            problem_id=pid,
+            source_type=SourceType.자체생성,
+            curriculum_version=Curriculum.REVISION_2015,
+            valid_from_year=2024,
+            subject=Subject.공통,
+            unit_codes=["UNIT-1"],
+            irt_difficulty_b=irt_difficulty_b,
+        )
+    )
+
+
+def _attempt_on_problem(
+    uid: uuid.UUID, *, problem_id: uuid.UUID, is_correct: bool, order: int
+) -> ProblemAttempt:
+    """problem_id를 가진 ProblemAttempt 1행 — 난이도 추세는 problem join이 필요하므로 FK 지정."""
+    return ProblemAttempt.from_schema(
+        ProblemAttemptSchema(
+            attempt_id=uuid.uuid4(),
+            user_id=uid,
+            problem_id=problem_id,
             started_at=datetime.now(UTC) + timedelta(seconds=order),
             is_correct=is_correct,
         )
@@ -340,5 +397,71 @@ def test_harness_metrics_no_data_when_empty_on_live_pg() -> None:
             assert body["sample_verify_events"] == 0
             assert body["sample_hint_events"] == 0
             assert body["sample_accuracy_attempts"] == 0
+            # R15 난이도 추세 — problem 미적재 → 난이도 표본 0(정답률도 0이라 INSUFFICIENT).
+            assert hrv["difficulty_slope"] is None
+            assert body["sample_difficulty_attempts"] == 0
     finally:
         asyncio.run(_cleanup([uid]))
+
+
+def test_harness_metrics_easy_problem_avoidance_gaming_on_live_pg() -> None:
+    """쉬운 문제 회피 — 도움↓·정답률 유지지만 문항 난이도↓(보정 b 하강) → GAMING_SUSPECT.
+
+    이 슬라이스 핵심: 정답률만 유지하면 GENUINE으로 오판하던 것을, 문항 IRT b 추세를 3번째
+    신호로 추가해 "쉬운 문제로 갈아탄 회피"를 잡는다. 실 PG에서 Problem(b 하강) + ProblemAttempt
+    (정답 유지) + 힌트제공(도움↓)을 적재해 verdict=gaming_suspect·사유=쉬운 문제 회피를 확인.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid = uuid.uuid4()
+    # 보정 b 하강(2.0→1.0→0.0→−1.0 = 어려움→쉬움)인 문항 4개 — started_at 순서로 갈아탄다.
+    pids = [uuid.uuid4() for _ in range(4)]
+    b_values = [2.0, 1.0, 0.0, -1.0]
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(
+            _add_all(
+                *(
+                    _problem_row(p, irt_difficulty_b=b)
+                    for p, b in zip(pids, b_values, strict=True)
+                )
+            )
+        )
+        # 도움↓(힌트 4→3→2→1) — 도움 감소 신호.
+        asyncio.run(
+            _add_all(
+                _hint_event_row(uid, hint_level=4, order=0),
+                _hint_event_row(uid, hint_level=3, order=1),
+                _hint_event_row(uid, hint_level=2, order=2),
+                _hint_event_row(uid, hint_level=1, order=3),
+            )
+        )
+        # 정답률 유지(전부 정답) — 그러나 문항이 쉬워지는 중(b↓) → 쉬운 문제 회피.
+        asyncio.run(
+            _add_all(
+                *(
+                    _attempt_on_problem(uid, problem_id=p, is_correct=True, order=i)
+                    for i, p in enumerate(pids)
+                )
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            resp = client.get("/v1/me/harness-metrics", headers=auth)
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            hrv = body["help_reduction_validated"]
+            # 도움↓·정답률 유지(>=0)지만 난이도↓ → GAMING_SUSPECT(쉬운 문제 회피).
+            assert hrv["verdict"] == "gaming_suspect"
+            assert hrv["help_slope"] is not None and hrv["help_slope"] < 0
+            assert hrv["accuracy_slope"] is not None and hrv["accuracy_slope"] >= 0
+            assert hrv["difficulty_slope"] is not None and hrv["difficulty_slope"] < 0
+            assert "쉬운 문제 회피" in hrv["note"]
+            assert body["sample_difficulty_attempts"] == 4
+    finally:
+        asyncio.run(_cleanup([uid]))
+        asyncio.run(_cleanup_problems(pids))
