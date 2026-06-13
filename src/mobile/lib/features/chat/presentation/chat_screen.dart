@@ -13,6 +13,15 @@ import 'coach_signal_card.dart';
 /// 슬로건 — 앱바 부제로 노출(브랜드 정체성·답이 아닌 이유).
 const String _slogan = '답이 아닌, 이유를 묻는 수학';
 
+/// 입력 모드 — 대화(단일 라인) 또는 풀이 단계(멀티라인·줄 분해 전송).
+enum _InputMode {
+  /// 자유 대화(기존 동작) — `send`로 학생 발화만 전송.
+  conversation,
+
+  /// 풀이 단계 입력 — 멀티라인을 줄 분해해 `sendSolution`으로 단계 전송.
+  solution,
+}
+
 /// 메인 대화 화면.
 ///
 /// 본문은 메시지 ListView(학생/코치 버블 구분)·하단 입력 행(TextField + 전송)으로 구성된다.
@@ -27,20 +36,41 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _inputController = TextEditingController();
 
+  /// 현재 입력 모드(기본=대화). 토글로 풀이 단계 모드와 전환한다.
+  _InputMode _mode = _InputMode.conversation;
+
   @override
   void dispose() {
     _inputController.dispose();
     super.dispose();
   }
 
-  /// 입력 텍스트를 컨트롤러로 보내고 입력 필드를 비운다.
+  /// 입력 모드를 대화↔풀이 단계로 토글한다(입력 내용은 유지하지 않고 비운다).
+  void _toggleMode() {
+    setState(() {
+      _mode = _mode == _InputMode.conversation
+          ? _InputMode.solution
+          : _InputMode.conversation;
+      _inputController.clear();
+    });
+  }
+
+  /// 입력 텍스트를 *현재 모드에 맞는* 컨트롤러 메서드로 보내고 입력 필드를 비운다.
+  ///
+  /// 대화 모드는 `send`(학생 발화), 풀이 단계 모드는 `sendSolution`(줄 분해→단계 전송).
+  /// 줄 분해 자체는 컨트롤러(L5 책임·수동 세그먼트)에서 하고, 화면은 원문만 넘긴다.
   Future<void> _onSend() async {
     final text = _inputController.text;
     if (text.trim().isEmpty) {
       return;
     }
     _inputController.clear();
-    await ref.read(chatControllerProvider.notifier).send(text);
+    final notifier = ref.read(chatControllerProvider.notifier);
+    if (_mode == _InputMode.solution) {
+      await notifier.sendSolution(text);
+    } else {
+      await notifier.send(text);
+    }
   }
 
   @override
@@ -89,7 +119,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _InputBar(
             controller: _inputController,
             enabled: !state.isSending,
+            mode: _mode,
             onSend: _onSend,
+            onToggleMode: _toggleMode,
           ),
         ],
       ),
@@ -202,46 +234,90 @@ class _SocraticBadge extends StatelessWidget {
   }
 }
 
-/// 하단 입력 행 — TextField + 전송 IconButton.
+/// 하단 입력 행 — 모드별 입력(대화=단일/짧은 멀티라인, 풀이=멀티라인) + 전송 버튼.
+///
+/// 풀이 단계 모드는 줄바꿈으로 단계를 구분하므로 Enter를 전송에 묶지 않고(줄바꿈 허용)
+/// 별도 "풀이 확인" 버튼으로만 보낸다. 대화 모드는 기존 동작(Enter 전송)을 유지한다.
 class _InputBar extends StatelessWidget {
   const _InputBar({
     required this.controller,
     required this.enabled,
+    required this.mode,
     required this.onSend,
+    required this.onToggleMode,
   });
 
   final TextEditingController controller;
   final bool enabled;
+  final _InputMode mode;
   final Future<void> Function() onSend;
+  final VoidCallback onToggleMode;
 
   @override
   Widget build(BuildContext context) {
+    final isSolution = mode == _InputMode.solution;
+    // 풀이 모드는 줄바꿈으로 단계를 구분하므로 Enter를 전송에 묶지 않는다(멀티라인 입력).
     return SafeArea(
       top: false,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Row(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: TextField(
-                controller: controller,
-                enabled: enabled,
-                minLines: 1,
-                maxLines: 4,
-                textInputAction: TextInputAction.send,
-                onSubmitted: enabled ? (_) => onSend() : null,
-                decoration: const InputDecoration(
-                  hintText: '생각을 적어 보세요',
-                  border: OutlineInputBorder(),
-                  isDense: true,
+            // 모드 토글 행 — 대화↔풀이 단계 전환(은근한 라벨·답 강조 없음).
+            Row(
+              children: [
+                IconButton(
+                  icon: Icon(
+                    isSolution
+                        ? Icons.chat_bubble_outline
+                        : Icons.format_list_numbered,
+                  ),
+                  tooltip: isSolution ? '대화로 전환' : '풀이 단계로 전환',
+                  onPressed: enabled ? onToggleMode : null,
                 ),
-              ),
+                Text(
+                  isSolution ? '풀이 단계' : '대화',
+                  style: Theme.of(context).textTheme.labelMedium,
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.send),
-              tooltip: '보내기',
-              onPressed: enabled ? onSend : null,
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: controller,
+                    enabled: enabled,
+                    minLines: isSolution ? 3 : 1,
+                    maxLines: isSolution ? 8 : 4,
+                    textInputAction: isSolution
+                        ? TextInputAction.newline
+                        : TextInputAction.send,
+                    onSubmitted:
+                        (!isSolution && enabled) ? (_) => onSend() : null,
+                    decoration: InputDecoration(
+                      hintText: isSolution
+                          ? '한 줄에 한 단계씩 적어 주세요'
+                          : '생각을 적어 보세요',
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (isSolution)
+                  FilledButton(
+                    onPressed: enabled ? onSend : null,
+                    child: const Text('풀이 확인'),
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.send),
+                    tooltip: '보내기',
+                    onPressed: enabled ? onSend : null,
+                  ),
+              ],
             ),
           ],
         ),

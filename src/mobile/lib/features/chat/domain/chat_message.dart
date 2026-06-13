@@ -24,6 +24,7 @@ enum ChatRole {
 /// - [text] : 표시 본문(학생=입력, 코치=`decision.prompt` 등 메타인지 유도 발화).
 /// - [socraticCategory] : 코치 발화의 소크라테스 카테고리 라벨(있으면 배지로 표시).
 /// - [response] : 코치 발화의 원본 응답(후속 신호 시각화용 보관·없으면 null).
+/// - [isSolution] : 학생 메시지가 *풀이 단계 입력*인지(대화 입력과 구분·표시 cue용).
 ///
 /// JSON 직렬화는 두지 않는다 — 서버 계약은 [CoachRequest]/[CoachResponse]가 전담하고
 /// 이 클래스는 *화면 상태*라 영속·전송 대상이 아니다(런타임 모델).
@@ -41,13 +42,20 @@ class ChatMessage with _$ChatMessage {
 
     /// 코치 발화의 원본 응답(후속 신호 렌더용·학생 메시지엔 null).
     CoachResponse? response,
+
+    /// 학생 메시지가 풀이 단계 입력인지(기본 false·대화 입력). 코치 메시지엔 의미 없음.
+    @Default(false) bool isSolution,
   }) = _ChatMessage;
 
   const ChatMessage._();
 
-  /// 학생 입력 한 줄을 만든다.
-  factory ChatMessage.student(String text) =>
-      ChatMessage(role: ChatRole.student, text: text);
+  /// 학생 입력 한 줄을 만든다([isSolution]이면 풀이 단계 입력으로 표시).
+  factory ChatMessage.student(String text, {bool isSolution = false}) =>
+      ChatMessage(
+        role: ChatRole.student,
+        text: text,
+        isSolution: isSolution,
+      );
 
   /// 코치 발화 한 줄을 만든다(원본 응답·소크라테스 카테고리 옵션 보관).
   factory ChatMessage.coach(

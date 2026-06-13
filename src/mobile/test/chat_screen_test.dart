@@ -115,6 +115,53 @@ void main() {
     expect(find.textContaining('틀렸'), findsNothing);
   });
 
+  testWidgets('풀이 단계 모드로 토글해 멀티라인 전송하면 신호 카드가 노출된다',
+      (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        _FakeCoachApi(
+          response: _response(
+            prompt: '같이 한 번 더 살펴볼까요?',
+            socraticCategory: '검증',
+            coaching: const SolutionCoaching(
+              trigger: CoachingTrigger(
+                focus: 'verify',
+                rationale: '근거(테스트)',
+                prompt: '', // 추가 버블 없이 신호 카드만 검증.
+                socraticCategory: '검증',
+              ),
+              arithmeticError: false,
+              solutionVerification: SolutionVerificationResult(
+                nCorrect: 1,
+                nIncorrect: 1,
+                nUnverifiable: 0,
+                nTransitions: 2,
+                unverifiedRatio: 0,
+                firstIncorrectIndex: 1,
+                hasIncorrect: true,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // 풀이 단계 모드로 토글한다(토글 아이콘 → 풀이 단계).
+    await tester.tap(find.byIcon(Icons.format_list_numbered));
+    await tester.pump();
+
+    // 멀티라인 풀이를 입력하고 "풀이 확인"으로 전송한다.
+    await tester.enterText(find.byType(TextField), 'a\nb\nc');
+    await tester.tap(find.text('풀이 확인'));
+    await tester.pumpAndSettle();
+
+    // 단계 검증 요약 신호 카드가 노출된다(전이 수 표시).
+    expect(find.textContaining('단계 확인'), findsOneWidget);
+    expect(find.textContaining('다시 볼 단계가 있어요'), findsOneWidget);
+    // 답 미루기 — "틀렸다" 단정은 노출하지 않는다.
+    expect(find.textContaining('틀렸'), findsNothing);
+  });
+
   testWidgets('API 실패 시 SnackBar로 에러를 알린다(앱은 유지)', (tester) async {
     await tester.pumpWidget(_wrap(_FakeCoachApi(shouldThrow: true)));
 
