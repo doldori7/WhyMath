@@ -56,6 +56,9 @@ from whymath_backend.db.models.dialogue import (
     DialogueTurn,
 )
 from whymath_backend.db.models.misconception_embedding import MisconceptionEmbedding
+from whymath_backend.db.models.misconception_hypothesis import (
+    MisconceptionHypothesisRecord,
+)
 from whymath_backend.db.models.problem import (
     Problem,
     ProblemRelation,
@@ -128,6 +131,8 @@ __all__ = [
     "DeletionAudit",
     # 슬라이스 105: MisconceptionEmbedding (pgvector 영속)
     "MisconceptionEmbedding",
+    # WH-1 2단계: MisconceptionHypothesisRecord (활성 오개념 가설 per-student 영속·§8.4)
+    "MisconceptionHypothesisRecord",
     # 슬라이스 3(개념그래프 아크): ConceptEmbedding (L1 개념 의미검색 pgvector 영속·UC 키)
     "ConceptEmbedding",
     # 개념그래프 소비 슬1: ConceptNode (L1 개념 메타 PG 프로젝션·UC 키·검색 enrichment 백킹)
