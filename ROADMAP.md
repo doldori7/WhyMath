@@ -27,6 +27,15 @@
 - **1인 capacity 가드**: Phase 1은 P0 FR 14 중 *핵심 모트 우선* — 조건파서·시그니처 패턴·동등문제 생성·소크라테스/Polya. 멀티모달·세특은 Phase 2+.
 - **후속(미반영)**: docs/data/licensing_safety.md·CLAUDE.md(페르소나 5종) 갱신 · 스키마 v1.0↔v1.1 통합 · FR 31 P0 매트릭스 · OCR 스택 결정 · Phase 3~5 전면 재구조화.
 
+### 하네스 도입 단계화 (2026-06-12 채택 — `docs/architecture/03b·04a`)
+
+> 두 하네스(WH-1 튜터링·WH-S 솔버)는 LLM 호출 방식 횡단 인프라. **"측정 없는 도입 없음"**·1인 capacity 가드에 따라 단계화하며, 각 단계는 0단계/S0 대리 지표 베이스라인 대비 개선을 게이트로 한다.
+
+- **Phase 1~2 (모트 시드)**: WH-1 **0단계(평가 하네스·대리 지표 7종·Langfuse)** + `verify_step`·`match_misconception` 2도구를 기존 파이프라인에 삽입(verify 커버리지 ≥70% 단원만). WH-S **S0~S1**(검증기 Tier1+2·솔버 루프·MCTS-lite) — 자기진화 없이도 검증 풀이 자산 축적.
+- **Phase 2~3 (확장)**: WH-1 **전체 도구 루프·웜 스타트·전략 계층(§11)**, 모델 라우팅 A→B→C(Haiku→Qwen3 섀도). WH-S **자기진화 라운드·PRM(S2~S3)** → WH-1 verify_step 품질 환류.
+- **장기 (보류)**: WH-S **Lean4 Tier3(S5·자동형식화)** · WH-1 **자체 모델 SFT/RL**(보상 설계·약관 검토 선행). 비용 절감은 *검증 필요 가설*(C단계 도달 시).
+- **스택 정합**: 두 문서 원안의 ChromaDB→**pgvector**(슬98)·Mathpix→**PaddleOCR+Qwen3-VL**(2026-05-28)로 교정 반영.
+
 ---
 
 ## 📅 90일 상세 (Phase 0 → Phase 1 진입)

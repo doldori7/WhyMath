@@ -65,6 +65,13 @@ L7 → L6 → L5 → L4 → L3 → L2 → L1
 - **개인정보 (동의·삭제)**
 - **국제화 (한국어 우선, 영문 Phase 5+)**
 
+### 하네스 (Harness) — LLM 호출 방식 횡단 인프라
+
+7계층은 *무엇을* 어디서 하는지의 축이고, **하네스는 L3(생성)·L4(결정)의 LLM 호출 *방식*을 바꾸는 횡단 인프라**다(새 계층이 아님·경계 원칙 유지). 프롬프트 스터핑 → 상태 외부화 + 도구 루프(agent loop)로 전환한다. 두 하네스:
+
+- **WH-1 (튜터링 하네스)** — 학생 세션 런타임. 상태(오개념 가설·증거 그래프)를 DB로 외부화하고 LLM은 매 턴 "다음 교수학적 행동"만 판단. L4 교수학(Polya·소크라테스·LTHC·오개념)·L2·L1을 *소비*하는 온라인 런타임. 상세: `04a_wh1_tutoring_harness.md`
+- **WH-S (솔버 하네스)** — 시스템 자체 풀이력 자기진화. MCTS 탐색 + 3-Tier 검증(수치·SymPy·Lean) + STaR/rStar-Math 루프. 학생 세션에 직접 개입하지 않는 **L3/L1 업스트림**(검증 풀이·PRM을 WH-1에 공급). 오프라인 배치. 상세: `03b_wh_s_solver_harness.md`
+
 ## 데이터 흐름 — 학생 메시지 1건
 
 ```
@@ -174,6 +181,8 @@ WhyMath 아키텍처는 *서로 직교하는 두 축*으로 본다:
 ## 참조
 
 - 각 계층 상세: `01_data_foundation.md` ~ `07_community.md`
+- L3 라우터 설계: `03a_l3_router_design.md`
+- 하네스: `03b_wh_s_solver_harness.md`(솔버·WH-S) · `04a_wh1_tutoring_harness.md`(튜터링·WH-1)
 - 시장 전략: `../strategy/`
 - 코딩 표준: `../standards/`
 - 프롬프트 라이브러리: `../prompts/`

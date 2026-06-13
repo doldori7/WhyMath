@@ -215,6 +215,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 
 ### 상세 (필요 시 읽기)
 - `docs/architecture/01-07_*.md` — 각 계층 상세 명세
+- `docs/architecture/03b_wh_s_solver_harness.md`·`04a_wh1_tutoring_harness.md` — 하네스 설계안(WH-S 솔버·WH-1 튜터링·횡단 인프라)
 - `docs/strategy/*.md` — 시장·차별화·리스크
 - `docs/data/licensing_safety.md` — 데이터 라이선스 매트릭스
 - `docs/prompts/*.md` — 프롬프트 템플릿 라이브러리
