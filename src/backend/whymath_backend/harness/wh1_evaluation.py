@@ -21,8 +21,11 @@
   ⑤ 도움 감소 곡선         — 🟡 MEASURED/NO_DATA: attempt_event(event_type=힌트제공)의
                              hint_level 시계열 OLS 기울기(음수=도움 감소). raw ⑤는 R15 미반영
                              이나, *파생 결합 판정* `help_reduction_validated`(R15)가 정답률
-                             추세(ProblemAttempt.is_correct OLS)와 교차해 진짜 개선 vs 교정기
-                             함정(힌트 회피)을 가린다(새 적재 0·기존 신호 결합만).
+                             추세(ProblemAttempt.is_correct OLS)·**문항 난이도 추세**(Problem의
+                             보정 b/휴리스틱 b OLS)와 교차해 진짜 개선 vs 교정기 함정(힌트
+                             회피)·**쉬운 문제 회피(난이도↓로 정답률 유지)**를 가린다(새 적재
+                             0·기존 신호 결합만). 난이도 추세는 R15의 *부분* 정밀화(난이도 회피
+                             1종 추가)일 뿐 — 이탈/무작위/세션 정렬 등 다른 gaming은 여전히 미반영.
   ⑥ 보정 점수(Brier)      — 🔴 REQUIRES_TOOL: elicit_prediction 도구 미구현.
   ⑦ 전이 점수             — 🔴 REQUIRES_TOOL: 시그니처 패턴 태깅·전이 출제 미구현.
 
@@ -47,6 +50,8 @@ from whymath_backend.db.models.activity import (
     ProblemAttempt,
 )
 from whymath_backend.db.models.dialogue import Dialogue
+from whymath_backend.db.models.problem import Problem
+from whymath_backend.l2.ability_estimation import resolve_item_difficulty_b
 from whymath_backend.schema.enums import EventType
 
 __all__ = [
@@ -144,16 +149,25 @@ class R15Verdict(str, Enum):
 
     설계안 §11.2 R15: "도움 감소를 *정답률 유지와 결합 판정* — 힌트 회피만으로는 개선 인정
     안 함". 즉 도움(hint_level)이 줄어도 정답률이 *같이* 떨어지면 그건 *힌트 회피/방치*(교정기
-    함정)이지 실력 향상이 아니다. 이 enum은 ⑤ 기울기 부호와 정답률 기울기 부호의 *교차*로
-    내는 판정이다(경계 0 기준·tolerance 없음). 종단·표본 의존·이탈/무작위 신호 미반영은
-    한계로 note에 정직 표기한다(R15 완전판정이 아니다).
+    함정)이지 실력 향상이 아니다. 이 enum은 ⑤ 기울기 부호·정답률 기울기 부호·**문항 난이도
+    기울기 부호**의 *교차*로 내는 판정이다(경계 0 기준·tolerance 없음). 종단·표본 의존·이탈/
+    무작위/세션 정렬 신호 미반영은 한계로 note에 정직 표기한다(R15 완전판정이 아니다 — 난이도
+    추세는 "쉬운 문제 회피" 1종만 더 잡는 *부분* 정밀화다).
     """
 
     GENUINE_IMPROVEMENT = "genuine_improvement"
-    """진짜 개선 — 도움↓·정답률 유지/↑(힌트 회피가 아니라 실력으로 도움이 줄었다)."""
+    """진짜 개선 — 도움↓·정답률 유지/↑·(난이도 유지/↑ 또는 난이도 추세 미가용).
+
+    힌트 회피가 아니라 실력으로 도움이 줄었다. 단 난이도 추세가 미가용(b 데이터 부족)이면
+    "쉬운 문제 회피"는 *미검증*이다 — note에 blind spot 캐비엇을 정직 표기한다.
+    """
 
     GAMING_SUSPECT = "gaming_suspect"
-    """교정기 함정 경보 — 도움↓이나 정답률↓(힌트 회피/방치 의심·실력 향상 아님)."""
+    """교정기 함정 경보 — 도움↓이나 (정답률↓ **또는** 정답률 유지인데 난이도↓).
+
+    두 사유: ⓐ 정답률↓(힌트 회피/방치 의심) ⓑ 정답률 유지인데 문항 난이도↓(쉬운 문제로
+    갈아타 정답률을 유지하는 회피). 둘 다 실력 향상이 아니다 — note에 사유를 구분 표기한다.
+    """
 
     NO_HELP_REDUCTION = "no_help_reduction"
     """도움이 줄지 않음(기울기 >= 0) — 애초에 개선 신호가 아니다(판정 대상 밖)."""
@@ -163,7 +177,7 @@ class R15Verdict(str, Enum):
 
 
 class HelpReductionValidation(BaseModel):
-    """R15 결합 판정 결과 — ⑤ 도움 감소(help_slope)와 정답률 추세(accuracy_slope)의 교차.
+    """R15 결합 판정 결과 — ⑤ 도움 감소·정답률 추세·**문항 난이도 추세**의 3신호 교차.
 
     ⑤ raw 도움 감소 기울기만으로는 *힌트 회피*(틀려도 레벨이 낮아짐)와 *실력 향상*을 구분
     못 한다(⑤ note의 R15 미반영 한계). 이 모델은 정답률 추세(`ProblemAttempt.is_correct`의
@@ -172,11 +186,21 @@ class HelpReductionValidation(BaseModel):
     정답률*인 `is_correct`를 쓰는 이유: R15의 "정답률"에 직접 대응하고 ① 대비 더 직접적이다
     (①은 풀이 제출 턴의 수치 검산 통과 proxy일 뿐).
 
-    한계(정직 표기): 종단·표본 의존(한쪽이라도 _MIN_SLOPE_POINTS 미만이면 INSUFFICIENT_DATA)·
-    경계는 slope 0(tolerance 없음)·이탈/무작위/난이도 변화 신호 미반영. R15 완전판정이 아니다.
+    **난이도 추세 정밀화(이 슬라이스 추가)**: 정답률 유지(>=0)만으로 GENUINE을 내면 학생이
+    *쉬운 문제로 갈아타* 정답률을 유지하는 회피(도움↓·정답률 유지지만 *문항이 쉬워지는 중*)를
+    오판한다. 이를 잡기 위해 같은 ProblemAttempt 집합의 문항 IRT 난이도 b(보정 b 우선·없으면
+    `difficulty_overall` 휴리스틱·`resolve_item_difficulty_b`) OLS 기울기를 3번째 신호로 쓴다 —
+    b 높을수록 어려움이므로 difficulty_slope<0 = 문항이 쉬워지는 중 = 쉬운 문제 회피. 도움↓·
+    정답률 유지인데 난이도↓면 GENUINE이 아니라 GAMING_SUSPECT(쉬운 문제 회피)로 격하한다.
+
+    한계(정직 표기): 종단·표본 의존(help/accuracy 한쪽이라도 _MIN_SLOPE_POINTS 미만이면
+    INSUFFICIENT_DATA)·경계는 slope 0(tolerance 없음). 난이도 추세는 *부분* 정밀화일 뿐 —
+    난이도 b가 부족하면(둘 다 None인 문항만이거나 표본<3) difficulty_slope=None이고, 그때는
+    2신호로만 판정하되 "쉬운 문제 회피 미검증" 캐비엇을 note에 표기한다(blind spot 정직).
+    이탈/무작위/세션 정렬 등 다른 gaming은 여전히 미반영(R15 완전판정이 아니다).
     """
 
-    verdict: R15Verdict = Field(description="R15 결합 판정 — 도움↓·정답률 교차 결과.")
+    verdict: R15Verdict = Field(description="R15 결합 판정 — 도움↓·정답률·난이도 교차 결과.")
     help_slope: float | None = Field(
         default=None,
         description="⑤ 도움 감소 OLS 기울기(raw·음수=도움 감소). 표본 부족이면 None(날조 0 금지).",
@@ -185,7 +209,15 @@ class HelpReductionValidation(BaseModel):
         default=None,
         description="정답률(is_correct 1/0) OLS 기울기(양수=상승). 표본 부족이면 None(날조 0).",
     )
-    note: str = Field(description="한국어 판정 근거 — 임계(slope 0)·교차 결과·한계.")
+    difficulty_slope: float | None = Field(
+        default=None,
+        description=(
+            "문항 IRT 난이도 b(보정 b 우선·휴리스틱 폴백) OLS 기울기 — 양수=문항 난이도 상승·"
+            "음수=쉬워지는 중(쉬운 문제 회피 신호). b 유효 표본 부족이면 None(날조 0 금지·"
+            "그때는 2신호 판정 + blind spot 캐비엇)."
+        ),
+    )
+    note: str = Field(description="한국어 판정 근거 — 임계(slope 0)·교차 결과·사유 구분·한계.")
 
 
 class SurrogateMetrics(BaseModel):
@@ -246,6 +278,13 @@ class SurrogateMetrics(BaseModel):
         default=0,
         description=(
             "R15 정답률 추세 집계 대상 ProblemAttempt 수(is_correct NOT NULL·OLS 포인트 수)."
+        ),
+    )
+    sample_difficulty_attempts: int = Field(
+        default=0,
+        description=(
+            "R15 난이도 추세 집계 대상 ProblemAttempt 수(problem join·유효 b NOT NULL·OLS "
+            "포인트 수). 정답률 표본과 다를 수 있음(b 없는 문항·problem_id NULL 제외)."
         ),
     )
     window_start: datetime | None = Field(
@@ -325,26 +364,40 @@ def _help_reduction_from_levels(hint_levels: list[int]) -> Metric:
     )
 
 
-def _judge_r15(help_slope: float | None, accuracy_slope: float | None) -> HelpReductionValidation:
-    """R15 결합 판정(순수) — ⑤ 도움 감소 기울기와 정답률 기울기를 교차해 verdict를 낸다.
+def _judge_r15(
+    help_slope: float | None,
+    accuracy_slope: float | None,
+    difficulty_slope: float | None,
+) -> HelpReductionValidation:
+    """R15 결합 판정(순수) — ⑤ 도움 감소·정답률·**문항 난이도** 3신호를 교차해 verdict를 낸다.
 
     설계안 §11.2 R15: 도움 감소를 *정답률 유지와 결합 판정* — 힌트 회피만으로 개선 인정 안 함.
-    경계는 slope 0(tolerance 없이 명확)·날조 0 금지(한쪽이라도 None이면 INSUFFICIENT_DATA):
+    경계는 slope 0(tolerance 없이 명확)·날조 0 금지(help/accuracy 한쪽이라도 None이면
+    INSUFFICIENT_DATA). 난이도(difficulty_slope)는 *선택* 신호다 — None이면 2신호로 판정하되
+    blind spot을 note에 캐비엇 표기한다(가짜 0/기울기 금지):
 
     - help_slope None **또는** accuracy_slope None → INSUFFICIENT_DATA(종단 표본 부족·교차 불가).
     - help_slope >= 0(도움 안 줄어듦) → NO_HELP_REDUCTION(개선 신호 자체가 아님).
-    - help_slope < 0 **and** accuracy_slope >= 0(정답률 유지/상승) → GENUINE_IMPROVEMENT.
-    - help_slope < 0 **and** accuracy_slope < 0(정답률 하락) → GAMING_SUSPECT(힌트 회피/방치 의심).
+    - help_slope < 0 **and** accuracy_slope < 0(정답률 하락) → GAMING_SUSPECT(힌트 회피/방치).
+    - help_slope < 0 **and** accuracy_slope >= 0(정답률 유지/상승):
+        - difficulty_slope is not None **and** difficulty_slope < 0(난이도↓) →
+          GAMING_SUSPECT(쉬운 문제 회피 — 쉬운 문제로 갈아타 정답률 유지). ← 이 슬라이스 정밀화.
+        - else(난이도 유지/상승 또는 난이도 추세 미가용) → GENUINE_IMPROVEMENT.
+          단 difficulty_slope None이면 "쉬운 문제 회피 미검증" 캐비엇을 note에 표기(blind spot).
 
     정답률 신호는 `ProblemAttempt.is_correct`의 OLS 기울기(실제 정답률 추세)다 — ①(검산
     미적발 proxy)이 아니라 is_correct를 쓰는 이유는 R15의 "정답률"에 직접 대응하고 더
-    직접적이기 때문. 한계(종단·표본 의존·경계 0·이탈/난이도 미반영)는 note에 정직 표기한다.
+    직접적이기 때문. 난이도 신호는 문항 IRT 난이도 b(보정 b 우선·휴리스틱 폴백)의 OLS
+    기울기로, b 높을수록 어려움이라 음수=쉬워지는 중이다. 난이도 추세는 "쉬운 문제 회피"
+    1종만 더 잡는 *부분* 정밀화일 뿐 — 이탈/무작위/세션 정렬 등 다른 gaming은 여전히 미반영
+    (R15 완전판정이 아니다)임을 note에 정직 표기한다.
     """
     if help_slope is None or accuracy_slope is None:
         return HelpReductionValidation(
             verdict=R15Verdict.INSUFFICIENT_DATA,
             help_slope=help_slope,
             accuracy_slope=accuracy_slope,
+            difficulty_slope=difficulty_slope,
             note=(
                 "도움/정답률 한쪽이라도 종단 표본 부족(최소 "
                 f"{_MIN_SLOPE_POINTS}점)으로 R15 교차검증 불가 — verdict 미산출(날조 판정 금지). "
@@ -357,32 +410,58 @@ def _judge_r15(help_slope: float | None, accuracy_slope: float | None) -> HelpRe
             verdict=R15Verdict.NO_HELP_REDUCTION,
             help_slope=help_slope,
             accuracy_slope=accuracy_slope,
+            difficulty_slope=difficulty_slope,
             note=(
                 f"도움 기울기 {help_slope:+.4f} >= 0 — 도움이 줄지 않아 개선 신호 자체가 아님"
-                "(임계 slope 0). 정답률 추세와 교차 불필요."
+                "(임계 slope 0). 정답률·난이도 추세와 교차 불필요."
             ),
         )
 
-    if accuracy_slope >= 0:
+    if accuracy_slope < 0:
         return HelpReductionValidation(
-            verdict=R15Verdict.GENUINE_IMPROVEMENT,
+            verdict=R15Verdict.GAMING_SUSPECT,
             help_slope=help_slope,
             accuracy_slope=accuracy_slope,
+            difficulty_slope=difficulty_slope,
             note=(
-                f"진짜 개선 — 도움 기울기 {help_slope:+.4f} < 0(도움↓)·정답률 기울기 "
-                f"{accuracy_slope:+.4f} >= 0(유지/상승). 힌트 회피가 아니라 실력으로 도움 감소"
-                "(임계 slope 0·정답률=is_correct 추세). 종단·표본 의존·이탈 미반영(완전판정 아님)."
+                f"교정기 함정 경보(사유: 정답률 하락) — 도움 기울기 {help_slope:+.4f} < 0(도움↓)"
+                f"이나 정답률 기울기 {accuracy_slope:+.4f} < 0(하락). 힌트 회피/방치 의심(실력 "
+                "향상 아님·임계 slope 0·정답률=is_correct 추세). 종단·표본 의존·이탈/무작위/세션 "
+                "정렬 신호 미반영(R15 완전판정 아님)."
             ),
         )
 
+    # 여기부터 도움↓·정답률 유지/상승 — 난이도 추세로 "쉬운 문제 회피"를 가른다(3번째 신호).
+    if difficulty_slope is not None and difficulty_slope < 0:
+        return HelpReductionValidation(
+            verdict=R15Verdict.GAMING_SUSPECT,
+            help_slope=help_slope,
+            accuracy_slope=accuracy_slope,
+            difficulty_slope=difficulty_slope,
+            note=(
+                f"교정기 함정 경보(사유: 쉬운 문제 회피·난이도↓) — 도움 기울기 {help_slope:+.4f} "
+                f"< 0(도움↓)·정답률 기울기 {accuracy_slope:+.4f} >= 0(유지/상승)이나 문항 난이도 "
+                f"기울기 {difficulty_slope:+.4f} < 0(쉬워지는 중). 쉬운 문제로 갈아타 정답률을 "
+                "유지한 회피(실력 향상 아님·임계 slope 0·난이도=IRT b 추세·b↓=쉬워짐). 종단·표본 "
+                "의존·이탈/무작위/세션 정렬 신호 미반영(R15 완전판정 아님)."
+            ),
+        )
+
+    # 난이도 유지/상승, 또는 난이도 추세 미가용 → 진짜 개선. 미가용이면 blind spot 캐비엇.
+    if difficulty_slope is None:
+        difficulty_note = "난이도 추세 미가용(b 부족) — 쉬운문제 회피 미검증(blind spot). "
+    else:
+        difficulty_note = f"난이도 기울기 {difficulty_slope:+.4f} >= 0(쉬운문제 회피 아님). "
     return HelpReductionValidation(
-        verdict=R15Verdict.GAMING_SUSPECT,
+        verdict=R15Verdict.GENUINE_IMPROVEMENT,
         help_slope=help_slope,
         accuracy_slope=accuracy_slope,
+        difficulty_slope=difficulty_slope,
         note=(
-            f"교정기 함정 경보 — 도움 기울기 {help_slope:+.4f} < 0(도움↓)이나 정답률 기울기 "
-            f"{accuracy_slope:+.4f} < 0(하락). 힌트 회피/방치 의심(실력 향상 아님·임계 slope 0·"
-            "정답률=is_correct 추세). 종단·표본 의존·이탈/난이도 신호 미반영(R15 완전판정 아님)."
+            f"진짜 개선 — 도움 기울기 {help_slope:+.4f} < 0(도움↓)·정답률 기울기 "
+            f"{accuracy_slope:+.4f} >= 0(유지/상승). {difficulty_note}힌트 회피가 아니라 실력으로 "
+            "도움 감소(임계 slope 0·정답률=is_correct 추세). 종단·표본 의존·이탈/무작위/세션 정렬 "
+            "미반영(R15 완전판정 아님·난이도 추세는 부분 정밀화)."
         ),
     )
 
@@ -626,7 +705,33 @@ async def compute_wh1_surrogate_metrics(
     accuracy_series = [1.0 if row[0] else 0.0 for row in accuracy_rows if row[0] is not None]
     help_slope = _ols_slope([float(level) for level in hint_levels])
     accuracy_slope = _ols_slope(accuracy_series)
-    help_reduction_validated = _judge_r15(help_slope, accuracy_slope)
+
+    # ── R15 난이도 추세 (정답률과 같은 ProblemAttempt 집합을 Problem JOIN해 유효 b OLS) ──
+    # "쉬운 문제로 갈아타 정답률 유지" gaming을 잡는 3번째 신호. 같은 user_id/시간창 필터·started_at
+    # 오름차순으로, ProblemAttempt를 Problem(problem_id join)에 붙여 irt_difficulty_b·difficulty_
+    # overall을 가져온다. resolve_item_difficulty_b로 유효 b를 해석 — *보정 b 우선·휴리스틱 폴백·
+    # 둘 다 None이면 None*. None인 attempt는 난이도 시계열에서 제외(정답률 표본과 표본이 다를 수
+    # 있음·is_correct는 NULL만 제외하지만 난이도는 problem_id NULL·b 둘 다 None도 제외). ORM
+    # join만(원시 SQL 0). 정답률 쿼리와 별도 조회 — 제외 규칙이 달라 표본이 어긋나도 메타로 분리.
+    difficulty_rows = (
+        await session.execute(
+            select(Problem.irt_difficulty_b, Problem.difficulty_overall)
+            .select_from(ProblemAttempt)
+            .join(Problem, ProblemAttempt.problem_id == Problem.problem_id)
+            .where(*accuracy_conds)
+            .order_by(ProblemAttempt.started_at.asc())
+        )
+    ).all()
+    # 각 행의 (보정 b, 휴리스틱 difficulty)를 유효 b로 해석 — None(둘 다 부재)이면 시계열 제외.
+    # Numeric(difficulty_overall)은 Decimal일 수 있어 float 변환은 resolve_item_difficulty_b가 처리.
+    difficulty_series = [
+        b
+        for irt_b, difficulty in difficulty_rows
+        if (b := resolve_item_difficulty_b(irt_b, difficulty)) is not None
+    ]
+    difficulty_slope = _ols_slope(difficulty_series)
+
+    help_reduction_validated = _judge_r15(help_slope, accuracy_slope, difficulty_slope)
 
     return SurrogateMetrics(
         verify_pass_rate=verify_metric,
@@ -642,6 +747,7 @@ async def compute_wh1_surrogate_metrics(
         sample_verify_events=verify_total,
         sample_hint_events=len(hint_levels),
         sample_accuracy_attempts=len(accuracy_series),
+        sample_difficulty_attempts=len(difficulty_series),
         window_start=since,
         window_end=until,
         user_scoped=user_id is not None,
