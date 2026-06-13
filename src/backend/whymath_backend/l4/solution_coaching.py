@@ -21,6 +21,15 @@ WH-1 1단계 결선: `solution_steps`(L5가 분해한 단계 시퀀스)가 제�
 (OR)** 으로 결합돼 검산 코칭을 정밀화하되 기존 신호를 *약화하지 않는다*. 단계 미제공 시
 모든 기존 동작이 *완전 불변*이다(하위호환). 텍스트→단계 *분해*(NLP)는 L5 OCR·공간정보
 책임으로 본 모듈 범위 밖 — 백엔드는 제공된 단계만 검증한다.
+
+WH-1 1단계 OCR 신뢰 게이팅: `ocr_confidence`(L5 OCR 인식 신뢰도)가 낮으면 분해 단계 텍스트
+자체가 *오인식*일 수 있어, `verify_solution`이 낸 step-incorrect가 *학생 오류가 아니라 OCR
+오류*일 수 있다. 이때 학생의 옳은 풀이를 거짓 지적하는 정확성 위반을 막으려고, 저신뢰 OCR일
+때 step 신호를 코칭 *결정*에서 누그러뜨린다(`step_incorrect_trusted`·위치 비지목). 게이팅은
+*오케스트레이터*만 수행하고 `verify_solution`은 순수(판정 불변)로 유지한다. 보류 사실은
+`verification_ocr_gated`로 정직히 노출하고 원 verdict(`solution_verification`)는 투명성 위해
+그대로 노출한다. 텍스트 레벨 신호(`validate_response`)는 OCR 분해와 무관해 게이팅하지 않는다.
+임계는 match_gate 게이트 ②(0.8)와 단일 출처를 공유한다(일관성).
 """
 
 from __future__ import annotations
@@ -41,8 +50,14 @@ from whymath_backend.l3.verify_solution import (
     verify_solution,
 )
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
+from whymath_backend.l4.misconception.match_gate import _DEFAULT_OCR_THRESHOLD
 from whymath_backend.l4.step_shadow import observe_step_breaks
 from whymath_backend.schema.enums import StepType
+
+# OCR 신뢰도 하한 — match_gate 게이트 ②(§3.3)와 *단일 출처* 공유(임계 일관성). 이 미만이면
+# 분해 단계 텍스트 자체가 OCR 오인식일 수 있어, verify_solution이 낸 step-incorrect 신호를
+# 코칭 *결정*에서 누그러뜨린다(거짓 지적 방지·정확성 #1). 새 임계를 도입하지 않는다.
+_OCR_THRESHOLD = _DEFAULT_OCR_THRESHOLD
 
 SlipKind = ValidationSignalKind
 """검출된 슬립 종류 — L3 `ValidationSignalKind`와 동일 도메인(별칭). L5 UI 분기·L7 분석용.
@@ -103,7 +118,24 @@ class SolutionCoaching(BaseModel):
             "단계 미제공 시 None(텍스트 레벨 폴백 — 기존 동작 완전 불변). **노출 안전**: 입력은 "
             "*학생 자신의 단계*이고 `verify_step`의 `reason`('동치 아님 — SymPy: before ≠ "
             "after')은 검증 사유일 뿐 정답/본문이 아니다(verify_step은 정답을 알지도 못함). "
-            "단계 레벨 incorrect는 텍스트 신호와 *추가적(OR)*으로 결합돼 검산 코칭을 정밀화한다."
+            "단계 레벨 incorrect는 텍스트 신호와 *추가적(OR)*으로 결합돼 검산 코칭을 정밀화한다. "
+            "**투명성**: 이 필드는 *원 verdict*를 그대로 노출한다 — 저신뢰 OCR로 코칭 결정에서 "
+            "보류돼도(`verification_ocr_gated`) `has_incorrect`/`first_incorrect_index`는 "
+            "verify_solution이 낸 값 그대로다(조용히 숨기지 않음)."
+        ),
+    )
+    verification_ocr_gated: bool = Field(
+        default=False,
+        description=(
+            "WH-1 1단계 — `verify_solution`이 step-incorrect를 냈으나 OCR 신뢰도가 낮아"
+            "(<0.8·match_gate 게이트 ② 임계 공유) 코칭 *결정*에서 그 신호를 *보류*했는지 여부. "
+            "True면 분해 단계 텍스트 자체가 OCR 오인식일 수 있어(예: '(a+b)³'를 '(a+b)²'로 오독) "
+            "verify의 incorrect가 *학생 오류가 아니라 OCR 오류*일 가능성이 있다 — 학생의 옳은 "
+            "풀이를 거짓 지적하지 않으려고(정확성 #1·'틀렸다 정서 강화 금지') step 신호를 verify "
+            "코칭에서 누그러뜨리고 위치도 지목하지 않는다. L5는 이 플래그를 보고 *OCR 재확인 후* "
+            "다시 판단하라(재확인 UX). `solution_verification`(원 verdict)은 투명성 위해 그대로 "
+            "노출되고, 텍스트 레벨 신호(`validation_signal`)는 OCR 분해와 무관해 게이팅되지 "
+            "않는다. OCR 미제공(None)·고신뢰(≥0.8)·step-incorrect 없음이면 항상 False(동작 불변)."
         ),
     )
 
@@ -118,6 +150,7 @@ def recommend_coaching_for_solution(
     validator: SeedValidator | None = None,
     solution_steps: Sequence[str] | None = None,
     solution_step_types: Sequence[StepType | None] | None = None,
+    ocr_confidence: float | None = None,
     discrepancy_tol: float = 0.2,
     mastery_threshold: float = 0.6,
 ) -> SolutionCoaching:
@@ -143,10 +176,26 @@ def recommend_coaching_for_solution(
     넘긴다(결정 함수 시그니처·로직 불변). `solution_steps` 미제공·전이 0개면 `verification=None`·
     신호는 기존 텍스트 레벨 그대로 — **모든 기존 동작 완전 불변**(하위호환).
 
+    **OCR 신뢰 게이팅(WH-1 1단계)**: `ocr_confidence`(0~1·L5 OCR 인식 신뢰도)가 제공되고
+    `_OCR_THRESHOLD`(0.8·match_gate 게이트 ② 임계 공유) 미만이면(`ocr_low`), 분해 단계 텍스트
+    자체가 OCR 오인식일 수 있어(예: "(a+b)³"를 "(a+b)²"로 오독) `verify_solution`이 낸
+    step-incorrect 신호를 코칭 *결정*에서 누그러뜨린다 — 학생의 옳은 풀이를 거짓 지적하지
+    않으려는 정확성 #1 가드(CLAUDE.md "틀렸다 정서 강화 금지"). 신뢰 게이팅:
+    `step_incorrect_trusted = step_incorrect and not ocr_low`. 이 *신뢰분만* verify 신호 결합에
+    반영하고(arithmetic_error·verify_steps·incorrect_step_index), 저신뢰 OCR이면 *위치도 지목하지
+    않는다*(거짓 지적 방지). 보류 사실은 `verification_ocr_gated`(=`step_incorrect and ocr_low`)로
+    노출한다 — L5가 *OCR 재확인 후* 다시 판단하라는 신호다(조용히 버리지 않음·정직). **텍스트
+    레벨 신호는 게이팅하지 않는다**: `validate_response`(student_solution 텍스트 거짓 등식)는 OCR
+    분해와 무관하므로 `signal` 경로는 *불변*이다(OCR 저신뢰여도 텍스트 거짓 등식은 유효). 게이팅은
+    *step(verify_solution) 신호만*이다. `ocr_confidence` 미제공(None)이면 `ocr_low=False`라
+    `step_incorrect_trusted == step_incorrect` — **모든 기존 동작 완전 불변**(하위호환).
+
     **redaction**: `verify_solution` 결과(`solution_verification`)의 `reason`('동치 아님 —
     SymPy: before ≠ after')은 *학생 자신의 단계*(solution_steps 입력)에 대한 검증 사유라
     노출이 안전하다 — 정답/본문이 아니다(`verify_step`은 정답을 알지도 못함). `SolutionCoaching`
-    에 채워 L5가 단계별 검산 UI(has_incorrect·first_incorrect_index)를 그릴 수 있게 한다.
+    에 채워 L5가 단계별 검산 UI(has_incorrect·first_incorrect_index)를 그릴 수 있게 한다. 원
+    verdict(`solution_verification`)는 저신뢰 OCR로 보류돼도 *투명성* 위해 그대로 노출한다 —
+    코칭 *결정*엔 신뢰분(`step_incorrect_trusted`)만 반영하고 보류 사실은 플래그로 정직히 알린다.
 
     `problem_id`·`expected_answer`(slice 64)는 *step shadow 진단 맥락*으로만 쓰여 반환
     `SolutionCoaching`을 *바꾸지 않는다*(비노출 불변). `expected_answer`는 호출자(api 계층)가
@@ -162,21 +211,30 @@ def recommend_coaching_for_solution(
     if solution_steps is not None and len(solution_steps) >= 2:
         verification = verify_solution(solution_steps, solution_step_types)
 
-    # 신호 결합은 *추가적(OR)* — 텍스트 레벨 신호를 약화하지 않고 단계 레벨 incorrect만 더한다.
+    # WH-1 1단계 — OCR 신뢰 게이팅. ocr_confidence가 제공되고 임계(0.8·match_gate 공유) 미만이면
+    # 분해 단계 텍스트가 OCR 오인식일 수 있어 step 신호를 코칭 결정에서 누그러뜨린다(정확성 #1).
+    # 미제공(None)이면 ocr_low=False → step_incorrect_trusted == step_incorrect(기존 동작 불변).
+    ocr_low = ocr_confidence is not None and ocr_confidence < _OCR_THRESHOLD
     step_incorrect = verification is not None and verification.has_incorrect
-    arithmetic_error = (signal is not None) or step_incorrect
+    # 신뢰분 — 저신뢰 OCR이면 step-incorrect를 코칭 결정에 반영하지 않는다(거짓 지적 방지).
+    step_incorrect_trusted = step_incorrect and not ocr_low
+    # 신호 결합은 *추가적(OR)* — 텍스트 레벨 신호를 약화하지 않고 *신뢰* 단계 incorrect만 더한다.
+    # 텍스트 레벨 신호(signal)는 OCR 분해와 무관하므로 *게이팅하지 않는다*(저신뢰여도 유효).
+    arithmetic_error = (signal is not None) or step_incorrect_trusted
     # 다단계 대수 슬립(kind="solution")이면 verify 발화를 *단계 자가검산*으로 변형한다(slice 61).
     # 단계 레벨 incorrect도 *단계 자가검산* 프레이밍과 자연 정합 → 같은 변형으로 OR 결합한다.
     # L3 kind→순수 bool 환산은 *오케스트레이터만* 수행(L4 recommend_coaching은 kind를 모름).
-    verify_steps = (signal is not None and signal.kind == "solution") or step_incorrect
-    # 단계 레벨 incorrect가 있으면 첫 incorrect 전이 인덱스를 *위치 신호*로 전달한다(slice 후속).
+    verify_steps = (signal is not None and signal.kind == "solution") or step_incorrect_trusted
+    # *신뢰* 단계 incorrect가 있으면 첫 incorrect 전이 인덱스를 *위치 신호*로 전달한다(slice 후속).
     # verify 발화를 *위치 인지* 점층(앞단계 통과 확인 + 그 지점 자가검산)으로 좁히되 정답/수정은
-    # 주지 않는다(답 미루기·LTHC). 텍스트 레벨만 있고 단계 신호가 없으면 None(위치 비지목·하위호환).
+    # 주지 않는다(답 미루기·LTHC). 저신뢰 OCR이거나 텍스트 레벨만 있으면 None(위치 비지목·하위호환).
     incorrect_step_index = (
         verification.first_incorrect_index
-        if verification is not None and verification.has_incorrect
+        if (verification is not None and step_incorrect_trusted)
         else None
     )
+    # verify가 incorrect를 냈으나 OCR 저신뢰로 코칭에서 *보류*했음을 노출(조용히 버리지 않음·정직).
+    verification_ocr_gated = step_incorrect and ocr_low
     trigger = recommend_coaching(
         bkt_mastery,
         irt_theta,
@@ -193,6 +251,7 @@ def recommend_coaching_for_solution(
         error_kind=signal.kind if signal is not None else None,
         error_span=signal.span if signal is not None else None,
         solution_verification=verification,
+        verification_ocr_gated=verification_ocr_gated,
     )
     # 중간 step 등가성 shadow 관측(slice 63) — fire-and-forget·반환 무반영(비노출·비차단).
     # `result`를 *바꾸지 않는다* — observe_step_breaks는 None을 반환하고 로그로만 sink한다.
