@@ -167,3 +167,127 @@ class TestVerifyStepSchema:
             json={"expr_before": "2+3", "expr_after": "5", "step_type": "bogus"},
         )
         assert resp.status_code == 422
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# POST /v1/verify-solution — 연쇄 검증 집계(§3.1). verify-step 패턴 미러.
+# ──────────────────────────────────────────────────────────────────────────
+class TestVerifySolution200:
+    def test_correct_chain(self) -> None:
+        resp = _client().post(
+            "/v1/verify-solution",
+            json={"steps": ["2*(x+1)", "2*x+2", "2*(x+1)"]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["n_transitions"] == 2
+        assert body["n_correct"] == 2
+        assert body["has_incorrect"] is False
+        assert body["first_incorrect_index"] is None
+        assert body["unverified_ratio"] == 0.0
+        assert len(body["steps"]) == 2
+
+    def test_chain_with_incorrect(self) -> None:
+        # 전이0 correct·전이1 incorrect(2x→2x+1)·전이2 correct → first_incorrect_index=1.
+        resp = _client().post(
+            "/v1/verify-solution",
+            json={"steps": ["2*x", "2*x", "2*x+1", "2*x+1"]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["has_incorrect"] is True
+        assert body["first_incorrect_index"] == 1
+        assert body["n_incorrect"] == 1
+
+    def test_unverified_ratio(self) -> None:
+        # 전이0 correct(2+3≡5)·전이1 unverifiable(5→산문) → ratio 0.5.
+        resp = _client().post(
+            "/v1/verify-solution",
+            json={"steps": ["2+3", "5", "어쩌고저쩌고"]},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["n_unverifiable"] == 1
+        assert body["unverified_ratio"] == 0.5
+
+    def test_step_types_propagated(self) -> None:
+        resp = _client().post(
+            "/v1/verify-solution",
+            json={
+                "steps": ["2+3", "5", "5"],
+                "step_types": ["계산", "조건해석"],
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["steps"][0]["step_type"] == "계산"
+        # 비대수 step_type이면 동치(5≡5)여도 unverifiable(verify_step 보수성 상속).
+        assert body["steps"][1]["step_type"] == "조건해석"
+        assert body["steps"][1]["state"] == "unverifiable"
+
+    def test_short_sequence_empty_result(self) -> None:
+        # 단계 1개 → 전이 0개의 정직한 빈 집계(200·에러 아님).
+        resp = _client().post("/v1/verify-solution", json={"steps": ["2+3"]})
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["n_transitions"] == 0
+        assert body["steps"] == []
+        assert body["has_incorrect"] is False
+
+
+class TestVerifySolutionExposureContract:
+    """노출 계약 — 응답은 검증 집계뿐(상태·카운트·비율). 정답/본문 누출 0."""
+
+    def test_response_field_set(self) -> None:
+        resp = _client().post("/v1/verify-solution", json={"steps": ["2+3", "5"]})
+        assert set(resp.json().keys()) == {
+            "steps",
+            "n_correct",
+            "n_incorrect",
+            "n_unverifiable",
+            "n_transitions",
+            "unverified_ratio",
+            "first_incorrect_index",
+            "has_incorrect",
+        }
+
+
+class TestVerifySolutionAuth:
+    def test_no_token_401(self) -> None:
+        resp = _no_auth_client().post(
+            "/v1/verify-solution", json={"steps": ["2+3", "5"]}
+        )
+        assert resp.status_code == 401
+
+
+class TestVerifySolutionSchema:
+    def test_missing_steps_422(self) -> None:
+        resp = _client().post("/v1/verify-solution", json={})
+        assert resp.status_code == 422
+
+    def test_step_types_optional(self) -> None:
+        # step_types 생략 OK(기본 None).
+        resp = _client().post("/v1/verify-solution", json={"steps": ["2+3", "5"]})
+        assert resp.status_code == 200, resp.text
+
+    def test_extra_field_forbidden_422(self) -> None:
+        resp = _client().post(
+            "/v1/verify-solution",
+            json={"steps": ["2+3", "5"], "bogus": 1},
+        )
+        assert resp.status_code == 422
+
+    def test_step_types_length_mismatch_422(self) -> None:
+        # 전이 2개인데 step_types 1개 → verify_solution ValueError → 422.
+        resp = _client().post(
+            "/v1/verify-solution",
+            json={"steps": ["2+3", "5", "5"], "step_types": ["계산"]},
+        )
+        assert resp.status_code == 422, resp.text
+
+    def test_invalid_step_type_value_422(self) -> None:
+        resp = _client().post(
+            "/v1/verify-solution",
+            json={"steps": ["2+3", "5"], "step_types": ["bogus"]},
+        )
+        assert resp.status_code == 422
