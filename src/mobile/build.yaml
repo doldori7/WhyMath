@@ -1,0 +1,12 @@
+# build_runner 전역 설정 — json_serializable 옵션.
+#
+# explicit_to_json: 중첩 freezed/json 객체(예 CoachResponse.decision[PedagogyDecision])의
+# toJson을 *명시 직렬화*한다. 없으면 toJson이 중첩 객체를 Map으로 바꾸지 않고 그대로 둬서
+# `fromJson ∘ toJson` 라운드트립이 "X is not a subtype of Map" 캐스팅 오류로 깨진다.
+# CoachResponse는 중첩 모델이 많아(decision·misconceptions·solution_coaching 등) 필수.
+targets:
+  $default:
+    builders:
+      json_serializable:
+        options:
+          explicit_to_json: true
