@@ -11,18 +11,35 @@ WH-1의 L1(데이터)·L3(검증) 자산을 공급하는 업스트림이며 **�
 결합해 최종 등급(verified/unverified/failed)을 낸다. `baseline.py`는 그 검증기 스택을 *문제셋*에
 돌려 §5 난이도 사다리별 풀이율(verified 비율)을 집계한다(§9 S0 게이트 산출물 — 풀이율 곡선).
 
-범위 밖(후속): 시드 모델 실행(후보 풀이 생성·Ollama·MCTS)·솔버 루프·도구 8종·`solution_nodes`/
-저장소 스키마·자기 진화·PRM·Tier3(§9 로드맵).
+S1 좌석(풀이 트리 상태 계층): ③ 풀이 경로 트리 노드 ORM(`db/models/solution_node.py` —
+`SolutionNode`·`NodeVerifyStatus`·§2.1)과 ④ 그 비동기 CRUD 저장소(`node_store.py`). 솔버
+루프·MCTS·도구 8종이 이 저장소로 트리 노드를 생성·조회·갱신한다(루프 본체는 후속).
+
+범위 밖(후속): 시드 모델 실행(후보 풀이 생성·Ollama·MCTS)·솔버 루프·도구 8종·다른 저장소
+(§2.2 Verified Lemma Store·§2.3 Dead-End Log·§2.4 Verified Solution Bank)·자기 진화·PRM·
+Tier3(§9 로드맵).
 """
 
 from __future__ import annotations
 
+from whymath_backend.db.models.solution_node import (
+    NodeVerifyStatus,
+    SolutionNode,
+)
 from whymath_backend.whs.baseline import (
     BandResult,
     BaselineReport,
     DifficultyBand,
     EvalItem,
     run_baseline,
+)
+from whymath_backend.whs.node_store import (
+    create_node,
+    get_children,
+    get_node,
+    get_roots,
+    increment_visits,
+    update_evaluation,
 )
 from whymath_backend.whs.verdict import (
     WhsGrade,
@@ -35,8 +52,16 @@ __all__ = [
     "BaselineReport",
     "DifficultyBand",
     "EvalItem",
+    "NodeVerifyStatus",
+    "SolutionNode",
     "WhsGrade",
     "WhsVerdict",
+    "create_node",
     "final_verdict",
+    "get_children",
+    "get_node",
+    "get_roots",
+    "increment_visits",
     "run_baseline",
+    "update_evaluation",
 ]

@@ -285,7 +285,15 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 - **Tier1 수치 검산** `l3/verify_answer.py` `verify_answer(conditions: str | Sequence[str], answer, *, n_samples=8, tol=1e-9) -> AnswerVerdict(state[pass/fail/unverifiable]·reason·samples_checked)` — 답을 원 조건에 대입·잔차 자유변수 없으면 직접 수치 평가·있으면(파라미터) **고정 시드 수치 샘플링 + 경계값(0·±1·소·대)**. **등식·부등식(>,<,≥,≤,≠)·연립(여러 조건 AND)** 지원(함수 동치 항등식은 등식+샘플링으로 커버). 부등식은 진리값 평가(엄격 경계 tol→모호 unverifiable·등호 경계→포함)·연립은 하나라도 fail→fail/전부 pass→pass/미정→unverifiable. §4 정직성: pass는 *샘플 점 만족*이지 증명 아님(신뢰도 최저·단독 사용 금지·Tier2 결합 필수)·판정 불가→unverifiable(pass 위장 금지·verify_step 상속).
 - **신규 `whymath_backend/whs/` 패키지**(WH-S 서브시스템·오프라인·학생 세션 미개입 업스트림·§7.5). `whs/verdict.py` `final_verdict(answer: AnswerVerdict, steps: SolutionVerificationResult) -> WhsVerdict(grade[verified/unverified/failed]·reason·근거)` — §4 판정 규칙: **failed**=Tier1 fail OR 단계 incorrect(틀린 과정 차단·이중 체크)·**verified**=Tier1 pass AND 전 단계 correct·**unverified**=판정 불가 격리(§3·R-S2 보상 해킹 차단·*학습 데이터 배제*).
 - **베이스라인 풀이율 하네스** `whs/baseline.py`(§9 S0 게이트 산출물·순수·모델 0): `DifficultyBand`(§5 사다리 5단계 교과기본·준킬러·킬러·KMO1차·KMO2차)·`EvalItem`(band·conditions·answer·steps)·`run_baseline(items) -> BaselineReport`(밴드별 BandResult: n·verified/unverified/failed·**solve_rate=verified/n**[검증 통과만 해결·unverified 격리·failed 미해결]·overall 포함·5밴드 항상). 검증기 스택(verify_answer+verify_solution+final_verdict)을 *이미 생성된* 평가 항목에 돌려 "사다리별 풀이율 곡선" 집계. 결정론(고정 시드). **시드 모델로 후보 풀이 생성은 범위 밖**(후속·하네스는 모델 출력의 검증·집계 착지점).
-- **후속(S0 잔여·S1+)**: 시드 모델 실행으로 후보 풀이 *생성*(Ollama·Phaiakes9·MCTS)·솔버 루프(도구 8종)·`solution_nodes`/저장소 스키마(향후 alembic)·PRM·Tier3(Lean4).
+- **후속(S0 잔여·S1+)**: 시드 모델 실행으로 후보 풀이 *생성*(Ollama·Phaiakes9·MCTS)·솔버 루프(도구 8종)·PRM·Tier3(Lean4).
+
+### S1 진입 (2026-06-13)
+
+**S1 슬라이스 1 — 풀이 트리 상태 스키마 + 저장소**(설계 §2.1) 구현됨(마이그레이션 동반·**LLM 정책 모델 구동은 후속**). 솔버 루프가 쓸 *상태 계층*만:
+- `db/models/solution_node.py` `SolutionNode`(테이블 `solution_nodes`)·`NodeVerifyStatus`(pending/verified/unverified/failed): `id`(UUID PK)·`problem_id`(UUID·인덱스·**FK 아님**·WH-S 독립 오프라인 느슨참조)·`parent_id`(self-FK `ondelete=CASCADE`·트리 부모·루트 NULL)·`state_repr`(JSONB)·`action`(Text)·`prm_score`(Float)·`verify_status`(enum·default pending)·`visits`(int·MCTS 방문)·`created_at`/`updated_at`. 인덱스 `problem_id`·`parent_id`.
+- 마이그레이션 **`c2d3e4f5a6b7`**(down_revision `b1c2d3e4f5a6`·단일 head·upgrade=테이블+enum 자동생성+인덱스2·downgrade=인덱스→테이블→enum 명시 drop·가역).
+- `whs/node_store.py`(비동기 저장소·순수 ORM·원시 SQL 0): `create_node`·`get_node`·`get_children`·`get_roots`·`increment_visits`(원자적)·`update_evaluation`. WH-S 오프라인(API 노출 0·§7.5).
+- **후속(S1 잔여)**: 솔버 루프(LLM 정책·MCTS-lite·도구 8종)·§2.2 Verified Lemma Store·§2.3 Dead-End Log·§2.4 Verified Solution Bank 저장소.
 
 ### 용어 정합: "545노드" (편집자 부기)
 
