@@ -30,11 +30,9 @@ from whymath_backend.l4.misconception.hypothesis import (
     update_hypotheses,
 )
 from whymath_backend.l4.misconception.hypothesis_store import (
+    _to_pydantic,
     apply_matches,
     get_active_hypotheses,
-)
-from whymath_backend.l4.misconception.hypothesis_store import (
-    _to_pydantic,
 )
 from whymath_backend.l4.misconception.models import Misconception, MisconceptionMatch
 from whymath_backend.schema.enums import Persona
@@ -141,9 +139,7 @@ async def _cleanup(user_ids: list[uuid.UUID]) -> None:
         async with engine.begin() as conn:
             # 자식(misconception_hypothesis) → 부모(user_profile) 순.
             await conn.execute(
-                text(
-                    "DELETE FROM misconception_hypothesis WHERE user_id = ANY(:uids)"
-                ),
+                text("DELETE FROM misconception_hypothesis WHERE user_id = ANY(:uids)"),
                 {"uids": uids},
             )
             await conn.execute(
@@ -190,8 +186,9 @@ def test_apply_matches_insert_upsert_prune_on_live_pg() -> None:
                 t2 = await apply_matches(session, uid, [_match(mid_a, 0.8)])
                 await session.commit()
                 by_mid_2 = {h.misconception_id: h for h in t2}
-                # mid_a 강화: reinforce(0.6, 0.8)=0.92, evidence_count 2, turns 0
-                assert by_mid_2[mid_a].confidence == pytest.approx(0.92, abs=0.01)
+                # mid_a: update_hypotheses는 *감쇠 먼저, 그 다음 강화*(#191 정본) —
+                # reinforce(decay(0.6,1), 0.8) ≈ 0.904. evidence_count 2, turns 0.
+                assert by_mid_2[mid_a].confidence == pytest.approx(0.904, abs=0.02)
                 assert by_mid_2[mid_a].evidence_count == 2
                 assert by_mid_2[mid_a].turns_since_evidence == 0
                 # mid_b 감쇠(증거 없음): decay(0.5, 1)=0.5*0.5**0.2≈0.435, turns 1
@@ -211,8 +208,9 @@ def test_apply_matches_insert_upsert_prune_on_live_pg() -> None:
                 assert rows == 2
 
                 # ── 턴3~: 증거 없이 여러 턴 → mid_b confidence가 임계(0.1) 미만 → prune ──
-                #   mid_a에는 계속 증거를 주고 mid_b는 방치해 가지치기를 유도.
-                for _ in range(6):
+                #   mid_a에는 계속 증거를 주고 mid_b는 방치해 가지치기를 유도. 반감기 5턴·임계
+                #   0.1이라 mid_b(턴2≈0.435)가 0.1 아래로 내려가려면 ~11턴 필요 → 넉넉히 15턴.
+                for _ in range(15):
                     await apply_matches(session, uid, [_match(mid_a, 0.5)])
                 await session.commit()
 
@@ -267,12 +265,15 @@ def test_pruned_hypothesis_reactivates_on_new_evidence_on_live_pg() -> None:
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
-                # 신규 → 증거 끊고 여러 턴 → prune
+                # 신규 → 증거 끊고 여러 턴 → prune (0.5가 임계 0.1 아래로: 반감기 5턴 기준
+                # ~12턴 필요 → 넉넉히 15턴 감쇠)
                 await apply_matches(session, uid, [_match(mid, 0.5)])
-                for _ in range(8):
+                for _ in range(15):
                     await apply_matches(session, uid, [])
                 await session.commit()
-                assert get_active_mids(await get_active_hypotheses(session, uid)) == set()
+                assert (
+                    get_active_mids(await get_active_hypotheses(session, uid)) == set()
+                )
 
                 # 새 증거 → 같은 (user_id, mid) 행 재활성화(중복 insert 아님·UniqueConstraint)
                 t = await apply_matches(session, uid, [_match(mid, 0.7)])
@@ -370,7 +371,9 @@ def test_persisted_roundtrip_matches_pure_logic_on_live_pg() -> None:
         assert set(persisted_by) == set(pure_by)
         for mid, pure in pure_by.items():
             # Numeric(3,2) 영속이라 소수 2자리로 비교(confidence 보존).
-            assert persisted_by[mid].confidence == pytest.approx(pure.confidence, abs=0.01)
+            assert persisted_by[mid].confidence == pytest.approx(
+                pure.confidence, abs=0.01
+            )
             assert persisted_by[mid].evidence_count == pure.evidence_count
             assert persisted_by[mid].turns_since_evidence == pure.turns_since_evidence
 
