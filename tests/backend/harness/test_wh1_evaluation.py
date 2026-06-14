@@ -431,7 +431,7 @@ class TestDiagnosisAgreementOffline:
         assert "precision" in m.note or "FP율" in m.note
 
     async def test_harness_surfaces_offline_recall_measured(self) -> None:
-        """하네스 통합 — DB와 무관하게 ②가 실 프로브셋(60건)으로 MEASURED가 된다(시스템 지표).
+        """하네스 통합 — DB와 무관하게 ②가 실 프로브셋(61건)으로 MEASURED가 된다(시스템 지표).
 
         `compute_diagnostic_recall`이 실 패키지 프로브셋을 로드하므로 FakeSession이어도 ②는
         MEASURED다(user/기간 무관·전 user 동일값). value∈[0,1]·표본=recall 프로브 수만 단언
@@ -444,8 +444,8 @@ class TestDiagnosisAgreementOffline:
         diag = m.diagnosis_agreement_rate
         assert diag.status is MetricStatus.MEASURED
         assert diag.value is not None and 0.0 <= diag.value <= 1.0
-        # 표본 메타 = recall 프로브 수(DB 표본 아님·프로브셋 크기·현재 60건)
-        assert m.sample_diagnostic_probes == 60
+        # 표본 메타 = recall 프로브 수(DB 표본 아님·프로브셋 크기·현재 61건)
+        assert m.sample_diagnostic_probes == 61
         assert "오프라인 진단정확도" in diag.note
 
     async def test_offline_metric_invariant_to_user_and_window(self) -> None:
@@ -905,7 +905,7 @@ class TestMetaAndFieldSet:
         assert m.sample_calibration_pairs == 5  # 유효 보정 쌍 수
         assert m.sample_transfer_probes == 3  # ⑦ 전이 프로브 수(초견·사전 노출·패턴별)
         assert (
-            m.sample_diagnostic_probes == 60
+            m.sample_diagnostic_probes == 61
         )  # ② recall 프로브 수(시스템 지표·프로브셋 크기)
         # difficulty_slope 필드 노출(양수=난이도 상승·음수=쉬워짐). 여기선 하강(1→0.5→0)이라 음수.
         assert m.help_reduction_validated.difficulty_slope is not None

@@ -99,6 +99,19 @@ _ALGEBRA: tuple[Misconception, ...] = (
         canonical_statement="log(a+b) = log a + log b",
         counterexample="a=b=1: log 2 ≠ log 1 + log 1 = 0",
         signals=("log(a+b)", "log a + log b"),
+        # v1.2 수치 대입 탐지(슬 102 후속·보수적 확장): 로그를 *합에 분배*해 구체 수치로
+        # 거짓 항등식을 계산한 흔적 `log(2+3)=log2+log3`을 잡는다. canonical `log(a+b)=log a+log b`
+        # 의 정규형(_normalize: NFKC+공백제거)은 `log(a+b)=loga+logb`이므로 정규식은 그 평문
+        # 골격에 좌변 두 진수(a,b)를 `\d+`로, 우변 두 로그 항을 *명명그룹 역참조*로 강제한다.
+        # disjoint 근거(정상/기호식 매치 0·교차검증 완료):
+        #   ① 올바른 곱 법칙 `log(2·3)=log2+log3`은 괄호 안이 `2·3`(곱)이라 `\d+\+\d+`(합)에
+        #      미매치 — 로그의 *진짜 분배 대상*은 곱이므로 합(`+`) 강제가 정상 풀이를 가른다.
+        #   ② 올바른 값 `log(2+3)=log5`는 우변이 `log5` 단항이라 `log(?P=a)+log(?P=b)`에 미매치.
+        #   ③ 기호식 `log(a+b)=log a+log b`는 `\d+`가 문자 `a`·`b`에 미매치(substring 경로가 담당).
+        #   ④ 역참조라 진수 불일치(`log(2+3)=log2+log4`)·순서 교환(`=log3+log2`)도 미매치.
+        # 근거: canonical_statement에서 정규형 직접 도출(추측 0). 표기 변이 큰 삼각(sin 합 분배·
+        # 도/라디안)·기호식만(곱미분)·서술형/개념 오류는 regex 부적합 → semantic/LLM-judge 후속.
+        regex_signals=(r"log\((?P<a>\d+)\+(?P<b>\d+)\)=log(?P=a)\+log(?P=b)",),
     ),
     Misconception(
         id="discriminant-negative-no-real-root",

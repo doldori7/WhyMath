@@ -54,10 +54,14 @@ class TestSliceCatalogExpansionMatches:
     """
 
     def _find(self, text: str, mid: str) -> MisconceptionMatch | None:
-        return next((m for m in diagnose(text, top_k=8) if m.misconception.id == mid), None)
+        return next(
+            (m for m in diagnose(text, top_k=8) if m.misconception.id == mid), None
+        )
 
     def test_discriminant_negative_no_real_root(self) -> None:
-        m = self._find("판별식이 음수라서 해가 없다고 했어", "discriminant-negative-no-real-root")
+        m = self._find(
+            "판별식이 음수라서 해가 없다고 했어", "discriminant-negative-no-real-root"
+        )
         assert m is not None
         assert m.confidence == 1.0
         assert m.misconception.domain == "대수"
@@ -74,13 +78,17 @@ class TestSliceCatalogExpansionMatches:
         assert m.misconception.domain == "기하"
 
     def test_mutually_exclusive_implies_independent(self) -> None:
-        m = self._find("두 사건이 배반이니까 독립이야", "mutually-exclusive-implies-independent")
+        m = self._find(
+            "두 사건이 배반이니까 독립이야", "mutually-exclusive-implies-independent"
+        )
         assert m is not None
         assert m.confidence == 1.0
         assert m.misconception.domain == "확률통계"
 
     def test_composite_function_commutes(self) -> None:
-        m = self._find("f∘g = g∘f 라서 합성 순서는 상관없어", "composite-function-commutes")
+        m = self._find(
+            "f∘g = g∘f 라서 합성 순서는 상관없어", "composite-function-commutes"
+        )
         assert m is not None
         assert m.confidence == 1.0
         assert m.misconception.domain == "함수"
@@ -93,7 +101,9 @@ class TestSliceCatalogExpansionMatches:
 
     def test_continuity_implies_differentiability(self) -> None:
         # doc 함수 슬롯 #15이나 domain=미적분([H:12미적Ⅰ02-02])
-        m = self._find("이 함수는 연속이니까 미분가능해", "continuity-implies-differentiability")
+        m = self._find(
+            "이 함수는 연속이니까 미분가능해", "continuity-implies-differentiability"
+        )
         assert m is not None
         assert m.confidence == 1.0
         assert m.misconception.domain == "미적분"
@@ -195,7 +205,11 @@ class TestSignalPrecision:
         # (v1 신호 "모든"이었다면 역함수+모든 → 1.0 거짓양성)
         benign = "이 함수의 역함수를 모든 구간에서 구했어"
         m = next(
-            (x for x in diagnose(benign) if x.misconception.id == "invertibility-without-1-1"),
+            (
+                x
+                for x in diagnose(benign)
+                if x.misconception.id == "invertibility-without-1-1"
+            ),
             None,
         )
         assert m is None or m.confidence < 1.0
@@ -208,7 +222,9 @@ class TestNumericSubstitutionDetection:
     """
 
     def _find(self, text: str, mid: str) -> MisconceptionMatch | None:
-        return next((m for m in diagnose(text, top_k=5) if m.misconception.id == mid), None)
+        return next(
+            (m for m in diagnose(text, top_k=5) if m.misconception.id == mid), None
+        )
 
     def test_distribution_numeric_substitution_detected(self) -> None:
         # 기호 signals "(a+b)"·"a² + b²" 부재(학생은 *수*를 적음) → v1.1이면 미탐지.
@@ -245,6 +261,30 @@ class TestNumericSubstitutionDetection:
             # 후보가 떠도(다른 weak substring 때문) 정규식은 미발화여야 함
             assert m is None or m.matched_regex_signals == ()
 
+    def test_log_distribution_numeric_substitution_detected(self) -> None:
+        # 슬 102 후속(보수적 확장): 로그를 합에 분배해 *수치로* 거짓 항등식을 계산한 흔적
+        # `log(2+3)=log2+log3`을 잡는다. 기호 signals "log(a+b)"·"log a + log b" 부재(학생은
+        # *수*만 적음) → v1.1이면 미탐지. v1.2 정규식이 *추가* 탐지.
+        m = self._find("log(2+3) = log2 + log3", "log-distribution")
+        assert m is not None
+        # 분모=2(substr signals), 정규식만 매치 → 0/2 + 1/2 = 0.5
+        assert m.confidence == 0.5
+        assert m.matched_signals == ()  # 기호 substring 0
+        assert len(m.matched_regex_signals) == 1
+
+    def test_log_correct_product_law_not_flagged_by_regex(self) -> None:
+        # FP 0 증명: 올바른 곱 법칙 `log(2·3)=log2+log3`은 괄호 안이 *곱*(·)이라 정규식
+        # `\d+\+\d+`(합)에 미매치 — 정상 풀이를 오개념으로 거짓 매칭하지 않는다(낙인 방지).
+        # 동시에 올바른 값 `log(2+3)=log5`(우변 단항)·기호식 `log(a+b)=log a+log b`(문자)도 미발화.
+        for text in (
+            "log(2·3) = log2 + log3",  # 올바른 곱 법칙(분배 대상은 곱)
+            "log(2+3) = log5",  # 올바른 값 계산
+            "log(a+b) = log a + log b",  # 기호식(substring 경로 담당·regex 미발화)
+            "log(2+3) = log2 + log4",  # 역참조 불일치(진수 b: 3≠4)
+        ):
+            m = self._find(text, "log-distribution")
+            assert m is None or m.matched_regex_signals == ()
+
 
 class TestRegexBackwardCompatibility:
     """v1.2 정규식 도입이 v1.1 기호식 매칭(confidence·matched_signals)을 *불변*으로 유지."""
@@ -262,7 +302,9 @@ class TestRegexBackwardCompatibility:
 
     def test_symbolic_distribution_unchanged_partial(self) -> None:
         m = next(
-            x for x in diagnose("(a+b)² 까지만") if x.misconception.id == "distribution-over-power"
+            x
+            for x in diagnose("(a+b)² 까지만")
+            if x.misconception.id == "distribution-over-power"
         )
         assert m.confidence == 0.5
         assert m.matched_regex_signals == ()
@@ -290,7 +332,9 @@ class TestSignalBoundaryV13:
     """
 
     def _by_id(self, text: str, mid: str) -> MisconceptionMatch | None:
-        return next((m for m in diagnose(text, top_k=30) if m.misconception.id == mid), None)
+        return next(
+            (m for m in diagnose(text, top_k=30) if m.misconception.id == mid), None
+        )
 
     def test_demonstrated_live_fp_no_longer_full_matches(self) -> None:
         # 실증 케이스 그대로: '10'의 '0'이 더는 매칭되지 않아 풀매칭(1.0)이 사라진다.
@@ -323,7 +367,9 @@ class TestSignalBoundaryV13:
 
     def test_legitimate_zero_still_matches(self) -> None:
         # 정당한 사용처(한글 조사 이웃)는 계속 풀매칭 — 거짓음성 추가 없음 회귀.
-        m = self._by_id("분모가 0이 되어도 항상 정의된다고 생각했어", "division-by-zero")
+        m = self._by_id(
+            "분모가 0이 되어도 항상 정의된다고 생각했어", "division-by-zero"
+        )
         assert m is not None
         assert set(m.matched_signals) == {"분모", "0"}
         assert m.confidence == 1.0

@@ -4,7 +4,7 @@
   ① **스코어링**: 합성 `ProbeOutcome`로 `evaluate`·recall/FP율·Wilson 하한/상한·kind/도메인
      분해·`format_report`를 *수치까지* 단언한다(라이브 임베딩 불요). Wilson 경계(n=0 None·전부
      정답 시 하한<1·전부 FP 시 상한>0·하한≤점추정≤상한)도 못 박는다.
-  ② **프로브셋 구조**(실파일 로드): 92줄 파싱·모든 expected_id/near_id ∈ CATALOG_BY_ID·30종
+  ② **프로브셋 구조**(실파일 로드): 94줄 파싱·모든 expected_id/near_id ∈ CATALOG_BY_ID·30종
      recall·FP 둘 다 커버·kind 유효·**recall 프로브 substring 풀매칭 0**(임베딩 측정 유효성
      회귀 가드 — substring이 잡으면 의미 매처를 측정할 수 없다).
   ③ **배선 end-to-end**: `run_probes`를 FakeEmbeddingProvider로 1건 돌려 스코어링 배선을 증명한다
@@ -40,13 +40,14 @@ from whymath_backend.l4.misconception.semantic_eval import (
 )
 
 
-# 프로브셋 실파일(검증된 92줄·프로덕션 패키지 데이터 `probes_v1.jsonl`) — 구조 검증·end-to-end
+# 프로브셋 실파일(검증된 94줄·프로덕션 패키지 데이터 `probes_v1.jsonl`) — 구조 검증·end-to-end
 # 배선이 읽는다. 프로브셋은 tests/fixtures가 아니라 *패키지 데이터*로 단일화됐으므로(prod→tests
 # 역방향 의존 회피), 설치 트리·개발 트리 공통으로 `probes_path()`(importlib.resources) 경유로
 # 실파일 `Path`를 빌려 `load_probes`에 넘긴다.
 def _load_real_probes() -> list[MisconceptionProbe]:
     with probes_path() as path:
         return load_probes(path)
+
 
 # 유효 kind 집합 — 프로브셋 스키마 계약(분해 라벨).
 _VALID_KINDS = frozenset(
@@ -300,16 +301,16 @@ class TestFormatReport:
 # ② 프로브셋 구조 검증(실파일 로드)
 # ══════════════════════════════════════════════════════════════════════════
 class TestProbeSetStructure:
-    def test_loads_92_probes(self) -> None:
+    def test_loads_94_probes(self) -> None:
         probes = _load_real_probes()
-        assert len(probes) == 92
+        assert len(probes) == 94
 
     def test_recall_and_fp_split(self) -> None:
         probes = _load_real_probes()
         recall = [p for p in probes if p.is_recall_probe]
         fp = [p for p in probes if p.is_fp_probe]
-        assert len(recall) == 60
-        assert len(fp) == 32
+        assert len(recall) == 61
+        assert len(fp) == 33
         # 상호배타·완전분할(recall ⊕ fp = 전체).
         assert len(recall) + len(fp) == len(probes)
 
@@ -367,7 +368,7 @@ class TestRunProbesWiring:
         assert len(outcomes) == len(probes)
         report = evaluate(outcomes)
         # 구조 단언만(품질 hard-fail 아님): 비율은 [0,1] 또는 None.
-        assert report.total == 92
+        assert report.total == 94
         for value in (report.recall, report.false_positive_rate):
             assert value is None or 0.0 <= value <= 1.0
         # outcome의 semantic_ids/substring_ids는 카탈로그 id이거나 빈 튜플.
@@ -508,13 +509,23 @@ class TestJudgeScoring:
         # judge FP는 상한(보수)·judge recall은 하한(정직)으로 보고.
         outs = [
             _judge_outcome(_fp_probe("a"), semantic_ids=("a",), judge_kept_ids=("a",)),
-            _judge_outcome(_recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)),
+            _judge_outcome(
+                _recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)
+            ),
         ]
         report = evaluate(outs)
         fub = report.judge_fp_rate_upper_bound()
         rlb = report.judge_recall_lower_bound()
-        assert fub is not None and report.judge_fp_rate is not None and fub >= report.judge_fp_rate
-        assert rlb is not None and report.judge_recall is not None and rlb <= report.judge_recall
+        assert (
+            fub is not None
+            and report.judge_fp_rate is not None
+            and fub >= report.judge_fp_rate
+        )
+        assert (
+            rlb is not None
+            and report.judge_recall is not None
+            and rlb <= report.judge_recall
+        )
 
     def test_judge_metrics_none_on_empty(self) -> None:
         report = evaluate([])
@@ -526,8 +537,12 @@ class TestJudgeScoring:
     def test_format_report_includes_judge_lines_when_applied(self) -> None:
         # judge 적용 outcome이면 before/after 줄이 나온다.
         outs = [
-            _judge_outcome(_fp_probe("a"), semantic_ids=("a",), judge_removed_ids=("a",)),
-            _judge_outcome(_recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)),
+            _judge_outcome(
+                _fp_probe("a"), semantic_ids=("a",), judge_removed_ids=("a",)
+            ),
+            _judge_outcome(
+                _recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)
+            ),
         ]
         report = evaluate(outs)
         assert _judge_applied(report) is True
@@ -633,7 +648,7 @@ class TestRunProbesWithJudgeWiring:
 
     @pytest.mark.asyncio
     async def test_full_probeset_with_fake_judge_structure(self) -> None:
-        # 실 프로브셋 92줄 + FakeEmbeddingProvider + FakeJudge로 배선 구조 단언(품질 아님).
+        # 실 프로브셋 94줄 + FakeEmbeddingProvider + FakeJudge로 배선 구조 단언(품질 아님).
         probes = _load_real_probes()
         # 전부 불확실 → judge가 아무것도 안 거름(유지) → judge 후 = 의미 후 동일.
         judge = FakeJudge(default=JudgeVerdict.UNCERTAIN)
@@ -646,13 +661,15 @@ class TestRunProbesWithJudgeWiring:
         )
         assert len(outcomes) == len(probes)
         report = evaluate(outcomes)
-        assert report.total == 92
+        assert report.total == 94
         # 전부 유지(불확실)이므로 judge 후 지표 = 의미 지표(거른 게 없음).
         assert report.judge_false_positives == report.semantic_false_positives
         assert report.judge_caught_recall == report.caught_recall
         # 각 outcome: kept ⊕ removed = semantic_ids(분할 불변).
         for o in outcomes:
-            assert set(o.judge_kept_ids) | set(o.judge_removed_ids) == set(o.semantic_ids)
+            assert set(o.judge_kept_ids) | set(o.judge_removed_ids) == set(
+                o.semantic_ids
+            )
             assert set(o.judge_kept_ids) & set(o.judge_removed_ids) == set()
             # 전부 불확실 → removed 비어 있고 kept == semantic_ids.
             assert o.judge_removed_ids == ()

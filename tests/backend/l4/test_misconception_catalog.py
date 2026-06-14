@@ -162,12 +162,17 @@ class TestNameClarity:
 
 
 class TestRegexSignals:
-    """v1.2 `regex_signals` — 선택 필드(기본 빈 튜플)·시연 3종·전부 컴파일 가능(슬 102)."""
+    """v1.2 `regex_signals` — 선택 필드(기본 빈 튜플)·시연 4종·전부 컴파일 가능(슬 102·후속 확장).
+
+    슬 102 후속 보수적 확장: log-distribution(로그 합 분배·`log(2+3)=log2+log3`)를 추가했다.
+    네 종 모두 *거짓 수치 항등식*만 매치하는 disjoint 정규식(명명그룹 역참조·`\\d+` 피연산자)이다.
+    """
 
     _DEMO_IDS = {
         "distribution-over-power",
         "square-root-positivity",
         "fraction-cancellation",
+        "log-distribution",
     }
 
     def test_field_defaults_empty_and_is_tuple(self) -> None:
