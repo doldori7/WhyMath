@@ -193,7 +193,7 @@ LearningScene
 | 단계 | 범위 | 게이트 | 마이그레이션 |
 |---|---|---|---|
 | **S0** *(이번)* | 본 설계문서·MEMORY 로그·`05_interaction.md` 교차링크 | 문서 정합·회귀 0 | 0 |
-| S1 | **typed `Visualization.spec`** — 4 타입별 sub-schema(자유 JSON → 검증가능 계약)·게이트 확장 | 백엔드 cov 90%+·회귀 0 | 0 |
+| S1 ✅ | **typed `Visualization.spec`** — 4 타입별 sub-schema(자유 JSON → 검증가능 계약)·게이트 확장 | **완료 2026-06-14**: cov 100%·3001 passed·회귀 0 | 0 |
 | S2 | `LearningScene` Pydantic + `parse_learning_scene`(참조 무결성·불변식) | 답미루기·낙인 불변식 테스트 | 0 |
 | S3 | L3 `generate_learning_scene`(골격 결정론 + spec 충전) | 라우터·Langfuse·캐시 | 0 |
 | S4 | L5 `SceneRenderer` 레지스트리(WebView 시드) | CI mobile 잡 | 0 |
