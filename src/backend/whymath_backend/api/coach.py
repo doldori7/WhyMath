@@ -80,6 +80,8 @@ from whymath_backend.l4.misconception import (
     select_intervention,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG
+from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
+from whymath_backend.l4.misconception.hypothesis_store import apply_matches
 from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
 from whymath_backend.l4.misconception.shadow import observe_misconception_shadow
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
@@ -268,13 +270,30 @@ class SessionCreateRequest(CoachRequest):
     )
 
 
+# WH-1 2단계 §8.4 슬라이스 3: 활성 가설 세트 노출 필드 설명(SessionCreateResponse·
+# TurnAppendResponse 공통). stateless `CoachResponse`에는 *싣지 않는다* — stateless 경로는
+# DB가 없어 가설을 영속·누적할 수 없기 때문(슬라이스 3 결선은 세션 엔드포인트 한정).
+_ACTIVE_HYPOTHESES_DESC = (
+    "이 학생의 *누적·감쇠된* 활성 오개념 가설 세트(confidence 내림차순). 매 턴 매칭(증거)으로 "
+    "갱신·영속되며, 증거가 끊긴 가설은 감쇠하고 임계 미만이면 가지치기된다. 각 항목은 *확정 "
+    "오개념이 아니라 후보*다(낙인 금지 — `misconceptions`와 동형 노출). 학생 *본인*의 가설만 "
+    "노출되며(ConsentedUser 게이트 통과), 민감정보 평문 저장·동의는 저장/동의 계층(암호화·"
+    "미들웨어·PIPA 권한 매트릭스) 책임이다. 매칭이 없으면 빈 리스트. select_focus 기반 개입 "
+    "변경·evidence_links(증거 연결)·진단 일치율 게이트는 후속 슬라이스(이번은 per-turn 영속+노출)."
+)
+
+
 class SessionCreateResponse(CoachResponse):
-    """`/v1/coach/sessions` 응답 — `CoachResponse` + 영속된 dialogue/turn ID."""
+    """`/v1/coach/sessions` 응답 — `CoachResponse` + 영속된 dialogue/turn ID + 활성 가설 세트."""
 
     dialogue_id: uuid.UUID = Field(description="새로 생성된 대화 PK.")
     student_turn_id: uuid.UUID = Field(description="학생 발화 턴 PK(turn_order=1).")
     assistant_turn_id: uuid.UUID = Field(
         description="AI 결정 턴 PK(turn_order=2, content=decision.prompt)."
+    )
+    active_hypotheses: list[MisconceptionHypothesis] = Field(
+        default_factory=list,
+        description=_ACTIVE_HYPOTHESES_DESC,
     )
 
 
@@ -289,6 +308,10 @@ class TurnAppendResponse(CoachResponse):
         ge=1, description="학생 턴 순번(append 후 dialogue.total_turns에 반영)."
     )
     assistant_turn_order: int = Field(ge=1, description="AI 턴 순번(=student_turn_order + 1).")
+    active_hypotheses: list[MisconceptionHypothesis] = Field(
+        default_factory=list,
+        description=_ACTIVE_HYPOTHESES_DESC,
+    )
 
 
 class SessionGetResponse(BaseModel):
@@ -711,6 +734,30 @@ async def _log_hint_event(
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
 
 
+async def _apply_hypotheses(
+    session: AsyncSession,
+    user_id: uuid.UUID | None,
+    matches: list[MisconceptionMatch],
+) -> list[MisconceptionHypothesis]:
+    """이번 턴 매칭(증거)으로 학생 활성 가설 세트를 1턴 갱신·영속해 반환 — coach 세션/턴 전용.
+
+    WH-1 2단계 §8.4 슬라이스 3 *결선* 좌석. #191 순수 로직·#192 저장소(`apply_matches`)를
+    *재사용만* 한다(재구현 0). 핸들러의 `session`/트랜잭션에 합류하고 `apply_matches`가 flush만
+    하므로(commit은 핸들러), 가설 갱신이 dialogue/turn 쓰기와 *같은 트랜잭션*에서 원자적으로
+    영속된다(별도 commit 없음). 반환 가설은 응답 `active_hypotheses`로 노출된다(매칭 없으면
+    빈 리스트 — `apply_matches`가 감쇠·가지치기 후 빈 세트면 그대로).
+
+    `user_id` 가드: `ConsentedUser` 인증 게이트라 실제론 항상 채워지지만, 방어적으로 None이면
+    가설을 적용·영속하지 않고 빈 리스트를 반환한다(`apply_matches`는 per-student라 user_id 필수).
+
+    범위(정직): per-turn *영속+노출*까지다. select_focus 기반 intervention 변경(ε 탐색→개입
+    발화)·evidence_links(증거→가설 연결)·진단 일치율 게이트는 후속 슬라이스다(이번은 불변).
+    """
+    if user_id is None:
+        return []  # 인증 게이트라 실제론 도달 안 함(방어적 가드 — apply_matches는 user_id 필수).
+    return await apply_matches(session, user_id, matches)
+
+
 @router.post(
     "/coach",
     response_model=CoachResponse,
@@ -787,6 +834,12 @@ async def create_session(
             matches=outcome.matches,
         )
     )
+    # WH-1 2단계 §8.4 슬라이스 3 — 이번 턴 매칭(증거)으로 학생 활성 가설 세트를 갱신·영속한다
+    # (#191 순수 로직 + #192 저장소 재사용·재구현 0). 같은 `session`/같은 트랜잭션에 합류하며
+    # apply_matches는 flush만 하고 commit은 *이 핸들러의 기존 commit*이 담당(별도 commit 없음).
+    # `user.user_id`는 ConsentedUser 게이트라 채워지지만, None이면 빈 리스트로 가드(apply_matches는
+    # user_id 필요). 가설은 *후보*일 뿐 확정 오개념 아님(낙인 금지)·학생 본인 데이터만 노출.
+    active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
 
     now = datetime.now(timezone.utc)
     dialogue = DialogueORM.from_schema(
@@ -854,6 +907,7 @@ async def create_session(
         prerequisite_coaching=prereq,
         match_low_quality=outcome.low_quality,
         no_confident_match=outcome.no_confident_match,
+        active_hypotheses=active_hypotheses,
         dialogue_id=dialogue.dialogue_id,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
@@ -910,6 +964,10 @@ async def append_turns(
             matches=outcome.matches,
         )
     )
+    # WH-1 2단계 §8.4 슬라이스 3 — create_session과 동형. 이번 턴 매칭으로 *기존* 활성 가설
+    # 세트를 갱신(감쇠/강화·누적)·영속한다(같은 트랜잭션 합류·별도 commit 없음·#191/#192 재사용).
+    # 멀티턴이라 직전 턴들의 가설 위에 누적되어 감쇠·강화가 실제로 가동된다(2단계 메커니즘).
+    active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
 
     current_total = dialogue.total_turns or 0
     student_order = current_total + 1
@@ -974,6 +1032,7 @@ async def append_turns(
         prerequisite_coaching=prereq,
         match_low_quality=outcome.low_quality,
         no_confident_match=outcome.no_confident_match,
+        active_hypotheses=active_hypotheses,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
         student_turn_order=student_order,

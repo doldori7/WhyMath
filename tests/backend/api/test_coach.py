@@ -120,6 +120,7 @@ class _CapturingSession:
     ) -> None:
         self.added: list[Any] = []
         self.commits = 0
+        self.flushes = 0
         self.refreshes = 0
         self._preload = preload or {}
         self._execute_rows = list(execute_rows or [])
@@ -132,6 +133,11 @@ class _CapturingSession:
 
     async def commit(self) -> None:
         self.commits += 1
+
+    async def flush(self) -> None:
+        # WH-1 2단계 슬라이스 3 — apply_matches가 같은 트랜잭션 가시화로 flush(commit은 핸들러).
+        # 캡처 세션은 no-op(영속 부재·added만 캡처).
+        self.flushes += 1
 
     async def refresh(self, obj: Any) -> None:
         self.refreshes += 1
@@ -3810,3 +3816,24 @@ class TestLogHintEvent:
         assert sess.added[0].attempt_id == aid
         assert sess.added[0].problem_id is None
         assert sess.added[0].event_data == {"hint_level": 1}
+
+
+# ── WH-1 2단계 슬라이스 3: _apply_hypotheses 가드 단위테스트 ──────────────────────
+class TestApplyHypothesesGuard:
+    """`_apply_hypotheses` — user_id None 방어 가드(인증 게이트라 실제론 도달 안 함).
+
+    ConsentedUser 게이트가 user_id를 항상 채우므로 라우터 경로로는 닿지 않는 방어 분기.
+    가드가 *DB 무접근*으로 빈 리스트를 돌려주는지(apply_matches 미호출·세션 미터치) 직접 호출로
+    확인한다. 가설 *세트 영속*(matches 있는 경로)은 통합테스트(실 PG)에서 검증한다.
+    """
+
+    async def test_none_user_returns_empty_without_db_touch(self) -> None:
+        from whymath_backend.api.coach import _apply_hypotheses
+
+        # 세션을 만지면 AttributeError로 터지는 가짜 — 가드가 DB를 건드리지 않음을 보장.
+        class _Boom:
+            def __getattr__(self, name: str) -> Any:
+                raise AssertionError(f"user_id=None 가드는 세션을 만지지 않아야 한다: {name}")
+
+        result = await _apply_hypotheses(cast(AsyncSession, _Boom()), None, [])
+        assert result == []
