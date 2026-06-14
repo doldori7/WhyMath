@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (설계·L5/L3): LearningScene DSL 설계안 채택 — Visualization 위 합성 계층·답 미루기/낙인 불변식 구조화
+**컨텍스트**: Kiki가 "수학교육앱 인터페이스 설계 자동화" 외부 문서 2종(DOCX·PDF·2026-06-14)을 검토 요청 → "우리 시스템 적용·개선·미래상 전망". 문서 골자(성취기준/개념 DB → Semantic AST → **Math UI DSL** → UI Generator → Flutter, "화면 말고 수학 구조", 종착점 Math Knowledge Runtime)는 CLAUDE.md 슬라이스 89(표현≠의미)·L1–L4 독립 수학 코어의 재진술 — *방향 전환 아닌 외부 검증*.
+**조사(Explore 3)**: 문서가 "수학 구조 데이터"라 부르는 것은 대부분 가동 — 개념그래프 403노드+541엣지(`recommended_visual_styles` 16종)·오개념 30종(signals+regex+counterexample)·문항 50+필드(`conditions_parsed`)·IRT/BKT·verify_step SymPy AST. 단일 시각화 명세 `Visualization`(4 타입·자유 JSON spec)+L3 생성기(`generate_visualization_spec`)+검증 게이트 가동. **공백 = ① 타입별 typed spec ② 다요소 합성 scene ③ L5 렌더러**. SolutionPath는 YAML만(Python 후속).
+**결정**: `Visualization` 위 **합성 계층 `LearningScene` DSL** 신설 설계안 채택(`docs/architecture/05a_learning_scene_dsl.md`). 개념노드 메타 → 결정론 골격 · 요소별 spec만 LLM 충전 · `parse_learning_scene` 검증 게이트. 요소(visualization·param_control·step_panel·misconception_probe·socratic_prompt·annotation)는 *기존 좌석 참조 조립*(신규 콘텐츠 엔진 0). **문서 범용 DSL을 그대로 쓰지 않음** — `misconception→warning_overlay(붉은 강조·AI 피드백 자동)`은 CLAUDE.md 금기(즉답·낙인·거짓 "틀렸다") 위반 → 답 미루기 상한(`answer_deferral_max_level`·`hint_level ≤ 상한`)·`misconception_probe`에 정답/수정 필드 부재(스키마 차원 차단)·misconception=가설(WH-1 confidence·낙인 금지)을 **불변식**으로 교정 수용(의사결정 우선순위 1.학생 안전 > 2.법·윤리 > 3.교수학 정확성을 표현 계층에 강제).
+**단계화**: S0(이번·설계문서·마이그레이션 0) → S1 typed `Visualization.spec` → S2 `LearningScene`+게이트 → S3 L3 `generate_learning_scene` → S4 L5 `SceneRenderer`(CI mobile 잡) → S5+ 적응형 장면(`learner_context` ↔ WH-1 가설/evidence_links)·과목 확장·교과서 자동 UI. 각 자족 슬라이스·"측정 없는 도입 없음"·기하/증명(드래그·스내핑·작도)은 WH-S Tier3 종속이라 초기 scope 제외(정직 경계).
+**상태**: S0 문서만 — `05a` 신설·`05_interaction.md §시각화 스택` 교차링크·본 로그. 코드·스키마·Flutter 변경 0·alembic 단일 head `d3e4f5a6b7c8` 불변. 구현(S1+)은 후속 슬라이스.
+
 ### 2026-06-12 (계획·L1): 개념그래프 적재 아크 착수 — transform·검증 우선(무저장소) → Neo4j·pgvector
 **컨텍스트**: 데이터셋 v1 수정본 교체(위 항목) 직후, 사용자가 다음 트랙으로 **L1 개념그래프 적재** 선택(`/plan`). Explore 조사 결론: 적재 인프라가 *대부분 존재* — 정본 스키마(`schema/concept.py`)·ORM(`db/models/concept.py`)·마이그레이션·UC 규약+검증 정규식(`concept_graph/models.py`)·NCIC 시드(`seed.py`)·검증 로직(`validate.py`)·정본 문서(`docs/data/concept_graph.md` §4 9단계·§5 10 invariant)·통합테스트 게이트 모두 구비. **공백 = 5(정형화)·6(검증 실데이터)·7(Neo4j 적재 — `__main__.py:load()`는 가드만, 드라이버·config·CI서비스 전무)**.
 **아크(4슬라이스)**: ① *(이번)* `src_id→UC` 매핑 + 데이터셋→정본 `Concept`/`ConceptEdge` transform + 10 invariant 테스트 **(무저장소·1일)** → ② Neo4j 드라이버+`load()` 멱등 MERGE+통합테스트 → ③ 개념 pgvector 좌석(misconception_embedding 미러)+임베딩 적재 → ④ backend concept API + L2/L4 결선. **transform·검증을 적재보다 먼저** 두는 이유: src_id→UC 매핑·스키마 적합이 적재의 선행조건이고 Neo4j 미설치라, 무저장소 슬라이스로 매핑·검증을 못박아 fudge 없이 적재 안전화 + 데이터 품질(사이클·dangling·학년 단조성) 사전 노출.
