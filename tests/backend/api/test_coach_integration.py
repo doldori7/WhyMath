@@ -825,10 +825,11 @@ def test_create_session_persists_and_surfaces_active_hypotheses_on_live_pg() -> 
             )
             assert resp2.status_code == 201, resp2.text
             body2 = resp2.json()
-            dialogue_ids.append(uuid.UUID(body2["dialogue_id"]))
+            uid2_dialogue = uuid.UUID(body2["dialogue_id"])
             assert body2["active_hypotheses"] == []
             assert asyncio.run(_active_hypotheses(uid2)) == []
-            asyncio.run(_cleanup(uid2, []))
+            # uid2의 dialogue를 *자신의* 정리로 넘긴다(자식 dialogue 먼저 → user_profile FK 충족).
+            asyncio.run(_cleanup(uid2, [uid2_dialogue]))
     finally:
         asyncio.run(_cleanup(uid, dialogue_ids))
 
