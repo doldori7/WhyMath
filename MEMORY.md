@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (구현·L5/auth): 실 카카오·네이버 OAuth provider(httpx) + config 배선(OAuth-a2)
+**범위**: OAuth-a2를 providers/refresh/ratelimit로 분해, 첫 슬라이스로 **실 provider**(로그인 실작동의 핵심). 신규 `api/oauth_providers.py`(`KakaoOAuthProvider`·`NaverOAuthProvider` — httpx token→userinfo→`OAuthIdentity`·`build_oauth_providers` 레지스트리) + `config.py`(kakao/naver client_id·client_secret SecretStr env-only + `*_configured` 프로퍼티) + `app.py`(create_app 기본 `oauth_providers` = config 기반 build·키 미설정이면 빈 dict→404). 테스트 16개(성공·토큰/userinfo 실패·네트워크 오류·이메일 누락·lazy 클라이언트·레지스트리).
+**★검증 경계(정직·중대)**: 카카오/네이버 외부 API 계약(URL·요청/응답 필드)은 **공개 문서 기반 인코딩**이라 mock httpx 단위테스트는 *내 로직*(요청 구성·파싱·에러 매핑)만 검증한다. **실 provider 통합(실 필드명·스코프·응답 구조)은 라이브 크레덴셜로만 확인 가능**(로컬·CI 미검증) — 배포 전 실 카카오/네이버 콘솔로 검증 필요. Ollama/Anthropic provider와 동형(통합은 환경 밖).
+**결정**: ① 클라이언트 주입 가능(테스트 MockTransport)·미주입 시 호출당 생성·종료(`anthropic.py` lazy 패턴). ② 네트워크/타임아웃 `httpx.HTTPError` → `OAuthProviderError`(콜백 502). ③ client_secret SecretStr env-only(하드코딩 금지)·client_id 공개 str. ④ create_app 기본 레지스트리 = config 키 설정된 provider만(CI 빈 dict→404·현 동작·회귀 0). 시크릿은 환경변수(`WHYMATH_KAKAO_*`·`WHYMATH_NAVER_*`).
+**4게이트 green(메인 직접·CI 명령)**: ruff·black --check(186)·mypy --strict(160 src)·pytest **3088 passed/123 skip**(베이스라인 3072 + 신규 16·회귀 0)·`api/oauth_providers.py` cov **100%**. 마이그레이션 0(head `d3e4f5a6b7c8` 불변).
+**후속**: 실 provider 라이브 검증(카카오/네이버 콘솔·크레덴셜)·OAuth-a3 리프레시 토큰·OAuth-a4 로그인 IP 레이트리밋 / OAuth-b 모바일 인터셉터 / OAuth-c 로그인 UI.
+
 ### 2026-06-14 (구현·L5): OAuth 로그인 콜백 — code→사용자 upsert→JWT 발급(OAuth-a)
 **컨텍스트**: scene 등 보호 엔드포인트가 `ConsentedUser`(인증)를 쓰는데 모바일에 토큰 소스가 없었다(S5e가 인증 미배선으로 실 호출 불가). OAuth(카카오·네이버)는 backend 콜백 + 모바일 인터셉터 + 로그인 UI + SDK로 크고 외부의존이라 **OAuth-a~c로 분해**, 첫 슬라이스로 **OAuth-a(백엔드 콜백·로컬 검증 가능)** 채택.
 **범위**: 신규 `api/auth.py`(`OAuthProvider` Protocol·`OAuthIdentity`·`email_hash`·`resolve_user`·`POST /v1/auth/{provider}/callback`) + `schema/auth.py`(요청/응답) + `app.py`(create_app `oauth_providers` 주입·라우터 등록). 테스트 6개(service 3 + endpoint 3). 인증 인프라(JWT 발급/검증 `security.py`·Bearer `_auth.py`·미성년 동의 게이트·UserProfile)는 **전부 재사용**(신규 0).

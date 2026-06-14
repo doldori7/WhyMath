@@ -72,6 +72,7 @@ from whymath_backend.api.coach import router as coach_router
 from whymath_backend.api.concepts import router as concepts_router
 from whymath_backend.api.devices import router as devices_router
 from whymath_backend.api.me import router as me_router
+from whymath_backend.api.oauth_providers import build_oauth_providers
 from whymath_backend.api.problems import router as problems_router
 from whymath_backend.api.scene import router as scene_router
 from whymath_backend.api.users import router as users_router
@@ -319,10 +320,12 @@ def create_app(
     app.state.__setattr__(_TRACE_KEY, trace if trace is not None else LangfuseSink())
     # 기본 큐는 CeleryJobQueue(지연 연결) — 구성 시 broker 불필요(첫 디스패치 때 연결, S4).
     app.state.__setattr__(_QUEUE_KEY, queue if queue is not None else CeleryJobQueue())
-    # OAuth provider 레지스트리(로그인 콜백이 provider 이름으로 조회) — 기본 빈 dict(실 카카오/
-    # 네이버 구현은 후속이라 미등록 시 콜백 404). 테스트·운영이 주입한다.
+    # OAuth provider 레지스트리(로그인 콜백이 provider 이름으로 조회). 기본은 config의 키가
+    # 설정된 provider만(카카오·네이버·OAuth-a2) — 키 미설정(CI)이면 빈 dict라 콜백 404. 클라이언트는
+    # 지연이라 구성만으로 네트워크 미발생. 테스트는 가짜 provider를 직접 주입한다.
     app.state.__setattr__(
-        _OAUTH_PROVIDERS_KEY, oauth_providers if oauth_providers is not None else {}
+        _OAUTH_PROVIDERS_KEY,
+        oauth_providers if oauth_providers is not None else build_oauth_providers(get_settings()),
     )
     # shadow 검증기 — Settings 게이트(l3_shadow_validation_enabled). 비활성이면 None이라
     # /v1/generate가 validator 없이 호출(검증 미실행). 비차단이라 둘 다 안전.

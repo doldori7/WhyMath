@@ -321,6 +321,37 @@ class Settings(BaseSettings):
         description="액세스 토큰 만료(분). 기본 24시간. WHYMATH_JWT_EXPIRE_MINUTES로 조정.",
     )
 
+    # ── OAuth 로그인(카카오·네이버 SSO, OAuth-a2) ──
+    # client_id는 공개 식별자(일반 str)·client_secret은 SecretStr·env-only(하드코딩 금지).
+    # 비면 해당 provider 미등록(create_app이 레지스트리에서 제외 → 콜백 404).
+    kakao_client_id: str = Field(
+        default="",
+        description=(
+            "카카오 REST API 키(client_id·공개 식별자). 환경변수 WHYMATH_KAKAO_CLIENT_ID. "
+            "비면 카카오 로그인 미등록(콜백 404)."
+        ),
+    )
+    kakao_client_secret: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "카카오 client_secret(선택·관리자 설정 시). SecretStr·env-only "
+            "(WHYMATH_KAKAO_CLIENT_SECRET·하드코딩 금지)."
+        ),
+    )
+    naver_client_id: str = Field(
+        default="",
+        description=(
+            "네이버 client_id(공개 식별자). 환경변수 WHYMATH_NAVER_CLIENT_ID. "
+            "비면 네이버 로그인 미등록(콜백 404)."
+        ),
+    )
+    naver_client_secret: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "네이버 client_secret. SecretStr·env-only(WHYMATH_NAVER_CLIENT_SECRET·하드코딩 금지)."
+        ),
+    )
+
     # ── L4 코치 엔드포인트 rate limit ──
     coach_rate_limit_read_per_minute: int = Field(
         default=60,
@@ -716,6 +747,16 @@ class Settings(BaseSettings):
         던진다(빈 시크릿으로 토큰을 발급/검증하는 사고 방지). 값은 로그에 남기지 않는다.
         """
         return bool(self.jwt_secret_key.get_secret_value())
+
+    @property
+    def kakao_configured(self) -> bool:
+        """카카오 로그인이 구성됐는가(client_id 존재). 비면 콜백 레지스트리에서 제외(404)."""
+        return bool(self.kakao_client_id)
+
+    @property
+    def naver_configured(self) -> bool:
+        """네이버 로그인이 구성됐는가(client_id 존재). 비면 콜백 레지스트리에서 제외(404)."""
+        return bool(self.naver_client_id)
 
     @property
     def effective_celery_broker_url(self) -> str:
