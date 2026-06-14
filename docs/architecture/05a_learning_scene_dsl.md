@@ -171,6 +171,16 @@ LearningScene
 `coach_models.dart`에 `Visualization` 계약을 추가하고 `_SceneRenderer` 위젯을 `chat_screen`
 메시지 빌드에 삽입하는 것이 자연 확장 경로다. **Flutter SDK 부재 → CI mobile 잡이 게이트.**
 
+> **★구현 정정(S4 2026-06-14)**: ① 모델은 `coach_models.dart`가 아니라 신규 `data/scene_models.dart`
+> (`LearningScene`·`SceneElement`·`Visualization`·`SceneLearnerContext`·freezed). **`SceneElement`는
+> freezed union이 아니라 단일 flat 모델 + `kind` 문자열 + 변형별 nullable**(코드베이스에 union 선례 0·
+> 로컬 코드젠 검증 불가 → 리스크 회피·렌더러가 `kind` switch). ② `SceneRenderer`는 `presentation/
+> scene_renderer.dart` 독립 위젯(레지스트리 `kind→위젯`). `chat_screen` 삽입은 *장면 전달 엔드포인트
+> 부재*로 연기(S5). ③ `visualization`은 **placeholder seed**(caption/type cue) — 실 WebView·
+> postMessage는 S5(webview_flutter 미사용 + 위젯 테스트 플랫폼 부재). ④ `misconception_probe`는
+> 개입 패턴별 *사고 유도 cue*만(정답·수정·오개념 id 미렌더 — 렌더 단계 낙인 금지). 테스트 단독
+> `scene_models_test`(파싱·라운드트립)·`scene_renderer_test`(kind별 렌더·답미루기 가드).
+
 -----
 
 ## 7. 현 구현 매핑 (편집자 부기)
@@ -187,7 +197,7 @@ LearningScene
 | `misconception_probe` | `l4/misconception/`(카탈로그 30종·`diagnose`·`InterventionPattern` 4종)·`misconception_hypothesis` ORM | 🟢 카탈로그·진단 가동 |
 | `socratic_prompt` | L4 `PolyaState`·`PedagogyDecision`·`recommend_coaching` | 🟡 코칭 결정 가동(요소화 후속) |
 | `learner_context` | L2 BKT/IRT·`MisconceptionHypothesisRecord`(활성 가설·confidence) | 🟢 가동 |
-| `SceneRenderer`(L5) | Flutter declarative 대화 렌더(`chat_screen`)·`Visualization` 렌더러 **미구현** | 🔴 S4(CI mobile) |
+| `SceneRenderer`(L5) | `scene_renderer.dart`(레지스트리 `kind→위젯`)·`scene_models.dart`(freezed)·시각화 seed | 🟢 S4(CI mobile 게이트·`chat_screen` 통합은 S5) |
 | `LearningScene`/`parse_learning_scene` | `l4/learning_scene.py`(6종 kind 판별 유니온·3 구조 불변식·카탈로그 참조 게이트·cov 100%) | 🟢 S2 완료 |
 
 **판독**: 장면을 구성하는 *재료*(개념·오개념·코칭·학습자상태·단일 시각화 명세)는 대부분 가동.
@@ -204,7 +214,7 @@ LearningScene
 | S1 ✅ | **typed `Visualization.spec`** — 4 타입별 sub-schema(자유 JSON → 검증가능 계약)·게이트 확장 | **완료 2026-06-14**: cov 100%·3001 passed·회귀 0 | 0 |
 | S2 ✅ | `LearningScene` Pydantic + `parse_learning_scene`(참조 무결성·불변식) | **완료 2026-06-14**(`l4/learning_scene.py`): cov 100%·3036 passed·회귀 0·답미루기/낙인 불변식 테스트 35개 | 0 |
 | S3 ✅ | `generate_learning_scene`(골격 결정론 + spec 충전·★배치 **L4** `l4/scene_generation.py` — LearningScene이 L4라 생성기도 L4·L3 다운콜) | **완료 2026-06-14**: cov 100%·3054 passed·회귀 0·테스트 18개 | 0 |
-| S4 | L5 `SceneRenderer` 레지스트리(WebView 시드) | CI mobile 잡 | 0 |
+| S4 ✅ | L5 `SceneRenderer` 레지스트리(`kind→위젯`·시각화 seed·flat `SceneElement`) | **완료 2026-06-14**: CI mobile 잡(`build_runner`→`analyze`→`test`)·모델/위젯 테스트 | 0 |
 | S5+ | 적응형 장면(`learner_context` ↔ WH-1 가설/evidence_links)·과목 확장·교과서 자동 UI | Phase 2~3 | 해당 시 |
 
 **적용 범위 원칙**: verify 가능·표기 안정 단원(대수·함수 그래프)부터 켜고, 기하·증명(드래그·

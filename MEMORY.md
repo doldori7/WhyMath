@@ -332,6 +332,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (구현·L5): SceneRenderer 레지스트리 — LearningScene → Flutter 위젯(S4)
+**범위**: 05a §6 구현. Flutter `src/mobile`에 신규 4파일 — `data/scene_models.dart`(freezed: `LearningScene`·`SceneElement`·`Visualization`·`SceneLearnerContext`)·`presentation/scene_renderer.dart`(`SceneRenderer` 위젯·`kind→위젯` 레지스트리)·`test/scene_models_test.dart`·`test/scene_renderer_test.dart`. 렌더러는 **dumb**(수학 로직 0·명세→위젯·슬라이스 89).
+**★환경 제약(중대)**: 로컬 Flutter SDK 없음 → `flutter analyze`/`test`/`build_runner` **로컬 검증 불가**. **CI mobile 잡이 유일 게이트**(Flutter 3.24.5·`pub get`→`build_runner build`→`analyze`→`test`·format 미강제). 전략: 검증된 기존 패턴(`coach_models.dart`·`coach_signal_card.dart`·`*_test.dart`)을 *토큰 단위 모방*해 1차 통과 노림. `*.g.dart`·`*.freezed.dart`는 gitignore(CI가 codegen) → `@freezed` 소스만 작성.
+**설계 결정(CI 무실패 우선)**: ① **`SceneElement`=단일 flat freezed 모델 + `kind` 문자열 + 변형별 nullable**(freezed *union* 아님 — 코드베이스 union 선례 0·untestable codegen 리스크 회피·렌더러가 `kind` switch). ② **시각화=placeholder seed**(caption/type cue·실 WebView 아님 — `webview_flutter` 미사용 + 위젯 테스트 플랫폼 부재 → 실 WebView는 `flutter test` 실패. 실 렌더·postMessage는 S5). ③ **범위=독립 SceneRenderer 위젯**(chat_screen 통합은 장면 전달 엔드포인트 부재로 S5 연기).
+**렌더 단계 답미루기/낙인 가드(CLAUDE.md)**: `misconception_probe`는 정답·수정·오개념 id 미렌더·개입 패턴별 *사고 유도 cue*만("반례를 떠올려 볼까요?" 등). `socratic_prompt`는 정본 유도 질문(promptText)만. `step_panel`은 접힌 ExpansionTile(deferred). 위젯 테스트가 "틀렸"·정답·오개념 id `findsNothing` 단언. 미지 kind는 조용히 생략(전방호환).
+**게이트**: 로컬 4게이트 불가(SDK 없음). 백엔드 무변경(파이썬 경로 스킵)·docs 갱신 동반. **CI mobile 잡이 실제 게이트** — PR 머지 전 녹색 필수(이전 슬라이스와 달리 로컬 사전검증 0이라 CI 실패 시 `get_job_logs`로 반복 수정). 05a §6/§7/§8 갱신.
+**후속**: S5 실 WebView 시각화(D3/Desmos·postMessage)·`chat_screen` 통합(장면 API)·layout(two_panel/tabbed) 전용 렌더·타입 안전 union(로컬 SDK 확보 시).
+
 ### 2026-06-14 (구현·L4): generate_learning_scene — 개념 메타 결정론 골격 + L3 spec 충전(S3)
 **범위**: 05a §5 구현. `l4/scene_generation.py`(신규) — `generate_learning_scene(concept, level, req, *, provider, cache, trace, learner_context=None, answer_deferral_max_level=4)`. 개념 메타에서 **결정론 골격**을 코드가 만들고 시각화 spec만 LLM 충전 → `LearningScene` 조립·불변식 통과 반환. 테스트 18개(`test_scene_generation.py`).
 **★계층 배치 정정(05a "L3" 표기 교정)**: 05a §1·§5는 생성기를 *L3*로 표기하나, **S2가 LearningScene을 L4에 배치**(schema 역방향 회피)했으므로 생성기가 L3면 LearningScene(L4)을 import해 **역방향 의존 위반**. → 생성기는 **L4**(`l4/scene_generation.py`)에 두고 L3 `generate_visualization_spec`을 *다운콜*(L4→L3 LLMSeam 방향·`l4/models.py`). "생성" *역할*은 L3적이나 *배치*는 LearningScene과 같은 L4여야 계층 규칙 준수. 05a §5·§8 문서도 정정.
