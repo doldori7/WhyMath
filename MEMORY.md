@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (구현·L5): chat_screen 통합 — SceneRenderer + Scene API 소비(S5e·end-to-end 첫 연결)
+**범위**: 05a §6. Flutter chat 흐름에 장면 통합 — 신규 `data/scene_api.dart`(`SceneApi.fetchWeakConceptScene()`·`POST /v1/scenes/weak-concept`·`coach_api.dart` 미러·`sceneApiProvider`) + 수정 3(`domain/chat_message.dart`에 `LearningScene? scene` 필드+`ChatMessage.scene` 팩토리·`application/chat_controller.dart`에 `requestScene()`·`presentation/chat_screen.dart`에 AppBar 트리거 버튼+`_MessageBubble`의 `SceneRenderer` 단락) + 신규 `test/chat_scene_test.dart`(3개). **백엔드 생성·검증(S2/S3/S5a) → 클라 렌더(S4)** 파이프라인이 처음 end-to-end 연결.
+**설계(최소 침습)**: ① **장면은 `ChatMessage`에 싣는다**(coach `response`처럼·별도 엔드포인트 산출물이라 `CoachResponse`에 안 넣음). ② **기존 chat 테스트 미수정**(freezed nullable 필드 추가라 호환·새 테스트는 새 파일). ③ `requestScene`은 `_dispatch` graceful 패턴 미러(`isSending` 가드·`catch`로 에러만·앱 안 죽음). ④ 장면 메시지는 `_MessageBubble`이 `SceneRenderer`로만 렌더(빈 텍스트 버블 없음).
+**★인증 정직 명시**: scene 엔드포인트는 인증 필요하나 앱에 **토큰 인터셉터 미배선**(OAuth 트랙·`api_client.dart` 주석) → 실 호출은 OAuth 후 401. S5e는 fake 주입 테스트라 무관·**실 연결 좌석만 깐다**(end-to-end UI 흐름 + API 클라이언트).
+**환경 제약**: 로컬 Flutter SDK 없음 → `analyze`/`test`/`build_runner` **로컬 불가**. 기존 통과 패턴(`coach_api`·`chat_controller`·`chat_screen`·`*_test`) 토큰 모방 + 구분자 균형 정적 점검. **CI mobile 잡이 유일 게이트**(S4가 동형으로 1차 통과한 전례). 백엔드 무변경·마이그레이션 0. ★S4 교훈: mobile 잡이 필수 체크 아닐 수 있어 auto-merge 조기 머지 위험 → **mobile 녹색 확인 후 수동 머지**.
+**후속**: S5b 타입안전 union·S5c layout 전용 렌더·S5d 실 WebView(D3/Desmos·postMessage)·OAuth(인증 배선 → scene 실 호출 가능).
+
 ### 2026-06-14 (구현·L5): Scene API 노출 — generate_learning_scene → HTTP(S5a)
 **컨텍스트**: S5(실 WebView·chat 통합·layout 렌더·타입안전 union)는 4기능·mobile+backend 혼합이라 한 PR이 슬라이스 규율 위반 → **S5a~S5e로 분해**, 첫 슬라이스로 **S5a(Scene API·backend·로컬 검증 가능)** 채택(chat 통합의 전제·S4의 CI-only 제약 해소).
 **범위**: `api/visualization.py`(약점개념→시각화) **그대로 미러링**. 신규 `api/scene.py` — `scene_for_concept_diagnosis(diagnosis, session, *, provider, cache, trace)`(진단→`session.get(Concept)`→`mastery_to_level`→`generate_learning_scene` 위임) + `POST /v1/scenes/weak-concept`(`compute_concept_diagnoses` 최약점→장면·404/422/503 매핑·`response_model=LearningScene`). `app.py` 라우터 등록 2줄. 테스트 12개(service 5 + endpoint 7).

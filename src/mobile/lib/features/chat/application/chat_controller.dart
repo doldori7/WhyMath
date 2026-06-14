@@ -8,6 +8,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../data/coach_api.dart';
 import '../data/coach_models.dart';
+import '../data/scene_api.dart';
 import '../domain/chat_message.dart';
 import 'chat_state.dart';
 
@@ -184,6 +185,31 @@ class ChatController extends _$ChatController {
   void clearError() {
     if (state.error != null) {
       state = state.copyWith(error: null);
+    }
+  }
+
+  /// 약점개념 학습 장면을 서버에서 받아 대화에 끼운다(L2 진단→L4 장면·S5a 엔드포인트).
+  ///
+  /// 흐름: ① 전송중 표시·에러 클리어 → ② `POST /v1/scenes/weak-concept`(SceneApi) →
+  /// ③ 성공 시 장면 메시지 append(`SceneRenderer`가 렌더) → ④ 실패 시 graceful 에러만
+  /// 기록(앱은 죽지 않는다). 장면 생성·검증은 전부 서버(L4)가 하고 클라는 렌더만 한다
+  /// (표현≠의미·수학 로직 클라 미구현). 부수효과는 [SceneApi] 호출 하나뿐.
+  Future<void> requestScene() async {
+    if (state.isSending) {
+      return; // 전송 중 재진입 방지.
+    }
+    state = state.copyWith(isSending: true, error: null);
+    try {
+      final scene = await ref.read(sceneApiProvider).fetchWeakConceptScene();
+      state = state.copyWith(
+        messages: [...state.messages, ChatMessage.scene(scene)],
+        isSending: false,
+      );
+    } catch (e) {
+      state = state.copyWith(
+        isSending: false,
+        error: '학습 장면을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.',
+      );
     }
   }
 }

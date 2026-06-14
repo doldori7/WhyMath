@@ -6,6 +6,7 @@
 import 'package:freezed_annotation/freezed_annotation.dart';
 
 import '../data/coach_models.dart';
+import '../data/scene_models.dart';
 
 part 'chat_message.freezed.dart';
 
@@ -43,6 +44,9 @@ class ChatMessage with _$ChatMessage {
     /// 코치 발화의 원본 응답(후속 신호 렌더용·학생 메시지엔 null).
     CoachResponse? response,
 
+    /// 약점개념 학습 장면(S5a 엔드포인트 산출물·`SceneRenderer`로 렌더·없으면 null).
+    LearningScene? scene,
+
     /// 학생 메시지가 풀이 단계 입력인지(기본 false·대화 입력). 코치 메시지엔 의미 없음.
     @Default(false) bool isSolution,
   }) = _ChatMessage;
@@ -68,6 +72,13 @@ class ChatMessage with _$ChatMessage {
         text: text,
         socraticCategory: socraticCategory,
         response: response,
+      );
+
+  /// 학습 장면 한 줄을 만든다(코치 측·텍스트 버블 없이 [SceneRenderer]로만 렌더).
+  factory ChatMessage.scene(LearningScene scene) => ChatMessage(
+        role: ChatRole.coach,
+        text: '',
+        scene: scene,
       );
 
   /// 코치 발화 여부(버블 분기 편의).

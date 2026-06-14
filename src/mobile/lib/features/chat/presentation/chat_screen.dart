@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/chat_controller.dart';
 import '../domain/chat_message.dart';
 import 'coach_signal_card.dart';
+import 'scene_renderer.dart';
 
 /// 슬로건 — 앱바 부제로 노출(브랜드 정체성·답이 아닌 이유).
 const String _slogan = '답이 아닌, 이유를 묻는 수학';
@@ -73,6 +74,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  /// 약점개념 학습 장면을 요청한다(서버 L2 진단→L4 장면·S5a 엔드포인트). 결과는 장면
+  /// 메시지로 대화에 끼워져 [SceneRenderer]로 렌더된다(컨트롤러가 상태 전이·에러 처리).
+  Future<void> _onRequestScene() async {
+    await ref.read(chatControllerProvider.notifier).requestScene();
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatControllerProvider);
@@ -93,6 +100,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('WhyMath'),
+        actions: [
+          // 약점개념 학습 장면 요청 — 전송 중엔 비활성(중복 요청 방지).
+          IconButton(
+            icon: const Icon(Icons.auto_awesome_outlined),
+            tooltip: '약점 개념 장면 보기',
+            onPressed: state.isSending ? null : _onRequestScene,
+          ),
+        ],
         // 슬로건을 부제로 — 답이 아닌 이유를 묻는다는 정체성을 항상 노출.
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(20),
@@ -156,6 +171,12 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 장면 메시지면 SceneRenderer로만 렌더한다(빈 텍스트 버블 없이·S5e).
+    final scene = message.scene;
+    if (scene != null) {
+      return SceneRenderer(scene: scene);
+    }
+
     final theme = Theme.of(context);
     final isCoach = message.isCoach;
     final alignment = isCoach ? Alignment.centerLeft : Alignment.centerRight;

@@ -197,7 +197,7 @@ LearningScene
 | `misconception_probe` | `l4/misconception/`(카탈로그 30종·`diagnose`·`InterventionPattern` 4종)·`misconception_hypothesis` ORM | 🟢 카탈로그·진단 가동 |
 | `socratic_prompt` | L4 `PolyaState`·`PedagogyDecision`·`recommend_coaching` | 🟡 코칭 결정 가동(요소화 후속) |
 | `learner_context` | L2 BKT/IRT·`MisconceptionHypothesisRecord`(활성 가설·confidence) | 🟢 가동 |
-| `SceneRenderer`(L5) | `scene_renderer.dart`(레지스트리 `kind→위젯`)·`scene_models.dart`(freezed)·시각화 seed | 🟢 S4(CI mobile 게이트·`chat_screen` 통합은 S5) |
+| `SceneRenderer`(L5) | `scene_renderer.dart`(레지스트리)·`scene_models.dart`·`scene_api.dart`(S5a 소비)·`chat_screen` 통합(S5e) | 🟢 S4+S5e(CI mobile·시각화 seed·실 WebView는 S5d) |
 | `LearningScene`/`parse_learning_scene` | `l4/learning_scene.py`(6종 kind 판별 유니온·3 구조 불변식·카탈로그 참조 게이트·cov 100%) | 🟢 S2 완료 |
 
 **판독**: 장면을 구성하는 *재료*(개념·오개념·코칭·학습자상태·단일 시각화 명세)는 대부분 가동.
@@ -216,7 +216,8 @@ LearningScene
 | S3 ✅ | `generate_learning_scene`(골격 결정론 + spec 충전·★배치 **L4** `l4/scene_generation.py` — LearningScene이 L4라 생성기도 L4·L3 다운콜) | **완료 2026-06-14**: cov 100%·3054 passed·회귀 0·테스트 18개 | 0 |
 | S4 ✅ | L5 `SceneRenderer` 레지스트리(`kind→위젯`·시각화 seed·flat `SceneElement`) | **완료 2026-06-14**: CI mobile 잡(`build_runner`→`analyze`→`test`)·모델/위젯 테스트 | 0 |
 | S5a ✅ | **Scene API 노출** — `generate_learning_scene`을 HTTP로(`api/scene.py`·`POST /v1/scenes/weak-concept`·진단→Concept→장면·visualization 미러) | **완료 2026-06-14**: cov 100%·3066 passed·회귀 0·테스트 12개 | 0 |
-| S5b~e | 타입안전 union(mobile)·layout 전용 렌더(mobile)·실 WebView(mobile·D3/Desmos·postMessage)·`chat_screen` 통합(mobile·S5a 소비) | mobile CI / 백엔드 4게이트 | 0 |
+| S5e ✅ | **`chat_screen` 통합** — `SceneApi`(S5a 소비)·`ChatMessage.scene`·`requestScene`·AppBar 트리거·`_MessageBubble`→`SceneRenderer`(**end-to-end 첫 연결**) | **완료 2026-06-14**: CI mobile 잡·통합 테스트 3개 | 0 |
+| S5b~d | 타입안전 union(mobile)·layout 전용 렌더(mobile)·실 WebView(mobile·D3/Desmos·postMessage) | mobile CI | 0 |
 | S5+ | 적응형 장면(`learner_context` ↔ WH-1 가설/evidence_links·프로브)·과목 확장·교과서 자동 UI | Phase 2~3 | 해당 시 |
 
 **적용 범위 원칙**: verify 가능·표기 안정 단원(대수·함수 그래프)부터 켜고, 기하·증명(드래그·
