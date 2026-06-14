@@ -215,7 +215,9 @@ LearningScene
 | S2 ✅ | `LearningScene` Pydantic + `parse_learning_scene`(참조 무결성·불변식) | **완료 2026-06-14**(`l4/learning_scene.py`): cov 100%·3036 passed·회귀 0·답미루기/낙인 불변식 테스트 35개 | 0 |
 | S3 ✅ | `generate_learning_scene`(골격 결정론 + spec 충전·★배치 **L4** `l4/scene_generation.py` — LearningScene이 L4라 생성기도 L4·L3 다운콜) | **완료 2026-06-14**: cov 100%·3054 passed·회귀 0·테스트 18개 | 0 |
 | S4 ✅ | L5 `SceneRenderer` 레지스트리(`kind→위젯`·시각화 seed·flat `SceneElement`) | **완료 2026-06-14**: CI mobile 잡(`build_runner`→`analyze`→`test`)·모델/위젯 테스트 | 0 |
-| S5+ | 적응형 장면(`learner_context` ↔ WH-1 가설/evidence_links)·과목 확장·교과서 자동 UI | Phase 2~3 | 해당 시 |
+| S5a ✅ | **Scene API 노출** — `generate_learning_scene`을 HTTP로(`api/scene.py`·`POST /v1/scenes/weak-concept`·진단→Concept→장면·visualization 미러) | **완료 2026-06-14**: cov 100%·3066 passed·회귀 0·테스트 12개 | 0 |
+| S5b~e | 타입안전 union(mobile)·layout 전용 렌더(mobile)·실 WebView(mobile·D3/Desmos·postMessage)·`chat_screen` 통합(mobile·S5a 소비) | mobile CI / 백엔드 4게이트 | 0 |
+| S5+ | 적응형 장면(`learner_context` ↔ WH-1 가설/evidence_links·프로브)·과목 확장·교과서 자동 UI | Phase 2~3 | 해당 시 |
 
 **적용 범위 원칙**: verify 가능·표기 안정 단원(대수·함수 그래프)부터 켜고, 기하·증명(드래그·
 스내핑·제약·작도)은 WH-S Tier3(Lean) 성숙도에 종속하므로 초기 scope 제외(정직한 경계).

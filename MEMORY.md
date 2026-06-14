@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (구현·L5): Scene API 노출 — generate_learning_scene → HTTP(S5a)
+**컨텍스트**: S5(실 WebView·chat 통합·layout 렌더·타입안전 union)는 4기능·mobile+backend 혼합이라 한 PR이 슬라이스 규율 위반 → **S5a~S5e로 분해**, 첫 슬라이스로 **S5a(Scene API·backend·로컬 검증 가능)** 채택(chat 통합의 전제·S4의 CI-only 제약 해소).
+**범위**: `api/visualization.py`(약점개념→시각화) **그대로 미러링**. 신규 `api/scene.py` — `scene_for_concept_diagnosis(diagnosis, session, *, provider, cache, trace)`(진단→`session.get(Concept)`→`mastery_to_level`→`generate_learning_scene` 위임) + `POST /v1/scenes/weak-concept`(`compute_concept_diagnoses` 최약점→장면·404/422/503 매핑·`response_model=LearningScene`). `app.py` 라우터 등록 2줄. 테스트 12개(service 5 + endpoint 7).
+**결정**: ① **레이트리밋 visualization 버킷 재사용**(장면 생성 = 내부 시각화 spec LLM 1회·동일 비용·전용 scene 버킷은 후속·Settings 플러밍 회피). ② **`learner_context`는 진단 스냅샷(mastery·theta)만**·`active_hypothesis_ids=[]`(WH-1 가설 store 조회 기반 오개념 프로브 적응은 후속이라 이 엔드포인트는 프로브 미생성·정직 명시). ③ 통합 테스트(실 PG)는 후속(엔드포인트 테스트가 dependency_overrides+monkeypatch로 HTTP 글루를 PG 없이 커버·기존 visualization 통합 테스트가 공유 DI/auth/session 검증).
+**4게이트 green(메인 직접·CI 명령)**: ruff·black --check(183)·mypy --strict(157 src)·pytest **3066 passed/123 skip**(베이스라인 3054 + 신규 12·회귀 0)·`api/scene.py` cov **100%**(42 stmt·6 branch). **마이그레이션 0**(순수 API·DB 모델 0·head `d3e4f5a6b7c8` 불변).
+**후속**: S5b 타입안전 union(mobile)·S5c layout 전용 렌더·S5d 실 WebView(D3/Desmos·postMessage)·S5e `chat_screen` 통합(S5a 소비·`_MessageBubble`에 `SceneRenderer` 삽입).
+
 ### 2026-06-14 (구현·L5): SceneRenderer 레지스트리 — LearningScene → Flutter 위젯(S4)
 **범위**: 05a §6 구현. Flutter `src/mobile`에 신규 4파일 — `data/scene_models.dart`(freezed: `LearningScene`·`SceneElement`·`Visualization`·`SceneLearnerContext`)·`presentation/scene_renderer.dart`(`SceneRenderer` 위젯·`kind→위젯` 레지스트리)·`test/scene_models_test.dart`·`test/scene_renderer_test.dart`. 렌더러는 **dumb**(수학 로직 0·명세→위젯·슬라이스 89).
 **★환경 제약(중대)**: 로컬 Flutter SDK 없음 → `flutter analyze`/`test`/`build_runner` **로컬 검증 불가**. **CI mobile 잡이 유일 게이트**(Flutter 3.24.5·`pub get`→`build_runner build`→`analyze`→`test`·format 미강제). 전략: 검증된 기존 패턴(`coach_models.dart`·`coach_signal_card.dart`·`*_test.dart`)을 *토큰 단위 모방*해 1차 통과 노림. `*.g.dart`·`*.freezed.dart`는 gitignore(CI가 codegen) → `@freezed` 소스만 작성.
