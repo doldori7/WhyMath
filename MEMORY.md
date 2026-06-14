@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (구현·L5): 인증 세션 로직 — AuthApi + AuthController(OAuth-c1)
+**컨텍스트**: OAuth-a/a2/b로 인증 인프라 완결. 로그인(OAuth-c) 중 **provider 리다이렉트 코드 획득(webview/딥링크)은 네이티브라 CI/로컬 검증 불가** → c1/c2/c3 분해, 첫 슬라이스로 **검증 가능한 인증 세션 로직(c1)** 채택(사용자 선택).
+**범위**: Flutter `features/auth/` 신규 3(`data/auth_api.dart`·`application/auth_state.dart`(freezed)·`application/auth_controller.dart`(@riverpod)) + 테스트 2(api·controller). `AuthApi.login(provider, code, redirectUri)` → `POST /v1/auth/{provider}/callback`(OAuth-a)·access_token 추출(coach_api 미러·모델 없이 직접 파싱). `AuthController.completeLogin`(교환→`tokenStore.saveAccessToken`(OAuth-b)→isAuthenticated·graceful 에러)·`logout()`(clear).
+**설계**: 토큰 저장 후 dio 인터셉터(OAuth-b)가 이후 요청에 Bearer 자동 첨부 → scene 등 인증 호출 작동. 로그인 *화면*·webview/딥링크 코드 획득·SDK·네이티브 설정·라우트 가드는 c2/c3(미검증 네이티브). 테스트: capture adapter(AuthApi)·fake AuthApi+TokenStore(AuthController·`ChatController` 패턴).
+**환경 제약**: 로컬 Flutter SDK 없음 → 기존 freezed/riverpod 패턴 모방 + dio 5.x API + 구분자 점검. **CI mobile 잡 유일 게이트**(S4·S5e·OAuth-b 동형 전례). ★mobile 녹색 확인 후 수동 머지. 백엔드·마이그레이션 0·새 의존성 0.
+**후속**: OAuth-c2 로그인 화면(카카오/네이버 버튼·코드 획득 seam)·라우트 가드 / OAuth-c3 실 webview/딥링크·네이티브 설정 / OAuth-a3 refresh·a4 로그인 레이트리밋.
+
 ### 2026-06-14 (구현·L5): 모바일 dio Bearer 인터셉터 + 토큰 저장(OAuth-b)
 **범위**: OAuth-a/a2(백엔드 토큰 발급) → 모바일이 토큰을 저장·첨부하는 마지막 배선. Flutter 신규 2(`core/token_store.dart`·`core/auth_interceptor.dart`) + 수정 1(`core/api_client.dart` dioProvider에 인터셉터) + 테스트 1(`test/auth_interceptor_test.dart`·3개). 저장된 액세스 토큰을 모든 코어 API 요청에 `Authorization: Bearer`로 자동 첨부 → 로그인(OAuth-c) 후 scene 등 인증 호출 작동.
 **설계(테스트 가능성)**: ① `flutter_secure_storage`(이미 pubspec)는 플랫폼 채널이라 `flutter test` 직접 불가 → **`TokenStore` 추상 인터페이스**(read/save/clear)로 감싸 fake로 단위 테스트·`SecureTokenStore`(실 구현)는 통합/수동. ② dio 인터셉터는 **capture adapter**(`HttpClientAdapter`)로 검증(표준 dio 5.x). ③ 토큰 없으면 헤더 미첨부(미인증→서버 401)·읽기 실패는 dio가 요청 오류로(행 아님). 401 자동 클리어·리프레시는 후속.
