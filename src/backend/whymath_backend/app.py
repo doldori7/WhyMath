@@ -64,6 +64,7 @@ from whymath_backend.api.concepts import router as concepts_router
 from whymath_backend.api.devices import router as devices_router
 from whymath_backend.api.me import router as me_router
 from whymath_backend.api.problems import router as problems_router
+from whymath_backend.api.scene import router as scene_router
 from whymath_backend.api.users import router as users_router
 from whymath_backend.api.verify import router as verify_router
 from whymath_backend.api.visualization import router as visualization_router
@@ -487,5 +488,6 @@ def create_app(
     app.include_router(verify_router)
     app.include_router(devices_router)
     app.include_router(visualization_router)
+    app.include_router(scene_router)
 
     return app

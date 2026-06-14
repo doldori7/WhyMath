@@ -1,0 +1,173 @@
+"""L5 학습 장면 오케스트레이션 서비스 단위테스트 — 진단→Concept 로드→L4 위임. S5a.
+
+라이브 DB·LLM 없음: 가짜 session(.get) + 가짜 provider + 인메모리 스텁으로 L5 배선을 검증한다
+(test_visualization_service 미러). 설계 정본: 00_overview(7계층·L5 오케스트레이션)·05a §5.
+"""
+
+from __future__ import annotations
+
+import uuid
+
+import pytest
+
+from whymath_backend.api.scene import scene_for_concept_diagnosis
+from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis
+from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
+from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.visualization import InvalidVisualizationSpecError
+from whymath_backend.l4.learning_scene import (
+    LearningScene,
+    SocraticPromptElement,
+    VisualizationElement,
+)
+from whymath_backend.schema.concept import Concept
+from whymath_backend.schema.enums import (
+    CognitiveType,
+    ConceptLevel,
+    VisualizationStyle,
+)
+
+
+class _FakeProvider:
+    """가짜 LLMProvider — 정해진 텍스트 반환 + 호출 기록(LLMProvider 구조 충족)."""
+
+    def __init__(self, text: str) -> None:
+        self._text = text
+        self.calls: list[tuple[str, str, RoutingDecision]] = []
+
+    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+        self.calls.append((prompt, system, decision))
+        return self._text
+
+
+class _FakeConceptOrm:
+    """가짜 Concept ORM — to_schema()만 제공(session.get 반환값 모사)."""
+
+    def __init__(self, schema: Concept) -> None:
+        self._schema = schema
+
+    def to_schema(self) -> Concept:
+        return self._schema
+
+
+class _FakeSession:
+    """가짜 AsyncSession — get()만 모사(concept ORM 또는 None 반환)."""
+
+    def __init__(self, orm: object) -> None:
+        self._orm = orm
+
+    async def get(self, model: object, key: object) -> object:
+        return self._orm
+
+
+_VALID_JSON = (
+    '{"type": "interactive_graph_2d", "spec": {"function": "a*x**2", '
+    '"parameters": [{"name": "a"}]}, "interactive": true}'
+)
+
+
+def _concept() -> Concept:
+    """이차함수 개념 — 권장 양식 함수그래프 + 인지유형 정의(시각화+소크라테스 골격)."""
+    return Concept(
+        code="ALG-QUAD-DEF",
+        name_ko="이차함수의 그래프",
+        level=ConceptLevel.세부개념,
+        recommended_visual_styles=[VisualizationStyle.함수그래프],
+        cognitive_type=[CognitiveType.DEFINITION],
+    )
+
+
+def _diagnosis(bkt: float | None = 0.3, theta: float | None = 0.5) -> ConceptDiagnosis:
+    """주어진 BKT 숙달·θ의 개념 진단."""
+    return ConceptDiagnosis(
+        concept_id=uuid.uuid4(),
+        response_count=4,
+        agreement="insufficient",
+        bkt_mastery=bkt,
+        irt_theta=theta,
+    )
+
+
+@pytest.mark.asyncio
+async def test_loads_concept_and_generates_scene() -> None:
+    """진단 → Concept 로드 → 장면(시각화+소크라테스)·concept_id=code·name_ko 프롬프트."""
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert isinstance(scene, LearningScene)
+    assert scene.concept_id == "ALG-QUAD-DEF"
+    assert any(isinstance(el, VisualizationElement) for el in scene.elements)
+    assert any(isinstance(el, SocraticPromptElement) for el in scene.elements)
+    assert "이차함수의 그래프" in provider.calls[0][0]
+
+
+@pytest.mark.asyncio
+async def test_concept_not_found_returns_none() -> None:
+    """concept_id가 DB에 없으면(session.get→None) None·L3 미호출."""
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(None)
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert scene is None
+    assert provider.calls == []
+
+
+@pytest.mark.asyncio
+async def test_learner_context_snapshot_carried() -> None:
+    """learner_context에 진단 스냅샷(mastery·theta) 운반·active_hypothesis_ids 빈 목록(프로브 미생성)."""
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3, 0.5),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert scene is not None
+    assert scene.learner_context is not None
+    assert scene.learner_context.mastery_level == 0.3
+    assert scene.learner_context.theta == 0.5
+    assert scene.learner_context.active_hypothesis_ids == []
+
+
+@pytest.mark.asyncio
+async def test_none_mastery_defaults_level_chobo() -> None:
+    """bkt·irt 숙달 모두 None → level 기본 '초보'가 프롬프트에 반영."""
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(None, None),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert isinstance(scene, LearningScene)
+    assert "초보" in provider.calls[0][0]
+
+
+@pytest.mark.asyncio
+async def test_invalid_spec_propagates() -> None:
+    """시각화 spec LLM 출력이 게이트를 통과 못 하면 예외 전파(검증 안 된 명세 비반환)."""
+    provider = _FakeProvider("죄송합니다, 명세를 만들 수 없습니다.")
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    with pytest.raises(InvalidVisualizationSpecError):
+        await scene_for_concept_diagnosis(
+            _diagnosis(0.3),
+            session,  # type: ignore[arg-type]
+            provider=provider,
+            cache=InMemoryCache(),
+            trace=RecordingTraceSink(),
+        )
