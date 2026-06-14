@@ -10,10 +10,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/features/auth/data/auth_api.dart';
 
 class _Adapter implements HttpClientAdapter {
-  _Adapter(this._body, {this.status = 200});
+  _Adapter(this._body);
 
   final Map<String, dynamic> _body;
-  final int status;
   RequestOptions? captured;
 
   @override
@@ -25,7 +24,7 @@ class _Adapter implements HttpClientAdapter {
     captured = options;
     return ResponseBody.fromString(
       jsonEncode(_body),
-      status,
+      200,
       headers: {
         Headers.contentTypeHeader: [Headers.jsonContentType],
       },
