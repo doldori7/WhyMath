@@ -149,6 +149,10 @@ class _CapturingSession:
     async def commit(self) -> None:
         self.commits += 1
 
+    async def flush(self) -> None:
+        # WH-1 2단계 슬라이스 3 — apply_matches가 같은 트랜잭션 가시화로 flush(commit은 핸들러).
+        return None
+
     async def refresh(self, obj: Any) -> None:
         return None
 

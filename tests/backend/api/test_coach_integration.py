@@ -75,6 +75,11 @@ async def _cleanup(uid: uuid.UUID, dialogue_ids: list[uuid.UUID]) -> None:
                 text("DELETE FROM attempt_event WHERE user_id = :uid"),
                 {"uid": str(uid)},
             )
+            # WH-1 2단계 슬라이스 3 — 활성 가설 행 정리(user 단위·dialogue FK 없음).
+            await conn.execute(
+                text("DELETE FROM misconception_hypothesis WHERE user_id = :uid"),
+                {"uid": str(uid)},
+            )
             await conn.execute(
                 text("DELETE FROM dialogue WHERE dialogue_id = ANY(:ids)"),
                 {"ids": dids},
@@ -151,6 +156,27 @@ async def _compute_hint_metric(uid: uuid.UUID) -> dict[str, object]:
                 "help_value": metrics.help_reduction_slope.value,
                 "sample_hint_events": metrics.sample_hint_events,
             }
+    finally:
+        await engine.dispose()
+
+
+async def _active_hypotheses(uid: uuid.UUID) -> list[tuple[str, float, int, int]]:
+    """user의 *활성* misconception_hypothesis 행을 (mid, confidence, turns_since, count)로
+    confidence 내림차순 반환 — WH-1 2단계 슬라이스 3 per-turn 영속 검증용."""
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            rows = await conn.execute(
+                text(
+                    "SELECT misconception_id, confidence::float, "
+                    "turns_since_evidence, evidence_count "
+                    "FROM misconception_hypothesis "
+                    "WHERE user_id = :uid AND is_active = TRUE "
+                    "ORDER BY confidence DESC, misconception_id"
+                ),
+                {"uid": str(uid)},
+            )
+            return [(str(r[0]), float(r[1]), int(r[2]), int(r[3])) for r in rows.all()]
     finally:
         await engine.dispose()
 
@@ -731,3 +757,175 @@ def test_session_multiturn_logs_hint_events_on_live_pg() -> None:
             assert metrics["help_status"] in ("measured", "no_data")
     finally:
         asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+# ── WH-1 2단계 §8.4 슬라이스 3: 활성 가설 세트 per-turn 영속·노출 결선 ──
+# create_session·append_turns가 매칭(증거)으로 활성 가설 세트를 갱신·영속하고 응답
+# active_hypotheses로 노출하는지 검증. 매칭 유발 입력은 catalog의 제곱 분배 오류
+# `(a+b)² = a² + b²`(기존 test_create_session...이 counterexample intervention으로 이미 검증).
+
+_SQUARE_DISTRIB_INPUT = "내 풀이는 (a+b)² = a² + b² 이렇게 했어"
+_NO_MATCH_INPUT = "오늘 날씨가 좋네요 그냥 인사"
+
+
+def test_create_session_persists_and_surfaces_active_hypotheses_on_live_pg() -> None:
+    """POST /v1/coach/sessions — 매칭 있으면 active_hypotheses 채워짐 + 실 PG에 행 영속.
+
+    ① 제곱 분배 오류 입력 → 응답 active_hypotheses 비어있지 않음·DB misconception_hypothesis
+       활성 행 영속(confidence∈(0,1]·evidence_count≥1·turns_since_evidence=0).
+    ② 매칭 없는 입력 → active_hypotheses 빈 리스트·새 활성 행 없음.
+    ③ 기존 응답 필드(misconceptions·dialogue_id·intervention) 보존(회귀 0).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # ① 매칭 유발 입력 → 가설 노출 + 영속.
+            resp = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={"student_input": _SQUARE_DISTRIB_INPUT},
+            )
+            assert resp.status_code == 201, resp.text
+            body = resp.json()
+            dialogue_ids.append(uuid.UUID(body["dialogue_id"]))
+
+            hyps = body["active_hypotheses"]
+            assert hyps, "매칭이 있으면 active_hypotheses 비어있지 않음"
+            # 가설=후보 — 구조(confidence·후보 필드) 검증.
+            top = hyps[0]
+            assert 0.0 < top["confidence"] <= 1.0
+            assert top["evidence_count"] >= 1
+            assert top["turns_since_evidence"] == 0  # 이번 턴 증거
+            # 기존 응답 필드 보존(회귀 0).
+            assert body["misconceptions"], "misconceptions도 채워짐(동형 노출)"
+            assert body["intervention"]["pattern"] == "counterexample"
+
+            # DB 영속 확인 — 활성 행 1개 이상·노출과 일치.
+            rows = asyncio.run(_active_hypotheses(uid))
+            assert rows, "misconception_hypothesis 활성 행 영속"
+            assert rows[0][0] == top["misconception_id"]
+
+            # ② 매칭 없는 입력 → 빈 리스트·새 활성 행 없음(매칭이 없으면 가설 미생성).
+            uid2 = uuid.uuid4()
+            asyncio.run(_add_user(uid2))
+            token2 = create_access_token(uid2, settings=_settings())
+            resp2 = client.post(
+                "/v1/coach/sessions",
+                headers={"Authorization": f"Bearer {token2}"},
+                json={"student_input": _NO_MATCH_INPUT},
+            )
+            assert resp2.status_code == 201, resp2.text
+            body2 = resp2.json()
+            uid2_dialogue = uuid.UUID(body2["dialogue_id"])
+            assert body2["active_hypotheses"] == []
+            assert asyncio.run(_active_hypotheses(uid2)) == []
+            # uid2의 dialogue를 *자신의* 정리로 넘긴다(자식 dialogue 먼저 → user_profile FK 충족).
+            asyncio.run(_cleanup(uid2, [uid2_dialogue]))
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+def test_append_turns_accumulates_and_reinforces_hypotheses_on_live_pg() -> None:
+    """append_turns 재호출 시 가설 누적·강화(같은 오개념 증거 반복)·user 격리.
+
+    같은 매칭을 2턴 연속 제공 → evidence_count 증가(강화·누적)·confidence 단조 비감소.
+    다른 user는 격리(타 user 가설 행 미오염).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip(
+            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
+        )
+
+    uid = uuid.uuid4()
+    other = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        asyncio.run(_add_user(other))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            # 턴1(create) — 가설 생성.
+            create = client.post(
+                "/v1/coach/sessions",
+                headers=auth,
+                json={"student_input": _SQUARE_DISTRIB_INPUT},
+            )
+            assert create.status_code == 201, create.text
+            did = uuid.UUID(create.json()["dialogue_id"])
+            dialogue_ids.append(did)
+            after_t1 = create.json()["active_hypotheses"]
+            assert after_t1
+            mid = after_t1[0]["misconception_id"]
+            conf1 = after_t1[0]["confidence"]
+            count1 = after_t1[0]["evidence_count"]
+
+            # 턴2(append) — 같은 증거 반복 → 강화·누적.
+            append = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=auth,
+                json={"student_input": _SQUARE_DISTRIB_INPUT},
+            )
+            assert append.status_code == 201, append.text
+            after_t2 = append.json()["active_hypotheses"]
+            assert after_t2
+            same = next(h for h in after_t2 if h["misconception_id"] == mid)
+            # 강화 — evidence_count 증가·confidence 비감소(reinforce 단조).
+            assert same["evidence_count"] == count1 + 1
+            assert same["confidence"] >= conf1
+            assert same["turns_since_evidence"] == 0
+
+            # DB 영속(누적 후) 일치.
+            rows = asyncio.run(_active_hypotheses(uid))
+            db_same = next(r for r in rows if r[0] == mid)
+            assert db_same[3] == count1 + 1
+
+            # user 격리 — other user는 가설 행 0(타 user 오염 없음).
+            assert asyncio.run(_active_hypotheses(other)) == []
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+        asyncio.run(_cleanup(other, []))
+
+
+def test_stateless_coach_omits_active_hypotheses() -> None:
+    """stateless /v1/coach 응답엔 active_hypotheses 없음(DB 없음·불변).
+
+    실 PG 불필요(stateless·DB 무접근) — 인증만 통과하면 됨. CoachResponse는 active_hypotheses
+    필드를 갖지 않으므로 응답 JSON에 키가 부재한다.
+    """
+    uid = uuid.uuid4()
+    settings = _settings()
+    token = create_access_token(uid, settings=settings)
+    app = create_app()
+    app.dependency_overrides[get_settings] = _settings
+
+    # 인증 의존성을 우회하기 위해 토큰 user를 실제 조회하지 않는 stateless 경로지만,
+    # ConsentedUser 게이트는 user_profile 조회를 요구할 수 있어 PG 도달 시에만 본 검증을
+    # 수행한다(미도달 시 skip — stateless 경로도 ConsentedUser 게이트는 공유).
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — ConsentedUser 게이트 조회 불가로 건너뜀")
+    try:
+        asyncio.run(_add_user(uid))
+        with TestClient(app) as client:
+            resp = client.post(
+                "/v1/coach",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"student_input": _SQUARE_DISTRIB_INPUT},
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            # stateless 응답에는 active_hypotheses 키 자체가 없다(CoachResponse 불변).
+            assert "active_hypotheses" not in body
+            # 기존 매칭 노출은 여전히 동작(불변).
+            assert body["misconceptions"]
+    finally:
+        asyncio.run(_cleanup(uid, []))
