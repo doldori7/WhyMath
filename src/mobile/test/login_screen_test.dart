@@ -11,7 +11,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:korean_math_app/core/router.dart';
 import 'package:korean_math_app/core/token_store.dart';
-import 'package:korean_math_app/features/auth/application/auth_controller.dart';
 import 'package:korean_math_app/features/auth/data/auth_api.dart';
 import 'package:korean_math_app/features/auth/data/oauth_code_requester.dart';
 import 'package:korean_math_app/features/auth/presentation/login_screen.dart';
