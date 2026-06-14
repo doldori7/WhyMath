@@ -332,6 +332,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (구현·L5): 로그인 화면 + 코드 획득 seam(OAuth-c2)
+**컨텍스트**: OAuth-c1(AuthApi·AuthController)으로 로그인 *세션 로직*(code→토큰→저장) 완결. c2는 그 위에 **로그인 화면**(카카오/네이버 버튼)과 **authorization code 획득 seam**을 얹는다. 단, 실 code 획득(provider authorize→redirect 인터셉트)은 webview/네이티브라 CI/로컬 검증 불가.
+**범위**: Flutter 신규 2(`features/auth/data/oauth_code_requester.dart`·`features/auth/presentation/login_screen.dart`) + 수정 1(`core/router.dart`에 `/login` 라우트) + 테스트 1(`test/login_screen_test.dart`·3개). `LoginScreen`(ConsumerStatefulWidget·chat_screen 패턴)이 ① `OAuthCodeRequester.requestCode`(seam)로 code 획득 → ② `AuthController.completeLogin`(c1)으로 토큰 교환 → ③ 성공 시 `context.go(chatPath)`·실패/미구현은 SnackBar(앱 유지).
+**설계(seam 분리)**: ★**실 code 획득(webview)은 OAuth-c3**이라 `OAuthCodeRequester` **주입 가능 seam**으로 두고 기본 구현 `UnsupportedOAuthCodeRequester`는 명확한 `OAuthCodeException`을 던진다 — code 획득(네이티브·미검증)과 토큰 교환(c1·검증 가능)을 분리해 후자만 테스트한다. 테스트는 fake requester(code 반환 또는 예외)+fake AuthApi+fake TokenStore override.
+**★비파괴(정직·중대)**: c3 전엔 로그인이 *작동하지 않으므로* 기본 흐름(온보딩→채팅)을 로그인으로 강제하면 앱이 막힌다 → c2는 `/login`을 **등록·테스트만** 하고 `initialLocation`·온보딩 흐름은 불변(앱 유지). 흐름 강제(라우트 가드)·세션 복원은 c2b, 실 webview/딥링크·SDK·네이티브 설정은 c3.
+**환경 제약**: 로컬 Flutter SDK 없음 → 기존 패턴(chat_screen ConsumerStatefulWidget·onboarding_test GoRouter+ProviderScope·auth_controller_test fake) 토큰 모방 + 구분자 균형 점검. codegen 불요(LoginScreen·seam은 plain·freezed/riverpod 0). **CI mobile 잡 유일 게이트**(S4·S5e·OAuth-b/c1 동형 전례). ★mobile 녹색 확인 후 수동 머지. 백엔드·마이그레이션 0·새 의존성 0(pubspec 불변).
+**후속**: OAuth-c2b 라우트 가드(미인증 redirect)+세션 복원(앱 재시작 토큰 로드) / OAuth-c3 실 webview/딥링크 code 획득(`OAuthCodeRequester` 실 구현)·카카오/네이버 SDK·네이티브 설정 / OAuth-a3 refresh·a4 로그인 레이트리밋.
+
 ### 2026-06-14 (구현·L5): 인증 세션 로직 — AuthApi + AuthController(OAuth-c1)
 **컨텍스트**: OAuth-a/a2/b로 인증 인프라 완결. 로그인(OAuth-c) 중 **provider 리다이렉트 코드 획득(webview/딥링크)은 네이티브라 CI/로컬 검증 불가** → c1/c2/c3 분해, 첫 슬라이스로 **검증 가능한 인증 세션 로직(c1)** 채택(사용자 선택).
 **범위**: Flutter `features/auth/` 신규 3(`data/auth_api.dart`·`application/auth_state.dart`(freezed)·`application/auth_controller.dart`(@riverpod)) + 테스트 2(api·controller). `AuthApi.login(provider, code, redirectUri)` → `POST /v1/auth/{provider}/callback`(OAuth-a)·access_token 추출(coach_api 미러·모델 없이 직접 파싱). `AuthController.completeLogin`(교환→`tokenStore.saveAccessToken`(OAuth-b)→isAuthenticated·graceful 에러)·`logout()`(clear).
