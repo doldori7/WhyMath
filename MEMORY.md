@@ -332,6 +332,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (구현·L4): LearningScene 스키마 + parse_learning_scene 게이트(S2) — 합성 DSL 코어 못박음
+**범위**: 05a §3~§4 정본 구현. `l4/learning_scene.py`(신규) — `LearningScene`(scene_id·concept_id·layout 4종·`answer_deferral_max_level` 1~4·learner_context·elements) + `SceneElement` **kind 판별 유니온 6종**(visualization·param_control·step_panel·misconception_probe·socratic_prompt·annotation) + `SceneLayout`·`SceneLearnerContext` + `parse_learning_scene` 게이트 + `LearningSceneValidationError`. 테스트 35개(`tests/backend/l4/test_learning_scene.py`).
+**계층(왜 L4)**: scene은 schema(`Visualization`·`Graph2dSpec`·`VisualizationType`) **+ L4**(`InterventionPattern`·`SocraticCategory`·`PolyaStage`·`CATALOG_BY_ID`)를 조립 → schema는 L레이어 import 0(역방향 금지)이라 scene을 schema에 두면 위반·L4가 정확한 좌석(상위→하위만). 순환·옵션 deps eager 로드 0(Explore 2종 + 게이트로 확인).
+**교수학 안전을 스키마 불변식으로(CLAUDE.md 1·2·3)**: ① 답 미루기 — 모든 `socratic_prompt.hint_level ≤ answer_deferral_max_level`. ② param_control 정합 — `bound_visualization_index`가 범위 내 `VisualizationElement` 가리킴 + `targets ⊆ graph_2d spec 선언 파라미터`(비graph_2d/미선언/파싱실패시 **보수적 통과=false reject 0**). ③ annotation 정합 — 대상이 자기 외 유효 인덱스. **`misconception_probe`에 정답/수정 필드 부재**(extra=forbid가 구조 차단 — 낙인/즉답 금지를 스키마 차원에서 강제·`step_panel.reveal_policy="deferred"` 유일값). 게이트는 카탈로그 참조 무결성(`misconception_id ∈ CATALOG_BY_ID`)까지 — **concept_id 개념그래프 존재 확인은 DB 필요 → S3 연기**(정직 명시).
+**4게이트 green(메인 직접 재검증·에이전트 보고 불신뢰)**: ruff·black --check(181)·mypy --strict(155 src)·pytest **3036 passed/123 skip**(베이스라인 3001 + 신규 35·회귀 0)·`learning_scene.py` cov **100%**(103 stmt·26 branch). **마이그레이션 0**(순수 Pydantic·alembic head `d3e4f5a6b7c8` 불변).
+**전 세션 "전체 스위트 collection error" 규명**: numpy 2.4.6 + coverage 7.14.1 C-tracer가 `l4/__init__`(eager)→l2→db→pgvector→numpy 재로딩 시 "cannot load module more than once"를 던지나, **단일 파일 `--cov` 실행에서만** 발생(전체 스위트는 numpy 선로딩·캐시로 무해). CI `pytest --cov=whymath_backend`(full)·로컬 full 모두 3036 passed로 확인 — **코드 결함 아님**. 격리 cov 측정은 numpy 선import로 우회. `l4/__init__.py` 재export는 미추가(S3가 실제 소비 시).
+**후속**: S3 L3 `generate_learning_scene`(개념 메타 결정론 골격 + `generate_visualization_spec` 재사용·라우터·Langfuse·concept_id 그래프 검증).
+
 ### 2026-06-14 (설계·L5/L3): LearningScene DSL 설계안 채택 — Visualization 위 합성 계층·답 미루기/낙인 불변식 구조화
 **컨텍스트**: Kiki가 "수학교육앱 인터페이스 설계 자동화" 외부 문서 2종(DOCX·PDF·2026-06-14)을 검토 요청 → "우리 시스템 적용·개선·미래상 전망". 문서 골자(성취기준/개념 DB → Semantic AST → **Math UI DSL** → UI Generator → Flutter, "화면 말고 수학 구조", 종착점 Math Knowledge Runtime)는 CLAUDE.md 슬라이스 89(표현≠의미)·L1–L4 독립 수학 코어의 재진술 — *방향 전환 아닌 외부 검증*.
 **조사(Explore 3)**: 문서가 "수학 구조 데이터"라 부르는 것은 대부분 가동 — 개념그래프 403노드+541엣지(`recommended_visual_styles` 16종)·오개념 30종(signals+regex+counterexample)·문항 50+필드(`conditions_parsed`)·IRT/BKT·verify_step SymPy AST. 단일 시각화 명세 `Visualization`(4 타입·자유 JSON spec)+L3 생성기(`generate_visualization_spec`)+검증 게이트 가동. **공백 = ① 타입별 typed spec ② 다요소 합성 scene ③ L5 렌더러**. SolutionPath는 YAML만(Python 후속).
