@@ -180,7 +180,7 @@ LearningScene
 | `socratic_prompt` | L4 `PolyaState`·`PedagogyDecision`·`recommend_coaching` | 🟡 코칭 결정 가동(요소화 후속) |
 | `learner_context` | L2 BKT/IRT·`MisconceptionHypothesisRecord`(활성 가설·confidence) | 🟢 가동 |
 | `SceneRenderer`(L5) | Flutter declarative 대화 렌더(`chat_screen`)·`Visualization` 렌더러 **미구현** | 🔴 S4(CI mobile) |
-| `LearningScene`/`parse_learning_scene` | — | 🔴 S2 |
+| `LearningScene`/`parse_learning_scene` | `l4/learning_scene.py`(6종 kind 판별 유니온·3 구조 불변식·카탈로그 참조 게이트·cov 100%) | 🟢 S2 완료 |
 
 **판독**: 장면을 구성하는 *재료*(개념·오개념·코칭·학습자상태·단일 시각화 명세)는 대부분 가동.
 본 DSL이 추가하는 건 ① **합성 스키마**(`LearningScene`) ② **검증 게이트**(불변식) ③ **L5 렌더러**.
@@ -194,7 +194,7 @@ LearningScene
 |---|---|---|---|
 | **S0** *(이번)* | 본 설계문서·MEMORY 로그·`05_interaction.md` 교차링크 | 문서 정합·회귀 0 | 0 |
 | S1 ✅ | **typed `Visualization.spec`** — 4 타입별 sub-schema(자유 JSON → 검증가능 계약)·게이트 확장 | **완료 2026-06-14**: cov 100%·3001 passed·회귀 0 | 0 |
-| S2 | `LearningScene` Pydantic + `parse_learning_scene`(참조 무결성·불변식) | 답미루기·낙인 불변식 테스트 | 0 |
+| S2 ✅ | `LearningScene` Pydantic + `parse_learning_scene`(참조 무결성·불변식) | **완료 2026-06-14**(`l4/learning_scene.py`): cov 100%·3036 passed·회귀 0·답미루기/낙인 불변식 테스트 35개 | 0 |
 | S3 | L3 `generate_learning_scene`(골격 결정론 + spec 충전) | 라우터·Langfuse·캐시 | 0 |
 | S4 | L5 `SceneRenderer` 레지스트리(WebView 시드) | CI mobile 잡 | 0 |
 | S5+ | 적응형 장면(`learner_context` ↔ WH-1 가설/evidence_links)·과목 확장·교과서 자동 UI | Phase 2~3 | 해당 시 |
