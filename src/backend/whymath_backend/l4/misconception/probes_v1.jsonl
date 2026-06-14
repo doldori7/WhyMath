@@ -21,6 +21,8 @@
 {"statement": "두 수의 합에 로그를 취한 값은 각각에 로그를 취해서 더한 것과 같다고 생각했어", "expected_id": "log-distribution", "near_id": null, "kind": "paraphrase", "note": "log(a+b)=log a+log b 오개념 — signals log(a+b)·log a + log b 회피(말로 풀어 씀)"}
 {"statement": "덧셈한 결과에 로그를 씌우면 로그를 각 항에 따로 씌워 합한 것으로 분리된다고 적었어", "expected_id": "log-distribution", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
 {"statement": "두 수의 곱에 로그를 취하면 각각에 로그를 취해서 더한 값과 같아진다", "expected_id": null, "near_id": "log-distribution", "kind": "correct-near", "note": "log(ab)=log a+log b는 올바른 로그 법칙(합이 아니라 곱일 때)"}
+{"statement": "log(2+3) = log2 + log3 이라고 계산했어", "expected_id": "log-distribution", "near_id": null, "kind": "paraphrase", "note": "v1.2 후속 regex 탐지 — 로그를 합에 분배한 거짓 수치 항등식(canonical log(a+b)=log a+log b)을 수치 대입으로 재진술. substring 기호 signals는 부재(수치만)·regex_signals가 잡음(kind=paraphrase·기존 스키마)"}
+{"statement": "log(2·3) = log2 + log3 으로 계산했어", "expected_id": null, "near_id": "log-distribution", "kind": "correct-near", "note": "FP 가드 — 곱(2·3)에 로그를 취하면 합으로 분리되는 올바른 곱 법칙 log(ab)=log a+log b. regex는 괄호 안 합(\\d+\\+\\d+)만 매치하므로 곱(·)엔 미발화(disjoint·FP 0)"}
 {"statement": "이차방정식에서 판별식이 음수로 나오면 그 방정식은 아예 풀리지 않아 근이 하나도 없다고 결론지었어", "expected_id": "discriminant-negative-no-real-root", "near_id": null, "kind": "paraphrase", "note": "D<0이면 해 없음 단정 오개념 — signals 판별식·해가 없 중 '해가 없'을 '근이 하나도 없'으로 우회"}
 {"statement": "판별식 값이 0보다 작으면 이 식을 만족시키는 답은 존재하지 않는다고 봤어", "expected_id": "discriminant-negative-no-real-root", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 다른 어휘"}
 {"statement": "판별식이 음수이면 실수 범위의 근은 없지만 켤레인 복소수 근 두 개가 존재한다", "expected_id": null, "near_id": "discriminant-negative-no-real-root", "kind": "correct-near", "note": "D<0이면 실근은 없고 복소근 2개 — 올바른 진술(불능이 아님)"}

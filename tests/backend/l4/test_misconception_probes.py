@@ -44,8 +44,12 @@ class TestPackageDataLoading:
         text = read_probes_text()
         assert text.strip()  # 비어있지 않음
         # 각 (주석·빈 줄 아닌) 줄이 JSON 객체다.
-        lines = [ln for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
-        assert len(lines) == 92  # 검증된 92줄(이동만·내용 불변)
+        lines = [
+            ln
+            for ln in text.splitlines()
+            if ln.strip() and not ln.strip().startswith("#")
+        ]
+        assert len(lines) == 94  # 92줄 + 슬 102 후속 log-distribution recall·FP 각 1건
         for ln in lines:
             rec = json.loads(ln)
             assert "statement" in rec
@@ -69,8 +73,10 @@ class TestPackageDataLoading:
                 recall += 1
             else:
                 fp += 1
-        assert recall == 60  # recall 프로브 수(②의 표본)
-        assert fp == 32  # FP 프로브(precision·semantic_eval 별도·② 대상 아님)
+        assert recall == 61  # recall 프로브 수(②의 표본·log 수치대입 +1)
+        assert (
+            fp == 33
+        )  # FP 프로브(precision·semantic_eval 별도·② 대상 아님·log 곱법칙 +1)
 
     def test_all_expected_ids_in_catalog(self) -> None:
         # recall 프로브의 expected_id는 모두 카탈로그 id(매처가 잡을 수 있는 라벨).
@@ -90,9 +96,9 @@ class TestPackageDataLoading:
 class TestComputeDiagnosticRecall:
     def test_returns_hits_and_total_recall_probes(self) -> None:
         hits, total = compute_diagnostic_recall()
-        # total = recall 프로브 수(expected_id null=FP 제외) = 60.
-        assert total == 60
-        # hits ∈ [0, total](실측 — substring 매처 품질).
+        # total = recall 프로브 수(expected_id null=FP 제외) = 61.
+        assert total == 61
+        # hits ∈ [0, total](실측 — substring·regex 매처 품질).
         assert 0 <= hits <= total
 
     def test_deterministic(self) -> None:
@@ -123,15 +129,15 @@ class TestComputeDiagnosticRecall:
         assert (manual_hits, manual_total) == compute_diagnostic_recall()
 
     def test_fp_probes_excluded_from_total(self) -> None:
-        # total(recall 프로브 60) < 전체 프로브(92) — FP 프로브 32건이 제외됐다.
+        # total(recall 프로브 61) < 전체 프로브(94) — FP 프로브 33건이 제외됐다.
         _, total = compute_diagnostic_recall()
         all_probes = sum(
             1
             for ln in read_probes_text().splitlines()
             if ln.strip() and not ln.strip().startswith("#")
         )
-        assert all_probes == 92
-        assert total == 60
+        assert all_probes == 94
+        assert total == 61
         assert total < all_probes
 
 
@@ -150,8 +156,12 @@ class TestParsingTolerance:
             [
                 "  # 주석 줄",
                 "",
-                json.dumps({"statement": signals, "expected_id": eid, "kind": "paraphrase"}),
-                json.dumps({"statement": "올바른 진술", "expected_id": None, "near_id": eid}),
+                json.dumps(
+                    {"statement": signals, "expected_id": eid, "kind": "paraphrase"}
+                ),
+                json.dumps(
+                    {"statement": "올바른 진술", "expected_id": None, "near_id": eid}
+                ),
             ]
         )
         monkeypatch.setattr(probes_mod, "read_probes_text", lambda: fake)
@@ -177,7 +187,9 @@ class TestParsingTolerance:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # FP 프로브만 있으면 recall 프로브 0 → (0, 0)(하네스가 NO_DATA로 분기·날조 0 회피).
-        fake = json.dumps({"statement": "올바른 진술", "expected_id": None, "near_id": "x"})
+        fake = json.dumps(
+            {"statement": "올바른 진술", "expected_id": None, "near_id": "x"}
+        )
         monkeypatch.setattr(probes_mod, "read_probes_text", lambda: fake)
         assert compute_diagnostic_recall() == (0, 0)
 

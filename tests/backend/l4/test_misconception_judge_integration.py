@@ -4,7 +4,7 @@
 거짓양성을 judge가 얼마나 거르는지(judge_fp_reduction)와 recall을 얼마나 보존하는지
 (judge_recall_loss)를 측정한다. 이 테스트의 목적은 **측정**이다 — 품질을 hard-fail하지 않는다
 (Kiki가 출력 수치를 보고 coach 배선 여부를 후속 슬라이스에서 결정한다). loose smoke만 단언하고
-(`total==92`·비율 ∈ [0,1] 등), judge 전후 수치는 print로 흘려 `-s`로 Kiki가 확인한다.
+(`total==94`·비율 ∈ [0,1] 등), judge 전후 수치는 print로 흘려 `-s`로 Kiki가 확인한다.
 
 CI는 `WHYMATH_RUN_INTEGRATION`을 설정하지 않으므로 자동 skip(conftest.py 게이트). 켜져 돌더라도
 로컬 Ollama 미도달(모델 미설치·서버 다운)이면 *fail이 아니라 skip*한다(슬106/107 try/except skip
@@ -12,7 +12,7 @@ CI는 `WHYMATH_RUN_INTEGRATION`을 설정하지 않으므로 자동 skip(conftes
 로컬 모델이 받아진 환경에서만 실제로 돈다.
 
 비용 메모: judge는 *고비용*이다(후보당 LLM 1회 왕복). 측정은 *프로브 일부*(FP·recall 대표 표본)
-로 제한하지 않고 전체 92줄을 돌리되, 로컬 FAST(L3JudgeSeam이 max_latency<2000으로 FAST 강제)라
+로 제한하지 않고 전체 94줄을 돌리되, 로컬 FAST(L3JudgeSeam이 max_latency<2000으로 FAST 강제)라
 클라우드 비용 0이다(CLAUDE.md 로컬 우선).
 """
 
@@ -48,7 +48,7 @@ class TestJudgeLive:
         # 실파일을 빌려 `load_probes`에 넘긴다(설치 트리·개발 트리 공통).
         with probes_path() as path:
             probes = load_probes(path)
-        assert len(probes) == 92
+        assert len(probes) == 94
 
         # 슬110(#5): bge-m3·Ollama 자원 미도달은 사전체크로 skip(judge=UNCERTAIN 무의미 측정
         # 회피)·측정 경로 코드 버그는 fail로 전파. judge 측정은 임베딩(후보)+Ollama(판정) 둘 다 필요.
@@ -74,9 +74,9 @@ class TestJudgeLive:
         print(format_report(report))
 
         # loose smoke(측정이 목적·품질 hard-fail 아님): 구조 무결성만 단언.
-        assert report.total == 92
-        assert report.total_recall == 60
-        assert report.total_fp == 32
+        assert report.total == 94
+        assert report.total_recall == 61
+        assert report.total_fp == 33
         # judge 후 지표는 None이거나 [0,1](Ollama 미도달이면 전부 UNCERTAIN→의미와 동일).
         for value in (
             report.judge_fp_rate,
@@ -90,4 +90,6 @@ class TestJudgeLive:
         assert report.judge_caught_recall <= report.caught_recall
         # 각 outcome 분할 불변(kept ⊕ removed = semantic_ids).
         for o in outcomes:
-            assert set(o.judge_kept_ids) | set(o.judge_removed_ids) == set(o.semantic_ids)
+            assert set(o.judge_kept_ids) | set(o.judge_removed_ids) == set(
+                o.semantic_ids
+            )
