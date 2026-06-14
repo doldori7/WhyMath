@@ -59,6 +59,15 @@ from whymath_backend.api._l3_state import (
     get_trace as _get_trace,
 )
 from whymath_backend.api._misconception_state import get_semantic_matcher
+from whymath_backend.api.auth import (
+    OAUTH_PROVIDERS_KEY as _OAUTH_PROVIDERS_KEY,
+)
+from whymath_backend.api.auth import (
+    OAuthProvider,
+)
+from whymath_backend.api.auth import (
+    router as auth_router,
+)
 from whymath_backend.api.coach import router as coach_router
 from whymath_backend.api.concepts import router as concepts_router
 from whymath_backend.api.devices import router as devices_router
@@ -278,6 +287,7 @@ def create_app(
     cache: CacheBackend | None = None,
     trace: TraceSink | None = None,
     queue: AsyncJobQueue | None = None,
+    oauth_providers: dict[str, OAuthProvider] | None = None,
 ) -> FastAPI:
     """FastAPI 앱 팩토리 — 의존성 주입 가능.
 
@@ -309,6 +319,11 @@ def create_app(
     app.state.__setattr__(_TRACE_KEY, trace if trace is not None else LangfuseSink())
     # 기본 큐는 CeleryJobQueue(지연 연결) — 구성 시 broker 불필요(첫 디스패치 때 연결, S4).
     app.state.__setattr__(_QUEUE_KEY, queue if queue is not None else CeleryJobQueue())
+    # OAuth provider 레지스트리(로그인 콜백이 provider 이름으로 조회) — 기본 빈 dict(실 카카오/
+    # 네이버 구현은 후속이라 미등록 시 콜백 404). 테스트·운영이 주입한다.
+    app.state.__setattr__(
+        _OAUTH_PROVIDERS_KEY, oauth_providers if oauth_providers is not None else {}
+    )
     # shadow 검증기 — Settings 게이트(l3_shadow_validation_enabled). 비활성이면 None이라
     # /v1/generate가 validator 없이 호출(검증 미실행). 비차단이라 둘 다 안전.
     _settings = get_settings()
@@ -480,6 +495,7 @@ def create_app(
     # DB-backed 라우터 결선 — get_session 의존성으로 PostgreSQL을 읽고 쓴다(영속 레이어 →
     # HTTP). L3 인라인 엔드포인트와 달리 살아있는 PG를 요구하므로 통합테스트(@integration)와
     # 메인의 실 PG 검증으로 동작을 확인한다.
+    app.include_router(auth_router)
     app.include_router(concepts_router)
     app.include_router(problems_router)
     app.include_router(users_router)

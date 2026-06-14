@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (구현·L5): OAuth 로그인 콜백 — code→사용자 upsert→JWT 발급(OAuth-a)
+**컨텍스트**: scene 등 보호 엔드포인트가 `ConsentedUser`(인증)를 쓰는데 모바일에 토큰 소스가 없었다(S5e가 인증 미배선으로 실 호출 불가). OAuth(카카오·네이버)는 backend 콜백 + 모바일 인터셉터 + 로그인 UI + SDK로 크고 외부의존이라 **OAuth-a~c로 분해**, 첫 슬라이스로 **OAuth-a(백엔드 콜백·로컬 검증 가능)** 채택.
+**범위**: 신규 `api/auth.py`(`OAuthProvider` Protocol·`OAuthIdentity`·`email_hash`·`resolve_user`·`POST /v1/auth/{provider}/callback`) + `schema/auth.py`(요청/응답) + `app.py`(create_app `oauth_providers` 주입·라우터 등록). 테스트 6개(service 3 + endpoint 3). 인증 인프라(JWT 발급/검증 `security.py`·Bearer `_auth.py`·미성년 동의 게이트·UserProfile)는 **전부 재사용**(신규 0).
+**결정**: ① **provider seam**(`OAuthProvider` Protocol·주입) — ★**실 카카오/네이버 httpx 교환·client secret 설정은 후속**(OAuth-a2). 콜백은 가짜 provider 주입으로 결정론 검증(라이브 provider 없이 로컬 100%). 미등록 provider면 404(운영은 빈 레지스트리). ② **upsert 키=이메일 해시**(`email_hash=sha256(정규화 이메일)`) — 평문 미저장(개인정보)·같은 이메일은 provider 무관 같은 계정(자연 연결)·**마이그레이션 0**(기존 `email_hash` UNIQUE 재사용·신규 컬럼 0). ③ 신규 사용자는 `persona_primary` NOT NULL이라 **기본 A(일반고 고3·MVP)**로 생성·온보딩(PATCH /v1/users/me)서 정교화. ④ 로그인은 *미인증* 엔드포인트(토큰만 발급)·미성년 동의는 *보호된* 엔드포인트의 `ConsentedUser`가 게이트. 에러: 미등록 provider 404·code 교환 실패 502·JWT 시크릿 미설정 500.
+**4게이트 green(메인 직접·CI 명령)**: ruff·black --check(185)·mypy --strict(159 src)·pytest **3072 passed/123 skip**(베이스라인 3066 + 신규 6·회귀 0)·`api/auth.py`+`schema/auth.py` cov **100%**. 마이그레이션 0(head `d3e4f5a6b7c8` 불변).
+**후속**: OAuth-a2 실 카카오/네이버 httpx provider + config secret·로그인 IP 레이트리밋·리프레시 토큰 / OAuth-b 모바일 dio Bearer 인터셉터+토큰 저장(flutter_secure_storage) / OAuth-c 로그인 화면+SDK+라우트 가드.
+
 ### 2026-06-14 (구현·L5): chat_screen 통합 — SceneRenderer + Scene API 소비(S5e·end-to-end 첫 연결)
 **범위**: 05a §6. Flutter chat 흐름에 장면 통합 — 신규 `data/scene_api.dart`(`SceneApi.fetchWeakConceptScene()`·`POST /v1/scenes/weak-concept`·`coach_api.dart` 미러·`sceneApiProvider`) + 수정 3(`domain/chat_message.dart`에 `LearningScene? scene` 필드+`ChatMessage.scene` 팩토리·`application/chat_controller.dart`에 `requestScene()`·`presentation/chat_screen.dart`에 AppBar 트리거 버튼+`_MessageBubble`의 `SceneRenderer` 단락) + 신규 `test/chat_scene_test.dart`(3개). **백엔드 생성·검증(S2/S3/S5a) → 클라 렌더(S4)** 파이프라인이 처음 end-to-end 연결.
 **설계(최소 침습)**: ① **장면은 `ChatMessage`에 싣는다**(coach `response`처럼·별도 엔드포인트 산출물이라 `CoachResponse`에 안 넣음). ② **기존 chat 테스트 미수정**(freezed nullable 필드 추가라 호환·새 테스트는 새 파일). ③ `requestScene`은 `_dispatch` graceful 패턴 미러(`isSending` 가드·`catch`로 에러만·앱 안 죽음). ④ 장면 메시지는 `_MessageBubble`이 `SceneRenderer`로만 렌더(빈 텍스트 버블 없음).
