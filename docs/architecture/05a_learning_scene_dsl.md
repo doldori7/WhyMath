@@ -133,6 +133,14 @@ LearningScene
 
 ## 5. L3 생성 — 개념 노드 → 장면 (S3)
 
+> **★배치 정정(S3 구현 2026-06-14)**: 본 절은 생성기를 *L3*로 표기하나, S2가 `LearningScene`을
+> **L4**에 배치(schema는 L레이어 import 0 → 역방향 회피)했으므로 생성기가 L3에 있으면 `LearningScene`
+> (L4)을 import해 역방향 의존 위반이 된다. 따라서 `generate_learning_scene`은 **L4**(`l4/scene_generation.py`)에
+> 두고 L3 `generate_visualization_spec`을 *다운콜*한다(L4→L3 `LLMSeam` 방향). "생성"이라는 *역할*은
+> L3적이나 *배치*는 LearningScene과 같은 L4여야 계층 규칙을 지킨다. 또한 개념의 `common_misconceptions`는
+> *자유서술*(정답/수정 텍스트·카탈로그 id 아님)이라 프로브 근거로 쓰지 않고, 프로브는 **활성 가설
+> (`active_hypothesis_ids`) ∩ 오개념 카탈로그**에서만 생성한다(RS2 거짓 낙인 차단).
+
 문서의 "무엇을 배울 것인가? → 어떤 UI" 를 *LLM 자유 추측이 아니라 개념 메타 기반 결정론*으로 구현.
 
 1. **결정론적 골격** — 개념(`schema/concept.py`)의 구조 필드에서 요소 kind를 코드가 결정:
@@ -195,7 +203,7 @@ LearningScene
 | **S0** *(이번)* | 본 설계문서·MEMORY 로그·`05_interaction.md` 교차링크 | 문서 정합·회귀 0 | 0 |
 | S1 ✅ | **typed `Visualization.spec`** — 4 타입별 sub-schema(자유 JSON → 검증가능 계약)·게이트 확장 | **완료 2026-06-14**: cov 100%·3001 passed·회귀 0 | 0 |
 | S2 ✅ | `LearningScene` Pydantic + `parse_learning_scene`(참조 무결성·불변식) | **완료 2026-06-14**(`l4/learning_scene.py`): cov 100%·3036 passed·회귀 0·답미루기/낙인 불변식 테스트 35개 | 0 |
-| S3 | L3 `generate_learning_scene`(골격 결정론 + spec 충전) | 라우터·Langfuse·캐시 | 0 |
+| S3 ✅ | `generate_learning_scene`(골격 결정론 + spec 충전·★배치 **L4** `l4/scene_generation.py` — LearningScene이 L4라 생성기도 L4·L3 다운콜) | **완료 2026-06-14**: cov 100%·3054 passed·회귀 0·테스트 18개 | 0 |
 | S4 | L5 `SceneRenderer` 레지스트리(WebView 시드) | CI mobile 잡 | 0 |
 | S5+ | 적응형 장면(`learner_context` ↔ WH-1 가설/evidence_links)·과목 확장·교과서 자동 UI | Phase 2~3 | 해당 시 |
 

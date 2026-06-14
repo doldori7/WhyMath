@@ -332,6 +332,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (구현·L4): generate_learning_scene — 개념 메타 결정론 골격 + L3 spec 충전(S3)
+**범위**: 05a §5 구현. `l4/scene_generation.py`(신규) — `generate_learning_scene(concept, level, req, *, provider, cache, trace, learner_context=None, answer_deferral_max_level=4)`. 개념 메타에서 **결정론 골격**을 코드가 만들고 시각화 spec만 LLM 충전 → `LearningScene` 조립·불변식 통과 반환. 테스트 18개(`test_scene_generation.py`).
+**★계층 배치 정정(05a "L3" 표기 교정)**: 05a §1·§5는 생성기를 *L3*로 표기하나, **S2가 LearningScene을 L4에 배치**(schema 역방향 회피)했으므로 생성기가 L3면 LearningScene(L4)을 import해 **역방향 의존 위반**. → 생성기는 **L4**(`l4/scene_generation.py`)에 두고 L3 `generate_visualization_spec`을 *다운콜*(L4→L3 LLMSeam 방향·`l4/models.py`). "생성" *역할*은 L3적이나 *배치*는 LearningScene과 같은 L4여야 계층 규칙 준수. 05a §5·§8 문서도 정정.
+**결정론 골격(LLM은 spec만·RS5 환각 방어)**: ① `recommended_visual_styles` 있으면 `visualization` 1개 — `generate_visualization_spec`(라우터·Langfuse·캐시 경유) 충전, 결과가 graph_2d+파라미터 선언이면 그 파라미터 타깃 `param_control` 덧붙임(없으면/비graph_2d면 생략). ② `cognitive_type` → 소크라테스 발화(결정론 매핑 `_COGNITIVE_SOCRATIC_MAP`·정본 유도 질문 `EXAMPLE_QUESTION`·`hint_level=1`·카테고리 중복 제거·없으면 기본 META). ③ `learner_context.active_hypothesis_ids ∩ CATALOG_BY_ID` → `misconception_probe`(적응·반례 개입). LLM 호출은 시각화 spec 1회뿐(스타일 있을 때)·로컬 우선.
+**낙인 금지(RS2·정직)**: 개념의 `common_misconceptions`는 *자유서술*(정답/수정 텍스트·카탈로그 id 아님)이라 프로브 근거로 **안 씀** — 프로브는 *근거 있는 활성 가설 ∩ 카탈로그*에서만(거짓 낙인 차단). 카탈로그 밖 가설 id는 조용히 제외. `concept_id`=`Concept.code`(UC)·개념그래프 *존재* 검증은 DB 필요라 후속.
+**4게이트 green(메인 직접·CI 명령 그대로)**: ruff·black --check(182)·mypy --strict(156 src)·pytest **3054 passed/123 skip**(베이스라인 3036 + 신규 18·회귀 0)·`scene_generation.py` cov **100%**(50 stmt·16 branch). **마이그레이션 0**(순수 함수·head `d3e4f5a6b7c8` 불변).
+**후속**: S4 L5 `SceneRenderer` 레지스트리(WebView 시드·CI mobile 잡)·S5+ 적응형 장면(learner_context ↔ WH-1 evidence_links)·다중 시각화·step_panel(SolutionPath Python 구현).
+
 ### 2026-06-14 (구현·L4): LearningScene 스키마 + parse_learning_scene 게이트(S2) — 합성 DSL 코어 못박음
 **범위**: 05a §3~§4 정본 구현. `l4/learning_scene.py`(신규) — `LearningScene`(scene_id·concept_id·layout 4종·`answer_deferral_max_level` 1~4·learner_context·elements) + `SceneElement` **kind 판별 유니온 6종**(visualization·param_control·step_panel·misconception_probe·socratic_prompt·annotation) + `SceneLayout`·`SceneLearnerContext` + `parse_learning_scene` 게이트 + `LearningSceneValidationError`. 테스트 35개(`tests/backend/l4/test_learning_scene.py`).
 **계층(왜 L4)**: scene은 schema(`Visualization`·`Graph2dSpec`·`VisualizationType`) **+ L4**(`InterventionPattern`·`SocraticCategory`·`PolyaStage`·`CATALOG_BY_ID`)를 조립 → schema는 L레이어 import 0(역방향 금지)이라 scene을 schema에 두면 위반·L4가 정확한 좌석(상위→하위만). 순환·옵션 deps eager 로드 0(Explore 2종 + 게이트로 확인).
