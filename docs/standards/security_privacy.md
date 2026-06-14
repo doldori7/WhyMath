@@ -58,6 +58,12 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 # 교사: 학교 인증 (Phase 3+)
 ```
 
+> **구현 현황 (OAuth-a·2026-06-14)**: JWT 발급/검증(`security.py`)·Bearer 의존성·미성년 동의
+> 게이트(`api/_auth.py`)는 가동. **OAuth 로그인 콜백 seam**(`api/auth.py`·`POST /v1/auth/{provider}/
+> callback` — `OAuthProvider` Protocol → 사용자 upsert(이메일 해시 키·마이그레이션 0) → `create_access_token`)
+> 착수. ★**실 카카오/네이버 httpx 교환·client secret·리프레시 토큰·로그인 IP 레이트리밋은 후속**
+> (OAuth-a2). access 15분/refresh 30일 TTL 표준은 리프레시 토큰 도입 시 적용(현재 access 기본 24h).
+
 ## 감사 로그
 
 ```python
