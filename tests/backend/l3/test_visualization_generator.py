@@ -103,6 +103,12 @@ class TestParseVisualizationSpec:
         with pytest.raises(InvalidVisualizationSpecError):
             parse_visualization_spec(bad)
 
+    def test_typed_spec_violation_rejected(self) -> None:
+        """S1 typed spec 게이트 — graph_2d function이 문자열 아님(123) → 거부."""
+        bad = '{"type": "interactive_graph_2d", "spec": {"function": 123}}'
+        with pytest.raises(InvalidVisualizationSpecError):
+            parse_visualization_spec(bad)
+
 
 # ──────────────────────────────────────────────────────────────────────
 # generate_visualization_spec — 라우터 경유(pipeline.generate) + 게이트
