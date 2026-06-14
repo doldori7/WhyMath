@@ -65,7 +65,9 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 > id/secret env-only·`create_app` 기본 배선) 가동. ★**실 provider 외부 API 계약은 문서 기반 인코딩 —
 > 라이브 크레덴셜로만 통합 검증 가능(로컬/CI 미검증)**, 배포 전 실 콘솔 검증 필요. **리프레시 토큰·
 > 로그인 IP 레이트리밋은 후속**(OAuth-a3·a4). access 15분/refresh 30일 TTL은 리프레시 도입 시 적용
-> (현재 access 기본 24h).
+> (현재 access 기본 24h). **모바일(OAuth-b)**: `core/token_store.dart`(`TokenStore`·OS 보안 저장소
+> `flutter_secure_storage`) + `core/auth_interceptor.dart`(dio Bearer 자동 첨부) 가동 — 로그인 화면·
+> SDK(OAuth-c)는 후속.
 
 ## 감사 로그
 

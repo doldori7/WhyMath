@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-14 (구현·L5): 모바일 dio Bearer 인터셉터 + 토큰 저장(OAuth-b)
+**범위**: OAuth-a/a2(백엔드 토큰 발급) → 모바일이 토큰을 저장·첨부하는 마지막 배선. Flutter 신규 2(`core/token_store.dart`·`core/auth_interceptor.dart`) + 수정 1(`core/api_client.dart` dioProvider에 인터셉터) + 테스트 1(`test/auth_interceptor_test.dart`·3개). 저장된 액세스 토큰을 모든 코어 API 요청에 `Authorization: Bearer`로 자동 첨부 → 로그인(OAuth-c) 후 scene 등 인증 호출 작동.
+**설계(테스트 가능성)**: ① `flutter_secure_storage`(이미 pubspec)는 플랫폼 채널이라 `flutter test` 직접 불가 → **`TokenStore` 추상 인터페이스**(read/save/clear)로 감싸 fake로 단위 테스트·`SecureTokenStore`(실 구현)는 통합/수동. ② dio 인터셉터는 **capture adapter**(`HttpClientAdapter`)로 검증(표준 dio 5.x). ③ 토큰 없으면 헤더 미첨부(미인증→서버 401)·읽기 실패는 dio가 요청 오류로(행 아님). 401 자동 클리어·리프레시는 후속.
+**무영향(회귀 0)**: 기존 chat 테스트는 fake api(자체 Dio) 주입이라 실 dioProvider 미사용·smoke는 요청 없이 렌더만(인터셉터 미발동)·새 의존성 0(dio·secure_storage 기존)·백엔드·마이그레이션 0.
+**환경 제약**: 로컬 Flutter SDK 없음 → 기존 패턴 모방 + dio 5.x API 정확 인코딩 + 구분자 균형 점검. **CI mobile 잡이 유일 게이트**(S4·S5e 동형 1차 통과 전례). ★mobile 잡 비필수 가능성 → 녹색 확인 후 수동 머지.
+**후속**: OAuth-c 로그인 화면+카카오/네이버 SDK(토큰 저장 호출)·라우트 가드 / OAuth-a3 refresh(인터셉터 401 자동 갱신) / OAuth-a4 로그인 레이트리밋.
+
 ### 2026-06-14 (구현·L5/auth): 실 카카오·네이버 OAuth provider(httpx) + config 배선(OAuth-a2)
 **범위**: OAuth-a2를 providers/refresh/ratelimit로 분해, 첫 슬라이스로 **실 provider**(로그인 실작동의 핵심). 신규 `api/oauth_providers.py`(`KakaoOAuthProvider`·`NaverOAuthProvider` — httpx token→userinfo→`OAuthIdentity`·`build_oauth_providers` 레지스트리) + `config.py`(kakao/naver client_id·client_secret SecretStr env-only + `*_configured` 프로퍼티) + `app.py`(create_app 기본 `oauth_providers` = config 기반 build·키 미설정이면 빈 dict→404). 테스트 16개(성공·토큰/userinfo 실패·네트워크 오류·이메일 누락·lazy 클라이언트·레지스트리).
 **★검증 경계(정직·중대)**: 카카오/네이버 외부 API 계약(URL·요청/응답 필드)은 **공개 문서 기반 인코딩**이라 mock httpx 단위테스트는 *내 로직*(요청 구성·파싱·에러 매핑)만 검증한다. **실 provider 통합(실 필드명·스코프·응답 구조)은 라이브 크레덴셜로만 확인 가능**(로컬·CI 미검증) — 배포 전 실 카카오/네이버 콘솔로 검증 필요. Ollama/Anthropic provider와 동형(통합은 환경 밖).

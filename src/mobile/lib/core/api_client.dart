@@ -6,13 +6,16 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'auth_interceptor.dart';
 import 'env.dart';
+import 'token_store.dart';
 
 /// 앱 전역에서 공유하는 Dio 인스턴스 provider.
 ///
 /// - baseUrl: [Env.apiUrl](빌드 타임 주입·시크릿 하드코딩 금지).
 /// - connect/receive 타임아웃: 모바일 네트워크 변동을 견디는 보수적 값.
-/// - 인증 토큰 인터셉터·certificate pinning은 후속 슬라이스(인증 플로우 도입 시).
+/// - [AuthInterceptor]: 저장된 액세스 토큰을 Bearer로 자동 첨부(OAuth-b·미인증이면 헤더 없이).
+/// - certificate pinning은 후속 슬라이스.
 final dioProvider = Provider<Dio>((ref) {
   final dio = Dio(
     BaseOptions(
@@ -23,5 +26,7 @@ final dioProvider = Provider<Dio>((ref) {
       headers: const {'Content-Type': 'application/json'},
     ),
   );
+  // 저장된 토큰을 모든 요청에 Bearer로 첨부(인증 플로우·OAuth-b).
+  dio.interceptors.add(AuthInterceptor(ref.read(tokenStoreProvider)));
   return dio;
 });
