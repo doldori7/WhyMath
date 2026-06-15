@@ -320,6 +320,11 @@ class Settings(BaseSettings):
         ge=1,
         description="액세스 토큰 만료(분). 기본 24시간. WHYMATH_JWT_EXPIRE_MINUTES로 조정.",
     )
+    jwt_refresh_expire_minutes: int = Field(
+        default=60 * 24 * 30,  # 30일(security_privacy.md REFRESH_TOKEN_TTL)
+        ge=1,
+        description="리프레시 토큰 만료(분). 기본 30일. WHYMATH_JWT_REFRESH_EXPIRE_MINUTES로 조정.",
+    )
 
     # ── OAuth 로그인(카카오·네이버 SSO, OAuth-a2) ──
     # client_id는 공개 식별자(일반 str)·client_secret은 SecretStr·env-only(하드코딩 금지).

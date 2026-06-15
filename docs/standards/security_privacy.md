@@ -58,14 +58,18 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 # 교사: 학교 인증 (Phase 3+)
 ```
 
-> **구현 현황 (OAuth-a·a2·c2·c2b·2026-06-15)**: JWT 발급/검증(`security.py`)·Bearer 의존성·미성년 동의
+> **구현 현황 (OAuth-a·a2·a3·c2·c2b·2026-06-15)**: JWT 발급/검증(`security.py`)·Bearer 의존성·미성년 동의
 > 게이트(`api/_auth.py`)는 가동. **OAuth 로그인 콜백**(`api/auth.py`·`POST /v1/auth/{provider}/callback`
 > — `OAuthProvider` Protocol → 사용자 upsert(이메일 해시 키·마이그레이션 0) → `create_access_token`)
 > + **실 카카오/네이버 provider**(`api/oauth_providers.py`·httpx token→userinfo·`config.py` client
 > id/secret env-only·`create_app` 기본 배선) 가동. ★**실 provider 외부 API 계약은 문서 기반 인코딩 —
-> 라이브 크레덴셜로만 통합 검증 가능(로컬/CI 미검증)**, 배포 전 실 콘솔 검증 필요. **리프레시 토큰·
-> 로그인 IP 레이트리밋은 후속**(OAuth-a3·a4). access 15분/refresh 30일 TTL은 리프레시 도입 시 적용
-> (현재 access 기본 24h). **모바일(OAuth-b)**: `core/token_store.dart`(`TokenStore`·OS 보안 저장소
+> 라이브 크레덴셜로만 통합 검증 가능(로컬/CI 미검증)**, 배포 전 실 콘솔 검증 필요. **리프레시 토큰
+> (OAuth-a3)** 가동: `create_refresh_token`/`decode_refresh_token`(`security.py`·`typ:refresh` 클레임·
+> 후방호환) + `POST /v1/auth/refresh`(`api/auth.py`·리프레시→새 액세스·사용자 존재 확인). ★**stateless
+> 서명 토큰이라 만료 전 서버측 개별 취소는 불가** — 회전(rotation)·denylist·세션 목록은 후속(a3b·DB
+> 백킹). refresh 30일 TTL(`jwt_refresh_expire_minutes`); access는 현재 24h 유지(15분 단축은 모바일
+> refresh-on-401 배선 후). **로그인 IP 레이트리밋은 후속**(OAuth-a4). **모바일(OAuth-b)**:
+> `core/token_store.dart`(`TokenStore`·OS 보안 저장소
 > `flutter_secure_storage`) + `core/auth_interceptor.dart`(dio Bearer 자동 첨부) + **인증 세션
 > 로직(OAuth-c1)**(`features/auth/`·`AuthApi.login`→콜백 토큰 교환·`AuthController` 저장·로그아웃·
 > 상태) + **로그인 화면(OAuth-c2)**(`features/auth/presentation/login_screen.dart`·카카오/네이버 버튼

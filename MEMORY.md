@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-15 (구현·L5/auth): 리프레시 토큰 — stateless 서명(OAuth-a3)
+**컨텍스트**: OAuth-a~c2b로 로그인·세션·가드 완결. 발급 토큰은 액세스(24h) 하나뿐이라 매 요청 노출되는데 TTL이 길어 탈취 위험창이 크다. a3는 **리프레시 토큰**(긴 TTL·`/refresh`로 새 액세스 교환)을 추가해, 이후 클라가 액세스를 짧게 두고 갱신(refresh-on-401)할 토대를 깐다.
+**저장 전략(사용자 위임→권장안 채택)**: **stateless 서명 토큰**(`typ:refresh` 클레임 JWT·storage 0·마이그레이션 0·순수 단위테스트). ★**정직(보안 경계)**: stateless라 **만료 전 서버측 개별 취소 불가** — 회전(rotation)·denylist·세션 목록은 **a3b(DB 백킹·`RefreshTokenSession`+마이그레이션)로 연기**. 단 `/refresh`는 사용자 존재 확인으로 *삭제된 사용자* 갱신 거부(최소 통제). access TTL은 24h 유지(클라 refresh-on-401 배선 전 단축하면 세션 단절 — 비파괴).
+**범위**: `security.py`(공통 `_encode_token`/`_decode_token`에 `typ` 클레임 추가·신규 `create_refresh_token`/`decode_refresh_token`; **후방호환**: typ 없는 기존 액세스 토큰은 액세스로 허용·리프레시↔액세스 오용은 JWTError) + `config.py`(`jwt_refresh_expire_minutes` 기본 30일) + `schema/auth.py`(`OAuthTokenResponse`에 `refresh_token` 추가·신규 `RefreshRequest`·`AccessTokenResponse`) + `api/auth.py`(콜백이 액세스+리프레시 발급·신규 `POST /v1/auth/refresh`: decode→UUID→사용자 존재 확인→새 액세스; 불량/만료/타입불일치/미존재 401·시크릿 미설정 500) + 테스트 11(security 6·endpoint 5). 회전 없어 `/refresh`는 새 액세스만 반환(클라는 기존 리프레시 보유).
+**검증**: CI 동일 py3.12 venv 4게이트 green — ruff·black(186)·mypy-strict(160)·pytest **3099 passed/123 skip**(+11)·`security.py` cov **100%**. 마이그레이션 0·새 의존성 0·모바일 무변경(콜백 응답에 `refresh_token` 추가는 c1이 `access_token`만 읽어 비파괴).
+**후속**: a3b 서버측 취소(회전·denylist·`RefreshTokenSession` DB+마이그레이션) / 모바일 리프레시 저장·refresh-on-401(OAuth-b 인터셉터 401 자동 갱신) / a4 로그인 IP 레이트리밋 / access TTL 15분 단축(refresh-on-401 배선 후).
+
 ### 2026-06-15 (구현·L5): 라우트 가드 + 세션 복원(OAuth-c2b)
 **컨텍스트**: OAuth-c1/c2로 인증 세션 로직·로그인 화면 완결. 그러나 앱 재시작 시 `AuthController.build()`가 항상 미인증으로 시작해 보안 저장소 토큰이 있어도 **세션이 사라진다**. c2b는 (1) 시작 시 토큰으로 **세션 복원** (2) go_router **redirect 가드**로 *복원된 인증* 세션을 채팅으로 보낸다.
 **범위**: Flutter 수정 3(`auth_controller.dart`에 `restore()`·`main.dart` async restore-before-runApp·`router.dart`에 비파괴 redirect) + 테스트 신규 1(`route_guard_test.dart`·2) + 확장 1(`auth_controller_test.dart`에 restore 4). `restore()`=보안 저장소 토큰 읽어 있으면 isAuthenticated(방어적 try/catch — secure storage 오류·`MissingPluginException` 삼켜 미인증·앱 안 죽음). `main()`=`UncontrolledProviderScope`+수동 `ProviderContainer`로 runApp 전 복원. redirect=`authed && loc∈{온보딩,로그인} → 채팅`.

@@ -5,12 +5,16 @@
 위임하고, 이 모듈은 그 신원으로 `UserProfile`을 upsert해 `create_access_token`(`security.py`)으로
 집행 토큰을 발급한다 — 인증 인프라(Bearer 검증·미성년 동의·UserProfile)는 전부 재사용(신규 0).
 
-범위(OAuth-a): provider seam + 콜백 엔드포인트 + 사용자 upsert + JWT 발급. ★**실제 카카오/네이버
-HTTP 교환 구현(httpx)·client secret 설정은 후속**(OAuth-a2) — 여기선 provider를 주입 가능한
-Protocol로 두고 콜백 로직을 결정론적으로 검증한다(가짜 provider 주입·정직한 경계). upsert 키는
-**이메일 해시**(`email_hash = sha256(정규화 이메일)`) — 평문 이메일 미저장(개인정보 보호·기존
-필드 의미 그대로)·같은 이메일은 provider 무관 같은 계정(자연 연결)·마이그레이션 0. 로그인
-레이트리밋(IP 기반 남용 방지)·리프레시 토큰은 후속.
+범위: provider seam + 콜백 엔드포인트 + 사용자 upsert + JWT 발급(액세스+리프레시) + 리프레시 교환
+(`POST /v1/auth/refresh`). 실제 카카오/네이버 HTTP 교환은 provider 구현(OAuth-a2)이 담당하고,
+여기선 주입 가능한 Protocol로 콜백 로직을 결정론적으로 검증한다(가짜 provider 주입·정직한 경계).
+upsert 키는 **이메일 해시**(`email_hash = sha256(정규화 이메일)`) — 평문 이메일 미저장(개인정보
+보호·기존 필드 의미 그대로)·같은 이메일은 provider 무관 같은 계정(자연 연결)·마이그레이션 0.
+
+리프레시(OAuth-a3): 로그인 시 액세스+리프레시를 함께 발급하고, `/refresh`는 리프레시 토큰을 검증해
+새 액세스 토큰을 발급한다. ★리프레시는 **stateless 서명 토큰** — 만료 전 서버측 개별 취소는 불가
+(회전·denylist·세션 목록은 후속·DB 백킹). 단 `/refresh`는 사용자 존재를 확인해 *삭제된 사용자*의
+갱신은 거부한다(최소 통제). 로그인 레이트리밋(IP 기반 남용 방지)은 후속.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ import uuid
 from typing import Annotated, Protocol, runtime_checkable
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from jose import JWTError
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,9 +32,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
-from whymath_backend.schema.auth import OAuthCallbackRequest, OAuthTokenResponse
+from whymath_backend.schema.auth import (
+    AccessTokenResponse,
+    OAuthCallbackRequest,
+    OAuthTokenResponse,
+    RefreshRequest,
+)
 from whymath_backend.schema.enums import Persona
-from whymath_backend.security import create_access_token
+from whymath_backend.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+)
 
 # 신규 사용자 가입 시 기본 페르소나 — MVP 첫 노출 A(일반고 고3·MEMORY 페르소나 전략).
 # persona_primary는 NOT NULL이라 가입 시 필요하고, 온보딩(PATCH /v1/users/me)에서 정교화된다.
@@ -130,7 +144,7 @@ async def oauth_callback(
     """OAuth provider redirect의 authorization code로 로그인 — 토큰 발급(미인증 엔드포인트).
 
     흐름: provider 구현 조회(미등록 404) → `fetch_identity`(code 교환·실패 502) → 사용자 upsert
-    (이메일 해시 키) → `create_access_token`(JWT). 미성년 동의는 *보호된* 엔드포인트가 게이트하므로
+    (이메일 해시 키) → 액세스+리프레시 토큰 발급. 미성년 동의는 *보호된* 엔드포인트가 게이트하므로
     로그인은 토큰만 발급한다(JWT 시크릿 미설정 시 500·서버 구성 오류).
     """
     impl = _get_provider(request, provider)
@@ -142,5 +156,43 @@ async def oauth_callback(
             detail="로그인 제공자 인증에 실패했습니다(잠시 후 다시 시도).",
         ) from exc
     user = await resolve_user(session, identity)
-    token = create_access_token(user.user_id, settings=settings)
-    return OAuthTokenResponse(access_token=token)
+    access_token = create_access_token(user.user_id, settings=settings)
+    refresh_token = create_refresh_token(user.user_id, settings=settings)
+    return OAuthTokenResponse(access_token=access_token, refresh_token=refresh_token)
+
+
+@router.post(
+    "/refresh",
+    response_model=AccessTokenResponse,
+    summary="리프레시 토큰 → 새 액세스 토큰 발급",
+)
+async def refresh_access_token(
+    body: RefreshRequest,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> AccessTokenResponse:
+    """유효한 리프레시 토큰으로 새 액세스 토큰을 발급한다(미인증 엔드포인트).
+
+    리프레시 토큰을 검증(typ=refresh·만료·서명)하고 사용자가 여전히 존재하면 새 액세스 토큰을
+    발급한다. 불량/만료/타입불일치(액세스 토큰)/UUID아님/사용자없음 → 401(`WWW-Authenticate:
+    Bearer`). ★stateless라 만료 전 서버측 개별 취소는 불가(회전·denylist는 후속) — *삭제된 사용자*는
+    존재 확인으로 거부한다. JWT 시크릿 미설정 시 500(서버 구성 오류·토큰 문제와 구분).
+    """
+    try:
+        subject = decode_refresh_token(body.refresh_token, settings=settings)
+        user_id = uuid.UUID(subject)
+    except (JWTError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="리프레시 토큰이 유효하지 않습니다(다시 로그인해 주세요).",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+    user = await session.get(UserProfile, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="리프레시 토큰이 유효하지 않습니다(다시 로그인해 주세요).",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token = create_access_token(user.user_id, settings=settings)
+    return AccessTokenResponse(access_token=access_token)
