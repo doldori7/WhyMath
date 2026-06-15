@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-15 (구현·L4·도구): judge 효과 측정 *리포트 산출물* — JSON + 판정근거 캐처(라이브 측정 준비)
+**컨텍스트**: "라이브 judge 효과 측정"(슬108 후속·종착 졸업 판단 근거) 착수. 조사 결과 측정 하네스(`semantic_eval`·94 프로브·judge 전후 지표·`--judge` CLI)는 *이미 존재* — 빈자리는 ① 기계가독 *리포트 산출물*(아카이브·모델 업그레이드 간 추세 diff) ② judge가 *왜* 후보를 걸렀는지(verdict·reason) 보존(현 `judge_filter`는 버림). 라이브 실행은 Phaiakes9(로컬 Ollama) 필요라, 이 환경에선 *Kiki가 돌릴 산출물*을 만든다.
+**변경**: ① `judge.py` `judge_verdicts`(후보별 `(match, JudgeResult)` 반환·verdict·reason 보존) 추가 + `judge_filter`를 그 파생으로 리팩터(동작 불변·기존 테스트 통과). ② `semantic_eval.py` `JudgeDecision`(id·verdict·reason)·`ProbeOutcome.judge_decisions`·`run_probes_with_judge`가 판정 근거 기록·`report_to_dict`(요약지표 + 프로브별 행 JSON)·CLI `--format text|json`. judge 미적용이면 judge_* 요약 생략·decisions 빈 리스트(슬107 비트동일).
+**실행(Phaiakes9)**: `WHYMATH_RUN_INTEGRATION=1 python -m whymath_backend.l4.misconception.semantic_eval <probes_v1.jsonl> --judge --format json > report.json` → judge 전후 FP 감소·recall 손실 + 후보별 판정 근거를 아카이브.
+**검증**: 4게이트 green(ruff·black·mypy-strict·pytest **3137 passed/126 skip**·신규 9 테스트·cov≥70). coach·게이트·런타임 무변경(측정 도구는 *소비*만).
+**후속**: Kiki Phaiakes9 라이브 측정 → judge FP 제거율 vs recall 손실 트레이드오프로 *실시간 coach judge 졸업*(`misconception_judge_enabled` ON) 판단.
+
 ### 2026-06-15 (구현·L4): 슬108 judge 게이트 coach 결선 + `TRIGGERS_DISTRACTOR` 어휘 + distractor op-code 카탈로그 — 에이전트 패러다임 "값싼 역량만" 흡수
 **컨텍스트**: 하네스형 진단 에이전트(외부 PDF·LLM-주도 LangGraph) ↔ 현 규칙기반·무상태·도구검증 코드 진단. 결론 — 에이전트 루프의 가치는 *배관이 아니라 핵심가치*지만 ① 학생 사고의 *개방형 진단*에 위치 ② MVP(고3 객관식)보다 후속 페르소나(서술형·영재)로 *백로디드* ③ 강점=실패모드(생성성: 자신있는 오진→오도된 가르침). **결정(Kiki)**: 에이전트 PLAN 루프·LangGraph·tool-dispatch·서버측 상태 루프는 *진단 계층의 종착 아키텍처*로 **예약**(C1·C2·C4·C5·C8 회피)하고, *루프 없이 현 규칙과 호환되며 즉효인 역량만* 흡수(Path A 최소 부분집합).
 **슬1(핵심·즉효)**: 슬108이 *예약*해 둔 `misconception_judge_enabled`(`config.py:656`·기본 off)를 coach `_compute_matches`(`api/coach.py:441` — 3 엔드포인트 공통 choke point)에 결선. on이면 결합 matches에 `judge_filter`를 *품질 게이트 이전*에 적용해 방향(⇒역)·부정(≠)·등치(=)가 어긋난 `NOT_EXPRESSES`만 제거(예·불확실 유지·recall 보존)·가설 영속도 같은 게이트 통과. **안전(진단 D3)**: 게이트는 *제거만* 하고 *생성하지 않음* → 실패모드=과소코칭(안전)≠오도된 가르침(위험). judge LLM은 `L3JudgeSeam`→라우터·로컬 FAST·Langfuse·never-break(예외→UNCERTAIN→유지). off=judge 미구성·LLM 0·현행 비트동일. 테스트 주입은 `_judge_for_gate` 좌석(FakeJudge·hermetic).

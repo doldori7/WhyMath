@@ -15,8 +15,10 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import pytest
 
@@ -26,15 +28,18 @@ from whymath_backend.l4.misconception.judge import FakeJudge, JudgeVerdict
 from whymath_backend.l4.misconception.probes import probes_path
 from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProvider
 from whymath_backend.l4.misconception.semantic_eval import (
+    JudgeDecision,
     MisconceptionProbe,
     ProbeOutcome,
     SemanticEvalReport,
     _judge_applied,
+    _run,
     _wilson_lower_bound,
     _wilson_upper_bound,
     evaluate,
     format_report,
     load_probes,
+    report_to_dict,
     run_probes,
     run_probes_with_judge,
 )
@@ -674,6 +679,144 @@ class TestRunProbesWithJudgeWiring:
             # 전부 불확실 → removed 비어 있고 kept == semantic_ids.
             assert o.judge_removed_ids == ()
             assert o.judge_kept_ids == o.semantic_ids
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ⑤ 판정근거 캐처 — judge_decisions 기록 + JSON 리포트(report_to_dict·_run --format json)
+# ══════════════════════════════════════════════════════════════════════════
+class TestJudgeDecisionsCapture:
+    @pytest.mark.asyncio
+    async def test_decisions_recorded_per_candidate(self) -> None:
+        # 의미 후보마다 (id, verdict, reason)이 judge_decisions에 남는다(판정근거 캐처).
+        target = "division-by-zero"
+        nk = CATALOG_BY_ID[target].name_kr
+        probe = MisconceptionProbe(
+            statement=f"'{nk}' 오개념과 같은 틀린 진술",
+            expected_id=target,
+            near_id=None,
+            kind="paraphrase",
+        )
+        provider = _NameKrOneHotProvider(
+            name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values())
+        )
+        judge = FakeJudge({target: JudgeVerdict.UNCERTAIN})
+        outcomes = await run_probes_with_judge(
+            [probe], provider=provider, judge=judge, threshold=0.5, top_k=5  # type: ignore[arg-type]
+        )
+        decisions = outcomes[0].judge_decisions
+        assert any(d.misconception_id == target for d in decisions)
+        d = next(dd for dd in decisions if dd.misconception_id == target)
+        assert d.verdict == JudgeVerdict.UNCERTAIN.value  # "uncertain"
+        assert isinstance(d.reason, str)  # FakeJudge → "fake"
+
+
+class TestReportToDict:
+    def test_no_judge_omits_judge_summary(self) -> None:
+        # judge 미적용 → judge_applied False·judge_* 요약 키 없음·decisions 빈 리스트(슬107 반영).
+        outcomes = [
+            _outcome(_recall_probe("x"), semantic_ids=("x",)),
+            _outcome(_fp_probe("y"), semantic_ids=()),
+        ]
+        d = report_to_dict(evaluate(outcomes), threshold=0.55)
+        assert d["threshold"] == 0.55
+        assert d["summary"]["judge_applied"] is False
+        assert "judge_fp_rate" not in d["summary"]
+        assert len(d["probes"]) == 2
+        assert all(row["judge_decisions"] == [] for row in d["probes"])
+        # 한글 포함 JSON 직렬화 가능.
+        assert json.loads(json.dumps(d, ensure_ascii=False))["summary"]["total"] == 2
+
+    def test_judge_applied_includes_summary_and_decisions(self) -> None:
+        # judge 적용(+decisions) → judge_* 요약·프로브별 decisions 직렬화.
+        probe = _fp_probe("a", kind="direction-reverse")
+        outcome = ProbeOutcome(
+            probe=probe,
+            semantic_ids=("a",),
+            substring_ids=(),
+            judge_kept_ids=(),
+            judge_removed_ids=("a",),
+            judge_decisions=(
+                JudgeDecision(misconception_id="a", verdict="not_expresses", reason="역방향"),
+            ),
+        )
+        d = report_to_dict(evaluate([outcome]), threshold=0.6, confidence=0.9)
+        assert d["confidence"] == 0.9
+        summary = d["summary"]
+        assert summary["judge_applied"] is True
+        assert summary["judge_fp_reduction"] == pytest.approx(1.0)  # 1 FP 전부 제거
+        assert "judge_recall" in summary
+        row = d["probes"][0]
+        assert row["judge_removed_ids"] == ["a"]
+        assert row["judge_decisions"] == [
+            {"misconception_id": "a", "verdict": "not_expresses", "reason": "역방향"}
+        ]
+        json.dumps(d, ensure_ascii=False)  # 전체 직렬화 가능
+
+
+class TestRunJsonOutput:
+    def test_run_emits_parseable_json_without_judge(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # _run(report_format="json")이 stdout에 파싱 가능한 JSON 리포트를 낸다(judge 없이).
+        with probes_path() as path:
+            code = _run(
+                path,
+                threshold=0.3,
+                sweep=None,
+                min_recall=0.0,
+                max_fp=0.0,
+                top_k=5,
+                confidence=0.95,
+                provider=FakeEmbeddingProvider(),
+                report_format="json",
+            )
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["summary"]["total"] == 94
+        assert payload["summary"]["judge_applied"] is False
+        assert len(payload["probes"]) == 94
+
+    def test_run_json_with_judge_includes_decisions(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # judge 주입 + json → judge_applied True·후보별 decisions 직렬화(판정근거 캐처 end-to-end).
+        target = "division-by-zero"
+        nk = CATALOG_BY_ID[target].name_kr
+        probes_file = tmp_path / "probes.jsonl"
+        probes_file.write_text(
+            json.dumps(
+                {
+                    "statement": f"'{nk}' 오개념",
+                    "expected_id": target,
+                    "near_id": None,
+                    "kind": "paraphrase",
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        provider = _NameKrOneHotProvider(
+            name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values())
+        )
+        code = _run(
+            probes_file,
+            threshold=0.5,
+            sweep=None,
+            min_recall=0.0,
+            max_fp=0.0,
+            top_k=5,
+            confidence=0.95,
+            provider=provider,  # type: ignore[arg-type]
+            judge=FakeJudge({target: JudgeVerdict.UNCERTAIN}),
+            report_format="json",
+        )
+        assert code == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["summary"]["judge_applied"] is True
+        row = payload["probes"][0]
+        assert row["judge_decisions"][0]["misconception_id"] == target
+        assert row["judge_decisions"][0]["verdict"] == "uncertain"
 
 
 # ══════════════════════════════════════════════════════════════════════════

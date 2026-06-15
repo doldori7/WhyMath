@@ -30,6 +30,7 @@ FP 프로브(*올바른* 진술·expected_id null·near_id 설정)를 한 파일
 from __future__ import annotations
 
 import argparse
+import json
 import math
 import statistics
 import sys
@@ -37,13 +38,18 @@ from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.diagnose import diagnose
-from whymath_backend.l4.misconception.judge import JudgeProtocol, judge_filter
+from whymath_backend.l4.misconception.judge import (
+    JudgeProtocol,
+    JudgeVerdict,
+    judge_verdicts,
+)
 from whymath_backend.l4.misconception.models import MisconceptionDomain
 from whymath_backend.l4.misconception.semantic.matcher import SemanticMatcher
 from whymath_backend.l4.misconception.semantic.provider import (
@@ -122,6 +128,20 @@ def load_probes(path: Path) -> list[MisconceptionProbe]:
 # 프로브 1건 평가 결과(LabeledOutcome 미러)
 # ──────────────────────────────────────────────────────────────────────────
 @dataclass(slots=True, frozen=True)
+class JudgeDecision:
+    """프로브 1건의 후보 1개에 대한 judge 판정 기록 — 감사·리포트용(불변).
+
+    `misconception_id`(판정 대상 후보)·`verdict`(expresses/not_expresses/uncertain)·
+    `reason`(judge가 낸 한 줄 근거·학생 비노출). 어떤 후보를 *왜* 유지/제거했는지 사람이 눈으로
+    확인하는 단위 — JSON 리포트에 후보별로 실린다(판정근거 캐처).
+    """
+
+    misconception_id: str
+    verdict: str
+    reason: str
+
+
+@dataclass(slots=True, frozen=True)
 class ProbeOutcome:
     """프로브 1건 평가 결과 — 의미 매처·substring 기준선의 매칭 id + 파생 판정. 불변.
 
@@ -145,6 +165,9 @@ class ProbeOutcome:
     # 유지/제거로 분할한 것. `run_probes_with_judge`만 채우고 sync `run_probes`는 비운다.
     judge_kept_ids: tuple[str, ...] = ()
     judge_removed_ids: tuple[str, ...] = ()
+    # judge 판정 근거(판정근거 캐처) — semantic_ids 각 후보의 (id, verdict, reason). judge 미적용
+    # 시 빈 튜플(슬107 동작 불변). `run_probes_with_judge`만 채운다(sync `run_probes`는 비움).
+    judge_decisions: tuple[JudgeDecision, ...] = ()
 
     @property
     def caught_by_semantic(self) -> bool:
@@ -534,8 +557,9 @@ async def run_probes_with_judge(
     슬108: 슬107 sync `run_probes`(judge None)는 *불변*으로 두고, judge 경로는 *별도 async
     함수*로 분리한다(`judge_filter`가 async라 sync 시그니처를 깨지 않기 위함). 각 프로브에:
       ① 의미 매처(`.match`)로 `MisconceptionMatch` 후보를 뽑고(substring 기준선도 함께),
-      ② 그 후보에 `judge_filter`(judge가 `아니오`인 것만 제거)를 적용해 *유지된* 후보를 얻고,
-      ③ `judge_kept_ids`(유지)·`judge_removed_ids`(제거)를 *의미 매처 순서 그대로* 기록한다.
+      ② 그 후보를 `judge_verdicts`로 판정(verdict·reason 보존)해 `아니오`만 제거·나머지 유지,
+      ③ `judge_kept_ids`(유지)·`judge_removed_ids`(제거)를 *의미 매처 순서 그대로* 기록하고,
+         후보별 `judge_decisions`(id·verdict·reason)로 판정 근거를 보존한다(판정근거 캐처).
 
     `semantic_ids`/`substring_ids`는 슬107과 동일하게 채운다(judge 적용 *이전* 의미 매칭 결과를
     보존 — judge 전후 대조의 기준선). 따라서 한 outcome에서 `recall`/`fp_rate`(judge 전)와
@@ -548,12 +572,22 @@ async def run_probes_with_judge(
         sem_matches = resolved_matcher.match(probe.statement, top_k=top_k, threshold=threshold)
         substr_matches = diagnose(probe.statement, top_k=top_k)
         semantic_ids = tuple(m.misconception.id for m in sem_matches)
-        # judge가 `아니오`로 거른 것만 제외 → 유지된 후보(예·불확실)만 남는다(순서 보존).
-        kept_matches = await judge_filter(sem_matches, probe.statement, judge=judge)
-        kept_ids = tuple(m.misconception.id for m in kept_matches)
+        # 각 의미 후보를 judge로 판정 — verdict·reason까지 보존(판정근거 캐처).
+        decided = await judge_verdicts(sem_matches, probe.statement, judge=judge)
+        # 유지 = `아니오`(NOT_EXPRESSES) 아닌 것(예·불확실). judge_filter와 동일 규칙·순서 보존.
+        kept_ids = tuple(
+            m.misconception.id for m, r in decided if r.verdict is not JudgeVerdict.NOT_EXPRESSES
+        )
         kept_set = set(kept_ids)
         # 제거 = 의미 후보 중 유지되지 않은 것(의미 매처 순서 그대로 — 분할 보존).
         removed_ids = tuple(mid for mid in semantic_ids if mid not in kept_set)
+        # 후보별 판정 근거(의미 매처 순서) — JSON 리포트에 실려 "왜 걸렀나"를 감사 가능하게 한다.
+        judge_decisions = tuple(
+            JudgeDecision(
+                misconception_id=m.misconception.id, verdict=r.verdict.value, reason=r.reason
+            )
+            for m, r in decided
+        )
         outcomes.append(
             ProbeOutcome(
                 probe=probe,
@@ -561,6 +595,7 @@ async def run_probes_with_judge(
                 substring_ids=tuple(m.misconception.id for m in substr_matches),
                 judge_kept_ids=kept_ids,
                 judge_removed_ids=removed_ids,
+                judge_decisions=judge_decisions,
             )
         )
     return outcomes
@@ -695,6 +730,62 @@ def _resolved_threshold(threshold: float | None, settings: Settings | None = Non
     return resolved.misconception_semantic_threshold
 
 
+def report_to_dict(
+    report: SemanticEvalReport, *, threshold: float, confidence: float = 0.95
+) -> dict[str, Any]:
+    """SemanticEvalReport → 기계가독 dict(JSON 직렬화용·아카이브·추세추적·diff).
+
+    `summary`는 요약 지표(카운트·비율·Wilson 경계·judge 전후), `probes`는 프로브별 행(매칭 id +
+    후보별 `judge_decisions`)이다. judge 미적용(`--judge` 없이)이면 `judge_applied=false`이고
+    judge_* 요약 키는 생략·`judge_decisions`는 빈 리스트(슬107 반영). `format_report`(사람읽기)와
+    *같은 원천*(report)에서 파생하되 형태만 기계가독 — 모델 업그레이드 간 judge 효과 diff·추적.
+    """
+    judge_applied = _judge_applied(report)
+    summary: dict[str, Any] = {
+        "total": report.total,
+        "total_recall": report.total_recall,
+        "total_fp": report.total_fp,
+        "recall": report.recall,
+        "recall_lower_bound": report.recall_lower_bound(confidence),
+        "false_positive_rate": report.false_positive_rate,
+        "fp_rate_upper_bound": report.fp_rate_upper_bound(confidence),
+        "near_false_positive_rate": report.near_false_positive_rate,
+        "substring_recall": report.substring_recall,
+        "substring_false_positive_rate": report.substring_false_positive_rate,
+        "judge_applied": judge_applied,
+    }
+    if judge_applied:
+        summary["judge_fp_rate"] = report.judge_fp_rate
+        summary["judge_fp_rate_upper_bound"] = report.judge_fp_rate_upper_bound(confidence)
+        summary["judge_fp_reduction"] = report.judge_fp_reduction
+        summary["judge_recall"] = report.judge_recall
+        summary["judge_recall_lower_bound"] = report.judge_recall_lower_bound(confidence)
+        summary["judge_recall_loss"] = report.judge_recall_loss
+    probes_rows: list[dict[str, Any]] = [
+        {
+            "statement": o.probe.statement,
+            "expected_id": o.probe.expected_id,
+            "near_id": o.probe.near_id,
+            "kind": o.probe.kind,
+            "semantic_ids": list(o.semantic_ids),
+            "substring_ids": list(o.substring_ids),
+            "judge_kept_ids": list(o.judge_kept_ids),
+            "judge_removed_ids": list(o.judge_removed_ids),
+            "judge_decisions": [
+                {"misconception_id": d.misconception_id, "verdict": d.verdict, "reason": d.reason}
+                for d in o.judge_decisions
+            ],
+        }
+        for o in report.items
+    ]
+    return {
+        "threshold": threshold,
+        "confidence": confidence,
+        "summary": summary,
+        "probes": probes_rows,
+    }
+
+
 def _run(
     probes_path: Path,
     *,
@@ -706,6 +797,7 @@ def _run(
     confidence: float,
     provider: EmbeddingProvider | None = None,
     judge: JudgeProtocol | None = None,
+    report_format: str = "text",
 ) -> int:
     """프로브셋 로드 → 라이브 측정 → 리포트(또는 스윕) → 게이트 판정.
 
@@ -724,7 +816,7 @@ def _run(
     # 매처를 1회 만들어(사전 임베딩 캐시) 스윕·고정 측정에 재사용한다.
     matcher = SemanticMatcher(provider=resolved_provider)
 
-    if sweep is not None:
+    if sweep is not None and report_format == "text":
         print(
             f"sweep (n={len(probes)} recall={sum(1 for p in probes if p.is_recall_probe)} "
             f"fp={sum(1 for p in probes if p.is_fp_probe)}):"
@@ -766,8 +858,17 @@ def _run(
             top_k=top_k,
         )
     report = evaluate(outcomes)
-    print(f"\n=== threshold={resolved_threshold:.3f} ===")
-    print(format_report(report, confidence=confidence))
+    if report_format == "json":
+        print(
+            json.dumps(
+                report_to_dict(report, threshold=resolved_threshold, confidence=confidence),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    else:
+        print(f"\n=== threshold={resolved_threshold:.3f} ===")
+        print(format_report(report, confidence=confidence))
 
     # 게이트(둘 다 opt-in·기본 0.0=off): recall은 하한이 min-recall 이상·FP는 상한이 max-fp 이하면
     # 통과(exit 0). None(프로브 0)은 임계>0일 때 미달로 본다(증거 없음=통과 불가). step_shadow의
@@ -844,6 +945,12 @@ def main(argv: list[str] | None = None) -> int:
             "동작(의미 매칭만)."
         ),
     )
+    parser.add_argument(
+        "--format",
+        choices=["text", "json"],
+        default="text",
+        help="출력 형식 — text(사람읽기·기본)/json(기계가독 리포트·아카이브·후보별 판정근거).",
+    )
     args = parser.parse_args(argv)
     probes_path: str = args.probes_path
     threshold: float | None = args.threshold
@@ -854,6 +961,7 @@ def main(argv: list[str] | None = None) -> int:
     top_k: int = args.top_k
     confidence: float = args.confidence
     use_judge: bool = args.judge
+    report_format: str = args.format
     judge: JudgeProtocol | None = None
     if use_judge:
         # L3 백킹 judge(로컬 FAST·라우터 경유) 구성 — L3 import는 judge_seam에 격리.
@@ -871,6 +979,7 @@ def main(argv: list[str] | None = None) -> int:
         top_k=top_k,
         confidence=confidence,
         judge=judge,
+        report_format=report_format,
     )
 
 

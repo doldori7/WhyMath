@@ -23,6 +23,7 @@ from whymath_backend.l4.misconception.judge import (
     JudgeVerdict,
     LLMJudge,
     judge_filter,
+    judge_verdicts,
     parse_verdict,
 )
 from whymath_backend.l4.misconception.judge_prompts import (
@@ -205,6 +206,54 @@ class TestJudgeFilter:
         kept_wrong = await judge_filter([_match(_CONTINUITY)], "틀린 진술", judge=judge)
         assert kept_correct == []  # 올바른 → 아니오 → 제거
         assert len(kept_wrong) == 1  # 틀린 → 예 → 유지
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# ②-b judge_verdicts — 판정 근거(verdict·reason) 보존(측정·감사 원자료)
+# ══════════════════════════════════════════════════════════════════════════
+class TestJudgeVerdicts:
+    @pytest.mark.asyncio
+    async def test_returns_pairs_in_order_with_verdicts(self) -> None:
+        # 각 후보의 (match, JudgeResult)를 입력 순서 그대로 반환(verdict 보존·필터 이전 원자료).
+        matches = [_match(_CONTINUITY), _match(_COMPOSITE), _match(_LIMIT)]
+        judge = FakeJudge(
+            {
+                _CONTINUITY.id: JudgeVerdict.NOT_EXPRESSES,
+                _COMPOSITE.id: JudgeVerdict.UNCERTAIN,
+                _LIMIT.id: JudgeVerdict.EXPRESSES,
+            }
+        )
+        decided = await judge_verdicts(matches, "x", judge=judge)
+        assert [m.misconception.id for m, _ in decided] == [
+            _CONTINUITY.id,
+            _COMPOSITE.id,
+            _LIMIT.id,
+        ]
+        assert [r.verdict for _, r in decided] == [
+            JudgeVerdict.NOT_EXPRESSES,
+            JudgeVerdict.UNCERTAIN,
+            JudgeVerdict.EXPRESSES,
+        ]
+
+    @pytest.mark.asyncio
+    async def test_preserves_reason(self) -> None:
+        # JudgeResult.reason까지 보존(판정근거 캐처 — FakeJudge는 reason="fake").
+        decided = await judge_verdicts([_match(_DIVZERO)], "x", judge=FakeJudge())
+        assert decided[0][1].reason == "fake"
+
+    @pytest.mark.asyncio
+    async def test_empty_input_returns_empty(self) -> None:
+        assert await judge_verdicts([], "x", judge=FakeJudge()) == []
+
+    @pytest.mark.asyncio
+    async def test_filter_consistent_with_verdicts(self) -> None:
+        # judge_filter는 judge_verdicts에서 아니오 제외와 동일(필터는 verdicts의 파생).
+        matches = [_match(_DIVZERO), _match(_CONTINUITY), _match(_LIMIT)]
+        judge = FakeJudge({_CONTINUITY.id: JudgeVerdict.NOT_EXPRESSES})
+        decided = await judge_verdicts(matches, "x", judge=judge)
+        kept = await judge_filter(matches, "x", judge=judge)
+        expected = [m for m, r in decided if r.verdict is not JudgeVerdict.NOT_EXPRESSES]
+        assert kept == expected
 
 
 # ══════════════════════════════════════════════════════════════════════════
