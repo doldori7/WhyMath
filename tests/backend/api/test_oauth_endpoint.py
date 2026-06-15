@@ -1,13 +1,16 @@
-"""POST /v1/auth/{provider}/callback 단위테스트 — provider 조회·code 교환·JWT 발급. OAuth-a.
+"""POST /v1/auth/{provider}/callback·/refresh·/logout 단위테스트 — JWT 발급·allowlist·취소.
 
 라이브 provider·DB 없음: 가짜 OAuthProvider 주입(create_app oauth_providers) + resolve_user
-monkeypatch + dependency_overrides(get_session·get_settings)로 콜백 글루를 hermetic 검증.
+monkeypatch + dependency_overrides(get_session·get_settings)로 글루를 hermetic 검증. `/refresh`·
+`/logout`의 서버측 취소(OAuth-a3b)는 `_FakeSession`이 RefreshTokenSession 행을 add/get/commit으로
+추적해 검증한다(실 PG 왕복은 test_refresh_session_integration.py).
 """
 
 from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator, Awaitable, Callable
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -16,6 +19,7 @@ from pydantic import SecretStr
 from whymath_backend.api.auth import OAuthIdentity, OAuthProviderError
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import Persona
@@ -28,6 +32,7 @@ from whymath_backend.security import (
 
 _PATH = "/v1/auth/kakao/callback"
 _REFRESH_PATH = "/v1/auth/refresh"
+_LOGOUT_PATH = "/v1/auth/logout"
 _RESOLVE_FN = "whymath_backend.api.auth.resolve_user"
 _BODY = {"code": "auth-code", "redirect_uri": "https://app/cb"}
 
@@ -47,14 +52,36 @@ class _FakeProvider:
 
 
 class _FakeSession:
-    """get_session 오버라이드용 — 콜백은 resolve_user monkeypatch라 쿼리 미발생, /refresh는 get으로 조회."""
+    """get_session 오버라이드용 — user 조회 + RefreshTokenSession 행 저장/조회(add/get/commit).
+
+    콜백은 resolve_user monkeypatch라 user 쿼리는 안 나지만 세션 행 add/commit은 탄다. `/refresh`·
+    `/logout`은 jti로 세션 행을 PK lookup 하므로 사전 시드(`seed`)한 행을 돌려준다.
+    """
 
     def __init__(self, user: UserProfile | None = None) -> None:
         self._user = user
+        self._sessions: dict[uuid.UUID, RefreshTokenSession] = {}
 
-    async def get(self, model: object, pk: uuid.UUID) -> UserProfile | None:
-        if self._user is not None and self._user.user_id == pk:
-            return self._user
+    def seed(self, row: RefreshTokenSession) -> None:
+        self._sessions[row.token_session_id] = row
+
+    def stored_rows(self) -> list[RefreshTokenSession]:
+        return list(self._sessions.values())
+
+    def add(self, obj: object) -> None:
+        if isinstance(obj, RefreshTokenSession):
+            self._sessions[obj.token_session_id] = obj
+
+    async def get(self, model: object, pk: uuid.UUID) -> object | None:
+        if model is UserProfile:
+            if self._user is not None and self._user.user_id == pk:
+                return self._user
+            return None
+        if model is RefreshTokenSession:
+            return self._sessions.get(pk)
+        return None
+
+    async def commit(self) -> None:
         return None
 
 
@@ -66,14 +93,30 @@ def _user(uid: uuid.UUID) -> UserProfile:
     return UserProfile(user_id=uid, email_hash="h", persona_primary=Persona.A_일반고고3)
 
 
-def _client(
-    providers: dict[str, object], *, session_user: UserProfile | None = None
-) -> TestClient:
+def _session_row(
+    uid: uuid.UUID, jti: uuid.UUID, *, revoked: bool = False
+) -> RefreshTokenSession:
+    return RefreshTokenSession(
+        token_session_id=jti,
+        user_id=uid,
+        expires_at=datetime.now(tz=timezone.utc) + timedelta(days=30),
+        revoked=revoked,
+    )
+
+
+def _refresh_for(uid: uuid.UUID) -> tuple[uuid.UUID, str]:
+    """(jti, 리프레시 토큰) — jti는 세션 행 PK와 일치시켜 시드한다."""
+    jti = uuid.uuid4()
+    return jti, create_refresh_token(uid, settings=_settings(), jti=jti)
+
+
+def _client(providers: dict[str, object], *, session: _FakeSession | None = None) -> TestClient:
     app = create_app(oauth_providers=providers)  # type: ignore[arg-type]
     app.dependency_overrides[get_settings] = _settings
+    fake = session if session is not None else _FakeSession()
 
     async def _sess() -> AsyncIterator[_FakeSession]:
-        yield _FakeSession(session_user)
+        yield fake
 
     app.dependency_overrides[get_session] = _sess
     return TestClient(app)
@@ -117,14 +160,34 @@ def test_callback_issues_refresh_token(monkeypatch: pytest.MonkeyPatch) -> None:
     identity = OAuthIdentity(provider="kakao", subject="s", email="a@b.com")
     resp = _client({"kakao": _FakeProvider(identity=identity)}).post(_PATH, json=_BODY)
     assert resp.status_code == 200
-    assert decode_refresh_token(resp.json()["refresh_token"], settings=_settings()) == str(uid)
+    claims = decode_refresh_token(resp.json()["refresh_token"], settings=_settings())
+    assert claims.subject == str(uid)
 
 
-def test_refresh_issues_new_access_token() -> None:
-    """유효한 리프레시 토큰 + 존재하는 사용자 → 200 + 새 액세스 토큰(sub=사용자 id)."""
+def test_callback_persists_session_row(monkeypatch: pytest.MonkeyPatch) -> None:
+    """콜백이 리프레시 토큰의 jti로 세션 행(allowlist)을 영속 — 토큰↔행 jti 일치."""
     uid = uuid.uuid4()
-    refresh = create_refresh_token(uid, settings=_settings())
-    resp = _client({}, session_user=_user(uid)).post(_REFRESH_PATH, json={"refresh_token": refresh})
+    monkeypatch.setattr(_RESOLVE_FN, _resolve_to(_user(uid)))
+    identity = OAuthIdentity(provider="kakao", subject="s", email="a@b.com")
+    session = _FakeSession()
+    resp = _client({"kakao": _FakeProvider(identity=identity)}, session=session).post(
+        _PATH, json=_BODY
+    )
+    assert resp.status_code == 200
+    rows = session.stored_rows()
+    assert len(rows) == 1
+    assert rows[0].user_id == uid
+    claims = decode_refresh_token(resp.json()["refresh_token"], settings=_settings())
+    assert claims.jti == str(rows[0].token_session_id)
+
+
+def test_refresh_with_valid_session_issues_access() -> None:
+    """유효 리프레시 + 미취소 세션 행 + 존재하는 사용자 → 200 + 새 액세스 토큰(sub=사용자 id)."""
+    uid = uuid.uuid4()
+    jti, refresh = _refresh_for(uid)
+    session = _FakeSession(_user(uid))
+    session.seed(_session_row(uid, jti))
+    resp = _client({}, session=session).post(_REFRESH_PATH, json={"refresh_token": refresh})
     assert resp.status_code == 200
     body = resp.json()
     assert body["token_type"] == "bearer"
@@ -135,20 +198,86 @@ def test_refresh_rejects_access_token_401() -> None:
     """액세스 토큰을 리프레시로 제출 → 401(typ 불일치)."""
     uid = uuid.uuid4()
     access = create_access_token(uid, settings=_settings())
-    resp = _client({}, session_user=_user(uid)).post(_REFRESH_PATH, json={"refresh_token": access})
+    resp = _client({}, session=_FakeSession(_user(uid))).post(
+        _REFRESH_PATH, json={"refresh_token": access}
+    )
     assert resp.status_code == 401
 
 
 def test_refresh_invalid_token_401() -> None:
     """불량 리프레시 토큰 → 401."""
-    resp = _client({}, session_user=_user(uuid.uuid4())).post(
+    resp = _client({}, session=_FakeSession(_user(uuid.uuid4()))).post(
         _REFRESH_PATH, json={"refresh_token": "not-a-jwt"}
     )
     assert resp.status_code == 401
 
 
-def test_refresh_unknown_user_401() -> None:
-    """유효 서명이지만 사용자가 없으면(삭제) → 401."""
-    refresh = create_refresh_token(uuid.uuid4(), settings=_settings())
-    resp = _client({}).post(_REFRESH_PATH, json={"refresh_token": refresh})
+def test_refresh_unknown_session_401() -> None:
+    """서명·jti는 유효하지만 세션 행이 없으면(미인식·로그아웃됨) → 401(allowlist 미스)."""
+    uid = uuid.uuid4()
+    _, refresh = _refresh_for(uid)  # 행 시드 안 함
+    resp = _client({}, session=_FakeSession(_user(uid))).post(
+        _REFRESH_PATH, json={"refresh_token": refresh}
+    )
     assert resp.status_code == 401
+
+
+def test_refresh_revoked_session_401() -> None:
+    """세션 행이 취소(revoked=true)됐으면 → 401(denylist)."""
+    uid = uuid.uuid4()
+    jti, refresh = _refresh_for(uid)
+    session = _FakeSession(_user(uid))
+    session.seed(_session_row(uid, jti, revoked=True))
+    resp = _client({}, session=session).post(_REFRESH_PATH, json={"refresh_token": refresh})
+    assert resp.status_code == 401
+
+
+def test_refresh_unknown_user_401() -> None:
+    """세션 행은 유효하지만 사용자가 없으면(삭제) → 401."""
+    uid = uuid.uuid4()
+    jti, refresh = _refresh_for(uid)
+    session = _FakeSession()  # 사용자 없음
+    session.seed(_session_row(uid, jti))
+    resp = _client({}, session=session).post(_REFRESH_PATH, json={"refresh_token": refresh})
+    assert resp.status_code == 401
+
+
+def test_logout_revokes_session_204() -> None:
+    """로그아웃 → 204 + 세션 행 revoked=True(즉시 무효화)."""
+    uid = uuid.uuid4()
+    jti, refresh = _refresh_for(uid)
+    row = _session_row(uid, jti)
+    session = _FakeSession(_user(uid))
+    session.seed(row)
+    resp = _client({}, session=session).post(_LOGOUT_PATH, json={"refresh_token": refresh})
+    assert resp.status_code == 204
+    assert row.revoked is True
+
+
+def test_logout_then_refresh_401() -> None:
+    """로그아웃한 리프레시 토큰은 이후 /refresh에서 거부(401) — 서버측 취소 e2e."""
+    uid = uuid.uuid4()
+    jti, refresh = _refresh_for(uid)
+    session = _FakeSession(_user(uid))
+    session.seed(_session_row(uid, jti))
+    client = _client({}, session=session)
+    assert client.post(_LOGOUT_PATH, json={"refresh_token": refresh}).status_code == 204
+    assert client.post(_REFRESH_PATH, json={"refresh_token": refresh}).status_code == 401
+
+
+def test_logout_invalid_token_401() -> None:
+    """디코드 불가 토큰 로그아웃 → 401."""
+    resp = _client({}, session=_FakeSession()).post(
+        _LOGOUT_PATH, json={"refresh_token": "not-a-jwt"}
+    )
+    assert resp.status_code == 401
+
+
+def test_logout_missing_row_idempotent_204() -> None:
+    """유효 리프레시지만 세션 행이 없어도 멱등하게 204(취소할 게 없음)."""
+    uid = uuid.uuid4()
+    _, refresh = _refresh_for(uid)
+    resp = _client({}, session=_FakeSession(_user(uid))).post(
+        _LOGOUT_PATH, json={"refresh_token": refresh}
+    )
+    assert resp.status_code == 204

@@ -80,14 +80,17 @@ def test_missing_secret_raises_runtimeerror() -> None:
 def test_refresh_create_decode_roundtrip() -> None:
     settings = _settings()
     user_id = uuid.uuid4()
-    token = create_refresh_token(user_id, settings=settings)
-    assert decode_refresh_token(token, settings=settings) == str(user_id)
+    jti = uuid.uuid4()
+    token = create_refresh_token(user_id, settings=settings, jti=jti)
+    claims = decode_refresh_token(token, settings=settings)
+    assert claims.subject == str(user_id)
+    assert claims.jti == str(jti)
 
 
 def test_refresh_expired_raises_jwterror() -> None:
     settings = _settings()
     token = create_refresh_token(
-        uuid.uuid4(), settings=settings, expires_delta=timedelta(seconds=-1)
+        uuid.uuid4(), settings=settings, jti=uuid.uuid4(), expires_delta=timedelta(seconds=-1)
     )
     with pytest.raises(JWTError):
         decode_refresh_token(token, settings=settings)
@@ -104,9 +107,21 @@ def test_access_token_rejected_as_refresh() -> None:
 def test_refresh_token_rejected_as_access() -> None:
     """typ=refresh 토큰을 액세스로 디코드하면 JWTError(용도 오용 차단)."""
     settings = _settings()
-    token = create_refresh_token(uuid.uuid4(), settings=settings)
+    token = create_refresh_token(uuid.uuid4(), settings=settings, jti=uuid.uuid4())
     with pytest.raises(JWTError):
         decode_access_token(token, settings=settings)
+
+
+def test_refresh_token_without_jti_raises_jwterror() -> None:
+    """jti 클레임 없는 리프레시 토큰은 JWTError(서버측 취소 추적 불가·a3b 계약)."""
+    settings = _settings()
+    token = jwt.encode(
+        {"sub": "u-123", "typ": "refresh"},
+        settings.jwt_secret_key.get_secret_value(),
+        algorithm=settings.jwt_algorithm,
+    )
+    with pytest.raises(JWTError):
+        decode_refresh_token(token, settings=settings)
 
 
 def test_legacy_access_token_without_typ_still_decodes() -> None:
@@ -124,6 +139,6 @@ def test_refresh_missing_secret_raises_runtimeerror() -> None:
     """빈 시크릿(미설정)은 리프레시 발급·검증 모두 RuntimeError(서버 구성 오류)."""
     settings = Settings(jwt_secret_key=SecretStr(""))
     with pytest.raises(RuntimeError):
-        create_refresh_token(uuid.uuid4(), settings=settings)
+        create_refresh_token(uuid.uuid4(), settings=settings, jti=uuid.uuid4())
     with pytest.raises(RuntimeError):
         decode_refresh_token("any-token", settings=settings)

@@ -8,15 +8,17 @@
 사고 방지 — CLAUDE.md 보안). 토큰 자체 오류(만료·서명 불일치·sub 누락·typ 불일치)는 jose
 `JWTError`로 표면화하고, FastAPI 의존성(`api/_auth.py`·`api/auth.py`)이 401로 변환한다.
 
-★리프레시는 **stateless 서명 토큰**(storage 없음) — 만료 전엔 서버측 개별 취소가 불가하다. 회전
-(rotation)·denylist·세션 목록 같은 서버측 취소는 후속(DB 백킹). 단 `/refresh`는 사용자 존재를
-확인해 *삭제된 사용자*의 갱신은 거부한다(`api/auth.py`).
+리프레시 토큰엔 `jti` 클레임(세션 id)을 실어 **서버측 취소**를 가능케 한다(OAuth-a3b) — 발급된
+리프레시마다 `refresh_token_session` 행(PK=jti)을 두고 `/refresh`가 allowlist 확인·`/logout`이
+취소한다(`api/auth.py`). 토큰 서명 자체는 여전히 stateless고, 취소 *상태*만 DB가 보유한다. 회전
+(rotation)·재사용 탐지·세션 목록은 후속(a3c).
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from typing import Any, NamedTuple
 
 from jose import JWTError, jwt
 
@@ -30,6 +32,13 @@ _ACCESS_TYPE = "access"
 _REFRESH_TYPE = "refresh"
 
 
+class RefreshTokenClaims(NamedTuple):
+    """리프레시 토큰에서 뽑아낸 검증된 클레임 — sub(user_id)와 jti(세션 id·서버측 취소 추적 키)."""
+
+    subject: str
+    jti: str
+
+
 def _encode_token(
     user_id: uuid.UUID | str,
     *,
@@ -37,18 +46,24 @@ def _encode_token(
     token_type: str,
     default_minutes: int,
     expires_delta: timedelta | None,
+    jti: str | None = None,
 ) -> str:
-    """user_id를 sub로, token_type을 typ로 담는 서명 토큰 발급. 시크릿 미설정 시 RuntimeError."""
+    """user_id를 sub로, token_type을 typ로 담는 서명 토큰 발급. 시크릿 미설정 시 RuntimeError.
+
+    `jti`가 주어지면 클레임에 실어 서버측 세션 추적(취소)에 쓴다(리프레시 토큰 전용).
+    """
     if not settings.jwt_configured:
         raise RuntimeError(f"{_MISCONFIG}(토큰 발급 불가).")
     now = datetime.now(tz=timezone.utc)
     expire = now + (expires_delta or timedelta(minutes=default_minutes))
-    claims = {
+    claims: dict[str, object] = {
         "sub": str(user_id),
         _TYPE_CLAIM: token_type,
         "iat": int(now.timestamp()),
         "exp": int(expire.timestamp()),
     }
+    if jti is not None:
+        claims["jti"] = jti
     encoded: str = jwt.encode(
         claims,
         settings.jwt_secret_key.get_secret_value(),
@@ -57,8 +72,8 @@ def _encode_token(
     return encoded
 
 
-def _decode_token(token: str, *, settings: Settings, expected_type: str) -> str:
-    """토큰 검증 후 sub 반환. 만료·서명·sub 누락·typ 불일치 시 JWTError, 미설정 시 RuntimeError.
+def _decode_token(token: str, *, settings: Settings, expected_type: str) -> dict[str, Any]:
+    """검증된 클레임 dict 반환. 만료·서명·sub 누락·typ 불일치 시 JWTError, 미설정 시 RuntimeError.
 
     typ 검증은 후방호환: `expected_type==refresh`면 typ가 정확히 "refresh"여야 하고(액세스/typ
     없는 토큰을 리프레시로 못 씀), `expected_type==access`면 typ가 "refresh"만 거부한다(typ 없는
@@ -66,7 +81,7 @@ def _decode_token(token: str, *, settings: Settings, expected_type: str) -> str:
     """
     if not settings.jwt_configured:
         raise RuntimeError(f"{_MISCONFIG}(토큰 검증 불가).")
-    claims = jwt.decode(
+    claims: dict[str, Any] = jwt.decode(
         token,
         settings.jwt_secret_key.get_secret_value(),
         algorithms=[settings.jwt_algorithm],
@@ -80,7 +95,7 @@ def _decode_token(token: str, *, settings: Settings, expected_type: str) -> str:
             raise JWTError("리프레시 토큰이 아닙니다(typ 불일치).")
     elif token_type == _REFRESH_TYPE:
         raise JWTError("리프레시 토큰은 액세스 토큰으로 사용할 수 없습니다(typ 불일치).")
-    return str(subject)
+    return claims
 
 
 def create_access_token(
@@ -103,12 +118,14 @@ def create_refresh_token(
     user_id: uuid.UUID | str,
     *,
     settings: Settings,
+    jti: uuid.UUID | str,
     expires_delta: timedelta | None = None,
 ) -> str:
-    """user_id를 sub로 하는 서명된 리프레시 토큰(typ=refresh) 발급. 시크릿 미설정 시 RuntimeError.
+    """user_id를 sub로, jti를 세션 id로 담는 서명된 리프레시 토큰(typ=refresh) 발급.
 
     긴 TTL(`jwt_refresh_expire_minutes`·기본 30일)로 `/v1/auth/refresh`에서 새 액세스 토큰과
-    교환한다. stateless(storage 없음) — 만료 전 서버측 취소는 불가(후속 회전·denylist).
+    교환한다. `jti`는 `refresh_token_session` 행의 PK가 되어 서버측 취소(allowlist/denylist)를
+    가능케 한다(OAuth-a3b). 시크릿 미설정 시 RuntimeError.
     """
     return _encode_token(
         user_id,
@@ -116,6 +133,7 @@ def create_refresh_token(
         token_type=_REFRESH_TYPE,
         default_minutes=settings.jwt_refresh_expire_minutes,
         expires_delta=expires_delta,
+        jti=str(jti),
     )
 
 
@@ -124,12 +142,18 @@ def decode_access_token(token: str, *, settings: Settings) -> str:
 
     시크릿 미설정은 RuntimeError(서버 구성 오류 — 토큰 문제와 구분, 401 아닌 500).
     """
-    return _decode_token(token, settings=settings, expected_type=_ACCESS_TYPE)
+    claims = _decode_token(token, settings=settings, expected_type=_ACCESS_TYPE)
+    return str(claims["sub"])
 
 
-def decode_refresh_token(token: str, *, settings: Settings) -> str:
-    """리프레시 토큰 검증 후 sub(user_id) 반환. 만료·서명·sub 누락·액세스 토큰 시 JWTError.
+def decode_refresh_token(token: str, *, settings: Settings) -> RefreshTokenClaims:
+    """리프레시 토큰 검증 후 sub·jti를 반환. 만료·서명·sub/jti 누락·액세스 토큰 시 JWTError.
 
-    시크릿 미설정은 RuntimeError(서버 구성 오류, 401 아닌 500).
+    `jti`는 서버측 세션 추적(취소)의 키라 *반드시* 있어야 한다(OAuth-a3b) — 없으면(pre-a3b·위조)
+    JWTError. 시크릿 미설정은 RuntimeError(서버 구성 오류, 401 아닌 500).
     """
-    return _decode_token(token, settings=settings, expected_type=_REFRESH_TYPE)
+    claims = _decode_token(token, settings=settings, expected_type=_REFRESH_TYPE)
+    jti = claims.get("jti")
+    if not jti:
+        raise JWTError("리프레시 토큰에 jti 클레임이 없습니다(서버측 취소 추적 불가).")
+    return RefreshTokenClaims(subject=str(claims["sub"]), jti=str(jti))

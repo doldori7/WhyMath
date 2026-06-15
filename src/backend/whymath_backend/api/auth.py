@@ -11,16 +11,17 @@
 upsert 키는 **이메일 해시**(`email_hash = sha256(정규화 이메일)`) — 평문 이메일 미저장(개인정보
 보호·기존 필드 의미 그대로)·같은 이메일은 provider 무관 같은 계정(자연 연결)·마이그레이션 0.
 
-리프레시(OAuth-a3): 로그인 시 액세스+리프레시를 함께 발급하고, `/refresh`는 리프레시 토큰을 검증해
-새 액세스 토큰을 발급한다. ★리프레시는 **stateless 서명 토큰** — 만료 전 서버측 개별 취소는 불가
-(회전·denylist·세션 목록은 후속·DB 백킹). 단 `/refresh`는 사용자 존재를 확인해 *삭제된 사용자*의
-갱신은 거부한다(최소 통제). 로그인 레이트리밋(IP 기반 남용 방지)은 후속.
+리프레시(OAuth-a3·a3b): 로그인 시 액세스+리프레시를 함께 발급하고(리프레시마다 `jti`=세션 행 PK),
+`/refresh`는 리프레시 토큰을 검증한 뒤 `refresh_token_session` 행을 allowlist 확인(존재·미취소)해
+새 액세스 토큰을 발급하며, `/logout`은 그 행을 취소(denylist)해 즉시 무효화한다. 이로써 *만료 전
+서버측 취소*가 가능해진다(a3의 빈자리). 회전·재사용 탐지·세션 목록은 a3c·로그인 레이트리밋은 a4.
 """
 
 from __future__ import annotations
 
 import hashlib
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Protocol, runtime_checkable
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -30,6 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.auth import (
@@ -129,6 +131,15 @@ SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 
+def _refresh_unauthorized() -> HTTPException:
+    """리프레시/로그아웃 401 — 불량·만료·취소·미인식 토큰(`_auth.py._unauthorized` 동형)."""
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="리프레시 토큰이 유효하지 않습니다(다시 로그인해 주세요).",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
 @router.post(
     "/{provider}/callback",
     response_model=OAuthTokenResponse,
@@ -156,8 +167,20 @@ async def oauth_callback(
             detail="로그인 제공자 인증에 실패했습니다(잠시 후 다시 시도).",
         ) from exc
     user = await resolve_user(session, identity)
+    jti = uuid.uuid4()
     access_token = create_access_token(user.user_id, settings=settings)
-    refresh_token = create_refresh_token(user.user_id, settings=settings)
+    refresh_token = create_refresh_token(user.user_id, settings=settings, jti=jti)
+    # 발급된 리프레시 토큰을 세션 행(allowlist)으로 영속 — /refresh가 확인·/logout이 취소한다.
+    # 이 commit이 세션 행과 (신규면) 사용자까지 영속시킨다(resolve_user는 flush만 하므로).
+    session.add(
+        RefreshTokenSession(
+            token_session_id=jti,
+            user_id=user.user_id,
+            expires_at=datetime.now(tz=timezone.utc)
+            + timedelta(minutes=settings.jwt_refresh_expire_minutes),
+        )
+    )
+    await session.commit()
     return OAuthTokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
@@ -173,26 +196,49 @@ async def refresh_access_token(
 ) -> AccessTokenResponse:
     """유효한 리프레시 토큰으로 새 액세스 토큰을 발급한다(미인증 엔드포인트).
 
-    리프레시 토큰을 검증(typ=refresh·만료·서명)하고 사용자가 여전히 존재하면 새 액세스 토큰을
-    발급한다. 불량/만료/타입불일치(액세스 토큰)/UUID아님/사용자없음 → 401(`WWW-Authenticate:
-    Bearer`). ★stateless라 만료 전 서버측 개별 취소는 불가(회전·denylist는 후속) — *삭제된 사용자*는
-    존재 확인으로 거부한다. JWT 시크릿 미설정 시 500(서버 구성 오류·토큰 문제와 구분).
+    리프레시 토큰을 검증(typ=refresh·만료·서명·jti)하고, 그 jti의 `refresh_token_session` 행을
+    allowlist 확인(존재·미취소)한 뒤 사용자가 여전히 존재하면 새 액세스 토큰을 발급한다. 불량/만료/
+    타입불일치/jti없음/세션없음·취소됨/사용자없음 → 401(`WWW-Authenticate: Bearer`). 회전 없음(같은
+    리프레시 토큰 재사용 — a3c). JWT 시크릿 미설정 시 500(서버 구성 오류·토큰 문제와 구분).
     """
     try:
-        subject = decode_refresh_token(body.refresh_token, settings=settings)
-        user_id = uuid.UUID(subject)
+        claims = decode_refresh_token(body.refresh_token, settings=settings)
+        user_id = uuid.UUID(claims.subject)
+        session_id = uuid.UUID(claims.jti)
     except (JWTError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="리프레시 토큰이 유효하지 않습니다(다시 로그인해 주세요).",
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from exc
+        raise _refresh_unauthorized() from exc
+    token_session = await session.get(RefreshTokenSession, session_id)
+    if token_session is None or token_session.revoked:
+        raise _refresh_unauthorized()
     user = await session.get(UserProfile, user_id)
     if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="리프레시 토큰이 유효하지 않습니다(다시 로그인해 주세요).",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise _refresh_unauthorized()
     access_token = create_access_token(user.user_id, settings=settings)
     return AccessTokenResponse(access_token=access_token)
+
+
+@router.post(
+    "/logout",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="로그아웃 — 리프레시 토큰 세션 취소(denylist)",
+)
+async def logout(
+    body: RefreshRequest,
+    session: SessionDep,
+    settings: SettingsDep,
+) -> None:
+    """제출된 리프레시 토큰의 세션 행을 취소(revoked=true)해 즉시 무효화한다(미인증·denylist).
+
+    토큰 디코드 불가/타입불일치/jti없음 → 401. 유효하면 그 jti의 세션 행을 취소한다 — 행이 없거나
+    이미 취소됐어도 멱등하게 204. 취소된 리프레시 토큰은 이후 `/refresh`에서 거부된다(만료 미대기).
+    """
+    try:
+        claims = decode_refresh_token(body.refresh_token, settings=settings)
+        session_id = uuid.UUID(claims.jti)
+    except (JWTError, ValueError) as exc:
+        raise _refresh_unauthorized() from exc
+    token_session = await session.get(RefreshTokenSession, session_id)
+    if token_session is not None and not token_session.revoked:
+        token_session.revoked = True
+        token_session.revoked_at = datetime.now(tz=timezone.utc)
+        await session.commit()
