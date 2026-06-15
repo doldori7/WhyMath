@@ -48,6 +48,19 @@ class _FakeTokenStore implements TokenStore {
   }
 }
 
+/// 읽기에서 오류를 던지는 TokenStore — restore()의 방어적 처리(앱 안 죽음)를 검증한다.
+class _ThrowingTokenStore implements TokenStore {
+  @override
+  Future<String?> readAccessToken() async =>
+      throw Exception('보안 저장소 오류(테스트)');
+
+  @override
+  Future<void> saveAccessToken(String token) async {}
+
+  @override
+  Future<void> clear() async {}
+}
+
 ProviderContainer _container(AuthApi api, TokenStore store) {
   final container = ProviderContainer(
     overrides: [
@@ -91,6 +104,33 @@ void main() {
     final container = _container(_FakeAuthApi(token: 'tok'), store);
     await container.read(authControllerProvider.notifier).logout();
     expect(store.cleared, isTrue);
+    expect(container.read(authControllerProvider).isAuthenticated, isFalse);
+  });
+
+  test('restore: 저장된 토큰 있으면 → isAuthenticated', () async {
+    final store = _FakeTokenStore()..saved = 'tok';
+    final container = _container(_FakeAuthApi(token: 'tok'), store);
+    await container.read(authControllerProvider.notifier).restore();
+    expect(container.read(authControllerProvider).isAuthenticated, isTrue);
+  });
+
+  test('restore: 토큰 없으면(null) → 미인증', () async {
+    final container = _container(_FakeAuthApi(token: 'tok'), _FakeTokenStore());
+    await container.read(authControllerProvider.notifier).restore();
+    expect(container.read(authControllerProvider).isAuthenticated, isFalse);
+  });
+
+  test('restore: 빈 문자열 토큰 → 미인증', () async {
+    final store = _FakeTokenStore()..saved = '';
+    final container = _container(_FakeAuthApi(token: 'tok'), store);
+    await container.read(authControllerProvider.notifier).restore();
+    expect(container.read(authControllerProvider).isAuthenticated, isFalse);
+  });
+
+  test('restore: 저장소 오류 → 미인증·예외 없음(앱 안 죽음)', () async {
+    final container =
+        _container(_FakeAuthApi(token: 'tok'), _ThrowingTokenStore());
+    await container.read(authControllerProvider.notifier).restore();
     expect(container.read(authControllerProvider).isAuthenticated, isFalse);
   });
 }

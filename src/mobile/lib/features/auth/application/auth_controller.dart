@@ -18,6 +18,23 @@ class AuthController extends _$AuthController {
   @override
   AuthState build() => const AuthState();
 
+  /// 앱 시작 시 보안 저장소(OAuth-b `tokenStore`)의 토큰으로 인증 세션을 복원한다.
+  ///
+  /// 재시작 후에도 로그인 세션을 유지한다 — `build()`는 항상 미인증으로 시작하므로, 시작 시
+  /// 한 번 호출해 저장된 토큰이 있으면 인증 상태로 올린다(라우터 가드가 채팅으로 보냄·c2b).
+  /// 토큰 *검증*은 서버(L5) — 여기선 존재만 보고 운반한다(만료 처리는 후속). 보안 저장소 오류는
+  /// 미인증으로 처리해 앱이 죽지 않게 한다.
+  Future<void> restore() async {
+    try {
+      final token = await ref.read(tokenStoreProvider).readAccessToken();
+      if (token != null && token.isNotEmpty) {
+        state = state.copyWith(isAuthenticated: true);
+      }
+    } on Object catch (_) {
+      // 보안 저장소 미가용·오류(테스트의 MissingPluginException 포함) → 미인증 취급, 앱 안 죽음.
+    }
+  }
+
   /// authorization code를 토큰으로 교환하고 보안 저장소에 저장한다(로그인 완료).
   ///
   /// 흐름: ① 전송중 표시·에러 클리어 → ② `AuthApi.login`(백엔드 콜백) → ③ `tokenStore.saveAccessToken`
