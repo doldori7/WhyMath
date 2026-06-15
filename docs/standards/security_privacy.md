@@ -58,7 +58,7 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 # 교사: 학교 인증 (Phase 3+)
 ```
 
-> **구현 현황 (OAuth-a·a2·c2·2026-06-14)**: JWT 발급/검증(`security.py`)·Bearer 의존성·미성년 동의
+> **구현 현황 (OAuth-a·a2·c2·c2b·2026-06-15)**: JWT 발급/검증(`security.py`)·Bearer 의존성·미성년 동의
 > 게이트(`api/_auth.py`)는 가동. **OAuth 로그인 콜백**(`api/auth.py`·`POST /v1/auth/{provider}/callback`
 > — `OAuthProvider` Protocol → 사용자 upsert(이메일 해시 키·마이그레이션 0) → `create_access_token`)
 > + **실 카카오/네이버 provider**(`api/oauth_providers.py`·httpx token→userinfo·`config.py` client
@@ -71,8 +71,12 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 > 상태) + **로그인 화면(OAuth-c2)**(`features/auth/presentation/login_screen.dart`·카카오/네이버 버튼
 > → `OAuthCodeRequester` seam으로 code 획득 → c1 토큰 교환 → 채팅 이동·실패 graceful) 가동. ★**실
 > code 획득(webview/딥링크)은 미구현 seam**(`UnsupportedOAuthCodeRequester`·명확한 오류)이라 로그인은
-> *아직 작동하지 않으며* 기본 흐름(온보딩→채팅)은 강제하지 않는다(`/login` 등록만·비파괴). 흐름 강제
-> (라우트 가드)·세션 복원=OAuth-c2b, 실 webview·카카오/네이버 SDK·네이티브 설정=OAuth-c3로 후속.
+> *아직 작동하지 않으며* 기본 흐름(온보딩→채팅)은 강제하지 않는다(`/login` 등록만·비파괴).
+> + **세션 복원 + 라우트 가드(OAuth-c2b)**: `AuthController.restore()`(시작 시 보안 저장소 토큰으로
+> 인증 복원·방어적—오류 시 미인증·앱 안 죽음) + `main.dart` runApp 전 복원(`UncontrolledProviderScope`)
+> + `router.dart` **비파괴 redirect**(*복원된 인증* 세션만 온보딩/로그인→채팅·미인증은 현 흐름 유지)
+> 가동. ★미인증→로그인 **강제** redirect·로그아웃 반영·세션 만료는 로그인이 실제 작동하는 c3로 연기
+> (그 전에 강제하면 앱이 막힘). 실 webview/딥링크 code 획득·카카오/네이버 SDK·네이티브 설정=OAuth-c3.
 
 ## 감사 로그
 

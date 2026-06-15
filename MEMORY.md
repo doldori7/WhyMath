@@ -332,6 +332,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-15 (구현·L5): 라우트 가드 + 세션 복원(OAuth-c2b)
+**컨텍스트**: OAuth-c1/c2로 인증 세션 로직·로그인 화면 완결. 그러나 앱 재시작 시 `AuthController.build()`가 항상 미인증으로 시작해 보안 저장소 토큰이 있어도 **세션이 사라진다**. c2b는 (1) 시작 시 토큰으로 **세션 복원** (2) go_router **redirect 가드**로 *복원된 인증* 세션을 채팅으로 보낸다.
+**범위**: Flutter 수정 3(`auth_controller.dart`에 `restore()`·`main.dart` async restore-before-runApp·`router.dart`에 비파괴 redirect) + 테스트 신규 1(`route_guard_test.dart`·2) + 확장 1(`auth_controller_test.dart`에 restore 4). `restore()`=보안 저장소 토큰 읽어 있으면 isAuthenticated(방어적 try/catch — secure storage 오류·`MissingPluginException` 삼켜 미인증·앱 안 죽음). `main()`=`UncontrolledProviderScope`+수동 `ProviderContainer`로 runApp 전 복원. redirect=`authed && loc∈{온보딩,로그인} → 채팅`.
+**★비파괴(잠금·중대)**: 실 로그인은 c3(실 webview) 전엔 작동 안 함 → 가드가 **미인증을 /login으로 강제하면 앱이 막힌다**. 따라서 가드는 *복원된 인증* 세션만 채팅으로 보내고 **미인증은 현 흐름(온보딩→채팅) 그대로**. 미인증 강제 redirect·로그아웃 반영·세션 만료는 c3.
+**설계(Plan 에이전트 검증·GO-WITH-CHANGES)**: ① redirect의 `ref.read(authControllerProvider)`는 정석(`Provider<GoRouter>` 수명=ref 수명·`watch` 아님). ② restore-before-runApp + 로그인 명시적 네비게이션 + 로그아웃 미배선 → **`refreshListenable` 생략이 c2b에선 정확**(런타임 상태 변화 시나리오 0). ③ restore-before-runApp(동기 redirect)이 async-splash보다 CI-only 게이트에서 결정적·저위험. ④ 기존 위젯 테스트는 `main()`을 안 타 `restore()` 미호출·redirect는 미인증→`null` → **무영향**. ⑤ 가드 테스트는 슬로건(로그인 화면도 보유) 대신 `find.byType(ChatScreen)`로 단언·`UncontrolledProviderScope`는 `addTearDown(container.dispose)` 필수·`empty_catches`는 catch 주석으로 통과·`main.dart` import 순서 점검.
+**환경 제약**: 로컬 Flutter SDK 없음 → 검증 패턴(onboarding_test `_FakeCoachApi`·auth_controller_test `_FakeTokenStore`/`_container`·go_router redirect 정석) 모방 + 구분자 균형 점검. **CI mobile 잡 유일 게이트**·녹색 확인 후 수동 머지. 백엔드·마이그레이션·pubspec·codegen 0.
+**후속**: OAuth-c3 실 webview/딥링크 code 획득(`OAuthCodeRequester` 실 구현)+로그아웃 UI+미인증 강제 가드(`refreshListenable` 도입)+세션 만료·카카오/네이버 SDK·네이티브 설정 / OAuth-a3 refresh·a4 로그인 레이트리밋.
+
 ### 2026-06-14 (구현·L5): 로그인 화면 + 코드 획득 seam(OAuth-c2)
 **컨텍스트**: OAuth-c1(AuthApi·AuthController)으로 로그인 *세션 로직*(code→토큰→저장) 완결. c2는 그 위에 **로그인 화면**(카카오/네이버 버튼)과 **authorization code 획득 seam**을 얹는다. 단, 실 code 획득(provider authorize→redirect 인터셉트)은 webview/네이티브라 CI/로컬 검증 불가.
 **범위**: Flutter 신규 2(`features/auth/data/oauth_code_requester.dart`·`features/auth/presentation/login_screen.dart`) + 수정 1(`core/router.dart`에 `/login` 라우트) + 테스트 1(`test/login_screen_test.dart`·3개). `LoginScreen`(ConsumerStatefulWidget·chat_screen 패턴)이 ① `OAuthCodeRequester.requestCode`(seam)로 code 획득 → ② `AuthController.completeLogin`(c1)으로 토큰 교환 → ③ 성공 시 `context.go(chatPath)`·실패/미구현은 SnackBar(앱 유지).
