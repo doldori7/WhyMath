@@ -57,13 +57,14 @@ class TestConceptEnumValues:
         }
 
     def test_edge_type_values_english(self) -> None:
-        """EdgeType — 영어 5종."""
+        """EdgeType — 영어 6종(슬108 TRIGGERS_DISTRACTOR 어휘 추가)."""
         assert {e.value for e in EdgeType} == {
             "PREREQUISITE",
             "COMPOSED_OF",
             "ANALOGOUS_TO",
             "EXTENDS",
             "CONTRASTS",
+            "TRIGGERS_DISTRACTOR",
         }
 
     def test_concept_role_values_english(self) -> None:
