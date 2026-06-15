@@ -786,6 +786,20 @@ def report_to_dict(
     }
 
 
+def _emit(text: str, out: str | None) -> None:
+    """렌더된 리포트를 *파일*(UTF-8 직접 기록)이나 stdout으로 낸다.
+
+    `out` 지정 시 Python이 직접 UTF-8 파일로 쓴다 — Windows cp949 콘솔에서 `print`가 비-ASCII
+    (예: 위첨자 `⁰`)에 UnicodeEncodeError로 죽거나 PowerShell 파이프 재인코딩으로 깨지는 것을
+    원천 차단(셸 리다이렉트 비의존). 미지정 시 기존대로 stdout — Linux/Phaiakes9 경로 불변.
+    """
+    if out is not None:
+        Path(out).write_text(text, encoding="utf-8")
+        print(f"[semantic_eval] report written (utf-8): {out}")  # ASCII만 — cp949 안전
+    else:
+        print(text)
+
+
 def _run(
     probes_path: Path,
     *,
@@ -798,6 +812,7 @@ def _run(
     provider: EmbeddingProvider | None = None,
     judge: JudgeProtocol | None = None,
     report_format: str = "text",
+    out: str | None = None,
 ) -> int:
     """프로브셋 로드 → 라이브 측정 → 리포트(또는 스윕) → 게이트 판정.
 
@@ -811,6 +826,14 @@ def _run(
     의미 매처만(judge 미적용·threshold 곡선이 목적) 유지한다 — judge는 운영점 곡선이 아니라
     *고정점에서의 추가 필터 효과* 측정이다(judge 호출이 임계값마다 N배 늘면 측정 비용 과다).
     """
+    # Windows(cp949 등) 콘솔에서 비-ASCII print가 UnicodeEncodeError로 죽지 않도록 stdout을
+    # 베스트에포트로 UTF-8 재구성(--out은 파일을 직접 UTF-8로 써 파이프·콘솔 인코딩을 아예 회피).
+    _reconfig = getattr(sys.stdout, "reconfigure", None)
+    if _reconfig is not None:
+        try:
+            _reconfig(encoding="utf-8")
+        except (ValueError, OSError):  # pragma: no cover — 재구성 불가 환경(베스트에포트)
+            pass
     probes = load_probes(probes_path)
     resolved_provider = provider if provider is not None else build_provider()
     # 매처를 1회 만들어(사전 임베딩 캐시) 스윕·고정 측정에 재사용한다.
@@ -859,16 +882,17 @@ def _run(
         )
     report = evaluate(outcomes)
     if report_format == "json":
-        print(
-            json.dumps(
-                report_to_dict(report, threshold=resolved_threshold, confidence=confidence),
-                ensure_ascii=False,
-                indent=2,
-            )
+        rendered = json.dumps(
+            report_to_dict(report, threshold=resolved_threshold, confidence=confidence),
+            ensure_ascii=False,
+            indent=2,
         )
     else:
-        print(f"\n=== threshold={resolved_threshold:.3f} ===")
-        print(format_report(report, confidence=confidence))
+        rendered = (
+            f"\n=== threshold={resolved_threshold:.3f} ===\n"
+            f"{format_report(report, confidence=confidence)}"
+        )
+    _emit(rendered, out)
 
     # 게이트(둘 다 opt-in·기본 0.0=off): recall은 하한이 min-recall 이상·FP는 상한이 max-fp 이하면
     # 통과(exit 0). None(프로브 0)은 임계>0일 때 미달로 본다(증거 없음=통과 불가). step_shadow의
@@ -951,6 +975,15 @@ def main(argv: list[str] | None = None) -> int:
         default="text",
         help="출력 형식 — text(사람읽기·기본)/json(기계가독 리포트·아카이브·후보별 판정근거).",
     )
+    parser.add_argument(
+        "--out",
+        type=str,
+        default=None,
+        help=(
+            "리포트를 stdout 대신 *파일*로 직접 UTF-8 기록(셸 파이프·콘솔 코드페이지 회피). "
+            "Windows cp949 콘솔에서 print가 비-ASCII(예: ⁰)에 죽는 문제 회피 — Windows 권장."
+        ),
+    )
     args = parser.parse_args(argv)
     probes_path: str = args.probes_path
     threshold: float | None = args.threshold
@@ -962,6 +995,7 @@ def main(argv: list[str] | None = None) -> int:
     confidence: float = args.confidence
     use_judge: bool = args.judge
     report_format: str = args.format
+    out: str | None = args.out
     judge: JudgeProtocol | None = None
     if use_judge:
         # L3 백킹 judge(로컬 FAST·라우터 경유) 구성 — L3 import는 judge_seam에 격리.
@@ -980,6 +1014,7 @@ def main(argv: list[str] | None = None) -> int:
         confidence=confidence,
         judge=judge,
         report_format=report_format,
+        out=out,
     )
 
 
