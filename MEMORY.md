@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-15 (구현·L5/auth): 리프레시 토큰 서버측 취소 기반 — allowlist+로그아웃(OAuth-a3b)
+**컨텍스트**: a3가 리프레시를 stateless로 추가하며 남긴 빈자리(만료 전 서버측 개별 취소 불가)를 메운다. 발급된 리프레시마다 DB *세션 행*(allowlist)을 두고 `/refresh`가 확인·`/logout`이 취소(denylist)해 즉시 무효화한다.
+**스코프(최소 검증 seam)**: a3b=기반(테이블+`jti`+allowlist 검증+로그아웃). **회전(rotation)·재사용 탐지·세션 목록은 a3c로 분리** — 회전은 `/refresh` 응답 변경·패닉 로직을 끌고 와 검증면을 흐린다. a3b는 회전 없이도 진짜 취소(로그아웃·관리)를 제공해 a3 빈자리를 직접 닫음.
+**범위**: 신규 `db/models/refresh_token_session.py`(`RefreshTokenSession`·PK=토큰 jti·user FK·revoked/revoked_at·`device.py` 동형)+마이그레이션 `e4f5a6b7c8d9`(첫 신규 테이블·head `d3e4f5a6b7c8` 위)+`__init__` 등록. `security.py`(`jti` 클레임·`create_refresh_token(jti=)`·`decode_refresh_token`→`RefreshTokenClaims(subject,jti)`·jti 없으면 JWTError). `api/auth.py`(콜백이 jti 발급+세션행 add+**commit**[신규 사용자까지 영속하는 부수 개선]·`/refresh` allowlist[행 없음/취소→401]·신규 `POST /logout`[행 revoked=true·멱등 204]). 테스트 +unit(endpoint 15·security 6)+실PG 통합(login→refresh→logout→refresh 401).
+**검증**: CI 동일 py3.12 venv 4게이트 green — ruff·black(188)·mypy-strict(161)·pytest **3107 passed/125 skip**·신규 모델·`security.py` cov **100%**·`api/auth.py` a3b 분기 전부 커버(미커버는 기존 monkeypatch resolve_user). 마이그레이션 단일 head 확인(실PG 왕복은 CI `backend-migrations`). 새 의존성 0·`schema/auth.py`·`config.py`·모바일 무변경.
+**후속**: a3c 회전(revoke-old+issue-new·재사용 탐지 패닉)·세션 목록/관리(`GET /v1/auth/sessions`) / 모바일 refresh-on-401 / a4 레이트리밋 / access TTL 15분.
+
 ### 2026-06-15 (구현·L5/auth): 리프레시 토큰 — stateless 서명(OAuth-a3)
 **컨텍스트**: OAuth-a~c2b로 로그인·세션·가드 완결. 발급 토큰은 액세스(24h) 하나뿐이라 매 요청 노출되는데 TTL이 길어 탈취 위험창이 크다. a3는 **리프레시 토큰**(긴 TTL·`/refresh`로 새 액세스 교환)을 추가해, 이후 클라가 액세스를 짧게 두고 갱신(refresh-on-401)할 토대를 깐다.
 **저장 전략(사용자 위임→권장안 채택)**: **stateless 서명 토큰**(`typ:refresh` 클레임 JWT·storage 0·마이그레이션 0·순수 단위테스트). ★**정직(보안 경계)**: stateless라 **만료 전 서버측 개별 취소 불가** — 회전(rotation)·denylist·세션 목록은 **a3b(DB 백킹·`RefreshTokenSession`+마이그레이션)로 연기**. 단 `/refresh`는 사용자 존재 확인으로 *삭제된 사용자* 갱신 거부(최소 통제). access TTL은 24h 유지(클라 refresh-on-401 배선 전 단축하면 세션 단절 — 비파괴).

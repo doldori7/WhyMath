@@ -68,6 +68,7 @@ from whymath_backend.db.models.provenance import (
     ContentProvenance,
     GenerationLog,
 )
+from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
 from whymath_backend.db.models.solution_node import (
     NodeVerifyStatus,
     SolutionNode,
@@ -140,4 +141,6 @@ __all__ = [
     # WH-S S1: SolutionNode (풀이 경로 트리 노드·§2.1·오프라인 솔버 상태) + 검증 상태 enum
     "SolutionNode",
     "NodeVerifyStatus",
+    # OAuth-a3b: RefreshTokenSession (리프레시 토큰 서버측 취소 allowlist·PK=jti)
+    "RefreshTokenSession",
 ]
