@@ -636,6 +636,18 @@ class Settings(BaseSettings):
             "오버라이드 가능. WHYMATH_MISCONCEPTION_SEMANTIC_THRESHOLD로 전역 조정."
         ),
     )
+    misconception_judge_routing: Literal["fast_math", "general_mid"] = Field(
+        default="fast_math",
+        description=(
+            "오개념 방향 판별 judge 라우팅 프로파일(슬108 후속·측정 실험용). **`fast_math`"
+            "(기본·현행)** = 로컬 FAST MATH(qwen2-math:1.5b). 단 2026-06-15 라이브 측정에서 "
+            "한국어 판정 형식(`판정: 예/아니오/불확실`) 미준수로 전부 UNCERTAIN→FP 감소 0(작은 "
+            "수학 모델이 NLP 분류·형식 준수에 부적합). **`general_mid`** = GENERAL MID"
+            "(qwen2.5:7b)로 라우팅해 형식 준수·방향 판별 재측정(판단은 NLP 분류라 일반 instruct "
+            "모델 적합). judge는 coach 미배선이라 이 값은 *측정 경로*(CLI `--judge`·통합 "
+            "테스트)에만 영향. WHYMATH_MISCONCEPTION_JUDGE_ROUTING로 전환."
+        ),
+    )
 
     misconception_semantic_mode: Literal["off", "shadow", "on"] = Field(
         default="off",
