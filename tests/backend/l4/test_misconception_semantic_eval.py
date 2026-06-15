@@ -818,6 +818,31 @@ class TestRunJsonOutput:
         assert row["judge_decisions"][0]["misconception_id"] == target
         assert row["judge_decisions"][0]["verdict"] == "uncertain"
 
+    def test_run_out_writes_utf8_file_not_stdout(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # --out: 리포트를 stdout 대신 파일로 직접 UTF-8 기록(Windows cp949 콘솔/파이프 우회).
+        # stdout엔 JSON 본문이 아니라 확인 메시지(ASCII)만, 파일엔 UTF-8 JSON.
+        out_file = tmp_path / "report.json"
+        with probes_path() as path:
+            code = _run(
+                path,
+                threshold=0.3,
+                sweep=None,
+                min_recall=0.0,
+                max_fp=0.0,
+                top_k=5,
+                confidence=0.95,
+                provider=FakeEmbeddingProvider(),
+                report_format="json",
+                out=str(out_file),
+            )
+        assert code == 0
+        assert "summary" not in capsys.readouterr().out  # 본문은 파일로, stdout엔 없음
+        payload = json.loads(out_file.read_text(encoding="utf-8"))
+        assert payload["summary"]["total"] == 94
+        assert len(payload["probes"]) == 94
+
 
 # ══════════════════════════════════════════════════════════════════════════
 # 불변·계약 — Report items가 source-of-truth(파생 일관성)
