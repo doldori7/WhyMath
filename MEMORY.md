@@ -332,6 +332,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-15 (구현·L5/auth): 리프레시 토큰 회전 + 재사용 탐지(OAuth-a3c)
+**컨텍스트**: a3b allowlist 위에 **회전(rotation)**과 **재사용 탐지**를 얹는다 — a3b까진 `/refresh`가 같은 리프레시 토큰을 만료(30일)까지 무한 재사용해 탈취 위험창이 길었다. 이제 매 `/refresh`가 토큰을 회전(기존 세션 취소+새 토큰 발급)하고, 이미 취소된 토큰 재제출은 탈취 신호로 보아 전체 세션을 패닉 취소한다.
+**스코프**: a3c=회전+재사용 탐지(**마이그레이션 0**·a3b 테이블 재사용). 세션 목록/관리(`GET·DELETE /v1/auth/sessions`)는 a3d로 분리.
+**범위**: `schema/auth.py`(`AccessTokenResponse` 제거 — `/refresh`가 이제 `OAuthTokenResponse`[access+refresh] 반환). `api/auth.py`(신규 헬퍼 `_issue_refresh_session`[콜백·회전 공유]·`_revoke_all_user_sessions`[`update()` bulk·`_device_store` 패턴]; `/refresh` 재작성: 행 없음→401·**행 취소됨→재사용 패닉**[전 세션 취소+401]·정상→**회전**[기존 취소+새 access/refresh]). `/logout`·콜백 흐름 유지(헬퍼 리팩터). 테스트: endpoint 회전/재사용 패닉 갱신+`_FakeSession.execute`·실PG 통합(회전→R1 재사용→패닉→R2도 401).
+**설계**: ① `/refresh` 응답 형태 변경(`AccessTokenResponse`→`OAuthTokenResponse`) — 유일 소비자는 테스트·모바일 미호출이라 안전. ⚠️ *향후 모바일 refresh-on-401은 회전된 리프레시 토큰을 반드시 저장*. ② 재사용 정책=전체 활성 세션 패닉 취소(가족 부분취소 대신 보수적·단순; 로그아웃 토큰 재사용도 동일 트리거·무해).
+**검증**: CI 동일 py3.12 venv 4게이트 green — ruff·black(188)·mypy-strict(161)·pytest **3107 passed/126 skip**·`schema/auth.py` cov **100%**·`api/auth.py` 회전·재사용 분기 전부 커버(미커버는 기존 monkeypatch resolve_user). 마이그레이션 0·새 의존성 0·`security.py`·`config.py`·모바일 무변경.
+**후속**: a3d 세션 목록/관리(`GET·DELETE /v1/auth/sessions`·인증 필요) / 모바일 refresh-on-401(회전 토큰 저장) / a4 레이트리밋 / access TTL 15분.
+
 ### 2026-06-15 (구현·L5/auth): 리프레시 토큰 서버측 취소 기반 — allowlist+로그아웃(OAuth-a3b)
 **컨텍스트**: a3가 리프레시를 stateless로 추가하며 남긴 빈자리(만료 전 서버측 개별 취소 불가)를 메운다. 발급된 리프레시마다 DB *세션 행*(allowlist)을 두고 `/refresh`가 확인·`/logout`이 취소(denylist)해 즉시 무효화한다.
 **스코프(최소 검증 seam)**: a3b=기반(테이블+`jti`+allowlist 검증+로그아웃). **회전(rotation)·재사용 탐지·세션 목록은 a3c로 분리** — 회전은 `/refresh` 응답 변경·패닉 로직을 끌고 와 검증면을 흐린다. a3b는 회전 없이도 진짜 취소(로그아웃·관리)를 제공해 a3 빈자리를 직접 닫음.

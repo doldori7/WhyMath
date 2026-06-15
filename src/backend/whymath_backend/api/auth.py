@@ -11,10 +11,10 @@
 upsert 키는 **이메일 해시**(`email_hash = sha256(정규화 이메일)`) — 평문 이메일 미저장(개인정보
 보호·기존 필드 의미 그대로)·같은 이메일은 provider 무관 같은 계정(자연 연결)·마이그레이션 0.
 
-리프레시(OAuth-a3·a3b): 로그인 시 액세스+리프레시를 함께 발급하고(리프레시마다 `jti`=세션 행 PK),
-`/refresh`는 리프레시 토큰을 검증한 뒤 `refresh_token_session` 행을 allowlist 확인(존재·미취소)해
-새 액세스 토큰을 발급하며, `/logout`은 그 행을 취소(denylist)해 즉시 무효화한다. 이로써 *만료 전
-서버측 취소*가 가능해진다(a3의 빈자리). 회전·재사용 탐지·세션 목록은 a3c·로그인 레이트리밋은 a4.
+리프레시(OAuth-a3·a3b·a3c): 로그인 시 액세스+리프레시를 함께 발급하고(리프레시마다 `jti`=세션 행
+PK), `/refresh`는 토큰 검증·allowlist 확인 후 **회전**한다(기존 세션 취소+새 토큰 발급).
+*이미 취소된* 토큰 재제출은 **재사용 탐지**로 전체 세션을 패닉 취소(탈취 대응). `/logout`은 세션
+취소(denylist)로 즉시 무효화. 세션 목록/관리는 a3d·로그인 레이트리밋은 a4.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from typing import Annotated, Protocol, runtime_checkable
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from jose import JWTError
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.config import Settings, get_settings
@@ -35,7 +35,6 @@ from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.auth import (
-    AccessTokenResponse,
     OAuthCallbackRequest,
     OAuthTokenResponse,
     RefreshRequest,
@@ -140,6 +139,36 @@ def _refresh_unauthorized() -> HTTPException:
     )
 
 
+def _issue_refresh_session(session: AsyncSession, user_id: uuid.UUID, settings: Settings) -> str:
+    """새 jti로 리프레시 토큰 발급 + 세션 행(allowlist) add. 반환=리프레시 토큰(commit은 호출자).
+
+    콜백(로그인)과 `/refresh`(회전)가 공유한다 — 둘 다 같은 트랜잭션에서 다른 변경과 함께 커밋한다.
+    """
+    jti = uuid.uuid4()
+    token = create_refresh_token(user_id, settings=settings, jti=jti)
+    session.add(
+        RefreshTokenSession(
+            token_session_id=jti,
+            user_id=user_id,
+            expires_at=datetime.now(tz=timezone.utc)
+            + timedelta(minutes=settings.jwt_refresh_expire_minutes),
+        )
+    )
+    return token
+
+
+async def _revoke_all_user_sessions(session: AsyncSession, user_id: uuid.UUID) -> None:
+    """사용자의 *활성* 리프레시 세션을 모두 취소(재사용 탐지 패닉·`_device_store` revoke 패턴)."""
+    await session.execute(
+        update(RefreshTokenSession)
+        .where(
+            RefreshTokenSession.user_id == user_id,
+            RefreshTokenSession.revoked.is_(False),
+        )
+        .values(revoked=True, revoked_at=datetime.now(tz=timezone.utc))
+    )
+
+
 @router.post(
     "/{provider}/callback",
     response_model=OAuthTokenResponse,
@@ -167,39 +196,29 @@ async def oauth_callback(
             detail="로그인 제공자 인증에 실패했습니다(잠시 후 다시 시도).",
         ) from exc
     user = await resolve_user(session, identity)
-    jti = uuid.uuid4()
     access_token = create_access_token(user.user_id, settings=settings)
-    refresh_token = create_refresh_token(user.user_id, settings=settings, jti=jti)
-    # 발급된 리프레시 토큰을 세션 행(allowlist)으로 영속 — /refresh가 확인·/logout이 취소한다.
-    # 이 commit이 세션 행과 (신규면) 사용자까지 영속시킨다(resolve_user는 flush만 하므로).
-    session.add(
-        RefreshTokenSession(
-            token_session_id=jti,
-            user_id=user.user_id,
-            expires_at=datetime.now(tz=timezone.utc)
-            + timedelta(minutes=settings.jwt_refresh_expire_minutes),
-        )
-    )
+    refresh_token = _issue_refresh_session(session, user.user_id, settings)
+    # 세션 행(allowlist) + (신규면) 사용자까지 한 번에 영속(resolve_user는 flush만 하므로).
     await session.commit()
     return OAuthTokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post(
     "/refresh",
-    response_model=AccessTokenResponse,
-    summary="리프레시 토큰 → 새 액세스 토큰 발급",
+    response_model=OAuthTokenResponse,
+    summary="리프레시 토큰 회전 — 새 액세스+리프레시 토큰 발급",
 )
 async def refresh_access_token(
     body: RefreshRequest,
     session: SessionDep,
     settings: SettingsDep,
-) -> AccessTokenResponse:
-    """유효한 리프레시 토큰으로 새 액세스 토큰을 발급한다(미인증 엔드포인트).
+) -> OAuthTokenResponse:
+    """유효한 리프레시 토큰을 회전한다 — 기존 세션 취소+새 액세스/리프레시 발급(미인증 엔드포인트).
 
-    리프레시 토큰을 검증(typ=refresh·만료·서명·jti)하고, 그 jti의 `refresh_token_session` 행을
-    allowlist 확인(존재·미취소)한 뒤 사용자가 여전히 존재하면 새 액세스 토큰을 발급한다. 불량/만료/
-    타입불일치/jti없음/세션없음·취소됨/사용자없음 → 401(`WWW-Authenticate: Bearer`). 회전 없음(같은
-    리프레시 토큰 재사용 — a3c). JWT 시크릿 미설정 시 500(서버 구성 오류·토큰 문제와 구분).
+    리프레시 토큰을 검증(typ=refresh·만료·서명·jti)하고 그 jti의 세션 행을 allowlist 확인한다. 행이
+    *없으면* 401. 행이 *이미 취소됨*이면 **재사용 탐지**(회전·로그아웃된 토큰 재제출 = 탈취 신호) →
+    사용자 전체 활성 세션을 패닉 취소하고 401. 정상이면 **회전**: 기존 세션 취소 + 새 리프레시 세션
+    발급 → 새 액세스+리프레시 반환. 불량/만료/타입불일치/사용자없음 → 401. 시크릿 미설정 500.
     """
     try:
         claims = decode_refresh_token(body.refresh_token, settings=settings)
@@ -208,13 +227,23 @@ async def refresh_access_token(
     except (JWTError, ValueError) as exc:
         raise _refresh_unauthorized() from exc
     token_session = await session.get(RefreshTokenSession, session_id)
-    if token_session is None or token_session.revoked:
+    if token_session is None:
+        raise _refresh_unauthorized()
+    if token_session.revoked:
+        # 재사용 탐지 — 이미 회전/로그아웃된 토큰 재제출은 탈취 신호. 전체 활성 세션 패닉 취소.
+        await _revoke_all_user_sessions(session, user_id)
+        await session.commit()
         raise _refresh_unauthorized()
     user = await session.get(UserProfile, user_id)
     if user is None:
         raise _refresh_unauthorized()
+    # 회전 — 제출 세션 취소 + 새 리프레시 세션 발급(같은 트랜잭션에서 커밋).
+    token_session.revoked = True
+    token_session.revoked_at = datetime.now(tz=timezone.utc)
     access_token = create_access_token(user.user_id, settings=settings)
-    return AccessTokenResponse(access_token=access_token)
+    refresh_token = _issue_refresh_session(session, user.user_id, settings)
+    await session.commit()
+    return OAuthTokenResponse(access_token=access_token, refresh_token=refresh_token)
 
 
 @router.post(

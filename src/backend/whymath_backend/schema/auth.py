@@ -37,16 +37,3 @@ class RefreshRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     refresh_token: str = Field(description="로그인 시 발급받은 JWT 리프레시 토큰.")
-
-
-class AccessTokenResponse(BaseModel):
-    """리프레시 교환 성공 — 새로 발급된 액세스 토큰(Bearer).
-
-    리프레시 토큰 회전(rotation)은 후속이라 새 리프레시 토큰은 반환하지 않는다 — 클라는 만료 전까지
-    기존 리프레시 토큰을 계속 사용한다.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-
-    access_token: str = Field(description="새로 발급된 JWT 액세스 토큰(Authorization: Bearer).")
-    token_type: str = Field(default="bearer", description="토큰 타입(OAuth2 관용 'bearer').")

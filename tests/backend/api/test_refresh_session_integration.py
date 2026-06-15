@@ -143,3 +143,28 @@ def test_refresh_unknown_session_401_on_live_pg() -> None:
             assert resp.status_code == 401, resp.text
     finally:
         asyncio.run(_cleanup(uid))
+
+
+def test_refresh_rotation_and_reuse_on_live_pg() -> None:
+    """회전(R1→R2·기존 세션 취소) → R1 재사용 → 재사용 탐지 패닉(전 세션 취소·R2도 401)."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    jti = uuid.uuid4()
+    try:
+        asyncio.run(_insert_user(_build_user(uid)))
+        asyncio.run(_insert_session(jti, uid))
+        r1 = create_refresh_token(uid, settings=_settings(), jti=jti)
+        with _app_with_settings() as client:
+            rotated = client.post(_REFRESH_PATH, json={"refresh_token": r1})
+            assert rotated.status_code == 200, rotated.text
+            r2 = rotated.json()["refresh_token"]
+            assert r2 != r1  # 회전된 새 리프레시 토큰
+            # R1 재사용(이미 회전됨) → 재사용 탐지 패닉 → 401
+            reuse = client.post(_REFRESH_PATH, json={"refresh_token": r1})
+            assert reuse.status_code == 401, reuse.text
+            # 패닉으로 회전된 R2까지 무효화
+            assert client.post(_REFRESH_PATH, json={"refresh_token": r2}).status_code == 401
+    finally:
+        asyncio.run(_cleanup(uid))
