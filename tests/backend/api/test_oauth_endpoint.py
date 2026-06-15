@@ -84,6 +84,15 @@ class _FakeSession:
     async def commit(self) -> None:
         return None
 
+    async def execute(self, statement: object) -> None:
+        # 핸들러가 호출하는 유일한 execute는 재사용-패닉의 전체 활성 세션 취소(update).
+        now = datetime.now(tz=timezone.utc)
+        for row in self._sessions.values():
+            if not row.revoked:
+                row.revoked = True
+                row.revoked_at = now
+        return None
+
 
 def _settings() -> Settings:
     return Settings(jwt_secret_key=SecretStr("test-secret-0123456789abcdef"))
@@ -181,17 +190,25 @@ def test_callback_persists_session_row(monkeypatch: pytest.MonkeyPatch) -> None:
     assert claims.jti == str(rows[0].token_session_id)
 
 
-def test_refresh_with_valid_session_issues_access() -> None:
-    """유효 리프레시 + 미취소 세션 행 + 존재하는 사용자 → 200 + 새 액세스 토큰(sub=사용자 id)."""
+def test_refresh_rotates_tokens() -> None:
+    """유효 리프레시 회전 → 200·새 액세스+리프레시(새 jti≠원본)·기존 세션 취소·새 세션 추가."""
     uid = uuid.uuid4()
     jti, refresh = _refresh_for(uid)
     session = _FakeSession(_user(uid))
-    session.seed(_session_row(uid, jti))
+    row = _session_row(uid, jti)
+    session.seed(row)
     resp = _client({}, session=session).post(_REFRESH_PATH, json={"refresh_token": refresh})
     assert resp.status_code == 200
     body = resp.json()
     assert body["token_type"] == "bearer"
     assert decode_access_token(body["access_token"], settings=_settings()) == str(uid)
+    new_claims = decode_refresh_token(body["refresh_token"], settings=_settings())
+    assert new_claims.subject == str(uid)
+    assert new_claims.jti != str(jti)  # 회전: 새 jti
+    assert row.revoked is True  # 기존 세션 취소
+    rows = session.stored_rows()
+    assert len(rows) == 2
+    assert any(r.token_session_id == uuid.UUID(new_claims.jti) and not r.revoked for r in rows)
 
 
 def test_refresh_rejects_access_token_401() -> None:
@@ -222,14 +239,17 @@ def test_refresh_unknown_session_401() -> None:
     assert resp.status_code == 401
 
 
-def test_refresh_revoked_session_401() -> None:
-    """세션 행이 취소(revoked=true)됐으면 → 401(denylist)."""
+def test_refresh_reuse_revoked_panics_401() -> None:
+    """이미 취소된(회전/로그아웃) 토큰 재제출 → 재사용 탐지: 전체 활성 세션 패닉 취소 + 401."""
     uid = uuid.uuid4()
     jti, refresh = _refresh_for(uid)
     session = _FakeSession(_user(uid))
-    session.seed(_session_row(uid, jti, revoked=True))
+    session.seed(_session_row(uid, jti, revoked=True))  # 재사용되는 취소 토큰
+    other = _session_row(uid, uuid.uuid4())  # 같은 사용자의 다른 활성 세션
+    session.seed(other)
     resp = _client({}, session=session).post(_REFRESH_PATH, json={"refresh_token": refresh})
     assert resp.status_code == 401
+    assert other.revoked is True  # 패닉: 다른 활성 세션도 취소됨
 
 
 def test_refresh_unknown_user_401() -> None:

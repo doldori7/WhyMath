@@ -58,7 +58,7 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 # 교사: 학교 인증 (Phase 3+)
 ```
 
-> **구현 현황 (OAuth-a·a2·a3·a3b·c2·c2b·2026-06-15)**: JWT 발급/검증(`security.py`)·Bearer 의존성·미성년 동의
+> **구현 현황 (OAuth-a·a2·a3·a3b·a3c·c2·c2b·2026-06-15)**: JWT 발급/검증(`security.py`)·Bearer 의존성·미성년 동의
 > 게이트(`api/_auth.py`)는 가동. **OAuth 로그인 콜백**(`api/auth.py`·`POST /v1/auth/{provider}/callback`
 > — `OAuthProvider` Protocol → 사용자 upsert(이메일 해시 키·마이그레이션 0) → `create_access_token`)
 > + **실 카카오/네이버 provider**(`api/oauth_providers.py`·httpx token→userinfo·`config.py` client
@@ -67,8 +67,10 @@ REFRESH_TOKEN_TTL = timedelta(days=30)
 > (OAuth-a3)** 가동: `create_refresh_token`/`decode_refresh_token`(`security.py`·`typ:refresh` 클레임·
 > 후방호환) + `POST /v1/auth/refresh`. **서버측 취소(OAuth-a3b)** 가동: 발급 리프레시마다 `jti`를 실어
 > `refresh_token_session` 행(PK=jti·allowlist)을 두고 `/refresh`가 존재·미취소 확인·`POST
-> /v1/auth/logout`이 행을 취소(denylist)해 *만료 전 즉시 무효화*(로그아웃·관리). 회전·재사용 탐지·세션
-> 목록은 후속(a3c). refresh 30일 TTL(`jwt_refresh_expire_minutes`); access는 현재 24h 유지(15분 단축은
+> /v1/auth/logout`이 행을 취소(denylist)해 *만료 전 즉시 무효화*. **회전·재사용 탐지(OAuth-a3c)** 가동:
+> `/refresh`가 매번 회전(기존 세션 취소+새 액세스/리프레시 반환)하고, 이미 취소된 토큰 재제출은 재사용
+> 탐지로 사용자 전체 세션을 패닉 취소한다(탈취 대응). 세션 목록/관리(`GET·DELETE /v1/auth/sessions`)는
+> 후속(a3d). refresh 30일 TTL(`jwt_refresh_expire_minutes`); access는 현재 24h 유지(15분 단축은
 > 모바일 refresh-on-401 배선 후). **로그인 IP 레이트리밋은 후속**(OAuth-a4). **모바일(OAuth-b)**:
 > `core/token_store.dart`(`TokenStore`·OS 보안 저장소
 > `flutter_secure_storage`) + `core/auth_interceptor.dart`(dio Bearer 자동 첨부) + **인증 세션
