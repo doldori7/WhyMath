@@ -10,7 +10,12 @@ from jose import JWTError, jwt
 from pydantic import SecretStr
 
 from whymath_backend.config import Settings
-from whymath_backend.security import create_access_token, decode_access_token
+from whymath_backend.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_access_token,
+    decode_refresh_token,
+)
 
 _SECRET = "test-secret-key-0123456789abcdef"
 
@@ -70,3 +75,55 @@ def test_missing_secret_raises_runtimeerror() -> None:
         create_access_token(uuid.uuid4(), settings=settings)
     with pytest.raises(RuntimeError):
         decode_access_token("any-token", settings=settings)
+
+
+def test_refresh_create_decode_roundtrip() -> None:
+    settings = _settings()
+    user_id = uuid.uuid4()
+    token = create_refresh_token(user_id, settings=settings)
+    assert decode_refresh_token(token, settings=settings) == str(user_id)
+
+
+def test_refresh_expired_raises_jwterror() -> None:
+    settings = _settings()
+    token = create_refresh_token(
+        uuid.uuid4(), settings=settings, expires_delta=timedelta(seconds=-1)
+    )
+    with pytest.raises(JWTError):
+        decode_refresh_token(token, settings=settings)
+
+
+def test_access_token_rejected_as_refresh() -> None:
+    """typ=access 토큰을 리프레시로 디코드하면 JWTError(용도 오용 차단)."""
+    settings = _settings()
+    token = create_access_token(uuid.uuid4(), settings=settings)
+    with pytest.raises(JWTError):
+        decode_refresh_token(token, settings=settings)
+
+
+def test_refresh_token_rejected_as_access() -> None:
+    """typ=refresh 토큰을 액세스로 디코드하면 JWTError(용도 오용 차단)."""
+    settings = _settings()
+    token = create_refresh_token(uuid.uuid4(), settings=settings)
+    with pytest.raises(JWTError):
+        decode_access_token(token, settings=settings)
+
+
+def test_legacy_access_token_without_typ_still_decodes() -> None:
+    """후방호환: typ 클레임 없는 기존 액세스 토큰도 decode_access_token이 받아준다."""
+    settings = _settings()
+    token = jwt.encode(
+        {"sub": "u-123"},
+        settings.jwt_secret_key.get_secret_value(),
+        algorithm=settings.jwt_algorithm,
+    )
+    assert decode_access_token(token, settings=settings) == "u-123"
+
+
+def test_refresh_missing_secret_raises_runtimeerror() -> None:
+    """빈 시크릿(미설정)은 리프레시 발급·검증 모두 RuntimeError(서버 구성 오류)."""
+    settings = Settings(jwt_secret_key=SecretStr(""))
+    with pytest.raises(RuntimeError):
+        create_refresh_token(uuid.uuid4(), settings=settings)
+    with pytest.raises(RuntimeError):
+        decode_refresh_token("any-token", settings=settings)
