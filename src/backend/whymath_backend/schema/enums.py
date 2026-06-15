@@ -412,7 +412,7 @@ class CognitiveType(str, Enum):
 
 
 class EdgeType(str, Enum):
-    """개념 간 관계(DAG 엣지) — §4.2 `edge_type_enum`(L345-350, 영어 5종)."""
+    """개념 간 관계(DAG 엣지) — §4.2 `edge_type_enum`(L345-350, 영어 6종)."""
 
     PREREQUISITE = "PREREQUISITE"
     """선수 — A를 알아야 B를 안다(A→B)."""
@@ -428,6 +428,14 @@ class EdgeType(str, Enum):
 
     CONTRASTS = "CONTRASTS"
     """대조 — A와 B는 혼동하기 쉽다."""
+
+    TRIGGERS_DISTRACTOR = "TRIGGERS_DISTRACTOR"
+    """오개념 유발 선택지 — distractor(객관식 오답 선지)가 misconception을 유발한다(슬108 어휘).
+
+    이번 슬라이스는 *어휘만* 선언하고 `concept_edge` 적재는 하지 않는다 — `concept_edge`는
+    concept→concept(UUID FK)인데 misconception은 아직 그래프 노드가 아니라 카탈로그(kebab id)다.
+    노드화 전까지 distractor→misconception 매핑은 op-code 카탈로그
+    (`l4/misconception/distractor.py`)가 보유한다."""
 
 
 class ConceptRole(str, Enum):

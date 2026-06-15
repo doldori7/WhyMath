@@ -82,6 +82,8 @@ from whymath_backend.l4.misconception import (
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.misconception.hypothesis_store import apply_matches
+from whymath_backend.l4.misconception.judge import JudgeProtocol, LLMJudge, judge_filter
+from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
 from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
 from whymath_backend.l4.misconception.shadow import observe_misconception_shadow
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
@@ -438,6 +440,18 @@ class _MatchOutcome(NamedTuple):
     no_confident_match: bool
 
 
+def _judge_for_gate() -> JudgeProtocol:
+    """coach 오개념 게이트용 judge 좌석 — 기본 L3 백킹(라우터 경유·로컬 FAST·never-break).
+
+    슬108 플래그(`misconception_judge_enabled`)가 on일 때만 `_gate`가 호출한다. 기본은 L3 백킹
+    seam(`L3JudgeSeam`→`l3.pipeline`·로컬 FAST·Langfuse·캐시)을 문 `LLMJudge`다 — "LLM 라우터
+    경유·로컬 우선·추적" 절대원칙을 자동 충족(직접 호출 0). 테스트는 이 팩토리를 monkeypatch해
+    `FakeJudge`(결정론·라이브 0)를 주입한다(좌석 주입점·hermetic). 플래그 off면 호출되지 않아
+    `OllamaProvider` 구성도 0(현행 비트동일).
+    """
+    return LLMJudge(L3JudgeSeam())
+
+
 async def _compute_matches(
     student_input: str, *, ocr_confidence: float | None = None
 ) -> _MatchOutcome:
@@ -488,12 +502,18 @@ async def _compute_matches(
     (CLAUDE.md "환각/장애 조용히 넘어가지 말고 로그").
     """
 
-    def _gate(candidates: list[MisconceptionMatch]) -> _MatchOutcome:
+    async def _gate(candidates: list[MisconceptionMatch]) -> _MatchOutcome:
         # §3.3 품질 게이트 후처리 — 세 모드 공통 출구. 게이트를 *한 번만* 적용해 결과 전체를 받고
         # matches+플래그를 함께 반환한다(직전엔 .matches만 반환해 플래그를 드롭했음). 게이트 ①은
         # top-1<floor면 후보를 비우고(억지 매칭 금지) no_confident_match=True를, 게이트 ②는 OCR
         # confidence<0.8(None이면 dormant)면 low_quality=True를 세운다(매칭은 유지). 게이트는
         # *재정렬·변형 없이* 통과분만 그대로 통과시킨다(`combine_diagnoses` 순서 보존).
+        # 슬108 결선: judge 게이트 on이면 품질 게이트 *이전*에 방향 판별 필터를 적용한다 —
+        # NOT_EXPRESSES(올바름/다른 말)만 제거하고 예·불확실은 유지(recall 보존)해, 품질 게이트의
+        # no_confident_match가 *judge 통과 후* top-1을 반영하게 한다. 세 모드(off/shadow/on) 공통
+        # 출구라 게이트가 한 곳에 일관 적용된다. off면 좌석 호출 0·LLM 0·현행 비트동일.
+        if candidates and get_settings().misconception_judge_enabled:
+            candidates = await judge_filter(candidates, student_input, judge=_judge_for_gate())
         result = apply_match_quality_gate(candidates, ocr_confidence=ocr_confidence)
         return _MatchOutcome(
             matches=result.matches,
@@ -505,7 +525,7 @@ async def _compute_matches(
     mode = get_settings().misconception_semantic_mode
     if mode == "off":
         # off — substring만(의미 매처 미호출). 노출 상한 top-3로 자른다(결합 없음·현행 비트동일).
-        return _gate(substr[:_DEFAULT_TOP_K])
+        return await _gate(substr[:_DEFAULT_TOP_K])
     # shadow·on — 의미 매처를 비블로킹(워커 스레드)으로 돌린다. 실패는 substring graceful 폴백.
     try:
         sem = await asyncio.to_thread(
@@ -517,15 +537,15 @@ async def _compute_matches(
     except Exception:
         # 의미 매칭 실패 — substring 폴백(가용성 우선·200 유지). 조용히 넘기지 않고 로그.
         logger.warning("의미 매칭 실패 — substring 폴백", exc_info=True)
-        return _gate(substr[:_DEFAULT_TOP_K])
+        return await _gate(substr[:_DEFAULT_TOP_K])
     if mode == "shadow":
         # shadow — 노출은 substring 그대로(off 비트동일)·substring↔semantic 불일치만 로깅한다
         # (비노출·실 분포 플립 근거 수집·slice 111). 학생 원문은 로그에 안 담는다(프라이버시).
         # shadow 로깅은 *게이트 전* 원본 substr/sem으로 수행(게이트가 비교 분포를 왜곡하지 않게).
         observe_misconception_shadow(substr, sem)
-        return _gate(substr[:_DEFAULT_TOP_K])
+        return await _gate(substr[:_DEFAULT_TOP_K])
     # on — substring 아래에 semantic-only 후보를 결합해 *노출*(substring 우선·재정렬 없음).
-    return _gate(combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K))
+    return await _gate(combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K))
 
 
 async def _expected_answer_for(session: AsyncSession, problem_id: uuid.UUID | None) -> str | None:

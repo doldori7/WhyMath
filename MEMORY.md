@@ -332,6 +332,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-15 (구현·L4): 슬108 judge 게이트 coach 결선 + `TRIGGERS_DISTRACTOR` 어휘 + distractor op-code 카탈로그 — 에이전트 패러다임 "값싼 역량만" 흡수
+**컨텍스트**: 하네스형 진단 에이전트(외부 PDF·LLM-주도 LangGraph) ↔ 현 규칙기반·무상태·도구검증 코드 진단. 결론 — 에이전트 루프의 가치는 *배관이 아니라 핵심가치*지만 ① 학생 사고의 *개방형 진단*에 위치 ② MVP(고3 객관식)보다 후속 페르소나(서술형·영재)로 *백로디드* ③ 강점=실패모드(생성성: 자신있는 오진→오도된 가르침). **결정(Kiki)**: 에이전트 PLAN 루프·LangGraph·tool-dispatch·서버측 상태 루프는 *진단 계층의 종착 아키텍처*로 **예약**(C1·C2·C4·C5·C8 회피)하고, *루프 없이 현 규칙과 호환되며 즉효인 역량만* 흡수(Path A 최소 부분집합).
+**슬1(핵심·즉효)**: 슬108이 *예약*해 둔 `misconception_judge_enabled`(`config.py:656`·기본 off)를 coach `_compute_matches`(`api/coach.py:441` — 3 엔드포인트 공통 choke point)에 결선. on이면 결합 matches에 `judge_filter`를 *품질 게이트 이전*에 적용해 방향(⇒역)·부정(≠)·등치(=)가 어긋난 `NOT_EXPRESSES`만 제거(예·불확실 유지·recall 보존)·가설 영속도 같은 게이트 통과. **안전(진단 D3)**: 게이트는 *제거만* 하고 *생성하지 않음* → 실패모드=과소코칭(안전)≠오도된 가르침(위험). judge LLM은 `L3JudgeSeam`→라우터·로컬 FAST·Langfuse·never-break(예외→UNCERTAIN→유지). off=judge 미구성·LLM 0·현행 비트동일. 테스트 주입은 `_judge_for_gate` 좌석(FakeJudge·hermetic).
+**슬2(어휘·무위험)**: `EdgeType`에 `TRIGGERS_DISTRACTOR`(distractor→misconception) 추가 + Alembic `ALTER TYPE edge_type_enum ADD VALUE`(event_type 확장 선례 동형). **적재 보류** — `concept_edge`는 concept→concept(UUID FK)인데 misconception은 카탈로그(kebab id)·미노드화. 어휘만 선언.
+**슬3(그라운드워크·저작권 레일)**: `l4/misconception/distractor.py` 신설 — *추상 오류연산 op-code → `misconception_id`* 카탈로그(시드 5종·도메인 교차·`Misconception` 패턴 미러·생성 시 `CATALOG_BY_ID` 무결성 검증). op-code는 *일반 오류연산*(평가원/EBS 선지 본문 복제 아님·`Problem.choices` 검증자와 정합·CLAUDE.md 우선순위 #2). `Problem` 선지 메타 스키마·실시간 distractor 역추적 진단은 *모달리티 추가*라 후속 예약.
+**4게이트 green(메인 직접 재검증)**: ruff·black·mypy --strict·pytest 전체 통과(신규 테스트 2파일 — `test_coach_judge_gate.py` 11·`test_distractor_catalog.py` 10·회귀 0)·`--cov-fail-under=70` 통과. alembic 단일 선형 head(`TRIGGERS_DISTRACTOR` enum 확장).
+**후속**: 라이브 judge 효과 측정(Kiki·Phaiakes9)→경계 내 주도권 실시간 *졸업* 결정 · distractor 선지 메타 스키마+실시간 역추적 진단 · (종착) 에이전트 PLAN 루프 shadow/오프라인 PoC(WH-S 전례).
+
 ### 2026-06-15 (구현·L5/auth): 리프레시 토큰 회전 + 재사용 탐지(OAuth-a3c)
 **컨텍스트**: a3b allowlist 위에 **회전(rotation)**과 **재사용 탐지**를 얹는다 — a3b까진 `/refresh`가 같은 리프레시 토큰을 만료(30일)까지 무한 재사용해 탈취 위험창이 길었다. 이제 매 `/refresh`가 토큰을 회전(기존 세션 취소+새 토큰 발급)하고, 이미 취소된 토큰 재제출은 탈취 신호로 보아 전체 세션을 패닉 취소한다.
 **스코프**: a3c=회전+재사용 탐지(**마이그레이션 0**·a3b 테이블 재사용). 세션 목록/관리(`GET·DELETE /v1/auth/sessions`)는 a3d로 분리.
