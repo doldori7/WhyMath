@@ -178,6 +178,7 @@ async def grant_parental_consent(
     user: Annotated[UserProfile, Depends(get_current_user)],
     session: SessionDep,
     verifier: VerifierDep,
+    settings: SettingsDep,
 ) -> ParentalConsentGrantResponse:
     """법정대리인 동의를 기록하고 미성년 동의 게이트를 통과시킨다(PIPA 만14세 미만·§3).
 
@@ -202,6 +203,14 @@ async def grant_parental_consent(
     멱등성: 이미 동의가 있어도(만료 후 재확인·범위 재동의) append-only로 새 행을 적재하고
     `parent_consent_at`을 현재 시각으로 갱신한다 — 반복 호출이 안전하다(게이트는 통과 유지).
     """
+    # 0. 기능 플래그 게이트 — 실 GuardianVerifier 결선 전까지 prod에서 off(기본). stub만으론
+    #    임의 이메일로 self-consent 우회가 가능하므로, off면 동의 경로 자체를 막는다
+    #    (consent_grant.py·pipa_data_matrix.md §3.5·변호사 자문 후속).
+    if not settings.parental_consent_grant_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="법정대리인 동의 기록 기능이 비활성화되어 있습니다.",
+        )
     # 1. 신원 확인 SEAM 실행(현재 stub) — 미통과면 동의를 받지 않는다(403).
     verification = verifier.verify(GuardianVerificationRequest(guardian_email=body.guardian_email))
     if not verification.verified:

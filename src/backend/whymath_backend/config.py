@@ -344,6 +344,18 @@ class Settings(BaseSettings):
             "법정 기준 자체는 변호사 자문으로 확정. WHYMATH_MINOR_CONSENT_AGE로 조정."
         ),
     )
+    parental_consent_grant_enabled: bool = Field(
+        default=False,
+        description=(
+            "법정대리인 동의 *기록(GRANT)* 엔드포인트(POST /v1/users/me/parental-consent·PIPA "
+            "만14세 미만 §3) 활성 여부. **기본 False(prod 안전)**: 신원 확인이 아직 "
+            "StubGuardianVerifier(실 본인확인 미구현·변호사 자문 후속)라, 켜면 미성년이 임의 "
+            "이메일로 *스스로 동의를 부여*해 게이트를 우회할 수 있다(self-consent). 실 "
+            "GuardianVerifier(휴대폰 본인인증 등) 결선 전까지 off로 둬 동의 경로를 막는다(off면 "
+            "404). consent_grant.py·pipa_data_matrix.md §3.5. "
+            "WHYMATH_PARENTAL_CONSENT_GRANT_ENABLED로 조정."
+        ),
+    )
 
     # ── OAuth 로그인(카카오·네이버 SSO, OAuth-a2) ──
     # client_id는 공개 식별자(일반 str)·client_secret은 SecretStr·env-only(하드코딩 금지).

@@ -14,9 +14,11 @@ from typing import Any
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_consented_user, get_current_user
 from whymath_backend.app import create_app
+from whymath_backend.config import Settings, get_settings
 from whymath_backend.consent_grant import (
     GuardianVerificationRequest,
     StubGuardianVerifier,
@@ -30,6 +32,7 @@ from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 _GRANT_PATH = "/v1/users/me/parental-consent"
+_TEST_SECRET = "consent-test-secret-key-0123456789abcdef"  # 테스트용 더미(길이만 충족)
 
 
 def _minor_user(**over: Any) -> UserProfile:
@@ -81,8 +84,12 @@ def _client(
     fake: FakeSession,
     *,
     verifier: Any | None = None,
+    grant_enabled: bool = True,
 ) -> TestClient:
-    """앱 + get_current_user/get_session 오버라이드(+ 선택적 verifier seam 오버라이드)."""
+    """앱 + get_current_user/get_session/get_settings 오버라이드(+ 선택적 verifier seam).
+
+    `grant_enabled`로 동의 GRANT 기능 플래그를 토글한다(기본 켬 — 기존 테스트 유지).
+    """
     app = create_app()
     app.dependency_overrides[get_current_user] = lambda: user
 
@@ -90,6 +97,10 @@ def _client(
         yield fake
 
     app.dependency_overrides[get_session] = _sess
+    app.dependency_overrides[get_settings] = lambda: Settings(
+        jwt_secret_key=SecretStr(_TEST_SECRET),
+        parental_consent_grant_enabled=grant_enabled,
+    )
     if verifier is not None:
         app.dependency_overrides[_default_guardian_verifier] = lambda: verifier
     return TestClient(app)
@@ -114,6 +125,17 @@ class TestGrantParentalConsent:
         # user_profile.parent_consent_at이 설정됨(게이트 통과 근거) + 커밋.
         assert user.parent_consent_at is not None
         assert fake.committed is True
+
+    def test_disabled_by_default_returns_404(self) -> None:
+        """기능 플래그 off면 동의 경로가 막힌다(stub self-consent 우회 방지·prod 기본)."""
+        user = _minor_user()
+        fake = FakeSession()
+        resp = _client(user, fake, grant_enabled=False).post(
+            _GRANT_PATH, json={"guardian_email": "parent@example.com"}
+        )
+        assert resp.status_code == 404
+        assert fake.added_consents() == []  # 동의 미적재
+        assert user.parent_consent_at is None  # 게이트 통과 근거 미설정
 
     def test_consent_then_gate_passes_end_to_end(self) -> None:
         """**종단**: 동의 기록 후 같은 미성년의 ConsentedUser 게이트가 통과한다(구멍 폐쇄).
@@ -145,10 +167,14 @@ class TestGrantParentalConsent:
         import hashlib
 
         guardian_email = "parent@example.com"
-        expected_hash = hashlib.sha256(guardian_email.strip().lower().encode("utf-8")).hexdigest()
+        expected_hash = hashlib.sha256(
+            guardian_email.strip().lower().encode("utf-8")
+        ).hexdigest()
         user = _minor_user()
         fake = FakeSession()
-        resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": guardian_email})
+        resp = _client(user, fake).post(
+            _GRANT_PATH, json={"guardian_email": guardian_email}
+        )
         assert resp.status_code == 201, resp.text
         consent = fake.added_consents()[0]
         # 해시만 저장 — 평문 이메일은 어떤 필드에도 없다.
@@ -163,8 +189,12 @@ class TestGrantParentalConsent:
         """seam 주입성: 가짜 verifier(method 다름)를 주입하면 그 결과가 레코드에 반영된다."""
 
         class _FakeVerifier:
-            def verify(self, request: GuardianVerificationRequest) -> VerificationResult:
-                return VerificationResult(verified=True, method="fake-test", reference="ref-123")
+            def verify(
+                self, request: GuardianVerificationRequest
+            ) -> VerificationResult:
+                return VerificationResult(
+                    verified=True, method="fake-test", reference="ref-123"
+                )
 
         user = _minor_user()
         fake = FakeSession()
@@ -181,7 +211,9 @@ class TestGrantParentalConsent:
         """신원 확인 미통과(verified=False) → 403 + 동의 미기록·parent_consent_at 미설정."""
 
         class _FailingVerifier:
-            def verify(self, request: GuardianVerificationRequest) -> VerificationResult:
+            def verify(
+                self, request: GuardianVerificationRequest
+            ) -> VerificationResult:
                 return VerificationResult(verified=False, method="stub", reference=None)
 
         user = _minor_user()
@@ -199,7 +231,9 @@ class TestGrantParentalConsent:
         user = _minor_user()
         fake = FakeSession()
         # verifier 미주입 → create_app 기본(_default_guardian_verifier = stub).
-        resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": "p@example.com"})
+        resp = _client(user, fake).post(
+            _GRANT_PATH, json={"guardian_email": "p@example.com"}
+        )
         assert resp.status_code == 201, resp.text
         assert resp.json()["verification_method"] == StubGuardianVerifier.METHOD
 
@@ -219,7 +253,9 @@ class TestGrantParentalConsent:
     def test_empty_guardian_email_rejected_422(self) -> None:
         """빈 guardian_email → 422(요청 스키마 min_length=1 — 통지 대상 없음)."""
         user = _minor_user()
-        resp = _client(user, FakeSession()).post(_GRANT_PATH, json={"guardian_email": ""})
+        resp = _client(user, FakeSession()).post(
+            _GRANT_PATH, json={"guardian_email": ""}
+        )
         assert resp.status_code == 422
 
     def test_unknown_field_rejected_422(self) -> None:
@@ -237,7 +273,9 @@ class TestGrantParentalConsent:
         user = _minor_user()
         err = IntegrityError("INSERT", {}, Exception("conflict"))
         fake = FakeSession(commit_error=err)
-        resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": "p@example.com"})
+        resp = _client(user, fake).post(
+            _GRANT_PATH, json={"guardian_email": "p@example.com"}
+        )
         assert resp.status_code == 409
         assert fake.rolled_back is True
 
