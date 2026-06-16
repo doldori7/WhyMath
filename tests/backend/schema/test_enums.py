@@ -10,6 +10,7 @@ from enum import Enum
 
 from whymath_backend.schema.enums import (
     AnswerFormat,
+    BloomLevel,
     Curriculum,
     ExamType,
     GenerationType,
@@ -18,6 +19,7 @@ from whymath_backend.schema.enums import (
     QuestionFormat,
     RelationType,
     ReviewStatus,
+    ScoringType,
     SignaturePattern,
     SourceType,
     StepType,
@@ -33,6 +35,8 @@ _ALL_ENUMS: list[type[Enum]] = [
     Subject,
     QuestionFormat,
     AnswerFormat,
+    BloomLevel,
+    ScoringType,
     SignaturePattern,
     Persona,
     VisualType,
@@ -114,20 +118,97 @@ class TestSubject:
 # 문항 형식·정답
 # ──────────────────────────────────────────────────────────────────────
 class TestQuestionFormat:
-    def test_values_match_ddl_comment(self) -> None:
-        """§3.1 question_format_enum 주석(객관식/단답형/합답형/서술형)."""
+    def test_existing_four_labels_preserved(self) -> None:
+        """기존 4종 PG 라벨 보존(객관식/단답형/합답형/서술형) — 기존 행 하위호환(P3a)."""
+        assert QuestionFormat.객관식.value == "객관식"
+        assert QuestionFormat.단답형.value == "단답형"
+        assert QuestionFormat.합답형.value == "합답형"
+        assert QuestionFormat.서술형.value == "서술형"
+
+    def test_values_match_ten_type_system(self) -> None:
+        """P3a: 10유형 체계(기존 4 + 신규 6). 값=멤버명=한글."""
         assert {q.value for q in QuestionFormat} == {
+            # 기존 4종(라벨 보존)
             "객관식",
             "단답형",
             "합답형",
             "서술형",
+            # 신규 6종
+            "객관식진단",
+            "빈칸형",
+            "짝짓기형",
+            "그래프형",
+            "수행형",
+            "재수전용형",
         }
+
+    def test_exactly_ten_members(self) -> None:
+        """P3a: 문항 형식은 정확히 10종(Kiki 확정 10유형 체계)."""
+        assert len(list(QuestionFormat)) == 10
+
+    def test_six_new_members_present(self) -> None:
+        """신규 6종(MC-D/FB/MN/GR/PF/RT)이 모두 존재한다."""
+        new_labels = {
+            "객관식진단",
+            "빈칸형",
+            "짝짓기형",
+            "그래프형",
+            "수행형",
+            "재수전용형",
+        }
+        assert new_labels <= {q.value for q in QuestionFormat}
 
 
 class TestAnswerFormat:
     def test_values_match_ddl_comment(self) -> None:
         """§3.1 answer_format_enum 주석(자연수/분수/실수/식)."""
         assert {a.value for a in AnswerFormat} == {"자연수", "분수", "실수", "식"}
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Bloom 인지 수준·채점 유형 (P3a)
+# ──────────────────────────────────────────────────────────────────────
+class TestBloomLevel:
+    def test_values_match_taxonomy(self) -> None:
+        """P3a: 개정 Bloom 6단계(영어 값=멤버명)."""
+        assert {b.value for b in BloomLevel} == {
+            "REMEMBER",
+            "UNDERSTAND",
+            "APPLY",
+            "ANALYZE",
+            "EVALUATE",
+            "CREATE",
+        }
+
+    def test_exactly_six_members(self) -> None:
+        """Bloom 인지 수준은 정확히 6종."""
+        assert len(list(BloomLevel)) == 6
+
+    def test_member_name_equals_value(self) -> None:
+        """멤버명·값 모두 영어로 동일(SignaturePattern 선례)."""
+        assert BloomLevel.ANALYZE.value == "ANALYZE"
+        assert BloomLevel.CREATE == "CREATE"
+
+
+class TestScoringType:
+    def test_values_match_spec(self) -> None:
+        """P3a: 채점 유형 5종(한글 값)."""
+        assert {s.value for s in ScoringType} == {
+            "정오답",
+            "진단",
+            "부분점수",
+            "시간",
+            "루브릭",
+        }
+
+    def test_exactly_five_members(self) -> None:
+        """채점 유형은 정확히 5종."""
+        assert len(list(ScoringType)) == 5
+
+    def test_korean_values_preserved(self) -> None:
+        """한글 값 보존(use_enum_values 직렬화 시 한글 유지)."""
+        assert ScoringType.루브릭.value == "루브릭"
+        assert ScoringType.진단 == "진단"
 
 
 # ──────────────────────────────────────────────────────────────────────

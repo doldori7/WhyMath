@@ -34,9 +34,11 @@ from whymath_backend.db.models.problem import (
     ProblemStep as OrmProblemStep,
 )
 from whymath_backend.schema.enums import (
+    BloomLevel,
     Curriculum,
     Persona,
     RelationType,
+    ScoringType,
     SignaturePattern,
     SourceType,
     StepType,
@@ -239,6 +241,89 @@ def test_problem_irt_difficulty_b_in_ddl_and_roundtrip() -> None:
     orm = OrmProblem.from_schema(s)
     assert orm.irt_difficulty_b == -1.75
     assert orm.to_schema().irt_difficulty_b == -1.75  # 역변환도 보존
+
+
+def test_problem_p3a_meta_fields_in_ddl() -> None:
+    """P3a: 8 신규 컬럼·신규 enum 타입(bloom_level_enum·scoring_type_enum)이 PG DDL에 있다."""
+    ddl = _pg_ddl(OrmProblem.__table__)
+    # 신규 enum 타입명(마이그레이션 CREATE TYPE 대상).
+    assert "bloom_level_enum" in ddl
+    assert "scoring_type_enum" in ddl
+    # 8 신규 컬럼명.
+    for col in (
+        "bloom_level",
+        "scoring_type",
+        "domain",
+        "subunit",
+        "irt_a",
+        "discrimination_D",
+        "session_position",
+        "feedback_id",
+    ):
+        assert col in ddl, f"{col} 미반영"
+
+
+def test_problem_p3a_new_enums_use_values() -> None:
+    """P3a: 신규 enum 컬럼이 값(영어 BloomLevel·한글 ScoringType)을 PG 라벨로 갖는다."""
+    bloom_enums = OrmProblem.__table__.c.bloom_level.type.enums  # type: ignore[attr-defined]
+    assert "ANALYZE" in bloom_enums
+    assert "CREATE" in bloom_enums
+    scoring_enums = OrmProblem.__table__.c.scoring_type.type.enums  # type: ignore[attr-defined]
+    assert "루브릭" in scoring_enums
+    assert "부분점수" in scoring_enums
+
+
+def test_problem_p3a_meta_fields_roundtrip() -> None:
+    """P3a: 8 신규 필드가 schema → ORM → schema 왕복을 보존한다(seam 무수정)."""
+    s = _valid_schema_problem().model_copy(
+        update={
+            "bloom_level": BloomLevel.EVALUATE,
+            "scoring_type": ScoringType.진단,
+            "domain": "CAL-INT",
+            "subunit": "정적분의 활용",
+            "irt_a": 1.1,
+            "discrimination_D": 0.55,
+            "session_position": 5,
+            "feedback_id": "fb-def-int-02",
+        }
+    )
+    orm = OrmProblem.from_schema(s)
+    # ORM 단계(use_enum_values=True → enum은 문자열 값).
+    assert orm.bloom_level == "EVALUATE"
+    assert orm.scoring_type == "진단"
+    assert orm.domain == "CAL-INT"
+    assert orm.subunit == "정적분의 활용"
+    assert orm.irt_a == 1.1
+    assert orm.discrimination_D == 0.55
+    assert orm.session_position == 5
+    assert orm.feedback_id == "fb-def-int-02"
+    # 역변환(검증 포함) 보존.
+    back = orm.to_schema()
+    assert back.bloom_level == s.bloom_level
+    assert back.scoring_type == s.scoring_type
+    assert back.domain == "CAL-INT"
+    assert back.subunit == "정적분의 활용"
+    assert back.irt_a == 1.1
+    assert back.discrimination_D == 0.55
+    assert back.session_position == 5
+    assert back.feedback_id == "fb-def-int-02"
+
+
+def test_problem_p3a_meta_fields_default_none_roundtrip() -> None:
+    """P3a: 신규 필드 미지정 시 None으로 왕복(무회귀 — 기존 Problem 구성 보존)."""
+    s = _valid_schema_problem()  # 신규 필드 미지정
+    orm = OrmProblem.from_schema(s)
+    assert orm.bloom_level is None
+    assert orm.irt_a is None
+    assert orm.discrimination_D is None
+    assert orm.domain is None
+    assert orm.subunit is None
+    assert orm.session_position is None
+    assert orm.scoring_type is None
+    assert orm.feedback_id is None
+    back = orm.to_schema()
+    assert back.bloom_level is None
+    assert back.feedback_id is None
 
 
 def test_problem_step_roundtrip() -> None:

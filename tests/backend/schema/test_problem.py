@@ -13,12 +13,14 @@ from pydantic import ValidationError
 
 from whymath_backend.schema.enums import (
     AnswerFormat,
+    BloomLevel,
     Curriculum,
     ExamType,
     Persona,
     QuestionFormat,
     RelationType,
     ReviewStatus,
+    ScoringType,
     SignaturePattern,
     SourceType,
     StepType,
@@ -254,6 +256,85 @@ class TestProblemValidation:
         assert dumped["source_type"] == "자체생성"
         assert dumped["curriculum_version"] == "2022_REVISION"
         assert dumped["subject"] == "미적분"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# P3a 신규 메타 8필드 — 전부 nullable·가산적(기존 구성 무회귀)
+# ──────────────────────────────────────────────────────────────────────
+class TestProblemP3aMetaFields:
+    def test_new_fields_default_none(self) -> None:
+        """P3a 8필드는 미지정 시 모두 None — 기존 Problem 구성이 그대로 유효(무회귀)."""
+        p = _minimal_self_generated()
+        assert p.bloom_level is None
+        assert p.irt_a is None
+        assert p.discrimination_D is None
+        assert p.domain is None
+        assert p.subunit is None
+        assert p.session_position is None
+        assert p.scoring_type is None
+        assert p.feedback_id is None
+
+    def test_all_new_fields_accepted(self) -> None:
+        """8필드를 유효 값으로 모두 채워 생성된다(자체생성 — 본문 보유 허용)."""
+        p = _minimal_self_generated(
+            bloom_level=BloomLevel.ANALYZE,
+            irt_a=1.35,
+            discrimination_D=0.42,
+            domain="CAL-DIFF",
+            subunit="합성함수의 미분",
+            session_position=3,
+            scoring_type=ScoringType.부분점수,
+            feedback_id="fb-composite-diff-01",
+        )
+        assert p.bloom_level == BloomLevel.ANALYZE
+        assert p.irt_a == pytest.approx(1.35)
+        assert p.discrimination_D == pytest.approx(0.42)
+        assert p.domain == "CAL-DIFF"
+        assert p.subunit == "합성함수의 미분"
+        assert p.session_position == 3
+        assert p.scoring_type == ScoringType.부분점수
+        assert p.feedback_id == "fb-composite-diff-01"
+
+    def test_new_enum_value_serialization(self) -> None:
+        """use_enum_values=True → bloom_level(영어)·scoring_type(한글) 값 직렬화."""
+        p = _minimal_self_generated(
+            bloom_level=BloomLevel.CREATE,
+            scoring_type=ScoringType.루브릭,
+        )
+        dumped = p.model_dump()
+        assert dumped["bloom_level"] == "CREATE"
+        assert dumped["scoring_type"] == "루브릭"
+
+    def test_new_question_format_member_accepted(self) -> None:
+        """확장된 QuestionFormat 신규 멤버(객관식진단)도 question_format에 수용된다."""
+        p = _minimal_self_generated(question_format=QuestionFormat.객관식진단)
+        assert p.question_format == QuestionFormat.객관식진단
+        assert p.model_dump()["question_format"] == "객관식진단"
+
+    def test_invalid_bloom_level_rejected(self) -> None:
+        """bloom_level은 BloomLevel enum 값만(잘못된 값 → ValidationError)."""
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(bloom_level="WONDER")
+
+    def test_invalid_scoring_type_rejected(self) -> None:
+        """scoring_type은 ScoringType enum 값만(잘못된 값 → ValidationError)."""
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(scoring_type="별점")
+
+    def test_session_position_negative_rejected(self) -> None:
+        """session_position은 0 이상(ge=0) — 음수 → ValidationError."""
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(session_position=-1)
+
+    def test_session_position_zero_allowed(self) -> None:
+        """session_position=0은 유효(세션 첫 번째)."""
+        p = _minimal_self_generated(session_position=0)
+        assert p.session_position == 0
+
+    def test_feedback_id_max_length_rejected(self) -> None:
+        """feedback_id는 max_length=64 — 초과 → ValidationError."""
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(feedback_id="x" * 65)
 
 
 # ──────────────────────────────────────────────────────────────────────

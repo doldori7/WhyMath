@@ -33,12 +33,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from whymath_backend.schema.enums import (
     AnswerFormat,
+    BloomLevel,
     Curriculum,
     ExamType,
     Persona,
     QuestionFormat,
     RelationType,
     ReviewStatus,
+    ScoringType,
     SignaturePattern,
     SourceType,
     StepType,
@@ -176,10 +178,23 @@ class Problem(BaseModel):
 
     # ===== 과목·단원 =====
     subject: Subject = Field(..., description="과목 — 공통/미적분/확통/기하/인공지능수학")
+    # P3a 신규: domain은 subject(과목)보다 세분, topic(주제)보다 광역인 *광역 영역 코드*.
+    # subject=미적분 < domain=미분법/적분법 < (topic) < subunit=소단원의 위계. nullable·점진 채움.
+    domain: str | None = Field(
+        default=None,
+        description="광역 영역 코드 — subject보다 세분·topic보다 광역(예: 'CAL-DIFF')",
+        max_length=64,
+    )
     unit_codes: list[str] = Field(
         ...,
         description="단원 코드 배열 (예: ['CAL-INT-DEF', 'FUN-COMPOSITE'])",
         min_length=1,
+    )
+    # P3a 신규: 소단원명(자연어). unit_codes(코드 배열)와 다른 *사람이 읽는 소단원 이름*.
+    subunit: str | None = Field(
+        default=None,
+        description="소단원명 (예: '합성함수의 미분')",
+        max_length=128,
     )
 
     # ===== 문항 형식 =====
@@ -191,6 +206,15 @@ class Problem(BaseModel):
     answer_format: AnswerFormat | None = Field(
         default=None,
         description="정답 형식 — 자연수/분수/실수/식",
+    )
+    # P3a 신규: 문항이 요구하는 인지 수준(개정 Bloom 6단계)·채점 유형. 문항 형식·난이도와 다른 축.
+    bloom_level: BloomLevel | None = Field(
+        default=None,
+        description="Bloom 인지 수준 — REMEMBER/UNDERSTAND/APPLY/ANALYZE/EVALUATE/CREATE",
+    )
+    scoring_type: ScoringType | None = Field(
+        default=None,
+        description="채점 유형 — 정오답/진단/부분점수/시간/루브릭",
     )
     answer_constraint: dict[str, Any] | None = Field(
         default=None,
@@ -317,6 +341,28 @@ class Problem(BaseModel):
             "난이도(difficulty_overall) 휴리스틱 폴백. logit 척도(1~5 아님)·범위 비제한."
         ),
     )
+    # P3a 신규: IRT 2PL 변별 모수 a(slope·기울기). 기존 1PL b(irt_difficulty_b)를 보완해
+    # 2PL로 확장할 때의 변별도. NULL=미적합(1PL 고정 a=1 가정). logit 척도·범위 비제한.
+    irt_a: float | None = Field(
+        default=None,
+        description=(
+            "IRT 2PL 변별 모수 a(slope). 기존 1PL b(irt_difficulty_b) 보완. NULL=미적합. "
+            "logit 척도·범위 비제한(고전 변별도 discrimination_D와 다른 축 — IRT 모형 모수)."
+        ),
+    )
+    # P3a 신규: 고전 검사이론(CTT) 변별도 D(상위/하위 정답률 차 등). irt_a(IRT 2PL 모수)와
+    # *다른 축*이다 — discrimination_D는 *모형 비의존 경험 통계*(보통 0~1·상위27% 정답률 −
+    # 하위27% 정답률), irt_a는 *2PL 잠재특성 모형의 기울기 모수*(logit·비제한). 둘 다 "변별"을
+    # 재지만 추정 방식·척도가 달라 별도 보존한다.
+    # 필드명 'discrimination_D'는 고전 검사이론의 *변별도 지수 D*(item discrimination index D)
+    # 정본 표기라 대문자 D를 그대로 둔다(enums.py `iPhone` noqa 선례 — 도메인 정본명 보존).
+    discrimination_D: float | None = Field(  # noqa: N815
+        default=None,
+        description=(
+            "고전 변별도 D — 상위/하위 집단 정답률 차(모형 비의존 경험 통계). "
+            "irt_a(IRT 2PL 기울기 모수)와 다른 축. 보통 0.0~1.0."
+        ),
+    )
 
     # ===== 정답률·통계 =====
     historical_correct_rate: float | None = Field(
@@ -354,6 +400,18 @@ class Problem(BaseModel):
         default=None,
         description="상위 10% 기준 풀이 시간(초)",
         ge=0,
+    )
+    # P3a 신규: 세션(문제 세트) 내 권장 출제 순서(0부터). NULL=세션 비배치. 학습 흐름 배치용.
+    session_position: int | None = Field(
+        default=None,
+        description="세션 내 권장 출제 순서(0부터). NULL=세션 비배치",
+        ge=0,
+    )
+    # P3a 신규: 피드백 템플릿 *느슨참조*(FK 아님 — 외부 피드백 카탈로그 키). NULL=기본 피드백.
+    feedback_id: str | None = Field(
+        default=None,
+        description="피드백 템플릿 느슨참조 키(FK 아님). NULL=기본 피드백",
+        max_length=64,
     )
 
     # ===== 페르소나 적합도 (원칙 5) =====
