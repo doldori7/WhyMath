@@ -655,6 +655,18 @@ class Settings(BaseSettings):
             "오버라이드 가능. WHYMATH_MISCONCEPTION_SEMANTIC_THRESHOLD로 전역 조정."
         ),
     )
+    misconception_judge_routing: Literal["fast_math", "general_mid"] = Field(
+        default="fast_math",
+        description=(
+            "오개념 방향 판별 judge 라우팅 프로파일(슬108 후속·측정 실험용). **`fast_math`"
+            "(기본·현행)** = 로컬 FAST MATH(qwen2-math:1.5b). 단 2026-06-15 라이브 측정에서 "
+            "한국어 판정 형식(`판정: 예/아니오/불확실`) 미준수로 전부 UNCERTAIN→FP 감소 0(작은 "
+            "수학 모델이 NLP 분류·형식 준수에 부적합). **`general_mid`** = GENERAL MID"
+            "(qwen2.5:7b)로 라우팅해 형식 준수·방향 판별 재측정(판단은 NLP 분류라 일반 instruct "
+            "모델 적합). judge는 coach 미배선이라 이 값은 *측정 경로*(CLI `--judge`·통합 "
+            "테스트)에만 영향. WHYMATH_MISCONCEPTION_JUDGE_ROUTING로 전환."
+        ),
+    )
 
     misconception_semantic_mode: Literal["off", "shadow", "on"] = Field(
         default="off",
@@ -684,6 +696,24 @@ class Settings(BaseSettings):
             "다른 말) 후보만 거른다(예·불확실 유지·recall 보존). 라우팅/모델은 L3 재사용(로컬 "
             "FAST·라우터 경유). `l4_step_shadow_enabled`·`misconception_semantic_mode` 미러. "
             "WHYMATH_MISCONCEPTION_JUDGE_ENABLED=true로 켠다(후속)."
+        ),
+    )
+
+    misconception_judge_shadow: bool = Field(
+        default=False,
+        description=(
+            "L4 coach 오개념 진단에서 *judge would-be shadow 로깅*(G1·04b Phase 1)을 켤지. "
+            "**False(기본·opt-in)·현행 비트동일**: 노출(student-facing)은 *절대 불변*이고, "
+            '`misconception_semantic_mode=="shadow"`일 때만 효력이 있다(매처가 라이브로 도는 '
+            "그 경로에서, 의미 후보에 judge를 *비차단*으로 돌려 *걸러질 결과*(would-be removed/"
+            "kept)를 무노출로 로깅). 노출 전 실데이터로 judge 효과를 검증하기 위함(합성↔실 갭). "
+            "**매처 shadow(`misconception_semantic_mode`·싸다)와 비용 분리**: judge는 LLM(수 초)"
+            "이라 매처 shadow와 on/off가 *독립*이어야 한다(이 플래그가 별 토글). judge는 응답 "
+            "경로를 *지연시키지 않는다* — fire-and-forget(asyncio.create_task)으로 띄우고 즉시 "
+            "반환한다(coach는 judge를 await하지 않음). 레코드엔 *학생 원문·judge reason 미저장* "
+            "(미성년 PII — verdict 카운트·id·임계만). `misconception_judge_enabled`(노출 게이트)와 "
+            "별개다(이쪽은 노출 필터·저쪽은 비노출 측정). "
+            "WHYMATH_MISCONCEPTION_JUDGE_SHADOW=true로 켠다."
         ),
     )
 

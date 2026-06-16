@@ -209,6 +209,30 @@ class FakeJudge:
         return JudgeResult(verdict=verdict, reason="fake", raw="fake")
 
 
+async def judge_verdicts(
+    matches: list[MisconceptionMatch],
+    student_statement: str,
+    *,
+    judge: JudgeProtocol,
+) -> list[tuple[MisconceptionMatch, JudgeResult]]:
+    """각 후보를 judge로 판정해 `(match, JudgeResult)` 쌍을 *순서 보존*해 반환(필터 이전 원자료).
+
+    `judge_filter`의 하위 원자 — 판정 *근거*(verdict·reason)까지 보존해 *측정·감사*에 쓴다(어떤
+    후보가 왜 유지/제거됐나). 후보들을 `asyncio.gather`로 *병렬* 판정한다(N개 순차 LLM 왕복의 지연
+    누적 회피 — 카탈로그 top_k는 작아 병렬이 안전). gather는 *입력 순서를 보존*하므로 반환 쌍도 원래
+    후보 순서다. 빈 입력은 빈 리스트.
+
+    `judge` 구현의 never-break(seam 예외→UNCERTAIN)는 `LLMJudge`가 보장하므로 여기서 추가
+    try/except는 두지 않는다 — judge는 *항상* JudgeResult를 돌려준다는 계약(Protocol)에 기댄다.
+    """
+    if not matches:
+        return []
+    results = await asyncio.gather(
+        *(judge.judge(student_statement, m.misconception) for m in matches)
+    )
+    return list(zip(matches, results, strict=True))
+
+
 async def judge_filter(
     matches: list[MisconceptionMatch],
     student_statement: str,
@@ -217,30 +241,15 @@ async def judge_filter(
 ) -> list[MisconceptionMatch]:
     """후보 리스트에서 judge가 `아니오`(NOT_EXPRESSES) 판정한 것만 제거(순서 보존·async).
 
-    각 match를 `judge.judge(student_statement, match.misconception)`로 판정해, *오직*
-    `NOT_EXPRESSES`(아니오)면 제거하고 `EXPRESSES`(예)·`UNCERTAIN`(불확실)이면 유지한다
-    (recall 보존·보수·doc 필터 규칙). 빈 입력은 빈 리스트.
+    각 match를 `judge_verdicts`로 판정해, *오직* `NOT_EXPRESSES`(아니오)면 제거하고 `EXPRESSES`(예)·
+    `UNCERTAIN`(불확실)이면 유지한다(recall 보존·보수·doc 필터 규칙). 판정 *근거*(verdict·reason)가
+    필요하면 `judge_verdicts`를 직접 쓴다(측정·감사). 빈 입력은 빈 리스트.
 
-    **동시성**: 후보들을 `asyncio.gather`로 *병렬* 판정한다(N개 후보를 순차로 LLM 왕복하면 지연
-    누적 — 카탈로그 top_k는 작아 병렬이 안전). gather는 *입력 순서를 보존*하므로 결과 필터링
-    후에도 원래 후보 순서(substring 우선·semantic 후순 등 호출자가 준 순서)가 유지된다.
-
-    `judge` 구현의 never-break(seam 예외→UNCERTAIN)는 `LLMJudge`가 보장하므로 여기서 추가
-    try/except는 두지 않는다 — judge는 *항상* JudgeResult를 돌려준다는 계약(Protocol)에 기댄다.
     이 함수는 *추가 필터*일 뿐 `combine_diagnoses`·`diagnose`·`semantic_matches`를 건드리지 않는다.
     """
-    if not matches:
-        return []
-    results = await asyncio.gather(
-        *(judge.judge(student_statement, m.misconception) for m in matches)
-    )
-    kept: list[MisconceptionMatch] = []
-    for match, result in zip(matches, results, strict=True):
-        # 아니오(NOT_EXPRESSES)만 제거. 예·불확실은 유지(recall 보존).
-        if result.verdict is JudgeVerdict.NOT_EXPRESSES:
-            continue
-        kept.append(match)
-    return kept
+    decided = await judge_verdicts(matches, student_statement, judge=judge)
+    # 아니오(NOT_EXPRESSES)만 제거. 예·불확실은 유지(recall 보존).
+    return [match for match, result in decided if result.verdict is not JudgeVerdict.NOT_EXPRESSES]
 
 
 __all__ = [
@@ -250,5 +259,6 @@ __all__ = [
     "JudgeVerdict",
     "LLMJudge",
     "judge_filter",
+    "judge_verdicts",
     "parse_verdict",
 ]

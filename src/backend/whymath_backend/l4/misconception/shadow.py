@@ -17,16 +17,23 @@ substring이 안 잡은 semantic-only 후보(불일치)를 **로그로만** 남�
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from collections.abc import Coroutine
 from datetime import datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.l4.misconception.judge import JudgeProtocol, JudgeVerdict, judge_verdicts
 from whymath_backend.l4.misconception.models import MisconceptionMatch
 
 logger = logging.getLogger("whymath.l4.misconception.shadow")  # step_shadow 네이밍 동형
 # 구조화 레코드 JSON 한 줄(harvest 입력) — 평문 로그와 분리된 자식 로거(step_shadow.record 미러).
 record_logger = logging.getLogger("whymath.l4.misconception.shadow.record")
+
+# G1: judge would-be shadow 전용 자식 로거(`shadow.record`와 동형으로 한 단계 더 분리) —
+# judge shadow 레코드만 따로 harvest/필터할 수 있게 한다.
+judge_record_logger = logging.getLogger("whymath.l4.misconception.judge_shadow.record")
 
 
 class MisconceptionShadowObservation(BaseModel):
@@ -98,4 +105,141 @@ def observe_misconception_shadow(
             ).model_dump_json()
         )
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(비차단 방어선·테스트 커버)
+        return
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# G1: judge would-be shadow — 의미 후보에 judge를 *비차단*으로 돌려 *걸러질 결과*만 로깅
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class MisconceptionJudgeShadowObservation(BaseModel):
+    """judge would-be shadow 관측 1건의 *구조화 레코드* — judge_record_logger JSON emit (harvest).
+
+    `misconception_semantic_mode=="shadow"`에서 도는 *의미 후보*에 judge를 돌려, judge가 **제거할**
+    후보(`would_remove_ids`·NOT_EXPRESSES)와 **유지할** 후보(`would_keep_ids`·EXPRESSES+UNCERTAIN)를
+    무노출로 수집한다 → 노출 전 실데이터로 judge 효과(합성↔실 갭)를 검증한다(04b Phase 1).
+
+    **프라이버시(미성년 PII)**: 학생 진술 원문도, judge의 `근거`(reason·학생 진술 인용 가능)도
+    *담지 않는다*. `reason` 필드 자체가 없고 `extra="forbid"`라 구조적으로 차단된다(`shadow.py`
+    `MisconceptionShadowObservation` 규약 계승). 담는 건 추상화된 오개념 id·verdict 카운트·임계
+    (비식별·로그 sink 한정·비노출 불변).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    semantic_candidate_ids: list[str]
+    """judge에 *투입한* 의미 후보 id(입력 순서·matcher가 이미 threshold로 필터한 셋)."""
+
+    would_remove_ids: list[str]
+    """judge가 `아니오`(NOT_EXPRESSES)로 판정해 *제거할* 후보 id — on이면 안 노출될 것."""
+
+    would_keep_ids: list[str]
+    """judge가 `예`/`불확실`(EXPRESSES+UNCERTAIN)로 판정해 *유지할* 후보 id(recall 보존·보수)."""
+
+    verdict_expresses: int
+    """`예`(EXPRESSES) 판정 수 — 진짜 오개념 표현으로 본 후보."""
+
+    verdict_not_expresses: int
+    """`아니오`(NOT_EXPRESSES) 판정 수 — 올바름/다른 말로 본 후보(would_remove와 1:1)."""
+
+    verdict_uncertain: int
+    """`불확실`(UNCERTAIN) 판정 수 — 모호 + 모든 폴백(형식 위반·seam 예외)의 귀착점."""
+
+    candidate_count: int
+    """투입 의미 후보 총수(=len(semantic_candidate_ids))."""
+
+    feed_threshold: float | None = None
+    """후보를 matcher가 거른 코사인 임계(judge-feed 운영점·사후 해석용·04b §4). None=미주입."""
+
+    judge_routing: str | None = None
+    """judge 라우팅 프로파일 라벨(fast_math/general_mid·judge 모델 식별·04b §2). None=미주입."""
+
+    observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+# 비차단(fire-and-forget) task의 강참조 보관소 — `create_task`가 *유일하게* 들고 있는 참조가
+# 약참조라 GC가 *실행 중* task를 수거해버리는 Python 경고(asyncio docs)를 방어한다. spawn 시
+# add → 완료 시 add_done_callback(discard)로 자가 정리한다. `_misconception_state.py`의 모듈
+# 전역 싱글톤 관용과 동형(코드베이스에 `create_task` 선례 0이라 가장 보수적 표준 패턴 채택).
+_PENDING: set[asyncio.Task[None]] = set()
+
+
+def _spawn(coro: Coroutine[object, object, None]) -> None:
+    """코루틴을 *비차단*으로 띄우고 즉시 반환 — 응답 경로가 judge(수 초)를 await하지 않게 한다.
+
+    `asyncio.create_task`로 백그라운드 실행하고, GC가 실행 중 task를 수거하지 못하게 `_PENDING`에
+    강참조를 잡았다가 완료 콜백으로 푼다(3중 안전망 중 GC 방어선). 호출자(coach)는 이 함수가
+    *즉시* 반환하므로 judge LLM 왕복을 기다리지 않는다(노출 무지연·G1 핵심 제약).
+    """
+    task: asyncio.Task[None] = asyncio.create_task(coro)
+    _PENDING.add(task)
+    task.add_done_callback(_PENDING.discard)
+
+
+async def observe_misconception_judge_shadow(
+    semantic_matches: list[MisconceptionMatch],
+    student_statement: str,
+    *,
+    judge: JudgeProtocol,
+    feed_threshold: float | None = None,
+    judge_routing: str | None = None,
+) -> None:
+    """의미 후보에 judge를 돌려 *would-be removed/kept*를 로그로만 관측(shadow·비노출). 반환 `None`.
+
+    `judge_verdicts`(*`judge_filter` 아님* — verdict 카운트가 필요)로 각 후보를 판정한 뒤
+    `result.verdict`*만* 읽어 would_remove(NOT_EXPRESSES)/would_keep(EXPRESSES+UNCERTAIN)로 분류하고
+    레코드를 emit한다. judge의 `reason`/`raw`는 *버린다*(학생 진술 인용 가능=미성년 PII·레코드
+    모델에 필드 없음). 빈 입력은 short-circuit(judge 미호출).
+
+    **never-break**(비차단 방어선·`observe_misconception_shadow`의 async 미러): judge 호출·직렬화·
+    로깅을 한 `try`로 감싸 *어떤 예외도* 본류(여기선 fire-and-forget task)를 깨지 않는다 — judge
+    코어(`judge_verdicts`)는 이미 seam 예외→UNCERTAIN으로 never-break지만(judge.py), 직렬화·로깅
+    실패까지 포함해 방어한다(우선순위: 학생 경험 > 진단 관측·CLAUDE.md #1≫#6).
+    """
+    if not semantic_matches:
+        return  # 의미 후보 0 → judge 미호출(short-circuit·효율).
+    try:
+        decided = await judge_verdicts(semantic_matches, student_statement, judge=judge)
+        would_remove: list[str] = []
+        would_keep: list[str] = []
+        n_expresses = n_not_expresses = n_uncertain = 0
+        for match, result in decided:
+            mid = match.misconception.id
+            # `result.verdict`만 읽는다 — reason/raw(PII 가능)는 절대 레코드에 안 담는다.
+            if result.verdict is JudgeVerdict.NOT_EXPRESSES:
+                would_remove.append(mid)
+                n_not_expresses += 1
+            else:
+                would_keep.append(mid)  # 예·불확실 모두 유지(recall 보존·보수)
+                if result.verdict is JudgeVerdict.EXPRESSES:
+                    n_expresses += 1
+                else:
+                    n_uncertain += 1
+        candidate_ids = [m.misconception.id for m in semantic_matches]
+        logger.info(
+            "judge shadow(비노출) — candidates=%s would_remove=%s would_keep=%s "
+            "(예=%d 아니오=%d 불확실=%d routing=%s)",
+            candidate_ids,
+            would_remove,
+            would_keep,
+            n_expresses,
+            n_not_expresses,
+            n_uncertain,
+            judge_routing,
+        )
+        judge_record_logger.info(
+            MisconceptionJudgeShadowObservation(
+                semantic_candidate_ids=candidate_ids,
+                would_remove_ids=would_remove,
+                would_keep_ids=would_keep,
+                verdict_expresses=n_expresses,
+                verdict_not_expresses=n_not_expresses,
+                verdict_uncertain=n_uncertain,
+                candidate_count=len(semantic_matches),
+                feed_threshold=feed_threshold,
+                judge_routing=judge_routing,
+            ).model_dump_json()
+        )
+    except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(비차단 방어선·shadow.py:100 미러)
         return
