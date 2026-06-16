@@ -43,15 +43,26 @@ _CONCEPT_B = {
 
 
 def _id_map() -> dict[str, str]:
-    return {"HK01": "UC.common1.a01.hk01", "HK02": "UC.common1.a01.hk02"}
+    """HK01·HK02 → 새 ID(HIGH·EQN·tier 6<7 정렬 — 001·002). 합성 픽스처용 고정 매핑."""
+    return {"HK01": "HIGH-EQN-001", "HK02": "HIGH-EQN-002"}
+
+
+def _alias_map() -> dict[str, list[str]]:
+    """HK01·HK02 별칭(옛 UC + src_id) — source_id·aliases 단언용."""
+    return {
+        "HK01": ["UC.common1.a01.hk01", "HK01"],
+        "HK02": ["UC.common1.a01.hk02", "HK02"],
+    }
 
 
 class TestTransformConcepts:
     def test_maps_core_fields(self) -> None:
-        concepts, skipped = transform_concepts([_CONCEPT_A], _id_map())
+        concepts, skipped = transform_concepts([_CONCEPT_A], _id_map(), _alias_map())
         assert skipped == []
         c = concepts[0]
-        assert c.concept_id == "UC.common1.a01.hk01"  # UC 변환
+        assert c.concept_id == "HIGH-EQN-001"  # 새 ID 변환
+        assert c.source_id == "HK01"  # 원천 보존
+        assert c.aliases == ["UC.common1.a01.hk01", "HK01"]  # 옛 UC + src_id
         assert c.name_ko == "다항식의 연산"
         assert c.domain == "[공통]식·방정식·부등식"  # category → domain
         assert c.standard_codes == ["[10공수1-01-01]"]
@@ -119,7 +130,7 @@ class TestTransformConcepts:
         """파싱 불가 standard_code만 있으면 grade_band_hint=None(단정 아닌 힌트)."""
         record = dict(_CONCEPT_A)
         record["standard_codes"] = ["not-a-code"]
-        id_map = {"HK01": "UC.x.misc.hk01"}
+        id_map = {"HK01": "HIGH-EQN-001"}
         c = transform_concepts([record], id_map)[0][0]
         assert c.grade_band_hint is None
 
@@ -152,8 +163,8 @@ class TestTransformEdges:
         edges, skipped = transform_edges(records, _id_map())
         assert skipped == []
         e = edges[0]
-        assert e.src_concept_id == "UC.common1.a01.hk01"  # UC 변환
-        assert e.dst_concept_id == "UC.common1.a01.hk02"
+        assert e.src_concept_id == "HIGH-EQN-001"  # 새 ID 변환
+        assert e.dst_concept_id == "HIGH-EQN-002"
         assert e.relation == Relation.PREREQUISITE.value
         assert e.evidence  # 비공백(합성)
         assert e.evidence_source == EvidenceSource.EXPERT_REVIEW.value
@@ -190,8 +201,8 @@ class TestTransformDataset:
             edge_records=[edge],
         )
         by_id = {c.concept_id: c for c in result.concepts}
-        assert by_id["UC.common1.a01.hk02"].prerequisite_concept_ids == ["UC.common1.a01.hk01"]
-        assert by_id["UC.common1.a01.hk01"].prerequisite_concept_ids == []
+        assert by_id["HIGH-EQN-002"].prerequisite_concept_ids == ["HIGH-EQN-001"]
+        assert by_id["HIGH-EQN-001"].prerequisite_concept_ids == []
 
     def test_passthrough_redacts_intl(self) -> None:
         """intl 패스스루는 redaction 키(ccss_statement_en) 제외."""
@@ -244,10 +255,10 @@ class TestTransformRealData:
         self, concept_records: list[dict[str, object]]
     ) -> None:
         """§4 분포: 수기 검수 114 → reviewed, 나머지 289 → pending."""
-        concepts, _ = transform_concepts(
-            concept_records, _real_id_map(concept_records)
+        concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
+        reviewed = sum(
+            1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value
         )
-        reviewed = sum(1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value)
         assert reviewed == 114
         assert len(concepts) - reviewed == 289
 
@@ -255,9 +266,7 @@ class TestTransformRealData:
         self, concept_records: list[dict[str, object]]
     ) -> None:
         """전체 개념 dump에 description/formal_definition 키 0건."""
-        concepts, _ = transform_concepts(
-            concept_records, _real_id_map(concept_records)
-        )
+        concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
         keys: set[str] = set()
         for c in concepts:
             keys.update(c.model_dump().keys())
@@ -268,9 +277,7 @@ class TestTransformRealData:
         self, concept_records: list[dict[str, object]]
     ) -> None:
         """모든 개념은 성취기준 코드 1개+ 태그(CLAUDE.md ALWAYS)."""
-        concepts, _ = transform_concepts(
-            concept_records, _real_id_map(concept_records)
-        )
+        concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
         assert all(len(c.standard_codes) >= 1 for c in concepts)
 
 

@@ -36,16 +36,40 @@ fields:
     type: string
     required: true
     description: >-
-      Universal Concept ID. 개념 노드의 PK이자 curriculum_entry·textbook_mapping과
-      공유하는 키. 한 번 발급하면 변경 금지 (다른 자산이 이 키로 join).
-    pattern: "UC.<domain약칭>.<topic>.<concept-slug>"
+      concept_id. 개념 노드의 PK이자 curriculum_entry·textbook_mapping과 공유하는 키.
+      2026-06-16 결정으로 기존 'UC.<domain>.<topic>.<slug>'에서 '{TRACK}-{AREA}-{NNN}'으로
+      *전환*(의도적 breaking). 추적성은 source_id·aliases로 보존(아래) — 롤백·하위호환 join.
+    pattern: "^(ELEM|MID|HIGH|RT|OLY)-[A-Z0-9]{2,8}-\\d{3}$"
+    format: "{TRACK}-{AREA}-{NNN}  (TRACK∈ELEM/MID/HIGH/RT/OLY·AREA 2~8 대문자숫자·NNN 3자리)"
     examples:
-      - "UC.calc.limit.epsilon-delta"
-      - "UC.calc.deriv.definition"
+      - "ELEM-GEO-001"
+      - "MID-ARITH-007"
+      - "HIGH-CALC-042"
     notes: >-
-      curriculum_matrix.md 본문은 'WM-C-<domain>-<순번4자리>' 형식도 언급하나,
-      concept_graph.md(정본)의 'UC.<domain>.<topic>.<slug>'를 채택한다.
-      두 카드의 표기 차이는 Phase 1 구현 시 concept_graph.md 기준으로 통일.
+      TRACK은 첫 standard_codes 학년대수(2/4/6=ELEM·9=MID·10/12=HIGH·코드 없으면
+      difficulty_tier 밴드 폴백)에서, AREA는 category(레벨 접두사 제거 후 토픽)를 ascii
+      니모닉으로 매핑(data_pipeline.concept_graph.idmap._TOPIC_AREA_MAP·37 category 전수),
+      NNN은 (TRACK, AREA) 그룹 안 (tier, src_id) 정렬 순번. RT(재수)·OLY(영재)는 예약 트랙.
+      curriculum_matrix.md 'WM-C-…' 표기는 stale — 이 형식이 정본.
+
+  source_id:
+    type: string
+    required: true
+    description: >-
+      원천 데이터셋 src_id(예 'N1'·'HK01'·'H:12대수01-01'). 재ID(UC→{TRACK}-{AREA}-{NNN})
+      전 식별자 보존 — concept_id가 src_id에서 *파생*되었음을 추적(롤백·재현).
+    example: "H:12미적Ⅰ01-01"
+
+  aliases:
+    type: list[string]
+    required: false
+    default: []
+    description: >-
+      옛 키 별칭 목록 — [레거시 UC('UC.<domain>.<topic>.<slug>'), src_id]. 새 concept_id로
+      전환한 뒤에도 옛 키·원천 키로 join/조회 가능하게 보존(하위호환). *재ID된* 개념(원천 코퍼스)은
+      옛 UC를 반드시 보존하고, 시드 단계 *신규* 후보(source_id==concept_id)는 보존할 옛 키가 없어
+      빈 목록일 수 있다.
+    example: ["UC.calc1.a01.h-12-01-01", "H:12미적Ⅰ01-01"]
 
   name_ko:
     type: string
@@ -134,10 +158,13 @@ license:
     공공누리 1유형 출처 문구 동봉 필수. data_pipeline.concept_graph.models.SOURCE_CITATION
     상수로 강제 (NCIC 모듈과 동일 패턴).
 
-# --- 검증 invariant (concept_graph.md §5 — tests 예정) ------------------------
+# --- 검증 invariant (concept_graph.md §5 — data_pipeline tests 구현됨) --------
 validation_invariants:
-  - "concept_id가 'UC.<domain>.<topic>.<slug>' 규약 준수"
-  - "name_ko / name_en / name_ja 모두 비어있지 않음 (다국 정합성 키)"
+  - "concept_id가 '{TRACK}-{AREA}-{NNN}' 규약 준수 (id_conformance)"
+  - "concept_id 유일 — 새 ID 충돌 0 (id_unique)"
+  - "source_id 비공백 + 재ID된 개념은 옛 UC 별칭·src_id 보존 (alias_roundtrip)"
+  - "모든 category가 _TOPIC_AREA_MAP에 매핑 (area_map_total — 미매핑 0·침묵 폴백 금지)"
+  - "name_ko 비어있지 않음 (name_en/ja는 Phase 1 KR 단일언어 — None 허용)"
   - "prerequisite_concept_ids의 각 ID가 실재 (cross-node 참조)"
   - "dangling misconception_codes / visualization_card_keys → 경고 (에러 아님)"
   - "고립 노드(엣지 0개) → 경고"

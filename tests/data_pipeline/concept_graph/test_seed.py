@@ -56,11 +56,19 @@ def _calc_samples() -> list[AchievementStandard]:
 
 class TestBuildConceptId:
     def test_deterministic_and_valid(self) -> None:
-        """동일 코드 → 동일 UC ID(멱등) + UC 규약 통과."""
+        """동일 코드 → 동일 새 ID(멱등) + 새 규약 통과."""
         first = build_concept_id("[9수01-01]")
         assert first == build_concept_id("[9수01-01]")
         assert CONCEPT_ID_PATTERN.match(first)
-        assert first == "UC.math.a01.g9n01"
+        # [9수01-01] → 학년9=MID·영역01=A01(잠정)·순번01→001
+        assert first == "MID-A01-001"
+
+    def test_track_from_grade(self) -> None:
+        """학년대수 → TRACK(9=MID·10=HIGH·6=ELEM)."""
+        assert build_concept_id("[6수01-01]").startswith("ELEM-")
+        assert build_concept_id("[9수01-01]").startswith("MID-")
+        assert build_concept_id("[10공수1-01-01]").startswith("HIGH-")
+        assert build_concept_id("[12미적Ⅰ01-01]").startswith("HIGH-")
 
     def test_distinct_codes_distinct_ids(self) -> None:
         ids = {
@@ -68,11 +76,11 @@ class TestBuildConceptId:
         }
         assert len(ids) == 3
 
-    def test_unmapped_subject_falls_back_to_valid_ascii(self) -> None:
-        """미수록 과목약칭도 ascii UC ID(해시 폴백)로 유효."""
-        cid = build_concept_id("[12서양Ⅰ01-01]")  # '서양Ⅰ' 미수록
+    def test_unmapped_subject_still_valid(self) -> None:
+        """미수록 과목약칭이라도 코드가 파싱되면 새 규약 ID 생성(AREA=영역코드 잠정)."""
+        cid = build_concept_id("[12서양Ⅰ01-01]")  # '서양Ⅰ' 미수록이나 파싱 가능
         assert CONCEPT_ID_PATTERN.match(cid)
-        assert cid.startswith("UC.x")
+        assert cid == "HIGH-A01-001"
 
 
 class TestSeedConcepts:

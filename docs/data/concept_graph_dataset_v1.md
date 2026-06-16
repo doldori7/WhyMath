@@ -50,9 +50,10 @@
 | `flashcards.jsonl` | 113 | `grade`(A·…), `category`, `difficulty_tier`, `src_id`, `name_ko`, `front`, `back`, `mnemonic`, `exposure_condition` |
 | `ccss_only_intl.jsonl` | 13 | `node_id`, `ccss_code`, `scope`, `kr_adjacent_area`, `kr_interpretation`, `kr_absence_reason` |
 
-> **ID 체계 주의**: 본 데이터의 `src_id`(G01·N1·HK01·J0201·H:12대수01-01 등)는 기존
-> concept_graph 파이프라인의 **UC 규약**(`UC.<domain>.<topic>.<slug>`)과 *다르다*. L1 전체
-> 적재 시 ID 매핑/재발급이 선행되어야 한다.
+> **ID 체계 주의 (2026-06-16 P2a 갱신)**: 본 데이터의 `src_id`(G01·N1·HK01·J0201·H:12대수01-01
+> 등)는 적재 시 정본 `concept_id`로 *재발급*된다. 정본 형식은 **`{TRACK}-{AREA}-{NNN}`**(예
+> `ELEM-GEO-001`) — 기존 `UC.<domain>.<topic>.<slug>`에서 P2a에서 *전환*했다(아래 §5b.1). 추적성은
+> `source_id`(=`src_id`)·`aliases`(=[옛 UC, `src_id`])로 보존된다.
 
 ---
 
@@ -154,25 +155,34 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 > Neo4j/pgvector 적재·드라이버·임베딩은 **이번 범위 밖**(후속 슬라이스 2~3). 모듈:
 > `data_pipeline/concept_graph/{idmap,transform,validate}.py`, CLI `transform-v1`.
 
-### 5b.1 src_id → UC 매핑 (`idmap.py`)
+### 5b.1 src_id → concept_id 매핑 (`idmap.py`) — **2026-06-16 P2a 재ID**
 
-- 데이터셋 `src_id`(N1·HK01·H:12대수01-01 …)는 UC 규약(`UC.<domain>.<topic>.<slug>`)과 다르다(§2 주의).
-  **결정론적 매핑** 규칙: 도메인·토픽은 첫 `standard_code`에서 파생(`parse_standard_code`+과목약칭 —
-  교육과정 의미 보존), **slug는 `src_id`에서 파생**(유일성 보장).
-- **충돌 해소(핵심)**: 성취기준 코드만으로 UC를 만들면 **충돌 7건**이 난다 — 여러 개념이 *같은*
-  성취기준을 공유한다(예 `F7`·`F8`·`F9` → 모두 `[6수01-06]`). slug에 `src_id`를 쓰므로
-  **403 src_id → 403 유일 UC(충돌 0)**. 폴백 `UC.x.misc.<slug>`(코드 없음/파싱 실패 — 실데이터 0건).
-- 전문가 재명명은 `overrides`(src_id→UC) 주입으로 가능(결정론이되 교체 가능). 산출 UC는 전부
-  `CONCEPT_ID_PATTERN` 통과. 매핑 테이블은 `id_map.csv`(`src_id`,`concept_id`)로 검토·인계.
-- **한계(슬2 인계)**: 한글 src_id(`H:12미적Ⅰ01-01`)는 slug에서 과목한글이 소실(`h-12-01-01`)된다 —
-  유일성·결정론·규약은 보존되고 `src_id`는 매핑 테이블에 보존. 가독 UC 재명명은 적재 시 override로.
+- 데이터셋 `src_id`(N1·HK01·H:12대수01-01 …)는 정본 `concept_id` **`{TRACK}-{AREA}-{NNN}`**으로
+  *재발급*된다(기존 `UC.*`에서 전환·§2 주의·`MEMORY.md` P2a). 매핑 규칙:
+  - **TRACK**: 첫 `standard_code` 학년대수(2/4/6=ELEM·9=MID·10/12=HIGH·코드 없으면 `difficulty_tier`
+    밴드 0~8/9~16/17~24 → ELEM/MID/HIGH·그것도 없으면 MID). RT/OLY는 예약(코퍼스엔 없음).
+  - **AREA**: `category`(레벨 접두사 `[고]`/`[중]`/`[공통]` 제거 후 토픽)를 ascii 니모닉으로 매핑
+    (`_TOPIC_AREA_MAP`·37 category 전수·예 `미적분`→`CALC`·`기하`→`GEO`·`분수`→`FRAC`). 미수록 category는
+    **침묵 폴백 없이 KeyError**(taxonomy 누수 즉시 발견). 레벨만 다른 어간(`[중]기하`·`[고]기하`)은 AREA
+    공유·TRACK 구분.
+  - **NNN**: (TRACK, AREA) 그룹 안 `(int(difficulty_tier), src_id)` 정렬 3자리 순번(멱등).
+- **충돌 0**: 같은 성취기준을 공유하는 개념(`F7`·`F8`·`F9` → `[6수01-06]`)도 NNN이 분리해 유일.
+  실측 **403 src_id → 403 유일 concept_id(충돌 0)**·전부 `CONCEPT_ID_PATTERN` 통과. 최대 그룹
+  `HIGH-CALC`=43개(3자리 순번 여유 충분).
+- **추적성(P2 핵심)**: 각 개념은 `source_id = src_id`(원천)·`aliases = [옛 UC, src_id]`를 보존한다.
+  옛 UC는 *이전 알고리즘*(`UC.<과목약칭>.a<영역>.<src-slug>`)을 `idmap._build_legacy_uc`가 재현해 만든다 —
+  옛 키·원천 키로도 join·롤백 가능. `build_id_map`은 `{src_id: 새 ID}`, `build_alias_map`은
+  `{src_id: [옛 UC, src_id]}` 반환. 매핑 테이블은 `id_map.csv`(`src_id`,`concept_id`)로 검토·인계.
+- 전문가 재명명은 `overrides`(src_id→새 ID) 주입으로 가능(결정론이되 교체 가능·override도 규약·유일성 검증).
+- 검증: `validate_idmap`이 `area_map_total`(미매핑 0)·`id_unique`·`alias_roundtrip`(src_id→새 ID 가역·옛 UC
+  보존)를 *재ID 직전* 단언한다(P2 안전망).
 
 ### 5b.2 정형화 (`transform.py`)
 
 | 데이터셋 | → 모델 | 비고 |
 |---|---|---|
 | `concepts.jsonl`(403) | `Concept`(403) | `category`→`domain`·첫 코드 학년→`grade_band_hint`·풍부필드 직결 |
-| `prerequisite_edges.jsonl`(541) | `ConceptEdge`(541) | relation `선수(prereq)`→`PREREQUISITE`·UC 변환 |
+| `prerequisite_edges.jsonl`(541) | `ConceptEdge`(541) | relation `선수(prereq)`→`PREREQUISITE`·끝점 `src_id`→새 ID 변환 |
 | `standard_ccss_map.jsonl`(403) | — | `concept.ccss_code`로 흡수(ccss 완전 일치 검증) |
 | `flashcards.jsonl`(113) | raw 패스스루 | L6 — 억지 매핑 안 함(후속) |
 | `ccss_only_intl.jsonl`(13) | raw 패스스루 | 국제트랙 — 후속 |
@@ -201,7 +211,8 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 |---|---|
 | error(fail) | **0** (prerequisite 사이클 없음) |
 | warning | **0** (dangling 끝점·고립 노드·역방향 쌍·prerequisite 캐시 dangling·학년 단조성 역전 모두 0) |
-| 구조 invariant(UC 규약·relation enum·strength 범위·evidence 비공백) | 정형화 시점(Pydantic) 강제 |
+| 구조 invariant(concept_id 규약·relation enum·strength 범위·evidence 비공백) | 정형화 시점(Pydantic) 강제 |
+| 재ID invariant(id_conformance·id_unique·alias_roundtrip·area_map_total) | **error 0**(P2a — `validate_graph`·`validate_idmap`) |
 | Neo4j 멱등성(§5 #9) | N/A — 슬라이스 2(적재) |
 
 > Phase 1은 warning을 *통과 처리*한다(§3 — 그래프 구축을 다른 자산 일정에 막지 않음). 데이터셋이
@@ -210,7 +221,7 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 ### 5b.5 산출물·게이트
 
 - CLI: `python -m data_pipeline.concept_graph transform-v1 --corpus-dir data/corpus/concept_graph_v1 [--output-dir DIR]`.
-  `--output-dir` 주면 `graph.json`(개념·엣지 + raw 패스스루·redaction 유지)·`id_map.csv`(src_id→UC) 저장.
+  `--output-dir` 주면 `graph.json`(개념·엣지 + raw 패스스루·redaction 유지)·`id_map.csv`(src_id→새 ID) 저장.
 - 4게이트 통과: `ruff check .`·`black --check .`·`mypy --strict data_pipeline`·`pytest --cov`(전체 89.38%·
   271 passed/1 skip). 테스트 `tests/data_pipeline/concept_graph/{test_idmap,test_transform,test_validate,test_models,test_main_cli}.py`.
 

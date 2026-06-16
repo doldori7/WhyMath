@@ -26,17 +26,25 @@ SOURCE_CITATION: Final[str] = (
     "국가교육과정정보센터(NCIC, https://www.ncic.go.kr)"
 )
 
-# Universal Concept ID 규약(§2.4): UC.<domain약칭>.<topic>.<concept-slug>.
-# 4개 점-구분 파트(UC + 3), 소문자·숫자·하이픈. 한 번 발급 후 변경 금지(다른 자산이 join).
-CONCEPT_ID_PATTERN: Final[re.Pattern[str]] = re.compile(r"^UC\.[a-z0-9]+\.[a-z0-9-]+\.[a-z0-9-]+$")
+# concept_id 규약(§2.4) — **2026-06-16 전환**: `{TRACK}-{AREA}-{NNN}`(예 'ELEM-GEO-001').
+#   TRACK ∈ {ELEM, MID, HIGH, RT, OLY}(코퍼스엔 ELEM/MID/HIGH·RT 재수/OLY 영재는 예약),
+#   AREA  = 토픽 ascii 코드(2~8 대문자/숫자), NNN = (TRACK, AREA) 안 3자리 순번.
+# 기존 `UC.<domain>.<topic>.<slug>`에서 *의도적 breaking* 전환(추적성은 source_id·aliases 보존).
+CONCEPT_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^(ELEM|MID|HIGH|RT|OLY)-[A-Z0-9]{2,8}-\d{3}$"
+)
+
+# 레거시 UC 규약(전환 *이전* 형식) — `aliases`에 보존하는 옛 키 검증 전용(롤백·하위호환 join).
+# 새 PK는 CONCEPT_ID_PATTERN을 쓴다. 이 패턴은 별칭값이 옛 규약을 지키는지 *확인*만 한다.
+LEGACY_UC_PATTERN: Final[re.Pattern[str]] = re.compile(r"^UC\.[a-z0-9]+\.[a-z0-9-]+\.[a-z0-9-]+$")
 
 
 def _require_concept_id(value: str) -> str:
-    """concept_id가 UC 규약을 지키는지 검증(노드 PK·엣지 src/dst 공용)."""
+    """concept_id가 새 규약(`{TRACK}-{AREA}-{NNN}`)을 지키는지 검증(노드 PK·엣지 src/dst 공용)."""
     if not CONCEPT_ID_PATTERN.match(value):
         raise ValueError(
-            f"concept_id 규약 위반: {value!r}. 예상 'UC.<domain>.<topic>.<slug>' "
-            "(소문자·숫자·하이픈, 예: 'UC.calc.limit.epsilon-delta')"
+            f"concept_id 규약 위반: {value!r}. 예상 '{{TRACK}}-{{AREA}}-{{NNN}}' "
+            "(TRACK∈ELEM/MID/HIGH/RT/OLY·AREA 2~8 대문자숫자·NNN 3자리, 예: 'ELEM-GEO-001')"
         )
     return value
 
@@ -87,7 +95,9 @@ REVIEW_STATUSES: Final[tuple[str, ...]] = tuple(s.value for s in ReviewStatus)
 class Concept(BaseModel):
     """개념 그래프 노드 — `concept.schema.yaml` + 데이터셋 v1 풍부 필드 확장.
 
-    `concept_id`는 UC 규약 PK(curriculum_entry·textbook_mapping과 공유 키). `name_ko`는
+    `concept_id`는 새 규약(`{TRACK}-{AREA}-{NNN}`·예 'ELEM-GEO-001') PK(curriculum_entry·
+    textbook_mapping과 공유 키). 2026-06-16 결정으로 기존 UC에서 *전환*했고, 추적성은
+    `source_id`(원천 src_id)·`aliases`(옛 UC + src_id)로 보존한다(롤백·하위호환). `name_ko`는
     필수, `name_en/ja`는 **선택(Phase 1 KR 단일언어 데이터 수용)** — 다국 표기는 후속.
     `standard_codes`는 NCIC 성취기준 코드 참조(truth source) — 본문은 복제하지 않는다.
 
@@ -109,7 +119,25 @@ class Concept(BaseModel):
 
     concept_id: str = Field(
         ...,
-        description="Universal Concept ID (PK). 'UC.<domain>.<topic>.<slug>'. 발급 후 변경 금지.",
+        description=(
+            "concept_id (PK). '{TRACK}-{AREA}-{NNN}'(예 'ELEM-GEO-001'). 2026-06-16 UC→이 형식 전환"
+            "(breaking) — 추적성은 source_id·aliases로 보존."
+        ),
+    )
+    source_id: str = Field(
+        ...,
+        min_length=1,
+        description=(
+            "원천 데이터셋 src_id(예 'N1'·'HK01'·'H:12대수01-01'). 재ID 전 식별자 보존 — "
+            "concept_id가 src_id에서 *파생*되었음을 추적(롤백·재현)."
+        ),
+    )
+    aliases: list[str] = Field(
+        default_factory=list,
+        description=(
+            "옛 키 별칭 목록 — [레거시 UC(UC.<domain>.<topic>.<slug>), src_id]. 새 concept_id로 "
+            "전환한 뒤에도 옛 키·원천 키로 join/조회 가능하게 보존(하위호환)."
+        ),
     )
     name_ko: str = Field(..., min_length=1, description="한국어 명칭(빈 문자열 금지).")
     name_en: str | None = Field(
@@ -185,8 +213,17 @@ class Concept(BaseModel):
     @field_validator("concept_id")
     @classmethod
     def _validate_concept_id(cls, v: str) -> str:
-        """concept_id가 UC 규약(§2.4)을 지키는지."""
+        """concept_id가 새 규약(`{TRACK}-{AREA}-{NNN}`)을 지키는지(§2.4)."""
         return _require_concept_id(v)
+
+    @field_validator("aliases")
+    @classmethod
+    def _validate_aliases(cls, v: list[str]) -> list[str]:
+        """별칭은 빈 문자열 금지(추적성 키 누락 차단). 형식 자체는 자유 — 옛 UC·src_id 혼재 허용."""
+        for alias in v:
+            if not alias or not alias.strip():
+                raise ValueError(f"aliases에 빈 별칭 금지: {v!r}")
+        return v
 
 
 class ConceptEdge(BaseModel):

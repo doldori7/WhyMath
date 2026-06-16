@@ -48,9 +48,11 @@ def _standards_json(tmp_path: Path) -> Path:
 
 
 def _write_filled_concepts(path: Path, ids: list[str]) -> None:
-    """전문가가 표기를 채운 concepts.csv 모사(검증 통과용)."""
+    """전문가가 표기를 채운 concepts.csv 모사(검증 통과용). source_id=concept_id(신규 후보)."""
     fields = [
         "concept_id",
+        "source_id",
+        "aliases",
         "name_ko",
         "name_en",
         "name_ja",
@@ -69,6 +71,8 @@ def _write_filled_concepts(path: Path, ids: list[str]) -> None:
             w.writerow(
                 {
                     "concept_id": cid,
+                    "source_id": cid,  # 신규 후보 = 자기 정체
+                    "aliases": "",
                     "name_ko": f"개념{i}",
                     "name_en": f"concept{i}",
                     "name_ja": f"概念{i}",
@@ -236,7 +240,7 @@ class TestValidate:
         assert "파싱 실패" in result.stdout
 
     def test_validate_detects_cycle_exits_1(self, tmp_path: Path) -> None:
-        a, b = "UC.calc.a01.g10n01", "UC.calc.a01.g10n02"
+        a, b = "HIGH-CALC-001", "HIGH-CALC-002"
         cpath, epath = tmp_path / "c.csv", tmp_path / "e.csv"
         _write_filled_concepts(cpath, [a, b])
         _write_filled_edges(epath, [(a, b), (b, a)])  # 순환
@@ -276,7 +280,9 @@ class TestLoad:
                     "source_citation": "x",
                     "concepts": [
                         {
-                            "concept_id": "UC.calc.limit.epsilon-delta",
+                            "concept_id": "HIGH-CALC-001",
+                            "source_id": "H:12미적Ⅰ01-01",
+                            "aliases": ["UC.calc1.a01.h-12-01-01", "H:12미적Ⅰ01-01"],
                             "name_ko": "극한",
                             "domain": "미적분",
                             "review_status": "reviewed",

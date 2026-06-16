@@ -28,8 +28,9 @@ from data_pipeline.ncic.transform import TransformError, parse_standard_code
 
 logger = logging.getLogger("data_pipeline.concept_graph.seed")
 
-# NCIC 과목약칭(parse_standard_code의 subject_token, 한글) → UC ID용 ascii 도메인약칭.
+# NCIC 과목약칭(parse_standard_code의 subject_token, 한글) → ascii 도메인약칭.
 # Phase 1(고1 미적분) 중심 + 흔한 과목. 미수록 토큰은 결정론적 해시로 폴백(_subject_abbr).
+# (idmap이 *레거시 UC 별칭* 생성에 이 함수를 재사용한다 — 시그니처·동작 보존 필수.)
 _SUBJECT_ABBR: dict[str, str] = {
     "수": "math",
     "공수": "common",
@@ -43,9 +44,26 @@ _SUBJECT_ABBR: dict[str, str] = {
     "기하": "geom",
 }
 
+# 학년대수 → TRACK(새 concept_id 접두). idmap._GRADE_TRACK_MAP과 동일 의미 — 순환 import 회피로
+# seed에 *국소 복제*(seed는 하위 모듈이라 idmap을 import할 수 없다). 두 곳을 함께 갱신한다.
+_GRADE_TRACK_MAP: dict[str, str] = {
+    "2": "ELEM",
+    "4": "ELEM",
+    "6": "ELEM",
+    "9": "MID",
+    "10": "HIGH",
+    "12": "HIGH",
+}
+# 학년 미수록 시 폴백 TRACK(시드는 NCIC 코드 기반이라 정상 경로에선 도달하지 않음).
+_SEED_TRACK_FALLBACK: str = "MID"
+
 # CSV 컬럼(= Concept / ConceptEdge 필드). 빈칸 컬럼은 전문가가 채운다.
+# source_id: 시드는 외부 src_id가 없어 concept_id로 채운다(신규 후보 = 자기 정체).
+# aliases: 시드는 *신규* ID라 보존할 옛 키가 없다 — 빈칸(코퍼스 재ID 경로만 옛 UC 보존).
 _CONCEPT_CSV_FIELDS: tuple[str, ...] = (
     "concept_id",
+    "source_id",
+    "aliases",
     "name_ko",
     "name_en",
     "name_ja",
@@ -77,13 +95,20 @@ def _subject_abbr(subject_token: str) -> str:
 
 
 def build_concept_id(code: str) -> str:
-    """NCIC 성취기준 코드 → 결정론적 *후보* Universal Concept ID(UC 규약).
+    """NCIC 성취기준 코드 → 결정론적 *후보* concept_id(새 규약 `{TRACK}-{AREA}-{NNN}`).
 
-    `[9수01-01]` → `UC.math.a01.g9n01`. 코드가 유일하므로 ID도 유일하고, 재실행 시 동일하다
-    (멱등). 전문가가 의미있는 slug로 재명명할 수 있다(시드 단계라 잠정 — §3.5는 *발급 후* 불변).
+    `[9수01-01]` → `MID-A01-001`. 매핑: TRACK=학년대수(9→MID)·**AREA=`A`+영역코드**(잠정 — NCIC
+    영역코드 2자리. 시드는 토픽 니모닉이 없어 영역코드를 ascii AREA로 *잠정* 사용·전문가가 재명명
+    가능)·NNN=코드 순번(2자리→3자리 zero-pad). 코드 유일 → ID 유일·재실행 동일(멱등).
+
+    주의: 시드 경로의 AREA(`A01`)는 *코퍼스 경로*(`GEO`·`CALC` 등 `_TOPIC_AREA_MAP` 니모닉)와
+    체계가 다르다 — 시드는 NCIC `category`가 아닌 *코드*만 알기에 토픽 니모닉을 못 만든다(잠정·후속
+    재명명). 두 경로 산출물은 P2a에서 ID 레벨로 병합되지 않는다(시드→후보 CSV·코퍼스→graph.json).
     """
-    grade, subject_token, domain_code, seq = parse_standard_code(code)
-    return f"UC.{_subject_abbr(subject_token)}.a{domain_code}.g{grade}n{seq}"
+    grade, _subject_token, domain_code, seq = parse_standard_code(code)
+    track = _GRADE_TRACK_MAP.get(grade, _SEED_TRACK_FALLBACK)
+    seq_num = int(seq)
+    return f"{track}-A{domain_code}-{seq_num:03d}"
 
 
 def _matches_domain(standard: AchievementStandard, domain_filter: str | None) -> bool:
@@ -117,6 +142,8 @@ def seed_concepts(
         rows.append(
             {
                 "concept_id": concept_id,
+                "source_id": concept_id,  # 시드는 외부 src_id 없음 — 자기 정체
+                "aliases": "",  # 신규 후보 — 보존할 옛 키 없음
                 "name_ko": "",  # 전문가
                 "name_en": "",  # 전문가
                 "name_ja": "",  # 전문가

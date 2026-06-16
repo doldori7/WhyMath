@@ -1,25 +1,38 @@
 """단계 6 — 개념 그래프 검증(전문가가 채운 노드·엣지 대상).
 
 정본 invariant: docs/data/concept_graph.md §5 + schemas/v1.1/{concept,edge}.schema.yaml.
-구조 invariant(UC ID·relation enum·strength 범위·evidence 비공백)는 `Concept`/`ConceptEdge`
-*생성 시점*(Pydantic)에서 강제되므로, 여기서는 단일 모델로 알 수 없는 *그래프 레벨* invariant을
-검증한다(ncic/validate.py의 컬렉션 검증과 같은 분담):
+구조 invariant(concept_id 형식·relation enum·strength 범위·evidence 비공백)는 `Concept`/
+`ConceptEdge` *생성 시점*(Pydantic)에서 강제되므로, 여기서는 단일 모델로 알 수 없는 *그래프
+레벨* invariant을 검증한다(ncic/validate.py의 컬렉션 검증과 같은 분담):
 
   - prerequisite 사이클 → **error**(순환 선수관계 = 학습 경로 불능)
   - generalization↔specialization 역쌍 → warning
   - 고립 노드(엣지 0개) → warning
   - dangling 참조(엣지 양끝·prerequisite 캐시·오개념·시각화) → warning(에러 아님 §3.3)
   - 데이터 상관: prerequisite 엣지의 src·dst 성취기준 학년 단조성(역전 시 warning)
+  - **id_conformance**(새 규약·전 노드) → error
+  - **id_unique**(새 concept_id 충돌) → error
+  - **alias_roundtrip**(source_id 존재·옛 UC 별칭 보존) → error
+
+별도로 `validate_idmap`(원천 레코드 대상)은 **area_map_total**(37 category 전수 매핑·0 미매핑)·
+**id_unique**·**alias_roundtrip**를 *재ID 산출 직전*에 검증한다(P2 재ID 불변식).
 
 성공 기준은 **error 0건**(warning은 그래프 구축을 막지 않음 — 보수적, §3.3).
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
-from data_pipeline.concept_graph.models import Concept, ConceptEdge, Relation
+from data_pipeline.concept_graph.idmap import build_alias_map, build_id_map
+from data_pipeline.concept_graph.models import (
+    CONCEPT_ID_PATTERN,
+    LEGACY_UC_PATTERN,
+    Concept,
+    ConceptEdge,
+    Relation,
+)
 from data_pipeline.concept_graph.transform import TransformResult
 from data_pipeline.ncic.transform import TransformError, parse_standard_code
 
@@ -237,7 +250,11 @@ def validate_graph(
 
     # 6. dangling 오개념·시각화 (warning — known_* 주어진 경우만)
     _check_dangling_catalog(
-        report, concepts, "misconception_codes", "dangling_misconception", known_misconception_codes
+        report,
+        concepts,
+        "misconception_codes",
+        "dangling_misconception",
+        known_misconception_codes,
     )
     _check_dangling_catalog(
         report,
@@ -261,6 +278,71 @@ def validate_graph(
                     ref=f"{edge.src_concept_id}→{edge.dst_concept_id}",
                     rule="grade_monotonic",
                     detail=f"선수개념 학년({src_grade})이 후행({dst_grade})보다 높음 — 역전 의심",
+                )
+            )
+
+    # 8. concept_id 새 규약 적합성 (error) — 생성 시 강제되나 *전 노드 명시 단언*(재ID 불변식).
+    for concept in concepts:
+        if not CONCEPT_ID_PATTERN.match(concept.concept_id):
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=concept.concept_id,
+                    rule="id_conformance",
+                    detail="concept_id가 '{TRACK}-{AREA}-{NNN}' 규약 위반",
+                )
+            )
+
+    # 9. concept_id 유일성 (error) — 새 ID 충돌 0(서로 다른 개념이 같은 ID면 join 붕괴).
+    id_counts: dict[str, int] = {}
+    for concept in concepts:
+        id_counts[concept.concept_id] = id_counts.get(concept.concept_id, 0) + 1
+    for cid, count in id_counts.items():
+        if count > 1:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=cid,
+                    rule="id_unique",
+                    detail=f"concept_id 중복 {count}건 — 새 ID 충돌(NNN 부여 버그 의심)",
+                )
+            )
+
+    # 10. alias 라운드트립 (error) — source_id 비공백, *재ID된* 개념은 옛 UC 별칭 + src_id 보존.
+    #    재ID 판정: source_id != concept_id(원천 src_id가 새 PK와 다름 = 마이그레이션됨). 시드
+    #    경로의 *신규* 후보(source_id == concept_id·옛 UC 없음)는 옛 UC 요건에서 면제한다 — 별칭은
+    #    *전환*의 추적성 장치라 새로 만든 ID에는 보존할 옛 키가 없다.
+    for concept in concepts:
+        if not concept.source_id.strip():
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=concept.concept_id,
+                    rule="alias_roundtrip",
+                    detail="source_id 비어있음 — 원천 추적 불가",
+                )
+            )
+            continue
+        migrated = concept.source_id != concept.concept_id
+        if not migrated:
+            continue  # 신규 후보(시드) — 옛 키 없음·면제
+        legacy = [a for a in concept.aliases if LEGACY_UC_PATTERN.match(a)]
+        if not legacy:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=concept.concept_id,
+                    rule="alias_roundtrip",
+                    detail=f"옛 UC 별칭 미보존(aliases={concept.aliases!r}) — 하위호환 join 불가",
+                )
+            )
+        if concept.source_id not in concept.aliases:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=concept.concept_id,
+                    rule="alias_roundtrip",
+                    detail=f"source_id가 aliases에 미포함({concept.aliases!r}) — 원천 키 조회 불가",
                 )
             )
 
@@ -292,6 +374,90 @@ def _check_dangling_catalog(
                 )
 
 
+def validate_idmap(
+    concept_records: Sequence[Mapping[str, object]],
+) -> GraphValidationReport:
+    """원천 concepts 레코드의 *재ID 불변식*을 검증(P2 — `{TRACK}-{AREA}-{NNN}` 전환 안전망).
+
+    `validate_graph`가 *구성된 Concept*를 보는 것과 달리, 여기서는 *원천 레코드*에서 직접
+    id_map·alias_map을 만들어 다음을 단언한다:
+
+      - **area_map_total**(error): 모든 레코드 category가 `_TOPIC_AREA_MAP`에 매핑된다(0 미매핑).
+        미매핑이면 `build_id_map`이 KeyError를 던지므로, 이를 잡아 error 이슈로 보고한다.
+      - **id_conformance**(error): 생성된 모든 새 ID가 CONCEPT_ID_PATTERN 통과.
+      - **id_unique**(error): `{src_id: new_id}`에서 new_id 충돌 0(역매핑 1:1).
+      - **alias_roundtrip**(error): 각 src_id의 별칭에 옛 UC(LEGACY_UC_PATTERN)·src_id가 모두 보존.
+
+    node_count는 레코드 수, edge_count는 0(엣지 미검증 — 이 함수는 ID 레벨 전용).
+    """
+    report = GraphValidationReport(node_count=len(concept_records), edge_count=0)
+
+    try:
+        id_map = build_id_map(concept_records)
+    except KeyError as exc:
+        # 미매핑 category — build_id_map이 시끄럽게 실패. error로 환원(전수 매핑 위반).
+        report.issues.append(
+            ValidationIssue(
+                severity=_ERROR,
+                ref="(category)",
+                rule="area_map_total",
+                detail=f"미매핑 category 발견: {exc}",
+            )
+        )
+        return report
+
+    # area_map_total 통과(KeyError 없음) — 명시 PASS 마커는 두지 않는다(error 0 = 성공).
+    alias_map = build_alias_map(concept_records)
+
+    # id_conformance + id_unique
+    id_to_src: dict[str, str] = {}
+    for src_id, cid in id_map.items():
+        if not CONCEPT_ID_PATTERN.match(cid):
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=src_id,
+                    rule="id_conformance",
+                    detail=f"새 ID 규약 위반: {cid!r}",
+                )
+            )
+        if cid in id_to_src:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=cid,
+                    rule="id_unique",
+                    detail=f"새 ID 충돌: {id_to_src[cid]!r}·{src_id!r}가 공유",
+                )
+            )
+        else:
+            id_to_src[cid] = src_id
+
+    # alias_roundtrip — src_id → 별칭에 옛 UC·src_id 보존
+    for src_id, aliases in alias_map.items():
+        legacy = [a for a in aliases if LEGACY_UC_PATTERN.match(a)]
+        if not legacy:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=src_id,
+                    rule="alias_roundtrip",
+                    detail=f"옛 UC 별칭 미보존: {aliases!r}",
+                )
+            )
+        if src_id not in aliases:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=src_id,
+                    rule="alias_roundtrip",
+                    detail=f"src_id가 aliases에 미포함: {aliases!r}",
+                )
+            )
+
+    return report
+
+
 def validate_dataset(
     result: TransformResult,
     *,
@@ -316,4 +482,5 @@ __all__ = [
     "ValidationIssue",
     "validate_dataset",
     "validate_graph",
+    "validate_idmap",
 ]

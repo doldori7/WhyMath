@@ -9,7 +9,7 @@ SET하고, 어디에도 시크릿이 없음을 *주입 FAKE*로 검증한다. nc
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import pytest
@@ -85,6 +85,7 @@ class _FakeDriver:
 def _concept(concept_id: str, **over: object) -> Concept:
     data: dict[str, object] = {
         "concept_id": concept_id,
+        "source_id": concept_id,  # 적재 테스트는 추적성 무관 — 자기 정체로 충족
         "name_ko": "개념",
         "domain": "미적분",
         "standard_codes": ["[12미적Ⅰ01-01]"],
@@ -106,8 +107,8 @@ def _edge(src: str, dst: str, **over: object) -> ConceptEdge:
     return ConceptEdge(**data)  # type: ignore[arg-type]
 
 
-_A = "UC.calc.a01.g10n01"
-_B = "UC.calc.a01.g10n02"
+_A = "HIGH-CALC-001"
+_B = "HIGH-CALC-002"
 
 
 @pytest.fixture
@@ -143,8 +144,12 @@ class TestEmittedCypher:
         driver = _FakeDriver()
         load_graph(small_result, driver=driver)
         queries = [c.query for c in driver.calls]
-        constraint_idx = next(i for i, q in enumerate(queries) if "CREATE CONSTRAINT" in q)
-        first_node_idx = next(i for i, q in enumerate(queries) if "MERGE (c:" + NODE_LABEL in q)
+        constraint_idx = next(
+            i for i, q in enumerate(queries) if "CREATE CONSTRAINT" in q
+        )
+        first_node_idx = next(
+            i for i, q in enumerate(queries) if "MERGE (c:" + NODE_LABEL in q
+        )
         assert constraint_idx < first_node_idx
         # 제약명·유일성 조건이 §2.3 DDL과 일치
         cons = _constraint_calls(driver.calls)[0].query
@@ -180,7 +185,9 @@ class TestEmittedCypher:
         assert statuses[_A] == "reviewed"
         assert statuses[_B] == "pending"
 
-    def test_concept_id_not_duplicated_in_props(self, small_result: TransformResult) -> None:
+    def test_concept_id_not_duplicated_in_props(
+        self, small_result: TransformResult
+    ) -> None:
         """MERGE 키 concept_id는 props에서 제외(중복 SET 방지)."""
         driver = _FakeDriver()
         load_graph(small_result, driver=driver)
@@ -188,7 +195,9 @@ class TestEmittedCypher:
             assert "concept_id" not in call.params["props"]
             assert call.params["concept_id"]  # 별도 파라미터로 전달
 
-    def test_edge_props_carry_strength_evidence(self, small_result: TransformResult) -> None:
+    def test_edge_props_carry_strength_evidence(
+        self, small_result: TransformResult
+    ) -> None:
         """엣지 props에 strength·evidence·evidence_source가 실린다(끝점·relation은 제외)."""
         driver = _FakeDriver()
         load_graph(small_result, driver=driver)
@@ -215,7 +224,9 @@ class TestEmittedCypher:
 # 멱등성(§5 #9)
 # ──────────────────────────────────────────────────────────────────────
 class TestIdempotency:
-    def test_two_loads_emit_identical_cypher(self, small_result: TransformResult) -> None:
+    def test_two_loads_emit_identical_cypher(
+        self, small_result: TransformResult
+    ) -> None:
         """2회 적재가 *완전히 동일한* Cypher·파라미터를 발행한다(MERGE 멱등 — §5 #9)."""
         d1, d2 = _FakeDriver(), _FakeDriver()
         load_graph(small_result, driver=d1)
@@ -223,7 +234,9 @@ class TestIdempotency:
         as_tuples = lambda d: [(c.query, c.params) for c in d.calls]  # noqa: E731
         assert as_tuples(d1) == as_tuples(d2)
 
-    def test_repeated_load_same_node_edge_counts(self, small_result: TransformResult) -> None:
+    def test_repeated_load_same_node_edge_counts(
+        self, small_result: TransformResult
+    ) -> None:
         """같은 드라이버로 2회 적재 — 노드·엣지 MERGE 보고 수가 회당 불변."""
         driver = _FakeDriver()
         r1 = load_graph(small_result, driver=driver)
@@ -237,18 +250,21 @@ class TestIdempotency:
 # 시크릿·redaction
 # ──────────────────────────────────────────────────────────────────────
 class TestNoSecretsNoRedactedFields:
-    def test_no_credentials_in_emitted_cypher(self, small_result: TransformResult) -> None:
+    def test_no_credentials_in_emitted_cypher(
+        self, small_result: TransformResult
+    ) -> None:
         """발행 쿼리·파라미터 어디에도 접속 자격·시크릿 흔적이 없다(env 전용)."""
         driver = _FakeDriver()
         load_graph(small_result, driver=driver)
         blob = " ".join(
-            [c.query for c in driver.calls]
-            + [repr(c.params) for c in driver.calls]
+            [c.query for c in driver.calls] + [repr(c.params) for c in driver.calls]
         ).lower()
         for needle in ("password", "neo4j_password", "bolt://", "auth"):
             assert needle not in blob
 
-    def test_no_redacted_body_fields_in_props(self, small_result: TransformResult) -> None:
+    def test_no_redacted_body_fields_in_props(
+        self, small_result: TransformResult
+    ) -> None:
         """description·formal_definition은 어떤 노드 props에도 없다(redaction 불변)."""
         driver = _FakeDriver()
         load_graph(small_result, driver=driver)
@@ -356,13 +372,17 @@ class TestHelpers:
         index_calls = [c for c in driver.calls if "CREATE INDEX" in c.query]
         assert len(index_calls) == 2
 
-    def test_load_graph_passes_database_to_session(self, small_result: TransformResult) -> None:
+    def test_load_graph_passes_database_to_session(
+        self, small_result: TransformResult
+    ) -> None:
         """database 인자가 session(database=...)로 전달된다(멀티-DB)."""
         driver = _FakeDriver()
         load_graph(small_result, driver=driver, database="neo4j")
         assert driver.last_session_kwargs == {"database": "neo4j"}
 
-    def test_load_graph_omits_database_when_none(self, small_result: TransformResult) -> None:
+    def test_load_graph_omits_database_when_none(
+        self, small_result: TransformResult
+    ) -> None:
         """database None이면 session에 database 키를 넣지 않는다(기본 DB)."""
         driver = _FakeDriver()
         load_graph(small_result, driver=driver)
@@ -371,7 +391,9 @@ class TestHelpers:
 
 class TestLoadReport:
     def test_summary_mentions_counts(self) -> None:
-        report = LoadReport(constraints=1, indexes=2, nodes_merged=403, edges_merged=541)
+        report = LoadReport(
+            constraints=1, indexes=2, nodes_merged=403, edges_merged=541
+        )
         text = report.summary()
         assert "403" in text
         assert "541" in text

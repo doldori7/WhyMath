@@ -9,17 +9,18 @@ docs/data/concept_graph_dataset_v1.md §2(필드표)·§3(redaction)·§4(검수
 불요(데이터 검증으로 확인 — concept.ccss_code로 흡수).
 
 매핑 규칙(concepts.jsonl → Concept):
-  - concept_id = idmap.build_concept_uc(src_id, standard_codes)  ← UC 변환(충돌 0)
+  - concept_id = idmap.build_id_map(records)[src_id]  ← 새 ID(`{TRACK}-{AREA}-{NNN}`·충돌 0)
+  - source_id = src_id;  aliases = idmap.build_alias_map(records)[src_id](= [옛 UC, src_id])
   - name_ko = name_ko;  name_en/ja = None(Phase 1 KR 단일언어)
   - domain = category(데이터셋 영역명, 예 '[고]미적분');  grade_band_hint = 첫 코드 학년군 추론
   - standard_codes 직결;  ccss_code/metaphor/accepted_expressions/misconception_text/
     difficulty_tier 풍부필드 직결
   - review_status: definition_provenance가 "수기 검수"면 reviewed, 그 외 pending(§4)
-  - prerequisite_concept_ids: 엣지에서 역으로 채움(to=후행 개념의 캐시에 from=선수 UC 추가)
+  - prerequisite_concept_ids: 엣지에서 역으로 채움(to=후행 개념의 캐시에 from=선수 ID 추가)
 
 매핑 규칙(prerequisite_edges.jsonl → ConceptEdge):
   - relation = PREREQUISITE(데이터셋 relation은 '선수(prereq)' 단일 — 검증)
-  - src/dst = idmap[from_id]/idmap[to_id]  ← UC 변환
+  - src/dst = idmap[from_id]/idmap[to_id]  ← 새 ID 변환
   - **evidence 합성**: 데이터셋 엣지엔 evidence/strength가 없다. 모델은 evidence 비공백·
     strength 필수 → 기본값 evidence="전문가 작성 개념그래프 v1"·evidence_source=EXPERT_REVIEW·
     strength=_DEFAULT_EDGE_STRENGTH 합성(전 엣지 동일 — 데이터셋이 강도 미보유).
@@ -34,7 +35,7 @@ import logging
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
-from data_pipeline.concept_graph.idmap import build_id_map
+from data_pipeline.concept_graph.idmap import build_alias_map, build_id_map
 from data_pipeline.concept_graph.models import (
     Concept,
     ConceptEdge,
@@ -42,7 +43,11 @@ from data_pipeline.concept_graph.models import (
     Relation,
     ReviewStatus,
 )
-from data_pipeline.ncic.transform import TransformError, infer_school_and_band, parse_standard_code
+from data_pipeline.ncic.transform import (
+    TransformError,
+    infer_school_and_band,
+    parse_standard_code,
+)
 
 logger = logging.getLogger("data_pipeline.concept_graph.transform")
 
@@ -126,12 +131,16 @@ def _int_opt(value: object) -> int | None:
 def transform_concepts(
     records: Iterable[Mapping[str, object]],
     id_map: Mapping[str, str],
+    alias_map: Mapping[str, Sequence[str]] | None = None,
 ) -> tuple[list[Concept], list[str]]:
     """concepts.jsonl 레코드 → `Concept` 목록 + skip 메시지.
 
+    concept_id는 `id_map[src_id]`(새 ID), source_id=src_id, aliases=`alias_map[src_id]`(옛 UC +
+    src_id). alias_map 미지정 시 aliases는 빈 목록(단위테스트 편의 — 실행 경로는 항상 주입).
     prerequisite_concept_ids는 *여기서 비워둔다* — 엣지 정형화 후 캐시를 역채움한다
     (transform_dataset에서 합류). redaction 키는 읽지 않는다.
     """
+    aliases_by_src = alias_map or {}
     concepts: list[Concept] = []
     skipped: list[str] = []
     for record in records:
@@ -139,16 +148,18 @@ def transform_concepts(
         if not src_id:
             skipped.append(f"concept: src_id 없음 — {record!r}")
             continue
-        uc = id_map.get(src_id)
-        if uc is None:
-            skipped.append(f"concept {src_id}: id_map에 UC 없음")
+        cid = id_map.get(src_id)
+        if cid is None:
+            skipped.append(f"concept {src_id}: id_map에 concept_id 없음")
             continue
 
         raw_codes = record.get("standard_codes") or []
         codes = [str(c) for c in raw_codes] if isinstance(raw_codes, Sequence) else []
         try:
             concept = Concept(
-                concept_id=uc,
+                concept_id=cid,
+                source_id=src_id,
+                aliases=list(aliases_by_src.get(src_id, [])),
                 name_ko=str(record.get("name_ko", "")),
                 name_en=None,
                 name_ja=None,
@@ -163,7 +174,7 @@ def transform_concepts(
                 review_status=_review_status(_opt(record.get("definition_provenance"))),
             )
         except (ValueError, TypeError) as exc:
-            skipped.append(f"concept {src_id} ({uc}): {type(exc).__name__}")
+            skipped.append(f"concept {src_id} ({cid}): {type(exc).__name__}")
             continue
         concepts.append(concept)
     return concepts, skipped
@@ -175,7 +186,8 @@ def transform_edges(
 ) -> tuple[list[ConceptEdge], list[str]]:
     """prerequisite_edges.jsonl 레코드 → `ConceptEdge` 목록(evidence 합성) + skip 메시지.
 
-    from/to id를 UC로 변환(id_map). id_map에 없는 끝점·비-선수 relation은 skip(억지 매핑 금지).
+    from/to id를 새 concept_id로 변환(id_map). id_map에 없는 끝점·비-선수 relation은 skip
+    (억지 매핑 금지).
     """
     edges: list[ConceptEdge] = []
     skipped: list[str] = []
@@ -192,7 +204,7 @@ def transform_edges(
         dst = id_map.get(to_id)
         if src is None or dst is None:
             missing = from_id if src is None else to_id
-            skipped.append(f"edge {ref}: id_map에 UC 없음({missing})")
+            skipped.append(f"edge {ref}: id_map에 concept_id 없음({missing})")
             continue
         try:
             edges.append(
@@ -256,13 +268,14 @@ def transform_dataset(
 ) -> TransformResult:
     """5종 데이터셋 → 정형화 산출(개념·엣지 코어 + raw 패스스루).
 
-    UC 매핑(idmap)을 먼저 만들고, 개념·엣지를 변환한 뒤 prerequisite 캐시를 역채움한다.
-    flashcards·intl은 raw 보존만(슬라이스 1 범위 밖). standard_ccss_map은 concept.ccss_code로
-    이미 흡수되어 인자로 받지 않는다.
+    ID 매핑(idmap)을 먼저 만들고(`{TRACK}-{AREA}-{NNN}` + 옛 UC 별칭), 개념·엣지를 변환한 뒤
+    prerequisite 캐시를 역채움한다. flashcards·intl은 raw 보존만(슬라이스 1 범위 밖).
+    standard_ccss_map은 concept.ccss_code로 이미 흡수되어 인자로 받지 않는다.
     """
     id_map = build_id_map(concept_records, overrides=overrides)
+    alias_map = build_alias_map(concept_records)
 
-    concepts, c_skips = transform_concepts(concept_records, id_map)
+    concepts, c_skips = transform_concepts(concept_records, id_map, alias_map)
     edges, e_skips = transform_edges(edge_records, id_map)
     _fill_prerequisite_cache(concepts, edges)
 
