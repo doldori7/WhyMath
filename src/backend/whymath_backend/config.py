@@ -326,6 +326,25 @@ class Settings(BaseSettings):
         description="리프레시 토큰 만료(분). 기본 30일. WHYMATH_JWT_REFRESH_EXPIRE_MINUTES로 조정.",
     )
 
+    # ── 미성년 동의 게이트(PIPA 만14세 미만, L5) ──
+    # 서버측 `is_minor` 파생의 연령 임계(법정 기준). PIPA는 *만 14세 미만*의 개인정보 처리에
+    # 법정대리인 동의를 요구하므로(docs/legal/pipa_data_matrix.md §3) 기본 14다. 이 값은
+    # `consent.derive_is_minor`가 birth_year로 `is_minor`를 파생할 때 쓰는 *유일한* 연령 기준
+    # 으로, 콜백(가입)·PATCH 양쪽 쓰기 경로가 공유한다(법정 기준 변경 시 한 곳만 바꾼다).
+    # birth_year만 수집(월일 미수집)하므로 파생은 *보수적 연나이*다 — 정확한 만나이 게이팅·
+    # 동의 GRANT 플로우·동의 재확인 주기는 변호사 자문 후속(pipa_data_matrix.md §3 체크리스트).
+    minor_consent_age: int = Field(
+        default=14,
+        ge=0,
+        description=(
+            "미성년 동의 게이트 연령 임계(만 나이·법정 기준). PIPA 만14세 미만 법정대리인 동의 "
+            "(docs/legal/pipa_data_matrix.md §3) → 기본 14. `consent.derive_is_minor`가 "
+            "birth_year로 `is_minor`를 파생할 때의 유일한 기준(가입 콜백·PATCH 공유). 정확한 "
+            "만나이엔 생일(월일)이 필요하나 birth_year만 수집해 *보수적 연나이*로 파생한다 — "
+            "법정 기준 자체는 변호사 자문으로 확정. WHYMATH_MINOR_CONSENT_AGE로 조정."
+        ),
+    )
+
     # ── OAuth 로그인(카카오·네이버 SSO, OAuth-a2) ──
     # client_id는 공개 식별자(일반 str)·client_secret은 SecretStr·env-only(하드코딩 금지).
     # 비면 해당 provider 미등록(create_app이 레지스트리에서 제외 → 콜백 404).

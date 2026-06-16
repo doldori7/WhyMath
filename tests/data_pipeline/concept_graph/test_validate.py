@@ -7,14 +7,24 @@ from __future__ import annotations
 
 from data_pipeline.concept_graph.models import Concept, ConceptEdge
 from data_pipeline.concept_graph.transform import transform_dataset
-from data_pipeline.concept_graph.validate import validate_dataset, validate_graph
+from data_pipeline.concept_graph.validate import (
+    validate_dataset,
+    validate_graph,
+    validate_idmap,
+)
 
 
 def _concept(
     concept_id: str, *, standard_codes: list[str] | None = None, **over: object
 ) -> Concept:
+    # source_id·aliases는 새 alias_roundtrip 불변식을 만족하도록 합성(옛 UC 별칭 + src_id).
+    # concept_id를 소문자화해 합성 옛 UC slug로 쓴다(LEGACY_UC_PATTERN 통과·고유).
+    src_id = concept_id
+    legacy_uc = f"UC.calc.a01.{concept_id.lower().replace('-', '')}"
     data: dict[str, object] = {
         "concept_id": concept_id,
+        "source_id": src_id,
+        "aliases": [legacy_uc, src_id],
         "name_ko": "개념",
         "name_en": "concept",
         "name_ja": "概念",
@@ -25,7 +35,9 @@ def _concept(
     return Concept(**data)  # type: ignore[arg-type]
 
 
-def _edge(src: str, dst: str, relation: str = "prerequisite", **over: object) -> ConceptEdge:
+def _edge(
+    src: str, dst: str, relation: str = "prerequisite", **over: object
+) -> ConceptEdge:
     data: dict[str, object] = {
         "src_concept_id": src,
         "dst_concept_id": dst,
@@ -38,9 +50,9 @@ def _edge(src: str, dst: str, relation: str = "prerequisite", **over: object) ->
     return ConceptEdge(**data)  # type: ignore[arg-type]
 
 
-_A = "UC.calc.a01.g10n01"
-_B = "UC.calc.a01.g10n02"
-_C = "UC.calc.a01.g11n01"
+_A = "HIGH-CALC-001"
+_B = "HIGH-CALC-002"
+_C = "HIGH-CALC-003"
 
 
 def _rules(report: object) -> set[str]:
@@ -152,7 +164,9 @@ class TestReport:
         assert "PASS" in report.summary()
 
     def test_summary_fail_verdict_on_cycle(self) -> None:
-        report = validate_graph([_concept(_A), _concept(_B)], [_edge(_A, _B), _edge(_B, _A)])
+        report = validate_graph(
+            [_concept(_A), _concept(_B)], [_edge(_A, _B), _edge(_B, _A)]
+        )
         assert "FAIL" in report.summary()
 
     def test_counts_by_rule(self) -> None:
@@ -169,12 +183,106 @@ class TestReport:
         assert "rule별 집계" in text
 
 
+class TestIdInvariants:
+    """P2a 재ID 그래프 레벨 불변식 — id_conformance·id_unique·alias_roundtrip(전부 error)."""
+
+    def test_clean_graph_has_no_id_errors(self) -> None:
+        """정상 개념(새 ID·source_id·옛 UC 별칭)은 ID 불변식 위반 0."""
+        report = validate_graph([_concept(_A), _concept(_B)], [])
+        id_rules = {"id_conformance", "id_unique", "alias_roundtrip"}
+        assert not (id_rules & _rules(report))
+
+    def test_duplicate_concept_id_is_error(self) -> None:
+        """같은 concept_id 2개 → id_unique error(success=False)."""
+        dup = _concept(_A)
+        report = validate_graph([_concept(_A), dup], [])
+        assert "id_unique" in _rules(report)
+        assert report.success is False
+
+    def test_migrated_concept_missing_legacy_alias_is_error(self) -> None:
+        """*재ID된* 개념(source_id≠concept_id)이 옛 UC 별칭을 잃으면 alias_roundtrip error."""
+        # source_id='HK01'(원천 src_id) ≠ concept_id → 마이그레이션됨. 별칭에 옛 UC 없음.
+        c = _concept(_A, source_id="HK01", aliases=["HK01"])
+        report = validate_graph([c], [])
+        assert "alias_roundtrip" in _rules(report)
+        assert report.success is False
+
+    def test_fresh_seed_without_legacy_alias_is_ok(self) -> None:
+        """*신규* 후보(source_id==concept_id)는 옛 UC 별칭 면제(보존할 옛 키 없음)."""
+        c = _concept(_A, aliases=[])  # source_id==concept_id(헬퍼 기본)·별칭 없음
+        report = validate_graph([c], [])
+        assert "alias_roundtrip" not in _rules(report)
+
+    def test_migrated_source_id_must_be_in_aliases(self) -> None:
+        """재ID된 개념의 source_id가 aliases에 없으면 error(원천 키 조회 불가)."""
+        c = _concept(
+            _A, source_id="HK01", aliases=["UC.common1.a01.hk01"]
+        )  # src_id 누락
+        report = validate_graph([c], [])
+        assert "alias_roundtrip" in _rules(report)
+        assert report.success is False
+
+
+class TestValidateIdmap:
+    """원천 레코드 대상 재ID 불변식 — area_map_total·id_unique·alias_roundtrip(P2a 안전망)."""
+
+    def _records(self) -> list[dict[str, object]]:
+        return [
+            {
+                "src_id": "HK01",
+                "category": "[공통]식·방정식·부등식",
+                "difficulty_tier": "6",
+                "standard_codes": ["[10공수1-01-01]"],
+            },
+            {
+                "src_id": "HK02",
+                "category": "[공통]식·방정식·부등식",
+                "difficulty_tier": "7",
+                "standard_codes": ["[10공수1-01-02]"],
+            },
+        ]
+
+    def test_clean_records_pass(self) -> None:
+        report = validate_idmap(self._records())
+        assert report.success is True
+        assert report.errors == []
+        assert report.node_count == 2
+
+    def test_unmapped_category_is_area_map_error(self) -> None:
+        """미수록 category → area_map_total error(KeyError를 error로 환원)."""
+        bad = [
+            {"src_id": "X1", "category": "외계수학", "standard_codes": ["[6수01-01]"]}
+        ]
+        report = validate_idmap(bad)
+        assert "area_map_total" in {i.rule for i in report.issues}
+        assert report.success is False
+
+    def test_real_corpus_idmap_passes(
+        self, concept_records: list[dict[str, object]]
+    ) -> None:
+        """실데이터 403건 재ID 불변식 전부 통과(area_map_total·id_unique·alias_roundtrip)."""
+        report = validate_idmap(concept_records)
+        assert report.node_count == 403
+        assert report.success is True
+        assert report.errors == []
+
+
 class TestValidateDataset:
     def test_wraps_transform_result(self) -> None:
         """validate_dataset은 TransformResult의 개념·엣지를 검증한다."""
         records = [
-            {"src_id": "HK01", "name_ko": "다항식", "category": "[공통]식", "standard_codes": ["[10공수1-01-01]"]},
-            {"src_id": "HK02", "name_ko": "나머지정리", "category": "[공통]식", "standard_codes": ["[10공수1-01-02]"]},
+            {
+                "src_id": "HK01",
+                "name_ko": "다항식",
+                "category": "[공통]식·방정식·부등식",
+                "standard_codes": ["[10공수1-01-01]"],
+            },
+            {
+                "src_id": "HK02",
+                "name_ko": "나머지정리",
+                "category": "[공통]식·방정식·부등식",
+                "standard_codes": ["[10공수1-01-02]"],
+            },
         ]
         edges = [{"from_id": "HK01", "relation": "선수(prereq)", "to_id": "HK02"}]
         result = transform_dataset(concept_records=records, edge_records=edges)
@@ -192,7 +300,9 @@ class TestRealDataValidation:
         concept_records: list[dict[str, object]],
         edge_records: list[dict[str, object]],
     ) -> None:
-        result = transform_dataset(concept_records=concept_records, edge_records=edge_records)
+        result = transform_dataset(
+            concept_records=concept_records, edge_records=edge_records
+        )
         report = validate_dataset(result)
         assert report.node_count == 403
         assert report.edge_count == 541
@@ -205,7 +315,9 @@ class TestRealDataValidation:
         edge_records: list[dict[str, object]],
     ) -> None:
         """리포트 텍스트가 PASS 판정과 카운트를 담는다."""
-        result = transform_dataset(concept_records=concept_records, edge_records=edge_records)
+        result = transform_dataset(
+            concept_records=concept_records, edge_records=edge_records
+        )
         report = validate_dataset(result)
         text = report.report_text()
         assert "PASS" in text

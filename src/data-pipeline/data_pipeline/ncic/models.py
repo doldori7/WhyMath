@@ -79,6 +79,35 @@ STANDARD_CODE_PATTERN: Final[re.Pattern[str]] = re.compile(
 )
 """성취기준 코드 패턴. 학년대수·과목한글·(과목숫자)·영역·순번."""
 
+# norm_id: 교육과정(2022/2015) × 학년·과목 토큰 × 영역 × 순번을 합친 **교육과정 간 유일 식별자**.
+#
+# 형식:  <개정연도>_<학년+과목토큰>_<영역2자리>_<순번2자리>
+#   예: 2022_2수_01_01 · 2022_10공수1_01_01 · 2015_12미적_01_03
+#
+# 도입 배경 (P1-1): `code`(official_code, 고시 원문코드)는 2022·2015 두 교육과정에서
+#   *동일 문자열로 충돌*할 수 있다(예: 양쪽에 `[12미적01-01]`). 따라서 PK를 official_code가
+#   아닌 norm_id로 옮겨 충돌을 해소한다.
+#
+# 토큰셋 주의: 학년+과목토큰 부분은 `[가-힣A-Za-z0-9]{1,8}`로 *느슨하게* 받는다.
+#   File A(성취기준 마스터 xlsx) 도착 전이라 실제 토큰 집합이 미확정이므로, 로마숫자(Ⅰ/Ⅱ)는
+#   build_norm_id가 ASCII(I/II)로 정규화한 뒤 이 패턴에 통과시키는 것을 전제로 한다.
+#   File A 도착 시 정밀 토큰셋(예: 허용 과목 enum)으로 좁힐 것 — 그때 이 주석과 함께 조정.
+NORM_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^(2022|2015)_[가-힣A-Za-z0-9]{1,8}_\d{2}_\d{2}$"
+)
+"""norm_id 패턴. <개정연도>_<학년+과목토큰>_<영역>_<순번> (예: '2022_2수_01_01')."""
+
+# 지원 교육과정 개정 — curriculum_revision 검증·norm_id prefix 매핑의 단일 진실.
+_VALID_CURRICULUM_REVISIONS: Final[frozenset[str]] = frozenset({"2022 개정", "2015 개정"})
+"""허용 교육과정 개정 집합 (2022·2015)."""
+
+# 연결 유형 — 개념↔성취기준 링크의 의미.
+#   직접   = 개념이 해당 성취기준을 곧장 다룸
+#   재매핑 = 2015↔2022 개정 사이에서 대응되는 성취기준으로 옮겨 연결
+#   준용   = 정확히 같진 않으나 교수학적으로 준하여 적용
+ConceptLinkType = Literal["직접", "재매핑", "준용"]
+"""개념↔성취기준 연결 유형."""
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # 핵심 모델
@@ -92,7 +121,8 @@ class AchievementStandard(BaseModel):
                               effective_from, parent_codes[]).
 
     필드 결정 사항:
-      - `code`: PK. `STANDARD_CODE_PATTERN` 검증
+      - `norm_id`: **PK(식별 필드)**. `NORM_ID_PATTERN` 검증. 교육과정(2022/2015) 간 유일.
+      - `code`: official_code(고시 원문코드). `STANDARD_CODE_PATTERN` 검증. 교육과정 간 *비유일*.
       - `parent_codes`: 선수 성취기준. 비어있을 수 있음(예: 초등 1~2학년군)
       - `source_url` / `source_document`: 출처 추적용 — 공공누리 1유형 의무
       - `curriculum_revision`: 기본 "2022 개정" (다른 개정과 혼동 방지)
@@ -107,9 +137,21 @@ class AchievementStandard(BaseModel):
         str_strip_whitespace=True,
     )
 
+    norm_id: str = Field(
+        ...,
+        description=(
+            "정규화 식별자(PK) — 교육과정(2022/2015) 간 유일. "
+            "<개정연도>_<학년+과목토큰>_<영역>_<순번> (예: '2022_2수_01_01')"
+        ),
+        examples=["2022_2수_01_01", "2022_10공수1_01_01"],
+    )
     code: str = Field(
         ...,
-        description="성취기준 코드 (예: '[9수01-01]', '[10공수1-01-01]')",
+        description=(
+            "official_code(고시 원문코드, 예: '[9수01-01]', '[10공수1-01-01]'). "
+            "이제 **교육과정 간 비유일** — 동일 code가 2022·2015에 동시 존재 가능. "
+            "교육과정 간 유일 식별은 norm_id가 담당한다."
+        ),
         examples=["[9수01-01]", "[10공수1-01-01]"],
     )
     grade_band: GradeBand = Field(..., description="학년군")
@@ -148,7 +190,7 @@ class AchievementStandard(BaseModel):
     )
     curriculum_revision: str = Field(
         default="2022 개정",
-        description="교육과정 개정 표시",
+        description="교육과정 개정 표시 ('2022 개정' | '2015 개정')",
     )
     effective_from: date | None = Field(
         default=None,
@@ -168,6 +210,29 @@ class AchievementStandard(BaseModel):
     )
 
     # ── 검증자 ────────────────────────────────────────────────────
+    @field_validator("norm_id")
+    @classmethod
+    def _validate_norm_id_format(cls, v: str) -> str:
+        """norm_id 형식 검증 — NORM_ID_PATTERN (교육과정 간 유일 식별자)."""
+        if not NORM_ID_PATTERN.match(v):
+            raise ValueError(
+                f"norm_id 형식 오류: {v!r}. "
+                f"예상 패턴: '<2022|2015>_<학년+과목토큰>_<영역2자리>_<순번2자리>', "
+                f"예: '2022_2수_01_01', '2022_10공수1_01_01'"
+            )
+        return v
+
+    @field_validator("curriculum_revision")
+    @classmethod
+    def _validate_curriculum_revision(cls, v: str) -> str:
+        """교육과정 개정 표시는 지원 집합('2022 개정'·'2015 개정')으로 제한."""
+        if v not in _VALID_CURRICULUM_REVISIONS:
+            raise ValueError(
+                f"지원하지 않는 교육과정 개정: {v!r}. "
+                f"허용: {sorted(_VALID_CURRICULUM_REVISIONS)}"
+            )
+        return v
+
     @field_validator("code")
     @classmethod
     def _validate_code_format(cls, v: str) -> str:
@@ -232,3 +297,81 @@ class AchievementStandardCollection(BaseModel):
     def count(self) -> int:
         """수록 성취기준 수."""
         return len(self.standards)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 개념 ↔ 성취기준 연결 모델 (Concept Graph 연결 레이어 — data-engineer L1 자산 9번)
+# ──────────────────────────────────────────────────────────────────────────
+class ConceptStandardLink(BaseModel):
+    """개념 노드 ↔ 성취기준(norm_id) 단일 연결.
+
+    개념 그래프(Neo4j)의 `Concept` 노드와 성취기준 사이를 잇는 *연결 레이어*.
+    L1은 이 연결의 *데이터*를 보유하고, 개념 노드 자체의 소유는 concept_graph 모듈이다.
+
+    필드 결정 사항:
+      - `concept_src_id`: 개념 소스 식별자 (concept_graph가 부여, L1은 *참조만*)
+      - `norm_id`: 연결 대상 성취기준 식별자. `NORM_ID_PATTERN` 검증
+      - `link_type`: 연결 의미 ('직접'·'재매핑'·'준용')
+      - `note`: 연결 근거·비고 (선택)
+    """
+
+    model_config = ConfigDict(
+        # AchievementStandard와 동일 — 추가 필드 금지 + 문자열 양끝 공백 제거
+        extra="forbid",
+        str_strip_whitespace=True,
+    )
+
+    concept_src_id: str = Field(
+        ...,
+        description="개념 소스 식별자 (concept_graph 부여, L1은 참조만)",
+        min_length=1,
+    )
+    norm_id: str = Field(
+        ...,
+        description="연결 대상 성취기준 식별자 (norm_id)",
+        examples=["2022_2수_01_01"],
+    )
+    link_type: ConceptLinkType = Field(
+        ...,
+        description="연결 의미 ('직접'·'재매핑'·'준용')",
+    )
+    note: str | None = Field(
+        default=None,
+        description="연결 근거·비고 (선택)",
+    )
+
+    @field_validator("norm_id")
+    @classmethod
+    def _validate_norm_id_format(cls, v: str) -> str:
+        """연결 대상 norm_id도 NORM_ID_PATTERN으로 검증."""
+        if not NORM_ID_PATTERN.match(v):
+            raise ValueError(
+                f"norm_id 형식 오류: {v!r}. "
+                f"예상 패턴: '<2022|2015>_<학년+과목토큰>_<영역2자리>_<순번2자리>'"
+            )
+        return v
+
+
+class ConceptStandardLinkCollection(BaseModel):
+    """개념↔성취기준 연결 묶음 + 메타데이터 (JSON 저장 단위).
+
+    `AchievementStandardCollection`을 거울처럼 따른다 — 출처·라이선스 표지를 포함한다.
+    (개념-성취기준 연결의 *성취기준 측* 원천은 NCIC 공공누리 1유형이므로 동일 표지 유지)
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    source_citation: str = Field(default=SOURCE_CITATION)
+    license_notice: str = Field(default=LICENSE_NOTICE)
+    curriculum_revision: str = Field(default="2022 개정")
+    collected_at: str = Field(
+        ...,
+        description="수집 시각 (ISO 8601, UTC)",
+    )
+    crawler_version: str = Field(default="0.1.0")
+    links: list[ConceptStandardLink] = Field(default_factory=list)
+
+    @property
+    def count(self) -> int:
+        """수록 연결 수."""
+        return len(self.links)

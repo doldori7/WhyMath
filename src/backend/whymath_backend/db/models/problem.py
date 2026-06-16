@@ -44,11 +44,13 @@ from whymath_backend.db.base import Base
 from whymath_backend.db.models._orm_enum import _pg_enum
 from whymath_backend.schema.enums import (
     AnswerFormat,
+    BloomLevel,
     Curriculum,
     ExamType,
     QuestionFormat,
     RelationType,
     ReviewStatus,
+    ScoringType,
     SignaturePattern,
     SourceType,
     StepType,
@@ -109,7 +111,11 @@ class Problem(Base):
 
     # ===== 과목·단원 =====
     subject: Mapped[Subject] = mapped_column(_pg_enum(Subject, "subject_enum"), nullable=False)
+    # P3a 신규: 광역 영역 코드(subject보다 세분·topic보다 광역). nullable·점진 채움.
+    domain: Mapped[str | None] = mapped_column(sa.String(64))
     unit_codes: Mapped[list[str]] = mapped_column(ARRAY(sa.Text), nullable=False)
+    # P3a 신규: 소단원명(사람이 읽는 이름). unit_codes(코드 배열)와 다른 축.
+    subunit: Mapped[str | None] = mapped_column(sa.String(128))
 
     # ===== 문항 형식 =====
     question_format: Mapped[QuestionFormat | None] = mapped_column(
@@ -118,6 +124,11 @@ class Problem(Base):
     points: Mapped[int | None] = mapped_column(sa.Integer)
     answer_format: Mapped[AnswerFormat | None] = mapped_column(
         _pg_enum(AnswerFormat, "answer_format_enum")
+    )
+    # P3a 신규: Bloom 인지 수준·채점 유형(신규 PG enum 타입 — 마이그레이션이 CREATE TYPE).
+    bloom_level: Mapped[BloomLevel | None] = mapped_column(_pg_enum(BloomLevel, "bloom_level_enum"))
+    scoring_type: Mapped[ScoringType | None] = mapped_column(
+        _pg_enum(ScoringType, "scoring_type_enum")
     )
     answer_constraint: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     answer_transform: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
@@ -131,6 +142,11 @@ class Problem(Base):
     answer: Mapped[str | None] = mapped_column(sa.Text)
     answer_explanation: Mapped[str | None] = mapped_column(sa.Text)
     multiple_answers: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # P3b 신규: 객관식 오답 선지→오개념 매핑(rich list). schema는 list[DistractorEntry] —
+    # model_dump()로 list[dict]가 되어 JSONB. nullable(server_default 없음 — source_detail·
+    # multiple_answers와 동형, visualizations의 NOT NULL '[]' 패턴과 달리 *없음*을 NULL로 표현해
+    # schema의 `distractor_map: ... | None = None`과 정합). 참조 무결성은 L4 검증자 소관.
+    distractor_map: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
 
     # ===== 한국 시그니처 패턴 (enum 배열) =====
     signature_patterns: Mapped[list[SignaturePattern]] = mapped_column(
@@ -172,8 +188,13 @@ class Problem(Base):
 
     # IRT 보정 난이도 b(logit) — JMLE(`l2.fit_jmle`)가 응답 데이터로 적합한 문항 난이도.
     # NULL=미보정 → θ 추정은 `difficulty_overall` 휴리스틱(`difficulty_to_logit`)으로 폴백.
-    # logit 척도(전문가 1~5 라벨과 다름)·a(변별도)는 1PL 고정이라 미저장.
+    # logit 척도(전문가 1~5 라벨과 다름).
     irt_difficulty_b: Mapped[float | None] = mapped_column(sa.Float)
+    # P3a 신규: IRT 2PL 변별 모수 a(slope) — 1PL b 보완(2PL 확장 시). NULL=미적합. Float·logit.
+    irt_a: Mapped[float | None] = mapped_column(sa.Float)
+    # P3a 신규: 고전 변별도 D(상위/하위 정답률 차) — irt_a(IRT 모수)와 다른 축(경험 통계). Float.
+    # 필드명 대문자 D는 변별도 지수 D 정본 표기 보존(schema.Problem 동일·iPhone noqa 선례).
+    discrimination_D: Mapped[float | None] = mapped_column(sa.Float)  # noqa: N815
 
     # ===== 정답률·통계 =====
     historical_correct_rate: Mapped[float | None] = mapped_column(sa.Numeric(5, 4))
@@ -184,6 +205,9 @@ class Problem(Base):
     # ===== 시간 예상치 =====
     expected_solve_seconds: Mapped[int | None] = mapped_column(sa.Integer)
     expected_solve_seconds_p90: Mapped[int | None] = mapped_column(sa.Integer)
+    # P3a 신규: 세션 내 권장 출제 순서(0부터·NULL=비배치)·피드백 템플릿 느슨참조(FK 아님).
+    session_position: Mapped[int | None] = mapped_column(sa.Integer)
+    feedback_id: Mapped[str | None] = mapped_column(sa.String(64))
 
     # ===== 페르소나 적합도 (JSONB — schema는 dict[Persona, float]) =====
     persona_fit: Mapped[dict[str, float] | None] = mapped_column(JSONB)

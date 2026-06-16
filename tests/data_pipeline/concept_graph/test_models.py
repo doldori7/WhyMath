@@ -9,7 +9,9 @@ import pytest
 from pydantic import ValidationError
 
 from data_pipeline.concept_graph.models import (
+    CONCEPT_ID_PATTERN,
     EVIDENCE_SOURCES,
+    LEGACY_UC_PATTERN,
     RELATION_TYPES,
     REVIEW_STATUSES,
     SOURCE_CITATION,
@@ -23,7 +25,9 @@ from data_pipeline.concept_graph.models import (
 
 def _concept(**overrides: object) -> Concept:
     data: dict[str, object] = {
-        "concept_id": "UC.calc.limit.epsilon-delta",
+        "concept_id": "HIGH-CALC-001",
+        "source_id": "H:12미적Ⅰ01-01",
+        "aliases": ["UC.calc1.a01.h-12-01-01", "H:12미적Ⅰ01-01"],
         "name_ko": "엡실론-델타 극한 정의",
         "name_en": "epsilon-delta definition of limit",
         "name_ja": "イプシロン・デルタ論法",
@@ -35,8 +39,8 @@ def _concept(**overrides: object) -> Concept:
 
 def _edge(**overrides: object) -> ConceptEdge:
     data: dict[str, object] = {
-        "src_concept_id": "UC.calc.limit.definition",
-        "dst_concept_id": "UC.calc.deriv.definition",
+        "src_concept_id": "HIGH-CALC-001",
+        "dst_concept_id": "HIGH-CALC-002",
         "relation": "prerequisite",
         "strength": 0.9,
         "evidence": "NCIC 성취기준 학년 인접 + 수학교육 문헌",
@@ -50,37 +54,51 @@ class TestConcept:
     def test_valid_instance(self) -> None:
         """유효 인스턴스 생성 + 기본값(빈 리스트)."""
         c = _concept()
-        assert c.concept_id == "UC.calc.limit.epsilon-delta"
+        assert c.concept_id == "HIGH-CALC-001"
+        assert c.source_id == "H:12미적Ⅰ01-01"
+        assert c.aliases == ["UC.calc1.a01.h-12-01-01", "H:12미적Ⅰ01-01"]
         assert c.prerequisite_concept_ids == []
         assert c.standard_codes == []
 
     @pytest.mark.parametrize(
         "good_id",
         [
-            "UC.calc.limit.epsilon-delta",
-            "UC.calc.deriv.definition",
-            "UC.alg.poly.factor-theorem",
+            "ELEM-GEO-001",
+            "MID-ARITH-042",
+            "HIGH-CALC-999",
+            "RT-FUN-001",  # 재수 트랙(예약)
+            "OLY-NT-007",  # 영재 트랙(예약)
         ],
     )
     def test_accepts_valid_concept_id(self, good_id: str) -> None:
-        """UC 규약(§2.4)을 지키는 ID는 통과."""
+        """새 규약(`{TRACK}-{AREA}-{NNN}`)을 지키는 ID는 통과(RT/OLY 예약 트랙 포함)."""
         assert _concept(concept_id=good_id).concept_id == good_id
 
     @pytest.mark.parametrize(
         "bad_id",
         [
-            "calc.limit.def",  # UC 접두사 없음
-            "UC.calc.limit",  # 파트 부족(3 only)
-            "UC.calc.limit.def.extra",  # 파트 초과
-            "UC.CALC.limit.def",  # 대문자
-            "UC.calc.limit.엡실론",  # 비ASCII slug
-            "UC..limit.def",  # 빈 domain
+            "UC.calc.limit.epsilon-delta",  # 옛 UC 형식 거부
+            "ELEM-GEO-1",  # NNN 3자리 아님
+            "ELEM-GEO-0001",  # NNN 4자리
+            "ELEM-geo-001",  # AREA 소문자
+            "FOO-GEO-001",  # 미지원 TRACK
+            "ELEM-G-001",  # AREA 1자리(2~8 위반)
+            "ELEM-GEOMETRYX-001",  # AREA 9자리(2~8 위반)
+            "ELEM-GEO",  # NNN 누락
+            "ELEMGEO001",  # 구분자 없음
         ],
     )
     def test_rejects_malformed_concept_id(self, bad_id: str) -> None:
-        """UC 규약 위반 ID는 ValidationError."""
+        """새 규약 위반 ID는 ValidationError."""
         with pytest.raises(ValidationError):
             _concept(concept_id=bad_id)
+
+    def test_concept_id_pattern_matches_examples(self) -> None:
+        """CONCEPT_ID_PATTERN이 새 형식만·LEGACY_UC_PATTERN이 옛 형식만 매칭(분리 확인)."""
+        assert CONCEPT_ID_PATTERN.match("ELEM-GEO-001")
+        assert not CONCEPT_ID_PATTERN.match("UC.calc.limit.def")
+        assert LEGACY_UC_PATTERN.match("UC.calc.limit.def")
+        assert not LEGACY_UC_PATTERN.match("ELEM-GEO-001")
 
     @pytest.mark.parametrize("field", ["name_ko", "name_en", "name_ja"])
     def test_rejects_empty_multilingual_name(self, field: str) -> None:
@@ -104,9 +122,32 @@ class TestConcept:
         """name_ko는 여전히 필수(누락 시 거부)."""
         with pytest.raises(ValidationError):
             Concept(
-                concept_id="UC.calc.limit.epsilon-delta",  # type: ignore[call-arg]
+                concept_id="HIGH-CALC-001",  # type: ignore[call-arg]
+                source_id="H:12미적Ⅰ01-01",
                 domain="미적분",
             )
+
+    def test_source_id_required_and_nonempty(self) -> None:
+        """source_id는 필수·비공백(원천 추적 키)."""
+        with pytest.raises(ValidationError):
+            _concept(source_id="")
+        with pytest.raises(ValidationError):
+            _concept(source_id="   ")
+
+    def test_aliases_default_empty(self) -> None:
+        """aliases는 선택(기본 빈 목록)."""
+        c = Concept(
+            concept_id="HIGH-CALC-001",  # type: ignore[call-arg]
+            source_id="H:12미적Ⅰ01-01",
+            name_ko="극한",
+            domain="미적분",
+        )
+        assert c.aliases == []
+
+    def test_aliases_reject_empty_string(self) -> None:
+        """별칭에 빈 문자열 금지(추적성 키 누락 차단)."""
+        with pytest.raises(ValidationError):
+            _concept(aliases=["UC.calc1.a01.x", ""])
 
     def test_rejects_extra_field(self) -> None:
         """extra='forbid' — 미정의 필드 거부."""
@@ -148,7 +189,9 @@ class TestConceptEnrichedFields:
 
     def test_misconception_text_is_separate_from_codes(self) -> None:
         """자유텍스트 misconception_text와 카탈로그 misconception_codes는 *별개* 슬롯."""
-        c = _concept(misconception_text="자유텍스트 오개념", misconception_codes=["mc-code"])
+        c = _concept(
+            misconception_text="자유텍스트 오개념", misconception_codes=["mc-code"]
+        )
         assert c.misconception_text == "자유텍스트 오개념"
         assert c.misconception_codes == ["mc-code"]
 

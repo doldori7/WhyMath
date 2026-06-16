@@ -114,6 +114,9 @@ def _read_concepts_csv(path: Path) -> tuple[list[Concept], list[str]]:
                 concepts.append(
                     Concept(
                         concept_id=row["concept_id"],
+                        # source_id 컬럼 없으면 concept_id로 폴백(시드/신규 후보 = 자기 정체).
+                        source_id=row.get("source_id") or row["concept_id"],
+                        aliases=_split_list(row.get("aliases", "")),
                         name_ko=row["name_ko"],
                         name_en=row["name_en"],
                         name_ja=row["name_ja"],
@@ -240,7 +243,10 @@ def transform_v1(
         raise typer.Exit(code=2)
     concepts_path = corpus_dir / "concepts.jsonl"
     edges_path = corpus_dir / "prerequisite_edges.jsonl"
-    for label, p in (("concepts.jsonl", concepts_path), ("prerequisite_edges.jsonl", edges_path)):
+    for label, p in (
+        ("concepts.jsonl", concepts_path),
+        ("prerequisite_edges.jsonl", edges_path),
+    ):
         if not p.exists():
             typer.echo(f"[!] {label} 없음: {p}", err=True)
             raise typer.Exit(code=2)
@@ -251,7 +257,7 @@ def transform_v1(
     result = transform_dataset(
         concept_records=_read_jsonl(concepts_path),
         edge_records=_read_jsonl(edges_path),
-        flashcard_records=_read_jsonl(flashcards_path) if flashcards_path.exists() else None,
+        flashcard_records=(_read_jsonl(flashcards_path) if flashcards_path.exists() else None),
         intl_records=_read_jsonl(intl_path) if intl_path.exists() else None,
     )
     report = validate_dataset(result)

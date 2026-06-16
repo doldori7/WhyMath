@@ -18,6 +18,7 @@ from data_pipeline.concept_graph.seed import (
     write_edges_csv,
 )
 from data_pipeline.ncic.models import AchievementStandard
+from data_pipeline.ncic.transform import build_norm_id
 
 
 def _std(
@@ -26,6 +27,7 @@ def _std(
     grade_band = "중학교 1~3학년군" if code.startswith("[9") else "고등학교"
     school_type = "중학교" if code.startswith("[9") else "고등학교"
     return AchievementStandard(
+        norm_id=build_norm_id("2022 개정", code),
         code=code,
         grade_band=grade_band,
         school_type=school_type,
@@ -40,28 +42,45 @@ def _std(
 def _calc_samples() -> list[AchievementStandard]:
     return [
         _std("[12미적Ⅰ01-01]", subject="미적분Ⅰ", domain="함수의 극한"),
-        _std("[12미적Ⅰ01-02]", subject="미적분Ⅰ", domain="함수의 극한", parents=["[12미적Ⅰ01-01]"]),
-        _std("[10공수1-01-01]", subject="공통수학1", domain="다항식"),  # 미적분 아님(필터 대상)
+        _std(
+            "[12미적Ⅰ01-02]",
+            subject="미적분Ⅰ",
+            domain="함수의 극한",
+            parents=["[12미적Ⅰ01-01]"],
+        ),
+        _std(
+            "[10공수1-01-01]", subject="공통수학1", domain="다항식"
+        ),  # 미적분 아님(필터 대상)
     ]
 
 
 class TestBuildConceptId:
     def test_deterministic_and_valid(self) -> None:
-        """동일 코드 → 동일 UC ID(멱등) + UC 규약 통과."""
+        """동일 코드 → 동일 새 ID(멱등) + 새 규약 통과."""
         first = build_concept_id("[9수01-01]")
         assert first == build_concept_id("[9수01-01]")
         assert CONCEPT_ID_PATTERN.match(first)
-        assert first == "UC.math.a01.g9n01"
+        # [9수01-01] → 학년9=MID·영역01=A01(잠정)·순번01→001
+        assert first == "MID-A01-001"
+
+    def test_track_from_grade(self) -> None:
+        """학년대수 → TRACK(9=MID·10=HIGH·6=ELEM)."""
+        assert build_concept_id("[6수01-01]").startswith("ELEM-")
+        assert build_concept_id("[9수01-01]").startswith("MID-")
+        assert build_concept_id("[10공수1-01-01]").startswith("HIGH-")
+        assert build_concept_id("[12미적Ⅰ01-01]").startswith("HIGH-")
 
     def test_distinct_codes_distinct_ids(self) -> None:
-        ids = {build_concept_id(c) for c in ("[9수01-01]", "[9수01-02]", "[10공수1-01-01]")}
+        ids = {
+            build_concept_id(c) for c in ("[9수01-01]", "[9수01-02]", "[10공수1-01-01]")
+        }
         assert len(ids) == 3
 
-    def test_unmapped_subject_falls_back_to_valid_ascii(self) -> None:
-        """미수록 과목약칭도 ascii UC ID(해시 폴백)로 유효."""
-        cid = build_concept_id("[12서양Ⅰ01-01]")  # '서양Ⅰ' 미수록
+    def test_unmapped_subject_still_valid(self) -> None:
+        """미수록 과목약칭이라도 코드가 파싱되면 새 규약 ID 생성(AREA=영역코드 잠정)."""
+        cid = build_concept_id("[12서양Ⅰ01-01]")  # '서양Ⅰ' 미수록이나 파싱 가능
         assert CONCEPT_ID_PATTERN.match(cid)
-        assert cid.startswith("UC.x")
+        assert cid == "HIGH-A01-001"
 
 
 class TestSeedConcepts:
@@ -129,7 +148,10 @@ class TestSeedEdges:
     def test_dedup_duplicate_parent(self) -> None:
         """같은 부모 중복 → 엣지 1개."""
         std = _std(
-            "[9수01-02]", subject="수학", domain="수와 연산", parents=["[9수01-01]", "[9수01-01]"]
+            "[9수01-02]",
+            subject="수학",
+            domain="수와 연산",
+            parents=["[9수01-01]", "[9수01-01]"],
         )
         assert len(seed_edges([std])) == 1
 

@@ -56,36 +56,50 @@ class AchievementStandard(BaseModel):
     source_document: str | None     # PDF 식별자
 ```
 
-### 2.2 SQL DDL (Phase 2+ — 미배포)
+### 2.2 백엔드 ORM (구현 완료 — P1·2026-06-16)
+
+성취기준은 백엔드 L1 코어의 **1급 테이블**이다(Alembic `a6b7c8d9e0f1`·단일 head). PK는
+**`norm_id`**(2022·2015 교육과정 간 유일) — 원본 `code`는 두 교육과정 **153건 충돌**로 PK 불가하여
+`official_code`(비유일)로 강등하고, 개념↔성취기준 관계 테이블(`연결구분`)을 동반한다. 듀얼커리큘럼·
+`norm_id` 설계 배경은 `achievement_standards_v1.md`·`curriculum_master_v2_integration_review.md` 참조.
 
 ```sql
-CREATE TABLE achievement_standards (
-    code                    VARCHAR(20) PRIMARY KEY,
-    grade_band              VARCHAR(20)  NOT NULL,
-    school_type             VARCHAR(10)  NOT NULL,
-    subject                 VARCHAR(50)  NOT NULL,
-    domain                  VARCHAR(50)  NOT NULL,
-    sub_domain              VARCHAR(100),
-    statement               TEXT         NOT NULL,
+CREATE TABLE achievement_standard (
+    norm_id                 VARCHAR(32) PRIMARY KEY,          -- 예: 2022_2수_01_01
+    official_code           VARCHAR(32) NOT NULL,             -- 예: [9수01-01] (교육과정 간 비유일)
+    curriculum_revision     VARCHAR(16) NOT NULL,             -- '2022 개정' | '2015 개정'
+    grade_band              VARCHAR     NOT NULL,
+    school_type             VARCHAR     NOT NULL,
+    subject                 VARCHAR     NOT NULL,
+    domain                  VARCHAR     NOT NULL,
+    sub_domain              VARCHAR,
+    statement               TEXT        NOT NULL,
     commentary              TEXT,
     big_idea                TEXT,
-    curriculum_revision     VARCHAR(20)  DEFAULT '2022 개정',
     effective_from          DATE,
-    parent_codes            VARCHAR(20)[],
-    source_url              TEXT         NOT NULL,
-    source_document         VARCHAR(200),
-    created_at              TIMESTAMPTZ  DEFAULT now(),
-    updated_at              TIMESTAMPTZ  DEFAULT now()
+    parent_codes            TEXT[]      NOT NULL DEFAULT '{}',
+    source_url              TEXT        NOT NULL,
+    source_document         TEXT,
+    UNIQUE (curriculum_revision, official_code)              -- 교육과정 내 유일·간 충돌 허용
 );
-CREATE INDEX idx_standards_grade_band ON achievement_standards(grade_band);
-CREATE INDEX idx_standards_domain     ON achievement_standards(domain);
-CREATE INDEX idx_standards_subject    ON achievement_standards(subject);
+CREATE INDEX ix_achievement_standard_official_code   ON achievement_standard(official_code);
+CREATE INDEX ix_achievement_standard_revision_domain ON achievement_standard(curriculum_revision, domain);
+
+CREATE TABLE concept_standard_link (
+    link_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    concept_code   VARCHAR(64) NOT NULL,                      -- 개념 identity(UC.*/추후 ELEM-GEO) 느슨참조
+    norm_id        VARCHAR(32) NOT NULL REFERENCES achievement_standard(norm_id) ON DELETE CASCADE,
+    link_type      VARCHAR(8)  NOT NULL,                      -- 직접 | 재매핑 | 준용
+    note           TEXT,
+    UNIQUE (concept_code, norm_id, link_type)
+);
 ```
 
-정식 테이블의 Alembic 마이그레이션·프로덕션 배포는 Phase 2다. 단 `load_to_postgres`는
-**구현 완료**(`[postgres]` extra·`create_all`로 staging 테이블 멱등 보장·code PK upsert/DO
-NOTHING)이며, 슬99에서 실 PostgreSQL 통합테스트(`test_load_postgres_integration`)를 CI 전용
-잡(`data-pipeline — 적재 통합 (실 PG)`)으로 상시 검증한다.
+정의: `src/backend/whymath_backend/db/models/{achievement_standard,concept_standard_link}.py` +
+`schema/standard.py`. data-pipeline `load_to_postgres`는 여전히 *staging* 보조이며, **authoritative
+영속은 위 백엔드 ORM**이다 — data-pipeline 추출물(Collection JSON)을 백엔드 `l1/` 로더가 멱등 적재한다
+(corpus `code`→ORM `official_code`·`concept_src_id`→`concept_code`). 실 PG upgrade/downgrade·통합테스트는
+CI `backend-migrations`·`data-pipeline — 적재 통합 (실 PG)` 잡으로 검증한다.
 
 ### 2.3 코드 패턴
 

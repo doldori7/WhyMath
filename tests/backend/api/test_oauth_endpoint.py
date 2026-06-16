@@ -131,8 +131,9 @@ def _client(providers: dict[str, object], *, session: _FakeSession | None = None
     return TestClient(app)
 
 
-def _resolve_to(user: UserProfile) -> Callable[[object, object], Awaitable[UserProfile]]:
-    async def _fake(session: object, identity: object) -> UserProfile:
+def _resolve_to(user: UserProfile) -> Callable[..., Awaitable[UserProfile]]:
+    # resolve_user는 이제 keyword-only `settings`를 받는다(서버측 is_minor 파생) — 가짜도 흡수.
+    async def _fake(session: object, identity: object, *, settings: object) -> UserProfile:
         return user
 
     return _fake

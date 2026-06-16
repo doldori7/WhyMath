@@ -6,12 +6,15 @@ CI hermetic 잡엔 PostgreSQL이 없으므로 `BackendEdgeStore`/`populate_backe
 
   ① graph.json 로딩 — edges 파싱(prerequisite만·비-선수 skip·self-edge skip)·src/dst→code·
      strength 매핑·evidence 미유입(슬롯 부재)
-  ② code→UUID 해석 — backend concept 단일 조회 맵·orphan skip(맵에 없는 UC)
+  ② code→UUID 해석 — backend concept 단일 조회 맵·orphan skip(맵에 없는 code)
   ③ upsert SQL 구성 — ON CONFLICT(from,to,type)·edge_id(PK)·created_at 미-SET(보존 멱등)
   ④ populate — orphan 제외 후 적재 행 수·멱등(같은 레코드 2회→같은 upsert)
 
-가짜 엔진(`_FakeEngine`)은 begin()/connect() 컨텍스트 + execute()를 흉내내 실행된 statement와
-code→UUID 조회 결과를 제어한다 — psycopg/PG 없이 배선·방향·redaction·멱등 키를 검증한다.
+P2b 재ID(2026-06-16): 엣지 적재기는 *형식 불문*(endpoint id 문자열을 그대로 concept.code에 대조)
+이라 concept_id 재ID(UC.*→`{TRACK}-{AREA}-{NNN}`)에 코드 변경이 없다. 이 테스트는 정본으로 새 형식
+id를 쓴다(옛 UC도 같은 경로로 흘렀겠지만). 가짜 엔진(`_FakeEngine`)은 begin()/connect() 컨텍스트 +
+execute()를 흉내내 실행 statement·code→UUID 조회 결과를 제어한다 — psycopg/PG 없이 배선·방향·
+redaction·멱등 키를 검증한다.
 """
 
 from __future__ import annotations
@@ -32,10 +35,10 @@ from whymath_backend.l1.concept_graph.backend_edge import (
 )
 from whymath_backend.schema.enums import EdgeType
 
-# 슬2 idmap UC 규약 키 예시(concept.code·concept_node와 동일 키 공간).
-_UC_PRE = "UC.alg.afunction.linear"  # 선수
-_UC_POST = "UC.calc.alimit.epsilon-delta"  # 후행
-_UC_ORPHAN = "UC.unknown.x.y"  # 노드 미적재(orphan)
+# 재ID 후 concept_id 규약 키 예시(`{TRACK}-{AREA}-{NNN}`·concept.code·concept_node와 동일 키 공간).
+_NID_PRE = "HIGH-ALG-001"  # 선수
+_NID_POST = "HIGH-CALC-001"  # 후행
+_NID_ORPHAN = "HIGH-ZZ-999"  # 노드 미적재(orphan)
 
 _UUID_PRE = uuid.uuid4()
 _UUID_POST = uuid.uuid4()
@@ -71,7 +74,11 @@ class _FakeConnection:
         self._engine.executed.append(statement)
         # code→UUID 조회(SELECT concept.code, concept.concept_id)면 맵 행을 돌려준다.
         compiled = str(statement.compile(dialect=_pg_dialect()))  # type: ignore[attr-defined]
-        if "SELECT" in compiled and "concept.code" in compiled and "INSERT" not in compiled:
+        if (
+            "SELECT" in compiled
+            and "concept.code" in compiled
+            and "INSERT" not in compiled
+        ):
             return _FakeResult(self._engine.code_rows)
         return _FakeResult([])
 
@@ -91,7 +98,7 @@ class _FakeEngine:
         self.code_rows: list[object] = (
             code_rows
             if code_rows is not None
-            else [_Row(_UC_PRE, _UUID_PRE), _Row(_UC_POST, _UUID_POST)]
+            else [_Row(_NID_PRE, _UUID_PRE), _Row(_NID_POST, _UUID_POST)]
         )
 
     def begin(self) -> _FakeConnection:
@@ -109,7 +116,9 @@ class _Row:
         self.concept_id = concept_id
 
 
-def _fake_store(code_rows: list[object] | None = None) -> tuple[BackendEdgeStore, _FakeEngine]:
+def _fake_store(
+    code_rows: list[object] | None = None,
+) -> tuple[BackendEdgeStore, _FakeEngine]:
     engine = _FakeEngine(code_rows)
     store = BackendEdgeStore(engine=engine)  # type: ignore[arg-type]  # 가짜 엔진(구조만 충족)
     return store, engine
@@ -120,8 +129,8 @@ def _compile(statement: object) -> str:
 
 
 def _record(
-    src: str = _UC_PRE,
-    dst: str = _UC_POST,
+    src: str = _NID_PRE,
+    dst: str = _NID_POST,
     *,
     edge_strength: float | None = 0.8,
 ) -> BackendConceptEdgeRecord:
@@ -151,8 +160,8 @@ class TestLoadFromGraphJson:
             tmp_path,
             [
                 {
-                    "src_concept_id": _UC_PRE,
-                    "dst_concept_id": _UC_POST,
+                    "src_concept_id": _NID_PRE,
+                    "dst_concept_id": _NID_POST,
                     "relation": "prerequisite",
                     "strength": 0.75,
                     "evidence": "근거 산문(적재 금지)",
@@ -164,8 +173,8 @@ class TestLoadFromGraphJson:
         assert len(records) == 1
         assert skipped == []
         rec = records[0]
-        assert rec.src_code == _UC_PRE  # 선수
-        assert rec.dst_code == _UC_POST  # 후행
+        assert rec.src_code == _NID_PRE  # 선수
+        assert rec.dst_code == _NID_POST  # 후행
         assert rec.edge_type == EdgeType.PREREQUISITE
         assert rec.edge_strength == 0.75
 
@@ -183,16 +192,16 @@ class TestLoadFromGraphJson:
             tmp_path,
             [
                 {
-                    "src_concept_id": _UC_PRE,
-                    "dst_concept_id": _UC_POST,
+                    "src_concept_id": _NID_PRE,
+                    "dst_concept_id": _NID_POST,
                     "relation": "analogous_to",
                     "strength": 0.5,
                     "evidence": "x",
                     "evidence_source": "ncic",
                 },
                 {
-                    "src_concept_id": _UC_PRE,
-                    "dst_concept_id": _UC_POST,
+                    "src_concept_id": _NID_PRE,
+                    "dst_concept_id": _NID_POST,
                     "relation": "prerequisite",
                     "strength": 0.6,
                     "evidence": "y",
@@ -211,8 +220,8 @@ class TestLoadFromGraphJson:
             tmp_path,
             [
                 {
-                    "src_concept_id": _UC_PRE,
-                    "dst_concept_id": _UC_PRE,
+                    "src_concept_id": _NID_PRE,
+                    "dst_concept_id": _NID_PRE,
                     "relation": "prerequisite",
                     "strength": 0.9,
                     "evidence": "z",
@@ -230,8 +239,8 @@ class TestLoadFromGraphJson:
             tmp_path,
             [
                 {
-                    "src_concept_id": _UC_PRE,
-                    "dst_concept_id": _UC_POST,
+                    "src_concept_id": _NID_PRE,
+                    "dst_concept_id": _NID_POST,
                     "relation": "prerequisite",
                     "strength": "",
                     "evidence": "z",
@@ -245,7 +254,7 @@ class TestLoadFromGraphJson:
     def test_missing_endpoint_skipped(self, tmp_path: Path) -> None:
         path = self._write_graph(
             tmp_path,
-            [{"src_concept_id": _UC_PRE, "relation": "prerequisite", "strength": 0.5}],
+            [{"src_concept_id": _NID_PRE, "relation": "prerequisite", "strength": 0.5}],
         )
         records, skipped = load_backend_edges_from_graph_json(path)
         assert records == []
@@ -274,7 +283,7 @@ class TestCodeToUuidResolution:
     def test_orphan_endpoint_skipped(self) -> None:
         # 후행이 맵에 없으면(orphan·노드 미적재) 그 엣지는 FK 위반 방지로 skip.
         store, engine = _fake_store()
-        loaded, skipped = store.populate([_record(dst=_UC_ORPHAN)])
+        loaded, skipped = store.populate([_record(dst=_NID_ORPHAN)])
         assert loaded == 0
         assert any("orphan" in m for m in skipped)
         # code→UUID 조회만 실행(INSERT 없음).
@@ -284,7 +293,11 @@ class TestCodeToUuidResolution:
         # 여러 엣지여도 code→UUID 조회는 *단 한 번*(N+1 0).
         store, engine = _fake_store()
         store.populate([_record(), _record(), _record()])
-        selects = [s for s in engine.executed if "concept.code" in _compile(s) and "INSERT" not in _compile(s)]
+        selects = [
+            s
+            for s in engine.executed
+            if "concept.code" in _compile(s) and "INSERT" not in _compile(s)
+        ]
         assert len(selects) == 1
 
 
@@ -332,7 +345,7 @@ class TestPopulate:
     def test_populate_counts_loaded_excluding_orphans(self) -> None:
         store, _ = _fake_store()
         count = populate_backend_edges(
-            [_record(), _record(dst=_UC_ORPHAN)], store=store
+            [_record(), _record(dst=_NID_ORPHAN)], store=store
         )
         assert count == 1  # orphan 1건 제외
 
@@ -346,7 +359,9 @@ class TestPopulate:
         records = [_record()]
         populate_backend_edges(records, store=store)
         populate_backend_edges(records, store=store)
-        inserts = [s for s in engine.executed if "INSERT INTO concept_edge" in _compile(s)]
+        inserts = [
+            s for s in engine.executed if "INSERT INTO concept_edge" in _compile(s)
+        ]
         assert len(inserts) == 2
         for stmt in inserts:
             assert "ON CONFLICT" in _compile(stmt)
@@ -370,8 +385,8 @@ def test_blank_strength_variants_none(tmp_path: Path, bad: object) -> None:
     path = tmp_path / "graph.json"
     edges = [
         {
-            "src_concept_id": _UC_PRE,
-            "dst_concept_id": _UC_POST,
+            "src_concept_id": _NID_PRE,
+            "dst_concept_id": _NID_POST,
             "relation": "prerequisite",
             "strength": bad,
             "evidence": "x",

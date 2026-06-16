@@ -34,6 +34,10 @@ from whymath_backend.l4.misconception.semantic import (
     build_provider,
     semantic_matches,
 )
+from whymath_backend.l4.misconception.validate import (
+    raise_for_distractor_map,
+    validate_distractor_map,
+)
 from whymath_backend.l4.misconception.visualize import visualize_misconception
 
 __all__ = [
@@ -55,7 +59,9 @@ __all__ = [
     "combine_diagnoses",
     "combined_diagnose",
     "diagnose",
+    "raise_for_distractor_map",
     "select_intervention",
     "semantic_matches",
+    "validate_distractor_map",
     "visualize_misconception",
 ]

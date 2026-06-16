@@ -11,6 +11,7 @@ from __future__ import annotations
 from data_pipeline.concept_graph.models import (
     CONCEPT_ID_PATTERN,
     EVIDENCE_SOURCES,
+    LEGACY_UC_PATTERN,
     RELATION_TYPES,
     REVIEW_STATUSES,
     SOURCE_CITATION,
@@ -24,6 +25,7 @@ from data_pipeline.concept_graph.models import (
 __all__ = [
     "CONCEPT_ID_PATTERN",
     "EVIDENCE_SOURCES",
+    "LEGACY_UC_PATTERN",
     "RELATION_TYPES",
     "REVIEW_STATUSES",
     "SOURCE_CITATION",

@@ -26,6 +26,7 @@ Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이�
   - curriculum(슬라이스 8a, v1.1 이식): CurriculumEntry
   - textbook(슬라이스 8b, v1.1 이식): TextbookMapping·TextbookToneProfile·TextbookUnit
   - visualization(슬라이스 90): Visualization
+  - standard(P1-2): AchievementStandard·ConceptStandardLink
 """
 
 from whymath_backend.schema.activity import (
@@ -101,6 +102,10 @@ from whymath_backend.schema.problem import (
 from whymath_backend.schema.provenance import (
     ContentProvenance,
     GenerationLog,
+)
+from whymath_backend.schema.standard import (
+    AchievementStandard,
+    ConceptStandardLink,
 )
 from whymath_backend.schema.textbook_mapping import (
     TextbookMapping,
@@ -204,4 +209,7 @@ __all__ = [
     "TextbookUnit",
     # visualization (슬라이스 90)
     "Visualization",
+    # standard (P1-2)
+    "AchievementStandard",
+    "ConceptStandardLink",
 ]

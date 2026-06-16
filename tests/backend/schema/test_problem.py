@@ -13,12 +13,14 @@ from pydantic import ValidationError
 
 from whymath_backend.schema.enums import (
     AnswerFormat,
+    BloomLevel,
     Curriculum,
     ExamType,
     Persona,
     QuestionFormat,
     RelationType,
     ReviewStatus,
+    ScoringType,
     SignaturePattern,
     SourceType,
     StepType,
@@ -28,6 +30,7 @@ from whymath_backend.schema.enums import (
 )
 from whymath_backend.schema.problem import (
     Condition,
+    DistractorEntry,
     Problem,
     ProblemRelation,
     ProblemStep,
@@ -76,6 +79,65 @@ class TestCondition:
         """text 누락 → ValidationError."""
         with pytest.raises(ValidationError):
             Condition(label="가")  # type: ignore[call-arg]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# DistractorEntry 서브모델 (P3b) — 구조 검증만(참조 무결성은 L4)
+# ──────────────────────────────────────────────────────────────────────
+class TestDistractorEntry:
+    def test_valid_instance(self) -> None:
+        """choice_index·misconception_id 필수, op_code 선택."""
+        e = DistractorEntry(
+            choice_index=2,
+            misconception_id="distribution-over-power",
+            op_code="power-distributed-no-cross-term",
+        )
+        assert e.choice_index == 2
+        assert e.misconception_id == "distribution-over-power"
+        assert e.op_code == "power-distributed-no-cross-term"
+
+    def test_op_code_optional(self) -> None:
+        """op_code는 기본 None(오개념만 매핑 가능)."""
+        e = DistractorEntry(choice_index=0, misconception_id="mean-vs-median")
+        assert e.op_code is None
+
+    def test_choice_index_negative_rejected(self) -> None:
+        """choice_index는 0 이상(ge=0) — 음수 → ValidationError."""
+        with pytest.raises(ValidationError):
+            DistractorEntry(choice_index=-1, misconception_id="mean-vs-median")
+
+    def test_choice_index_zero_allowed(self) -> None:
+        """choice_index=0은 유효(첫 선지)."""
+        e = DistractorEntry(choice_index=0, misconception_id="mean-vs-median")
+        assert e.choice_index == 0
+
+    def test_empty_misconception_id_rejected(self) -> None:
+        """misconception_id는 min_length=1 — 빈 문자열 → ValidationError."""
+        with pytest.raises(ValidationError):
+            DistractorEntry(choice_index=1, misconception_id="")
+
+    def test_structural_only_no_catalog_check(self) -> None:
+        """L1은 *구조만* 검증 — 카탈로그에 없는 id도 구조가 맞으면 생성된다(참조 무결성은 L4).
+
+        역방향 의존 금지(CLAUDE.md): schema는 l4 카탈로그를 모른다. 미등록 id 거부는 L4
+        검증자(validate_distractor_map)가 한다 — 여기선 형태만 본다.
+        """
+        e = DistractorEntry(choice_index=1, misconception_id="this-id-does-not-exist")
+        assert e.misconception_id == "this-id-does-not-exist"
+
+    def test_extra_forbidden(self) -> None:
+        """extra='forbid' — 알 수 없는 필드 거부."""
+        with pytest.raises(ValidationError):
+            DistractorEntry(
+                choice_index=1,
+                misconception_id="mean-vs-median",
+                bogus="x",  # type: ignore[call-arg]
+            )
+
+    def test_missing_required_raises(self) -> None:
+        """misconception_id 누락 → ValidationError."""
+        with pytest.raises(ValidationError):
+            DistractorEntry(choice_index=1)  # type: ignore[call-arg]
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -257,6 +319,146 @@ class TestProblemValidation:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# P3a 신규 메타 8필드 — 전부 nullable·가산적(기존 구성 무회귀)
+# ──────────────────────────────────────────────────────────────────────
+class TestProblemP3aMetaFields:
+    def test_new_fields_default_none(self) -> None:
+        """P3a 8필드는 미지정 시 모두 None — 기존 Problem 구성이 그대로 유효(무회귀)."""
+        p = _minimal_self_generated()
+        assert p.bloom_level is None
+        assert p.irt_a is None
+        assert p.discrimination_D is None
+        assert p.domain is None
+        assert p.subunit is None
+        assert p.session_position is None
+        assert p.scoring_type is None
+        assert p.feedback_id is None
+
+    def test_all_new_fields_accepted(self) -> None:
+        """8필드를 유효 값으로 모두 채워 생성된다(자체생성 — 본문 보유 허용)."""
+        p = _minimal_self_generated(
+            bloom_level=BloomLevel.ANALYZE,
+            irt_a=1.35,
+            discrimination_D=0.42,
+            domain="CAL-DIFF",
+            subunit="합성함수의 미분",
+            session_position=3,
+            scoring_type=ScoringType.부분점수,
+            feedback_id="fb-composite-diff-01",
+        )
+        assert p.bloom_level == BloomLevel.ANALYZE
+        assert p.irt_a == pytest.approx(1.35)
+        assert p.discrimination_D == pytest.approx(0.42)
+        assert p.domain == "CAL-DIFF"
+        assert p.subunit == "합성함수의 미분"
+        assert p.session_position == 3
+        assert p.scoring_type == ScoringType.부분점수
+        assert p.feedback_id == "fb-composite-diff-01"
+
+    def test_new_enum_value_serialization(self) -> None:
+        """use_enum_values=True → bloom_level(영어)·scoring_type(한글) 값 직렬화."""
+        p = _minimal_self_generated(
+            bloom_level=BloomLevel.CREATE,
+            scoring_type=ScoringType.루브릭,
+        )
+        dumped = p.model_dump()
+        assert dumped["bloom_level"] == "CREATE"
+        assert dumped["scoring_type"] == "루브릭"
+
+    def test_new_question_format_member_accepted(self) -> None:
+        """확장된 QuestionFormat 신규 멤버(객관식진단)도 question_format에 수용된다."""
+        p = _minimal_self_generated(question_format=QuestionFormat.객관식진단)
+        assert p.question_format == QuestionFormat.객관식진단
+        assert p.model_dump()["question_format"] == "객관식진단"
+
+    def test_invalid_bloom_level_rejected(self) -> None:
+        """bloom_level은 BloomLevel enum 값만(잘못된 값 → ValidationError)."""
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(bloom_level="WONDER")
+
+    def test_invalid_scoring_type_rejected(self) -> None:
+        """scoring_type은 ScoringType enum 값만(잘못된 값 → ValidationError)."""
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(scoring_type="별점")
+
+    def test_session_position_negative_rejected(self) -> None:
+        """session_position은 0 이상(ge=0) — 음수 → ValidationError."""
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(session_position=-1)
+
+    def test_session_position_zero_allowed(self) -> None:
+        """session_position=0은 유효(세션 첫 번째)."""
+        p = _minimal_self_generated(session_position=0)
+        assert p.session_position == 0
+
+    def test_feedback_id_max_length_rejected(self) -> None:
+        """feedback_id는 max_length=64 — 초과 → ValidationError."""
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(feedback_id="x" * 65)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# P3b 신규 distractor_map — nullable·rich list·가산적(기존 구성 무회귀)
+# ──────────────────────────────────────────────────────────────────────
+class TestProblemDistractorMap:
+    def test_default_none(self) -> None:
+        """distractor_map 미지정 시 None — 기존 Problem 구성이 그대로 유효(무회귀)."""
+        p = _minimal_self_generated()
+        assert p.distractor_map is None
+
+    def test_rich_list_accepted(self) -> None:
+        """DistractorEntry 리스트로 채워 생성된다(객관식 오답 매핑)."""
+        p = _minimal_self_generated(
+            distractor_map=[
+                DistractorEntry(
+                    choice_index=1,
+                    misconception_id="distribution-over-power",
+                    op_code="power-distributed-no-cross-term",
+                ),
+                DistractorEntry(choice_index=3, misconception_id="mean-vs-median"),
+            ],
+        )
+        assert p.distractor_map is not None
+        assert len(p.distractor_map) == 2
+        assert p.distractor_map[0].choice_index == 1
+        assert p.distractor_map[1].op_code is None
+
+    def test_from_dict_coercion(self) -> None:
+        """dict로도 DistractorEntry 강제 변환(JSONB 역직렬화 경로)·model_dump 직렬화."""
+        p = _minimal_self_generated(
+            distractor_map=[
+                {"choice_index": 0, "misconception_id": "mean-vs-median", "op_code": None},
+            ],
+        )
+        assert p.distractor_map is not None
+        assert isinstance(p.distractor_map[0], DistractorEntry)
+        assert p.distractor_map[0].misconception_id == "mean-vs-median"
+        dumped = p.model_dump()
+        assert dumped["distractor_map"][0]["choice_index"] == 0
+        assert dumped["distractor_map"][0]["misconception_id"] == "mean-vs-median"
+
+    def test_empty_list_allowed(self) -> None:
+        """빈 리스트도 유효(None과 구분 — 오답 매핑이 명시적으로 없음)."""
+        p = _minimal_self_generated(distractor_map=[])
+        assert p.distractor_map == []
+
+    def test_invalid_entry_rejected(self) -> None:
+        """원소 구조 위반(choice_index 음수)이 Problem 검증에 전파."""
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(
+                distractor_map=[{"choice_index": -1, "misconception_id": "mean-vs-median"}],
+            )
+
+    def test_structural_only_unknown_id_allowed(self) -> None:
+        """L1은 구조만 검증 — 카탈로그 미등록 id도 Problem 생성은 통과(참조 무결성은 L4)."""
+        p = _minimal_self_generated(
+            distractor_map=[{"choice_index": 1, "misconception_id": "unknown-id"}],
+        )
+        assert p.distractor_map is not None
+        assert p.distractor_map[0].misconception_id == "unknown-id"
+
+
+# ──────────────────────────────────────────────────────────────────────
 # 법적 교정 불변식 (MEMORY 2026-05-28) — 핵심
 # ──────────────────────────────────────────────────────────────────────
 class TestCopyrightInvariant:
@@ -375,6 +577,24 @@ class TestCopyrightInvariant:
         # str_strip_whitespace + falsy → 위반 아님
         assert not p.question_text
         assert not p.choices
+
+    def test_distractor_map_allowed_for_metadata_source(self) -> None:
+        """P3b: distractor_map은 *구조 메타*(본문 아님)라 메타 전용 출처에도 허용 → 통과.
+
+        저작권 불변식의 대상 본문 필드는 question_text·answer_explanation·choices뿐이다.
+        distractor_map(선지 인덱스→오개념 코드·추상 op-code)은 평가원/EBS 본문 복제가 아니므로
+        signature_patterns처럼 메타 전용 출처에도 실릴 수 있다 — 불변식이 distractor_map에
+        결합되지 않았음(intact)을 못 박는다.
+        """
+        p = _minimal_self_generated(
+            source_type=SourceType.평가원,
+            distractor_map=[
+                DistractorEntry(choice_index=1, misconception_id="distribution-over-power"),
+            ],
+        )
+        assert p.question_text is None  # 본문은 여전히 비어야(불변식 충족)
+        assert p.distractor_map is not None
+        assert p.distractor_map[0].choice_index == 1
 
 
 # ──────────────────────────────────────────────────────────────────────

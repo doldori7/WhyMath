@@ -33,12 +33,14 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from whymath_backend.schema.enums import (
     AnswerFormat,
+    BloomLevel,
     Curriculum,
     ExamType,
     Persona,
     QuestionFormat,
     RelationType,
     ReviewStatus,
+    ScoringType,
     SignaturePattern,
     SourceType,
     StepType,
@@ -82,6 +84,56 @@ class Condition(BaseModel):
     formal: str | None = Field(
         default=None,
         description="조건의 형식(수식) 표현 (선택)",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 서브모델: DistractorEntry (객관식 오답 선지 → 오개념 매핑)
+# ──────────────────────────────────────────────────────────────────────────
+class DistractorEntry(BaseModel):
+    """객관식 *오답 선지 1개* → 오개념 코드 매핑 — `Problem.distractor_map` 원소.
+
+    객관식 문항의 *오답 선지*(distractor)는 보통 *특정 오개념*이 만들어낸 값이다. 이 엔트리는
+    "몇 번째 선지(`choice_index`)가 어떤 오개념(`misconception_id`)에서 비롯됐는가"를 담아,
+    학생이 고른 오답을 오개념으로 *역추적*하거나 *자체 동등문제*의 오답을 설명하는 데 쓴다.
+
+    **레이어 규칙(CLAUDE.md 역방향 의존 금지)**: 이 L1 모델은 *구조 검증만* 한다 — `choice_index`가
+    음수 아님·`misconception_id`가 비지 않음 같은 형태만 본다. `misconception_id`가 정본 카탈로그
+    (`l4.misconception.catalog.CATALOG_BY_ID`)에 *실재*하는지의 **참조 무결성**은 L4 검증자
+    (`l4/misconception/validate.py`)가 본다 — L1은 L4를 *알지 못하므로* 여기서 카탈로그를
+    import하지 않는다(L4→L1 방향만 허용). `op_code`도 같은 이유로 여기선 문자열 형태만 본다.
+
+    **저작권 레일(CLAUDE.md 우선순위 #2)**: `op_code`는 *추상 오류연산* op-code(예:
+    'power-distributed-no-cross-term')일 뿐 평가원·EBS·교과서의 *선지 본문* 복제가 아니다 —
+    선지 텍스트 자체는 담지 않는다(`l4/misconception/distractor.py` 설계와 정합).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    choice_index: int = Field(
+        ...,
+        description="오답 선지의 0-기반 인덱스(`Problem.choices` 위치). 정답 선지는 제외한다.",
+        ge=0,
+    )
+    misconception_id: str = Field(
+        ...,
+        description=(
+            "이 오답을 유발한 오개념 — 정본 `l4.misconception.catalog.CATALOG_BY_ID`의 id "
+            "(kebab-case). L1은 형태(비지 않음)만 검증하고 카탈로그 실재 여부는 L4 검증자 소관."
+        ),
+        min_length=1,
+    )
+    op_code: str | None = Field(
+        default=None,
+        description=(
+            "추상 오류연산 op-code(선택) — `l4.misconception.distractor.DISTRACTOR_BY_ID`의 키. "
+            "*일반 오류연산 서술*을 가리키는 식별자일 뿐 평가원/EBS 선지 본문 복제가 아니다(저작권 "
+            "레일). NULL이면 op-code 미상(오개념만 매핑). 카탈로그 실재·정합 검증은 L4 소관."
+        ),
     )
 
 
@@ -176,10 +228,23 @@ class Problem(BaseModel):
 
     # ===== 과목·단원 =====
     subject: Subject = Field(..., description="과목 — 공통/미적분/확통/기하/인공지능수학")
+    # P3a 신규: domain은 subject(과목)보다 세분, topic(주제)보다 광역인 *광역 영역 코드*.
+    # subject=미적분 < domain=미분법/적분법 < (topic) < subunit=소단원의 위계. nullable·점진 채움.
+    domain: str | None = Field(
+        default=None,
+        description="광역 영역 코드 — subject보다 세분·topic보다 광역(예: 'CAL-DIFF')",
+        max_length=64,
+    )
     unit_codes: list[str] = Field(
         ...,
         description="단원 코드 배열 (예: ['CAL-INT-DEF', 'FUN-COMPOSITE'])",
         min_length=1,
+    )
+    # P3a 신규: 소단원명(자연어). unit_codes(코드 배열)와 다른 *사람이 읽는 소단원 이름*.
+    subunit: str | None = Field(
+        default=None,
+        description="소단원명 (예: '합성함수의 미분')",
+        max_length=128,
     )
 
     # ===== 문항 형식 =====
@@ -191,6 +256,15 @@ class Problem(BaseModel):
     answer_format: AnswerFormat | None = Field(
         default=None,
         description="정답 형식 — 자연수/분수/실수/식",
+    )
+    # P3a 신규: 문항이 요구하는 인지 수준(개정 Bloom 6단계)·채점 유형. 문항 형식·난이도와 다른 축.
+    bloom_level: BloomLevel | None = Field(
+        default=None,
+        description="Bloom 인지 수준 — REMEMBER/UNDERSTAND/APPLY/ANALYZE/EVALUATE/CREATE",
+    )
+    scoring_type: ScoringType | None = Field(
+        default=None,
+        description="채점 유형 — 정오답/진단/부분점수/시간/루브릭",
     )
     answer_constraint: dict[str, Any] | None = Field(
         default=None,
@@ -230,6 +304,18 @@ class Problem(BaseModel):
     multiple_answers: dict[str, Any] | None = Field(
         default=None,
         description="복수해 가능성(출제오류 검증, 자유형 JSONB)",
+    )
+    # P3b 신규: 객관식 오답 선지 → 오개념 코드 매핑(rich list). 정답 선지는 제외하고 *오답*만
+    # 싣는다. 각 원소는 (choice_index, misconception_id, op_code?). misconception_id는 정본
+    # CATALOG_BY_ID의 id, op_code는 선택(추상 오류연산·평가원/EBS 본문 복제 아님). L1은 구조만
+    # 검증하고, 카탈로그 실재·op_code 정합의 *참조 무결성*은 L4 검증자(validate_distractor_map)
+    # 소관이다(역방향 의존 금지 — schema는 l4를 import하지 않음). NULL=미매핑(점진 채움).
+    distractor_map: list[DistractorEntry] | None = Field(
+        default=None,
+        description=(
+            "객관식 오답 선지→오개념코드 매핑(rich list). 정답 선지 제외·오답만. 각 원소 "
+            "(choice_index·misconception_id=CATALOG_BY_ID id·op_code 선택). 참조 무결성은 L4 검증."
+        ),
     )
 
     # ===== 한국 시그니처 패턴 =====
@@ -317,6 +403,28 @@ class Problem(BaseModel):
             "난이도(difficulty_overall) 휴리스틱 폴백. logit 척도(1~5 아님)·범위 비제한."
         ),
     )
+    # P3a 신규: IRT 2PL 변별 모수 a(slope·기울기). 기존 1PL b(irt_difficulty_b)를 보완해
+    # 2PL로 확장할 때의 변별도. NULL=미적합(1PL 고정 a=1 가정). logit 척도·범위 비제한.
+    irt_a: float | None = Field(
+        default=None,
+        description=(
+            "IRT 2PL 변별 모수 a(slope). 기존 1PL b(irt_difficulty_b) 보완. NULL=미적합. "
+            "logit 척도·범위 비제한(고전 변별도 discrimination_D와 다른 축 — IRT 모형 모수)."
+        ),
+    )
+    # P3a 신규: 고전 검사이론(CTT) 변별도 D(상위/하위 정답률 차 등). irt_a(IRT 2PL 모수)와
+    # *다른 축*이다 — discrimination_D는 *모형 비의존 경험 통계*(보통 0~1·상위27% 정답률 −
+    # 하위27% 정답률), irt_a는 *2PL 잠재특성 모형의 기울기 모수*(logit·비제한). 둘 다 "변별"을
+    # 재지만 추정 방식·척도가 달라 별도 보존한다.
+    # 필드명 'discrimination_D'는 고전 검사이론의 *변별도 지수 D*(item discrimination index D)
+    # 정본 표기라 대문자 D를 그대로 둔다(enums.py `iPhone` noqa 선례 — 도메인 정본명 보존).
+    discrimination_D: float | None = Field(  # noqa: N815
+        default=None,
+        description=(
+            "고전 변별도 D — 상위/하위 집단 정답률 차(모형 비의존 경험 통계). "
+            "irt_a(IRT 2PL 기울기 모수)와 다른 축. 보통 0.0~1.0."
+        ),
+    )
 
     # ===== 정답률·통계 =====
     historical_correct_rate: float | None = Field(
@@ -354,6 +462,18 @@ class Problem(BaseModel):
         default=None,
         description="상위 10% 기준 풀이 시간(초)",
         ge=0,
+    )
+    # P3a 신규: 세션(문제 세트) 내 권장 출제 순서(0부터). NULL=세션 비배치. 학습 흐름 배치용.
+    session_position: int | None = Field(
+        default=None,
+        description="세션 내 권장 출제 순서(0부터). NULL=세션 비배치",
+        ge=0,
+    )
+    # P3a 신규: 피드백 템플릿 *느슨참조*(FK 아님 — 외부 피드백 카탈로그 키). NULL=기본 피드백.
+    feedback_id: str | None = Field(
+        default=None,
+        description="피드백 템플릿 느슨참조 키(FK 아님). NULL=기본 피드백",
+        max_length=64,
     )
 
     # ===== 페르소나 적합도 (원칙 5) =====

@@ -17,6 +17,7 @@ from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_consented_user, get_current_user
 from whymath_backend.config import Settings
+from whymath_backend.consent import current_year_kst, derive_is_minor
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.security import create_access_token
 
@@ -110,4 +111,52 @@ class TestConsentGate:
     async def test_unknown_minor_status_passes(self) -> None:
         """is_minor None(미상)이면 차단하지 않는다 — 알려진 미성년자만 게이트."""
         user = UserProfile(user_id=uuid.uuid4())
+        assert await get_consented_user(user=user) is user
+
+
+class TestDerivedMinorGateEndToEnd:
+    """P4: 서버 파생 is_minor → 동의 게이트가 *실제로* 발화하는지 종단 검증.
+
+    파생(consent.derive_is_minor)과 게이트(get_consented_user)를 한 흐름으로 묶어, 만14세 미만
+    birth_year를 가진 사용자가 동의(parent_consent_at) 없이 보호된 엔드포인트에 접근하면 403이
+    되는 *전체 사슬*을 확인한다(파생이 없으면 게이트가 무력하던 P4 이전 구멍이 막혔음을 증명).
+    """
+
+    async def test_derived_minor_without_consent_raises_403(self) -> None:
+        """미성년 birth_year → is_minor=True 파생 → 동의 없음 → 게이트 403(구멍 폐쇄)."""
+        minor_birth_year = current_year_kst() - 8  # 연나이 8 ≤ 14
+        is_minor = derive_is_minor(minor_birth_year, current_year=current_year_kst(), threshold=14)
+        assert is_minor is True
+        user = UserProfile(
+            user_id=uuid.uuid4(),
+            birth_year=minor_birth_year,
+            is_minor=is_minor,
+            parent_consent_at=None,
+        )
+        with pytest.raises(HTTPException) as exc:
+            await get_consented_user(user=user)
+        assert exc.value.status_code == 403
+
+    async def test_derived_minor_with_consent_passes(self) -> None:
+        """미성년 파생이라도 parent_consent_at가 있으면 통과(동의 완료 흐름)."""
+        minor_birth_year = current_year_kst() - 8
+        is_minor = derive_is_minor(minor_birth_year, current_year=current_year_kst(), threshold=14)
+        user = UserProfile(
+            user_id=uuid.uuid4(),
+            birth_year=minor_birth_year,
+            is_minor=is_minor,
+            parent_consent_at=datetime.now(tz=timezone.utc),
+        )
+        assert await get_consented_user(user=user) is user
+
+    async def test_derived_adult_passes_without_consent(self) -> None:
+        """성인 birth_year → is_minor=False 파생 → 동의 불요로 통과."""
+        adult_birth_year = current_year_kst() - 30
+        is_minor = derive_is_minor(adult_birth_year, current_year=current_year_kst(), threshold=14)
+        assert is_minor is False
+        user = UserProfile(
+            user_id=uuid.uuid4(),
+            birth_year=adult_birth_year,
+            is_minor=is_minor,
+        )
         assert await get_consented_user(user=user) is user
