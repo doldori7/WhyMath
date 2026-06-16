@@ -49,6 +49,11 @@ postgres = [
 neo4j = [
     "neo4j>=5,<6",
 ]
+# File A(성취기준 마스터 xlsx) 추출용. extract_xlsx의 openpyxl import는 지연 — extra 없이도
+# 순수 row 파서(parse_standard_row/parse_link_row)는 import·사용 가능해야 한다([postgres] 선례).
+xlsx = [
+    "openpyxl>=3.1.5",
+]
 
 [project.scripts]
 whymath-ncic = "data_pipeline.ncic.__main__:app"

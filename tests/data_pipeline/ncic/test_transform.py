@@ -6,9 +6,12 @@ import pytest
 
 from data_pipeline.ncic.transform import (
     TransformError,
+    build_norm_id,
     infer_school_and_band,
+    normalize_norm_id,
     parse_standard_code,
     resolve_subject,
+    transform_raw_to_link,
     transform_raw_to_standard,
 )
 
@@ -127,9 +130,7 @@ class TestTransformRawToStandard:
 
     def test_missing_code_raises(self) -> None:
         with pytest.raises(TransformError):
-            transform_raw_to_standard(
-                {"statement": "x", "source_url": "https://x.com"}
-            )
+            transform_raw_to_standard({"statement": "x", "source_url": "https://x.com"})
 
     def test_missing_statement_raises(self) -> None:
         with pytest.raises(TransformError):
@@ -151,5 +152,146 @@ class TestTransformRawToStandard:
                     "code": "[9수01-01]",
                     "statement": "   \n\t  ",
                     "source_url": "https://x.com",
+                }
+            )
+
+    def test_norm_id_derived_when_absent(self) -> None:
+        """raw에 norm_id 없으면 (개정, code)로 결정적 파생."""
+        std = transform_raw_to_standard(
+            {
+                "code": "[9수01-01]",
+                "statement": "소인수분해를 이해한다.",
+                "source_url": "https://x.com",
+            }
+        )
+        assert std.norm_id == "2022_9수_01_01"
+
+    def test_norm_id_used_when_present(self) -> None:
+        """raw에 norm_id 있으면 그대로(공백만 정규화)."""
+        std = transform_raw_to_standard(
+            {
+                "code": "[9수01-01]",
+                "norm_id": " 2022_9수_01_01 ",
+                "statement": "x",
+                "source_url": "https://x.com",
+            }
+        )
+        assert std.norm_id == "2022_9수_01_01"
+
+    def test_revision_2015_drives_norm_id_prefix(self) -> None:
+        """2015 개정 명시 → norm_id가 2015 prefix로 파생."""
+        std = transform_raw_to_standard(
+            {
+                "code": "[9수01-01]",
+                "curriculum_revision": "2015 개정",
+                "statement": "x",
+                "source_url": "https://x.com",
+            }
+        )
+        assert std.norm_id == "2015_9수_01_01"
+        assert std.curriculum_revision == "2015 개정"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# norm_id 파생·정규화 — P1-1 신규
+# ──────────────────────────────────────────────────────────────────────
+class TestBuildNormId:
+    @pytest.mark.parametrize(
+        "revision, code, expected",
+        [
+            ("2022 개정", "[2수01-01]", "2022_2수_01_01"),
+            ("2022 개정", "[9수01-01]", "2022_9수_01_01"),
+            ("2022 개정", "[10공수1-01-01]", "2022_10공수1_01_01"),
+            ("2015 개정", "[12미적Ⅰ01-03]", "2015_12미적I_01_03"),  # 로마숫자→ASCII
+            ("2015 개정", "[6수04-05]", "2015_6수_04_05"),
+        ],
+    )
+    def test_deterministic_norm_id(
+        self, revision: str, code: str, expected: str
+    ) -> None:
+        assert build_norm_id(revision, code) == expected
+
+    def test_idempotent(self) -> None:
+        """같은 입력 → 항상 같은 출력."""
+        assert build_norm_id("2022 개정", "[9수01-01]") == build_norm_id(
+            "2022 개정", "[9수01-01]"
+        )
+
+    def test_unsupported_revision_raises(self) -> None:
+        with pytest.raises(TransformError):
+            build_norm_id("2009 개정", "[9수01-01]")
+
+    def test_malformed_code_raises(self) -> None:
+        with pytest.raises(TransformError):
+            build_norm_id("2022 개정", "not-a-code")
+
+
+class TestNormalizeNormId:
+    def test_strips_internal_and_edge_whitespace(self) -> None:
+        assert normalize_norm_id("  2022_9수 _01_01 ") == "2022_9수_01_01"
+
+
+class Test2015SubjectTokens:
+    @pytest.mark.parametrize(
+        "token, expected",
+        [
+            ("수학Ⅰ", "수학Ⅰ"),
+            ("수학I", "수학Ⅰ"),  # ASCII 변형
+            ("수학II", "수학Ⅱ"),
+            ("미적", "미적분"),
+        ],
+    )
+    def test_2015_subject_resolution(self, token: str, expected: str) -> None:
+        assert resolve_subject(token) == expected
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 개념↔성취기준 연결 변환 — P1-1 신규
+# ──────────────────────────────────────────────────────────────────────
+class TestTransformRawToLink:
+    def test_minimal_valid_link(self) -> None:
+        link = transform_raw_to_link(
+            {"concept_src_id": "N1", "norm_id": "2022_9수_01_01", "link_type": "직접"}
+        )
+        assert link.concept_src_id == "N1"
+        assert link.norm_id == "2022_9수_01_01"
+        assert link.link_type == "직접"
+        assert link.note is None
+
+    def test_link_with_note(self) -> None:
+        link = transform_raw_to_link(
+            {
+                "concept_src_id": "HK42",
+                "norm_id": "2015_9수_01_01",
+                "link_type": "재매핑",
+                "note": "2015→2022 대응",
+            }
+        )
+        assert link.note == "2015→2022 대응"
+
+    def test_norm_id_whitespace_normalized(self) -> None:
+        link = transform_raw_to_link(
+            {"concept_src_id": "N1", "norm_id": " 2022_9수_01_01 ", "link_type": "준용"}
+        )
+        assert link.norm_id == "2022_9수_01_01"
+
+    @pytest.mark.parametrize("missing", ["concept_src_id", "norm_id", "link_type"])
+    def test_missing_required_field_raises(self, missing: str) -> None:
+        raw = {
+            "concept_src_id": "N1",
+            "norm_id": "2022_9수_01_01",
+            "link_type": "직접",
+        }
+        del raw[missing]
+        with pytest.raises(TransformError):
+            transform_raw_to_link(raw)  # type: ignore[arg-type]
+
+    def test_invalid_link_type_raises(self) -> None:
+        with pytest.raises(TransformError):
+            transform_raw_to_link(
+                {
+                    "concept_src_id": "N1",
+                    "norm_id": "2022_9수_01_01",
+                    "link_type": "유사",
                 }
             )

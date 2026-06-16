@@ -22,6 +22,7 @@ from data_pipeline.ncic.models import (
 def _samples() -> list[AchievementStandard]:
     return [
         AchievementStandard(
+            norm_id="2022_9수_01_01",
             code="[9수01-01]",
             grade_band="중학교 1~3학년군",
             school_type="중학교",
@@ -33,6 +34,7 @@ def _samples() -> list[AchievementStandard]:
             source_url="https://www.ncic.go.kr/a",
         ),
         AchievementStandard(
+            norm_id="2022_10공수1_01_01",
             code="[10공수1-01-01]",
             grade_band="고등학교",
             school_type="고등학교",
@@ -147,7 +149,9 @@ class TestPostgresLoad:
 
     def test_to_async_dsn_forces_asyncpg_driver(self) -> None:
         """동기 `postgresql://`는 asyncpg 드라이버로 정규화."""
-        assert _to_async_dsn("postgresql://h:5432/db") == "postgresql+asyncpg://h:5432/db"
+        assert (
+            _to_async_dsn("postgresql://h:5432/db") == "postgresql+asyncpg://h:5432/db"
+        )
 
     def test_to_async_dsn_preserves_explicit_driver(self) -> None:
         """드라이버가 이미 명시된 DSN은 그대로 둔다."""

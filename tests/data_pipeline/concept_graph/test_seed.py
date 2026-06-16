@@ -18,6 +18,7 @@ from data_pipeline.concept_graph.seed import (
     write_edges_csv,
 )
 from data_pipeline.ncic.models import AchievementStandard
+from data_pipeline.ncic.transform import build_norm_id
 
 
 def _std(
@@ -26,6 +27,7 @@ def _std(
     grade_band = "중학교 1~3학년군" if code.startswith("[9") else "고등학교"
     school_type = "중학교" if code.startswith("[9") else "고등학교"
     return AchievementStandard(
+        norm_id=build_norm_id("2022 개정", code),
         code=code,
         grade_band=grade_band,
         school_type=school_type,
@@ -40,8 +42,15 @@ def _std(
 def _calc_samples() -> list[AchievementStandard]:
     return [
         _std("[12미적Ⅰ01-01]", subject="미적분Ⅰ", domain="함수의 극한"),
-        _std("[12미적Ⅰ01-02]", subject="미적분Ⅰ", domain="함수의 극한", parents=["[12미적Ⅰ01-01]"]),
-        _std("[10공수1-01-01]", subject="공통수학1", domain="다항식"),  # 미적분 아님(필터 대상)
+        _std(
+            "[12미적Ⅰ01-02]",
+            subject="미적분Ⅰ",
+            domain="함수의 극한",
+            parents=["[12미적Ⅰ01-01]"],
+        ),
+        _std(
+            "[10공수1-01-01]", subject="공통수학1", domain="다항식"
+        ),  # 미적분 아님(필터 대상)
     ]
 
 
@@ -54,7 +63,9 @@ class TestBuildConceptId:
         assert first == "UC.math.a01.g9n01"
 
     def test_distinct_codes_distinct_ids(self) -> None:
-        ids = {build_concept_id(c) for c in ("[9수01-01]", "[9수01-02]", "[10공수1-01-01]")}
+        ids = {
+            build_concept_id(c) for c in ("[9수01-01]", "[9수01-02]", "[10공수1-01-01]")
+        }
         assert len(ids) == 3
 
     def test_unmapped_subject_falls_back_to_valid_ascii(self) -> None:
@@ -129,7 +140,10 @@ class TestSeedEdges:
     def test_dedup_duplicate_parent(self) -> None:
         """같은 부모 중복 → 엣지 1개."""
         std = _std(
-            "[9수01-02]", subject="수학", domain="수와 연산", parents=["[9수01-01]", "[9수01-01]"]
+            "[9수01-02]",
+            subject="수학",
+            domain="수와 연산",
+            parents=["[9수01-01]", "[9수01-01]"],
         )
         assert len(seed_edges([std])) == 1
 

@@ -28,12 +28,15 @@ from data_pipeline.ncic.models import (
     SOURCE_CITATION,
     AchievementStandard,
     AchievementStandardCollection,
+    ConceptStandardLink,
+    ConceptStandardLinkCollection,
 )
 
 logger = logging.getLogger("data_pipeline.ncic.load")
 
-# CSV 컬럼 순서 (안정)
+# CSV 컬럼 순서 (안정) — norm_id가 PK이므로 선두에 둔다.
 _CSV_FIELDS: tuple[str, ...] = (
+    "norm_id",
     "code",
     "school_type",
     "grade_band",
@@ -94,6 +97,56 @@ def write_json(
     )
     logger.info(
         "JSON 저장: %s (%d개 성취기준, %d bytes)",
+        output_path,
+        collection.count,
+        output_path.stat().st_size,
+    )
+    return collection
+
+
+def _make_links_collection(
+    links: Sequence[ConceptStandardLink],
+    *,
+    crawler_version: str = "0.1.0",
+) -> ConceptStandardLinkCollection:
+    """저장용 연결 컬렉션 객체 생성 (출처·라이선스·시각 메타데이터 동봉)."""
+    return ConceptStandardLinkCollection(
+        collected_at=datetime.now(tz=timezone.utc).isoformat(),
+        crawler_version=crawler_version,
+        links=list(links),
+    )
+
+
+def write_links_json(
+    links: Sequence[ConceptStandardLink],
+    output_path: Path,
+    *,
+    crawler_version: str = "0.1.0",
+    indent: int = 2,
+) -> ConceptStandardLinkCollection:
+    """개념↔성취기준 연결을 JSON으로 저장.
+
+    `write_json`과 동일 구조 — JSON 표지에 SOURCE_CITATION + LICENSE_NOTICE를 *반드시* 포함.
+
+    Args:
+        links: 저장 대상 연결.
+        output_path: 출력 파일 경로 (디렉토리 자동 생성).
+        crawler_version: 메타데이터.
+        indent: JSON 들여쓰기.
+
+    Returns:
+        생성한 연결 컬렉션 객체.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    collection = _make_links_collection(links, crawler_version=crawler_version)
+
+    # ensure_ascii=False — 한국어 그대로
+    output_path.write_text(
+        collection.model_dump_json(indent=indent),
+        encoding="utf-8",
+    )
+    logger.info(
+        "JSON 저장: %s (%d개 연결, %d bytes)",
         output_path,
         collection.count,
         output_path.stat().st_size,
@@ -182,15 +235,16 @@ async def load_to_postgres(
     설치를 안내한다(모듈 import는 extra 없이도 가능하도록 sqlalchemy를 여기서 지연 import).
     테이블은 이 로더가 소유하는 L1 staging 테이블이라 `create_all`(checkfirst, 멱등)로 보장한다.
 
-    `code`는 PK이므로 입력 내 중복은 *마지막 항목*으로 dedup한다(단일 INSERT의 ON CONFLICT가
-    같은 행을 두 번 건드리는 오류 방지). `upsert=True`면 code 충돌 시 나머지 컬럼을 UPDATE,
-    False면 무시한다(DO NOTHING). 빈 입력은 *연결 없이* 0을 돌려준다(조기 반환).
+    `norm_id`는 PK이므로 입력 내 중복은 *마지막 항목*으로 dedup한다(단일 INSERT의 ON CONFLICT가
+    같은 행을 두 번 건드리는 오류 방지). `code`(official_code)는 교육과정 간 *비유일*이라 PK가 아닌
+    일반 컬럼이다. `upsert=True`면 norm_id 충돌 시 나머지 컬럼을 UPDATE, False면 무시한다
+    (DO NOTHING). 빈 입력은 *연결 없이* 0을 돌려준다(조기 반환).
 
     Args:
         standards: 적재 대상.
         dsn: PostgreSQL 연결 문자열(`postgresql://` 또는 `postgresql+asyncpg://`).
         table_name: 테이블명(기본 `achievement_standards`).
-        upsert: code PK 충돌 시 UPDATE 여부(False면 DO NOTHING).
+        upsert: norm_id PK 충돌 시 UPDATE 여부(False면 DO NOTHING).
 
     Returns:
         영향받은(적재·갱신된) 행 수.
@@ -215,7 +269,9 @@ async def load_to_postgres(
     table = Table(
         table_name,
         metadata,
-        Column("code", Text, primary_key=True),
+        # PK = norm_id (교육과정 간 유일). code는 비유일 일반 컬럼.
+        Column("norm_id", Text, primary_key=True),
+        Column("code", Text, nullable=False),
         Column("school_type", Text, nullable=False),
         Column("grade_band", Text, nullable=False),
         Column("subject", Text, nullable=False),
@@ -231,11 +287,11 @@ async def load_to_postgres(
         Column("source_document", Text),
     )
 
-    # code PK 기준 dedup(마지막 우선) — 단일 배치 INSERT의 ON CONFLICT 중복행 오류 방지.
-    by_code: dict[str, dict[str, object]] = {
-        std.code: std.model_dump(mode="python") for std in standards
+    # norm_id PK 기준 dedup(마지막 우선) — 단일 배치 INSERT의 ON CONFLICT 중복행 오류 방지.
+    by_norm_id: dict[str, dict[str, object]] = {
+        std.norm_id: std.model_dump(mode="python") for std in standards
     }
-    rows = list(by_code.values())
+    rows = list(by_norm_id.values())
 
     engine = create_async_engine(_to_async_dsn(dsn))
     try:
@@ -244,15 +300,15 @@ async def load_to_postgres(
             stmt = pg_insert(table).values(rows)
             if upsert:
                 stmt = stmt.on_conflict_do_update(
-                    index_elements=["code"],
+                    index_elements=["norm_id"],
                     set_={
                         col.name: stmt.excluded[col.name]
                         for col in table.columns
-                        if col.name != "code"
+                        if col.name != "norm_id"
                     },
                 )
             else:
-                stmt = stmt.on_conflict_do_nothing(index_elements=["code"])
+                stmt = stmt.on_conflict_do_nothing(index_elements=["norm_id"])
             result = await conn.execute(stmt)
     finally:
         await engine.dispose()
@@ -260,4 +316,4 @@ async def load_to_postgres(
     return result.rowcount if result.rowcount >= 0 else len(rows)
 
 
-__all__ = ["load_to_postgres", "write_csv", "write_json"]
+__all__ = ["load_to_postgres", "write_csv", "write_json", "write_links_json"]

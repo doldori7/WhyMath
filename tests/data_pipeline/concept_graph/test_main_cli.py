@@ -21,6 +21,7 @@ runner = CliRunner()
 def _standards_json(tmp_path: Path) -> Path:
     stds = [
         AchievementStandard(
+            norm_id="2022_12미적I_01_01",
             code="[12미적Ⅰ01-01]",
             grade_band="고등학교",
             school_type="고등학교",
@@ -30,6 +31,7 @@ def _standards_json(tmp_path: Path) -> Path:
             source_url="https://www.ncic.go.kr/a",
         ),
         AchievementStandard(
+            norm_id="2022_12미적I_01_02",
             code="[12미적Ⅰ01-02]",
             grade_band="고등학교",
             school_type="고등학교",
@@ -147,13 +149,17 @@ class TestTransformV1:
         assert len(rows) == 403  # src_id → UC 매핑
 
     def test_missing_corpus_exits_2(self, tmp_path: Path) -> None:
-        result = runner.invoke(app, ["transform-v1", "--corpus-dir", str(tmp_path / "nope")])
+        result = runner.invoke(
+            app, ["transform-v1", "--corpus-dir", str(tmp_path / "nope")]
+        )
         assert result.exit_code == 2
 
     def test_missing_concepts_file_exits_2(self, tmp_path: Path) -> None:
         """디렉토리는 있으나 concepts.jsonl 없음 → 종료코드 2."""
         (tmp_path / "empty").mkdir()
-        result = runner.invoke(app, ["transform-v1", "--corpus-dir", str(tmp_path / "empty")])
+        result = runner.invoke(
+            app, ["transform-v1", "--corpus-dir", str(tmp_path / "empty")]
+        )
         assert result.exit_code == 2
 
 
@@ -194,7 +200,9 @@ class TestValidate:
         cpath, epath = tmp_path / "c.csv", tmp_path / "e.csv"
         _write_filled_concepts(cpath, [a, b])
         _write_filled_edges(epath, [(a, b)])
-        result = runner.invoke(app, ["validate", "--concepts", str(cpath), "--edges", str(epath)])
+        result = runner.invoke(
+            app, ["validate", "--concepts", str(cpath), "--edges", str(epath)]
+        )
         assert result.exit_code == 0, result.output
         assert "그래프 검증" in result.stdout
 
@@ -232,14 +240,22 @@ class TestValidate:
         cpath, epath = tmp_path / "c.csv", tmp_path / "e.csv"
         _write_filled_concepts(cpath, [a, b])
         _write_filled_edges(epath, [(a, b), (b, a)])  # 순환
-        result = runner.invoke(app, ["validate", "--concepts", str(cpath), "--edges", str(epath)])
+        result = runner.invoke(
+            app, ["validate", "--concepts", str(cpath), "--edges", str(epath)]
+        )
         assert result.exit_code == 1
         assert "prerequisite_cycle" in result.stdout
 
     def test_validate_missing_csv_exits_2(self, tmp_path: Path) -> None:
         result = runner.invoke(
             app,
-            ["validate", "--concepts", str(tmp_path / "x.csv"), "--edges", str(tmp_path / "y.csv")],
+            [
+                "validate",
+                "--concepts",
+                str(tmp_path / "x.csv"),
+                "--edges",
+                str(tmp_path / "y.csv"),
+            ],
         )
         assert result.exit_code == 2
 
