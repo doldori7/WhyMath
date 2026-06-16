@@ -974,3 +974,22 @@ class AuditResourceType(str, Enum):
 
     assessment = "assessment"
     """진단 삭제(slice 53)."""
+
+
+class ConsentScope(str, Enum):
+    """`parental_consent.consent_scope` — 14세 미만 법정대리인 동의가 *무엇을* 허용했는가.
+
+    PIPA 만14세 미만 법정대리인 동의(docs/legal/pipa_data_matrix.md §3)의 *고지·동의 범위*를
+    표현한다. PIPA는 동의 시 *수집 항목·이용 목적·보유 기간·제3자 제공 여부*를 명확히 고지할
+    의무를 지우므로(§3.2), 동의 1건이 *무엇에 대한 동의였는지*를 감사 가능하게 기록한다.
+
+    **현재는 `service_core`(서비스 본 기능 이용을 위한 개인정보 처리·게이트 해제) 한 값만
+    둔다.** 모델 학습 활용·제3자 제공·마케팅 등 *별도 동의가 필요한 범위*는 각각 별도 동의
+    레코드(별 scope)로 받아야 하며(CLAUDE.md "동의 없이 학습 사용 금지"·§5 체크리스트), 그
+    값들은 **변호사 자문으로 범위·문구가 확정된 뒤** 추가한다(지금 추측으로 박지 않는다 —
+    가짜 동의 범위를 만들지 않는다). 닫힌 카테고리지만 ORM은 String(32)로 두어(AuditResourceType
+    선례) 범위 추가 시 마이그레이션이 enum 변경을 요구하지 않게 한다.
+    """
+
+    service_core = "service_core"
+    """서비스 본 기능 이용을 위한 개인정보 처리 동의(미성년 게이트 해제) — §3.1 가입 단계."""
