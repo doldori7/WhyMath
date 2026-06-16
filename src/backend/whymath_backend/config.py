@@ -680,6 +680,24 @@ class Settings(BaseSettings):
         ),
     )
 
+    misconception_judge_shadow: bool = Field(
+        default=False,
+        description=(
+            "L4 coach 오개념 진단에서 *judge would-be shadow 로깅*(G1·04b Phase 1)을 켤지. "
+            "**False(기본·opt-in)·현행 비트동일**: 노출(student-facing)은 *절대 불변*이고, "
+            '`misconception_semantic_mode=="shadow"`일 때만 효력이 있다(매처가 라이브로 도는 '
+            "그 경로에서, 의미 후보에 judge를 *비차단*으로 돌려 *걸러질 결과*(would-be removed/"
+            "kept)를 무노출로 로깅). 노출 전 실데이터로 judge 효과를 검증하기 위함(합성↔실 갭). "
+            "**매처 shadow(`misconception_semantic_mode`·싸다)와 비용 분리**: judge는 LLM(수 초)"
+            "이라 매처 shadow와 on/off가 *독립*이어야 한다(이 플래그가 별 토글). judge는 응답 "
+            "경로를 *지연시키지 않는다* — fire-and-forget(asyncio.create_task)으로 띄우고 즉시 "
+            "반환한다(coach는 judge를 await하지 않음). 레코드엔 *학생 원문·judge reason 미저장* "
+            "(미성년 PII — verdict 카운트·id·임계만). `misconception_judge_enabled`(노출 게이트)와 "
+            "별개다(이쪽은 노출 필터·저쪽은 비노출 측정). "
+            "WHYMATH_MISCONCEPTION_JUDGE_SHADOW=true로 켠다."
+        ),
+    )
+
     # ── 슬라이스 105: 오개념 임베딩 *영속(pgvector) 백엔드* 좌석 선택 ──
     # 슬104 VectorIndex 좌석에 PgVectorIndex(pgvector 백엔드)를 추가한다. **기본은 `memory`**
     # (InMemoryVectorIndex·기본 동작 무변경) — pgvector는 *opt-in*이다. 카탈로그 30종엔
