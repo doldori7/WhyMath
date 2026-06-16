@@ -32,17 +32,27 @@ data-pipeline 코퍼스와 backend schema의 키 이름이 두 군데 다르다.
 나머지 키는 동명 직결이다(`norm_id`·`statement`·`link_type`·`note` 등).
 
 ────────────────────────────────────────────────────────────────────────────
-concept_src_id → concept_code 참조 처리 (backend_edge와의 *구조적 차이* — store-direct)
+concept_src_id → concept_code 해석 (P2b — backend_edge resolve-via-map 템플릿 답습)
 ────────────────────────────────────────────────────────────────────────────
-backend_edge는 개념 양끝(UC)을 backend `concept` 단일 조회 맵(`{code: uuid}`)으로 *해석*해 UUID FK로
-저장한다 — `concept_edge.from/to_concept_id`가 실 FK(UUID)이기 때문이다. **링크는 다르다**:
-`concept_standard_link.concept_code`는 **FK가 아니라 느슨참조**다(ORM docstring: "FK 아님 — 개념
-식별자 공간이 진화 중이라 DB FK로 묶지 않는다"). 컬럼이 *코드 문자열 자체*를 담으므로 해석할 UUID가
-없다 — 따라서 `concept_src_id`는 **그대로 `concept_code`에 저장**한다(store-direct). 이는
-backend_edge가 *맵 해석*을 한 것과 대비되는 이 로더의 핵심 결정이며, 두 경우 모두 *조용한 누락을
-만들지 않는다*는 원칙은 같다: backend_edge가 맵에 없는 개념 UC를 orphan으로 skip·보고하듯, 이
-로더는 실 FK인 `norm_id`가 적재 성취기준 집합에 없는 링크(unresolved 성취기준 참조)를 orphan으로
-skip·보고한다(FK 위반 방지).
+**P2b 재ID 전파의 핵심 변경.** 코퍼스 링크의 `concept_src_id`는 *원천 src_id*(예 'N1'·'HK01')다.
+재ID(2026-06-16) 후 backend `concept`의 식별자는 `code`(`{TRACK}-{AREA}-{NNN}`·예 'HIGH-CALC-001')
+이고, src_id는 `concept.source_id` 컬럼에 보존된다. 따라서 링크는 `concept_src_id`(src_id)를
+backend `concept`의 새 `code`로 **해석해서** `concept_code`에 저장해야 한다 — 그래야 링크가 재ID된
+개념 식별자 공간과 정합한다.
+
+해석 방식은 **backend_edge의 resolve-via-map을 그대로 답습**한다(P2b 명세 지정 템플릿): backend
+`concept` 전량을 *단일 조회*(`SELECT concept.source_id, concept.code`)로 `{source_id: code}` 맵을
+만들고(N+1 0), 각 링크의 `concept_src_id`를 그 맵으로 새 `code`로 바꾼다. backend_edge가
+`{code: uuid}`로 UC→UUID FK를 푼 것과 *동형*이되, 여기선 `{source_id: code}`로 src_id→새 code를
+푼다(둘 다 단일 SELECT·N+1 0·resolve-via-map). 해석 후 저장하는 `concept_code`는 여전히 **FK가
+아니라 느슨참조**다(ORM docstring: 개념 식별자 공간 진화 중) — 맵으로 *값을 새 code로 정규화*할
+뿐 DB FK를 거는 것은 아니다.
+
+이전(P1)엔 `concept_src_id`를 *그대로* `concept_code`에 넣는 store-direct였으나, 재ID로 src_id와
+code가 *달라졌으므로* 더는 그대로 둘 수 없다 — 반드시 해석한다. *조용한 누락 금지* 원칙은 동일:
+backend_edge가 맵에 없는 UC를 orphan skip·보고하듯, 이 로더는 ① 맵에 없는 src_id(unresolved 개념
+참조)와 ② 적재 성취기준 집합에 없는 `norm_id`(unresolved 성취기준 참조·실 FK) **양쪽**을 orphan으로
+skip·보고한다(개념 해석 실패·FK 위반 둘 다 차단).
 
 ────────────────────────────────────────────────────────────────────────────
 멱등 (PG ON CONFLICT — backend_concept·backend_edge 규약)
@@ -254,15 +264,17 @@ class AchievementStandardStore:
 def _link_from_row(row: dict[str, Any]) -> ConceptStandardLink:
     """코퍼스 링크 dict → 검증된 `schema.ConceptStandardLink` (`concept_src_id`→`concept_code`).
 
-    seam: 코퍼스는 개념 소스 식별자를 `concept_src_id` 키로 두지만 backend schema는
-    `concept_code`다. 여기서 `concept_src_id`를 꺼내 `concept_code`로 옮긴다(store-direct — 해석할
-    UUID 없음·느슨참조, 모듈 docstring 핵심 결정). schema는 extra=forbid라 `concept_src_id` 키가
-    남으면 거부되므로 pop으로 rename한다. 나머지(`norm_id`·`link_type`·`note`)는 동명 직결이며
-    schema가 재검증한다.
+    seam: 코퍼스는 개념 소스 식별자를 `concept_src_id`(src_id) 키로 두지만 backend schema는
+    `concept_code`다. 여기서 `concept_src_id`(src_id)를 꺼내 `concept_code` 슬롯에 옮긴다 — 단 이
+    값은 *아직 해석 전 src_id*다(backend_edge의 record.src_code/dst_code가 *해석 전 lookup 키*인
+    것과 동형). 실제 새 `code`로의 해석은 `store.populate`가 `{source_id: code}` 맵으로 수행한다
+    (모듈 docstring 핵심 변경 — P2b resolve-via-map). schema는 extra=forbid라 `concept_src_id` 키가
+    남으면 거부되므로 pop으로 옮긴다(`concept_code` 필드 검증은 src_id 문자열에도 통과 — 느슨참조라
+    형식 자유). 나머지(`norm_id`·`link_type`·`note`)는 동명 직결이며 schema가 재검증한다.
     """
     data = dict(row)  # 원본 불변(호출자 dict 보호)
-    # 코퍼스 `concept_src_id` → schema `concept_code` (store-direct rename·느슨참조). schema는
-    # extra=forbid라 `concept_src_id`를 남기면 거부되므로 pop으로 옮긴다.
+    # 코퍼스 `concept_src_id`(src_id) → schema `concept_code` 슬롯(해석 전 lookup 키). schema는
+    # extra=forbid라 `concept_src_id`를 남기면 거부되므로 pop으로 옮긴다. 새 code 해석은 populate.
     if "concept_src_id" in data:
         data["concept_code"] = data.pop("concept_src_id")
     return ConceptStandardLink.model_validate(data)
@@ -279,11 +291,13 @@ def load_links(
     """링크 Collection JSON을 backend `concept_standard_link`에 멱등 upsert. 반환=적재 행 수.
 
     `populate_backend_edges`(개념 엣지)의 *링크* 짝이다 — Collection의 `links` 배열을 행마다
-    `schema.ConceptStandardLink`로 빌드(코퍼스 `concept_src_id`→`concept_code` store-direct
-    rename)한 뒤 의미 유일키 `(concept_code, norm_id, link_type)` 충돌 멱등 upsert한다.
-    `concept_code`는 FK가 아니라 느슨참조라 *그대로 저장*한다(backend_edge가 UC→UUID로 *해석*한 것과
-    대비 — 모듈 docstring). 실 FK인 `norm_id`는 적재 성취기준 집합에 없으면 orphan으로 skip한다
-    (FK 위반 방지·조용한 누락 금지 — backend_edge orphan skip 미러). 빈 컬렉션은 0.
+    `schema.ConceptStandardLink`로 빌드(코퍼스 `concept_src_id`(src_id)→`concept_code` 슬롯)한 뒤
+    의미 유일키 `(concept_code, norm_id, link_type)` 충돌 멱등 upsert한다. **P2b 변경**: backend
+    `concept`을 단일 조회해 `{source_id: code}` 맵을 만들고 각 링크의 src_id를 새 `code`로 *해석*해
+    저장한다(backend_edge가 UC→UUID로 해석한 것과 동형 — 모듈 docstring·해석 후에도 concept_code는
+    FK 아닌 느슨참조). 맵에 없는 src_id(unresolved 개념)와 적재 성취기준 집합에 없는 `norm_id`(실
+    FK)는 **둘 다** orphan으로 skip한다(FK 위반·해석 실패 방지·조용한 누락 금지 — backend_edge
+    orphan skip 미러). 빈 컬렉션은 0.
 
     `session` 인자는 좌석 규약 호환 자리표시다(sync 엔진 사용 — None 허용). store/engine/settings
     미주입 시 슬3 sync 엔진 재사용 `ConceptStandardLinkStore`를 만든다. orphan skip 수는
@@ -310,16 +324,18 @@ def load_links(
 class ConceptStandardLinkStore:
     """개념↔성취기준 링크 → backend `concept_standard_link` 적재기 — 의미키 멱등 upsert(sync).
 
-    `BackendEdgeStore`(개념 엣지)의 *링크* 짝이다(같은 sync 좌석·멱등 규약·orphan skip). 핵심 차이:
-    backend_edge는 개념 양끝(UC)을 backend `concept` 맵으로 *해석*해 UUID FK로 저장했으나, 링크의
-    `concept_code`는 **FK가 아니라 느슨참조**라 해석 없이 *그대로 저장*한다(store-direct·모듈
-    docstring). 대신 *실 FK*인 `norm_id`(→`achievement_standard.norm_id`)를 적재 성취기준 집합과
-    대조해, 그 집합에 없는 링크는 orphan으로 skip한다(FK 위반 방지 — backend_edge가 맵에 없는 UC를
-    skip한 것의 짝). `populate`는 먼저 `achievement_standard.norm_id` 전량을 단일 조회해 알려진
-    norm_id 집합을 만들고(N+1 0), 각 링크의 norm_id가 그 집합에 있을 때만 `INSERT ... ON
-    CONFLICT(concept_code, norm_id, link_type) DO UPDATE`로 적재한다 — `note`만 갱신하고
-    **link_id(UUID PK)는 SET하지 않아 보존**한다(backend_edge가 edge_id를 보존하듯). sync 엔진은
-    슬3 `_build_sync_engine`을 재사용한다(신규 seam 0).
+    `BackendEdgeStore`(개념 엣지)의 *링크* 짝이다(같은 sync 좌석·멱등 규약·orphan skip). **P2b
+    변경 — 이제 backend_edge resolve-via-map을 그대로 답습한다**: backend_edge가 개념 양끝(UC)을
+    `{code: uuid}` 맵으로 UUID FK로 해석했듯, 이 store는 링크의 `concept_code` 슬롯에 든 *src_id*를
+    `{source_id: code}` 맵으로 backend `concept`의 새 `code`로 *해석*해 저장한다(재ID 정합). 해석
+    후 `concept_code`는 여전히 **FK가 아니라 느슨참조**다(맵으로 값을 새 code로 정규화·DB FK 아님).
+    `populate`는 ① `SELECT concept.source_id, concept.code` 단일 조회로 `{source_id: code}` 맵을,
+    ② `SELECT achievement_standard.norm_id` 단일 조회로 알려진 norm_id 집합을 만든 뒤(둘 다 N+1 0),
+    각 링크에 대해 (a) src_id를 맵으로 새 code로 해석(맵에 없으면 orphan skip)하고 (b) norm_id가
+    집합에 있는지 확인(없으면 orphan skip)한 다음 `INSERT ... ON CONFLICT(concept_code, norm_id,
+    link_type) DO UPDATE`로 적재한다 — `note`만 갱신하고 **link_id(UUID PK)는 SET하지 않아 보존**
+    한다(backend_edge가 edge_id를 보존하듯). 두 orphan(개념 해석 실패·성취기준 FK 위반) 모두
+    메시지로 보고한다(조용한 누락 금지). sync 엔진은 슬3 `_build_sync_engine`을 재사용한다(seam 0).
     """
 
     def __init__(
@@ -344,13 +360,33 @@ class ConceptStandardLinkStore:
             self._engine = _build_sync_engine(self._resolved_settings)
         return self._engine
 
+    def _load_source_id_to_code(self) -> dict[str, str]:
+        """backend `concept` 전량을 단일 조회해 `{source_id: code}` 맵 구축(N+1 0·P2b).
+
+        링크의 src_id(`concept_src_id`)를 재ID된 새 `code`로 해석하는 데 쓴다 — backend_edge의
+        `_load_code_to_uuid`(`{code: uuid}`)와 *동형*이되, 여기선 src_id→새 code를 푼다. 개념이 먼저
+        적재돼야(backend_concept) source_id 컬럼이 채워지므로, 링크 적재는 개념 적재 다음에 와야
+        한다. `source_id`가 NULL인 개념(옛 데이터·재ID 전)은 맵 키가 될 수 없어 제외하고(None 키
+        방지), code가 NULL일 수 없으므로(NOT NULL) 값은 항상 유효하다. 같은 source_id가 둘 이상의
+        code에 달리면(이론상 src_id는 개념당 유일) 나중 행이 이긴다(dict 갱신 — 정상 데이터엔 없음).
+        """
+        from sqlalchemy import select
+
+        from whymath_backend.db.models.concept import Concept
+
+        stmt = select(Concept.source_id, Concept.code)
+        with self._get_engine().connect() as conn:
+            rows = conn.execute(stmt).all()
+        # source_id가 NULL인 행은 키로 쓸 수 없어 제외(옛 데이터·재ID 전 개념).
+        return {row.source_id: row.code for row in rows if row.source_id is not None}
+
     def _load_known_norm_ids(self) -> set[str]:
         """`achievement_standard` 전량을 단일 조회해 알려진 `norm_id` 집합 구축(N+1 0).
 
         링크의 실 FK(`norm_id`)가 존재하는 성취기준을 가리키는지 대조하는 데 쓴다(orphan skip).
         성취기준이 먼저 적재돼야(load_standards) 이 집합이 채워지므로, 링크 적재는 성취기준 적재
-        다음에 와야 한다. backend_edge의 `_load_code_to_uuid` 짝이되, 링크는 해석할 UUID가 없어
-        *값 맵*이 아니라 *존재 집합*만 만든다(concept_code는 느슨참조라 대조 불요).
+        다음에 와야 한다. backend_edge의 `_load_code_to_uuid` 짝이되, norm_id는 *값 맵*이 아니라
+        *존재 집합*만 만든다(실 FK라 존재 여부만 대조하면 됨).
         """
         from sqlalchemy import select
 
@@ -364,15 +400,16 @@ class ConceptStandardLinkStore:
         return {row.norm_id for row in rows}
 
     def populate(self, links: Sequence[ConceptStandardLink]) -> tuple[int, list[str]]:
-        """링크 schema 모델들을 `concept_standard_link`에 멱등 upsert (orphan skip·link_id 보존).
+        """링크 schema 모델들을 `concept_standard_link`에 멱등 upsert (해석·orphan skip·PK 보존).
 
-        ① 알려진 norm_id 집합 단일 구축 → ② 각 링크의 실 FK `norm_id`가 그 집합에 없으면 orphan
-        skip(조용한 누락 금지·메시지 수집) → ③ `ON CONFLICT(concept_code, norm_id, link_type) DO
-        UPDATE`로 `note`만 갱신(link_id·created 미-SET·보존). `concept_code`는 느슨참조라 그대로
-        바인딩한다(해석 없음). 입력 내 의미키 중복은 *마지막 우선* dedup한다(단일 배치 ON CONFLICT
-        중복행 오류 방지·성취기준 적재 dedup과 동형). 반환: (적재 행 수, orphan skip 메시지 목록).
-        입력이 비면 (0, []).
-        """
+        ① `{source_id: code}` 맵·알려진 norm_id 집합을 각각 단일 조회로 구축(둘 다 N+1 0) → ② 각
+        링크의 `concept_code` 슬롯(=src_id)을 맵으로 새 `code`로 *해석*(맵에 없으면 개념 orphan
+        skip) → ③ 해석된 `(code, norm_id, link_type)` 기준 *마지막 우선* dedup(단일 배치 ON CONFLICT
+        중복행 오류 방지·해석 후 키로 dedup해야 정합) → ④ 실 FK `norm_id`가 집합에 없으면 성취기준
+        orphan skip → ⑤ `ON CONFLICT(concept_code, norm_id, link_type) DO UPDATE`로 `note`만 갱신
+        (link_id·created 미-SET·보존)·바인딩하는 `concept_code`는 *해석된 새 code*다. 두 orphan(개념
+        해석 실패·성취기준 FK 위반) 모두 메시지로 보고한다(조용한 누락 금지). 반환: (적재 행 수,
+        orphan skip 메시지 목록). 입력이 비면 (0, [])."""
         if not links:
             return 0, []
 
@@ -382,27 +419,45 @@ class ConceptStandardLinkStore:
             ConceptStandardLink as ConceptStandardLinkORM,
         )
 
-        # 의미키 (concept_code, norm_id, link_type) 기준 dedup(마지막 우선) — 단일 배치 ON CONFLICT
-        # 중복행 오류 방지. backend의 link_type은 Literal이라 항상 한글 정본 문자열이다.
-        by_key: dict[tuple[str, str, str], ConceptStandardLink] = {
-            (link.concept_code, link.norm_id, link.link_type): link for link in links
+        source_id_to_code = self._load_source_id_to_code()
+        known_norm_ids = self._load_known_norm_ids()
+        skipped: list[str] = []
+
+        # ② src_id → 새 code 해석. 맵에 없는 src_id(unresolved 개념)는 개념 orphan으로 skip.
+        #    `link.concept_code` 슬롯엔 _link_from_row가 넣은 *해석 전 src_id*가 들어 있다.
+        resolved: list[tuple[str, ConceptStandardLink]] = []
+        for link in links:
+            src_id = link.concept_code  # 해석 전 src_id(슬롯 재사용 — backend_edge record 키 동형)
+            code = source_id_to_code.get(src_id)
+            if code is None:
+                # 개념 orphan — 맵에 없는 src_id(개념 미적재·재ID 전 데이터·오타). 조용한 누락 금지.
+                skipped.append(
+                    f"orphan link skip(개념 미해석): concept_src_id={src_id}(맵에 없음) "
+                    f"norm_id={link.norm_id} link_type={link.link_type}"
+                )
+                continue
+            resolved.append((code, link))
+
+        # ③ 해석된 의미키 (code, norm_id, link_type) 기준 dedup(마지막 우선) — 단일 배치 ON CONFLICT
+        # 중복행 오류 방지. 해석 *후* 키로 dedup해야 같은 새 code로 모인 중복을 올바로 접는다.
+        # backend의 link_type은 Literal이라 항상 한글 정본 문자열이다.
+        by_key: dict[tuple[str, str, str], tuple[str, ConceptStandardLink]] = {
+            (code, link.norm_id, link.link_type): (code, link) for code, link in resolved
         }
         deduped = list(by_key.values())
 
-        known_norm_ids = self._load_known_norm_ids()
         loaded = 0
-        skipped: list[str] = []
         with self._get_engine().begin() as conn:
-            for link in deduped:
+            for code, link in deduped:
                 if link.norm_id not in known_norm_ids:
-                    # orphan — 적재 성취기준 집합에 없는 norm_id(실 FK 위반 방지·정직).
+                    # 성취기준 orphan — 적재 집합에 없는 norm_id(실 FK 위반 방지·정직).
                     skipped.append(
-                        f"orphan link skip: concept_code={link.concept_code} "
+                        f"orphan link skip(성취기준 미적재): concept_code={code} "
                         f"norm_id={link.norm_id}(미적재) link_type={link.link_type}"
                     )
                     continue
                 stmt = pg_insert(ConceptStandardLinkORM).values(
-                    concept_code=link.concept_code,
+                    concept_code=code,  # 해석된 새 code(src_id 아님)
                     norm_id=link.norm_id,
                     link_type=link.link_type,
                     note=link.note,

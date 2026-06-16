@@ -100,7 +100,14 @@ class Concept(BaseModel):
     )
     code: str = Field(
         ...,
-        description="개념 코드 (UNIQUE, 예: 'CAL-INT-DEF-FUNDAMENTAL')",
+        description="개념 코드 (UNIQUE, 예: 'HIGH-CALC-001'). 2026-06-16 UC→'{TRACK}-{AREA}-{NNN}' "
+        "전환(breaking) — 추적성은 source_id·aliases로 보존.",
+        max_length=64,
+    )
+    source_id: str | None = Field(
+        default=None,
+        description="재ID 전 원천 식별자(src_id, 예: 'N1'·'HK01'). concept_id가 src_id에서 "
+        "*파생*되었음을 추적(롤백·재현). 백엔드는 옛 데이터(부재) 수용 위해 선택(None 허용).",
         max_length=64,
     )
     name_ko: str = Field(
@@ -115,7 +122,8 @@ class Concept(BaseModel):
     )
     aliases: list[str] = Field(
         default_factory=list,
-        description="별칭 배열 (예: ['FTC', 'Fundamental Theorem of Calculus'])",
+        description="옛 키 별칭 배열 — [레거시 UC, src_id]. 새 code 전환 후에도 옛 키·원천 키로 "
+        "join/조회 가능하게 보존(하위호환, 예: ['UC.calc.ftc', 'N1']).",
     )
 
     # ===== 계층 정보 =====

@@ -29,7 +29,11 @@ explanation`에 *욱여넣지 않는다* — 그 컬럼은 검수 통과한 직�
 필드 매핑 (graph.json Concept → backend Concept)
 ────────────────────────────────────────────────────────────────────────────
 직결:
-  - `concept_id`(UC) → **`code`**(브리지 키·UNIQUE). `name_ko` → `name_ko`.
+  - `concept_id`(재ID 후 `{TRACK}-{AREA}-{NNN}`·예 'HIGH-CALC-001') → **`code`**(브리지 키·UNIQUE).
+    `name_ko` → `name_ko`. (2026-06-16 재ID 전엔 UC였고, 이 적재기는 *형식 불문* — graph.json의
+    concept_id 문자열을 그대로 code에 넣는다. 새 형식이 별도 변경 없이 흐른다.)
+  - `source_id`(재ID 전 원천 src_id) → `source_id`(추적성 보존·옛 graph.json엔 부재→None).
+  - `aliases`([레거시 UC, src_id]) → `aliases`(옛 키 join 보존·옛 graph.json엔 부재→빈 배열).
   - `common_misconceptions` ← `misconception_text`(있으면 1원소 JSONB·자유형).
 유도(소스 신호가 깔끔히 대응할 때만):
   - `subject` ← `domain` 매핑(고 4과목 + `[공통]…`→공통, 그 외는 NULL — 억지 매핑 0).
@@ -39,10 +43,12 @@ explanation`에 *욱여넣지 않는다* — 그 컬럼은 검수 통과한 직�
     노드(단원·소단원 위계가 아니라 평면 개념 목록)라 *교수학적으로 정확한* 유도다(날조 아님).
     'unspecified' enum 값 추가·nullable화 같은 스키마 변경을 피한다(마이그레이션 0).
 미매핑(NULL/기본 유지·교수학 내용 날조 금지):
-  - `name_en`·`aliases`·`parent_concept_id`·`curriculum_version`·`grade_introduced`·
+  - `name_en`·`parent_concept_id`·`curriculum_version`·`grade_introduced`·
     `semester_introduced`·`is_signature_korean`(기본 False)·`cognitive_type`·
     `recommended_visual_styles`·`exam_frequency`·`weight_in_curriculum`·`embedding_id`·
     `description`·`formal_definition`·`intuitive_explanation` — 소스에 합당한 대응 없음 → 검수 대기.
+  (`aliases`·`source_id`는 더는 미매핑이 아니다 — 재ID(2026-06-16)로 graph.json이 둘을 산출하므로
+  직결 적재한다. 옛 graph.json(둘 다 부재)도 None/빈 배열로 graceful.)
 
 graph의 `grade_band_hint`·`standard_codes`·`ccss_code`·`metaphor`·`accepted_expressions`·
 `review_status`·`prerequisite_concept_ids`·`misconception_codes`·`visualization_card_keys`·`notes`는
@@ -134,6 +140,23 @@ def _opt_int(value: object) -> int | None:
         return None
 
 
+def _str_list(value: object) -> list[str]:
+    """graph.json `aliases`(list[str]) → 정규화 str 목록. 비-list나 빈 원소는 안전 처리.
+
+    list/tuple이 아니면 빈 목록(옛 graph.json엔 aliases 부재 → 빈 배열로 graceful·NOT NULL 정합).
+    각 원소는 strip하고 빈 문자열은 제외한다(data-pipeline `_validate_aliases`가 빈 별칭을
+    금지하므로 정상 산출엔 없지만 방어적으로 거른다 — 조용한 빈 별칭 적재 차단).
+    """
+    if not isinstance(value, (list, tuple)):
+        return []
+    out: list[str] = []
+    for item in value:
+        text = str(item).strip()
+        if text:
+            out.append(text)
+    return out
+
+
 def map_subject(domain: str | None) -> Subject | None:
     """graph `domain`(category) → backend `Subject` enum 또는 None(미대응).
 
@@ -190,12 +213,16 @@ class BackendConceptRecord:
     `graph.json`의 `Concept.model_dump()`에서 backend 런타임 엔티티에 필요한 최소 식별만 추린
     값이다. **`description`·`formal_definition`·`intuitive_explanation` 슬롯이 *없다*** — graph
     부재·검수 책임 필드라 적재기가 채우지 않으므로 레코드에도 두지 않는다(redaction·구조적 차단).
-    `code`가 UC(브리지 키)이고, 나머지는 backend Concept 컬럼에 직결/유도된다.
+    `code`가 concept_id(브리지 키·재ID 후 `{TRACK}-{AREA}-{NNN}`)이고, `source_id`·`aliases`는
+    재ID 추적성 직결 필드, 나머지는 backend Concept 컬럼에 직결/유도된다.
     """
 
     # 브리지 키·직결
-    code: str  # = UC(concept_id) — UNIQUE 브리지 키
+    code: str  # = concept_id(재ID 후 '{TRACK}-{AREA}-{NNN}') — UNIQUE 브리지 키
     name_ko: str
+    # 재ID 추적성 직결(2026-06-16) — 옛 graph.json엔 부재 → None/빈 배열
+    source_id: str | None  # 원천 src_id(파생 추적)
+    aliases: list[str]  # [레거시 UC, src_id](옛 키 join 보존)
     # 유도
     level: ConceptLevel  # 세부개념 고정(NOT NULL 충족)
     subject: Subject | None  # domain 매핑(미대응 None)
@@ -206,10 +233,13 @@ class BackendConceptRecord:
 def load_backend_concepts_from_graph_json(path: Path) -> list[BackendConceptRecord]:
     """슬1 산출 `graph.json` → backend `Concept` 적재 레코드 목록(UC 브리지·redaction 청결).
 
-    `concepts` 배열의 각 항목에서 **`concept_id`(UC)·`name_ko`** 직결 + `domain`→subject·
-    `difficulty_tier`→intrinsic_difficulty·`misconception_text`→common_misconceptions를 유도한다.
-    `level`은 `세부개념` 고정(graph 노드는 전부 세부 개념). **`description`·`formal_definition`은
-    읽지 않는다**(graph 부재이며, 오염돼 들어와도 레코드에 슬롯이 없어 차단).
+    `concepts` 배열의 각 항목에서 **`concept_id`·`name_ko`·`source_id`·`aliases`** 직결 +
+    `domain`→subject·`difficulty_tier`→intrinsic_difficulty·`misconception_text`→
+    common_misconceptions를 유도한다. concept_id는 *형식 불문*으로 code에 들어가므로 재ID 새 형식
+    (`{TRACK}-{AREA}-{NNN}`)이 별도 변경 없이 흐른다(옛 UC도 동일 경로). source_id/aliases는 옛
+    graph.json(부재)이면 None/빈 배열로 graceful. `level`은 `세부개념` 고정(graph 노드는 전부 세부
+    개념). **`description`·`formal_definition`은 읽지 않는다**(graph 부재이며, 오염돼 들어와도
+    레코드에 슬롯이 없어 차단).
 
     `name_ko`가 빈/None이면(이론상 graph.json은 name_ko 필수·min_length=1) 그 개념은 *건너뛴다*
     (NOT NULL 위반 방지·조용한 빈 적재 금지). `review_status` 무관 전량(403) — 게이팅은 조회 몫.
@@ -234,6 +264,9 @@ def load_backend_concepts_from_graph_json(path: Path) -> list[BackendConceptReco
             BackendConceptRecord(
                 code=concept_id,
                 name_ko=name_ko,
+                # 재ID 추적성(2026-06-16) — graph.json 직결. 옛 graph.json 부재 시 None/빈 배열.
+                source_id=_opt_str(record.get("source_id")),
+                aliases=_str_list(record.get("aliases")),
                 level=_DEFAULT_LEVEL,
                 subject=map_subject(_opt_str(record.get("domain"))),
                 intrinsic_difficulty=scale_difficulty(_opt_int(record.get("difficulty_tier"))),
@@ -280,11 +313,11 @@ class BackendConceptStore:
         return self._engine
 
     def upsert(self, record: BackendConceptRecord) -> None:
-        """단일 개념을 backend `concept`에 upsert (멱등·UC `code` 충돌 갱신·UUID PK 보존).
+        """단일 개념을 backend `concept`에 upsert (멱등·`code` 충돌 갱신·UUID PK 보존).
 
-        `INSERT ... ON CONFLICT(code) DO UPDATE` — 런타임 식별 필드(name_ko·level·subject·
-        intrinsic_difficulty·common_misconceptions)를 갱신한다. **PK(concept_id)는 SET하지 않아
-        보존**되고(재적재 시 기존 UUID 유지), 신규 행만 server_default로 발급한다.
+        `INSERT ... ON CONFLICT(code) DO UPDATE` — 런타임 식별 필드(name_ko·source_id·aliases·
+        level·subject·intrinsic_difficulty·common_misconceptions)를 갱신한다. **PK(concept_id)는
+        SET하지 않아 보존**되고(재적재 시 기존 UUID 유지), 신규 행만 server_default로 발급한다.
         **description·formal_definition·intuitive_explanation은 INSERT/SET 컬럼에 없다**(redaction —
         레코드에 슬롯 부재·검수 본문 보존). `level`/`subject`는 enum 값(문자열)으로 바인딩한다
         (`use_enum_values` 직렬화 등가 — PG enum 컬럼에 한글 값).
@@ -296,16 +329,20 @@ class BackendConceptStore:
         stmt = pg_insert(Concept).values(
             code=record.code,
             name_ko=record.name_ko,
+            source_id=record.source_id,
+            aliases=record.aliases,
             level=record.level.value,
             subject=record.subject.value if record.subject is not None else None,
             intrinsic_difficulty=record.intrinsic_difficulty,
             common_misconceptions=record.common_misconceptions,
         )
-        # UC(code) 충돌 시 갱신 — concept_id(PK)·created_at·본문은 SET하지 않는다(보존·redaction).
+        # code 충돌 시 갱신 — concept_id(PK)·created_at·본문은 SET하지 않는다(보존·redaction).
         stmt = stmt.on_conflict_do_update(
             index_elements=[Concept.code],
             set_={
                 "name_ko": stmt.excluded.name_ko,
+                "source_id": stmt.excluded.source_id,
+                "aliases": stmt.excluded.aliases,
                 "level": stmt.excluded.level,
                 "subject": stmt.excluded.subject,
                 "intrinsic_difficulty": stmt.excluded.intrinsic_difficulty,

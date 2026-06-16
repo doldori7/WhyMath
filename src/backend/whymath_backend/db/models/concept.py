@@ -74,7 +74,17 @@ class Concept(Base):
     code: Mapped[str] = mapped_column(sa.String(64), unique=True, nullable=False)
     name_ko: Mapped[str] = mapped_column(sa.String(200), nullable=False)
     name_en: Mapped[str | None] = mapped_column(sa.String(200))
-    aliases: Mapped[list[str] | None] = mapped_column(ARRAY(sa.Text))
+    # source_id: 재ID(2026-06-16) 이전 원천 식별자(src_id) 보존 — concept_id가 src_id에서
+    # *파생*되었음을 추적(롤백·재현). data-pipeline Concept.source_id(필수)의 영속 짝이나, 백엔드
+    # 적재기는 옛 graph.json(source_id 부재)도 받을 수 있어 *nullable*로 둔다(점진 채움·하위호환).
+    # FK 아님(원천 키 공간) — 인덱스만 둔다(src_id로 개념을 역조회·링크 해석 SELECT의 조회 키).
+    source_id: Mapped[str | None] = mapped_column(sa.String(64))
+    # aliases: 옛 키 별칭([레거시 UC, src_id]) — 새 code로 전환 후에도 옛 키·원천 키로 join 가능.
+    # schema.Concept.aliases가 list[str](default_factory=list·NOT NULL 의미)라 problem.py
+    # tags/keywords 선례대로 NOT NULL + server_default '{}'로 둔다(NULL 대신 빈 배열로 정규화).
+    aliases: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
+    )
 
     # ===== 계층 정보 =====
     level: Mapped[ConceptLevel] = mapped_column(
@@ -130,11 +140,13 @@ class Concept(Base):
         sa.DateTime(timezone=True), server_default=sa.func.now()
     )
 
-    # ── 인덱스 (§4.2 CREATE INDEX) ──
+    # ── 인덱스 (§4.2 CREATE INDEX + source_id 역조회) ──
     __table_args__ = (
         sa.Index("idx_concept_code", "code"),
         sa.Index("idx_concept_parent", "parent_concept_id"),
         sa.Index("idx_concept_level", "level", "subject"),
+        # src_id → code 해석(standard_loader load_links)·src_id 역조회 경로.
+        sa.Index("idx_concept_source_id", "source_id"),
     )
 
     # ── 변환 헬퍼 (schema↔db seam, problem.py 패턴) ──────────────────────

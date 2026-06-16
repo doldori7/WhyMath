@@ -94,6 +94,30 @@ def test_concept_self_fk_and_unique_code() -> None:
     assert "UNIQUE" in ddl  # code UNIQUE
 
 
+def test_concept_source_id_column_string64_nullable_not_fk() -> None:
+    """P2b: source_id는 String(64)·nullable·FK 아님(원천 src_id 보존·재ID 추적)."""
+    col = OrmConcept.__table__.c.source_id
+    assert col.type.length == 64  # type: ignore[attr-defined]  # Concept.code와 동일 길이
+    assert col.nullable is True  # 옛 데이터(부재) 수용 — nullable
+    assert len(col.foreign_keys) == 0  # 원천 키 공간 — FK 아님
+
+
+def test_concept_source_id_indexed() -> None:
+    """P2b: source_id 인덱스(idx_concept_source_id) — src_id→code 해석·역조회 경로."""
+    by_name = {
+        ix.name: [c.name for c in ix.columns] for ix in OrmConcept.__table__.indexes
+    }
+    assert by_name["idx_concept_source_id"] == ["source_id"]
+
+
+def test_concept_aliases_not_null_array_default() -> None:
+    """P2b: aliases는 TEXT[] NOT NULL·server_default '{}'(NULL 대신 빈 배열·schema list[str] 정합)."""
+    col = OrmConcept.__table__.c.aliases
+    assert col.nullable is False  # NOT NULL(problem.py tags/keywords 선례)
+    ddl = _pg_ddl(OrmConcept.__table__)
+    assert "'{}'::text[]" in ddl  # NOT NULL 배열 빈 기본값
+
+
 def test_concept_edge_ddl_unique_and_fk() -> None:
     """concept_edge: from/to→concept FK·edge_type_enum·복합 UNIQUE가 DDL에 반영된다."""
     ddl = _pg_ddl(OrmConceptEdge.__table__)
@@ -156,21 +180,24 @@ def test_concept_roundtrip_preserves_core_fields() -> None:
     cid = uuid.uuid4()
     s = SchemaConcept(
         concept_id=cid,
-        code="CAL-INT-DEF-FUNDAMENTAL",
+        code="HIGH-CALC-001",  # 재ID 새 형식(`{TRACK}-{AREA}-{NNN}`)
         name_ko="미적분학의 기본정리",
         name_en="Fundamental Theorem of Calculus",
+        source_id="N1",  # P2b 재ID 추적성(원천 src_id)
         level=ConceptLevel.세부개념,
         subject=Subject.미적분,
         cognitive_type=[CognitiveType.THEOREM, CognitiveType.TECHNIQUE],
         common_misconceptions=[
             {"misconception": "정적분=넓이", "correction": "부호 있는 넓이"}
         ],
-        aliases=["FTC"],
+        aliases=["UC.calc.ftc", "N1"],  # [레거시 UC, src_id]
     )
     orm = OrmConcept.from_schema(s)
     # ORM 단계 보존(use_enum_values=True → enum은 문자열 값).
     assert orm.concept_id == cid
-    assert orm.code == "CAL-INT-DEF-FUNDAMENTAL"
+    assert orm.code == "HIGH-CALC-001"
+    assert orm.source_id == "N1"
+    assert orm.aliases == ["UC.calc.ftc", "N1"]
     assert orm.level == "세부개념"
     assert orm.cognitive_type == ["THEOREM", "TECHNIQUE"]
     assert orm.common_misconceptions == [
@@ -180,6 +207,7 @@ def test_concept_roundtrip_preserves_core_fields() -> None:
     back = orm.to_schema()
     assert back.concept_id == cid
     assert back.code == s.code
+    assert back.source_id == s.source_id
     assert back.level == s.level
     assert back.cognitive_type == s.cognitive_type
     assert back.common_misconceptions == s.common_misconceptions

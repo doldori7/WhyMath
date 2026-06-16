@@ -4,14 +4,18 @@ CI hermetic 잡엔 PostgreSQL이 없으므로 `BackendConceptStore`/`populate_ba
 라운드트립*은 통합테스트(`test_concept_backend_load_integration.py`·실 PG 게이트)로 미룬다. 여기서는
 PG 없이 검증 가능한 것만 못 박는다(슬117 `test_concept_node_projection.py` 가짜 엔진 패턴 재사용):
 
-  ① graph.json 로딩 — UC→code 브리지·name_ko·필드 유도·redaction 키 미유입·name_ko 누락 graceful
+  ① graph.json 로딩 — concept_id→code 브리지·source_id·aliases·필드 유도·redaction 키 미유입·
+     name_ko 누락 graceful
   ② 필드 유도 — subject 매핑(고4·공통·미대응 None)·difficulty 스케일·misconception 변환·level 고정
-  ③ upsert SQL 구성 — ON CONFLICT(code) upsert·**본문 3컬럼(description/formal_definition/
-     intuitive_explanation) 0**·PK(concept_id) 미-SET(UUID 보존)
+  ③ upsert SQL 구성 — ON CONFLICT(code) upsert·source_id/aliases 컬럼 수록·**본문 3컬럼
+     (description/formal_definition/intuitive_explanation) 0**·PK(concept_id) 미-SET(UUID 보존)
   ④ populate — 전 레코드 upsert(횟수=레코드 수)·멱등(같은 레코드 2회→같은 upsert statement)
 
-가짜 엔진(`_FakeEngine`)은 begin() 컨텍스트 + execute()를 흉내내 실행된 statement를 기록한다 —
-psycopg/PG 없이 배선·redaction·멱등 키를 검증한다.
+P2b 재ID(2026-06-16): concept_id가 UC.* → `{TRACK}-{AREA}-{NNN}`(예 'HIGH-CALC-001')로 전환됐고,
+각 개념이 `source_id`(원천 src_id)·`aliases`([레거시 UC, src_id])를 갖는다. 이 테스트는 새 형식
+id를 쓰며(적재기는 형식 불문이라 옛 UC도 흘렀겠지만 정본은 새 형식), source_id/aliases 적재를 못
+박는다. 가짜 엔진(`_FakeEngine`)은 begin() 컨텍스트 + execute()를 흉내내 실행된 statement를
+기록한다 — psycopg/PG 없이 배선·redaction·멱등 키를 검증한다.
 """
 
 from __future__ import annotations
@@ -33,9 +37,10 @@ from whymath_backend.l1.concept_graph.backend_concept import (
 )
 from whymath_backend.schema.enums import ConceptLevel, Subject
 
-# 슬2 idmap이 발급하는 UC 규약 키 예시(Neo4j·concept_embedding·concept_node와 동일 키 공간).
-_UC_A = "UC.calc.alimit.epsilon-delta"
-_UC_B = "UC.alg.afunction.composition"
+# 재ID 후 concept_id 규약 키 예시(`{TRACK}-{AREA}-{NNN}`·Neo4j·concept_embedding·concept_node와
+# 동일 키 공간). 적재기는 *형식 불문*이라 옛 UC도 같은 경로지만 정본은 새 형식을 쓴다.
+_NID_A = "HIGH-CALC-001"
+_NID_B = "HIGH-ALG-002"
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -85,15 +90,22 @@ def _compile(statement: object) -> str:
 
 
 def _record(
-    code: str = _UC_A,
+    code: str = _NID_A,
     *,
     name_ko: str = "극한",
+    source_id: str | None = "N1",
+    aliases: list[str] | None = None,
     subject: Subject | None = Subject.미적분,
     intrinsic_difficulty: float | None = 2.17,
 ) -> BackendConceptRecord:
     return BackendConceptRecord(
         code=code,
         name_ko=name_ko,
+        # 재ID 추적성(2026-06-16) — 원천 src_id + 옛 키 별칭([레거시 UC, src_id]).
+        source_id=source_id,
+        aliases=(
+            aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]
+        ),
         level=ConceptLevel.세부개념,
         subject=subject,
         intrinsic_difficulty=intrinsic_difficulty,
@@ -102,7 +114,7 @@ def _record(
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# ① graph.json 로딩 — UC→code 브리지·유도·redaction·graceful
+# ① graph.json 로딩 — concept_id→code 브리지·source_id·aliases·유도·redaction·graceful
 # ──────────────────────────────────────────────────────────────────────────
 class TestLoadFromGraphJson:
     def _write_graph(self, tmp_path: Path, concepts: list[dict[str, object]]) -> Path:
@@ -114,12 +126,14 @@ class TestLoadFromGraphJson:
         return path
 
     def test_concept_id_becomes_code_bridge(self, tmp_path: Path) -> None:
-        # 핵심 브리지: graph concept_id(UC)가 backend Concept.code가 된다.
+        # 핵심 브리지: graph concept_id(재ID 새 형식)가 backend Concept.code가 된다.
         path = self._write_graph(
             tmp_path,
             [
                 {
-                    "concept_id": _UC_A,
+                    "concept_id": _NID_A,
+                    "source_id": "N1",
+                    "aliases": ["UC.calc.alimit.epsilon-delta", "N1"],
                     "name_ko": "극한",
                     "domain": "[고]미적분",
                     "difficulty_tier": 7,
@@ -131,7 +145,9 @@ class TestLoadFromGraphJson:
         loaded = load_backend_concepts_from_graph_json(path)
         assert len(loaded) == 1
         rec = loaded[0]
-        assert rec.code == _UC_A  # UC = code(브리지 키)
+        assert rec.code == _NID_A  # concept_id = code(브리지 키·형식 불문 통과)
+        assert rec.source_id == "N1"  # 재ID 추적성(원천 src_id)
+        assert rec.aliases == ["UC.calc.alimit.epsilon-delta", "N1"]  # 옛 키 별칭 보존
         assert rec.name_ko == "극한"
         assert rec.level == ConceptLevel.세부개념  # 고정 유도(NOT NULL 충족)
         assert rec.subject == Subject.미적분  # domain 매핑
@@ -139,6 +155,33 @@ class TestLoadFromGraphJson:
         assert rec.common_misconceptions == [
             {"misconception": "극한을 대입값으로 혼동"}
         ]
+
+    def test_source_id_and_aliases_absent_graceful(self, tmp_path: Path) -> None:
+        # 옛 graph.json(재ID 전·source_id/aliases 부재) → None/빈 배열 graceful(하위호환·NOT NULL
+        # 정합). 적재기가 형식 불문이라 옛 데이터도 깨지지 않고 흐른다.
+        path = self._write_graph(
+            tmp_path,
+            [{"concept_id": _NID_A, "name_ko": "극한", "domain": "[고]미적분"}],
+        )
+        rec = load_backend_concepts_from_graph_json(path)[0]
+        assert rec.source_id is None  # 부재 → None
+        assert rec.aliases == []  # 부재 → 빈 배열(NOT NULL 컬럼 정합)
+
+    def test_aliases_blank_entries_filtered(self, tmp_path: Path) -> None:
+        # 방어: 빈/공백 별칭 원소는 걸러진다(data-pipeline _validate_aliases가 금지하나 이중 방어).
+        path = self._write_graph(
+            tmp_path,
+            [
+                {
+                    "concept_id": _NID_A,
+                    "name_ko": "극한",
+                    "domain": "[고]미적분",
+                    "aliases": ["UC.x.y.z", "  ", "", "N1"],
+                }
+            ],
+        )
+        rec = load_backend_concepts_from_graph_json(path)[0]
+        assert rec.aliases == ["UC.x.y.z", "N1"]  # 빈 원소 제외
 
     def test_description_and_formal_definition_never_loaded(
         self, tmp_path: Path
@@ -148,7 +191,7 @@ class TestLoadFromGraphJson:
             tmp_path,
             [
                 {
-                    "concept_id": _UC_A,
+                    "concept_id": _NID_A,
                     "name_ko": "극한",
                     "domain": "[고]미적분",
                     "description": "교과서 본문 근접 서술(절대 적재 금지)",
@@ -173,13 +216,13 @@ class TestLoadFromGraphJson:
             tmp_path,
             [
                 {
-                    "concept_id": _UC_A,
+                    "concept_id": _NID_A,
                     "name_ko": "첫째",
                     "domain": "d",
                     "review_status": "reviewed",
                 },
                 {
-                    "concept_id": _UC_B,
+                    "concept_id": _NID_B,
                     "name_ko": "둘째",
                     "domain": "d",
                     "review_status": "pending",
@@ -187,13 +230,13 @@ class TestLoadFromGraphJson:
             ],
         )
         loaded = load_backend_concepts_from_graph_json(path)
-        assert [c.code for c in loaded] == [_UC_A, _UC_B]
+        assert [c.code for c in loaded] == [_NID_A, _NID_B]
 
     def test_optional_fields_default_when_absent(self, tmp_path: Path) -> None:
         # difficulty_tier·misconception_text·domain 매핑 불가 → None/빈(날조 0).
         path = self._write_graph(
             tmp_path,
-            [{"concept_id": _UC_A, "name_ko": "유효", "domain": "[중]수와 연산"}],
+            [{"concept_id": _NID_A, "name_ko": "유효", "domain": "[중]수와 연산"}],
         )
         rec = load_backend_concepts_from_graph_json(path)[0]
         assert rec.subject is None  # 초·중 영역은 backend Subject enum에 없음 → None
@@ -202,12 +245,12 @@ class TestLoadFromGraphJson:
 
     def test_skips_when_name_ko_missing(self, tmp_path: Path) -> None:
         # name_ko 누락(오염) → 건너뜀(NOT NULL 위반 방지·조용한 빈 적재 금지).
-        path = self._write_graph(tmp_path, [{"concept_id": _UC_A, "domain": "d"}])
+        path = self._write_graph(tmp_path, [{"concept_id": _NID_A, "domain": "d"}])
         assert load_backend_concepts_from_graph_json(path) == []
 
     def test_skips_when_name_ko_blank(self, tmp_path: Path) -> None:
         path = self._write_graph(
-            tmp_path, [{"concept_id": _UC_A, "name_ko": "   ", "domain": "d"}]
+            tmp_path, [{"concept_id": _NID_A, "name_ko": "   ", "domain": "d"}]
         )
         assert load_backend_concepts_from_graph_json(path) == []
 
@@ -300,8 +343,37 @@ class TestUpsertStatement:
         store, engine = _fake_store()
         store.upsert(_record())
         compiled = _compile(engine.executed[0])
-        for col in ("code", "name_ko", "level", "subject", "intrinsic_difficulty"):
+        # 재ID 추적성(source_id·aliases)도 런타임 식별 컬럼에 포함된다.
+        for col in (
+            "code",
+            "name_ko",
+            "source_id",
+            "aliases",
+            "level",
+            "subject",
+            "intrinsic_difficulty",
+        ):
             assert col in compiled
+
+    def test_upsert_sets_source_id_and_aliases_on_conflict(self) -> None:
+        # 재적재 갱신: ON CONFLICT DO UPDATE SET이 source_id·aliases를 excluded로 갱신한다
+        # (재ID 추적성이 재적재로 최신화 — PK·본문은 여전히 보존).
+        store, engine = _fake_store()
+        store.upsert(_record())
+        compiled = _compile(engine.executed[0])
+        after_set = compiled.split("DO UPDATE SET", 1)[1]
+        set_clause = after_set.split("RETURNING", 1)[0]
+        assert "source_id" in set_clause
+        assert "aliases" in set_clause
+
+    def test_upsert_handles_null_source_id_without_error(self) -> None:
+        # source_id None(옛 데이터·재ID 전)도 안전 — upsert가 예외 없이 statement를 만든다.
+        store, engine = _fake_store()
+        store.upsert(_record(source_id=None, aliases=[]))
+        assert len(engine.executed) == 1
+        compiled = _compile(engine.executed[0])
+        assert "source_id" in compiled  # 컬럼은 여전히 upsert(값만 NULL)
+        assert "aliases" in compiled
 
     def test_upsert_handles_null_subject_without_error(self) -> None:
         # subject None(미대응 도메인)도 안전 — upsert가 예외 없이 statement를 만든다(억지 매핑 0의
@@ -319,7 +391,9 @@ class TestUpsertStatement:
 class TestPopulate:
     def test_populate_upserts_each_record(self) -> None:
         store, engine = _fake_store()
-        count = populate_backend_concepts([_record(_UC_A), _record(_UC_B)], store=store)
+        count = populate_backend_concepts(
+            [_record(_NID_A), _record(_NID_B)], store=store
+        )
         assert count == 2
         assert len(engine.executed) == 2  # 레코드당 1 upsert
 
@@ -331,7 +405,7 @@ class TestPopulate:
     def test_populate_idempotent_same_statements(self) -> None:
         # 같은 레코드 2회 populate → 같은 upsert(ON CONFLICT) statement(멱등 — 실 행 1개는 통합).
         store, engine = _fake_store()
-        records = [_record(_UC_A)]
+        records = [_record(_NID_A)]
         populate_backend_concepts(records, store=store)
         populate_backend_concepts(records, store=store)
         assert len(engine.executed) == 2
@@ -345,8 +419,16 @@ def test_record_has_no_body_slots() -> None:
     assert "description" not in fields
     assert "formal_definition" not in fields
     assert "intuitive_explanation" not in fields
-    # 런타임 식별 필드는 보유.
-    assert {"code", "name_ko", "level", "subject", "intrinsic_difficulty"} <= fields
+    # 런타임 식별 필드 + 재ID 추적성(source_id·aliases)은 보유.
+    assert {
+        "code",
+        "name_ko",
+        "source_id",
+        "aliases",
+        "level",
+        "subject",
+        "intrinsic_difficulty",
+    } <= fields
 
 
 def test_store_uses_default_settings_when_unset() -> None:

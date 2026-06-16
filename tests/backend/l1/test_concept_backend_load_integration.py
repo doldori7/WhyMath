@@ -34,9 +34,9 @@ from whymath_backend.schema.enums import ConceptLevel, EdgeType, Subject
 
 pytestmark = pytest.mark.integration
 
-# 통합테스트 적재 키(UC 규약·정리 대상). 실 데이터 UC와 충돌하지 않도록 it- 접두 slug.
-_UC_A = "UC.x.it.backend-concept-a"
-_UC_B = "UC.x.it.backend-concept-b"
+# 통합테스트 적재 키(재ID 새 형식·정리 대상). 실 데이터와 충돌하지 않도록 9xx 순번 slug.
+_NID_A = "HIGH-CALC-901"
+_NID_B = "HIGH-CALC-902"
 
 
 def _sync_engine() -> object:
@@ -100,6 +100,8 @@ def _record(
     code: str,
     *,
     name_ko: str = "극한",
+    source_id: str | None = "N1",
+    aliases: list[str] | None = None,
     subject: Subject | None = Subject.미적분,
     intrinsic_difficulty: float | None = 2.17,
     misconceptions: list[dict[str, str]] | None = None,
@@ -107,6 +109,10 @@ def _record(
     return BackendConceptRecord(
         code=code,
         name_ko=name_ko,
+        source_id=source_id,
+        aliases=(
+            aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]
+        ),
         level=ConceptLevel.세부개념,
         subject=subject,
         intrinsic_difficulty=intrinsic_difficulty,
@@ -115,19 +121,21 @@ def _record(
 
 
 class TestBackendConceptRoundtrip:
-    """① 적재 → row 존재·code=UC·유도 반영, ② redaction NULL."""
+    """① 적재 → row 존재·code=재ID id·source_id·aliases·유도 반영, ② redaction NULL."""
 
     def test_populate_creates_row_with_code_uc(self) -> None:
         _skip_if_unreachable()
         from sqlalchemy import text
 
-        keys = [_UC_A]
+        keys = [_NID_A]
         try:
             count = populate_backend_concepts(
                 [
                     _record(
-                        _UC_A,
+                        _NID_A,
                         name_ko="극한",
+                        source_id="N1",
+                        aliases=["UC.calc.alimit.epsilon-delta", "N1"],
                         subject=Subject.미적분,
                         intrinsic_difficulty=2.17,
                         misconceptions=[{"misconception": "극한을 대입값으로 혼동"}],
@@ -142,17 +150,20 @@ class TestBackendConceptRoundtrip:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     row = conn.execute(
                         text(
-                            "SELECT concept_id, code, name_ko, level, subject, "
-                            "intrinsic_difficulty, common_misconceptions, "
+                            "SELECT concept_id, code, name_ko, source_id, aliases, level, "
+                            "subject, intrinsic_difficulty, common_misconceptions, "
                             "description, formal_definition, intuitive_explanation "
                             "FROM concept WHERE code = :c"
                         ),
-                        {"c": _UC_A},
+                        {"c": _NID_A},
                     ).one()
                 # ① 브리지·유도 반영.
-                assert row.code == _UC_A  # UC = code(브리지 키)
+                assert row.code == _NID_A  # concept_id = code(브리지 키)
                 assert isinstance(row.concept_id, uuid.UUID)  # UUID PK 발급
                 assert row.name_ko == "극한"
+                # P2b 재ID 추적성 영속(source_id 컬럼·aliases TEXT[]).
+                assert row.source_id == "N1"
+                assert row.aliases == ["UC.calc.alimit.epsilon-delta", "N1"]
                 assert row.level == "세부개념"  # 고정 유도(NOT NULL enum·한글 값)
                 assert row.subject == "미적분"
                 assert float(row.intrinsic_difficulty) == pytest.approx(2.17)
@@ -173,10 +184,19 @@ class TestBackendConceptRoundtrip:
         _skip_if_unreachable()
         from sqlalchemy import text
 
-        keys = [_UC_B]
+        keys = [_NID_B]
         try:
+            # source_id None·aliases 빈 배열(옛 데이터·재ID 전) 경로도 함께 확인.
             populate_backend_concepts(
-                [_record(_UC_B, subject=None, intrinsic_difficulty=None)],
+                [
+                    _record(
+                        _NID_B,
+                        source_id=None,
+                        aliases=[],
+                        subject=None,
+                        intrinsic_difficulty=None,
+                    )
+                ],
                 settings=Settings(),
             )
             engine = _sync_engine()
@@ -184,11 +204,13 @@ class TestBackendConceptRoundtrip:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     row = conn.execute(
                         text(
-                            "SELECT subject, intrinsic_difficulty, common_misconceptions "
-                            "FROM concept WHERE code = :c"
+                            "SELECT source_id, aliases, subject, intrinsic_difficulty, "
+                            "common_misconceptions FROM concept WHERE code = :c"
                         ),
-                        {"c": _UC_B},
+                        {"c": _NID_B},
                     ).one()
+                assert row.source_id is None  # 부재 → NULL(옛 데이터 graceful)
+                assert row.aliases == []  # 빈 배열(NOT NULL 컬럼 — NULL 아님)
                 assert row.subject is None  # 미대응 도메인 → NULL(억지 매핑 0)
                 assert row.intrinsic_difficulty is None
                 assert row.common_misconceptions == []  # JSONB server_default '[]'
@@ -205,11 +227,11 @@ class TestIdempotentUuidPreserved:
         _skip_if_unreachable()
         from sqlalchemy import text
 
-        keys = [_UC_A]
+        keys = [_NID_A]
         try:
             # 1차 적재 → UUID 확보.
             populate_backend_concepts(
-                [_record(_UC_A, name_ko="첫 이름", subject=Subject.미적분)],
+                [_record(_NID_A, name_ko="첫 이름", subject=Subject.미적분)],
                 settings=Settings(),
             )
             engine = _sync_engine()
@@ -217,12 +239,12 @@ class TestIdempotentUuidPreserved:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     first_uuid = conn.execute(
                         text("SELECT concept_id FROM concept WHERE code = :c"),
-                        {"c": _UC_A},
+                        {"c": _NID_A},
                     ).scalar_one()
 
                 # 2차 적재(값 변경) → 같은 행 갱신·UUID 보존.
                 populate_backend_concepts(
-                    [_record(_UC_A, name_ko="둘째 이름", subject=Subject.기하)],
+                    [_record(_NID_A, name_ko="둘째 이름", subject=Subject.기하)],
                     settings=Settings(),
                 )
                 with engine.connect() as conn:  # type: ignore[attr-defined]
@@ -231,7 +253,7 @@ class TestIdempotentUuidPreserved:
                             "SELECT concept_id, name_ko, subject FROM concept "
                             "WHERE code = :c"
                         ),
-                        {"c": _UC_A},
+                        {"c": _NID_A},
                     ).all()
                 # 행 1개(멱등)·값 갱신·**UUID 동일**(브리지 키 안정성 — FK 참조 보존).
                 assert len(rows) == 1
@@ -265,19 +287,19 @@ class TestL2MasteryBridge:
         from whymath_backend.db.models.assessment import ConceptMasteryHistory
         from whymath_backend.l2.mastery_tracking import get_current_mastery
 
-        keys = [_UC_A]
+        keys = [_NID_A]
         user_id = uuid.uuid4()
         try:
             # 개념 적재(브리지) → backend concept UUID 확보.
             populate_backend_concepts(
-                [_record(_UC_A, name_ko="극한")], settings=Settings()
+                [_record(_NID_A, name_ko="극한")], settings=Settings()
             )
             engine = _sync_engine()
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     concept_uuid = conn.execute(
                         text("SELECT concept_id FROM concept WHERE code = :c"),
-                        {"c": _UC_A},
+                        {"c": _NID_A},
                     ).scalar_one()
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
@@ -334,8 +356,8 @@ class TestL2MasteryBridge:
 # ──────────────────────────────────────────────────────────────────────────
 # 선수엣지 적재 통합 — 노드 적재 → 엣지 적재 → row·방향·멱등(edge_id 보존)
 # ──────────────────────────────────────────────────────────────────────────
-_UC_PRE = "UC.x.it.backend-edge-pre"  # 선수
-_UC_POST = "UC.x.it.backend-edge-post"  # 후행
+_NID_PRE = "HIGH-ALG-901"  # 선수
+_NID_POST = "HIGH-CALC-903"  # 후행
 
 
 def _cleanup_edges_and_concepts(keys: list[str]) -> None:
@@ -368,19 +390,19 @@ class TestBackendEdgeRoundtrip:
         _skip_if_unreachable()
         from sqlalchemy import text
 
-        keys = [_UC_PRE, _UC_POST]
+        keys = [_NID_PRE, _NID_POST]
         try:
             # 노드 먼저(③) — code→UUID 해석·FK 충족.
             populate_backend_concepts(
-                [_record(_UC_PRE, name_ko="선수"), _record(_UC_POST, name_ko="후행")],
+                [_record(_NID_PRE, name_ko="선수"), _record(_NID_POST, name_ko="후행")],
                 settings=Settings(),
             )
             # 엣지(④) — 선수→후행.
             count = populate_backend_edges(
                 [
                     BackendConceptEdgeRecord(
-                        src_code=_UC_PRE,
-                        dst_code=_UC_POST,
+                        src_code=_NID_PRE,
+                        dst_code=_NID_POST,
                         edge_type=EdgeType.PREREQUISITE,
                         edge_strength=0.75,
                     )
@@ -402,11 +424,11 @@ class TestBackendEdgeRoundtrip:
                             "JOIN concept t ON e.to_concept_id = t.concept_id "
                             "WHERE f.code = :pre AND t.code = :post"
                         ),
-                        {"pre": _UC_PRE, "post": _UC_POST},
+                        {"pre": _NID_PRE, "post": _NID_POST},
                     ).one()
                 # 방향: from=선수·to=후행.
-                assert row.from_code == _UC_PRE
-                assert row.to_code == _UC_POST
+                assert row.from_code == _NID_PRE
+                assert row.to_code == _NID_POST
                 assert row.edge_type == "PREREQUISITE"
                 assert float(row.edge_strength) == pytest.approx(0.75)
                 # 날조 회피: gap_signal·notes는 NULL.
@@ -420,17 +442,17 @@ class TestBackendEdgeRoundtrip:
     def test_orphan_edge_skipped(self) -> None:
         _skip_if_unreachable()
 
-        keys = [_UC_PRE]
+        keys = [_NID_PRE]
         try:
             # 선수만 적재(후행 노드 미적재 → orphan).
             populate_backend_concepts(
-                [_record(_UC_PRE, name_ko="선수")], settings=Settings()
+                [_record(_NID_PRE, name_ko="선수")], settings=Settings()
             )
             count = populate_backend_edges(
                 [
                     BackendConceptEdgeRecord(
-                        src_code=_UC_PRE,
-                        dst_code=_UC_POST,  # 미적재
+                        src_code=_NID_PRE,
+                        dst_code=_NID_POST,  # 미적재
                         edge_type=EdgeType.PREREQUISITE,
                         edge_strength=0.5,
                     )
@@ -445,17 +467,17 @@ class TestBackendEdgeRoundtrip:
         _skip_if_unreachable()
         from sqlalchemy import text
 
-        keys = [_UC_PRE, _UC_POST]
+        keys = [_NID_PRE, _NID_POST]
         try:
             populate_backend_concepts(
-                [_record(_UC_PRE, name_ko="선수"), _record(_UC_POST, name_ko="후행")],
+                [_record(_NID_PRE, name_ko="선수"), _record(_NID_POST, name_ko="후행")],
                 settings=Settings(),
             )
             populate_backend_edges(
                 [
                     BackendConceptEdgeRecord(
-                        src_code=_UC_PRE,
-                        dst_code=_UC_POST,
+                        src_code=_NID_PRE,
+                        dst_code=_NID_POST,
                         edge_type=EdgeType.PREREQUISITE,
                         edge_strength=0.5,
                     )
@@ -471,14 +493,14 @@ class TestBackendEdgeRoundtrip:
                             "JOIN concept f ON e.from_concept_id = f.concept_id "
                             "WHERE f.code = :pre"
                         ),
-                        {"pre": _UC_PRE},
+                        {"pre": _NID_PRE},
                     ).scalar_one()
                 # 재적재(강도 변경) → 멱등·edge_id 보존.
                 populate_backend_edges(
                     [
                         BackendConceptEdgeRecord(
-                            src_code=_UC_PRE,
-                            dst_code=_UC_POST,
+                            src_code=_NID_PRE,
+                            dst_code=_NID_POST,
                             edge_type=EdgeType.PREREQUISITE,
                             edge_strength=0.9,
                         )
@@ -492,7 +514,7 @@ class TestBackendEdgeRoundtrip:
                             "JOIN concept f ON e.from_concept_id = f.concept_id "
                             "WHERE f.code = :pre"
                         ),
-                        {"pre": _UC_PRE},
+                        {"pre": _NID_PRE},
                     ).all()
                 assert len(rows) == 1  # 멱등(행 1개)
                 assert rows[0].edge_id == first_edge_id  # PK 보존
