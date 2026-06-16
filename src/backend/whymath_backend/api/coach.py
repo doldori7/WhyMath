@@ -85,7 +85,11 @@ from whymath_backend.l4.misconception.hypothesis_store import apply_matches
 from whymath_backend.l4.misconception.judge import JudgeProtocol, LLMJudge, judge_filter
 from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
 from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
-from whymath_backend.l4.misconception.shadow import observe_misconception_shadow
+from whymath_backend.l4.misconception.shadow import (
+    _spawn,
+    observe_misconception_judge_shadow,
+    observe_misconception_shadow,
+)
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
@@ -543,6 +547,21 @@ async def _compute_matches(
         # (비노출·실 분포 플립 근거 수집·slice 111). 학생 원문은 로그에 안 담는다(프라이버시).
         # shadow 로깅은 *게이트 전* 원본 substr/sem으로 수행(게이트가 비교 분포를 왜곡하지 않게).
         observe_misconception_shadow(substr, sem)
+        # G1: judge-shadow 토글이 켜져 있고 의미 후보가 있으면, 그 후보에 judge를 돌려 *걸러질
+        # 결과*(would-be removed/kept)를 무노출로 로깅한다(04b Phase 1·합성↔실 갭 검증). judge는
+        # LLM(수 초)이라 *비차단*(_spawn=create_task)으로 띄우고 즉시 반환한다 — 응답 경로는 judge를
+        # await하지 않는다(노출 무지연). `_judge_for_gate()` 좌석을 spawn 직전 만들어 인자로
+        # 넘긴다(monkeypatch 타이밍 호환). 레코드엔 학생 원문·judge reason 미저장(미성년 PII).
+        if get_settings().misconception_judge_shadow and sem:
+            _spawn(
+                observe_misconception_judge_shadow(
+                    sem,
+                    student_input,
+                    judge=_judge_for_gate(),
+                    feed_threshold=get_settings().misconception_semantic_threshold,
+                    judge_routing=get_settings().misconception_judge_routing,
+                )
+            )
         return await _gate(substr[:_DEFAULT_TOP_K])
     # on — substring 아래에 semantic-only 후보를 결합해 *노출*(substring 우선·재정렬 없음).
     return await _gate(combine_diagnoses(substr, sem, top_k=_DEFAULT_TOP_K))
