@@ -88,6 +88,56 @@ class Condition(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 서브모델: DistractorEntry (객관식 오답 선지 → 오개념 매핑)
+# ──────────────────────────────────────────────────────────────────────────
+class DistractorEntry(BaseModel):
+    """객관식 *오답 선지 1개* → 오개념 코드 매핑 — `Problem.distractor_map` 원소.
+
+    객관식 문항의 *오답 선지*(distractor)는 보통 *특정 오개념*이 만들어낸 값이다. 이 엔트리는
+    "몇 번째 선지(`choice_index`)가 어떤 오개념(`misconception_id`)에서 비롯됐는가"를 담아,
+    학생이 고른 오답을 오개념으로 *역추적*하거나 *자체 동등문제*의 오답을 설명하는 데 쓴다.
+
+    **레이어 규칙(CLAUDE.md 역방향 의존 금지)**: 이 L1 모델은 *구조 검증만* 한다 — `choice_index`가
+    음수 아님·`misconception_id`가 비지 않음 같은 형태만 본다. `misconception_id`가 정본 카탈로그
+    (`l4.misconception.catalog.CATALOG_BY_ID`)에 *실재*하는지의 **참조 무결성**은 L4 검증자
+    (`l4/misconception/validate.py`)가 본다 — L1은 L4를 *알지 못하므로* 여기서 카탈로그를
+    import하지 않는다(L4→L1 방향만 허용). `op_code`도 같은 이유로 여기선 문자열 형태만 본다.
+
+    **저작권 레일(CLAUDE.md 우선순위 #2)**: `op_code`는 *추상 오류연산* op-code(예:
+    'power-distributed-no-cross-term')일 뿐 평가원·EBS·교과서의 *선지 본문* 복제가 아니다 —
+    선지 텍스트 자체는 담지 않는다(`l4/misconception/distractor.py` 설계와 정합).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    choice_index: int = Field(
+        ...,
+        description="오답 선지의 0-기반 인덱스(`Problem.choices` 위치). 정답 선지는 제외한다.",
+        ge=0,
+    )
+    misconception_id: str = Field(
+        ...,
+        description=(
+            "이 오답을 유발한 오개념 — 정본 `l4.misconception.catalog.CATALOG_BY_ID`의 id "
+            "(kebab-case). L1은 형태(비지 않음)만 검증하고 카탈로그 실재 여부는 L4 검증자 소관."
+        ),
+        min_length=1,
+    )
+    op_code: str | None = Field(
+        default=None,
+        description=(
+            "추상 오류연산 op-code(선택) — `l4.misconception.distractor.DISTRACTOR_BY_ID`의 키. "
+            "*일반 오류연산 서술*을 가리키는 식별자일 뿐 평가원/EBS 선지 본문 복제가 아니다(저작권 "
+            "레일). NULL이면 op-code 미상(오개념만 매핑). 카탈로그 실재·정합 검증은 L4 소관."
+        ),
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 핵심: Problem (§3.1 problem 테이블)
 # ──────────────────────────────────────────────────────────────────────────
 class Problem(BaseModel):
@@ -254,6 +304,18 @@ class Problem(BaseModel):
     multiple_answers: dict[str, Any] | None = Field(
         default=None,
         description="복수해 가능성(출제오류 검증, 자유형 JSONB)",
+    )
+    # P3b 신규: 객관식 오답 선지 → 오개념 코드 매핑(rich list). 정답 선지는 제외하고 *오답*만
+    # 싣는다. 각 원소는 (choice_index, misconception_id, op_code?). misconception_id는 정본
+    # CATALOG_BY_ID의 id, op_code는 선택(추상 오류연산·평가원/EBS 본문 복제 아님). L1은 구조만
+    # 검증하고, 카탈로그 실재·op_code 정합의 *참조 무결성*은 L4 검증자(validate_distractor_map)
+    # 소관이다(역방향 의존 금지 — schema는 l4를 import하지 않음). NULL=미매핑(점진 채움).
+    distractor_map: list[DistractorEntry] | None = Field(
+        default=None,
+        description=(
+            "객관식 오답 선지→오개념코드 매핑(rich list). 정답 선지 제외·오답만. 각 원소 "
+            "(choice_index·misconception_id=CATALOG_BY_ID id·op_code 선택). 참조 무결성은 L4 검증."
+        ),
     )
 
     # ===== 한국 시그니처 패턴 =====

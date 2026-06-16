@@ -142,6 +142,11 @@ class Problem(Base):
     answer: Mapped[str | None] = mapped_column(sa.Text)
     answer_explanation: Mapped[str | None] = mapped_column(sa.Text)
     multiple_answers: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    # P3b 신규: 객관식 오답 선지→오개념 매핑(rich list). schema는 list[DistractorEntry] —
+    # model_dump()로 list[dict]가 되어 JSONB. nullable(server_default 없음 — source_detail·
+    # multiple_answers와 동형, visualizations의 NOT NULL '[]' 패턴과 달리 *없음*을 NULL로 표현해
+    # schema의 `distractor_map: ... | None = None`과 정합). 참조 무결성은 L4 검증자 소관.
+    distractor_map: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
 
     # ===== 한국 시그니처 패턴 (enum 배열) =====
     signature_patterns: Mapped[list[SignaturePattern]] = mapped_column(

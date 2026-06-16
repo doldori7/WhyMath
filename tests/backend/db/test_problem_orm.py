@@ -47,6 +47,7 @@ from whymath_backend.schema.enums import (
 )
 from whymath_backend.schema.problem import (
     Condition,
+    DistractorEntry,
     Problem as SchemaProblem,
     ProblemRelation as SchemaProblemRelation,
     ProblemStep as SchemaProblemStep,
@@ -324,6 +325,55 @@ def test_problem_p3a_meta_fields_default_none_roundtrip() -> None:
     back = orm.to_schema()
     assert back.bloom_level is None
     assert back.feedback_id is None
+
+
+def test_problem_distractor_map_in_ddl() -> None:
+    """P3b: distractor_map 컬럼이 PG DDL에 JSONB nullable로 들어간다(자유 JSON·NOT NULL 아님)."""
+    ddl = _pg_ddl(OrmProblem.__table__)
+    assert "distractor_map" in ddl
+    # 자유 JSON(JSONB). visualizations와 달리 NOT NULL/server_default '[]' 없음(없음=NULL).
+    assert "JSONB" in ddl
+    assert "distractor_map" not in [
+        c.key for c in OrmProblem.__table__.columns if not c.nullable
+    ], "distractor_map은 nullable이어야(없음=NULL)"
+
+
+def test_problem_distractor_map_roundtrip() -> None:
+    """P3b: list[DistractorEntry] → JSONB list[dict] → list[DistractorEntry] 왕복(seam 무수정)."""
+    s = _valid_schema_problem().model_copy(
+        update={
+            "distractor_map": [
+                DistractorEntry(
+                    choice_index=1,
+                    misconception_id="distribution-over-power",
+                    op_code="power-distributed-no-cross-term",
+                ),
+                DistractorEntry(choice_index=3, misconception_id="mean-vs-median"),
+            ]
+        }
+    )
+    orm = OrmProblem.from_schema(s)
+    # ORM 단계: list[DistractorEntry] → list[dict] (JSONB 대상·model_dump)
+    assert isinstance(orm.distractor_map, list)
+    assert orm.distractor_map[0]["choice_index"] == 1
+    assert orm.distractor_map[0]["misconception_id"] == "distribution-over-power"
+    assert orm.distractor_map[0]["op_code"] == "power-distributed-no-cross-term"
+    assert orm.distractor_map[1]["op_code"] is None
+    # 역변환: list[dict] → list[DistractorEntry] 재검증
+    back = orm.to_schema()
+    assert back.distractor_map is not None
+    assert isinstance(back.distractor_map[0], DistractorEntry)
+    assert back.distractor_map[0].choice_index == 1
+    assert back.distractor_map[1].misconception_id == "mean-vs-median"
+
+
+def test_problem_distractor_map_default_none_roundtrip() -> None:
+    """P3b: distractor_map 미지정 시 None으로 왕복(무회귀 — 기존 Problem 구성 보존)."""
+    s = _valid_schema_problem()  # distractor_map 미지정
+    orm = OrmProblem.from_schema(s)
+    assert orm.distractor_map is None
+    back = orm.to_schema()
+    assert back.distractor_map is None
 
 
 def test_problem_step_roundtrip() -> None:
