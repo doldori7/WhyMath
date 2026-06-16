@@ -332,6 +332,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-16 (구현·L1): P3 문항 메타 확장 + distractor_map 오개념 카탈로그 연동 — 완료
+**컨텍스트**: v2 검토 P3. 기존 50필드 Problem(난이도 5축·signature_patterns·persona_fit·저작권 source_type 게이트)에 메타 5축을 *직교 가산*. 결정(Kiki): item_type=`QuestionFormat` 4→10 확대·distractor_map=리치 list·서브슬라이스.
+**P3a(커밋 `b2ac695`)**: `QuestionFormat` 4→10 확대 — 기존 4 라벨 보존(객관식=MC·단답형=SA·합답형=ST·서술형=EX) + MC-D·FB·MN·GR·PF·RT 6종 ADD VALUE. 신규 enum `BloomLevel`(6)·`ScoringType`(5). Problem 8 nullable 필드(bloom_level·irt_a·discrimination_D·domain·subunit·session_position·scoring_type·feedback_id·전부 optional→무회귀). Alembic `c8d9e0f1a2b3`(ALTER TYPE ADD VALUE ×6 IF NOT EXISTS·CREATE enum ×2·ADD COLUMN ×8·UUID PK 불변).
+**P3b(커밋 `d92eb73`)**: distractor_map(오답→오개념). **계층규칙 준수(L1↛L4)** — L1 `schema/problem.py`는 `DistractorEntry{choice_index, misconception_id, op_code?}`·distractor_map 구조검증만(l4 미import), 참조 무결성은 신규 **L4** `l4/misconception/validate.py`(`validate_distractor_map`/`raise_for_distractor_map` — misconception_id∈`CATALOG_BY_ID`·op_code∈`DISTRACTOR_BY_ID`·op_code↔misconception 정합·fail-loud). nullable JSONB(None≠[])·Alembic `d9e0f1a2b3c4`. **저작권**: distractor_map=구조 메타(index→정본 코드·추상 op-code)·본문 아님 → signature_patterns 동급·평가원/EBS 허용(테스트 보장). 기존 오개념 카탈로그(30종)·op-code(5종) 재사용.
+**검증**: 4게이트 green·전체 **3259 passed/141 skip**(무회귀·+51 테스트)·단일 head. ★샌드박스 env 드리프트(백엔드 venv가 pip·pytest-asyncio·anyio 상실 — P2c 검증 이후) 발견·복원(`uv pip install … pytest-asyncio anyio`) 후 전체 suite 재검증. CI는 `.[dev]` 신규 설치라 무영향.
+**후속(NOT P3)**: 실시간 distractor→오개념 역추적 진단·misconception 그래프 노드화(`TRIGGERS_DISTRACTOR` 적재)·IRT/Bloom 데이터 적합(L2)·선지별 메타 테이블·5계층 콘텐츠·RT/OLY 엔티티(P4). distractor_map의 L3/L4 생성·검증 결선은 validate 좌석만 두고 미배선.
+**결론**: P1(성취기준 듀얼)·P2(concept_id 재ID)·P3(문항 메타) 완료 — v2 통합 검토의 L1 기반 DB 확장 3축 마감.
+
 ### 2026-06-16 (구현·L1): P2b·P2c concept_id 재ID 백엔드 연쇄 — 마이그레이션 *기능적 완결*
 **컨텍스트**: P2a(data-pipeline 재ID)에 이어 백엔드로 전파·마감. 서브슬라이스 P2b(백엔드 concept+링크 해소)·P2c(투영).
 **P2b(커밋 `e2b290e`)**: concept ORM에 `source_id`(String64·인덱스)·`aliases`(ARRAY NOT NULL) 추가 + Alembic `b7c8d9e0f1a2`(단일 head·down=`a6b7c8d9e0f1`·UUID PK·기존행 불변·aliases NULL 백필 후 NOT NULL). `backend_concept`가 graph.json의 source_id/aliases 적재(멱등 upsert on code). **P1 지연 해소점 마감** — `standard_loader.load_links`가 `concept_src_id`→concept.`code`를 *resolve-via-map*(`{source_id:code}` 단일쿼리·`backend_edge` 미러)로 해소, 개념·성취기준 **이중 고아 skip**(메시지·무침묵)·해소된 code를 `concept_code`에 저장. 4게이트 green·3208 passed·테스트 +24.
