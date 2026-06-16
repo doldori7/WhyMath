@@ -332,6 +332,13 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-16 (구현·L5/컴플라이언스): P4 만14세 동의 게이트 실효화 — is_minor 서버측 파생
+**컨텍스트**: v2 검토 P4(로드맵 묶음·일부 데이터/스펙 차단). Kiki 선택=만14세 동의(PIPA §22-2). 탐색 결과 **동의 게이트는 이미 완성**(`api/_auth.py::get_consented_user`·403 if is_minor&parent_consent_at=NULL·모든 학생 엔드포인트 `ConsentedUser`)이나 **is_minor가 birth_year에서 파생 안 돼 게이트 toothless**(미파생 <14가 우회). 결정(Kiki)=게이트 실효화만(동의 GRANT 흐름은 법무 차단).
+**구현(커밋 `e6f4660`)**: `consent.py`(신규) `derive_is_minor`(미상 birth_year=None→None 유지·연도 reckoning 보수적 `year-age<=14`·월일 미수집→over-protect)·`config.minor_consent_age=14`(PIPA 단일 출처). 두 write path 배선: OAuth `resolve_user`(신규)·`PATCH /users/me`(birth_year 변경 시 always 재계산). **우회 방지(보안 핵심)**: is_minor는 client 비신뢰 — `_SELF_EDITABLE` 제외(직접 설정 422)+서버 always-overwrite(self-heal)·`OAuthIdentity` extra=forbid. 마이그레이션 불요(is_minor/birth_year 컬럼 기존).
+**검증**: 4게이트 green·전체 **3279 passed/141 skip**(무회귀·+20). ★pytest "async 미지원" 재진단: 플러그인 드리프트 아님 — `addopts --rootdir=../..` 때문에 *명시 경로*로 pytest 호출 시 configfile 미발견→asyncio_mode strict 기본값. canonical `.venv/bin/pytest -q`(경로 없음·testpaths 구동)는 정상(P2c/P3 검증이 통과했던 이유). venv pytest 8.4.2 핀(dev 범위 내·repo 무변경).
+**잔존(차단·후속)**: 동의 GRANT 흐름·`parental_consents` 감사 테이블·보호자 본인확인 절차=**변호사 자문 필수**(`docs/legal/pipa_data_matrix.md` §3.4). OAuth 제공자(kakao/naver)는 birth_year 미수집(seam만)·signup birth_year 수집은 별도 정책. P4 타 항목: RT/OLY(데이터 차단)·5계층 콘텐츠(스펙 차단·md 필요)·Apple Kids/접근성(문서·클라).
+**결론**: 미성년 보호 게이트 실효화 완료(CLAUDE.md 우선순위 #1·#2). v2 통합 검토의 L1·컴플라이언스 확장 — P1(성취기준)·P2(concept_id 재ID)·P3(문항 메타)·P4(동의 게이트) 마감.
+
 ### 2026-06-16 (구현·L1): P3 문항 메타 확장 + distractor_map 오개념 카탈로그 연동 — 완료
 **컨텍스트**: v2 검토 P3. 기존 50필드 Problem(난이도 5축·signature_patterns·persona_fit·저작권 source_type 게이트)에 메타 5축을 *직교 가산*. 결정(Kiki): item_type=`QuestionFormat` 4→10 확대·distractor_map=리치 list·서브슬라이스.
 **P3a(커밋 `b2ac695`)**: `QuestionFormat` 4→10 확대 — 기존 4 라벨 보존(객관식=MC·단답형=SA·합답형=ST·서술형=EX) + MC-D·FB·MN·GR·PF·RT 6종 ADD VALUE. 신규 enum `BloomLevel`(6)·`ScoringType`(5). Problem 8 nullable 필드(bloom_level·irt_a·discrimination_D·domain·subunit·session_position·scoring_type·feedback_id·전부 optional→무회귀). Alembic `c8d9e0f1a2b3`(ALTER TYPE ADD VALUE ×6 IF NOT EXISTS·CREATE enum ×2·ADD COLUMN ×8·UUID PK 불변).
