@@ -20,6 +20,7 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - 슬3(개념그래프 아크) ConceptEmbedding (L1 개념 의미검색 pgvector 영속 — UC 키·`vector` 컬럼).
   - 개념그래프 소비 슬1 ConceptNode (L1 개념 메타 PG 프로젝션 — UC 키·검색 enrichment 백킹).
   - P1-2 AchievementStandard·ConceptStandardLink (NCIC 성취기준 영속 + 개념↔성취기준 N:M 링크).
+  - PIPA §22-2 ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사 — user_profile FK).
 모든 테이블이 한 `Base.metadata`에 모여 문자열 FK 타깃(`problem.problem_id`·
 `concept.concept_id`·`user_profile.user_id`·`learning_session.session_id`·
 `problem_attempt.attempt_id`·`dialogue.dialogue_id`·`textbook_mapping.isbn` 등)이 해소된다.
@@ -62,6 +63,7 @@ from whymath_backend.db.models.misconception_embedding import MisconceptionEmbed
 from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
 )
+from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.problem import (
     Problem,
     ProblemRelation,
@@ -146,6 +148,8 @@ __all__ = [
     "NodeVerifyStatus",
     # OAuth-a3b: RefreshTokenSession (리프레시 토큰 서버측 취소 allowlist·PK=jti)
     "RefreshTokenSession",
+    # PIPA §22-2: ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사·surrogate UUID PK)
+    "ParentalConsent",
     # P1-2: AchievementStandard (NCIC 성취기준 영속·norm_id PK·official_code 비유일)
     "AchievementStandard",
     # P1-2: ConceptStandardLink (개념↔성취기준 N:M 연결·norm_id 실 FK·link_id UUID PK)

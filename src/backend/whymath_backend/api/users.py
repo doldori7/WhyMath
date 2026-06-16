@@ -1,15 +1,24 @@
-"""user 도메인 HTTP API — 인증된 본인 프로필 조회/수정(`/v1/users/me`).
+"""user 도메인 HTTP API — 인증된 본인 프로필 조회/수정 + 법정대리인 동의 기록(`/v1/users/me`).
 
-`ConsentedUser`(인증 + 미성년 동의 게이트) 뒤에 노출한다. **PII**(email_hash·parent_email_hash)는
-응답에서 제외(`response_model_exclude`). **PATCH는 자기 편집 가능 필드 화이트리스트만 허용** —
-동의·신원·결제·시스템·감사 필드(parent_consent_at·is_minor·email_hash·persona_*·subscription_*·
-created_at 등)는 사용자가 바꿀 수 없다(미성년 *동의 게이트 우회 방지*가 핵심 보안 요구).
+조회·수정(`GET`/`PATCH /me`)은 `ConsentedUser`(인증 + 미성년 동의 게이트) 뒤에 노출한다.
+**PII**(email_hash·parent_email_hash)는 응답에서 제외(`response_model_exclude`). **PATCH는 자기
+편집 가능 필드 화이트리스트만 허용** — 동의·신원·결제·시스템·감사 필드(parent_consent_at·
+is_minor·email_hash·persona_*·subscription_*·created_at 등)는 사용자가 바꿀 수 없다(미성년 *동의
+게이트 우회 방지*가 핵심 보안 요구).
+
+법정대리인 동의 기록(`POST /me/parental-consent`·PIPA 만14세 미만 §3)은 *예외적으로*
+`get_current_user`(인증만)로 노출한다 — 동의가 *아직 없는* 미성년은 동의 게이트가 403으로 막으므로
+동의를 *받는* 경로가 게이트 뒤에 있으면 도달 불가하기 때문(닭-달걀). 신원 확인은 stub seam
+(`consent_grant.py` — 실 본인확인은 변호사 자문 후속). 법정대리인 이메일은 *해시만* 저장(평문 PII
+금지·CLAUDE.md).
 
 다른 사용자 프로필 조회/관리(관리자)는 범위 밖 — 본인(`me`)만 노출(CLAUDE.md 미성년 PII 보호).
 """
 
 from __future__ import annotations
 
+import uuid
+from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
@@ -17,18 +26,32 @@ from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._auth import ConsentedUser, get_current_user
 from whymath_backend.api._concurrency import ensure_if_match, etag_for
+from whymath_backend.api.auth import email_hash
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.consent import current_year_kst, derive_is_minor
+from whymath_backend.consent_grant import (
+    GuardianVerificationRequest,
+    GuardianVerifier,
+    _default_guardian_verifier,
+)
+from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
+from whymath_backend.schema.parental_consent import (
+    ParentalConsentGrantRequest,
+    ParentalConsentGrantResponse,
+)
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 router = APIRouter(prefix="/v1/users", tags=["user"])
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+# 법정대리인 신원 확인 SEAM 주입(기본 StubGuardianVerifier). 테스트·미래 실 구현은
+# app.dependency_overrides[_default_guardian_verifier]로 교체한다(consent_grant.py 경계).
+VerifierDep = Annotated[GuardianVerifier, Depends(_default_guardian_verifier)]
 
 # 응답에서 항상 제외하는 PII(해시 식별자 — 클라이언트에 불필요).
 _PII_EXCLUDE = {"email_hash", "parent_email_hash"}
@@ -142,3 +165,83 @@ async def patch_me(
     result = updated.to_schema()
     response.headers["ETag"] = etag_for(result)
     return result
+
+
+@router.post(
+    "/me/parental-consent",
+    response_model=ParentalConsentGrantResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="법정대리인 동의 기록(14세 미만 게이트 해제) — PIPA §22-2",
+)
+async def grant_parental_consent(
+    body: ParentalConsentGrantRequest,
+    user: Annotated[UserProfile, Depends(get_current_user)],
+    session: SessionDep,
+    verifier: VerifierDep,
+) -> ParentalConsentGrantResponse:
+    """법정대리인 동의를 기록하고 미성년 동의 게이트를 통과시킨다(PIPA 만14세 미만·§3).
+
+    **인증 게이트가 `get_consented_user`가 아니라 `get_current_user`인 이유(핵심)**: 동의가
+    *아직 없는* 미성년자는 `get_consented_user`가 403으로 막으므로, 동의를 *받는* 이 엔드포인트가
+    동의 게이트 뒤에 있으면 영원히 도달할 수 없다(닭-달걀). 그래서 인증만 요구하고 동의 게이트는
+    요구하지 않는다 — 동의를 *받는* 경로는 동의 게이트의 *예외*여야 한다.
+
+    흐름: 신원 확인 SEAM(`verifier.verify` — 현재 StubGuardianVerifier) 실행 → 미통과면 403 →
+    통과면 `parental_consent` 행 1개 적재(해시된 법정대리인 이메일·방식·범위·서명 시각) +
+    `user_profile.parent_consent_at = now`를 *같은 트랜잭션*으로 커밋. 이후 그 학생의
+    `get_consented_user` 게이트가 통과한다(end-to-end).
+
+    **법적 경계(변호사 자문 필수)**: 신원 확인 *방식*은 stub이다 — 실 본인확인(휴대폰 인증·카드)
+    의 법적 적정성은 변호사 자문 후속이고(consent_grant.py·pipa_data_matrix.md §3.2/§5), 동의
+    *재확인 주기*(expires_at 정책)와 *법정대리인 인증 모델*(보호자가 어떻게 이 화면에 접근하는가)
+    도 후속이다. 현재 expires_at은 미설정(None)으로 기록만 한다(게이트 만료 재차단은 후속).
+
+    **미성년 PII(CLAUDE.md 절대 금기)**: 법정대리인 이메일은 *평문 미저장* — sha256 해시
+    (`email_hash` 재사용)로만 둔다. 응답에도 PII를 싣지 않는다(불필요).
+
+    멱등성: 이미 동의가 있어도(만료 후 재확인·범위 재동의) append-only로 새 행을 적재하고
+    `parent_consent_at`을 현재 시각으로 갱신한다 — 반복 호출이 안전하다(게이트는 통과 유지).
+    """
+    # 1. 신원 확인 SEAM 실행(현재 stub) — 미통과면 동의를 받지 않는다(403).
+    verification = verifier.verify(GuardianVerificationRequest(guardian_email=body.guardian_email))
+    if not verification.verified:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="법정대리인 신원 확인에 실패했습니다(동의를 진행할 수 없습니다).",
+        )
+
+    now = datetime.now(tz=timezone.utc)
+    # 2. 동의 레코드 적재 — 법정대리인 이메일은 *해시만*(평문 PII 금지·CLAUDE.md). expires_at은
+    #    재확인 주기 미확정이라 None(변호사 자문 후속) — 기록만 하고 게이트 만료 재차단은 후속.
+    #    consent_id는 앱에서 명시 생성(server_default 의존 없이 즉시 응답에 쓰려고 — resolve_user·
+    #    RefreshTokenSession 동형: 발급 코드가 발급 전에 PK 값을 안다).
+    consent = ParentalConsent(
+        consent_id=uuid.uuid4(),
+        user_id=user.user_id,
+        guardian_email_hash=email_hash(body.guardian_email),
+        verification_method=verification.method,
+        verification_ref=verification.reference,
+        consent_scope=body.consent_scope.value,
+        consent_signed_at=now,
+        expires_at=None,
+        revoked_at=None,
+    )
+    session.add(consent)
+    # 3. 같은 트랜잭션으로 게이트 통과 근거(parent_consent_at) 설정 — 동의 기록과 원자적.
+    user.parent_consent_at = now
+    await session.merge(user)
+    try:
+        await session.commit()
+    except IntegrityError as exc:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="동의를 기록할 수 없습니다(제약 위반).",
+        ) from exc
+    return ParentalConsentGrantResponse(
+        consent_id=consent.consent_id,
+        consent_scope=body.consent_scope,
+        verification_method=verification.method,
+        consent_signed_at=now,
+        parent_consent_at=now,
+    )
