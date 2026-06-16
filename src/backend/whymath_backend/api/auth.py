@@ -31,6 +31,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.consent import current_year_kst, derive_is_minor
 from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
@@ -66,6 +67,15 @@ class OAuthIdentity(BaseModel):
     provider: str = Field(description="제공자 이름(예: 'kakao'·'naver').")
     subject: str = Field(description="provider의 안정 사용자 id(provider 내 고유).")
     email: str = Field(description="사용자 이메일 — 식별 키(해시 저장·평문 미저장).")
+    birth_year: int | None = Field(
+        default=None,
+        description=(
+            "provider가 제공한 출생 연도(연 단위·월일 미수집). 신규 사용자 생성 시 서버측 "
+            "`is_minor` 파생(consent.derive_is_minor)의 입력. provider가 동의·범위 미제공 시 "
+            "None(현 동작) — 미상이면 is_minor도 None(미성년 게이트는 *알려진* 미성년만 차단). "
+            "**클라가 보낸 is_minor는 신뢰하지 않고 항상 이 birth_year에서 파생한다**."
+        ),
+    )
 
 
 class OAuthProviderError(Exception):
@@ -91,13 +101,22 @@ def email_hash(email: str) -> str:
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
-async def resolve_user(session: AsyncSession, identity: OAuthIdentity) -> UserProfile:
+async def resolve_user(
+    session: AsyncSession, identity: OAuthIdentity, *, settings: Settings
+) -> UserProfile:
     """외부 신원 → `UserProfile` upsert(이메일 해시 키). 신규면 기본 페르소나로 생성.
 
     같은 이메일은 provider 무관 같은 계정으로 매핑(자연 연결). 신규 사용자는 `persona_primary`가
     필수(NOT NULL)라 MVP 기본 페르소나로 생성하고 온보딩에서 정교화한다(미성년 동의는 *보호된*
     엔드포인트의 `ConsentedUser`가 게이트하고, 로그인 자체는 토큰만 발급). `user_id`는 앱에서 명시
     생성(서버 default 의존 없이 즉시 알 수 있게·토큰 발급에 필요).
+
+    **미성년 게이트(서버측 is_minor 파생)**: 신규 사용자 생성 시 `is_minor`는 *반드시*
+    `identity.birth_year`에서 `derive_is_minor`로 파생한다(클라/외부 입력의 is_minor를 신뢰하지
+    않는 단일 진실 — `consent.py`). provider가 birth_year를 안 주면 None → is_minor도 None(미상은
+    게이트 통과·*알려진* 미성년만 차단). *기존* 사용자는 birth_year/is_minor가 이미 PATCH 경로
+    에서 서버 파생·관리되므로 로그인이 덮어쓰지 않는다(그대로 반환) — birth_year 갱신·재파생은
+    온보딩 PATCH(`api/users.py`)가 단독 담당해 한 경로로만 파생값을 쓴다.
     """
     digest = email_hash(identity.email)
     existing = await session.scalar(select(UserProfile).where(UserProfile.email_hash == digest))
@@ -107,6 +126,13 @@ async def resolve_user(session: AsyncSession, identity: OAuthIdentity) -> UserPr
         user_id=uuid.uuid4(),
         email_hash=digest,
         persona_primary=_DEFAULT_PERSONA,
+        # is_minor는 서버 파생만(외부 is_minor 미신뢰) — birth_year 없으면 None(미상).
+        birth_year=identity.birth_year,
+        is_minor=derive_is_minor(
+            identity.birth_year,
+            current_year=current_year_kst(),
+            threshold=settings.minor_consent_age,
+        ),
     )
     session.add(user)
     await session.flush()
@@ -195,7 +221,7 @@ async def oauth_callback(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="로그인 제공자 인증에 실패했습니다(잠시 후 다시 시도).",
         ) from exc
-    user = await resolve_user(session, identity)
+    user = await resolve_user(session, identity, settings=settings)
     access_token = create_access_token(user.user_id, settings=settings)
     refresh_token = _issue_refresh_session(session, user.user_id, settings)
     # 세션 행(allowlist) + (신규면) 사용자까지 한 번에 영속(resolve_user는 flush만 하므로).

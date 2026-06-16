@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi.testclient import TestClient
@@ -115,6 +116,56 @@ class TestPatchMe:
         client = _client(user, FakeSession())
         assert client.patch("/v1/users/me", json={"email_hash": "x"}).status_code == 422
         assert client.patch("/v1/users/me", json={"is_minor": False}).status_code == 422
+
+    def test_birth_year_change_recomputes_is_minor_true(self) -> None:
+        """birth_year를 미성년 값으로 PATCH → is_minor가 서버에서 True로 재파생(클라 미요청)."""
+        minor_birth_year = datetime.now(tz=timezone.utc).year - 8  # 연나이 8 ≤ 14
+        user = _user(is_minor=False)  # 기존값은 False지만 birth_year로 덮어써져야 함
+        fake = FakeSession()
+        resp = _client(user, fake).patch(
+            "/v1/users/me", json={"birth_year": minor_birth_year}
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["birth_year"] == minor_birth_year
+        assert resp.json()["is_minor"] is True
+        assert fake.committed is True
+
+    def test_birth_year_change_recomputes_is_minor_false(self) -> None:
+        """birth_year를 성인 값으로 PATCH → is_minor가 서버에서 False로 재파생."""
+        adult_birth_year = datetime.now(tz=timezone.utc).year - 30  # 연나이 30 > 14
+        user = _user(is_minor=True)  # 기존 True도 birth_year 기준으로 재계산되어야 함
+        resp = _client(user, FakeSession()).patch(
+            "/v1/users/me", json={"birth_year": adult_birth_year}
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["is_minor"] is False
+
+    def test_client_supplied_is_minor_cannot_bypass_gate(self) -> None:
+        """우회 차단: 미성년 birth_year + is_minor=false 동시 PATCH → 422(is_minor 자가수정 불가).
+
+        is_minor는 화이트리스트에 없어 *직접 지정 자체*가 422다(서버 파생값에 도달하기도 전에
+        거부). 즉 미성년이 is_minor=false를 끼워 넣어 게이트를 우회할 수 없다.
+        """
+        minor_birth_year = datetime.now(tz=timezone.utc).year - 8
+        user = _user()
+        resp = _client(user, FakeSession()).patch(
+            "/v1/users/me",
+            json={"birth_year": minor_birth_year, "is_minor": False},
+        )
+        assert resp.status_code == 422
+
+    def test_unrelated_patch_self_heals_stale_is_minor(self) -> None:
+        """birth_year를 안 건드는 PATCH라도 is_minor는 현재 birth_year에서 재파생(자가 치유).
+
+        기존 레코드가 미성년 birth_year인데 is_minor가 (잘못) False로 남아 있으면, 닉네임만
+        바꾸는 무관한 PATCH에도 is_minor가 True로 교정된다(is_minor=birth_year의 순수 투영).
+        """
+        minor_birth_year = datetime.now(tz=timezone.utc).year - 8
+        user = _user(birth_year=minor_birth_year, is_minor=False)  # stale False
+        resp = _client(user, FakeSession()).patch("/v1/users/me", json={"nickname": "새닉"})
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["nickname"] == "새닉"
+        assert resp.json()["is_minor"] is True  # 서버가 birth_year 기준으로 교정
 
     def test_stale_if_match_returns_412(self) -> None:
         user = _user()
