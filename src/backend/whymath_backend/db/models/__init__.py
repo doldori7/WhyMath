@@ -19,6 +19,7 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - 슬105 MisconceptionEmbedding (L4 오개념 의미 매칭 pgvector 영속 — `vector` 컬럼 소유).
   - 슬3(개념그래프 아크) ConceptEmbedding (L1 개념 의미검색 pgvector 영속 — UC 키·`vector` 컬럼).
   - 개념그래프 소비 슬1 ConceptNode (L1 개념 메타 PG 프로젝션 — UC 키·검색 enrichment 백킹).
+  - P1-2 AchievementStandard·ConceptStandardLink (NCIC 성취기준 영속 + 개념↔성취기준 N:M 링크).
 모든 테이블이 한 `Base.metadata`에 모여 문자열 FK 타깃(`problem.problem_id`·
 `concept.concept_id`·`user_profile.user_id`·`learning_session.session_id`·
 `problem_attempt.attempt_id`·`dialogue.dialogue_id`·`textbook_mapping.isbn` 등)이 해소된다.
@@ -31,6 +32,7 @@ problem_solve_time_distribution·user_behavior_metrics)은 ORM에선 *일반 테
 
 from __future__ import annotations
 
+from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.activity import (
     AttemptEvent,
     LearningSession,
@@ -49,6 +51,7 @@ from whymath_backend.db.models.concept import (
 )
 from whymath_backend.db.models.concept_embedding import ConceptEmbedding
 from whymath_backend.db.models.concept_node import ConceptNode
+from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.curriculum_entry import CurriculumEntry
 from whymath_backend.db.models.device import DeviceCredential
 from whymath_backend.db.models.dialogue import (
@@ -143,4 +146,8 @@ __all__ = [
     "NodeVerifyStatus",
     # OAuth-a3b: RefreshTokenSession (리프레시 토큰 서버측 취소 allowlist·PK=jti)
     "RefreshTokenSession",
+    # P1-2: AchievementStandard (NCIC 성취기준 영속·norm_id PK·official_code 비유일)
+    "AchievementStandard",
+    # P1-2: ConceptStandardLink (개념↔성취기준 N:M 연결·norm_id 실 FK·link_id UUID PK)
+    "ConceptStandardLink",
 ]
