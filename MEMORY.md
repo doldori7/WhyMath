@@ -332,6 +332,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-16 (구현·L1): P2b·P2c concept_id 재ID 백엔드 연쇄 — 마이그레이션 *기능적 완결*
+**컨텍스트**: P2a(data-pipeline 재ID)에 이어 백엔드로 전파·마감. 서브슬라이스 P2b(백엔드 concept+링크 해소)·P2c(투영).
+**P2b(커밋 `e2b290e`)**: concept ORM에 `source_id`(String64·인덱스)·`aliases`(ARRAY NOT NULL) 추가 + Alembic `b7c8d9e0f1a2`(단일 head·down=`a6b7c8d9e0f1`·UUID PK·기존행 불변·aliases NULL 백필 후 NOT NULL). `backend_concept`가 graph.json의 source_id/aliases 적재(멱등 upsert on code). **P1 지연 해소점 마감** — `standard_loader.load_links`가 `concept_src_id`→concept.`code`를 *resolve-via-map*(`{source_id:code}` 단일쿼리·`backend_edge` 미러)로 해소, 개념·성취기준 **이중 고아 skip**(메시지·무침묵)·해소된 code를 `concept_code`에 저장. 4게이트 green·3208 passed·테스트 +24.
+**P2c(본 커밋)**: **투영/검색/Neo4j는 포맷 불가지론 확인 → 소스 변경 0** — `node_projection`·`embedding`·`retrieval`·concept_graph `load.py`는 concept_id를 *opaque str*로 저장(ON CONFLICT(concept_id)·정규식 가정 없음). 신 `{TRACK}-{AREA}-{NNN}`가 그대로 흐른다. 따라서 **P2 마이그레이션은 P2a+P2b로 기능적 완결**. `retrieval.py::ConceptSearchHit` docstring의 *허위 포맷 주장*(`UC.<domain>.<topic>.<slug>`)만 정정.
+**잔존(의도·비기능)**: ① 구 UC는 `aliases`에 보존(롤백·역호환 — 의도). ② concept-graph 백엔드 docstring의 "UC 키" 산문은 *역사적 약칭*(키 공간·동작 동일·포맷만 변경) — 선택적 용어 일괄정리 보류. ③ l2/l4/api·투영 테스트의 `UC.*` 픽스처는 *opaque 개념참조*(포맷 미검증·전부 통과) — 선택적 sweep 보류.
+**운영(ops·샌드박스 미실행)**: 라이브 Neo4j 재적재·pgvector 투영 재키는 멱등 적재기(`populate`) 재실행으로 수행 — 코드 변경 불요·라이브 인프라 필요. graph.json은 P2a 재ID transform 산출(생성물·미커밋).
+**결론**: concept_id 정본 `{TRACK}-{AREA}-{NNN}` 전환 완료 — 생성(idmap)·저장(`concept.code`)·링크 해소(src_id→code)·투영 호환·추적성(`aliases`/`source_id`) 전 경로. 다음=P3 문항 5축 확장(`docs/data/curriculum_master_v2_integration_review.md`).
+
 ### 2026-06-16 (구현·L1): P2a concept_id 재ID — `UC.*`→`{TRACK}-{AREA}-{NNN}`(ELEM-GEO-001) *data-pipeline 한정*·breaking·추적성 보존
 **컨텍스트**: v2 통합 검토(아래)·P1(아래) 후속 **P2a** 실행. 2026-06-16 결정한 concept_id 정본 전환(`UC.<domain>.<topic>.<slug>` → `{TRACK}-{AREA}-{NNN}`)을 **data-pipeline에서만** 구현(backend 재ID·Neo4j/pgvector 재적재는 P2b/P2c). 의도적 *breaking* — `concept.schema.yaml` "발급 후 변경금지"를 한 번 깨되 추적성은 `source_id`·`aliases`로 보존. 커밋 코퍼스가 `src_id` 기반이고 UC/새 ID 모두 *파생*(idmap)이라 재ID = 파생 규칙 교체 + 하위 변경.
 **ID 포맷(Kiki 확정)**: `^(ELEM|MID|HIGH|RT|OLY)-[A-Z0-9]{2,8}-\d{3}$`. **TRACK**=첫 `standard_code` 학년대수(2/4/6=ELEM·9=MID·10/12=HIGH·무코드 시 `difficulty_tier` 밴드 0~8/9~16/17~24 폴백·그것도 없으면 MID·실데이터 403건은 전부 코드보유라 폴백 0). RT(재수)·OLY(영재)는 *regex 예약*(코퍼스 미존재). **AREA**=토픽 ascii 코드 — `category`의 레벨 접두사(`[고]`/`[중]`/`[공통]`) 제거 후 토픽을 니모닉으로 매핑(`idmap._TOPIC_AREA_MAP`·**37 category 전수**·`미적분`→CALC·`기하`→GEO·`분수`→FRAC·`확률·통계`→PROB·`식·방정식·부등식`→EQN·`집합과 명제`→LOGIC 등). 레벨만 다른 어간(`[중]기하`·`[고]기하`→GEO·`[중]함수`·`[공통]함수`→FUN·`[중]문자·식·방정식`·`[공통]식·방정식·부등식`→EQN)은 AREA 공유·**TRACK이 구분**. **NNN**=(TRACK,AREA) 그룹 안 `(int(difficulty_tier), src_id)` 정렬 3자리(멱등). **미수록 category=침묵 폴백 금지·KeyError**(taxonomy 누수 가드). 실측: **403 src_id → 403 유일 ID·충돌 0**·전부 regex 통과·34 AREA 사용·최대 그룹 HIGH-CALC=43(3자리 여유).
