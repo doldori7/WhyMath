@@ -21,20 +21,36 @@
 use_enum_values=True 주의: `Problem`은 `ConfigDict(use_enum_values=True)`라 직렬화·구성
 경로에 따라 `source_type`·`exam_type`이 *문자열 값*일 수 있고 `persona_fit`의 *키*도 문자열일
 수 있다. 따라서 enum 비교 시 항상 enum/문자열 양쪽을 정규화해 비교한다(`schema/problem.py`의
-`_enforce_copyright_no_body_for_metadata_sources` validator·`l6/retake/gating.py` 패턴 답습).
+`_enforce_copyright_no_body_for_metadata_sources` validator·`l6/_shared.py` 패턴 답습).
 
-Rule of three — 3번째 L6 모드 시 l6 공용 추출 검토: `METADATA_ONLY_SOURCES`와 정규화 헬퍼
-(`_source_value`·`_persona_fit`)는 RT 트랙(`l6/retake/gating.py`)과 *의도적으로* 중복한다.
-RT 파일을 수정하지 않아 무회귀를 보장하려는 선택이며(두 모드가 독립적으로 같은 L1 공개 계약을
-재정의), L6에 *세 번째* 모드가 들어올 때 `l6` 공용 모듈로의 추출을 검토한다(Rule of three).
+Rule of three — 추출 완료(`l6/_shared.py`): `METADATA_ONLY_SOURCES`와 정규화 헬퍼
+(`_source_value`·`_persona_fit`)는 본래 RT 트랙(`l6/retake/gating.py`)과 *의도적으로*
+중복했다(RT 파일을 건드리지 않아 무회귀를 보장하려는 선택). 학교진도가 *세 번째* L6 모드로
+들어오면서 그 중복을 `l6/_shared.py`로 통합했다 — 이 모듈은 이제 `_shared.is_exposable`
+(저작권 게이트)·`_shared.normalize_enum_value`(enum 정규화)·`_shared.persona_fit`을 호출한다.
+`METADATA_ONLY_SOURCES`는 기존 import 경로(`l6.suneung.gating.METADATA_ONLY_SOURCES`)와
+테스트 호환을 위해 `_shared`에서 *재노출*한다(아래).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
-from whymath_backend.schema.enums import ExamType, Persona, SourceType
+from whymath_backend.l6 import _shared
+from whymath_backend.l6._shared import METADATA_ONLY_SOURCES
+from whymath_backend.schema.enums import ExamType, Persona
 from whymath_backend.schema.problem import Problem
+
+# 저작권 노출 게이트 차단 집합(평가원·EBS·교과서)을 L6 공용 모듈에서 *재노출*한다 —
+# 기존 import 경로(`l6.suneung.gating.METADATA_ONLY_SOURCES`)·테스트 호환을 위해 이름을 유지.
+# 정의 정본은 `l6/_shared.py`(Rule of three 추출 완료). `__all__`에도 그대로 둔다.
+__all__ = [
+    "METADATA_ONLY_SOURCES",
+    "SUNEUNG_PERSONAS",
+    "is_suneung_eligible",
+    "select_suneung_items",
+    "suneung_priority",
+]
 
 # ──────────────────────────────────────────────────────────────────────────
 # 게이팅 상수
@@ -55,72 +71,15 @@ PRD 5종 페르소나(`enums.Persona`) 중 *정시(수능)* 트랙에 있는 셋
     (`Persona.E_홈스쿨링영재` docstring: "v2.0·가치 최대").
 """
 
-METADATA_ONLY_SOURCES: frozenset[SourceType] = frozenset(
-    {SourceType.평가원, SourceType.EBS, SourceType.교과서}
-)
-"""학생에게 *본문 노출이 불가*한 출처 — 저작권 노출 게이트의 차단 집합.
-
-평가원·EBS·검정교과서는 *본문·문항 미보유*(WhyMath는 구조 메타데이터만 보유). 이 출처의
-레코드는 단원·코드·문항번호 같은 *구조 참조 전용*이며 실제 발문·해설·선지를 가지지 않으므로,
-**학생에게 노출할 문항으로 쓸 수 없다**. 노출 가능한 본문을 가진 문항은 `자체생성`
-(WHYMATH_GENERATED) 레코드뿐이다.
-
-**수능 모드에서 특히 중요**: 수능 대비의 핵심 자원은 *평가원 기출*(수능·모평)이지만, 평가원
-기출의 *본문·문항 복제·영리이용*은 저작권법 §32 단서·§136·§140(영리 비친고죄)로 금지된다
-(저작권 가이드 v2.0, MEMORY 2026-05-28). 따라서 수능 모드는 평가원 기출 *본문*을 절대 노출하지
-않고, *자체생성 동등문제*(WHYMATH_GENERATED)만 학생에게 보인다 — 평가원 출처 레코드는 어떤
-수능 신호(exam_type·시그니처 패턴·적합도)를 가지더라도 이 게이트에서 원천 차단한다. EBS·검정
-교과서도 같은 이유로 차단(EBS 영상·교재 본문 무단 활용 금지·검정 교과서 본문 복제 절대 금지).
-
-설계 메모: `schema.problem._METADATA_ONLY_SOURCES`는 *private*이라 import하지 않고 L6에서
-같은 집합을 명시적으로 재정의한다(레이어 경계 — L6는 L1의 *공개* 계약만 의존). 두 정의가
-어긋나지 않게, 값은 L1 enum(`SourceType.평가원/EBS/교과서`)을 그대로 가리킨다.
-Rule of three — 3번째 L6 모드 시 l6 공용 추출 검토(RT 트랙과 의도적 중복, 모듈 docstring 참조).
-"""
+# 저작권 노출 게이트 차단 집합 `METADATA_ONLY_SOURCES`(평가원·EBS·교과서)는 L6 공용 모듈
+# `l6/_shared.py`에 정본을 두고, 이 파일 상단에서 *재노출*한다(Rule of three 추출 완료).
+# 수능 모드 특히 중요: 평가원 기출 본문은 절대 노출 불가 → `_shared.is_exposable`가 원천 차단.
 
 # 수능 적합 신호로 인정하는 시험 유형(권위 있는 기출 유형) — 수능·모평·학평.
 # 정시 대비의 핵심은 *평가원·교육청 기출 유형*에 대한 숙달이므로 이 셋을 적합 신호로 본다
 # (EBS교재·N제·자체생성은 그 자체로는 "기출 유형" 신호가 아니라 다른 적합 신호로 판정).
+# (수능 전용 신호라 공용 추출 대상이 아니다 — 이 모듈에 남긴다.)
 _SUNEUNG_EXAM_TYPES: frozenset[ExamType] = frozenset({ExamType.수능, ExamType.모평, ExamType.학평})
-
-
-def _source_value(problem: Problem) -> str:
-    """`problem.source_type`을 *문자열 값*으로 정규화한다(use_enum_values=True 대응).
-
-    `Problem`은 `use_enum_values=True`라 `source_type`이 `SourceType` enum일 수도, 그 문자열
-    값일 수도 있다. 양쪽을 같은 척도(문자열)로 맞춰 비교 안정성을 확보한다
-    (`problem.py` validator·`l6/retake/gating.py` 패턴 답습).
-    """
-    src = problem.source_type
-    return src.value if isinstance(src, SourceType) else src
-
-
-def _exam_type_value(problem: Problem) -> str | None:
-    """`problem.exam_type`을 *문자열 값*으로 정규화한다(None 보존).
-
-    `exam_type`은 Optional이며 use_enum_values=True 환경에서 enum/문자열 양쪽이 가능하다.
-    None이면 None을 돌려준다(시험 유형 미지정 — 기출 유형 신호 부재).
-    """
-    et = problem.exam_type
-    if et is None:
-        return None
-    return et.value if isinstance(et, ExamType) else et
-
-
-def _persona_fit(problem: Problem, persona: Persona) -> float:
-    """`persona_fit`에서 주어진 페르소나의 적합도를 꺼낸다(키 문자열화 대응·없으면 0.0).
-
-    use_enum_values=True 환경에서 `persona_fit`의 *키*가 `Persona` enum일 수도, 그 문자열
-    값일 수도 있으므로 각 키를 *문자열 값*으로 정규화해 대상 페르소나와 대조한다. 적중이 없으면
-    0.0(미평가 = 부적합). 선언 타입은 `dict[Persona, float]`이나 런타임 키가 문자열일 수 있어
-    `isinstance` 분기로 안전하게 정규화한다(call-overload·Any 회피).
-    """
-    target = persona.value
-    for key, score in problem.persona_fit.items():
-        key_value = key.value if isinstance(key, Persona) else key
-        if key_value == target:
-            return score
-    return 0.0
 
 
 def is_suneung_eligible(
@@ -151,7 +110,8 @@ def is_suneung_eligible(
       수능 모드 노출 적격이면 True.
 
     use_enum_values=True 주의: source_type·exam_type·persona_fit 키가 문자열일 수 있어
-    헬퍼(`_source_value`·`_exam_type_value`·`_persona_fit`)로 정규화해 비교한다.
+    L6 공용 헬퍼(`_shared.is_exposable`·`_shared.normalize_enum_value`·`_shared.persona_fit`)로
+    정규화해 비교한다.
     """
     # ① 대상 페르소나 게이트.
     if persona not in SUNEUNG_PERSONAS:
@@ -159,15 +119,14 @@ def is_suneung_eligible(
 
     # ② 저작권 노출 게이트 — 본문 미보유 출처는 노출 불가(대상 페르소나라도 차단).
     #    수능 모드 핵심: 평가원 기출 본문은 절대 노출 불가 → 여기서 원천 차단.
-    metadata_only_values = {s.value for s in METADATA_ONLY_SOURCES}
-    if _source_value(problem) in metadata_only_values:
+    if not _shared.is_exposable(problem):
         return False
 
     # ③ 수능 적합 신호 — 기출 유형 / 시그니처 패턴 / 페르소나 적합도 중 하나라도.
     suneung_exam_values = {e.value for e in _SUNEUNG_EXAM_TYPES}
-    is_exam_signal = _exam_type_value(problem) in suneung_exam_values
+    is_exam_signal = _shared.normalize_enum_value(problem.exam_type) in suneung_exam_values
     has_signature = bool(problem.signature_patterns)
-    meets_fit = _persona_fit(problem, persona) >= min_fit
+    meets_fit = _shared.persona_fit(problem, persona) >= min_fit
     return is_exam_signal or has_signature or meets_fit
 
 
@@ -253,12 +212,3 @@ def select_suneung_items(
     if limit is None:
         return ranked
     return ranked[:limit]
-
-
-__all__ = [
-    "METADATA_ONLY_SOURCES",
-    "SUNEUNG_PERSONAS",
-    "is_suneung_eligible",
-    "select_suneung_items",
-    "suneung_priority",
-]

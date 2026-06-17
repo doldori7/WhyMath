@@ -1,0 +1,432 @@
+"""L6 학교진도 모드 게이팅 단위테스트 — 적격성·우선순위·선별·저작권/교육과정 게이트.
+
+검증:
+  ① 대상 페르소나(A·D 재학생) + 진도 신호(단원 겹침 또는 persona_fit 폴백) → 적격(True).
+  ② 비재학 페르소나(B·C N수·E 홈스쿨) → 부적격(False).
+  ③ 본문 미보유 출처(평가원/EBS/교과서) → 저작권 노출 게이트로 차단(진도 정합이어도 False).
+  ④ target_unit_codes 겹침 有 → 적격 / 無 → 부적격(단원 정합 게이트).
+  ⑤ target_unit_codes 미지정 시 persona_fit 폴백 동작(>=min_fit → 적격).
+  ⑥ curriculum_version 불일치 → 부적격(진도는 교육과정 버전 정합 필수).
+  ⑦ `select_school_progress_items` — 혼합 풀에서 진도 적합만 남고 우선순위·limit 동작.
+  ⑧ `school_progress_priority` 단조성 — 겹치는 단원이 많을수록 큼·난이도 보조 축 등.
+
+합성 픽스처만(실데이터 0). `_problem(**over)` 빌더로 자체생성 최소 문항을 만들고 오버라이드한다
+(`tests/backend/l6/retake/test_gating.py`·`tests/backend/l6/suneung/test_gating.py` 헬퍼 패턴 답습).
+
+레이어(CLAUDE.md): 테스트는 L1(`schema.problem`·`schema.enums`)·L6(`l6.school_progress`)만
+import한다.
+"""
+
+from __future__ import annotations
+
+from whymath_backend.l6.school_progress.gating import (
+    SCHOOL_PROGRESS_PERSONAS,
+    is_school_progress_eligible,
+    school_progress_priority,
+    select_school_progress_items,
+)
+from whymath_backend.schema.enums import (
+    Curriculum,
+    Persona,
+    SourceType,
+    Subject,
+)
+from whymath_backend.schema.problem import Problem
+
+
+def _problem(**over: object) -> Problem:
+    """본문 보유가 허용되는 최소 자체생성 Problem 빌더(합성 픽스처).
+
+    기본은 `source_type=자체생성`(저작권 노출 게이트를 통과하는 출처)·`curriculum_version=
+    2022 개정`·`unit_codes=['CAL-INT-DEF']`이라 진도 신호만 오버라이드하면 적격/부적격을
+    자유로이 만든다. 본문 미보유 출처(평가원/EBS/교과서)는 `source_type=...`로 오버라이드해
+    저작권 게이트를 시험한다.
+    (`l6/retake/test_gating.py`·`l6/suneung/test_gating.py`의 `_problem` 패턴 답습 —
+    type: ignore 동일.)
+    """
+    kwargs: dict[str, object] = {
+        "source_type": SourceType.자체생성,
+        "curriculum_version": Curriculum.REVISION_2022,
+        "valid_from_year": 2022,
+        "subject": Subject.미적분,
+        "unit_codes": ["CAL-INT-DEF"],
+    }
+    kwargs.update(over)
+    return Problem(**kwargs)  # type: ignore[arg-type]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 게이팅 상수
+# ──────────────────────────────────────────────────────────────────────
+class TestConstants:
+    def test_school_progress_personas_are_a_and_d(self) -> None:
+        """학교진도 대상 페르소나는 정확히 A(일반고고3)·D(학종고2) 둘(재학생)."""
+        assert SCHOOL_PROGRESS_PERSONAS == frozenset({Persona.A_일반고고3, Persona.D_학종고2})
+
+    def test_school_progress_personas_exclude_retakers_and_homeschool(self) -> None:
+        """N수(B·C 비재학)·영재(E 홈스쿨)는 학교진도 모드 대상이 아니다."""
+        assert Persona.B_자사고N수 not in SCHOOL_PROGRESS_PERSONAS
+        assert Persona.C_검정고시N수 not in SCHOOL_PROGRESS_PERSONAS
+        assert Persona.E_홈스쿨링영재 not in SCHOOL_PROGRESS_PERSONAS
+
+
+# ──────────────────────────────────────────────────────────────────────
+# is_school_progress_eligible — 적격성 게이트
+# ──────────────────────────────────────────────────────────────────────
+class TestIsSchoolProgressEligible:
+    def test_target_persona_with_unit_overlap_eligible(self) -> None:
+        """A 페르소나 + 현재 진도 단원과 겹침 → 적격(진도 정합 신호로 통과)."""
+        problem = _problem(unit_codes=["CAL-INT-DEF", "FUN-COMPOSITE"])
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_unit_codes={"CAL-INT-DEF"},
+            )
+            is True
+        )
+
+    def test_default_persona_is_a_general_high_grade3(self) -> None:
+        """persona 인자 생략 시 기본 A_일반고고3(MVP 재학생 정면 대상)."""
+        problem = _problem(unit_codes=["CAL-INT-DEF"])
+        # persona 미지정 → A로 판정되어 적격.
+        assert is_school_progress_eligible(problem, target_unit_codes={"CAL-INT-DEF"}) is True
+
+    def test_persona_d_haksong_is_eligible(self) -> None:
+        """D 페르소나(학종 고2·재학생)도 학교진도 모드 대상이다."""
+        problem = _problem(unit_codes=["CAL-INT-DEF"])
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.D_학종고2,
+                target_unit_codes={"CAL-INT-DEF"},
+            )
+            is True
+        )
+
+    def test_unit_overlap_absent_rejected(self) -> None:
+        """target_unit_codes가 주어졌는데 겹치는 단원이 없으면 부적격(진도 부정합)."""
+        problem = _problem(unit_codes=["GEO-VECTOR"])
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_unit_codes={"CAL-INT-DEF"},
+            )
+            is False
+        )
+
+    def test_persona_fit_fallback_when_no_target_units(self) -> None:
+        """target_unit_codes 미지정 시 persona_fit 폴백 — 적합도 충족(>=0.5)이면 적격."""
+        problem = _problem(persona_fit={Persona.A_일반고고3: 0.8})
+        # target_unit_codes 없음 → persona_fit 폴백 경로.
+        assert is_school_progress_eligible(problem, Persona.A_일반고고3) is True
+
+    def test_persona_fit_fallback_at_threshold_is_eligible(self) -> None:
+        """경계값 — persona_fit == min_fit(0.5)이면 폴백 적격(>= 비교)."""
+        problem = _problem(persona_fit={Persona.A_일반고고3: 0.5})
+        assert is_school_progress_eligible(problem, Persona.A_일반고고3, min_fit=0.5) is True
+
+    def test_persona_fit_fallback_below_threshold_rejected(self) -> None:
+        """폴백 경로에서 persona_fit 미달(<0.5)이면 부적격."""
+        problem = _problem(persona_fit={Persona.A_일반고고3: 0.3})
+        assert is_school_progress_eligible(problem, Persona.A_일반고고3) is False
+
+    def test_no_target_units_and_no_persona_fit_rejected(self) -> None:
+        """target_unit_codes 없고 persona_fit도 비어 있으면 부적격(적합도 0.0 < 0.5)."""
+        problem = _problem()
+        assert is_school_progress_eligible(problem, Persona.A_일반고고3) is False
+
+    def test_non_target_personas_rejected(self) -> None:
+        """비재학 페르소나(B·C·E) → 부적격 — 진도 정합·적합도가 있어도 막힌다."""
+        # 진도 단원 겹침 + 높은 적합도라도 비재학 페르소나면 ① 게이트에서 탈락.
+        problem = _problem(
+            unit_codes=["CAL-INT-DEF"],
+            persona_fit={
+                Persona.B_자사고N수: 0.9,
+                Persona.C_검정고시N수: 0.9,
+                Persona.E_홈스쿨링영재: 0.9,
+            },
+        )
+        for persona in (Persona.B_자사고N수, Persona.C_검정고시N수, Persona.E_홈스쿨링영재):
+            assert (
+                is_school_progress_eligible(problem, persona, target_unit_codes={"CAL-INT-DEF"})
+                is False
+            ), persona
+
+    def test_copyright_gate_blocks_metadata_only_sources(self) -> None:
+        """저작권 노출 게이트 — 본문 미보유 출처는 A 페르소나·진도 정합이어도 차단.
+
+        평가원/EBS/교과서는 본문 미보유(구조 메타 전용)라 학생 노출 불가 →
+        ② 게이트에서 무조건 탈락. 본문 필드(question_text 등)를 비워 둬야 Problem
+        검증을 통과하므로 빌더 기본(본문 None)을 그대로 쓰되 source_type만 바꾼다.
+        """
+        for source in (SourceType.평가원, SourceType.EBS, SourceType.교과서):
+            problem = _problem(
+                source_type=source,
+                unit_codes=["CAL-INT-DEF"],  # 진도 단원이 겹쳐도
+                persona_fit={Persona.A_일반고고3: 0.99},  # 적합도가 높아도
+            )
+            assert (
+                is_school_progress_eligible(
+                    problem,
+                    Persona.A_일반고고3,
+                    target_unit_codes={"CAL-INT-DEF"},
+                )
+                is False
+            ), source
+
+    def test_curriculum_version_mismatch_rejected(self) -> None:
+        """교육과정 버전 불일치 → 부적격(진도는 교육과정 버전 정합 필수)."""
+        # 문항은 2015 개정인데 진도(기준)는 2022 개정 → 불일치로 탈락.
+        problem = _problem(
+            curriculum_version=Curriculum.REVISION_2015,
+            unit_codes=["CAL-INT-DEF"],
+        )
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_unit_codes={"CAL-INT-DEF"},
+                curriculum_version=Curriculum.REVISION_2022,
+            )
+            is False
+        )
+
+    def test_curriculum_version_match_eligible(self) -> None:
+        """교육과정 버전 일치 + 진도 단원 겹침 → 적격."""
+        problem = _problem(
+            curriculum_version=Curriculum.REVISION_2022,
+            unit_codes=["CAL-INT-DEF"],
+        )
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_unit_codes={"CAL-INT-DEF"},
+                curriculum_version=Curriculum.REVISION_2022,
+            )
+            is True
+        )
+
+    def test_curriculum_version_none_skips_gate(self) -> None:
+        """curriculum_version 인자 미지정 → 버전 게이트 건너뜀(문항 버전 무관 통과)."""
+        # 문항은 2015 개정이지만 기준 버전을 안 주면 ③ 게이트를 건너뛰어 진도 단원만 본다.
+        problem = _problem(
+            curriculum_version=Curriculum.REVISION_2015,
+            unit_codes=["CAL-INT-DEF"],
+        )
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_unit_codes={"CAL-INT-DEF"},
+            )
+            is True
+        )
+
+    def test_use_enum_values_string_keys_handled(self) -> None:
+        """use_enum_values=True로 persona_fit 키가 문자열이어도 적합도가 조회된다(폴백 경로).
+
+        Problem이 use_enum_values=True라, 키를 enum이 아닌 *문자열 값*으로 줘도
+        `_shared.persona_fit`이 문자열 폴백으로 적중해야 한다(정규화 계약).
+        """
+        problem = _problem(persona_fit={Persona.D_학종고2.value: 0.7})
+        assert is_school_progress_eligible(problem, Persona.D_학종고2) is True
+
+
+# ──────────────────────────────────────────────────────────────────────
+# school_progress_priority — 우선순위 가중치(단조성)
+# ──────────────────────────────────────────────────────────────────────
+class TestSchoolProgressPriority:
+    def test_more_unit_overlap_increases_priority(self) -> None:
+        """현재 진도 단원과 더 많이 겹치는 문항이 우선순위가 크다(겹침 개수 단조)."""
+        target = {"CAL-INT-DEF", "FUN-COMPOSITE", "SEQ-LIMIT"}
+        two_overlap = _problem(unit_codes=["CAL-INT-DEF", "FUN-COMPOSITE"])  # 겹침 2
+        one_overlap = _problem(unit_codes=["CAL-INT-DEF", "GEO-VECTOR"])  # 겹침 1
+        assert school_progress_priority(
+            two_overlap, target_unit_codes=target
+        ) > school_progress_priority(one_overlap, target_unit_codes=target)
+
+    def test_unit_overlap_outweighs_no_overlap(self) -> None:
+        """겹치는 단원이 있는 문항이 없는 문항보다 우선순위가 크다(다른 조건 동일)."""
+        target = {"CAL-INT-DEF"}
+        with_overlap = _problem(unit_codes=["CAL-INT-DEF"], difficulty_overall=2.0)
+        without_overlap = _problem(unit_codes=["GEO-VECTOR"], difficulty_overall=2.0)
+        assert school_progress_priority(
+            with_overlap, target_unit_codes=target
+        ) > school_progress_priority(without_overlap, target_unit_codes=target)
+
+    def test_higher_difficulty_increases_priority(self) -> None:
+        """종합 난이도가 높을수록 우선순위가 크다(보조 축·다른 조건 동일)."""
+        target = {"CAL-INT-DEF"}
+        hard = _problem(unit_codes=["CAL-INT-DEF"], difficulty_overall=5.0)
+        easy = _problem(unit_codes=["CAL-INT-DEF"], difficulty_overall=1.0)
+        assert school_progress_priority(hard, target_unit_codes=target) > school_progress_priority(
+            easy, target_unit_codes=target
+        )
+
+    def test_none_target_units_uses_difficulty_only(self) -> None:
+        """target_unit_codes 미지정 시 겹침 항은 0.0 — 난이도만으로 우선순위 산정."""
+        # 겹침 항이 없으니 priority == difficulty_overall.
+        problem = _problem(unit_codes=["CAL-INT-DEF"], difficulty_overall=3.0)
+        assert school_progress_priority(problem) == 3.0
+
+    def test_none_difficulty_treated_as_zero(self) -> None:
+        """difficulty_overall=None은 0.0으로 취급 — 난이도 신호 없음(target도 없으면 0.0)."""
+        no_diff = _problem()  # difficulty_overall 기본 None·target 없음
+        assert school_progress_priority(no_diff) == 0.0
+
+    def test_priority_is_deterministic(self) -> None:
+        """같은 입력은 같은 가중치(결정적)·가중 합 정확."""
+        target = {"CAL-INT-DEF", "FUN-COMPOSITE"}
+        problem = _problem(
+            unit_codes=["CAL-INT-DEF", "FUN-COMPOSITE"],
+            difficulty_overall=4.0,
+        )
+        # 겹침 2개 ×2.0 = 4.0 + 난이도 4.0 = 8.0.
+        assert (
+            school_progress_priority(problem, target_unit_codes=target)
+            == school_progress_priority(problem, target_unit_codes=target)
+            == 8.0
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# select_school_progress_items — 선별·정렬·limit
+# ──────────────────────────────────────────────────────────────────────
+class TestSelectSchoolProgressItems:
+    def test_filters_to_eligible_only(self) -> None:
+        """혼합 풀(타단원·다른교육과정·진도적합 섞음)에서 진도 적합만 남는다."""
+        target = {"CAL-INT-DEF"}
+        fit_item = _problem(slug="fit", unit_codes=["CAL-INT-DEF"])
+        # 타 단원(진도 단원과 안 겹침) → 탈락.
+        other_unit = _problem(slug="other-unit", unit_codes=["GEO-VECTOR"])
+        # 다른 교육과정(2015) → 버전 불일치로 탈락.
+        old_curriculum = _problem(
+            slug="old-curriculum",
+            curriculum_version=Curriculum.REVISION_2015,
+            unit_codes=["CAL-INT-DEF"],
+        )
+
+        selected = select_school_progress_items(
+            [other_unit, fit_item, old_curriculum],
+            Persona.A_일반고고3,
+            target_unit_codes=target,
+            curriculum_version=Curriculum.REVISION_2022,
+        )
+        assert [p.slug for p in selected] == ["fit"]
+
+    def test_orders_by_overlap_count_descending(self) -> None:
+        """진도 단원 겹침이 많은 문항이 앞에 온다(우선순위 내림차순)."""
+        target = {"CAL-INT-DEF", "FUN-COMPOSITE", "SEQ-LIMIT"}
+        # 셋 다 진도 적합(>=1 겹침). 겹침 개수만 다르게 설계(난이도 0 → 겹침으로만 정렬).
+        one = _problem(slug="one", unit_codes=["CAL-INT-DEF"])  # 겹침 1 → 2.0
+        three = _problem(
+            slug="three",
+            unit_codes=["CAL-INT-DEF", "FUN-COMPOSITE", "SEQ-LIMIT"],
+        )  # 겹침 3 → 6.0
+        two = _problem(slug="two", unit_codes=["CAL-INT-DEF", "FUN-COMPOSITE"])  # 겹침 2 → 4.0
+
+        # 입력은 우선순위 역순으로 줘서 정렬이 실제로 일어나는지 본다.
+        selected = select_school_progress_items(
+            [one, two, three], Persona.A_일반고고3, target_unit_codes=target
+        )
+        assert [p.slug for p in selected] == ["three", "two", "one"]
+
+    def test_limit_truncates_to_top_n(self) -> None:
+        """limit이 상위 N개로 자른다(우선순위 상위부터)."""
+        target = {"CAL-INT-DEF"}
+        items = [
+            _problem(
+                slug=f"item-{i}",
+                unit_codes=["CAL-INT-DEF"],
+                difficulty_overall=float(i),
+            )
+            for i in (1, 2, 3, 4, 5)
+        ]
+        # 겹침 1(2.0) 동일 + 난이도 5,4가 상위 2개.
+        selected = select_school_progress_items(
+            items, Persona.A_일반고고3, target_unit_codes=target, limit=2
+        )
+        assert [p.slug for p in selected] == ["item-5", "item-4"]
+
+    def test_limit_none_returns_all_eligible(self) -> None:
+        """limit=None(기본) → 적격 전부 반환(무제한)."""
+        target = {"CAL-INT-DEF"}
+        items = [_problem(slug=f"i-{i}", unit_codes=["CAL-INT-DEF"]) for i in range(3)]
+        selected = select_school_progress_items(
+            items, Persona.A_일반고고3, target_unit_codes=target
+        )
+        assert len(selected) == 3
+
+    def test_limit_zero_returns_empty(self) -> None:
+        """limit=0 → 빈 리스트(상위 0개)."""
+        target = {"CAL-INT-DEF"}
+        items = [_problem(unit_codes=["CAL-INT-DEF"])]
+        assert (
+            select_school_progress_items(
+                items, Persona.A_일반고고3, target_unit_codes=target, limit=0
+            )
+            == []
+        )
+
+    def test_empty_input_returns_empty(self) -> None:
+        """빈 입력 → 빈 결과."""
+        assert select_school_progress_items([], Persona.A_일반고고3) == []
+
+    def test_non_target_persona_selects_nothing(self) -> None:
+        """비재학 페르소나(B)면 적합 문항이 많아도 전부 탈락 → 빈 결과."""
+        target = {"CAL-INT-DEF"}
+        items = [
+            _problem(
+                unit_codes=["CAL-INT-DEF"],
+                persona_fit={Persona.B_자사고N수: 0.9},
+            )
+            for _ in range(3)
+        ]
+        assert (
+            select_school_progress_items(items, Persona.B_자사고N수, target_unit_codes=target) == []
+        )
+
+    def test_copyright_blocked_items_excluded_from_selection(self) -> None:
+        """선별에서도 본문 미보유 출처는 빠진다(저작권 게이트가 필터에 적용)."""
+        target = {"CAL-INT-DEF"}
+        ok = _problem(slug="ok", unit_codes=["CAL-INT-DEF"])
+        # 평가원 출처(본문 미보유) — 진도 정합이어도 노출 불가.
+        blocked = _problem(
+            slug="blocked",
+            source_type=SourceType.평가원,
+            unit_codes=["CAL-INT-DEF"],
+        )
+        selected = select_school_progress_items(
+            [blocked, ok], Persona.A_일반고고3, target_unit_codes=target
+        )
+        assert [p.slug for p in selected] == ["ok"]
+
+    def test_persona_fit_fallback_selection(self) -> None:
+        """target_unit_codes 미지정 시 persona_fit 폴백으로 선별(적합도 충족만 남음)."""
+        fit = _problem(slug="fit", persona_fit={Persona.A_일반고고3: 0.8})
+        unfit = _problem(slug="unfit", persona_fit={Persona.A_일반고고3: 0.2})
+        selected = select_school_progress_items([unfit, fit], Persona.A_일반고고3)
+        assert [p.slug for p in selected] == ["fit"]
+
+    def test_default_persona_used_when_omitted(self) -> None:
+        """persona 생략 시 기본 A로 선별(MVP 재학생 정면 대상)."""
+        target = {"CAL-INT-DEF"}
+        items = [_problem(slug=f"d-{i}", unit_codes=["CAL-INT-DEF"]) for i in range(2)]
+        # persona 미지정 → A로 판정되어 둘 다 적격.
+        selected = select_school_progress_items(items, target_unit_codes=target)
+        assert {p.slug for p in selected} == {"d-0", "d-1"}
+
+    def test_stable_sort_preserves_input_order_on_ties(self) -> None:
+        """동률(같은 우선순위)은 입력 순서를 보존한다(안정정렬 계약)."""
+        target = {"CAL-INT-DEF"}
+        # 셋 다 겹침 1·난이도 3.0 → 동일 우선순위(2.0 + 3.0 = 5.0).
+        first = _problem(slug="first", unit_codes=["CAL-INT-DEF"], difficulty_overall=3.0)
+        second = _problem(slug="second", unit_codes=["CAL-INT-DEF"], difficulty_overall=3.0)
+        third = _problem(slug="third", unit_codes=["CAL-INT-DEF"], difficulty_overall=3.0)
+        selected = select_school_progress_items(
+            [first, second, third], Persona.A_일반고고3, target_unit_codes=target
+        )
+        assert [p.slug for p in selected] == ["first", "second", "third"]

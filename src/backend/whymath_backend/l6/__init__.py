@@ -13,11 +13,17 @@ CLAUDE.md 7계층의 L6(응용 모드). L1~L4(독립 수학 코어)·L5(상호�
     오버레이 모델로 기존 `exam_type`·`exam_authority_weight`·`signature_patterns`·
     `persona_fit`·`difficulty_overall`·`source_type`을 *재사용*한다. 평가원 기출 *본문*은
     저작권 게이트로 원천 차단하고 자체생성 동등문제만 노출(CLAUDE.md 우선순위 #2).
+  - 학교진도 모드 게이팅(`school_progress/`) — 페르소나 A·D(학교 재학생)에게 현재 진도 단원
+    정합 문항 선별 노출. RT·수능과 동형 오버레이 모델로 `source_type`·`curriculum_version`·
+    `unit_codes`·`persona_fit`·`difficulty_overall`을 *재사용*한다(자동 커리큘럼 정렬 — 진도
+    단원 겹침 우선). N수(B·C)·영재(E)는 비재학·홈스쿨이라 제외.
 
-두 모드는 새 concept 노드·Alembic 마이그레이션·새 enum을 *만들지 않고* **게이팅 로직만** 더한다.
-얇게 유지 — L4/L2/L3를 import하지 않는다(기존 `Problem` 필드의 존재·값만 본다).
+세 모드는 새 concept 노드·Alembic 마이그레이션·새 enum을 *만들지 않고* **게이팅 로직만** 더한다.
+얇게 유지 — L4/L2/L3를 import하지 않는다(기존 `Problem` 필드의 존재·값만 본다). 세 모드가
+공통으로 쓰는 저작권 게이트·enum 정규화는 L6 공용 모듈 `_shared.py`로 추출했다(Rule of three).
 
-후속(범위 밖): 학교진도/사고력/영재/메타인지 모드 입주, OLY(영재) 트랙, HTTP 노출.
+후속(범위 밖): 사고력/영재/메타인지 모드 입주, OLY(영재) 트랙, 학교진도 성취기준 마스터 매칭,
+HTTP 노출.
 """
 
 from __future__ import annotations
@@ -28,6 +34,12 @@ from whymath_backend.l6.retake import (
     retake_priority,
     select_retake_items,
 )
+from whymath_backend.l6.school_progress import (
+    SCHOOL_PROGRESS_PERSONAS,
+    is_school_progress_eligible,
+    school_progress_priority,
+    select_school_progress_items,
+)
 from whymath_backend.l6.suneung import (
     SUNEUNG_PERSONAS,
     is_suneung_eligible,
@@ -37,11 +49,15 @@ from whymath_backend.l6.suneung import (
 
 __all__ = [
     "RETAKE_PERSONAS",
+    "SCHOOL_PROGRESS_PERSONAS",
     "SUNEUNG_PERSONAS",
     "is_retake_eligible",
+    "is_school_progress_eligible",
     "is_suneung_eligible",
     "retake_priority",
+    "school_progress_priority",
     "select_retake_items",
+    "select_school_progress_items",
     "select_suneung_items",
     "suneung_priority",
 ]
