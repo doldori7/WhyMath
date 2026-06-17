@@ -71,6 +71,7 @@ from whymath_backend.api.auth import (
 from whymath_backend.api.coach import router as coach_router
 from whymath_backend.api.concepts import router as concepts_router
 from whymath_backend.api.devices import router as devices_router
+from whymath_backend.api.gating import router as gating_router
 from whymath_backend.api.me import router as me_router
 from whymath_backend.api.oauth_providers import build_oauth_providers
 from whymath_backend.api.problems import router as problems_router
@@ -506,6 +507,7 @@ def create_app(
     app.include_router(coach_router)
     app.include_router(verify_router)
     app.include_router(devices_router)
+    app.include_router(gating_router)
     app.include_router(visualization_router)
     app.include_router(scene_router)
 
