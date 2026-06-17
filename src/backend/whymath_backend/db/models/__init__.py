@@ -94,6 +94,7 @@ from whymath_backend.db.models.user import (
     UserStateSnapshot,
     UserTrackHistory,
 )
+from whymath_backend.db.models.verified_lemma import VerifiedLemma
 from whymath_backend.db.models.verified_solution import (
     VerifiedSolution,
     WhsSolutionGrade,
@@ -156,6 +157,8 @@ __all__ = [
     # WH-S S1 §2.4: VerifiedSolution (검증 풀이 저장소·다중 풀이) + 등급 enum(verified/unverified)
     "VerifiedSolution",
     "WhsSolutionGrade",
+    # WH-S S1 §2.2: VerifiedLemma (검증 중간 결과 저장소·재사용·멱등 (problem,key) UNIQUE)
+    "VerifiedLemma",
     # OAuth-a3b: RefreshTokenSession (리프레시 토큰 서버측 취소 allowlist·PK=jti)
     "RefreshTokenSession",
     # PIPA §22-2: ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사·surrogate UUID PK)
