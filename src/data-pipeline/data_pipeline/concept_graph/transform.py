@@ -51,8 +51,11 @@ from data_pipeline.ncic.transform import (
 
 logger = logging.getLogger("data_pipeline.concept_graph.transform")
 
-# definition_provenance가 이 값일 때만 reviewed(나머지는 모두 pending). §4 분포: 수기 검수 114건.
+# definition_provenance가 이 값(완전일치)이면 reviewed. §4 분포: 수기 검수 114건.
 _REVIEWED_PROVENANCE: str = "수기 검수"
+# 출처를 보존하면서 검수 완료를 표기하는 마커(예: "…별책8(기본수학)·AI 검수(수식·오개념 정합)").
+# definition_provenance에 이 마커가 포함되면 reviewed — 출처 문자열(별책8 등)은 그대로 살린다.
+_REVIEW_MARKER: str = "·AI 검수"
 
 # 데이터셋 엣지 relation 단일 값(검증용). 그 외 값은 경고 후 PREREQUISITE로 강제하지 않고 건너뜀.
 _DATASET_PREREQ_RELATION: str = "선수(prereq)"
@@ -104,8 +107,13 @@ def _grade_band_hint(standard_codes: Sequence[str]) -> str | None:
 
 
 def _review_status(definition_provenance: str | None) -> ReviewStatus:
-    """definition_provenance → 검수 상태. '수기 검수'만 reviewed, 그 외(자동·검수필요)는 pending."""
-    if (definition_provenance or "").strip() == _REVIEWED_PROVENANCE:
+    """definition_provenance → 검수 상태.
+
+    '수기 검수'(완전일치) 또는 검수 마커(`·AI 검수`) 포함이면 reviewed, 그 외(자동·검수필요)는
+    pending. 마커 방식은 출처 문자열(예 '별책8(기본수학)')을 보존하면서 검수 완료를 덧붙인다(§4).
+    """
+    provenance = (definition_provenance or "").strip()
+    if provenance == _REVIEWED_PROVENANCE or _REVIEW_MARKER in provenance:
         return ReviewStatus.REVIEWED
     return ReviewStatus.PENDING
 
