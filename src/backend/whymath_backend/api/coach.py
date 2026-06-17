@@ -78,6 +78,7 @@ from whymath_backend.l4.misconception import (
     combine_diagnoses,
     diagnose,
     select_intervention,
+    select_intervention_from_hypotheses,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
@@ -789,12 +790,34 @@ async def _apply_hypotheses(
     `user_id` 가드: `ConsentedUser` 인증 게이트라 실제론 항상 채워지지만, 방어적으로 None이면
     가설을 적용·영속하지 않고 빈 리스트를 반환한다(`apply_matches`는 per-student라 user_id 필수).
 
-    범위(정직): per-turn *영속+노출*까지다. select_focus 기반 intervention 변경(ε 탐색→개입
-    발화)·evidence_links(증거→가설 연결)·진단 일치율 게이트는 후속 슬라이스다(이번은 불변).
+    범위(정직): per-turn *영속+노출* + 개입 발화 결선까지다. 갱신된 가설 세트는 바로 아래
+    `_intervention_from_hypotheses_or`로 *개입 발화*도 구동한다(select_focus 기반 intervention —
+    이 슬라이스에서 결선). 진단-실제 *일치율* 게이트·도구 루프 오케스트레이션은 후속 슬라이스다.
     """
     if user_id is None:
         return []  # 인증 게이트라 실제론 도달 안 함(방어적 가드 — apply_matches는 user_id 필수).
     return await apply_matches(session, user_id, matches)
+
+
+def _intervention_from_hypotheses_or(
+    active_hypotheses: list[MisconceptionHypothesis],
+    fallback: InterventionDecision | None,
+) -> InterventionDecision | None:
+    """개입 발화를 *누적 가설 세트* 기준으로 재결정 — WH-1 2단계 §8.4 *결선* 좌석.
+
+    `_apply_hypotheses` docstring이 예고한 "select_focus 기반 intervention 변경(ε 탐색→개입
+    발화)"의 실현. 단일 턴 raw 매치(`fallback` = `_build_response_payload`의 substring-우선
+    매치 기반 결정)가 아니라, 시간 감쇠·강화로 **누적된 활성 가설 세트**가 개입을 구동하게
+    한다(#191 `select_focus`·`select_intervention_from_hypotheses` 재사용·재구현 0).
+
+    *폴백 보존*(회귀 0): 가설 세트가 결정을 못 내면(빈 세트·focus<0.5 보류·느슨 id) `fallback`을
+    그대로 둔다. **턴1**은 가설이 이번 턴 매치로 막 시드되어(감쇠 전) 신뢰도=매치 신뢰도이므로,
+    최상위 가설이 raw 매치 1위와 같으면 결과가 비트동일하다. 차이는 *멀티턴 누적*(강화로 반례
+    임계 돌파·감쇠로 보류 전환) 또는 가설 세트가 substring-우선과 다른 1위를 가질 때만 난다 —
+    그게 정확히 WH-1이 의도한 "상태(누적 증거)가 개입을 결정한다"이다. stateless `/v1/coach`는
+    가설 세트가 없어 *호출하지 않는다*(raw 매치 유지).
+    """
+    return select_intervention_from_hypotheses(active_hypotheses) or fallback
 
 
 @router.post(
@@ -879,6 +902,7 @@ async def create_session(
     # `user.user_id`는 ConsentedUser 게이트라 채워지지만, None이면 빈 리스트로 가드(apply_matches는
     # user_id 필요). 가설은 *후보*일 뿐 확정 오개념 아님(낙인 금지)·학생 본인 데이터만 노출.
     active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
+    intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
 
     now = datetime.now(timezone.utc)
     dialogue = DialogueORM.from_schema(
@@ -1007,6 +1031,7 @@ async def append_turns(
     # 세트를 갱신(감쇠/강화·누적)·영속한다(같은 트랜잭션 합류·별도 commit 없음·#191/#192 재사용).
     # 멀티턴이라 직전 턴들의 가설 위에 누적되어 감쇠·강화가 실제로 가동된다(2단계 메커니즘).
     active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
+    intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
 
     current_total = dialogue.total_turns or 0
     student_order = current_total + 1
