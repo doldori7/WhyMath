@@ -20,14 +20,36 @@ use_enum_values=True 주의: `Problem`은 `ConfigDict(use_enum_values=True)`라 
 경로에 따라 `source_type`·`question_format`이 *문자열 값*일 수 있고 `persona_fit`의 *키*도
 문자열일 수 있다. 따라서 enum 비교 시 항상 enum/문자열 양쪽을 정규화해 비교한다
 (`schema/problem.py`의 `_enforce_copyright_no_body_for_metadata_sources` validator 패턴 답습).
+정규화·저작권 게이트는 L6 공용 모듈 `l6/_shared.py`로 추출 완료(아래 Rule of three 메모).
+
+Rule of three — 추출 완료(`l6/_shared.py`): `METADATA_ONLY_SOURCES`와 정규화 헬퍼
+(`_source_value`·`_persona_fit`)는 본래 수능 모드(`l6/suneung/gating.py`)와 *의도적으로*
+중복했다(서로의 파일을 건드리지 않아 무회귀를 보장하려는 선택). 학교진도가 *세 번째* L6
+모드로 들어오면서 그 중복을 `l6/_shared.py`로 통합했다 — 이 모듈은 이제 `_shared.is_exposable`
+(저작권 게이트)·`_shared.normalize_enum_value`(enum 정규화)·`_shared.persona_fit`을 호출한다.
+`METADATA_ONLY_SOURCES`는 기존 import 경로(`l6.retake.gating.METADATA_ONLY_SOURCES`)와
+테스트 호환을 위해 `_shared`에서 *재노출*한다(아래).
 """
 
 from __future__ import annotations
 
 from collections.abc import Iterable
 
-from whymath_backend.schema.enums import Persona, QuestionFormat, SourceType
+from whymath_backend.l6 import _shared
+from whymath_backend.l6._shared import METADATA_ONLY_SOURCES
+from whymath_backend.schema.enums import Persona, QuestionFormat
 from whymath_backend.schema.problem import Problem
+
+# 저작권 노출 게이트 차단 집합(평가원·EBS·교과서)을 L6 공용 모듈에서 *재노출*한다 —
+# 기존 import 경로(`l6.retake.gating.METADATA_ONLY_SOURCES`)·테스트 호환을 위해 이름을 유지.
+# 정의 정본은 `l6/_shared.py`(Rule of three 추출 완료). `__all__`에도 그대로 둔다.
+__all__ = [
+    "METADATA_ONLY_SOURCES",
+    "RETAKE_PERSONAS",
+    "is_retake_eligible",
+    "retake_priority",
+    "select_retake_items",
+]
 
 # ──────────────────────────────────────────────────────────────────────────
 # 게이팅 상수
@@ -42,63 +64,8 @@ PRD 5종 페르소나(`enums.Persona`) 중 *재수(N수)* 상황인 둘만 RT �
 (`QuestionFormat.재수전용형` docstring: "재수(N수)전용 유형(retake-only). 페르소나 B·C 대상").
 """
 
-METADATA_ONLY_SOURCES: frozenset[SourceType] = frozenset(
-    {SourceType.평가원, SourceType.EBS, SourceType.교과서}
-)
-"""학생에게 *본문 노출이 불가*한 출처 — 저작권 노출 게이트의 차단 집합.
-
-평가원·EBS·검정교과서는 *본문·문항 미보유*(WhyMath는 구조 메타데이터만 보유). 이 출처의
-레코드는 단원·코드·문항번호 같은 *구조 참조 전용*이며 실제 발문·해설·선지를 가지지 않으므로,
-**학생에게 노출할 문항으로 쓸 수 없다**. 노출 가능한 본문을 가진 문항은 `자체생성`
-(WHYMATH_GENERATED) 레코드뿐이다.
-
-왜 노출 불가인가: 검정 교과서·평가원·EBS 본문의 복제·영리이용은 저작권법 §32 단서·§136·
-§140(영리 비친고죄)로 금지된다(저작권 가이드 v2.0, MEMORY 2026-05-28). RT 트랙은 학생에게
-문항을 *노출*하는 응용 모드이므로, 본문 미보유 출처는 게이트에서 원천 차단한다.
-
-설계 메모: `schema.problem._METADATA_ONLY_SOURCES`는 *private*이라 import하지 않고 L6에서
-같은 집합을 명시적으로 재정의한다(레이어 경계 — L6는 L1의 *공개* 계약만 의존). 두 정의가
-어긋나지 않게, 값은 L1 enum(`SourceType.평가원/EBS/교과서`)을 그대로 가리킨다.
-"""
-
-
-def _source_value(problem: Problem) -> str:
-    """`problem.source_type`을 *문자열 값*으로 정규화한다(use_enum_values=True 대응).
-
-    `Problem`은 `use_enum_values=True`라 `source_type`이 `SourceType` enum일 수도, 그 문자열
-    값일 수도 있다. 양쪽을 같은 척도(문자열)로 맞춰 비교 안정성을 확보한다
-    (`problem.py` validator 패턴 답습).
-    """
-    src = problem.source_type
-    return src.value if isinstance(src, SourceType) else src
-
-
-def _question_format_value(problem: Problem) -> str | None:
-    """`problem.question_format`을 *문자열 값*으로 정규화한다(None 보존).
-
-    `question_format`은 Optional이며 use_enum_values=True 환경에서 enum/문자열 양쪽이 가능하다.
-    None이면 None을 돌려준다(형식 미지정 — RT 라벨 신호 부재).
-    """
-    fmt = problem.question_format
-    if fmt is None:
-        return None
-    return fmt.value if isinstance(fmt, QuestionFormat) else fmt
-
-
-def _persona_fit(problem: Problem, persona: Persona) -> float:
-    """`persona_fit`에서 주어진 페르소나의 적합도를 꺼낸다(키 문자열화 대응·없으면 0.0).
-
-    use_enum_values=True 환경에서 `persona_fit`의 *키*가 `Persona` enum일 수도, 그 문자열
-    값일 수도 있으므로 각 키를 *문자열 값*으로 정규화해 대상 페르소나와 대조한다. 적중이 없으면
-    0.0(미평가 = 부적합). 선언 타입은 `dict[Persona, float]`이나 런타임 키가 문자열일 수 있어
-    `isinstance` 분기로 안전하게 정규화한다(call-overload·Any 회피).
-    """
-    target = persona.value
-    for key, score in problem.persona_fit.items():
-        key_value = key.value if isinstance(key, Persona) else key
-        if key_value == target:
-            return score
-    return 0.0
+# 저작권 노출 게이트 차단 집합 `METADATA_ONLY_SOURCES`(평가원·EBS·교과서)는 L6 공용
+# 모듈 `l6/_shared.py`에 정본을 두고, 이 파일 상단에서 *재노출*한다(Rule of three 추출 완료).
 
 
 def is_retake_eligible(problem: Problem, persona: Persona, *, min_fit: float = 0.5) -> bool:
@@ -121,20 +88,22 @@ def is_retake_eligible(problem: Problem, persona: Persona, *, min_fit: float = 0
       RT 트랙 노출 적격이면 True.
 
     use_enum_values=True 주의: source_type·question_format·persona_fit 키가 문자열일 수
-    있어 헬퍼(`_source_value`·`_question_format_value`·`_persona_fit`)로 정규화해 비교한다.
+    있어 L6 공용 헬퍼(`_shared.is_exposable`·`_shared.normalize_enum_value`·
+    `_shared.persona_fit`)로 정규화해 비교한다.
     """
     # ① 대상 페르소나 게이트.
     if persona not in RETAKE_PERSONAS:
         return False
 
     # ② 저작권 노출 게이트 — 본문 미보유 출처는 노출 불가(대상 페르소나라도 차단).
-    metadata_only_values = {s.value for s in METADATA_ONLY_SOURCES}
-    if _source_value(problem) in metadata_only_values:
+    if not _shared.is_exposable(problem):
         return False
 
     # ③ RT 적합 신호 — 재수전용형 라벨 또는 페르소나 적합도 임계 이상.
-    is_retake_format = _question_format_value(problem) == QuestionFormat.재수전용형.value
-    meets_fit = _persona_fit(problem, persona) >= min_fit
+    is_retake_format = (
+        _shared.normalize_enum_value(problem.question_format) == QuestionFormat.재수전용형.value
+    )
+    meets_fit = _shared.persona_fit(problem, persona) >= min_fit
     return is_retake_format or meets_fit
 
 
@@ -172,7 +141,7 @@ def retake_priority(problem: Problem) -> float:
         weight += 2.0
 
     # 재수전용형 라벨 신호 — RT용으로 설계된 문항.
-    if _question_format_value(problem) == QuestionFormat.재수전용형.value:
+    if _shared.normalize_enum_value(problem.question_format) == QuestionFormat.재수전용형.value:
         weight += 1.5
 
     # 종합 난이도 보조 축(None이면 0.0) — 심화·변별을 약하게 앞세움.
@@ -217,12 +186,3 @@ def select_retake_items(
     if limit is None:
         return ranked
     return ranked[:limit]
-
-
-__all__ = [
-    "METADATA_ONLY_SOURCES",
-    "RETAKE_PERSONAS",
-    "is_retake_eligible",
-    "retake_priority",
-    "select_retake_items",
-]
