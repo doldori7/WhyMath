@@ -495,7 +495,7 @@ CREATE TABLE strategy_evidence (
 |`read_student_state`(BKT·오개념·정서)|L2 `concept_mastery_history`(BKT)·`get_current_mastery`·`compute_concept_diagnoses`|정서 프록시 미구현                                       |
 |`match_misconception`(pgvector top-5)|L4 오개념 의미 매처(slice104+·pgvector `misconception` 임베딩)                          |카탈로그 **30종**(설계안 "400"=목표·§3.3 audit으로 보강)         |
 |`query_curriculum`(선수/후속)       |`concept_edge` PREREQUISITE + `fetch_prerequisites`(재귀 CTE·다단계)              |후속/형제 EdgeType은 후속 확장(현 데이터 전량 prerequisite)       |
-|`curate_hypothesis`/`select_probe`|L2 `recommend_weak_concepts`·`recommend_prerequisite_gaps`                  |가설 세트(감쇠·ε)·`evidence_links`는 향후 스키마             |
+|`curate_hypothesis`/`select_probe`|L4 `hypothesis.py`+`hypothesis_store.py`(`curate_hypothesis` — 감쇠·강화·반박·최대 5)·`evidence_links`(가동)|`curate_hypothesis` 구현(증거 net_support 반박·캡)·`select_probe` ε-탐색·coach 결선은 후속|
 |`end_turn` 코칭 결정               |L4 `recommend_coaching`·`recommend_prerequisite_coaching`·`GET /v1/me/.../coaching`·`/v1/coach/sessions`|§11.2 힌트 경제(개입 금지 타이머)는 이 코칭 결정의 *집행 런타임*       |
 |상태 저장소                        |PostgreSQL 16·Redis 7 (가동)·**벡터=pgvector**                                  |`evidence_links`·`strategy_*`는 향후 alembic 마이그레이션 |
 |커리큘럼 노드                       |개념그래프 **403개념**(`concept` code=UC)·NCIC 성취기준                                |설계안 "545노드"와 용어·수치 정합 필요                         |
@@ -515,7 +515,9 @@ CREATE TABLE strategy_evidence (
 
 `evidence_links`는 *신규 테이블*이되 FK 타깃을 위 실제 테이블로 정정해 마이그레이션한다.
 
-**구현됨(2026-06-17·마이그레이션 `b3c4d5e6f7a8`)**: `db/models/evidence_link.py` `EvidenceLink`(테이블 `evidence_links`·BIGSERIAL `link_id`). 위 매핑 정정 적용 — `student_id` **FK `user_profile.user_id` ON DELETE CASCADE**(★삭제권 연쇄·1차 마이그레이션 포함)·`event_id` BIGINT **느슨참조**(attempt_event 복합 PK라 단일 FK 불가)·`misconception_id` TEXT(인코드 카탈로그·스토어 `CATALOG_BY_ID` 대조·FK 아님)·`node_id` TEXT 느슨참조(concept_id)·`polarity` SMALLINT **CHECK ∈ {−1,+1}**·`weight`·`retention_until`(보존 배치 파기). 저장소+게이트 `l4/misconception/evidence_store.py`: `log_evidence`(카탈로그·극성 게이트 — 거짓 증거 차단)·`get_evidence_for_student`/`_misconception`·`net_support`(Σ polarity×weight — §2.3 *SQL 진단 신호*)·`purge_expired`(retention 야간 배치). **후속**: `curate_hypothesis`(증거→가설 세트·하네스)·단일 트랜잭션 삭제 오케스트레이션(BKT·pgvector 동반)·`select_probe`.
+**구현됨(2026-06-17·마이그레이션 `b3c4d5e6f7a8`)**: `db/models/evidence_link.py` `EvidenceLink`(테이블 `evidence_links`·BIGSERIAL `link_id`). 위 매핑 정정 적용 — `student_id` **FK `user_profile.user_id` ON DELETE CASCADE**(★삭제권 연쇄·1차 마이그레이션 포함)·`event_id` BIGINT **느슨참조**(attempt_event 복합 PK라 단일 FK 불가)·`misconception_id` TEXT(인코드 카탈로그·스토어 `CATALOG_BY_ID` 대조·FK 아님)·`node_id` TEXT 느슨참조(concept_id)·`polarity` SMALLINT **CHECK ∈ {−1,+1}**·`weight`·`retention_until`(보존 배치 파기). 저장소+게이트 `l4/misconception/evidence_store.py`: `log_evidence`(카탈로그·극성 게이트 — 거짓 증거 차단)·`get_evidence_for_student`/`_misconception`·`net_support`(Σ polarity×weight — §2.3 *SQL 진단 신호*)·`purge_expired`(retention 야간 배치).
+
+**구현됨(2026-06-17·마이그레이션 0 — 기존 테이블 재사용)**: `curate_hypothesis`(`l4/misconception/hypothesis_store.py`). 순수 `curate`(`hypothesis.py` — `update_hypotheses` + **반박 제거** + **최대 5 캡**·§2.2) 위에, 후보 오개념(현재 활성 가설 ∪ 새 매치)별 `evidence_store.net_support`를 조회해 *음수(반박 우세)면 archived*하고(§5.1·R4 확증편향 방지 — 반박이 LLM 추론 아닌 증거 그래프 SQL 집계) 최대 5개로 캡한 활성 세트를 `_persist_active_set`(upsert + 탈락 비활성화)으로 영속한다. `apply_matches`(매치만 반영)와 영속 헬퍼 공유(중복 0). **후속**: coach/intervention 결선(`curate_hypothesis`→개입 발화)·`select_probe`(ε-탐색 문항)·단일 트랜잭션 삭제 오케스트레이션(BKT·pgvector 동반).
 
 ### 용어·수치 정합: "545 노드" → 구현 403 개념
 
@@ -530,7 +532,7 @@ CREATE TABLE strategy_evidence (
 |1 |`read_student_state` |L2    |`get_current_mastery`(BKT)·`compute_concept_diagnoses`(BKT+IRT)·`get_current_theta`/`compute_concept_abilities`(θ)·`concept_mastery_history`|🟡 정서 프록시 미구현                                  |
 |2 |`verify_step`        |L3    |L4 `recommend_coaching_for_solution`(verify_steps 신호)·L3 SymPy 검증·PRM(PRM800K)                            |🟡 3-state(unverifiable)·한국 PRM 보정은 0단계         |
 |3 |`match_misconception`|L2/L3 |L4 `misconception/diagnose`(substring+정규식+의미)·pgvector `misconception_embedding`(slice104+)              |🟢 카탈로그 30종·top-1<0.65 게이트                     |
-|4 |`curate_hypothesis`  |하네스   |(근접) L2 `recommend_weak_concepts`                                                                         |🔴 가설 세트·감쇠 ×0.85·ε-탐색·최대 5 미구현             |
+|4 |`curate_hypothesis`  |하네스   |L4 `hypothesis.py`(순수 `decay`·`reinforce`·`update_hypotheses`·**`curate`**·`select_focus`)·`hypothesis_store.py`(`apply_matches`·**`curate_hypothesis`** — `evidence_store.net_support` 반박·최대 5 캡·per-student 영속)|🟢 가설 세트·감쇠(반감기 5턴 지수·설계 ×0.85/3턴과 곡선만 차이·파라미터화)·반박(net_support<0 archived)·최대 5 캡 가동. coach 결선·`select_probe` ε-탐색은 후속|
 |5 |`query_curriculum`   |L1+L2 |`concept_edge` PREREQUISITE·`fetch_prerequisites`(재귀 CTE 다단계)·`recommend_prerequisite_gaps`             |🟢 선수(후속/형제 EdgeType은 후속)                      |
 |6 |`select_probe`       |L4    |`GET /v1/me/next-problem`·`select_weighted_item`(IRT 정보량 CAT·slice L2-12/16)                              |🟡 정보량 출제 가동·가설 판별 태깅/ε 미구현                  |
 |7 |`log_evidence`       |하네스   |(근접) `record_attempt_mastery`·`attempt_event`(이벤트 소싱·TimescaleDB)                                       |🔴 `evidence_links`(polarity·weight) 미구현        |
