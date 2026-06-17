@@ -247,20 +247,20 @@ class TestTransformRealData:
             flashcard_records=flashcard_records,
             intl_records=intl_records,
         )
-        assert len(result.concepts) == 403
-        assert len(result.edges) == 541
+        assert len(result.concepts) == 437
+        assert len(result.edges) == 580
         assert result.skipped == []  # 실데이터는 전량 매핑
 
-    def test_review_status_distribution_114_289(
+    def test_review_status_distribution_114_323(
         self, concept_records: list[dict[str, object]]
     ) -> None:
-        """§4 분포: 수기 검수 114 → reviewed, 나머지 289 → pending."""
+        """§4 분포: 수기 검수 114 → reviewed, 나머지 323 → pending(기본수학 34 신규 포함)."""
         concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
         reviewed = sum(
             1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value
         )
         assert reviewed == 114
-        assert len(concepts) - reviewed == 289
+        assert len(concepts) - reviewed == 323
 
     def test_no_redaction_leak_in_full_dump(
         self, concept_records: list[dict[str, object]]

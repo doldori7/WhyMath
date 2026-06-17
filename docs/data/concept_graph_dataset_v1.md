@@ -1,9 +1,9 @@
 # 와이매스 개념그래프 데이터셋 v1 (자체작성) — 데이터 카드
 
-> **요약**: 한국 2022 개정 교육과정 전 범위(초등~고교 선택)를 덮는 **자체작성 개념그래프**
-> 시드. 403 개념 · 541 선수엣지 · 성취기준↔CCSS 코드 매핑 · 113 암기카드 · 13 국제트랙(CCSS전용).
-> 본 슬라이스(101)에서는 그중 **오개념 114건을 L4 오개념 카탈로그(22종)와 교차검증**하는 데
-> 사용했다(아래 §5). 전체 적재(L1 concept_graph 파이프라인)는 후속 슬라이스 결정 사항.
+> **요약**: 한국 2022 개정 교육과정 전 범위(초등~고교 선택·고1 기본수학)를 덮는 **자체작성
+> 개념그래프** 시드. 437 개념 · 580 선수엣지 · 성취기준↔CCSS 코드 매핑 · 113 암기카드 · 13
+> 국제트랙(CCSS전용). 본 슬라이스(101)에서는 그중 **오개념 114건을 L4 오개념 카탈로그(22종)와
+> 교차검증**하는 데 사용했다(아래 §5). 전체 적재(L1 concept_graph 파이프라인)는 후속 슬라이스 결정 사항.
 >
 > **2026-06-12 수정본 교체**: 사용자가 원본 입력 오류(절단된 개념명·어미 등)를 바로잡은 수정본
 > xlsx로 5개 jsonl + provenance를 *전량 재생성*했다(§1 버전 이력). 개념 401→403·선수엣지
@@ -22,9 +22,9 @@
 
 | 항목 | 값 |
 |---|---|
-| 형태 | 사용자 업로드 xlsx(수정본·13 시트 중 5종 사용) |
-| 업로드일 | 2026-06-12 (수정본) |
-| 원본 sha256 | `062695cef261386ec880313631aa349f624fcace1b7eb3d52bc031025536f90d` |
+| 형태 | 사용자 업로드 xlsx(보완본 v2·10 시트 중 5종 사용) |
+| 업로드일 | 2026-06-17 (보완본 v2) |
+| 원본 sha256 | `4e5a880bc7ff41a5f67a876da9fb8125f518638c0cbea73b3377447eb79d29cd` |
 | 저작 | 와이매스 자체작성(교수학 주석) + 공공 표준 *코드* 참조 |
 | 추출 산출물 | `data/corpus/concept_graph_v1/*.jsonl` (5종) + `_provenance.json` |
 
@@ -37,6 +37,8 @@
 |---|---|---|---|---|
 | 2026-06-10 | `1274533c…8488d1` | 401 | 540 | 최초 업로드 |
 | 2026-06-12 | `062695ce…36f90d` | 403 | 541 | **수정본 전량 교체** — 절단 개념명·어미 복원 등 입력 오류 정정(원본 검수보고 시트 기준). 동일 redaction 정책(§3) 적용·재생성 |
+| 2026-06-17 | `684cfc13…eacaf0` | (검토만) | — | **개정본 v1 — 검토 후 통합 보류**. 고1 기본수학1·2 개념 34 *스텁*(개념명+성취기준만, 교수학 본문 공란) 추가 발견 → 품질 우선(CLAUDE.md #3)으로 본문 충전 후 적재 결정. 코퍼스 미반영. |
+| 2026-06-17 | `4e5a880b…d29cd` | 437 | 580 | **보완본 v2 — 전량 재생성·적재**. ⑴ **고1 공통 기본수학1·2 개념 34 추가**(`10기수1/2-*`·2022개정·성취기준 참조 무결성 OK·v1 스텁의 오개념·은유·허용표현·설명·정식정의·선수엣지(+39) **전부 충전**·`정의출처`=2022 별책8). ⑵ **기존 403 교수학 본문 보강**: `metaphor` 403건·`misconception` 403건·`accepted_expressions` 287건 전면 확충(전부 길어짐). 구조 필드(`name_ko`·`category`·`difficulty_tier`·`ccss_code`·`definition_provenance`) **변경 0**(드리프트 없음). ⑶ `std_codes` 표기 47(선택과목 하이픈+멀티구분자·코드 실체 동일). ⑷ 검수보고 시트: 고등 선택 `성취기준 문장` 절단·어미복원 정제 다수(코퍼스 미추출 필드). ⑸ 신규 concept_id `HIGH-B{AREA}-NNN`(idmap에 `[기본]` 7영역 독립 네임스페이스 추가 — 기존 403 ID **재번호화 0** 검증). redaction(설명·정식정의·intl 영문) 정책 유지. |
 
 ---
 
@@ -44,9 +46,9 @@
 
 | jsonl | 레코드 | 핵심 필드 |
 |---|---|---|
-| `concepts.jsonl` | 403 | `src_id`(G01·N1·HK01·J0105·H:…), `name_ko`, `category`, `difficulty_tier`(0~24), `standard_codes`[], `ccss_code`, `metaphor`, **`misconception`**, `accepted_expressions`, `definition_provenance`, `flashcard_count` |
-| `prerequisite_edges.jsonl` | 541 | `from_id`, `from_name`, `relation`(선수), `to_id`, `to_name` |
-| `standard_ccss_map.jsonl` | 403 | `src_id`, `name_ko`, `standard_code_kr`, `ccss_code` |
+| `concepts.jsonl` | 437 | `src_id`(G01·N1·HK01·J0105·H:…·`10기수1/2-*`), `name_ko`, `category`, `difficulty_tier`(0~24), `standard_codes`[], `ccss_code`, `metaphor`, **`misconception`**, `accepted_expressions`, `definition_provenance`, `flashcard_count` |
+| `prerequisite_edges.jsonl` | 580 | `from_id`, `from_name`, `relation`(선수), `to_id`, `to_name` |
+| `standard_ccss_map.jsonl` | 437 | `src_id`, `name_ko`, `standard_code_kr`, `ccss_code` |
 | `flashcards.jsonl` | 113 | `grade`(A·…), `category`, `difficulty_tier`, `src_id`, `name_ko`, `front`, `back`, `mnemonic`, `exposure_condition` |
 | `ccss_only_intl.jsonl` | 13 | `node_id`, `ccss_code`, `scope`, `kr_adjacent_area`, `kr_interpretation`, `kr_absence_reason` |
 
@@ -79,16 +81,19 @@ CCSS 코드)는 **안전**(자체 코퍼스 + 사실정보). 단, 두 자유텍�
 
 ## 4. 검수 상태 (적재 전 게이트)
 
-`definition_provenance` 분포 — **289/403이 자동생성·검수필요**(수정본 기준):
+`definition_provenance` 분포 — **323/437이 자동생성·검수필요**(보완본 v2 기준):
 
 | 출처 | 개수 | 적재 가능성 |
 |---|---|---|
 | 수기 검수 | 114 | 검수 완료 — 우선 적재 후보 |
 | 자동(설명기반)·검수필요 | 197 | 전문가 검수 후 |
 | 자동 초안·검수필요 | 90 | 전문가 검수 후 |
+| 2022 개정 교육과정 별책8(기본수학) | 34 | 고1 기본수학 신규(v2)·전문가 검수 후 |
 | 신규 작성(2022 신설)·검수필요 | 2 | 전문가 검수 후 |
 
-오개념(116건)이 채워진 개념은 대부분 "수기 검수"군과 겹쳐 신뢰도가 상대적으로 높다.
+오개념(전 개념 충전)이 채워진 개념은 대부분 "수기 검수"군과 겹쳐 신뢰도가 상대적으로 높다. v2에서
+`metaphor`·`misconception`·`accepted_expressions`를 전면 보강했으나 `definition_provenance`(검수 출처)는
+보강과 무관하게 보존되므로 위 분포의 *검수 등급*은 그대로다(콘텐츠 충실화 ≠ 전문가 검수 완료).
 
 ---
 

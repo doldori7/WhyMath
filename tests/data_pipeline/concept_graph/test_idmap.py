@@ -143,10 +143,10 @@ class TestBuildIdMap:
     def test_real_data_no_collision_403_unique(
         self, concept_records: list[dict[str, object]]
     ) -> None:
-        """실데이터 403 개념 → 403 유일 새 ID(충돌 0)."""
+        """실데이터 437 개념 → 437 유일 새 ID(충돌 0)."""
         id_map = build_id_map(concept_records)
-        assert len(id_map) == 403
-        assert len(set(id_map.values())) == 403  # 충돌 0
+        assert len(id_map) == 437
+        assert len(set(id_map.values())) == 437  # 충돌 0
 
     def test_real_data_all_pass_pattern(
         self, concept_records: list[dict[str, object]]
@@ -364,9 +364,9 @@ class TestBuildAliasMap:
     def test_real_data_every_concept_has_aliases(
         self, concept_records: list[dict[str, object]]
     ) -> None:
-        """실데이터 403건 모두 별칭에 옛 UC·src_id 보존."""
+        """실데이터 437건 모두 별칭에 옛 UC·src_id 보존."""
         alias_map = build_alias_map(concept_records)
-        assert len(alias_map) == 403
+        assert len(alias_map) == 437
         for src_id, aliases in alias_map.items():
             assert src_id in aliases
             assert any(LEGACY_UC_PATTERN.match(a) for a in aliases)
