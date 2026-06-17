@@ -54,6 +54,7 @@ from whymath_backend.db.models.concept_embedding import ConceptEmbedding
 from whymath_backend.db.models.concept_node import ConceptNode
 from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.curriculum_entry import CurriculumEntry
+from whymath_backend.db.models.dead_end_log import DeadEndLog
 from whymath_backend.db.models.device import DeviceCredential
 from whymath_backend.db.models.dialogue import (
     Dialogue,
@@ -92,6 +93,10 @@ from whymath_backend.db.models.user import (
     UserProfile,
     UserStateSnapshot,
     UserTrackHistory,
+)
+from whymath_backend.db.models.verified_solution import (
+    VerifiedSolution,
+    WhsSolutionGrade,
 )
 
 __all__ = [
@@ -146,6 +151,11 @@ __all__ = [
     # WH-S S1: SolutionNode (풀이 경로 트리 노드·§2.1·오프라인 솔버 상태) + 검증 상태 enum
     "SolutionNode",
     "NodeVerifyStatus",
+    # WH-S S1 §2.3: DeadEndLog (실패 접근 로그·멱등 (problem,state,action) UNIQUE)
+    "DeadEndLog",
+    # WH-S S1 §2.4: VerifiedSolution (검증 풀이 저장소·다중 풀이) + 등급 enum(verified/unverified)
+    "VerifiedSolution",
+    "WhsSolutionGrade",
     # OAuth-a3b: RefreshTokenSession (리프레시 토큰 서버측 취소 allowlist·PK=jti)
     "RefreshTokenSession",
     # PIPA §22-2: ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사·surrogate UUID PK)
