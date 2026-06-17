@@ -25,10 +25,45 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
+from whymath_backend.l4.misconception import InterventionDecision, InterventionPattern
+from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 _UID = uuid.uuid4()
+
+
+def _hyp(confidence: float, mid: str = "distribution-over-power") -> MisconceptionHypothesis:
+    return MisconceptionHypothesis(
+        misconception_id=mid, confidence=confidence, turns_since_evidence=0, evidence_count=1
+    )
+
+
+def _fallback_decision() -> InterventionDecision:
+    return InterventionDecision(
+        pattern=InterventionPattern.REVERSE_REASONING, prompt="FB", misconception_id="fb"
+    )
+
+
+class TestInterventionFromHypothesesWiring:
+    """`_intervention_from_hypotheses_or` — 가설 세트가 결정을 내면 override, 못 내면 fallback."""
+
+    def test_hypothesis_overrides_fallback(self) -> None:
+        """누적 가설(0.9)이 raw 매치 기반 fallback을 대체한다(결선 핵심)."""
+        out = coach._intervention_from_hypotheses_or([_hyp(0.9)], _fallback_decision())
+        assert out is not None
+        assert out.pattern is InterventionPattern.COUNTEREXAMPLE  # 0.9 > 0.8
+        assert out.misconception_id == "distribution-over-power"
+
+    def test_fallback_when_hypotheses_withhold(self) -> None:
+        """가설 세트가 결정을 못 내면(빈 세트·focus<0.5 보류) fallback 유지(회귀 0)."""
+        fb = _fallback_decision()
+        assert coach._intervention_from_hypotheses_or([], fb) is fb
+        assert coach._intervention_from_hypotheses_or([_hyp(0.3)], fb) is fb
+
+    def test_fallback_none_stays_none(self) -> None:
+        """가설도 보류·fallback도 None → None(개입 없음)."""
+        assert coach._intervention_from_hypotheses_or([], None) is None
 
 
 @pytest.fixture(autouse=True)
