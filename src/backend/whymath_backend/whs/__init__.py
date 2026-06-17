@@ -15,16 +15,28 @@ S1 좌석(풀이 트리 상태 계층): ③ 풀이 경로 트리 노드 ORM(`db/
 `SolutionNode`·`NodeVerifyStatus`·§2.1)과 ④ 그 비동기 CRUD 저장소(`node_store.py`). 솔버
 루프·MCTS·도구 8종이 이 저장소로 트리 노드를 생성·조회·갱신한다(루프 본체는 후속).
 
-범위 밖(후속): 시드 모델 실행(후보 풀이 생성·Ollama·MCTS)·솔버 루프·도구 8종·다른 저장소
-(§2.2 Verified Lemma Store·§2.3 Dead-End Log·§2.4 Verified Solution Bank)·자기 진화·PRM·
-Tier3(§9 로드맵).
+S1 좌석(상태 저장소 — 추가): ⑤ 실패 접근 로그(`db/models/dead_end_log.py` `DeadEndLog`·§2.3)와
+그 저장소(`dead_end_store.py` — `log_dead_end` 멱등·`is_dead_end` 회피 조회·`get_dead_ends`).
+⑥ 검증 풀이 저장소(`db/models/verified_solution.py` `VerifiedSolution`·`WhsSolutionGrade`·§2.4)와
+그 저장소(`solution_bank.py` — `bank_solution`·`get_solutions`·`get_verified`[학습 안전 필터]).
+탐색 정책이 ⑤로 같은 막다른 길을 회피하고, `finalize`가 ⑥에 완전 풀이를 커밋한다(둘 다 루프 본체는
+후속). ⑥은 등급 enum에 failed를 배제(§3·R-S2)하고 `get_verified`로 학습 데이터에서 unverified를
+구조 격리한다.
+
+범위 밖(후속): 시드 모델 실행(후보 풀이 생성·Ollama·MCTS)·솔버 루프·도구 8종·§2.2 Verified
+Lemma Store·자기 진화·PRM·Tier3(§9 로드맵).
 """
 
 from __future__ import annotations
 
+from whymath_backend.db.models.dead_end_log import DeadEndLog
 from whymath_backend.db.models.solution_node import (
     NodeVerifyStatus,
     SolutionNode,
+)
+from whymath_backend.db.models.verified_solution import (
+    VerifiedSolution,
+    WhsSolutionGrade,
 )
 from whymath_backend.whs.baseline import (
     BandResult,
@@ -33,6 +45,11 @@ from whymath_backend.whs.baseline import (
     EvalItem,
     run_baseline,
 )
+from whymath_backend.whs.dead_end_store import (
+    get_dead_ends,
+    is_dead_end,
+    log_dead_end,
+)
 from whymath_backend.whs.node_store import (
     create_node,
     get_children,
@@ -40,6 +57,11 @@ from whymath_backend.whs.node_store import (
     get_roots,
     increment_visits,
     update_evaluation,
+)
+from whymath_backend.whs.solution_bank import (
+    bank_solution,
+    get_solutions,
+    get_verified,
 )
 from whymath_backend.whs.verdict import (
     WhsGrade,
@@ -50,18 +72,27 @@ from whymath_backend.whs.verdict import (
 __all__ = [
     "BandResult",
     "BaselineReport",
+    "DeadEndLog",
     "DifficultyBand",
     "EvalItem",
     "NodeVerifyStatus",
     "SolutionNode",
+    "VerifiedSolution",
     "WhsGrade",
+    "WhsSolutionGrade",
     "WhsVerdict",
+    "bank_solution",
     "create_node",
     "final_verdict",
     "get_children",
+    "get_dead_ends",
     "get_node",
     "get_roots",
+    "get_solutions",
+    "get_verified",
     "increment_visits",
+    "is_dead_end",
+    "log_dead_end",
     "run_baseline",
     "update_evaluation",
 ]

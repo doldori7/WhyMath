@@ -277,7 +277,7 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 |자기진화 SFT/RL      |Phaiakes9·Ollama(Qwen3-Math·DeepSeek-Math)          |오픈 가중치 시드·자기생성 데이터(약관 청정·R-S7)       |
 |벡터               |**pgvector**(ChromaDB 폐기·§8 비교표 교정)                 |Postgres 16 확장 통합                     |
 
-`solution_nodes`·`Verified Lemma/Solution Store`·`Dead-End Log`는 *향후 스키마*(구현 시 alembic 마이그레이션). 도입은 ROADMAP상 **S0~S1(검증기 Tier1+2·솔버 루프)은 Phase 2 모트, 자기진화·PRM(S2~S3)·Lean4 Tier3(S5)는 Phase 2~3**으로 단계화한다(1인 capacity 가드).
+`solution_nodes`(§2.1)·`Dead-End Log`(§2.3)·`Verified Solution Bank`(§2.4)는 *스키마 구현됨*(S1 슬라이스 1·2·아래). `Verified Lemma Store`(§2.2)는 *향후 스키마*. 도입은 ROADMAP상 **S0~S1(검증기 Tier1+2·솔버 루프)은 Phase 2 모트, 자기진화·PRM(S2~S3)·Lean4 Tier3(S5)는 Phase 2~3**으로 단계화한다(1인 capacity 가드).
 
 ### S0 진행 (2026-06-13)
 
@@ -293,7 +293,13 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 - `db/models/solution_node.py` `SolutionNode`(테이블 `solution_nodes`)·`NodeVerifyStatus`(pending/verified/unverified/failed): `id`(UUID PK)·`problem_id`(UUID·인덱스·**FK 아님**·WH-S 독립 오프라인 느슨참조)·`parent_id`(self-FK `ondelete=CASCADE`·트리 부모·루트 NULL)·`state_repr`(JSONB)·`action`(Text)·`prm_score`(Float)·`verify_status`(enum·default pending)·`visits`(int·MCTS 방문)·`created_at`/`updated_at`. 인덱스 `problem_id`·`parent_id`.
 - 마이그레이션 **`c2d3e4f5a6b7`**(down_revision `b1c2d3e4f5a6`·단일 head·upgrade=테이블+enum 자동생성+인덱스2·downgrade=인덱스→테이블→enum 명시 drop·가역).
 - `whs/node_store.py`(비동기 저장소·순수 ORM·원시 SQL 0): `create_node`·`get_node`·`get_children`·`get_roots`·`increment_visits`(원자적)·`update_evaluation`. WH-S 오프라인(API 노출 0·§7.5).
-- **후속(S1 잔여)**: 솔버 루프(LLM 정책·MCTS-lite·도구 8종)·§2.2 Verified Lemma Store·§2.3 Dead-End Log·§2.4 Verified Solution Bank 저장소.
+- **후속(S1 잔여)**: 솔버 루프(LLM 정책·MCTS-lite·도구 8종)·§2.2 Verified Lemma Store 저장소.
+
+**S1 슬라이스 2 — 실패 접근 로그 + 검증 풀이 저장소**(설계 §2.3·§2.4) 구현됨(마이그레이션 동반·**솔버 루프 구동은 후속**). 솔버 상태 저장소 2종:
+- **§2.3 `dead_end_log`** `db/models/dead_end_log.py` `DeadEndLog`: `id`(UUID PK)·`problem_id`(UUID·**FK 아님**·느슨참조)·`state_hash`(Text)·`action`(Text)·`reason`(Text nullable)·`created_at`. **`(problem_id, state_hash, action)` UNIQUE**(멱등 — 중복 막다른 길 1행). 저장소 `whs/dead_end_store.py`: `log_dead_end`(ON CONFLICT DO NOTHING 멱등)·`is_dead_end`(EXISTS 회피 조회)·`get_dead_ends`. 탐색 정책이 행동 적용 전 `is_dead_end`로 재진입 차단(같은 실수 반복 구조 차단).
+- **§2.4 `verified_solutions`** `db/models/verified_solution.py` `VerifiedSolution`·`WhsSolutionGrade`: `id`(UUID PK)·`problem_id`(느슨참조)·`grade`(enum **verified/unverified만**·failed 구조 배제·§3·R-S2)·`solution_path`(JSONB)·`strategy_tag`(Text nullable·대수/기하/귀납 다중 풀이 태그)·`answer`(Text nullable)·`source_root_id`(UUID nullable·**FK 아님**·내구 자산이라 트리 GC 비강결합)·`created_at`. 인덱스 `(problem_id, grade)`. `problem_id` UNIQUE 없음(다중 풀이). 저장소 `whs/solution_bank.py`: `bank_solution`(finalize 커밋)·`get_solutions`(전체)·`get_verified`(**verified만**·학습 데이터에서 unverified 격리·R-S2). `finalize`가 완전 풀이를 커밋.
+- 마이그레이션 **`f1a2b3c4d5e6`**(down_revision `e0f1a2b3c4d5`·단일 head·upgrade=테이블 2 + enum 자동생성 + 인덱스 1·downgrade=verified_solutions[인덱스→테이블→enum 명시 drop]→dead_end_log 테이블·가역).
+- **후속(S1 잔여)**: 솔버 루프(도구 `log_deadend`·`finalize`가 위 저장소 호출)·§2.2 Verified Lemma Store·해시 스킴 표준화.
 
 ### 용어 정합: "545노드" (편집자 부기)
 
