@@ -305,7 +305,7 @@ class TestRealDataValidation:
         )
         report = validate_dataset(result)
         assert report.node_count == 437
-        assert report.edge_count == 580
+        assert report.edge_count == 581
         assert report.success is True  # error 0 (Phase 1: warning은 통과)
         assert report.errors == []
 
@@ -322,4 +322,4 @@ class TestRealDataValidation:
         text = report.report_text()
         assert "PASS" in text
         assert "노드 437개" in text
-        assert "엣지 580개" in text
+        assert "엣지 581개" in text

@@ -129,7 +129,7 @@ class TestTransformV1:
         result = runner.invoke(app, ["transform-v1", "--corpus-dir", str(corpus_dir)])
         assert result.exit_code == 0, result.output
         assert "개념 437개" in result.stdout
-        assert "엣지 580개" in result.stdout
+        assert "엣지 581개" in result.stdout
         assert "PASS" in result.stdout
 
     def test_writes_outputs(self, corpus_dir: Path, tmp_path: Path) -> None:

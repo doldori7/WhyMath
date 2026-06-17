@@ -1,7 +1,7 @@
 # 와이매스 개념그래프 데이터셋 v1 (자체작성) — 데이터 카드
 
 > **요약**: 한국 2022 개정 교육과정 전 범위(초등~고교 선택·고1 기본수학)를 덮는 **자체작성
-> 개념그래프** 시드. 437 개념 · 580 선수엣지 · 성취기준↔CCSS 코드 매핑 · 113 암기카드 · 13
+> 개념그래프** 시드. 437 개념 · 581 선수엣지 · 성취기준↔CCSS 코드 매핑 · 113 암기카드 · 13
 > 국제트랙(CCSS전용). 본 슬라이스(101)에서는 그중 **오개념 114건을 L4 오개념 카탈로그(22종)와
 > 교차검증**하는 데 사용했다(아래 §5). 전체 적재(L1 concept_graph 파이프라인)는 후속 슬라이스 결정 사항.
 >
@@ -40,6 +40,7 @@
 | 2026-06-17 | `684cfc13…eacaf0` | (검토만) | — | **개정본 v1 — 검토 후 통합 보류**. 고1 기본수학1·2 개념 34 *스텁*(개념명+성취기준만, 교수학 본문 공란) 추가 발견 → 품질 우선(CLAUDE.md #3)으로 본문 충전 후 적재 결정. 코퍼스 미반영. |
 | 2026-06-17 | `4e5a880b…d29cd` | 437 | 580 | **보완본 v2 — 전량 재생성·적재**. ⑴ **고1 공통 기본수학1·2 개념 34 추가**(`10기수1/2-*`·2022개정·성취기준 참조 무결성 OK·v1 스텁의 오개념·은유·허용표현·설명·정식정의·선수엣지(+39) **전부 충전**·`정의출처`=2022 별책8). ⑵ **기존 403 교수학 본문 보강**: `metaphor` 403건·`misconception` 403건·`accepted_expressions` 287건 전면 확충(전부 길어짐). 구조 필드(`name_ko`·`category`·`difficulty_tier`·`ccss_code`·`definition_provenance`) **변경 0**(드리프트 없음). ⑶ `std_codes` 표기 47(선택과목 하이픈+멀티구분자·코드 실체 동일). ⑷ 검수보고 시트: 고등 선택 `성취기준 문장` 절단·어미복원 정제 다수(코퍼스 미추출 필드). ⑸ 신규 concept_id `HIGH-B{AREA}-NNN`(idmap에 `[기본]` 7영역 독립 네임스페이스 추가 — 기존 403 ID **재번호화 0** 검증). redaction(설명·정식정의·intl 영문) 정책 유지. |
 | 2026-06-17 | (코퍼스 후처리) | 437 | 580 | **기본수학 34 AI 검수 승격**(xlsx 무관 — 추출 후 검수 행위). 34개 `정의출처`에 `·AI 검수(수식·오개념 정합)` 마커 추가 → `review_status` reviewed(148=114+34·pending 289). 검수 내용: 수식 정확성·오개념 타당성(거짓 낙인 0)·은유·CLAUDE.md 정합 **34/34 통과**. *출처(별책8) 보존*·인간 수기검수 아닌 **AI 검수** 정직 명시. 403줄 바이트 불변(34줄만 변경). ★xlsx 재추출 시 이 마커는 재적용 필요(후처리라 정본 미반영). |
+| 2026-06-17 | (코퍼스 후처리) | 437 | 581 | **선수엣지 1건 추가**(xlsx 무관 — 정본 정합). `평행이동(10기수2-01-06) ← 원의 방정식(10기수2-01-04)`. 근거: 공통수학 정본 `HK24 평행이동 ← {직선, 원}`인데 기본수학은 `← {직선}`만 → 같은 과목(기본수학2)의 원의 방정식 선수 누락 보정(580→581). *검수 중 플래그한 3건(행렬←다항식·직선←거리·평행이동←직선)은 공통수학 정본과 일치해 제거 대상 아님을 확인*. `_provenance.post_extraction`에 기록(source xlsx edges=580). |
 
 ---
 
@@ -48,7 +49,7 @@
 | jsonl | 레코드 | 핵심 필드 |
 |---|---|---|
 | `concepts.jsonl` | 437 | `src_id`(G01·N1·HK01·J0105·H:…·`10기수1/2-*`), `name_ko`, `category`, `difficulty_tier`(0~24), `standard_codes`[], `ccss_code`, `metaphor`, **`misconception`**, `accepted_expressions`, `definition_provenance`, `flashcard_count` |
-| `prerequisite_edges.jsonl` | 580 | `from_id`, `from_name`, `relation`(선수), `to_id`, `to_name` |
+| `prerequisite_edges.jsonl` | 581 | `from_id`, `from_name`, `relation`(선수), `to_id`, `to_name` |
 | `standard_ccss_map.jsonl` | 437 | `src_id`, `name_ko`, `standard_code_kr`, `ccss_code` |
 | `flashcards.jsonl` | 113 | `grade`(A·…), `category`, `difficulty_tier`, `src_id`, `name_ko`, `front`, `back`, `mnemonic`, `exposure_condition` |
 | `ccss_only_intl.jsonl` | 13 | `node_id`, `ccss_code`, `scope`, `kr_adjacent_area`, `kr_interpretation`, `kr_absence_reason` |

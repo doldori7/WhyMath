@@ -257,7 +257,7 @@ class TestTransformRealData:
             intl_records=intl_records,
         )
         assert len(result.concepts) == 437
-        assert len(result.edges) == 580
+        assert len(result.edges) == 581
         assert result.skipped == []  # 실데이터는 전량 매핑
 
     def test_review_status_distribution_148_289(
