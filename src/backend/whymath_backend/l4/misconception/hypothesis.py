@@ -49,6 +49,10 @@ _DEFAULT_EPSILON = 0.1
 """ε-규칙 탐색 확률. 이 확률로 최상위 외 차순위 가설을 *탐색*해 1위 고착(오진단 고정)을
 깬다. 나머지(1-ε)는 최상위 활용. 0이면 항상 최상위(탐색 안 함)."""
 
+_MAX_ACTIVE = 5
+"""활성 가설 세트 상한(설계 §2.2 "최대 5개 강제"). LLM이 큐레이션 세트를 임의로 무한
+늘리지 못하게 confidence 내림차순 상위 N개만 활성으로 둔다(나머지는 archived·이력 보존)."""
+
 
 class MisconceptionHypothesis(BaseModel):
     """활성 오개념 *가설* 1건 — 후보일 뿐 *확정 라벨 아님*(감쇠·가지치기 대상).
@@ -157,6 +161,33 @@ def update_hypotheses(
     return pruned
 
 
+def curate(
+    current: Sequence[MisconceptionHypothesis],
+    matches: Sequence[MisconceptionMatch],
+    *,
+    turns_elapsed: int = 1,
+    refuted: frozenset[str] = frozenset(),
+    max_active: int = _MAX_ACTIVE,
+) -> list[MisconceptionHypothesis]:
+    """활성 가설 세트를 1턴 *큐레이션* — 갱신 → 반박 제거 → 최대 N 캡(순수·결정론).
+
+    `update_hypotheses`(감쇠→증거 강화/신규→임계 가지치기→내림차순 정렬) 위에 설계 §2.2의
+    두 큐레이션 규칙을 더한다(재구현 0·조합):
+      1. **반박 제거** — `refuted`(증거 *순지지도가 음수*인 오개념 id 집합)에 든 가설을 세트에서
+         archived(제외)한다(§5.1 "반박된 가설 archived"·§2.2 규칙3 반박 증거 우선). 반박 판정
+         *자체*는 증거 그래프(`evidence_store.net_support`) 몫이라 본 함수는 *id 집합으로 주입*
+         받는다 — DB·증거를 모르는 순수 함수로 유지(확증편향 방지가 LLM 추론이 아닌 증거 기반).
+      2. **최대 N 캡** — confidence 내림차순 상위 `max_active`개만 활성(§2.2 "최대 5개 강제").
+         `update_hypotheses`가 이미 내림차순 정렬하므로 `[:max_active]` 슬라이스로 충분하다.
+
+    `refuted=∅`·`max_active≥세트크기`이면 `update_hypotheses`와 동치다(순수 상위 호환). 입력은
+    변형하지 않고 항상 새 리스트를 반환한다(`update_hypotheses` 불변 승계).
+    """
+    updated = update_hypotheses(current, matches, turns_elapsed=turns_elapsed)
+    survivors = [h for h in updated if h.misconception_id not in refuted]
+    return survivors[:max_active]
+
+
 def select_focus(
     hypotheses: Sequence[MisconceptionHypothesis],
     *,
@@ -187,6 +218,7 @@ def select_focus(
 
 __all__ = [
     "MisconceptionHypothesis",
+    "curate",
     "decay",
     "reinforce",
     "select_focus",

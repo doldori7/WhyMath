@@ -14,17 +14,21 @@ from __future__ import annotations
 import asyncio
 import uuid
 from decimal import Decimal
+from typing import cast
 
 import pytest
 from pydantic import SecretStr
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from whymath_backend.config import Settings
 from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
 )
 from whymath_backend.db.models.user import UserProfile
+from whymath_backend.l4.misconception import hypothesis_store
+from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.evidence_store import log_evidence
 from whymath_backend.l4.misconception.hypothesis import (
     MisconceptionHypothesis,
     update_hypotheses,
@@ -32,6 +36,7 @@ from whymath_backend.l4.misconception.hypothesis import (
 from whymath_backend.l4.misconception.hypothesis_store import (
     _to_pydantic,
     apply_matches,
+    curate_hypothesis,
     get_active_hypotheses,
 )
 from whymath_backend.l4.misconception.models import Misconception, MisconceptionMatch
@@ -60,6 +65,13 @@ def _match(mid: str, confidence: float) -> MisconceptionMatch:
     return MisconceptionMatch(misconception=_mc(mid), confidence=confidence)
 
 
+def _pyhyp(mid: str, conf: float, *, turns: int = 0, count: int = 1) -> MisconceptionHypothesis:
+    """테스트용 순수 `MisconceptionHypothesis`(현재 활성 가설 시드)."""
+    return MisconceptionHypothesis(
+        misconception_id=mid, confidence=conf, turns_since_evidence=turns, evidence_count=count
+    )
+
+
 # ===========================================================================
 # 단위 (hermetic) — Record↔Pydantic 변환
 # ===========================================================================
@@ -83,6 +95,80 @@ class TestToPydanticUnit:
         assert hyp.confidence == 0.75
         assert hyp.turns_since_evidence == 2
         assert hyp.evidence_count == 3
+
+
+class TestCurateHypothesisOrchestrationUnit:
+    """`curate_hypothesis` 오케스트레이션 — I/O 경계(get_active·net_support·_persist)만 스텁해
+    후보 집합·반박 판정·순수 `curate`·영속 위임을 hermetic 검증한다(DB·SQL 불요).
+    """
+
+    def _patch(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        *,
+        current: list[MisconceptionHypothesis],
+        net: dict[str, float],
+        sink: list[list[MisconceptionHypothesis]],
+    ) -> None:
+        async def fake_active(
+            session: AsyncSession, student_id: uuid.UUID
+        ) -> list[MisconceptionHypothesis]:
+            return list(current)
+
+        async def fake_net(session: AsyncSession, student_id: uuid.UUID, mid: str) -> float:
+            return net.get(mid, 0.0)
+
+        async def fake_persist(
+            session: AsyncSession, student_id: uuid.UUID, active: list[MisconceptionHypothesis]
+        ) -> None:
+            sink.append(list(active))
+
+        monkeypatch.setattr(hypothesis_store, "get_active_hypotheses", fake_active)
+        monkeypatch.setattr(hypothesis_store, "net_support", fake_net)
+        monkeypatch.setattr(hypothesis_store, "_persist_active_set", fake_persist)
+
+    def test_negative_net_support_refutes_even_if_matched(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """net_support<0 오개념은 이번 턴 매치가 있어도 archived(증거 기반 반박)."""
+        sink: list[list[MisconceptionHypothesis]] = []
+        self._patch(
+            monkeypatch,
+            current=[_pyhyp("keep", 0.6), _pyhyp("bad", 0.6)],
+            net={"keep": 2.0, "bad": -1.5},  # fresh는 기본 0.0(반박 아님)
+            sink=sink,
+        )
+        out = asyncio.run(
+            curate_hypothesis(
+                cast(AsyncSession, object()),
+                student_id=uuid.uuid4(),
+                matches=[_match("keep", 0.5), _match("fresh", 0.7)],
+                turns_elapsed=0,
+            )
+        )
+        ids = {h.misconception_id for h in out}
+        assert "bad" not in ids  # net_support<0 → archived
+        assert "keep" in ids and "fresh" in ids
+        assert sink == [out]  # 영속에 동일 활성 세트 위임
+
+    def test_max_active_caps_to_five(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """반박 없으면(net 0) 최대 N 캡만 적용 — 7개 → 상위 5개."""
+        sink: list[list[MisconceptionHypothesis]] = []
+        self._patch(monkeypatch, current=[], net={}, sink=sink)  # net.get→0.0(반박 0)
+        matches = [_match(f"m{i}", 0.3 + 0.05 * i) for i in range(7)]
+        out = asyncio.run(
+            curate_hypothesis(
+                cast(AsyncSession, object()),
+                student_id=uuid.uuid4(),
+                matches=matches,
+                turns_elapsed=1,
+                max_active=5,
+            )
+        )
+        assert len(out) == 5
+        ids = {h.misconception_id for h in out}
+        assert "m0" not in ids and "m1" not in ids  # 최저 2개 탈락
+        assert sink == [out]
 
 
 # ===========================================================================
@@ -137,9 +223,13 @@ async def _cleanup(user_ids: list[uuid.UUID]) -> None:
     uids = [str(u) for u in user_ids]
     try:
         async with engine.begin() as conn:
-            # 자식(misconception_hypothesis) → 부모(user_profile) 순.
+            # 자식(misconception_hypothesis·evidence_links) → 부모(user_profile) 순.
             await conn.execute(
                 text("DELETE FROM misconception_hypothesis WHERE user_id = ANY(:uids)"),
+                {"uids": uids},
+            )
+            await conn.execute(
+                text("DELETE FROM evidence_links WHERE student_id = ANY(:uids)"),
                 {"uids": uids},
             )
             await conn.execute(
@@ -331,6 +421,66 @@ def test_user_isolation_on_live_pg() -> None:
         asyncio.run(_run())
     finally:
         asyncio.run(_cleanup([uid1, uid2]))
+
+
+@pytest.mark.integration
+def test_curate_hypothesis_refutes_via_evidence_on_live_pg() -> None:
+    """반박 증거(net_support<0) 오개념은 매치돼도 archived, 지지 증거는 활성 — 실 집계·영속."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    # 게이트(log_evidence)는 정본 카탈로그 id만 허용 → 실제 오개념 2개 사용.
+    real_mids = list(CATALOG_BY_ID)[:2]
+    mid_keep, mid_bad = real_mids[0], real_mids[1]
+    uid = uuid.uuid4()
+    sid = uuid.uuid4()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as session:
+                # mid_bad: 강한 반박 증거(net_support = −2.0) · mid_keep: 지지 증거(+1.0).
+                await log_evidence(
+                    session,
+                    session_id=sid,
+                    student_id=uid,
+                    misconception_id=mid_bad,
+                    polarity=-1,
+                    weight=2.0,
+                )
+                await log_evidence(
+                    session,
+                    session_id=sid,
+                    student_id=uid,
+                    misconception_id=mid_keep,
+                    polarity=1,
+                    weight=1.0,
+                )
+                await session.commit()
+
+                # 두 오개념 모두 이번 턴 매치 — 그래도 mid_bad는 증거 반박으로 archived.
+                out = await curate_hypothesis(
+                    session,
+                    student_id=uid,
+                    matches=[_match(mid_keep, 0.6), _match(mid_bad, 0.7)],
+                )
+                await session.commit()
+                ids = {h.misconception_id for h in out}
+                assert mid_keep in ids  # 지지 증거 → 유지
+                assert mid_bad not in ids  # net_support<0 → archived(매치 무시)
+
+                # 영속 확인 — 활성 세트는 mid_keep만(mid_bad 행은 미생성).
+                active = await get_active_hypotheses(session, uid)
+                assert {h.misconception_id for h in active} == {mid_keep}
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_seed_users([uid]))
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup([uid]))
 
 
 @pytest.mark.integration

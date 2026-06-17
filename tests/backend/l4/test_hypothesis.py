@@ -14,6 +14,7 @@ import random
 
 from whymath_backend.l4.misconception.hypothesis import (
     MisconceptionHypothesis,
+    curate,
     decay,
     reinforce,
     select_focus,
@@ -165,6 +166,60 @@ class TestUpdateHypotheses:
         # 정렬 확인.
         confs = [h.confidence for h in out]
         assert confs == sorted(confs, reverse=True)
+
+
+class TestCurate:
+    """`curate` = `update_hypotheses` + 반박 제거 + 최대 N 캡(설계 §2.2 큐레이션 규칙)."""
+
+    def test_default_equals_update_when_small(self) -> None:
+        """반박 ∅·세트 ≤ max_active → `update_hypotheses`와 동치(상위 호환)."""
+        current = [_hyp("a", 0.8)]
+        matches = [_match("a", 0.5), _match("b", 0.6)]
+        expected = update_hypotheses(current, matches, turns_elapsed=1)
+        out = curate(current, matches, turns_elapsed=1)
+        assert [(h.misconception_id, h.confidence) for h in out] == [
+            (h.misconception_id, h.confidence) for h in expected
+        ]
+
+    def test_refuted_archived(self) -> None:
+        """`refuted`에 든 오개념은 매치가 없어도 세트에서 제외(archived)."""
+        current = [_hyp("keep", 0.7), _hyp("bad", 0.7)]
+        out = curate(current, [], turns_elapsed=0, refuted=frozenset({"bad"}))
+        ids = {h.misconception_id for h in out}
+        assert "bad" not in ids
+        assert "keep" in ids
+
+    def test_caps_to_max_active(self) -> None:
+        """세트가 max_active 초과 → confidence 내림차순 상위 N개만(최저 탈락)."""
+        matches = [_match(f"m{i}", 0.3 + 0.05 * i) for i in range(7)]  # 0.30..0.60
+        out = curate([], matches, turns_elapsed=1, max_active=5)
+        assert len(out) == 5
+        confs = [h.confidence for h in out]
+        assert confs == sorted(confs, reverse=True)
+        ids = {h.misconception_id for h in out}
+        assert "m0" not in ids and "m1" not in ids  # 최저 2개(0.30·0.35) 탈락
+
+    def test_default_max_active_is_five(self) -> None:
+        """기본 max_active=5 — 6개 이상이면 5개로 캡."""
+        matches = [_match(f"h{i}", 0.4 + 0.05 * i) for i in range(6)]
+        out = curate([], matches, turns_elapsed=1)
+        assert len(out) == 5
+
+    def test_refute_before_cap_frees_slot(self) -> None:
+        """반박 제거가 캡보다 먼저 — 최상위를 반박하면 차순위가 캡 안으로 승격."""
+        current = [_hyp(f"h{i}", 0.9 - 0.1 * i) for i in range(6)]  # h0=0.9 .. h5=0.4
+        out = curate(current, [], turns_elapsed=0, refuted=frozenset({"h0"}), max_active=5)
+        ids = [h.misconception_id for h in out]
+        assert "h0" not in ids
+        assert ids == ["h1", "h2", "h3", "h4", "h5"]  # 반박 후 상위 5(h5도 생존)
+
+    def test_input_not_mutated(self) -> None:
+        """입력 비변형 — frozen 가설·새 리스트 반환(`update_hypotheses` 불변 승계)."""
+        current = [_hyp("m1", 0.8, turns=0, count=1)]
+        snapshot = current[0].confidence
+        out = curate(current, [_match("m1", 0.4)], turns_elapsed=3, refuted=frozenset({"x"}))
+        assert current[0].confidence == snapshot
+        assert out is not current
 
 
 class TestSelectFocus:
