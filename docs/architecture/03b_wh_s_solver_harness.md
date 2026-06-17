@@ -277,7 +277,7 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 |자기진화 SFT/RL      |Phaiakes9·Ollama(Qwen3-Math·DeepSeek-Math)          |오픈 가중치 시드·자기생성 데이터(약관 청정·R-S7)       |
 |벡터               |**pgvector**(ChromaDB 폐기·§8 비교표 교정)                 |Postgres 16 확장 통합                     |
 
-`solution_nodes`(§2.1)·`Verified Lemma Store`(§2.2)·`Dead-End Log`(§2.3)·`Verified Solution Bank`(§2.4) **4종 상태 저장소 전부 스키마 구현됨**(S1 슬라이스 1·2·3·아래). 도입은 ROADMAP상 **S0~S1(검증기 Tier1+2·솔버 루프)은 Phase 2 모트, 자기진화·PRM(S2~S3)·Lean4 Tier3(S5)는 Phase 2~3**으로 단계화한다(1인 capacity 가드).
+`solution_nodes`(§2.1)·`Verified Lemma Store`(§2.2)·`Dead-End Log`(§2.3)·`Verified Solution Bank`(§2.4) **4종 상태 저장소 전부 스키마 구현됨** + **솔버 루프 골격**(`run_solver`·도구 8종 결선·불변식·LLM 정책은 주입)(S1 슬라이스 1·2·3·4·아래). 도입은 ROADMAP상 **S0~S1(검증기 Tier1+2·솔버 루프)은 Phase 2 모트, 자기진화·PRM(S2~S3)·Lean4 Tier3(S5)는 Phase 2~3**으로 단계화한다(1인 capacity 가드).
 
 ### S0 진행 (2026-06-13)
 
@@ -304,7 +304,14 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 **S1 슬라이스 3 — 검증된 중간 결과 저장소**(설계 §2.2) 구현됨(마이그레이션 동반·**솔버 루프 구동은 후속**). 마지막 상태 저장소:
 - **§2.2 `verified_lemmas`** `db/models/verified_lemma.py` `VerifiedLemma`: `id`(UUID PK)·`problem_id`(느슨참조)·`lemma_key`(Text — 재사용 매칭 키)·`lemma_repr`(JSONB — 검증된 부분 결과)·`statement`(Text nullable — 사람 가독 진술)·`source_node_id`(UUID nullable·**FK 아님**·재사용 자산이라 트리 GC 비강결합)·`created_at`. **`(problem_id, lemma_key)` UNIQUE**(멱등 — 두 가지 독립 발견해도 1행). ★등급 컬럼 없음: 저장소는 *검증된* 보조정리만 담음(`log_lemma`는 verify 통과 후 호출). 저장소 `whs/lemma_store.py`: `log_lemma`(ON CONFLICT DO NOTHING 멱등)·`find_lemma`(정확 매칭 *재사용 조회*)·`get_lemmas`. 탐색이 보조 목표에 닿을 때 `find_lemma`로 이미 검증된 결과를 재사용해 중복 탐색을 가지친다(§2.2 효율 핵심).
 - 마이그레이션 **`a2b3c4d5e6f7`**(down_revision `f1a2b3c4d5e6`·단일 head·테이블1+복합 UNIQUE·enum 0·가역 — 테이블 drop만).
-- **상태 저장소 완성**: §2.1~§2.4 4종(트리·검증 보조정리·실패 로그·검증 풀이) 전부 영속. **후속(S1 잔여)**: 솔버 루프(도구 8종이 4 저장소 호출)·키/해시 스킴 표준화·LLM 정책 모델 구동.
+- **상태 저장소 완성**: §2.1~§2.4 4종(트리·검증 보조정리·실패 로그·검증 풀이) 전부 영속. **후속(S1 잔여)**: 솔버 루프 골격(아래 슬라이스 4)·키/해시 스킴 표준화·LLM 정책 모델 구동.
+
+**S1 슬라이스 4 — 솔버 루프 골격**(설계 §3 도구 8종·§4 판정·§7) 구현됨(마이그레이션 0·**LLM 정책 모델 구동은 후속·환경 밖**). 결정론 루프 드라이버 `whs/harness.py`:
+- **`run_solver(session, *, problem_id, policy, max_tool_calls=32) -> SolverOutcome`**: `SolverPolicy`(도구 선택 두뇌·주입)를 받아 도구를 실행하고 검증기 스택·상태 저장소 4종에 결선한다. **생성 도구(parse_problem·decompose·apply_strategy)의 *내용*은 정책이 공급**(프로덕션=Ollama·테스트=`ScriptedPolicy`)·하네스는 *실행·검증·기록*만.
+- **강제 불변식(§3·§4)**: ① verify 없는 finalize 거부(finalize=검증기 스택 실행+커밋이 한 몸) ② **failed 차단**(`final_verdict`=failed면 미적재·검색 계속) ③ unverifiable→`unverified` 격리 적재 ④ **탐색 예산 상한**(`max_tool_calls` 초과→`budget_exhausted` 안전 종료·R-S4) ⑤ dead-end 회피(`apply_strategy`는 적용 전 `is_dead_end` 조회·노드 미생성) ⑥ 검증 보조정리만(`log_lemma`는 직전 verify=verified 전제).
+- **도구 결선**: verify→검증기 스택(verify_answer+verify_solution+final_verdict)·retrieve_similar→검증풀이/보조정리 조회·conjecture_check→수치 반례(verify_answer 재사용)·log_lemma/log_deadend·finalize→verify+등급 매핑+`bank_solution`. 액션 10종(8 도구 + log 분리 + end_search)은 `kind` 판별 Pydantic 유니온(`extra=forbid·frozen`).
+- 마이그레이션 0(기존 저장소·검증기 재사용). `SolverOutcome`(status: finalized/budget_exhausted/ended + 트레이스).
+- **후속(S1 잔여)**: LLM 정책 모델(Ollama·Phaiakes9)·MCTS-lite 탐색·생성 도구 내용 생성·키/해시 스킴 표준화·PRM(S2)·Tier3(S5).
 
 ### 용어 정합: "545노드" (편집자 부기)
 

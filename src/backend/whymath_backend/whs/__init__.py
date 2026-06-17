@@ -29,8 +29,15 @@ S1 좌석(상태 저장소 — 완성): ⑦ 검증된 중간 결과 저장소(`d
 재사용해 중복 탐색을 제거한다(검증된 보조정리만 담음 — 등급 컬럼 없음). 이로써 §2.1~§2.4 *상태
 저장소 4종(트리·실패 로그·검증 풀이·검증 보조정리)* 전부 영속.
 
-범위 밖(후속): 시드 모델 실행(후보 풀이 생성·Ollama·MCTS)·솔버 루프(도구 8종이 위 저장소 호출)·
-자기 진화·PRM·Tier3(§9 로드맵).
+S1 좌석(솔버 루프 골격 — 추가): ⑧ `harness.py` `run_solver(session, *, problem_id, policy,
+max_tool_calls)` — `SolverPolicy`(도구 선택 두뇌·주입)를 받아 도구 8종을 실행하고 검증기 스택·상태
+저장소 4종에 결선하는 *결정론 루프 드라이버*. 생성 도구(parse/decompose/apply_strategy) 내용은
+정책이 공급(프로덕션=LLM·테스트=`ScriptedPolicy`)하고, 하네스는 §3·§4 불변식을 강제한다 — verify
+없는 finalize 거부·failed 차단·unverifiable→unverified 격리·탐색 예산 상한·dead-end 회피·검증
+보조정리만 log_lemma. 액션 10종은 `kind` 판별 Pydantic 유니온.
+
+범위 밖(후속·환경 밖): LLM 정책 모델(Ollama·Phaiakes9)·생성 도구 내용 생성·MCTS-lite 탐색·자기
+진화·PRM·Tier3(§9 로드맵). 본 패키지는 *상태 저장소 4종 + 결정론 루프 골격*까지 둔다.
 """
 
 from __future__ import annotations
@@ -57,6 +64,25 @@ from whymath_backend.whs.dead_end_store import (
     is_dead_end,
     log_dead_end,
 )
+from whymath_backend.whs.harness import (
+    Action,
+    ApplyStrategyAction,
+    ConjectureCheckAction,
+    DecomposeAction,
+    EndSearchAction,
+    FinalizeAction,
+    LogDeadEndAction,
+    LogLemmaAction,
+    ParseProblemAction,
+    RetrieveSimilarAction,
+    ScriptedPolicy,
+    SolverOutcome,
+    SolverPolicy,
+    SolverState,
+    ToolResult,
+    VerifyAction,
+    run_solver,
+)
 from whymath_backend.whs.lemma_store import (
     find_lemma,
     get_lemmas,
@@ -82,15 +108,31 @@ from whymath_backend.whs.verdict import (
 )
 
 __all__ = [
+    "Action",
+    "ApplyStrategyAction",
     "BandResult",
     "BaselineReport",
+    "ConjectureCheckAction",
     "DeadEndLog",
+    "DecomposeAction",
     "DifficultyBand",
+    "EndSearchAction",
     "EvalItem",
+    "FinalizeAction",
+    "LogDeadEndAction",
+    "LogLemmaAction",
     "NodeVerifyStatus",
+    "ParseProblemAction",
+    "RetrieveSimilarAction",
+    "ScriptedPolicy",
     "SolutionNode",
+    "SolverOutcome",
+    "SolverPolicy",
+    "SolverState",
+    "ToolResult",
     "VerifiedLemma",
     "VerifiedSolution",
+    "VerifyAction",
     "WhsGrade",
     "WhsSolutionGrade",
     "WhsVerdict",
@@ -110,5 +152,6 @@ __all__ = [
     "log_dead_end",
     "log_lemma",
     "run_baseline",
+    "run_solver",
     "update_evaluation",
 ]
