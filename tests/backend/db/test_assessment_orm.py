@@ -65,9 +65,7 @@ def test_assessment_ddl_fk_jsonb_enum() -> None:
     assert "assessment_type_enum" in ddl
     assert "mental_phase_enum" in ddl
     assert "gen_random_uuid()" in ddl
-    assert (
-        "NUMERIC" in ddl
-    )  # estimated_grade·estimated_percentile·admission_probability
+    assert "NUMERIC" in ddl  # estimated_grade·estimated_percentile·admission_probability
 
 
 def test_assessment_loose_ref_target_university() -> None:
@@ -149,9 +147,7 @@ def test_assessment_roundtrip_d100_and_jsonb() -> None:
     assert orm.mental_phase == "D_100_50"
     assert orm.admission_probability == 0.72
     assert orm.weak_points == [{"concept": "수열의극한", "mastery": 0.3}]
-    assert orm.recommended_path == [
-        {"week": 1, "concept": "극한", "estimated_hours": 5}
-    ]
+    assert orm.recommended_path == [{"week": 1, "concept": "극한", "estimated_hours": 5}]
 
     back = orm.to_schema()
     assert back.assessment_id == aid

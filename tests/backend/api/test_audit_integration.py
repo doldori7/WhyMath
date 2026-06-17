@@ -71,9 +71,7 @@ def _client() -> TestClient:
 def test_delete_writes_audit_on_live_pg() -> None:
     """세션 삭제 → deletion_audit에 (user_id, learning_session, session_id) 1행 적재."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid, sid = uuid.uuid4(), uuid.uuid4()
     try:
@@ -126,8 +124,7 @@ def test_delete_writes_audit_on_live_pg() -> None:
             listed = client.get("/v1/me/deletions", headers=auth)
             assert listed.status_code == 200, listed.text
             assert any(
-                it["resource_id"] == str(sid)
-                and it["resource_type"] == "learning_session"
+                it["resource_id"] == str(sid) and it["resource_type"] == "learning_session"
                 for it in listed.json()
             )
     finally:

@@ -20,10 +20,6 @@ from __future__ import annotations
 
 import pytest
 
-from ._live_resources import (
-    require_local_embedding,
-    require_ollama_reachable,
-)
 from whymath_backend.l4.misconception.judge import LLMJudge
 from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
 from whymath_backend.l4.misconception.probes import probes_path
@@ -34,6 +30,11 @@ from whymath_backend.l4.misconception.semantic_eval import (
     format_report,
     load_probes,
     run_probes_with_judge,
+)
+
+from ._live_resources import (
+    require_local_embedding,
+    require_ollama_reachable,
 )
 
 pytestmark = pytest.mark.integration
@@ -51,7 +52,8 @@ class TestJudgeLive:
         assert len(probes) == 94
 
         # 슬110(#5): bge-m3·Ollama 자원 미도달은 사전체크로 skip(judge=UNCERTAIN 무의미 측정
-        # 회피)·측정 경로 코드 버그는 fail로 전파. judge 측정은 임베딩(후보)+Ollama(판정) 둘 다 필요.
+        # 회피)·측정 경로 코드 버그는 fail로 전파.
+        # judge 측정은 임베딩(후보)+Ollama(판정) 둘 다 필요.
         require_local_embedding()
         await require_ollama_reachable()
         provider = LocalEmbeddingProvider()
@@ -90,6 +92,4 @@ class TestJudgeLive:
         assert report.judge_caught_recall <= report.caught_recall
         # 각 outcome 분할 불변(kept ⊕ removed = semantic_ids).
         for o in outcomes:
-            assert set(o.judge_kept_ids) | set(o.judge_removed_ids) == set(
-                o.semantic_ids
-            )
+            assert set(o.judge_kept_ids) | set(o.judge_removed_ids) == set(o.semantic_ids)

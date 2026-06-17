@@ -87,26 +87,20 @@ class TestEstimateGlobalAbility:
         assert se is not None  # 혼합 → Fisher 정보 > 0 → SE 유한
 
     async def test_no_responses_se_none(self) -> None:
-        theta, se, count = await estimate_global_ability(
-            cast(AsyncSession, _FakeSession([])), _UID
-        )
+        theta, se, count = await estimate_global_ability(cast(AsyncSession, _FakeSession([])), _UID)
         assert count == 0
         assert se is None  # 정보 0 → 측정 불가
 
     async def test_excludes_when_no_b_source(self) -> None:
         # 보정 b·전문가 난이도 둘 다 없는 문항 제외.
         rows = [(True, 3.0, None), (False, None, None), (True, 4.0, None)]
-        _, _, count = await estimate_global_ability(
-            cast(AsyncSession, _FakeSession(rows)), _UID
-        )
+        _, _, count = await estimate_global_ability(cast(AsyncSession, _FakeSession(rows)), _UID)
         assert count == 2
 
     async def test_includes_calibrated_item_without_expert_difficulty(self) -> None:
         # 전문가 난이도 None이어도 보정 b가 있으면 포함.
         rows = [(True, None, -1.0), (False, None, 1.0)]
-        _, _, count = await estimate_global_ability(
-            cast(AsyncSession, _FakeSession(rows)), _UID
-        )
+        _, _, count = await estimate_global_ability(cast(AsyncSession, _FakeSession(rows)), _UID)
         assert count == 2
 
     async def test_all_correct_high_theta(self) -> None:
@@ -143,9 +137,7 @@ class TestComputeConceptAbilities:
             (cid_x, "A", "가", False, 4.0, None),
             (cid_y, "B", "나", True, 3.0, None),
         ]
-        items = await compute_concept_abilities(
-            cast(AsyncSession, _FakeSession(rows)), _UID
-        )
+        items = await compute_concept_abilities(cast(AsyncSession, _FakeSession(rows)), _UID)
         by_id = {i.concept_id: i for i in items}
         assert set(by_id) == {cid_x, cid_y}
         assert by_id[cid_x].response_count == 2
@@ -154,18 +146,14 @@ class TestComputeConceptAbilities:
         assert by_id[cid_y].response_count == 1
 
     async def test_empty(self) -> None:
-        items = await compute_concept_abilities(
-            cast(AsyncSession, _FakeSession([])), _UID
-        )
+        items = await compute_concept_abilities(cast(AsyncSession, _FakeSession([])), _UID)
         assert items == []
 
     async def test_orphan_concept_null_meta(self) -> None:
         # Concept LEFT JOIN orphan → code/name None.
         cid = uuid.uuid4()
         rows = [(cid, None, None, True, 3.0, None), (cid, None, None, False, 4.0, None)]
-        items = await compute_concept_abilities(
-            cast(AsyncSession, _FakeSession(rows)), _UID
-        )
+        items = await compute_concept_abilities(cast(AsyncSession, _FakeSession(rows)), _UID)
         assert len(items) == 1
         assert items[0].concept_code is None
         assert items[0].concept_name is None
@@ -174,9 +162,7 @@ class TestComputeConceptAbilities:
         # 전문가 난이도 None·보정 b 有 문항도 개념 추정에 포함.
         cid = uuid.uuid4()
         rows = [(cid, "C", "다", True, None, -1.0), (cid, "C", "다", False, None, 1.0)]
-        items = await compute_concept_abilities(
-            cast(AsyncSession, _FakeSession(rows)), _UID
-        )
+        items = await compute_concept_abilities(cast(AsyncSession, _FakeSession(rows)), _UID)
         assert len(items) == 1
         assert items[0].response_count == 2
 
@@ -184,7 +170,5 @@ class TestComputeConceptAbilities:
         # 보정 b·전문가 난이도 둘 다 없는 행은 건너뜀(개념 미포함).
         cid = uuid.uuid4()
         rows = [(cid, "C", "다", True, None, None)]
-        items = await compute_concept_abilities(
-            cast(AsyncSession, _FakeSession(rows)), _UID
-        )
+        items = await compute_concept_abilities(cast(AsyncSession, _FakeSession(rows)), _UID)
         assert items == []

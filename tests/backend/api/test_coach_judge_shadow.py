@@ -55,9 +55,8 @@ _JUDGE_RECORD_LOGGER = "whymath.l4.misconception.judge_shadow.record"
 
 def _judge_records(caplog: pytest.LogCaptureFixture) -> list[str]:
     """judge shadow 구조화 record 로거 JSON 라인만(평문·다른 로거 노이즈 배제)."""
-    return [
-        r.getMessage() for r in caplog.records if r.name == _JUDGE_RECORD_LOGGER
-    ]
+    return [r.getMessage() for r in caplog.records if r.name == _JUDGE_RECORD_LOGGER]
+
 
 _UID = uuid.uuid4()
 
@@ -212,9 +211,7 @@ def _exposed_ids(body: dict[str, Any]) -> list[str]:
 # ① shadow+judge_shadow on → 노출 substring 불변(off 비트동일) + spawn 1회
 # ──────────────────────────────────────────────────────────────────────────
 class TestExposureUnchanged:
-    def test_judge_shadow_does_not_change_exposure(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_judge_shadow_does_not_change_exposure(self, monkeypatch: pytest.MonkeyPatch) -> None:
         set_semantic_matcher(_StubMatcher())  # type: ignore[arg-type]
         _patch_judge(monkeypatch, FakeJudge({_SEMANTIC_ID: JudgeVerdict.NOT_EXPRESSES}))
         captured = _patch_spawn(monkeypatch)
@@ -318,9 +315,7 @@ class TestSpawnGating:
 # ④ never-break — judge seam 예외라도 200·substring 유지(가용성 우선)
 # ──────────────────────────────────────────────────────────────────────────
 class TestNeverBreak:
-    def test_boom_judge_still_200_and_substring(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_boom_judge_still_200_and_substring(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 실 LLMJudge + 항상 raise하는 seam을 judge_shadow에 박아도, 비차단+never-break라
         # 응답은 200·substring 노출 불변(judge shadow 실패가 응답을 절대 안 깸).
         set_semantic_matcher(_StubMatcher())  # type: ignore[arg-type]

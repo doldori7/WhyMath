@@ -134,9 +134,7 @@ class TestDispatch:
 # ──────────────────────────────────────────────────────────────────────────
 class TestStatus:
     async def test_check_status_delegates_to_local(self) -> None:
-        status = OllamaStatus(
-            reachable=True, models=(ModelAvailability("qwen2-math:1.5b", True),)
-        )
+        status = OllamaStatus(reachable=True, models=(ModelAvailability("qwen2-math:1.5b", True),))
         composite = CompositeProvider(local=FakeProvider(status=status), cloud=FakeProvider())
         result = await composite.check_status()
         assert result is status
@@ -150,9 +148,7 @@ class TestStatus:
 
     async def test_check_cloud_status_delegates_to_cloud(self) -> None:
         status = AnthropicStatus(configured=True, reachable=True)
-        composite = CompositeProvider(
-            local=FakeProvider(), cloud=FakeProvider(status=status)
-        )
+        composite = CompositeProvider(local=FakeProvider(), cloud=FakeProvider(status=status))
         result = await composite.check_cloud_status()
         assert result is status
 

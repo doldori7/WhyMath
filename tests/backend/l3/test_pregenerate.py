@@ -61,16 +61,12 @@ from whymath_backend.l3.router import Router, cache_key_for
 # 가짜 dependencies
 # ──────────────────────────────────────────────────────────────────────────
 class FakePregenProvider:
-    def __init__(
-        self, *, text: str = "GENERATED", raises: Exception | None = None
-    ) -> None:
+    def __init__(self, *, text: str = "GENERATED", raises: Exception | None = None) -> None:
         self._text = text
         self._raises = raises
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(
-        self, prompt: str, system: str, decision: RoutingDecision
-    ) -> str:
+    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
         self.calls.append((prompt, system, decision))
         if self._raises is not None:
             raise self._raises
@@ -166,9 +162,7 @@ class TestPrewarmReport:
                 PrewarmItemResult(cache_key="k1", status="written"),
                 PrewarmItemResult(cache_key="k2", status="written"),
                 PrewarmItemResult(cache_key="k3", status="skipped_exists"),
-                PrewarmItemResult(
-                    cache_key="k4", status="failed_validation", error="r"
-                ),
+                PrewarmItemResult(cache_key="k4", status="failed_validation", error="r"),
                 PrewarmItemResult(cache_key="", status="error", error="e"),
             )
         )
@@ -193,7 +187,7 @@ class TestValidationSignal:
 
     def test_frozen(self) -> None:
         sig = ValidationSignal(kind="solution", reason="r")
-        with pytest.raises(Exception):  # FrozenInstanceError(불변)
+        with pytest.raises(Exception):  # noqa: B017  # FrozenInstanceError(불변)
             sig.kind = "arithmetic"  # type: ignore[misc]
 
     def test_relation_validators_produce_span(self) -> None:
@@ -346,10 +340,7 @@ class TestSymPyArithmeticValidator:
 
     def test_no_arithmetic_passes(self) -> None:
         assert (
-            SymPyArithmeticValidator().validate(
-                _item(), "이차방정식의 개념을 설명합니다."
-            )
-            is None
+            SymPyArithmeticValidator().validate(_item(), "이차방정식의 개념을 설명합니다.") is None
         )
 
     def test_inline_prose_prefixed_now_detected(self) -> None:
@@ -738,10 +729,7 @@ class TestDefaultSeedValidator:
         assert isinstance(default_seed_validator(), SeedValidator)
 
     def test_clean_response_passes(self) -> None:
-        assert (
-            default_seed_validator().validate(_item(), "2 + 2 = 4, 그리고 3 < 5")
-            is None
-        )
+        assert default_seed_validator().validate(_item(), "2 + 2 = 4, 그리고 3 < 5") is None
 
     def test_catches_false_arithmetic(self) -> None:
         reason = default_seed_validator().validate(_item(), "2 + 2 = 5")
@@ -910,8 +898,7 @@ class TestSymPySolutionValidator:
     def test_two_roots_skipped_conservatively(self) -> None:
         # 같은 줄에서 변수에 2개 값 주장(두 근) → 다중값 → 보수적 건너뜀(통과).
         assert (
-            SymPySolutionValidator().validate(_item(), "x^2 = 9 이므로 x = 3 또는 x = -3")
-            is None
+            SymPySolutionValidator().validate(_item(), "x^2 = 9 이므로 x = 3 또는 x = -3") is None
         )
 
     def test_multivariable_equation_skipped(self) -> None:
@@ -926,9 +913,7 @@ class TestSymPySolutionValidator:
 
     def test_multistep_consistent_derivation_correct_passes(self) -> None:
         # 일관된 다단계 유도(공통 해 x=3)·정해 → 통과.
-        assert (
-            SymPySolutionValidator().validate(_item(), "2x + 1 = 7\n2x = 6\nx = 3") is None
-        )
+        assert SymPySolutionValidator().validate(_item(), "2x + 1 = 7\n2x = 6\nx = 3") is None
 
     def test_multistep_consistent_derivation_wrong_caught(self) -> None:
         # 일관된 다단계 유도지만 최종 해가 틀림(x=5, 정해 3) → 탈락.
@@ -938,9 +923,7 @@ class TestSymPySolutionValidator:
 
     def test_inconsistent_subproblems_skipped(self) -> None:
         # 같은 변수지만 방정식 상호 모순(공통 해 없음=서로 다른 소문제) → 보수적 skip.
-        assert (
-            SymPySolutionValidator().validate(_item(), "2x = 6\n3x = 12\nx = 4") is None
-        )
+        assert SymPySolutionValidator().validate(_item(), "2x = 6\n3x = 12\nx = 4") is None
 
     def test_distinct_variables_each_verified(self) -> None:
         # 변수별 독립 검증 — 다른 변수의 소문제는 각자 일관성으로 판정(오해면 탈락).
@@ -1023,9 +1006,7 @@ class TestCachePrewarmer:
     async def test_ingest_mode_writes_without_provider_call(self) -> None:
         cache = InMemoryCache()
         provider = FakePregenProvider()
-        prewarmer = CachePrewarmer(
-            provider=provider, cache=cache, validator=AlwaysPassValidator()
-        )
+        prewarmer = CachePrewarmer(provider=provider, cache=cache, validator=AlwaysPassValidator())
         item = _item(precomputed="INGESTED")
 
         report = await prewarmer.prewarm([item])
@@ -1037,9 +1018,7 @@ class TestCachePrewarmer:
     async def test_generate_mode_calls_provider_and_writes(self) -> None:
         cache = InMemoryCache()
         provider = FakePregenProvider(text="FROM_PROVIDER")
-        prewarmer = CachePrewarmer(
-            provider=provider, cache=cache, validator=AlwaysPassValidator()
-        )
+        prewarmer = CachePrewarmer(provider=provider, cache=cache, validator=AlwaysPassValidator())
         item = _item()  # precomputed=None → 생성 모드
 
         report = await prewarmer.prewarm([item])
@@ -1094,13 +1073,9 @@ class TestCachePrewarmer:
         """QUALITY async는 런타임이 캐시를 안 치므로 사전적재 의미 없음 → 명시 error."""
         cache = InMemoryCache()
         provider = FakePregenProvider()
-        prewarmer = CachePrewarmer(
-            provider=provider, cache=cache, validator=AlwaysPassValidator()
-        )
+        prewarmer = CachePrewarmer(provider=provider, cache=cache, validator=AlwaysPassValidator())
 
-        report = await prewarmer.prewarm(
-            [_item(request=_quality_async_request(), precomputed="X")]
-        )
+        report = await prewarmer.prewarm([_item(request=_quality_async_request(), precomputed="X")])
 
         assert report.errored == 1
         assert "QUALITY async" in (report.items[0].error or "")
@@ -1243,19 +1218,14 @@ class TestLoadItems:
 
     def test_skips_blank_lines_and_comments(self) -> None:
         text = (
-            "# 주석은 무시\n"
-            "\n"
-            "   \n"
-            f'{{"prompt":"p","system":"s","request":{_REQ_JSON}}}\n'
+            "# 주석은 무시\n" "\n" "   \n" f'{{"prompt":"p","system":"s","request":{_REQ_JSON}}}\n'
         )
         items = load_items(text)
         assert len(items) == 1
         assert items[0].precomputed_response is None  # 없으면 None 기본값
 
     def test_invalid_json_raises_with_line_number(self) -> None:
-        text = (
-            f'{{"prompt":"p","system":"s","request":{_REQ_JSON}}}\n' "not-json-here\n"
-        )
+        text = f'{{"prompt":"p","system":"s","request":{_REQ_JSON}}}\n' "not-json-here\n"
         with pytest.raises(ValueError, match="line 2"):
             load_items(text)
 
@@ -1276,9 +1246,7 @@ class TestFormatReport:
         assert "boom" in out
 
     def test_written_items_not_individually_listed(self) -> None:
-        report = PrewarmReport(
-            items=(PrewarmItemResult(cache_key="k1", status="written"),)
-        )
+        report = PrewarmReport(items=(PrewarmItemResult(cache_key="k1", status="written"),))
         out = format_report(report)
         assert "[written]" not in out  # 정상 항목은 요약만
 
@@ -1387,7 +1355,7 @@ class TestDetectStepBreaks:
 
     def test_returns_frozen_dataclass(self) -> None:
         b = detect_step_breaks("2x = 6 따라서 3x = 12")[0]
-        with pytest.raises(Exception):  # FrozenInstanceError(불변)
+        with pytest.raises(Exception):  # noqa: B017  # FrozenInstanceError(불변)
             b.var = "y"  # type: ignore[misc]
 
 

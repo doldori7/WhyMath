@@ -111,9 +111,7 @@ class TestGrantParentalConsent:
         """동의 기록 → 201 + ParentalConsent 1행 적재 + user.parent_consent_at 설정."""
         user = _minor_user()
         fake = FakeSession()
-        resp = _client(user, fake).post(
-            _GRANT_PATH, json={"guardian_email": "parent@example.com"}
-        )
+        resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": "parent@example.com"})
         assert resp.status_code == 201, resp.text
         body = resp.json()
         assert body["verification_method"] == "stub"
@@ -153,9 +151,7 @@ class TestGrantParentalConsent:
 
         # 동의 기록.
         fake = FakeSession()
-        resp = _client(user, fake).post(
-            _GRANT_PATH, json={"guardian_email": "parent@example.com"}
-        )
+        resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": "parent@example.com"})
         assert resp.status_code == 201, resp.text
 
         # 이제 같은 user 객체로 게이트가 통과(parent_consent_at 설정됨).
@@ -167,14 +163,10 @@ class TestGrantParentalConsent:
         import hashlib
 
         guardian_email = "parent@example.com"
-        expected_hash = hashlib.sha256(
-            guardian_email.strip().lower().encode("utf-8")
-        ).hexdigest()
+        expected_hash = hashlib.sha256(guardian_email.strip().lower().encode("utf-8")).hexdigest()
         user = _minor_user()
         fake = FakeSession()
-        resp = _client(user, fake).post(
-            _GRANT_PATH, json={"guardian_email": guardian_email}
-        )
+        resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": guardian_email})
         assert resp.status_code == 201, resp.text
         consent = fake.added_consents()[0]
         # 해시만 저장 — 평문 이메일은 어떤 필드에도 없다.
@@ -189,12 +181,8 @@ class TestGrantParentalConsent:
         """seam 주입성: 가짜 verifier(method 다름)를 주입하면 그 결과가 레코드에 반영된다."""
 
         class _FakeVerifier:
-            def verify(
-                self, request: GuardianVerificationRequest
-            ) -> VerificationResult:
-                return VerificationResult(
-                    verified=True, method="fake-test", reference="ref-123"
-                )
+            def verify(self, request: GuardianVerificationRequest) -> VerificationResult:
+                return VerificationResult(verified=True, method="fake-test", reference="ref-123")
 
         user = _minor_user()
         fake = FakeSession()
@@ -211,9 +199,7 @@ class TestGrantParentalConsent:
         """신원 확인 미통과(verified=False) → 403 + 동의 미기록·parent_consent_at 미설정."""
 
         class _FailingVerifier:
-            def verify(
-                self, request: GuardianVerificationRequest
-            ) -> VerificationResult:
+            def verify(self, request: GuardianVerificationRequest) -> VerificationResult:
                 return VerificationResult(verified=False, method="stub", reference=None)
 
         user = _minor_user()
@@ -231,9 +217,7 @@ class TestGrantParentalConsent:
         user = _minor_user()
         fake = FakeSession()
         # verifier 미주입 → create_app 기본(_default_guardian_verifier = stub).
-        resp = _client(user, fake).post(
-            _GRANT_PATH, json={"guardian_email": "p@example.com"}
-        )
+        resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": "p@example.com"})
         assert resp.status_code == 201, resp.text
         assert resp.json()["verification_method"] == StubGuardianVerifier.METHOD
 
@@ -253,9 +237,7 @@ class TestGrantParentalConsent:
     def test_empty_guardian_email_rejected_422(self) -> None:
         """빈 guardian_email → 422(요청 스키마 min_length=1 — 통지 대상 없음)."""
         user = _minor_user()
-        resp = _client(user, FakeSession()).post(
-            _GRANT_PATH, json={"guardian_email": ""}
-        )
+        resp = _client(user, FakeSession()).post(_GRANT_PATH, json={"guardian_email": ""})
         assert resp.status_code == 422
 
     def test_unknown_field_rejected_422(self) -> None:
@@ -273,9 +255,7 @@ class TestGrantParentalConsent:
         user = _minor_user()
         err = IntegrityError("INSERT", {}, Exception("conflict"))
         fake = FakeSession(commit_error=err)
-        resp = _client(user, fake).post(
-            _GRANT_PATH, json={"guardian_email": "p@example.com"}
-        )
+        resp = _client(user, fake).post(_GRANT_PATH, json={"guardian_email": "p@example.com"})
         assert resp.status_code == 409
         assert fake.rolled_back is True
 

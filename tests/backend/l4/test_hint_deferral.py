@@ -19,16 +19,12 @@ class TestDefaultLevelOne:
     """모호한 입력(신호 없음·5회 미만) → 1(가장 은근·가장 빠른 단계)."""
 
     def test_empty_input_first_turn(self) -> None:
-        assert (
-            decide_hint_level(student_input="", turn_count=0, prev_hint_level=None) == 1
-        )
+        assert decide_hint_level(student_input="", turn_count=0, prev_hint_level=None) == 1
 
     def test_neutral_input_returns_1_even_if_prev_higher(self) -> None:
         # prev_hint_level이 높아도 신호 사라지면 1로 복귀(가장 빠른 단계에서 멈춤).
         assert (
-            decide_hint_level(
-                student_input="네, 그렇게 해볼게요", turn_count=2, prev_hint_level=3
-            )
+            decide_hint_level(student_input="네, 그렇게 해볼게요", turn_count=2, prev_hint_level=3)
             == 1
         )
 
@@ -38,46 +34,24 @@ class TestFrustrationSignal:
 
     @pytest.mark.parametrize("text", ["잘 모르겠어", "막혔어", "너무 어려워", "헷갈려"])
     def test_frustration_keywords_advance(self, text: str) -> None:
-        assert (
-            decide_hint_level(student_input=text, turn_count=1, prev_hint_level=1) == 2
-        )
-        assert (
-            decide_hint_level(student_input=text, turn_count=1, prev_hint_level=2) == 3
-        )
-        assert (
-            decide_hint_level(student_input=text, turn_count=1, prev_hint_level=3) == 4
-        )
+        assert decide_hint_level(student_input=text, turn_count=1, prev_hint_level=1) == 2
+        assert decide_hint_level(student_input=text, turn_count=1, prev_hint_level=2) == 3
+        assert decide_hint_level(student_input=text, turn_count=1, prev_hint_level=3) == 4
 
     def test_frustration_caps_at_4(self) -> None:
-        assert (
-            decide_hint_level(
-                student_input="너무 어려워", turn_count=1, prev_hint_level=4
-            )
-            == 4
-        )
+        assert decide_hint_level(student_input="너무 어려워", turn_count=1, prev_hint_level=4) == 4
 
 
 class TestDemandAnswerSignal:
     """답 요구 신호 → min(4, prev+1) 점진 상승(시나리오 3)."""
 
-    @pytest.mark.parametrize(
-        "text", ["답 알려줘", "그냥 답이 뭐야", "정답 알려줘", "풀이 좀 해줘"]
-    )
+    @pytest.mark.parametrize("text", ["답 알려줘", "그냥 답이 뭐야", "정답 알려줘", "풀이 좀 해줘"])
     def test_demand_keywords_advance(self, text: str) -> None:
-        assert (
-            decide_hint_level(student_input=text, turn_count=1, prev_hint_level=1) == 2
-        )
-        assert (
-            decide_hint_level(student_input=text, turn_count=1, prev_hint_level=2) == 3
-        )
+        assert decide_hint_level(student_input=text, turn_count=1, prev_hint_level=1) == 2
+        assert decide_hint_level(student_input=text, turn_count=1, prev_hint_level=2) == 3
 
     def test_demand_caps_at_4(self) -> None:
-        assert (
-            decide_hint_level(
-                student_input="답 알려줘", turn_count=1, prev_hint_level=4
-            )
-            == 4
-        )
+        assert decide_hint_level(student_input="답 알려줘", turn_count=1, prev_hint_level=4) == 4
 
 
 class TestStuckThreshold:
@@ -85,24 +59,15 @@ class TestStuckThreshold:
 
     def test_five_turns_no_signal_jumps_to_3(self) -> None:
         # 신호 없어도 5회 막혔으면 3으로 점프(보수적 디폴트보다 우선).
-        assert (
-            decide_hint_level(student_input="음...", turn_count=5, prev_hint_level=1)
-            == 3
-        )
+        assert decide_hint_level(student_input="음...", turn_count=5, prev_hint_level=1) == 3
 
     def test_five_turns_prev_4_stays_4(self) -> None:
         # prev=4면 3으로 내려가지 않음(max).
-        assert (
-            decide_hint_level(student_input="음...", turn_count=5, prev_hint_level=4)
-            == 4
-        )
+        assert decide_hint_level(student_input="음...", turn_count=5, prev_hint_level=4) == 4
 
     def test_four_turns_still_default(self) -> None:
         # 임계 미만(4회)은 기본 규칙 적용.
-        assert (
-            decide_hint_level(student_input="음...", turn_count=4, prev_hint_level=1)
-            == 1
-        )
+        assert decide_hint_level(student_input="음...", turn_count=4, prev_hint_level=1) == 1
 
 
 class TestPriorityOrder:
@@ -111,12 +76,7 @@ class TestPriorityOrder:
     def test_stuck_beats_demand_signal(self) -> None:
         # 5회+ 막힘 + 답 요구 → 막힘 규칙 적용(max(prev, 3)).
         # prev=1일 때: max(1, 3) = 3 (demand의 min(4, 2)=2보다 큼 — 임계 우선)
-        assert (
-            decide_hint_level(
-                student_input="답 알려줘", turn_count=5, prev_hint_level=1
-            )
-            == 3
-        )
+        assert decide_hint_level(student_input="답 알려줘", turn_count=5, prev_hint_level=1) == 3
 
 
 class TestRevealsMap:
@@ -140,9 +100,7 @@ class TestNoFalsePositives:
     def test_short_neutral_phrasing_stays_1(self) -> None:
         # 좌절 토큰("어렵") 없는 자연스러운 응답
         assert (
-            decide_hint_level(
-                student_input="이 부분이 흥미롭네요", turn_count=2, prev_hint_level=2
-            )
+            decide_hint_level(student_input="이 부분이 흥미롭네요", turn_count=2, prev_hint_level=2)
             == 1
         )
 
@@ -249,9 +207,4 @@ class TestMasteryConservatism:
 
     def test_omitted_mastery_arg_unchanged(self) -> None:
         # mastery_level 인자 생략 → 기존 동작(기본 None).
-        assert (
-            decide_hint_level(
-                student_input="답 알려줘", turn_count=1, prev_hint_level=1
-            )
-            == 2
-        )
+        assert decide_hint_level(student_input="답 알려줘", turn_count=1, prev_hint_level=1) == 2

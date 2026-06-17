@@ -197,6 +197,4 @@ class TestForgetting:
 
     def test_model_method_matches_function(self) -> None:
         model = BktModel(BktParameters(p_forget=0.05))
-        assert model.apply_forgetting(0.9, 10.0) == apply_forgetting(
-            0.9, 10.0, model.params
-        )
+        assert model.apply_forgetting(0.9, 10.0) == apply_forgetting(0.9, 10.0, model.params)

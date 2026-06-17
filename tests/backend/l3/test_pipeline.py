@@ -147,12 +147,8 @@ class TestCacheHitPath:
         trace = RecordingTraceSink()
         req = _sync_local_request()
 
-        r1 = await generate(
-            req, "p", "s", provider=provider, cache=cache, trace=trace
-        )
-        r2 = await generate(
-            req, "p", "s", provider=provider, cache=cache, trace=trace
-        )
+        r1 = await generate(req, "p", "s", provider=provider, cache=cache, trace=trace)
+        r2 = await generate(req, "p", "s", provider=provider, cache=cache, trace=trace)
 
         assert r1.cache_hit is False
         assert r2.cache_hit is True
@@ -472,9 +468,7 @@ class TestCloudRejectedThroughProvider:
         """
 
         class CloudRejectingProvider:
-            async def generate(
-                self, prompt: str, system: str, decision: RoutingDecision
-            ) -> str:
+            async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
                 from whymath_backend.l3.models import CostTier
                 from whymath_backend.l3.router import _as_cost_tier
 

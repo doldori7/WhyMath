@@ -53,12 +53,8 @@ def test_redis_backend_enforces_limit_on_live_daemon() -> None:
         uid = uuid.uuid4()
         try:
             now = time.monotonic()
-            assert (
-                await backend.hit(uid, category="read", limit=2, now=now)
-            ).allowed is True
-            assert (
-                await backend.hit(uid, category="read", limit=2, now=now + 0.1)
-            ).allowed is True
+            assert (await backend.hit(uid, category="read", limit=2, now=now)).allowed is True
+            assert (await backend.hit(uid, category="read", limit=2, now=now + 0.1)).allowed is True
             assert (
                 await backend.hit(uid, category="read", limit=2, now=now + 0.2)
             ).allowed is False
@@ -135,9 +131,7 @@ def test_redis_backend_distributed_consistency_on_live_daemon() -> None:
         uid = uuid.uuid4()
         try:
             now = time.monotonic()
-            assert (
-                await worker_a.hit(uid, category="read", limit=2, now=now)
-            ).allowed is True
+            assert (await worker_a.hit(uid, category="read", limit=2, now=now)).allowed is True
             # worker_b — 같은 사용자·같은 limit·다른 인스턴스. ZSET 공유라 카운트 누적
             assert (
                 await worker_b.hit(uid, category="read", limit=2, now=now + 0.1)

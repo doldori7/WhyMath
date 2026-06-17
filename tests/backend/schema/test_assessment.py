@@ -105,9 +105,7 @@ class TestAssessment:
             estimated_percentile=94.5,
             target_university_id=univ,
             admission_probability=0.72,
-            concept_diagnosis=[
-                {"concept_id": "CAL-INT-DEF", "mastery": 0.7, "trend": "+0.1"}
-            ],
+            concept_diagnosis=[{"concept_id": "CAL-INT-DEF", "mastery": 0.7, "trend": "+0.1"}],
             pattern_diagnosis=[{"pattern": "COMPOSITE_DIFFERENTIABILITY", "mastery": 0.6}],
             weak_points=[{"concept": "수열의 극한", "mastery": 0.3}],
             strong_points=[{"concept": "미분계수", "mastery": 0.9}],

@@ -105,9 +105,7 @@ def _client(fake: FakeSession) -> TestClient:
     return TestClient(app)
 
 
-def _sample_concept(
-    code: str = "CAL-INT-FTC", name: str = "미적분학의 기본정리"
-) -> Concept:
+def _sample_concept(code: str = "CAL-INT-FTC", name: str = "미적분학의 기본정리") -> Concept:
     """from_schema로 만든 transient ORM(라이브 PG 불필요) — get/list 행 모사용."""
     return Concept.from_schema(ConceptSchema(code=code, name_ko=name, level="단원"))
 
@@ -134,9 +132,7 @@ class TestCreate:
 
     def test_create_duplicate_code_returns_409(self) -> None:
         """code UNIQUE 충돌(IntegrityError) → 롤백 후 409(스택트레이스 없이)."""
-        err = IntegrityError(
-            "INSERT", {}, Exception("duplicate key value violates unique")
-        )
+        err = IntegrityError("INSERT", {}, Exception("duplicate key value violates unique"))
         fake = FakeSession(commit_error=err)
         resp = _client(fake).post("/v1/concepts", json=_VALID_BODY)
         assert resp.status_code == 409
@@ -235,18 +231,14 @@ class TestPatch:
         assert fake.committed is True
 
     def test_patch_404_when_missing(self) -> None:
-        resp = _client(FakeSession()).patch(
-            f"/v1/concepts/{uuid.uuid4()}", json={"name_en": "x"}
-        )
+        resp = _client(FakeSession()).patch(f"/v1/concepts/{uuid.uuid4()}", json={"name_en": "x"})
         assert resp.status_code == 404
 
     def test_patch_invalid_value_returns_422(self) -> None:
         """병합 결과가 스키마 위반(잘못된 enum) → 422."""
         concept = _sample_concept()
         fake = FakeSession(get_map={concept.concept_id: concept})
-        resp = _client(fake).patch(
-            f"/v1/concepts/{concept.concept_id}", json={"level": "없는레벨"}
-        )
+        resp = _client(fake).patch(f"/v1/concepts/{concept.concept_id}", json={"level": "없는레벨"})
         assert resp.status_code == 422
         assert fake.committed is False
 
@@ -254,9 +246,7 @@ class TestPatch:
         """미정의 필드(extra=forbid) → 422."""
         concept = _sample_concept()
         fake = FakeSession(get_map={concept.concept_id: concept})
-        resp = _client(fake).patch(
-            f"/v1/concepts/{concept.concept_id}", json={"nonexistent": 1}
-        )
+        resp = _client(fake).patch(f"/v1/concepts/{concept.concept_id}", json={"nonexistent": 1})
         assert resp.status_code == 422
 
     def test_patch_duplicate_code_returns_409(self) -> None:
@@ -264,9 +254,7 @@ class TestPatch:
         concept = _sample_concept()
         err = IntegrityError("UPDATE", {}, Exception("duplicate key"))
         fake = FakeSession(get_map={concept.concept_id: concept}, commit_error=err)
-        resp = _client(fake).patch(
-            f"/v1/concepts/{concept.concept_id}", json={"code": "DUP-CODE"}
-        )
+        resp = _client(fake).patch(f"/v1/concepts/{concept.concept_id}", json={"code": "DUP-CODE"})
         assert resp.status_code == 409
         assert fake.rolled_back is True
 
@@ -344,9 +332,7 @@ class TestConcurrency:
         """If-Match 미전송 → 무조건 진행(비파괴)."""
         concept = _sample_concept()
         fake = FakeSession(get_map={concept.concept_id: concept})
-        resp = _client(fake).patch(
-            f"/v1/concepts/{concept.concept_id}", json={"name_en": "X"}
-        )
+        resp = _client(fake).patch(f"/v1/concepts/{concept.concept_id}", json={"name_en": "X"})
         assert resp.status_code == 200
 
     def test_delete_with_stale_if_match_returns_412(self) -> None:
@@ -367,9 +353,7 @@ class TestConditionalGet:
         concept = _sample_concept()
         client = _client(FakeSession(get_map={concept.concept_id: concept}))
         etag = client.get(f"/v1/concepts/{concept.concept_id}").headers["ETag"]
-        resp = client.get(
-            f"/v1/concepts/{concept.concept_id}", headers={"If-None-Match": etag}
-        )
+        resp = client.get(f"/v1/concepts/{concept.concept_id}", headers={"If-None-Match": etag})
         assert resp.status_code == 304
         assert resp.headers.get("ETag") == etag
         assert resp.content == b""
@@ -377,9 +361,7 @@ class TestConditionalGet:
     def test_wildcard_if_none_match_returns_304(self) -> None:
         concept = _sample_concept()
         client = _client(FakeSession(get_map={concept.concept_id: concept}))
-        resp = client.get(
-            f"/v1/concepts/{concept.concept_id}", headers={"If-None-Match": "*"}
-        )
+        resp = client.get(f"/v1/concepts/{concept.concept_id}", headers={"If-None-Match": "*"})
         assert resp.status_code == 304
 
     def test_stale_if_none_match_returns_200(self) -> None:

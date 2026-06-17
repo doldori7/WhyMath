@@ -44,11 +44,7 @@ class TestPackageDataLoading:
         text = read_probes_text()
         assert text.strip()  # 비어있지 않음
         # 각 (주석·빈 줄 아닌) 줄이 JSON 객체다.
-        lines = [
-            ln
-            for ln in text.splitlines()
-            if ln.strip() and not ln.strip().startswith("#")
-        ]
+        lines = [ln for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
         assert len(lines) == 94  # 92줄 + 슬 102 후속 log-distribution recall·FP 각 1건
         for ln in lines:
             rec = json.loads(ln)
@@ -74,9 +70,7 @@ class TestPackageDataLoading:
             else:
                 fp += 1
         assert recall == 61  # recall 프로브 수(②의 표본·log 수치대입 +1)
-        assert (
-            fp == 33
-        )  # FP 프로브(precision·semantic_eval 별도·② 대상 아님·log 곱법칙 +1)
+        assert fp == 33  # FP 프로브(precision·semantic_eval 별도·② 대상 아님·log 곱법칙 +1)
 
     def test_all_expected_ids_in_catalog(self) -> None:
         # recall 프로브의 expected_id는 모두 카탈로그 id(매처가 잡을 수 있는 라벨).
@@ -145,9 +139,7 @@ class TestComputeDiagnosticRecall:
 # 파싱 관용성 — 빈 줄/주석 무시·잘못된 JSON은 줄 번호와 함께 ValueError(load_probes 동형)
 # ──────────────────────────────────────────────────────────────────────────
 class TestParsingTolerance:
-    def test_blank_and_comment_lines_skipped(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_blank_and_comment_lines_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 빈 줄·`#` 주석은 무시하고, expected_id 설정 줄만 recall 프로브로 센다.
         # (statement에 distribution-over-power 카탈로그 신호를 심어 hit 1건 확정.)
         eid = "distribution-over-power"
@@ -156,12 +148,8 @@ class TestParsingTolerance:
             [
                 "  # 주석 줄",
                 "",
-                json.dumps(
-                    {"statement": signals, "expected_id": eid, "kind": "paraphrase"}
-                ),
-                json.dumps(
-                    {"statement": "올바른 진술", "expected_id": None, "near_id": eid}
-                ),
+                json.dumps({"statement": signals, "expected_id": eid, "kind": "paraphrase"}),
+                json.dumps({"statement": "올바른 진술", "expected_id": None, "near_id": eid}),
             ]
         )
         monkeypatch.setattr(probes_mod, "read_probes_text", lambda: fake)
@@ -169,9 +157,7 @@ class TestParsingTolerance:
         assert total == 1  # recall 프로브 1건(FP·주석·빈 줄 제외)
         assert hits == 1  # 심은 신호로 top-1 매칭
 
-    def test_malformed_json_raises_with_line_number(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_malformed_json_raises_with_line_number(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 잘못된 JSON 줄은 줄 번호 컨텍스트와 함께 ValueError로 던진다(load_probes 동형).
         fake = "\n".join(
             [
@@ -183,13 +169,9 @@ class TestParsingTolerance:
         with pytest.raises(ValueError, match="line 2"):
             compute_diagnostic_recall()
 
-    def test_zero_recall_probes_returns_zero_total(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_zero_recall_probes_returns_zero_total(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # FP 프로브만 있으면 recall 프로브 0 → (0, 0)(하네스가 NO_DATA로 분기·날조 0 회피).
-        fake = json.dumps(
-            {"statement": "올바른 진술", "expected_id": None, "near_id": "x"}
-        )
+        fake = json.dumps({"statement": "올바른 진술", "expected_id": None, "near_id": "x"})
         monkeypatch.setattr(probes_mod, "read_probes_text", lambda: fake)
         assert compute_diagnostic_recall() == (0, 0)
 

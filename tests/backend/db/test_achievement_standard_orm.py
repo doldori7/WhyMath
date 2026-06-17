@@ -121,8 +121,7 @@ def test_achievement_standard_date_and_text_array_and_no_fk() -> None:
 def test_achievement_standard_indexes() -> None:
     """official_code 단일 · (curriculum_revision, domain) 인덱스가 정의된다."""
     by_name = {
-        ix.name: [c.name for c in ix.columns]
-        for ix in OrmAchievementStandard.__table__.indexes
+        ix.name: [c.name for c in ix.columns] for ix in OrmAchievementStandard.__table__.indexes
     }
     assert by_name["idx_achievement_standard_official_code"] == ["official_code"]
     assert by_name["idx_achievement_standard_revision_domain"] == [
@@ -170,8 +169,7 @@ def test_concept_standard_link_unique_and_indexes() -> None:
     assert "UNIQUE (concept_code, norm_id, link_type)" in ddl
     assert "uq_concept_standard_link_concept_norm_type" in ddl
     by_name = {
-        ix.name: [c.name for c in ix.columns]
-        for ix in OrmConceptStandardLink.__table__.indexes
+        ix.name: [c.name for c in ix.columns] for ix in OrmConceptStandardLink.__table__.indexes
     }
     assert by_name["idx_concept_standard_link_norm"] == ["norm_id"]
     assert by_name["idx_concept_standard_link_concept"] == ["concept_code"]
@@ -180,10 +178,7 @@ def test_concept_standard_link_unique_and_indexes() -> None:
 def test_concept_standard_link_link_type_is_string_not_enum() -> None:
     """link_type은 VARCHAR(8)로 담는다(PG native enum 아님 — concept_node.review_status 선례)."""
     col_type = OrmConceptStandardLink.__table__.c.link_type.type
-    assert (
-        isinstance(col_type, postgresql.VARCHAR)
-        or col_type.__class__.__name__ == "String"
-    )
+    assert isinstance(col_type, postgresql.VARCHAR) or col_type.__class__.__name__ == "String"
     assert col_type.length == 8  # type: ignore[attr-defined]
     # enum이 아니므로 enums 속성이 없다.
     assert not hasattr(col_type, "enums")

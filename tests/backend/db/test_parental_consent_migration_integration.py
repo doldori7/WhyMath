@@ -189,9 +189,10 @@ class TestParentalConsentMigrationRoundtrip:
             # 핵심(미성년 PII): 저장된 값은 *해시*다 — 평문 이메일이 아니다.
             assert stored_hash != guardian_email
             assert len(stored_hash) == 64
-            assert stored_hash == hashlib.sha256(
-                guardian_email.strip().lower().encode("utf-8")
-            ).hexdigest()
+            assert (
+                stored_hash
+                == hashlib.sha256(guardian_email.strip().lower().encode("utf-8")).hexdigest()
+            )
             assert method == "stub"  # 실 본인확인 아님(법적 경계·변호사 자문 후속)
         finally:
             _cleanup(uid)

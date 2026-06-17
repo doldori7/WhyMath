@@ -5,7 +5,8 @@ upsert/search의 *실 라운드트립*은 통합테스트(`test_concept_embeddin
 게이트)로 미룬다. 여기서는 PG 없이 검증 가능한 것만 못 박는다(L4 `test_misconception_pgvector.py`
 패턴 미러):
 
-  ① 임베딩 텍스트 구성 — name_ko+metaphor+accepted만, **description·formal_definition 미포함**(redaction)
+  ① 임베딩 텍스트 구성 — name_ko+metaphor+accepted만,
+     **description·formal_definition 미포함**(redaction)
   ② graph.json 로딩 — UC concept_id 추출·안전 필드 표현·redaction 키 무시·빈 표현 제외
   ③ upsert SQL 구성(가짜 엔진 주입 — ON CONFLICT(concept_id) upsert·바인딩 관찰)
   ④ search SQL 구성 — provider/model 필터·<=> 코사인·LIMIT + similarity=1-distance 변환·top_k 경계

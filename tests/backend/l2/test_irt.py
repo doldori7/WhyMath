@@ -67,13 +67,9 @@ class TestProbabilityCorrect:
         easy_disc = IrtItem(difficulty=0.0, discrimination=0.5)
         sharp_disc = IrtItem(difficulty=0.0, discrimination=2.0)
         # θ=1(>b)에서 변별도 높은 문항이 더 높은 확률
-        assert probability_correct(1.0, sharp_disc) > probability_correct(
-            1.0, easy_disc
-        )
+        assert probability_correct(1.0, sharp_disc) > probability_correct(1.0, easy_disc)
         # θ=-1(<b)에서는 더 낮은 확률
-        assert probability_correct(-1.0, sharp_disc) < probability_correct(
-            -1.0, easy_disc
-        )
+        assert probability_correct(-1.0, sharp_disc) < probability_correct(-1.0, easy_disc)
 
     def test_bounds(self) -> None:
         item = IrtItem(difficulty=0.0)
@@ -116,17 +112,13 @@ class TestEstimateAbility:
     def test_symmetric_responses_near_zero(self) -> None:
         """난이도 0 문항에 1정답·1오답 → MLE θ=0(대칭)."""
         item = IrtItem(difficulty=0.0)
-        assert estimate_ability([(item, True), (item, False)]) == pytest.approx(
-            0.0, abs=1e-6
-        )
+        assert estimate_ability([(item, True), (item, False)]) == pytest.approx(0.0, abs=1e-6)
 
     def test_more_correct_higher_theta(self) -> None:
         easy = IrtItem(difficulty=-1.0)
         hard = IrtItem(difficulty=1.0)
         low = estimate_ability([(easy, True), (hard, False)])
-        high = estimate_ability(
-            [(easy, True), (hard, True), (IrtItem(difficulty=0.0), True)]
-        )
+        high = estimate_ability([(easy, True), (hard, True), (IrtItem(difficulty=0.0), True)])
         assert high > low
 
     def test_correct_on_hard_item_raises_theta(self) -> None:
@@ -237,9 +229,7 @@ class TestSelectWeightedItem:
     def test_none_weights_equals_select_next_item(self) -> None:
         """weights=None은 균등 가중 → select_next_item과 동일."""
         for theta in (-2.0, 0.0, 2.0):
-            assert select_weighted_item(theta, self._POOL) == select_next_item(
-                theta, self._POOL
-            )
+            assert select_weighted_item(theta, self._POOL) == select_next_item(theta, self._POOL)
 
     def test_weight_biases_among_equal_info(self) -> None:
         """정보량 같은 두 문항(b=0)이면 가중치 큰 쪽 선택."""
@@ -337,9 +327,7 @@ class TestEstimateDifficulty:
 
     def test_symmetric_responses_near_zero(self) -> None:
         """능력 0 학생이 1정답·1오답 → 난이도 b=0."""
-        assert estimate_difficulty([(0.0, True), (0.0, False)]) == pytest.approx(
-            0.0, abs=1e-6
-        )
+        assert estimate_difficulty([(0.0, True), (0.0, False)]) == pytest.approx(0.0, abs=1e-6)
 
     def test_only_high_ability_correct_is_harder(self) -> None:
         """고능력 학생만 맞히면 난이도 높게(어려운 문항)."""

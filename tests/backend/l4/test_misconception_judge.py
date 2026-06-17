@@ -104,15 +104,11 @@ class TestParseVerdict:
 
     def test_format_violation_falls_back_uncertain(self) -> None:
         # `판정:` 라벨 없는 형식 위반 → UNCERTAIN.
-        assert (
-            parse_verdict("그냥 막 적은 응답입니다").verdict is JudgeVerdict.UNCERTAIN
-        )
+        assert parse_verdict("그냥 막 적은 응답입니다").verdict is JudgeVerdict.UNCERTAIN
 
     def test_unknown_token_falls_back_uncertain(self) -> None:
         # `판정:` 뒤 토큰이 3값 외 → UNCERTAIN.
-        assert (
-            parse_verdict("판정: 아마도\n근거: 모름").verdict is JudgeVerdict.UNCERTAIN
-        )
+        assert parse_verdict("판정: 아마도\n근거: 모름").verdict is JudgeVerdict.UNCERTAIN
 
     def test_ambiguous_multiple_tokens_falls_back_uncertain(self) -> None:
         # 여러 판정이 동시에(이상 응답) → 모호로 보고 UNCERTAIN(거짓 단정 금지).
@@ -203,16 +199,10 @@ class TestJudgeFilter:
         # rule 콜러블로 statement 내용에 따라 판정(동적 시나리오).
         def rule(stmt: str, m: Misconception) -> JudgeVerdict:
             # "올바른"이 들어가면 아니오(제거)·아니면 예(유지).
-            return (
-                JudgeVerdict.NOT_EXPRESSES
-                if "올바른" in stmt
-                else JudgeVerdict.EXPRESSES
-            )
+            return JudgeVerdict.NOT_EXPRESSES if "올바른" in stmt else JudgeVerdict.EXPRESSES
 
         judge = FakeJudge(rule=rule)
-        kept_correct = await judge_filter(
-            [_match(_CONTINUITY)], "올바른 진술", judge=judge
-        )
+        kept_correct = await judge_filter([_match(_CONTINUITY)], "올바른 진술", judge=judge)
         kept_wrong = await judge_filter([_match(_CONTINUITY)], "틀린 진술", judge=judge)
         assert kept_correct == []  # 올바른 → 아니오 → 제거
         assert len(kept_wrong) == 1  # 틀린 → 예 → 유지
@@ -262,9 +252,7 @@ class TestJudgeVerdicts:
         judge = FakeJudge({_CONTINUITY.id: JudgeVerdict.NOT_EXPRESSES})
         decided = await judge_verdicts(matches, "x", judge=judge)
         kept = await judge_filter(matches, "x", judge=judge)
-        expected = [
-            m for m, r in decided if r.verdict is not JudgeVerdict.NOT_EXPRESSES
-        ]
+        expected = [m for m, r in decided if r.verdict is not JudgeVerdict.NOT_EXPRESSES]
         assert kept == expected
 
 
@@ -273,9 +261,7 @@ class TestJudgeVerdicts:
 # ══════════════════════════════════════════════════════════════════════════
 class TestLLMJudge:
     def test_satisfies_protocol(self) -> None:
-        assert isinstance(
-            LLMJudge(seam=_ScriptedSeam("판정: 예\n근거: x")), JudgeProtocol
-        )
+        assert isinstance(LLMJudge(seam=_ScriptedSeam("판정: 예\n근거: x")), JudgeProtocol)
 
     @pytest.mark.asyncio
     async def test_parses_scripted_not_expresses(self) -> None:
@@ -367,9 +353,7 @@ class TestJudgePrompts:
 
     def test_user_template_matches_doc_canonical(self) -> None:
         # doc USER 템플릿(L93-104)의 식별 문구 정합.
-        assert (
-            "다음 학생 진술이 이 오개념(틀린 믿음)을 표현하는가?" in JUDGE_USER_TEMPLATE
-        )
+        assert "다음 학생 진술이 이 오개념(틀린 믿음)을 표현하는가?" in JUDGE_USER_TEMPLATE
         assert "정확히 두 줄(판정/근거)로만 답하라." in JUDGE_USER_TEMPLATE
 
 
@@ -395,13 +379,8 @@ class TestParseVerdictStrictHedging:
     def test_trailing_period_tolerated(self) -> None:
         # 후행 문장부호는 사소한 변형으로 관용(정확 일치의 실용 완화).
         assert parse_verdict("판정: 예.\n근거: 단정").verdict is JudgeVerdict.EXPRESSES
-        assert (
-            parse_verdict("판정: 아니오.\n근거: 역방향").verdict
-            is JudgeVerdict.NOT_EXPRESSES
-        )
-        assert (
-            parse_verdict("판정: 불확실.\n근거: 모호").verdict is JudgeVerdict.UNCERTAIN
-        )
+        assert parse_verdict("판정: 아니오.\n근거: 역방향").verdict is JudgeVerdict.NOT_EXPRESSES
+        assert parse_verdict("판정: 불확실.\n근거: 모호").verdict is JudgeVerdict.UNCERTAIN
 
     def test_modifier_suffix_falls_back_to_uncertain(self) -> None:
         # '아니오입니다'·'예요' 같은 수식 변형도 계약 밖 → UNCERTAIN(추측 금지).
@@ -425,26 +404,16 @@ class TestJudgeRoutingProfile:
         decision = Router().route(req)
         assert decision.local_family == ModelFamily.MATH
         assert decision.local_model == LocalModelTier.FAST
-        assert (
-            resolve_model(decision.local_family, decision.local_model)
-            == "qwen2-math:1.5b"
-        )
+        assert resolve_model(decision.local_family, decision.local_model) == "qwen2-math:1.5b"
 
     def test_general_mid_routes_to_general_mid_instruct_model(self) -> None:
-        req = _judge_routing_request(
-            Settings(misconception_judge_routing="general_mid")
-        )
+        req = _judge_routing_request(Settings(misconception_judge_routing="general_mid"))
         decision = Router().route(req)
         assert decision.local_family == ModelFamily.GENERAL
         assert decision.local_model == LocalModelTier.MID
-        assert (
-            resolve_model(decision.local_family, decision.local_model) == "qwen2.5:7b"
-        )
+        assert resolve_model(decision.local_family, decision.local_model) == "qwen2.5:7b"
 
     def test_default_settings_preserve_fast_math(self) -> None:
         # env/오버라이드 없으면 현행(fast_math) 보존 — 회귀 0.
         decision = Router().route(_judge_routing_request(Settings()))
-        assert (
-            resolve_model(decision.local_family, decision.local_model)
-            == "qwen2-math:1.5b"
-        )
+        assert resolve_model(decision.local_family, decision.local_model) == "qwen2-math:1.5b"

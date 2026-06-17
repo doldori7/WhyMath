@@ -191,9 +191,7 @@ def test_create_get_tree_and_visits_on_live_pg() -> None:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
                 # 루트 + 자식 2개 생성(트리)
-                root = await create_node(
-                    session, problem_id=pid, state_repr={"step": "root"}
-                )
+                root = await create_node(session, problem_id=pid, state_repr={"step": "root"})
                 child_a = await create_node(
                     session,
                     problem_id=pid,
@@ -261,9 +259,7 @@ def test_create_get_tree_and_visits_on_live_pg() -> None:
                 assert evaluated.verify_status is NodeVerifyStatus.VERIFIED
 
                 # update_evaluation 부분 갱신: verify_status만(child_b)
-                await update_evaluation(
-                    session, child_b.id, verify_status=NodeVerifyStatus.FAILED
-                )
+                await update_evaluation(session, child_b.id, verify_status=NodeVerifyStatus.FAILED)
                 await session.commit()
                 evaluated_b = await get_node(session, child_b.id)
                 assert evaluated_b is not None
@@ -291,9 +287,7 @@ def test_parent_cascade_delete_on_live_pg() -> None:
         try:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
-                root = await create_node(
-                    session, problem_id=pid, state_repr={"step": "root"}
-                )
+                root = await create_node(session, problem_id=pid, state_repr={"step": "root"})
                 child = await create_node(
                     session,
                     problem_id=pid,

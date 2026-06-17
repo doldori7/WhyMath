@@ -48,8 +48,14 @@ from whymath_backend.schema.enums import (
 from whymath_backend.schema.problem import (
     Condition,
     DistractorEntry,
+)
+from whymath_backend.schema.problem import (
     Problem as SchemaProblem,
+)
+from whymath_backend.schema.problem import (
     ProblemRelation as SchemaProblemRelation,
+)
+from whymath_backend.schema.problem import (
     ProblemStep as SchemaProblemStep,
 )
 from whymath_backend.schema.visualization import Visualization
@@ -190,9 +196,7 @@ def test_problem_roundtrip_preserves_core_fields() -> None:
     assert orm.subject == "미적분"
     assert orm.unit_codes == ["CAL-INT-DEF", "FUN-COMPOSITE"]
     # JSONB 대상: list[Condition] → list[dict]
-    assert orm.conditions_parsed == [
-        {"label": "가", "text": "미분가능", "formal": "diff(f,R)"}
-    ]
+    assert orm.conditions_parsed == [{"label": "가", "text": "미분가능", "formal": "diff(f,R)"}]
     assert orm.persona_fit == {"A_일반고고3": 0.9}
 
     # 역변환(검증 포함) 후에도 핵심 필드 보존.

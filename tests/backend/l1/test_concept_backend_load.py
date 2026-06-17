@@ -103,9 +103,7 @@ def _record(
         name_ko=name_ko,
         # 재ID 추적성(2026-06-16) — 원천 src_id + 옛 키 별칭([레거시 UC, src_id]).
         source_id=source_id,
-        aliases=(
-            aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]
-        ),
+        aliases=(aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]),
         level=ConceptLevel.세부개념,
         subject=subject,
         intrinsic_difficulty=intrinsic_difficulty,
@@ -152,9 +150,7 @@ class TestLoadFromGraphJson:
         assert rec.level == ConceptLevel.세부개념  # 고정 유도(NOT NULL 충족)
         assert rec.subject == Subject.미적분  # domain 매핑
         assert rec.intrinsic_difficulty == scale_difficulty(7)
-        assert rec.common_misconceptions == [
-            {"misconception": "극한을 대입값으로 혼동"}
-        ]
+        assert rec.common_misconceptions == [{"misconception": "극한을 대입값으로 혼동"}]
 
     def test_source_id_and_aliases_absent_graceful(self, tmp_path: Path) -> None:
         # 옛 graph.json(재ID 전·source_id/aliases 부재) → None/빈 배열 graceful(하위호환·NOT NULL
@@ -183,9 +179,7 @@ class TestLoadFromGraphJson:
         rec = load_backend_concepts_from_graph_json(path)[0]
         assert rec.aliases == ["UC.x.y.z", "N1"]  # 빈 원소 제외
 
-    def test_description_and_formal_definition_never_loaded(
-        self, tmp_path: Path
-    ) -> None:
+    def test_description_and_formal_definition_never_loaded(self, tmp_path: Path) -> None:
         # redaction: graph 부재이나 *오염되어 들어와도* 레코드에 유입되지 않음을 못 박는다.
         path = self._write_graph(
             tmp_path,
@@ -208,9 +202,7 @@ class TestLoadFromGraphJson:
         assert "formal_definition" not in fields
         assert "intuitive_explanation" not in fields
 
-    def test_loads_all_concepts_regardless_of_review_status(
-        self, tmp_path: Path
-    ) -> None:
+    def test_loads_all_concepts_regardless_of_review_status(self, tmp_path: Path) -> None:
         # 전량 적재(review_status 무관·게이팅은 조회 몫·슬2/3/117 동형).
         path = self._write_graph(
             tmp_path,
@@ -335,9 +327,7 @@ class TestUpsertStatement:
         # SET이 PK·created_at을 대입하지 않음(excluded.concept_id/created_at 부재 = 보존).
         assert "concept_id" not in set_clause
         assert "created_at" not in set_clause
-        assert (
-            "excluded.concept_id" not in compiled
-        )  # 어디서도 PK를 excluded로 덮지 않음
+        assert "excluded.concept_id" not in compiled  # 어디서도 PK를 excluded로 덮지 않음
 
     def test_upsert_includes_runtime_identity_columns(self) -> None:
         store, engine = _fake_store()
@@ -391,9 +381,7 @@ class TestUpsertStatement:
 class TestPopulate:
     def test_populate_upserts_each_record(self) -> None:
         store, engine = _fake_store()
-        count = populate_backend_concepts(
-            [_record(_NID_A), _record(_NID_B)], store=store
-        )
+        count = populate_backend_concepts([_record(_NID_A), _record(_NID_B)], store=store)
         assert count == 2
         assert len(engine.executed) == 2  # 레코드당 1 upsert
 

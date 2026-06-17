@@ -60,16 +60,10 @@ def _records(caplog: pytest.LogCaptureFixture) -> list[str]:
 # ① verdict별 would_remove/keep 분류 + 카운트
 # ──────────────────────────────────────────────────────────────────────────
 class TestVerdictClassification:
-    def test_not_expresses_goes_to_would_remove(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_not_expresses_goes_to_would_remove(self, caplog: pytest.LogCaptureFixture) -> None:
         # _DOP=아니오(제거)·_DBZ=예(유지) → would_remove=[_DOP]·would_keep=[_DBZ].
-        judge = FakeJudge(
-            {_DOP: JudgeVerdict.NOT_EXPRESSES, _DBZ: JudgeVerdict.EXPRESSES}
-        )
-        with caplog.at_level(
-            logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"
-        ):
+        judge = FakeJudge({_DOP: JudgeVerdict.NOT_EXPRESSES, _DBZ: JudgeVerdict.EXPRESSES})
+        with caplog.at_level(logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"):
             result = asyncio.run(
                 observe_misconception_judge_shadow(
                     [_match(_DOP), _match(_DBZ)], _STUDENT, judge=judge
@@ -90,30 +84,22 @@ class TestVerdictClassification:
     def test_uncertain_counts_as_keep(self, caplog: pytest.LogCaptureFixture) -> None:
         # 불확실(보수 폴백)도 would_keep — recall 보존. default=UNCERTAIN로 둘 다 유지.
         judge = FakeJudge(default=JudgeVerdict.UNCERTAIN)
-        with caplog.at_level(
-            logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"
-        ):
+        with caplog.at_level(logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"):
             asyncio.run(
                 observe_misconception_judge_shadow(
                     [_match(_DOP), _match(_DBZ)], _STUDENT, judge=judge
                 )
             )
-        obs = MisconceptionJudgeShadowObservation.model_validate_json(
-            _records(caplog)[0]
-        )
+        obs = MisconceptionJudgeShadowObservation.model_validate_json(_records(caplog)[0])
         assert obs.would_remove_ids == []  # 아니오 없음
         assert sorted(obs.would_keep_ids) == sorted([_DOP, _DBZ])  # 불확실=유지
         assert obs.verdict_uncertain == 2
         assert obs.verdict_not_expresses == 0
         assert obs.verdict_expresses == 0
 
-    def test_feed_threshold_and_routing_recorded(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_feed_threshold_and_routing_recorded(self, caplog: pytest.LogCaptureFixture) -> None:
         # 운영점(feed_threshold)·judge 모델 라벨(judge_routing)이 레코드에 사후 해석용으로 실린다.
-        with caplog.at_level(
-            logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"
-        ):
+        with caplog.at_level(logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"):
             asyncio.run(
                 observe_misconception_judge_shadow(
                     [_match(_DOP)],
@@ -123,9 +109,7 @@ class TestVerdictClassification:
                     judge_routing="general_mid",
                 )
             )
-        obs = MisconceptionJudgeShadowObservation.model_validate_json(
-            _records(caplog)[0]
-        )
+        obs = MisconceptionJudgeShadowObservation.model_validate_json(_records(caplog)[0])
         assert obs.feed_threshold == 0.40
         assert obs.judge_routing == "general_mid"
 
@@ -138,25 +122,17 @@ class TestPrivacyNoReasonNoStudentText:
         # FakeJudge는 reason="fake"를 내지만(judge.py) 레코드 모델엔 reason 필드가 없고
         # extra="forbid"라 *구조적으로* 차단된다 — JSON에 reason 키 부재.
         judge = FakeJudge({_DOP: JudgeVerdict.NOT_EXPRESSES})
-        with caplog.at_level(
-            logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"
-        ):
-            asyncio.run(
-                observe_misconception_judge_shadow([_match(_DOP)], _STUDENT, judge=judge)
-            )
+        with caplog.at_level(logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"):
+            asyncio.run(observe_misconception_judge_shadow([_match(_DOP)], _STUDENT, judge=judge))
         raw = _records(caplog)[0]
         parsed = json.loads(raw)
         assert "reason" not in parsed  # judge reason 미저장(학생 진술 인용 가능=PII)
         assert "raw" not in parsed
         assert "fake" not in raw  # FakeJudge reason 문자열도 레코드에 0
 
-    def test_record_omits_student_statement(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_record_omits_student_statement(self, caplog: pytest.LogCaptureFixture) -> None:
         # 학생 진술 원문은 레코드에 *어디에도* 없다(id·카운트만·step_shadow 규약 계승).
-        with caplog.at_level(
-            logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"
-        ):
+        with caplog.at_level(logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"):
             asyncio.run(
                 observe_misconception_judge_shadow(
                     [_match(_DOP)],
@@ -193,9 +169,7 @@ class _BoomJudge:
     로깅 실패까지 감싸는 추가 방어선이 있다 — judge가 *프로토콜을 어기고* raise해도 삼킨다.
     """
 
-    async def judge(
-        self, student_statement: str, misconception: Misconception
-    ) -> JudgeResult:
+    async def judge(self, student_statement: str, misconception: Misconception) -> JudgeResult:
         raise RuntimeError("judge 강제 실패(never-break 테스트)")
 
 
@@ -204,13 +178,9 @@ class TestNeverBreak:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         # judge가 raise → observe는 조용히 None 반환(예외가 fire-and-forget task를 안 깸).
-        with caplog.at_level(
-            logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"
-        ):
+        with caplog.at_level(logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"):
             result = asyncio.run(
-                observe_misconception_judge_shadow(
-                    [_match(_DOP)], _STUDENT, judge=_BoomJudge()
-                )
+                observe_misconception_judge_shadow([_match(_DOP)], _STUDENT, judge=_BoomJudge())
             )
         assert result is None  # 예외 전파 0(never-break)
         assert _records(caplog) == []  # 실패라 레코드도 안 남음(부분 기록 0)
@@ -225,24 +195,16 @@ class _SpyJudge:
     def __init__(self) -> None:
         self.calls = 0
 
-    async def judge(
-        self, student_statement: str, misconception: Misconception
-    ) -> JudgeResult:
+    async def judge(self, student_statement: str, misconception: Misconception) -> JudgeResult:
         self.calls += 1
         return JudgeResult(verdict=JudgeVerdict.UNCERTAIN)
 
 
 class TestEmptyInputShortCircuit:
-    def test_empty_candidates_skips_judge(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_empty_candidates_skips_judge(self, caplog: pytest.LogCaptureFixture) -> None:
         spy = _SpyJudge()
-        with caplog.at_level(
-            logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"
-        ):
-            result = asyncio.run(
-                observe_misconception_judge_shadow([], _STUDENT, judge=spy)
-            )
+        with caplog.at_level(logging.INFO, logger="whymath.l4.misconception.judge_shadow.record"):
+            result = asyncio.run(observe_misconception_judge_shadow([], _STUDENT, judge=spy))
         assert result is None
         assert spy.calls == 0  # 후보 0 → judge 미호출(short-circuit)
         assert _records(caplog) == []  # 레코드도 0

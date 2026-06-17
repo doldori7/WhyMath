@@ -22,8 +22,8 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import whymath_backend.l2.weak_concept_recommendation as wcr_mod
-from whymath_backend.l2.concept_diagnosis import Agreement, ConceptDiagnosis
 from whymath_backend.l1.concept_graph.node_projection import ConceptNodeMeta
+from whymath_backend.l2.concept_diagnosis import Agreement, ConceptDiagnosis
 from whymath_backend.l2.weak_concept_recommendation import (
     WeakConceptRecommendation,
     recommend_weak_concepts,
@@ -62,9 +62,7 @@ def _fake_session() -> AsyncSession:
     return cast(AsyncSession, object())
 
 
-def _patch_diagnoses(
-    monkeypatch: pytest.MonkeyPatch, diagnoses: list[ConceptDiagnosis]
-) -> None:
+def _patch_diagnoses(monkeypatch: pytest.MonkeyPatch, diagnoses: list[ConceptDiagnosis]) -> None:
     """`compute_concept_diagnoses`를 패치해 canned 진단(이미 약점 정렬됐다고 가정)을 돌려준다."""
 
     async def _fake(_session: AsyncSession, _user_id: uuid.UUID) -> list[ConceptDiagnosis]:
@@ -113,9 +111,7 @@ class TestWeaknessFilter:
         assert [r.concept_code for r in out] == [_UC_A]
         assert out[0].weakness == 0.3  # 두 신호 중 최저
 
-    async def test_threshold_boundary_excludes_equal(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_threshold_boundary_excludes_equal(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 경계: weakness == threshold면 *미만*이 아니므로 제외(< 비교).
         _patch_meta(monkeypatch)
         _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, bkt=0.7, proxy=0.8)])
@@ -137,9 +133,7 @@ class TestWeaknessFilter:
         assert [r.concept_code for r in out] == [_UC_B]
         assert out[0].weakness == 0.2
 
-    async def test_single_signal_used_as_weakness(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_single_signal_used_as_weakness(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 한쪽 신호만 있으면 그 값이 weakness(min of 1).
         _patch_meta(monkeypatch)
         _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, bkt=None, proxy=0.4)])
@@ -159,9 +153,7 @@ class TestWeaknessFilter:
 # ② 정렬 보존 — 진단의 약점 우선 순서를 그대로 유지
 # ──────────────────────────────────────────────────────────────────────────
 class TestSortPreserved:
-    async def test_preserves_diagnosis_order(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_preserves_diagnosis_order(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch_meta(monkeypatch)
         # compute_concept_diagnoses가 약점 먼저 정렬해 준 순서(_UC_A weak → _UC_B less weak).
         _patch_diagnoses(
@@ -183,10 +175,7 @@ class TestLimit:
         _patch_meta(monkeypatch)
         _patch_diagnoses(
             monkeypatch,
-            [
-                _diagnosis(code=f"UC.x.y.{i}", bkt=0.1 + i * 0.01, proxy=0.2)
-                for i in range(5)
-            ],
+            [_diagnosis(code=f"UC.x.y.{i}", bkt=0.1 + i * 0.01, proxy=0.2) for i in range(5)],
         )
         out = await recommend_weak_concepts(_fake_session(), _UID, limit=2)
         assert len(out) == 2
@@ -199,9 +188,7 @@ class TestLimit:
 class TestEnrichment:
     async def test_attaches_node_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
         meta = {
-            _UC_A: ConceptNodeMeta(
-                name_ko="일차함수", domain="[중]함수", review_status="reviewed"
-            )
+            _UC_A: ConceptNodeMeta(name_ko="일차함수", domain="[중]함수", review_status="reviewed")
         }
         captured = _patch_meta(monkeypatch, meta)
         _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, bkt=0.2, proxy=0.3)])
@@ -213,13 +200,9 @@ class TestEnrichment:
         assert captured["calls"] == 1
         assert captured["concept_ids"] == [_UC_A]
 
-    async def test_missing_meta_is_none_graceful(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_missing_meta_is_none_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # concept_node에 _UC_B 메타가 없으면(적재 누락) enrich 필드 None(추천은 유지).
-        meta = {
-            _UC_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="reviewed")
-        }
+        meta = {_UC_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="reviewed")}
         _patch_meta(monkeypatch, meta)
         _patch_diagnoses(
             monkeypatch,
@@ -245,9 +228,7 @@ class TestEnrichment:
         # UC가 하나도 없으면 메타 조회 생략(빈 UC 목록 → 호출 0).
         assert captured["calls"] == 0
 
-    async def test_dedupes_uc_in_single_call(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_dedupes_uc_in_single_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 같은 UC 중복 후보는 메타 조회 UC 목록에서 중복 제거(IN 1회·중복 키 0).
         meta = {_UC_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="reviewed")}
         captured = _patch_meta(monkeypatch, meta)
@@ -298,9 +279,7 @@ class TestReviewedOnlyGating:
         out = await recommend_weak_concepts(_fake_session(), _UID, reviewed_only=True)
         assert [r.concept_code for r in out] == [_UC_A]  # 메타 없음·orphan 모두 제외
 
-    async def test_default_keeps_all_recall(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_default_keeps_all_recall(self, monkeypatch: pytest.MonkeyPatch) -> None:
         meta = {_UC_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="pending")}
         _patch_meta(monkeypatch, meta)
         _patch_diagnoses(
@@ -328,9 +307,7 @@ class TestReviewedOnlyGating:
                 _diagnosis(code=_UC_B, bkt=0.15, proxy=0.2),  # reviewed
             ],
         )
-        out = await recommend_weak_concepts(
-            _fake_session(), _UID, limit=1, reviewed_only=True
-        )
+        out = await recommend_weak_concepts(_fake_session(), _UID, limit=1, reviewed_only=True)
         # gated UC 건너뛰고 reviewed 첫 1개(_UC_A)만.
         assert [r.concept_code for r in out] == [_UC_A]
 

@@ -108,9 +108,7 @@ class TestSearchRoundtrip:
         far = ConceptText(concept_id=_UC_FAR, text="행렬 벡터 좌표 평면 기울기")
         keys = [_UC_NEAR, _UC_FAR]
         try:
-            count = populate_concept_embeddings(
-                [near, far], provider, settings=settings
-            )
+            count = populate_concept_embeddings([near, far], provider, settings=settings)
             assert count == 2
 
             hits = search_concepts(
@@ -137,9 +135,7 @@ class TestSearchRoundtrip:
         keys = [c.concept_id for c in concepts]
         try:
             populate_concept_embeddings(concepts, provider, settings=settings)
-            hits = search_concepts(
-                "극한", top_k=2, provider=provider, settings=settings
-            )
+            hits = search_concepts("극한", top_k=2, provider=provider, settings=settings)
             assert len(hits) == 2  # top_k 컷
         finally:
             _cleanup(keys)

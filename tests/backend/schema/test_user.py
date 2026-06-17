@@ -206,9 +206,7 @@ class TestUserProfileCreation:
     def test_extra_forbidden(self) -> None:
         """extra='forbid' — 알 수 없는 필드 거부."""
         with pytest.raises(ValidationError):
-            UserProfile(  # type: ignore[call-arg]
-                persona_primary=Persona.A_일반고고3, bogus="x"
-            )
+            UserProfile(persona_primary=Persona.A_일반고고3, bogus="x")  # type: ignore[call-arg]
 
     def test_enum_value_serialization_korean(self) -> None:
         """use_enum_values → 한글 enum 값 보존(school_type='일반고' 등)."""

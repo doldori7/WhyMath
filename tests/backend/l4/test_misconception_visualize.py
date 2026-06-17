@@ -25,9 +25,7 @@ class _FakeProvider:
         self._text = text
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(
-        self, prompt: str, system: str, decision: RoutingDecision
-    ) -> str:
+    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
         self.calls.append((prompt, system, decision))
         return self._text
 
@@ -49,9 +47,7 @@ _VALID_JSON = (
 
 def _match(confidence: float) -> MisconceptionMatch:
     """주어진 신뢰도의 진단 결과(_M 고정)."""
-    return MisconceptionMatch(
-        misconception=_M, confidence=confidence, matched_signals=()
-    )
+    return MisconceptionMatch(misconception=_M, confidence=confidence, matched_signals=())
 
 
 @pytest.mark.asyncio

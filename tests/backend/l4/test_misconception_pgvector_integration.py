@@ -77,9 +77,7 @@ def _cleanup(keys: list[str]) -> None:
     try:
         with engine.begin() as conn:  # type: ignore[attr-defined]
             conn.execute(
-                text(
-                    "DELETE FROM misconception_embedding WHERE misconception_id = ANY(:keys)"
-                ),
+                text("DELETE FROM misconception_embedding WHERE misconception_id = ANY(:keys)"),
                 {"keys": keys},
             )
     finally:
@@ -94,9 +92,7 @@ def _skip_if_unreachable() -> None:
         )
 
 
-def _fake_index(
-    *, provider_name: str = "fake", model_name: str = "fake-hash"
-) -> PgVectorIndex:
+def _fake_index(*, provider_name: str = "fake", model_name: str = "fake-hash") -> PgVectorIndex:
     """실 PG에 붙는 PgVectorIndex(엔진 미주입 → lazy sync 엔진 생성)."""
     return PgVectorIndex(provider_name=provider_name, model_name=model_name)
 
@@ -222,9 +218,7 @@ class TestSemanticMatcherE2E:
             matcher = SemanticMatcher(provider=provider, index=index)
             # 카탈로그 첫 항목의 표현 토큰을 일부 포함한 학생 텍스트 — recall 후보가 비지 않게.
             first = CATALOG[0]
-            student = (
-                f"{first.name_kr} 관련해서 {first.canonical_statement} 라고 생각했어"
-            )
+            student = f"{first.name_kr} 관련해서 {first.canonical_statement} 라고 생각했어"
             # threshold를 낮춰(Fake 어휘 해시) 후보가 잡히도록 — 실 PG search 경로 동작 입증.
             out = matcher.match(student, top_k=5, threshold=0.1)
             assert isinstance(out, list)

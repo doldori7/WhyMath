@@ -168,10 +168,7 @@ class TestAggregationInvariants:
 
     def test_counts_sum_equals_transitions(self) -> None:
         result = verify_solution(["2+3", "5", "6", "어쩌고", "x+1", "x+2"])
-        assert (
-            result.n_correct + result.n_incorrect + result.n_unverifiable
-            == result.n_transitions
-        )
+        assert result.n_correct + result.n_incorrect + result.n_unverifiable == result.n_transitions
         assert len(result.steps) == result.n_transitions
 
     def test_aggregates_verify_step_results_verbatim(self) -> None:

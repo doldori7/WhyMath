@@ -55,9 +55,7 @@ def test_record_and_flush_on_live_langfuse() -> None:
     """
     settings = _live_settings()
     if not settings.langfuse_configured:
-        pytest.skip(
-            "Langfuse 키 미설정 — WHYMATH_LANGFUSE_PUBLIC_KEY/SECRET_KEY 설정 필요"
-        )
+        pytest.skip("Langfuse 키 미설정 — WHYMATH_LANGFUSE_PUBLIC_KEY/SECRET_KEY 설정 필요")
 
     sink = LangfuseSink(settings=settings)
     assert sink.configured is True

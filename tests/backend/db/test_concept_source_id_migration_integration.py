@@ -3,7 +3,8 @@
 마이그레이션 head가 적용된 **실 PostgreSQL**에서 P2b 리비전(b7c8d9e0f1a2)을 *revision-local 왕복*
 (downgrade -1 → upgrade head)으로 검증한다. CI `backend — 마이그레이션·통합 (실 PG)` 잡이 이미
 `alembic downgrade base → upgrade head` 전구간 왕복을 돌리므로(ci.yml backend-migrations), 이
-테스트는 그 위에서 *P2b 리비전이 컬럼을 정확히 더하고/되돌리며 UUID PK·기존 행을 보존*함을 못 박는다.
+테스트는 그 위에서 *P2b 리비전이 컬럼을 정확히 더하고/되돌리며
+UUID PK·기존 행을 보존*함을 못 박는다.
 PG 미도달 시 graceful skip(`test_concept_backend_load_integration.py` 미러).
 
 검증(P2b 핵심 — UUID PK 보존 결정):
@@ -39,7 +40,8 @@ _ALEMBIC_DIR = _BACKEND_DIR / "alembic"
 
 
 def _sync_url() -> str:
-    """Settings의 sync(psycopg) DB URL — alembic env가 async지만 여기선 조회용 sync 엔진에도 쓴다."""
+    """Settings의 sync(psycopg) DB URL
+    — alembic env가 async지만 여기선 조회용 sync 엔진에도 쓴다."""
     return Settings().sync_database_url
 
 
@@ -168,9 +170,7 @@ def _cleanup_sentinel() -> None:
     engine = _sync_engine()
     try:
         with engine.begin() as conn:  # type: ignore[attr-defined]
-            conn.execute(
-                text("DELETE FROM concept WHERE code = :code"), {"code": _SENTINEL_CODE}
-            )
+            conn.execute(text("DELETE FROM concept WHERE code = :code"), {"code": _SENTINEL_CODE})
     finally:
         engine.dispose()  # type: ignore[attr-defined]
 
@@ -234,9 +234,7 @@ class TestSourceIdMigrationRoundtrip:
                         text("SELECT aliases FROM concept WHERE code = :code"),
                         {"code": _SENTINEL_CODE},
                     ).one()
-                assert (
-                    row.aliases is not None
-                )  # NOT NULL 유지(왕복이 NULL을 남기지 않음)
+                assert row.aliases is not None  # NOT NULL 유지(왕복이 NULL을 남기지 않음)
                 assert row.aliases == []
             finally:
                 engine.dispose()  # type: ignore[attr-defined]

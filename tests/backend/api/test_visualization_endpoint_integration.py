@@ -58,9 +58,7 @@ _VALID_JSON = (
 class _StubProvider:
     """가짜 LLMProvider — 항상 유효 Visualization JSON 반환(라이브 Ollama 회피)."""
 
-    async def generate(
-        self, prompt: str, system: str, decision: RoutingDecision
-    ) -> str:
+    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
         return _VALID_JSON
 
 
@@ -133,15 +131,11 @@ def test_weak_concept_visualization_on_live_pg() -> None:
         )
         await _add_all(
             ProblemConcept.from_schema(
-                ProblemConceptSchema(
-                    problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY
-                )
+                ProblemConceptSchema(problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY)
             )
         )
         await _add_all(
-            ProblemAttempt(
-                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=False
-            )
+            ProblemAttempt(attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=False)
         )
         # BKT 낮음(약점) → weakest-first 정렬에서 이 개념이 선택된다.
         await _add_all(
@@ -178,9 +172,7 @@ def test_weak_concept_visualization_on_live_pg() -> None:
         finally:
             await engine.dispose()
 
-    app = create_app(
-        provider=_StubProvider(), cache=InMemoryCache(), trace=RecordingTraceSink()
-    )
+    app = create_app(provider=_StubProvider(), cache=InMemoryCache(), trace=RecordingTraceSink())
     app.dependency_overrides[get_settings] = _settings
 
     try:

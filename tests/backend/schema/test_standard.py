@@ -141,7 +141,8 @@ class TestConceptStandardLink:
             ConceptStandardLink(**_link_kwargs(link_type=bad))  # type: ignore[arg-type]
 
     def test_no_link_id_field(self) -> None:
-        """schema에는 link_id가 없다(연결 의미키는 (concept_code, norm_id, link_type) — ORM 전용 PK)."""
+        """schema에는 link_id가 없다
+        (연결 의미키는 (concept_code, norm_id, link_type) — ORM 전용 PK)."""
         assert "link_id" not in set(ConceptStandardLink.model_fields)
 
     @pytest.mark.parametrize("missing", ["concept_code", "norm_id", "link_type"])

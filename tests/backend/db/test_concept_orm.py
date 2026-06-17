@@ -80,9 +80,7 @@ def test_concept_ddl_compiles_to_postgres() -> None:
     assert "JSONB" in ddl  # common_misconceptions
     assert "concept_level_enum" in ddl  # level
     assert "cognitive_type_enum" in ddl  # cognitive_type[] (enum 배열)
-    assert (
-        "visualization_style_enum" in ddl
-    )  # recommended_visual_styles[] (슬라이스 88)
+    assert "visualization_style_enum" in ddl  # recommended_visual_styles[] (슬라이스 88)
     assert "gen_random_uuid()" in ddl
     assert "UUID" in ddl
 
@@ -104,14 +102,13 @@ def test_concept_source_id_column_string64_nullable_not_fk() -> None:
 
 def test_concept_source_id_indexed() -> None:
     """P2b: source_id 인덱스(idx_concept_source_id) — src_id→code 해석·역조회 경로."""
-    by_name = {
-        ix.name: [c.name for c in ix.columns] for ix in OrmConcept.__table__.indexes
-    }
+    by_name = {ix.name: [c.name for c in ix.columns] for ix in OrmConcept.__table__.indexes}
     assert by_name["idx_concept_source_id"] == ["source_id"]
 
 
 def test_concept_aliases_not_null_array_default() -> None:
-    """P2b: aliases는 TEXT[] NOT NULL·server_default '{}'(NULL 대신 빈 배열·schema list[str] 정합)."""
+    """P2b: aliases는 TEXT[] NOT NULL·server_default '{}'
+    (NULL 대신 빈 배열·schema list[str] 정합)."""
     col = OrmConcept.__table__.c.aliases
     assert col.nullable is False  # NOT NULL(problem.py tags/keywords 선례)
     ddl = _pg_ddl(OrmConcept.__table__)
@@ -187,9 +184,7 @@ def test_concept_roundtrip_preserves_core_fields() -> None:
         level=ConceptLevel.세부개념,
         subject=Subject.미적분,
         cognitive_type=[CognitiveType.THEOREM, CognitiveType.TECHNIQUE],
-        common_misconceptions=[
-            {"misconception": "정적분=넓이", "correction": "부호 있는 넓이"}
-        ],
+        common_misconceptions=[{"misconception": "정적분=넓이", "correction": "부호 있는 넓이"}],
         aliases=["UC.calc.ftc", "N1"],  # [레거시 UC, src_id]
     )
     orm = OrmConcept.from_schema(s)

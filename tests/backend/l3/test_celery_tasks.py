@@ -10,6 +10,8 @@ hermetic). 등록된 Celery 태스크는 이 플레인 함수 위의 얇은 래�
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from whymath_backend.l3.models import (
@@ -34,9 +36,7 @@ class FakeProvider:
         self._text = text
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(
-        self, prompt: str, system: str, decision: RoutingDecision
-    ) -> str:
+    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
         self.calls.append((prompt, system, decision))
         return self._text
 
@@ -167,9 +167,7 @@ class TestWorkerShadowValidation:
         assert text == "정답: 2 + 2 = 4"
         assert caplog.records == []
 
-    def test_no_validator_no_validation(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    def test_no_validator_no_validation(self, caplog: pytest.LogCaptureFixture) -> None:
         """validator 미주입(기본) → 검증 미실행 → 경고 없음·텍스트 반환."""
         provider = FakeProvider(text="5 < 3 라는 거짓 부등식")
         with caplog.at_level("WARNING", logger="whymath.l3.quality"):
@@ -268,9 +266,7 @@ def test_register_quality_task_body_delegates_to_plain_function(
 
     seen: list[tuple[dict[str, Any], object]] = []
 
-    def _fake_payload_runner(
-        payload: dict[str, Any], *, validator: object = None
-    ) -> str:
+    def _fake_payload_runner(payload: dict[str, Any], *, validator: object = None) -> str:
         seen.append((payload, validator))
         return "위임됨"
 

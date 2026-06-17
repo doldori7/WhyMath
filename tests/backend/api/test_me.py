@@ -136,9 +136,7 @@ def _no_auth_client() -> TestClient:
     async def _sess() -> AsyncIterator[FakeSession]:
         yield FakeSession()
 
-    app.dependency_overrides[get_session] = (
-        _sess  # 무토큰 401은 세션 전 발생(엔진 격리)
-    )
+    app.dependency_overrides[get_session] = _sess  # 무토큰 401은 세션 전 발생(엔진 격리)
     return TestClient(app)
 
 
@@ -457,9 +455,7 @@ class TestEndSession:
         async def _no_concepts(session: Any, user_id: Any) -> list[ConceptAbilityItem]:
             return []
 
-        monkeypatch.setattr(
-            "whymath_backend.api.me.compute_concept_abilities", _no_concepts
-        )
+        monkeypatch.setattr("whymath_backend.api.me.compute_concept_abilities", _no_concepts)
         row = self._session_row(_UID, ended=False)
         # FakeSession.execute(θ 쿼리) → (is_correct, difficulty, irt_difficulty_b) 행
         client, fake = _client(
@@ -539,7 +535,8 @@ class TestDeleteSession:
         assert row.session_id in fake._get_map
 
     def test_delete_then_get_returns_404(self) -> None:
-        """slice 51: 삭제 후 같은 ID 재호출은 404(idempotent 의미·DELETE *aFTER*는 두 번째 호출이 미존재)."""
+        """slice 51: 삭제 후 같은 ID 재호출은 404
+        (idempotent 의미·DELETE *aFTER*는 두 번째 호출이 미존재)."""
         row = self._session_row(_UID)
         client, _ = _client([], get_map={row.session_id: row})
         first = client.delete(f"/v1/me/sessions/{row.session_id}")
@@ -851,15 +848,11 @@ class TestSubmitAttempt:
         client = _attempts_client(session)
         # is_correct 누락
         assert (
-            client.post(
-                "/v1/me/attempts", json={"problem_id": str(uuid.uuid4())}
-            ).status_code
+            client.post("/v1/me/attempts", json={"problem_id": str(uuid.uuid4())}).status_code
             == 422
         )
         # problem_id 누락
-        assert (
-            client.post("/v1/me/attempts", json={"is_correct": True}).status_code == 422
-        )
+        assert client.post("/v1/me/attempts", json={"is_correct": True}).status_code == 422
 
     def test_submit_extra_field_422(self) -> None:
         """extra='forbid' — 모르는 필드 거부(예: user_id 사칭 시도)."""
@@ -928,17 +921,10 @@ class TestMasteryCurve:
         """?concept_id=<uuid> 결선(200)·잘못된 uuid는 422."""
         client, _ = _client([_mastery_row()])
         assert (
-            client.get(
-                "/v1/me/mastery", params={"concept_id": str(uuid.uuid4())}
-            ).status_code
+            client.get("/v1/me/mastery", params={"concept_id": str(uuid.uuid4())}).status_code
             == 200
         )
-        assert (
-            client.get(
-                "/v1/me/mastery", params={"concept_id": "not-a-uuid"}
-            ).status_code
-            == 422
-        )
+        assert client.get("/v1/me/mastery", params={"concept_id": "not-a-uuid"}).status_code == 422
 
     def test_include_total_header(self) -> None:
         client, _ = _client([_mastery_row()])
@@ -948,22 +934,14 @@ class TestMasteryCurve:
     def test_order_accepted(self) -> None:
         client, _ = _client([_mastery_row()])
         for order in ("asc", "desc"):
-            assert (
-                client.get("/v1/me/mastery", params={"order": order}).status_code == 200
-            )
-        assert (
-            client.get("/v1/me/mastery", params={"order": "sideways"}).status_code
-            == 422
-        )
+            assert client.get("/v1/me/mastery", params={"order": order}).status_code == 200
+        assert client.get("/v1/me/mastery", params={"order": "sideways"}).status_code == 422
 
     def test_time_window_validation(self) -> None:
         """measured_at 시간창도 naive 422·since>until 422(공용 검증)."""
         client, _ = _client([])
         assert (
-            client.get(
-                "/v1/me/mastery", params={"since": "2024-01-01T00:00:00"}
-            ).status_code
-            == 422
+            client.get("/v1/me/mastery", params={"since": "2024-01-01T00:00:00"}).status_code == 422
         )
         assert (
             client.get(
@@ -1007,37 +985,26 @@ class TestMasteryCurve:
         """slice L2-5c: order_by=mastery&order=asc → 약점(낮은 숙달) 우선."""
         rows = [_snapshot_row(0.9), _snapshot_row(0.3), _snapshot_row(0.6)]
         client, _ = _client(rows)
-        resp = client.get(
-            "/v1/me/mastery/current", params={"order_by": "mastery", "order": "asc"}
-        )
+        resp = client.get("/v1/me/mastery/current", params={"order_by": "mastery", "order": "asc"})
         assert resp.status_code == 200, resp.text
         assert [float(r["mastery"]) for r in resp.json()] == [0.3, 0.6, 0.9]
 
     def test_current_order_by_mastery_strongest_first(self) -> None:
         rows = [_snapshot_row(0.3), _snapshot_row(0.9)]
         client, _ = _client(rows)
-        resp = client.get(
-            "/v1/me/mastery/current", params={"order_by": "mastery", "order": "desc"}
-        )
+        resp = client.get("/v1/me/mastery/current", params={"order_by": "mastery", "order": "desc"})
         assert [float(r["mastery"]) for r in resp.json()] == [0.9, 0.3]
 
     def test_current_mastery_null_always_last(self) -> None:
         """mastery NULL은 정렬 방향 무관 항상 끝."""
         client, _ = _client([_snapshot_row(None), _snapshot_row(0.5)])
-        resp = client.get(
-            "/v1/me/mastery/current", params={"order_by": "mastery", "order": "asc"}
-        )
+        resp = client.get("/v1/me/mastery/current", params={"order_by": "mastery", "order": "asc"})
         body = resp.json()
         assert body[-1]["mastery"] is None
 
     def test_current_invalid_order_by_422(self) -> None:
         client, _ = _client([])
-        assert (
-            client.get(
-                "/v1/me/mastery/current", params={"order_by": "bogus"}
-            ).status_code
-            == 422
-        )
+        assert client.get("/v1/me/mastery/current", params={"order_by": "bogus"}).status_code == 422
 
 
 class TestAbility:
@@ -1160,18 +1127,14 @@ class TestAbilityHistory:
         assert body[0]["response_count"] == 3  # 마지막 지점
 
     def test_standard_error_present(self) -> None:
-        client, _ = _client(
-            [(self._ts(1), True, 3.0, None), (self._ts(2), False, 3.0, None)]
-        )
+        client, _ = _client([(self._ts(1), True, 3.0, None), (self._ts(2), False, 3.0, None)])
         body = client.get("/v1/me/ability/history").json()
         # 응답 있으니 SE 유한(측정 가능)
         assert all(p["standard_error"] is not None for p in body)
 
     def test_skips_attempt_without_b_source(self) -> None:
         """slice 81: 난이도·보정 b 둘 다 없는 풀이는 θ 시점 생성에서 제외."""
-        client, _ = _client(
-            [(self._ts(1), True, 3.0, None), (self._ts(2), True, None, None)]
-        )
+        client, _ = _client([(self._ts(1), True, 3.0, None), (self._ts(2), True, None, None)])
         body = client.get("/v1/me/ability/history").json()
         assert len(body) == 1  # None-b 풀이 제외 → 시점 1개
 
@@ -1369,9 +1332,7 @@ class TestNextProblem:
         session = _QueueSession(
             [
                 _AQResult([]),
-                _AQResult(
-                    [(pid_easy, 2.0, None), (pid_mid, 3.0, None), (pid_hard, 5.0, None)]
-                ),
+                _AQResult([(pid_easy, 2.0, None), (pid_mid, 3.0, None), (pid_hard, 5.0, None)]),
             ]
         )
         client = _attempts_client(session)
@@ -1527,9 +1488,7 @@ class TestWeakConceptWeights:
 
 def _diagnosis_client(mastery_rows: list[Any], irt_rows: list[Any]) -> TestClient:
     """slice 19: 진단 엔드포인트(쿼리 2회 — ①BKT 스냅샷 ②개념별 IRT) 큐 세션."""
-    return _attempts_client(
-        _QueueSession([_AQResult(mastery_rows), _AQResult(irt_rows)])
-    )
+    return _attempts_client(_QueueSession([_AQResult(mastery_rows), _AQResult(irt_rows)]))
 
 
 class TestConceptDiagnosis:
@@ -1577,9 +1536,7 @@ class TestConceptDiagnosis:
     def test_irt_higher_signal(self) -> None:
         """BKT 0.1인데 전부 정답(θ=4·프록시≈0.98) → irt_higher·코칭 consolidate."""
         cid = uuid.uuid4()
-        client = _diagnosis_client(
-            [(cid, "C", "개념", 0.1)], [(cid, "C", "개념", True, 3.0, None)]
-        )
+        client = _diagnosis_client([(cid, "C", "개념", 0.1)], [(cid, "C", "개념", True, 3.0, None)])
         item = client.get("/v1/me/diagnosis/concepts").json()[0]
         assert item["agreement"] == "irt_higher"
         assert item["irt_theta"] == 4.0
@@ -1632,9 +1589,7 @@ class TestConceptDiagnosis:
     def test_sorted_weakest_first(self) -> None:
         """약점(저신호) 개념 먼저 — BKT 0.1 < 0.9."""
         c_low, c_high = uuid.uuid4(), uuid.uuid4()
-        client = _diagnosis_client(
-            [(c_high, "H", "상", 0.9), (c_low, "L", "하", 0.1)], []
-        )
+        client = _diagnosis_client([(c_high, "H", "상", 0.9), (c_low, "L", "하", 0.1)], [])
         body = client.get("/v1/me/diagnosis/concepts").json()
         assert [i["concept_id"] for i in body] == [str(c_low), str(c_high)]
 
@@ -1678,9 +1633,7 @@ class TestConceptDiagnosis:
                 (c_agree, "A", "합의", False, 3.0, None),
             ],
         )
-        body = client.get(
-            "/v1/me/diagnosis/concepts?agreement=insufficient&agreement=agree"
-        ).json()
+        body = client.get("/v1/me/diagnosis/concepts?agreement=insufficient&agreement=agree").json()
         assert len(body) == 2
 
     def test_invalid_agreement_rejected_422(self) -> None:
@@ -1740,19 +1693,13 @@ class TestDiagnosisSummary:
 class TestSessionEndConceptSnapshots:
     """slice 75: 세션 종료 자동 적재가 전과목 θ + 개념별 θ를 *같은 시각*으로 함께 추가."""
 
-    async def test_adds_global_and_concept_snapshots(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_adds_global_and_concept_snapshots(self, monkeypatch: pytest.MonkeyPatch) -> None:
         cid_x, cid_y = uuid.uuid4(), uuid.uuid4()
 
-        async def _fake_global(
-            session: Any, user_id: Any
-        ) -> tuple[float, float | None, int]:
+        async def _fake_global(session: Any, user_id: Any) -> tuple[float, float | None, int]:
             return (1.2, 0.3, 5)
 
-        async def _fake_concepts(
-            session: Any, user_id: Any
-        ) -> list[ConceptAbilityItem]:
+        async def _fake_concepts(session: Any, user_id: Any) -> list[ConceptAbilityItem]:
             return [
                 ConceptAbilityItem(
                     concept_id=cid_x,
@@ -1772,12 +1719,8 @@ class TestSessionEndConceptSnapshots:
                 ),
             ]
 
-        monkeypatch.setattr(
-            "whymath_backend.api.me.estimate_global_ability", _fake_global
-        )
-        monkeypatch.setattr(
-            "whymath_backend.api.me.compute_concept_abilities", _fake_concepts
-        )
+        monkeypatch.setattr("whymath_backend.api.me.estimate_global_ability", _fake_global)
+        monkeypatch.setattr("whymath_backend.api.me.compute_concept_abilities", _fake_concepts)
         fake = FakeSession()
         await _add_ability_snapshot_if_attempts(cast(AsyncSession, fake), _UID)
 
@@ -1792,20 +1735,14 @@ class TestSessionEndConceptSnapshots:
         # commit은 호출자(end_my_session) 책임 — 헬퍼는 add만
         assert fake.commits == 0
 
-    async def test_skips_all_when_no_attempts(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        async def _fake_global(
-            session: Any, user_id: Any
-        ) -> tuple[float, float | None, int]:
+    async def test_skips_all_when_no_attempts(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        async def _fake_global(session: Any, user_id: Any) -> tuple[float, float | None, int]:
             return (0.0, None, 0)
 
         async def _boom(session: Any, user_id: Any) -> list[ConceptAbilityItem]:
             raise AssertionError("count==0이면 개념 θ 계산조차 하지 않아야 함")
 
-        monkeypatch.setattr(
-            "whymath_backend.api.me.estimate_global_ability", _fake_global
-        )
+        monkeypatch.setattr("whymath_backend.api.me.estimate_global_ability", _fake_global)
         monkeypatch.setattr("whymath_backend.api.me.compute_concept_abilities", _boom)
         fake = FakeSession()
         await _add_ability_snapshot_if_attempts(cast(AsyncSession, fake), _UID)

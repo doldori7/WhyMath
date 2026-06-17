@@ -20,9 +20,7 @@ from whymath_backend.l2.item_calibration import (
 )
 
 
-def _responses(
-    item: uuid.UUID, corrects: list[bool]
-) -> list[tuple[uuid.UUID, uuid.UUID, bool]]:
+def _responses(item: uuid.UUID, corrects: list[bool]) -> list[tuple[uuid.UUID, uuid.UUID, bool]]:
     """문항 하나에 학생 N명(각기 다른 user_id)의 정오답 응답을 만든다."""
     return [(uuid.uuid4(), item, c) for c in corrects]
 

@@ -23,9 +23,7 @@ class TestStageDefaultsOnStay:
             (PolyaStage.REVIEW, SocraticCategory.META),
         ],
     )
-    def test_default_per_stage(
-        self, stage: PolyaStage, expected: SocraticCategory
-    ) -> None:
+    def test_default_per_stage(self, stage: PolyaStage, expected: SocraticCategory) -> None:
         assert select_category(stage, "stay", "음") == expected
 
 
@@ -61,10 +59,7 @@ class TestInputSignalOverridesOnStay:
                 select_category(stage, "stay", "왜 이렇게 되는 건지 모르겠어")
                 == SocraticCategory.EVIDENCE
             )
-            assert (
-                select_category(stage, "stay", "근거가 뭐지")
-                == SocraticCategory.EVIDENCE
-            )
+            assert select_category(stage, "stay", "근거가 뭐지") == SocraticCategory.EVIDENCE
 
     def test_assumption_keyword_overrides(self) -> None:
         # "가정·라고 치"는 단계 무관 ASSUMPTION
@@ -74,17 +69,13 @@ class TestInputSignalOverridesOnStay:
                 == SocraticCategory.ASSUMPTION
             )
             assert (
-                select_category(stage, "stay", "f가 연속이라고 치자")
-                == SocraticCategory.ASSUMPTION
+                select_category(stage, "stay", "f가 연속이라고 치자") == SocraticCategory.ASSUMPTION
             )
 
     def test_assumption_precedes_evidence(self) -> None:
         # 둘 다 있으면 가장 구체적 신호(가정 탐색) 우선 — 매핑 순서 보장.
         text = "왜 가정을 그렇게 두는 거야"
-        assert (
-            select_category(PolyaStage.PLAN, "stay", text)
-            == SocraticCategory.ASSUMPTION
-        )
+        assert select_category(PolyaStage.PLAN, "stay", text) == SocraticCategory.ASSUMPTION
 
 
 class TestSignalsIgnoredOnNext:
@@ -107,7 +98,4 @@ class TestPreviousTreatedLikeStay:
 
     def test_previous_respects_signal(self) -> None:
         t: StageTransition = "previous"
-        assert (
-            select_category(PolyaStage.PLAN, t, "왜 모르겠어")
-            == SocraticCategory.EVIDENCE
-        )
+        assert select_category(PolyaStage.PLAN, t, "왜 모르겠어") == SocraticCategory.EVIDENCE

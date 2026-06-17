@@ -82,9 +82,7 @@ def test_irt_difficulty_b_insert_update_select_roundtrip_on_live_pg() -> None:
             # UPDATE — calibrate가 쓰는 update().values(irt_difficulty_b=) 경로.
             async with sm() as session:
                 await session.execute(
-                    update(Problem)
-                    .where(Problem.problem_id == pid)
-                    .values(irt_difficulty_b=-1.25)
+                    update(Problem).where(Problem.problem_id == pid).values(irt_difficulty_b=-1.25)
                 )
                 await session.commit()
             assert await _select_b(sm) == pytest.approx(-1.25)

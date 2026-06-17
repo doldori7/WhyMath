@@ -92,9 +92,7 @@ class TestRates:
         report = audit_catalog_coverage()
         n_regex = sum(1 for m in CATALOG if len(m.regex_signals) >= 1)
         assert report.regex_coverage_rate == n_regex / len(CATALOG)
-        n_saturated = sum(
-            1 for m in CATALOG if len(m.signals) >= 2 and len(m.regex_signals) >= 1
-        )
+        n_saturated = sum(1 for m in CATALOG if len(m.signals) >= 2 and len(m.regex_signals) >= 1)
         assert report.saturation_rate == n_saturated / len(CATALOG)
 
     def test_rates_match_item_counts(self) -> None:
@@ -139,9 +137,7 @@ class TestByDomain:
         for summary in report.by_domain:
             members = [m for m in CATALOG if m.domain == summary.domain]
             assert summary.n == len(members)
-            assert summary.n_signals_ge_min == sum(
-                1 for m in members if len(m.signals) >= 2
-            )
+            assert summary.n_signals_ge_min == sum(1 for m in members if len(m.signals) >= 2)
             assert summary.n_saturated == sum(
                 1 for m in members if len(m.signals) >= 2 and len(m.regex_signals) >= 1
             )

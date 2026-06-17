@@ -66,7 +66,8 @@ def test_timeseries_orm_tablenames() -> None:
 # 2) PG DDL 컴파일 — 복합 PK·DATE·TEXT[]·FK 없음(느슨참조)
 # ──────────────────────────────────────────────────────────────────────────
 def test_daily_learning_metrics_composite_pk_date_array() -> None:
-    """daily_learning_metrics: 복합 PK(user_id, metric_date)·DATE·concepts_practiced TEXT[]·FK 없음."""
+    """daily_learning_metrics: 복합 PK(user_id, metric_date)·DATE
+    ·concepts_practiced TEXT[]·FK 없음."""
     ddl = _pg_ddl(OrmDailyLearningMetrics.__table__)
     assert "PRIMARY KEY (user_id, metric_date)" in ddl
     assert "DATE" in ddl  # metric_date (TIMESTAMPTZ 아님)
@@ -84,7 +85,8 @@ def test_daily_learning_metrics_concepts_practiced_not_null() -> None:
 
 
 def test_problem_solve_time_distribution_composite_pk_enum() -> None:
-    """problem_solve_time_distribution: 복합 PK(problem_id, persona, measured_at)·persona_enum·FK 없음."""
+    """problem_solve_time_distribution: 복합 PK(problem_id, persona, measured_at)
+    ·persona_enum·FK 없음."""
     ddl = _pg_ddl(OrmProblemSolveTimeDistribution.__table__)
     assert "PRIMARY KEY (problem_id, persona, measured_at)" in ddl
     assert "persona_enum" in ddl  # 배치1 공유 enum
@@ -93,7 +95,8 @@ def test_problem_solve_time_distribution_composite_pk_enum() -> None:
 
 
 def test_user_behavior_metrics_composite_pk_varchar() -> None:
-    """user_behavior_metrics: 복합 PK(user_id, metric_name, measured_at)·metric_name VARCHAR·FK 없음."""
+    """user_behavior_metrics: 복합 PK(user_id, metric_name, measured_at)
+    ·metric_name VARCHAR·FK 없음."""
     ddl = _pg_ddl(OrmUserBehaviorMetrics.__table__)
     assert "PRIMARY KEY (user_id, metric_name, measured_at)" in ddl
     assert "VARCHAR(50)" in ddl  # metric_name (enum 아님)

@@ -66,9 +66,7 @@ def test_ability_snapshot_insert_select_roundtrip_on_live_pg() -> None:
                 rows = (
                     (
                         await session.execute(
-                            select(AbilitySnapshot).where(
-                                AbilitySnapshot.user_id == uid
-                            )
+                            select(AbilitySnapshot).where(AbilitySnapshot.user_id == uid)
                         )
                     )
                     .scalars()

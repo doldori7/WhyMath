@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import pytest
 
-from ._live_resources import require_local_embedding
 from whymath_backend.config import get_settings
 from whymath_backend.l4.misconception.semantic import (
     LocalEmbeddingProvider,
     OpenAIEmbeddingProvider,
     semantic_matches,
 )
+
+from ._live_resources import require_local_embedding
 
 pytestmark = pytest.mark.integration
 

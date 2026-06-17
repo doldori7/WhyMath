@@ -85,9 +85,7 @@ async def _delete_steps(problem_id: uuid.UUID) -> None:
 def test_problem_crud_roundtrip_on_live_pg() -> None:
     """POST→GET→subject 목록이 실 PG에서 왕복한다."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     problem_id: str | None = None
     try:
@@ -118,9 +116,7 @@ def test_problem_crud_roundtrip_on_live_pg() -> None:
 def test_problem_steps_nested_read_on_live_pg() -> None:
     """GET /problems/{id}/steps가 step_order 순으로 실 PG에서 반환·404·빈 relations."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     problem_id: str | None = None
     try:
@@ -150,9 +146,7 @@ def test_problem_steps_nested_read_on_live_pg() -> None:
 def test_problem_patch_delete_roundtrip_on_live_pg() -> None:
     """POST→PATCH→GET→DELETE(204)→GET(404)이 실 PG에서 왕복."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     problem_id: str | None = None
     deleted = False

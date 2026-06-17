@@ -27,6 +27,10 @@ from pydantic import SecretStr
 
 from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api._crypto import MultiKeyCipher, SecretCipher
+from whymath_backend.api._device_metrics import (
+    get_device_sig_failures,
+    reset_device_sig_failures,
+)
 from whymath_backend.api._device_store import (
     CachedDeviceStore,
     DeviceCredentialStore,
@@ -36,10 +40,6 @@ from whymath_backend.api._device_store import (
     build_device_store_from_settings,
     get_device_store,
     set_device_store,
-)
-from whymath_backend.api._device_metrics import (
-    get_device_sig_failures,
-    reset_device_sig_failures,
 )
 from whymath_backend.api._rate_limit import (
     _client_device_id,
@@ -134,9 +134,7 @@ def _no_auth_client(store: DeviceCredentialStore | None) -> TestClient:
 
 def _sign(secret: str, device_id: str) -> str:
     """HMAC-SHA256(secret, device_id) hex digest — store가 verify에서 재계산하는 식."""
-    return hmac.new(
-        secret.encode("utf-8"), device_id.encode("utf-8"), sha256
-    ).hexdigest()
+    return hmac.new(secret.encode("utf-8"), device_id.encode("utf-8"), sha256).hexdigest()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -570,9 +568,7 @@ class TestListDevicesEndpoint:
         assert body_all["total"] == 5
         assert len(body_all["devices"]) == 5
         # 페이지네이션과 결합 — limit=2면 devices=2개·total=5 그대로
-        resp_paged = client.get(
-            "/v1/devices?include_revoked=true&include_total=true&limit=2"
-        )
+        resp_paged = client.get("/v1/devices?include_revoked=true&include_total=true&limit=2")
         paged_body = resp_paged.json()
         assert paged_body["total"] == 5
         assert len(paged_body["devices"]) == 2
@@ -586,9 +582,7 @@ class TestListDevicesEndpoint:
         d1, _ = await store.register(_UID)
         d2, _ = await store.register(_UID)
         now = datetime.now(UTC)
-        store._creds[d2] = store._creds[d2]._replace(
-            created_at=now - timedelta(days=365)
-        )
+        store._creds[d2] = store._creds[d2]._replace(created_at=now - timedelta(days=365))
         client = _client(store)
         since_iso = (now - timedelta(days=30)).isoformat()
         # since=30일 전 → d1만
@@ -597,9 +591,7 @@ class TestListDevicesEndpoint:
         ids = [d["device_id"] for d in resp.json()["devices"]]
         assert ids == [d1]
         # since + include_total → 필터 적용 count(우회 캐시 경로)
-        resp_total = client.get(
-            "/v1/devices", params={"since": since_iso, "include_total": True}
-        )
+        resp_total = client.get("/v1/devices", params={"since": since_iso, "include_total": True})
         assert resp_total.json()["total"] == 1
 
     def test_naive_datetime_since_rejected_422(self) -> None:
@@ -633,9 +625,7 @@ class TestListDevicesEndpoint:
         await store.revoke(d2, _UID)
         now = datetime.now(UTC)
         # d1은 1년 전 폐기·d2는 어제 폐기
-        store._creds[d1] = store._creds[d1]._replace(
-            revoked_at=now - timedelta(days=365)
-        )
+        store._creds[d1] = store._creds[d1]._replace(revoked_at=now - timedelta(days=365))
         store._creds[d2] = store._creds[d2]._replace(revoked_at=now - timedelta(days=1))
         client = _client(store)
         # ?include_revoked=true&revoked_since=30일전 → d2만
@@ -657,9 +647,7 @@ class TestListDevicesEndpoint:
         d_used, secret = await store.register(_UID)
         await store.verify(d_used, _sign(secret, d_used))
         now = datetime.now(UTC)
-        store._creds[d_used] = store._creds[d_used]._replace(
-            last_used_at=now - timedelta(hours=1)
-        )
+        store._creds[d_used] = store._creds[d_used]._replace(last_used_at=now - timedelta(hours=1))
         client = _client(store)
         # used_since=1일전 → d_used만(d_never는 last_used_at=None 제외)
         resp = client.get(
@@ -682,9 +670,7 @@ class TestListDevicesEndpoint:
         """slice 42 검증을 slice 43 필드(revoked_since)에도 적용."""
         store = InMemoryDeviceStore()
         client = _client(store)
-        resp = client.get(
-            "/v1/devices", params={"revoked_since": "2024-01-01T00:00:00"}
-        )
+        resp = client.get("/v1/devices", params={"revoked_since": "2024-01-01T00:00:00"})
         assert resp.status_code == 422
         assert "revoked_since" in resp.json()["detail"]
 
@@ -753,17 +739,11 @@ class TestListDevicesEndpoint:
         client = _client(store)
         # since만
         assert (
-            client.get(
-                "/v1/devices", params={"since": "2024-01-01T00:00:00Z"}
-            ).status_code
-            == 200
+            client.get("/v1/devices", params={"since": "2024-01-01T00:00:00Z"}).status_code == 200
         )
         # until만
         assert (
-            client.get(
-                "/v1/devices", params={"until": "2024-12-31T00:00:00Z"}
-            ).status_code
-            == 200
+            client.get("/v1/devices", params={"until": "2024-12-31T00:00:00Z"}).status_code == 200
         )
 
     async def test_order_by_query_param_changes_order(self) -> None:
@@ -774,17 +754,11 @@ class TestListDevicesEndpoint:
         await store.verify(d1, _sign(s1, d1))
         await store.verify(d2, _sign(s2, d2))
         now = datetime.now(UTC)
-        store._creds[d1] = store._creds[d1]._replace(
-            last_used_at=now - timedelta(days=10)
-        )
-        store._creds[d2] = store._creds[d2]._replace(
-            last_used_at=now - timedelta(days=1)
-        )
+        store._creds[d1] = store._creds[d1]._replace(last_used_at=now - timedelta(days=10))
+        store._creds[d2] = store._creds[d2]._replace(last_used_at=now - timedelta(days=1))
         client = _client(store)
         # last_used_at ASC → d1(10d ago) 먼저
-        resp = client.get(
-            "/v1/devices", params={"order_by": "last_used_at", "order_dir": "asc"}
-        )
+        resp = client.get("/v1/devices", params={"order_by": "last_used_at", "order_dir": "asc"})
         assert resp.status_code == 200
         ids = [d["device_id"] for d in resp.json()["devices"]]
         assert ids == [d1, d2]
@@ -960,7 +934,8 @@ class TestInMemoryDeviceStoreListForUser:
         )
 
     async def test_used_since_until_filters_last_used_at(self) -> None:
-        """slice 44: used_since/until은 last_used_at 시간창 — 한 번도 verify 안 된 device 자동 제외."""
+        """slice 44: used_since/until은 last_used_at 시간창
+        — 한 번도 verify 안 된 device 자동 제외."""
         store = InMemoryDeviceStore()
         d_never, _ = await store.register(_UID)
         d_old_used, secret_old = await store.register(_UID)
@@ -986,12 +961,8 @@ class TestInMemoryDeviceStoreListForUser:
         )
         assert [i.device_id for i in infos2] == [d_old_used]
         # count 두 분기
-        assert (
-            await store.count_for_user(_UID, used_since=now - timedelta(days=30)) == 1
-        )
-        assert (
-            await store.count_for_user(_UID, used_until=now - timedelta(days=100)) == 1
-        )
+        assert await store.count_for_user(_UID, used_since=now - timedelta(days=30)) == 1
+        assert await store.count_for_user(_UID, used_until=now - timedelta(days=100)) == 1
 
     async def test_order_by_created_at_default_desc(self) -> None:
         """slice 46: 기본은 created_at DESC(슬라이스 29 의미 보존)."""
@@ -1017,21 +988,13 @@ class TestInMemoryDeviceStoreListForUser:
         await store.verify(d1, _sign(s1, d1))
         await store.verify(d2, _sign(s2, d2))
         now = datetime.now(UTC)
-        store._creds[d1] = store._creds[d1]._replace(
-            last_used_at=now - timedelta(days=10)
-        )
-        store._creds[d2] = store._creds[d2]._replace(
-            last_used_at=now - timedelta(days=1)
-        )
+        store._creds[d1] = store._creds[d1]._replace(last_used_at=now - timedelta(days=10))
+        store._creds[d2] = store._creds[d2]._replace(last_used_at=now - timedelta(days=1))
         # DESC: d2(어제) → d1(10일전) → d3(None은 끝)
-        infos = await store.list_for_user(
-            _UID, order_by="last_used_at", order_dir="desc"
-        )
+        infos = await store.list_for_user(_UID, order_by="last_used_at", order_dir="desc")
         assert [i.device_id for i in infos] == [d2, d1, d3_never]
         # ASC: d1(10일전) → d2(어제) → d3(None은 끝)
-        infos_asc = await store.list_for_user(
-            _UID, order_by="last_used_at", order_dir="asc"
-        )
+        infos_asc = await store.list_for_user(_UID, order_by="last_used_at", order_dir="asc")
         assert infos_asc[-1].device_id == d3_never  # None은 항상 끝
 
     async def test_order_by_revoked_at_desc_include_revoked(self) -> None:
@@ -1042,9 +1005,7 @@ class TestInMemoryDeviceStoreListForUser:
         await store.revoke(d1, _UID)
         await store.revoke(d2, _UID)
         now = datetime.now(UTC)
-        store._creds[d1] = store._creds[d1]._replace(
-            revoked_at=now - timedelta(days=100)
-        )
+        store._creds[d1] = store._creds[d1]._replace(revoked_at=now - timedelta(days=100))
         store._creds[d2] = store._creds[d2]._replace(revoked_at=now - timedelta(days=1))
         infos = await store.list_for_user(
             _UID, include_revoked=True, order_by="revoked_at", order_dir="desc"
@@ -1129,9 +1090,7 @@ class TestInMemoryDeviceStoreMonotonicOrdering:
         tie = datetime.now(UTC)
         for d in (d1, d2):
             store._creds[d] = store._creds[d]._replace(last_used_at=tie)
-        infos = await store.list_for_user(
-            _UID, order_by="last_used_at", order_dir="desc"
-        )
+        infos = await store.list_for_user(_UID, order_by="last_used_at", order_dir="desc")
         assert [i.device_id for i in infos] == [d2, d1]
 
     async def test_null_group_keeps_registration_order(self) -> None:
@@ -1234,9 +1193,7 @@ class TestInMemoryDeviceStoreCleanupStale:
         await store.verify(device_id, _sign(secret_plain, device_id))
         # last_used_at을 *과거*로 강제(31일 전)
         cred = store._creds[device_id]
-        store._creds[device_id] = cred._replace(
-            last_used_at=datetime.now(UTC) - timedelta(days=31)
-        )
+        store._creds[device_id] = cred._replace(last_used_at=datetime.now(UTC) - timedelta(days=31))
         assert await store.cleanup_stale(max_age_days=30) == [device_id]
         assert store._creds[device_id].revoked is True
 
@@ -1246,9 +1203,7 @@ class TestInMemoryDeviceStoreCleanupStale:
         device_id, _ = await store.register(_UID)
         # created_at을 강제로 31일 전
         cred = store._creds[device_id]
-        store._creds[device_id] = cred._replace(
-            created_at=datetime.now(UTC) - timedelta(days=31)
-        )
+        store._creds[device_id] = cred._replace(created_at=datetime.now(UTC) - timedelta(days=31))
         assert await store.cleanup_stale(max_age_days=30) == [device_id]
         assert store._creds[device_id].revoked is True
 
@@ -1259,9 +1214,7 @@ class TestInMemoryDeviceStoreCleanupStale:
         await store.revoke(device_id, _UID)
         # created_at을 과거로 강제
         cred = store._creds[device_id]
-        store._creds[device_id] = cred._replace(
-            created_at=datetime.now(UTC) - timedelta(days=100)
-        )
+        store._creds[device_id] = cred._replace(created_at=datetime.now(UTC) - timedelta(days=100))
         assert await store.cleanup_stale(max_age_days=30) == []
 
     async def test_mixed_only_stale_revoked(self) -> None:
@@ -1283,9 +1236,7 @@ class TestInMemoryDeviceStoreCleanupStale:
         store = InMemoryDeviceStore()
         device_id, _ = await store.register(_UID)
         cred = store._creds[device_id]
-        store._creds[device_id] = cred._replace(
-            created_at=datetime.now(UTC) - timedelta(days=31)
-        )
+        store._creds[device_id] = cred._replace(created_at=datetime.now(UTC) - timedelta(days=31))
         # 미리보기 → 목록 반환·실제 폐기 안 됨
         preview = await store.cleanup_stale(max_age_days=30, dry_run=True)
         assert preview == [device_id]
@@ -1321,9 +1272,7 @@ class TestClientDeviceIdStoreMode:
     async def test_store_unregistered_device_returns_none(self) -> None:
         store = InMemoryDeviceStore()
         set_device_store(store)
-        request = self._make_request(
-            {"x-device-id": "unregistered-id", "x-device-sig": "0" * 64}
-        )
+        request = self._make_request({"x-device-id": "unregistered-id", "x-device-sig": "0" * 64})
         settings = _settings_override()
         assert await _client_device_id(request, settings) is None
 
@@ -1331,9 +1280,7 @@ class TestClientDeviceIdStoreMode:
         store = InMemoryDeviceStore()
         set_device_store(store)
         device_id, _secret = await store.register(_UID)
-        request = self._make_request(
-            {"x-device-id": device_id, "x-device-sig": "0" * 64}
-        )
+        request = self._make_request({"x-device-id": device_id, "x-device-sig": "0" * 64})
         settings = _settings_override()
         assert await _client_device_id(request, settings) is None
 
@@ -1366,9 +1313,7 @@ class TestClientDeviceIdStoreMode:
         shared_secret = "shared-fallback-secret"
         device_id = "not-in-store"
         valid_for_shared = _expected_device_signature(shared_secret, device_id)
-        request = self._make_request(
-            {"x-device-id": device_id, "x-device-sig": valid_for_shared}
-        )
+        request = self._make_request({"x-device-id": device_id, "x-device-sig": valid_for_shared})
         settings = _settings_override(device_hmac_secret=shared_secret)
         assert await _client_device_id(request, settings) is None
 
@@ -1378,9 +1323,7 @@ class TestClientDeviceIdStoreMode:
         shared_secret = "shared-fallback-secret"
         device_id = "any-device"
         valid_sig = _expected_device_signature(shared_secret, device_id)
-        request = self._make_request(
-            {"x-device-id": device_id, "x-device-sig": valid_sig}
-        )
+        request = self._make_request({"x-device-id": device_id, "x-device-sig": valid_sig})
         settings = _settings_override(device_hmac_secret=shared_secret)
         assert await _client_device_id(request, settings) == device_id
 
@@ -1435,9 +1378,7 @@ class TestDeviceSigFailureMetrics:
         store = InMemoryDeviceStore()
         set_device_store(store)
         device_id, _ = await store.register(_UID)
-        request = self._make_request(
-            {"x-device-id": device_id, "x-device-sig": "0" * 64}
-        )
+        request = self._make_request({"x-device-id": device_id, "x-device-sig": "0" * 64})
         await _client_device_id(request, _settings_override())
         assert get_device_sig_failures() == {"store_verify_failed": 1}
 
@@ -1449,28 +1390,20 @@ class TestDeviceSigFailureMetrics:
         """
         store = InMemoryDeviceStore()
         set_device_store(store)
-        request = self._make_request(
-            {"x-device-id": "never-registered", "x-device-sig": "0" * 64}
-        )
+        request = self._make_request({"x-device-id": "never-registered", "x-device-sig": "0" * 64})
         await _client_device_id(request, _settings_override())
         assert get_device_sig_failures() == {"store_verify_failed": 1}
 
     async def test_shared_secret_no_sig_records_shared_no_sig(self) -> None:
         set_device_store(None)
         request = self._make_request({"x-device-id": "some-device"})  # sig 누락
-        await _client_device_id(
-            request, _settings_override(device_hmac_secret="any-secret")
-        )
+        await _client_device_id(request, _settings_override(device_hmac_secret="any-secret"))
         assert get_device_sig_failures() == {"shared_no_sig": 1}
 
     async def test_shared_secret_invalid_sig_records_shared_invalid_sig(self) -> None:
         set_device_store(None)
-        request = self._make_request(
-            {"x-device-id": "some-device", "x-device-sig": "0" * 64}
-        )
-        await _client_device_id(
-            request, _settings_override(device_hmac_secret="some-secret")
-        )
+        request = self._make_request({"x-device-id": "some-device", "x-device-sig": "0" * 64})
+        await _client_device_id(request, _settings_override(device_hmac_secret="some-secret"))
         assert get_device_sig_failures() == {"shared_invalid_sig": 1}
 
     async def test_valid_store_sig_records_no_failure(self) -> None:
@@ -1488,9 +1421,7 @@ class TestDeviceSigFailureMetrics:
         secret = "valid-secret"
         device_id = "device-x"
         valid_sig = _expected_device_signature(secret, device_id)
-        request = self._make_request(
-            {"x-device-id": device_id, "x-device-sig": valid_sig}
-        )
+        request = self._make_request({"x-device-id": device_id, "x-device-sig": valid_sig})
         await _client_device_id(request, _settings_override(device_hmac_secret=secret))
         assert get_device_sig_failures() == {}
 
@@ -1645,9 +1576,7 @@ class _CountingInnerStore:
             used_until=used_until,
         )
 
-    async def cleanup_stale(
-        self, max_age_days: int, *, dry_run: bool = False
-    ) -> list[str]:
+    async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         self.cleanup_calls += 1
         return await self._inner.cleanup_stale(max_age_days, dry_run=dry_run)
 
@@ -2059,13 +1988,9 @@ class TestBuildDeviceStoreFromSettings:
             async def aclose(self) -> None:
                 aclose_called["called"] = True
 
-        monkeypatch.setattr(
-            ds_mod, "_build_redis_for_cache", lambda settings: _FakeAcloseable()
-        )
+        monkeypatch.setattr(ds_mod, "_build_redis_for_cache", lambda settings: _FakeAcloseable())
 
-        store, cleanup = build_device_store_from_settings(
-            _lifespan_settings("pg_cached")
-        )
+        store, cleanup = build_device_store_from_settings(_lifespan_settings("pg_cached"))
         assert isinstance(store, CachedDeviceStore)
         # slice 48: lifespan이 count_ttl도 별도 전달 — Settings 기본값 300s
         assert store._count_ttl == 300
@@ -2088,13 +2013,9 @@ class TestBuildDeviceStoreFromSettings:
             async def delete(self, *keys: str) -> int:
                 return 0
 
-        monkeypatch.setattr(
-            ds_mod, "_build_redis_for_cache", lambda settings: _NoAcloseClient()
-        )
+        monkeypatch.setattr(ds_mod, "_build_redis_for_cache", lambda settings: _NoAcloseClient())
 
-        _store, cleanup = build_device_store_from_settings(
-            _lifespan_settings("pg_cached")
-        )
+        _store, cleanup = build_device_store_from_settings(_lifespan_settings("pg_cached"))
         await cleanup()  # 예외 없이 종료
 
 
@@ -2163,9 +2084,7 @@ class TestPingDeviceStoreHealth:
             called["sm"] = True
             raise AssertionError("none 모드는 sessionmaker 호출 안 해야 함")
 
-        monkeypatch.setattr(
-            "whymath_backend.db.session.get_sessionmaker", _spy_sm, raising=True
-        )
+        monkeypatch.setattr("whymath_backend.db.session.get_sessionmaker", _spy_sm, raising=True)
         monkeypatch.setattr(
             ds_mod,
             "_build_redis_for_cache",
@@ -2195,16 +2114,12 @@ class TestPingDeviceStoreHealth:
         def _ok_sm(_s: Any) -> Any:
             return lambda: _OkSession()
 
-        monkeypatch.setattr(
-            "whymath_backend.db.session.get_sessionmaker", _ok_sm, raising=True
-        )
+        monkeypatch.setattr("whymath_backend.db.session.get_sessionmaker", _ok_sm, raising=True)
         # pg 모드는 Redis 빌더 호출 0
         monkeypatch.setattr(
             ds_mod,
             "_build_redis_for_cache",
-            lambda s: (_ for _ in ()).throw(
-                AssertionError("pg 모드는 Redis 빌더 호출 안 해야 함")
-            ),
+            lambda s: (_ for _ in ()).throw(AssertionError("pg 모드는 Redis 빌더 호출 안 해야 함")),
         )
         await ds_mod.ping_device_store_health(_lifespan_settings("pg"))
         assert execute_called["hit"] is True
@@ -2224,15 +2139,11 @@ class TestPingDeviceStoreHealth:
 
             return lambda: _BadSession()
 
-        monkeypatch.setattr(
-            "whymath_backend.db.session.get_sessionmaker", _bad_sm, raising=True
-        )
+        monkeypatch.setattr("whymath_backend.db.session.get_sessionmaker", _bad_sm, raising=True)
         with pytest.raises(RuntimeError, match="PostgreSQL 미도달"):
             await ds_mod.ping_device_store_health(_lifespan_settings("pg"))
 
-    async def test_pg_cached_mode_pings_both(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_pg_cached_mode_pings_both(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from whymath_backend.api import _device_store as ds_mod
 
         class _OkSession:
@@ -2309,9 +2220,7 @@ class TestPingDeviceStoreHealth:
             lambda _s: (lambda: _OkSession()),
             raising=True,
         )
-        monkeypatch.setattr(
-            ds_mod, "_build_redis_for_cache", lambda _s: _NoAcloseRedis()
-        )
+        monkeypatch.setattr(ds_mod, "_build_redis_for_cache", lambda _s: _NoAcloseRedis())
         # 예외 없이 통과
         await ds_mod.ping_device_store_health(_lifespan_settings("pg_cached"))
 
@@ -2386,9 +2295,7 @@ class TestPingDeviceStoreHealth:
         )
         # timeout 0.01s — 즉시 발화
         with pytest.raises(RuntimeError, match="PostgreSQL ping.*응답 없음"):
-            await ds_mod.ping_device_store_health(
-                _lifespan_settings("pg", timeout_seconds=0.01)
-            )
+            await ds_mod.ping_device_store_health(_lifespan_settings("pg", timeout_seconds=0.01))
 
     async def test_redis_ping_timeout_raises_runtime_error_and_closes(
         self, monkeypatch: pytest.MonkeyPatch
@@ -2431,9 +2338,7 @@ class TestPingDeviceStoreHealth:
             lambda _s: (lambda: _OkSession()),
             raising=True,
         )
-        monkeypatch.setattr(
-            ds_mod, "_build_redis_for_cache", lambda _s: _HangingRedis()
-        )
+        monkeypatch.setattr(ds_mod, "_build_redis_for_cache", lambda _s: _HangingRedis())
         with pytest.raises(RuntimeError, match="Redis ping.*응답 없음"):
             await ds_mod.ping_device_store_health(
                 _lifespan_settings("pg_cached", timeout_seconds=0.01)
@@ -2441,9 +2346,7 @@ class TestPingDeviceStoreHealth:
         # timeout 시에도 cleanup 보장(연결 leak 0)
         assert aclose_called["hit"] is True
 
-    async def test_pg_ping_retries_then_succeeds(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_pg_ping_retries_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """slice 35: PG ping 첫 2회 실패·3회째 성공 → ping_device_store_health 통과."""
         from whymath_backend.api import _device_store as ds_mod
 
@@ -2504,9 +2407,7 @@ class TestPingDeviceStoreHealth:
         # 정확히 3회 시도(첫 1회 + 재시도 2회)
         assert attempt_count["n"] == 3
 
-    async def test_redis_ping_retries_then_succeeds(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_redis_ping_retries_then_succeeds(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """slice 35: Redis ping 일시 실패 후 재시도 성공·aclose는 한 번만 호출."""
         from whymath_backend.api import _device_store as ds_mod
 
@@ -2697,9 +2598,7 @@ class _FakePgSession:
         constraints = self._iter_eq_constraints(stmt.whereclause)
         values_to_set: dict[Any, Any] = dict(stmt._values)
         target_device_id = constraints.get("device_id")
-        existing = (
-            self._store.get(target_device_id) if target_device_id is not None else None
-        )
+        existing = self._store.get(target_device_id) if target_device_id is not None else None
         if existing is not None:
             for col_name, expected_value in constraints.items():
                 if col_name == "device_id":
@@ -2730,11 +2629,7 @@ class _FakePgSession:
         slice 41: where 절을 *재귀 row-matcher*로 평가 — eq/is_뿐 아니라 `>=`/`<=`
         연산자도 처리(operator.__name__ dispatch). created_at >= since 등 시간창 필터 호환.
         """
-        matched = [
-            row
-            for row in self._store.values()
-            if self._row_matches(row, stmt.whereclause)
-        ]
+        matched = [row for row in self._store.values() if self._row_matches(row, stmt.whereclause)]
         # slice 46/47: 동적 ORDER BY — UnaryExpression 체인을 재귀 unwrap.
         # `col.desc().nulls_last()` → 외부 nulls_last_op → 내부 desc_op → column.
         order_clauses = getattr(stmt, "_order_by_clauses", ())
@@ -2765,12 +2660,8 @@ class _FakePgSession:
         # slice 38: LIMIT/OFFSET 적용(BindParameter에서 값 추출)
         limit_clause = getattr(stmt, "_limit_clause", None)
         offset_clause = getattr(stmt, "_offset_clause", None)
-        offset_val = (
-            getattr(offset_clause, "value", 0) if offset_clause is not None else 0
-        )
-        limit_val = (
-            getattr(limit_clause, "value", None) if limit_clause is not None else None
-        )
+        offset_val = getattr(offset_clause, "value", 0) if offset_clause is not None else 0
+        limit_val = getattr(limit_clause, "value", None) if limit_clause is not None else None
         if limit_val is not None:
             matched = matched[offset_val : offset_val + limit_val]
         elif offset_val:
@@ -2840,9 +2731,7 @@ class _FakePgSession:
             return True
         # BooleanClauseList(AND) — children 모두 만족
         if hasattr(where, "clauses"):
-            return all(
-                _FakePgSession._row_matches(row, child) for child in where.clauses
-            )
+            return all(_FakePgSession._row_matches(row, child) for child in where.clauses)
         # BinaryExpression — left=column·right=BindParameter·operator=callable
         if hasattr(where, "left") and hasattr(where, "right"):
             col_name = where.left.key if hasattr(where.left, "key") else str(where.left)
@@ -3155,12 +3044,8 @@ class TestPgDeviceStoreListForUser:
         )
         assert [i.device_id for i in infos2] == [d_old]
         # count 두 분기 cov
-        assert (
-            await store.count_for_user(_UID, used_since=now - timedelta(days=30)) == 1
-        )
-        assert (
-            await store.count_for_user(_UID, used_until=now - timedelta(days=100)) == 1
-        )
+        assert await store.count_for_user(_UID, used_since=now - timedelta(days=30)) == 1
+        assert await store.count_for_user(_UID, used_until=now - timedelta(days=100)) == 1
 
     async def test_order_by_dynamic_column_and_direction(self) -> None:
         """slice 46: PgDeviceStore의 ORDER BY가 동적 컬럼·방향으로 변경됨."""
@@ -3178,9 +3063,7 @@ class TestPgDeviceStoreListForUser:
         infos_asc = await store.list_for_user(_UID, order_dir="asc")
         assert [i.device_id for i in infos_asc] == ids
         # last_used_at DESC
-        infos_lua_desc = await store.list_for_user(
-            _UID, order_by="last_used_at", order_dir="desc"
-        )
+        infos_lua_desc = await store.list_for_user(_UID, order_by="last_used_at", order_dir="desc")
         # ids[2]가 가장 최근(now-8d), ids[0]가 가장 옛(now-10d)
         assert [i.device_id for i in infos_lua_desc] == [ids[2], ids[1], ids[0]]
 
@@ -3192,9 +3075,7 @@ class TestPgDeviceStoreListForUser:
         d_never, _ = await store.register(_UID)
         await store.verify(d1, _compute_signature(secret1, d1))
         # 기본 nulls=last
-        infos_last = await store.list_for_user(
-            _UID, order_by="last_used_at", order_dir="desc"
-        )
+        infos_last = await store.list_for_user(_UID, order_by="last_used_at", order_dir="desc")
         assert [i.device_id for i in infos_last] == [d1, d_never]
         # nulls=first
         infos_first = await store.list_for_user(
@@ -3436,6 +3317,4 @@ class TestPgDeviceStoreKeyRotation:
         assert await rotated_store.verify(device_id, _compute_signature(secret, device_id)) is True
         # 회전 후 신규 등록은 새 키로 암호화 — 구 키 단독 store는 복호 불가(verify 시 raise)
         new_id, new_secret = await rotated_store.register(_UID)
-        assert (
-            await rotated_store.verify(new_id, _compute_signature(new_secret, new_id)) is True
-        )
+        assert await rotated_store.verify(new_id, _compute_signature(new_secret, new_id)) is True

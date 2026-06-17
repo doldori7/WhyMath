@@ -68,9 +68,7 @@ class TestComputeMasteryRecord:
     def test_first_observation_uses_p_init(self) -> None:
         """prior None(첫 관측)이면 사전 P(L0)에서 갱신·표본 1."""
         rec = compute_mastery_record(None, None, True, _M)
-        assert rec.mastery == round(
-            update_mastery(_M.initial_mastery, True, _M.params), 2
-        )
+        assert rec.mastery == round(update_mastery(_M.initial_mastery, True, _M.params), 2)
         assert rec.mastery == 0.69
         assert rec.sample_size == 1
 
@@ -134,9 +132,7 @@ class TestRecordAttemptMastery:
     async def test_first_observation_no_prior(self) -> None:
         """직전 측정 없으면 P(L0)에서 갱신·표본 1·새 행 add·commit."""
         fake = _FakeSession(prior=None)
-        row = await record_attempt_mastery(
-            cast(AsyncSession, fake), _UID, _CID, True, model=_M
-        )
+        row = await record_attempt_mastery(cast(AsyncSession, fake), _UID, _CID, True, model=_M)
         assert row.mastery == 0.69
         assert row.sample_size == 1
         assert row.user_id == _UID and row.concept_id == _CID
@@ -146,18 +142,14 @@ class TestRecordAttemptMastery:
     async def test_reads_prior_and_updates(self) -> None:
         """직전 측정(0.69·표본1)을 prior로 → 0.92·표본 2."""
         fake = _FakeSession(prior=_prior_row(0.69, 1))
-        row = await record_attempt_mastery(
-            cast(AsyncSession, fake), _UID, _CID, True, model=_M
-        )
+        row = await record_attempt_mastery(cast(AsyncSession, fake), _UID, _CID, True, model=_M)
         assert row.mastery == 0.92
         assert row.sample_size == 2
 
     async def test_prior_with_null_mastery_falls_back_to_p_init(self) -> None:
         """직전 행은 있으나 mastery=NULL이면 P(L0)에서 시작."""
         fake = _FakeSession(prior=_prior_row(None, None))
-        row = await record_attempt_mastery(
-            cast(AsyncSession, fake), _UID, _CID, True, model=_M
-        )
+        row = await record_attempt_mastery(cast(AsyncSession, fake), _UID, _CID, True, model=_M)
         assert row.mastery == 0.69
 
     async def test_explicit_measured_at(self) -> None:
@@ -306,9 +298,9 @@ class TestForgettingInRecord:
     def test_compute_elapsed_no_effect_default_model(self) -> None:
         """기본 모델(p_forget=0)은 elapsed_days 무관."""
         m = BktModel()
-        assert compute_mastery_record(
-            0.9, 1, True, m, elapsed_days=100
-        ) == compute_mastery_record(0.9, 1, True, m, elapsed_days=0)
+        assert compute_mastery_record(0.9, 1, True, m, elapsed_days=100) == compute_mastery_record(
+            0.9, 1, True, m, elapsed_days=0
+        )
 
     def test_compute_forgetting_lowers_result(self) -> None:
         """망각 모델: 경과일이 길수록 prior 감쇠 → 갱신 결과 낮아짐."""

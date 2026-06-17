@@ -400,16 +400,12 @@ class TestCurriculumEntryValidation:
     def test_invalid_license_id_rejected(self) -> None:
         """license_id에 정의되지 않은 값 거부."""
         with pytest.raises(ValidationError):
-            CurriculumEntry(
-                **_minimal_kwargs(license_id="ZZ-NONE")  # type: ignore[arg-type]
-            )
+            CurriculumEntry(**_minimal_kwargs(license_id="ZZ-NONE"))  # type: ignore[arg-type]
 
     def test_invalid_required_depth_rejected(self) -> None:
         """required_depth에 정의되지 않은 enum 값 거부."""
         with pytest.raises(ValidationError):
-            CurriculumEntry(
-                **_minimal_kwargs(required_depth="expert")  # type: ignore[arg-type]
-            )
+            CurriculumEntry(**_minimal_kwargs(required_depth="expert"))  # type: ignore[arg-type]
 
     def test_extra_forbidden(self) -> None:
         """extra='forbid' — 알 수 없는 필드 거부."""

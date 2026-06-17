@@ -102,9 +102,7 @@ def _user(uid: uuid.UUID) -> UserProfile:
     return UserProfile(user_id=uid, email_hash="h", persona_primary=Persona.A_일반고고3)
 
 
-def _session_row(
-    uid: uuid.UUID, jti: uuid.UUID, *, revoked: bool = False
-) -> RefreshTokenSession:
+def _session_row(uid: uuid.UUID, jti: uuid.UUID, *, revoked: bool = False) -> RefreshTokenSession:
     return RefreshTokenSession(
         token_session_id=jti,
         user_id=uid,

@@ -103,9 +103,7 @@ class TestComputeConceptDiagnoses:
     async def test_bkt_only_insufficient(self) -> None:
         # IRT 채점 없는 개념(BKT만) → theta·proxy null·insufficient.
         cid = uuid.uuid4()
-        out = await compute_concept_diagnoses(
-            _session([(cid, "C", "개념", 0.6)], []), _UID
-        )
+        out = await compute_concept_diagnoses(_session([(cid, "C", "개념", 0.6)], []), _UID)
         d = out[0]
         assert d.bkt_mastery == 0.6
         assert d.irt_theta is None

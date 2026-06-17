@@ -1,6 +1,7 @@
 """L4 step_shadow_harvest 단위테스트 — 구조화 관측 → A/B 라벨링 워크시트(오프라인·비노출).
 
-load_observations·to_draft(프라이버시·candidate 드롭)·format_drafts·CLI·라운드트립(eval 연결)·미라벨 가드.
+load_observations·to_draft(프라이버시·candidate 드롭)·format_drafts·CLI
+·라운드트립(eval 연결)·미라벨 가드.
 """
 
 from __future__ import annotations
@@ -49,7 +50,9 @@ class TestLoadObservations:
             "# 주석\n\n"
             + _obs().model_dump_json()
             + "\n   \n"
-            + _obs(verdict="unrelated", candidate="ambiguous", expected_answer="5").model_dump_json()
+            + _obs(
+                verdict="unrelated", candidate="ambiguous", expected_answer="5"
+            ).model_dump_json()
             + "\n"
         )
         obs = load_observations(text)
@@ -126,9 +129,10 @@ class TestRoundTrip:
             eval_mod.load_labels(drafts_text)
 
     def test_labeled_draft_loads_as_steplabel(self) -> None:
-        # LabelDraft 필드 = StepBreakLabel 필드(상속) → 라벨 채운 draft가 그대로 StepBreakLabel로 로드.
-        labeled_json = to_draft(_obs()).model_dump_json().replace(
-            '"human_label":null', '"human_label":"A"'
+        # LabelDraft 필드 = StepBreakLabel 필드(상속)
+        # → 라벨 채운 draft가 그대로 StepBreakLabel로 로드.
+        labeled_json = (
+            to_draft(_obs()).model_dump_json().replace('"human_label":null', '"human_label":"A"')
         )
         label = eval_mod.StepBreakLabel.model_validate_json(labeled_json)
         assert label.human_label == "A" and label.source == "shadow-log"
@@ -142,7 +146,9 @@ class TestCli:
         obs_file.write_text(
             _obs().model_dump_json()
             + "\n"
-            + _obs(verdict="reached_answer", candidate="not_A", expected_answer="4").model_dump_json()
+            + _obs(
+                verdict="reached_answer", candidate="not_A", expected_answer="4"
+            ).model_dump_json()
             + "\n",
             encoding="utf-8",
         )

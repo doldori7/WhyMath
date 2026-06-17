@@ -16,7 +16,7 @@ from typing import Any
 import pytest
 
 from whymath_backend.l3.cache import RedisCache
-from whymath_backend.l3.cache.redis_cache import _RedisClient, _decode
+from whymath_backend.l3.cache.redis_cache import _decode, _RedisClient
 
 
 class FakeRedisClient:

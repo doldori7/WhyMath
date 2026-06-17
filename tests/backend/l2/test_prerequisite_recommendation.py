@@ -79,9 +79,7 @@ def _fake_session() -> AsyncSession:
     return cast(AsyncSession, object())
 
 
-def _patch_prereqs(
-    monkeypatch: pytest.MonkeyPatch, rows: list[PrerequisiteRow]
-) -> dict[str, Any]:
+def _patch_prereqs(monkeypatch: pytest.MonkeyPatch, rows: list[PrerequisiteRow]) -> dict[str, Any]:
     """`fetch_prerequisites`를 패치 — traversal 결과를 제어·호출 인자(concept_id·max_depth) 기록.
 
     실 재귀 CTE는 통합 테스트(`test_prerequisite_traversal_integration.py`) 몫이고, 여기선 다양한
@@ -101,9 +99,7 @@ def _patch_prereqs(
     return captured
 
 
-def _patch_diagnoses(
-    monkeypatch: pytest.MonkeyPatch, diagnoses: list[ConceptDiagnosis]
-) -> None:
+def _patch_diagnoses(monkeypatch: pytest.MonkeyPatch, diagnoses: list[ConceptDiagnosis]) -> None:
     async def _fake(_session: AsyncSession, _user_id: uuid.UUID) -> list[ConceptDiagnosis]:
         return diagnoses
 
@@ -131,9 +127,7 @@ def _patch_meta(
 # ① 선수 traversal 방향 — fetch_prerequisites가 약개념 concept_id로 호출됨
 # ──────────────────────────────────────────────────────────────────────────
 class TestTraversalDirection:
-    async def test_passes_concept_id_to_traversal(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_passes_concept_id_to_traversal(self, monkeypatch: pytest.MonkeyPatch) -> None:
         captured = _patch_prereqs(monkeypatch, [])
         _patch_diagnoses(monkeypatch, [])
         _patch_meta(monkeypatch)
@@ -145,9 +139,7 @@ class TestTraversalDirection:
         # 기본 max_depth=1(직접 선수만·기존 1-hop 계약·후방 호환)이 전달됨.
         assert captured["max_depth"] == 1
 
-    async def test_forwards_max_depth_to_traversal(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_forwards_max_depth_to_traversal(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # max_depth는 fetch_prerequisites(재귀 CTE bound)로 그대로 전달된다(다단계 traversal).
         captured = _patch_prereqs(monkeypatch, [])
         _patch_diagnoses(monkeypatch, [])
@@ -155,9 +147,7 @@ class TestTraversalDirection:
         await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C, max_depth=3)
         assert captured["max_depth"] == 3
 
-    async def test_no_prerequisites_short_circuits(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_no_prerequisites_short_circuits(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch_prereqs(monkeypatch, [])
         _patch_diagnoses(monkeypatch, [])
         meta_cap = _patch_meta(monkeypatch)
@@ -171,9 +161,7 @@ class TestTraversalDirection:
 # ② weak_only — 막힌 선수만·미측정 제외/포함·임계 경계
 # ──────────────────────────────────────────────────────────────────────────
 class TestWeakOnly:
-    async def test_keeps_weak_prerequisites_only(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_keeps_weak_prerequisites_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pre_a, pre_b = uuid.uuid4(), uuid.uuid4()
         _patch_prereqs(
             monkeypatch,
@@ -203,9 +191,7 @@ class TestWeakOnly:
             monkeypatch,
             [_row(cid=pre_a, code=_UC_PRE_A), _row(cid=pre_b, code=_UC_PRE_B)],
         )
-        _patch_diagnoses(
-            monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)]
-        )
+        _patch_diagnoses(monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)])
         _patch_meta(monkeypatch)
         out = await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C)
         assert [g.concept_id for g in out] == [pre_a]  # pre_b 미측정 → 제외
@@ -222,13 +208,9 @@ class TestWeakOnly:
                 _row(cid=pre_b, code=_UC_PRE_B, edge_strength=0.5),
             ],
         )
-        _patch_diagnoses(
-            monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)]
-        )
+        _patch_diagnoses(monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)])
         _patch_meta(monkeypatch)
-        out = await recommend_prerequisite_gaps(
-            _fake_session(), _UID, _CONCEPT_C, weak_only=False
-        )
+        out = await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C, weak_only=False)
         ids = {g.concept_id for g in out}
         assert ids == {pre_a, pre_b}
         b = next(g for g in out if g.concept_id == pre_b)
@@ -236,14 +218,10 @@ class TestWeakOnly:
         assert b.bkt_mastery is None
         assert b.agreement == "insufficient"
 
-    async def test_threshold_boundary_excludes_equal(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_threshold_boundary_excludes_equal(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pre_a = uuid.uuid4()
         _patch_prereqs(monkeypatch, [_row(cid=pre_a, code=_UC_PRE_A)])
-        _patch_diagnoses(
-            monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.7, proxy=0.8)]
-        )
+        _patch_diagnoses(monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.7, proxy=0.8)])
         _patch_meta(monkeypatch)
         out = await recommend_prerequisite_gaps(
             _fake_session(), _UID, _CONCEPT_C, mastery_threshold=0.7
@@ -255,9 +233,7 @@ class TestWeakOnly:
 # ③ 정렬 — weakness asc(root blocker 먼저)·tie는 edge_strength desc
 # ──────────────────────────────────────────────────────────────────────────
 class TestSorting:
-    async def test_weakest_prerequisite_first(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_weakest_prerequisite_first(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pre_a, pre_b = uuid.uuid4(), uuid.uuid4()
         # traversal은 강도 desc로 줄 수 있으나, 최종 정렬은 weakness asc.
         _patch_prereqs(
@@ -275,9 +251,7 @@ class TestSorting:
         out = await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C)
         assert [g.concept_id for g in out] == [pre_a, pre_b]  # 가장 약한 선수 먼저
 
-    async def test_tie_breaks_on_edge_strength_desc(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_tie_breaks_on_edge_strength_desc(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pre_a, pre_b = uuid.uuid4(), uuid.uuid4()
         _patch_prereqs(
             monkeypatch,
@@ -324,9 +298,7 @@ class TestSorting:
         assert [g.concept_id for g in out] == [pre_near, pre_far]  # depth 1 먼저(강도보다 우선)
         assert [g.depth for g in out] == [1, 2]
 
-    async def test_tie_same_depth_breaks_on_strength(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_tie_same_depth_breaks_on_strength(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # weakness·depth 모두 동률이면 그 다음 edge_strength desc.
         pre_a, pre_b = uuid.uuid4(), uuid.uuid4()
         _patch_prereqs(
@@ -352,14 +324,10 @@ class TestSorting:
 # ④ enrich — concept_node 메타·미적재 None·orphan·단일 호출(N+1 0)
 # ──────────────────────────────────────────────────────────────────────────
 class TestEnrichment:
-    async def test_attaches_node_meta_single_call(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_attaches_node_meta_single_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pre_a = uuid.uuid4()
         _patch_prereqs(monkeypatch, [_row(cid=pre_a, code=_UC_PRE_A)])
-        _patch_diagnoses(
-            monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)]
-        )
+        _patch_diagnoses(monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)])
         cap = _patch_meta(
             monkeypatch,
             {
@@ -376,14 +344,10 @@ class TestEnrichment:
         assert cap["calls"] == 1
         assert cap["concept_ids"] == [_UC_PRE_A]
 
-    async def test_missing_meta_is_none_graceful(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_missing_meta_is_none_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pre_a = uuid.uuid4()
         _patch_prereqs(monkeypatch, [_row(cid=pre_a, code=_UC_PRE_A)])
-        _patch_diagnoses(
-            monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)]
-        )
+        _patch_diagnoses(monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)])
         _patch_meta(monkeypatch, {})  # 메타 미적재
         out = await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C)
         assert out[0].name_ko is None
@@ -391,14 +355,10 @@ class TestEnrichment:
         assert out[0].review_status is None
         assert out[0].concept_code == _UC_PRE_A  # 추천은 유지
 
-    async def test_orphan_no_uc_skips_meta(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_orphan_no_uc_skips_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pre_a = uuid.uuid4()
         _patch_prereqs(monkeypatch, [_row(cid=pre_a, code=None)])  # orphan(UC 없음)
-        _patch_diagnoses(
-            monkeypatch, [_diagnosis(cid=pre_a, code=None, bkt=0.2, proxy=0.3)]
-        )
+        _patch_diagnoses(monkeypatch, [_diagnosis(cid=pre_a, code=None, bkt=0.2, proxy=0.3)])
         cap = _patch_meta(monkeypatch)
         out = await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C)
         assert out[0].concept_code is None
@@ -410,9 +370,7 @@ class TestEnrichment:
 # ⑤ reviewed_only 게이팅 — reviewed만·메타 없으면 보수적 제외
 # ──────────────────────────────────────────────────────────────────────────
 class TestReviewedOnlyGating:
-    async def test_gates_pending_and_missing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_gates_pending_and_missing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pre_a, pre_b, pre_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
         _patch_prereqs(
             monkeypatch,
@@ -442,9 +400,7 @@ class TestReviewedOnlyGating:
         )
         assert [g.concept_id for g in out] == [pre_a]  # pending·메타 없음 제외
 
-    async def test_default_keeps_all_recall(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_default_keeps_all_recall(self, monkeypatch: pytest.MonkeyPatch) -> None:
         pre_a, pre_b = uuid.uuid4(), uuid.uuid4()
         _patch_prereqs(
             monkeypatch,
@@ -505,7 +461,5 @@ async def test_depth_propagates_row_to_gap(monkeypatch: pytest.MonkeyPatch) -> N
     _patch_prereqs(monkeypatch, [_row(cid=pre_a, code=_UC_PRE_A, depth=2)])
     _patch_diagnoses(monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)])
     _patch_meta(monkeypatch)
-    out = await recommend_prerequisite_gaps(
-        _fake_session(), _UID, _CONCEPT_C, max_depth=2
-    )
+    out = await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C, max_depth=2)
     assert out[0].depth == 2

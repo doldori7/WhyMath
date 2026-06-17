@@ -45,9 +45,7 @@ def _reset_rate_limit_store() -> None:
 class _StubProvider:
     """create_app(provider=) 주입용 — generate 미호출(visualize monkeypatch)."""
 
-    async def generate(
-        self, prompt: str, system: str, decision: RoutingDecision
-    ) -> str:
+    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
         return ""
 
 
@@ -125,9 +123,7 @@ class _FakeVisualize:
         return self.result
 
 
-def _client(
-    *, provider: _StubProvider, authed: bool = True, viz_limit: int = 0
-) -> TestClient:
+def _client(*, provider: _StubProvider, authed: bool = True, viz_limit: int = 0) -> TestClient:
     app = create_app(provider=provider)
     if authed:
         app.dependency_overrides[get_consented_user] = _user
@@ -173,26 +169,20 @@ def test_concept_not_found_404(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_invalid_spec_422(monkeypatch: pytest.MonkeyPatch) -> None:
     """L3 검증 실패(InvalidVisualizationSpecError) → 422."""
     monkeypatch.setattr(_DIAG_FN, _fake_diagnoses([_diagnosis()]))
-    monkeypatch.setattr(
-        _VIZ_FN, _FakeVisualize(raises=InvalidVisualizationSpecError("bad"))
-    )
+    monkeypatch.setattr(_VIZ_FN, _FakeVisualize(raises=InvalidVisualizationSpecError("bad")))
     assert _client(provider=_StubProvider()).post(_PATH).status_code == 422
 
 
 def test_quality_queue_unavailable_503(monkeypatch: pytest.MonkeyPatch) -> None:
     """LLM 큐 불가(QualityQueueUnavailableError) → 503."""
     monkeypatch.setattr(_DIAG_FN, _fake_diagnoses([_diagnosis()]))
-    monkeypatch.setattr(
-        _VIZ_FN, _FakeVisualize(raises=QualityQueueUnavailableError("no queue"))
-    )
+    monkeypatch.setattr(_VIZ_FN, _FakeVisualize(raises=QualityQueueUnavailableError("no queue")))
     assert _client(provider=_StubProvider()).post(_PATH).status_code == 503
 
 
 def test_unauthenticated_401() -> None:
     """토큰 없음 → 401."""
-    assert (
-        _client(provider=_StubProvider(), authed=False).post(_PATH).status_code == 401
-    )
+    assert _client(provider=_StubProvider(), authed=False).post(_PATH).status_code == 401
 
 
 def test_rate_limit_429(monkeypatch: pytest.MonkeyPatch) -> None:
