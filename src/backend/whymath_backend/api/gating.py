@@ -1,9 +1,10 @@
-"""L6 응용 모드 게이팅 HTTP API — retake·suneung·school_progress 3모드를 HTTP로 노출.
+"""L6 응용 모드 게이팅 HTTP API — retake·suneung·school_progress·thinking 4모드를 HTTP로 노출.
 
 엔드포인트(prefix `/v1/gating`):
   - GET /v1/gating/retake           — RT(재수전용/N수) 트랙 게이팅 결과(페르소나 B·C 대상).
   - GET /v1/gating/suneung          — 수능(정시) 모드 게이팅 결과(페르소나 A·B·C 대상).
   - GET /v1/gating/school-progress  — 학교진도 모드 게이팅 결과(페르소나 A·D 대상).
+  - GET /v1/gating/thinking         — 사고력 모드 게이팅 결과(Bloom 상위 3단계 주신호·D·E 주 대상).
 
 레이어 경계(CLAUDE.md 7계층): 이 라우터는 **L5(상호작용·api)** 표면이다. L6 응용 모드
 게이팅(`whymath_backend.l6`)을 *호출(소비)*해 HTTP로 노출할 뿐, 게이팅 로직을 *구현하지
@@ -39,6 +40,7 @@ from whymath_backend.l6 import (
     select_retake_items,
     select_school_progress_items,
     select_suneung_items,
+    select_thinking_items,
 )
 from whymath_backend.schema.enums import Curriculum, Persona
 from whymath_backend.schema.problem import Problem as ProblemSchema
@@ -183,3 +185,32 @@ async def gating_school_progress(
         min_fit=min_fit,
         limit=limit,
     )
+
+
+@router.get(
+    "/thinking",
+    response_model=list[ProblemSchema],
+    summary="사고력 모드 게이팅",
+)
+async def gating_thinking(
+    candidates: CandidatesDep,
+    persona: Annotated[
+        Persona, Query(description="노출 대상 페르소나. 사고력 주 대상 D·E(닫힌 집합 게이트 없음)")
+    ] = Persona.D_학종고2,
+    min_fit: Annotated[float, Query(description="persona_fit 임계값(0~1)")] = 0.5,
+    limit: Annotated[int, Query(ge=1, le=200, description="응답 최대 개수")] = 20,
+) -> list[ProblemSchema]:
+    """사고력 모드 노출 문항을 게이팅해 반환한다(Bloom 상위 3단계가 주신호·D·E 주 대상).
+
+    후보를 L1에서 읽어(`_fetch_candidates`) `select_thinking_items`에 넘긴다 — 적격 필터(저작권
+    노출 게이트·페르소나 적합도·사고력 주신호) → 우선순위(Bloom 상위 단계>사고력 시그니처 개수>
+    케이스/융합/종합 난이도) 내림차순 안정정렬 → limit 적용까지 *전부 L6 게이팅이* 수행한 결과를
+    그대로 돌려준다.
+
+    **사고력 주신호는 `bloom_level`**(상위 3단계 ANALYZE/EVALUATE/CREATE) — 사고력 미표지
+    (bloom None)·하위 인지 수준(APPLY 이하) 문항은 게이팅이 전부 거른다. **닫힌 페르소나 집합으로
+    좁히지 않는다**: 주 대상은 D(학종)·E(영재)이나 A(MVP 고3)도 `persona_fit`이 임계 이상이면
+    노출된다(MVP 페르소나 배제 금지·persona_fit 메커니즘만 사용). 평가원/EBS/교과서(본문 미보유)
+    출처는 저작권 게이트가 차단하고, 학생에겐 자체생성 동등문제만 노출된다(CLAUDE.md 우선순위 #2).
+    """
+    return select_thinking_items(candidates, persona, min_fit=min_fit, limit=limit)

@@ -17,13 +17,18 @@ CLAUDE.md 7계층의 L6(응용 모드). L1~L4(독립 수학 코어)·L5(상호�
     정합 문항 선별 노출. RT·수능과 동형 오버레이 모델로 `source_type`·`curriculum_version`·
     `unit_codes`·`persona_fit`·`difficulty_overall`을 *재사용*한다(자동 커리큘럼 정렬 — 진도
     단원 겹침 우선). N수(B·C)·영재(E)는 비재학·홈스쿨이라 제외.
+  - 사고력 모드 게이팅(`thinking/`) — 고차 사고(Bloom 상위 3단계 ANALYZE/EVALUATE/CREATE)
+    문항 선별 노출. RT·수능·학교진도와 동형 오버레이 모델로 `source_type`·`bloom_level`(주신호)·
+    `signature_patterns`·`diff_case_analysis`·`diff_integration`·`difficulty_overall`·
+    `persona_fit`을 *재사용*한다. 주 대상은 D(학종)·E(영재)이나 **닫힌 페르소나 집합으로 좁히지
+    않는다** — 사고력은 페르소나가 아니라 문항의 사고 수준이 본질이라 A(MVP 고3)도 적합도가
+    충족되면 노출된다(persona_fit 메커니즘만 사용·MVP 페르소나 배제 금지).
 
-세 모드는 새 concept 노드·Alembic 마이그레이션·새 enum을 *만들지 않고* **게이팅 로직만** 더한다.
-얇게 유지 — L4/L2/L3를 import하지 않는다(기존 `Problem` 필드의 존재·값만 본다). 세 모드가
+네 모드는 새 concept 노드·Alembic 마이그레이션·새 enum을 *만들지 않고* **게이팅 로직만** 더한다.
+얇게 유지 — L4/L2/L3를 import하지 않는다(기존 `Problem` 필드의 존재·값만 본다). 네 모드가
 공통으로 쓰는 저작권 게이트·enum 정규화는 L6 공용 모듈 `_shared.py`로 추출했다(Rule of three).
 
-후속(범위 밖): 사고력/영재/메타인지 모드 입주, OLY(영재) 트랙, 학교진도 성취기준 마스터 매칭,
-HTTP 노출.
+후속(범위 밖): 영재(OLY) 트랙·메타인지 모드 입주, 학교진도 성취기준 마스터 매칭.
 """
 
 from __future__ import annotations
@@ -46,18 +51,28 @@ from whymath_backend.l6.suneung import (
     select_suneung_items,
     suneung_priority,
 )
+from whymath_backend.l6.thinking import (
+    THINKING_BLOOM_LEVELS,
+    is_thinking_eligible,
+    select_thinking_items,
+    thinking_priority,
+)
 
 __all__ = [
     "RETAKE_PERSONAS",
     "SCHOOL_PROGRESS_PERSONAS",
     "SUNEUNG_PERSONAS",
+    "THINKING_BLOOM_LEVELS",
     "is_retake_eligible",
     "is_school_progress_eligible",
     "is_suneung_eligible",
+    "is_thinking_eligible",
     "retake_priority",
     "school_progress_priority",
     "select_retake_items",
     "select_school_progress_items",
     "select_suneung_items",
+    "select_thinking_items",
     "suneung_priority",
+    "thinking_priority",
 ]
