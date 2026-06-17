@@ -277,20 +277,20 @@ class TestNoSecretsNoRedactedFields:
 # 실데이터(403/541) — 정형화 산출을 그대로 적재
 # ──────────────────────────────────────────────────────────────────────
 class TestRealCorpus:
-    def test_loads_403_nodes_541_edges(
+    def test_loads_437_nodes_580_edges(
         self,
         concept_records: list[dict[str, object]],
         edge_records: list[dict[str, object]],
     ) -> None:
-        """실데이터 정형화 → 적재: 노드 403·엣지 541 MERGE(전 엣지 prerequisite)."""
+        """실데이터 정형화 → 적재: 노드 437·엣지 580 MERGE(전 엣지 prerequisite)."""
         result = transform_dataset(
             concept_records=concept_records,
             edge_records=edge_records,
         )
         driver = _FakeDriver()
         report = load_graph(result, driver=driver)
-        assert report.nodes_merged == 403
-        assert report.edges_merged == 541
+        assert report.nodes_merged == 437
+        assert report.edges_merged == 580
         assert report.edges_skipped == 0
         # 모든 엣지 reltype은 PREREQUISITE(데이터셋 단일 관계)
         for call in _edge_calls(driver.calls):
@@ -301,14 +301,14 @@ class TestRealCorpus:
         concept_records: list[dict[str, object]],
         edge_records: list[dict[str, object]],
     ) -> None:
-        """403 노드 MERGE의 concept_id가 모두 유일(UC 매핑 충돌 0 — 슬1 보장)."""
+        """437 노드 MERGE의 concept_id가 모두 유일(concept_id 매핑 충돌 0 — 슬1 보장)."""
         result = transform_dataset(
             concept_records=concept_records, edge_records=edge_records
         )
         driver = _FakeDriver()
         load_graph(result, driver=driver)
         ids = [c.params["concept_id"] for c in _node_calls(driver.calls)]
-        assert len(ids) == len(set(ids)) == 403
+        assert len(ids) == len(set(ids)) == 437
 
 
 # ──────────────────────────────────────────────────────────────────────

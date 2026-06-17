@@ -260,9 +260,9 @@ class TestValidateIdmap:
     def test_real_corpus_idmap_passes(
         self, concept_records: list[dict[str, object]]
     ) -> None:
-        """실데이터 403건 재ID 불변식 전부 통과(area_map_total·id_unique·alias_roundtrip)."""
+        """실데이터 437건 재ID 불변식 전부 통과(area_map_total·id_unique·alias_roundtrip)."""
         report = validate_idmap(concept_records)
-        assert report.node_count == 403
+        assert report.node_count == 437
         assert report.success is True
         assert report.errors == []
 
@@ -304,8 +304,8 @@ class TestRealDataValidation:
             concept_records=concept_records, edge_records=edge_records
         )
         report = validate_dataset(result)
-        assert report.node_count == 403
-        assert report.edge_count == 541
+        assert report.node_count == 437
+        assert report.edge_count == 580
         assert report.success is True  # error 0 (Phase 1: warning은 통과)
         assert report.errors == []
 
@@ -321,5 +321,5 @@ class TestRealDataValidation:
         report = validate_dataset(result)
         text = report.report_text()
         assert "PASS" in text
-        assert "노드 403개" in text
-        assert "엣지 541개" in text
+        assert "노드 437개" in text
+        assert "엣지 580개" in text

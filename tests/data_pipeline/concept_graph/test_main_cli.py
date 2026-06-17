@@ -128,8 +128,8 @@ class TestTransformV1:
         """실데이터 transform-v1(검증만) → PASS 종료코드 0."""
         result = runner.invoke(app, ["transform-v1", "--corpus-dir", str(corpus_dir)])
         assert result.exit_code == 0, result.output
-        assert "개념 403개" in result.stdout
-        assert "엣지 541개" in result.stdout
+        assert "개념 437개" in result.stdout
+        assert "엣지 580개" in result.stdout
         assert "PASS" in result.stdout
 
     def test_writes_outputs(self, corpus_dir: Path, tmp_path: Path) -> None:
@@ -150,7 +150,7 @@ class TestTransformV1:
         assert "formal_definition" not in text
         with idmap.open(encoding="utf-8-sig") as f:
             rows = list(csv.DictReader(f))
-        assert len(rows) == 403  # src_id → UC 매핑
+        assert len(rows) == 437  # src_id → concept_id 매핑(공통 403 + 기본수학 34)
 
     def test_missing_corpus_exits_2(self, tmp_path: Path) -> None:
         result = runner.invoke(
