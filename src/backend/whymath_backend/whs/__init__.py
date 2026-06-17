@@ -23,8 +23,14 @@ S1 좌석(상태 저장소 — 추가): ⑤ 실패 접근 로그(`db/models/dead
 후속). ⑥은 등급 enum에 failed를 배제(§3·R-S2)하고 `get_verified`로 학습 데이터에서 unverified를
 구조 격리한다.
 
-범위 밖(후속): 시드 모델 실행(후보 풀이 생성·Ollama·MCTS)·솔버 루프·도구 8종·§2.2 Verified
-Lemma Store·자기 진화·PRM·Tier3(§9 로드맵).
+S1 좌석(상태 저장소 — 완성): ⑦ 검증된 중간 결과 저장소(`db/models/verified_lemma.py`
+`VerifiedLemma`·§2.2)와 그 저장소(`lemma_store.py` — `log_lemma` 멱등·`find_lemma` 재사용
+조회·`get_lemmas`). 탐색이 verify 통과 부분 결과를 ⑦에 적재하고 다른 가지가 `find_lemma`로
+재사용해 중복 탐색을 제거한다(검증된 보조정리만 담음 — 등급 컬럼 없음). 이로써 §2.1~§2.4 *상태
+저장소 4종(트리·실패 로그·검증 풀이·검증 보조정리)* 전부 영속.
+
+범위 밖(후속): 시드 모델 실행(후보 풀이 생성·Ollama·MCTS)·솔버 루프(도구 8종이 위 저장소 호출)·
+자기 진화·PRM·Tier3(§9 로드맵).
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from whymath_backend.db.models.solution_node import (
     NodeVerifyStatus,
     SolutionNode,
 )
+from whymath_backend.db.models.verified_lemma import VerifiedLemma
 from whymath_backend.db.models.verified_solution import (
     VerifiedSolution,
     WhsSolutionGrade,
@@ -49,6 +56,11 @@ from whymath_backend.whs.dead_end_store import (
     get_dead_ends,
     is_dead_end,
     log_dead_end,
+)
+from whymath_backend.whs.lemma_store import (
+    find_lemma,
+    get_lemmas,
+    log_lemma,
 )
 from whymath_backend.whs.node_store import (
     create_node,
@@ -77,6 +89,7 @@ __all__ = [
     "EvalItem",
     "NodeVerifyStatus",
     "SolutionNode",
+    "VerifiedLemma",
     "VerifiedSolution",
     "WhsGrade",
     "WhsSolutionGrade",
@@ -84,8 +97,10 @@ __all__ = [
     "bank_solution",
     "create_node",
     "final_verdict",
+    "find_lemma",
     "get_children",
     "get_dead_ends",
+    "get_lemmas",
     "get_node",
     "get_roots",
     "get_solutions",
@@ -93,6 +108,7 @@ __all__ = [
     "increment_visits",
     "is_dead_end",
     "log_dead_end",
+    "log_lemma",
     "run_baseline",
     "update_evaluation",
 ]
