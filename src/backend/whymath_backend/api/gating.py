@@ -3,7 +3,9 @@
 엔드포인트(prefix `/v1/gating`):
   - GET /v1/gating/retake           — RT(재수전용/N수) 트랙 게이팅 결과(페르소나 B·C 대상).
   - GET /v1/gating/suneung          — 수능(정시) 모드 게이팅 결과(페르소나 A·B·C 대상).
-  - GET /v1/gating/school-progress  — 학교진도 모드 게이팅 결과(페르소나 A·D 대상).
+  - GET /v1/gating/school-progress  — 학교진도 모드 게이팅 결과(페르소나 A·D 대상). 단원·성취기준
+    고시코드 정합(OR·성취기준이 더 세밀). 성취기준 코드는 4단계 조인(problem_concept→concept→
+    concept_standard_link→achievement_standard)으로 후보에 주입(school-progress 전용 의존성).
   - GET /v1/gating/thinking         — 사고력 모드 게이팅 결과(Bloom 상위 3단계 주신호·D·E 주 대상).
 
 레이어 경계(CLAUDE.md 7계층): 이 라우터는 **L5(상호작용·api)** 표면이다. L6 응용 모드
@@ -28,12 +30,16 @@ list[ProblemSchema]`이며, api 레이어는 "DB 조회 + L6 함수 호출 + sch
 
 from __future__ import annotations
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.db.models.achievement_standard import AchievementStandard
+from whymath_backend.db.models.concept import Concept, ProblemConcept
+from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
 from whymath_backend.l6 import (
@@ -90,6 +96,87 @@ async def _fetch_candidates(session: SessionDep) -> list[ProblemSchema]:
 CandidatesDep = Annotated[list[ProblemSchema], Depends(_fetch_candidates)]
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# 성취기준 조인 — school-progress 전용(다른 3모드는 조인 비용 안 얹음)
+# ──────────────────────────────────────────────────────────────────────────
+# 채택 link_type — '직접'만 본다. '재매핑'(개정 간 대응)·'준용'(교수학적 준용)은 연결이 느슨해
+# 진도 정합 신호로는 노이즈라 MVP에서 제외한다(데이터가 차오르면 재검토할 상수 손잡이). 한글
+# 정본 값('직접'/'재매핑'/'준용')은 schema.standard.ConceptStandardLink.link_type와 동일.
+_DIRECT_LINK_TYPE = "직접"
+
+
+async def _fetch_achievement_codes(
+    session: AsyncSession, problem_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, set[str]]:
+    """문항 id 목록 → {problem_id: {성취기준 official_code, ...}} (4단계 조인·N+1 없음).
+
+    경로(모두 L1 영속 테이블): `problem_concept`(문항↔개념 N:M) → `concept`(개념) →
+    `concept_standard_link`(개념↔성취기준 N:M·느슨참조 concept_code) → `achievement_standard`
+    (성취기준). 조인 키: `ProblemConcept.concept_id == Concept.concept_id`,
+    `ConceptStandardLink.concept_code == Concept.code`(FK 아님·느슨참조),
+    `AchievementStandard.norm_id == ConceptStandardLink.norm_id`(실 FK). 매칭 축으로 꺼내는
+    값은 `official_code`(고시코드 — 클라이언트 입력 형태, `unit_codes`가 "사람이 읽는 코드"인
+    것과 정합)다.
+
+    `me.py`의 `select(...).join(...).where(...in_(...))` 선례를 답습한 *단일 쿼리 IN 일괄*이라
+    후보 수와 무관하게 쿼리 1회(N+1 0). INNER 조인이라 성취기준이 달린 (문항,개념) 행만 나오고,
+    성취기준이 없는 문항은 결과 dict의 *키 자체가 없다*(주입 시 빈 리스트로 남음). `link_type`은
+    `_DIRECT_LINK_TYPE`('직접')만 필터한다(모듈 상수 주석).
+
+    Args:
+      session: 요청 수명 AsyncSession.
+      problem_ids: 성취기준을 조회할 문항 id 목록(후보 풀). 비면 빈 dict(쿼리 생략).
+
+    Returns:
+      `{problem_id: {official_code, ...}}` — 성취기준이 하나도 없는 문항은 키 부재.
+    """
+    if not problem_ids:
+        return {}
+    stmt = (
+        select(ProblemConcept.problem_id, AchievementStandard.official_code)
+        .join(Concept, ProblemConcept.concept_id == Concept.concept_id)
+        .join(ConceptStandardLink, ConceptStandardLink.concept_code == Concept.code)
+        .join(AchievementStandard, AchievementStandard.norm_id == ConceptStandardLink.norm_id)
+        .where(ProblemConcept.problem_id.in_(problem_ids))
+        .where(ConceptStandardLink.link_type == _DIRECT_LINK_TYPE)
+    )
+    result = await session.execute(stmt)
+    mapping: dict[uuid.UUID, set[str]] = {}
+    for problem_id, official_code in result.all():
+        mapping.setdefault(problem_id, set()).add(official_code)
+    return mapping
+
+
+async def _fetch_candidates_with_standards(session: SessionDep) -> list[ProblemSchema]:
+    """학교진도 후보를 읽고 *성취기준 코드*(비영속 필드)를 4단계 조인으로 주입해 돌려준다.
+
+    `_fetch_candidates`(기존 후보 조회·재사용)로 후보를 끌어온 뒤, `_fetch_achievement_codes`로
+    그 문항들의 성취기준 official_code를 일괄(IN) 조회해 각 `ProblemSchema`의 비영속 필드
+    `achievement_standard_codes`에 *결정적으로*(sorted) 채운다. 성취기준이 없는 문항은 맵 키가
+    없어 빈 리스트로 남는다(데이터0 안전·단원/persona_fit 폴백). school-progress 게이팅 핸들러
+    전용 의존성이라 retake·suneung·thinking은 이 조인 비용을 지지 않는다(그들은 `CandidatesDep`
+    유지).
+
+    Args:
+      session: 요청 수명 AsyncSession(`get_session` 주입).
+
+    Returns:
+      성취기준 코드가 주입된 후보 `schema.Problem` 리스트(게이팅 입력).
+    """
+    candidates = await _fetch_candidates(session)
+    codes = await _fetch_achievement_codes(session, [p.problem_id for p in candidates])
+    for problem in candidates:
+        if problem.problem_id in codes:
+            # sorted로 결정적 순서(집합→리스트). 키 부재 문항은 기본 빈 리스트 유지.
+            problem.achievement_standard_codes = sorted(codes[problem.problem_id])
+    return candidates
+
+
+SchoolProgressCandidatesDep = Annotated[
+    list[ProblemSchema], Depends(_fetch_candidates_with_standards)
+]
+
+
 @router.get(
     "/retake",
     response_model=list[ProblemSchema],
@@ -141,7 +228,7 @@ async def gating_suneung(
     summary="학교진도 모드 게이팅",
 )
 async def gating_school_progress(
-    candidates: CandidatesDep,
+    candidates: SchoolProgressCandidatesDep,
     persona: Annotated[
         Persona, Query(description="노출 대상 페르소나. 학교진도는 A·D 대상")
     ] = Persona.A_일반고고3,
@@ -151,6 +238,15 @@ async def gating_school_progress(
             alias="unit_codes",
             description="현재 진도 단원 코드(반복 지정 가능 — `?unit_codes=X&unit_codes=Y`). "
             "주어지면 단원 겹침으로 진도 정합 판정",
+        ),
+    ] = None,
+    target_achievement_codes: Annotated[
+        list[str] | None,
+        Query(
+            alias="achievement_codes",
+            description="현재 진도 성취기준 고시코드 반복지정 "
+            "— `?achievement_codes=X&achievement_codes=Y`. "
+            "단원과 더불어 성취기준 겹침으로 추가 정합(OR·더 세밀하면 우선)",
         ),
     ] = None,
     curriculum_version: Annotated[
@@ -163,24 +259,30 @@ async def gating_school_progress(
 ) -> list[ProblemSchema]:
     """학교진도 모드 노출 문항을 게이팅해 반환한다(페르소나 A·D 대상).
 
-    후보를 L1에서 읽어 `select_school_progress_items`에 넘긴다 — 적격 필터(대상 페르소나·저작권
-    노출 게이트·교육과정 버전 정합·진도 단원 정합) → 우선순위(진도 단원 겹침 개수>난이도) 내림차순
+    후보를 L1에서 읽어(`_fetch_candidates_with_standards` — 후보 + 성취기준 코드 4단계 조인 주입)
+    `select_school_progress_items`에 넘긴다 — 적격 필터(대상 페르소나·저작권 노출 게이트·교육과정
+    버전 정합·진도 성취기준/단원 정합) → 우선순위(성취기준 겹침 개수>단원 겹침 개수>난이도) 내림차순
     안정정렬 → limit 적용까지 *전부 L6 게이팅이* 수행한 결과를 그대로 돌려준다.
 
-    `unit_codes` 쿼리를 반복 지정하면(예: `?unit_codes=X&unit_codes=Y`) 그 코드 집합과 *하나라도
-    겹치는* 문항만 진도 정합으로 통과하고, 미지정이면 `persona_fit` 폴백으로 판정한다(게이팅 계약).
-    리스트는 `set(...) or None`으로 변환해 넘긴다 — 빈 리스트(쿼리 미지정)는 None과 같이 폴백을
-    타게 하기 위함이다. `curriculum_version`이 문항과 불일치면 게이팅이 차단한다(예: 2022 진도에
-    2015 문항 미혼입). N수(B·C)·영재(E)는 비재학이라 게이팅이 비대상으로 거른다.
+    `unit_codes`(단원)·`achievement_codes`(성취기준 고시코드)를 반복 지정하면 그 집합과 *하나라도
+    겹치는* 문항이 진도 정합으로 통과한다 — 둘은 **OR**로 결합되며(성취기준은 단원보다 세밀한 추가
+    신호), 우선순위에서는 성취기준 겹침(×3.0)이 단원 겹침(×2.0)보다 앞선다. 둘 다 미지정이면
+    `persona_fit` 폴백으로 판정한다(게이팅 계약). 각 리스트는 `set(...) or None`으로 변환해 넘긴다 —
+    빈 리스트(쿼리 미지정)는 None과 같이 폴백/비신호로 취급하기 위함이다. 성취기준 코드는 비영속
+    필드라 *문항 태깅·성취기준 코퍼스가 없으면* 빈 리스트로 주입돼 단원 신호로 자연 폴백한다
+    (데이터0 안전). `curriculum_version`이 문항과 불일치면 게이팅이 차단한다(예: 2022 진도에 2015
+    문항 미혼입). N수(B·C)·영재(E)는 비재학이라 게이팅이 비대상으로 거른다.
     """
-    # 빈 리스트(쿼리 미지정·`?unit_codes=` 빈값)는 None과 동일하게 polya-fit 폴백을 타도록
-    # `set(...) or None`으로 정규화한다(빈 set은 falsy → None). 게이팅은 None이면 진도 단원
-    # 정보 부재로 보고 persona_fit으로 판정한다(school_progress.gating 계약).
+    # 빈 리스트(쿼리 미지정·`?unit_codes=` 빈값)는 None과 동일하게 폴백/비신호를 타도록
+    # `set(...) or None`으로 정규화한다(빈 set은 falsy → None). 게이팅은 둘 다 None이면 진도 정보
+    # 부재로 보고 persona_fit으로 판정한다(school_progress.gating 계약).
     unit_code_set = set(target_unit_codes) if target_unit_codes else None
+    achievement_code_set = set(target_achievement_codes) if target_achievement_codes else None
     return select_school_progress_items(
         candidates,
         persona,
         target_unit_codes=unit_code_set,
+        target_achievement_codes=achievement_code_set,
         curriculum_version=curriculum_version,
         min_fit=min_fit,
         limit=limit,
