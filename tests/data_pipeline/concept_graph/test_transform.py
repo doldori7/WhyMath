@@ -103,6 +103,15 @@ class TestTransformConcepts:
         c = transform_concepts([_CONCEPT_B], _id_map())[0][0]
         assert c.review_status == ReviewStatus.PENDING.value
 
+    def test_review_status_reviewed_for_ai_marker(self) -> None:
+        """출처 보존 + '·AI 검수' 마커 → reviewed (출처 문자열은 그대로 살림)."""
+        record = {
+            **_CONCEPT_A,
+            "definition_provenance": "2022 개정 교육과정 별책8(기본수학)·AI 검수(수식·오개념 정합)",
+        }
+        c = transform_concepts([record], _id_map())[0][0]
+        assert c.review_status == ReviewStatus.REVIEWED.value
+
     def test_skips_unmapped_src_id(self) -> None:
         """id_map에 없는 src_id → skip."""
         concepts, skipped = transform_concepts([_CONCEPT_A], {})
@@ -251,16 +260,16 @@ class TestTransformRealData:
         assert len(result.edges) == 580
         assert result.skipped == []  # 실데이터는 전량 매핑
 
-    def test_review_status_distribution_114_323(
+    def test_review_status_distribution_148_289(
         self, concept_records: list[dict[str, object]]
     ) -> None:
-        """§4 분포: 수기 검수 114 → reviewed, 나머지 323 → pending(기본수학 34 신규 포함)."""
+        """§4 분포: reviewed 148(수기 검수 114 + 기본수학 34 AI 검수)·pending 289."""
         concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
         reviewed = sum(
             1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value
         )
-        assert reviewed == 114
-        assert len(concepts) - reviewed == 323
+        assert reviewed == 148
+        assert len(concepts) - reviewed == 289
 
     def test_no_redaction_leak_in_full_dump(
         self, concept_records: list[dict[str, object]]
