@@ -1,4 +1,4 @@
-"""L6 응용 모드 게이팅 HTTP API — retake·suneung·school_progress·thinking 4모드를 HTTP로 노출.
+"""L6 응용 모드 게이팅 HTTP API — 6개 응용 모드(아래 엔드포인트)를 HTTP로 노출.
 
 엔드포인트(prefix `/v1/gating`):
   - GET /v1/gating/retake           — RT(재수전용/N수) 트랙 게이팅 결과(페르소나 B·C 대상).
@@ -7,6 +7,8 @@
     고시코드 정합(OR·성취기준이 더 세밀). 성취기준 코드는 4단계 조인(problem_concept→concept→
     concept_standard_link→achievement_standard)으로 후보에 주입(school-progress 전용 의존성).
   - GET /v1/gating/thinking         — 사고력 모드 게이팅 결과(Bloom 상위 3단계 주신호·D·E 주 대상).
+  - GET /v1/gating/metacognition    — 메타인지 모드(distractor_map 주신호·전 페르소나 공유 코어).
+  - GET /v1/gating/gifted           — 영재 트랙 게이팅 결과(심화+창안/융합·페르소나 E 전용).
 
 레이어 경계(CLAUDE.md 7계층): 이 라우터는 **L5(상호작용·api)** 표면이다. L6 응용 모드
 게이팅(`whymath_backend.l6`)을 *호출(소비)*해 HTTP로 노출할 뿐, 게이팅 로직을 *구현하지
@@ -43,6 +45,8 @@ from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
 from whymath_backend.l6 import (
+    select_gifted_items,
+    select_metacognition_items,
     select_retake_items,
     select_school_progress_items,
     select_suneung_items,
@@ -316,3 +320,69 @@ async def gating_thinking(
     출처는 저작권 게이트가 차단하고, 학생에겐 자체생성 동등문제만 노출된다(CLAUDE.md 우선순위 #2).
     """
     return select_thinking_items(candidates, persona, min_fit=min_fit, limit=limit)
+
+
+@router.get(
+    "/metacognition",
+    response_model=list[ProblemSchema],
+    summary="메타인지 모드 게이팅",
+)
+async def gating_metacognition(
+    candidates: CandidatesDep,
+    persona: Annotated[
+        Persona,
+        Query(description="노출 대상 페르소나. 메타인지는 전 페르소나 공유 코어(닫힌 집합 없음)"),
+    ] = Persona.A_일반고고3,
+    min_fit: Annotated[float, Query(description="persona_fit 임계값(0~1)")] = 0.5,
+    limit: Annotated[int, Query(ge=1, le=200, description="응답 최대 개수")] = 20,
+) -> list[ProblemSchema]:
+    """메타인지 모드 노출 문항을 게이팅해 반환한다(distractor_map 주신호·전 페르소나 공유 코어).
+
+    후보를 L1에서 읽어(`_fetch_candidates`) `select_metacognition_items`에 넘긴다 — 적격 필터
+    (저작권 노출 게이트·페르소나 적합도·메타인지 주신호) → 우선순위(오답→오개념 매핑 개수>진단/
+    루브릭 채점>난이도) 내림차순 안정정렬 → limit 적용까지 *전부 L6 게이팅이* 수행한 결과를
+    그대로 돌려준다.
+
+    **메타인지 주신호는 `distractor_map`**(오답 선지→오개념 매핑) 존재 — 오답을 오개념으로
+    역추적하는 자원이 있거나(주신호) `scoring_type`이 진단/루브릭(보조)인 문항이 적격이며, 둘 다
+    없으면 게이팅이 거른다. **닫힌 페르소나 집합으로 좁히지 않는다**: 메타인지는 WhyMath의 공유
+    코어(CLAUDE.md §3)라 A(첫 노출 MVP)부터 E까지 `persona_fit`이 임계 이상이면 노출된다.
+    평가원/EBS/교과서(본문 미보유) 출처는 저작권 게이트가 차단한다(CLAUDE.md 우선순위 #2).
+    """
+    return select_metacognition_items(candidates, persona, min_fit=min_fit, limit=limit)
+
+
+@router.get(
+    "/gifted",
+    response_model=list[ProblemSchema],
+    summary="영재 트랙 게이팅",
+)
+async def gating_gifted(
+    candidates: CandidatesDep,
+    persona: Annotated[
+        Persona, Query(description="노출 대상 페르소나. 영재는 E(홈스쿨링 영재) 전용 닫힌 집합")
+    ] = Persona.E_홈스쿨링영재,
+    min_fit: Annotated[
+        float, Query(description="persona_fit 임계값(0~1·영재는 높은 적합 기본 0.7)")
+    ] = 0.7,
+    min_difficulty: Annotated[
+        float, Query(ge=1.0, le=5.0, description="종합 난이도 하한(영재 심화 기본 4.0)")
+    ] = 4.0,
+    limit: Annotated[int, Query(ge=1, le=200, description="응답 최대 개수")] = 20,
+) -> list[ProblemSchema]:
+    """영재 트랙 노출 문항을 게이팅해 반환한다(심화+창안/융합·페르소나 E 전용).
+
+    후보를 L1에서 읽어(`_fetch_candidates`) `select_gifted_items`에 넘긴다 — 적격 필터(대상
+    페르소나 E·저작권 노출 게이트·높은 적합도·심화 하한 AND 창안/융합) → 우선순위(창안 CREATE>
+    EVALUATE>단원 융합>융합도>난이도) 내림차순 안정정렬 → limit 적용까지 *전부 L6 게이팅이*
+    수행한 결과를 그대로 돌려준다.
+
+    **영재는 페르소나 E(홈스쿨링 영재) 전용 닫힌 집합**(RT가 재수 B·C를 닫은 것과 동형 — 학습
+    환경이 본질) — A·B·C·D는 게이팅이 비대상으로 거른다. 적격은 `difficulty_overall`이 심화 하한
+    (`min_difficulty`·기본 4.0) 이상 *이고* `bloom_level==CREATE` 또는 `is_cross_unit`인 문항이다.
+    영재 콘텐츠(KMO·올림피아드)는 코퍼스 미존재라 데이터가 차오르면 자동 활성한다(데이터0 안전·
+    학교진도 성취기준 선례). 평가원/EBS/교과서(본문 미보유) 출처는 저작권 게이트가 차단한다.
+    """
+    return select_gifted_items(
+        candidates, persona, min_fit=min_fit, min_difficulty=min_difficulty, limit=limit
+    )

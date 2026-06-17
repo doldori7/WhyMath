@@ -39,10 +39,12 @@ from whymath_backend.schema.enums import (
     ExamType,
     Persona,
     QuestionFormat,
+    ScoringType,
     SignaturePattern,
     SourceType,
     Subject,
 )
+from whymath_backend.schema.problem import DistractorEntry
 from whymath_backend.schema.problem import Problem as ProblemSchema
 
 
@@ -646,6 +648,209 @@ class TestThinking:
     def test_invalid_persona_returns_422(self) -> None:
         """enum 밖 persona 값 → 422."""
         resp = _client([]).get("/v1/gating/thinking", params={"persona": "nope"})
+        assert resp.status_code == 422
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /v1/gating/metacognition
+# ──────────────────────────────────────────────────────────────────────
+class TestMetacognition:
+    def test_persona_a_sees_distractor_map_item(self) -> None:
+        """persona=A(기본) → distractor_map(오답→오개념) 보유 자체생성 문항이 노출된다."""
+        item = _problem(
+            slug="meta",
+            distractor_map=[DistractorEntry(choice_index=1, misconception_id="m-a")],
+            persona_fit={Persona.A_일반고고3: 0.9},
+        )
+        resp = _client([item]).get("/v1/gating/metacognition")  # persona 기본 A
+        assert resp.status_code == 200, resp.text
+        assert _slugs(resp.json()) == ["meta"]
+
+    def test_scoring_type_alone_exposed(self) -> None:
+        """distractor_map이 없어도 scoring_type 진단이면 노출된다(OR 보조 신호)."""
+        item = _problem(
+            slug="diag",
+            scoring_type=ScoringType.진단,
+            persona_fit={Persona.A_일반고고3: 0.9},
+        )
+        resp = _client([item]).get("/v1/gating/metacognition")
+        assert resp.status_code == 200
+        assert _slugs(resp.json()) == ["diag"]
+
+    def test_no_signal_item_not_exposed(self) -> None:
+        """메타인지 신호(distractor_map·진단/루브릭)가 없는 문항은 게이팅이 거른다(빈 배열)."""
+        item = _problem(
+            slug="plain",
+            scoring_type=ScoringType.정오답,
+            persona_fit={Persona.A_일반고고3: 0.9},
+        )
+        resp = _client([item]).get("/v1/gating/metacognition")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_pyeonggawon_body_source_blocked(self) -> None:
+        """저작권 게이트 — 평가원(본문 미보유) 출처는 distractor_map이 있어도 응답에서 차단."""
+        ok = _problem(
+            slug="own",
+            distractor_map=[DistractorEntry(choice_index=1, misconception_id="m-a")],
+            persona_fit={Persona.A_일반고고3: 0.9},
+        )
+        blocked = _problem(
+            slug="pyeonggawon",
+            source_type=SourceType.평가원,
+            distractor_map=[DistractorEntry(choice_index=1, misconception_id="m-b")],
+            persona_fit={Persona.A_일반고고3: 0.9},
+        )
+        resp = _client([blocked, ok]).get("/v1/gating/metacognition")
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert _slugs(payload) == ["own"]
+        assert "평가원" not in _source_types(payload)
+
+    def test_priority_orders_by_distractor_count(self) -> None:
+        """distractor_map 개수가 많은 문항이 앞에 온다(게이팅 우선순위)."""
+        one = _problem(
+            slug="one",
+            distractor_map=[DistractorEntry(choice_index=0, misconception_id="m-0")],
+            persona_fit={Persona.A_일반고고3: 0.9},
+        )
+        two = _problem(
+            slug="two",
+            distractor_map=[
+                DistractorEntry(choice_index=0, misconception_id="m-0"),
+                DistractorEntry(choice_index=1, misconception_id="m-1"),
+            ],
+            persona_fit={Persona.A_일반고고3: 0.9},
+        )
+        # 입력은 역순으로 줘서 정렬이 실제로 일어나는지 본다.
+        resp = _client([one, two]).get("/v1/gating/metacognition")
+        assert resp.status_code == 200
+        assert _slugs(resp.json()) == ["two", "one"]
+
+    def test_shared_core_other_persona_exposed(self) -> None:
+        """공유 코어 — A 외 페르소나(D)도 적합도 충족이면 노출된다(닫힌 집합 게이트 없음)."""
+        item = _problem(
+            slug="d-meta",
+            distractor_map=[DistractorEntry(choice_index=1, misconception_id="m-a")],
+            persona_fit={Persona.D_학종고2: 0.8},
+        )
+        resp = _client([item]).get("/v1/gating/metacognition", params={"persona": "D_학종고2"})
+        assert resp.status_code == 200
+        assert _slugs(resp.json()) == ["d-meta"]
+
+    def test_invalid_persona_returns_422(self) -> None:
+        """enum 밖 persona 값 → 422."""
+        resp = _client([]).get("/v1/gating/metacognition", params={"persona": "nope"})
+        assert resp.status_code == 422
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /v1/gating/gifted
+# ──────────────────────────────────────────────────────────────────────
+class TestGifted:
+    def test_persona_e_sees_gifted_item(self) -> None:
+        """persona=E(기본) → 심화+창안(CREATE) 자체생성 문항이 노출된다."""
+        item = _problem(
+            slug="gifted",
+            difficulty_overall=4.5,
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.E_홈스쿨링영재: 0.9},
+        )
+        resp = _client([item]).get("/v1/gating/gifted")  # persona 기본 E
+        assert resp.status_code == 200, resp.text
+        assert _slugs(resp.json()) == ["gifted"]
+
+    def test_non_target_persona_a_returns_empty(self) -> None:
+        """비대상 페르소나(A)는 영재 트랙 비대상 → 게이팅이 거른다(빈 배열·닫힌 집합)."""
+        item = _problem(
+            slug="x",
+            difficulty_overall=4.5,
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.A_일반고고3: 0.9},
+        )
+        resp = _client([item]).get("/v1/gating/gifted", params={"persona": "A_일반고고3"})
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_below_difficulty_not_exposed(self) -> None:
+        """난이도 미달(<4.0) 문항은 영재 심화 하한에 못 미쳐 게이팅이 거른다(빈 배열)."""
+        item = _problem(
+            slug="easy",
+            difficulty_overall=3.0,
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.E_홈스쿨링영재: 0.9},
+        )
+        resp = _client([item]).get("/v1/gating/gifted")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_min_difficulty_query_adjusts_threshold(self) -> None:
+        """min_difficulty 쿼리로 심화 하한을 올리면 그 미만 문항이 빠진다."""
+        item = _problem(
+            slug="mid",
+            difficulty_overall=4.2,
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.E_홈스쿨링영재: 0.9},
+        )
+        # 기본(4.0)이면 통과하지만 하한을 4.5로 올리면 4.2는 미달.
+        resp = _client([item]).get("/v1/gating/gifted", params={"min_difficulty": 4.5})
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_pyeonggawon_body_source_blocked(self) -> None:
+        """저작권 게이트 — 평가원(본문 미보유) 출처는 영재 신호가 있어도 응답에서 차단."""
+        ok = _problem(
+            slug="own",
+            difficulty_overall=4.5,
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.E_홈스쿨링영재: 0.9},
+        )
+        blocked = _problem(
+            slug="pyeonggawon",
+            source_type=SourceType.평가원,
+            difficulty_overall=4.5,
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.E_홈스쿨링영재: 0.9},
+        )
+        resp = _client([blocked, ok]).get("/v1/gating/gifted")
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert _slugs(payload) == ["own"]
+        assert "평가원" not in _source_types(payload)
+
+    def test_priority_orders_by_create_then_difficulty(self) -> None:
+        """창안(CREATE) 고난도가 앞에 온다(게이팅 우선순위)."""
+        high = _problem(
+            slug="high",
+            difficulty_overall=5.0,
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.E_홈스쿨링영재: 0.9},
+        )
+        low = _problem(
+            slug="low",
+            difficulty_overall=4.0,
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.E_홈스쿨링영재: 0.9},
+        )
+        resp = _client([low, high]).get("/v1/gating/gifted")
+        assert resp.status_code == 200
+        assert _slugs(resp.json()) == ["high", "low"]
+
+    def test_data_zero_returns_empty(self) -> None:
+        """영재 콘텐츠 미존재(일반 난이도·비창안)면 빈 배열(데이터0 안전)."""
+        ordinary = _problem(
+            slug="ord",
+            difficulty_overall=3.0,
+            bloom_level=BloomLevel.APPLY,
+            persona_fit={Persona.E_홈스쿨링영재: 0.9},
+        )
+        resp = _client([ordinary]).get("/v1/gating/gifted")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_invalid_persona_returns_422(self) -> None:
+        """enum 밖 persona 값 → 422."""
+        resp = _client([]).get("/v1/gating/gifted", params={"persona": "nope"})
         assert resp.status_code == 422
 
 
