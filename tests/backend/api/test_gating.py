@@ -33,6 +33,7 @@ from whymath_backend.app import create_app
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import (
+    BloomLevel,
     Curriculum,
     ExamType,
     Persona,
@@ -380,6 +381,97 @@ class TestSchoolProgress:
             "/v1/gating/school-progress",
             params={"persona": "A_일반고고3", "curriculum_version": "9999_REVISION"},
         )
+        assert resp.status_code == 422
+
+
+# ──────────────────────────────────────────────────────────────────────
+# GET /v1/gating/thinking
+# ──────────────────────────────────────────────────────────────────────
+class TestThinking:
+    def test_persona_d_sees_top_bloom_item(self) -> None:
+        """persona=D(기본) → Bloom 상위 단계(CREATE) 자체생성 문항이 노출된다."""
+        item = _problem(
+            slug="thinking",
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.D_학종고2: 0.9},
+        )
+        resp = _client([item]).get("/v1/gating/thinking")  # persona 기본 D
+        assert resp.status_code == 200, resp.text
+        assert _slugs(resp.json()) == ["thinking"]
+
+    def test_lower_bloom_item_not_exposed(self) -> None:
+        """하위 인지 수준(APPLY) 문항은 사고력 주신호가 아니라 게이팅이 거른다(빈 배열)."""
+        item = _problem(
+            slug="apply",
+            bloom_level=BloomLevel.APPLY,
+            persona_fit={Persona.D_학종고2: 0.9},
+        )
+        resp = _client([item]).get("/v1/gating/thinking")
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_pyeonggawon_body_source_blocked(self) -> None:
+        """저작권 게이트 — 평가원(본문 미보유) 출처는 최상위 bloom이어도 응답에서 차단."""
+        ok = _problem(
+            slug="own",
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.D_학종고2: 0.9},
+        )
+        # 평가원 출처(본문 미보유) — CREATE 신호가 있어도 노출 불가.
+        blocked = _problem(
+            slug="pyeonggawon",
+            source_type=SourceType.평가원,
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.D_학종고2: 0.9},
+        )
+        resp = _client([blocked, ok]).get("/v1/gating/thinking")
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert _slugs(payload) == ["own"]
+        assert "평가원" not in _source_types(payload)
+
+    def test_priority_orders_by_bloom_level(self) -> None:
+        """Bloom 상위 단계(CREATE>EVALUATE)가 앞에 온다(게이팅 우선순위)."""
+        create = _problem(
+            slug="create",
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.D_학종고2: 0.9},
+        )
+        evaluate = _problem(
+            slug="evaluate",
+            bloom_level=BloomLevel.EVALUATE,
+            persona_fit={Persona.D_학종고2: 0.9},
+        )
+        # 입력은 역순으로 줘서 정렬이 실제로 일어나는지 본다.
+        resp = _client([evaluate, create]).get("/v1/gating/thinking")
+        assert resp.status_code == 200
+        assert _slugs(resp.json()) == ["create", "evaluate"]
+
+    def test_mvp_persona_a_sees_thinking_item(self) -> None:
+        """A(MVP 고3)도 적합도 충족이면 사고력 문항이 노출된다(닫힌 집합 게이트 없음)."""
+        item = _problem(
+            slug="a-thinking",
+            bloom_level=BloomLevel.EVALUATE,
+            persona_fit={Persona.A_일반고고3: 0.8},
+        )
+        resp = _client([item]).get("/v1/gating/thinking", params={"persona": "A_일반고고3"})
+        assert resp.status_code == 200
+        assert _slugs(resp.json()) == ["a-thinking"]
+
+    def test_persona_without_fit_returns_empty(self) -> None:
+        """조회 페르소나의 적합도가 없으면 상위 bloom이어도 게이팅이 거른다(빈 배열)."""
+        item = _problem(
+            slug="x",
+            bloom_level=BloomLevel.CREATE,
+            persona_fit={Persona.E_홈스쿨링영재: 0.9},  # 조회 대상 A는 없음
+        )
+        resp = _client([item]).get("/v1/gating/thinking", params={"persona": "A_일반고고3"})
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_invalid_persona_returns_422(self) -> None:
+        """enum 밖 persona 값 → 422."""
+        resp = _client([]).get("/v1/gating/thinking", params={"persona": "nope"})
         assert resp.status_code == 422
 
 
