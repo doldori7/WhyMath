@@ -515,6 +515,8 @@ CREATE TABLE strategy_evidence (
 
 `evidence_links`는 *신규 테이블*이되 FK 타깃을 위 실제 테이블로 정정해 마이그레이션한다.
 
+**구현됨(2026-06-17·마이그레이션 `b3c4d5e6f7a8`)**: `db/models/evidence_link.py` `EvidenceLink`(테이블 `evidence_links`·BIGSERIAL `link_id`). 위 매핑 정정 적용 — `student_id` **FK `user_profile.user_id` ON DELETE CASCADE**(★삭제권 연쇄·1차 마이그레이션 포함)·`event_id` BIGINT **느슨참조**(attempt_event 복합 PK라 단일 FK 불가)·`misconception_id` TEXT(인코드 카탈로그·스토어 `CATALOG_BY_ID` 대조·FK 아님)·`node_id` TEXT 느슨참조(concept_id)·`polarity` SMALLINT **CHECK ∈ {−1,+1}**·`weight`·`retention_until`(보존 배치 파기). 저장소+게이트 `l4/misconception/evidence_store.py`: `log_evidence`(카탈로그·극성 게이트 — 거짓 증거 차단)·`get_evidence_for_student`/`_misconception`·`net_support`(Σ polarity×weight — §2.3 *SQL 진단 신호*)·`purge_expired`(retention 야간 배치). **후속**: `curate_hypothesis`(증거→가설 세트·하네스)·단일 트랜잭션 삭제 오케스트레이션(BKT·pgvector 동반)·`select_probe`.
+
 ### 용어·수치 정합: "545 노드" → 구현 403 개념
 
 본문의 "545노드 커리큘럼 그래프"는 *설계 시점 추정치*이며 현 저장소에 해당 실체가 없다(레포 grep 결과 "545"는 본 문서 외 0). 구현된 커리큘럼/개념 계층은 **개념그래프 v1 — 403 개념(`concept`·code=UC) + 541 선수엣지(`concept_edge` PREREQUISITE)** + NCIC 성취기준이다. 성취기준 노드를 별도 차원으로 둘 경우 수치를 실측으로 확정한다("545"는 미반영 추정치).
