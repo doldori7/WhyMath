@@ -9,6 +9,10 @@
   ⑥ curriculum_version 불일치 → 부적격(진도는 교육과정 버전 정합 필수).
   ⑦ `select_school_progress_items` — 혼합 풀에서 진도 적합만 남고 우선순위·limit 동작.
   ⑧ `school_progress_priority` 단조성 — 겹치는 단원이 많을수록 큼·난이도 보조 축 등.
+  ⑨ 성취기준 매칭 심화(이 슬라이스): 성취기준 겹침 적격·우선순위 위계(×3.0>단원×2.0 단조)·
+     **OR 폴백(성취기준 불일치+단원 일치→적격, AND 아님)**·데이터부재 폴백(빈 codes+성취기준
+     타깃+단원 일치→통과)·차단 불변(평가원+성취기준 완벽일치→여전히 False)·하위호환
+     (target_achievement_codes 미지정 시 기존 케이스 그대로)·결정성(정확 합).
 
 합성 픽스처만(실데이터 0). `_problem(**over)` 빌더로 자체생성 최소 문항을 만들고 오버라이드한다
 (`tests/backend/l6/retake/test_gating.py`·`tests/backend/l6/suneung/test_gating.py` 헬퍼 패턴 답습).
@@ -233,6 +237,138 @@ class TestIsSchoolProgressEligible:
         """
         problem = _problem(persona_fit={Persona.D_학종고2.value: 0.7})
         assert is_school_progress_eligible(problem, Persona.D_학종고2) is True
+
+    # ── 성취기준 매칭 심화(이 슬라이스) ──────────────────────────────────────
+    def test_achievement_overlap_eligible(self) -> None:
+        """성취기준 겹침 → 적격(단원 미지정·성취기준 단독 신호로 통과)."""
+        # 진도 단원은 안 주고 성취기준만 겹치게 — 성취기준 단독으로 적격이 되는지 본다.
+        problem = _problem(
+            unit_codes=["GEO-VECTOR"],  # 진도 단원과 무관(단원 타깃 미지정)
+            achievement_standard_codes=["[12미적01-01]", "[12미적01-02]"],
+        )
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_achievement_codes={"[12미적01-01]"},
+            )
+            is True
+        )
+
+    def test_achievement_mismatch_with_no_unit_target_rejected(self) -> None:
+        """성취기준 타깃만 주고 안 겹치면 부적격(성취기준 단독 신호 불일치)."""
+        problem = _problem(achievement_standard_codes=["[12미적02-99]"])
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_achievement_codes={"[12미적01-01]"},
+            )
+            is False
+        )
+
+    def test_achievement_mismatch_but_unit_match_eligible_or_not_and(self) -> None:
+        """★ OR 핵심 — 성취기준 불일치라도 단원이 겹치면 적격(AND였다면 부적격)."""
+        problem = _problem(
+            unit_codes=["CAL-INT-DEF"],  # 단원은 진도와 겹침
+            achievement_standard_codes=["[12미적09-09]"],  # 성취기준은 불일치
+        )
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_unit_codes={"CAL-INT-DEF"},
+                target_achievement_codes={"[12미적01-01]"},
+            )
+            is True
+        )
+
+    def test_empty_achievement_codes_falls_back_to_unit(self) -> None:
+        """데이터0 — 문항 성취기준이 빈 리스트여도 단원이 겹치면 통과(데이터 부재 폴백).
+
+        성취기준 코퍼스·태깅 미적재 상태(빈 achievement_standard_codes)에서 성취기준 타깃을 줘도,
+        단원이 맞으면 OR로 통과한다(성취기준 불일치가 단원 적합을 덮지 않음 — 데이터0 무회귀).
+        """
+        problem = _problem(
+            unit_codes=["CAL-INT-DEF"],
+            achievement_standard_codes=[],  # 데이터0(태깅 부재)
+        )
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_unit_codes={"CAL-INT-DEF"},
+                target_achievement_codes={"[12미적01-01]"},
+            )
+            is True
+        )
+
+    def test_achievement_only_target_with_empty_codes_rejected(self) -> None:
+        """데이터0 + 단원 타깃 미지정 → 부적격(폴백할 단원 신호가 없음)."""
+        # 성취기준 타깃만 주고(단원 미지정) 문항 성취기준이 비면 OR이 둘 다 실패 → 부적격.
+        problem = _problem(achievement_standard_codes=[])
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_achievement_codes={"[12미적01-01]"},
+            )
+            is False
+        )
+
+    def test_copyright_gate_blocks_even_with_achievement_match(self) -> None:
+        """차단 불변 — 평가원(본문 미보유) + 성취기준 완벽 일치여도 여전히 False(②가 ④보다 앞).
+
+        성취기준이 진도와 완벽 일치해도 저작권 노출 게이트(②)가 ④ 진도 신호보다 우선하므로
+        본문 미보유 출처는 무조건 차단된다(법적 우선순위 불변).
+        """
+        problem = _problem(
+            source_type=SourceType.평가원,
+            unit_codes=["CAL-INT-DEF"],
+            achievement_standard_codes=["[12미적01-01]"],  # 성취기준 완벽 일치여도
+            persona_fit={Persona.A_일반고고3: 0.99},
+        )
+        assert (
+            is_school_progress_eligible(
+                problem,
+                Persona.A_일반고고3,
+                target_unit_codes={"CAL-INT-DEF"},
+                target_achievement_codes={"[12미적01-01]"},
+            )
+            is False
+        )
+
+    def test_achievement_target_none_preserves_legacy_unit_behavior(self) -> None:
+        """하위호환 — target_achievement_codes 미지정 시 기존 단원 정합 케이스 그대로.
+
+        성취기준 코드가 채워져 있어도, 성취기준 타깃을 안 주면 적격성은 *기존 단원 경로*와 완전히
+        동일하다(성취기준 항 비관여). 단원 겹침 有→적격·無→부적격이 기존과 같아야 한다.
+        """
+        with_codes_unit_match = _problem(
+            unit_codes=["CAL-INT-DEF"],
+            achievement_standard_codes=["[12미적01-01]"],
+        )
+        with_codes_unit_miss = _problem(
+            unit_codes=["GEO-VECTOR"],
+            achievement_standard_codes=["[12미적01-01]"],
+        )
+        # target_achievement_codes 미지정 → 단원만으로 판정(기존 동작).
+        assert (
+            is_school_progress_eligible(
+                with_codes_unit_match,
+                Persona.A_일반고고3,
+                target_unit_codes={"CAL-INT-DEF"},
+            )
+            is True
+        )
+        assert (
+            is_school_progress_eligible(
+                with_codes_unit_miss,
+                Persona.A_일반고고3,
+                target_unit_codes={"CAL-INT-DEF"},
+            )
+            is False
+        )
 
 
 # ──────────────────────────────────────────────────────────────────────

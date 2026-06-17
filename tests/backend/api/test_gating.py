@@ -30,6 +30,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from whymath_backend.app import create_app
+from whymath_backend.db.models.achievement_standard import AchievementStandard
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import (
@@ -87,28 +88,79 @@ class _FakeResult:
         return _FakeScalars(self._rows)
 
 
+class _FakeTupleResult:
+    """4단계 조인 쿼리(`_fetch_achievement_codes`) 결과 모사 — `.all()`로 (id, code) 튜플 반환.
+
+    후보 쿼리(`select(Problem)`·scalars 경로)와 달리 성취기준 조인은 *튜플 select*
+    (`select(ProblemConcept.problem_id, AchievementStandard.official_code)`)라 `result.all()`을
+    직접 부른다. 이 가짜는 미리 정한 `(problem_id, official_code)` 행들을 그대로 돌려준다.
+    """
+
+    def __init__(self, rows: list[tuple[uuid.UUID, str]]) -> None:
+        self._rows = rows
+
+    def all(self) -> list[tuple[uuid.UUID, str]]:
+        return list(self._rows)
+
+
+def _is_standard_join(stmt: Any) -> bool:
+    """stmt가 성취기준 4단계 조인인지 *컬럼 엔티티*로 판별(문자열 매칭보다 견고).
+
+    후보 쿼리는 `select(Problem)`이라 column_descriptions의 엔티티가 `Problem` 하나뿐이고,
+    성취기준 조인은 `(ProblemConcept.problem_id, AchievementStandard.official_code)` 튜플 select라
+    엔티티에 `AchievementStandard`가 등장한다. 그 출현으로 두 쿼리를 가른다(stmt 텍스트·컬럼명
+    문자열에 의존하지 않음 — 리팩터에 견고).
+    """
+    try:
+        entities = [c.get("entity") for c in stmt.column_descriptions]
+    except (AttributeError, TypeError):
+        return False
+    return AchievementStandard in entities
+
+
 class FakeSession:
-    """AsyncSession 표면 일부 모사 — 게이팅 라우터가 부르는 `execute`만(stmt 무시).
+    """AsyncSession 표면 일부 모사 — 게이팅 라우터가 부르는 `execute`만(stmt 분기).
 
     라우터는 사전 SQL 필터 없이 `select(Problem)`만 만들고 게이팅이 모두 거르므로, 가짜
     세션은 stmt 내용과 무관하게 보유한 후보 행(`rows`)을 통째로 돌려준다 — 그러면 *저작권/
     페르소나/진도 차단이 SQL이 아니라 게이팅에서* 일어남이 테스트로 입증된다(차단된 문항을
     가짜 세션이 *그대로 흘려보내도* 응답엔 없어야 한다).
+
+    school-progress 핸들러는 후보 조회에 더해 *성취기준 4단계 조인*(`_fetch_achievement_codes`)도
+    실행하므로, `execute()`가 두 쿼리를 *컬럼 엔티티*(`_is_standard_join`)로 분기한다 — 조인이면
+    미리 정한 `standard_rows`(`(problem_id, official_code)` 목록)를 `_FakeTupleResult.all()`로,
+    아니면 후보 행을 `_FakeResult.scalars()`로 돌려준다. `standard_rows` 기본 빈 목록은 *성취기준
+    데이터0*(태깅 부재)을 모사해 단원·persona_fit 폴백이 그대로 동작함을 검증한다.
     """
 
-    def __init__(self, rows: list[Problem] | None = None) -> None:
+    def __init__(
+        self,
+        rows: list[Problem] | None = None,
+        standard_rows: list[tuple[uuid.UUID, str]] | None = None,
+    ) -> None:
         self._rows = list(rows or [])
+        self._standard_rows = list(standard_rows or [])
 
-    async def execute(self, stmt: Any) -> _FakeResult:
+    async def execute(self, stmt: Any) -> _FakeResult | _FakeTupleResult:
+        if _is_standard_join(stmt):
+            return _FakeTupleResult(self._standard_rows)
         return _FakeResult(self._rows)
 
 
-def _client(rows: list[Problem]) -> TestClient:
-    """후보 행을 보유한 가짜 세션을 `get_session`에 주입한 TestClient."""
+def _client(
+    rows: list[Problem],
+    standard_rows: list[tuple[uuid.UUID, str]] | None = None,
+) -> TestClient:
+    """후보 행(+ 선택적 성취기준 조인 행)을 보유한 가짜 세션을 `get_session`에 주입한 TestClient.
+
+    `standard_rows`는 school-progress의 4단계 조인 결과를 모사한다(`(problem_id, official_code)`
+    목록). 생략하면 빈 목록(성취기준 데이터0) — 다른 3모드 테스트는 이 인자를 쓰지 않으므로
+    기존 호출이 그대로 동작한다(하위호환).
+    """
     app = create_app()
 
     async def _override() -> AsyncIterator[FakeSession]:
-        yield FakeSession(rows)
+        yield FakeSession(rows, standard_rows)
 
     app.dependency_overrides[get_session] = _override
     return TestClient(app)
@@ -382,6 +434,128 @@ class TestSchoolProgress:
             params={"persona": "A_일반고고3", "curriculum_version": "9999_REVISION"},
         )
         assert resp.status_code == 422
+
+    # ── 성취기준 매칭 심화(이 슬라이스) ──────────────────────────────────────
+    def test_achievement_code_match_exposes_item_via_join(self) -> None:
+        """`?achievement_codes=...` → 4단계 조인이 주입한 성취기준이 겹치는 문항이 노출된다.
+
+        단원은 안 겹치고(진도 단원 미지정) *성취기준만* 겹치게 설계해, 조인 주입→OR 적격이
+        실제로 동작함을 본다(성취기준 단독 신호로 통과). 가짜 세션의 `standard_rows`가 그 문항의
+        official_code를 비영속 필드로 주입한다.
+        """
+        match = _problem(slug="ach-match", unit_codes=["CAL-INT-DEF"])
+        # 조인 결과로 이 문항에 성취기준 '[12미적01-01]'을 매핑(다른 문항은 매핑 없음).
+        standard_rows = [(match.problem_id, "[12미적01-01]")]
+        client = _client([match], standard_rows=standard_rows)
+        resp = client.get(
+            "/v1/gating/school-progress",
+            params={"persona": "A_일반고고3", "achievement_codes": ["[12미적01-01]"]},
+        )
+        assert resp.status_code == 200, resp.text
+        payload = resp.json()
+        assert _slugs(payload) == ["ach-match"]
+        # 응답 JSON에 비영속 성취기준 코드가 직렬화돼 실린다(주입 입증).
+        assert payload[0]["achievement_standard_codes"] == ["[12미적01-01]"]
+
+    def test_achievement_code_mismatch_excluded(self) -> None:
+        """진도 성취기준과 안 겹치고 단원도 미지정이면 부적격(성취기준 단독 신호 불일치)."""
+        miss = _problem(slug="ach-miss", unit_codes=["CAL-INT-DEF"])
+        standard_rows = [(miss.problem_id, "[12미적02-99]")]  # 진도와 다른 성취기준
+        client = _client([miss], standard_rows=standard_rows)
+        resp = client.get(
+            "/v1/gating/school-progress",
+            params={"persona": "A_일반고고3", "achievement_codes": ["[12미적01-01]"]},
+        )
+        assert resp.status_code == 200
+        assert resp.json() == []
+
+    def test_achievement_and_unit_or_combination(self) -> None:
+        """성취기준 불일치 + 단원 일치 → OR로 적격(성취기준이 단원 적합을 덮지 않음·핵심)."""
+        # 문항 성취기준은 진도와 불일치(아래 standard_rows)지만 단원은 진도와 겹친다.
+        item = _problem(slug="unit-ok", unit_codes=["CAL-INT-DEF"])
+        standard_rows = [(item.problem_id, "[12미적09-09]")]  # 진도 성취기준과 불일치
+        client = _client([item], standard_rows=standard_rows)
+        resp = client.get(
+            "/v1/gating/school-progress",
+            params={
+                "persona": "A_일반고고3",
+                "unit_codes": ["CAL-INT-DEF"],  # 단원은 겹침
+                "achievement_codes": ["[12미적01-01]"],  # 성취기준은 안 겹침
+            },
+        )
+        assert resp.status_code == 200
+        # 성취기준 불일치라도 단원이 맞아 OR로 통과(AND였다면 빈 배열).
+        assert _slugs(resp.json()) == ["unit-ok"]
+
+    def test_achievement_priority_outranks_unit_only(self) -> None:
+        """성취기준+단원 겹침(×3.0+×2.0) 문항이 단원만 겹친 문항보다 앞에 온다(우선순위 위계)."""
+        # both: 단원 1겹침(2.0) + 성취기준 1겹침(3.0) = 5.0.
+        both = _problem(slug="both", unit_codes=["CAL-INT-DEF"])
+        # unit_only: 단원 1겹침(2.0)만 = 2.0(성취기준 조인 매핑 없음).
+        unit_only = _problem(slug="unit-only", unit_codes=["CAL-INT-DEF"])
+        standard_rows = [(both.problem_id, "[12미적01-01]")]  # both에만 성취기준 매핑
+        # 입력은 역순으로 줘서 정렬이 실제로 일어나는지 본다.
+        client = _client([unit_only, both], standard_rows=standard_rows)
+        resp = client.get(
+            "/v1/gating/school-progress",
+            params={
+                "persona": "A_일반고고3",
+                "unit_codes": ["CAL-INT-DEF"],
+                "achievement_codes": ["[12미적01-01]"],
+            },
+        )
+        assert resp.status_code == 200
+        assert _slugs(resp.json()) == ["both", "unit-only"]
+
+    def test_no_achievement_param_preserves_existing_behavior(self) -> None:
+        """achievement_codes 미지정 → 기존 단원 정합 동작 100% 보존(조인 주입돼도 무영향).
+
+        성취기준 코드가 조인으로 주입되더라도, *진도 성취기준 타깃을 안 주면* 성취기준 항은
+        적격·우선순위에 전혀 기여하지 않는다(타깃 None → 항 0.0). 단원 정합만으로 기존과 동일하게
+        선별된다(하위호환).
+        """
+        match = _problem(slug="match", unit_codes=["CAL-INT-DEF", "FUN-COMPOSITE"])
+        miss = _problem(slug="miss", unit_codes=["GEO-CIRCLE"])
+        # 두 문항 모두 성취기준이 주입되지만 achievement_codes 미지정이라 무관.
+        standard_rows = [
+            (match.problem_id, "[12미적01-01]"),
+            (miss.problem_id, "[12미적01-01]"),
+        ]
+        client = _client([miss, match], standard_rows=standard_rows)
+        resp = client.get(
+            "/v1/gating/school-progress",
+            params={
+                "persona": "A_일반고고3",
+                "unit_codes": ["CAL-INT-DEF", "PROB-COND"],
+            },
+        )
+        assert resp.status_code == 200
+        # 단원 정합(기존 동작)만으로 'match'만 통과 — 성취기준 미지정이라 기존과 동일.
+        assert _slugs(resp.json()) == ["match"]
+
+    def test_empty_standard_join_falls_back_to_unit(self) -> None:
+        """조인 결과가 비면(성취기준 데이터0) 빈 리스트 주입 → 단원 신호로 폴백(데이터0 안전).
+
+        성취기준 코퍼스·문항 태깅이 없어 조인이 0행이어도, achievement_codes를 줬더라도 단원이
+        맞으면 OR로 통과한다(빈 성취기준 코드 ∩ 타깃 = ∅ → 단원으로 폴백). 데이터가 차오르기 전
+        골격 상태에서 회귀가 없음을 입증한다.
+        """
+        item = _problem(slug="unit-fallback", unit_codes=["CAL-INT-DEF"])
+        # standard_rows 미지정 → 조인 0행(데이터0).
+        client = _client([item])
+        resp = client.get(
+            "/v1/gating/school-progress",
+            params={
+                "persona": "A_일반고고3",
+                "unit_codes": ["CAL-INT-DEF"],
+                "achievement_codes": ["[12미적01-01]"],  # 줬지만 문항 코드가 비어 불일치
+            },
+        )
+        assert resp.status_code == 200
+        # 성취기준은 빈 리스트(데이터0)라 불일치하나 단원이 맞아 통과.
+        assert _slugs(resp.json()) == ["unit-fallback"]
+        # 비영속 성취기준 코드는 빈 리스트로 직렬화(주입 부재).
+        assert resp.json()[0]["achievement_standard_codes"] == []
 
 
 # ──────────────────────────────────────────────────────────────────────

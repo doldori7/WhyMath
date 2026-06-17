@@ -482,6 +482,20 @@ class Problem(BaseModel):
         description="페르소나별 적합도 0.0-1.0 {Persona: score}",
     )
 
+    # ===== 성취기준 코드 (비영속 — L5 게이팅 조인 주입) =====
+    # 이 필드는 ORM에 *매핑되지 않는다*(db/models/problem.py의 from_schema/to_schema가
+    # mapper.column_attrs로 매핑 컬럼만 추리므로 자동 무시 → 마이그레이션 0·ORM 무변경).
+    # to_schema()는 이 필드를 채우지 않고 항상 default(빈 리스트)로 둔다. 값 주입은 L5 api
+    # 게이팅(`api/gating.py`)의 4단계 조인(Problem→problem_concept→concept→concept_standard_link
+    # →achievement_standard)이 official_code를 모아 넣는다. 성취기준 코퍼스·문항 태깅이 없으면
+    # 빈 리스트로 남아 L6 학교진도 게이팅이 단원(unit_codes)·persona_fit 폴백으로 동작한다.
+    achievement_standard_codes: list[str] = Field(
+        default_factory=list,
+        description="이 문항이 다루는 성취기준 고시코드(official_code, 예 '[12미적01-01]') 집합 "
+        "— 비영속(ORM 비매핑). to_schema()가 채우지 않고 L5 api 게이팅 조인이 주입. "
+        "데이터 없으면 빈 리스트(폴백).",
+    )
+
     # ===== EBS 연계 =====
     ebs_linked: bool = Field(default=False, description="EBS 연계 여부")
     ebs_source: dict[str, Any] | None = Field(
