@@ -70,9 +70,7 @@ class TestAxis1CostTier:
     def test_rule1_budget_exhausted_forces_local(self, router: Router) -> None:
         """규칙1: budget_krw<=0 → LOCAL (쿼터 소진, 비용 0원 강제)."""
         # killer + premium이지만 예산 0이라 클라우드 차단
-        d = router.route(
-            _req(difficulty="killer", student_subscription="premium", budget_krw=0.0)
-        )
+        d = router.route(_req(difficulty="killer", student_subscription="premium", budget_krw=0.0))
         assert d.cost_tier == CostTier.LOCAL
         assert d.est_cost_krw == 0.0
 
@@ -195,7 +193,9 @@ class TestAxis2LocalTier:
     def test_rule3_sync_tight_sla_fast(self, router: Router) -> None:
         """규칙3: 동기 + max_latency<2000 → FAST (FAST만 SLA 게이트 통과)."""
         d = router.route(
-            _req(task_type="explain", difficulty="hard", requires_reasoning=True, max_latency_ms=1500)
+            _req(
+                task_type="explain", difficulty="hard", requires_reasoning=True, max_latency_ms=1500
+            )
         )
         assert d.local_model == LocalModelTier.FAST
         assert d.mode == "sync"
@@ -258,8 +258,8 @@ class TestAxis2LocalTier:
 
     def test_rule7_fallback_fast(self, router: Router) -> None:
         """규칙7: 어떤 규칙에도 안 걸리는 안전 기본값 → FAST."""
-        # generate + easy + reasoning + sync: 규칙2(sync), 규칙3(latency), 규칙4(easy인데 reasoning),
-        # 규칙5(generate 아님), 규칙6(easy 아님) 모두 미해당 → 규칙7
+        # generate + easy + reasoning + sync: 규칙2(sync), 규칙3(latency),
+        # 규칙4(easy인데 reasoning), 규칙5(generate 아님), 규칙6(easy 아님) 모두 미해당 → 규칙7
         d = router.route(
             _req(task_type="generate", difficulty="easy", requires_reasoning=True, sync=True)
         )
@@ -324,9 +324,7 @@ class TestAxis3ModelFamily:
         ② depth(패밀리 MATH) + 비동기 hard → 크기 규칙2가 QUALITY로 올림.
         패밀리는 결정됐으나 QUALITY라 local_family는 비워진다(reason엔 남음).
         """
-        d = router.route(
-            _req(call_site=CallSite.DEEP_REASON, difficulty="hard", sync=False)
-        )
+        d = router.route(_req(call_site=CallSite.DEEP_REASON, difficulty="hard", sync=False))
         assert d.local_model == LocalModelTier.QUALITY
         assert d.local_family is None
         assert "math" in d.reason  # reason에는 결정된 패밀리 흔적 유지
@@ -458,9 +456,7 @@ class TestGuardCloud:
 
     def test_route_killer_basic_demoted_to_mid(self, router: Router) -> None:
         """통합: killer + basic → 규칙3이 CLOUD_HIGH 희망하나 가드가 CLOUD_MID로 제한."""
-        d = router.route(
-            _req(difficulty="killer", student_subscription="basic", budget_krw=1000.0)
-        )
+        d = router.route(_req(difficulty="killer", student_subscription="basic", budget_krw=1000.0))
         assert d.cost_tier == CostTier.CLOUD_MID
 
     def test_route_killer_low_budget_demoted_to_local(self, router: Router) -> None:

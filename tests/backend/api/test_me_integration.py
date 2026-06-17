@@ -116,9 +116,7 @@ def _session_row(
     # started_at 생략 시 server_default now(). 시간창 테스트는 명시 값 주입.
     # ended_at은 nullable(미종료 None) — slice 69 ended_at 시간창 테스트용.
     return LearningSession.from_schema(
-        LearningSessionSchema(
-            session_id=sid, user_id=uid, started_at=started_at, ended_at=ended_at
-        )
+        LearningSessionSchema(session_id=sid, user_id=uid, started_at=started_at, ended_at=ended_at)
     )
 
 
@@ -148,9 +146,7 @@ def _client() -> TestClient:
 def test_me_sessions_scoped_to_current_user_on_live_pg() -> None:
     """A·B 세션 적재 → A 토큰 /me/sessions는 A의 것만(B 제외). 무토큰 401."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid_a, uid_b = uuid.uuid4(), uuid.uuid4()
     sid_a, sid_b = uuid.uuid4(), uuid.uuid4()
@@ -184,9 +180,7 @@ def test_me_deletions_resource_type_filter_on_live_pg() -> None:
     learning_session은 2건·dialogue는 1건·필터 생략은 3건 모두. 본인 스코핑도 함께 확인.
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid_a = uuid.uuid4()
     try:
@@ -249,9 +243,7 @@ def test_me_deletions_resource_type_filter_on_live_pg() -> None:
             }
 
             # slice 71: include_total → X-Total-Count = 필터 적용 총 건수(limit/offset 무시)
-            resp = client.get(
-                "/v1/me/deletions", headers=auth, params={"include_total": "true"}
-            )
+            resp = client.get("/v1/me/deletions", headers=auth, params={"include_total": "true"})
             assert resp.headers["X-Total-Count"] == "3", resp.headers
             # 필터 + 페이지 축소에도 total은 *전체 필터 건수* — learning_session 2건
             resp = client.get(
@@ -279,9 +271,7 @@ def test_me_deletions_time_window_filter_on_live_pg() -> None:
     since=6월&until=6월은 6월 1건(inclusive 경계 확인)·필터 생략은 3건 전체.
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     jan = datetime(2024, 1, 15, tzinfo=UTC)
     jun = datetime(2024, 6, 15, tzinfo=UTC)
@@ -303,15 +293,11 @@ def test_me_deletions_time_window_filter_on_live_pg() -> None:
             assert len(client.get("/v1/me/deletions", headers=auth).json()) == 3
 
             # since=6월 → 6·12월(inclusive)
-            resp = client.get(
-                "/v1/me/deletions", headers=auth, params={"since": jun.isoformat()}
-            )
+            resp = client.get("/v1/me/deletions", headers=auth, params={"since": jun.isoformat()})
             assert len(resp.json()) == 2, resp.text
 
             # until=6월 → 1·6월(inclusive)
-            resp = client.get(
-                "/v1/me/deletions", headers=auth, params={"until": jun.isoformat()}
-            )
+            resp = client.get("/v1/me/deletions", headers=auth, params={"until": jun.isoformat()})
             assert len(resp.json()) == 2, resp.text
 
             # since=6월 & until=6월 → 6월 1건(양끝 inclusive 경계)
@@ -332,9 +318,7 @@ def test_me_sessions_time_window_filter_on_live_pg() -> None:
     동일한 시간창 의미(apply_time_window 공용)를 다른 도메인에서도 검증.
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     jan = datetime(2024, 1, 15, tzinfo=UTC)
     jun = datetime(2024, 6, 15, tzinfo=UTC)
@@ -354,14 +338,10 @@ def test_me_sessions_time_window_filter_on_live_pg() -> None:
         with _client() as client:
             assert len(client.get("/v1/me/sessions", headers=auth).json()) == 3
 
-            resp = client.get(
-                "/v1/me/sessions", headers=auth, params={"since": jun.isoformat()}
-            )
+            resp = client.get("/v1/me/sessions", headers=auth, params={"since": jun.isoformat()})
             assert len(resp.json()) == 2, resp.text
 
-            resp = client.get(
-                "/v1/me/sessions", headers=auth, params={"until": jun.isoformat()}
-            )
+            resp = client.get("/v1/me/sessions", headers=auth, params={"until": jun.isoformat()})
             assert len(resp.json()) == 2, resp.text
 
             resp = client.get(
@@ -381,9 +361,7 @@ def test_me_sessions_order_param_on_live_pg() -> None:
     안정 정렬용(고유 시각이라 무영향).
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     jan = datetime(2024, 1, 15, tzinfo=UTC)
     jun = datetime(2024, 6, 15, tzinfo=UTC)
@@ -403,10 +381,7 @@ def test_me_sessions_order_param_on_live_pg() -> None:
         auth = {"Authorization": f"Bearer {token_a}"}
         with _client() as client:
             # 기본(생략) = desc = 최신순 [12,6,1]월
-            ids = [
-                s["session_id"]
-                for s in client.get("/v1/me/sessions", headers=auth).json()
-            ]
+            ids = [s["session_id"] for s in client.get("/v1/me/sessions", headers=auth).json()]
             assert ids == [str(s_dec), str(s_jun), str(s_jan)], ids
 
             # order=asc = 오래된순 [1,6,12]월
@@ -425,9 +400,7 @@ def test_me_sessions_ended_at_window_filter_on_live_pg() -> None:
     항상 제외(SQL NULL 비교).
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     jan = datetime(2024, 1, 15, tzinfo=UTC)
     mar = datetime(2024, 3, 15, tzinfo=UTC)
@@ -466,9 +439,7 @@ def test_me_sessions_ended_at_window_filter_on_live_pg() -> None:
 def test_submit_attempt_records_and_propagates_mastery_on_live_pg() -> None:
     """POST /v1/me/attempts — ProblemAttempt 적재 + 평가 개념 숙달 갱신(end-to-end)."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     pid = uuid.uuid4()
@@ -500,9 +471,7 @@ def test_submit_attempt_records_and_propagates_mastery_on_live_pg() -> None:
         )
         await _add_all(
             ProblemConcept.from_schema(
-                ProblemConceptSchema(
-                    problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY
-                )
+                ProblemConceptSchema(problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY)
             )
         )
 
@@ -518,9 +487,7 @@ def test_submit_attempt_records_and_propagates_mastery_on_live_pg() -> None:
                 ).scalar()
                 cm = (
                     await conn.execute(
-                        text(
-                            "SELECT count(*) FROM concept_mastery_history WHERE user_id=:u"
-                        ),
+                        text("SELECT count(*) FROM concept_mastery_history WHERE user_id=:u"),
                         {"u": str(uid)},
                     )
                 ).scalar()
@@ -646,9 +613,7 @@ def test_me_mastery_curve_scoped_and_concept_filter_on_live_pg() -> None:
             assert resp.status_code == 200, resp.text
             assert len(resp.json()) == 3
             # ?concept_id=c1 → c1의 2측정만
-            resp = client.get(
-                "/v1/me/mastery", headers=auth, params={"concept_id": str(c1)}
-            )
+            resp = client.get("/v1/me/mastery", headers=auth, params={"concept_id": str(c1)})
             rows = resp.json()
             assert len(rows) == 2
             assert {str(c1)} == {r["concept_id"] for r in rows}
@@ -748,9 +713,7 @@ def test_me_ability_estimates_theta_from_attempts_on_live_pg() -> None:
             )
         )
         await _add_all(
-            ProblemAttempt(
-                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True
-            )
+            ProblemAttempt(attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True)
         )
 
     async def _cleanup_all() -> None:
@@ -770,9 +733,7 @@ def test_me_ability_estimates_theta_from_attempts_on_live_pg() -> None:
         asyncio.run(_setup())
         token = create_access_token(uid, settings=_settings())
         with _client() as client:
-            resp = client.get(
-                "/v1/me/ability", headers={"Authorization": f"Bearer {token}"}
-            )
+            resp = client.get("/v1/me/ability", headers={"Authorization": f"Bearer {token}"})
             assert resp.status_code == 200, resp.text
             body = resp.json()
             assert body["response_count"] == 1
@@ -859,9 +820,7 @@ def test_me_next_problem_recommends_unattempted_on_live_pg() -> None:
         asyncio.run(_setup())
         token = create_access_token(uid, settings=_settings())
         with _client() as client:
-            resp = client.get(
-                "/v1/me/next-problem", headers={"Authorization": f"Bearer {token}"}
-            )
+            resp = client.get("/v1/me/next-problem", headers={"Authorization": f"Bearer {token}"})
             assert resp.status_code == 200, resp.text
             body = resp.json()
             assert body["theta"] == 4.0  # 정답 1건 → 능력 상한
@@ -905,16 +864,12 @@ def test_me_next_problem_weak_concept_priority_on_live_pg() -> None:
 
     def _concept(cid: uuid.UUID, code: str) -> Concept:
         return Concept.from_schema(
-            ConceptSchema(
-                concept_id=cid, code=code, name_ko=code, level=ConceptLevel.세부개념
-            )
+            ConceptSchema(concept_id=cid, code=code, name_ko=code, level=ConceptLevel.세부개념)
         )
 
     async def _setup() -> None:
         await _add_all(_user(uid))
-        await _add_all(
-            _concept(c_strong, f"S-{suffix}"), _concept(c_weak, f"W-{suffix}")
-        )
+        await _add_all(_concept(c_strong, f"S-{suffix}"), _concept(c_weak, f"W-{suffix}"))
         await _add_all(_problem(pid_strong), _problem(pid_weak))
         await _add_all(
             ProblemConcept.from_schema(
@@ -967,9 +922,7 @@ def test_me_next_problem_weak_concept_priority_on_live_pg() -> None:
         with _client() as client:
             auth = {"Authorization": f"Bearer {token}"}
             # 약점 우선 → 저숙달 개념(pid_weak) 추천(동일 난이도·가중으로 역전)
-            resp = client.get(
-                "/v1/me/next-problem?prioritize_weak_concepts=true", headers=auth
-            )
+            resp = client.get("/v1/me/next-problem?prioritize_weak_concepts=true", headers=auth)
             assert resp.status_code == 200, resp.text
             assert resp.json()["problem_id"] == str(pid_weak)
     finally:
@@ -977,7 +930,8 @@ def test_me_next_problem_weak_concept_priority_on_live_pg() -> None:
 
 
 def test_me_ability_by_concept_on_live_pg() -> None:
-    """GET /v1/me/ability/by-concept — 채점 풀이를 개념별로 묶어 θ 분리 추정·약점 먼저(end-to-end)."""
+    """GET /v1/me/ability/by-concept
+    — 채점 풀이를 개념별로 묶어 θ 분리 추정·약점 먼저(end-to-end)."""
     if not asyncio.run(_pg_reachable()):
         pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
 
@@ -1001,9 +955,7 @@ def test_me_ability_by_concept_on_live_pg() -> None:
 
     def _concept(cid: uuid.UUID, code: str, name: str) -> Concept:
         return Concept.from_schema(
-            ConceptSchema(
-                concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념
-            )
+            ConceptSchema(concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념)
         )
 
     async def _setup() -> None:
@@ -1020,9 +972,7 @@ def test_me_ability_by_concept_on_live_pg() -> None:
                 )
             ),
             ProblemConcept.from_schema(
-                ProblemConceptSchema(
-                    problem_id=p_weak, concept_id=c_weak, role=ConceptRole.PRIMARY
-                )
+                ProblemConceptSchema(problem_id=p_weak, concept_id=c_weak, role=ConceptRole.PRIMARY)
             ),
         )
         # 강점 문항 정답(θ↑)·약점 문항 오답(θ↓)
@@ -1088,7 +1038,8 @@ def test_me_ability_by_concept_on_live_pg() -> None:
 
 
 def test_me_concept_diagnosis_cross_check_on_live_pg() -> None:
-    """GET /v1/me/diagnosis/concepts — BKT 숙달↔IRT θ 불일치(irt_higher·bkt_higher) 교차검증(end-to-end)."""
+    """GET /v1/me/diagnosis/concepts
+    — BKT 숙달↔IRT θ 불일치(irt_higher·bkt_higher) 교차검증(end-to-end)."""
     if not asyncio.run(_pg_reachable()):
         pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
 
@@ -1114,36 +1065,24 @@ def test_me_concept_diagnosis_cross_check_on_live_pg() -> None:
 
     def _concept(cid: uuid.UUID, code: str, name: str) -> Concept:
         return Concept.from_schema(
-            ConceptSchema(
-                concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념
-            )
+            ConceptSchema(concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념)
         )
 
     async def _setup() -> None:
         await _add_all(_user(uid))
-        await _add_all(
-            _concept(c1, f"A-{suffix}", "개념1"), _concept(c2, f"B-{suffix}", "개념2")
-        )
+        await _add_all(_concept(c1, f"A-{suffix}", "개념1"), _concept(c2, f"B-{suffix}", "개념2"))
         await _add_all(_problem(p1), _problem(p2))
         await _add_all(
             ProblemConcept.from_schema(
-                ProblemConceptSchema(
-                    problem_id=p1, concept_id=c1, role=ConceptRole.PRIMARY
-                )
+                ProblemConceptSchema(problem_id=p1, concept_id=c1, role=ConceptRole.PRIMARY)
             ),
             ProblemConcept.from_schema(
-                ProblemConceptSchema(
-                    problem_id=p2, concept_id=c2, role=ConceptRole.PRIMARY
-                )
+                ProblemConceptSchema(problem_id=p2, concept_id=c2, role=ConceptRole.PRIMARY)
             ),
         )
         await _add_all(
-            ProblemAttempt(
-                attempt_id=uuid.uuid4(), user_id=uid, problem_id=p1, is_correct=True
-            ),
-            ProblemAttempt(
-                attempt_id=uuid.uuid4(), user_id=uid, problem_id=p2, is_correct=False
-            ),
+            ProblemAttempt(attempt_id=uuid.uuid4(), user_id=uid, problem_id=p1, is_correct=True),
+            ProblemAttempt(attempt_id=uuid.uuid4(), user_id=uid, problem_id=p2, is_correct=False),
         )
         # BKT: c1 낮음·c2 높음(IRT와 반대 → 불일치 신호)
         await _add_all(_mastery_row(uid, c1, t1, 0.1), _mastery_row(uid, c2, t1, 0.9))
@@ -1223,9 +1162,7 @@ def test_me_ability_snapshot_capture_and_list_on_live_pg() -> None:
             )
         )
         await _add_all(
-            ProblemAttempt(
-                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True
-            )
+            ProblemAttempt(attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True)
         )
 
     async def _cleanup_all() -> None:
@@ -1302,15 +1239,11 @@ def test_me_ability_snapshot_per_concept_on_live_pg() -> None:
         )
         await _add_all(
             ProblemConcept.from_schema(
-                ProblemConceptSchema(
-                    problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY
-                )
+                ProblemConceptSchema(problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY)
             )
         )
         await _add_all(
-            ProblemAttempt(
-                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True
-            )
+            ProblemAttempt(attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True)
         )
 
     async def _cleanup_all() -> None:
@@ -1337,9 +1270,7 @@ def test_me_ability_snapshot_per_concept_on_live_pg() -> None:
         token = create_access_token(uid, settings=_settings())
         auth = {"Authorization": f"Bearer {token}"}
         with _client() as client:
-            cap = client.post(
-                "/v1/me/ability/snapshots?include_concepts=true", headers=auth
-            )
+            cap = client.post("/v1/me/ability/snapshots?include_concepts=true", headers=auth)
             assert cap.status_code == 201, cap.text
             assert cap.json()["concept_id"] is None  # 응답=전과목
             # 기본(concept_id 생략) → 전과목 곡선만(1행·concept_id null)
@@ -1348,9 +1279,7 @@ def test_me_ability_snapshot_per_concept_on_live_pg() -> None:
             assert glob[0]["concept_id"] is None
             assert glob[0]["theta"] == 4.0
             # ?concept_id=cid → 그 개념 곡선(1행·concept_id=cid·θ4)
-            byc = client.get(
-                f"/v1/me/ability/snapshots?concept_id={cid}", headers=auth
-            ).json()
+            byc = client.get(f"/v1/me/ability/snapshots?concept_id={cid}", headers=auth).json()
             assert len(byc) == 1
             assert byc[0]["concept_id"] == str(cid)
             assert byc[0]["theta"] == 4.0
@@ -1384,9 +1313,7 @@ def test_me_session_end_auto_captures_snapshot_on_live_pg() -> None:
             )
         )
         await _add_all(
-            ProblemAttempt(
-                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True
-            )
+            ProblemAttempt(attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True)
         )
         await _add_all(_session_row(sid, uid))  # 미종료 세션
 
@@ -1469,15 +1396,11 @@ def test_me_session_end_auto_captures_concept_snapshots_on_live_pg() -> None:
         )
         await _add_all(
             ProblemConcept.from_schema(
-                ProblemConceptSchema(
-                    problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY
-                )
+                ProblemConceptSchema(problem_id=pid, concept_id=cid, role=ConceptRole.PRIMARY)
             )
         )
         await _add_all(
-            ProblemAttempt(
-                attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True
-            )
+            ProblemAttempt(attempt_id=uuid.uuid4(), user_id=uid, problem_id=pid, is_correct=True)
         )
         await _add_all(_session_row(sid, uid))  # 미종료 세션
 
@@ -1526,9 +1449,7 @@ def test_me_session_end_auto_captures_concept_snapshots_on_live_pg() -> None:
             assert glob[0]["concept_id"] is None
             assert glob[0]["theta"] == 4.0
             # 개념 곡선(?concept_id=cid) → 1행·concept_id=cid (세션종료로 자동 적재됨)
-            byc = client.get(
-                f"/v1/me/ability/snapshots?concept_id={cid}", headers=auth
-            ).json()
+            byc = client.get(f"/v1/me/ability/snapshots?concept_id={cid}", headers=auth).json()
             assert len(byc) == 1
             assert byc[0]["concept_id"] == str(cid)
             assert byc[0]["theta"] == 4.0
@@ -1556,17 +1477,13 @@ async def _cleanup_concept_nodes(uc_ids: list[str]) -> None:
 def _concept_with_code(cid: uuid.UUID, code: str, name: str) -> Concept:
     """backend `concept` 행(code=UC 브리지 키) — 진단이 mastery→concept join에 쓴다."""
     return Concept.from_schema(
-        ConceptSchema(
-            concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념
-        )
+        ConceptSchema(concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념)
     )
 
 
 def _node_meta(uc: str, name_ko: str, domain: str, review_status: str) -> ConceptNode:
     """concept_node(UC PK) 안전 메타 행 — fetch_node_meta enrich가 sync 조회로 읽는다."""
-    return ConceptNode(
-        concept_id=uc, name_ko=name_ko, domain=domain, review_status=review_status
-    )
+    return ConceptNode(concept_id=uc, name_ko=name_ko, domain=domain, review_status=review_status)
 
 
 def test_me_weak_concepts_enrich_and_gating_on_live_pg() -> None:
@@ -1643,15 +1560,11 @@ def test_me_weak_concepts_enrich_and_gating_on_live_pg() -> None:
             assert [r["concept_code"] for r in resp.json()] == [uc_a]
 
             # ③ limit=1 — 약점 정렬 보존 상위 1(a)
-            resp = client.get(
-                "/v1/me/weak-concepts", headers=auth, params={"limit": "1"}
-            )
+            resp = client.get("/v1/me/weak-concepts", headers=auth, params={"limit": "1"})
             assert [r["concept_code"] for r in resp.json()] == [uc_a]
 
             # ④ threshold=0.35 — 0.35 미만만(a 0.2·b 0.3·c 0.4 제외)
-            resp = client.get(
-                "/v1/me/weak-concepts", headers=auth, params={"threshold": "0.35"}
-            )
+            resp = client.get("/v1/me/weak-concepts", headers=auth, params={"threshold": "0.35"})
             assert [r["concept_code"] for r in resp.json()] == [uc_a, uc_b]
 
             # ⑤ 무토큰 401
@@ -1764,9 +1677,7 @@ def test_me_prerequisite_gaps_traversal_and_gating_on_live_pg() -> None:
             assert [r["concept_code"] for r in resp.json()] == [uc_pw]
 
             # ④ 선수 없는 개념(c_pw를 후행으로) — 빈 목록
-            resp = client.get(
-                f"/v1/me/weak-concepts/{c_pw}/prerequisites", headers=auth
-            )
+            resp = client.get(f"/v1/me/weak-concepts/{c_pw}/prerequisites", headers=auth)
             assert resp.json() == []
 
             # ⑤ 무토큰 401
@@ -1856,14 +1767,8 @@ def test_me_prerequisite_gaps_multi_hop_traversal_on_live_pg() -> None:
             assert [r["depth"] for r in rows] == [1, 2, 3]
 
             # ④ max_depth 경계 — 0은 422(ge=1)·6은 422(le=5).
-            assert (
-                client.get(base, headers=auth, params={"max_depth": "0"}).status_code
-                == 422
-            )
-            assert (
-                client.get(base, headers=auth, params={"max_depth": "6"}).status_code
-                == 422
-            )
+            assert client.get(base, headers=auth, params={"max_depth": "0"}).status_code == 422
+            assert client.get(base, headers=auth, params={"max_depth": "6"}).status_code == 422
     finally:
         asyncio.run(_cleanup_concept_edges([c_p1, c_p2, c_p3]))
         asyncio.run(_cleanup_mastery([uid]))
@@ -1943,9 +1848,7 @@ def test_me_concept_coaching_prereq_block_and_fallback_on_live_pg() -> None:
             }
 
             # ③ 무토큰 401.
-            assert (
-                client.get(f"/v1/me/weak-concepts/{c_post}/coaching").status_code == 401
-            )
+            assert client.get(f"/v1/me/weak-concepts/{c_post}/coaching").status_code == 401
     finally:
         asyncio.run(_cleanup_concept_edges([c_pw]))
         asyncio.run(_cleanup_mastery([uid]))

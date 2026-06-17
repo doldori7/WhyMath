@@ -159,9 +159,7 @@ class TestConceptCreation:
 
     def test_enum_value_serialization_korean_level(self) -> None:
         """use_enum_values → level이 한글 값('단원')으로 직렬화·보존."""
-        c = Concept(
-            code="C", name_ko="공통수학", level=ConceptLevel.단원, subject=Subject.공통
-        )
+        c = Concept(code="C", name_ko="공통수학", level=ConceptLevel.단원, subject=Subject.공통)
         dumped = c.model_dump()
         assert dumped["level"] == "단원"
         assert dumped["subject"] == "공통"
@@ -207,16 +205,12 @@ class TestConceptRanges:
     def test_intrinsic_difficulty_too_high_rejected(self) -> None:
         """intrinsic_difficulty는 1.0-5.0 — 5 초과 거부."""
         with pytest.raises(ValidationError):
-            Concept(
-                code="C", name_ko="x", level=ConceptLevel.단원, intrinsic_difficulty=5.5
-            )
+            Concept(code="C", name_ko="x", level=ConceptLevel.단원, intrinsic_difficulty=5.5)
 
     def test_intrinsic_difficulty_too_low_rejected(self) -> None:
         """intrinsic_difficulty는 1.0-5.0 — 1 미만 거부."""
         with pytest.raises(ValidationError):
-            Concept(
-                code="C", name_ko="x", level=ConceptLevel.단원, intrinsic_difficulty=0.5
-            )
+            Concept(code="C", name_ko="x", level=ConceptLevel.단원, intrinsic_difficulty=0.5)
 
     def test_exam_frequency_too_high_rejected(self) -> None:
         """exam_frequency는 0.0-1.0 — 1 초과 거부."""
@@ -226,16 +220,12 @@ class TestConceptRanges:
     def test_weight_in_curriculum_too_high_rejected(self) -> None:
         """weight_in_curriculum은 0.0-1.0(보수 설정) — 1 초과 거부."""
         with pytest.raises(ValidationError):
-            Concept(
-                code="C", name_ko="x", level=ConceptLevel.단원, weight_in_curriculum=1.2
-            )
+            Concept(code="C", name_ko="x", level=ConceptLevel.단원, weight_in_curriculum=1.2)
 
     def test_semester_introduced_out_of_range_rejected(self) -> None:
         """semester_introduced는 1-2 — 3 거부."""
         with pytest.raises(ValidationError):
-            Concept(
-                code="C", name_ko="x", level=ConceptLevel.단원, semester_introduced=3
-            )
+            Concept(code="C", name_ko="x", level=ConceptLevel.단원, semester_introduced=3)
 
     def test_grade_introduced_out_of_range_rejected(self) -> None:
         """grade_introduced는 1-12(보수 설정) — 13 거부."""

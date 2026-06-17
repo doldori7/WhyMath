@@ -260,14 +260,8 @@ class TestShadowMode:
         set_semantic_matcher(stub)  # type: ignore[arg-type]
         _enable_shadow(monkeypatch)
         try:
-            with caplog.at_level(
-                logging.INFO, logger="whymath.l4.misconception.shadow"
-            ):
-                body = (
-                    _client()
-                    .post("/v1/coach", json={"student_input": _SUBSTR_FULL})
-                    .json()
-                )
+            with caplog.at_level(logging.INFO, logger="whymath.l4.misconception.shadow"):
+                body = _client().post("/v1/coach", json={"student_input": _SUBSTR_FULL}).json()
         finally:
             get_settings.cache_clear()
         # shadow도 의미 매처를 *돌린다*(off와 달리 호출 1회).
@@ -280,9 +274,7 @@ class TestShadowMode:
         # 불일치는 *로그로만* 관측한다(비노출·실 분포 플립 근거·학생 원문 미포함).
         assert any("의미 매칭 shadow" in r.message for r in caplog.records)
 
-    def test_shadow_neutral_exposes_nothing(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_shadow_neutral_exposes_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 중립 발화: on이면 semantic-only가 노출됐을 것(TestGateOn 참조). shadow는 노출 0.
         stub = _StubMatcher()
         set_semantic_matcher(stub)  # type: ignore[arg-type]
@@ -300,31 +292,21 @@ class TestShadowMode:
 # ② 게이트 on — semantic-only 후순 등장
 # ──────────────────────────────────────────────────────────────────────────
 class TestGateOnSemanticSurfaces:
-    def test_semantic_only_surfaces_below(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_semantic_only_surfaces_below(self, monkeypatch: pytest.MonkeyPatch) -> None:
         set_semantic_matcher(_StubMatcher())  # type: ignore[arg-type]
         _enable_gate(monkeypatch)
         try:
-            body = (
-                _client().post("/v1/coach", json={"student_input": _SUBSTR_FULL}).json()
-            )
+            body = _client().post("/v1/coach", json={"student_input": _SUBSTR_FULL}).json()
         finally:
             get_settings.cache_clear()
         ids = [m["misconception"]["id"] for m in body["misconceptions"]]
         # substr(distribution-over-power) 위 + semantic-only(division-by-zero) 아래.
         assert ids[0] == "distribution-over-power"
         assert _SEMANTIC_ID in ids
-        dz = next(
-            m
-            for m in body["misconceptions"]
-            if m["misconception"]["id"] == _SEMANTIC_ID
-        )
+        dz = next(m for m in body["misconceptions"] if m["misconception"]["id"] == _SEMANTIC_ID)
         assert dz["semantic_similarity"] is not None  # 의미 경로 결과(표면 근접도 실림)
 
-    def test_neutral_input_surfaces_semantic_only(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_neutral_input_surfaces_semantic_only(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # substring이 아무것도 안 잡는 중립 발화 → semantic-only만 노출.
         set_semantic_matcher(_StubMatcher())  # type: ignore[arg-type]
         _enable_gate(monkeypatch)
@@ -340,22 +322,16 @@ class TestGateOnSemanticSurfaces:
 # ③ on이라도 substr 1위·select_intervention 구동
 # ──────────────────────────────────────────────────────────────────────────
 class TestSubstringStaysFirstWithIntervention:
-    def test_substring_first_and_intervention(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_substring_first_and_intervention(self, monkeypatch: pytest.MonkeyPatch) -> None:
         set_semantic_matcher(_StubMatcher())  # type: ignore[arg-type]
         _enable_gate(monkeypatch)
         try:
-            body = (
-                _client().post("/v1/coach", json={"student_input": _SUBSTR_FULL}).json()
-            )
+            body = _client().post("/v1/coach", json={"student_input": _SUBSTR_FULL}).json()
         finally:
             get_settings.cache_clear()
         top = body["misconceptions"][0]
         assert top["misconception"]["id"] == "distribution-over-power"
-        assert (
-            top["semantic_similarity"] is None
-        )  # 1위는 substring(의미 아님·재정렬 없음)
+        assert top["semantic_similarity"] is None  # 1위는 substring(의미 아님·재정렬 없음)
         # confidence 1.0(>0.8) → 패턴 1(반례) 개입이 substring 진단 기준으로 구동.
         assert body["intervention"] is not None
         assert body["intervention"]["misconception_id"] == "distribution-over-power"
@@ -365,9 +341,7 @@ class TestSubstringStaysFirstWithIntervention:
 # ④ to_thread 경유 — 의미 매칭이 워커 스레드에서 호출됨
 # ──────────────────────────────────────────────────────────────────────────
 class TestToThreadOffload:
-    def test_matcher_called_in_worker_thread(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_matcher_called_in_worker_thread(self, monkeypatch: pytest.MonkeyPatch) -> None:
         stub = _StubMatcher()
         set_semantic_matcher(stub)  # type: ignore[arg-type]
         _enable_gate(monkeypatch)
@@ -403,9 +377,7 @@ class TestToThreadOffload:
 # ⑤ provider 실패 → substring 폴백·200(500 아님)
 # ──────────────────────────────────────────────────────────────────────────
 class TestGracefulFallback:
-    def test_matcher_raises_falls_back_200(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_matcher_raises_falls_back_200(self, monkeypatch: pytest.MonkeyPatch) -> None:
         set_semantic_matcher(_RaisingMatcher())  # type: ignore[arg-type]
         _enable_gate(monkeypatch)
         try:
@@ -438,9 +410,7 @@ class TestGracefulFallback:
 # ⑥ sessions·turns도 결합(3 엔드포인트 일관)
 # ──────────────────────────────────────────────────────────────────────────
 class TestSessionAndTurnsCombine:
-    def test_session_create_surfaces_semantic(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_session_create_surfaces_semantic(self, monkeypatch: pytest.MonkeyPatch) -> None:
         set_semantic_matcher(_StubMatcher())  # type: ignore[arg-type]
         _enable_gate(monkeypatch)
         client, _ = _session_client()
@@ -452,9 +422,7 @@ class TestSessionAndTurnsCombine:
         ids = [m["misconception"]["id"] for m in resp.json()["misconceptions"]]
         assert _SEMANTIC_ID in ids  # 세션도 결합 경유(공통 _compute_matches)
 
-    def test_turns_append_surfaces_semantic(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_turns_append_surfaces_semantic(self, monkeypatch: pytest.MonkeyPatch) -> None:
         did = uuid.uuid4()
         dialogue = DialogueORM.from_schema(
             DialogueSchema(
@@ -470,9 +438,7 @@ class TestSessionAndTurnsCombine:
         _enable_gate(monkeypatch)
         client, _ = _session_client(preload={(DialogueORM, did): dialogue})
         try:
-            resp = client.post(
-                f"/v1/coach/sessions/{did}/turns", json={"student_input": _NEUTRAL}
-            )
+            resp = client.post(f"/v1/coach/sessions/{did}/turns", json={"student_input": _NEUTRAL})
         finally:
             get_settings.cache_clear()
         assert resp.status_code == 201, resp.text
@@ -491,15 +457,11 @@ class TestBuildPayloadDirectCallUnchanged:
         assert isinstance(result, tuple) and len(result) == 6  # 반환 튜플 형태 불변
         _decision, matches, intervention, _lthc, _entry, _sol = result
         assert matches  # distribution-over-power 풀매칭
-        assert all(
-            m.semantic_similarity is None for m in matches
-        )  # diagnose만(현행 비트동일)
+        assert all(m.semantic_similarity is None for m in matches)  # diagnose만(현행 비트동일)
         assert matches[0].misconception.id == "distribution-over-power"
         assert intervention is not None  # confidence 1.0 → 개입 구동(현행 동작)
 
-    def test_direct_call_does_not_touch_matcher(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_direct_call_does_not_touch_matcher(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 직접 sync 호출은 _compute_matches를 거치지 않으므로 게이트 on이어도 매처 무관.
         stub = _StubMatcher()
         set_semantic_matcher(stub)  # type: ignore[arg-type]
@@ -525,9 +487,7 @@ class TestOcrConfidenceLowQualityFlag:
         # OCR<0.8 → match_low_quality=True. 매칭은 *유지*(low_quality는 매칭을 비우지 않음).
         body = (
             _client()
-            .post(
-                "/v1/coach", json={"student_input": _SUBSTR_FULL, "ocr_confidence": 0.5}
-            )
+            .post("/v1/coach", json={"student_input": _SUBSTR_FULL, "ocr_confidence": 0.5})
             .json()
         )
         assert body["match_low_quality"] is True  # 게이트 ② 활성(OCR<0.8)
@@ -539,9 +499,7 @@ class TestOcrConfidenceLowQualityFlag:
         # OCR>=0.8 → match_low_quality=False.
         body = (
             _client()
-            .post(
-                "/v1/coach", json={"student_input": _SUBSTR_FULL, "ocr_confidence": 0.9}
-            )
+            .post("/v1/coach", json={"student_input": _SUBSTR_FULL, "ocr_confidence": 0.9})
             .json()
         )
         assert body["match_low_quality"] is False
@@ -606,9 +564,7 @@ class TestNoConfidentMatchExposure:
 # ⑩ WH-1: off/shadow/on 세 모드 플래그 일관 + 세션/턴 노출
 # ──────────────────────────────────────────────────────────────────────────
 class TestFlagConsistencyAcrossModes:
-    def test_flags_consistent_off_shadow_on(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_flags_consistent_off_shadow_on(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 같은 입력(OCR<0.8)에 대해 세 모드 모두 match_low_quality=True·no_confident_match=False.
         set_semantic_matcher(_StubMatcher())  # type: ignore[arg-type]
         payload = {"student_input": _SUBSTR_FULL, "ocr_confidence": 0.4}
@@ -673,10 +629,7 @@ class TestComputeMatchesReturnShape:
         # off 모드(기본)·OCR<0.8 → matches 유지·low_quality=True·no_confident_match=False.
         outcome = asyncio.run(coach._compute_matches(_SUBSTR_FULL, ocr_confidence=0.5))
         assert isinstance(outcome, coach._MatchOutcome)
-        assert (
-            outcome.matches
-            and outcome.matches[0].misconception.id == "distribution-over-power"
-        )
+        assert outcome.matches and outcome.matches[0].misconception.id == "distribution-over-power"
         assert outcome.low_quality is True
         assert outcome.no_confident_match is False
 

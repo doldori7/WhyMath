@@ -35,9 +35,7 @@ class StubProvider:
         self._status = status
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(
-        self, prompt: str, system: str, decision: RoutingDecision
-    ) -> str:
+    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
         self.calls.append((prompt, system, decision))
         return self._text
 
@@ -167,9 +165,7 @@ class TestStatus:
         """check_status가 없는 provider(가짜)를 주입하면 도달 불가로 보고(500 아님)."""
 
         class NoStatusProvider:
-            async def generate(
-                self, prompt: str, system: str, decision: RoutingDecision
-            ) -> str:
+            async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
                 return ""
 
         app = create_app(
@@ -223,9 +219,7 @@ class TestStatus:
         """클라우드 키 미설정 → cloud_configured=False, cloud_reachable=False(비크래시)."""
         provider = StubCompositeProvider(
             ollama_status=OllamaStatus(reachable=True, models=()),
-            cloud_status=AnthropicStatus(
-                configured=False, reachable=False, error=None
-            ),
+            cloud_status=AnthropicStatus(configured=False, reachable=False, error=None),
         )
         app = create_app(
             provider=provider,
@@ -298,9 +292,7 @@ class TestGenerateEndpoint:
         assert body["validation_signal"] is not None
         assert "arithmetic error" in body["validation_signal"]
 
-    def test_generate_shadow_disabled_via_settings(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_generate_shadow_disabled_via_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Settings 게이트 off → 거짓 산술이어도 validation_signal=None(검증 미실행)."""
         monkeypatch.setenv("WHYMATH_L3_SHADOW_VALIDATION_ENABLED", "false")
         get_settings.cache_clear()
@@ -325,9 +317,7 @@ class TestGenerateEndpoint:
         finally:
             get_settings.cache_clear()  # 다음 테스트로 게이트 상태 누수 방지.
 
-    def test_skip_cache_on_signal_via_settings(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_skip_cache_on_signal_via_settings(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """l3_skip_cache_on_signal=on → 거짓 산술은 캐시 미적재(재요청 시 재생성)."""
         monkeypatch.setenv("WHYMATH_L3_SKIP_CACHE_ON_SIGNAL", "true")
         get_settings.cache_clear()
@@ -354,9 +344,7 @@ class TestGenerateEndpoint:
         finally:
             get_settings.cache_clear()
 
-    def test_skip_cache_default_off_caches_flagged(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_skip_cache_default_off_caches_flagged(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """기본(skip off) → 거짓 산술도 캐시 적재(2회차 히트·기존 동작)."""
         get_settings.cache_clear()  # 환경 기본값(off) 확정.
         try:
@@ -490,9 +478,7 @@ class TestJobsEndpoint:
 
     def test_job_success_returns_text(self) -> None:
         """완료(success) → 200 + text(검증 전 원시 출력). 환각 없으면 신호 None."""
-        queue = StubQueue(
-            statuses={"j2": JobStatus(job_id="j2", state="success", text="27b 결과")}
-        )
+        queue = StubQueue(statuses={"j2": JobStatus(job_id="j2", state="success", text="27b 결과")})
         client = _client(StubProvider(), queue=queue)
         resp = client.get("/v1/jobs/j2")
         assert resp.status_code == 200
@@ -505,9 +491,7 @@ class TestJobsEndpoint:
     def test_job_success_surfaces_shadow_signal(self) -> None:
         """완료 텍스트에 거짓 산술 → 폴링 응답이 validation_signal 노출(동기 파리티·재검증)."""
         queue = StubQueue(
-            statuses={
-                "j2x": JobStatus(job_id="j2x", state="success", text="결과:\n2 + 2 = 5")
-            }
+            statuses={"j2x": JobStatus(job_id="j2x", state="success", text="결과:\n2 + 2 = 5")}
         )
         client = _client(StubProvider(), queue=queue)
         body = client.get("/v1/jobs/j2x").json()
@@ -523,17 +507,13 @@ class TestJobsEndpoint:
         body = client.get("/v1/jobs/j5").json()
         assert body["validation_signal"] is None
 
-    def test_job_signal_none_when_shadow_disabled(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_job_signal_none_when_shadow_disabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Settings 게이트 off → 완료 텍스트가 거짓이어도 재검증 안 함(신호 None)."""
         monkeypatch.setenv("WHYMATH_L3_SHADOW_VALIDATION_ENABLED", "false")
         get_settings.cache_clear()
         try:
             queue = StubQueue(
-                statuses={
-                    "j6": JobStatus(job_id="j6", state="success", text="결과:\n2 + 2 = 5")
-                }
+                statuses={"j6": JobStatus(job_id="j6", state="success", text="결과:\n2 + 2 = 5")}
             )
             client = _client(StubProvider(), queue=queue)
             body = client.get("/v1/jobs/j6").json()
@@ -585,7 +565,8 @@ class TestJobsEndpoint:
 
 
 def test_create_app_defaults_are_real_implementations() -> None:
-    """기본 팩토리(주입 없음)는 CompositeProvider(Ollama+Anthropic, S5)+RedisCache(S2)+LangfuseSink(S3)+CeleryJobQueue(S4)를 단다.
+    """기본 팩토리(주입 없음)는 CompositeProvider(Ollama+Anthropic, S5)
+    +RedisCache(S2)+LangfuseSink(S3)+CeleryJobQueue(S4)를 단다.
 
     S2에서 기본 캐시가 InMemoryCache → RedisCache로, S3에서 기본 트레이스가
     RecordingTraceSink → LangfuseSink로, S4에서 기본 큐가 CeleryJobQueue로, S5에서 기본
@@ -595,12 +576,12 @@ def test_create_app_defaults_are_real_implementations() -> None:
     동작을 타는 테스트는 위 _client()가 가짜 의존성을 주입해 라이브 의존을 피한다.
     """
     from whymath_backend.app import _CACHE_KEY, _PROVIDER_KEY, _QUEUE_KEY, _TRACE_KEY
-    from whymath_backend.l3.cache import RedisCache as _RC
-    from whymath_backend.l3.providers.anthropic import AnthropicProvider as _AP
-    from whymath_backend.l3.providers.composite import CompositeProvider as _CP
-    from whymath_backend.l3.providers.ollama import OllamaProvider as _OP
-    from whymath_backend.l3.queue import CeleryJobQueue as _CJQ
-    from whymath_backend.l3.trace import LangfuseSink as _LFS
+    from whymath_backend.l3.cache import RedisCache as _RC  # noqa: N814
+    from whymath_backend.l3.providers.anthropic import AnthropicProvider as _AP  # noqa: N814
+    from whymath_backend.l3.providers.composite import CompositeProvider as _CP  # noqa: N814
+    from whymath_backend.l3.providers.ollama import OllamaProvider as _OP  # noqa: N814
+    from whymath_backend.l3.queue import CeleryJobQueue as _CJQ  # noqa: N814
+    from whymath_backend.l3.trace import LangfuseSink as _LFS  # noqa: N814
 
     app = create_app()
     composite = getattr(app.state, _PROVIDER_KEY)

@@ -1,13 +1,15 @@
 """NCIC 성취기준 코퍼스 → backend 적재 *통합테스트* — P1 코퍼스 로더 (WHYMATH_RUN_INTEGRATION).
 
-마이그레이션 head가 적용된 **실 PostgreSQL**(`achievement_standard`·`concept_standard_link` 테이블)에
-코퍼스 Collection을 적재해 P1 로더가 실제로 서는지 본다. CI `backend — 마이그레이션·통합 (실 PG)` 잡이
+마이그레이션 head가 적용된 **실 PostgreSQL**(`achievement_standard`·`concept_standard_link`
+테이블)에 코퍼스 Collection을 적재해 P1 로더가 실제로 서는지 본다.
+CI `backend — 마이그레이션·통합 (실 PG)` 잡이
 `pgvector/pgvector:pg16` + `alembic upgrade head` 후 `WHYMATH_RUN_INTEGRATION=1`로 수집·실행한다
 (기존 잡이 `tests/backend/l1/`를 수집 — 신규 CI 잡 불요). PG 미도달 시 graceful skip
 (`test_concept_backend_load_integration.py` 미러).
 
 검증:
-  ① 성취기준 적재 → row 존재·코퍼스 `code`→`official_code` rename·본문(statement) 적재(공공누리 1유형)
+  ① 성취기준 적재 → row 존재·코퍼스 `code`→`official_code` rename
+     ·본문(statement) 적재(공공누리 1유형)
   ② official_code 충돌쌍 — 같은 code(2022·2015)·다른 norm_id → 2행(PK 충돌 아님)
   ③ 멱등 — 같은 norm_id 재적재 시 행 1개·값 갱신
   ④ 링크 적재 → **P2b**: `concept_src_id`(src_id)→`{source_id: code}` 맵 해석·실 FK norm_id 결선·
@@ -40,7 +42,8 @@ _NORM_A = "2022_99it_01_01"
 _NORM_B = "2015_99it_01_01"  # 같은 official_code·다른 개정(충돌쌍)
 _CODE_AB = "[99it01-01]"  # 2022·2015 양쪽에 동일(official_code 비유일)
 # P2b: 코퍼스 링크 concept_src_id(src_id)는 backend concept을 통해 새 code로 *해석*된다.
-# _SRC_ID(원천)→_CODE(해석된 새 형식 concept.code·느슨참조). _SRC_ID_ORPHAN은 적재 개념에 없는 src_id.
+# _SRC_ID(원천)→_CODE(해석된 새 형식 concept.code·느슨참조).
+# _SRC_ID_ORPHAN은 적재 개념에 없는 src_id.
 _SRC_ID = "ZZIT01"  # 링크 concept_src_id(원천 src_id·해석 전)
 _CODE = "HIGH-ZZIT-001"  # _SRC_ID가 해석되는 backend concept.code(적재 시드)
 _SRC_ID_ORPHAN = "ZZIT99"  # 적재 개념에 없는 src_id(개념 orphan)
@@ -247,12 +250,8 @@ class TestStandardRoundtrip:
                 None,
                 _standards_collection(
                     [
-                        _standard_row(
-                            _NORM_A, _CODE_AB, curriculum_revision="2022 개정"
-                        ),
-                        _standard_row(
-                            _NORM_B, _CODE_AB, curriculum_revision="2015 개정"
-                        ),
+                        _standard_row(_NORM_A, _CODE_AB, curriculum_revision="2022 개정"),
+                        _standard_row(_NORM_B, _CODE_AB, curriculum_revision="2015 개정"),
                     ]
                 ),
                 settings=Settings(),
@@ -338,9 +337,7 @@ class TestLinkRoundtrip:
             )
             count = load_links(
                 None,
-                _links_collection(
-                    [_link_row(_SRC_ID, _NORM_A, note="개념이 곧장 다룸")]
-                ),
+                _links_collection([_link_row(_SRC_ID, _NORM_A, note="개념이 곧장 다룸")]),
                 settings=Settings(),
             )
             assert count == 1
@@ -433,9 +430,7 @@ class TestLinkRoundtrip:
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     first_link_id = conn.execute(
-                        text(
-                            "SELECT link_id FROM concept_standard_link WHERE norm_id = :n"
-                        ),
+                        text("SELECT link_id FROM concept_standard_link WHERE norm_id = :n"),
                         {"n": _NORM_A},
                     ).scalar_one()
                 # 재적재(note 변경) → 멱등·link_id 보존.
@@ -447,8 +442,7 @@ class TestLinkRoundtrip:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     rows = conn.execute(
                         text(
-                            "SELECT link_id, note FROM concept_standard_link "
-                            "WHERE norm_id = :n"
+                            "SELECT link_id, note FROM concept_standard_link " "WHERE norm_id = :n"
                         ),
                         {"n": _NORM_A},
                     ).all()
@@ -499,12 +493,8 @@ class TestLinkRoundtrip:
                 ]
             )
             assert loaded == 1  # 유효 1(개념·성취기준 둘 다 해석)
-            assert any(
-                "orphan" in m and "성취기준" in m for m in skipped
-            )  # 성취기준 orphan 보고
-            assert any(
-                "orphan" in m and "개념" in m for m in skipped
-            )  # 개념 orphan 보고
+            assert any("orphan" in m and "성취기준" in m for m in skipped)  # 성취기준 orphan 보고
+            assert any("orphan" in m and "개념" in m for m in skipped)  # 개념 orphan 보고
         finally:
             _cleanup(norm_ids + [_NORM_ORPHAN])
             _cleanup_concepts([_CODE])

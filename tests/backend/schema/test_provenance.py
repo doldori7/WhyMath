@@ -67,9 +67,7 @@ class TestContentProvenanceCreation:
             original_source=SourceType.AIHub,
             original_reference={"dataset": "aihub-math", "id": "A-1"},
             generation_type=GenerationType.FULLY_GENERATED,
-            transformation={
-                "operations": [{"type": "swap_numbers", "from": 3, "to": 5}]
-            },
+            transformation={"operations": [{"type": "swap_numbers", "from": 3, "to": 5}]},
             parent_problem_id=parent,
             transformation_pipeline={"steps": ["Qwen3-32B 초안", "Claude 검증"]},
             auto_validation={"sympy": "passed"},
@@ -103,7 +101,7 @@ class TestContentProvenanceCreation:
 # ──────────────────────────────────────────────────────────────────────
 # 법적 교정 불변식 — (A) ORIGINAL 전면 차단
 # ──────────────────────────────────────────────────────────────────────
-class TestLegalInvariantA_Original:
+class TestLegalInvariantA_Original:  # noqa: N801  (불변식 ID 'A'를 가독성 위해 밑줄로 분리)
     def test_original_generation_rejected(self) -> None:
         """(A) generation_type=ORIGINAL → ValueError (메타출처 아니어도 차단)."""
         with pytest.raises(ValidationError, match="위반\\(A\\)"):
@@ -129,7 +127,7 @@ class TestLegalInvariantA_Original:
 # ──────────────────────────────────────────────────────────────────────
 # 법적 교정 불변식 — (B) EBS_LICENSED 전면 차단
 # ──────────────────────────────────────────────────────────────────────
-class TestLegalInvariantB_EbsLicensed:
+class TestLegalInvariantB_EbsLicensed:  # noqa: N801  (불변식 ID 'B'를 가독성 위해 밑줄로 분리)
     def test_ebs_licensed_rejected(self) -> None:
         """(B) license=EBS_LICENSED → ValueError (출처 무관 차단)."""
         with pytest.raises(ValidationError, match="위반\\(B\\)"):
@@ -147,10 +145,8 @@ class TestLegalInvariantB_EbsLicensed:
 # ──────────────────────────────────────────────────────────────────────
 # 법적 교정 불변식 — (C-1) 메타출처 + 비WHYMATH license 거부
 # ──────────────────────────────────────────────────────────────────────
-class TestLegalInvariantC1_License:
-    @pytest.mark.parametrize(
-        "source", [SourceType.평가원, SourceType.EBS, SourceType.교과서]
-    )
+class TestLegalInvariantC1_License:  # noqa: N801  (불변식 ID 'C1'을 가독성 위해 밑줄로 분리)
+    @pytest.mark.parametrize("source", [SourceType.평가원, SourceType.EBS, SourceType.교과서])
     def test_metadata_source_requires_whymath_license(self, source: SourceType) -> None:
         """(C-1) 평가원/EBS/교과서 + license≠WHYMATH_GENERATED → ValueError."""
         with pytest.raises(ValidationError, match="위반\\(C-1\\)"):
@@ -173,7 +169,7 @@ class TestLegalInvariantC1_License:
 # ──────────────────────────────────────────────────────────────────────
 # 법적 교정 불변식 — (C-2) 메타출처 + None·비변형 generation_type 거부
 # ──────────────────────────────────────────────────────────────────────
-class TestLegalInvariantC2_GenerationType:
+class TestLegalInvariantC2_GenerationType:  # noqa: N801  (불변식 ID 'C2'를 가독성 위해 밑줄로 분리)
     def test_metadata_source_with_none_generation_rejected(self) -> None:
         """(C-2) 메타출처 + generation_type=None → ValueError."""
         with pytest.raises(ValidationError, match="위반\\(C-2\\)"):
@@ -189,9 +185,7 @@ class TestLegalInvariantC2_GenerationType:
             GenerationType.FULLY_GENERATED,
         ],
     )
-    def test_metadata_source_all_transformed_types_pass(
-        self, gen: GenerationType
-    ) -> None:
+    def test_metadata_source_all_transformed_types_pass(self, gen: GenerationType) -> None:
         """(C-2 통과) 변형류 5종은 모두 메타출처에서 허용된다."""
         p = _valid_metadata_provenance(generation_type=gen)
         assert p.generation_type == gen
@@ -205,7 +199,7 @@ class TestLegalInvariantC2_GenerationType:
 # ──────────────────────────────────────────────────────────────────────
 # 법적 교정 불변식 — (C-3) 메타출처 + original_reference 본문키 거부
 # ──────────────────────────────────────────────────────────────────────
-class TestLegalInvariantC3_OriginalReference:
+class TestLegalInvariantC3_OriginalReference:  # noqa: N801  (불변식 ID 'C3'을 가독성 위해 밑줄로 분리)
     @pytest.mark.parametrize(
         "body_ref",
         [

@@ -80,18 +80,14 @@ def _build_user(user_id: uuid.UUID, **over: object) -> UserProfile:
 
 def _app_with_settings() -> TestClient:
     app = create_app()
-    app.dependency_overrides[get_settings] = (
-        _settings  # jwt 시크릿만 주입(get_session은 실 PG)
-    )
+    app.dependency_overrides[get_settings] = _settings  # jwt 시크릿만 주입(get_session은 실 PG)
     return TestClient(app)
 
 
 def test_users_me_roundtrip_on_live_pg() -> None:
     """토큰으로 /me 200(PII 제외)→PATCH(nickname)→GET 반영→무토큰 401."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     try:
@@ -111,9 +107,7 @@ def test_users_me_roundtrip_on_live_pg() -> None:
                 json={"nickname": "수정닉"},
             )
             assert patched.status_code == 200, patched.text
-            assert (
-                client.get("/v1/users/me", headers=auth).json()["nickname"] == "수정닉"
-            )
+            assert client.get("/v1/users/me", headers=auth).json()["nickname"] == "수정닉"
 
             assert client.get("/v1/users/me").status_code == 401  # 무토큰
     finally:
@@ -123,9 +117,7 @@ def test_users_me_roundtrip_on_live_pg() -> None:
 def test_users_me_minor_without_consent_403_on_live_pg() -> None:
     """미성년자(동의 미설정) → /me 403(동의 게이트)."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     try:
@@ -141,9 +133,7 @@ def test_users_me_minor_without_consent_403_on_live_pg() -> None:
         )
         token = create_access_token(uid, settings=_settings())
         with _app_with_settings() as client:
-            resp = client.get(
-                "/v1/users/me", headers={"Authorization": f"Bearer {token}"}
-            )
+            resp = client.get("/v1/users/me", headers={"Authorization": f"Bearer {token}"})
             assert resp.status_code == 403
     finally:
         asyncio.run(_delete_user(uid))

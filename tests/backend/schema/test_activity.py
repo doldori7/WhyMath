@@ -61,9 +61,7 @@ class TestActivityEnumValues:
         """EventType — §6.1 한글 8종(L667-668) + WH-1 검산결과·힌트제공(10종)."""
         assert EventType.문제읽기.value == "문제읽기"
         assert EventType.답입력.value == "답입력"
-        assert (
-            EventType.검산결과.value == "검산결과"
-        )  # WH-1 verify 결과 이벤트(binary 검산·지표 ①)
+        assert EventType.검산결과.value == "검산결과"  # WH-1 verify 결과 이벤트(binary 검산·지표 ①)
         assert (
             EventType.힌트제공.value == "힌트제공"
         )  # WH-1 도움 감소 곡선(supply hint_level·지표 ⑤)

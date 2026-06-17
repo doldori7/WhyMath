@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import pytest
 
-from ._live_resources import require_local_embedding
 from whymath_backend.l4.misconception.probes import probes_path
 from whymath_backend.l4.misconception.semantic.matcher import SemanticMatcher
 from whymath_backend.l4.misconception.semantic.provider import LocalEmbeddingProvider
@@ -26,6 +25,8 @@ from whymath_backend.l4.misconception.semantic_eval import (
     load_probes,
     run_probes,
 )
+
+from ._live_resources import require_local_embedding
 
 pytestmark = pytest.mark.integration
 
@@ -48,9 +49,7 @@ class TestSemanticEvalLive:
         require_local_embedding()
         provider = LocalEmbeddingProvider()
         matcher = SemanticMatcher(provider=provider)
-        outcomes = run_probes(
-            probes, provider=provider, matcher=matcher, threshold=0.55, top_k=5
-        )
+        outcomes = run_probes(probes, provider=provider, matcher=matcher, threshold=0.55, top_k=5)
 
         report = evaluate(outcomes)
         # Kiki 확인용 출력(-s) — 플립 임계 R·F 결정 근거.

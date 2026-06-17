@@ -77,9 +77,7 @@ def _enable_judge(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
 
 
-def _patch_judge(
-    monkeypatch: pytest.MonkeyPatch, judge: JudgeProtocol
-) -> dict[str, int]:
+def _patch_judge(monkeypatch: pytest.MonkeyPatch, judge: JudgeProtocol) -> dict[str, int]:
     """`_judge_for_gate` 좌석을 주입 judge로 교체 + 호출 횟수 스파이 반환(off면 0이어야)."""
     calls = {"n": 0}
 
@@ -196,9 +194,7 @@ class _BoomSeam:
 # ① 게이트 off(기본) = judge 좌석 미구성·현행 비트동일
 # ──────────────────────────────────────────────────────────────────────────
 class TestGateOffDefault:
-    def test_off_does_not_construct_judge(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_off_does_not_construct_judge(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 플래그 미설정(기본 off) → judge 팩토리가 호출되지 않아야 한다(좌석 구성 0).
         calls = _patch_judge(monkeypatch, FakeJudge({_DOP: JudgeVerdict.NOT_EXPRESSES}))
         body = _client().post("/v1/coach", json={"student_input": _SUBSTR_FULL}).json()
@@ -230,9 +226,7 @@ class TestGateOnRemovesNotExpresses:
         body = _client().post("/v1/coach", json={"student_input": _SUBSTR_FULL}).json()
         assert calls["n"] == 1  # on + 후보 있음 → judge 1회 구성
         assert body["misconceptions"] == []  # 아니오 → 제거
-        assert (
-            body["no_confident_match"] is True
-        )  # judge 후 top-1 없음 → 품질 게이트가 플래그
+        assert body["no_confident_match"] is True  # judge 후 top-1 없음 → 품질 게이트가 플래그
         assert body["intervention"] is None  # 후보 0 → 개입 없음
 
     def test_expresses_keeps(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -282,9 +276,7 @@ class TestNeverBreak:
 # ④ 후보 0(중립) → judge 미호출(효율·좌석 구성 0)
 # ──────────────────────────────────────────────────────────────────────────
 class TestNoCandidatesSkipsJudge:
-    def test_neutral_input_does_not_call_judge(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_neutral_input_does_not_call_judge(self, monkeypatch: pytest.MonkeyPatch) -> None:
         calls = _patch_judge(monkeypatch, FakeJudge(default=JudgeVerdict.NOT_EXPRESSES))
         _enable_judge(monkeypatch)
         body = _client().post("/v1/coach", json={"student_input": _NEUTRAL}).json()
@@ -322,9 +314,7 @@ class TestThreeEndpointsConsistent:
         _patch_judge(monkeypatch, FakeJudge({_DOP: JudgeVerdict.NOT_EXPRESSES}))
         _enable_judge(monkeypatch)
         client, _ = _session_client(preload={(DialogueORM, did): dialogue})
-        resp = client.post(
-            f"/v1/coach/sessions/{did}/turns", json={"student_input": _SUBSTR_FULL}
-        )
+        resp = client.post(f"/v1/coach/sessions/{did}/turns", json={"student_input": _SUBSTR_FULL})
         assert resp.status_code == 201, resp.text
         assert resp.json()["misconceptions"] == []  # 턴 append도 게이트
 
@@ -333,16 +323,12 @@ class TestThreeEndpointsConsistent:
 # ⑥ 직접 sync _build_response_payload(body) 경로는 게이트 미적용(잠긴 계약 불변)
 # ──────────────────────────────────────────────────────────────────────────
 class TestDirectPayloadCallUngated:
-    def test_direct_sync_call_skips_judge(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_direct_sync_call_skips_judge(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 직접 호출은 _compute_matches(게이트 거처)를 거치지 않으므로, 게이트 on·아니오 judge여도
         # diagnose 폴백이라 후보 유지(잠긴 _build_response_payload(body) 계약 불변).
         calls = _patch_judge(monkeypatch, FakeJudge({_DOP: JudgeVerdict.NOT_EXPRESSES}))
         _enable_judge(monkeypatch)
-        result = coach._build_response_payload(
-            coach.CoachRequest(student_input=_SUBSTR_FULL)
-        )
+        result = coach._build_response_payload(coach.CoachRequest(student_input=_SUBSTR_FULL))
         assert calls["n"] == 0  # 직접 경로는 judge 무관
         _decision, matches, _intervention, _lthc, _entry, _sol = result
         assert matches and matches[0].misconception.id == _DOP  # diagnose 폴백·유지

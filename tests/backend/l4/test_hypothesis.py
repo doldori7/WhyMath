@@ -39,9 +39,7 @@ def _match(mid: str, confidence: float) -> MisconceptionMatch:
     return MisconceptionMatch(misconception=_mc(mid), confidence=confidence)
 
 
-def _hyp(
-    mid: str, confidence: float, *, turns: int = 0, count: int = 1
-) -> MisconceptionHypothesis:
+def _hyp(mid: str, confidence: float, *, turns: int = 0, count: int = 1) -> MisconceptionHypothesis:
     return MisconceptionHypothesis(
         misconception_id=mid,
         confidence=confidence,
@@ -66,9 +64,7 @@ class TestDecay:
     def test_monotone_decreasing(self) -> None:
         """턴 증가 → 단조 감소."""
         seq = [decay(0.9, t) for t in range(0, 12)]
-        assert all(
-            later <= earlier for earlier, later in zip(seq, seq[1:], strict=False)
-        )
+        assert all(later <= earlier for earlier, later in zip(seq, seq[1:], strict=False))
 
     def test_clamped_in_unit_interval(self) -> None:
         """결과는 [0,1] 범위."""

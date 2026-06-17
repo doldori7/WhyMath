@@ -87,7 +87,8 @@ def test_learning_session_fk_and_loose_ref() -> None:
 
 
 def test_problem_attempt_ddl_fks_and_jsonb() -> None:
-    """problem_attempt: FK 3개(user_profile·learning_session·problem)·ocr_result/step_times JSONB."""
+    """problem_attempt: FK 3개(user_profile·learning_session·problem)
+    ·ocr_result/step_times JSONB."""
     ddl = _pg_ddl(OrmProblemAttempt.__table__)
     assert "REFERENCES user_profile" in ddl
     assert "REFERENCES learning_session" in ddl

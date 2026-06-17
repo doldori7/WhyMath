@@ -152,9 +152,7 @@ class TestResult:
     def test_pending_states_map_to_pending(self) -> None:
         """PENDING/RECEIVED/STARTED/RETRY → state=pending(미확정)."""
         for celery_state in ("PENDING", "RECEIVED", "STARTED", "RETRY"):
-            app = FakeCeleryApp(
-                results={"j": FakeAsyncResult("j", state=celery_state)}
-            )
+            app = FakeCeleryApp(results={"j": FakeAsyncResult("j", state=celery_state)})
             status = CeleryJobQueue(app=app).result("j")
             assert status.state == "pending", celery_state
             assert status.ready is False
@@ -162,9 +160,7 @@ class TestResult:
 
     def test_success_returns_text(self) -> None:
         """SUCCESS → state=success + text(생성 결과)."""
-        app = FakeCeleryApp(
-            results={"j": FakeAsyncResult("j", state="SUCCESS", result="27b 결과")}
-        )
+        app = FakeCeleryApp(results={"j": FakeAsyncResult("j", state="SUCCESS", result="27b 결과")})
         status = CeleryJobQueue(app=app).result("j")
         assert status.state == "success"
         assert status.ready is True
@@ -173,9 +169,7 @@ class TestResult:
 
     def test_success_with_nonstr_result_coerces_text_none(self) -> None:
         """SUCCESS인데 결과가 비정상 타입이면 text=None(안전 처리)."""
-        app = FakeCeleryApp(
-            results={"j": FakeAsyncResult("j", state="SUCCESS", result={"k": "v"})}
-        )
+        app = FakeCeleryApp(results={"j": FakeAsyncResult("j", state="SUCCESS", result={"k": "v"})})
         status = CeleryJobQueue(app=app).result("j")
         assert status.state == "success"
         assert status.text is None
@@ -185,9 +179,7 @@ class TestResult:
         for celery_state in ("FAILURE", "REVOKED"):
             app = FakeCeleryApp(
                 results={
-                    "j": FakeAsyncResult(
-                        "j", state=celery_state, result=ValueError("모델 오류")
-                    )
+                    "j": FakeAsyncResult("j", state=celery_state, result=ValueError("모델 오류"))
                 }
             )
             status = CeleryJobQueue(app=app).result("j")
@@ -231,9 +223,7 @@ class TestResult:
         """SUCCESS 판정 후 결과 읽기가 실패하면 unknown으로 흡수(역직렬화 장애)."""
         app = FakeCeleryApp(
             results={
-                "j": FakeAsyncResult(
-                    "j", state="SUCCESS", result_raises=ValueError("deser fail")
-                )
+                "j": FakeAsyncResult("j", state="SUCCESS", result_raises=ValueError("deser fail"))
             }
         )
         status = CeleryJobQueue(app=app).result("j")

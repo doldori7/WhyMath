@@ -466,9 +466,7 @@ class TestCopyrightInvariant:
         "source",
         [SourceType.평가원, SourceType.EBS, SourceType.교과서],
     )
-    def test_metadata_only_source_with_question_text_rejected(
-        self, source: SourceType
-    ) -> None:
+    def test_metadata_only_source_with_question_text_rejected(self, source: SourceType) -> None:
         """평가원/EBS/교과서 + question_text 존재 → ValidationError(저작권)."""
         with pytest.raises(ValidationError):
             _minimal_self_generated(
@@ -494,9 +492,7 @@ class TestCopyrightInvariant:
         "source",
         [SourceType.평가원, SourceType.EBS, SourceType.교과서],
     )
-    def test_metadata_only_source_with_choices_rejected(
-        self, source: SourceType
-    ) -> None:
+    def test_metadata_only_source_with_choices_rejected(self, source: SourceType) -> None:
         """평가원/EBS/교과서 + choices 존재 → ValidationError(저작권)."""
         with pytest.raises(ValidationError):
             _minimal_self_generated(

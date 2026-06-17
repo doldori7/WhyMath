@@ -235,9 +235,7 @@ class TestReviewedOnlyGating:
             # 토큰을 공유해 둘 다 검색에 잡히게 한다(reviewed·pending 한 쌍).
             populate_concept_embeddings(
                 [
-                    ConceptText(
-                        concept_id=_UC_REVIEWED, text="극한 수렴 정의 검수완료"
-                    ),
+                    ConceptText(concept_id=_UC_REVIEWED, text="극한 수렴 정의 검수완료"),
                     ConceptText(concept_id=_UC_PENDING, text="극한 수렴 정의 검수대기"),
                 ],
                 provider,

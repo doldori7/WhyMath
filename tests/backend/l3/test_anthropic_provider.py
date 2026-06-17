@@ -302,7 +302,13 @@ class TestExtractText:
 
     def test_text_block_without_text_value_skipped(self) -> None:
         """type=text이나 text 값이 없는(또는 비문자열) 블록은 건너뛴다."""
-        msg = {"content": [{"type": "text"}, {"type": "text", "text": 7}, {"type": "text", "text": "ok"}]}
+        msg = {
+            "content": [
+                {"type": "text"},
+                {"type": "text", "text": 7},
+                {"type": "text", "text": "ok"},
+            ]
+        }
         assert _extract_text(msg) == "ok"
 
     def test_empty_content_returns_empty(self) -> None:

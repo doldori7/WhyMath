@@ -53,13 +53,9 @@ class TestPedagogyDecision:
 
     def test_hint_level_range_validation(self) -> None:
         with pytest.raises(ValidationError):
-            PedagogyDecision(
-                polya_stage_to_advance="stay", prompt="p", system="s", hint_level=0
-            )
+            PedagogyDecision(polya_stage_to_advance="stay", prompt="p", system="s", hint_level=0)
         with pytest.raises(ValidationError):
-            PedagogyDecision(
-                polya_stage_to_advance="stay", prompt="p", system="s", hint_level=5
-            )
+            PedagogyDecision(polya_stage_to_advance="stay", prompt="p", system="s", hint_level=5)
 
     def test_stage_transition_literal(self) -> None:
         for t in ("stay", "next", "previous"):

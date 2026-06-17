@@ -55,9 +55,7 @@ def _load_real_probes() -> list[MisconceptionProbe]:
 
 
 # 유효 kind 집합 — 프로브셋 스키마 계약(분해 라벨).
-_VALID_KINDS = frozenset(
-    {"paraphrase", "direction-reverse", "negation", "correct-near"}
-)
+_VALID_KINDS = frozenset({"paraphrase", "direction-reverse", "negation", "correct-near"})
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -87,9 +85,7 @@ def _outcome(
     substring_ids: tuple[str, ...] = (),
 ) -> ProbeOutcome:
     """ProbeOutcome 합성 — 매처 결과를 *직접* 지정해 스코어링을 통제."""
-    return ProbeOutcome(
-        probe=probe, semantic_ids=semantic_ids, substring_ids=substring_ids
-    )
+    return ProbeOutcome(probe=probe, semantic_ids=semantic_ids, substring_ids=substring_ids)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -181,9 +177,7 @@ class TestScoring:
         a, b, c = "div", "log", "sin"
         outcomes = [
             _outcome(_recall_probe(a), semantic_ids=(a,)),  # 잡힘
-            _outcome(
-                _recall_probe(b), semantic_ids=("other",)
-            ),  # 다른 id만 끌림 → 미스
+            _outcome(_recall_probe(b), semantic_ids=("other",)),  # 다른 id만 끌림 → 미스
             _outcome(_recall_probe(c), semantic_ids=(c,)),  # 잡힘
         ]
         report = evaluate(outcomes)
@@ -214,12 +208,8 @@ class TestScoring:
     def test_near_false_positive_is_subset_of_fp(self) -> None:
         # near_id가 끌리면 near-FP이자 일반 FP. 다른 id만 끌리면 FP이되 near-FP 아님.
         outcomes = [
-            _outcome(
-                _fp_probe("target"), semantic_ids=("target",)
-            ),  # near 끌림 → near-FP
-            _outcome(
-                _fp_probe("other"), semantic_ids=("zzz",)
-            ),  # 다른 id → FP, not near
+            _outcome(_fp_probe("target"), semantic_ids=("target",)),  # near 끌림 → near-FP
+            _outcome(_fp_probe("other"), semantic_ids=("zzz",)),  # 다른 id → FP, not near
         ]
         report = evaluate(outcomes)
         assert report.semantic_false_positives == 2
@@ -246,15 +236,9 @@ class TestScoring:
         assert CATALOG_BY_ID[algebra_id].domain == "대수"
         assert CATALOG_BY_ID[prob_id].domain == "확률통계"
         outcomes = [
-            _outcome(
-                _recall_probe(algebra_id, kind="paraphrase"), semantic_ids=(algebra_id,)
-            ),
-            _outcome(
-                _recall_probe(prob_id, kind="paraphrase"), semantic_ids=()
-            ),  # 미스
-            _outcome(
-                _fp_probe(algebra_id, kind="correct-near"), semantic_ids=("zz",)
-            ),  # FP
+            _outcome(_recall_probe(algebra_id, kind="paraphrase"), semantic_ids=(algebra_id,)),
+            _outcome(_recall_probe(prob_id, kind="paraphrase"), semantic_ids=()),  # 미스
+            _outcome(_fp_probe(algebra_id, kind="correct-near"), semantic_ids=("zz",)),  # FP
         ]
         report = evaluate(outcomes)
         # kind 분해: paraphrase recall 1/2.
@@ -367,9 +351,7 @@ class TestRunProbesWiring:
     def test_run_probes_assembles_outcomes_with_fake_provider(self) -> None:
         # FakeEmbeddingProvider로 전 프로브를 돌려 스코어링 배선을 증명한다(실 의미 recall 아님).
         probes = _load_real_probes()
-        outcomes = run_probes(
-            probes, provider=FakeEmbeddingProvider(), threshold=0.3, top_k=5
-        )
+        outcomes = run_probes(probes, provider=FakeEmbeddingProvider(), threshold=0.3, top_k=5)
         assert len(outcomes) == len(probes)
         report = evaluate(outcomes)
         # 구조 단언만(품질 hard-fail 아님): 비율은 [0,1] 또는 None.
@@ -394,9 +376,7 @@ class TestRunProbesWiring:
             kind="paraphrase",
         )
         # 전 카탈로그 name_kr로 제공자를 만든다(각 항목이 distinct one-hot이 되도록).
-        provider = _NameKrOneHotProvider(
-            name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values())
-        )
+        provider = _NameKrOneHotProvider(name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values()))
         outcomes = run_probes([probe], provider=provider, threshold=0.5, top_k=5)
         assert len(outcomes) == 1
         report = evaluate(outcomes)
@@ -478,9 +458,7 @@ class TestJudgeScoring:
 
     def test_judge_recall_loss_when_judge_wrongly_removes(self) -> None:
         # 의미가 잡은 recall 2건 중 judge가 1건을 잘못 거름 → judge_recall↓·recall_loss=0.5.
-        kept = _judge_outcome(
-            _recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)
-        )
+        kept = _judge_outcome(_recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",))
         lost = _judge_outcome(
             _recall_probe("y"),
             semantic_ids=("y",),
@@ -514,23 +492,13 @@ class TestJudgeScoring:
         # judge FP는 상한(보수)·judge recall은 하한(정직)으로 보고.
         outs = [
             _judge_outcome(_fp_probe("a"), semantic_ids=("a",), judge_kept_ids=("a",)),
-            _judge_outcome(
-                _recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)
-            ),
+            _judge_outcome(_recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)),
         ]
         report = evaluate(outs)
         fub = report.judge_fp_rate_upper_bound()
         rlb = report.judge_recall_lower_bound()
-        assert (
-            fub is not None
-            and report.judge_fp_rate is not None
-            and fub >= report.judge_fp_rate
-        )
-        assert (
-            rlb is not None
-            and report.judge_recall is not None
-            and rlb <= report.judge_recall
-        )
+        assert fub is not None and report.judge_fp_rate is not None and fub >= report.judge_fp_rate
+        assert rlb is not None and report.judge_recall is not None and rlb <= report.judge_recall
 
     def test_judge_metrics_none_on_empty(self) -> None:
         report = evaluate([])
@@ -542,12 +510,8 @@ class TestJudgeScoring:
     def test_format_report_includes_judge_lines_when_applied(self) -> None:
         # judge 적용 outcome이면 before/after 줄이 나온다.
         outs = [
-            _judge_outcome(
-                _fp_probe("a"), semantic_ids=("a",), judge_removed_ids=("a",)
-            ),
-            _judge_outcome(
-                _recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)
-            ),
+            _judge_outcome(_fp_probe("a"), semantic_ids=("a",), judge_removed_ids=("a",)),
+            _judge_outcome(_recall_probe("x"), semantic_ids=("x",), judge_kept_ids=("x",)),
         ]
         report = evaluate(outs)
         assert _judge_applied(report) is True
@@ -571,9 +535,7 @@ class TestRunProbesWithJudgeWiring:
 
     def _one_hot_provider(self) -> object:
         # 전 카탈로그 name_kr로 제공자 구성(각 항목 distinct one-hot).
-        return _NameKrOneHotProvider(
-            name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values())
-        )
+        return _NameKrOneHotProvider(name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values()))
 
     @pytest.mark.asyncio
     async def test_judge_removes_caught_fp_via_filter(self) -> None:
@@ -672,9 +634,7 @@ class TestRunProbesWithJudgeWiring:
         assert report.judge_caught_recall == report.caught_recall
         # 각 outcome: kept ⊕ removed = semantic_ids(분할 불변).
         for o in outcomes:
-            assert set(o.judge_kept_ids) | set(o.judge_removed_ids) == set(
-                o.semantic_ids
-            )
+            assert set(o.judge_kept_ids) | set(o.judge_removed_ids) == set(o.semantic_ids)
             assert set(o.judge_kept_ids) & set(o.judge_removed_ids) == set()
             # 전부 불확실 → removed 비어 있고 kept == semantic_ids.
             assert o.judge_removed_ids == ()
@@ -696,9 +656,7 @@ class TestJudgeDecisionsCapture:
             near_id=None,
             kind="paraphrase",
         )
-        provider = _NameKrOneHotProvider(
-            name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values())
-        )
+        provider = _NameKrOneHotProvider(name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values()))
         judge = FakeJudge({target: JudgeVerdict.UNCERTAIN})
         outcomes = await run_probes_with_judge(
             [probe], provider=provider, judge=judge, threshold=0.5, top_k=5  # type: ignore[arg-type]
@@ -796,9 +754,7 @@ class TestRunJsonOutput:
             + "\n",
             encoding="utf-8",
         )
-        provider = _NameKrOneHotProvider(
-            name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values())
-        )
+        provider = _NameKrOneHotProvider(name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values()))
         code = _run(
             probes_file,
             threshold=0.5,

@@ -199,8 +199,7 @@ def test_apply_matches_insert_upsert_prune_on_live_pg() -> None:
                 rows = (
                     await session.execute(
                         text(
-                            "SELECT count(*) FROM misconception_hypothesis "
-                            "WHERE user_id = :uid"
+                            "SELECT count(*) FROM misconception_hypothesis " "WHERE user_id = :uid"
                         ),
                         {"uid": str(uid)},
                     )
@@ -224,8 +223,7 @@ def test_apply_matches_insert_upsert_prune_on_live_pg() -> None:
                 total = (
                     await session.execute(
                         text(
-                            "SELECT count(*) FROM misconception_hypothesis "
-                            "WHERE user_id = :uid"
+                            "SELECT count(*) FROM misconception_hypothesis " "WHERE user_id = :uid"
                         ),
                         {"uid": str(uid)},
                     )
@@ -271,9 +269,7 @@ def test_pruned_hypothesis_reactivates_on_new_evidence_on_live_pg() -> None:
                 for _ in range(15):
                     await apply_matches(session, uid, [])
                 await session.commit()
-                assert (
-                    get_active_mids(await get_active_hypotheses(session, uid)) == set()
-                )
+                assert get_active_mids(await get_active_hypotheses(session, uid)) == set()
 
                 # 새 증거 → 같은 (user_id, mid) 행 재활성화(중복 insert 아님·UniqueConstraint)
                 t = await apply_matches(session, uid, [_match(mid, 0.7)])
@@ -283,8 +279,7 @@ def test_pruned_hypothesis_reactivates_on_new_evidence_on_live_pg() -> None:
                 rows = (
                     await session.execute(
                         text(
-                            "SELECT count(*) FROM misconception_hypothesis "
-                            "WHERE user_id = :uid"
+                            "SELECT count(*) FROM misconception_hypothesis " "WHERE user_id = :uid"
                         ),
                         {"uid": str(uid)},
                     )
@@ -354,9 +349,7 @@ def test_persisted_roundtrip_matches_pure_logic_on_live_pg() -> None:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
                 # 영속 경로: 턴1 → 턴2
-                await apply_matches(
-                    session, uid, [_match(mid_a, 0.6), _match(mid_b, 0.5)]
-                )
+                await apply_matches(session, uid, [_match(mid_a, 0.6), _match(mid_b, 0.5)])
                 persisted = await apply_matches(session, uid, [_match(mid_a, 0.8)])
                 await session.commit()
         finally:
@@ -371,9 +364,7 @@ def test_persisted_roundtrip_matches_pure_logic_on_live_pg() -> None:
         assert set(persisted_by) == set(pure_by)
         for mid, pure in pure_by.items():
             # Numeric(3,2) 영속이라 소수 2자리로 비교(confidence 보존).
-            assert persisted_by[mid].confidence == pytest.approx(
-                pure.confidence, abs=0.01
-            )
+            assert persisted_by[mid].confidence == pytest.approx(pure.confidence, abs=0.01)
             assert persisted_by[mid].evidence_count == pure.evidence_count
             assert persisted_by[mid].turns_since_evidence == pure.turns_since_evidence
 

@@ -118,9 +118,7 @@ class TestResponseShape:
                     domain="[고]미적분",
                     review_status="reviewed",
                 ),
-                ConceptSearchHit(
-                    concept_id=_UC_B, similarity=0.42
-                ),  # 메타 미적재 → null
+                ConceptSearchHit(concept_id=_UC_B, similarity=0.42),  # 메타 미적재 → null
             ]
 
         monkeypatch.setattr(concepts_api, "search_concepts", _fake_search)
@@ -155,9 +153,7 @@ class TestResponseShape:
         assert captured["provider"] is provider
         assert captured["reviewed_only"] is False
 
-    def test_reviewed_only_param_passed_to_seat(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_reviewed_only_param_passed_to_seat(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # ?reviewed_only=true 쿼리가 좌석에 그대로 전달된다(게이팅 필터 위임).
         captured: dict[str, Any] = {}
 
@@ -191,9 +187,7 @@ class TestResponseShape:
         assert resp.status_code == 200
         assert captured["top_k"] == concepts_api._SEARCH_DEFAULT_K
 
-    def test_empty_results_serialize_as_empty_list(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_empty_results_serialize_as_empty_list(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             concepts_api,
             "search_concepts",
@@ -208,9 +202,7 @@ class TestResponseShape:
 # ③ 라우팅 — /search가 /{concept_id} UUID 경로에 먹히지 않음
 # ──────────────────────────────────────────────────────────────────────────
 class TestRouting:
-    def test_search_path_not_parsed_as_concept_uuid(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_search_path_not_parsed_as_concept_uuid(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # /search가 GET /{concept_id}(UUID)보다 먼저 매칭돼야 한다 — UUID 파싱 422가 아니라 200.
         monkeypatch.setattr(
             concepts_api,
@@ -225,9 +217,7 @@ class TestRouting:
 # ⑤ memory 모드 신호 — vector_store_enabled=false + 빈 results
 # ──────────────────────────────────────────────────────────────────────────
 class TestMemoryModeSignal:
-    def test_memory_mode_reports_disabled_and_empty(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_memory_mode_reports_disabled_and_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 기본(memory) 모드 — 좌석을 패치하지 않아도 실제 search_concepts가 빈 리스트를 돌려준다
         # (memory 가드). vector_store_enabled=false로 명시 신호(조용한 무동작 금지).
         _force_memory(monkeypatch)

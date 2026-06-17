@@ -234,14 +234,9 @@ class TestSemanticMatcherThresholdAndRanking:
         assert hits[0].misconception.id == "ctrl-gamma"
         assert hits[1].misconception.id == "ctrl-alpha"
         # match()는 MisconceptionMatch를 돌려준다 → 코사인은 semantic_similarity 필드.
-        assert (
-            hits[0].semantic_similarity is not None
-            and hits[1].semantic_similarity is not None
-        )
+        assert hits[0].semantic_similarity is not None and hits[1].semantic_similarity is not None
         assert hits[0].semantic_similarity > hits[1].semantic_similarity
-        assert hits[0].semantic_similarity == pytest.approx(
-            2.0 / (math.sqrt(2) * math.sqrt(3))
-        )
+        assert hits[0].semantic_similarity == pytest.approx(2.0 / (math.sqrt(2) * math.sqrt(3)))
         assert hits[1].semantic_similarity == pytest.approx(1.0 / 3.0)
 
     def test_top_k_caps(self) -> None:
@@ -253,15 +248,11 @@ class TestSemanticMatcherThresholdAndRanking:
         assert hits[0].misconception.id == "ctrl-gamma"
 
     def test_empty_text_returns_empty(self) -> None:
-        matcher = SemanticMatcher(
-            provider=FakeEmbeddingProvider(), catalog=self._catalog()
-        )
+        matcher = SemanticMatcher(provider=FakeEmbeddingProvider(), catalog=self._catalog())
         assert matcher.match("", top_k=3, threshold=0.5) == []
 
     def test_top_k_zero_returns_empty(self) -> None:
-        matcher = SemanticMatcher(
-            provider=FakeEmbeddingProvider(), catalog=self._catalog()
-        )
+        matcher = SemanticMatcher(provider=FakeEmbeddingProvider(), catalog=self._catalog())
         assert matcher.match("ALPHA", top_k=0, threshold=0.5) == []
 
 
@@ -283,9 +274,7 @@ class TestParaphraseRecallWin:
         # (a) substring diagnose는 풀매칭(1.0) 못 함 — '0' 토큰 부재로 division-by-zero 불완전
         diag = {m.misconception.id: m for m in diagnose(student, top_k=10)}
         dz = diag.get("division-by-zero")
-        assert (
-            dz is None or dz.confidence < 1.0
-        )  # substring은 놓치거나 부분 매칭에 그침
+        assert dz is None or dz.confidence < 1.0  # substring은 놓치거나 부분 매칭에 그침
 
         # (b) 의미 매처(Fake·어휘 해시)는 표현과 어휘 공유로 division-by-zero를 *상위*로 올린다
         provider = FakeEmbeddingProvider()
@@ -358,9 +347,7 @@ class TestDirectionBlindnessHonesty:
         assert [h.misconception.id for h in forward] == ["dir-cont-diff"]
         assert [h.misconception.id for h in reverse] == ["dir-cont-diff"]
         # *동일* 유사도 — 매처가 방향을 구분 못 한다는 결정론적 증거(과장 금지).
-        assert forward[0].semantic_similarity == pytest.approx(
-            reverse[0].semantic_similarity
-        )
+        assert forward[0].semantic_similarity == pytest.approx(reverse[0].semantic_similarity)
 
     def test_negation_not_distinguished(self) -> None:
         # 부정("CONT ≠ DIFF")도 단어 집합 {CONT,DIFF}가 같아(≠는 별 토큰 아님) 동일 매칭.
@@ -370,12 +357,8 @@ class TestDirectionBlindnessHonesty:
         affirm = matcher.match("CONT = DIFF", top_k=5, threshold=0.3)
         negate = matcher.match("CONT ≠ DIFF 아니다", top_k=5, threshold=0.3)
         assert affirm and negate
-        assert (
-            affirm[0].misconception.id == negate[0].misconception.id == "dir-cont-diff"
-        )
-        assert affirm[0].semantic_similarity == pytest.approx(
-            negate[0].semantic_similarity
-        )
+        assert affirm[0].misconception.id == negate[0].misconception.id == "dir-cont-diff"
+        assert affirm[0].semantic_similarity == pytest.approx(negate[0].semantic_similarity)
 
     def test_real_catalog_reverse_also_surfaces_with_lexical_fake(self) -> None:
         # 보강(비결정론 단언 회피): 실 카탈로그·Fake로 *방향 쌍*을 넣었을 때, 올바른 역방향이
@@ -408,9 +391,7 @@ class TestDiagnoseUnchanged:
         # 모든 substring 결과의 semantic_similarity는 None(신규 선택 필드 기본)
         for m in diagnose("(a+b)² = a² + b² 그리고 log(a+b)는 log a + log b"):
             assert m.semantic_similarity is None
-            assert m.matched_regex_signals == () or isinstance(
-                m.matched_regex_signals, tuple
-            )
+            assert m.matched_regex_signals == () or isinstance(m.matched_regex_signals, tuple)
 
     def test_numeric_regex_path_unchanged(self) -> None:
         m = next(
@@ -458,9 +439,7 @@ class TestMatcherCatalogBuild:
     def test_semantic_matches_default_threshold_from_settings(self) -> None:
         # threshold 미지정 → Settings 기본(0.55). Fake로 무관 텍스트는 임계 미달 → 빈/소수.
         provider = FakeEmbeddingProvider()
-        out = semantic_matches(
-            "완전히 무관한 임의의 문장 zzzzz", provider=provider, top_k=3
-        )
+        out = semantic_matches("완전히 무관한 임의의 문장 zzzzz", provider=provider, top_k=3)
         # 무관 텍스트는 카탈로그와 어휘 비공유 → 코사인 0 근처 → 보수적 임계 0.55 미달로 빈 리스트
         assert out == []
 
@@ -470,9 +449,7 @@ class TestMatcherCatalogBuild:
 # ──────────────────────────────────────────────────────────────────────────
 class TestMisconceptionMatchBackwardCompat:
     def test_semantic_similarity_defaults_none(self) -> None:
-        m = MisconceptionMatch(
-            misconception=CATALOG_BY_ID["division-by-zero"], confidence=0.5
-        )
+        m = MisconceptionMatch(misconception=CATALOG_BY_ID["division-by-zero"], confidence=0.5)
         assert m.semantic_similarity is None
 
     def test_semantic_similarity_settable(self) -> None:

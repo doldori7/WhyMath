@@ -88,9 +88,7 @@ async def _cleanup(user_ids: list[uuid.UUID]) -> None:
         async with engine.begin() as conn:
             # FK 순서: 자식(dialogue·problem_attempt·learning_session·attempt_event) 먼저,
             # 부모(user_profile) 나중. problem_attempt는 learning_session 자식이므로 먼저 지운다.
-            await conn.execute(
-                text("DELETE FROM dialogue WHERE user_id = ANY(:ids)"), {"ids": ids}
-            )
+            await conn.execute(text("DELETE FROM dialogue WHERE user_id = ANY(:ids)"), {"ids": ids})
             await conn.execute(
                 text("DELETE FROM problem_attempt WHERE user_id = ANY(:ids)"),
                 {"ids": ids},
@@ -142,9 +140,7 @@ def _session_row(uid: uuid.UUID, *, ended: bool) -> LearningSession:
     )
 
 
-def _dialogue_row(
-    uid: uuid.UUID, *, total_tokens: int | None, total_turns: int | None
-) -> Dialogue:
+def _dialogue_row(uid: uuid.UUID, *, total_tokens: int | None, total_turns: int | None) -> Dialogue:
     return Dialogue.from_schema(
         DialogueSchema(
             dialogue_id=uuid.uuid4(),
@@ -252,9 +248,7 @@ def _attempt_on_problem(
     )
 
 
-def _problem_with_patterns(
-    pid: uuid.UUID, *, patterns: list[SignaturePattern]
-) -> Problem:
+def _problem_with_patterns(pid: uuid.UUID, *, patterns: list[SignaturePattern]) -> Problem:
     """⑦ 근사 전이 점수용 problem 행(signature_patterns 지정) — 본문 미보유 자체생성 메타.
 
     같은 시그니처 패턴·다른 problem_id 시퀀스를 만들어 전이 프로브(사전 노출 후 초견)를 적재할
@@ -282,9 +276,7 @@ def _client() -> TestClient:
 def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
     """A: 세션 4개(완주 3·미완주 1)·대화 토큰 채움 → ③ MEASURED 0.75·④ MEASURED. B는 제외. 401."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid_a, uid_b = uuid.uuid4(), uuid.uuid4()
     try:
@@ -299,9 +291,7 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
             )
         )
         # B: 세션 2개 전부 완주 — A 집계에 *섞이면 안 됨*(user 스코핑 핵심).
-        asyncio.run(
-            _add_all(_session_row(uid_b, ended=True), _session_row(uid_b, ended=True))
-        )
+        asyncio.run(_add_all(_session_row(uid_b, ended=True), _session_row(uid_b, ended=True)))
         # A: 대화 2개 토큰 채움(100/10=10, 60/6=10) + 토큰 없는 1개(집계 제외).
         asyncio.run(
             _add_all(
@@ -414,9 +404,7 @@ def test_harness_metrics_measured_and_scoped_on_live_pg() -> None:
 def test_harness_metrics_no_data_when_empty_on_live_pg() -> None:
     """데이터 없는 user → ①③④⑤ NO_DATA·value None(가짜 0 금지)·표본 0."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     try:
@@ -465,9 +453,7 @@ def test_harness_metrics_easy_problem_avoidance_gaming_on_live_pg() -> None:
     (정답 유지) + 힌트제공(도움↓)을 적재해 verdict=gaming_suspect·사유=쉬운 문제 회피를 확인.
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     # 보정 b 하강(2.0→1.0→0.0→−1.0 = 어려움→쉬움)인 문항 4개 — started_at 순서로 갈아탄다.
@@ -477,10 +463,7 @@ def test_harness_metrics_easy_problem_avoidance_gaming_on_live_pg() -> None:
         asyncio.run(_add_all(_user(uid)))
         asyncio.run(
             _add_all(
-                *(
-                    _problem_row(p, irt_difficulty_b=b)
-                    for p, b in zip(pids, b_values, strict=True)
-                )
+                *(_problem_row(p, irt_difficulty_b=b) for p, b in zip(pids, b_values, strict=True))
             )
         )
         # 도움↓(힌트 4→3→2→1) — 도움 감소 신호.
@@ -529,9 +512,7 @@ def test_harness_metrics_calibration_brier_measured_on_live_pg() -> None:
     NULL 필터). 5 >= _MIN_CALIBRATION_SAMPLES이므로 NO_DATA가 아니라 MEASURED.
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     try:
@@ -541,17 +522,11 @@ def test_harness_metrics_calibration_brier_measured_on_live_pg() -> None:
             _add_all(
                 _calibration_attempt_row(uid, confidence=1.0, is_correct=True, order=0),
                 _calibration_attempt_row(uid, confidence=1.0, is_correct=True, order=1),
-                _calibration_attempt_row(
-                    uid, confidence=0.0, is_correct=False, order=2
-                ),
-                _calibration_attempt_row(
-                    uid, confidence=0.0, is_correct=False, order=3
-                ),
+                _calibration_attempt_row(uid, confidence=0.0, is_correct=False, order=2),
+                _calibration_attempt_row(uid, confidence=0.0, is_correct=False, order=3),
                 _calibration_attempt_row(uid, confidence=1.0, is_correct=True, order=4),
                 # confidence None — 보정 쌍 아님(둘 다 NOT NULL 필터로 제외).
-                _calibration_attempt_row(
-                    uid, confidence=None, is_correct=True, order=5
-                ),
+                _calibration_attempt_row(uid, confidence=None, is_correct=True, order=5),
             )
         )
         token = create_access_token(uid, settings=_settings())
@@ -580,9 +555,7 @@ def test_harness_metrics_transfer_score_measured_on_live_pg() -> None:
     전이 프로브 3건(P2·P3·P4)·정답률 2/3·MEASURED를 확인한다.
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     # 같은 패턴(CONDITION_LIST)을 가진 문항 4개(다른 problem_id) — 동형 시퀀스.

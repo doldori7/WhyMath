@@ -41,9 +41,7 @@ _UC_B = "UC.alg.afunction.composition"
 class _FakeMetaRow:
     """fetch_node_meta 결과 행 흉내 — concept_id·name_ko·domain·review_status 속성 접근."""
 
-    def __init__(
-        self, concept_id: str, name_ko: str, domain: str, review_status: str
-    ) -> None:
+    def __init__(self, concept_id: str, name_ko: str, domain: str, review_status: str) -> None:
         self.concept_id = concept_id
         self.name_ko = name_ko
         self.domain = domain
@@ -170,9 +168,7 @@ class TestLoadFromGraphJson:
             )
         ]
 
-    def test_ignores_description_and_formal_definition_if_present(
-        self, tmp_path: Path
-    ) -> None:
+    def test_ignores_description_and_formal_definition_if_present(self, tmp_path: Path) -> None:
         # graph.json엔 본디 없지만, *오염되어 들어와도* 메타 레코드에 유입되지 않음을 못 박는다.
         path = self._write_graph(
             tmp_path,
@@ -198,9 +194,7 @@ class TestLoadFromGraphJson:
         assert rec.name_ko == "극한"
         assert rec.review_status == "pending"
 
-    def test_loads_all_concepts_including_empty_optional_fields(
-        self, tmp_path: Path
-    ) -> None:
+    def test_loads_all_concepts_including_empty_optional_fields(self, tmp_path: Path) -> None:
         # 슬3 임베딩 로더와 달리 빈 표현 제외 없음 — 메타는 전량 적재(enrichment·게이팅 recall).
         path = self._write_graph(
             tmp_path,
@@ -258,9 +252,7 @@ class TestLoadFromGraphJson:
 class TestMissingRequiredFields:
     def _write(self, tmp_path: Path, concept: dict[str, object]) -> Path:
         path = tmp_path / "graph.json"
-        path.write_text(
-            json.dumps({"concepts": [concept]}, ensure_ascii=False), encoding="utf-8"
-        )
+        path.write_text(json.dumps({"concepts": [concept]}, ensure_ascii=False), encoding="utf-8")
         return path
 
     def test_skips_when_name_ko_missing(self, tmp_path: Path) -> None:
@@ -375,9 +367,7 @@ class TestFetchNodeMeta:
         assert engine.executed == []  # 빈 입력 → 쿼리 생략
 
     def test_fetch_builds_in_query_with_safe_fields(self) -> None:
-        engine = _FakeEngine(
-            fetch_rows=[_FakeMetaRow(_UC_A, "극한", "[고]미적분", "reviewed")]
-        )
+        engine = _FakeEngine(fetch_rows=[_FakeMetaRow(_UC_A, "극한", "[고]미적분", "reviewed")])
         result = fetch_node_meta([_UC_A, _UC_B], engine=engine)  # type: ignore[arg-type]
         compiled = _compile(engine.executed[0])
         # IN 조회·안전 필드 SELECT·본문 미조회.
@@ -388,9 +378,7 @@ class TestFetchNodeMeta:
         assert "formal_definition" not in compiled
         # 결과 dict는 UC 키 → ConceptNodeMeta.
         assert result == {
-            _UC_A: ConceptNodeMeta(
-                name_ko="극한", domain="[고]미적분", review_status="reviewed"
-            )
+            _UC_A: ConceptNodeMeta(name_ko="극한", domain="[고]미적분", review_status="reviewed")
         }
 
     def test_missing_uc_absent_from_result(self) -> None:

@@ -134,9 +134,7 @@ def _patch_meta(
 # ① 좌석 흐름 — query 임베딩→search→메타 enrich→ConceptSearchHit 랭킹 반환
 # ──────────────────────────────────────────────────────────────────────────
 class TestSearchFlow:
-    def test_returns_ranked_hits_from_search(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_returns_ranked_hits_from_search(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # search가 거리 오름차순(=유사도 내림차순)으로 돌려주는 행을 그대로 ConceptSearchHit로.
         _patch_meta(monkeypatch)  # enrichment 없음 — 메타 None
         rows = [_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.25)]
@@ -175,9 +173,7 @@ class TestSearchFlow:
         )
         assert seen == [["합성함수"]]  # 정확히 질의 1건만 임베딩
 
-    def test_empty_search_result_is_empty_list(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_empty_search_result_is_empty_list(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 적재 행 없음(또는 같은 공간 행 없음)이면 빈 리스트(정직 — 매칭 없음). 메타 조회 생략.
         captured = _patch_meta(monkeypatch)
         index, _engine = _index_with_rows([])
@@ -192,9 +188,7 @@ class TestSearchFlow:
         # hits가 비면 메타 조회도 안 한다(early return).
         assert "concept_ids" not in captured
 
-    def test_null_distance_is_zero_similarity(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_null_distance_is_zero_similarity(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch_meta(monkeypatch)
         index, _engine = _index_with_rows([_FakeRow(_UC_A, None)])
         hits = search_concepts(
@@ -211,9 +205,7 @@ class TestSearchFlow:
 # ② top_k 경계 — top_k<=0이면 빈 리스트(search·임베딩 미실행)
 # ──────────────────────────────────────────────────────────────────────────
 class TestTopKBoundary:
-    def test_top_k_zero_returns_empty_without_search(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_top_k_zero_returns_empty_without_search(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch_meta(monkeypatch)
         index, engine = _index_with_rows([_FakeRow(_UC_A, 0.0)])
         assert (
@@ -228,9 +220,7 @@ class TestTopKBoundary:
         )
         assert engine.executed == []
 
-    def test_negative_top_k_returns_empty(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_negative_top_k_returns_empty(self, monkeypatch: pytest.MonkeyPatch) -> None:
         _patch_meta(monkeypatch)
         index, engine = _index_with_rows([_FakeRow(_UC_A, 0.0)])
         assert (
@@ -274,9 +264,7 @@ class TestMemoryModeGraceful:
             def embed(self, texts: Sequence[str]) -> list[list[float]]:
                 raise AssertionError("memory 모드에서 embed가 호출되면 안 된다")
 
-        hits = search_concepts(
-            "q", top_k=5, provider=_ExplodingProvider(), settings=Settings()
-        )
+        hits = search_concepts("q", top_k=5, provider=_ExplodingProvider(), settings=Settings())
         assert hits == []
 
 
@@ -310,16 +298,10 @@ class TestProviderSpaceIdentity:
 # ⑤ enrichment — concept_node 메타를 hit에 붙임·미적재 UC는 None graceful
 # ──────────────────────────────────────────────────────────────────────────
 class TestEnrichment:
-    def test_enriches_hits_with_node_meta(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_enriches_hits_with_node_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
         meta = {
-            _UC_A: ConceptNodeMeta(
-                name_ko="극한", domain="[고]미적분", review_status="reviewed"
-            ),
-            _UC_B: ConceptNodeMeta(
-                name_ko="합성함수", domain="[고]대수", review_status="pending"
-            ),
+            _UC_A: ConceptNodeMeta(name_ko="극한", domain="[고]미적분", review_status="reviewed"),
+            _UC_B: ConceptNodeMeta(name_ko="합성함수", domain="[고]대수", review_status="pending"),
         }
         captured = _patch_meta(monkeypatch, meta)
         index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.2)])
@@ -350,13 +332,9 @@ class TestEnrichment:
         assert captured["concept_ids"] == [_UC_A, _UC_B]
         assert captured["engine"] is index._engine
 
-    def test_missing_meta_is_none_graceful(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_missing_meta_is_none_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # concept_node에 _UC_B 메타가 없으면(적재 누락) None으로 채운다(검색 계속·graceful).
-        meta = {
-            _UC_A: ConceptNodeMeta(name_ko="극한", domain="d", review_status="reviewed")
-        }
+        meta = {_UC_A: ConceptNodeMeta(name_ko="극한", domain="d", review_status="reviewed")}
         _patch_meta(monkeypatch, meta)
         index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.2)])
         hits = search_concepts(
@@ -378,16 +356,10 @@ class TestEnrichment:
 # ⑥ 검수 게이팅(reviewed_only) — reviewed만 통과·메타 없음 제외·정렬 유지
 # ──────────────────────────────────────────────────────────────────────────
 class TestReviewedOnlyGating:
-    def test_reviewed_only_filters_pending(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_reviewed_only_filters_pending(self, monkeypatch: pytest.MonkeyPatch) -> None:
         meta = {
-            _UC_A: ConceptNodeMeta(
-                name_ko="극한", domain="d", review_status="reviewed"
-            ),
-            _UC_B: ConceptNodeMeta(
-                name_ko="합성함수", domain="d", review_status="pending"
-            ),
+            _UC_A: ConceptNodeMeta(name_ko="극한", domain="d", review_status="reviewed"),
+            _UC_B: ConceptNodeMeta(name_ko="합성함수", domain="d", review_status="pending"),
         }
         _patch_meta(monkeypatch, meta)
         index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.2)])
@@ -403,13 +375,9 @@ class TestReviewedOnlyGating:
         assert [h.concept_id for h in hits] == [_UC_A]
         assert hits[0].review_status == "reviewed"
 
-    def test_reviewed_only_excludes_missing_meta(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_reviewed_only_excludes_missing_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 메타가 없어 reviewed 확인 불가인 UC는 gated 모드에서 보수적으로 제외(정직).
-        meta = {
-            _UC_A: ConceptNodeMeta(name_ko="극한", domain="d", review_status="reviewed")
-        }
+        meta = {_UC_A: ConceptNodeMeta(name_ko="극한", domain="d", review_status="reviewed")}
         _patch_meta(monkeypatch, meta)
         index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.2)])
         hits = search_concepts(
@@ -424,9 +392,7 @@ class TestReviewedOnlyGating:
 
     def test_default_keeps_all_recall(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 기본 reviewed_only=False면 pending·메타 없음도 모두 노출(recall 보존).
-        meta = {
-            _UC_A: ConceptNodeMeta(name_ko="극한", domain="d", review_status="pending")
-        }
+        meta = {_UC_A: ConceptNodeMeta(name_ko="극한", domain="d", review_status="pending")}
         _patch_meta(monkeypatch, meta)
         index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.2)])
         hits = search_concepts(

@@ -108,9 +108,7 @@ class TestRecommendPrerequisiteCoaching:
 
     def test_display_name_fallback_concept_name(self) -> None:
         """name_ko 없으면 concept_name으로 fallback(둘 다 안전 표시 필드)."""
-        trig = recommend_prerequisite_coaching(
-            [_gap(name_ko=None, concept_name="대체개념명")]
-        )
+        trig = recommend_prerequisite_coaching([_gap(name_ko=None, concept_name="대체개념명")])
         assert trig is not None
         assert "대체개념명" in trig.prompt
 
@@ -141,9 +139,7 @@ class TestRecommendPrerequisiteCoaching:
     def test_deterministic(self) -> None:
         """동일 입력 → 동일 출력(순수·결정론)."""
         gaps = [_gap(name_ko="일차함수", weakness=0.2)]
-        assert recommend_prerequisite_coaching(gaps) == recommend_prerequisite_coaching(
-            gaps
-        )
+        assert recommend_prerequisite_coaching(gaps) == recommend_prerequisite_coaching(gaps)
 
 
 class TestCoachingFocusExhaustiveness:
@@ -162,6 +158,4 @@ class TestCoachingFocusExhaustiveness:
 
     def test_prerequisite_review_socratic_is_clarification(self) -> None:
         """prerequisite_review 정적 매핑 == CLARIFICATION(기초 지향)."""
-        assert (
-            _SOCRATIC_BY_FOCUS["prerequisite_review"] == SocraticCategory.CLARIFICATION
-        )
+        assert _SOCRATIC_BY_FOCUS["prerequisite_review"] == SocraticCategory.CLARIFICATION

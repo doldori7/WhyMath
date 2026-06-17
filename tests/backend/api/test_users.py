@@ -122,9 +122,7 @@ class TestPatchMe:
         minor_birth_year = datetime.now(tz=timezone.utc).year - 8  # 연나이 8 ≤ 14
         user = _user(is_minor=False)  # 기존값은 False지만 birth_year로 덮어써져야 함
         fake = FakeSession()
-        resp = _client(user, fake).patch(
-            "/v1/users/me", json={"birth_year": minor_birth_year}
-        )
+        resp = _client(user, fake).patch("/v1/users/me", json={"birth_year": minor_birth_year})
         assert resp.status_code == 200, resp.text
         assert resp.json()["birth_year"] == minor_birth_year
         assert resp.json()["is_minor"] is True
@@ -181,9 +179,7 @@ class TestPatchMe:
         fake = FakeSession()
         client = _client(user, fake)
         etag = client.get("/v1/users/me").headers["ETag"]
-        resp = client.patch(
-            "/v1/users/me", json={"nickname": "새닉"}, headers={"If-Match": etag}
-        )
+        resp = client.patch("/v1/users/me", json={"nickname": "새닉"}, headers={"If-Match": etag})
         assert resp.status_code == 200
 
     def test_invalid_value_for_whitelisted_field_422(self) -> None:

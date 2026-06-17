@@ -278,7 +278,7 @@ class TestLazyConstruction:
 
     def test_resolved_settings_falls_back_to_global(self) -> None:
         """settings 미주입 시 전역 get_settings()로 폴백한다."""
-        from whymath_backend.config import Settings as _S
+        from whymath_backend.config import Settings as _S  # noqa: N814
         from whymath_backend.config import get_settings
 
         get_settings.cache_clear()

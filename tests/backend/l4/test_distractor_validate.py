@@ -102,9 +102,7 @@ class TestValidateDistractorMap:
         errors = validate_distractor_map(
             [
                 DistractorEntry(choice_index=1, misconception_id="unknown-a"),
-                DistractorEntry(
-                    choice_index=2, misconception_id=_VALID_MIS, op_code="unknown-op"
-                ),
+                DistractorEntry(choice_index=2, misconception_id=_VALID_MIS, op_code="unknown-op"),
                 DistractorEntry(choice_index=3, misconception_id="mean-vs-median"),  # 정합
             ]
         )
@@ -115,11 +113,7 @@ class TestValidateDistractorMap:
     def test_mismatch_skips_when_op_code_unknown(self) -> None:
         """op_code 자체가 미등록이면 정합(③)은 평가하지 않고 ② 한 건만 보고(중복 회피)."""
         errors = validate_distractor_map(
-            [
-                DistractorEntry(
-                    choice_index=1, misconception_id=_VALID_MIS, op_code="ghost-op"
-                )
-            ]
+            [DistractorEntry(choice_index=1, misconception_id=_VALID_MIS, op_code="ghost-op")]
         )
         assert len(errors) == 1
         assert "미등록 op_code" in errors[0]
@@ -135,6 +129,4 @@ class TestRaiseForDistractorMap:
     def test_invalid_raises_value_error(self) -> None:
         """위반 시 ValueError(fail-loud 게이트) — 모든 위반을 한 메시지로."""
         with pytest.raises(ValueError, match="참조 무결성 위반"):
-            raise_for_distractor_map(
-                [DistractorEntry(choice_index=1, misconception_id="nope")]
-            )
+            raise_for_distractor_map([DistractorEntry(choice_index=1, misconception_id="nope")])

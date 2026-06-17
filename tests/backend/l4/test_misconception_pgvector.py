@@ -121,9 +121,7 @@ def _fake_pg_index(
 class TestSyncDatabaseUrl:
     def test_driver_swapped_to_psycopg(self) -> None:
         s = Settings(database_url="postgresql+asyncpg://whymath@127.0.0.1:5432/whymath")
-        assert (
-            s.sync_database_url == "postgresql+psycopg://whymath@127.0.0.1:5432/whymath"
-        )
+        assert s.sync_database_url == "postgresql+psycopg://whymath@127.0.0.1:5432/whymath"
 
     def test_credentials_and_port_preserved(self) -> None:
         # 자격증명(유저·패스워드)·포트·DB명 보존, 드라이버만 교체. 패스워드 인코딩(%40=@) 유지.
@@ -175,9 +173,7 @@ class TestVectorStoreFactory:
         )
         idx.add("k", [1.0, 0.0])
         # psycopg(연결 드라이버)는 memory add로 로드되지 않는다.
-        assert (
-            "psycopg" not in sys.modules or True
-        )  # 존재 여부는 환경 의존 — add가 안 깨짐이 핵심
+        assert "psycopg" not in sys.modules or True  # 존재 여부는 환경 의존 — add가 안 깨짐이 핵심
         assert len(idx.search([1.0, 0.0], top_k=1)) == 1
 
 

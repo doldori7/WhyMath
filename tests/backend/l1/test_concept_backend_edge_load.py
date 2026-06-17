@@ -74,11 +74,7 @@ class _FakeConnection:
         self._engine.executed.append(statement)
         # code→UUID 조회(SELECT concept.code, concept.concept_id)면 맵 행을 돌려준다.
         compiled = str(statement.compile(dialect=_pg_dialect()))  # type: ignore[attr-defined]
-        if (
-            "SELECT" in compiled
-            and "concept.code" in compiled
-            and "INSERT" not in compiled
-        ):
+        if "SELECT" in compiled and "concept.code" in compiled and "INSERT" not in compiled:
             return _FakeResult(self._engine.code_rows)
         return _FakeResult([])
 
@@ -344,9 +340,7 @@ class TestUpsertStatement:
 class TestPopulate:
     def test_populate_counts_loaded_excluding_orphans(self) -> None:
         store, _ = _fake_store()
-        count = populate_backend_edges(
-            [_record(), _record(dst=_NID_ORPHAN)], store=store
-        )
+        count = populate_backend_edges([_record(), _record(dst=_NID_ORPHAN)], store=store)
         assert count == 1  # orphan 1건 제외
 
     def test_populate_empty_is_noop(self) -> None:
@@ -359,9 +353,7 @@ class TestPopulate:
         records = [_record()]
         populate_backend_edges(records, store=store)
         populate_backend_edges(records, store=store)
-        inserts = [
-            s for s in engine.executed if "INSERT INTO concept_edge" in _compile(s)
-        ]
+        inserts = [s for s in engine.executed if "INSERT INTO concept_edge" in _compile(s)]
         assert len(inserts) == 2
         for stmt in inserts:
             assert "ON CONFLICT" in _compile(stmt)

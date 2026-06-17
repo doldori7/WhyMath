@@ -97,9 +97,7 @@ async def _cleanup(user_id: uuid.UUID) -> None:
 
 
 def _sign(secret: str, device_id: str) -> str:
-    return hmac.new(
-        secret.encode("utf-8"), device_id.encode("utf-8"), sha256
-    ).hexdigest()
+    return hmac.new(secret.encode("utf-8"), device_id.encode("utf-8"), sha256).hexdigest()
 
 
 def test_pg_device_store_roundtrip_on_live_pg() -> None:
@@ -378,9 +376,7 @@ def test_ping_health_succeeds_on_live_pg_and_redis() -> None:
         pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
 
     settings_pg = Settings(jwt_secret_key=SecretStr(_SECRET), device_store_mode="pg")
-    settings_cached = Settings(
-        jwt_secret_key=SecretStr(_SECRET), device_store_mode="pg_cached"
-    )
+    settings_cached = Settings(jwt_secret_key=SecretStr(_SECRET), device_store_mode="pg_cached")
 
     # pg 모드 — PG ping만
     asyncio.run(ping_device_store_health(settings_pg))
@@ -571,9 +567,7 @@ def test_pg_list_for_user_seq_tiebreak_parity_on_live_pg() -> None:
                 desc_ids = [i.device_id for i in await store.list_for_user(uid)]
                 assert desc_ids == [d3, d2, d1], desc_ids
                 # asc면 seq ASC = 먼저 등록(d1) 먼저
-                asc_ids = [
-                    i.device_id for i in await store.list_for_user(uid, order_dir="asc")
-                ]
+                asc_ids = [i.device_id for i in await store.list_for_user(uid, order_dir="asc")]
                 assert asc_ids == [d1, d2, d3], asc_ids
                 # last_used_at 전부 NULL(미verify) → null 그룹은 *방향 무관* 등록순(seq ASC)
                 null_ids = [

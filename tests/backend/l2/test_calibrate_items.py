@@ -44,12 +44,8 @@ class TestCli:
             disposed["yes"] = True
 
         # get_sessionmaker는 호출 시 async-CM 세션을 주는 팩토리(_FakeSession 클래스)를 반환.
-        monkeypatch.setattr(
-            calibrate_items, "get_sessionmaker", lambda settings=None: _FakeSession
-        )
-        monkeypatch.setattr(
-            calibrate_items, "calibrate_item_difficulties", _fake_calibrate
-        )
+        monkeypatch.setattr(calibrate_items, "get_sessionmaker", lambda settings=None: _FakeSession)
+        monkeypatch.setattr(calibrate_items, "calibrate_item_difficulties", _fake_calibrate)
         monkeypatch.setattr(calibrate_items, "dispose_engine", _fake_dispose)
 
         assert calibrate_items.main([]) == 0

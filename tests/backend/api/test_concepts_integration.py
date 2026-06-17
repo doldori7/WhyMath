@@ -93,9 +93,7 @@ async def _delete_concepts_and_edges(concept_ids: list[uuid.UUID]) -> None:
 def test_concept_edges_nested_read_on_live_pg() -> None:
     """GET /concepts/{id}/edges가 outgoing 엣지를 실 PG에서 반환·방향·404 검증."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     suffix = uuid.uuid4().hex[:8]
     ids: list[str] = []
@@ -132,9 +130,7 @@ def test_concept_edges_nested_read_on_live_pg() -> None:
 def test_concept_crud_roundtrip_on_live_pg() -> None:
     """POST→GET→중복(409)→목록이 실 PG에서 HTTP→get_session→PG로 왕복한다."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     code = f"TEST-CONCEPT-{uuid.uuid4().hex[:8]}"
     body = {"code": code, "name_ko": "통합테스트 개념", "level": "세부개념"}
@@ -169,9 +165,7 @@ def test_concept_crud_roundtrip_on_live_pg() -> None:
 def test_concept_patch_delete_roundtrip_on_live_pg() -> None:
     """POST→PATCH(부분수정)→GET(반영확인)→DELETE(204)→GET(404)이 실 PG에서 왕복."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     code = f"TEST-PATCH-{uuid.uuid4().hex[:8]}"
     concept_id: str | None = None
@@ -183,17 +177,13 @@ def test_concept_patch_delete_roundtrip_on_live_pg() -> None:
             ).json()["concept_id"]
 
             # PATCH: name_en만 추가(부분 수정), 병합 재검증
-            patched = client.patch(
-                f"/v1/concepts/{concept_id}", json={"name_en": "Patched"}
-            )
+            patched = client.patch(f"/v1/concepts/{concept_id}", json={"name_en": "Patched"})
             assert patched.status_code == 200, patched.text
             assert patched.json()["name_en"] == "Patched"
             assert patched.json()["name_ko"] == "원본"  # 기존 필드 보존
 
             # GET으로 영속 반영 확인
-            assert (
-                client.get(f"/v1/concepts/{concept_id}").json()["name_en"] == "Patched"
-            )
+            assert client.get(f"/v1/concepts/{concept_id}").json()["name_en"] == "Patched"
 
             # DELETE → 204, 이후 GET → 404
             assert client.delete(f"/v1/concepts/{concept_id}").status_code == 204
@@ -207,9 +197,7 @@ def test_concept_patch_delete_roundtrip_on_live_pg() -> None:
 def test_concept_optimistic_lock_on_live_pg() -> None:
     """GET ETag로 PATCH→200·ETag 갱신→옛 ETag 재PATCH→412(동시수정 차단)."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     code = f"TEST-LOCK-{uuid.uuid4().hex[:8]}"
     concept_id: str | None = None
@@ -248,9 +236,7 @@ def test_concept_optimistic_lock_on_live_pg() -> None:
 def test_concept_conditional_get_304_on_live_pg() -> None:
     """GET ETag→If-None-Match로 GET→304→PATCH 변경 후 옛 ETag→200(내용 바뀜)."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     code = f"TEST-INM-{uuid.uuid4().hex[:8]}"
     concept_id: str | None = None
@@ -262,17 +248,13 @@ def test_concept_conditional_get_304_on_live_pg() -> None:
             etag = client.get(f"/v1/concepts/{concept_id}").headers["ETag"]
 
             # 변하지 않았으면 304(빈 본문)
-            not_mod = client.get(
-                f"/v1/concepts/{concept_id}", headers={"If-None-Match": etag}
-            )
+            not_mod = client.get(f"/v1/concepts/{concept_id}", headers={"If-None-Match": etag})
             assert not_mod.status_code == 304
             assert not_mod.content == b""
 
             # PATCH로 내용 변경 → 옛 ETag로 조건부 GET은 이제 200(본문)
             client.patch(f"/v1/concepts/{concept_id}", json={"name_en": "Changed"})
-            refetched = client.get(
-                f"/v1/concepts/{concept_id}", headers={"If-None-Match": etag}
-            )
+            refetched = client.get(f"/v1/concepts/{concept_id}", headers={"If-None-Match": etag})
             assert refetched.status_code == 200
             assert refetched.json()["name_en"] == "Changed"
     finally:

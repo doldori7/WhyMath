@@ -44,7 +44,8 @@ class TestEmptySpec:
 
     @pytest.mark.parametrize("vtype", list(VisualizationType))
     def test_visualization_empty_spec_ok(self, vtype: VisualizationType) -> None:
-        """Visualization(type=...) 기본 spec={} 통과(animation은 슬90 불변식상 interactive=False)."""
+        """Visualization(type=...) 기본 spec={} 통과
+        (animation은 슬90 불변식상 interactive=False)."""
         interactive = vtype != VisualizationType.animation_prerendered
         v = Visualization(type=vtype, interactive=interactive)
         assert v.spec == {}
@@ -59,9 +60,7 @@ class TestValidSpecs:
             {
                 "function": "a*x**2",
                 "domain": [-3, 3],
-                "parameters": [
-                    {"name": "a", "min": -5, "max": 5, "step": 0.1, "default": 1}
-                ],
+                "parameters": [{"name": "a", "min": -5, "max": 5, "step": 0.1, "default": 1}],
             }
         )
         assert s.function == "a*x**2"

@@ -9,7 +9,6 @@ enum values_callable / schema↔ORM 변환 roundtrip.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.schema import CreateTable

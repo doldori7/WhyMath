@@ -125,7 +125,8 @@ async def test_concept_not_found_returns_none() -> None:
 
 @pytest.mark.asyncio
 async def test_learner_context_snapshot_carried() -> None:
-    """learner_context에 진단 스냅샷(mastery·theta) 운반·active_hypothesis_ids 빈 목록(프로브 미생성)."""
+    """learner_context에 진단 스냅샷(mastery·theta) 운반
+    ·active_hypothesis_ids 빈 목록(프로브 미생성)."""
     provider = _FakeProvider(_VALID_JSON)
     session = _FakeSession(_FakeConceptOrm(_concept()))
     scene = await scene_for_concept_diagnosis(

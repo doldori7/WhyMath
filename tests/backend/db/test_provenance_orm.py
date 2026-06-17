@@ -53,7 +53,8 @@ def test_provenance_orm_tablenames() -> None:
 # 2) PG DDL 컴파일
 # ──────────────────────────────────────────────────────────────────────────
 def test_content_provenance_ddl_compiles() -> None:
-    """ContentProvenance DDL에 JSONB·source_type_enum·license_enum·generation_type_enum·UUID 포함."""
+    """ContentProvenance DDL에 JSONB·source_type_enum·license_enum
+    ·generation_type_enum·UUID 포함."""
     ddl = _pg_ddl(OrmContentProvenance.__table__)
     assert "JSONB" in ddl  # original_reference·transformation 등
     assert "source_type_enum" in ddl  # original_source (problem과 enum 타입 공유)

@@ -42,9 +42,7 @@ def test_expired_token_raises_jwterror() -> None:
 
 
 def test_wrong_secret_raises_jwterror() -> None:
-    token = create_access_token(
-        uuid.uuid4(), settings=_settings("secret-aaaaaaaaaaaaaaaa")
-    )
+    token = create_access_token(uuid.uuid4(), settings=_settings("secret-aaaaaaaaaaaaaaaa"))
     with pytest.raises(JWTError):
         decode_access_token(token, settings=_settings("secret-bbbbbbbbbbbbbbbb"))
 

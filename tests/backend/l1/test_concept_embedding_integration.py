@@ -165,9 +165,7 @@ class TestUpsertIdempotency:
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     n = conn.execute(
-                        text(
-                            "SELECT count(*) FROM concept_embedding WHERE concept_id = :k"
-                        ),
+                        text("SELECT count(*) FROM concept_embedding WHERE concept_id = :k"),
                         {"k": key},
                     ).scalar_one()
                 assert n == 1  # PK upsert — 행 1개(멱등)

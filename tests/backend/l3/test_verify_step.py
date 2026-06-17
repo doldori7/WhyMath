@@ -46,7 +46,8 @@ class TestIncorrect:
     """대수 거짓 증명 → incorrect(evidence_weight 1.0·reason 채워짐).
 
     incorrect 조건: ⓐ 차이가 *0이 아님 확정*(is_zero is False·상수 차 등) 또는 ⓑ *같은 자유변수*의
-    0-아닌 다항식(예: freshman's dream (a+b)²≠a²+b²). 변수 집합이 다른 치환은 unverifiable(오판 회피).
+    0-아닌 다항식(예: freshman's dream (a+b)²≠a²+b²).
+    변수 집합이 다른 치환은 unverifiable(오판 회피).
     """
 
     def test_symbolic_constant_diff_is_incorrect(self) -> None:
@@ -68,7 +69,8 @@ class TestIncorrect:
 
     def test_freshman_dream_is_incorrect(self) -> None:
         # (a+b)² vs a²+b² — 차이 2ab는 *같은 자유변수 {a,b}*의 0-아닌 다항식이라 항등식 아님이
-        # 증명된다(a=b=1에서 4≠2). 가장 흔한 대수 오류 → incorrect(unverifiable로 약하게 넘기지 않음).
+        # 증명된다(a=b=1에서 4≠2).
+        # 가장 흔한 대수 오류 → incorrect(unverifiable로 약하게 넘기지 않음).
         result = verify_step("(a+b)^2", "a^2+b^2")
         assert result.state == VerifyStepState.incorrect
         assert result.evidence_weight == 1.0
@@ -76,7 +78,8 @@ class TestIncorrect:
 
     def test_substitution_different_symbols_is_unverifiable(self) -> None:
         # a vs b+1 — before{a}·after{b}로 변수 집합이 달라(치환·a가 b+1로 정의됐을 수 있음) 맥락을
-        # 모른다 → 거짓 incorrect를 *회피*하고 보수적 unverifiable(정확성 #1 — 올바른 단계 오판 금지).
+        # 모른다 → 거짓 incorrect를 *회피*하고 보수적 unverifiable
+        # (정확성 #1 — 올바른 단계 오판 금지).
         result = verify_step("a", "b+1")
         assert result.state == VerifyStepState.unverifiable
         assert result.evidence_weight == 0.5

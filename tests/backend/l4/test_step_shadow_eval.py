@@ -21,9 +21,7 @@ from whymath_backend.l4.step_shadow_eval import (
 )
 
 # 배포 시드 코퍼스(repo 루트 data/corpus/) — 테스트는 src/backend에서 돌지만 파일은 루트에 있다.
-_SEED = (
-    Path(__file__).resolve().parents[3] / "data" / "corpus" / "step_break_ab_seed_v1.jsonl"
-)
+_SEED = Path(__file__).resolve().parents[3] / "data" / "corpus" / "step_break_ab_seed_v1.jsonl"
 
 
 def _label(
@@ -58,8 +56,7 @@ class TestLoadLabels:
 
     def test_invalid_json_raises_with_line_number(self) -> None:
         text = (
-            '{"solset_before": "{3}", "solset_after": "{4}", "human_label": "A"}\n'
-            "{ not json }\n"
+            '{"solset_before": "{3}", "solset_after": "{4}", "human_label": "A"}\n' "{ not json }\n"
         )
         with pytest.raises(ValueError, match="line 2"):
             load_labels(text)

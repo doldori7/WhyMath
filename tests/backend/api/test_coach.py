@@ -256,15 +256,11 @@ class TestCoachingFocusSeed:
         }
         client = _client()
         for focus, expected in cases.items():
-            resp = client.post(
-                "/v1/coach", json={"student_input": "음", "coaching_focus": focus}
-            )
+            resp = client.post("/v1/coach", json={"student_input": "음", "coaching_focus": focus})
             assert resp.json()["entry_socratic_category"] == expected, focus
 
     def test_invalid_focus_rejected_422(self) -> None:
-        resp = _client().post(
-            "/v1/coach", json={"student_input": "음", "coaching_focus": "bogus"}
-        )
+        resp = _client().post("/v1/coach", json={"student_input": "음", "coaching_focus": "bogus"})
         assert resp.status_code == 422
 
     def test_session_create_includes_entry_category(self) -> None:
@@ -337,9 +333,7 @@ class TestLthcIntegration:
 
     def test_bkt_mastery_derives_level(self) -> None:
         """slice 25: mastery_level 미지정·BKT 숙달(0.1) → '초보'로 환산해 LTHC 도출."""
-        resp = _client().post(
-            "/v1/coach", json={"student_input": "음", "bkt_mastery": 0.1}
-        )
+        resp = _client().post("/v1/coach", json={"student_input": "음", "bkt_mastery": 0.1})
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["lthc"] is not None
@@ -359,9 +353,7 @@ class TestLthcIntegration:
         assert resp.json()["lthc"] is None
 
     def test_bkt_mastery_out_of_range_422(self) -> None:
-        resp = _client().post(
-            "/v1/coach", json={"student_input": "음", "bkt_mastery": 1.5}
-        )
+        resp = _client().post("/v1/coach", json={"student_input": "음", "bkt_mastery": 1.5})
         assert resp.status_code == 422
 
 
@@ -396,9 +388,7 @@ class TestSolutionCoachingWiring:
 
     def test_korean_prose_slip_surfaces_verify(self) -> None:
         # slice 54 — 한국어 풀이("계산하면 2 + 3 = 6 입니다")의 슬립도 검출.
-        resp = _client().post(
-            "/v1/coach", json={"student_input": "계산하면 2 + 3 = 6 입니다"}
-        )
+        resp = _client().post("/v1/coach", json={"student_input": "계산하면 2 + 3 = 6 입니다"})
         sc = resp.json()["solution_coaching"]
         assert sc is not None
         assert sc["trigger"]["focus"] == "verify"
@@ -450,9 +440,7 @@ class TestSolutionCoachingWiring:
         assert sc is not None
         assert sc["trigger"]["focus_step_index"] is None
 
-    def test_step_shadow_not_exposed_in_response(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_step_shadow_not_exposed_in_response(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # slice 63 — 코칭도 생기고(대수 슬립) shadow도 검출되는("이므로"·해 {3}≠{5}) 입력에서,
         # 게이트가 켜져 관측이 돌아도 HTTP 응답엔 step 신호 *부재*(비노출). observe_step_breaks는
         # 실 get_settings()를 보므로 env+cache_clear로 게이트를 켠다.
@@ -486,9 +474,7 @@ class TestSolutionCoachingWiring:
 
     def test_question_no_solution_coaching(self) -> None:
         # 수식 없는 질문 → 검증기 보수적 → None(false-positive 0).
-        resp = _client().post(
-            "/v1/coach", json={"student_input": "이거 어떻게 풀어요?"}
-        )
+        resp = _client().post("/v1/coach", json={"student_input": "이거 어떻게 풀어요?"})
         assert resp.json()["solution_coaching"] is None
 
     def test_empty_input_no_solution_coaching(self) -> None:
@@ -863,9 +849,7 @@ class TestServerMastery:
         }
         return client.post("/v1/coach/sessions", json=body)
 
-    def test_server_mastery_overrides_client_bkt(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_server_mastery_overrides_client_bkt(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 서버 0.9(숙달) — 클라가 0.1(초보)을 보내도 서버값으로 hint 보수화(2→1).
         async def _fake(session: Any, user_id: Any, problem_id: Any) -> float | None:
             return 0.9
@@ -876,9 +860,7 @@ class TestServerMastery:
         assert resp.status_code == 201, resp.text
         assert resp.json()["decision"]["hint_level"] == 1
 
-    def test_no_server_mastery_falls_back_to_client(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_no_server_mastery_falls_back_to_client(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 서버 None(개념/이력 없음) → 클라 0.1(초보) 사용 → slice 77: 초보 강화 hint 3.
         async def _fake(session: Any, user_id: Any, problem_id: Any) -> float | None:
             return None
@@ -888,9 +870,7 @@ class TestServerMastery:
         resp = self._post(client, bkt_mastery=0.1)
         assert resp.json()["decision"]["hint_level"] == 3
 
-    def test_gate_off_skips_server_lookup(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_gate_off_skips_server_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 게이트 off → 서버조회 skip → 클라 0.1(초보) → slice 77: 초보 강화 hint 3.
         monkeypatch.setenv("WHYMATH_L4_SERVER_MASTERY_ENABLED", "false")
         get_settings.cache_clear()
@@ -901,9 +881,7 @@ class TestServerMastery:
         finally:
             get_settings.cache_clear()
 
-    def test_server_mastery_not_exposed_in_decision(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_server_mastery_not_exposed_in_decision(self, monkeypatch: pytest.MonkeyPatch) -> None:
         async def _fake(session: Any, user_id: Any, problem_id: Any) -> float | None:
             return 0.9
 
@@ -950,17 +928,13 @@ class TestServerMasteryHelper:
         row = ConceptMasteryHistory(mastery=0.9)
         # execute#1=PRIMARY 개념 [cid] → #2=그 개념 최신 측정 row
         fake = _MasteryQueueSession([_MasteryQR([cid]), _MasteryQR([row])])
-        m = await coach._server_mastery_for(
-            cast(AsyncSession, fake), _UID, uuid.uuid4()
-        )
+        m = await coach._server_mastery_for(cast(AsyncSession, fake), _UID, uuid.uuid4())
         assert m == 0.9
 
     async def test_none_when_no_concept_mapping(self) -> None:
         # PRIMARY·TESTED 모두 없음 → 개념 None → 숙달도 조회 안 함·None.
         fake = _MasteryQueueSession([_MasteryQR([]), _MasteryQR([])])
-        m = await coach._server_mastery_for(
-            cast(AsyncSession, fake), _UID, uuid.uuid4()
-        )
+        m = await coach._server_mastery_for(cast(AsyncSession, fake), _UID, uuid.uuid4())
         assert m is None
 
 
@@ -1000,9 +974,7 @@ class TestServerTheta:
         monkeypatch.setattr("whymath_backend.api.coach._server_mastery_for", _fm)
         monkeypatch.setattr("whymath_backend.api.coach._server_theta_for", _ft)
 
-    def test_high_theta_low_bkt_surfaces_consolidate(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_high_theta_low_bkt_surfaces_consolidate(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # θ=2.0(proxy≈0.88)·BKT=0.1 → diff>0.2 → consolidate(추측 의심) 노출.
         self._patch(monkeypatch, mastery=0.1, theta=2.0)
         client, _ = _session_client()
@@ -1013,9 +985,7 @@ class TestServerTheta:
         assert sc["trigger"]["focus"] == "consolidate"
         assert sc["arithmetic_error"] is False
 
-    def test_low_theta_high_bkt_surfaces_retrieval(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_low_theta_high_bkt_surfaces_retrieval(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # θ=-2.0(proxy≈0.12)·BKT=0.9 → diff<-0.2 → retrieval(망각 의심) 노출.
         self._patch(monkeypatch, mastery=0.9, theta=-2.0)
         client, _ = _session_client()
@@ -1023,25 +993,19 @@ class TestServerTheta:
         assert sc is not None
         assert sc["trigger"]["focus"] == "retrieval"
 
-    def test_consensus_advance_not_surfaced(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_consensus_advance_not_surfaced(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # θ=2.0(proxy≈0.88)·BKT=0.9 → 합의(diff 작음)·수준 높음 → advance → 비노출(LTHC 담당).
         self._patch(monkeypatch, mastery=0.9, theta=2.0)
         client, _ = _session_client()
         assert self._post(client).json()["solution_coaching"] is None
 
-    def test_consensus_foundation_not_surfaced(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_consensus_foundation_not_surfaced(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # θ=-2.0(proxy≈0.12)·BKT=0.1 → 합의·수준 낮음 → foundation → 비노출.
         self._patch(monkeypatch, mastery=0.1, theta=-2.0)
         client, _ = _session_client()
         assert self._post(client).json()["solution_coaching"] is None
 
-    def test_no_theta_diagnose_not_surfaced(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_no_theta_diagnose_not_surfaced(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # θ None(스냅샷 없음) → 교차검증 불가 → diagnose → 비노출(기존 동작·하위호환).
         self._patch(monkeypatch, mastery=0.1, theta=None)
         client, _ = _session_client()
@@ -1120,27 +1084,21 @@ class TestServerThetaHelper:
     async def test_low_response_count_falls_back_to_global(self) -> None:
         # 개념 θ 응답 2개(<3·극단 θ) → 불신뢰 → 전과목 θ 폴백.
         cid = uuid.uuid4()
-        fake = _ThetaQueueSession(
-            [_ThetaQR([cid]), _ThetaQR([(4.0, 0.2, 2)]), _ThetaQR([0.5])]
-        )
+        fake = _ThetaQueueSession([_ThetaQR([cid]), _ThetaQR([(4.0, 0.2, 2)]), _ThetaQR([0.5])])
         t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
         assert t == 0.5
 
     async def test_high_se_falls_back_to_global(self) -> None:
         # 개념 θ SE 큼(1.5>1.0) → 불신뢰 → 전과목 θ 폴백.
         cid = uuid.uuid4()
-        fake = _ThetaQueueSession(
-            [_ThetaQR([cid]), _ThetaQR([(1.0, 1.5, 8)]), _ThetaQR([0.6])]
-        )
+        fake = _ThetaQueueSession([_ThetaQR([cid]), _ThetaQR([(1.0, 1.5, 8)]), _ThetaQR([0.6])])
         t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
         assert t == 0.6
 
     async def test_none_se_falls_back_to_global(self) -> None:
         # 개념 θ SE 없음(정보 0·극단 θ) → 불신뢰 → 전과목 θ 폴백.
         cid = uuid.uuid4()
-        fake = _ThetaQueueSession(
-            [_ThetaQR([cid]), _ThetaQR([(4.0, None, 5)]), _ThetaQR([0.4])]
-        )
+        fake = _ThetaQueueSession([_ThetaQR([cid]), _ThetaQR([(4.0, None, 5)]), _ThetaQR([0.4])])
         t = await coach._server_theta_for(cast(AsyncSession, fake), _UID, self._PID)
         assert t == 0.4
 
@@ -1200,12 +1158,8 @@ class TestThetaIntoScaffolding:
     def test_theta_lifts_label_lowers_hint(self) -> None:
         # 답요구 → base 2. BKT 0.2 단독=초보 → +1(=3). +θ 2.0=발전중 → 불변(=2).
         body = coach.CoachRequest(student_input="답 알려줘")
-        dec_bkt, *_ = coach._build_response_payload(
-            body, server_mastery=0.2, server_theta=None
-        )
-        dec_theta, *_ = coach._build_response_payload(
-            body, server_mastery=0.2, server_theta=2.0
-        )
+        dec_bkt, *_ = coach._build_response_payload(body, server_mastery=0.2, server_theta=None)
+        dec_theta, *_ = coach._build_response_payload(body, server_mastery=0.2, server_theta=2.0)
         assert dec_bkt.hint_level == 3
         assert dec_theta.hint_level == 2
 
@@ -1214,12 +1168,8 @@ class TestThetaIntoScaffolding:
         # +θ 4.0 → 평균 0.84=숙달 → min_len 15 ≤ 17 → next(θ가 전이 임계를 낮춤).
         text = "가" * 16 + "."
         body = coach.CoachRequest(student_input=text)
-        dec_dev, *_ = coach._build_response_payload(
-            body, server_mastery=0.7, server_theta=None
-        )
-        dec_mas, *_ = coach._build_response_payload(
-            body, server_mastery=0.7, server_theta=4.0
-        )
+        dec_dev, *_ = coach._build_response_payload(body, server_mastery=0.7, server_theta=None)
+        dec_mas, *_ = coach._build_response_payload(body, server_mastery=0.7, server_theta=4.0)
         assert dec_dev.polya_stage_to_advance == "stay"
         assert dec_mas.polya_stage_to_advance == "next"
 
@@ -1237,9 +1187,7 @@ class TestRequestValidation:
 
     def test_oversize_input_422(self) -> None:
         big = "가" * 4001  # max_length=4000
-        assert (
-            _client().post("/v1/coach", json={"student_input": big}).status_code == 422
-        )
+        assert _client().post("/v1/coach", json={"student_input": big}).status_code == 422
 
     def test_bad_mastery_level_422(self) -> None:
         resp = _client().post(
@@ -1315,9 +1263,7 @@ class TestSessionPersistence:
         assert assistant_t.content  # 비공
 
     def test_no_token_401(self) -> None:
-        resp = _no_auth_client().post(
-            "/v1/coach/sessions", json={"student_input": "음"}
-        )
+        resp = _no_auth_client().post("/v1/coach/sessions", json={"student_input": "음"})
         assert resp.status_code == 401
 
     def test_extra_field_forbidden(self) -> None:
@@ -1456,14 +1402,10 @@ class TestStepShadowProblemContext:
 
     # 단계 비보존(해 {3}≠{4}) + 순차유도 마커 → step shadow가 검출하는 풀이.
     _SOLUTION = "2x = 6 따라서 3x = 12"
-    _SENTINEL = (
-        "ANSWER_SENTINEL_DONOTLEAK"  # Problem.answer에만 존재 — 응답에 새면 누출
-    )
+    _SENTINEL = "ANSWER_SENTINEL_DONOTLEAK"  # Problem.answer에만 존재 — 응답에 새면 누출
 
     def _shadow_msgs(self, caplog: pytest.LogCaptureFixture) -> list[str]:
-        return [
-            r.getMessage() for r in caplog.records if r.name == "whymath.l4.step_shadow"
-        ]
+        return [r.getMessage() for r in caplog.records if r.name == "whymath.l4.step_shadow"]
 
     def test_create_session_answer_not_in_response(
         self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
@@ -1539,9 +1481,7 @@ class TestStepShadowProblemContext:
         finally:
             get_settings.cache_clear()
 
-    def test_gate_off_skips_answer_lookup(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_gate_off_skips_answer_lookup(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 게이트 off(프로덕션 기본) → 정답 조회·접근 자체를 안 함(불필요 적재 차단·비용).
         from whymath_backend.db.models.problem import Problem as ProblemORM
 
@@ -1619,12 +1559,8 @@ class TestSessionGet:
         from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 
         did = uuid.uuid4()
-        dialogue = DialogueORM.from_schema(
-            DialogueSchema(dialogue_id=did, user_id=_UID)
-        )
-        client, _ = _session_client(
-            preload={(DialogueORM, did): dialogue}, execute_rows=[]
-        )
+        dialogue = DialogueORM.from_schema(DialogueSchema(dialogue_id=did, user_id=_UID))
+        client, _ = _session_client(preload={(DialogueORM, did): dialogue}, execute_rows=[])
         resp = client.get(f"/v1/coach/sessions/{did}")
         assert resp.status_code == 200
         assert resp.json()["turns"] == []
@@ -1641,9 +1577,7 @@ class TestSessionGet:
 
         did = uuid.uuid4()
         other_uid = uuid.uuid4()
-        dialogue = DialogueORM.from_schema(
-            DialogueSchema(dialogue_id=did, user_id=other_uid)
-        )
+        dialogue = DialogueORM.from_schema(DialogueSchema(dialogue_id=did, user_id=other_uid))
         client, _ = _session_client(preload={(DialogueORM, did): dialogue})
         resp = client.get(f"/v1/coach/sessions/{did}")
         assert resp.status_code == 404
@@ -1681,14 +1615,10 @@ class TestSessionGetConditional:
             DialogueSchema(dialogue_id=did, user_id=_UID, total_turns=2)
         )
         t1 = DialogueTurnORM.from_schema(
-            DialogueTurnSchema(
-                dialogue_id=did, turn_order=1, role=TurnRole.student, content="A"
-            )
+            DialogueTurnSchema(dialogue_id=did, turn_order=1, role=TurnRole.student, content="A")
         )
         t2 = DialogueTurnORM.from_schema(
-            DialogueTurnSchema(
-                dialogue_id=did, turn_order=2, role=TurnRole.assistant, content="B"
-            )
+            DialogueTurnSchema(dialogue_id=did, turn_order=2, role=TurnRole.assistant, content="B")
         )
         return did, {(DialogueORM, did): dialogue}, [t1, t2]
 
@@ -1747,10 +1677,7 @@ class TestRateLimit:
         # limit=3 → 3회까지 통과
         client = _client(rate_limit=3)
         for _ in range(3):
-            assert (
-                client.post("/v1/coach", json={"student_input": "음"}).status_code
-                == 200
-            )
+            assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
 
     def test_over_limit_returns_429(self) -> None:
         # limit=2 → 3번째 요청 429 + Retry-After
@@ -1765,10 +1692,7 @@ class TestRateLimit:
         # limit=0 → 무제한(기본 테스트 모드)
         client = _client(rate_limit=0)
         for _ in range(20):
-            assert (
-                client.post("/v1/coach", json={"student_input": "음"}).status_code
-                == 200
-            )
+            assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
 
     def test_get_endpoint_also_limited(self) -> None:
         # GET /v1/coach/sessions/{id}도 동일 버킷 카운트 — 임계 공유
@@ -1776,9 +1700,7 @@ class TestRateLimit:
         from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 
         did = uuid.uuid4()
-        dialogue = DialogueORM.from_schema(
-            DialogueSchema(dialogue_id=did, user_id=_UID)
-        )
+        dialogue = DialogueORM.from_schema(DialogueSchema(dialogue_id=did, user_id=_UID))
         client, _ = _session_client(
             preload={(DialogueORM, did): dialogue},
             execute_rows=[],
@@ -1798,18 +1720,9 @@ class TestRateLimit:
 
         backend = InMemoryBackend()
         uid = uuid.uuid4()
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)).allowed
-            is True
-        )
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.5)).allowed
-            is False
-        )
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=1, now=61.0)).allowed
-            is True
-        )
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)).allowed is True
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.5)).allowed is False
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=61.0)).allowed is True
 
 
 class _FakeRedisClient:
@@ -1901,7 +1814,8 @@ class _FakeRedisClient:
             bucket = self.zsets.setdefault(k, [])
             bucket[:] = [(s, m) for (s, m) in bucket if s >= cutoff]
         counts = [len(self.zsets[k]) for k in keys]
-        all_ok = all(c < lim for c, lim in zip(counts, limits))
+        # counts·limits 모두 keys(=numkeys)당 1개씩 생성되어 길이가 항상 같다 → strict=True
+        all_ok = all(c < lim for c, lim in zip(counts, limits, strict=True))
         if all_ok:
             for i, k in enumerate(keys):
                 self.zsets[k].append((now, member))
@@ -1967,18 +1881,9 @@ class TestRedisBackend:
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
         uid = uuid.uuid4()
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=2, now=0.0)).allowed
-            is True
-        )
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=2, now=0.1)).allowed
-            is True
-        )
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=2, now=0.2)).allowed
-            is False
-        )
+        assert asyncio.run(backend.hit(uid, category="read", limit=2, now=0.0)).allowed is True
+        assert asyncio.run(backend.hit(uid, category="read", limit=2, now=0.1)).allowed is True
+        assert asyncio.run(backend.hit(uid, category="read", limit=2, now=0.2)).allowed is False
 
     def test_hit_uses_canonical_key_prefix(self) -> None:
         import asyncio
@@ -2013,20 +1918,11 @@ class TestRedisBackend:
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
         uid = uuid.uuid4()
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)).allowed
-            is True
-        )
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)).allowed is True
         # 같은 윈도우 — 초과
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.5)).allowed
-            is False
-        )
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.5)).allowed is False
         # 60초+ — prune되어 통과
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=1, now=61.0)).allowed
-            is True
-        )
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=61.0)).allowed is True
 
 
 class TestRedisBackendLazyPaths:
@@ -2070,9 +1966,7 @@ class TestRedisBackendLazyPaths:
         backend = rl.RedisBackend()  # client 주입 X
         # 첫 hit — lazy build 발화 + EVALSHA NOSCRIPT → script_load + 재시도
         assert (
-            asyncio.run(
-                backend.hit(uuid.uuid4(), category="read", limit=2, now=0.0)
-            ).allowed
+            asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=2, now=0.0)).allowed
             is True
         )
         # 첫 hit: evalsha 2회(NOSCRIPT + 재시도), script_load 1회
@@ -2080,9 +1974,7 @@ class TestRedisBackendLazyPaths:
         assert len(fake.script_loads) == 1
         # 두번째 hit — script 이미 캐시됨, evalsha 1회만(NOSCRIPT 없음)
         assert (
-            asyncio.run(
-                backend.hit(uuid.uuid4(), category="read", limit=2, now=0.1)
-            ).allowed
+            asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=2, now=0.1)).allowed
             is True
         )
         assert len(fake.evalsha_calls) == 3
@@ -2143,15 +2035,11 @@ class TestEvalshaOptimization:
         fake = _FakeRedisClient()
         backend = RedisBackend(client=fake)
         assert (
-            asyncio.run(
-                backend.hit(uuid.uuid4(), category="read", limit=2, now=0.0)
-            ).allowed
+            asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=2, now=0.0)).allowed
             is True
         )
         assert fake.script_loads == [
-            __import__(
-                "whymath_backend.api._rate_limit", fromlist=["_LUA_HIT"]
-            )._LUA_HIT
+            __import__("whymath_backend.api._rate_limit", fromlist=["_LUA_HIT"])._LUA_HIT
         ]
         assert len(fake.evalsha_calls) == 2  # 1회 NOSCRIPT + 1회 재시도
 
@@ -2169,9 +2057,7 @@ class TestEvalshaOptimization:
 
         # 추가 5회 — 전부 evalsha 1회씩만
         for i in range(5):
-            asyncio.run(
-                backend.hit(uuid.uuid4(), category="read", limit=10, now=0.1 + i * 0.01)
-            )
+            asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=10, now=0.1 + i * 0.01))
         assert len(fake.evalsha_calls) == evalsha_after_first + 5
         assert len(fake.script_loads) == loads_after_first  # 변동 없음
 
@@ -2202,18 +2088,12 @@ class TestReadWriteSeparation:
         from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 
         did = uuid.uuid4()
-        dialogue = DialogueORM.from_schema(
-            DialogueSchema(dialogue_id=did, user_id=_UID)
-        )
+        dialogue = DialogueORM.from_schema(DialogueSchema(dialogue_id=did, user_id=_UID))
 
         app = create_app()
         app.dependency_overrides[get_consented_user] = _user
-        app.dependency_overrides[get_settings] = lambda: _settings_override(
-            limit=10, write_limit=1
-        )
-        captured = _CapturingSession(
-            preload={(DialogueORM, did): dialogue}, execute_rows=[]
-        )
+        app.dependency_overrides[get_settings] = lambda: _settings_override(limit=10, write_limit=1)
+        captured = _CapturingSession(preload={(DialogueORM, did): dialogue}, execute_rows=[])
 
         async def _sess() -> AsyncIterator[_CapturingSession]:
             yield captured
@@ -2235,18 +2115,12 @@ class TestReadWriteSeparation:
         from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 
         did = uuid.uuid4()
-        dialogue = DialogueORM.from_schema(
-            DialogueSchema(dialogue_id=did, user_id=_UID)
-        )
+        dialogue = DialogueORM.from_schema(DialogueSchema(dialogue_id=did, user_id=_UID))
 
         app = create_app()
         app.dependency_overrides[get_consented_user] = _user
-        app.dependency_overrides[get_settings] = lambda: _settings_override(
-            limit=1, write_limit=10
-        )
-        captured = _CapturingSession(
-            preload={(DialogueORM, did): dialogue}, execute_rows=[]
-        )
+        app.dependency_overrides[get_settings] = lambda: _settings_override(limit=1, write_limit=10)
+        captured = _CapturingSession(preload={(DialogueORM, did): dialogue}, execute_rows=[])
 
         async def _sess() -> AsyncIterator[_CapturingSession]:
             yield captured
@@ -2260,10 +2134,7 @@ class TestReadWriteSeparation:
         assert client.get(f"/v1/coach/sessions/{did}").status_code == 429
         # POST 여러 번 — write 한도(10)는 별도 버킷이라 영향 없음
         for _ in range(5):
-            assert (
-                client.post("/v1/coach", json={"student_input": "음"}).status_code
-                == 200
-            )
+            assert client.post("/v1/coach", json={"student_input": "음"}).status_code == 200
 
 
 class TestRateCategoryBackend:
@@ -2277,19 +2148,10 @@ class TestRateCategoryBackend:
         backend = InMemoryBackend()
         uid = uuid.uuid4()
         # write 1/1 한도 도달
-        assert (
-            asyncio.run(backend.hit(uid, category="write", limit=1, now=0.0)).allowed
-            is True
-        )
-        assert (
-            asyncio.run(backend.hit(uid, category="write", limit=1, now=0.1)).allowed
-            is False
-        )
+        assert asyncio.run(backend.hit(uid, category="write", limit=1, now=0.0)).allowed is True
+        assert asyncio.run(backend.hit(uid, category="write", limit=1, now=0.1)).allowed is False
         # 같은 사용자의 read 버킷은 독립 — 영향 없음
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.2)).allowed
-            is True
-        )
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.2)).allowed is True
 
     def test_redis_key_prefix_includes_category(self) -> None:
         import asyncio
@@ -2363,9 +2225,7 @@ class TestRateLimitResultStruct:
         from whymath_backend.api._rate_limit import InMemoryBackend, RateLimitResult
 
         backend = InMemoryBackend()
-        result = asyncio.run(
-            backend.hit(uuid.uuid4(), category="read", limit=5, now=100.0)
-        )
+        result = asyncio.run(backend.hit(uuid.uuid4(), category="read", limit=5, now=100.0))
         assert isinstance(result, RateLimitResult)
         assert result.allowed is True
         assert result.remaining == 4  # limit - 1
@@ -2399,19 +2259,11 @@ class TestIpRateLimit:
         backend = InMemoryBackend()
         uid = uuid.uuid4()
         # 사용자 한도 1 소진
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)).allowed
-            is True
-        )
-        assert (
-            asyncio.run(backend.hit(uid, category="read", limit=1, now=0.1)).allowed
-            is False
-        )
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.0)).allowed is True
+        assert asyncio.run(backend.hit(uid, category="read", limit=1, now=0.1)).allowed is False
         # 같은 사용자 *as IP*가 별도 키 — IP 한도는 별개
         assert (
-            asyncio.run(
-                backend.hit_by_ip(str(uid), category="read", limit=1, now=0.2)
-            ).allowed
+            asyncio.run(backend.hit_by_ip(str(uid), category="read", limit=1, now=0.2)).allowed
             is True
         )
 
@@ -2438,16 +2290,12 @@ class TestIpRateLimit:
 
         backend = InMemoryBackend()
         assert (
-            asyncio.run(
-                backend.hit_by_ip("1.1.1.1", category="write", limit=1, now=0.0)
-            ).allowed
+            asyncio.run(backend.hit_by_ip("1.1.1.1", category="write", limit=1, now=0.0)).allowed
             is True
         )
         # 다른 IP는 별도 버킷
         assert (
-            asyncio.run(
-                backend.hit_by_ip("2.2.2.2", category="write", limit=1, now=0.1)
-            ).allowed
+            asyncio.run(backend.hit_by_ip("2.2.2.2", category="write", limit=1, now=0.1)).allowed
             is True
         )
 
@@ -2730,15 +2578,11 @@ class TestHitBothAtomic:
         uid = uuid.uuid4()
         # user에 1 추가(한도 도달)
         asyncio.run(
-            backend.hit_both(
-                uid, "1.1.1.1", category="read", user_limit=1, ip_limit=10, now=0.0
-            )
+            backend.hit_both(uid, "1.1.1.1", category="read", user_limit=1, ip_limit=10, now=0.0)
         )
         # 같은 user, *다른* IP — user 한도 도달이라 atomic deny
         result = asyncio.run(
-            backend.hit_both(
-                uid, "2.2.2.2", category="read", user_limit=1, ip_limit=10, now=0.1
-            )
+            backend.hit_both(uid, "2.2.2.2", category="read", user_limit=1, ip_limit=10, now=0.1)
         )
         assert result.allowed is False
         # IP 2.2.2.2 버킷은 *미증가*(0개) → remaining = 10
@@ -2754,21 +2598,15 @@ class TestHitBothAtomic:
         backend = InMemoryBackend()
         uid = uuid.uuid4()
         asyncio.run(
-            backend.hit_both(
-                uid, "1.1.1.1", category="read", user_limit=1, ip_limit=1, now=0.0
-            )
+            backend.hit_both(uid, "1.1.1.1", category="read", user_limit=1, ip_limit=1, now=0.0)
         )
         denied = asyncio.run(
-            backend.hit_both(
-                uid, "1.1.1.1", category="read", user_limit=1, ip_limit=1, now=0.5
-            )
+            backend.hit_both(uid, "1.1.1.1", category="read", user_limit=1, ip_limit=1, now=0.5)
         )
         assert denied.allowed is False
         # 60초+ 후 — 옛 항목 prune되어 통과
         passed = asyncio.run(
-            backend.hit_both(
-                uid, "1.1.1.1", category="read", user_limit=1, ip_limit=1, now=61.0
-            )
+            backend.hit_both(uid, "1.1.1.1", category="read", user_limit=1, ip_limit=1, now=61.0)
         )
         assert passed.allowed is True
 
@@ -2782,22 +2620,16 @@ class TestHitBothAtomic:
         uid = uuid.uuid4()
         # IP에 1 추가(한도 도달)
         asyncio.run(
-            backend.hit_both(
-                uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.0
-            )
+            backend.hit_both(uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.0)
         )
         # 같은 uid+같은 ip → IP 한도 도달이라 atomic deny
         result = asyncio.run(
-            backend.hit_both(
-                uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.1
-            )
+            backend.hit_both(uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.1)
         )
         assert result.allowed is False
         # user counter는 *미증가* — 다음 다른 IP에서 user_limit 그대로
         followup = asyncio.run(
-            backend.hit_both(
-                uid, "2.2.2.2", category="read", user_limit=10, ip_limit=10, now=0.2
-            )
+            backend.hit_both(uid, "2.2.2.2", category="read", user_limit=10, ip_limit=10, now=0.2)
         )
         # user_count가 누적 1(첫 호출만) — IP 거부된 두번째는 user 미증가
         assert followup.allowed is True
@@ -2857,20 +2689,16 @@ class TestHitBothAtomic:
         uid = uuid.uuid4()
         # IP에 1 추가(한도 도달)
         r1 = asyncio.run(
-            backend.hit_both(
-                uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.0
-            )
+            backend.hit_both(uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.0)
         )
         assert r1.allowed is True
         # 같은 ip → IP 거부 → atomic 거부 → user counter 낭비 X
         r2 = asyncio.run(
-            backend.hit_both(
-                uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.1
-            )
+            backend.hit_both(uid, "1.1.1.1", category="read", user_limit=10, ip_limit=1, now=0.1)
         )
         assert r2.allowed is False
         # user 키엔 1개만 있어야 함(낭비 0)
-        from whymath_backend.api._rate_limit import RedisBackend as RB
+        from whymath_backend.api._rate_limit import RedisBackend as RB  # noqa: N817
 
         user_key = f"{RB._KEY_PREFIX}read:user:{uid}"
         assert len(fake.zsets[user_key]) == 1
@@ -3181,7 +3009,7 @@ class TestTripleDimension:
         )
         assert results["user"].allowed is True
         # 세 키 모두 ZSET에 생성됨
-        from whymath_backend.api._rate_limit import RedisBackend as RB
+        from whymath_backend.api._rate_limit import RedisBackend as RB  # noqa: N817
 
         assert f"{RB._KEY_PREFIX}read:user:{uid}" in fake.zsets
         assert f"{RB._KEY_PREFIX}read:ip:1.1.1.1" in fake.zsets
@@ -3286,22 +3114,16 @@ class TestHitManyEdgeCases:
         backend = InMemoryBackend()
         uid = str(uuid.uuid4())
         asyncio.run(
-            backend.hit_many(
-                [Subject(kind="user", id=uid, limit=1)], category="read", now=0.0
-            )
+            backend.hit_many([Subject(kind="user", id=uid, limit=1)], category="read", now=0.0)
         )
         # 같은 윈도우 — 거부
         denied = asyncio.run(
-            backend.hit_many(
-                [Subject(kind="user", id=uid, limit=1)], category="read", now=0.5
-            )
+            backend.hit_many([Subject(kind="user", id=uid, limit=1)], category="read", now=0.5)
         )
         assert denied["user"].allowed is False
         # 60초+ — prune 분기 발화
         passed = asyncio.run(
-            backend.hit_many(
-                [Subject(kind="user", id=uid, limit=1)], category="read", now=61.0
-            )
+            backend.hit_many([Subject(kind="user", id=uid, limit=1)], category="read", now=61.0)
         )
         assert passed["user"].allowed is True
 
@@ -3475,9 +3297,7 @@ class TestDeviceHmacSignature:
         # 잘못된 서명을 매 호출 다른 device_id로 (spoofing 시도)
         for i in range(5):
             headers = {"x-device-id": f"dev-{i}", "x-device-sig": "0" * 64}
-            resp = client.post(
-                "/v1/coach", json={"student_input": "음"}, headers=headers
-            )
+            resp = client.post("/v1/coach", json={"student_input": "음"}, headers=headers)
             assert resp.status_code == 200
             # device 차원 미활성 → Device-* 헤더 없음
             assert "X-RateLimit-Device-Limit" not in resp.headers
@@ -3501,16 +3321,12 @@ class TestPrerequisiteCoachingHelper:
         )
         assert result is None
 
-    async def test_concept_none_returns_none(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_concept_none_returns_none(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 문항-개념 미매핑(get_primary_concept_id None) → 선수 traversal 불가 → None.
         async def _no_concept(session: Any, problem_id: Any) -> uuid.UUID | None:
             return None
 
-        monkeypatch.setattr(
-            "whymath_backend.api.coach.get_primary_concept_id", _no_concept
-        )
+        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _no_concept)
         result = await coach._prerequisite_coaching_for(
             cast(AsyncSession, _FakeSession()), _UID, self._PID
         )
@@ -3526,20 +3342,14 @@ class TestPrerequisiteCoachingHelper:
         async def _gaps(*args: Any, **kwargs: Any) -> list[Any]:
             return []
 
-        monkeypatch.setattr(
-            "whymath_backend.api.coach.get_primary_concept_id", _concept
-        )
-        monkeypatch.setattr(
-            "whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps
-        )
+        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _concept)
+        monkeypatch.setattr("whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps)
         result = await coach._prerequisite_coaching_for(
             cast(AsyncSession, _FakeSession()), _UID, self._PID
         )
         assert result is None
 
-    async def test_gaps_present_returns_trigger(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    async def test_gaps_present_returns_trigger(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 막힌 선수 있음 → L4 decide가 prerequisite_review trigger를 돌려준다(선수 이름 포함).
         from whymath_backend.l2.prerequisite_recommendation import PrerequisiteGap
 
@@ -3560,12 +3370,8 @@ class TestPrerequisiteCoachingHelper:
         async def _gaps(*args: Any, **kwargs: Any) -> list[PrerequisiteGap]:
             return [gap]
 
-        monkeypatch.setattr(
-            "whymath_backend.api.coach.get_primary_concept_id", _concept
-        )
-        monkeypatch.setattr(
-            "whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps
-        )
+        monkeypatch.setattr("whymath_backend.api.coach.get_primary_concept_id", _concept)
+        monkeypatch.setattr("whymath_backend.api.coach.recommend_prerequisite_gaps", _gaps)
         result = await coach._prerequisite_coaching_for(
             cast(AsyncSession, _FakeSession()), _UID, self._PID
         )
@@ -3592,9 +3398,7 @@ class TestPrerequisiteCoachingField:
         assert resp.status_code == 200, resp.text
         assert resp.json()["prerequisite_coaching"] is None
 
-    def test_session_create_wires_prereq_trigger(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_session_create_wires_prereq_trigger(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 세션 생성 핸들러가 _prerequisite_coaching_for 결과를 응답에 싣는다(배선 검증).
         from whymath_backend.l4.metacognitive_trigger import CoachingTrigger
         from whymath_backend.l4.socratic.categories import SocraticCategory
@@ -3611,9 +3415,7 @@ class TestPrerequisiteCoachingField:
         ) -> CoachingTrigger | None:
             return trigger
 
-        monkeypatch.setattr(
-            "whymath_backend.api.coach._prerequisite_coaching_for", _fake
-        )
+        monkeypatch.setattr("whymath_backend.api.coach._prerequisite_coaching_for", _fake)
         client, _ = _session_client()
         resp = client.post(
             "/v1/coach/sessions",
@@ -3629,14 +3431,10 @@ class TestPrerequisiteCoachingField:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         # 막힌 선수 없음(헬퍼 None) → 응답 prerequisite_coaching None.
-        async def _fake(
-            session: Any, user_id: Any, problem_id: Any, **kwargs: Any
-        ) -> Any:
+        async def _fake(session: Any, user_id: Any, problem_id: Any, **kwargs: Any) -> Any:
             return None
 
-        monkeypatch.setattr(
-            "whymath_backend.api.coach._prerequisite_coaching_for", _fake
-        )
+        monkeypatch.setattr("whymath_backend.api.coach._prerequisite_coaching_for", _fake)
         client, _ = _session_client()
         resp = client.post(
             "/v1/coach/sessions",

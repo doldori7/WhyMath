@@ -51,10 +51,10 @@ class TestMasteryTransitionWiring:
         s = _state(PolyaStage.UNDERSTAND)
         text = "f의 최댓값을 구해, x>0."  # 16자 — 기본 stay·숙달 next(임계 15)
         assert coach.decide(text, s).polya_stage_to_advance == "stay"
-        assert (
-            coach.decide(text, s, mastery_level="숙달").polya_stage_to_advance == "next"
-        )
-    """슬라이스 3 — decide()가 PolyaState.prev_hint_level·turn_count를 읽어 hint_level/reveals 채움."""
+        assert coach.decide(text, s, mastery_level="숙달").polya_stage_to_advance == "next"
+
+    """슬라이스 3 — decide()가 PolyaState.prev_hint_level·turn_count를 읽어
+    hint_level/reveals 채움."""
 
     def test_default_hint_level_1_with_reveals(self) -> None:
         coach = PolyaCoach()
@@ -78,9 +78,7 @@ class TestMasteryTransitionWiring:
 
     def test_stuck_threshold_jumps_to_3(self) -> None:
         coach = PolyaCoach()
-        s = PolyaState(
-            current_stage=PolyaStage.EXECUTE, turn_count=5, prev_hint_level=1
-        )
+        s = PolyaState(current_stage=PolyaStage.EXECUTE, turn_count=5, prev_hint_level=1)
         d = coach.decide("음...", s)
         assert d.hint_level == 3
         assert d.reveals == "partial_steps_demo"
@@ -182,9 +180,7 @@ class TestCoachWiring:
     async def test_coach_calls_llm_and_returns_clean_response(self) -> None:
         coach = PolyaCoach()
         llm = FakeLLM("좋은 시도네! 다음 단계로 가볼까?")
-        decision, response, report = await coach.coach(
-            "음", _state(PolyaStage.UNDERSTAND), llm=llm
-        )
+        decision, response, report = await coach.coach("음", _state(PolyaStage.UNDERSTAND), llm=llm)
         assert len(llm.calls) == 1
         called_prompt, called_system = llm.calls[0]
         assert called_prompt == decision.prompt
@@ -198,9 +194,7 @@ class TestCoachWiring:
         coach = PolyaCoach()
         # LLM이 금지 패턴을 뱉어도 마지막 방어선이 차단
         llm = FakeLLM("그건 틀렸어. 그런 실수는 흔해.")
-        _, response, report = await coach.coach(
-            "음", _state(PolyaStage.UNDERSTAND), llm=llm
-        )
+        _, response, report = await coach.coach("음", _state(PolyaStage.UNDERSTAND), llm=llm)
         assert "틀렸" not in response
         assert "실수" not in response
         assert report.rewritten is True

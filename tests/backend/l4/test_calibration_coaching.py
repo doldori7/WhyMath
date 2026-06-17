@@ -118,6 +118,6 @@ class TestRecommendCalibrationCoaching:
 
     def test_deterministic(self) -> None:
         """동일 입력 → 동일 출력(순수·결정론)."""
-        assert recommend_calibration_coaching(
+        assert recommend_calibration_coaching(0.9, False) == recommend_calibration_coaching(
             0.9, False
-        ) == recommend_calibration_coaching(0.9, False)
+        )

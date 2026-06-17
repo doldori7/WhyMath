@@ -110,9 +110,7 @@ def test_anthropic_env_override(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_anthropic_tuning_knobs_default_off() -> None:
     """effort/thinking/caching 노브는 기본 OFF(생략) — 현 동작 유지(03a §H#4)."""
-    s = Settings(
-        anthropic_effort="", anthropic_thinking=False, anthropic_prompt_caching=False
-    )
+    s = Settings(anthropic_effort="", anthropic_thinking=False, anthropic_prompt_caching=False)
     assert s.anthropic_effort == ""
     assert s.anthropic_thinking is False
     assert s.anthropic_prompt_caching is False

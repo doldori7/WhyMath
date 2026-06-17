@@ -81,9 +81,7 @@ def _cleanup(keys: list[str]) -> None:
                 ),
                 {"keys": keys},
             )
-            conn.execute(
-                text("DELETE FROM concept WHERE code = ANY(:keys)"), {"keys": keys}
-            )
+            conn.execute(text("DELETE FROM concept WHERE code = ANY(:keys)"), {"keys": keys})
     finally:
         engine.dispose()  # type: ignore[attr-defined]
 
@@ -110,9 +108,7 @@ def _record(
         code=code,
         name_ko=name_ko,
         source_id=source_id,
-        aliases=(
-            aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]
-        ),
+        aliases=(aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]),
         level=ConceptLevel.세부개념,
         subject=subject,
         intrinsic_difficulty=intrinsic_difficulty,
@@ -168,9 +164,7 @@ class TestBackendConceptRoundtrip:
                 assert row.subject == "미적분"
                 assert float(row.intrinsic_difficulty) == pytest.approx(2.17)
                 # JSONB 오개념(자유형) — 자체 작성 주석(본문 아님).
-                assert row.common_misconceptions == [
-                    {"misconception": "극한을 대입값으로 혼동"}
-                ]
+                assert row.common_misconceptions == [{"misconception": "극한을 대입값으로 혼동"}]
                 # ② redaction: 본문 3컬럼 NULL(검수 대기).
                 assert row.description is None
                 assert row.formal_definition is None
@@ -249,10 +243,7 @@ class TestIdempotentUuidPreserved:
                 )
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     rows = conn.execute(
-                        text(
-                            "SELECT concept_id, name_ko, subject FROM concept "
-                            "WHERE code = :c"
-                        ),
+                        text("SELECT concept_id, name_ko, subject FROM concept " "WHERE code = :c"),
                         {"c": _NID_A},
                     ).all()
                 # 행 1개(멱등)·값 갱신·**UUID 동일**(브리지 키 안정성 — FK 참조 보존).
@@ -291,9 +282,7 @@ class TestL2MasteryBridge:
         user_id = uuid.uuid4()
         try:
             # 개념 적재(브리지) → backend concept UUID 확보.
-            populate_backend_concepts(
-                [_record(_NID_A, name_ko="극한")], settings=Settings()
-            )
+            populate_backend_concepts([_record(_NID_A, name_ko="극한")], settings=Settings())
             engine = _sync_engine()
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
@@ -339,9 +328,7 @@ class TestL2MasteryBridge:
                 try:
                     async with eng.begin() as conn:
                         await conn.execute(
-                            _text(
-                                "DELETE FROM concept_mastery_history WHERE user_id = :u"
-                            ),
+                            _text("DELETE FROM concept_mastery_history WHERE user_id = :u"),
                             {"u": str(user_id)},
                         )
                 finally:
@@ -376,9 +363,7 @@ def _cleanup_edges_and_concepts(keys: list[str]) -> None:
                 ),
                 {"keys": keys},
             )
-            conn.execute(
-                text("DELETE FROM concept WHERE code = ANY(:keys)"), {"keys": keys}
-            )
+            conn.execute(text("DELETE FROM concept WHERE code = ANY(:keys)"), {"keys": keys})
     finally:
         engine.dispose()  # type: ignore[attr-defined]
 
@@ -445,9 +430,7 @@ class TestBackendEdgeRoundtrip:
         keys = [_NID_PRE]
         try:
             # 선수만 적재(후행 노드 미적재 → orphan).
-            populate_backend_concepts(
-                [_record(_NID_PRE, name_ko="선수")], settings=Settings()
-            )
+            populate_backend_concepts([_record(_NID_PRE, name_ko="선수")], settings=Settings())
             count = populate_backend_edges(
                 [
                     BackendConceptEdgeRecord(

@@ -154,11 +154,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Ruff (lint)
-        run: ruff check .
+      # lint(ruff·black)는 src(.)뿐 아니라 tests(../../tests/backend)도 검사한다(PR #223).
+      # 과거 CI는 src만 lint해 tests의 위반(B905·N817·E501·I001 등)이 검출 없이 머지돼 왔다 —
+      # 이 가드가 tests 위반의 재발을 막는다. mypy는 tests로 확장하지 않는다(테스트에 --strict
+      # 타입 부담 제외 — 기존 정책 유지).
+      - name: Ruff (lint — src + tests)
+        run: ruff check . ../../tests/backend
 
-      - name: Black (format check)
-        run: black --check .
+      # black은 --line-length 100을 *명시*한다: tests 경로(../../tests/backend)에는 위로
+      # pyproject가 없어(레포 루트에 pyproject 부재) black이 기본값 88로 폴백하기 때문이다.
+      # 명시하지 않으면 100으로 포맷된 tests를 88로 검사해 거짓 실패한다(src의 [tool.black]
+      # line-length=100과 동일 기준으로 통일).
+      - name: Black (format check — src + tests)
+        run: black --check --line-length 100 . ../../tests/backend
 
       - name: Mypy (strict type check)
         run: mypy --strict whymath_backend

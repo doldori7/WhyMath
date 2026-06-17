@@ -92,7 +92,8 @@ class TestRecommendCoaching:
         assert "잘 따라왔어" in prompt and prompt.rstrip().endswith("?")
 
     def test_index_none_keeps_generic_step_prompt(self) -> None:
-        """incorrect_step_index 없음 → 기존 위치 비지목 _PROMPT_VERIFY_STEPS·focus_step_index None."""
+        """incorrect_step_index 없음
+        → 기존 위치 비지목 _PROMPT_VERIFY_STEPS·focus_step_index None."""
         trig = recommend_coaching(
             0.9, 2.0, arithmetic_error=True, verify_steps=True, incorrect_step_index=None
         )
@@ -185,8 +186,6 @@ class TestFocusToSocraticCategory:
         assert focus_to_socratic_category("verify") == SocraticCategory.EVIDENCE
         assert focus_to_socratic_category("consolidate") == SocraticCategory.EVIDENCE
         assert focus_to_socratic_category("retrieval") == SocraticCategory.META
-        assert (
-            focus_to_socratic_category("foundation") == SocraticCategory.CLARIFICATION
-        )
+        assert focus_to_socratic_category("foundation") == SocraticCategory.CLARIFICATION
         assert focus_to_socratic_category("advance") == SocraticCategory.PERSPECTIVE
         assert focus_to_socratic_category("diagnose") == SocraticCategory.CLARIFICATION

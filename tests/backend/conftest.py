@@ -42,9 +42,7 @@ def _integration_enabled() -> bool:
     return os.environ.get(_RUN_INTEGRATION_ENV, "").strip().lower() in _TRUTHY
 
 
-def pytest_collection_modifyitems(
-    config: pytest.Config, items: Iterable[pytest.Item]
-) -> None:
+def pytest_collection_modifyitems(config: pytest.Config, items: Iterable[pytest.Item]) -> None:
     """`integration` 마크 테스트를 기본 skip (환경변수로만 활성화).
 
     CI는 `WHYMATH_RUN_INTEGRATION`을 설정하지 않으므로 통합 테스트가 자동으로

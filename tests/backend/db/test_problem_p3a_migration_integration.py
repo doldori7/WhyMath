@@ -194,9 +194,7 @@ def _cleanup_sentinel(pid: uuid.UUID) -> None:
     engine = _sync_engine()
     try:
         with engine.begin() as conn:  # type: ignore[attr-defined]
-            conn.execute(
-                text("DELETE FROM problem WHERE problem_id = :pid"), {"pid": str(pid)}
-            )
+            conn.execute(text("DELETE FROM problem WHERE problem_id = :pid"), {"pid": str(pid)})
     finally:
         engine.dispose()  # type: ignore[attr-defined]
 

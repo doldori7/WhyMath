@@ -114,9 +114,7 @@ def _sample_problem() -> Problem:
 
 def _sample_step(problem_id: uuid.UUID, order: int) -> ProblemStep:
     return ProblemStep.from_schema(
-        ProblemStepSchema(
-            problem_id=problem_id, step_order=order, step_title=f"단계{order}"
-        )
+        ProblemStepSchema(problem_id=problem_id, step_order=order, step_title=f"단계{order}")
     )
 
 
@@ -141,9 +139,7 @@ class TestCreate:
 
     def test_create_duplicate_returns_409(self) -> None:
         """external_id/slug UNIQUE 충돌(IntegrityError) → 롤백 후 409."""
-        err = IntegrityError(
-            "INSERT", {}, Exception("duplicate key value violates unique")
-        )
+        err = IntegrityError("INSERT", {}, Exception("duplicate key value violates unique"))
         fake = FakeSession(commit_error=err)
         resp = _client(fake).post("/v1/problems", json=_valid_body())
         assert resp.status_code == 409
@@ -253,17 +249,13 @@ class TestPatch:
     def test_patch_updates_field(self) -> None:
         problem = _sample_problem()
         fake = FakeSession(get_map={problem.problem_id: problem})
-        resp = _client(fake).patch(
-            f"/v1/problems/{problem.problem_id}", json={"answer": "42"}
-        )
+        resp = _client(fake).patch(f"/v1/problems/{problem.problem_id}", json={"answer": "42"})
         assert resp.status_code == 200, resp.text
         assert resp.json()["answer"] == "42"
         assert fake.committed is True
 
     def test_patch_404_when_missing(self) -> None:
-        resp = _client(FakeSession()).patch(
-            f"/v1/problems/{uuid.uuid4()}", json={"answer": "x"}
-        )
+        resp = _client(FakeSession()).patch(f"/v1/problems/{uuid.uuid4()}", json={"answer": "x"})
         assert resp.status_code == 404
 
     def test_patch_invalid_enum_returns_422(self) -> None:
@@ -364,9 +356,7 @@ class TestConcurrency:
     def test_patch_without_if_match_proceeds(self) -> None:
         problem = _sample_problem()
         fake = FakeSession(get_map={problem.problem_id: problem})
-        resp = _client(fake).patch(
-            f"/v1/problems/{problem.problem_id}", json={"answer": "42"}
-        )
+        resp = _client(fake).patch(f"/v1/problems/{problem.problem_id}", json={"answer": "42"})
         assert resp.status_code == 200
 
     def test_delete_with_stale_if_match_returns_412(self) -> None:
@@ -387,9 +377,7 @@ class TestConditionalGet:
         problem = _sample_problem()
         client = _client(FakeSession(get_map={problem.problem_id: problem}))
         etag = client.get(f"/v1/problems/{problem.problem_id}").headers["ETag"]
-        resp = client.get(
-            f"/v1/problems/{problem.problem_id}", headers={"If-None-Match": etag}
-        )
+        resp = client.get(f"/v1/problems/{problem.problem_id}", headers={"If-None-Match": etag})
         assert resp.status_code == 304
         assert resp.headers.get("ETag") == etag
         assert resp.content == b""
@@ -397,9 +385,7 @@ class TestConditionalGet:
     def test_wildcard_if_none_match_returns_304(self) -> None:
         problem = _sample_problem()
         client = _client(FakeSession(get_map={problem.problem_id: problem}))
-        resp = client.get(
-            f"/v1/problems/{problem.problem_id}", headers={"If-None-Match": "*"}
-        )
+        resp = client.get(f"/v1/problems/{problem.problem_id}", headers={"If-None-Match": "*"})
         assert resp.status_code == 304
 
     def test_stale_if_none_match_returns_200(self) -> None:

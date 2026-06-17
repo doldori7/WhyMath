@@ -130,9 +130,7 @@ class TestVerifyStepExposureContract:
     """노출 계약 — 응답은 판정만(state·reason·evidence_weight·step_type). 정답/본문 누출 0."""
 
     def test_response_field_set(self) -> None:
-        resp = _client().post(
-            "/v1/verify-step", json={"expr_before": "2+3", "expr_after": "5"}
-        )
+        resp = _client().post("/v1/verify-step", json={"expr_before": "2+3", "expr_after": "5"})
         assert set(resp.json().keys()) == {
             "state",
             "step_type",
@@ -254,9 +252,7 @@ class TestVerifySolutionExposureContract:
 
 class TestVerifySolutionAuth:
     def test_no_token_401(self) -> None:
-        resp = _no_auth_client().post(
-            "/v1/verify-solution", json={"steps": ["2+3", "5"]}
-        )
+        resp = _no_auth_client().post("/v1/verify-solution", json={"steps": ["2+3", "5"]})
         assert resp.status_code == 401
 
 

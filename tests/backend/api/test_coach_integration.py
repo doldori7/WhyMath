@@ -190,9 +190,7 @@ def _client() -> TestClient:
 def test_create_session_persists_dialogue_and_two_turns_on_live_pg() -> None:
     """세션 생성 → 실 PG에 dialogue 1 + turn 2 영속. user_id 자동 결선."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     dialogue_ids: list[uuid.UUID] = []
@@ -218,10 +216,7 @@ def test_create_session_persists_dialogue_and_two_turns_on_live_pg() -> None:
 
             # ③ 무토큰 401(인증 게이트)
             assert (
-                client.post(
-                    "/v1/coach/sessions", json={"student_input": "음"}
-                ).status_code
-                == 401
+                client.post("/v1/coach/sessions", json={"student_input": "음"}).status_code == 401
             )
     finally:
         asyncio.run(_cleanup(uid, dialogue_ids))
@@ -230,9 +225,7 @@ def test_create_session_persists_dialogue_and_two_turns_on_live_pg() -> None:
 def test_etag_round_trip_304_then_invalidate_on_append_on_live_pg() -> None:
     """GET → ETag → If-None-Match 304 → append → 옛 ETag로 200(자동 무효화)."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     dialogue_ids: list[uuid.UUID] = []
@@ -241,9 +234,7 @@ def test_etag_round_trip_304_then_invalidate_on_append_on_live_pg() -> None:
         token = create_access_token(uid, settings=_settings())
         auth = {"Authorization": f"Bearer {token}"}
         with _client() as client:
-            create = client.post(
-                "/v1/coach/sessions", headers=auth, json={"student_input": "처음"}
-            )
+            create = client.post("/v1/coach/sessions", headers=auth, json={"student_input": "처음"})
             did = uuid.UUID(create.json()["dialogue_id"])
             dialogue_ids.append(did)
 
@@ -280,9 +271,7 @@ def test_etag_round_trip_304_then_invalidate_on_append_on_live_pg() -> None:
 def test_get_session_returns_dialogue_with_ordered_turns_on_live_pg() -> None:
     """세션 생성→append→GET — turn 4행이 turn_order 오름차순으로 반환."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     dialogue_ids: list[uuid.UUID] = []
@@ -291,9 +280,7 @@ def test_get_session_returns_dialogue_with_ordered_turns_on_live_pg() -> None:
         token = create_access_token(uid, settings=_settings())
         auth = {"Authorization": f"Bearer {token}"}
         with _client() as client:
-            create = client.post(
-                "/v1/coach/sessions", headers=auth, json={"student_input": "처음"}
-            )
+            create = client.post("/v1/coach/sessions", headers=auth, json={"student_input": "처음"})
             did = uuid.UUID(create.json()["dialogue_id"])
             dialogue_ids.append(did)
             client.post(
@@ -321,12 +308,7 @@ def test_get_session_returns_dialogue_with_ordered_turns_on_live_pg() -> None:
             assert turns[2]["content"] == "두번째"
 
             # 존재하지 않는 dialogue → 404
-            assert (
-                client.get(
-                    f"/v1/coach/sessions/{uuid.uuid4()}", headers=auth
-                ).status_code
-                == 404
-            )
+            assert client.get(f"/v1/coach/sessions/{uuid.uuid4()}", headers=auth).status_code == 404
 
             # 무토큰 401
             assert client.get(f"/v1/coach/sessions/{did}").status_code == 401
@@ -337,9 +319,7 @@ def test_get_session_returns_dialogue_with_ordered_turns_on_live_pg() -> None:
 def test_append_turns_extends_existing_session_on_live_pg() -> None:
     """세션 생성 → 턴 추가 → 실 PG에 dialogue_turn 4행·turn_order 1·2·3·4 증분."""
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     dialogue_ids: list[uuid.UUID] = []
@@ -391,8 +371,6 @@ def test_append_turns_extends_existing_session_on_live_pg() -> None:
 
 from datetime import datetime, timezone  # noqa: E402
 
-from sqlalchemy.ext.asyncio import async_sessionmaker  # noqa: E402
-
 from whymath_backend.db.models.assessment import ConceptMasteryHistory  # noqa: E402
 from whymath_backend.db.models.concept import (  # noqa: E402
     Concept,
@@ -431,16 +409,12 @@ async def _add_all(*objs: object) -> None:
 
 def _concept_with_code(cid: uuid.UUID, code: str, name: str) -> Concept:
     return Concept.from_schema(
-        ConceptSchema(
-            concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념
-        )
+        ConceptSchema(concept_id=cid, code=code, name_ko=name, level=ConceptLevel.세부개념)
     )
 
 
 def _node_meta(uc: str, name_ko: str, domain: str, review_status: str) -> ConceptNode:
-    return ConceptNode(
-        concept_id=uc, name_ko=name_ko, domain=domain, review_status=review_status
-    )
+    return ConceptNode(concept_id=uc, name_ko=name_ko, domain=domain, review_status=review_status)
 
 
 def _prereq_edge(from_id: uuid.UUID, to_id: uuid.UUID, strength: float) -> ConceptEdge:
@@ -649,9 +623,7 @@ def test_session_create_logs_verify_event_on_live_pg() -> None:
     빈 풀이(student_solution 없음)는 적재 0(false-pass 방지). stateless /v1/coach는 미적재.
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     dialogue_ids: list[uuid.UUID] = []
@@ -710,9 +682,7 @@ def test_session_multiturn_logs_hint_events_on_live_pg() -> None:
     compute_wh1_surrogate_metrics ⑤가 MEASURED(또는 표본 부족 시 NO_DATA)가 된다.
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     dialogue_ids: list[uuid.UUID] = []
@@ -777,9 +747,7 @@ def test_create_session_persists_and_surfaces_active_hypotheses_on_live_pg() -> 
     ③ 기존 응답 필드(misconceptions·dialogue_id·intervention) 보존(회귀 0).
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     dialogue_ids: list[uuid.UUID] = []
@@ -841,9 +809,7 @@ def test_append_turns_accumulates_and_reinforces_hypotheses_on_live_pg() -> None
     다른 user는 격리(타 user 가설 행 미오염).
     """
     if not asyncio.run(_pg_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     uid = uuid.uuid4()
     other = uuid.uuid4()
