@@ -12,5 +12,9 @@
     "concepts.description",
     "concepts.formal_definition",
     "intl.ccss_statement_en"
+  ],
+  "post_extraction": [
+    "concepts: 기본수학 34의 definition_provenance에 '·AI 검수(수식·오개념 정합)' 마커 추가 — reviewed 승격(출처 별책8 보존). 추출 후 검수 행위라 source xlsx에는 없음.",
+    "edges: 평행이동(10기수2-01-06)←원의 방정식(10기수2-01-04) 1건 추가 — 공통수학 정본(HK24 평행이동←{직선,원}) 정합. source xlsx 'edges'=580, 적재 jsonl=581."
   ]
 }

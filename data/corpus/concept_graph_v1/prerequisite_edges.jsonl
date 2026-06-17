@@ -561,6 +561,7 @@
 {"from_id": "10\uae30\uc2182-01-02", "from_name": "\uc9c1\uc120\uc758 \ubc29\uc815\uc2dd", "relation": "\uc120\uc218(prereq)", "to_id": "10\uae30\uc2182-01-05", "to_name": "\uc6d0\uacfc \uc9c1\uc120\uc758 \uc704\uce58 \uad00\uacc4"}
 {"from_id": "10\uae30\uc2182-01-04", "from_name": "\uc6d0\uc758 \ubc29\uc815\uc2dd", "relation": "\uc120\uc218(prereq)", "to_id": "10\uae30\uc2182-01-05", "to_name": "\uc6d0\uacfc \uc9c1\uc120\uc758 \uc704\uce58 \uad00\uacc4"}
 {"from_id": "10\uae30\uc2182-01-02", "from_name": "\uc9c1\uc120\uc758 \ubc29\uc815\uc2dd", "relation": "\uc120\uc218(prereq)", "to_id": "10\uae30\uc2182-01-06", "to_name": "\ud3c9\ud589\uc774\ub3d9"}
+{"from_id": "10\uae30\uc2182-01-04", "from_name": "\uc6d0\uc758 \ubc29\uc815\uc2dd", "relation": "\uc120\uc218(prereq)", "to_id": "10\uae30\uc2182-01-06", "to_name": "\ud3c9\ud589\uc774\ub3d9"}
 {"from_id": "10\uae30\uc2182-01-06", "from_name": "\ud3c9\ud589\uc774\ub3d9", "relation": "\uc120\uc218(prereq)", "to_id": "10\uae30\uc2182-01-07", "to_name": "\ub300\uce6d\uc774\ub3d9"}
 {"from_id": "10\uae30\uc2182-02-01", "from_name": "\uc9d1\ud569\uc758 \uac1c\ub150\uacfc \ud45c\ud604", "relation": "\uc120\uc218(prereq)", "to_id": "10\uae30\uc2182-02-02", "to_name": "\ub450 \uc9d1\ud569\uc758 \ud3ec\ud568\uad00\uacc4"}
 {"from_id": "10\uae30\uc2182-02-02", "from_name": "\ub450 \uc9d1\ud569\uc758 \ud3ec\ud568\uad00\uacc4", "relation": "\uc120\uc218(prereq)", "to_id": "10\uae30\uc2182-02-03", "to_name": "\uc9d1\ud569\uc758 \uc5f0\uc0b0"}
