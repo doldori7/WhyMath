@@ -60,6 +60,7 @@ from whymath_backend.db.models.dialogue import (
     Dialogue,
     DialogueTurn,
 )
+from whymath_backend.db.models.evidence_link import EvidenceLink
 from whymath_backend.db.models.misconception_embedding import MisconceptionEmbedding
 from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
@@ -145,6 +146,8 @@ __all__ = [
     "MisconceptionEmbedding",
     # WH-1 2단계: MisconceptionHypothesisRecord (활성 오개념 가설 per-student 영속·§8.4)
     "MisconceptionHypothesisRecord",
+    # WH-1 2단계 §2.3: EvidenceLink (학습 증거 그래프·삭제권 FK CASCADE·polarity CHECK)
+    "EvidenceLink",
     # 슬라이스 3(개념그래프 아크): ConceptEmbedding (L1 개념 의미검색 pgvector 영속·UC 키)
     "ConceptEmbedding",
     # 개념그래프 소비 슬1: ConceptNode (L1 개념 메타 PG 프로젝션·UC 키·검색 enrichment 백킹)
