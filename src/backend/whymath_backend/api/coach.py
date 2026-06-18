@@ -425,6 +425,10 @@ def _build_response_payload(
     # 코칭 결정에서 누그러뜨리고(거짓 지적 방지·정확성 #1) verification_ocr_gated로 노출한다.
     # 텍스트 레벨 신호·미제공/고신뢰 OCR은 게이팅 안 됨(하위호환). 이미 _compute_matches(게이트
     # ②)에 전달 중인 동일 값을 solution coaching에도 thread한다.
+    # WH-1 1단계 잔여(hint 점층 결선): Polya 결정이 이미 계산한 hint_level(decide_hint_level·
+    # 턴/좌절/숙달 기반)을 solution 코칭에 thread한다 — *단계 자가검산* 발화가 3·4단계에서 과정
+    # 재구성 비계로 점층된다(정답/"틀렸다" 미포함·답 미루기). 재계산 0(L4 decide_hint_level 단일
+    # 산정처)·verify_steps 아니거나 1·2단계면 발화 불변(하위호환).
     sol = recommend_coaching_for_solution(
         solution_text,
         effective_bkt,
@@ -434,6 +438,7 @@ def _build_response_payload(
         solution_steps=body.solution_steps,
         solution_step_types=body.solution_step_types,
         ocr_confidence=body.ocr_confidence,
+        hint_level=decision.hint_level,
     )
     # slice 73: 노출은 *불일치 신호만* — 계산오류 verify(기존·arithmetic_error) + BKT↔θ 불일치
     # (consolidate·retrieval). 합의(foundation/advance)는 LTHC가 담당·한쪽 신호만(diagnose)은

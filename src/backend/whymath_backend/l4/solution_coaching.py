@@ -49,6 +49,7 @@ from whymath_backend.l3.verify_solution import (
     SolutionVerificationResult,
     verify_solution,
 )
+from whymath_backend.l4.hint_deferral import HintLevel
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.misconception.match_gate import _DEFAULT_OCR_THRESHOLD
 from whymath_backend.l4.step_shadow import observe_step_breaks
@@ -151,6 +152,7 @@ def recommend_coaching_for_solution(
     solution_steps: Sequence[str] | None = None,
     solution_step_types: Sequence[StepType | None] | None = None,
     ocr_confidence: float | None = None,
+    hint_level: HintLevel | None = None,
     discrepancy_tol: float = 0.2,
     mastery_threshold: float = 0.6,
 ) -> SolutionCoaching:
@@ -196,6 +198,13 @@ def recommend_coaching_for_solution(
     에 채워 L5가 단계별 검산 UI(has_incorrect·first_incorrect_index)를 그릴 수 있게 한다. 원
     verdict(`solution_verification`)는 저신뢰 OCR로 보류돼도 *투명성* 위해 그대로 노출한다 —
     코칭 *결정*엔 신뢰분(`step_incorrect_trusted`)만 반영하고 보류 사실은 플래그로 정직히 알린다.
+
+    **hint 점층 결선(WH-1 1단계 잔여)**: `hint_level`(답 미루기 1~4·None이면 미적용)을 그대로
+    `recommend_coaching`에 위임한다 — 오케스트레이터(api)가 *이미 계산한* Polya 결정의
+    `decision.hint_level`(`decide_hint_level`·턴/좌절/숙달 기반)을 넘기면, *단계 자가검산*
+    (verify_steps) 발화가 3·4단계에서 과정 재구성 비계로 점층된다(정답/"틀렸다" 미포함·답 미루기).
+    재계산하지 않고 그대로 전달만 한다(L4 경계·이 함수는 hint 산정 책임 없음). 미제공(None)·
+    verify_steps 아님이면 발화 불변(하위호환).
 
     `problem_id`·`expected_answer`(slice 64)는 *step shadow 진단 맥락*으로만 쓰여 반환
     `SolutionCoaching`을 *바꾸지 않는다*(비노출 불변). `expected_answer`는 호출자(api 계층)가
@@ -243,6 +252,7 @@ def recommend_coaching_for_solution(
         incorrect_step_index=incorrect_step_index,
         discrepancy_tol=discrepancy_tol,
         mastery_threshold=mastery_threshold,
+        hint_level=hint_level,
     )
     result = SolutionCoaching(
         trigger=trigger,

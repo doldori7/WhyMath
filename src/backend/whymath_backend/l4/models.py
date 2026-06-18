@@ -87,11 +87,12 @@ class PedagogyDecision(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     polya_stage_to_advance: StageTransition = Field(description="다음 단계 전이 결정.")
-    hint_level: int = Field(
+    # `hint_deferral.HintLevel`과 동일한 Literal을 *인라인*한다 — models→hint_deferral import는
+    # 순환(hint_deferral→lthc→…→models)이라 회피하고, mypy는 두 Literal[1,2,3,4]를 *같은 타입*으로
+    # 보므로 `recommend_coaching(hint_level=)`(HintLevel|None)에 그대로 전달된다(점층 입력).
+    hint_level: Literal[1, 2, 3, 4] = Field(
         default=1,
-        ge=1,
-        le=4,
-        description="답 미루기 단계(1=가장 은근/방향, 4=전체 풀이/마지막 수단).",
+        description="답 미루기 단계(1=가장 은근/방향, 4=전체 풀이/마지막 수단). 항상 1~4.",
     )
     socratic_category: str = Field(
         default="",

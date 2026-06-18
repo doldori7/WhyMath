@@ -581,3 +581,45 @@ class TestStepShadowNonExposure:
             assert any(str(pid) in m and "expected='x = 3'" in m for m in msgs)
         finally:
             get_settings.cache_clear()
+
+
+class TestHintLevelEscalation:
+    """hint 점층 결선 — `hint_level`을 `recommend_coaching`에 위임(단계 자가검산 3·4 점층)."""
+
+    # step-incorrect 시퀀스(2x+4 ≠ 2x+5) → verify_steps=True 경로(점층 대상).
+    _STEPS = ["2*x + 4", "2*x + 5"]
+
+    def test_hint_level_none_keeps_step_prompt(self) -> None:
+        """hint_level 미제공 → 단계 자가검산 발화 불변·trigger.hint_level None(하위호환)."""
+        base = recommend_coaching_for_solution("풀이", 0.9, 2.0, solution_steps=self._STEPS)
+        assert base.trigger.focus == "verify"
+        assert base.trigger.hint_level is None
+        assert "어떤 규칙" not in base.trigger.prompt  # 점층 아님
+
+    def test_hint_level_3_4_escalates_step_prompt(self) -> None:
+        """verify_steps + hint_level 3·4 → 과정 재구성 비계 점층·trigger.hint_level 전달."""
+        base = recommend_coaching_for_solution("풀이", 0.9, 2.0, solution_steps=self._STEPS)
+        for level in (3, 4):
+            esc = recommend_coaching_for_solution(
+                "풀이", 0.9, 2.0, solution_steps=self._STEPS, hint_level=level  # type: ignore[arg-type]
+            )
+            assert esc.trigger.focus == "verify"
+            assert esc.trigger.hint_level == level
+            assert esc.trigger.prompt != base.trigger.prompt  # 점층으로 바뀜
+            assert "어떤 규칙" in esc.trigger.prompt
+
+    def test_hint_level_1_2_no_escalation(self) -> None:
+        """verify_steps + hint_level 1·2 → 발화 불변(점층 아님)·메타데이터만 채움."""
+        base = recommend_coaching_for_solution("풀이", 0.9, 2.0, solution_steps=self._STEPS)
+        for level in (1, 2):
+            r = recommend_coaching_for_solution(
+                "풀이", 0.9, 2.0, solution_steps=self._STEPS, hint_level=level  # type: ignore[arg-type]
+            )
+            assert r.trigger.prompt == base.trigger.prompt  # 발화 불변
+            assert r.trigger.hint_level == level
+
+    def test_hint_level_ignored_for_plain_arithmetic_slip(self) -> None:
+        """단계 시퀀스 없는 순수 산술 슬립(verify_steps=False)은 hint_level 3이어도 점층 안 됨."""
+        r = recommend_coaching_for_solution("2 + 3 = 6", 0.9, 2.0, hint_level=3)
+        assert r.trigger.focus == "verify"
+        assert "어떤 규칙" not in r.trigger.prompt  # verify_steps 경로 아님 → 점층 미적용
