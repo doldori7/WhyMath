@@ -36,8 +36,14 @@ max_tool_calls)` — `SolverPolicy`(도구 선택 두뇌·주입)를 받아 도�
 없는 finalize 거부·failed 차단·unverifiable→unverified 격리·탐색 예산 상한·dead-end 회피·검증
 보조정리만 log_lemma. 액션 10종은 `kind` 판별 Pydantic 유니온.
 
+S1 좌석(자기 진화 데이터 — 순수 코어): ⑨ `self_evolution.py` `build_sft_dataset(solutions, *,
+dedup=True) -> SftDataset` — 솔버가 적재한 *verified* 풀이를 SFT 학습 레코드(`SftRecord`)로
+변환한다. **verified만**(R-S2 심층 방어·`unverified` 배제·배제 건수 정직 집계)·`(problem_id,
+지문)` 재발견 dedup(#256 export 레벨 연장). 순수(DB 0) — 실 DB 배치 조회·JSONL·ops CLI는 후속.
+
 범위 밖(후속·환경 밖): LLM 정책 모델(Ollama·Phaiakes9)·생성 도구 내용 생성·MCTS-lite 탐색·자기
-진화·PRM·Tier3(§9 로드맵). 본 패키지는 *상태 저장소 4종 + 결정론 루프 골격*까지 둔다.
+진화 *실 DB export·PRM·Tier3*(§9 로드맵). 본 패키지는 *상태 저장소 4종 + 결정론 루프 골격 + 자기
+진화 변환 코어*까지 둔다.
 """
 
 from __future__ import annotations
@@ -96,10 +102,17 @@ from whymath_backend.whs.node_store import (
     increment_visits,
     update_evaluation,
 )
+from whymath_backend.whs.self_evolution import (
+    SftDataset,
+    SftRecord,
+    build_sft_dataset,
+    to_sft_record,
+)
 from whymath_backend.whs.solution_bank import (
     bank_solution,
     get_solutions,
     get_verified,
+    solution_fingerprint,
 )
 from whymath_backend.whs.verdict import (
     WhsGrade,
@@ -125,6 +138,8 @@ __all__ = [
     "ParseProblemAction",
     "RetrieveSimilarAction",
     "ScriptedPolicy",
+    "SftDataset",
+    "SftRecord",
     "SolutionNode",
     "SolverOutcome",
     "SolverPolicy",
@@ -137,6 +152,7 @@ __all__ = [
     "WhsSolutionGrade",
     "WhsVerdict",
     "bank_solution",
+    "build_sft_dataset",
     "create_node",
     "final_verdict",
     "find_lemma",
@@ -153,5 +169,7 @@ __all__ = [
     "log_lemma",
     "run_baseline",
     "run_solver",
+    "solution_fingerprint",
+    "to_sft_record",
     "update_evaluation",
 ]

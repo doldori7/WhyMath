@@ -318,6 +318,12 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 - **정직 표기**: `ToolResult.detail`은 dedup 히트(재사용) 시 "적재" 과대주장을 피해 "확정(중복은 기존 재사용)"으로 표기한다. 구조 필드(`banked_solution_id`·`grade`·`status`)는 히트/미스 모두 정확하므로 불변(`finalized` + 기존 행 id 반환).
 - **후속**: 신규 vs 재발견 정밀 카운터(§5 export가 라운드별 *새* verified 경로를 셀 때)·*본질적 동치* dedup(동치 풀이 정규화).
 
+**S1 슬라이스 6 — 자기진화 SFT 변환 코어**(설계 §5) 구현됨(마이그레이션 0·순수·DB 0). 검증 풀이 → SFT 학습 레코드 변환 `whs/self_evolution.py`:
+- **`build_sft_dataset(solutions, *, dedup=True) -> SftDataset`**: 솔버가 적재한 풀이들을 SFT 학습 레코드(`SftRecord`: problem_id·solution_path·strategy_tag·answer — 학습신호만·출처 메타 제외)로 변환. `to_sft_record`(순수 매핑)는 별도.
+- **★R-S2 학습 안전(심층 방어)**: `grade != verified`는 *레코드화하지 않고* `excluded_unverified`로 집계한다. `get_verified` 저장소 필터가 1차 방어지만, 임의 입력(혼합 등급)에도 판정 불가 풀이가 학습 데이터에 새지 않도록 *여기서 다시* 구조 강제(CLAUDE.md 정확성 #1). 조용히 버리지 않고 *정직하게* 센다.
+- **재발견 dedup(기본 ON·#256 연장)**: 키 `(problem_id, solution_fingerprint)` — 같은 문제·같은 지문은 1건만(`deduped` 집계), *다른 문제*의 우연히 같은 경로는 보존(문제마다 별개 학습쌍). `SftDataset`은 `records`+정직 회계(`total_input`·`excluded_unverified`·`deduped`·`size`) — 보류했던 "신규 vs 재발견 카운터"의 실현. 입력 순서 보존(결정론).
+- **후속**: 실 DB 배치 조회(전 문제 verified 스트리밍)·JSONL 직렬화·ops CLI(§7.5 오프라인 배치)·문제 본문 조인(problem_id→코퍼스)·PRM 쌍 추출·*본질적 동치* dedup.
+
 ### 용어 정합: "545노드" (편집자 부기)
 
 §5 난이도 사다리의 "545노드 연계 문항"에서 545는 *설계 추정치*다. 구현 커리큘럼 계층은 개념그래프 **403 개념(UC) + 541 선수엣지**이며, "545"는 레포에 실체가 없다(상세는 WH-1 문서 "용어·수치 정합" 절). 시그니처 패턴 55+108은 ROADMAP Phase 1 자산으로 유효하다.
