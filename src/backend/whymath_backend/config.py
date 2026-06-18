@@ -407,6 +407,17 @@ class Settings(BaseSettings):
             "log_evidence가 retention_until 미제공 시 today+이 값으로 채운다."
         ),
     )
+    pii_retention_years: int = Field(
+        default=3,
+        ge=1,
+        description=(
+            "학습 활동 PII 시계열(dialogue·learning_session·problem_attempt·attempt_event·"
+            "assessment·concept_mastery_history·ability_snapshot·daily/behavior metrics)의 *기본 "
+            "보존기한*(년). `privacy.retention.purge_expired_records`가 타임스탬프(started_at/"
+            "measured_at 등) < (오늘−이 값)인 행을 파기(GDPR 데이터 최소화·무기한 보존 금지). 기본 "
+            "3년(evidence와 동일·2026-06-18 합의)·법무 확정 시 테이블별 차등은 후속."
+        ),
+    )
     coach_rate_limit_write_per_minute: int = Field(
         default=30,
         ge=0,
