@@ -42,6 +42,7 @@ __all__ = [
     "Matcher",
     "Phase2Exit",
     "Phase2ExitVerdict",
+    "Phase2Report",
     "PrecisionGuard",
     "PrecisionVerdict",
     "evaluate_agreement_gate",
@@ -413,3 +414,18 @@ def evaluate_phase2_exit(recall: AgreementGate, precision: PrecisionGuard) -> Ph
             "위험이라 recall 개선을 덮어쓴다). 오프라인·시스템 지표(LIVE ground-truth 아님)."
         ),
     )
+
+
+class Phase2Report(BaseModel):
+    """2단계 종료 *전체* 리포트 — recall 게이트 + 정밀도 가드 + 결합 판정을 한 번에. 불변.
+
+    ops/스크립트가 "2단계 종료 기준 충족?"을 *근거와 함께* 읽도록 세 결과를 묶는다 — 결합
+    `decision`만이 아니라 두 축의 일치율·FP율·불일치쌍·p값까지 담아 *왜* 그 판정인지 보인다
+    (전역 집계는 HTTP 미노출·ops 스크립트가 직접 호출하는 컨벤션의 직렬화 표면).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    recall: AgreementGate = Field(description="recall(진단 일치율) 게이트 — 전체 수치.")
+    precision: PrecisionGuard = Field(description="정밀도(거짓양성) 회귀 가드 — 전체 수치.")
+    decision: Phase2Exit = Field(description="결합 종료 판정(recall AND 정밀도).")
