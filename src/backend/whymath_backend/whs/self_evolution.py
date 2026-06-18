@@ -32,6 +32,8 @@ from whymath_backend.db.models.verified_solution import (
     VerifiedSolution,
     WhsSolutionGrade,
 )
+from whymath_backend.schema.enums import SourceType
+from whymath_backend.schema.problem import _METADATA_ONLY_SOURCES
 from whymath_backend.whs.solution_bank import solution_fingerprint
 
 __all__ = [
@@ -45,6 +47,23 @@ __all__ = [
 ]
 
 
+def _body_license_clean(problem: Problem) -> bool:
+    """문제 본문을 *임베드해도 되는* 라이선스 청정 출처인가(저작권 게이트·우선순위 #2).
+
+    코퍼스 저작권 불변식(`schema.Problem` validator)은 평가원·EBS·교과서(=`_METADATA_ONLY_SOURCES`)
+    를 *구조 메타 전용*으로 묶어 `question_text` 등 본문 필드를 비우지만, **`conditions_parsed`는
+    그 강제 대상이 아니다**(validator 갭). 그래서 WH-S export가 조건을 임베드할 때 *여기서 다시*
+    출처를 보고 제한 출처면 비운다(심층 방어). 본문 보유 합법 출처(자체생성·OER 등 메타 전용 아님)
+    면 True. `source_type`이 enum/문자열 어느 쪽이어도 정규화해 비교한다(validator 패턴 답습).
+    """
+    source_value = (
+        problem.source_type.value
+        if isinstance(problem.source_type, SourceType)
+        else problem.source_type
+    )
+    return source_value not in {s.value for s in _METADATA_ONLY_SOURCES}
+
+
 class SftRecord(BaseModel):
     """SFT 학습 레코드 1건 — 검증된 (문제, 풀이 경로) 쌍의 *학습신호*만 담는다.
 
@@ -56,7 +75,9 @@ class SftRecord(BaseModel):
 
     저작권 안전(§13.2·우선순위 #2): `question_text`는 코퍼스 불변식상 *라이선스 청정*(자체
     동등문제·OER)만 본문을 보유하고 평가원·EBS·교과서 출처는 NULL이라(`schema.Problem` 강제),
-    임베드해도 제한 본문이 새지 않는다. `unit_codes`는 공공 성취기준 코드.
+    임베드해도 제한 본문이 새지 않는다. `unit_codes`는 공공 성취기준 코드. `conditions`(구조화
+    조건)는 *코퍼스 불변식이 비우지 않는* 필드라 WH-S export가 **출처 게이트**
+    (`_body_license_clean`)로 제한 출처면 비운다 — 조건 본문 누출 방지(심층 방어).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -70,6 +91,10 @@ class SftRecord(BaseModel):
     )
     unit_codes: tuple[str, ...] | None = Field(
         default=None, description="성취기준 코드(코퍼스 조인·미조인 시 None)."
+    )
+    conditions: tuple[dict[str, Any], ...] | None = Field(
+        default=None,
+        description="구조화 조건(코퍼스 조인·본문 합법 출처만·제한 출처/미조인 시 None).",
     )
 
 
@@ -91,6 +116,11 @@ class SftDataset(BaseModel):
         ge=0,
         description="코퍼스에 problem_id가 없어 컨텍스트 미결합된 레코드 수(NO_DATA).",
     )
+    conditions_gated: int = Field(
+        default=0,
+        ge=0,
+        description="제한 출처라 조건 본문을 비운 레코드 수(저작권 게이트·억제 가시화).",
+    )
 
     @property
     def size(self) -> int:
@@ -101,10 +131,15 @@ class SftDataset(BaseModel):
 def to_sft_record(solution: VerifiedSolution, problem: Problem | None = None) -> SftRecord:
     """검증 풀이 1건 → SFT 레코드(순수·학습신호 필드만). 등급 검사는 `build_sft_dataset`가 한다.
 
-    `problem`(코퍼스 조인 결과)을 주면 `question_text`·`unit_codes`를 임베드한다(자연어 프롬프트
-    컨텍스트). 없으면 두 필드는 None(미조인·하위호환). `Problem` ORM은 *속성만 읽고* 세션을
+    `problem`(코퍼스 조인 결과)을 주면 `question_text`·`unit_codes`·`conditions`를 임베드한다
+    (자연어 프롬프트 컨텍스트). 없으면 세 필드는 None(미조인·하위호환). **`conditions`는 저작권
+    게이트**(`_body_license_clean`): 본문 보유 합법 출처에만 싣고 제한 출처(평가원·EBS·교과서)면
+    None(코퍼스 불변식이 안 비우는 갭 보완·우선순위 #2). `Problem` ORM은 *속성만 읽고* 세션을
     건드리지 않아 순수성을 유지한다(`VerifiedSolution` 읽기와 동형).
     """
+    conditions: tuple[dict[str, Any], ...] | None = None
+    if problem is not None and _body_license_clean(problem):
+        conditions = tuple(problem.conditions_parsed)  # 본문 합법 출처만 — 제한 출처는 None.
     return SftRecord(
         problem_id=solution.problem_id,
         solution_path=solution.solution_path,
@@ -112,6 +147,7 @@ def to_sft_record(solution: VerifiedSolution, problem: Problem | None = None) ->
         answer=solution.answer,
         question_text=problem.question_text if problem is not None else None,
         unit_codes=tuple(problem.unit_codes) if problem is not None else None,
+        conditions=conditions,
     )
 
 
@@ -129,9 +165,11 @@ def build_sft_dataset(
     입력 순서를 보존한다(결정론). 트랜잭션·DB 0(순수).
 
     **문제 조인(opt-in)**: `problem_map`(problem_id→Problem·호출자가 코퍼스에서 일괄 조회)을 주면
-    레코드에 `question_text`·`unit_codes`를 결합한다. map에 *없는* problem_id는 NO_DATA로 보고
-    컨텍스트를 비운 채(`problems_missing` 집계) 레코드는 *그대로 적재한다* — 풀이는 verified라
-    버리지 않되 누락을 *조용히 메우지 않고 정직하게 센다*(날조 0).
+    레코드에 `question_text`·`unit_codes`·`conditions`를 결합한다. map에 *없는* problem_id는
+    NO_DATA로 보고 컨텍스트를 비운 채(`problems_missing` 집계) 레코드는 *그대로 적재한다* — 풀이는
+    verified라 버리지 않되 누락을 *조용히 메우지 않고 정직하게 센다*(날조 0). **저작권 게이트**:
+    제한 출처(평가원·EBS·교과서)면 `conditions`를 비우고, *실제 조건이 있던* 레코드는
+    `conditions_gated`로 센다(억제 가시화·우선순위 #2).
     """
     records: list[SftRecord] = []
     seen: set[tuple[uuid.UUID, str]] = set()
@@ -139,6 +177,7 @@ def build_sft_dataset(
     excluded = 0
     deduped = 0
     problems_missing = 0
+    conditions_gated = 0
     for sol in solutions:
         total += 1
         if sol.grade != WhsSolutionGrade.VERIFIED:
@@ -155,6 +194,8 @@ def build_sft_dataset(
             problem = problem_map.get(sol.problem_id)
             if problem is None:
                 problems_missing += 1  # 코퍼스에 없음 — 컨텍스트 비우고 정직 집계(NO_DATA).
+            elif not _body_license_clean(problem) and problem.conditions_parsed:
+                conditions_gated += 1  # 제한 출처 조건 억제 — 저작권 게이트 가시화(#2).
         records.append(to_sft_record(sol, problem))
     return SftDataset(
         records=tuple(records),
@@ -162,6 +203,7 @@ def build_sft_dataset(
         excluded_unverified=excluded,
         deduped=deduped,
         problems_missing=problems_missing,
+        conditions_gated=conditions_gated,
     )
 
 
@@ -196,6 +238,9 @@ class SftStreamAccounting(BaseModel):
         ge=0,
         description="코퍼스에 problem_id가 없어 컨텍스트 미결합된 레코드 수(NO_DATA).",
     )
+    conditions_gated: int = Field(
+        default=0, ge=0, description="제한 출처라 조건 본문을 비운 레코드 수(저작권 게이트)."
+    )
 
     def summary(self) -> dict[str, int]:
         """stderr 회계 요약 dict(일괄 CLI 요약과 동일 키 `{total_input, records, ...}`)."""
@@ -205,6 +250,7 @@ class SftStreamAccounting(BaseModel):
             "excluded_unverified": self.excluded_unverified,
             "deduped": self.deduped,
             "problems_missing": self.problems_missing,
+            "conditions_gated": self.conditions_gated,
         }
 
 
@@ -263,5 +309,7 @@ async def stream_sft_jsonl(
             problem = cached_problem
             if problem is None:
                 accounting.problems_missing += 1  # 코퍼스 미존재 — 컨텍스트 비우고 정직 집계.
+            elif not _body_license_clean(problem) and problem.conditions_parsed:
+                accounting.conditions_gated += 1  # 제한 출처 조건 억제 — 저작권 게이트 가시화(#2).
         accounting.records += 1
         yield to_sft_record(sol, problem).model_dump_json()

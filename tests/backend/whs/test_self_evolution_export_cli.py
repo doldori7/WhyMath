@@ -20,6 +20,7 @@ from whymath_backend.db.models.verified_solution import (
     VerifiedSolution,
     WhsSolutionGrade,
 )
+from whymath_backend.schema.enums import SourceType
 from whymath_backend.whs import self_evolution_export_cli as cli
 from whymath_backend.whs.self_evolution import SftDataset, build_sft_dataset
 
@@ -28,8 +29,20 @@ def _vs(problem_id: uuid.UUID, path: dict, grade: WhsSolutionGrade = WhsSolution
     return VerifiedSolution(problem_id=problem_id, grade=grade, solution_path=path)
 
 
-def _problem(problem_id: uuid.UUID, *, question_text: str = "문제 본문") -> Problem:
-    return Problem(problem_id=problem_id, question_text=question_text, unit_codes=["M1-A-01"])
+def _problem(  # type: ignore[no-untyped-def]
+    problem_id: uuid.UUID,
+    *,
+    question_text: str = "문제 본문",
+    source_type: SourceType = SourceType.자체생성,
+    conditions_parsed: list | None = None,
+):
+    return Problem(
+        problem_id=problem_id,
+        question_text=question_text,
+        unit_codes=["M1-A-01"],
+        source_type=source_type,
+        conditions_parsed=conditions_parsed if conditions_parsed is not None else [],
+    )
 
 
 def _runner(dataset: SftDataset, *, seen: dict[str, bool]):  # type: ignore[no-untyped-def]
@@ -92,6 +105,7 @@ class TestSelfEvolutionExportCli:
             "excluded_unverified": 1,  # unverified 1건 배제(정직 집계)
             "deduped": 0,
             "problems_missing": 0,  # 문제 조인 안 함 → 0
+            "conditions_gated": 0,
         }
 
     def test_no_dedup_flag_forwarded(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -143,6 +157,7 @@ class TestSelfEvolutionExportCliStream:
             "excluded_unverified": 1,
             "deduped": 1,
             "problems_missing": 0,
+            "conditions_gated": 0,
         }
 
     def test_stream_no_dedup_keeps_duplicates(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -159,6 +174,7 @@ class TestSelfEvolutionExportCliStream:
             "excluded_unverified": 0,
             "deduped": 0,
             "problems_missing": 0,
+            "conditions_gated": 0,
         }
 
     def test_stream_empty_summary_zero(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -211,3 +227,24 @@ class TestSelfEvolutionExportCliWithProblem:
         captured = capsys.readouterr()
         assert json.loads(captured.out.splitlines()[0])["question_text"] is None
         assert json.loads(captured.err)["problems_missing"] == 1
+
+    def test_stream_with_problem_restricted_source_gates_conditions(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """--stream --with-problem + 제한 출처 → conditions null·conditions_gated 집계(저작권)."""
+        pid = uuid.uuid4()
+        rows = [_vs(pid, {"steps": ["x=2"]})]
+        restricted = _problem(
+            pid,
+            source_type=SourceType.평가원,
+            conditions_parsed=[{"label": "가", "text": "f(x) 미분가능", "formal": None}],
+        )
+        code = cli.main(
+            ["--stream", "--with-problem"],
+            stream_fn=_stream_runner(rows),
+            problem_loader=_loader_for({pid: restricted}),
+        )
+        assert code == 0
+        captured = capsys.readouterr()
+        assert json.loads(captured.out.splitlines()[0])["conditions"] is None  # 제한 출처 억제
+        assert json.loads(captured.err)["conditions_gated"] == 1

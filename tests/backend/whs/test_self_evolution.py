@@ -17,6 +17,7 @@ from whymath_backend.db.models.verified_solution import (
     VerifiedSolution,
     WhsSolutionGrade,
 )
+from whymath_backend.schema.enums import SourceType
 from whymath_backend.whs.self_evolution import (
     SftRecord,
     SftStreamAccounting,
@@ -32,9 +33,17 @@ def _problem(
     *,
     question_text: str | None = "다음 방정식을 풀어라.",
     unit_codes: tuple[str, ...] = ("M1-A-01",),
+    source_type: SourceType = SourceType.자체생성,
+    conditions_parsed: list[dict[str, Any]] | None = None,
 ) -> Problem:
-    """transient Problem(세션 미부착) — to_sft_record가 읽는 question_text·unit_codes만 채운다."""
-    return Problem(problem_id=problem_id, question_text=question_text, unit_codes=list(unit_codes))
+    """transient Problem(세션 미부착) — to_sft_record가 읽는 필드만(기본 자체생성=청정 출처)."""
+    return Problem(
+        problem_id=problem_id,
+        question_text=question_text,
+        unit_codes=list(unit_codes),
+        source_type=source_type,
+        conditions_parsed=conditions_parsed if conditions_parsed is not None else [],
+    )
 
 
 def _vs(
@@ -333,6 +342,7 @@ class TestStreamSftJsonl:
             "excluded_unverified": 0,
             "deduped": 0,
             "problems_missing": 0,
+            "conditions_gated": 0,
         }
 
     def test_summary_shape_matches_cli_keys(self) -> None:
@@ -351,6 +361,7 @@ class TestStreamSftJsonl:
             "excluded_unverified": 1,
             "deduped": 1,
             "problems_missing": 0,  # 문제 조인 안 함 → 0
+            "conditions_gated": 0,
         }
 
 
@@ -455,3 +466,84 @@ class TestProblemContextJoin:
         )
         assert json.loads(lines[0])["question_text"] is None
         assert acc.problems_missing == 1 and calls == [p1]
+
+
+_COND = [{"label": "가", "text": "f(x)는 미분가능", "formal": None}]
+
+
+class TestConditionsCopyrightGate:
+    """conditions 저작권 게이트 — 본문 합법 출처만 임베드·제한 출처는 None + conditions_gated."""
+
+    def test_to_sft_record_embeds_conditions_for_clean_source(self) -> None:
+        """청정 출처(자체생성) → conditions를 tuple로 임베드."""
+        pid = uuid.uuid4()
+        rec = to_sft_record(
+            _vs(problem_id=pid),
+            _problem(pid, source_type=SourceType.자체생성, conditions_parsed=_COND),
+        )
+        assert rec.conditions == tuple(_COND)
+
+    def test_to_sft_record_gates_conditions_for_restricted_source(self) -> None:
+        """제한 출처(평가원)는 조건이 있어도 conditions=None(저작권 게이트)."""
+        pid = uuid.uuid4()
+        rec = to_sft_record(
+            _vs(problem_id=pid),
+            _problem(pid, source_type=SourceType.평가원, conditions_parsed=_COND),
+        )
+        assert rec.conditions is None
+        assert rec.question_text == "다음 방정식을 풀어라."  # 다른 컨텍스트는 영향 없음
+
+    def test_to_sft_record_no_problem_conditions_none(self) -> None:
+        """problem 미제공 → conditions None(하위호환)."""
+        rec = to_sft_record(_vs(problem_id=uuid.uuid4()))
+        assert rec.conditions is None
+
+    def test_to_sft_record_clean_empty_conditions_is_empty_tuple(self) -> None:
+        """청정 출처·빈 조건 → 빈 tuple(None과 구분)."""
+        pid = uuid.uuid4()
+        rec = to_sft_record(_vs(problem_id=pid), _problem(pid, conditions_parsed=[]))
+        assert rec.conditions == ()
+
+    def test_build_counts_conditions_gated_for_restricted_with_conditions(self) -> None:
+        """제한 출처 + 실제 조건 있음 → conditions_gated 집계·conditions None."""
+        pid = uuid.uuid4()
+        ds = build_sft_dataset(
+            [_vs(problem_id=pid, solution_path={"s": 1})],
+            problem_map={pid: _problem(pid, source_type=SourceType.EBS, conditions_parsed=_COND)},
+        )
+        assert ds.conditions_gated == 1
+        assert ds.records[0].conditions is None
+
+    def test_build_no_gate_for_clean_source(self) -> None:
+        """청정 출처는 억제 0·conditions 임베드."""
+        pid = uuid.uuid4()
+        ds = build_sft_dataset(
+            [_vs(problem_id=pid, solution_path={"s": 1})],
+            problem_map={pid: _problem(pid, conditions_parsed=_COND)},
+        )
+        assert ds.conditions_gated == 0
+        assert ds.records[0].conditions == tuple(_COND)
+
+    def test_build_restricted_empty_conditions_not_counted(self) -> None:
+        """제한 출처라도 *조건이 없으면* 억제 아님 → conditions_gated 0(억제할 본문 없음)."""
+        pid = uuid.uuid4()
+        ds = build_sft_dataset(
+            [_vs(problem_id=pid, solution_path={"s": 1})],
+            problem_map={pid: _problem(pid, source_type=SourceType.교과서, conditions_parsed=[])},
+        )
+        assert ds.conditions_gated == 0
+        assert ds.records[0].conditions is None  # 제한 출처라 어차피 None
+
+    def test_stream_counts_conditions_gated(self) -> None:
+        """스트림도 제한 출처 조건 억제를 집계하고 conditions를 비운다."""
+        pid = uuid.uuid4()
+        calls: list[uuid.UUID] = []
+        loader = _make_loader(
+            {pid: _problem(pid, source_type=SourceType.평가원, conditions_parsed=_COND)},
+            calls=calls,
+        )
+        lines, acc = _run_stream(
+            [_vs(problem_id=pid, solution_path={"s": 1})], problem_loader=loader
+        )
+        assert json.loads(lines[0])["conditions"] is None
+        assert acc.conditions_gated == 1

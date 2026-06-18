@@ -342,6 +342,11 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 - **CLI `--with-problem` 옵트인**: batch=`_default_export_fn`이 `select(Problem).where(problem_id.in_(...))` IN-일괄로 map 구성(`gating.py`·`me.py` 선례), stream=`_default_problem_loader`가 *문제별 별도 세션* `get(Problem, pid)`(asyncpg 커서 인터리브 회피). 둘 다 `pragma: no cover`+integration·주입 좌석(`export_fn`/`problem_loader`)으로 hermetic 검증. 미설정 시 기존 동작 완전 불변(하위호환).
 - **후속**: PRM 쌍 추출·*본질적 동치* dedup·conditions_parsed 등 추가 컨텍스트·실 PG 조인 integration·GDPR `/v1/me/export`(결정 필요).
 
+**S1 슬라이스 10 — SFT export conditions_parsed 컨텍스트(출처 저작권 게이트)**(설계 §5·§7·#260 후속) 구현됨(마이그레이션 0·opt-in). #260 조인에 구조화 조건(`conditions_parsed`)을 추가하되 **저작권 갭**을 막는다: 코퍼스 불변식(`schema/problem.py:558` validator)은 `question_text`·`answer_explanation`·`choices`만 제한 출처(평가원·EBS·교과서)에서 비우고 **`conditions_parsed`는 비우지 않아**(validator 갭), `Condition.text`(조건 자연어 본문)가 제한 출처에서 SFT로 샐 수 있다(우선순위 #2 법적).
+- **출처 게이트**: `_body_license_clean(problem)`(WH-S)이 `_METADATA_ONLY_SOURCES`(`schema/problem.py:56` 단일 출처·`provenance.py` 선례·정규화 비교)로 본문 합법 출처를 판정. `SftRecord` + `conditions: tuple[dict,...] | None`(pydantic·마이그레이션 0)·`to_sft_record`는 *본문 합법 출처에만* `tuple(problem.conditions_parsed)` 임베드, 제한 출처는 None(코퍼스 차원 validator 무변경·export 레벨 심층 방어). question_text/unit_codes는 #260대로 불변.
+- **억제 가시화(날조 0·감사)**: `build_sft_dataset`·`stream_sft_jsonl`이 *제한 출처 + 실제 조건 있던* 레코드를 `conditions_gated`로 집계(빈 조건은 억제 아님이라 미집계). `SftDataset`·`SftStreamAccounting`·stderr 요약에 `conditions_gated` 키 추가. 미조인/청정 출처면 0(하위호환).
+- **후속**: 코퍼스 차원 validator 확장(법무·백필)·answer_explanation 등 추가 컨텍스트·PRM 쌍 추출·*본질적 동치* dedup·실 PG 조인 integration·GDPR `/v1/me/export`(결정 필요).
+
 ### 용어 정합: "545노드" (편집자 부기)
 
 §5 난이도 사다리의 "545노드 연계 문항"에서 545는 *설계 추정치*다. 구현 커리큘럼 계층은 개념그래프 **403 개념(UC) + 541 선수엣지**이며, "545"는 레포에 실체가 없다(상세는 WH-1 문서 "용어·수치 정합" 절). 시그니처 패턴 55+108은 ROADMAP Phase 1 자산으로 유효하다.
