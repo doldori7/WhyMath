@@ -27,6 +27,7 @@ from whymath_backend.db.models.user import UserProfile
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.evidence_store import (
     EvidenceValidationError,
+    default_retention_until,
     get_evidence_for_misconception,
     get_evidence_for_student,
     log_evidence,
@@ -133,6 +134,37 @@ class TestLogEvidenceGate:
         assert link.weight == 0.8
         assert link.link_id == 1
         assert session.added == [link]
+
+
+class TestRetentionDefault:
+    """GDPR 데이터 최소화 — 적재 시 보존기한 *자동* 채움(무기한 보존 금지)."""
+
+    def test_default_retention_until_pure(self) -> None:
+        """순수 헬퍼 — +years년·2/29는 비윤년 2/28 클램프."""
+        assert default_retention_until(date(2026, 1, 15), years=3) == date(2029, 1, 15)
+        assert default_retention_until(date(2024, 2, 29), years=3) == date(2027, 2, 28)
+        assert default_retention_until(date(2026, 6, 18), years=1) == date(2027, 6, 18)
+
+    def test_log_evidence_fills_retention_when_absent(self) -> None:
+        """retention_until 미제공 → logged_on + Settings 기본(3년)으로 *반드시* 채움."""
+        session = _FakeSession()
+        link = _log(session, logged_on=date(2026, 1, 15))
+        # 기본 evidence_retention_years=3 → 2029-01-15(무기한 None 금지).
+        assert link.retention_until == date(2029, 1, 15)
+
+    def test_log_evidence_respects_explicit_retention(self) -> None:
+        """retention_until 명시 제공 → 그 값 존중(자동 기본 덮어쓰지 않음)."""
+        session = _FakeSession()
+        explicit = date(2030, 12, 31)
+        link = _log(session, retention_until=explicit, logged_on=date(2026, 1, 15))
+        assert link.retention_until == explicit
+
+    def test_log_evidence_default_logged_on_is_today(self) -> None:
+        """logged_on 미제공 → 오늘 기준 +3년(무기한 None 아님)."""
+        session = _FakeSession()
+        link = _log(session)
+        assert link.retention_until == default_retention_until(date.today(), years=3)
+        assert link.retention_until is not None
 
 
 class TestQueriesUnit:

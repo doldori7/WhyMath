@@ -35,11 +35,13 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.config import get_settings
 from whymath_backend.db.models.evidence_link import EvidenceLink
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 
 __all__ = [
     "EvidenceValidationError",
+    "default_retention_until",
     "get_evidence_for_misconception",
     "get_evidence_for_student",
     "log_evidence",
@@ -48,6 +50,19 @@ __all__ = [
 ]
 
 _VALID_POLARITY = (-1, 1)
+
+
+def default_retention_until(logged_on: date, *, years: int) -> date:
+    """적재일 기준 기본 보존기한 = `logged_on + years`년(순수·윤년 안전).
+
+    GDPR 데이터 최소화 — 미성년 증거를 *무기한 보존하지 않도록* 적재 시 만료일을 박는다.
+    2/29 적재분은 비윤년에 2/28로 클램프(ValueError 회피). `years`는 Settings로 조정
+    (`evidence_retention_years`·기본 3·법무 확정 시 변경).
+    """
+    try:
+        return logged_on.replace(year=logged_on.year + years)
+    except ValueError:  # 2/29 → +years년이 비윤년이면 2/28로 클램프.
+        return logged_on.replace(year=logged_on.year + years, month=2, day=28)
 
 
 class EvidenceValidationError(ValueError):
@@ -65,6 +80,7 @@ async def log_evidence(
     node_id: str | None = None,
     weight: float | None = None,
     retention_until: date | None = None,
+    logged_on: date | None = None,
 ) -> EvidenceLink:
     """증거 엣지 1개를 적재한다(§3 도구7 — 게이트 통과 후).
 
@@ -73,6 +89,11 @@ async def log_evidence(
       ② `polarity ∈ {−1, +1}` — +1 지지/−1 반박만(DB CHECK 이중 가드).
     위반은 `EvidenceValidationError`. `flush`+`refresh`로 DB-assigned `link_id`를 같은 트랜잭션에서
     가시화(commit은 호출자). `student_id` FK CASCADE가 삭제권을 자동 보장한다.
+
+    **보존기한(GDPR 데이터 최소화)**: `retention_until` *미제공 시* `logged_on`(기본 오늘)+
+    `Settings.evidence_retention_years`(기본 3년)으로 *자동* 채운다 — 미성년 증거를 무기한 보존
+    안 함(`purge_expired`가 경과분 파기). 명시 제공 시 그 값 존중(테스트·특수 정책). `logged_on`은
+    테스트 주입용(기본 `date.today()`).
     """
     if misconception_id not in CATALOG_BY_ID:
         raise EvidenceValidationError(
@@ -82,6 +103,12 @@ async def log_evidence(
     if polarity not in _VALID_POLARITY:
         raise EvidenceValidationError(
             f"극성 위반 — polarity={polarity!r}(허용 {_VALID_POLARITY} — +1 지지/−1 반박)."
+        )
+    # GDPR 데이터 최소화 — 명시 미제공 시 적재일+정책 보존년으로 *반드시* 만료일을 박는다
+    # (무기한 보존 금지·미성년 데이터). 명시 제공 시 그 값 존중(테스트·특수 정책).
+    if retention_until is None:
+        retention_until = default_retention_until(
+            logged_on or date.today(), years=get_settings().evidence_retention_years
         )
     link = EvidenceLink(
         session_id=session_id,
