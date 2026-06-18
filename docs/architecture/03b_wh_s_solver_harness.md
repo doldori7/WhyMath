@@ -336,6 +336,12 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 - **CLI `--stream` 옵트인**: `self_evolution_export_cli`에 `--stream` 플래그·`stream_fn` 주입 좌석(`_default_stream_fn`=실 DB·`pragma: no cover`). 미설정 시 기존 일괄 경로 완전 불변(하위호환)·출력(JSONL stdout·요약 stderr)은 양쪽 동일·메모리만 다름. `--no-dedup`은 두 경로 모두 전달.
 - **후속**: 문제 본문 조인(problem_id→코퍼스)·PRM 쌍 추출·*본질적 동치* dedup·GDPR `/v1/me/export`(열람·이동권·결정 필요).
 
+**S1 슬라이스 9 — 자기진화 SFT export 문제 본문 조인**(설계 §5·§7·#258·#259 후속) 구현됨(마이그레이션 0·opt-in). 슬라이스 8까지의 SFT 레코드는 `problem_id`(느슨참조)+`solution_path`(solver 기호 파스)만 담아 *자연어 프롬프트가 없었다*. opt-in `--with-problem`으로 코퍼스를 조인해 학습 가능한 (프롬프트, 풀이) 쌍으로 만든다:
+- **`SftRecord` + `question_text`·`unit_codes`(옵션·기본 None·pydantic이라 마이그레이션 0)**. `to_sft_record(solution, problem=None)`는 `Problem` 주면 본문·성취기준을 임베드(속성만 읽음·순수·세션 0). **저작권 안전(§13.2·우선순위 #2)**: `question_text`는 코퍼스 불변식(`schema.Problem`)상 평가원·EBS·교과서 출처는 NULL이고 라이선스 청정(자체 동등문제·OER)만 본문 보유 → 조인해도 제한 본문이 새지 않음. `unit_codes`는 공공 성취기준.
+- **`build_sft_dataset(…, problem_map=None)`**(batch·순수): map의 problem_id로 컨텍스트 결합, 미존재는 NO_DATA로 보고 컨텍스트를 비운 채 레코드는 *보존*하고 `problems_missing` 집계(날조 0). **`stream_sft_jsonl(…, problem_loader=None)`**(스트림): `stream_all_verified`의 `(problem_id, …)` 그룹 정렬을 이용한 **단일 항목 캐시**로 problem_id가 바뀔 때만 async loader 호출 → O(1) 메모리·O(distinct) 조회(#259 가드 불파괴). `SftDataset`·`SftStreamAccounting`에 `problems_missing` 추가(stderr 요약 1키 확장).
+- **CLI `--with-problem` 옵트인**: batch=`_default_export_fn`이 `select(Problem).where(problem_id.in_(...))` IN-일괄로 map 구성(`gating.py`·`me.py` 선례), stream=`_default_problem_loader`가 *문제별 별도 세션* `get(Problem, pid)`(asyncpg 커서 인터리브 회피). 둘 다 `pragma: no cover`+integration·주입 좌석(`export_fn`/`problem_loader`)으로 hermetic 검증. 미설정 시 기존 동작 완전 불변(하위호환).
+- **후속**: PRM 쌍 추출·*본질적 동치* dedup·conditions_parsed 등 추가 컨텍스트·실 PG 조인 integration·GDPR `/v1/me/export`(결정 필요).
+
 ### 용어 정합: "545노드" (편집자 부기)
 
 §5 난이도 사다리의 "545노드 연계 문항"에서 545는 *설계 추정치*다. 구현 커리큘럼 계층은 개념그래프 **403 개념(UC) + 541 선수엣지**이며, "545"는 레포에 실체가 없다(상세는 WH-1 문서 "용어·수치 정합" 절). 시그니처 패턴 55+108은 ROADMAP Phase 1 자산으로 유효하다.

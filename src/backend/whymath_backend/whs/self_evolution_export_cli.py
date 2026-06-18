@@ -30,9 +30,13 @@ import argparse
 import asyncio
 import json
 import sys
-from collections.abc import AsyncIterator, Callable, Coroutine
+import uuid
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine
 from typing import Any
 
+from sqlalchemy import select
+
+from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.verified_solution import VerifiedSolution
 from whymath_backend.db.session import get_sessionmaker
 from whymath_backend.whs.self_evolution import (
@@ -44,25 +48,40 @@ from whymath_backend.whs.self_evolution import (
 )
 from whymath_backend.whs.solution_bank import get_all_verified, stream_all_verified
 
-__all__ = ["ExportFn", "StreamFn", "main"]
+__all__ = ["ExportFn", "ProblemLoader", "StreamFn", "main"]
 
-# export 좌석 — dedup 플래그 → SftDataset. 기본은 실 DB(전 문제 verified 조회·변환), 테스트는 합성
-# 데이터셋을 주입해 DB 없이 CLI 배선(인자 파싱·JSONL stdout·요약 stderr·종료 코드)을 검증한다.
-ExportFn = Callable[[bool], Coroutine[Any, Any, SftDataset]]
+# export 좌석 — (dedup, with_problem) → SftDataset. 기본은 실 DB(전 문제 verified 조회·변환·문제
+# 조인), 테스트는 합성 데이터셋을 주입해 DB 없이 CLI 배선(인자 파싱·JSONL stdout·요약 stderr·종료
+# 코드)을 검증한다.
+ExportFn = Callable[[bool, bool], Coroutine[Any, Any, SftDataset]]
 
 # stream 좌석 — 검증 풀이를 1건씩 흘리는 async 이터레이터 팩토리. 기본은 실 DB(서버측 커서),
 # 테스트는 고정 행 async generator를 주입해 DB 없이 스트리밍 CLI 배선을 검증한다.
 StreamFn = Callable[[], AsyncIterator[VerifiedSolution]]
 
+# 문제 조인 좌석 — problem_id → Problem|None(async). 기본은 실 DB(문제별 별도 세션·커서 인터리브
+# 회피), 테스트는 고정 dict 가짜 loader를 주입해 DB 없이 조인 배선을 검증한다.
+ProblemLoader = Callable[[uuid.UUID], Awaitable[Problem | None]]
 
-async def _default_export_fn(dedup: bool) -> SftDataset:  # pragma: no cover — 실 DB(integration)
+
+async def _default_export_fn(
+    dedup: bool, with_problem: bool
+) -> SftDataset:  # pragma: no cover — 실 DB(integration)
     """기본 export — 세션 1개로 전 문제 verified를 조회해 SFT 데이터셋으로 변환한다(읽기 전용).
 
-    `get_all_verified`(verified만·R-S2)→`build_sft_dataset(dedup=dedup)`. 읽기뿐이라 commit 없음.
+    `get_all_verified`(verified만·R-S2)→`build_sft_dataset`. `with_problem`이면 verified의
+    problem_id를 모아 `select(Problem).where(problem_id.in_(...))` IN-일괄로 코퍼스를 조회해
+    `problem_map`을 만들고 컨텍스트를 결합한다(미존재는 NO_DATA·problems_missing). 읽기뿐이라
+    commit 없음.
     """
     async with get_sessionmaker()() as session:
         rows = await get_all_verified(session)
-        return build_sft_dataset(rows, dedup=dedup)
+        problem_map: dict[uuid.UUID, Problem] | None = None
+        if with_problem:
+            ids = {row.problem_id for row in rows}
+            result = await session.execute(select(Problem).where(Problem.problem_id.in_(ids)))
+            problem_map = {problem.problem_id: problem for problem in result.scalars().all()}
+        return build_sft_dataset(rows, dedup=dedup, problem_map=problem_map)
 
 
 async def _default_stream_fn() -> AsyncIterator[VerifiedSolution]:  # pragma: no cover — 실 DB
@@ -76,14 +95,32 @@ async def _default_stream_fn() -> AsyncIterator[VerifiedSolution]:  # pragma: no
             yield solution
 
 
-async def _run_stream(stream_fn: StreamFn, *, dedup: bool) -> SftStreamAccounting:
+async def _default_problem_loader(
+    problem_id: uuid.UUID,
+) -> Problem | None:  # pragma: no cover — 실 DB
+    """기본 문제 loader — problem_id로 코퍼스 단건 조회(읽기 전용·문제별 *별도 세션*).
+
+    스트림 커서 세션과 분리된 세션을 *호출마다* 열고 닫아 asyncpg 단일 커서 제약(열린
+    `stream_scalars` 커서 중 같은 연결로 점 조회 금지)을 피한다. `stream_sft_jsonl`의 단일 항목
+    캐시 덕에 호출은 O(distinct problems)뿐이라 오프라인 배치에 충분하다.
+    """
+    async with get_sessionmaker()() as session:
+        return await session.get(Problem, problem_id)
+
+
+async def _run_stream(
+    stream_fn: StreamFn, *, dedup: bool, problem_loader: ProblemLoader | None
+) -> SftStreamAccounting:
     """스트리밍 경로 본체 — 행을 흘리며 JSONL을 stdout에 즉시 print, 회계를 누적해 반환한다.
 
-    `stream_sft_jsonl`(verified 필터·dedup·직렬화)을 `async for`로 소비하며 한 줄씩 print —
-    전량 적재 없음. 소진 후 누산기를 돌려주면 호출자가 `summary()`로 stderr 요약을 낸다.
+    `stream_sft_jsonl`(verified 필터·dedup·직렬화·문제 조인)을 `async for`로 소비하며 한 줄씩
+    print — 전량 적재 없음. `problem_loader`를 주면 컨텍스트를 결합한다(단일 캐시). 소진 후
+    누산기를 돌려주면 호출자가 `summary()`로 stderr 요약을 낸다.
     """
     accounting = SftStreamAccounting()
-    async for line in stream_sft_jsonl(stream_fn(), accounting, dedup=dedup):
+    async for line in stream_sft_jsonl(
+        stream_fn(), accounting, dedup=dedup, problem_loader=problem_loader
+    ):
         print(line)
     return accounting
 
@@ -93,13 +130,18 @@ def main(
     *,
     export_fn: ExportFn = _default_export_fn,
     stream_fn: StreamFn = _default_stream_fn,
+    problem_loader: ProblemLoader = _default_problem_loader,
 ) -> int:
     """CLI 엔트리 — verified 풀이를 SFT JSONL로 stdout에, 회계 요약을 stderr에 낸다.
 
-    `--no-dedup`(기본 dedup ON)·`--stream`(옵트인·전량 적재 없이 서버측 커서로 흘림·메모리 가드).
-    `export_fn`/`stream_fn`은 테스트 주입 좌석(기본 실 DB). 종료 코드 0(verified 0건도 정상 — 빈
-    데이터셋·요약 total=0). `--stream` 유무로 출력은 동일하고(JSONL stdout·요약 stderr) 메모리
-    프로파일만 다르다.
+    `--no-dedup`(기본 dedup ON)·`--stream`(옵트인·전량 적재 없이 서버측 커서로 흘림·메모리 가드)·
+    `--with-problem`(옵트인·코퍼스 조인으로 question_text·unit_codes 결합·미설정 시 컨텍스트 None).
+    `export_fn`/`stream_fn`/`problem_loader`는 테스트 주입 좌석(기본 실 DB). 종료 코드 0(verified
+    0건도 정상). `--stream` 유무로 출력은 동일하고 메모리 프로파일만 다르다.
+
+    저작권 안전(§13.2): `question_text`는 코퍼스 불변식상 라이선스 청정만 본문을 보유하고 제한
+    출처는 NULL이라 조인해도 새지 않는다. NO_DATA: 코퍼스에 없는 problem_id는 컨텍스트를 비우고
+    `problems_missing`로 정직 집계한다(날조 0).
     """
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.whs.self_evolution_export_cli",
@@ -118,15 +160,22 @@ def main(
         action="store_true",
         help="전량 적재 없이 서버측 커서로 1건씩 흘림(대규모 메모리 가드·출력은 일괄과 동일).",
     )
+    parser.add_argument(
+        "--with-problem",
+        action="store_true",
+        help="코퍼스를 조인해 문제 본문·성취기준(question_text·unit_codes)을 결합(기본 미조인).",
+    )
     args = parser.parse_args(argv)
     dedup = not args.no_dedup
+    with_problem = args.with_problem
 
     if args.stream:
-        accounting = asyncio.run(_run_stream(stream_fn, dedup=dedup))
+        loader = problem_loader if with_problem else None
+        accounting = asyncio.run(_run_stream(stream_fn, dedup=dedup, problem_loader=loader))
         print(json.dumps(accounting.summary()), file=sys.stderr)
         return 0
 
-    dataset: SftDataset = asyncio.run(export_fn(dedup))
+    dataset: SftDataset = asyncio.run(export_fn(dedup, with_problem))
     for line in iter_sft_jsonl(dataset):
         print(line)
     summary = {
@@ -134,6 +183,7 @@ def main(
         "records": dataset.size,
         "excluded_unverified": dataset.excluded_unverified,
         "deduped": dataset.deduped,
+        "problems_missing": dataset.problems_missing,
     }
     print(json.dumps(summary), file=sys.stderr)
     return 0

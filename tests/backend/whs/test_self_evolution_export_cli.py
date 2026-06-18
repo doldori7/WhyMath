@@ -15,6 +15,7 @@ from collections.abc import AsyncIterator
 
 import pytest
 
+from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.verified_solution import (
     VerifiedSolution,
     WhsSolutionGrade,
@@ -27,9 +28,14 @@ def _vs(problem_id: uuid.UUID, path: dict, grade: WhsSolutionGrade = WhsSolution
     return VerifiedSolution(problem_id=problem_id, grade=grade, solution_path=path)
 
 
+def _problem(problem_id: uuid.UUID, *, question_text: str = "문제 본문") -> Problem:
+    return Problem(problem_id=problem_id, question_text=question_text, unit_codes=["M1-A-01"])
+
+
 def _runner(dataset: SftDataset, *, seen: dict[str, bool]):  # type: ignore[no-untyped-def]
-    async def _export(dedup: bool) -> SftDataset:
+    async def _export(dedup: bool, with_problem: bool) -> SftDataset:
         seen["dedup"] = dedup
+        seen["with_problem"] = with_problem
         return dataset
 
     return _export
@@ -48,6 +54,15 @@ def _stream_runner(rows: list[VerifiedSolution]):  # type: ignore[no-untyped-def
     return _factory
 
 
+def _loader_for(mapping: dict[uuid.UUID, Problem]):  # type: ignore[no-untyped-def]
+    """가짜 async problem_loader — mapping에서 조회(없으면 None)."""
+
+    async def _loader(problem_id: uuid.UUID) -> Problem | None:
+        return mapping.get(problem_id)
+
+    return _loader
+
+
 class TestSelfEvolutionExportCli:
     def test_jsonl_to_stdout_summary_to_stderr(self, capsys: pytest.CaptureFixture[str]) -> None:
         """stdout = 레코드/줄 JSONL·stderr = 회계 요약 JSON·종료 0."""
@@ -63,6 +78,7 @@ class TestSelfEvolutionExportCli:
         code = cli.main([], export_fn=_runner(ds, seen=seen))
         assert code == 0
         assert seen["dedup"] is True  # 기본 dedup ON
+        assert seen["with_problem"] is False  # --with-problem 미설정
 
         captured = capsys.readouterr()
         lines = [ln for ln in captured.out.splitlines() if ln]
@@ -75,6 +91,7 @@ class TestSelfEvolutionExportCli:
             "records": 2,
             "excluded_unverified": 1,  # unverified 1건 배제(정직 집계)
             "deduped": 0,
+            "problems_missing": 0,  # 문제 조인 안 함 → 0
         }
 
     def test_no_dedup_flag_forwarded(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -125,6 +142,7 @@ class TestSelfEvolutionExportCliStream:
             "records": 2,
             "excluded_unverified": 1,
             "deduped": 1,
+            "problems_missing": 0,
         }
 
     def test_stream_no_dedup_keeps_duplicates(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -140,6 +158,7 @@ class TestSelfEvolutionExportCliStream:
             "records": 2,
             "excluded_unverified": 0,
             "deduped": 0,
+            "problems_missing": 0,
         }
 
     def test_stream_empty_summary_zero(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -149,3 +168,46 @@ class TestSelfEvolutionExportCliStream:
         captured = capsys.readouterr()
         assert captured.out.strip() == ""
         assert json.loads(captured.err)["total_input"] == 0
+
+
+class TestSelfEvolutionExportCliWithProblem:
+    """`--with-problem` 옵트인 — 코퍼스 조인 배선(batch=export_fn 플래그·stream=loader 주입)."""
+
+    def test_batch_with_problem_flag_forwarded(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """--with-problem → export_fn에 with_problem=True 전달·요약에 problems_missing."""
+        pid = uuid.uuid4()
+        seen: dict[str, bool] = {}
+        ds = build_sft_dataset([_vs(pid, {"s": 1})])
+        code = cli.main(["--with-problem"], export_fn=_runner(ds, seen=seen))
+        assert code == 0
+        assert seen["with_problem"] is True
+        capsys.readouterr()
+
+    def test_stream_with_problem_joins_context(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """--stream --with-problem → 주입 loader로 컨텍스트 결합(question_text)."""
+        pid = uuid.uuid4()
+        rows = [_vs(pid, {"steps": ["x=2"]})]
+        code = cli.main(
+            ["--stream", "--with-problem"],
+            stream_fn=_stream_runner(rows),
+            problem_loader=_loader_for({pid: _problem(pid, question_text="조인된 본문")}),
+        )
+        assert code == 0
+        captured = capsys.readouterr()
+        lines = [ln for ln in captured.out.splitlines() if ln]
+        assert json.loads(lines[0])["question_text"] == "조인된 본문"
+        assert json.loads(captured.err)["problems_missing"] == 0
+
+    def test_stream_with_problem_missing_counts(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """--stream --with-problem + 코퍼스 미존재 → 컨텍스트 None·problems_missing 집계."""
+        pid = uuid.uuid4()
+        rows = [_vs(pid, {"steps": ["x=2"]})]
+        code = cli.main(
+            ["--stream", "--with-problem"],
+            stream_fn=_stream_runner(rows),
+            problem_loader=_loader_for({}),  # 항상 None
+        )
+        assert code == 0
+        captured = capsys.readouterr()
+        assert json.loads(captured.out.splitlines()[0])["question_text"] is None
+        assert json.loads(captured.err)["problems_missing"] == 1

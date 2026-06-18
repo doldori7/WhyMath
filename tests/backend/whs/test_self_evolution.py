@@ -10,7 +10,9 @@ import asyncio
 import json
 import uuid
 from collections.abc import AsyncIterator
+from typing import Any
 
+from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.verified_solution import (
     VerifiedSolution,
     WhsSolutionGrade,
@@ -23,6 +25,16 @@ from whymath_backend.whs.self_evolution import (
     stream_sft_jsonl,
     to_sft_record,
 )
+
+
+def _problem(
+    problem_id: uuid.UUID,
+    *,
+    question_text: str | None = "다음 방정식을 풀어라.",
+    unit_codes: tuple[str, ...] = ("M1-A-01",),
+) -> Problem:
+    """transient Problem(세션 미부착) — to_sft_record가 읽는 question_text·unit_codes만 채운다."""
+    return Problem(problem_id=problem_id, question_text=question_text, unit_codes=list(unit_codes))
 
 
 def _vs(
@@ -205,13 +217,21 @@ async def _aiter(items: list[VerifiedSolution]) -> AsyncIterator[VerifiedSolutio
 
 
 def _run_stream(
-    items: list[VerifiedSolution], *, dedup: bool = True
+    items: list[VerifiedSolution],
+    *,
+    dedup: bool = True,
+    problem_loader: Any = None,
 ) -> tuple[list[str], SftStreamAccounting]:
     """stream_sft_jsonl을 구동해 (JSONL 줄 목록, 소진 후 회계)를 돌려준다."""
     accounting = SftStreamAccounting()
 
     async def _go() -> list[str]:
-        return [line async for line in stream_sft_jsonl(_aiter(items), accounting, dedup=dedup)]
+        return [
+            line
+            async for line in stream_sft_jsonl(
+                _aiter(items), accounting, dedup=dedup, problem_loader=problem_loader
+            )
+        ]
 
     lines = asyncio.run(_go())
     return lines, accounting
@@ -312,6 +332,7 @@ class TestStreamSftJsonl:
             "records": 0,
             "excluded_unverified": 0,
             "deduped": 0,
+            "problems_missing": 0,
         }
 
     def test_summary_shape_matches_cli_keys(self) -> None:
@@ -329,4 +350,108 @@ class TestStreamSftJsonl:
             "records": 1,
             "excluded_unverified": 1,
             "deduped": 1,
+            "problems_missing": 0,  # 문제 조인 안 함 → 0
         }
+
+
+def _make_loader(mapping: dict[uuid.UUID, Problem], *, calls: list[uuid.UUID]) -> Any:
+    """가짜 async problem_loader — 호출 인자를 calls에 기록(단일 캐시 호출수 검증용)."""
+
+    async def _loader(problem_id: uuid.UUID) -> Problem | None:
+        calls.append(problem_id)
+        return mapping.get(problem_id)
+
+    return _loader
+
+
+class TestProblemContextJoin:
+    """문제 본문 조인(opt-in) — to_sft_record·build_sft_dataset(map)·stream(loader)."""
+
+    def test_to_sft_record_embeds_problem(self) -> None:
+        """problem 주면 question_text·unit_codes 임베드(tuple)."""
+        pid = uuid.uuid4()
+        rec = to_sft_record(
+            _vs(problem_id=pid),
+            _problem(pid, question_text="x를 구하라.", unit_codes=("M1-A-01", "M1-A-02")),
+        )
+        assert rec.question_text == "x를 구하라."
+        assert rec.unit_codes == ("M1-A-01", "M1-A-02")
+
+    def test_to_sft_record_without_problem_is_none(self) -> None:
+        """problem 미제공 → 두 컨텍스트 필드 None(하위호환)."""
+        rec = to_sft_record(_vs(problem_id=uuid.uuid4()))
+        assert rec.question_text is None and rec.unit_codes is None
+
+    def test_to_sft_record_honest_null_body(self) -> None:
+        """본문 미보유 출처(question_text=None)는 None 그대로 임베드(날조 0)·unit_codes는 채움."""
+        pid = uuid.uuid4()
+        rec = to_sft_record(_vs(problem_id=pid), _problem(pid, question_text=None))
+        assert rec.question_text is None
+        assert rec.unit_codes == ("M1-A-01",)
+
+    def test_build_with_problem_map_joins(self) -> None:
+        """problem_map 결합 — verified 레코드에 컨텍스트 채움·problems_missing=0."""
+        p1, p2 = uuid.uuid4(), uuid.uuid4()
+        ds = build_sft_dataset(
+            [
+                _vs(problem_id=p1, solution_path={"s": 1}),
+                _vs(problem_id=p2, solution_path={"s": 2}),
+            ],
+            problem_map={
+                p1: _problem(p1, question_text="첫째"),
+                p2: _problem(p2, question_text="둘째"),
+            },
+        )
+        assert ds.size == 2 and ds.problems_missing == 0
+        assert {r.question_text for r in ds.records} == {"첫째", "둘째"}
+
+    def test_build_with_problem_map_missing_counts(self) -> None:
+        """map에 없는 problem_id → 컨텍스트 None·problems_missing 집계·레코드는 보존(NO_DATA)."""
+        p1, p2 = uuid.uuid4(), uuid.uuid4()
+        ds = build_sft_dataset(
+            [
+                _vs(problem_id=p1, solution_path={"s": 1}),
+                _vs(problem_id=p2, solution_path={"s": 2}),  # map에 없음
+            ],
+            problem_map={p1: _problem(p1)},
+        )
+        assert ds.size == 2  # 둘 다 보존(verified는 안 버림)
+        assert ds.problems_missing == 1
+        missing = [r for r in ds.records if r.problem_id == p2][0]
+        assert missing.question_text is None and missing.unit_codes is None
+
+    def test_build_no_problem_map_missing_zero(self) -> None:
+        """problem_map 미제공 → 컨텍스트 None·problems_missing 0(조인 안 함)."""
+        pid = uuid.uuid4()
+        ds = build_sft_dataset([_vs(problem_id=pid)])
+        assert ds.problems_missing == 0
+        assert ds.records[0].question_text is None
+
+    def test_stream_loader_single_cache_one_call_per_problem(self) -> None:
+        """그룹 정렬 스트림 — problem_id가 바뀔 때만 loader 1회(단일 캐시·O(distinct))."""
+        p1, p2 = uuid.uuid4(), uuid.uuid4()
+        items = [
+            _vs(problem_id=p1, solution_path={"s": 1}),
+            _vs(problem_id=p1, solution_path={"s": 2}),  # 같은 문제 연속 — 재조회 안 함
+            _vs(problem_id=p2, solution_path={"s": 3}),
+        ]
+        calls: list[uuid.UUID] = []
+        loader = _make_loader(
+            {p1: _problem(p1, question_text="P1"), p2: _problem(p2, question_text="P2")},
+            calls=calls,
+        )
+        lines, acc = _run_stream(items, problem_loader=loader)
+        assert [json.loads(ln)["question_text"] for ln in lines] == ["P1", "P1", "P2"]
+        assert calls == [p1, p2]  # 문제당 1회(연속 같은 문제는 캐시)
+        assert acc.problems_missing == 0
+
+    def test_stream_loader_missing_counts(self) -> None:
+        """loader가 None(코퍼스 미존재) → 컨텍스트 None·problems_missing 집계(NO_DATA)."""
+        p1 = uuid.uuid4()
+        calls: list[uuid.UUID] = []
+        loader = _make_loader({}, calls=calls)  # 항상 None
+        lines, acc = _run_stream(
+            [_vs(problem_id=p1, solution_path={"s": 1})], problem_loader=loader
+        )
+        assert json.loads(lines[0])["question_text"] is None
+        assert acc.problems_missing == 1 and calls == [p1]

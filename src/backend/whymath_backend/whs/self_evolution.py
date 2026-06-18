@@ -22,11 +22,12 @@ export 레벨에서 한 번 더 거른다(재발견 중복 제거·데이터 위
 from __future__ import annotations
 
 import uuid
-from collections.abc import AsyncIterator, Iterable, Iterator
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Iterator, Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.verified_solution import (
     VerifiedSolution,
     WhsSolutionGrade,
@@ -48,8 +49,14 @@ class SftRecord(BaseModel):
     """SFT 학습 레코드 1건 — 검증된 (문제, 풀이 경로) 쌍의 *학습신호*만 담는다.
 
     `solution_path`는 finalize가 적재한 구조(`conditions`·`answer`·`steps`)를 그대로 싣는다 —
-    문제 본문 조인(problem_id→코퍼스)·프롬프트 템플릿화는 트레이너 책임(후속). 출처 메타
-    (id·created_at·source_root_id)는 학습신호가 아니라 제외한다.
+    solver의 *기호* 파스다. `question_text`·`unit_codes`는 코퍼스 조인(`--with-problem`)으로
+    채워지는 *문제 컨텍스트*(자연어 본문·성취기준 코드)로, 트레이너가 "이 문제를 풀어라"
+    프롬프트를 만들 때 쓴다 — 미조인이면 None(기존 동작·하위호환). 출처 메타(id·created_at·
+    source_root_id)는 학습신호가 아니라 제외한다.
+
+    저작권 안전(§13.2·우선순위 #2): `question_text`는 코퍼스 불변식상 *라이선스 청정*(자체
+    동등문제·OER)만 본문을 보유하고 평가원·EBS·교과서 출처는 NULL이라(`schema.Problem` 강제),
+    임베드해도 제한 본문이 새지 않는다. `unit_codes`는 공공 성취기준 코드.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -58,6 +65,12 @@ class SftRecord(BaseModel):
     solution_path: dict[str, Any] = Field(description="검증된 풀이 경로(conditions·answer·steps).")
     strategy_tag: str | None = Field(default=None, description="전략 유형(대수적·기하적 등).")
     answer: str | None = Field(default=None, description="최종 답(증명 등 답 없으면 None).")
+    question_text: str | None = Field(
+        default=None, description="문제 자연어 본문(코퍼스 조인·라이선스 청정만·미조인 시 None)."
+    )
+    unit_codes: tuple[str, ...] | None = Field(
+        default=None, description="성취기준 코드(코퍼스 조인·미조인 시 None)."
+    )
 
 
 class SftDataset(BaseModel):
@@ -73,6 +86,11 @@ class SftDataset(BaseModel):
     total_input: int = Field(ge=0, description="입력 풀이 총수(필터 전).")
     excluded_unverified: int = Field(ge=0, description="verified 아님으로 배제된 수(R-S2).")
     deduped: int = Field(ge=0, description="재발견 중복으로 제거된 수(같은 문제·같은 지문).")
+    problems_missing: int = Field(
+        default=0,
+        ge=0,
+        description="코퍼스에 problem_id가 없어 컨텍스트 미결합된 레코드 수(NO_DATA).",
+    )
 
     @property
     def size(self) -> int:
@@ -80,13 +98,20 @@ class SftDataset(BaseModel):
         return len(self.records)
 
 
-def to_sft_record(solution: VerifiedSolution) -> SftRecord:
-    """검증 풀이 1건 → SFT 레코드(순수·학습신호 필드만). 등급 검사는 `build_sft_dataset`가 한다."""
+def to_sft_record(solution: VerifiedSolution, problem: Problem | None = None) -> SftRecord:
+    """검증 풀이 1건 → SFT 레코드(순수·학습신호 필드만). 등급 검사는 `build_sft_dataset`가 한다.
+
+    `problem`(코퍼스 조인 결과)을 주면 `question_text`·`unit_codes`를 임베드한다(자연어 프롬프트
+    컨텍스트). 없으면 두 필드는 None(미조인·하위호환). `Problem` ORM은 *속성만 읽고* 세션을
+    건드리지 않아 순수성을 유지한다(`VerifiedSolution` 읽기와 동형).
+    """
     return SftRecord(
         problem_id=solution.problem_id,
         solution_path=solution.solution_path,
         strategy_tag=solution.strategy_tag,
         answer=solution.answer,
+        question_text=problem.question_text if problem is not None else None,
+        unit_codes=tuple(problem.unit_codes) if problem is not None else None,
     )
 
 
@@ -94,6 +119,7 @@ def build_sft_dataset(
     solutions: Iterable[VerifiedSolution],
     *,
     dedup: bool = True,
+    problem_map: Mapping[uuid.UUID, Problem] | None = None,
 ) -> SftDataset:
     """검증 풀이들 → SFT 데이터셋(verified만·재발견 dedup·정직 집계·순수).
 
@@ -101,12 +127,18 @@ def build_sft_dataset(
     `excluded_unverified`로 집계한다 — `get_verified`가 1차 필터여도 임의 입력에 안전하다.
     **dedup(기본 ON)**: 같은 `(problem_id, 지문)`이 이미 나왔으면 건너뛰고 `deduped`로 집계한다.
     입력 순서를 보존한다(결정론). 트랜잭션·DB 0(순수).
+
+    **문제 조인(opt-in)**: `problem_map`(problem_id→Problem·호출자가 코퍼스에서 일괄 조회)을 주면
+    레코드에 `question_text`·`unit_codes`를 결합한다. map에 *없는* problem_id는 NO_DATA로 보고
+    컨텍스트를 비운 채(`problems_missing` 집계) 레코드는 *그대로 적재한다* — 풀이는 verified라
+    버리지 않되 누락을 *조용히 메우지 않고 정직하게 센다*(날조 0).
     """
     records: list[SftRecord] = []
     seen: set[tuple[uuid.UUID, str]] = set()
     total = 0
     excluded = 0
     deduped = 0
+    problems_missing = 0
     for sol in solutions:
         total += 1
         if sol.grade != WhsSolutionGrade.VERIFIED:
@@ -118,12 +150,18 @@ def build_sft_dataset(
                 deduped += 1  # 같은 문제·같은 지문 재발견 — 중복 제거(가시화).
                 continue
             seen.add(key)
-        records.append(to_sft_record(sol))
+        problem: Problem | None = None
+        if problem_map is not None:
+            problem = problem_map.get(sol.problem_id)
+            if problem is None:
+                problems_missing += 1  # 코퍼스에 없음 — 컨텍스트 비우고 정직 집계(NO_DATA).
+        records.append(to_sft_record(sol, problem))
     return SftDataset(
         records=tuple(records),
         total_input=total,
         excluded_unverified=excluded,
         deduped=deduped,
+        problems_missing=problems_missing,
     )
 
 
@@ -153,6 +191,11 @@ class SftStreamAccounting(BaseModel):
     records: int = Field(default=0, ge=0, description="JSONL로 흘린 학습 레코드 수.")
     excluded_unverified: int = Field(default=0, ge=0, description="verified 아님으로 배제(R-S2).")
     deduped: int = Field(default=0, ge=0, description="재발견 중복으로 제거(같은 문제·같은 지문).")
+    problems_missing: int = Field(
+        default=0,
+        ge=0,
+        description="코퍼스에 problem_id가 없어 컨텍스트 미결합된 레코드 수(NO_DATA).",
+    )
 
     def summary(self) -> dict[str, int]:
         """stderr 회계 요약 dict(일괄 CLI 요약과 동일 키 `{total_input, records, ...}`)."""
@@ -161,6 +204,7 @@ class SftStreamAccounting(BaseModel):
             "records": self.records,
             "excluded_unverified": self.excluded_unverified,
             "deduped": self.deduped,
+            "problems_missing": self.problems_missing,
         }
 
 
@@ -169,6 +213,7 @@ async def stream_sft_jsonl(
     accounting: SftStreamAccounting,
     *,
     dedup: bool = True,
+    problem_loader: Callable[[uuid.UUID], Awaitable[Problem | None]] | None = None,
 ) -> AsyncIterator[str]:
     """검증 풀이 스트림 → SFT JSONL 스트림(verified만·재발견 dedup·정직 회계·순서 보존).
 
@@ -184,12 +229,20 @@ async def stream_sft_jsonl(
     `accounting.records`를 올리고 `to_sft_record(...).model_dump_json()`을 yield한다(일괄
     경로와 바이트 동일).
 
+    **문제 조인(opt-in)**: `problem_loader`(problem_id→Problem|None·async)를 주면 컨텍스트를
+    결합한다. `stream_all_verified`가 `(problem_id, …)` *그룹 정렬*로 흘리므로 **단일 항목
+    캐시**(현재 problem_id+Problem)로 problem_id가 바뀔 때만 loader를 부른다 — O(1) 메모리·
+    O(distinct problems) 조회(#259 가드 불파괴). loader가 None을 주면(코퍼스 미존재) 컨텍스트를
+    비우고 `accounting.problems_missing`로 정직 집계(NO_DATA·날조 0).
+
     회계는 주입된 `accounting`(가변)에 누적된다 — 스트림 소진 후 호출자가
     `accounting.summary()`로 stderr 요약을 낸다. **메모리 가드의 경계(정직)**: 행은 전량
     적재하지 않지만 dedup `seen` 키셋은 *유일하게 증가하는* 구조다 — 다만 ORM 행이 아니라
     `(UUID, sha256)` 키라 훨씬 작고, `dedup=False`면 그마저 없다.
     """
     seen: set[tuple[uuid.UUID, str]] = set()
+    cached_problem_id: uuid.UUID | None = None
+    cached_problem: Problem | None = None
     async for sol in rows:
         accounting.total_input += 1
         if sol.grade != WhsSolutionGrade.VERIFIED:
@@ -201,5 +254,14 @@ async def stream_sft_jsonl(
                 accounting.deduped += 1  # 같은 문제·같은 지문 재발견 — 중복 제거(가시화).
                 continue
             seen.add(key)
+        problem: Problem | None = None
+        if problem_loader is not None:
+            if sol.problem_id != cached_problem_id:
+                # 그룹 정렬 전제 — problem_id가 바뀔 때만 조회(단일 캐시·O(distinct) 조회).
+                cached_problem_id = sol.problem_id
+                cached_problem = await problem_loader(sol.problem_id)
+            problem = cached_problem
+            if problem is None:
+                accounting.problems_missing += 1  # 코퍼스 미존재 — 컨텍스트 비우고 정직 집계.
         accounting.records += 1
-        yield to_sft_record(sol).model_dump_json()
+        yield to_sft_record(sol, problem).model_dump_json()
