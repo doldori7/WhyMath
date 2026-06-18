@@ -1209,6 +1209,48 @@ class TestThetaIntoScaffolding:
         assert dec_mas.polya_stage_to_advance == "next"
 
 
+class TestHintLevelEscalationWiring:
+    """WH-1 1단계 잔여: Polya `decision.hint_level`이 solution 코칭 점층으로 결선됨."""
+
+    # step-incorrect(2x+4 ≠ 2x+5) → verify_steps 경로(점층 대상).
+    _STEPS = ["2*x + 4", "2*x + 5"]
+
+    def test_decision_hint_level_escalates_solution_coaching(self) -> None:
+        """turn_count 5 + 발전 중 → decision.hint_level 3 → 단계 자가검산 점층 발화."""
+        body = coach.CoachRequest(
+            student_input="풀이",
+            student_solution="풀이",
+            solution_steps=self._STEPS,
+            mastery_level="발전 중",  # 완화/강화 없음 → turn≥5 → hint_level 3
+            polya_state={"current_stage": "execute", "turn_count": 5},
+        )
+        decision, *_rest, sol = coach._build_response_payload(
+            body, server_mastery=0.9, server_theta=2.0
+        )
+        assert decision.hint_level == 3
+        assert sol is not None
+        assert sol.trigger.focus == "verify"
+        assert sol.trigger.hint_level == 3  # decision.hint_level이 그대로 결선
+        assert "어떤 규칙" in sol.trigger.prompt  # 점층 과정-비계 발화
+
+    def test_low_turn_no_escalation(self) -> None:
+        """turn_count 0 → hint_level 1 → 점층 안 됨(대조·발화 불변 경로)."""
+        body = coach.CoachRequest(
+            student_input="풀이",
+            student_solution="풀이",
+            solution_steps=self._STEPS,
+            mastery_level="발전 중",
+            polya_state={"current_stage": "execute", "turn_count": 0},
+        )
+        decision, *_rest, sol = coach._build_response_payload(
+            body, server_mastery=0.9, server_theta=2.0
+        )
+        assert decision.hint_level == 1
+        assert sol is not None
+        assert sol.trigger.hint_level == 1
+        assert "어떤 규칙" not in sol.trigger.prompt  # 점층 아님
+
+
 class TestAuthGate:
     def test_no_token_401(self) -> None:
         resp = _no_auth_client().post("/v1/coach", json={"student_input": "음"})
