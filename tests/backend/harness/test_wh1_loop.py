@@ -230,7 +230,8 @@ class TestEvidenceGateAndRefutation:
         )
         ev_results = [r for r in out.trace if r.kind == "log_evidence"]  # type: ignore[attr-defined]
         assert [r.ok for r in ev_results] == [False, False, True]
-        assert out.evidence_count == 1  # type: ignore[attr-defined]
+        assert len(out.evidence) == 1  # type: ignore[attr-defined]
+        assert out.evidence[0].misconception_id == _MID  # type: ignore[attr-defined]
 
     def test_negative_evidence_refutes_hypothesis_in_curate(self) -> None:
         """반박 증거(net_support<0)면 curate가 그 가설을 archived(작업 메모리에서 제거)."""

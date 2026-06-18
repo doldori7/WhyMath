@@ -54,6 +54,7 @@ __all__ = [
     "apply_matches",
     "curate_hypothesis",
     "get_active_hypotheses",
+    "persist_hypotheses",
 ]
 
 
@@ -130,6 +131,20 @@ async def apply_matches(
 
     # 4. 이번 턴 활성 세트(순수) 반환.
     return updated
+
+
+async def persist_hypotheses(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    hypotheses: Sequence[MisconceptionHypothesis],
+) -> None:
+    """활성 가설 세트를 그대로 영속한다(upsert + 빠진 활성 행 비활성화) — 공개 커밋 진입점.
+
+    WH-1 턴 루프(`harness/wh1_loop.py`)가 *in-memory로 갱신한* 최종 가설 세트를 턴 종료 시 영속할
+    때 쓰는 좌석이다(매치 재계산 없이 *결과 세트*만 커밋). 내부 영속 로직(`_persist_active_set`)에
+    위임한다(중복 0). 트랜잭션 commit은 호출자 관리(flush로 같은 트랜잭션 가시화).
+    """
+    await _persist_active_set(session, user_id, hypotheses)
 
 
 async def _persist_active_set(

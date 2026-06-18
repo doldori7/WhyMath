@@ -39,9 +39,13 @@ log_evidence`·BKT 커밋 결선은 후속). 그래서 본 골격은 *순수·DB
   8 end_turn          : 하네스가 verify 의무 검사 후 학생 발화 산출(질문/힌트=가설 세트 개입
     발화 결선·출제=직전 probe·격려=정책/기본)·턴 종료.
 
-범위 밖(후속): 영속 결선(`curate_hypothesis`/`log_evidence` 스토어·BKT 커밋·Redis 작업 메모리)·
-LLM 정책 모델·fast path(§5.3)·전략 계층 도구(§11.3)·진단-실제 일치율 게이트. 본 모듈은 *결정론
-한 턴 드라이버 + 순수 도구 결선 + 불변식*만 둔다.
+영속 좌석(분리): 본 모듈은 *순수 골격*이고, in-memory 작업 메모리(가설 세트·증거 원장)를 실제
+스토어에 커밋하는 건 `harness/wh1_session.py`(`run_persisted_turn` — 웜 스타트 로드→본 루프 실행→
+`evidence_store.log_evidence`·`hypothesis_store.persist_hypotheses` 커밋)가 담당한다.
+
+범위 밖(후속): BKT 커밋 큐(§2.4)·Redis 작업 메모리 스냅샷(§2.1)·`/v1/coach/sessions` 멀티턴
+엔드포인트 결선·LLM 정책 모델·fast path(§5.3)·전략 계층 도구(§11.3)·진단-실제 일치율 게이트.
+본 모듈은 *결정론 한 턴 드라이버 + 순수 도구 결선 + 불변식*만 둔다.
 """
 
 from __future__ import annotations
@@ -71,6 +75,7 @@ __all__ = [
     "CurateHypothesisAction",
     "EndTurnAction",
     "EndTurnType",
+    "EvidenceEdge",
     "LogEvidenceAction",
     "MatchMisconceptionAction",
     "QueryCurriculumAction",
@@ -193,13 +198,20 @@ class ToolResult(BaseModel):
     detail: str = Field(description="사람 가독 사유(거부·등급·발화 등·내부용·학생 비노출).")
 
 
-@dataclass
-class _Evidence:
-    """in-memory 증거 엣지 — net_support 집계용(영속은 evidence_links가 후속)."""
+class EvidenceEdge(BaseModel):
+    """이 턴에 적재된 증거 엣지 1건 — net_support 집계 + 영속(`evidence_links`) 입력. 불변(frozen).
 
-    misconception_id: str
-    polarity: int
-    weight: float | None = None
+    `log_evidence` 게이트(카탈로그·극성)를 통과한 엣지만 담긴다. 호출자(영속 좌석)가 이 엣지들을
+    `evidence_store.log_evidence`로 DB에 커밋한다(session_id·student_id는 그때 주입).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    misconception_id: str = Field(description="증거가 지지/반박하는 오개념 id(카탈로그 실재).")
+    polarity: int = Field(description="+1 지지/−1 반박.")
+    weight: float | None = Field(
+        default=None, description="verify/PRM 기반 가중치(없으면 1.0 취급)."
+    )
 
 
 @dataclass
@@ -213,7 +225,7 @@ class TurnState:
     turn_index: int
     has_solution_steps: bool
     hypotheses: list[MisconceptionHypothesis]
-    evidence: list[_Evidence] = field(default_factory=list)
+    evidence: list[EvidenceEdge] = field(default_factory=list)
     last_matches: list[MisconceptionMatch] = field(default_factory=list)
     last_probe: ProbeSelection | None = None
     verify_called: bool = False
@@ -253,7 +265,9 @@ class TurnOutcome(BaseModel):
     hypotheses: list[MisconceptionHypothesis] = Field(
         description="턴 종료 시점 활성 가설 세트(호출자가 영속)."
     )
-    evidence_count: int = Field(description="이 턴에 적재된 in-memory 증거 엣지 수(영속 후속).")
+    evidence: list[EvidenceEdge] = Field(
+        description="이 턴에 적재된 증거 엣지(호출자가 `evidence_links`로 영속)."
+    )
     tool_calls: int = Field(description="총 도구 호출 횟수.")
     trace: list[ToolResult] = Field(description="도구 실행 트레이스(감사·디버그·학생 비노출).")
 
@@ -293,7 +307,7 @@ def _turn_verdict(
     return "correct"
 
 
-def _net_support(evidence: list[_Evidence], misconception_id: str) -> float:
+def _net_support(evidence: list[EvidenceEdge], misconception_id: str) -> float:
     """in-memory 증거 순지지도 = Σ polarity×(weight or 1.0) — `evidence_store.net_support` 동형."""
     return sum(
         (
@@ -422,7 +436,7 @@ def _exec(state: TurnState, action: Action, *, explore_period: int) -> ToolResul
                 detail=f"log_evidence 거부 — 극성 위반({action.polarity}).",
             )
         state.evidence.append(
-            _Evidence(
+            EvidenceEdge(
                 misconception_id=action.misconception_id,
                 polarity=action.polarity,
                 weight=action.weight,
@@ -479,7 +493,7 @@ async def run_tutoring_turn(
             action_type=state.end_action_type,
             utterance=state.utterance,
             hypotheses=state.hypotheses,
-            evidence_count=len(state.evidence),
+            evidence=list(state.evidence),
             tool_calls=state.tool_calls,
             trace=state.history,
         )
@@ -488,7 +502,7 @@ async def run_tutoring_turn(
         action_type=None,
         utterance=None,
         hypotheses=state.hypotheses,
-        evidence_count=len(state.evidence),
+        evidence=list(state.evidence),
         tool_calls=state.tool_calls,
         trace=state.history,
     )
