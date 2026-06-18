@@ -584,3 +584,13 @@ CREATE TABLE strategy_evidence (
 **슬라이스 7 — OCR confidence ↔ verify 연동(저신뢰 step 보류)**: `recommend_coaching_for_solution`에 옵션 `ocr_confidence` thread(`CoachRequest.ocr_confidence`에서). `ocr_low = ocr_confidence<0.8`(match_gate `_DEFAULT_OCR_THRESHOLD` 재사용)이면 **step-incorrect 신호 보류** — `step_incorrect_trusted = has_incorrect and not ocr_low`만 `arithmetic_error`/`verify_steps`/`incorrect_step_index`에 반영(저신뢰 시 **위치 미지목**). `SolutionCoaching.verification_ocr_gated: bool`(=has_incorrect and ocr_low)로 *보류 사실* 노출(L5 OCR 재확인 유도). **정확성 #1**: OCR 오인식("(a+b)³"→"(a+b)²")을 *학생 오류로 거짓 지적하지 않음*(보류). **투명성**: `solution_verification`(원 verdict)은 그대로 노출·코칭 결정엔 신뢰분만. **텍스트 레벨 신호 불변**: `validate_response`(거짓 등식)는 OCR 무관이라 게이팅 안 함(step만). **하위호환**: ocr_confidence 미제공/≥0.8→완전 불변. 게이팅은 오케스트레이터만(verify_solution/verify_step/recommend_coaching 순수 불변)·마이그레이션 0. 실측: ocr=0.5→focus≠verify·gated=True·step_idx=None·verdict 보존 / 0.9·미제공→verify·위치.
 
 **후속(1단계 잔여)**: 학생 솔루션 텍스트→단계 *분해*(L5 OCR·공간정보) · `match_low_quality`·`verification_ocr_gated` 소비(재확인 발화·intervention 보류·L5) · `focus_step_index` 점층 escalation(기존 `hint_deferral` 4단계 사다리[방향→의사코드→부분풀이→안전망]와 통합) · per-step OCR 신뢰도(전이별 정밀 게이팅) · 단원별 verify 커버리지 ≥70% 게이팅 · PRM800K 한국 분포 보정.
+
+### 2단계 종료 게이트 (진단 일치율 유의 개선) — 진행 (2026-06-18)
+
+§8.4 2단계 *종료 기준* "진단-실제 일치율이 **베이스라인 대비 유의 개선**"의 **판정 좌석 구현됨** — `whymath_backend/harness/agreement_gate.py`. 후보(candidate) 진단 파이프라인이 베이스라인 대비 라벨 프로브셋에서 *통계적으로 유의하게* 더 높은 top-1 일치율(recall)을 내는지 **McNemar 검정**으로 가린다(단순 "조금 높다"가 아니라 *유의 개선*만 PASS).
+
+- **McNemar(쌍체 정확 이항)**: 같은 프로브셋을 두 매처가 각각 풀므로 *쌍체*다. 불일치쌍만 본다 — b=베이스라인만 맞춤·c=후보만 맞춤. H0(차이 없음) 하 c~Binom(b+c, 0.5)·*단측* 정확 이항(`_mcnemar_one_sided_p` — Σ_{k=c}^{n} C(n,k)·0.5ⁿ)으로 "후보가 더 맞춤(c 큼)" p값을 내고 `alpha`(기본 0.05) 미만이면 유의. 정규근사 대신 정확 이항이라 소표본에도 타당(연속성보정 불요).
+- **verdict 3종**: `IMPROVED`(후보 recall>베이스라인 ∧ p<alpha) / `NOT_IMPROVED`(동등·악화·또는 개선이나 비유의·과소표본 포함) / `NO_DATA`(라벨 프로브 `_MIN_PROBES=5` 미만 → 판정 보류·p None). **거짓 PASS 0**: 유의에 *도달 못 하는* 과소표본은 자연히 NOT_IMPROVED(불일치쌍 4건 개선이어도 p=0.0625>0.05 → NOT_IMPROVED).
+- **베이스라인 = `substring_matcher`**(`diagnose` top-1·결정론·항상 가용·② 지표와 동일 신호·보수적 기준선). **후보 = 주입**(`run_agreement_gate(candidate=...)` Matcher) — 프로덕션은 의미 매처(pgvector 임베딩·더 높은 recall이나 임베딩 의존)를 주입, 테스트는 합성 매처(임베딩 비의존 검증). 매처가 None 반환(매치 0)이면 그 프로브는 자동 miss(억지 매칭 금지·§3.3).
+- **정직 스코프**: *오프라인·시스템 지표*다(② 진단정확도와 동일 라벨 프로브셋·`_iter_recall_probes`). **LIVE 학생별 ground-truth 아님** — 실제 학생 진짜 오개념은 자가보고되지 않아(문항-오개념 태깅·attempt별 진단 기록 부재) LIVE per-user 일치율은 여전히 데이터 기반 없음(후속). 이 게이트는 *진단엔진 품질의 회귀/개선*을 잰다.
+- **범위 밖(후속)**: 의미 매처 후보 *결선*(임베딩 provider·integration)·LIVE per-user 일치율(문항-오개념 태깅·attempt 진단 기록)·게이트 결과 API 노출·코호트별 층화. 순수 함수·DB 0·마이그레이션 0.
