@@ -17,12 +17,15 @@
 WH-S 오프라인(§7.5): `verified_solutions`는 *시스템이 스스로 푼* 풀이이며 학생 PII가 아니다
 (redaction·암호화 무관). 학생 경로 미개입·API 노출 0(WH-1 소비 시 표현 계층은 후속).
 
-범위 밖(후속): 솔버 `finalize`·자기진화 export(§5)·WH-1 콘텐츠 변환(§7)·중복 dedup. 본 모듈은
-*검증 풀이 저장소 CRUD*만 둔다.
+중복 dedup: `bank_solution(dedup=True)` + `solution_fingerprint`로 *정확 일치* 경로 재적재를
+막는다(솔버 루프 데이터 위생). 범위 밖(후속): 솔버 `finalize`·자기진화 export(§5)·WH-1 콘텐츠
+변환(§7)·*본질적 동치* dedup(표기 다른 동치 풀이 정규화). 본 모듈은 *검증 풀이 저장소 CRUD*만 둔다.
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import uuid
 from typing import Any
 
@@ -38,7 +41,20 @@ __all__ = [
     "bank_solution",
     "get_solutions",
     "get_verified",
+    "solution_fingerprint",
 ]
+
+
+def solution_fingerprint(solution_path: dict[str, Any]) -> str:
+    """풀이 경로의 *정규 지문* — 정렬 키 JSON의 sha256(바이트 동일 경로 식별·dedup용).
+
+    키 순서·공백 무관하게 *내용이 같으면 같은 지문*(`sort_keys`·compact separators). 순수·결정론.
+    **정확 일치만** 잡는다 — 표기는 달라도 수학적으로 동치인 풀이(다중 풀이 본질적 동치)는 못
+    가린다(정규화·동치 판정은 후속). 솔버 루프가 *같은 경로를 재발견*해 저장소를 부풀리는 것을 막는
+    1차 dedup 신호다.
+    """
+    canonical = json.dumps(solution_path, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 async def bank_solution(
@@ -50,6 +66,7 @@ async def bank_solution(
     strategy_tag: str | None = None,
     answer: str | None = None,
     source_root_id: uuid.UUID | None = None,
+    dedup: bool = False,
 ) -> VerifiedSolution:
     """완전 풀이 경로 1개를 저장소에 적재한다(§2.4 — finalize 커밋 대상).
 
@@ -57,7 +74,21 @@ async def bank_solution(
     `WhsSolutionGrade` enum이 failed를 배제해 *틀린 풀이의 적재를 구조 차단*한다(§3·R-S2). 한 문제에
     여러 풀이(다중 전략)를 적재할 수 있다(problem_id UNIQUE 없음). `flush`+`refresh`로 새 행의
     `id`·`created_at`을 같은 트랜잭션에서 가시화(commit은 호출자).
+
+    **dedup(opt-in)**: `dedup=True`면 적재 전 같은 문제의 *같은 grade* 풀이 중 `solution_path`가
+    바이트 동일(같은 지문·`solution_fingerprint`)인 것이 있으면 *새로 적재하지 않고 기존 행을
+    반환*한다(idempotent) — 솔버 루프가 같은 경로를 재발견해 자기진화 저장소를 부풀리는 것을
+    막는다(데이터 위생·R-S2 인접). 정확 일치만 dedup(다중 풀이 *본질적 동치*는 후속). 기본 False는
+    종전대로 항상 적재(다중 전략·하위호환).
     """
+    if dedup:
+        fingerprint = solution_fingerprint(solution_path)
+        for existing in await get_solutions(session, problem_id):
+            if (
+                existing.grade == grade
+                and solution_fingerprint(existing.solution_path) == fingerprint
+            ):
+                return existing  # 같은 grade·동일 경로 이미 적재 — 중복 적재 skip(idempotent).
     solution = VerifiedSolution(
         problem_id=problem_id,
         grade=grade,

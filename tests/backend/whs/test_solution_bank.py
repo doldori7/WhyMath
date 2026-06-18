@@ -29,6 +29,7 @@ from whymath_backend.whs.solution_bank import (
     bank_solution,
     get_solutions,
     get_verified,
+    solution_fingerprint,
 )
 
 # ===========================================================================
@@ -136,6 +137,94 @@ class TestQueryUnit:
         out = asyncio.run(get_verified(cast(AsyncSession, fake), uuid.uuid4()))
         assert out == []
         assert len(fake.executed) == 1
+
+
+class TestSolutionFingerprint:
+    def test_key_order_independent(self) -> None:
+        """키 순서가 달라도 내용이 같으면 같은 지문(정규 JSON·dedup 안정성)."""
+        a = solution_fingerprint({"steps": ["x=2"], "k": 1})
+        b = solution_fingerprint({"k": 1, "steps": ["x=2"]})
+        assert a == b and len(a) == 64
+
+    def test_different_path_differs(self) -> None:
+        """경로 내용이 다르면 지문도 다르다."""
+        assert solution_fingerprint({"steps": ["x=2"]}) != solution_fingerprint({"steps": ["x=3"]})
+
+
+class TestBankSolutionDedup:
+    def test_dedup_skips_identical_same_grade_path(self) -> None:
+        """dedup=True + 같은 grade·동일 경로 기존 행 → 적재 안 하고 기존 행 반환(idempotent)."""
+        pid = uuid.uuid4()
+        existing = VerifiedSolution(
+            problem_id=pid, grade=WhsSolutionGrade.VERIFIED, solution_path={"steps": ["x=2"]}
+        )
+        fake = _FakeSession(scalars_list=[existing])
+        out = asyncio.run(
+            bank_solution(
+                cast(AsyncSession, fake),
+                problem_id=pid,
+                grade=WhsSolutionGrade.VERIFIED,
+                solution_path={"steps": ["x=2"]},  # 동일 경로(키 순서 무관)
+                dedup=True,
+            )
+        )
+        assert out is existing  # 기존 행 반환
+        assert fake.added == []  # 새 적재 0
+        assert fake.flushes == 0
+
+    def test_dedup_allows_different_path(self) -> None:
+        """dedup=True여도 경로가 다르면 새로 적재한다(다중 전략 보존)."""
+        pid = uuid.uuid4()
+        existing = VerifiedSolution(
+            problem_id=pid, grade=WhsSolutionGrade.VERIFIED, solution_path={"steps": ["x=2"]}
+        )
+        fake = _FakeSession(scalars_list=[existing])
+        out = asyncio.run(
+            bank_solution(
+                cast(AsyncSession, fake),
+                problem_id=pid,
+                grade=WhsSolutionGrade.VERIFIED,
+                solution_path={"steps": ["x=3"]},  # 다른 경로
+                dedup=True,
+            )
+        )
+        assert out is not existing and fake.added == [out]  # 새로 적재
+
+    def test_dedup_different_grade_not_deduped(self) -> None:
+        """같은 경로라도 grade가 다르면 dedup 안 함(verified vs unverified는 별개 레코드)."""
+        pid = uuid.uuid4()
+        existing = VerifiedSolution(
+            problem_id=pid, grade=WhsSolutionGrade.UNVERIFIED, solution_path={"steps": ["x=2"]}
+        )
+        fake = _FakeSession(scalars_list=[existing])
+        out = asyncio.run(
+            bank_solution(
+                cast(AsyncSession, fake),
+                problem_id=pid,
+                grade=WhsSolutionGrade.VERIFIED,  # 다른 grade
+                solution_path={"steps": ["x=2"]},
+                dedup=True,
+            )
+        )
+        assert out is not existing and fake.added == [out]
+
+    def test_dedup_false_always_inserts(self) -> None:
+        """dedup 기본(False) → 동일 경로라도 항상 적재(하위호환·조회 안 함)."""
+        pid = uuid.uuid4()
+        existing = VerifiedSolution(
+            problem_id=pid, grade=WhsSolutionGrade.VERIFIED, solution_path={"steps": ["x=2"]}
+        )
+        fake = _FakeSession(scalars_list=[existing])
+        out = asyncio.run(
+            bank_solution(
+                cast(AsyncSession, fake),
+                problem_id=pid,
+                grade=WhsSolutionGrade.VERIFIED,
+                solution_path={"steps": ["x=2"]},
+            )
+        )
+        assert fake.added == [out]  # 적재됨
+        assert fake.executed == []  # dedup 조회 안 함(기존 행 미조회)
 
 
 class TestEnumValues:
