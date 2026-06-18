@@ -51,7 +51,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._auth import ConsentedUser, CurrentUser
 from whymath_backend.api._query_filters import (
     _validate_time_window,
     _validate_tz_aware,
@@ -99,6 +99,7 @@ from whymath_backend.l2.weak_concept_recommendation import (
 from whymath_backend.l4.calibration_coaching import recommend_calibration_coaching
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
+from whymath_backend.privacy import erase_user
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
@@ -1653,6 +1654,67 @@ async def delete_my_assessment(
         AuditResourceType.assessment,
         "진단을 찾을 수 없습니다.",
     )
+
+
+# ── DELETE /v1/me : 계정·전체 데이터 영구 삭제(개인정보 삭제권·R11) ──
+# 단일 리소스 삭제(위 sessions/dialogues/assessments)와 달리, 본인 *계정 전체*(17개 테이블 +
+# user_profile)를 단일 트랜잭션으로 지운다(privacy.erase_user·#242). 오삭제 방지로 확인 문구를
+# 요구하고, **CurrentUser**(동의 게이트 아님)를 쓴다 — 미성년 동의 미설정자도 *삭제*는 가능해야
+# 한다(삭제권 우선·수집 동의와 무관). 법정대리인 동의 *흐름*은 후속(여기선 본인 인증 + 확인 문구).
+_DELETE_CONFIRMATION = "DELETE_MY_ACCOUNT"
+
+
+class AccountErasureRequest(BaseModel):
+    """계정 삭제 요청 — 오삭제 방지 확인 문구 필수."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    confirmation: str = Field(
+        description=f"오삭제 방지 확인 문구 — 정확히 '{_DELETE_CONFIRMATION}'이어야 한다.",
+    )
+
+
+class AccountErasureResponse(BaseModel):
+    """계정 삭제 영수증 — 무엇이 지워졌는지의 *요약*(내부 테이블 구조 비노출)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: uuid.UUID = Field(description="삭제된 사용자 id.")
+    total_rows_deleted: int = Field(ge=0, description="삭제된 총 행수(전 테이블 + user_profile).")
+
+
+@router.delete(
+    "",
+    response_model=AccountErasureResponse,
+    summary="내 계정·전체 데이터 영구 삭제(개인정보 삭제권·R11)",
+)
+async def erase_my_account(
+    body: AccountErasureRequest,
+    user: CurrentUser,
+    session: SessionDep,
+) -> AccountErasureResponse:
+    """삭제권(R11) — 본인 계정의 *모든* 학생-연결 데이터를 단일 트랜잭션으로 영구 삭제.
+
+    인증된 *본인만*(user_id=토큰 subject) 자기 계정을 지운다. 오삭제 방지로 확인 문구
+    (`confirmation == '{_DELETE_CONFIRMATION}'`) 불일치 시 **400**. `privacy.erase_user`(#242)
+    오케스트레이션을 호출해 17개 테이블 + user_profile을 자식→부모 순서로 지우고, 삭제 *시도*는
+    `DeletionAudit`로 잔존한다(GDPR 증빙). 같은 트랜잭션 commit이라 부분 삭제가 없다. 멱등
+    (이미 없으면 0행). **동의 게이트 아님**(`CurrentUser`) — 미성년 동의 미설정자도 삭제 가능
+    (삭제권 우선). 법정대리인 동의 *흐름*은 후속.
+
+    응답은 *요약 영수증*(user_id·총 삭제 행수)만 — 내부 테이블 구조는 노출하지 않는다. 삭제 후
+    본인 토큰/세션도 사라지므로(refresh_token_session 포함) 이후 요청은 재인증이 필요하다.
+    """
+    if body.confirmation != _DELETE_CONFIRMATION:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"확인 문구가 일치하지 않습니다('{_DELETE_CONFIRMATION}' 필요).",
+        )
+    # 삭제 후 user 객체 만료(expire_on_commit)에 대비해 user_id를 먼저 포획.
+    user_id = user.user_id
+    report = await erase_user(session, user_id=user_id)
+    await session.commit()
+    return AccountErasureResponse(user_id=user_id, total_rows_deleted=report.total_rows_deleted)
 
 
 # ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종 커버리지 맵 — 본인 스코핑) ──
