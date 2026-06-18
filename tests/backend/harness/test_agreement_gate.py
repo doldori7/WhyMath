@@ -9,9 +9,14 @@ from __future__ import annotations
 
 from whymath_backend.harness.agreement_gate import (
     AgreementVerdict,
+    Phase2ExitVerdict,
+    PrecisionVerdict,
     _mcnemar_one_sided_p,
     evaluate_agreement_gate,
+    evaluate_phase2_exit,
+    evaluate_precision_guard,
     run_agreement_gate,
+    run_precision_guard,
     substring_matcher,
 )
 
@@ -127,3 +132,102 @@ class TestRunAgreementGate:
         assert gate.verdict is AgreementVerdict.NOT_IMPROVED
         assert gate.n_probes > 0  # 실 라벨 프로브셋 로드됨
         assert gate.baseline_recall == gate.candidate_recall
+
+
+class TestEvaluatePrecisionGuard:
+    """FP 프로브(올바른 진술)에서 후보 거짓양성 회귀 판정 — True=오매칭(나쁨)."""
+
+    def test_candidate_adds_false_positives_regressed(self) -> None:
+        """후보만 5건 새 오매칭 → p=0.03125<0.05 → REGRESSED(정확성 #1 위반 위험)."""
+        guard = evaluate_precision_guard([(False, True)] * 5)
+        assert guard.verdict is PrecisionVerdict.REGRESSED
+        assert guard.candidate_fp_rate == 1.0 and guard.baseline_fp_rate == 0.0
+        assert guard.discordant_candidate_only == 5 and guard.discordant_baseline_only == 0
+        assert guard.p_value is not None and guard.p_value < 0.05
+
+    def test_candidate_reduces_false_positives_no_regression(self) -> None:
+        """후보가 오매칭을 줄임(베이스라인만 오매칭) → 무회귀."""
+        guard = evaluate_precision_guard([(True, False)] * 5)
+        assert guard.verdict is PrecisionVerdict.NO_REGRESSION
+        assert guard.candidate_fp_rate == 0.0 and guard.baseline_fp_rate == 1.0
+
+    def test_equal_no_regression(self) -> None:
+        """둘 다 동일 오매칭 → 불일치쌍 0 → 무회귀·p=1.0."""
+        guard = evaluate_precision_guard([(True, True)] * 6)
+        assert guard.verdict is PrecisionVerdict.NO_REGRESSION
+        assert guard.p_value == 1.0
+
+    def test_worse_but_underpowered_no_regression(self) -> None:
+        """후보 악화나 과소표본(불일치쌍 4) → p=0.0625>0.05 → 무회귀(거짓 FAIL 0)."""
+        guard = evaluate_precision_guard([(False, True)] * 4 + [(True, True)])
+        assert guard.candidate_fp_rate is not None and guard.baseline_fp_rate is not None
+        assert guard.candidate_fp_rate > guard.baseline_fp_rate  # 악화는 맞음
+        assert guard.verdict is PrecisionVerdict.NO_REGRESSION  # 그러나 비유의
+        assert guard.p_value is not None and guard.p_value >= 0.05
+
+    def test_below_min_probes_no_data(self) -> None:
+        """FP 프로브 < min_probes → NO_DATA(판정 보류·p None·FP율은 참고 채움)."""
+        guard = evaluate_precision_guard([(False, True)] * 3)
+        assert guard.verdict is PrecisionVerdict.NO_DATA
+        assert guard.p_value is None
+        assert guard.candidate_fp_rate == 1.0
+
+    def test_custom_alpha_flips_regression(self) -> None:
+        """같은 데이터라도 alpha=0.1이면 p=0.0625<0.1 → REGRESSED."""
+        paired = [(False, True)] * 4 + [(True, True)]
+        assert evaluate_precision_guard(paired, alpha=0.1).verdict is PrecisionVerdict.REGRESSED
+
+
+class TestRunPrecisionGuard:
+    def test_synthetic_candidate_adds_fps(self) -> None:
+        """합성 FP 프로브 — 베이스라인 침묵·후보 전부 오매칭 → REGRESSED."""
+        fp_probes = [f"올바른 진술 {i}" for i in range(5)]
+        guard = run_precision_guard(
+            candidate=lambda _s: "X",  # 항상 오개념 붙임(올바른 진술이므로 거짓양성)
+            baseline=lambda _s: None,  # 침묵
+            fp_probes=fp_probes,
+        )
+        assert guard.verdict is PrecisionVerdict.REGRESSED
+        assert guard.n_probes == 5
+
+    def test_default_substring_baseline_over_default_fp_probes(self) -> None:
+        """기본 경로 — 실 FP 프로브셋·substring 동일 매처 → 불일치쌍 0 → 무회귀."""
+        guard = run_precision_guard(candidate=substring_matcher)
+        assert guard.verdict is PrecisionVerdict.NO_REGRESSION
+        assert guard.n_probes > 0  # 실 FP 프로브셋 로드됨(33)
+        assert guard.baseline_fp_rate == guard.candidate_fp_rate
+        assert guard.baseline_fp_rate is not None and guard.baseline_fp_rate > 0  # substring FP 큼
+
+
+class TestEvaluatePhase2Exit:
+    """결합 — recall 유의 개선 AND 정밀도 무회귀일 때만 READY."""
+
+    def test_improved_and_no_regression_ready(self) -> None:
+        recall = evaluate_agreement_gate([(False, True)] * 5)  # IMPROVED
+        precision = evaluate_precision_guard([(True, False)] * 5)  # NO_REGRESSION
+        exit_ = evaluate_phase2_exit(recall, precision)
+        assert exit_.verdict is Phase2ExitVerdict.READY
+        assert exit_.recall_verdict is AgreementVerdict.IMPROVED
+        assert exit_.precision_verdict is PrecisionVerdict.NO_REGRESSION
+
+    def test_improved_but_precision_regressed_not_ready(self) -> None:
+        """★ 핵심 안전: recall 개선이어도 정밀도 회귀면 NOT_READY(정밀도가 recall 덮어씀)."""
+        recall = evaluate_agreement_gate([(False, True)] * 5)  # IMPROVED
+        precision = evaluate_precision_guard([(False, True)] * 5)  # REGRESSED
+        exit_ = evaluate_phase2_exit(recall, precision)
+        assert exit_.verdict is Phase2ExitVerdict.NOT_READY
+
+    def test_not_improved_recall_not_ready(self) -> None:
+        recall = evaluate_agreement_gate([(True, True)] * 5)  # NOT_IMPROVED
+        precision = evaluate_precision_guard([(True, False)] * 5)  # NO_REGRESSION
+        assert evaluate_phase2_exit(recall, precision).verdict is Phase2ExitVerdict.NOT_READY
+
+    def test_recall_no_data_propagates_no_data(self) -> None:
+        recall = evaluate_agreement_gate([(False, True)] * 3)  # NO_DATA
+        precision = evaluate_precision_guard([(True, False)] * 5)  # NO_REGRESSION
+        assert evaluate_phase2_exit(recall, precision).verdict is Phase2ExitVerdict.NO_DATA
+
+    def test_precision_no_data_propagates_no_data(self) -> None:
+        recall = evaluate_agreement_gate([(False, True)] * 5)  # IMPROVED
+        precision = evaluate_precision_guard([(False, True)] * 3)  # NO_DATA
+        assert evaluate_phase2_exit(recall, precision).verdict is Phase2ExitVerdict.NO_DATA

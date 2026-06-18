@@ -35,7 +35,10 @@ from whymath_backend.harness.agreement_gate import (
     _MIN_PROBES,
     AgreementGate,
     Matcher,
+    Phase2Exit,
+    evaluate_phase2_exit,
     run_agreement_gate,
+    run_precision_guard,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.models import Misconception, MisconceptionMatch
@@ -45,6 +48,7 @@ from whymath_backend.l4.misconception.semantic.provider import EmbeddingProvider
 
 __all__ = [
     "run_semantic_agreement_gate",
+    "run_semantic_phase2_exit",
     "semantic_candidate_matcher",
 ]
 
@@ -92,11 +96,52 @@ def run_semantic_agreement_gate(
     `index` 생략 시 `SemanticMatcher`가 `InMemoryVectorIndex` 자체 생성(영속 `PgVectorIndex`
     주입은 후속).
     """
+    candidate = _build_semantic_candidate(
+        provider=provider, threshold=threshold, index=index, catalog=catalog
+    )
+    return run_agreement_gate(
+        candidate=candidate, probes=probes, alpha=alpha, min_probes=min_probes
+    )
+
+
+def _build_semantic_candidate(
+    *,
+    provider: EmbeddingProvider,
+    threshold: float | None,
+    index: VectorIndex | None,
+    catalog: tuple[Misconception, ...],
+) -> Matcher:
+    """의미 매처를 *1회* 구축(카탈로그 사전 임베딩 캐시)해 게이트 후보 `Matcher`로 만든다.
+
+    `threshold` 미지정 시 `Settings.misconception_semantic_threshold`(보수적 0.55). recall 게이트·
+    정밀도 가드가 *같은* 후보(같은 사전 임베딩)를 공유하도록 빌드를 한 곳에 모은다.
+    """
     resolved_threshold = (
         threshold if threshold is not None else get_settings().misconception_semantic_threshold
     )
     matcher = SemanticMatcher(provider=provider, index=index, catalog=catalog)
-    candidate = semantic_candidate_matcher(matcher, threshold=resolved_threshold)
-    return run_agreement_gate(
-        candidate=candidate, probes=probes, alpha=alpha, min_probes=min_probes
+    return semantic_candidate_matcher(matcher, threshold=resolved_threshold)
+
+
+def run_semantic_phase2_exit(
+    *,
+    provider: EmbeddingProvider,
+    threshold: float | None = None,
+    index: VectorIndex | None = None,
+    catalog: tuple[Misconception, ...] = CATALOG,
+    alpha: float = _DEFAULT_ALPHA,
+    min_probes: int = _MIN_PROBES,
+) -> Phase2Exit:
+    """의미 매처 후보로 2단계 종료 *결합* 판정 — recall 유의 개선 AND 정밀도 무회귀.
+
+    `SemanticMatcher`를 *1회* 구축(사전 임베딩 캐시)한 후보를 recall 게이트(라벨 recall 프로브)와
+    정밀도 가드(FP 프로브)에 *공유* 적용하고 `evaluate_phase2_exit`로 묶는다. recall만으론
+    후보가 거짓양성을 늘리며 종료를 통과할 수 있어(정확성 #1 위반 위험), 정밀도 무회귀를 함께
+    요구한다. provider 주입 필수(테스트=Fake·프로덕션=build_provider)·라이브 결선은 integration.
+    """
+    candidate = _build_semantic_candidate(
+        provider=provider, threshold=threshold, index=index, catalog=catalog
     )
+    recall = run_agreement_gate(candidate=candidate, alpha=alpha, min_probes=min_probes)
+    precision = run_precision_guard(candidate=candidate, alpha=alpha, min_probes=min_probes)
+    return evaluate_phase2_exit(recall, precision)

@@ -12,9 +12,10 @@ import importlib.util
 
 import pytest
 
-from whymath_backend.harness.agreement_gate import AgreementVerdict
+from whymath_backend.harness.agreement_gate import AgreementVerdict, Phase2ExitVerdict
 from whymath_backend.harness.agreement_gate_semantic import (
     run_semantic_agreement_gate,
+    run_semantic_phase2_exit,
     semantic_candidate_matcher,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG
@@ -94,6 +95,19 @@ class TestRunSemanticAgreementGate:
         # 임계값은 데이터 의존이라 verdict는 단언하지 않고 구조만(유효 enum·프로브 수).
         assert gate.verdict in set(AgreementVerdict)
         assert gate.n_probes == 6
+
+
+class TestRunSemanticPhase2Exit:
+    """결합 — recall 게이트 + 정밀도 가드를 의미 매처 후보로 한 번에(실 프로브셋·Fake provider)."""
+
+    def test_runs_over_real_probes_structural(self) -> None:
+        """실 라벨(recall 61 + fp 33) 프로브셋에 Fake provider → 결정론·구조 유효 결합 판정."""
+        exit_ = run_semantic_phase2_exit(provider=FakeEmbeddingProvider(dim=16))
+        # verdict는 데이터·임계값 의존이라 구조만 단언(유효 enum·두 축 판정 채워짐).
+        assert exit_.verdict in set(Phase2ExitVerdict)
+        assert exit_.recall_verdict in set(AgreementVerdict)
+        # 정밀도 가드도 실제로 돌아 결합에 반영됐는지(두 축 모두 채워짐).
+        assert exit_.precision_verdict is not None
 
 
 def _require_local_embedding() -> None:
