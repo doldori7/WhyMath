@@ -150,8 +150,14 @@ LLM 추론이 아닌 **SQL 조회**로 나온다. 학부모 리포트의 신뢰 
 > 행 삭제론 불충분 → **앱레벨 명시 삭제**(child→parent 순서·`_ERASURE_PLAN`)가 필요. FK 전부 CASCADE
 > 대안은 대규모 마이그레이션 + 전역 오삭제 위험이라 배제(명시·감사 가능·마이그레이션 0 선택). 삭제
 > 전 `DeletionAudit`(`resource_type="user_profile"`·콘텐츠 미저장) 적재 — user FK가 없어 *잔존*(GDPR
-> 증빙·slice 57 동형). **후속**: 삭제권 *요청* API(인증·법정대리인 동의)·외부 store(ClickHouse·S3·
-> Redis) 삭제 연계.
+> 증빙·slice 57 동형).
+>
+> **요청 API (2026-06-18·`DELETE /v1/me`)**: `api/me.py` `erase_my_account` — 인증된 *본인만* 자기
+> 계정을 삭제(`user_id`=토큰 subject). **CurrentUser**(동의 게이트 *아님*) — 미성년 동의 미설정자도
+> *삭제*는 가능해야 한다(삭제권 우선·수집 동의와 무관). 오삭제 방지 **확인 문구**(`confirmation ==
+> "DELETE_MY_ACCOUNT"`) 불일치 시 400. 200 *영수증*(user_id·총 삭제 행수만·내부 테이블 구조 비노출)·
+> `erase_user`+commit 원자적. **후속**: 법정대리인 동의 *흐름*(미성년 가디언 승인)·외부 store
+> (ClickHouse 행동로그·S3 객체·Redis 세션) 삭제 연계.
 
 ### 2.4 장기 상태 — 기존 L2 그대로
 
