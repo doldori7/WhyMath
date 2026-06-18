@@ -1252,6 +1252,9 @@ class TestSessionPersistence:
         assert "student_turn_id" in body
         assert "assistant_turn_id" in body
         assert body["intervention"]["pattern"] == "counterexample"
+        # WH-1 멀티턴 카운터 — 새 dialogue 첫 교환은 턴 1·ε-탐색 아님(§2.2).
+        assert body["wh1_turn_index"] == 1
+        assert body["wh1_exploration_turn"] is False
 
         # 영속 — 1 dialogue + 2 turns, commit 2회(parent 먼저, child 다음).
         from whymath_backend.db.models.dialogue import (
@@ -1356,6 +1359,9 @@ class TestTurnAppend:
         # 다음 학생 turn_order = 직전 total_turns(2) + 1 = 3
         assert body["student_turn_order"] == 3
         assert body["assistant_turn_order"] == 4
+        # WH-1 멀티턴 카운터 — 직전 total_turns=2 → 이번 교환은 턴 2(누적·연속성·§2.2).
+        assert body["wh1_turn_index"] == 2
+        assert body["wh1_exploration_turn"] is False
 
         # 영속 — 2 turns added, dialogue 카운트 업데이트, 1 commit
         turns = [o for o in captured.added if isinstance(o, DialogueTurnORM)]
@@ -1365,6 +1371,21 @@ class TestTurnAppend:
         assert dialogue.total_turns == 4
         assert dialogue.student_turns == 2
         assert dialogue.assistant_turns == 2
+
+    def test_append_exploration_turn_on_fifth_exchange(self) -> None:
+        """직전 total_turns=8 → 이번 교환은 턴 5 → ε-탐색 강제 턴(§2.2 규칙2·카운터 누적)."""
+        did = uuid.uuid4()
+        key, dialogue = self._preloaded_dialogue(did, _UID, total_turns=8)
+        client, _ = _session_client(preload={key: dialogue})
+
+        resp = client.post(
+            f"/v1/coach/sessions/{did}/turns",
+            json={"student_input": "5턴째 풀이"},
+        )
+        assert resp.status_code == 201, resp.text
+        body = resp.json()
+        assert body["wh1_turn_index"] == 5
+        assert body["wh1_exploration_turn"] is True
 
     def test_nonexistent_dialogue_404(self) -> None:
         client, captured = _session_client()  # 빈 preload

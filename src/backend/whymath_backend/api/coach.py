@@ -86,6 +86,7 @@ from whymath_backend.l4.misconception.hypothesis_store import apply_matches
 from whymath_backend.l4.misconception.judge import JudgeProtocol, LLMJudge, judge_filter
 from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
 from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
+from whymath_backend.l4.misconception.probe_selection import is_exploration_turn
 from whymath_backend.l4.misconception.shadow import (
     _spawn,
     observe_misconception_judge_shadow,
@@ -302,6 +303,12 @@ class SessionCreateResponse(CoachResponse):
         default_factory=list,
         description=_ACTIVE_HYPOTHESES_DESC,
     )
+    wh1_turn_index: int = Field(
+        ge=1, description="이 교환의 WH-1 턴 번호(1-기반·세션 누적·ε-탐색 카운터·§2.2). 생성=1."
+    )
+    wh1_exploration_turn: bool = Field(
+        description="이 턴이 ε-탐색 강제 턴인지(기본 5턴마다·활성 세트 밖 프로브 의무·§2.2 규칙2)."
+    )
 
 
 class TurnAppendResponse(CoachResponse):
@@ -318,6 +325,12 @@ class TurnAppendResponse(CoachResponse):
     active_hypotheses: list[MisconceptionHypothesis] = Field(
         default_factory=list,
         description=_ACTIVE_HYPOTHESES_DESC,
+    )
+    wh1_turn_index: int = Field(
+        ge=1, description="이 교환의 WH-1 턴 번호(1-기반·세션 누적·ε-탐색 카운터·§2.2)."
+    )
+    wh1_exploration_turn: bool = Field(
+        description="이 턴이 ε-탐색 강제 턴인지(기본 5턴마다·활성 세트 밖 프로브 의무·§2.2 규칙2)."
     )
 
 
@@ -799,6 +812,19 @@ async def _apply_hypotheses(
     return await apply_matches(session, user_id, matches)
 
 
+def _wh1_turn_state(total_turns_before: int) -> tuple[int, bool]:
+    """이 교환(student↔AI)의 WH-1 턴 번호 + ε-탐색 턴 여부 — 멀티턴 연속성 카운터(§2.2).
+
+    `total_turns_before`(이번 턴 추가 *전* `dialogue.total_turns` — 교환당 +2라 짝수)에서 1-기반
+    WH-1 턴 번호를 유도한다(create=0→1·n번째 append=2n→n+1). `is_exploration_turn`으로 ε-탐색
+    주기(기본 5턴마다)도 함께 표식한다 — 설계 §2.2 "하네스가 카운터를 관리"를 *세션 상태(dialogue)*
+    에서 충족한다. 활성 가설 세트(웜 스타트로 복원·`active_hypotheses`)와 함께 노출돼 멀티턴 연속성
+    (직전 누적 상태 위에 이번 턴 진행)을 클라이언트·후속 도구 루프가 관측할 수 있게 한다.
+    """
+    turn_index = total_turns_before // 2 + 1
+    return turn_index, is_exploration_turn(turn_index)
+
+
 def _intervention_from_hypotheses_or(
     active_hypotheses: list[MisconceptionHypothesis],
     fallback: InterventionDecision | None,
@@ -960,6 +986,8 @@ async def create_session(
     )
     await session.commit()
 
+    # WH-1 멀티턴 연속성 — 새 dialogue라 직전 total_turns=0 → 첫 교환은 턴 1(§2.2 ε 카운터).
+    wh1_turn_index, wh1_exploration = _wh1_turn_state(0)
     return SessionCreateResponse(
         decision=decision,
         misconceptions=matches,
@@ -974,6 +1002,8 @@ async def create_session(
         dialogue_id=dialogue.dialogue_id,
         student_turn_id=student_turn.turn_id,
         assistant_turn_id=assistant_turn.turn_id,
+        wh1_turn_index=wh1_turn_index,
+        wh1_exploration_turn=wh1_exploration,
     )
 
 
@@ -1086,6 +1116,8 @@ async def append_turns(
     )
     await session.commit()
 
+    # WH-1 멀티턴 연속성 — 이번 교환 *전* total_turns(current_total)에서 누적 턴 번호 유도(§2.2).
+    wh1_turn_index, wh1_exploration = _wh1_turn_state(current_total)
     return TurnAppendResponse(
         decision=decision,
         misconceptions=matches,
@@ -1101,6 +1133,8 @@ async def append_turns(
         assistant_turn_id=assistant_turn.turn_id,
         student_turn_order=student_order,
         assistant_turn_order=assistant_order,
+        wh1_turn_index=wh1_turn_index,
+        wh1_exploration_turn=wh1_exploration,
     )
 
 
