@@ -397,6 +397,16 @@ class Settings(BaseSettings):
             "상한. 0=비활성. 읽기는 ETag/304 캐싱으로 경량 — 쓰기보다 높게 둔다."
         ),
     )
+    evidence_retention_years: int = Field(
+        default=3,
+        ge=1,
+        description=(
+            "학습 증거(evidence_links — 미성년 오개념 진단 증거)의 *기본 보존기한*(년). 적재 시점 "
+            "기준 retention_until을 채워 `purge_expired`가 경과분 파기(GDPR 데이터 최소화·무기한 "
+            "보존 금지). 기본 3년(2026-06-18 합의)·미성년 보존은 규제 대상이라 법무 확정 시 조정. "
+            "log_evidence가 retention_until 미제공 시 today+이 값으로 채운다."
+        ),
+    )
     coach_rate_limit_write_per_minute: int = Field(
         default=30,
         ge=0,
