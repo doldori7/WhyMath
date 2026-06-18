@@ -22,6 +22,10 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from whymath_backend.config import Settings
+from whymath_backend.db.models.verified_solution import (
+    VerifiedSolution,
+    WhsSolutionGrade,
+)
 from whymath_backend.whs.harness import (
     ApplyStrategyAction,
     ConjectureCheckAction,
@@ -152,6 +156,29 @@ class TestFinalizeInvariants:
         assert session.added == []  # 적재 0
         assert out.trace[0].ok is False
         assert out.trace[0].grade == "failed"
+
+    def test_finalize_dedup_reuses_existing(self) -> None:
+        """finalize는 dedup=True로 적재 — 같은 문제의 동일 경로 기존 행이 있으면 재사용(멱등·#256).
+
+        재발견 풀이가 자기진화 데이터(§5)에 중복 적재되지 않는다(위생). status는 여전히
+        finalized이고 banked_solution_id는 *기존* 행 id다(새 적재 0).
+        """
+        existing = VerifiedSolution(
+            problem_id=uuid.uuid4(),
+            grade=WhsSolutionGrade.VERIFIED,
+            # finalize가 만드는 경로와 바이트 동일(같은 지문) → dedup 히트.
+            solution_path={"conditions": _COND, "answer": _ANS_PASS, "steps": []},
+        )
+        existing.id = uuid.uuid4()
+        policy = ScriptedPolicy(
+            [FinalizeAction(conditions=_COND, answer=_ANS_PASS, steps=[], strategy_tag="대수적")]
+        )
+        session = _FakeSession(verified_list=[existing])
+        out = _run(session, policy)
+        assert out.status == "finalized"
+        assert out.final_grade == "verified"
+        assert out.banked_solution_id == existing.id  # 기존 행 재사용
+        assert session.added == []  # 새 적재 0(중복 차단)
 
 
 class TestLemmaGate:

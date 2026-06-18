@@ -309,9 +309,14 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 **S1 슬라이스 4 — 솔버 루프 골격**(설계 §3 도구 8종·§4 판정·§7) 구현됨(마이그레이션 0·**LLM 정책 모델 구동은 후속·환경 밖**). 결정론 루프 드라이버 `whs/harness.py`:
 - **`run_solver(session, *, problem_id, policy, max_tool_calls=32) -> SolverOutcome`**: `SolverPolicy`(도구 선택 두뇌·주입)를 받아 도구를 실행하고 검증기 스택·상태 저장소 4종에 결선한다. **생성 도구(parse_problem·decompose·apply_strategy)의 *내용*은 정책이 공급**(프로덕션=Ollama·테스트=`ScriptedPolicy`)·하네스는 *실행·검증·기록*만.
 - **강제 불변식(§3·§4)**: ① verify 없는 finalize 거부(finalize=검증기 스택 실행+커밋이 한 몸) ② **failed 차단**(`final_verdict`=failed면 미적재·검색 계속) ③ unverifiable→`unverified` 격리 적재 ④ **탐색 예산 상한**(`max_tool_calls` 초과→`budget_exhausted` 안전 종료·R-S4) ⑤ dead-end 회피(`apply_strategy`는 적용 전 `is_dead_end` 조회·노드 미생성) ⑥ 검증 보조정리만(`log_lemma`는 직전 verify=verified 전제).
-- **도구 결선**: verify→검증기 스택(verify_answer+verify_solution+final_verdict)·retrieve_similar→검증풀이/보조정리 조회·conjecture_check→수치 반례(verify_answer 재사용)·log_lemma/log_deadend·finalize→verify+등급 매핑+`bank_solution`. 액션 10종(8 도구 + log 분리 + end_search)은 `kind` 판별 Pydantic 유니온(`extra=forbid·frozen`).
+- **도구 결선**: verify→검증기 스택(verify_answer+verify_solution+final_verdict)·retrieve_similar→검증풀이/보조정리 조회·conjecture_check→수치 반례(verify_answer 재사용)·log_lemma/log_deadend·finalize→verify+등급 매핑+`bank_solution`(dedup 멱등·아래 슬라이스 5). 액션 10종(8 도구 + log 분리 + end_search)은 `kind` 판별 Pydantic 유니온(`extra=forbid·frozen`).
 - 마이그레이션 0(기존 저장소·검증기 재사용). `SolverOutcome`(status: finalized/budget_exhausted/ended + 트레이스).
 - **후속(S1 잔여)**: LLM 정책 모델(Ollama·Phaiakes9)·MCTS-lite 탐색·생성 도구 내용 생성·키/해시 스킴 표준화·PRM(S2)·Tier3(S5).
+
+**S1 슬라이스 5 — finalize dedup 결선**(설계 §2.4·§5·#255 소비) 구현됨(마이그레이션 0·순수 결선). 솔버 `finalize`가 적재를 `bank_solution(dedup=True)`로 한다:
+- **멱등 재확정**: 여러 솔버 런이 같은 문제의 *동일 경로*(`solution_fingerprint` 바이트 일치 + 같은 grade)를 재발견하면 #255 dedup 로직이 기존 행을 반환하고 *새 행을 적재하지 않는다*. 자기진화 학습 데이터(§5)에 재발견 중복이 쌓이는 것을 막는다(저장소 위생·R-S2 인접). 정확 일치만 잡는다(표기 다른 *본질적 동치*는 후속).
+- **정직 표기**: `ToolResult.detail`은 dedup 히트(재사용) 시 "적재" 과대주장을 피해 "확정(중복은 기존 재사용)"으로 표기한다. 구조 필드(`banked_solution_id`·`grade`·`status`)는 히트/미스 모두 정확하므로 불변(`finalized` + 기존 행 id 반환).
+- **후속**: 신규 vs 재발견 정밀 카운터(§5 export가 라운드별 *새* verified 경로를 셀 때)·*본질적 동치* dedup(동치 풀이 정규화).
 
 ### 용어 정합: "545노드" (편집자 부기)
 
