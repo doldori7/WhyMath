@@ -32,6 +32,7 @@ def _problem(
     problem_id: uuid.UUID,
     *,
     question_text: str | None = "다음 방정식을 풀어라.",
+    answer_explanation: str | None = "해설: x=2.",
     unit_codes: tuple[str, ...] = ("M1-A-01",),
     source_type: SourceType = SourceType.자체생성,
     conditions_parsed: list[dict[str, Any]] | None = None,
@@ -40,6 +41,7 @@ def _problem(
     return Problem(
         problem_id=problem_id,
         question_text=question_text,
+        answer_explanation=answer_explanation,
         unit_codes=list(unit_codes),
         source_type=source_type,
         conditions_parsed=conditions_parsed if conditions_parsed is not None else [],
@@ -483,15 +485,21 @@ class TestConditionsCopyrightGate:
         )
         assert rec.conditions == tuple(_COND)
 
-    def test_to_sft_record_gates_conditions_for_restricted_source(self) -> None:
-        """제한 출처(평가원)는 조건이 있어도 conditions=None(저작권 게이트)."""
+    def test_to_sft_record_gates_body_fields_for_restricted_source(self) -> None:
+        """제한 출처(평가원)는 본문 3필드(question_text·answer_explanation·conditions) 전부 None.
+
+        #261은 conditions만 게이트했으나 #11에서 *균일 게이트*로 question_text·answer_explanation도
+        제한 출처면 None(심층 방어). unit_codes(공공 코드)는 게이트 없이 포함.
+        """
         pid = uuid.uuid4()
         rec = to_sft_record(
             _vs(problem_id=pid),
             _problem(pid, source_type=SourceType.평가원, conditions_parsed=_COND),
         )
         assert rec.conditions is None
-        assert rec.question_text == "다음 방정식을 풀어라."  # 다른 컨텍스트는 영향 없음
+        assert rec.question_text is None  # 균일 게이트 — 제한 출처 본문 전부 None
+        assert rec.answer_explanation is None
+        assert rec.unit_codes == ("M1-A-01",)  # 공공 코드는 게이트 안 함
 
     def test_to_sft_record_no_problem_conditions_none(self) -> None:
         """problem 미제공 → conditions None(하위호환)."""
@@ -547,3 +555,33 @@ class TestConditionsCopyrightGate:
         )
         assert json.loads(lines[0])["conditions"] is None
         assert acc.conditions_gated == 1
+
+
+class TestAnswerExplanationContext:
+    """answer_explanation 컨텍스트 — 본문 합법 출처만 임베드(균일 게이트)·미조인/제한 출처 None."""
+
+    def test_embeds_for_clean_source(self) -> None:
+        """청정 출처 → answer_explanation 임베드."""
+        pid = uuid.uuid4()
+        rec = to_sft_record(_vs(problem_id=pid), _problem(pid, answer_explanation="해설: x=2."))
+        assert rec.answer_explanation == "해설: x=2."
+
+    def test_gated_for_restricted_source(self) -> None:
+        """제한 출처(EBS)는 answer_explanation도 None(균일 게이트)."""
+        pid = uuid.uuid4()
+        rec = to_sft_record(
+            _vs(problem_id=pid),
+            _problem(pid, source_type=SourceType.EBS, answer_explanation="해설"),
+        )
+        assert rec.answer_explanation is None
+
+    def test_none_when_no_problem(self) -> None:
+        """problem 미제공 → answer_explanation None(하위호환)."""
+        assert to_sft_record(_vs(problem_id=uuid.uuid4())).answer_explanation is None
+
+    def test_stream_embeds_for_clean_source(self) -> None:
+        """스트림 조인도 청정 출처 answer_explanation을 JSONL에 싣는다."""
+        pid = uuid.uuid4()
+        loader = _make_loader({pid: _problem(pid, answer_explanation="참조 풀이")}, calls=[])
+        lines, _ = _run_stream([_vs(problem_id=pid, solution_path={"s": 1})], problem_loader=loader)
+        assert json.loads(lines[0])["answer_explanation"] == "참조 풀이"

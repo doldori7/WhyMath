@@ -68,16 +68,17 @@ class SftRecord(BaseModel):
     """SFT 학습 레코드 1건 — 검증된 (문제, 풀이 경로) 쌍의 *학습신호*만 담는다.
 
     `solution_path`는 finalize가 적재한 구조(`conditions`·`answer`·`steps`)를 그대로 싣는다 —
-    solver의 *기호* 파스다. `question_text`·`unit_codes`는 코퍼스 조인(`--with-problem`)으로
-    채워지는 *문제 컨텍스트*(자연어 본문·성취기준 코드)로, 트레이너가 "이 문제를 풀어라"
-    프롬프트를 만들 때 쓴다 — 미조인이면 None(기존 동작·하위호환). 출처 메타(id·created_at·
-    source_root_id)는 학습신호가 아니라 제외한다.
+    solver의 *기호* 파스다. `question_text`·`answer_explanation`·`unit_codes`·`conditions`는 코퍼스
+    조인(`--with-problem`)으로 채워지는 *문제 컨텍스트*(자연어 본문·참조 해설·성취기준 코드·구조화
+    조건)로, 트레이너가 "이 문제를 풀어라" 프롬프트·참조 풀이를 만들 때 쓴다 — 미조인이면 None
+    (기존 동작·하위호환). 출처 메타(id·created_at·source_root_id)는 학습신호가 아니라 제외한다.
 
-    저작권 안전(§13.2·우선순위 #2): `question_text`는 코퍼스 불변식상 *라이선스 청정*(자체
-    동등문제·OER)만 본문을 보유하고 평가원·EBS·교과서 출처는 NULL이라(`schema.Problem` 강제),
-    임베드해도 제한 본문이 새지 않는다. `unit_codes`는 공공 성취기준 코드. `conditions`(구조화
-    조건)는 *코퍼스 불변식이 비우지 않는* 필드라 WH-S export가 **출처 게이트**
-    (`_body_license_clean`)로 제한 출처면 비운다 — 조건 본문 누출 방지(심층 방어).
+    저작권 안전(§13.2·우선순위 #2·심층 방어): **본문 3필드**(`question_text`·`answer_explanation`·
+    `conditions`)는 WH-S export가 **출처 균일 게이트**(`_body_license_clean`)로 *본문 보유 합법
+    출처에만* 싣고 제한 출처(평가원·EBS·교과서)면 비운다. 코퍼스 불변식(`schema.Problem`)이 1차로
+    question_text·answer_explanation을 제한 출처에서 NULL로 강제하지만(conditions는 그 갭),
+    export 경계에서 *독립 2차 방어*로 셋 모두를 게이트한다 — validator 갭/오류에도 제한 본문이 SFT로
+    새지 않게(#261 교훈). `unit_codes`는 공공 성취기준 코드라 게이트 대상이 아니다.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -87,7 +88,11 @@ class SftRecord(BaseModel):
     strategy_tag: str | None = Field(default=None, description="전략 유형(대수적·기하적 등).")
     answer: str | None = Field(default=None, description="최종 답(증명 등 답 없으면 None).")
     question_text: str | None = Field(
-        default=None, description="문제 자연어 본문(코퍼스 조인·라이선스 청정만·미조인 시 None)."
+        default=None, description="문제 자연어 본문(코퍼스 조인·본문 합법 출처만·미조인 시 None)."
+    )
+    answer_explanation: str | None = Field(
+        default=None,
+        description="문제 해설(참조 풀이·코퍼스 조인·본문 합법 출처만·미조인 시 None).",
     )
     unit_codes: tuple[str, ...] | None = Field(
         default=None, description="성취기준 코드(코퍼스 조인·미조인 시 None)."
@@ -131,22 +136,32 @@ class SftDataset(BaseModel):
 def to_sft_record(solution: VerifiedSolution, problem: Problem | None = None) -> SftRecord:
     """검증 풀이 1건 → SFT 레코드(순수·학습신호 필드만). 등급 검사는 `build_sft_dataset`가 한다.
 
-    `problem`(코퍼스 조인 결과)을 주면 `question_text`·`unit_codes`·`conditions`를 임베드한다
-    (자연어 프롬프트 컨텍스트). 없으면 세 필드는 None(미조인·하위호환). **`conditions`는 저작권
+    `problem`(코퍼스 조인 결과)을 주면 컨텍스트를 임베드한다. 없으면 컨텍스트 필드 전부 None
+    (미조인·하위호환). **본문 3필드(question_text·answer_explanation·conditions)는 출처 균일
     게이트**(`_body_license_clean`): 본문 보유 합법 출처에만 싣고 제한 출처(평가원·EBS·교과서)면
-    None(코퍼스 불변식이 안 비우는 갭 보완·우선순위 #2). `Problem` ORM은 *속성만 읽고* 세션을
-    건드리지 않아 순수성을 유지한다(`VerifiedSolution` 읽기와 동형).
+    None(L1 validator 독립 2차 방어·#261 교훈·우선순위 #2). `unit_codes`(공공 성취기준 코드)는
+    본문이 아니라 게이트 없이 조인 시 항상 포함. `Problem` ORM은 *속성만 읽고* 세션을 건드리지 않아
+    순수성을 유지한다(`VerifiedSolution` 읽기와 동형).
     """
+    question_text: str | None = None
+    answer_explanation: str | None = None
+    unit_codes: tuple[str, ...] | None = None
     conditions: tuple[dict[str, Any], ...] | None = None
-    if problem is not None and _body_license_clean(problem):
-        conditions = tuple(problem.conditions_parsed)  # 본문 합법 출처만 — 제한 출처는 None.
+    if problem is not None:
+        unit_codes = tuple(problem.unit_codes)  # 공공 성취기준 코드 — 본문 아님·게이트 불요.
+        if _body_license_clean(problem):
+            # 본문 합법 출처만 — 본문 3필드를 export 경계에서 균일 게이트(제한 출처는 전부 None).
+            question_text = problem.question_text
+            answer_explanation = problem.answer_explanation
+            conditions = tuple(problem.conditions_parsed)
     return SftRecord(
         problem_id=solution.problem_id,
         solution_path=solution.solution_path,
         strategy_tag=solution.strategy_tag,
         answer=solution.answer,
-        question_text=problem.question_text if problem is not None else None,
-        unit_codes=tuple(problem.unit_codes) if problem is not None else None,
+        question_text=question_text,
+        answer_explanation=answer_explanation,
+        unit_codes=unit_codes,
         conditions=conditions,
     )
 
