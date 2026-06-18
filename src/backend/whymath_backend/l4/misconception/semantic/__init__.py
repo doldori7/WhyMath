@@ -26,6 +26,7 @@ from whymath_backend.l4.misconception.semantic.index import (
 )
 from whymath_backend.l4.misconception.semantic.matcher import (
     SemanticMatcher,
+    build_semantic_matcher,
     catalog_text,
     semantic_matches,
 )
@@ -54,6 +55,7 @@ __all__ = [
     "SemanticMatcher",
     "VectorIndex",
     "build_provider",
+    "build_semantic_matcher",
     "build_vector_index",
     "catalog_text",
     "cosine_similarity",

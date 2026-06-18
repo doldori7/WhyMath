@@ -35,6 +35,7 @@ from whymath_backend.l4.misconception.models import Misconception, Misconception
 from whymath_backend.l4.misconception.semantic.index import (
     InMemoryVectorIndex,
     VectorIndex,
+    build_vector_index,
 )
 from whymath_backend.l4.misconception.semantic.provider import EmbeddingProvider
 
@@ -188,6 +189,42 @@ def semantic_matches(
     resolved_threshold = threshold if threshold is not None else _resolved_threshold_from_settings()
     matcher = SemanticMatcher(provider=provider, index=index)
     return matcher.match(student_solution, top_k=top_k, threshold=resolved_threshold)
+
+
+def build_semantic_matcher(
+    provider: EmbeddingProvider,
+    *,
+    settings: Settings | None = None,
+    catalog: tuple[Misconception, ...] = CATALOG,
+    prebuilt_index: bool = False,
+) -> SemanticMatcher:
+    """설정 `vector_store`에 맞는 `SemanticMatcher` 좌석 팩토리 — index/identity 체인 단일화.
+
+    `_misconception_state._build_matcher`(라이브 coach 싱글톤)·하네스가 각자 풀던 좌석 체인
+    (`_provider_model_identity`→`build_vector_index`→`SemanticMatcher`)을 한 곳에 모은다.
+
+      - **memory(기본)**: `InMemoryVectorIndex`를 자체 생성(식별자 불요)하고 매처가 첫 매칭 시
+        1회 자체 적재한다 — `pgvector_index`(psycopg)를 *import하지 않는다*(memory 경로 dep-free).
+      - **pgvector**: `_provider_model_identity`로 임베딩 공간 식별자를 풀고 `build_vector_index`로
+        `PgVectorIndex`를 만든다(지연 import). `prebuilt_index=True`면 *사전적재된*
+        (`populate_pgvector`) 인덱스를 재임베딩 없이 질의한다(항목당 재임베딩 0). 기본 False는
+        종전대로 첫 매칭 시 자체 적재(매처 `_ensure_built`가 upsert).
+
+    `provider`는 호출자가 만든다(`build_provider`). memory에서 `prebuilt_index`는 무시한다
+    (자체 적재가 정답 — 빈 InMemory를 prebuilt로 질의하면 매칭 0이라 무의미).
+    """
+    resolved = settings if settings is not None else get_settings()
+    if resolved.vector_store == "memory":
+        # memory는 식별자 불요(InMemory가 무시)·pgvector_index(psycopg) import 회피(dep-free).
+        return SemanticMatcher(provider=provider, index=InMemoryVectorIndex(), catalog=catalog)
+    # pgvector — 지연 import(memory 경로는 psycopg를 안 끌어온다·build_vector_index 미러).
+    from whymath_backend.l4.misconception.semantic.pgvector_index import _provider_model_identity
+
+    provider_name, model_name = _provider_model_identity(provider, resolved)
+    index = build_vector_index(resolved, provider_name=provider_name, model_name=model_name)
+    return SemanticMatcher(
+        provider=provider, index=index, catalog=catalog, prebuilt_index=prebuilt_index
+    )
 
 
 def _resolved_threshold_from_settings(settings: Settings | None = None) -> float:
