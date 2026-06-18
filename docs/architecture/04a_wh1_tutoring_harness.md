@@ -141,6 +141,18 @@ LLM 추론이 아닌 **SQL 조회**로 나온다. 학부모 리포트의 신뢰 
 - retention_until 경과 레코드는 야간 배치로 자동 파기
 - 이 설계는 나중에 붙이기 어려우므로 **스키마 1차 마이그레이션에 포함** (선택이 아님)
 
+> **구현됨 (2026-06-18·삭제권 오케스트레이션·마이그레이션 0)**: `whymath_backend/privacy/erasure.py`
+> `erase_user(session, *, user_id)` — 한 사용자의 *모든* 학생-연결 데이터(증거·가설·BKT
+> `concept_mastery_history`·IRT `ability_snapshot`·행동 로그 `attempt_event`·대화·세션·시도·기기·
+> 토큰·동의 등 **17개 테이블 + user_profile**)를 **단일 트랜잭션**으로 영구 삭제(부분 삭제 0·commit은
+> 호출자). **레포 FK 실태**(전수 조사): `evidence_links`만 user_profile FK `ON DELETE CASCADE`,
+> 나머지는 NO ACTION FK(user 삭제 *차단*) 또는 느슨참조·hypertable(*고아 잔존*) → user_profile 한
+> 행 삭제론 불충분 → **앱레벨 명시 삭제**(child→parent 순서·`_ERASURE_PLAN`)가 필요. FK 전부 CASCADE
+> 대안은 대규모 마이그레이션 + 전역 오삭제 위험이라 배제(명시·감사 가능·마이그레이션 0 선택). 삭제
+> 전 `DeletionAudit`(`resource_type="user_profile"`·콘텐츠 미저장) 적재 — user FK가 없어 *잔존*(GDPR
+> 증빙·slice 57 동형). **후속**: 삭제권 *요청* API(인증·법정대리인 동의)·외부 store(ClickHouse·S3·
+> Redis) 삭제 연계.
+
 ### 2.4 장기 상태 — 기존 L2 그대로
 
 BKT 숙달도 벡터는 변경 없음. 하네스가 `end_turn` 시 업데이트 큐에 푸시하고
