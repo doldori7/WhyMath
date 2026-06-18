@@ -975,6 +975,9 @@ class AuditResourceType(str, Enum):
     assessment = "assessment"
     """진단 삭제(slice 53)."""
 
+    user_profile = "user_profile"
+    """계정 전체(삭제권) 삭제 — 사용자의 *모든* 학생-연결 데이터 단일 트랜잭션 영구 삭제(R11)."""
+
 
 class ConsentScope(str, Enum):
     """`parental_consent.consent_scope` — 14세 미만 법정대리인 동의가 *무엇을* 허용했는가.
