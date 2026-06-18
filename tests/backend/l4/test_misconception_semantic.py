@@ -432,6 +432,29 @@ class TestMatcherCatalogBuild:
         assert second == 3
         assert len(index) == len(CATALOG_BY_ID)
 
+    def test_provider_length_mismatch_raises(self) -> None:
+        # provider.embed가 카탈로그 개수와 다른 길이를 내면 RuntimeError(좌석 계약 fail-loud).
+        catalog = (
+            Misconception(
+                id="solo",
+                name_kr="단일",
+                domain="대수",
+                canonical_statement="X",
+                counterexample="y",
+                signals=("기호없는토큰3",),
+            ),
+        )
+
+        class ShortProvider:
+            def embed(self, texts: Sequence[str]) -> list[list[float]]:
+                return []  # 입력 길이 무시 → 카탈로그(1)와 불일치
+
+        matcher = SemanticMatcher(
+            provider=ShortProvider(), index=InMemoryVectorIndex(), catalog=catalog
+        )
+        with pytest.raises(RuntimeError, match="임베딩 개수"):
+            matcher.match("X", top_k=1, threshold=0.1)
+
     def test_catalog_text_format(self) -> None:
         m = CATALOG_BY_ID["division-by-zero"]
         assert catalog_text(m) == f"{m.name_kr}. {m.canonical_statement}"
@@ -442,6 +465,93 @@ class TestMatcherCatalogBuild:
         out = semantic_matches("완전히 무관한 임의의 문장 zzzzz", provider=provider, top_k=3)
         # 무관 텍스트는 카탈로그와 어휘 비공유 → 코사인 0 근처 → 보수적 임계 0.55 미달로 빈 리스트
         assert out == []
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# prebuilt_index 모드 — 영속 사전 임베딩(PgVectorIndex) 재사용·카탈로그 재임베딩 0
+# ──────────────────────────────────────────────────────────────────────────
+class TestSemanticMatcherPrebuiltIndex:
+    """사전적재된 인덱스를 *재임베딩 없이* 질의(라이브 진단 경로의 항목당 재임베딩 비용 0)."""
+
+    def _catalog(self) -> tuple[Misconception, ...]:
+        m1 = Misconception(
+            id="ctrl-alpha",
+            name_kr="알파",
+            domain="대수",
+            canonical_statement="ALPHA BETA",
+            counterexample="x",
+            signals=("기호없는토큰",),
+        )
+        m2 = Misconception(
+            id="ctrl-gamma",
+            name_kr="감마",
+            domain="대수",
+            canonical_statement="GAMMA",
+            counterexample="y",
+            signals=("기호없는토큰2",),
+        )
+        return (m1, m2)
+
+    def _vocab(self) -> tuple[str, ...]:
+        return ("ALPHA", "BETA", "GAMMA", "알파", "감마", "DELTA")
+
+    def test_prebuilt_skips_catalog_embedding_and_matches(self) -> None:
+        catalog = self._catalog()
+        vocab = self._vocab()
+        # 인덱스를 *별도* 제공자로 미리 채운다(populate_pgvector 대역·카탈로그 순서).
+        populate_provider = ScriptedEmbeddingProvider(vocab)
+        index = InMemoryVectorIndex()
+        for m in catalog:
+            index.add(m.id, populate_provider.embed([catalog_text(m)])[0])
+
+        calls = {"n": 0}
+
+        class CountingProvider:
+            def __init__(self) -> None:
+                self._inner = ScriptedEmbeddingProvider(vocab)
+
+            def embed(self, texts: Sequence[str]) -> list[list[float]]:
+                calls["n"] += 1
+                return self._inner.embed(texts)
+
+        matcher = SemanticMatcher(
+            provider=CountingProvider(), index=index, catalog=catalog, prebuilt_index=True
+        )
+        hits = matcher.match("ALPHA BETA 알파", top_k=5, threshold=0.5)
+        # 사전적재 인덱스를 그대로 질의 → 정확히 ctrl-alpha(코사인 1.0).
+        assert [h.misconception.id for h in hits] == ["ctrl-alpha"]
+        assert hits[0].confidence == pytest.approx(1.0)
+        # ★ 카탈로그 *재임베딩 0* — provider.embed는 *질의 1건*만(prebuilt 핵심 이득).
+        assert calls["n"] == 1
+
+    def test_prebuilt_requires_injected_index(self) -> None:
+        # prebuilt_index=True + index=None → ValueError(빈 인덱스 질의는 무의미·오용 가드).
+        with pytest.raises(ValueError, match="prebuilt_index"):
+            SemanticMatcher(provider=FakeEmbeddingProvider(), prebuilt_index=True)
+
+    def test_prebuilt_empty_index_returns_empty_no_reembed(self) -> None:
+        # prebuilt인데 인덱스가 비었으면(미적재) → 재임베딩 *않고* 빈 결과(호출자 신뢰 계약).
+        catalog = self._catalog()
+        calls = {"n": 0}
+
+        class CountingProvider:
+            def __init__(self) -> None:
+                self._inner = ScriptedEmbeddingProvider(self._outer_vocab)
+
+            _outer_vocab = ("ALPHA", "BETA", "GAMMA", "알파", "감마", "DELTA")
+
+            def embed(self, texts: Sequence[str]) -> list[list[float]]:
+                calls["n"] += 1
+                return self._inner.embed(texts)
+
+        matcher = SemanticMatcher(
+            provider=CountingProvider(),
+            index=InMemoryVectorIndex(),  # 비었지만 주입됨(가드 통과)
+            catalog=catalog,
+            prebuilt_index=True,
+        )
+        assert matcher.match("ALPHA BETA", top_k=5, threshold=0.5) == []
+        assert calls["n"] == 1  # 질의 1건만(카탈로그 재적재 안 함)
 
 
 # ──────────────────────────────────────────────────────────────────────────

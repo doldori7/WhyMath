@@ -60,10 +60,17 @@ class SemanticMatcher:
 
     provider는 주입 필수(좌석) — 테스트는 FakeEmbeddingProvider, 프로덕션은 provider.
     build_provider(local/openai)를 넣는다. index는 선택(미주입 시 InMemoryVectorIndex 자체
-    생성) — 후속에서 PgVectorIndex를 주입할 자리.
+    생성)·영속은 PgVectorIndex 주입.
+
+    **prebuilt_index 모드(영속 사전 임베딩 재사용)**: `prebuilt_index=True`면 카탈로그를 *재임베딩
+    하지 않고*(자체 적재 단락) 주입된 인덱스를 *그대로 질의*한다 — `populate_pgvector`로 한 번
+    채워둔 PgVectorIndex를 매 프로세스/매 호출이 재임베딩 없이 공유한다(라이브 진단 경로의 항목당
+    재임베딩 비용 0·프로세스 간 공유). 이 모드는 *채워진* 인덱스 주입을 요구한다(index=None이면
+    ValueError — 빈 인덱스 질의는 무의미). 기본(False)은 종전대로 첫 매칭 시 1회 자체 적재.
 
     적재 순서는 *카탈로그 순서*(=doc 명시 순서)로 맞춘다 → 인덱스 동률 정렬이 카탈로그
-    순서를 안정 유지(diagnose의 동률 안정성과 같은 규약).
+    순서를 안정 유지(diagnose의 동률 안정성과 같은 규약). prebuilt 모드에선 적재 순서를
+    populate_pgvector가 카탈로그 순서로 보장한다(같은 규약).
     """
 
     def __init__(
@@ -72,14 +79,24 @@ class SemanticMatcher:
         provider: EmbeddingProvider,
         index: VectorIndex | None = None,
         catalog: tuple[Misconception, ...] = CATALOG,
+        prebuilt_index: bool = False,
     ) -> None:
+        if prebuilt_index and index is None:
+            raise ValueError(
+                "prebuilt_index=True는 *사전적재된* 인덱스 주입을 요구합니다 — index=None은 빈 "
+                "InMemoryVectorIndex라 질의가 비어 무의미합니다. populate_pgvector로 채운 "
+                "PgVectorIndex(또는 사전적재된 InMemoryVectorIndex)를 넘기세요."
+            )
         self._provider = provider
         self._index: VectorIndex = index if index is not None else InMemoryVectorIndex()
         self._catalog = catalog
         # 인덱스 키(misconception.id) → 항목 역참조. *주입된 카탈로그* 기준으로 만든다
         # (전역 CATALOG_BY_ID가 아님 — 커스텀 카탈로그 주입 시에도 해석되도록).
         self._by_id: dict[str, Misconception] = {m.id: m for m in catalog}
-        self._built = False
+        # prebuilt_index면 카탈로그 *재임베딩*을 건너뛴다(_ensure_built 단락) — 인덱스가 이미
+        # populate_pgvector 등으로 채워졌다고 신뢰한다(라이브 진단 경로의 항목당 재임베딩 0).
+        # _by_id 역참조는 *임베딩 없이* 카탈로그에서 만든다(hit.key→Misconception 해석에 필요).
+        self._built = prebuilt_index
 
     def _ensure_built(self) -> None:
         """카탈로그 표현을 *1회* 임베딩해 인덱스에 적재(지연·캐시).
