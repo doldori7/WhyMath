@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
-from pydantic import SecretStr
+from pydantic import SecretStr, ValidationError
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -27,7 +27,13 @@ from whymath_backend.l4.misconception.hypothesis_store import (
     get_active_hypotheses,
     persist_hypotheses,
 )
-from whymath_backend.privacy.erasure import _ERASURE_PLAN, ErasureReport, erase_user
+from whymath_backend.privacy.erasure import (
+    _ERASURE_PLAN,
+    ErasureReport,
+    ExternalErasureTarget,
+    erase_user,
+    external_erasure_targets,
+)
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
 from whymath_backend.schema.enums import ContentType, Persona, TurnRole
@@ -139,6 +145,37 @@ class TestEraseOrchestration:
         report = asyncio.run(erase_user(cast(AsyncSession, session), user_id=uuid.uuid4()))
         assert report.total_rows_deleted == 0
         assert report.user_profile_deleted == 0
+
+
+class TestExternalErasureManifest:
+    """외부 store(RDB 밖) 삭제 누락을 구조화·정직히 명시(GDPR 범위·날조 0)."""
+
+    def test_targets_cover_three_external_stores(self) -> None:
+        """ClickHouse·S3·Redis 3종 — `erase_user`가 못 지우는 외부 store를 모두 명시."""
+        targets = external_erasure_targets(uuid.uuid4())
+        assert {t.store for t in targets} == {"clickhouse", "s3", "redis"}
+        assert all(isinstance(t, ExternalErasureTarget) for t in targets)
+        assert all(t.data and t.reason for t in targets)  # 설명·이유 비지 않음
+
+    def test_locators_reference_user_id(self) -> None:
+        """locator는 *그 user* 대상을 가리킨다(per-user actionable·체크리스트)."""
+        uid = uuid.uuid4()
+        targets = external_erasure_targets(uid)
+        assert all(str(uid) in t.locator for t in targets)
+
+    def test_targets_are_frozen(self) -> None:
+        """대상은 불변(매니페스트 변조 방지)."""
+        target = external_erasure_targets(uuid.uuid4())[0]
+        with pytest.raises(ValidationError):
+            target.store = "tampered"  # type: ignore[misc]
+
+    def test_erase_user_report_carries_pending_external(self) -> None:
+        """`erase_user` 결과가 외부 store 매니페스트를 담는다(조용한 누락 0)."""
+        session = _FakeSession()
+        uid = uuid.uuid4()
+        report = asyncio.run(erase_user(cast(AsyncSession, session), user_id=uid))
+        assert report.pending_external == external_erasure_targets(uid)
+        assert len(report.pending_external) == 3
         assert any(k == "add" for k, _ in session.events)  # 삭제 *시도* 증빙
 
 
