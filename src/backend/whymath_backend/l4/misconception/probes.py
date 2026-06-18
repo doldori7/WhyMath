@@ -110,6 +110,32 @@ def _iter_recall_probes() -> list[tuple[str, str]]:
     return pairs
 
 
+def _iter_fp_probes() -> list[str]:
+    """라벨 프로브셋에서 **FP 프로브만**(올바른 진술 = `expected_id` null) 추출.
+
+    FP 프로브 = `expected_id`가 null인 줄(틀리지 *않은* 진술 → 어떤 오개념도 매칭되면 안 됨·
+    `near_id`는 겨냥 대상). 매처가 이 진술에 오개념을 매칭하면 *거짓양성*(학생을 틀렸다고
+    오판)이다. recall 프로브는 제외한다. 빈 줄·`#` 주석은 무시(`_iter_recall_probes`와 동형).
+
+    **용도**: 2단계 종료 게이트의 *정밀도(FP) 회귀 가드* — 후보 매처가 베이스라인보다 정답
+    진술에 오개념을 *더 많이* 오매칭하는지 비교한다(`harness/agreement_gate`). `semantic_eval`의
+    *절대* precision(Wilson 상한·단일 매처)과 달리 여기선 두 매처의 *비교* FP만 본다.
+    """
+    statements: list[str] = []
+    for line_num, raw in enumerate(read_probes_text().splitlines(), start=1):
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        try:
+            record = json.loads(stripped)
+        except json.JSONDecodeError as exc:  # 줄 번호 컨텍스트와 함께 재던짐(load_probes 동형)
+            raise ValueError(f"line {line_num}: {exc}") from exc
+        if record.get("expected_id") is not None:  # recall 프로브 — FP 대상 아님
+            continue
+        statements.append(record["statement"])
+    return statements
+
+
 def compute_diagnostic_recall() -> tuple[int, int]:
     """오프라인 진단정확도 — 라벨 recall 프로브에 substring 매처 top-1 recall을 잰다.
 

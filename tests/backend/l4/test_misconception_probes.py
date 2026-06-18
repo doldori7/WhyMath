@@ -24,6 +24,7 @@ from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.diagnose import diagnose
 from whymath_backend.l4.misconception.probes import (
     PROBES_RESOURCE,
+    _iter_fp_probes,
     compute_diagnostic_recall,
     probes_path,
     probes_resource,
@@ -174,6 +175,50 @@ class TestParsingTolerance:
         fake = json.dumps({"statement": "올바른 진술", "expected_id": None, "near_id": "x"})
         monkeypatch.setattr(probes_mod, "read_probes_text", lambda: fake)
         assert compute_diagnostic_recall() == (0, 0)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ②' FP 프로브 추출 — 정밀도 회귀 가드(harness/agreement_gate)의 입력 좌석
+# ──────────────────────────────────────────────────────────────────────────
+class TestIterFpProbes:
+    def test_returns_only_fp_statements(self) -> None:
+        # 실 프로브셋의 FP(올바른 진술·expected_id null)만 추출 — 수는 split 테스트와 일치(33).
+        fp = _iter_fp_probes()
+        assert len(fp) == 33
+        assert all(isinstance(s, str) and s for s in fp)
+        # FP statement 집합은 recall statement와 서로소여야(같은 진술이 양쪽일 수 없음).
+        recall_statements = {
+            json.loads(ln)["statement"]
+            for ln in read_probes_text().splitlines()
+            if ln.strip() and not ln.strip().startswith("#") and json.loads(ln).get("expected_id")
+        }
+        assert recall_statements.isdisjoint(set(fp))
+
+    def test_blank_comment_and_recall_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 빈 줄·주석·recall 프로브(expected_id 설정)는 제외하고 FP(null)만 남긴다.
+        fake = "\n".join(
+            [
+                "  # 주석",
+                "",
+                json.dumps({"statement": "틀린 진술", "expected_id": "x"}),  # recall → 제외
+                json.dumps({"statement": "올바른 진술 A", "expected_id": None, "near_id": "x"}),
+                json.dumps({"statement": "올바른 진술 B", "expected_id": None}),
+            ]
+        )
+        monkeypatch.setattr(probes_mod, "read_probes_text", lambda: fake)
+        assert _iter_fp_probes() == ["올바른 진술 A", "올바른 진술 B"]
+
+    def test_malformed_json_raises_with_line_number(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 잘못된 JSON 줄은 줄 번호 컨텍스트와 함께 ValueError(recall 이터레이터 동형).
+        fake = "\n".join(
+            [
+                json.dumps({"statement": "올바른 진술", "expected_id": None}),
+                "{ not valid json",
+            ]
+        )
+        monkeypatch.setattr(probes_mod, "read_probes_text", lambda: fake)
+        with pytest.raises(ValueError, match="line 2"):
+            _iter_fp_probes()
 
 
 # ──────────────────────────────────────────────────────────────────────────
