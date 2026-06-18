@@ -51,10 +51,11 @@ def _body_license_clean(problem: Problem) -> bool:
     """문제 본문을 *임베드해도 되는* 라이선스 청정 출처인가(저작권 게이트·우선순위 #2).
 
     코퍼스 저작권 불변식(`schema.Problem` validator)은 평가원·EBS·교과서(=`_METADATA_ONLY_SOURCES`)
-    를 *구조 메타 전용*으로 묶어 `question_text` 등 본문 필드를 비우지만, **`conditions_parsed`는
-    그 강제 대상이 아니다**(validator 갭). 그래서 WH-S export가 조건을 임베드할 때 *여기서 다시*
-    출처를 보고 제한 출처면 비운다(심층 방어). 본문 보유 합법 출처(자체생성·OER 등 메타 전용 아님)
-    면 True. `source_type`이 enum/문자열 어느 쪽이어도 정규화해 비교한다(validator 패턴 답습).
+    를 *구조 메타 전용*으로 묶어 본문 필드(question_text·answer_explanation·choices·
+    conditions_parsed)를 비운다. conditions_parsed는 한때 강제 대상이 아니었으나(validator 갭) 이제
+    L1에서도 강제되어 갭이 닫혔다 — 본 게이트는 export 경계의 *중복 심층 방어*(독립 2차 방어)다.
+    본문 보유 합법 출처(자체생성·OER 등 메타 전용 아님)면 True. `source_type`이 enum/문자열 어느
+    쪽이어도 정규화해 비교한다(validator 패턴 답습).
     """
     source_value = (
         problem.source_type.value
@@ -76,9 +77,9 @@ class SftRecord(BaseModel):
     저작권 안전(§13.2·우선순위 #2·심층 방어): **본문 3필드**(`question_text`·`answer_explanation`·
     `conditions`)는 WH-S export가 **출처 균일 게이트**(`_body_license_clean`)로 *본문 보유 합법
     출처에만* 싣고 제한 출처(평가원·EBS·교과서)면 비운다. 코퍼스 불변식(`schema.Problem`)이 1차로
-    question_text·answer_explanation을 제한 출처에서 NULL로 강제하지만(conditions는 그 갭),
-    export 경계에서 *독립 2차 방어*로 셋 모두를 게이트한다 — validator 갭/오류에도 제한 본문이 SFT로
-    새지 않게(#261 교훈). `unit_codes`는 공공 성취기준 코드라 게이트 대상이 아니다.
+    이 세 본문 필드를 제한 출처에서 NULL로 강제하므로(conditions 갭도 L1에서 닫힘), export 경계의
+    게이트는 *독립 2차 방어*다 — validator 오류/회귀에도 제한 본문이 SFT로 새지 않게(#261 교훈).
+    `unit_codes`는 공공 성취기준 코드라 게이트 대상이 아니다.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
