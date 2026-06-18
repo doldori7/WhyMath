@@ -27,6 +27,7 @@ from whymath_backend.db.models.verified_solution import (
 )
 from whymath_backend.whs.solution_bank import (
     bank_solution,
+    get_all_verified,
     get_solutions,
     get_verified,
     solution_fingerprint,
@@ -137,6 +138,20 @@ class TestQueryUnit:
         out = asyncio.run(get_verified(cast(AsyncSession, fake), uuid.uuid4()))
         assert out == []
         assert len(fake.executed) == 1
+
+    def test_get_all_verified_returns_scalars(self) -> None:
+        """get_all_verified는 problem_id 인자 없이 전 문제 verified 행(scalars)을 반환한다."""
+        rows = [
+            VerifiedSolution(
+                problem_id=uuid.uuid4(),
+                grade=WhsSolutionGrade.VERIFIED,
+                solution_path={"s": 1},
+            )
+        ]
+        fake = _FakeSession(scalars_list=rows)
+        out = asyncio.run(get_all_verified(cast(AsyncSession, fake)))
+        assert out == rows
+        assert len(fake.executed) == 1  # 단일 SELECT 발행
 
 
 class TestSolutionFingerprint:
@@ -327,6 +342,13 @@ def test_bank_multi_solutions_and_verified_filter_on_live_pg() -> None:
                 assert len(verified) == 2
                 assert all(r.grade == WhsSolutionGrade.VERIFIED for r in verified)
                 assert {r.strategy_tag for r in verified} == {"대수적", "기하적"}
+
+                # get_all_verified: 전 문제 verified만(grade 전부 verified·pid+other 포함·R-S2)
+                all_verified = await get_all_verified(session)
+                assert all(r.grade == WhsSolutionGrade.VERIFIED for r in all_verified)
+                all_ids = {r.id for r in all_verified}
+                assert {r.id for r in verified} <= all_ids  # pid verified 포함
+                assert {r.problem_id for r in all_verified} >= {pid, other}  # other도 수집
         finally:
             await engine.dispose()
 

@@ -40,6 +40,7 @@ from whymath_backend.db.models.verified_solution import (
 
 __all__ = [
     "bank_solution",
+    "get_all_verified",
     "get_solutions",
     "get_verified",
     "solution_fingerprint",
@@ -132,6 +133,26 @@ async def get_verified(session: AsyncSession, problem_id: uuid.UUID) -> list[Ver
             VerifiedSolution.grade == WhsSolutionGrade.VERIFIED,
         )
         .order_by(VerifiedSolution.created_at, VerifiedSolution.id)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_all_verified(session: AsyncSession) -> list[VerifiedSolution]:
+    """**전 문제**의 verified 풀이를 결정적 순서로 조회한다 — 자기 진화 SFT export 원천(§5).
+
+    `get_verified`(문제 1개)의 *전역* 버전 — 라운드별 SFT 데이터셋(§5)을 뽑을 때 솔버가 지금까지
+    적재한 검증 풀이 전부를 한데 모은다. `unverified`는 *절대 포함하지 않는다*(R-S2 안전·학습 누수
+    0). `(problem_id, created_at, id)` 정렬로 결정적(재현 가능한 export). 대규모 시 스트리밍은 후속.
+    """
+    stmt = (
+        select(VerifiedSolution)
+        .where(VerifiedSolution.grade == WhsSolutionGrade.VERIFIED)
+        .order_by(
+            VerifiedSolution.problem_id,
+            VerifiedSolution.created_at,
+            VerifiedSolution.id,
+        )
     )
     result = await session.execute(stmt)
     return list(result.scalars().all())
