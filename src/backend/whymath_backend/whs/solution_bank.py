@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 from sqlalchemy import select
@@ -44,6 +45,7 @@ __all__ = [
     "get_solutions",
     "get_verified",
     "solution_fingerprint",
+    "stream_all_verified",
 ]
 
 
@@ -156,3 +158,30 @@ async def get_all_verified(session: AsyncSession) -> list[VerifiedSolution]:
     )
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def stream_all_verified(session: AsyncSession) -> AsyncIterator[VerifiedSolution]:
+    """`get_all_verified`의 **스트리밍판** — 전 문제 verified를 1건씩 yield(§5·대규모 가드).
+
+    `get_all_verified`와 *완전히 같은 WHERE/ORDER BY*(grade==verified·`(problem_id,
+    created_at, id)` 결정적 순서·R-S2 안전·verified만)지만, 결과 전부를 `list`로 메모리에
+    적재하는 대신 `stream_scalars`(서버측 커서)로 행을 *한 건씩* 흘린다. 자기 진화 export(§5)가
+    수만~수십만 검증 풀이를 JSONL로 쏟을 때 메모리를 행 1건 + 소비자 dedup 키셋으로만
+    바운드한다(전량 적재 회피).
+
+    소비자(`self_evolution.stream_sft_jsonl`)가 `async for`로 받아 verified 필터·dedup·직렬화를
+    스트리밍한다. 세션은 스트림이 소진될 때까지 살아 있어야 한다(호출자가 `async with`로 유지).
+    읽기 전용이라 commit 없음(저장소 패턴).
+    """
+    stmt = (
+        select(VerifiedSolution)
+        .where(VerifiedSolution.grade == WhsSolutionGrade.VERIFIED)
+        .order_by(
+            VerifiedSolution.problem_id,
+            VerifiedSolution.created_at,
+            VerifiedSolution.id,
+        )
+    )
+    result = await session.stream_scalars(stmt)
+    async for solution in result:
+        yield solution

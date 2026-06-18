@@ -330,6 +330,12 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 - **`whs/self_evolution_export_cli.py`**(ops CLI·`retention_purge_cli` 컨벤션 미러·§7.5 HTTP 미노출): `get_all_verified → build_sft_dataset → iter_sft_jsonl`. **stdout = JSONL 데이터셋**(`> dataset.jsonl`), **stderr = 정직 회계 JSON**(`{total_input, records, excluded_unverified, deduped}` — 데이터 스트림 미오염). `--no-dedup`(기본 dedup ON)·종료 0(verified 0건도 정상). `_default_export_fn`은 읽기 전용(commit 0)·실 DB는 `pragma: no cover`+integration, `export_fn` 주입 좌석으로 CLI 배선 hermetic 검증.
 - **후속**: 진정한 스트리밍(`stream_scalars`·대규모 메모리 가드)·문제 본문 조인(problem_id→코퍼스)·PRM 쌍 추출.
 
+**S1 슬라이스 8 — 자기진화 export 진정한 스트리밍**(설계 §5·§7.5·#258 후속) 구현됨(마이그레이션 0). 슬라이스 7 export의 *대규모 메모리 가드*. `get_all_verified`/`build_sft_dataset`가 전 verified를 `list`·`SftDataset`로 전량 적재하던 것을 서버측 커서로 흘려 메모리를 *행 1건 + dedup 키셋 + 정수 카운터*로 바운드:
+- **`solution_bank.stream_all_verified(session) -> AsyncIterator[VerifiedSolution]`**: `get_all_verified`와 *완전히 같은 WHERE/ORDER BY*(grade==verified·`(problem_id, created_at, id)`·R-S2)지만 `stream_scalars`(서버측 커서)로 행을 1건씩 yield(전량 적재 회피). 읽기 전용(commit 0).
+- **`self_evolution.stream_sft_jsonl(rows, accounting, *, dedup=True) -> AsyncIterator[str]`** + **`SftStreamAccounting`**(가변 누산기·`summary()`): `build_sft_dataset`+`iter_sft_jsonl`의 *스트리밍 등가물* — verified 필터(R-S2 심층 방어·`excluded_unverified` 집계)·`(problem_id, 지문)` dedup·`to_sft_record(...).model_dump_json()` 직렬화를 한 건씩 하며 회계를 주입 누산기에 누적(일괄 경로와 바이트 동일). 스트림 소진 후 `summary()`로 stderr 요약. **메모리 가드 경계(정직)**: dedup `seen` 키셋이 유일한 증가 구조이나 ORM 행이 아닌 `(UUID, sha256)` 키라 훨씬 작고 `dedup=False`면 없다.
+- **CLI `--stream` 옵트인**: `self_evolution_export_cli`에 `--stream` 플래그·`stream_fn` 주입 좌석(`_default_stream_fn`=실 DB·`pragma: no cover`). 미설정 시 기존 일괄 경로 완전 불변(하위호환)·출력(JSONL stdout·요약 stderr)은 양쪽 동일·메모리만 다름. `--no-dedup`은 두 경로 모두 전달.
+- **후속**: 문제 본문 조인(problem_id→코퍼스)·PRM 쌍 추출·*본질적 동치* dedup·GDPR `/v1/me/export`(열람·이동권·결정 필요).
+
 ### 용어 정합: "545노드" (편집자 부기)
 
 §5 난이도 사다리의 "545노드 연계 문항"에서 545는 *설계 추정치*다. 구현 커리큘럼 계층은 개념그래프 **403 개념(UC) + 541 선수엣지**이며, "545"는 레포에 실체가 없다(상세는 WH-1 문서 "용어·수치 정합" 절). 시그니처 패턴 55+108은 ROADMAP Phase 1 자산으로 유효하다.

@@ -2,14 +2,16 @@
 
 DB 없이 CLI *배선*만 검증한다: ① stdout = JSONL 레코드(줄/레코드) ② stderr = 정직 요약 JSON
 (total_input·records·excluded_unverified·deduped) ③ `--no-dedup` → dedup=False 전달 ④ 종료 0
-(verified 0건도 정상). 실 DB 조회·변환은 solution_bank·self_evolution 테스트가 검증한다(중복 0).
-합성 `export_fn`(코루틴, `SftDataset` 반환·dedup 플래그 캡처)을 주입한다.
+(verified 0건도 정상) ⑤ `--stream` 옵트인 경로(서버측 커서 흉내 async 이터레이터 주입·출력은
+일괄과 동일). 실 DB 조회·변환은 solution_bank·self_evolution 테스트가 검증한다(중복 0). 합성
+`export_fn`(코루틴, `SftDataset` 반환)·`stream_fn`(async 이터레이터 팩토리)을 주입한다.
 """
 
 from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import AsyncIterator
 
 import pytest
 
@@ -31,6 +33,19 @@ def _runner(dataset: SftDataset, *, seen: dict[str, bool]):  # type: ignore[no-u
         return dataset
 
     return _export
+
+
+def _stream_runner(rows: list[VerifiedSolution]):  # type: ignore[no-untyped-def]
+    """고정 행을 한 건씩 흘리는 stream_fn 팩토리(실 DB 서버측 커서 흉내·DB 0)."""
+
+    def _factory() -> AsyncIterator[VerifiedSolution]:
+        async def _gen() -> AsyncIterator[VerifiedSolution]:
+            for row in rows:
+                yield row
+
+        return _gen()
+
+    return _factory
 
 
 class TestSelfEvolutionExportCli:
@@ -81,4 +96,56 @@ class TestSelfEvolutionExportCli:
         assert code == 0
         captured = capsys.readouterr()
         assert captured.out.strip() == ""  # JSONL 0줄
+        assert json.loads(captured.err)["total_input"] == 0
+
+
+class TestSelfEvolutionExportCliStream:
+    """`--stream` 옵트인 — 서버측 커서 흉내 async 이터레이터 주입으로 스트리밍 배선 검증."""
+
+    def test_stream_jsonl_to_stdout_summary_to_stderr(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """--stream: stdout = JSONL/줄·stderr = 회계 요약(verified 필터·dedup 적용)·종료 0."""
+        pid = uuid.uuid4()
+        rows = [
+            _vs(pid, {"steps": ["x=2"]}),
+            _vs(pid, {"steps": ["x=2"]}, grade=WhsSolutionGrade.UNVERIFIED),  # 배제
+            _vs(pid, {"steps": ["x=2"]}),  # 같은 문제·같은 지문 재발견(dedup)
+            _vs(pid, {"steps": ["x=3"]}),
+        ]
+        code = cli.main(["--stream"], stream_fn=_stream_runner(rows))
+        assert code == 0
+
+        captured = capsys.readouterr()
+        lines = [ln for ln in captured.out.splitlines() if ln]
+        assert len(lines) == 2  # verified·dedup 통과 2건(x=2 1건 + x=3)
+        assert all(json.loads(ln)["problem_id"] == str(pid) for ln in lines)
+        assert json.loads(captured.err) == {
+            "total_input": 4,
+            "records": 2,
+            "excluded_unverified": 1,
+            "deduped": 1,
+        }
+
+    def test_stream_no_dedup_keeps_duplicates(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """--stream --no-dedup: 같은 지문 재발견도 그대로 흘림(deduped=0)."""
+        pid = uuid.uuid4()
+        rows = [_vs(pid, {"steps": ["x=2"]}), _vs(pid, {"steps": ["x=2"]})]
+        code = cli.main(["--stream", "--no-dedup"], stream_fn=_stream_runner(rows))
+        assert code == 0
+        captured = capsys.readouterr()
+        assert len([ln for ln in captured.out.splitlines() if ln]) == 2
+        assert json.loads(captured.err) == {
+            "total_input": 2,
+            "records": 2,
+            "excluded_unverified": 0,
+            "deduped": 0,
+        }
+
+    def test_stream_empty_summary_zero(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """--stream 빈 스트림 → JSONL 0줄·요약 total=0·종료 0."""
+        code = cli.main(["--stream"], stream_fn=_stream_runner([]))
+        assert code == 0
+        captured = capsys.readouterr()
+        assert captured.out.strip() == ""
         assert json.loads(captured.err)["total_input"] == 0
