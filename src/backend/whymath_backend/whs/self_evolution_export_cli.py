@@ -140,8 +140,9 @@ def main(
     0건도 정상). `--stream` 유무로 출력은 동일하고 메모리 프로파일만 다르다.
 
     저작권 안전(§13.2): `question_text`는 코퍼스 불변식상 라이선스 청정만 본문을 보유하고 제한
-    출처는 NULL이라 조인해도 새지 않는다. NO_DATA: 코퍼스에 없는 problem_id는 컨텍스트를 비우고
-    `problems_missing`로 정직 집계한다(날조 0).
+    출처는 NULL이라 조인해도 새지 않는다. `conditions`(구조화 조건)는 불변식이 안 비우는 갭이라
+    export가 *출처 게이트*로 제한 출처(평가원·EBS·교과서)면 비우고 `conditions_gated`로 센다.
+    NO_DATA: 코퍼스에 없는 problem_id는 컨텍스트를 비우고 `problems_missing`로 센다(날조 0).
     """
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.whs.self_evolution_export_cli",
@@ -184,6 +185,7 @@ def main(
         "excluded_unverified": dataset.excluded_unverified,
         "deduped": dataset.deduped,
         "problems_missing": dataset.problems_missing,
+        "conditions_gated": dataset.conditions_gated,
     }
     print(json.dumps(summary), file=sys.stderr)
     return 0
