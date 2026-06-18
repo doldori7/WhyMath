@@ -19,18 +19,21 @@ from collections.abc import Sequence
 
 import pytest
 
+from whymath_backend.config import Settings
 from whymath_backend.l4.misconception import MisconceptionMatch, diagnose
-from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.catalog import CATALOG, CATALOG_BY_ID
 from whymath_backend.l4.misconception.models import Misconception
 from whymath_backend.l4.misconception.semantic import (
     EmbeddingProvider,
     FakeEmbeddingProvider,
     InMemoryVectorIndex,
     SemanticMatcher,
+    build_semantic_matcher,
     catalog_text,
     cosine_similarity,
     semantic_matches,
 )
+from whymath_backend.l4.misconception.semantic import matcher as matcher_mod
 from whymath_backend.l4.misconception.semantic.index import IndexHit
 
 
@@ -569,3 +572,67 @@ class TestMisconceptionMatchBackwardCompat:
             semantic_similarity=0.8,
         )
         assert m.semantic_similarity == pytest.approx(0.8)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# build_semantic_matcher 좌석 팩토리 — vector_store별 index/identity 체인 단일화
+# ──────────────────────────────────────────────────────────────────────────
+class _CountingProvider:
+    """provider.embed 호출 횟수를 세는 래퍼(재임베딩 0 증명용)."""
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self._inner = FakeEmbeddingProvider(dim=16)
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        self.calls += 1
+        return self._inner.embed(texts)
+
+
+class TestBuildSemanticMatcher:
+    def test_memory_self_builds_and_matches(self) -> None:
+        # memory(기본): InMemoryVectorIndex 자체 적재·매칭 동작(종전 동작 불변).
+        matcher = build_semantic_matcher(FakeEmbeddingProvider(dim=16), settings=Settings())
+        hits = matcher.match(catalog_text(CATALOG[0]), top_k=1, threshold=-2.0)
+        assert hits and hits[0].misconception.id == CATALOG[0].id
+        assert isinstance(matcher._index, InMemoryVectorIndex)
+
+    def test_memory_ignores_prebuilt_flag(self) -> None:
+        # memory에서 prebuilt_index=True는 무시(자체 적재가 정답·빈 질의 방지)·정상 매칭.
+        matcher = build_semantic_matcher(
+            FakeEmbeddingProvider(dim=16), settings=Settings(), prebuilt_index=True
+        )
+        hits = matcher.match(catalog_text(CATALOG[0]), top_k=1, threshold=-2.0)
+        assert hits and hits[0].misconception.id == CATALOG[0].id
+
+    def test_pgvector_prebuilt_skips_catalog_embedding(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # pgvector + prebuilt=True: 사전적재 인덱스를 재임베딩 없이 질의(build_vector_index 패치).
+        populate = FakeEmbeddingProvider(dim=16)
+        prepopulated = InMemoryVectorIndex()
+        for m in CATALOG:
+            prepopulated.add(m.id, populate.embed([catalog_text(m)])[0])
+        monkeypatch.setattr(
+            matcher_mod, "build_vector_index", lambda *a, **k: prepopulated  # noqa: ARG005
+        )
+        provider = _CountingProvider()
+        matcher = build_semantic_matcher(
+            provider, settings=Settings(vector_store="pgvector"), prebuilt_index=True
+        )
+        hits = matcher.match(catalog_text(CATALOG[0]), top_k=1, threshold=-2.0)
+        assert hits and hits[0].misconception.id == CATALOG[0].id
+        assert provider.calls == 1  # ★ 질의 1건만 — 카탈로그 재임베딩 0(prebuilt 핵심)
+
+    def test_pgvector_self_build_embeds_catalog(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # pgvector + prebuilt=False: 종전대로 첫 매칭 시 카탈로그 자체 적재(embed 카탈로그+질의=2).
+        empty = InMemoryVectorIndex()
+        monkeypatch.setattr(
+            matcher_mod, "build_vector_index", lambda *a, **k: empty  # noqa: ARG005
+        )
+        provider = _CountingProvider()
+        matcher = build_semantic_matcher(
+            provider, settings=Settings(vector_store="pgvector"), prebuilt_index=False
+        )
+        matcher.match(catalog_text(CATALOG[0]), top_k=1, threshold=-2.0)
+        assert provider.calls == 2  # 카탈로그 배치(1) + 질의(1) = 2(자체 적재)

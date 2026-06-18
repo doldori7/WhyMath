@@ -18,11 +18,10 @@ starlette 기본). 따라서 app.state 의존은 테스트에서 비고, 매처�
 스레드에서* 웜업(첫 match 1회)으로 미리 완료해 막는다(멀티스레드 경합 안전판). lifespan 미발화
 테스트는 단일 요청부터 시작하므로 실질 경합이 없고, 통합/프로덕션은 웜업이 가드한다.
 
-구성 체인(03 좌석 팩토리 재사용): `build_provider(settings)`(provider.py) →
-`_provider_model_identity(provider, settings)`(pgvector_index.py·임베딩 공간 식별자) →
-`build_vector_index(settings, provider_name=, model_name=)`(index.py·memory/pgvector) →
-`SemanticMatcher(provider=, index=)`. memory(기본)면 식별자는 무시되고 InMemoryVectorIndex가
-선다(03 build_vector_index docstring).
+구성 체인(03 좌석 팩토리 재사용): `build_provider(settings)`(provider.py)로 provider를 만들고
+`build_semantic_matcher(provider, settings=)`(matcher.py)에 위임한다 — 팩토리가 vector_store에
+맞춰 index/identity 체인을 푼다(memory=InMemoryVectorIndex 자체 적재·pgvector=식별자→
+build_vector_index). 둘 다 *지연*이라 이 구성만으로는 모델 로드·DB 연결이 없다(첫 embed/search).
 """
 
 from __future__ import annotations
@@ -30,9 +29,10 @@ from __future__ import annotations
 import threading
 
 from whymath_backend.config import get_settings
-from whymath_backend.l4.misconception.semantic.index import build_vector_index
-from whymath_backend.l4.misconception.semantic.matcher import SemanticMatcher
-from whymath_backend.l4.misconception.semantic.pgvector_index import _provider_model_identity
+from whymath_backend.l4.misconception.semantic.matcher import (
+    SemanticMatcher,
+    build_semantic_matcher,
+)
 from whymath_backend.l4.misconception.semantic.provider import build_provider
 
 # 프로세스 싱글톤 + 생성 경합 차단 락(double-checked). None=미생성(첫 get에서 lazy 구성)·
@@ -42,17 +42,15 @@ _LOCK = threading.Lock()
 
 
 def _build_matcher() -> SemanticMatcher:
-    """Settings 기반 매처 구성 — 좌석 팩토리 체인(provider→index→matcher) 재사용.
+    """Settings 기반 매처 구성 — `build_semantic_matcher` 좌석 팩토리에 위임(체인 단일화).
 
-    `build_provider`(local/openai/fake)·`build_vector_index`(memory/pgvector) 둘 다 *지연*이라
-    이 구성만으로는 모델 로드·DB 연결이 없다(첫 embed/search 시점). memory(기본)면 provider/model
-    식별자는 InMemoryVectorIndex가 무시한다(인터페이스 대칭을 위해 계산해 넘김).
+    `build_provider`(local/openai/fake)로 provider만 만들고, index/identity 체인은 팩토리가
+    푼다(memory=InMemory 자체 적재·pgvector=식별자→build_vector_index). 둘 다 *지연*이라 이
+    구성만으로는 모델 로드·DB 연결이 없다(첫 embed/search 시점). `prebuilt_index`는 기본 False —
+    종전 동작(첫 매칭 시 자체 적재) 유지(pgvector 사전적재 전환은 별도 결정·ops populate 선행).
     """
     settings = get_settings()
-    provider = build_provider(settings)
-    provider_name, model_name = _provider_model_identity(provider, settings)
-    index = build_vector_index(settings, provider_name=provider_name, model_name=model_name)
-    return SemanticMatcher(provider=provider, index=index)
+    return build_semantic_matcher(build_provider(settings), settings=settings)
 
 
 def get_semantic_matcher() -> SemanticMatcher:
