@@ -536,12 +536,12 @@ CREATE TABLE strategy_evidence (
 |5 |`query_curriculum`   |L1+L2 |`concept_edge` PREREQUISITE·`fetch_prerequisites`(재귀 CTE 다단계)·`recommend_prerequisite_gaps`             |🟢 선수(후속/형제 EdgeType은 후속)                      |
 |6 |`select_probe`       |L4    |L4 `probe_selection.py`(순수 `select_probe`·`resolve_probe_target`·`is_exploration_turn`·`plan_probe` — 정보이득 근사·ε-탐색)·L2 `item_information`/`IrtItem`(IRT 정보량 재사용)·`select_weighted_item`(CAT)|🟡 가설 판별 태깅(target 있고 competing 없음)·ε-탐색(주기 5턴·활성 세트 밖)·정보량 최대 선택 순수 로직 가동. 문제은행 *태그 스키마*·ε 카운터 영속·신뢰도 상한 0.9 집행은 후속(하네스)|
 |7 |`log_evidence`       |하네스   |(근접) `record_attempt_mastery`·`attempt_event`(이벤트 소싱·TimescaleDB)                                       |🔴 `evidence_links`(polarity·weight) 미구현        |
-|8 |`end_turn`           |L4→L5 |`recommend_coaching`·`recommend_prerequisite_coaching`·`GET /v1/me/.../coaching`·`/v1/coach(/sessions)`·**개입 발화=가설 세트 결선**(`_intervention_from_hypotheses_or`)·BKT 커밋 `record_problem_attempt_mastery`|🟢 코칭 결정+커밋·개입 발화 누적 가설 결선(도구 루프 오케스트레이션은 미구현)|
+|8 |`end_turn`           |L4→L5 |`recommend_coaching`·`recommend_prerequisite_coaching`·`GET /v1/me/.../coaching`·`/v1/coach(/sessions)`·**개입 발화=가설 세트 결선**(`_intervention_from_hypotheses_or`)·**도구 루프 골격**(`harness/wh1_loop.py` `run_tutoring_turn`)·BKT 커밋 `record_problem_attempt_mastery`|🟢 코칭 결정+커밋·개입 발화 누적 가설 결선·도구 루프 골격(8종 디스패치+불변식·순수 in-memory) 가동. 영속 결선·LLM 정책·fast path는 후속|
 |9 |`log_strategy_event` |전략    |—                                                                                                       |🔴 `strategy_nodes`·`strategy_evidence` 미구현     |
 |10|`elicit_prediction`  |전략    |—                                                                                                       |🔴 보정 루프(Brier·과신/과소신) 미구현                   |
 |11|`assign_transfer_probe`|전략  |(자산) 시그니처 패턴 55+108(ROADMAP Phase 1)                                                                    |🔴 전이 측정·간격 출제 미구현                            |
 
-**판독**: 코어 진단·코칭·선수 좌석(#1·#3·#5·#8 일부)은 *이미 가동*하며 이번 세션 소비 아크로 강화됐다. 하네스가 추가하는 건 ① **상태 외부화**(가설 세트·evidence_links·#4·#7) ② **도구 루프 오케스트레이션**(end_turn 도구 루프·#8) ③ **전략 계층**(#9~#11). 즉 WH-1 도입은 *기존 좌석을 도구로 노출 + 상태/루프/전략 신설*이며, 진단·코칭 로직을 새로 짜는 게 아니다.
+**판독**: 코어 진단·코칭·선수 좌석(#1·#3·#5·#8 일부)은 *이미 가동*하며 이번 세션 소비 아크로 강화됐다. 하네스가 추가하는 건 ① **상태 외부화**(가설 세트·evidence_links·#4·#7 — 가동) ② **도구 루프 오케스트레이션**(end_turn 도구 루프·#8 — *골격 가동*: `harness/wh1_loop.py` `run_tutoring_turn` 8종 디스패치+불변식·순수 in-memory·영속/LLM 결선은 후속) ③ **전략 계층**(#9~#11 — 미구현). 즉 WH-1 도입은 *기존 좌석을 도구로 노출 + 상태/루프/전략 신설*이며, 진단·코칭 로직을 새로 짜는 게 아니다.
 
 ### 0단계 평가 하네스 — 구현 현황 (2026-06-13, 편집자 부기)
 
