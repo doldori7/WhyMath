@@ -31,6 +31,7 @@ from whymath_backend.whs.solution_bank import (
     get_solutions,
     get_verified,
     solution_fingerprint,
+    stream_all_verified,
 )
 
 # ===========================================================================
@@ -54,12 +55,24 @@ class _FakeResult:
         return _FakeScalars(self._scalars_list)
 
 
+class _FakeAsyncScalars:
+    """`stream_scalars` 반환을 흉내 — 행을 *한 건씩* 비동기로 흘리는 async 이터러블."""
+
+    def __init__(self, items: list[Any]) -> None:
+        self._items = items
+
+    async def __aiter__(self) -> Any:
+        for item in self._items:
+            yield item
+
+
 class _FakeSession:
     def __init__(self, *, scalars_list: list[Any] | None = None) -> None:
         self.added: list[Any] = []
         self.flushes = 0
         self.refreshes = 0
         self.executed: list[Any] = []
+        self.streamed: list[Any] = []
         self._scalars_list = scalars_list or []
 
     def add(self, obj: Any) -> None:
@@ -74,6 +87,10 @@ class _FakeSession:
     async def execute(self, stmt: Any) -> _FakeResult:
         self.executed.append(stmt)
         return _FakeResult(self._scalars_list)
+
+    async def stream_scalars(self, stmt: Any) -> _FakeAsyncScalars:
+        self.streamed.append(stmt)
+        return _FakeAsyncScalars(self._scalars_list)
 
 
 class TestBankSolutionUnit:
@@ -152,6 +169,36 @@ class TestQueryUnit:
         out = asyncio.run(get_all_verified(cast(AsyncSession, fake)))
         assert out == rows
         assert len(fake.executed) == 1  # 단일 SELECT 발행
+
+    def test_stream_all_verified_yields_scalars_in_order(self) -> None:
+        """stream_all_verified는 서버측 커서(stream_scalars)로 행을 순서대로 1건씩 yield한다."""
+        rows = [
+            VerifiedSolution(
+                problem_id=uuid.uuid4(),
+                grade=WhsSolutionGrade.VERIFIED,
+                solution_path={"s": i},
+            )
+            for i in range(3)
+        ]
+        fake = _FakeSession(scalars_list=rows)
+
+        async def _collect() -> list[VerifiedSolution]:
+            return [sol async for sol in stream_all_verified(cast(AsyncSession, fake))]
+
+        out = asyncio.run(_collect())
+        assert out == rows  # 순서 보존
+        assert len(fake.streamed) == 1  # stream_scalars 단일 발행
+        assert fake.executed == []  # execute(전량 적재) 미사용
+
+    def test_stream_all_verified_empty(self) -> None:
+        """verified 0건이면 빈 스트림(yield 0)."""
+        fake = _FakeSession(scalars_list=[])
+
+        async def _collect() -> list[VerifiedSolution]:
+            return [sol async for sol in stream_all_verified(cast(AsyncSession, fake))]
+
+        assert asyncio.run(_collect()) == []
+        assert len(fake.streamed) == 1
 
 
 class TestSolutionFingerprint:
@@ -349,6 +396,11 @@ def test_bank_multi_solutions_and_verified_filter_on_live_pg() -> None:
                 all_ids = {r.id for r in all_verified}
                 assert {r.id for r in verified} <= all_ids  # pid verified 포함
                 assert {r.problem_id for r in all_verified} >= {pid, other}  # other도 수집
+
+                # stream_all_verified: 서버측 커서 스트리밍이 get_all_verified와 동일 집합·순서
+                streamed = [r async for r in stream_all_verified(session)]
+                assert [r.id for r in streamed] == [r.id for r in all_verified]
+                assert all(r.grade == WhsSolutionGrade.VERIFIED for r in streamed)
         finally:
             await engine.dispose()
 

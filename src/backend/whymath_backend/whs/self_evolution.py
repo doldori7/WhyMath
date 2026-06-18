@@ -22,7 +22,7 @@ export 레벨에서 한 번 더 거른다(재발견 중복 제거·데이터 위
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable, Iterator
+from collections.abc import AsyncIterator, Iterable, Iterator
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -36,8 +36,10 @@ from whymath_backend.whs.solution_bank import solution_fingerprint
 __all__ = [
     "SftDataset",
     "SftRecord",
+    "SftStreamAccounting",
     "build_sft_dataset",
     "iter_sft_jsonl",
+    "stream_sft_jsonl",
     "to_sft_record",
 ]
 
@@ -134,3 +136,70 @@ def iter_sft_jsonl(dataset: SftDataset) -> Iterator[str]:
     """
     for record in dataset.records:
         yield record.model_dump_json()
+
+
+class SftStreamAccounting(BaseModel):
+    """`stream_sft_jsonl`의 *진행 중* 회계 — 스트림을 흘리며 누적, 소진 *후* 최종값을 읽는다.
+
+    `build_sft_dataset`가 전량 적재 후 `SftDataset`에 회계를 *한 번에* 담는 것과 달리, 스트리밍은
+    레코드를 다 본 시점에야 총계가 확정된다. 그래서 호출자가 이 *가변* 누산기를 만들어
+    `stream_sft_jsonl`에 주입하고, 스트림이 끝난 뒤 `summary()`로 stderr 회계를 낸다(데이터 stdout과
+    분리·#258 일괄 CLI와 같은 키). `SftDataset`(frozen·결과 스냅샷)과 달리 가변이다(누적 카운터).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_input: int = Field(default=0, ge=0, description="입력 풀이 총수(필터 전).")
+    records: int = Field(default=0, ge=0, description="JSONL로 흘린 학습 레코드 수.")
+    excluded_unverified: int = Field(default=0, ge=0, description="verified 아님으로 배제(R-S2).")
+    deduped: int = Field(default=0, ge=0, description="재발견 중복으로 제거(같은 문제·같은 지문).")
+
+    def summary(self) -> dict[str, int]:
+        """stderr 회계 요약 dict(일괄 CLI 요약과 동일 키 `{total_input, records, ...}`)."""
+        return {
+            "total_input": self.total_input,
+            "records": self.records,
+            "excluded_unverified": self.excluded_unverified,
+            "deduped": self.deduped,
+        }
+
+
+async def stream_sft_jsonl(
+    rows: AsyncIterator[VerifiedSolution],
+    accounting: SftStreamAccounting,
+    *,
+    dedup: bool = True,
+) -> AsyncIterator[str]:
+    """검증 풀이 스트림 → SFT JSONL 스트림(verified만·재발견 dedup·정직 회계·순서 보존).
+
+    `build_sft_dataset`+`iter_sft_jsonl`의 *스트리밍 등가물*이다 — 전 풀이를 list로 모아
+    데이터셋을 구성하는 대신, `rows`(서버측 커서 `stream_all_verified`)를 `async for`로 한
+    건씩 받아 그 자리에서 JSONL 한 줄을 yield한다. 메모리는 *한 건 + dedup 키셋 + 정수
+    카운터*로 바운드된다.
+
+    **R-S2 학습 안전(심층 방어·정확성 #1)**: `grade != verified`는 yield하지 않고
+    `accounting.excluded_unverified`로 집계한다 — `stream_all_verified`가 1차 필터여도 임의
+    입력에 안전하다(판정 불가 풀이 학습 누수 0). **dedup(기본 ON)**: 같은 `(problem_id,
+    지문)`이 이미 나왔으면 yield 않고 `accounting.deduped`로 집계한다. 통과분만
+    `accounting.records`를 올리고 `to_sft_record(...).model_dump_json()`을 yield한다(일괄
+    경로와 바이트 동일).
+
+    회계는 주입된 `accounting`(가변)에 누적된다 — 스트림 소진 후 호출자가
+    `accounting.summary()`로 stderr 요약을 낸다. **메모리 가드의 경계(정직)**: 행은 전량
+    적재하지 않지만 dedup `seen` 키셋은 *유일하게 증가하는* 구조다 — 다만 ORM 행이 아니라
+    `(UUID, sha256)` 키라 훨씬 작고, `dedup=False`면 그마저 없다.
+    """
+    seen: set[tuple[uuid.UUID, str]] = set()
+    async for sol in rows:
+        accounting.total_input += 1
+        if sol.grade != WhsSolutionGrade.VERIFIED:
+            accounting.excluded_unverified += 1  # R-S2 심층 방어 — verified 아님 배제(정직 집계).
+            continue
+        if dedup:
+            key = (sol.problem_id, solution_fingerprint(sol.solution_path))
+            if key in seen:
+                accounting.deduped += 1  # 같은 문제·같은 지문 재발견 — 중복 제거(가시화).
+                continue
+            seen.add(key)
+        accounting.records += 1
+        yield to_sft_record(sol).model_dump_json()

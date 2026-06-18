@@ -39,7 +39,13 @@ max_tool_calls)` — `SolverPolicy`(도구 선택 두뇌·주입)를 받아 도�
 S1 좌석(자기 진화 데이터 — 순수 코어): ⑨ `self_evolution.py` `build_sft_dataset(solutions, *,
 dedup=True) -> SftDataset` — 솔버가 적재한 *verified* 풀이를 SFT 학습 레코드(`SftRecord`)로
 변환한다. **verified만**(R-S2 심층 방어·`unverified` 배제·배제 건수 정직 집계)·`(problem_id,
-지문)` 재발견 dedup(#256 export 레벨 연장). 순수(DB 0) — 실 DB 배치 조회·JSONL·ops CLI는 후속.
+지문)` 재발견 dedup(#256 export 레벨 연장). 실 DB export 진입점은 `solution_bank.get_all_verified`
+(전 문제 verified)·`iter_sft_jsonl`(JSONL)·ops CLI(`self_evolution_export_cli`)다.
+
+S1 좌석(자기 진화 export — 스트리밍): ⑩ 대규모 메모리 가드 — `solution_bank.stream_all_verified`
+(서버측 커서 `stream_scalars`로 verified를 1건씩)·`self_evolution.stream_sft_jsonl(rows,
+accounting, *, dedup=True)`(verified 필터·dedup·JSONL을 스트리밍·`SftStreamAccounting`에 누적)으로
+전량 list 적재 없이 export한다. ops CLI는 `--stream` 옵트인(출력은 일괄과 동일·메모리만 바운드).
 
 범위 밖(후속·환경 밖): LLM 정책 모델(Ollama·Phaiakes9)·생성 도구 내용 생성·MCTS-lite 탐색·자기
 진화 *실 DB export·PRM·Tier3*(§9 로드맵). 본 패키지는 *상태 저장소 4종 + 결정론 루프 골격 + 자기
@@ -105,8 +111,10 @@ from whymath_backend.whs.node_store import (
 from whymath_backend.whs.self_evolution import (
     SftDataset,
     SftRecord,
+    SftStreamAccounting,
     build_sft_dataset,
     iter_sft_jsonl,
+    stream_sft_jsonl,
     to_sft_record,
 )
 from whymath_backend.whs.solution_bank import (
@@ -115,6 +123,7 @@ from whymath_backend.whs.solution_bank import (
     get_solutions,
     get_verified,
     solution_fingerprint,
+    stream_all_verified,
 )
 from whymath_backend.whs.verdict import (
     WhsGrade,
@@ -142,6 +151,7 @@ __all__ = [
     "ScriptedPolicy",
     "SftDataset",
     "SftRecord",
+    "SftStreamAccounting",
     "SolutionNode",
     "SolverOutcome",
     "SolverPolicy",
@@ -174,6 +184,8 @@ __all__ = [
     "run_baseline",
     "run_solver",
     "solution_fingerprint",
+    "stream_all_verified",
+    "stream_sft_jsonl",
     "to_sft_record",
     "update_evaluation",
 ]
