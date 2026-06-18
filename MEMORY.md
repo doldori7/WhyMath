@@ -332,6 +332,10 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-06-18 (구현·WH-S/자기진화): finalize dedup 결선 — 솔버 `finalize`가 `bank_solution(dedup=True)` 소비(#255 후속·순수·마이그레이션 0)
+
+**무엇**: #255가 만든 dedup의 *소비처 결선*. WH-S 솔버 하네스(`whs/harness.py`)의 `FinalizeAction` 분기가 그동안 `bank_solution(...)`을 **dedup 없이(기본 False)** 불러, 여러 솔버 런이 같은 문제의 *동일 경로*를 재발견하면 `verified_solutions`에 **중복 행**이 쌓였다(자기진화 학습 데이터 §5 부풀림·저장소 위생 빈틈·R-S2 인접). **구현**: finalize의 `bank_solution(...)` 호출에 `dedup=True` 추가 — `solution_fingerprint` 바이트 일치 + 같은 grade면 #255 로직이 기존 행을 재사용(idempotent·새 적재 0). 정확 일치만(표기 다른 *본질적 동치*는 후속). **정직 표기(날조 0)**: `ToolResult.detail`을 dedup 히트(재사용) 시 "적재" 과대주장에서 `"확정(중복은 기존 재사용)"`으로 교정 — 구조 필드(`banked_solution_id`·`grade`·`status=finalized`)는 히트/미스 모두 정확하므로 불변(기존 행 id 반환). **검증**: 4게이트 green(ruff·black·mypy **--strict 전 패키지**[206 파일]·backend pytest **3792**=3791+1[finalize dedup 히트→기존 행 재사용·새 적재 0])·`solution_bank.py` cov **100%**·`harness.py` 신규 결선 라인 커버·무회귀. 순수 결선·DB 0·마이그레이션 0. 기존 finalize 테스트는 `_FakeSession.execute`가 빈 리스트(dedup 미스)를 반환해 무수정 통과. **NOT(후속)**: 신규 vs 재발견 정밀 카운터(§5 export가 라운드별 *새* verified 경로를 셀 때 소비)·본질적 동치 dedup·GDPR `/v1/me/export`(열람·이동권·결정 필요).
+
 ### 2026-06-18 (구현·WH-S/자기진화): 솔루션 dedup — `solution_fingerprint` + `bank_solution(dedup=True)`(opt-in·마이그레이션 0)
 
 **무엇**: WH-S `solution_bank`의 후속 "중복 dedup". 솔버 루프(MCTS·재탐색)가 *같은 풀이 경로를 재발견*해 자기진화 학습 데이터(§5)를 부풀리는 걸 막는 1차 dedup. 신규 `solution_fingerprint(solution_path) -> str`(순수·정렬 키 JSON sha256·키 순서/공백 무관·**정확 일치만**·본질적 동치는 후속). `bank_solution`에 옵션 `dedup: bool = False`: True면 적재 전 같은 문제의 *같은 grade* 풀이 중 동일 지문이 있으면 *새 적재 없이 기존 행 반환*(idempotent·R-S2 인접 데이터 위생). **다른 grade**(verified vs unverified)는 별개 레코드라 dedup 안 함·**다른 경로**(다중 전략)는 보존. 기본 False는 종전대로 항상 적재(조회 0·하위호환). **검증**: 4게이트 green(ruff·black·mypy **--strict 전 패키지**·backend pytest **+6**[지문 순서무관/구분·dedup 동일경로 skip/다른경로 적재/다른grade 미dedup/기본 항상적재·조회0])·`solution_bank.py` cov **100%**·무회귀. 순수 함수·DB 0·마이그레이션 0(지문 컬럼 추가 안 함·in-app 비교). **소비처**: 솔버 `finalize`(후속)가 `dedup=True`로 부른다. **NOT(후속)**: 본질적 동치 dedup(표기 다른 동치 풀이 정규화·canonical form)·솔버 finalize 결선·지문 인덱스 컬럼(대규모 시).

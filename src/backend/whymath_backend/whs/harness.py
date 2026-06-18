@@ -16,6 +16,8 @@
     failed를 배제 — `VerifiedSolution`). 검색은 종료되지 않고(정책이 다른 경로 시도) 계속한다.
   - **unverifiable → unverified 격리**: 판정 불가 최종 풀이는 `unverified` 등급으로 *적재하되*
     학습 배제(§3·R-S2). verified만 finalize 성공으로 검색 종료.
+  - **finalize 멱등(dedup)**: 적재는 `bank_solution(dedup=True)`로 한다 — 여러 런이 같은 문제의
+    *동일 경로*를 재발견하면 기존 행을 재사용한다(자기진화 데이터 중복 차단·§2.4·§5·위생).
   - **탐색 예산 상한**: `max_tool_calls` 초과 시 하네스가 강제 종료(`budget_exhausted`·안전
     종료·R-S4 문제당 탐색 예산 상한). 무한 루프·과대 컴퓨트 차단.
   - **dead-end 회피**: `apply_strategy`는 적용 전 `is_dead_end`를 조회해 이미 막다른 길이면
@@ -31,7 +33,7 @@
   5 verify         : 하네스가 검증기 스택(verify_answer+verify_solution+final_verdict) 실행.
   6 conjecture_check: 하네스가 수치 반례 탐색(verify_answer 재사용·거짓 추측 가지치기).
   7 log_lemma/log_deadend: 하네스가 저장소 적재(보조정리는 verified 전제).
-  8 finalize       : 하네스가 verify+등급 매핑+저장소 커밋(failed 차단·검색 종료).
+  8 finalize       : 하네스가 verify+등급 매핑+저장소 커밋(failed 차단·dedup 멱등·검색 종료).
 
 범위 밖(후속·환경 밖): LLM 정책 모델(Ollama·Phaiakes9)·생성 도구 내용 생성·MCTS-lite 탐색·PRM·
 Tier3(Lean4). 본 모듈은 *결정론 루프 드라이버 + 도구 결선 + 불변식*만 둔다.
@@ -374,6 +376,8 @@ async def _exec(session: AsyncSession, state: SolverState, action: Action) -> To
         bank_grade = (
             WhsSolutionGrade.VERIFIED if grade == "verified" else WhsSolutionGrade.UNVERIFIED
         )
+        # dedup=True(§2.4·#255): 여러 런이 같은 문제의 *동일 경로*를 재발견하면 기존 행을 재사용
+        # 한다(idempotent) — 자기진화 데이터(§5)에 재발견 중복이 쌓이는 것을 막는다(위생·R-S2).
         solution = await solution_bank.bank_solution(
             session,
             problem_id=state.problem_id,
@@ -386,13 +390,15 @@ async def _exec(session: AsyncSession, state: SolverState, action: Action) -> To
             strategy_tag=action.strategy_tag,
             answer=_answer_str(action.answer),
             source_root_id=action.source_root_id or state.root_id,
+            dedup=True,
         )
         state.finalized = True
         state.banked_solution_id = solution.id
         return ToolResult(
             kind=action.kind,
             ok=True,
-            detail=f"검증 풀이 적재(등급 {grade}).",
+            # dedup 히트 시 "적재"는 과대주장 → "확정"으로 정직 표기(구조 필드는 히트/미스 불변).
+            detail=f"검증 풀이 확정(등급 {grade}·중복은 기존 재사용).",
             grade=grade,
             banked_solution_id=solution.id,
         )

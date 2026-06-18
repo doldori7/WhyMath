@@ -18,8 +18,9 @@ WH-S 오프라인(§7.5): `verified_solutions`는 *시스템이 스스로 푼* �
 (redaction·암호화 무관). 학생 경로 미개입·API 노출 0(WH-1 소비 시 표현 계층은 후속).
 
 중복 dedup: `bank_solution(dedup=True)` + `solution_fingerprint`로 *정확 일치* 경로 재적재를
-막는다(솔버 루프 데이터 위생). 범위 밖(후속): 솔버 `finalize`·자기진화 export(§5)·WH-1 콘텐츠
-변환(§7)·*본질적 동치* dedup(표기 다른 동치 풀이 정규화). 본 모듈은 *검증 풀이 저장소 CRUD*만 둔다.
+막는다(솔버 루프 데이터 위생). 솔버 `finalize`(`whs/harness.py`)가 이 옵션으로 호출해 재발견을
+멱등 처리한다(#256 결선). 범위 밖(후속): 자기진화 export(§5)·WH-1 콘텐츠 변환(§7)·*본질적 동치*
+dedup(표기 다른 동치 풀이 정규화). 본 모듈은 *검증 풀이 저장소 CRUD*만 둔다.
 """
 
 from __future__ import annotations
