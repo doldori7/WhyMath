@@ -33,12 +33,14 @@ def _problem(  # type: ignore[no-untyped-def]
     problem_id: uuid.UUID,
     *,
     question_text: str = "문제 본문",
+    answer_explanation: str = "해설 본문",
     source_type: SourceType = SourceType.자체생성,
     conditions_parsed: list | None = None,
 ):
     return Problem(
         problem_id=problem_id,
         question_text=question_text,
+        answer_explanation=answer_explanation,
         unit_codes=["M1-A-01"],
         source_type=source_type,
         conditions_parsed=conditions_parsed if conditions_parsed is not None else [],
@@ -200,18 +202,22 @@ class TestSelfEvolutionExportCliWithProblem:
         capsys.readouterr()
 
     def test_stream_with_problem_joins_context(self, capsys: pytest.CaptureFixture[str]) -> None:
-        """--stream --with-problem → 주입 loader로 컨텍스트 결합(question_text)."""
+        """--stream --with-problem → loader로 컨텍스트 결합(question_text·answer_explanation)."""
         pid = uuid.uuid4()
         rows = [_vs(pid, {"steps": ["x=2"]})]
         code = cli.main(
             ["--stream", "--with-problem"],
             stream_fn=_stream_runner(rows),
-            problem_loader=_loader_for({pid: _problem(pid, question_text="조인된 본문")}),
+            problem_loader=_loader_for(
+                {pid: _problem(pid, question_text="조인된 본문", answer_explanation="조인된 해설")}
+            ),
         )
         assert code == 0
         captured = capsys.readouterr()
         lines = [ln for ln in captured.out.splitlines() if ln]
-        assert json.loads(lines[0])["question_text"] == "조인된 본문"
+        rec = json.loads(lines[0])
+        assert rec["question_text"] == "조인된 본문"
+        assert rec["answer_explanation"] == "조인된 해설"
         assert json.loads(captured.err)["problems_missing"] == 0
 
     def test_stream_with_problem_missing_counts(self, capsys: pytest.CaptureFixture[str]) -> None:
