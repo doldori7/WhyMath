@@ -7,10 +7,12 @@ CASCADE·고아 제거·DeletionAudit 잔존)는 `privacy/test_erasure.py` 통�
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from whymath_backend.api._auth import get_current_user
@@ -123,3 +125,18 @@ class TestEraseMyAccount:
         client = _no_auth_client()
         resp = client.request("DELETE", "/v1/me", json={"confirmation": _CONFIRM})
         assert resp.status_code == 401
+
+    def test_pending_external_logged_not_in_response(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """외부 store 별도 삭제 필요를 *ops 로그*로만 가시화 — 응답엔 미노출(정보 누출 0)."""
+        client, _ = _client(rowcount=2)
+        with caplog.at_level(logging.INFO, logger="whymath.api.me"):
+            resp = client.request("DELETE", "/v1/me", json={"confirmation": _CONFIRM})
+        assert resp.status_code == 200
+        # ops 로그에 store명·user_id가 남아 누락이 가시화된다(조용한 누락 0).
+        logged = "\n".join(r.getMessage() for r in caplog.records if r.name == "whymath.api.me")
+        assert "clickhouse" in logged and "s3" in logged and "redis" in logged
+        assert str(_UID) in logged
+        # student-facing 응답엔 인프라/매니페스트 미노출(요약 영수증 2필드만).
+        assert set(resp.json()) == {"user_id", "total_rows_deleted"}

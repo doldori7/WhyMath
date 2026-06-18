@@ -26,9 +26,14 @@
 ORM/쿼리빌더만(`delete(Model).where(...)` — 원시 SQL 0·CLAUDE.md). `dialogue_turn`은 user 컬럼이
 없어 `dialogue` CASCADE로 제거(보고에는 cascade로 표기).
 
+외부 store(ClickHouse 행동 로그·S3 객체·Redis 세션)는 RDB 밖이라 이 단일 트랜잭션에 못 넣는다 —
+삭제를 *조용히 누락하지 않고* `external_erasure_targets`로 *구조화*해
+`ErasureReport.pending_external`에 담는다(GDPR 범위 정직·날조 0·ops 후속 체크리스트). 실제 외부
+삭제 *집행*은 후속.
+
 범위 밖(후속): 삭제권 *요청* API 엔드포인트(인증·본인 확인·법정대리인 동의 흐름)·보존 기한 배치
-(`evidence_store.purge_expired`는 retention 전용·여기는 user 단위)·외부 store(ClickHouse 행동 로그·
-S3 객체·Redis 세션) 삭제 연계.
+(`evidence_store.purge_expired`는 retention 전용·여기는 user 단위)·외부 store 삭제 *집행*
+(ClickHouse·S3·Redis 클라이언트 — 현재는 `pending_external` 매니페스트로 명시만).
 """
 
 from __future__ import annotations
@@ -63,7 +68,12 @@ from whymath_backend.db.models.user import (
 )
 from whymath_backend.schema.enums import AuditResourceType
 
-__all__ = ["ErasureReport", "erase_user"]
+__all__ = [
+    "ErasureReport",
+    "ExternalErasureTarget",
+    "erase_user",
+    "external_erasure_targets",
+]
 
 # 삭제 계획 — (모델, user 컬럼명) child→parent 순서(FK 의존 안전). user_profile·dialogue_turn
 # 제외: user_profile은 마지막에 명시 삭제, dialogue_turn은 dialogue CASCADE로 자동 제거.
@@ -90,6 +100,54 @@ _ERASURE_PLAN: tuple[tuple[type[Base], str], ...] = (
 )
 
 
+class ExternalErasureTarget(BaseModel):
+    """`erase_user`가 *직접 삭제하지 않는* 외부 store의 사용자 데이터 — 별도 ops 삭제 대상. 불변.
+
+    `erase_user`는 PostgreSQL(`_ERASURE_PLAN`)만 단일 트랜잭션으로 지운다. 외부 store(ClickHouse
+    행동 로그·S3/MinIO 객체·Redis 세션)는 RDB 밖·별도 클라이언트/비동기 인프라라 그 트랜잭션에
+    *포함되지 않는다*. 이 모델은 그 누락을 *조용히 넘기지 않고*(날조 0·GDPR 삭제 범위 정직) ops가
+    집행할 체크리스트로 *구조화*한다. `locator`는 *정확한 키 문법을 단정하지 않는다* — 키/프리픽스
+    규약은 인프라 정의라 user_id 연관 대상을 서술만 한다(없는 사실 날조 금지).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    store: str = Field(description="외부 store 식별자(clickhouse·s3·redis).")
+    data: str = Field(description="그 store가 보유한 사용자 데이터 설명(한국어).")
+    locator: str = Field(description="삭제 대상(user_id 연관·키 규약은 인프라 정의·단정 아님).")
+    reason: str = Field(description="`erase_user` 단일 TX에 *포함되지 않는* 이유.")
+
+
+def external_erasure_targets(user_id: uuid.UUID) -> tuple[ExternalErasureTarget, ...]:
+    """이 사용자에 대해 외부 store에 남아 *별도 삭제가 필요한* 데이터 목록(per-user·구조화).
+
+    `erase_user`의 PostgreSQL 단일 트랜잭션 *밖*에 있는 store들을 명시한다 — 삭제 범위를 정직히
+    드러내(GDPR·날조 0) ops/후속 오케스트레이터가 집행하게 한다. 순수 함수(외부 호출 0)·locator는
+    *키 문법을 단정하지 않고* user_id 연관 대상만 서술한다(인프라 키 규약 날조 금지).
+    """
+    uid = str(user_id)
+    return (
+        ExternalErasureTarget(
+            store="clickhouse",
+            data="학습 행동 로그(이벤트 스트림·분석)",
+            locator=f"student_id_hash(user_id={uid}) 연관 이벤트 행 — 해시 매핑은 적재 규약 따름",
+            reason="별도 분석 store·비동기 배치 삭제(RDB 트랜잭션 밖) — 단일 TX 불포함.",
+        ),
+        ExternalErasureTarget(
+            store="s3",
+            data="업로드 이미지·렌더 객체(손글씨 풀이·시각화)",
+            locator=f"user_id={uid} 연관 업로드/렌더 객체(프리픽스 규약은 인프라 정의)",
+            reason="객체 저장소(S3/MinIO)는 RDB 밖·SDK 삭제 — 단일 TX 불포함.",
+        ),
+        ExternalErasureTarget(
+            store="redis",
+            data="세션·핫 캐시(작업메모리·레이트리밋)",
+            locator=f"user_id={uid} 연관 세션·캐시 키(TTL 만료가 기본·즉시 무효화는 별도)",
+            reason="캐시는 RDB 밖·별도 클라이언트 무효화 — 단일 TX 불포함.",
+        ),
+    )
+
+
 class ErasureReport(BaseModel):
     """삭제권 실행 결과 — 사용자 + 테이블별 삭제 행수(감사·검증·엔드포인트 응답). 불변(frozen).
 
@@ -107,6 +165,14 @@ class ErasureReport(BaseModel):
         ge=0, description="user_profile 삭제 행수(1=존재했음·0=이미 없음)."
     )
     total_rows_deleted: int = Field(ge=0, description="명시 삭제 총 행수(user_profile 포함).")
+    pending_external: tuple[ExternalErasureTarget, ...] = Field(
+        default=(),
+        description=(
+            "이 트랜잭션이 *삭제하지 않은* 외부 store 대상(ClickHouse·S3·Redis). RDB 밖이라 "
+            "단일 TX에 못 넣어 *별도 ops 삭제*가 필요하다 — 누락을 조용히 넘기지 않고(날조 0·GDPR "
+            "범위 정직) 후속 집행 체크리스트로 남긴다. 정보 누출 방지로 응답엔 미노출(ops만)."
+        ),
+    )
 
 
 async def erase_user(session: AsyncSession, *, user_id: uuid.UUID) -> ErasureReport:
@@ -146,4 +212,6 @@ async def erase_user(session: AsyncSession, *, user_id: uuid.UUID) -> ErasureRep
         deleted_counts=counts,
         user_profile_deleted=profile_deleted,
         total_rows_deleted=sum(counts.values()) + profile_deleted,
+        # RDB 밖 store는 이 TX가 못 지운다 — 누락을 구조화해 후속 ops 삭제 체크리스트로 남긴다.
+        pending_external=external_erasure_targets(user_id),
     )

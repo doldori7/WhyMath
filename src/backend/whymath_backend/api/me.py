@@ -41,6 +41,7 @@ slice 58: `GET /v1/me/deletions` — slice 57이 적재한 본인 삭제 감사 
 
 from __future__ import annotations
 
+import logging
 import math
 import uuid
 from datetime import UTC, datetime
@@ -111,6 +112,8 @@ from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import ASSESSED_ROLES, AuditResourceType
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
+
+_logger = logging.getLogger("whymath.api.me")
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 Limit = Annotated[int, Query(ge=1, le=200, description="페이지 크기")]
@@ -1704,6 +1707,10 @@ async def erase_my_account(
 
     응답은 *요약 영수증*(user_id·총 삭제 행수)만 — 내부 테이블 구조는 노출하지 않는다. 삭제 후
     본인 토큰/세션도 사라지므로(refresh_token_session 포함) 이후 요청은 재인증이 필요하다.
+
+    RDB 밖 store(ClickHouse·S3·Redis)는 이 트랜잭션이 못 지운다 — `report.pending_external`
+    매니페스트를 *ops 로그*로 남겨(store명·user_id만) 별도 삭제가 필요함을 가시화한다(누락 은폐
+    금지·GDPR 범위 정직). student-facing 응답엔 인프라 정보를 싣지 않는다(정보 누출 방지).
     """
     if body.confirmation != _DELETE_CONFIRMATION:
         raise HTTPException(
@@ -1714,6 +1721,15 @@ async def erase_my_account(
     user_id = user.user_id
     report = await erase_user(session, user_id=user_id)
     await session.commit()
+    # ops 가시화 — RDB 밖 store(ClickHouse·S3·Redis)는 이 TX가 못 지운다(report.pending_external).
+    # 누락을 조용히 넘기지 않도록 알림(store명·user_id만·키 패턴 미로깅) — 별도 삭제 필요.
+    _logger.info(
+        "개인정보 삭제권 실행: user=%s · PG %d행 삭제 · 외부 store %d곳 별도 삭제 필요(%s)",
+        user_id,
+        report.total_rows_deleted,
+        len(report.pending_external),
+        ", ".join(t.store for t in report.pending_external),
+    )
     return AccountErasureResponse(user_id=user_id, total_rows_deleted=report.total_rows_deleted)
 
 
