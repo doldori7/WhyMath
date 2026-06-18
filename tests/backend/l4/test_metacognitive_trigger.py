@@ -119,6 +119,138 @@ class TestRecommendCoaching:
         assert trig.focus == "advance"
         assert trig.focus_step_index is None
 
+    def test_hint_level_none_keeps_verify_prompt_unchanged(self) -> None:
+        """hint_level=None → 기존 verify 발화·반환 완전 불변(회귀)."""
+        # 위치 비지목 — 기존 단계 자가검산 발화 그대로.
+        generic = recommend_coaching(0.9, 2.0, arithmetic_error=True, verify_steps=True)
+        with_none = recommend_coaching(
+            0.9, 2.0, arithmetic_error=True, verify_steps=True, hint_level=None
+        )
+        assert with_none == generic
+        assert with_none.hint_level is None
+        # 위치 인지 — 기존 위치 인지 발화 그대로.
+        at = recommend_coaching(
+            0.9, 2.0, arithmetic_error=True, verify_steps=True, incorrect_step_index=2
+        )
+        at_none = recommend_coaching(
+            0.9,
+            2.0,
+            arithmetic_error=True,
+            verify_steps=True,
+            incorrect_step_index=2,
+            hint_level=None,
+        )
+        assert at_none == at
+        assert at_none.hint_level is None
+
+    def test_hint_level_1_2_no_escalation_metadata_filled(self) -> None:
+        """verify+steps+hint_level 1·2 → 발화 점층 안 됨(기존 발화)·hint_level 메타데이터만 채움."""
+        for level in (1, 2):
+            # 위치 비지목.
+            generic = recommend_coaching(0.9, 2.0, arithmetic_error=True, verify_steps=True)
+            trig = recommend_coaching(
+                0.9, 2.0, arithmetic_error=True, verify_steps=True, hint_level=level  # type: ignore[arg-type]
+            )
+            assert trig.prompt == generic.prompt  # 발화 불변(점층 아님)
+            assert trig.hint_level == level  # 메타데이터만 채움(별도 채널)
+            # 위치 인지.
+            at = recommend_coaching(
+                0.9, 2.0, arithmetic_error=True, verify_steps=True, incorrect_step_index=2
+            )
+            trig_at = recommend_coaching(
+                0.9,
+                2.0,
+                arithmetic_error=True,
+                verify_steps=True,
+                incorrect_step_index=2,
+                hint_level=level,  # type: ignore[arg-type]
+            )
+            assert trig_at.prompt == at.prompt  # 발화 불변
+            assert trig_at.hint_level == level
+
+    def test_hint_level_3_4_escalates_without_index(self) -> None:
+        """verify+steps+hint_level 3·4(step_index 없음) → 점층 과정-비계 발화로 바뀜."""
+        baseline = recommend_coaching(0.9, 2.0, arithmetic_error=True, verify_steps=True).prompt
+        for level in (3, 4):
+            trig = recommend_coaching(
+                0.9, 2.0, arithmetic_error=True, verify_steps=True, hint_level=level  # type: ignore[arg-type]
+            )
+            assert trig.focus == "verify"
+            assert trig.socratic_category == SocraticCategory.EVIDENCE  # 카테고리 불변
+            assert trig.prompt != baseline  # 점층으로 바뀜
+            # 과정 재구성 비계 — "어떤 규칙"을 한 단계씩 말로 다시 세우기.
+            assert "어떤 규칙" in trig.prompt and "한 줄씩" in trig.prompt
+            assert trig.hint_level == level
+            assert trig.focus_step_index is None  # 위치 미제공
+
+    def test_hint_level_3_4_escalates_with_index_off_by_one(self) -> None:
+        """verify+steps+hint_level 3·4(step_index 있음) → 위치 인지 점층·off-by-one(k/m) 정확."""
+        # 전이 2(steps[2]→steps[3]): 3줄까지 통과(k=3)·4번째 줄 재구성(m=4).
+        for level in (3, 4):
+            trig = recommend_coaching(
+                0.9,
+                2.0,
+                arithmetic_error=True,
+                verify_steps=True,
+                incorrect_step_index=2,
+                hint_level=level,  # type: ignore[arg-type]
+            )
+            assert trig.focus == "verify"
+            # 효능감(앞 k줄 통과) 유지 + 과정 재구성 비계(m번째 줄 규칙).
+            assert "처음 3줄까지는 잘 따라왔어" in trig.prompt
+            assert "4번째 줄" in trig.prompt
+            assert "어떤 규칙" in trig.prompt
+            assert trig.hint_level == level
+            assert trig.focus_step_index == 2
+        # 전이 0(steps[0]→steps[1]): 1줄 통과(k=1)·2번째 줄 재구성(m=2).
+        p0 = recommend_coaching(
+            0.9, 2.0, arithmetic_error=True, verify_steps=True, incorrect_step_index=0, hint_level=3
+        ).prompt
+        assert "처음 1줄까지는 잘 따라왔어" in p0 and "2번째 줄" in p0
+
+    def test_escalated_prompt_no_answer_or_negation(self) -> None:
+        """교수학 금기 가드 — 점층 발화(위치 유/무)에 정답·수정·'틀렸다' 부정 단정 부재."""
+        forbidden = ("틀렸", "틀린", "잘못", "오답", "정답은", "고치", "수정", "이렇게 하면", "=")
+        # 위치 비지목 점층.
+        no_idx = recommend_coaching(
+            0.9, 2.0, arithmetic_error=True, verify_steps=True, hint_level=4
+        ).prompt
+        # 위치 인지 점층.
+        with_idx = recommend_coaching(
+            0.9,
+            2.0,
+            arithmetic_error=True,
+            verify_steps=True,
+            incorrect_step_index=1,
+            hint_level=4,
+        ).prompt
+        for prompt in (no_idx, with_idx):
+            for token in forbidden:
+                assert token not in prompt
+            # 질문형(소크라테스)으로 끝남.
+            assert prompt.rstrip().endswith("?")
+
+    def test_hint_level_ignored_when_not_verify_focus(self) -> None:
+        """비-verify 포커스(mastery 경로)에 hint_level 줘도 발화 불변·hint_level None."""
+        baseline = recommend_coaching(0.9, 2.0)  # advance(mastery 경로)
+        trig = recommend_coaching(0.9, 2.0, hint_level=4)
+        assert trig.focus == "foundation" or trig.focus == "advance"
+        assert trig.prompt == baseline.prompt  # 발화 불변
+        assert trig.hint_level is None  # verify 아니면 항상 None
+        # foundation 경로도 동일.
+        found = recommend_coaching(0.5, 0.0, hint_level=3)
+        assert found.focus == "foundation"
+        assert found.hint_level is None
+
+    def test_hint_level_ignored_without_verify_steps(self) -> None:
+        """verify이나 steps=False면 발화는 일반 verify·hint_level 메타데이터만 채움(점층 없음)."""
+        generic = recommend_coaching(0.9, 2.0, arithmetic_error=True)  # 일반 verify
+        trig = recommend_coaching(0.9, 2.0, arithmetic_error=True, verify_steps=False, hint_level=4)
+        assert trig.focus == "verify"
+        assert trig.prompt == generic.prompt  # 점층 없음(steps=False)
+        assert "숫자가 어긋났는지" in trig.prompt
+        assert trig.hint_level == 4  # 메타데이터(별도 채널)는 verify면 채움
+
     def test_missing_signal_diagnose(self) -> None:
         """한쪽 신호라도 없으면 diagnose(교차검증 불가)."""
         assert recommend_coaching(None, 1.0).focus == "diagnose"

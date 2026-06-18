@@ -22,6 +22,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.l2.irt import theta_to_mastery_proxy
+from whymath_backend.l4.hint_deferral import HintLevel
 from whymath_backend.l4.socratic.categories import SocraticCategory
 
 CoachingFocus = Literal[
@@ -123,6 +124,49 @@ def _verify_steps_at_prompt(step_index: int) -> str:
     return _PROMPT_VERIFY_STEPS_AT.format(k=k, m=m)
 
 
+# ── 답 미루기 점층(hint_level 3·4) verify 자가검산 변형 ────────────────────────────────
+# hint_deferral 4단계 사다리(1 방향→2 의사코드→3 부분풀이→4 안전망)와 verify 자가검산을
+# 통합한다(slice·hint escalation). 학생이 *같은 단계*에서 반복해 막힐수록(상위 hint_level)
+# 호출자(오케스트레이터)가 hint_deferral.decide_hint_level로 단계를 올려 전달하면, 3·4단계에서
+# 더 *과정* 비계를 준다. 단, 답 미루기·정확성·정서안전 금기를 엄수:
+#   - ❌ 정답/정답값/올바른 다음 줄을 제시하지 않는다(verify는 정답을 모름 — 학생 풀이의
+#     *내부 일관성*만 본다).
+#   - ❌ "틀렸다/틀렸/잘못" 같은 단정·부정 강화 표현 금지.
+#   - ✅ 질문형(소크라테스)·앞 단계 통과 효능감 유지.
+#   - ✅ 점층은 *과정 재구성 비계*(의사코드/부분풀이 수준) — 바로 윗줄에서 *어떤 규칙을
+#     적용했는지*부터 한 단계씩 말로 다시 세우게 한다. 무엇이 왜 어긋났는지·고치는 법은 학생 몫.
+# 1·2단계는 점층하지 않는다(기존 동작 그대로·가장 빠른 단계에서 멈춤·스펙 L39).
+#
+# 위치 비지목 버전(step_index 없음) — 인덱스가 없으니 줄을 좁히지 못한다. 대신 *각 줄에서 바로
+# 윗줄에 어떤 규칙을 적용했는지*를 말로 재구성하게 한다(부분풀이 수준 과정 비계).
+_PROMPT_VERIFY_STEPS_ESCALATED = (
+    "규칙을 한 단계씩 짚다 보면 어디서 두 줄의 값이 달라지는지 스스로 보일 거야. 이번엔 "
+    "한 줄씩, 바로 윗줄에서 *어떤 규칙*을 적용해 그 줄을 얻었는지 말로 다시 세워볼래?"
+)
+# 위치 인지 버전(step_index 있음) — 앞 단계 통과 효능감(처음 k줄)을 유지하면서, 의심 결과 줄
+# (m번째)에 *어떤 규칙*을 적용했는지부터 한 단계씩 말로 재구성하게 한다(부분풀이 수준 과정 비계).
+# off-by-one 규약은 위치 인지 기본형과 동일(k=i+1 통과·m=i+2 의심 줄).
+_PROMPT_VERIFY_STEPS_AT_ESCALATED = (
+    "처음 {k}줄까지는 잘 따라왔어. 규칙을 짚다 보면 그 줄의 값이 윗줄과 같은지 스스로 보일 "
+    "거야. 이번엔 {m}번째 줄을 바로 윗줄에서 *어떤 규칙*을 적용해 얻었는지부터 한 단계씩 "
+    "말로 다시 세워볼까?"
+)
+
+
+def _verify_steps_escalated_prompt(step_index: int | None) -> str:
+    """답 미루기 점층(hint_level 3·4) verify 자가검산 발화 빌드 — 과정 재구성 비계.
+
+    `step_index`가 있으면 위치 인지 점층(앞 k줄 통과 효능감 + m번째 줄 규칙 재구성), 없으면
+    위치 비지목 점층(각 줄의 규칙을 한 단계씩 재구성). off-by-one(k=i+1·m=i+2)은 기본형과 동일.
+    정답/수정/"틀렸다"는 어떤 경우에도 미포함 — 무엇이 왜 어긋났는지·고치는 법은 학생 몫이다.
+    """
+    if step_index is None:
+        return _PROMPT_VERIFY_STEPS_ESCALATED
+    k = step_index + 1  # 잘 따라온 줄 수(1-indexed 마지막 통과 줄 = i+1).
+    m = step_index + 2  # 스스로 규칙을 재구성할 의심 결과 줄(1-indexed steps[i+1]).
+    return _PROMPT_VERIFY_STEPS_AT_ESCALATED.format(k=k, m=m)
+
+
 # 포커스 → 대화 진입 소크라테스 카테고리(slice 5·socratic 6분류). coach가 *어떤 질문 종류*로
 # 시작할지 — verify=근거(계산 재점검)·consolidate=근거(추측 검증)·retrieval=메타(예전 풀이
 # 회상)·foundation/diagnose=명료화(기초·상태 파악)·advance=관점(다른 방법·일반화).
@@ -165,6 +209,16 @@ class CoachingTrigger(BaseModel):
             "담을 뿐 정답/본문은 아니다(학생 자기 풀이 구조·노출 안전)."
         ),
     )
+    hint_level: HintLevel | None = Field(
+        default=None,
+        description=(
+            "verify 자가검산 발화에 적용된 답 미루기 단계(1 방향~4 안전망·hint_deferral 사다리). "
+            "호출자(오케스트레이터)가 `decide_hint_level`로 계산해 전달한 값을 그대로 옮긴 *구조화 "
+            "메타데이터*로, 발화(prompt)와 *별도 채널*이다 — L5 점층 렌더·교사 대시보드에 쓴다. "
+            "`focus_step_index`와 같은 컨벤션: *verify 포커스일 때만* 채우고 그 외/미제공이면 "
+            "None(하위호환). 척도 변환은 L4 내부 책임이며 L5는 단계 라벨만 표시한다."
+        ),
+    )
 
 
 def recommend_coaching(
@@ -176,6 +230,7 @@ def recommend_coaching(
     incorrect_step_index: int | None = None,
     discrepancy_tol: float = 0.2,
     mastery_threshold: float = 0.6,
+    hint_level: HintLevel | None = None,
 ) -> CoachingTrigger:
     """L2 두 신호(BKT 숙달·IRT θ)+선택적 계산 오류 신호에서 코칭 포커스 결정 — 순수·결정론.
 
@@ -203,9 +258,22 @@ def recommend_coaching(
     좁히되, *무엇이 왜 어긋났는지·고치는 법은 주지 않는다*(답 미루기·LTHC 최소도움·정서안전).
     인덱스가 None이면 기존 위치 비지목 발화 그대로(하위호환). 또한 verify 포커스면 이 인덱스를
     `CoachingTrigger.focus_step_index`(구조화 메타데이터·발화와 별도 채널)로도 옮긴다.
+
+    `hint_level`(답 미루기 단계·1~4·None이면 미적용)도 같은 *순수 신호* — 호출자가
+    `hint_deferral.decide_hint_level`로 *미리 계산*해 전달한다(L4는 raw 입력에서 재계산하지
+    않는다·레이어 경계). verify 자가검산 경로(focus=="verify" and verify_steps)에서만 점층에
+    쓰인다: 1·2·None이면 *현재 동작 그대로*(가장 빠른 단계에서 멈춤), 3·4면 더 많은 *과정* 비계를
+    주는 점층 발화로 바꾼다(과정 재구성 비계·정답/"틀렸다" 미포함·답 미루기·정서안전). verify
+    포커스면 이 단계를 `CoachingTrigger.hint_level`(구조화 메타데이터·발화와 별도 채널)로도
+    옮긴다(verify가 아니면 None·하위호환).
     """
     if arithmetic_error:
-        return _build("verify", steps=verify_steps, step_index=incorrect_step_index)
+        return _build(
+            "verify",
+            steps=verify_steps,
+            step_index=incorrect_step_index,
+            hint_level=hint_level,
+        )
     if bkt_mastery is None or irt_theta is None:
         return _build("diagnose")
 
@@ -225,28 +293,40 @@ def _build(
     *,
     steps: bool = False,
     step_index: int | None = None,
+    hint_level: HintLevel | None = None,
 ) -> CoachingTrigger:
     # verify 발화 변형 결정(우선순위 명확):
-    #   1) verify + steps + step_index 제공 → *위치 인지* 단계 자가검산(앞단계 확인 + 그 지점
-    #      재검산·정답/수정/"틀렸다" 미포함·답 미루기).
-    #   2) verify + steps + step_index 없음 → 위치 비지목 단계 자가검산(_PROMPT_VERIFY_STEPS).
-    #   3) 그 외 → 포커스별 정본 발화(_PROMPT).
+    #   1) verify + steps + hint_level∈{3,4} → 답 미루기 점층 *과정 재구성 비계*(위치 인지/비지목
+    #      각각·정답/수정/"틀렸다" 미포함·답 미루기). 학생이 같은 단계에서 반복해 막혀(상위 단계)
+    #      더 많은 *과정* 비계가 필요할 때.
+    #   2) verify + steps + hint_level∈{None,1,2} + step_index 제공 → *위치 인지* 단계 자가검산
+    #      (앞단계 확인 + 그 지점 재검산·기존 동작 그대로).
+    #   3) verify + steps + hint_level∈{None,1,2} + step_index 없음 → 위치 비지목 단계 자가검산
+    #      (_PROMPT_VERIFY_STEPS·기존 동작 그대로).
+    #   4) 그 외 → 포커스별 정본 발화(_PROMPT).
     if focus == "verify" and steps:
-        prompt = (
-            _verify_steps_at_prompt(step_index) if step_index is not None else _PROMPT_VERIFY_STEPS
-        )
+        if hint_level in (3, 4):
+            prompt = _verify_steps_escalated_prompt(step_index)
+        elif step_index is not None:
+            prompt = _verify_steps_at_prompt(step_index)
+        else:
+            prompt = _PROMPT_VERIFY_STEPS
     else:
         prompt = _PROMPT[focus]
     # focus_step_index는 *구조화 메타데이터*(발화와 별도 채널) — verify 포커스일 때만 step_index를
     # 그대로 옮긴다(steps bool 여부 무관: L5 하이라이트/교사 대시보드는 발화 변형과 독립). verify가
     # 아니거나 인덱스 미제공이면 None(하위호환).
     focus_step_index = step_index if focus == "verify" else None
+    # hint_level도 동일 컨벤션 — verify 포커스일 때만 그대로 옮긴다(L5 점층 렌더·교사 대시보드).
+    # verify가 아니거나 미제공이면 None(하위호환).
+    out_hint_level = hint_level if focus == "verify" else None
     return CoachingTrigger(
         focus=focus,
         rationale=_RATIONALE[focus],
         prompt=prompt,
         socratic_category=_SOCRATIC_BY_FOCUS[focus],
         focus_step_index=focus_step_index,
+        hint_level=out_hint_level,
     )
 
 
