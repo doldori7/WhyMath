@@ -36,6 +36,7 @@ from whymath_backend.harness.agreement_gate import (
     AgreementGate,
     Matcher,
     Phase2Exit,
+    Phase2Report,
     evaluate_phase2_exit,
     run_agreement_gate,
     run_precision_guard,
@@ -49,6 +50,7 @@ from whymath_backend.l4.misconception.semantic.provider import EmbeddingProvider
 __all__ = [
     "run_semantic_agreement_gate",
     "run_semantic_phase2_exit",
+    "run_semantic_phase2_report",
     "semantic_candidate_matcher",
 ]
 
@@ -123,6 +125,31 @@ def _build_semantic_candidate(
     return semantic_candidate_matcher(matcher, threshold=resolved_threshold)
 
 
+def run_semantic_phase2_report(
+    *,
+    provider: EmbeddingProvider,
+    threshold: float | None = None,
+    index: VectorIndex | None = None,
+    catalog: tuple[Misconception, ...] = CATALOG,
+    alpha: float = _DEFAULT_ALPHA,
+    min_probes: int = _MIN_PROBES,
+) -> Phase2Report:
+    """의미 매처 후보로 2단계 종료 *전체 리포트* — recall 게이트 + 정밀도 가드 + 결합 판정.
+
+    `SemanticMatcher`를 *1회* 구축(사전 임베딩 캐시)한 후보를 recall 게이트(라벨 recall 프로브)와
+    정밀도 가드(FP 프로브)에 *공유* 적용하고 `evaluate_phase2_exit`로 묶어, 세 결과(두 축 수치 +
+    결합 판정)를 `Phase2Report`로 반환한다. ops/스크립트가 *왜* 그 판정인지 근거와 함께 읽도록
+    하는 직렬화 표면이다. provider 주입 필수(테스트=Fake·프로덕션=build_provider).
+    """
+    candidate = _build_semantic_candidate(
+        provider=provider, threshold=threshold, index=index, catalog=catalog
+    )
+    recall = run_agreement_gate(candidate=candidate, alpha=alpha, min_probes=min_probes)
+    precision = run_precision_guard(candidate=candidate, alpha=alpha, min_probes=min_probes)
+    decision = evaluate_phase2_exit(recall, precision)
+    return Phase2Report(recall=recall, precision=precision, decision=decision)
+
+
 def run_semantic_phase2_exit(
     *,
     provider: EmbeddingProvider,
@@ -132,16 +159,16 @@ def run_semantic_phase2_exit(
     alpha: float = _DEFAULT_ALPHA,
     min_probes: int = _MIN_PROBES,
 ) -> Phase2Exit:
-    """의미 매처 후보로 2단계 종료 *결합* 판정 — recall 유의 개선 AND 정밀도 무회귀.
+    """의미 매처 후보로 2단계 종료 *결합* 판정만 — recall 유의 개선 AND 정밀도 무회귀.
 
-    `SemanticMatcher`를 *1회* 구축(사전 임베딩 캐시)한 후보를 recall 게이트(라벨 recall 프로브)와
-    정밀도 가드(FP 프로브)에 *공유* 적용하고 `evaluate_phase2_exit`로 묶는다. recall만으론
-    후보가 거짓양성을 늘리며 종료를 통과할 수 있어(정확성 #1 위반 위험), 정밀도 무회귀를 함께
-    요구한다. provider 주입 필수(테스트=Fake·프로덕션=build_provider)·라이브 결선은 integration.
+    `run_semantic_phase2_report`의 `decision`만 필요한 호출자용 얇은 래퍼(후보 1회 구축·두 축
+    공유는 동일). 전체 수치가 필요하면 `run_semantic_phase2_report`를 쓴다.
     """
-    candidate = _build_semantic_candidate(
-        provider=provider, threshold=threshold, index=index, catalog=catalog
-    )
-    recall = run_agreement_gate(candidate=candidate, alpha=alpha, min_probes=min_probes)
-    precision = run_precision_guard(candidate=candidate, alpha=alpha, min_probes=min_probes)
-    return evaluate_phase2_exit(recall, precision)
+    return run_semantic_phase2_report(
+        provider=provider,
+        threshold=threshold,
+        index=index,
+        catalog=catalog,
+        alpha=alpha,
+        min_probes=min_probes,
+    ).decision
