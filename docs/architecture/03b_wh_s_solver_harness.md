@@ -324,6 +324,12 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 - **재발견 dedup(기본 ON·#256 연장)**: 키 `(problem_id, solution_fingerprint)` — 같은 문제·같은 지문은 1건만(`deduped` 집계), *다른 문제*의 우연히 같은 경로는 보존(문제마다 별개 학습쌍). `SftDataset`은 `records`+정직 회계(`total_input`·`excluded_unverified`·`deduped`·`size`) — 보류했던 "신규 vs 재발견 카운터"의 실현. 입력 순서 보존(결정론).
 - **후속**: 실 DB 배치 조회(전 문제 verified 스트리밍)·JSONL 직렬화·ops CLI(§7.5 오프라인 배치)·문제 본문 조인(problem_id→코퍼스)·PRM 쌍 추출·*본질적 동치* dedup.
 
+**S1 슬라이스 7 — 자기진화 실 DB export(get_all_verified + JSONL + ops CLI)**(설계 §5·§7.5) 구현됨(마이그레이션 0). 슬라이스 6 변환 코어의 *실 데이터 진입점*:
+- **`solution_bank.get_all_verified(session) -> list[VerifiedSolution]`**: `get_verified`(문제 1개)의 *전역* 버전 — `grade == verified`인 전 문제 풀이를 `(problem_id, created_at, id)` 결정적 순서로 조회(R-S2 안전·verified만·순수 쿼리빌더). 라운드별 SFT 데이터셋의 원천.
+- **`self_evolution.iter_sft_jsonl(dataset) -> Iterator[str]`**: 레코드 1개/줄 JSONL(`model_dump_json`·UUID→문자열). 순수·순서 보존.
+- **`whs/self_evolution_export_cli.py`**(ops CLI·`retention_purge_cli` 컨벤션 미러·§7.5 HTTP 미노출): `get_all_verified → build_sft_dataset → iter_sft_jsonl`. **stdout = JSONL 데이터셋**(`> dataset.jsonl`), **stderr = 정직 회계 JSON**(`{total_input, records, excluded_unverified, deduped}` — 데이터 스트림 미오염). `--no-dedup`(기본 dedup ON)·종료 0(verified 0건도 정상). `_default_export_fn`은 읽기 전용(commit 0)·실 DB는 `pragma: no cover`+integration, `export_fn` 주입 좌석으로 CLI 배선 hermetic 검증.
+- **후속**: 진정한 스트리밍(`stream_scalars`·대규모 메모리 가드)·문제 본문 조인(problem_id→코퍼스)·PRM 쌍 추출.
+
 ### 용어 정합: "545노드" (편집자 부기)
 
 §5 난이도 사다리의 "545노드 연계 문항"에서 545는 *설계 추정치*다. 구현 커리큘럼 계층은 개념그래프 **403 개념(UC) + 541 선수엣지**이며, "545"는 레포에 실체가 없다(상세는 WH-1 문서 "용어·수치 정합" 절). 시그니처 패턴 55+108은 ROADMAP Phase 1 자산으로 유효하다.

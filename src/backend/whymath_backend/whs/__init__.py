@@ -106,10 +106,12 @@ from whymath_backend.whs.self_evolution import (
     SftDataset,
     SftRecord,
     build_sft_dataset,
+    iter_sft_jsonl,
     to_sft_record,
 )
 from whymath_backend.whs.solution_bank import (
     bank_solution,
+    get_all_verified,
     get_solutions,
     get_verified,
     solution_fingerprint,
@@ -156,6 +158,7 @@ __all__ = [
     "create_node",
     "final_verdict",
     "find_lemma",
+    "get_all_verified",
     "get_children",
     "get_dead_ends",
     "get_lemmas",
@@ -165,6 +168,7 @@ __all__ = [
     "get_verified",
     "increment_visits",
     "is_dead_end",
+    "iter_sft_jsonl",
     "log_dead_end",
     "log_lemma",
     "run_baseline",

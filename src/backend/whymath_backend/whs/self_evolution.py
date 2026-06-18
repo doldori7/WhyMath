@@ -22,7 +22,7 @@ export 레벨에서 한 번 더 거른다(재발견 중복 제거·데이터 위
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -37,6 +37,7 @@ __all__ = [
     "SftDataset",
     "SftRecord",
     "build_sft_dataset",
+    "iter_sft_jsonl",
     "to_sft_record",
 ]
 
@@ -122,3 +123,14 @@ def build_sft_dataset(
         excluded_unverified=excluded,
         deduped=deduped,
     )
+
+
+def iter_sft_jsonl(dataset: SftDataset) -> Iterator[str]:
+    """데이터셋의 레코드를 **JSONL 한 줄/레코드**로 yield한다(순수·결정론·레코드 순서 보존).
+
+    각 줄은 `SftRecord`의 `model_dump_json()`(UUID→문자열·nested `solution_path` dict 처리)이다 —
+    개행 없는 1줄(`json.dumps` 기본). ops export 진입점(`self_evolution_export_cli`)이 stdout으로
+    흘려 `> dataset.jsonl`로 받는다. 회계 요약(배제·중복 수)은 *데이터에 섞지 않는다*(CLI가 stderr).
+    """
+    for record in dataset.records:
+        yield record.model_dump_json()

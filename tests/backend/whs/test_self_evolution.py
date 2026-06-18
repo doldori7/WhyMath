@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 
 from whymath_backend.db.models.verified_solution import (
@@ -15,6 +16,7 @@ from whymath_backend.db.models.verified_solution import (
 from whymath_backend.whs.self_evolution import (
     SftRecord,
     build_sft_dataset,
+    iter_sft_jsonl,
     to_sft_record,
 )
 
@@ -157,3 +159,36 @@ class TestBuildSftDataset:
         assert ds.total_input == 0
         assert ds.excluded_unverified == 0
         assert ds.deduped == 0
+
+
+class TestIterSftJsonl:
+    def test_one_line_per_record_each_parses(self) -> None:
+        """레코드/줄 JSONL — 줄 수 == size·각 줄 JSON 파싱 가능·필드 보존."""
+        pid = uuid.uuid4()
+        ds = build_sft_dataset(
+            [
+                _vs(
+                    problem_id=pid,
+                    solution_path={"steps": ["x=2"]},
+                    strategy_tag="대수적",
+                    answer="2",
+                ),
+                _vs(problem_id=pid, solution_path={"steps": ["기하"]}, strategy_tag="기하적"),
+            ]
+        )
+        lines = list(iter_sft_jsonl(ds))
+        assert len(lines) == ds.size == 2
+        first = json.loads(lines[0])
+        assert first["problem_id"] == str(pid)  # UUID → 문자열
+        assert first["solution_path"] == {"steps": ["x=2"]}
+        assert first["strategy_tag"] == "대수적" and first["answer"] == "2"
+
+    def test_preserves_record_order(self) -> None:
+        """JSONL 줄 순서 = 레코드 순서(결정론)."""
+        pid = uuid.uuid4()
+        ds = build_sft_dataset([_vs(problem_id=pid, solution_path={"n": i}) for i in range(3)])
+        ns = [json.loads(line)["solution_path"]["n"] for line in iter_sft_jsonl(ds)]
+        assert ns == [0, 1, 2]
+
+    def test_empty_dataset_no_lines(self) -> None:
+        assert list(iter_sft_jsonl(build_sft_dataset([]))) == []
