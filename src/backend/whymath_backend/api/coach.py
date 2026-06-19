@@ -76,11 +76,12 @@ from whymath_backend.l4.misconception import (
     InterventionDecision,
     MisconceptionMatch,
     combine_diagnoses,
+    correct_form_present,
     diagnose,
     select_intervention,
     select_intervention_from_hypotheses,
 )
-from whymath_backend.l4.misconception.catalog import CATALOG
+from whymath_backend.l4.misconception.catalog import CATALOG, CATALOG_BY_ID
 from whymath_backend.l4.misconception.evidence_store import log_evidence
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.misconception.hypothesis_store import curate_hypothesis
@@ -124,6 +125,12 @@ _THETA_SURFACED_FOCI: frozenset[str] = frozenset({"consolidate", "retrieval"})
 # 죽지 않고 약·stale 의심만 누적으로 archived된다(낙인 방지하며 실신호 보존·CLAUDE.md #1). 0.5는
 # KPI 튜닝 대상(#266 신뢰 floor 0.65 선례처럼 상수로 노출해 A/B 조정 여지를 남긴다).
 _REFUTE_WEIGHT: float = 0.5
+
+# WH-1 §2.3 정밀 귀속 — 검증 풀이가 *특정 오개념의 정정 형태*(`correct_form`)를 실제로 보일 때 주는
+# *강한* 반박 가중. 막연한 clean 작업(0.5)과 달리 "학생이 M의 올바른 형태를 직접 보였다"는 정밀
+# 모순이라 만점 매치(weight 1.0)와 대칭되는 강도를 준다 — 단발 정정이 confident 단일 매치(+1.0)를
+# *즉시* 지우진 않고(net 0·archived 아님) 반복·decay와 합쳐 죽인다(신호 보존). 1.0은 KPI 튜닝 대상.
+_REFUTE_STRONG_WEIGHT: float = 1.0
 
 
 class CoachRequest(BaseModel):
@@ -896,8 +903,9 @@ async def _log_refutation_evidence(
     passed: bool | None,
     matches: list[MisconceptionMatch],
     active_hypotheses: list[MisconceptionHypothesis],
+    solution_text: str | None,
 ) -> None:
-    """clean하게 검증된 풀이 1턴을 *현재 의심* 오개념에 대한 약한 −1 *반박* 증거로 적재(§2.3 짝).
+    """clean하게 검증된 풀이 1턴을 *현재 의심* 오개념에 대한 −1 *반박* 증거로 적재(§2.3 짝).
 
     #269가 +1 *지지* 생산(`_log_match_evidence`)을 결선했으나 −1 *반박* 생산이 없어, #268의
     `curate_hypothesis` archived 가드(`net_support<0`)가 라이브-단독 학생에겐 발동하지 못했다
@@ -912,11 +920,15 @@ async def _log_refutation_evidence(
       - **no-match 게이트(정합·핵심)**: 이번 턴이 오개념을 *매치*했으면(`_log_match_evidence`가 +1)
         반박 안 함 → 한 턴은 지지(매치) 또는 반박(clean 정답) *둘 중 하나*(같은 턴 모순 적재 차단·
         매치+정답 동시 턴은 +1 우선).
-      - **약한 가중·active 귀속**: `_REFUTE_WEIGHT`(강한 오개념 보존·낙인 방지·상수 주석). 대상은
-        curate가 ≤5·recency로 좁힌 *현재* 의심(`active_hypotheses`)뿐 — 오래된 무관 오개념은 이미
-        decay/prune. verify 신호는 *일반* 계산정합이라 특정 오개념 귀속이 불가하므로(카탈로그엔
-        '거짓' 신호만·'올바른 형태' 부재) *현재 의심 전체* 약한 반박이 가능한 가장 보수적
-        귀속이다(정밀 domain 스코핑은 후속·NOT).
+      - **tier 가중(정밀 귀속)**: active 가설 각각에 −1을 적재하되 *증거 강도로 가중을 tier*한다.
+        풀이에 그 오개념의 *정정 형태*(`correct_form`)가 검출되면(`correct_form_present`) `_REFUTE_
+        STRONG_WEIGHT`(1.0·정밀: "학생이 M의 올바른 형태를 직접 보임"), 아니면 `_REFUTE_WEIGHT`
+        (0.5·막연한 clean 작업). 대상은 curate가 ≤5·recency로 좁힌 *현재* 의심(active_hypotheses)뿐
+        — 오래된 무관 오개념은 이미 decay/prune. 과거 한계(verify 신호는 *일반* 계산정합이라 특정
+        오개념 귀속 불가·'올바른 형태' 부재)를 `correct_form`(identity-shaped에 부여) 검출로 *부분
+        해소* — 정정이 검출되는 오개념은 정밀(강), 나머지는 보수(약). 강·약 모두 낙인
+        방지(−1 방향)·실신호 보존(강 1.0도 만점 단일 매치를 *즉시* 죽이진 않음). domain 스코핑은
+        데이터 부재로 보류(후속·NOT).
 
     **순서(생산=미래)**: `_log_match_evidence`와 동일하게 `_apply_hypotheses`(curate·*직전까지*
     net_support 소비) **뒤에** 둔다 — 이번 턴 −1은 같은 턴 curation을 바꾸지 않고 *미래*
@@ -931,14 +943,18 @@ async def _log_refutation_evidence(
         return  # clean 검증(통과)만 반박 — None(풀이 아님)·False(거짓관계 적발)은 제외.
     if matches:
         return  # no-match 게이트 — 이번 턴이 매치(+1 지지)면 같은 턴 반박 안 함(모순 차단).
+    text = solution_text or ""  # passed is True ⟹ student_solution 비어있지 않음(verify 게이트).
     for hyp in active_hypotheses:
+        # 정정 형태 검출 시 정밀·강한 반박(1.0), 아니면 막연한 clean 작업의 약한 반박(0.5).
+        entry = CATALOG_BY_ID.get(hyp.misconception_id)
+        strong = entry is not None and correct_form_present(entry, text)
         await log_evidence(
             session,
             session_id=session_id,
             student_id=student_id,
             misconception_id=hyp.misconception_id,
-            polarity=-1,  # clean 정답 = 의심 오개념 *반박* 증거(약한·#1 낙인 방지).
-            weight=_REFUTE_WEIGHT,
+            polarity=-1,  # clean 정답 = 의심 오개념 *반박* 증거(#1 낙인 방지).
+            weight=_REFUTE_STRONG_WEIGHT if strong else _REFUTE_WEIGHT,
         )
 
 
@@ -1134,6 +1150,7 @@ async def create_session(
         passed=verify_passed,
         matches=outcome.matches,
         active_hypotheses=active_hypotheses,
+        solution_text=body.student_solution,
     )
     await session.commit()
 
@@ -1283,6 +1300,7 @@ async def append_turns(
         passed=verify_passed,
         matches=outcome.matches,
         active_hypotheses=active_hypotheses,
+        solution_text=body.student_solution,
     )
     await session.commit()
 

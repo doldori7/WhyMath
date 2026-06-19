@@ -41,6 +41,9 @@ _ALGEBRA: tuple[Misconception, ...] = (
         # 매치 → 올바른 전개 `(3+4)²=49`나 기호식 `(a+b)²=a²+b²`(\d가 글자 미매치)엔 미스(disjoint).
         # 근거: 데이터셋 [H:12대수01-03] ◎ 정확대응(concept_graph_dataset_v1.md §5.2).
         regex_signals=(r"\((?P<x>\d+)\+(?P<y>\d+)\)2=(?P=x)2\+(?P=y)2",),
+        # 정정 형태(올바른 완전제곱) — `signals`의 좌변 `(a+b)`만 공유하고 *틀린 RHS* `a²+b²`는
+        # 미포함(가운데 `2ab`로 분리)이라 자기 오개념 conf 0.5(게이트 0.65 미만). gate-safe.
+        correct_form="(a+b)² = a² + 2ab + b²",
     ),
     Misconception(
         id="sign-flip-in-inequality",
@@ -78,6 +81,9 @@ _ALGEBRA: tuple[Misconception, ...] = (
         canonical_statement="a⁰ = 0",
         counterexample="2⁰ = 1 (a≠0인 모든 a에 대해 a⁰ = 1)",
         signals=("a⁰", "0"),
+        # 정정 형태 — `a⁰`만 공유(좌변)하고 RHS `1`은 틀린 RHS `0`과 다름. 정규형 `a0=1`에서
+        # signal `0`은 영숫자 경계(앞 `a`)로 미매치 → 자기 오개념 conf 0.5(게이트 미만). gate-safe.
+        correct_form="a⁰ = 1",
     ),
     Misconception(
         id="fraction-cancellation",
@@ -112,6 +118,9 @@ _ALGEBRA: tuple[Misconception, ...] = (
         # 근거: canonical_statement에서 정규형 직접 도출(추측 0). 표기 변이 큰 삼각(sin 합 분배·
         # 도/라디안)·기호식만(곱미분)·서술형/개념 오류는 regex 부적합 → semantic/LLM-judge 후속.
         regex_signals=(r"log\((?P<a>\d+)\+(?P<b>\d+)\)=log(?P=a)\+log(?P=b)",),
+        # 정정 형태(로그 *곱* 법칙) — 진짜 분배 대상은 곱(`ab`)이다. RHS `log a + log b`만 공유·
+        # 좌변 `log(a+b)`(틀린 대상=합)는 미포함(`log(ab)`) → 자기 오개념 conf 0.5(게이트 미만).
+        correct_form="log(ab) = log a + log b",
     ),
     Misconception(
         id="discriminant-negative-no-real-root",
@@ -270,6 +279,9 @@ _CALCULUS: tuple[Misconception, ...] = (
         canonical_statement="(f·g)′ = f′·g′",
         counterexample="f=g=x: (x²)′ = 2x ≠ 1·1 = 1",
         signals=("(f·g)′", "f′·g′"),
+        # 정정 형태(곱의 미분 법칙) — 좌변 `(f·g)′`만 공유하고 *틀린 RHS* `f′·g′`는 미포함
+        # (`f′·g + f·g′`로 두 항 합) → 자기 오개념 conf 0.5(게이트 미만). gate-safe.
+        correct_form="(f·g)′ = f′·g + f·g′",
     ),
     Misconception(
         id="limit-equals-function-value",
@@ -332,6 +344,9 @@ _TRIG: tuple[Misconception, ...] = (
         canonical_statement="sin(a+b) = sin a + sin b",
         counterexample="a=b=90°: sin180° = 0 ≠ sin90° + sin90° = 2",
         signals=("sin(a+b)", "sin a + sin b"),
+        # 정정 형태(사인 덧셈정리) — 좌변 `sin(a+b)`만 공유하고 *틀린 RHS* `sin a + sin b`는 미포함
+        # (`sin a cos b + cos a sin b`) → 자기 오개념 conf 0.5(게이트 미만). gate-safe.
+        correct_form="sin(a+b) = sin a cos b + cos a sin b",
     ),
     Misconception(
         id="period-of-scaled-sine",

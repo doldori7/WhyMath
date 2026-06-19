@@ -12,7 +12,9 @@ from whymath_backend.l4.misconception import (
     CATALOG,
     CATALOG_BY_ID,
     Misconception,
+    diagnose,
 )
+from whymath_backend.l4.misconception.match_gate import _DEFAULT_CONFIDENCE_FLOOR
 
 
 class TestCatalogShape:
@@ -191,6 +193,53 @@ class TestRegexSignals:
         for m in CATALOG:
             for pat in m.regex_signals:
                 re.compile(pat)  # 실패 시 re.error → 테스트 실패
+
+
+class TestCorrectForm:
+    """선택 필드 `correct_form` — identity-shaped 오개념의 정정 형태(정밀 −1 반박 신호·tier).
+
+    초기 부여 5종(distribution·a⁰·log·곱미분·sin 합분배). 핵심 불변식: 정정 형태가 *자기 오개념*
+    으로 신뢰 게이트(0.65) 이상 confident 오진단되면 안 된다 — `signals`의 LHS만 공유하고 틀린
+    RHS는 미포함하는 gate-safe 오개념만 부여(square-root류 unsafe 후보 제외).
+    """
+
+    _AUTHORED_IDS = {
+        "distribution-over-power",
+        "exponent-zero",
+        "log-distribution",
+        "product-rule-naive",
+        "sine-distributes-over-sum",
+    }
+
+    def test_field_optional_and_typed(self) -> None:
+        # 대부분 None(대체 불가 conceptual 오개념)·부여 항목은 비어있지 않은 str.
+        for m in CATALOG:
+            assert m.correct_form is None or isinstance(m.correct_form, str)
+            if m.id not in self._AUTHORED_IDS:
+                assert m.correct_form is None, m.id
+
+    def test_authored_set_present_and_nonempty(self) -> None:
+        # 초기 부여 5종이 실제로 correct_form을 갖는다(≥5 정밀 귀속 좌석).
+        authored = {m.id for m in CATALOG if m.correct_form is not None}
+        assert authored == self._AUTHORED_IDS
+        assert len(authored) >= 5
+        for mid in self._AUTHORED_IDS:
+            assert CATALOG_BY_ID[mid].correct_form, mid
+
+    def test_correct_form_distinct_from_wrong_statement(self) -> None:
+        # 정정 형태 ≠ 학생의 틀린 진술(정정은 올바른 형태라야 의미가 있다).
+        for mid in self._AUTHORED_IDS:
+            m = CATALOG_BY_ID[mid]
+            assert m.correct_form != m.canonical_statement, mid
+
+    def test_correct_form_is_gate_safe(self) -> None:
+        # 불변식 — 정정 형태를 진단하면 *자기 오개념*을 신뢰 게이트(0.65) 이상으로 내지 않는다
+        # (정정 형태가 자기 오개념으로 confident 오진단되면 student_input에서 거짓 +1을 유발).
+        for mid in self._AUTHORED_IDS:
+            cf = CATALOG_BY_ID[mid].correct_form
+            assert cf is not None
+            self_match = next((x for x in diagnose(cf, top_k=8) if x.misconception.id == mid), None)
+            assert self_match is None or self_match.confidence < _DEFAULT_CONFIDENCE_FLOOR, mid
 
 
 class TestExposedSurface:

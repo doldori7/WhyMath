@@ -3941,11 +3941,12 @@ class TestLogMatchEvidence:
 
 
 class TestLogRefutationEvidence:
-    """`_log_refutation_evidence` — clean 풀이(no-match)를 active 가설에 약한 −1 반박 적재(§2.3 짝).
+    """`_log_refutation_evidence` — clean 풀이(no-match)를 active 가설에 −1 반박 적재(§2.3 짝).
 
     `_log_match_evidence`(+1 지지)의 짝이다. 본 테스트는 결선 규칙(passed=True·no-match·active당
-    polarity=-1·weight=_REFUTE_WEIGHT)과 3중 게이트(passed≠True·matches 존재·student_id None·빈
-    active)만 핀한다 — `log_evidence` 내부는 evidence_store 테스트가 검증한다.
+    polarity=-1)과 3중 게이트(passed≠True·matches 존재·student_id None·빈 active), 그리고 *가중
+    tier*(정정 형태 검출 시 _REFUTE_STRONG_WEIGHT·아니면 _REFUTE_WEIGHT)를 핀한다 — `log_evidence`
+    내부는 evidence_store 테스트가 검증한다.
     """
 
     class _M:
@@ -3954,7 +3955,7 @@ class TestLogRefutationEvidence:
     async def test_clean_no_match_logs_minus_one_per_active(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # passed=True·매치 없음·active 2개 → 가설당 −1(weight=_REFUTE_WEIGHT)로 적재.
+        # passed=True·매치 없음·active 2개·정정 형태 없는 풀이 → 가설당 −1(weight=_REFUTE_WEIGHT).
         calls: list[dict[str, Any]] = []
 
         async def _fake_log(session: Any, **kw: Any) -> Any:
@@ -3971,6 +3972,7 @@ class TestLogRefutationEvidence:
             passed=True,
             matches=[],
             active_hypotheses=active,
+            solution_text="x = 2",  # 정정 형태 없음 → 전부 약한 가중
         )
         assert len(calls) == 2
         assert [c["misconception_id"] for c in calls] == [
@@ -3978,8 +3980,33 @@ class TestLogRefutationEvidence:
             "sign-flip-in-inequality",
         ]
         assert all(c["polarity"] == -1 for c in calls)  # clean 정답 = 반박
-        assert all(c["weight"] == coach._REFUTE_WEIGHT for c in calls)  # 약한 가중(상수)
+        assert all(c["weight"] == coach._REFUTE_WEIGHT for c in calls)  # 약한 가중(정정 없음)
         assert all(c["session_id"] == sid and c["student_id"] == uid for c in calls)
+
+    async def test_correct_form_tiers_strong_weight(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 정정 형태 검출 가설은 강한 가중(1.0)·미검출 가설은 약한 가중(0.5) — tier 정밀 귀속.
+        calls: list[dict[str, Any]] = []
+
+        async def _fake_log(session: Any, **kw: Any) -> Any:
+            calls.append(kw)
+            return None
+
+        monkeypatch.setattr(coach, "log_evidence", _fake_log)
+        active = [_hyp(0.8, "distribution-over-power"), _hyp(0.4, "sign-flip-in-inequality")]
+        await coach._log_refutation_evidence(
+            cast(AsyncSession, object()),
+            session_id=uuid.uuid4(),
+            student_id=uuid.uuid4(),
+            passed=True,
+            matches=[],
+            active_hypotheses=active,
+            # distribution-over-power의 정정 형태만 포함 → 그 가설은 강·다른 가설은 약.
+            solution_text="전개하면 (a+b)² = a² + 2ab + b² 입니다",
+        )
+        by_id = {c["misconception_id"]: c for c in calls}
+        assert all(c["polarity"] == -1 for c in calls)  # 강·약 모두 반박 방향(낙인 0)
+        assert by_id["distribution-over-power"]["weight"] == coach._REFUTE_STRONG_WEIGHT
+        assert by_id["sign-flip-in-inequality"]["weight"] == coach._REFUTE_WEIGHT
 
     async def test_match_gate_blocks_refutation(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # no-match 게이트 — 이번 턴이 매치(+1)면 같은 턴 반박 안 함(상호배타·모순 차단).
@@ -3994,6 +4021,7 @@ class TestLogRefutationEvidence:
             passed=True,
             matches=cast(Any, [self._M()]),
             active_hypotheses=[_hyp(0.8)],
+            solution_text="x = 2",
         )  # 예외 없이 통과 = 게이트 동작
 
     @pytest.mark.parametrize("passed", [False, None])
@@ -4012,6 +4040,7 @@ class TestLogRefutationEvidence:
             passed=passed,
             matches=[],
             active_hypotheses=[_hyp(0.8)],
+            solution_text="x = 2",
         )  # 예외 없이 통과 = 게이트 동작
 
     async def test_none_student_guard_no_log(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4027,6 +4056,7 @@ class TestLogRefutationEvidence:
             passed=True,
             matches=[],
             active_hypotheses=[_hyp(0.8)],
+            solution_text="x = 2",
         )  # 예외 없이 통과 = 가드 동작
 
     async def test_empty_active_no_log(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4045,6 +4075,7 @@ class TestLogRefutationEvidence:
             passed=True,
             matches=[],
             active_hypotheses=[],
+            solution_text="x = 2",
         )
         assert called is False
 
@@ -4071,7 +4102,30 @@ class TestLogRefutationEvidence:
         assert len(links) == 1
         assert links[0].polarity == -1
         assert links[0].misconception_id == "distribution-over-power"
-        assert links[0].weight == coach._REFUTE_WEIGHT
+        assert links[0].weight == coach._REFUTE_WEIGHT  # 정정 형태 없는 풀이 → 약한 가중
+
+    def test_endpoint_correct_form_solution_refutes_strongly(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # active 가설(distribution) + 무매치 입력("음") + 그 오개념의 *정정 형태*를 담은 clean 풀이
+        # → EvidenceLink(−1·강한 가중). 정밀 귀속: 학생이 올바른 완전제곱을 직접 보였다.
+        from whymath_backend.db.models.evidence_link import EvidenceLink
+
+        async def _fake(session: Any, user_id: Any, matches: Any) -> list[MisconceptionHypothesis]:
+            return [_hyp(0.8, "distribution-over-power")]
+
+        monkeypatch.setattr("whymath_backend.api.coach._apply_hypotheses", _fake)
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "음", "student_solution": "(a+b)² = a² + 2ab + b²"},
+        )
+        assert resp.status_code == 201, resp.text
+        links = [o for o in captured.added if isinstance(o, EvidenceLink)]
+        assert len(links) == 1
+        assert links[0].polarity == -1
+        assert links[0].misconception_id == "distribution-over-power"
+        assert links[0].weight == coach._REFUTE_STRONG_WEIGHT  # 정정 형태 검출 → 강한 가중
 
     def test_endpoint_match_turn_logs_support_not_refutation(
         self, monkeypatch: pytest.MonkeyPatch
