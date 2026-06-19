@@ -33,6 +33,7 @@ from whymath_backend.l4.misconception.semantic_eval import (
     ProbeOutcome,
     SemanticEvalReport,
     _judge_applied,
+    _judge_flip_passed,
     _run,
     _wilson_lower_bound,
     _wilson_upper_bound,
@@ -820,3 +821,141 @@ class TestReportInvariants:
         assert r1.recall == r2.recall
         assert r1.false_positive_rate == r2.false_positive_rate
         assert r1.total == r2.total == 2
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# judge flip 결정 게이트 — 측정→자동 flip/no-flip verdict (슬·Phaiakes9 flip 근거)
+# ══════════════════════════════════════════════════════════════════════════
+class TestJudgeFlipGate:
+    """`_judge_flip_passed` + `_run` judge flip 게이트 — Phaiakes9 측정→자동 flip 근거(hermetic).
+
+    judge 후 recall 하한 ≥ min_recall AND judge 후 FP율 상한 ≤ max_fp면 PASS(flip 권장). 둘 다
+    opt-in(0.0=off). None(축 프로브 0)은 임계>0일 때 미달. 실LLM judge 정확도는 Phaiakes9 측정
+    소관이고, 여기선 게이트 *수치 로직*과 `_run` exit 코드·verdict *배선*만 결정론으로 잠근다.
+    """
+
+    _TGT = "continuity-implies-differentiability"
+
+    def _report(self, *, fp_kept: bool = False, n: int = 8) -> SemanticEvalReport:
+        # judge가 recall n건 전부 유지 + FP n건 전부 제거(fp_kept=True면 FP를 *못* 거른 약한 judge).
+        recall = [
+            _judge_outcome(
+                _recall_probe(self._TGT), semantic_ids=(self._TGT,), judge_kept_ids=(self._TGT,)
+            )
+            for _ in range(n)
+        ]
+        fp = [
+            _judge_outcome(
+                _fp_probe(self._TGT),
+                semantic_ids=(self._TGT,),
+                judge_kept_ids=(self._TGT,) if fp_kept else (),
+                judge_removed_ids=() if fp_kept else (self._TGT,),
+            )
+            for _ in range(n)
+        ]
+        return evaluate(recall + fp)
+
+    def test_off_thresholds_always_pass(self) -> None:
+        # 둘 다 0.0(off) → 리포트 무관 항상 PASS(opt-in·약한 judge라도).
+        assert _judge_flip_passed(
+            self._report(fp_kept=True), min_recall=0.0, max_fp=0.0, confidence=0.95
+        )
+
+    def test_strong_judge_passes(self) -> None:
+        # recall 보존(8/8)·FP 제거(0/8) → 너그러운 임계 PASS(lb≈0.75≥0.5·ub≈0.25≤0.5).
+        assert _judge_flip_passed(self._report(), min_recall=0.5, max_fp=0.5, confidence=0.95)
+
+    def test_recall_below_min_fails(self) -> None:
+        # recall 하한 미달 임계(0.9>≈0.75) → FAIL.
+        assert not _judge_flip_passed(self._report(), min_recall=0.9, max_fp=0.5, confidence=0.95)
+
+    def test_fp_above_max_fails(self) -> None:
+        # judge가 FP를 못 거르면(fp_kept·judge_fp=8/8·ub≈1.0) max_fp=0.1 초과 → FAIL.
+        assert not _judge_flip_passed(
+            self._report(fp_kept=True), min_recall=0.5, max_fp=0.1, confidence=0.95
+        )
+
+    def test_missing_axis_probes_fail_when_gated(self) -> None:
+        # 축 프로브 0 + 임계>0 → None=미달(증거 없음=통과 불가).
+        only_recall = evaluate(
+            [
+                _judge_outcome(
+                    _recall_probe(self._TGT), semantic_ids=(self._TGT,), judge_kept_ids=(self._TGT,)
+                )
+            ]
+        )
+        assert only_recall.judge_fp_rate_upper_bound(0.95) is None
+        assert not _judge_flip_passed(only_recall, min_recall=0.0, max_fp=0.1, confidence=0.95)
+        only_fp = evaluate(
+            [
+                _judge_outcome(
+                    _fp_probe(self._TGT),
+                    semantic_ids=(self._TGT,),
+                    judge_kept_ids=(),
+                    judge_removed_ids=(self._TGT,),
+                )
+            ]
+        )
+        assert only_fp.judge_recall_lower_bound(0.95) is None
+        assert not _judge_flip_passed(only_fp, min_recall=0.1, max_fp=0.0, confidence=0.95)
+
+    # ── _run exit 코드·verdict 배선(실LLM 0·FakeJudge·결정론 제공자) ──
+    def _probes_file(self, tmp_path: Path) -> Path:
+        nk = CATALOG_BY_ID[self._TGT].name_kr
+        f = tmp_path / "probes.jsonl"
+        f.write_text(
+            json.dumps(
+                {
+                    "statement": f"'{nk}' 오개념",
+                    "expected_id": self._TGT,
+                    "near_id": None,
+                    "kind": "paraphrase",
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return f
+
+    def test_run_judge_gate_pass_exit0(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # judge가 recall 유지(1/1·lb≈0.27) → judge_min_recall=0.1 PASS·exit 0·verdict 한 줄.
+        provider = _NameKrOneHotProvider(name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values()))
+        code = _run(
+            self._probes_file(tmp_path),
+            threshold=0.5,
+            sweep=None,
+            min_recall=0.0,
+            max_fp=0.0,
+            top_k=5,
+            confidence=0.95,
+            provider=provider,  # type: ignore[arg-type]
+            judge=FakeJudge(default=JudgeVerdict.UNCERTAIN),
+            judge_min_recall=0.1,
+            judge_max_fp=0.0,
+        )
+        assert code == 0
+        assert "JUDGE FLIP GATE: PASS" in capsys.readouterr().out
+
+    def test_run_judge_gate_fail_exit1(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # 과한 recall 하한(0.99>≈0.27) → FAIL·exit 1·verdict FAIL 줄.
+        provider = _NameKrOneHotProvider(name_krs=tuple(m.name_kr for m in CATALOG_BY_ID.values()))
+        code = _run(
+            self._probes_file(tmp_path),
+            threshold=0.5,
+            sweep=None,
+            min_recall=0.0,
+            max_fp=0.0,
+            top_k=5,
+            confidence=0.95,
+            provider=provider,  # type: ignore[arg-type]
+            judge=FakeJudge(default=JudgeVerdict.UNCERTAIN),
+            judge_min_recall=0.99,
+            judge_max_fp=0.0,
+        )
+        assert code == 1
+        assert "JUDGE FLIP GATE: FAIL" in capsys.readouterr().out

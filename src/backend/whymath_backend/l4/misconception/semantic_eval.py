@@ -800,6 +800,36 @@ def _emit(text: str, out: str | None) -> None:
         print(text)
 
 
+def _judge_flip_passed(
+    report: SemanticEvalReport,
+    *,
+    min_recall: float,
+    max_fp: float,
+    confidence: float,
+) -> bool:
+    """judge flip 결정 게이트 — *judge 후* 지표가 임계를 만족하면 flip 권장(True).
+
+    기존 semantic 게이트(`_run`의 min_recall/max_fp)는 *의미 매처* 지표(`recall_lower_bound`·
+    `fp_rate_upper_bound`)라 judge 효과를 못 본다. 본 게이트는 *judge 적용 후* 지표를 본다 —
+    `judge_recall_lower_bound ≥ min_recall`(recall 보존·정직 하한) **AND**
+    `judge_fp_rate_upper_bound ≤ max_fp`(거짓양성 억제·보수 상한)이면 통과. 둘 다 opt-in(기본
+    0.0=off·임계 0이면 그 축 미검사). None(프로브 0·judge 미적용)은 임계>0일 때 미달(증거 없음=
+    통과 불가·기존 semantic 게이트 규약 동일). recall은 *하한*·FP는 *상한*으로 양방향(우선순위
+    #1 student-facing FP 보수·#4 recall 정직). Phaiakes9 실LLM 측정이 이 게이트로 flip/no-flip
+    verdict를 자동 산출한다 — exit 0(PASS)이면 `misconception_judge_enabled=True` flip 근거.
+    """
+    passed = True
+    if min_recall > 0.0:
+        rlb = report.judge_recall_lower_bound(confidence)
+        if rlb is None or rlb < min_recall:
+            passed = False
+    if max_fp > 0.0:
+        fub = report.judge_fp_rate_upper_bound(confidence)
+        if fub is None or fub > max_fp:
+            passed = False
+    return passed
+
+
 def _run(
     probes_path: Path,
     *,
@@ -811,6 +841,8 @@ def _run(
     confidence: float,
     provider: EmbeddingProvider | None = None,
     judge: JudgeProtocol | None = None,
+    judge_min_recall: float = 0.0,
+    judge_max_fp: float = 0.0,
     report_format: str = "text",
     out: str | None = None,
 ) -> int:
@@ -825,6 +857,11 @@ def _run(
     측정해 judge 후 FP 감소·recall 손실을 함께 낸다(format_report가 before/after 줄 추가). 스윕은
     의미 매처만(judge 미적용·threshold 곡선이 목적) 유지한다 — judge는 운영점 곡선이 아니라
     *고정점에서의 추가 필터 효과* 측정이다(judge 호출이 임계값마다 N배 늘면 측정 비용 과다).
+
+    **judge flip 게이트(슬·`--judge-min-recall`/`--judge-max-fp`)**: judge 적용 + 임계>0이면
+    `_judge_flip_passed`(judge 후 recall 하한·FP 상한)를 semantic 게이트와 *함께* exit 코드에 접고
+    text 모드면 `JUDGE FLIP GATE: PASS/FAIL` 한 줄을 낸다. Phaiakes9 실LLM 측정이 이 게이트로
+    flip 권장 여부를 *자동 산출* — exit 0이면 `misconception_judge_enabled=True` flip 근거(런북).
     """
     # Windows(cp949 등) 콘솔에서 비-ASCII print가 UnicodeEncodeError로 죽지 않도록 stdout을
     # 베스트에포트로 UTF-8 재구성(--out은 파일을 직접 UTF-8로 써 파이프·콘솔 인코딩을 아예 회피).
@@ -906,6 +943,23 @@ def _run(
         fub = report.fp_rate_upper_bound(confidence)
         if fub is None or fub > max_fp:
             passed = False
+    # 슬: judge flip 결정 게이트 — judge 적용 + 임계>0일 때만 *judge 후* 지표로 flip 권장 판정.
+    # exit 코드에 접고 text 모드면 PASS/FAIL verdict 한 줄을 낸다(Phaiakes9 측정→자동 flip 근거).
+    # json 모드는 verdict 줄을 찍지 않는다(JSON 본문 오염 방지·exit 코드로만 전달).
+    if judge is not None and (judge_min_recall > 0.0 or judge_max_fp > 0.0):
+        flip_ok = _judge_flip_passed(
+            report, min_recall=judge_min_recall, max_fp=judge_max_fp, confidence=confidence
+        )
+        if report_format == "text":
+            print(
+                f"JUDGE FLIP GATE: {'PASS' if flip_ok else 'FAIL'} "
+                f"(judge_recall_lb={_fmt(report.judge_recall_lower_bound(confidence))}"
+                f">={judge_min_recall} "
+                f"judge_fp_ub={_fmt(report.judge_fp_rate_upper_bound(confidence))}"
+                f"<={judge_max_fp})"
+            )
+        if not flip_ok:
+            passed = False
     return 0 if passed else 1
 
 
@@ -947,6 +1001,24 @@ def main(argv: list[str] | None = None) -> int:
         type=float,
         default=0.0,
         help="FP율 Wilson 상한 게이트 — 초과면 exit 1(기본 0.0=off·보수적).",
+    )
+    parser.add_argument(
+        "--judge-min-recall",
+        type=float,
+        default=0.0,
+        help=(
+            "judge flip 게이트(슬·`--judge` 시만) — *judge 후* recall Wilson 하한 ≥ 이 값이어야 "
+            "PASS(기본 0.0=off). 미달이면 exit 1. flip(`misconception_judge_enabled=True`) 근거."
+        ),
+    )
+    parser.add_argument(
+        "--judge-max-fp",
+        type=float,
+        default=0.0,
+        help=(
+            "judge flip 게이트(슬·`--judge` 시만) — *judge 후* FP율 Wilson 상한 ≤ 이 값이어야 "
+            "PASS(기본 0.0=off·보수). 초과면 exit 1. recall·FP 둘 다 통과해야 flip 권장(PASS)."
+        ),
     )
     parser.add_argument(
         "--top-k",
@@ -991,6 +1063,8 @@ def main(argv: list[str] | None = None) -> int:
     sweep = _parse_sweep(sweep_raw) if sweep_raw else None
     min_recall: float = args.min_recall
     max_fp: float = args.max_fp
+    judge_min_recall: float = args.judge_min_recall
+    judge_max_fp: float = args.judge_max_fp
     top_k: int = args.top_k
     confidence: float = args.confidence
     use_judge: bool = args.judge
@@ -1013,6 +1087,8 @@ def main(argv: list[str] | None = None) -> int:
         top_k=top_k,
         confidence=confidence,
         judge=judge,
+        judge_min_recall=judge_min_recall,
+        judge_max_fp=judge_max_fp,
         report_format=report_format,
         out=out,
     )

@@ -27,6 +27,8 @@ from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.l4.misconception import InterventionDecision, InterventionPattern
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
+from whymath_backend.l4.misconception.judge import FakeJudge, JudgeVerdict
+from whymath_backend.l4.misconception.models import Misconception
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
@@ -341,6 +343,67 @@ class TestMisconceptionIntegration:
         # top-1<0.65 → 후보 비움·개입 보류.
         assert body["misconceptions"] == []
         assert body["intervention"] is None
+
+
+class TestJudgeFlipEndToEnd:
+    """judge flag flip 안전성 hermetic E2E — flag on + FakeJudge로 directional FP 라이브 필터 증명.
+
+    substring 방향맹: 정답 "미분가능하면 연속이다"·오답 "연속이면 미분가능하다" 둘 다
+    `continuity-implies-differentiability`(signals 연속·미분가능)에 1.0 풀매칭. judge off(기본)면
+    정답에도 COUNTEREXAMPLE 낙인 발화가 도달한다(#271/#272 동류·substring 정밀화 불가). flag on +
+    방향 판별 judge면 정답(NOT_EXPRESSES)은 필터·오답(EXPRESSES)은 유지 — flip이 라이브 API에서
+    안전·정확함을 증명한다(judge 실정확도는 Phaiakes9 측정 소관·여기선 *배선*만 결정론으로 잠금).
+    세션 엔드포인트(`_compute_matches`→`_gate`)가 judge 게이트 경로다(스테이트리스 `/v1/coach`는
+    diagnose 폴백이라 judge 미적용). 기본 flag는 *불변*(False) — 이 슬라이스는 flip 준비·증명만.
+    """
+
+    @staticmethod
+    def _directional_judge() -> FakeJudge:
+        # 올바른 방향 judge 모사: 정답(미분가능⇒연속)은 제거(NOT_EXPRESSES)·오답(연속⇒미분가능)은
+        # 유지(EXPRESSES). 실 judge 정확도가 아니라 *flip 배선*을 증명하는 결정론 시임.
+        def _rule(statement: str, _m: Misconception) -> JudgeVerdict:
+            return (
+                JudgeVerdict.NOT_EXPRESSES
+                if "미분가능하면" in statement
+                else JudgeVerdict.EXPRESSES
+            )
+
+        return FakeJudge(rule=_rule)
+
+    def test_judge_on_filters_correct_direction_keeps_wrong(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_JUDGE_ENABLED", "true")
+        get_settings.cache_clear()
+        monkeypatch.setattr(coach, "_judge_for_gate", self._directional_judge)
+        try:
+            client, _ = _session_client()
+            ok = client.post("/v1/coach/sessions", json={"student_input": "미분가능하면 연속이다"})
+            wrong = client.post(
+                "/v1/coach/sessions", json={"student_input": "연속이면 미분가능하다"}
+            )
+        finally:
+            get_settings.cache_clear()  # 캐시 누수 방지(다음 테스트는 기본 False)
+        # 정답 방향: judge NOT_EXPRESSES → 후보 제거 → 매치·개입 없음(거짓 COUNTEREXAMPLE 소멸).
+        assert ok.status_code == 201, ok.text
+        ok_ids = [m["misconception"]["id"] for m in ok.json()["misconceptions"]]
+        assert "continuity-implies-differentiability" not in ok_ids
+        assert ok.json()["intervention"] is None
+        # 오답 방향: judge EXPRESSES 유지 → 매치·개입 발화(recall 보존).
+        assert wrong.status_code == 201, wrong.text
+        wrong_ids = [m["misconception"]["id"] for m in wrong.json()["misconceptions"]]
+        assert "continuity-implies-differentiability" in wrong_ids
+        assert wrong.json()["intervention"] is not None
+
+    def test_judge_off_default_keeps_directional_fp(self) -> None:
+        # 기본(flag off)에선 judge 미적용 → 정답도 substring 1.0 매치가 그대로 노출(현행 비트동일·
+        # flip이 *고칠* FP를 회귀로 잠금·이 슬라이스는 기본 동작 불변).
+        get_settings.cache_clear()  # judge env 미설정=기본 False 보장
+        client, _ = _session_client()
+        ok = client.post("/v1/coach/sessions", json={"student_input": "미분가능하면 연속이다"})
+        assert ok.status_code == 201, ok.text
+        ids = [m["misconception"]["id"] for m in ok.json()["misconceptions"]]
+        assert "continuity-implies-differentiability" in ids
 
 
 class TestLthcIntegration:

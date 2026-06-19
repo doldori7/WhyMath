@@ -105,6 +105,32 @@ misconception_semantic_threshold = 0.40        (현 0.55)      # recall-max (jud
 | F1(후속) | async QUALITY(27b) judge seam — 잔여 FP | 중 | 03a async/Celery |
 | F2(후속) | judge verdict 캐시 — 지연 | 소 | L3 캐시 |
 | F3(후속) | 매처 recall 개선(카탈로그/임베딩) — recall 천장 | 중 | L4 카탈로그 |
+| **GT** | 측정→flip 결정 게이트(CLI) + flip 안전성 hermetic 증명 + 런북 | 소 | 측정 하니스·judge 배선 |
+
+### GT 슬라이스 — 측정→flip 결정 게이트 + 안전성 증명 (졸업 도구)
+
+`misconception_judge_enabled` flip을 **turnkey·de-risk**한다(기본 flag 불변·flip 자체는 측정 통과 후 한 줄).
+
+1. **결정 게이트(CLI·`semantic_eval.py`)**: `--judge` 측정에 `--judge-min-recall`/`--judge-max-fp`(둘 다
+   opt-in·기본 0.0=off)를 더해 *judge 후* 지표(`judge_recall_lower_bound`·`judge_fp_rate_upper_bound`·
+   Wilson)로 PASS/FAIL을 낸다(`_judge_flip_passed`). 기존 `--min-recall`/`--max-fp`는 *semantic* 지표라
+   별개(비중첩). text 모드면 `JUDGE FLIP GATE: PASS/FAIL` 한 줄 + exit 0/1 → Phaiakes9 측정이 *자동
+   flip/no-flip verdict*를 낸다.
+2. **flip 안전성 hermetic 증명(`test_coach.py`)**: `misconception_judge_enabled=true`(env+`cache_clear`) +
+   `_judge_for_gate`→`FakeJudge(방향 판별 모사)`로 세션 엔드포인트에서 *정답* directional FP
+   (`미분가능하면 연속이다`→NOT_EXPRESSES)는 필터·개입 None, *오답*(`연속이면 미분가능하다`→EXPRESSES)은
+   매치·개입 유지를 단언. flip 배선이 라이브 API에서 안전·정확함을 증명(judge 실정확도는 측정 소관).
+
+**런북 — judge flip 절차**:
+- ⓪ **사전**: `--judge` 측정은 *실LLM*(Ollama·L3 FAST/general_mid)·**Phaiakes9에서 실행**(통합 환경·
+  로컬 LLM 필요·hermetic CI엔 `FakeJudge`만).
+- ① **측정+verdict**: `python -m whymath_backend.l4.misconception.semantic_eval
+  whymath_backend/l4/misconception/probes_v1.jsonl --judge --judge-routing general_mid --threshold 0.40
+  --judge-min-recall 0.80 --judge-max-fp 0.10`(권장 임계·근거: 우선순위 #1 student-facing FP는 *상한*
+  보수·#4 recall은 *하한* 정직·튜닝 대상). exit 0(`JUDGE FLIP GATE: PASS`)이면 flip 근거 성립.
+- ② **flip**: `WHYMATH_MISCONCEPTION_JUDGE_ENABLED=true`(+ §4 동반 4플래그 단계별·G2 canary→G3 full).
+  코드 변경 0(config). E2E 증명이 flip 배선 안전을 이미 보장.
+- ③ **모니터**: Langfuse로 judge 지연·개입률·해악 신호(§5 Phase 2~3).
 
 ---
 
