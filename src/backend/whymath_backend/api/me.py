@@ -100,7 +100,12 @@ from whymath_backend.l2.weak_concept_recommendation import (
 from whymath_backend.l4.calibration_coaching import recommend_calibration_coaching
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
-from whymath_backend.privacy import erase_user
+from whymath_backend.privacy import (
+    UserDataExport,
+    erase_user,
+    export_user_data,
+    external_export_pending,
+)
 from whymath_backend.schema.activity import LearningSession as LearningSessionSchema
 from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshotSchema
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
@@ -1731,6 +1736,39 @@ async def erase_my_account(
         ", ".join(t.store for t in report.pending_external),
     )
     return AccountErasureResponse(user_id=user_id, total_rows_deleted=report.total_rows_deleted)
+
+
+@router.get(
+    "/export",
+    response_model=UserDataExport,
+    summary="내 데이터 내보내기(개인정보 열람·이동권·GDPR)",
+)
+async def export_my_data(
+    user: ConsentedUser,
+    session: SessionDep,
+) -> UserDataExport:
+    """열람·이동권 — 본인의 학습/진단 데이터를 구조화 JSON으로 내려받는다(삭제권의 짝).
+
+    인증된 *본인만*(`user_id=토큰 subject`) 자기 데이터를 받는다(다른 /me GET과 동형·user_id
+    스코핑). `privacy.export_user_data`(#264·읽기 전용)가 `_EXPORT_PLAN`의 학습/진단 5종 +
+    user_profile을 모아 반환한다. **부분 export**임을 `not_included`로 정직히 고지한다(대화·시계열·
+    외부 store 등 미포함·후속). per-user 본인 데이터라 HTTP 노출이 맞다(전역 집계 아님).
+
+    외부 store(ClickHouse·S3·Redis)는 RDB 밖이라 이 export에 못 담는다 — `external_export_pending`
+    매니페스트를 *ops 로그*로 남겨(store명·user_id만) 별도 export가 필요함을 가시화한다(누락 은폐
+    금지·GDPR 범위 정직). student-facing 응답엔 인프라 정보를 싣지 않는다(정보 누출 방지).
+    """
+    export = await export_user_data(session, user_id=user.user_id)
+    # ops 가시화 — RDB 밖 store는 이 export(PG)에 미포함(store명·user_id만·키 패턴 미로깅).
+    pending = external_export_pending(user.user_id)
+    _logger.info(
+        "개인정보 열람·이동권 export: user=%s · 카테고리 %d · 외부 store %d곳 별도 export 필요(%s)",
+        user.user_id,
+        len(export.data),
+        len(pending),
+        ", ".join(t.store for t in pending),
+    )
+    return export
 
 
 # ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종 커버리지 맵 — 본인 스코핑) ──

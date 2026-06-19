@@ -8,5 +8,18 @@
 from __future__ import annotations
 
 from whymath_backend.privacy.erasure import ErasureReport, erase_user
+from whymath_backend.privacy.export import (
+    ExternalDataLocation,
+    UserDataExport,
+    export_user_data,
+    external_export_pending,
+)
 
-__all__ = ["ErasureReport", "erase_user"]
+__all__ = [
+    "ErasureReport",
+    "ExternalDataLocation",
+    "UserDataExport",
+    "erase_user",
+    "export_user_data",
+    "external_export_pending",
+]
