@@ -28,6 +28,10 @@ _CATEGORIES = {
     "assessments",
     "concept_mastery_history",
     "ability_snapshots",
+    "parental_consents",
+    "track_history",
+    "persona_history",
+    "state_snapshots",
 }
 
 
@@ -97,16 +101,21 @@ def _run(session: _FakeSession, user_id: uuid.UUID) -> UserDataExport:
 
 class TestExportUserData:
     def test_assembles_categories_and_profile(self) -> None:
-        """5종 카테고리 직렬화 + user_profile 단건 + exported_at + not_included·읽기 전용."""
+        """9종 카테고리 직렬화 + user_profile 단건 + exported_at + not_included·읽기 전용."""
         uid = uuid.uuid4()
-        # _EXPORT_PLAN 순서(5) + profile(1) = 6 execute.
+        # _EXPORT_PLAN 순서(9) + profile(1) = 10 execute. 첫(learning_sessions)·6번째
+        # (parental_consents)·5번째(ability_snapshots)에 구분 행, 나머지 빈, 마지막 profile.
         fake = _FakeSession(
             [
                 [_StubRow({"cat": "ls"})],
-                [_StubRow({"cat": "pa"})],
-                [_StubRow({"cat": "asmt"})],
-                [_StubRow({"cat": "cmh"})],
+                [],
+                [],
+                [],
                 [_StubRow({"cat": "ab"})],
+                [_StubRow({"cat": "pc"})],
+                [],
+                [],
+                [],
                 [_StubRow({"cat": "profile"})],
             ]
         )
@@ -116,14 +125,15 @@ class TestExportUserData:
         assert set(out.data.keys()) == _CATEGORIES
         assert out.data["learning_sessions"] == [{"cat": "ls"}]
         assert out.data["ability_snapshots"] == [{"cat": "ab"}]
+        assert out.data["parental_consents"] == [{"cat": "pc"}]  # 증분 2 신규 카테고리
         assert out.user_profile == {"cat": "profile"}
         assert len(out.not_included) >= 1  # 부분 export 정직 고지
         assert fake.commits == 0 and fake.flushes == 0  # 읽기 전용(저장소 패턴)
-        assert len(fake.executed) == 6
+        assert len(fake.executed) == 10
 
     def test_no_profile_yields_none(self) -> None:
         """프로필 행이 없으면 user_profile=None·각 카테고리 빈 리스트."""
-        fake = _FakeSession([[], [], [], [], [], []])
+        fake = _FakeSession([[] for _ in range(10)])
         out = _run(fake, uuid.uuid4())
         assert out.user_profile is None
         assert all(rows == [] for rows in out.data.values())
@@ -131,16 +141,7 @@ class TestExportUserData:
 
     def test_multiple_rows_preserved(self) -> None:
         """카테고리당 다행 직렬화 보존(리스트 순서)."""
-        fake = _FakeSession(
-            [
-                [_StubRow({"n": 1}), _StubRow({"n": 2})],
-                [],
-                [],
-                [],
-                [],
-                [],
-            ]
-        )
+        fake = _FakeSession([[_StubRow({"n": 1}), _StubRow({"n": 2})], *([[]] * 9)])
         out = _run(fake, uuid.uuid4())
         assert out.data["learning_sessions"] == [{"n": 1}, {"n": 2}]
 

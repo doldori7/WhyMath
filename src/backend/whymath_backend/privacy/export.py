@@ -36,7 +36,13 @@ from whymath_backend.db.models.assessment import (
     Assessment,
     ConceptMasteryHistory,
 )
-from whymath_backend.db.models.user import UserProfile
+from whymath_backend.db.models.parental_consent import ParentalConsent
+from whymath_backend.db.models.user import (
+    UserPersonaHistory,
+    UserProfile,
+    UserStateSnapshot,
+    UserTrackHistory,
+)
 
 __all__ = [
     "ExternalDataLocation",
@@ -45,23 +51,28 @@ __all__ = [
     "external_export_pending",
 ]
 
-# export 계획 — (모델, user 컬럼명, 응답 카테고리 키). `_ERASURE_PLAN`(erasure.py)의 *학습/진단
-# subset*이다. 보안 토큰(device_credential·refresh_token_session)·시계열·대화 등은 제외(보안·범위·
-# 후속). 모든 모델은 `to_schema()`를 보유한다(JSON-safe 직렬화).
+# export 계획 — (모델, user 컬럼명, 응답 카테고리 키). `_ERASURE_PLAN`(erasure.py)의 *바운드 크기·
+# `to_schema` 보유 subset*이다. 보안 토큰(device_credential·refresh_token_session)·시계열(대용량)·
+# 대화(미성년 채팅 본문·turn 조인)·to_schema 미보유(misconception·evidence)는 제외(보안·범위·후속).
+# 모든 모델은 `to_schema()`를 보유한다(JSON-safe 직렬화).
 _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
     (LearningSession, "user_id", "learning_sessions"),
     (ProblemAttempt, "user_id", "problem_attempts"),
     (Assessment, "user_id", "assessments"),
     (ConceptMasteryHistory, "user_id", "concept_mastery_history"),
     (AbilitySnapshot, "user_id", "ability_snapshots"),
+    (ParentalConsent, "user_id", "parental_consents"),
+    (UserTrackHistory, "user_id", "track_history"),
+    (UserPersonaHistory, "user_id", "persona_history"),
+    (UserStateSnapshot, "user_id", "state_snapshots"),
 )
 
 # 이 export에 *포함되지 않은* 범위 — student-facing 사용자 친화 설명(인프라 store명·키 미노출).
 # 부분 export임을 정직히 알린다(GDPR 완전성·날조 0). 외부 store 상세는 ops 로그(아래 함수)로만.
 _NOT_INCLUDED: tuple[str, ...] = (
-    "대화 이력(개별 메시지 포함)은 이 내보내기에 미포함 — 후속 확장 예정.",
+    "대화 이력(개별 메시지·손글씨 이미지 포함)은 이 내보내기에 미포함 — 후속 확장 예정.",
     "학습 시계열 지표(일별·행동)·세부 시도 이벤트는 미포함 — 후속 확장 예정.",
-    "오개념 가설·진단 증거·동의 이력·트랙/페르소나 이력은 미포함 — 후속 확장 예정.",
+    "오개념 가설·진단 증거(증거 그래프)는 미포함 — 후속 확장 예정.",
     "행동 로그·업로드 이미지·세션 캐시 등 외부 시스템 보관 데이터는 미포함(별도 시스템).",
     "보안 항목(로그인 토큰·기기 자격)은 보안상 내보내지 않는다.",
 )
