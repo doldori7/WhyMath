@@ -3638,18 +3638,18 @@ class TestLogVerifyEvent:
 
     검증기(`arithmetic_validator`)는 결정론·순수라 패치하지 않고 실제 호출한다 — 거짓 수치관계
     포함/미포함 풀이로 passed False/True가 갈리는지·빈 풀이면 적재 0인지·event_type이 검산결과
-    인지를 add 캡처로 확인한다.
+    인지를 add 캡처로 확인한다. 반환값(반박 증거 결선용·None/True/False)도 함께 핀한다.
     """
 
     _UID = uuid.uuid4()
     _PID = uuid.uuid4()
 
     async def test_empty_solution_no_event(self) -> None:
-        """student_solution이 None이면 적재 0(early return·false-pass 방지)."""
+        """student_solution이 None이면 적재 0(early return·false-pass 방지)·반환 None(신호 없음)."""
         from whymath_backend.api.coach import _log_verify_event
 
         sess = _CaptureSession()
-        await _log_verify_event(
+        result = await _log_verify_event(
             cast(AsyncSession, sess),
             user_id=self._UID,
             problem_id=self._PID,
@@ -3657,13 +3657,14 @@ class TestLogVerifyEvent:
             student_solution=None,
         )
         assert sess.added == []
+        assert result is None  # 풀이 제출 턴 아님 → 검산 신호 없음(반박 결선이 건너뜀).
 
     async def test_blank_solution_no_event(self) -> None:
-        """공백만 있는 풀이도 적재 0(strip 후 빈 문자열)."""
+        """공백만 있는 풀이도 적재 0(strip 후 빈 문자열)·반환 None."""
         from whymath_backend.api.coach import _log_verify_event
 
         sess = _CaptureSession()
-        await _log_verify_event(
+        result = await _log_verify_event(
             cast(AsyncSession, sess),
             user_id=self._UID,
             problem_id=self._PID,
@@ -3671,14 +3672,15 @@ class TestLogVerifyEvent:
             student_solution="   ",
         )
         assert sess.added == []
+        assert result is None
 
     async def test_false_relation_passed_false(self) -> None:
-        """거짓 수치관계(2+3=6) 포함 → passed False·event_type 검산결과·error_kind 채워짐."""
+        """거짓 수치관계(2+3=6) 포함 → passed False·event_type 검산결과·error_kind·반환 False."""
         from whymath_backend.api.coach import _log_verify_event
         from whymath_backend.schema.enums import EventType
 
         sess = _CaptureSession()
-        await _log_verify_event(
+        result = await _log_verify_event(
             cast(AsyncSession, sess),
             user_id=self._UID,
             problem_id=self._PID,
@@ -3692,14 +3694,15 @@ class TestLogVerifyEvent:
         assert event.event_data["error_kind"] is not None
         assert event.user_id == self._UID
         assert event.problem_id == self._PID
+        assert result is False  # 거짓관계 적발 → 반박 안 함(반박 결선이 건너뜀).
 
     async def test_true_relation_passed_true(self) -> None:
-        """거짓관계 없는 풀이 → passed True·error_kind None."""
+        """거짓관계 없는 풀이 → passed True·error_kind None·반환 True(반박 결선 구동)."""
         from whymath_backend.api.coach import _log_verify_event
         from whymath_backend.schema.enums import EventType
 
         sess = _CaptureSession()
-        await _log_verify_event(
+        result = await _log_verify_event(
             cast(AsyncSession, sess),
             user_id=self._UID,
             problem_id=self._PID,
@@ -3711,6 +3714,7 @@ class TestLogVerifyEvent:
         assert event.event_type is EventType.검산결과
         assert event.event_data["passed"] is True
         assert event.event_data["error_kind"] is None
+        assert result is True  # clean 검증 → 반박 결선이 −1 적재 가능.
 
     async def test_attempt_id_passthrough(self) -> None:
         """attempt_id가 있으면 이벤트에 그대로 실린다."""
@@ -3934,3 +3938,160 @@ class TestLogMatchEvidence:
         resp = client.post("/v1/coach/sessions", json={"student_input": "음"})
         assert resp.status_code == 201, resp.text
         assert [o for o in captured.added if isinstance(o, EvidenceLink)] == []
+
+
+class TestLogRefutationEvidence:
+    """`_log_refutation_evidence` — clean 풀이(no-match)를 active 가설에 약한 −1 반박 적재(§2.3 짝).
+
+    `_log_match_evidence`(+1 지지)의 짝이다. 본 테스트는 결선 규칙(passed=True·no-match·active당
+    polarity=-1·weight=_REFUTE_WEIGHT)과 3중 게이트(passed≠True·matches 존재·student_id None·빈
+    active)만 핀한다 — `log_evidence` 내부는 evidence_store 테스트가 검증한다.
+    """
+
+    class _M:
+        """매치 스텁 — no-match 게이트(`if matches`)만 트리거하면 되므로 빈 객체로 충분."""
+
+    async def test_clean_no_match_logs_minus_one_per_active(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # passed=True·매치 없음·active 2개 → 가설당 −1(weight=_REFUTE_WEIGHT)로 적재.
+        calls: list[dict[str, Any]] = []
+
+        async def _fake_log(session: Any, **kw: Any) -> Any:
+            calls.append(kw)
+            return None
+
+        monkeypatch.setattr(coach, "log_evidence", _fake_log)
+        sid, uid = uuid.uuid4(), uuid.uuid4()
+        active = [_hyp(0.8, "distribution-over-power"), _hyp(0.4, "sign-flip-in-inequality")]
+        await coach._log_refutation_evidence(
+            cast(AsyncSession, object()),
+            session_id=sid,
+            student_id=uid,
+            passed=True,
+            matches=[],
+            active_hypotheses=active,
+        )
+        assert len(calls) == 2
+        assert [c["misconception_id"] for c in calls] == [
+            "distribution-over-power",
+            "sign-flip-in-inequality",
+        ]
+        assert all(c["polarity"] == -1 for c in calls)  # clean 정답 = 반박
+        assert all(c["weight"] == coach._REFUTE_WEIGHT for c in calls)  # 약한 가중(상수)
+        assert all(c["session_id"] == sid and c["student_id"] == uid for c in calls)
+
+    async def test_match_gate_blocks_refutation(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # no-match 게이트 — 이번 턴이 매치(+1)면 같은 턴 반박 안 함(상호배타·모순 차단).
+        async def _boom_log(session: Any, **kw: Any) -> Any:
+            raise AssertionError("매치 존재 턴은 반박(−1)을 적재하지 않아야 한다.")
+
+        monkeypatch.setattr(coach, "log_evidence", _boom_log)
+        await coach._log_refutation_evidence(
+            cast(AsyncSession, object()),
+            session_id=uuid.uuid4(),
+            student_id=uuid.uuid4(),
+            passed=True,
+            matches=cast(Any, [self._M()]),
+            active_hypotheses=[_hyp(0.8)],
+        )  # 예외 없이 통과 = 게이트 동작
+
+    @pytest.mark.parametrize("passed", [False, None])
+    async def test_passed_gate_blocks_refutation(
+        self, passed: bool | None, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # clean(passed is True)만 반박 — False(거짓관계 적발)·None(풀이 아님)은 적재 0.
+        async def _boom_log(session: Any, **kw: Any) -> Any:
+            raise AssertionError(f"passed={passed!r}는 반박을 적재하지 않아야 한다.")
+
+        monkeypatch.setattr(coach, "log_evidence", _boom_log)
+        await coach._log_refutation_evidence(
+            cast(AsyncSession, object()),
+            session_id=uuid.uuid4(),
+            student_id=uuid.uuid4(),
+            passed=passed,
+            matches=[],
+            active_hypotheses=[_hyp(0.8)],
+        )  # 예외 없이 통과 = 게이트 동작
+
+    async def test_none_student_guard_no_log(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 인증 게이트라 미도달이나 방어 가드 — student_id None이면 적재 0.
+        async def _boom_log(session: Any, **kw: Any) -> Any:
+            raise AssertionError("student_id=None 가드는 log_evidence를 호출하지 않아야 한다.")
+
+        monkeypatch.setattr(coach, "log_evidence", _boom_log)
+        await coach._log_refutation_evidence(
+            cast(AsyncSession, object()),
+            session_id=uuid.uuid4(),
+            student_id=None,
+            passed=True,
+            matches=[],
+            active_hypotheses=[_hyp(0.8)],
+        )  # 예외 없이 통과 = 가드 동작
+
+    async def test_empty_active_no_log(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # passed=True·no-match지만 의심 가설이 없으면 적재 0(반박할 대상 없음).
+        called = False
+
+        async def _fake_log(session: Any, **kw: Any) -> Any:
+            nonlocal called
+            called = True
+
+        monkeypatch.setattr(coach, "log_evidence", _fake_log)
+        await coach._log_refutation_evidence(
+            cast(AsyncSession, object()),
+            session_id=uuid.uuid4(),
+            student_id=uuid.uuid4(),
+            passed=True,
+            matches=[],
+            active_hypotheses=[],
+        )
+        assert called is False
+
+    # --- 엔드포인트: 핸들러가 clean 풀이(no-match)에서 active 가설을 −1 반박 적재 ---
+    _PID = uuid.uuid4()
+
+    def test_endpoint_clean_solution_refutes_active_hypotheses(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # active 가설 주입 + 무매치 입력("음") + clean 풀이("x = 2") → EvidenceLink(−1) 적재.
+        from whymath_backend.db.models.evidence_link import EvidenceLink
+
+        async def _fake(session: Any, user_id: Any, matches: Any) -> list[MisconceptionHypothesis]:
+            return [_hyp(0.8, "distribution-over-power")]
+
+        monkeypatch.setattr("whymath_backend.api.coach._apply_hypotheses", _fake)
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "음", "student_solution": "x = 2"},
+        )
+        assert resp.status_code == 201, resp.text
+        links = [o for o in captured.added if isinstance(o, EvidenceLink)]
+        assert len(links) == 1
+        assert links[0].polarity == -1
+        assert links[0].misconception_id == "distribution-over-power"
+        assert links[0].weight == coach._REFUTE_WEIGHT
+
+    def test_endpoint_match_turn_logs_support_not_refutation(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 매치 입력 + clean 풀이 → +1 지지만(no-match 게이트로 −1 미적재·상호배타).
+        from whymath_backend.db.models.evidence_link import EvidenceLink
+
+        async def _fake(session: Any, user_id: Any, matches: Any) -> list[MisconceptionHypothesis]:
+            return [_hyp(0.8, "distribution-over-power")]
+
+        monkeypatch.setattr("whymath_backend.api.coach._apply_hypotheses", _fake)
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "내 풀이는 (a+b)² = a² + b² 이렇게 했어",
+                "student_solution": "x = 2",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        links = [o for o in captured.added if isinstance(o, EvidenceLink)]
+        assert len(links) >= 1
+        assert all(link.polarity == 1 for link in links)  # 매치 턴 = +1만(−1 없음)
