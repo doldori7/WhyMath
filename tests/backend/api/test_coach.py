@@ -141,6 +141,11 @@ class _Result:
     def scalars(self) -> _Scalars:
         return _Scalars(self._rows)
 
+    def scalar_one(self) -> Any:
+        # WH-1 §8.4: curate_hypothesis가 net_support(순지지도) 집계를 scalar_one으로 읽는다.
+        # 캡처 세션엔 증거 행이 없으니 0.0(반박 아님) — apply_matches와 결과 동치(하위호환).
+        return 0.0
+
 
 class _CapturingSession:
     """`/v1/coach/sessions`용 — add/add_all/commit/refresh/get/execute 캡처.
@@ -3788,13 +3793,15 @@ class TestLogHintEvent:
         assert sess.added[0].event_data == {"hint_level": 1}
 
 
-# ── WH-1 2단계 슬라이스 3: _apply_hypotheses 가드 단위테스트 ──────────────────────
+# ── WH-1 2단계 슬라이스 3: _apply_hypotheses 가드·결선 단위테스트 ──────────────────
 class TestApplyHypothesesGuard:
-    """`_apply_hypotheses` — user_id None 방어 가드(인증 게이트라 실제론 도달 안 함).
+    """`_apply_hypotheses` — user_id None 방어 가드 + curate_hypothesis 위임(하네스 동치).
 
-    ConsentedUser 게이트가 user_id를 항상 채우므로 라우터 경로로는 닿지 않는 방어 분기.
-    가드가 *DB 무접근*으로 빈 리스트를 돌려주는지(apply_matches 미호출·세션 미터치) 직접 호출로
-    확인한다. 가설 *세트 영속*(matches 있는 경로)은 통합테스트(실 PG)에서 검증한다.
+    ConsentedUser 게이트가 user_id를 항상 채우므로 None 분기는 라우터 경로로는 닿지 않는 방어
+    분기다. 가드가 *DB 무접근*으로 빈 리스트를 돌려주는지(curate_hypothesis 미호출·세션 미터치)와,
+    유효 user_id일 때 `apply_matches`가 아니라 §3 도구4 `curate_hypothesis`(증거 반박 R4·최대5
+    캡)로 위임하는지를 직접 호출로 확인한다. 반박·캡 *내부 로직*은 store 테스트
+    (`test_hypothesis_store.py`·실 PG 포함)에서 검증한다 — 본 테스트는 *결선(위임)*만 핀한다.
     """
 
     async def test_none_user_returns_empty_without_db_touch(self) -> None:
@@ -3807,3 +3814,28 @@ class TestApplyHypothesesGuard:
 
         result = await _apply_hypotheses(cast(AsyncSession, _Boom()), None, [])
         assert result == []
+
+    async def test_valid_user_delegates_to_curate_hypothesis(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 라이브 coach가 `apply_matches`(매치만)가 아니라 `curate_hypothesis`(증거 반박·캡·하네스
+        # 동치)로 위임함을 핀 — student_id=user_id·matches 그대로 전달·반환 세트 패스스루.
+        from whymath_backend.api import coach as coach_mod
+
+        seen: dict[str, Any] = {}
+        curated = [_hyp(0.9)]
+
+        async def _fake_curate(
+            session: Any, *, student_id: Any, matches: Any, **kw: Any
+        ) -> list[MisconceptionHypothesis]:
+            seen["student_id"] = student_id
+            seen["matches"] = matches
+            return curated
+
+        monkeypatch.setattr(coach_mod, "curate_hypothesis", _fake_curate)
+        uid = uuid.uuid4()
+        ms: list[Any] = []  # matches는 위임 인자만 핀하므로 빈 리스트로 충분(세션 미터치).
+        result = await coach_mod._apply_hypotheses(cast(AsyncSession, object()), uid, ms)
+        assert result is curated
+        assert seen["student_id"] == uid
+        assert seen["matches"] is ms

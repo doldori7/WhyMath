@@ -131,6 +131,10 @@ class _Result:
     def scalars(self) -> _Scalars:
         return _Scalars(self._rows)
 
+    def scalar_one(self) -> Any:
+        # curate_hypothesis가 net_support(순지지도) 집계를 scalar_one으로 읽음 — 증거 행 없으니 0.0.
+        return 0.0
+
 
 class _CapturingSession:
     """/v1/coach/sessions·turns용 — add/commit/refresh/get/execute 캡처(test_coach.py 패턴)."""
