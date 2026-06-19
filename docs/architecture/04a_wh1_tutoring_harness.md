@@ -170,8 +170,12 @@ LLM 추론이 아닌 **SQL 조회**로 나온다. 학부모 리포트의 신뢰 
 > `external_export_pending` 매니페스트를 **ops 로그**로만(store명·user_id·#252 선례·정보 누출 방지·
 > student 응답 미노출). **증분 2(2026-06-19·#265)**: `_EXPORT_PLAN`에 동의·트랙·페르소나·상태 이력
 > 4종(`parental_consent`·`user_track/persona_history`·`user_state_snapshot`·모두 `to_schema` 보유·
-> `user_id` 키) 추가(순수 plan 확장·마이그레이션 0). **후속**: 대화/turn 조인(미성년 채팅 본문 privacy
-> 결정)·시계열(대용량 async)·`to_schema` 미보유(misconception·evidence)·외부 store 실조회.
+> `user_id` 키) 추가(순수 plan 확장·마이그레이션 0). **증분 3(2026-06-19)**: `_EXPORT_PLAN`에 **오개념
+> 가설·진단 증거** 2종(`misconception_hypothesis`·user_id 키 / `evidence_links`·**student_id 키**) 추가.
+> #269~272가 라이브 적재하므로 비어있지 않다. 두 모델에 `to_schema()`(+ `schema/` Pydantic 레코드)를
+> 부여해 export 패턴(`to_schema().model_dump(mode="json")`)에 합류 — *식별자·극성·가중치·날짜*만이라
+> PII 0·redaction 0(증거 그래프 §2.3)·마이그레이션 0(기존 테이블 읽기). **후속**: 대화/turn 조인(미성년
+> 채팅 본문 privacy 결정)·시계열(대용량 async)·외부 store 실조회.
 
 ### 2.4 장기 상태 — 기존 L2 그대로
 
