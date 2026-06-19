@@ -119,6 +119,12 @@ _FANOUT = len(CATALOG)
 # diagnose(한쪽 신호만·θ 희소)는 비노출. `_build_response_payload` 노출 게이트에서 사용.
 _THETA_SURFACED_FOCI: frozenset[str] = frozenset({"consolidate", "retrieval"})
 
+# WH-1 §2.3 — clean하게 검증된 풀이 1턴이 *현재 의심* 오개념에 주는 *약한* 반박 가중(−1 polarity).
+# net_support=Σ(polarity×weight)라, 강한 실제 오개념(다회 +1·weight≤1.0 누적)은 한 turn(−0.5)으로
+# 죽지 않고 약·stale 의심만 누적으로 archived된다(낙인 방지하며 실신호 보존·CLAUDE.md #1). 0.5는
+# KPI 튜닝 대상(#266 신뢰 floor 0.65 선례처럼 상수로 노출해 A/B 조정 여지를 남긴다).
+_REFUTE_WEIGHT: float = 0.5
+
 
 class CoachRequest(BaseModel):
     """`/v1/coach` 요청 본문 — 학생 발화·현재 상태·옵션 숙달도."""
@@ -726,8 +732,8 @@ async def _log_verify_event(
     problem_id: uuid.UUID | None,
     attempt_id: uuid.UUID | None,
     student_solution: str | None,
-) -> None:
-    """학생 풀이의 검산(verify) 결과를 `attempt_event`(event_type=검산결과)로 1행 적재.
+) -> bool | None:
+    """학생 풀이 검산(verify) 결과를 `attempt_event`(검산결과)로 1행 적재 + 통과여부 반환.
 
     WH-1 0단계 지표 ①(verify 통과율)을 NOT_INSTRUMENTED→MEASURED로 끌어올리는 *적재 좌석*.
     스테이트풀 coach(`create_session`·`append_turns`)에서만 호출하며, stateless `/v1/coach`
@@ -743,10 +749,15 @@ async def _log_verify_event(
     트랜잭션: ORM 1행을 `session.add`만 하고 *commit은 하지 않는다* — 호출 핸들러가 이미 자기
     트랜잭션을 commit하므로 그 트랜잭션에 합류한다(별도 commit 금지). `event_at`은 핸들러와 동일
     시각으로 명시(server_default 의존 회피·복합 PK 구성요소).
+
+    **반환(반박 증거 결선용)**: 풀이 제출 턴이 아니면 `None`(검산 신호 없음)·clean 검증이면 `True`·
+    거짓 수치관계 적발이면 `False`. 핸들러가 이 값으로 `_log_refutation_evidence`(clean→약한 −1)를
+    구동한다 — 적재(부수효과)는 불변이고 *통과여부 신호만* 추가 노출한다(기존 호출자는 반환 무시·
+    하위호환).
     """
     solution_text = student_solution or ""
     if not solution_text.strip():
-        return  # 풀이 제출 턴이 아님(빈/대화 턴) → 적재 안 함(false-pass 방지).
+        return None  # 풀이 제출 턴이 아님(빈/대화 턴) → 적재 안 함(false-pass 방지)·검산 신호 없음.
 
     signal = validate_response(arithmetic_validator(), solution_text)
     passed = signal is None  # None=거짓관계 미적발(통과)·아니면 적발(실패).
@@ -760,6 +771,7 @@ async def _log_verify_event(
         event_data={"passed": passed, "error_kind": (signal.kind if signal else None)},
     )
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
+    return passed  # clean→True·거짓관계 적발→False(핸들러의 반박 증거 결선이 소비).
 
 
 async def _log_hint_event(
@@ -857,9 +869,8 @@ async def _log_match_evidence(
     net_support로 반박 판정) **뒤에** 둔다 — 이번 턴 지지가 같은 턴의 반박을 순환적으로 막지 않고
     *미래 턴* net_support에만 반영된다(소비는 과거 증거·생산은 미래 증거).
 
-    **−1 반박 생산은 범위 밖**(후속): 하네스조차 polarity를 LLM 정책으로 고르며(`wh1_loop`) verify-
-    pass가 *어느* 오개념을 반박하는지 결정론 귀속이 불가하다 — 교수학 사인오프 필요. 따라서 본
-    슬라이스는 +1 지지 *생산*만 하고 라이브-단독 curation 행동은 불변이다(그래프만 채움).
+    **짝**: −1 *반박* 생산은 `_log_refutation_evidence`(바로 아래)가 담당한다 — clean 검증 풀이가
+    의심 오개념을 약하게 반박. no-match 게이트로 둘은 *상호배타*(한 턴은 지지 또는 반박 중 하나).
 
     `log_evidence`는 주입 `session`에 합류·flush만(commit은 핸들러). `student_id` None이면 가드(인증
     게이트라 미도달)·빈 matches면 no-op. `session_id`는 dialogue UUID(느슨참조·FK 아님).
@@ -874,6 +885,60 @@ async def _log_match_evidence(
             misconception_id=match.misconception.id,
             polarity=1,  # 매치 = 오개념 *지지* 증거(진단이 오개념 신호를 드러냄).
             weight=match.confidence,
+        )
+
+
+async def _log_refutation_evidence(
+    session: AsyncSession,
+    *,
+    session_id: uuid.UUID,
+    student_id: uuid.UUID | None,
+    passed: bool | None,
+    matches: list[MisconceptionMatch],
+    active_hypotheses: list[MisconceptionHypothesis],
+) -> None:
+    """clean하게 검증된 풀이 1턴을 *현재 의심* 오개념에 대한 약한 −1 *반박* 증거로 적재(§2.3 짝).
+
+    #269가 +1 *지지* 생산(`_log_match_evidence`)을 결선했으나 −1 *반박* 생산이 없어, #268의
+    `curate_hypothesis` archived 가드(`net_support<0`)가 라이브-단독 학생에겐 발동하지 못했다
+    (net_support≥0). 본 헬퍼가 그 −1 좌석을 *보수적*으로 결선해 evidence 아크를 닫는다 — 04a §2.3
+    "verify가 가설 *예측*과 모순되면 −1"의 결정론 조작화.
+
+    **규칙(보수)**: ① 풀이 제출 턴이 clean 검증(`passed is True`)이고 ② 이번 턴 *확정 매치가 없을*
+    때만(`not matches`) ③ *현재 active 가설 각각*에 `polarity=-1·weight=_REFUTE_WEIGHT(0.5)`를 적재.
+      - **passed 게이트**: 도구 검증된 올바른 풀이 = "학생이 (오류 유발) 오개념을 가졌다"는 예측과
+        모순(약한 반대 증거). `passed is None`(풀이 아님)·`False`(거짓관계 적발)은 반박 안 함 — `is
+        True` 명시 비교로 None/False를 한 번에 배제(현재 슬라이스는 −1만·verify-fail→+1은 후속).
+      - **no-match 게이트(정합·핵심)**: 이번 턴이 오개념을 *매치*했으면(`_log_match_evidence`가 +1)
+        반박 안 함 → 한 턴은 지지(매치) 또는 반박(clean 정답) *둘 중 하나*(같은 턴 모순 적재 차단·
+        매치+정답 동시 턴은 +1 우선).
+      - **약한 가중·active 귀속**: `_REFUTE_WEIGHT`(강한 오개념 보존·낙인 방지·상수 주석). 대상은
+        curate가 ≤5·recency로 좁힌 *현재* 의심(`active_hypotheses`)뿐 — 오래된 무관 오개념은 이미
+        decay/prune. verify 신호는 *일반* 계산정합이라 특정 오개념 귀속이 불가하므로(카탈로그엔
+        '거짓' 신호만·'올바른 형태' 부재) *현재 의심 전체* 약한 반박이 가능한 가장 보수적
+        귀속이다(정밀 domain 스코핑은 후속·NOT).
+
+    **순서(생산=미래)**: `_log_match_evidence`와 동일하게 `_apply_hypotheses`(curate·*직전까지*
+    net_support 소비) **뒤에** 둔다 — 이번 턴 −1은 같은 턴 curation을 바꾸지 않고 *미래*
+    net_support에만 반영(소비=과거·생산=미래). decay(자연 감쇠)에 더해 *능동적 clearing*을 준다.
+
+    `log_evidence`는 주입 `session`에 합류·flush만(commit은 핸들러). `student_id` None(인증 게이트라
+    미도달)·게이트 미충족·빈 active면 no-op. `session_id`는 dialogue UUID(느슨참조·FK 아님).
+    """
+    if student_id is None:
+        return  # 인증 게이트라 도달 안 함(방어 가드 — log_evidence는 student_id 필수).
+    if passed is not True:
+        return  # clean 검증(통과)만 반박 — None(풀이 아님)·False(거짓관계 적발)은 제외.
+    if matches:
+        return  # no-match 게이트 — 이번 턴이 매치(+1 지지)면 같은 턴 반박 안 함(모순 차단).
+    for hyp in active_hypotheses:
+        await log_evidence(
+            session,
+            session_id=session_id,
+            student_id=student_id,
+            misconception_id=hyp.misconception_id,
+            polarity=-1,  # clean 정답 = 의심 오개념 *반박* 증거(약한·#1 낙인 방지).
+            weight=_REFUTE_WEIGHT,
         )
 
 
@@ -1036,7 +1101,7 @@ async def create_session(
     session.add_all([student_turn, assistant_turn])
     # WH-1 지표 ① 적재 — 풀이 제출(student_solution 비어있지 않음)이면 검산 결과를 attempt_event로
     # 기록(같은 트랜잭션 합류·별도 commit 없음). stateless /v1/coach는 미적재(DB 무접근 계약).
-    await _log_verify_event(
+    verify_passed = await _log_verify_event(
         session,
         user_id=user.user_id,
         problem_id=body.problem_id,
@@ -1059,6 +1124,16 @@ async def create_session(
         session_id=dialogue.dialogue_id,
         student_id=user.user_id,
         matches=outcome.matches,
+    )
+    # WH-1 §2.3 짝 — clean 검증 풀이(no-match)면 현재 active 가설을 약하게 −1 반박(낙인 방지·#268
+    # archived 가드 라이브 발동). +1 생산 뒤·no-match 게이트로 한 턴은 지지/반박 중 하나(상호배타).
+    await _log_refutation_evidence(
+        session,
+        session_id=dialogue.dialogue_id,
+        student_id=user.user_id,
+        passed=verify_passed,
+        matches=outcome.matches,
+        active_hypotheses=active_hypotheses,
     )
     await session.commit()
 
@@ -1176,7 +1251,7 @@ async def append_turns(
 
     # WH-1 지표 ① 적재 — create_session과 동형(풀이 제출 턴만·같은 트랜잭션 합류). problem_id·
     # attempt_id는 dialogue에서 출처(append는 dialogue 컨텍스트).
-    await _log_verify_event(
+    verify_passed = await _log_verify_event(
         session,
         user_id=user.user_id,
         problem_id=dialogue.problem_id,
@@ -1199,6 +1274,15 @@ async def append_turns(
         session_id=dialogue_id,
         student_id=user.user_id,
         matches=outcome.matches,
+    )
+    # WH-1 §2.3 짝 — create_session과 동형. clean 풀이(no-match)면 active 가설 약한 −1 반박.
+    await _log_refutation_evidence(
+        session,
+        session_id=dialogue_id,
+        student_id=user.user_id,
+        passed=verify_passed,
+        matches=outcome.matches,
+        active_hypotheses=active_hypotheses,
     )
     await session.commit()
 
