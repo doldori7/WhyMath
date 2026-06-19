@@ -158,6 +158,17 @@ LLM 추론이 아닌 **SQL 조회**로 나온다. 학부모 리포트의 신뢰 
 > "DELETE_MY_ACCOUNT"`) 불일치 시 400. 200 *영수증*(user_id·총 삭제 행수만·내부 테이블 구조 비노출)·
 > `erase_user`+commit 원자적. **후속**: 법정대리인 동의 *흐름*(미성년 가디언 승인)·외부 store
 > (ClickHouse 행동로그·S3 객체·Redis 세션) 삭제 연계.
+>
+> **열람·이동권 (2026-06-19·`GET /v1/me/export`·삭제권의 짝·마이그레이션 0)**: `privacy/export.py`
+> `export_user_data(session, *, user_id)`(읽기 전용·commit 0) — 삭제권의 `_ERASURE_PLAN` 인벤토리
+> *학습/진단 subset*을 **읽기로 재사용**해 본인 데이터를 구조화 JSON으로 모은다. 첫 증분: 5종(학습
+> 세션·시도·진단·`concept_mastery_history`·`ability_snapshot`) + `user_profile`(plan-driven 확장).
+> **보안 항목 영구 제외**(`device_credential`·`refresh_token_session` — 토큰 노출 위험). 각 행은
+> `to_schema().model_dump(mode="json")`. **부분 export 정직**: `not_included`로 미포함 범위(대화·
+> 시계열·외부 store 등) 고지(날조 0·완전성). `api/me.py` `export_my_data`(**ConsentedUser**·다른
+> /me GET 동형·per-user HTTP — 전역 집계 아님). 외부 store(ClickHouse·S3·Redis)는 RDB 밖이라
+> `external_export_pending` 매니페스트를 **ops 로그**로만(store명·user_id·#252 선례·정보 누출 방지·
+> student 응답 미노출). **후속**: 대화/turn 조인·시계열·나머지 PII·외부 store 실조회·대용량 async job.
 
 ### 2.4 장기 상태 — 기존 L2 그대로
 
