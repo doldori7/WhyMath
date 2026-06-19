@@ -504,6 +504,22 @@ class TestCopyrightInvariant:
         "source",
         [SourceType.평가원, SourceType.EBS, SourceType.교과서],
     )
+    def test_metadata_only_source_with_conditions_parsed_rejected(self, source: SourceType) -> None:
+        """평가원/EBS/교과서 + conditions_parsed 존재 → ValidationError(저작권).
+
+        `Condition.text`는 조건 자연어 본문이라 저작권 민감 — 제한 출처는 본문 미보유여야 한다
+        (P3a/P3b 신규 필드라 초기 명세에 누락됐던 갭 보정).
+        """
+        with pytest.raises(ValidationError):
+            _minimal_self_generated(
+                source_type=source,
+                conditions_parsed=[Condition(label="가", text="f(x)는 미분가능", formal=None)],
+            )
+
+    @pytest.mark.parametrize(
+        "source",
+        [SourceType.평가원, SourceType.EBS, SourceType.교과서],
+    )
     def test_metadata_only_source_meta_only_passes(self, source: SourceType) -> None:
         """평가원/EBS/교과서 + 구조 메타만(본문 없음) → 통과."""
         p = _minimal_self_generated(

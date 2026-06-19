@@ -351,7 +351,9 @@ S0~S1은 자기 진화 없이도 독립 가치가 있다(탐색만으로 풀이�
 - **`SftRecord` + `answer_explanation: str | None`**(pydantic·마이그레이션 0). answer_explanation은 코퍼스 참조 풀이로 증류·PRM 비교·품질 신호에 쓴다.
 - **본문 3필드 균일 게이트**: `to_sft_record`가 `question_text`·`answer_explanation`·`conditions`를 모두 `_body_license_clean`(#261)으로 게이트 — 본문 합법 출처에만 싣고 제한 출처(평가원·EBS·교과서)면 전부 None. validator가 question_text·answer_explanation을 1차로 NULL 강제하지만(conditions는 갭), export 경계에서 *독립 2차 방어*로 셋 모두 게이트(validator 갭/오류에도 누출 0·#261 교훈). question_text가 #260의 "조인된 모든 출처"에서 "본문 합법 출처만"으로 좁혀짐. `unit_codes`(공공 코드)는 게이트 대상 아님.
 - **회귀 0**: validator 정상 데이터에선 출력 동일(제한 출처는 이미 NULL). 동작 변화는 malformed/테스트 데이터에서만(게이트가 더 안전). `conditions_gated` 회계·CLI·summary 무변경(새 카운터 없음).
-- **후속**: 코퍼스 차원 validator 확장(법무·백필)·PRM 쌍 추출·*본질적 동치* dedup·실 PG 조인 integration·GDPR `/v1/me/export`(결정 필요).
+- **후속**: ~~코퍼스 차원 validator 확장~~(**완료 — 아래 부기**)·PRM 쌍 추출·*본질적 동치* dedup·실 PG 조인 integration·GDPR `/v1/me/export`(결정 필요).
+
+**부기(L1 갭 해소) — 코퍼스 저작권 불변식에 `conditions_parsed` 추가**: 위 #261/#262가 export 경계 게이트로 막던 갭의 *근본 원인*(L1 validator가 제한 출처 본문 필드로 question_text·answer_explanation·choices만 강제, conditions_parsed 누락)을 코퍼스 차원에서 닫았다 — `schema/problem.py` `_enforce_copyright_no_body_for_metadata_sources`에 `conditions_parsed`를 offending에 추가(`Condition.text`=조건 자연어 본문). 2026-05-28 정책의 *필드 누락 보정*(일관 적용·마이그레이션 0). 이로써 #261/#262의 `_body_license_clean` export 게이트는 *중복 심층 방어*(독립 2차 방어)로 유지된다. 기존 DB 감사·백필은 후속(적재 경로 없어 필요성 낮음).
 
 ### 용어 정합: "545노드" (편집자 부기)
 

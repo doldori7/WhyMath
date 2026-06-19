@@ -564,7 +564,10 @@ class Problem(BaseModel):
         구조 메타데이터 참조 전용이므로 본문 필드가 비어 있어야 한다. 본문이 있으면
         ValueError를 던져 ValidationError로 전파한다.
 
-        대상 본문 필드(태스크 명세): `question_text`·`answer_explanation`·`choices`.
+        대상 본문 필드: `question_text`·`answer_explanation`·`choices`·`conditions_parsed`.
+        (`conditions_parsed`는 각 `Condition.text`가 *조건 자연어 본문*이라 저작권 민감 — P3a/P3b
+        신규 필드라 초기 명세[question_text·answer_explanation·choices]에 누락됐던 갭을 보정.
+        WH-S export의 #261/#262 게이트는 이 보정으로 *중복 심층 방어*가 된다.)
         (license/generation_type 강제는 슬라이스 2 ContentProvenance 소관.)
 
         use_enum_values=True 환경: `source_type`이 문자열 값일 수 있으므로
@@ -587,6 +590,8 @@ class Problem(BaseModel):
             offending.append("answer_explanation")
         if self.choices:
             offending.append("choices")
+        if self.conditions_parsed:
+            offending.append("conditions_parsed")  # Condition.text=조건 자연어 본문(갭 보정)
 
         if offending:
             raise ValueError(
