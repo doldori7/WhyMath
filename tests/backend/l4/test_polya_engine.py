@@ -8,6 +8,7 @@ from __future__ import annotations
 import pytest
 
 from whymath_backend.l3.models import CostTier
+from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.models import PolyaStage, PolyaState
 from whymath_backend.l4.polya.engine import PolyaCoach, _next_stage
 from whymath_backend.l4.polya.prompts import STAGE_PROMPTS
@@ -120,6 +121,31 @@ class TestSocraticCategory:
         text = "함수 f의 최댓값을 구하는 문제고, 조건은 x≥0이야."
         d = coach.decide(text, _state(PolyaStage.UNDERSTAND))
         assert d.polya_stage_to_advance == "next"
+        assert d.socratic_category == "perspective"
+
+
+class TestMisconceptionHypothesisWiring:
+    """decide()가 misconception_hypotheses를 select_category에 전달(가정 표면화)."""
+
+    def test_high_conf_recent_hypothesis_yields_assumption_category(self) -> None:
+        coach = PolyaCoach()
+        h = [
+            MisconceptionHypothesis(
+                misconception_id="MC-1",
+                confidence=0.8,
+                turns_since_evidence=0,
+                evidence_count=1,
+            )
+        ]
+        d = coach.decide("음", _state(PolyaStage.PLAN), misconception_hypotheses=h)
+        assert d.polya_stage_to_advance == "stay"
+        # 단계 기본(perspective) 대신 가정 표면화(assumption)로 정밀화
+        assert d.socratic_category == "assumption"
+
+    def test_default_none_keeps_stage_default(self) -> None:
+        # 가설 미전달 → 현 동작 불변(하위호환)
+        coach = PolyaCoach()
+        d = coach.decide("음", _state(PolyaStage.PLAN))
         assert d.socratic_category == "perspective"
 
 
