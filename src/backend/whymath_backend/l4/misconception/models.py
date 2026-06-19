@@ -58,6 +58,19 @@ class Misconception(BaseModel):
             "*겹치지 않게*(disjoint) 작성해 기존 confidence·matched_signals를 보존한다."
         ),
     )
+    correct_form: str | None = Field(
+        default=None,
+        description=(
+            "오개념의 *정정 형태*(올바른 항등식·식) — identity-shaped 오개념에만 선택 부여. 학생의 "
+            "*검증된* clean 풀이에 이 형태가 나타나면 그 오개념을 *강하게* 반박(−1·정밀 귀속)하는 "
+            "신호다(`correct_form_present`·tier). 표기는 `signals`와 동일(위첨자·공백 가변)·매칭은 "
+            "`_normalize`(NFKC+공백제거)로 흡수. None(기본)이면 정정 탐지 비활성 → 기존(일반 "
+            "clean) 약한 반박 동작 불변. 부여 시 *불변식*: `diagnose(correct_form)`이 그 오개념을 "
+            "신뢰 게이트(0.65) 이상으로 내면 안 됨(정정이 자기 오개념으로 confident 오진단 금지) — "
+            "카탈로그 테스트로 강제. 그래서 `signals`의 LHS만 공유하고 *틀린 RHS*는 미포함하는 "
+            "오개념(distribution·log·곱미분·sin 합분배·a⁰)에만 단다."
+        ),
+    )
 
 
 class MisconceptionMatch(BaseModel):

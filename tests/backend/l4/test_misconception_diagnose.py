@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from whymath_backend.l4.misconception import MisconceptionMatch, diagnose
+from whymath_backend.l4.misconception import (
+    MisconceptionMatch,
+    correct_form_present,
+    diagnose,
+)
+from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.models import Misconception
 
 
 class TestSingleMatch:
@@ -44,6 +50,48 @@ class TestSingleMatch:
         top = matches[0]
         assert top.misconception.id == "sine-distributes-over-sum"
         assert top.confidence == 1.0
+
+
+class TestCorrectFormPresent:
+    """`correct_form_present` — 검증 풀이에 오개념의 *정정 형태*가 나타나는지(정밀 반박 신호).
+
+    `signals`와 동일한 `_normalize`(NFKC+공백제거)로 흡수하므로 공백·위첨자 표기 변이에 불변.
+    `correct_form`이 None인 오개념·정정 부재 텍스트는 False(기존 약한 반박 동작 보존).
+    """
+
+    _DISTRIBUTION = CATALOG_BY_ID[
+        "distribution-over-power"
+    ]  # correct_form="(a+b)² = a² + 2ab + b²"
+
+    def test_detected_when_present(self) -> None:
+        assert correct_form_present(self._DISTRIBUTION, "전개하면 (a+b)² = a² + 2ab + b²")
+
+    def test_notation_invariant_spacing_and_superscript(self) -> None:
+        # 공백 변이·위첨자 `²`↔평문 `2`(NFKC)에 불변 — 같은 정규형으로 흡수.
+        assert correct_form_present(self._DISTRIBUTION, "  (a+b)2  =  a2 + 2 a b + b2  ")
+
+    def test_absent_when_only_wrong_form(self) -> None:
+        # 틀린 형태만 있는 풀이엔 정정 형태가 없음 → False(약한 경로로 빠짐).
+        assert not correct_form_present(self._DISTRIBUTION, "(a+b)² = a² + b²")
+
+    def test_none_correct_form_disabled(self) -> None:
+        # correct_form 미부여 오개념(예: sign-flip-in-inequality)은 항상 False.
+        none_cf = CATALOG_BY_ID["sign-flip-in-inequality"]
+        assert none_cf.correct_form is None
+        assert not correct_form_present(none_cf, none_cf.canonical_statement)
+
+    def test_empty_normalized_form_not_whole_match(self) -> None:
+        # 정규형이 빈 문자열인 correct_form(공백만)은 전체 매칭을 일으키지 않는다(가드).
+        blank = Misconception(
+            id="x",
+            name_kr="x",
+            domain="대수",
+            canonical_statement="x",
+            counterexample="x",
+            signals=("x",),
+            correct_form="   ",
+        )
+        assert not correct_form_present(blank, "아무 텍스트")
 
 
 class TestSliceCatalogExpansionMatches:

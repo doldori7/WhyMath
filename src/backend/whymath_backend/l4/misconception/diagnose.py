@@ -112,6 +112,27 @@ def _match_one(misconception: Misconception, text: str) -> MisconceptionMatch | 
     )
 
 
+def correct_form_present(misconception: Misconception, text: str) -> bool:
+    """학생 풀이에 오개념의 *정정 형태*(`correct_form`)가 나타나는지 — 정밀 반박 신호.
+
+    `signals`와 *동일한* `_normalize`(NFKC+공백제거)로 양변을 정규화해 `correct_form`의 정규형이
+    텍스트 정규형의 *부분문자열*인지 검사한다(표기 변이 흡수·신호 경로와 일관). `signals`의
+    공출현(AND)·짧은 영숫자 경계 로직과 달리, 정정은 *식별 형태 1개*의 출현만으로 충분한 강한
+    신호라 단일 substring 포함만 본다. `correct_form`이 None이거나 정규형이 빈 문자열(전체 매칭
+    방지)이면 False(탐지 비활성·기존 약한 반박 동작 불변).
+
+    이 함수가 True면 호출자(coach)는 그 오개념을 *강하게*(−1·강한 가중) 반박한다 — 도구 검증된
+    풀이에 정정 형태가 실재하면 "학생이 그 오개념을 가졌다"는 예측과 *정밀하게* 모순되기 때문이다.
+    """
+    cf = misconception.correct_form
+    if not cf:
+        return False
+    norm_cf = _normalize(cf)
+    if not norm_cf:
+        return False
+    return norm_cf in _normalize(text)
+
+
 def diagnose(student_solution: str, *, top_k: int = _DEFAULT_TOP_K) -> list[MisconceptionMatch]:
     """학생 풀이에서 오개념 후보 top-K를 confidence 내림차순으로 반환한다.
 

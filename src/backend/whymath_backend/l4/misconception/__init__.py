@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from whymath_backend.l4.misconception.catalog import CATALOG, CATALOG_BY_ID
 from whymath_backend.l4.misconception.combined import combine_diagnoses, combined_diagnose
-from whymath_backend.l4.misconception.diagnose import diagnose
+from whymath_backend.l4.misconception.diagnose import correct_form_present, diagnose
 from whymath_backend.l4.misconception.intervene import (
     select_intervention,
     select_intervention_from_hypotheses,
@@ -61,6 +61,7 @@ __all__ = [
     "build_provider",
     "combine_diagnoses",
     "combined_diagnose",
+    "correct_form_present",
     "diagnose",
     "raise_for_distractor_map",
     "select_intervention",
