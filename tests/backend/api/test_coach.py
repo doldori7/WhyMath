@@ -1251,6 +1251,80 @@ class TestHintLevelEscalationWiring:
         assert "어떤 규칙" not in sol.trigger.prompt  # 점층 아님
 
 
+class TestActiveHypothesesIntoSocratic:
+    """누적 활성 오개념 가설 → 소크라테스 카테고리(ASSUMPTION 가정 표면화) 결선.
+
+    #266 순수 규칙(`select_category`·`decide`)을 라이브 coach 경로에 *활성화*한다 — 세션/턴
+    핸들러가 `_apply_hypotheses` post-apply 세트를 `_build_response_payload`로 넘긴다.
+    """
+
+    _PID = uuid.uuid4()
+
+    # --- 단위: _build_response_payload가 가설을 decide로 thread(hermetic·직접 호출) ---
+    def test_payload_threads_high_conf_hypothesis_to_assumption(self) -> None:
+        # PLAN·"음"(stay·無신호) 기본=perspective지만 고신뢰·최근 가설 → assumption.
+        body = coach.CoachRequest(student_input="음", polya_state={"current_stage": "plan"})
+        decision, *_ = coach._build_response_payload(body, misconception_hypotheses=[_hyp(0.8)])
+        assert decision.polya_stage_to_advance == "stay"
+        assert decision.socratic_category == "assumption"
+
+    def test_payload_no_hypotheses_keeps_stage_default(self) -> None:
+        # 미주입(기본 None) → 현행 비트동일(PLAN 기본 perspective).
+        body = coach.CoachRequest(student_input="음", polya_state={"current_stage": "plan"})
+        decision, *_ = coach._build_response_payload(body)
+        assert decision.socratic_category == "perspective"
+
+    def test_payload_low_confidence_hypothesis_keeps_default(self) -> None:
+        # 저신뢰 가설(floor 미달) → 단계 기본 불변(맞은/약한 가설 학생 영향 0).
+        body = coach.CoachRequest(student_input="음", polya_state={"current_stage": "plan"})
+        decision, *_ = coach._build_response_payload(body, misconception_hypotheses=[_hyp(0.3)])
+        assert decision.socratic_category == "perspective"
+
+    # --- 엔드포인트: 핸들러 재정렬이 가설을 실제로 활성화(_apply_hypotheses monkeypatch) ---
+    def _post_session(self, client: TestClient, student_input: str) -> Any:
+        return client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": student_input,
+                "polya_state": {"current_stage": "plan"},
+                "problem_id": str(self._PID),
+            },
+        )
+
+    def test_session_high_conf_hypothesis_surfaces_assumption(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def _fake(session: Any, user_id: Any, matches: Any) -> list[MisconceptionHypothesis]:
+            return [_hyp(0.8)]
+
+        monkeypatch.setattr("whymath_backend.api.coach._apply_hypotheses", _fake)
+        client, _ = _session_client()
+        resp = self._post_session(client, "음")  # stay·無신호
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["decision"]["socratic_category"] == "assumption"
+
+    def test_session_empty_hypotheses_keeps_stage_default(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        async def _fake(session: Any, user_id: Any, matches: Any) -> list[MisconceptionHypothesis]:
+            return []
+
+        monkeypatch.setattr("whymath_backend.api.coach._apply_hypotheses", _fake)
+        client, _ = _session_client()
+        resp = self._post_session(client, "음")
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["decision"]["socratic_category"] == "perspective"
+
+    def test_stateless_endpoint_unaffected(self) -> None:
+        # stateless /v1/coach는 세션·가설 없음 → 단계 기본(불변·하위호환).
+        resp = _client().post(
+            "/v1/coach",
+            json={"student_input": "음", "polya_state": {"current_stage": "plan"}},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["decision"]["socratic_category"] == "perspective"
+
+
 class TestAuthGate:
     def test_no_token_401(self) -> None:
         resp = _no_auth_client().post("/v1/coach", json={"student_input": "음"})

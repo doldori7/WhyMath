@@ -369,6 +369,7 @@ def _build_response_payload(
     server_mastery: float | None = None,
     server_theta: float | None = None,
     matches: list[MisconceptionMatch] | None = None,
+    misconception_hypotheses: list[MisconceptionHypothesis] | None = None,
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -390,6 +391,12 @@ def _build_response_payload(
     sync 직접호출) 시 *현행 동작과 비트동일*이다(추가 인자는 기본값 only·sync성·반환 튜플 형태
     불변). `intervention`은 *결합 후* matches[0] 기준(combine_diagnoses가 substr 우선이라
     substr 진단이 있으면 그대로 1위 유지).
+
+    `misconception_hypotheses`(누적 활성 가설 세트·confidence 내림차순)를 주입받으면 `decide`로
+    thread해 *소크라테스 카테고리*를 정밀화한다 — 학생이 머무르며 막혀 있고 명시 신호가 없을 때
+    고신뢰+최근 가설이면 ASSUMPTION(가정 표면화). **미주입(기본 None)이면 현행 비트동일**
+    (stateless `/v1/coach`·sync 직접호출). 세션/턴 핸들러가 `_apply_hypotheses` 반환 세트를 넘긴다
+    (개입 채널 `_intervention_from_hypotheses_or`와 *같은* post-apply 세트·단일 진실원천).
     """
     # slice 25: mastery_level 명시값 우선·없으면 BKT 숙달(0~1)을 라벨로 환산(L2→L4 브릿지).
     # slice 69: level을 _coach.decide 이전에 계산해 hint level 보수화에도 전달(적응형 코칭).
@@ -401,7 +408,12 @@ def _build_response_payload(
     level = body.mastery_level
     if level is None:
         level = _ability_level(effective_bkt, server_theta)
-    decision = _coach.decide(body.student_input, body.polya_state, mastery_level=level)
+    decision = _coach.decide(
+        body.student_input,
+        body.polya_state,
+        mastery_level=level,
+        misconception_hypotheses=misconception_hypotheses,
+    )
     # slice 106: 주입된 결합 matches 우선·미주입(sync 직접호출·게이트 off 경로)이면 substring
     # diagnose 폴백(현행 비트동일). combine_diagnoses가 substr 우선이라 resolved[0]은 substr가
     # 있으면 substr → select_intervention이 substring 진단(검증된 표면 신호) 기준으로 구동.
@@ -917,6 +929,14 @@ async def create_session(
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
     outcome = await _compute_matches(body.student_input, ocr_confidence=body.ocr_confidence)
+    # WH-1 2단계 §8.4 슬라이스 3 — 이번 턴 매칭(증거)으로 학생 활성 가설 세트를 갱신·영속한다
+    # (#191 순수 로직 + #192 저장소 재사용·재구현 0). 같은 `session`/같은 트랜잭션에 합류하며
+    # apply_matches는 flush만 하고 commit은 *이 핸들러의 기존 commit*이 담당(별도 commit 없음).
+    # `user.user_id`는 ConsentedUser 게이트라 채워지지만, None이면 빈 리스트로 가드(apply_matches는
+    # user_id 필요). 가설은 *후보*일 뿐 확정 오개념 아님(낙인 금지)·학생 본인 데이터만 노출.
+    # 결정 *앞에서* 적용한다 — 갱신된 가설 세트를 _build_response_payload로 넘겨 소크라테스
+    # 카테고리(ASSUMPTION 가정 표면화)까지 구동(개입 채널과 동일한 post-apply 세트·단일 진실원천).
+    active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -925,14 +945,9 @@ async def create_session(
             server_mastery=server_mastery,
             server_theta=server_theta,
             matches=outcome.matches,
+            misconception_hypotheses=active_hypotheses,
         )
     )
-    # WH-1 2단계 §8.4 슬라이스 3 — 이번 턴 매칭(증거)으로 학생 활성 가설 세트를 갱신·영속한다
-    # (#191 순수 로직 + #192 저장소 재사용·재구현 0). 같은 `session`/같은 트랜잭션에 합류하며
-    # apply_matches는 flush만 하고 commit은 *이 핸들러의 기존 commit*이 담당(별도 commit 없음).
-    # `user.user_id`는 ConsentedUser 게이트라 채워지지만, None이면 빈 리스트로 가드(apply_matches는
-    # user_id 필요). 가설은 *후보*일 뿐 확정 오개념 아님(낙인 금지)·학생 본인 데이터만 노출.
-    active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
 
     now = datetime.now(timezone.utc)
@@ -1052,6 +1067,12 @@ async def append_turns(
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
     outcome = await _compute_matches(body.student_input, ocr_confidence=body.ocr_confidence)
+    # WH-1 2단계 §8.4 슬라이스 3 — create_session과 동형. 이번 턴 매칭으로 *기존* 활성 가설
+    # 세트를 갱신(감쇠/강화·누적)·영속한다(같은 트랜잭션 합류·별도 commit 없음·#191/#192 재사용).
+    # 멀티턴이라 직전 턴들의 가설 위에 누적되어 감쇠·강화가 실제로 가동된다(2단계 메커니즘).
+    # 결정 *앞에서* 적용한다 — 누적 가설 세트를 _build_response_payload로 넘겨 소크라테스 카테고리
+    # (ASSUMPTION 가정 표면화)까지 구동(개입 채널과 동일한 post-apply 세트·단일 진실원천).
+    active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -1060,12 +1081,9 @@ async def append_turns(
             server_mastery=server_mastery,
             server_theta=server_theta,
             matches=outcome.matches,
+            misconception_hypotheses=active_hypotheses,
         )
     )
-    # WH-1 2단계 §8.4 슬라이스 3 — create_session과 동형. 이번 턴 매칭으로 *기존* 활성 가설
-    # 세트를 갱신(감쇠/강화·누적)·영속한다(같은 트랜잭션 합류·별도 commit 없음·#191/#192 재사용).
-    # 멀티턴이라 직전 턴들의 가설 위에 누적되어 감쇠·강화가 실제로 가동된다(2단계 메커니즘).
-    active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
 
     current_total = dialogue.total_turns or 0
