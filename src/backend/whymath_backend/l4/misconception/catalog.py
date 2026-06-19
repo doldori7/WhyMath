@@ -67,12 +67,17 @@ _ALGEBRA: tuple[Misconception, ...] = (
         domain="대수",
         canonical_statement="√(x²) = x",
         counterexample="x=-3이면 √(x²) = 3 = |x|, x가 아님",
-        signals=("√", "x²"),
+        # 신호 정밀화: LHS식 `√(x²)` + *틀린 RHS* `= x`. 느슨한 `("√","x²")`는 정답 `√(x²)=|x|`까지
+        # 1.0 풀매칭해 *정답에 거짓 COUNTEREXAMPLE 개입*을 발화했다(judge 기본 off·#109 동류).
+        # 정답엔 `= x` 없음(=`|x|`)→LHS만 0.5(게이트 미만)·틀림 `√(x²)=x`만 1.0. gate-safe.
+        signals=("√(x²)", "= x"),
         # v1.2 수치 대입 탐지(슬 102): 음수를 대입해 거짓 항등식을 드러낸 흔적
         # `√((-3)²)=-3`을 잡는다. 정규형 `√((-d)2)=-d`(NFKC `²`→`2`)에서 역참조로 피개수가
         # 좌·우변 동일할 때만 매치 → 올바른 `√((-3)²)=3`이나 기호 `√(x²)=x`엔 미스(disjoint).
         # 근거: 데이터셋 [J0107]·[H:12대수01-01] ◎ 정확대응(§5.2).
         regex_signals=(r"√\(\(-(?P<a>\d+)\)2\)=-(?P=a)",),
+        # 정정 형태 — `√(x²)`만 공유·RHS `|x|`는 틀린 RHS `x`와 다름 → 자기 오개념 0.5. gate-safe.
+        correct_form="√(x²) = |x|",
     ),
     Misconception(
         id="exponent-zero",
@@ -91,12 +96,17 @@ _ALGEBRA: tuple[Misconception, ...] = (
         domain="대수",
         canonical_statement="(a+b)/a = b",
         counterexample="a=2, b=4: (2+4)/2 = 3 ≠ 4",
-        signals=("(a+b)/a", "b"),
+        # 신호 정밀화: LHS식 `(a+b)/a` + *틀린 RHS* `= b`. 느슨한 `b`는 정답 `(a+b)/a = 1 + b/a`까지
+        # 1.0 풀매칭해 *정답에 거짓 COUNTEREXAMPLE 개입*을 발화했다. 정답엔 `= b` 없음(=`1+`)→
+        # LHS만 0.5(게이트 미만)·틀림 `(a+b)/a=b`만 1.0. gate-safe.
+        signals=("(a+b)/a", "= b"),
         # v1.2 수치 대입 탐지(슬 102): 분자 합에서 분모와 같은 항을 *통째로 약분*해버린
         # 수치 흔적 `(2+4)/2=4`를 잡는다. 정규형 `(p+q)/p=q`에서 분모가 첫 피연산자(p)와 같고
         # 결과가 둘째 피연산자(q)일 때만 매치 → 올바른 `(2+4)/2=3`이나 기호 `(a+b)/a=b`엔
         # 미스(disjoint). 데이터셋 직접진술 미수록(§5.2 '미대응')이나 canonical로 자명한 기본수학.
         regex_signals=(r"\((?P<p>\d+)\+(?P<q>\d+)\)/(?P=p)=(?P=q)",),
+        # 정정 형태 — `(a+b)/a`만 공유·RHS `1 + b/a`는 틀린 RHS `b`와 다름 → 0.5. gate-safe.
+        correct_form="(a+b)/a = 1 + b/a",
     ),
     Misconception(
         id="log-distribution",
@@ -270,7 +280,13 @@ _CALCULUS: tuple[Misconception, ...] = (
         domain="미적분",
         canonical_statement="d/dx[sin(2x)] = cos(2x)",
         counterexample="정답은 2cos(2x) — 내부함수 2x의 도함수 2가 곱해져야 함",
-        signals=("d/dx", "cos(2x)"),
+        # 신호 정밀화: LHS식 `d/dx[sin(2x)]` + *틀린 RHS* `= cos(2x)`. 느슨한 `("d/dx","cos(2x)")`는
+        # 정답 `d/dx[sin(2x)] = 2cos(2x)`까지 1.0 풀매칭(`cos(2x)`⊂`2cos(2x)`)해 *정답에 거짓
+        # COUNTEREXAMPLE 개입*을 발화했다. 정답엔 `= cos(2x)` 없음(=`2cos`)→LHS만 0.5(게이트 미만)·
+        # 틀림 `d/dx[sin(2x)]=cos(2x)`만 1.0. gate-safe.
+        signals=("d/dx[sin(2x)]", "= cos(2x)"),
+        # 정정 형태 — LHS만 공유·RHS `2cos(2x)`는 틀린 `cos(2x)`(계수 누락)와 다름 → 0.5. gate-safe.
+        correct_form="d/dx[sin(2x)] = 2cos(2x)",
     ),
     Misconception(
         id="product-rule-naive",
