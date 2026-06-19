@@ -340,13 +340,14 @@ class TestRegexBackwardCompatibility:
         assert m.matched_regex_signals == ()
 
     def test_symbolic_fraction_unchanged_full(self) -> None:
+        # 슬: 신호 정밀화로 둘째 signal `b`→`= b`(틀린 RHS) — 틀린 형태는 여전히 풀매칭 1.0.
         m = next(
             x
             for x in diagnose("(a+b)/a = b 로 약분")
             if x.misconception.id == "fraction-cancellation"
         )
         assert m.confidence == 1.0
-        assert set(m.matched_signals) == {"(a+b)/a", "b"}
+        assert set(m.matched_signals) == {"(a+b)/a", "= b"}
         assert m.matched_regex_signals == ()
 
 
@@ -402,9 +403,10 @@ class TestSignalBoundaryV13:
         assert m.confidence == 1.0
 
     def test_single_latin_b_inside_identifier_not_matched(self) -> None:
-        # 'b'가 'ab' 내부(다른 식별자의 일부)면 미매칭 — 임의 텍스트의 b 오매칭 차단.
+        # 슬: fraction-cancellation 신호가 `("(a+b)/a","= b")`로 정밀화돼 단일 `b`는 사라졌다.
+        # `ab를 전개…`는 LHS식·`= b` 둘 다 없어 미매칭 — 임의 텍스트 오매칭 차단(정밀화 후 유지).
         m = self._by_id("ab를 전개해서 정리했어요", "fraction-cancellation")
-        assert m is None or "b" not in m.matched_signals
+        assert m is None
 
     def test_180_inside_larger_number_not_matched(self) -> None:
         # '1800' 내부의 '180'은 차단·정당한 '180'(비숫자 이웃)은 유지.
@@ -422,11 +424,63 @@ class TestSignalBoundaryV13:
         short_or_digit = {
             (m.id, s) for m in CATALOG for s in m.signals if len(s) <= 1 or s.isdigit()
         }
+        # 슬: 신호 정밀화로 square-root(`√`)·fraction(`b`)의 짧은 signal이 LHS식+틀린 RHS로 대체돼
+        # 래칫에서 빠졌다(정답 거짓 COUNTEREXAMPLE 제거 부수효과 — 짧은 signal 오매칭면 축소).
         assert short_or_digit == {
             ("sign-flip-in-inequality", "곱"),  # 한글 형태소 — substring 유지(내용성)
             ("division-by-zero", "0"),  # 경계 매칭
-            ("square-root-positivity", "√"),  # 연산자 기호 — substring 유지(내용성)
             ("exponent-zero", "0"),  # 경계 매칭
-            ("fraction-cancellation", "b"),  # 경계 매칭(단일 ASCII)
             ("angle-sum-non-triangle", "180"),  # 경계 매칭(숫자-only)
         }
+
+
+class TestUnsafeSignalTightening:
+    """LHS-only 느슨 신호 정밀화 — 정답 작업의 거짓 COUNTEREXAMPLE 개입 제거(우선순위 #1·#109 동류).
+
+    세 오개념(square-root-positivity·fraction-cancellation·chain-rule)의 `signals`가 *틀린 RHS*를
+    포함하지 않아 정답 형태(`√(x²)=|x|`·`(a+b)/a=1+b/a`·`d/dx[sin(2x)]=2cos(2x)`)를 1.0 풀매칭 →
+    judge 기본 off라 COUNTEREXAMPLE 낙인 발화가 학생에 도달했다. LHS식+틀린 RHS로 좁혀 정답은 0.5
+    (게이트 0.65 미만)·틀린 형태만 1.0이 되게 한다. 각 ① 정답 미발화 ② 틀림 1.0 ③ 정답에 단정
+    개입 소멸(#109 미러)을 잠근다.
+    """
+
+    # (id, 정답 형태, 틀린 형태)
+    _CASES = (
+        ("square-root-positivity", "√(x²) = |x|", "√(x²) = x"),
+        ("fraction-cancellation", "(a+b)/a = 1 + b/a", "(a+b)/a = b"),
+        (
+            "chain-rule-inner-derivative-omitted",
+            "d/dx[sin(2x)] = 2cos(2x)",
+            "d/dx[sin(2x)] = cos(2x)",
+        ),
+    )
+
+    def _find(self, text: str, mid: str) -> MisconceptionMatch | None:
+        return next((m for m in diagnose(text, top_k=30) if m.misconception.id == mid), None)
+
+    def test_correct_form_below_gate(self) -> None:
+        # 정답 형태는 자기 오개념을 신뢰 게이트(0.65) 이상으로 내지 않는다(거짓양성 소멸).
+        for mid, correct, _wrong in self._CASES:
+            m = self._find(correct, mid)
+            assert m is None or m.confidence < 0.65, (mid, correct)
+
+    def test_wrong_form_full_match(self) -> None:
+        # 틀린 형태는 여전히 1.0 풀매칭(정밀화가 탐지력을 죽이지 않음).
+        for mid, _correct, wrong in self._CASES:
+            m = self._find(wrong, mid)
+            assert m is not None and m.confidence == 1.0, (mid, wrong)
+
+    def test_correct_form_no_counterexample_intervention(self) -> None:
+        # #109 미러 — 정답 형태에 단정적 COUNTEREXAMPLE 개입이 발화하지 않는다(낙인 방지).
+        from whymath_backend.l4.misconception import select_intervention
+        from whymath_backend.l4.misconception.models import InterventionPattern
+
+        for mid, correct, _wrong in self._CASES:
+            m = self._find(correct, mid)
+            if m is None:
+                continue
+            iv = select_intervention(m)
+            assert iv is None or iv.pattern is not InterventionPattern.COUNTEREXAMPLE, (
+                mid,
+                correct,
+            )

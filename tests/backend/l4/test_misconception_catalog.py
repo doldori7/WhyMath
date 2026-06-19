@@ -198,9 +198,10 @@ class TestRegexSignals:
 class TestCorrectForm:
     """선택 필드 `correct_form` — identity-shaped 오개념의 정정 형태(정밀 −1 반박 신호·tier).
 
-    초기 부여 5종(distribution·a⁰·log·곱미분·sin 합분배). 핵심 불변식: 정정 형태가 *자기 오개념*
-    으로 신뢰 게이트(0.65) 이상 confident 오진단되면 안 된다 — `signals`의 LHS만 공유하고 틀린
-    RHS는 미포함하는 gate-safe 오개념만 부여(square-root류 unsafe 후보 제외).
+    부여 8종(distribution·a⁰·log·곱미분·sin 합분배 + 슬: 신호 정밀화로 gate-safe화된 square-root·
+    fraction-cancellation·chain-rule). 핵심 불변식: 정정 형태가 *자기 오개념*으로 신뢰 게이트(0.65)
+    이상 confident 오진단되면 안 된다 — `signals`가 *틀린 RHS*를 포함해 정정 형태(올바른 RHS)와
+    구분되는 오개념만 부여(LHS-only 느슨 신호는 신호 정밀화로 먼저 좁힌다).
     """
 
     _AUTHORED_IDS = {
@@ -209,6 +210,10 @@ class TestCorrectForm:
         "log-distribution",
         "product-rule-naive",
         "sine-distributes-over-sum",
+        # 슬: 신호 정밀화(LHS식+틀린 RHS)로 gate-safe화 → correct_form 부여(#271 커버리지 완성).
+        "square-root-positivity",
+        "fraction-cancellation",
+        "chain-rule-inner-derivative-omitted",
     }
 
     def test_field_optional_and_typed(self) -> None:
