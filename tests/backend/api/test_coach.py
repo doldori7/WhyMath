@@ -1390,7 +1390,8 @@ class TestSessionPersistence:
         assert len(dialogues) == 1
         assert len(turns) == 2
         assert captured.commits == 2  # dialogue → turns 순서
-        assert captured.refreshes == 1
+        # dialogue 1회 + 매치당 증거 적재(§2.3 생산측·log_evidence가 link_id로 refresh)라 ≥1.
+        assert captured.refreshes >= 1
 
     def test_user_id_scoped_to_authenticated_user(self) -> None:
         # 본인 데이터 차단 — dialogue.user_id는 인증된 user.user_id로 자동
@@ -3839,3 +3840,97 @@ class TestApplyHypothesesGuard:
         assert result is curated
         assert seen["student_id"] == uid
         assert seen["matches"] is ms
+
+
+class TestLogMatchEvidence:
+    """`_log_match_evidence` — 확정 매치를 +1 지지 증거로 `evidence_links`에 적재(§2.3 생산측).
+
+    #268이 라이브 coach를 증거 그래프의 *소비측*(curate→net_support 반박)으로 결선했고, 본 헬퍼는
+    그 짝인 *생산측*이다(하네스 `log_evidence` 패턴 모사). 본 테스트는 결선(매치→+1 지지·
+    weight=confidence)과 가드만 핀한다 — `log_evidence` 내부는 evidence_store 테스트가 검증.
+    """
+
+    class _M:
+        """매치 스텁 — `_log_match_evidence`가 읽는 `.misconception.id`·`.confidence`만."""
+
+        def __init__(self, mid: str, confidence: float) -> None:
+            self.misconception = type("_Mc", (), {"id": mid})()
+            self.confidence = confidence
+
+    async def test_logs_plus_one_support_per_match(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        calls: list[dict[str, Any]] = []
+
+        async def _fake_log(session: Any, **kw: Any) -> Any:
+            calls.append(kw)
+            return None
+
+        monkeypatch.setattr(coach, "log_evidence", _fake_log)
+        sid, uid = uuid.uuid4(), uuid.uuid4()
+        matches = [self._M("distribution-over-power", 1.0), self._M("sign-flip-in-inequality", 0.7)]
+        await coach._log_match_evidence(
+            cast(AsyncSession, object()),
+            session_id=sid,
+            student_id=uid,
+            matches=cast(Any, matches),
+        )
+        assert len(calls) == 2
+        assert [c["misconception_id"] for c in calls] == [
+            "distribution-over-power",
+            "sign-flip-in-inequality",
+        ]
+        assert all(c["polarity"] == 1 for c in calls)  # 매치 = +1 지지
+        assert [c["weight"] for c in calls] == [1.0, 0.7]  # weight=confidence
+        assert all(c["session_id"] == sid and c["student_id"] == uid for c in calls)
+
+    async def test_empty_matches_no_log(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        called = False
+
+        async def _fake_log(session: Any, **kw: Any) -> Any:
+            nonlocal called
+            called = True
+
+        monkeypatch.setattr(coach, "log_evidence", _fake_log)
+        await coach._log_match_evidence(
+            cast(AsyncSession, object()),
+            session_id=uuid.uuid4(),
+            student_id=uuid.uuid4(),
+            matches=[],
+        )
+        assert called is False
+
+    async def test_none_student_guard_no_log(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 인증 게이트라 미도달이나 방어 가드 — student_id None이면 log_evidence 미호출(세션 미터치).
+        async def _boom_log(session: Any, **kw: Any) -> Any:
+            raise AssertionError("student_id=None 가드는 log_evidence를 호출하지 않아야 한다.")
+
+        monkeypatch.setattr(coach, "log_evidence", _boom_log)
+        await coach._log_match_evidence(
+            cast(AsyncSession, object()),
+            session_id=uuid.uuid4(),
+            student_id=None,
+            matches=cast(Any, [self._M("distribution-over-power", 1.0)]),
+        )  # 예외 없이 통과 = 가드 동작
+
+    def test_endpoint_logs_evidence_for_confident_match(self) -> None:
+        # 확정 매치(distribution-over-power·confidence 1.0)를 내는 입력 → EvidenceLink(+1) 적재.
+        from whymath_backend.db.models.evidence_link import EvidenceLink
+
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={"student_input": "내 풀이는 (a+b)² = a² + b² 이렇게 했어"},
+        )
+        assert resp.status_code == 201, resp.text
+        links = [o for o in captured.added if isinstance(o, EvidenceLink)]
+        assert len(links) >= 1
+        assert all(link.polarity == 1 for link in links)
+        assert any(link.misconception_id == "distribution-over-power" for link in links)
+
+    def test_endpoint_no_confident_match_no_evidence(self) -> None:
+        # 신뢰 게이트로 비워진(no_confident_match) 입력 → EvidenceLink 미적재(생산 0).
+        from whymath_backend.db.models.evidence_link import EvidenceLink
+
+        client, captured = _session_client()
+        resp = client.post("/v1/coach/sessions", json={"student_input": "음"})
+        assert resp.status_code == 201, resp.text
+        assert [o for o in captured.added if isinstance(o, EvidenceLink)] == []

@@ -81,6 +81,7 @@ from whymath_backend.l4.misconception import (
     select_intervention_from_hypotheses,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG
+from whymath_backend.l4.misconception.evidence_store import log_evidence
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.misconception.hypothesis_store import curate_hypothesis
 from whymath_backend.l4.misconception.judge import JudgeProtocol, LLMJudge, judge_filter
@@ -837,6 +838,45 @@ async def _apply_hypotheses(
     return await curate_hypothesis(session, student_id=user_id, matches=matches)
 
 
+async def _log_match_evidence(
+    session: AsyncSession,
+    *,
+    session_id: uuid.UUID,
+    student_id: uuid.UUID | None,
+    matches: list[MisconceptionMatch],
+) -> None:
+    """이번 턴 *확정 매치*를 +1 지지 증거로 `evidence_links`에 적재한다(§2.3 생산측 좌석).
+
+    #268이 라이브 coach를 증거 그래프의 *소비측*(`curate_hypothesis`→`net_support<0` 반박)으로
+    결선했다면, 본 헬퍼는 그 짝인 ***생산측***이다 — 하네스(`run_persisted_turn`)의 `log_evidence`
+    영속 패턴을 결정론 규칙으로 모사한다(재구현 0). `outcome.matches`는 이미 신뢰 게이트
+    (top-1<0.65→후보 비움)를 통과한 *확정 진단*이라 추가 floor 불요·match당 +1(지지·진단이 오개념
+    신호를 드러냄)·`weight=confidence`(net_support 가중).
+
+    **순서(비순환)**: 호출자는 본 헬퍼를 `_apply_hypotheses`(=`curate_hypothesis`·*직전까지* 누적된
+    net_support로 반박 판정) **뒤에** 둔다 — 이번 턴 지지가 같은 턴의 반박을 순환적으로 막지 않고
+    *미래 턴* net_support에만 반영된다(소비는 과거 증거·생산은 미래 증거).
+
+    **−1 반박 생산은 범위 밖**(후속): 하네스조차 polarity를 LLM 정책으로 고르며(`wh1_loop`) verify-
+    pass가 *어느* 오개념을 반박하는지 결정론 귀속이 불가하다 — 교수학 사인오프 필요. 따라서 본
+    슬라이스는 +1 지지 *생산*만 하고 라이브-단독 curation 행동은 불변이다(그래프만 채움).
+
+    `log_evidence`는 주입 `session`에 합류·flush만(commit은 핸들러). `student_id` None이면 가드(인증
+    게이트라 미도달)·빈 matches면 no-op. `session_id`는 dialogue UUID(느슨참조·FK 아님).
+    """
+    if student_id is None:
+        return  # 인증 게이트라 도달 안 함(방어 가드 — log_evidence는 student_id 필수).
+    for match in matches:
+        await log_evidence(
+            session,
+            session_id=session_id,
+            student_id=student_id,
+            misconception_id=match.misconception.id,
+            polarity=1,  # 매치 = 오개념 *지지* 증거(진단이 오개념 신호를 드러냄).
+            weight=match.confidence,
+        )
+
+
 def _wh1_turn_state(total_turns_before: int) -> tuple[int, bool]:
     """이 교환(student↔AI)의 WH-1 턴 번호 + ε-탐색 턴 여부 — 멀티턴 연속성 카운터(§2.2).
 
@@ -1012,6 +1052,14 @@ async def create_session(
         attempt_id=dialogue.attempt_id,
         hint_level=decision.hint_level,
     )
+    # WH-1 §2.3 — 이번 턴 확정 매치를 +1 지지 증거로 적재(#268 소비측의 짝·생산측 좌석). curate
+    # *뒤*에 둬 이번 턴 지지가 같은 턴 반박을 순환 차단 안 함(미래 net_support 반영). 같은 트랜잭션.
+    await _log_match_evidence(
+        session,
+        session_id=dialogue.dialogue_id,
+        student_id=user.user_id,
+        matches=outcome.matches,
+    )
     await session.commit()
 
     # WH-1 멀티턴 연속성 — 새 dialogue라 직전 total_turns=0 → 첫 교환은 턴 1(§2.2 ε 카운터).
@@ -1144,6 +1192,13 @@ async def append_turns(
         problem_id=dialogue.problem_id,
         attempt_id=dialogue.attempt_id,
         hint_level=decision.hint_level,
+    )
+    # WH-1 §2.3 — create_session과 동형. 이번 턴 확정 매치를 +1 지지 증거로 적재(생산측·curate 뒤).
+    await _log_match_evidence(
+        session,
+        session_id=dialogue_id,
+        student_id=user.user_id,
+        matches=outcome.matches,
     )
     await session.commit()
 
