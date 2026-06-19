@@ -168,7 +168,10 @@ LLM 추론이 아닌 **SQL 조회**로 나온다. 학부모 리포트의 신뢰 
 > 시계열·외부 store 등) 고지(날조 0·완전성). `api/me.py` `export_my_data`(**ConsentedUser**·다른
 > /me GET 동형·per-user HTTP — 전역 집계 아님). 외부 store(ClickHouse·S3·Redis)는 RDB 밖이라
 > `external_export_pending` 매니페스트를 **ops 로그**로만(store명·user_id·#252 선례·정보 누출 방지·
-> student 응답 미노출). **후속**: 대화/turn 조인·시계열·나머지 PII·외부 store 실조회·대용량 async job.
+> student 응답 미노출). **증분 2(2026-06-19·#265)**: `_EXPORT_PLAN`에 동의·트랙·페르소나·상태 이력
+> 4종(`parental_consent`·`user_track/persona_history`·`user_state_snapshot`·모두 `to_schema` 보유·
+> `user_id` 키) 추가(순수 plan 확장·마이그레이션 0). **후속**: 대화/turn 조인(미성년 채팅 본문 privacy
+> 결정)·시계열(대용량 async)·`to_schema` 미보유(misconception·evidence)·외부 store 실조회.
 
 ### 2.4 장기 상태 — 기존 L2 그대로
 

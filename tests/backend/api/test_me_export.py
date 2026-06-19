@@ -81,9 +81,21 @@ def _client() -> TestClient:
     app.dependency_overrides[get_consented_user] = _user
 
     async def _sess() -> AsyncIterator[_FakeSession]:
-        # 5종 카테고리 + profile = 6 execute. learning_sessions 1행, 나머지 빈, profile 1행.
+        # 9종 카테고리 + profile = 10 execute. learning_sessions·parental_consents(idx 5)에 1행씩,
+        # 나머지 빈, profile 1행.
         yield _FakeSession(
-            [[_StubRow({"sid": "s1"})], [], [], [], [], [_StubRow({"uid": str(_UID)})]]
+            [
+                [_StubRow({"sid": "s1"})],
+                [],
+                [],
+                [],
+                [],
+                [_StubRow({"cid": "c1"})],
+                [],
+                [],
+                [],
+                [_StubRow({"uid": str(_UID)})],
+            ]
         )
 
     app.dependency_overrides[get_session] = _sess
@@ -109,6 +121,7 @@ class TestExportMyData:
         assert body["user_id"] == str(_UID)
         assert body["data"]["learning_sessions"] == [{"sid": "s1"}]
         assert body["data"]["assessments"] == []
+        assert body["data"]["parental_consents"] == [{"cid": "c1"}]  # 증분 2 신규 카테고리
         assert body["user_profile"] == {"uid": str(_UID)}
         assert len(body["not_included"]) >= 1  # 부분 export 정직 고지
         assert "exported_at" in body
