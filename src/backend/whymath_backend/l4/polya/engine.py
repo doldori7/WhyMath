@@ -10,8 +10,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from whymath_backend.l4.hint_deferral import REVEALS, decide_hint_level
 from whymath_backend.l4.lthc.models import MasteryLevel
+from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.models import (
     LLMSeam,
     PedagogyDecision,
@@ -63,11 +66,14 @@ class PolyaCoach:
         state: PolyaState,
         *,
         mastery_level: MasteryLevel | None = None,
+        misconception_hypotheses: Sequence[MisconceptionHypothesis] | None = None,
     ) -> PedagogyDecision:
         """LLM 없이 *결정*만. 다음 단계·프롬프트·system·권장 티어·보조 행동을 채운다.
 
         - 전이 판정 → next면 `_next_stage()`의 프롬프트, stay면 현 단계 프롬프트.
-        - `socratic_category`: 단계·전이·발화 신호로 6카테고리 중 하나(슬라이스 2).
+        - `socratic_category`: 단계·전이·발화 신호·활성 오개념 가설로 6카테고리 중 하나.
+          stay/previous + 명시 신호 없음 + 고신뢰·최근 가설이면 ASSUMPTION으로 가정 표면화.
+          `misconception_hypotheses` None → 현 동작 불변(하위호환·맞은 학생 영향 0).
         - `hint_level`: 답 미루기 4단계 — 좌절·답요구·5회+ 막힘 신호로 점진 상승(슬라이스 3).
         - `reveals`: hint_level에서 파생된 노출량 라벨(KPI 입력).
         - `recommended_cost_tier=LOCAL`(기본 — Polya 코칭은 로컬 충분, CLAUDE.md "로컬 LLM 우선").
@@ -77,7 +83,12 @@ class PolyaCoach:
             _next_stage(state.current_stage) if transition == "next" else state.current_stage
         )
         sp = STAGE_PROMPTS[target_stage]
-        category = select_category(state.current_stage, transition, student_input)
+        category = select_category(
+            state.current_stage,
+            transition,
+            student_input,
+            misconception_hypotheses,
+        )
         hint_level = decide_hint_level(
             student_input=student_input,
             turn_count=state.turn_count,

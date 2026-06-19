@@ -89,6 +89,8 @@ PRD의 Socratic 풀이 흐름은 한 문제를 다음 순서로 전개한다:
 - PRD 흐름은 *콘텐츠의 전개 순서*를 규정하고, WhyMath 6카테고리는 *매 발화의 질문 종류*를 규정한다. 둘은 직교한다.
 - L4는 학생이 PRD 흐름의 어느 마디에 있든 그 마디에 맞는 소크라테스 카테고리를 골라 `PedagogyDecision.socratic_category`로 반환한다.
 
+**슬라이스 — 소크라테스 카테고리 선택에 활성 오개념 가설 반영 (2026-06-19·순수·마이그레이션 0)**: `l4/socratic/select.py`의 `select_category(stage, transition, student_input, hypotheses=None)`가 *활성 오개념 가설 세트*(§2.2 `l4/misconception/hypothesis.py`·`MisconceptionHypothesis`)를 4번째 인자로 받는다. **규칙**(stay/previous 한정·우선순위 학생 명시 신호 > 가설 > 단계 기본): 학생이 머무르며 막혀 있고 명시 발화 신호가 *없을 때만*, *고신뢰+최근* 활성 가설이 있으면 → **ASSUMPTION**("왜 그렇게 가정했어?")으로 그 (잘못된) *가정을 표면화*해 학생이 스스로 점검하게 한다(LTHC 최소도움·메타인지·자기 발견). 오개념은 본질적으로 "틀린 전제를 참으로 *가정*"한 상태라 ASSUMPTION이 정확히 그 전제를 겨눈다(위 표 "전략 선택 = 가정 탐색"과 정합). **임계**(pedagogy-designer 설계·KPI 튜닝 대상): `confidence ≥ 0.65`(가지치기선 0.1보다 훨씬 높아 "표면화할 확신"을 보수적 요구) **AND** `turns_since_evidence ≤ 2`(stale 가설 거부·"지금 작동 중인 가정"만 겨냥). 가설 세트는 confidence 내림차순 가정(`curate` 계약)이라 선두 confidence<floor면 조기 종료, recency만 미달이면 차순위 검사(선두 stale·차순위 고신뢰·최근을 놓치지 않음). **교수학 금기 준수(테스트 가드)**: 반환은 *카테고리 enum*뿐 — 발화 본문·정답·"틀렸다"·misconception_id 미노출(구조적 불가). 오개념을 *지목·낙인*하지 않고 *질문 종류만* 바꾼다(정서 안전). **하위호환**: `hypotheses=None`/빈/전부 저신뢰·stale → 현 동작 완전 불변(맞은 학생 영향 0). `PolyaCoach.decide(..., misconception_hypotheses=None)`로 thread. **후속(명시)**: 엔드포인트(`api/coach.py`)의 활성 가설 *조회 배선*(misconception store → decide thread)·오개념 *타입별* 카테고리(현재 confidence만)·ASSUMPTION vs EVIDENCE 동적 선택 정밀화.
+
 ## 개념 점화 지도 (Concept Ignition Map)
 
 > MathScope PRD v1.1을 정본으로 흡수하며 들여온 정렬. 채택 근거는 `MEMORY.md` 2026-05-14 결정 로그 참조.
