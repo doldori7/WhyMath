@@ -82,7 +82,7 @@ from whymath_backend.l4.misconception import (
 )
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
-from whymath_backend.l4.misconception.hypothesis_store import apply_matches
+from whymath_backend.l4.misconception.hypothesis_store import curate_hypothesis
 from whymath_backend.l4.misconception.judge import JudgeProtocol, LLMJudge, judge_filter
 from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
 from whymath_backend.l4.misconception.match_gate import apply_match_quality_gate
@@ -809,24 +809,32 @@ async def _apply_hypotheses(
     user_id: uuid.UUID | None,
     matches: list[MisconceptionMatch],
 ) -> list[MisconceptionHypothesis]:
-    """이번 턴 매칭(증거)으로 학생 활성 가설 세트를 1턴 갱신·영속해 반환 — coach 세션/턴 전용.
+    """이번 턴 매칭(증거)으로 학생 활성 가설 세트를 1턴 *큐레이션*·영속해 반환 — coach 세션/턴 전용.
 
-    WH-1 2단계 §8.4 슬라이스 3 *결선* 좌석. #191 순수 로직·#192 저장소(`apply_matches`)를
-    *재사용만* 한다(재구현 0). 핸들러의 `session`/트랜잭션에 합류하고 `apply_matches`가 flush만
+    WH-1 2단계 §8.4 슬라이스 3 *결선* 좌석. #191 순수 로직·#192 저장소(`curate_hypothesis`)를
+    *재사용만* 한다(재구현 0). 핸들러의 `session`/트랜잭션에 합류하고 `curate_hypothesis`가 flush만
     하므로(commit은 핸들러), 가설 갱신이 dialogue/turn 쓰기와 *같은 트랜잭션*에서 원자적으로
     영속된다(별도 commit 없음). 반환 가설은 응답 `active_hypotheses`로 노출된다(매칭 없으면
-    빈 리스트 — `apply_matches`가 감쇠·가지치기 후 빈 세트면 그대로).
+    빈 리스트 — 감쇠·가지치기 후 빈 세트면 그대로).
+
+    **하네스 동치(parity)**: `apply_matches`(매치만)가 아니라 §3 도구4 `curate_hypothesis`를 쓴다
+    — `evidence_links` 순지지도(`net_support`)가 *음수*(반박 우세)인 가설은 archived하고(R4 확증
+    편향·거짓 낙인 방지) 최대 5개 활성으로 캡한다(§2.2 큐레이션 규칙·초점). 같은 `student_id` 증거
+    그래프를 하네스(`harness/wh1_session.py`)와 공유하므로 *단일 진실원천*이다 — 하네스가 반박한
+    오개념을 라이브도 동일 제외. 반박 증거 없고 활성 ≤5면 `apply_matches`와 결과 동일(하위호환).
 
     `user_id` 가드: `ConsentedUser` 인증 게이트라 실제론 항상 채워지지만, 방어적으로 None이면
-    가설을 적용·영속하지 않고 빈 리스트를 반환한다(`apply_matches`는 per-student라 user_id 필수).
+    가설을 적용·영속하지 않고 빈 리스트를 반환한다(`curate_hypothesis`는 per-student·user_id 필수).
 
     범위(정직): per-turn *영속+노출* + 개입 발화 결선까지다. 갱신된 가설 세트는 바로 아래
     `_intervention_from_hypotheses_or`로 *개입 발화*도 구동한다(select_focus 기반 intervention —
-    이 슬라이스에서 결선). 진단-실제 *일치율* 게이트·도구 루프 오케스트레이션은 후속 슬라이스다.
+    이 슬라이스에서 결선). 라이브 경로 증거 *적재*(`log_evidence`)는 아직 하네스 몫이라 net_support
+    는 하네스가 쌓은 증거를 *소비*만 한다(라이브 자가 적재는 후속). 진단-실제 *일치율* 게이트·도구
+    루프 오케스트레이션도 후속 슬라이스다.
     """
     if user_id is None:
-        return []  # 인증 게이트라 실제론 도달 안 함(방어적 가드 — apply_matches는 user_id 필수).
-    return await apply_matches(session, user_id, matches)
+        return []  # 인증 게이트라 도달 안 함(방어 가드 — curate_hypothesis는 user_id 필수).
+    return await curate_hypothesis(session, student_id=user_id, matches=matches)
 
 
 def _wh1_turn_state(total_turns_before: int) -> tuple[int, bool]:
@@ -929,10 +937,10 @@ async def create_session(
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
     outcome = await _compute_matches(body.student_input, ocr_confidence=body.ocr_confidence)
-    # WH-1 2단계 §8.4 슬라이스 3 — 이번 턴 매칭(증거)으로 학생 활성 가설 세트를 갱신·영속한다
+    # WH-1 2단계 §8.4 슬라이스 3 — 이번 턴 매칭(증거)으로 학생 활성 가설 세트를 큐레이션·영속한다
     # (#191 순수 로직 + #192 저장소 재사용·재구현 0). 같은 `session`/같은 트랜잭션에 합류하며
-    # apply_matches는 flush만 하고 commit은 *이 핸들러의 기존 commit*이 담당(별도 commit 없음).
-    # `user.user_id`는 ConsentedUser 게이트라 채워지지만, None이면 빈 리스트로 가드(apply_matches는
+    # curate_hypothesis(증거 반박·캡)는 flush만 하고 commit은 *핸들러의 기존 commit*이 담당(별도 X).
+    # `user.user_id`는 ConsentedUser 게이트라 채워지지만, None이면 빈 리스트로 가드(per-student라
     # user_id 필요). 가설은 *후보*일 뿐 확정 오개념 아님(낙인 금지)·학생 본인 데이터만 노출.
     # 결정 *앞에서* 적용한다 — 갱신된 가설 세트를 _build_response_payload로 넘겨 소크라테스
     # 카테고리(ASSUMPTION 가정 표면화)까지 구동(개입 채널과 동일한 post-apply 세트·단일 진실원천).
@@ -1068,7 +1076,7 @@ async def append_turns(
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
     outcome = await _compute_matches(body.student_input, ocr_confidence=body.ocr_confidence)
     # WH-1 2단계 §8.4 슬라이스 3 — create_session과 동형. 이번 턴 매칭으로 *기존* 활성 가설
-    # 세트를 갱신(감쇠/강화·누적)·영속한다(같은 트랜잭션 합류·별도 commit 없음·#191/#192 재사용).
+    # 세트를 큐레이션(감쇠/강화·누적·증거 반박·캡)·영속한다(트랜잭션 합류·별도 commit 없음·재사용).
     # 멀티턴이라 직전 턴들의 가설 위에 누적되어 감쇠·강화가 실제로 가동된다(2단계 메커니즘).
     # 결정 *앞에서* 적용한다 — 누적 가설 세트를 _build_response_payload로 넘겨 소크라테스 카테고리
     # (ASSUMPTION 가정 표면화)까지 구동(개입 채널과 동일한 post-apply 세트·단일 진실원천).
