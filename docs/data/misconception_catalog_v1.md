@@ -5,9 +5,11 @@
 > 오개념은 개념·성취기준·CCSS·distractor 규칙·교정포인트를 갖춘 **진단·피드백 1급 자산**이다. 현행
 > `l4/misconception/catalog.py`(Python 상수·kebab-case ~30종·DB 비영속)의 **DB 승격 대상**.
 >
-> **현황(2026-06-20)**: 코퍼스 **추출·커밋 완료**(Phase B.1). `whymath-misconception`로 839종을
-> 정규화해 `data/corpus/misconceptions_v1/`에 커밋(중복 0·CCSS 771·error_type 730). 30종 kebab
-> 탐지 엔진과 **별개 체계**(합치지 않음). DB 테이블·마이그레이션·로더는 후속(B.2/B.3).
+> **현황(2026-06-20)**: 코퍼스 추출·커밋(B.1) + **DB 테이블 신설(B.2)** 완료. `whymath-misconception`로
+> 839종을 정규화해 `data/corpus/misconceptions_v1/`에 커밋(중복 0·CCSS 771·error_type 730), 영속
+> 테이블 `misconception_catalog`(mis_id PK·16필드·Alembic `c4d5e6f7a8b9`) 신설. 30종 kebab 탐지
+> 엔진·런타임 테이블(hypothesis/evidence/embedding)과 **별개 체계**(FK 0·합치지 않음). 로더(코퍼스→DB
+> 적재)는 후속(B.3).
 
 ---
 
