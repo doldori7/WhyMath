@@ -270,7 +270,18 @@ class TestRecordProblemAttemptMastery:
         assert all(r.mastery == 0.69 for r in records)  # 첫 관측·정답
         assert all(r.measured_at == ts for r in records)  # 한 풀이=같은 시각
         assert len(fake.added) == 2
-        assert fake.commits == 2
+        assert fake.commits == 1  # 다개념 = 단일 트랜잭션(원자성)
+
+    async def test_multi_concept_single_transaction(self) -> None:
+        """3개념도 add 3·commit 1 — 루프 N회·트랜잭션 1회(전부 성공 또는 전부 롤백)."""
+        cids = [uuid.uuid4(), uuid.uuid4(), uuid.uuid4()]
+        fake = _QueueSession([_QResult(cids), _QResult([]), _QResult([]), _QResult([])])
+        records = await record_problem_attempt_mastery(
+            cast(AsyncSession, fake), _UID, uuid.uuid4(), True, model=_M
+        )
+        assert len(records) == 3
+        assert len(fake.added) == 3
+        assert fake.commits == 1
 
     async def test_no_mapped_concepts_returns_empty(self) -> None:
         """문제↔개념 매핑이 없으면 숙달 갱신 0(빈 리스트·add 0)."""
@@ -290,6 +301,7 @@ class TestRecordProblemAttemptMastery:
         )
         assert len(records) == 1
         assert records[0].mastery == 0.15  # 오답
+        assert fake.commits == 1  # 1개념 = 1 트랜잭션
 
 
 class TestForgettingInRecord:

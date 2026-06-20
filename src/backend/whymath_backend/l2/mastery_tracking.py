@@ -102,6 +102,47 @@ async def get_current_mastery(
     return float(row.mastery) if row is not None and row.mastery is not None else None
 
 
+async def _stage_attempt_mastery(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    concept_id: uuid.UUID,
+    correct: bool,
+    *,
+    model: BktModel,
+    measured_at: datetime,
+) -> ConceptMasteryHistory:
+    """풀이 관측 1건을 (user, concept) 학습 곡선에 반영해 새 측정 행을 *세션에 add*한다(커밋 0).
+
+    직전 측정을 prior로 읽어 BKT 갱신 후 새 `concept_mastery_history` 행을 만들어 `session.add`만
+    한다 — **commit은 호출자 책임**. 단일 개념(`record_attempt_mastery`)·다개념 원자 갱신
+    (`record_problem_attempt_mastery`)이 이 staging을 공유하되 커밋 경계는 각자 정한다.
+    """
+    prior_row = await _latest_mastery(session, user_id, concept_id)
+    prior_mastery = (
+        float(prior_row.mastery)
+        if prior_row is not None and prior_row.mastery is not None
+        else None
+    )
+    prior_sample = prior_row.sample_size if prior_row is not None else None
+    # slice L2-6: 직전 측정 이후 경과일(망각 감쇠 입력). 직전 없으면 0.
+    elapsed_days = (
+        (measured_at - prior_row.measured_at).total_seconds() / 86400.0
+        if prior_row is not None
+        else 0.0
+    )
+    rec = compute_mastery_record(prior_mastery, prior_sample, correct, model, elapsed_days)
+    row = ConceptMasteryHistory(
+        user_id=user_id,
+        concept_id=concept_id,
+        measured_at=measured_at,
+        mastery=rec.mastery,
+        confidence=rec.confidence,
+        sample_size=rec.sample_size,
+    )
+    session.add(row)
+    return row
+
+
 async def record_attempt_mastery(
     session: AsyncSession,
     user_id: uuid.UUID,
@@ -113,32 +154,15 @@ async def record_attempt_mastery(
 ) -> ConceptMasteryHistory:
     """풀이 관측 1건을 (user, concept) 학습 곡선에 반영 — 새 측정 행 적재·반환.
 
-    직전 측정을 prior로 읽어 BKT 갱신 후 새 `concept_mastery_history` 행을 INSERT(append-only).
-    `measured_at` 생략 시 현재. 같은 트랜잭션으로 commit.
+    `_stage_attempt_mastery`로 새 행을 세션에 add한 뒤 **단일 개념 단위로 commit**한다(공개 계약·
+    하위호환). `measured_at` 생략 시 현재. 다개념 원자 갱신은 `record_problem_attempt_mastery`가
+    staging을 직접 묶어 한 번만 커밋한다.
     """
     model = model or BktModel()
     now = measured_at or datetime.now(UTC)
-    prior_row = await _latest_mastery(session, user_id, concept_id)
-    prior_mastery = (
-        float(prior_row.mastery)
-        if prior_row is not None and prior_row.mastery is not None
-        else None
+    row = await _stage_attempt_mastery(
+        session, user_id, concept_id, correct, model=model, measured_at=now
     )
-    prior_sample = prior_row.sample_size if prior_row is not None else None
-    # slice L2-6: 직전 측정 이후 경과일(망각 감쇠 입력). 직전 없으면 0.
-    elapsed_days = (
-        (now - prior_row.measured_at).total_seconds() / 86400.0 if prior_row is not None else 0.0
-    )
-    rec = compute_mastery_record(prior_mastery, prior_sample, correct, model, elapsed_days)
-    row = ConceptMasteryHistory(
-        user_id=user_id,
-        concept_id=concept_id,
-        measured_at=now,
-        mastery=rec.mastery,
-        confidence=rec.confidence,
-        sample_size=rec.sample_size,
-    )
-    session.add(row)
     await session.commit()
     return row
 
@@ -189,21 +213,24 @@ async def record_problem_attempt_mastery(
     파이프라인의 자동 결선 진입점.
 
     `problem_concept`에서 role이 `assessed_roles`(기본 PRIMARY·TESTED)인 distinct 개념마다
-    `record_attempt_mastery`를 호출해 학습 곡선에 측정 1건씩 적재한다. 매핑이 없으면 빈 리스트
-    (숙달 갱신 0). 한 풀이의 모든 개념은 *같은 `measured_at`*(생략 시 현재)을 공유한다.
+    `_stage_attempt_mastery`로 측정 1건씩 세션에 add하고 **루프 후 한 번만 commit**한다 — 한 풀이
+    채점의 모든 개념 갱신이 *단일 트랜잭션*(전부 성공 또는 전부 롤백)이라 중간 실패 시 부분 갱신·
+    재시도 이중 카운트가 없다. 매핑이 없으면 빈 리스트(커밋 0). 모든 개념은 *같은 `measured_at`*
+    (생략 시 현재)을 공유한다.
 
-    v1: 평가 개념 각각에 *동일* 정/오답 신호를 적용(role/relevance 가중 부분 크레딧은 후속).
-    개념별로 독립 commit(record_attempt_mastery 계약) — 다개념 원자성은 후속.
+    v1: 평가 개념 각각에 *동일* 정/오답 신호를 적용(역할 가중 부분 크레딧은 pedagogy 후속).
     """
     model = model or BktModel()
     timestamp = measured_at or datetime.now(UTC)
     concept_ids = await _assessed_concept_ids(session, problem_id, assessed_roles)
     records: list[ConceptMasteryHistory] = []
     for concept_id in concept_ids:
-        record = await record_attempt_mastery(
+        record = await _stage_attempt_mastery(
             session, user_id, concept_id, correct, model=model, measured_at=timestamp
         )
         records.append(record)
+    if records:  # 빈 개념셋은 커밋 0(현 동작 보존)
+        await session.commit()
     return records
 
 
