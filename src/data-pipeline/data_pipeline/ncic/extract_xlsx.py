@@ -12,13 +12,19 @@ re-ID/스키마 안정성:
   - 연결의 개념 참조는 안정 키 `concept_src_id`(File A 원본키)를 그대로 보존한다 — concept_id
     마이그레이션(UC→ELEM-GEO)에 견고. 현재 개념 identity 해소는 백엔드 로더 책임.
 
-⚠️ File A 도착 전 주의: 실제 시트/컬럼명은 미확정이다. 아래 `_SHEET_*`·`_STD_COLS`·`_LINK_COLS`
-매핑(좌변=File A 컬럼명)만 조정하면 파서·검증·테스트 본체는 그대로 재사용된다. 테스트는 여기서
-정의한 컬럼명으로 합성 dict를 만들어 매핑 로직을 검증한다.
+✅ File A 도착(2026-06-20·sha256 `4e21d6d4…`): 아래 `_SHEET_*`·`_STD_COLS`·`_LINK_COLS`
+좌변을 실 File A 컬럼명으로 정합 완료. 파서·검증·모델·패턴은 무변경(좌변만 조정). 실 추출 결과:
+성취기준 895·연결 437행(다중코드 분할로 443 링크) 클린(`external_corpus_ingestion_v1.md` §1).
+
+실데이터 특성 3종(연결 시트 `개념-성취기준-CCSS`): ① 교육과정 열 없음 → revision 2022 기본,
+② `연결구분` 괄호 접미사(`직접(기본수학)`) → 베어 토큰 정규화·괄호는 note 보존, ③ code 셀 `;`
+다중코드 → 코드별 1 링크 분할. 표준 시트의 `norm_id` 열은 **로마숫자 Ⅰ 유지**(ASCII 패턴 위반)라
+매핑하지 않고 `build_norm_id`(Ⅰ→I 정규화) 파생을 쓴다.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator, Mapping
 from pathlib import Path
 from typing import Any, Final, cast
@@ -33,25 +39,27 @@ from data_pipeline.ncic.transform import (
 )
 
 # ──────────────────────────────────────────────────────────────────────
-# File A 시트·컬럼 매핑 (도착 시 좌변만 조정)
+# File A 시트·컬럼 매핑 (실 File A 정합 — 좌변=실제 컬럼명)
 # ──────────────────────────────────────────────────────────────────────
 # 전체 성취기준(895행·2022+2015). 학교급·학년군은 코드에서 추론하므로 매핑 불요.
 _SHEET_STANDARDS: Final[str] = "성취기준_목록"
-# 개념↔성취기준 연결(연결구분 = 직접/재매핑/준용).
-_SHEET_LINKS: Final[str] = "연결_개념-성취기준"
-# 2022 전용(435행) 공식 마스터 — official_code↔norm_id 교차검증용. File A 도착 시 별도 배선.
+# 개념↔성취기준 연결(연결구분 = 직접/재매핑/준용). 실 File A 시트명.
+_SHEET_LINKS: Final[str] = "개념-성취기준-CCSS"
+# 2022 전용(공식 마스터) — official_code↔norm_id 교차검증용. 현재 미배선(후속).
 _SHEET_OFFICIAL_MASTER: Final[str] = "공식_성취기준_마스터"
 
 # 성취기준 컬럼: File A 컬럼명 → RawStandardRecord 키.
 #   - code·statement는 필수, 그 외 선택(미존재 시 transform 기본값/추론).
-#   - norm_id 컬럼은 매핑하지 않는다 → transform이 (교육과정, code)로 결정적 파생.
+#   - norm_id 컬럼은 매핑하지 않는다(File A norm_id는 로마숫자 Ⅰ 유지 → ASCII 패턴 위반).
+#     transform이 (교육과정, code)로 Ⅰ→I 정규화하며 결정적 파생한다.
+#   - 해설·핵심아이디어·출처URL·출처문서는 실 File A에 열이 없으면 자동 skip(미존재=무해).
 _STD_COLS: Final[dict[str, str]] = {
-    "코드": "code",
+    "성취기준 코드": "code",
     "교육과정": "curriculum_revision",
-    "과목": "subject",
-    "영역": "domain",
-    "세부영역": "sub_domain",
-    "성취기준": "statement",
+    "과목약칭": "subject",
+    "영역(단원)": "domain",
+    "소단원(개념)": "sub_domain",
+    "성취기준 내용": "statement",
     "해설": "commentary",
     "핵심아이디어": "big_idea",
     "출처URL": "source_url",
@@ -59,13 +67,15 @@ _STD_COLS: Final[dict[str, str]] = {
 }
 
 # 연결 컬럼: File A 컬럼명 → 내부 키.
-#   - norm_id가 직접 있으면 사용, 없으면 (교육과정, 코드)로 파생.
+#   - 실 링크 시트엔 code 열만 있고 교육과정·norm_id·비고 열이 없다 → revision 2022 기본·파생.
+#   - 하위호환: `norm_id`/`코드`/`교육과정`/`비고` 열도 매핑해 직접 norm_id·구버전 시트를 수용.
 _LINK_COLS: Final[dict[str, str]] = {
     "개념ID": "concept_src_id",
+    "한국 성취기준(2022)": "code",
+    "연결구분": "link_type",
     "norm_id": "norm_id",
     "코드": "code",
     "교육과정": "curriculum_revision",
-    "연결구분": "link_type",
     "비고": "note",
 }
 
@@ -122,11 +132,17 @@ def parse_standard_row(row: Mapping[str, object]) -> AchievementStandard:
     return transform_raw_to_standard(cast(RawStandardRecord, raw))
 
 
-def parse_link_row(row: Mapping[str, object]) -> ConceptStandardLink:
-    """File A 연결 행(dict) → 검증된 `ConceptStandardLink`.
+def parse_link_row(row: Mapping[str, object]) -> list[ConceptStandardLink]:
+    """File A 연결 행(dict) → 검증된 `ConceptStandardLink` 목록(행→복수 가능).
 
-    norm_id가 직접 있으면 사용하고, 없으면 (교육과정, 코드)로 `build_norm_id` 파생한다.
-    필수 필드(concept_src_id·norm_id·link_type) 누락·link_type 비허용은 transform이 거른다.
+    실 `개념-성취기준-CCSS` 시트 특성 3종을 처리한다:
+      1. 교육과정 열이 없으면 revision은 **2022 개정 기본**(norm_id 직접값이 있으면 우선).
+      2. link_type 괄호 접미사(`직접(기본수학)`·`재매핑(2015→2022)`)는 베어 토큰으로 정규화하고,
+         괄호 내부는 `note`로 보존한다(비고 열이 따로 없을 때만 — 정보 손실 0).
+      3. code 셀이 `;`로 복수 성취기준을 묶을 수 있어 **코드별 1 링크로 분할**한다.
+
+    norm_id 직접값이 있으면 단일 링크로 쓰고, 없으면 code(복수 가능)에서 `build_norm_id` 파생한다.
+    필수 필드 누락·link_type 비허용은 transform이 거른다.
     """
     mapped: dict[str, str] = {}
     for column, key in _LINK_COLS.items():
@@ -134,24 +150,40 @@ def parse_link_row(row: Mapping[str, object]) -> ConceptStandardLink:
         if value is not None:
             mapped[key] = value
 
-    norm_id = mapped.get("norm_id")
-    if not norm_id:
-        code = mapped.get("code")
-        revision = mapped.get("curriculum_revision")
-        if code and revision:
-            norm_id = build_norm_id(_canon_revision(revision), code)
-    if not norm_id:
-        raise ExtractError("연결 행에 norm_id(또는 교육과정+코드)가 없습니다")
-
-    raw: dict[str, str] = {
-        "concept_src_id": mapped.get("concept_src_id", ""),
-        "norm_id": norm_id,
-        "link_type": mapped.get("link_type", ""),
-    }
+    # link_type 괄호 정규화 + 괄호 내부 note 보존(비고 미지정 시)
+    link_type_raw = mapped.get("link_type", "")
+    link_type = re.sub(r"\(.*?\)", "", link_type_raw).strip()
     note = mapped.get("note")
-    if note:
-        raw["note"] = note
-    return transform_raw_to_link(cast(RawLinkRecord, raw))
+    if note is None:
+        paren = re.search(r"\((.*?)\)", link_type_raw)
+        if paren and paren.group(1).strip():
+            note = paren.group(1).strip()
+
+    concept_src_id = mapped.get("concept_src_id", "")
+
+    def _build(norm_id: str) -> ConceptStandardLink:
+        raw: dict[str, str] = {
+            "concept_src_id": concept_src_id,
+            "norm_id": norm_id,
+            "link_type": link_type,
+        }
+        if note:
+            raw["note"] = note
+        return transform_raw_to_link(cast(RawLinkRecord, raw))
+
+    # norm_id 직접값 우선(단일 링크)
+    direct = mapped.get("norm_id")
+    if direct:
+        return [_build(direct)]
+
+    # 없으면 code(복수 가능)에서 파생 — revision 기본 2022
+    code_cell = mapped.get("code")
+    if not code_cell:
+        raise ExtractError("연결 행에 norm_id(또는 성취기준 코드)가 없습니다")
+    revision = mapped.get("curriculum_revision")
+    revision = _canon_revision(revision) if revision else "2022 개정"
+    codes = [c.strip() for c in code_cell.split(";") if c.strip()]
+    return [_build(build_norm_id(revision, code)) for code in codes]
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -204,7 +236,10 @@ def extract_file_a(
         standards = [
             parse_standard_row(row) for row in _iter_sheet_rows(workbook, _SHEET_STANDARDS)
         ]
-        links = [parse_link_row(row) for row in _iter_sheet_rows(workbook, _SHEET_LINKS)]
+        # 연결 행은 다중코드 분할로 행→복수 링크가 될 수 있어 평탄화(extend).
+        links = [
+            link for row in _iter_sheet_rows(workbook, _SHEET_LINKS) for link in parse_link_row(row)
+        ]
     finally:
         workbook.close()
     return standards, links
