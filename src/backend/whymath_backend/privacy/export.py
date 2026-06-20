@@ -7,16 +7,18 @@ data access·portability)이다. 삭제권이 이미 *어떤 테이블이 사용
 
 범위(plan-driven 확장): `_EXPORT_PLAN`의 학습/진단 14종(학습 세션·시도·진단·개념 숙달 이력·능력
 스냅샷·동의·트랙/페르소나/상태 이력·오개념 가설·진단 증거·일별 학습 지표·행동 지표 시계열 +
-**대화 세션 메타**) + `user_profile` 단건. **보안 항목 영구 제외**: `device_credential`·
-`refresh_token_session`(로그인 토큰·기기 자격 — 노출은 보안 위험·"개인 학습 데이터" 아님). 대화의
-개별 메시지·손글씨(turn 본문)·세부 시도 이벤트(대용량)·외부 store 실조회·비동기 job은 후속 —
-미포함을 *조용히 넘기지 않고* `not_included`로 정직히 드러낸다(날조 0). 오개념 가설·증거는
-*식별자·신호·날짜*만 담고 자유텍스트 PII가 없어(증거 그래프 설계 04a §2.3) 본인 export에 그대로
-안전(redaction 0). 증분 4 시계열 2종도 *식별자·지표·날짜*만이라 동일 안전 — `UserBehaviorMetrics`의
-churn_risk 등 추론 행동분석치도 본인 열람·이동권(Art.15)엔 포함하되(기존 θ·오개념 가설 등 추론치
-포함과 일관) `ProblemSolveTimeDistribution`은 `problem_id` 교차집계라 개인 PII가 아니므로 제외한다
-(영구). **증분 5**: `Dialogue`(대화 세션 메타·시각/문제/resolution/턴수/모델/비용/평점·자유텍스트
-0)를 포함하되, *채팅 본문*인 `DialogueTurn`(미성년 콘텐츠·`dialogue_id` 조인)은 privacy 결정 후속.
+**대화 세션 메타**) + **대화 턴 본문**(`dialogue_turns`·조인) + `user_profile` 단건. **보안 항목
+영구 제외**: `device_credential`·`refresh_token_session`(로그인 토큰·기기 자격 — 노출은 보안 위험·
+"개인 학습 데이터" 아님). 세부 시도 이벤트(대용량)·손글씨 이미지 원본 파일(외부 저장소·URI만 포함)·
+외부 store 실조회·비동기 job은 후속 — 미포함을 *조용히 넘기지 않고* `not_included`로 정직히 드러낸다
+(날조 0). 오개념 가설·증거는 *식별자·신호·날짜*만 담고 자유텍스트 PII가 없어(증거 그래프 설계 04a
+§2.3) 본인 export에 그대로 안전(redaction 0). 증분 4 시계열 2종도 *식별자·지표·날짜*만이라 동일
+안전 — `UserBehaviorMetrics`의 churn_risk 등 추론 행동분석치도 본인 열람·이동권(Art.15)엔 포함하되
+(기존 θ·오개념 가설 등 추론치 포함과 일관) `ProblemSolveTimeDistribution`은 `problem_id` 교차집계라
+개인 PII가 아니므로 제외한다(영구). **증분 5**: `Dialogue`(대화 세션 메타·자유텍스트 0)를 포함.
+**증분 6**: 자식 `DialogueTurn`(채팅 본문·손글씨)을 `Dialogue` 조인으로 결선 — *전체 본문 포함*
+(사용자 결정·GDPR Art.15 열람권·본인 인증 게이트·제3자 공유 아님). 채팅 본문·동의는 *저장 계층*
+(암호화·미들웨어) 책임이며 이 읽기 경로는 인증된 본인에게만 본인 데이터를 돌려준다.
 
 외부 store(ClickHouse 행동 로그·S3 객체·Redis 캐시)는 RDB 밖이라 이 export(PostgreSQL)에 *포함되지
 않는다* — `external_export_pending`으로 *구조화*해 ops가 가시화한다(#252 `external_erasure_targets`
@@ -43,7 +45,7 @@ from whymath_backend.db.models.assessment import (
     Assessment,
     ConceptMasteryHistory,
 )
-from whymath_backend.db.models.dialogue import Dialogue
+from whymath_backend.db.models.dialogue import Dialogue, DialogueTurn
 from whymath_backend.db.models.evidence_link import EvidenceLink
 from whymath_backend.db.models.misconception_hypothesis import MisconceptionHypothesisRecord
 from whymath_backend.db.models.parental_consent import ParentalConsent
@@ -72,8 +74,10 @@ __all__ = [
 # 제외(영구). `UserBehaviorMetrics`의 churn_risk 등 *추론 행동분석*도 본인 열람·이동권(GDPR
 # Art.15)엔 포함한다(기존 θ·오개념 가설 등 추론치 포함과 일관·식별자/지표/날짜만 PII-safe·
 # 자유텍스트 0). **증분 5**: `Dialogue`(대화 *세션 메타*·`user_id` 키·`to_schema()` 보유·
-# `_ERASURE_PLAN` 첫 타깃)를 추가한다 — *본문은 없다*(채팅 본문·손글씨는 자식 `DialogueTurn`
-# (`dialogue_id` 키)에 있고, 조인 필요 + 미성년 콘텐츠 privacy 결정이라 후속). 컬럼명은 모델별
+# `_ERASURE_PLAN` 첫 타깃)를 추가한다. **증분 6**: 그 자식 `DialogueTurn`(채팅 본문·손글씨)을
+# *user_id 직접 키가 없어* `_EXPORT_PLAN`이 아닌 전용 조인 쿼리(`Dialogue`로 조인·아래 함수)로
+# 결선한다 — 사용자 결정(전체 본문 포함·GDPR Art.15)에 따라 `content`·`image_uri`·`image_analysis`
+# 포함(본인 인증 게이트·제3자 공유 아님·기존 추론/진단 데이터 포함과 일관). 컬럼명은 모델별
 # (evidence_links는 `student_id`·나머지는 `user_id`)이라 튜플 2번째로 파라미터화한다. 모든 모델은
 # `to_schema()`를 보유한다(JSON-safe 직렬화).
 _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
@@ -90,15 +94,15 @@ _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
     (EvidenceLink, "student_id", "misconception_evidence"),
     (DailyLearningMetrics, "user_id", "daily_learning_metrics"),  # 증분 4: 일별 학습 활동 집계
     (UserBehaviorMetrics, "user_id", "user_behavior_metrics"),  # 증분 4: 학습 행동 시계열
-    (Dialogue, "user_id", "dialogues"),  # 증분 5: 대화 세션 메타(본문은 DialogueTurn·후속)
+    (Dialogue, "user_id", "dialogues"),  # 증분 5: 대화 세션 메타(본문은 DialogueTurn·아래 조인)
 )
 
 # 이 export에 *포함되지 않은* 범위 — student-facing 사용자 친화 설명(인프라 store명·키 미노출).
 # 부분 export임을 정직히 알린다(GDPR 완전성·날조 0). 외부 store 상세는 ops 로그(아래 함수)로만.
 _NOT_INCLUDED: tuple[str, ...] = (
-    "대화의 개별 메시지·손글씨 이미지(turn 본문)는 미포함 — 후속 확장 예정(대화 세션 메타는 포함).",
     "세부 시도 이벤트(실시간 단계 이벤트)는 대용량이라 미포함 — 후속 스트리밍 export 예정.",
-    "행동 로그·업로드 이미지·세션 캐시 등 외부 시스템 보관 데이터는 미포함(별도 시스템).",
+    "손글씨 이미지 *원본 파일*은 외부 저장소(별도 시스템) 보관 — 본 export엔 참조 URI만 담긴다.",
+    "행동 로그·세션 캐시 등 외부 시스템 보관 데이터는 미포함(별도 시스템).",
     "보안 항목(로그인 토큰·기기 자격)은 보안상 내보내지 않는다.",
 )
 
@@ -182,9 +186,10 @@ async def export_user_data(session: AsyncSession, *, user_id: uuid.UUID) -> User
     """본인의 학습/진단 데이터를 `_EXPORT_PLAN`대로 모아 구조화 export로 반환한다(읽기 전용).
 
     각 테이블을 `select(...).where(user컬럼 == user_id)`로 조회(PK 정렬·결정적)하고
-    `to_schema().model_dump(mode="json")`로 직렬화한다. `user_profile`은 단건. **commit/flush 0**
-    (읽기 전용·저장소 패턴). 외부 store는 포함하지 않고 `external_export_pending`(ops)로 별도 고지.
-    멱등·부작용 0 — 같은 user는 같은 데이터(시각만 갱신).
+    `to_schema().model_dump(mode="json")`로 직렬화한다. **증분 6**: `dialogue_turns`는 `user_id`
+    직접 키가 없어(자식 테이블) `Dialogue`로 조인해 본인 턴만 조회한다(전체 본문 포함·사용자 결정).
+    `user_profile`은 단건. **commit/flush 0**(읽기 전용·저장소 패턴). 외부 store는 포함하지 않고
+    `external_export_pending`(ops)로 별도 고지. 멱등·부작용 0(같은 user는 같은 데이터·시각만 갱신).
     """
     data: dict[str, list[dict[str, Any]]] = {}
     for model, column, category in _EXPORT_PLAN:
@@ -194,6 +199,16 @@ async def export_user_data(session: AsyncSession, *, user_id: uuid.UUID) -> User
             .order_by(*model.__mapper__.primary_key)
         )
         data[category] = [_row_to_json(row) for row in result.scalars().all()]
+
+    # 대화 턴(채팅 본문·손글씨) — `dialogue_turn`엔 user_id가 없어 부모 `dialogue`로 조인해 본인
+    # 턴만 조회. (dialogue_id, turn_order) 정렬로 대화별·시간순 결정적. 전체 본문 포함(증분 6).
+    turn_result = await session.execute(
+        select(DialogueTurn)
+        .join(Dialogue, DialogueTurn.dialogue_id == Dialogue.dialogue_id)
+        .where(Dialogue.user_id == user_id)
+        .order_by(DialogueTurn.dialogue_id, DialogueTurn.turn_order)
+    )
+    data["dialogue_turns"] = [_row_to_json(row) for row in turn_result.scalars().all()]
 
     profile_result = await session.execute(
         select(UserProfile).where(UserProfile.user_id == user_id)

@@ -37,6 +37,7 @@ _CATEGORIES = {
     "daily_learning_metrics",
     "user_behavior_metrics",
     "dialogues",
+    "dialogue_turns",
 }
 
 
@@ -106,12 +107,12 @@ def _run(session: _FakeSession, user_id: uuid.UUID) -> UserDataExport:
 
 class TestExportUserData:
     def test_assembles_categories_and_profile(self) -> None:
-        """14종 카테고리 직렬화 + user_profile 단건 + exported_at + not_included·읽기 전용."""
+        """15종 카테고리(+대화 턴 조인) 직렬화 + user_profile 단건 + exported_at + 읽기 전용."""
         uid = uuid.uuid4()
-        # _EXPORT_PLAN 순서(14) + profile(1) = 15 execute. learning_sessions(0)·ability_snapshots
-        # (4)·parental_consents(5)·misconception_hypotheses(9)·misconception_evidence(10)·
-        # daily_learning_metrics(11)·user_behavior_metrics(12)·dialogues(13)에 구분 행, 나머지 빈,
-        # 마지막 profile.
+        # _EXPORT_PLAN(14) + dialogue_turns 조인(1) + profile(1) = 16 execute. learning_sessions
+        # (0)·ability_snapshots(4)·parental_consents(5)·misconception_hypotheses(9)·
+        # misconception_evidence(10)·daily_learning_metrics(11)·user_behavior_metrics(12)·
+        # dialogues(13)·dialogue_turns(14)에 구분 행, 나머지 빈, 마지막 profile.
         fake = _FakeSession(
             [
                 [_StubRow({"cat": "ls"})],
@@ -128,6 +129,7 @@ class TestExportUserData:
                 [_StubRow({"cat": "dlm"})],
                 [_StubRow({"cat": "ubm"})],
                 [_StubRow({"cat": "dlg"})],
+                [_StubRow({"cat": "dlt"})],
                 [_StubRow({"cat": "profile"})],
             ]
         )
@@ -143,14 +145,15 @@ class TestExportUserData:
         assert out.data["daily_learning_metrics"] == [{"cat": "dlm"}]  # 증분 4 신규
         assert out.data["user_behavior_metrics"] == [{"cat": "ubm"}]  # 증분 4 신규
         assert out.data["dialogues"] == [{"cat": "dlg"}]  # 증분 5 신규(대화 세션 메타)
+        assert out.data["dialogue_turns"] == [{"cat": "dlt"}]  # 증분 6 신규(대화 턴 본문·조인)
         assert out.user_profile == {"cat": "profile"}
         assert len(out.not_included) >= 1  # 부분 export 정직 고지
         assert fake.commits == 0 and fake.flushes == 0  # 읽기 전용(저장소 패턴)
-        assert len(fake.executed) == 15
+        assert len(fake.executed) == 16
 
     def test_no_profile_yields_none(self) -> None:
         """프로필 행이 없으면 user_profile=None·각 카테고리 빈 리스트."""
-        fake = _FakeSession([[] for _ in range(15)])
+        fake = _FakeSession([[] for _ in range(16)])
         out = _run(fake, uuid.uuid4())
         assert out.user_profile is None
         assert all(rows == [] for rows in out.data.values())
@@ -158,7 +161,7 @@ class TestExportUserData:
 
     def test_multiple_rows_preserved(self) -> None:
         """카테고리당 다행 직렬화 보존(리스트 순서)."""
-        fake = _FakeSession([[_StubRow({"n": 1}), _StubRow({"n": 2})], *([[]] * 14)])
+        fake = _FakeSession([[_StubRow({"n": 1}), _StubRow({"n": 2})], *([[]] * 15)])
         out = _run(fake, uuid.uuid4())
         assert out.data["learning_sessions"] == [{"n": 1}, {"n": 2}]
 
