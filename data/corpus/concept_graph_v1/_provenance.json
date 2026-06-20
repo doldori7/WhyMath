@@ -16,5 +16,26 @@
   "post_extraction": [
     "concepts: 기본수학 34의 definition_provenance에 '·AI 검수(수식·오개념 정합)' 마커 추가 — reviewed 승격(출처 별책8 보존). 추출 후 검수 행위라 source xlsx에는 없음.",
     "edges: 평행이동(10기수2-01-06)←원의 방정식(10기수2-01-04) 1건 추가 — 공통수학 정본(HK24 평행이동←{직선,원}) 정합. source xlsx 'edges'=580, 적재 jsonl=581."
-  ]
+  ],
+  "transform": {
+    "version": "transform-v1",
+    "command": "python -m data_pipeline.concept_graph transform-v1 --corpus-dir data/corpus/concept_graph_v1 --output-dir data/corpus/concept_graph_v1",
+    "output": "graph.json",
+    "deterministic": true,
+    "inputs": {
+      "concepts.jsonl": "3f16764faabcb9ebda6899e4dbe87b01e2389c8a3a8cee04f8f247f965098d67",
+      "prerequisite_edges.jsonl": "9e1b9425f2ed3beaeb07057c8d0cc7be96b1794177c0ce4b46c9af47be4da218"
+    },
+    "counts": {
+      "concepts": 437,
+      "edges": 581
+    },
+    "output_sha256": "e0acba28f4c49a82a9eed419d8614f68a0fe9a1ffe0bff6f98729dfa3a03ee54",
+    "redacted": [
+      "concepts.description",
+      "concepts.formal_definition"
+    ],
+    "redaction_note": "graph.json 산출물에서 본문(description·formal_definition) 키 완전 제거 — 라이선스 안전(본문 누출 0). source_id·aliases는 보존(재ID 직결용).",
+    "id_map_note": "id_map.csv는 검토용 부산물로 작업트리에 보존하지 않음 — graph.json concepts[].source_id·aliases에 매핑 정보가 직결됨."
+  }
 }

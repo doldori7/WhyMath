@@ -24,6 +24,7 @@ import pytest
 from whymath_backend.config import Settings
 from whymath_backend.l1.concept_graph.backend_concept import (
     BackendConceptRecord,
+    load_backend_concepts_from_graph_json,
     populate_backend_concepts,
 )
 from whymath_backend.l1.concept_graph.backend_edge import (
@@ -366,6 +367,99 @@ def _cleanup_edges_and_concepts(keys: list[str]) -> None:
             conn.execute(text("DELETE FROM concept WHERE code = ANY(:keys)"), {"keys": keys})
     finally:
         engine.dispose()  # type: ignore[attr-defined]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 실 코퍼스 승격 — graph.json(437) → backend `concept` 적재·멱등·직결·redaction
+# ──────────────────────────────────────────────────────────────────────────
+class TestRealCorpusLoad:
+    """실 코퍼스(`data/corpus/concept_graph_v1/graph.json`) 적재 — 437행·멱등(슬1 코퍼스 정합).
+
+    합성 레코드가 아니라 transform-v1이 산출·커밋한 실 `graph.json`을
+    `load_backend_concepts_from_graph_json`(코퍼스 경로 *명시 인자*·로더 기본 경로 무변경)으로 읽어
+    437개 레코드를 만들고 `populate_backend_concepts`로 backend `concept`에 적재한다. 검증:
+      ① 로드 → 437 레코드(슬1 transform counts 정합)
+      ② 적재 count 437·재적재 멱등(행수 불변·UUID PK 보존)
+      ③ source_id/aliases 직결(재ID 추적성)·`code`=재ID concept_id 직결
+      ④ **redaction** — 본문(description·formal_definition·intuitive_explanation) 실제 NULL
+    graph.json 미존재 시 graceful skip(코퍼스 미커밋 환경 보호). 정리는 코퍼스 437 code 전건.
+    """
+
+    def test_load_real_corpus_idempotent(self) -> None:
+        _skip_if_unreachable()
+        import json
+        from pathlib import Path
+
+        from sqlalchemy import text
+
+        corpus = Path("data/corpus/concept_graph_v1/graph.json")
+        if not corpus.exists():
+            pytest.skip("실 코퍼스 미존재(data/corpus/concept_graph_v1/graph.json)")
+
+        # ① 로더가 코퍼스 graph.json을 명시 인자로 받아 437 레코드 산출(기본 경로 무변경).
+        records = load_backend_concepts_from_graph_json(corpus)
+        assert len(records) == 437
+
+        # 적재·정리 키는 코퍼스의 실 concept_id(=code) 전건.
+        payload = json.loads(corpus.read_text(encoding="utf-8"))
+        codes = [str(c["concept_id"]) for c in payload["concepts"]]
+        assert len(codes) == 437
+        # 대표 1건(source_id/aliases 직결 검증용) — 코퍼스 첫 행.
+        first = payload["concepts"][0]
+        first_code = str(first["concept_id"])
+        first_src = first.get("source_id")
+        first_aliases = first.get("aliases") or []
+        try:
+            # ② 적재 count 437 + 재적재 멱등(행수 불변·UUID 보존).
+            count = populate_backend_concepts(records, settings=Settings())
+            assert count == 437
+
+            engine = _sync_engine()
+            try:
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    first_uuid = conn.execute(
+                        text("SELECT concept_id FROM concept WHERE code = :c"),
+                        {"c": first_code},
+                    ).scalar_one()
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+
+            recount = populate_backend_concepts(
+                load_backend_concepts_from_graph_json(corpus), settings=Settings()
+            )
+            assert recount == 437  # 멱등(2회 적재 후에도 437 레코드)
+
+            engine = _sync_engine()
+            try:
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    total = conn.execute(
+                        text("SELECT count(*) FROM concept WHERE code = ANY(:codes)"),
+                        {"codes": codes},
+                    ).scalar_one()
+                    # ③ source_id/aliases 직결·code=concept_id 직결 + ④ redaction NULL.
+                    row = conn.execute(
+                        text(
+                            "SELECT concept_id, code, source_id, aliases, "
+                            "description, formal_definition, intuitive_explanation "
+                            "FROM concept WHERE code = :c"
+                        ),
+                        {"c": first_code},
+                    ).one()
+                # ② 멱등 — 437행·UUID PK 보존(브리지 안정성·FK 참조 보존).
+                assert total == 437
+                assert row.concept_id == first_uuid
+                # ③ 재ID 추적성 직결(source_id·aliases TEXT[])·code=concept_id.
+                assert row.code == first_code
+                assert row.source_id == first_src
+                assert row.aliases == list(first_aliases)
+                # ④ redaction: 본문 3컬럼 NULL(graph.json 부재·로더 미적재·검수 대기).
+                assert row.description is None
+                assert row.formal_definition is None
+                assert row.intuitive_explanation is None
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+        finally:
+            _cleanup(codes)
 
 
 class TestBackendEdgeRoundtrip:

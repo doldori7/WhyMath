@@ -329,3 +329,138 @@ class TestResolveIntegration:
             assert summary["standard_orphan_code_n"] == 1
         finally:
             _cleanup()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 실 코퍼스 승격 — concept graph.json·standards·misconceptions 3코퍼스 실 해소 실측
+# ──────────────────────────────────────────────────────────────────────────
+def _split_standard_codes(raw: object) -> list[str]:
+    """`standard_code` 원천 → 코드 리스트(`;` 분할·strip·빈값 제거). resolve 코어 미러."""
+    if not raw:
+        return []
+    return [c.strip() for c in str(raw).split(";") if c.strip()]
+
+
+def _real_resolve(mis_ids: list[str]) -> list[ResolvedMisconceptionLinks]:
+    """실 코퍼스 적재 후 mis_id 전건을 페치 → resolve_many(같은 AsyncSession 해소)."""
+    from sqlalchemy import select
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+    from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog
+
+    async def _run() -> list[ResolvedMisconceptionLinks]:
+        engine = create_async_engine(Settings().database_url)
+        try:
+            maker = async_sessionmaker(engine, expire_on_commit=False)
+            async with maker() as session:
+                stmt = (
+                    select(MisconceptionCatalog)
+                    .where(MisconceptionCatalog.mis_id.in_(mis_ids))
+                    .order_by(MisconceptionCatalog.mis_id)
+                )
+                rows = list((await session.execute(stmt)).scalars().all())
+                return await resolve_many(session, rows)
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_run())
+
+
+def _cleanup_real(mis_ids: list[str], codes: list[str]) -> None:
+    """3코퍼스 적재 행 정리 — FK 역순(misconception → standard → concept) 전건 DELETE."""
+    from sqlalchemy import text
+
+    engine = _sync_engine()
+    try:
+        with engine.begin() as conn:  # type: ignore[attr-defined]
+            # misconception_catalog(자유 참조) 먼저.
+            conn.execute(
+                text("DELETE FROM misconception_catalog WHERE mis_id = ANY(:ids)"),
+                {"ids": mis_ids},
+            )
+            # achievement_standard(official_code 일치 행 전건).
+            conn.execute(text("DELETE FROM achievement_standard"))
+            # concept(code = 코퍼스 437 전건).
+            conn.execute(
+                text("DELETE FROM concept WHERE code = ANY(:codes)"),
+                {"codes": codes},
+            )
+    finally:
+        engine.dispose()  # type: ignore[attr-defined]
+
+
+class TestRealCorpusResolve:
+    """실 3코퍼스 적재 → `resolve_many`/`summarize` 실측 — 직전 슬라이스 느슨참조 해소율 측정.
+
+    합성 부분집합(`TestResolveIntegration`)을 *보존*하되, graph.json 코퍼스 활성화로 가능해진 *실
+    코퍼스 한 방 적재*를 더한다. 적재 순서: concept graph.json → `populate_backend_concepts`
+    (source_id 채움) / standards.json → `load_standards`(official_code) / misconceptions.json →
+    `load_misconceptions`(concept_src_id·standard_code 원천 저장). 그 뒤 `resolve_many`→`summarize`:
+      ① concept 100% — 모든 concept_src_id가 `Concept.source_id`에 해소(orphan 0)
+      ② standard `>= 0.99` — standard_code 발생 대비 해소 비율(하드코딩 회피·실측 범위 단언)
+      ③ orphan 보고 — 미해소 코드는 `standard_orphan_codes`로 정직 보고(조용한 누락 아님)
+    cleanup은 FK 역순(misconception → standard → concept). 코퍼스 미존재 시 graceful skip.
+    """
+
+    def test_real_corpus_resolution_rates(self) -> None:
+        _skip_if_unreachable()
+        import json
+        from pathlib import Path
+
+        from whymath_backend.l1.concept_graph.backend_concept import (
+            load_backend_concepts_from_graph_json,
+        )
+
+        graph = Path("data/corpus/concept_graph_v1/graph.json")
+        standards = Path("data/corpus/standards_v1/standards.json")
+        misconceptions = Path("data/corpus/misconceptions_v1/misconceptions.json")
+        for path in (graph, standards, misconceptions):
+            if not path.exists():
+                pytest.skip(f"실 코퍼스 미존재({path})")
+
+        # 적재 키 — 코퍼스 전건(정리용).
+        graph_payload = json.loads(graph.read_text(encoding="utf-8"))
+        concept_codes = [str(c["concept_id"]) for c in graph_payload["concepts"]]
+        mis_payload = json.loads(misconceptions.read_text(encoding="utf-8"))
+        mis_ids = [str(m["mis_id"]) for m in mis_payload["misconceptions"]]
+
+        # 실측 기대 — standard_code 발생 총수·해소 비율을 코퍼스에서 *라이브* 계산(하드코딩 회피).
+        std_payload = json.loads(standards.read_text(encoding="utf-8"))
+        std_codes = {str(s["code"]) for s in std_payload["standards"]}
+        code_occurrences = [
+            code
+            for m in mis_payload["misconceptions"]
+            for code in _split_standard_codes(m.get("standard_code"))
+        ]
+        total_occ = len(code_occurrences)
+        resolved_occ = sum(1 for code in code_occurrences if code in std_codes)
+        expected_rate = resolved_occ / total_occ if total_occ else 1.0
+
+        try:
+            # 적재 순서: concept(source_id) → standard(official_code) → misconception(원천 저장).
+            concept_count = populate_backend_concepts(
+                load_backend_concepts_from_graph_json(graph), settings=Settings()
+            )
+            assert concept_count == 437
+            assert load_standards(None, standards, settings=Settings()) > 0
+            assert load_misconceptions(None, misconceptions, settings=Settings()) == len(mis_ids)
+
+            results = _real_resolve(mis_ids)
+            assert len(results) == len(mis_ids)
+            summary = summarize(results)
+
+            # ① concept 100% — orphan 0(graph source_id ⊇ 코퍼스 concept_src_id 완전 겹침).
+            assert summary["concept_orphan_n"] == 0
+            concept_ref_n = sum(1 for m in mis_payload["misconceptions"] if m.get("concept_src_id"))
+            assert summary["concept_resolved_n"] == concept_ref_n  # 참조 있는 행 전부 해소
+
+            # ② standard 해소율 — 코드 발생 대비 해소 비율 실측·`>= 0.99` 범위 단언(하드코딩 회피).
+            actual_resolved_occ = total_occ - summary["standard_orphan_code_n"]
+            actual_rate = actual_resolved_occ / total_occ if total_occ else 1.0
+            assert actual_rate == pytest.approx(expected_rate)  # 코퍼스 라이브 계산 일치
+            assert actual_rate >= 0.99  # 해소율 ≳99%(범위 단언)
+
+            # ③ orphan 보고 정직 — orphan 코드 수는 발생-해소 차와 일치(조용한 누락 아님).
+            assert summary["standard_orphan_code_n"] == total_occ - resolved_occ
+        finally:
+            _cleanup_real(mis_ids, concept_codes)
