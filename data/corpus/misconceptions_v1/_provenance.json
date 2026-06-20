@@ -1,0 +1,27 @@
+{
+  "source_sha256": "fcf6d333a419a222fd15d3140ef3c767d246e6f8a7bafe2756326c6b080b187e",
+  "source_name": "fac16e6f-WhyMath_______.json",
+  "uploaded": "2026-06-20",
+  "counts": {
+    "misconceptions": 839,
+    "duplicates_skipped": 0,
+    "with_ccss": 771,
+    "with_error_type": 730
+  },
+  "error_types": [
+    "공식혼동",
+    "극값변곡혼동",
+    "부호오류",
+    "분배누락",
+    "순서오류",
+    "조건무시",
+    "차원혼동",
+    "해석오류"
+  ],
+  "source_citation": "출처: WhyMath 7계층 본문 코퍼스(자체 저작 — 교수학 오개념 분석).",
+  "license_notice": "와이매스 자체 저작물(오개념 서술·distractor 규칙·교정포인트). 성취기준·CCSS 코드는 구조 메타(공공·사실).",
+  "post_extraction": [
+    "L5_META.오개념 평탄화·한글 소스 키→안정 영문 키(데이터카드 §2).",
+    "mis_id 유일(첫 등장 우선 dedup)·개념/성취기준 코드는 원천 보존(해소는 백엔드 로더)."
+  ]
+}

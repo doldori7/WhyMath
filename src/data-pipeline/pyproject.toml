@@ -57,6 +57,7 @@ xlsx = [
 
 [project.scripts]
 whymath-ncic = "data_pipeline.ncic.__main__:app"
+whymath-misconception = "data_pipeline.misconception.__main__:app"
 
 [build-system]
 requires = ["hatchling>=1.25.0"]
