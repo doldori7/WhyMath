@@ -1,26 +1,36 @@
-"""개인정보 열람·이동권(`privacy/export.py`) — 순수 단위(hermetic·FakeSession).
+"""개인정보 열람·이동권(`privacy/export.py`) — 단위(hermetic·FakeSession) + 실 PG 통합.
 
-`export_user_data`의 *조립 로직*만 검증한다: `_EXPORT_PLAN` 카테고리별 직렬화·user_profile 단건·
-`exported_at`·`not_included` 고지·**읽기 전용**(execute만·commit/flush 0). 실제 ORM 직렬화·실 PG
-조회는 통합테스트가 검증한다(중복 0). `external_export_pending`(외부 store 매니페스트)도 검증.
+단위(FakeSession): `export_user_data`의 *조립 로직*만 검증한다 — `_EXPORT_PLAN` 카테고리별 직렬화·
+user_profile 단건·`exported_at`·`not_included` 고지·**읽기 전용**(execute만·commit/flush 0).
+`external_export_pending`(외부 store 매니페스트)도 검증. ★실제 ORM 직렬화·**대화 턴 조인 스코핑**
+(증분 6·`dialogue_turn`엔 user_id 없음)은 *실 PG 통합테스트*가 seed→export로 검증한다(중복 0).
 """
 
 from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import SecretStr
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from whymath_backend.config import Settings
+from whymath_backend.db.models.dialogue import Dialogue, DialogueTurn
+from whymath_backend.db.models.user import UserProfile
 from whymath_backend.privacy.export import (
     ExternalDataLocation,
     UserDataExport,
     export_user_data,
     external_export_pending,
 )
+from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
+from whymath_backend.schema.enums import ContentType, Persona, TurnRole
+from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 _CATEGORIES = {
     "learning_sessions",
@@ -180,3 +190,130 @@ class TestExternalExportPending:
         loc = external_export_pending(uuid.uuid4())[0]
         with pytest.raises(Exception):  # noqa: B017 — pydantic frozen ValidationError
             loc.store = "x"  # type: ignore[misc]
+
+
+# ===========================================================================
+# 통합 (실 PG·기본 SKIP) — seed→export 왕복(증분 6 대화 턴 조인 스코핑 검증)
+# ===========================================================================
+
+_SECRET = "integration-jwt-secret-0123456789abcdef"
+
+
+def _settings() -> Settings:
+    return Settings(jwt_secret_key=SecretStr(_SECRET))
+
+
+async def _pg_reachable() -> bool:
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
+def _build_user(user_id: uuid.UUID) -> UserProfile:
+    return UserProfile.from_schema(
+        UserProfileSchema(
+            user_id=user_id,
+            persona_primary=Persona.A_일반고고3,
+            nickname="열람학생",
+            email_hash=f"HASH-{user_id.hex[:8]}",
+            is_minor=True,
+        )
+    )
+
+
+def _build_turn(dialogue_id: uuid.UUID, order: int, content: str) -> DialogueTurn:
+    return DialogueTurn.from_schema(
+        DialogueTurnSchema(
+            dialogue_id=dialogue_id,
+            turn_order=order,
+            role=TurnRole.student,
+            content=content,
+            content_type=ContentType.텍스트,
+            spoken_at=datetime.now(UTC),
+        )
+    )
+
+
+async def _cleanup(user_ids: tuple[uuid.UUID, ...], dialogue_ids: tuple[uuid.UUID, ...]) -> None:
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            for did in dialogue_ids:
+                await conn.execute(
+                    text("DELETE FROM dialogue_turn WHERE dialogue_id = :k"), {"k": str(did)}
+                )
+            for uid in user_ids:
+                await conn.execute(text("DELETE FROM dialogue WHERE user_id = :k"), {"k": str(uid)})
+                await conn.execute(
+                    text("DELETE FROM user_profile WHERE user_id = :k"), {"k": str(uid)}
+                )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.integration
+def test_export_dialogue_turns_scoped_by_join_on_live_pg() -> None:
+    """증분 6 — `dialogue_turns`는 user_id 직접 키가 없어 `Dialogue` 조인으로 본인 턴만(타인 제외).
+
+    학생 A의 대화 턴 2건(역순 삽입)·학생 B의 턴 1건을 심고, A의 export가 A의 2턴만 turn_order
+    오름차순·본문 round-trip으로 담고 B의 턴은 *조인 WHERE user_id 스코핑*으로 제외함을 실 PG로
+    검증한다(hermetic FakeSession이 못 잡는 실제 조인 SQL·정렬·직렬화).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    a_uid = uuid.uuid4()
+    b_uid = uuid.uuid4()
+    a_did = uuid.uuid4()
+    b_did = uuid.uuid4()
+
+    async def _seed(sm: async_sessionmaker[AsyncSession]) -> None:
+        async with sm() as session:
+            session.add(_build_user(a_uid))
+            session.add(_build_user(b_uid))
+            session.add(
+                Dialogue.from_schema(
+                    DialogueSchema(dialogue_id=a_did, user_id=a_uid, total_turns=2)
+                )
+            )
+            session.add(
+                Dialogue.from_schema(
+                    DialogueSchema(dialogue_id=b_did, user_id=b_uid, total_turns=1)
+                )
+            )
+            await session.flush()
+            session.add(_build_turn(a_did, 2, "두번째 턴"))  # 역순 삽입 → 정렬 검증
+            session.add(_build_turn(a_did, 1, "첫번째 턴"))
+            session.add(_build_turn(b_did, 1, "타인 턴"))
+            await session.commit()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            await _seed(sm)
+            async with sm() as session:
+                export = await export_user_data(session, user_id=a_uid)
+
+            # 대화 세션 메타 — A의 대화만(B 제외).
+            dialogues = export.data["dialogues"]
+            assert [d["dialogue_id"] for d in dialogues] == [str(a_did)]
+
+            # 대화 턴 — A의 2턴만·turn_order 오름차순·본문 round-trip·B 턴 제외(조인 스코핑).
+            turns = export.data["dialogue_turns"]
+            assert [t["turn_order"] for t in turns] == [1, 2]
+            assert [t["content"] for t in turns] == ["첫번째 턴", "두번째 턴"]
+            assert all(t["dialogue_id"] == str(a_did) for t in turns)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup((a_uid, b_uid), (a_did, b_did)))
