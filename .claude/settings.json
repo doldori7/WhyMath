@@ -37,7 +37,8 @@
       "Bash(psql:DROP*)",
       "Bash(redis-cli:FLUSHALL*)"
     ],
-    "deny": []
+    "deny": [],
+    "defaultMode": "plan"
   },
   "model": "claude-opus-4-7",
   "env": {
