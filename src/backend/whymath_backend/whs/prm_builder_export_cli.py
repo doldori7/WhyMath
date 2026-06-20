@@ -9,7 +9,7 @@ WH-S 오프라인 업스트림(§7.5)이라 *전역 배치는 HTTP 미노출* �
 (레코드/줄). 출력 분리:
   - **stdout = JSONL 레코드**(레코드 1개/줄·파이프 가능한 데이터셋·`> prm.jsonl`).
   - **stderr = 정직 요약 JSON 한 줄**(`{total_input, records, excluded_uncertain, good_labels,
-    bad_labels}`·ops 회계 로그·데이터 스트림에 섞지 않음).
+    bad_labels, scored_steps, mean_prm_score}`·ops 회계 로그·데이터 스트림에 섞지 않음).
 
 흐름(`--stream`·옵트인·대규모 메모리 가드): `stream_all_problem_ids`(서버측 커서·distinct
 problem_id 1건씩) → 문제별 `get_problem_nodes`→`build_prm_dataset`→`iter_prm_jsonl` print →
@@ -155,12 +155,14 @@ def main(
     dataset: PrmDataset = asyncio.run(export_fn())
     for line in iter_prm_jsonl(dataset):
         print(line)
-    summary = {
+    summary: dict[str, float | int | None] = {
         "total_input": dataset.total_input,
         "records": dataset.size,
         "excluded_uncertain": dataset.excluded_uncertain,
         "good_labels": dataset.good_labels,
         "bad_labels": dataset.bad_labels,
+        "scored_steps": dataset.scored_steps,
+        "mean_prm_score": dataset.mean_prm_score,
     }
     print(json.dumps(summary), file=sys.stderr)
     return 0

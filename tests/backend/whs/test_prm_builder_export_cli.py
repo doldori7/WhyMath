@@ -29,6 +29,7 @@ def _node(
     parent_id: uuid.UUID | None = None,
     action: str | None = None,
     node_id: uuid.UUID | None = None,
+    prm_score: float | None = None,
 ) -> SolutionNode:
     """in-memory SolutionNode 1개(DB 없음·id 명시 발급·`test_prm_builder._node` 복제)."""
     return SolutionNode(
@@ -38,11 +39,21 @@ def _node(
         state_repr=state,
         action=action,
         verify_status=status,
+        prm_score=prm_score,
     )
 
 
-def _tree(problem_id: uuid.UUID, *, with_pending: bool = False) -> list[SolutionNode]:
-    """root + good + bad(+ 옵션 pending) 1트리 — 한 문제 트리 픽스처."""
+def _tree(
+    problem_id: uuid.UUID,
+    *,
+    with_pending: bool = False,
+    good_score: float | None = None,
+    bad_score: float | None = None,
+) -> list[SolutionNode]:
+    """root + good + bad(+ 옵션 pending) 1트리 — 한 문제 트리 픽스처.
+
+    `good_score`·`bad_score`로 good/bad step에 prm_score를 주입한다(기본 None·점수 통계 검증용).
+    """
     root = _node(problem_id=problem_id, state={"s": "root"}, status=NodeVerifyStatus.PENDING)
     nodes = [
         root,
@@ -52,6 +63,7 @@ def _tree(problem_id: uuid.UUID, *, with_pending: bool = False) -> list[Solution
             status=NodeVerifyStatus.VERIFIED,
             parent_id=root.id,
             action="good-step",
+            prm_score=good_score,
         ),
         _node(
             problem_id=problem_id,
@@ -59,6 +71,7 @@ def _tree(problem_id: uuid.UUID, *, with_pending: bool = False) -> list[Solution
             status=NodeVerifyStatus.FAILED,
             parent_id=root.id,
             action="bad-step",
+            prm_score=bad_score,
         ),
     ]
     if with_pending:
@@ -125,6 +138,8 @@ class TestPrmBuilderExportCli:
             "excluded_uncertain": 0,
             "good_labels": 1,
             "bad_labels": 1,
+            "scored_steps": 0,
+            "mean_prm_score": None,
         }
 
     def test_excluded_uncertain_in_summary(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -145,6 +160,8 @@ class TestPrmBuilderExportCli:
             "excluded_uncertain": 1,  # PENDING 배제(R-S2)
             "good_labels": 1,
             "bad_labels": 1,
+            "scored_steps": 0,
+            "mean_prm_score": None,
         }
 
     def test_empty_dataset_summary_zero(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -159,7 +176,19 @@ class TestPrmBuilderExportCli:
             "excluded_uncertain": 0,
             "good_labels": 0,
             "bad_labels": 0,
+            "scored_steps": 0,
+            "mean_prm_score": None,
         }
+
+    def test_batch_summary_includes_prm_stats(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """배치: good 0.25·bad 0.5 → scored 2·mean 0.375가 요약에 포함(이진 정확값)."""
+        pid = uuid.uuid4()
+        ds = build_prm_dataset(_tree(pid, good_score=0.25, bad_score=0.5))
+        code = cli.main([], export_fn=_runner(ds))
+        assert code == 0
+        summary = json.loads(capsys.readouterr().err)
+        assert summary["scored_steps"] == 2
+        assert summary["mean_prm_score"] == 0.375  # (0.25 + 0.5) / 2 — dyadic·정확
 
 
 class TestPrmBuilderExportCliStream:
@@ -189,6 +218,8 @@ class TestPrmBuilderExportCliStream:
             "excluded_uncertain": 0,
             "good_labels": 2,
             "bad_labels": 2,
+            "scored_steps": 0,
+            "mean_prm_score": None,
         }
 
     def test_stream_multiple_problems_accounting_accumulates(
@@ -217,6 +248,8 @@ class TestPrmBuilderExportCliStream:
             "excluded_uncertain": 1,  # pid_a의 PENDING 1
             "good_labels": 2,
             "bad_labels": 2,
+            "scored_steps": 0,
+            "mean_prm_score": None,
         }
 
     def test_stream_empty_summary_zero(self, capsys: pytest.CaptureFixture[str]) -> None:
@@ -235,4 +268,31 @@ class TestPrmBuilderExportCliStream:
             "excluded_uncertain": 0,
             "good_labels": 0,
             "bad_labels": 0,
+            "scored_steps": 0,
+            "mean_prm_score": None,
         }
+
+    def test_stream_mean_accumulates_across_problems(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """--stream: 평균은 sum/count 누적 — 문제별 평균의 평균(0.625)과 다름을 증명(핵심 회귀).
+
+        pid_a 점수 1.0(1건)·pid_b 점수 0.0·0.5(2건) → scored 3·sum 1.5·mean 0.5. 문제별 평균을
+        평균하면 (1.0 + 0.25)/2 = 0.625로 틀어지므로, 0.5가 가중 정합의 증거다.
+        """
+        pid_a = uuid.uuid4()
+        pid_b = uuid.uuid4()
+        code = cli.main(
+            ["--stream"],
+            stream_fn=_stream_runner([pid_a, pid_b]),
+            node_loader=_loader_for(
+                {
+                    pid_a: _tree(pid_a, good_score=1.0),  # good 1.0·bad None → scored 1
+                    pid_b: _tree(pid_b, good_score=0.0, bad_score=0.5),  # scored 2
+                }
+            ),
+        )
+        assert code == 0
+        summary = json.loads(capsys.readouterr().err)
+        assert summary["scored_steps"] == 3
+        assert summary["mean_prm_score"] == 0.5  # 1.5 / 3 (≠ 0.625 = 문제별 평균의 평균)
