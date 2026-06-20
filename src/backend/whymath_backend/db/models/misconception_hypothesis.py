@@ -47,6 +47,9 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
+from whymath_backend.schema.misconception_hypothesis import (
+    MisconceptionHypothesisRecord as SchemaMisconceptionHypothesisRecord,
+)
 
 
 class MisconceptionHypothesisRecord(Base):
@@ -112,6 +115,16 @@ class MisconceptionHypothesisRecord(Base):
         # 학생별 활성 가설 로드(`get_active_hypotheses`) 접근 경로.
         sa.Index("idx_misconception_hypothesis_user_active", "user_id", "is_active"),
     )
+
+    def to_schema(self) -> SchemaMisconceptionHypothesisRecord:
+        """영속 ORM → `schema.MisconceptionHypothesisRecord`(검증 복원·열람권 export JSON-safe).
+
+        parental_consent 동일 패턴 — 매핑 컬럼키만 추려 검증 복원(UUID·datetime·Numeric→float를
+        `model_dump(mode="json")`로 JSON 안전). 자유텍스트 PII 없는 식별자·신호·날짜라 redaction 0.
+        """
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        return SchemaMisconceptionHypothesisRecord.model_validate(data)
 
 
 __all__ = ["MisconceptionHypothesisRecord"]

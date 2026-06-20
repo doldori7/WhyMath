@@ -5,11 +5,12 @@
 data access·portability)이다. 삭제권이 이미 *어떤 테이블이 사용자 PII인지* 열거(`_ERASURE_PLAN`)
 하므로, 그 인벤토리의 *학습/진단 subset*을 **읽기**로 재사용해 본인 데이터를 한데 모은다.
 
-범위(첫 증분·plan-driven 확장): `_EXPORT_PLAN`의 5종(학습 세션·시도·진단·개념 숙달 이력·능력
-스냅샷) + `user_profile` 단건. **보안 항목 영구 제외**: `device_credential`·`refresh_token_session`
-(로그인 토큰·기기 자격 — export 시 노출은 보안 위험이고 "개인 학습 데이터"가 아니다). 대화·시계열
-지표·오개념 가설·증거·동의/트랙/페르소나 이력·외부 store 실조회·비동기 job은 후속 — 미포함을
-*조용히 넘기지 않고* `not_included`로 정직히 드러낸다(날조 0·완전성 정직).
+범위(plan-driven 확장): `_EXPORT_PLAN`의 학습/진단 11종(학습 세션·시도·진단·개념 숙달 이력·능력
+스냅샷·동의·트랙/페르소나/상태 이력 + **오개념 가설·진단 증거**) + `user_profile` 단건. **보안 항목
+영구 제외**: `device_credential`·`refresh_token_session`(로그인 토큰·기기 자격 — 노출은 보안 위험·
+"개인 학습 데이터" 아님). 대화·시계열 지표·외부 store 실조회·비동기 job은 후속 — 미포함을 *조용히
+넘기지 않고* `not_included`로 정직히 드러낸다(날조 0). 오개념 가설·증거는 *식별자·신호·날짜*만 담고
+자유텍스트 PII가 없어(증거 그래프 설계 04a §2.3) 본인 export에 그대로 안전(redaction 0).
 
 외부 store(ClickHouse 행동 로그·S3 객체·Redis 캐시)는 RDB 밖이라 이 export(PostgreSQL)에 *포함되지
 않는다* — `external_export_pending`으로 *구조화*해 ops가 가시화한다(#252 `external_erasure_targets`
@@ -36,6 +37,8 @@ from whymath_backend.db.models.assessment import (
     Assessment,
     ConceptMasteryHistory,
 )
+from whymath_backend.db.models.evidence_link import EvidenceLink
+from whymath_backend.db.models.misconception_hypothesis import MisconceptionHypothesisRecord
 from whymath_backend.db.models.parental_consent import ParentalConsent
 from whymath_backend.db.models.user import (
     UserPersonaHistory,
@@ -53,8 +56,10 @@ __all__ = [
 
 # export 계획 — (모델, user 컬럼명, 응답 카테고리 키). `_ERASURE_PLAN`(erasure.py)의 *바운드 크기·
 # `to_schema` 보유 subset*이다. 보안 토큰(device_credential·refresh_token_session)·시계열(대용량)·
-# 대화(미성년 채팅 본문·turn 조인)·to_schema 미보유(misconception·evidence)는 제외(보안·범위·후속).
-# 모든 모델은 `to_schema()`를 보유한다(JSON-safe 직렬화).
+# 대화(미성년 채팅 본문·turn 조인)는 제외(보안·범위·후속). 오개념 가설·진단 증거는 본 슬라이스에서
+# `to_schema()` 부여로 *포함*(#269~272가 라이브 적재·식별자/신호/날짜만이라 PII-safe). 컬럼명은
+# 모델별(evidence_links는 `student_id`·나머지는 `user_id`)이라 튜플 2번째로 파라미터화한다.
+# 모든 모델은 이제 `to_schema()`를 보유한다(JSON-safe 직렬화).
 _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
     (LearningSession, "user_id", "learning_sessions"),
     (ProblemAttempt, "user_id", "problem_attempts"),
@@ -65,6 +70,8 @@ _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
     (UserTrackHistory, "user_id", "track_history"),
     (UserPersonaHistory, "user_id", "persona_history"),
     (UserStateSnapshot, "user_id", "state_snapshots"),
+    (MisconceptionHypothesisRecord, "user_id", "misconception_hypotheses"),
+    (EvidenceLink, "student_id", "misconception_evidence"),
 )
 
 # 이 export에 *포함되지 않은* 범위 — student-facing 사용자 친화 설명(인프라 store명·키 미노출).
@@ -72,7 +79,6 @@ _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
 _NOT_INCLUDED: tuple[str, ...] = (
     "대화 이력(개별 메시지·손글씨 이미지 포함)은 이 내보내기에 미포함 — 후속 확장 예정.",
     "학습 시계열 지표(일별·행동)·세부 시도 이벤트는 미포함 — 후속 확장 예정.",
-    "오개념 가설·진단 증거(증거 그래프)는 미포함 — 후속 확장 예정.",
     "행동 로그·업로드 이미지·세션 캐시 등 외부 시스템 보관 데이터는 미포함(별도 시스템).",
     "보안 항목(로그인 토큰·기기 자격)은 보안상 내보내지 않는다.",
 )

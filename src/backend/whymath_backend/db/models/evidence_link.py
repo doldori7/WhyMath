@@ -47,6 +47,7 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
+from whymath_backend.schema.evidence_link import EvidenceLink as SchemaEvidenceLink
 
 
 class EvidenceLink(Base):
@@ -99,6 +100,16 @@ class EvidenceLink(Base):
         # 보존 기한 야간 배치 파기 스캔.
         sa.Index("idx_evidence_retention", "retention_until"),
     )
+
+    def to_schema(self) -> SchemaEvidenceLink:
+        """영속 ORM → `schema.EvidenceLink`(Pydantic 검증 복원·열람권 export JSON-safe 직렬화).
+
+        parental_consent·audit 동일 패턴 — 매핑 컬럼키만 추려 검증 복원(UUID·datetime·date를
+        `model_dump(mode="json")`로 JSON 안전). 본 테이블은 PII 없는 식별자·신호라 redaction 0.
+        """
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        return SchemaEvidenceLink.model_validate(data)
 
 
 __all__ = ["EvidenceLink"]
