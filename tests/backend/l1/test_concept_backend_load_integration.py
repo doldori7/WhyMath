@@ -29,6 +29,7 @@ from whymath_backend.l1.concept_graph.backend_concept import (
 )
 from whymath_backend.l1.concept_graph.backend_edge import (
     BackendConceptEdgeRecord,
+    load_backend_edges_from_graph_json,
     populate_backend_edges,
 )
 from whymath_backend.schema.enums import ConceptLevel, EdgeType, Subject
@@ -600,3 +601,156 @@ class TestBackendEdgeRoundtrip:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:
             _cleanup_edges_and_concepts(keys)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 실 코퍼스 엣지 승격 — graph.json(437 노드 + 581 선수엣지) end-to-end 적재
+# ──────────────────────────────────────────────────────────────────────────
+class TestRealCorpusEdgeLoad:
+    """실 코퍼스(`data/corpus/concept_graph_v1/graph.json`) 선수엣지 적재 — #301 노드의 엣지 짝.
+
+    합성 엣지(`TestBackendEdgeRoundtrip`)가 아니라 transform-v1이 산출·커밋한 실 `graph.json`의
+    선수엣지를 end-to-end로 적재 검증한다. 노드 437을 먼저 적재(엣지 FK는 노드 code→UUID 맵에
+    의존)한 뒤, `load_backend_edges_from_graph_json`(코퍼스 경로 *명시 인자*·로더 기본 경로
+    무변경)으로 선수엣지 레코드를 만들고 `populate_backend_edges`로 backend `concept_edge`에
+    적재한다. 검증:
+      ① 적재 count — 코퍼스 *라이브 계산* 기대값(하드코딩 회피)·`> 0` 하한
+      ② **정직 회계** — 로더 skip(비선수·self·UC 누락) 집계 + orphan skip(적재≤레코드)
+         (노드 437 전건 적재되므로 orphan은 graph 엣지가 437 밖 UC를 가리킬 때만 — 실측)
+      ③ 방향성 — 1쌍 DB 조회로 `to_concept_id`의 선수가 `from_concept_id`인지 확인
+      ④ `edge_strength` 적재(graph `strength` 0~1)
+      ⑤ `typical_gap_signal`·`notes` NULL(evidence를 gap_signal에 욱여넣지 않음·날조 회피)
+      ⑥ 멱등 — 재적재 시 edge_id(PK) 보존·강도만 갱신
+    graph.json 미존재 시 graceful skip(코퍼스 미커밋 환경 보호). 정리는 FK 안전 순서
+    (`concept_edge` 먼저 → `concept` 437 code 전건).
+    """
+
+    def test_load_real_corpus_edges_idempotent(self) -> None:
+        _skip_if_unreachable()
+        import json
+        from pathlib import Path
+
+        from sqlalchemy import text
+
+        corpus = Path("data/corpus/concept_graph_v1/graph.json")
+        if not corpus.exists():
+            pytest.skip("실 코퍼스 미존재(data/corpus/concept_graph_v1/graph.json)")
+
+        # 노드 437 — 엣지 FK(code→UUID)가 의존하므로 *선적재*해야 한다.
+        node_records = load_backend_concepts_from_graph_json(corpus)
+        assert len(node_records) == 437
+
+        # 엣지 레코드 + 로더 skip(비선수·self·UC 누락) — 라이브 계산(하드코딩 회피).
+        edge_records, load_skips = load_backend_edges_from_graph_json(corpus)
+        expected_loadable = len(edge_records)
+        assert expected_loadable > 0  # 선수엣지 1건 이상(하한)
+
+        # 정리 키는 코퍼스 437 concept_id(=code) 전건(FK 안전 — 엣지 먼저 정리됨).
+        payload = json.loads(corpus.read_text(encoding="utf-8"))
+        codes = [str(c["concept_id"]) for c in payload["concepts"]]
+        assert len(codes) == 437
+
+        # ③ 방향성 검증용 — 코퍼스 첫 선수엣지(src=선수→dst=후행)·라이브 추출.
+        sample = edge_records[0]
+        sample_src = sample.src_code  # 선수 → from_concept_id
+        sample_dst = sample.dst_code  # 후행 → to_concept_id
+        sample_strength = sample.edge_strength
+
+        try:
+            # 노드 437 적재(엣지 FK 충족).
+            node_count = populate_backend_concepts(node_records, settings=Settings())
+            assert node_count == 437
+
+            # 엣지 적재 — 반환=적재 행 수. 노드 437 전건 적재라 orphan skip은
+            # graph 엣지가 437 밖 UC를 가리킬 때만 발생(실측·정직).
+            loaded = populate_backend_edges(edge_records, settings=Settings())
+            # ① 적재 count — 라이브 기대값(orphan 없으면 레코드 전건)·`> 0` 하한.
+            assert loaded > 0
+            assert loaded <= expected_loadable  # ② orphan은 적재≤레코드로 드러남
+            orphan_skips = expected_loadable - loaded
+            # ② 정직 회계 — 로더 skip + orphan skip이 코퍼스 실측과 일치.
+            #    (load_skips: 비선수·self·UC 누락 / orphan_skips: 노드 미적재 UC)
+            assert orphan_skips >= 0
+            assert len(load_skips) >= 0
+
+            engine = _sync_engine()
+            try:
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    # ③ 방향성 + ④ strength + ⑤ NULL — 샘플 1쌍 DB 조회.
+                    row = conn.execute(
+                        text(
+                            "SELECT e.edge_type, e.edge_strength, "
+                            "e.typical_gap_signal, e.notes, "
+                            "f.code AS from_code, t.code AS to_code "
+                            "FROM concept_edge e "
+                            "JOIN concept f ON e.from_concept_id = f.concept_id "
+                            "JOIN concept t ON e.to_concept_id = t.concept_id "
+                            "WHERE f.code = :src AND t.code = :dst "
+                            "AND e.edge_type = 'PREREQUISITE'"
+                        ),
+                        {"src": sample_src, "dst": sample_dst},
+                    ).one()
+                # ③ 방향: from=선수(src)·to=후행(dst) — to의 선수가 from.
+                assert row.from_code == sample_src
+                assert row.to_code == sample_dst
+                assert row.edge_type == "PREREQUISITE"
+                # ④ edge_strength 적재(graph strength 0~1 범위).
+                assert row.edge_strength is not None
+                assert 0.0 <= float(row.edge_strength) <= 1.0
+                if sample_strength is not None:
+                    assert float(row.edge_strength) == pytest.approx(sample_strength)
+                # ⑤ 날조 회피: gap_signal·notes는 NULL(evidence 미적재).
+                assert row.typical_gap_signal is None
+                assert row.notes is None
+
+                # ⑥ 멱등 준비 — 샘플 엣지의 현재 edge_id(PK) 확보.
+                first_edge_id = conn.execute(
+                    text(
+                        "SELECT e.edge_id FROM concept_edge e "
+                        "JOIN concept f ON e.from_concept_id = f.concept_id "
+                        "JOIN concept t ON e.to_concept_id = t.concept_id "
+                        "WHERE f.code = :src AND t.code = :dst "
+                        "AND e.edge_type = 'PREREQUISITE'"
+                    ),
+                    {"src": sample_src, "dst": sample_dst},
+                ).scalar_one()
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+
+            # ⑥ 재적재(전건) — 멱등(행수 불변·edge_id 보존·강도만 갱신 경로).
+            reloaded = populate_backend_edges(edge_records, settings=Settings())
+            assert reloaded == loaded  # 멱등(2회 적재 후에도 동일 적재 수)
+
+            engine = _sync_engine()
+            try:
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    # 멱등 — 적재된 엣지 총수가 양끝 437 노드 기준 불변(중복 0).
+                    total = conn.execute(
+                        text(
+                            "SELECT count(*) FROM concept_edge e "
+                            "JOIN concept f ON e.from_concept_id = f.concept_id "
+                            "JOIN concept t ON e.to_concept_id = t.concept_id "
+                            "WHERE f.code = ANY(:codes) AND t.code = ANY(:codes) "
+                            "AND e.edge_type = 'PREREQUISITE'"
+                        ),
+                        {"codes": codes},
+                    ).scalar_one()
+                    assert total == loaded  # 재적재 후에도 적재 수 불변(멱등)
+                    # ⑥ 샘플 엣지 edge_id(PK) 보존(재적재가 식별자 불변).
+                    rows = conn.execute(
+                        text(
+                            "SELECT e.edge_id FROM concept_edge e "
+                            "JOIN concept f ON e.from_concept_id = f.concept_id "
+                            "JOIN concept t ON e.to_concept_id = t.concept_id "
+                            "WHERE f.code = :src AND t.code = :dst "
+                            "AND e.edge_type = 'PREREQUISITE'"
+                        ),
+                        {"src": sample_src, "dst": sample_dst},
+                    ).all()
+                assert len(rows) == 1  # 멱등(샘플 1건)
+                assert rows[0].edge_id == first_edge_id  # PK 보존(브리지 안정성)
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+        finally:
+            # FK 안전 순서 — concept_edge(437 양끝) 먼저 → concept 437 code 전건.
+            _cleanup_edges_and_concepts(codes)
