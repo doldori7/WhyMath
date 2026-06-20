@@ -18,8 +18,9 @@ R-S2 방침과 동형).
 `self_evolution.py`가 순수→실 DB 조회→ops CLI로 증분 확장한 선례를 답습한다. 본 모듈은 이제
 다중 문제 일괄/스트리밍 회계(`PrmStreamAccounting`)까지 두어 JSONL ops CLI
 (`prm_builder_export_cli`)가 소비한다. confidence(`prm_score`)는 레코드 메타로 부가하고
-데이터셋·스트림 회계에 점수 통계(scored_steps·평균)를 둔다(라벨 아님). 범위 밖(후속):
-(prefix, step) dedup·Dead-End Log(§2.3) 통합(트리 밖에서 가지친 실패 step의 추가 bad 신호).
+데이터셋·스트림 회계에 점수 통계(scored_steps·평균)를 둔다(라벨 아님). (prefix, step) dedup도
+적용한다 — 같은 `(problem_id, 지문)` 재발견을 정직 회계(`deduped`)로 제거(기본 ON·opt-out).
+범위 밖(후속): Dead-End Log(§2.3) 통합(트리 밖에서 가지친 실패 step의 추가 bad 신호).
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.solution_node import NodeVerifyStatus, SolutionNode
 from whymath_backend.whs.node_store import get_problem_nodes
+from whymath_backend.whs.solution_bank import solution_fingerprint
 
 __all__ = [
     "PrmDataset",
@@ -82,7 +84,9 @@ class PrmDataset(BaseModel):
     """`build_prm_dataset` 결과 — 레코드 + *정직한* 집계(배제·라벨 분포).
 
     `excluded_uncertain`은 PENDING·UNVERIFIED step을 조용히 버리지 않은 투명 회계다(R-S2 가시화).
-    `size`(=len(records))가 실제 학습쌍 수. `good_labels + bad_labels == size`.
+    `deduped`는 같은 `(problem_id, 지문)` 재발견을 조용히 버리지 않은 투명 회계다(중복 가시화).
+    `size`(=len(records))가 실제 학습쌍 수. `good_labels + bad_labels == size`이고
+    `total_input == excluded_uncertain + size + deduped`(dedup ON·excluded ⟂ deduped).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -91,6 +95,9 @@ class PrmDataset(BaseModel):
     total_input: int = Field(ge=0, description="후보 step(action 보유 비루트 노드) 총수(필터 전).")
     excluded_uncertain: int = Field(
         ge=0, description="PENDING·UNVERIFIED로 배제된 step 수(R-S2 학습 배제)."
+    )
+    deduped: int = Field(
+        default=0, ge=0, description="재발견 중복으로 제거된 step 수(같은 문제·같은 지문)."
     )
     good_labels: int = Field(ge=0, description="good(verified) step 수.")
     bad_labels: int = Field(ge=0, description="bad(failed) step 수.")
@@ -125,6 +132,9 @@ class PrmStreamAccounting(BaseModel):
     excluded_uncertain: int = Field(
         default=0, ge=0, description="PENDING·UNVERIFIED로 배제된 step 누적 수(R-S2)."
     )
+    deduped: int = Field(
+        default=0, ge=0, description="재발견 중복으로 제거된 step 누적 수(같은 문제·같은 지문)."
+    )
     good_labels: int = Field(default=0, ge=0, description="good(verified) step 누적 수.")
     bad_labels: int = Field(default=0, ge=0, description="bad(failed) step 누적 수.")
     scored_steps: int = Field(
@@ -147,6 +157,7 @@ class PrmStreamAccounting(BaseModel):
         self.total_input += dataset.total_input
         self.records += dataset.size
         self.excluded_uncertain += dataset.excluded_uncertain
+        self.deduped += dataset.deduped
         self.good_labels += dataset.good_labels
         self.bad_labels += dataset.bad_labels
         self.scored_steps += dataset.scored_steps
@@ -159,6 +170,7 @@ class PrmStreamAccounting(BaseModel):
             "total_input": self.total_input,
             "records": self.records,
             "excluded_uncertain": self.excluded_uncertain,
+            "deduped": self.deduped,
             "good_labels": self.good_labels,
             "bad_labels": self.bad_labels,
             "scored_steps": self.scored_steps,
@@ -185,7 +197,7 @@ def _prefix_states(
     return tuple(chain)
 
 
-def build_prm_dataset(nodes: Iterable[SolutionNode]) -> PrmDataset:
+def build_prm_dataset(nodes: Iterable[SolutionNode], *, dedup: bool = True) -> PrmDataset:
     """풀이 트리 노드들 → PRM process-supervision 학습셋(good/bad만·정직 집계·순수).
 
     각 *비루트*(=`parent_id` 있음) 노드는 한 step((부모 상태 → 이 상태) via `action`)이다. 루트
@@ -195,12 +207,23 @@ def build_prm_dataset(nodes: Iterable[SolutionNode]) -> PrmDataset:
     **R-S2 학습 안전(심층 방어)**: step 라벨은 노드 `verify_status`로 — VERIFIED→good·FAILED→bad.
     PENDING(미검증)·UNVERIFIED(판정 불가)는 레코드로 만들지 않고 `excluded_uncertain`으로 집계한다
     (판정 불가 step의 학습 누수 0). 입력 순서를 보존한다(결정론). 트랜잭션·DB 0(순수).
+
+    **dedup(기본 ON·`build_sft_dataset` 미러)**: 솔버가 같은 prefix에서 같은 step을 재발견하면 같은
+    `(problem_id, 지문)` 레코드가 학습 분포를 부풀린다. 라벨 확정 *후*·집계 *전*에 dedup 게이트를
+    둬, 같은 `(problem_id, 지문)`이 이미 나왔으면 건너뛰고 `deduped`로 집계한다(첫 레코드 유지).
+    지문은 `record.model_dump(mode="json", exclude={"prm_score", "problem_id"})`의
+    `solution_fingerprint`다 — `prm_score`는 confidence 메타라 키에서 빼(점수만 달라도 중복으로
+    본다), `problem_id`(UUID)는 JSON 직렬화를 피해 키 튜플에 별도로 둔다. PENDING/UNVERIFIED는
+    dedup 게이트 *전에* 이미 배제되므로 `deduped`로 세지 않는다(`excluded_uncertain`과 직교).
+    `dedup=False`면 게이트를 건너뛰어 중복도 모두 보존한다(`deduped==0`).
     """
     node_list = list(nodes)
     by_id = {n.id: n for n in node_list}
     records: list[PrmRecord] = []
+    seen: set[tuple[uuid.UUID, str]] = set()
     total = 0
     excluded = 0
+    deduped = 0
     good = 0
     bad = 0
     score_sum = 0.0
@@ -211,20 +234,29 @@ def build_prm_dataset(nodes: Iterable[SolutionNode]) -> PrmDataset:
         total += 1
         label = _LABEL_BY_STATUS.get(node.verify_status)
         if label is None:
-            excluded += 1  # PENDING·UNVERIFIED → R-S2 배제(정직 집계).
+            excluded += 1  # PENDING·UNVERIFIED → R-S2 배제(정직 집계·dedup 게이트 전).
             continue
-        records.append(
-            PrmRecord(
-                problem_id=node.problem_id,
-                prefix_states=_prefix_states(node, by_id),
-                step_action=node.action,
-                step_state=node.state_repr,
-                label=label,
-                prm_score=node.prm_score,  # confidence 메타 부가(라벨 아님·미평가 None).
-            )
+        rec = PrmRecord(
+            problem_id=node.problem_id,
+            prefix_states=_prefix_states(node, by_id),
+            step_action=node.action,
+            step_state=node.state_repr,
+            label=label,
+            prm_score=node.prm_score,  # confidence 메타 부가(라벨 아님·미평가 None).
         )
-        # 레코드화된 step(good/bad)만 점수 통계에 누적 — excluded step은 데이터셋에 임베드되지
-        # 않으므로 통계에서도 제외(scored_steps ≤ size 정합).
+        if dedup:
+            # 지문은 prm_score·problem_id 제외 완전 지문 — 점수만 달라도 중복(첫 레코드 유지).
+            fp = solution_fingerprint(
+                rec.model_dump(mode="json", exclude={"prm_score", "problem_id"})
+            )
+            key = (rec.problem_id, fp)
+            if key in seen:
+                deduped += 1  # 같은 문제·같은 지문 재발견 — 중복 제거(가시화).
+                continue
+            seen.add(key)
+        records.append(rec)
+        # 레코드화된 step(good/bad)만 점수 통계에 누적 — excluded·deduped step은 데이터셋에
+        # 임베드되지 않으므로 통계에서도 제외(scored_steps ≤ size 정합).
         if node.prm_score is not None:
             score_sum += node.prm_score
             score_count += 1
@@ -236,6 +268,7 @@ def build_prm_dataset(nodes: Iterable[SolutionNode]) -> PrmDataset:
         records=tuple(records),
         total_input=total,
         excluded_uncertain=excluded,
+        deduped=deduped,
         good_labels=good,
         bad_labels=bad,
         scored_steps=score_count,

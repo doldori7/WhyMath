@@ -38,11 +38,12 @@ def _node(
     action: str | None = None,
     node_id: uuid.UUID | None = None,
     prm_score: float | None = None,
+    problem_id: uuid.UUID | None = None,
 ) -> SolutionNode:
-    """in-memory SolutionNode 1개(DB 없음·id 명시 발급)."""
+    """in-memory SolutionNode 1개(DB 없음·id 명시 발급·problem_id 기본 `_PID`)."""
     return SolutionNode(
         id=node_id or uuid.uuid4(),
-        problem_id=_PID,
+        problem_id=problem_id or _PID,
         parent_id=parent_id,
         state_repr=state,
         action=action,
@@ -226,6 +227,113 @@ class TestBuildPrmDataset:
         assert ds.size == 1 and ds.excluded_uncertain == 1
         assert ds.scored_steps == 1  # good만
         assert ds.mean_prm_score == 0.4  # pending의 0.99는 평균에 끼지 않음
+
+
+class TestBuildPrmDatasetDedup:
+    """(prefix, step) dedup — 같은 `(problem_id, 지문)` 재발견 제거(`build_sft_dataset` 미러)."""
+
+    def test_dedup_same_prefix_step_collapses(self) -> None:
+        """같은 prefix·같은 step(지문 키 순서 무관) 재발견은 1건만 — deduped로 집계."""
+        root = _node(state={"a": 1, "b": 2}, status=NodeVerifyStatus.PENDING)
+        s1 = _node(
+            state={"x": 1, "y": 2},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root.id,
+            action="치환",
+        )
+        # 같은 부모·같은 action·같은 state(키 순서만 뒤집음) — 지문 동일.
+        s2 = _node(
+            state={"y": 2, "x": 1},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root.id,
+            action="치환",
+        )
+        ds = build_prm_dataset([root, s1, s2])
+        assert ds.size == 1
+        assert ds.deduped == 1
+        assert ds.total_input == 2
+        assert ds.good_labels == 1 and ds.bad_labels == 0
+        # 불변식: total == excluded + size + deduped.
+        assert ds.total_input == ds.excluded_uncertain + ds.size + ds.deduped
+
+    def test_dedup_disabled_keeps_duplicates(self) -> None:
+        """dedup=False → 같은 지문 step이라도 모두 보존(deduped=0)."""
+        root = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        s1 = _node(
+            state={"e": "1"}, status=NodeVerifyStatus.VERIFIED, parent_id=root.id, action="s"
+        )
+        s2 = _node(
+            state={"e": "1"}, status=NodeVerifyStatus.VERIFIED, parent_id=root.id, action="s"
+        )
+        ds = build_prm_dataset([root, s1, s2], dedup=False)
+        assert ds.size == 2 and ds.deduped == 0
+
+    def test_dedup_prm_score_only_differs_collapses(self) -> None:
+        """점수만 다른 같은 step → 1건(첫 레코드 prm_score 유지·prm_score 키 제외 회귀)."""
+        root = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        first = _node(
+            state={"e": "1"},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root.id,
+            action="s",
+            prm_score=0.9,
+        )
+        second = _node(
+            state={"e": "1"},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root.id,
+            action="s",
+            prm_score=0.1,  # 점수만 다름 — 지문에서 제외되므로 중복으로 봄.
+        )
+        ds = build_prm_dataset([root, first, second])
+        assert ds.size == 1 and ds.deduped == 1
+        assert ds.records[0].prm_score == 0.9  # 첫 레코드 유지
+        assert ds.scored_steps == 1 and ds.mean_prm_score == 0.9  # 둘째 0.1은 집계 안 됨
+
+    def test_dedup_different_problem_no_collision(self) -> None:
+        """*다른 problem_id*의 우연히 같은 지문은 보존(키=(problem_id, 지문))."""
+        p2 = uuid.uuid4()
+        root1 = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        s1 = _node(
+            state={"e": "1"}, status=NodeVerifyStatus.VERIFIED, parent_id=root1.id, action="s"
+        )
+        root2 = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING, problem_id=p2)
+        s2 = _node(
+            state={"e": "1"},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root2.id,
+            action="s",
+            problem_id=p2,
+        )
+        ds = build_prm_dataset([root1, s1, root2, s2])
+        assert ds.size == 2 and ds.deduped == 0
+
+    def test_dedup_different_step_kept(self) -> None:
+        """같은 문제라도 step(action·state)이 다르면 둘 다 보존(다중 전략)."""
+        root = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        s1 = _node(
+            state={"e": "1"}, status=NodeVerifyStatus.VERIFIED, parent_id=root.id, action="대수"
+        )
+        s2 = _node(
+            state={"e": "2"}, status=NodeVerifyStatus.VERIFIED, parent_id=root.id, action="기하"
+        )
+        ds = build_prm_dataset([root, s1, s2])
+        assert ds.size == 2 and ds.deduped == 0
+
+    def test_dedup_excluded_step_not_counted_as_dup(self) -> None:
+        """PENDING은 dedup 게이트 전에 배제 — excluded_uncertain만 세고 deduped는 안 셈(직교)."""
+        root = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        pending = _node(
+            state={"e": "1"}, status=NodeVerifyStatus.PENDING, parent_id=root.id, action="s"
+        )
+        # PENDING step과 지문이 같지만 라벨 불가라 dedup 게이트 전에 빠진다(중복 충돌 없음).
+        verified = _node(
+            state={"e": "1"}, status=NodeVerifyStatus.VERIFIED, parent_id=root.id, action="s"
+        )
+        ds = build_prm_dataset([root, pending, verified])
+        assert ds.size == 1 and ds.good_labels == 1
+        assert ds.excluded_uncertain == 1 and ds.deduped == 0
+        assert ds.total_input == ds.excluded_uncertain + ds.size + ds.deduped
 
 
 class TestIterPrmJsonl:

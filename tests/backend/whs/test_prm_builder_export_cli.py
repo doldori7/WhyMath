@@ -87,10 +87,15 @@ def _tree(
     return nodes
 
 
-def _runner(dataset: PrmDataset):  # type: ignore[no-untyped-def]
-    """고정 `PrmDataset`을 반환하는 export_fn(배치 경로용·실 DB 조회 흉내·DB 0)."""
+def _runner(dataset: PrmDataset, *, seen: dict[str, bool] | None = None):  # type: ignore[no-untyped-def]
+    """고정 `PrmDataset`을 반환하는 export_fn(배치 경로용·실 DB 조회 흉내·DB 0).
 
-    async def _export() -> PrmDataset:
+    `seen`을 주면 main이 전달한 `dedup` 인자를 캡처해 `--no-dedup` 배선을 검증한다.
+    """
+
+    async def _export(dedup: bool) -> PrmDataset:
+        if seen is not None:
+            seen["dedup"] = dedup
         return dataset
 
     return _export
@@ -136,6 +141,7 @@ class TestPrmBuilderExportCli:
             "total_input": 2,
             "records": 2,
             "excluded_uncertain": 0,
+            "deduped": 0,
             "good_labels": 1,
             "bad_labels": 1,
             "scored_steps": 0,
@@ -158,6 +164,7 @@ class TestPrmBuilderExportCli:
             "total_input": 3,  # 비루트 step 3
             "records": 2,
             "excluded_uncertain": 1,  # PENDING 배제(R-S2)
+            "deduped": 0,
             "good_labels": 1,
             "bad_labels": 1,
             "scored_steps": 0,
@@ -174,11 +181,24 @@ class TestPrmBuilderExportCli:
             "total_input": 0,
             "records": 0,
             "excluded_uncertain": 0,
+            "deduped": 0,
             "good_labels": 0,
             "bad_labels": 0,
             "scored_steps": 0,
             "mean_prm_score": None,
         }
+
+    def test_no_dedup_flag_forwarded(self, capsys: pytest.CaptureFixture[str]) -> None:
+        """--no-dedup → export_fn에 dedup=False 전달(기본은 True)."""
+        seen: dict[str, bool] = {}
+        code = cli.main(["--no-dedup"], export_fn=_runner(build_prm_dataset([]), seen=seen))
+        assert code == 0
+        assert seen["dedup"] is False
+
+        seen2: dict[str, bool] = {}
+        code = cli.main([], export_fn=_runner(build_prm_dataset([]), seen=seen2))
+        assert code == 0
+        assert seen2["dedup"] is True  # 기본 dedup ON
 
     def test_batch_summary_includes_prm_stats(self, capsys: pytest.CaptureFixture[str]) -> None:
         """배치: good 0.25·bad 0.5 → scored 2·mean 0.375가 요약에 포함(이진 정확값)."""
@@ -216,6 +236,7 @@ class TestPrmBuilderExportCliStream:
             "total_input": 4,
             "records": 4,
             "excluded_uncertain": 0,
+            "deduped": 0,
             "good_labels": 2,
             "bad_labels": 2,
             "scored_steps": 0,
@@ -246,8 +267,49 @@ class TestPrmBuilderExportCliStream:
             "total_input": 5,  # (3) + (2)
             "records": 4,
             "excluded_uncertain": 1,  # pid_a의 PENDING 1
+            "deduped": 0,
             "good_labels": 2,
             "bad_labels": 2,
+            "scored_steps": 0,
+            "mean_prm_score": None,
+        }
+
+    def test_stream_dedup_collapses_within_problem(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """--stream: 한 문제 트리 내 같은 (prefix, step) 재발견은 deduped로 collapse."""
+        pid = uuid.uuid4()
+        root = _node(problem_id=pid, state={"s": "root"}, status=NodeVerifyStatus.PENDING)
+        dup1 = _node(
+            problem_id=pid,
+            state={"s": "ok"},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root.id,
+            action="치환",
+        )
+        dup2 = _node(  # 같은 부모·같은 action·같은 state — 지문 동일.
+            problem_id=pid,
+            state={"s": "ok"},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root.id,
+            action="치환",
+        )
+        code = cli.main(
+            ["--stream"],
+            stream_fn=_stream_runner([pid]),
+            node_loader=_loader_for({pid: [root, dup1, dup2]}),
+        )
+        assert code == 0
+        captured = capsys.readouterr()
+        lines = [ln for ln in captured.out.splitlines() if ln]
+        assert len(lines) == 1  # 중복 collapse → 1줄만
+        assert json.loads(captured.err) == {
+            "total_input": 2,
+            "records": 1,
+            "excluded_uncertain": 0,
+            "deduped": 1,
+            "good_labels": 1,
+            "bad_labels": 0,
             "scored_steps": 0,
             "mean_prm_score": None,
         }
@@ -266,6 +328,7 @@ class TestPrmBuilderExportCliStream:
             "total_input": 0,
             "records": 0,
             "excluded_uncertain": 0,
+            "deduped": 0,
             "good_labels": 0,
             "bad_labels": 0,
             "scored_steps": 0,
