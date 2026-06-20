@@ -772,7 +772,8 @@ class TestSubmitAttempt:
 
     def test_submit_no_mapped_concepts(self) -> None:
         """문제↔개념 매핑 없으면 attempt만 적재·mastery_updates 빈 리스트."""
-        session = _QueueSession([_AQResult([])])
+        # 오답(모델 B): PRIMARY 쿼리→[] → TESTED 폴백 쿼리→[]. 둘 다 비어 갱신 0.
+        session = _QueueSession([_AQResult([]), _AQResult([])])
         client = _attempts_client(session)
         resp = client.post(
             "/v1/me/attempts",
@@ -784,7 +785,8 @@ class TestSubmitAttempt:
 
     def test_submit_overconfident_returns_coaching(self) -> None:
         """과신 제출(틀림 + 확신≥0.7) → calibration_coaching.focus==overconfident(§11.4)."""
-        session = _QueueSession([_AQResult([])])
+        # 오답(모델 B): PRIMARY→[] → TESTED 폴백→[](개념 매핑 없음).
+        session = _QueueSession([_AQResult([]), _AQResult([])])
         client = _attempts_client(session)
         resp = client.post(
             "/v1/me/attempts",
@@ -819,7 +821,8 @@ class TestSubmitAttempt:
 
     def test_submit_no_confidence_no_coaching(self) -> None:
         """확신 미제출(confidence 없음) → calibration_coaching==null(보정 평가 불가)."""
-        session = _QueueSession([_AQResult([])])
+        # 오답(모델 B): PRIMARY→[] → TESTED 폴백→[](개념 매핑 없음).
+        session = _QueueSession([_AQResult([]), _AQResult([])])
         client = _attempts_client(session)
         resp = client.post(
             "/v1/me/attempts",

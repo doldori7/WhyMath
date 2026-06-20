@@ -209,20 +209,34 @@ async def record_problem_attempt_mastery(
     measured_at: datetime | None = None,
     assessed_roles: Sequence[ConceptRole] = ASSESSED_ROLES,
 ) -> list[ConceptMasteryHistory]:
-    """채점된 풀이(정/오답)를 문제가 평가하는 *모든 개념*의 숙달 갱신으로 전파 — 풀이 채점
-    파이프라인의 자동 결선 진입점.
+    """채점된 풀이(정/오답)를 문제가 평가하는 개념의 숙달 갱신으로 전파 — 풀이 채점 파이프라인의
+    자동 결선 진입점. **역할 가중 부분 크레딧(모델 B·무파라미터 비대칭)**.
 
-    `problem_concept`에서 role이 `assessed_roles`(기본 PRIMARY·TESTED)인 distinct 개념마다
-    `_stage_attempt_mastery`로 측정 1건씩 세션에 add하고 **루프 후 한 번만 commit**한다 — 한 풀이
-    채점의 모든 개념 갱신이 *단일 트랜잭션*(전부 성공 또는 전부 롤백)이라 중간 실패 시 부분 갱신·
-    재시도 이중 카운트가 없다. 매핑이 없으면 빈 리스트(커밋 0). 모든 개념은 *같은 `measured_at`*
-    (생략 시 현재)을 공유한다.
+    대상 개념을 정/오답으로 비대칭 선택한다(pedagogy-designer 권고·사용자 확정):
+      - **정답** → `assessed_roles`(기본 PRIMARY·TESTED) *전체*를 지지(합동 증거 — 모든 평가 개념이
+        함께 작동했다는 증거라 귀속 모호성이 작다).
+      - **오답** → 책임귀속이 정의상 분명한 **PRIMARY에만** 감점(문항당 PRIMARY 1 보장 전제).
+        TESTED는 *갱신하지 않는다*(=관측 없음) — 책임귀속 모호한 개념에 거짓 약점 신호를 주지
+        않는다(기존 SUPPORTING·IMPLICIT 제외 논리의 연장·CLAUDE.md "오답=약점 단정 금지").
+        PRIMARY 미매핑인 퇴화 문항은 TESTED로 폴백(`get_primary_concept_id`의 PRIMARY→TESTED 선례).
 
-    v1: 평가 개념 각각에 *동일* 정/오답 신호를 적용(역할 가중 부분 크레딧은 pedagogy 후속).
+    선택된 개념마다 `_stage_attempt_mastery`로 측정 1건씩 add하고 **루프 후 한 번만 commit**한다
+    (#279 단일 트랜잭션 원자성 — 전부 성공 또는 전부 롤백). 매핑이 없으면 빈 리스트(커밋 0). 모든
+    개념은 *같은 `measured_at`*(생략 시 현재)을 공유한다.
+
+    데이터·EM 적합이 갖춰지면 역할별 p_slip 등 per-skill 파라미터(모델 C)로 승격해 TESTED 오답도
+    *약화된 신호*로 반영하는 경로를 남긴다(현재는 무파라미터 보수 기본값).
     """
     model = model or BktModel()
     timestamp = measured_at or datetime.now(UTC)
-    concept_ids = await _assessed_concept_ids(session, problem_id, assessed_roles)
+    if correct:
+        # 정답: 평가 개념 전체 지지(합동 증거).
+        concept_ids = await _assessed_concept_ids(session, problem_id, assessed_roles)
+    else:
+        # 오답: PRIMARY에만 책임귀속(거짓 약점 0). 없으면 TESTED 폴백(get_primary_concept_id 선례).
+        concept_ids = await _assessed_concept_ids(session, problem_id, [ConceptRole.PRIMARY])
+        if not concept_ids:
+            concept_ids = await _assessed_concept_ids(session, problem_id, [ConceptRole.TESTED])
     records: list[ConceptMasteryHistory] = []
     for concept_id in concept_ids:
         record = await _stage_attempt_mastery(

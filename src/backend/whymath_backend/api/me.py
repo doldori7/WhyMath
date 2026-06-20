@@ -545,8 +545,9 @@ async def submit_attempt(
     """본인 풀이 채점 1건 제출 — `ProblemAttempt` 적재 후 문제의 평가 개념 BKT 숙달 자동 전파.
 
     user_id는 인증에서 주입(본문 무시·타인 사칭 차단). attempt를 먼저 commit하고(주된 기록)
-    이어서 `record_problem_attempt_mastery`로 평가 개념(PRIMARY·TESTED) 숙달을 시계열에 누적
-    (L2 슬라이스 3). 응답에 갱신된 개념별 숙달을 담아 클라이언트가 학습 곡선을 즉시 반영.
+    이어서 `record_problem_attempt_mastery`로 숙달을 시계열에 누적한다 — **모델 B(역할 비대칭)**:
+    정답은 평가 개념(PRIMARY·TESTED) *전체*, 오답은 책임귀속 가능한 PRIMARY만 갱신(L2 슬라이스 3).
+    응답 `mastery_updates`엔 *실제 갱신된* 개념만 담긴다(오답 시 PRIMARY).
     """
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
