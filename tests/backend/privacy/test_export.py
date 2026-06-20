@@ -274,9 +274,13 @@ def test_export_dialogue_turns_scoped_by_join_on_live_pg() -> None:
     b_did = uuid.uuid4()
 
     async def _seed(sm: async_sessionmaker[AsyncSession]) -> None:
+        # 사용자를 *먼저 별도 트랜잭션*으로 커밋 — dialogue.user_id FK(fk_dialogue_user_id_
+        # user_profile)가 user_profile 선존재를 요구한다(test_erasure 패턴 그대로).
         async with sm() as session:
             session.add(_build_user(a_uid))
             session.add(_build_user(b_uid))
+            await session.commit()
+        async with sm() as session:
             session.add(
                 Dialogue.from_schema(
                     DialogueSchema(dialogue_id=a_did, user_id=a_uid, total_turns=2)
@@ -287,7 +291,7 @@ def test_export_dialogue_turns_scoped_by_join_on_live_pg() -> None:
                     DialogueSchema(dialogue_id=b_did, user_id=b_uid, total_turns=1)
                 )
             )
-            await session.flush()
+            await session.flush()  # 턴 FK(dialogue_id)가 dialogue 선존재를 요구
             session.add(_build_turn(a_did, 2, "두번째 턴"))  # 역순 삽입 → 정렬 검증
             session.add(_build_turn(a_did, 1, "첫번째 턴"))
             session.add(_build_turn(b_did, 1, "타인 턴"))
