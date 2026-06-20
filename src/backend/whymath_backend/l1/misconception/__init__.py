@@ -24,9 +24,25 @@ from whymath_backend.l1.misconception.catalog_loader import (
     load_misconceptions,
 )
 from whymath_backend.l1.misconception.populate import main as populate_main
+from whymath_backend.l1.misconception.resolve import (
+    ConceptRef,
+    ResolvedMisconceptionLinks,
+    ResolvedStandardCode,
+    StandardRef,
+    resolve_many,
+    resolve_one,
+    summarize,
+)
 
 __all__ = [
     "MisconceptionCatalogStore",
     "load_misconceptions",
     "populate_main",
+    "ConceptRef",
+    "StandardRef",
+    "ResolvedStandardCode",
+    "ResolvedMisconceptionLinks",
+    "resolve_many",
+    "resolve_one",
+    "summarize",
 ]
