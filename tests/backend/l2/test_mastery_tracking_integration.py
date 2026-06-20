@@ -235,3 +235,95 @@ def test_record_problem_attempt_mastery_only_assessed_roles_on_live_pg() -> None
     finally:
         asyncio.run(_cleanup(uid))
         asyncio.run(_cleanup_problem(pid, [c_primary, c_tested, c_supporting]))
+
+
+async def _mastery_row_count(user_id: uuid.UUID, concept_id: uuid.UUID) -> int:
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            n = (
+                await conn.execute(
+                    text(
+                        "SELECT count(*) FROM concept_mastery_history "
+                        "WHERE user_id = :uid AND concept_id = :cid"
+                    ),
+                    {"uid": str(user_id), "cid": str(concept_id)},
+                )
+            ).scalar()
+        return int(n or 0)
+    finally:
+        await engine.dispose()
+
+
+def test_incorrect_blames_primary_only_on_live_pg() -> None:
+    """모델 B(실 PG) — 오답은 PRIMARY에만 행 적재·TESTED 거짓 약점 0. 이후 정답은 TESTED도 지지."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid = uuid.uuid4()
+    c_primary, c_tested = uuid.uuid4(), uuid.uuid4()
+    suffix = pid.hex[:8]
+
+    async def _setup() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as s:
+                s.add(
+                    Problem.from_schema(
+                        ProblemSchema(
+                            problem_id=pid,
+                            source_type=SourceType.자체생성,
+                            curriculum_version=Curriculum.REVISION_2022,
+                            valid_from_year=2022,
+                            subject=Subject.공통,
+                            unit_codes=[f"U-{suffix}"],
+                        )
+                    )
+                )
+                s.add_all([_concept(c_primary, f"P-{suffix}"), _concept(c_tested, f"T-{suffix}")])
+                await s.commit()
+            async with sm() as s:
+                s.add_all(
+                    [
+                        ProblemConcept.from_schema(
+                            ProblemConceptSchema(
+                                problem_id=pid, concept_id=c_primary, role=ConceptRole.PRIMARY
+                            )
+                        ),
+                        ProblemConcept.from_schema(
+                            ProblemConceptSchema(
+                                problem_id=pid, concept_id=c_tested, role=ConceptRole.TESTED
+                            )
+                        ),
+                    ]
+                )
+                await s.commit()
+        finally:
+            await engine.dispose()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            # 오답: PRIMARY만 갱신(TESTED 미갱신 — 거짓 약점 0).
+            async with sm() as session:
+                rec_wrong = await record_problem_attempt_mastery(session, uid, pid, False)
+            assert {r.concept_id for r in rec_wrong} == {c_primary}
+            assert await _mastery_row_count(uid, c_primary) == 1
+            assert await _mastery_row_count(uid, c_tested) == 0  # ★ TESTED 거짓 약점 0
+            # 정답: 전체 지지 — TESTED도 행 생성(비대칭의 반대편).
+            async with sm() as session:
+                rec_right = await record_problem_attempt_mastery(session, uid, pid, True)
+            assert {r.concept_id for r in rec_right} == {c_primary, c_tested}
+            assert await _mastery_row_count(uid, c_tested) == 1
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup(uid))
+        asyncio.run(_cleanup_problem(pid, [c_primary, c_tested]))

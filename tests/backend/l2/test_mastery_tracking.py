@@ -303,6 +303,40 @@ class TestRecordProblemAttemptMastery:
         assert records[0].mastery == 0.15  # 오답
         assert fake.commits == 1  # 1개념 = 1 트랜잭션
 
+    async def test_incorrect_blames_primary_only(self) -> None:
+        """모델 B — 오답은 PRIMARY에만 귀속. PRIMARY 존재 시 TESTED 쿼리·갱신 0(거짓 약점 0)."""
+        cid_p = uuid.uuid4()
+        # 큐: PRIMARY 쿼리→[cid_p], cid_p prior→[]. (PRIMARY 비지 않아 TESTED 폴백 미발생)
+        fake = _QueueSession([_QResult([cid_p]), _QResult([])])
+        records = await record_problem_attempt_mastery(
+            cast(AsyncSession, fake), _UID, uuid.uuid4(), False, model=_M
+        )
+        assert [r.concept_id for r in records] == [cid_p]  # PRIMARY만
+        assert len(fake.added) == 1  # TESTED는 add 안 됨
+        assert fake.commits == 1
+
+    async def test_incorrect_falls_back_to_tested_when_no_primary(self) -> None:
+        """모델 B — PRIMARY 미매핑인 퇴화 문항은 TESTED로 폴백(신호 손실 방지)."""
+        cid_t = uuid.uuid4()
+        # 큐: PRIMARY 쿼리→[](없음), TESTED 폴백 쿼리→[cid_t], cid_t prior→[].
+        fake = _QueueSession([_QResult([]), _QResult([cid_t]), _QResult([])])
+        records = await record_problem_attempt_mastery(
+            cast(AsyncSession, fake), _UID, uuid.uuid4(), False, model=_M
+        )
+        assert [r.concept_id for r in records] == [cid_t]
+        assert fake.commits == 1
+
+    async def test_correct_supports_all_assessed(self) -> None:
+        """모델 B — 정답은 PRIMARY+TESTED *전체* 지지(합동 증거·비대칭의 반대편)."""
+        cid_p, cid_t = uuid.uuid4(), uuid.uuid4()
+        # 큐: assessed 쿼리→[cid_p, cid_t], 각 prior→[].
+        fake = _QueueSession([_QResult([cid_p, cid_t]), _QResult([]), _QResult([])])
+        records = await record_problem_attempt_mastery(
+            cast(AsyncSession, fake), _UID, uuid.uuid4(), True, model=_M
+        )
+        assert [r.concept_id for r in records] == [cid_p, cid_t]  # 둘 다 지지
+        assert all(r.mastery == 0.69 for r in records)  # 정답·첫 관측 상승
+
 
 class TestForgettingInRecord:
     """slice L2-6: 경과일 망각이 compute/record에 반영(p_forget=0 기본은 무영향)."""
