@@ -7,6 +7,7 @@ load 커맨드는 hermetic하게 검증한다(라이브 PG 불요): DSN 해소·
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -18,6 +19,90 @@ from data_pipeline.ncic.load import write_json
 from data_pipeline.ncic.models import AchievementStandard
 
 runner = CliRunner()
+
+
+def _write_min_file_a(path: Path) -> None:
+    """extract 테스트용 합성 File A xlsx(실 컬럼명·괄호 link_type 포함)."""
+    openpyxl = pytest.importorskip("openpyxl")
+    workbook = openpyxl.Workbook()
+    default_sheet = workbook.active
+    sheets: dict[str, list[list[str]]] = {
+        "성취기준_목록": [
+            ["성취기준 코드", "교육과정", "과목약칭", "영역(단원)", "성취기준 내용"],
+            ["[9수01-01]", "2022개정", "수학", "수와 연산", "소인수분해를 이해한다."],
+            ["[2수03-08]", "2022개정", "수학", "도형과 측정", "도형 A."],
+        ],
+        "개념-성취기준-CCSS": [
+            ["개념ID", "한국 성취기준(2022)", "연결구분"],
+            ["N1", "[9수01-01]", "직접(기본수학)"],  # 괄호→베어 토큰·note
+            ["N5", "[2수03-08]", "직접"],
+        ],
+    }
+    for name, rows in sheets.items():
+        worksheet = workbook.create_sheet(title=name)
+        for row in rows:
+            worksheet.append(row)
+    workbook.remove(default_sheet)
+    workbook.save(str(path))
+
+
+class TestExtractCommand:
+    def test_extract_writes_corpus(self, tmp_path: Path) -> None:
+        """extract → standards.json·links.json·_provenance.json 생성·카운트·정규화 검증."""
+        xlsx = tmp_path / "file_a.xlsx"
+        _write_min_file_a(xlsx)
+        out = tmp_path / "corpus"
+        result = runner.invoke(
+            app, ["extract", "--xlsx", str(xlsx), "--output-dir", str(out)]
+        )
+        assert result.exit_code == 0, result.output
+
+        std = json.loads((out / "standards.json").read_text(encoding="utf-8"))
+        links = json.loads((out / "concept_standard_links.json").read_text(encoding="utf-8"))
+        prov = json.loads((out / "_provenance.json").read_text(encoding="utf-8"))
+
+        assert len(std["standards"]) == 2
+        assert len(links["links"]) == 2
+        # 괄호 link_type 정규화(직접(기본수학)→직접·note 기본수학)
+        n1 = next(link for link in links["links"] if link["concept_src_id"] == "N1")
+        assert n1["link_type"] == "직접" and n1["note"] == "기본수학"
+        # provenance: sha256·카운트
+        assert len(prov["source_sha256"]) == 64
+        assert prov["counts"] == {"standards": 2, "links": 2, "2022 개정": 2}
+        assert "공공누리" in prov["license_notice"]
+
+    def test_extract_missing_xlsx_exits_2(self, tmp_path: Path) -> None:
+        result = runner.invoke(app, ["extract", "--xlsx", str(tmp_path / "nope.xlsx")])
+        assert result.exit_code == 2
+
+    def test_extract_validation_failure_exits_2(self, tmp_path: Path) -> None:
+        """링크가 미존재 성취기준을 가리키면(norm_id 미해소) 검증 실패→Exit 2."""
+        openpyxl = pytest.importorskip("openpyxl")
+        xlsx = tmp_path / "bad.xlsx"
+        workbook = openpyxl.Workbook()
+        default_sheet = workbook.active
+        sheets: dict[str, list[list[str]]] = {
+            "성취기준_목록": [
+                ["성취기준 코드", "교육과정", "과목약칭", "영역(단원)", "성취기준 내용"],
+                ["[9수01-01]", "2022개정", "수학", "수와 연산", "x."],
+            ],
+            "개념-성취기준-CCSS": [
+                ["개념ID", "한국 성취기준(2022)", "연결구분"],
+                ["N9", "[9수99-99]", "직접"],  # 성취기준 목록에 없는 코드 → 고아
+            ],
+        }
+        for name, rows in sheets.items():
+            worksheet = workbook.create_sheet(title=name)
+            for row in rows:
+                worksheet.append(row)
+        workbook.remove(default_sheet)
+        workbook.save(str(xlsx))
+        out = tmp_path / "corpus"
+        result = runner.invoke(
+            app, ["extract", "--xlsx", str(xlsx), "--output-dir", str(out)]
+        )
+        assert result.exit_code == 2
+        assert not (out / "standards.json").exists()  # 검증 실패 시 미저장
 
 
 def _samples() -> list[AchievementStandard]:

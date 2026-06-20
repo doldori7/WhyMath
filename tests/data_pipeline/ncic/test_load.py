@@ -11,6 +11,7 @@ from data_pipeline.ncic.load import (
     load_to_postgres,
     write_csv,
     write_json,
+    write_provenance,
 )
 from data_pipeline.ncic.models import (
     LICENSE_NOTICE,
@@ -45,6 +46,35 @@ def _samples() -> list[AchievementStandard]:
             parent_codes=["[9수02-01]"],
         ),
     ]
+
+
+class TestWriteProvenance:
+    def test_writes_sha256_counts_and_citation(self, tmp_path: Path) -> None:
+        """write_provenance가 원본 sha256·카운트·출처표지를 기록하고 sha256을 반환."""
+        source = tmp_path / "file_a.xlsx"
+        source.write_bytes(b"fake-xlsx-bytes")
+        out = tmp_path / "corpus" / "_provenance.json"
+        digest = write_provenance(
+            out,
+            source_path=source,
+            counts={"standards": 895, "links": 443},
+            notes=["테스트 노트"],
+        )
+        assert len(digest) == 64
+        payload = json.loads(out.read_text(encoding="utf-8"))
+        assert payload["source_sha256"] == digest
+        assert payload["source_name"] == "file_a.xlsx"
+        assert payload["counts"] == {"standards": 895, "links": 443}
+        assert payload["post_extraction"] == ["테스트 노트"]
+        assert SOURCE_CITATION == payload["source_citation"]
+        assert LICENSE_NOTICE == payload["license_notice"]
+
+    def test_creates_parent_directory(self, tmp_path: Path) -> None:
+        source = tmp_path / "a.xlsx"
+        source.write_bytes(b"x")
+        out = tmp_path / "nested" / "deep" / "_provenance.json"
+        write_provenance(out, source_path=source, counts={}, notes=[])
+        assert out.is_file()
 
 
 class TestWriteJson:

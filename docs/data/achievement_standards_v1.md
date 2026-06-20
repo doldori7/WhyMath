@@ -6,9 +6,9 @@
 > 적재). 본 카드는 그 *성취기준·연결 레이어*를 다룬다. 설계 배경은
 > `curriculum_master_v2_integration_review.md`(2026-06-16) 참조.
 >
-> **현황(2026-06-16)**: *기계장치 우선* — 모델·추출기·검증·백엔드 ORM·Alembic·로더·테스트를 **합성
-> fixture로 구축·4게이트 green**. 실 895행 적재는 File A xlsx 재업로드 후 `extract_file_a` 1회 실행으로
-> 분리(아래 §6). 따라서 `data/corpus/standards_v1/`는 **File A 처리 전까지 비어 있다**(가짜 데이터 미적재).
+> **현황(2026-06-20)**: 코퍼스 **생성·커밋 완료**. `whymath-ncic extract`로 실 File A에서 성취기준 895·
+> 연결 443을 추출·검증(errors 0)·저장해 `data/corpus/standards_v1/`에 커밋(`standards.json`·
+> `concept_standard_links.json`·`_provenance.json`). 백엔드 ORM 적재는 후속 슬라이스(§6).
 
 ---
 
@@ -20,7 +20,7 @@
 | 원본 sha256 | `062695cef261386ec880313631aa349f624fcace1b7eb3d52bc031025536f90d` (File A·`concept_graph_dataset_v1`과 동일 원본) |
 | 출처(성취기준) | 교육부 고시 [수학과 교육과정] — 2022 개정(제2022-33호)·2015 개정(제2015-74호), 국가교육과정정보센터(NCIC, https://www.ncic.go.kr) |
 | 저작(연결) | 와이매스 자체작성(개념↔성취기준 교수학 매핑) |
-| 추출 산출물 | `data/corpus/standards_v1/{standards_895.jsonl, concept_standard_links.jsonl, _provenance.json}` (File A 처리 시 생성) |
+| 추출 산출물 | `data/corpus/standards_v1/{standards.json, concept_standard_links.json, _provenance.json}` (**커밋됨** — `whymath-ncic extract`, 2026-06-20) |
 
 > 원본 xlsx는 **커밋하지 않는다**. 진실 원천은 추출 jsonl이다. 재추출이 필요하면 동일 sha256 원본을
 > 사용자에게 재요청한다(`extract_file_a`).
@@ -95,17 +95,22 @@ norm_id = build_norm_id(curriculum_revision, official_code)
 
 ---
 
-## 6. 적재 절차 (File A 도착 시)
+## 6. 적재 절차 (코퍼스 생성 완료 — 2026-06-20)
 
 ```bash
-# 1) File A xlsx 재업로드(동일 sha256) 후 추출
-python -c "from data_pipeline.ncic.extract_xlsx import extract_file_a; ..."  # → standards_v1/*.jsonl
-# 2) 검증: 895=435+460 · norm_id 유일 · official_code 153중복 허용 · 연결 443 전건 해소
-# 3) 백엔드: alembic upgrade head → 로더로 corpus 적재
+# 1) File A xlsx로 추출·검증·저장(공공누리 1유형 표지 동봉) — 멱등 재현
+whymath-ncic extract --xlsx <File A.xlsx> --output-dir data/corpus/standards_v1
+#   → standards.json(895)·concept_standard_links.json(443)·_provenance.json(source_sha256)
+# 2) 검증은 extract가 내장: validate_standards/validate_links errors=0 아니면 Exit 2
+# 3) 백엔드: alembic upgrade head → 로더로 corpus 적재(후속 슬라이스)
 ```
 
-**완료 기준**: 895(2022:435+2015:460)·`norm_id` 유일·`official_code` 153중복 허용·연결 443 전건
-`norm_id`·concept 해소(고아 0)·연결구분 분포(직접/재매핑41/준용).
+산출물은 **Collection JSON**(`write_json`/`write_links_json` 재사용 — SOURCE_CITATION·LICENSE_NOTICE
+표지·`standards`/`links` 배열)이며 **레포에 커밋**(`data/corpus/standards_v1/`). 원본 xlsx는 미커밋,
+`_provenance.json`의 `source_sha256`(`4e21d6d4…`)으로 재현 가능성 보장.
+
+**완료 기준(달성)**: 895(2022:435+2015:460)·`norm_id` 유일·`official_code` 중복 허용·연결 437행→443
+링크 전건 `norm_id` 해소(고아 0)·연결구분(직접/재매핑/준용·괄호 접미사는 note 보존).
 
 ## 7. File A 정합 완료 (2026-06-20 — §6 미결 해소)
 
