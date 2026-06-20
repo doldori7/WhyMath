@@ -109,7 +109,7 @@ class TestExportUserData:
     def test_assembles_categories_and_profile(self) -> None:
         """15종 카테고리(+대화 턴 조인) 직렬화 + user_profile 단건 + exported_at + 읽기 전용."""
         uid = uuid.uuid4()
-        # _EXPORT_PLAN 순서(14) + dialogue_turns 조인(1) + profile(1) = 16 execute. learning_sessions
+        # _EXPORT_PLAN(14) + dialogue_turns 조인(1) + profile(1) = 16 execute. learning_sessions
         # (0)·ability_snapshots(4)·parental_consents(5)·misconception_hypotheses(9)·
         # misconception_evidence(10)·daily_learning_metrics(11)·user_behavior_metrics(12)·
         # dialogues(13)·dialogue_turns(14)에 구분 행, 나머지 빈, 마지막 profile.
