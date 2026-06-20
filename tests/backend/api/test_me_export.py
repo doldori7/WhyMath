@@ -67,7 +67,7 @@ class _FakeResult:
 
 
 class _FakeSession:
-    """execute(select)별 scalars 큐(14종 + 대화 턴 조인 + profile = 16)를 순서대로 반환."""
+    """execute(select)별 scalars 큐(15종 + 대화 턴 조인 + profile = 17)를 순서대로 반환."""
 
     def __init__(self, result_rows: list[list[Any]]) -> None:
         self._queue = list(result_rows)
@@ -81,9 +81,9 @@ def _client() -> TestClient:
     app.dependency_overrides[get_consented_user] = _user
 
     async def _sess() -> AsyncIterator[_FakeSession]:
-        # 14종 카테고리 + 대화 턴 조인(14) + profile(15) = 16 execute. learning_sessions(0)·
+        # 15종 카테고리 + 대화 턴 조인(15) + profile(16) = 17 execute. learning_sessions(0)·
         # parental_consents(5)·misconception_evidence(10)·user_behavior_metrics(12)·dialogues(13)·
-        # dialogue_turns(14)에 1행씩, 나머지 빈, profile 1행.
+        # attempt_events(14)·dialogue_turns(15)에 1행씩, 나머지 빈, profile 1행.
         yield _FakeSession(
             [
                 [_StubRow({"sid": "s1"})],
@@ -100,6 +100,7 @@ def _client() -> TestClient:
                 [],
                 [_StubRow({"metric": "churn_risk"})],
                 [_StubRow({"resolution": "자기풀이"})],
+                [_StubRow({"event": "step_submit"})],
                 [_StubRow({"content": "x=2?"})],
                 [_StubRow({"uid": str(_UID)})],
             ]
@@ -136,6 +137,7 @@ class TestExportMyData:
         assert body["data"]["daily_learning_metrics"] == []  # 증분 4 신규(빈)
         assert body["data"]["user_behavior_metrics"] == [{"metric": "churn_risk"}]  # 증분 4 신규
         assert body["data"]["dialogues"] == [{"resolution": "자기풀이"}]  # 증분 5 신규(세션 메타)
+        assert body["data"]["attempt_events"] == [{"event": "step_submit"}]  # 증분 7 신규
         assert body["data"]["dialogue_turns"] == [{"content": "x=2?"}]  # 증분 6 신규(턴 본문)
         assert body["user_profile"] == {"uid": str(_UID)}
         assert len(body["not_included"]) >= 1  # 부분 export 정직 고지
