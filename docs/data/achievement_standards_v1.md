@@ -32,7 +32,7 @@
 | 시트(File A) | 레코드 | 모델 | 핵심 필드 |
 |---|---|---|---|
 | `성취기준_목록` | 895 | `AchievementStandard` | **`norm_id`**(정규화 PK), `code`(official_code·비유일), `curriculum_revision`(2022/2015 개정), `grade_band`, `school_type`, `subject`, `domain`, `sub_domain`, `statement`, `commentary`, `big_idea`, `parent_codes[]`, `source_url` |
-| `연결_개념-성취기준` | 443 | `ConceptStandardLink` | `concept_src_id`(개념 안정키 N1·HK42…), `norm_id`(성취기준 참조), `link_type`(직접/재매핑/준용), `note` |
+| `개념-성취기준-CCSS` | 437행→443 | `ConceptStandardLink` | `concept_src_id`(개념 안정키 N1·HK42…), `norm_id`(성취기준 참조), `link_type`(직접/재매핑/준용), `note`(괄호 접미사 보존). 다중코드 셀 4건 분할로 437행→443 링크 |
 | `공식_성취기준_마스터` | 435(2022) | (교차검증) | `official_code`+`norm_id` 2층키 — 파생 norm_id 검산용 |
 
 ### `norm_id` — 교육과정 간 유일 정규화키
@@ -107,13 +107,25 @@ python -c "from data_pipeline.ncic.extract_xlsx import extract_file_a; ..."  # �
 **완료 기준**: 895(2022:435+2015:460)·`norm_id` 유일·`official_code` 153중복 허용·연결 443 전건
 `norm_id`·concept 해소(고아 0)·연결구분 분포(직접/재매핑41/준용).
 
-## 7. File A 도착 시 확정할 세부
+## 7. File A 정합 완료 (2026-06-20 — §6 미결 해소)
 
-- `연결_개념-성취기준` 시트의 *개념 키 컬럼*(src_id N1 vs 개념명) — `_LINK_COLS` 매핑 확정.
-- `NORM_ID_PATTERN` 과목약칭 토큰셋(2015 포함) 정밀화 + 공식마스터(435)와 2022 norm_id 일치 검산.
-- 2015 성취기준 코드의 `STANDARD_CODE_PATTERN` 적합성 전수 확인.
+2026-06-20 도착 File A(sha256 `4e21d6d4…`·§1의 2026-06-12판 `062695…`의 후속 리비전)로 `extract_xlsx.py`
+좌변 컬럼 매핑을 **정합 완료**. 실 추출 검증: **성취기준 895(2022:435+2015:460)·연결 437행→443 링크·
+`validate_standards`/`validate_links` errors 0**. 위 §6 미결 항목 처리 결과:
+
+- **연결 시트명·키 컬럼**: 실 시트는 `연결_개념-성취기준`이 아니라 **`개념-성취기준-CCSS`**(개념ID·
+  한국 성취기준(2022)·연결구분). `_SHEET_LINKS`·`_LINK_COLS` 교체로 확정.
+- **`NORM_ID_PATTERN`·`STANDARD_CODE_PATTERN`(2015 포함)**: **확장 불요** — 기존 패턴/`_SUBJECT_MAP`으로
+  895 전건 통과. 단 File A `norm_id` 열은 **로마숫자 Ⅰ 유지**(ASCII 패턴 위반)라 매핑하지 않고
+  `build_norm_id`(Ⅰ→I 정규화) 파생을 쓴다(229건 직접매핑 실패 원인 = 이 함정).
+- **실데이터 특성 3종(연결)**: ① 교육과정 열 부재→revision 2022 기본, ② `연결구분` 괄호 접미사
+  (`직접(기본수학)`)→베어 토큰 정규화·괄호는 `note` 보존, ③ code 셀 `;` 다중코드 4건→코드별 링크 분할
+  (437행→443 링크). `parse_link_row`가 **행→복수 링크** 반환으로 처리.
+
+> **후속(미커밋)**: 코퍼스 생성·커밋(`data/corpus/standards_v1/*.jsonl`)+`whymath-ncic extract` CLI는 별도
+> 슬라이스. 본 정합은 추출 *기계장치*만 완성(실 추출은 로컬 검증·데이터 비커밋 — "기계장치 우선" 관례).
 
 ---
 
-**버전**: v1 (기계장치) | **최종 수정**: 2026-06-16 | 관련: `ncic.md`·`ncic_scheme.md`·
-`curriculum_master_v2_integration_review.md`·`concept_graph_dataset_v1.md`
+**버전**: v1 (기계장치·2026-06-20 정합) | **최종 수정**: 2026-06-20 | 관련: `ncic.md`·`ncic_scheme.md`·
+`curriculum_master_v2_integration_review.md`·`concept_graph_dataset_v1.md`·`external_corpus_ingestion_v1.md`
