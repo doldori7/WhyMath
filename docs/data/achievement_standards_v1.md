@@ -102,7 +102,12 @@ norm_id = build_norm_id(curriculum_revision, official_code)
 whymath-ncic extract --xlsx <File A.xlsx> --output-dir data/corpus/standards_v1
 #   → standards.json(895)·concept_standard_links.json(443)·_provenance.json(source_sha256)
 # 2) 검증은 extract가 내장: validate_standards/validate_links errors=0 아니면 Exit 2
-# 3) 백엔드: alembic upgrade head → 로더로 corpus 적재(후속 슬라이스)
+# 3) 백엔드 적재: alembic upgrade head 후 populate CLI(멱등·norm_id PK 충돌 upsert)
+python -m whymath_backend.l1.standards.populate \
+    --standards data/corpus/standards_v1/standards.json \
+    --links data/corpus/standards_v1/concept_standard_links.json
+#   링크 해석(concept_src_id→concept.source_id→code)은 l1.concept_graph.populate 선행 필요
+#   (개념 미적재 시 전건 개념 orphan skip — 성취기준은 정상 적재).
 ```
 
 산출물은 **Collection JSON**(`write_json`/`write_links_json` 재사용 — SOURCE_CITATION·LICENSE_NOTICE

@@ -498,3 +498,44 @@ class TestLinkRoundtrip:
         finally:
             _cleanup(norm_ids + [_NORM_ORPHAN])
             _cleanup_concepts([_CODE])
+
+
+class TestRealCorpusLoad:
+    """⑥ 실 코퍼스(`data/corpus/standards_v1`) 적재 — 895행·멱등(#288 코퍼스 정합 검증).
+
+    합성 행이 아니라 `whymath-ncic extract`가 커밋한 실 Collection JSON을 `load_standards`로
+    적재해 P1 로더가 실 데이터에 서는지 본다(2022:435+2015:460=895). 정리는 코퍼스 norm_id 전건.
+    """
+
+    def test_load_real_standards_corpus_idempotent(self) -> None:
+        _skip_if_unreachable()
+        import json
+        from pathlib import Path
+
+        from sqlalchemy import text
+
+        corpus = Path("data/corpus/standards_v1/standards.json")
+        if not corpus.exists():
+            pytest.skip("실 코퍼스 미존재(data/corpus/standards_v1/standards.json)")
+        payload = json.loads(corpus.read_text(encoding="utf-8"))
+        norm_ids = [str(s["norm_id"]) for s in payload["standards"]]
+        try:
+            count = load_standards(None, corpus, settings=Settings())
+            assert count == 895  # 2022:435 + 2015:460
+            # 재적재 멱등 — 같은 코퍼스 → DB 행수 불변(중복 적재 없음).
+            recount = load_standards(None, corpus, settings=Settings())
+            assert recount == 895
+            engine = _sync_engine()
+            try:
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    total = conn.execute(
+                        text(
+                            "SELECT count(*) FROM achievement_standard " "WHERE norm_id = ANY(:ids)"
+                        ),
+                        {"ids": norm_ids},
+                    ).scalar_one()
+                assert total == 895  # 멱등(2회 적재 후에도 895행)
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+        finally:
+            _cleanup(norm_ids)
