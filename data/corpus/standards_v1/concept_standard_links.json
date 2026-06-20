@@ -1,0 +1,2667 @@
+{
+  "source_citation": "출처: 교육부 고시 제2022-33호 [수학과 교육과정], 국가교육과정정보센터(NCIC, https://www.ncic.go.kr)",
+  "license_notice": "본 데이터는 공공누리 제1유형(출처 표시) 조건에 따라 자유로이 이용 가능합니다. 상업적 이용 및 변경(2차적 저작물 작성)이 허용되며, 이용 시 반드시 위 출처를 명시해야 합니다.",
+  "curriculum_revision": "2022 개정",
+  "collected_at": "2026-06-20T10:33:35.728842+00:00",
+  "crawler_version": "0.1.0",
+  "links": [
+    {
+      "concept_src_id": "N1",
+      "norm_id": "2022_2수_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "N2",
+      "norm_id": "2022_2수_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "N3",
+      "norm_id": "2022_2수_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "N4",
+      "norm_id": "2022_2수_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "A1",
+      "norm_id": "2022_2수_01_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "A2",
+      "norm_id": "2022_2수_01_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "A3",
+      "norm_id": "2022_2수_01_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "A4",
+      "norm_id": "2022_2수_01_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "A5",
+      "norm_id": "2022_2수_01_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "M1",
+      "norm_id": "2022_2수_01_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "M2",
+      "norm_id": "2022_2수_01_11",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "Q1",
+      "norm_id": "2022_2수_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "Q2",
+      "norm_id": "2022_2수_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G01",
+      "norm_id": "2022_2수_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G02",
+      "norm_id": "2022_2수_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G03",
+      "norm_id": "2022_2수_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G04",
+      "norm_id": "2022_2수_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G05",
+      "norm_id": "2022_2수_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "L0",
+      "norm_id": "2022_2수_03_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "T1",
+      "norm_id": "2022_2수_03_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "T2",
+      "norm_id": "2022_2수_03_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "T2",
+      "norm_id": "2022_2수_03_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "T2",
+      "norm_id": "2022_4수_03_13",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "L1",
+      "norm_id": "2022_2수_03_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "L2",
+      "norm_id": "2022_2수_03_11",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "L3",
+      "norm_id": "2022_2수_03_12",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "L4",
+      "norm_id": "2022_2수_03_13",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P1",
+      "norm_id": "2022_2수_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P2",
+      "norm_id": "2022_2수_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P3",
+      "norm_id": "2022_2수_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "N5",
+      "norm_id": "2022_4수_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "N6",
+      "norm_id": "2022_4수_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "A6",
+      "norm_id": "2022_4수_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "M3",
+      "norm_id": "2022_4수_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "D1",
+      "norm_id": "2022_4수_01_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "D2",
+      "norm_id": "2022_4수_01_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "D3",
+      "norm_id": "2022_4수_01_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "E1",
+      "norm_id": "2022_4수_01_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F1",
+      "norm_id": "2022_4수_01_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F2",
+      "norm_id": "2022_4수_01_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F3",
+      "norm_id": "2022_4수_01_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F4",
+      "norm_id": "2022_4수_01_11",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "S1",
+      "norm_id": "2022_4수_01_12",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F6",
+      "norm_id": "2022_4수_01_12",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "S2",
+      "norm_id": "2022_4수_01_13",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "S3",
+      "norm_id": "2022_4수_01_14",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F5",
+      "norm_id": "2022_4수_01_15",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "S4",
+      "norm_id": "2022_4수_01_16",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "Q3",
+      "norm_id": "2022_4수_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "Q4",
+      "norm_id": "2022_4수_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "Q5",
+      "norm_id": "2022_4수_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G06",
+      "norm_id": "2022_4수_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G07",
+      "norm_id": "2022_4수_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G08",
+      "norm_id": "2022_4수_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G11",
+      "norm_id": "2022_4수_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G12",
+      "norm_id": "2022_4수_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G09",
+      "norm_id": "2022_4수_03_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G10",
+      "norm_id": "2022_4수_03_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G13",
+      "norm_id": "2022_4수_03_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G14",
+      "norm_id": "2022_4수_03_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G15",
+      "norm_id": "2022_4수_03_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G16",
+      "norm_id": "2022_4수_03_11",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G17",
+      "norm_id": "2022_4수_03_12",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "T3",
+      "norm_id": "2022_4수_03_14",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "L5",
+      "norm_id": "2022_4수_03_15",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "L5",
+      "norm_id": "2022_4수_03_16",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "V1",
+      "norm_id": "2022_4수_03_17",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "V1",
+      "norm_id": "2022_4수_03_18",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "V2",
+      "norm_id": "2022_4수_03_19",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "W1",
+      "norm_id": "2022_4수_03_20",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "W1",
+      "norm_id": "2022_4수_03_21",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "W1",
+      "norm_id": "2022_4수_03_22",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "W2",
+      "norm_id": "2022_4수_03_23",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AD",
+      "norm_id": "2022_4수_03_24",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G25",
+      "norm_id": "2022_4수_03_25",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P4",
+      "norm_id": "2022_4수_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P5",
+      "norm_id": "2022_4수_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P6",
+      "norm_id": "2022_4수_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "X1",
+      "norm_id": "2022_6수_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "R1",
+      "norm_id": "2022_6수_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "R2",
+      "norm_id": "2022_6수_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "B1",
+      "norm_id": "2022_6수_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "B2",
+      "norm_id": "2022_6수_01_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F7",
+      "norm_id": "2022_6수_01_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F8",
+      "norm_id": "2022_6수_01_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F9",
+      "norm_id": "2022_6수_01_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F10",
+      "norm_id": "2022_6수_01_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F11",
+      "norm_id": "2022_6수_01_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F12",
+      "norm_id": "2022_6수_01_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F13",
+      "norm_id": "2022_6수_01_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F14",
+      "norm_id": "2022_6수_01_11",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "F15",
+      "norm_id": "2022_6수_01_12",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "S5",
+      "norm_id": "2022_6수_01_13",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "S6",
+      "norm_id": "2022_6수_01_14",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "S7",
+      "norm_id": "2022_6수_01_15",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "Q6",
+      "norm_id": "2022_6수_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "Q7",
+      "norm_id": "2022_6수_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "Q8",
+      "norm_id": "2022_6수_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "Q9",
+      "norm_id": "2022_6수_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "Q10",
+      "norm_id": "2022_6수_02_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G18",
+      "norm_id": "2022_6수_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G19",
+      "norm_id": "2022_6수_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G20",
+      "norm_id": "2022_6수_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G21",
+      "norm_id": "2022_6수_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G22",
+      "norm_id": "2022_6수_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G23",
+      "norm_id": "2022_6수_03_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G24",
+      "norm_id": "2022_6수_03_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G26",
+      "norm_id": "2022_6수_03_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G27",
+      "norm_id": "2022_6수_03_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "G28",
+      "norm_id": "2022_6수_03_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ME1",
+      "norm_id": "2022_6수_03_11",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ME2",
+      "norm_id": "2022_6수_03_12",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ME3",
+      "norm_id": "2022_6수_03_13",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ME4",
+      "norm_id": "2022_6수_03_14",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ME5",
+      "norm_id": "2022_6수_03_15",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ME6",
+      "norm_id": "2022_6수_03_16",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ME7",
+      "norm_id": "2022_6수_03_17",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ME8",
+      "norm_id": "2022_6수_03_18",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ME9",
+      "norm_id": "2022_6수_03_19",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P7",
+      "norm_id": "2022_6수_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P8",
+      "norm_id": "2022_6수_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P9",
+      "norm_id": "2022_6수_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P10",
+      "norm_id": "2022_6수_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P11",
+      "norm_id": "2022_6수_04_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "P12",
+      "norm_id": "2022_6수_04_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0101",
+      "norm_id": "2022_9수_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0102",
+      "norm_id": "2022_9수_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0103",
+      "norm_id": "2022_9수_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0104",
+      "norm_id": "2022_9수_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0105",
+      "norm_id": "2022_9수_01_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0106",
+      "norm_id": "2022_9수_01_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0107",
+      "norm_id": "2022_9수_01_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0108",
+      "norm_id": "2022_9수_01_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0109",
+      "norm_id": "2022_9수_01_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0110",
+      "norm_id": "2022_9수_01_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0201",
+      "norm_id": "2022_9수_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0202",
+      "norm_id": "2022_9수_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0203",
+      "norm_id": "2022_9수_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0204",
+      "norm_id": "2022_9수_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0205",
+      "norm_id": "2022_9수_02_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0206",
+      "norm_id": "2022_9수_02_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0207",
+      "norm_id": "2022_9수_02_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0208",
+      "norm_id": "2022_9수_02_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0209",
+      "norm_id": "2022_9수_02_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0210",
+      "norm_id": "2022_9수_02_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0211",
+      "norm_id": "2022_9수_02_11",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0212",
+      "norm_id": "2022_9수_02_12",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0213",
+      "norm_id": "2022_9수_02_13",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0214",
+      "norm_id": "2022_9수_02_14",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0215",
+      "norm_id": "2022_9수_02_15",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0216",
+      "norm_id": "2022_9수_02_16",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0217",
+      "norm_id": "2022_9수_02_17",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0218",
+      "norm_id": "2022_9수_02_18",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0219",
+      "norm_id": "2022_9수_02_19",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0220",
+      "norm_id": "2022_9수_02_20",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0221",
+      "norm_id": "2022_9수_02_21",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0222",
+      "norm_id": "2022_9수_02_22",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0301",
+      "norm_id": "2022_9수_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0302",
+      "norm_id": "2022_9수_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0303",
+      "norm_id": "2022_9수_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0304",
+      "norm_id": "2022_9수_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0305",
+      "norm_id": "2022_9수_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0306",
+      "norm_id": "2022_9수_03_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0307",
+      "norm_id": "2022_9수_03_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0308",
+      "norm_id": "2022_9수_03_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0309",
+      "norm_id": "2022_9수_03_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0310",
+      "norm_id": "2022_9수_03_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0311",
+      "norm_id": "2022_9수_03_11",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0312",
+      "norm_id": "2022_9수_03_12",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0313",
+      "norm_id": "2022_9수_03_13",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0314",
+      "norm_id": "2022_9수_03_14",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0315",
+      "norm_id": "2022_9수_03_15",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0316",
+      "norm_id": "2022_9수_03_16",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0317",
+      "norm_id": "2022_9수_03_17",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0318",
+      "norm_id": "2022_9수_03_18",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0319",
+      "norm_id": "2022_9수_03_19",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0401",
+      "norm_id": "2022_9수_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0402",
+      "norm_id": "2022_9수_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0403",
+      "norm_id": "2022_9수_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0404",
+      "norm_id": "2022_9수_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0405",
+      "norm_id": "2022_9수_04_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0406",
+      "norm_id": "2022_9수_04_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0407",
+      "norm_id": "2022_9수_04_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0408",
+      "norm_id": "2022_9수_04_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "J0409",
+      "norm_id": "2022_9수_04_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "HK01",
+      "norm_id": "2022_10공수1_01_01",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK02",
+      "norm_id": "2022_10공수1_01_02",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK03",
+      "norm_id": "2022_10공수1_01_02",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK04",
+      "norm_id": "2022_10공수1_01_03",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK05",
+      "norm_id": "2022_10공수1_02_01",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK06",
+      "norm_id": "2022_10공수1_02_02",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK07",
+      "norm_id": "2022_10공수1_02_02",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK08",
+      "norm_id": "2022_10공수1_02_03",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK09",
+      "norm_id": "2022_10공수1_02_04",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK10",
+      "norm_id": "2022_10공수1_02_05",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK11",
+      "norm_id": "2022_10공수1_02_06",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK12",
+      "norm_id": "2022_10공수1_02_07",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK13",
+      "norm_id": "2022_10공수1_02_08",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK14",
+      "norm_id": "2022_10공수1_02_09",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK15",
+      "norm_id": "2022_10공수1_02_10",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK16",
+      "norm_id": "2022_10공수1_02_11",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK39",
+      "norm_id": "2022_10공수1_03_01",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK40",
+      "norm_id": "2022_10공수1_03_02",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK41",
+      "norm_id": "2022_10공수1_03_03",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK42",
+      "norm_id": "2022_10공수1_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "HK43",
+      "norm_id": "2022_10공수1_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "HK17",
+      "norm_id": "2022_10공수2_01_01",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK18",
+      "norm_id": "2022_10공수2_01_01",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK19",
+      "norm_id": "2022_10공수2_01_02",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK20",
+      "norm_id": "2022_10공수2_01_02",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK21",
+      "norm_id": "2022_10공수2_01_03",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK22",
+      "norm_id": "2022_10공수2_01_04",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK23",
+      "norm_id": "2022_10공수2_01_05",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK24",
+      "norm_id": "2022_10공수2_01_06",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK25",
+      "norm_id": "2022_10공수2_01_07",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK26",
+      "norm_id": "2022_10공수2_02_01",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK27",
+      "norm_id": "2022_10공수2_02_02",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK28",
+      "norm_id": "2022_10공수2_02_03",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK29",
+      "norm_id": "2022_10공수2_02_04",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK30",
+      "norm_id": "2022_10공수2_02_05",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK31",
+      "norm_id": "2022_10공수2_02_06",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK32",
+      "norm_id": "2022_10공수2_02_07",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK33",
+      "norm_id": "2022_10공수2_02_08",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK34",
+      "norm_id": "2022_10공수2_03_01",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK35",
+      "norm_id": "2022_10공수2_03_02",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK36",
+      "norm_id": "2022_10공수2_03_03",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK37",
+      "norm_id": "2022_10공수2_03_04",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "HK38",
+      "norm_id": "2022_10공수2_03_05",
+      "link_type": "재매핑",
+      "note": "2015→2022"
+    },
+    {
+      "concept_src_id": "H:12대수01-01",
+      "norm_id": "2022_12대수_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수01-02",
+      "norm_id": "2022_12대수_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수01-03",
+      "norm_id": "2022_12대수_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수01-04",
+      "norm_id": "2022_12대수_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수01-05",
+      "norm_id": "2022_12대수_01_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수01-06",
+      "norm_id": "2022_12대수_01_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수01-07",
+      "norm_id": "2022_12대수_01_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수01-08",
+      "norm_id": "2022_12대수_01_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수02-01",
+      "norm_id": "2022_12대수_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수02-02",
+      "norm_id": "2022_12대수_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수02-03",
+      "norm_id": "2022_12대수_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수03-01",
+      "norm_id": "2022_12대수_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수03-02",
+      "norm_id": "2022_12대수_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수03-03",
+      "norm_id": "2022_12대수_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수03-04",
+      "norm_id": "2022_12대수_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수03-05",
+      "norm_id": "2022_12대수_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수03-06",
+      "norm_id": "2022_12대수_03_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12대수03-07",
+      "norm_id": "2022_12대수_03_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ01-01",
+      "norm_id": "2022_12미적I_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ01-02",
+      "norm_id": "2022_12미적I_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ01-03",
+      "norm_id": "2022_12미적I_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ01-04",
+      "norm_id": "2022_12미적I_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ02-01",
+      "norm_id": "2022_12미적I_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ02-02",
+      "norm_id": "2022_12미적I_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ02-03",
+      "norm_id": "2022_12미적I_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ02-04",
+      "norm_id": "2022_12미적I_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ02-05",
+      "norm_id": "2022_12미적I_02_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ02-06",
+      "norm_id": "2022_12미적I_02_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ02-07",
+      "norm_id": "2022_12미적I_02_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ02-08",
+      "norm_id": "2022_12미적I_02_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ02-09",
+      "norm_id": "2022_12미적I_02_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ02-10",
+      "norm_id": "2022_12미적I_02_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ03-01",
+      "norm_id": "2022_12미적I_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ03-02",
+      "norm_id": "2022_12미적I_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ03-03",
+      "norm_id": "2022_12미적I_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ03-04",
+      "norm_id": "2022_12미적I_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ03-05",
+      "norm_id": "2022_12미적I_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅰ03-06",
+      "norm_id": "2022_12미적I_03_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통01-01",
+      "norm_id": "2022_12확통_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통01-02",
+      "norm_id": "2022_12확통_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통01-03",
+      "norm_id": "2022_12확통_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통02-01",
+      "norm_id": "2022_12확통_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통02-02",
+      "norm_id": "2022_12확통_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통02-03",
+      "norm_id": "2022_12확통_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통02-04",
+      "norm_id": "2022_12확통_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통02-05",
+      "norm_id": "2022_12확통_02_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통02-06",
+      "norm_id": "2022_12확통_02_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통03-01",
+      "norm_id": "2022_12확통_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통03-02",
+      "norm_id": "2022_12확통_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통03-03",
+      "norm_id": "2022_12확통_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통03-04",
+      "norm_id": "2022_12확통_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통03-05",
+      "norm_id": "2022_12확통_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통03-06",
+      "norm_id": "2022_12확통_03_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12확통03-07",
+      "norm_id": "2022_12확통_03_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ01-01",
+      "norm_id": "2022_12미적II_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ01-02",
+      "norm_id": "2022_12미적II_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ01-03",
+      "norm_id": "2022_12미적II_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ01-04",
+      "norm_id": "2022_12미적II_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ01-05",
+      "norm_id": "2022_12미적II_01_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-01",
+      "norm_id": "2022_12미적II_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-02",
+      "norm_id": "2022_12미적II_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-03",
+      "norm_id": "2022_12미적II_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-04",
+      "norm_id": "2022_12미적II_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-05",
+      "norm_id": "2022_12미적II_02_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-06",
+      "norm_id": "2022_12미적II_02_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-07",
+      "norm_id": "2022_12미적II_02_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-08",
+      "norm_id": "2022_12미적II_02_08",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-09",
+      "norm_id": "2022_12미적II_02_09",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-10",
+      "norm_id": "2022_12미적II_02_10",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ02-11",
+      "norm_id": "2022_12미적II_02_11",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ03-01",
+      "norm_id": "2022_12미적II_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ03-02",
+      "norm_id": "2022_12미적II_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ03-03",
+      "norm_id": "2022_12미적II_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ03-04",
+      "norm_id": "2022_12미적II_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ03-05",
+      "norm_id": "2022_12미적II_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ03-06",
+      "norm_id": "2022_12미적II_03_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12미적Ⅱ03-07",
+      "norm_id": "2022_12미적II_03_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하01-01",
+      "norm_id": "2022_12기하_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하01-02",
+      "norm_id": "2022_12기하_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하01-03",
+      "norm_id": "2022_12기하_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하01-04",
+      "norm_id": "2022_12기하_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하02-01",
+      "norm_id": "2022_12기하_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하02-02",
+      "norm_id": "2022_12기하_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하02-03",
+      "norm_id": "2022_12기하_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하02-04",
+      "norm_id": "2022_12기하_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하02-05",
+      "norm_id": "2022_12기하_02_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하03-01",
+      "norm_id": "2022_12기하_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하03-02",
+      "norm_id": "2022_12기하_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하03-03",
+      "norm_id": "2022_12기하_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하03-04",
+      "norm_id": "2022_12기하_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12기하03-05",
+      "norm_id": "2022_12기하_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수01-01",
+      "norm_id": "2022_12경수_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수01-02",
+      "norm_id": "2022_12경수_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수01-03",
+      "norm_id": "2022_12경수_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수01-04",
+      "norm_id": "2022_12경수_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수01-05",
+      "norm_id": "2022_12경수_01_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수02-01",
+      "norm_id": "2022_12경수_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수02-02",
+      "norm_id": "2022_12경수_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수02-03",
+      "norm_id": "2022_12경수_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수02-04",
+      "norm_id": "2022_12경수_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수02-05",
+      "norm_id": "2022_12경수_02_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수02-06",
+      "norm_id": "2022_12경수_02_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수03-01",
+      "norm_id": "2022_12경수_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수03-02",
+      "norm_id": "2022_12경수_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수03-03",
+      "norm_id": "2022_12경수_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수04-01",
+      "norm_id": "2022_12경수_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수04-02",
+      "norm_id": "2022_12경수_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수04-03",
+      "norm_id": "2022_12경수_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12경수04-04",
+      "norm_id": "2022_12경수_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수01-01",
+      "norm_id": "2022_12인수_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수01-02",
+      "norm_id": "2022_12인수_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수01-03",
+      "norm_id": "2022_12인수_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수02-01",
+      "norm_id": "2022_12인수_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수02-02",
+      "norm_id": "2022_12인수_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수02-03",
+      "norm_id": "2022_12인수_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수03-01",
+      "norm_id": "2022_12인수_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수03-02",
+      "norm_id": "2022_12인수_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수03-03",
+      "norm_id": "2022_12인수_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수04-01",
+      "norm_id": "2022_12인수_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수04-02",
+      "norm_id": "2022_12인수_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수04-03",
+      "norm_id": "2022_12인수_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수04-04",
+      "norm_id": "2022_12인수_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수05-01",
+      "norm_id": "2022_12인수_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12인수05-02",
+      "norm_id": "2022_12인수_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수01-01",
+      "norm_id": "2022_12직수_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수01-02",
+      "norm_id": "2022_12직수_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수01-03",
+      "norm_id": "2022_12직수_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수02-01",
+      "norm_id": "2022_12직수_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수02-02",
+      "norm_id": "2022_12직수_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수02-03",
+      "norm_id": "2022_12직수_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수02-04",
+      "norm_id": "2022_12직수_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수02-05",
+      "norm_id": "2022_12직수_02_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수03-01",
+      "norm_id": "2022_12직수_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수03-02",
+      "norm_id": "2022_12직수_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수03-03",
+      "norm_id": "2022_12직수_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수03-04",
+      "norm_id": "2022_12직수_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수03-05",
+      "norm_id": "2022_12직수_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수04-01",
+      "norm_id": "2022_12직수_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수04-02",
+      "norm_id": "2022_12직수_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수04-03",
+      "norm_id": "2022_12직수_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수04-04",
+      "norm_id": "2022_12직수_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12직수04-05",
+      "norm_id": "2022_12직수_04_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문01-01",
+      "norm_id": "2022_12수문_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문01-02",
+      "norm_id": "2022_12수문_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문01-03",
+      "norm_id": "2022_12수문_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문01-04",
+      "norm_id": "2022_12수문_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문02-01",
+      "norm_id": "2022_12수문_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문02-02",
+      "norm_id": "2022_12수문_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문02-03",
+      "norm_id": "2022_12수문_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문02-04",
+      "norm_id": "2022_12수문_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문03-01",
+      "norm_id": "2022_12수문_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문03-02",
+      "norm_id": "2022_12수문_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문03-03",
+      "norm_id": "2022_12수문_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문03-04",
+      "norm_id": "2022_12수문_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문04-01",
+      "norm_id": "2022_12수문_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문04-02",
+      "norm_id": "2022_12수문_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문04-03",
+      "norm_id": "2022_12수문_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수문04-04",
+      "norm_id": "2022_12수문_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통01-01",
+      "norm_id": "2022_12실통_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통01-02",
+      "norm_id": "2022_12실통_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통01-03",
+      "norm_id": "2022_12실통_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통02-01",
+      "norm_id": "2022_12실통_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통02-02",
+      "norm_id": "2022_12실통_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통02-03",
+      "norm_id": "2022_12실통_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통02-04",
+      "norm_id": "2022_12실통_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통03-01",
+      "norm_id": "2022_12실통_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통03-02",
+      "norm_id": "2022_12실통_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통03-03",
+      "norm_id": "2022_12실통_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통03-04",
+      "norm_id": "2022_12실통_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통04-01",
+      "norm_id": "2022_12실통_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12실통04-02",
+      "norm_id": "2022_12실통_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수과01-01",
+      "norm_id": "2022_12수과_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수과01-02",
+      "norm_id": "2022_12수과_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수과02-01",
+      "norm_id": "2022_12수과_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수과02-02",
+      "norm_id": "2022_12수과_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수과02-03",
+      "norm_id": "2022_12수과_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수과02-04",
+      "norm_id": "2022_12수과_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수과03-01",
+      "norm_id": "2022_12수과_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수과03-02",
+      "norm_id": "2022_12수과_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수과03-03",
+      "norm_id": "2022_12수과_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "H:12수과03-04",
+      "norm_id": "2022_12수과_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "10기수1-01-01",
+      "norm_id": "2022_10기수1_01_01",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-01-02",
+      "norm_id": "2022_10기수1_01_02",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-01-03",
+      "norm_id": "2022_10기수1_01_03",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-02-01",
+      "norm_id": "2022_10기수1_02_01",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-02-02",
+      "norm_id": "2022_10기수1_02_02",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-02-03",
+      "norm_id": "2022_10기수1_02_03",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-02-04",
+      "norm_id": "2022_10기수1_02_04",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-02-05",
+      "norm_id": "2022_10기수1_02_05",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-02-06",
+      "norm_id": "2022_10기수1_02_06",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-02-07",
+      "norm_id": "2022_10기수1_02_07",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-02-08",
+      "norm_id": "2022_10기수1_02_08",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-02-09",
+      "norm_id": "2022_10기수1_02_09",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-03-01",
+      "norm_id": "2022_10기수1_03_01",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-03-02",
+      "norm_id": "2022_10기수1_03_02",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-03-03",
+      "norm_id": "2022_10기수1_03_03",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-04-01",
+      "norm_id": "2022_10기수1_04_01",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수1-04-02",
+      "norm_id": "2022_10기수1_04_02",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-01-01",
+      "norm_id": "2022_10기수2_01_01",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-01-02",
+      "norm_id": "2022_10기수2_01_02",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-01-03",
+      "norm_id": "2022_10기수2_01_03",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-01-04",
+      "norm_id": "2022_10기수2_01_04",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-01-05",
+      "norm_id": "2022_10기수2_01_05",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-01-06",
+      "norm_id": "2022_10기수2_01_06",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-01-07",
+      "norm_id": "2022_10기수2_01_07",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-02-01",
+      "norm_id": "2022_10기수2_02_01",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-02-02",
+      "norm_id": "2022_10기수2_02_02",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-02-03",
+      "norm_id": "2022_10기수2_02_03",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-02-04",
+      "norm_id": "2022_10기수2_02_04",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-02-05",
+      "norm_id": "2022_10기수2_02_05",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-03-01",
+      "norm_id": "2022_10기수2_03_01",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-03-02",
+      "norm_id": "2022_10기수2_03_02",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-03-03",
+      "norm_id": "2022_10기수2_03_03",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-03-04",
+      "norm_id": "2022_10기수2_03_04",
+      "link_type": "직접",
+      "note": "기본수학"
+    },
+    {
+      "concept_src_id": "10기수2-03-05",
+      "norm_id": "2022_10기수2_03_05",
+      "link_type": "직접",
+      "note": "기본수학"
+    }
+  ]
+}

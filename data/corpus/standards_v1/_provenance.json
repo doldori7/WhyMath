@@ -1,0 +1,17 @@
+{
+  "source_sha256": "4e21d6d4424ca5f0f7307f8badcd47f318df527c7ba2d258560e5b81f8ebb746",
+  "source_name": "6eb9f759-20222015________________.xlsx",
+  "uploaded": "2026-06-20",
+  "counts": {
+    "standards": 895,
+    "links": 443,
+    "2022 개정": 435,
+    "2015 개정": 460
+  },
+  "source_citation": "출처: 교육부 고시 제2022-33호 [수학과 교육과정], 국가교육과정정보센터(NCIC, https://www.ncic.go.kr)",
+  "license_notice": "본 데이터는 공공누리 제1유형(출처 표시) 조건에 따라 자유로이 이용 가능합니다. 상업적 이용 및 변경(2차적 저작물 작성)이 허용되며, 이용 시 반드시 위 출처를 명시해야 합니다.",
+  "post_extraction": [
+    "extract_file_a 정합 추출(좌변 컬럼 매핑). norm_id는 로마숫자 Ⅰ→ASCII I 파생.",
+    "연결: 교육과정 열 부재→2022 기본·괄호 link_type 정규화(note 보존)·다중코드 분할."
+  ]
+}

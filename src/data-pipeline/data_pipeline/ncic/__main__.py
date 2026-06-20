@@ -27,14 +27,21 @@ from data_pipeline.ncic.collect import (
     NcicSourceConfig,
     check_robots_txt,
 )
-from data_pipeline.ncic.load import load_to_postgres, write_csv, write_json
+from data_pipeline.ncic.extract_xlsx import ExtractError, extract_file_a
+from data_pipeline.ncic.load import (
+    load_to_postgres,
+    write_csv,
+    write_json,
+    write_links_json,
+    write_provenance,
+)
 from data_pipeline.ncic.models import (
     LICENSE_NOTICE,
     SOURCE_CITATION,
     AchievementStandard,
     AchievementStandardCollection,
 )
-from data_pipeline.ncic.validate import validate_standards
+from data_pipeline.ncic.validate import validate_links, validate_standards
 
 app = typer.Typer(
     name="whymath-ncic",
@@ -51,6 +58,80 @@ def _setup_logging(verbose: bool) -> None:
         level=level,
         format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
         datefmt="%H:%M:%S",
+    )
+
+
+@app.command()
+def extract(
+    xlsx: Annotated[
+        Path,
+        typer.Option(
+            "--xlsx",
+            help="File A(성취기준·개념그래프 통합 마스터 xlsx) 경로.",
+        ),
+    ],
+    output_dir: Annotated[
+        Path,
+        typer.Option(
+            "--output-dir",
+            "-o",
+            help="코퍼스 산출물 저장 디렉토리.",
+        ),
+    ] = Path("data/corpus/standards_v1"),
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="DEBUG 로그."),
+    ] = False,
+) -> None:
+    """File A xlsx에서 성취기준·연결을 추출·검증·저장(공공누리 1유형 표지 동봉).
+
+    산출물 3종: `standards.json`·`concept_standard_links.json`·`_provenance.json`. 원본 xlsx는
+    커밋하지 않고(achievement_standards_v1 §1) provenance의 sha256으로 재현 가능성을 보장한다.
+    """
+    _setup_logging(verbose)
+
+    print(SOURCE_CITATION)
+    print(LICENSE_NOTICE)
+    print()
+
+    if not xlsx.is_file():
+        typer.echo(f"[!] xlsx 파일 없음: {xlsx}", err=True)
+        raise typer.Exit(code=2)
+
+    try:
+        standards, links = extract_file_a(xlsx)
+    except ExtractError as exc:
+        typer.echo(f"[!] 추출 실패: {exc}", err=True)
+        raise typer.Exit(code=4) from exc
+
+    # 연결의 개념 참조는 *추출 링크 자체*로 자기검증한다(개념그래프와의 교차검증은 백엔드 로더
+    # 책임 — achievement_standards_v1 §5). 핵심은 norm_id 해소(고아 0)·link_type enum.
+    known_concepts = {link.concept_src_id for link in links}
+    std_report = validate_standards(standards)
+    link_report = validate_links(links, standards, known_concepts)
+    if std_report.errors or link_report.errors:
+        for issue in (*std_report.errors, *link_report.errors):
+            typer.echo(f"[!] 검증 오류: {issue}", err=True)
+        raise typer.Exit(code=2)
+
+    rev_split: dict[str, int] = {}
+    for std in standards:
+        rev_split[std.curriculum_revision] = rev_split.get(std.curriculum_revision, 0) + 1
+
+    write_json(standards, output_dir / "standards.json")
+    write_links_json(links, output_dir / "concept_standard_links.json")
+    digest = write_provenance(
+        output_dir / "_provenance.json",
+        source_path=xlsx,
+        counts={"standards": len(standards), "links": len(links), **rev_split},
+        notes=[
+            "extract_file_a 정합 추출(좌변 컬럼 매핑). norm_id는 로마숫자 Ⅰ→ASCII I 파생.",
+            "연결: 교육과정 열 부재→2022 기본·괄호 link_type 정규화(note 보존)·다중코드 분할.",
+        ],
+    )
+    typer.echo(
+        f"[OK] 성취기준 {len(standards)}·연결 {len(links)} 저장 → {output_dir} "
+        f"(sha256 {digest[:12]}…, 개정별 {rev_split})"
     )
 
 

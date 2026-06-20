@@ -17,6 +17,7 @@ import는 `load_to_postgres` 안에서 *지연*한다 — 미설치 시 명확�
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import logging
 from collections.abc import Sequence
@@ -152,6 +153,38 @@ def write_links_json(
         output_path.stat().st_size,
     )
     return collection
+
+
+def write_provenance(
+    output_path: Path,
+    *,
+    source_path: Path,
+    counts: dict[str, int],
+    notes: Sequence[str],
+) -> str:
+    """추출 산출물의 provenance(`_provenance.json`)를 작성한다 — 반환=원본 sha256.
+
+    원본 xlsx는 *커밋하지 않으므로*(achievement_standards_v1 §1) sha256으로 재현 가능성을 보장한다.
+    `concept_graph_v1/_provenance.json` 형식을 답습(source_sha256·uploaded·counts·post_extraction)
+    하고 공공누리 출처/라이선스 표지를 동봉한다. 순수 파일 쓰기(의존성 0).
+    """
+    digest = hashlib.sha256(source_path.read_bytes()).hexdigest()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "source_sha256": digest,
+        "source_name": source_path.name,
+        "uploaded": datetime.now(tz=timezone.utc).date().isoformat(),
+        "counts": dict(counts),
+        "source_citation": SOURCE_CITATION,
+        "license_notice": LICENSE_NOTICE,
+        "post_extraction": list(notes),
+    }
+    output_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    logger.info("provenance 저장: %s (sha256 %s…)", output_path, digest[:12])
+    return digest
 
 
 def write_csv(
