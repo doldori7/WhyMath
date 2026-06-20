@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from whymath_backend.config import Settings
+from whymath_backend.db.models.activity import AttemptEvent
 from whymath_backend.db.models.dialogue import Dialogue, DialogueTurn
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.privacy.export import (
@@ -29,7 +30,7 @@ from whymath_backend.privacy.export import (
 )
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
-from whymath_backend.schema.enums import ContentType, Persona, TurnRole
+from whymath_backend.schema.enums import ContentType, EventType, Persona, TurnRole
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 _CATEGORIES = {
@@ -324,3 +325,80 @@ def test_export_dialogue_turns_scoped_by_join_on_live_pg() -> None:
         asyncio.run(_run())
     finally:
         asyncio.run(_cleanup((a_uid, b_uid), (a_did, b_did)))
+
+
+async def _cleanup_attempt_events(user_ids: tuple[uuid.UUID, ...]) -> None:
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM attempt_event WHERE user_id = ANY(:uids)"),
+                {"uids": [str(u) for u in user_ids]},
+            )
+    finally:
+        await engine.dispose()
+
+
+def test_export_attempt_events_scoped_by_user_on_live_pg() -> None:
+    """증분 7(실 PG) — attempt_events는 user_id로 본인만·event_data(JSONB) round-trip·타인 제외.
+
+    `attempt_event`는 FK 없는 hypertable 느슨참조라 user_profile 선적재 불요. 학생 A의 이벤트 2건·
+    학생 B의 1건을 심고, A의 export가 A의 2건만(event_id/event_at 정렬·JSONB 페이로드 보존) 담고
+    B는 제외함을 실 PG로 검증한다(hermetic이 못 잡는 실제 user_id 쿼리·JSONB 직렬화).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    a_uid = uuid.uuid4()
+    b_uid = uuid.uuid4()
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    t2 = datetime(2026, 1, 1, 0, 5, tzinfo=UTC)
+
+    async def _seed(sm: async_sessionmaker[AsyncSession]) -> None:
+        async with sm() as session:
+            # event_id(BIGSERIAL)는 DB가 삽입 순서로 할당 → A는 검산결과(먼저)·힌트제공(나중) 순.
+            session.add(
+                AttemptEvent(
+                    event_at=t1,
+                    user_id=a_uid,
+                    event_type=EventType.검산결과,
+                    event_data={"passed": True},
+                )
+            )
+            session.add(
+                AttemptEvent(
+                    event_at=t2,
+                    user_id=a_uid,
+                    event_type=EventType.힌트제공,
+                    event_data={"hint_level": 2},
+                )
+            )
+            session.add(
+                AttemptEvent(
+                    event_at=t1,
+                    user_id=b_uid,
+                    event_type=EventType.검산결과,
+                    event_data={"passed": False},
+                )
+            )
+            await session.commit()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            await _seed(sm)
+            async with sm() as session:
+                export = await export_user_data(session, user_id=a_uid)
+            events = export.data["attempt_events"]
+            assert len(events) == 2  # A의 2건만(B 제외)
+            assert all(e["user_id"] == str(a_uid) for e in events)  # user_id 스코핑
+            # event_id 오름차순(삽입 순서)·JSONB 페이로드 round-trip.
+            assert [e["event_data"] for e in events] == [{"passed": True}, {"hint_level": 2}]
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup_attempt_events((a_uid, b_uid)))
