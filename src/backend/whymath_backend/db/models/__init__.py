@@ -61,6 +61,7 @@ from whymath_backend.db.models.dialogue import (
     DialogueTurn,
 )
 from whymath_backend.db.models.evidence_link import EvidenceLink
+from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog
 from whymath_backend.db.models.misconception_embedding import MisconceptionEmbedding
 from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
@@ -142,6 +143,8 @@ __all__ = [
     "DeviceCredential",
     # 슬라이스 57: DeletionAudit
     "DeletionAudit",
+    # Phase B.2: MisconceptionCatalog (M-id 오개념 콘텐츠 카탈로그·mis_id PK·기존 kebab 체계와 별개)
+    "MisconceptionCatalog",
     # 슬라이스 105: MisconceptionEmbedding (pgvector 영속)
     "MisconceptionEmbedding",
     # WH-1 2단계: MisconceptionHypothesisRecord (활성 오개념 가설 per-student 영속·§8.4)
