@@ -15,9 +15,10 @@ R-S2 방침과 동형).
 7계층(§7.5): WH-S 오프라인 — `solution_nodes`는 *시스템 솔버 내부 탐색 상태*이며 학생 PII가
 아니다(redaction·암호화 무관). **구성**(`mastery_tracking` 패턴): `build_prm_dataset`(순수·DB 0)
 + `collect_prm_dataset`(얇은 async DB 시ام — `node_store.get_problem_nodes` 조회 후 순수 빌더 호출).
-`self_evolution.py`가 순수→실 DB 조회→ops CLI로 증분 확장한 선례를 답습한다. 범위 밖(후속):
-다중 문제 일괄/스트리밍·JSONL ops CLI·confidence(`prm_score` 반영)·(prefix, step) dedup·
-Dead-End Log(§2.3) 통합(트리 밖에서 가지친 실패 step의 추가 bad 신호).
+`self_evolution.py`가 순수→실 DB 조회→ops CLI로 증분 확장한 선례를 답습한다. 본 모듈은 이제
+다중 문제 일괄/스트리밍 회계(`PrmStreamAccounting`)까지 두어 JSONL ops CLI
+(`prm_builder_export_cli`)가 소비한다. 범위 밖(후속): confidence(`prm_score` 반영)·
+(prefix, step) dedup·Dead-End Log(§2.3) 통합(트리 밖에서 가지친 실패 step의 추가 bad 신호).
 """
 
 from __future__ import annotations
@@ -36,6 +37,7 @@ __all__ = [
     "PrmDataset",
     "PrmRecord",
     "PrmStepLabel",
+    "PrmStreamAccounting",
     "build_prm_dataset",
     "collect_prm_dataset",
     "iter_prm_jsonl",
@@ -91,6 +93,50 @@ class PrmDataset(BaseModel):
     def size(self) -> int:
         """실제 학습쌍 수(=len(records))."""
         return len(self.records)
+
+
+class PrmStreamAccounting(BaseModel):
+    """다중 문제 스트리밍 export의 *진행 중* 회계 — 문제별 데이터셋을 흘리며 누적한다.
+
+    `build_prm_dataset`가 한 문제 트리를 전량 적재해 `PrmDataset`(frozen·스냅샷)에 회계를 *한 번에*
+    담는 것과 달리, 스트리밍은 problem_id를 하나씩 흘리며 문제별 빌드 결과를 이 *가변* 누산기에
+    합산한다(메모리는 한 문제 트리 + 정수 카운터로 바운드). PRM은 prefix 계산에 부모 노드가 필요해
+    행 1건씩 독립 직렬화가 불가능하므로 최소 단위가 *문제 트리*다 — 그래서 SFT처럼 행 누적이 아니라
+    데이터셋 누적이다(`SftStreamAccounting` 동형·가변·동일 요약 키). 소진 후 `summary()`로 stderr
+    회계를 낸다(데이터 stdout과 분리).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_input: int = Field(default=0, ge=0, description="후보 step(action 보유 비루트) 누적수.")
+    records: int = Field(default=0, ge=0, description="JSONL로 흘린 학습 레코드 누적 수.")
+    excluded_uncertain: int = Field(
+        default=0, ge=0, description="PENDING·UNVERIFIED로 배제된 step 누적 수(R-S2)."
+    )
+    good_labels: int = Field(default=0, ge=0, description="good(verified) step 누적 수.")
+    bad_labels: int = Field(default=0, ge=0, description="bad(failed) step 누적 수.")
+
+    def merge(self, dataset: PrmDataset) -> None:
+        """한 문제의 `PrmDataset` 회계를 누산기에 합산한다(가변·in-place).
+
+        `records`는 `dataset.size`(=실 학습쌍 수)로 누적해 stdout으로 흘린 줄 수와 정합한다.
+        good+bad == size 불변식이 문제별로 성립하므로 합산해도 유지된다(정직 집계).
+        """
+        self.total_input += dataset.total_input
+        self.records += dataset.size
+        self.excluded_uncertain += dataset.excluded_uncertain
+        self.good_labels += dataset.good_labels
+        self.bad_labels += dataset.bad_labels
+
+    def summary(self) -> dict[str, int]:
+        """stderr 회계 요약 dict(일괄 CLI 요약과 동일 키 `{total_input, records, ...}`)."""
+        return {
+            "total_input": self.total_input,
+            "records": self.records,
+            "excluded_uncertain": self.excluded_uncertain,
+            "good_labels": self.good_labels,
+            "bad_labels": self.bad_labels,
+        }
 
 
 def _prefix_states(

@@ -24,6 +24,7 @@ WH-S 오프라인(§7.5): `solution_nodes`는 *시스템 솔버 내부 탐색 �
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 from typing import Any
 
 from sqlalchemy import select, update
@@ -33,11 +34,13 @@ from whymath_backend.db.models.solution_node import NodeVerifyStatus, SolutionNo
 
 __all__ = [
     "create_node",
+    "get_all_nodes",
     "get_children",
     "get_node",
     "get_problem_nodes",
     "get_roots",
     "increment_visits",
+    "stream_all_problem_ids",
     "update_evaluation",
 ]
 
@@ -124,6 +127,37 @@ async def get_problem_nodes(session: AsyncSession, problem_id: uuid.UUID) -> lis
     )
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_all_nodes(session: AsyncSession) -> list[SolutionNode]:
+    """*전(全) 문제*의 트리 노드를 한 번에 평탄 로드한다 — `problem_id`별로 인접·결정적 정렬.
+
+    `get_problem_nodes`가 한 문제로 좁히는 것과 달리 전 문제 노드를 한 리스트로 합친다(다중 문제
+    PRM 일괄 빌더 소비처용). `order_by(problem_id, created_at, id)`라 같은 문제 트리가 *인접*하고
+    순서가 결정적이다. `build_prm_dataset`의 `parent_id` 체인은 같은 문제 트리 내부에서만 연결되어
+    (루트는 `parent_id=None`) 전 문제를 한 리스트로 넘겨도 크로스-문제 오염이 0이다. 읽기 전용.
+    """
+    stmt = select(SolutionNode).order_by(
+        SolutionNode.problem_id,
+        SolutionNode.created_at,
+        SolutionNode.id,
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def stream_all_problem_ids(session: AsyncSession) -> AsyncIterator[uuid.UUID]:
+    """`solution_nodes`의 *distinct* `problem_id`를 서버측 커서로 1건씩 흘린다(읽기 전용).
+
+    PRM 스트리밍 export가 problem_id를 하나씩 받아 *문제 트리 단위*로 빌드하도록 distinct
+    problem_id만 흘린다(전 노드 적재 회피). `distinct().order_by(problem_id)`로 중복 없이 결정적
+    순서를 보장하고, `stream_scalars`(서버측 커서)로 전량 적재 없이 흘린다. 세션은 스트림이 소진될
+    때까지 살아 있어야 한다(호출자가 `async with`로 유지). 읽기 전용이라 commit 없음.
+    """
+    stmt = select(SolutionNode.problem_id).distinct().order_by(SolutionNode.problem_id)
+    result = await session.stream_scalars(stmt)
+    async for problem_id in result:
+        yield problem_id
 
 
 async def increment_visits(session: AsyncSession, node_id: uuid.UUID) -> None:
