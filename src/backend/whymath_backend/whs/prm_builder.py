@@ -13,9 +13,10 @@ PRM은 중간 단계마다 보상을 주는 모델이라, 한 step(부모 상태
 R-S2 방침과 동형).
 
 7계층(§7.5): WH-S 오프라인 — `solution_nodes`는 *시스템 솔버 내부 탐색 상태*이며 학생 PII가
-아니다(redaction·암호화 무관). 본 모듈은 순수(세션·DB 0)다 — `self_evolution.py`가 순수→실 DB
-조회→ops CLI로 증분 확장한 선례를 답습한다. 범위 밖(후속): 실 DB 트리 조회(`solution_nodes`
-problem별 일괄 로드)·JSONL ops CLI·confidence(`prm_score` 반영)·(prefix, step) dedup·
+아니다(redaction·암호화 무관). **구성**(`mastery_tracking` 패턴): `build_prm_dataset`(순수·DB 0)
++ `collect_prm_dataset`(얇은 async DB 시ام — `node_store.get_problem_nodes` 조회 후 순수 빌더 호출).
+`self_evolution.py`가 순수→실 DB 조회→ops CLI로 증분 확장한 선례를 답습한다. 범위 밖(후속):
+다중 문제 일괄/스트리밍·JSONL ops CLI·confidence(`prm_score` 반영)·(prefix, step) dedup·
 Dead-End Log(§2.3) 통합(트리 밖에서 가지친 실패 step의 추가 bad 신호).
 """
 
@@ -26,14 +27,17 @@ from collections.abc import Iterable, Iterator
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.solution_node import NodeVerifyStatus, SolutionNode
+from whymath_backend.whs.node_store import get_problem_nodes
 
 __all__ = [
     "PrmDataset",
     "PrmRecord",
     "PrmStepLabel",
     "build_prm_dataset",
+    "collect_prm_dataset",
     "iter_prm_jsonl",
 ]
 
@@ -154,6 +158,17 @@ def build_prm_dataset(nodes: Iterable[SolutionNode]) -> PrmDataset:
         good_labels=good,
         bad_labels=bad,
     )
+
+
+async def collect_prm_dataset(session: AsyncSession, problem_id: uuid.UUID) -> PrmDataset:
+    """한 문제의 풀이 트리를 실 DB에서 로드해 PRM 학습셋을 만든다(얇은 DB 시ام).
+
+    `node_store.get_problem_nodes`로 트리 전체를 *한 번에* 평탄 로드한 뒤 순수 `build_prm_dataset`에
+    넘긴다(N+1 쿼리 회피·`mastery_tracking`의 record_attempt_mastery류 얇은 래퍼). 읽기 전용(commit
+    0). 다중 문제 일괄/스트리밍·ops CLI는 후속(`self_evolution` 선례).
+    """
+    nodes = await get_problem_nodes(session, problem_id)
+    return build_prm_dataset(nodes)
 
 
 def iter_prm_jsonl(dataset: PrmDataset) -> Iterator[str]:

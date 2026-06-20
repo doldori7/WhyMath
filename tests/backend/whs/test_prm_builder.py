@@ -7,13 +7,23 @@ in-memory 구성). 실 DB 트리 조회는 후속 슬라이스(self_evolution �
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
+from typing import Any, cast
 
+import pytest
+from pydantic import SecretStr
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+
+from whymath_backend.config import Settings
 from whymath_backend.db.models.solution_node import NodeVerifyStatus, SolutionNode
+from whymath_backend.whs.node_store import create_node
 from whymath_backend.whs.prm_builder import (
     PrmDataset,
     build_prm_dataset,
+    collect_prm_dataset,
     iter_prm_jsonl,
 )
 
@@ -149,3 +159,136 @@ class TestIterPrmJsonl:
     def test_empty_dataset_yields_no_lines(self) -> None:
         """빈 데이터셋 → 0줄."""
         assert list(iter_prm_jsonl(build_prm_dataset([]))) == []
+
+
+# ===========================================================================
+# DB 시ام (collect_prm_dataset) — 단위(hermetic·FakeSession) + 실 PG 통합
+# ===========================================================================
+
+
+class _FakeResult:
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
+
+    def scalars(self) -> "_FakeResult":
+        return self
+
+    def all(self) -> list[Any]:
+        return list(self._rows)
+
+
+class _FakeSession:
+    """`get_problem_nodes`의 execute(select).scalars().all()만 시뮬(stmt 무시)."""
+
+    def __init__(self, rows: list[Any]) -> None:
+        self._rows = rows
+
+    async def execute(self, _stmt: Any) -> _FakeResult:
+        return _FakeResult(self._rows)
+
+
+class TestCollectPrmDatasetUnit:
+    def test_wires_fetch_to_pure_builder(self) -> None:
+        """collect = get_problem_nodes 조회 → build_prm_dataset(순수)와 동일 결과."""
+        root = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        good = _node(
+            state={"e": "1"}, status=NodeVerifyStatus.VERIFIED, parent_id=root.id, action="s1"
+        )
+        bad = _node(
+            state={"e": "2"}, status=NodeVerifyStatus.FAILED, parent_id=root.id, action="s2"
+        )
+        fake = _FakeSession([root, good, bad])
+        ds = asyncio.run(collect_prm_dataset(cast(AsyncSession, fake), _PID))
+        assert ds == build_prm_dataset([root, good, bad])  # frozen 모델 동등성
+        assert ds.good_labels == 1 and ds.bad_labels == 1
+
+
+_SECRET = "integration-jwt-secret-0123456789abcdef"
+
+
+def _settings() -> Settings:
+    return Settings(jwt_secret_key=SecretStr(_SECRET))
+
+
+async def _pg_reachable() -> bool:
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return True
+    except Exception:
+        return False
+    finally:
+        await engine.dispose()
+
+
+async def _cleanup(problem_id: uuid.UUID) -> None:
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("DELETE FROM solution_nodes WHERE problem_id = :pid"),
+                {"pid": str(problem_id)},
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.integration
+def test_collect_prm_dataset_on_live_pg() -> None:
+    """실 PG — 트리 seed → collect_prm_dataset → verify_status 라벨(good/bad)·prefix·배제 검증."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    pid = uuid.uuid4()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as session:
+                root = await create_node(session, problem_id=pid, state_repr={"step": "root"})
+                # verified step(good)
+                await create_node(
+                    session,
+                    problem_id=pid,
+                    parent_id=root.id,
+                    state_repr={"step": "ok"},
+                    action="치환",
+                    verify_status=NodeVerifyStatus.VERIFIED,
+                )
+                # failed step(bad)
+                await create_node(
+                    session,
+                    problem_id=pid,
+                    parent_id=root.id,
+                    state_repr={"step": "wrong"},
+                    action="오변형",
+                    verify_status=NodeVerifyStatus.FAILED,
+                )
+                # pending step(배제·uncertain)
+                await create_node(
+                    session,
+                    problem_id=pid,
+                    parent_id=root.id,
+                    state_repr={"step": "todo"},
+                    action="미평가",
+                    verify_status=NodeVerifyStatus.PENDING,
+                )
+                await session.commit()
+
+            async with sm() as session:
+                ds = await collect_prm_dataset(session, pid)
+            assert ds.total_input == 3  # 비루트 step 3(root 제외)
+            assert ds.good_labels == 1 and ds.bad_labels == 1
+            assert ds.excluded_uncertain == 1  # PENDING 배제
+            assert ds.size == 2
+            # 모든 레코드의 prefix는 루트 상태로 시작(루트 직후 step).
+            assert all(r.prefix_states == ({"step": "root"},) for r in ds.records)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup(pid))

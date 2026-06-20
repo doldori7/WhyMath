@@ -35,6 +35,7 @@ __all__ = [
     "create_node",
     "get_children",
     "get_node",
+    "get_problem_nodes",
     "get_roots",
     "increment_visits",
     "update_evaluation",
@@ -103,6 +104,22 @@ async def get_roots(session: AsyncSession, problem_id: uuid.UUID) -> list[Soluti
             SolutionNode.problem_id == problem_id,
             SolutionNode.parent_id.is_(None),
         )
+        .order_by(SolutionNode.created_at, SolutionNode.id)
+    )
+    result = await session.execute(stmt)
+    return list(result.scalars().all())
+
+
+async def get_problem_nodes(session: AsyncSession, problem_id: uuid.UUID) -> list[SolutionNode]:
+    """주어진 문제의 *전체* 트리 노드(루트+자손 모두)를 조회한다 — `problem_id` 일치 전부.
+
+    `get_roots`/`get_children`이 트리를 한 단계씩 내려가는 것과 달리, 한 문제의 풀이 트리를
+    *한 번에* 평탄 로드한다(PRM 학습셋 빌더 등 트리 전체 분석 소비처용·N+1 쿼리 회피). 생성순
+    (created_at·id)으로 정렬해 결정적 순서를 보장한다(`build_prm_dataset` 입력 순서 안정).
+    """
+    stmt = (
+        select(SolutionNode)
+        .where(SolutionNode.problem_id == problem_id)
         .order_by(SolutionNode.created_at, SolutionNode.id)
     )
     result = await session.execute(stmt)

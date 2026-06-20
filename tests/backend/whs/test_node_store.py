@@ -27,6 +27,7 @@ from whymath_backend.whs.node_store import (
     create_node,
     get_children,
     get_node,
+    get_problem_nodes,
     get_roots,
     increment_visits,
     update_evaluation,
@@ -236,6 +237,11 @@ def test_create_get_tree_and_visits_on_live_pg() -> None:
                 assert [r.id for r in roots] == [root.id]
                 other_roots = await get_roots(session, other_pid)
                 assert [r.id for r in other_roots] == [other_root.id]
+
+                # get_problem_nodes: pid 트리 전체(루트+자식 2)·other_pid 제외(문제 격리).
+                prob_nodes = await get_problem_nodes(session, pid)
+                assert {n.id for n in prob_nodes} == {root.id, child_a.id, child_b.id}
+                assert other_root.id not in {n.id for n in prob_nodes}
 
                 # increment_visits 원자성: 3회 → visits=3
                 for _ in range(3):
