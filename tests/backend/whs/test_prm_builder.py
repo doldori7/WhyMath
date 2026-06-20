@@ -37,6 +37,7 @@ def _node(
     parent_id: uuid.UUID | None = None,
     action: str | None = None,
     node_id: uuid.UUID | None = None,
+    prm_score: float | None = None,
 ) -> SolutionNode:
     """in-memory SolutionNode 1개(DB 없음·id 명시 발급)."""
     return SolutionNode(
@@ -46,6 +47,7 @@ def _node(
         state_repr=state,
         action=action,
         verify_status=status,
+        prm_score=prm_score,
     )
 
 
@@ -138,6 +140,93 @@ class TestBuildPrmDataset:
         ds = build_prm_dataset([root, c1, c2, c3])
         assert [r.step_action for r in ds.records] == ["1", "2", "3"]
 
+    def test_prm_score_embedded_on_record(self) -> None:
+        """prm_score는 confidence 메타로 레코드에 부가(node 출처값 그대로·prefix 불변)."""
+        root = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        good = _node(
+            state={"e": "1"},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root.id,
+            action="g",
+            prm_score=0.9,
+        )
+        bad = _node(
+            state={"e": "2"},
+            status=NodeVerifyStatus.FAILED,
+            parent_id=root.id,
+            action="b",
+            prm_score=0.2,
+        )
+        ds = build_prm_dataset([root, good, bad])
+        by_label = {r.label: r for r in ds.records}
+        assert by_label["good"].prm_score == 0.9
+        assert by_label["bad"].prm_score == 0.2
+        assert by_label["good"].prefix_states == ({"e": "0"},)  # 부가가 prefix를 건드리지 않음
+
+    def test_prm_score_none_preserved(self) -> None:
+        """미평가 노드의 prm_score(None)는 레코드에 None으로 보존된다."""
+        root = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        good = _node(
+            state={"e": "1"}, status=NodeVerifyStatus.VERIFIED, parent_id=root.id, action="g"
+        )
+        ds = build_prm_dataset([root, good])
+        assert ds.records[0].prm_score is None
+
+    def test_scored_steps_and_mean(self) -> None:
+        """레코드화된 step의 점수만 집계 — 0.5+1.0+None → scored 2·mean 0.75."""
+        root = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        a = _node(
+            state={"e": "1"},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root.id,
+            action="a",
+            prm_score=0.5,
+        )
+        b = _node(
+            state={"e": "2"},
+            status=NodeVerifyStatus.FAILED,
+            parent_id=root.id,
+            action="b",
+            prm_score=1.0,
+        )
+        c = _node(state={"e": "3"}, status=NodeVerifyStatus.VERIFIED, parent_id=root.id, action="c")
+        ds = build_prm_dataset([root, a, b, c])
+        assert ds.size == 3
+        assert ds.scored_steps == 2  # None은 통계 제외
+        assert ds.mean_prm_score == 0.75  # (0.5 + 1.0) / 2
+
+    def test_mean_none_when_no_scores(self) -> None:
+        """점수 보유 레코드가 0건이면 mean_prm_score는 None(0 나눗셈 회피)."""
+        root = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        good = _node(
+            state={"e": "1"}, status=NodeVerifyStatus.VERIFIED, parent_id=root.id, action="g"
+        )
+        ds = build_prm_dataset([root, good])
+        assert ds.size == 1 and ds.scored_steps == 0
+        assert ds.mean_prm_score is None
+
+    def test_excluded_step_score_not_counted(self) -> None:
+        """배제(PENDING/UNVERIFIED) step의 prm_score는 통계에서도 제외(scored ≤ size)."""
+        root = _node(state={"e": "0"}, status=NodeVerifyStatus.PENDING)
+        pending = _node(
+            state={"e": "1"},
+            status=NodeVerifyStatus.PENDING,
+            parent_id=root.id,
+            action="p",
+            prm_score=0.99,  # 배제 step이라 임베드·통계 모두 제외
+        )
+        good = _node(
+            state={"e": "2"},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root.id,
+            action="g",
+            prm_score=0.4,
+        )
+        ds = build_prm_dataset([root, pending, good])
+        assert ds.size == 1 and ds.excluded_uncertain == 1
+        assert ds.scored_steps == 1  # good만
+        assert ds.mean_prm_score == 0.4  # pending의 0.99는 평균에 끼지 않음
+
 
 class TestIterPrmJsonl:
     def test_yields_one_json_line_per_record(self) -> None:
@@ -159,6 +248,29 @@ class TestIterPrmJsonl:
     def test_empty_dataset_yields_no_lines(self) -> None:
         """빈 데이터셋 → 0줄."""
         assert list(iter_prm_jsonl(build_prm_dataset([]))) == []
+
+    def test_jsonl_includes_prm_score(self) -> None:
+        """JSONL에 prm_score 키 포함 — 점수 보유는 값·미평가는 null."""
+        root = _node(state={"e": "a"}, status=NodeVerifyStatus.PENDING)
+        scored = _node(
+            state={"e": "b"},
+            status=NodeVerifyStatus.VERIFIED,
+            parent_id=root.id,
+            action="s",
+            prm_score=0.6,
+            node_id=uuid.UUID(int=1),
+        )
+        unscored = _node(
+            state={"e": "c"},
+            status=NodeVerifyStatus.FAILED,
+            parent_id=root.id,
+            action="u",
+            node_id=uuid.UUID(int=2),
+        )
+        lines = list(iter_prm_jsonl(build_prm_dataset([root, scored, unscored])))
+        objs = {json.loads(ln)["step_action"]: json.loads(ln) for ln in lines}
+        assert objs["s"]["prm_score"] == 0.6
+        assert "prm_score" in objs["u"] and objs["u"]["prm_score"] is None
 
 
 # ===========================================================================
@@ -248,7 +360,7 @@ def test_collect_prm_dataset_on_live_pg() -> None:
             sm = async_sessionmaker(engine, expire_on_commit=False)
             async with sm() as session:
                 root = await create_node(session, problem_id=pid, state_repr={"step": "root"})
-                # verified step(good)
+                # verified step(good·prm_score 부여)
                 await create_node(
                     session,
                     problem_id=pid,
@@ -256,6 +368,7 @@ def test_collect_prm_dataset_on_live_pg() -> None:
                     state_repr={"step": "ok"},
                     action="치환",
                     verify_status=NodeVerifyStatus.VERIFIED,
+                    prm_score=0.7,
                 )
                 # failed step(bad)
                 await create_node(
@@ -283,6 +396,8 @@ def test_collect_prm_dataset_on_live_pg() -> None:
             assert ds.good_labels == 1 and ds.bad_labels == 1
             assert ds.excluded_uncertain == 1  # PENDING 배제
             assert ds.size == 2
+            # good step만 prm_score 0.7 부여 → scored 1·mean 0.7(bad는 None).
+            assert ds.scored_steps == 1 and ds.mean_prm_score == 0.7
             # 모든 레코드의 prefix는 루트 상태로 시작(루트 직후 step).
             assert all(r.prefix_states == ({"step": "root"},) for r in ds.records)
         finally:

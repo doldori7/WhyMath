@@ -17,7 +17,8 @@ R-S2 방침과 동형).
 + `collect_prm_dataset`(얇은 async DB 시ام — `node_store.get_problem_nodes` 조회 후 순수 빌더 호출).
 `self_evolution.py`가 순수→실 DB 조회→ops CLI로 증분 확장한 선례를 답습한다. 본 모듈은 이제
 다중 문제 일괄/스트리밍 회계(`PrmStreamAccounting`)까지 두어 JSONL ops CLI
-(`prm_builder_export_cli`)가 소비한다. 범위 밖(후속): confidence(`prm_score` 반영)·
+(`prm_builder_export_cli`)가 소비한다. confidence(`prm_score`)는 레코드 메타로 부가하고
+데이터셋·스트림 회계에 점수 통계(scored_steps·평균)를 둔다(라벨 아님). 범위 밖(후속):
 (prefix, step) dedup·Dead-End Log(§2.3) 통합(트리 밖에서 가지친 실패 step의 추가 bad 신호).
 """
 
@@ -58,7 +59,8 @@ class PrmRecord(BaseModel):
 
     `prefix_states`는 루트~부모까지의 상태열(이 step 직전까지의 풀이 경로)이고, `step_state`는
     `step_action`을 적용해 도달한 상태다. `label`은 그 step의 검증 결과(good=verified·bad=failed).
-    출처 메타(node id·타임스탬프·visits·prm_score)는 학습신호가 아니라 제외한다(SftRecord 동형).
+    출처 메타(node id·타임스탬프·visits)는 학습신호가 아니라 제외하나, `prm_score`는 confidence
+    메타로 부가한다(라벨 아님·node 출처값 그대로·학습 타깃은 label·미평가 None).
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -70,6 +72,10 @@ class PrmRecord(BaseModel):
     step_action: str = Field(description="부모→이 노드 도달 행동(전략 1스텝·엣지).")
     step_state: dict[str, Any] = Field(description="step 적용 후 상태(state_repr).")
     label: PrmStepLabel = Field(description="step 검증 라벨 — good(verified)·bad(failed).")
+    prm_score: float | None = Field(
+        default=None,
+        description="PRM 과정 보상 추정치(confidence 메타·라벨 아님·node 출처값·미평가 None).",
+    )
 
 
 class PrmDataset(BaseModel):
@@ -88,6 +94,12 @@ class PrmDataset(BaseModel):
     )
     good_labels: int = Field(ge=0, description="good(verified) step 수.")
     bad_labels: int = Field(ge=0, description="bad(failed) step 수.")
+    scored_steps: int = Field(
+        default=0, ge=0, description="prm_score 보유(non-null) 레코드 수(scored ≤ size)."
+    )
+    mean_prm_score: float | None = Field(
+        default=None, description="레코드화된 step의 prm_score 평균(점수 0건이면 None)."
+    )
 
     @property
     def size(self) -> int:
@@ -115,27 +127,42 @@ class PrmStreamAccounting(BaseModel):
     )
     good_labels: int = Field(default=0, ge=0, description="good(verified) step 누적 수.")
     bad_labels: int = Field(default=0, ge=0, description="bad(failed) step 누적 수.")
+    scored_steps: int = Field(
+        default=0, ge=0, description="prm_score 보유(non-null) 레코드 누적 수."
+    )
+    prm_score_sum: float = Field(
+        default=0.0, description="prm_score 합(평균은 summary에서 scored_steps로 나눔)."
+    )
 
     def merge(self, dataset: PrmDataset) -> None:
         """한 문제의 `PrmDataset` 회계를 누산기에 합산한다(가변·in-place).
 
         `records`는 `dataset.size`(=실 학습쌍 수)로 누적해 stdout으로 흘린 줄 수와 정합한다.
         good+bad == size 불변식이 문제별로 성립하므로 합산해도 유지된다(정직 집계).
+
+        prm_score 평균은 문제별 평균을 평균하면 가중이 틀어지므로 sum/count로 누적한다. 합은
+        `dataset.records`를 직접 순회해 non-null prm_score만 더한다(`mean*count` 복원이 아니라
+        원값 합산이라 배치 경로와 부동소수 비트가 일치한다).
         """
         self.total_input += dataset.total_input
         self.records += dataset.size
         self.excluded_uncertain += dataset.excluded_uncertain
         self.good_labels += dataset.good_labels
         self.bad_labels += dataset.bad_labels
+        self.scored_steps += dataset.scored_steps
+        self.prm_score_sum += sum(r.prm_score for r in dataset.records if r.prm_score is not None)
 
-    def summary(self) -> dict[str, int]:
-        """stderr 회계 요약 dict(일괄 CLI 요약과 동일 키 `{total_input, records, ...}`)."""
+    def summary(self) -> dict[str, float | int | None]:
+        """stderr 회계 요약 dict(일괄 CLI 요약과 동일 키 + scored_steps·mean_prm_score)."""
+        mean = self.prm_score_sum / self.scored_steps if self.scored_steps else None
         return {
             "total_input": self.total_input,
             "records": self.records,
             "excluded_uncertain": self.excluded_uncertain,
             "good_labels": self.good_labels,
             "bad_labels": self.bad_labels,
+            "scored_steps": self.scored_steps,
+            "mean_prm_score": mean,
         }
 
 
@@ -176,6 +203,8 @@ def build_prm_dataset(nodes: Iterable[SolutionNode]) -> PrmDataset:
     excluded = 0
     good = 0
     bad = 0
+    score_sum = 0.0
+    score_count = 0
     for node in node_list:
         if node.parent_id is None or node.action is None:
             continue  # 루트(들어온 행동 없음) 또는 엣지 결손 — step 아님(후보에서 제외).
@@ -191,8 +220,14 @@ def build_prm_dataset(nodes: Iterable[SolutionNode]) -> PrmDataset:
                 step_action=node.action,
                 step_state=node.state_repr,
                 label=label,
+                prm_score=node.prm_score,  # confidence 메타 부가(라벨 아님·미평가 None).
             )
         )
+        # 레코드화된 step(good/bad)만 점수 통계에 누적 — excluded step은 데이터셋에 임베드되지
+        # 않으므로 통계에서도 제외(scored_steps ≤ size 정합).
+        if node.prm_score is not None:
+            score_sum += node.prm_score
+            score_count += 1
         if label == "good":
             good += 1
         else:
@@ -203,6 +238,8 @@ def build_prm_dataset(nodes: Iterable[SolutionNode]) -> PrmDataset:
         excluded_uncertain=excluded,
         good_labels=good,
         bad_labels=bad,
+        scored_steps=score_count,
+        mean_prm_score=(score_sum / score_count if score_count else None),
     )
 
 
