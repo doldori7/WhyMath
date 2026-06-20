@@ -5,8 +5,9 @@
 > 오개념은 개념·성취기준·CCSS·distractor 규칙·교정포인트를 갖춘 **진단·피드백 1급 자산**이다. 현행
 > `l4/misconception/catalog.py`(Python 상수·kebab-case ~30종·DB 비영속)의 **DB 승격 대상**.
 >
-> **현황(2026-06-20)**: *설계 전용*. 테이블·마이그레이션·로더는 수집 설계
-> (`external_corpus_ingestion_v1.md` §2·Phase B) 승인 후 별도 슬라이스.
+> **현황(2026-06-20)**: 코퍼스 **추출·커밋 완료**(Phase B.1). `whymath-misconception`로 839종을
+> 정규화해 `data/corpus/misconceptions_v1/`에 커밋(중복 0·CCSS 771·error_type 730). 30종 kebab
+> 탐지 엔진과 **별개 체계**(합치지 않음). DB 테이블·마이그레이션·로더는 후속(B.2/B.3).
 
 ---
 
@@ -18,9 +19,9 @@
 | 원본 sha256(앞 16) | `fcf6d333a419a222` (JSON 전체) |
 | 저작 | **와이매스 자체 저작**(교수학 오개념 분석·distractor 규칙) |
 | 규모 | **839**(고유 `mis_id`·예 `M0425`) |
-| 추출 산출물 | `data/corpus/misconceptions_v1/{misconceptions_839.jsonl, _provenance.json}` (처리 시 생성) |
+| 추출 산출물 | `data/corpus/misconceptions_v1/{misconceptions.json, _provenance.json}` (**커밋됨** — `whymath-misconception`·Collection JSON 839) |
 
-> 원본 JSON은 커밋하지 않는다. 진실 원천은 추출 jsonl.
+> 원본 JSON은 커밋하지 않는다. 진실 원천은 추출 Collection JSON(`_provenance.json`의 `source_sha256`으로 재현).
 
 ---
 
