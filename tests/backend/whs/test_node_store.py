@@ -25,11 +25,13 @@ from whymath_backend.config import Settings
 from whymath_backend.db.models.solution_node import NodeVerifyStatus, SolutionNode
 from whymath_backend.whs.node_store import (
     create_node,
+    get_all_nodes,
     get_children,
     get_node,
     get_problem_nodes,
     get_roots,
     increment_visits,
+    stream_all_problem_ids,
     update_evaluation,
 )
 
@@ -322,3 +324,58 @@ def test_parent_cascade_delete_on_live_pg() -> None:
         asyncio.run(_run())
     finally:
         asyncio.run(_cleanup([pid]))
+
+
+@pytest.mark.integration
+def test_get_all_nodes_and_stream_problem_ids_on_live_pg() -> None:
+    """전역 평탄 조회·distinct problem_id 스트림 — 두 문제 트리 seed → 양 문제 노드·distinct."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    pid = uuid.uuid4()
+    other_pid = uuid.uuid4()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as session:
+                # 문제 1: 루트 + 자식 1
+                root = await create_node(session, problem_id=pid, state_repr={"step": "root"})
+                child = await create_node(
+                    session,
+                    problem_id=pid,
+                    parent_id=root.id,
+                    state_repr={"step": "a"},
+                    action="치환",
+                )
+                # 문제 2: 루트만
+                other_root = await create_node(
+                    session, problem_id=other_pid, state_repr={"step": "other"}
+                )
+                await session.commit()
+                seeded = {root.id, child.id, other_root.id}
+
+            # get_all_nodes: 양 문제 노드 전부(시드 외 무관 행이 있어도 시드는 모두 포함).
+            async with sm() as session:
+                all_nodes = await get_all_nodes(session)
+            got_ids = {n.id for n in all_nodes}
+            assert seeded <= got_ids
+            # problem_id별 인접(같은 문제 노드가 연속) — 결정적 정렬 확인.
+            seen_order = [n.problem_id for n in all_nodes if n.problem_id in {pid, other_pid}]
+            for target in (pid, other_pid):
+                idxs = [i for i, p in enumerate(seen_order) if p == target]
+                assert idxs == list(range(idxs[0], idxs[0] + len(idxs)))  # 연속(인접)
+
+            # stream_all_problem_ids: distinct·시드 두 문제 모두 열거.
+            async with sm() as session:
+                streamed = [p async for p in stream_all_problem_ids(session)]
+            assert len(streamed) == len(set(streamed))  # distinct
+            assert {pid, other_pid} <= set(streamed)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup([pid, other_pid]))

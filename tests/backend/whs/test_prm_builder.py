@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from whymath_backend.config import Settings
 from whymath_backend.db.models.solution_node import NodeVerifyStatus, SolutionNode
-from whymath_backend.whs.node_store import create_node
+from whymath_backend.whs.node_store import create_node, get_all_nodes
 from whymath_backend.whs.prm_builder import (
     PrmDataset,
     build_prm_dataset,
@@ -292,3 +292,70 @@ def test_collect_prm_dataset_on_live_pg() -> None:
         asyncio.run(_run())
     finally:
         asyncio.run(_cleanup(pid))
+
+
+@pytest.mark.integration
+def test_build_prm_dataset_from_all_nodes_cross_problem_isolation() -> None:
+    """실 PG — 2문제 트리 seed → get_all_nodes→build_prm_dataset 합산·크로스-문제 오염 0."""
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    pid_a = uuid.uuid4()
+    pid_b = uuid.uuid4()
+
+    async def _seed_tree(session: AsyncSession, problem_id: uuid.UUID, root_tag: str) -> None:
+        root = await create_node(session, problem_id=problem_id, state_repr={"root": root_tag})
+        await create_node(
+            session,
+            problem_id=problem_id,
+            parent_id=root.id,
+            state_repr={"step": "ok"},
+            action="치환",
+            verify_status=NodeVerifyStatus.VERIFIED,
+        )
+        await create_node(
+            session,
+            problem_id=problem_id,
+            parent_id=root.id,
+            state_repr={"step": "wrong"},
+            action="오변형",
+            verify_status=NodeVerifyStatus.FAILED,
+        )
+        await create_node(
+            session,
+            problem_id=problem_id,
+            parent_id=root.id,
+            state_repr={"step": "todo"},
+            action="미평가",
+            verify_status=NodeVerifyStatus.PENDING,
+        )
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as session:
+                await _seed_tree(session, pid_a, "A")
+                await _seed_tree(session, pid_b, "B")
+                await session.commit()
+
+            async with sm() as session:
+                nodes = await get_all_nodes(session)
+            # 시드 두 문제로 좁혀 합산 검증(무관 행 영향 배제).
+            seeded = [n for n in nodes if n.problem_id in {pid_a, pid_b}]
+            ds = build_prm_dataset(seeded)
+            assert ds.good_labels == 2 and ds.bad_labels == 2  # 문제당 good1·bad1
+            assert ds.excluded_uncertain == 2  # 문제당 PENDING 1
+            assert ds.size == 4
+            # 크로스-문제 오염 0: 각 레코드 prefix는 *자기 문제* 루트로 시작.
+            tag_by_pid = {pid_a: "A", pid_b: "B"}
+            for rec in ds.records:
+                assert rec.prefix_states == ({"root": tag_by_pid[rec.problem_id]},)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup(pid_a))
+        asyncio.run(_cleanup(pid_b))
