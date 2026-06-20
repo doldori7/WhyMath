@@ -5,16 +5,18 @@
 data access·portability)이다. 삭제권이 이미 *어떤 테이블이 사용자 PII인지* 열거(`_ERASURE_PLAN`)
 하므로, 그 인벤토리의 *학습/진단 subset*을 **읽기**로 재사용해 본인 데이터를 한데 모은다.
 
-범위(plan-driven 확장): `_EXPORT_PLAN`의 학습/진단 13종(학습 세션·시도·진단·개념 숙달 이력·능력
-스냅샷·동의·트랙/페르소나/상태 이력·오개념 가설·진단 증거 + **일별 학습 지표·행동 지표 시계열**) +
-`user_profile` 단건. **보안 항목 영구 제외**: `device_credential`·`refresh_token_session`(로그인
-토큰·기기 자격 — 노출은 보안 위험·"개인 학습 데이터" 아님). 대화 본문·세부 시도 이벤트(대용량)·외부
-store 실조회·비동기 job은 후속 — 미포함을 *조용히 넘기지 않고* `not_included`로 정직히 드러낸다
-(날조 0). 오개념 가설·증거는 *식별자·신호·날짜*만 담고 자유텍스트 PII가 없어(증거 그래프 설계 04a
-§2.3) 본인 export에 그대로 안전(redaction 0). 증분 4 시계열 2종도 *식별자·지표·날짜*만이라 동일
-안전 — `UserBehaviorMetrics`의 churn_risk 등 추론 행동분석치도 본인 열람·이동권(Art.15)엔 포함하되
-(기존 θ·오개념 가설 등 추론치 포함과 일관) `ProblemSolveTimeDistribution`은 `problem_id` 교차집계라
-개인 PII가 아니므로 제외한다(영구).
+범위(plan-driven 확장): `_EXPORT_PLAN`의 학습/진단 14종(학습 세션·시도·진단·개념 숙달 이력·능력
+스냅샷·동의·트랙/페르소나/상태 이력·오개념 가설·진단 증거·일별 학습 지표·행동 지표 시계열 +
+**대화 세션 메타**) + `user_profile` 단건. **보안 항목 영구 제외**: `device_credential`·
+`refresh_token_session`(로그인 토큰·기기 자격 — 노출은 보안 위험·"개인 학습 데이터" 아님). 대화의
+개별 메시지·손글씨(turn 본문)·세부 시도 이벤트(대용량)·외부 store 실조회·비동기 job은 후속 —
+미포함을 *조용히 넘기지 않고* `not_included`로 정직히 드러낸다(날조 0). 오개념 가설·증거는
+*식별자·신호·날짜*만 담고 자유텍스트 PII가 없어(증거 그래프 설계 04a §2.3) 본인 export에 그대로
+안전(redaction 0). 증분 4 시계열 2종도 *식별자·지표·날짜*만이라 동일 안전 — `UserBehaviorMetrics`의
+churn_risk 등 추론 행동분석치도 본인 열람·이동권(Art.15)엔 포함하되(기존 θ·오개념 가설 등 추론치
+포함과 일관) `ProblemSolveTimeDistribution`은 `problem_id` 교차집계라 개인 PII가 아니므로 제외한다
+(영구). **증분 5**: `Dialogue`(대화 세션 메타·시각/문제/resolution/턴수/모델/비용/평점·자유텍스트
+0)를 포함하되, *채팅 본문*인 `DialogueTurn`(미성년 콘텐츠·`dialogue_id` 조인)은 privacy 결정 후속.
 
 외부 store(ClickHouse 행동 로그·S3 객체·Redis 캐시)는 RDB 밖이라 이 export(PostgreSQL)에 *포함되지
 않는다* — `external_export_pending`으로 *구조화*해 ops가 가시화한다(#252 `external_erasure_targets`
@@ -41,6 +43,7 @@ from whymath_backend.db.models.assessment import (
     Assessment,
     ConceptMasteryHistory,
 )
+from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.evidence_link import EvidenceLink
 from whymath_backend.db.models.misconception_hypothesis import MisconceptionHypothesisRecord
 from whymath_backend.db.models.parental_consent import ParentalConsent
@@ -68,8 +71,11 @@ __all__ = [
 # 메운다. `ProblemSolveTimeDistribution`은 `problem_id` 키 *교차 사용자 집계*라 개인 PII가 아니므로
 # 제외(영구). `UserBehaviorMetrics`의 churn_risk 등 *추론 행동분석*도 본인 열람·이동권(GDPR
 # Art.15)엔 포함한다(기존 θ·오개념 가설 등 추론치 포함과 일관·식별자/지표/날짜만 PII-safe·
-# 자유텍스트 0). 컬럼명은 모델별(evidence_links는 `student_id`·나머지는 `user_id`)이라 튜플 2번째로
-# 파라미터화한다. 모든 모델은 `to_schema()`를 보유한다(JSON-safe 직렬화).
+# 자유텍스트 0). **증분 5**: `Dialogue`(대화 *세션 메타*·`user_id` 키·`to_schema()` 보유·
+# `_ERASURE_PLAN` 첫 타깃)를 추가한다 — *본문은 없다*(채팅 본문·손글씨는 자식 `DialogueTurn`
+# (`dialogue_id` 키)에 있고, 조인 필요 + 미성년 콘텐츠 privacy 결정이라 후속). 컬럼명은 모델별
+# (evidence_links는 `student_id`·나머지는 `user_id`)이라 튜플 2번째로 파라미터화한다. 모든 모델은
+# `to_schema()`를 보유한다(JSON-safe 직렬화).
 _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
     (LearningSession, "user_id", "learning_sessions"),
     (ProblemAttempt, "user_id", "problem_attempts"),
@@ -84,12 +90,13 @@ _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
     (EvidenceLink, "student_id", "misconception_evidence"),
     (DailyLearningMetrics, "user_id", "daily_learning_metrics"),  # 증분 4: 일별 학습 활동 집계
     (UserBehaviorMetrics, "user_id", "user_behavior_metrics"),  # 증분 4: 학습 행동 시계열
+    (Dialogue, "user_id", "dialogues"),  # 증분 5: 대화 세션 메타(본문은 DialogueTurn·후속)
 )
 
 # 이 export에 *포함되지 않은* 범위 — student-facing 사용자 친화 설명(인프라 store명·키 미노출).
 # 부분 export임을 정직히 알린다(GDPR 완전성·날조 0). 외부 store 상세는 ops 로그(아래 함수)로만.
 _NOT_INCLUDED: tuple[str, ...] = (
-    "대화 이력(개별 메시지·손글씨 이미지 포함)은 이 내보내기에 미포함 — 후속 확장 예정.",
+    "대화의 개별 메시지·손글씨 이미지(turn 본문)는 미포함 — 후속 확장 예정(대화 세션 메타는 포함).",
     "세부 시도 이벤트(실시간 단계 이벤트)는 대용량이라 미포함 — 후속 스트리밍 export 예정.",
     "행동 로그·업로드 이미지·세션 캐시 등 외부 시스템 보관 데이터는 미포함(별도 시스템).",
     "보안 항목(로그인 토큰·기기 자격)은 보안상 내보내지 않는다.",
