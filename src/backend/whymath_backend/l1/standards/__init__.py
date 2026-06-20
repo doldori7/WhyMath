@@ -22,6 +22,7 @@ data-pipeline NCIC 수집기가 낸 *Collection JSON*(단일 객체·jsonl 아�
 
 from __future__ import annotations
 
+from whymath_backend.l1.standards.populate import main as populate_main
 from whymath_backend.l1.standards.standard_loader import (
     AchievementStandardStore,
     ConceptStandardLinkStore,
@@ -34,4 +35,5 @@ __all__ = [
     "ConceptStandardLinkStore",
     "load_links",
     "load_standards",
+    "populate_main",
 ]
