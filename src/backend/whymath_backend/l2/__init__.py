@@ -57,6 +57,13 @@ from whymath_backend.l2.irt import (
     total_information,
 )
 from whymath_backend.l2.item_calibration import calibrate_item_difficulties
+from whymath_backend.l2.learning_path import (
+    LearningPath,
+    LearningStep,
+    build_learning_path,
+    fetch_internal_prerequisite_edges,
+    order_learning_path,
+)
 from whymath_backend.l2.mastery_tracking import (
     MasteryRecord,
     compute_mastery_record,
@@ -75,10 +82,13 @@ __all__ = [
     "ConceptAbilityItem",
     "ConceptDiagnosis",
     "IrtItem",
+    "LearningPath",
+    "LearningStep",
     "MasteryRecord",
     "ability_standard_error",
     "apply_forgetting",
     "apply_learning",
+    "build_learning_path",
     "calibrate_item_difficulties",
     "compute_concept_abilities",
     "compute_concept_diagnoses",
@@ -88,12 +98,14 @@ __all__ = [
     "estimate_ability",
     "estimate_difficulty",
     "estimate_global_ability",
+    "fetch_internal_prerequisite_edges",
     "fit_jmle",
     "get_current_ability",
     "get_current_mastery",
     "get_current_theta",
     "get_primary_concept_id",
     "item_information",
+    "order_learning_path",
     "posterior_mastery",
     "select_next_item",
     "select_weighted_item",
