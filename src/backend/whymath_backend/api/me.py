@@ -88,6 +88,10 @@ from whymath_backend.l2.irt import (
     estimate_ability,
     select_weighted_item,
 )
+from whymath_backend.l2.learning_path import (
+    LearningPath,
+    build_learning_path,
+)
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.l2.prerequisite_recommendation import (
     PrerequisiteGap,
@@ -1305,6 +1309,60 @@ async def get_my_concept_coaching(
     if diag is None:
         return recommend_coaching(None, None)  # 진단 없음 → diagnose(추가 진단 권유).
     return recommend_coaching(diag.bkt_mastery, diag.irt_theta)
+
+
+# ── 개념그래프 소비 학습경로 슬: GET /v1/me/weak-concepts/{concept_id}/learning-path ──
+# 선수 슬1(prerequisites)이 "어떤 선수가 막혔나"를 weakness 정렬로 *골랐다면*, 이 슬은 그 막힌
+# 선수들 *사이의 선수 의존*을 Kahn 위상정렬해 "무엇부터 복습해야 하나 — 근본 선수 먼저, 그 위에
+# 쌓이는 말단 나중"의 학습 *순서*를 돌려준다(LTHC 기초 우선의 기계적 구현). prerequisites 미러:
+# query 4종·게이팅·user_id 스코핑을 그대로 답습하되, 응답이 *순서화된 학습 경로*다. L2 fetch +
+# L2 위상정렬 *배선*만 L5(여기)·순수 정렬·내부엣지 조회는 L2(`build_learning_path`)가 소유.
+@router.get(
+    "/weak-concepts/{concept_id}/learning-path",
+    response_model=LearningPath,
+    summary="약개념의 막힌 선수개념 학습 경로(선수 위상정렬·근본→말단 순서)",
+)
+async def get_my_learning_path(
+    concept_id: uuid.UUID,
+    user: ConsentedUser,
+    session: SessionDep,
+    threshold: WeakThreshold = 0.7,
+    reviewed_only: WeakReviewedOnly = False,
+    weak_only: WeakOnly = True,
+    max_depth: MaxDepth = 1,
+) -> LearningPath:
+    """약개념 C(`concept_id`)의 *막힌 선수개념들*을 위상정렬한 **학습 순서**(근본 먼저)로 반환.
+
+    선수 슬1(`prerequisites`)의 미러다 — 같은 query(`threshold`·`reviewed_only`·`weak_only`·
+    `max_depth`)·게이팅·user_id 스코핑으로 막힌 선수를 고르지만, 응답이 *순서화된 경로*다.
+    오케스트레이션:
+      ① **L2 fetch** — `recommend_prerequisite_gaps`로 C의 막힌 선수개념(weakness asc)을
+         조회한다(`prerequisites`와 동일 인자).
+      ② **L2 위상정렬** — `build_learning_path(session, gaps)`가 그 막힌 선수 집합 *내부*의
+         직접 선수 엣지를 조회해 Kahn 위상정렬한다 — in-degree 0(선수 의존 없는 *근본*)을 먼저
+         방출하고 그 위에 쌓이는 선수를 뒤에 둔다. **추천의 depth/strength 정렬과 다르다**:
+         두 선수가 둘 다 직접 선수(depth=1)여도 A가 B의 선수면 A를 먼저 다져야 한다(LTHC).
+         사이클(부분 적재 방어)은 잔여로 정직하게 표시(`has_cycle`·`is_cycle_residual`).
+
+    L2 fetch + L2 정렬 *배선*만 여기(L5)가 소유하고(신규 로직 0), 순수 위상정렬·내부엣지 조회는
+    L2(`build_learning_path`·`order_learning_path`)가 소유한다. user_id 스코핑·읽기 전용·
+    마이그레이션 0.
+
+    **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 *조회·순서화 좌석*(소비 슬 일관)이다.
+    `LearningStep`은 안전 표시·구조 메타(concept_code·concept_name·weakness·depth·
+    edge_strength·position)만 담고 — **본문(description·formal_definition·intuitive_
+    explanation) 슬롯 자체가 없다**(frozen 스키마·redaction). 우열 매기기·정답 빠르게 등 금기 0.
+    """
+    gaps = await recommend_prerequisite_gaps(
+        session,
+        user.user_id,
+        concept_id,
+        mastery_threshold=threshold,
+        reviewed_only=reviewed_only,
+        weak_only=weak_only,
+        max_depth=max_depth,
+    )
+    return await build_learning_path(session, gaps)
 
 
 # ── slice L2-12: GET /v1/me/next-problem (적응형 출제 — IRT 정보량 최대 미응답 문항) ──
