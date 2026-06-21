@@ -1777,6 +1777,202 @@ def test_me_prerequisite_gaps_multi_hop_traversal_on_live_pg() -> None:
         asyncio.run(_cleanup([uid]))  # user_profile 정리
 
 
+# ── 소비 학습경로 슬: GET /v1/me/weak-concepts/{concept_id}/learning-path (선수 위상정렬) ──
+def test_me_learning_path_topological_ordering_and_gating_on_live_pg() -> None:
+    """GET /v1/me/weak-concepts/{C}/learning-path — 막힌 선수의 위상정렬 학습 순서(근본 먼저).
+
+    prerequisites 슬1의 미러(같은 query·게이팅)이되 응답이 *순서화된 경로*다. 핵심: 두 직접
+    선수 P_a·P_b가 둘 다 depth1·동률 weakness지만 내부엣지 P_a→P_b(P_a가 P_b의 선수)가 있어
+    위상정렬은 P_a(근본)를 먼저 둔다 — 같은 입력의 prerequisites는 edge_strength desc tie-break
+    로 P_b를 먼저 주므로 두 엔드포인트의 순서가 *뒤집힘*을 대비 검증한다(위상정렬의 가치).
+    추가로 weak_only=false(강한 선수 포함)·threshold(약점 게이트)·빈 경로·redaction·401 왕복.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    sfx = uid.hex[:8]
+    # 후행(약개념) C + 직접 선수 P_a·P_b(둘 다 약점·동률)·P_s(강함). 내부엣지 P_a→P_b.
+    uc_c = f"UC.test.{sfx}.lp.post"
+    uc_pa = f"UC.test.{sfx}.lp.prea"
+    uc_pb = f"UC.test.{sfx}.lp.preb"
+    uc_ps = f"UC.test.{sfx}.lp.pres"
+    c_post, c_pa, c_pb, c_ps = (uuid.uuid4() for _ in range(4))
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(
+            _add_all(
+                _concept_with_code(c_post, uc_c, "이차함수"),  # 후행(약개념)
+                _concept_with_code(c_pa, uc_pa, "선수A"),  # 근본 선수(약함)
+                _concept_with_code(c_pb, uc_pb, "선수B"),  # 말단 선수(약함·A의 후행)
+                _concept_with_code(c_ps, uc_ps, "선수S"),  # 강한 선수
+            )
+        )
+        asyncio.run(
+            _add_all(
+                _node_meta(uc_pa, "선수A", "[중]함수", "reviewed"),
+                _node_meta(uc_pb, "선수B", "[중]함수", "reviewed"),
+                _node_meta(uc_ps, "선수S", "[초]수와연산", "reviewed"),
+            )
+        )
+        # concept_edge — P_a·P_b·P_s 모두 C의 직접 선수(to==c_post). 내부엣지 P_a→P_b(to==c_pb).
+        # P_a→C 강도 0.5·P_b→C 강도 0.9(동률 weakness에서 prerequisites는 강도 desc로 P_b 먼저).
+        asyncio.run(
+            _add_all(
+                _prereq_edge(c_pa, c_post, 0.5),
+                _prereq_edge(c_pb, c_post, 0.9),
+                _prereq_edge(c_ps, c_post, 0.5),
+                _prereq_edge(c_pa, c_pb, 0.8),  # 내부엣지 — P_a가 P_b의 선수(위상정렬 근본).
+            )
+        )
+        # mastery — P_a·P_b 약점 동률(0.2)·P_s 강함(0.9).
+        asyncio.run(
+            _add_all(
+                _mastery_row(uid, c_pa, t1, 0.2),
+                _mastery_row(uid, c_pb, t1, 0.2),
+                _mastery_row(uid, c_ps, t1, 0.9),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            base = f"/v1/me/weak-concepts/{c_post}/learning-path"
+            # ① 기본(weak_only=true) — 막힌 선수 P_a·P_b를 위상정렬(근본 P_a 먼저).
+            resp = client.get(base, headers=auth)
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+            assert data["has_cycle"] is False
+            steps = data["steps"]
+            assert [s["concept_code"] for s in steps] == [uc_pa, uc_pb]  # 근본 먼저
+            assert [s["position"] for s in steps] == [0, 1]
+            assert steps[0]["concept_name"] == "선수A"  # backend concept.name_ko 전사
+            # redaction — 본문 슬롯 부재(LearningStep은 안전·구조 메타만).
+            assert "description" not in steps[0]
+            assert "formal_definition" not in steps[0]
+
+            # ① 대비 — 같은 입력의 prerequisites는 edge_strength desc로 P_b를 먼저 준다.
+            # 위상정렬이 그 순서를 *뒤집어* 근본(P_a)을 앞세움을 명시(엔드포인트의 가치).
+            prereq = client.get(f"/v1/me/weak-concepts/{c_post}/prerequisites", headers=auth).json()
+            assert [r["concept_code"] for r in prereq] == [uc_pb, uc_pa]  # 추천 순서
+            assert [s["concept_code"] for s in steps] != [r["concept_code"] for r in prereq]
+
+            # ② weak_only=false — 강한 P_s 포함·여전히 위상정렬(P_a→P_b·P_s는 말단 무관).
+            resp = client.get(base, headers=auth, params={"weak_only": "false"})
+            codes = [s["concept_code"] for s in resp.json()["steps"]]
+            assert codes == [uc_pa, uc_pb, uc_ps]
+
+            # ③ threshold=0.15 — 0.15 미만만(P_a·P_b 0.2는 제외) → 빈 경로(게이트 통과 검증).
+            resp = client.get(base, headers=auth, params={"threshold": "0.15"})
+            data = resp.json()
+            assert data["steps"] == []
+            assert data["has_cycle"] is False
+
+            # ④ 선수 없는 개념(P_s를 후행으로) — 빈 경로.
+            resp = client.get(f"/v1/me/weak-concepts/{c_ps}/learning-path", headers=auth)
+            assert resp.json()["steps"] == []
+
+            # ⑤ 무토큰 401.
+            assert client.get(base).status_code == 401
+    finally:
+        asyncio.run(_cleanup_concept_edges([c_pa, c_pb, c_ps]))
+        asyncio.run(_cleanup_mastery([uid]))
+        asyncio.run(_cleanup_concepts([c_post, c_pa, c_pb, c_ps]))
+        asyncio.run(_cleanup_concept_nodes([uc_c, uc_pa, uc_pb, uc_ps]))
+        asyncio.run(_cleanup([uid]))  # user_profile 정리
+
+
+def test_me_learning_path_multi_hop_on_live_pg() -> None:
+    """GET /v1/me/weak-concepts/{C}/learning-path?max_depth=N — 다단계 선수의 위상정렬 경로.
+
+    체인 C ← P1 ← P2 ← P3(엣지 from=선수·to=후행)·셋 다 약점. max_depth=3이면 gaps={P1,P2,P3}·
+    집합 내부엣지(P2→P1·P3→P2) 위상정렬 → 근본 P3부터 [P3,P2,P1](position 0·1·2). 이는
+    prerequisites의 추천 순서(depth asc=[P1,P2,P3])와 *정반대*다 — 추천은 가까운 선수를 먼저
+    보이지만 학습 순서는 근본(깊은) 선수를 먼저 다져야 하기 때문(LTHC). max_depth=1 경계도 확인.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    sfx = uid.hex[:8]
+    uc_c = f"UC.test.{sfx}.lpmh.post"
+    uc_p1 = f"UC.test.{sfx}.lpmh.p1"
+    uc_p2 = f"UC.test.{sfx}.lpmh.p2"
+    uc_p3 = f"UC.test.{sfx}.lpmh.p3"
+    c_post, c_p1, c_p2, c_p3 = (uuid.uuid4() for _ in range(4))
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(
+            _add_all(
+                _concept_with_code(c_post, uc_c, "후행개념"),
+                _concept_with_code(c_p1, uc_p1, "선수1"),
+                _concept_with_code(c_p2, uc_p2, "선수2"),
+                _concept_with_code(c_p3, uc_p3, "선수3"),
+            )
+        )
+        asyncio.run(
+            _add_all(
+                _node_meta(uc_p1, "선수1", "[중]함수", "reviewed"),
+                _node_meta(uc_p2, "선수2", "[중]함수", "reviewed"),
+                _node_meta(uc_p3, "선수3", "[초]수와연산", "reviewed"),
+            )
+        )
+        # 선수 체인 — P1은 C의 선수·P2는 P1의 선수·P3는 P2의 선수(from=선수·to=후행).
+        asyncio.run(
+            _add_all(
+                _prereq_edge(c_p1, c_post, 0.9),
+                _prereq_edge(c_p2, c_p1, 0.8),
+                _prereq_edge(c_p3, c_p2, 0.7),
+            )
+        )
+        # 셋 다 약점(0.2)으로 둬 weak_only 통과(위상정렬은 내부엣지가 강제·tie-break 무관).
+        asyncio.run(
+            _add_all(
+                _mastery_row(uid, c_p1, t1, 0.2),
+                _mastery_row(uid, c_p2, t1, 0.2),
+                _mastery_row(uid, c_p3, t1, 0.2),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            base = f"/v1/me/weak-concepts/{c_post}/learning-path"
+            # ① max_depth=1(기본) — 직접 선수 P1만(내부엣지 없음·근본 1개).
+            resp = client.get(base, headers=auth)
+            assert resp.status_code == 200, resp.text
+            data = resp.json()
+            assert [s["concept_code"] for s in data["steps"]] == [uc_p1]
+            assert data["has_cycle"] is False
+
+            # ② max_depth=3 — gaps={P1,P2,P3}·내부엣지(P2→P1·P3→P2) 위상정렬 → 근본 P3 먼저.
+            resp = client.get(base, headers=auth, params={"max_depth": "3"})
+            steps = resp.json()["steps"]
+            assert [s["concept_code"] for s in steps] == [uc_p3, uc_p2, uc_p1]  # 근본→말단
+            assert [s["position"] for s in steps] == [0, 1, 2]
+
+            # ② 대비 — prerequisites는 depth asc(가까운 선수 먼저)=[P1,P2,P3]로 *정반대* 순서.
+            prereq = client.get(
+                f"/v1/me/weak-concepts/{c_post}/prerequisites",
+                headers=auth,
+                params={"max_depth": "3"},
+            ).json()
+            assert [r["concept_code"] for r in prereq] == [uc_p1, uc_p2, uc_p3]
+            assert [s["concept_code"] for s in steps] == list(
+                reversed([r["concept_code"] for r in prereq])
+            )
+
+            # ③ max_depth 경계 — 0은 422(ge=1)·6은 422(le=5).
+            assert client.get(base, headers=auth, params={"max_depth": "0"}).status_code == 422
+            assert client.get(base, headers=auth, params={"max_depth": "6"}).status_code == 422
+    finally:
+        asyncio.run(_cleanup_concept_edges([c_p1, c_p2, c_p3]))
+        asyncio.run(_cleanup_mastery([uid]))
+        asyncio.run(_cleanup_concepts([c_post, c_p1, c_p2, c_p3]))
+        asyncio.run(_cleanup_concept_nodes([uc_c, uc_p1, uc_p2, uc_p3]))
+        asyncio.run(_cleanup([uid]))  # user_profile 정리
+
+
 # ── L4 코칭 결선: GET /v1/me/weak-concepts/{concept_id}/coaching (선수 차단 우선 코칭) ──
 def test_me_concept_coaching_prereq_block_and_fallback_on_live_pg() -> None:
     """GET /v1/me/weak-concepts/{C}/coaching — 막힌 선수 있으면 선수 복습 우선·없으면 메타인지.
