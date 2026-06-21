@@ -1,0 +1,243 @@
+"""원자 백본 선수엣지 → backend `concept_edge` ORM 적재 — PREREQUISITE + relation_subtype(Phase 1).
+
+`l1/concept_graph/backend_edge.py`(구 개념그래프 엣지 적재)의 *원자 백본* 짝이다. 차이점:
+  - graph.json 엣지 키가 다르다: `from_code`/`to_code`/`relation`/`relation_subtype`/`strength`
+    (구 `src_concept_id`/`dst_concept_id`가 아님).
+  - **`relation_subtype`(관계유형: 원본/소단원내/소단원간/학년간/학교급간(추정))을 적재**한다(이번
+    슬라이스가 추가한 `concept_edge.relation_subtype` nullable TEXT 컬럼).
+
+방향: `from_code`(선수) → `to_code`(후행) — "from을 알아야 to를 안다". backend
+`EdgeType.PREREQUISITE`(A→B: A는 B의 선수)와 일치 → from_code→from_concept_id·to_code→to_concept_id.
+
+범위: graph.json `relation`은 전량 `"prerequisite"`(원자ID 엣지 2,213). 서술형 엣지
+(narrative_edges_raw 1,007)는 원자ID가 아니라 적재 대상이 아니다. self-edge·양끝 누락은
+로딩에서 skip(불변·FK 방어).
+
+최소 적재: INSERT 컬럼은 (from·to·edge_type·edge_strength·relation_subtype)뿐 —
+`typical_gap_signal`·`notes`는 슬롯 부재(NULL·날조 회피). code→UUID 해석은 단일 조회(N+1 0)·
+orphan skip(FK 위반 방지).
+멱등: UNIQUE(from,to,type) 충돌 시 edge_strength·relation_subtype만 갱신(edge_id·created_at 보존).
+sync 엔진은 슬3 `_build_sync_engine` 재사용(신규 seam 0). 자격증명 env·하드코딩 0.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING
+
+from whymath_backend.config import Settings, get_settings
+from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
+from whymath_backend.schema.enums import EdgeType
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.engine import Engine
+
+
+# graph.json `relation`(use_enum_values 직렬화) 중 적재 대상 — 선수만(원자ID 엣지 전량).
+_PREREQUISITE_RELATION: str = "prerequisite"
+
+
+def _opt_str(value: object) -> str | None:
+    """빈 문자열·None → None, 그 외 strip한 str."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _opt_float(value: object) -> float | None:
+    """관계 강도 옵션 파싱 — 빈/None/비수치는 None."""
+    if value is None or (isinstance(value, str) and not value.strip()):
+        return None
+    try:
+        return float(value)  # type: ignore[arg-type]
+    except (ValueError, TypeError):
+        return None
+
+
+@dataclass(frozen=True, slots=True)
+class AtomBackendEdgeRecord:
+    """backend `concept_edge` 행으로 적재할 한 *선수 관계*의 최소 값 — 원자 백본.
+
+    `from_code`(선수)·`to_code`(후행)는 적재 시 code→UUID로 해석되어 `from_concept_id`·
+    `to_concept_id`가 된다(방향 일치). `relation_subtype`은 관계유형(자유 텍스트). **`evidence`·
+    `notes`·`typical_gap_signal` 슬롯이 *없다*** — 본문/판단근거라 적재기가 채우지 않는다
+    (구조적 차단).
+    """
+
+    from_code: str  # 선수 code → from_concept_id
+    to_code: str  # 후행 code → to_concept_id
+    edge_type: EdgeType  # PREREQUISITE 고정
+    edge_strength: float | None  # graph `strength`(0~1)·미기재 None
+    relation_subtype: str | None  # 관계유형(원본/소단원내/소단원간/학년간/학교급간 등)
+
+
+def load_atom_edges_from_graph_json(
+    path: Path,
+) -> tuple[list[AtomBackendEdgeRecord], list[str]]:
+    """원자 코퍼스 `graph.json` → backend `concept_edge` 선수 적재 레코드 + skip 메시지 목록.
+
+    `payload["edges"]`의 각 항목에서 `relation == "prerequisite"`인 엣지만
+    `EdgeType.PREREQUISITE`로 매핑한다 — `from_code`(선수)·`to_code`(후행)·`strength`→
+    edge_strength·`relation_subtype`. self-edge(from==to)·양끝 누락은 건너뛴다(불변·FK 방어).
+    **`evidence`는 읽지 않는다**(슬롯 부재).
+
+    반환: (적재 레코드 목록, skip 사유 메시지 목록). 메시지는 운영 가시성용(조용한 누락 금지).
+
+    Raises:
+        FileNotFoundError: graph.json 부재.
+    """
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    out: list[AtomBackendEdgeRecord] = []
+    skipped: list[str] = []
+    for record in payload.get("edges", []):
+        relation = _opt_str(record.get("relation"))
+        from_code = _opt_str(record.get("from_code"))
+        to_code = _opt_str(record.get("to_code"))
+
+        if relation != _PREREQUISITE_RELATION:
+            skipped.append(f"비-선수 관계 skip: relation={relation!r} ({from_code}→{to_code})")
+            continue
+        if from_code is None or to_code is None:
+            skipped.append(f"양끝 code 누락 skip: from={from_code!r} to={to_code!r}")
+            continue
+        if from_code == to_code:
+            skipped.append(f"self-edge skip: {from_code}")
+            continue
+
+        out.append(
+            AtomBackendEdgeRecord(
+                from_code=from_code,
+                to_code=to_code,
+                edge_type=EdgeType.PREREQUISITE,
+                edge_strength=_opt_float(record.get("strength")),
+                relation_subtype=_opt_str(record.get("relation_subtype")),
+            )
+        )
+    return out, skipped
+
+
+class AtomBackendEdgeStore:
+    """원자 백본 선수엣지 → backend `concept_edge` 적재기 — UNIQUE 충돌 멱등 upsert(sync).
+
+    `BackendEdgeStore`(구 개념그래프)의 원자 짝이다. `populate`는 먼저 backend `concept` 전량을
+    단일 조회해 `{code: uuid}` 맵을 만들고(N+1 0), 각 레코드의 양끝 code를 UUID로 해석한 뒤
+    `INSERT ... ON CONFLICT(from, to, edge_type) DO UPDATE`로 멱등 적재한다 — 재적재는
+    edge_strength·relation_subtype만 갱신하고 **edge_id(PK)·created_at은 보존**한다. 양끝 중
+    하나라도 맵에 없으면(orphan) 건너뛴다(FK 위반 방지). sync 엔진은 슬3 `_build_sync_engine`
+    재사용(신규 seam 0).
+    """
+
+    def __init__(
+        self,
+        *,
+        engine: Engine | None = None,
+        settings: Settings | None = None,
+    ) -> None:
+        self._engine = engine
+        self._settings = settings
+
+    @property
+    def _resolved_settings(self) -> Settings:
+        if self._settings is None:
+            self._settings = get_settings()
+        return self._settings
+
+    def _get_engine(self) -> Engine:
+        if self._engine is None:
+            self._engine = _build_sync_engine(self._resolved_settings)
+        return self._engine
+
+    def _load_code_to_uuid(self) -> dict[str, uuid.UUID]:
+        """backend `concept` 전량을 단일 조회해 `{code: concept_id(UUID)}` 맵 구축(N+1 0)."""
+        from sqlalchemy import select
+
+        from whymath_backend.db.models.concept import Concept
+
+        stmt = select(Concept.code, Concept.concept_id)
+        with self._get_engine().connect() as conn:
+            rows = conn.execute(stmt).all()
+        return {row.code: row.concept_id for row in rows}
+
+    def populate(self, records: Sequence[AtomBackendEdgeRecord]) -> tuple[int, list[str]]:
+        """선수엣지 레코드들을 backend `concept_edge`에 멱등 upsert (orphan skip·식별자 보존).
+
+        ① code→UUID 맵 단일 구축 → ② 양끝 해석(orphan skip) → ③ `ON CONFLICT(from,to,type)
+        DO UPDATE`로 edge_strength·relation_subtype 갱신. 반환: (적재 행 수, orphan skip 목록).
+        `edge_type`은 enum 값(문자열)으로 바인딩한다.
+        """
+        if not records:
+            return 0, []
+
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
+
+        from whymath_backend.db.models.concept import ConceptEdge
+
+        code_to_uuid = self._load_code_to_uuid()
+        loaded = 0
+        skipped: list[str] = []
+        with self._get_engine().begin() as conn:
+            for record in records:
+                from_uuid = code_to_uuid.get(record.from_code)
+                to_uuid = code_to_uuid.get(record.to_code)
+                if from_uuid is None or to_uuid is None:
+                    skipped.append(
+                        f"orphan edge skip: from={record.from_code}"
+                        f"({'있음' if from_uuid else '없음'}) → "
+                        f"to={record.to_code}({'있음' if to_uuid else '없음'})"
+                    )
+                    continue
+                stmt = pg_insert(ConceptEdge).values(
+                    from_concept_id=from_uuid,
+                    to_concept_id=to_uuid,
+                    edge_type=record.edge_type.value,
+                    edge_strength=record.edge_strength,
+                    relation_subtype=record.relation_subtype,
+                )
+                stmt = stmt.on_conflict_do_update(
+                    index_elements=[
+                        ConceptEdge.from_concept_id,
+                        ConceptEdge.to_concept_id,
+                        ConceptEdge.edge_type,
+                    ],
+                    set_={
+                        "edge_strength": stmt.excluded.edge_strength,
+                        "relation_subtype": stmt.excluded.relation_subtype,
+                    },
+                )
+                conn.execute(stmt)
+                loaded += 1
+        return loaded, skipped
+
+
+def populate_atom_edges(
+    records: Sequence[AtomBackendEdgeRecord],
+    *,
+    engine: Engine | None = None,
+    settings: Settings | None = None,
+    store: AtomBackendEdgeStore | None = None,
+) -> int:
+    """원자 백본 선수엣지를 backend `concept_edge`로 멱등 적재. 반환=적재 행 수(orphan은 제외).
+
+    store 미주입 시 슬3 sync 엔진 재사용 store를 만든다. 멱등(재실행 시 강도·subtype 갱신·
+    edge_id 보존).
+    """
+    resolved = settings if settings is not None else get_settings()
+    edge_store = (
+        store if store is not None else AtomBackendEdgeStore(engine=engine, settings=resolved)
+    )
+    loaded, _skipped = edge_store.populate(records)
+    return loaded
+
+
+__all__ = [
+    "AtomBackendEdgeRecord",
+    "AtomBackendEdgeStore",
+    "load_atom_edges_from_graph_json",
+    "populate_atom_edges",
+]
