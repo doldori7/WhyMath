@@ -43,6 +43,10 @@ from whymath_backend.db.models.assessment import (
     Assessment,
     ConceptMasteryHistory,
 )
+from whymath_backend.db.models.atom_node import (
+    ATOM_REVIEW_STATUS_AI_ESTIMATED,
+    AtomNode,
+)
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import (
     Concept,
@@ -155,6 +159,9 @@ __all__ = [
     "ConceptEmbedding",
     # 개념그래프 소비 슬1: ConceptNode (L1 개념 메타 PG 프로젝션·UC 키·검색 enrichment 백킹)
     "ConceptNode",
+    # 원자 마이그레이션 Phase 2a: AtomNode (L1 원자 메타 PG 프로젝션·code 키·검색 enrichment 백킹)
+    "AtomNode",
+    "ATOM_REVIEW_STATUS_AI_ESTIMATED",
     # WH-S S1: SolutionNode (풀이 경로 트리 노드·§2.1·오프라인 솔버 상태) + 검증 상태 enum
     "SolutionNode",
     "NodeVerifyStatus",
