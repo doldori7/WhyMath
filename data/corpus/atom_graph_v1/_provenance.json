@@ -1,0 +1,32 @@
+{
+  "source_file": "58b1d193-260622_________________DB_K12_3______.xlsx",
+  "source_sha256": "759f163a2a271f88c4eaf3d26f30e4cfad96cab1a5df79304b8fdbefcde41ed4",
+  "source_citation": "원자-성취기준 매핑 근거: 교육부 고시 제2022-33호 [수학과 교육과정], 국가교육과정정보센터(NCIC, https://www.ncic.go.kr). 원자화·교수학 주석(4요소·원자성)·대학 축은 와이매스 자체작성.",
+  "normalization_counts": {
+    "narrative_edges": 1007,
+    "redacted_핵심명제": 1324,
+    "경계값": 4,
+    "미적하이픈": 129,
+    "미적하이픈_distinct": 43,
+    "자리값": 13
+  },
+  "node_counts": {
+    "atoms": 1837,
+    "units": 217,
+    "subunits": 643,
+    "total": 2697
+  },
+  "edge_counts": {
+    "atom_id_edges": 2213,
+    "narrative_edges_raw": 1007
+  },
+  "school_level_university_atoms": 513,
+  "validation": {
+    "success": true,
+    "errors": 0,
+    "warnings": 0,
+    "counts_by_rule": {}
+  },
+  "skipped": [],
+  "determinism": "결정론 — 동일 sha256 입력 2회 transform 시 byte 동일 산출"
+}
