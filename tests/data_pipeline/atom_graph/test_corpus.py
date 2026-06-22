@@ -42,9 +42,12 @@ class TestCorpusCounts:
         assert v["errors"] == 0
 
     def test_source_sha256(self, corpus_provenance: dict[str, object]) -> None:
+        # 정본 소스 = 통합 코퍼스 마스터(54c14913-260622, 2026-06-22 채택). 직전 소스
+        # (58b1d193, sha 759f163a…)는 미적 원자ID raw였고, 이 마스터가 원자ID 하이픈을
+        # 통일(공수·기수와 정합) → 129 미적 원자ID만 변경, 그 외 카운트 동일.
         assert (
             corpus_provenance["source_sha256"]
-            == "759f163a2a271f88c4eaf3d26f30e4cfad96cab1a5df79304b8fdbefcde41ed4"
+            == "83a0d2883fe8552868916181f04ebe687f24dd9cabb91ec4b3096d59a767d0e0"
         )
 
 

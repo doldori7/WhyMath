@@ -1,12 +1,11 @@
 {
-  "source_file": "58b1d193-260622_________________DB_K12_3______.xlsx",
-  "source_sha256": "759f163a2a271f88c4eaf3d26f30e4cfad96cab1a5df79304b8fdbefcde41ed4",
+  "source_file": "54c14913-260622__________________.xlsx",
+  "source_sha256": "83a0d2883fe8552868916181f04ebe687f24dd9cabb91ec4b3096d59a767d0e0",
   "source_citation": "원자-성취기준 매핑 근거: 교육부 고시 제2022-33호 [수학과 교육과정], 국가교육과정정보센터(NCIC, https://www.ncic.go.kr). 원자화·교수학 주석(4요소·원자성)·대학 축은 와이매스 자체작성.",
   "normalization_counts": {
     "narrative_edges": 1007,
     "redacted_핵심명제": 1324,
     "경계값": 4,
-    "미적하이픈": 129,
     "미적하이픈_distinct": 43,
     "자리값": 13
   },
