@@ -8,7 +8,7 @@
 
 ## 1. 현재 상태 (2026-06-22)
 
-- **브랜치**: `claude/admiring-faraday-ouvlfx` (PR 미생성 · 전부 커밋·푸시됨)
+- **브랜치**: Phase 0~2b는 main 머지됨(#309·head `1ab711d`). **Phase 2c는 `claude/peaceful-turing-qecxvy`**(이번 작업)
 - ✅ **Phase 0** — 데이터카드 `docs/data/atom_graph_v1.md` + `licensing_safety.md` 등록
 - ✅ **Phase 1 (data-pipeline)** — `data_pipeline/atom_graph/`(extract→transform→validate→CLI) + 커밋된 코퍼스 `data/corpus/atom_graph_v1/graph.json`(노드 2,697 = 원자 1,837·단원 217·소단원 643 / 엣지 2,213 / 서술형 raw 1,007 / 대학 513)
 - ✅ **Phase 1 (backend)** — `l1/atom_graph/atom_backend_{concept,edge}.py`·`populate.py` → `concept`/`concept_edge` 적재 + 마이그레이션 `d5e6f7a8b9c0`(concept_edge.relation_subtype)
@@ -22,8 +22,9 @@
   - **R1** (`8dfe1ad`) 원자 백본 재생성 — 미적 원자ID **129개 raw→하이픈** 채택(파이프라인 재실행만·코드 변경 0·transform이 원자ID 그대로 적재)·`university_standard_fill` 재실행(대학 513)·graph.json diff **100% 미적**·K-12 핵심명제 0누수. 정본 sha `83a0d288…`
   - **R2** (`ca2dd2e`) `data_pipeline/concept_content/` → `data/corpus/concept_content_v1/`(K-12 개념 437 콘텐츠 4종 + 암기카드 113 · U4 미러 · **K-12 성취기준 본문 미수록=redaction**·연결성취기준 코드만 다리·정식정의 학생 비노출)
   - **R3 (=Phase 2b)** (`5ca3bec`) 원자 임베딩 `atom_embedding`(PK=code·vector(1024)·입력=**name+transfer만**·`level=="세부개념"` 1,837·원문 비저장)·마이그레이션 `f7a8b9c0d1e2`
-- **alembic head(현재)**: `f7a8b9c0d1e2` (down `e6f7a8b9c0d1` — atom_embedding pgvector. U1~U4·R1·R2는 마이그레이션 무관)
-- **다음 작업**: **Phase 2c**(Neo4j 원자 그래프 재적재) — §5.2. 새 세션 권장(컨텍스트 위생).
+- ✅ **Phase 2c (data-pipeline)** — Neo4j 원자 그래프 멱등 적재. 신규 `data_pipeline/atom_graph/load.py`(`concept_graph/load.py` 미러) + CLI `load`(`1484d32` 로더·`ed07620` CLI). **additive 스키마**(구 437과 충돌 회피): 노드 `:Atom`/키 `code`/제약 `atom_code_unique`/인덱스 `atom_school_level`·`atom_level`/관계 `:ATOM_PREREQUISITE`. atomicity(dict)→JSON 문자열·parent_code 계층=노드 속성·narrative raw 미적재. 코퍼스 실측 2,697 노드·2,213 엣지·skip 0. Fake 드라이버 단위 + 실 neo4j:5 통합(@integration·importorskip). 4게이트 green(pytest 632p/3skip·cov 91%)
+- **alembic head(현재)**: `f7a8b9c0d1e2` (down `e6f7a8b9c0d1` — atom_embedding pgvector. Phase 2c는 Neo4j 전용 → PG 마이그레이션 무추가·head 불변. U1~U4·R1·R2도 마이그레이션 무관)
+- **다음 작업**: **Phase 3**(4요소 정식 소스 승격 + 콘텐츠 4종 DB 투영 + K-12 437→원자 크로스워크) — §5.3. 새 세션 권장(컨텍스트 위생).
 
 ## 2. locked 결정 (요약 — 상세는 MEMORY.md)
 ① 전면 교체·원자화 ② 크로스워크=문제 corpus만 ③ 4요소→정식 소스 승격 ④ 대학 513 포함+2015·2022 병행
@@ -53,11 +54,13 @@
 - **pytest는 *전체 스위트*로 실행** — 부분집합은 기존 `concept_graph` 순환 import로 collection 에러가 난다(아티팩트·실패 아님). 게이트: `cd src/backend && /tmp/bevenv/bin/pytest --cov=whymath_backend -q -m "not integration"`.
 - **위임 시 명시**: "*파일을 직접 생성*하고 끝에 `git status --short`로 증명하라. 서브에이전트 spawn·리서치만 금지."
 - mypy의 neo4j 충돌은 *wmvenv에 neo4j 설치 시*만 발생(CI는 `.[dev]`만 → green).
+- **CI는 *backend*의 `tests/`도 ruff·black 린트한다**(PR#223) — backend tests 수정 시 게이트도 CI와 동일하게 `ruff check . ../../tests/backend`·`black --check --line-length 100 . ../../tests/backend`(루트 pyproject 부재로 line-length 명시 필수). *data-pipeline CI는 `.`(src)만 린트*(tests 제외)지만 pytest·cov는 전체 적용.
+- **data-pipeline CI는 xlsx extra 없이 실행된다**(`.[dev]`만·openpyxl 없음) — xlsx 의존 테스트는 *맨몸 import 금지*, 반드시 `openpyxl = pytest.importorskip("openpyxl")`(형제 test_main_cli 동형). neo4j 의존도 동일(`pytest.importorskip("neo4j")`). xlsx 불요 테스트는 importorskip 모듈에 *얹지 말고* 별도 파일로 두어야 기본 잡에서 실행·커버된다(예 Phase 2c `test_load_cli.py`).
 
 ## 5. 다음 작업 순서 (각 슬라이스 4게이트+커밋, 미러 대상 명시)
 1. ✅ **Phase 2b — 원자 임베딩(pgvector)** (`5ca3bec`·완료) — 신규 `atom_embedding`(PK=code·vector(1024))·`l1/atom_graph/embedding.py`(입력=**name+transfer만**·`level=="세부개념"` 1,837·ON CONFLICT(code)·원문 비저장). hermetic 26 + 통합 gated. 마이그레이션 `f7a8b9c0d1e2`.
-2. **Phase 2c — Neo4j 원자 그래프 재적재**(MERGE 멱등) ← **다음**. **미러**: `data_pipeline/concept_graph/load.py`(NEO4J_* env·`.[neo4j]` extra).
-3. **Phase 3 — 4요소 승격 + 콘텐츠 4종 저작**: ①오개념→`misconception_catalog`·②진단문항→`problem`(+`problem_concept`·`distractor_map`)·③소크라테스→`problem_step.socratic_prompt`·④전이=이미 atom_node. 콘텐츠 4종(은유/정식정의[자체창작]/허용표현/암기카드)=개념/소개념 레벨·AI 생성+검수.
+2. ✅ **Phase 2c — Neo4j 원자 그래프 재적재**(`1484d32` 로더·`ed07620` CLI·완료) — 신규 `data_pipeline/atom_graph/load.py`(`concept_graph/load.py` 미러·지연 import·NEO4J_* env·드라이버 주입·멱등 MERGE) + CLI `load`. additive 스키마: `:Atom`/`code`/`atom_code_unique`/`:ATOM_PREREQUISITE`(구 `:Concept`/`:PREREQUISITE`와 라벨·토큰 분리). atomicity(dict)→결정론 JSON 문자열·parent_code=노드 속성·narrative raw 미적재. Fake 드라이버 단위(2,697/2,213/skip 0) + 실 neo4j:5 통합(@integration·importorskip·code 격리). CI 전용 `data-pipeline-neo4j` 잡이 실 적재 검증.
+3. **Phase 3 — 4요소 승격 + 콘텐츠 4종 저작** ← **다음**: ①오개념→`misconception_catalog`·②진단문항→`problem`(+`problem_concept`·`distractor_map`)·③소크라테스→`problem_step.socratic_prompt`·④전이=이미 atom_node. 콘텐츠 4종(은유/정식정의[자체창작]/허용표현/암기카드)=개념/소개념 레벨·AI 생성+검수.
 4. **Phase 4 — 문제 크로스워크**: 기존 문제의 *소단원/단원 매칭* + *성취기준 코드* 2중 다리로 `problem_concept`를 원자 code로 재연결(교차검증·검수 큐).
 5. **Phase 5 — 정리**: 구 `concept_graph_v1` 코퍼스·구 437 concept 폐기, 전 계층 통합테스트, `MEMORY.md`·`ROADMAP.md` 갱신.
 
