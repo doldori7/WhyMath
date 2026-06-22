@@ -15,6 +15,8 @@ mode="sync"). 클라우드 결정은 항상 동기라 비동기 큐(Celery)를 �
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import CostTier, RoutingDecision
 from whymath_backend.l3.providers.anthropic import AnthropicStatus
@@ -46,25 +48,33 @@ class CompositeProvider:
         prompt: str,
         system: str,
         decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
     ) -> str:
         """cost_tier로 로컬↔클라우드 디스패치 (LLMProvider 구현).
 
         - LOCAL → 로컬 제공자(Ollama)에 위임.
         - CLOUD_MID/CLOUD_HIGH → 클라우드 제공자(Anthropic)에 위임. cloud가 None이면
           명확한 RuntimeError(클라우드 결정이 왔으나 제공자 미구성 — 조용한 강등 금지).
+        - `images`(멀티모달)는 위임받는 제공자로 그대로 전달한다(비전은 LOCAL Qwen3-VL이
+          처리·클라우드 제공자는 images를 받으면 거부).
 
         반환 텍스트는 위임받은 제공자의 *검증 전 원시 출력*이다(각 제공자 docstring 경계 메모).
         """
         cost = _as_cost_tier(decision.cost_tier)
-        if cost is CostTier.LOCAL:
-            return await self._local.generate(prompt, system, decision)
-        if self._cloud is None:
+        # images는 *있을 때만* 위임 호출에 싣는다 — 텍스트 전용 하위 제공자(기존 구현·가짜)는
+        # images 인자 없이도 동작(하위호환). 멀티모달일 때만 images-수신 제공자로 전달된다.
+        target = self._local if cost is CostTier.LOCAL else self._cloud
+        if cost is not CostTier.LOCAL and target is None:
             raise RuntimeError(
                 f"클라우드 결정({cost.value})이 내려졌으나 클라우드 제공자가 미구성입니다 "
                 "(CompositeProvider(cloud=None)). 클라우드 라우팅을 쓰려면 cloud= 제공자를 "
                 "주입하세요(03a §H 후속 4)."
             )
-        return await self._cloud.generate(prompt, system, decision)
+        assert target is not None  # 위 가드로 보장(LOCAL은 항상 _local·CLOUD는 None 차단)
+        if images is not None:
+            return await target.generate(prompt, system, decision, images=images)
+        return await target.generate(prompt, system, decision)
 
     async def check_status(self) -> OllamaStatus:
         """로컬 제공자의 레디니스 보고 — /status 로컬 매핑 보존.

@@ -53,6 +53,8 @@ LOCAL_MODEL_MATRIX: Final[dict[tuple[ModelFamily, LocalModelTier], str]] = {
     (ModelFamily.MATH, LocalModelTier.MID): "qwen2-math:7b",
     (ModelFamily.GENERAL, LocalModelTier.FAST): "qwen2.5:3b",
     (ModelFamily.GENERAL, LocalModelTier.MID): "qwen2.5:7b",
+    # 멀티모달(VL) — Qwen3-VL 단일 모델(크기축 미세분). Phaiakes9 pull 태그에 맞춰 조정.
+    (ModelFamily.VISION, LocalModelTier.FAST): "qwen3-vl",
 }
 """로컬 모델 ID = (패밀리 축3 × 크기 축2) lookup. 출처: 03a §A.0 매트릭스.
 
@@ -238,14 +240,20 @@ def cache_key(
     cost_tier: CostTier,
     local_family: ModelFamily | None,
     local_model: LocalModelTier | None,
+    *,
+    image_digest: str | None = None,
 ) -> str:
-    """프롬프트+시스템+(세 축 합성 식별자) 기반 캐시 키 (03a §F.1).
+    """프롬프트+시스템+(세 축 합성 식별자)[+이미지 다이제스트] 기반 캐시 키 (03a §F.1).
 
     같은 프롬프트라도 *어느 티어·패밀리가 생성했는지*가 캐시 정체성의 일부다 —
     FAST 응답과 QUALITY 응답을, 그리고 MATH(qwen2-math) 응답과 GENERAL(qwen2.5)
     응답을 섞지 않는다(패밀리가 다르면 출력 특성·신뢰도가 다르므로, 03a §F.1).
     예: "local:general:fast"(qwen2.5:3b), "local:math:mid"(qwen2-math:7b),
     "cloud_mid:-:-". 학생 ID는 키에 포함하지 않는다(개인화는 컨텍스트로).
+
+    `image_digest`(멀티모달 입력 이미지의 해시)가 주어지면 키에 합성한다 — 같은
+    프롬프트라도 *이미지가 다르면 다른 캐시*(다른 크롭=다른 수식). **None(텍스트
+    호출)이면 키가 기존과 100% 동일**(하위호환·텍스트 캐시 무영향).
     """
     cost = _as_cost_tier(cost_tier)
     family = _as_model_family(local_family)
@@ -254,14 +262,23 @@ def cache_key(
     local_id = local.value if local is not None else "-"
     model_id = f"{cost.value}:{family_id}:{local_id}"
     content = f"{system}|||{prompt}|||{model_id}"
+    if image_digest is not None:
+        content = f"{content}|||img:{image_digest}"  # 이미지 있을 때만 부가(텍스트 키 불변)
     digest = hashlib.sha256(content.encode("utf-8")).hexdigest()
     return f"{CACHE_KEY_PREFIX}{digest}"
 
 
-def cache_key_for(prompt: str, system: str, decision: RoutingDecision) -> str:
-    """RoutingDecision으로부터 캐시 키 생성 — cache_key()의 편의 래퍼."""
+def cache_key_for(
+    prompt: str, system: str, decision: RoutingDecision, *, image_digest: str | None = None
+) -> str:
+    """RoutingDecision으로부터 캐시 키 생성 — cache_key()의 편의 래퍼(이미지 다이제스트 통과)."""
     return cache_key(
-        prompt, system, decision.cost_tier, decision.local_family, decision.local_model
+        prompt,
+        system,
+        decision.cost_tier,
+        decision.local_family,
+        decision.local_model,
+        image_digest=image_digest,
     )
 
 
@@ -372,6 +389,19 @@ class Router:
 
     def route(self, req: RoutingRequest) -> RoutingDecision:
         """라우팅 결정 — 축1(C.1) → [LOCAL이면] 축3(C.0) → 축2(C.2) (03a §C.4)."""
+        # 멀티모달(VL) 단축 경로 — 이미지 인식은 항상 LOCAL Qwen3-VL(VISION 패밀리)·FAST·동기.
+        # 수학/일반 텍스트 패밀리·크기 규칙을 건너뛴다(이미지 인식은 직교 축, 03a 확장).
+        # 미성년자 프라이버시·로컬-우선(CLAUDE.md 2026-05-28)이라 클라우드 비전 승급은 없다.
+        if req.requires_vision:
+            return RoutingDecision(
+                cost_tier=CostTier.LOCAL,
+                local_family=ModelFamily.VISION,
+                local_model=LocalModelTier.FAST,
+                mode="sync",
+                reason="local/vision/fast (multimodal)",
+                est_latency_ms=local_latency(LocalModelTier.FAST),
+                est_cost_krw=0.0,
+            )
         cost_tier = self._decide_cost_tier(req)
 
         # CLOUD 경로면 축3·축2 없음 — 불변식 2·4(03a §G)

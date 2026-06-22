@@ -60,6 +60,10 @@ class ModelFamily(str, Enum):
     GENERAL = "general"
     """qwen2.5 — NLP: 추출·정규화·매칭·분류. match 3b 100%·translate 7b 75% (03a §A.0)."""
 
+    VISION = "vision"
+    """qwen3-vl — 멀티모달(이미지+텍스트). 손글씨/인쇄 수식·그래프 인식(L5 OCR Phase C+).
+    `requires_vision=True` 요청만 이 패밀리로 라우팅된다(수학/일반 텍스트와 직교)."""
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # 축2: 로컬 모델 크기 (2026-05-19 벤치 라인업, CostTier.LOCAL일 때만 적용)
@@ -160,6 +164,13 @@ class RoutingRequest(BaseModel):
     call_site: CallSite | None = Field(
         default=None,
         description="5개 핵심 호출지점 식별 ①~⑤ (없으면 일반 호출, 03a §B.2)",
+    )
+    requires_vision: bool = Field(
+        default=False,
+        description=(
+            "멀티모달(이미지) 입력 필요 여부 — True면 LOCAL Qwen3-VL(VISION 패밀리)·FAST·동기로 "
+            "직행한다(수학/일반 텍스트 라우팅 규칙 무시). L5 OCR Qwen3-VL 인식기용(03a 확장)."
+        ),
     )
 
 

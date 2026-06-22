@@ -22,6 +22,8 @@
 
 from __future__ import annotations
 
+import hashlib
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from whymath_backend.config import get_settings
@@ -99,6 +101,18 @@ def _build_async_payload(prompt: str, system: str, decision: RoutingDecision) ->
     }
 
 
+def _image_digest(images: Sequence[str] | None) -> str | None:
+    """멀티모달 입력 이미지 목록의 안정적 다이제스트(SHA256) — 캐시 키 식별용(순수).
+
+    None/빈 목록이면 None(텍스트 호출 → 캐시 키 불변). 순서 포함 결합 후 해시하므로 같은
+    이미지 집합은 같은 다이제스트(같은 크롭 재인식은 캐시 적중)·다른 이미지는 다른 키.
+    """
+    if not images:
+        return None
+    joined = "\x1e".join(images)  # RS(레코드 구분자)로 결합 — base64에 없는 바이트
+    return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+
 async def generate(
     req: RoutingRequest,
     prompt: str,
@@ -112,6 +126,7 @@ async def generate(
     student_id_hash: str | None = None,
     validator: SeedValidator | None = None,
     skip_cache_on_signal: bool = False,
+    images: Sequence[str] | None = None,
 ) -> GenerationResult:
     """라우팅 → (비동기면 큐잉 / 동기면 캐시·생성) → 관측을 조립한다.
 
@@ -172,7 +187,9 @@ async def generate(
         )
 
     ttl = cache_ttl_s if cache_ttl_s is not None else get_settings().cache_ttl_s
-    key = cache_key_for(prompt, system, decision)
+    # 멀티모달 입력 이미지는 캐시 키에 다이제스트로 반영(같은 프롬프트라도 이미지 다르면 다른 캐시).
+    # images=None(텍스트 호출)이면 image_digest=None → 캐시 키가 기존과 100% 동일(하위호환).
+    key = cache_key_for(prompt, system, decision, image_digest=_image_digest(images))
 
     cached = await cache.get(key)
     if cached is not None:
@@ -181,7 +198,12 @@ async def generate(
         return GenerationResult(decision=decision, text=cached, cache_hit=True)
 
     # 캐시 미스 → 실제 생성(검증 전 원시 출력) → (shadow 검증) → 조건부 캐시 저장 → 기록.
-    output = await provider.generate(prompt, system, decision)
+    # images는 *있을 때만* 전달한다 — 텍스트 전용 제공자(기존 구현·테스트 가짜)는 images
+    # 인자가 없어도 그대로 동작(하위호환). 멀티모달 호출만 images-수신 제공자를 쓴다.
+    if images is not None:
+        output = await provider.generate(prompt, system, decision, images=images)
+    else:
+        output = await provider.generate(prompt, system, decision)
     # 런타임 shadow 검증(비차단·opt-in) — 거짓 수치 관계 등 환각 신호를 관측에 남긴다.
     # 캐시 적재 *전에* 검증해야 skip_cache_on_signal이 적재 여부를 결정할 수 있다.
     signal = validate_response(validator, output) if validator is not None else None

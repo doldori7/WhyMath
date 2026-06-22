@@ -14,6 +14,7 @@ bench_latency.py(`_OllamaClientProtocol` 경유 가짜 클라이언트 주입)�
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 
@@ -46,10 +47,11 @@ class _OllamaClient(Protocol):
         model: str,
         prompt: str,
         system: str,
+        images: Sequence[str] | None = None,
         options: dict[str, Any] | None = None,
         stream: bool = False,
     ) -> Any:
-        """단일 프롬프트 생성 (ollama generate API)."""
+        """단일 프롬프트 생성 (ollama generate API). `images`=멀티모달(VL) base64 목록."""
         ...
 
     async def list(self) -> Any:
@@ -206,12 +208,17 @@ class OllamaProvider:
         prompt: str,
         system: str,
         decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
     ) -> str:
         """라우터 결정에 따라 로컬 Ollama로 생성 (LLMProvider 구현).
 
         - CostTier.LOCAL이 아니면 즉시 거부(클라우드는 S5 범위 밖).
         - LOCAL FAST/MID/QUALITY는 resolve_model()로 실제 모델 ID를 얻어 호출한다
-          (QUALITY→qwen3.5:27b, 패밀리 무관; FAST/MID→매트릭스 lookup, 03a §A.0).
+          (QUALITY→qwen3.5:27b, 패밀리 무관; FAST/MID→매트릭스 lookup, 03a §A.0;
+          VISION/FAST→qwen3-vl 멀티모달).
+        - `images`(base64 목록)가 주어지면 ollama generate의 `images=`로 전달한다 —
+          VL 모델(qwen3-vl)이 이미지를 받는다. None이면 기존 텍스트 호출과 동일.
 
         주의: QUALITY(27b)의 *동기 디스패치 차단*은 파이프라인(pipeline.generate)의
         책임이다(03a §D.3). 제공자 자체는 모델 ID 해석·호출만 담당한다 —
@@ -228,14 +235,20 @@ class OllamaProvider:
 
         # (패밀리 × 크기) → 실제 Ollama 모델 ID. local_model이 None이면 resolve_model이
         # 명확히 오류를 던진다(불변식 1 위반은 RoutingDecision 검증에서 이미 차단됨).
+        # VISION/FAST는 매트릭스에서 qwen3-vl로 해석된다(텍스트 패밀리와 동일 경로).
         model_id = resolve_model(decision.local_family, decision.local_model)
 
-        response = await self._get_client().generate(
-            model=model_id,
-            prompt=prompt,
-            system=system,
-            stream=False,
-        )
+        # images는 *있을 때만* 전달한다 — 텍스트 전용 클라이언트(기존 가짜 시임)는 images
+        # 인자 없이도 동작(하위호환). 멀티모달(VL)일 때만 ollama generate의 images=로 싣는다.
+        client = self._get_client()
+        if images is not None:
+            response = await client.generate(
+                model=model_id, prompt=prompt, system=system, images=images, stream=False
+            )
+        else:
+            response = await client.generate(
+                model=model_id, prompt=prompt, system=system, stream=False
+            )
         return _extract_text(response)
 
     async def check_status(self) -> OllamaStatus:
