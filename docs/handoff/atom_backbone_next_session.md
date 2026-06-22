@@ -12,7 +12,13 @@
 - ✅ **Phase 1 (data-pipeline)** — `data_pipeline/atom_graph/`(extract→transform→validate→CLI) + 커밋된 코퍼스 `data/corpus/atom_graph_v1/graph.json`(노드 2,697 = 원자 1,837·단원 217·소단원 643 / 엣지 2,213 / 서술형 raw 1,007 / 대학 513)
 - ✅ **Phase 1 (backend)** — `l1/atom_graph/atom_backend_{concept,edge}.py`·`populate.py` → `concept`/`concept_edge` 적재 + 마이그레이션 `d5e6f7a8b9c0`(concept_edge.relation_subtype)
 - ✅ **Phase 2a** — `atom_node` 메타 프로젝션(`db/models/atom_node.py`·`l1/atom_graph/atom_node_projection.py`·마이그레이션 `e6f7a8b9c0d1`)
-- **alembic head(현재)**: `e6f7a8b9c0d1`
+- ✅ **대학 통합 U1~U4 완료** (2026-06-22, 사용자가 통합마스터 xlsx 업로드 → "대학만 지금 통합" 결정·플랜 `synchronous-crafting-squid`):
+  - **U1** (`d5fdcd8`) `data_pipeline/standards_university/` → `data/corpus/standards_university_v1/`(대학 성취기준 409·링크 409·자체작성·redaction 불요)
+  - **U2** (`2f40184`) `data_pipeline/atom_graph/university_standard_fill.py` → graph.json 대학 원자 513 `standard_codes` 채움(소단원→성취기준 1:1·멱등·K-12 무변경)
+  - **U3** (`0e4343b`) 대학 성취기준 backend 적재 검증(기존 범용 `standard_loader` 재사용·신규 코드 0·단위 hermetic+통합 gated). **주의**: atom concept `source_id` 미설정 → concept_standard_link 해석은 orphan skip(atom↔성취기준은 `atom.standard_codes`가 담당)
+  - **U4** (`39846a6`) `data_pipeline/concept_content_university/` → `data/corpus/concept_content_university_v1/`(대학 소단원 409 콘텐츠 4종+암기카드 409·자체작성·검수필요·**정식정의 학생비노출**·휘발 xlsx 보존). **DB 투영은 Phase 3**
+- **alembic head(현재)**: `e6f7a8b9c0d1` (U1~U4는 마이그레이션 무관 — data-pipeline + 기존 테이블 재사용)
+- **다음 작업**: **Phase 2b**(원자 임베딩 `atom_embedding`) — §5.1. 새 세션 권장(컨텍스트 위생).
 
 ## 2. locked 결정 (요약 — 상세는 MEMORY.md)
 ① 전면 교체·원자화 ② 크로스워크=문제 corpus만 ③ 4요소→정식 소스 승격 ④ 대학 513 포함+2015·2022 병행
@@ -50,7 +56,12 @@
 4. **Phase 4 — 문제 크로스워크**: 기존 문제의 *소단원/단원 매칭* + *성취기준 코드* 2중 다리로 `problem_concept`를 원자 code로 재연결(교차검증·검수 큐).
 5. **Phase 5 — 정리**: 구 `concept_graph_v1` 코퍼스·구 437 concept 폐기, 전 계층 통합테스트, `MEMORY.md`·`ROADMAP.md` 갱신.
 
-## 6. ⏳ 대학 성취기준 파일 (사용자 준비 중 — 받으면 별도 처리)
+## 6. ✅ 대학 성취기준 파일 (2026-06-22 수신·U1~U4 완료 — 아래는 원래 계획·이력)
+
+> **해결됨**: 사용자가 업로드한 파일은 §6 예상(대학 성취기준만)보다 넓은 *개념-레벨 통합마스터*
+> (구 437개념 + 대학 409소단원·콘텐츠4종)였다. 대학 코드 100% 원자DB 조인 확인 후 "대학만 지금
+> 통합"(K-12 콘텐츠는 Phase 3 437→원자 크로스워크로 분리). U1(standards 코퍼스)·U2(원자 연결성취기준
+> 채움)·U3(적재 검증)·U4(콘텐츠 캡처) 완료. 상세는 §1·MEMORY.md.
 - 파일: **`2022-2015개정_수학_성취기준_통합마스터.xlsx`**(대학 추가본).
 - **대학 단원/소단원은 이미 원자 DB에 존재**(코드까지: `CALC1-U1`·`CALC1-U1-S1` 등·32과목·단원 148·소단원 409). 사용자에게 *그 코드 재사용* 안내함(참조 CSV 전달 완료).
 - **진짜 빠진 건 대학 *성취기준***(대학 513 원자 `standard_codes` 전부 빈값).
