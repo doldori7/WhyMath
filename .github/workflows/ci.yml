@@ -36,6 +36,7 @@ jobs:
       backend: ${{ steps.filter.outputs.backend }}
       data_pipeline: ${{ steps.filter.outputs.data_pipeline }}
       mobile: ${{ steps.filter.outputs.mobile }}
+      web: ${{ steps.filter.outputs.web }}
     steps:
       - name: Checkout (merge commit + 부모 — PR diff용)
         uses: actions/checkout@v4
@@ -51,12 +52,13 @@ jobs:
             echo "backend=true" >> "$GITHUB_OUTPUT"
             echo "data_pipeline=true" >> "$GITHUB_OUTPUT"
             echo "mobile=true" >> "$GITHUB_OUTPUT"
+            echo "web=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # pull_request의 HEAD는 merge commit — ^1(=base tip) 대비 diff가 곧 PR 변경 전량.
           files=$(git diff --name-only HEAD^1 HEAD)
           printf '변경 파일:\n%s\n' "$files"
-          be=false; dp=false; mo=false
+          be=false; dp=false; mo=false; web=false
           if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
             be=true
           fi
@@ -66,9 +68,13 @@ jobs:
           if printf '%s\n' "$files" | grep -qE '^(src/mobile/|\.github/workflows/ci\.yml$)'; then
             mo=true
           fi
+          if printf '%s\n' "$files" | grep -qE '^(src/web/|\.github/workflows/ci\.yml$)'; then
+            web=true
+          fi
           echo "backend=$be" >> "$GITHUB_OUTPUT"
           echo "data_pipeline=$dp" >> "$GITHUB_OUTPUT"
           echo "mobile=$mo" >> "$GITHUB_OUTPUT"
+          echo "web=$web" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────────────────────────────
   # L1 데이터 파이프라인 (현재 유일하게 패키지화된 영역)
@@ -436,6 +442,44 @@ jobs:
 
       - name: Flutter test
         run: flutter test
+
+  # ─────────────────────────────────────────────────────────────────
+  # L5 웹 (그래프 계산기 — 격리 Vite + React SPA·국소 비상구)
+  # backend/mobile 잡을 미러링하되 Node 툴체인을 쓴다. 수학 코어(src/lib/**) 단위 테스트 +
+  # 스모크 렌더(Vitest·jsdom)와 정적 번들 빌드를 검증한다. 커버리지 게이트(70%+)는
+  # vitest.config.js가 src/lib/** 한정으로 강제한다(캔버스·three·DOM UI는 분모 제외).
+  # 산출물(node_modules·dist)은 커밋하지 않고(.gitignore) 여기서 npm ci로 생성·검증한다.
+  # ─────────────────────────────────────────────────────────────────
+  web:
+    name: web — graphing-calculator test·build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: changes
+    # doc-only/타 영역 PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.web == 'true'
+    defaults:
+      run:
+        working-directory: src/web/graphing-calculator
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: src/web/graphing-calculator/package-lock.json
+
+      - name: Install dependencies (npm ci — lockfile 고정)
+        run: npm ci
+
+      - name: Vitest (test + coverage — src/lib 70%+ 게이트)
+        run: npm run coverage
+
+      - name: Vite build (정적 번들 회귀)
+        run: npm run build
 
   # ─────────────────────────────────────────────────────────────────
   # infra 쉘 스크립트 syntax 검사 (Phaiakes9 운영 자산 회귀 방지)
