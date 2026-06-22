@@ -59,6 +59,7 @@ from whymath_backend.api._l3_state import (
     get_trace as _get_trace,
 )
 from whymath_backend.api._misconception_state import get_semantic_matcher
+from whymath_backend.api._ocr_state import set_ocr_components
 from whymath_backend.api.auth import (
     OAUTH_PROVIDERS_KEY as _OAUTH_PROVIDERS_KEY,
 )
@@ -74,6 +75,7 @@ from whymath_backend.api.devices import router as devices_router
 from whymath_backend.api.gating import router as gating_router
 from whymath_backend.api.me import router as me_router
 from whymath_backend.api.oauth_providers import build_oauth_providers
+from whymath_backend.api.ocr import router as ocr_router
 from whymath_backend.api.problems import router as problems_router
 from whymath_backend.api.scene import router as scene_router
 from whymath_backend.api.users import router as users_router
@@ -101,6 +103,7 @@ from whymath_backend.l3.providers.composite import CompositeProvider
 from whymath_backend.l3.providers.ollama import OllamaProvider, OllamaStatus
 from whymath_backend.l3.queue import CeleryJobQueue
 from whymath_backend.l3.trace import LangfuseSink
+from whymath_backend.l5.ocr.factory import build_ocr_components
 
 # 앱 state 의존 키 — provider/cache/trace/queue는 `api/_l3_state.py`로 추출(라우터 공유,
 # slice 96)해 위에서 별칭 import. validator/skip-cache는 /v1/generate 전용이라 여기 둔다.
@@ -275,6 +278,19 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
             )
         except Exception:
             logger.warning("오개념 의미 매처 웜업 실패 — 첫 요청 시 lazy 재시도", exc_info=True)
+    # L5 OCR: `ocr_enabled`면 부품(검출기·라우터·인식기)을 1회 구성해 app.state에 올린다(모델
+    # 1회 로드·매 요청 재구성 회피·세만틱 매처 웜업 미러). 부품 생성은 *지연 import*라 모델
+    # 다운로드·네트워크가 일어나지 않는다(첫 인식 시 적재). 실패해도 *학생 경로 게이트가 아니라*
+    # OCR 기능만 비활성(/v1/ocr → 503)이라 fail-fast시키지 않고 경고만 남긴다(부팅 보호·CLAUDE.md
+    # 가용성 우선 #1≫#6). off(기본)면 set_ocr_components(None)으로 비활성 표시(getter가 503).
+    if settings.ocr_enabled:
+        try:
+            set_ocr_components(_app, build_ocr_components(settings))
+        except Exception:
+            logger.warning("OCR 부품 구성 실패 — /v1/ocr 비활성(503)", exc_info=True)
+            set_ocr_components(_app, None)
+    else:
+        set_ocr_components(_app, None)
     try:
         yield
     finally:
@@ -326,7 +342,7 @@ def create_app(
     # 지연이라 구성만으로 네트워크 미발생. 테스트는 가짜 provider를 직접 주입한다.
     app.state.__setattr__(
         _OAUTH_PROVIDERS_KEY,
-        oauth_providers if oauth_providers is not None else build_oauth_providers(get_settings()),
+        (oauth_providers if oauth_providers is not None else build_oauth_providers(get_settings())),
     )
     # shadow 검증기 — Settings 게이트(l3_shadow_validation_enabled). 비활성이면 None이라
     # /v1/generate가 validator 없이 호출(검증 미실행). 비차단이라 둘 다 안전.
@@ -510,5 +526,6 @@ def create_app(
     app.include_router(gating_router)
     app.include_router(visualization_router)
     app.include_router(scene_router)
+    app.include_router(ocr_router)
 
     return app
