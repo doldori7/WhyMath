@@ -56,6 +56,12 @@ from whymath_backend.db.models.concept import (
     ConceptFusion,
     ProblemConcept,
 )
+from whymath_backend.db.models.concept_content import (
+    CONTENT_REVIEW_STATUS_AI_ESTIMATED,
+    CONTENT_SCOPE_K12,
+    CONTENT_SCOPE_UNIVERSITY,
+    ConceptContent,
+)
 from whymath_backend.db.models.concept_embedding import ConceptEmbedding
 from whymath_backend.db.models.concept_node import ConceptNode
 from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
@@ -161,6 +167,11 @@ __all__ = [
     "ConceptEmbedding",
     # 개념그래프 소비 슬1: ConceptNode (L1 개념 메타 PG 프로젝션·UC 키·검색 enrichment 백킹)
     "ConceptNode",
+    # 원자 Phase 3 Slice 1: ConceptContent (콘텐츠 4종 PG 프로젝션·code 키·K-12/대학·additive)
+    "ConceptContent",
+    "CONTENT_REVIEW_STATUS_AI_ESTIMATED",
+    "CONTENT_SCOPE_K12",
+    "CONTENT_SCOPE_UNIVERSITY",
     # 원자 마이그레이션 Phase 2a: AtomNode (L1 원자 메타 PG 프로젝션·code 키·검색 enrichment 백킹)
     "AtomNode",
     "ATOM_REVIEW_STATUS_AI_ESTIMATED",
