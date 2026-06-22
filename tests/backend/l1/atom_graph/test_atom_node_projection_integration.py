@@ -84,6 +84,7 @@ class TestAtomNodeProjectionLoad:
     def test_end_to_end_load_idempotent(self) -> None:
         codes = _skip_guard()
         from sqlalchemy import text
+        from sqlalchemy.exc import SQLAlchemyError
 
         try:
             records = load_atom_nodes_from_graph_json(_CORPUS)
@@ -140,16 +141,14 @@ class TestAtomNodeProjectionLoad:
 
                     # ③ review_status 전건 'ai_estimated'(원자 메타는 AI 추정).
                     statuses = conn.execute(
-                        text(
-                            "SELECT DISTINCT review_status FROM atom_node WHERE code = ANY(:k)"
-                        ),
+                        text("SELECT DISTINCT review_status FROM atom_node WHERE code = ANY(:k)"),
                         {"k": codes},
                     ).all()
                     assert [r.review_status for r in statuses] == ["ai_estimated"]
 
                     # ④ redaction — 본문 컬럼 부재(존재하면 SELECT가 성공·부재면 ProgrammingError).
                     for col in ("core_proposition", "description", "formal_definition"):
-                        with pytest.raises(Exception):
+                        with pytest.raises(SQLAlchemyError):
                             with engine.connect() as c2:  # type: ignore[attr-defined]
                                 c2.execute(
                                     text(f"SELECT {col} FROM atom_node LIMIT 1")  # noqa: S608

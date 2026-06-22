@@ -296,7 +296,8 @@ class TestRedaction:
             assert f not in fields, f"AtomNodeRecord에 redaction 필드 누출: {f}"
 
     def test_record_keeps_only_safe_meta(self) -> None:
-        # 안전 메타만 — 본문/④요소(misconception/diagnostic/socratic)는 없고, transfer·atomicity는 포함.
+        # 안전 메타만 — 본문/④요소(misconception/diagnostic/socratic)는 없고,
+        # transfer·atomicity는 포함.
         fields = set(AtomNodeRecord.__dataclass_fields__)
         assert fields == {
             "code",
@@ -352,8 +353,9 @@ class TestRedaction:
         store, engine = _fake_store()
         store.upsert(_record())
         compiled = _compile(engine.executed[0])
-        # 안전 컬럼 `misconception_type`이 `misconception` 부분문자열 검사를 오염시키므로 먼저 제거한다
-        # (안전 컬럼 자체는 별도 단언으로 존재 확인 — TestUpsertStatement). 그 뒤 redaction 필드 부재 단언.
+        # 안전 컬럼 `misconception_type`이 `misconception` 부분문자열 검사를 오염시키므로
+        # 먼저 제거한다(안전 컬럼 자체는 별도 단언으로 존재 확인 — TestUpsertStatement).
+        # 그 뒤 redaction 필드 부재 단언.
         sanitized = compiled.replace("misconception_type", "")
         for f in self.REDACTED_FIELDS:
             assert f not in sanitized, f"upsert SQL에 redaction 필드 누출: {f}"

@@ -185,7 +185,7 @@ class TestLoadFromGraphJson:
         loaded = load_atoms_from_graph_json(path)
         assert loaded == [AtomText(code=_CODE_A, text="기수 원리. 개수·양 판단의 핵심")]
 
-    def test_filters_only_세부개념_level(self, tmp_path: Path) -> None:
+    def test_filters_only_detail_concept_level(self, tmp_path: Path) -> None:
         # 단원/소단원 노드는 임베딩 대상이 아니다(level=="세부개념"만).
         path = self._write_graph(
             tmp_path,
@@ -240,7 +240,7 @@ class TestLoadFromGraphJson:
         loaded = load_atoms_from_graph_json(path)
         assert [a.code for a in loaded] == [_CODE_A]
 
-    def test_missing_code_on_세부개념_raises(self, tmp_path: Path) -> None:
+    def test_missing_code_on_detail_concept_raises(self, tmp_path: Path) -> None:
         import pytest
 
         path = self._write_graph(tmp_path, [{"level": "세부개념", "name": "code 없음"}])

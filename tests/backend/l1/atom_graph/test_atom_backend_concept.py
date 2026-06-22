@@ -81,11 +81,7 @@ class _FakeConnection:
     def execute(self, statement: object, parameters: object = None) -> _FakeResult:
         self._engine.executed.append(statement)
         compiled = _compile(statement)
-        if (
-            "SELECT" in compiled
-            and "concept.code" in compiled
-            and "INSERT" not in compiled
-        ):
+        if "SELECT" in compiled and "concept.code" in compiled and "INSERT" not in compiled:
             return _FakeResult(self._engine.code_rows)
         return _FakeResult([])
 
@@ -174,9 +170,7 @@ class TestLoadFromGraphJson:
         assert rec.level == ConceptLevel.세부개념
         assert rec.parent_code == _SUBUNIT
         assert rec.intrinsic_difficulty == 3.0
-        assert (
-            rec.subject is None
-        )  # "수와 연산"은 Subject enum 미대응 → None(억지 매핑 금지)
+        assert rec.subject is None  # "수와 연산"은 Subject enum 미대응 → None(억지 매핑 금지)
 
     def test_all_three_levels(self, tmp_path: Path) -> None:
         path = self._write(

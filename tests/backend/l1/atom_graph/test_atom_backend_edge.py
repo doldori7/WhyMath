@@ -75,11 +75,7 @@ class _FakeConnection:
     def execute(self, statement: object, parameters: object = None) -> _FakeResult:
         self._engine.executed.append(statement)
         compiled = _compile(statement)
-        if (
-            "SELECT" in compiled
-            and "concept.code" in compiled
-            and "INSERT" not in compiled
-        ):
+        if "SELECT" in compiled and "concept.code" in compiled and "INSERT" not in compiled:
             return _FakeResult(self._engine.code_rows)
         return _FakeResult([])
 
@@ -88,9 +84,7 @@ class _FakeEngine:
     def __init__(self, code_rows: list[object] | None = None) -> None:
         self.executed: list[object] = []
         self.code_rows: list[object] = (
-            code_rows
-            if code_rows is not None
-            else [_Row(_PRE, _UUID_PRE), _Row(_POST, _UUID_POST)]
+            code_rows if code_rows is not None else [_Row(_PRE, _UUID_PRE), _Row(_POST, _UUID_POST)]
         )
 
     def begin(self) -> _FakeConnection:

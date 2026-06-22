@@ -4,7 +4,8 @@
 `AtomEmbeddingIndex` upsert/search를 라운드트립한다. CI `backend — 마이그레이션·통합(실 PG)` 잡이
 `pgvector/pgvector:pg16` 서비스 + `alembic upgrade head` 후 `WHYMATH_RUN_INTEGRATION=1`로 실행한다
 (기존 잡이 `pytest -m integration`으로 이 파일을 수집한다). PG/pgvector 미도달 시 graceful skip
-(`test_concept_embedding_integration.py` 미러). 단위 경로(`test_atom_embedding.py`)는 PG 없이 hermetic.
+(`test_concept_embedding_integration.py` 미러). 단위 경로(`test_atom_embedding.py`)는
+PG 없이 hermetic.
 
 검증:
   ① upsert→search 라운드트립(코사인 순위·similarity 값·근접 항목 상위·code 키 반환)

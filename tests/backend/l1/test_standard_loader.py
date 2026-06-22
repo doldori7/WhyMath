@@ -193,9 +193,7 @@ class _FakeEngine:
         self.executed: list[object] = []
         # norm_id 존재 조회가 돌려줄 행. 기본: A·B 둘 다 적재됨(성취기준 orphan 아님).
         self.norm_rows: list[object] = (
-            norm_rows
-            if norm_rows is not None
-            else [_NormRow(_NORM_A), _NormRow(_NORM_B)]
+            norm_rows if norm_rows is not None else [_NormRow(_NORM_A), _NormRow(_NORM_B)]
         )
         # src_id→code 조회가 돌려줄 행(P2b). 기본: _SRC_ID→_CODE 1건(개념 해석됨·orphan 아님).
         self.concept_rows: list[object] = (
@@ -235,9 +233,7 @@ class TestCollectionParsing:
     def test_standards_from_dict_collection(self) -> None:
         # 단일 Collection dict(jsonl 아님)의 standards 배열을 적재한다.
         store, engine = _std_store()
-        count = load_standards(
-            None, _standards_collection([_standard_row()]), store=store
-        )
+        count = load_standards(None, _standards_collection([_standard_row()]), store=store)
         assert count == 1
         assert len(engine.executed) == 1  # 행당 1 upsert
 
@@ -283,9 +279,7 @@ class TestCollectionParsing:
 # ──────────────────────────────────────────────────────────────────────────
 def _link_inserts(engine: _FakeEngine) -> list[object]:
     """link upsert INSERT statement만 추린다(SELECT 2종 사이에서 위치 무관 — 위치 의존 제거)."""
-    return [
-        s for s in engine.executed if "INSERT INTO concept_standard_link" in _compile(s)
-    ]
+    return [s for s in engine.executed if "INSERT INTO concept_standard_link" in _compile(s)]
 
 
 class TestRenameSeam:
@@ -293,9 +287,7 @@ class TestRenameSeam:
         # 코퍼스 `code`가 official_code 컬럼으로 적재되고,
         # `code` 컬럼은 없다(개념 code와 혼동 회피).
         store, engine = _std_store()
-        load_standards(
-            None, _standards_collection([_standard_row(code=_CODE_AB)]), store=store
-        )
+        load_standards(None, _standards_collection([_standard_row(code=_CODE_AB)]), store=store)
         sql = _compile(engine.executed[0])
         assert "official_code" in sql
         # achievement_standard엔 'code' 컬럼이 없으므로 INSERT 컬럼 목록에도 없다.
@@ -306,9 +298,7 @@ class TestRenameSeam:
         # P2b 핵심: 코퍼스 `concept_src_id`(src_id)가 `{source_id: code}` 맵으로 *해석*돼 새 code가
         # concept_code 컬럼에 실린다(store-direct 아님 — src_id 자체가 아니라 해석된 code).
         store, engine = _link_store()
-        load_links(
-            None, _links_collection([_link_row(concept_src_id=_SRC_ID)]), store=store
-        )
+        load_links(None, _links_collection([_link_row(concept_src_id=_SRC_ID)]), store=store)
         inserts = _link_inserts(engine)
         assert len(inserts) == 1
         insert_sql = _compile(inserts[0])
@@ -321,9 +311,7 @@ class TestRenameSeam:
     def test_official_code_value_preserved(self) -> None:
         # rename은 *키만* 바꾼다 — 값(고시 원문코드)은 그대로 적재된다.
         store, engine = _std_store()
-        load_standards(
-            None, _standards_collection([_standard_row(code=_CODE_AB)]), store=store
-        )
+        load_standards(None, _standards_collection([_standard_row(code=_CODE_AB)]), store=store)
         # 컴파일된 statement의 바인딩 파라미터에 official_code 값이 실린다.
         params = engine.executed[0].compile(dialect=_pg_dialect()).params  # type: ignore[attr-defined]
         assert _CODE_AB in params.values()
@@ -395,11 +383,7 @@ class TestStandardUpsert:
         collection = _standards_collection([_standard_row()])
         load_standards(None, collection, store=store)
         load_standards(None, collection, store=store)
-        inserts = [
-            s
-            for s in engine.executed
-            if "INSERT INTO achievement_standard" in _compile(s)
-        ]
+        inserts = [s for s in engine.executed if "INSERT INTO achievement_standard" in _compile(s)]
         assert len(inserts) == 2
         for stmt in inserts:
             assert "ON CONFLICT" in _compile(stmt)
@@ -462,17 +446,14 @@ class TestLinkUpsert:
         selects = [
             s
             for s in engine.executed
-            if "achievement_standard.norm_id" in _compile(s)
-            and "INSERT" not in _compile(s)
+            if "achievement_standard.norm_id" in _compile(s) and "INSERT" not in _compile(s)
         ]
         assert len(selects) == 1
 
     def test_orphan_norm_id_skipped(self) -> None:
         # 성취기준 orphan: 실 FK norm_id가 적재 집합에 없으면 그 링크는 FK 위반 방지로 skip.
         store, engine = _link_store()
-        loaded = load_links(
-            None, _links_collection([_link_row(norm_id=_NORM_ORPHAN)]), store=store
-        )
+        loaded = load_links(None, _links_collection([_link_row(norm_id=_NORM_ORPHAN)]), store=store)
         assert loaded == 0
         # 해석·norm_id 조회는 돌되 INSERT는 없다.
         assert _link_inserts(engine) == []

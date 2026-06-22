@@ -8,11 +8,13 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import openpyxl
 import pytest
-from typer.testing import CliRunner
 
-from data_pipeline.atom_graph.__main__ import app
+openpyxl = pytest.importorskip("openpyxl")
+
+from typer.testing import CliRunner  # noqa: E402
+
+from data_pipeline.atom_graph.__main__ import app  # noqa: E402
 
 runner = CliRunner()
 

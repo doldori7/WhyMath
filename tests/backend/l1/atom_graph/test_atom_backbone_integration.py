@@ -57,9 +57,7 @@ def _reachable() -> bool:
 
 def _skip_guard() -> list[str]:
     if not _reachable():
-        pytest.skip(
-            "PG 미도달 또는 마이그레이션 미적용(relation_subtype) — 통합 건너뜀"
-        )
+        pytest.skip("PG 미도달 또는 마이그레이션 미적용(relation_subtype) — 통합 건너뜀")
     if not _CORPUS.exists():
         pytest.skip("원자 코퍼스 미존재(data/corpus/atom_graph_v1/graph.json)")
     payload = json.loads(_CORPUS.read_text(encoding="utf-8"))

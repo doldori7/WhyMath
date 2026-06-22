@@ -68,11 +68,7 @@ class _FakeConnection:
     def execute(self, statement: object, parameters: object = None) -> _FakeResult:
         self._engine.executed.append(statement)
         compiled = str(statement.compile(dialect=_pg_dialect()))  # type: ignore[attr-defined]
-        if (
-            "SELECT" in compiled
-            and "concept.code" in compiled
-            and "INSERT" not in compiled
-        ):
+        if "SELECT" in compiled and "concept.code" in compiled and "INSERT" not in compiled:
             return _FakeResult(self._engine.code_rows)
         return _FakeResult([])
 
@@ -157,9 +153,7 @@ def test_populate_atom_backbone_orphan_edge(tmp_path: Path) -> None:
         },
     ]
     path = tmp_path / "graph.json"
-    path.write_text(
-        json.dumps({"concepts": concepts, "edges": edges}), encoding="utf-8"
-    )
+    path.write_text(json.dumps({"concepts": concepts, "edges": edges}), encoding="utf-8")
 
     class _OneRowEngine(_FakeEngine):
         def __init__(self) -> None:

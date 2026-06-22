@@ -250,12 +250,8 @@ class TestStandardRoundtrip:
                 None,
                 _standards_collection(
                     [
-                        _standard_row(
-                            _NORM_A, _CODE_AB, curriculum_revision="2022 개정"
-                        ),
-                        _standard_row(
-                            _NORM_B, _CODE_AB, curriculum_revision="2015 개정"
-                        ),
+                        _standard_row(_NORM_A, _CODE_AB, curriculum_revision="2022 개정"),
+                        _standard_row(_NORM_B, _CODE_AB, curriculum_revision="2015 개정"),
                     ]
                 ),
                 settings=Settings(),
@@ -341,9 +337,7 @@ class TestLinkRoundtrip:
             )
             count = load_links(
                 None,
-                _links_collection(
-                    [_link_row(_SRC_ID, _NORM_A, note="개념이 곧장 다룸")]
-                ),
+                _links_collection([_link_row(_SRC_ID, _NORM_A, note="개념이 곧장 다룸")]),
                 settings=Settings(),
             )
             assert count == 1
@@ -436,9 +430,7 @@ class TestLinkRoundtrip:
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     first_link_id = conn.execute(
-                        text(
-                            "SELECT link_id FROM concept_standard_link WHERE norm_id = :n"
-                        ),
+                        text("SELECT link_id FROM concept_standard_link WHERE norm_id = :n"),
                         {"n": _NORM_A},
                     ).scalar_one()
                 # 재적재(note 변경) → 멱등·link_id 보존.
@@ -450,8 +442,7 @@ class TestLinkRoundtrip:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     rows = conn.execute(
                         text(
-                            "SELECT link_id, note FROM concept_standard_link "
-                            "WHERE norm_id = :n"
+                            "SELECT link_id, note FROM concept_standard_link " "WHERE norm_id = :n"
                         ),
                         {"n": _NORM_A},
                     ).all()
@@ -502,12 +493,8 @@ class TestLinkRoundtrip:
                 ]
             )
             assert loaded == 1  # 유효 1(개념·성취기준 둘 다 해석)
-            assert any(
-                "orphan" in m and "성취기준" in m for m in skipped
-            )  # 성취기준 orphan 보고
-            assert any(
-                "orphan" in m and "개념" in m for m in skipped
-            )  # 개념 orphan 보고
+            assert any("orphan" in m and "성취기준" in m for m in skipped)  # 성취기준 orphan 보고
+            assert any("orphan" in m and "개념" in m for m in skipped)  # 개념 orphan 보고
         finally:
             _cleanup(norm_ids + [_NORM_ORPHAN])
             _cleanup_concepts([_CODE])
@@ -543,8 +530,7 @@ class TestRealCorpusLoad:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     total = conn.execute(
                         text(
-                            "SELECT count(*) FROM achievement_standard "
-                            "WHERE norm_id = ANY(:ids)"
+                            "SELECT count(*) FROM achievement_standard " "WHERE norm_id = ANY(:ids)"
                         ),
                         {"ids": norm_ids},
                     ).scalar_one()
@@ -573,9 +559,7 @@ class TestUniversityCorpusLoad:
 
         corpus = Path("data/corpus/standards_university_v1/standards.json")
         if not corpus.exists():
-            pytest.skip(
-                "대학 코퍼스 미존재(data/corpus/standards_university_v1/standards.json)"
-            )
+            pytest.skip("대학 코퍼스 미존재(data/corpus/standards_university_v1/standards.json)")
         payload = json.loads(corpus.read_text(encoding="utf-8"))
         norm_ids = [str(s["norm_id"]) for s in payload["standards"]]
         try:
@@ -587,9 +571,7 @@ class TestUniversityCorpusLoad:
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     total = conn.execute(
-                        text(
-                            "SELECT count(*) FROM achievement_standard WHERE norm_id = ANY(:ids)"
-                        ),
+                        text("SELECT count(*) FROM achievement_standard WHERE norm_id = ANY(:ids)"),
                         {"ids": norm_ids},
                     ).scalar_one()
                     univ = conn.execute(
