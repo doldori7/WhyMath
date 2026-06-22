@@ -8,6 +8,7 @@ hermetic 검증(test_scene_endpoint 미러).
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -17,6 +18,7 @@ from whymath_backend.api._auth import get_consented_user
 from whymath_backend.api._ocr_state import get_ocr_components
 from whymath_backend.app import create_app
 from whymath_backend.db.models.user import UserProfile
+from whymath_backend.db.session import get_session
 from whymath_backend.l3.models import RoutingDecision
 from whymath_backend.schema.enums import ContentType, Persona
 from whymath_backend.schema.ocr import BBox, OcrRegion, OcrResult
@@ -35,6 +37,15 @@ class _StubProvider:
 
 class _FakeComponents:
     """get_ocr_components 오버라이드용 — 파이프라인 monkeypatch라 내용 무관."""
+
+
+class _FakeSession:
+    """get_session 오버라이드용 빈 스텁 — 401 경로는 세션 사용 전 인증 거부라 충분."""
+
+
+async def _fake_session() -> AsyncIterator[_FakeSession]:
+    """실 get_session(→ get_engine) 대신 주입 — 전역 _engine 생성을 막아 테스트 격리 보존."""
+    yield _FakeSession()
 
 
 def _user() -> UserProfile:
@@ -70,6 +81,10 @@ def _client(*, authed: bool = True, components_loaded: bool = True) -> TestClien
         app.dependency_overrides[get_consented_user] = _user
     if components_loaded:
         app.dependency_overrides[get_ocr_components] = _FakeComponents
+    # 인증 미오버라이드(401) 경로에서도 실 get_session(→ get_engine)이 돌지 않도록 가짜 세션 주입.
+    # 전역 db.session._engine 오염을 막아 뒤 순서의 db lazy-import 테스트가 깨지지 않게 한다
+    # (다른 hermetic api 테스트와 동일 규약).
+    app.dependency_overrides[get_session] = _fake_session
     return TestClient(app)
 
 
