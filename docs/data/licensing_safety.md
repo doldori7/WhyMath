@@ -60,6 +60,20 @@
 
 *전체 21종 카탈로그·레코드 수·등급: `docs/data/dataset_catalog_v4.md`.*
 
+## L5 OCR (검출·인식 모델)
+
+모두 *공개 오픈소스·로컬 ONNX*만 사용한다(미성년자 프라이버시·외부 OCR 미사용, 2026-05-28 결정). **상용 SaaS이므로 AGPL-3.0 모델은 금지**(네트워크 §13 소스공개 의무 — 결정 우선순위 #2).
+
+| 자원 | 라이선스 | 상업 OK | 용도 | 비고 |
+|---|---|---|---|---|
+| rapidocr-onnxruntime | Apache 2.0 | ✅ | 텍스트 검출·한국어 인식 (Phase A) | PaddleOCR PP-OCR ONNX 포팅 |
+| rapid-latex-ocr | Apache 2.0 | ✅ | 수식→LaTeX 경량 인식 (Phase A) | LaTeX-OCR ONNX |
+| **rapid-layout (PP 계열)** | Apache 2.0 | ✅ | **MFD 수식 영역 검출 (Phase B)** | PP-StructureV2 CDLA('Equation')·PP-DocLayout('formula') PicoDet·순수 ONNX·torch 불요 |
+| **ultralytics (YOLOv8 / DocLayout-YOLO)** | **AGPL-3.0** | ❌ | (MFD 대안 — 미사용) | **금지** — 코드에서 model_type 거부(`MfdDetector`). rapid-layout PP로 대체 |
+| TexTeller / Qwen3-VL | Apache 2.0 계열 | ✅ | 고정밀 수식·멀티모달 (Phase C 좌석) | transformers·로컬 |
+
+> MFD(수식 영역 검출)는 **rapid-layout PP 계열(Apache-2.0)**로만 구현한다. rapid-layout가 함께 번들하는 ultralytics 기반 모델 타입(`yolov8*`/`doclayout*`)은 AGPL이라 `MfdDetector.__init__`이 `RuntimeError`로 거부하고, `Settings.ocr_mfd_model_type` Literal도 PP 계열만 허용한다(이중 차단).
+
 ## 사용자 데이터
 
 | 종류 | 활용 가능 | 조건 |

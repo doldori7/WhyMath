@@ -67,10 +67,17 @@ ocr = [
     "pillow>=10.0.0",
     "numpy>=1.26.0",
 ]
-# L5 OCR(Phase B/C) — 무거운 백엔드(torch 수 GB). TexTeller·MFD(YOLO·ultralytics)·Qwen3-VL
-# (transformers). Phase A 미사용(스텁 좌석)이라 분리한다. 실제 모델 배선은 후속 슬라이스.
+# L5 OCR(Phase B) — MFD(수식 영역 검출). rapid-layout는 RapidAI의 레이아웃 분석으로
+# **Apache-2.0**·순수 ONNXRuntime(torch/ultralytics 불요)다. PP 계열 모델만 쓴다 —
+# ultralytics 기반(yolov8*/doclayout*)은 AGPL-3.0이라 코드에서 거부한다(결정 우선순위 #2).
+# lazy import라 미설치 CI에서도 green. 설치: `pip install -e ".[dev,ocr,ocr-layout]"`.
+ocr-layout = [
+    "rapid-layout>=1.2.0",
+]
+# L5 OCR(Phase C) — 무거운 백엔드(torch 수 GB). TexTeller·Qwen3-VL(transformers). Phase A/B
+# 미사용(스텁 좌석)이라 분리한다. 실제 모델 배선은 후속 슬라이스. ultralytics(AGPL)는
+# 제외한다 — MFD는 rapid-layout(Apache-2.0)으로 대체했다(우선순위 #2 법적 준수).
 ocr-heavy = [
-    "ultralytics>=8.0.0",
     "transformers>=4.40.0",
     "torch>=2.0.0",
 ]
