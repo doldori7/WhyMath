@@ -23,7 +23,7 @@ from typing import Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from whymath_backend.l5.ocr.detect import DetectedRegion
+from whymath_backend.l5.ocr.detect import DetectedRegion, _MathDetectedRegion
 from whymath_backend.schema.enums import ContentType
 from whymath_backend.schema.ocr import BBox
 
@@ -106,20 +106,38 @@ class HeuristicRouter:
 
 
 class MfdRouter:
-    """MFD 기반 라우터 좌석 — **Phase B 스텁**(텍스트 박스 ↔ MFD 수식 박스 IoU 병합).
+    """MFD 기반 라우터 (Phase B·동작) — 텍스트 라인 박스 ↔ MFD 수식 박스 병합.
 
-    Phase B에서 MFD(수식 영역 검출·YOLO)가 *별도로* 수식 박스를 주면, 텍스트 검출 박스와
-    `merge_text_and_math_regions`로 병합한다(수식 좌표 우선·중복 텍스트 제거). Phase A에서는
-    배선되지 않으므로 호출 시 명확한 NotImplementedError를 던진다(조용한 통과 금지).
+    `MfdDetector`가 *텍스트 라인 박스*(`DetectedRegion`)와 *수식 영역 박스*
+    (`_MathDetectedRegion`)를 함께 준다. `route`는 둘을 `isinstance`로 가른 뒤 순수 함수
+    `merge_text_and_math_regions`로 병합한다 — **수식 박스 좌표가 이기고**, 수식 박스에 ≥50%
+    들어간 텍스트 라인(수식이 텍스트로도 검출된 중복)은 버리며, 겹치지 않는 텍스트만 텍스트로
+    남긴다. 분류(휴리스틱)는 하지 않는다 — 유형은 검출 단계가 이미 정했다(수식=MFD, 그 외=텍스트).
     """
 
     def route(self, regions: list[DetectedRegion]) -> list[RoutedRegion]:
-        """Phase B 미구현 — MFD 수식 박스 병합 라우팅은 후속 슬라이스에서 배선한다."""
-        raise NotImplementedError(
-            "MfdRouter(MFD 수식 박스 IoU 병합)는 Phase B에서 배선합니다 — "
-            "현재는 HeuristicRouter를 씁니다(Phase A). 병합 코어는 "
-            "`merge_text_and_math_regions`로 이미 순수 함수로 추출되어 있습니다."
-        )
+        """검출 영역을 수식(`_MathDetectedRegion`)/텍스트로 가른 뒤 순수 병합으로 라우팅."""
+        math_boxes = [
+            RoutedRegion(
+                bbox=region.bbox,
+                content_type=ContentType.수식,
+                confidence=region.confidence,
+                text_hint=region.text_hint,
+            )
+            for region in regions
+            if isinstance(region, _MathDetectedRegion)
+        ]
+        text_boxes = [
+            RoutedRegion(
+                bbox=region.bbox,
+                content_type=ContentType.텍스트,
+                confidence=region.confidence,
+                text_hint=region.text_hint,
+            )
+            for region in regions
+            if not isinstance(region, _MathDetectedRegion)
+        ]
+        return merge_text_and_math_regions(text_boxes, math_boxes)
 
 
 # ──────────────────────────────────────────────────────────────────────────
