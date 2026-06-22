@@ -10,16 +10,20 @@
 
 백엔드:
   - `RapidLatexRecognizer`(Phase A·현재 동작) — rapid_latex_ocr로 수식 크롭 → LaTeX.
-  - `TexTellerRecognizer`(Phase B 스텁) — TexTeller(transformers) 좌석·NotImplementedError.
-  - `QwenVlRecognizer`(Phase C 스텁) — 멀티모달 VLM 인식. **반드시 L3 라우터 경유**
-    (`l3.pipeline.generate` — Ollama 직접 호출 금지·CLAUDE.md). 현재 NotImplementedError이되
-    L3 호출 형태를 docstring·시그니처로 박아 둔다(Phase C에서 본문만 채운다).
-  - `PaddleTextRecognizer`(Phase A·현재 동작) — rapidocr 한글 모델로 텍스트 영역 인식.
+  - `TexTellerRecognizer`(Phase C·동작) — TexTeller(transformers VisionEncoderDecoder) 고정밀
+    수식 인식. transformers·torch 지연 import(`[ocr-heavy]`)·미설치 시 RuntimeError. 라이브
+    모델(`OleehyO/TexTeller`·약 1.2GB)은 Phaiakes9에서 검증(CI는 가짜 엔진 주입·hermetic).
+  - `QwenVlRecognizer`(보류) — 멀티모달 VLM. **L3 라우터 경유 필수**이나 현 L3 provider 계약
+    (`LLMProvider.generate(prompt, system, decision)`)이 텍스트 전용이라 멀티모달 인터페이스
+    확장이 선행돼야 함 → 별도 슬라이스로 보류(현재 NotImplementedError·호출 형태만 docstring).
+  - `PaddleTextRecognizer`(Phase A·Phase C 한국어 wiring) — rapidocr로 텍스트 영역 인식.
+    `language=korean`+`model_dir`이면 한국어 PP-OCRv4 rec 모델·사전을 rapidocr에 주입한다.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -127,18 +131,55 @@ class RapidLatexRecognizer(_BaseMathRecognizer):
 
 
 class TexTellerRecognizer(_BaseMathRecognizer):
-    """TexTeller(transformers) 수식 인식기 좌석 — **Phase B 스텁**(인터페이스만·모델 미배선).
+    """TexTeller(transformers VisionEncoderDecoder) 고정밀 수식 인식기 (Phase C·동작).
 
-    Phase B에서 TexTeller(transformers·torch)를 결선해 rapid_latex_ocr보다 강건한 손글씨
-    수식 인식을 제공한다. Phase A에서는 호출 시 명확한 NotImplementedError(조용한 통과 금지).
+    rapid_latex_ocr(경량 ONNX)보다 강건한 손글씨/복잡 수식 인식을 제공한다(2D 분수·적분·
+    행렬). 무거운 의존(transformers·torch·PIL)은 *지연 import*다 — `[ocr-heavy]` 미설치면
+    조용한 폴백 없이 명확한 RuntimeError. 라이브 모델(`OleehyO/TexTeller`·약 1.2GB)은
+    Phaiakes9에서 검증한다(CI는 가짜 엔진 주입으로 hermetic — 실 모델 미로드).
+
+    `engine`을 주입하면 실 모델 대신 그 콜러블(crop→LaTeX str)을 쓴다(테스트·대체 백엔드).
     """
 
+    def __init__(self, *, model_name: str = "OleehyO/TexTeller", engine: Any = None) -> None:
+        """TexTeller 구성 — `model_name`은 HF 모델 ID, `engine`은 테스트용 주입 콜러블."""
+        self._model_name = model_name
+        self._engine = engine
+
+    def _ensure_engine(self) -> Any:
+        """transformers VisionEncoderDecoder 엔진을 1회 지연 생성·재사용. 미설치면 RuntimeError.
+
+        엔진은 `crop(numpy/PIL) → LaTeX str` 콜러블이다. 실제 모델 적재·생성은 Phaiakes9에서
+        검증하며, 여기서는 표준 VisionEncoderDecoder + 이미지 프로세서 흐름으로 구성한다.
+        """
+        if self._engine is not None:
+            return self._engine
+        try:
+            import torch  # 지연 import — 기본 경로 미로드
+            from PIL import Image
+            from transformers import AutoImageProcessor, VisionEncoderDecoderModel
+        except ImportError as exc:  # 조용한 폴백 금지 — 명확히 보고
+            raise RuntimeError(
+                "TexTellerRecognizer에는 transformers·torch가 필요합니다 — "
+                '`pip install -e ".[ocr-heavy]"`로 설치하세요(조용한 폴백 없음).'
+            ) from exc
+        model = VisionEncoderDecoderModel.from_pretrained(self._model_name)
+        processor = AutoImageProcessor.from_pretrained(self._model_name)
+
+        def _run(crop: Any) -> str:
+            image = crop if isinstance(crop, Image.Image) else Image.fromarray(crop)
+            pixel_values = processor(images=image, return_tensors="pt").pixel_values
+            with torch.no_grad():
+                generated = model.generate(pixel_values, max_new_tokens=512)
+            return str(processor.batch_decode(generated, skip_special_tokens=True)[0])
+
+        self._engine = _run
+        return self._engine
+
     def _recognize_crop(self, crop: Any) -> str:
-        """Phase B 미구현 — TexTeller(transformers) 수식 인식은 후속 슬라이스에서 배선한다."""
-        raise NotImplementedError(
-            "TexTellerRecognizer(transformers TexTeller)는 Phase B에서 배선합니다 — "
-            "현재는 RapidLatexRecognizer를 씁니다(Phase A)."
-        )
+        """수식 크롭 → LaTeX(TexTeller). 엔진 콜러블에 위임(지연 로드·주입 가능)."""
+        result = self._ensure_engine()(crop)
+        return str(result) if result is not None else ""
 
 
 class QwenVlRecognizer(_BaseMathRecognizer):
@@ -218,9 +259,15 @@ class PaddleTextRecognizer:
     *지연 import*이며 미설치면 명확한 RuntimeError.
     """
 
-    def __init__(self, *, language: str = "korean") -> None:
-        """텍스트 인식기 구성 — `language`는 rapidocr 언어(기본 한국어·`ocr_language`)."""
+    def __init__(self, *, language: str = "korean", model_dir: str = "") -> None:
+        """텍스트 인식기 구성 — `language`(rapidocr 언어)·`model_dir`(한국어 모델 디렉토리).
+
+        `language`가 한국어(korean/ko)이고 `model_dir`이 주어지면 한국어 PP-OCRv4 rec 모델·
+        사전을 rapidocr에 주입한다(검출·방향분류는 언어 무관이라 기본 모델 유지). 빈 model_dir
+        이면 rapidocr 기본 모델(중영)을 쓴다(한국어 미설정·정직히 기본 동작).
+        """
         self._language = language
+        self._model_dir = model_dir
         self._engine: Any = None
 
     def _ensure_engine(self) -> Any:
@@ -234,7 +281,8 @@ class PaddleTextRecognizer:
                 "PaddleTextRecognizer에는 rapidocr_onnxruntime가 필요합니다 — "
                 '`pip install -e ".[ocr]"`로 설치하세요(조용한 폴백 없음).'
             ) from exc
-        self._engine = RapidOCR()
+        # 한국어(korean/ko)+model_dir이면 한국어 rec 모델·사전 주입·아니면 기본 모델.
+        self._engine = RapidOCR(**_rapidocr_rec_kwargs(self._language, self._model_dir))
         return self._engine
 
     def recognize(self, region: RoutedRegion, image: Any) -> RecognizedRegion:
@@ -257,6 +305,23 @@ class PaddleTextRecognizer:
             latex=text.strip(),
             confidence=region.confidence if text else 0.0,
         )
+
+
+def _rapidocr_rec_kwargs(language: str, model_dir: str) -> dict[str, str]:
+    """언어·모델 디렉토리로 rapidocr 한국어 *인식(rec)* 모델 kwargs를 구성(순수 계산).
+
+    한국어(`korean`/`ko`)이면서 `model_dir`이 있으면 한국어 PP-OCRv4 rec ONNX·사전 경로를
+    돌려준다(검출 모델은 언어 무관이라 미지정·기본). 그 외(빈 model_dir·타 언어)는 빈 dict를
+    돌려 rapidocr 기본 모델을 쓴다. 파일명은 Phase A 한국어 모델 규약(README §4-1) 정합:
+    `korean_PP-OCRv4_rec.onnx`·`korean_dict.txt`. 모델 파일은 배포 시 내려받는다(미커밋).
+    """
+    if language.strip().lower() in {"korean", "ko"} and model_dir:
+        base = Path(model_dir)
+        return {
+            "rec_model_path": str(base / "korean_PP-OCRv4_rec.onnx"),
+            "rec_keys_path": str(base / "korean_dict.txt"),
+        }
+    return {}
 
 
 def _normalize_latex(latex: str) -> str:
