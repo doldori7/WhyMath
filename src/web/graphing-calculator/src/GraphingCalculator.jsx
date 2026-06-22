@@ -1,0 +1,1825 @@
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import * as math from "mathjs";
+import {
+  latexToMath,
+  classify,
+  extractVars,
+  asciiToLatex,
+  linearRegression,
+  sameGraph,
+  numDeriv,
+  num2Deriv,
+} from "./lib/mathExpr";
+
+// ====== [Phase 4] MathLive를 CDN에서 동적으로 불러오기 ======
+let mathliveLoadPromise = null;
+const loadMathLive = () => {
+  if (mathliveLoadPromise) return mathliveLoadPromise;
+  if (typeof window !== "undefined" && window.customElements?.get("math-field")) {
+    mathliveLoadPromise = Promise.resolve();
+    return mathliveLoadPromise;
+  }
+  mathliveLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/mathlive/dist/mathlive.min.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("MathLive 로드 실패"));
+    document.head.appendChild(script);
+  });
+  return mathliveLoadPromise;
+};
+
+const COLORS = ["#c74440", "#2d70b3", "#388c46", "#6042a6", "#fa7e19", "#000000"];
+
+const makeRow = (id) => ({
+  id, latex: "", expr: "",
+  color: COLORS[(id - 1) % COLORS.length],
+  visible: true, error: null,
+  // [Phase 9] 미분 시각화 관련
+  showTangent: false, // 접선 표시 on/off
+  tangentX: 1,        // 접점의 x좌표 (슬라이더로 조절)
+  showDeriv: false,   // 도함수 곡선 표시 on/off
+  // [Phase 10] 적분 시각화 관련
+  showIntegral: false, // 넓이 색칠 + 리만 합 표시 on/off
+  intA: 0,             // 적분 구간 시작
+  intB: 3,             // 적분 구간 끝
+  intN: 10,            // 리만 합 직사각형 개수
+});
+
+// ====== MathLive 입력칸 컴포넌트 ======
+function MathField({ value, onChange, color, error }) {
+  const ref = useRef(null);
+  const [ready, setReady] = useState(
+    typeof window !== "undefined" && !!window.customElements?.get("math-field")
+  );
+  const [failed, setFailed] = useState(false);
+  // [붙여넣기 대응] 텍스트 입력 모드 on/off
+  const [textMode, setTextMode] = useState(false);
+  // 텍스트 모드에서 사용자가 보는 ASCII 원본 (예: "x^2")
+  const [text, setText] = useState("");
+
+  useEffect(() => {
+    let alive = true;
+    loadMathLive().then(() => alive && setReady(true)).catch(() => alive && setFailed(true));
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!ready || textMode) return; // 텍스트 모드일 땐 편집기 동기화 안 함
+    const mf = ref.current;
+    if (!mf) return;
+    if (mf.value !== value) mf.value = value;
+    const handler = () => onChange(mf.value);
+    mf.addEventListener("input", handler);
+    return () => mf.removeEventListener("input", handler);
+  }, [ready, value, onChange, textMode]);
+
+  // 텍스트 모드 입력 처리: ASCII → LaTeX 변환해서 부모로 전달
+  const handleText = (v) => {
+    setText(v);
+    onChange(asciiToLatex(v)); // 부모는 LaTeX를 받아 기존 로직 그대로 사용
+  };
+
+  // 모드 전환 버튼 (편집기 ↔ 텍스트)
+  const ModeBtn = (
+    <button
+      onClick={() => setTextMode((m) => !m)}
+      title={textMode ? "수식 편집기로" : "텍스트로 입력 (붙여넣기 가능)"}
+      style={{ border: "none", background: "none", cursor: "pointer", fontSize: 15, color: textMode ? "#2d70b3" : "#bbb", flexShrink: 0, padding: "0 2px" }}
+    >
+      {textMode ? "✎" : "⌨"}
+    </button>
+  );
+
+  // 로드 실패 시: 일반 입력칸 (브라우저 기본 붙여넣기 사용)
+  if (failed) {
+    return (
+      <input value={value} onChange={(e) => onChange(e.target.value)} placeholder="예: x^2, (1,3), x^2+y^2=9"
+        style={{ flex: 1, fontSize: 16, padding: "4px 2px", border: "none", borderBottom: error ? "2px solid #c74440" : "1px solid #ddd", outline: "none", fontFamily: "monospace", background: "transparent" }} />
+    );
+  }
+
+  // 텍스트 입력 모드: 일반 input이라 붙여넣기가 항상 됨
+  if (textMode) {
+    return (
+      <>
+        <input
+          value={text}
+          onChange={(e) => handleText(e.target.value)}
+          placeholder="붙여넣기 가능: x^2, sin(x), x^2+y^2=9"
+          autoFocus
+          style={{ flex: 1, fontSize: 16, padding: "4px 2px", border: "none", borderBottom: error ? "2px solid #c74440" : "1px solid #2d70b3", outline: "none", fontFamily: "monospace", background: "transparent" }}
+        />
+        {ModeBtn}
+      </>
+    );
+  }
+
+  if (!ready) return <span style={{ flex: 1, fontSize: 14, color: "#bbb" }}>수식 편집기 불러오는 중…</span>;
+
+  return (
+    <>
+      <math-field ref={ref}
+        style={{ flex: 1, fontSize: "18px", padding: "2px 4px", border: "none", borderBottom: error ? "2px solid #c74440" : "1px solid #ddd", outline: "none", background: "transparent", "--caret-color": color, "--selection-background-color": color + "33" }} />
+      {ModeBtn}
+    </>
+  );
+}
+
+// ====== [Phase 11] three.js를 CDN에서 동적 로딩 ======
+let threeLoadPromise = null;
+const loadThree = () => {
+  if (threeLoadPromise) return threeLoadPromise;
+  if (typeof window !== "undefined" && window.THREE) {
+    threeLoadPromise = Promise.resolve();
+    return threeLoadPromise;
+  }
+  threeLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("three.js 로드 실패"));
+    document.head.appendChild(script);
+  });
+  return threeLoadPromise;
+};
+
+// ====== [Phase 11] 3D 곡면 뷰 컴포넌트 ======
+// z = f(x, y) 식을 받아 3차원 곡면을 그리고, 마우스 드래그로 회전시킵니다.
+function Surface3D({ expr, range }) {
+  const mountRef = useRef(null);
+  const [ready, setReady] = useState(typeof window !== "undefined" && !!window.THREE);
+  const [failed, setFailed] = useState(false);
+  // 회전 각도(가로 회전 az, 세로 회전 el)와 확대(zoom)를 보관
+  const stateRef = useRef({ az: -0.6, el: 0.5, zoom: 1, dragging: false, lastX: 0, lastY: 0 });
+  const sceneRef = useRef({}); // three 객체들 보관
+
+  useEffect(() => {
+    let alive = true;
+    loadThree().then(() => alive && setReady(true)).catch(() => alive && setFailed(true));
+    return () => { alive = false; };
+  }, []);
+
+  // three.js 장면 1회 초기화
+  useEffect(() => {
+    if (!ready || !mountRef.current) return;
+    const THREE = window.THREE;
+    const mount = mountRef.current;
+    const w = mount.clientWidth, h = mount.clientHeight;
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0xfafafa);
+    const camera = new THREE.PerspectiveCamera(50, w / h, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(window.devicePixelRatio || 1);
+    mount.appendChild(renderer.domElement);
+
+    // 조명 (곡면 입체감)
+    scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+    dir.position.set(5, 10, 7);
+    scene.add(dir);
+
+    // 좌표축 (빨강=x, 초록=y, 파랑=z)
+    const axes = new THREE.AxesHelper(range * 1.3);
+    scene.add(axes);
+
+    sceneRef.current = { THREE, scene, camera, renderer, mesh: null };
+
+    // 렌더 루프
+    let raf;
+    const animate = () => {
+      const st = stateRef.current;
+      // 구면 좌표로 카메라 위치 계산 (회전 각도 반영)
+      const dist = range * 3.2 / st.zoom;
+      camera.position.set(
+        dist * Math.cos(st.el) * Math.sin(st.az),
+        dist * Math.sin(st.el),
+        dist * Math.cos(st.el) * Math.cos(st.az)
+      );
+      camera.up.set(0, 1, 0);
+      camera.lookAt(0, 0, 0);
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(animate);
+    };
+    animate();
+
+    // 정리
+    return () => {
+      cancelAnimationFrame(raf);
+      renderer.dispose();
+      if (renderer.domElement.parentNode) renderer.domElement.parentNode.removeChild(renderer.domElement);
+    };
+  }, [ready, range]);
+
+  // 식이 바뀌면 곡면(mesh)을 다시 생성
+  useEffect(() => {
+    const s = sceneRef.current;
+    if (!s.scene || !ready) return;
+    const THREE = s.THREE;
+
+    // 이전 곡면 제거
+    if (s.mesh) { s.scene.remove(s.mesh); s.mesh.geometry.dispose(); s.mesh.material.dispose(); s.mesh = null; }
+    if (!expr || !expr.trim()) return;
+
+    let node;
+    try { node = math.compile(expr); } catch { return; }
+
+    // 격자 정점 만들기 (N×N)
+    const N = 60;
+    const geo = new THREE.PlaneGeometry(range * 2, range * 2, N, N);
+    const pos = geo.attributes.position;
+    let minZ = Infinity, maxZ = -Infinity;
+    const zVals = [];
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), yPlane = pos.getY(i); // PlaneGeometry는 xy평면
+      let z;
+      try { z = node.evaluate({ x, y: yPlane }); } catch { z = 0; }
+      if (!isFinite(z)) z = 0;
+      zVals.push(z);
+      if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
+    }
+    // three는 y가 위쪽이므로, 계산한 z를 높이(y)로 올리고 평면 y는 깊이(z축)로
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), yPlane = pos.getY(i);
+      pos.setXYZ(i, x, zVals[i], -yPlane);
+    }
+    geo.computeVertexNormals();
+
+    // 높이에 따라 색이 변하는 재질 (낮으면 파랑, 높으면 빨강)
+    const colors = [];
+    const span = maxZ - minZ || 1;
+    for (let i = 0; i < pos.count; i++) {
+      const t = (zVals[i] - minZ) / span; // 0~1
+      // 파랑(0)→청록→초록→노랑→빨강(1) 그라데이션
+      const c = new THREE.Color();
+      c.setHSL((1 - t) * 0.7, 0.7, 0.5); // HSL 색상환 이용
+      colors.push(c.r, c.g, c.b);
+    }
+    geo.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
+
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true, side: THREE.DoubleSide,
+      flatShading: false, roughness: 0.6, metalness: 0.1,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    s.scene.add(mesh);
+    s.mesh = mesh;
+  }, [expr, range, ready]);
+
+  // 마우스 드래그로 회전, 휠로 확대 (OrbitControls 없이 직접 구현)
+  const onMouseDown = (e) => { const st = stateRef.current; st.dragging = true; st.lastX = e.clientX; st.lastY = e.clientY; };
+  const onMouseMove = (e) => {
+    const st = stateRef.current;
+    if (!st.dragging) return;
+    st.az -= (e.clientX - st.lastX) * 0.01; // 좌우 → 가로 회전
+    st.el += (e.clientY - st.lastY) * 0.01; // 상하 → 세로 회전
+    st.el = Math.max(-1.5, Math.min(1.5, st.el)); // 뒤집힘 방지
+    st.lastX = e.clientX; st.lastY = e.clientY;
+  };
+  const onMouseUp = () => { stateRef.current.dragging = false; };
+  const onWheel = (e) => {
+    e.preventDefault();
+    const st = stateRef.current;
+    st.zoom *= e.deltaY > 0 ? 0.92 : 1.08;
+    st.zoom = Math.max(0.3, Math.min(5, st.zoom));
+  };
+
+  if (failed) return <div style={{ padding: 20, color: "#999" }}>3D 라이브러리를 불러오지 못했습니다 (인터넷 연결 확인).</div>;
+  if (!ready) return <div style={{ padding: 20, color: "#bbb" }}>3D 엔진 불러오는 중…</div>;
+
+  return (
+    <div
+      ref={mountRef}
+      onMouseDown={onMouseDown} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onWheel={onWheel}
+      style={{ width: "100%", height: "100%", cursor: "grab" }}
+    />
+  );
+}
+
+// ====== [Phase 15] 한국 수학 교육과정 성취기준 노드 (2022 개정) ======
+// 각 노드: 성취기준 코드, 학년, 영역, 단원, 설명, 연계 문제 난이도
+const CURRICULUM = [
+  { code: "9수03-01", grade: "중1", unit: "좌표와 그래프", desc: "순서쌍과 좌표를 이해한다", quizLevel: "easy", concept: "일차함수" },
+  { code: "9수03-02", grade: "중1", unit: "좌표와 그래프", desc: "다양한 상황을 그래프로 나타내고 해석한다", quizLevel: "easy", concept: "일차함수" },
+  { code: "9수03-05", grade: "중2", unit: "일차함수", desc: "일차함수의 의미를 이해하고 그래프를 그린다", quizLevel: "easy", concept: "일차함수" },
+  { code: "9수03-06", grade: "중2", unit: "일차함수", desc: "일차함수 그래프의 성질을 이해하고 활용한다", quizLevel: "easy", concept: "일차함수" },
+  { code: "9수03-08", grade: "중3", unit: "이차함수", desc: "이차함수의 의미를 이해하고 그래프를 그린다", quizLevel: "medium", concept: "이차함수" },
+  { code: "9수03-09", grade: "중3", unit: "이차함수", desc: "이차함수 그래프의 성질을 이해한다", quizLevel: "medium", concept: "이차함수" },
+  { code: "10공수-1", grade: "고1", unit: "이차함수의 활용", desc: "이차함수의 최대·최소를 구한다", quizLevel: "medium", concept: "이차함수" },
+  { code: "10공수-2", grade: "고1", unit: "삼각함수 기초", desc: "삼각함수의 그래프를 이해한다", quizLevel: "hard", concept: "삼각함수" },
+];
+
+// ====== [Phase 12] 문제 출제 모드 컴포넌트 ======
+// 시스템이 그래프를 그려 보여주고, 학생이 식을 맞히면 자동 채점합니다.
+function QuizMode() {
+  const canvasRef = useRef(null);
+  const wrapRef = useRef(null);
+  const [size, setSize] = useState({ w: 600, h: 500 });
+  const [level, setLevel] = useState("easy");      // 난이도
+  const [problem, setProblem] = useState(null);     // 현재 문제 {expr, concept, hint}
+  const [answer, setAnswer] = useState("");         // 학생 입력
+  const [result, setResult] = useState(null);       // 채점 결과 "correct"|"wrong"|null
+  const [showHint, setShowHint] = useState(false);
+  const [reveal, setReveal] = useState(false);       // 정답 공개 여부
+  const [score, setScore] = useState({ correct: 0, total: 0 }); // 점수 기록
+  // [Phase 14] 학습 기록 (푼 문제별 결과) + 통계 패널 표시
+  const [history, setHistory] = useState([]);
+  const [showStats, setShowStats] = useState(false);
+  const [weaknessSet, setWeaknessSet] = useState(new Set()); // 현재 문제에서 누적된 약점
+  // [Phase 15] 선택된 성취기준 (null이면 난이도 자유 모드)
+  const [selectedStandard, setSelectedStandard] = useState(null);
+  const HISTORY_KEY = "quiz_history";
+  const [attempts, setAttempts] = useState(0);       // 현재 문제 시도 횟수
+  // [Phase 13] 진단 결과 목록 + 단계적으로 공개할 개수
+  const [diagnosis, setDiagnosis] = useState([]);
+  const [revealSteps, setRevealSteps] = useState(0);
+
+  // 화면 좌표 범위 (문제 그래프용, 고정)
+  const view = { xMin: -8, xMax: 8, yMin: -8, yMax: 8 };
+
+  // 캔버스 크기 맞춤
+  useEffect(() => {
+    const upd = () => { if (wrapRef.current) { const r = wrapRef.current.getBoundingClientRect(); setSize({ w: r.width, h: r.height }); } };
+    upd(); window.addEventListener("resize", upd);
+    return () => window.removeEventListener("resize", upd);
+  }, []);
+
+  // ====== 난수 헬퍼 ======
+  const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+  const nonZero = (min, max) => { let v; do { v = randInt(min, max); } while (v === 0); return v; };
+
+  // ====== 식 표시 정리 (x--3 → x+3, 1*x → x 등) ======
+  const prettify = (s) => s
+    .replace(/--/g, "+").replace(/\+-/g, "-").replace(/-\+/g, "-")
+    .replace(/\b1\*/g, "").replace(/\*/g, "")
+    .replace(/\+0\b/g, "").replace(/-0\b/g, "");
+
+  // ====== 난이도별 문제 생성 ======
+  const genProblem = (lv, standard) => {
+    let p;
+    if (lv === "easy") {
+      const a = nonZero(-3, 3), b = randInt(-5, 5);
+      p = { expr: `${a}*x+${b}`, concept: "일차함수", hint: "직선이에요. 기울기(얼마나 가파른지)와 y축과 만나는 점을 보세요." };
+    } else if (lv === "medium") {
+      const a = nonZero(-2, 2), pp = randInt(-3, 3), q = randInt(-4, 4);
+      p = { expr: `${a}*(x-${pp})^2+${q}`, concept: "이차함수", hint: "포물선이에요. 가장 볼록한 꼭짓점의 위치(x, y)와 위로/아래로 볼록인지를 보세요." };
+    } else {
+      const types = [
+        () => { const a = nonZero(1, 3); return { expr: `${a}*sin(x)`, concept: "삼각함수", hint: "사인 곡선이에요. 물결의 높이(진폭)를 보세요." }; },
+        () => { const a = nonZero(1, 2); return { expr: `${a}*cos(x)`, concept: "삼각함수", hint: "코사인 곡선이에요. x=0에서의 값을 보세요." }; },
+        () => { const a = nonZero(-2, 2), b = randInt(-3, 3); return { expr: `${a}*x^2+${b}`, concept: "이차함수", hint: "포물선이에요. 위아래 이동과 볼록 방향을 보세요." }; },
+      ];
+      p = types[randInt(0, types.length - 1)]();
+    }
+    // [Phase 15] 선택된 성취기준 코드를 문제에 부착
+    if (standard) p.standard = standard.code;
+    return p;
+  };
+
+  // 새 문제 시작
+  const newProblem = useCallback((lv, standard) => {
+    // [Phase 15] 성취기준이 선택돼 있으면 그 난이도를 따름
+    const useLevel = standard ? standard.quizLevel : lv;
+    setProblem(genProblem(useLevel, standard));
+    setAnswer(""); setResult(null); setShowHint(false); setReveal(false); setAttempts(0);
+    setDiagnosis([]); setRevealSteps(0); // [Phase 13] 진단 초기화
+    setWeaknessSet(new Set()); // [Phase 14] 약점 누적 초기화
+  }, []);
+
+  // 처음 + 난이도/성취기준 바뀔 때 문제 생성
+  useEffect(() => { newProblem(level, selectedStandard); }, [level, selectedStandard, newProblem]);
+
+  // ====== [Phase 14] 컴포넌트 시작 시 저장된 학습 기록 불러오기 ======
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await window.storage.get(HISTORY_KEY);
+        if (res?.value) {
+          const hist = JSON.parse(res.value);
+          setHistory(hist);
+          // 누적 점수도 복원
+          const correct = hist.filter((h) => h.correct).length;
+          setScore({ correct, total: hist.length });
+        }
+      } catch { /* 저장소 미지원 환경이면 무시 */ }
+    })();
+  }, []);
+
+  // 기록 한 건 저장 (메모리 + 영구 저장소)
+  const saveRecord = async (record) => {
+    setHistory((prev) => {
+      const next = [...prev, record];
+      // 영구 저장 (실패해도 메모리에는 남음)
+      try { window.storage.set(HISTORY_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  // 기록 전체 삭제
+  const clearHistory = async () => {
+    if (!window.confirm("학습 기록을 모두 지울까요?")) return;
+    setHistory([]); setScore({ correct: 0, total: 0 });
+    try { await window.storage.delete(HISTORY_KEY); } catch {}
+  };
+
+  // ====== [Phase 14] 학습 기록 통계 집계 ======
+  const stats = (() => {
+    if (!history.length) return null;
+    // 개념별 정답률
+    const byConcept = {};
+    history.forEach((r) => {
+      if (!byConcept[r.concept]) byConcept[r.concept] = { correct: 0, total: 0 };
+      byConcept[r.concept].total++;
+      if (r.correct) byConcept[r.concept].correct++;
+    });
+    // 약점 빈도
+    const weakCount = {};
+    history.forEach((r) => (r.weakness || []).forEach((w) => (weakCount[w] = (weakCount[w] || 0) + 1)));
+    // 가장 약한 개념 (정답률 최저, 2문제 이상 푼 것 중)
+    const conceptList = Object.entries(byConcept);
+    const weakest = conceptList
+      .filter(([, s]) => s.total >= 2)
+      .sort((a, b) => a[1].correct / a[1].total - b[1].correct / b[1].total)[0];
+    // 평균 시도 횟수
+    const avgAttempts = history.reduce((sum, r) => sum + (r.attempts || 0), 0) / history.length;
+    // [Phase 15] 성취기준별 숙련도 (코드별 정답률)
+    const byStandard = {};
+    history.forEach((r) => {
+      if (!r.standard) return;
+      if (!byStandard[r.standard]) byStandard[r.standard] = { correct: 0, total: 0 };
+      byStandard[r.standard].total++;
+      if (r.correct) byStandard[r.standard].correct++;
+    });
+    return { byConcept, weakCount, weakest, avgAttempts, byStandard };
+  })();
+
+  // ====== 그래프 그리기 (문제 곡선) ======
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !problem) return;
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size.w * dpr; canvas.height = size.h * dpr;
+    canvas.style.width = size.w + "px"; canvas.style.height = size.h + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.w, size.h);
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, size.w, size.h);
+
+    const toPxX = (x) => ((x - view.xMin) / (view.xMax - view.xMin)) * size.w;
+    const toPxY = (y) => size.h - ((y - view.yMin) / (view.yMax - view.yMin)) * size.h;
+
+    // 격자
+    ctx.strokeStyle = "#eee"; ctx.lineWidth = 1;
+    for (let x = Math.ceil(view.xMin); x <= view.xMax; x++) { ctx.beginPath(); ctx.moveTo(toPxX(x), 0); ctx.lineTo(toPxX(x), size.h); ctx.stroke(); }
+    for (let y = Math.ceil(view.yMin); y <= view.yMax; y++) { ctx.beginPath(); ctx.moveTo(0, toPxY(y)); ctx.lineTo(size.w, toPxY(y)); ctx.stroke(); }
+    // 축
+    ctx.strokeStyle = "#888"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, toPxY(0)); ctx.lineTo(size.w, toPxY(0)); ctx.moveTo(toPxX(0), 0); ctx.lineTo(toPxX(0), size.h); ctx.stroke();
+    // 눈금 숫자
+    ctx.fillStyle = "#999"; ctx.font = "11px sans-serif";
+    for (let x = Math.ceil(view.xMin); x <= view.xMax; x++) { if (x !== 0) ctx.fillText(x, toPxX(x) + 2, toPxY(0) - 3); }
+    for (let y = Math.ceil(view.yMin); y <= view.yMax; y++) { if (y !== 0) ctx.fillText(y, toPxX(0) + 4, toPxY(y) - 2); }
+
+    // 정답 곡선 (문제로 보여주는 그래프)
+    try {
+      const node = math.compile(problem.expr);
+      ctx.strokeStyle = "#2d70b3"; ctx.lineWidth = 3; ctx.beginPath();
+      let started = false, prevY = null;
+      for (let px = 0; px <= size.w; px++) {
+        const x = view.xMin + (px / size.w) * (view.xMax - view.xMin);
+        let y; try { y = node.evaluate({ x }); } catch { y = NaN; }
+        if (!isFinite(y)) { started = false; prevY = null; continue; }
+        const py = toPxY(y);
+        if (prevY !== null && Math.abs(py - prevY) > size.h * 1.5) started = false;
+        if (!started) { ctx.moveTo(px, py); started = true; } else ctx.lineTo(px, py);
+        prevY = py;
+      }
+      ctx.stroke();
+    } catch {}
+
+    // 학생 답 곡선 (입력 중이면 주황 점선으로 미리보기)
+    if (answer.trim() && !reveal) {
+      try {
+        const sNode = math.compile(latexToMath(answer));
+        ctx.strokeStyle = "#fa7e19"; ctx.lineWidth = 2; ctx.setLineDash([6, 4]); ctx.beginPath();
+        let started = false, prevY = null;
+        for (let px = 0; px <= size.w; px++) {
+          const x = view.xMin + (px / size.w) * (view.xMax - view.xMin);
+          let y; try { y = sNode.evaluate({ x }); } catch { y = NaN; }
+          if (!isFinite(y)) { started = false; prevY = null; continue; }
+          const py = toPxY(y);
+          if (prevY !== null && Math.abs(py - prevY) > size.h * 1.5) started = false;
+          if (!started) { ctx.moveTo(px, py); started = true; } else ctx.lineTo(px, py);
+          prevY = py;
+        }
+        ctx.stroke(); ctx.setLineDash([]);
+      } catch {}
+    }
+  }, [problem, answer, size, reveal]);
+
+  useEffect(() => { draw(); }, [draw]);
+
+  // ====== [Phase 13] 학생 답 진단 (정답과 비교해 무엇이 맞고 틀렸는지) ======
+  const diagnose = (correctExpr, studentExpr) => {
+    let c, s;
+    try { c = math.compile(correctExpr); s = math.compile(studentExpr); } catch { return [{ ok: false, msg: "입력한 식을 이해할 수 없어요. 형식을 확인해 주세요." }]; }
+    const eq = (a, b) => Math.abs(a - b) < 1e-4 * (1 + Math.abs(a));
+    const notes = [];
+    // 1) y절편 (x=0에서의 값)
+    try {
+      const cY0 = c.evaluate({ x: 0 }), sY0 = s.evaluate({ x: 0 });
+      if (eq(cY0, sY0)) notes.push({ ok: true, msg: "y절편(x=0에서의 높이)은 맞았어요." });
+      else notes.push({ ok: false, key: "y절편", msg: `y절편이 달라요. x=0에서 파란 곡선이 지나는 높이를 다시 보세요. (당신의 답: ${sY0.toFixed(1)})` });
+    } catch {}
+    // 2) 기울기 (x=1에서의 순간 변화율)
+    try {
+      const cD = numDeriv(c, 1), sD = numDeriv(s, 1);
+      if (eq(cD, sD)) notes.push({ ok: true, msg: "기울기(가파른 정도)는 맞았어요." });
+      else notes.push({ ok: false, key: "기울기", msg: "기울기가 달라요. 그래프가 얼마나 빠르게 오르내리는지 비교해 보세요." });
+    } catch {}
+    // 3) 볼록성 (곡선이 위/아래로 휘는 방향)
+    try {
+      const c2 = num2Deriv(c, 1), s2 = num2Deriv(s, 1);
+      const cSign = Math.sign(Math.round(c2 * 100)), sSign = Math.sign(Math.round(s2 * 100));
+      if (cSign !== sSign && (cSign !== 0 || sSign !== 0)) notes.push({ ok: false, key: "볼록방향", msg: "곡선이 휘는 방향(위로 볼록/아래로 볼록)이 달라요. 계수의 부호를 보세요." });
+    } catch {}
+    return notes;
+  };
+
+  // 채점하기
+  const checkAnswer = () => {
+    if (!answer.trim() || !problem) return;
+    const studentExpr = latexToMath(answer);
+    const correct = sameGraph(problem.expr, studentExpr);
+    setAttempts((a) => a + 1);
+    if (correct) {
+      setResult("correct");
+      setDiagnosis([]);
+      setScore((s) => ({ correct: s.correct + 1, total: s.total + 1 }));
+      // [Phase 14] 정답 기록 저장 (이번 문제에서 누적된 약점 포함)
+      saveRecord({
+        concept: problem.concept, level, correct: true, standard: problem.standard || null,
+        attempts: attempts + 1, weakness: [...weaknessSet],
+        date: new Date().toISOString(),
+      });
+    } else {
+      setResult("wrong");
+      // [Phase 13] 학생 답을 진단해 단계별로 보여줄 항목 저장
+      const notes = diagnose(problem.expr, studentExpr);
+      setDiagnosis(notes);
+      setRevealSteps(attempts + 1);
+      // [Phase 14] 이번 문제에서 드러난 약점을 누적 (중복 제거)
+      setWeaknessSet((prev) => {
+        const next = new Set(prev);
+        notes.forEach((n) => { if (!n.ok && n.key) next.add(n.key); });
+        return next;
+      });
+    }
+  };
+
+  // 정답 공개 (포기)
+  const giveUp = () => {
+    setReveal(true); setResult(null);
+    setScore((s) => ({ ...s, total: s.total + 1 }));
+    // [Phase 14] 포기도 오답으로 기록
+    if (problem) {
+      saveRecord({
+        concept: problem.concept, level, correct: false, standard: problem.standard || null,
+        attempts: attempts, weakness: [...weaknessSet],
+        date: new Date().toISOString(),
+      });
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", height: "100vh", fontFamily: "'Georgia', serif", background: "#fafafa" }}>
+      {/* 왼쪽: 문제 풀이 패널 */}
+      <div style={{ width: 360, background: "#fff", borderRight: "1px solid #ddd", display: "flex", flexDirection: "column", overflowY: "auto" }}>
+        <div style={{ padding: "16px 20px", borderBottom: "1px solid #eee" }}>
+          <div style={{ fontSize: 18, fontWeight: "bold", marginBottom: 4 }}>그래프 맞히기</div>
+          <div style={{ fontSize: 13, color: "#888" }}>보이는 파란 그래프의 식을 입력하세요</div>
+        </div>
+
+        {/* [Phase 15] 교육과정 성취기준 선택 */}
+        <div style={{ padding: "12px 20px", borderBottom: "1px solid #eee" }}>
+          <div style={{ fontSize: 12, color: "#999", marginBottom: 6 }}>교육과정 (2022 개정)</div>
+          <select
+            value={selectedStandard ? selectedStandard.code : ""}
+            onChange={(e) => {
+              const std = CURRICULUM.find((c) => c.code === e.target.value) || null;
+              setSelectedStandard(std);
+            }}
+            style={{ width: "100%", fontSize: 13, padding: "7px 8px", border: "1px solid #ddd", borderRadius: 6, background: "#fff", cursor: "pointer" }}
+          >
+            <option value="">난이도 자유 선택 모드</option>
+            {["중1", "중2", "중3", "고1"].map((grade) => (
+              <optgroup key={grade} label={grade}>
+                {CURRICULUM.filter((c) => c.grade === grade).map((c) => (
+                  <option key={c.code} value={c.code}>[{c.code}] {c.unit}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {/* 선택된 성취기준 설명 */}
+          {selectedStandard && (
+            <div style={{ marginTop: 8, padding: "8px 10px", background: "#f5f8fc", borderRadius: 6, fontSize: 12, color: "#555", lineHeight: 1.5 }}>
+              <b style={{ color: "#2d70b3" }}>[{selectedStandard.code}]</b> {selectedStandard.desc}
+            </div>
+          )}
+        </div>
+
+        {/* 난이도 선택 (자유 모드일 때만 활성) */}
+        <div style={{ padding: "12px 20px", borderBottom: "1px solid #eee", opacity: selectedStandard ? 0.4 : 1, pointerEvents: selectedStandard ? "none" : "auto" }}>
+          <div style={{ fontSize: 12, color: "#999", marginBottom: 6 }}>난이도 {selectedStandard && "(교육과정 모드에선 자동 설정)"}</div>
+          <div style={{ display: "flex", gap: 6 }}>
+            {[["easy", "쉬움 (일차)"], ["medium", "보통 (이차)"], ["hard", "어려움 (삼각/이차)"]].map(([lv, label]) => (
+              <button key={lv} onClick={() => setLevel(lv)}
+                style={{ flex: 1, padding: "6px 4px", border: "1px solid " + (level === lv ? "#2d70b3" : "#ddd"), borderRadius: 6, background: level === lv ? "#2d70b3" : "#fff", color: level === lv ? "#fff" : "#666", cursor: "pointer", fontSize: 11 }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 개념 태그 + 성취기준 코드 */}
+        {problem && (
+          <div style={{ padding: "12px 20px 0", display: "flex", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 12, padding: "3px 10px", background: "#eef4fa", color: "#2d70b3", borderRadius: 12 }}>{problem.concept}</span>
+            {problem.standard && <span style={{ fontSize: 12, padding: "3px 10px", background: "#eef7ef", color: "#388c46", borderRadius: 12 }}>[{problem.standard}]</span>}
+          </div>
+        )}
+
+        {/* 답 입력 */}
+        <div style={{ padding: "12px 20px" }}>
+          <div style={{ fontSize: 13, color: "#666", marginBottom: 6 }}>y =</div>
+          <input
+            value={answer}
+            onChange={(e) => { setAnswer(e.target.value); setResult(null); }}
+            onKeyDown={(e) => { if (e.key === "Enter") checkAnswer(); }}
+            placeholder="예: 2x+1, (x-1)^2, sin(x)"
+            disabled={reveal}
+            style={{ width: "100%", fontSize: 16, padding: "8px 10px", border: "1px solid #ddd", borderRadius: 6, fontFamily: "monospace", boxSizing: "border-box" }}
+          />
+          <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>입력하면 주황 점선으로 미리 보여요. Enter로 채점.</div>
+        </div>
+
+        {/* 채점/포기 버튼 */}
+        <div style={{ padding: "0 20px", display: "flex", gap: 8 }}>
+          <button onClick={checkAnswer} disabled={reveal || !answer.trim()}
+            style={{ flex: 1, padding: "10px", border: "none", borderRadius: 6, background: reveal || !answer.trim() ? "#ccc" : "#388c46", color: "#fff", cursor: reveal || !answer.trim() ? "default" : "pointer", fontSize: 14 }}>
+            채점하기
+          </button>
+          <button onClick={() => setShowHint(true)} style={{ padding: "10px 14px", border: "1px solid #ddd", borderRadius: 6, background: "#fff", color: "#666", cursor: "pointer", fontSize: 14 }}>힌트</button>
+        </div>
+
+        {/* 결과 메시지 */}
+        {result === "correct" && (
+          <div style={{ margin: "12px 20px", padding: "12px", background: "#eef7ef", borderRadius: 8, color: "#2e6b3a" }}>
+            정답입니다! 그래프가 정확히 일치해요.
+          </div>
+        )}
+        {result === "wrong" && (
+          <div style={{ margin: "12px 20px" }}>
+            <div style={{ padding: "12px", background: "#fdeeee", borderRadius: 8, color: "#a33", marginBottom: 8 }}>
+              아직 일치하지 않아요. 아래 단계를 따라가며 답을 고쳐 보세요. (시도 {attempts}회)
+            </div>
+
+            {/* [Phase 13] 단계별 진단: revealSteps 개수만큼만 공개 */}
+            {diagnosis.slice(0, Math.max(revealSteps, 1)).map((note, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, padding: "8px 10px", marginBottom: 6, background: note.ok ? "#eef7ef" : "#fff8ec", borderRadius: 6, fontSize: 13, lineHeight: 1.5, color: note.ok ? "#2e6b3a" : "#946200" }}>
+                <span style={{ flexShrink: 0 }}>{note.ok ? "✓" : "→"}</span>
+                <span>{note.msg}</span>
+              </div>
+            ))}
+
+            {/* 아직 안 보여준 진단이 남아 있으면 "더 알려주세요" 버튼 */}
+            {revealSteps < diagnosis.length && (
+              <button onClick={() => setRevealSteps((n) => n + 1)}
+                style={{ width: "100%", padding: "8px", marginTop: 4, border: "1px dashed #d4a843", borderRadius: 6, background: "#fffdf7", color: "#946200", cursor: "pointer", fontSize: 13 }}>
+                다음 단계 힌트 보기 ↓
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* 추가 힌트 (개념적 관찰 포인트) */}
+        {showHint && problem && !reveal && (
+          <div style={{ margin: "0 20px 12px", padding: "12px", background: "#fff8ec", borderRadius: 8, color: "#946200", fontSize: 13, lineHeight: 1.6 }}>
+            개념 힌트: {problem.hint}
+          </div>
+        )}
+
+        {/* 정답 공개 */}
+        {reveal && problem && (
+          <div style={{ margin: "12px 20px", padding: "12px", background: "#eef4fa", borderRadius: 8, color: "#2d70b3" }}>
+            정답: y = {prettify(problem.expr)}
+          </div>
+        )}
+
+        <div style={{ padding: "8px 20px", display: "flex", gap: 8 }}>
+          {!reveal && result !== "correct" && (
+            <button onClick={giveUp} style={{ flex: 1, padding: "8px", border: "1px solid #ddd", borderRadius: 6, background: "#fff", color: "#999", cursor: "pointer", fontSize: 13 }}>정답 보기</button>
+          )}
+          <button onClick={() => newProblem(level, selectedStandard)} style={{ flex: 1, padding: "8px", border: "1px solid #2d70b3", borderRadius: 6, background: result === "correct" || reveal ? "#2d70b3" : "#fff", color: result === "correct" || reveal ? "#fff" : "#2d70b3", cursor: "pointer", fontSize: 13 }}>
+            다음 문제 →
+          </button>
+        </div>
+
+        {/* 점수 + [Phase 14] 학습 분석 버튼 */}
+        <div style={{ marginTop: "auto", padding: "14px 20px", borderTop: "1px solid #eee", fontSize: 13, color: "#666" }}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <span>맞힌 문제: <b style={{ color: "#2d70b3" }}>{score.correct}</b> / {score.total}
+              {score.total > 0 && <span style={{ color: "#999" }}> (정답률 {Math.round((score.correct / score.total) * 100)}%)</span>}
+            </span>
+            <button onClick={() => setShowStats(true)} disabled={!history.length}
+              style={{ marginLeft: "auto", padding: "5px 12px", border: "1px solid #2d70b3", borderRadius: 6, background: history.length ? "#fff" : "#f3f3f3", color: history.length ? "#2d70b3" : "#bbb", cursor: history.length ? "pointer" : "default", fontSize: 12 }}>
+              학습 분석
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 오른쪽: 문제 그래프 또는 [Phase 14] 통계 패널 */}
+      <div ref={wrapRef} style={{ flex: 1, position: "relative" }}>
+        <canvas ref={canvasRef} style={{ display: "block" }} />
+        {showStats && stats && (
+          <div style={{ position: "absolute", inset: 0, background: "rgba(255,255,255,0.97)", overflowY: "auto", padding: "32px 40px" }}>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 20 }}>
+              <span style={{ fontSize: 22, fontWeight: "bold" }}>학습 분석</span>
+              <button onClick={() => setShowStats(false)} style={{ marginLeft: "auto", padding: "6px 14px", border: "1px solid #ddd", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 14 }}>닫기</button>
+            </div>
+
+            {/* 요약 */}
+            <div style={{ display: "flex", gap: 16, marginBottom: 24 }}>
+              <div style={{ flex: 1, padding: "16px", background: "#f5f8fc", borderRadius: 10, textAlign: "center" }}>
+                <div style={{ fontSize: 28, fontWeight: "bold", color: "#2d70b3" }}>{Math.round((score.correct / score.total) * 100)}%</div>
+                <div style={{ fontSize: 13, color: "#888" }}>전체 정답률</div>
+              </div>
+              <div style={{ flex: 1, padding: "16px", background: "#f5f8fc", borderRadius: 10, textAlign: "center" }}>
+                <div style={{ fontSize: 28, fontWeight: "bold", color: "#388c46" }}>{history.length}</div>
+                <div style={{ fontSize: 13, color: "#888" }}>푼 문제 수</div>
+              </div>
+              <div style={{ flex: 1, padding: "16px", background: "#f5f8fc", borderRadius: 10, textAlign: "center" }}>
+                <div style={{ fontSize: 28, fontWeight: "bold", color: "#fa7e19" }}>{stats.avgAttempts.toFixed(1)}</div>
+                <div style={{ fontSize: 13, color: "#888" }}>평균 시도 횟수</div>
+              </div>
+            </div>
+
+            {/* 가장 약한 개념 추천 */}
+            {stats.weakest && (
+              <div style={{ padding: "14px 18px", background: "#fff8ec", borderRadius: 10, marginBottom: 24, color: "#946200", lineHeight: 1.6 }}>
+                <b>집중 학습 추천:</b> "{stats.weakest[0]}"이(가) 가장 약해요
+                (정답률 {Math.round((stats.weakest[1].correct / stats.weakest[1].total) * 100)}%).
+                이 개념의 문제를 더 풀어보면 좋겠어요.
+              </div>
+            )}
+
+            {/* 개념별 정답률 막대 */}
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 15, fontWeight: "bold", marginBottom: 10 }}>개념별 정답률</div>
+              {Object.entries(stats.byConcept).map(([concept, s]) => {
+                const pct = Math.round((s.correct / s.total) * 100);
+                return (
+                  <div key={concept} style={{ marginBottom: 10 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "#555", marginBottom: 3 }}>
+                      <span>{concept}</span>
+                      <span>{s.correct}/{s.total} ({pct}%)</span>
+                    </div>
+                    <div style={{ height: 10, background: "#eee", borderRadius: 5, overflow: "hidden" }}>
+                      <div style={{ width: pct + "%", height: "100%", background: pct >= 70 ? "#388c46" : pct >= 40 ? "#fa7e19" : "#c74440", borderRadius: 5 }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* [Phase 15] 성취기준별 진도 (교육과정 숙련도) */}
+            {Object.keys(stats.byStandard).length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 15, fontWeight: "bold", marginBottom: 10 }}>교육과정 성취기준별 진도</div>
+                {CURRICULUM.filter((c) => stats.byStandard[c.code]).map((c) => {
+                  const s = stats.byStandard[c.code];
+                  const pct = Math.round((s.correct / s.total) * 100);
+                  // 숙련도 단계: 80%+ 도달, 50%+ 진행중, 미만 부족
+                  const lvl = pct >= 80 ? "도달" : pct >= 50 ? "진행중" : "보충필요";
+                  const lvlColor = pct >= 80 ? "#388c46" : pct >= 50 ? "#fa7e19" : "#c74440";
+                  return (
+                    <div key={c.code} style={{ marginBottom: 10, padding: "8px 10px", background: "#fafafa", borderRadius: 6 }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                        <span style={{ color: "#555" }}><b style={{ color: "#2d70b3" }}>[{c.code}]</b> {c.grade} · {c.unit}</span>
+                        <span style={{ color: lvlColor, fontWeight: "bold" }}>{lvl} ({pct}%)</span>
+                      </div>
+                      <div style={{ height: 8, background: "#eee", borderRadius: 4, overflow: "hidden" }}>
+                        <div style={{ width: pct + "%", height: "100%", background: lvlColor, borderRadius: 4 }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 약점 빈도 */}
+            {Object.keys(stats.weakCount).length > 0 && (
+              <div style={{ marginBottom: 24 }}>
+                <div style={{ fontSize: 15, fontWeight: "bold", marginBottom: 10 }}>자주 틀리는 부분</div>
+                {Object.entries(stats.weakCount).sort((a, b) => b[1] - a[1]).map(([w, count]) => (
+                  <div key={w} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6, fontSize: 13 }}>
+                    <span style={{ minWidth: 70, color: "#555" }}>{w}</span>
+                    <div style={{ flex: 1, height: 8, background: "#eee", borderRadius: 4, overflow: "hidden" }}>
+                      <div style={{ width: Math.min(count * 25, 100) + "%", height: "100%", background: "#c74440" }} />
+                    </div>
+                    <span style={{ color: "#999", minWidth: 36 }}>{count}회</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button onClick={clearHistory} style={{ padding: "8px 16px", border: "1px solid #ddd", borderRadius: 6, background: "#fff", color: "#999", cursor: "pointer", fontSize: 13 }}>학습 기록 초기화</button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function GraphingCalculator() {
+  const [rows, setRows] = useState([makeRow(1)]);
+  const nextId = useRef(2);
+  const [sliders, setSliders] = useState({});
+  const [view, setView] = useState({ xMin: -10, xMax: 10, yMin: -10, yMax: 10 });
+  const [hover, setHover] = useState(null);
+  // [Phase 6] 데이터 표: {x, y} 쌍의 목록 + 회귀선 표시 여부
+  const [table, setTable] = useState([
+    { x: "", y: "" },
+  ]);
+  const [showRegression, setShowRegression] = useState(true);
+  // [Phase 7] 저장된 그래프 목록 (이름 목록)
+  const [savedList, setSavedList] = useState([]);
+  const [saveStatus, setSaveStatus] = useState(""); // 저장/불러오기 안내 메시지
+  // [Phase 10] 적분 계산 결과 저장 {rowId: {riemannSum, exact}}
+  const [integralResults, setIntegralResults] = useState({});
+  // [Phase 11] 3D 모드 on/off, 3D 곡면 식, 정의역 범위
+  const [mode3D, setMode3D] = useState(false);
+  const [expr3D, setExpr3D] = useState("x^2 + y^2");
+  const [range3D, setRange3D] = useState(3);
+  // [Phase 12] 문제 출제 모드 on/off
+  const [quizMode, setQuizMode] = useState(false);
+  const canvasRef = useRef(null);
+  const containerRef = useRef(null);
+  const [size, setSize] = useState({ w: 800, h: 600 });
+  const dragRef = useRef(null);
+  const animRef = useRef(null);
+
+  // [Phase 6] 표에서 숫자로 변환 가능한 (x,y) 쌍만 골라냄
+  const tablePoints = useCallback(() => {
+    return table
+      .map((r) => [parseFloat(r.x), parseFloat(r.y)])
+      .filter(([x, y]) => isFinite(x) && isFinite(y));
+  }, [table]);
+
+  // [Phase 6] 최소제곱 선형회귀: y = m*x + b 와 결정계수 R² 계산
+  const regression = useCallback(() => linearRegression(tablePoints()), [tablePoints]);
+
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        const rect = containerRef.current.getBoundingClientRect();
+        setSize({ w: rect.width, h: rect.height });
+      }
+    };
+    updateSize();
+    window.addEventListener("resize", updateSize);
+    return () => window.removeEventListener("resize", updateSize);
+  }, []);
+
+  useEffect(() => {
+    const needed = new Set();
+    rows.forEach((r) => {
+      if (r.expr.trim() && !r.error) extractVars(r.expr).forEach((v) => needed.add(v));
+    });
+    setSliders((prev) => {
+      const next = {};
+      needed.forEach((v) => { next[v] = prev[v] || { value: 1, min: -10, max: 10, step: 0.1, playing: false }; });
+      const same = Object.keys(next).length === Object.keys(prev).length && Object.keys(next).every((k) => prev[k]);
+      return same ? prev : next;
+    });
+  }, [rows]);
+
+  const toPxX = useCallback((x) => ((x - view.xMin) / (view.xMax - view.xMin)) * size.w, [view, size]);
+  const toPxY = useCallback((y) => size.h - ((y - view.yMin) / (view.yMax - view.yMin)) * size.h, [view, size]);
+  const toMathX = useCallback((px) => view.xMin + (px / size.w) * (view.xMax - view.xMin), [view, size]);
+  const toMathY = useCallback((py) => view.yMin + ((size.h - py) / size.h) * (view.yMax - view.yMin), [view, size]);
+
+  const niceStep = (range, n) => {
+    const rough = range / n, pow = Math.pow(10, Math.floor(Math.log10(rough))), frac = rough / pow;
+    let nice; if (frac < 1.5) nice = 1; else if (frac < 3) nice = 2; else if (frac < 7) nice = 5; else nice = 10;
+    return nice * pow;
+  };
+  const formatNum = (n) => (Math.abs(n) < 1e-10 ? "0" : parseFloat(n.toPrecision(4)).toString());
+
+  const sliderValues = useCallback(() => {
+    const obj = {};
+    Object.entries(sliders).forEach(([k, s]) => (obj[k] = s.value));
+    return obj;
+  }, [sliders]);
+
+  const findRoots = useCallback((node, scope) => {
+    const roots = []; const samples = 400; const dx = (view.xMax - view.xMin) / samples;
+    let prevX = view.xMin, prevY;
+    try { prevY = node.evaluate({ ...scope, x: prevX }); } catch { prevY = NaN; }
+    for (let i = 1; i <= samples; i++) {
+      const curX = view.xMin + i * dx; let curY;
+      try { curY = node.evaluate({ ...scope, x: curX }); } catch { curY = NaN; }
+      if (isFinite(prevY) && isFinite(curY) && prevY * curY < 0 && Math.abs(curY - prevY) < view.yMax - view.yMin) {
+        let a = prevX, b = curX, fa = prevY;
+        for (let k = 0; k < 40; k++) {
+          const mid = (a + b) / 2; let fm;
+          try { fm = node.evaluate({ ...scope, x: mid }); } catch { fm = NaN; }
+          if (fa * fm <= 0) b = mid; else { a = mid; fa = fm; }
+        }
+        roots.push((a + b) / 2);
+      }
+      prevX = curX; prevY = curY;
+    }
+    return roots;
+  }, [view]);
+
+  // ====== [Phase 5] 일반 함수 y=f(x) 그리기 ======
+  const drawFunction = (ctx, body, color, scope) => {
+    const node = math.compile(body);
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.beginPath();
+    let started = false, prevY = null;
+    for (let px = 0; px <= size.w; px++) {
+      const xVal = toMathX(px); let yVal;
+      try { yVal = node.evaluate({ ...scope, x: xVal }); } catch { yVal = NaN; }
+      if (typeof yVal !== "number" || !isFinite(yVal)) { started = false; prevY = null; continue; }
+      const py = toPxY(yVal);
+      if (prevY !== null && Math.abs(py - prevY) > size.h * 1.5) started = false;
+      if (!started) { ctx.moveTo(px, py); started = true; } else ctx.lineTo(px, py);
+      prevY = py;
+    }
+    ctx.stroke();
+    // 근 + y절편 표시
+    ctx.fillStyle = "#777";
+    findRoots(node, scope).forEach((rx) => { ctx.beginPath(); ctx.arc(toPxX(rx), toPxY(0), 4, 0, Math.PI * 2); ctx.fill(); });
+    try {
+      const yInt = node.evaluate({ ...scope, x: 0 });
+      if (isFinite(yInt) && yInt >= view.yMin && yInt <= view.yMax) { ctx.beginPath(); ctx.arc(toPxX(0), toPxY(yInt), 4, 0, Math.PI * 2); ctx.fill(); }
+    } catch {}
+  };
+
+  // ====== [Phase 9] 접선 + 접점 + 기울기 라벨 그리기 ======
+  const drawTangent = (ctx, body, color, scope, tangentX) => {
+    const node = math.compile(body);
+    let y0, slope;
+    try { y0 = node.evaluate({ ...scope, x: tangentX }); } catch { return; }
+    if (!isFinite(y0)) return;
+    slope = numDeriv(node, tangentX, scope); // 그 점의 순간 기울기
+    if (!isFinite(slope)) return;
+
+    // 접선의 식: y = slope·(x - tangentX) + y0
+    // 화면 좌우 끝까지 직선을 그림
+    ctx.strokeStyle = "#fa7e19"; ctx.lineWidth = 2; ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    const yL = slope * (view.xMin - tangentX) + y0;
+    const yR = slope * (view.xMax - tangentX) + y0;
+    ctx.moveTo(toPxX(view.xMin), toPxY(yL));
+    ctx.lineTo(toPxX(view.xMax), toPxY(yR));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // 접점 (큰 점)
+    const px = toPxX(tangentX), py = toPxY(y0);
+    ctx.fillStyle = "#fa7e19";
+    ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI * 2); ctx.fill();
+
+    // 기울기 라벨 (말풍선)
+    const label = `기울기 = ${formatNum(slope)}`;
+    ctx.font = "13px sans-serif";
+    const tw = ctx.measureText(label).width;
+    let bx = px + 12, by = py - 30;
+    if (bx + tw + 14 > size.w) bx = px - tw - 26;
+    if (by < 0) by = py + 12;
+    ctx.fillStyle = "rgba(250,126,25,0.92)";
+    ctx.fillRect(bx, by, tw + 14, 22);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(label, bx + 7, by + 15);
+  };
+
+  // ====== [Phase 9] 도함수 곡선 그리기 (점선) ======
+  // 모든 x에서 기울기를 구해 이으면 그게 도함수 f'(x)의 그래프
+  const drawDerivative = (ctx, body, color, scope) => {
+    const node = math.compile(body);
+    ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.setLineDash([2, 4]); // 가는 점선
+    ctx.globalAlpha = 0.7;
+    ctx.beginPath();
+    let started = false, prevY = null;
+    for (let px = 0; px <= size.w; px++) {
+      const xVal = toMathX(px);
+      const slope = numDeriv(node, xVal, scope);
+      if (!isFinite(slope)) { started = false; prevY = null; continue; }
+      const py = toPxY(slope);
+      if (prevY !== null && Math.abs(py - prevY) > size.h * 1.5) started = false;
+      if (!started) { ctx.moveTo(px, py); started = true; } else ctx.lineTo(px, py);
+      prevY = py;
+    }
+    ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  };
+
+  // ====== [Phase 10] 적분 시각화: 넓이 색칠 + 리만 합 직사각형 ======
+  // 구간 [a,b]에서 곡선 아래 넓이를 보여주고, n개의 직사각형으로 근사합니다.
+  // n을 키울수록 직사각형 합(리만 합)이 실제 적분값에 가까워집니다.
+  const drawIntegral = (ctx, body, color, scope, a, b, n) => {
+    const node = math.compile(body);
+    if (a >= b || n < 1) return null;
+    const dx = (b - a) / n;
+    let riemannSum = 0;
+
+    // 1) 직사각형들 (중점법: 칸 중앙의 함수값을 높이로)
+    for (let i = 0; i < n; i++) {
+      const xLeft = a + i * dx;
+      const xMid = xLeft + dx / 2;
+      let h;
+      try { h = node.evaluate({ ...scope, x: xMid }); } catch { continue; }
+      if (!isFinite(h)) continue;
+      riemannSum += h * dx;
+
+      // 직사각형 그리기 (반투명 채움 + 테두리)
+      const pxL = toPxX(xLeft), pxR = toPxX(xLeft + dx);
+      const py0 = toPxY(0), pyH = toPxY(h);
+      ctx.fillStyle = color + "33";   // 약 20% 투명
+      ctx.fillRect(pxL, py0, pxR - pxL, pyH - py0);
+      ctx.strokeStyle = color + "99"; // 테두리는 더 진하게
+      ctx.lineWidth = 1;
+      ctx.strokeRect(pxL, py0, pxR - pxL, pyH - py0);
+    }
+
+    // 2) 정확한 적분값 (아주 잘게 나눈 합으로 근사)
+    let exact = 0;
+    const fineN = 2000, fineDx = (b - a) / fineN;
+    for (let i = 0; i < fineN; i++) {
+      const xMid = a + (i + 0.5) * fineDx;
+      try { const v = node.evaluate({ ...scope, x: xMid }); if (isFinite(v)) exact += v * fineDx; } catch {}
+    }
+
+    // 구간 경계선 (세로 점선)
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash([4, 3]);
+    [a, b].forEach((xv) => {
+      ctx.beginPath(); ctx.moveTo(toPxX(xv), 0); ctx.lineTo(toPxX(xv), size.h); ctx.stroke();
+    });
+    ctx.setLineDash([]);
+
+    return { riemannSum, exact }; // 패널에 표시하기 위해 반환
+  };
+
+  // ====== [Phase 5] 점 그리기 ======
+  const drawPoints = (ctx, points, color) => {
+    ctx.fillStyle = color;
+    points.forEach(([x, y]) => {
+      const px = toPxX(x), py = toPxY(y);
+      ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill();
+      // 좌표 라벨
+      ctx.font = "12px sans-serif"; ctx.fillStyle = "#333";
+      ctx.fillText(`(${formatNum(x)}, ${formatNum(y)})`, px + 9, py - 6);
+      ctx.fillStyle = color;
+    });
+  };
+
+  // ====== [Phase 8] 극좌표 그리기: r = f(θ) ======
+  // θ를 0부터 2π(또는 그 이상)까지 돌리며 각도마다 반지름 r을 구하고,
+  // (r·cosθ, r·sinθ)로 화면 좌표로 바꿔 점을 이어 곡선을 그립니다.
+  const drawPolar = (ctx, body, color, scope) => {
+    const node = math.compile(body);
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.beginPath();
+    const TWO_PI = Math.PI * 2;
+    // 장미·나선 곡선은 한 바퀴로 안 닫힐 수 있어 넉넉히 4바퀴까지 그림
+    const maxTheta = TWO_PI * 4;
+    const stepsPerTurn = 360; // 한 바퀴를 360등분 (매끄럽게)
+    const dTheta = TWO_PI / stepsPerTurn;
+    let started = false;
+    for (let theta = 0; theta <= maxTheta; theta += dTheta) {
+      let r;
+      try { r = node.evaluate({ ...scope, theta }); } catch { r = NaN; }
+      if (!isFinite(r)) { started = false; continue; }
+      // 극좌표 → 직교좌표 변환
+      const x = r * Math.cos(theta), y = r * Math.sin(theta);
+      const px = toPxX(x), py = toPxY(y);
+      if (!started) { ctx.moveTo(px, py); started = true; } else ctx.lineTo(px, py);
+    }
+    ctx.stroke();
+  };
+
+  // ====== [Phase 8] 매개변수 그리기: (x(t), y(t)) ======
+  // 매개변수 t를 일정 범위로 돌리며 x좌표와 y좌표를 각각 계산해 점을 잇습니다.
+  const drawParametric = (ctx, xBody, yBody, color, scope) => {
+    const xNode = math.compile(xBody), yNode = math.compile(yBody);
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.beginPath();
+    const tMin = -Math.PI * 2, tMax = Math.PI * 2; // t 범위 (필요시 조정 가능)
+    const steps = 1000;
+    const dt = (tMax - tMin) / steps;
+    let started = false, prevPx = null, prevPy = null;
+    for (let t = tMin; t <= tMax; t += dt) {
+      let x, y;
+      try { x = xNode.evaluate({ ...scope, t }); y = yNode.evaluate({ ...scope, t }); }
+      catch { started = false; continue; }
+      if (!isFinite(x) || !isFinite(y)) { started = false; continue; }
+      const px = toPxX(x), py = toPxY(y);
+      // 화면 밖으로 크게 튀면 선을 끊음
+      if (prevPx !== null && (Math.abs(px - prevPx) > size.w * 2 || Math.abs(py - prevPy) > size.h * 2)) started = false;
+      if (!started) { ctx.moveTo(px, py); started = true; } else ctx.lineTo(px, py);
+      prevPx = px; prevPy = py;
+    }
+    ctx.stroke();
+  };
+
+  // ====== [Phase 5] 음함수 그리기 (마칭 스퀘어) ======
+  // F(x,y)=lhs-rhs 가 0이 되는 곡선을 격자를 훑어가며 찾습니다.
+  const drawImplicit = (ctx, lhs, rhs, color, scope) => {
+    const node = math.compile(`(${lhs})-(${rhs})`);
+    const N = 150; // 격자 해상도 (높을수록 매끄럽지만 느려짐)
+    const dx = (view.xMax - view.xMin) / N;
+    const dy = (view.yMax - view.yMin) / N;
+
+    // 모든 격자점에서 F값을 미리 계산해 2차원 배열에 저장
+    const F = [];
+    for (let j = 0; j <= N; j++) {
+      F[j] = [];
+      for (let i = 0; i <= N; i++) {
+        const x = view.xMin + i * dx, y = view.yMin + j * dy;
+        let v; try { v = node.evaluate({ ...scope, x, y }); } catch { v = NaN; }
+        F[j][i] = v;
+      }
+    }
+
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.beginPath();
+    // 두 격자점 사이에서 F=0이 되는 위치를 비례로 추정(선형 보간)
+    const interp = (xa, ya, va, xb, yb, vb) => {
+      const t = va / (va - vb); // va와 vb 사이에서 0이 되는 비율
+      return [xa + t * (xb - xa), ya + t * (yb - ya)];
+    };
+
+    for (let j = 0; j < N; j++) {
+      for (let i = 0; i < N; i++) {
+        const x0 = view.xMin + i * dx, x1 = x0 + dx;
+        const y0 = view.yMin + j * dy, y1 = y0 + dy;
+        const v00 = F[j][i], v10 = F[j][i + 1], v01 = F[j + 1][i], v11 = F[j + 1][i + 1];
+        if (![v00, v10, v01, v11].every(isFinite)) continue;
+
+        // 칸의 네 변 중 F부호가 바뀌는 변에서 교점을 구함
+        const pts = [];
+        if (v00 * v10 < 0) pts.push(interp(x0, y0, v00, x1, y0, v10)); // 아래변
+        if (v10 * v11 < 0) pts.push(interp(x1, y0, v10, x1, y1, v11)); // 오른변
+        if (v01 * v11 < 0) pts.push(interp(x0, y1, v01, x1, y1, v11)); // 위변
+        if (v00 * v01 < 0) pts.push(interp(x0, y0, v00, x0, y1, v01)); // 왼변
+
+        // 보통 교점은 2개 → 둘을 선분으로 이으면 곡선 조각이 됨
+        if (pts.length >= 2) {
+          ctx.moveTo(toPxX(pts[0][0]), toPxY(pts[0][1]));
+          ctx.lineTo(toPxX(pts[1][0]), toPxY(pts[1][1]));
+        }
+      }
+    }
+    ctx.stroke();
+  };
+
+  // ====== [Phase 5] 부등식 영역 색칠 ======
+  // 화면을 픽셀 블록 단위로 훑어 조건을 만족하는 칸을 반투명색으로 칠합니다.
+  const drawInequality = (ctx, lhs, op, rhs, color, scope) => {
+    const node = math.compile(`(${lhs})-(${rhs})`); // 부등식을 한쪽으로 모음
+    const step = 4; // 4픽셀마다 검사 (성능 위해 약간 거칠게)
+    ctx.fillStyle = color + "33"; // 끝의 33은 약 20% 투명도
+    for (let px = 0; px < size.w; px += step) {
+      for (let py = 0; py < size.h; py += step) {
+        const x = toMathX(px + step / 2), y = toMathY(py + step / 2);
+        let diff; try { diff = node.evaluate({ ...scope, x, y }); } catch { continue; }
+        if (!isFinite(diff)) continue;
+        // op에 따라 조건 만족 여부 판정 (lhs-rhs 부호로 비교)
+        let ok = false;
+        if (op === ">" || op === ">=") ok = diff > 0;
+        else ok = diff < 0;
+        if (ok) ctx.fillRect(px, py, step, step);
+      }
+    }
+    // 경계선도 함께 그려 영역 테두리를 명확히
+    drawImplicit(ctx, lhs, rhs, color, scope);
+  };
+
+  // ====== 전체 그리기 ======
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = size.w * dpr; canvas.height = size.h * dpr;
+    canvas.style.width = size.w + "px"; canvas.style.height = size.h + "px";
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.w, size.h);
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, size.w, size.h);
+
+    const xStep = niceStep(view.xMax - view.xMin, 10);
+    const yStep = niceStep(view.yMax - view.yMin, 10);
+    const scope = sliderValues();
+
+    // 격자
+    ctx.lineWidth = 1; ctx.strokeStyle = "#e8e8e8"; ctx.font = "12px sans-serif";
+    for (let x = Math.ceil(view.xMin / xStep) * xStep; x <= view.xMax; x += xStep) {
+      const px = toPxX(x); ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, size.h); ctx.stroke();
+    }
+    for (let y = Math.ceil(view.yMin / yStep) * yStep; y <= view.yMax; y += yStep) {
+      const py = toPxY(y); ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(size.w, py); ctx.stroke();
+    }
+    // 축
+    ctx.strokeStyle = "#888"; ctx.lineWidth = 1.5;
+    const x0 = toPxX(0), y0 = toPxY(0);
+    ctx.beginPath(); ctx.moveTo(0, y0); ctx.lineTo(size.w, y0); ctx.moveTo(x0, 0); ctx.lineTo(x0, size.h); ctx.stroke();
+    ctx.fillStyle = "#333";
+    for (let x = Math.ceil(view.xMin / xStep) * xStep; x <= view.xMax; x += xStep) {
+      if (Math.abs(x) < xStep / 2) continue; ctx.fillText(formatNum(x), toPxX(x) + 3, y0 - 4);
+    }
+    for (let y = Math.ceil(view.yMin / yStep) * yStep; y <= view.yMax; y += yStep) {
+      if (Math.abs(y) < yStep / 2) continue; ctx.fillText(formatNum(y), x0 + 4, toPxY(y) - 3);
+    }
+
+    // [Phase 5] 타입별로 그리기
+    const newIntegralResults = {}; // [Phase 10] 이번 그리기의 적분 결과 모음
+    rows.forEach((row) => {
+      if (!row.visible || !row.expr.trim() || row.error) return;
+      const info = classify(row.expr);
+      try {
+        if (info.type === "function") {
+          // [Phase 10] 적분 영역을 먼저 깔고(곡선 뒤), 그 위에 곡선을 그림
+          if (row.showIntegral) {
+            const res = drawIntegral(ctx, info.body, row.color, scope, row.intA, row.intB, row.intN);
+            if (res) newIntegralResults[row.id] = res;
+          }
+          drawFunction(ctx, info.body, row.color, scope);
+          // [Phase 9] 이 줄에 미분 옵션이 켜져 있으면 추가로 그림
+          if (row.showDeriv) drawDerivative(ctx, info.body, row.color, scope);
+          if (row.showTangent) drawTangent(ctx, info.body, row.color, scope, row.tangentX);
+        }
+        else if (info.type === "point") drawPoints(ctx, info.points, row.color);
+        else if (info.type === "implicit") drawImplicit(ctx, info.lhs, info.rhs, row.color, scope);
+        else if (info.type === "inequality") drawInequality(ctx, info.lhs, info.op, info.rhs, row.color, scope);
+        else if (info.type === "polar") drawPolar(ctx, info.body, row.color, scope);
+        else if (info.type === "parametric") drawParametric(ctx, info.xBody, info.yBody, row.color, scope);
+      } catch {}
+    });
+
+    // [Phase 6] 데이터 표의 점들 그리기 (주황색 점)
+    const tpts = tablePoints();
+    const tableColor = "#fa7e19";
+    tpts.forEach(([x, y]) => {
+      ctx.fillStyle = tableColor;
+      ctx.beginPath();
+      ctx.arc(toPxX(x), toPxY(y), 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.5; ctx.stroke();
+    });
+
+    // [Phase 6] 회귀선 그리기 (점선)
+    if (showRegression) {
+      const reg = regression();
+      if (reg) {
+        ctx.strokeStyle = tableColor; ctx.lineWidth = 2;
+        ctx.setLineDash([8, 5]); // 점선 패턴
+        ctx.beginPath();
+        // 화면 좌우 끝까지 직선 y=mx+b 를 그림
+        const y1 = reg.m * view.xMin + reg.b;
+        const y2 = reg.m * view.xMax + reg.b;
+        ctx.moveTo(toPxX(view.xMin), toPxY(y1));
+        ctx.lineTo(toPxX(view.xMax), toPxY(y2));
+        ctx.stroke();
+        ctx.setLineDash([]); // 점선 해제 (다른 그리기에 영향 없게)
+      }
+    }
+
+    // 마우스 좌표 추적 (일반 함수에만 스냅)
+    if (hover) {
+      const mathX = toMathX(hover.x);
+      let snapped = null;
+      for (const row of rows) {
+        if (!row.visible || !row.expr.trim() || row.error) continue;
+        const info = classify(row.expr);
+        if (info.type !== "function") continue;
+        try {
+          const y = math.compile(info.body).evaluate({ ...scope, x: mathX });
+          if (isFinite(y)) {
+            const py = toPxY(y);
+            if (Math.abs(py - hover.y) < 30) { snapped = { x: mathX, y, color: row.color, px: toPxX(mathX), py }; break; }
+          }
+        } catch {}
+      }
+      const dotX = snapped ? snapped.px : hover.x, dotY = snapped ? snapped.py : hover.y;
+      const labelX = snapped ? snapped.x : mathX, labelY = snapped ? snapped.y : toMathY(hover.y);
+      ctx.fillStyle = snapped ? snapped.color : "#333";
+      ctx.beginPath(); ctx.arc(dotX, dotY, snapped ? 6 : 4, 0, Math.PI * 2); ctx.fill();
+      if (snapped) { ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2); ctx.fill(); }
+      const label = `(${formatNum(labelX)}, ${formatNum(labelY)})`;
+      ctx.font = "13px sans-serif";
+      const tw = ctx.measureText(label).width;
+      let bx = dotX + 10, by = dotY - 28;
+      if (bx + tw + 12 > size.w) bx = dotX - tw - 22;
+      if (by < 0) by = dotY + 10;
+      ctx.fillStyle = "rgba(50,50,50,0.9)"; ctx.fillRect(bx, by, tw + 14, 22);
+      ctx.fillStyle = "#fff"; ctx.fillText(label, bx + 7, by + 15);
+    }
+
+    // [Phase 10] 적분 결과가 바뀌었을 때만 상태 업데이트 (무한 루프 방지)
+    setIntegralResults((prev) => {
+      const keys = Object.keys(newIntegralResults);
+      const prevKeys = Object.keys(prev);
+      let changed = keys.length !== prevKeys.length;
+      if (!changed) {
+        for (const k of keys) {
+          if (!prev[k] || Math.abs(prev[k].riemannSum - newIntegralResults[k].riemannSum) > 1e-9 || Math.abs(prev[k].exact - newIntegralResults[k].exact) > 1e-9) {
+            changed = true; break;
+          }
+        }
+      }
+      return changed ? newIntegralResults : prev;
+    });
+  }, [rows, view, size, hover, sliders, sliderValues, toPxX, toPxY, toMathX, toMathY, findRoots, tablePoints, regression, showRegression]);
+
+  useEffect(() => { draw(); }, [draw]);
+
+  useEffect(() => {
+    const anyPlaying = Object.values(sliders).some((s) => s.playing);
+    if (!anyPlaying) { if (animRef.current) { cancelAnimationFrame(animRef.current); animRef.current = null; } return; }
+    const dir = {}; Object.keys(sliders).forEach((k) => (dir[k] = 1));
+    const tick = () => {
+      setSliders((prev) => {
+        const next = { ...prev };
+        Object.entries(next).forEach(([k, s]) => {
+          if (!s.playing) return;
+          let v = s.value + dir[k] * s.step;
+          if (v >= s.max) { v = s.max; dir[k] = -1; } else if (v <= s.min) { v = s.min; dir[k] = 1; }
+          next[k] = { ...s, value: parseFloat(v.toFixed(4)) };
+        });
+        return next;
+      });
+      animRef.current = requestAnimationFrame(tick);
+    };
+    animRef.current = requestAnimationFrame(tick);
+    return () => { if (animRef.current) cancelAnimationFrame(animRef.current); };
+  }, [sliders]);
+
+  // ====== 수식 입력 처리 (타입별 검증) ======
+  const updateLatex = useCallback((id, latex) => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.id !== id) return r;
+        const expr = latexToMath(latex);
+        let error = null;
+        if (expr.trim()) {
+          const info = classify(expr);
+          try {
+            const scope = { x: 1, y: 1, t: 1, theta: 1 };
+            if (info.type === "function") { extractVars(info.body).forEach((v) => (scope[v] = 1)); math.compile(info.body).evaluate(scope); }
+            else if (info.type === "implicit") { math.compile(`(${info.lhs})-(${info.rhs})`).evaluate(scope); }
+            else if (info.type === "inequality") { math.compile(`(${info.lhs})-(${info.rhs})`).evaluate(scope); }
+            else if (info.type === "point") { if (!info.points.length) error = "수식 오류"; }
+            else if (info.type === "polar") { math.compile(info.body).evaluate(scope); }
+            else if (info.type === "parametric") { math.compile(info.xBody).evaluate(scope); math.compile(info.yBody).evaluate(scope); }
+          } catch { error = "수식 오류"; }
+        }
+        return { ...r, latex, expr, error };
+      })
+    );
+  }, []);
+
+  const addRow = () => setRows((prev) => [...prev, makeRow(nextId.current++)]);
+  const removeRow = (id) => setRows((prev) => prev.filter((r) => r.id !== id));
+  const toggleVisible = (id) => setRows((prev) => prev.map((r) => (r.id === id ? { ...r, visible: !r.visible } : r)));
+  // [Phase 9] 함수 줄의 미분 옵션 변경
+  const updateRowField = (id, field, value) =>
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  const setSliderValue = (name, value) => setSliders((prev) => ({ ...prev, [name]: { ...prev[name], value } }));
+  const setSliderRange = (name, key, value) => setSliders((prev) => ({ ...prev, [name]: { ...prev[name], [key]: value } }));
+  const togglePlay = (name) => setSliders((prev) => ({ ...prev, [name]: { ...prev[name], playing: !prev[name].playing } }));
+
+  // [Phase 6] 표 조작 함수들
+  const updateCell = (idx, key, val) =>
+    setTable((prev) => prev.map((r, i) => (i === idx ? { ...r, [key]: val } : r)));
+  const addTableRow = () => setTable((prev) => [...prev, { x: "", y: "" }]);
+  const removeTableRow = (idx) => setTable((prev) => prev.filter((_, i) => i !== idx));
+  const clearTable = () => setTable([{ x: "", y: "" }]);
+
+  const handleWheel = (e) => {
+    e.preventDefault();
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const factor = e.deltaY > 0 ? 1.1 : 0.9;
+    const cx = toMathX(mx), cy = toMathY(my);
+    setView((v) => ({ xMin: cx + (v.xMin - cx) * factor, xMax: cx + (v.xMax - cx) * factor, yMin: cy + (v.yMin - cy) * factor, yMax: cy + (v.yMax - cy) * factor }));
+  };
+  const handleMouseDown = (e) => (dragRef.current = { startX: e.clientX, startY: e.clientY, view: { ...view } });
+  const handleMouseMove = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    if (dragRef.current) {
+      const d = dragRef.current;
+      const dxMath = ((e.clientX - d.startX) / size.w) * (d.view.xMax - d.view.xMin);
+      const dyMath = ((e.clientY - d.startY) / size.h) * (d.view.yMax - d.view.yMin);
+      setView({ xMin: d.view.xMin - dxMath, xMax: d.view.xMax - dxMath, yMin: d.view.yMin + dyMath, yMax: d.view.yMax + dyMath });
+      setHover(null);
+    } else setHover({ x: mx, y: my });
+  };
+  const handleMouseUp = () => (dragRef.current = null);
+  const handleMouseLeave = () => { dragRef.current = null; setHover(null); };
+  const resetView = () => setView({ xMin: -10, xMax: 10, yMin: -10, yMax: 10 });
+  const exportPNG = () => {
+    setHover(null);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const url = canvasRef.current.toDataURL("image/png");
+      const a = document.createElement("a"); a.href = url; a.download = "graph.png"; a.click();
+    }));
+  };
+
+  // ====== [Phase 7] 현재 상태를 하나의 객체로 모으기 ======
+  // 함수·슬라이더·표·화면범위를 묶어 저장 단위로 만듦
+  const collectState = () => ({
+    version: 1,
+    rows: rows.map((r) => ({ latex: r.latex, expr: r.expr, color: r.color, visible: r.visible, showTangent: r.showTangent, tangentX: r.tangentX, showDeriv: r.showDeriv, showIntegral: r.showIntegral, intA: r.intA, intB: r.intB, intN: r.intN })),
+    sliders,
+    table,
+    view,
+    showRegression,
+  });
+
+  // 저장된 상태를 화면에 다시 적용
+  const applyState = (st) => {
+    if (!st || !st.rows) return false;
+    // 불러온 함수에 새 id를 부여하며 복원
+    const restored = st.rows.map((r, i) => ({
+      id: i + 1, latex: r.latex || "", expr: r.expr || "",
+      color: r.color || COLORS[i % COLORS.length],
+      visible: r.visible !== false, error: null,
+      showTangent: r.showTangent || false, tangentX: r.tangentX ?? 1, showDeriv: r.showDeriv || false,
+      showIntegral: r.showIntegral || false, intA: r.intA ?? 0, intB: r.intB ?? 3, intN: r.intN ?? 10,
+    }));
+    nextId.current = restored.length + 1;
+    setRows(restored.length ? restored : [makeRow(1)]);
+    setSliders(st.sliders || {});
+    setTable(st.table || [{ x: "", y: "" }]);
+    if (st.view) setView(st.view);
+    if (typeof st.showRegression === "boolean") setShowRegression(st.showRegression);
+    return true;
+  };
+
+  // ====== [Phase 7-A] JSON 파일로 내보내기 ======
+  const exportJSON = () => {
+    const data = JSON.stringify(collectState(), null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "graph-state.json"; a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // ====== [Phase 7-A] JSON 파일 가져오기 ======
+  const importJSON = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const st = JSON.parse(reader.result);
+        if (applyState(st)) setSaveStatus("파일을 불러왔습니다");
+        else setSaveStatus("올바른 형식이 아닙니다");
+      } catch {
+        setSaveStatus("파일을 읽을 수 없습니다");
+      }
+      setTimeout(() => setSaveStatus(""), 2500);
+    };
+    reader.readAsText(file);
+    e.target.value = ""; // 같은 파일 다시 선택 가능하게 초기화
+  };
+
+  // ====== [Phase 7-B] 영구 저장소에 이름 붙여 저장 (브라우저 닫아도 유지) ======
+  const STORAGE_PREFIX = "graph:";
+  // 저장된 목록 새로고침
+  const refreshSavedList = useCallback(async () => {
+    try {
+      const res = await window.storage.list(STORAGE_PREFIX);
+      const names = (res?.keys || []).map((k) => k.replace(STORAGE_PREFIX, ""));
+      setSavedList(names);
+    } catch {
+      setSavedList([]); // storage 미지원 환경이면 빈 목록
+    }
+  }, []);
+
+  // 컴포넌트 처음 뜰 때 저장 목록 한 번 불러옴
+  useEffect(() => { refreshSavedList(); }, [refreshSavedList]);
+
+  const saveNamed = async () => {
+    const name = window.prompt("저장할 이름을 입력하세요", "내 그래프");
+    if (!name) return;
+    try {
+      await window.storage.set(STORAGE_PREFIX + name, JSON.stringify(collectState()));
+      await refreshSavedList();
+      setSaveStatus(`"${name}" 저장됨`);
+    } catch {
+      setSaveStatus("저장 실패 (이 환경은 영구저장 미지원)");
+    }
+    setTimeout(() => setSaveStatus(""), 2500);
+  };
+
+  const loadNamed = async (name) => {
+    try {
+      const res = await window.storage.get(STORAGE_PREFIX + name);
+      if (res?.value) {
+        applyState(JSON.parse(res.value));
+        setSaveStatus(`"${name}" 불러옴`);
+      }
+    } catch {
+      setSaveStatus("불러오기 실패");
+    }
+    setTimeout(() => setSaveStatus(""), 2500);
+  };
+
+  const deleteNamed = async (name) => {
+    try {
+      await window.storage.delete(STORAGE_PREFIX + name);
+      await refreshSavedList();
+    } catch {}
+  };
+
+  const sliderNames = Object.keys(sliders).sort();
+
+  // [Phase 12] 문제 모드면 퀴즈 화면 전체 표시 (상단에 돌아가기 버튼 포함)
+  if (quizMode) {
+    return (
+      <div style={{ position: "relative", height: "100vh" }}>
+        <button onClick={() => setQuizMode(false)}
+          style={{ position: "absolute", top: 16, right: 16, zIndex: 10, padding: "8px 16px", background: "#fff", border: "1px solid #ddd", borderRadius: 8, cursor: "pointer", fontSize: 14, boxShadow: "0 2px 6px rgba(0,0,0,0.1)" }}>
+          ← 계산기로 돌아가기
+        </button>
+        <QuizMode />
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", height: "100vh", fontFamily: "'Georgia', serif", background: "#fafafa" }}>
+      <div style={{ width: 360, background: "#fff", borderRight: "1px solid #ddd", display: "flex", flexDirection: "column", boxShadow: "2px 0 8px rgba(0,0,0,0.04)" }}>
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid #eee", display: "flex", alignItems: "center" }}>
+          <span style={{ fontSize: 20, fontWeight: "bold", letterSpacing: "-0.5px" }}>그래프 계산기</span>
+          {/* [Phase 11] 2D/3D 전환 + [Phase 12] 문제 모드 */}
+          <div style={{ marginLeft: "auto", display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ display: "flex", border: "1px solid #ddd", borderRadius: 8, overflow: "hidden" }}>
+              <button onClick={() => setMode3D(false)} style={{ padding: "5px 12px", border: "none", background: !mode3D ? "#2d70b3" : "#fff", color: !mode3D ? "#fff" : "#666", cursor: "pointer", fontSize: 13 }}>2D</button>
+              <button onClick={() => setMode3D(true)} style={{ padding: "5px 12px", border: "none", background: mode3D ? "#2d70b3" : "#fff", color: mode3D ? "#fff" : "#666", cursor: "pointer", fontSize: 13 }}>3D</button>
+            </div>
+            <button onClick={() => setQuizMode(true)} style={{ padding: "5px 12px", border: "1px solid #388c46", borderRadius: 8, background: "#388c46", color: "#fff", cursor: "pointer", fontSize: 13 }}>문제</button>
+          </div>
+        </div>
+
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {mode3D ? (
+            /* [Phase 11] 3D 모드 입력 패널 */
+            <div style={{ padding: "16px" }}>
+              <div style={{ fontSize: 13, color: "#999", marginBottom: 8, fontWeight: "bold" }}>3D 곡면 z = f(x, y)</div>
+              <input
+                value={expr3D}
+                onChange={(e) => setExpr3D(e.target.value)}
+                placeholder="예: x^2 + y^2"
+                style={{ width: "100%", fontSize: 16, padding: "8px 10px", border: "1px solid #ddd", borderRadius: 6, fontFamily: "monospace", boxSizing: "border-box" }}
+              />
+              <div style={{ marginTop: 12, fontSize: 13, color: "#666" }}>
+                정의역 범위: ±{range3D}
+                <input type="range" min={1} max={10} step={1} value={range3D} onChange={(e) => setRange3D(parseInt(e.target.value))} style={{ width: "100%", accentColor: "#2d70b3", marginTop: 4 }} />
+              </div>
+              <div style={{ marginTop: 16, fontSize: 12, color: "#999", lineHeight: 1.7 }}>
+                <b>조작:</b> 드래그=회전 · 휠=확대/축소
+                <br /><b>예시 식:</b>
+                <br />• x^2 + y^2 (그릇 모양)
+                <br />• x^2 - y^2 (안장면)
+                <br />• sin(x) * cos(y) (물결)
+                <br />• sin(sqrt(x^2+y^2)) (잔물결)
+                <br />• x * y / 4 (꼬인 면)
+                <br /><br />색은 높이를 나타냅니다 (파랑=낮음, 빨강=높음).
+              </div>
+            </div>
+          ) : (
+          <>
+          {rows.map((row, idx) => {
+            const info = classify(row.expr);
+            const isFunc = info.type === "function" && !row.error && row.expr.trim();
+            return (
+              <div key={row.id} style={{ borderBottom: "1px solid #f2f2f2" }}>
+                <div style={{ display: "flex", alignItems: "center", padding: "10px 12px", gap: 8 }}>
+                  <button onClick={() => toggleVisible(row.id)} title="보이기/숨기기" style={{ width: 22, height: 22, borderRadius: "50%", background: row.visible ? row.color : "#fff", border: `2px solid ${row.color}`, cursor: "pointer", flexShrink: 0 }} />
+                  <span style={{ color: "#999", fontSize: 13, minWidth: 30 }}>f{idx + 1} =</span>
+                  <MathField value={row.latex} onChange={(latex) => updateLatex(row.id, latex)} color={row.color} error={row.error} />
+                  {rows.length > 1 && (<button onClick={() => removeRow(row.id)} style={{ border: "none", background: "none", color: "#bbb", cursor: "pointer", fontSize: 18, flexShrink: 0 }}>×</button>)}
+                </div>
+
+                {/* [Phase 9] 미분 시각화 컨트롤 (일반 함수일 때만) */}
+                {isFunc && (
+                  <div style={{ padding: "0 12px 10px 52px", display: "flex", flexDirection: "column", gap: 6 }}>
+                    <div style={{ display: "flex", gap: 12, fontSize: 12, color: "#666" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                        <input type="checkbox" checked={row.showTangent} onChange={(e) => updateRowField(row.id, "showTangent", e.target.checked)} style={{ accentColor: "#fa7e19" }} />
+                        접선
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                        <input type="checkbox" checked={row.showDeriv} onChange={(e) => updateRowField(row.id, "showDeriv", e.target.checked)} style={{ accentColor: row.color }} />
+                        도함수 f'(x)
+                      </label>
+                      <label style={{ display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                        <input type="checkbox" checked={row.showIntegral} onChange={(e) => updateRowField(row.id, "showIntegral", e.target.checked)} style={{ accentColor: "#388c46" }} />
+                        적분(넓이)
+                      </label>
+                    </div>
+                    {/* 접선이 켜지면 접점 위치 슬라이더 표시 */}
+                    {row.showTangent && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span style={{ fontSize: 12, color: "#888", minWidth: 60 }}>x = {formatNum(row.tangentX)}</span>
+                        <input type="range" min={view.xMin} max={view.xMax} step={(view.xMax - view.xMin) / 200}
+                          value={row.tangentX}
+                          onChange={(e) => updateRowField(row.id, "tangentX", parseFloat(e.target.value))}
+                          style={{ flex: 1, accentColor: "#fa7e19" }} />
+                      </div>
+                    )}
+                    {/* [Phase 10] 적분이 켜지면 구간·직사각형 개수 컨트롤 */}
+                    {row.showIntegral && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 2, padding: "8px 10px", background: "#f3f8f4", borderRadius: 6 }}>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <label style={{ fontSize: 12, color: "#666", display: "flex", alignItems: "center", gap: 4 }}>
+                            a=<input type="number" value={row.intA} onChange={(e) => updateRowField(row.id, "intA", parseFloat(e.target.value))} style={{ width: 48, fontSize: 12, padding: "2px 4px", border: "1px solid #ccd", borderRadius: 4 }} />
+                          </label>
+                          <label style={{ fontSize: 12, color: "#666", display: "flex", alignItems: "center", gap: 4 }}>
+                            b=<input type="number" value={row.intB} onChange={(e) => updateRowField(row.id, "intB", parseFloat(e.target.value))} style={{ width: 48, fontSize: 12, padding: "2px 4px", border: "1px solid #ccd", borderRadius: 4 }} />
+                          </label>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 12, color: "#888", minWidth: 64 }}>직사각형 {row.intN}개</span>
+                          <input type="range" min={1} max={100} step={1} value={row.intN}
+                            onChange={(e) => updateRowField(row.id, "intN", parseInt(e.target.value))}
+                            style={{ flex: 1, accentColor: "#388c46" }} />
+                        </div>
+                        {/* 리만 합 결과 vs 실제 적분값 */}
+                        {integralResults[row.id] && (
+                          <div style={{ fontSize: 12, fontFamily: "monospace", color: "#2e6b3a", lineHeight: 1.6 }}>
+                            리만 합 ≈ {formatNum(integralResults[row.id].riemannSum)}
+                            <br />
+                            실제 적분값 = {formatNum(integralResults[row.id].exact)}
+                            <br />
+                            <span style={{ color: "#999", fontSize: 11 }}>오차 {formatNum(Math.abs(integralResults[row.id].riemannSum - integralResults[row.id].exact))} (개수 늘리면 줄어듦)</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          <button onClick={addRow} style={{ margin: "12px", padding: "10px", width: "calc(100% - 24px)", border: "1px dashed #bbb", borderRadius: 8, background: "#fafafa", cursor: "pointer", fontSize: 14, color: "#666" }}>+ 함수 추가</button>
+
+          {sliderNames.length > 0 && (
+            <div style={{ borderTop: "1px solid #eee", padding: "12px 16px" }}>
+              <div style={{ fontSize: 13, color: "#999", marginBottom: 8, fontWeight: "bold" }}>슬라이더 (변수)</div>
+              {sliderNames.map((name) => {
+                const s = sliders[name];
+                return (
+                  <div key={name} style={{ marginBottom: 16, padding: "10px 12px", background: "#f9f9f9", borderRadius: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <span style={{ fontFamily: "monospace", fontSize: 16, fontWeight: "bold", minWidth: 20 }}>{name}</span>
+                      <span style={{ fontFamily: "monospace", fontSize: 15, color: "#2d70b3" }}>= {formatNum(s.value)}</span>
+                      <button onClick={() => togglePlay(name)} title="애니메이션" style={{ marginLeft: "auto", width: 28, height: 28, borderRadius: "50%", border: "1px solid #ccc", background: s.playing ? "#388c46" : "#fff", color: s.playing ? "#fff" : "#555", cursor: "pointer", fontSize: 12 }}>{s.playing ? "❚❚" : "▶"}</button>
+                    </div>
+                    <input type="range" min={s.min} max={s.max} step={s.step} value={s.value} onChange={(e) => setSliderValue(name, parseFloat(e.target.value))} style={{ width: "100%", accentColor: "#2d70b3" }} />
+                    <div style={{ display: "flex", gap: 6, marginTop: 6, fontSize: 11, color: "#888" }}>
+                      <label style={{ flex: 1 }}>최소<input type="number" value={s.min} onChange={(e) => setSliderRange(name, "min", parseFloat(e.target.value))} style={{ width: "100%", fontSize: 12, padding: 2, border: "1px solid #ddd", borderRadius: 4 }} /></label>
+                      <label style={{ flex: 1 }}>최대<input type="number" value={s.max} onChange={(e) => setSliderRange(name, "max", parseFloat(e.target.value))} style={{ width: "100%", fontSize: 12, padding: 2, border: "1px solid #ddd", borderRadius: 4 }} /></label>
+                      <label style={{ flex: 1 }}>간격<input type="number" value={s.step} onChange={(e) => setSliderRange(name, "step", parseFloat(e.target.value) || 0.1)} style={{ width: "100%", fontSize: 12, padding: 2, border: "1px solid #ddd", borderRadius: 4 }} /></label>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* [Phase 6] 데이터 표 + 회귀선 */}
+          <div style={{ borderTop: "1px solid #eee", padding: "12px 16px" }}>
+            <div style={{ display: "flex", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 13, color: "#999", fontWeight: "bold" }}>데이터 표 (점 + 회귀선)</span>
+              <button onClick={clearTable} style={{ marginLeft: "auto", fontSize: 11, color: "#bbb", border: "none", background: "none", cursor: "pointer" }}>모두 지우기</button>
+            </div>
+
+            {/* 표 헤더 */}
+            <div style={{ display: "flex", gap: 6, fontSize: 12, color: "#888", marginBottom: 4, paddingLeft: 4 }}>
+              <span style={{ flex: 1 }}>x</span>
+              <span style={{ flex: 1 }}>y</span>
+              <span style={{ width: 20 }}></span>
+            </div>
+
+            {/* 표 행들 */}
+            {table.map((row, idx) => (
+              <div key={idx} style={{ display: "flex", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                <input type="number" value={row.x} onChange={(e) => updateCell(idx, "x", e.target.value)} placeholder="0"
+                  style={{ flex: 1, fontSize: 14, padding: "4px 6px", border: "1px solid #ddd", borderRadius: 4, fontFamily: "monospace" }} />
+                <input type="number" value={row.y} onChange={(e) => updateCell(idx, "y", e.target.value)} placeholder="0"
+                  style={{ flex: 1, fontSize: 14, padding: "4px 6px", border: "1px solid #ddd", borderRadius: 4, fontFamily: "monospace" }} />
+                <button onClick={() => removeTableRow(idx)} style={{ width: 20, border: "none", background: "none", color: "#ccc", cursor: "pointer", fontSize: 16 }}>×</button>
+              </div>
+            ))}
+
+            <button onClick={addTableRow} style={{ marginTop: 6, padding: "6px", width: "100%", border: "1px dashed #ddd", borderRadius: 6, background: "#fafafa", cursor: "pointer", fontSize: 13, color: "#888" }}>+ 행 추가</button>
+
+            {/* 회귀선 표시 토글 + 결과 */}
+            <label style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, fontSize: 13, color: "#555", cursor: "pointer" }}>
+              <input type="checkbox" checked={showRegression} onChange={(e) => setShowRegression(e.target.checked)} style={{ accentColor: "#fa7e19" }} />
+              회귀선 표시 (최적적합 직선)
+            </label>
+
+            {/* 회귀 결과 (기울기, 절편, R²) */}
+            {(() => {
+              const reg = regression();
+              if (!reg) return <div style={{ marginTop: 8, fontSize: 12, color: "#bbb" }}>점이 2개 이상이면 회귀선이 계산됩니다.</div>;
+              return (
+                <div style={{ marginTop: 8, padding: "8px 10px", background: "#fff7ef", borderRadius: 6, fontSize: 13, fontFamily: "monospace", color: "#b8590b", lineHeight: 1.6 }}>
+                  y = {formatNum(reg.m)}x {reg.b >= 0 ? "+ " + formatNum(reg.b) : "− " + formatNum(-reg.b)}
+                  <br />
+                  <span style={{ fontSize: 12 }}>R² = {reg.r2.toFixed(4)} (1에 가까울수록 잘 맞음)</span>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* [Phase 7] 저장 & 불러오기 */}
+          <div style={{ borderTop: "1px solid #eee", padding: "12px 16px" }}>
+            <div style={{ fontSize: 13, color: "#999", marginBottom: 8, fontWeight: "bold" }}>저장 & 불러오기</div>
+
+            {/* 영구 저장 (이름 붙여) */}
+            <button onClick={saveNamed} style={{ width: "100%", padding: "8px", marginBottom: 6, border: "1px solid #2d70b3", borderRadius: 6, background: "#2d70b3", color: "#fff", cursor: "pointer", fontSize: 13 }}>
+              현재 그래프 저장하기
+            </button>
+
+            {/* 저장된 목록 */}
+            {savedList.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                {savedList.map((name) => (
+                  <div key={name} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 0" }}>
+                    <button onClick={() => loadNamed(name)} style={{ flex: 1, textAlign: "left", padding: "5px 8px", border: "1px solid #ddd", borderRadius: 6, background: "#fff", cursor: "pointer", fontSize: 13, color: "#333" }}>
+                      📈 {name}
+                    </button>
+                    <button onClick={() => deleteNamed(name)} title="삭제" style={{ width: 24, border: "none", background: "none", color: "#ccc", cursor: "pointer", fontSize: 15 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* JSON 파일 내보내기/가져오기 */}
+            <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+              <button onClick={exportJSON} style={{ flex: 1, padding: "7px", border: "1px solid #ddd", borderRadius: 6, background: "#fafafa", cursor: "pointer", fontSize: 12, color: "#666" }}>
+                파일로 내보내기
+              </button>
+              <label style={{ flex: 1, padding: "7px", border: "1px solid #ddd", borderRadius: 6, background: "#fafafa", cursor: "pointer", fontSize: 12, color: "#666", textAlign: "center" }}>
+                파일 가져오기
+                <input type="file" accept="application/json,.json" onChange={importJSON} style={{ display: "none" }} />
+              </label>
+            </div>
+
+            {/* 상태 메시지 */}
+            {saveStatus && (
+              <div style={{ marginTop: 8, fontSize: 12, color: "#388c46", textAlign: "center" }}>{saveStatus}</div>
+            )}
+          </div>
+          </>
+          )}
+        </div>
+
+        <div style={{ padding: "12px 20px", borderTop: "1px solid #eee", fontSize: 12, color: "#999", lineHeight: 1.6 }}>
+          함수: x^2, sin(x) · 점: (1,3) · 원/음함수: x^2+y^2=9
+          <br />부등식: y&gt;x^2 · 극좌표: r=2sin(theta)
+          <br />매개변수: (cos(t), sin(t)) · x외 문자=슬라이더
+          <br />함수 아래 "접선" 체크 → 슬라이더로 기울기 관찰
+        </div>
+      </div>
+
+      <div ref={containerRef} style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+        {mode3D ? (
+          /* [Phase 11] 3D 곡면 뷰 */
+          <Surface3D expr={expr3D} range={range3D} />
+        ) : (
+          <>
+            <canvas ref={canvasRef} onWheel={handleWheel} onMouseDown={handleMouseDown} onMouseMove={handleMouseMove} onMouseUp={handleMouseUp} onMouseLeave={handleMouseLeave} style={{ display: "block", cursor: dragRef.current ? "grabbing" : "crosshair" }} />
+            <div style={{ position: "absolute", top: 16, right: 16, display: "flex", gap: 8 }}>
+              <button onClick={exportPNG} style={{ padding: "8px 16px", background: "#fff", border: "1px solid #ddd", borderRadius: 8, cursor: "pointer", fontSize: 14, boxShadow: "0 2px 6px rgba(0,0,0,0.1)" }}>PNG 저장</button>
+              <button onClick={resetView} style={{ padding: "8px 16px", background: "#fff", border: "1px solid #ddd", borderRadius: 8, cursor: "pointer", fontSize: 14, boxShadow: "0 2px 6px rgba(0,0,0,0.1)" }}>화면 초기화</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
