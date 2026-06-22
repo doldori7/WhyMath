@@ -27,6 +27,7 @@ Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포)이�
   - textbook(슬라이스 8b, v1.1 이식): TextbookMapping·TextbookToneProfile·TextbookUnit
   - visualization(슬라이스 90): Visualization
   - standard(P1-2): AchievementStandard·ConceptStandardLink
+  - ocr(L5 OCR): BBox·OcrRegion·OcrResult
 """
 
 from whymath_backend.schema.activity import (
@@ -92,6 +93,11 @@ from whymath_backend.schema.enums import (
     VisualizationStyle,
     VisualizationType,
     VisualType,
+)
+from whymath_backend.schema.ocr import (
+    BBox,
+    OcrRegion,
+    OcrResult,
 )
 from whymath_backend.schema.problem import (
     Condition,
@@ -212,4 +218,8 @@ __all__ = [
     # standard (P1-2)
     "AchievementStandard",
     "ConceptStandardLink",
+    # ocr (L5 OCR)
+    "BBox",
+    "OcrRegion",
+    "OcrResult",
 ]
