@@ -1,0 +1,151 @@
+# WhyMath 24/7 운영 설계 (Phaiakes9 상시 가동)
+
+> 범위: WhyMath **독립 수학 코어(L1~L4) + L5 서버**를 Phaiakes9에서 *상시 가동*하기 위한 서비스
+> 토폴로지·감독(supervision)·헬스/레디니스·모니터링·백업·배포·클라우드 비용 보정 설계.
+> 기존 [`README.md`](./README.md)는 **Ollama 단독(M1.1)** 운영만 다룬다 — 이 문서는 그 위에 *풀 스택*을 올린다.
+>
+> ⚠️ 라이브 적용(서비스 등록·실측)은 Phaiakes9 콘솔에서 실행한다. 이 문서는 *설계·런북*이며, 실 수치(비용·지연)는 §8에서 측정해 코드 상수를 보정한다.
+
+---
+
+## 0. 결정 우선순위 (CLAUDE.md §의사결정)
+
+운영 충돌 시: **① 학생 안전·웰빙 → ② 법적·미성년자 → ③ 교수학 정확성 → … → ⑥ 비용 → ⑦ 속도.**
+가용성(서비스 재시작·폴백)이 *정확성*을 위협하면(예: 검증 없는 응답 노출) **가용성을 양보한다** — L3/L4 검증 게이트를 우회하는 폴백은 금지.
+
+---
+
+## 1. 서비스 토폴로지
+
+Phaiakes9(Ryzen AI Max+ 395·128GB) 단일 노드에 전 스택을 systemd/컨테이너로 상시 가동한다. **수학 로직은 L1~L4 독립 코어**(클라이언트는 API 소비·CLAUDE.md 슬라이스89).
+
+| 서비스 | 역할 | 포트(기본) | 상태점검 | 데이터 |
+|---|---|---|---|---|
+| `ollama` | 로컬 LLM(Qwen2-Math·DeepSeek-Math·**Qwen3-VL** OCR) | 11434 | `/api/tags` + warm generate | 모델 캐시 |
+| `whymath-api` (uvicorn) | L5 FastAPI — L1~L4 오케스트레이션·`/v1/*` | 8000 | **`GET /status`**(아래 §3) | 무상태(컨테이너) |
+| `whymath-worker` (celery) | **QUALITY(27b) 비동기 큐 전용**(03a §D.3·동시성 1·GPU 단일 점유) | — | celery ping | 무상태 |
+| `postgres` (+TimescaleDB·pgvector) | RDB·시계열·임베딩 벡터(단일 store 동거·슬98) | 5432 | `pg_isready` | **영속(백업 필수)** |
+| `neo4j` (Community) | 개념 연결 그래프(노드·엣지) | 7687/7474 | `cypher RETURN 1` | **영속(백업 필수)** |
+| `clickhouse` | 학습 행동 로그 분석 | 9000/8123 | `SELECT 1` | 영속(재생성 가능) |
+| `redis` | 세션·핫데이터·**L3 응답 캐시**·Celery broker/backend | 6379 | `PING` | 반영속(AOF 권장) |
+| `minio` (S3 호환) | 영상·이미지·**학생 손글씨 원본**(미성년 PII·암호화) | 9000c | `/minio/health/live` | **영속·암호화** |
+
+의존 순서(부팅): `postgres·neo4j·redis·clickhouse·minio·ollama` → `whymath-api`·`whymath-worker`.
+이 순서를 systemd `After=`/`Wants=`로 강제한다(§2). 컨테이너 스택이면 docker-compose `depends_on`+healthcheck.
+
+---
+
+## 2. 감독(Supervision) — systemd
+
+상시 가동·자동 재시작의 단일 원천은 systemd(컨테이너면 `restart: unless-stopped` + compose). 기존 `systemd/ollama.service` 패턴을 확장한다.
+
+**공통 정책**: `Restart=on-failure`·`RestartSec=5`·`StartLimitIntervalSec`로 크래시 루프 차단·`After=`로 의존 정렬. 시크릿은 `EnvironmentFile=/etc/whymath/whymath.env`(0600·env만·하드코딩 금지·CLAUDE.md 보안).
+
+`whymath-api.service` (요지):
+```ini
+[Unit]
+Description=WhyMath L5 API (uvicorn)
+After=network-online.target postgresql.service redis-server.service neo4j.service ollama.service
+Wants=postgresql.service redis-server.service neo4j.service ollama.service
+
+[Service]
+User=whymath
+WorkingDirectory=/srv/whymath/src/backend
+EnvironmentFile=/etc/whymath/whymath.env
+ExecStart=/srv/whymath/src/backend/.venv/bin/uvicorn whymath_backend.app:create_app \
+  --factory --host 0.0.0.0 --port 8000 --workers 2
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+`whymath-worker.service`: 동일 패턴, `ExecStart=… celery -A whymath_backend...worker --concurrency=1`(QUALITY 27b는 GPU 단일 점유 → **concurrency 1 고정**·03a §D.3). 큐 미가동 시 `/v1/generate` QUALITY는 503(파이프라인 `QualityQueueUnavailableError`·동기 호출 절대 금지).
+
+> **다중 워커 주의**: api `--workers N`이면 인메모리 상태(세션·OCR 부품·L3 provider)가 워커별로 복제된다. 세션은 **Redis 영속**(`WHYMATH_REDIS_URL`)으로 공유하고, OCR/L3 부품은 워커별 startup 1회 로드(읽기전용이라 안전). DB 엔진은 lazy·워커별.
+
+---
+
+## 3. 헬스 / 레디니스
+
+- **`GET /status`**(이미 구현) — Ollama 도달성·라우팅 모델 매트릭스 설치 여부·(선택)클라우드 구성. 죽은 의존이 있어도 **500을 던지지 않고 보고**(`reachable=false`·503/ready=false). 로드밸런서·systemd watchdog·외부 모니터의 레디니스 소스.
+- 서비스별 저수준 점검: `pg_isready`·`redis-cli PING`·`cypher-shell "RETURN 1"`·`/minio/health/live`·`ollama` warm generate(`healthcheck.sh`).
+- **콜드로드 방지**: Ollama `OLLAMA_KEEP_ALIVE`(예: `-1` 또는 충분히 길게)로 핫모델 상주 → 첫 요청 SLA(p50<2s·FAST) 보호. 부팅 후 `healthcheck.sh` generate 2~3회로 워밍업.
+- **OCR 부품**: `WHYMATH_OCR_ENABLED=true`면 startup 1회 로드(app.py lifespan)·실패해도 부팅 fail-fast 안 함(/v1/ocr만 503). 라이브 검증은 [`OCR_LIVE_VERIFICATION.md`](./OCR_LIVE_VERIFICATION.md).
+
+---
+
+## 4. 모니터링·관측성
+
+- **LLM 추적**: 모든 LLM/VLM 호출 → **Langfuse**(라우팅 결정·캐시 적중·shadow 검증 신호·비용/지연 추정 vs 실측). L3 `TraceSink`(LangfuseSink)가 이미 결선.
+- **분산 추적/메트릭**: OpenTelemetry(api·worker) → 수집기. 핵심 SLI: `/v1/coach`·`/v1/ocr` p50/p95·에러율·캐시 적중률·큐 대기시간·GPU 메모리.
+- **로그**: `journalctl -u whymath-api -u whymath-worker -u ollama`. 학생 채팅·손글씨는 **평문 로그 금지**(미성년 PII·CLAUDE.md) — Langfuse 기록도 학생 ID는 *해시*만(03a §F.2).
+- **알림 신호(권장 임계)**: `/status` ready=false 1분↑ · api 5xx율 >2% · 큐 대기 p95 > SLA · 디스크 <15% · GPU OOM(`ollama ps`).
+
+---
+
+## 5. 백업·복구 (영속 데이터)
+
+| 데이터 | 백업 | 주기 | 복구 검증 |
+|---|---|---|---|
+| PostgreSQL(학생·숙달 시계열·문항·임베딩) | `pg_dump`/물리(pgBackRest)·TimescaleDB 청크 포함 | 일 1회 + WAL 연속 | 분기별 복원 리허설 |
+| Neo4j(개념 그래프) | `neo4j-admin database dump` | 일 1회(그래프는 재구성 비싸나 코퍼스로 재시드 가능) | 덤프 로드 확인 |
+| MinIO(손글씨·이미지) | 버킷 복제/스냅샷 | 일 1회 | 객체 무결성 |
+| Redis(세션) | AOF(`appendonly yes`) | 연속 | 재시작 후 세션 잔존(OCR §9·TTL 24h) |
+| ClickHouse(행동 로그) | 선택(재생성 가능) | 주 1회 | — |
+
+**미성년 PII**: 손글씨 원본·채팅은 **암호화 저장**(MinIO SSE·DB 컬럼 암호화), 백업도 암호화. 보존기간·삭제(GDPR/개인정보)는 `privacy/` 모듈·동의 절차 준수.
+
+---
+
+## 6. 배포·업데이트 (무중단 지향)
+
+1. `git pull` → venv 동기화(`pip install -e ".[dev,...]"`·필요 extra).
+2. **DB 마이그레이션**: `alembic upgrade head`(전방호환 우선 — 컬럼 추가형). 파괴적 변경은 2단계(추가→백필→제거).
+3. **api 롤링 재시작**: `systemctl reload-or-restart whymath-api`(워커 2+면 순차). lifespan이 `dispose_engine`로 커넥션 정리.
+4. worker 재시작은 in-flight 작업 드레인 후(`celery ... control shutdown` graceful).
+5. 롤백: 직전 태그로 `git checkout` + (마이그레이션 가역성 확보된 경우) `alembic downgrade`.
+6. **CI 게이트 통과분만 배포**(ruff·black·mypy-strict·pytest 70%+·policy-guard). `main` 머지 = 배포 후보.
+
+---
+
+## 7. 보안·네트워크
+
+- Phaiakes9는 **폐쇄망** 가정. `ollama`·DB의 `0.0.0.0` 바인딩은 방화벽(ufw) 뒤에서만. 외부 노출 필요 시 **reverse proxy(TLS)+인증** 추가.
+- 시크릿은 전부 `EnvironmentFile`(env)·`SecretStr`(코드)·repr/로그 노출 금지(CLAUDE.md). API 키 하드코딩 0.
+- 인증·결제(카카오/네이버/토스)는 라이브 키 보유 후 결선(샌드박스 범위 밖).
+
+---
+
+## 8. 클라우드 티어 비용/지연 실측 보정 (03a §H#4)
+
+현재 `l3/router.py`의 클라우드 추정 상수는 **명시적 placeholder**다(fabricate 아님):
+- `CLOUD_MIN_COST_KRW` = {CLOUD_MID: 10.0, CLOUD_HIGH: 50.0} — `guard_cloud` 잔여예산 판정용 1회 최소비용.
+- `CLOUD_LATENCY_MS` = {CLOUD_MID: 3000, CLOUD_HIGH: 8000} — 예상 지연(03a §A.1 "가변").
+
+**보정 절차**(Phaiakes9·라이브 Anthropic 키):
+1. 대표 호출지점(explain/diagnose/coach/verify)별 실 프롬프트로 CLOUD_MID(Sonnet)·CLOUD_HIGH(Opus) 호출 N회.
+2. **Langfuse 실측 필드**(토큰 in/out·지연)에서 p50/p95 지연·호출당 원가(토큰×단가·환율) 산출.
+3. 1회 최소비용 = 최소 프롬프트 관측 원가의 보수적 하한 → `CLOUD_MIN_COST_KRW` 갱신.
+4. 예상 지연 = p50(또는 SLA 보수적으로 p95) → `CLOUD_LATENCY_MS` 갱신.
+5. 상수 변경 + 근거(측정 N·기간·환율)를 **MEMORY.md 결정 로그**에 기록(코드 주석의 "placeholder" 표식 제거).
+
+> 측정 자체는 라이브 키·트래픽이 필요해 샌드박스 불가 — 이 절차를 Phaiakes9에서 실행해 상수만 교체한다(라우팅 *로직*은 불변·상수만 데이터 보정).
+
+---
+
+## 9. 용량·확장 메모
+
+- 단일 노드(Phaiakes9) 기준 설계. GPU는 **단일 점유**라 QUALITY(27b) 동시성 1·OCR(Qwen3-VL)·FAST/MID가 GPU를 공유 → 큐로 직렬화(03a §D.3). 동시 부하↑ 시 FAST 우선·QUALITY 비동기 분리가 이미 라우터에 반영.
+- 수평 확장은 *프로덕션(GCP/AWS)* 단계(CLAUDE.md 인프라): api 무상태라 N복제 가능(세션 Redis·DB 공유), GPU 워커만 노드 추가. Phaiakes9는 개발·시범 상시가동 노드.
+
+---
+
+## 10. 후속 (이 문서 범위 밖·라이브 필요)
+
+- systemd unit 파일 실제 작성·`/etc/whymath/whymath.env` 구성(Phaiakes9).
+- §8 클라우드 상수 실측 보정(라이브 키).
+- 컨테이너화(docker-compose) 여부 결정·이미지 빌드.
+- 백업 자동화 스크립트·복원 리허설 cron.
+- 인증·결제 라이브 결선.
