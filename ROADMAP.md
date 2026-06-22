@@ -76,7 +76,7 @@
 ### Day 61~75: 클라이언트(Flutter 단일·패드 중심)·서버 스캐폴딩 (L5)
 - [ ] Flutter(패드 중심·Riverpod) 프로젝트 초기화 + 반응형(360px) + 입력 계층 추상화 + 2 비상구(MathLive·three.js) WebView 시드
 - [ ] FastAPI 백엔드 초기화 + PostgreSQL + Redis (+ Neo4j 개념 그래프 연결)
-- [ ] Mathpix OCR 통합 (사진 → LaTeX)
+- [~] OCR 통합 (사진 → 구조화 LaTeX) — **Phase A·B 完**: 콴다식 4단계 파이프라인(`l5/ocr`)·`POST /v1/ocr`·MFD 수식 영역 검출(rapid-layout PP·Apache-2.0·AGPL ultralytics 제외). 잔여 Phase C: TexTeller·Qwen3-VL(L3 경유)·한국어 모델 실연결·라이브 검증(Phaiakes9)
 - [ ] 기본 채팅 UI + 학습자 상태 표시
 - [ ] **온보딩 흐름** — 국가·학년·학교·교과서·진도·목표 (3분 무마찰)
 - [ ] **자동 커리큘럼 정렬 엔진 MVP** — 학생 프로필 → 교과서 단원 → 콘텐츠 라우팅

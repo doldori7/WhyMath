@@ -811,16 +811,26 @@ class Settings(BaseSettings):
         default="paddle",
         description=(
             "영역 검출기 좌석. `paddle`(기본·Phase A)=rapidocr 텍스트 라인 검출(휴리스틱 라우터가 "
-            "수식을 가름). `mfd`(Phase B 스텁)=MFD(YOLO 수식 영역 검출·미배선). "
-            "WHYMATH_OCR_DETECTOR로 조정. 시크릿 아님."
+            "수식을 가름). `mfd`(Phase B)=rapid-layout PP 계열(Apache-2.0)로 수식 영역을 별도 "
+            "검출(2D 수식을 한 덩어리로). WHYMATH_OCR_DETECTOR로 조정. 시크릿 아님."
+        ),
+    )
+    ocr_mfd_model_type: Literal[
+        "pp_layout_cdla", "pp_layout_publaynet", "pp_doc_layoutv2", "pp_doc_layoutv3"
+    ] = Field(
+        default="pp_layout_cdla",
+        description=(
+            "MFD(Phase B) 레이아웃 모델 — rapid-layout PP 계열(**Apache-2.0**)만 허용한다. "
+            "`pp_layout_cdla`(기본)는 '공식(Equation)' 클래스를, PP-DocLayout는 'formula'를 준다. "
+            "ultralytics 기반(yolov8*/doclayout*)은 AGPL-3.0이라 *허용하지 않는다*(우선순위 #2). "
+            "WHYMATH_OCR_MFD_MODEL_TYPE로 조정. 시크릿 아님."
         ),
     )
     ocr_mfd_weights_path: str = Field(
         default="",
         description=(
-            "MFD(Phase B·YOLO) 수식 영역 검출 가중치 경로 좌석. 빈 값(기본)=미설정. Phase A에서는 "
-            "보관만 한다(MfdDetector는 호출 시 NotImplementedError). "
-            "WHYMATH_OCR_MFD_WEIGHTS_PATH로 주입."
+            "MFD 수식 영역 검출 커스텀 가중치 경로 좌석(rapid-layout 기본 모델 외 핀 모델용). "
+            "빈 값(기본)=rapid-layout 기본 PP 모델 사용. WHYMATH_OCR_MFD_WEIGHTS_PATH로 주입."
         ),
     )
     ocr_model_dir: str = Field(

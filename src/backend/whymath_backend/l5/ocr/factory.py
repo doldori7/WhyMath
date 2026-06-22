@@ -24,7 +24,7 @@ from whymath_backend.l5.ocr.recognize import (
     TextRecognizer,
     _BaseMathRecognizer,
 )
-from whymath_backend.l5.ocr.router import HeuristicRouter, RegionRouter
+from whymath_backend.l5.ocr.router import HeuristicRouter, MfdRouter, RegionRouter
 
 
 @dataclass(frozen=True)
@@ -55,7 +55,7 @@ def build_ocr_components(settings: Settings) -> OcrComponents:
     NotImplementedError가 난다(파이프라인이 그 단계에 닿으면).
     """
     detector = _build_detector(settings)
-    router = HeuristicRouter()  # Phase A: 모델 없는 휴리스틱 라우터(MfdRouter는 Phase B).
+    router = _build_router(settings)
     text_recognizer = PaddleTextRecognizer(language=settings.ocr_language)
     math_recognizer = _build_math_recognizer(settings)
     return OcrComponents(
@@ -67,15 +67,28 @@ def build_ocr_components(settings: Settings) -> OcrComponents:
 
 
 def _build_detector(settings: Settings) -> Detector:
-    """`ocr_detector` 좌석으로 검출기 선택 — paddle(Phase A) / mfd(Phase B 스텁)."""
+    """`ocr_detector` 좌석으로 검출기 선택 — paddle(Phase A) / mfd(Phase B·rapid-layout PP)."""
     if settings.ocr_detector == "paddle":
         return PaddleDetector(model_dir=settings.ocr_model_dir)
     if settings.ocr_detector == "mfd":
-        # Phase B 좌석 — 구성은 허용하되 호출 시 NotImplementedError(좌석 결선만).
-        return MfdDetector(weights_path=settings.ocr_mfd_weights_path)
+        # Phase B — rapid-layout PP 계열(Apache-2.0)로 수식 영역 검출 + 내부 텍스트 라인 검출.
+        # AGPL(yolov8/doclayout) model_type은 MfdDetector가 거부한다(config Literal로도 차단).
+        return MfdDetector(
+            model_type=settings.ocr_mfd_model_type,
+            text_detector=PaddleDetector(model_dir=settings.ocr_model_dir),
+            model_dir=settings.ocr_model_dir,
+        )
     raise RuntimeError(
         f"알 수 없는 ocr_detector 좌석: {settings.ocr_detector!r}(조용한 폴백 없음)."
     )
+
+
+def _build_router(settings: Settings) -> RegionRouter:
+    """`ocr_detector` 좌석으로 라우터 선택 — mfd면 MfdRouter(병합), 그 외 HeuristicRouter."""
+    if settings.ocr_detector == "mfd":
+        # MFD 검출기는 텍스트/수식 박스를 함께 주므로, isinstance 기반 병합 라우터를 쓴다.
+        return MfdRouter()
+    return HeuristicRouter()  # Phase A: 모델 없는 휴리스틱 라우터(검출기가 전부 라인 박스).
 
 
 def _build_math_recognizer(settings: Settings) -> _BaseMathRecognizer:
