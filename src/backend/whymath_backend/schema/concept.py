@@ -281,6 +281,10 @@ class ConceptEdge(BaseModel):
         description="이 엣지의 부재를 진단하는 신호(자체 작성 텍스트)",
     )
     notes: str | None = Field(default=None, description="비고")
+    relation_subtype: str | None = Field(
+        default=None,
+        description="관계 세부유형 — 원자 백본 관계유형(원본/소단원내/소단원간/학년간/학교급간 등)",
+    )
     created_at: datetime | None = Field(default=None, description="생성 시각")
 
     # ── 불변식 ────────────────────────────────────────────────────

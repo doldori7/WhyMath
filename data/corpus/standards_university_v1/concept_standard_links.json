@@ -1,0 +1,2463 @@
+{
+  "source_citation": "출처: 와이매스 자체작성 — 대학 수학 성취기준(원자노드DB 핵심명제 종합·AI 추정·검수필요). 단원/소단원 코드는 대학과정 단원소단원 코드참조(CALC1-U1·CALC1-U1-S1 등) 재사용.",
+  "license_notice": "본 데이터(대학 성취기준 본문·요약)는 와이매스 자체 저작물입니다. NCIC 공공누리 자료가 아니며 redaction이 불요합니다. 대학 성취기준 본문은 AI 추정 초안으로 수학 전문가 검수가 필요합니다.",
+  "curriculum_revision": "대학",
+  "collected_at": "2026-06-22T01:39:57.155365+00:00",
+  "crawler_version": "0.1.0",
+  "links": [
+    {
+      "concept_src_id": "GALOIS-U1-S1",
+      "norm_id": "대학_GALOIS_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "GALOIS-U1-S2",
+      "norm_id": "대학_GALOIS_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "GALOIS-U1-S3",
+      "norm_id": "대학_GALOIS_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "GALOIS-U2-S1",
+      "norm_id": "대학_GALOIS_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "GALOIS-U2-S2",
+      "norm_id": "대학_GALOIS_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "GALOIS-U3-S1",
+      "norm_id": "대학_GALOIS_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "GALOIS-U4-S1",
+      "norm_id": "대학_GALOIS_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "GALOIS-U4-S2",
+      "norm_id": "대학_GALOIS_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FINM-U1-S1",
+      "norm_id": "대학_FINM_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FINM-U1-S2",
+      "norm_id": "대학_FINM_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FINM-U2-S1",
+      "norm_id": "대학_FINM_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FINM-U2-S2",
+      "norm_id": "대학_FINM_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FINM-U3-S1",
+      "norm_id": "대학_FINM_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FINM-U3-S2",
+      "norm_id": "대학_FINM_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FINM-U4-S1",
+      "norm_id": "대학_FINM_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FINM-U4-S2",
+      "norm_id": "대학_FINM_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AGEO-U1-S1",
+      "norm_id": "대학_AGEO_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AGEO-U1-S2",
+      "norm_id": "대학_AGEO_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AGEO-U2-S1",
+      "norm_id": "대학_AGEO_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AGEO-U3-S1",
+      "norm_id": "대학_AGEO_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AGEO-U3-S2",
+      "norm_id": "대학_AGEO_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AGEO-U4-S1",
+      "norm_id": "대학_AGEO_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AGEO-U4-S2",
+      "norm_id": "대학_AGEO_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ATOPO-U1-S1",
+      "norm_id": "대학_ATOPO_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ATOPO-U1-S2",
+      "norm_id": "대학_ATOPO_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ATOPO-U2-S1",
+      "norm_id": "대학_ATOPO_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ATOPO-U2-S2",
+      "norm_id": "대학_ATOPO_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ATOPO-U3-S1",
+      "norm_id": "대학_ATOPO_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ATOPO-U3-S2",
+      "norm_id": "대학_ATOPO_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ATOPO-U4-S1",
+      "norm_id": "대학_ATOPO_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ATOPO-U4-S2",
+      "norm_id": "대학_ATOPO_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U1-S1",
+      "norm_id": "대학_DGEO_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U1-S2",
+      "norm_id": "대학_DGEO_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U1-S3",
+      "norm_id": "대학_DGEO_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U1-S4",
+      "norm_id": "대학_DGEO_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U2-S1",
+      "norm_id": "대학_DGEO_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U2-S2",
+      "norm_id": "대학_DGEO_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U2-S3",
+      "norm_id": "대학_DGEO_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U3-S1",
+      "norm_id": "대학_DGEO_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U3-S2",
+      "norm_id": "대학_DGEO_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U3-S3",
+      "norm_id": "대학_DGEO_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U4-S1",
+      "norm_id": "대학_DGEO_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U4-S2",
+      "norm_id": "대학_DGEO_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "DGEO-U5-S1",
+      "norm_id": "대학_DGEO_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U1-S1",
+      "norm_id": "대학_MFLD_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U1-S2",
+      "norm_id": "대학_MFLD_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U1-S3",
+      "norm_id": "대학_MFLD_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U2-S1",
+      "norm_id": "대학_MFLD_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U2-S2",
+      "norm_id": "대학_MFLD_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U3-S1",
+      "norm_id": "대학_MFLD_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U3-S2",
+      "norm_id": "대학_MFLD_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U4-S1",
+      "norm_id": "대학_MFLD_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U4-S2",
+      "norm_id": "대학_MFLD_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U4-S3",
+      "norm_id": "대학_MFLD_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MFLD-U5-S1",
+      "norm_id": "대학_MFLD_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U1-S1",
+      "norm_id": "대학_ODE_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U1-S2",
+      "norm_id": "대학_ODE_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U1-S3",
+      "norm_id": "대학_ODE_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U1-S4",
+      "norm_id": "대학_ODE_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U2-S1",
+      "norm_id": "대학_ODE_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U2-S2",
+      "norm_id": "대학_ODE_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U2-S3",
+      "norm_id": "대학_ODE_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U3-S1",
+      "norm_id": "대학_ODE_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U3-S2",
+      "norm_id": "대학_ODE_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U3-S3",
+      "norm_id": "대학_ODE_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U4-S1",
+      "norm_id": "대학_ODE_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U4-S2",
+      "norm_id": "대학_ODE_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U5-S1",
+      "norm_id": "대학_ODE_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ODE-U5-S2",
+      "norm_id": "대학_ODE_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U1-S1",
+      "norm_id": "대학_CALC1_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U1-S2",
+      "norm_id": "대학_CALC1_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U1-S3",
+      "norm_id": "대학_CALC1_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U1-S4",
+      "norm_id": "대학_CALC1_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U2-S1",
+      "norm_id": "대학_CALC1_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U2-S2",
+      "norm_id": "대학_CALC1_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U2-S3",
+      "norm_id": "대학_CALC1_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U2-S4",
+      "norm_id": "대학_CALC1_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U2-S5",
+      "norm_id": "대학_CALC1_02_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U2-S6",
+      "norm_id": "대학_CALC1_02_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U2-S7",
+      "norm_id": "대학_CALC1_02_07",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U3-S1",
+      "norm_id": "대학_CALC1_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U3-S2",
+      "norm_id": "대학_CALC1_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U3-S3",
+      "norm_id": "대학_CALC1_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U3-S4",
+      "norm_id": "대학_CALC1_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U3-S5",
+      "norm_id": "대학_CALC1_03_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U4-S1",
+      "norm_id": "대학_CALC1_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U4-S2",
+      "norm_id": "대학_CALC1_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U4-S3",
+      "norm_id": "대학_CALC1_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U4-S4",
+      "norm_id": "대학_CALC1_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U5-S1",
+      "norm_id": "대학_CALC1_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U5-S2",
+      "norm_id": "대학_CALC1_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U5-S3",
+      "norm_id": "대학_CALC1_05_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U5-S4",
+      "norm_id": "대학_CALC1_05_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U6-S1",
+      "norm_id": "대학_CALC1_06_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U6-S2",
+      "norm_id": "대학_CALC1_06_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U6-S3",
+      "norm_id": "대학_CALC1_06_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U6-S4",
+      "norm_id": "대학_CALC1_06_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U7-S1",
+      "norm_id": "대학_CALC1_07_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U7-S2",
+      "norm_id": "대학_CALC1_07_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U7-S3",
+      "norm_id": "대학_CALC1_07_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC1-U7-S4",
+      "norm_id": "대학_CALC1_07_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U1-S1",
+      "norm_id": "대학_CALC2_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U1-S2",
+      "norm_id": "대학_CALC2_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U1-S3",
+      "norm_id": "대학_CALC2_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U1-S4",
+      "norm_id": "대학_CALC2_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U2-S1",
+      "norm_id": "대학_CALC2_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U2-S2",
+      "norm_id": "대학_CALC2_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U2-S3",
+      "norm_id": "대학_CALC2_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U2-S4",
+      "norm_id": "대학_CALC2_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U2-S5",
+      "norm_id": "대학_CALC2_02_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U2-S6",
+      "norm_id": "대학_CALC2_02_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U3-S1",
+      "norm_id": "대학_CALC2_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U3-S2",
+      "norm_id": "대학_CALC2_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U3-S3",
+      "norm_id": "대학_CALC2_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U3-S4",
+      "norm_id": "대학_CALC2_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U4-S1",
+      "norm_id": "대학_CALC2_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U4-S2",
+      "norm_id": "대학_CALC2_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U4-S3",
+      "norm_id": "대학_CALC2_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U4-S4",
+      "norm_id": "대학_CALC2_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U4-S5",
+      "norm_id": "대학_CALC2_04_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U5-S1",
+      "norm_id": "대학_CALC2_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U5-S2",
+      "norm_id": "대학_CALC2_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U5-S3",
+      "norm_id": "대학_CALC2_05_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U5-S4",
+      "norm_id": "대학_CALC2_05_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U5-S5",
+      "norm_id": "대학_CALC2_05_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U5-S6",
+      "norm_id": "대학_CALC2_05_06",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U6-S1",
+      "norm_id": "대학_CALC2_06_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U6-S2",
+      "norm_id": "대학_CALC2_06_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U6-S3",
+      "norm_id": "대학_CALC2_06_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U6-S4",
+      "norm_id": "대학_CALC2_06_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CALC2-U6-S5",
+      "norm_id": "대학_CALC2_06_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U1-S1",
+      "norm_id": "대학_CXAN_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U1-S2",
+      "norm_id": "대학_CXAN_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U2-S1",
+      "norm_id": "대학_CXAN_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U2-S2",
+      "norm_id": "대학_CXAN_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U2-S3",
+      "norm_id": "대학_CXAN_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U2-S4",
+      "norm_id": "대학_CXAN_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U3-S1",
+      "norm_id": "대학_CXAN_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U3-S2",
+      "norm_id": "대학_CXAN_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U4-S1",
+      "norm_id": "대학_CXAN_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U4-S2",
+      "norm_id": "대학_CXAN_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U4-S3",
+      "norm_id": "대학_CXAN_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U4-S4",
+      "norm_id": "대학_CXAN_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U5-S1",
+      "norm_id": "대학_CXAN_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CXAN-U5-S2",
+      "norm_id": "대학_CXAN_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U1-S1",
+      "norm_id": "대학_LINA1_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U1-S2",
+      "norm_id": "대학_LINA1_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U1-S3",
+      "norm_id": "대학_LINA1_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U2-S1",
+      "norm_id": "대학_LINA1_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U2-S2",
+      "norm_id": "대학_LINA1_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U2-S3",
+      "norm_id": "대학_LINA1_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U3-S1",
+      "norm_id": "대학_LINA1_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U3-S2",
+      "norm_id": "대학_LINA1_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U3-S3",
+      "norm_id": "대학_LINA1_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U4-S1",
+      "norm_id": "대학_LINA1_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U4-S2",
+      "norm_id": "대학_LINA1_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U4-S3",
+      "norm_id": "대학_LINA1_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U4-S4",
+      "norm_id": "대학_LINA1_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U5-S1",
+      "norm_id": "대학_LINA1_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U5-S2",
+      "norm_id": "대학_LINA1_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U5-S3",
+      "norm_id": "대학_LINA1_05_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA1-U5-S4",
+      "norm_id": "대학_LINA1_05_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U1-S1",
+      "norm_id": "대학_LINA2_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U1-S2",
+      "norm_id": "대학_LINA2_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U1-S3",
+      "norm_id": "대학_LINA2_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U2-S1",
+      "norm_id": "대학_LINA2_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U2-S2",
+      "norm_id": "대학_LINA2_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U2-S3",
+      "norm_id": "대학_LINA2_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U3-S1",
+      "norm_id": "대학_LINA2_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U3-S2",
+      "norm_id": "대학_LINA2_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U3-S3",
+      "norm_id": "대학_LINA2_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U4-S1",
+      "norm_id": "대학_LINA2_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U4-S2",
+      "norm_id": "대학_LINA2_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U5-S1",
+      "norm_id": "대학_LINA2_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U5-S2",
+      "norm_id": "대학_LINA2_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "LINA2-U5-S3",
+      "norm_id": "대학_LINA2_05_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MLOG-U1-S1",
+      "norm_id": "대학_MLOG_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MLOG-U1-S2",
+      "norm_id": "대학_MLOG_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MLOG-U2-S1",
+      "norm_id": "대학_MLOG_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MLOG-U2-S2",
+      "norm_id": "대학_MLOG_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MLOG-U2-S3",
+      "norm_id": "대학_MLOG_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MLOG-U3-S1",
+      "norm_id": "대학_MLOG_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MLOG-U4-S1",
+      "norm_id": "대학_MLOG_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MLOG-U4-S2",
+      "norm_id": "대학_MLOG_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MSTAT-U1-S1",
+      "norm_id": "대학_MSTAT_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MSTAT-U1-S2",
+      "norm_id": "대학_MSTAT_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MSTAT-U1-S3",
+      "norm_id": "대학_MSTAT_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MSTAT-U2-S1",
+      "norm_id": "대학_MSTAT_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MSTAT-U2-S2",
+      "norm_id": "대학_MSTAT_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MSTAT-U2-S3",
+      "norm_id": "대학_MSTAT_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MSTAT-U3-S1",
+      "norm_id": "대학_MSTAT_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MSTAT-U4-S1",
+      "norm_id": "대학_MSTAT_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "MSTAT-U4-S2",
+      "norm_id": "대학_MSTAT_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U1-S1",
+      "norm_id": "대학_NUMER_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U1-S2",
+      "norm_id": "대학_NUMER_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U1-S3",
+      "norm_id": "대학_NUMER_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U2-S1",
+      "norm_id": "대학_NUMER_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U2-S2",
+      "norm_id": "대학_NUMER_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U2-S3",
+      "norm_id": "대학_NUMER_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U3-S1",
+      "norm_id": "대학_NUMER_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U3-S2",
+      "norm_id": "대학_NUMER_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U3-S3",
+      "norm_id": "대학_NUMER_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U4-S1",
+      "norm_id": "대학_NUMER_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U4-S2",
+      "norm_id": "대학_NUMER_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U5-S1",
+      "norm_id": "대학_NUMER_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U5-S2",
+      "norm_id": "대학_NUMER_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMER-U5-S3",
+      "norm_id": "대학_NUMER_05_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U1-S1",
+      "norm_id": "대학_RANAL_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U1-S2",
+      "norm_id": "대학_RANAL_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U1-S3",
+      "norm_id": "대학_RANAL_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U2-S1",
+      "norm_id": "대학_RANAL_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U2-S2",
+      "norm_id": "대학_RANAL_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U3-S1",
+      "norm_id": "대학_RANAL_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U3-S2",
+      "norm_id": "대학_RANAL_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U3-S3",
+      "norm_id": "대학_RANAL_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U4-S1",
+      "norm_id": "대학_RANAL_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U4-S2",
+      "norm_id": "대학_RANAL_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U4-S3",
+      "norm_id": "대학_RANAL_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U5-S1",
+      "norm_id": "대학_RANAL_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "RANAL-U5-S2",
+      "norm_id": "대학_RANAL_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U1-S1",
+      "norm_id": "대학_CRYP_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U1-S2",
+      "norm_id": "대학_CRYP_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U2-S1",
+      "norm_id": "대학_CRYP_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U2-S2",
+      "norm_id": "대학_CRYP_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U2-S3",
+      "norm_id": "대학_CRYP_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U3-S1",
+      "norm_id": "대학_CRYP_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U3-S2",
+      "norm_id": "대학_CRYP_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U3-S3",
+      "norm_id": "대학_CRYP_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U3-S4",
+      "norm_id": "대학_CRYP_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U4-S1",
+      "norm_id": "대학_CRYP_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CRYP-U4-S2",
+      "norm_id": "대학_CRYP_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U1-S1",
+      "norm_id": "대학_TOPO1_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U1-S2",
+      "norm_id": "대학_TOPO1_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U1-S3",
+      "norm_id": "대학_TOPO1_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U2-S1",
+      "norm_id": "대학_TOPO1_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U2-S2",
+      "norm_id": "대학_TOPO1_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U3-S1",
+      "norm_id": "대학_TOPO1_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U3-S2",
+      "norm_id": "대학_TOPO1_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U3-S3",
+      "norm_id": "대학_TOPO1_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U4-S1",
+      "norm_id": "대학_TOPO1_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U4-S2",
+      "norm_id": "대학_TOPO1_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U5-S1",
+      "norm_id": "대학_TOPO1_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U5-S2",
+      "norm_id": "대학_TOPO1_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO1-U5-S3",
+      "norm_id": "대학_TOPO1_05_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO2-U1-S1",
+      "norm_id": "대학_TOPO2_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO2-U1-S2",
+      "norm_id": "대학_TOPO2_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO2-U2-S1",
+      "norm_id": "대학_TOPO2_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO2-U2-S2",
+      "norm_id": "대학_TOPO2_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO2-U3-S1",
+      "norm_id": "대학_TOPO2_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO2-U3-S2",
+      "norm_id": "대학_TOPO2_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO2-U4-S1",
+      "norm_id": "대학_TOPO2_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "TOPO2-U4-S2",
+      "norm_id": "대학_TOPO2_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT1-U1-S1",
+      "norm_id": "대학_NUMT1_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT1-U1-S2",
+      "norm_id": "대학_NUMT1_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT1-U1-S3",
+      "norm_id": "대학_NUMT1_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT1-U2-S1",
+      "norm_id": "대학_NUMT1_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT1-U2-S2",
+      "norm_id": "대학_NUMT1_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT1-U3-S1",
+      "norm_id": "대학_NUMT1_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT1-U3-S2",
+      "norm_id": "대학_NUMT1_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT1-U4-S1",
+      "norm_id": "대학_NUMT1_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT1-U4-S2",
+      "norm_id": "대학_NUMT1_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT1-U4-S3",
+      "norm_id": "대학_NUMT1_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT2-U1-S1",
+      "norm_id": "대학_NUMT2_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT2-U1-S2",
+      "norm_id": "대학_NUMT2_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT2-U2-S1",
+      "norm_id": "대학_NUMT2_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT2-U2-S2",
+      "norm_id": "대학_NUMT2_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT2-U3-S1",
+      "norm_id": "대학_NUMT2_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT2-U3-S2",
+      "norm_id": "대학_NUMT2_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT2-U4-S1",
+      "norm_id": "대학_NUMT2_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "NUMT2-U4-S2",
+      "norm_id": "대학_NUMT2_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U1-S1",
+      "norm_id": "대학_COMB_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U1-S2",
+      "norm_id": "대학_COMB_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U1-S3",
+      "norm_id": "대학_COMB_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U1-S4",
+      "norm_id": "대학_COMB_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U2-S1",
+      "norm_id": "대학_COMB_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U2-S2",
+      "norm_id": "대학_COMB_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U2-S3",
+      "norm_id": "대학_COMB_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U2-S4",
+      "norm_id": "대학_COMB_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U3-S1",
+      "norm_id": "대학_COMB_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U3-S2",
+      "norm_id": "대학_COMB_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U3-S3",
+      "norm_id": "대학_COMB_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U4-S1",
+      "norm_id": "대학_COMB_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "COMB-U4-S2",
+      "norm_id": "대학_COMB_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CAPST-U1-S1",
+      "norm_id": "대학_CAPST_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CAPST-U1-S2",
+      "norm_id": "대학_CAPST_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CAPST-U2-S1",
+      "norm_id": "대학_CAPST_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "CAPST-U2-S2",
+      "norm_id": "대학_CAPST_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U1-S1",
+      "norm_id": "대학_SETLOG_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U1-S2",
+      "norm_id": "대학_SETLOG_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U1-S3",
+      "norm_id": "대학_SETLOG_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U2-S1",
+      "norm_id": "대학_SETLOG_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U2-S2",
+      "norm_id": "대학_SETLOG_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U2-S3",
+      "norm_id": "대학_SETLOG_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U2-S4",
+      "norm_id": "대학_SETLOG_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U3-S1",
+      "norm_id": "대학_SETLOG_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U3-S2",
+      "norm_id": "대학_SETLOG_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U3-S3",
+      "norm_id": "대학_SETLOG_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U4-S1",
+      "norm_id": "대학_SETLOG_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U4-S2",
+      "norm_id": "대학_SETLOG_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U4-S3",
+      "norm_id": "대학_SETLOG_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U4-S4",
+      "norm_id": "대학_SETLOG_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U4-S5",
+      "norm_id": "대학_SETLOG_04_05",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U5-S1",
+      "norm_id": "대학_SETLOG_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U5-S2",
+      "norm_id": "대학_SETLOG_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SETLOG-U5-S3",
+      "norm_id": "대학_SETLOG_05_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SET-U1-S1",
+      "norm_id": "대학_SET_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SET-U1-S2",
+      "norm_id": "대학_SET_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SET-U1-S3",
+      "norm_id": "대학_SET_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SET-U2-S1",
+      "norm_id": "대학_SET_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SET-U2-S2",
+      "norm_id": "대학_SET_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SET-U3-S1",
+      "norm_id": "대학_SET_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SET-U3-S2",
+      "norm_id": "대학_SET_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SET-U4-S1",
+      "norm_id": "대학_SET_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "SET-U4-S2",
+      "norm_id": "대학_SET_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U1-S1",
+      "norm_id": "대학_PDE_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U2-S1",
+      "norm_id": "대학_PDE_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U2-S2",
+      "norm_id": "대학_PDE_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U2-S3",
+      "norm_id": "대학_PDE_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U3-S1",
+      "norm_id": "대학_PDE_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U3-S2",
+      "norm_id": "대학_PDE_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U4-S1",
+      "norm_id": "대학_PDE_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U4-S2",
+      "norm_id": "대학_PDE_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U5-S1",
+      "norm_id": "대학_PDE_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U5-S2",
+      "norm_id": "대학_PDE_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PDE-U5-S3",
+      "norm_id": "대학_PDE_05_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U1-S1",
+      "norm_id": "대학_FANAL_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U1-S2",
+      "norm_id": "대학_FANAL_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U2-S1",
+      "norm_id": "대학_FANAL_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U2-S2",
+      "norm_id": "대학_FANAL_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U2-S3",
+      "norm_id": "대학_FANAL_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U3-S1",
+      "norm_id": "대학_FANAL_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U3-S2",
+      "norm_id": "대학_FANAL_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U4-S1",
+      "norm_id": "대학_FANAL_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U4-S2",
+      "norm_id": "대학_FANAL_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U4-S3",
+      "norm_id": "대학_FANAL_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U5-S1",
+      "norm_id": "대학_FANAL_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "FANAL-U5-S2",
+      "norm_id": "대학_FANAL_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U1-S1",
+      "norm_id": "대학_ANAL1_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U1-S2",
+      "norm_id": "대학_ANAL1_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U1-S3",
+      "norm_id": "대학_ANAL1_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U2-S1",
+      "norm_id": "대학_ANAL1_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U2-S2",
+      "norm_id": "대학_ANAL1_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U2-S3",
+      "norm_id": "대학_ANAL1_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U2-S4",
+      "norm_id": "대학_ANAL1_02_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U3-S1",
+      "norm_id": "대학_ANAL1_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U3-S2",
+      "norm_id": "대학_ANAL1_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U3-S3",
+      "norm_id": "대학_ANAL1_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U3-S4",
+      "norm_id": "대학_ANAL1_03_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U4-S1",
+      "norm_id": "대학_ANAL1_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U4-S2",
+      "norm_id": "대학_ANAL1_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U4-S3",
+      "norm_id": "대학_ANAL1_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U4-S4",
+      "norm_id": "대학_ANAL1_04_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U5-S1",
+      "norm_id": "대학_ANAL1_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U5-S2",
+      "norm_id": "대학_ANAL1_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U5-S3",
+      "norm_id": "대학_ANAL1_05_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL1-U5-S4",
+      "norm_id": "대학_ANAL1_05_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U1-S1",
+      "norm_id": "대학_ANAL2_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U1-S2",
+      "norm_id": "대학_ANAL2_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U1-S3",
+      "norm_id": "대학_ANAL2_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U2-S1",
+      "norm_id": "대학_ANAL2_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U2-S2",
+      "norm_id": "대학_ANAL2_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U2-S3",
+      "norm_id": "대학_ANAL2_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U3-S1",
+      "norm_id": "대학_ANAL2_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U3-S2",
+      "norm_id": "대학_ANAL2_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U3-S3",
+      "norm_id": "대학_ANAL2_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U4-S1",
+      "norm_id": "대학_ANAL2_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U4-S2",
+      "norm_id": "대학_ANAL2_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U5-S1",
+      "norm_id": "대학_ANAL2_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U5-S2",
+      "norm_id": "대학_ANAL2_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U5-S3",
+      "norm_id": "대학_ANAL2_05_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "ANAL2-U5-S4",
+      "norm_id": "대학_ANAL2_05_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U1-S1",
+      "norm_id": "대학_AALG1_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U1-S2",
+      "norm_id": "대학_AALG1_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U1-S3",
+      "norm_id": "대학_AALG1_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U1-S4",
+      "norm_id": "대학_AALG1_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U2-S1",
+      "norm_id": "대학_AALG1_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U2-S2",
+      "norm_id": "대학_AALG1_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U2-S3",
+      "norm_id": "대학_AALG1_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U3-S1",
+      "norm_id": "대학_AALG1_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U3-S2",
+      "norm_id": "대학_AALG1_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U3-S3",
+      "norm_id": "대학_AALG1_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U4-S1",
+      "norm_id": "대학_AALG1_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U4-S2",
+      "norm_id": "대학_AALG1_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U5-S1",
+      "norm_id": "대학_AALG1_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG1-U5-S2",
+      "norm_id": "대학_AALG1_05_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U1-S1",
+      "norm_id": "대학_AALG2_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U1-S2",
+      "norm_id": "대학_AALG2_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U1-S3",
+      "norm_id": "대학_AALG2_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U1-S4",
+      "norm_id": "대학_AALG2_01_04",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U2-S1",
+      "norm_id": "대학_AALG2_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U2-S2",
+      "norm_id": "대학_AALG2_02_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U2-S3",
+      "norm_id": "대학_AALG2_02_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U3-S1",
+      "norm_id": "대학_AALG2_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U3-S2",
+      "norm_id": "대학_AALG2_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U4-S1",
+      "norm_id": "대학_AALG2_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U4-S2",
+      "norm_id": "대학_AALG2_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U4-S3",
+      "norm_id": "대학_AALG2_04_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "AALG2-U5-S1",
+      "norm_id": "대학_AALG2_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U1-S1",
+      "norm_id": "대학_PROB_01_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U1-S2",
+      "norm_id": "대학_PROB_01_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U1-S3",
+      "norm_id": "대학_PROB_01_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U2-S1",
+      "norm_id": "대학_PROB_02_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U3-S1",
+      "norm_id": "대학_PROB_03_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U3-S2",
+      "norm_id": "대학_PROB_03_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U3-S3",
+      "norm_id": "대학_PROB_03_03",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U4-S1",
+      "norm_id": "대학_PROB_04_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U4-S2",
+      "norm_id": "대학_PROB_04_02",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U5-S1",
+      "norm_id": "대학_PROB_05_01",
+      "link_type": "직접",
+      "note": null
+    },
+    {
+      "concept_src_id": "PROB-U5-S2",
+      "norm_id": "대학_PROB_05_02",
+      "link_type": "직접",
+      "note": null
+    }
+  ]
+}

@@ -196,6 +196,8 @@ class ConceptEdge(Base):
     edge_strength: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
     typical_gap_signal: Mapped[str | None] = mapped_column(sa.Text)
     notes: Mapped[str | None] = mapped_column(sa.Text)
+    # 원자 백본 관계유형(원본/소단원내/소단원간/학년간/학교급간 등) — 자유 텍스트 주석.
+    relation_subtype: Mapped[str | None] = mapped_column(sa.Text)
     created_at: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now()
     )
