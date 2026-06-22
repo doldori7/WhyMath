@@ -71,7 +71,7 @@
 | **rapid-layout (PP 계열)** | Apache 2.0 | ✅ | **MFD 수식 영역 검출 (Phase B)** | PP-StructureV2 CDLA('Equation')·PP-DocLayout('formula') PicoDet·순수 ONNX·torch 불요 |
 | **ultralytics (YOLOv8 / DocLayout-YOLO)** | **AGPL-3.0** | ❌ | (MFD 대안 — 미사용) | **금지** — 코드에서 model_type 거부(`MfdDetector`). rapid-layout PP로 대체 |
 | TexTeller (OleehyO/TexTeller) | Apache 2.0 | ✅ | 고정밀 수식 인식 (Phase C·동작) | transformers·로컬·가중치 라이선스 배포 시 재확인 |
-| Qwen3-VL | Apache 2.0 계열 | ✅ | 멀티모달 수식 (보류 — L3 멀티모달 선행) | 로컬·L3 라우터 경유 필수 |
+| Qwen3-VL | Apache 2.0 계열 | ✅ | 멀티모달 수식 (Phase C·동작) | 로컬·**L3 라우터 경유 필수**(직접 Ollama 금지)·VISION 패밀리 |
 
 > MFD(수식 영역 검출)는 **rapid-layout PP 계열(Apache-2.0)**로만 구현한다. rapid-layout가 함께 번들하는 ultralytics 기반 모델 타입(`yolov8*`/`doclayout*`)은 AGPL이라 `MfdDetector.__init__`이 `RuntimeError`로 거부하고, `Settings.ocr_mfd_model_type` Literal도 PP 계열만 허용한다(이중 차단).
 

@@ -75,6 +75,10 @@ class _FakeMathRecognizer:
             confidence=region.confidence,
         )
 
+    async def arecognize(self, region: RoutedRegion, image: Any) -> RecognizedRegion:
+        # 파이프라인이 arecognize를 await한다(PR2) — 동기 백엔드는 recognize를 감싼다.
+        return self.recognize(region, image)
+
 
 def _components(detected: list[DetectedRegion]) -> OcrComponents:
     """가짜 부품 묶음."""

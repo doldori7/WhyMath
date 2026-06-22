@@ -13,6 +13,7 @@ RuntimeError로 보고한다(검출기/인식기 내부 지연 import도 동일 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from whymath_backend.config import Settings
 from whymath_backend.l5.ocr.detect import Detector, MfdDetector, PaddleDetector
@@ -25,6 +26,10 @@ from whymath_backend.l5.ocr.recognize import (
     _BaseMathRecognizer,
 )
 from whymath_backend.l5.ocr.router import HeuristicRouter, MfdRouter, RegionRouter
+
+if TYPE_CHECKING:
+    # L3 의존 타입(주입용) — qwen_vl 백엔드만 사용. 지연 참조라 런타임 import 0(계층 격리).
+    from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 
 
 @dataclass(frozen=True)
@@ -41,7 +46,13 @@ class OcrComponents:
     math_recognizer: _BaseMathRecognizer
 
 
-def build_ocr_components(settings: Settings) -> OcrComponents:
+def build_ocr_components(
+    settings: Settings,
+    *,
+    llm_provider: LLMProvider | None = None,
+    llm_cache: CacheBackend | None = None,
+    trace_sink: TraceSink | None = None,
+) -> OcrComponents:
     """Settings 좌석으로 OCR 부품을 골라 `OcrComponents`로 조립(모델은 첫 사용 시 지연 로드).
 
     좌석:
@@ -59,7 +70,9 @@ def build_ocr_components(settings: Settings) -> OcrComponents:
     text_recognizer = PaddleTextRecognizer(
         language=settings.ocr_language, model_dir=settings.ocr_model_dir
     )
-    math_recognizer = _build_math_recognizer(settings)
+    math_recognizer = _build_math_recognizer(
+        settings, llm_provider=llm_provider, llm_cache=llm_cache, trace_sink=trace_sink
+    )
     return OcrComponents(
         detector=detector,
         router=router,
@@ -93,7 +106,13 @@ def _build_router(settings: Settings) -> RegionRouter:
     return HeuristicRouter()  # Phase A: 모델 없는 휴리스틱 라우터(검출기가 전부 라인 박스).
 
 
-def _build_math_recognizer(settings: Settings) -> _BaseMathRecognizer:
+def _build_math_recognizer(
+    settings: Settings,
+    *,
+    llm_provider: LLMProvider | None = None,
+    llm_cache: CacheBackend | None = None,
+    trace_sink: TraceSink | None = None,
+) -> _BaseMathRecognizer:
     """`ocr_recognizer_backend` 좌석으로 수식 인식기 선택 — rapid_latex / texteller / qwen_vl."""
     backend = settings.ocr_recognizer_backend
     if backend == "rapid_latex":
@@ -101,6 +120,18 @@ def _build_math_recognizer(settings: Settings) -> _BaseMathRecognizer:
     if backend == "texteller":
         return TexTellerRecognizer()  # Phase C·동작(transformers·[ocr-heavy]·Phaiakes9 검증).
     if backend == "qwen_vl":
-        # 보류 — L3 provider 계약이 텍스트 전용이라 멀티모달 확장 선행 필요(별도 슬라이스).
-        return QwenVlRecognizer(student_subscription="free")
+        # Phase C·동작 — L3 라우터 경유(직접 Ollama 금지·CLAUDE.md). provider/cache/trace는
+        # app.state의 L3 의존을 factory가 주입한다. provider 미주입이면 명확한 RuntimeError.
+        if llm_provider is None or llm_cache is None or trace_sink is None:
+            raise RuntimeError(
+                "qwen_vl 백엔드는 L3 provider/cache/trace 주입이 필요합니다 — "
+                "build_ocr_components(settings, llm_provider=, llm_cache=, trace_sink=)로 "
+                "app.state의 L3 의존을 넘기세요(직접 Ollama 호출 금지)."
+            )
+        return QwenVlRecognizer(
+            provider=llm_provider,
+            cache=llm_cache,
+            trace=trace_sink,
+            student_subscription="free",
+        )
     raise RuntimeError(f"알 수 없는 ocr_recognizer_backend 좌석: {backend!r}(조용한 폴백 없음).")
