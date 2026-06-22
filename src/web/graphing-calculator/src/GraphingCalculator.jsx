@@ -11,7 +11,10 @@ import {
   num2Deriv,
 } from "./lib/mathExpr";
 
-// ====== [Phase 4] MathLive를 CDN에서 동적으로 불러오기 ======
+// ====== [Phase 4] MathLive를 npm 번들에서 동적 로딩 (코드 분할·오프라인 자족) ======
+// 과거엔 CDN <script>로 불러왔으나, WebView/오프라인 자족을 위해 npm 의존성으로 번들한다.
+// 동적 import라 초기 번들에 포함되지 않고 입력칸이 처음 필요할 때만 로드된다(코드 분할).
+// import 시 <math-field> 커스텀 엘리먼트가 자동 등록된다. 폰트는 public/mathlive/fonts에서 자족.
 let mathliveLoadPromise = null;
 const loadMathLive = () => {
   if (mathliveLoadPromise) return mathliveLoadPromise;
@@ -19,12 +22,12 @@ const loadMathLive = () => {
     mathliveLoadPromise = Promise.resolve();
     return mathliveLoadPromise;
   }
-  mathliveLoadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/mathlive/dist/mathlive.min.js";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("MathLive 로드 실패"));
-    document.head.appendChild(script);
+  mathliveLoadPromise = import("mathlive").then((ml) => {
+    // 폰트는 번들된 정적 자산(public/mathlive/fonts)에서 — CDN 의존 제거. 효과음은 비활성.
+    if (ml.MathfieldElement) {
+      ml.MathfieldElement.fontsDirectory = "./mathlive/fonts";
+      ml.MathfieldElement.soundsDirectory = null;
+    }
   });
   return mathliveLoadPromise;
 };
@@ -126,7 +129,10 @@ function MathField({ value, onChange, color, error }) {
   );
 }
 
-// ====== [Phase 11] three.js를 CDN에서 동적 로딩 ======
+// ====== [Phase 11] three.js를 npm 번들에서 동적 로딩 (코드 분할·오프라인 자족) ======
+// 과거엔 CDN <script>(r128)로 불러왔으나 오프라인 자족을 위해 npm 의존성으로 번들한다.
+// 동적 import라 3D 모드 진입 시에만 로드된다(코드 분할). 기존 Surface3D가 window.THREE를
+// 참조하므로, 모듈 네임스페이스를 window.THREE에 어댑터로 연결해 컴포넌트 본문은 무수정.
 let threeLoadPromise = null;
 const loadThree = () => {
   if (threeLoadPromise) return threeLoadPromise;
@@ -134,12 +140,8 @@ const loadThree = () => {
     threeLoadPromise = Promise.resolve();
     return threeLoadPromise;
   }
-  threeLoadPromise = new Promise((resolve, reject) => {
-    const script = document.createElement("script");
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("three.js 로드 실패"));
-    document.head.appendChild(script);
+  threeLoadPromise = import("three").then((THREE) => {
+    if (typeof window !== "undefined") window.THREE = THREE;
   });
   return threeLoadPromise;
 };

@@ -14,8 +14,10 @@
   },
   "dependencies": {
     "mathjs": "^12.4.0",
+    "mathlive": "^0.110.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.8",

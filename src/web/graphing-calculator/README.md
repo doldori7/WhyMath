@@ -77,15 +77,19 @@ test/
 
 ---
 
-## MathLive / three.js (CDN 동적 로드)
+## MathLive / three.js (npm 번들 · 오프라인 자족)
 
-수식 편집기(MathLive)와 3D 곡면(three.js)은 원본처럼 **CDN에서 동적 로드**한다.
+수식 편집기(MathLive)와 3D 곡면(three.js)은 **npm 의존성으로 번들**한다(CDN 의존 제거 →
+오프라인 WebView 자족). 둘 다 **동적 import로 코드 분할**돼 초기 번들에 포함되지 않고,
+입력칸이 처음 필요할 때(MathLive)·3D 모드 진입 시(three.js)에만 별도 청크로 로드된다.
 
-- **MathLive 로드 실패** → 자동으로 일반 텍스트 입력칸으로 폴백(붙여넣기 지원).
-- **three.js 로드 실패** → 3D 뷰에 안내 메시지 표시.
-- **2D 그래프 코어는 mathjs(번들)만 쓰므로 CDN 없이도 완전 동작**한다.
+- **MathLive 폰트**: KaTeX woff2 20종을 `public/mathlive/fonts/`에 두어 빌드 시 `dist/mathlive/fonts/`로
+  복사한다(`MathfieldElement.fontsDirectory = "./mathlive/fonts"`, 효과음은 비활성). CDN 폰트 의존 없음.
+- **로드 실패 폴백 유지**: MathLive 실패 → 일반 텍스트 입력칸(붙여넣기 지원), three.js 실패 → 3D 뷰 안내 메시지.
+- **2D 그래프 코어는 mathjs(번들)만** 쓰므로 MathLive/three.js 없이도 완전 동작한다.
 
-> 오프라인 WebView 배포가 필요하면 `mathlive`·`three`를 npm으로 번들링하도록 전환해야 한다(후속 과제).
+> 빌드 산출물(`dist/`)에 외부 CDN 스크립트 URL이 남지 않는다(완전 자족). Flutter WebView가 `file://`로
+> 로드해도 `base: './'` 상대경로 + 동적 청크 + 번들 폰트로 그대로 동작한다.
 
 ---
 
