@@ -28,5 +28,8 @@
     "counts_by_rule": {}
   },
   "skipped": [],
-  "determinism": "결정론 — 동일 sha256 입력 2회 transform 시 byte 동일 산출"
+  "determinism": "결정론 — 동일 sha256 입력 2회 transform 시 byte 동일 산출",
+  "post_extraction": [
+    "[U2 2026-06-22] 대학 원자 standard_codes 채움 513건(소단원→성취기준 1:1·standards_university_v1). K-12 원자·단원/소단원 무변경."
+  ]
 }

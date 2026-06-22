@@ -16,6 +16,9 @@ import pytest
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 CORPUS_DIR = _PROJECT_ROOT / "data" / "corpus" / "atom_graph_v1"
 STANDARDS_PATH = _PROJECT_ROOT / "data" / "corpus" / "standards_v1" / "standards.json"
+UNIV_STANDARDS_PATH = (
+    _PROJECT_ROOT / "data" / "corpus" / "standards_university_v1" / "standards.json"
+)
 
 
 def _atom_row(**over: object) -> dict[str, object]:
@@ -89,8 +92,16 @@ def corpus_provenance() -> dict[str, object]:
 
 @pytest.fixture(scope="session")
 def standards_codes() -> set[str]:
-    """standards.json code 집합(standard_exists 검증용)."""
+    """유효 성취기준 code 집합 — K-12(standards_v1) ∪ 대학(standards_university_v1·U1 이후).
+
+    원자 standard_codes는 K-12 NCIC 코드(`[2수01-01]`)와 대학 자체작성 코드(`[CALC1-01-01]`·U2에서
+    대학 원자에 채움)를 모두 포함하므로, 두 코퍼스의 code 합집합으로 검증한다(대학 코퍼스 미생성
+    시 K-12만)."""
     if not STANDARDS_PATH.exists():
         pytest.skip(f"standards.json 없음: {STANDARDS_PATH}")
     payload = json.loads(STANDARDS_PATH.read_text(encoding="utf-8"))
-    return {str(s["code"]) for s in payload.get("standards", [])}
+    codes = {str(s["code"]) for s in payload.get("standards", [])}
+    if UNIV_STANDARDS_PATH.exists():
+        univ = json.loads(UNIV_STANDARDS_PATH.read_text(encoding="utf-8"))
+        codes |= {str(s["code"]) for s in univ.get("standards", [])}
+    return codes
