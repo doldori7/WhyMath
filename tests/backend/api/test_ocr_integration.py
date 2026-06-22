@@ -13,6 +13,13 @@ from whymath_backend.config import Settings
 from whymath_backend.l5.ocr.factory import build_ocr_components
 from whymath_backend.l5.ocr.pipeline import run_ocr_pipeline
 
+# [ocr] extra(rapidocr·rapid-latex-ocr) 미설치 환경에서는 라이브 파이프라인을 돌릴 수 없다.
+# 통합 잡(WHYMATH_RUN_INTEGRATION=1)도 이 extra가 없으면 build_ocr_components가 RuntimeError를
+# 내므로, 모듈 전체를 skip한다 — 다른 라이브 테스트가 sentence-transformers 미설치 시 skip하는
+# 것과 동일 규약(조용한 폴백 없음·라이브는 dep 갖춘 Phaiakes9에서만 실행).
+pytest.importorskip("rapidocr_onnxruntime", reason="[ocr] extra 미설치 — 라이브 OCR skip")
+pytest.importorskip("rapid_latex_ocr", reason="[ocr] extra 미설치 — 라이브 OCR skip")
+
 pytestmark = pytest.mark.integration
 
 
