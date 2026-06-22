@@ -56,7 +56,9 @@ def build_ocr_components(settings: Settings) -> OcrComponents:
     """
     detector = _build_detector(settings)
     router = _build_router(settings)
-    text_recognizer = PaddleTextRecognizer(language=settings.ocr_language)
+    text_recognizer = PaddleTextRecognizer(
+        language=settings.ocr_language, model_dir=settings.ocr_model_dir
+    )
     math_recognizer = _build_math_recognizer(settings)
     return OcrComponents(
         detector=detector,
@@ -97,8 +99,8 @@ def _build_math_recognizer(settings: Settings) -> _BaseMathRecognizer:
     if backend == "rapid_latex":
         return RapidLatexRecognizer()
     if backend == "texteller":
-        return TexTellerRecognizer()  # Phase B 스텁(호출 시 NotImplementedError).
+        return TexTellerRecognizer()  # Phase C·동작(transformers·[ocr-heavy]·Phaiakes9 검증).
     if backend == "qwen_vl":
-        # Phase C 스텁 — L3 의존(provider/cache/trace)은 후속에서 주입(직접 Ollama 금지).
+        # 보류 — L3 provider 계약이 텍스트 전용이라 멀티모달 확장 선행 필요(별도 슬라이스).
         return QwenVlRecognizer(student_subscription="free")
     raise RuntimeError(f"알 수 없는 ocr_recognizer_backend 좌석: {backend!r}(조용한 폴백 없음).")
