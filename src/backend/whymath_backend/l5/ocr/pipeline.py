@@ -52,10 +52,12 @@ async def run_ocr_pipeline(image_bytes: bytes, *, components: OcrComponents) -> 
     routed = components.router.route(detected)
 
     # ③ 인식 — 수식은 수식 인식기, 텍스트는 텍스트 인식기로.
+    # 수식은 `arecognize`를 await한다 — 동기 백엔드(RapidLatex·TexTeller)는 기본 구현이 동기
+    # recognize를 감싸 즉시 반환하고, L3 라우터 경유 백엔드(Qwen3-VL)만 실제 비동기 인식을 한다.
     recognized: list[RecognizedRegion] = []
     for region in routed:
         if region.content_type == ContentType.수식:
-            recognized.append(components.math_recognizer.recognize(region, image))
+            recognized.append(await components.math_recognizer.arecognize(region, image))
         else:
             recognized.append(components.text_recognizer.recognize(region, image))
 

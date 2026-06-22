@@ -285,7 +285,17 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     # 가용성 우선 #1≫#6). off(기본)면 set_ocr_components(None)으로 비활성 표시(getter가 503).
     if settings.ocr_enabled:
         try:
-            set_ocr_components(_app, build_ocr_components(settings))
+            # qwen_vl 인식기는 L3 라우터 경유라 provider/cache/trace 주입이 필요하다 —
+            # app.state에 이미 올린 L3 의존을 넘긴다(다른 백엔드는 미사용·무영향).
+            set_ocr_components(
+                _app,
+                build_ocr_components(
+                    settings,
+                    llm_provider=getattr(_app.state, _PROVIDER_KEY, None),
+                    llm_cache=getattr(_app.state, _CACHE_KEY, None),
+                    trace_sink=getattr(_app.state, _TRACE_KEY, None),
+                ),
+            )
         except Exception:
             logger.warning("OCR 부품 구성 실패 — /v1/ocr 비활성(503)", exc_info=True)
             set_ocr_components(_app, None)
