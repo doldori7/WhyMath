@@ -48,10 +48,12 @@ src/
 └── lib/
     ├── mathExpr.js       # 순수 수학 헬퍼 (테스트 대상): latexToMath·classify·extractVars·
     │                     #   asciiToLatex·linearRegression·sameGraph·numDeriv·num2Deriv
+    ├── graph2dSpec.js    # 코어 Graph2dSpec(?spec=) → 계산기 상태 변환 어댑터
     └── storageShim.js    # window.storage(claude.ai 전용)를 localStorage로 재현
 test/
 ├── setup.js              # canvas getContext·matchMedia stub + shim 주입
 ├── mathExpr.test.js      # 수학 코어 단위 테스트
+├── graph2dSpec.test.js   # 코어 명세 어댑터 단위 테스트
 ├── storageShim.test.js   # 저장소 라운드트립·prefix 필터
 └── GraphingCalculator.smoke.test.jsx  # jsdom 마운트 회귀 방지
 ```
@@ -74,6 +76,33 @@ test/
 | `list(prefix)` | `Promise<{ keys: string[] }>` | prefix로 시작하는 키 목록 |
 
 저장 데이터: 이름 붙인 그래프(`graph:*`), 퀴즈 학습 기록(`quiz_history`). 브라우저 새로고침 후에도 유지된다.
+
+---
+
+## 코어 Graph2dSpec 연동 (`?spec=`)
+
+백엔드 코어(L1–L4)의 선언적 시각화 명세 **`Graph2dSpec`**(설계: `docs/architecture/05_interaction.md` §5.2,
+구현: `src/backend/whymath_backend/schema/visualization.py`)을 이 계산기가 **소비**한다 — "표현 ≠ 의미"(슬라이스 89)
+원칙대로 코어는 구조(JSON)를 주고 L5(이 도구)는 받아서 렌더한다. **백엔드는 수정하지 않는다**(`lib/graph2dSpec.js` 어댑터만).
+
+URL 쿼리로 명세를 주입한다(백엔드·Flutter WebView가 계산기를 명세와 함께 띄울 수 있음):
+
+```
+?spec=<base64(JSON)>      또는      ?spec=<URL 인코딩한 JSON>
+```
+
+`Graph2dSpec` 형태와 매핑:
+
+| 명세 필드 | 예 | 계산기 반영 |
+|---|---|---|
+| `function` | `"a*x**2+b*x+c"` | 함수 행(파이썬식 `**` → mathjs `^`, latex 자동 생성) |
+| `parameters` | `[{name,min,max,step,default}]` | 슬라이더(이름·범위·기본값, 누락 필드는 기본값 보정) |
+| `domain` | `[-5, 5]` | 보기 x 범위(y는 ±10 유지) |
+
+예: `?spec=eyJmdW5jdGlvbiI6ImEqeCoqMiIsImRvbWFpbiI6Wy01LDVdLCJwYXJhbWV0ZXJzIjpbeyJuYW1lIjoiYSIsImRlZmF1bHQiOjJ9XX0=`
+→ `a*x²` 곡선 + `a` 슬라이더(기본 2) + 정의역 [-5, 5].
+
+> 잘못된/없는 `spec`은 조용히 무시하고 빈 계산기로 시작한다. **명세를 서빙하는 백엔드 API·Flutter WebView 실배선은 후속**(해당 세션 영역).
 
 ---
 

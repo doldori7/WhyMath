@@ -1,0 +1,83 @@
+// ====== 코어 Graph2dSpec 소비 어댑터 (L5가 코어 선언적 명세를 읽어 렌더) ======
+// 백엔드 코어(L1-L4)의 선언적 시각화 명세 Graph2dSpec(설계: docs/architecture/05_interaction.md §5.2,
+// 구현: src/backend/whymath_backend/schema/visualization.py)을 *수정 없이* 웹 계산기 상태로 변환한다.
+// "표현 ≠ 의미"(슬라이스 89) — 코어는 구조(JSON)를 주고, L5(이 웹 도구)는 그것을 받아 렌더만 한다.
+//
+// Graph2dSpec 형태:
+//   { function: "a*x**2+b*x+c", domain: [xMin, xMax], parameters: [{name,min,max,step,default}] }
+//
+// 백엔드·Flutter는 이 계산기를 `?spec=<base64(JSON)>` URL로 띄워 함수·슬라이더·정의역을 주입할 수 있다.
+import * as math from "mathjs";
+
+// Graph2dSpec → 계산기 applyState 호환 부분 상태({rows, sliders, view}). 변환할 게 없으면 null.
+export const graph2dSpecToState = (spec) => {
+  if (!spec || typeof spec !== "object") return null;
+
+  // function: 파이썬식 '**' 지수를 mathjs '^'로 변환, latex는 toTex로 생성(MathField 표시용).
+  const rows = [];
+  if (typeof spec.function === "string" && spec.function.trim()) {
+    const expr = spec.function.replace(/\*\*/g, "^").trim();
+    let latex = expr;
+    try {
+      latex = math.parse(expr).toTex();
+    } catch {
+      /* 파싱 실패 시 원본 문자열을 latex로 사용(텍스트 모드 폴백) */
+    }
+    rows.push({ latex, expr });
+  }
+
+  // parameters → sliders (이름·범위·기본값). 누락 필드는 계산기 기본값으로 보정.
+  const sliders = {};
+  if (Array.isArray(spec.parameters)) {
+    spec.parameters.forEach((p) => {
+      if (!p || typeof p.name !== "string" || !p.name) return;
+      sliders[p.name] = {
+        value: Number.isFinite(p.default) ? p.default : 1,
+        min: Number.isFinite(p.min) ? p.min : -10,
+        max: Number.isFinite(p.max) ? p.max : 10,
+        step: Number.isFinite(p.step) && p.step > 0 ? p.step : 0.1,
+        playing: false,
+      };
+    });
+  }
+
+  // domain [xMin, xMax] → view의 x 범위(y는 기본 ±10 유지).
+  let view;
+  if (Array.isArray(spec.domain) && spec.domain.length === 2) {
+    const [xMin, xMax] = spec.domain;
+    if (Number.isFinite(xMin) && Number.isFinite(xMax) && xMin < xMax) {
+      view = { xMin, xMax, yMin: -10, yMax: 10 };
+    }
+  }
+
+  if (!rows.length && !Object.keys(sliders).length && !view) return null;
+  return { rows, sliders, view };
+};
+
+// URL 파라미터 문자열에서 Graph2dSpec 파싱: base64(JSON) 우선, 실패 시 (URL 디코딩한) raw JSON.
+export const parseSpecParam = (raw) => {
+  if (!raw || typeof raw !== "string") return null;
+  const tryParse = (s) => {
+    try {
+      const obj = JSON.parse(s);
+      return obj && typeof obj === "object" ? obj : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  // 1) base64(JSON)
+  try {
+    if (typeof atob === "function") {
+      const obj = tryParse(atob(raw));
+      if (obj) return obj;
+    }
+  } catch {
+    /* base64 아님 — 다음 분기로 */
+  }
+  // 2) raw JSON (URL 인코딩 가능)
+  try {
+    return tryParse(decodeURIComponent(raw)) ?? tryParse(raw) ?? null;
+  } catch {
+    return tryParse(raw) ?? null;
+  }
+};
