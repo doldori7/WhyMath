@@ -1,14 +1,19 @@
-"""원자 백본 CLI — transform-v1(xlsx → graph.json + _provenance.json).
+"""원자 백본 CLI — transform-v1(xlsx → graph.json) · load(graph.json → Neo4j 멱등 적재).
 
 사용:
     python -m data_pipeline.atom_graph transform-v1 \
         --source <원자_xlsx> \
         --output-dir data/corpus/atom_graph_v1 \
         --standards data/corpus/standards_v1/standards.json
+    python -m data_pipeline.atom_graph load \
+        --graph data/corpus/atom_graph_v1/graph.json   # Neo4j 멱등 적재(env 접속)
 
-xlsx 2시트(원자_통합마스터·선수엣지_통합)를 추출→정형화→검증한 뒤 `graph.json`(원자+단원+소단원
-노드·원자ID 엣지·서술형 패스스루·redaction 마커)과 `_provenance.json`(source sha256·정규화
-카운트·결정성)을 저장한다. concept_graph transform-v1 시그니처/출력을 미러한다.
+transform-v1: xlsx 2시트(원자_통합마스터·선수엣지_통합)를 추출→정형화→검증한 뒤 `graph.json`
+(원자+단원+소단원 노드·원자ID 엣지·서술형 패스스루·redaction 마커)과 `_provenance.json`
+(source sha256·정규화 카운트·결정성)을 저장한다. concept_graph transform-v1 출력을 미러한다.
+
+load: transform-v1이 만든 graph.json을 Neo4j에 멱등 MERGE 적재한다(Phase 2c·접속 env 전용).
+구 437 개념 그래프와 별개 라벨(`:Atom`·`:ATOM_PREREQUISITE`)로 additive 적재한다.
 
 무저장소(--output-dir 생략) 시 검증만 수행한다. warning은 통과 처리(§3), error 또는 정형화
 skip 발생 시 비정상 종료(CLAUDE.md 신뢰 원칙 — 조용히 넘기지 않음).
@@ -20,13 +25,14 @@ import hashlib
 import json
 import logging
 import sys
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from data_pipeline.atom_graph.extract import ExtractError, extract_workbook
-from data_pipeline.atom_graph.models import SOURCE_CITATION
+from data_pipeline.atom_graph.models import SOURCE_CITATION, AtomConcept, AtomEdge
 from data_pipeline.atom_graph.transform import TransformResult, transform_dataset
 from data_pipeline.atom_graph.validate import GraphValidationReport, validate_dataset
 
@@ -192,6 +198,79 @@ def _write_provenance(
         "determinism": "결정론 — 동일 sha256 입력 2회 transform 시 byte 동일 산출",
     }
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _graph_json_to_result(path: Path) -> TransformResult:
+    """graph.json(transform-v1 산출) → TransformResult(원자·엣지 모델 복원).
+
+    dump는 `use_enum_values=True`라 enum이 문자열이지만 Pydantic이 enum 값으로 재구성한다.
+    narrative_edges_raw는 그래프 적재 대상이 아니나 라운드트립 보존을 위해 복원한다(load는 미적재).
+    """
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    concepts = [AtomConcept(**record) for record in payload.get("concepts", [])]
+    edges = [AtomEdge(**record) for record in payload.get("edges", [])]
+    return TransformResult(
+        concepts=concepts,
+        edges=edges,
+        narrative_edges_raw=list(payload.get("narrative_edges_raw", [])),
+    )
+
+
+@app.command()
+def load(
+    graph: Annotated[
+        Path,
+        typer.Option("--graph", "-g", help="transform-v1이 만든 graph.json 경로."),
+    ],
+    database: Annotated[
+        str | None,
+        typer.Option("--database", help="대상 Neo4j DB명(멀티-DB 환경). 생략 시 기본 DB."),
+    ] = None,
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="DEBUG 로그.")] = False,
+) -> None:
+    """graph.json → Neo4j 멱등 적재(Phase 2c). 접속은 env 전용(시크릿 하드코딩 금지).
+
+    적재는 멱등(MERGE)이라 재실행해도 노드·엣지 수가 불변이다. 구 437 개념 그래프와 별개 라벨
+    (`:Atom`·`:ATOM_PREREQUISITE`)로 additive 적재한다. 접속 자격은 NEO4J_URI·NEO4J_USER·
+    NEO4J_PASSWORD env에서만 읽는다(CLAUDE.md 보안).
+    """
+    _setup_logging(verbose)
+    print(SOURCE_CITATION)
+    print()
+
+    # neo4j 드라이버 사전체크(미설치 시 친절 안내 — find_spec은 import 부작용 없음).
+    if find_spec("neo4j") is None:
+        typer.echo(
+            "[!] neo4j 드라이버가 없습니다 — `pip install -e '.[neo4j]'` 후 재시도하세요.",
+            err=True,
+        )
+        raise typer.Exit(code=3)
+
+    if not graph.exists():
+        typer.echo(f"[!] graph.json 없음: {graph}", err=True)
+        raise typer.Exit(code=2)
+
+    # 지연 import(드라이버 사전체크 통과 후) — extra 미설치 환경에서 모듈 import 막지 않기 위함.
+    from data_pipeline.atom_graph.load import connect_driver, load_graph
+
+    try:
+        driver = connect_driver()
+    except ValueError as exc:
+        # 접속 env 누락 — 시크릿 안내(절대 하드코딩 금지).
+        typer.echo(f"[!] {exc}", err=True)
+        raise typer.Exit(code=2) from exc
+
+    result = _graph_json_to_result(graph)
+    try:
+        report = load_graph(result, driver=driver, database=database)
+    finally:
+        driver.close()
+
+    print(f"[적재] {report.summary()}")
+    print(
+        "[멱등] MERGE 기반 — 재실행해도 노드·엣지 수 불변. "
+        f"노드 {report.nodes_merged}개·엣지 {report.edges_merged}개."
+    )
 
 
 if __name__ == "__main__":  # pragma: no cover
