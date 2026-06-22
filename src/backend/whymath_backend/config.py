@@ -778,6 +778,69 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── L5 OCR 서브시스템 (손글씨 풀이 인식·기본 OFF·opt-in) ──
+    # OCR는 무거운 모델(rapidocr·rapid_latex_ocr 등)을 쓰므로 기본 비활성이다(extra [ocr]
+    # 미설치 환경·CI hermetic 보호). True여야 lifespan이 부품을 적재해 /v1/ocr가 활성화된다.
+    # 부품은 *지연 import*라 이 설정·구성만으로는 모델 다운로드·네트워크가 일어나지 않는다.
+    ocr_enabled: bool = Field(
+        default=False,
+        description=(
+            "L5 OCR 서브시스템(손글씨 풀이 인식·POST /v1/ocr) 활성 여부. **기본 False(opt-in·"
+            "prod 안전)**: rapidocr·rapid_latex_ocr 등 무거운 의존이 extra [ocr]라 미설치 "
+            "환경·CI에서 끈다. True면 lifespan이 `build_ocr_components`로 부품을 적재해 "
+            "app.state에 올린다(실패해도 fail-fast 아님·경고 로그). WHYMATH_OCR_ENABLED로 켠다."
+        ),
+    )
+    ocr_language: Literal["ko", "en", "korean"] = Field(
+        default="korean",
+        description=(
+            "OCR 텍스트 인식 언어(rapidocr 한글 모델). 기본 korean(한국 학생 손글씨 산문). "
+            "ko/en은 별칭·축약. WHYMATH_OCR_LANGUAGE로 조정. 시크릿 아님."
+        ),
+    )
+    ocr_recognizer_backend: Literal["rapid_latex", "texteller", "qwen_vl"] = Field(
+        default="rapid_latex",
+        description=(
+            "수식 인식 백엔드 좌석. `rapid_latex`(기본·Phase A)=rapid_latex_ocr(경량 ONNX). "
+            "`texteller`(Phase B 스텁)=transformers TexTeller(손글씨 강건·미배선). "
+            "`qwen_vl`(Phase C 스텁)=Qwen3-VL 멀티모달(*반드시 L3 라우터 경유*·Ollama 직접 호출 "
+            "금지·미배선). WHYMATH_OCR_RECOGNIZER_BACKEND로 조정."
+        ),
+    )
+    ocr_detector: Literal["paddle", "mfd"] = Field(
+        default="paddle",
+        description=(
+            "영역 검출기 좌석. `paddle`(기본·Phase A)=rapidocr 텍스트 라인 검출(휴리스틱 라우터가 "
+            "수식을 가름). `mfd`(Phase B 스텁)=MFD(YOLO 수식 영역 검출·미배선). "
+            "WHYMATH_OCR_DETECTOR로 조정. 시크릿 아님."
+        ),
+    )
+    ocr_mfd_weights_path: str = Field(
+        default="",
+        description=(
+            "MFD(Phase B·YOLO) 수식 영역 검출 가중치 경로 좌석. 빈 값(기본)=미설정. Phase A에서는 "
+            "보관만 한다(MfdDetector는 호출 시 NotImplementedError). "
+            "WHYMATH_OCR_MFD_WEIGHTS_PATH로 주입."
+        ),
+    )
+    ocr_model_dir: str = Field(
+        default="",
+        description=(
+            "OCR 검출/인식 커스텀 모델 디렉토리 좌석. 빈 값(기본)=rapidocr 기본 모델 사용. "
+            "오프라인/핀 모델은 WHYMATH_OCR_MODEL_DIR로 주입. 시크릿 아님."
+        ),
+    )
+    ocr_min_confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "OCR 영역 인식 신뢰도 하한 좌석(0~1). 기본 0.0=필터 비활성(모든 영역 통과·현 동작). "
+            "향후 이 미만 영역을 거르거나 재확인 유도에 쓴다(coach <0.8 게이트와 별). "
+            "WHYMATH_OCR_MIN_CONFIDENCE로 조정."
+        ),
+    )
+
     @property
     def sync_database_url(self) -> str:
         """`database_url`(async asyncpg)에서 *sync psycopg* 드라이버 URL을 파생(슬105).
