@@ -121,3 +121,49 @@ Phase 3에서 저작한다. 특히 **정식정의(formal_definition)는 교과�
 - **Phase 5**: 구 `concept_graph_v1` 폐기·전 계층 검증.
 
 상세 로드맵·결정(locked ①~⑥)은 마이그레이션 플랜 및 `MEMORY.md` 결정 로그 참조.
+
+---
+
+## 7. Neo4j 적재 스키마 (Phase 2c — `atom_graph/load.py`)
+
+`graph.json`을 Neo4j에 **멱등 MERGE** 적재한다(`concept_graph/load.py` 미러 — 지연 import·
+`NEO4J_*` env 접속·드라이버 주입·reltype enum allowlist). **additive 원칙**: 구 437 개념 그래프
+(`:Concept`/`concept_id`/`:PREREQUISITE`)와 *노드·엣지 라벨 모두 충돌하지 않게* 별도 스키마를
+쓴다(Phase 5 구 폐기 전까지 병존).
+
+| 요소 | 구 개념 그래프 | 원자 백본(신·Phase 2c) |
+|---|---|---|
+| 노드 라벨 | `:Concept` | **`:Atom`** |
+| MERGE 키 | `concept_id` | **`code`** (원자ID/소단원코드/단원코드) |
+| 제약 | `concept_id_unique` | **`atom_code_unique`** (`REQUIRE a.code IS UNIQUE`) |
+| 인덱스 | `concept_domain`·`concept_name_ko` | **`atom_school_level`**(a.school_level)·**`atom_level`**(a.level) |
+| 관계 타입 | `:PREREQUISITE` | **`:ATOM_PREREQUISITE`** (reltype 토큰까지 완전 분리) |
+
+### DDL·MERGE (멱등)
+```cypher
+CREATE CONSTRAINT atom_code_unique IF NOT EXISTS FOR (a:Atom) REQUIRE a.code IS UNIQUE;
+CREATE INDEX atom_school_level IF NOT EXISTS FOR (a:Atom) ON (a.school_level);
+CREATE INDEX atom_level IF NOT EXISTS FOR (a:Atom) ON (a.level);
+MERGE (a:Atom {code: $code}) SET a += $props;            -- 노드 전량(원자+단원+소단원)
+MATCH (src:Atom {code: $src}) MATCH (dst:Atom {code: $dst})
+MERGE (src)-[r:ATOM_PREREQUISITE]->(dst) SET r += $props; -- 선수 엣지
+```
+
+### 적재 규칙
+- **노드 2,697**(원자 1,837·단원 217·소단원 643)·**엣지 2,213**(원자ID prerequisite 전량)·skip 0.
+- 엣지 속성: `relation_subtype`(원본/소단원내/소단원간/학년간/학교급간(추정))·`school_link`·
+  `strength`·`evidence`·`from_name`·`to_name`. `from_code`/`to_code`/`relation`은 MATCH/reltype에 쓰고
+  속성으론 넣지 않는다.
+- `atomicity`(a~d dict)는 **Neo4j map 속성 불가** → 결정론 JSON 문자열로 직렬화(구조 진실 원천은
+  graph.json·Postgres `atom_node`). `None`·빈 dict 속성은 생략(Neo4j null 미저장).
+- `parent_code`(3단 계층)는 **노드 속성**으로만 보존 — 별도 계층 관계는 만들지 않는다(Phase 3+).
+  `narrative_edges_raw`(서술형 1,007)는 FK 불가라 **적재 대상 아님**(패스스루 보존).
+- **redaction 불변**: AtomConcept에 K-12 핵심명제 본문 슬롯이 없어 dump에 미포함 → 구조적 차단.
+  접속 자격은 `NEO4J_URI`·`NEO4J_USER`·`NEO4J_PASSWORD` env 전용(시크릿 하드코딩 금지).
+
+### CLI·검증
+```bash
+python -m data_pipeline.atom_graph load --graph data/corpus/atom_graph_v1/graph.json
+```
+단위(Fake 드라이버·실 코퍼스 2,697/2,213/skip 0)·통합(`@integration`·`neo4j` importorskip·실
+neo4j:5에서 멱등 재적재 불변·code 집합 격리 정리). CI 전용 `data-pipeline-neo4j` 잡이 실 적재 검증.
