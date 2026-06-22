@@ -19,6 +19,7 @@ alembic autogenerate(env.py의 `target_metadata = Base.metadata`)가 테이블�
   - 슬105 MisconceptionEmbedding (L4 오개념 의미 매칭 pgvector 영속 — `vector` 컬럼 소유).
   - 슬3(개념그래프 아크) ConceptEmbedding (L1 개념 의미검색 pgvector 영속 — UC 키·`vector` 컬럼).
   - 개념그래프 소비 슬1 ConceptNode (L1 개념 메타 PG 프로젝션 — UC 키·검색 enrichment 백킹).
+  - 원자 Phase 2b AtomEmbedding (L1 원자 의미검색 pgvector 영속 — code 키·`vector` 컬럼).
   - P1-2 AchievementStandard·ConceptStandardLink (NCIC 성취기준 영속 + 개념↔성취기준 N:M 링크).
   - PIPA §22-2 ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사 — user_profile FK).
 모든 테이블이 한 `Base.metadata`에 모여 문자열 FK 타깃(`problem.problem_id`·
@@ -43,6 +44,7 @@ from whymath_backend.db.models.assessment import (
     Assessment,
     ConceptMasteryHistory,
 )
+from whymath_backend.db.models.atom_embedding import AtomEmbedding
 from whymath_backend.db.models.atom_node import (
     ATOM_REVIEW_STATUS_AI_ESTIMATED,
     AtomNode,
@@ -162,6 +164,8 @@ __all__ = [
     # 원자 마이그레이션 Phase 2a: AtomNode (L1 원자 메타 PG 프로젝션·code 키·검색 enrichment 백킹)
     "AtomNode",
     "ATOM_REVIEW_STATUS_AI_ESTIMATED",
+    # 원자 마이그레이션 Phase 2b: AtomEmbedding (L1 원자 의미검색 pgvector 영속·code 키·vector 컬럼)
+    "AtomEmbedding",
     # WH-S S1: SolutionNode (풀이 경로 트리 노드·§2.1·오프라인 솔버 상태) + 검증 상태 enum
     "SolutionNode",
     "NodeVerifyStatus",

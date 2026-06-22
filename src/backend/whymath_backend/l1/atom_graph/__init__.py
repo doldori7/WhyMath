@@ -35,6 +35,13 @@ from whymath_backend.l1.atom_graph.atom_node_projection import (
     load_atom_nodes_from_graph_json,
     populate_atom_nodes,
 )
+from whymath_backend.l1.atom_graph.embedding import (
+    AtomEmbeddingIndex,
+    AtomText,
+    atom_embedding_text,
+    load_atoms_from_graph_json,
+    populate_atom_embeddings,
+)
 from whymath_backend.l1.atom_graph.populate import populate_atom_backbone
 
 __all__ = [
@@ -42,14 +49,19 @@ __all__ = [
     "AtomBackendConceptStore",
     "AtomBackendEdgeRecord",
     "AtomBackendEdgeStore",
+    "AtomEmbeddingIndex",
     "AtomNodeRecord",
     "AtomNodeStore",
+    "AtomText",
+    "atom_embedding_text",
     "clamp_difficulty",
     "load_atom_concepts_from_graph_json",
     "load_atom_edges_from_graph_json",
     "load_atom_nodes_from_graph_json",
+    "load_atoms_from_graph_json",
     "populate_atom_backbone",
     "populate_atom_concepts",
     "populate_atom_edges",
+    "populate_atom_embeddings",
     "populate_atom_nodes",
 ]
