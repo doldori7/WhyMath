@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Protocol, runtime_checkable
 
 from whymath_backend.l3.models import RoutingDecision
@@ -26,8 +27,15 @@ class LLMProvider(Protocol):
         prompt: str,
         system: str,
         decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
     ) -> str:
-        """라우터 결정(decision)에 따라 응답을 생성한다(미구현)."""
+        """라우터 결정(decision)에 따라 응답을 생성한다(미구현).
+
+        `images`(base64 인코딩 이미지 목록)는 멀티모달(VL) 호출용 *선택적* 입력이다.
+        None(기본·텍스트 호출)이면 기존 동작과 동일하다. 비전 미지원 제공자는 images가
+        주어지면 *조용한 무시 없이* 명확한 오류를 던진다(CLAUDE.md "모르면 모른다고").
+        """
         ...
 
 

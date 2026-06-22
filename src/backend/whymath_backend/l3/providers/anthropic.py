@@ -24,6 +24,7 @@ system=,messages=[{"role":"user","content":...}])`. 응답은 content 블록 리
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 
@@ -248,15 +249,24 @@ class AnthropicProvider:
         prompt: str,
         system: str,
         decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
     ) -> str:
         """라우터 결정에 따라 Anthropic Claude로 생성 (LLMProvider 구현).
 
         - CostTier.LOCAL이면 즉시 거부(로컬은 OllamaProvider 담당).
         - CLOUD_MID/CLOUD_HIGH는 resolve_cloud_model()로 실제 모델 ID(Sonnet/Opus)를 얻어
           plain messages.create로 호출한다(샘플링·thinking 인자 없음 — Opus 4.7 호환).
+        - `images`가 주어지면 *명확한 오류*를 던진다 — 멀티모달은 로컬 Qwen3-VL 경유이며
+          (미성년자 프라이버시·로컬-우선) 클라우드 비전은 미배선이다(조용한 무시 금지).
 
         반환 텍스트는 *검증 전 원시 출력*이다(모듈 docstring 경계 메모 참조).
         """
+        if images:
+            raise RuntimeError(
+                "AnthropicProvider는 멀티모달(images) 입력을 지원하지 않습니다 — 비전 인식은 "
+                "로컬 Qwen3-VL(VISION 패밀리) 경유입니다(클라우드 비전 미배선·미성년자 프라이버시)."
+            )
         cost = _as_cost_tier(decision.cost_tier)
         if cost is CostTier.LOCAL:
             raise ValueError(
