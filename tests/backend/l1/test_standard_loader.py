@@ -558,3 +558,30 @@ def test_standard_store_uses_default_settings_when_unset() -> None:
 def test_link_store_uses_default_settings_when_unset() -> None:
     store = ConceptStandardLinkStore()
     assert isinstance(store._resolved_settings, Settings)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 실 대학 성취기준 코퍼스 hermetic 적재 (U3 — PG 불요·가짜 엔진으로 전 경로)
+# ──────────────────────────────────────────────────────────────────────────
+def test_load_real_university_corpus_via_fake_engine() -> None:
+    """실 `standards_university_v1` 코퍼스 409건이 로더 전 경로를 통과(자체작성·대학 code·PG 불요).
+
+    가짜 엔진으로 `load_standards`를 실 코퍼스에 돌려 ① 409건 파싱·schema 검증(code→official_code
+    rename·school_type=대학교·`[CALC1-01-01]` 형식) ② 행마다 ON CONFLICT(norm_id) upsert 구성을
+    확인한다(실 PG 적재는 통합테스트). 대학은 NCIC 아닌 자체작성이나 *같은 범용 로더*로 적재된다."""
+    corpus = (
+        Path(__file__).resolve().parents[3]
+        / "data"
+        / "corpus"
+        / "standards_university_v1"
+        / "standards.json"
+    )
+    if not corpus.exists():
+        pytest.skip("대학 코퍼스 미존재(U1 산출 필요)")
+    store, engine = _std_store()
+    count = load_standards(None, corpus, store=store)
+    assert count == 409  # 대학 성취기준 전건
+    assert len(engine.executed) == 409  # 행마다 upsert statement
+    compiled = _compile(engine.executed[0])
+    assert "INSERT INTO achievement_standard" in compiled
+    assert "ON CONFLICT" in compiled

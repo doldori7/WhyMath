@@ -539,3 +539,51 @@ class TestRealCorpusLoad:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:
             _cleanup(norm_ids)
+
+
+class TestUniversityCorpusLoad:
+    """⑦ 실 대학 성취기준 코퍼스(`data/corpus/standards_university_v1`) 적재 — 409행·멱등(U3).
+
+    대학 성취기준은 NCIC 아닌 *자체작성*이나 같은 범용 backend 로더로 적재된다(school_type=대학교·
+    code=`[CALC1-01-01]`·curriculum_revision='대학'). 링크는 atom 백본 concept이 source_id
+    미설정이라 orphan skip될 수 있어(concept_standard_link은 개념그래프 레거시·atom↔성취기준은
+    atom.standard_codes가 담당·U2에서 채움) 여기선 *standards 적재*만 검증한다.
+    """
+
+    def test_load_real_university_standards_idempotent(self) -> None:
+        _skip_if_unreachable()
+        import json
+        from pathlib import Path
+
+        from sqlalchemy import text
+
+        corpus = Path("data/corpus/standards_university_v1/standards.json")
+        if not corpus.exists():
+            pytest.skip("대학 코퍼스 미존재(data/corpus/standards_university_v1/standards.json)")
+        payload = json.loads(corpus.read_text(encoding="utf-8"))
+        norm_ids = [str(s["norm_id"]) for s in payload["standards"]]
+        try:
+            count = load_standards(None, corpus, settings=Settings())
+            assert count == 409  # 대학 성취기준 전건
+            recount = load_standards(None, corpus, settings=Settings())
+            assert recount == 409  # 멱등
+            engine = _sync_engine()
+            try:
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    total = conn.execute(
+                        text("SELECT count(*) FROM achievement_standard WHERE norm_id = ANY(:ids)"),
+                        {"ids": norm_ids},
+                    ).scalar_one()
+                    univ = conn.execute(
+                        text(
+                            "SELECT count(*) FROM achievement_standard "
+                            "WHERE curriculum_revision = '대학' AND norm_id = ANY(:ids)"
+                        ),
+                        {"ids": norm_ids},
+                    ).scalar_one()
+                assert total == 409  # 멱등(2회 적재 후에도 409행)
+                assert univ == 409  # 전부 대학 개정 표식
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+        finally:
+            _cleanup(norm_ids)
