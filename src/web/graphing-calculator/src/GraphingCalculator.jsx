@@ -10,6 +10,7 @@ import {
   numDeriv,
   num2Deriv,
 } from "./lib/mathExpr";
+import { graph2dSpecToState, parseSpecParam } from "./lib/graph2dSpec";
 
 // ====== [Phase 4] MathLive를 npm 번들에서 동적 로딩 (코드 분할·오프라인 자족) ======
 // 과거엔 CDN <script>로 불러왔으나, WebView/오프라인 자족을 위해 npm 의존성으로 번들한다.
@@ -1473,6 +1474,24 @@ export default function GraphingCalculator() {
     if (typeof st.showRegression === "boolean") setShowRegression(st.showRegression);
     return true;
   };
+
+  // ====== [코어 연동] Graph2dSpec(?spec=) 소비 — 백엔드/Flutter가 명세 URL로 계산기를 띄움 ======
+  // 코어(L1-L4)의 선언적 Graph2dSpec을 L5(이 도구)가 *소비*만 한다(표현≠의미: 구조를 받아 렌더).
+  // 예: ?spec=<base64({"function":"a*x**2","domain":[-5,5],"parameters":[{"name":"a","default":2}]})>
+  useEffect(() => {
+    try {
+      if (typeof window === "undefined" || !window.location) return;
+      const raw = new URLSearchParams(window.location.search).get("spec");
+      const spec = parseSpecParam(raw);
+      if (!spec) return;
+      const st = graph2dSpecToState(spec);
+      if (st) applyState(st);
+    } catch {
+      /* 잘못된 spec은 조용히 무시(기본 빈 계산기로 시작) */
+    }
+    // 마운트 1회만 — URL은 진입 시점 고정
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // ====== [Phase 7-A] JSON 파일로 내보내기 ======
   const exportJSON = () => {
