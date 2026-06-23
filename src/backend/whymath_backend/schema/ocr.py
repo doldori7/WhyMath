@@ -15,6 +15,8 @@ L4 코치 핸드오프(`api/coach.CoachRequest`)와의 *깔끔한 매핑*(coach.
 클라이언트는 `/v1/ocr`로 구조를 받고, 이어서 `/v1/coach/sessions`에 위 매핑으로 다시
 호출한다(2-콜 핸드오프). 백엔드가 두 호출을 *조합*하지 않는다 — OCR 엔드포인트는 순수
 인식만 한다(7계층 경계: L5는 하위를 호출하나 합치는 책임은 호출자/오케스트레이션).
+위 매핑의 *실행 가능한 정전 구현*(빌더·테스트됨)은 `api/ocr_handoff.py`에 있다
+(`ocr_result_to_coach_request`·다중 페이지 `ocr_pages_to_coach_request`).
 
 컨벤션(`schema/problem.py`·`l3/verify_answer.py` 답습):
   - `ConfigDict(extra="forbid", use_enum_values=True, str_strip_whitespace=True)`.
