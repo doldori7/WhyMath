@@ -8,6 +8,7 @@
 //
 // 백엔드·Flutter는 이 계산기를 `?spec=<base64(JSON)>` URL로 띄워 함수·슬라이더·정의역을 주입할 수 있다.
 import * as math from "mathjs";
+import { classify, extractVars } from "./mathExpr.js";
 
 // Graph2dSpec → 계산기 applyState 호환 부분 상태({rows, sliders, view}). 변환할 게 없으면 null.
 export const graph2dSpecToState = (spec) => {
@@ -80,4 +81,68 @@ export const parseSpecParam = (raw) => {
   } catch {
     return tryParse(raw) ?? null;
   }
+};
+
+// ====== 역방향 어댑터: 계산기 상태 → 코어 Graph2dSpec (내보내기) ======
+// graph2dSpecToState의 *역연산*. 계산기가 만든 그래프를 코어 선언적 명세(JSON)로 추출해
+// 백엔드·문항·공유 링크로 보낼 수 있게 한다 — "표현 ≠ 의미"(슬라이스 89) 양방향 완성.
+//
+// 입력: 계산기 부분 상태 { rows, sliders, view }
+//   - rows[i]: { expr, latex, ... }  (expr는 mathjs '^' 지수)
+//   - sliders[name]: { value, min, max, step, playing }
+//   - view: { xMin, xMax, yMin, yMax }
+// 출력: Graph2dSpec { function?, domain?, parameters? } (정의된 키만) 또는 null(함수 행 없음).
+//
+// 규약(정방향과 대칭):
+//   - Graph2dSpec는 단일 function만 표현 → rows에서 *첫 일반 함수 행*만 취하고 점/음함수/
+//     부등식/극좌표/매개변수 행은 건너뛴다(classify 판별).
+//   - mathjs '^' → 파이썬 '**' 치환(정방향 graph2dSpecToState의 '**'→'^' 역).
+//   - 함수에 실제로 쓰인 슬라이더만 parameters로(정방향이 parameters에서만 슬라이더를 만들므로
+//     클린 라운드트립). default = 현재 슬라이더 value.
+//   - domain은 x 범위만(코어 규약: y는 ±10 고정, 명세에 안 실음).
+export const calcStateToGraph2dSpec = (state) => {
+  if (!state || typeof state !== "object") return null;
+  const { rows, sliders, view } = state;
+
+  // 1) 첫 일반 함수 행 탐색(점/음함수/부등식/극좌표/매개변수 제외).
+  let body = null;
+  if (Array.isArray(rows)) {
+    for (const r of rows) {
+      if (!r || typeof r.expr !== "string" || !r.expr.trim()) continue;
+      const c = classify(r.expr);
+      if (c.type === "function") {
+        body = c.body; // 'y=' 접두 제거된 본문
+        break;
+      }
+    }
+  }
+  if (!body) return null;
+
+  // 2) function: '^' → '**' (파이썬식 지수).
+  const fn = body.replace(/\^/g, "**");
+  const spec = { function: fn };
+
+  // 3) parameters: 함수에 쓰인 변수 중 슬라이더가 존재하는 것만.
+  if (sliders && typeof sliders === "object") {
+    const parameters = [];
+    for (const name of extractVars(body)) {
+      const s = sliders[name];
+      if (!s || typeof s !== "object") continue;
+      parameters.push({
+        name,
+        min: s.min,
+        max: s.max,
+        step: s.step,
+        default: s.value,
+      });
+    }
+    if (parameters.length) spec.parameters = parameters;
+  }
+
+  // 4) domain: 유효한 view의 x 범위만.
+  if (view && Number.isFinite(view.xMin) && Number.isFinite(view.xMax) && view.xMin < view.xMax) {
+    spec.domain = [view.xMin, view.xMax];
+  }
+
+  return spec;
 };

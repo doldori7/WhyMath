@@ -10,7 +10,7 @@ import {
   numDeriv,
   num2Deriv,
 } from "./lib/mathExpr";
-import { graph2dSpecToState, parseSpecParam } from "./lib/graph2dSpec";
+import { graph2dSpecToState, parseSpecParam, calcStateToGraph2dSpec } from "./lib/graph2dSpec";
 
 // ====== [Phase 4] MathLive를 npm 번들에서 동적 로딩 (코드 분할·오프라인 자족) ======
 // 과거엔 CDN <script>로 불러왔으나, WebView/오프라인 자족을 위해 npm 의존성으로 번들한다.
@@ -861,6 +861,7 @@ export default function GraphingCalculator() {
   // [Phase 7] 저장된 그래프 목록 (이름 목록)
   const [savedList, setSavedList] = useState([]);
   const [saveStatus, setSaveStatus] = useState(""); // 저장/불러오기 안내 메시지
+  const [specText, setSpecText] = useState(""); // 코어 Graph2dSpec JSON 내보내기/붙여넣기 칸
   // [Phase 10] 적분 계산 결과 저장 {rowId: {riemannSum, exact}}
   const [integralResults, setIntegralResults] = useState({});
   // [Phase 11] 3D 모드 on/off, 3D 곡면 식, 정의역 범위
@@ -1522,6 +1523,31 @@ export default function GraphingCalculator() {
     e.target.value = ""; // 같은 파일 다시 선택 가능하게 초기화
   };
 
+  // ====== [Phase 7-B] 코어 Graph2dSpec 명세 내보내기/붙여넣기 ======
+  // 계산기 상태 → 코어 선언적 명세(JSON). 백엔드·문항·공유 링크로 보낼 수 있다("표현≠의미" 양방향).
+  const exportSpec = () => {
+    const spec = calcStateToGraph2dSpec({ rows, sliders, view });
+    if (!spec) {
+      setSaveStatus("내보낼 함수가 없습니다");
+      setTimeout(() => setSaveStatus(""), 2500);
+      return;
+    }
+    const json = JSON.stringify(spec, null, 2);
+    setSpecText(json);
+    try { navigator.clipboard?.writeText(json); } catch { /* 클립보드 미지원 — 칸에는 채워짐 */ }
+    setSaveStatus("명세를 복사했습니다");
+    setTimeout(() => setSaveStatus(""), 2500);
+  };
+
+  // 붙여넣은 Graph2dSpec JSON을 파싱해 그래프로 적용(graph2dSpecToState 경유).
+  const applySpec = () => {
+    const spec = parseSpecParam(specText);
+    const st = spec && graph2dSpecToState(spec);
+    if (st && applyState(st)) setSaveStatus("명세를 적용했습니다");
+    else setSaveStatus("올바른 Graph2dSpec JSON이 아닙니다");
+    setTimeout(() => setSaveStatus(""), 2500);
+  };
+
   // ====== [Phase 7-B] 영구 저장소에 이름 붙여 저장 (브라우저 닫아도 유지) ======
   const STORAGE_PREFIX = "graph:";
   // 저장된 목록 새로고침
@@ -1808,6 +1834,26 @@ export default function GraphingCalculator() {
                 파일 가져오기
                 <input type="file" accept="application/json,.json" onChange={importJSON} style={{ display: "none" }} />
               </label>
+            </div>
+
+            {/* [Phase 7-B] 코어 Graph2dSpec 명세 내보내기/붙여넣기 */}
+            <div style={{ marginTop: 10, borderTop: "1px dashed #eee", paddingTop: 8 }}>
+              <div style={{ fontSize: 12, color: "#aaa", marginBottom: 6 }}>코어 명세 (Graph2dSpec JSON)</div>
+              <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+                <button onClick={exportSpec} style={{ flex: 1, padding: "7px", border: "1px solid #ddd", borderRadius: 6, background: "#fafafa", cursor: "pointer", fontSize: 12, color: "#666" }}>
+                  📋 명세 내보내기
+                </button>
+                <button onClick={applySpec} style={{ flex: 1, padding: "7px", border: "1px solid #ddd", borderRadius: 6, background: "#fafafa", cursor: "pointer", fontSize: 12, color: "#666" }}>
+                  붙여넣기 적용
+                </button>
+              </div>
+              <textarea
+                value={specText}
+                onChange={(e) => setSpecText(e.target.value)}
+                rows={4}
+                placeholder={'{ "function": "a*x**2", "domain": [-5, 5], "parameters": [...] }'}
+                style={{ width: "100%", boxSizing: "border-box", fontFamily: "monospace", fontSize: 11, padding: 6, border: "1px solid #ddd", borderRadius: 6, resize: "vertical", color: "#333" }}
+              />
             </div>
 
             {/* 상태 메시지 */}
