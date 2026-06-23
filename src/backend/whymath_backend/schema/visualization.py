@@ -184,3 +184,22 @@ class Visualization(BaseModel):
         except ValidationError as exc:
             raise ValueError(f"{vtype.value} spec 위반: {exc}") from exc
         return self
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 공유 링크 — Graph2dSpec 라운드트립 API 응답 (slice 96-B)
+# ──────────────────────────────────────────────────────────────────────────
+class VisualizationShareLink(BaseModel):
+    """검증된 `Visualization` + 웹 계산기용 공유 링크 파라미터.
+
+    `POST /v1/visualizations/spec`의 응답 — 코어가 spec을 *중앙 검증*한 뒤 클라(웹·Flutter)가
+    이미 쓰는 `?spec=<base64(JSON)>` 형식의 공유 파라미터를 *생성*해 돌려준다(표현≠의미·슬89:
+    spec은 구조이고 검증은 코어 책임). `spec_param`은 표준 base64(웹 `atob`·Flutter
+    `encodeGraph2dSpecParam` 호환), `share_query`는 그 앞에 `?spec=`를 붙인 쿼리스트링이다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    visualization: Visualization = Field(..., description="검증 통과한 정본 시각화 명세(에코)")
+    spec_param: str = Field(..., description="base64(JSON(spec)) — 웹 ?spec= 호환 파라미터")
+    share_query: str = Field(..., description='"?spec=<base64>" 공유 쿼리스트링')

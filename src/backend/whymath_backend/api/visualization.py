@@ -13,9 +13,12 @@ weakest-first 정렬 → 호출자가 [0]을 넘김). HTTP 엔드포인트 + pro
 
 from __future__ import annotations
 
-from typing import Annotated
+import base64
+import json
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
@@ -35,7 +38,8 @@ from whymath_backend.l3.visualization import (
     visualization_spec_for_concept,
 )
 from whymath_backend.l4.lthc import mastery_to_level
-from whymath_backend.schema.visualization import Visualization
+from whymath_backend.schema.enums import VisualizationType
+from whymath_backend.schema.visualization import Visualization, VisualizationShareLink
 
 
 async def visualize_for_concept_diagnosis(
@@ -147,3 +151,72 @@ async def post_weak_concept_visualization(
             detail="개념 데이터를 찾을 수 없습니다.",
         )
     return viz
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# HTTP 엔드포인트 (L5) — Graph2dSpec 명세 라운드트립 (slice 96-B)
+# ──────────────────────────────────────────────────────────────────────────
+# 코어가 spec을 *중앙 검증*하고, 클라(웹·Flutter)가 이미 쓰는 ?spec=<base64(JSON)> 공유 파라미터를
+# 생성/파싱한다(표현≠의미·슬89). LLM 호출 0(순수 검증/인코딩)이라 레이트리미터는 적용하지 않는다.
+
+
+def _encode_spec(spec: dict[str, Any]) -> str:
+    """spec dict → 표준 base64(compact JSON). 웹 atob·Flutter encodeGraph2dSpecParam 호환."""
+    return base64.b64encode(
+        json.dumps(spec, separators=(",", ":"), ensure_ascii=False).encode()
+    ).decode()
+
+
+def _decode_spec(param: str) -> dict[str, Any]:
+    """base64(JSON) → spec dict. 잘못된 base64·JSON·비-객체는 ValueError(호출부 422 매핑)."""
+    raw = base64.b64decode(param, validate=True)  # binascii.Error(⊂ValueError)
+    data = json.loads(raw)  # JSONDecodeError(⊂ValueError)
+    if not isinstance(data, dict):
+        raise ValueError("spec은 JSON 객체여야 합니다.")
+    return data
+
+
+@router.post(
+    "/spec",
+    response_model=VisualizationShareLink,
+    summary="시각화 명세 검증 + 공유 링크 파라미터 생성 (Graph2dSpec 라운드트립)",
+)
+async def post_visualization_spec(
+    user: ConsentedUser, visualization: Visualization
+) -> VisualizationShareLink:
+    """`Visualization`을 코어 계약으로 검증하고 웹 계산기용 `?spec=` 공유 파라미터를 생성한다.
+
+    body의 `spec`은 `Visualization._validate_typed_spec`로 type별 자동 검증되어 위반 시 422다.
+    `spec_param`은 표준 base64(JSON(spec))로 웹 계산기(`?spec=`)·Flutter가 그대로 소비한다.
+    (웹 계산기는 interactive_graph_2d만 렌더 — 다른 type도 검증·인코딩은 동일하게 지원.)
+    """
+    spec_param = _encode_spec(visualization.spec)
+    return VisualizationShareLink(
+        visualization=visualization,
+        spec_param=spec_param,
+        share_query=f"?spec={spec_param}",
+    )
+
+
+@router.get(
+    "/spec",
+    response_model=Visualization,
+    summary="공유 파라미터(?spec=base64) → 검증된 시각화 명세로 디코드",
+)
+async def get_visualization_spec(
+    user: ConsentedUser,
+    spec: Annotated[str, Query(description="base64(JSON(Graph2dSpec)) — 웹 ?spec= 파라미터")],
+) -> Visualization:
+    """`?spec=<base64>`를 디코드·검증해 정본 `Visualization`(interactive_graph_2d)을 돌려준다.
+
+    웹 `?spec=`는 Graph2dSpec dict만 싣는 정방향 어댑터 규약과 대칭이므로 type을 2d로 가정한다.
+    base64/JSON 파손·spec 검증 위반은 422다.
+    """
+    try:
+        spec_dict = _decode_spec(spec)
+        return Visualization(type=VisualizationType.interactive_graph_2d, spec=spec_dict)
+    except (ValueError, ValidationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"올바른 Graph2dSpec 명세가 아닙니다: {exc}",
+        ) from exc
