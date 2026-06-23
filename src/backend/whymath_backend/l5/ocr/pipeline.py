@@ -62,7 +62,8 @@ async def run_ocr_pipeline(image_bytes: bytes, *, components: OcrComponents) -> 
             recognized.append(components.text_recognizer.recognize(region, image))
 
     # ④ 조립·검증 — 읽기순 정렬·SymPy 왕복 검증·집계 → 구조.
-    return assemble_regions(recognized)
+    # 부품이 운반한 재확인 임계(ocr_min_confidence)를 넘겨 저신뢰 영역에 needs_review를 단다.
+    return assemble_regions(recognized, review_threshold=components.review_threshold)
 
 
 def _decode_image(image_bytes: bytes) -> Any:

@@ -25,15 +25,22 @@ from whymath_backend.schema.ocr import OcrRegion, OcrResult
 _SAME_LINE_RATIO = 0.6
 
 
-def assemble_regions(recognized: list[RecognizedRegion]) -> OcrResult:
+def assemble_regions(
+    recognized: list[RecognizedRegion], *, review_threshold: float = 0.0
+) -> OcrResult:
     """인식 영역들을 읽기순 정렬·검증·집계해 `OcrResult`로 조립한다 — **순수 함수**(모델 0).
 
     Args:
         recognized: 인식 완료 영역 목록(순서 무관·이 함수가 읽기순 정렬).
+        review_threshold: 재확인(저신뢰) 게이트 임계(`ocr_min_confidence` 좌석). (SymPy 강등
+            *이후*) confidence < 임계인 영역에 `needs_review=True`를 단다. 기본 0.0=비활성
+            (모든 영역 통과·`needs_reconfirmation=False`·현 동작 완전 불변). 영역을 드롭하지
+            않고 신호만 단다(학생 손글씨 데이터 비파괴·결정 우선순위 ①학생안전).
 
     Returns:
         읽기순 `regions` + 집계 뷰(plain_latex·solution_steps·solution_step_types·
-        markdown·overall/min confidence)를 채운 `OcrResult`. 빈 입력은 빈 `OcrResult`.
+        markdown·overall/min confidence·needs_reconfirmation)를 채운 `OcrResult`. 빈 입력은
+        빈 `OcrResult`.
     """
     if not recognized:
         return OcrResult()
@@ -49,6 +56,8 @@ def assemble_regions(recognized: list[RecognizedRegion]) -> OcrResult:
             ok = parse_check_latex(region.latex).ok
             verified = ok
             confidence = demote_confidence_if_unparseable(region.latex, region.confidence)
+        # 재확인 게이트 — (강등 후) 신뢰도가 임계 미만이면 비파괴 플래그. 임계 0이면 항상 False.
+        needs_review = review_threshold > 0.0 and confidence < review_threshold
         regions.append(
             OcrRegion(
                 bbox=region.bbox,
@@ -56,6 +65,7 @@ def assemble_regions(recognized: list[RecognizedRegion]) -> OcrResult:
                 latex=region.latex,
                 confidence=confidence,
                 verified=verified,
+                needs_review=needs_review,
             )
         )
 
@@ -78,6 +88,7 @@ def assemble_regions(recognized: list[RecognizedRegion]) -> OcrResult:
         markdown=markdown,
         overall_confidence=overall,
         min_confidence=minimum,
+        needs_reconfirmation=any(r.needs_review for r in regions),
     )
 
 

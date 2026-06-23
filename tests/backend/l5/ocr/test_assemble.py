@@ -115,3 +115,43 @@ def test_markdown_wraps_math_in_dollars() -> None:
     regions = [_text("계산", x=0, y=0), _math("x = 1", x=0, y=30)]
     result = assemble_regions(regions)
     assert result.markdown == "계산 $x = 1$"
+
+
+def test_review_threshold_zero_flags_nothing() -> None:
+    """임계 0(기본)이면 어떤 영역도 needs_review가 아니고 신호도 False(현 동작 불변)."""
+    regions = [_math("x = 1", x=0, y=0, conf=0.1), _text("풀이", x=0, y=30, conf=0.2)]
+    result = assemble_regions(regions, review_threshold=0.0)
+    assert all(r.needs_review is False for r in result.regions)
+    assert result.needs_reconfirmation is False
+
+
+def test_review_threshold_flags_low_confidence_region_nondestructively() -> None:
+    """임계>0이면 미만 영역만 needs_review·신호 True — 영역·집계는 비파괴(그대로)."""
+    regions = [_text("기울기를 구하면", x=0, y=0, conf=0.95), _math("m = 2", x=0, y=30, conf=0.5)]
+    result = assemble_regions(regions, review_threshold=0.7)
+    # 약한 수식 영역만 플래그.
+    by_latex = {r.latex: r for r in result.regions}
+    assert by_latex["m = 2"].needs_review is True
+    assert by_latex["기울기를 구하면"].needs_review is False
+    assert result.needs_reconfirmation is True
+    # 비파괴 — 영역 수·집계 뷰는 변하지 않는다.
+    assert len(result.regions) == 2
+    assert result.plain_latex == "기울기를 구하면 m = 2"
+    assert result.solution_steps == ["m = 2"]
+
+
+def test_review_threshold_is_strict_less_than() -> None:
+    """confidence == 임계면 needs_review False(엄격 `<`)."""
+    result = assemble_regions([_math("x = 1", x=0, y=0, conf=0.8)], review_threshold=0.8)
+    assert result.regions[0].needs_review is False
+    assert result.needs_reconfirmation is False
+
+
+def test_review_threshold_uses_demoted_confidence() -> None:
+    """SymPy 강등으로 임계 아래로 내려간 수식 영역도 플래그된다(강등 후 판정)."""
+    # 강등 전 0.9(임계 0.8 이상)이나, 파싱 불가로 강등되면 임계 미만이 돼 플래그돼야.
+    result = assemble_regions([_math("x ++ == )(", x=0, y=0, conf=0.9)], review_threshold=0.8)
+    assert result.regions[0].verified is False
+    assert result.regions[0].confidence < 0.8
+    assert result.regions[0].needs_review is True
+    assert result.needs_reconfirmation is True

@@ -80,13 +80,14 @@ class _FakeMathRecognizer:
         return self.recognize(region, image)
 
 
-def _components(detected: list[DetectedRegion]) -> OcrComponents:
+def _components(detected: list[DetectedRegion], *, review_threshold: float = 0.0) -> OcrComponents:
     """가짜 부품 묶음."""
     return OcrComponents(
         detector=_FakeDetector(detected),
         router=_FakeRouter(),
         text_recognizer=_FakeTextRecognizer(),
         math_recognizer=_FakeMathRecognizer(),  # type: ignore[arg-type]
+        review_threshold=review_threshold,
     )
 
 
@@ -132,3 +133,20 @@ async def test_structured_output_has_steps_and_confidence() -> None:
     assert result.solution_steps == ["x = 1", "y = 2"]
     assert result.overall_confidence > 0.0
     assert result.plain_latex == "x = 1 y = 2"
+
+
+async def test_review_threshold_propagates_to_assemble() -> None:
+    """부품의 review_threshold가 조립까지 전달돼 저신뢰 영역을 플래그한다(재확인 신호 전파)."""
+    # _det는 confidence 0.9 — 임계 0.95면 미만이라 플래그돼야.
+    detected = [_det("x = 1", x=0, y=0)]
+    result = await run_ocr_pipeline(b"img", components=_components(detected, review_threshold=0.95))
+    assert result.regions[0].needs_review is True
+    assert result.needs_reconfirmation is True
+
+
+async def test_default_threshold_flags_nothing() -> None:
+    """기본 임계(0.0)면 신호가 꺼져 있다(현 동작 불변)."""
+    detected = [_det("x = 1", x=0, y=0)]
+    result = await run_ocr_pipeline(b"img", components=_components(detected))
+    assert result.regions[0].needs_review is False
+    assert result.needs_reconfirmation is False
