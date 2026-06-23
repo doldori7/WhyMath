@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from whymath_backend.schema.enums import ContentType, StepType
-from whymath_backend.schema.ocr import BBox, OcrRegion, OcrResult
+from whymath_backend.schema.ocr import BBox, OcrPagesResult, OcrRegion, OcrResult
 
 
 def test_bbox_valid_construction_and_derived() -> None:
@@ -124,3 +124,64 @@ def test_coach_handoff_field_names_present() -> None:
         "solution_steps",
         "solution_step_types",
     } <= fields
+
+
+def _page(*confidences: float) -> OcrResult:
+    """주어진 신뢰도들의 수식 영역으로 구성한 한 페이지 OcrResult 헬퍼."""
+    regions = [
+        OcrRegion(
+            bbox=BBox(x=0, y=float(i) * 30, width=50, height=20),
+            content_type=ContentType.수식,
+            latex=f"x = {i}",
+            confidence=conf,
+        )
+        for i, conf in enumerate(confidences)
+    ]
+    return OcrResult(regions=regions)
+
+
+def test_pages_result_default_empty() -> None:
+    """기본 OcrPagesResult는 빈 구조(page_count 0·신호 off)."""
+    result = OcrPagesResult()
+    assert result.pages == []
+    assert result.page_count == 0
+    assert result.overall_confidence == 0.0
+    assert result.needs_reconfirmation is False
+
+
+def test_pages_result_from_pages_rolls_up_confidence() -> None:
+    """from_pages는 전 페이지 *모든 영역*의 평균·최솟값으로 신뢰도를 롤업한다."""
+    pages = [_page(0.9, 0.7), _page(0.5)]  # 영역 신뢰도 0.9·0.7·0.5
+    result = OcrPagesResult.from_pages(pages)
+    assert result.page_count == 2
+    assert abs(result.overall_confidence - (0.9 + 0.7 + 0.5) / 3) < 1e-9
+    assert abs(result.min_confidence - 0.5) < 1e-9
+
+
+def test_pages_result_from_pages_empty() -> None:
+    """빈 페이지 목록은 page_count 0·신뢰도 0(영역 0)."""
+    result = OcrPagesResult.from_pages([])
+    assert result.page_count == 0
+    assert result.overall_confidence == 0.0
+    assert result.min_confidence == 0.0
+    assert result.needs_reconfirmation is False
+
+
+def test_pages_result_needs_reconfirmation_is_page_or() -> None:
+    """한 페이지라도 재확인 후보면 롤업 신호가 True(페이지 OR)."""
+    flagged = OcrResult(needs_reconfirmation=True)
+    clean = _page(0.95)
+    assert OcrPagesResult.from_pages([clean, flagged]).needs_reconfirmation is True
+    assert OcrPagesResult.from_pages([clean]).needs_reconfirmation is False
+
+
+def test_pages_result_page_count_must_match_len() -> None:
+    """page_count가 pages 길이와 다르면 거부(롤업 일관성)."""
+    with pytest.raises(ValidationError):
+        OcrPagesResult(pages=[_page(0.9)], page_count=3)
+
+
+def test_pages_result_extra_forbidden() -> None:
+    """OcrPagesResult 미지정 필드 거부."""
+    with pytest.raises(ValidationError):
+        OcrPagesResult(unexpected="x")  # type: ignore[call-arg]

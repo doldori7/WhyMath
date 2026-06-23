@@ -13,7 +13,7 @@ import pytest
 from whymath_backend.l5.ocr import pipeline as pipeline_mod
 from whymath_backend.l5.ocr.detect import DetectedRegion
 from whymath_backend.l5.ocr.factory import OcrComponents
-from whymath_backend.l5.ocr.pipeline import run_ocr_pipeline
+from whymath_backend.l5.ocr.pipeline import run_ocr_pipeline, run_ocr_pipeline_pages
 from whymath_backend.l5.ocr.recognize import RecognizedRegion
 from whymath_backend.l5.ocr.router import RoutedRegion
 from whymath_backend.schema.enums import ContentType
@@ -150,3 +150,32 @@ async def test_default_threshold_flags_nothing() -> None:
     result = await run_ocr_pipeline(b"img", components=_components(detected))
     assert result.regions[0].needs_review is False
     assert result.needs_reconfirmation is False
+
+
+async def test_pages_runs_each_image_and_rolls_up() -> None:
+    """다중 페이지: 각 이미지를 독립 인식해 페이지 순서대로 담고 신뢰도를 롤업한다."""
+    detected = [_det("x = 1", x=0, y=0)]
+    result = await run_ocr_pipeline_pages([b"p1", b"p2"], components=_components(detected))
+    assert result.page_count == 2
+    assert len(result.pages) == 2
+    # 각 페이지가 독립 인식돼 같은 구조를 가진다(가짜 검출기가 동일 영역 반환).
+    assert all(page.solution_steps == ["x = 1"] for page in result.pages)
+    assert result.overall_confidence > 0.0
+
+
+async def test_pages_empty_returns_empty() -> None:
+    """빈 이미지 목록은 빈 OcrPagesResult(page_count 0)."""
+    result = await run_ocr_pipeline_pages([], components=_components([]))
+    assert result.page_count == 0
+    assert result.pages == []
+    assert result.needs_reconfirmation is False
+
+
+async def test_pages_threshold_propagates_and_rolls_up_signal() -> None:
+    """페이지별 needs_reconfirmation이 롤업 신호로 OR된다(부품 임계 전파)."""
+    detected = [_det("x = 1", x=0, y=0)]  # confidence 0.9 — 임계 0.95면 미만이라 플래그.
+    result = await run_ocr_pipeline_pages(
+        [b"p1", b"p2"], components=_components(detected, review_threshold=0.95)
+    )
+    assert all(page.needs_reconfirmation is True for page in result.pages)
+    assert result.needs_reconfirmation is True

@@ -24,7 +24,7 @@ from whymath_backend.l5.ocr.assemble import assemble_regions
 from whymath_backend.l5.ocr.factory import OcrComponents
 from whymath_backend.l5.ocr.recognize import RecognizedRegion
 from whymath_backend.schema.enums import ContentType
-from whymath_backend.schema.ocr import OcrResult
+from whymath_backend.schema.ocr import OcrPagesResult, OcrResult
 
 
 async def run_ocr_pipeline(image_bytes: bytes, *, components: OcrComponents) -> OcrResult:
@@ -64,6 +64,27 @@ async def run_ocr_pipeline(image_bytes: bytes, *, components: OcrComponents) -> 
     # ④ 조립·검증 — 읽기순 정렬·SymPy 왕복 검증·집계 → 구조.
     # 부품이 운반한 재확인 임계(ocr_min_confidence)를 넘겨 저신뢰 영역에 needs_review를 단다.
     return assemble_regions(recognized, review_threshold=components.review_threshold)
+
+
+async def run_ocr_pipeline_pages(
+    images: list[bytes], *, components: OcrComponents
+) -> OcrPagesResult:
+    """여러 장의 이미지 바이트 → 다중 페이지 OCR 구조(`OcrPagesResult`). 부품 주입·순수 조율.
+
+    각 페이지를 `run_ocr_pipeline`로 *독립* 인식해 업로드(페이지) 순서대로 모으고, 신뢰도
+    롤업을 계산한다(`OcrPagesResult.from_pages`). L5는 페이지별 인식만 책임지고, 페이지
+    합성(코치 핸드오프)은 호출자/오케스트레이션 몫이다(7계층 경계).
+
+    Args:
+        images: 페이지 순서대로의 인코딩된 이미지 바이트 목록. 빈 목록은 빈
+            `OcrPagesResult`(page_count=0). 빈 바이트 페이지는 빈 `OcrResult`로 담긴다.
+        components: factory가 구성한 부품 묶음(단일 파이프라인과 공유).
+
+    Returns:
+        페이지별 `OcrResult`(`pages`) + 신뢰도 롤업을 채운 `OcrPagesResult`(구조).
+    """
+    pages = [await run_ocr_pipeline(image_bytes, components=components) for image_bytes in images]
+    return OcrPagesResult.from_pages(pages)
 
 
 def _decode_image(image_bytes: bytes) -> Any:
