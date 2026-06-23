@@ -106,6 +106,14 @@ class OcrRegion(BaseModel):
             "False=파싱 불가(신뢰도 강등 근거)·None=미검증(텍스트 영역 등)."
         ),
     )
+    needs_review: bool = Field(
+        default=False,
+        description=(
+            "이 영역이 재확인(저신뢰) 후보인지 — (강등 후) confidence < `ocr_min_confidence`면 "
+            "True. 기본 False(임계 0=비활성·현 동작). 영역을 *드롭하지 않고* 신호만 단다"
+            "(학생 손글씨 데이터 비파괴·표현≠의미). coach overall<0.8 게이트와는 별도(영역 레벨)."
+        ),
+    )
 
 
 class OcrResult(BaseModel):
@@ -167,6 +175,14 @@ class OcrResult(BaseModel):
         ge=0.0,
         le=1.0,
         description="영역 신뢰도의 *최솟값* — 가장 약한 영역(재확인 우선 후보)을 가린다.",
+    )
+    needs_reconfirmation: bool = Field(
+        default=False,
+        description=(
+            "영역 중 하나라도 `needs_review=True`면 True — L5/클라이언트가 재확인을 유도하라는 "
+            "신호(`ocr_min_confidence` 게이트). 임계 0(기본)이면 항상 False(현 동작 불변). "
+            "coach `overall_confidence<0.8` 게이트(match_low_quality)와 *독립*(영역 레벨 신호)."
+        ),
     )
 
     @model_validator(mode="after")

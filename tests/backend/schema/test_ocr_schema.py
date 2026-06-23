@@ -75,6 +75,16 @@ def test_ocr_result_default_empty() -> None:
     assert result.overall_confidence == 0.0
 
 
+def test_review_signal_defaults_off() -> None:
+    """재확인 신호 기본값 — needs_review False·needs_reconfirmation False(현 동작 불변)."""
+    region = OcrRegion(
+        bbox=BBox(x=0, y=0, width=1, height=1),
+        content_type=ContentType.텍스트,
+    )
+    assert region.needs_review is False
+    assert OcrResult().needs_reconfirmation is False
+
+
 def test_ocr_result_step_types_length_ok() -> None:
     """solution_step_types 길이는 전이 수(steps-1)면 허용."""
     result = OcrResult(
