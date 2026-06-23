@@ -1476,20 +1476,41 @@ export default function GraphingCalculator() {
     return true;
   };
 
-  // ====== [코어 연동] Graph2dSpec(?spec=) 소비 — 백엔드/Flutter가 명세 URL로 계산기를 띄움 ======
+  // ====== [코어 연동] Graph2dSpec 소비 — ?spec= URL + window.whymathApplySpec() 훅 ======
   // 코어(L1-L4)의 선언적 Graph2dSpec을 L5(이 도구)가 *소비*만 한다(표현≠의미: 구조를 받아 렌더).
-  // 예: ?spec=<base64({"function":"a*x**2","domain":[-5,5],"parameters":[{"name":"a","default":2}]})>
+  // 두 경로: (1) ?spec=<base64(JSON)> 진입 URL, (2) 전역 훅 window.whymathApplySpec(raw) —
+  // Flutter WebView는 쿼리스트링을 못 싣는 loadFlutterAsset를 쓰므로 onPageFinished에서 이 훅을
+  // runJavaScript로 호출해 명세를 주입한다. raw는 base64(JSON) 또는 raw JSON 모두 허용(parseSpecParam).
   useEffect(() => {
+    // base64(JSON)/raw JSON 문자열을 받아 계산기 상태로 적용(잘못된 입력은 무시·false 반환).
+    const apply = (raw) => {
+      try {
+        const spec = parseSpecParam(raw);
+        if (!spec) return false;
+        const st = graph2dSpecToState(spec);
+        if (!st) return false;
+        applyState(st);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    // (2) 전역 훅 등록 — Flutter WebView/외부 호스트가 마운트 후 명세를 주입.
+    if (typeof window !== "undefined") window.whymathApplySpec = apply;
+    // (1) ?spec= 진입 URL 자동 소비.
     try {
-      if (typeof window === "undefined" || !window.location) return;
-      const raw = new URLSearchParams(window.location.search).get("spec");
-      const spec = parseSpecParam(raw);
-      if (!spec) return;
-      const st = graph2dSpecToState(spec);
-      if (st) applyState(st);
+      if (typeof window !== "undefined" && window.location) {
+        apply(new URLSearchParams(window.location.search).get("spec"));
+      }
     } catch {
       /* 잘못된 spec은 조용히 무시(기본 빈 계산기로 시작) */
     }
+    return () => {
+      // 언마운트 시 이 인스턴스가 등록한 훅만 해제(다른 인스턴스 덮어쓰지 않음).
+      if (typeof window !== "undefined" && window.whymathApplySpec === apply) {
+        delete window.whymathApplySpec;
+      }
+    };
     // 마운트 1회만 — URL은 진입 시점 고정
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
