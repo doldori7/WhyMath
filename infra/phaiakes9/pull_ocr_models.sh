@@ -7,7 +7,7 @@
 # 사용:
 #   bash pull_ocr_models.sh                  # 전체(VL + 한국어 rec). rapid-layout/rapid-latex/
 #                                            # TexTeller는 첫 사용 시 자동 다운로드(아래 메모)
-#   WHYMATH_OCR_VL_MODEL=qwen2.5vl:7b bash pull_ocr_models.sh   # VL 태그 오버라이드
+#   WHYMATH_OCR_VL_MODEL=qwen3-vl:4b bash pull_ocr_models.sh   # 더 가벼운 VL(3.3GB)로 오버라이드
 #   WHYMATH_OCR_MODEL_DIR=/srv/whymath/models bash pull_ocr_models.sh  # 한국어 모델 위치
 #
 # 멱등성:
@@ -15,9 +15,10 @@
 #   - VL 풀 실패해도 한국어 다운로드는 계속(부분 성공 허용). 단 둘 다 실패면 종료 코드 1.
 #
 # 환경변수:
-#   WHYMATH_OCR_VL_MODEL   Qwen3-VL Ollama 태그 (디폴트: qwen3-vl)
+#   WHYMATH_OCR_VL_MODEL   Qwen3-VL Ollama 태그 (디폴트: qwen3-vl:8b)
 #                          ⚠️ 이 값은 router.py LOCAL_MODEL_MATRIX[(VISION,FAST)]와 *반드시 일치*
-#                             해야 한다(현재 "qwen3-vl"). 실제 ollama 태그가 다르면 코드도 함께 수정.
+#                             해야 한다(현재 "qwen3-vl:8b"·6.1GB). 실제 ollama 태그가 다르면 코드도 함께 수정.
+#                             태그(2026-06-23 확인): 2b·4b·8b(=latest)·30b·32b 로컬 / 235b-cloud.
 #   WHYMATH_OCR_MODEL_DIR  한국어 rec 모델 디렉토리 (디폴트: ./models/korean)
 #                          ⚠️ 서버의 WHYMATH_OCR_MODEL_DIR와 동일해야 한국어 모델이 로드된다.
 #                             파일명은 recognize._rapidocr_rec_kwargs 규약 고정:
@@ -26,7 +27,7 @@
 
 set -euo pipefail
 
-readonly VL_MODEL="${WHYMATH_OCR_VL_MODEL:-qwen3-vl}"
+readonly VL_MODEL="${WHYMATH_OCR_VL_MODEL:-qwen3-vl:8b}"
 readonly MODEL_DIR="${WHYMATH_OCR_MODEL_DIR:-./models/korean}"
 readonly OLLAMA_HOST="${WHYMATH_OLLAMA_HOST:-http://localhost:11434}"
 export OLLAMA_HOST
