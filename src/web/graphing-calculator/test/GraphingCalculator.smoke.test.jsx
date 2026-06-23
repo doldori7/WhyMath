@@ -19,4 +19,13 @@ describe("GraphingCalculator 스모크", () => {
     expect(screen.getByText("그래프 계산기")).toBeInTheDocument();
     expect(screen.getByText("+ 함수 추가")).toBeInTheDocument();
   });
+
+  it("마운트 후 window.whymathApplySpec 훅을 노출한다(Flutter WebView 주입 경로)", () => {
+    render(<GraphingCalculator />);
+    expect(typeof window.whymathApplySpec).toBe("function");
+    // base64(JSON) 명세를 던져도 throw 없이 boolean을 돌려준다(견고성).
+    const b64 = btoa(JSON.stringify({ function: "x**2" }));
+    expect(window.whymathApplySpec(b64)).toBe(true);
+    expect(window.whymathApplySpec("not-a-spec")).toBe(false);
+  });
 });
