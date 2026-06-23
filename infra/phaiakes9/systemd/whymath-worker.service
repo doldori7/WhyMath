@@ -1,0 +1,40 @@
+[Unit]
+# WhyMath / Phaiakes9 — L3 Celery 워커(QUALITY 비동기 큐) systemd unit
+#
+# 설치(또는 install_whymath_units.sh 사용):
+#   sudo cp infra/phaiakes9/systemd/whymath-worker.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now whymath-worker
+#   sudo systemctl status whymath-worker
+# 로그:
+#   sudo journalctl -u whymath-worker -f
+#
+# 주의(OPERATIONS_24_7.md §2·03a §D.3):
+#   - QUALITY 27b는 GPU 단일 점유 → concurrency 1 고정(-c 1). 늘리지 말 것.
+#   - 큐(이 워커)가 미가동이면 /v1/generate QUALITY는 503(QualityQueueUnavailableError·
+#     동기 호출 절대 금지). broker/result backend는 WHYMATH_REDIS_URL(celery_app.py).
+Description=WhyMath L3 Celery worker (QUALITY async queue)
+Documentation=https://github.com/doldori7/WhyMath/blob/main/infra/phaiakes9/OPERATIONS_24_7.md
+After=network-online.target redis-server.service ollama.service
+Wants=network-online.target redis-server.service ollama.service
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=whymath
+Group=whymath
+WorkingDirectory=/srv/whymath/src/backend
+EnvironmentFile=/etc/whymath/whymath.env
+# 정전(canonical) 기동 명령(celery_app.py docstring): factory 형식 -A module:build_celery_app.
+ExecStart=/srv/whymath/src/backend/.venv/bin/celery \
+  -A whymath_backend.l3.queue.celery_app:build_celery_app worker -c 1 --loglevel=INFO
+Restart=on-failure
+RestartSec=5
+ProtectSystem=full
+ProtectHome=read-only
+NoNewPrivileges=true
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
