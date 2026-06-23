@@ -159,29 +159,40 @@ class TexTellerRecognizer(_BaseMathRecognizer):
     def _ensure_engine(self) -> Any:
         """transformers VisionEncoderDecoder 엔진을 1회 지연 생성·재사용. 미설치면 RuntimeError.
 
-        엔진은 `crop(numpy/PIL) → LaTeX str` 콜러블이다. 실제 모델 적재·생성은 Phaiakes9에서
-        검증하며, 여기서는 표준 VisionEncoderDecoder + 이미지 프로세서 흐름으로 구성한다.
+        엔진은 `crop(numpy/PIL) → LaTeX str` 콜러블이다. 이미지 프로세서로 픽셀을 만들고
+        `model.generate` 후 *텍스트 토크나이저*로 디코드한다(ViT+TrOCR+RobertaTokenizerFast 구조).
+        실제 모델 적재·생성(`OleehyO/TexTeller`·~1.2GB·Apache-2.0)은 Phaiakes9에서 검증한다.
+        잔여 불확실성(정직): 이 repo가 `AutoImageProcessor`용 preprocessor_config를 싣는지는
+        라이브에서 최종 확인한다 — 디코더 토크나이저 결선은 실 API 확인으로 확정(2026-06-23).
         """
         if self._engine is not None:
             return self._engine
         try:
             import torch  # 지연 import — 기본 경로 미로드
             from PIL import Image
-            from transformers import AutoImageProcessor, VisionEncoderDecoderModel
+            from transformers import (
+                AutoImageProcessor,
+                AutoTokenizer,
+                VisionEncoderDecoderModel,
+            )
         except ImportError as exc:  # 조용한 폴백 금지 — 명확히 보고
             raise RuntimeError(
                 "TexTellerRecognizer에는 transformers·torch가 필요합니다 — "
                 '`pip install -e ".[ocr-heavy]"`로 설치하세요(조용한 폴백 없음).'
             ) from exc
+        # TexTeller = VisionEncoderDecoder(ViT + TrOCRForCausalLM + RobertaTokenizerFast).
+        # 핵심: 디코딩은 *텍스트 토크나이저*(AutoTokenizer→RobertaTokenizerFast)로 한다 —
+        # 이미지 프로세서로 batch_decode 금지(디코더가 텍스트 토큰). 2026-06-23 실 API 확인.
         model = VisionEncoderDecoderModel.from_pretrained(self._model_name)
-        processor = AutoImageProcessor.from_pretrained(self._model_name)
+        image_processor = AutoImageProcessor.from_pretrained(self._model_name)
+        tokenizer = AutoTokenizer.from_pretrained(self._model_name)
 
         def _run(crop: Any) -> str:
             image = crop if isinstance(crop, Image.Image) else Image.fromarray(crop)
-            pixel_values = processor(images=image, return_tensors="pt").pixel_values
+            pixel_values = image_processor(images=image, return_tensors="pt").pixel_values
             with torch.no_grad():
                 generated = model.generate(pixel_values, max_new_tokens=512)
-            return str(processor.batch_decode(generated, skip_special_tokens=True)[0])
+            return str(tokenizer.batch_decode(generated, skip_special_tokens=True)[0])
 
         self._engine = _run
         return self._engine

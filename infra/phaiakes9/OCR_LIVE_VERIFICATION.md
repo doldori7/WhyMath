@@ -36,8 +36,9 @@ bash infra/phaiakes9/pull_ocr_models.sh
 ```
 
 > ⚠️ **VL 태그 일치**: `WHYMATH_OCR_VL_MODEL`(또는 pull한 ollama 태그)은 `l3/router.py`의
-> `LOCAL_MODEL_MATRIX[(ModelFamily.VISION, LocalModelTier.FAST)]`(현재 `"qwen3-vl"`)와 **반드시
-> 같아야** 라우터→provider 모델 해석이 맞는다. 실제 태그가 다르면 둘 다 수정.
+> `LOCAL_MODEL_MATRIX[(ModelFamily.VISION, LocalModelTier.FAST)]`(현재 `"qwen3-vl:8b"`·`:latest`
+> 드리프트 회피 명시 핀)와 **반드시 같아야** 라우터→provider 모델 해석이 맞는다. 실제 태그가
+> 다르면 둘 다 수정. 태그(2026-06-23 확인): 2b·4b·8b(=latest)·30b·32b 로컬 / 235b-cloud.
 > ⚠️ **한국어 파일명 고정**: `korean_PP-OCRv4_rec.onnx`·`korean_dict.txt`(`recognize._rapidocr_rec_kwargs`
 > 규약). `WHYMATH_OCR_MODEL_DIR`는 pull 위치와 서버 설정이 같아야 한다.
 

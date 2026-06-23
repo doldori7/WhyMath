@@ -53,8 +53,10 @@ LOCAL_MODEL_MATRIX: Final[dict[tuple[ModelFamily, LocalModelTier], str]] = {
     (ModelFamily.MATH, LocalModelTier.MID): "qwen2-math:7b",
     (ModelFamily.GENERAL, LocalModelTier.FAST): "qwen2.5:3b",
     (ModelFamily.GENERAL, LocalModelTier.MID): "qwen2.5:7b",
-    # 멀티모달(VL) — Qwen3-VL 단일 모델(크기축 미세분). Phaiakes9 pull 태그에 맞춰 조정.
-    (ModelFamily.VISION, LocalModelTier.FAST): "qwen3-vl",
+    # 멀티모달(VL) — Qwen3-VL 단일 모델. `:latest` 드리프트 회피로 `qwen3-vl:8b` 명시 핀
+    # (6.1GB·현 :latest·로컬 풀 가능). 2026-06-23 ollama 태그 확인(4b/8b/235b-cloud).
+    # ★ pull_ocr_models.sh VL_MODEL 디폴트·OCR_LIVE_VERIFICATION.md와 *반드시* 일치시킬 것.
+    (ModelFamily.VISION, LocalModelTier.FAST): "qwen3-vl:8b",
 }
 """로컬 모델 ID = (패밀리 축3 × 크기 축2) lookup. 출처: 03a §A.0 매트릭스.
 

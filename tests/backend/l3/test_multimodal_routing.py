@@ -55,7 +55,8 @@ def test_vision_request_routes_to_local_vision_fast() -> None:
 
 
 def test_resolve_vision_model_is_qwen3_vl() -> None:
-    assert resolve_model(ModelFamily.VISION, LocalModelTier.FAST) == "qwen3-vl"
+    # 명시 핀(`:latest` 드리프트 회피) — pull_ocr_models.sh·런북과 일치(2026-06-23 태그 확인).
+    assert resolve_model(ModelFamily.VISION, LocalModelTier.FAST) == "qwen3-vl:8b"
 
 
 # ── 캐시 키: 이미지 다이제스트 (하위호환) ──
@@ -105,7 +106,7 @@ async def test_ollama_passes_images_and_resolves_vl_model() -> None:
     decision = Router().route(_vision_request())  # LOCAL/VISION/FAST
     out = await provider.generate("이 수식을 LaTeX로", "수식 추출", decision, images=["BASE64IMG"])
     assert out == "x^{2}"
-    assert client.calls[0]["model"] == "qwen3-vl"  # VISION/FAST → qwen3-vl
+    assert client.calls[0]["model"] == "qwen3-vl:8b"  # VISION/FAST → qwen3-vl:8b(명시 핀)
     assert client.calls[0]["images"] == ["BASE64IMG"]
 
 
