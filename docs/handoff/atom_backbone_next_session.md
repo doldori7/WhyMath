@@ -23,9 +23,10 @@
   - **R2** (`ca2dd2e`) `data_pipeline/concept_content/` → `data/corpus/concept_content_v1/`(K-12 개념 437 콘텐츠 4종 + 암기카드 113 · U4 미러 · **K-12 성취기준 본문 미수록=redaction**·연결성취기준 코드만 다리·정식정의 학생 비노출)
   - **R3 (=Phase 2b)** (`5ca3bec`) 원자 임베딩 `atom_embedding`(PK=code·vector(1024)·입력=**name+transfer만**·`level=="세부개념"` 1,837·원문 비저장)·마이그레이션 `f7a8b9c0d1e2`
 - ✅ **Phase 2c (data-pipeline)** — Neo4j 원자 그래프 멱등 적재. 신규 `data_pipeline/atom_graph/load.py`(`concept_graph/load.py` 미러) + CLI `load`(`1484d32` 로더·`ed07620` CLI). **additive 스키마**(구 437과 충돌 회피): 노드 `:Atom`/키 `code`/제약 `atom_code_unique`/인덱스 `atom_school_level`·`atom_level`/관계 `:ATOM_PREREQUISITE`. atomicity(dict)→JSON 문자열·parent_code 계층=노드 속성·narrative raw 미적재. 코퍼스 실측 2,697 노드·2,213 엣지·skip 0. Fake 드라이버 단위 + 실 neo4j:5 통합(@integration·importorskip). 4게이트 green(pytest 632p/3skip·cov 91%)
-- **alembic head(현재)**: `f7a8b9c0d1e2` (down `e6f7a8b9c0d1` — atom_embedding pgvector. Phase 2c는 Neo4j 전용 → PG 마이그레이션 무추가·head 불변. U1~U4·R1·R2도 마이그레이션 무관)
+- **alembic head(현재)**: `a8b9c0d1e2f3` (Phase 3 Slice 1 concept_content_projection·down `f7a8b9c0d1e2`. Slice 2는 기존 `misconception_catalog` 재사용 → **PG 마이그레이션 무추가·head 불변**. Phase 2c Neo4j·U1~U4·R1·R2도 마이그레이션 무관)
 - ✅ **Phase 3 Slice 1 (backend)** — 콘텐츠 4종 DB 투영(`concept_content` 테이블·로더·CLI·마이그레이션 `a8b9c0d1e2f3`·`1470b83`). 캡처 코퍼스 437+409 투영. 상세 §5.3.
-- **다음 작업**: **Phase 3 Slice 2**(①오개념 atom→misconception_catalog 승격·기존 카탈로그와 합치 설계) — §5.3. 새 세션 권장(컨텍스트 위생).
+- ✅ **Phase 3 Slice 2 (backend)** — ①오개념 atom→`misconception_catalog` 승격(`l1/misconception/atom_catalog.py`·CLI `populate_atom.py`). 기존 테이블·로더 재사용·**마이그레이션 0**(head 불변). 원자 1,837행 `ATOM:` 네임스페이스·구 839과 병존. 상세 §5.3.
+- **다음 작업**: **Phase 3 Slice 3**(②진단문항·③소크라테스 — 경량 진단 테이블 vs 기존 `problem` 결합 설계) — §5.3. 새 세션 권장(컨텍스트 위생).
 
 ## 2. locked 결정 (요약 — 상세는 MEMORY.md)
 ① 전면 교체·원자화 ② 크로스워크=문제 corpus만 ③ 4요소→정식 소스 승격 ④ 대학 513 포함+2015·2022 병행
@@ -63,8 +64,8 @@
 2. ✅ **Phase 2c — Neo4j 원자 그래프 재적재**(`1484d32` 로더·`ed07620` CLI·완료) — 신규 `data_pipeline/atom_graph/load.py`(`concept_graph/load.py` 미러·지연 import·NEO4J_* env·드라이버 주입·멱등 MERGE) + CLI `load`. additive 스키마: `:Atom`/`code`/`atom_code_unique`/`:ATOM_PREREQUISITE`(구 `:Concept`/`:PREREQUISITE`와 라벨·토큰 분리). atomicity(dict)→결정론 JSON 문자열·parent_code=노드 속성·narrative raw 미적재. Fake 드라이버 단위(2,697/2,213/skip 0) + 실 neo4j:5 통합(@integration·importorskip·code 격리). CI 전용 `data-pipeline-neo4j` 잡이 실 적재 검증.
 3. **Phase 3 — 4요소 승격 + 콘텐츠 4종 DB 투영** (크므로 슬라이스 분할):
    - ✅ **Slice 1 — 콘텐츠 4종 DB 투영**(`1470b83`·완료) — 신규 `concept_content` 테이블(code PK·`scope` K-12|대학·은유/오개념/정식정의/허용표현·`standard_codes` TEXT[]·`flashcards` JSONB·review_status='ai_estimated'). 로더 `l1/concept_content/projection.py`(`atom_node_projection` 미러)·CLI `populate.py`(--k12/--university)·마이그레이션 `a8b9c0d1e2f3`(**ID는 sliding-window hex 스킴 준수 — 임의 ID는 alembic CycleDetected**). additive(FK 0). 캡처 코퍼스 437+409 투영. hermetic 22 + 통합(실 PG 846행). 키: K-12=구 437 개념코드(원자 연결은 Phase 4)·대학=소단원코드. 정식정의 학생 비노출.
-   - **Slice 2 (다음)** — ①오개념 atom→`misconception_catalog` 승격: 단, `misconception_catalog`(table+loader+migration·`l1/misconception/`)는 *이미 존재*(별도 misconceptions_v1 코퍼스 적재). atom graph.json의 per-atom ①오개념을 합칠지/중복 회피 설계 판단 필요.
-   - **Slice 3** — ②진단문항·③소크라테스: `problem`/`problem_step`(socratic_prompt)·`problem_concept`·`distractor_map`은 *이미 존재*(성숙). atom 경량 진단을 무거운 problem에 넣을지 vs 경량 진단 테이블 신설 설계 판단 필요.
+   - ✅ **Slice 2 — ①오개념 atom→`misconception_catalog` 승격**(`dae8d82`·완료) — **기존 테이블 재사용**(사용자 확정 — Phase 1이 atom을 기존 `concept`/`concept_edge`에 additive 적재한 것과 동형·신규 테이블 거부). 신규 `l1/misconception/atom_catalog.py`(graph.json 세부개념 ①오개념→`MisconceptionCatalog` 행 투영·`mis_id`=`"ATOM:"+code`·canonical_statement←misconception·error_type←misconception_type(6종)·concept_src_id←code·standard_code←standard_codes[0]·domain←subject_area)·CLI `populate_atom.py`. 검증·dedup·ON CONFLICT(mis_id) 멱등 upsert는 **기존 `load_misconceptions`/`MisconceptionCatalogStore` 재사용**(신규 store 0). **마이그레이션 0**(head `a8b9c0d1e2f3` 유지)·data-pipeline 변경 0. atom_node_projection이 미적재한 ①요소의 유일 승격 좌석. 구 839(misconceptions_v1)와 `ATOM:` 접두·provenance('atom_graph_v1')로 네임스페이스 분리·병존(Phase 5 구 폐기). hermetic(매핑·필터·schema 적합·load 위임·store 배선·CLI) + @integration(실 PG 1,837행·멱등·표본·네임스페이스). 신규 두 모듈 커버리지 100%·전체 96%. 데이터카드 `misconception_catalog_v1.md` §6.
+   - **Slice 3 (다음)** — ②진단문항·③소크라테스: `problem`/`problem_step`(socratic_prompt)·`problem_concept`·`distractor_map`은 *이미 존재*(성숙). atom 경량 진단을 무거운 problem에 넣을지 vs 경량 진단 테이블 신설 설계 판단 필요.
    - ④전이=이미 atom_node(Phase 2a). 콘텐츠 4종 임베딩/검색은 후속.
 4. **Phase 4 — 문제 크로스워크**: 기존 문제의 *소단원/단원 매칭* + *성취기준 코드* 2중 다리로 `problem_concept`를 원자 code로 재연결(교차검증·검수 큐).
 5. **Phase 5 — 정리**: 구 `concept_graph_v1` 코퍼스·구 437 concept 폐기, 전 계층 통합테스트, `MEMORY.md`·`ROADMAP.md` 갱신.

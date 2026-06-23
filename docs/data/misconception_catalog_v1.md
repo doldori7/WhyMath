@@ -10,6 +10,13 @@
 > 테이블(mis_id PK·Alembic `c4d5e6f7a8b9`) → `l1.misconception.populate` CLI로 멱등 적재(실 PG 통합
 > 839 검증). 30종 kebab 탐지 엔진·런타임 테이블과 **별개 체계**(FK 0). `concept_src_id`/`standard_code`는
 > 원천 보존(개념/성취기준 해소는 후속).
+>
+> **추가(2026-06-23 · Phase 3 Slice 2)**: 같은 `misconception_catalog` 테이블에 **원자 백본
+> ①오개념 1,837행**을 *additive* 승격(신규 테이블·마이그레이션 0·head `a8b9c0d1e2f3` 유지). 출처는
+> `data/corpus/atom_graph_v1/graph.json`의 세부개념 원자(전량 `misconception` 보유). 로더
+> `l1.misconception.atom_catalog`(투영) → 기존 `load_misconceptions`/`MisconceptionCatalogStore`
+> 재사용(멱등 upsert)·CLI `l1.misconception.populate_atom`. 구 839와 **mis_id 네임스페이스(`ATOM:`
+> 접두)·`provenance_note`('atom_graph_v1')로 분리·병존**. 상세 §6.
 
 ---
 
@@ -79,5 +86,32 @@
 
 ---
 
-**버전**: v1 (설계 전용) | **최종 수정**: 2026-06-20 | 관련: `external_corpus_ingestion_v1.md`·
-`concept_graph_dataset_v1.md`·`l4/misconception/catalog.py`
+## 6. 원자 백본 출처 행 (Phase 3 Slice 2 — additive·`ATOM:` 네임스페이스)
+
+> 로드맵 Phase 3 결정 ③("4요소→정식 콘텐츠 소스 승격")의 ①오개념 조각. 원자 백본
+> (`atom_graph_v1`)의 메타 프로젝션(`atom_node`)은 ①②③ 4요소 *본문을 의도적으로 미적재*했고
+> (redaction·이중 보관 금지), 이 슬라이스가 ①오개념의 **유일 승격 좌석**이다.
+
+| 항목 | 값 |
+|---|---|
+| 출처 | `data/corpus/atom_graph_v1/graph.json` 세부개념 원자(level=='세부개념') |
+| 규모 | **1,837**(원자 전량이 `misconception` 보유 — 초등382·중학180·고등762·대학513) |
+| 적재 | `l1.misconception.atom_catalog`(투영) → 기존 `load_misconceptions` 위임·CLI `populate_atom` |
+| 마이그레이션 | **무추가**(기존 테이블 재사용·head `a8b9c0d1e2f3` 유지) |
+
+**매핑(자체 작성 필드만·날조 0)**: `mis_id`=`"ATOM:"+code`(합성·결정론·구 M-series 무충돌) ·
+`canonical_statement`←`misconception` · `error_type`←`misconception_type`(6종: 개념혼동·절차오류·
+정의·표기오류·과잉일반화·직관오류·역방향오류) · `concept_src_id`←원자 `code`(느슨참조·`atom_node.code`
+공간) · `standard_code`←`standard_codes[0]` · `school_level`·`domain`(←`subject_area`)·`subunit` 그대로 ·
+`provenance_note`=`'atom_graph_v1'`. 나머지(student_wrong_thinking·distractor_rule·correction_point·
+difficulty·ccss_code·mapping_*)는 원천 미보유라 **None**(날조하지 않음).
+
+**구 839과의 관계**: mis_id 접두(`ATOM:` vs `M####`)·`provenance_note`로 네임스페이스 분리·**additive
+병존**(Phase 1이 원자를 기존 `concept`/`concept_edge`에 additive 적재한 것과 동형). 구 839
+(misconceptions_v1·개념-grain)는 **Phase 5에서 폐기 예정**. K-12 437↔원자 크로스워크(concept_src_id
+연결)는 Phase 4.
+
+---
+
+**버전**: v1 (설계 전용) | **최종 수정**: 2026-06-23 | 관련: `external_corpus_ingestion_v1.md`·
+`concept_graph_dataset_v1.md`·`atom_graph_v1.md`·`l4/misconception/catalog.py`
