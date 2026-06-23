@@ -37,7 +37,7 @@ Phaiakes9(Ryzen AI Max+ 395·128GB) 단일 노드에 전 스택을 systemd/컨�
 
 ## 2. 감독(Supervision) — systemd
 
-상시 가동·자동 재시작의 단일 원천은 systemd(컨테이너면 `restart: unless-stopped` + compose). 기존 `systemd/ollama.service` 패턴을 확장한다.
+상시 가동·자동 재시작의 단일 원천은 systemd(컨테이너면 `restart: unless-stopped` + compose). 기존 `systemd/ollama.service` 패턴을 확장한다. **실제 유닛 파일은 작성 완료**: [`systemd/whymath-api.service`](./systemd/whymath-api.service)·[`systemd/whymath-worker.service`](./systemd/whymath-worker.service)·[`systemd/whymath.env.example`](./systemd/whymath.env.example), 설치 헬퍼 [`systemd/install_whymath_units.sh`](./systemd/install_whymath_units.sh)(아래 요지는 발췌).
 
 **공통 정책**: `Restart=on-failure`·`RestartSec=5`·`StartLimitIntervalSec`로 크래시 루프 차단·`After=`로 의존 정렬. 시크릿은 `EnvironmentFile=/etc/whymath/whymath.env`(0600·env만·하드코딩 금지·CLAUDE.md 보안).
 
@@ -144,7 +144,9 @@ WantedBy=multi-user.target
 
 ## 10. 후속 (이 문서 범위 밖·라이브 필요)
 
-- systemd unit 파일 실제 작성·`/etc/whymath/whymath.env` 구성(Phaiakes9).
+- ✅ **systemd unit 파일 작성 완료** — `systemd/whymath-api.service`·`whymath-worker.service`·
+  `whymath.env.example`·`install_whymath_units.sh`(§2). 라이브 잔여: Phaiakes9에서 복사·enable +
+  `/etc/whymath/whymath.env` 값 채우기(`sudo bash systemd/install_whymath_units.sh --now`).
 - §8 클라우드 상수 실측 보정(라이브 키).
 - 컨테이너화(docker-compose) 여부 결정·이미지 빌드.
 - 백업 자동화 스크립트·복원 리허설 cron.

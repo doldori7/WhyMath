@@ -1,0 +1,44 @@
+[Unit]
+# WhyMath / Phaiakes9 — L5 API (uvicorn) systemd unit
+#
+# 설치(또는 install_whymath_units.sh 사용):
+#   sudo install -d -m 700 /etc/whymath
+#   sudo cp infra/phaiakes9/systemd/whymath.env.example /etc/whymath/whymath.env  # 값 채우기
+#   sudo chmod 600 /etc/whymath/whymath.env
+#   sudo cp infra/phaiakes9/systemd/whymath-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now whymath-api
+#   sudo systemctl status whymath-api
+# 로그:
+#   sudo journalctl -u whymath-api -f
+#
+# 주의(OPERATIONS_24_7.md §2):
+#   - 다중 --workers면 인메모리 상태(세션·OCR 부품·L3 provider)가 워커별 복제 →
+#     세션은 Redis 영속(WHYMATH_REDIS_URL)으로 공유, OCR/L3 부품은 워커별 startup 1회 로드(읽기전용).
+#   - 시크릿·연결 문자열은 EnvironmentFile만(0600·하드코딩 금지·CLAUDE.md 보안).
+Description=WhyMath L5 API (uvicorn)
+Documentation=https://github.com/doldori7/WhyMath/blob/main/infra/phaiakes9/OPERATIONS_24_7.md
+After=network-online.target postgresql.service redis-server.service neo4j.service ollama.service
+Wants=network-online.target postgresql.service redis-server.service neo4j.service ollama.service
+# 크래시 루프 차단 — 10분 내 5회 실패면 정지(수동 개입 유도).
+StartLimitIntervalSec=600
+StartLimitBurst=5
+
+[Service]
+Type=exec
+User=whymath
+Group=whymath
+WorkingDirectory=/srv/whymath/src/backend
+EnvironmentFile=/etc/whymath/whymath.env
+ExecStart=/srv/whymath/src/backend/.venv/bin/uvicorn whymath_backend.app:create_app \
+  --factory --host 0.0.0.0 --port 8000 --workers 2
+Restart=on-failure
+RestartSec=5
+# 시스템 보호(미성년 학습 데이터 노드·CLAUDE.md 보안).
+ProtectSystem=full
+ProtectHome=read-only
+NoNewPrivileges=true
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
