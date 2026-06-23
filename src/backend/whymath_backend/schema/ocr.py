@@ -199,3 +199,83 @@ class OcrResult(BaseModel):
                 f"(len(solution_steps)-1={expected})여야 합니다."
             )
         return self
+
+
+class OcrPagesResult(BaseModel):
+    """여러 장(다중 페이지)의 풀이 이미지 OCR 결과 — 페이지별 `OcrResult` + 신뢰도 롤업.
+
+    한 학생의 풀이가 여러 장에 걸칠 때(`POST /v1/ocr/pages`) 각 페이지를 *독립* 인식해
+    `pages`에 업로드(페이지) 순서대로 담는다 — L5는 페이지별 *순수 인식*만 하고, 페이지를
+    합치는(코치 핸드오프) 책임은 호출자다(7계층 경계). 상위 신뢰도 필드는 *전 페이지 모든
+    영역*에서 모호성 없이 롤업한 편의 신호다:
+      - `overall_confidence` = 전 페이지 모든 영역 신뢰도의 평균(영역 가중·단일 페이지 의미와 일치).
+      - `min_confidence`     = 전 페이지 모든 영역의 최솟값(가장 약한 영역·재확인 우선 후보).
+      - `needs_reconfirmation` = 한 페이지라도 재확인 후보가 있으면 True(페이지 OR).
+
+    coach 핸드오프용 텍스트(plain_latex·solution_steps)는 *페이지 경계 전이 의미*가 모호해
+    여기서 병합하지 않는다 — 클라이언트가 `pages`를 페이지 순서로 이어 `CoachRequest`에
+    매핑한다(표현 ≠ 의미·모듈 docstring 매핑 표).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    pages: list[OcrResult] = Field(
+        default_factory=list,
+        description="페이지(업로드) 순서대로의 페이지별 OCR 구조(`OcrResult`) 목록.",
+    )
+    page_count: int = Field(
+        default=0,
+        ge=0,
+        description="페이지 수(= len(pages)). 빈 입력은 0.",
+    )
+    overall_confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="전 페이지 *모든 영역* 신뢰도의 평균(영역 0이면 0.0).",
+    )
+    min_confidence: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="전 페이지 모든 영역 신뢰도의 최솟값(영역 0이면 0.0).",
+    )
+    needs_reconfirmation: bool = Field(
+        default=False,
+        description=(
+            "한 페이지라도 재확인 후보(`OcrResult.needs_reconfirmation`)면 True — "
+            "L5/클라이언트가 재확인을 유도하라는 신호(`ocr_min_confidence` 게이트·페이지 OR)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_page_count(self) -> OcrPagesResult:
+        """`page_count`는 `pages` 길이와 일치해야 한다(롤업 일관성·`from_pages`가 보장)."""
+        if self.page_count != len(self.pages):
+            raise ValueError(
+                f"page_count({self.page_count})는 pages 길이({len(self.pages)})와 같아야 합니다."
+            )
+        return self
+
+    @classmethod
+    def from_pages(cls, pages: list[OcrResult]) -> OcrPagesResult:
+        """페이지별 `OcrResult` 목록에서 신뢰도 롤업을 계산해 `OcrPagesResult`로 조립 — **순수**.
+
+        `overall_confidence`는 *전 페이지 모든 영역* 신뢰도의 평균(영역 가중·단일 페이지
+        의미와 일치), `min_confidence`는 최솟값, `needs_reconfirmation`은 페이지 OR다.
+        영역이 하나도 없으면 신뢰도는 0.0(빈 입력 포함).
+        """
+        confidences = [region.confidence for page in pages for region in page.regions]
+        overall = sum(confidences) / len(confidences) if confidences else 0.0
+        minimum = min(confidences) if confidences else 0.0
+        return cls(
+            pages=pages,
+            page_count=len(pages),
+            overall_confidence=overall,
+            min_confidence=minimum,
+            needs_reconfirmation=any(page.needs_reconfirmation for page in pages),
+        )

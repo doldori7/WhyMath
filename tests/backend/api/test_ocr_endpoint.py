@@ -21,11 +21,12 @@ from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.l3.models import RoutingDecision
 from whymath_backend.schema.enums import ContentType, Persona
-from whymath_backend.schema.ocr import BBox, OcrRegion, OcrResult
+from whymath_backend.schema.ocr import BBox, OcrPagesResult, OcrRegion, OcrResult
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 _UID = uuid.uuid4()
 _PATH = "/v1/ocr"
+_PAGES_PATH = "/v1/ocr/pages"
 
 
 class _StubProvider:
@@ -133,3 +134,64 @@ def test_missing_file_422() -> None:
     """이미지 파일 누락 → 422(FastAPI 검증)."""
     resp = _client().post(_PATH)
     assert resp.status_code == 422
+
+
+# ── 다중 페이지(POST /v1/ocr/pages) ──────────────────────────────────────────
+
+
+def _image_field(name: str) -> tuple[str, tuple[str, bytes, str]]:
+    """멀티파트 images 필드 1개(같은 필드명 반복으로 list[UploadFile] 구성)."""
+    return ("images", (name, b"fakebytes", "image/png"))
+
+
+def test_pages_happy_returns_pages_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    """여러 이미지 업로드 → 200 + OcrPagesResult(페이지별 + 신뢰도 롤업)."""
+
+    async def _fake_pages(images: list[bytes], *, components: object) -> OcrPagesResult:
+        return OcrPagesResult.from_pages([_ocr_result() for _ in images])
+
+    monkeypatch.setattr(ocr_module, "run_ocr_pipeline_pages", _fake_pages)
+    resp = _client().post(_PAGES_PATH, files=[_image_field("p1.png"), _image_field("p2.png")])
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["page_count"] == 2
+    assert len(body["pages"]) == 2
+    assert body["overall_confidence"] == 0.9
+    assert body["needs_reconfirmation"] is False
+    # 페이지별 구조가 그대로 담긴다(표현 ≠ 의미).
+    assert body["pages"][0]["plain_latex"] == "x = 2"
+
+
+def test_pages_empty_422() -> None:
+    """이미지 0장 → 422(필수 파일 누락·FastAPI 검증)."""
+    resp = _client().post(_PAGES_PATH)
+    assert resp.status_code == 422
+
+
+def test_pages_too_many_422(monkeypatch: pytest.MonkeyPatch) -> None:
+    """상한(_MAX_OCR_PAGES) 초과 → 422(파이프라인 도달 전 가드)."""
+
+    async def _fake_pages(images: list[bytes], *, components: object) -> OcrPagesResult:
+        raise AssertionError("상한 초과는 파이프라인에 도달하지 않아야 한다")
+
+    monkeypatch.setattr(ocr_module, "run_ocr_pipeline_pages", _fake_pages)
+    too_many = [_image_field(f"p{i}.png") for i in range(ocr_module._MAX_OCR_PAGES + 1)]
+    resp = _client().post(_PAGES_PATH, files=too_many)
+    assert resp.status_code == 422
+
+
+def test_pages_unauthenticated_401(monkeypatch: pytest.MonkeyPatch) -> None:
+    """토큰 없음 → 401(부품·파이프라인 도달 전)."""
+
+    async def _fake_pages(images: list[bytes], *, components: object) -> OcrPagesResult:
+        return OcrPagesResult.from_pages([_ocr_result()])
+
+    monkeypatch.setattr(ocr_module, "run_ocr_pipeline_pages", _fake_pages)
+    resp = _client(authed=False).post(_PAGES_PATH, files=[_image_field("p1.png")])
+    assert resp.status_code == 401
+
+
+def test_pages_disabled_503() -> None:
+    """OCR 부품 미로드(비활성) → 503."""
+    resp = _client(components_loaded=False).post(_PAGES_PATH, files=[_image_field("p1.png")])
+    assert resp.status_code == 503
