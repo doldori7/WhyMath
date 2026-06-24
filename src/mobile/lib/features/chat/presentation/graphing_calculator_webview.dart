@@ -42,10 +42,22 @@ Map<String, dynamic>? decodeInteractionMessage(String raw) {
 ///
 /// 라우트를 추가하지 않고(인라인 임베드) `SceneRenderer` 안에서 고정 높이로 표시한다.
 class GraphingCalculatorWebView extends ConsumerStatefulWidget {
-  const GraphingCalculatorWebView({required this.viz, this.height = 320, super.key});
+  const GraphingCalculatorWebView({
+    required this.viz,
+    this.conceptId,
+    this.sceneId,
+    this.height = 320,
+    super.key,
+  });
 
   /// 렌더할 시각화 명세(`spec`이 Graph2dSpec/Surface3dSpec 구조).
   final Visualization viz;
+
+  /// 탐구 중인 개념(scene.conceptId·호스트측 학습 로그 컨텍스트·선택). 슬라이스 96-J.
+  final String? conceptId;
+
+  /// 조작이 일어난 학습 장면(scene.sceneId·선택). 슬라이스 96-J.
+  final String? sceneId;
 
   /// 인라인 표시 높이(px).
   final double height;
@@ -70,7 +82,12 @@ class _GraphingCalculatorWebViewState extends ConsumerState<GraphingCalculatorWe
         onMessageReceived: (JavaScriptMessage message) {
           final event = decodeInteractionMessage(message.message);
           if (event == null) return;
-          ref.read(interactionLoggerProvider).record(event);
+          // 개념 컨텍스트는 호스트(Flutter)가 scene에서 주입한다 — 웹은 모른다(슬89·J).
+          ref.read(interactionLoggerProvider).record(
+                event,
+                conceptId: widget.conceptId,
+                sceneId: widget.sceneId,
+              );
           debugPrint('[whymath] interaction ${event['type']}: ${event['payload']}');
         },
       )

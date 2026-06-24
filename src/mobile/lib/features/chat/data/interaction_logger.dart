@@ -24,11 +24,20 @@ class InteractionLogger {
   final Map<String, Map<String, dynamic>> _latest = {};
 
   /// 조작 이벤트를 기록한다(디바운스 후 전송). 이벤트: `{type, payload, at}`.
-  void record(Map<String, dynamic> event) {
+  ///
+  /// [conceptId]/[sceneId]는 호스트(scene)가 주입하는 개념 컨텍스트(슬라이스 96-J)로, 전송 전
+  /// 이벤트에 병합돼 POST body `{type, payload, at, concept_id, scene_id}`가 된다. 디바운스 키는
+  /// `type:payload.name`으로 유지(컨텍스트는 키에 미반영 — 같은 조작의 폭주만 합친다).
+  void record(Map<String, dynamic> event, {String? conceptId, String? sceneId}) {
     final payload = event['payload'];
     final name = (payload is Map && payload['name'] != null) ? '${payload['name']}' : '';
     final key = '${event['type']}:$name';
-    _latest[key] = event;
+    final enriched = <String, dynamic>{
+      ...event,
+      if (conceptId != null) 'concept_id': conceptId,
+      if (sceneId != null) 'scene_id': sceneId,
+    };
+    _latest[key] = enriched;
     _timers[key]?.cancel();
     _timers[key] = Timer(debounce, () => _flush(key));
   }
