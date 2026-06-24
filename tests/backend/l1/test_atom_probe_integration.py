@@ -103,9 +103,7 @@ class TestRealCorpusLoad:
             engine = _sync_engine()
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
-                    total = conn.execute(
-                        text("SELECT count(*) FROM atom_probe")
-                    ).scalar_one()
+                    total = conn.execute(text("SELECT count(*) FROM atom_probe")).scalar_one()
                     assert total == _EXPECTED_ROWS
 
                     # ③ 표본 행 — 첫 투영 레코드가 DB에 라운드트립(②3필드·③·난이도·review).
@@ -141,9 +139,7 @@ class TestRealCorpusLoad:
             engine = _sync_engine()
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
-                    total2 = conn.execute(
-                        text("SELECT count(*) FROM atom_probe")
-                    ).scalar_one()
+                    total2 = conn.execute(text("SELECT count(*) FROM atom_probe")).scalar_one()
                     assert total2 == _EXPECTED_ROWS
             finally:
                 engine.dispose()  # type: ignore[attr-defined]

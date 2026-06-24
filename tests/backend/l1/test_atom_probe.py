@@ -1,7 +1,7 @@
 """원자 ②진단문항·③소크라테스 → atom_probe 승격 *단위테스트* — Slice 3 (hermetic·PG 불요).
 
 CI hermetic 잡엔 PostgreSQL이 없으므로 실 라운드트립은 통합테스트
-(`test_atom_probe_integration.py`·실 PG 게이트)로 미룬다. 여기서는 PG 없이 검증 가능한 것만 못 박는다
+(`test_atom_probe_integration.py`·실 PG)로 미룬다. 여기서는 PG 없이 검증 가능한 것만 못 박는다
 (`test_atom_misconception_catalog.py` 가짜 엔진 패턴 재사용):
 
   ① `load_atom_probes_from_json` — graph.json → AtomProbeRecord 투영(②3필드·③ rename·난이도·코드)
