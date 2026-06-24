@@ -42,7 +42,14 @@
 ### 5. 접근성
 - 텍스트 대비 4.5:1+
 - 최소 탭 영역 44x44 dp
-- TTS 통합
+- TTS 통합 — **수식 음성화(Math-to-Speech)**: 어려운 본질은 오디오 합성(클라 `flutter_tts`)이
+  아니라 *LaTeX/수식구조 → 모호성 없는·학년 적합 한국어 낭독 문자열 변환*이다(수학 의미 분해가
+  필요한 코어 로직). 따라서 `Visualization`·`LearningScene`처럼 **`SpeechSpec`(선언적 낭독 명세)을
+  코어가 산출**하고 클라는 합성만 한다(표현≠의미·슬89). 변환은 *결정론 규칙 엔진*(LLM 0·환각 0·
+  골든 코퍼스로 정확성 단언). 배치: 스키마 `schema/speech.py` · 변환 엔진 L3 `l3/speech.py`·
+  `l3/speech_parse.py` · 사전·학년 프로파일 데이터 L4 `l4/speech/` · 오케스트레이션·HTTP L5
+  `api/speech.py`(`POST /v1/speech/latex`). 학년(초등/중등/고등/대학)은 같은 구조를 다르게 읽는
+  프로파일 파라미터. 미지 기호는 `unresolved_symbols`로 *조용히 버리지 않고* 정직 노출.
 - 색맹 친화
 
 ## 핵심 흐름 — 학생 메시지 1건
