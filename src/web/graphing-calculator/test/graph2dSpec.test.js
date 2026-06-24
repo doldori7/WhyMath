@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   graph2dSpecToState,
   surface3dSpecToState,
+  simulationSpecToState,
   parseSpecParam,
   calcStateToGraph2dSpec,
 } from "../src/lib/graph2dSpec";
@@ -188,6 +189,39 @@ describe("surface3dSpecToState — 코어 Surface3dSpec → 계산기 3D 상태"
     expect(surface3dSpecToState(parseSpecParam(b64))).toEqual({
       mode3D: true,
       expr3D: "x^2 - y^2",
+    });
+  });
+});
+
+describe("simulationSpecToState — 코어 SimulationSpec → 계산기 시뮬 상태", () => {
+  it("experiment+trials → simulationMode 상태", () => {
+    expect(simulationSpecToState({ experiment: "동전 던지기", trials: 100 })).toEqual({
+      simulationMode: true,
+      experiment: "동전 던지기",
+      trials: 100,
+    });
+  });
+
+  it("trials 없으면 키 생략(기본값은 컴포넌트 몫)", () => {
+    expect(simulationSpecToState({ experiment: "주사위 던지기" })).toEqual({
+      simulationMode: true,
+      experiment: "주사위 던지기",
+    });
+  });
+
+  it("experiment 없거나 빈 문자열이면 null", () => {
+    expect(simulationSpecToState({ trials: 100 })).toBeNull();
+    expect(simulationSpecToState({ experiment: "   " })).toBeNull();
+    expect(simulationSpecToState(null)).toBeNull();
+  });
+
+  it("base64 URL(시뮬) → parseSpecParam → 시뮬 상태", () => {
+    const spec = { experiment: "동전 던지기", trials: 500 };
+    const b64 = Buffer.from(JSON.stringify(spec)).toString("base64");
+    expect(simulationSpecToState(parseSpecParam(b64))).toEqual({
+      simulationMode: true,
+      experiment: "동전 던지기",
+      trials: 500,
     });
   });
 });

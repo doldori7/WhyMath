@@ -72,6 +72,17 @@ export const surface3dSpecToState = (spec) => {
   return st;
 };
 
+// ====== 코어 SimulationSpec 소비 어댑터 (확률 시뮬) ======
+// 백엔드 SimulationSpec({ experiment: "동전 던지기", trials: 100 })을 계산기 시뮬 상태로 변환한다.
+// 실제 실험 인식·시행은 simulationExperiment.js(parseExperiment·runTrials)가 담당하고, 여기선
+// 상태(simulationMode·experiment·trials)로만 매핑한다. experiment 없으면 null.
+export const simulationSpecToState = (spec) => {
+  if (!spec || typeof spec.experiment !== "string" || !spec.experiment.trim()) return null;
+  const st = { simulationMode: true, experiment: spec.experiment.trim() };
+  if (Number.isFinite(spec.trials) && spec.trials > 0) st.trials = Math.floor(spec.trials);
+  return st;
+};
+
 // URL 파라미터 문자열에서 Graph2dSpec 파싱: base64(JSON) 우선, 실패 시 (URL 디코딩한) raw JSON.
 export const parseSpecParam = (raw) => {
   if (!raw || typeof raw !== "string") return null;
@@ -83,10 +94,19 @@ export const parseSpecParam = (raw) => {
       return undefined;
     }
   };
-  // 1) base64(JSON)
+  // 1) base64(JSON) — UTF-8 디코드로 한국어 등 비-ASCII 보존(Flutter base64(utf8(json))의 역연산).
+  //    atob는 바이트→Latin-1 문자열이라 그대로 JSON.parse하면 한글이 깨진다 → TextDecoder로 UTF-8 복원.
   try {
     if (typeof atob === "function") {
-      const obj = tryParse(atob(raw));
+      const bin = atob(raw);
+      let text = bin;
+      try {
+        const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+        text = new TextDecoder().decode(bytes);
+      } catch {
+        /* TextDecoder 미지원 환경이면 바이너리 문자열 폴백(ASCII는 동일) */
+      }
+      const obj = tryParse(text);
       if (obj) return obj;
     }
   } catch {

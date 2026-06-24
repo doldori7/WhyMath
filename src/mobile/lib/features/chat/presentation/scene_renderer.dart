@@ -94,7 +94,11 @@ class SceneRenderer extends StatelessWidget {
   /// 않은 `spec`일 때만 임베드 계산기를 띄운다(확률·사전렌더 애니메이션·spec 없는 명세는 아직 seed —
   /// 점층 확장·전방호환). 인코더/WebView는 type-무관이라 spec Map을 그대로 웹에 주입한다.
   Widget _buildVisualization(Visualization? viz) {
-    const webViewTypes = {'interactive_graph_2d', 'interactive_surface_3d'};
+    const webViewTypes = {
+      'interactive_graph_2d',
+      'interactive_surface_3d',
+      'simulation_probabilistic',
+    };
     if (viz != null &&
         webViewTypes.contains(viz.type) &&
         viz.interactive &&

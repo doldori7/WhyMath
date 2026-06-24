@@ -13,10 +13,12 @@ import {
 import {
   graph2dSpecToState,
   surface3dSpecToState,
+  simulationSpecToState,
   parseSpecParam,
   calcStateToGraph2dSpec,
 } from "./lib/graph2dSpec";
 import { emitInteraction } from "./lib/interactionEmitter";
+import { parseExperiment, runTrials } from "./lib/simulationExperiment";
 
 // ====== [Phase 4] MathLive를 npm 번들에서 동적 로딩 (코드 분할·오프라인 자족) ======
 // 과거엔 CDN <script>로 불러왔으나, WebView/오프라인 자족을 위해 npm 의존성으로 번들한다.
@@ -853,6 +855,154 @@ function QuizMode() {
   );
 }
 
+// [Phase 13] 확률 시뮬 뷰 — 동전·주사위 Monte Carlo 결과를 캔버스 막대그래프(개수+백분율)로 그린다.
+// 미지원 실험(parseExperiment=null)은 안내 카드. 시행 로직은 부모가 runTrials로 돌려 counts로 내려준다.
+function SimulationView({ experiment, setExperiment, trials, setTrials, counts, onRun, onBack }) {
+  const canvasRef = useRef(null);
+  const model = parseExperiment(experiment); // JSX 분기용(라벨 표시)
+
+  useEffect(() => {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    if (!ctx) return;
+    const W = cv.width;
+    const H = cv.height;
+    ctx.clearRect(0, 0, W, H);
+    const m = parseExperiment(experiment);
+    if (!m || !Array.isArray(counts)) return;
+    const labels = m.labels;
+    const n = labels.length;
+    const total = counts.reduce((a, c) => a + c, 0) || 1;
+    const maxC = Math.max(...counts, 1);
+    const pad = 48;
+    const baseY = H - pad;
+    const plotW = W - pad * 2;
+    const plotH = H - pad * 2;
+    const gap = 14;
+    const barW = (plotW - gap * (n - 1)) / n;
+    // 기준선
+    ctx.strokeStyle = "#ccc";
+    ctx.beginPath();
+    ctx.moveTo(pad, baseY);
+    ctx.lineTo(W - pad, baseY);
+    ctx.stroke();
+    ctx.font = "13px Georgia";
+    ctx.textAlign = "center";
+    for (let i = 0; i < n; i++) {
+      const x = pad + i * (barW + gap);
+      const h = (counts[i] / maxC) * plotH;
+      ctx.fillStyle = "#2d70b3";
+      ctx.fillRect(x, baseY - h, barW, h);
+      ctx.fillStyle = "#333";
+      ctx.fillText(labels[i], x + barW / 2, baseY + 18);
+      const pct = ((counts[i] / total) * 100).toFixed(1);
+      ctx.fillStyle = "#555";
+      ctx.fillText(`${counts[i]} (${pct}%)`, x + barW / 2, baseY - h - 8);
+    }
+  }, [counts, experiment]);
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        height: "100vh",
+        padding: 24,
+        boxSizing: "border-box",
+        fontFamily: "'Georgia', serif",
+        background: "#fafafa",
+      }}
+    >
+      <button
+        onClick={onBack}
+        style={{
+          position: "absolute",
+          top: 16,
+          right: 16,
+          zIndex: 10,
+          padding: "8px 16px",
+          background: "#fff",
+          border: "1px solid #ddd",
+          borderRadius: 8,
+          cursor: "pointer",
+          fontSize: 14,
+          boxShadow: "0 2px 6px rgba(0,0,0,0.1)",
+        }}
+      >
+        ← 계산기로 돌아가기
+      </button>
+      <div style={{ fontSize: 20, fontWeight: "bold", marginBottom: 16 }}>확률 시뮬레이션</div>
+      <div
+        style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}
+      >
+        <label style={{ fontSize: 13, color: "#666" }}>실험</label>
+        <input
+          value={experiment}
+          onChange={(e) => setExperiment(e.target.value)}
+          placeholder="동전 던지기 / 주사위 던지기"
+          style={{
+            padding: "6px 10px",
+            border: "1px solid #ccc",
+            borderRadius: 6,
+            fontSize: 14,
+            width: 220,
+          }}
+        />
+        <label style={{ fontSize: 13, color: "#666" }}>시행 {trials}회</label>
+        <input
+          type="range"
+          min={1}
+          max={2000}
+          step={1}
+          value={trials}
+          onChange={(e) => setTrials(parseInt(e.target.value))}
+          style={{ accentColor: "#2d70b3" }}
+        />
+        <button
+          onClick={onRun}
+          style={{
+            padding: "6px 16px",
+            border: "1px solid #2d70b3",
+            borderRadius: 6,
+            background: "#2d70b3",
+            color: "#fff",
+            cursor: "pointer",
+            fontSize: 14,
+          }}
+        >
+          시작
+        </button>
+      </div>
+      {model ? (
+        <canvas
+          ref={canvasRef}
+          width={640}
+          height={420}
+          style={{
+            border: "1px solid #eee",
+            borderRadius: 8,
+            background: "#fff",
+            maxWidth: "100%",
+          }}
+        />
+      ) : (
+        <div
+          style={{
+            marginTop: 24,
+            padding: 20,
+            border: "1px dashed #ccc",
+            borderRadius: 8,
+            color: "#888",
+            fontSize: 14,
+          }}
+        >
+          이 실험은 아직 지원되지 않아요. 동전·주사위만 시뮬레이션할 수 있어요.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function GraphingCalculator() {
   const [rows, setRows] = useState([makeRow(1)]);
   const nextId = useRef(2);
@@ -876,6 +1026,11 @@ export default function GraphingCalculator() {
   const [range3D, setRange3D] = useState(3);
   // [Phase 12] 문제 출제 모드 on/off
   const [quizMode, setQuizMode] = useState(false);
+  // [Phase 13] 확률 시뮬 모드 on/off + 실험·시행수·결과 카운트(동전·주사위 MVP)
+  const [simMode, setSimMode] = useState(false);
+  const [simExperiment, setSimExperiment] = useState("동전 던지기");
+  const [simTrials, setSimTrials] = useState(200);
+  const [simCounts, setSimCounts] = useState(null); // null=미실행, 배열=라벨별 카운트
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -1473,9 +1628,19 @@ export default function GraphingCalculator() {
   // 저장된 상태를 화면에 다시 적용
   const applyState = (st) => {
     if (!st) return false;
+    // [Phase 13] 확률 시뮬 상태 — rows 없이 simExperiment/simTrials만 적용.
+    if (st.simulationMode) {
+      setSimMode(true);
+      setMode3D(false);
+      if (typeof st.experiment === "string" && st.experiment.trim()) setSimExperiment(st.experiment);
+      if (typeof st.trials === "number") setSimTrials(st.trials);
+      setSimCounts(null); // 새 명세 적용 시 이전 결과 초기화
+      return true;
+    }
     // [Phase 11] 3D 곡면 상태(곡면식) — rows 없이 mode3D/expr3D/range3D만 적용.
     if (st.mode3D) {
       setMode3D(true);
+      setSimMode(false);
       if (typeof st.expr3D === "string" && st.expr3D.trim()) setExpr3D(st.expr3D);
       if (typeof st.range3D === "number") setRange3D(st.range3D);
       return true;
@@ -1496,6 +1661,7 @@ export default function GraphingCalculator() {
     if (st.view) setView(st.view);
     if (typeof st.showRegression === "boolean") setShowRegression(st.showRegression);
     setMode3D(false); // 2D 명세 적용 시 3D 모드 해제(잔류 방지)
+    setSimMode(false); // 2D 명세 적용 시 시뮬 모드 해제(잔류 방지)
     return true;
   };
 
@@ -1510,8 +1676,13 @@ export default function GraphingCalculator() {
       try {
         const spec = parseSpecParam(raw);
         if (!spec) return false;
-        // 곡면식(surface)이면 3D 어댑터, 아니면 2D 어댑터.
-        const st = spec.surface != null ? surface3dSpecToState(spec) : graph2dSpecToState(spec);
+        // 실험(experiment)→시뮬, 곡면식(surface)→3D, 그 외→2D 어댑터.
+        const st =
+          spec.experiment != null
+            ? simulationSpecToState(spec)
+            : spec.surface != null
+              ? surface3dSpecToState(spec)
+              : graph2dSpecToState(spec);
         if (!st) return false;
         applyState(st);
         return true;
@@ -1657,6 +1828,26 @@ export default function GraphingCalculator() {
     );
   }
 
+  // [Phase 13] 시뮬 모드면 확률 시뮬 화면 전체 표시 (동전·주사위 Monte Carlo)
+  if (simMode) {
+    return (
+      <SimulationView
+        experiment={simExperiment}
+        setExperiment={setSimExperiment}
+        trials={simTrials}
+        setTrials={setSimTrials}
+        counts={simCounts}
+        onRun={() => {
+          const m = parseExperiment(simExperiment);
+          setSimCounts(m ? runTrials(m, simTrials) : null);
+          // 학습 로그(E 파이프라인) — 시뮬 실행도 조작 신호로 영속(F).
+          emitInteraction("sim_run", { experiment: simExperiment, trials: simTrials });
+        }}
+        onBack={() => setSimMode(false)}
+      />
+    );
+  }
+
   return (
     <div style={{ display: "flex", height: "100vh", fontFamily: "'Georgia', serif", background: "#fafafa" }}>
       <div style={{ width: 360, background: "#fff", borderRight: "1px solid #ddd", display: "flex", flexDirection: "column", boxShadow: "2px 0 8px rgba(0,0,0,0.04)" }}>
@@ -1669,6 +1860,7 @@ export default function GraphingCalculator() {
               <button onClick={() => setMode3D(true)} style={{ padding: "5px 12px", border: "none", background: mode3D ? "#2d70b3" : "#fff", color: mode3D ? "#fff" : "#666", cursor: "pointer", fontSize: 13 }}>3D</button>
             </div>
             <button onClick={() => setQuizMode(true)} style={{ padding: "5px 12px", border: "1px solid #388c46", borderRadius: 8, background: "#388c46", color: "#fff", cursor: "pointer", fontSize: 13 }}>문제</button>
+            <button onClick={() => setSimMode(true)} style={{ padding: "5px 12px", border: "1px solid #8456c9", borderRadius: 8, background: "#8456c9", color: "#fff", cursor: "pointer", fontSize: 13 }}>시뮬</button>
           </div>
         </div>
 
