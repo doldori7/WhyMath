@@ -101,18 +101,24 @@ DAILY_LIMIT_KRW: Final[dict[str, int]] = {
 # ──────────────────────────────────────────────────────────────────────────
 # 클라우드 추정 상수 — 03a는 *경로·가드 설계*만 명세하고 구체 수치는 미제공
 # (§H 후속 4 "클라우드 티어 실제 연동·비용 계측·guard_cloud 실측 임계값 보정").
-# 아래 값은 *fabricate가 아니라* 실측 전까지의 명시적 placeholder다. 라이브 연동 시
-# 실측으로 대체한다. guard_cloud의 "잔여 예산 부족" 판정에 쓰이는 1회 최소 비용.
+# guard_cloud의 "잔여 예산 부족" 판정·est_cost_krw에 쓰이는 1회 호출 추정 비용.
+# 비용(KRW)은 *공개 가격*에서 유도한 sourced 추정이다(fabricate 아님·2026-06-23 확인):
+#   - CLOUD_MID  = claude-sonnet-4-6  $3/$15 per 1M(in/out)
+#   - CLOUD_HIGH = claude-opus-4-7    $5/$25 per 1M(in/out)
+#   - 환율 1 USD ≈ 1,540 KRW(2026-06-23). 기준 호출 = 입력 1K + 출력 1K 토큰(대표 코칭 생성).
+#   MID = (1K·$3+1K·$15)/1M × 1540 ≈ ₩28 / HIGH = (1K·$5+1K·$25)/1M × 1540 ≈ ₩46.
+# 잔여 불확실(정직): 호출당 실 토큰 수는 워크로드별 가변 → 라이브 토큰 계측으로 최종 보정.
 # ──────────────────────────────────────────────────────────────────────────
 CLOUD_MIN_COST_KRW: Final[dict[CostTier, float]] = {
-    # 1회 호출 최소 추정 비용(원) — 잔여 예산이 이보다 작으면 LOCAL 강등(§D.4)
-    CostTier.CLOUD_MID: 10.0,  # placeholder — §H 후속 4에서 실측 보정
-    CostTier.CLOUD_HIGH: 50.0,  # placeholder — §H 후속 4에서 실측 보정
+    # 1회 호출 추정 비용(원) — 잔여 예산이 이보다 작으면 LOCAL 강등(§D.4). 위 유도 참조.
+    CostTier.CLOUD_MID: 28.0,  # sonnet-4-6 1K+1K × ₩1,540 — 라이브 토큰 계측 시 보정
+    CostTier.CLOUD_HIGH: 46.0,  # opus-4-7 1K+1K × ₩1,540 — 라이브 토큰 계측 시 보정
 }
-"""클라우드 티어 1회 호출 최소 추정 비용(원). placeholder — 03a §H 후속 4 보정 대상."""
+"""클라우드 티어 1회 호출 추정 비용(원). 공개 가격 유도(2026-06-23)·라이브 토큰 계측 보정 대상."""
 
 CLOUD_LATENCY_MS: Final[dict[CostTier, int]] = {
-    # 03a §A.1 표에서 CLOUD는 "가변" — 네트워크·모델 의존. placeholder 예상치.
+    # 03a §A.1 표에서 CLOUD는 "가변" — 네트워크·모델 의존. 지연은 *측정값*이라 공개 가격처럼
+    # 유도할 수 없다 → placeholder 유지, 라이브 실측 보정(§H 후속 4).
     CostTier.CLOUD_MID: 3000,  # placeholder — §H 후속 4에서 실측 보정
     CostTier.CLOUD_HIGH: 8000,  # placeholder — §H 후속 4에서 실측 보정
 }

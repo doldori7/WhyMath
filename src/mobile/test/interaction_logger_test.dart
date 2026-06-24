@@ -86,6 +86,39 @@ void main() {
     expect(types, {'param_change', 'surface_change'});
   });
 
+  test('conceptId/sceneId는 POST body에 concept_id/scene_id로 병합된다 (슬라이스 96-J)', () async {
+    final adapter = _CaptureAdapter();
+    final logger = _loggerWith(adapter);
+
+    logger.record(
+      {'type': 'param_change', 'payload': {'name': 'a', 'value': 1}},
+      conceptId: 'UC-MATH-2-FUNC-01',
+      sceneId: 'scene-abc',
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(adapter.posted, hasLength(1));
+    final data = adapter.posted[0]['data'] as Map;
+    expect(data['concept_id'], 'UC-MATH-2-FUNC-01');
+    expect(data['scene_id'], 'scene-abc');
+    expect(data['type'], 'param_change');
+  });
+
+  test('컨텍스트 생략 시 body에 concept_id/scene_id를 싣지 않는다 (하위호환)', () async {
+    final adapter = _CaptureAdapter();
+    final logger = _loggerWith(adapter);
+
+    logger.record({'type': 'sim_run', 'payload': {'trials': 500}});
+
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+
+    expect(adapter.posted, hasLength(1));
+    final data = adapter.posted[0]['data'] as Map;
+    expect(data.containsKey('concept_id'), isFalse);
+    expect(data.containsKey('scene_id'), isFalse);
+  });
+
   test('네트워크 실패는 throw 없이 흡수한다', () async {
     final logger = _loggerWith(_FailAdapter());
     logger.record({'type': 'param_change', 'payload': {'name': 'a', 'value': 1}});

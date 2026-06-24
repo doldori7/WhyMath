@@ -108,6 +108,23 @@ def _user_prompt(concept: str, level: str, recommended_styles: Sequence[str] | N
     return "\n".join(lines)
 
 
+def build_visualization_prompt(
+    concept: str,
+    level: str,
+    recommended_styles: Sequence[str] | None = None,
+) -> tuple[str, str]:
+    """개념·수준(+권장 양식) → (시스템, 사용자) 프롬프트 쌍 — *프로덕션 프롬프트 공개 접근자*.
+
+    `generate_visualization_spec`이 LLM에 넘기는 *바로 그* 프롬프트를 반환한다. 라이브 평가
+    하니스(`viz_eval`·`test_visualization_live`)가 프롬프트를 따로 베끼지 않고 이 함수를 통해
+    *동일한* 프롬프트로 모델을 호출하게 하기 위함이다 — 평가와 프로덕션의 프롬프트 드리프트 0.
+
+    Returns:
+        (system_prompt, user_prompt) — `_SYSTEM_PROMPT`와 `_user_prompt(...)` 결과.
+    """
+    return _SYSTEM_PROMPT, _user_prompt(concept, level, recommended_styles)
+
+
 async def generate_visualization_spec(
     concept: str,
     level: str,
@@ -140,10 +157,11 @@ async def generate_visualization_spec(
     Raises:
         InvalidVisualizationSpecError: LLM 출력이 유효한 Visualization이 아님.
     """
+    system_prompt, user_prompt = build_visualization_prompt(concept, level, recommended_styles)
     result = await generate(
         req,
-        _user_prompt(concept, level, recommended_styles),
-        _SYSTEM_PROMPT,
+        user_prompt,
+        system_prompt,
         provider=provider,
         cache=cache,
         trace=trace,

@@ -104,7 +104,12 @@ class SceneRenderer extends StatelessWidget {
         viz.interactive &&
         viz.spec != null &&
         viz.spec!.isNotEmpty) {
-      return GraphingCalculatorWebView(viz: viz);
+      // 개념 컨텍스트(concept_id/scene_id)를 호스트측에서 학습 로그에 싣는다(슬라이스 96-J).
+      return GraphingCalculatorWebView(
+        viz: viz,
+        conceptId: scene.conceptId,
+        sceneId: scene.sceneId,
+      );
     }
     return _VisualizationSeed(viz: viz);
   }
