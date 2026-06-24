@@ -81,22 +81,23 @@ void main() {
     expect(find.text('곡면'), findsOneWidget);
   });
 
-  testWidgets('알 수 없는 시각화 타입은 seed(caption)로 폴백한다', (tester) async {
+  testWidgets('WebView 미지원 타입(animation_prerendered)은 seed(caption)로 폴백한다', (tester) async {
     await tester.pumpWidget(
       _wrap(
         _scene(const [
           SceneElement(
             kind: 'visualization',
             ref: Visualization(
-              type: 'simulation_probabilistic',
-              spec: {'experiment': '동전'},
-              caption: '시뮬레이션',
+              type: 'animation_prerendered',
+              spec: {'asset_id': 'x'},
+              caption: '애니메이션',
+              interactive: false,
             ),
           ),
         ]),
       ),
     );
-    expect(find.text('시뮬레이션'), findsOneWidget);
+    expect(find.text('애니메이션'), findsOneWidget);
   });
 
   testWidgets('param_control은 대상 파라미터 cue를 렌더한다', (tester) async {
