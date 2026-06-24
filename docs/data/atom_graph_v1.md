@@ -117,6 +117,10 @@ Phase 3에서 저작한다. 특히 **정식정의(formal_definition)는 교과�
   매핑 + 서술형 엣지 분리를 결정론으로 수행. backend `concept`·`concept_edge` 적재.
 - **Phase 2**: 파생 스토어(`concept_node`·pgvector `concept_embedding`·Neo4j) 재생성.
 - **Phase 3**: 4요소 정식 소스 승격(오개념 카탈로그·진단문항·소크라테스·전이) + 콘텐츠 4종 신규 저작.
+  - Slice 1(완): 콘텐츠 4종 → `concept_content`. Slice 2(완): ①오개념 → `misconception_catalog`
+    (additive·`ATOM:` 네임스페이스). **Slice 3(완·2026-06-23)**: ②진단문항·③소크라테스 → 신규
+    `atom_probe`(code PK·additive·마이그레이션 `b9c0d1e2f3a4`·1,837행·상세 `atom_probe_v1.md`).
+    잔여: ④전이 승격.
 - **Phase 4**: 문제 corpus 크로스워크(소단원/단원 매칭 + 성취기준 코드 2중 다리).
 - **Phase 5**: 구 `concept_graph_v1` 폐기·전 계층 검증.
 

@@ -49,6 +49,10 @@ from whymath_backend.db.models.atom_node import (
     ATOM_REVIEW_STATUS_AI_ESTIMATED,
     AtomNode,
 )
+from whymath_backend.db.models.atom_probe import (
+    ATOM_PROBE_REVIEW_STATUS_AI_ESTIMATED,
+    AtomProbe,
+)
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import (
     Concept,
@@ -175,6 +179,9 @@ __all__ = [
     # 원자 마이그레이션 Phase 2a: AtomNode (L1 원자 메타 PG 프로젝션·code 키·검색 enrichment 백킹)
     "AtomNode",
     "ATOM_REVIEW_STATUS_AI_ESTIMATED",
+    # 원자 Phase 3 Slice 3: AtomProbe (②진단문항·③소크라테스 PG 프로젝션·code 키·additive)
+    "AtomProbe",
+    "ATOM_PROBE_REVIEW_STATUS_AI_ESTIMATED",
     # 원자 마이그레이션 Phase 2b: AtomEmbedding (L1 원자 의미검색 pgvector 영속·code 키·vector 컬럼)
     "AtomEmbedding",
     # WH-S S1: SolutionNode (풀이 경로 트리 노드·§2.1·오프라인 솔버 상태) + 검증 상태 enum
