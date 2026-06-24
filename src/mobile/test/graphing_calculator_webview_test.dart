@@ -28,4 +28,32 @@ void main() {
       expect(encodeGraph2dSpecParam(const <String, dynamic>{}), base64.encode(utf8.encode('{}')));
     });
   });
+
+  group('decodeInteractionMessage', () {
+    test('유효한 상호작용 JSON → Map', () {
+      final raw = jsonEncode({
+        'type': 'param_change',
+        'payload': {'name': 'a', 'value': 2},
+        'at': 123,
+      });
+      final event = decodeInteractionMessage(raw);
+      expect(event, isNotNull);
+      expect(event!['type'], 'param_change');
+      expect(event['payload'], {'name': 'a', 'value': 2});
+    });
+
+    test('type이 문자열이 아니면 null', () {
+      expect(decodeInteractionMessage('{"type": 42}'), isNull);
+    });
+
+    test('JSON 객체가 아니면 null(배열·원시값)', () {
+      expect(decodeInteractionMessage('[1, 2, 3]'), isNull);
+      expect(decodeInteractionMessage('"just a string"'), isNull);
+    });
+
+    test('깨진 JSON은 흡수하고 null', () {
+      expect(decodeInteractionMessage('not json'), isNull);
+      expect(decodeInteractionMessage(''), isNull);
+    });
+  });
 }

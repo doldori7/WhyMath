@@ -16,6 +16,7 @@ import {
   parseSpecParam,
   calcStateToGraph2dSpec,
 } from "./lib/graph2dSpec";
+import { emitInteraction } from "./lib/interactionEmitter";
 
 // ====== [Phase 4] MathLive를 npm 번들에서 동적 로딩 (코드 분할·오프라인 자족) ======
 // 과거엔 CDN <script>로 불러왔으나, WebView/오프라인 자족을 위해 npm 의존성으로 번들한다.
@@ -1408,9 +1409,17 @@ export default function GraphingCalculator() {
   // [Phase 9] 함수 줄의 미분 옵션 변경
   const updateRowField = (id, field, value) =>
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
-  const setSliderValue = (name, value) => setSliders((prev) => ({ ...prev, [name]: { ...prev[name], value } }));
+  const setSliderValue = (name, value) => {
+    emitInteraction("param_change", { name, value }); // 학습 로그: 파라미터 탐구 신호
+    setSliders((prev) => ({ ...prev, [name]: { ...prev[name], value } }));
+  };
   const setSliderRange = (name, key, value) => setSliders((prev) => ({ ...prev, [name]: { ...prev[name], [key]: value } }));
-  const togglePlay = (name) => setSliders((prev) => ({ ...prev, [name]: { ...prev[name], playing: !prev[name].playing } }));
+  const togglePlay = (name) =>
+    setSliders((prev) => {
+      const playing = !prev[name].playing;
+      emitInteraction("param_play", { name, playing }); // 학습 로그: 애니메이션 재생/정지
+      return { ...prev, [name]: { ...prev[name], playing } };
+    });
 
   // [Phase 6] 표 조작 함수들
   const updateCell = (idx, key, val) =>
@@ -1670,13 +1679,16 @@ export default function GraphingCalculator() {
               <div style={{ fontSize: 13, color: "#999", marginBottom: 8, fontWeight: "bold" }}>3D 곡면 z = f(x, y)</div>
               <input
                 value={expr3D}
-                onChange={(e) => setExpr3D(e.target.value)}
+                onChange={(e) => {
+                  emitInteraction("surface_change", { expr: e.target.value }); // 학습 로그: 3D 곡면식 변경
+                  setExpr3D(e.target.value);
+                }}
                 placeholder="예: x^2 + y^2"
                 style={{ width: "100%", fontSize: 16, padding: "8px 10px", border: "1px solid #ddd", borderRadius: 6, fontFamily: "monospace", boxSizing: "border-box" }}
               />
               <div style={{ marginTop: 12, fontSize: 13, color: "#666" }}>
                 정의역 범위: ±{range3D}
-                <input type="range" min={1} max={10} step={1} value={range3D} onChange={(e) => setRange3D(parseInt(e.target.value))} style={{ width: "100%", accentColor: "#2d70b3", marginTop: 4 }} />
+                <input type="range" min={1} max={10} step={1} value={range3D} onChange={(e) => { const r = parseInt(e.target.value); emitInteraction("surface_range", { range: r }); setRange3D(r); }} style={{ width: "100%", accentColor: "#2d70b3", marginTop: 4 }} />
               </div>
               <div style={{ marginTop: 16, fontSize: 12, color: "#999", lineHeight: 1.7 }}>
                 <b>조작:</b> 드래그=회전 · 휠=확대/축소
