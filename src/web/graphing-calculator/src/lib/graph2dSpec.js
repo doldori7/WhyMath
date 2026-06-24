@@ -55,6 +55,23 @@ export const graph2dSpecToState = (spec) => {
   return { rows, sliders, view };
 };
 
+// ====== 코어 Surface3dSpec 소비 어댑터 (3D 곡면) ======
+// 백엔드 Surface3dSpec({ surface: "z = x**2 + y**2", rotatable }, schema/visualization.py)을
+// 계산기 3D 상태({mode3D, expr3D, range3D})로 변환한다. graph2dSpecToState의 3D 짝.
+// 웹 Surface3D 렌더러는 expr를 mathjs로 컴파일(node.evaluate({x,y}))하므로 좌변('z =')을 떼고
+// 파이썬 '**'를 mathjs '^'로 바꾼 RHS만 expr3D로 넘긴다. 변환할 게 없으면 null.
+export const surface3dSpecToState = (spec) => {
+  if (!spec || typeof spec.surface !== "string" || !spec.surface.trim()) return null;
+  let body = spec.surface.trim();
+  const eq = body.indexOf("="); // "z = …"/"f(x,y) = …" 좌변 제거(우변 식만 평가)
+  if (eq >= 0) body = body.slice(eq + 1).trim();
+  body = body.replace(/\*\*/g, "^"); // 파이썬 '**' → mathjs '^'
+  if (!body) return null;
+  const st = { mode3D: true, expr3D: body };
+  if (Number.isFinite(spec.range) && spec.range > 0) st.range3D = spec.range; // 선택(없으면 기본 유지)
+  return st;
+};
+
 // URL 파라미터 문자열에서 Graph2dSpec 파싱: base64(JSON) 우선, 실패 시 (URL 디코딩한) raw JSON.
 export const parseSpecParam = (raw) => {
   if (!raw || typeof raw !== "string") return null;

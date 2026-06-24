@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   graph2dSpecToState,
+  surface3dSpecToState,
   parseSpecParam,
   calcStateToGraph2dSpec,
 } from "../src/lib/graph2dSpec";
@@ -153,5 +154,40 @@ describe("graph2dSpecToState + parseSpecParam 결합 (URL → 상태)", () => {
     expect(st.rows[0].expr).toBe("a*sin(x)");
     expect(st.sliders.a.value).toBe(2);
     expect(st.view.xMin).toBe(-6);
+  });
+});
+
+describe("surface3dSpecToState — 코어 Surface3dSpec → 계산기 3D 상태", () => {
+  it("'z = x**2 + y**2' → mode3D + expr3D(좌변 제거·**→^)", () => {
+    const st = surface3dSpecToState({ surface: "z = x**2 + y**2" });
+    expect(st).toEqual({ mode3D: true, expr3D: "x^2 + y^2" });
+  });
+
+  it("좌변 없는 곡면식도 그대로 변환('x**2*y' → 'x^2*y')", () => {
+    expect(surface3dSpecToState({ surface: "x**2*y" })).toEqual({
+      mode3D: true,
+      expr3D: "x^2*y",
+    });
+  });
+
+  it("range(숫자)가 있으면 range3D로 매핑", () => {
+    const st = surface3dSpecToState({ surface: "z = sin(x)*cos(y)", range: 5 });
+    expect(st.range3D).toBe(5);
+    expect(st.expr3D).toBe("sin(x)*cos(y)");
+  });
+
+  it("surface가 없거나 빈 문자열이면 null", () => {
+    expect(surface3dSpecToState({ rotatable: true })).toBeNull();
+    expect(surface3dSpecToState({ surface: "   " })).toBeNull();
+    expect(surface3dSpecToState(null)).toBeNull();
+  });
+
+  it("base64 URL(3D) → parseSpecParam → 3D 상태", () => {
+    const spec = { surface: "z = x**2 - y**2" };
+    const b64 = Buffer.from(JSON.stringify(spec)).toString("base64");
+    expect(surface3dSpecToState(parseSpecParam(b64))).toEqual({
+      mode3D: true,
+      expr3D: "x^2 - y^2",
+    });
   });
 });

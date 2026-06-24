@@ -10,7 +10,12 @@ import {
   numDeriv,
   num2Deriv,
 } from "./lib/mathExpr";
-import { graph2dSpecToState, parseSpecParam, calcStateToGraph2dSpec } from "./lib/graph2dSpec";
+import {
+  graph2dSpecToState,
+  surface3dSpecToState,
+  parseSpecParam,
+  calcStateToGraph2dSpec,
+} from "./lib/graph2dSpec";
 
 // ====== [Phase 4] MathLive를 npm 번들에서 동적 로딩 (코드 분할·오프라인 자족) ======
 // 과거엔 CDN <script>로 불러왔으나, WebView/오프라인 자족을 위해 npm 의존성으로 번들한다.
@@ -1458,7 +1463,15 @@ export default function GraphingCalculator() {
 
   // 저장된 상태를 화면에 다시 적용
   const applyState = (st) => {
-    if (!st || !st.rows) return false;
+    if (!st) return false;
+    // [Phase 11] 3D 곡면 상태(곡면식) — rows 없이 mode3D/expr3D/range3D만 적용.
+    if (st.mode3D) {
+      setMode3D(true);
+      if (typeof st.expr3D === "string" && st.expr3D.trim()) setExpr3D(st.expr3D);
+      if (typeof st.range3D === "number") setRange3D(st.range3D);
+      return true;
+    }
+    if (!st.rows) return false;
     // 불러온 함수에 새 id를 부여하며 복원
     const restored = st.rows.map((r, i) => ({
       id: i + 1, latex: r.latex || "", expr: r.expr || "",
@@ -1473,6 +1486,7 @@ export default function GraphingCalculator() {
     setTable(st.table || [{ x: "", y: "" }]);
     if (st.view) setView(st.view);
     if (typeof st.showRegression === "boolean") setShowRegression(st.showRegression);
+    setMode3D(false); // 2D 명세 적용 시 3D 모드 해제(잔류 방지)
     return true;
   };
 
@@ -1487,7 +1501,8 @@ export default function GraphingCalculator() {
       try {
         const spec = parseSpecParam(raw);
         if (!spec) return false;
-        const st = graph2dSpecToState(spec);
+        // 곡면식(surface)이면 3D 어댑터, 아니면 2D 어댑터.
+        const st = spec.surface != null ? surface3dSpecToState(spec) : graph2dSpecToState(spec);
         if (!st) return false;
         applyState(st);
         return true;

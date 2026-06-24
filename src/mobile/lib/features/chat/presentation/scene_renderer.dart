@@ -88,13 +88,15 @@ class SceneRenderer extends StatelessWidget {
     }
   }
 
-  /// 시각화 렌더 선택: 대화형 2D 그래프(spec 보유)는 실 WebView, 그 외는 caption seed로 폴백.
+  /// 시각화 렌더 선택: 대화형 2D 그래프·3D 곡면(spec 보유)은 실 WebView, 그 외는 caption seed로 폴백.
   ///
-  /// `interactive_graph_2d` + `interactive` + 비어있지 않은 `spec`일 때만 임베드 계산기를 띄운다
-  /// (3D·확률·사전렌더 애니메이션·spec 없는 명세는 아직 seed — 점층 확장·전방호환).
+  /// `interactive_graph_2d`(2D 함수)·`interactive_surface_3d`(3D 곡면) + `interactive` + 비어있지
+  /// 않은 `spec`일 때만 임베드 계산기를 띄운다(확률·사전렌더 애니메이션·spec 없는 명세는 아직 seed —
+  /// 점층 확장·전방호환). 인코더/WebView는 type-무관이라 spec Map을 그대로 웹에 주입한다.
   Widget _buildVisualization(Visualization? viz) {
+    const webViewTypes = {'interactive_graph_2d', 'interactive_surface_3d'};
     if (viz != null &&
-        viz.type == 'interactive_graph_2d' &&
+        webViewTypes.contains(viz.type) &&
         viz.interactive &&
         viz.spec != null &&
         viz.spec!.isNotEmpty) {
