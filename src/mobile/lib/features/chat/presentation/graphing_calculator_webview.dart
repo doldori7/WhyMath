@@ -20,17 +20,41 @@ import '../data/scene_models.dart';
 String encodeGraph2dSpecParam(Map<String, dynamic> spec) =>
     base64.encode(utf8.encode(jsonEncode(spec)));
 
-/// 시각화 명세(`interactive_graph_2d`)를 실 WebView로 렌더하는 인라인 위젯.
+/// 웹이 보낸 상호작용 메시지(JSON)를 디코드한다(학습 로그 인바운드).
+///
+/// 웹 `emitInteraction`이 `WhymathInteraction` JS 채널로 보내는 `{type, payload, at}` JSON을
+/// Map으로 돌려준다. JSON이 아니거나 객체가 아니거나 `type`이 문자열이 아니면 null(파손 흡수).
+Map<String, dynamic>? decodeInteractionMessage(String raw) {
+  try {
+    final decoded = jsonDecode(raw);
+    if (decoded is Map<String, dynamic> && decoded['type'] is String) {
+      return decoded;
+    }
+  } catch (_) {
+    // 깨진 JSON은 학습 흐름을 막지 않는다(null로 무시).
+  }
+  return null;
+}
+
+/// 시각화 명세(`interactive_graph_2d`·`interactive_surface_3d`)를 실 WebView로 렌더하는 인라인 위젯.
 ///
 /// 라우트를 추가하지 않고(인라인 임베드) `SceneRenderer` 안에서 고정 높이로 표시한다.
 class GraphingCalculatorWebView extends StatefulWidget {
-  const GraphingCalculatorWebView({required this.viz, this.height = 320, super.key});
+  const GraphingCalculatorWebView({
+    required this.viz,
+    this.height = 320,
+    this.onInteraction,
+    super.key,
+  });
 
-  /// 렌더할 시각화 명세(`spec`이 Graph2dSpec 구조).
+  /// 렌더할 시각화 명세(`spec`이 Graph2dSpec/Surface3dSpec 구조).
   final Visualization viz;
 
   /// 인라인 표시 높이(px).
   final double height;
+
+  /// 학생 조작 이벤트 콜백(학습 로그 워이어용·기본 null이면 debugPrint만).
+  final void Function(Map<String, dynamic> event)? onInteraction;
 
   @override
   State<GraphingCalculatorWebView> createState() => _GraphingCalculatorWebViewState();
@@ -46,6 +70,16 @@ class _GraphingCalculatorWebViewState extends State<GraphingCalculatorWebView> {
     final param = encodeGraph2dSpecParam(widget.viz.spec ?? const <String, dynamic>{});
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
+      // 학습 로그 인바운드 — 웹 emitInteraction이 보내는 학생 조작 이벤트 수신.
+      ..addJavaScriptChannel(
+        'WhymathInteraction',
+        onMessageReceived: (JavaScriptMessage message) {
+          final event = decodeInteractionMessage(message.message);
+          if (event == null) return;
+          widget.onInteraction?.call(event);
+          debugPrint('[whymath] interaction ${event['type']}: ${event['payload']}');
+        },
+      )
       ..setNavigationDelegate(
         NavigationDelegate(
           onPageFinished: (_) {
