@@ -225,3 +225,41 @@ describe("simulationSpecToState — 코어 SimulationSpec → 계산기 시뮬 �
     });
   });
 });
+
+describe("simulationSpecToState — outcomes 통과 (구조화 우선)", () => {
+  it("outcomes 있으면 상태에 통과", () => {
+    const spec = {
+      experiment: "가위바위보",
+      trials: 300,
+      outcomes: [
+        { label: "가위", weight: 1 },
+        { label: "바위", weight: 1 },
+        { label: "보", weight: 1 },
+      ],
+    };
+    expect(simulationSpecToState(spec)).toEqual({
+      simulationMode: true,
+      experiment: "가위바위보",
+      trials: 300,
+      outcomes: spec.outcomes,
+    });
+  });
+
+  it("outcomes 없거나 빈/비배열이면 키 생략(하위호환)", () => {
+    expect(simulationSpecToState({ experiment: "동전 던지기" }).outcomes).toBeUndefined();
+    expect(simulationSpecToState({ experiment: "x", outcomes: [] }).outcomes).toBeUndefined();
+    expect(simulationSpecToState({ experiment: "x", outcomes: "no" }).outcomes).toBeUndefined();
+  });
+
+  it("base64 URL(outcomes) → parseSpecParam → 상태(한국어 보존)", () => {
+    const spec = {
+      experiment: "동전",
+      outcomes: [
+        { label: "앞면", weight: 1 },
+        { label: "뒷면", weight: 1 },
+      ],
+    };
+    const b64 = Buffer.from(JSON.stringify(spec)).toString("base64");
+    expect(simulationSpecToState(parseSpecParam(b64)).outcomes).toEqual(spec.outcomes);
+  });
+});

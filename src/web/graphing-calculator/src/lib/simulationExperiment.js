@@ -27,6 +27,25 @@ export const parseExperiment = (experiment) => {
   return null;
 };
 
+/**
+ * 구조화 outcomes([{label, weight}]) → 이산 확률 모델 { labels, weights } 또는 null.
+ * 백엔드 SimulationSpec.outcomes를 키워드 파싱보다 우선 소비한다(임의 분포·슬89 정합).
+ * 각 항목은 비어있지 않은 문자열 label + 양수 weight여야 한다(위반·빈배열·null → null).
+ * @param {Array<{label:string, weight:number}>} outcomes
+ */
+export const modelFromOutcomes = (outcomes) => {
+  if (!Array.isArray(outcomes) || !outcomes.length) return null;
+  const labels = [];
+  const weights = [];
+  for (const o of outcomes) {
+    if (!o || typeof o.label !== "string" || !o.label.trim()) return null;
+    if (typeof o.weight !== "number" || !(o.weight > 0)) return null;
+    labels.push(o.label);
+    weights.push(o.weight);
+  }
+  return { kind: "outcomes", labels, weights };
+};
+
 // 시행 횟수 안전 범위(성능 가드).
 const MIN_TRIALS = 1;
 const MAX_TRIALS = 50000;

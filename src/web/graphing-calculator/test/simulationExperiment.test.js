@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parseExperiment, runTrials, clampTrials } from "../src/lib/simulationExperiment";
+import {
+  parseExperiment,
+  runTrials,
+  clampTrials,
+  modelFromOutcomes,
+} from "../src/lib/simulationExperiment";
 
 describe("parseExperiment — 실험 문자열 → 이산 확률 모델", () => {
   it("동전/coin → 앞·뒤 균등", () => {
@@ -55,5 +60,36 @@ describe("runTrials — 가중치 시행 → 라벨별 카운트", () => {
   it("시행수는 clamp된다(0 → 1회)", () => {
     const counts = runTrials(parseExperiment("동전"), 0, () => 0.1);
     expect(counts.reduce((a, c) => a + c, 0)).toBe(1);
+  });
+});
+
+describe("modelFromOutcomes — 구조화 outcomes → 이산 확률 모델", () => {
+  it("outcomes 배열 → {labels, weights}", () => {
+    expect(
+      modelFromOutcomes([
+        { label: "가위", weight: 1 },
+        { label: "바위", weight: 2 },
+        { label: "보", weight: 1 },
+      ]),
+    ).toEqual({ kind: "outcomes", labels: ["가위", "바위", "보"], weights: [1, 2, 1] });
+  });
+
+  it("빈 배열·null·라벨/weight 위반 → null", () => {
+    expect(modelFromOutcomes([])).toBeNull();
+    expect(modelFromOutcomes(null)).toBeNull();
+    expect(modelFromOutcomes([{ label: "A" }])).toBeNull(); // weight 없음
+    expect(modelFromOutcomes([{ weight: 1 }])).toBeNull(); // label 없음
+    expect(modelFromOutcomes([{ label: "  ", weight: 1 }])).toBeNull(); // 빈 라벨
+    expect(modelFromOutcomes([{ label: "A", weight: 0 }])).toBeNull(); // 양수 아님
+  });
+
+  it("outcomes 모델 + runTrials는 카운트 합 = 시행수", () => {
+    const m = modelFromOutcomes([
+      { label: "당첨", weight: 1 },
+      { label: "꽝", weight: 9 },
+    ]);
+    const counts = runTrials(m, 500);
+    expect(counts.reduce((a, c) => a + c, 0)).toBe(500);
+    expect(counts).toHaveLength(2);
   });
 });

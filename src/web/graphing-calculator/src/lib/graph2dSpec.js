@@ -80,6 +80,8 @@ export const simulationSpecToState = (spec) => {
   if (!spec || typeof spec.experiment !== "string" || !spec.experiment.trim()) return null;
   const st = { simulationMode: true, experiment: spec.experiment.trim() };
   if (Number.isFinite(spec.trials) && spec.trials > 0) st.trials = Math.floor(spec.trials);
+  // 구조화 outcomes(label+weight)가 있으면 통과 — 웹이 키워드 파싱보다 우선 소비.
+  if (Array.isArray(spec.outcomes) && spec.outcomes.length > 0) st.outcomes = spec.outcomes;
   return st;
 };
 

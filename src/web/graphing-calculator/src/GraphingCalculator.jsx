@@ -18,7 +18,7 @@ import {
   calcStateToGraph2dSpec,
 } from "./lib/graph2dSpec";
 import { emitInteraction } from "./lib/interactionEmitter";
-import { parseExperiment, runTrials } from "./lib/simulationExperiment";
+import { parseExperiment, runTrials, modelFromOutcomes } from "./lib/simulationExperiment";
 
 // ====== [Phase 4] MathLive를 npm 번들에서 동적 로딩 (코드 분할·오프라인 자족) ======
 // 과거엔 CDN <script>로 불러왔으나, WebView/오프라인 자족을 위해 npm 의존성으로 번들한다.
@@ -857,9 +857,10 @@ function QuizMode() {
 
 // [Phase 13] 확률 시뮬 뷰 — 동전·주사위 Monte Carlo 결과를 캔버스 막대그래프(개수+백분율)로 그린다.
 // 미지원 실험(parseExperiment=null)은 안내 카드. 시행 로직은 부모가 runTrials로 돌려 counts로 내려준다.
-function SimulationView({ experiment, setExperiment, trials, setTrials, counts, onRun, onBack }) {
+function SimulationView({ experiment, setExperiment, trials, setTrials, counts, outcomes, onRun, onBack }) {
   const canvasRef = useRef(null);
-  const model = parseExperiment(experiment); // JSX 분기용(라벨 표시)
+  // 구조화 outcomes가 있으면 우선, 없으면 키워드 파싱(JSX 분기·라벨 표시용).
+  const model = modelFromOutcomes(outcomes) || parseExperiment(experiment);
 
   useEffect(() => {
     const cv = canvasRef.current;
@@ -869,7 +870,7 @@ function SimulationView({ experiment, setExperiment, trials, setTrials, counts, 
     const W = cv.width;
     const H = cv.height;
     ctx.clearRect(0, 0, W, H);
-    const m = parseExperiment(experiment);
+    const m = modelFromOutcomes(outcomes) || parseExperiment(experiment);
     if (!m || !Array.isArray(counts)) return;
     const labels = m.labels;
     const n = labels.length;
@@ -900,7 +901,7 @@ function SimulationView({ experiment, setExperiment, trials, setTrials, counts, 
       ctx.fillStyle = "#555";
       ctx.fillText(`${counts[i]} (${pct}%)`, x + barW / 2, baseY - h - 8);
     }
-  }, [counts, experiment]);
+  }, [counts, experiment, outcomes]);
 
   return (
     <div
@@ -1031,6 +1032,7 @@ export default function GraphingCalculator() {
   const [simExperiment, setSimExperiment] = useState("동전 던지기");
   const [simTrials, setSimTrials] = useState(200);
   const [simCounts, setSimCounts] = useState(null); // null=미실행, 배열=라벨별 카운트
+  const [simOutcomes, setSimOutcomes] = useState(null); // 구조화 outcomes(있으면 키워드보다 우선)
   const canvasRef = useRef(null);
   const containerRef = useRef(null);
   const [size, setSize] = useState({ w: 800, h: 600 });
@@ -1634,6 +1636,7 @@ export default function GraphingCalculator() {
       setMode3D(false);
       if (typeof st.experiment === "string" && st.experiment.trim()) setSimExperiment(st.experiment);
       if (typeof st.trials === "number") setSimTrials(st.trials);
+      setSimOutcomes(Array.isArray(st.outcomes) ? st.outcomes : null); // 구조화 outcomes 통과
       setSimCounts(null); // 새 명세 적용 시 이전 결과 초기화
       return true;
     }
@@ -1837,11 +1840,17 @@ export default function GraphingCalculator() {
         trials={simTrials}
         setTrials={setSimTrials}
         counts={simCounts}
+        outcomes={simOutcomes}
         onRun={() => {
-          const m = parseExperiment(simExperiment);
+          // 구조화 outcomes 우선, 없으면 키워드 파싱.
+          const m = modelFromOutcomes(simOutcomes) || parseExperiment(simExperiment);
           setSimCounts(m ? runTrials(m, simTrials) : null);
           // 학습 로그(E 파이프라인) — 시뮬 실행도 조작 신호로 영속(F).
-          emitInteraction("sim_run", { experiment: simExperiment, trials: simTrials });
+          emitInteraction("sim_run", {
+            experiment: simExperiment,
+            trials: simTrials,
+            outcomes: !!simOutcomes,
+          });
         }}
         onBack={() => setSimMode(false)}
       />
