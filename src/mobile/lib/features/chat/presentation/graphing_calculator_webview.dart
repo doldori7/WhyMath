@@ -9,8 +9,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
+import '../data/interaction_logger.dart';
 import '../data/scene_models.dart';
 
 /// Graph2dSpec(Map) → 웹 계산기 `?spec=` 호환 base64(JSON) 파라미터.
@@ -39,13 +41,8 @@ Map<String, dynamic>? decodeInteractionMessage(String raw) {
 /// 시각화 명세(`interactive_graph_2d`·`interactive_surface_3d`)를 실 WebView로 렌더하는 인라인 위젯.
 ///
 /// 라우트를 추가하지 않고(인라인 임베드) `SceneRenderer` 안에서 고정 높이로 표시한다.
-class GraphingCalculatorWebView extends StatefulWidget {
-  const GraphingCalculatorWebView({
-    required this.viz,
-    this.height = 320,
-    this.onInteraction,
-    super.key,
-  });
+class GraphingCalculatorWebView extends ConsumerStatefulWidget {
+  const GraphingCalculatorWebView({required this.viz, this.height = 320, super.key});
 
   /// 렌더할 시각화 명세(`spec`이 Graph2dSpec/Surface3dSpec 구조).
   final Visualization viz;
@@ -53,14 +50,11 @@ class GraphingCalculatorWebView extends StatefulWidget {
   /// 인라인 표시 높이(px).
   final double height;
 
-  /// 학생 조작 이벤트 콜백(학습 로그 워이어용·기본 null이면 debugPrint만).
-  final void Function(Map<String, dynamic> event)? onInteraction;
-
   @override
-  State<GraphingCalculatorWebView> createState() => _GraphingCalculatorWebViewState();
+  ConsumerState<GraphingCalculatorWebView> createState() => _GraphingCalculatorWebViewState();
 }
 
-class _GraphingCalculatorWebViewState extends State<GraphingCalculatorWebView> {
+class _GraphingCalculatorWebViewState extends ConsumerState<GraphingCalculatorWebView> {
   late final WebViewController _controller;
 
   @override
@@ -70,13 +64,13 @@ class _GraphingCalculatorWebViewState extends State<GraphingCalculatorWebView> {
     final param = encodeGraph2dSpecParam(widget.viz.spec ?? const <String, dynamic>{});
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
-      // 학습 로그 인바운드 — 웹 emitInteraction이 보내는 학생 조작 이벤트 수신.
+      // 학습 로그 인바운드 — 웹 emitInteraction이 보내는 학생 조작 이벤트를 백엔드로 적재.
       ..addJavaScriptChannel(
         'WhymathInteraction',
         onMessageReceived: (JavaScriptMessage message) {
           final event = decodeInteractionMessage(message.message);
           if (event == null) return;
-          widget.onInteraction?.call(event);
+          ref.read(interactionLoggerProvider).record(event);
           debugPrint('[whymath] interaction ${event['type']}: ${event['payload']}');
         },
       )
