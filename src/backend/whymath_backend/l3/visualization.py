@@ -87,9 +87,15 @@ _SYSTEM_PROMPT = (
     'animation_prerendered>", "spec": {렌더 파라미터·데이터·축·상호작용 규칙}, '
     '"caption": "<한 줄 캡션>", "interactive": <true|false>}\n'
     "규칙: type은 위 4종 중 하나의 영문 값. animation_prerendered는 조작 불가이므로 "
-    "interactive=false. spec은 해당 type에 맞는 자유 JSON(예: interactive_graph_2d → "
-    "함수식·정의역·슬라이더 파라미터). 사용자가 '권장 시각화 양식'을 주면 그 교수학적 "
-    "양식을 최대한 반영해 spec을 구성하라."
+    "interactive=false. spec은 해당 type에 맞는 자유 JSON. 사용자가 '권장 시각화 양식'을 "
+    "주면 그 교수학적 양식을 최대한 반영해 spec을 구성하라.\n"
+    "type별 spec 예시(가능하면 이 키를 채워라):\n"
+    '  - interactive_graph_2d: {"function":"a*x**2+b*x+c", "domain":[-3,3], '
+    '"parameters":[{"name":"a","min":-5,"max":5,"step":0.1,"default":1}]}\n'
+    '  - interactive_surface_3d: {"surface":"z = x**2 + y**2", "rotatable":true}\n'
+    '  - simulation_probabilistic: {"experiment":"동전 던지기", "trials":200, '
+    '"outcomes":[{"label":"앞면","weight":1},{"label":"뒷면","weight":1}]}\n'
+    "확률 시뮬은 outcomes(결과 라벨+확률 가중치)를 반드시 채워 임의 실험도 표현하라."
 )
 
 

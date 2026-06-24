@@ -107,6 +107,16 @@ class TestParseVisualizationSpec:
         with pytest.raises(InvalidVisualizationSpecError):
             parse_visualization_spec(bad)
 
+    def test_simulation_with_outcomes_accepted(self) -> None:
+        """구조화 outcomes(label+weight) 포함 시뮬 명세가 파스·검증을 통과한다."""
+        text = (
+            '{"type": "simulation_probabilistic", "spec": {"experiment": "동전 던지기", '
+            '"trials": 200, "outcomes": [{"label": "앞면", "weight": 1}, '
+            '{"label": "뒷면", "weight": 1}]}, "interactive": true}'
+        )
+        v = parse_visualization_spec(text)
+        assert v.spec["outcomes"][0]["label"] == "앞면"
+
 
 # ──────────────────────────────────────────────────────────────────────
 # generate_visualization_spec — 라우터 경유(pipeline.generate) + 게이트

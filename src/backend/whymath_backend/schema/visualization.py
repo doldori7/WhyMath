@@ -78,6 +78,15 @@ class Surface3dSpec(BaseModel):
     rotatable: bool | None = Field(default=None, description="회전 조작 가능 여부")
 
 
+class SimOutcome(BaseModel):
+    """simulation_probabilistic 결과값 — 학생이 관찰할 결과 라벨·이론 확률 가중치."""
+
+    model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
+
+    label: str | None = Field(default=None, description="결과 라벨(예: '앞면')")
+    weight: float | None = Field(default=None, ge=0, description="이론 확률 가중치(≥0·상대값)")
+
+
 class SimulationSpec(BaseModel):
     """simulation_probabilistic spec — 확률 시뮬레이션(D3/Plotly·시행 반복·누적)."""
 
@@ -85,6 +94,10 @@ class SimulationSpec(BaseModel):
 
     experiment: str | None = Field(default=None, description="시행 정의(예: '동전 던지기')")
     trials: int | None = Field(default=None, ge=1, description="시행 횟수(≥1)")
+    outcomes: list[SimOutcome] | None = Field(
+        default=None,
+        description="결과값·확률 가중치 목록(예: 앞면 weight 1·뒷면 weight 1)",
+    )
 
 
 class AnimationSpec(BaseModel):

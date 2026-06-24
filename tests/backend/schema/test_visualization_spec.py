@@ -77,6 +77,23 @@ class TestValidSpecs:
         s = SimulationSpec.model_validate({"experiment": "동전 던지기", "trials": 100})
         assert s.trials == 100
 
+    def test_simulation_with_outcomes(self) -> None:
+        s = SimulationSpec.model_validate(
+            {
+                "experiment": "가위바위보",
+                "trials": 300,
+                "outcomes": [
+                    {"label": "가위", "weight": 1},
+                    {"label": "바위", "weight": 1},
+                    {"label": "보", "weight": 1},
+                ],
+            }
+        )
+        assert s.outcomes is not None
+        assert len(s.outcomes) == 3
+        assert s.outcomes[0].label == "가위"
+        assert s.outcomes[0].weight == 1.0
+
     def test_animation_valid(self) -> None:
         s = AnimationSpec.model_validate({"asset_id": "manim-001", "duration_seconds": 12.5})
         assert s.duration_seconds == 12.5
@@ -101,6 +118,10 @@ class TestTypeViolationsRejected:
     def test_simulation_trials_below_one(self) -> None:
         with pytest.raises(ValidationError):
             SimulationSpec.model_validate({"trials": 0})
+
+    def test_simulation_outcome_weight_negative(self) -> None:
+        with pytest.raises(ValidationError):
+            SimulationSpec.model_validate({"outcomes": [{"label": "A", "weight": -1}]})
 
     def test_animation_duration_not_positive(self) -> None:
         with pytest.raises(ValidationError):
