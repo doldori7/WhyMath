@@ -1,7 +1,8 @@
-"""POST /v1/interactions 단위테스트 — 시각화 조작 이벤트 적재. 슬라이스 96-F.
+"""POST /v1/interactions 단위테스트 — 시각화 조작 이벤트 적재. 슬라이스 96-F/J.
 
 라이브 DB 없음: get_session을 add/commit 캡처 fake 세션으로 오버라이드해, 엔드포인트가
-AttemptEvent를 올바르게 구성·적재(commit)하는지 hermetic 검증(204·event_data·422·401).
+AttemptEvent를 올바르게 구성·적재(commit)하는지 hermetic 검증(204·event_data·컨텍스트·422·401).
+J: event_type=시각화조작·concept_id/scene_id(event_data)를 검증한다.
 """
 
 from __future__ import annotations
@@ -75,7 +76,7 @@ def _client(*, authed: bool = True) -> TestClient:
 
 
 def test_post_interaction_persists_event() -> None:
-    """유효 조작 이벤트 → 204 + AttemptEvent 1건 적재(그래프그리기·event_data 보존)·commit."""
+    """유효 조작 이벤트(컨텍스트 포함) → 204 + AttemptEvent 적재(시각화조작·event_data 보존)."""
     session = _CapturingSession()
     app = create_app(provider=_StubProvider())
     app.dependency_overrides[get_consented_user] = _user
@@ -89,20 +90,60 @@ def test_post_interaction_persists_event() -> None:
 
     resp = client.post(
         _PATH,
-        json={"type": "param_change", "payload": {"name": "a", "value": 2.5}, "at": 1234},
+        json={
+            "type": "param_change",
+            "payload": {"name": "a", "value": 2.5},
+            "at": 1234,
+            "concept_id": "UC-MATH-2-FUNC-01",
+            "scene_id": "scene-abc",
+        },
     )
     assert resp.status_code == 204
     assert session.commits == 1
     assert len(session.added) == 1
     event = session.added[0]
     assert isinstance(event, AttemptEvent)
-    assert event.event_type == EventType.그래프그리기
+    # 시각화조작 = 탐구적 조작(그래프그리기 답안 작도와 구분 — J)
+    assert event.event_type == EventType.시각화조작
     assert event.user_id == _UID
+    # 약점개념 흐름엔 problem/attempt가 없어 NULL 유지(거짓 연결 금지 — J)
+    assert event.attempt_id is None
+    assert event.problem_id is None
     assert event.event_data == {
         "interaction": "param_change",
         "payload": {"name": "a", "value": 2.5},
         "client_at": 1234,
+        "concept_id": "UC-MATH-2-FUNC-01",
+        "scene_id": "scene-abc",
     }
+
+
+def test_post_interaction_context_optional() -> None:
+    """concept_id/scene_id 생략 → 204 + event_data에 None으로 적재(하위호환)."""
+    session = _CapturingSession()
+    app = create_app(provider=_StubProvider())
+    app.dependency_overrides[get_consented_user] = _user
+    app.dependency_overrides[get_settings] = _settings
+
+    async def _sess() -> AsyncIterator[_CapturingSession]:
+        yield session
+
+    app.dependency_overrides[get_session] = _sess
+    client = TestClient(app)
+
+    resp = client.post(_PATH, json={"type": "sim_run", "payload": {"trials": 500}})
+    assert resp.status_code == 204
+    event = session.added[0]
+    assert isinstance(event, AttemptEvent)
+    assert event.event_data is not None
+    assert event.event_data["concept_id"] is None
+    assert event.event_data["scene_id"] is None
+
+
+def test_post_interaction_concept_id_too_long_422() -> None:
+    """concept_id 과길이(>128) → 422(max_length)."""
+    resp = _client().post(_PATH, json={"type": "param_change", "concept_id": "x" * 129})
+    assert resp.status_code == 422
 
 
 def test_post_interaction_empty_type_422() -> None:

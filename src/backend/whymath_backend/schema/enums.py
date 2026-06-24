@@ -715,7 +715,7 @@ class AttemptMode(str, Enum):
 
 
 class EventType(str, Enum):
-    """학생 풀이 단계 이벤트 — §6.1 `event_type_enum`(한글 8종 + 검산결과 + 힌트제공).
+    """학생 풀이 단계 이벤트 — §6.1 `event_type_enum`(한글 8종 + 검산결과 + 힌트제공 + 시각화조작).
 
     실시간 분석용(TimescaleDB hypertable `attempt_event`)의 이벤트 종류.
     """
@@ -742,6 +742,16 @@ class EventType(str, Enum):
     도움 감소 곡선은 AI가 *제공한* 노출량(graded 1~4)의 시간 추세이므로 supply가 정본이다.
     스테이트풀 coach가 매 응답 턴에 `decision.hint_level`을 그대로 적재한다(재계산 없음).
     `AttemptMode.힌트제공`(attempt_mode_enum·풀이 방식)과는 *다른 enum*이니 혼동 주의.
+    """
+
+    시각화조작 = "시각화조작"
+    """L5 시각화의 *탐구적* 조작 이벤트(슬라이더·3D 식·확률 시뮬)·슬라이스 96-J.
+
+    event_data={interaction, payload, concept_id, scene_id, client_at}. `그래프그리기`(그래프를
+    그려 *답함*)와 구분되는 *능동 탐구·메타인지* 신호다 — 약점개념 scene의 임베드 계산기에서
+    학생이 파라미터·식을 바꿔 본질을 탐색하는 행동. 둘을 한 enum으로 뭉개면 L2 행동 지표가
+    오염되므로 전용 라벨로 분리한다. 약점개념 흐름엔 problem/attempt가 없어 컨텍스트는
+    concept_id/scene_id(event_data)로 싣고 attempt_id/problem_id는 NULL로 둔다(거짓 연결 금지).
     """
 
 
