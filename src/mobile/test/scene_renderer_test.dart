@@ -66,7 +66,8 @@ void main() {
     expect(find.text('정적 포물선'), findsOneWidget);
   });
 
-  testWidgets('2d가 아닌 시각화는 seed(caption)로 렌더한다', (tester) async {
+  testWidgets('spec 없는 3d 시각화는 seed(caption)로 폴백한다', (tester) async {
+    // 3d+spec은 WebView로 가지만(헤드리스 미pump·수동 검증), spec이 없으면 seed.
     await tester.pumpWidget(
       _wrap(
         _scene(const [
@@ -78,6 +79,24 @@ void main() {
       ),
     );
     expect(find.text('곡면'), findsOneWidget);
+  });
+
+  testWidgets('알 수 없는 시각화 타입은 seed(caption)로 폴백한다', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        _scene(const [
+          SceneElement(
+            kind: 'visualization',
+            ref: Visualization(
+              type: 'simulation_probabilistic',
+              spec: {'experiment': '동전'},
+              caption: '시뮬레이션',
+            ),
+          ),
+        ]),
+      ),
+    );
+    expect(find.text('시뮬레이션'), findsOneWidget);
   });
 
   testWidgets('param_control은 대상 파라미터 cue를 렌더한다', (tester) async {
