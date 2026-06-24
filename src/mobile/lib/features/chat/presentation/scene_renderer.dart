@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/scene_models.dart';
+import 'graphing_calculator_webview.dart';
 
 /// `LearningScene`을 받아 요소들을 세로로 렌더하는 레지스트리 위젯.
 ///
@@ -62,7 +63,7 @@ class SceneRenderer extends StatelessWidget {
   Widget _buildElement(SceneElement element) {
     switch (element.kind) {
       case 'visualization':
-        return _VisualizationSeed(viz: element.ref);
+        return _buildVisualization(element.ref);
       case 'param_control':
         return _SceneRow(
           icon: Icons.tune,
@@ -85,6 +86,23 @@ class SceneRenderer extends StatelessWidget {
       default:
         return const SizedBox.shrink();
     }
+  }
+
+  /// 시각화 렌더 선택: 대화형 2D 그래프·3D 곡면(spec 보유)은 실 WebView, 그 외는 caption seed로 폴백.
+  ///
+  /// `interactive_graph_2d`(2D 함수)·`interactive_surface_3d`(3D 곡면) + `interactive` + 비어있지
+  /// 않은 `spec`일 때만 임베드 계산기를 띄운다(확률·사전렌더 애니메이션·spec 없는 명세는 아직 seed —
+  /// 점층 확장·전방호환). 인코더/WebView는 type-무관이라 spec Map을 그대로 웹에 주입한다.
+  Widget _buildVisualization(Visualization? viz) {
+    const webViewTypes = {'interactive_graph_2d', 'interactive_surface_3d'};
+    if (viz != null &&
+        webViewTypes.contains(viz.type) &&
+        viz.interactive &&
+        viz.spec != null &&
+        viz.spec!.isNotEmpty) {
+      return GraphingCalculatorWebView(viz: viz);
+    }
+    return _VisualizationSeed(viz: viz);
   }
 
   /// 개입 패턴별 *부드러운 사고 유도* 문구 — 정답·수정 금지(낙인/즉답 금지).

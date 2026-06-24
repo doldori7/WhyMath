@@ -10,7 +10,13 @@ import {
   numDeriv,
   num2Deriv,
 } from "./lib/mathExpr";
-import { graph2dSpecToState, parseSpecParam, calcStateToGraph2dSpec } from "./lib/graph2dSpec";
+import {
+  graph2dSpecToState,
+  surface3dSpecToState,
+  parseSpecParam,
+  calcStateToGraph2dSpec,
+} from "./lib/graph2dSpec";
+import { emitInteraction } from "./lib/interactionEmitter";
 
 // ====== [Phase 4] MathLive를 npm 번들에서 동적 로딩 (코드 분할·오프라인 자족) ======
 // 과거엔 CDN <script>로 불러왔으나, WebView/오프라인 자족을 위해 npm 의존성으로 번들한다.
@@ -1403,9 +1409,17 @@ export default function GraphingCalculator() {
   // [Phase 9] 함수 줄의 미분 옵션 변경
   const updateRowField = (id, field, value) =>
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
-  const setSliderValue = (name, value) => setSliders((prev) => ({ ...prev, [name]: { ...prev[name], value } }));
+  const setSliderValue = (name, value) => {
+    emitInteraction("param_change", { name, value }); // 학습 로그: 파라미터 탐구 신호
+    setSliders((prev) => ({ ...prev, [name]: { ...prev[name], value } }));
+  };
   const setSliderRange = (name, key, value) => setSliders((prev) => ({ ...prev, [name]: { ...prev[name], [key]: value } }));
-  const togglePlay = (name) => setSliders((prev) => ({ ...prev, [name]: { ...prev[name], playing: !prev[name].playing } }));
+  const togglePlay = (name) =>
+    setSliders((prev) => {
+      const playing = !prev[name].playing;
+      emitInteraction("param_play", { name, playing }); // 학습 로그: 애니메이션 재생/정지
+      return { ...prev, [name]: { ...prev[name], playing } };
+    });
 
   // [Phase 6] 표 조작 함수들
   const updateCell = (idx, key, val) =>
@@ -1458,7 +1472,15 @@ export default function GraphingCalculator() {
 
   // 저장된 상태를 화면에 다시 적용
   const applyState = (st) => {
-    if (!st || !st.rows) return false;
+    if (!st) return false;
+    // [Phase 11] 3D 곡면 상태(곡면식) — rows 없이 mode3D/expr3D/range3D만 적용.
+    if (st.mode3D) {
+      setMode3D(true);
+      if (typeof st.expr3D === "string" && st.expr3D.trim()) setExpr3D(st.expr3D);
+      if (typeof st.range3D === "number") setRange3D(st.range3D);
+      return true;
+    }
+    if (!st.rows) return false;
     // 불러온 함수에 새 id를 부여하며 복원
     const restored = st.rows.map((r, i) => ({
       id: i + 1, latex: r.latex || "", expr: r.expr || "",
@@ -1473,23 +1495,46 @@ export default function GraphingCalculator() {
     setTable(st.table || [{ x: "", y: "" }]);
     if (st.view) setView(st.view);
     if (typeof st.showRegression === "boolean") setShowRegression(st.showRegression);
+    setMode3D(false); // 2D 명세 적용 시 3D 모드 해제(잔류 방지)
     return true;
   };
 
-  // ====== [코어 연동] Graph2dSpec(?spec=) 소비 — 백엔드/Flutter가 명세 URL로 계산기를 띄움 ======
+  // ====== [코어 연동] Graph2dSpec 소비 — ?spec= URL + window.whymathApplySpec() 훅 ======
   // 코어(L1-L4)의 선언적 Graph2dSpec을 L5(이 도구)가 *소비*만 한다(표현≠의미: 구조를 받아 렌더).
-  // 예: ?spec=<base64({"function":"a*x**2","domain":[-5,5],"parameters":[{"name":"a","default":2}]})>
+  // 두 경로: (1) ?spec=<base64(JSON)> 진입 URL, (2) 전역 훅 window.whymathApplySpec(raw) —
+  // Flutter WebView는 쿼리스트링을 못 싣는 loadFlutterAsset를 쓰므로 onPageFinished에서 이 훅을
+  // runJavaScript로 호출해 명세를 주입한다. raw는 base64(JSON) 또는 raw JSON 모두 허용(parseSpecParam).
   useEffect(() => {
+    // base64(JSON)/raw JSON 문자열을 받아 계산기 상태로 적용(잘못된 입력은 무시·false 반환).
+    const apply = (raw) => {
+      try {
+        const spec = parseSpecParam(raw);
+        if (!spec) return false;
+        // 곡면식(surface)이면 3D 어댑터, 아니면 2D 어댑터.
+        const st = spec.surface != null ? surface3dSpecToState(spec) : graph2dSpecToState(spec);
+        if (!st) return false;
+        applyState(st);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    // (2) 전역 훅 등록 — Flutter WebView/외부 호스트가 마운트 후 명세를 주입.
+    if (typeof window !== "undefined") window.whymathApplySpec = apply;
+    // (1) ?spec= 진입 URL 자동 소비.
     try {
-      if (typeof window === "undefined" || !window.location) return;
-      const raw = new URLSearchParams(window.location.search).get("spec");
-      const spec = parseSpecParam(raw);
-      if (!spec) return;
-      const st = graph2dSpecToState(spec);
-      if (st) applyState(st);
+      if (typeof window !== "undefined" && window.location) {
+        apply(new URLSearchParams(window.location.search).get("spec"));
+      }
     } catch {
       /* 잘못된 spec은 조용히 무시(기본 빈 계산기로 시작) */
     }
+    return () => {
+      // 언마운트 시 이 인스턴스가 등록한 훅만 해제(다른 인스턴스 덮어쓰지 않음).
+      if (typeof window !== "undefined" && window.whymathApplySpec === apply) {
+        delete window.whymathApplySpec;
+      }
+    };
     // 마운트 1회만 — URL은 진입 시점 고정
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -1634,13 +1679,16 @@ export default function GraphingCalculator() {
               <div style={{ fontSize: 13, color: "#999", marginBottom: 8, fontWeight: "bold" }}>3D 곡면 z = f(x, y)</div>
               <input
                 value={expr3D}
-                onChange={(e) => setExpr3D(e.target.value)}
+                onChange={(e) => {
+                  emitInteraction("surface_change", { expr: e.target.value }); // 학습 로그: 3D 곡면식 변경
+                  setExpr3D(e.target.value);
+                }}
                 placeholder="예: x^2 + y^2"
                 style={{ width: "100%", fontSize: 16, padding: "8px 10px", border: "1px solid #ddd", borderRadius: 6, fontFamily: "monospace", boxSizing: "border-box" }}
               />
               <div style={{ marginTop: 12, fontSize: 13, color: "#666" }}>
                 정의역 범위: ±{range3D}
-                <input type="range" min={1} max={10} step={1} value={range3D} onChange={(e) => setRange3D(parseInt(e.target.value))} style={{ width: "100%", accentColor: "#2d70b3", marginTop: 4 }} />
+                <input type="range" min={1} max={10} step={1} value={range3D} onChange={(e) => { const r = parseInt(e.target.value); emitInteraction("surface_range", { range: r }); setRange3D(r); }} style={{ width: "100%", accentColor: "#2d70b3", marginTop: 4 }} />
               </div>
               <div style={{ marginTop: 16, fontSize: 12, color: "#999", lineHeight: 1.7 }}>
                 <b>조작:</b> 드래그=회전 · 휠=확대/축소
