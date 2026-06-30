@@ -6,13 +6,16 @@
 `recommended_visual_styles`·`cognitive_type`가 결정론 골격에 반영된다.
 
 범위(S5a): 단일 진단 → 학습 장면 서비스 + HTTP 엔드포인트(약점 선택은 `compute_concept_diagnoses`가
-weakest-first 정렬 → 호출자가 [0]을 넘김). ★`learner_context.active_hypothesis_ids`는 빈 목록 —
-WH-1 가설 store 조회 기반 오개념 프로브 적응은 후속이라 여기선 프로브가 생성되지 않는다(정직한
-경계). 레이트리밋은 visualization 버킷 재사용(장면 생성 = 내부 시각화 spec LLM 1회).
+weakest-first 정렬 → 호출자가 [0]을 넘김). `learner_context.active_hypothesis_ids`는 WH-1 가설
+store(`get_active_hypotheses`)에서 학생의 *활성 오개념 가설*을 조회해 채운다 — `scene_generation`이
+이를 ∩ 카탈로그로 *적응형 오개념 프로브*로 만든다(RS2 거짓 낙인 차단·근거 있는 가설만). 가설이
+없으면(신규 학생 등) 빈 목록이라 프로브 0(정직한 경계 유지). 레이트리밋은 visualization 버킷
+재사용(장면 생성 = 내부 시각화 spec LLM 1회).
 """
 
 from __future__ import annotations
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -33,6 +36,7 @@ from whymath_backend.l3.pipeline import QualityQueueUnavailableError
 from whymath_backend.l3.visualization import InvalidVisualizationSpecError
 from whymath_backend.l4.learning_scene import LearningScene, SceneLearnerContext
 from whymath_backend.l4.lthc import mastery_to_level
+from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
 from whymath_backend.l4.scene_generation import generate_learning_scene
 
 
@@ -44,6 +48,7 @@ async def scene_for_concept_diagnosis(
     cache: CacheBackend,
     trace: TraceSink,
     student_subscription: str = "free",
+    student_id: uuid.UUID | None = None,
 ) -> LearningScene | None:
     """진단된 개념 → Concept 로드 → 맞춤 학습 장면 생성. Concept 미존재면 None.
 
@@ -54,14 +59,17 @@ async def scene_for_concept_diagnosis(
     검증 실패(`InvalidVisualizationSpecError`)는 *전파*된다(생성기→호출자·슬93 동일). Concept가 DB에
     없으면(orphan id) None을 돌려준다(장면 스킵·예외 아님).
 
-    ★`learner_context`는 진단 스냅샷(mastery·theta)만 담는다 — `active_hypothesis_ids`는 빈 목록
-    (WH-1 가설 store 조회 기반 오개념 프로브 적응은 후속·여기선 프로브 미생성).
+    **오개념 프로브 적응**: `student_id`가 주어지면 WH-1 가설 store(`get_active_hypotheses`·L4)에서
+    그 학생의 *활성 오개념 가설*을 조회해 `active_hypothesis_ids`로 넘긴다 — `scene_generation`이
+    이를 ∩ 카탈로그로 *적응형 프로브*로 만든다(근거 있는 가설만·RS2 거짓 낙인 차단). `student_id`가
+    None이면(익명·맥락 없음) 조회 생략·빈 목록(프로브 0·기존 동작).
 
     Args:
         diagnosis: 개념 진단(`compute_concept_diagnoses`의 원소·약점 먼저 정렬됨).
-        session: DB 세션(Concept 로드용·L5가 보유).
+        session: DB 세션(Concept 로드·가설 store 조회용·L5가 보유).
         provider/cache/trace: L3 `pipeline.generate` DI(라우터 경유 생성·캐시·관측).
         student_subscription: 클라우드 승급 가드용 구독 등급(기본 free).
+        student_id: 가설 store 조회용 학생 id(None이면 프로브 적응 생략).
 
     Returns:
         검증된 `LearningScene`, Concept 미존재면 None.
@@ -73,10 +81,15 @@ async def scene_for_concept_diagnosis(
         diagnosis.bkt_mastery if diagnosis.bkt_mastery is not None else diagnosis.irt_mastery_proxy
     )
     level = mastery_to_level(mastery) if mastery is not None else "초보"
+    # WH-1 활성 가설 → 적응형 오개념 프로브(student_id 있을 때만 조회·근거 있는 가설만).
+    active_hypothesis_ids: list[str] = []
+    if student_id is not None:
+        hypotheses = await get_active_hypotheses(session, student_id)
+        active_hypothesis_ids = [h.misconception_id for h in hypotheses]
     learner_context = SceneLearnerContext(
         mastery_level=mastery,
         theta=diagnosis.irt_theta,
-        active_hypothesis_ids=[],
+        active_hypothesis_ids=active_hypothesis_ids,
     )
     req = RoutingRequest(
         task_type="generate",
@@ -118,9 +131,10 @@ async def post_weak_concept_scene(
     """인증 학생의 *가장 약한 개념*을 진단(L2)해 맞춤 학습 장면(L4)을 생성한다.
 
     흐름: `compute_concept_diagnoses`(약점 먼저 정렬) → 최약점 → `scene_for_concept_diagnosis`
-    (Concept 로드·수준 라벨·장면 생성·라우터 경유). provider/cache/trace는 app.state에서
-    꺼낸다. 에러: 진단 없음/Concept 없음=404·장면 검증 실패=422·LLM 큐 불가=503. 레이트리밋은
-    visualization 버킷 재사용(장면 생성 = 내부 시각화 spec LLM 1회).
+    (Concept 로드·수준 라벨·WH-1 활성 가설 조회→적응형 오개념 프로브·장면 생성·라우터 경유).
+    provider/cache/trace는 app.state에서 꺼낸다. 에러: 진단 없음/Concept 없음=404·장면 검증
+    실패=422·LLM 큐 불가=503. 레이트리밋은 visualization 버킷 재사용(장면 생성 = 내부 시각화
+    spec LLM 1회).
     """
     diagnoses = await compute_concept_diagnoses(session, user.user_id)
     if not diagnoses:
@@ -135,6 +149,7 @@ async def post_weak_concept_scene(
             provider=get_provider(request),
             cache=get_cache(request),
             trace=get_trace(request),
+            student_id=user.user_id,
         )
     except InvalidVisualizationSpecError as exc:
         raise HTTPException(
