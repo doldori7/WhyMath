@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "note": "SymPy(동치·정오 단일 권위) ↔ mathjs(렌더·수치 평가 전용) 수식 표기 계약. 거듭제곱은 caret(^) 표준(SymPy convert_xor=True·mathjs 기본), 곱은 명시 '*'를 canonical로 둔다. SymPy sympify는 implicit multiplication(예 '2x')을 지원하지 않으므로 공유 계약은 canonical 형태(명시 '*'·caret '^')에만 한정한다. py·js 양측이 같은 입력을 같은 수치로 해석하는지 golden test로 교차검증해 표기 drift를 막는다. implicit mult·unicode(π)·문자 정규화는 계약 밖(후속).",
+  "authority": "backend SymPy (l3/verify_step.py·verify_answer.py)",
+  "render_only": "web mathjs (src/web/graphing-calculator/src/lib/graph2dSpec.js·mathExpr.js)",
+  "numeric_cases": [
+    {"id": "caret_power", "expr": "x^3", "vars": {"x": 2}, "value": 8.0, "tol": 1e-9},
+    {"id": "coeff_power", "expr": "3*x^2", "vars": {"x": 2}, "value": 12.0, "tol": 1e-9},
+    {"id": "paren_product", "expr": "(x+1)*(x-1)", "vars": {"x": 4}, "value": 15.0, "tol": 1e-9},
+    {"id": "trig_identity", "expr": "sin(x)^2+cos(x)^2", "vars": {"x": 0.7}, "value": 1.0, "tol": 1e-9},
+    {"id": "sqrt_square", "expr": "sqrt(x^2)", "vars": {"x": 5}, "value": 5.0, "tol": 1e-9},
+    {"id": "division", "expr": "x/4+1", "vars": {"x": 8}, "value": 3.0, "tol": 1e-9}
+  ],
+  "equivalence_cases": [
+    {"id": "distributive", "a": "2*(x+1)", "b": "2*x+2", "equivalent": true},
+    {"id": "binomial_expand", "a": "(x+1)^2", "b": "x^2+2*x+1", "equivalent": true},
+    {"id": "freshman_dream", "a": "(a+b)^2", "b": "a^2+b^2", "equivalent": false},
+    {"id": "like_terms", "a": "x+x+x", "b": "3*x", "equivalent": true}
+  ]
+}

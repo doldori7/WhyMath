@@ -3,6 +3,12 @@
 // 구현: src/backend/whymath_backend/schema/visualization.py)을 *수정 없이* 웹 계산기 상태로 변환한다.
 // "표현 ≠ 의미"(슬라이스 89) — 코어는 구조(JSON)를 주고, L5(이 웹 도구)는 그것을 받아 렌더만 한다.
 //
+// 권위 경계(docs/architecture/notation_contract.md): mathjs는 *렌더·수치 평가 전용*이며 수식 동치/정오
+// 판정에 관여하지 않는다 — 동치·정오 판정 단일 권위는 백엔드 SymPy(L3 verify_step·verify_answer)다.
+// 거듭제곱은 caret `^`가 표준이라 파이썬식 `**`는 여기서 `^`로 변환만 한다(SymPy는 convert_xor로 둘 다
+// 읽음). 두 파서가 같은 canonical 표기를 같은 수치로 해석함은 공유 golden test로 교차검증한다
+// (test/notation_contract.test.js ↔ backend·공유 data/notation_contract.json).
+//
 // Graph2dSpec 형태:
 //   { function: "a*x**2+b*x+c", domain: [xMin, xMax], parameters: [{name,min,max,step,default}] }
 //

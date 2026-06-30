@@ -2,6 +2,10 @@
 // GraphingCalculator/QuizMode가 import해 쓰는 순수 함수 모음. 캔버스·React state에 의존하지 않아
 // 단위 테스트가 쉽다(커버리지 70%+ 게이트의 주 대상). 원본 graphingcalculator.jsx의 모듈 스코프
 // 헬퍼 + 컴포넌트 내부 순수 로직을 이곳으로 추출했다(시그니처·동작 동일 — 시각적 회귀 0 목표).
+//
+// 권위 경계(docs/architecture/notation_contract.md): 이 헬퍼들(extractVars·sameGraph·latexToMath 등)은
+// *렌더·수치 평가 전용*이다. 수식 동치/정오 판정의 단일 권위는 백엔드 SymPy(L3 verify_step·verify_answer)
+// 이며, mathjs 수치 비교(sameGraph)는 렌더 보조일 뿐 정오 판정 근거가 아니다.
 import * as math from "mathjs";
 
 // ====== LaTeX → mathjs 변환 ======
