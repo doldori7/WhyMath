@@ -41,8 +41,23 @@ from typing import Any, Protocol, runtime_checkable
 
 from data_pipeline.atom_graph.models import AtomRelation
 from data_pipeline.atom_graph.transform import TransformResult
+from data_pipeline.atom_graph.validate import _find_prerequisite_cycle
 
 logger = logging.getLogger("data_pipeline.atom_graph.load")
+
+
+class AtomGraphCycleError(ValueError):
+    """선수엣지에 순환이 있어 Neo4j 적재를 거부할 때 — 학습 경로 구성 불가(DAG 불변식).
+
+    `load` CLI 경로는 graph.json을 신뢰해 validate를 재호출하지 않으므로(transform-v1에서 이미
+    통과한 산출물 가정), 적재 직전 여기서 한 번 더 막는다 — 손수 편집되거나 옛 graph.json이
+    재적재될 때 cycle 유입을 차단한다(math_dsl_risk_register.md Q10-②).
+    """
+
+    def __init__(self, cycle: list[str]) -> None:
+        self.cycle = cycle
+        super().__init__("순환 선수관계로 Neo4j 적재 거부: " + " → ".join(cycle))
+
 
 # Neo4j 접속 env 키. 시크릿은 코드에 두지 않고 *전적으로* env에서 읽는다(CLAUDE.md 보안).
 ENV_URI = "NEO4J_URI"
@@ -293,6 +308,12 @@ def load_graph(
     Returns:
         적재 결과 요약(LoadReport).
     """
+    # 적재 전 cycle 방어선(DAG 불변식·hard fail). load CLI는 validate를 재호출하지 않으므로
+    # (transform-v1 산출 신뢰) 여기서 한 번 더 막는다 — validate의 동일 탐지기를 재사용한다.
+    cycle = _find_prerequisite_cycle(result.edges)
+    if cycle is not None:
+        raise AtomGraphCycleError(cycle)
+
     concept_dumps = [c.model_dump() for c in result.concepts]
     edge_dumps = [e.model_dump() for e in result.edges]
 
@@ -319,6 +340,7 @@ def load_graph(
 __all__ = [
     "CONSTRAINT_CYPHER",
     "CONSTRAINT_NAME",
+    "AtomGraphCycleError",
     "ENV_PASSWORD",
     "ENV_URI",
     "ENV_USER",
