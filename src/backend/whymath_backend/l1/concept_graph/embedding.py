@@ -43,7 +43,11 @@ from whymath_backend.config import Settings, get_settings
 # (`semantic.pgvector_index`)에 살아 L1이 L4를 위로 import(지연 import로 가린 순환)했으나,
 # 프리미티브를 L1로 내려 의존을 *아래로* 뒤집었다(L1→L1·순환 0). L4 오개념 의미 매칭도 같은
 # 프리미티브를 쓰므로 좌석 공유는 유지된다.
-from whymath_backend.l1.embedding_primitives import provider_model_identity, text_hash
+from whymath_backend.l1.embedding_primitives import (
+    join_embedding_text,
+    provider_model_identity,
+    text_hash,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -81,12 +85,7 @@ def concept_embedding_text(
     name_ko가 비면(이론상 graph.json은 name_ko 필수) 나머지만으로 표현을 만든다(빈 표현 가능 —
     호출자가 빈 표현을 임베딩하지 않도록 거를 수 있으나, 여기선 합성만 한다).
     """
-    parts = [
-        str(value).strip()
-        for value in (name_ko, metaphor, accepted_expressions)
-        if value is not None and str(value).strip()
-    ]
-    return ". ".join(parts)
+    return join_embedding_text(name_ko, metaphor, accepted_expressions)
 
 
 def load_concepts_from_graph_json(path: Path) -> list[ConceptText]:

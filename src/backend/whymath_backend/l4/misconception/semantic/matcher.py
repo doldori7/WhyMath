@@ -30,7 +30,7 @@ FakeEmbeddingProvider를 주입해 라이브 모델 없이 배선·임계값·�
 from __future__ import annotations
 
 from whymath_backend.config import Settings, get_settings
-from whymath_backend.l1.embedding_primitives import provider_model_identity
+from whymath_backend.l1.embedding_primitives import join_embedding_text, provider_model_identity
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.models import Misconception, MisconceptionMatch
 from whymath_backend.l4.misconception.semantic.index import (
@@ -48,9 +48,10 @@ def catalog_text(m: Misconception) -> str:
 
     *틀린 믿음의 자연어*를 임베딩해 학생의 (패러프레이즈된) 틀린 진술과 가까워지게 한다.
     name_kr(짧은 라벨)와 canonical_statement(잘못된 진술)를 합쳐 신호를 키운다. signals/
-    regex_signals(토큰·정규식)는 *표면 매칭*용이라 의미 임베딩엔 넣지 않는다.
+    regex_signals(토큰·정규식)는 *표면 매칭*용이라 의미 임베딩엔 넣지 않는다. 결합 규칙은 개념·
+    원자판과 공유하는 단일 포맷 권위(`join_embedding_text`)를 쓴다(두 필드 항상 존재 → 출력 동일).
     """
-    return f"{m.name_kr}. {m.canonical_statement}"
+    return join_embedding_text(m.name_kr, m.canonical_statement)
 
 
 class SemanticMatcher:
