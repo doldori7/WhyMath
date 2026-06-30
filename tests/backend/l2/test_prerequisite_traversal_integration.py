@@ -71,6 +71,18 @@ def _edge(from_id: uuid.UUID, to_id: uuid.UUID, strength: float) -> ConceptEdge:
     )
 
 
+def _typed_edge(
+    from_id: uuid.UUID, to_id: uuid.UUID, edge_type: EdgeType, strength: float
+) -> ConceptEdge:
+    """임의 타입 엣지 — 약한 관계(ANALOGOUS_TO 등)를 DB에 심어 traversal 격리를 검증할 때 쓴다."""
+    return ConceptEdge(
+        from_concept_id=from_id,
+        to_concept_id=to_id,
+        edge_type=edge_type.value,
+        edge_strength=strength,
+    )
+
+
 async def _cleanup(concept_ids: list[uuid.UUID]) -> None:
     """concept_edge(엣지) → concept(노드) 순 정리(FK 순서)."""
     engine = create_async_engine(_settings().database_url)
@@ -225,3 +237,63 @@ def test_fetch_prerequisites_diamond_keeps_min_depth_on_live_pg() -> None:
         asyncio.run(_run())
     finally:
         asyncio.run(_cleanup([c, a, b, d]))
+
+
+def test_fetch_prerequisites_excludes_weak_relations_on_live_pg() -> None:
+    """약한 관계 엣지(ANALOGOUS_TO·CONTRASTS)가 DB에 있어도 선수 traversal에 *새지 않는다*.
+
+    math_dsl_risk_register.md Q2 — 약한 관계가 미래에 적재돼도(혹은 손수 편집돼도) PREREQUISITE
+    그래프 traversal은 그것을 *후행→선수* 경로로 따라가면 안 된다(N² 폭발·오추천 차단). 같은
+    후행 C에 PREREQUISITE 선수 P와 약한 관계 이웃 W를 함께 심고, traversal이 P만 반환함을 검증.
+    `fetch_prerequisites`는 base·recursive 양 가지에서 `edge_type == PREREQUISITE`로 필터한다.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    sfx = uuid.uuid4().hex[:8]
+    c, p, w = (uuid.uuid4() for _ in range(3))
+
+    async def _setup() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as s:
+                s.add_all(
+                    [
+                        _concept(c, f"UC.weak.{sfx}.c", "후행"),
+                        _concept(p, f"UC.weak.{sfx}.p", "선수"),
+                        _concept(w, f"UC.weak.{sfx}.w", "유사개념"),
+                    ]
+                )
+                await s.commit()
+            async with sm() as s:
+                s.add_all(
+                    [
+                        _edge(p, c, 0.9),  # P = C의 PREREQUISITE 선수(traversal 대상)
+                        # W↔C 약한 관계 — traversal에 *새면 안 됨*(from=W·to=C라 PREREQUISITE면
+                        # 잡혔을 위치). edge_type만 약한 관계라 필터로 배제돼야 한다.
+                        _typed_edge(w, c, EdgeType.ANALOGOUS_TO, 0.9),
+                        _typed_edge(w, p, EdgeType.CONTRASTS, 0.9),
+                    ]
+                )
+                await s.commit()
+        finally:
+            await engine.dispose()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as session:
+                rows = await fetch_prerequisites(session, c, max_depth=5)
+                # 오직 PREREQUISITE 선수 P만 — 약한 관계 이웃 W는 어떤 깊이에서도 제외.
+                assert {r.concept_id for r in rows} == {p}
+                assert w not in {r.concept_id for r in rows}
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        asyncio.run(_run())
+    finally:
+        asyncio.run(_cleanup([c, p, w]))

@@ -195,7 +195,11 @@ class Concept(BaseModel):
     )
     common_misconceptions: list[dict[str, Any]] = Field(
         default_factory=list,
-        description='흔한 오개념 목록 [{"misconception":"...","correction":"..."}](자유형 JSONB)',
+        description='흔한 오개념 목록 [{"misconception":"...","correction":"..."}](자유형 JSONB). '
+        "*seed 메타 전용* — 런타임 오개념 프로브/진단 근거로 쓰지 않는다(낙인·즉답·날조 차단). "
+        "런타임 정본은 검증된 오개념 카탈로그(kebab-id)·활성 가설이다(Q1/Q8·플레이북 §3.4 "
+        "'노드에 오개념 리스트 내장 금지'). 이 미사용은 test_concept_misconception_runtime.py가 "
+        "정적으로 동결한다.",
     )
 
     # ===== 벡터 임베딩 ID (pgvector·Postgres 동거 참조·슬98) =====
