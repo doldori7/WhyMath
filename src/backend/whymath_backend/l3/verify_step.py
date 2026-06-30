@@ -6,6 +6,12 @@
 훑어 *거짓 등식*만 보는 **2-state**(거짓이면 신호·아니면 None)라, "한 단계가 올바른 변형인가"를
 3상태로 묻는 verify_step과 *용도가 다르다*. 본 모듈은 그 격상판의 *순수 primitive*다.
 
+표기 계약·권위 경계(math_dsl_remediation_design.md·docs/architecture/notation_contract.md): SymPy는
+이 시스템의 *수식 동치·정오 판정 단일 권위*다. 웹 mathjs(`graph2dSpec.js`·`mathExpr.js`)는 렌더·수치
+평가 전용이며 동치 판정에 관여하지 않는다. 두 파서가 같은 canonical 표기(명시 `*`·caret `^`)를 같은
+수치로 해석함은 golden test로 교차검증한다(`tests/backend/l3/test_notation_contract.py` ↔
+`src/web/graphing-calculator/test/notation_contract.test.js`·공유 `data/notation_contract.json`).
+
 핵심 설계 계약:
   - **식 변형(대수)**: SymPy *심볼릭 동치* 검증 → `correct`/`incorrect`. 자유변수가 있어도
     된다("2(x+1)" ≡ "2x+2"). 기존 `_equality_is_false`는 *numeric-only*(free_symbols 있으면

@@ -10,6 +10,10 @@
 하며(§4 판정 규칙), 그 combiner는 `whs/verdict.py`다 — 본 모듈은 Tier1 *단독*이라 그 자체로
 최종 통과를 의미하지 않는다.
 
+표기 계약·권위 경계(docs/architecture/notation_contract.md): SymPy(verify_step·verify_answer)는 수식
+동치·정오 판정 단일 권위다. 웹 mathjs는 렌더·수치 평가 전용(동치 판정 미관여) — 공유 표기 계약은
+`data/notation_contract.json` golden test로 양측 교차검증한다.
+
 커버하는 조건 형태(Tier1 §4):
   - **등식**(`=`/`Eq`/항등식): `lhs - rhs`를 잔차로 만들어 |residual|<tol 검산.
     함수 동치 "f(x)=g(x) 항등식"(예 `sin(x)**2 + cos(x)**2 = 1`)도 이 등식 + 자유변수

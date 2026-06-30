@@ -15,8 +15,14 @@
 | cycle 검출(populate/load 방어선) | **구현 완료** | 저위험·기존 탐지기 미러 |
 | 교육과정 `grade_introduced`·`semester_introduced` 제거 | **구현 완료** | NULL·중복·소비처 0 |
 | 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 | **설계**(§3) | 소비처 있음(destructive) |
-| 오개념 ID 통합(kebab 30 ↔ M-id 839) | **설계**(§1) | 44+ 파일 강결합·crosswalk·학생데이터 미정 |
-| 파서(동치 권위) 일원화 | **설계**(§2) | 경계 정의 문제 |
+| 오개념 ID 통합(kebab 30 ↔ M-id 839) | **설계**(§1) — M-id 로더는 이미 구현됨, 잔여 = crosswalk+rekey | 44+ 파일 강결합·crosswalk·학생데이터 미정 |
+| 파서(동치 권위) 일원화 | **구현 완료**(§2) — 경계 명문화 + golden test | `notation_contract.md`·`data/notation_contract.json` |
+
+> **정정(2026-06-30)**: 초안(v0.1)은 M-id 로더를 "없음(스키마만)"이라 했으나 *오보*다 —
+> `l1/misconception/catalog_loader.py`(+`populate` CLI·`atom_catalog`·단위/통합 테스트·alembic
+> `c4d5e6f7a8b9`)로 **이미 구현·적재 가능**하다. 따라서 오개념 ID 통합의 "1단계 로더"는 완료 상태이며
+> 잔여는 §1.3의 ②crosswalk·④학생데이터 rekey다. 파서 항목(§2)은 본 슬라이스로 *경계 명문화 +
+> golden test*까지 구현 완료(`notation_contract.md`).
 
 ---
 
@@ -26,7 +32,8 @@
 - **kebab 30종**(`l4/misconception/catalog.py` 하드코딩) = *런타임 탐지·개입 정본*. 44+ 파일이
   `CATALOG_BY_ID`에 강결합(진단·judge·distractor·probe·learning_scene·wh1_loop 게이트).
 - **M-id 839종**(`schema/misconception_catalog.py`·`data/corpus/misconceptions_v1/`) = *콘텐츠
-  카탈로그*. **로더·API 없음**(스키마만).
+  카탈로그*. **로더 구현 완료**(`l1/misconception/catalog_loader.py`·`populate` CLI·alembic
+  `c4d5e6f7a8b9`·단위/통합 테스트) — `misconception_catalog` 테이블에 멱등 적재 가능. (API 노출은 후속.)
 - 둘 사이 **crosswalk 부재·FK 없음**. 런타임 테이블(`misconception_hypothesis`·`evidence_link`·
   `misconception_embedding`)은 kebab `misconception_id`를 **TEXT 느슨참조**로 보유.
 - 개념노드 `common_misconceptions`(JSONB 자유서술)는 또 다른 표현(런타임 경로 미사용·`05a` RS2).
@@ -35,8 +42,8 @@
 오개념 = **단일 canonical 정체성**·독립 그래프·reactive 로드. 표현 1개당 진실 id 1개.
 
 ### 1.3 단계 슬라이스 (제안)
-1. **M-id 로더 + ORM 적재**(저위험·런타임 무영향) — `misconceptions_v1` 839 → `misconception_catalog`
-   테이블. kebab 경로 불변. 측정만(노출 0).
+1. ✅ **M-id 로더 + ORM 적재**(완료·저위험·런타임 무영향) — `misconceptions_v1` 839 →
+   `misconception_catalog` 테이블(`l1/misconception/catalog_loader.py`). kebab 경로 불변.
 2. **crosswalk 설계·구축** — kebab 30 → M-id 매핑 테이블(`misconception_crosswalk`: kebab_id,
    mis_id, confidence, method[manual|embedding|standard_code]). 30종은 수작업 검수 가능 규모.
    `concept_src_id`·`standard_code` 느슨연결을 후보 생성에 활용하되 **사람 승인 게이트** 필수.
