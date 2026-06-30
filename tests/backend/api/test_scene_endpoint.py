@@ -119,6 +119,7 @@ class _FakeScene:
         cache: object,
         trace: object,
         student_subscription: str = "free",
+        student_id: object = None,
     ) -> LearningScene | None:
         self.provider = provider
         if self.raises is not None:

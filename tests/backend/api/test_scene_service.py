@@ -10,6 +10,7 @@ import uuid
 
 import pytest
 
+from whymath_backend.api import scene as scene_mod
 from whymath_backend.api.scene import scene_for_concept_diagnosis
 from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
@@ -17,15 +18,21 @@ from whymath_backend.l3.models import RoutingDecision
 from whymath_backend.l3.visualization import InvalidVisualizationSpecError
 from whymath_backend.l4.learning_scene import (
     LearningScene,
+    MisconceptionProbeElement,
     SocraticPromptElement,
     VisualizationElement,
 )
+from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.schema.concept import Concept
 from whymath_backend.schema.enums import (
     CognitiveType,
     ConceptLevel,
     VisualizationStyle,
 )
+
+# 정본 오개념 카탈로그의 실 id(프로브 생성 검증용·동적 취득).
+_VALID_MC_ID = next(iter(CATALOG_BY_ID))
 
 
 class _FakeProvider:
@@ -157,6 +164,62 @@ async def test_none_mastery_defaults_level_chobo() -> None:
     )
     assert isinstance(scene, LearningScene)
     assert "초보" in provider.calls[0][0]
+
+
+@pytest.mark.asyncio
+async def test_active_hypotheses_become_probes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """student_id 제공 → WH-1 가설 store 조회 → 활성 가설이 적응형 오개념 프로브로 생성."""
+
+    async def _fake_active(session: object, user_id: uuid.UUID) -> list[MisconceptionHypothesis]:
+        return [
+            MisconceptionHypothesis(
+                misconception_id=_VALID_MC_ID,
+                confidence=0.8,
+                turns_since_evidence=0,
+                evidence_count=2,
+            )
+        ]
+
+    monkeypatch.setattr(scene_mod, "get_active_hypotheses", _fake_active)
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+        student_id=uuid.uuid4(),
+    )
+    assert scene is not None
+    assert scene.learner_context is not None
+    assert scene.learner_context.active_hypothesis_ids == [_VALID_MC_ID]
+    probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
+    assert len(probes) == 1
+    assert probes[0].misconception_id == _VALID_MC_ID
+
+
+@pytest.mark.asyncio
+async def test_no_student_id_skips_hypothesis_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    """student_id 미제공 → 가설 store 조회 생략·active_hypothesis_ids 빈 목록(프로브 0)."""
+
+    async def _boom(session: object, user_id: uuid.UUID) -> list[MisconceptionHypothesis]:
+        raise AssertionError("student_id None이면 가설 store를 조회하면 안 된다")
+
+    monkeypatch.setattr(scene_mod, "get_active_hypotheses", _boom)
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert scene is not None
+    assert scene.learner_context is not None
+    assert scene.learner_context.active_hypothesis_ids == []
+    assert not any(isinstance(el, MisconceptionProbeElement) for el in scene.elements)
 
 
 @pytest.mark.asyncio
