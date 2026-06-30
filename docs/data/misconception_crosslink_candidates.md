@@ -24,7 +24,17 @@
 
 - **canonical_statement / student_wrong_thinking 의미 일치**(주신호 — 내용 동일/유사).
 - domain·subunit 주제 정합·standard_code/concept_src_id 인접(보조).
-- (후속) M-id 임베딩 코사인 — 본 초안은 *텍스트 내용 매칭*만(임베딩 populate는 별 슬라이스).
+
+### 1.1 후보 재생성 도구 (자동)
+본 초안은 `l1/misconception/crosslink_candidates.py`(`propose_crosslink_candidates`)로 *재생성
+가능*하다 — kebab `catalog_text` × M-id(`canonical_statement`+`student_wrong_thinking`)를 임베딩
+코사인으로 비교해 kebab별 상위 후보를 제안한다. **신호 범위(정직)**: kebab 카탈로그엔
+`standard_code`·`error_type`가 *없어* 그 두 신호는 적용 불가 → **주신호 = 임베딩 코사인**. domain은
+체계가 달라 점수 미반영(rationale 메모만).
+- 실행(실모델·ops): `python -m whymath_backend.l1.misconception.crosslink_candidates --out <후보.json>`
+  (provider는 Settings·로컬 bge-m3 기본). 출력 top key는 `"candidates"`라 로더(`"crosslinks"`)가
+  *직접 못 읽는* 검수 artifact다(자동 적재 차단).
+- **자동 채택 금지**: 도구 출력도 *후보*다 — 본 표처럼 사람 검수 후 승인분만 적재한다.
 
 ## 2. 후보 매핑 (kebab → M-id) — 검수 대상
 
