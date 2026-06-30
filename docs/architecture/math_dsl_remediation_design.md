@@ -55,9 +55,15 @@
    신호 정정: kebab엔 standard_code·error_type 부재 → 주신호 = 임베딩 코사인(domain은 메모만).
    *(잔여)* **매핑 채택·적재** — 검수자가 승인분만 `"crosslinks"` JSON으로 옮겨 `crosslink_loader`
    적재(자동 커밋 금지·오도 코칭 차단).
-3. **canonical id 선정 + 게이트 공존**(잔여) — 신규 노출은 M-id canonical·kebab은 런타임 탐지 키로
-   잔존(crosswalk로 항상 매핑). 게이트(`learning_scene.py`·`wh1_loop.py`·`evidence_store.py`)는
+3. 🟡 **canonical id 선정 + 게이트 공존**(진행) — 신규 노출은 M-id canonical·kebab은 런타임 탐지
+   키로 잔존(crosswalk로 항상 매핑). 게이트(`learning_scene.py`·`wh1_loop.py`·`evidence_store.py`)는
    **두 체계 공존 분기**로 확장 — *노출 전 측정*(`04b` shadow→canary).
+   *(완료·shadow 1차)* **증거 저장소 게이트 shadow 배선** — `evidence_store.log_evidence`가
+   `misconception_crosslink_mode=="shadow"`일 때 kebab→M-id 매핑 coverage를 *비차단·비노출*로
+   해석·로깅(`l4/misconception/crosslink_shadow.py`·shadow.py 미러·resolve 실패도 적재 불변).
+   노출·DB 저장은 kebab-id 그대로. 기본 `off`(빈 테이블 per-write DB 왕복 회피·측정 윈도만 on).
+   *(잔여)* 나머지 두 게이트(`learning_scene.py`·`wh1_loop.py`) shadow 배선 + shadow 측정 후
+   canary/full 노출(M-id canonical 플립) — 매핑 채택(2-잔여) 선행 필요.
 4. **학생 데이터 마이그레이션** *(불필요화·결정)* — 런타임 테이블은 kebab `misconception_id`를
    TEXT(FK 아님)로 보존하므로 **read-time resolver로 rekey 없이** M-id 해석 가능(채택). 물리 일괄
    재키잉(option b)은 미성년 PII·되돌리기 위험으로 **비채택**(우선순위 #1·#2). 1:N 매핑 시 confidence

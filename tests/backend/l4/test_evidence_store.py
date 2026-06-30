@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from datetime import date, timedelta
 from typing import Any, cast
@@ -21,7 +22,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from whymath_backend.config import Settings
+from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.evidence_link import EvidenceLink
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
@@ -134,6 +135,79 @@ class TestLogEvidenceGate:
         assert link.weight == 0.8
         assert link.link_id == 1
         assert session.added == [link]
+
+
+class _SpyResolver:
+    """resolve 호출 여부·인자를 기록하는 스파이 resolver(crosswalk shadow 배선 검증용)."""
+
+    def __init__(self, mis_ids: list[str] | None = None) -> None:
+        self.calls: list[str] = []
+        self._mis_ids = mis_ids or []
+
+    def resolve(self, kebab_id: str, *, min_confidence: float | None = None) -> list[str]:
+        self.calls.append(kebab_id)
+        return self._mis_ids
+
+
+class _BoomResolver:
+    """resolve가 항상 raise — never-break(적재 무결성) 단언용."""
+
+    def resolve(self, *args: Any, **kwargs: Any) -> list[str]:
+        raise RuntimeError("crosswalk DB 미도달")
+
+
+_RECORD_LOGGER = "whymath.l4.misconception.crosslink_shadow.record"
+
+
+class TestCrosslinkShadowWiring:
+    """게이트 공존 배선 — mode off/shadow에서 적재 본류 불변·shadow 비차단(비노출 측정)."""
+
+    def test_off_skips_resolver_and_persists(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """off(기본) → resolver 미호출(crosswalk 조회 0)·kebab-id 그대로 적재."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "off")
+        get_settings.cache_clear()
+        spy = _SpyResolver(mis_ids=["M1"])
+        try:
+            session = _FakeSession()
+            link = _log(session, crosslink_resolver=cast(Any, spy))
+            assert spy.calls == []  # off → resolve 미호출
+            assert link.misconception_id == _VALID_MID  # kebab 그대로
+            assert session.added == [link]
+        finally:
+            get_settings.cache_clear()
+
+    def test_shadow_resolves_but_persists_kebab(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """shadow → resolver 호출·record 로깅하되 적재는 kebab-id 그대로(노출·저장 불변)."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        spy = _SpyResolver(mis_ids=["M1", "M2"])
+        try:
+            with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+                session = _FakeSession()
+                link = _log(session, crosslink_resolver=cast(Any, spy))
+            assert spy.calls == [_VALID_MID]  # shadow → kebab으로 resolve 호출
+            assert link.misconception_id == _VALID_MID  # 저장은 여전히 kebab
+            records = [r.getMessage() for r in caplog.records if r.name == _RECORD_LOGGER]
+            assert len(records) == 1  # shadow 관측 1건 기록
+        finally:
+            get_settings.cache_clear()
+
+    def test_shadow_resolver_failure_does_not_break_persist(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """shadow에서 resolve raise → 적재는 정상(never-break·증거 무결성 우선)."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        try:
+            session = _FakeSession()
+            link = _log(session, crosslink_resolver=cast(Any, _BoomResolver()))
+            assert isinstance(link, EvidenceLink)
+            assert link.misconception_id == _VALID_MID
+            assert session.added == [link]
+        finally:
+            get_settings.cache_clear()
 
 
 class TestRetentionDefault:
