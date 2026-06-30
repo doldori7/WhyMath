@@ -39,7 +39,8 @@ from whymath_backend.l4.learning_scene import (
     VisualizationElement,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
-from whymath_backend.l4.misconception.models import InterventionPattern
+from whymath_backend.l4.misconception.intervene import select_intervention
+from whymath_backend.l4.misconception.models import InterventionPattern, MisconceptionMatch
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.socratic.categories import EXAMPLE_QUESTION, SocraticCategory
 from whymath_backend.schema.concept import Concept
@@ -100,18 +101,33 @@ def _misconception_probes(
     """활성 오개념 가설 ∩ 카탈로그 → 프로브(적응·05a §5.3). 카탈로그 밖 id는 *조용히 제외*.
 
     RS2(거짓 낙인 차단): 프로브는 학습자의 *근거 있는* 활성 가설(`active_hypothesis_ids`)에서만
-    나온다. 기본 개입은 반례 유도(`COUNTEREXAMPLE`·패턴 1 — 카탈로그가 `counterexample`을 보유).
+    나온다.
+
+    **개입 다양화**(05a S5+ 잔여): `active_hypothesis_confidences`가 주어지면 가설별 *누적
+    신뢰도*로 doc 결정트리(`select_intervention`·>0.8 반례·≥0.5 거꾸로·<0.5 보류)를 구동해
+    개입 패턴을 고른다 — 신뢰도 <0.5 가설은 프로브를 *만들지 않는다*(보류·낙인 회피·재구현 0).
+    신뢰도 맵 미제공(None) 또는 그 맵에 없는 id는 레거시 반례(`COUNTEREXAMPLE`)로 폴백한다.
     """
     if learner_context is None:
         return []
-    return [
-        MisconceptionProbeElement(
-            misconception_id=mid,
-            intervention=InterventionPattern.COUNTEREXAMPLE,
-        )
-        for mid in learner_context.active_hypothesis_ids
-        if mid in CATALOG_BY_ID
-    ]
+    confidences = learner_context.active_hypothesis_confidences
+    probes: list[MisconceptionProbeElement] = []
+    for mid in learner_context.active_hypothesis_ids:
+        misconception = CATALOG_BY_ID.get(mid)
+        if misconception is None:
+            continue  # 카탈로그 밖 id(느슨) → 제외(RS2).
+        if confidences is not None and mid in confidences:
+            # 가설 신뢰도로 doc 결정트리 구동(재사용) — <0.5는 None(보류) → 프로브 미생성.
+            decision = select_intervention(
+                MisconceptionMatch(misconception=misconception, confidence=confidences[mid])
+            )
+            if decision is None:
+                continue
+            intervention = decision.pattern
+        else:
+            intervention = InterventionPattern.COUNTEREXAMPLE  # 레거시(신뢰도 미제공).
+        probes.append(MisconceptionProbeElement(misconception_id=mid, intervention=intervention))
+    return probes
 
 
 def _decide_layout(elements: list[SceneElement]) -> SceneLayout:

@@ -219,7 +219,8 @@ LearningScene
 | S5e ✅ | **`chat_screen` 통합** — `SceneApi`(S5a 소비)·`ChatMessage.scene`·`requestScene`·AppBar 트리거·`_MessageBubble`→`SceneRenderer`(**end-to-end 첫 연결**) | **완료 2026-06-14**: CI mobile 잡·통합 테스트 3개 | 0 |
 | S5b~d | 타입안전 union(mobile)·layout 전용 렌더(mobile)·실 WebView(mobile·D3/Desmos·postMessage) | mobile CI | 0 |
 | S5f ✅ | **적응형 오개념 프로브 배선** — `api/scene.py`가 `get_active_hypotheses`(WH-1 가설 store·L4)로 학생 활성 가설을 조회해 `active_hypothesis_ids` 충전 → `_misconception_probes`가 ∩ 카탈로그로 프로브 생성(RS2 근거 강제·`student_id` None이면 조회 생략·기존 동작) | **완료**: 서비스/엔드포인트 테스트(가설→프로브·미조회)·회귀 0 | 0 |
-| S5+ | 적응형 장면 잔여(`evidence_links` 연동·프로브 개입 다양화·1:N 정책)·과목 확장·교과서 자동 UI | Phase 2~3 | 해당 시 |
+| S5g ✅ | **프로브 개입 다양화** — 가설 *누적 신뢰도*(`active_hypothesis_confidences`)로 doc 결정트리(`select_intervention` 재사용·>0.8 반례·≥0.5 거꾸로·<0.5 보류)를 구동해 개입 패턴을 가설별로 선택(고정 `COUNTEREXAMPLE` 탈피·<0.5 프로브 미생성·낙인 회피). 신뢰도 미제공 시 레거시 반례 폴백(하위호환) | **완료**: 생성기 6개·서비스 1개 테스트·회귀 0 | 0 |
+| S5+ | 적응형 장면 잔여(`evidence_links` 연동·1:N 정책)·과목 확장·교과서 자동 UI | Phase 2~3 | 해당 시 |
 
 **적용 범위 원칙**: verify 가능·표기 안정 단원(대수·함수 그래프)부터 켜고, 기하·증명(드래그·
 스내핑·제약·작도)은 WH-S Tier3(Lean) 성숙도에 종속하므로 초기 scope 제외(정직한 경계).

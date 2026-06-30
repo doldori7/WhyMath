@@ -26,6 +26,7 @@ from whymath_backend.l4.learning_scene import (
     parse_learning_scene,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.models import InterventionPattern
 from whymath_backend.l4.scene_generation import generate_learning_scene
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.concept import Concept
@@ -36,6 +37,7 @@ from whymath_backend.schema.enums import (
 )
 
 _VALID_MC_ID = next(iter(CATALOG_BY_ID))
+_VALID_MC_ID2 = list(CATALOG_BY_ID)[1]  # 두 번째 카탈로그 id(다중 프로브 다양화 검증용).
 
 # 가짜 LLM 출력 — graph_2d(파라미터 선언)·graph_2d(무파라미터)·surface_3d.
 _GRAPH2D_WITH_PARAMS = (
@@ -225,6 +227,88 @@ class TestMisconceptionProbes:
         )
         probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
         assert len(probes) == 1  # 카탈로그 id 1개만
+
+    @pytest.mark.asyncio
+    async def test_no_confidences_defaults_counterexample(self) -> None:
+        """신뢰도 맵 미제공(레거시) → 개입은 반례(`COUNTEREXAMPLE`) 폴백."""
+        ctx = SceneLearnerContext(active_hypothesis_ids=[_VALID_MC_ID])
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+        )
+        probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
+        assert len(probes) == 1
+        assert probes[0].intervention == InterventionPattern.COUNTEREXAMPLE
+
+    @pytest.mark.asyncio
+    async def test_high_confidence_counterexample(self) -> None:
+        """신뢰도 >0.8 → 반례 유도(doc 결정트리 패턴1)."""
+        ctx = SceneLearnerContext(
+            active_hypothesis_ids=[_VALID_MC_ID],
+            active_hypothesis_confidences={_VALID_MC_ID: 0.9},
+        )
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+        )
+        probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
+        assert len(probes) == 1
+        assert probes[0].intervention == InterventionPattern.COUNTEREXAMPLE
+
+    @pytest.mark.asyncio
+    async def test_mid_confidence_reverse_reasoning(self) -> None:
+        """0.5 ≤ 신뢰도 ≤ 0.8 → 거꾸로 사고(doc 결정트리 패턴4)."""
+        ctx = SceneLearnerContext(
+            active_hypothesis_ids=[_VALID_MC_ID],
+            active_hypothesis_confidences={_VALID_MC_ID: 0.6},
+        )
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+        )
+        probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
+        assert len(probes) == 1
+        assert probes[0].intervention == InterventionPattern.REVERSE_REASONING
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_probe_withheld(self) -> None:
+        """신뢰도 <0.5 → 프로브 미생성(보류·낙인 회피·doc 결정트리)."""
+        ctx = SceneLearnerContext(
+            active_hypothesis_ids=[_VALID_MC_ID],
+            active_hypothesis_confidences={_VALID_MC_ID: 0.3},
+        )
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+        )
+        assert not any(isinstance(el, MisconceptionProbeElement) for el in scene.elements)
+
+    @pytest.mark.asyncio
+    async def test_mixed_confidences_diversified(self) -> None:
+        """다중 가설 → 신뢰도별 개입 다양화 + <0.5 보류(반례·거꾸로 공존)."""
+        ctx = SceneLearnerContext(
+            active_hypothesis_ids=[_VALID_MC_ID, _VALID_MC_ID2],
+            active_hypothesis_confidences={_VALID_MC_ID: 0.9, _VALID_MC_ID2: 0.6},
+        )
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+        )
+        probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
+        by_id = {p.misconception_id: p.intervention for p in probes}
+        assert by_id == {
+            _VALID_MC_ID: InterventionPattern.COUNTEREXAMPLE,
+            _VALID_MC_ID2: InterventionPattern.REVERSE_REASONING,
+        }
+
+    @pytest.mark.asyncio
+    async def test_missing_confidence_entry_falls_back(self) -> None:
+        """신뢰도 맵에 없는 id는 레거시 반례로 폴백(맵 부분 제공 방어)."""
+        ctx = SceneLearnerContext(
+            active_hypothesis_ids=[_VALID_MC_ID],
+            active_hypothesis_confidences={},  # 맵 제공되었으나 해당 id 부재
+        )
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+        )
+        probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
+        assert len(probes) == 1
+        assert probes[0].intervention == InterventionPattern.COUNTEREXAMPLE
 
 
 # ── 배치·메타·게이트 라운드트립 ──────────────────────────────────────────────

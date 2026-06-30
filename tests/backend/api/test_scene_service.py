@@ -24,6 +24,7 @@ from whymath_backend.l4.learning_scene import (
 )
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
+from whymath_backend.l4.misconception.models import InterventionPattern
 from whymath_backend.schema.concept import Concept
 from whymath_backend.schema.enums import (
     CognitiveType,
@@ -33,6 +34,7 @@ from whymath_backend.schema.enums import (
 
 # 정본 오개념 카탈로그의 실 id(프로브 생성 검증용·동적 취득).
 _VALID_MC_ID = next(iter(CATALOG_BY_ID))
+_VALID_MC_ID2 = list(CATALOG_BY_ID)[1]
 
 
 class _FakeProvider:
@@ -197,6 +199,48 @@ async def test_active_hypotheses_become_probes(monkeypatch: pytest.MonkeyPatch) 
     probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
     assert len(probes) == 1
     assert probes[0].misconception_id == _VALID_MC_ID
+
+
+@pytest.mark.asyncio
+async def test_probe_intervention_diversified_by_confidence(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """가설 신뢰도가 프로브 개입을 다양화한다(>0.8 반례·≥0.5 거꾸로·<0.5 보류) — 끝단 배선."""
+
+    async def _fake_active(session: object, user_id: uuid.UUID) -> list[MisconceptionHypothesis]:
+        return [
+            MisconceptionHypothesis(
+                misconception_id=_VALID_MC_ID,
+                confidence=0.9,  # >0.8 → 반례
+                turns_since_evidence=0,
+                evidence_count=3,
+            ),
+            MisconceptionHypothesis(
+                misconception_id=_VALID_MC_ID2,
+                confidence=0.6,  # 0.5~0.8 → 거꾸로
+                turns_since_evidence=1,
+                evidence_count=1,
+            ),
+        ]
+
+    monkeypatch.setattr(scene_mod, "get_active_hypotheses", _fake_active)
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+        student_id=uuid.uuid4(),
+    )
+    assert scene is not None
+    probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
+    by_id = {p.misconception_id: p.intervention for p in probes}
+    assert by_id == {
+        _VALID_MC_ID: InterventionPattern.COUNTEREXAMPLE,
+        _VALID_MC_ID2: InterventionPattern.REVERSE_REASONING,
+    }
 
 
 @pytest.mark.asyncio
