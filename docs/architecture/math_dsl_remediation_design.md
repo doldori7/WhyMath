@@ -17,6 +17,7 @@
 | 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 | **구현 완료**(§3) — 두 필드 제거(PR #350) + `curriculum_entry` KR 적재기 완료 | 런타임 소비처 0 확인·Overlay 단일 진실 |
 | 오개념 ID 통합(kebab 30 ↔ M-id 839) | **골격 구현**(§1) — M-id 로더·crosswalk 테이블·read-time resolver 완료. 잔여 = 매핑 큐레이션·게이트 배선 | rekey는 resolver로 불필요화(채택) |
 | 파서(동치 권위) 일원화 | **구현 완료**(§2) — 경계 명문화 + golden test | `notation_contract.md`·`data/notation_contract.json` |
+| invariant 회귀 동결 게이트(노드 의미·약한 relation·shadow·traversal 예산) | **구현 완료**(PR #357) — risk_register §4 매핑 5종(Q10-③·Q1/Q8·Q2·Q10-⑥·Q10-⑧) | `test_concept.py`·`test_concept_misconception_runtime.py`·`test_edge_relation_governance.py`·`hypothesis_store.py`·`prerequisite_recommendation.py` |
 
 > **정정(2026-06-30)**: 초안(v0.1)은 M-id 로더를 "없음(스키마만)"이라 했으나 *오보*다 —
 > `l1/misconception/catalog_loader.py`(+`populate` CLI·`atom_catalog`·단위/통합 테스트·alembic
@@ -130,4 +131,4 @@
 - 패턴: `04b_misconception_judge_graduation.md`(shadow→canary→full 점진 노출)
 - 원칙: `CLAUDE.md`(의사결정 우선순위 1·2·3·미성년 PII)
 - 변경 이력: v0.1 (2026-06-30 초안 — 설계만) · v0.2 (2026-06-30 — §3 구현 완료: 필드 제거 PR #350 +
-  curriculum_entry KR 적재기)
+  curriculum_entry KR 적재기) · v0.3 (2026-06-30 — §0 invariant 회귀 동결 게이트 5종 구현 완료·PR #357)
