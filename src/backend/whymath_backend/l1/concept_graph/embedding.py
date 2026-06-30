@@ -39,12 +39,11 @@ from typing import TYPE_CHECKING
 from whymath_backend.config import Settings, get_settings
 
 # 임베딩 provider seam 재사용(신규 금지·CLAUDE.md 로컬 우선) — L4 오개념 의미 매칭과 *같은*
-# 좌석을 쓴다. `text_hash`(표현 변경 감지)·`_provider_model_identity`(임베딩 공간 식별)도 재사용.
-from whymath_backend.l4.misconception.semantic.pgvector_index import (
-    _provider_model_identity,
-    text_hash,
-)
-
+# 좌석(`text_hash`·`_provider_model_identity`)을 쓴다. 단 이 L1 모듈이 L4를 *모듈 최상단*에서
+# import하면 순환이 생긴다(L1 embedding → L4 → L2 → L1 node_projection → L1 embedding._build_sync_
+# engine 미정의). L4는 의미상 상위 계층이라 import-time 결합도 부적절하다(역방향 의존). 따라서 두
+# 심볼은 *사용처 함수 내부에서 지연 import*한다(아래 upsert·populate) — 좌석 재사용은 유지하되
+# import-time 순환·역방향 결합을 끊는다. 타입 전용 import는 TYPE_CHECKING이라 런타임 무영향.
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
@@ -179,6 +178,9 @@ class ConceptEmbeddingIndex:
 
         from whymath_backend.db.models.concept_embedding import ConceptEmbedding
 
+        # L4 좌석 재사용(지연 import — 모듈 최상단 결합 시 순환·역방향 의존 회피, 모듈 docstring).
+        from whymath_backend.l4.misconception.semantic.pgvector_index import text_hash
+
         values = [float(x) for x in vector]
         stmt = pg_insert(ConceptEmbedding).values(
             concept_id=concept_id,
@@ -289,6 +291,9 @@ def populate_concept_embeddings(
     model을 노출하지 않으므로(좌석은 embed만), 같은 규약을 upsert/search 양쪽이 공유하도록
     여기서 결정한다(L4와 동일). review_status 무관 전량 적재(게이팅은 조회 몫).
     """
+    # L4 좌석 재사용(지연 import — 모듈 최상단 결합 시 순환·역방향 의존 회피, 모듈 docstring).
+    from whymath_backend.l4.misconception.semantic.pgvector_index import _provider_model_identity
+
     resolved = settings if settings is not None else get_settings()
     provider_name, model_name = _provider_model_identity(provider, resolved)
     idx = (
