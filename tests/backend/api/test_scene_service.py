@@ -37,6 +37,11 @@ _VALID_MC_ID = next(iter(CATALOG_BY_ID))
 _VALID_MC_ID2 = list(CATALOG_BY_ID)[1]
 
 
+async def _no_evidence(session: object, user_id: uuid.UUID) -> dict[str, float]:
+    """증거 없음 스텁 — net_support_by_misconception 대체(아무 가설도 억제 안 함)."""
+    return {}
+
+
 class _FakeProvider:
     """가짜 LLMProvider — 정해진 텍스트 반환 + 호출 기록(LLMProvider 구조 충족)."""
 
@@ -183,6 +188,7 @@ async def test_active_hypotheses_become_probes(monkeypatch: pytest.MonkeyPatch) 
         ]
 
     monkeypatch.setattr(scene_mod, "get_active_hypotheses", _fake_active)
+    monkeypatch.setattr(scene_mod, "net_support_by_misconception", _no_evidence)
     provider = _FakeProvider(_VALID_JSON)
     session = _FakeSession(_FakeConceptOrm(_concept()))
     scene = await scene_for_concept_diagnosis(
@@ -224,6 +230,7 @@ async def test_probe_intervention_diversified_by_confidence(
         ]
 
     monkeypatch.setattr(scene_mod, "get_active_hypotheses", _fake_active)
+    monkeypatch.setattr(scene_mod, "net_support_by_misconception", _no_evidence)
     provider = _FakeProvider(_VALID_JSON)
     session = _FakeSession(_FakeConceptOrm(_concept()))
     scene = await scene_for_concept_diagnosis(
@@ -241,6 +248,49 @@ async def test_probe_intervention_diversified_by_confidence(
         _VALID_MC_ID: InterventionPattern.COUNTEREXAMPLE,
         _VALID_MC_ID2: InterventionPattern.REVERSE_REASONING,
     }
+
+
+@pytest.mark.asyncio
+async def test_refuted_hypothesis_probe_suppressed(monkeypatch: pytest.MonkeyPatch) -> None:
+    """evidence_links 순지지도<0(반박 우세)인 가설은 렌더 시점에 프로브에서 제외(RS2 낙인 회피)."""
+
+    async def _fake_active(session: object, user_id: uuid.UUID) -> list[MisconceptionHypothesis]:
+        return [
+            MisconceptionHypothesis(
+                misconception_id=_VALID_MC_ID,  # 증거 반박(net_support<0) → 제외
+                confidence=0.9,
+                turns_since_evidence=0,
+                evidence_count=2,
+            ),
+            MisconceptionHypothesis(
+                misconception_id=_VALID_MC_ID2,  # 증거 지지(net_support>0) → 유지
+                confidence=0.9,
+                turns_since_evidence=0,
+                evidence_count=2,
+            ),
+        ]
+
+    async def _net_support(session: object, user_id: uuid.UUID) -> dict[str, float]:
+        return {_VALID_MC_ID: -1.5, _VALID_MC_ID2: 2.0}
+
+    monkeypatch.setattr(scene_mod, "get_active_hypotheses", _fake_active)
+    monkeypatch.setattr(scene_mod, "net_support_by_misconception", _net_support)
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+        student_id=uuid.uuid4(),
+    )
+    assert scene is not None
+    assert scene.learner_context is not None
+    # 반박된 가설은 빠지고 지지된 가설만 남는다.
+    assert scene.learner_context.active_hypothesis_ids == [_VALID_MC_ID2]
+    probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
+    assert [p.misconception_id for p in probes] == [_VALID_MC_ID2]
 
 
 @pytest.mark.asyncio
