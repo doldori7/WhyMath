@@ -51,7 +51,11 @@ from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
 # 임베딩 provider seam·해시·식별 헬퍼 재사용(신규 금지·CLAUDE.md 로컬 우선) — 개념판과 *같은*
 # 좌석을 쓴다. text_hash(표현 변경 감지)·provider_model_identity(공간 식별)는 레이어-중립 L1
 # 프리미티브(`l1/embedding_primitives.py`)에서 가져온다(L1→L1·역방향 의존 0·seam 0·동일 규약).
-from whymath_backend.l1.embedding_primitives import provider_model_identity, text_hash
+from whymath_backend.l1.embedding_primitives import (
+    join_embedding_text,
+    provider_model_identity,
+    text_hash,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -89,12 +93,7 @@ def atom_embedding_text(
     비면(이론상 graph.json은 name 필수) 나머지만으로 표현을 만든다(빈 표현 가능 — 호출자[로더]가
     빈 표현을 거른다).
     """
-    parts = [
-        str(value).strip()
-        for value in (name_ko, transfer)
-        if value is not None and str(value).strip()
-    ]
-    return ". ".join(parts)
+    return join_embedding_text(name_ko, transfer)
 
 
 def load_atoms_from_graph_json(path: Path) -> list[AtomText]:

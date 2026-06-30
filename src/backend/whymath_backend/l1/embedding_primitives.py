@@ -21,6 +21,23 @@ from typing import Protocol, runtime_checkable
 
 from whymath_backend.config import Settings
 
+# 임베딩 원본 표현(embed-text) *포맷 계약 버전*. 개념·원자·오개념 텍스트 빌더가 공유하는
+# 결합 규칙(구분자 `". "`·strip·빈값 skip)을 바꾸면(예: 구분자 교체·필드 순서) 이 값을 올린다 —
+# 사전 계산된 벡터가 *조용히* stale 되는 것을 감지할 근거(차후 임베딩 행에 함께 영속 시 drift
+# 비교). math_dsl 감사 §5(포맷 계약 미고정) 대응. 현재 v1 = `". ".join(strip·non-empty)`.
+EMBEDDING_TEXT_FORMAT_VERSION = 1
+
+
+def join_embedding_text(*parts: object) -> str:
+    """임베딩 원본 표현 결합 — *단일 포맷 권위*(개념·원자·오개념 빌더 공유·감사 §2 3중복 제거).
+
+    각 조각을 `str().strip()`하고 빈/None은 건너뛴 뒤 `". "`로 잇는다(포맷 v1·
+    `EMBEDDING_TEXT_FORMAT_VERSION`). 과거엔 이 결합 규칙이 `concept_embedding_text`·
+    `atom_embedding_text`·`catalog_text` 세 곳에 따로 박혀 있어 구분자·순서 변경이 *조용한* drift를
+    낳을 수 있었다 — 한 곳으로 모아 포맷 계약을 고정한다(필드 *선택*은 호출자 몫·결합만 공유).
+    """
+    return ". ".join(str(part).strip() for part in parts if part is not None and str(part).strip())
+
 
 @runtime_checkable
 class EmbeddingProvider(Protocol):
@@ -69,7 +86,9 @@ def provider_model_identity(provider: EmbeddingProvider, settings: Settings) -> 
 
 
 __all__ = [
+    "EMBEDDING_TEXT_FORMAT_VERSION",
     "EmbeddingProvider",
+    "join_embedding_text",
     "provider_model_identity",
     "text_hash",
 ]
