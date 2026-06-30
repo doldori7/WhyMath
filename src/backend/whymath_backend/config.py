@@ -750,6 +750,23 @@ class Settings(BaseSettings):
         ),
     )
 
+    misconception_crosslink_mode: Literal["off", "shadow"] = Field(
+        default="off",
+        description=(
+            "L4 오개념 게이트의 *kebab-id → M-id crosswalk 해석 shadow 측정* 모드(게이트 공존 배선·"
+            "math_dsl_remediation_design.md §1.3 step3). 2값: **`off`(기본·opt-in)** = 게이트는 "
+            "kebab-id만 쓰고(현행 비트동일) crosswalk 조회 0. **`shadow`** = 게이트(증거 저장소 "
+            "`log_evidence`)가 kebab-id를 *그대로* 런타임 키로 쓰되(노출·DB 저장 불변), crosswalk "
+            "resolver로 그 kebab-id의 canonical M-id 매핑을 *비차단·비노출*로 해석해 coverage(매핑 "
+            "유무·1:N)를 *로그로만* 남긴다(`crosslink_shadow`·shadow.py 미러). crosswalk 테이블은 "
+            "사람 검수 전까지 비어 있어 보통 미매핑([]) — 매핑이 차오르는 분포를 노출 전 수집해 "
+            "canonical id 플립(canary→full) 근거를 모은다. shadow의 resolve는 비블로킹"
+            "(asyncio.to_thread)·실패 시 적재 graceful 진행(증거 무결성 우선). 기본 off는 빈 "
+            "테이블에 per-write DB 왕복을 피하기 위함 — 측정 윈도에만 켠다(semantic_mode 미러). "
+            "WHYMATH_MISCONCEPTION_CROSSLINK_MODE=shadow로 켠다."
+        ),
+    )
+
     # ── 슬라이스 105: 오개념 임베딩 *영속(pgvector) 백엔드* 좌석 선택 ──
     # 슬104 VectorIndex 좌석에 PgVectorIndex(pgvector 백엔드)를 추가한다. **기본은 `memory`**
     # (InMemoryVectorIndex·기본 동작 무변경) — pgvector는 *opt-in*이다. 카탈로그 30종엔

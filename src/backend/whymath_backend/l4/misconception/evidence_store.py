@@ -37,7 +37,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.evidence_link import EvidenceLink
+from whymath_backend.l1.misconception.crosslink_resolve import MisconceptionCrosslinkResolver
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.crosslink_shadow import observe_crosslink_shadow_async
 
 __all__ = [
     "EvidenceValidationError",
@@ -81,6 +83,7 @@ async def log_evidence(
     weight: float | None = None,
     retention_until: date | None = None,
     logged_on: date | None = None,
+    crosslink_resolver: MisconceptionCrosslinkResolver | None = None,
 ) -> EvidenceLink:
     """증거 엣지 1개를 적재한다(§3 도구7 — 게이트 통과 후).
 
@@ -94,7 +97,13 @@ async def log_evidence(
     `Settings.evidence_retention_years`(기본 3년)으로 *자동* 채운다 — 미성년 증거를 무기한 보존
     안 함(`purge_expired`가 경과분 파기). 명시 제공 시 그 값 존중(테스트·특수 정책). `logged_on`은
     테스트 주입용(기본 `date.today()`).
+
+    **crosswalk shadow(게이트 공존 배선·비노출 측정)**: `misconception_crosslink_mode == "shadow"`
+    면 적재 직전 kebab-id의 canonical M-id 매핑을 *비차단·비노출*로 해석해 coverage를 로그로만
+    남긴다(`crosslink_shadow`) — kebab-id를 *그대로* 저장하는 현행 동작은 불변, resolve 실패도
+    적재를 막지 않는다(증거 무결성 우선). `crosslink_resolver`는 테스트 주입용(기본 지연 생성).
     """
+    settings = get_settings()
     if misconception_id not in CATALOG_BY_ID:
         raise EvidenceValidationError(
             f"증거 참조 무결성 위반 — misconception_id {misconception_id!r}이(가) "
@@ -104,11 +113,15 @@ async def log_evidence(
         raise EvidenceValidationError(
             f"극성 위반 — polarity={polarity!r}(허용 {_VALID_POLARITY} — +1 지지/−1 반박)."
         )
+    # crosswalk shadow(비노출 측정·비차단) — 게이트 통과한 kebab-id의 M-id 매핑 coverage를
+    # 로그로만 관측한다(노출·아래 DB 저장은 kebab-id 그대로). off면 crosslink 조회 0.
+    if settings.misconception_crosslink_mode != "off":
+        await observe_crosslink_shadow_async(misconception_id, resolver=crosslink_resolver)
     # GDPR 데이터 최소화 — 명시 미제공 시 적재일+정책 보존년으로 *반드시* 만료일을 박는다
     # (무기한 보존 금지·미성년 데이터). 명시 제공 시 그 값 존중(테스트·특수 정책).
     if retention_until is None:
         retention_until = default_retention_until(
-            logged_on or date.today(), years=get_settings().evidence_retention_years
+            logged_on or date.today(), years=settings.evidence_retention_years
         )
     link = EvidenceLink(
         session_id=session_id,
