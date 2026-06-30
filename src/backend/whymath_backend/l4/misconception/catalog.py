@@ -41,6 +41,9 @@ _ALGEBRA: tuple[Misconception, ...] = (
         # 매치 → 올바른 전개 `(3+4)²=49`나 기호식 `(a+b)²=a²+b²`(\d가 글자 미매치)엔 미스(disjoint).
         # 근거: 데이터셋 [H:12대수01-03] ◎ 정확대응(concept_graph_dataset_v1.md §5.2).
         regex_signals=(r"\((?P<x>\d+)\+(?P<y>\d+)\)2=(?P=x)2\+(?P=y)2",),
+        # SymPy 머신 검증 거짓 항등식 — diff=(a+b)²−(a²+b²)=2ab(다항·a=b=1에서 거짓)이라
+        # identity_status가 not_identity로 *증명*한다(동치 권위 일원화·무결성 테스트 강제).
+        canonical_wrong_form=("(a+b)**2", "a**2 + b**2"),
         # 정정 형태(올바른 완전제곱) — `signals`의 좌변 `(a+b)`만 공유하고 *틀린 RHS* `a²+b²`는
         # 미포함(가운데 `2ab`로 분리)이라 자기 오개념 conf 0.5(게이트 0.65 미만). gate-safe.
         correct_form="(a+b)² = a² + 2ab + b²",
@@ -86,6 +89,8 @@ _ALGEBRA: tuple[Misconception, ...] = (
         canonical_statement="a⁰ = 0",
         counterexample="2⁰ = 1 (a≠0인 모든 a에 대해 a⁰ = 1)",
         signals=("a⁰", "0"),
+        # SymPy 머신 검증 — `a**0`은 1로 환원되어 `1 ≠ 0`(상수 차)이라 not_identity로 증명된다.
+        canonical_wrong_form=("a**0", "0"),
         # 정정 형태 — `a⁰`만 공유(좌변)하고 RHS `1`은 틀린 RHS `0`과 다름. 정규형 `a0=1`에서
         # signal `0`은 영숫자 경계(앞 `a`)로 미매치 → 자기 오개념 conf 0.5(게이트 미만). gate-safe.
         correct_form="a⁰ = 1",

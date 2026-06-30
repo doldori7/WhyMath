@@ -96,6 +96,20 @@
    golden fixture. CI 양쪽 잡에서 같은 fixture를 읽어 drift를 잡는다.
 3. **비목표** — 브라우저에서 SymPy 실행(불가·과설계)·mathjs를 SymPy로 대체(렌더 성능 손실).
 
+### 2.4 런타임 권위 일원화 + 오개념 거짓 항등식 grounding (구현 완료)
+파이썬 *런타임* 내부에서도 SymPy 동치 관용구가 `verify_step`에 인라인돼 있었고(오개념 카탈로그는
+거짓 항등식을 *문자열*로만 다룸) "권위 둘"이 잠재했다(math_dsl 감사 §7). 교정:
+- **단일 primitive** `l3/symbolic_equivalence.py` `identity_status(lhs, rhs) -> IdentityVerdict`
+  (identity/not_identity/undecidable/parse_error). SymPy `sympify(convert_xor)`+`expand`+
+  `simplify().is_zero`+다항/변수집합 관용구를 *한 곳*에 둔다. `verify_step`은 이 primitive에
+  *위임*하도록 리팩터(3상태·reason 동작 불변·기존 테스트 그대로 green).
+- **오개념 `canonical_wrong_form`**(`Misconception` 선택 필드·(lhs, rhs) SymPy syntax) — 카탈로그
+  무결성 테스트가 `identity_status`로 **not_identity**(거짓임을 SymPy가 증명)임을 강제한다. 정직
+  스코프: 다항 거짓 항등식만 부여(`distribution-over-power`·`exponent-zero`). 정의역 의존(`√(x²)`)·
+  초월(`log`)·유리식은 SymPy 미결정이라 *미부여*(거짓 머신검증 주장 금지). 런타임 탐지 경로는
+  불변(regex/substring) — 본 슬라이스는 *카탈로그를 기호 권위로 grounding*하고 차후 탐지 통합의
+  canonical 표현을 깐다.
+
 ---
 
 ## 3. 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 (구현 완료)

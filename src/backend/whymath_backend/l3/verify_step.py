@@ -37,9 +37,9 @@ from __future__ import annotations
 
 from enum import Enum
 
-import sympy
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
 from whymath_backend.schema.enums import StepType
 
 __all__ = [
@@ -155,41 +155,27 @@ def verify_step(
     if not expr_before.strip() or not expr_after.strip():
         return _unverifiable("빈 입력 — 검증 안전 회피", step_type)
 
-    # ② 대수 단계(계산·검산·None) — SymPy 심볼릭 동치(자유변수 OK·convert_xor로 ^=거듭제곱).
-    try:
-        before = sympy.sympify(expr_before, convert_xor=True)
-        after = sympy.sympify(expr_after, convert_xor=True)
-        diff = sympy.sympify(before - after)
-        expanded = sympy.expand(diff)  # 다항식은 전개가 *완전한 정규형*(항등식이면 0으로 환원).
-        is_zero = sympy.simplify(diff).is_zero  # 삼각 등 비다항 항등식까지 잡는 보강 판정.
-        is_poly = bool(diff.is_polynomial())  # 다항식이면 전개 0-여부로 항등식 *결정 가능*.
-        # before·after가 *같은 자유변수*를 쓸 때만 다항 비항등식을 incorrect로 본다 — 변수
-        # 집합이 다르면(예: 치환 `a`→`b+1`·a가 b+1로 정의됐을 수 있음·산문이 심볼로 강제됨)
-        # *맥락*을 몰라 학생의 올바른 단계를 *오판*할 위험이 있다(정확성 #1 — 거짓 incorrect 금지).
-        same_symbols = before.free_symbols == after.free_symbols
-    except Exception:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 unverifiable(correct 위장 금지)
-        return _unverifiable("SymPy 판정 불가/파싱 불가 — 검증 안전 회피", step_type)
-
-    # 동치 확정 → correct. 전개가 0으로 환원(다항식 항등식)되거나 simplify가 0으로 판정(예:
-    # sin²+cos²=1 같은 삼각 항등식)이면 올바른 변형이다.
-    if expanded == 0 or is_zero is True:
+    # ② 대수 단계(계산·검산·None) — 동치 권위 단일 primitive(`identity_status`·SymPy)에 위임한다.
+    # 자유변수 OK·convert_xor로 ^=거듭제곱·같은 변수 다항 비항등식은 not_identity로 *증명*된다
+    # ((a+b)²−(a²+b²)=2ab는 a=b=1에서 거짓·freshman's dream). 변수 집합이 다른 치환 등은 primitive
+    # 가 undecidable로 보수 처리해 거짓 incorrect를 회피한다(정확성 #1).
+    verdict = identity_status(expr_before, expr_after)
+    if verdict is IdentityVerdict.identity:
         return VerifyStepResult(
             state=VerifyStepState.correct,
             step_type=step_type,
             reason=None,
             evidence_weight=_WEIGHT_DECISIVE,
         )
-    # 비동치 확정 → incorrect. ⓐ SymPy가 차이를 0-아님으로 *확정*(상수 차 등)했거나, ⓑ 차이가
-    # *같은 변수의 다항식*인데 전개가 0이 아니면 항등식이 아님이 *증명*된다 — 0-아닌 다항식은
-    # 영함수가 아니다(예: (a+b)²−(a²+b²)=2ab는 a=b=1에서 거짓). 가장 흔한 대수 오류(freshman's
-    # dream)를 잡되, 변수 집합이 다른 치환은 위 same_symbols 가드로 *거짓 incorrect를 회피*한다.
-    if is_zero is False or (is_poly and same_symbols):
+    if verdict is IdentityVerdict.not_identity:
         return VerifyStepResult(
             state=VerifyStepState.incorrect,
             step_type=step_type,
-            reason=f"동치 아님 — SymPy: {before} ≠ {after}",
+            reason=f"동치 아님 — SymPy: {expr_before} ≠ {expr_after}",
             evidence_weight=_WEIGHT_DECISIVE,
         )
-    # 비다항·simplify 미정 등 — 항등성을 *증명도 반증도* 못 함 → correct 위장 금지·unverifiable
-    # (예: √(x²) vs x는 정의역 의존이라 정직하게 검증 불가).
+    # parse_error(빈 입력은 위에서 거름·sympify 예외) → "파싱 불가" 표기로 보수.
+    if verdict is IdentityVerdict.parse_error:
+        return _unverifiable("SymPy 판정 불가/파싱 불가 — 검증 안전 회피", step_type)
+    # undecidable — 항등성을 *증명도 반증도* 못 함(예: √(x²) vs x는 정의역 의존)·correct 위장 금지.
     return _unverifiable("SymPy 판정 불가 — 검증 안전 회피", step_type)
