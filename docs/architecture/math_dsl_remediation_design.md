@@ -110,6 +110,19 @@
   불변(regex/substring) — 본 슬라이스는 *카탈로그를 기호 권위로 grounding*하고 차후 탐지 통합의
   canonical 표현을 깐다.
 
+### 2.5 오개념 탐지 SymPy 통합 (shadow 1차·구현 완료)
+`canonical_wrong_form`을 *런타임 탐지*에 결선한다 — `l4/misconception/wrong_form_match.py`:
+- **`matches_wrong_form`/`detect_wrong_forms`**: 학생 등식을 추출(`extract_equations`)해
+  `canonical_wrong_form`을 **SymPy Wild 정합**으로 푼다 — 학생이 *거짓 규칙을 적용*했는지 표기·
+  변수명 무관 판정(lhs는 Wild 바인딩·rhs는 `identity_status`로 동치 확인). 순기여: substring이
+  놓치는 *기호 인스턴스*(`(x+y)²=x²+y²`·`(p+q)²=p²+q²`). 수치(`(3+4)²`)는 SymPy가 평가해 제외
+  (`regex_signals` 담당)·상수 평가 템플릿(`a⁰`→1)은 구조 정합 불가로 제외(정직).
+- **shadow 전용**: `observe_wrong_form_shadow`(coach `solution_coaching` 결선)는
+  `misconception_wrong_form_mode=="shadow"`일 때 SymPy 탐지와 기존 substring/regex(`diagnose`)를
+  비교해 SymPy-only 순기여를 *로그로만* 남긴다 — 노출(diagnose 반환)·verdict 불변·비차단·학생
+  원문 미기록(미성년 PII). 기본 `off`. 노출 전 분포 측정으로 canary/full 통합 근거를 모은다.
+- *(잔여)* shadow 측정 후 노출 통합(substring과 결합·canary)·수치 인스턴스 구조보존 파서.
+
 ---
 
 ## 3. 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 (구현 완료)
