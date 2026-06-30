@@ -49,9 +49,12 @@
    실 FK·의미 유일키 `(kebab_id, mis_id, link_type)`)·로더(`l1/misconception/crosslink_loader.py`)·
    **read-time resolver**(`crosslink_resolve.py`·kebab→M-id 조회)·alembic `e2f3a4b5c6d7`. **실제 매핑
    데이터·게이트 배선은 잔여**(아래). `confidence`·`method`로 근거를 남기되 채택은 사람 검수.
-   *(잔여)* **매핑 큐레이션** — 30 kebab → M-id를 `concept_src_id`·`standard_code`·canonical_statement
-   의미유사·error_type 신호로 *제안*하되 **사람 승인 후** 적재(자동 커밋 금지·오도 코칭 차단).
-   후보 자동생성 도구(M-id 임베딩 populate + 신호 결합)는 별 슬라이스.
+   *(완료)* **검수 초안** `docs/data/misconception_crosslink_candidates.md`(30종 후보·근거·신뢰도).
+   *(완료)* **후보 자동생성 도구** `l1/misconception/crosslink_candidates.py`
+   (`propose_crosslink_candidates`·kebab×M-id 임베딩 코사인·검수 artifact 출력·자동 적재 차단).
+   신호 정정: kebab엔 standard_code·error_type 부재 → 주신호 = 임베딩 코사인(domain은 메모만).
+   *(잔여)* **매핑 채택·적재** — 검수자가 승인분만 `"crosslinks"` JSON으로 옮겨 `crosslink_loader`
+   적재(자동 커밋 금지·오도 코칭 차단).
 3. **canonical id 선정 + 게이트 공존**(잔여) — 신규 노출은 M-id canonical·kebab은 런타임 탐지 키로
    잔존(crosswalk로 항상 매핑). 게이트(`learning_scene.py`·`wh1_loop.py`·`evidence_store.py`)는
    **두 체계 공존 분기**로 확장 — *노출 전 측정*(`04b` shadow→canary).
