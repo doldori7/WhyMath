@@ -28,9 +28,7 @@ from whymath_backend.schema.enums import (
     CognitiveType,
     ConceptLevel,
     ConceptRole,
-    Curriculum,
     EdgeType,
-    Subject,
     VisualizationStyle,
 )
 
@@ -113,8 +111,6 @@ class TestConceptCreation:
             aliases=["FTC", "Fundamental Theorem of Calculus"],
             level=ConceptLevel.세부개념,
             parent_concept_id=parent,
-            subject=Subject.미적분,
-            curriculum_version=Curriculum.REVISION_2022,
             is_signature_korean=True,
             cognitive_type=[CognitiveType.THEOREM, CognitiveType.TECHNIQUE],
             recommended_visual_styles=[
@@ -157,10 +153,9 @@ class TestConceptCreation:
 
     def test_enum_value_serialization_korean_level(self) -> None:
         """use_enum_values → level이 한글 값('단원')으로 직렬화·보존."""
-        c = Concept(code="C", name_ko="공통수학", level=ConceptLevel.단원, subject=Subject.공통)
+        c = Concept(code="C", name_ko="공통수학", level=ConceptLevel.단원)
         dumped = c.model_dump()
         assert dumped["level"] == "단원"
-        assert dumped["subject"] == "공통"
 
     def test_cognitive_type_list_serialization(self) -> None:
         """use_enum_values → cognitive_type 배열이 문자열 값 배열로 직렬화."""

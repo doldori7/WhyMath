@@ -1,7 +1,7 @@
 """원자 백본 → backend `concept` 적재 *단위테스트*(hermetic·PG 불요).
 
 가짜 sync 엔진(`_FakeEngine`)으로 PG 없이 검증한다(`test_concept_backend_edge_load.py` 패턴 재사용):
-  ① graph.json 로딩 — code/name/level/parent_code/난이도/subject 매핑·level 직대응·본문 미유입
+  ① graph.json 로딩 — code/name/level/parent_code/난이도·level 직대응·본문 미유입(subject 제거)
   ② clamp_difficulty — 1~5 clamp·None
   ③ upsert SQL — ON CONFLICT(code)·concept_id/created_at/parent_concept_id 미-SET(보존·2-pass)
   ④ resolve_parents — code→UUID 해석 UPDATE·미해소 skip
@@ -127,7 +127,6 @@ def _record(
         level=level,
         parent_code=parent_code,
         intrinsic_difficulty=difficulty,
-        subject=None,
     )
 
 
@@ -170,7 +169,6 @@ class TestLoadFromGraphJson:
         assert rec.level == ConceptLevel.세부개념
         assert rec.parent_code == _SUBUNIT
         assert rec.intrinsic_difficulty == 3.0
-        assert rec.subject is None  # "수와 연산"은 Subject enum 미대응 → None(억지 매핑 금지)
 
     def test_all_three_levels(self, tmp_path: Path) -> None:
         path = self._write(
@@ -221,7 +219,6 @@ class TestLoadFromGraphJson:
             "level",
             "parent_code",
             "intrinsic_difficulty",
-            "subject",
         }
 
     def test_missing_name_skipped(self, tmp_path: Path) -> None:
@@ -288,7 +285,7 @@ class TestUpsertStatement:
         assert "created_at" not in set_clause
         # parent_concept_id는 upsert에서 다루지 않는다(2-pass).
         assert "parent_concept_id" not in set_clause
-        for col in ("name_ko", "level", "intrinsic_difficulty", "subject"):
+        for col in ("name_ko", "level", "intrinsic_difficulty"):
             assert col in set_clause
 
     def test_upsert_omits_body_columns(self) -> None:

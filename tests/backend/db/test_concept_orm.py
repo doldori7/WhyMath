@@ -44,7 +44,6 @@ from whymath_backend.schema.enums import (
     ConceptLevel,
     ConceptRole,
     EdgeType,
-    Subject,
 )
 
 
@@ -182,7 +181,6 @@ def test_concept_roundtrip_preserves_core_fields() -> None:
         name_en="Fundamental Theorem of Calculus",
         source_id="N1",  # P2b 재ID 추적성(원천 src_id)
         level=ConceptLevel.세부개념,
-        subject=Subject.미적분,
         cognitive_type=[CognitiveType.THEOREM, CognitiveType.TECHNIQUE],
         common_misconceptions=[{"misconception": "정적분=넓이", "correction": "부호 있는 넓이"}],
         aliases=["UC.calc.ftc", "N1"],  # [레거시 UC, src_id]
