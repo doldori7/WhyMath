@@ -14,7 +14,7 @@
 |---|---|---|
 | cycle 검출(populate/load 방어선) | **구현 완료** | 저위험·기존 탐지기 미러 |
 | 교육과정 `grade_introduced`·`semester_introduced` 제거 | **구현 완료** | NULL·중복·소비처 0 |
-| 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 | **설계**(§3) | 소비처 있음(destructive) |
+| 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 | **구현 완료**(§3) — 두 필드 제거(PR #350) + `curriculum_entry` KR 적재기 완료 | 런타임 소비처 0 확인·Overlay 단일 진실 |
 | 오개념 ID 통합(kebab 30 ↔ M-id 839) | **골격 구현**(§1) — M-id 로더·crosswalk 테이블·read-time resolver 완료. 잔여 = 매핑 큐레이션·게이트 배선 | rekey는 resolver로 불필요화(채택) |
 | 파서(동치 권위) 일원화 | **구현 완료**(§2) — 경계 명문화 + golden test | `notation_contract.md`·`data/notation_contract.json` |
 
@@ -91,27 +91,37 @@
 
 ---
 
-## 3. 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 (잔여)
+## 3. 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 (구현 완료)
 
-### 3.1 현재
-`grade_introduced`·`semester_introduced`는 제거 완료. `curriculum_version`·`subject`는 소비처가
-있어 잔존: `api/problems.py`(Problem.curriculum_version 필터)·`api/concepts.py`(PATCH)·L6 gating은
-*Problem*의 curriculum_version 사용(Concept과 독립). `subject`는 `idx_concept_level`·검색 필터에 쓰임.
+### 3.1 결과
+`grade_introduced`·`semester_introduced`(rev d1e2f3a4b5c6)에 이어 `curriculum_version`·`subject`도
+**제거 완료(PR #350·rev f3a4b5c6d7e8)**. 조사 결과 두 필드의 *런타임 READ/필터 소비처가 0*이었고
+(교육과정 정합 게이팅은 전부 `Problem.curriculum_version` 사용·Concept과 독립), `idx_concept_level
+(level, subject)`도 활용 쿼리가 없어 `(level)`로 축소했다. 즉 "소비 경로 재설계 동반"이라던 초안
+가정은 *과대평가*였고 단순 제거가 안전했다(enum `subject_enum`·`curriculum_enum`은 Problem이 계속
+사용하므로 타입만 보존·컬럼만 drop).
 
-### 3.2 설계 포인트
-- **`curriculum_version`**: 개념의 *의미*가 아니라 *어느 교육과정 판에 등장하는가* → Overlay 성격.
-  단 Problem에도 동명 필드가 있어, Concept의 것을 제거하려면 (a) 소비 경로가 Problem만 쓰는지
-  재확인 (b) CurriculumEntry.curriculum_revision로 이관 후 조회 경유로 대체.
-- **`subject`**: 과목(미적분/확통/기하)은 *교육과정 조직 라벨*이자 검색·집계 키. 완전 제거보다
-  "CurriculumEntry.domain_label과 정합 유지 + Concept.subject는 검색 인덱스 캐시로 격하" 검토.
-- 결론: 두 필드는 *grade/semester처럼 단순 제거 불가* — 소비 경로 재설계 동반(별 슬라이스).
+### 3.2 Overlay 적재기 (이번 슬라이스)
+교육과정 분류의 단일 진실은 `curriculum_entry` Overlay다. 그 **KR 적재기를 구현**했다
+(`l1/curriculum/curriculum_loader.py`·`populate.py` CLI):
+- **소스**: `graph.json` 개념 중심 직접 매핑(개념당 1 KR 셀·concept_id 정합). `domain`→`domain_label`·
+  `grade_band_hint`→`grade_band`/`introduced_grade`(밴드 하한)·`standard_codes`→
+  `national_standard_codes`·`review_status`→`confidence`. KR 상수(country=KR·license=KR-NCIC·
+  revision="2022 개정"·source_url=NCIC)는 graph.json `source_citation`에서 정직 도출(공공누리 1유형).
+- **멱등**: `entry_id`(=`{concept_id}:KR`) PK 충돌 ON CONFLICT DO UPDATE — `created_at` 보존·
+  `updated_at` 갱신. concept_id는 FK 아닌 느슨참조라 개념 선적재 비의존(독립 적재).
+- **범위**: Phase 1 KR만(US는 ccss_code뿐 표준 코퍼스 없음·IMO 코퍼스 없음). `required_depth` 등
+  소스에 신호 없는 필드는 None(날조 금지).
+- **잔여(후속)**: US/IMO 열·`required_depth` 큐레이션·L6 자동 커리큘럼 정렬 소비 배선.
 
 ---
 
 ## 참고
 - 정본 상위: `math_dsl_risk_register.md`·`math_dsl_principles_review.md`
 - 구현 좌석: `l4/misconception/`(kebab)·`schema/misconception_catalog.py`(M-id)·`l3/verify_step.py`·
-  `l3/verify_answer.py`·`src/web/graphing-calculator/src/lib/graph2dSpec.js`·`schema/curriculum_entry.py`
+  `l3/verify_answer.py`·`src/web/graphing-calculator/src/lib/graph2dSpec.js`·`schema/curriculum_entry.py`·
+  `l1/curriculum/curriculum_loader.py`(KR Overlay 적재기)
 - 패턴: `04b_misconception_judge_graduation.md`(shadow→canary→full 점진 노출)
 - 원칙: `CLAUDE.md`(의사결정 우선순위 1·2·3·미성년 PII)
-- 변경 이력: v0.1 (2026-06-30 초안 — 설계만)
+- 변경 이력: v0.1 (2026-06-30 초안 — 설계만) · v0.2 (2026-06-30 — §3 구현 완료: 필드 제거 PR #350 +
+  curriculum_entry KR 적재기)

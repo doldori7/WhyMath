@@ -1,0 +1,68 @@
+"""교육과정 Overlay 적재 CLI — `whymath_backend.l1.curriculum.populate`.
+
+개념그래프 코퍼스(`data/corpus/concept_graph_v1/graph.json`)의 한국(KR) 교육과정 신호를 backend
+`curriculum_entry` Overlay(개념당 1 KR 셀)로 멱등 적재한다. `l1/concept_graph/populate`(개념
+임베딩+노드+엣지)·`l1/standards/populate`(성취기준)의 *Overlay* 짝이며 같은 CLI 골격을 따른다
+(argparse·`main(argv)->int`·파일 부재 `return 2`·stdout 행수 보고). 교육과정 셀은 임베딩·pgvector와
+무관(순수 RDB sync 적재)하므로 vector_store 게이트가 없다.
+
+적재 로직 0(얇은 래퍼): `load_kr_curriculum_entries_from_graph_json`(빌드)·`populate_kr_curriculum_
+entries`(멱등 upsert)가 파싱·매핑·dedup·ON CONFLICT를 전부 담당한다. 본 CLI는 경로 결선·실행·보고만.
+
+전제: 마이그레이션 head 적용된 실 PG 도달(`curriculum_entry`). 자격은 env(시크릿 0). 셀의
+`concept_id`는 개념 그래프 키 공간 느슨참조라 개념 선적재(`l1.concept_graph.populate`)에 의존하지
+않는다(FK 아님 — 셀은 독립 적재 가능).
+
+사용:
+    python -m whymath_backend.l1.curriculum.populate \\
+        --graph data/corpus/concept_graph_v1/graph.json
+"""
+
+from __future__ import annotations
+
+import argparse
+from pathlib import Path
+
+from whymath_backend.l1.curriculum.curriculum_loader import (
+    load_kr_curriculum_entries_from_graph_json,
+    populate_kr_curriculum_entries,
+)
+
+# 코퍼스 기본 경로(개념그래프 graph.json — l1.concept_graph.populate와 동일 소스).
+_DEFAULT_GRAPH = Path("data/corpus/concept_graph_v1/graph.json")
+
+
+def main(argv: list[str] | None = None) -> int:
+    """graph.json KR 교육과정 신호를 backend `curriculum_entry`에 멱등 적재·행 수 보고(CLI 본체).
+
+    반환은 프로세스 종료 코드(0=성공·2=입력 파일 부재). 적재 로직은 로더가 담당하며 본 함수는 경로
+    결선·실행·stdout 보고만 한다(조용한 무동작 금지 — 부재 시 명확히 보고).
+    """
+    parser = argparse.ArgumentParser(
+        prog="whymath-curriculum-populate",
+        description=(
+            "개념그래프 graph.json → backend curriculum_entry KR 셀 멱등 적재"
+            "(entry_id PK 충돌 upsert·교육과정 Overlay)."
+        ),
+    )
+    parser.add_argument(
+        "--graph",
+        type=Path,
+        default=_DEFAULT_GRAPH,
+        help=f"개념그래프 graph.json 경로(기본 {_DEFAULT_GRAPH}).",
+    )
+    args = parser.parse_args(argv)
+
+    graph_path: Path = args.graph
+    if not graph_path.exists():
+        print(f"개념그래프 graph.json 없음: {graph_path} — 코퍼스를 먼저 생성하세요.")
+        return 2
+
+    entries = load_kr_curriculum_entries_from_graph_json(graph_path)
+    count = populate_kr_curriculum_entries(entries)
+    print(f"교육과정 Overlay(KR) 적재 완료: {count}건 (graph={graph_path}).")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI 진입
+    raise SystemExit(main())
