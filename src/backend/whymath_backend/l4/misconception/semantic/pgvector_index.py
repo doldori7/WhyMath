@@ -29,11 +29,20 @@ session.py lazy 엔진 패턴 미러링). 기본(memory) 경로는 이 모듈을
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from whymath_backend.config import Settings, get_settings
+
+# 레이어-중립 L1 프리미티브 재사용(역방향 의존 제거) — 좌석 Protocol·표현 해시·공간 식별자.
+# `_provider_model_identity`는 기존 사용처(matcher 지연 import·아래 populate)를 위해 같은 이름으로
+# 별칭한다. `text_hash`는 아래 `__all__`로 re-export(기존 import 경로 유지).
+from whymath_backend.l1.embedding_primitives import (
+    provider_model_identity as _provider_model_identity,
+)
+from whymath_backend.l1.embedding_primitives import (
+    text_hash,
+)
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.semantic.index import IndexHit
 from whymath_backend.l4.misconception.semantic.matcher import catalog_text
@@ -43,15 +52,6 @@ if TYPE_CHECKING:
 
     from whymath_backend.l4.misconception.models import Misconception
     from whymath_backend.l4.misconception.semantic.provider import EmbeddingProvider
-
-
-def text_hash(text: str) -> str:
-    """임베딩 원본 표현의 안정 해시(SHA-256 hex) — 표현 변경(재임베딩 필요) 감지 신호.
-
-    카탈로그 표현(`catalog_text`)이 바뀌면 해시가 달라져 stale 행을 식별할 수 있다(populate가
-    비교에 쓸 수 있고, 행 메타로도 보관한다). 결정론·짧은 hex(32바이트→64자)면 충분하다.
-    """
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 class PgVectorIndex:
@@ -248,25 +248,6 @@ def populate_pgvector(
     for m, text, vec in zip(catalog, texts, vectors, strict=True):
         idx.upsert_entry(m.id, vec, source_text=text)
     return len(catalog)
-
-
-def _provider_model_identity(provider: EmbeddingProvider, settings: Settings) -> tuple[str, str]:
-    """provider 객체 + Settings에서 (provider_name, model_name) 임베딩 공간 식별자를 해석.
-
-    provider 좌석은 `embed`만 노출하므로 model 이름을 객체에서 못 읽는다. Settings의
-    `embedding_provider`/모델 ID로 식별자를 짓는다(add/search가 같은 규약을 공유해 공간 일치).
-    클래스명을 provider_name으로 써(local/openai/fake와 무관하게 *주입된 객체* 기준) 테스트가
-    임의 provider를 넣어도 일관된다.
-    """
-    cls_name = type(provider).__name__
-    if cls_name == "OpenAIEmbeddingProvider":
-        return "openai", settings.embedding_model_openai
-    if cls_name == "LocalEmbeddingProvider":
-        return "local", settings.embedding_model_local
-    if cls_name == "FakeEmbeddingProvider":
-        return "fake", "fake-hash"
-    # 알 수 없는 주입 provider — 클래스명을 공간 식별자로(테스트 scripted 등). 모델은 클래스명.
-    return cls_name, cls_name
 
 
 __all__ = [

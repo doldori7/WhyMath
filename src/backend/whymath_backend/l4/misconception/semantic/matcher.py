@@ -30,6 +30,7 @@ FakeEmbeddingProvider를 주입해 라이브 모델 없이 배선·임계값·�
 from __future__ import annotations
 
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.l1.embedding_primitives import provider_model_identity
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.models import Misconception, MisconceptionMatch
 from whymath_backend.l4.misconception.semantic.index import (
@@ -217,10 +218,9 @@ def build_semantic_matcher(
     if resolved.vector_store == "memory":
         # memory는 식별자 불요(InMemory가 무시)·pgvector_index(psycopg) import 회피(dep-free).
         return SemanticMatcher(provider=provider, index=InMemoryVectorIndex(), catalog=catalog)
-    # pgvector — 지연 import(memory 경로는 psycopg를 안 끌어온다·build_vector_index 미러).
-    from whymath_backend.l4.misconception.semantic.pgvector_index import _provider_model_identity
-
-    provider_name, model_name = _provider_model_identity(provider, resolved)
+    # 공간 식별자는 dep-free L1 프리미티브(psycopg 무관)라 상단 import — pgvector_index(psycopg)는
+    # 여전히 build_vector_index 안에서만 지연 로드되어 memory 경로의 dep-free 성질은 유지된다.
+    provider_name, model_name = provider_model_identity(provider, resolved)
     index = build_vector_index(resolved, provider_name=provider_name, model_name=model_name)
     return SemanticMatcher(
         provider=provider, index=index, catalog=catalog, prebuilt_index=prebuilt_index

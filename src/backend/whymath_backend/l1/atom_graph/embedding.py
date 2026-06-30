@@ -49,17 +49,14 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
 
 # 임베딩 provider seam·해시·식별 헬퍼 재사용(신규 금지·CLAUDE.md 로컬 우선) — 개념판과 *같은*
-# 좌석(궁극적으로 L4 오개념 의미 매칭)을 쓴다. text_hash(표현 변경 감지)·_provider_model_identity
-# (공간 식별)는 슬3이 쓰는 출처(L4 pgvector_index)에서 그대로 가져온다(seam 0·동일 규약).
-from whymath_backend.l4.misconception.semantic.pgvector_index import (
-    _provider_model_identity,
-    text_hash,
-)
+# 좌석을 쓴다. text_hash(표현 변경 감지)·provider_model_identity(공간 식별)는 레이어-중립 L1
+# 프리미티브(`l1/embedding_primitives.py`)에서 가져온다(L1→L1·역방향 의존 0·seam 0·동일 규약).
+from whymath_backend.l1.embedding_primitives import provider_model_identity, text_hash
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
-    from whymath_backend.l4.misconception.semantic.provider import EmbeddingProvider
+    from whymath_backend.l1.embedding_primitives import EmbeddingProvider
 
 # graph.json `concepts` 중 임베딩 대상 level(세부개념=원자만). 단원/소단원 노드는 의미검색
 # 대상이 아니라 제외한다(atom_node 프로젝션과 달리 임베딩은 원자만).
@@ -270,13 +267,13 @@ def populate_atom_embeddings(
     배치 1회 임베딩해 code 키로 upsert한다. provider/model은 임베딩 공간 식별자로 행에 박히고,
     같은 공간만 search가 본다. 멱등(재실행 시 갱신). 반환은 적재 행 수(=atoms 길이).
 
-    provider의 model 이름은 *Settings*에서 해석한다(`_provider_model_identity` 재사용 —
+    provider의 model 이름은 *Settings*에서 해석한다(`provider_model_identity` 재사용 —
     local→embedding_model_local·openai→embedding_model_openai·fake→fake-hash). provider 객체가
     model을 노출하지 않으므로(좌석은 embed만), 같은 규약을 upsert/search 양쪽이 공유하도록
     여기서 결정한다(concept_embedding과 동일). review_status 무관 전량 적재(게이팅은 조회 몫).
     """
     resolved = settings if settings is not None else get_settings()
-    provider_name, model_name = _provider_model_identity(provider, resolved)
+    provider_name, model_name = provider_model_identity(provider, resolved)
     idx = (
         index
         if index is not None
