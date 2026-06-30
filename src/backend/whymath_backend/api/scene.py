@@ -36,6 +36,7 @@ from whymath_backend.l3.pipeline import QualityQueueUnavailableError
 from whymath_backend.l3.visualization import InvalidVisualizationSpecError
 from whymath_backend.l4.learning_scene import LearningScene, SceneLearnerContext
 from whymath_backend.l4.lthc import mastery_to_level
+from whymath_backend.l4.misconception.evidence_store import net_support_by_misconception
 from whymath_backend.l4.misconception.hypothesis_store import get_active_hypotheses
 from whymath_backend.l4.scene_generation import generate_learning_scene
 
@@ -65,6 +66,12 @@ async def scene_for_concept_diagnosis(
     반례·≥0.5 거꾸로·<0.5 보류). 근거 있는 가설만(RS2 거짓 낙인 차단). `student_id`가 None이면
     (익명·맥락 없음) 조회 생략·빈 목록(프로브 0·기존 동작).
 
+    **렌더 시점 증거 재확인**(evidence_links 연동): `net_support_by_misconception`으로 학생의
+    증거 그래프를 단일 쿼리 집계해, 순지지도가 *음수*(반박 우세)인 활성 가설은 프로브에서 *제외*한다
+    — `curate_hypothesis`가 턴 시점에 쓰는 net_support<0 archived 규약과 동형이되, 직전 턴 이후
+    누적된 신규 증거까지 렌더 시점에 반영해 *반박된 오개념을 학생에게 들이밀지 않는다*(낙인 회피).
+    증거 없는 가설(키 부재→0.0)은 유지(과도 억제 회피).
+
     Args:
         diagnosis: 개념 진단(`compute_concept_diagnoses`의 원소·약점 먼저 정렬됨).
         session: DB 세션(Concept 로드·가설 store 조회용·L5가 보유).
@@ -84,12 +91,18 @@ async def scene_for_concept_diagnosis(
     level = mastery_to_level(mastery) if mastery is not None else "초보"
     # WH-1 활성 가설 → 적응형 오개념 프로브(student_id 있을 때만 조회·근거 있는 가설만).
     # 신뢰도 맵도 함께 넘겨 개입 패턴을 가설별로 다양화한다(scene_generation 결정트리).
+    # 렌더 시점 *증거 재확인*: evidence_links 순지지도가 음수(반박 우세)인 가설은 프로브를
+    # 억제한다(RS2 거짓 낙인 차단·curate net_support<0 archived 규약 동형·턴 후 신규 증거 반영).
     active_hypothesis_ids: list[str] = []
     active_hypothesis_confidences: dict[str, float] | None = None
     if student_id is not None:
         hypotheses = await get_active_hypotheses(session, student_id)
-        active_hypothesis_ids = [h.misconception_id for h in hypotheses]
-        active_hypothesis_confidences = {h.misconception_id: h.confidence for h in hypotheses}
+        net_support_map = await net_support_by_misconception(session, student_id)
+        corroborated = [
+            h for h in hypotheses if net_support_map.get(h.misconception_id, 0.0) >= 0.0
+        ]
+        active_hypothesis_ids = [h.misconception_id for h in corroborated]
+        active_hypothesis_confidences = {h.misconception_id: h.confidence for h in corroborated}
     learner_context = SceneLearnerContext(
         mastery_level=mastery,
         theta=diagnosis.irt_theta,
