@@ -10,9 +10,12 @@ import uuid
 from pathlib import Path
 from types import TracebackType
 
+import pytest
+
 from whymath_backend.l1.atom_graph.atom_backend_concept import AtomBackendConceptStore
 from whymath_backend.l1.atom_graph.atom_backend_edge import AtomBackendEdgeStore
 from whymath_backend.l1.atom_graph.populate import (
+    AtomBackboneCycleError,
     AtomBackbonePopulateReport,
     populate_atom_backbone,
 )
@@ -166,3 +169,50 @@ def test_populate_atom_backbone_orphan_edge(tmp_path: Path) -> None:
     assert report.concepts_loaded == 1
     assert report.edges_loaded == 0
     assert report.edges_skipped == 1  # orphan(to 미적재)
+
+
+def test_populate_atom_backbone_rejects_cycle(tmp_path: Path) -> None:
+    # 선수엣지에 순환(A→B→A)이 있으면 적재를 거부한다(DAG 방어선·hard fail).
+    concepts = [
+        {"code": _ATOM_A, "name": "일대일", "level": "세부개념", "parent_code": None},
+        {"code": _ATOM_B, "name": "기수", "level": "세부개념", "parent_code": None},
+    ]
+    edges = [
+        {"from_code": _ATOM_A, "to_code": _ATOM_B, "relation": "prerequisite", "strength": 0.8},
+        {"from_code": _ATOM_B, "to_code": _ATOM_A, "relation": "prerequisite", "strength": 0.8},
+    ]
+    path = tmp_path / "graph.json"
+    path.write_text(json.dumps({"concepts": concepts, "edges": edges}), encoding="utf-8")
+
+    c_store = AtomBackendConceptStore(engine=_FakeEngine())  # type: ignore[arg-type]
+    e_store = AtomBackendEdgeStore(engine=_FakeEngine())  # type: ignore[arg-type]
+    with pytest.raises(AtomBackboneCycleError) as exc_info:
+        populate_atom_backbone(path, concept_store=c_store, edge_store=e_store)
+    # 순환 경로가 노출돼 디버깅 가능해야 한다(닫힘 노드 반복 포함).
+    assert exc_info.value.cycle[0] == exc_info.value.cycle[-1]
+    assert set(exc_info.value.cycle) == {_ATOM_A, _ATOM_B}
+
+
+def test_populate_atom_backbone_self_loop_not_in_records(tmp_path: Path) -> None:
+    # self-edge(A→A)는 로딩 단계에서 skip되므로 cycle 검사에 도달하지 않는다(레코드 0건).
+    concepts = [
+        {"code": _ATOM_A, "name": "일대일", "level": "세부개념", "parent_code": None},
+    ]
+    edges = [
+        {"from_code": _ATOM_A, "to_code": _ATOM_A, "relation": "prerequisite", "strength": 0.8},
+    ]
+    path = tmp_path / "graph.json"
+    path.write_text(json.dumps({"concepts": concepts, "edges": edges}), encoding="utf-8")
+
+    class _OneRowEngine(_FakeEngine):
+        def __init__(self) -> None:
+            super().__init__()
+            self.code_rows = [_Row(_ATOM_A, _UUIDS[_ATOM_A])]
+
+    c_store = AtomBackendConceptStore(engine=_OneRowEngine())  # type: ignore[arg-type]
+    e_store = AtomBackendEdgeStore(engine=_OneRowEngine())  # type: ignore[arg-type]
+    # cycle 게이트는 raise하지 않는다 — self-edge는 적재 레코드(edge_records)에 들어오지 않아
+    # cycle 검사 대상이 0건이다(self-edge skip은 로딩 단계에서 처리·리포트엔 미반영).
+    report = populate_atom_backbone(path, concept_store=c_store, edge_store=e_store)
+    assert report.edges_loaded == 0
+    assert report.edges_skipped == 0  # 레코드 0건(self-edge는 로딩에서 이미 제외)

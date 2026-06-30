@@ -18,6 +18,7 @@ import pytest
 from data_pipeline.atom_graph.load import (
     CONSTRAINT_NAME,
     NODE_LABEL,
+    AtomGraphCycleError,
     LoadReport,
     ensure_schema,
     load_graph,
@@ -170,6 +171,18 @@ class TestEmittedCypher:
         report = load_graph(small_result, driver=driver)
         assert len(_node_calls(driver.calls)) == 2
         assert report.nodes_merged == 2
+
+    def test_rejects_cycle_before_any_merge(self) -> None:
+        """선수엣지에 순환(A→B→A)이 있으면 Neo4j 적재 직전 거부한다(어떤 MERGE도 발행 안 함)."""
+        cyclic = TransformResult(
+            concepts=[_atom(_A), _atom(_B)],
+            edges=[_edge(_A, _B), _edge(_B, _A)],
+        )
+        driver = _FakeDriver()
+        with pytest.raises(AtomGraphCycleError) as exc_info:
+            load_graph(cyclic, driver=driver)
+        assert exc_info.value.cycle[0] == exc_info.value.cycle[-1]
+        assert driver.calls == []  # cycle 검사가 세션 진입 전이라 어떤 Cypher도 발행되지 않음
 
     def test_edge_uses_atom_reltype_and_match(self, small_result: TransformResult) -> None:
         """엣지 MERGE는 reltype ATOM_PREREQUISITE·양끝 MATCH를 쓴다(고아 방지·구 그래프와 분리)."""

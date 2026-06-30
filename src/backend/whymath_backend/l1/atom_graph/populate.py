@@ -12,6 +12,7 @@ CLI: `python -m whymath_backend.l1.atom_graph.populate --graph data/corpus/atom_
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -22,10 +23,68 @@ from whymath_backend.l1.atom_graph.atom_backend_concept import (
     populate_atom_concepts,
 )
 from whymath_backend.l1.atom_graph.atom_backend_edge import (
+    AtomBackendEdgeRecord,
     AtomBackendEdgeStore,
     load_atom_edges_from_graph_json,
     populate_atom_edges,
 )
+
+
+class AtomBackboneCycleError(ValueError):
+    """선수엣지에 순환(cycle)이 있어 적재를 거부할 때 — 학습 경로 구성 불가.
+
+    DAG 불변식(`math_dsl_risk_register.md` Q10-②)을 *적재 시점*에 강제하는 방어선이다.
+    데이터 파이프라인 `validate.py`가 이미 transform 단계에서 cycle을 hard-error로 막지만,
+    backend는 graph.json을 신뢰하고 직접 적재하므로(부분 재적재·손수 편집된 코퍼스 대비)
+    여기서도 한 번 더 막는다. `cycle`은 순환 경로(닫힘 노드 반복 포함)다.
+    """
+
+    def __init__(self, cycle: list[str]) -> None:
+        self.cycle = cycle
+        super().__init__("순환 선수관계로 적재 거부 — 학습 경로 구성 불가: " + " → ".join(cycle))
+
+
+def _find_prerequisite_cycle_in_records(
+    records: Sequence[AtomBackendEdgeRecord],
+) -> list[str] | None:
+    """선수엣지 레코드(from=선수→to=후행)에서 사이클 1건 탐지(DFS·비재귀 스택).
+
+    데이터 파이프라인 `data_pipeline.atom_graph.validate._find_prerequisite_cycle`의 backend
+    짝이다(별 패키지라 import 대신 동일 알고리즘 미러). 모든 레코드는 PREREQUISITE이다
+    (`load_atom_edges_from_graph_json`이 선수만 남김). 1,837 노드 깊은 체인 대비 재귀 대신 명시
+    스택을 쓴다. Returns: 사이클 노드 경로(닫힘 노드 반복) 또는 None.
+    """
+    adj: dict[str, list[str]] = {}
+    for record in records:
+        adj.setdefault(record.from_code, []).append(record.to_code)
+
+    white, gray, black = 0, 1, 2
+    color: dict[str, int] = {}
+
+    for start in list(adj):
+        if color.get(start, white) != white:
+            continue
+        stack: list[tuple[str, int]] = [(start, 0)]
+        path: list[str] = [start]
+        color[start] = gray
+        while stack:
+            node, child_idx = stack[-1]
+            children = adj.get(node, [])
+            if child_idx < len(children):
+                stack[-1] = (node, child_idx + 1)
+                nxt = children[child_idx]
+                state = color.get(nxt, white)
+                if state == gray:  # back-edge → 사이클
+                    return path[path.index(nxt) :] + [nxt]
+                if state == white:
+                    color[nxt] = gray
+                    path.append(nxt)
+                    stack.append((nxt, 0))
+            else:
+                color[node] = black
+                path.pop()
+                stack.pop()
+    return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +120,14 @@ def populate_atom_backbone(
     )
 
     edge_records, _load_skipped = load_atom_edges_from_graph_json(graph_path)
+
+    # 적재 전 cycle 방어선(DAG 불변식·hard fail·조용한 skip 금지) — graph.json이 손수 편집되거나
+    # 부분 재적재돼 순환이 유입되면 거부한다. 데이터 파이프라인 validate가 1차로 막지만 backend는
+    # graph.json을 직접 신뢰하므로 여기서 한 번 더 막는다(math_dsl_risk_register.md Q10-②).
+    cycle = _find_prerequisite_cycle_in_records(edge_records)
+    if cycle is not None:
+        raise AtomBackboneCycleError(cycle)
+
     edges_loaded = populate_atom_edges(edge_records, settings=resolved, store=e_store)
 
     return AtomBackbonePopulateReport(
@@ -96,4 +163,8 @@ if __name__ == "__main__":  # pragma: no cover
     _main()
 
 
-__all__ = ["AtomBackbonePopulateReport", "populate_atom_backbone"]
+__all__ = [
+    "AtomBackboneCycleError",
+    "AtomBackbonePopulateReport",
+    "populate_atom_backbone",
+]
