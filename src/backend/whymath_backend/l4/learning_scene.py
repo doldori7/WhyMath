@@ -70,6 +70,15 @@ class SceneLearnerContext(BaseModel):
         default_factory=list,
         description="WH-1 활성 오개념 가설 id(`misconception_hypothesis`). 근거 있는 프로브 한정.",
     )
+    active_hypothesis_confidences: dict[str, float] | None = Field(
+        default=None,
+        description=(
+            "WH-1 활성 가설의 *누적 신뢰도* 맵(id→confidence·0~1). 주어지면 프로브 개입 패턴을 "
+            "doc 결정트리(`intervene.select_intervention`·>0.8 반례·≥0.5 거꾸로·<0.5 보류)로 "
+            "*가설별* 선택해 다양화한다(<0.5는 프로브 미생성·낙인 회피). None(기본)이면 "
+            "`active_hypothesis_ids` 전부 반례(`COUNTEREXAMPLE`) 레거시 동작."
+        ),
+    )
     theta: float | None = Field(default=None, description="L2 IRT 능력 추정치. 스냅샷.")
 
 

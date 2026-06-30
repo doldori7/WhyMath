@@ -60,9 +60,10 @@ async def scene_for_concept_diagnosis(
     없으면(orphan id) None을 돌려준다(장면 스킵·예외 아님).
 
     **오개념 프로브 적응**: `student_id`가 주어지면 WH-1 가설 store(`get_active_hypotheses`·L4)에서
-    그 학생의 *활성 오개념 가설*을 조회해 `active_hypothesis_ids`로 넘긴다 — `scene_generation`이
-    이를 ∩ 카탈로그로 *적응형 프로브*로 만든다(근거 있는 가설만·RS2 거짓 낙인 차단). `student_id`가
-    None이면(익명·맥락 없음) 조회 생략·빈 목록(프로브 0·기존 동작).
+    그 학생의 *활성 오개념 가설*을 조회해 id와 *누적 신뢰도 맵*을 넘긴다 — `scene_generation`이
+    이를 ∩ 카탈로그로 *적응형 프로브*로 만들고, 신뢰도로 개입 패턴을 다양화한다(doc 결정트리·>0.8
+    반례·≥0.5 거꾸로·<0.5 보류). 근거 있는 가설만(RS2 거짓 낙인 차단). `student_id`가 None이면
+    (익명·맥락 없음) 조회 생략·빈 목록(프로브 0·기존 동작).
 
     Args:
         diagnosis: 개념 진단(`compute_concept_diagnoses`의 원소·약점 먼저 정렬됨).
@@ -82,14 +83,18 @@ async def scene_for_concept_diagnosis(
     )
     level = mastery_to_level(mastery) if mastery is not None else "초보"
     # WH-1 활성 가설 → 적응형 오개념 프로브(student_id 있을 때만 조회·근거 있는 가설만).
+    # 신뢰도 맵도 함께 넘겨 개입 패턴을 가설별로 다양화한다(scene_generation 결정트리).
     active_hypothesis_ids: list[str] = []
+    active_hypothesis_confidences: dict[str, float] | None = None
     if student_id is not None:
         hypotheses = await get_active_hypotheses(session, student_id)
         active_hypothesis_ids = [h.misconception_id for h in hypotheses]
+        active_hypothesis_confidences = {h.misconception_id: h.confidence for h in hypotheses}
     learner_context = SceneLearnerContext(
         mastery_level=mastery,
         theta=diagnosis.irt_theta,
         active_hypothesis_ids=active_hypothesis_ids,
+        active_hypothesis_confidences=active_hypothesis_confidences,
     )
     req = RoutingRequest(
         task_type="generate",
