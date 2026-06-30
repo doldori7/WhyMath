@@ -52,6 +52,7 @@ from whymath_backend.l3.verify_solution import (
 from whymath_backend.l4.hint_deferral import HintLevel
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.misconception.match_gate import _DEFAULT_OCR_THRESHOLD
+from whymath_backend.l4.misconception.wrong_form_match import observe_wrong_form_shadow
 from whymath_backend.l4.step_shadow import observe_step_breaks
 from whymath_backend.schema.enums import StepType
 
@@ -268,6 +269,8 @@ def recommend_coaching_for_solution(
     # slice 64: 문항 맥락(problem_id·expected_answer)을 *shadow 로그에만* 주입(진단 라벨 정확도
     # 측정용). `result`엔 싣지 않는다 — 특히 expected_answer는 student-facing이면 정답 누출.
     observe_step_breaks(student_solution, problem_id=problem_id, expected_answer=expected_answer)
+    # 오개념 거짓 항등식 SymPy 탐지 shadow(감사 §7) — 비노출·비차단·로그만(verdict 불변·off 기본).
+    observe_wrong_form_shadow(student_solution)
     return result
 
 
