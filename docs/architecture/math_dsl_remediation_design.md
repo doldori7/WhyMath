@@ -15,7 +15,7 @@
 | cycle 검출(populate/load 방어선) | **구현 완료** | 저위험·기존 탐지기 미러 |
 | 교육과정 `grade_introduced`·`semester_introduced` 제거 | **구현 완료** | NULL·중복·소비처 0 |
 | 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 | **설계**(§3) | 소비처 있음(destructive) |
-| 오개념 ID 통합(kebab 30 ↔ M-id 839) | **설계**(§1) — M-id 로더는 이미 구현됨, 잔여 = crosswalk+rekey | 44+ 파일 강결합·crosswalk·학생데이터 미정 |
+| 오개념 ID 통합(kebab 30 ↔ M-id 839) | **골격 구현**(§1) — M-id 로더·crosswalk 테이블·read-time resolver 완료. 잔여 = 매핑 큐레이션·게이트 배선 | rekey는 resolver로 불필요화(채택) |
 | 파서(동치 권위) 일원화 | **구현 완료**(§2) — 경계 명문화 + golden test | `notation_contract.md`·`data/notation_contract.json` |
 
 > **정정(2026-06-30)**: 초안(v0.1)은 M-id 로더를 "없음(스키마만)"이라 했으나 *오보*다 —
@@ -44,16 +44,21 @@
 ### 1.3 단계 슬라이스 (제안)
 1. ✅ **M-id 로더 + ORM 적재**(완료·저위험·런타임 무영향) — `misconceptions_v1` 839 →
    `misconception_catalog` 테이블(`l1/misconception/catalog_loader.py`). kebab 경로 불변.
-2. **crosswalk 설계·구축** — kebab 30 → M-id 매핑 테이블(`misconception_crosswalk`: kebab_id,
-   mis_id, confidence, method[manual|embedding|standard_code]). 30종은 수작업 검수 가능 규모.
-   `concept_src_id`·`standard_code` 느슨연결을 후보 생성에 활용하되 **사람 승인 게이트** 필수.
-3. **canonical id 선정** — 신규 노출은 *M-id를 canonical*로(839가 콘텐츠 풍부·전이/진단문항 보유),
-   kebab은 *런타임 탐지 키*로 잔존하되 crosswalk로 M-id에 항상 매핑. 게이트(`learning_scene.py`·
-   `wh1_loop.py`)는 **두 체계 공존 분기**(kebab ∪ crosswalk(M-id))로 확장.
-4. **학생 데이터 마이그레이션** *(미정·선행조건)* — `misconception_hypothesis`·`evidence_link`의
-   기존 kebab `misconception_id`를 어떻게 재키잉할지 **전략 미정**. 옵션: (a) kebab 보존 + 조회
-   시 crosswalk 해석(무마이그레이션·읽기 비용), (b) 일괄 재키잉(데이터 마이그레이션·미성년 PII
-   주의·되돌리기 어려움). **별도 조사·결정 필요**(미성년 데이터라 의사결정 우선순위 #1·#2 적용).
+2. 🟡 **crosswalk 골격**(완료) — kebab ↔ M-id 매핑 테이블 `misconception_crosslink`
+   (`db/models/misconception_crosslink.py`·`concept_standard_link` 패턴·`link_id` UUID PK·`mis_id`
+   실 FK·의미 유일키 `(kebab_id, mis_id, link_type)`)·로더(`l1/misconception/crosslink_loader.py`)·
+   **read-time resolver**(`crosslink_resolve.py`·kebab→M-id 조회)·alembic `e2f3a4b5c6d7`. **실제 매핑
+   데이터·게이트 배선은 잔여**(아래). `confidence`·`method`로 근거를 남기되 채택은 사람 검수.
+   *(잔여)* **매핑 큐레이션** — 30 kebab → M-id를 `concept_src_id`·`standard_code`·canonical_statement
+   의미유사·error_type 신호로 *제안*하되 **사람 승인 후** 적재(자동 커밋 금지·오도 코칭 차단).
+   후보 자동생성 도구(M-id 임베딩 populate + 신호 결합)는 별 슬라이스.
+3. **canonical id 선정 + 게이트 공존**(잔여) — 신규 노출은 M-id canonical·kebab은 런타임 탐지 키로
+   잔존(crosswalk로 항상 매핑). 게이트(`learning_scene.py`·`wh1_loop.py`·`evidence_store.py`)는
+   **두 체계 공존 분기**로 확장 — *노출 전 측정*(`04b` shadow→canary).
+4. **학생 데이터 마이그레이션** *(불필요화·결정)* — 런타임 테이블은 kebab `misconception_id`를
+   TEXT(FK 아님)로 보존하므로 **read-time resolver로 rekey 없이** M-id 해석 가능(채택). 물리 일괄
+   재키잉(option b)은 미성년 PII·되돌리기 위험으로 **비채택**(우선순위 #1·#2). 1:N 매핑 시 confidence
+   상위 우선·다중 표시(리포트 계층 결정).
 
 ### 1.4 리스크
 - 강결합 44+ 파일 → 점진·공존 전제(빅뱅 금지). 각 슬라이스는 *측정 후 노출*(`04b` shadow→canary 패턴 재사용).
