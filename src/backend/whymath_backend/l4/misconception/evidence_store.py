@@ -48,6 +48,7 @@ __all__ = [
     "get_evidence_for_student",
     "log_evidence",
     "net_support",
+    "net_support_by_misconception",
     "purge_expired",
 ]
 
@@ -185,6 +186,31 @@ async def net_support(session: AsyncSession, student_id: uuid.UUID, misconceptio
     )
     result = await session.execute(stmt)
     return float(result.scalar_one())
+
+
+async def net_support_by_misconception(
+    session: AsyncSession, student_id: uuid.UUID
+) -> dict[str, float]:
+    """한 학생의 *오개념별 순 지지도* 맵 = {misconception_id: Σ(polarity×COALESCE(weight,1.0))}.
+
+    `net_support`의 *배치판*(GROUP BY) — 학생의 모든 증거를 단일 쿼리로 집계해 오개념별 순지지도를
+    돌려준다(N+1 회피). 증거가 있는 오개념만 키로 담는다(증거 없는 오개념은 키 부재 → 호출자가
+    0.0 취급). 적응형 장면이 *렌더 시점*에 활성 가설을 증거로 재확인(반박 net_support<0 억제·RS2)
+    하는 데 쓴다 — `curate_hypothesis`가 턴 시점에 쓰는 `net_support` 신호와 동형(SQL 진단 신호).
+    """
+    stmt = (
+        select(
+            EvidenceLink.misconception_id,
+            func.coalesce(
+                func.sum(EvidenceLink.polarity * func.coalesce(EvidenceLink.weight, 1.0)),
+                0.0,
+            ),
+        )
+        .where(EvidenceLink.student_id == student_id)
+        .group_by(EvidenceLink.misconception_id)
+    )
+    result = await session.execute(stmt)
+    return {mid: float(support) for mid, support in result.all()}
 
 
 async def purge_expired(session: AsyncSession, *, as_of: date) -> int:

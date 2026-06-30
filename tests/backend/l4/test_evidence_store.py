@@ -33,6 +33,7 @@ from whymath_backend.l4.misconception.evidence_store import (
     get_evidence_for_student,
     log_evidence,
     net_support,
+    net_support_by_misconception,
     purge_expired,
 )
 from whymath_backend.schema.enums import Persona
@@ -56,11 +57,17 @@ class _FakeScalars:
 
 class _FakeResult:
     def __init__(
-        self, *, scalars_list: list[Any] | None = None, scalar_one: Any = None, rowcount: int = 0
+        self,
+        *,
+        scalars_list: list[Any] | None = None,
+        scalar_one: Any = None,
+        rowcount: int = 0,
+        all_rows: list[Any] | None = None,
     ) -> None:
         self._scalars_list = scalars_list or []
         self._scalar_one = scalar_one
         self.rowcount = rowcount
+        self._all_rows = all_rows or []
 
     def scalars(self) -> Any:
         return _FakeScalars(self._scalars_list)
@@ -68,16 +75,25 @@ class _FakeResult:
     def scalar_one(self) -> Any:
         return self._scalar_one
 
+    def all(self) -> list[Any]:
+        return self._all_rows
+
 
 class _FakeSession:
     def __init__(
-        self, *, scalars_list: list[Any] | None = None, scalar_one: Any = None, rowcount: int = 0
+        self,
+        *,
+        scalars_list: list[Any] | None = None,
+        scalar_one: Any = None,
+        rowcount: int = 0,
+        all_rows: list[Any] | None = None,
     ) -> None:
         self.added: list[Any] = []
         self.executed: list[Any] = []
         self._scalars_list = scalars_list or []
         self._scalar_one = scalar_one
         self._rowcount = rowcount
+        self._all_rows = all_rows or []
 
     def add(self, obj: Any) -> None:
         self.added.append(obj)
@@ -92,7 +108,10 @@ class _FakeSession:
     async def execute(self, stmt: Any) -> _FakeResult:
         self.executed.append(stmt)
         return _FakeResult(
-            scalars_list=self._scalars_list, scalar_one=self._scalar_one, rowcount=self._rowcount
+            scalars_list=self._scalars_list,
+            scalar_one=self._scalar_one,
+            rowcount=self._rowcount,
+            all_rows=self._all_rows,
         )
 
 
@@ -260,6 +279,17 @@ class TestQueriesUnit:
         out = asyncio.run(net_support(cast(AsyncSession, session), uuid.uuid4(), _VALID_MID))
         assert out == 2.5
 
+    def test_net_support_by_misconception_maps_rows(self) -> None:
+        """GROUP BY 행 (mid, support) → {mid: float} 매핑·증거 없는 오개념은 키 부재."""
+        session = _FakeSession(all_rows=[("mc-a", 2.5), ("mc-b", -1.0)])
+        out = asyncio.run(net_support_by_misconception(cast(AsyncSession, session), uuid.uuid4()))
+        assert out == {"mc-a": 2.5, "mc-b": -1.0}
+
+    def test_net_support_by_misconception_empty(self) -> None:
+        session = _FakeSession(all_rows=[])
+        out = asyncio.run(net_support_by_misconception(cast(AsyncSession, session), uuid.uuid4()))
+        assert out == {}
+
     def test_purge_returns_rowcount(self) -> None:
         session = _FakeSession(rowcount=3)
         out = asyncio.run(purge_expired(cast(AsyncSession, session), as_of=date(2026, 1, 1)))
@@ -371,6 +401,9 @@ def test_evidence_persist_aggregate_retention_and_cascade_on_live_pg() -> None:
 
                 # net_support = +1*2.0 + (−1)*0.5 + +1*1.0(weight None→1) = 2.5
                 assert await net_support(session, uid, _VALID_MID) == pytest.approx(2.5)
+                # 배치 GROUP BY 집계가 단건 net_support와 일치(실 SQL 검증).
+                by_mc = await net_support_by_misconception(session, uid)
+                assert by_mc == {_VALID_MID: pytest.approx(2.5)}
                 assert len(await get_evidence_for_misconception(session, uid, _VALID_MID)) == 3
 
                 # retention 파기 — 만료 1건만
