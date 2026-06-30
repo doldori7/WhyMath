@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 
+from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
 from whymath_backend.l4.misconception import (
     CATALOG,
     CATALOG_BY_ID,
@@ -193,6 +194,39 @@ class TestRegexSignals:
         for m in CATALOG:
             for pat in m.regex_signals:
                 re.compile(pat)  # 실패 시 re.error → 테스트 실패
+
+
+class TestCanonicalWrongForm:
+    """선택 필드 `canonical_wrong_form` — 거짓 항등식의 *머신 검증* 표현(동치 권위 일원화·감사 §7).
+
+    핵심 불변식: 부여된 (lhs, rhs)는 `identity_status`(SymPy 단일 권위)로 **not_identity**여야
+    한다 — 'wrong form이 실제로 틀렸다'를 문자열이 아닌 기호 권위로 못 박는다. 정직 스코프:
+    SymPy가 가정 없이 반증 가능한 다항 거짓 항등식에만 부여(정의역 의존·초월·유리식은 미부여).
+    """
+
+    # SymPy가 not_identity로 반증 가능한 다항 거짓 항등식만(probe로 확정).
+    _AUTHORED_IDS = {"distribution-over-power", "exponent-zero"}
+
+    def test_field_optional_and_typed(self) -> None:
+        for m in CATALOG:
+            if m.canonical_wrong_form is None:
+                continue
+            assert isinstance(m.canonical_wrong_form, tuple)
+            assert len(m.canonical_wrong_form) == 2
+            lhs, rhs = m.canonical_wrong_form
+            assert isinstance(lhs, str) and lhs.strip()
+            assert isinstance(rhs, str) and rhs.strip()
+
+    def test_authored_set_matches(self) -> None:
+        authored = {m.id for m in CATALOG if m.canonical_wrong_form is not None}
+        assert authored == self._AUTHORED_IDS
+
+    def test_wrong_form_is_proven_false_by_sympy(self) -> None:
+        """★권위 일원화: 부여된 wrong form은 SymPy가 *거짓임을 증명*한다(not_identity)."""
+        for mid in self._AUTHORED_IDS:
+            lhs, rhs = CATALOG_BY_ID[mid].canonical_wrong_form  # type: ignore[misc]
+            verdict = identity_status(lhs, rhs)
+            assert verdict is IdentityVerdict.not_identity, (mid, lhs, rhs, verdict)
 
 
 class TestCorrectForm:

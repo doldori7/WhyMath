@@ -58,6 +58,19 @@ class Misconception(BaseModel):
             "*겹치지 않게*(disjoint) 작성해 기존 confidence·matched_signals를 보존한다."
         ),
     )
+    canonical_wrong_form: tuple[str, str] | None = Field(
+        default=None,
+        description=(
+            "거짓 항등식의 *머신 검증 가능* 표현 (lhs, rhs) — SymPy syntax(`**`·`sqrt`·`log`). "
+            "부여 시 카탈로그 무결성 테스트가 `identity_status`(동치 권위 단일·L3)로 "
+            "**not_identity**(SymPy가 거짓임을 *증명*)임을 강제한다 → 'wrong form이 실제로 "
+            "틀렸다'를 문자열이 아닌 *기호 권위*로 못 박는다(감사 §7·동치 권위 일원화). 정직 "
+            "스코프: SymPy가 가정 없이 반증 가능한 *다항* 거짓 항등식에만 부여(예 `(a+b)²=a²+b²`·"
+            "`a⁰=0`). 정의역 의존(`√(x²)=x`)·초월(`log(a+b)`)·유리식은 SymPy 미결정이라 *부여 "
+            "안 함*(거짓 머신 검증 주장 금지·regex/substring·semantic 경로가 담당). "
+            "`canonical_statement`(표시 문자열)와 별개의 *구조* 표현이다(표현≠의미)."
+        ),
+    )
     correct_form: str | None = Field(
         default=None,
         description=(
