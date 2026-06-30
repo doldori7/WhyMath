@@ -172,6 +172,85 @@ class TestCurateHypothesisOrchestrationUnit:
 
 
 # ===========================================================================
+# 단위 (hermetic) — crosswalk shadow 배선(게이트 공존·비노출 측정·Q10-⑥)
+# ===========================================================================
+
+
+class _FakeResult:
+    """`execute(select).scalars().all()` 체인 충족 — 기존 행 없음(빈 결과)."""
+
+    def scalars(self) -> _FakeResult:
+        return self
+
+    def all(self) -> list[object]:
+        return []
+
+
+class _FakeSession:
+    """_persist_active_set 단위검증용 최소 AsyncSession — select 빈 결과·add/flush no-op."""
+
+    def __init__(self) -> None:
+        self.added: list[object] = []
+
+    async def execute(self, statement: object) -> _FakeResult:
+        return _FakeResult()
+
+    def add(self, obj: object) -> None:
+        self.added.append(obj)
+
+    async def flush(self) -> None:
+        return None
+
+
+class TestCrosslinkShadowWiring:
+    """`_persist_active_set`은 kebab-id를 영속하는 게이트라 crosswalk shadow를 배선한다(Q10-⑥).
+
+    `evidence_store`와 동일한 게이트 공존 패턴 — mode off면 관측 0(per-write DB 왕복 회피), shadow면
+    영속되는 활성 가설 각각의 kebab-id를 *비노출·비차단*으로 관측한다(노출·DB 저장은 kebab 그대로).
+    never-break는 `observe_crosslink_shadow_async` 자체가 보장하므로(별도 테스트) 여기선 *배선*만 못
+    박는다 — off/shadow 분기와 per-mid 호출.
+    """
+
+    def _run_persist(
+        self, monkeypatch: pytest.MonkeyPatch, mode: str
+    ) -> tuple[list[str], _FakeSession]:
+        from whymath_backend.config import get_settings as _get_settings
+
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", mode)
+        _get_settings.cache_clear()
+        calls: list[str] = []
+
+        async def _spy(misconception_id: str, **_kw: object) -> None:
+            calls.append(misconception_id)
+
+        monkeypatch.setattr(hypothesis_store, "observe_crosslink_shadow_async", _spy)
+        session = _FakeSession()
+        try:
+            asyncio.run(
+                hypothesis_store._persist_active_set(
+                    cast(AsyncSession, session),
+                    uuid.uuid4(),
+                    [_pyhyp("kebab-a", 0.6), _pyhyp("kebab-b", 0.5)],
+                )
+            )
+        finally:
+            _get_settings.cache_clear()
+        return calls, session
+
+    def test_off_observes_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """off(기본) → shadow 관측 0(crosswalk 조회 0)·영속은 정상(행 add)."""
+        calls, session = self._run_persist(monkeypatch, "off")
+        assert calls == []
+        assert len(session.added) == 2  # 두 가설 모두 신규 insert(영속 정상)
+
+    def test_shadow_observes_each_persisted_kebab(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """shadow → 영속되는 활성 가설 각각의 kebab-id를 관측(노출·저장은 kebab 그대로)."""
+        calls, session = self._run_persist(monkeypatch, "shadow")
+        assert calls == ["kebab-a", "kebab-b"]  # per-active-mid 관측
+        assert len(session.added) == 2  # 영속 동작 불변(관측은 부수효과)
+
+
+# ===========================================================================
 # 통합 (실 PG·기본 SKIP) — upsert·prune·활성 세트·격리·#191 왕복 일관
 # ===========================================================================
 

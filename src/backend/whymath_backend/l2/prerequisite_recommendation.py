@@ -84,6 +84,14 @@ if TYPE_CHECKING:
 # 검수 게이팅 비교 리터럴 — 약개념 추천(`weak_concept_recommendation._REVIEWED`)과 동일 규약.
 _REVIEWED: str = "reviewed"
 
+# 선수 traversal 최대 깊이 — *단일 출처*(math_dsl_risk_register.md Q10-⑧). 선수 그래프는 DAG
+# 보장(data-pipeline validate.py prerequisite_cycle hard error)이라 재귀는 자연 종료하나, 비용·
+# 노이즈를 막으려 상한으로 bound한다(부분 적재·미래 데이터 대비 방어). API 경계(`api/me.py`
+# MaxDepth)가 이 상한을 공유해 매직 넘버 중복을 없앤다.
+# ⚠️ 이것은 *그래프 traversal 깊이 예산*이지 "LLM 컨텍스트 예산"(max_nodes·max_tokens)이 아니다 —
+# 후자는 LLM에 subgraph를 주입하는 소비처가 생긴 뒤에 별도로 도입한다(지금 미존재·premature).
+MAX_PREREQUISITE_DEPTH: int = 5
+
 
 @dataclass(frozen=True, slots=True)
 class PrerequisiteRow:
@@ -365,6 +373,7 @@ async def recommend_prerequisite_gaps(
 
 
 __all__ = [
+    "MAX_PREREQUISITE_DEPTH",
     "PrerequisiteGap",
     "PrerequisiteRow",
     "fetch_prerequisites",

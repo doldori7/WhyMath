@@ -94,6 +94,7 @@ from whymath_backend.l2.learning_path import (
 )
 from whymath_backend.l2.mastery_tracking import record_problem_attempt_mastery
 from whymath_backend.l2.prerequisite_recommendation import (
+    MAX_PREREQUISITE_DEPTH,
     PrerequisiteGap,
     recommend_prerequisite_gaps,
 )
@@ -1187,17 +1188,18 @@ WeakOnly = Annotated[
         ),
     ),
 ]
-# 다단계(multi-hop) 선수 traversal 깊이 — 1=직접 선수만(기본·후방 호환)·2~5=선수의 선수…까지.
+# 다단계(multi-hop) 선수 traversal 깊이 — 1=직접 선수만(기본·후방 호환)·2~상한=선수의 선수…까지.
 # 선수 그래프는 DAG 보장(data-pipeline validate.py가 prerequisite_cycle hard error)이라 재귀는
-# 자연 종료하나, 비용·노이즈를 막으려 상한 5(부분 적재·미래 데이터 대비 방어 bound).
+# 자연 종료하나, 비용·노이즈를 막으려 상한으로 bound한다. 상한은 L2 단일 출처
+# `MAX_PREREQUISITE_DEPTH`를 공유한다(매직 넘버 중복 제거·Q10-⑧).
 MaxDepth = Annotated[
     int,
     Query(
         ge=1,
-        le=5,
+        le=MAX_PREREQUISITE_DEPTH,
         description=(
-            "선수 traversal 최대 깊이 — 1=직접 선수만(기본)·2~5=다단계 선수(선수의 선수…). "
-            "DAG 보장이라 종료, 비용·노이즈 상한 5."
+            "선수 traversal 최대 깊이 — 1=직접 선수만(기본)·2 이상=다단계 선수(선수의 선수…). "
+            f"DAG 보장이라 종료, 비용·노이즈 상한 {MAX_PREREQUISITE_DEPTH}."
         ),
     ),
 ]

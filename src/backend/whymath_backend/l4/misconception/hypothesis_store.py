@@ -29,6 +29,11 @@ hypothesis.py` — `MisconceptionHypothesis`·`decay`·`reinforce`·`update_hypo
 본 모듈은 그 집계(`net_support`)를 *소비*만 한다. coach/intervention 결선(`curate_hypothesis`→
 개입 발화·학생 세션 경로)·`select_probe`(ε-탐색 문항)·API 엔드포인트 노출·진단-실제 *일치율*
 게이트는 모두 후속 슬라이스다.
+
+오개념 crosswalk shadow(게이트 공존 배선·math_dsl_risk_register.md Q10-⑥): `_persist_active_set`은
+kebab-id `misconception_id`를 *런타임 키로 영속*하는 게이트라, `evidence_store.log_evidence`와
+동일하게 `misconception_crosslink_mode == "shadow"`에서 영속 kebab-id의 canonical M-id 매핑
+coverage를 *비노출·비차단*으로 관측한다(노출·DB 저장은 kebab-id 그대로 불변).
 """
 
 from __future__ import annotations
@@ -39,9 +44,11 @@ from collections.abc import Sequence
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.config import get_settings
 from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
 )
+from whymath_backend.l4.misconception.crosslink_shadow import observe_crosslink_shadow_async
 from whymath_backend.l4.misconception.evidence_store import net_support
 from whymath_backend.l4.misconception.hypothesis import (
     MisconceptionHypothesis,
@@ -210,6 +217,15 @@ async def _persist_active_set(
 
     # server_default(id·타임스탬프)·갱신을 같은 트랜잭션에서 가시화(commit은 호출자).
     await session.flush()
+
+    # crosswalk shadow(비노출·비차단 측정·게이트 공존 배선) — 이 좌석은 kebab-id를 *런타임 키로
+    # 영속*하는 또 하나의 게이트다(evidence_store와 평행). mode != "off"면 영속된 활성 가설 각각의
+    # kebab-id가 canonical M-id로 어떻게 매핑되는지를 *로그로만* 관측한다(crosslink_shadow·
+    # math_dsl_risk_register.md Q10-⑥·remediation §1.3 step3). 노출·위 DB 저장은 kebab-id 그대로
+    # 불변이고, resolve 실패도 영속을 막지 않는다(never-break). 기본 off라 측정 윈도에서만 켠다.
+    if get_settings().misconception_crosslink_mode != "off":
+        for hyp in active:
+            await observe_crosslink_shadow_async(hyp.misconception_id)
 
 
 async def curate_hypothesis(

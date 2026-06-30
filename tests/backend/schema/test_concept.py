@@ -441,3 +441,89 @@ class TestConceptFusion:
         """extra='forbid'."""
         with pytest.raises(ValidationError):
             ConceptFusion(concept_ids=[uuid.uuid4()], bogus="x")  # type: ignore[call-arg]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# Concept — 노드 필드 거버넌스 가드 (math_dsl_risk_register.md Q10-③ "노드는 의미만")
+# ──────────────────────────────────────────────────────────────────────
+class TestConceptNodeFieldGovernance:
+    """개념 *노드*에 의미 외(렌더·교육과정·프롬프트·런타임·사용자) 필드 재유입을 막는 회귀 가드.
+
+    `extra="forbid"`는 *입력* 미지 필드만 막는다 — 누군가 `Concept`에 `grade_introduced`(교육과정)
+    나 `fps`(렌더) 같은 필드를 *모델에 다시 선언*하는 PR은 못 막는다. 교육과정 4필드는 이미
+    제거됐으나(Overlay `CurriculumEntry` 이관·rev f3a4b5c6d7e8) 그 부채가 *다시 들어오는* 경로를
+    동결한다. 플레이북 "노드에 넣지 말 10가지"(principles_review §3.4)의 실행 가능 게이트다.
+    """
+
+    # 노드에 절대 재유입되면 안 되는 필드명(의미 외 관심사) — Q10-③·plays §3.4.
+    #   · 교육과정(Overlay 단일 진실): subject·curriculum_version·grade/semester_introduced
+    #   · 렌더(L5 클라 책임·표현≠의미): fps·shader·pixel·canvas·color
+    #   · 프롬프트/런타임/사용자(외부화 대상): prompt·runtime_state·user_id·session_id
+    _FORBIDDEN_NODE_FIELDS = frozenset(
+        {
+            # 교육과정(노드 비내장·Overlay 이관) — 제거된 부채의 회귀 차단.
+            "subject",
+            "curriculum_version",
+            "grade_introduced",
+            "semester_introduced",
+            # 렌더 기술(L5 클라·spec 책임) — 노드는 렌더를 모른다.
+            "fps",
+            "shader",
+            "pixel",
+            "canvas",
+            "color",
+            # 프롬프트·런타임·사용자(외부화 — 노드에 결합 금지).
+            "prompt",
+            "runtime_state",
+            "user_id",
+            "session_id",
+        }
+    )
+
+    # 현재 허용 필드 화이트리스트(동결) — 새 필드 추가 PR이 *의식적으로* 이 집합을 갱신하게 한다.
+    # "노드는 의미만"(Q10-③) 원칙상 새 필드는 개념의 *의미*여야 하며, 의미 외 필드면 위 금지집합에
+    # 들어가야 한다. 이 동결이 그 판단을 코드리뷰로 끌어낸다(조용한 결합 부채 누적 차단).
+    _ALLOWED_NODE_FIELDS = frozenset(
+        {
+            "concept_id",
+            "code",
+            "source_id",
+            "name_ko",
+            "name_en",
+            "aliases",
+            "level",
+            "parent_concept_id",
+            "is_signature_korean",
+            "cognitive_type",
+            "recommended_visual_styles",
+            "intrinsic_difficulty",
+            "exam_frequency",
+            "weight_in_curriculum",
+            "description",
+            "formal_definition",
+            "intuitive_explanation",
+            "common_misconceptions",
+            "embedding_id",
+            "created_at",
+        }
+    )
+
+    def test_no_forbidden_fields_present(self) -> None:
+        """의미 외(렌더·교육과정·프롬프트·런타임·사용자) 필드가 노드에 *부재*임을 단언."""
+        present = set(Concept.model_fields) & self._FORBIDDEN_NODE_FIELDS
+        assert present == set(), (
+            f"개념 노드에 의미 외 필드 재유입 — {sorted(present)}. 교육과정은 CurriculumEntry "
+            "Overlay·렌더는 L5 spec·프롬프트/런타임/사용자는 외부화 대상(Q10-③ '노드는 의미만')."
+        )
+
+    def test_field_set_frozen(self) -> None:
+        """현재 필드 집합 동결 — 새 필드 추가 시 화이트리스트를 의식적으로 갱신하게 강제.
+
+        실패하면 추가/제거된 필드를 확인하고, *개념의 의미*면 화이트리스트에 추가, *의미 외*면
+        금지집합에 넣고 모델에서 제거하라(노드는 의미만·Q10-③).
+        """
+        assert set(Concept.model_fields) == self._ALLOWED_NODE_FIELDS
+
+    def test_forbidden_and_allowed_disjoint(self) -> None:
+        """금지집합과 허용 화이트리스트는 서로소 — 같은 필드가 양쪽에 들어가는 모순 방지."""
+        assert self._FORBIDDEN_NODE_FIELDS & self._ALLOWED_NODE_FIELDS == set()
