@@ -115,8 +115,6 @@ class TestConceptCreation:
             parent_concept_id=parent,
             subject=Subject.미적분,
             curriculum_version=Curriculum.REVISION_2022,
-            grade_introduced=12,
-            semester_introduced=1,
             is_signature_korean=True,
             cognitive_type=[CognitiveType.THEOREM, CognitiveType.TECHNIQUE],
             recommended_visual_styles=[
@@ -222,15 +220,17 @@ class TestConceptRanges:
         with pytest.raises(ValidationError):
             Concept(code="C", name_ko="x", level=ConceptLevel.단원, weight_in_curriculum=1.2)
 
-    def test_semester_introduced_out_of_range_rejected(self) -> None:
-        """semester_introduced는 1-2 — 3 거부."""
+    def test_curriculum_introduced_fields_removed(self) -> None:
+        """grade_introduced·semester_introduced는 노드에서 제거됨(교육과정 Overlay 분리) —
+        extra='forbid'라 넘기면 거부된다(curriculum_entry가 단일 진실)."""
         with pytest.raises(ValidationError):
-            Concept(code="C", name_ko="x", level=ConceptLevel.단원, semester_introduced=3)
-
-    def test_grade_introduced_out_of_range_rejected(self) -> None:
-        """grade_introduced는 1-12(보수 설정) — 13 거부."""
+            Concept(  # type: ignore[call-arg]
+                code="C", name_ko="x", level=ConceptLevel.단원, grade_introduced=12
+            )
         with pytest.raises(ValidationError):
-            Concept(code="C", name_ko="x", level=ConceptLevel.단원, grade_introduced=13)
+            Concept(  # type: ignore[call-arg]
+                code="C", name_ko="x", level=ConceptLevel.단원, semester_introduced=1
+            )
 
 
 # ──────────────────────────────────────────────────────────────────────

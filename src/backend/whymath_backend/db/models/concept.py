@@ -100,8 +100,9 @@ class Concept(Base):
     )
 
     # ===== 교육과정 매핑 =====
-    grade_introduced: Mapped[int | None] = mapped_column(sa.Integer)
-    semester_introduced: Mapped[int | None] = mapped_column(sa.Integer)
+    # `grade_introduced`·`semester_introduced`는 제거됨 — 교육과정 도입정보는 노드 내장이 아니라
+    # `CurriculumEntry`(Overlay·국가별 introduced_grade·required_depth)가 단일 진실이다
+    # (math_dsl_risk_register.md Q5·Q8). 두 컬럼은 전량 NULL·중복이라 안전 제거(마이그레이션 동반).
 
     # ===== 개념의 특성 =====
     is_signature_korean: Mapped[bool] = mapped_column(

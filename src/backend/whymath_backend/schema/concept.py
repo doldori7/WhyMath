@@ -145,19 +145,12 @@ class Concept(BaseModel):
     )
 
     # ===== 교육과정 매핑 =====
-    grade_introduced: int | None = Field(
-        default=None,
-        description="도입 학년 — 고1/고2/고3(10/11/12). DDL에 범위 미명시 → 중·고 학년을 "
-        "포괄해 ge=1 le=12로 보수 설정.",
-        ge=1,
-        le=12,
-    )
-    semester_introduced: int | None = Field(
-        default=None,
-        description="도입 학기 — 1/2학기 (ge=1 le=2)",
-        ge=1,
-        le=2,
-    )
+    # 학년·학기·깊이 도입정보는 *개념 노드에 내장하지 않는다* — 교육과정은 시간·국가에 따라
+    # 바뀌는 Overlay이므로 `CurriculumEntry`(introduced_grade·required_depth·country_code별)가
+    # 단일 진실 원천이다(math_dsl_risk_register.md Q5·Q8·Q10-③ "노드는 의미만"). 과거 내장 필드였던
+    # `grade_introduced`·`semester_introduced`는 적재된 적이 없고(전량 NULL) CurriculumEntry와
+    # 중복이라 제거했다(Overlay 분리). `curriculum_version`·`subject`는 별도 소비처가 있어 잔존
+    # (완전 Overlay 이관은 `math_dsl_remediation_design.md` 설계 항목).
 
     # ===== 개념의 특성 =====
     is_signature_korean: bool = Field(

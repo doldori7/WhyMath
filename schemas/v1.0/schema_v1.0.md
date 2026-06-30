@@ -312,8 +312,9 @@ CREATE TABLE concept (
     curriculum_version  curriculum_enum,
 
     -- 교육과정 매핑
-    grade_introduced    INTEGER,                    -- 고1/고2/고3 (10/11/12)
-    semester_introduced INTEGER,                    -- 1/2학기
+    -- grade_introduced·semester_introduced는 제거됨(2026-06-30·rev d1e2f3a4b5c6) —
+    -- 교육과정 도입정보는 노드 내장이 아니라 curriculum_entry(Overlay·국가별 introduced_grade·
+    -- required_depth)가 단일 진실이다(math_dsl_risk_register.md Q5·Q8 "노드는 의미만").
 
     -- 개념의 특성
     is_signature_korean BOOLEAN DEFAULT FALSE,      -- 한국 수능 특유 개념 여부
