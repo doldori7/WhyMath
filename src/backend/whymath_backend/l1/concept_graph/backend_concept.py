@@ -36,15 +36,13 @@ explanation`에 *욱여넣지 않는다* — 그 컬럼은 검수 통과한 직�
   - `aliases`([레거시 UC, src_id]) → `aliases`(옛 키 join 보존·옛 graph.json엔 부재→빈 배열).
   - `common_misconceptions` ← `misconception_text`(있으면 1원소 JSONB·자유형).
 유도(소스 신호가 깔끔히 대응할 때만):
-  - `subject` ← `domain` 매핑(고 4과목 + `[공통]…`→공통, 그 외는 NULL — 억지 매핑 0).
   - `intrinsic_difficulty`[1,5] ← `difficulty_tier`[0,24] 선형 스케일(0→1.0·24→5.0).
 필수 NOT NULL인데 소스 부재 → 보수 유도:
   - `level`(NOT NULL `concept_level_enum`) ← **`세부개념`**(고정). graph 403개는 전부 세부 개념
     노드(단원·소단원 위계가 아니라 평면 개념 목록)라 *교수학적으로 정확한* 유도다(날조 아님).
     'unspecified' enum 값 추가·nullable화 같은 스키마 변경을 피한다(마이그레이션 0).
 미매핑(NULL/기본 유지·교수학 내용 날조 금지):
-  - `name_en`·`parent_concept_id`·`curriculum_version`·`grade_introduced`·
-    `semester_introduced`·`is_signature_korean`(기본 False)·`cognitive_type`·
+  - `name_en`·`parent_concept_id`·`is_signature_korean`(기본 False)·`cognitive_type`·
     `recommended_visual_styles`·`exam_frequency`·`weight_in_curriculum`·`embedding_id`·
     `description`·`formal_definition`·`intuitive_explanation` — 소스에 합당한 대응 없음 → 검수 대기.
   (`aliases`·`source_id`는 더는 미매핑이 아니다 — 재ID(2026-06-16)로 graph.json이 둘을 산출하므로
@@ -53,7 +51,7 @@ explanation`에 *욱여넣지 않는다* — 그 컬럼은 검수 통과한 직�
 graph의 `grade_band_hint`·`standard_codes`·`ccss_code`·`metaphor`·`accepted_expressions`·
 `review_status`·`prerequisite_concept_ids`·`misconception_codes`·`visualization_card_keys`·`notes`는
 backend `Concept` 스키마에 *대응 컬럼이 없다* — `concept_node`(슬117) 프로젝션이 그 메타를 UC 키로
-이미 보관하므로, 이 런타임 엔티티엔 *런타임 결선에 필요한 최소 식별*(code=UC·name_ko·subject·
+이미 보관하므로, 이 런타임 엔티티엔 *런타임 결선에 필요한 최소 식별*(code=UC·name_ko·
 난이도·오개념)만 적재한다(이중 보관 회피·후속 consolidation 후보 — 보고 ⑥).
 
 ────────────────────────────────────────────────────────────────────────────
@@ -91,7 +89,7 @@ from whymath_backend.config import Settings, get_settings
 
 # 슬3 sync 엔진 빌더 재사용(신규 seam 0) — 슬117 node_projection과 동일 규약.
 from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
-from whymath_backend.schema.enums import ConceptLevel, Subject
+from whymath_backend.schema.enums import ConceptLevel
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -111,15 +109,9 @@ _DIFFICULTY_MIN: float = 1.0
 _DIFFICULTY_MAX: float = 5.0
 _DIFFICULTY_DECIMALS: int = 2
 
-# graph `domain`(category, 예 '[고]미적분') → backend Subject enum. 고 4과목만 직접 대응하고,
-# '[공통]…'는 공통, 그 외(초·중 영역·기타 고 과목)는 *NULL*(억지 매핑 금지 — subject는 nullable).
-_SUBJECT_BY_DOMAIN: dict[str, Subject] = {
-    "[고]미적분": Subject.미적분,
-    "[고]기하": Subject.기하,
-    "[고]확률·통계": Subject.확통,
-    "[고]인공지능 수학": Subject.인공지능수학,
-}
-_COMMON_DOMAIN_PREFIX: str = "[공통]"
+# subject 매핑(_SUBJECT_BY_DOMAIN·map_subject)은 제거됐다 — `Concept.subject` 컬럼이 Overlay 분리로
+# 사라졌다(rev f3a4b5c6d7e8·math_dsl_remediation_design.md §3). 교육과정 분류는 CurriculumEntry
+# (domain_label)가 단일 진실. graph `domain`은 원천 코퍼스에 남아 향후 Overlay 적재로 재구성 가능.
 
 
 def _opt_str(value: object) -> str | None:
@@ -155,22 +147,6 @@ def _str_list(value: object) -> list[str]:
         if text:
             out.append(text)
     return out
-
-
-def map_subject(domain: str | None) -> Subject | None:
-    """graph `domain`(category) → backend `Subject` enum 또는 None(미대응).
-
-    고 4과목('[고]미적분'·'[고]기하'·'[고]확률·통계'·'[고]인공지능 수학')만 직접 대응하고,
-    '[공통]…' 접두는 공통으로 본다. 그 외(초·중 영역·대수·경제 수학 등 enum에 없는 과목)는 None
-    (subject는 nullable — 억지 매핑·날조 금지). 빈 domain도 None.
-    """
-    if not domain:
-        return None
-    if domain in _SUBJECT_BY_DOMAIN:
-        return _SUBJECT_BY_DOMAIN[domain]
-    if domain.startswith(_COMMON_DOMAIN_PREFIX):
-        return Subject.공통
-    return None
 
 
 def scale_difficulty(difficulty_tier: int | None) -> float | None:
@@ -225,7 +201,6 @@ class BackendConceptRecord:
     aliases: list[str]  # [레거시 UC, src_id](옛 키 join 보존)
     # 유도
     level: ConceptLevel  # 세부개념 고정(NOT NULL 충족)
-    subject: Subject | None  # domain 매핑(미대응 None)
     intrinsic_difficulty: float | None  # difficulty_tier 스케일
     common_misconceptions: list[dict[str, Any]] = field(default_factory=list)
 
@@ -234,7 +209,7 @@ def load_backend_concepts_from_graph_json(path: Path) -> list[BackendConceptReco
     """슬1 산출 `graph.json` → backend `Concept` 적재 레코드 목록(UC 브리지·redaction 청결).
 
     `concepts` 배열의 각 항목에서 **`concept_id`·`name_ko`·`source_id`·`aliases`** 직결 +
-    `domain`→subject·`difficulty_tier`→intrinsic_difficulty·`misconception_text`→
+    `difficulty_tier`→intrinsic_difficulty·`misconception_text`→
     common_misconceptions를 유도한다. concept_id는 *형식 불문*으로 code에 들어가므로 재ID 새 형식
     (`{TRACK}-{AREA}-{NNN}`)이 별도 변경 없이 흐른다(옛 UC도 동일 경로). source_id/aliases는 옛
     graph.json(부재)이면 None/빈 배열로 graceful. `level`은 `세부개념` 고정(graph 노드는 전부 세부
@@ -268,7 +243,6 @@ def load_backend_concepts_from_graph_json(path: Path) -> list[BackendConceptReco
                 source_id=_opt_str(record.get("source_id")),
                 aliases=_str_list(record.get("aliases")),
                 level=_DEFAULT_LEVEL,
-                subject=map_subject(_opt_str(record.get("domain"))),
                 intrinsic_difficulty=scale_difficulty(_opt_int(record.get("difficulty_tier"))),
                 common_misconceptions=_build_misconceptions(record.get("misconception_text")),
             )
@@ -316,10 +290,10 @@ class BackendConceptStore:
         """단일 개념을 backend `concept`에 upsert (멱등·`code` 충돌 갱신·UUID PK 보존).
 
         `INSERT ... ON CONFLICT(code) DO UPDATE` — 런타임 식별 필드(name_ko·source_id·aliases·
-        level·subject·intrinsic_difficulty·common_misconceptions)를 갱신한다. **PK(concept_id)는
+        level·intrinsic_difficulty·common_misconceptions)를 갱신한다. **PK(concept_id)는
         SET하지 않아 보존**되고(재적재 시 기존 UUID 유지), 신규 행만 server_default로 발급한다.
         **description·formal_definition·intuitive_explanation은 INSERT/SET 컬럼에 없다**(redaction —
-        레코드에 슬롯 부재·검수 본문 보존). `level`/`subject`는 enum 값(문자열)으로 바인딩한다
+        레코드에 슬롯 부재·검수 본문 보존). `level`은 enum 값(문자열)으로 바인딩한다
         (`use_enum_values` 직렬화 등가 — PG enum 컬럼에 한글 값).
         """
         from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -332,7 +306,6 @@ class BackendConceptStore:
             source_id=record.source_id,
             aliases=record.aliases,
             level=record.level.value,
-            subject=record.subject.value if record.subject is not None else None,
             intrinsic_difficulty=record.intrinsic_difficulty,
             common_misconceptions=record.common_misconceptions,
         )
@@ -344,7 +317,6 @@ class BackendConceptStore:
                 "source_id": stmt.excluded.source_id,
                 "aliases": stmt.excluded.aliases,
                 "level": stmt.excluded.level,
-                "subject": stmt.excluded.subject,
                 "intrinsic_difficulty": stmt.excluded.intrinsic_difficulty,
                 "common_misconceptions": stmt.excluded.common_misconceptions,
             },
@@ -376,7 +348,6 @@ __all__ = [
     "BackendConceptRecord",
     "BackendConceptStore",
     "load_backend_concepts_from_graph_json",
-    "map_subject",
     "populate_backend_concepts",
     "scale_difficulty",
 ]

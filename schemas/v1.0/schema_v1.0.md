@@ -308,13 +308,14 @@ CREATE TABLE concept (
     -- 계층 정보
     level               concept_level_enum NOT NULL, -- 단원/소단원/세부개념
     parent_concept_id   UUID REFERENCES concept,    -- 상위 개념
-    subject             subject_enum,
-    curriculum_version  curriculum_enum,
 
-    -- 교육과정 매핑
-    -- grade_introduced·semester_introduced는 제거됨(2026-06-30·rev d1e2f3a4b5c6) —
-    -- 교육과정 도입정보는 노드 내장이 아니라 curriculum_entry(Overlay·국가별 introduced_grade·
-    -- required_depth)가 단일 진실이다(math_dsl_risk_register.md Q5·Q8 "노드는 의미만").
+    -- 교육과정 매핑 (완전 Overlay 이관·제거됨)
+    -- subject·curriculum_version는 제거됨(2026-06-30·rev f3a4b5c6d7e8). grade_introduced·
+    -- semester_introduced도 제거됨(rev d1e2f3a4b5c6). 교육과정(과목·판·도입정보)은 노드 내장이
+    -- 아니라 curriculum_entry(Overlay·domain_label·curriculum_revision·국가별 introduced_grade·
+    -- required_depth)가 단일 진실이다(math_dsl_risk_register.md Q5·Q8·Q10-③ "노드는 의미만").
+    -- 정합 게이팅은 problem.curriculum_version을 쓴다(Concept과 독립). subject_enum·curriculum_enum
+    -- 타입 자체는 Problem이 계속 사용하므로 보존(컬럼만 제거).
 
     -- 개념의 특성
     is_signature_korean BOOLEAN DEFAULT FALSE,      -- 한국 수능 특유 개념 여부
@@ -386,7 +387,7 @@ CREATE TABLE concept_fusion (
 
 CREATE INDEX idx_concept_code ON concept(code);
 CREATE INDEX idx_concept_parent ON concept(parent_concept_id);
-CREATE INDEX idx_concept_level ON concept(level, subject);
+CREATE INDEX idx_concept_level ON concept(level);  -- subject 제거(rev f3a4b5c6d7e8)
 CREATE INDEX idx_concept_edge_from ON concept_edge(from_concept_id, edge_type);
 CREATE INDEX idx_concept_edge_to ON concept_edge(to_concept_id, edge_type);
 CREATE INDEX idx_problem_concept_pc ON problem_concept(problem_id, concept_id);
@@ -435,7 +436,7 @@ CREATE INDEX ON user_state_snapshot USING hnsw (embedding halfvec_cosine_ops);
 | #16 (단원 융합) | `concept_fusion`, `problem.is_cross_unit` |
 | #21~24 (한국 시그니처) | `concept.is_signature_korean`, `signature_patterns` |
 | #78 (고교학점제 진로 추천) | `concept` 그래프 탐색 |
-| #79 (인공지능 수학) | `concept.subject = '인공지능수학'` |
+| #79 (인공지능 수학) | `curriculum_entry`(Overlay·domain_label) — Concept.subject 제거(rev f3a4b5c6d7e8) |
 
 ---
 
@@ -1348,7 +1349,7 @@ def recommend_research_topic(user_id):
 | #61~62 학종·세특 | User, Activity | `track_type='수시학종'` |
 | #71~77 고교 유형 | User | `school_type` |
 | #78 고교학점제 | User, Concept | `track_type`, 진로별 개념 추천 |
-| #79 인공지능 수학 | Concept | `subject='인공지능수학'` |
+| #79 인공지능 수학 | CurriculumEntry | `domain_label`(Overlay·Concept.subject 제거 f3a4b5c6d7e8) |
 | #80 2028 개편 | All | `curriculum_version='2022_REVISION'` |
 | #86 모의지원 | Assessment | `admission_probability` |
 | #91 시험장 환경 | Activity | `session_type='실전모의고사'` |

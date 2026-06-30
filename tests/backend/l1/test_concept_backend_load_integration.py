@@ -32,7 +32,7 @@ from whymath_backend.l1.concept_graph.backend_edge import (
     load_backend_edges_from_graph_json,
     populate_backend_edges,
 )
-from whymath_backend.schema.enums import ConceptLevel, EdgeType, Subject
+from whymath_backend.schema.enums import ConceptLevel, EdgeType
 
 pytestmark = pytest.mark.integration
 
@@ -102,7 +102,6 @@ def _record(
     name_ko: str = "극한",
     source_id: str | None = "N1",
     aliases: list[str] | None = None,
-    subject: Subject | None = Subject.미적분,
     intrinsic_difficulty: float | None = 2.17,
     misconceptions: list[dict[str, str]] | None = None,
 ) -> BackendConceptRecord:
@@ -112,7 +111,6 @@ def _record(
         source_id=source_id,
         aliases=(aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]),
         level=ConceptLevel.세부개념,
-        subject=subject,
         intrinsic_difficulty=intrinsic_difficulty,
         common_misconceptions=list(misconceptions or []),
     )
@@ -134,7 +132,6 @@ class TestBackendConceptRoundtrip:
                         name_ko="극한",
                         source_id="N1",
                         aliases=["UC.calc.alimit.epsilon-delta", "N1"],
-                        subject=Subject.미적분,
                         intrinsic_difficulty=2.17,
                         misconceptions=[{"misconception": "극한을 대입값으로 혼동"}],
                     )
@@ -149,7 +146,7 @@ class TestBackendConceptRoundtrip:
                     row = conn.execute(
                         text(
                             "SELECT concept_id, code, name_ko, source_id, aliases, level, "
-                            "subject, intrinsic_difficulty, common_misconceptions, "
+                            "intrinsic_difficulty, common_misconceptions, "
                             "description, formal_definition, intuitive_explanation "
                             "FROM concept WHERE code = :c"
                         ),
@@ -163,7 +160,6 @@ class TestBackendConceptRoundtrip:
                 assert row.source_id == "N1"
                 assert row.aliases == ["UC.calc.alimit.epsilon-delta", "N1"]
                 assert row.level == "세부개념"  # 고정 유도(NOT NULL enum·한글 값)
-                assert row.subject == "미적분"
                 assert float(row.intrinsic_difficulty) == pytest.approx(2.17)
                 # JSONB 오개념(자유형) — 자체 작성 주석(본문 아님).
                 assert row.common_misconceptions == [{"misconception": "극한을 대입값으로 혼동"}]
@@ -176,20 +172,19 @@ class TestBackendConceptRoundtrip:
         finally:
             _cleanup(keys)
 
-    def test_unmapped_subject_persists_null(self) -> None:
+    def test_optional_fields_persist_null(self) -> None:
         _skip_if_unreachable()
         from sqlalchemy import text
 
         keys = [_NID_B]
         try:
-            # source_id None·aliases 빈 배열(옛 데이터·재ID 전) 경로도 함께 확인.
+            # source_id None·aliases 빈 배열(옛 데이터·재ID 전)·difficulty None 경로 확인.
             populate_backend_concepts(
                 [
                     _record(
                         _NID_B,
                         source_id=None,
                         aliases=[],
-                        subject=None,
                         intrinsic_difficulty=None,
                     )
                 ],
@@ -200,14 +195,13 @@ class TestBackendConceptRoundtrip:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     row = conn.execute(
                         text(
-                            "SELECT source_id, aliases, subject, intrinsic_difficulty, "
+                            "SELECT source_id, aliases, intrinsic_difficulty, "
                             "common_misconceptions FROM concept WHERE code = :c"
                         ),
                         {"c": _NID_B},
                     ).one()
                 assert row.source_id is None  # 부재 → NULL(옛 데이터 graceful)
                 assert row.aliases == []  # 빈 배열(NOT NULL 컬럼 — NULL 아님)
-                assert row.subject is None  # 미대응 도메인 → NULL(억지 매핑 0)
                 assert row.intrinsic_difficulty is None
                 assert row.common_misconceptions == []  # JSONB server_default '[]'
             finally:
@@ -227,7 +221,7 @@ class TestIdempotentUuidPreserved:
         try:
             # 1차 적재 → UUID 확보.
             populate_backend_concepts(
-                [_record(_NID_A, name_ko="첫 이름", subject=Subject.미적분)],
+                [_record(_NID_A, name_ko="첫 이름")],
                 settings=Settings(),
             )
             engine = _sync_engine()
@@ -240,19 +234,18 @@ class TestIdempotentUuidPreserved:
 
                 # 2차 적재(값 변경) → 같은 행 갱신·UUID 보존.
                 populate_backend_concepts(
-                    [_record(_NID_A, name_ko="둘째 이름", subject=Subject.기하)],
+                    [_record(_NID_A, name_ko="둘째 이름")],
                     settings=Settings(),
                 )
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     rows = conn.execute(
-                        text("SELECT concept_id, name_ko, subject FROM concept " "WHERE code = :c"),
+                        text("SELECT concept_id, name_ko FROM concept WHERE code = :c"),
                         {"c": _NID_A},
                     ).all()
                 # 행 1개(멱등)·값 갱신·**UUID 동일**(브리지 키 안정성 — FK 참조 보존).
                 assert len(rows) == 1
                 assert rows[0].concept_id == first_uuid
                 assert rows[0].name_ko == "둘째 이름"
-                assert rows[0].subject == "기하"
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:

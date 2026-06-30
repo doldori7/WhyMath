@@ -6,7 +6,7 @@ PG 없이 검증 가능한 것만 못 박는다(슬117 `test_concept_node_projec
 
   ① graph.json 로딩 — concept_id→code 브리지·source_id·aliases·필드 유도·redaction 키 미유입·
      name_ko 누락 graceful
-  ② 필드 유도 — subject 매핑(고4·공통·미대응 None)·difficulty 스케일·misconception 변환·level 고정
+  ② 필드 유도 — difficulty 스케일·misconception 변환·level 고정(subject 매핑은 제거됨·Overlay 이관)
   ③ upsert SQL 구성 — ON CONFLICT(code) upsert·source_id/aliases 컬럼 수록·**본문 3컬럼
      (description/formal_definition/intuitive_explanation) 0**·PK(concept_id) 미-SET(UUID 보존)
   ④ populate — 전 레코드 upsert(횟수=레코드 수)·멱등(같은 레코드 2회→같은 upsert statement)
@@ -31,11 +31,10 @@ from whymath_backend.l1.concept_graph.backend_concept import (
     BackendConceptRecord,
     BackendConceptStore,
     load_backend_concepts_from_graph_json,
-    map_subject,
     populate_backend_concepts,
     scale_difficulty,
 )
-from whymath_backend.schema.enums import ConceptLevel, Subject
+from whymath_backend.schema.enums import ConceptLevel
 
 # 재ID 후 concept_id 규약 키 예시(`{TRACK}-{AREA}-{NNN}`·Neo4j·concept_embedding·concept_node와
 # 동일 키 공간). 적재기는 *형식 불문*이라 옛 UC도 같은 경로지만 정본은 새 형식을 쓴다.
@@ -95,7 +94,6 @@ def _record(
     name_ko: str = "극한",
     source_id: str | None = "N1",
     aliases: list[str] | None = None,
-    subject: Subject | None = Subject.미적분,
     intrinsic_difficulty: float | None = 2.17,
 ) -> BackendConceptRecord:
     return BackendConceptRecord(
@@ -105,7 +103,6 @@ def _record(
         source_id=source_id,
         aliases=(aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]),
         level=ConceptLevel.세부개념,
-        subject=subject,
         intrinsic_difficulty=intrinsic_difficulty,
         common_misconceptions=[{"misconception": "극한을 대입값으로 혼동"}],
     )
@@ -148,7 +145,6 @@ class TestLoadFromGraphJson:
         assert rec.aliases == ["UC.calc.alimit.epsilon-delta", "N1"]  # 옛 키 별칭 보존
         assert rec.name_ko == "극한"
         assert rec.level == ConceptLevel.세부개념  # 고정 유도(NOT NULL 충족)
-        assert rec.subject == Subject.미적분  # domain 매핑
         assert rec.intrinsic_difficulty == scale_difficulty(7)
         assert rec.common_misconceptions == [{"misconception": "극한을 대입값으로 혼동"}]
 
@@ -225,13 +221,12 @@ class TestLoadFromGraphJson:
         assert [c.code for c in loaded] == [_NID_A, _NID_B]
 
     def test_optional_fields_default_when_absent(self, tmp_path: Path) -> None:
-        # difficulty_tier·misconception_text·domain 매핑 불가 → None/빈(날조 0).
+        # difficulty_tier·misconception_text 부재 → None/빈(날조 0).
         path = self._write_graph(
             tmp_path,
             [{"concept_id": _NID_A, "name_ko": "유효", "domain": "[중]수와 연산"}],
         )
         rec = load_backend_concepts_from_graph_json(path)[0]
-        assert rec.subject is None  # 초·중 영역은 backend Subject enum에 없음 → None
         assert rec.intrinsic_difficulty is None  # difficulty_tier 부재
         assert rec.common_misconceptions == []  # misconception_text 부재
 
@@ -253,28 +248,9 @@ class TestLoadFromGraphJson:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# ② 필드 유도 — subject 매핑·difficulty 스케일·misconception·level 고정
+# ② 필드 유도 — difficulty 스케일·misconception·level 고정
+#   (subject 매핑은 제거됨 — 교육과정 완전 Overlay 이관·rev f3a4b5c6d7e8)
 # ──────────────────────────────────────────────────────────────────────────
-class TestSubjectMapping:
-    def test_high_school_four_subjects(self) -> None:
-        assert map_subject("[고]미적분") == Subject.미적분
-        assert map_subject("[고]기하") == Subject.기하
-        assert map_subject("[고]확률·통계") == Subject.확통
-        assert map_subject("[고]인공지능 수학") == Subject.인공지능수학
-
-    def test_common_prefix_maps_to_gongtong(self) -> None:
-        assert map_subject("[공통]함수") == Subject.공통
-        assert map_subject("[공통]집합과 명제") == Subject.공통
-
-    def test_unmapped_domains_are_none(self) -> None:
-        # 억지 매핑 0 — enum에 없는 과목·초중 영역은 None(subject nullable).
-        assert map_subject("[중]수와 연산") is None
-        assert map_subject("[고]대수") is None
-        assert map_subject("분수") is None
-        assert map_subject(None) is None
-        assert map_subject("") is None
-
-
 class TestDifficultyScale:
     def test_linear_scale_endpoints_and_mid(self) -> None:
         # tier[0,24] → intrinsic[1,5] 선형(schema ge=1 le=5·Numeric(3,2) 정합).
@@ -340,7 +316,6 @@ class TestUpsertStatement:
             "source_id",
             "aliases",
             "level",
-            "subject",
             "intrinsic_difficulty",
         ):
             assert col in compiled
@@ -364,15 +339,6 @@ class TestUpsertStatement:
         compiled = _compile(engine.executed[0])
         assert "source_id" in compiled  # 컬럼은 여전히 upsert(값만 NULL)
         assert "aliases" in compiled
-
-    def test_upsert_handles_null_subject_without_error(self) -> None:
-        # subject None(미대응 도메인)도 안전 — upsert가 예외 없이 statement를 만든다(억지 매핑 0의
-        # 영속 표현). NULL이 실제로 적재됨은 통합테스트 test_unmapped_subject_persists_null이 본다.
-        store, engine = _fake_store()
-        store.upsert(_record(subject=None))
-        assert len(engine.executed) == 1
-        compiled = _compile(engine.executed[0])
-        assert "subject" in compiled  # subject는 여전히 upsert 컬럼(값만 NULL)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -414,7 +380,6 @@ def test_record_has_no_body_slots() -> None:
         "source_id",
         "aliases",
         "level",
-        "subject",
         "intrinsic_difficulty",
     } <= fields
 

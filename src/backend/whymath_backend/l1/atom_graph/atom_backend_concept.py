@@ -32,9 +32,8 @@ from typing import TYPE_CHECKING
 from whymath_backend.config import Settings, get_settings
 
 # 슬3 sync 엔진 빌더 재사용(신규 seam 0) — backend_concept/edge·node_projection과 동일 규약.
-from whymath_backend.l1.concept_graph.backend_concept import map_subject
 from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
-from whymath_backend.schema.enums import ConceptLevel, Subject
+from whymath_backend.schema.enums import ConceptLevel
 
 if TYPE_CHECKING:
     import uuid
@@ -88,14 +87,13 @@ class AtomBackendConceptRecord:
     level: ConceptLevel  # 단원/소단원/세부개념 — 직대응(고정 아님)
     parent_code: str | None  # 부모 노드 code(원자→소단원·소단원→단원·단원→None)
     intrinsic_difficulty: float | None  # 1~5(세부개념만·단원/소단원 None)
-    subject: Subject | None  # subject_area 매핑(미대응 None·억지 매핑 금지)
 
 
 def load_atom_concepts_from_graph_json(path: Path) -> list[AtomBackendConceptRecord]:
     """원자 코퍼스 `graph.json` → backend `concept` 적재 레코드 목록(redaction 청결).
 
-    `concepts` 배열의 각 항목에서 **`code`·`name`·`level`·`parent_code`** 직결 + `subject_area`→
-    subject·`intrinsic_difficulty`→clamp를 유도한다. `level`은 `ConceptLevel`로 변환(잘못된 값이면
+    `concepts` 배열의 각 항목에서 **`code`·`name`·`level`·`parent_code`** 직결 +
+    `intrinsic_difficulty`→clamp를 유도한다. `level`은 `ConceptLevel`로 변환(잘못된 값이면
     그 노드 skip — 정상 코퍼스는 단원/소단원/세부개념만). `name`이 빈/None이면 skip(NOT NULL
     위반 방지·조용한 빈 적재 금지). **`description`·`core_proposition` 등 본문은 읽지 않는다**
     (슬롯 부재).
@@ -130,7 +128,6 @@ def load_atom_concepts_from_graph_json(path: Path) -> list[AtomBackendConceptRec
                 level=level,
                 parent_code=_opt_str(record.get("parent_code")),
                 intrinsic_difficulty=clamp_difficulty(record.get("intrinsic_difficulty")),
-                subject=map_subject(_opt_str(record.get("subject_area"))),
             )
         )
     return out
@@ -140,7 +137,7 @@ class AtomBackendConceptStore:
     """원자 백본 → backend `concept` 적재기 — `code` 충돌 멱등 upsert + 2-pass parent 해소(sync).
 
     `BackendConceptStore`(구 개념그래프)의 원자 짝이다(같은 sync 좌석·멱등 규약). `upsert`는
-    `INSERT ... ON CONFLICT(code) DO UPDATE`로 name_ko·level·intrinsic_difficulty·subject를 갱신하고
+    `INSERT ... ON CONFLICT(code) DO UPDATE`로 name_ko·level·intrinsic_difficulty를 갱신하고
     **PK(concept_id)는 보존**한다(parent_concept_id는 upsert 단계에서 *건드리지 않는다* — 2-pass).
     `resolve_parents`가 code→UUID 맵으로 parent_concept_id를 UPDATE한다(멱등). sync 엔진은 슬3
     `_build_sync_engine`을 재사용해 지연 생성·캐시한다(신규 seam 0).
@@ -173,7 +170,7 @@ class AtomBackendConceptStore:
 
         `parent_concept_id`는 INSERT/SET 컬럼에 *없다* — 2-pass(`resolve_parents`)에서 별도 UPDATE
         한다(UUID 발급 순서 비의존). `description`·`formal_definition`도 컬럼에 없다(redaction).
-        `level`/`subject`는 enum 값(문자열)으로 바인딩(use_enum_values 등가·PG enum 한글 값).
+        `level`은 enum 값(문자열)으로 바인딩(use_enum_values 등가·PG enum 한글 값).
         """
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -184,7 +181,6 @@ class AtomBackendConceptStore:
             name_ko=record.name_ko,
             level=record.level.value,
             intrinsic_difficulty=record.intrinsic_difficulty,
-            subject=record.subject.value if record.subject is not None else None,
         )
         stmt = stmt.on_conflict_do_update(
             index_elements=[Concept.code],
@@ -192,7 +188,6 @@ class AtomBackendConceptStore:
                 "name_ko": stmt.excluded.name_ko,
                 "level": stmt.excluded.level,
                 "intrinsic_difficulty": stmt.excluded.intrinsic_difficulty,
-                "subject": stmt.excluded.subject,
             },
         )
         with self._get_engine().begin() as conn:

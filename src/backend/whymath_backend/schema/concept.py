@@ -9,8 +9,8 @@ Pydantic 모델이다. SQLAlchemy/alembic 매핑은 후속 Phase(슬라이스 1 
 
 컨벤션(`problem.py`·`provenance.py`·`l3/models.py` 답습):
   - `ConfigDict(extra="forbid", use_enum_values=True, str_strip_whitespace=True)`.
-  - enum은 `enums.py`의 `class X(str, Enum)`(이번에 추가된 ConceptLevel·CognitiveType·
-    EdgeType·ConceptRole + 기존 Subject·Curriculum 재사용).
+  - enum은 `enums.py`의 `class X(str, Enum)`(ConceptLevel·CognitiveType·EdgeType·ConceptRole).
+    교육과정 enum(Subject·Curriculum)은 더 이상 사용하지 않는다(Overlay 이관·rev f3a4b5c6d7e8).
   - 불변식은 `@model_validator(mode="after")`(자기관계 금지는 슬라이스 1
     `ProblemRelation._no_self_relation` 패턴 답습).
   - 공유 베이스 클래스 없음(각 모델 독립).
@@ -54,9 +54,7 @@ from whymath_backend.schema.enums import (
     CognitiveType,
     ConceptLevel,
     ConceptRole,
-    Curriculum,
     EdgeType,
-    Subject,
     VisualizationStyle,
 )
 
@@ -135,22 +133,14 @@ class Concept(BaseModel):
         default=None,
         description="상위 개념 FK (자기 자신 불가 — 불변식으로 강제)",
     )
-    subject: Subject | None = Field(
-        default=None,
-        description="과목 — 공통/미적분/확통/기하/인공지능수학",
-    )
-    curriculum_version: Curriculum | None = Field(
-        default=None,
-        description="교육과정 버전(2015/2022 개정 등)",
-    )
-
-    # ===== 교육과정 매핑 =====
-    # 학년·학기·깊이 도입정보는 *개념 노드에 내장하지 않는다* — 교육과정은 시간·국가에 따라
-    # 바뀌는 Overlay이므로 `CurriculumEntry`(introduced_grade·required_depth·country_code별)가
-    # 단일 진실 원천이다(math_dsl_risk_register.md Q5·Q8·Q10-③ "노드는 의미만"). 과거 내장 필드였던
-    # `grade_introduced`·`semester_introduced`는 적재된 적이 없고(전량 NULL) CurriculumEntry와
-    # 중복이라 제거했다(Overlay 분리). `curriculum_version`·`subject`는 별도 소비처가 있어 잔존
-    # (완전 Overlay 이관은 `math_dsl_remediation_design.md` 설계 항목).
+    # ===== 교육과정 매핑 (Overlay 분리·노드 비내장) =====
+    # 교육과정 정보(과목·버전·학년·학기·깊이)는 *개념 노드에 내장하지 않는다* — 교육과정은 시간·
+    # 국가에 따라 바뀌는 Overlay이므로 `CurriculumEntry`(domain_label·curriculum_revision·
+    # introduced_grade·country_code별)가 단일 진실 원천이다(math_dsl_risk_register.md Q5·Q8·Q10-③
+    # "노드는 의미만"·completed Overlay 이관). 과거 내장 필드 `subject`·`curriculum_version`·
+    # `grade_introduced`·`semester_introduced`는 모두 제거됐다 — 런타임 조회/필터 소비처가 없었고
+    # (정합 게이팅은 `Problem.curriculum_version` 사용) Overlay와 중복이었다. `subject`는 원천
+    # 코퍼스 domain에서 파생됐으므로 필요 시 CurriculumEntry 적재로 재구성한다(비가역 손실 아님).
 
     # ===== 개념의 특성 =====
     is_signature_korean: bool = Field(

@@ -45,9 +45,7 @@ from whymath_backend.schema.enums import (
     CognitiveType,
     ConceptLevel,
     ConceptRole,
-    Curriculum,
     EdgeType,
-    Subject,
     VisualizationStyle,
 )
 
@@ -94,10 +92,8 @@ class Concept(Base):
     parent_concept_id: Mapped[uuid.UUID | None] = mapped_column(
         sa.Uuid, sa.ForeignKey("concept.concept_id")
     )
-    subject: Mapped[Subject | None] = mapped_column(_pg_enum(Subject, "subject_enum"))
-    curriculum_version: Mapped[Curriculum | None] = mapped_column(
-        _pg_enum(Curriculum, "curriculum_enum")
-    )
+    # subject·curriculum_version 제거됨(Overlay 분리·rev f3a4b5c6d7e8) — 교육과정은
+    # CurriculumEntry(domain_label·curriculum_revision)가 단일 진실. 런타임 조회 소비처 0이었다.
 
     # ===== 교육과정 매핑 =====
     # `grade_introduced`·`semester_introduced`는 제거됨 — 교육과정 도입정보는 노드 내장이 아니라
@@ -145,7 +141,7 @@ class Concept(Base):
     __table_args__ = (
         sa.Index("idx_concept_code", "code"),
         sa.Index("idx_concept_parent", "parent_concept_id"),
-        sa.Index("idx_concept_level", "level", "subject"),
+        sa.Index("idx_concept_level", "level"),
         # src_id → code 해석(standard_loader load_links)·src_id 역조회 경로.
         sa.Index("idx_concept_source_id", "source_id"),
     )
