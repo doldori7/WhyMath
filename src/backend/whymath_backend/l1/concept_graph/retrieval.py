@@ -47,12 +47,13 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.l1.concept_graph.embedding import ConceptEmbeddingIndex
 from whymath_backend.l1.concept_graph.node_projection import fetch_node_meta
 
-# provider 공간 식별자(provider→model 규약)는 적재(슬3)와 *같은 seam*을 재사용한다(신규 0). 같은
+# provider 공간 식별자(provider→model 규약)는 적재와 *같은 seam*을 재사용한다(신규 0). 같은
 # 규약을 search가 써야 적재 행과 같은 임베딩 공간을 본다(provider/model 불일치 시 빈 결과).
-from whymath_backend.l4.misconception.semantic.pgvector_index import _provider_model_identity
+# 레이어-중립 L1 프리미티브(`l1/embedding_primitives.py`)에서 가져온다(L1→L1·역방향 의존 0).
+from whymath_backend.l1.embedding_primitives import provider_model_identity
 
 if TYPE_CHECKING:
-    from whymath_backend.l4.misconception.semantic.provider import EmbeddingProvider
+    from whymath_backend.l1.embedding_primitives import EmbeddingProvider
 
 # 게이팅 비교 리터럴 — graph.json `review_status`(use_enum_values)가 싣는 reviewed 값.
 # `node_projection`이 같은 문자열을 `concept_node.review_status`에 적재한다(plain text).
@@ -104,7 +105,7 @@ def search_concepts(
     보수적으로 제외(정직). 게이팅은 *필터*라 결과가 top_k보다 적을 수 있다(창 내 필터 — 정렬 유지).
 
     provider·index는 *주입 가능*하다(테스트 격리·Fake). index 미주입 시 적재(슬3)와 같은 provider
-    공간 식별자(`_provider_model_identity`)로 `ConceptEmbeddingIndex`를 만든다 — 같은 공간 행만
+    공간 식별자(`provider_model_identity`)로 `ConceptEmbeddingIndex`를 만든다 — 같은 공간 행만
     봐야 적재 결과가 잡힌다.
 
     memory 모드 graceful(조용한 무동작 금지): `vector_store != pgvector`면 영속 임베딩 store가
@@ -121,7 +122,7 @@ def search_concepts(
     if top_k <= 0:
         return []
 
-    provider_name, model_name = _provider_model_identity(provider, resolved)
+    provider_name, model_name = provider_model_identity(provider, resolved)
     idx = (
         index
         if index is not None

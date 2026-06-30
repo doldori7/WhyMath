@@ -34,27 +34,16 @@ from typing import Any, Protocol, cast, runtime_checkable
 
 from whymath_backend.config import Settings, get_settings
 
+# `EmbeddingProvider` 좌석 Protocol은 레이어-중립 L1(`l1/embedding_primitives.py`)이 소유한다
+# (의존성 역전 — 추상은 하위, 구현체는 이 L4 모듈). 여기서 re-export해 기존 import 경로
+# (`...semantic.provider import EmbeddingProvider`·matcher/combined)를 유지한다.
+# `as EmbeddingProvider` 명시 별칭 = PEP 484 명시적 re-export(mypy no-implicit-reexport 충족).
+from whymath_backend.l1.embedding_primitives import EmbeddingProvider as EmbeddingProvider
+
 # Fake 제공자 기본 차원 — 결정론 해시 벡터의 길이. 카탈로그 30종·테스트엔 소차원이 충분하고
 # (라이브 불요), 작을수록 테스트 가독성↑. 라이브 모델 차원(bge-m3=1024, te-3-large=3072)과는
 # 무관하다 — Fake는 *구조적 호환*(list[list[float]])만 지키면 된다.
 _FAKE_DIM = 64
-
-
-@runtime_checkable
-class EmbeddingProvider(Protocol):
-    """텍스트 배치를 임베딩 벡터로 바꾸는 좌석 (구조적 타이핑).
-
-    `embed`는 *동기*다 — L4 오개념 진단 경로(diagnose)가 전부 동기이므로 같은 호출
-    맥락에서 쓰도록 맞춘다(L3는 async지만 L4 misconception는 sync). sentence-transformers·
-    OpenAI 모두 동기 API를 제공하므로 좌석을 동기로 두는 데 비용이 없다.
-
-    반환은 입력과 *같은 길이·순서*의 벡터 리스트여야 한다(행 i = texts[i]의 임베딩).
-    벡터 차원은 제공자·모델에 따라 다르되 한 제공자 안에서는 일정하다(코사인 비교 전제).
-    """
-
-    def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        """텍스트 배치 → 임베딩 벡터 리스트(입력 순서 보존)."""
-        ...
 
 
 # ──────────────────────────────────────────────────────────────────────────

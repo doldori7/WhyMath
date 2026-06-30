@@ -38,16 +38,17 @@ from typing import TYPE_CHECKING
 
 from whymath_backend.config import Settings, get_settings
 
-# 임베딩 provider seam 재사용(신규 금지·CLAUDE.md 로컬 우선) — L4 오개념 의미 매칭과 *같은*
-# 좌석(`text_hash`·`_provider_model_identity`)을 쓴다. 단 이 L1 모듈이 L4를 *모듈 최상단*에서
-# import하면 순환이 생긴다(L1 embedding → L4 → L2 → L1 node_projection → L1 embedding._build_sync_
-# engine 미정의). L4는 의미상 상위 계층이라 import-time 결합도 부적절하다(역방향 의존). 따라서 두
-# 심볼은 *사용처 함수 내부에서 지연 import*한다(아래 upsert·populate) — 좌석 재사용은 유지하되
-# import-time 순환·역방향 결합을 끊는다. 타입 전용 import는 TYPE_CHECKING이라 런타임 무영향.
+# 임베딩 provider seam 재사용(신규 금지·CLAUDE.md 로컬 우선) — 좌석 Protocol·표현 해시·공간
+# 식별자는 *레이어-중립 L1*(`l1/embedding_primitives.py`)이 소유한다. 과거엔 이 심볼들이 L4
+# (`semantic.pgvector_index`)에 살아 L1이 L4를 위로 import(지연 import로 가린 순환)했으나,
+# 프리미티브를 L1로 내려 의존을 *아래로* 뒤집었다(L1→L1·순환 0). L4 오개념 의미 매칭도 같은
+# 프리미티브를 쓰므로 좌석 공유는 유지된다.
+from whymath_backend.l1.embedding_primitives import provider_model_identity, text_hash
+
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
-    from whymath_backend.l4.misconception.semantic.provider import EmbeddingProvider
+    from whymath_backend.l1.embedding_primitives import EmbeddingProvider
 
 # graph.json에서 임베딩 입력으로 *허용된* 안전 필드(자체 작성·본문 아님). 이 집합 밖 키는
 # 임베딩에 쓰지 않는다(특히 description·formal_definition은 graph.json에 부재이며 읽지도 않음).
@@ -178,9 +179,6 @@ class ConceptEmbeddingIndex:
 
         from whymath_backend.db.models.concept_embedding import ConceptEmbedding
 
-        # L4 좌석 재사용(지연 import — 모듈 최상단 결합 시 순환·역방향 의존 회피, 모듈 docstring).
-        from whymath_backend.l4.misconception.semantic.pgvector_index import text_hash
-
         values = [float(x) for x in vector]
         stmt = pg_insert(ConceptEmbedding).values(
             concept_id=concept_id,
@@ -286,16 +284,13 @@ def populate_concept_embeddings(
     임베딩해 UC concept_id로 upsert한다. provider/model은 임베딩 공간 식별자로 행에 박히고,
     같은 공간만 search가 본다. 멱등(재실행 시 갱신). 반환은 적재 행 수(=concepts 길이).
 
-    provider의 model 이름은 *Settings*에서 해석한다(`_provider_model_identity` 재사용 —
+    provider의 model 이름은 *Settings*에서 해석한다(`provider_model_identity` 재사용 —
     local→embedding_model_local·openai→embedding_model_openai·fake→fake-hash). provider 객체가
     model을 노출하지 않으므로(좌석은 embed만), 같은 규약을 upsert/search 양쪽이 공유하도록
     여기서 결정한다(L4와 동일). review_status 무관 전량 적재(게이팅은 조회 몫).
     """
-    # L4 좌석 재사용(지연 import — 모듈 최상단 결합 시 순환·역방향 의존 회피, 모듈 docstring).
-    from whymath_backend.l4.misconception.semantic.pgvector_index import _provider_model_identity
-
     resolved = settings if settings is not None else get_settings()
-    provider_name, model_name = _provider_model_identity(provider, resolved)
+    provider_name, model_name = provider_model_identity(provider, resolved)
     idx = (
         index
         if index is not None
