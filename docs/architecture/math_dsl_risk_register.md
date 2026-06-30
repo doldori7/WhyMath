@@ -136,6 +136,27 @@ namespace 분리·희소 그래프라 상대적으로 안전.
 
 ---
 
+## 4. 구현 후속 — invariant 코드 게이트 동결 (2026-06-30·PR #357)
+
+§2 Q10 invariant 중 *회귀·미래 폭발 경로*를 코드 게이트(테스트/가드)로 동결했다. **이미 구현된
+방어선은 재구현하지 않고**(적재 시점 cycle DFS·교육과정 4필드 제거·약한 relation load-time skip·
+crosswalk 골격+resolver·증거저장소 shadow), **premature한 것은 도입하지 않았다**(소비처/경로 부재).
+
+| invariant | 게이트 | 좌석 |
+|---|---|---|
+| Q10-③ 노드는 의미만 | 금지 필드 + 허용 화이트리스트 동결 | `tests/.../schema/test_concept.py` |
+| Q1/Q8 오개념 자유서술 | `common_misconceptions` 런타임 미사용(행동+정적) + seed 전용 주석 | `test_scene_generation.py`·`test_concept_misconception_runtime.py`·`schema/concept.py` |
+| Q2 약한 relation 폭발 | EdgeType 약한 값 전부 스윕→PREREQUISITE만 적재 + traversal 배제 + 어휘 보존 | `test_edge_relation_governance.py`·`test_prerequisite_traversal_integration.py` |
+| Q10-⑥ 오개념 단일 정체성 | `_persist_active_set` crosswalk shadow 배선(비노출·비차단) | `l4/misconception/hypothesis_store.py` |
+| Q10-⑧(부분) traversal 예산 | `MAX_PREREQUISITE_DEPTH` 단일 출처 | `l2/prerequisite_recommendation.py`·`api/me.py` |
+
+**미채택(premature/dead)**: LLM subgraph 예산·증분 edge-add reachability·SCC 크론·약한 타입 reject
+validator·crosswalk 매핑 *자동* 적재(사람 검수 산출물·우선순위 #1·#3). **잔여(사람 검수 게이트)**:
+오개념 crosswalk 매핑 채택·적재(`docs/data/misconception_crosslink_candidates.md` 검수→로더 적재→
+shadow 측정→canary)·교육과정 Overlay US/IMO·`required_depth` 큐레이션.
+
+---
+
 ## 참고
 - 정본 상위: `docs/architecture/math_dsl_principles_review.md`(플레이북 검토)
 - 선행: `docs/architecture/05a_learning_scene_dsl.md`·`04b_misconception_judge_graduation.md`
@@ -144,4 +165,5 @@ namespace 분리·희소 그래프라 상대적으로 안전.
   `src/web/graphing-calculator/src/lib/graph2dSpec.js`·`schema/misconception_catalog.py`
 - 데이터: `data/corpus/atom_graph_v1/graph.json` · 스키마: `schemas/v1.1/curriculum_entry.schema.yaml`
 - 원칙: `CLAUDE.md`(의사결정 우선순위·절대 금기·표현≠의미)
-- 변경 이력: v0.1 (2026-06-30 초안 — 분석만·코드/스키마 변경 0)
+- 변경 이력: v0.1 (2026-06-30 초안 — 분석만·코드/스키마 변경 0) · v0.2 (2026-06-30 — §4 구현 후속
+  추가: invariant 코드 게이트 5종 동결·PR #357)
