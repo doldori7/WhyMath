@@ -68,11 +68,30 @@ L5 온보딩(국가·학년·학교·교과서·진도·목표, `05_interaction.
 |---|---|---|
 | 1 | 활성 개념 풀 | 학생 교과서·진도에 등장한 개념만 활성, 미진도 개념은 잠금 |
 | 2 | 표기 | 학생 교과서가 쓰는 기호·표기법 (예: 같은 개념의 출판사별 표기 차이) |
-| 3 | 깊이 | 학년·목표에 맞춘 설명 깊이 (내신 대비 vs 사고력 심화) |
+| 3 | 깊이 | 학년·목표에 맞춘 설명 깊이 (내신 대비 vs 사고력 심화) **— 1차 구현됨↓** |
 | 4 | 풀이 스타일 순서 | 어떤 풀이 접근을 먼저 보일지 (학생 교과서 서술 순서 우선) |
 | 5 | 용어 | 학생 교과서·학년 수준의 용어 선택 |
 | 6 | 인접 개념 순서 | 다음에 이어질 개념의 제시 순서 (교과서 단원 배열 따름) |
 | 7 | 평가 형식 | 내신형·수능형·서술형 등 목표에 맞춘 문항 형식 |
+
+### 구현 현황 — 깊이 축(차원 3) 1차 소비 배선 (2026-06-30)
+
+차원 3(깊이)의 *첫 런타임 소비 배선*이 학교 진도 모드에 들어갔다 — `curriculum_entry` Overlay
+(L1·`required_depth`)를 실제로 읽어 깊이정렬을 한다(이 Overlay의 첫 소비처):
+- **L1 read-time resolver**: `l1/curriculum/curriculum_resolve.py`(`CurriculumDepthResolver`) —
+  concept_id → 한국(KR) `required_depth`를 단일 SELECT로 조회(`is_present`·country·NOT NULL 필터·
+  N+1 0·sync 좌석). crosslink_resolve 패턴 동형.
+- **L6 순수 깊이정렬**: `l6/school_progress/gating.py`(`curriculum_depth_alignment`) — 문항
+  난이도가 그 개념의 요구 깊이(목표 난이도로 환산)에 맞을수록 우선순위 보너스(≤1.5·진도 겹침을
+  압도하지 않는 품질 신호). 깊이 미주입 시 0.0 폴백(하위호환·데이터0 안전).
+- **L5 결선**: `api/gating.py` — 문항→개념(problem_concept→concept) 조인 + resolver로 각 문항
+  개념의 *가장 깊은* required_depth를 비영속 필드 `Problem.curriculum_required_depth`에 주입
+  (성취기준 코드 주입과 동형 계약). 흐름: `HTTP → 후보 조회 → 개념코드 조인 → curriculum_entry
+  resolver(to_thread) → 깊이 주입 → L6 깊이정렬`.
+
+깊이는 *적격성 게이트가 아니라 우선순위 보너스*다(난이도처럼 — 깊이 불일치로 탈락시키지 않는다).
+잔여(후속): 차원 1·2·4~7(활성 풀·표기·풀이 순서·용어·인접 순서·평가 형식)·다국(US/IMO)·
+`required_depth` 큐레이션·표기/용어(notation_local·terminology_local) 소비.
 
 ### 모드와의 결합
 

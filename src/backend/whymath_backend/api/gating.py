@@ -32,6 +32,7 @@ list[ProblemSchema]`이며, api 레이어는 "DB 조회 + L6 함수 호출 + sch
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from typing import Annotated
 
@@ -44,6 +45,7 @@ from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
+from whymath_backend.l1.curriculum.curriculum_resolve import CurriculumDepthResolver
 from whymath_backend.l6 import (
     select_gifted_items,
     select_metacognition_items,
@@ -52,7 +54,7 @@ from whymath_backend.l6 import (
     select_suneung_items,
     select_thinking_items,
 )
-from whymath_backend.schema.enums import Curriculum, Persona
+from whymath_backend.schema.enums import Curriculum, Persona, RequiredDepth
 from whymath_backend.schema.problem import Problem as ProblemSchema
 
 router = APIRouter(prefix="/v1/gating", tags=["gating"])
@@ -108,6 +110,19 @@ CandidatesDep = Annotated[list[ProblemSchema], Depends(_fetch_candidates)]
 # 정본 값('직접'/'재매핑'/'준용')은 schema.standard.ConceptStandardLink.link_type와 동일.
 _DIRECT_LINK_TYPE = "직접"
 
+# 자동 커리큘럼 정렬 깊이 축의 국가(Phase 1 KR). curriculum_entry는 (concept × country) 셀이라
+# 깊이 해석은 국가별이다 — school-progress는 한국 재학생 모드이므로 KR 셀을 본다.
+_DEPTH_COUNTRY_CODE = "KR"
+
+# RequiredDepth 위계(얕음→깊음) 서수 — 한 문항이 여러 개념을 다루면 *가장 깊은* 요구 깊이를 택한다
+# (문항은 그 개념들이 요구하는 가장 깊은 깊이에 맞춰 출제돼야 함·06 §자동정렬-3).
+_DEPTH_ORDER: dict[RequiredDepth, int] = {
+    RequiredDepth.awareness: 0,
+    RequiredDepth.procedural: 1,
+    RequiredDepth.conceptual: 2,
+    RequiredDepth.mastery: 3,
+}
+
 
 async def _fetch_achievement_codes(
     session: AsyncSession, problem_ids: list[uuid.UUID]
@@ -151,21 +166,102 @@ async def _fetch_achievement_codes(
     return mapping
 
 
-async def _fetch_candidates_with_standards(session: SessionDep) -> list[ProblemSchema]:
-    """학교진도 후보를 읽고 *성취기준 코드*(비영속 필드)를 4단계 조인으로 주입해 돌려준다.
+async def _fetch_problem_concept_codes(
+    session: AsyncSession, problem_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, set[str]]:
+    """문항 id 목록 → {problem_id: {concept code, ...}} (2단계 조인·N+1 없음).
 
-    `_fetch_candidates`(기존 후보 조회·재사용)로 후보를 끌어온 뒤, `_fetch_achievement_codes`로
-    그 문항들의 성취기준 official_code를 일괄(IN) 조회해 각 `ProblemSchema`의 비영속 필드
-    `achievement_standard_codes`에 *결정적으로*(sorted) 채운다. 성취기준이 없는 문항은 맵 키가
-    없어 빈 리스트로 남는다(데이터0 안전·단원/persona_fit 폴백). school-progress 게이팅 핸들러
-    전용 의존성이라 retake·suneung·thinking은 이 조인 비용을 지지 않는다(그들은 `CandidatesDep`
-    유지).
+    경로: `problem_concept`(문항↔개념 N:M) → `concept`(개념). 조인 키
+    `ProblemConcept.concept_id == Concept.concept_id`로 각 문항이 다루는 개념의 `code`(UC 브리지
+    키 — `curriculum_entry.concept_id`와 동일 키 공간)를 모은다. 단일 IN 일괄 쿼리(N+1 0·
+    `_fetch_achievement_codes` 선례 동형). 개념이 없는 문항은 결과 dict 키 부재(빈 깊이로 폴백).
+
+    Args:
+      session: 요청 수명 AsyncSession.
+      problem_ids: 개념 코드를 조회할 문항 id 목록. 비면 빈 dict(쿼리 생략).
+
+    Returns:
+      `{problem_id: {concept_code, ...}}` — 개념이 없는 문항은 키 부재.
+    """
+    if not problem_ids:
+        return {}
+    stmt = (
+        select(ProblemConcept.problem_id, Concept.code)
+        .join(Concept, ProblemConcept.concept_id == Concept.concept_id)
+        .where(ProblemConcept.problem_id.in_(problem_ids))
+    )
+    result = await session.execute(stmt)
+    mapping: dict[uuid.UUID, set[str]] = {}
+    for problem_id, code in result.all():
+        mapping.setdefault(problem_id, set()).add(code)
+    return mapping
+
+
+async def _inject_curriculum_required_depth(
+    session: AsyncSession, candidates: list[ProblemSchema]
+) -> None:
+    """후보 문항에 *교육과정 요구 깊이*(비영속 필드)를 curriculum_entry resolver로 주입(in-place).
+
+    자동 커리큘럼 정렬 깊이 축(06_application_modes.md §자동정렬-3): 각 문항이 다루는 개념의 한국
+    (KR) 교육과정 요구 깊이(`required_depth`)를 `curriculum_entry`에서 조회해, 한 문항이 여러 개념을
+    다루면 *가장 깊은* 깊이를 `problem.curriculum_required_depth`에 넣는다(`_DEPTH_ORDER` 위계).
+
+    경로: ① `_fetch_problem_concept_codes`로 {problem_id: {concept_code}} 조회(async) → ② 전체
+    concept_code를 모아 `CurriculumDepthResolver.resolve_many`(sync·단일 SELECT·N+1 0)로
+    {concept_code: RequiredDepth} 조회 — sync 엔진 좌석이라 `asyncio.to_thread`로 이벤트 루프를
+    막지 않고 워커 스레드에 격리(weak_concept_recommendation의 fetch_node_meta 선례 동형) → ③
+    문항별 *가장 깊은* 깊이 주입. curriculum_entry 미적재·깊이 미큐레이션·개념 미해석이면 키가 빠져
+    None으로 남는다(L6 깊이정렬 무신호 폴백·데이터0 안전).
+
+    Args:
+      session: 요청 수명 AsyncSession.
+      candidates: 깊이를 주입할 후보(in-place 변경).
+    """
+    if not candidates:
+        return
+    codes_by_problem = await _fetch_problem_concept_codes(
+        session, [p.problem_id for p in candidates]
+    )
+    all_codes = sorted({code for codes in codes_by_problem.values() for code in codes})
+    if not all_codes:
+        return
+    # sync 엔진 좌석(curriculum_entry resolver)을 워커 스레드에 격리 — 이벤트 루프 블로킹 금지.
+    resolver = CurriculumDepthResolver()
+    depth_by_code = await asyncio.to_thread(
+        resolver.resolve_many, all_codes, country_code=_DEPTH_COUNTRY_CODE
+    )
+    if not depth_by_code:
+        return
+    for problem in candidates:
+        codes = codes_by_problem.get(problem.problem_id)
+        if not codes:
+            continue
+        depths = [depth_by_code[c] for c in codes if c in depth_by_code]
+        if depths:
+            # 여러 개념 → 가장 깊은 요구 깊이(_DEPTH_ORDER 위계)를 택해 주입.
+            problem.curriculum_required_depth = max(depths, key=lambda d: _DEPTH_ORDER[d])
+
+
+async def _fetch_candidates_with_standards(session: SessionDep) -> list[ProblemSchema]:
+    """학교진도 후보를 읽고 *성취기준 코드*·*교육과정 요구 깊이*(비영속 필드)를 주입해 돌려준다.
+
+    `_fetch_candidates`(기존 후보 조회·재사용)로 후보를 끌어온 뒤 두 비영속 신호를 주입한다:
+      ① 성취기준 코드 — `_fetch_achievement_codes`(4단계 조인)로 official_code를 일괄(IN) 조회해
+         각 `ProblemSchema.achievement_standard_codes`에 *결정적으로*(sorted) 채운다(없으면 빈
+         리스트·단원/persona_fit 폴백).
+      ② 교육과정 요구 깊이 — `_inject_curriculum_required_depth`(문항→개념 조인 + curriculum_entry
+         resolver)로 각 문항 개념의 한국 교육과정 *가장 깊은* required_depth를
+         `ProblemSchema.curriculum_required_depth`에 채운다(자동 커리큘럼 정렬 깊이 축). curriculum_
+         entry 미적재·깊이 미큐레이션이면 None으로 남아 L6 깊이정렬이 무신호 폴백(데이터0 안전).
+
+    school-progress 게이팅 핸들러 전용 의존성이라 retake·suneung·thinking은 이 조인 비용을 지지
+    않는다(그들은 `CandidatesDep` 유지).
 
     Args:
       session: 요청 수명 AsyncSession(`get_session` 주입).
 
     Returns:
-      성취기준 코드가 주입된 후보 `schema.Problem` 리스트(게이팅 입력).
+      성취기준 코드·교육과정 요구 깊이가 주입된 후보 `schema.Problem` 리스트(게이팅 입력).
     """
     candidates = await _fetch_candidates(session)
     codes = await _fetch_achievement_codes(session, [p.problem_id for p in candidates])
@@ -173,6 +269,8 @@ async def _fetch_candidates_with_standards(session: SessionDep) -> list[ProblemS
         if problem.problem_id in codes:
             # sorted로 결정적 순서(집합→리스트). 키 부재 문항은 기본 빈 리스트 유지.
             problem.achievement_standard_codes = sorted(codes[problem.problem_id])
+    # 자동 커리큘럼 정렬 깊이 축 주입(curriculum_entry resolver·in-place·데이터0 시 None 폴백).
+    await _inject_curriculum_required_depth(session, candidates)
     return candidates
 
 

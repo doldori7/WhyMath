@@ -23,8 +23,11 @@ import한다.
 
 from __future__ import annotations
 
+import pytest
+
 from whymath_backend.l6.school_progress.gating import (
     SCHOOL_PROGRESS_PERSONAS,
+    curriculum_depth_alignment,
     is_school_progress_eligible,
     school_progress_priority,
     select_school_progress_items,
@@ -32,6 +35,7 @@ from whymath_backend.l6.school_progress.gating import (
 from whymath_backend.schema.enums import (
     Curriculum,
     Persona,
+    RequiredDepth,
     SourceType,
     Subject,
 )
@@ -566,3 +570,54 @@ class TestSelectSchoolProgressItems:
             [first, second, third], Persona.A_일반고고3, target_unit_codes=target
         )
         assert [p.slug for p in selected] == ["first", "second", "third"]
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ⑩ 자동 커리큘럼 정렬 — 깊이 축(required_depth) 정렬 보너스
+# ──────────────────────────────────────────────────────────────────────
+class TestCurriculumDepthAlignment:
+    def test_perfect_match_gives_max_bonus(self) -> None:
+        # conceptual → 목표 난이도 3.5. difficulty 3.5면 거리 0 → 최대 보너스(_DEPTH_ALIGN_WEIGHT).
+        p = _problem(curriculum_required_depth=RequiredDepth.conceptual, difficulty_overall=3.5)
+        assert curriculum_depth_alignment(p) == pytest.approx(1.5)
+
+    def test_far_off_gives_small_bonus(self) -> None:
+        # awareness → 목표 1.5. difficulty 5.0 → 거리 3.5 → 1.5*(1-3.5/4)=0.1875.
+        p = _problem(curriculum_required_depth=RequiredDepth.awareness, difficulty_overall=5.0)
+        assert curriculum_depth_alignment(p) == pytest.approx(0.1875)
+
+    def test_none_depth_returns_zero(self) -> None:
+        # 깊이 미주입(curriculum_entry 미적재) → 0.0(하위호환).
+        p = _problem(difficulty_overall=3.5)
+        assert p.curriculum_required_depth is None
+        assert curriculum_depth_alignment(p) == 0.0
+
+    def test_none_difficulty_returns_zero(self) -> None:
+        # 난이도 미평가 → 정합 판정 불가 → 0.0.
+        p = _problem(curriculum_required_depth=RequiredDepth.mastery, difficulty_overall=None)
+        assert curriculum_depth_alignment(p) == 0.0
+
+    def test_enum_value_string_works(self) -> None:
+        # use_enum_values=True로 값이 문자열이어도 정규화돼 동작.
+        p = _problem(curriculum_required_depth="mastery", difficulty_overall=4.5)
+        assert curriculum_depth_alignment(p) == pytest.approx(1.5)
+
+    def test_priority_includes_depth_bonus(self) -> None:
+        # 같은 단원 겹침·같은 난이도라도 깊이정합 문항이 우선순위가 더 높다.
+        target = {"CAL-INT-DEF"}
+        aligned = _problem(
+            curriculum_required_depth=RequiredDepth.conceptual, difficulty_overall=3.5
+        )
+        misaligned = _problem(
+            curriculum_required_depth=RequiredDepth.awareness, difficulty_overall=3.5
+        )
+        w_aligned = school_progress_priority(aligned, target_unit_codes=target)
+        w_misaligned = school_progress_priority(misaligned, target_unit_codes=target)
+        assert w_aligned > w_misaligned
+
+    def test_priority_backward_compatible_without_depth(self) -> None:
+        # 깊이 미주입이면 기존 가중치(단원×2.0 + 난이도)와 정확히 동일.
+        target = {"CAL-INT-DEF"}
+        p = _problem(difficulty_overall=3.0)
+        # 단원 1겹침×2.0 + 난이도 3.0 + 깊이 0.0 = 5.0.
+        assert school_progress_priority(p, target_unit_codes=target) == pytest.approx(5.0)

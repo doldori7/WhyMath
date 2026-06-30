@@ -23,7 +23,15 @@ L4/L2/L3를 import하지 않는다 — 이 모듈은 기존 `Problem` 필드의 
 카탈로그·검증자·모델이 불필요하다. L6은 아무도 import하지 않는 최상위 소비자다(역방향 의존
 부재).
 
-**성취기준(AchievementStandard) 매칭 심화(이 슬라이스)**: 진도 정합을 단원(`unit_codes`)
+**자동 커리큘럼 정렬 — 깊이 축(이 슬라이스)**: 진도 *겹침*(단원·성취기준)에 더해, 문항 난이도가
+*그 개념의 교육과정 요구 깊이*(`curriculum_required_depth`)에 맞는지를 우선순위 보너스로 더한다
+(06_application_modes.md §자동정렬-3). 이 모듈은 깊이를 *직접 조회하지 않는다* —
+`Problem.curriculum_required_depth`(비영속 필드·L5 api가 `curriculum_entry` resolver로 주입)의
+*값만* 읽어 순수성(부수효과 0)을 유지한다(성취기준 코드 주입과 동형 계약). 깊이는 *적격성 게이트가
+아니라 우선순위 보너스*다(난이도처럼 — 깊이 불일치로 문항을 탈락시키지 않는다). 데이터(curriculum_
+entry 적재·깊이 큐레이션)가 없으면 None으로 폴백해 기존 가중치와 완전 동일하다(하위호환).
+
+**성취기준(AchievementStandard) 매칭 심화**: 진도 정합을 단원(`unit_codes`)
 하나로만 보던 데서, *단원보다 세밀한* 성취기준 코드 정합을 **추가 축**으로 더한다. 이 모듈은
 성취기준 마스터 테이블·4단계 조인을 *직접 수행하지 않는다* — `Problem.achievement_standard_codes`
 (비영속 필드·L5 api 조인이 주입)의 *값만* 읽어 순수성(부수효과 0)을 유지한다(DB 조인은 전부 L5
@@ -43,7 +51,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from whymath_backend.l6 import _shared
-from whymath_backend.schema.enums import Curriculum, Persona
+from whymath_backend.schema.enums import Curriculum, Persona, RequiredDepth
 from whymath_backend.schema.problem import Problem
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -63,6 +71,58 @@ PRD 5종 페르소나(`enums.Persona`) 중 *학교 재학생*인 둘만 학교�
   - `E_홈스쿨링영재` — 홈스쿨링(학교 미재학)으로 학교 진도 정합이 성립하지 않는다(심화·영재
     트랙 — 후속 영재 모드 대상).
 """
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 자동 커리큘럼 정렬 — 깊이 축(required_depth) 상수·헬퍼
+# ──────────────────────────────────────────────────────────────────────────
+# RequiredDepth(교육과정 요구 깊이) → 목표 난이도(difficulty_overall 1~5 척도). 깊이 위계
+# awareness<procedural<conceptual<mastery를 난이도 1~5 구간에 고르게 배치한다(얕은 깊이=쉬운
+# 난이도·깊은 깊이=어려운 난이도). 키는 enum 값 문자열(use_enum_values=True 대응 — Problem의
+# curriculum_required_depth가 문자열일 수 있어 _shared.normalize_enum_value로 정규화해 조회).
+_DEPTH_TARGET_DIFFICULTY: dict[str, float] = {
+    RequiredDepth.awareness.value: 1.5,  # 인지 — 가장 얕음
+    RequiredDepth.procedural.value: 2.5,  # 절차
+    RequiredDepth.conceptual.value: 3.5,  # 개념
+    RequiredDepth.mastery.value: 4.5,  # 숙달 — 가장 깊음
+}
+# 깊이정렬 보너스 최대치(완전 정합 시). 단원 겹침(×2.0)보다 작게 둔다 — 깊이정렬은 *진도 겹침
+# 안에서* 난이도-깊이 정합을 약하게 앞세우는 보조 신호일 뿐, 진도(단원·성취기준) 겹침을 압도하면
+# 안 된다(겹침이 1차 의도·깊이는 동급 정합 내 품질 신호). 난이도 보조축(≤5.0)과 비슷한 급.
+_DEPTH_ALIGN_WEIGHT: float = 1.5
+# difficulty_overall 1~5의 최대 거리(정규화 분모). |난이도-목표|를 이 값으로 나눠 [0,1] 정규화.
+_DEPTH_ALIGN_SPAN: float = 4.0
+
+
+def curriculum_depth_alignment(problem: Problem) -> float:
+    """문항 난이도가 *그 개념의 교육과정 요구 깊이*에 맞는지 보너스(0.0~_DEPTH_ALIGN_WEIGHT).
+
+    자동 커리큘럼 정렬의 *깊이 축*(06_application_modes.md §자동정렬-3): 같은 진도 정합 문항이라도,
+    문항 난이도(`difficulty_overall`)가 그 개념이 교육과정에서 요구되는 깊이(`curriculum_required_
+    depth`·L5 api가 curriculum_entry resolver로 주입)에 맞을수록 학습 적합도가 높다. 깊이를 목표
+    난이도로 환산(`_DEPTH_TARGET_DIFFICULTY`)해 거리가 가까울수록 큰 보너스를 준다:
+
+        bonus = _DEPTH_ALIGN_WEIGHT × (1 - |difficulty_overall - target| / _DEPTH_ALIGN_SPAN)  (≥0)
+
+    무신호 폴백(0.0 반환): `curriculum_required_depth`가 None(curriculum_entry 미적재·깊이 미설정·
+    개념 미해석)이거나 `difficulty_overall`이 None(난이도 미평가)이거나 깊이 값이 매핑 밖이면 보너스
+    0.0 → 기존 가중치(성취기준·단원·난이도)와 완전 동일(하위호환·데이터0 안전).
+
+    use_enum_values=True: `curriculum_required_depth`가 enum 멤버일 수도 문자열 값일 수도 있어
+    `_shared.normalize_enum_value`로 문자열 정규화 후 매핑 조회한다.
+    """
+    if problem.difficulty_overall is None:
+        return 0.0
+    depth_value = _shared.normalize_enum_value(problem.curriculum_required_depth)
+    if depth_value is None:
+        return 0.0
+    target = _DEPTH_TARGET_DIFFICULTY.get(depth_value)
+    if target is None:
+        return 0.0
+    distance = abs(problem.difficulty_overall - target)
+    bonus = _DEPTH_ALIGN_WEIGHT * (1.0 - distance / _DEPTH_ALIGN_SPAN)
+    # 거리가 span을 넘으면 음수가 되므로 0.0으로 클램프(보너스는 비음수).
+    return max(0.0, bonus)
 
 
 def is_school_progress_eligible(
@@ -158,8 +218,9 @@ def school_progress_priority(
     핵심은 *학생이 지금 배우는 진도*와의 정합이다. 같은 적격 문항이라도 현재 진도와 *더 세밀하게·더
     많이* 겹치는 문항이 지금 학습에 직결되므로 우선 노출 가치가 크다. 이를 반영해:
 
-      가중치 = (성취기준 겹침 *개수* × 3.0)         # 신규 — 가장 세밀 = 최우선
+      가중치 = (성취기준 겹침 *개수* × 3.0)         # 가장 세밀 = 최우선
              + (단원      겹침 *개수* × 2.0)         # 기존 불변
+             + (깊이정렬 보너스 0.0~1.5)              # 신규 — 자동 커리큘럼 정렬 깊이 축
              + (difficulty_overall|0.0)              # 기존 불변(타이브레이커)
 
       - 성취기준 겹침 *개수* × 3.0 → **가장 세밀한 신호라 가장 큰 단위 가중치**(성취기준 1개=3.0 >
@@ -171,6 +232,12 @@ def school_progress_priority(
       - 단원 겹침 *개수* × 2.0 → 기존 신호. `target_unit_codes`가 주어지면
         `set(problem.unit_codes) & target_unit_codes`의 *원소 수*에 ×2.0을 곱한다(단조).
         `target_unit_codes`가 None이면 이 항은 0.0.
+      - 깊이정렬 보너스(0.0~`_DEPTH_ALIGN_WEIGHT`=1.5) → `curriculum_depth_alignment(problem)`.
+        문항 난이도가 *그 개념의 교육과정 요구 깊이*(`curriculum_required_depth`·L5 api가
+        curriculum_entry resolver로 주입)에 가까울수록 큰 보너스(자동 커리큘럼 정렬 깊이 축).
+        `curriculum_required_depth`나 `difficulty_overall`이 None이면 0.0 → **기존 가중치와 완전
+        동일**(하위호환·데이터0 안전). 단원 겹침(×2.0)보다 작게 둬 진도 겹침을 압도하지 않는다
+        (깊이는 동급 정합 내 품질 신호).
       - `difficulty_overall`(1.0~5.0, None이면 0.0) → 그대로 가산. 같은 진도 정합 안에서
         약하게 심화 문항을 앞세우는 보조 축(겹침 신호를 압도하지 않는다 — 진도 정합은 *겹침 개수
         단조*가 1차 의도이고 난이도는 동급 정합 내 타이브레이커다).
@@ -199,6 +266,10 @@ def school_progress_priority(
     if target_unit_codes is not None:
         overlap_count = len(set(problem.unit_codes) & target_unit_codes)
         weight += overlap_count * 2.0
+
+    # 자동 커리큘럼 정렬 깊이 축 — 문항 난이도가 개념 교육과정 요구 깊이에 맞을수록 보너스(≤1.5).
+    # curriculum_required_depth/난이도가 None이면 0.0(하위호환·데이터0 안전).
+    weight += curriculum_depth_alignment(problem)
 
     # 종합 난이도 보조 축(None이면 0.0) — 같은 진도 정합 안에서 심화를 약하게 앞세움.
     if problem.difficulty_overall is not None:
@@ -275,6 +346,7 @@ def select_school_progress_items(
 
 __all__ = [
     "SCHOOL_PROGRESS_PERSONAS",
+    "curriculum_depth_alignment",
     "is_school_progress_eligible",
     "school_progress_priority",
     "select_school_progress_items",

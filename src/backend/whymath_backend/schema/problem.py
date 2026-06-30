@@ -39,6 +39,7 @@ from whymath_backend.schema.enums import (
     Persona,
     QuestionFormat,
     RelationType,
+    RequiredDepth,
     ReviewStatus,
     ScoringType,
     SignaturePattern,
@@ -494,6 +495,21 @@ class Problem(BaseModel):
         description="이 문항이 다루는 성취기준 고시코드(official_code, 예 '[12미적01-01]') 집합 "
         "— 비영속(ORM 비매핑). to_schema()가 채우지 않고 L5 api 게이팅 조인이 주입. "
         "데이터 없으면 빈 리스트(폴백).",
+    )
+
+    # ===== 교육과정 요구 깊이 (비영속 — L5 게이팅 + curriculum_entry resolver 주입) =====
+    # achievement_standard_codes와 동일하게 ORM 비매핑(비영속)이라 마이그레이션·ORM 무변경
+    # (from_schema/to_schema가 mapper.column_attrs로 매핑 컬럼만 추려 자동 무시). to_schema()는
+    # 채우지 않고 default(None)로 둔다. 값 주입은 L5 api 게이팅이 문항→개념(problem_concept→
+    # concept)으로 concept code를 모은 뒤 curriculum_entry resolver(l1/curriculum/curriculum_
+    # resolve.py)로 그 개념들의 한국(KR) required_depth를 조회해 *가장 깊은 깊이*를 넣는다(자동
+    # 커리큘럼 정렬 깊이 축·06_application_modes.md §자동정렬-3). 데이터(curriculum_entry 적재·
+    # required_depth 큐레이션)가 없으면 None으로 남아 L6 깊이정렬이 무신호(0.0)로 폴백한다.
+    curriculum_required_depth: RequiredDepth | None = Field(
+        default=None,
+        description="이 문항 개념들이 한국 교육과정에서 요구되는 가장 깊은 깊이(required_depth) "
+        "— 비영속(ORM 비매핑). to_schema()가 채우지 않고 L5 api 게이팅이 curriculum_entry "
+        "resolver로 주입. 데이터 없으면 None(L6 깊이정렬 무신호 폴백).",
     )
 
     # ===== EBS 연계 =====

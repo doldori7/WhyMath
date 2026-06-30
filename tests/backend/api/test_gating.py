@@ -27,18 +27,22 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
 from whymath_backend.app import create_app
 from whymath_backend.db.models.achievement_standard import AchievementStandard
+from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.session import get_session
+from whymath_backend.l1.curriculum import curriculum_resolve
 from whymath_backend.schema.enums import (
     BloomLevel,
     Curriculum,
     ExamType,
     Persona,
     QuestionFormat,
+    RequiredDepth,
     ScoringType,
     SignaturePattern,
     SourceType,
@@ -120,6 +124,20 @@ def _is_standard_join(stmt: Any) -> bool:
     return AchievementStandard in entities
 
 
+def _is_concept_code_join(stmt: Any) -> bool:
+    """stmt가 문항→개념 코드 조인(`_fetch_problem_concept_codes`)인지 *컬럼 엔티티*로 판별.
+
+    깊이 주입은 `select(ProblemConcept.problem_id, Concept.code)` 튜플 select라 엔티티에 `Concept`이
+    등장하고 `AchievementStandard`은 없다(성취기준 조인과 구별). 후보 쿼리(`select(Problem)`)는
+    엔티티가 Problem뿐이라 Concept이 없다. 그 출현으로 셋을 가른다.
+    """
+    try:
+        entities = [c.get("entity") for c in stmt.column_descriptions]
+    except (AttributeError, TypeError):
+        return False
+    return Concept in entities and AchievementStandard not in entities
+
+
 class FakeSession:
     """AsyncSession 표면 일부 모사 — 게이팅 라우터가 부르는 `execute`만(stmt 분기).
 
@@ -139,30 +157,38 @@ class FakeSession:
         self,
         rows: list[Problem] | None = None,
         standard_rows: list[tuple[uuid.UUID, str]] | None = None,
+        concept_code_rows: list[tuple[uuid.UUID, str]] | None = None,
     ) -> None:
         self._rows = list(rows or [])
         self._standard_rows = list(standard_rows or [])
+        self._concept_code_rows = list(concept_code_rows or [])
 
     async def execute(self, stmt: Any) -> _FakeResult | _FakeTupleResult:
         if _is_standard_join(stmt):
             return _FakeTupleResult(self._standard_rows)
+        # 깊이 주입 문항→개념 코드 조인 — 미리 정한 (problem_id, concept_code) 행(기본 빈 목록 →
+        # 깊이 무신호·resolver 미호출로 실 DB 회피).
+        if _is_concept_code_join(stmt):
+            return _FakeTupleResult(self._concept_code_rows)
         return _FakeResult(self._rows)
 
 
 def _client(
     rows: list[Problem],
     standard_rows: list[tuple[uuid.UUID, str]] | None = None,
+    concept_code_rows: list[tuple[uuid.UUID, str]] | None = None,
 ) -> TestClient:
-    """후보 행(+ 선택적 성취기준 조인 행)을 보유한 가짜 세션을 `get_session`에 주입한 TestClient.
+    """후보 행(+ 선택적 성취기준·개념코드 조인 행)을 보유한 가짜 세션을 주입한 TestClient.
 
-    `standard_rows`는 school-progress의 4단계 조인 결과를 모사한다(`(problem_id, official_code)`
-    목록). 생략하면 빈 목록(성취기준 데이터0) — 다른 3모드 테스트는 이 인자를 쓰지 않으므로
-    기존 호출이 그대로 동작한다(하위호환).
+    `standard_rows`는 성취기준 4단계 조인, `concept_code_rows`는 깊이 주입의 문항→개념 코드 조인
+    (`(problem_id, concept_code)`)을 모사한다. 둘 다 생략하면 빈 목록(데이터0) — 다른 모드·기존
+    호출이 그대로 동작한다(하위호환). `concept_code_rows`가 비면 깊이 resolver는 호출되지 않는다
+    (all_codes 빈 → 조기 반환·실 DB 회피).
     """
     app = create_app()
 
     async def _override() -> AsyncIterator[FakeSession]:
-        yield FakeSession(rows, standard_rows)
+        yield FakeSession(rows, standard_rows, concept_code_rows)
 
     app.dependency_overrides[get_session] = _override
     return TestClient(app)
@@ -558,6 +584,71 @@ class TestSchoolProgress:
         assert _slugs(resp.json()) == ["unit-fallback"]
         # 비영속 성취기준 코드는 빈 리스트로 직렬화(주입 부재).
         assert resp.json()[0]["achievement_standard_codes"] == []
+
+    # ── 자동 커리큘럼 정렬 깊이 축(이 슬라이스) ─────────────────────────────
+    def test_depth_injection_orders_by_alignment(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """문항→개념 조인 + curriculum_entry resolver가 깊이를 주입해 정합 문항을 앞세운다.
+
+        같은 단원 겹침·같은 난이도(3.5)지만 개념의 교육과정 요구 깊이가 다른 두 문항을 준다 —
+        conceptual(목표 난이도 3.5·완전 정합)이 awareness(목표 1.5·먼 거리)보다 우선순위가 높아
+        앞에 와야 한다. resolver는 monkeypatch로 대체해 실 PG 없이 깊이 맵을 주입한다(개념코드
+        조인은 가짜 세션 concept_code_rows로 모사). 응답 JSON에 curriculum_required_depth가 실린다.
+        """
+        aligned = _problem(slug="aligned", unit_codes=["CAL-INT-DEF"], difficulty_overall=3.5)
+        misaligned = _problem(slug="misaligned", unit_codes=["CAL-INT-DEF"], difficulty_overall=3.5)
+        # 문항→개념 코드 조인 모사: 각 문항이 개념 하나를 다룬다.
+        concept_code_rows = [
+            (aligned.problem_id, "C-ALIGN"),
+            (misaligned.problem_id, "C-MIS"),
+        ]
+        # resolver를 대체 — 개념코드 → required_depth 맵(실 PG 회피).
+        depth_map = {
+            "C-ALIGN": RequiredDepth.conceptual,
+            "C-MIS": RequiredDepth.awareness,
+        }
+
+        def _fake_resolve_many(
+            self: object,
+            concept_ids: object,
+            *,
+            country_code: str = "KR",
+            min_confidence: float | None = None,
+        ) -> dict[str, RequiredDepth]:
+            return {c: depth_map[c] for c in concept_ids if c in depth_map}  # type: ignore[union-attr]
+
+        monkeypatch.setattr(
+            curriculum_resolve.CurriculumDepthResolver, "resolve_many", _fake_resolve_many
+        )
+        # 입력은 역순(misaligned 먼저)으로 줘서 깊이정렬이 재정렬하는지 본다.
+        client = _client([misaligned, aligned], concept_code_rows=concept_code_rows)
+        resp = client.get(
+            "/v1/gating/school-progress",
+            params={"persona": "A_일반고고3", "unit_codes": ["CAL-INT-DEF"]},
+        )
+        assert resp.status_code == 200, resp.text
+        payload = resp.json()
+        # 깊이 정합(conceptual·난이도 3.5)이 앞으로.
+        assert _slugs(payload) == ["aligned", "misaligned"]
+        # 비영속 깊이가 응답 JSON에 직렬화(주입 입증).
+        by_slug = {item["slug"]: item for item in payload}
+        assert by_slug["aligned"]["curriculum_required_depth"] == "conceptual"
+        assert by_slug["misaligned"]["curriculum_required_depth"] == "awareness"
+
+    def test_depth_no_concept_codes_leaves_none(self) -> None:
+        """개념코드 조인이 0행이면(curriculum_entry/개념 매핑 부재) 깊이 None·resolver 미호출.
+
+        concept_code_rows 미지정 → all_codes 빈 → resolver 조기 반환(실 DB 회피). 깊이는 None으로
+        남고 기존 단원 정합 경로가 그대로 동작한다(데이터0 안전·하위호환).
+        """
+        item = _problem(slug="no-depth", unit_codes=["CAL-INT-DEF"])
+        resp = _client([item]).get(
+            "/v1/gating/school-progress",
+            params={"persona": "A_일반고고3", "unit_codes": ["CAL-INT-DEF"]},
+        )
+        assert resp.status_code == 200
+        payload = resp.json()
+        assert _slugs(payload) == ["no-depth"]
+        assert payload[0]["curriculum_required_depth"] is None
 
 
 # ──────────────────────────────────────────────────────────────────────
