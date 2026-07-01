@@ -166,6 +166,8 @@
   `l3/verify_answer.py`·`src/web/graphing-calculator/src/lib/graph2dSpec.js`·`schema/curriculum_entry.py`·
   `l1/curriculum/curriculum_loader.py`(KR Overlay 적재기)
 - 패턴: `04b_misconception_judge_graduation.md`(shadow→canary→full 점진 노출)
+- 운영: `shadow_measurement_runbook.md`(네 오개념 게이트 shadow 켜기→관측 수집→harvest 집계→
+  canary 판정 절차·crosslink/wrong_form/semantic/judge harvest 도구 사용법)
 - 원칙: `CLAUDE.md`(의사결정 우선순위 1·2·3·미성년 PII)
 - 변경 이력: v0.1 (2026-06-30 초안 — 설계만) · v0.2 (2026-06-30 — §3 구현 완료: 필드 제거 PR #350 +
   curriculum_entry KR 적재기) · v0.3 (2026-06-30 — §0 invariant 회귀 동결 게이트 5종 구현 완료·PR #357)
