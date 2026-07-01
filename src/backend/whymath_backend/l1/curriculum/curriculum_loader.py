@@ -30,8 +30,13 @@ KR 상수(graph.json `source_citation`에서 정직 도출 — 교육부 고시 
   source_name/source_code/source_url은 _KR_* 상수. is_present=True라 source_url이 비면 schema
   validator가 막으므로 NCIC 포털 URL을 상수로 채운다(존재 주장의 근거 출처).
 
+`required_depth`(휴리스틱·사용자 결정 2026-07): 코퍼스에 인지 깊이 주석이 없어(cognitive_level
+  원문 부재) `grade_band` 학년진행을 깊이 프록시로 파생한다(`_GRADE_BAND_TO_REQUIRED_DEPTH` —
+  나선형 교육과정 통설 기반 coarse 휴리스틱·개념별 진리 아님). L6 깊이정렬 *랭킹 보너스*에만 쓰이고
+  (하드 게이트 아님), cognitive_level 원문 주석이 확보되면 대체한다. 미지 밴드는 None(정직 폴백).
+
 미매핑(소스에 신호 없음·날조 금지 — CLAUDE.md "교수학 내용 날조 금지"):
-  `required_depth`(코퍼스에 깊이 주석 없음→None)·`cognitive_level`·`is_assessed`·
+  `cognitive_level`·`is_assessed`·
   `assessment_format`·`notation_local`·`terminology_local`·`notation_variants`·
   `followup_concept_ids`·`sub_domain_label`·`textbook_unit_refs`·`introduced_context`·
   `effective_from`·`source_document`·`verified_by`.
@@ -70,7 +75,7 @@ from whymath_backend.config import Settings, get_settings
 # 슬3 sync 엔진 빌더 재사용(신규 seam 0) — backend_concept·standard_loader와 동일 규약.
 from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
 from whymath_backend.schema.curriculum_entry import CurriculumEntry
-from whymath_backend.schema.enums import CurriculumLicense
+from whymath_backend.schema.enums import CurriculumLicense, RequiredDepth
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -100,6 +105,21 @@ _GRADE_BAND_TO_INTRODUCED_GRADE: dict[str, int] = {
     "초등학교 5~6학년군": 5,
     "중학교 1~3학년군": 7,  # 중1 = KR 1~12 번호 7
     "고등학교": 10,  # 고1 = KR 1~12 번호 10
+}
+
+# grade_band_hint(학년대 밴드) → required_depth(교육과정 요구 깊이) *휴리스틱*(사용자 결정
+# 2026-07·"grade_band 학년진행"). graph.json에 인지 깊이(성취기준 동사·cognitive_level) 주석이
+# 없어(날조 금지) 학년 진행을 깊이 프록시로 쓴다 — 나선형 교육과정에서 저학년은 인식·기능,
+# 고학년으로 갈수록 개념·숙달로 심화한다는 통설에 근거한 *coarse 휴리스틱*이다(개념별 진리 아님).
+# L6는 이 깊이를 *목표 난이도*로 환산(awareness 1.5 … mastery 4.5)해 문항 난이도 정합 *랭킹
+# 보너스*(하드 게이트 아님·상한 1.5)로만 쓴다 → 매핑이 다소 어긋나도 안전 범위. 인지수준 원문
+# 주석이 확보되면 이 휴리스틱을 대체한다(cognitive_level 적재 별 슬라이스). 미지 밴드는 None(정직).
+_GRADE_BAND_TO_REQUIRED_DEPTH: dict[str, RequiredDepth] = {
+    "초등학교 1~2학년군": RequiredDepth.awareness,  # 수 세기 등 도입·인식
+    "초등학교 3~4학년군": RequiredDepth.procedural,  # 연산 기능 습득
+    "초등학교 5~6학년군": RequiredDepth.procedural,
+    "중학교 1~3학년군": RequiredDepth.conceptual,  # 개념 이해·형식화
+    "고등학교": RequiredDepth.mastery,  # 심화·증명·전이(수능 숙달 요구)
 }
 
 
@@ -146,6 +166,11 @@ def _kr_entry_from_concept(concept: dict[str, Any], *, now: datetime) -> Curricu
     introduced_grade = (
         _GRADE_BAND_TO_INTRODUCED_GRADE.get(grade_band) if grade_band is not None else None
     )
+    # required_depth 휴리스틱 — grade_band 학년진행에서 파생(_GRADE_BAND_TO_REQUIRED_DEPTH).
+    # 미지·미제공 밴드는 None(정직 폴백 — L6 깊이보너스 0·기존 동작 불변).
+    required_depth = (
+        _GRADE_BAND_TO_REQUIRED_DEPTH.get(grade_band) if grade_band is not None else None
+    )
 
     return CurriculumEntry(
         # 식별 — 복합키 (concept_id, "KR") + 결정적 표면키 entry_id(멱등키)
@@ -163,6 +188,8 @@ def _kr_entry_from_concept(concept: dict[str, Any], *, now: datetime) -> Curricu
         curriculum_revision=_KR_CURRICULUM_REVISION,
         # 맥락
         domain_label=_opt_str(concept.get("domain")),
+        # 깊이 — grade_band 학년진행 휴리스틱(cognitive_level 원문 주석 확보 시 대체)
+        required_depth=required_depth,
         # 매핑·위계 — graph.json 직결(NCIC 코드·그 나라 선수개념)
         national_standard_codes=_str_list(concept.get("standard_codes")),
         prerequisite_concept_ids=_str_list(concept.get("prerequisite_concept_ids")),

@@ -124,8 +124,9 @@ class TestLoadFromGraphJson:
         assert e.source_url and e.source_url.startswith("https://www.ncic.go.kr")
         assert e.created_at == _NOW
         assert e.updated_at == _NOW
+        # 깊이 — grade_band 학년진행 휴리스틱(고등학교 → mastery·use_enum_values 문자열)
+        assert e.required_depth == "mastery"
         # 미매핑(소스에 신호 없음 → 기본/None)
-        assert e.required_depth is None
         assert e.is_assessed is None
 
     def test_introduced_grade_band_lower_bounds(self, tmp_path: Path) -> None:
@@ -147,12 +148,21 @@ class TestLoadFromGraphJson:
             }
             for i, band in enumerate(bands)
         ]
+        # grade_band 학년진행 → required_depth 휴리스틱(use_enum_values 문자열).
+        expected_depth = {
+            "초등학교 1~2학년군": "awareness",
+            "초등학교 3~4학년군": "procedural",
+            "초등학교 5~6학년군": "procedural",
+            "중학교 1~3학년군": "conceptual",
+            "고등학교": "mastery",
+        }
         path = self._write_graph(tmp_path, concepts)  # type: ignore[arg-type]
         loaded = load_kr_curriculum_entries_from_graph_json(path, now=_NOW)
         by_code = {e.concept_id: e for e in loaded}
         for i, (band, grade) in enumerate(bands.items()):
             assert by_code[f"C-{i}"].introduced_grade == grade
             assert by_code[f"C-{i}"].grade_band == band
+            assert by_code[f"C-{i}"].required_depth == expected_depth[band]
 
     def test_unknown_grade_band_introduced_grade_none(self, tmp_path: Path) -> None:
         # 매핑에 없는 밴드 → introduced_grade None(추정 안 함·정직). grade_band는 원문 보존.
@@ -172,6 +182,7 @@ class TestLoadFromGraphJson:
         e = load_kr_curriculum_entries_from_graph_json(path, now=_NOW)[0]
         assert e.grade_band == "대학교"
         assert e.introduced_grade is None
+        assert e.required_depth is None  # 미지 밴드 → 깊이 휴리스틱도 None(정직 폴백)
 
     def test_pending_review_lower_confidence(self, tmp_path: Path) -> None:
         path = self._write_graph(
