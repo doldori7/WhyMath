@@ -38,6 +38,9 @@ from whymath_backend.config import Settings, get_settings
 # `_provider_model_identity`는 기존 사용처(matcher 지연 import·아래 populate)를 위해 같은 이름으로
 # 별칭한다. `text_hash`는 아래 `__all__`로 re-export(기존 import 경로 유지).
 from whymath_backend.l1.embedding_primitives import (
+    build_sync_engine as _build_sync_engine,
+)
+from whymath_backend.l1.embedding_primitives import (
     embed_changed,
     text_hash,
 )
@@ -208,33 +211,6 @@ class PgVectorIndex:
         with self._get_engine().connect() as conn:
             rows = conn.execute(stmt).all()
         return {row.misconception_id: row.text_hash for row in rows}
-
-
-def _build_sync_engine(settings: Settings) -> Engine:
-    """기본 sync(psycopg) 엔진 생성 + pgvector 어댑터 등록 (지연 import·session.py 패턴).
-
-    psycopg/SQLAlchemy/pgvector import는 *호출 시점*에만(모듈 import 깨짐 방지). `sync_database_url`
-    (async URL에서 드라이버만 `+psycopg`로 파생)로 sync 엔진을 만들고, 각 raw 연결에
-    `register_vector`를 거는 connect 리스너를 단다 — psycopg가 vector 타입을 바인딩/디코딩하게.
-    `db_disable_pool`(통합테스트)면 NullPool(매 체크아웃 새 연결)로 다중 루프 충돌을 회피한다
-    (async 엔진과 같은 가드).
-    """
-    from pgvector.psycopg import register_vector
-    from sqlalchemy import create_engine, event
-    from sqlalchemy.pool import NullPool
-
-    if settings.db_disable_pool:
-        engine = create_engine(settings.sync_database_url, poolclass=NullPool)
-    else:
-        engine = create_engine(settings.sync_database_url)
-
-    @event.listens_for(engine, "connect")
-    def _register_vector_on_connect(dbapi_connection: object, _record: object) -> None:
-        # 각 새 psycopg 연결에 vector 어댑터 등록(바인딩 list[float]→vector·디코딩 역). 확장은
-        # 마이그레이션이 CREATE EXTENSION으로 보장하므로 여기선 타입 등록만 한다.
-        register_vector(dbapi_connection)
-
-    return engine
 
 
 def populate_pgvector(
