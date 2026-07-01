@@ -8,6 +8,7 @@
 > **작성**: 2026-06-30 · **계층**: L1 · **상위**: `math_dsl_remediation_design.md` §1·`misconception_crosslink_v1`(설계 문서)
 > **v0.2 추가**: §2.1 검수 워크시트(kebab↔M-id 원문 대조·결정란)·§2.2 결정 집계표. 여전히 미적재.
 > **v0.3 추가**: §2.3 Claude 세밀 분석(30건 권장 판정)·§2.2 `Claude 추천` 열. 참고 권장·**여전히 미적재**.
+> **v0.4 집행(Kiki 승인)**: §2.2 결정 확정·§2.4 집행 기록. 승인 자산 `crosslinks.json`(27 직접매핑)·CLI 커밋. **라이브 DB 적재는 ops**.
 > **산출 근거**: kebab 카탈로그(`l4/misconception/catalog.py` 30종) × M-id 코퍼스
 > (`data/corpus/misconceptions_v1/misconceptions.json` 839종) 내용 일치 분석.
 
@@ -417,36 +418,36 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 
 | kebab_id | Claude 추천(참고) | 승인?(사람) | 최종 link_type | 최종 mis_id | method | 검수 메모 |
 |---|---|---|---|---|---|---|
-| discriminant-negative-no-real-root | ✅ D · `M0610` |  |  |  |  |  |
-| distribution-over-power | ✅ D · `M0019` |  |  |  |  |  |
-| division-by-zero | ↔️ 대안 · `M0146` |  |  |  |  |  |
-| exponent-zero | ✅ D · `M0105` |  |  |  |  |  |
-| fraction-cancellation | ⚠️ 확인 · `M0118` |  |  |  |  |  |
-| log-distribution | ✅ D · `M0049` |  |  |  |  |  |
-| root-loss-by-dividing | ✅ D · `M0573` |  |  |  |  |  |
-| sign-flip-in-inequality | ✅ D · `M0564` |  |  |  |  |  |
-| square-root-positivity | ✅ D · `M0550` |  |  |  |  |  |
-| period-of-scaled-sine | 🆕 신규 · `(M0152)` |  |  |  |  |  |
-| sine-distributes-over-sum | ✅ D · `M0707` |  |  |  |  |  |
-| composite-function-commutes | ✅ D · `M0643` |  |  |  |  |  |
-| invertibility-without-1-1 | ✅ D · `M0144` |  |  |  |  |  |
-| translation-sign-flip | ✅ D · `M0411` |  |  |  |  |  |
-| chain-rule-inner-derivative-omitted | ✅ D · `M0370` |  |  |  |  |  |
-| continuity-implies-differentiability | ✅ D · `M0670` |  |  |  |  |  |
-| critical-point-implies-extremum | ✅ D · `M0080` |  |  |  |  |  |
-| limit-equals-function-value | ✅ D · `M0665` |  |  |  |  |  |
-| product-rule-naive | ✅ D · `M0075` |  |  |  |  |  |
-| angle-sum-non-triangle | ❌ 반려 · `(신규/재탐색)` |  |  |  |  |  |
-| area-perimeter-confusion | ⚠️ 확인 · `M0529` |  |  |  |  |  |
-| circle-radius-squared | ✅ D · `M0630` |  |  |  |  |  |
-| similarity-vs-congruence | ✅ D · `M0519` |  |  |  |  |  |
-| gambler-fallacy | ✅ D · `M0688` |  |  |  |  |  |
-| mean-vs-median | ✅ D · `M0419` |  |  |  |  |  |
-| mutually-exclusive-implies-independent | ✅ D · `M0692` |  |  |  |  |  |
-| prosecutor-fallacy | ✅ D · `M0691` |  |  |  |  |  |
-| dot-product-is-vector | ✅ D · `M0735` |  |  |  |  |  |
-| geometric-series-always-converges | ✅ D · `M0209` |  |  |  |  |  |
-| term-to-zero-implies-convergence | ✅ D · `M0704` |  |  |  |  |  |
+| discriminant-negative-no-real-root | ✅ D · `M0610` | ✅ 승인 | 직접매핑 | `M0610` | manual | 적재(§2.3 권장대로) |
+| distribution-over-power | ✅ D · `M0019` | ✅ 승인 | 직접매핑 | `M0019` | manual | 적재(§2.3 권장대로) |
+| division-by-zero | ↔️ 대안 · `M0146` | ✅ 승인 | 직접매핑 | `M0146` | manual | 적재(§2.3 권장대로) |
+| exponent-zero | ✅ D · `M0105` | ✅ 승인 | 직접매핑 | `M0105` | manual | 적재(§2.3 권장대로) |
+| fraction-cancellation | ⚠️ 확인 · `M0118` | ⏸️ 보류 |  |  |  | 보류 — M0118 원문 정합 확인 후 직접매핑(§2.3 ⚠️) |
+| log-distribution | ✅ D · `M0049` | ✅ 승인 | 직접매핑 | `M0049` | manual | 적재(§2.3 권장대로) |
+| root-loss-by-dividing | ✅ D · `M0573` | ✅ 승인 | 직접매핑 | `M0573` | manual | 적재(§2.3 권장대로) |
+| sign-flip-in-inequality | ✅ D · `M0564` | ✅ 승인 | 직접매핑 | `M0564` | manual | 적재(§2.3 권장대로) |
+| square-root-positivity | ✅ D · `M0550` | ✅ 승인 | 직접매핑 | `M0550` | manual | 적재(§2.3 권장대로) |
+| period-of-scaled-sine | 🆕 신규 · `(M0152)` | ⏸️ 보류 |  |  |  | 보류 — 신규 M-id 필요(직접 지칭 부재·§2.3 🆕) |
+| sine-distributes-over-sum | ✅ D · `M0707` | ✅ 승인 | 직접매핑 | `M0707` | manual | 적재(§2.3 권장대로) |
+| composite-function-commutes | ✅ D · `M0643` | ✅ 승인 | 직접매핑 | `M0643` | manual | 적재(§2.3 권장대로) |
+| invertibility-without-1-1 | ✅ D · `M0144` | ✅ 승인 | 직접매핑 | `M0144` | manual | 적재(§2.3 권장대로) |
+| translation-sign-flip | ✅ D · `M0411` | ✅ 승인 | 직접매핑 | `M0411` | manual | 적재(§2.3 권장대로) |
+| chain-rule-inner-derivative-omitted | ✅ D · `M0370` | ✅ 승인 | 직접매핑 | `M0370` | manual | 적재(§2.3 권장대로) |
+| continuity-implies-differentiability | ✅ D · `M0670` | ✅ 승인 | 직접매핑 | `M0670` | manual | 적재(§2.3 권장대로) |
+| critical-point-implies-extremum | ✅ D · `M0080` | ✅ 승인 | 직접매핑 | `M0080` | manual | 적재(§2.3 권장대로) |
+| limit-equals-function-value | ✅ D · `M0665` | ✅ 승인 | 직접매핑 | `M0665` | manual | 적재(§2.3 권장대로) |
+| product-rule-naive | ✅ D · `M0075` | ✅ 승인 | 직접매핑 | `M0075` | manual | 적재(§2.3 권장대로) |
+| angle-sum-non-triangle | ❌ 반려 · `(신규/재탐색)` | ❌ 반려 |  |  |  | 반려 — M0493='변한다' vs kebab '180 고정' 반대 오개념(§2.3 ❌) |
+| area-perimeter-confusion | ⚠️ 확인 · `M0529` | ✅ 승인 | 직접매핑 | `M0529` | manual | 적재(§2.3 권장대로) |
+| circle-radius-squared | ✅ D · `M0630` | ✅ 승인 | 직접매핑 | `M0630` | manual | 적재(§2.3 권장대로) |
+| similarity-vs-congruence | ✅ D · `M0519` | ✅ 승인 | 직접매핑 | `M0519` | manual | 적재(§2.3 권장대로) |
+| gambler-fallacy | ✅ D · `M0688` | ✅ 승인 | 직접매핑 | `M0688` | manual | 적재(§2.3 권장대로) |
+| mean-vs-median | ✅ D · `M0419` | ✅ 승인 | 직접매핑 | `M0419` | manual | 적재(§2.3 권장대로) |
+| mutually-exclusive-implies-independent | ✅ D · `M0692` | ✅ 승인 | 직접매핑 | `M0692` | manual | 적재(§2.3 권장대로) |
+| prosecutor-fallacy | ✅ D · `M0691` | ✅ 승인 | 직접매핑 | `M0691` | manual | 적재(§2.3 권장대로) |
+| dot-product-is-vector | ✅ D · `M0735` | ✅ 승인 | 직접매핑 | `M0735` | manual | 적재(§2.3 권장대로) |
+| geometric-series-always-converges | ✅ D · `M0209` | ✅ 승인 | 직접매핑 | `M0209` | manual | 적재(§2.3 권장대로) |
+| term-to-zero-implies-convergence | ✅ D · `M0704` | ✅ 승인 | 직접매핑 | `M0704` | manual | 적재(§2.3 권장대로) |
 
 > ※ 30행 채우기 전, 우선검수 4건(§3)과 `⚠️이중검수` M-id부터. 반려/보류도 메모로 남겨 재현 가능하게.
 
@@ -546,6 +547,22 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 
 ---
 
+## 2.4 집행 기록 (2026-07-01 — Kiki "권장대로 승인")
+
+§2.3 권장대로 집행. **적재(직접매핑) 27건** = ✅ 25 + ↔️ `division-by-zero`→**M0146**(top M0003 교체) +
+⚠️ `area-perimeter-confusion`→**M0529**. **미적재 3건** = ⏸️ 보류 `fraction-cancellation`(M0118 원문 확인
+후)·`period-of-scaled-sine`(신규 M-id 필요) · ❌ 반려 `angle-sum-non-triangle`(의미 반대).
+
+- **승인 자산**: `data/corpus/misconception_crosslink_v1/crosslinks.json`(27행·`link_type=직접매핑`·
+  `method=manual`·note에 근거). 스키마·FK·트리플 유일은 `tests/backend/l1/test_crosslink_populate.py`가 고정.
+- **적재 CLI**: `python -m whymath_backend.l1.misconception.crosslink_populate`
+  (`--crosslinks data/corpus/misconception_crosslink_v1/crosslinks.json`) — `load_crosslinks` 멱등 upsert.
+- **라이브 DB 적재는 ops**(실 PG 필요). 적재 후 read-time는 `crosslink_resolve.py`가 자동 해석(무배선).
+- **다음(별도)**: shadow 측정(`misconception_crosslink_mode=shadow`)→canary→M-id canonical 플립. 보류 2·
+  반려 1은 원문 재검·신규 M-id 발행 후 재상정.
+
+---
+
 ## 3. 요약 / 검수 우선순위
 
 - 30종 전부 ≥1 후보. 직접매핑 후보 56개. 최상위 평균 conf **0.915**.
@@ -574,3 +591,4 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 - 변경 이력: v0.1 초안 (2026-06-30 — 후보 제안·검수 전·미적재).
 - v0.2 (2026-07-01 — §2.1 원문 대조 워크시트·§2.2 결정 집계표 추가. catalog×corpus 조인·검수 편의. 미적재 불변).
 - v0.3 (2026-07-01 — §2.3 Claude 30건 세밀 분석·권장 판정 추가(✅25·↔️1·⚠️2·🆕1·❌1)·§2.2 `Claude 추천` 열. 참고 권장·미적재 불변).
+- v0.4 (2026-07-01 — Kiki '권장대로 승인' 집행: §2.2 결정 확정·§2.4 집행 기록. 승인 자산 crosslinks.json(27 직접매핑)+crosslink_populate CLI 커밋. 보류 2·반려 1. 라이브 DB 적재는 ops).

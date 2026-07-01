@@ -15,7 +15,7 @@
 | cycle 검출(populate/load 방어선) | **구현 완료** | 저위험·기존 탐지기 미러 |
 | 교육과정 `grade_introduced`·`semester_introduced` 제거 | **구현 완료** | NULL·중복·소비처 0 |
 | 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 | **구현 완료**(§3) — 두 필드 제거(PR #350) + `curriculum_entry` KR 적재기 완료 | 런타임 소비처 0 확인·Overlay 단일 진실 |
-| 오개념 ID 통합(kebab 30 ↔ M-id 839) | **골격 구현**(§1) — M-id 로더·crosswalk 테이블·read-time resolver·게이트 shadow 배선(evidence·hypothesis·**scene_generation 노출 표면**·wh1_loop는 중복이라 비채택) 완료. 잔여 = 매핑 채택(사람 검수)·canary 플립 | rekey는 resolver로 불필요화(채택) |
+| 오개념 ID 통합(kebab 30 ↔ M-id 839) | **골격 구현**(§1) — M-id 로더·crosswalk 테이블·read-time resolver·게이트 shadow 배선(evidence·hypothesis·**scene_generation 노출 표면**·wh1_loop는 중복이라 비채택) 완료. **매핑 27건 승인·자산+CLI 커밋**(2026-07-01 Kiki 권장대로·보류2·반려1). 잔여 = 라이브 DB 적재(ops)·canary 플립 | rekey는 resolver로 불필요화(채택) |
 | 파서(동치 권위) 일원화 | **구현 완료**(§2) — 경계 명문화 + golden test | `notation_contract.md`·`data/notation_contract.json` |
 | invariant 회귀 동결 게이트(노드 의미·약한 relation·shadow·traversal 예산) | **구현 완료**(PR #357) — risk_register §4 매핑 5종(Q10-③·Q1/Q8·Q2·Q10-⑥·Q10-⑧) | `test_concept.py`·`test_concept_misconception_runtime.py`·`test_edge_relation_governance.py`·`hypothesis_store.py`·`prerequisite_recommendation.py` |
 
@@ -54,8 +54,13 @@
    *(완료)* **후보 자동생성 도구** `l1/misconception/crosslink_candidates.py`
    (`propose_crosslink_candidates`·kebab×M-id 임베딩 코사인·검수 artifact 출력·자동 적재 차단).
    신호 정정: kebab엔 standard_code·error_type 부재 → 주신호 = 임베딩 코사인(domain은 메모만).
-   *(잔여)* **매핑 채택·적재** — 검수자가 승인분만 `"crosslinks"` JSON으로 옮겨 `crosslink_loader`
-   적재(자동 커밋 금지·오도 코칭 차단).
+   *(완료·검수 보조)* **세밀 분석·권장 판정** `candidates.md` §2.1 원문 대조 워크시트·§2.3 Claude 30건
+   권장(원문 판독으로 임베딩 방향맹 교정 — 예 angle-sum은 '변한다'↔'180 고정' 반대라 반려·division-by-zero는
+   M0003→M0146 교체).
+   *(완료·집행)* **매핑 채택·적재** — Kiki '권장대로 승인'(2026-07-01)으로 **27건 직접매핑 승인** →
+   `data/corpus/misconception_crosslink_v1/crosslinks.json`(자산) + `crosslink_populate.py`(CLI·populate 짝)
+   커밋. 보류 2(`fraction-cancellation`·`period-of-scaled-sine`)·반려 1(`angle-sum-non-triangle`).
+   스키마·FK·트리플 유일은 `test_crosslink_populate.py`가 고정. **라이브 DB upsert는 ops**(실 PG·CLI 실행).
 3. 🟡 **canonical id 선정 + 게이트 공존**(진행) — 신규 노출은 M-id canonical·kebab은 런타임 탐지
    키로 잔존(crosswalk로 항상 매핑). 게이트(`learning_scene.py`·`wh1_loop.py`·`evidence_store.py`)는
    **두 체계 공존 분기**로 확장 — *노출 전 측정*(`04b` shadow→canary).

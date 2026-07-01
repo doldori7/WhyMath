@@ -1,0 +1,225 @@
+{
+  "source": "WhyMath 오개념 crosswalk(kebab↔M-id) — 사람 검수 승인분",
+  "reviewed_by": "Kiki(검수·승인) · Claude(세밀분석 §2.3)",
+  "reviewed_note": "docs/data/misconception_crosslink_candidates.md §2.3 권장대로 승인. 적재 27(직접매핑) · 보류 2(fraction-cancellation·period-of-scaled-sine) · 반려 1(angle-sum-non-triangle). 라이브 DB 적재는 ops(crosslink_populate CLI).",
+  "reviewed_at": "2026-07-01",
+  "count": 27,
+  "crosslinks": [
+    {
+      "kebab_id": "area-perimeter-confusion",
+      "mis_id": "M0529",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 둘레·넓이 혼동(M0782와 동급 중 M0529 채택)"
+    },
+    {
+      "kebab_id": "chain-rule-inner-derivative-omitted",
+      "mis_id": "M0370",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "circle-radius-squared",
+      "mis_id": "M0630",
+      "link_type": "직접매핑",
+      "confidence": 0.93,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "composite-function-commutes",
+      "mis_id": "M0643",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "continuity-implies-differentiability",
+      "mis_id": "M0670",
+      "link_type": "직접매핑",
+      "confidence": 0.97,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "critical-point-implies-extremum",
+      "mis_id": "M0080",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "discriminant-negative-no-real-root",
+      "mis_id": "M0610",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "distribution-over-power",
+      "mis_id": "M0019",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "division-by-zero",
+      "mis_id": "M0146",
+      "link_type": "직접매핑",
+      "confidence": 0.85,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — top M0003(산술)→M0146(유리함수 정의역·분모0)이 정확"
+    },
+    {
+      "kebab_id": "dot-product-is-vector",
+      "mis_id": "M0735",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "exponent-zero",
+      "mis_id": "M0105",
+      "link_type": "직접매핑",
+      "confidence": 0.92,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "gambler-fallacy",
+      "mis_id": "M0688",
+      "link_type": "직접매핑",
+      "confidence": 0.98,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "geometric-series-always-converges",
+      "mis_id": "M0209",
+      "link_type": "직접매핑",
+      "confidence": 0.92,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "invertibility-without-1-1",
+      "mis_id": "M0144",
+      "link_type": "직접매핑",
+      "confidence": 0.92,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "limit-equals-function-value",
+      "mis_id": "M0665",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "log-distribution",
+      "mis_id": "M0049",
+      "link_type": "직접매핑",
+      "confidence": 0.97,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "mean-vs-median",
+      "mis_id": "M0419",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "mutually-exclusive-implies-independent",
+      "mis_id": "M0692",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "product-rule-naive",
+      "mis_id": "M0075",
+      "link_type": "직접매핑",
+      "confidence": 0.97,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "prosecutor-fallacy",
+      "mis_id": "M0691",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "root-loss-by-dividing",
+      "mis_id": "M0573",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "sign-flip-in-inequality",
+      "mis_id": "M0564",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "similarity-vs-congruence",
+      "mis_id": "M0519",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "sine-distributes-over-sum",
+      "mis_id": "M0707",
+      "link_type": "직접매핑",
+      "confidence": 0.97,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "square-root-positivity",
+      "mis_id": "M0550",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "term-to-zero-implies-convergence",
+      "mis_id": "M0704",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "translation-sign-flip",
+      "mis_id": "M0411",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
+      "method": "manual",
+      "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    }
+  ]
+}
