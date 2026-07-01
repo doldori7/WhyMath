@@ -14,6 +14,7 @@ import asyncio
 
 import pytest
 
+from whymath_backend.harness import wh1_loop as wh1_loop_mod
 from whymath_backend.harness.wh1_loop import (
     Action,
     CurateHypothesisAction,
@@ -278,3 +279,63 @@ class TestEndTurnUtterance:
         """격려 + 발화 미지정 → 격려 폴백 발화."""
         out = _run([EndTurnAction(action_type="격려", utterance=None)])
         assert out.utterance == "좋아, 지금까지 잘 하고 있어. 다음으로 가보자."  # type: ignore[attr-defined]
+
+
+class TestCrosslinkShadowSeam:
+    """개입 발화 결선의 crosswalk shadow 배선 — off/shadow 분기·활성 가설별 관측(비노출·비차단).
+
+    `evidence_store`·`hypothesis_store`·`learning_scene`과 동일한 게이트 공존 패턴
+    (math_dsl_risk_register.md Q10-⑥). 이 좌석은 활성 가설 kebab-id가 소크라테스 개입 발화(학생
+    노출)를 *구동*하는 게이트다. never-break·프라이버시는 `observe_crosslink_shadow` 자체가 보장
+    하므로(test_misconception_crosslink_shadow) 여기선 *배선*(mode 분기·질문/힌트 분기 한정·가설별
+    호출)만 못 박는다. 순수 루프 불변식: observe는 상태 미변경이라 발화 산출은 관측과 무관하게 불변.
+    """
+
+    def _run_intervention(self, monkeypatch: pytest.MonkeyPatch, mode: str) -> list[str]:
+        from whymath_backend.config import get_settings as _get_settings
+
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", mode)
+        _get_settings.cache_clear()
+        calls: list[str] = []
+
+        def _spy(misconception_id: str, **_kw: object) -> None:
+            calls.append(misconception_id)
+
+        monkeypatch.setattr(wh1_loop_mod, "observe_crosslink_shadow", _spy)
+        try:
+            out = _run(
+                [EndTurnAction(action_type="질문", utterance=None)],
+                initial_hypotheses=[_hyp(_MID, 0.95)],
+            )
+            # 발화 산출은 정상(관측과 무관).
+            assert out.status == "ended"  # type: ignore[attr-defined]
+        finally:
+            _get_settings.cache_clear()
+        return calls
+
+    def test_off_observes_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """off(기본) → shadow 관측 0(crosswalk 조회 0)·개입 발화 결선은 정상."""
+        assert self._run_intervention(monkeypatch, "off") == []
+
+    def test_shadow_observes_each_active_hypothesis(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """shadow → 개입을 구동하는 활성 가설 kebab-id를 관측(발화 산출은 관측과 무관하게 불변)."""
+        assert self._run_intervention(monkeypatch, "shadow") == [_MID]
+
+    def test_explicit_utterance_skips_observation(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """명시 발화(개입 결선 우회) → 관측 없음(관측은 개입 구동 게이트에 한정)."""
+        from whymath_backend.config import get_settings as _get_settings
+
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        _get_settings.cache_clear()
+        calls: list[str] = []
+        monkeypatch.setattr(
+            wh1_loop_mod, "observe_crosslink_shadow", lambda mid, **_kw: calls.append(mid)
+        )
+        try:
+            _run(
+                [EndTurnAction(action_type="질문", utterance="명시 발화")],
+                initial_hypotheses=[_hyp(_MID, 0.95)],
+            )
+        finally:
+            _get_settings.cache_clear()
+        assert calls == []

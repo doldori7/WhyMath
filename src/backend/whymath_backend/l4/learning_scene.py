@@ -31,7 +31,9 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from whymath_backend.config import get_settings
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.crosslink_shadow import observe_crosslink_shadow
 from whymath_backend.l4.misconception.models import InterventionPattern
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.socratic.categories import SocraticCategory
@@ -317,5 +319,16 @@ def parse_learning_scene(data: dict[str, Any] | str) -> LearningScene:
             raise LearningSceneValidationError(
                 f"elements[{idx}].misconception_id='{el.misconception_id}'가 오개념 카탈로그에 없다"
             )
+
+    # crosswalk shadow(비노출·비차단 측정·게이트 공존 배선) — 이 좌석은 검증 통과한 프로브
+    # kebab-id를 *학생 노출 장면의 런타임 키로* 승인하는 게이트다(evidence_store·hypothesis_store와
+    # 평행). mode != "off"면 각 프로브 kebab-id가 canonical M-id로 어떻게 매핑되는지를 *로그로만*
+    # 관측한다(crosslink_shadow·math_dsl_risk_register.md Q10-⑥·remediation §1.3 step3). 반환 scene·
+    # 위 노출은 kebab-id 그대로 불변이고, resolve 실패도 검증 결과를 바꾸지 않는다(never-break).
+    # 기본 off라 측정 윈도에서만 켠다.
+    if get_settings().misconception_crosslink_mode != "off":
+        for el in scene.elements:
+            if isinstance(el, MisconceptionProbeElement):
+                observe_crosslink_shadow(el.misconception_id)
 
     return scene

@@ -56,8 +56,10 @@ from typing import Annotated, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.config import get_settings
 from whymath_backend.l3.verify_solution import SolutionVerificationResult, verify_solution
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.crosslink_shadow import observe_crosslink_shadow
 from whymath_backend.l4.misconception.diagnose import diagnose
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis, curate
 from whymath_backend.l4.misconception.intervene import select_intervention_from_hypotheses
@@ -331,6 +333,15 @@ def _end_turn_utterance(state: TurnState, action: EndTurnAction) -> str:
     if action.utterance is not None:
         return action.utterance
     if action.action_type in ("질문", "힌트"):
+        # crosswalk shadow(비노출·비차단 측정·게이트 공존 배선) — 이 좌석은 활성 가설 kebab-id가
+        # 소크라테스 개입 발화(학생 노출)를 *구동*하는 게이트다(evidence_store·hypothesis_store와
+        # 평행). mode != "off"면 각 활성 가설 kebab-id의 canonical M-id 매핑 coverage를 *로그로만*
+        # 관측한다(crosslink_shadow·math_dsl_risk_register.md Q10-⑥·remediation §1.3 step3). 아래
+        # 개입 선택·발화는 kebab-id 그대로 불변, resolve 실패도 발화 불변(never-break). 순수 루프
+        # 불변식 보존: observe는 None 반환·상태 미변경(기본 off라 측정 윈도에서만 켠다).
+        if get_settings().misconception_crosslink_mode != "off":
+            for hyp in state.hypotheses:
+                observe_crosslink_shadow(hyp.misconception_id)
         # 개입 발화 결선(#237) — 누적 가설 세트가 소크라테스 발화를 구동.
         decision = select_intervention_from_hypotheses(state.hypotheses)
         if decision is not None:

@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from whymath_backend.l4 import learning_scene as learning_scene_mod
 from whymath_backend.l4.learning_scene import (
     AnnotationElement,
     LearningScene,
@@ -363,6 +364,56 @@ class TestParseGate:
                     ]
                 )
             )
+
+
+# ── crosswalk shadow 배선 (게이트 공존·비노출·비차단) ────────────────────────
+class TestCrosslinkShadowSeam:
+    """parse_learning_scene의 crosswalk shadow 배선 — off/shadow 분기·프로브별 관측(비노출·비차단).
+
+    `evidence_store`·`hypothesis_store`와 동일한 게이트 공존 패턴(math_dsl_risk_register.md Q10-⑥).
+    never-break·프라이버시는 `observe_crosslink_shadow` 자체가 보장하므로(별도 shadow 단위테스트)
+    여기선 *배선*(mode 분기·프로브별 kebab-id 호출·비-probe 요소 미관측)만 못 박는다.
+    """
+
+    def _run(self, monkeypatch: pytest.MonkeyPatch, mode: str) -> tuple[list[str], LearningScene]:
+        from whymath_backend.config import get_settings as _get_settings
+
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", mode)
+        _get_settings.cache_clear()
+        calls: list[str] = []
+
+        def _spy(misconception_id: str, **_kw: object) -> None:
+            calls.append(misconception_id)
+
+        monkeypatch.setattr(learning_scene_mod, "observe_crosslink_shadow", _spy)
+        try:
+            scene = parse_learning_scene(
+                _scene(
+                    [
+                        {
+                            "kind": "misconception_probe",
+                            "misconception_id": _VALID_MC_ID,
+                            "intervention": "counterexample",
+                        },
+                        _graph2d_viz(),  # 비-probe 요소 — 관측 대상 아님
+                    ]
+                )
+            )
+        finally:
+            _get_settings.cache_clear()
+        return calls, scene
+
+    def test_off_observes_nothing(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """off(기본) → shadow 관측 0(crosswalk 조회 0)·검증·반환은 정상."""
+        calls, scene = self._run(monkeypatch, "off")
+        assert calls == []
+        assert isinstance(scene, LearningScene)
+
+    def test_shadow_observes_each_probe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """shadow → 프로브 kebab-id만 관측(비-probe 요소 미관측)·반환은 관측과 무관하게 불변."""
+        calls, scene = self._run(monkeypatch, "shadow")
+        assert calls == [_VALID_MC_ID]
+        assert isinstance(scene, LearningScene)
 
 
 # ── misconception_probe 정답/수정 필드 부재 (extra=forbid 구조 차단) ─────────
