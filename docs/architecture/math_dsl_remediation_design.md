@@ -63,6 +63,10 @@
    `misconception_crosslink_mode=="shadow"`일 때 kebab→M-id 매핑 coverage를 *비차단·비노출*로
    해석·로깅(`l4/misconception/crosslink_shadow.py`·shadow.py 미러·resolve 실패도 적재 불변).
    노출·DB 저장은 kebab-id 그대로. 기본 `off`(빈 테이블 per-write DB 왕복 회피·측정 윈도만 on).
+   *(완료·측정 도구)* **coverage harvest** — `crosslink_shadow_harvest`가 관측 JSONL을 읽어
+   kebab→M-id 매핑 coverage(관측/distinct 커버리지·1:N 모호·미매핑 kebab-id 목록)를 집계한다
+   (`step_shadow_harvest` 동형·오프라인·순수·비노출). canary 플립 go/no-go와 크로스워크 큐레이션
+   우선순위(미매핑·1:N)의 정량 근거 — "노출 전 측정"을 산출하는 도구.
    *(잔여)* 나머지 두 게이트(`learning_scene.py`·`wh1_loop.py`) shadow 배선 + shadow 측정 후
    canary/full 노출(M-id canonical 플립) — 매핑 채택(2-잔여) 선행 필요.
 4. **학생 데이터 마이그레이션** *(불필요화·결정)* — 런타임 테이블은 kebab `misconception_id`를
