@@ -12,9 +12,9 @@ crosswalk 골격(`crosslink_loader.py`·`crosslink_resolve.py`)의 *후보 제�
 적용 불가. **주신호 = 임베딩 코사인**(canonical_statement 의미 유사). domain은 체계가 달라(대수 vs
 변화와 관계) 점수에 넣지 않고 rationale 메모로만 표기한다(보수).
 
-좌석 재사용(신규 seam 0): `semantic/provider.py`(EmbeddingProvider·build_provider·
-cosine_similarity)·`semantic/matcher.py::catalog_text`·`catalog.py::CATALOG`. provider 주입
-(Fake=결정론 테스트·실모델=Local bge-m3/OpenAI). 순수 함수(DB 불요)·CLI는 후보 JSON을 쓴다.
+좌석 재사용(신규 seam 0): `l1/embedding_provider.py`(EmbeddingProvider·build_provider·
+cosine_similarity — 레이어-중립 L1)·`semantic/matcher.py::catalog_text`·`catalog.py::CATALOG`.
+provider 주입(Fake=결정론 테스트·실모델=Local bge-m3/OpenAI). 순수 함수(DB 불요)·CLI는 JSON 출력.
 """
 
 from __future__ import annotations
@@ -22,13 +22,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 
+from whymath_backend.l1.embedding_provider import EmbeddingProvider, cosine_similarity
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.models import Misconception
 from whymath_backend.l4.misconception.semantic.matcher import catalog_text
-from whymath_backend.l4.misconception.semantic.provider import (
-    EmbeddingProvider,
-    cosine_similarity,
-)
 from whymath_backend.schema.misconception_catalog import MisconceptionCatalog
 from whymath_backend.schema.misconception_crosslink import CrosslinkMethod, CrosslinkType
 
@@ -133,8 +130,8 @@ def _main() -> None:  # pragma: no cover - CLI 배선(실모델·ops 경로)
     import json
     from pathlib import Path
 
+    from whymath_backend.l1.embedding_provider import build_provider
     from whymath_backend.l1.misconception.catalog_loader import _as_collection
-    from whymath_backend.l4.misconception.semantic.provider import build_provider
 
     parser = argparse.ArgumentParser(
         description="오개념 crosswalk 후보 자동생성(kebab×M-id 임베딩) — 검수용·미적재"

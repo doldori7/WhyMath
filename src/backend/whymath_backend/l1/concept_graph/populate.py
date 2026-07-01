@@ -54,7 +54,7 @@ from whymath_backend.l1.concept_graph.node_projection import (
     load_concept_nodes_from_graph_json,
     populate_concept_nodes,
 )
-from whymath_backend.l4.misconception.semantic.provider import build_provider
+from whymath_backend.l1.embedding_provider import build_provider
 
 # graph.json 기본 경로(슬1 transform-v1 --output-dir 관례). 명시 --graph로 오버라이드.
 _DEFAULT_GRAPH_PATH = Path("data/concept_graph/graph.json")

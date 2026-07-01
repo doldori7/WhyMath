@@ -322,8 +322,9 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
 - **입력 원천 = 슬1 산출 `graph.json`**(UC 키·정제). `load_concepts_from_graph_json`이 `concepts`
   배열에서 UC `concept_id` + 안전 필드만 읽어 `(concept_id, 표현)` 목록을 만든다(flashcards_raw·
   intl_raw 등 그래프 외 자산은 읽지 않음).
-- **임베딩 provider seam 재사용**(신규 금지·CLAUDE.md 로컬 우선): L4 `misconception/semantic/provider`
-  (`build_provider`·`FakeEmbeddingProvider`·local bge-m3·OpenAI)·`text_hash`·`_provider_model_identity`를
+- **임베딩 provider seam 재사용**(신규 금지·CLAUDE.md 로컬 우선): 레이어-중립 `l1/embedding_provider`
+  (`build_provider`·`FakeEmbeddingProvider`·local bge-m3·OpenAI — 감사 I4로 L4에서 L1로 이동·기존
+  `misconception/semantic/provider` 경로는 re-export shim)·`text_hash`·`_provider_model_identity`를
   그대로 import한다(같은 임베딩 공간 규약·Fake 주입·지연 로드). `ConceptEmbeddingIndex`(sync psycopg
   lazy 엔진·upsert/search)는 `PgVectorIndex`를 개념 테이블용으로 미러링.
 - **멱등 upsert**: `populate_concept_embeddings`가 표현을 배치 1회 임베딩해 UC 키로 upsert(재실행 시
