@@ -7,8 +7,10 @@ math_dsl 감사 §7(동치 권위 일원화)의 런타임 결선 1차. 기존 �
 단일 동치 권위로 rhs 확인).
 
 정직 스코프(중요):
-- SymPy는 *수치* 인스턴스(`(3+4)²`)를 49로 *평가*해 구조가 사라지므로 못 잡는다 — 그 경로는 기존
-  `regex_signals`가 담당한다. 본 탐지의 순기여는 *기호* 인스턴스(변수명 변이)다.
+- *기호* 인스턴스(`(x+y)²=x²+y²`·변수명 변이)와 *수치* 인스턴스(`(3+4)²=3²+4²`) 둘 다 잡는다 —
+  학생 lhs를 `evaluate=False`로 파싱해 구조를 보존하므로(손으로 쓴 `regex_signals` 일반화).
+- **거짓 등식 가드**(RS2 낙인 차단): 학생 등식이 *우연히 참*(`(3+0)²=3²+0²`)이거나 *올바른 형태*
+  (참 항등식)면 거짓 규칙 적용이 아니므로 제외한다(오개념 인스턴스는 실제로 거짓인 등식이어야 함).
 - 템플릿이 상수로 평가되는 오개념(`a⁰`→1)은 구조 정합 불가 → 탐지 대상에서 제외(거짓 주장 금지).
 - **shadow 전용**: `observe_wrong_form_shadow`는 *비노출·비차단*으로 로그만 남기고 `diagnose`
   반환·verdict를 바꾸지 않는다(학생 노출 게이트 우선순위 #1/#3·노출 전 측정·shadow.py 규약 계승).
@@ -66,17 +68,26 @@ def extract_equations(text: str) -> list[tuple[str, str]]:
 def matches_wrong_form(student_lhs: str, student_rhs: str, wrong_form: tuple[str, str]) -> bool:
     """학생 등식(student_lhs = student_rhs)이 거짓 규칙 `wrong_form`을 *인스턴스화*했는지.
 
-    절차: ① wrong_form lhs 템플릿의 자유변수를 Wild로 바꿔 `student_lhs`와 패턴 정합(변수명 무관
-    바인딩 획득). ② 그 바인딩을 rhs 템플릿에 적용해 *기대 거짓 rhs*를 만든 뒤, `student_rhs`가 그와
-    동치인지 `identity_status`(동치 권위 단일)로 확인. 둘 다 통과해야 True. 템플릿이 상수로 평가
-    (구조 소실·예: `a**0`→1)되거나 파싱 불가면 False(거짓 주장 금지). 수치 인스턴스는 SymPy가 값으로
-    평가해 lhs 패턴 정합이 실패하므로 자연히 제외된다(regex_signals 담당).
+    절차: ⓪ 학생 등식이 *실제로 거짓*인지 확인(거짓 낙인 방지 가드). ① wrong_form lhs 템플릿의
+    자유변수를 Wild로 바꿔 `student_lhs`와 패턴 정합(변수명 무관 바인딩 획득). ② 그 바인딩을 rhs
+    템플릿에 적용해 *기대 거짓 rhs*를 만든 뒤, `student_rhs`가 그와 동치인지 `identity_status`(동치
+    권위 단일)로 확인. 셋 다 통과해야 True.
+
+    수치 인스턴스((3+4)²=3²+4²)는 `student_lhs`를 `evaluate=False`로 파싱해 *구조를 보존*하므로
+    잡는다(기호 인스턴스와 동일 경로·손으로 쓴 regex_signals 일반화). ⓪ 가드: 학생 등식이 *우연히
+    참*(예: `(3+0)²=3²+0²`)이거나 *올바른 형태*(참 항등식)면 거짓 규칙 적용이 아니므로 제외한다
+    (RS2 거짓 낙인 차단). 템플릿이 상수로 평가(`a⁰`→1)되거나 파싱 불가면 False(거짓 주장 금지).
     """
     wl, wr = wrong_form
+    # ⓪ 거짓 등식 가드 — 학생 등식이 확정적 참(항등식)이면 오개념 인스턴스가 아니다(낙인 방지).
+    src_lhs, src_rhs = _to_sympy_source(student_lhs), _to_sympy_source(student_rhs)
+    if identity_status(src_lhs, src_rhs) is IdentityVerdict.identity:
+        return False
     try:
         lt = sympy.sympify(_to_sympy_source(wl), convert_xor=True)
         rt = sympy.sympify(_to_sympy_source(wr), convert_xor=True)
-        sl = sympy.sympify(_to_sympy_source(student_lhs), convert_xor=True)
+        # evaluate=False로 학생 lhs 구조 보존 — 수치((3+4)²)가 값(49)으로 평가되지 않게.
+        sl = sympy.sympify(src_lhs, convert_xor=True, evaluate=False)
     except Exception:  # noqa: BLE001 — 파싱 불가 학생/템플릿은 정합 안 됨(보수)
         return False
 
@@ -92,10 +103,7 @@ def matches_wrong_form(student_lhs: str, student_rhs: str, wrong_form: tuple[str
     if expected_rhs.has(*wilds.values()):
         return False  # rhs에만 있는 변수가 미바인딩 → 정합 불가.
 
-    return (
-        identity_status(_to_sympy_source(student_rhs), str(expected_rhs))
-        is IdentityVerdict.identity
-    )
+    return identity_status(src_rhs, str(expected_rhs)) is IdentityVerdict.identity
 
 
 def detect_wrong_forms(text: str) -> list[str]:
