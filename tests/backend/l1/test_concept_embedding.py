@@ -32,7 +32,21 @@ from whymath_backend.l1.concept_graph.embedding import (
     load_concepts_from_graph_json,
     populate_concept_embeddings,
 )
+from whymath_backend.l1.embedding_primitives import text_hash
 from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProvider
+
+
+class _SpyProvider:
+    """embed 호출 횟수를 세는 provider — skip-if-unchanged 검증용(불변분 미임베딩 확인)."""
+
+    def __init__(self, dim: int = 64) -> None:
+        self.embed_calls = 0
+        self._dim = dim
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        self.embed_calls += 1
+        return [[0.1] * self._dim for _ in texts]
+
 
 # 슬2 idmap이 발급하는 UC 규약 키 예시(슬2 Neo4j 노드 키와 동일 공간).
 _UC_A = "UC.calc.alimit.epsilon-delta"
@@ -43,11 +57,14 @@ _UC_B = "UC.alg.afunction.composition"
 # 가짜 sync 엔진 — begin()/connect() 컨텍스트 + execute() (PG 없이 배선 관찰)
 # ──────────────────────────────────────────────────────────────────────────
 class _FakeRow:
-    """search 결과 행 흉내 — `.concept_id`·`.distance` 속성 접근."""
+    """행 흉내 — search는 `.concept_id`·`.distance`, existing_text_hashes는 `.text_hash` 접근."""
 
-    def __init__(self, concept_id: str, distance: float | None) -> None:
+    def __init__(
+        self, concept_id: str, distance: float | None = None, text_hash: str | None = None
+    ) -> None:
         self.concept_id = concept_id
         self.distance = distance
+        self.text_hash = text_hash
 
 
 class _FakeResult:
@@ -308,7 +325,8 @@ class TestPopulate:
         index, engine = _fake_index(provider_name="fake", model_name="fake-hash")
         count = populate_concept_embeddings(concepts, provider, index=index)
         assert count == 2
-        assert len(engine.executed) == 2  # 개념당 1 upsert
+        # 1 read(existing_text_hashes·비어있어 둘 다 신규) + 2 upsert.
+        assert len(engine.executed) == 3
 
     def test_populate_dim_matches_provider(self) -> None:
         # upsert에 박히는 dim이 provider 벡터 차원과 일치(컬럼 차원 정합 점검 신호).
@@ -316,7 +334,7 @@ class TestPopulate:
         provider = FakeEmbeddingProvider(dim=64)
         index, engine = _fake_index(provider_name="fake", model_name="fake-hash")
         populate_concept_embeddings(concepts, provider, index=index)
-        compiled = _compile(engine.executed[0])
+        compiled = _compile(engine.executed[1])  # [0]=read, [1]=upsert
         # dim 컬럼이 INSERT에 포함된다(값은 바인딩이라 직접 못 보지만, provider가 64차원이므로
         # 같은 벡터로 search/upsert가 정합 — 통합테스트가 실 차원을 검증).
         assert "dim" in compiled
@@ -327,8 +345,36 @@ class TestPopulate:
         provider = FakeEmbeddingProvider()
         index, engine = _fake_index()
         populate_concept_embeddings(concepts, provider, index=index)
-        compiled = _compile(engine.executed[0])
+        compiled = _compile(engine.executed[1])  # [0]=read, [1]=upsert
         assert "concept_id" in compiled
+
+    def test_populate_skips_unchanged(self) -> None:
+        # 현행 text_hash가 표현과 일치 → provider 미호출·upsert 0·count 0(읽기 1회만).
+        concepts = [ConceptText(concept_id=_UC_A, text="극한. 다가감")]
+        rows = [_FakeRow(_UC_A, text_hash=text_hash("극한. 다가감"))]
+        provider = _SpyProvider()
+        index, engine = _fake_index(search_rows=rows)
+        count = populate_concept_embeddings(concepts, provider, index=index)
+        assert count == 0
+        assert provider.embed_calls == 0  # 불변 개념은 임베딩 안 함(비용 절감)
+        assert len(engine.executed) == 1  # read만·upsert 0
+
+    def test_populate_embeds_only_changed(self) -> None:
+        # 하나는 hash 일치(skip)·하나는 불일치(재임베딩) → count 1·read 1 + upsert 1.
+        concepts = [
+            ConceptText(concept_id=_UC_A, text="극한. 다가감"),
+            ConceptText(concept_id=_UC_B, text="합성함수. 바뀐 표현"),
+        ]
+        rows = [
+            _FakeRow(_UC_A, text_hash=text_hash("극한. 다가감")),  # 일치 → skip
+            _FakeRow(_UC_B, text_hash="stale-hash"),  # 불일치 → 재임베딩
+        ]
+        provider = _SpyProvider()
+        index, engine = _fake_index(search_rows=rows)
+        count = populate_concept_embeddings(concepts, provider, index=index)
+        assert count == 1
+        assert provider.embed_calls == 1
+        assert len(engine.executed) == 2  # read 1 + upsert 1
 
     def test_populate_empty_concepts_is_noop(self) -> None:
         provider = FakeEmbeddingProvider()
@@ -357,11 +403,11 @@ class TestProviderModelIdentityReuse:
         index, engine = _fake_index()
         populate_concept_embeddings(concepts, provider, index=index)
         populate_concept_embeddings(concepts, provider, index=index)
-        # 가짜 엔진은 실 PK 충돌을 모사하지 않으나, 호출이 매번 upsert(ON CONFLICT) statement임을
-        # 확인 — 실 멱등(행 1개)은 통합테스트.
-        assert len(engine.executed) == 2
-        for stmt in engine.executed:
-            assert "ON CONFLICT" in _compile(stmt)
+        # 가짜 엔진은 실 PK 충돌·기존 행 반영을 못 하므로(read는 매번 빈 결과) 두 번 다 재임베딩된다
+        # — 실 멱등(행 1개·재실행 skip)은 통합테스트. 여기선 매 populate가 upsert(ON CONFLICT)
+        # statement를 낸다는 것만 확인(read SELECT는 제외하고 upsert만 카운트).
+        upserts = [s for s in engine.executed if "ON CONFLICT" in _compile(s)]
+        assert len(upserts) == 2
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -389,4 +435,4 @@ def test_populate_accepts_any_embedding_provider() -> None:
     index, engine = _fake_index(provider_name="_Scripted", model_name="_Scripted")
     count = populate_concept_embeddings(concepts, _Scripted(), index=index)
     assert count == 1
-    assert len(engine.executed) == 1
+    assert len(engine.executed) == 2  # read(existing) 1 + upsert 1

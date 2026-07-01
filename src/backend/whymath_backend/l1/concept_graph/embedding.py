@@ -243,6 +243,29 @@ class ConceptEmbeddingIndex:
             for row in rows
         ]
 
+    def existing_text_hashes(self, concept_ids: Sequence[str]) -> dict[str, str]:
+        """주어진 concept_id들의 *현행* text_hash를 조회한다 — {concept_id: text_hash}(단일 SELECT).
+
+        같은 임베딩 공간(provider·model)의 행만 본다 — provider/model이 다르면 재임베딩이 필요하므로
+        (다른 공간) 이 맵에 안 담겨 "변경"으로 취급된다. 적재기가 표현(`text_hash`)이 바뀐 개념만
+        재임베딩(skip-if-unchanged)하는 데 쓴다(불필요한 provider 호출·비용 회피·CLAUDE.md #6).
+        빈 입력은 쿼리 없이 {}.
+        """
+        if not concept_ids:
+            return {}
+        from sqlalchemy import select
+
+        from whymath_backend.db.models.concept_embedding import ConceptEmbedding
+
+        stmt = select(ConceptEmbedding.concept_id, ConceptEmbedding.text_hash).where(
+            ConceptEmbedding.concept_id.in_(list(dict.fromkeys(concept_ids))),
+            ConceptEmbedding.provider == self._provider_name,
+            ConceptEmbedding.model == self._model_name,
+        )
+        with self._get_engine().connect() as conn:
+            rows = conn.execute(stmt).all()
+        return {row.concept_id: row.text_hash for row in rows}
+
 
 def _build_sync_engine(settings: Settings) -> Engine:
     """기본 sync(psycopg) 엔진 생성 + pgvector 어댑터 등록 (지연 import·L4 pgvector_index 미러).
@@ -279,9 +302,15 @@ def populate_concept_embeddings(
 ) -> int:
     """개념 표현을 임베딩해 `ConceptEmbeddingIndex`에 멱등 upsert 적재(영속 사전 임베딩).
 
-    L4 `populate_pgvector`의 개념판이다 — 각 개념의 안전 표현(`ConceptText.text`)을 배치 1회
-    임베딩해 UC concept_id로 upsert한다. provider/model은 임베딩 공간 식별자로 행에 박히고,
-    같은 공간만 search가 본다. 멱등(재실행 시 갱신). 반환은 적재 행 수(=concepts 길이).
+    L4 `populate_pgvector`의 개념판이다 — 각 개념의 안전 표현(`ConceptText.text`)을 임베딩해 UC
+    concept_id로 upsert한다. provider/model은 임베딩 공간 식별자로 행에 박히고, 같은 공간만
+    search가 본다. 멱등(재실행 시 갱신).
+
+    **skip-if-unchanged(비용 절감·CLAUDE.md #6)**: 적재 전 현행 `text_hash`를 조회해, 표현이 *바뀐
+    개념만* provider로 임베딩·upsert한다. `text_hash`는 *포맷된 표현 문자열*(`join_embedding_text`
+    결과)의 해시라 포맷 변경(구분자·필드 순서)도 표현 문자열이 바뀌어 해시에 반영된다 → 별도
+    format_version 불필요. provider/model이 다르면(다른 공간) 조회에 안 잡혀 재임베딩된다. 반환은
+    *실제 임베딩·적재한(변경분)* 개념 수(불변 개념은 provider 호출·upsert를 건너뛴다).
 
     provider의 model 이름은 *Settings*에서 해석한다(`provider_model_identity` 재사용 —
     local→embedding_model_local·openai→embedding_model_openai·fake→fake-hash). provider 객체가
@@ -297,16 +326,20 @@ def populate_concept_embeddings(
             provider_name=provider_name, model_name=model_name, settings=resolved
         )
     )
-    texts = [c.text for c in concepts]
-    vectors = provider.embed(texts)
-    if len(vectors) != len(concepts):
+    # skip-if-unchanged — 현행 text_hash와 다른(=표현 변경·신규·다른 공간) 개념만 재임베딩.
+    existing = idx.existing_text_hashes([c.concept_id for c in concepts])
+    changed = [c for c in concepts if existing.get(c.concept_id) != text_hash(c.text)]
+    if not changed:
+        return 0
+    vectors = provider.embed([c.text for c in changed])
+    if len(vectors) != len(changed):
         raise RuntimeError(
-            f"임베딩 개수({len(vectors)})가 개념 개수({len(concepts)})와 다릅니다 "
+            f"임베딩 개수({len(vectors)})가 대상 개념 개수({len(changed)})와 다릅니다 "
             "— provider.embed가 입력 순서·길이를 보존해야 합니다."
         )
-    for concept, vec in zip(concepts, vectors, strict=True):
+    for concept, vec in zip(changed, vectors, strict=True):
         idx.upsert(concept.concept_id, vec, source_text=concept.text)
-    return len(concepts)
+    return len(changed)
 
 
 __all__ = [
