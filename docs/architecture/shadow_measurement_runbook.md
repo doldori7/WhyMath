@@ -55,7 +55,56 @@ python -m whymath_backend.l4.misconception.judge_shadow_harvest       obs.jsonl
 
 ---
 
+## crosswalk 적재 (shadow 전 · canary 전제)
+
+> shadow 측정은 *매핑이 이미 적재됐다고 전제*한다. 아래는 그 앞단계 — 사람 검수·승인된 crosswalk
+> 매핑을 라이브 DB에 적재하는 절차다. 승인 자산: `data/corpus/misconception_crosslink_v1/crosslinks.json`
+> (27건 직접매핑·Kiki "권장대로 승인"·근거 `docs/data/misconception_crosslink_candidates.md` §2.3·§2.4).
+
+### 0-a. 전제
+- **alembic `head` 적용** — `misconception_catalog`·`misconception_crosslink` 테이블 존재(crosslink는
+  마이그레이션 `e2f3a4b5c6d7`).
+- **M-id 카탈로그 선행 적재(FK)** — `misconception_crosslink.mis_id`는 **실 FK →
+  `misconception_catalog.mis_id`**(CASCADE)라, 카탈로그가 *먼저* 적재돼 있어야 한다(미적재 시 FK 위반):
+  ```bash
+  python -m whymath_backend.l1.misconception.populate \
+      --misconceptions data/corpus/misconceptions_v1/misconceptions.json
+  ```
+- **DB 자격** — `WHYMATH_DATABASE_URL`(async). 로더는 sync psycopg URL을 `Settings.sync_database_url`로
+  파생한다(시크릿은 env·코드에 0).
+
+### 0-b. 적재 (멱등)
+```bash
+python -m whymath_backend.l1.misconception.crosslink_populate \
+    --crosslinks data/corpus/misconception_crosslink_v1/crosslinks.json
+# → "crosswalk 적재 완료: 27건 (src=…/crosslinks.json)."
+```
+의미 유일키 `(kebab_id, mis_id, link_type)` upsert라 **재실행 안전**(중복 삽입 없음).
+
+### 0-c. 검증
+- 적재 행 수 = **27**.
+- read-time resolver 스모크(적재가 실제 해석되는지):
+  ```python
+  from whymath_backend.l1.misconception.crosslink_resolve import MisconceptionCrosslinkResolver
+  MisconceptionCrosslinkResolver().resolve("distribution-over-power")  # → ["M0019"]
+  ```
+- 자산 무결성(스키마·FK·트리플 유일)은 `tests/backend/l1/test_crosslink_populate.py`가 CI에서 고정한다.
+
+### 0-d. 롤백
+배치 식별 note(`§2.3 세밀분석 승인(Kiki 권장대로)`)나 27개 `(kebab_id, mis_id, link_type)` 트리플로
+`misconception_crosslink`에서 삭제(멱등이라 재적재 가능). crosslink 단독 삭제는 안전 —
+`mis_id` CASCADE는 *카탈로그* 삭제 시에만 전파한다.
+
+### 0-e. 미적재(적재 대상 아님)
+§2.3 권장대로 3건은 **적재하지 않는다**: `fraction-cancellation`(⏸️ 보류 — M0118 원문 정합 확인 후)·
+`period-of-scaled-sine`(🆕 신규 M-id 필요)·`angle-sum-non-triangle`(❌ 반려 — M0493은 '변한다' vs kebab
+'180 고정' 반대 오개념). 신규 M-id 발행·원문 재검 후 재상정한다.
+
+---
+
 ## crosswalk 매핑 (kebab-id → canonical M-id)
+
+> **전제**: 위 '## crosswalk 적재' 완료(27건 승인·`§candidates 2.4`). 미적재 상태에선 coverage=0만 나온다.
 
 - **가치 변수**: `distinct_coverage_ratio` — 실 런타임에 등장한 *서로 다른* kebab-id 중 canonical
   매핑을 가진 비율. canary(M-id canonical 플립)는 이 커버리지가 *충분히 차오른 뒤* 검토한다.
