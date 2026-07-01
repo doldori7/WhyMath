@@ -230,6 +230,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 2. **새 영역 진입 시 컨텍스트 비우기** — `/status` 후 새 세션
 3. **MEMORY.md를 진실 원천으로** — 대화 휘발에 의존 금지
 4. **결정은 항상 문서화** — "전에 말했잖아"가 통하지 않는 환경
+5. **여러 세션 병렬 개발 시** — `docs/standards/parallel_sessions.md` 준수 (1 세션 = 1 도메인 = 1 브랜치 = 1 worktree, `scripts/new-session-worktree.sh`)
 
 ---
 
