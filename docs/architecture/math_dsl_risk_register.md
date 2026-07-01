@@ -4,7 +4,8 @@
 > **정본 상위**: `math_dsl_principles_review.md`(플레이북 검토 — 정합/충돌/공백). 본 문서는 그
 > "공백" 절을 *현 코드 근거(파일·라인)*로 구체화한 리스크 레지스터다.
 > **근거**: 코드 정밀 조사 3축(L1 원자 그래프 / L5 시각화·LearningScene / 오개념·AST·retrieval), 2026-06-30.
-> **범위**: 분석만 — 수정은 *방향*만 제시(작업 항목화는 별도 `/plan`).
+> **범위**: 분석만 — 수정은 *방향*만 제시(작업 항목화는 별도 `/plan`). §5는 이 실패모드를 **목표 규모**
+> (전과정·10만+ 문제·오개념 수천·proof system 등)로 전방 투영한 임계점 분석(2026-07-01 추가).
 
 ---
 
@@ -157,6 +158,126 @@ shadow 측정→canary)·교육과정 Overlay US/IMO·`required_depth` 큐레이
 
 ---
 
+## 5. 목표 규모 스케일업 투영 — 10 임계점 (2026-07-01)
+
+> **위치**: §1~§2는 *현재 스냅샷*에서 "지금 무엇이 위험한가"를 답한다. 본 절은 그 실패모드를
+> **목표 규모**(수학 전과정·문제 10만+·오개념 수천·visualization 수백·interaction 수천·renderer
+> 다중화·AI tutoring 통합·multi-language·adaptive·**proof system**)로 *전방 투영*해 "무엇이·언제
+> 깨지는가"(임계값·트리거)와 *방향 처방*만 답한다. §2 Q10과 동일하게 **작업 항목화는 하지 않는다**
+> (별도 `/plan`). 현재 규모 수치·근거는 §0~§2를 재인용하며 다시 서술하지 않는다.
+
+### 5.0 목표 규모 스냅샷 (현재 → 목표)
+
+| 축 | 현재(§0) | 목표 | 배율(추정) | 1차 압력 지점 |
+|---|---|---|---|---|
+| 개념/원자 노드 | 원자 1,837(부분·고1 미적분 중심) | 전과정(초·중·고+재수+영재) ~2~5만 | ~15~30× | Neo4j 단일 인스턴스·hub 집계노드 |
+| 엣지 | 2,213 전량 `PREREQUISITE` | 희소 유지 시 ~수만 / **약한 관계 적재 시 N²** | 비선형 | `enums.py` 약한 3종 |
+| 문제 | 코퍼스 구축 중 | **10만+** | — | `Problem` PG+pgvector 동거 |
+| 오개념 | 2,676(kebab 30·M-id 839·원자 1,837) | 수천~1만 | ~2~4× | 3중 표현 FK 부재 drift |
+| visualization type | 4(§0) | 수백 type/템플릿 | ~수십× | `_SPEC_MODEL_BY_TYPE` 정적 맵 |
+| interaction 패턴 | ~15(SceneElement 6·Intervention 4·Socratic 5) | 수천 | ~100× | `SceneElement` kind 하드코딩 union |
+| renderer | 실질 1(웹 계산기)+명세 | Flutter/웹/PDF/AI 다중 | — | mathjs·Manim asset 국소 종속 |
+| **proof system** | **scope 밖**(`05a` RS4·WH-S Tier3) | 신규 진입 | 0→N | **최대 신규 폭발원** |
+
+**한 줄 평**: 현재 부채 4곳(§3 종합: 그래프 위생·교육과정 이중·오개념 3중·파서 이중)은 규모에서
+*증폭*되고, proof system·multi-language·renderer 다중화·visualization/interaction 폭증은 *신규* 폭발원이다.
+
+### 5.1 10 임계점
+
+**① 가장 먼저 폭발하는 node** — 폭발 순서 3단.
+- **1순위 `ProblemNode`**(10만+·즉시·최대 볼륨). 단 이는 "노드 폭발"이 아니라 *인덱스/검색 대상 폭발*로
+  관리 가능해야 한다 — Problem은 개념 그래프 노드가 **아니라** 개념을 *참조*하는 인덱스 엔티티(`Problem`
+  `active_concepts`·`standard_codes`). 개념 그래프에 Problem을 노드로 흡수하면 즉시 붕괴. **경계 유지가 처방**.
+- **2순위 미도입 `FormulaNode`/`ProofNode`**(proof system 진입 순간). 변형식(변수명·항순서)·증명 트리를
+  노드화하면 즉시 N배(§2 Q1-③·Q9). 처방: Formula는 canonical 형만·맨 마지막, Proof는 **TheoremNode(무엇이
+  참) ≠ ProofNode(왜 참) 분리(1:다)**·Lean(Tier3) 성숙 전 도입 금지(`principles_review §3.8`).
+- **3순위 misconception 노드화**(`TRIGGERS_DISTRACTOR` 적재로 카탈로그가 그래프化, `enums.py:543-549`).
+  수천 종을 개념 그래프에 잇는 순간 두 그래프 결합·context 폭증. 처방: 오개념은 **독립 그래프·reactive
+  로드만**(§2 Q10-⑥).
+
+**② relation density 최고 위험 영역** — `enums.py:534-541` **약한 관계 3종**(`ANALOGOUS_TO`·`CONTRASTS`·
+`TRIGGERS_DISTRACTOR`). 현재 out-degree 평균 1.25(§0). 수만 노드에서 "해석↔대수 유사쌍"을 유비로 잇기
+시작하면 도메인 내 준-완전그래프화 → **N² 폭발·traversal 붕괴**(§2 Q2). 임계 트리거: 약한 관계 적재
+착수 그 자체. 처방: 도입해야 한다면 **traversal=0(ranking 전용)·단방향 canonical·도메인 경계 밖 금지**.
+현재 load-time skip 게이트(§4·`test_edge_relation_governance.py`)를 규모 확장 뒤에도 **동결 유지**.
+
+**③ normalization 실패 가능성** — §2 Q4 "single change→global rebuild" 3부채가 규모에서 증폭.
+- 오개념 3중 표현(kebab/M-id/JSONB, FK 없음): 수천 종이면 drift가 침묵 폭증(`schema/concept.py:213`·
+  `schema/misconception_catalog.py`).
+- 교육과정 이중(노드 내장 잔재 + `CurriculumEntry` Overlay): multi-language가 **N개국 × 2개정**으로 곱해짐.
+- 파서 이중(SymPy + mathjs): 10만 문제 검증에서 동치 규칙이 두 언어에 따로 → drift.
+처방: **canonical id 일원화 · Overlay 단일 진실 · 동치 권위 1개**(§2 Q8). 규모 진입 *전*이 유일한 저비용 창.
+
+**④ graph partition 필요 시점** — Neo4j 5.x **Community(단일 인스턴스·비클러스터)**. 임계 트리거:
+(a) 개념/원자 노드 **수만 대** 진입 + (b) 선수 추천 순회(`l2/prerequisite_recommendation.py`
+`MAX_PREREQUISITE_DEPTH=5`) p95 지연 상승 + (c) 집계 노드(단원·소단원 out 7, §2 Q1-②) hub 오염. 처방:
+**도메인 파티션**(대수/기하/해석/확통)으로 순회를 서브그래프에 가둠 · 집계 노드는 retrieval에서 배제 ·
+Community 한계 도달 시 Enterprise/샤딩은 *마지막*. 관측 트리거값을 먼저 계기화(노드 수·p95 latency).
+
+**⑤ plugin architecture 필요 시점** — 이미 부분 존재(L3 라우터 3축 `l3/router.py`·L6 모드 디렉토리·
+`InterventionPattern`). 임계 트리거: renderer 다중화 × **visualization 수백 type** → `_SPEC_MODEL_BY_TYPE`
+정적 맵(`schema/visualization.py`)과 `SceneElement` **6 kind 하드코딩 union**(`l4/learning_scene.py:79-312`)이
+매 type/패턴마다 코어 수정을 강요. 처방: **renderer adapter 레지스트리 + visualization type 등록제**(신규
+type이 코어 재컴파일 없이 등록). 단 §2 Q9 경고 준수 — **Dart typed-union 코드젠 강제 금지**(현 flat+kind가
+정답·선례 0). 트리거: type/패턴 수가 "정적 열거로 관리 불가" 임계 초과 시.
+
+**⑥ retrieval indexing 재설계 시점** — pgvector 단일 store(슬98). 임계 트리거: 10만 문제 × 다중 임베딩 +
+수천 오개념 + 개념 → 벡터 수 급증·HNSW **재색인 비용**·namespace 미분리 **의미 오염**(`principles_review
+§3.6`·`04b` 방향맹 실측 FP 45.5%). 재설계 **단계적**: (1순위) concept/misconception/example **논리 namespace
+분리**(단일 pgvector 내 컬럼·필터, `l1/concept_graph/retrieval.py`) → (2순위) **hybrid fusion**(BM25+dense,
+방향·부정·등치 보강) → (3순위) 벡터 수·recall·재색인 시간이 pgvector 한계 초과 시 **Qdrant 이관**(슬98 예고·
+`MEMORY.md`). 트리거값(벡터 수·재색인 벽시계·recall@k)을 먼저 계기화.
+
+**⑦ AST canonicalization 병목** — SymPy **단일 권위**(`notation_contract.md`·`l3/verify_step.py`). 두 병목:
+(a) 처리량 — 10만 문제 × 다중 풀이 × 단계 검증의 SymPy 호출량, (b) **결정불가능 경계** — proof system 진입
+시 canonical 정규화가 교육적 범위를 넘으면(일반 항등식 판정) 정지 위험(`05a` RS4·§2 Q9). mathjs 병렬
+파서(`graph2dSpec.js`) drift도 규모에서 확대. 처방: **SymPy 권위 유지** · 사전검증·캐싱(`l3/pregenerate`)으로
+런타임 처리량 흡수 · Lean(Tier3)은 **proof scope 한정** · "**교육적으로 필요한 범위까지만 정규화**" 경계
+고수(full CAS/증명 자동화로 확대 금지·§2 Q9).
+
+**⑧ renderer abstraction 한계** — 대부분 안전(spec 렌더러 독립·`schema/visualization.py` `extra="forbid"`,
+§2 Q6·Q9). 규모에서 깨지는 좁은 3점: (a) `graph2dSpec.js`의 **mathjs 변환**(`**`→`^`·`toTex`)이 웹 플러그인에
+살아있어 Desmos→타 엔진 교체 시 재구현, (b) `AnimationSpec.asset_id`(`visualization.py:108`)의 **Manim
+사전렌더 종속**(렌더러 변경 시 자산 재생성), (c) `?spec=` **base64(JSON) 공유링크**(`graph2dSpec.js:15`)의
+고정 wire 포맷. 다중 렌더러 × visualization 수백에서 이 3점이 재구현 병목. 처방: 렌더러별 정규화를 spec
+**밖**으로 · asset 파이프라인 추상화 · wire 포맷 버저닝.
+
+**⑨ AI tutoring consistency 붕괴 위험** — 규모의 3동인.
+- **context 예산 붕괴**: 수만 노드에서 bounded traversal(**depth≤2·max_nodes~12**, §2 Q10-⑧) 미준수 시
+  LLM에 과대 서브그래프 유입 → 일관성 붕괴. 예산을 **단일 출처로 명문화 유지**가 방어선.
+- **약한 relation traversal 유입**: ①·② 폭발이 그대로 subgraph 폭발로 전이. 처방: 약한 관계 traversal 배제.
+- **오개념 정체성 3중**: 수천 종이면 LLM이 canonical을 못 가려 진단이 흔들림(§2 Q7). 처방: canonical 일원화.
+현재 `MAX_PREREQUISITE_DEPTH` 단일 출처·crosswalk shadow(§4)가 예방선. 규모 확장 시 **LLM subgraph 예산
+명문화**(§4 "미채택"에 보류됨)가 승격 후보.
+
+**⑩ curriculum versioning 문제** — 노드 내장 교육과정 4필드는 §4에서 제거·`CurriculumEntry` Overlay 전환
+완료. 잔여 위험: (a) **atom code 자체에 개정연도 의미**('2수01-01-2'에 2022 개정 박힘, §2 Q5), (b)
+multi-language = **국가 × 개정 축의 곱**, (c) 2028 개정 유입. 처방: **concept_id 영속·curriculum=Overlay
+단일 진실**(§2 Q8·Q10-①) · code에서 개정 의미 분리 · 국가/개정을 **Overlay 차원**으로(노드 불변). 목표
+규모에서 versioning은 "노드가 교육과정을 들면 즉시 붕괴, Overlay면 선형 증가"로 갈린다.
+
+### 5.2 종합 — 임계 우선순위
+
+| 임계 | 트리거(선행 지표) | 처방 방향 | 긴급도 |
+|---|---|---|---|
+| ② 약한 관계 N² | 약한 관계 적재 착수 | traversal=0·게이트 동결 | 🔴 진입 전 동결 |
+| ③ 3중 정체성 drift | 오개념 수천 종 도달 | canonical 일원화 | 🔴 곱셈 폭증 전 |
+| ⑩ curriculum ×국가×개정 | multi-language 착수 | Overlay 단일 진실 | 🔴 곱 축 진입 전 |
+| ① Formula/Proof 노드화 | proof system 착수 | Theorem≠Proof·canonical만 | 🟠 신규 폭발원 |
+| ⑥ retrieval 오염 | 벡터 수·recall 저하 | namespace→fusion→Qdrant | 🟠 단계적 |
+| ④ graph partition | 수만 노드·p95 지연 | 도메인 파티션 | 🟠 계기화 후 |
+| ⑤ plugin 필요 | type/패턴 정적관리 불가 | 등록제·adapter | 🟡 관측 기반 |
+| ⑦ AST 병목 | SymPy 처리량·proof scope | 캐싱·범위 경계 고수 | 🟡 |
+| ⑨ tutoring 붕괴 | subgraph 예산 초과 | 예산 명문화 | 🟡 ①②연동 |
+| ⑧ renderer 한계 | 다중 렌더러 착수 | 정규화 spec 밖 | 🟢 좁음 |
+
+**결론**: 목표 규모의 폭발은 대부분 *아직 시작 전*이다(약한 관계 미적재·Formula/Proof 미도입·multi-language
+미착수·그래프 희소). 따라서 **목표 규모 진입 *전*에 §2 Q10 invariant를 코드 게이트로 박는 것**이 유일한
+저비용 창이며, §4가 그 첫 5종을 이미 동결했다. 위 표의 🔴 3건(②③⑩)은 각 "곱셈 축" 진입 직전이 마지막
+방어 시점이다. 본 절은 임계·방향까지다 — 게이트 작업 항목화는 별도 `/plan`.
+
+---
+
 ## 참고
 - 정본 상위: `docs/architecture/math_dsl_principles_review.md`(플레이북 검토)
 - 선행: `docs/architecture/05a_learning_scene_dsl.md`·`04b_misconception_judge_graduation.md`
@@ -166,4 +287,5 @@ shadow 측정→canary)·교육과정 Overlay US/IMO·`required_depth` 큐레이
 - 데이터: `data/corpus/atom_graph_v1/graph.json` · 스키마: `schemas/v1.1/curriculum_entry.schema.yaml`
 - 원칙: `CLAUDE.md`(의사결정 우선순위·절대 금기·표현≠의미)
 - 변경 이력: v0.1 (2026-06-30 초안 — 분석만·코드/스키마 변경 0) · v0.2 (2026-06-30 — §4 구현 후속
-  추가: invariant 코드 게이트 5종 동결·PR #357)
+  추가: invariant 코드 게이트 5종 동결·PR #357) · v0.3 (2026-07-01 — §5 목표 규모 스케일업 투영 추가:
+  10 임계점·트리거·방향 처방·우선순위 표. 분석만·코드/스키마 변경 0)
