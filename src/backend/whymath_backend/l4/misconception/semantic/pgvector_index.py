@@ -34,14 +34,15 @@ from typing import TYPE_CHECKING
 
 from whymath_backend.config import Settings, get_settings
 
-# 레이어-중립 L1 프리미티브 재사용(역방향 의존 제거) — 좌석 Protocol·표현 해시·공간 식별자.
+# 레이어-중립 L1 프리미티브 재사용(역방향 의존 제거) — 표현 해시·skip-if-unchanged 코어·공간 식별자.
 # `_provider_model_identity`는 기존 사용처(matcher 지연 import·아래 populate)를 위해 같은 이름으로
 # 별칭한다. `text_hash`는 아래 `__all__`로 re-export(기존 import 경로 유지).
 from whymath_backend.l1.embedding_primitives import (
-    provider_model_identity as _provider_model_identity,
+    embed_changed,
+    text_hash,
 )
 from whymath_backend.l1.embedding_primitives import (
-    text_hash,
+    provider_model_identity as _provider_model_identity,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.semantic.index import IndexHit
@@ -265,24 +266,14 @@ def populate_pgvector(
         if index is not None
         else PgVectorIndex(provider_name=provider_name, model_name=model_name, settings=resolved)
     )
-    # skip-if-unchanged — 현행 text_hash와 다른(=표현 변경·신규·다른 공간) 항목만 재임베딩.
-    existing = idx.existing_text_hashes([m.id for m in catalog])
-    changed = [
-        (m, txt)
-        for m, txt in ((m, catalog_text(m)) for m in catalog)
-        if existing.get(m.id) != text_hash(txt)
-    ]
-    if not changed:
-        return 0
-    vectors = provider.embed([text for _, text in changed])
-    if len(vectors) != len(changed):
-        raise RuntimeError(
-            f"임베딩 개수({len(vectors)})가 대상 항목 개수({len(changed)})와 다릅니다 "
-            "— provider.embed가 입력 순서·길이를 보존해야 합니다."
-        )
-    for (m, text), vec in zip(changed, vectors, strict=True):
-        idx.upsert_entry(m.id, vec, source_text=text)
-    return len(changed)
+    # skip-if-unchanged 코어는 레이어-중립 프리미티브가 소유(개념·원자·오개념 공유·3중복 제거).
+    return embed_changed(
+        [(m.id, catalog_text(m)) for m in catalog],
+        provider=provider,
+        existing_hashes=idx.existing_text_hashes,
+        upsert=lambda key, vec, text: idx.upsert_entry(key, vec, source_text=text),
+        item_noun="항목",
+    )
 
 
 __all__ = [

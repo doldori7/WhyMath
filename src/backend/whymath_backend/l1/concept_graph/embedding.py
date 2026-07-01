@@ -44,6 +44,7 @@ from whymath_backend.config import Settings, get_settings
 # 프리미티브를 L1로 내려 의존을 *아래로* 뒤집었다(L1→L1·순환 0). L4 오개념 의미 매칭도 같은
 # 프리미티브를 쓰므로 좌석 공유는 유지된다.
 from whymath_backend.l1.embedding_primitives import (
+    embed_changed,
     join_embedding_text,
     provider_model_identity,
     text_hash,
@@ -326,20 +327,14 @@ def populate_concept_embeddings(
             provider_name=provider_name, model_name=model_name, settings=resolved
         )
     )
-    # skip-if-unchanged — 현행 text_hash와 다른(=표현 변경·신규·다른 공간) 개념만 재임베딩.
-    existing = idx.existing_text_hashes([c.concept_id for c in concepts])
-    changed = [c for c in concepts if existing.get(c.concept_id) != text_hash(c.text)]
-    if not changed:
-        return 0
-    vectors = provider.embed([c.text for c in changed])
-    if len(vectors) != len(changed):
-        raise RuntimeError(
-            f"임베딩 개수({len(vectors)})가 대상 개념 개수({len(changed)})와 다릅니다 "
-            "— provider.embed가 입력 순서·길이를 보존해야 합니다."
-        )
-    for concept, vec in zip(changed, vectors, strict=True):
-        idx.upsert(concept.concept_id, vec, source_text=concept.text)
-    return len(changed)
+    # skip-if-unchanged 코어는 레이어-중립 프리미티브가 소유(개념·원자·오개념 공유·3중복 제거).
+    return embed_changed(
+        [(c.concept_id, c.text) for c in concepts],
+        provider=provider,
+        existing_hashes=idx.existing_text_hashes,
+        upsert=lambda key, vec, text: idx.upsert(key, vec, source_text=text),
+        item_noun="개념",
+    )
 
 
 __all__ = [

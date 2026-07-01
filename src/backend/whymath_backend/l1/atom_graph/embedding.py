@@ -52,6 +52,7 @@ from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
 # 좌석을 쓴다. text_hash(표현 변경 감지)·provider_model_identity(공간 식별)는 레이어-중립 L1
 # 프리미티브(`l1/embedding_primitives.py`)에서 가져온다(L1→L1·역방향 의존 0·seam 0·동일 규약).
 from whymath_backend.l1.embedding_primitives import (
+    embed_changed,
     join_embedding_text,
     provider_model_identity,
     text_hash,
@@ -305,20 +306,14 @@ def populate_atom_embeddings(
             provider_name=provider_name, model_name=model_name, settings=resolved
         )
     )
-    # skip-if-unchanged — 현행 text_hash와 다른(=표현 변경·신규·다른 공간) 원자만 재임베딩.
-    existing = idx.existing_text_hashes([a.code for a in atoms])
-    changed = [a for a in atoms if existing.get(a.code) != text_hash(a.text)]
-    if not changed:
-        return 0
-    vectors = provider.embed([a.text for a in changed])
-    if len(vectors) != len(changed):
-        raise RuntimeError(
-            f"임베딩 개수({len(vectors)})가 대상 원자 개수({len(changed)})와 다릅니다 "
-            "— provider.embed가 입력 순서·길이를 보존해야 합니다."
-        )
-    for atom, vec in zip(changed, vectors, strict=True):
-        idx.upsert(atom.code, vec, source_text=atom.text)
-    return len(changed)
+    # skip-if-unchanged 코어는 레이어-중립 프리미티브가 소유(개념·원자·오개념 공유·3중복 제거).
+    return embed_changed(
+        [(a.code, a.text) for a in atoms],
+        provider=provider,
+        existing_hashes=idx.existing_text_hashes,
+        upsert=lambda key, vec, text: idx.upsert(key, vec, source_text=text),
+        item_noun="원자",
+    )
 
 
 __all__ = [
