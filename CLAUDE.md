@@ -280,6 +280,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - `ROADMAP.md` — Phase별 일정
 - `docs/architecture/00_overview.md` — 7계층 요약
 - `docs/standards/prompt_engineering.md` — 프롬프트 기준
+- `docs/standards/build_checkpoint_questions.md` — 구축 플레이북 단계별 진행 점검 질문 세트 (`/review`·`/status` 시)
 
 ### 상세 (필요 시 읽기)
 - `docs/architecture/01-07_*.md` — 각 계층 상세 명세
