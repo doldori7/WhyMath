@@ -22,6 +22,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 
+from whymath_backend.l1.embedding_primitives import normalize_embedding_input
 from whymath_backend.l1.embedding_provider import EmbeddingProvider, cosine_similarity
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.models import Misconception
@@ -53,7 +54,8 @@ def _mid_text(record: MisconceptionCatalog) -> str:
         for p in (record.canonical_statement, record.student_wrong_thinking)
         if p is not None and p.strip()
     ]
-    return ". ".join(parts)
+    # kebab 표현(`catalog_text`→`join_embedding_text`)과 *같은* NFKC 정규화로 임베딩 공간 정합.
+    return normalize_embedding_input(". ".join(parts))
 
 
 def _link_type_for(confidence: float) -> CrosslinkType:

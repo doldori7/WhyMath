@@ -15,6 +15,7 @@ from whymath_backend.l1.embedding_primitives import (
     EMBEDDING_TEXT_FORMAT_VERSION,
     embed_changed,
     join_embedding_text,
+    normalize_embedding_input,
     text_hash,
 )
 
@@ -51,7 +52,51 @@ class TestJoinEmbeddingText:
 
 def test_format_version_is_positive_int() -> None:
     assert isinstance(EMBEDDING_TEXT_FORMAT_VERSION, int)
-    assert EMBEDDING_TEXT_FORMAT_VERSION >= 1
+    # v2 = NFKC(join) — 정규화 도입으로 v1에서 상향(사전 계산 벡터 stale 감지 근거).
+    assert EMBEDDING_TEXT_FORMAT_VERSION == 2
+
+
+class TestNormalizeEmbeddingInput:
+    """임베딩 입력 단일 정규화 권위(NFKC) — 표현·질의 경로 공유(감사 retrieval ambiguity)."""
+
+    def test_composed_equals_decomposed(self) -> None:
+        # NFC(합성) vs NFD(분해) 같은 글자는 NFKC 후 동일 → 같은 임베딩 텍스트·해시.
+        composed = "é"  # é (한 코드포인트)
+        decomposed = "é"  # e + combining acute (두 코드포인트)
+        assert composed != decomposed
+        assert normalize_embedding_input(composed) == normalize_embedding_input(decomposed)
+        assert text_hash(normalize_embedding_input(composed)) == text_hash(
+            normalize_embedding_input(decomposed)
+        )
+
+    def test_fullwidth_folds_to_ascii(self) -> None:
+        # 전각 영숫자 → 반각(NFKC 호환 분해). 표기 흔들림 흡수.
+        assert normalize_embedding_input("ａｂｃ") == "abc"
+
+    def test_superscript_folds(self) -> None:
+        # NFKC는 위첨자 ²(U+00B2)를 2로 접는다 — 의미 검색용(등치 정본은 to_sympy_source로 별개).
+        assert normalize_embedding_input("x²") == "x2"
+
+    def test_idempotent(self) -> None:
+        once = normalize_embedding_input("Ａ² é")
+        assert normalize_embedding_input(once) == once
+
+    def test_plain_text_unchanged(self) -> None:
+        # 이미 NFKC-정규(Hangul 완성형·ASCII)면 무변화(기존 표현 대다수).
+        assert normalize_embedding_input("이차함수. y=ax^2") == "이차함수. y=ax^2"
+
+
+class TestJoinAppliesNfkc:
+    """join_embedding_text가 결합 후 NFKC를 적용(질의 경로와 정합·포맷 v2)."""
+
+    def test_join_normalizes_output(self) -> None:
+        # 전각/합성 입력이 결합 출력에서 정규화된다.
+        assert join_embedding_text("ａｂ", "x²") == "ab. x2"
+
+    def test_join_matches_normalize_of_raw_join(self) -> None:
+        parts = ("라벨", "x²+y²")
+        raw = ". ".join(parts)
+        assert join_embedding_text(*parts) == normalize_embedding_input(raw)
 
 
 class _SpyProvider:

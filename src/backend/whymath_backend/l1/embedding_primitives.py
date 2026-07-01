@@ -9,6 +9,7 @@ L계층도 import하지 않는다(순환 불가).
 
 담는 것(전부 순수·인프라):
   - `EmbeddingProvider`(Protocol): 텍스트 배치 → 벡터. 구조적 타이핑(구현체는 L4 provider.py).
+  - `normalize_embedding_input`: 임베딩 입력 단일 정규화 권위(NFKC·표현/질의 경로 공유).
   - `text_hash`: 임베딩 원본 표현의 안정 해시(표현 변경=재임베딩 필요 감지).
   - `provider_model_identity`: provider 객체 + Settings → (provider_name, model_name) 공간 식별자.
   - `embed_changed`: skip-if-unchanged 적재 코어(개념·원자·오개념 공유).
@@ -18,6 +19,7 @@ L계층도 import하지 않는다(순환 불가).
 from __future__ import annotations
 
 import hashlib
+import unicodedata
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -27,21 +29,44 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
 # 임베딩 원본 표현(embed-text) *포맷 계약 버전*. 개념·원자·오개념 텍스트 빌더가 공유하는
-# 결합 규칙(구분자 `". "`·strip·빈값 skip)을 바꾸면(예: 구분자 교체·필드 순서) 이 값을 올린다 —
-# 사전 계산된 벡터가 *조용히* stale 되는 것을 감지할 근거(차후 임베딩 행에 함께 영속 시 drift
-# 비교). math_dsl 감사 §5(포맷 계약 미고정) 대응. 현재 v1 = `". ".join(strip·non-empty)`.
-EMBEDDING_TEXT_FORMAT_VERSION = 1
+# 결합·정규화 규칙(구분자 `". "`·strip·빈값 skip·**NFKC 정규화**)을 바꾸면(예: 구분자 교체·필드
+# 순서·정규화 방식) 이 값을 올린다 — 사전 계산된 벡터가 *조용히* stale 되는 것을 감지할 근거
+# (차후 임베딩 행에 함께 영속 시 drift 비교). math_dsl 감사 §5(포맷 계약 미고정)·retrieval
+# ambiguity(입력 정규화 비대칭) 대응. **v2 = NFKC(`". ".join(strip·non-empty)`)** — v1(NFKC 없음)
+# 대비 합성/분해 유니코드·전각/반각을 통일해 실제 provider(bge-m3·OpenAI) 입력의 표기 흔들림을
+# 제거한다(FakeEmbeddingProvider가 이미 내부 NFKC를 쓰던 것을 상류로 끌어올려 정합).
+EMBEDDING_TEXT_FORMAT_VERSION = 2
+
+
+def normalize_embedding_input(text: str) -> str:
+    """임베딩 입력 *단일 정규화 권위* — NFKC(합성/분해·전각/반각 통일).
+
+    카탈로그/개념/원자 표현(`join_embedding_text`)과 *질의* 경로(오개념 매처·개념 검색·crosswalk)가
+    **같은** 정규화를 거치게 하는 하나의 함수다. 이전에는 표현 빌더는 정규화가 없고 질의는 raw라,
+    학생이 합성문자 `x²`(U+00B2)로 입력하면 저장 표현과 다른 벡터가 나와 무매칭이 될 수 있었다
+    (감사 "retrieval ambiguity — 입력 NFKC 미적용"). NFKC는 substring 경로(`diagnose._normalize`)·
+    Fake provider가 이미 쓰던 정규화라 관례와 일치한다. 결정론·멱등(NFKC(NFKC(x))=NFKC(x)).
+
+    주의: 이 정규화는 *임베딩 recall* 전용이다 — 기호 등치(SymPy)의 정본 정규화는 별개
+    (`l3/symbolic_equivalence.to_sympy_source`, 위첨자→`**`). NFKC가 `²`를 `2`로 접는 것은 의미
+    검색엔 무해(오히려 표기 흔들림 흡수)하나 등치 판정엔 쓰지 않는다.
+    """
+    return unicodedata.normalize("NFKC", text)
 
 
 def join_embedding_text(*parts: object) -> str:
     """임베딩 원본 표현 결합 — *단일 포맷 권위*(개념·원자·오개념 빌더 공유·감사 §2 3중복 제거).
 
-    각 조각을 `str().strip()`하고 빈/None은 건너뛴 뒤 `". "`로 잇는다(포맷 v1·
-    `EMBEDDING_TEXT_FORMAT_VERSION`). 과거엔 이 결합 규칙이 `concept_embedding_text`·
-    `atom_embedding_text`·`catalog_text` 세 곳에 따로 박혀 있어 구분자·순서 변경이 *조용한* drift를
-    낳을 수 있었다 — 한 곳으로 모아 포맷 계약을 고정한다(필드 *선택*은 호출자 몫·결합만 공유).
+    각 조각을 `str().strip()`하고 빈/None은 건너뛴 뒤 `". "`로 이어 **NFKC 정규화**한다(포맷 v2·
+    `EMBEDDING_TEXT_FORMAT_VERSION`·`normalize_embedding_input`). 과거엔 이 결합 규칙이
+    `concept_embedding_text`·`atom_embedding_text`·`catalog_text` 세 곳에 따로 박혀 있어 구분자·순서
+    변경이 *조용한* drift를 낳을 수 있었고, 정규화가 없어 질의 경로와 표기가 어긋날 수 있었다 —
+    한 곳으로 모아 포맷·정규화 계약을 고정한다(필드 *선택*은 호출자 몫·결합·정규화만 공유).
     """
-    return ". ".join(str(part).strip() for part in parts if part is not None and str(part).strip())
+    joined = ". ".join(
+        str(part).strip() for part in parts if part is not None and str(part).strip()
+    )
+    return normalize_embedding_input(joined)
 
 
 @runtime_checkable
@@ -167,6 +192,7 @@ __all__ = [
     "build_sync_engine",
     "embed_changed",
     "join_embedding_text",
+    "normalize_embedding_input",
     "provider_model_identity",
     "text_hash",
 ]

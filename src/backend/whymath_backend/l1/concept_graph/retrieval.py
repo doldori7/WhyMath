@@ -50,7 +50,10 @@ from whymath_backend.l1.concept_graph.node_projection import fetch_node_meta
 # provider 공간 식별자(provider→model 규약)는 적재와 *같은 seam*을 재사용한다(신규 0). 같은
 # 규약을 search가 써야 적재 행과 같은 임베딩 공간을 본다(provider/model 불일치 시 빈 결과).
 # 레이어-중립 L1 프리미티브(`l1/embedding_primitives.py`)에서 가져온다(L1→L1·역방향 의존 0).
-from whymath_backend.l1.embedding_primitives import provider_model_identity
+from whymath_backend.l1.embedding_primitives import (
+    normalize_embedding_input,
+    provider_model_identity,
+)
 
 if TYPE_CHECKING:
     from whymath_backend.l1.embedding_primitives import EmbeddingProvider
@@ -148,7 +151,9 @@ def search_concepts(
 
     # 질의 1건 임베딩(배치 API에 단건 — provider 계약은 입력 순서·길이 보존). 결과가 1건이 아니면
     # provider가 계약을 어긴 것(방어). 빈 입력이 아니므로 정상 provider는 정확히 1행을 돌려준다.
-    vectors = provider.embed([query_text])
+    # 질의도 개념 표현(`concept_embedding_text`→`join_embedding_text`)과 *같은* NFKC 정규화를 거쳐
+    # 표기 흔들림에 의한 무매칭을 막는다(감사 retrieval ambiguity 대응).
+    vectors = provider.embed([normalize_embedding_input(query_text)])
     if len(vectors) != 1:
         raise RuntimeError(
             f"질의 임베딩이 1건이 아닙니다(받음: {len(vectors)}) "
