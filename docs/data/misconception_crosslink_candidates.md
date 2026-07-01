@@ -9,6 +9,7 @@
 > **v0.2 추가**: §2.1 검수 워크시트(kebab↔M-id 원문 대조·결정란)·§2.2 결정 집계표. 여전히 미적재.
 > **v0.3 추가**: §2.3 Claude 세밀 분석(30건 권장 판정)·§2.2 `Claude 추천` 열. 참고 권장·**여전히 미적재**.
 > **v0.4 집행(Kiki 승인)**: §2.2 결정 확정·§2.4 집행 기록. 승인 자산 `crosslinks.json`(27 직접매핑)·CLI 커밋. **라이브 DB 적재는 ops**.
+> **v0.5 후속**: §2.5 보류/반려 후속 — 신규 M-id 2건(M0862·M0863) 발행·M0118 확인. **적재 27→30**(전 30 kebab 매핑).
 > **산출 근거**: kebab 카탈로그(`l4/misconception/catalog.py` 30종) × M-id 코퍼스
 > (`data/corpus/misconceptions_v1/misconceptions.json` 839종) 내용 일치 분석.
 
@@ -422,12 +423,12 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 | distribution-over-power | ✅ D · `M0019` | ✅ 승인 | 직접매핑 | `M0019` | manual | 적재(§2.3 권장대로) |
 | division-by-zero | ↔️ 대안 · `M0146` | ✅ 승인 | 직접매핑 | `M0146` | manual | 적재(§2.3 권장대로) |
 | exponent-zero | ✅ D · `M0105` | ✅ 승인 | 직접매핑 | `M0105` | manual | 적재(§2.3 권장대로) |
-| fraction-cancellation | ⚠️ 확인 · `M0118` | ⏸️ 보류 |  |  |  | 보류 — M0118 원문 정합 확인 후 직접매핑(§2.3 ⚠️) |
+| fraction-cancellation | ⚠️ 확인 · `M0118` | ✅ 승인 | 직접매핑 | `M0118` | manual | 보류 해소(§2.5) — M0118 '덧셈식에서 약분' 확인 |
 | log-distribution | ✅ D · `M0049` | ✅ 승인 | 직접매핑 | `M0049` | manual | 적재(§2.3 권장대로) |
 | root-loss-by-dividing | ✅ D · `M0573` | ✅ 승인 | 직접매핑 | `M0573` | manual | 적재(§2.3 권장대로) |
 | sign-flip-in-inequality | ✅ D · `M0564` | ✅ 승인 | 직접매핑 | `M0564` | manual | 적재(§2.3 권장대로) |
 | square-root-positivity | ✅ D · `M0550` | ✅ 승인 | 직접매핑 | `M0550` | manual | 적재(§2.3 권장대로) |
-| period-of-scaled-sine | 🆕 신규 · `(M0152)` | ⏸️ 보류 |  |  |  | 보류 — 신규 M-id 필요(직접 지칭 부재·§2.3 🆕) |
+| period-of-scaled-sine | 🆕 신규 · `(M0152)` | ✅ 승인 | 직접매핑 | `M0862` | manual | 신규 M-id 발행(§2.5) — M0152 포괄 대체 |
 | sine-distributes-over-sum | ✅ D · `M0707` | ✅ 승인 | 직접매핑 | `M0707` | manual | 적재(§2.3 권장대로) |
 | composite-function-commutes | ✅ D · `M0643` | ✅ 승인 | 직접매핑 | `M0643` | manual | 적재(§2.3 권장대로) |
 | invertibility-without-1-1 | ✅ D · `M0144` | ✅ 승인 | 직접매핑 | `M0144` | manual | 적재(§2.3 권장대로) |
@@ -437,7 +438,7 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 | critical-point-implies-extremum | ✅ D · `M0080` | ✅ 승인 | 직접매핑 | `M0080` | manual | 적재(§2.3 권장대로) |
 | limit-equals-function-value | ✅ D · `M0665` | ✅ 승인 | 직접매핑 | `M0665` | manual | 적재(§2.3 권장대로) |
 | product-rule-naive | ✅ D · `M0075` | ✅ 승인 | 직접매핑 | `M0075` | manual | 적재(§2.3 권장대로) |
-| angle-sum-non-triangle | ❌ 반려 · `(신규/재탐색)` | ❌ 반려 |  |  |  | 반려 — M0493='변한다' vs kebab '180 고정' 반대 오개념(§2.3 ❌) |
+| angle-sum-non-triangle | ❌ 반려 · `(신규/재탐색)` | ✅ 승인 | 직접매핑 | `M0863` | manual | 신규 M-id 발행(§2.5) — M0493 반대오개념 대체 |
 | area-perimeter-confusion | ⚠️ 확인 · `M0529` | ✅ 승인 | 직접매핑 | `M0529` | manual | 적재(§2.3 권장대로) |
 | circle-radius-squared | ✅ D · `M0630` | ✅ 승인 | 직접매핑 | `M0630` | manual | 적재(§2.3 권장대로) |
 | similarity-vs-congruence | ✅ D · `M0519` | ✅ 승인 | 직접매핑 | `M0519` | manual | 적재(§2.3 권장대로) |
@@ -558,8 +559,24 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 - **적재 CLI**: `python -m whymath_backend.l1.misconception.crosslink_populate`
   (`--crosslinks data/corpus/misconception_crosslink_v1/crosslinks.json`) — `load_crosslinks` 멱등 upsert.
 - **라이브 DB 적재는 ops**(실 PG 필요). 적재 후 read-time는 `crosslink_resolve.py`가 자동 해석(무배선).
-- **다음(별도)**: shadow 측정(`misconception_crosslink_mode=shadow`)→canary→M-id canonical 플립. 보류 2·
-  반려 1은 원문 재검·신규 M-id 발행 후 재상정.
+- **다음(별도)**: shadow 측정(`misconception_crosslink_mode=shadow`)→canary→M-id canonical 플립.
+
+## 2.5 보류/반려 후속 — 신규 M-id 발행 (2026-07-01)
+
+§2.4의 보류 2·반려 1을 후속 해소. **적재 27→30**(모든 30 kebab 매핑 확보·미매핑 0).
+
+| kebab | 후속 조치 | 최종 mis_id |
+|---|---|---|
+| `period-of-scaled-sine` | 🆕 **신규 M-id 발행** `M0862` — M0152("삼각함수 진폭·주기", 포괄)가 'y=sin(bx) 주기=2π/\|b\|'를 직접 지칭 못 해 kebab 카탈로그에서 이관 저작 | **M0862** |
+| `angle-sum-non-triangle` | 🆕 **신규 M-id 발행** `M0863` — M0493("모양 다르면 변한다")은 kebab("모든 다각형 180° 고정")과 반대 오개념이라 대체 | **M0863** |
+| `fraction-cancellation` | ✅ **보류 해소** — M0118 원문(`덧셈식에서 약분`)이 `(a+b)/a` 오개념 지칭 확인 → 직접매핑 채택 | M0118 |
+
+- **신규 M-id 원천**: 사람 큐레이션된 kebab 카탈로그(`l4/misconception/catalog.py`·`canonical_statement`·
+  `counterexample`·`correct_form`)를 M-id 스키마로 이관. `provenance_note="WhyMath 저작 — kebab 카탈로그
+  이관(crosswalk 신규)"`. 코퍼스는 WhyMath 자체 저작물이라 추가 정당(라이선스 동일).
+- **자산**: `misconceptions_v1/misconceptions.json`(839→**841**·M0862·M0863) + `crosslinks.json`(27→**30**).
+  무결성(신규 M-id 존재·30 kebab 커버)은 `test_crosslink_populate.py`가 고정.
+- 라이브 적재·canary는 §2.4와 동일 경로(ops).
 
 ---
 
@@ -592,3 +609,4 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 - v0.2 (2026-07-01 — §2.1 원문 대조 워크시트·§2.2 결정 집계표 추가. catalog×corpus 조인·검수 편의. 미적재 불변).
 - v0.3 (2026-07-01 — §2.3 Claude 30건 세밀 분석·권장 판정 추가(✅25·↔️1·⚠️2·🆕1·❌1)·§2.2 `Claude 추천` 열. 참고 권장·미적재 불변).
 - v0.4 (2026-07-01 — Kiki '권장대로 승인' 집행: §2.2 결정 확정·§2.4 집행 기록. 승인 자산 crosslinks.json(27 직접매핑)+crosslink_populate CLI 커밋. 보류 2·반려 1. 라이브 DB 적재는 ops).
+- v0.5 (2026-07-01 — 보류/반려 후속 §2.5: 신규 M-id M0862(period)·M0863(angle-sum) 발행(kebab 카탈로그 이관·코퍼스 839→841)·M0118 확인. crosslinks 27→30·전 30 kebab 매핑·미매핑 0).

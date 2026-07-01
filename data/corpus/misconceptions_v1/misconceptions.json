@@ -2,7 +2,7 @@
   "source_citation": "출처: WhyMath 7계층 본문 코퍼스(자체 저작 — 교수학 오개념 분석).",
   "license_notice": "와이매스 자체 저작물(오개념 서술·distractor 규칙·교정포인트). 성취기준·CCSS 코드는 구조 메타(공공·사실).",
   "collected_at": "2026-06-20T11:18:19.433043+00:00",
-  "count": 839,
+  "count": 841,
   "misconceptions": [
     {
       "mis_id": "M0425",
@@ -15105,6 +15105,42 @@
       "mapping_confidence": "기준(원본)",
       "mapping_score": 1.0,
       "provenance_note": "AI생성-검수필요"
+    },
+    {
+      "mis_id": "M0862",
+      "canonical_statement": "y=sin(bx)의 주기를 계수 b와 무관하게 2π로 단정한다(실제 주기는 2π/|b|).",
+      "student_wrong_thinking": "y=sin(2x)의 주기를 2π로 본다(실제 π). 계수 b가 주기를 2π/|b|로 바꾸는 것을 무시한다.",
+      "distractor_rule": "정답 대신, 학생이 'y=sin(bx)의 주기를 계수 b와 무관하게 2π로 둔다(실제 2π/|b|)'처럼 잘못 처리한 결과를 오답 보기로 배치",
+      "error_type": "공식혼동",
+      "difficulty": "중",
+      "correction_point": "삼각함수 y=a sin(bx)의 주기가 2π/|b|임을 이해하고, 계수에 따른 주기 변화를 설명할 수 있다.",
+      "ccss_code": null,
+      "concept_src_id": null,
+      "standard_code": null,
+      "school_level": "고등학교(일반선택)",
+      "domain": "삼각함수",
+      "subunit": "삼각함수의 그래프",
+      "mapping_confidence": "기준(원본)",
+      "mapping_score": 1.0,
+      "provenance_note": "WhyMath 저작 — kebab 카탈로그 이관(crosswalk 신규·period-of-scaled-sine)"
+    },
+    {
+      "mis_id": "M0863",
+      "canonical_statement": "모든 다각형의 내각의 합을 180°로 단정한다(삼각형 과일반화). 실제 n각형의 내각의 합은 (n−2)×180°.",
+      "student_wrong_thinking": "삼각형 내각의 합 180°를 모든 다각형에 적용해, 사각형·오각형의 내각의 합도 180°라고 본다. n각형 내각의 합이 (n−2)×180°임을 모른다.",
+      "distractor_rule": "정답 대신, 학생이 '모든 다각형의 내각의 합을 180°로 둔다(변의 수 무시)'처럼 잘못 처리한 결과를 오답 보기로 배치",
+      "error_type": "해석오류",
+      "difficulty": "하",
+      "correction_point": "다각형의 내각의 합이 (n−2)×180°임을 이해하고, 변의 수에 따라 구할 수 있다.",
+      "ccss_code": null,
+      "concept_src_id": null,
+      "standard_code": null,
+      "school_level": "중학교",
+      "domain": "도형과 측정",
+      "subunit": "다각형의 내각과 외각",
+      "mapping_confidence": "기준(원본)",
+      "mapping_score": 1.0,
+      "provenance_note": "WhyMath 저작 — kebab 카탈로그 이관(crosswalk 신규·angle-sum-non-triangle)"
     }
   ]
 }

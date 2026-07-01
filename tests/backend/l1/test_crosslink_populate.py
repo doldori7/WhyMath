@@ -70,12 +70,20 @@ class TestApprovedAssetIntegrity:
         return data["crosslinks"]
 
     def test_all_rows_schema_valid_and_direct(self) -> None:
-        """27행 전부 스키마(extra=forbid) 통과·link_type '직접매핑'·method 'manual'."""
+        """30행 전부 스키마(extra=forbid) 통과·link_type '직접매핑'·method 'manual'.
+
+        27(§2.3 권장대로 승인) + 3(보류/반려 후속 — period-of-scaled-sine→M0862·
+        angle-sum-non-triangle→M0863 신규 M-id, fraction-cancellation→M0118 확인).
+        """
         rows = self._rows()
         objs = [MisconceptionCrosslink.model_validate(r) for r in rows]
-        assert len(objs) == 27
+        assert len(objs) == 30
         assert all(o.link_type == "직접매핑" for o in objs)
         assert all(o.method == "manual" for o in objs)
+
+    def test_all_30_kebabs_covered(self) -> None:
+        """30 kebab 카탈로그가 전부 매핑을 가진다(보류/반려 후속으로 미매핑 0)."""
+        assert {r["kebab_id"] for r in self._rows()} == set(CATALOG_BY_ID)
 
     def test_triples_unique(self) -> None:
         """(kebab_id, mis_id, link_type) 의미 유일키가 배치 내 중복 없음(멱등 upsert 전제)."""
@@ -100,4 +108,15 @@ class TestApprovedAssetIntegrity:
     def test_count_field_matches(self) -> None:
         """메타 count가 실제 행 수와 일치(자산 무결성)."""
         data = json.loads(_CROSSLINKS.read_text(encoding="utf-8"))
-        assert data["count"] == len(data["crosslinks"]) == 27
+        assert data["count"] == len(data["crosslinks"]) == 30
+
+    def test_followup_new_mids_present(self) -> None:
+        """보류/반려 후속 신규 M-id(M0862·M0863)가 코퍼스에 발행되고 매핑이 이를 가리킨다."""
+        corpus = {
+            r["mis_id"] for r in json.loads(_CORPUS.read_text(encoding="utf-8"))["misconceptions"]
+        }
+        assert {"M0862", "M0863"} <= corpus
+        by_kebab = {r["kebab_id"]: r["mis_id"] for r in self._rows()}
+        assert by_kebab["period-of-scaled-sine"] == "M0862"
+        assert by_kebab["angle-sum-non-triangle"] == "M0863"
+        assert by_kebab["fraction-cancellation"] == "M0118"

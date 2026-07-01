@@ -1,10 +1,18 @@
 {
   "source": "WhyMath 오개념 crosswalk(kebab↔M-id) — 사람 검수 승인분",
   "reviewed_by": "Kiki(검수·승인) · Claude(세밀분석 §2.3)",
-  "reviewed_note": "docs/data/misconception_crosslink_candidates.md §2.3 권장대로 승인. 적재 27(직접매핑) · 보류 2(fraction-cancellation·period-of-scaled-sine) · 반려 1(angle-sum-non-triangle). 라이브 DB 적재는 ops(crosslink_populate CLI).",
+  "reviewed_note": "docs/data/misconception_crosslink_candidates.md §2.3 권장대로 승인 + 보류/반려 후속 신규 M-id 발행. 적재 30(직접매핑) — 최초 27 + 후속 3(period-of-scaled-sine→M0862·angle-sum-non-triangle→M0863 신규 M-id, fraction-cancellation→M0118 확인). 라이브 DB 적재는 ops.",
   "reviewed_at": "2026-07-01",
-  "count": 27,
+  "count": 30,
   "crosslinks": [
+    {
+      "kebab_id": "angle-sum-non-triangle",
+      "mis_id": "M0863",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "신규 M-id 발행(§2.3 ❌ 해소). M0493은 '변한다'로 반대 오개념이라 대체"
+    },
     {
       "kebab_id": "area-perimeter-confusion",
       "mis_id": "M0529",
@@ -94,6 +102,14 @@
       "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
     },
     {
+      "kebab_id": "fraction-cancellation",
+      "mis_id": "M0118",
+      "link_type": "직접매핑",
+      "confidence": 0.8,
+      "method": "manual",
+      "note": "M0118 원문 확인(§2.3 ⚠️ 보류 해소·'덧셈식에서 약분'=（a+b)/a)"
+    },
+    {
       "kebab_id": "gambler-fallacy",
       "mis_id": "M0688",
       "link_type": "직접매핑",
@@ -148,6 +164,14 @@
       "confidence": 0.95,
       "method": "manual",
       "note": "§2.3 세밀분석 승인(Kiki 권장대로) — 원문 의미 동일"
+    },
+    {
+      "kebab_id": "period-of-scaled-sine",
+      "mis_id": "M0862",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "신규 M-id 발행(§2.3 🆕 해소·kebab 카탈로그 이관). M0152는 포괄이라 부적합"
     },
     {
       "kebab_id": "product-rule-naive",
