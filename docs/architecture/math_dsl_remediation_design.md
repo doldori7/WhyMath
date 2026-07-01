@@ -127,6 +127,10 @@
   `misconception_wrong_form_mode=="shadow"`일 때 SymPy 탐지와 기존 substring/regex(`diagnose`)를
   비교해 SymPy-only 순기여를 *로그로만* 남긴다 — 노출(diagnose 반환)·verdict 불변·비차단·학생
   원문 미기록(미성년 PII). 기본 `off`. 노출 전 분포 측정으로 canary/full 통합 근거를 모은다.
+- *(완료·측정 도구)* **분포 harvest** — `wrong_form_shadow_harvest`가 관측 JSONL을 읽어 SymPy vs
+  substring 탐지 분포(일치·SymPy 순기여 id별 빈도·substring 단독 id별 빈도)를 집계한다
+  (`crosslink_shadow_harvest` 동형·오프라인·순수·비노출). SymPy 순기여=통합 가치, substring 단독=
+  결합 후 substring이 계속 커버할 오개념 — canary 통합·결합 정책의 정량 근거.
 - *(잔여)* shadow 측정 후 노출 통합(substring과 결합·canary)·수치 인스턴스 구조보존 파서.
 
 ---
