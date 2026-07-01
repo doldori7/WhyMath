@@ -148,7 +148,7 @@ crosswalk 골격+resolver·증거저장소 shadow), **premature한 것은 도입
 | Q10-③ 노드는 의미만 | 금지 필드 + 허용 화이트리스트 동결 | `tests/.../schema/test_concept.py` |
 | Q1/Q8 오개념 자유서술 | `common_misconceptions` 런타임 미사용(행동+정적) + seed 전용 주석 | `test_scene_generation.py`·`test_concept_misconception_runtime.py`·`schema/concept.py` |
 | Q2 약한 relation 폭발 | EdgeType 약한 값 전부 스윕→PREREQUISITE만 적재 + traversal 배제 + 어휘 보존 | `test_edge_relation_governance.py`·`test_prerequisite_traversal_integration.py` |
-| Q10-⑥ 오개념 단일 정체성 | `_persist_active_set` crosswalk shadow 배선(비노출·비차단) | `l4/misconception/hypothesis_store.py` |
+| Q10-⑥ 오개념 단일 정체성 | crosswalk shadow 배선(비노출·비차단) — 저장 좌석(`_persist_active_set`·`log_evidence`) + **노출 표면 좌석**(`generate_learning_scene` 프로브별 관측 = canary 노출 가중 분모). wh1_loop는 커밋 좌석 중복이라 비채택 | `l4/misconception/hypothesis_store.py`·`evidence_store.py`·`l4/scene_generation.py`·`test_scene_generation_crosslink_shadow.py` |
 | Q10-⑧(부분) traversal 예산 | `MAX_PREREQUISITE_DEPTH` 단일 출처 | `l2/prerequisite_recommendation.py`·`api/me.py` |
 
 **미채택(premature/dead)**: LLM subgraph 예산·증분 edge-add reachability·SCC 크론·약한 타입 reject
@@ -288,4 +288,6 @@ multi-language = **국가 × 개정 축의 곱**, (c) 2028 개정 유입. 처방
 - 원칙: `CLAUDE.md`(의사결정 우선순위·절대 금기·표현≠의미)
 - 변경 이력: v0.1 (2026-06-30 초안 — 분석만·코드/스키마 변경 0) · v0.2 (2026-06-30 — §4 구현 후속
   추가: invariant 코드 게이트 5종 동결·PR #357) · v0.3 (2026-07-01 — §5 목표 규모 스케일업 투영 추가:
-  10 임계점·트리거·방향 처방·우선순위 표. 분석만·코드/스키마 변경 0)
+  10 임계점·트리거·방향 처방·우선순위 표. 분석만·코드/스키마 변경 0) · v0.4 (2026-07-01 — §4 Q10-⑥
+  행 갱신: 오개념 crosswalk shadow에 노출 표면 좌석(`scene_generation`) 추가·wh1_loop 비채택 근거.
+  구현 동반: `l4/scene_generation.py` + 신규 테스트)

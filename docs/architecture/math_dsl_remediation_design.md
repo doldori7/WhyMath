@@ -15,7 +15,7 @@
 | cycle 검출(populate/load 방어선) | **구현 완료** | 저위험·기존 탐지기 미러 |
 | 교육과정 `grade_introduced`·`semester_introduced` 제거 | **구현 완료** | NULL·중복·소비처 0 |
 | 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 | **구현 완료**(§3) — 두 필드 제거(PR #350) + `curriculum_entry` KR 적재기 완료 | 런타임 소비처 0 확인·Overlay 단일 진실 |
-| 오개념 ID 통합(kebab 30 ↔ M-id 839) | **골격 구현**(§1) — M-id 로더·crosswalk 테이블·read-time resolver 완료. 잔여 = 매핑 큐레이션·게이트 배선 | rekey는 resolver로 불필요화(채택) |
+| 오개념 ID 통합(kebab 30 ↔ M-id 839) | **골격 구현**(§1) — M-id 로더·crosswalk 테이블·read-time resolver·게이트 shadow 배선(evidence·hypothesis·**scene_generation 노출 표면**·wh1_loop는 중복이라 비채택) 완료. 잔여 = 매핑 채택(사람 검수)·canary 플립 | rekey는 resolver로 불필요화(채택) |
 | 파서(동치 권위) 일원화 | **구현 완료**(§2) — 경계 명문화 + golden test | `notation_contract.md`·`data/notation_contract.json` |
 | invariant 회귀 동결 게이트(노드 의미·약한 relation·shadow·traversal 예산) | **구현 완료**(PR #357) — risk_register §4 매핑 5종(Q10-③·Q1/Q8·Q2·Q10-⑥·Q10-⑧) | `test_concept.py`·`test_concept_misconception_runtime.py`·`test_edge_relation_governance.py`·`hypothesis_store.py`·`prerequisite_recommendation.py` |
 
@@ -67,8 +67,18 @@
    kebab→M-id 매핑 coverage(관측/distinct 커버리지·1:N 모호·미매핑 kebab-id 목록)를 집계한다
    (`step_shadow_harvest` 동형·오프라인·순수·비노출). canary 플립 go/no-go와 크로스워크 큐레이션
    우선순위(미매핑·1:N)의 정량 근거 — "노출 전 측정"을 산출하는 도구.
-   *(잔여)* 나머지 두 게이트(`learning_scene.py`·`wh1_loop.py`) shadow 배선 + shadow 측정 후
-   canary/full 노출(M-id canonical 플립) — 매핑 채택(2-잔여) 선행 필요.
+   *(완료·shadow 2차)* **노출 표면 게이트 shadow 배선** — `scene_generation.generate_learning_scene`이
+   `misconception_crosslink_mode!="off"`일 때 *실제 프로브로 나가는*(`MisconceptionProbeElement`)
+   kebab-id마다 `observe_crosslink_shadow_async`를 호출해 coverage를 관측한다(evidence/hypothesis
+   store와 동일 함수·never-break·비노출·기본 off). **왜 이 좌석인가**: 커밋 좌석(evidence/hypothesis)은
+   *저장*되는 kebab-id를 보지만, canary go/no-go의 분모는 *노출*되는 프로브 커버리지(노출 가중)라
+   persist-time 관측으로 대체 불가 — 노출 표면이 정본 관측점이다. (`l4/scene_generation.py`·
+   `tests/backend/l4/test_scene_generation_crosslink_shadow.py`)
+   *(비채택)* **`wh1_loop.py` shadow 배선** — wh1_loop는 *순수·in-memory·비영속*이고 커밋은
+   `wh1_session.run_persisted_turn`이 `evidence_store`·`hypothesis_store`(둘 다 이미 shadow)로 한다.
+   즉 wh1_loop의 kebab-id는 커밋 좌석에서 이미 관측돼 별도 배선은 *중복*이다(risk_register "중복·
+   premature 배선 금지" 규율). 노출 커버리지는 위 scene_generation 좌석이 담당.
+   *(잔여)* shadow 측정 후 canary/full 노출(M-id canonical 플립) — 매핑 채택(2-잔여) 선행 필요.
 4. **학생 데이터 마이그레이션** *(불필요화·결정)* — 런타임 테이블은 kebab `misconception_id`를
    TEXT(FK 아님)로 보존하므로 **read-time resolver로 rekey 없이** M-id 해석 가능(채택). 물리 일괄
    재키잉(option b)은 미성년 PII·되돌리기 위험으로 **비채택**(우선순위 #1·#2). 1:N 매핑 시 confidence

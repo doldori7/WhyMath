@@ -25,6 +25,7 @@
 
 from __future__ import annotations
 
+from whymath_backend.config import get_settings
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.visualization import generate_visualization_spec
@@ -39,6 +40,7 @@ from whymath_backend.l4.learning_scene import (
     VisualizationElement,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.crosslink_shadow import observe_crosslink_shadow_async
 from whymath_backend.l4.misconception.intervene import select_intervention
 from whymath_backend.l4.misconception.models import InterventionPattern, MisconceptionMatch
 from whymath_backend.l4.models import PolyaStage
@@ -201,6 +203,16 @@ async def generate_learning_scene(
     # ② 소크라테스 발화(인지 유형 결정론) ③ 오개념 프로브(적응)
     elements.extend(_socratic_elements(concept))
     elements.extend(_misconception_probes(learner_context))
+
+    # crosswalk shadow(비노출·비차단 측정) — 노출 표면(실제 프로브로 나가는 kebab-id)의 M-id
+    # 매핑 coverage를 로그로만 관측한다. 커밋 좌석(evidence/hypothesis store)은 *저장*되는
+    # kebab-id를 보지만, canary go/no-go의 분모는 *노출*되는 프로브 커버리지(노출 가중)라 여기가
+    # 정본 관측점이다. 노출·아래 반환 scene은 kebab-id 그대로 불변, resolve 실패도 scene을 안
+    # 깬다(never-break). 기본 off. (remediation_design §1.3-3·risk_register §4·Q10-⑥)
+    if get_settings().misconception_crosslink_mode != "off":
+        for el in elements:
+            if isinstance(el, MisconceptionProbeElement):
+                await observe_crosslink_shadow_async(el.misconception_id)
 
     # 조립 + 불변식 통과(미통과 명세는 반환 안 됨). misconception_id는 카탈로그로 사전 필터됨.
     return LearningScene(
