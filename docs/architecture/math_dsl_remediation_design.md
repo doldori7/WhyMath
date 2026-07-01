@@ -63,6 +63,10 @@
    `misconception_crosslink_mode=="shadow"`일 때 kebab→M-id 매핑 coverage를 *비차단·비노출*로
    해석·로깅(`l4/misconception/crosslink_shadow.py`·shadow.py 미러·resolve 실패도 적재 불변).
    노출·DB 저장은 kebab-id 그대로. 기본 `off`(빈 테이블 per-write DB 왕복 회피·측정 윈도만 on).
+   *(완료·측정 도구)* **coverage harvest** — `crosslink_shadow_harvest`가 관측 JSONL을 읽어
+   kebab→M-id 매핑 coverage(관측/distinct 커버리지·1:N 모호·미매핑 kebab-id 목록)를 집계한다
+   (`step_shadow_harvest` 동형·오프라인·순수·비노출). canary 플립 go/no-go와 크로스워크 큐레이션
+   우선순위(미매핑·1:N)의 정량 근거 — "노출 전 측정"을 산출하는 도구.
    *(잔여)* 나머지 두 게이트(`learning_scene.py`·`wh1_loop.py`) shadow 배선 + shadow 측정 후
    canary/full 노출(M-id canonical 플립) — 매핑 채택(2-잔여) 선행 필요.
 4. **학생 데이터 마이그레이션** *(불필요화·결정)* — 런타임 테이블은 kebab `misconception_id`를
@@ -109,6 +113,13 @@
   초월(`log`)·유리식은 SymPy 미결정이라 *미부여*(거짓 머신검증 주장 금지). 런타임 탐지 경로는
   불변(regex/substring) — 본 슬라이스는 *카탈로그를 기호 권위로 grounding*하고 차후 탐지 통합의
   canonical 표현을 깐다.
+- **파싱 소스 정규화 일원화**(위첨자·후속): 유니코드 위첨자(`x²`) 치환이 `wrong_form_match`에만
+  있어 `identity_status`는 위첨자를 parse_error로 떨구고 L4가 *미리* 변환해 넘겨야 하는 divergence가
+  있었다(감사 §7 파싱 관례 갈림·실제 위첨자 버그로 표면화). `to_sympy_source`(strip + 위첨자 0~9→
+  거듭제곱)를 `l3/symbolic_equivalence`로 올려 **단일 소스**로 두고 `identity_status`가 내부 적용
+  (위첨자 입력을 정상 판정·strict 개선·기존 판정 불변)·`wrong_form`은 사설 복제를 제거하고 재사용
+  한다. *잔여*: `validate_response`(`l3/pregenerate/validator.py`)의 `implicit_multiplication` 변환은
+  별개 파싱 관례라 후속 통일(관계식 검증 특화·회귀 리스크 분리).
 
 ### 2.5 오개념 탐지 SymPy 통합 (shadow 1차·구현 완료)
 `canonical_wrong_form`을 *런타임 탐지*에 결선한다 — `l4/misconception/wrong_form_match.py`:
@@ -123,6 +134,10 @@
   `misconception_wrong_form_mode=="shadow"`일 때 SymPy 탐지와 기존 substring/regex(`diagnose`)를
   비교해 SymPy-only 순기여를 *로그로만* 남긴다 — 노출(diagnose 반환)·verdict 불변·비차단·학생
   원문 미기록(미성년 PII). 기본 `off`. 노출 전 분포 측정으로 canary/full 통합 근거를 모은다.
+- *(완료·측정 도구)* **분포 harvest** — `wrong_form_shadow_harvest`가 관측 JSONL을 읽어 SymPy vs
+  substring 탐지 분포(일치·SymPy 순기여 id별 빈도·substring 단독 id별 빈도)를 집계한다
+  (`crosslink_shadow_harvest` 동형·오프라인·순수·비노출). SymPy 순기여=통합 가치, substring 단독=
+  결합 후 substring이 계속 커버할 오개념 — canary 통합·결합 정책의 정량 근거.
 - *(잔여)* shadow 측정 후 노출 통합(substring과 결합·canary)·수치 인스턴스 구조보존 파서.
 
 ---
@@ -158,6 +173,8 @@
   `l3/verify_answer.py`·`src/web/graphing-calculator/src/lib/graph2dSpec.js`·`schema/curriculum_entry.py`·
   `l1/curriculum/curriculum_loader.py`(KR Overlay 적재기)
 - 패턴: `04b_misconception_judge_graduation.md`(shadow→canary→full 점진 노출)
+- 운영: `shadow_measurement_runbook.md`(네 오개념 게이트 shadow 켜기→관측 수집→harvest 집계→
+  canary 판정 절차·crosslink/wrong_form/semantic/judge harvest 도구 사용법)
 - 원칙: `CLAUDE.md`(의사결정 우선순위 1·2·3·미성년 PII)
 - 변경 이력: v0.1 (2026-06-30 초안 — 설계만) · v0.2 (2026-06-30 — §3 구현 완료: 필드 제거 PR #350 +
   curriculum_entry KR 적재기) · v0.3 (2026-06-30 — §0 invariant 회귀 동결 게이트 5종 구현 완료·PR #357)
