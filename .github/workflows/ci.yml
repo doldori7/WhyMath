@@ -177,6 +177,9 @@ jobs:
       - name: Mypy (strict type check)
         run: mypy --strict whymath_backend
 
+      - name: Import contracts (import-linter — 7계층 단방향)
+        run: lint-imports
+
       - name: Pytest (with coverage)
         run: |
           pytest \
