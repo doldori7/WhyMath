@@ -116,6 +116,59 @@ python -m whymath_backend.l1.misconception.crosslink_populate \
 - **게이트 우회 감시**: `kebab_invalid` > 0 — 정본 카탈로그 밖 kebab-id가 게이트를 통과했다는 신호
   (조사 대상).
 
+## crosswalk canary 승격 정책 (M-id canonical 플립)
+
+> **무엇이 바뀌나(범위 정의)**: canary는 진단 *런타임* 경로를 바꾸지 않는다 — kebab-id는 계속 탐지·
+> 저장 키다(resolver read-time 매핑 불변). canary가 바꾸는 것은 **리포트·집계 계층의 canonical 정체성**
+> (학부모/교사 리포트·오개념 집계에서 kebab 대신 M-id를 대표로 표시·묶음)뿐이다. 이 좁은 표면이라
+> 롤백이 안전하다(진단 불변).
+>
+> **원칙 계승(협상 불가)**: 측정 전 노출 금지 · 학생 안전 #1 · 교수학 정확성 #3 · 미성년 PII 보호.
+> **구체 cutoff 숫자는 이 문서가 단정하지 않는다**(런북 관례 "모르면 모른다고") — *어느 변수를 어느
+> 방향으로 보고 누가 sign-off하는지*의 프레임만 고정한다.
+
+### 승격 단계 (staged)
+1. **shadow(측정·현재)** — `…CROSSLINK_MODE=shadow`. 노출 0. harvest로 커버리지 수집.
+2. **canary(제한 노출)** — M-id를 canonical로 *제한 범위*(내부 검수 코호트 → 소규모 %)에서 리포트·
+   집계에 소비. **신규 mode 값(예 `canary`)·플립 코드는 아래 게이트 충족 후 별 슬라이스**(현재 미착수 —
+   실 shadow 데이터 0이라 premature·enum 값도 미추가로 dead code 회피).
+3. **full(전면)** — 전 범위 M-id canonical.
+
+### go/no-go 결정 변수 (harvest → 사람 판정)
+`crosslink_shadow_harvest` 산출을 다음 방향으로 읽고 **제품+교수학 sign-off**로 단계 승격한다:
+- `distinct_coverage_ratio` **↑ 충분** — 실 등장 kebab 중 매핑 보유 비율이 합의 임계 이상.
+- `unmapped_kebab_ids` **고빈도 0** — 자주 등장하는 미매핑 kebab을 먼저 큐레이션(남으면 canary에서 그
+  kebab만 kebab-id 폴백). *현재 적재는 전 30 kebab 매핑이라 카탈로그 커버리지 100%* — 관측 미매핑은
+  카탈로그 밖 신규 kebab 등장 신호.
+- `ambiguous_kebab_ids`(1:N) **정책 확정** — *현재 적재는 30 kebab→30 M-id 1:1이라 1:N 0*. 향후
+  부분매핑(P) 추가로 1:N이 생기면 **confidence 우선·다중 표시 규칙을 사람이 확정한 뒤**에만 플립.
+- `kebab_invalid == 0` — 카탈로그 밖 id 유입 없음(게이트 위생 전제).
+- **관측량 최소 N** — 통계적으로 의미 있는 표본 축적 후 판정(구체 수는 제품 판단).
+
+### canary 범위 (미성년 프라이버시)
+- **PII 기반 타깃팅 금지**(CLAUDE.md 금기) — 개인 식별 세그먼트로 노출 대상 선별 금지.
+- 권장 순서: 내부 검수 코호트/opt-in → 소규모 *무작위* % → 확대. 학교·학년 정보로 개인 식별 가능한
+  결과를 외부 노출하지 않는다.
+
+### fallback (never-break)
+- `resolve()`가 빈 결과인 kebab은 canary에서도 **kebab-id로 폴백**(resolver 기본·이미 구현). 매핑 부재·
+  DB 실패가 리포트/코칭을 깨지 않는다(비차단).
+
+### 모니터링·롤백 트리거
+- 오도된 리포트 신호(학부모/교사 이의·이상 분포)·`resolve` 실패율 급증·1:N 오표시 → **즉시
+  `mode=shadow`/`off` 롤백**. canary는 리포트/집계 계층만 건드리고 진단 런타임(kebab)은 불변이라
+  롤백이 무상태·안전(플립 전후 진단 동일).
+
+### 안전 불변식 (canary에서도 유지)
+- **거짓 낙인 금지**: M-id 노출이 "틀렸다" 단정을 강화하지 않는다(`05a` RS2·프로브 정답/수정 필드 부재
+  유지).
+- **검증 게이트**: 학생 노출 전 검증(risk_register Q10-⑨) 계승 — canary가 우회로가 되지 않는다.
+- **오개념 독립 그래프·reactive**: canary가 정상 추론 경로에 오개념을 주입하지 않는다(Q10-⑥).
+
+### 코드 착수 조건 (이 정책이 게이트)
+`canary` mode 값·플립 코드는 **(a) 실 shadow 데이터가 위 go/no-go 충족 + (b) 1:N 정책 확정 +
+(c) 제품·교수학 sign-off** 이후에만 별 슬라이스로 착수한다. 그 전에는 착수하지 않는다(측정 전 노출 금지).
+
 ## wrong-form (SymPy 거짓 항등식)
 
 - **가치 변수**: `sympy_only_id_freq` — substring이 놓친(변수명·표기 변이) 오개념을 SymPy가 새로
