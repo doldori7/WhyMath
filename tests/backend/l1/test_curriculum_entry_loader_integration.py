@@ -142,7 +142,7 @@ class TestCurriculumEntryRoundtrip:
                 assert row.is_present is True
                 assert float(row.confidence) == pytest.approx(0.9)
                 assert row.source_url == "https://www.ncic.go.kr"
-                assert row.required_depth is None  # 코퍼스에 깊이 신호 없음(날조 금지)
+                assert row.required_depth == "mastery"  # 고등학교 → grade_band 학년진행 휴리스틱
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:
