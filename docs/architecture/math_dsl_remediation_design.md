@@ -161,9 +161,15 @@
   revision="2022 개정"·source_url=NCIC)는 graph.json `source_citation`에서 정직 도출(공공누리 1유형).
 - **멱등**: `entry_id`(=`{concept_id}:KR`) PK 충돌 ON CONFLICT DO UPDATE — `created_at` 보존·
   `updated_at` 갱신. concept_id는 FK 아닌 느슨참조라 개념 선적재 비의존(독립 적재).
-- **범위**: Phase 1 KR만(US는 ccss_code뿐 표준 코퍼스 없음·IMO 코퍼스 없음). `required_depth` 등
-  소스에 신호 없는 필드는 None(날조 금지).
-- **잔여(후속)**: US/IMO 열·`required_depth` 큐레이션·L6 자동 커리큘럼 정렬 소비 배선.
+- **범위**: Phase 1 KR만(US는 ccss_code뿐 표준 코퍼스 없음·IMO 코퍼스 없음).
+- **`required_depth` 휴리스틱**(사용자 결정 2026-07·"grade_band 학년진행"): 인지 깊이 원문 주석이
+  없어(cognitive_level 부재) `grade_band`를 깊이 프록시로 파생(`_GRADE_BAND_TO_REQUIRED_DEPTH` —
+  초1-2 awareness·초3-6 procedural·중 conceptual·고 mastery). 나선형 교육과정 통설 기반 coarse
+  휴리스틱(개념별 진리 아님)이며 L6 깊이정렬 *랭킹 보너스*(하드 게이트 아님·상한 1.5)에만 쓰인다 —
+  cognitive_level 원문 확보 시 대체. 미지 밴드는 None(정직 폴백). 이로써 L6 깊이보너스가 활성화됨
+  (기존 항상 0 → grade_band 있는 KR 개념에 목표난이도 정합 보너스).
+- **잔여(후속)**: US/IMO 열·cognitive_level 원문 주석(휴리스틱 대체)·`required_depth`의 L5 api
+  resolver 주입 배선(Problem.curriculum_required_depth 비영속 채움).
 
 ---
 
