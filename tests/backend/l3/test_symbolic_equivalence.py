@@ -9,7 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
+from whymath_backend.l3.symbolic_equivalence import (
+    IdentityVerdict,
+    identity_status,
+    to_sympy_source,
+)
 
 
 class TestIdentity:
@@ -63,3 +67,31 @@ class TestParseError:
     )
     def test_parse_error(self, lhs: str, rhs: str) -> None:
         assert identity_status(lhs, rhs) is IdentityVerdict.parse_error
+
+
+class TestSuperscriptNormalization:
+    """유니코드 위첨자 정규화 — `identity_status`가 `to_sympy_source`를 내부 적용(감사 §7 해소).
+
+    과거엔 위첨자 치환이 L4에만 있어 `identity_status`가 `x²`를 parse_error로 떨궜다 — 이제 동치
+    권위가 위첨자를 직접 정규화하므로 학생 손글씨·MathLive 위첨자 입력이 올바로 판정된다.
+    """
+
+    def test_superscript_identity(self) -> None:
+        # `x²` 위첨자가 `x**2`와 항등(과거엔 parse_error였음 — strict 개선).
+        assert identity_status("x²", "x**2") is IdentityVerdict.identity
+
+    def test_superscript_expansion_identity(self) -> None:
+        assert identity_status("(a+b)²", "a²+2*a*b+b²") is IdentityVerdict.identity
+
+    def test_superscript_freshman_dream_not_identity(self) -> None:
+        # (a+b)² ≠ a²+b² — 위첨자 입력도 거짓이 *증명*된다(같은 변수 0-아닌 다항).
+        assert identity_status("(a+b)²", "a²+b²") is IdentityVerdict.not_identity
+
+    def test_to_sympy_source_maps_all_digits_and_strips(self) -> None:
+        assert to_sympy_source("  x²  ") == "x**2"
+        assert to_sympy_source("a⁵+b⁰") == "a**5+b**0"
+
+    def test_to_sympy_source_idempotent_on_ascii(self) -> None:
+        # 이미 ASCII면 무변화(멱등) — caret(^)은 건드리지 않는다(convert_xor 담당).
+        assert to_sympy_source("x**2 + 3") == "x**2 + 3"
+        assert to_sympy_source("x^2") == "x^2"

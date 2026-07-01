@@ -28,27 +28,22 @@ from pydantic import BaseModel, ConfigDict, Field
 from sympy import Wild
 
 from whymath_backend.config import get_settings
-from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
+from whymath_backend.l3.symbolic_equivalence import (
+    IdentityVerdict,
+    identity_status,
+    to_sympy_source,
+)
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.diagnose import diagnose
 
 logger = logging.getLogger("whymath.l4.misconception.wrong_form_shadow")  # shadow.py 네이밍 동형
 record_logger = logging.getLogger("whymath.l4.misconception.wrong_form_shadow.record")
 
-# 유니코드 위첨자 → SymPy 거듭제곱(소스 변환). caret(^)은 sympify(convert_xor=True)가 처리.
-_SUPERSCRIPT = {"²": "**2", "³": "**3", "⁴": "**4"}
-# 등식 후보 토큰 — 수식 문자(영숫자·연산자·괄호·위첨자·공백)만. 한글 prose는 토큰을 끊어
-# 자연히 분리되고, 파싱 불가 조각은 sympify가 거른다(아래 matches_wrong_form try/except).
-_EQ_TOKEN = r"[0-9A-Za-z()+\-*/^.²³⁴ ]+"
+# 유니코드 위첨자→거듭제곱 정규화는 L3 `to_sympy_source`(동치 권위와 *단일 소스*)를 재사용한다 —
+# 과거 이 모듈의 사설 `_to_sympy_source`가 `identity_status`와 갈려 divergence였다(감사 §7). 등식
+# 후보 토큰 정규식은 위첨자(²³⁴⁵⁶⁷⁸⁹⁰¹)를 포함해 추출한 뒤 `to_sympy_source`가 파싱 소스로 변환한다.
+_EQ_TOKEN = r"[0-9A-Za-z()+\-*/^.⁰¹²³⁴⁵⁶⁷⁸⁹ ]+"
 _EQ_RE = re.compile(rf"({_EQ_TOKEN})=({_EQ_TOKEN})")
-
-
-def _to_sympy_source(raw: str) -> str:
-    """원시 수식 문자열을 SymPy 소스로 — 유니코드 위첨자만 거듭제곱으로 치환(strip 포함)."""
-    s = raw.strip()
-    for sup, repl in _SUPERSCRIPT.items():
-        s = s.replace(sup, repl)
-    return s
 
 
 def extract_equations(text: str) -> list[tuple[str, str]]:
@@ -80,12 +75,12 @@ def matches_wrong_form(student_lhs: str, student_rhs: str, wrong_form: tuple[str
     """
     wl, wr = wrong_form
     # ⓪ 거짓 등식 가드 — 학생 등식이 확정적 참(항등식)이면 오개념 인스턴스가 아니다(낙인 방지).
-    src_lhs, src_rhs = _to_sympy_source(student_lhs), _to_sympy_source(student_rhs)
+    src_lhs, src_rhs = to_sympy_source(student_lhs), to_sympy_source(student_rhs)
     if identity_status(src_lhs, src_rhs) is IdentityVerdict.identity:
         return False
     try:
-        lt = sympy.sympify(_to_sympy_source(wl), convert_xor=True)
-        rt = sympy.sympify(_to_sympy_source(wr), convert_xor=True)
+        lt = sympy.sympify(to_sympy_source(wl), convert_xor=True)
+        rt = sympy.sympify(to_sympy_source(wr), convert_xor=True)
         # evaluate=False로 학생 lhs 구조 보존 — 수치((3+4)²)가 값(49)으로 평가되지 않게.
         sl = sympy.sympify(src_lhs, convert_xor=True, evaluate=False)
     except Exception:  # noqa: BLE001 — 파싱 불가 학생/템플릿은 정합 안 됨(보수)
