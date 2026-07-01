@@ -1,7 +1,7 @@
 # 구축 플레이북 단계별 진행 점검 질문 세트
 
 > **목적**: WhyMath **구축 플레이북 v1.0**(Part 1·8·10·12)을 기준으로, 지금 프로젝트가 *"어디까지 왔고 · 불변식을 어기지 않았고 · 무엇을 고쳐야 하는가"*를 단계별로 자기점검하기 위한 핵심 질문지.
-> **연계 문서**: `CLAUDE.md`(2대 철칙·8대 구조원칙·질문 프로토콜) · `docs/standards/prompt_engineering.md` · `MEMORY.md`(결정 로그).
+> **연계 문서**: `CLAUDE.md`(2대 철칙·8대 구조원칙·질문 프로토콜) · `docs/standards/playbook_part_review_questions.md`(Part 0~12 **설계-준수** 축 — 이 문서는 **진행** 축) · `docs/standards/prompt_engineering.md` · `MEMORY.md`(결정 로그).
 
 ---
 
