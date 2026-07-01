@@ -16,7 +16,7 @@ L계층도 import하지 않는다(순환 불가).
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Protocol, runtime_checkable
 
 from whymath_backend.config import Settings
@@ -66,6 +66,46 @@ def text_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def embed_changed(
+    items: Sequence[tuple[str, str]],
+    *,
+    provider: EmbeddingProvider,
+    existing_hashes: Callable[[Sequence[str]], dict[str, str]],
+    upsert: Callable[[str, list[float], str], None],
+    item_noun: str = "항목",
+) -> int:
+    """skip-if-unchanged 임베딩 적재 코어 — *변경분만* embed·upsert (개념·원자·오개념 공유).
+
+    개념(`populate_concept_embeddings`)·원자(`populate_atom_embeddings`)·오개념
+    (`populate_pgvector`) 세 적재기가 문자 그대로 같은 절차를 반복하던 것을 한곳으로 모은다
+    (감사 §2 3중복 제거·drift 리스크 hidden dependency 차단). 각 호출자는 (키, 표현) 쌍 목록과
+    좌석 두 개(`existing_hashes`·`upsert`)·provider만 넘기고, *어떤 필드로 표현을 만들지*와
+    *어느 테이블에 어떻게 upsert할지*는 그대로 호출자 몫으로 남긴다(결합만 공유).
+
+    절차: ① `existing_hashes(keys)`로 현행 `text_hash`를 한 번에 조회 ② `text_hash(text)`와 다른
+    (=표현 변경·신규·다른 임베딩 공간) 항목만 추린다 ③ 없으면 provider 호출 없이 0 반환(비용
+    절감·CLAUDE.md #6) ④ 변경분만 `provider.embed` ⑤ 개수 불일치는 fail-loud(RuntimeError) ⑥ 각
+    변경분을 `upsert(key, vector, text)`로 적재. 반환은 *실제 적재한(변경분)* 개수.
+
+    `text_hash`는 *포맷된 표현 문자열*의 해시라 포맷 변경(구분자·필드 순서)도 표현이 바뀌어
+    해시에 반영된다 → 별도 format_version 불필요. `existing_hashes`가 같은 provider·model 행만
+    보므로 다른 임베딩 공간은 조회에 안 잡혀 재임베딩된다(호출자 인덱스 계약).
+    """
+    existing = existing_hashes([key for key, _ in items])
+    changed = [(key, text) for key, text in items if existing.get(key) != text_hash(text)]
+    if not changed:
+        return 0
+    vectors = provider.embed([text for _, text in changed])
+    if len(vectors) != len(changed):
+        raise RuntimeError(
+            f"임베딩 개수({len(vectors)})가 대상 {item_noun} 개수({len(changed)})와 다릅니다 "
+            "— provider.embed가 입력 순서·길이를 보존해야 합니다."
+        )
+    for (key, text), vec in zip(changed, vectors, strict=True):
+        upsert(key, vec, text)
+    return len(changed)
+
+
 def provider_model_identity(provider: EmbeddingProvider, settings: Settings) -> tuple[str, str]:
     """provider 객체 + Settings에서 (provider_name, model_name) 임베딩 공간 식별자를 해석.
 
@@ -88,6 +128,7 @@ def provider_model_identity(provider: EmbeddingProvider, settings: Settings) -> 
 __all__ = [
     "EMBEDDING_TEXT_FORMAT_VERSION",
     "EmbeddingProvider",
+    "embed_changed",
     "join_embedding_text",
     "provider_model_identity",
     "text_hash",
