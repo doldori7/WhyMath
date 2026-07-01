@@ -42,16 +42,25 @@ from whymath_backend.l4.misconception.semantic.provider import EmbeddingProvider
 
 _DEFAULT_TOP_K = 3
 
+# redaction — 임베딩 입력으로 허용된 *자체 작성 안전 필드*(개념 임베딩 `_SAFE_TEXT_FIELDS` 규율
+# 미러·CLAUDE.md 우선순위 #2). Misconception은 현재 전부 자체 작성 오개념 메타라 교과서 본문 근접
+# 필드가 *없지만*, 향후 출처 인용·본문 발췌 필드가 추가돼도 임베딩에 *자동 유입되지 않도록* 안전
+# 필드 집합을 명시하고 회귀 테스트로 고정한다(drift 방어·개념판과 대칭). signals/regex_signals·
+# counterexample·canonical_wrong_form 등은 *표면 매칭·구조* 용도라 의미 임베딩에 넣지 않는다.
+_SAFE_EMBED_FIELDS: tuple[str, ...] = ("name_kr", "canonical_statement")
+
 
 def catalog_text(m: Misconception) -> str:
-    """카탈로그 항목을 임베딩할 자연어 표현으로 직렬화 — `"{name_kr}. {canonical_statement}"`.
+    """카탈로그 항목을 임베딩할 자연어 표현으로 직렬화 — 안전 필드(`_SAFE_EMBED_FIELDS`)만 결합.
 
     *틀린 믿음의 자연어*를 임베딩해 학생의 (패러프레이즈된) 틀린 진술과 가까워지게 한다.
-    name_kr(짧은 라벨)와 canonical_statement(잘못된 진술)를 합쳐 신호를 키운다. signals/
-    regex_signals(토큰·정규식)는 *표면 매칭*용이라 의미 임베딩엔 넣지 않는다. 결합 규칙은 개념·
-    원자판과 공유하는 단일 포맷 권위(`join_embedding_text`)를 쓴다(두 필드 항상 존재 → 출력 동일).
+    name_kr(짧은 라벨)와 canonical_statement(잘못된 진술)를 합쳐 신호를 키운다 — 이 둘은
+    `_SAFE_EMBED_FIELDS`로 *명시*되어(redaction·drift 가드) 다른 필드가 실수로 임베딩에 새지
+    않는다. signals/regex_signals(토큰·정규식)는 *표면 매칭*용이라 의미 임베딩엔 넣지 않는다.
+    결합 규칙은 개념·원자판과 공유하는 단일 포맷 권위(`join_embedding_text`)를 쓴다(안전 필드는
+    항상 존재 → 출력 동일).
     """
-    return join_embedding_text(m.name_kr, m.canonical_statement)
+    return join_embedding_text(*(getattr(m, field) for field in _SAFE_EMBED_FIELDS))
 
 
 class SemanticMatcher:
