@@ -20,6 +20,7 @@ from collections.abc import Sequence
 import pytest
 
 from whymath_backend.config import Settings
+from whymath_backend.l1.embedding_primitives import normalize_embedding_input
 from whymath_backend.l4.misconception import MisconceptionMatch, diagnose
 from whymath_backend.l4.misconception.catalog import CATALOG, CATALOG_BY_ID
 from whymath_backend.l4.misconception.models import Misconception
@@ -459,8 +460,9 @@ class TestMatcherCatalogBuild:
             matcher.match("X", top_k=1, threshold=0.1)
 
     def test_catalog_text_format(self) -> None:
+        # 포맷 v2: `name_kr. canonical_statement`를 NFKC 정규화(질의 경로와 같은 정규화·표기 정합).
         m = CATALOG_BY_ID["division-by-zero"]
-        assert catalog_text(m) == f"{m.name_kr}. {m.canonical_statement}"
+        assert catalog_text(m) == normalize_embedding_input(f"{m.name_kr}. {m.canonical_statement}")
 
     def test_safe_embed_fields_pinned(self) -> None:
         # redaction drift 가드 — 안전 필드 집합을 *리뷰 없이 확대하면* 실패한다(개념판 규율 대칭).

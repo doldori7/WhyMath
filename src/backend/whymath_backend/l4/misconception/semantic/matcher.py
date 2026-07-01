@@ -30,7 +30,11 @@ FakeEmbeddingProvider를 주입해 라이브 모델 없이 배선·임계값·�
 from __future__ import annotations
 
 from whymath_backend.config import Settings, get_settings
-from whymath_backend.l1.embedding_primitives import join_embedding_text, provider_model_identity
+from whymath_backend.l1.embedding_primitives import (
+    join_embedding_text,
+    normalize_embedding_input,
+    provider_model_identity,
+)
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.l4.misconception.models import Misconception, MisconceptionMatch
 from whymath_backend.l4.misconception.semantic.index import (
@@ -147,7 +151,9 @@ class SemanticMatcher:
         self._ensure_built()
         # 임계값 필터가 top_k보다 *먼저* 후보를 잘라내지 않도록 전 항목을 질의한다(N=30,
         # 선형 스캔이라 저렴). 그 뒤 임계값 통과분만 남기고 top_k로 컷.
-        query_vec = self._provider.embed([student_solution])[0]
+        # 질의도 카탈로그 표현(`catalog_text`→`join_embedding_text`)과 *같은* NFKC 정규화를 거쳐
+        # 표기 흔들림(합성/분해·전각)으로 인한 무매칭을 막는다(감사 retrieval ambiguity 대응).
+        query_vec = self._provider.embed([normalize_embedding_input(student_solution)])[0]
         hits = self._index.search(query_vec, top_k=len(self._catalog))
         results: list[MisconceptionMatch] = []
         for hit in hits:
