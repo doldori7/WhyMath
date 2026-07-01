@@ -114,9 +114,11 @@
 `canonical_wrong_form`을 *런타임 탐지*에 결선한다 — `l4/misconception/wrong_form_match.py`:
 - **`matches_wrong_form`/`detect_wrong_forms`**: 학생 등식을 추출(`extract_equations`)해
   `canonical_wrong_form`을 **SymPy Wild 정합**으로 푼다 — 학생이 *거짓 규칙을 적용*했는지 표기·
-  변수명 무관 판정(lhs는 Wild 바인딩·rhs는 `identity_status`로 동치 확인). 순기여: substring이
-  놓치는 *기호 인스턴스*(`(x+y)²=x²+y²`·`(p+q)²=p²+q²`). 수치(`(3+4)²`)는 SymPy가 평가해 제외
-  (`regex_signals` 담당)·상수 평가 템플릿(`a⁰`→1)은 구조 정합 불가로 제외(정직).
+  변수명 무관 판정(lhs는 Wild 바인딩·rhs는 `identity_status`로 동치 확인). 기호(`(x+y)²=x²+y²`·
+  `(p+q)²=p²+q²`)·수치(`(3+4)²=3²+4²`·학생 lhs `evaluate=False` 구조보존) 인스턴스 둘 다 잡아
+  손으로 쓴 `regex_signals`를 일반화한다. **거짓-등식 가드**: 우연히 참(`(3+0)²=3²+0²`)·올바른
+  형태는 제외(오개념 인스턴스는 실제 거짓 등식이어야 함·RS2 낙인 차단). 상수 평가 템플릿
+  (`a⁰`→1)은 구조 정합 불가로 제외(정직).
 - **shadow 전용**: `observe_wrong_form_shadow`(coach `solution_coaching` 결선)는
   `misconception_wrong_form_mode=="shadow"`일 때 SymPy 탐지와 기존 substring/regex(`diagnose`)를
   비교해 SymPy-only 순기여를 *로그로만* 남긴다 — 노출(diagnose 반환)·verdict 불변·비차단·학생

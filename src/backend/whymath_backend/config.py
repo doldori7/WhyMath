@@ -774,9 +774,9 @@ class Settings(BaseSettings):
             "**`off`(기본·opt-in)** = 기존 substring/regex 탐지만(현행 비트동일·SymPy 미호출). "
             "**`shadow`** = coach가 학생 풀이의 등식을 추출해 `canonical_wrong_form`을 SymPy Wild "
             "정합(`wrong_form_match`)으로 *비차단·비노출* 탐지하고, 기존 결과와 비교(SymPy-only·"
-            "일치)를 *로그로만* 남긴다 — 노출(diagnose 반환)·verdict 불변. SymPy는 수치 인스턴스"
-            "(`(3+4)²`)를 평가해버려 주로 *기호 인스턴스*(`(x+y)²=x²+y²`·변수명 무관)를 잡는다"
-            "(substring이 놓치는 표기 변이). 노출 전 분포 측정으로 통합 근거를 모은다. "
+            "일치)를 *로그로만* 남긴다 — 노출(diagnose 반환)·verdict 불변. 기호(`(x+y)²=x²+y²`·"
+            "변수명 무관)·수치(`(3+4)²=3²+4²`·구조보존 파싱) 인스턴스를 잡고, 우연히 참인 등식은 "
+            "거짓-등식 가드로 제외한다(substring이 놓치는 표기 변이 일반화). 노출 전 분포 측정. "
             "WHYMATH_MISCONCEPTION_WRONG_FORM_MODE=shadow로 켠다."
         ),
     )

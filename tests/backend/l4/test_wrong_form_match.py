@@ -54,9 +54,17 @@ class TestMatchesWrongForm:
         # 올바른 완전제곱 → 거짓 규칙 아님(기대 거짓 rhs와 동치 아님).
         assert matches_wrong_form("(x+y)**2", "x**2+2*x*y+y**2", _DISTRIBUTION) is False
 
-    def test_numeric_instance_not_matched(self) -> None:
-        # SymPy가 (3+4)²를 49로 평가 → 구조 소실 → 미정합(regex_signals 담당 영역).
-        assert matches_wrong_form("(3+4)**2", "3**2+4**2", _DISTRIBUTION) is False
+    def test_numeric_instance_matched(self) -> None:
+        # evaluate=False 구조 보존 → 수치 인스턴스도 잡는다(regex_signals 일반화).
+        assert matches_wrong_form("(3+4)**2", "3**2+4**2", _DISTRIBUTION) is True
+
+    def test_numeric_correct_answer_not_matched(self) -> None:
+        # (3+4)²=49는 올바른 값 → 기대 거짓 rhs(25)와 불일치 → 미정합.
+        assert matches_wrong_form("(3+4)**2", "49", _DISTRIBUTION) is False
+
+    def test_numeric_coincidental_true_not_matched(self) -> None:
+        # (3+0)²=3²+0²=9는 *우연히 참* → 거짓 등식 가드가 제외(거짓 낙인 차단·RS2).
+        assert matches_wrong_form("(3+0)**2", "3**2+0**2", _DISTRIBUTION) is False
 
     def test_garbage_not_matched(self) -> None:
         assert matches_wrong_form("선생님", "안녕", _DISTRIBUTION) is False
