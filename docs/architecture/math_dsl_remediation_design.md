@@ -113,6 +113,13 @@
   초월(`log`)·유리식은 SymPy 미결정이라 *미부여*(거짓 머신검증 주장 금지). 런타임 탐지 경로는
   불변(regex/substring) — 본 슬라이스는 *카탈로그를 기호 권위로 grounding*하고 차후 탐지 통합의
   canonical 표현을 깐다.
+- **파싱 소스 정규화 일원화**(위첨자·후속): 유니코드 위첨자(`x²`) 치환이 `wrong_form_match`에만
+  있어 `identity_status`는 위첨자를 parse_error로 떨구고 L4가 *미리* 변환해 넘겨야 하는 divergence가
+  있었다(감사 §7 파싱 관례 갈림·실제 위첨자 버그로 표면화). `to_sympy_source`(strip + 위첨자 0~9→
+  거듭제곱)를 `l3/symbolic_equivalence`로 올려 **단일 소스**로 두고 `identity_status`가 내부 적용
+  (위첨자 입력을 정상 판정·strict 개선·기존 판정 불변)·`wrong_form`은 사설 복제를 제거하고 재사용
+  한다. *잔여*: `validate_response`(`l3/pregenerate/validator.py`)의 `implicit_multiplication` 변환은
+  별개 파싱 관례라 후속 통일(관계식 검증 특화·회귀 리스크 분리).
 
 ### 2.5 오개념 탐지 SymPy 통합 (shadow 1차·구현 완료)
 `canonical_wrong_form`을 *런타임 탐지*에 결선한다 — `l4/misconception/wrong_form_match.py`:

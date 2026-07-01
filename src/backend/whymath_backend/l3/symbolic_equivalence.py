@@ -19,6 +19,38 @@ from enum import Enum
 
 import sympy
 
+# 유니코드 위첨자 → SymPy 거듭제곱(소스 정규화). caret(^)은 sympify(convert_xor=True)가 처리하고,
+# 위첨자는 sympify가 못 읽으므로(→ SympifyError) 파싱 전에 치환해야 한다. 학생 손글씨·MathLive
+# 입력이 `x²`처럼 위첨자를 담는 경우가 흔하다(0~9 전 범위 매핑 — 부분 매핑은 조용한 parse_error).
+_SUPERSCRIPT = {
+    "⁰": "**0",
+    "¹": "**1",
+    "²": "**2",
+    "³": "**3",
+    "⁴": "**4",
+    "⁵": "**5",
+    "⁶": "**6",
+    "⁷": "**7",
+    "⁸": "**8",
+    "⁹": "**9",
+}
+
+
+def to_sympy_source(raw: str) -> str:
+    """원시 수식 문자열을 SymPy 소스로 정규화 — 유니코드 위첨자→거듭제곱 치환 + strip(단일 권위).
+
+    동치 권위(`identity_status`)와 오개념 거짓항등식 탐지(`l4.wrong_form_match`)가 *같은* 정규화를
+    쓰도록 한 곳에 둔다 — 과거엔 위첨자 치환이 L4에만 있어 `identity_status`가 `x²`를 parse_error로
+    떨구고 L4가 *미리* 변환해 넘겨야 하는 divergence(파싱 관례 갈림)가 있었다(math_dsl 감사 §7).
+    이 함수를 거치면 모든 SymPy 진입점이 위첨자를 동일하게 처리한다. caret(`^`)은 여기서 건드리지
+    않는다 — `sympify(convert_xor=True)`가 거듭제곱으로 해석하므로 이중 변환을 피한다. 멱등이다
+    (이미 ASCII면 무변화). *결합·implicit multiplication 등 다른 파싱 관례는 이 함수 범위 밖*이다.
+    """
+    s = raw.strip()
+    for sup, repl in _SUPERSCRIPT.items():
+        s = s.replace(sup, repl)
+    return s
+
 
 class IdentityVerdict(str, Enum):
     """두 식의 항등성 4상태 — identity/not_identity는 *확정*, undecidable/parse_error는 보수."""
@@ -42,11 +74,13 @@ def identity_status(lhs: str, rhs: str) -> IdentityVerdict:
       - **undecidable**: 비다항·simplify 미정(예: `√(x²)` vs `x`는 정의역 의존) — 위장 없이 보수.
       - **parse_error**: 빈 입력·sympify 예외.
     """
-    if not lhs.strip() or not rhs.strip():
+    lhs_src = to_sympy_source(lhs)
+    rhs_src = to_sympy_source(rhs)
+    if not lhs_src or not rhs_src:
         return IdentityVerdict.parse_error
     try:
-        left = sympy.sympify(lhs, convert_xor=True)
-        right = sympy.sympify(rhs, convert_xor=True)
+        left = sympy.sympify(lhs_src, convert_xor=True)
+        right = sympy.sympify(rhs_src, convert_xor=True)
         diff = sympy.sympify(left - right)
         expanded = sympy.expand(diff)  # 다항식은 전개가 완전한 정규형(항등식이면 0).
         is_zero = sympy.simplify(diff).is_zero  # 비다항 항등식(삼각 등)까지 보강 판정.
@@ -62,4 +96,4 @@ def identity_status(lhs: str, rhs: str) -> IdentityVerdict:
     return IdentityVerdict.undecidable
 
 
-__all__ = ["IdentityVerdict", "identity_status"]
+__all__ = ["IdentityVerdict", "identity_status", "to_sympy_source"]
