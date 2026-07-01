@@ -530,6 +530,50 @@ class RelationType(str, Enum):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 추론 유형 (MATH DSL 진화 — 교육 추론 엔진 §2.2 · SolutionStep.reasoning_type)
+# ──────────────────────────────────────────────────────────────────────────
+class ReasoningType(str, Enum):
+    """풀이 *스텝 단위* 추론 유형 — 폐쇄 7종(`SolutionStep.reasoning_type`).
+
+    근거: `docs/architecture/math_dsl_evolution.md` §2.2(교육 추론 엔진 — 권장 1순위).
+    불투명한 `SolutionStep.content`(자연어+LaTeX 문자열) 옆에 "이 스텝이 어떤 추론을
+    수행하는가"를 태그해, "왜 이 변형이 정당한가"를 *기계가 읽게* 한다(엔진 정체성의 첫 벽돌).
+
+    축 구분 주의: `approach_type`(SolutionPath — 풀이 *전체* 6유형: 대수/기하/조합/귀납/
+    시각/역방향)과는 다른 축이다. ReasoningType은 *한 스텝*의 추론 유형이다(한 대수적 풀이
+    안에서도 스텝마다 치환·사례분류·귀납이 섞일 수 있다).
+
+    ⚠️ 폐쇄집합(6~8종) — *제거는 어렵고 추가는 신중해야* 한다(무한 추론 온톨로지 금지·
+    math_dsl_evolution §2.2 금기). 유형 무한 세분화는 유지 불가·과설계다. 완전 형식논리
+    증명 유형은 여기 두지 않는다(경계된 Tier3 Lean 위임·§2.9).
+
+    멤버명·값 모두 영어(국제 인지 과정 어휘 — `BloomLevel`·`CognitiveType` 선례).
+    use_enum_values=True 직렬화 시 영어 값 보존(예: reasoning_type="DEDUCTION").
+    """
+
+    DEDUCTION = "DEDUCTION"
+    """연역 — 정리·정의에서 논리적으로 도출한다."""
+
+    SUBSTITUTION = "SUBSTITUTION"
+    """치환 — 변수·식을 대입해 변형한다."""
+
+    CASE_SPLIT = "CASE_SPLIT"
+    """사례분류 — 조건에 따라 경우를 나눈다(케이스 분석)."""
+
+    INDUCTION = "INDUCTION"
+    """귀납 — 패턴·수학적 귀납법으로 일반화한다."""
+
+    TRANSFORMATION = "TRANSFORMATION"
+    """동치변형 — 등식·부등식을 동치로 재작성한다(동치 판정 권위는 SymPy·§2.1)."""
+
+    HEURISTIC = "HEURISTIC"
+    """휴리스틱 — 통찰·추측으로 나아간다(검증 미완일 수 있음·정직 표시)."""
+
+    BACKWARD = "BACKWARD"
+    """역방향 — 결론에서 거꾸로 추론한다."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 개념 그래프 (§4.2 concept 도메인 인라인 DDL — 4종)
 # ──────────────────────────────────────────────────────────────────────────
 # §14.3에 별도 `CREATE TYPE`이 없어 §4.2 DDL의 컬럼 인라인 주석을 정본으로 채택한다

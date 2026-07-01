@@ -164,6 +164,37 @@ SolutionStep:
         값은 오개념 카탈로그 코드 또는 오류 패턴 서술.
       relation:
         references: "misconception.code  (오개념 카탈로그) — L2 오개념 매핑 입력"
+    reasoning_type:
+      type: enum | null
+      required: false
+      default: null
+      description: >-
+        이 단계가 수행하는 *추론 유형* — 폐쇄 enum(7종). 불투명한 content(자연어+LaTeX)
+        옆에 "이 스텝이 어떤 추론인가"를 태그해 "왜 이 변형이 정당한가"를 기계가 읽게 한다
+        (math_dsl_evolution.md §2.2 교육 추론 엔진). null이면 미태깅(하위호환 — content만).
+        구현 정본은 schema/enums.py `ReasoningType`(단일 좌석). 아래 폐쇄집합 밖은 거부.
+      enum:
+        deduction:      "연역 — 정리·정의에서 논리적으로 도출"
+        substitution:   "치환 — 변수/식 대입으로 변형"
+        case_split:     "사례분류 — 조건에 따라 경우를 나눔"
+        induction:      "귀납 — 패턴·수학적 귀납법"
+        transformation: "동치변형 — 등식·부등식의 동치 재작성(동치 권위 SymPy)"
+        heuristic:      "휴리스틱 — 통찰·추측(검증 미완·정직 표시)"
+        backward:       "역방향 — 결론에서 거꾸로 추론"
+      note: >-
+        approach_type(풀이 *전체* 6유형)과 다른 축 — 이건 *스텝 단위* 추론 유형이다
+        (한 대수적 풀이 안에서도 스텝마다 치환·사례분류·귀납이 섞인다). 영문 키는 구현
+        표준(BloomLevel·CognitiveType 선례). ⚠️ 무한 온톨로지 금지(6~8종 폐쇄·§2.2 금기).
+        Phase 1은 *태그만* 두고 유형별 검증 결선(PRM/SymPy)은 Phase 2(소비처 생길 때).
+    justification:
+      type: Justification | null
+      required: false
+      default: null
+      description: >-
+        이 스텝의 *정당화 근거 참조*(math_dsl_evolution.md §2.2). 정리·개념노드·이전
+        스텝을 가리키는 얇은 참조 묶음. null이면 근거 미명시(하위호환). 완전 형식논리
+        증명 트리 아님(경계된 Tier3 위임·§2.9) — 참조 3종만 담는다.
+      element_schema: Justification
     sympy_verified:
       type: boolean
       required: true
@@ -177,6 +208,42 @@ SolutionStep:
       description: >-
         형식 증명 단계인 경우 Lean 검증 여부. 증명 단계가 아니면 null.
         환각 방어 ② — Lean 형식 증명 검증은 Phase 3+ 성공 기준.
+
+# =============================================================================
+# Justification — 스텝의 정당화 근거 참조 (얇은 참조 묶음·증명 트리 아님)
+# =============================================================================
+Justification:
+  description: >-
+    한 SolutionStep 이 "왜 정당한가"의 근거 참조. 세 종류 참조를 얇게 담는다 —
+    정리(concept.concept_id 중 cognitive_type=THEOREM)·개념노드·이전 스텝(order).
+    자체 정리증명기·형식논리 증명 트리는 만들지 않는다(경계된 Tier3 위임·
+    math_dsl_evolution.md §2.2·§2.9 금기). 참조는 모두 *ID/order* — 그래프 엣지·
+    ORM 테이블로 승격하지 않는다(스텝 내부 인라인 묶음).
+  fields:
+    theorem_concept_ids:
+      type: list<string>
+      required: false
+      default: []
+      description: >-
+        이 스텝이 근거로 삼는 *정리* 개념노드 ID (concept.concept_id 중 cognitive_type 이
+        THEOREM/DEFINITION 인 노드). 실재 노드여야 함(cross-dataset·concept_node_id 규약 동일).
+      relation:
+        references: "concept.concept_id  (concept.schema.yaml)"
+    concept_node_ids:
+      type: list<string>
+      required: false
+      default: []
+      description: >-
+        이 스텝이 사용하는 *개념* 노드 ID (정리 외 일반 개념). 실재 노드여야 함.
+      relation:
+        references: "concept.concept_id  (concept.schema.yaml)"
+    prior_step_orders:
+      type: list<integer>
+      required: false
+      default: []
+      description: >-
+        이 스텝이 의존하는 *이전 스텝*의 order (같은 SolutionPath 내). 각 값 < 현재 스텝
+        order (전방참조 금지·비순환). 자기참조(현재 order) 금지.
 
 # -----------------------------------------------------------------------------
 # 엔티티 간 관계 요약
@@ -215,3 +282,12 @@ validation_invariants:
   - >-
     동치성 관련: equivalence_cluster_id 가 채워져 있어도 '확정 동치'로 단정하지
     않음 — 학생 노출 전 사람 검수 필수 (CLAUDE.md "확실하지 않을 때 자신 있게 말함 금지")
+  - >-
+    reasoning_type 이 채워져 있으면 폐쇄 enum(7종: deduction·substitution·case_split·
+    induction·transformation·heuristic·backward) 안이어야 함 — 밖이면 거부 (무한 온톨로지 금지)
+  - >-
+    justification.prior_step_orders 의 각 값 < 해당 스텝 order (전방참조·자기참조 금지·비순환)
+  - >-
+    justification.theorem_concept_ids·concept_node_ids 의 모든 ID 가 실재하는 Concept 노드
+  - >-
+    reasoning_type·justification 는 *선택* — 미지정 스텝도 유효(하위호환·strict superset)
