@@ -185,6 +185,29 @@ class PgVectorIndex:
             for row in rows
         ]
 
+    def existing_text_hashes(self, keys: Sequence[str]) -> dict[str, str]:
+        """주어진 misconception_id들의 *현행* text_hash 조회 — {key: text_hash}(단일 SELECT).
+
+        같은 임베딩 공간(provider·model)의 행만 본다(다른 공간은 재임베딩 필요라 미포함=변경 취급).
+        populate skip-if-unchanged용(concept/atom embedding 동형). 빈 입력은 쿼리 없이 {}.
+        """
+        if not keys:
+            return {}
+        from sqlalchemy import select
+
+        from whymath_backend.db.models.misconception_embedding import MisconceptionEmbedding
+
+        stmt = select(
+            MisconceptionEmbedding.misconception_id, MisconceptionEmbedding.text_hash
+        ).where(
+            MisconceptionEmbedding.misconception_id.in_(list(dict.fromkeys(keys))),
+            MisconceptionEmbedding.provider == self._provider_name,
+            MisconceptionEmbedding.model == self._model_name,
+        )
+        with self._get_engine().connect() as conn:
+            rows = conn.execute(stmt).all()
+        return {row.misconception_id: row.text_hash for row in rows}
+
 
 def _build_sync_engine(settings: Settings) -> Engine:
     """기본 sync(psycopg) 엔진 생성 + pgvector 어댑터 등록 (지연 import·session.py 패턴).
@@ -223,9 +246,13 @@ def populate_pgvector(
     """카탈로그 표현을 임베딩해 PgVectorIndex에 upsert 적재(영속 사전 임베딩).
 
     슬104 매처의 `_ensure_built`(인메모리 1회 적재)에 대응하는 *영속* 버전이다 — 카탈로그
-    각 항목의 표현(`catalog_text`)을 배치 1회 임베딩해 upsert한다. provider/model은 임베딩
-    공간 식별자로 행에 박히고, 같은 공간만 search가 본다. 멱등(재실행 시 갱신). 반환은 적재
-    행 수(=카탈로그 길이).
+    각 항목의 표현(`catalog_text`)을 임베딩해 upsert한다. provider/model은 임베딩 공간 식별자로
+    행에 박히고, 같은 공간만 search가 본다. 멱등(재실행 시 갱신).
+
+    **skip-if-unchanged(비용 절감·CLAUDE.md #6·concept/atom embedding 동형)**: 적재 전 현행
+    `text_hash`를 조회해 표현이 *바뀐 항목만* 임베딩·upsert한다(`text_hash`는 포맷된 표현 해시라
+    포맷 변경도 반영·format_version 불필요). provider/model이 다르면 재임베딩. 반환은 *실제
+    적재한(변경분)* 수.
 
     provider의 model 이름은 *Settings*에서 해석한다(local→embedding_model_local·openai→
     embedding_model_openai·그 외→provider 클래스명) — provider 객체가 model을 노출하지 않으므로
@@ -238,16 +265,24 @@ def populate_pgvector(
         if index is not None
         else PgVectorIndex(provider_name=provider_name, model_name=model_name, settings=resolved)
     )
-    texts = [catalog_text(m) for m in catalog]
-    vectors = provider.embed(texts)
-    if len(vectors) != len(catalog):
+    # skip-if-unchanged — 현행 text_hash와 다른(=표현 변경·신규·다른 공간) 항목만 재임베딩.
+    existing = idx.existing_text_hashes([m.id for m in catalog])
+    changed = [
+        (m, txt)
+        for m, txt in ((m, catalog_text(m)) for m in catalog)
+        if existing.get(m.id) != text_hash(txt)
+    ]
+    if not changed:
+        return 0
+    vectors = provider.embed([text for _, text in changed])
+    if len(vectors) != len(changed):
         raise RuntimeError(
-            f"임베딩 개수({len(vectors)})가 카탈로그 개수({len(catalog)})와 다릅니다 "
+            f"임베딩 개수({len(vectors)})가 대상 항목 개수({len(changed)})와 다릅니다 "
             "— provider.embed가 입력 순서·길이를 보존해야 합니다."
         )
-    for m, text, vec in zip(catalog, texts, vectors, strict=True):
+    for (m, text), vec in zip(changed, vectors, strict=True):
         idx.upsert_entry(m.id, vec, source_text=text)
-    return len(catalog)
+    return len(changed)
 
 
 __all__ = [

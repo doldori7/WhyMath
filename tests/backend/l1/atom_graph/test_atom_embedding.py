@@ -32,7 +32,21 @@ from whymath_backend.l1.atom_graph.embedding import (
     load_atoms_from_graph_json,
     populate_atom_embeddings,
 )
+from whymath_backend.l1.embedding_primitives import text_hash
 from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProvider
+
+
+class _SpyProvider:
+    """embed 호출 횟수를 세는 provider — skip-if-unchanged 검증용(불변분 미임베딩 확인)."""
+
+    def __init__(self, dim: int = 64) -> None:
+        self.embed_calls = 0
+        self._dim = dim
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        self.embed_calls += 1
+        return [[0.1] * self._dim for _ in texts]
+
 
 # 원자 code 규약 예시(Phase 1 concept.code·Phase 2a atom_node.code와 동일 공간·하이픈 확정본).
 _CODE_A = "12미적Ⅰ-01-01-1"
@@ -43,11 +57,14 @@ _CODE_B = "2수01-01-2"
 # 가짜 sync 엔진 — begin()/connect() 컨텍스트 + execute() (PG 없이 배선 관찰)
 # ──────────────────────────────────────────────────────────────────────────
 class _FakeRow:
-    """search 결과 행 흉내 — `.code`·`.distance` 속성 접근."""
+    """행 흉내 — search는 `.code`·`.distance`, existing_text_hashes는 `.text_hash` 접근."""
 
-    def __init__(self, code: str, distance: float | None) -> None:
+    def __init__(
+        self, code: str, distance: float | None = None, text_hash: str | None = None
+    ) -> None:
         self.code = code
         self.distance = distance
+        self.text_hash = text_hash
 
 
 class _FakeResult:
@@ -329,7 +346,7 @@ class TestPopulate:
         index, engine = _fake_index(provider_name="fake", model_name="fake-hash")
         count = populate_atom_embeddings(atoms, provider, index=index)
         assert count == 2
-        assert len(engine.executed) == 2  # 원자당 1 upsert
+        assert len(engine.executed) == 3  # 1 read(existing·비어) + 2 upsert
 
     def test_populate_dim_matches_provider(self) -> None:
         # upsert에 박히는 dim이 provider 벡터 차원과 일치(컬럼 차원 정합 점검 신호).
@@ -337,7 +354,7 @@ class TestPopulate:
         provider = FakeEmbeddingProvider(dim=64)
         index, engine = _fake_index(provider_name="fake", model_name="fake-hash")
         populate_atom_embeddings(atoms, provider, index=index)
-        compiled = _compile(engine.executed[0])
+        compiled = _compile(engine.executed[1])  # [0]=read, [1]=upsert
         assert "dim" in compiled
 
     def test_populate_uses_code_key(self) -> None:
@@ -346,8 +363,19 @@ class TestPopulate:
         provider = FakeEmbeddingProvider()
         index, engine = _fake_index()
         populate_atom_embeddings(atoms, provider, index=index)
-        compiled = _compile(engine.executed[0])
+        compiled = _compile(engine.executed[1])  # [0]=read, [1]=upsert
         assert "code" in compiled
+
+    def test_populate_skips_unchanged(self) -> None:
+        # 현행 text_hash 일치 → provider 미호출·upsert 0·count 0(읽기 1회만).
+        atoms = [AtomText(code=_CODE_A, text="기수 원리. 핵심")]
+        rows = [_FakeRow(_CODE_A, text_hash=text_hash("기수 원리. 핵심"))]
+        provider = _SpyProvider()
+        index, engine = _fake_index(search_rows=rows)
+        count = populate_atom_embeddings(atoms, provider, index=index)
+        assert count == 0
+        assert provider.embed_calls == 0
+        assert len(engine.executed) == 1  # read만
 
     def test_populate_empty_atoms_is_noop(self) -> None:
         provider = FakeEmbeddingProvider()
@@ -376,9 +404,10 @@ class TestProviderModelIdentityReuse:
         index, engine = _fake_index()
         populate_atom_embeddings(atoms, provider, index=index)
         populate_atom_embeddings(atoms, provider, index=index)
-        assert len(engine.executed) == 2
-        for stmt in engine.executed:
-            assert "ON CONFLICT" in _compile(stmt)
+        # 가짜 엔진은 기존 행을 반영 못 해(read 매번 빈 결과) 두 번 다 재임베딩 — 실 멱등·skip은
+        # 통합테스트. 여기선 매 populate가 upsert(ON CONFLICT)를 낸다는 것만(read SELECT는 제외).
+        upserts = [s for s in engine.executed if "ON CONFLICT" in _compile(s)]
+        assert len(upserts) == 2
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -406,4 +435,4 @@ def test_populate_accepts_any_embedding_provider() -> None:
     index, engine = _fake_index(provider_name="_Scripted", model_name="_Scripted")
     count = populate_atom_embeddings(atoms, _Scripted(), index=index)
     assert count == 1
-    assert len(engine.executed) == 1
+    assert len(engine.executed) == 2  # read(existing) 1 + upsert 1

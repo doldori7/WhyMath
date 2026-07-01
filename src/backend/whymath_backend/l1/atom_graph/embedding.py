@@ -252,6 +252,27 @@ class AtomEmbeddingIndex:
             for row in rows
         ]
 
+    def existing_text_hashes(self, codes: Sequence[str]) -> dict[str, str]:
+        """주어진 code들의 *현행* text_hash를 조회한다 — {code: text_hash}(단일 SELECT).
+
+        같은 임베딩 공간(provider·model)의 행만 본다(다른 공간은 재임베딩 필요라 미포함=변경 취급).
+        적재기 skip-if-unchanged용(concept_embedding 동형). 빈 입력은 쿼리 없이 {}.
+        """
+        if not codes:
+            return {}
+        from sqlalchemy import select
+
+        from whymath_backend.db.models.atom_embedding import AtomEmbedding
+
+        stmt = select(AtomEmbedding.code, AtomEmbedding.text_hash).where(
+            AtomEmbedding.code.in_(list(dict.fromkeys(codes))),
+            AtomEmbedding.provider == self._provider_name,
+            AtomEmbedding.model == self._model_name,
+        )
+        with self._get_engine().connect() as conn:
+            rows = conn.execute(stmt).all()
+        return {row.code: row.text_hash for row in rows}
+
 
 def populate_atom_embeddings(
     atoms: Sequence[AtomText],
@@ -263,8 +284,12 @@ def populate_atom_embeddings(
     """원자 표현을 임베딩해 `AtomEmbeddingIndex`에 멱등 upsert 적재(영속 사전 임베딩).
 
     `populate_concept_embeddings`의 *원자 백본* 짝이다 — 각 원자의 안전 표현(`AtomText.text`)을
-    배치 1회 임베딩해 code 키로 upsert한다. provider/model은 임베딩 공간 식별자로 행에 박히고,
-    같은 공간만 search가 본다. 멱등(재실행 시 갱신). 반환은 적재 행 수(=atoms 길이).
+    임베딩해 code 키로 upsert한다. provider/model은 임베딩 공간 식별자로 행에 박히고, 같은 공간만
+    search가 본다. 멱등(재실행 시 갱신).
+
+    **skip-if-unchanged(비용 절감·CLAUDE.md #6·concept_embedding 동형)**: 적재 전 현행 `text_hash`를
+    조회해 표현이 *바뀐 원자만* 임베딩·upsert한다(`text_hash`는 포맷된 표현 해시라 포맷 변경도
+    반영·format_version 불필요). provider/model이 다르면 재임베딩. 반환은 *실제 적재한(변경분)* 수.
 
     provider의 model 이름은 *Settings*에서 해석한다(`provider_model_identity` 재사용 —
     local→embedding_model_local·openai→embedding_model_openai·fake→fake-hash). provider 객체가
@@ -280,16 +305,20 @@ def populate_atom_embeddings(
             provider_name=provider_name, model_name=model_name, settings=resolved
         )
     )
-    texts = [a.text for a in atoms]
-    vectors = provider.embed(texts)
-    if len(vectors) != len(atoms):
+    # skip-if-unchanged — 현행 text_hash와 다른(=표현 변경·신규·다른 공간) 원자만 재임베딩.
+    existing = idx.existing_text_hashes([a.code for a in atoms])
+    changed = [a for a in atoms if existing.get(a.code) != text_hash(a.text)]
+    if not changed:
+        return 0
+    vectors = provider.embed([a.text for a in changed])
+    if len(vectors) != len(changed):
         raise RuntimeError(
-            f"임베딩 개수({len(vectors)})가 원자 개수({len(atoms)})와 다릅니다 "
+            f"임베딩 개수({len(vectors)})가 대상 원자 개수({len(changed)})와 다릅니다 "
             "— provider.embed가 입력 순서·길이를 보존해야 합니다."
         )
-    for atom, vec in zip(atoms, vectors, strict=True):
+    for atom, vec in zip(changed, vectors, strict=True):
         idx.upsert(atom.code, vec, source_text=atom.text)
-    return len(atoms)
+    return len(changed)
 
 
 __all__ = [
