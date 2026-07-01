@@ -7,6 +7,7 @@
 >
 > **작성**: 2026-06-30 · **계층**: L1 · **상위**: `math_dsl_remediation_design.md` §1·`misconception_crosslink_v1`(설계 문서)
 > **v0.2 추가**: §2.1 검수 워크시트(kebab↔M-id 원문 대조·결정란)·§2.2 결정 집계표. 여전히 미적재.
+> **v0.3 추가**: §2.3 Claude 세밀 분석(30건 권장 판정)·§2.2 `Claude 추천` 열. 참고 권장·**여전히 미적재**.
 > **산출 근거**: kebab 카탈로그(`l4/misconception/catalog.py` 30종) × M-id 코퍼스
 > (`data/corpus/misconceptions_v1/misconceptions.json` 839종) 내용 일치 분석.
 
@@ -412,13 +413,136 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 
 검수 완료 후 *승인분만* 아래에 옮겨 적는다(직접매핑 권장·부분/개념겹침 신중·period-of-scaled-sine은
 신규 M-id 결정 먼저). 이 표가 §4의 `{"crosslinks":[…]}` 변환 원천이다.
+**`Claude 추천` 열은 §2.3 세밀 분석의 참고 판정**(비적재)이며, `승인?`~`검수 메모`는 검수자가 채운다.
 
-| kebab_id | 승인? | 최종 link_type | 최종 mis_id | method | 검수 메모 |
-|---|---|---|---|---|---|
-| _(예) distribution-over-power_ | _✅/❌_ | _직접매핑_ | _M0019_ | _manual_ | _검수자·근거_ |
-|  |  |  |  |  |  |
+| kebab_id | Claude 추천(참고) | 승인?(사람) | 최종 link_type | 최종 mis_id | method | 검수 메모 |
+|---|---|---|---|---|---|---|
+| discriminant-negative-no-real-root | ✅ D · `M0610` |  |  |  |  |  |
+| distribution-over-power | ✅ D · `M0019` |  |  |  |  |  |
+| division-by-zero | ↔️ 대안 · `M0146` |  |  |  |  |  |
+| exponent-zero | ✅ D · `M0105` |  |  |  |  |  |
+| fraction-cancellation | ⚠️ 확인 · `M0118` |  |  |  |  |  |
+| log-distribution | ✅ D · `M0049` |  |  |  |  |  |
+| root-loss-by-dividing | ✅ D · `M0573` |  |  |  |  |  |
+| sign-flip-in-inequality | ✅ D · `M0564` |  |  |  |  |  |
+| square-root-positivity | ✅ D · `M0550` |  |  |  |  |  |
+| period-of-scaled-sine | 🆕 신규 · `(M0152)` |  |  |  |  |  |
+| sine-distributes-over-sum | ✅ D · `M0707` |  |  |  |  |  |
+| composite-function-commutes | ✅ D · `M0643` |  |  |  |  |  |
+| invertibility-without-1-1 | ✅ D · `M0144` |  |  |  |  |  |
+| translation-sign-flip | ✅ D · `M0411` |  |  |  |  |  |
+| chain-rule-inner-derivative-omitted | ✅ D · `M0370` |  |  |  |  |  |
+| continuity-implies-differentiability | ✅ D · `M0670` |  |  |  |  |  |
+| critical-point-implies-extremum | ✅ D · `M0080` |  |  |  |  |  |
+| limit-equals-function-value | ✅ D · `M0665` |  |  |  |  |  |
+| product-rule-naive | ✅ D · `M0075` |  |  |  |  |  |
+| angle-sum-non-triangle | ❌ 반려 · `(신규/재탐색)` |  |  |  |  |  |
+| area-perimeter-confusion | ⚠️ 확인 · `M0529` |  |  |  |  |  |
+| circle-radius-squared | ✅ D · `M0630` |  |  |  |  |  |
+| similarity-vs-congruence | ✅ D · `M0519` |  |  |  |  |  |
+| gambler-fallacy | ✅ D · `M0688` |  |  |  |  |  |
+| mean-vs-median | ✅ D · `M0419` |  |  |  |  |  |
+| mutually-exclusive-implies-independent | ✅ D · `M0692` |  |  |  |  |  |
+| prosecutor-fallacy | ✅ D · `M0691` |  |  |  |  |  |
+| dot-product-is-vector | ✅ D · `M0735` |  |  |  |  |  |
+| geometric-series-always-converges | ✅ D · `M0209` |  |  |  |  |  |
+| term-to-zero-implies-convergence | ✅ D · `M0704` |  |  |  |  |  |
 
 > ※ 30행 채우기 전, 우선검수 4건(§3)과 `⚠️이중검수` M-id부터. 반려/보류도 메모로 남겨 재현 가능하게.
+
+---
+
+## 2.3 Claude 세밀 분석 — 30건 권장 판정 (참고·비적재)
+
+> **원문 대조로 후보를 세밀 판독한 Claude 권장**이다. confidence(임베딩 코사인)가 못 가리는 *방향·부정·
+> 의미 어긋남*을 kebab↔M-id 원문 비교로 교정했다. **이는 참고 권장이며 최종 승인은 사람 판단**(직접매핑
+> 승격은 검수자만). **적재하지 않는다.** 요약: ✅ 승인권장 25 · ↔️ 대안 권장 1 · ⚠️ 보류·확인 2 ·
+> 🆕 신규 1 · ❌ 재검토 1.
+
+
+### 도메인: 대수
+
+- **1. `discriminant-negative-no-real-root`** — ✅ **승인권장(D)** · 권장 mis_id `M0610`
+    - D<0을 '해 없다'로 단정(실근만 없고 허근 존재) — 동일.
+- **2. `distribution-over-power`** — ✅ **승인권장(D)** · 권장 mis_id `M0019`
+    - (a+b)²=a²+b² 중간항 누락 — 원문 의미 동일.
+- **3. `division-by-zero`** — ↔️ **대안 권장(top 교체)** · 권장 mis_id `M0146`
+    - kebab='분모에 변수 와도 항상 정의됨'(유리함수 정의역 오개념). 대안 **M0146**='유리함수 정의역·분모 0 값 누락'이 top M0003('0으로 나누기·5÷0=0', 산술)보다 정확 → **M0146 직접매핑 권장**, M0003은 인접(부분매핑).
+- **4. `exponent-zero`** — ✅ **승인권장(D)** · 권장 mis_id `M0105`
+    - wrong '2^0=0'가 a⁰=0과 정확 일치(canonical '지수 0·음수'는 축약).
+- **5. `fraction-cancellation`** — ⚠️ **보류·원문확인** · 권장 mis_id `M0118`
+    - M0118 wrong='덧셈식에서 약분'이 (a+b)/a 약분을 지칭할 *가능성 높음*. canonical='약분 시점' 축약이라 원문 정합 확인 후 직접매핑(D).
+- **6. `log-distribution`** — ✅ **승인권장(D)** · 권장 mis_id `M0049`
+    - log(a+b)=log a+log b 분배 — 동일.
+- **7. `root-loss-by-dividing`** — ✅ **승인권장(D)** · 권장 mis_id `M0573`
+    - ax²=bx 양변 x로 나눠 x=0 근 손실 — 동일.
+- **8. `sign-flip-in-inequality`** — ✅ **승인권장(D)** · 권장 mis_id `M0564`
+    - 음수 곱/나눗 시 부등호 방향 그대로 — 동일.
+- **9. `square-root-positivity`** — ✅ **승인권장(D)** · 권장 mis_id `M0550`
+    - √(a²)=a 단정(실제 |a|) — 동일.
+
+### 도메인: 삼각함수
+
+- **10. `period-of-scaled-sine`** — 🆕 **신규 M-id 권장** · 권장 mis_id `(M0152)`
+    - M0152='삼각함수 진폭·주기·계수 위치 혼동'(포괄)이라 'y=sin(2x) 주기=2π' *직접 진술 부재*. **신규 M-id 추가 권장**(직접매핑 금지·개념겹침만).
+- **11. `sine-distributes-over-sum`** — ✅ **승인권장(D)** · 권장 mis_id `M0707`
+    - sin(a+b)=sin a+sin b로 분배 — 동일.
+
+### 도메인: 함수
+
+- **12. `composite-function-commutes`** — ✅ **승인권장(D)** · 권장 mis_id `M0643`
+    - f∘g=g∘f로 봄 — 동일.
+- **13. `invertibility-without-1-1`** — ✅ **승인권장(D)** · 권장 mis_id `M0144`
+    - 일대일 아닌데 역함수 존재로 봄 — 동일. 대안 M0644/M0859는 '역함수 vs 역수' 혼동이라 다름(top 채택).
+- **14. `translation-sign-flip`** — ✅ **승인권장(D)** · 권장 mis_id `M0411`
+    - y=f(x+1)을 오른쪽 이동으로(실제 왼쪽) — 평행이동 부호 반전 동일.
+
+### 도메인: 미적분
+
+- **15. `chain-rule-inner-derivative-omitted`** — ✅ **승인권장(D)** · 권장 mis_id `M0370`
+    - sin(2x) 미분서 내부도함수(계수 2) 누락 — 동일.
+- **16. `continuity-implies-differentiability`** — ✅ **승인권장(D)** · 권장 mis_id `M0670`
+    - 연속이면 미분가능으로 단정(뾰족점 반례) — 동일·명확.
+- **17. `critical-point-implies-extremum`** — ✅ **승인권장(D)** · 권장 mis_id `M0080`
+    - f'=0이면 무조건 극값(변곡점 무시) — 동일.
+- **18. `limit-equals-function-value`** — ✅ **승인권장(D)** · 권장 mis_id `M0665`
+    - lim=함숫값으로 단정(불연속점 무시) — 동일.
+- **19. `product-rule-naive`** — ✅ **승인권장(D)** · 권장 mis_id `M0075`
+    - (fg)'=f'g'로 봄 — 동일.
+
+### 도메인: 기하
+
+- **20. `angle-sum-non-triangle`** — ❌ **재검토(의미 어긋남)** · 권장 mis_id `(신규/재탐색)`
+    - kebab='모든 다각형 내각합 180°'(*고정* 오해). top M0493='모양 다르면 내각합 변한다'(*변화* 오해)=**사실상 반대 오개념**. 대안 M0051='삼각형 내각합 180 아님'도 부적합. → **직접매핑 반려**·정밀 재탐색 또는 신규 M-id 권장(임베딩 0.85가 놓친 어긋남).
+- **21. `area-perimeter-confusion`** — ⚠️ **보류·원문확인** · 권장 mis_id `M0529`
+    - M0529('둘레 같으면 넓이 같다')·M0782 둘 다 '둘레·넓이 혼동'으로 거의 동일. kebab='둘레 크면 넓이 큼'과 정합 — 둘 다 D 가능, **어느 M-id 채택할지만 결정**.
+- **22. `circle-radius-squared`** — ✅ **승인권장(D)** · 권장 mis_id `M0630`
+    - x²+y²=r²의 반지름을 r²로(실제 r) — 동일. M0630/M0848 중 M0630 채택 권장.
+- **23. `similarity-vs-congruence`** — ✅ **승인권장(D)** · 권장 mis_id `M0519`
+    - 닮은꼴(크기 다름)을 합동으로 여김 — 동일.
+
+### 도메인: 확률통계
+
+- **24. `gambler-fallacy`** — ✅ **승인권장(D)** · 권장 mis_id `M0688`
+    - 앞면 5번→다음 뒷면 차례(독립 무시) — 동일.
+- **25. `mean-vs-median`** — ✅ **승인권장(D)** · 권장 mis_id `M0419`
+    - 중앙값=평균으로 봄 — 동일.
+- **26. `mutually-exclusive-implies-independent`** — ✅ **승인권장(D)** · 권장 mis_id `M0692`
+    - 배반이면 독립(실제 종속) — 동일.
+- **27. `prosecutor-fallacy`** — ✅ **승인권장(D)** · 권장 mis_id `M0691`
+    - P(A|B)=P(B|A)로 봄(검사의 오류) — 동일.
+
+### 도메인: 벡터
+
+- **28. `dot-product-is-vector`** — ✅ **승인권장(D)** · 권장 mis_id `M0735`
+    - 내적 결과를 벡터로(실제 스칼라) — 동일.
+
+### 도메인: 수열
+
+- **29. `geometric-series-always-converges`** — ✅ **승인권장(D)** · 권장 mis_id `M0209`
+    - |r|≥1인데 무한등비급수 합 존재로 봄 — 동일.
+- **30. `term-to-zero-implies-convergence`** — ✅ **승인권장(D)** · 권장 mis_id `M0704`
+    - 일반항→0이면 수렴 단정(조화급수 반례) — 동일.
 
 ---
 
@@ -449,3 +573,4 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 - 원칙: `CLAUDE.md`(우선순위 #1 학생 안전·#3 교수학 정확성)·`math_dsl_remediation_design.md` §1.
 - 변경 이력: v0.1 초안 (2026-06-30 — 후보 제안·검수 전·미적재).
 - v0.2 (2026-07-01 — §2.1 원문 대조 워크시트·§2.2 결정 집계표 추가. catalog×corpus 조인·검수 편의. 미적재 불변).
+- v0.3 (2026-07-01 — §2.3 Claude 30건 세밀 분석·권장 판정 추가(✅25·↔️1·⚠️2·🆕1·❌1)·§2.2 `Claude 추천` 열. 참고 권장·미적재 불변).
