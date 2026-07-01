@@ -85,16 +85,17 @@ def search_concepts(
     top_k: int,
     provider: EmbeddingProvider,
     reviewed_only: bool = False,
+    min_similarity: float | None = None,
+    domain: str | None = None,
     index: ConceptEmbeddingIndex | None = None,
     settings: Settings | None = None,
 ) -> list[ConceptSearchHit]:
-    """질의 텍스트 → 임베딩 → 코사인 상위 top_k → 메타 enrich·검수 게이팅(랭킹된 결과).
+    """질의 텍스트 → 임베딩 → 코사인 상위 top_k → 메타 enrich·검수/임계/도메인 게이팅(랭킹 결과).
 
     흐름: ① `provider.embed([query_text])`로 질의 1건 임베딩 ② `ConceptEmbeddingIndex.search`로
     적재 임베딩과 코사인 비교(상위 K·유사도 내림차순) ③ 잡힌 UC들로 `fetch_node_meta`(concept_node
-    PG 조인)를 한 번 호출해 `name_ko`·`domain`·`review_status`를 붙임 ④ `reviewed_only`면 reviewed
-    아닌(또는 메타 없는) 히트를 *제외*(유사도 정렬 유지·게이팅은 필터). 임계값 필터는 없다(순수
-    랭킹 — 점수 컷은 소비처 몫).
+    PG 조인)를 한 번 호출해 `name_ko`·`domain`·`review_status`를 붙임 ④ `reviewed_only`·
+    `min_similarity`·`domain` 게이팅으로 히트를 *제외*(유사도 정렬 유지·게이팅은 필터).
 
     **enrichment graceful**: `concept_node`에 없는 UC는 메타 None으로 채운다(적재 누락에 안전 —
     검색 자체는 계속). 메타 조회는 검색 좌석과 같은 sync 엔진 평면에서 IN 한 방으로 일어난다
@@ -102,7 +103,21 @@ def search_concepts(
 
     **게이팅(`reviewed_only`)**: 기본 False=recall 보존(pending 개념도 노출). True면 상위 top_k
     창에서 `review_status == "reviewed"`인 히트만 남긴다 — 메타가 없어 reviewed 확인 불가인 UC는
-    보수적으로 제외(정직). 게이팅은 *필터*라 결과가 top_k보다 적을 수 있다(창 내 필터 — 정렬 유지).
+    보수적으로 제외(정직).
+
+    **임계 게이팅(`min_similarity`)**: 기본 None=임계 없음(순수 랭킹·기존 동작 불변 — 점수 컷은
+    소비처 몫). 값이 주어지면 `similarity < min_similarity`인 히트를 제외한다 — semantic search
+    *실패*(질의에 진짜 근접 개념이 없는데 top_k 랭킹만으로 무관한 개념을 회수)가 조용히 하류
+    (L3 RAG·L4 오개념 연결)로 전파되는 것을 좌석에서 선택적으로 막는 안전 노브다. 코사인 유사도
+    축은 [-1, 1](`ConceptEmbeddingIndex.search`).
+
+    **도메인 스코프(`domain`)**: 기본 None=전 도메인. 값이 주어지면 enrich된 `concept_node.domain`이
+    *정확히 일치*하는 히트만 남긴다 — 학년/트랙만 다른 동명 개념(예: 초·중·고 "함수")의 embedding
+    collision을 호출자가 좁힌다. 메타가 없어 도메인 확인 불가인 UC는 보수적으로 제외(reviewed_only와
+    동일 규약·정직).
+
+    세 게이팅 모두 *창 내 필터*라 결과가 top_k보다 적을 수 있다(정렬은 유지). 필터가 회수 후
+    적용되므로, 강한 스코프에서 top_k를 넉넉히 주면(over-fetch) recall을 보전할 수 있다.
 
     provider·index는 *주입 가능*하다(테스트 격리·Fake). index 미주입 시 적재(슬3)와 같은 provider
     공간 식별자(`provider_model_identity`)로 `ConceptEmbeddingIndex`를 만든다 — 같은 공간 행만
@@ -156,6 +171,12 @@ def search_concepts(
         node = meta.get(concept_id)
         if reviewed_only and (node is None or node.review_status != _REVIEWED):
             # 게이팅 필터 — reviewed 아니거나 메타 미적재(확인 불가)면 제외(보수적·정직).
+            continue
+        if min_similarity is not None and similarity < min_similarity:
+            # 임계 게이팅 — 근접도 미만은 제외(semantic 실패의 침묵 전파 차단). 정렬은 유지.
+            continue
+        if domain is not None and (node is None or node.domain != domain):
+            # 도메인 스코프 — 불일치·메타 미적재(확인 불가)면 제외(collision 방어·보수적·정직).
             continue
         results.append(
             ConceptSearchHit(
