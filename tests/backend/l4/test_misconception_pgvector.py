@@ -37,15 +37,30 @@ from whymath_backend.l4.misconception.semantic.pgvector_index import (
 from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProvider
 
 
+class _SpyProvider:
+    """embed 호출 횟수를 세는 provider — skip-if-unchanged 검증용(불변분 미임베딩 확인)."""
+
+    def __init__(self, dim: int = 64) -> None:
+        self.embed_calls = 0
+        self._dim = dim
+
+    def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        self.embed_calls += 1
+        return [[0.1] * self._dim for _ in texts]
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 가짜 sync 엔진 — begin()/connect() 컨텍스트 + execute() (PG 없이 배선 관찰)
 # ──────────────────────────────────────────────────────────────────────────
 class _FakeRow:
-    """search 결과 행 흉내 — `.misconception_id`·`.distance` 속성 접근."""
+    """행 흉내 — search는 `.misconception_id`·`.distance`, existing_text_hashes는 `.text_hash`."""
 
-    def __init__(self, misconception_id: str, distance: float | None) -> None:
+    def __init__(
+        self, misconception_id: str, distance: float | None = None, text_hash: str | None = None
+    ) -> None:
         self.misconception_id = misconception_id
         self.distance = distance
+        self.text_hash = text_hash
 
 
 class _FakeResult:
@@ -265,7 +280,23 @@ class TestPopulate:
         index, engine = _fake_pg_index(provider_name="fake", model_name="fake-hash")
         count = populate_pgvector(provider, index=index)
         assert count == len(CATALOG)
-        assert len(engine.executed) == len(CATALOG)  # 항목당 1 upsert
+        # 1 read(existing_text_hashes·비어) + 항목당 1 upsert.
+        assert len(engine.executed) == len(CATALOG) + 1
+
+    def test_populate_skips_unchanged(self) -> None:
+        # 모든 항목의 현행 text_hash가 표현과 일치 → provider 미호출·upsert 0·count 0(읽기 1회).
+        from whymath_backend.l4.misconception.catalog import CATALOG
+        from whymath_backend.l4.misconception.semantic.matcher import catalog_text
+
+        rows = [_FakeRow(m.id, text_hash=text_hash(catalog_text(m))) for m in CATALOG]
+        provider = _SpyProvider()
+        index, engine = _fake_pg_index(
+            search_rows=rows, provider_name="fake", model_name="fake-hash"
+        )
+        count = populate_pgvector(provider, index=index)
+        assert count == 0
+        assert provider.embed_calls == 0
+        assert len(engine.executed) == 1  # read만·upsert 0
 
     def test_populate_uses_catalog_text_hash_not_id(self) -> None:
         # populate는 표현(catalog_text) 해시를 쓴다(id 해시가 아니라) — 표현 변경 감지 정확도.
