@@ -10,7 +10,8 @@
 // (test/notation_contract.test.js ↔ backend·공유 data/notation_contract.json).
 //
 // Graph2dSpec 형태:
-//   { function: "a*x**2+b*x+c", domain: [xMin, xMax], parameters: [{name,min,max,step,default}] }
+//   { function: "a*x**2+b*x+c", domain: [xMin, xMax], y_range: [yMin, yMax]?,
+//     parameters: [{name,min,max,step,default}] }
 //
 // 백엔드·Flutter는 이 계산기를 `?spec=<base64(JSON)>` URL로 띄워 함수·슬라이더·정의역을 주입할 수 있다.
 import * as math from "mathjs";
@@ -48,12 +49,22 @@ export const graph2dSpecToState = (spec) => {
     });
   }
 
-  // domain [xMin, xMax] → view의 x 범위(y는 기본 ±10 유지).
+  // domain [xMin, xMax] → view의 x 범위. y는 spec.y_range가 well-formed면 그 값을, 아니면
+  // 렌더러 기본 ±10을 쓴다(명세가 y 범위를 표현할 수 있게 — 렌더러가 y 범위 유일 권위 아님).
   let view;
   if (Array.isArray(spec.domain) && spec.domain.length === 2) {
     const [xMin, xMax] = spec.domain;
     if (Number.isFinite(xMin) && Number.isFinite(xMax) && xMin < xMax) {
-      view = { xMin, xMax, yMin: -10, yMax: 10 };
+      let yMin = -10;
+      let yMax = 10;
+      if (Array.isArray(spec.y_range) && spec.y_range.length === 2) {
+        const [yLo, yHi] = spec.y_range;
+        if (Number.isFinite(yLo) && Number.isFinite(yHi) && yLo < yHi) {
+          yMin = yLo;
+          yMax = yHi;
+        }
+      }
+      view = { xMin, xMax, yMin, yMax };
     }
   }
 
@@ -144,7 +155,7 @@ export const parseSpecParam = (raw) => {
 //   - mathjs '^' → 파이썬 '**' 치환(정방향 graph2dSpecToState의 '**'→'^' 역).
 //   - 함수에 실제로 쓰인 슬라이더만 parameters로(정방향이 parameters에서만 슬라이더를 만들므로
 //     클린 라운드트립). default = 현재 슬라이더 value.
-//   - domain은 x 범위만(코어 규약: y는 ±10 고정, 명세에 안 실음).
+//   - domain은 x 범위. y_range는 기본 ±10과 다를 때만 실음(기본값은 명세에서 생략·클린 라운드트립).
 export const calcStateToGraph2dSpec = (state) => {
   if (!state || typeof state !== "object") return null;
   const { rows, sliders, view } = state;
@@ -187,6 +198,14 @@ export const calcStateToGraph2dSpec = (state) => {
   // 4) domain: 유효한 view의 x 범위만.
   if (view && Number.isFinite(view.xMin) && Number.isFinite(view.xMax) && view.xMin < view.xMax) {
     spec.domain = [view.xMin, view.xMax];
+  }
+
+  // 5) y_range: view의 y 범위가 유효하고 *기본 ±10과 다를 때만* 실음 — 정방향 폴백과 대칭이라
+  //    기본 y(±10) 명세는 y_range 없이 클린 라운드트립되고, 커스텀 y만 명세에 보존된다.
+  if (view && Number.isFinite(view.yMin) && Number.isFinite(view.yMax) && view.yMin < view.yMax) {
+    if (view.yMin !== -10 || view.yMax !== 10) {
+      spec.y_range = [view.yMin, view.yMax];
+    }
   }
 
   return spec;

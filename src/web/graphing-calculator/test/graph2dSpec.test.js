@@ -39,6 +39,30 @@ describe("graph2dSpecToState — 코어 Graph2dSpec → 계산기 상태", () =>
     expect(st.view).toEqual({ xMin: -3, xMax: 3, yMin: -10, yMax: 10 });
   });
 
+  it("y_range가 well-formed면 view의 y 범위로 반영", () => {
+    const st = graph2dSpecToState({ function: "x", domain: [-3, 3], y_range: [-5, 5] });
+    expect(st.view).toEqual({ xMin: -3, xMax: 3, yMin: -5, yMax: 5 });
+  });
+
+  it("잘못된/누락 y_range는 기본 ±10 폴백", () => {
+    expect(graph2dSpecToState({ function: "x", domain: [-3, 3], y_range: [5, 5] }).view).toEqual({
+      xMin: -3,
+      xMax: 3,
+      yMin: -10,
+      yMax: 10,
+    });
+    expect(graph2dSpecToState({ function: "x", domain: [-3, 3], y_range: [1] }).view).toEqual({
+      xMin: -3,
+      xMax: 3,
+      yMin: -10,
+      yMax: 10,
+    });
+  });
+
+  it("y_range만 있고 domain 없으면 view 없음(x 범위 날조 안 함)", () => {
+    expect(graph2dSpecToState({ function: "x", y_range: [-5, 5] }).view).toBeUndefined();
+  });
+
   it("잘못된 domain은 무시(view 없음)", () => {
     expect(graph2dSpecToState({ function: "x", domain: [3, 3] }).view).toBeUndefined();
     expect(graph2dSpecToState({ function: "x", domain: [1] }).view).toBeUndefined();
@@ -93,12 +117,22 @@ describe("calcStateToGraph2dSpec — 계산기 상태 → 코어 Graph2dSpec (�
     expect(spec.parameters).toEqual([{ name: "a", min: 0, max: 5, step: 0.5, default: 2 }]);
   });
 
-  it("view → domain [xMin,xMax] (y 범위는 명세에 안 실음)", () => {
+  it("기본 y(±10)는 y_range를 명세에 안 실음(클린 라운드트립)", () => {
     const spec = calcStateToGraph2dSpec({
       rows: [{ expr: "x" }],
       view: { xMin: -3, xMax: 3, yMin: -10, yMax: 10 },
     });
     expect(spec.domain).toEqual([-3, 3]);
+    expect(spec.y_range).toBeUndefined();
+  });
+
+  it("커스텀 y 범위는 y_range로 실음", () => {
+    const spec = calcStateToGraph2dSpec({
+      rows: [{ expr: "x" }],
+      view: { xMin: -3, xMax: 3, yMin: -5, yMax: 5 },
+    });
+    expect(spec.domain).toEqual([-3, 3]);
+    expect(spec.y_range).toEqual([-5, 5]);
   });
 
   it("유효하지 않은 view는 domain 생략", () => {
@@ -134,6 +168,22 @@ describe("Graph2dSpec 라운드트립 (spec → state → spec 동치)", () => {
     };
     const st = graph2dSpecToState(spec);
     // graph2dSpecToState는 sliders/view를 부분 상태로 주므로 그대로 역변환에 투입.
+    const back = calcStateToGraph2dSpec({
+      rows: st.rows,
+      sliders: st.sliders,
+      view: st.view,
+    });
+    expect(back).toEqual(spec);
+  });
+
+  it("커스텀 y_range도 왕복 후 보존된다", () => {
+    const spec = {
+      function: "a*sin(x)",
+      domain: [-6, 6],
+      y_range: [-2, 2],
+      parameters: [{ name: "a", min: 1, max: 3, step: 0.1, default: 2 }],
+    };
+    const st = graph2dSpecToState(spec);
     const back = calcStateToGraph2dSpec({
       rows: st.rows,
       sliders: st.sliders,

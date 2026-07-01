@@ -68,6 +68,16 @@ class TestValidSpecs:
         assert s.parameters is not None
         assert s.parameters[0].name == "a"
 
+    def test_graph2d_y_range(self) -> None:
+        # y_range(치역·선택) 타입 검증 — domain 동형. 미지정 시 None(렌더러 기본 폴백).
+        s = Graph2dSpec.model_validate({"function": "x", "domain": [-3, 3], "y_range": [-5, 5]})
+        assert s.y_range == [-5.0, 5.0]
+        assert Graph2dSpec.model_validate({"function": "x"}).y_range is None
+
+    def test_graph2d_y_range_not_list(self) -> None:
+        with pytest.raises(ValidationError):
+            Graph2dSpec.model_validate({"y_range": "x"})
+
     def test_surface3d_valid(self) -> None:
         s = Surface3dSpec.model_validate({"surface": "z = x**2 + y**2", "rotatable": True})
         assert s.surface == "z = x**2 + y**2"
