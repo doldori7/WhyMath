@@ -5,6 +5,7 @@
 > "공백" 절을 *현 코드 근거(파일·라인)*로 구체화한 리스크 레지스터다.
 > **근거**: 코드 정밀 조사 3축(L1 원자 그래프 / L5 시각화·LearningScene / 오개념·AST·retrieval), 2026-06-30.
 > **범위**: 분석만 — 수정은 *방향*만 제시(작업 항목화는 별도 `/plan`).
+> **동반(retrieval 심화)**: `math_dsl_retrieval_analysis.md` — 본 레지스터의 "AI retrieval failure" 축을 검색 10렌즈+4전략으로 심화(2026-07-01).
 
 ---
 
