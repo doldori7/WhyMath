@@ -92,6 +92,20 @@ _REVIEWED: str = "reviewed"
 # 후자는 LLM에 subgraph를 주입하는 소비처가 생긴 뒤에 별도로 도입한다(지금 미존재·premature).
 MAX_PREREQUISITE_DEPTH: int = 5
 
+# traversal 적격 관계 화이트리스트 — *단일 출처*(retrieval 분석 Q3·Q6·relation pruning 거버넌스).
+# 그래프 traversal(선수 체인 조회)은 **오직 이 집합의 관계만** 따라간다. 약한 관계(ANALOGOUS_TO·
+# CONTRASTS·EXTENDS·COMPOSED_OF)는 적재 자체가 load-time skip으로 차단되지만(test_edge_relation_
+# governance), *설령 적재되더라도* traversal에 새어들면 dense화·N² 폭발이므로 조회 계층에서도
+# 화이트리스트로 이중 차단한다(load-time↔traversal 두 층). 새 관계를 traversal에 넣으려면 여기에
+# *의도적으로* 추가해야 한다(회귀로 새는 것을 test_prerequisite_traversal_governance가 동결).
+# ⚠️ 약한/AI-생성 관계를 여기 추가하기 전에 ranking 전용(traversal 제외)·generated_by 출처·사람
+# 승급 게이트를 먼저 갖춰야 한다(retrieval_contract.md 거버넌스·플레이북 §3.7).
+TRAVERSAL_ELIGIBLE_EDGE_TYPES: frozenset[EdgeType] = frozenset({EdgeType.PREREQUISITE})
+# 쿼리 바인딩용 값 튜플(결정론 순서) — enum→DDL 문자열 값(`concept_edge.edge_type` 비교).
+_TRAVERSAL_ELIGIBLE_EDGE_VALUES: tuple[str, ...] = tuple(
+    sorted(e.value for e in TRAVERSAL_ELIGIBLE_EDGE_TYPES)
+)
+
 
 @dataclass(frozen=True, slots=True)
 class PrerequisiteRow:
@@ -214,7 +228,8 @@ async def fetch_prerequisites(
         )
         .where(
             ConceptEdge.to_concept_id == concept_id,
-            ConceptEdge.edge_type == EdgeType.PREREQUISITE.value,
+            # traversal 화이트리스트(단일 출처) — PREREQUISITE만 따른다(약한 관계 차단·Q3·Q6).
+            ConceptEdge.edge_type.in_(_TRAVERSAL_ELIGIBLE_EDGE_VALUES),
         )
         .cte(name="prereq_traversal", recursive=True)
     )
@@ -228,7 +243,8 @@ async def fetch_prerequisites(
         )
         .join(base, ConceptEdge.to_concept_id == base.c.concept_id)
         .where(
-            ConceptEdge.edge_type == EdgeType.PREREQUISITE.value,
+            # traversal 화이트리스트(단일 출처) — 재귀 가지도 PREREQUISITE만 따른다(두 층 일관).
+            ConceptEdge.edge_type.in_(_TRAVERSAL_ELIGIBLE_EDGE_VALUES),
             base.c.depth < max_depth,
         )
     )
@@ -374,6 +390,7 @@ async def recommend_prerequisite_gaps(
 
 __all__ = [
     "MAX_PREREQUISITE_DEPTH",
+    "TRAVERSAL_ELIGIBLE_EDGE_TYPES",
     "PrerequisiteGap",
     "PrerequisiteRow",
     "fetch_prerequisites",

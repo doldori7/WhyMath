@@ -10,12 +10,15 @@ sync 엔진·해시·식별 헬퍼는 슬3(또는 그 출처 L4)에서 그대로
 ────────────────────────────────────────────────────────────────────────────
 redaction (CLAUDE.md 우선순위 #2 — 협상 불가)
 ────────────────────────────────────────────────────────────────────────────
-임베딩 입력 표현은 **자체 작성 안전 필드만** 쓴다 — `name`(원자명)·`transfer`(④전이·자체 작성
-교수 주석). 개념판의 metaphor·accepted_expressions에 대응하지만 원자엔 그 필드가 없으므로
-name+transfer뿐이다. **`core_proposition`·`description`·`formal_definition`·4요소(`misconception`·
-`diagnostic_*`·`socratic`)는 절대 읽지 않는다**: 성취기준 *본문* 근접/검수 책임 필드이고,
-이 모듈은 그 키를 *읽지도 않으므로* 입력이 오염돼도 본문이 임베딩에 유입되지 않는다(이중 방어).
-임베딩 *벡터*만 적재하고 원문은 `atom_embedding`에 저장하지 않는다(ORM docstring·중복·프라이버시).
+임베딩 입력 표현은 **자체 작성 안전 구조 신호만** 쓴다 — `name`(원자명)·`transfer`(④전이·자체
+작성 교수 주석)·`cognitive_type`(개념/절차/표상 분류 라벨)·`subunit`(소단원 주제명). 뒤 둘은 벡터
+공간에서 "객체 vs 기법 vs 표상"·주제를 분리하는 저작권-안전 *분류/주제 라벨*이다(성취기준 본문이
+아님·retrieval 분석 Q1·Q2·Q4). **`core_proposition`·`description`·`formal_definition`·4요소
+(`misconception`·`diagnostic_*`·`socratic`)는 절대 읽지 않는다**: 성취기준 *본문* 근접/검수 책임
+필드이고, 이 모듈은 그 키를 *읽지도 않으므로* 입력이 오염돼도 본문이 임베딩에 유입되지 않는다
+(이중 방어). 교육과정 필드(`grade_band`·`standard_codes`)도 입력에 넣지 않는다 — Overlay/code
+소관이고 학년반복 개념을 벡터로 융합시키기 때문(분석 Q5). 임베딩 *벡터*만 적재하고 원문은
+`atom_embedding`에 저장하지 않는다(ORM docstring·중복·프라이버시).
 
 ────────────────────────────────────────────────────────────────────────────
 대상 = 세부개념(원자)만
@@ -70,10 +73,10 @@ _ATOM_LEVEL: str = "세부개념"
 
 @dataclass(frozen=True, slots=True)
 class AtomText:
-    """임베딩 대상 한 원자 — code + 안전 필드(name+transfer)로 합성한 표현.
+    """임베딩 대상 한 원자 — code + 안전 구조 신호로 합성한 표현.
 
-    `text`는 `atom_embedding_text`가 안전 필드만으로 만든 표현이다(본문 미포함). 적재기가 이
-    표현을 임베딩하고 code 키로 upsert한다(`ConceptText`의 원자 짝).
+    `text`는 `atom_embedding_text`가 안전 신호(name·transfer·cognitive_type·subunit)만으로 만든
+    표현이다(본문·교육과정 미포함). 적재기가 이 표현을 임베딩하고 code 키로 upsert한다(원자 짝).
     """
 
     code: str
@@ -84,28 +87,35 @@ def atom_embedding_text(
     *,
     name_ko: str | None,
     transfer: str | None = None,
+    cognitive_type: str | None = None,
+    subunit: str | None = None,
 ) -> str:
-    """원자를 임베딩할 자연어 표현으로 직렬화 — **안전 필드만**(name + transfer).
+    """원자를 임베딩할 자연어 표현으로 직렬화 — **안전 구조 신호만**(name + transfer + 파셋).
 
-    `concept_embedding_text`(name_ko·metaphor·accepted)의 원자판이다. 원자엔 metaphor·accepted가
-    없으므로 명칭(name)과 전이(transfer)만 잇는다. **description·formal_definition·core_proposition·
-    4요소는 인자로 받지도 않는다**(redaction — 본문/검수 책임 필드 구조적 차단). 비어 있는 필드는
-    건너뛰고, 남은 조각을 `". "`로 잇는다(개념판과 동일 결합 규칙·구분자·strip·빈값 처리). name이
-    비면(이론상 graph.json은 name 필수) 나머지만으로 표현을 만든다(빈 표현 가능 — 호출자[로더]가
-    빈 표현을 거른다).
+    `concept_embedding_text`(name_ko·metaphor·accepted)의 원자판이다. 명칭(name)·전이(transfer)에
+    더해 *저작권-안전 구조 파셋* `cognitive_type`(개념/절차/표상 — "객체 vs 기법 vs 표상" 축을 벡터
+    공간에서 분리)·`subunit`(소단원 주제 라벨)을 잇는다(retrieval semantic 분리 강화·분석 Q1·Q2·Q4).
+    이들은 성취기준 *본문*이 아니라 *분류 라벨·주제명*이라 저작권 안전하다. **description·
+    formal_definition·core_proposition·4요소(misconception·diagnostic_*·socratic)는 인자로 받지도
+    않는다**(redaction — 본문/검수 책임 필드 구조적 차단). 교육과정 필드(grade_band·standard_codes)
+    도 받지 않는다(Overlay/code 소관·학년반복 융합 방지). 비어 있는 필드는 건너뛰고, 남은 조각을
+    `". "`로 잇는다(개념판과 동일 결합 규칙·`join_embedding_text` 단일 포맷 권위). 모든 조각이 비면
+    빈 표현(호출자[로더]가 거른다).
     """
-    return join_embedding_text(name_ko, transfer)
+    return join_embedding_text(name_ko, transfer, cognitive_type, subunit)
 
 
 def load_atoms_from_graph_json(path: Path) -> list[AtomText]:
     """Phase 1 산출 `graph.json` → 임베딩 대상 (원자 code, 안전 표현) 목록(세부개념만).
 
-    `concepts` 배열에서 **`level=="세부개념"`인 원자만** 골라 `code`와 **안전 필드(name·transfer)
-    만** 읽어 표현을 합성한다 — 단원/소단원 노드는 제외한다(의미검색 대상 아님). `core_proposition`·
-    `description`·`formal_definition`·4요소(`misconception`·`diagnostic_*`·`socratic`)·`redacted_fields`
-    는 *읽지 않는다*(redaction — 있더라도 이 함수가 무시·구조적 차단).
+    `concepts` 배열에서 **`level=="세부개념"`인 원자만** 골라 `code`와 **안전 구조 신호만** 읽어
+    표현을 합성한다 — `name`·`transfer`·`cognitive_type`·`subunit`(단원/소단원 노드는 제외·의미검색
+    대상 아님). `cognitive_type`(개념/절차/표상)·`subunit`(소단원 주제)은 저작권-안전 분류 라벨이라
+    벡터 분리 신호로 넣는다(분석 Q1·Q2·Q4). 본문·4요소(`core_proposition`·`description`·
+    `formal_definition`·`misconception`·`diagnostic_*`·`socratic`)·`redacted_fields`·교육과정
+    (`grade_band`·`standard_codes`)는 *읽지 않는다*(redaction·Overlay 소관·구조적 차단).
 
-    표현이 빈(name·transfer 전부 공백) 원자는 제외한다(임베딩 무의미 — 빈 벡터 적재 방지). 단원/
+    표현이 빈(안전 신호 전부 공백) 원자는 제외한다(임베딩 무의미 — 빈 벡터 적재 방지). 단원/
     소단원·그래프 외 자산은 임베딩 대상이 아니므로 읽지 않는다.
 
     Raises:
@@ -124,6 +134,8 @@ def load_atoms_from_graph_json(path: Path) -> list[AtomText]:
         text = atom_embedding_text(
             name_ko=record.get("name"),
             transfer=record.get("transfer"),
+            cognitive_type=record.get("cognitive_type"),
+            subunit=record.get("subunit"),
         )
         if not text:
             # 안전 필드(name·transfer)가 전부 비어 임베딩할 표현이 없는 원자 — 제외(빈 벡터 방지).

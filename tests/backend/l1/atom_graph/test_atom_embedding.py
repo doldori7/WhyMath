@@ -4,9 +4,9 @@
 *실 라운드트립*은 통합테스트(`test_atom_embedding_integration.py`·실 PG 게이트)로 미룬다. 여기서는
 PG 없이 검증 가능한 것만 못 박는다(`test_concept_embedding.py` 미러):
 
-  ① 임베딩 텍스트 구성 — name + transfer만, transfer None 처리,
-     **description·formal_definition·metaphor·accepted 미포함**(redaction·원자엔 그 필드 없음)
-  ② graph.json 로딩 — level=="세부개념" 필터·code 키 추출·redaction 키 미독·빈 표현 제외
+  ① 임베딩 텍스트 구성 — name·transfer + 안전 파셋(cognitive_type·subunit), 빈값 graceful,
+     **본문·4요소·교육과정 필드 미포함**(redaction 구조적 차단·retrieval 파셋 분리 Q1·Q2·Q4)
+  ② graph.json 로딩 — level=="세부개념" 필터·code 키·안전 파셋 read·redaction 키 미독·빈 표현 제외
   ③ upsert SQL 구성(가짜 엔진 주입 — ON CONFLICT(code) upsert·바인딩 관찰)
   ④ search SQL 구성 — provider/model 필터·<=> 코사인·LIMIT + similarity=1-distance 변환·top_k 경계
   ⑤ populate — Fake provider + 가짜 엔진으로 전 원자 upsert(횟수=원자 수)·dim 일치
@@ -162,17 +162,54 @@ class TestAtomEmbeddingText:
     def test_all_empty_gives_empty_string(self) -> None:
         assert atom_embedding_text(name_ko=None, transfer=None) == ""
 
-    def test_signature_has_only_name_and_transfer(self) -> None:
-        # redaction 구조적 차단: 시그니처에 description·formal_definition·metaphor·accepted *없다*.
+    def test_includes_safe_facets_in_order(self) -> None:
+        # 안전 파셋(cognitive_type·subunit)이 name·transfer 뒤에 붙는다(벡터 분리 신호·Q1·Q2·Q4).
+        text = atom_embedding_text(
+            name_ko="합성함수의 미분",
+            transfer="연쇄법칙의 핵심",
+            cognitive_type="절차",
+            subunit="도함수",
+        )
+        assert text == "합성함수의 미분. 연쇄법칙의 핵심. 절차. 도함수"
+
+    def test_facets_none_falls_back_to_name_transfer(self) -> None:
+        # 파셋 미지정(기존 호출부·구 데이터) → name+transfer만(후방 호환).
+        assert atom_embedding_text(name_ko="극한", transfer="수렴") == "극한. 수렴"
+
+    def test_skips_empty_facets(self) -> None:
+        # 빈/공백 파셋 조각은 graceful skip(빈값 처리 규칙 공유).
+        text = atom_embedding_text(
+            name_ko="기울기", transfer="변화율", cognitive_type="  ", subunit=None
+        )
+        assert text == "기울기. 변화율"
+
+    def test_cognitive_type_separates_object_vs_technique(self) -> None:
+        # 같은 name이라도 cognitive_type가 다르면 표현이 갈린다(개념 vs 절차 융합 방지·Q4).
+        obj = atom_embedding_text(name_ko="정적분", transfer="넓이", cognitive_type="개념")
+        proc = atom_embedding_text(name_ko="정적분", transfer="넓이", cognitive_type="절차")
+        assert obj != proc
+        assert obj.endswith("개념") and proc.endswith("절차")
+
+    def test_signature_allows_only_safe_fields(self) -> None:
+        # redaction 구조적 차단: 시그니처에 본문·4요소·교육과정 필드가 *없다*.
         import inspect
 
         params = set(inspect.signature(atom_embedding_text).parameters)
-        assert "description" not in params
-        assert "formal_definition" not in params
-        assert "metaphor" not in params
-        assert "accepted_expressions" not in params
-        # 허용 인자는 name_ko·transfer뿐(keyword-only).
-        assert params == {"name_ko", "transfer"}
+        for forbidden in (
+            "description",
+            "formal_definition",
+            "core_proposition",
+            "metaphor",
+            "accepted_expressions",
+            "misconception",
+            "diagnostic_item",
+            "socratic",
+            "grade_band",
+            "standard_codes",
+        ):
+            assert forbidden not in params
+        # 허용 인자는 안전 구조 신호뿐(keyword-only).
+        assert params == {"name_ko", "transfer", "cognitive_type", "subunit"}
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -243,6 +280,52 @@ class TestLoadFromGraphJson:
         assert text == "기수 원리. 핵심"
         # 본문·4요소 토큰이 표현에 *전혀* 없다.
         for forbidden in ("본문", "∀ε", "오개념", "진단", "소크라테스", "명제"):
+            assert forbidden not in text
+
+    def test_reads_safe_facets_into_text(self, tmp_path: Path) -> None:
+        # cognitive_type·subunit(안전 파셋)를 읽어 표현에 포함(벡터 분리 신호·Q1·Q2·Q4).
+        path = self._write_graph(
+            tmp_path,
+            [
+                {
+                    "code": _CODE_A,
+                    "level": "세부개념",
+                    "name": "기수 원리",
+                    "transfer": "핵심",
+                    "cognitive_type": "개념",
+                    "subunit": "100까지의 수와 세기",
+                }
+            ],
+        )
+        loaded = load_atoms_from_graph_json(path)
+        assert loaded == [AtomText(code=_CODE_A, text="기수 원리. 핵심. 개념. 100까지의 수와 세기")]
+
+    def test_facets_present_but_redaction_still_excluded(self, tmp_path: Path) -> None:
+        # 파셋이 있어도 본문·4요소·교육과정 필드는 여전히 유입되지 않는다(redaction 유지).
+        path = self._write_graph(
+            tmp_path,
+            [
+                {
+                    "code": _CODE_A,
+                    "level": "세부개념",
+                    "name": "연속과 미분가능",
+                    "transfer": "함수의 국소 성질",
+                    "cognitive_type": "개념",
+                    "subunit": "미분",
+                    "core_proposition": "명제 본문(금지)",
+                    "misconception": "오개념 본문(금지)",
+                    "socratic": "소크라테스 발문(금지)",
+                    "grade_band": "고2",
+                    "standard_codes": ["[12미적I-01]"],
+                }
+            ],
+        )
+        loaded = load_atoms_from_graph_json(path)
+        assert loaded == [
+            AtomText(code=_CODE_A, text="연속과 미분가능. 함수의 국소 성질. 개념. 미분")
+        ]
+        text = loaded[0].text
+        for forbidden in ("본문", "오개념", "소크라테스", "고2", "12미적"):
             assert forbidden not in text
 
     def test_skips_atoms_with_empty_safe_text(self, tmp_path: Path) -> None:

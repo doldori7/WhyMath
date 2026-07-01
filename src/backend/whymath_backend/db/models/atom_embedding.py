@@ -8,9 +8,10 @@ Phase 2a가 풍부 원자 메타를 `atom_node`(code 키 PG 프로젝션)에 투
 
 이 모듈은 `concept_embedding.py`를 원자용으로 *미러링*한다. 차이는 ① PK가 `code`(원자 code TEXT —
 예 `12미적Ⅰ-01-01-1`·`atom_node.code`와 동일 공간) ② **세부개념(원자)만 임베딩**(단원/소단원
-노드 제외 — 적재 책임은 로더가 진다) ③ **임베딩 입력이 name+transfer만**(개념판의
-name_ko+metaphor+accepted와 달리 원자엔 그 필드가 없다 — 적재 책임은 텍스트 합성기가 진다)이다.
-나머지(provider/model/dim 메타·고정 차원 `vector(N)`·HNSW 인덱스 없음·원문 비저장)는 동일 규약이다.
+노드 제외 — 적재 책임은 로더가 진다) ③ **임베딩 입력이 안전 구조 신호만**(name·transfer·
+cognitive_type·subunit — 개념판의 name_ko+metaphor+accepted에 대응하는 원자용 저작권-안전 신호.
+본문·4요소·교육과정 필드는 미포함·retrieval 분석 Q1·Q2·Q4)이다. 나머지(provider/model/dim 메타·
+고정 차원 `vector(N)`·HNSW 인덱스 없음·원문 비저장)는 동일 규약이다.
 
 설계 결정(concept_embedding 미러):
 - **PK는 code(TEXT)**: Phase 1 `concept.code`·Phase 2a `atom_node.code`와 *동일 키 공간*(UC 아님).
@@ -21,8 +22,9 @@ name_ko+metaphor+accepted와 달리 원자엔 그 필드가 없다 — 적재 �
   config+마이그레이션 함께 조정).
 - **provider/model/dim 메타**: 같은 임베딩 공간만 비교하려고 보관한다(서로 다른 모델 벡터
   혼재 방지 — 검색이 현재 provider/model 행만 본다). dim은 디버그·정합 점검용.
-- **text_hash(TEXT)**: 임베딩 *원본 표현*(원자 표현 = name + transfer)의 해시 — 표현이 바뀌면
-  재임베딩이 필요함을 감지하는 신호. **원문 자체는 저장하지 않고 해시만** 둔다(아래 redaction).
+- **text_hash(TEXT)**: 임베딩 *원본 표현*(원자 표현 = name·transfer·cognitive_type·subunit 안전
+  신호)의 해시 — 표현이 바뀌면(파셋 추가 포함) 재임베딩이 필요함을 감지하는 신호. **원문 자체는
+  저장하지 않고 해시만** 둔다(아래 redaction).
 - **source_text 비저장(redaction·프라이버시·중복 — CLAUDE.md 우선순위 #2)**: 임베딩 *원문*은
   컬럼으로 두지 않는다. ① 임베딩 입력은 안전 필드(name·transfer)뿐이라 본문 누수는 없으나,
   *원문 재저장을 구조적으로 차단*해 두면 향후 입력이 오염돼도 이 테이블엔 본문이 못 들어온다
@@ -76,8 +78,8 @@ class AtomEmbedding(Base):
     model: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 임베딩 차원(디버그·정합 점검). 컬럼 타입 차원과 일치해야 한다.
     dim: Mapped[int] = mapped_column(sa.Integer, nullable=False)
-    # 임베딩 원본 표현(name + transfer)의 해시 — 표현 변경(재임베딩 필요) 감지 신호. **원문은
-    # 미저장**(해시만).
+    # 임베딩 원본 표현(name·transfer·cognitive_type·subunit 안전 신호)의 해시 — 표현 변경(재임베딩
+    # 필요) 감지 신호. **원문은 미저장**(해시만).
     text_hash: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 마지막 upsert 시각 — 운영·신선도. server_default now()(upsert 시 코드가 갱신).
     updated_at: Mapped[datetime] = mapped_column(
