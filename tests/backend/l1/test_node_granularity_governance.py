@@ -74,7 +74,8 @@ def test_detail_atoms_are_independent_misconception_units() -> None:
     assert detail, "세부개념 레벨 원자가 있어야 한다"
     without_misconception = [a for a in detail if not _nonempty(a.get("misconception"))]
     assert not without_misconception, (
-        f"세부개념 원자 {len(without_misconception)}/{len(detail)}개가 독립 오개념(misconception)을 "
+        f"세부개념 원자 {len(without_misconception)}/{len(detail)}개가 "
+        "독립 오개념(misconception)을 "
         "갖지 않는다 — 과세분(Part 2 §1 '기울기의 x증가량') 후보다. 오개념 없는 세부 노드는 개념 "
         "속성으로 흡수하거나 상위 노드로 병합하라."
     )

@@ -29,6 +29,7 @@ from data_pipeline.concept_graph.idmap import build_alias_map, build_id_map
 from data_pipeline.concept_graph.models import (
     CONCEPT_ID_PATTERN,
     LEGACY_UC_PATTERN,
+    MIN_EDGE_STRENGTH,
     Concept,
     ConceptEdge,
     Relation,
@@ -278,6 +279,49 @@ def validate_graph(
                     ref=f"{edge.src_concept_id}→{edge.dst_concept_id}",
                     rule="grade_monotonic",
                     detail=f"선수개념 학년({src_grade})이 후행({dst_grade})보다 높음 — 역전 의심",
+                )
+            )
+
+    # 7b. weight floor (warning) — strength가 MIN_EDGE_STRENGTH 미만인 약한 엣지(Part 3
+    #     "낮은 weight는 제거되나?"). 데이터 품질 하한 — build-time에 약한 엣지를 가시화한다.
+    #     Phase 1은 warning(적재 비차단). 런타임 동적 pruning은 소비처 생길 때 후속.
+    for edge in edges:
+        if edge.strength < MIN_EDGE_STRENGTH:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_WARNING,
+                    ref=f"{edge.src_concept_id}→{edge.dst_concept_id}",
+                    rule="weak_edge",
+                    detail=(
+                        f"strength {edge.strength} < 하한 {MIN_EDGE_STRENGTH} — "
+                        "약한 엣지(그래프 dense화·traversal 희석 의심)"
+                    ),
+                )
+            )
+
+    # 7c. prerequisite 캐시 일관성 (warning) — 노드의 prerequisite_concept_ids 캐시가
+    #     prerequisite *엣지*와 어긋나지 않는지(dual-truth drift 방어·단일 진실 원천).
+    #     캐시 집합 == {src | prerequisite 엣지 ∧ dst==concept_id}. dangling(§5)은 별도 검사.
+    prereq_edge_srcs: dict[str, set[str]] = {}
+    for edge in edges:
+        if edge.relation == Relation.PREREQUISITE:
+            prereq_edge_srcs.setdefault(edge.dst_concept_id, set()).add(edge.src_concept_id)
+    for concept in concepts:
+        cache = set(concept.prerequisite_concept_ids)
+        from_edges = prereq_edge_srcs.get(concept.concept_id, set())
+        if cache != from_edges:
+            missing = from_edges - cache  # 엣지엔 있으나 캐시에 없음
+            extra = cache - from_edges  # 캐시에 있으나 엣지엔 없음
+            report.issues.append(
+                ValidationIssue(
+                    severity=_WARNING,
+                    ref=concept.concept_id,
+                    rule="prerequisite_cache_consistency",
+                    detail=(
+                        "prerequisite_concept_ids 캐시가 prerequisite 엣지와 불일치 — "
+                        f"엣지에만(캐시 누락): {sorted(missing)}·"
+                        f"캐시에만(엣지 없음): {sorted(extra)}"
+                    ),
                 )
             )
 

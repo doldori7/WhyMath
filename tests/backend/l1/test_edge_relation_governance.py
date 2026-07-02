@@ -40,10 +40,44 @@ _WEAK_RELATIONS: tuple[str, ...] = tuple(
 )
 
 
+# backend EdgeType 값 미러 — data-pipeline `relation_crosswalk.KNOWN_BACKEND_EDGE_TYPES`와
+# 동일 집합을 *양쪽 스위트가 각자* freeze한다(별도 pytest 스위트라 상호 import 불가). 이 집합이
+# 바뀌면 crosswalk 미러도 의식적으로 갱신해야 한다(관계 어휘 drift 조용한 확산 차단·Part 3 ②).
+_EXPECTED_EDGE_TYPE_VALUES: frozenset[str] = frozenset(
+    {
+        "PREREQUISITE",
+        "COMPOSED_OF",
+        "ANALOGOUS_TO",
+        "EXTENDS",
+        "CONTRASTS",
+        "TRIGGERS_DISTRACTOR",
+    }
+)
+# 어느 관계 어휘에도 등장 금지(약한 총칭 관계 — traversal dense화). crosswalk와 동일 계약.
+_FORBIDDEN_RELATION_TOKENS: frozenset[str] = frozenset({"similar_to", "related_to"})
+_MIN_RELATIONS, _MAX_RELATIONS = 5, 8
+
+
 def test_loaders_freeze_prerequisite_as_only_accepted_relation() -> None:
     """두 적재기 모두 수용 관계 상수가 정확히 "prerequisite"임을 동결(단일 진실)."""
     assert _ATOM_PREREQ_RELATION == "prerequisite"
     assert _CG_PREREQ_RELATION == "prerequisite"
+
+
+def test_edge_type_value_set_frozen() -> None:
+    """backend EdgeType 값 집합이 crosswalk 미러와 정확히 일치(drift 시 red)."""
+    assert {e.value for e in EdgeType} == _EXPECTED_EDGE_TYPE_VALUES
+
+
+def test_edge_type_count_within_budget() -> None:
+    """backend EdgeType은 핵심 관계 5~8개(폭발 방어·Part 3)."""
+    assert _MIN_RELATIONS <= len(EdgeType) <= _MAX_RELATIONS
+
+
+def test_no_forbidden_relation_token_in_edge_type() -> None:
+    """`similar_to`/`related_to`가 EdgeType 어휘에 없다(대소문자 무관)."""
+    lowered = {e.value.lower() for e in EdgeType}
+    assert not (_FORBIDDEN_RELATION_TOKENS & lowered)
 
 
 def test_weak_relation_vocabulary_preserved() -> None:
