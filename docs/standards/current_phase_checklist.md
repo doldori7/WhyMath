@@ -1,7 +1,7 @@
 # 현단계 완수 체크리스트 — Phase 1(MVP) 진행 중 + 다과목 확장 준비
 
 > **현단계 정의**: 저장소 ROADMAP.md 기준 **Phase 1(MVP) 진행 중**, 여기에 다과목 확장 로드맵의 P0(공통 기반화)에 해당하는 **확장 준비 작업**이 겹친 상태.
-> **정본 관계**: Phase 게이트 수치의 정본은 `ROADMAP.md`(본 문서는 대조표). 확장 준비의 설계 정본은 `docs/architecture/subject_expansion_readiness.md`(예정)·검토 근거는 `docs/strategy/subject_expansion_roadmap_review.md`.
+> **정본 관계**: Phase 게이트 수치의 정본은 `ROADMAP.md`(본 문서는 대조표). 확장 준비의 설계 정본은 `docs/architecture/subject_expansion_readiness.md`·검토 근거는 `docs/strategy/subject_expansion_roadmap_review.md`.
 > **완료 판정 공통 게이트**(모든 코드 항목): pytest 전체 green(현행 ~4,600건) · ruff · black(ll=100) · mypy --strict · import-linter 계약 유지 · 커버리지 70%+.
 > **상설 항목**: 각 Phase/트랙 착수 전 평가원·교육부 최신 공고 확인(2028 수능 개편 세부 변동 감시).
 
@@ -12,29 +12,29 @@
 다과목 확장 로드맵 P0의 저장소 측 실체. 각 슬라이스는 자족 PR + 공통 게이트 green이 완료 판정.
 
 ### S0 — 설계 문서
-- [ ] `docs/architecture/subject_expansion_readiness.md` 작성: 수학 종속 9지점 전수 목록(계층별·{하드/soft/이미 중립} 3등급·파일:줄) · 조정 원칙(값싼 seam 3조건 판별식) · 로드맵 · ID/성취기준/오개념 네임스페이스 설계 · cross-subject 엣지 원칙 · 보류 항목 대장(각 항목 **착수 트리거** 명시)
-- [ ] MEMORY.md 결정 로그 추가(Overlay subject 축·수학 ID 불변·SymPy 단일 유지·Subject enum 수학 한정 존치·보류 4종 트리거)
+- [x] `docs/architecture/subject_expansion_readiness.md` 작성: 수학 종속 9지점 전수 목록(계층별·{하드/soft/이미 중립} 3등급·파일:줄) · 조정 원칙(값싼 seam 3조건 판별식) · 로드맵 · ID/성취기준/오개념 네임스페이스 설계 · cross-subject 엣지 원칙 · 보류 항목 대장(각 항목 **착수 트리거** 명시)
+- [x] MEMORY.md 결정 로그 추가(Overlay subject 축·수학 ID 불변·SymPy 단일 유지·Subject enum 수학 한정 존치·보류 4종 트리거)
 - 완료 판정: 문서 내 인용 rev·경로 실재, 기존 문서(04a §8.1·math_dsl_risk_register Q5) 상호참조 정합
 
 ### S1 — CurriculumEntry `subject` 축 (유일한 마이그레이션 슬라이스)
-- [ ] `schemas/v1.1/curriculum_entry.schema.yaml`: `subject` 필드(required·default '수학'·**교과** 레벨 — NCIC `AchievementStandard.subject`(**과목** 레벨)와 granularity 구분 주석) · `composite_key` 3-튜플 · field_count 31
-- [ ] `schema/curriculum_entry.py`: `subject: str = Field(default="수학", min_length=1, ...)`
-- [ ] `db/models/curriculum_entry.py`: 컬럼(server_default '수학') + `UniqueConstraint(concept_id, country_code, subject)`
-- [ ] Alembic 마이그레이션(down_revision=`f3a4b5c6d7e8`): ADD COLUMN → 기존 UNIQUE drop → 3-튜플 UNIQUE. downgrade 대칭·왕복 검증
-- [ ] `l1/curriculum/curriculum_loader.py`: `_KR_SUBJECT` 상수·entry_id 규약(수학 셀 `{concept_id}:KR` 불변, 비수학만 `:{subject}` 접미) docstring
-- [ ] 테스트: 기본값·공백 거부·직렬화 / **같은 (concept_id, KR)에 '수학'+'물리' 두 행 공존 허용 + 동일 3-튜플 중복 거부** / KR 적재 셀 전부 '수학'·재적재 멱등
+- [x] `schemas/v1.1/curriculum_entry.schema.yaml`: `subject` 필드(required·default '수학'·**교과** 레벨 — NCIC `AchievementStandard.subject`(**과목** 레벨)와 granularity 구분 주석) · `composite_key` 3-튜플 · field_count 31
+- [x] `schema/curriculum_entry.py`: `subject: str = Field(default="수학", min_length=1, ...)`
+- [x] `db/models/curriculum_entry.py`: 컬럼(server_default '수학') + `UniqueConstraint(concept_id, country_code, subject)`
+- [x] Alembic 마이그레이션(down_revision=`f3a4b5c6d7e8`): ADD COLUMN → 기존 UNIQUE drop → 3-튜플 UNIQUE. downgrade 대칭·왕복 검증
+- [x] `l1/curriculum/curriculum_loader.py`: `_KR_SUBJECT` 상수·entry_id 규약(수학 셀 `{concept_id}:KR` 불변, 비수학만 `:{subject}` 접미) docstring
+- [x] 테스트: 기본값·공백 거부·직렬화 / **같은 (concept_id, KR)에 '수학'+'물리' 두 행 공존 허용 + 동일 3-튜플 중복 거부** / KR 적재 셀 전부 '수학'·재적재 멱등
 - 완료 판정: 공통 게이트 + alembic upgrade/downgrade 왕복 green
 
 ### S2 — NCIC 출처 표기 파라미터화 + 과학 코드 수용성 동결
-- [ ] 신규 `data_pipeline/citation.py`: `build_ncic_citation_core(subject_label="수학과")` — 고시 제2022-33호 공유·별책만 상이(별책 8 수학/별책 9 과학)
-- [ ] `ncic/models.py`·`concept_graph/models.py`·`atom_graph/models.py`의 `SOURCE_CITATION`을 빌더 합성으로 재작성 — **값 바이트 동일**(기존 golden/직렬화 테스트가 증명). `standards_university/models.py`는 NCIC 비유래라 불변
-- [ ] 과학 코드 수용성 회귀 테스트: `[12물리01-01]`·`[10통과1-01-01]`·`[12화학02-03]`·`[9과01-05]`·`[12물리Ⅱ03-02]` 패턴 통과 + `AchievementStandard(subject='물리학Ⅰ')` 생성 + norm_id `2022_12물리_01_01` 통과
+- [x] 신규 `data_pipeline/citation.py`: `build_ncic_citation_core(subject_label="수학과")` — 고시 제2022-33호 공유·별책만 상이(별책 8 수학/별책 9 과학)
+- [x] `ncic/models.py`·`concept_graph/models.py`·`atom_graph/models.py`의 `SOURCE_CITATION`을 빌더 합성으로 재작성 — **값 바이트 동일**(기존 golden/직렬화 테스트가 증명). `standards_university/models.py`는 NCIC 비유래라 불변
+- [x] 과학 코드 수용성 회귀 테스트: `[12물리01-01]`·`[10통과1-01-01]`·`[12화학02-03]`·`[9과01-05]`·`[12물리Ⅱ03-02]` 패턴 통과 + `AchievementStandard(subject='물리학Ⅰ')` 생성 + norm_id `2022_12물리_01_01` 통과
 - 완료 판정: 공통 게이트 + data-pipeline 커버리지 91% 유지 + 기존 코퍼스 재생성 diff 0
 
 ### S3 — 과목 중립성 회귀 게이트
-- [ ] `tests/data_pipeline/test_subject_neutrality_gate.py`: citation 단일 원천(3모듈이 빌더 출력 포함 + "[수학과 교육과정]" 리터럴이 `citation.py` 밖 재등장 금지) · AREA 예약 접두(물리 예약 MECH·ELEC·WAVE·THERMO·MODPHY 등) 미침범
-- [ ] `tests/backend/l4/test_misconception_namespace_gate.py`: 수학 오개념 30종 id가 예약 과목 접두(`phys-`·`chem-`·`bio-`·`earth-`) 비사용 + kebab 형식
-- [ ] `schema/enums.py` `Subject` docstring 1줄(수학 교과 한정 — 타 과목은 향후 `subject_area` 축) · `edge.schema.yaml` evidence_source 주석(`<subject>_education_literature` 패턴 규칙·rename 금지)
+- [x] `tests/data_pipeline/test_subject_neutrality_gate.py`: citation 단일 원천(3모듈이 빌더 출력 포함 + "[수학과 교육과정]" 리터럴이 `citation.py` 밖 재등장 금지) · AREA 예약 접두(물리 예약 MECH·ELEC·WAVE·THERMO·MODPHY 등) 미침범
+- [x] `tests/backend/l4/test_misconception_namespace_gate.py`: 수학 오개념 30종 id가 예약 과목 접두(`phys-`·`chem-`·`bio-`·`earth-`) 비사용 + kebab 형식
+- [x] `schema/enums.py` `Subject` docstring 1줄(수학 교과 한정 — 타 과목은 향후 `subject_area` 축) · `edge.schema.yaml` evidence_source 주석(`<subject>_education_literature` 패턴 규칙·rename 금지)
 - 완료 판정: 공통 게이트 (값·멤버 무변경이므로 마이그레이션 0)
 
 ### A부 보류 항목 (착수 트리거 도달 전 구현 금지 — S0 문서의 대장이 정본)
@@ -80,7 +80,7 @@
 
 ### 확장 관점 추가 게이트 (본 체크리스트 신설분)
 - [ ] Phase 2(타 과목 착수) 진입 전: **A부 S0~S3 완료 + B부 ★ 2건 완료** — 이것이 다과목 로드맵 P0 완료 판정의 저장소 측 정의
-- [ ] 과목 순서(물리 vs 화학) MEMORY 결정 로그 확정 — 미결 상태로 P2 착수 금지 (검토 문서 §3)
+- [x] 과목 순서(물리 vs 화학) MEMORY 결정 로그 확정 — **물리 우선 locked**(사용자 확인·MEMORY 2026-07-02)
 
 ---
 
