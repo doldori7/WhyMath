@@ -19,8 +19,25 @@ import '../data/scene_models.dart';
 ///
 /// 웹의 `parseSpecParam`(atob→JSON.parse)이 그대로 소비하는 **표준 base64**(urlsafe 아님)다.
 /// JSON은 compact(공백 없음) — `jsonEncode`는 기본이 compact다.
+/// (spec-only 인코더 — 공개 `?spec=` 공유 링크 계약과 동형. 봉투는 아래 참조.)
 String encodeGraph2dSpecParam(Map<String, dynamic> spec) =>
     base64.encode(utf8.encode(jsonEncode(spec)));
+
+/// Visualization → `{type, spec}` 봉투 base64(JSON) 파라미터 — 렌더 선택 단일 진실원(invariant ⑩).
+///
+/// 코어 `Visualization.type`이 렌더러를 정하는 단일 권위다(`data/render_contract.json`). 과거엔
+/// 이 경계가 spec만 실어(encodeGraph2dSpecParam) 웹이 spec 모양으로 렌더러를 재추론(experiment→sim
+/// 등)했고, experiment 없는 유효 sim이 2D로 오라우팅되는 drift가 있었다. 이제 `type`을 함께 실어
+/// 웹의 `unwrapSpecEnvelope`+`specToStateForType`가 type을 우선 소비하게 한다(웹은 봉투가 없는
+/// 레거시 spec-only도 shape 폴백으로 계속 수용 — 하위호환). spec-only 인코더는 공유 링크용으로 존치.
+String encodeVisualizationParam(Visualization viz) => base64.encode(
+      utf8.encode(
+        jsonEncode(<String, dynamic>{
+          'type': viz.type,
+          'spec': viz.spec ?? const <String, dynamic>{},
+        }),
+      ),
+    );
 
 /// 웹이 보낸 상호작용 메시지(JSON)를 디코드한다(학습 로그 인바운드).
 ///
@@ -73,7 +90,8 @@ class _GraphingCalculatorWebViewState extends ConsumerState<GraphingCalculatorWe
   void initState() {
     super.initState();
     // base64는 영숫자 + '+/=' 뿐이라 작은따옴표 JS 리터럴에 안전(이스케이프 불요).
-    final param = encodeGraph2dSpecParam(widget.viz.spec ?? const <String, dynamic>{});
+    // {type, spec} 봉투로 실어 웹이 type을 우선 소비하게 한다(invariant ⑩·렌더 선택 단일 진실원).
+    final param = encodeVisualizationParam(widget.viz);
     _controller = WebViewController()
       ..setJavaScriptMode(JavaScriptMode.unrestricted)
       // 학습 로그 인바운드 — 웹 emitInteraction이 보내는 학생 조작 이벤트를 백엔드로 적재.

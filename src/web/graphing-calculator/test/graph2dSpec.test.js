@@ -4,6 +4,8 @@ import {
   surface3dSpecToState,
   simulationSpecToState,
   parseSpecParam,
+  unwrapSpecEnvelope,
+  specToStateForType,
   calcStateToGraph2dSpec,
 } from "../src/lib/graph2dSpec";
 
@@ -311,5 +313,59 @@ describe("simulationSpecToState — outcomes 통과 (구조화 우선)", () => {
     };
     const b64 = Buffer.from(JSON.stringify(spec)).toString("base64");
     expect(simulationSpecToState(parseSpecParam(b64)).outcomes).toEqual(spec.outcomes);
+  });
+});
+
+describe("unwrapSpecEnvelope — {type, spec} 봉투 판별(invariant ⑩)", () => {
+  it("봉투는 {type, spec}로 언랩", () => {
+    const r = unwrapSpecEnvelope({ type: "interactive_graph_2d", spec: { function: "x" } });
+    expect(r.type).toBe("interactive_graph_2d");
+    expect(r.spec).toEqual({ function: "x" });
+  });
+  it("레거시 spec-only(function)는 type=null·spec=원본", () => {
+    const bare = { function: "x^2" };
+    const r = unwrapSpecEnvelope(bare);
+    expect(r.type).toBeNull();
+    expect(r.spec).toBe(bare);
+  });
+  it("spec-only에 우연히 type 필드가 있어도 spec(객체) 없으면 봉투 아님", () => {
+    // bare spec은 최상위 `spec` 키를 갖지 않음 — 봉투 오판 방지.
+    const r = unwrapSpecEnvelope({ type: "x", function: "x" });
+    expect(r.type).toBeNull();
+  });
+});
+
+describe("specToStateForType — type-first dispatch(레거시 shape 폴백)", () => {
+  it("type=graph_2d → 2D 어댑터(rows)", () => {
+    const st = specToStateForType("interactive_graph_2d", { function: "x" });
+    expect(Array.isArray(st.rows)).toBe(true);
+  });
+  it("type=surface_3d → 3D 어댑터", () => {
+    const st = specToStateForType("interactive_surface_3d", { surface: "x+y" });
+    expect(st.mode3D).toBe(true);
+  });
+  it("type=simulation → sim 어댑터", () => {
+    const st = specToStateForType("simulation_probabilistic", { experiment: "동전" });
+    expect(st.simulationMode).toBe(true);
+  });
+  it("type=animation → null(웹 렌더 경로 없음)", () => {
+    expect(specToStateForType("animation_prerendered", { asset_id: "a" })).toBeNull();
+  });
+  it("drift 수정 ②: graph_2d spec에 experiment 키 혼입돼도 type 우선 → 2D(sim 오라우팅 방지)", () => {
+    const st = specToStateForType("interactive_graph_2d", { function: "x", experiment: "동전" });
+    expect(Array.isArray(st.rows)).toBe(true);
+    expect(st.simulationMode).toBeUndefined();
+  });
+  it("레거시 type=null: experiment 있으면 shape 폴백으로 sim", () => {
+    const st = specToStateForType(null, { experiment: "동전" });
+    expect(st.simulationMode).toBe(true);
+  });
+  it("레거시 type=null: surface 있으면 shape 폴백으로 3D", () => {
+    const st = specToStateForType(null, { surface: "x+y" });
+    expect(st.mode3D).toBe(true);
+  });
+  it("레거시 type=null: 그 외는 2D 폴백", () => {
+    const st = specToStateForType(null, { function: "x" });
+    expect(Array.isArray(st.rows)).toBe(true);
   });
 });

@@ -5,6 +5,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:korean_math_app/features/chat/data/scene_models.dart';
 import 'package:korean_math_app/features/chat/presentation/graphing_calculator_webview.dart';
 
 void main() {
@@ -26,6 +27,47 @@ void main() {
 
     test('빈 spec도 안전하게 인코딩한다', () {
       expect(encodeGraph2dSpecParam(const <String, dynamic>{}), base64.encode(utf8.encode('{}')));
+    });
+  });
+
+  group('encodeVisualizationParam — {type, spec} 봉투(invariant ⑩)', () {
+    test('type+spec 봉투로 왕복 디코드(웹 unwrapSpecEnvelope 호환)', () {
+      final viz = Visualization(
+        type: 'interactive_graph_2d',
+        spec: <String, dynamic>{'function': 'a*x**2'},
+      );
+      final param = encodeVisualizationParam(viz);
+      final decoded = jsonDecode(utf8.decode(base64.decode(param)));
+      expect(decoded, <String, dynamic>{
+        'type': 'interactive_graph_2d',
+        'spec': <String, dynamic>{'function': 'a*x**2'},
+      });
+    });
+
+    test('spec 없는 시각화도 안전(빈 spec 봉투)', () {
+      final viz = Visualization(type: 'simulation_probabilistic');
+      final decoded = jsonDecode(utf8.decode(base64.decode(encodeVisualizationParam(viz))));
+      expect(decoded['type'], 'simulation_probabilistic');
+      expect(decoded['spec'], <String, dynamic>{});
+    });
+
+    test('compact JSON(공백 없음)으로 인코딩(웹 atob 호환)', () {
+      final viz = Visualization(
+        type: 'interactive_surface_3d',
+        spec: <String, dynamic>{'surface': 'x+y'},
+      );
+      expect(
+        utf8.decode(base64.decode(encodeVisualizationParam(viz))),
+        '{"type":"interactive_surface_3d","spec":{"surface":"x+y"}}',
+      );
+    });
+
+    test('spec-only 인코더는 봉투와 별개로 존치(공유 링크 하위호환)', () {
+      // encodeGraph2dSpecParam은 여전히 spec-only(공개 ?spec= 계약) — 봉투와 형식이 다르다.
+      final specOnly = utf8.decode(
+        base64.decode(encodeGraph2dSpecParam(<String, dynamic>{'function': 'x'})),
+      );
+      expect(specOnly, '{"function":"x"}');
     });
   });
 
