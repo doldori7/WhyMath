@@ -82,7 +82,7 @@
 | 오개념 참조 | 이 개념에서 전형적으로 발생하는 오개념(기존 7번 카탈로그 연결) |
 | 시각화 카드 참조 | L5 시각화 자산 키 (L1은 *참조만* 보유, 렌더링은 L5) |
 
-**`Edge` — 6가지 관계 유형**:
+**`Edge` — 7가지 관계 유형** (`notation_variant` 포함 — pipeline `Relation` 정본, backend 투영은 `docs/data/concept_graph.md` §2.2b crosswalk):
 | 관계 | 의미 |
 |---|---|
 | `prerequisite` | 선수 — A를 알아야 B를 배움 |

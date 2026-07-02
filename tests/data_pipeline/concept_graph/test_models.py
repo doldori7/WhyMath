@@ -225,6 +225,66 @@ class TestConceptEnrichedFields:
             _concept(**{redacted: "성취기준 본문 근접 복제"})
 
 
+class TestConceptPurity:
+    """Concept Purity(Part 3 항목 ③·8대 원칙 ①) — 노드에 renderer·animation·layout·UI·embedding·
+    prompt 혼입 금지. AI Graph(개념) ↔ Runtime Graph(렌더·애니·레이아웃·UI) 분리를 모델 필드
+    수준에서 동결한다. 시각화·오개념은 *참조 키*(visualization_card_keys·misconception_codes)만
+    허용 — 실체(렌더 명세·오개념 목록)는 노드 밖(render_contract·오개념 카탈로그)에 산다."""
+
+    # 노드가 보유할 수 있는 필드 화이트리스트(동결). 새 필드 추가 시 이 테스트가 red →
+    # "개념 자체인가, 해석/투영/실행 정보인가?"를 의식적으로 판정하도록 강제(하드 게이트).
+    _ALLOWED_FIELDS = frozenset(
+        {
+            "concept_id",
+            "source_id",
+            "aliases",
+            "name_ko",
+            "name_en",
+            "name_ja",
+            "domain",
+            "grade_band_hint",
+            "prerequisite_concept_ids",
+            "misconception_codes",
+            "visualization_card_keys",
+            "standard_codes",
+            "metaphor",
+            "accepted_expressions",
+            "ccss_code",
+            "misconception_text",
+            "difficulty_tier",
+            "review_status",
+            "notes",
+        }
+    )
+    # Runtime Graph(투영/실행) 관심사 토큰 — 노드 필드명에 등장 금지(참조 키 예외는 화이트리스트).
+    _FORBIDDEN_TOKENS = (
+        "renderer",
+        "animation",
+        "layout",
+        "embedding",
+        "prompt",
+        "widget",
+    )
+
+    def test_field_set_frozen(self) -> None:
+        """Concept 필드 집합이 화이트리스트와 정확히 일치(순수 개념만)."""
+        assert set(Concept.model_fields) == self._ALLOWED_FIELDS
+
+    def test_no_runtime_graph_field_leaks_in(self) -> None:
+        """어떤 필드명도 renderer/animation/layout/embedding/prompt 토큰을 담지 않는다."""
+        for name in Concept.model_fields:
+            low = name.lower()
+            for token in self._FORBIDDEN_TOKENS:
+                assert token not in low, f"Runtime Graph 관심사 누수 의심 필드: {name}"
+
+    def test_visualization_is_reference_key_only(self) -> None:
+        """시각화는 *참조 키*만(L5 자산 참조) — 렌더 명세 실체는 노드에 없다."""
+        assert "visualization_card_keys" in Concept.model_fields
+        # 렌더 실체 슬롯(예: figure_spec·render_spec)은 부재 → extra='forbid'가 거부.
+        with pytest.raises(ValidationError):
+            _concept(figure_spec={"type": "plot"})
+
+
 class TestConceptEdge:
     def test_valid_instance(self) -> None:
         e = _edge()

@@ -2,7 +2,7 @@
 # edge.schema.yaml — 개념 그래프 엣지 (ConceptEdge)
 # =============================================================================
 # 엔티티 목적:
-#   두 개념 노드 사이의 관계를 표현한다. 6가지 관계 유형 enum 중 하나로 분류되며,
+#   두 개념 노드 사이의 관계를 표현한다. 7가지 관계 유형 enum 중 하나로 분류되며,
 #   관계가 *얼마나 강한지*(strength)와 그 *판단 근거*(evidence)를 함께 가진다.
 #   "왜 이 개념을 배우는가"의 '왜'를 담당하는 엣지.
 #
@@ -11,13 +11,13 @@
 #   순회 로직은 L4 교수학 엔진 소관.
 #
 # 관련 데이터 카드:
-#   docs/data/concept_graph.md  (6관계 enum 정의·검증 invariant의 정본)
+#   docs/data/concept_graph.md  (7관계 enum 정의·crosswalk·검증 invariant의 정본)
 #
 # 관계 요약:
 #   - ConceptEdge.src_concept_id --> Concept.concept_id   (FK)
 #   - ConceptEdge.dst_concept_id --> Concept.concept_id   (FK)
-#   - relation enum 6종은 transform.py의 _RELATION_TYPES로 단일 관리
-#   - Neo4j에서는 6개 enum 값이 곧 Cypher 관계 타입:
+#   - relation enum 7종은 models.py의 Relation(→ RELATION_TYPES)로 단일 관리
+#   - Neo4j에서는 7개 enum 값이 곧 Cypher 관계 타입:
 #       (:Concept)-[:PREREQUISITE {strength, evidence, evidence_source}]->(:Concept)
 #
 # 상태: 명세 단계. Phase 1 구현 대상 (목표 규모 2,000엣지 — Phase 3 도달).
@@ -25,7 +25,7 @@
 
 entity: ConceptEdge
 layer: L1
-storage: Neo4j 5.x          # 6 enum 값 = Cypher 관계 타입
+storage: Neo4j 5.x          # 7 enum 값 = Cypher 관계 타입
 composite_key: [src_concept_id, dst_concept_id, relation]
 phase_scope: "Phase 1 — 고1 미적분 영역 엣지. 목표 2,000엣지는 Phase 3"
 
@@ -47,8 +47,8 @@ fields:
     type: enum
     required: true
     description: >-
-      관계 유형. 6종 중 하나. 이 enum은 concept_graph.md와 01_data_foundation.md가
-      정의한 것과 1:1 일치해야 하며, transform.py의 _RELATION_TYPES 한 곳에서 관리.
+      관계 유형. 7종 중 하나. 이 enum은 concept_graph.md와 01_data_foundation.md가
+      정의한 것과 1:1 일치해야 하며, models.py의 Relation(→ RELATION_TYPES) 한 곳에서 관리.
     values:
       prerequisite:
         meaning: "선수 — src를 알아야 dst를 배움"
@@ -99,7 +99,7 @@ fields:
 
 # --- 검증 invariant (concept_graph.md §5 — tests 예정) ------------------------
 validation_invariants:
-  - "relation이 6종 enum 밖이면 ValidationError (test_edge_rejects_unknown_relation)"
+  - "relation이 7종 enum 밖이면 ValidationError (test_edge_rejects_unknown_relation)"
   - "strength가 0.0~1.0 범위 밖이면 거부 (test_edge_strength_bounds)"
   - "evidence가 빈 문자열이면 거부 (test_edge_requires_evidence)"
   - "generalization ↔ specialization 역방향 쌍 존재 시 경고 (test_validate_warns_inverse_pair)"
@@ -112,7 +112,7 @@ validation_invariants:
 notes:
   - >-
     엣지 자동 제안은 NCIC 학년·영역 인접성에서 prerequisite 후보까지만 가능.
-    6종 관계 *확정*은 전문가 검수 — 휴리스틱 제안 + 사람 검수가 유일한 방어선.
+    7종 관계 *확정*은 전문가 검수 — 휴리스틱 제안 + 사람 검수가 유일한 방어선.
   - >-
     같은 개념쌍에 작성자마다 다른 엣지(contrast vs application 등)를 달 수 있음.
     evidence 필드 필수화가 그 주관성을 통제한다.

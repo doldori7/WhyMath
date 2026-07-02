@@ -153,6 +153,58 @@ class TestGradeMonotonic:
         assert "grade_monotonic" not in _rules(report)
 
 
+class TestWeakEdge:
+    """weight floor(Part 3 '낮은 weight 제거') — MIN_EDGE_STRENGTH 미만은 warning."""
+
+    def test_warns_below_floor(self) -> None:
+        """strength가 하한 미만이면 weak_edge warning(적재 비차단)."""
+        concepts = [_concept(_A), _concept(_B)]
+        edges = [_edge(_A, _B, strength=0.1)]  # 하한 0.3 미만
+        report = validate_graph(concepts, edges)
+        assert "weak_edge" in _rules(report)
+        assert report.success is True  # warning이라 통과
+
+    def test_no_warning_at_or_above_floor(self) -> None:
+        """하한 이상(0.3·기본 0.8)이면 weak_edge 없음."""
+        concepts = [_concept(_A), _concept(_B), _concept(_C)]
+        edges = [_edge(_A, _B, strength=0.3), _edge(_B, _C, strength=0.8)]
+        report = validate_graph(concepts, edges)
+        assert "weak_edge" not in _rules(report)
+
+
+class TestPrerequisiteCacheConsistency:
+    """prerequisite_concept_ids 캐시 == prerequisite 엣지 src 집합(dual-truth drift 방어)."""
+
+    def test_consistent_cache_no_warning(self) -> None:
+        """캐시가 엣지와 일치하면 경고 없음(_B가 _A의 선수 — dst=_A 캐시에 _B)."""
+        concepts = [_concept(_A, prerequisite_concept_ids=[_B]), _concept(_B)]
+        edges = [_edge(_B, _A)]  # src=_B(선수) → dst=_A(후행)
+        report = validate_graph(concepts, edges)
+        assert "prerequisite_cache_consistency" not in _rules(report)
+
+    def test_cache_missing_edge_source_warns(self) -> None:
+        """엣지엔 선수가 있으나 캐시가 비면 불일치 warning."""
+        concepts = [_concept(_A, prerequisite_concept_ids=[]), _concept(_B)]
+        edges = [_edge(_B, _A)]  # 캐시엔 _B 누락
+        report = validate_graph(concepts, edges)
+        assert "prerequisite_cache_consistency" in _rules(report)
+        assert report.success is True
+
+    def test_cache_extra_without_edge_warns(self) -> None:
+        """캐시엔 선수가 있으나 대응 엣지가 없으면 불일치 warning."""
+        concepts = [_concept(_A, prerequisite_concept_ids=[_B]), _concept(_B)]
+        edges: list[ConceptEdge] = []  # 대응 prerequisite 엣지 없음
+        report = validate_graph(concepts, edges)
+        assert "prerequisite_cache_consistency" in _rules(report)
+
+    def test_non_prerequisite_edge_not_counted(self) -> None:
+        """비-prerequisite 관계는 캐시 기대치에 포함되지 않는다(선수 캐시 전용)."""
+        concepts = [_concept(_A, prerequisite_concept_ids=[]), _concept(_B)]
+        edges = [_edge(_B, _A, relation="generalization")]  # 선수 아님 → 캐시 기대 0
+        report = validate_graph(concepts, edges)
+        assert "prerequisite_cache_consistency" not in _rules(report)
+
+
 class TestReport:
     def test_summary_counts(self) -> None:
         report = validate_graph([_concept(_A), _concept(_B)], [_edge(_A, _B)])

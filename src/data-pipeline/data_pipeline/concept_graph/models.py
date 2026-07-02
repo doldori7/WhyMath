@@ -93,6 +93,14 @@ RELATION_TYPES: Final[tuple[str, ...]] = tuple(r.value for r in Relation)
 EVIDENCE_SOURCES: Final[tuple[str, ...]] = tuple(e.value for e in EvidenceSource)
 REVIEW_STATUSES: Final[tuple[str, ...]] = tuple(s.value for s in ReviewStatus)
 
+# 엣지 strength 하한(플레이북 Part 3 "낮은 weight는 제거되나?" — build-time floor 게이트).
+# strength가 이 값 미만인 엣지는 *약한 관계*로 간주한다(그래프 dense화·traversal 희석 방어).
+# Phase 1 정책상 위반은 **warning**(validate.py `weak_edge`)이며 적재를 막지 않는다(§3.3).
+# 현재 데이터는 전 엣지 strength=0.8이라 이 하한은 no-op이다 — 향후 자동 제안·약한 관계가
+# 유입될 때를 대비한 단일 진실 임계값(단일 원천: 이 상수만 갱신). 런타임 동적 pruning(소비처
+# 생길 때)은 후속 — 여기서는 *데이터 품질 하한*만 명문화한다(premature 기계 금지).
+MIN_EDGE_STRENGTH: Final[float] = 0.3
+
 
 class Concept(BaseModel):
     """개념 그래프 노드 — `concept.schema.yaml` + 데이터셋 v1 풍부 필드 확장.
