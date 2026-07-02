@@ -288,16 +288,30 @@ def test_real_queue_all_pending_unsigned(real_rows: list[dict[str, Any]]) -> Non
         assert row["reviewed_on"] is None
 
 
+# 검수 반영(#392) 직접 대안 conf — Kiki 검수로 confidence 필드에 이전된 값(초안 전사 아님).
+# 이 집합만큼만 초안 최상위(_DRAFT_DIRECT_TOPS) *외에* non-null 직접매핑이 허용된다 — 그 밖의
+# 새 non-null 직접매핑은 여전히 전사 왜곡·미검수 유입으로 차단(가드 유지). M0556은 부분매핑
+# 강등되어 여기 없다(직접 아님).
+_REVIEWED_DIRECT_ALTS: dict[str, set[tuple[str, float]]] = {
+    "distribution-over-power": {("M0572", 0.80)},
+    "sign-flip-in-inequality": {("M0028", 0.90), ("M0778", 0.75)},
+    "square-root-positivity": {("M0647", 0.85)},
+}
+
+
 def test_real_queue_direct_top_confidences_match_draft(
     real_rows: list[dict[str, Any]],
 ) -> None:
-    # ④ 직접매핑 최상위 conf가 초안 명시값과 일치(전사 왜곡 방지 스팟).
-    # 무표기 D 대안은 confidence=null로 전사되므로 non-null 직접매핑 = 초안 최상위 명시분.
+    # ④ non-null 직접매핑 = 초안 최상위 명시분 ∪ 검수 반영 대안(#392) — 그 외 유입 차단.
+    expected: dict[str, set[tuple[str, float]]] = {
+        k: set(_DRAFT_DIRECT_TOPS.get(k, set())) | set(_REVIEWED_DIRECT_ALTS.get(k, set()))
+        for k in set(_DRAFT_DIRECT_TOPS) | set(_REVIEWED_DIRECT_ALTS)
+    }
     actual: dict[str, set[tuple[str, float]]] = {}
     for row in real_rows:
         if row["link_type"] == "직접매핑" and row["confidence"] is not None:
             actual.setdefault(row["kebab_id"], set()).add((row["mis_id"], row["confidence"]))
-    assert actual == _DRAFT_DIRECT_TOPS
+    assert actual == expected
 
 
 def test_real_queue_no_direct_candidate_case_transcribed(
