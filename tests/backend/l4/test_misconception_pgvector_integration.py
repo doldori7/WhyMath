@@ -200,6 +200,66 @@ class TestProviderModelFilter:
             _cleanup([key_a, key_b])
 
 
+class TestSubjectAxis:
+    """⑤ subject 축(과목 확장 S1) — server_default 백필 + 교과 스코프 경계 실증."""
+
+    def test_insert_without_subject_defaults_to_math(self) -> None:
+        # 마이그레이션 후 subject *무지정* raw INSERT가 server_default '수학'으로 충전된다
+        # (기존 행 무손상 백필과 같은 메커니즘 — 가산적·BREAKING-free 실증).
+        _skip_if_unreachable()
+        from sqlalchemy import text
+
+        key = "it-pgv-subject-default"
+        dim = Settings().embedding_dim
+        vec_literal = "[" + ",".join(["0.1"] * dim) + "]"
+        try:
+            engine = _sync_engine()
+            try:
+                with engine.begin() as conn:  # type: ignore[attr-defined]
+                    conn.execute(
+                        text(
+                            "INSERT INTO misconception_embedding "
+                            "(misconception_id, embedding, provider, model, dim, text_hash) "
+                            "VALUES (:k, CAST(:v AS vector), 'fake', 'fake-hash', :d, 'h')"
+                        ),
+                        {"k": key, "v": vec_literal, "d": dim},
+                    )
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    subject = conn.execute(
+                        text(
+                            "SELECT subject FROM misconception_embedding "
+                            "WHERE misconception_id = :k"
+                        ),
+                        {"k": key},
+                    ).scalar_one()
+                assert subject == "수학"
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+        finally:
+            _cleanup([key])
+
+    def test_physics_scope_does_not_see_math_rows(self) -> None:
+        # 경계 실증: 기본('수학') 스코프로 적재한 행이 subject='물리' 인스턴스의 search·
+        # existing_text_hashes에 *안 잡힌다*(namespace = 테이블 × subject — 교과 혼입 0).
+        _skip_if_unreachable()
+        provider = FakeEmbeddingProvider(dim=Settings().embedding_dim)
+        key = "it-pgv-subject-scope"
+        try:
+            vec = provider.embed(["교과 경계 공통 표현"])[0]
+            math_index = _fake_index()  # 기본 subject='수학'
+            math_index.upsert_entry(key, vec, source_text="교과 경계 공통 표현")
+
+            phys_index = PgVectorIndex(provider_name="fake", model_name="fake-hash", subject="물리")
+            # search 경계 — 물리 스코프에선 미회수, 수학 스코프(대조군)에선 회수.
+            assert key not in {h.key for h in phys_index.search(vec, top_k=10)}
+            assert key in {h.key for h in math_index.search(vec, top_k=10)}
+            # skip-if-unchanged 경계 — 물리 스코프 조회엔 안 잡혀 "변경"으로 취급된다.
+            assert phys_index.existing_text_hashes([key]) == {}
+            assert key in math_index.existing_text_hashes([key])
+        finally:
+            _cleanup([key])
+
+
 class TestSemanticMatcherE2E:
     """② SemanticMatcher(index=PgVectorIndex) — 슬104 좌석 드롭인 e2e."""
 

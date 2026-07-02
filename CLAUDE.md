@@ -208,7 +208,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 **AI 연동 시**:
 - [ ] LLM에 전체 그래프가 아니라 subgraph(depth ≤ 2, max_nodes ≤ 12~20)만 주는가?
 - [ ] 오개념을 초기 context에 preload하지 않고 reactive로 가져오는가?
-- [ ] concept/misconception embedding index가 분리되어 있는가?
+- [ ] concept/atom/misconception embedding이 물리(테이블)·논리(subject 스코프 + 거버넌스 테스트) 분리되어 있는가? (DB cross-table 코사인 금지 — `test_embedding_namespace_governance.py`)
 - [ ] traversal에 visited set·timeout·token budget guard가 있는가?
 
 ---

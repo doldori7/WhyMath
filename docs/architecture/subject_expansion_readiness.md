@@ -123,7 +123,7 @@
 | `VisualizationStyle` 물리 양식 | 소비처 0 | 물리 시각화 콘텐츠 착수 | PG enum ADD VALUE(벡터장·파동그래프 등) — 자체 docstring 설계 그대로 |
 | 물리 도해 OCR | 콘텐츠 Phase 소관 | 물리 손글씨 입력 요구 확정 | 기존 PaddleOCR+Qwen3-VL 하이브리드에 도해 프롬프트 축 추가 검토 |
 | 오개념 subject 필드·유형 5분류 | 3중 표현 부채 상호작용 | canonical 수렴 트랙 | 수렴 스키마에 과목 축·유형 축 동시 반영 |
-| 임베딩 namespace 과목 축 | 기존 분리 부채와 통합 설계 | invariant ⑨(namespace 분리) 트랙 착수 | pgvector namespace 설계에 subject 스코프 포함 |
+| ~~임베딩 namespace 과목 축~~ | **해소(2026-07-02)** — invariant ⑨ 트랙에서 구현 완료: 임베딩 3테이블 subject 컬럼 + (provider, model, subject) 3축 스코프 + 거버넌스 게이트(재임베딩 0) | (트리거 도달·완료) | Alembic `b6c7d8e9f0a1`·`test_embedding_namespace_governance.py` |
 
 ## 9. 검증 invariant (S1~S3가 코드로 동결하는 것)
 

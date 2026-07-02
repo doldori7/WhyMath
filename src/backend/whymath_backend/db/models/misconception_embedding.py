@@ -18,6 +18,16 @@ Postgres 16 통합)의 첫 실 결선.
   혼재 방지 — `PgVectorIndex.search`가 현재 provider/model 행만 본다). dim은 디버그·정합 점검용.
 - **text_hash(TEXT)**: 임베딩 *원본 표현*의 해시 — 카탈로그 표현(`catalog_text`)이 바뀌면
   재임베딩이 필요함을 감지하는 신호(populate가 비교에 쓸 수 있다). 표현 변경 추적용.
+- **subject(TEXT·NOT NULL·server_default '수학')**: 임베딩 namespace의 *교과 축*(과목 확장 S1 —
+  `l1/embedding_primitives.py` namespace 불변식 "namespace = 테이블(kind) × subject"). 축 구분 명문:
+  ① 수학 내부 영역 축(`concept_node.domain`류)과 **직교**한다 — subject는 교과('수학'·'물리')
+  경계다. ② 교육과정 스코핑의 진실 출처는 `CurriculumEntry.subject`(Overlay 정본)다 — 임베딩
+  행의 subject는 **콘텐츠 팩 태그**(적재기가 적재 시점에 `DEFAULT_EMBEDDING_SUBJECT` 상수를
+  주입하는 스코프 라벨)이지 교육과정 매핑 주장이 아니다. ③ 오개념 id의 kebab 접두(`phys-` 등 —
+  subject_expansion_readiness.md §5)는 **명명 규약**이고 이 컬럼이 **질의 축**이다 — 접두는
+  사람이 읽는 유래 표기, 스코프 필터는 컬럼으로만 건다(이중 진실 아님·접두 파싱으로 스코핑
+  금지). server_default '수학'으로 기존 행이 무손상 백필된다(재임베딩 0 — subject는 컬럼/
+  스코프에만 들어가고 임베딩 *텍스트*에는 안 들어간다).
 - **updated_at**: 마지막 upsert 시각(운영·신선도 추적). server_default now().
 - **HNSW/IVFFlat 인덱스 없음**: 30종은 seq-scan이 최적이라 ANN 인덱스를 두지 않는다.
   스케일 코퍼스(개념그래프 401+·문제은행·학생 풀이)는 *fixed-dim + HNSW cosine 인덱스*가
@@ -61,6 +71,9 @@ class MisconceptionEmbedding(Base):
     # 임베딩 공간 식별 — provider(local/openai/fake)·model(bge-m3 등). 같은 공간만 비교.
     provider: Mapped[str] = mapped_column(sa.Text, nullable=False)
     model: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    # 교과 축(namespace = 테이블 × subject) — 콘텐츠 팩 태그. kebab 접두(phys-)는 명명 규약,
+    # 질의 축은 이 컬럼(모듈 docstring ③). server_default는 DEFAULT_EMBEDDING_SUBJECT와 동일.
+    subject: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default="수학")
     # 임베딩 차원(디버그·정합 점검). 컬럼 타입 차원과 일치해야 한다.
     dim: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     # 임베딩 원본 표현(catalog_text)의 해시 — 표현 변경(재임베딩 필요) 감지 신호.

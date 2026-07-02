@@ -52,6 +52,7 @@ from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
 # 좌석을 쓴다. text_hash(표현 변경 감지)·provider_model_identity(공간 식별)는 레이어-중립 L1
 # 프리미티브(`l1/embedding_primitives.py`)에서 가져온다(L1→L1·역방향 의존 0·seam 0·동일 규약).
 from whymath_backend.l1.embedding_primitives import (
+    DEFAULT_EMBEDDING_SUBJECT,
     embed_changed,
     join_embedding_text,
     provider_model_identity,
@@ -144,6 +145,11 @@ class AtomEmbeddingIndex:
     provider/model은 *임베딩 공간 식별자*다 — 같은 provider라도 model이 다르면 다른 공간으로
     본다. 호출자(적재기)는 upsert/search에 *같은* provider·model을 일관되게 넘겨야 한다. 차원
     불일치는 pgvector가 적재 시점에 오류로 막는다(컬럼 `vector(N)`).
+
+    `subject`는 임베딩 namespace의 *교과 축*이다(namespace = 테이블 × subject —
+    `l1/embedding_primitives.py` 불변식). upsert·search·existing_text_hashes 전부가 이 스코프를
+    건다 — 다른 교과 행은 서로 보이지 않는다. 기본값 `DEFAULT_EMBEDDING_SUBJECT`('수학')라
+    기존 호출자(populate)는 무수정으로 수학 스코프를 흡수한다(파라미터 관통 금지).
     """
 
     def __init__(
@@ -151,11 +157,13 @@ class AtomEmbeddingIndex:
         *,
         provider_name: str,
         model_name: str,
+        subject: str = DEFAULT_EMBEDDING_SUBJECT,
         engine: Engine | None = None,
         settings: Settings | None = None,
     ) -> None:
         self._provider_name = provider_name
         self._model_name = model_name
+        self._subject = subject
         self._engine = engine
         self._settings = settings
 
@@ -194,6 +202,7 @@ class AtomEmbeddingIndex:
             embedding=values,
             provider=self._provider_name,
             model=self._model_name,
+            subject=self._subject,
             dim=len(values),
             text_hash=text_hash(source_text),
         )
@@ -204,6 +213,7 @@ class AtomEmbeddingIndex:
                 "embedding": stmt.excluded.embedding,
                 "provider": stmt.excluded.provider,
                 "model": stmt.excluded.model,
+                "subject": stmt.excluded.subject,
                 "dim": stmt.excluded.dim,
                 "text_hash": stmt.excluded.text_hash,
                 "updated_at": func.now(),
@@ -239,6 +249,8 @@ class AtomEmbeddingIndex:
             .where(
                 AtomEmbedding.provider == self._provider_name,
                 AtomEmbedding.model == self._model_name,
+                # 교과 스코프 — 다른 subject 행은 랭킹에 안 잡힌다(namespace 불변식).
+                AtomEmbedding.subject == self._subject,
             )
             .order_by(distance)
             .limit(top_k)
@@ -269,6 +281,8 @@ class AtomEmbeddingIndex:
             AtomEmbedding.code.in_(list(dict.fromkeys(codes))),
             AtomEmbedding.provider == self._provider_name,
             AtomEmbedding.model == self._model_name,
+            # 교과 스코프 — 다른 subject 행은 조회에 안 잡혀 "변경"으로 취급(재임베딩).
+            AtomEmbedding.subject == self._subject,
         )
         with self._get_engine().connect() as conn:
             rows = conn.execute(stmt).all()
