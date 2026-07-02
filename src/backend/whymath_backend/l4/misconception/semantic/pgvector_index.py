@@ -33,16 +33,17 @@ from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from whymath_backend.config import Settings, get_settings
+from whymath_backend.l1.embedding_primitives import (
+    DEFAULT_EMBEDDING_SUBJECT,
+    embed_changed,
+    text_hash,
+)
 
 # 레이어-중립 L1 프리미티브 재사용(역방향 의존 제거) — 표현 해시·skip-if-unchanged 코어·공간 식별자.
 # `_provider_model_identity`는 기존 사용처(matcher 지연 import·아래 populate)를 위해 같은 이름으로
 # 별칭한다. `text_hash`는 아래 `__all__`로 re-export(기존 import 경로 유지).
 from whymath_backend.l1.embedding_primitives import (
     build_sync_engine as _build_sync_engine,
-)
-from whymath_backend.l1.embedding_primitives import (
-    embed_changed,
-    text_hash,
 )
 from whymath_backend.l1.embedding_primitives import (
     provider_model_identity as _provider_model_identity,
@@ -71,6 +72,11 @@ class PgVectorIndex:
     본다. 호출자(populate·매처)는 add/search에 *같은* provider·model을 일관되게 넘겨야 한다
     (혼용 시 search가 빈 결과 — 같은 공간 행이 없으므로). 차원 불일치는 pgvector가 적재 시점에
     오류로 막는다(컬럼 `vector(N)`).
+
+    `subject`는 임베딩 namespace의 *교과 축*이다(namespace = 테이블 × subject —
+    `l1/embedding_primitives.py` 불변식). upsert·search·existing_text_hashes 전부가 이 스코프를
+    건다 — 다른 교과 행은 서로 보이지 않는다. 기본값 `DEFAULT_EMBEDDING_SUBJECT`('수학')라
+    기존 호출자(populate·matcher)는 무수정으로 수학 스코프를 흡수한다(파라미터 관통 금지).
     """
 
     def __init__(
@@ -78,11 +84,13 @@ class PgVectorIndex:
         *,
         provider_name: str,
         model_name: str,
+        subject: str = DEFAULT_EMBEDDING_SUBJECT,
         engine: Engine | None = None,
         settings: Settings | None = None,
     ) -> None:
         self._provider_name = provider_name
         self._model_name = model_name
+        self._subject = subject
         self._engine = engine
         self._settings = settings
 
@@ -132,6 +140,7 @@ class PgVectorIndex:
             embedding=values,
             provider=self._provider_name,
             model=self._model_name,
+            subject=self._subject,
             dim=len(values),
             text_hash=text_hash(source_text),
         )
@@ -142,6 +151,7 @@ class PgVectorIndex:
                 "embedding": stmt.excluded.embedding,
                 "provider": stmt.excluded.provider,
                 "model": stmt.excluded.model,
+                "subject": stmt.excluded.subject,
                 "dim": stmt.excluded.dim,
                 "text_hash": stmt.excluded.text_hash,
                 "updated_at": func.now(),
@@ -173,6 +183,8 @@ class PgVectorIndex:
             .where(
                 MisconceptionEmbedding.provider == self._provider_name,
                 MisconceptionEmbedding.model == self._model_name,
+                # 교과 스코프 — 다른 subject 행은 랭킹에 안 잡힌다(namespace 불변식).
+                MisconceptionEmbedding.subject == self._subject,
             )
             .order_by(distance)
             .limit(top_k)
@@ -207,6 +219,8 @@ class PgVectorIndex:
             MisconceptionEmbedding.misconception_id.in_(list(dict.fromkeys(keys))),
             MisconceptionEmbedding.provider == self._provider_name,
             MisconceptionEmbedding.model == self._model_name,
+            # 교과 스코프 — 다른 subject 행은 조회에 안 잡혀 "변경"으로 취급(재임베딩).
+            MisconceptionEmbedding.subject == self._subject,
         )
         with self._get_engine().connect() as conn:
             rows = conn.execute(stmt).all()

@@ -31,6 +31,14 @@ join된다. 슬98 결정(벡터 DB=pgvector·Postgres 16 통합)을 개념 자�
   본문 누수는 없으나, *원문 재저장을 구조적으로 차단*해 두면 향후 입력이 오염돼도 이 테이블엔
   본문이 못 들어온다(방어). ② 임베딩 벡터만이 의미검색에 필요하고 원문은 Neo4j 노드 속성에
   이미 있다(중복 제거). 변경 감지는 `text_hash`로 충분하다.
+- **subject(TEXT·NOT NULL·server_default '수학')**: 임베딩 namespace의 *교과 축*(과목 확장 S1 —
+  `l1/embedding_primitives.py` namespace 불변식 "namespace = 테이블(kind) × subject"). 축 구분 명문:
+  ① `concept_node.domain`(영역명 '[고]미적분' 등 — *수학 내부* 영역 축)과 **직교**한다 — domain은
+  수학 안의 세부 영역이고 subject는 교과('수학'·'물리') 경계다. ② 교육과정 스코핑의 진실 출처는
+  `CurriculumEntry.subject`(Overlay 정본)다 — 임베딩 행의 subject는 **콘텐츠 팩 태그**(적재기가
+  적재 시점에 `DEFAULT_EMBEDDING_SUBJECT` 상수를 주입하는 스코프 라벨)이지 교육과정 매핑 주장이
+  아니다(이중 진실 아님·정본 조회는 Overlay로). ③ server_default '수학'으로 기존 행이 무손상
+  백필된다(재임베딩 0 — subject는 컬럼/스코프에만 들어가고 임베딩 *텍스트*에는 안 들어간다).
 - **updated_at**: 마지막 upsert 시각(운영·신선도 추적). server_default now().
 - **HNSW/IVFFlat 인덱스 없음**: `misconception_embedding`과 동일 — 현 규모는 seq-scan이 최적.
   스케일 코퍼스(문제은행·학생 풀이까지)는 *fixed-dim + HNSW cosine 인덱스*가 정석이나, 이
@@ -78,6 +86,9 @@ class ConceptEmbedding(Base):
     # 임베딩 공간 식별 — provider(local/openai/fake)·model(bge-m3 등). 같은 공간만 비교.
     provider: Mapped[str] = mapped_column(sa.Text, nullable=False)
     model: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    # 교과 축(namespace = 테이블 × subject) — 콘텐츠 팩 태그(정본은 CurriculumEntry.subject).
+    # server_default는 DEFAULT_EMBEDDING_SUBJECT('수학')와 동일해야 한다(거버넌스 테스트 동결).
+    subject: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default="수학")
     # 임베딩 차원(디버그·정합 점검). 컬럼 타입 차원과 일치해야 한다.
     dim: Mapped[int] = mapped_column(sa.Integer, nullable=False)
     # 임베딩 원본 표현의 해시 — 표현 변경(재임베딩 필요) 감지 신호. **원문은 미저장**(해시만).

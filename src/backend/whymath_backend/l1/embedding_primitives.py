@@ -14,6 +14,33 @@ L계층도 import하지 않는다(순환 불가).
   - `provider_model_identity`: provider 객체 + Settings → (provider_name, model_name) 공간 식별자.
   - `embed_changed`: skip-if-unchanged 적재 코어(개념·원자·오개념 공유).
   - `build_sync_engine`: pgvector sync(psycopg) 엔진 빌더 + register_vector 리스너(sync 좌석 공유).
+  - `DEFAULT_EMBEDDING_SUBJECT`: 임베딩 subject 축 기본값('수학') — 세 인덱스·ORM·게이트 공유.
+
+────────────────────────────────────────────────────────────────────────────
+임베딩 namespace 불변식 (과목 확장 S1 — subject_expansion_readiness.md §8 namespace 과목 축)
+────────────────────────────────────────────────────────────────────────────
+**namespace = 테이블(kind) × subject.** 임베딩 저장소의 논리 경계는 두 축의 곱이다:
+
+  - **kind(자산 종류)**: 테이블 자체가 표현한다 — `misconception_embedding`·`concept_embedding`·
+    `atom_embedding`은 물리적으로 분리된 별개 테이블이고, 별도 namespace 컬럼은 **두지 않는다**
+    (테이블명이 이미 kind를 함의 — 컬럼 중복 기각). kind 경계는 거버넌스 테스트
+    (`tests/backend/l1/test_embedding_namespace_governance.py`)로 동결한다.
+  - **subject(교과 축)**: 각 테이블의 `subject` 컬럼('수학'·'물리' — 교과 레벨). 세 인덱스의
+    search·existing_text_hashes·upsert가 *전부* subject 스코프를 건다 — 다른 교과 행은 서로
+    보이지 않는다(과목 확장 시 벡터 공간 혼입 0).
+  - **provider/model은 별개 공간 축**이다 — subject와 직교한다. provider/model은 "어느 임베딩
+    모델의 벡터 공간인가"(코사인 비교 가능성)이고, subject는 "어느 교과의 콘텐츠인가"(도메인
+    경계)다. 둘을 합성한 4-튜플 (테이블, subject, provider, model)이 완전한 비교 가능 스코프다.
+
+**DB cross-table 코사인 금지**: 서로 다른 kind 테이블 간 임베딩 벡터를 SQL에서 직접 코사인
+비교(`<=>` join)하는 질의는 금지한다 — kind 경계가 곧 의미 공간 경계다(오개념 벡터와 개념
+벡터의 근접은 도메인 로직이 해석해야지 SQL 랭킹이 섞으면 안 된다). 유일 예외:
+`l4/misconception/crosslink_candidates.py`의 **in-memory 교차**(개념 키워드 ↔ 오개념 표현) —
+이는 오개념 도메인 *내부*의 후보 생성 휴리스틱이라 DB 질의 경계를 넘지 않는다(예외로 명문).
+이 금지는 거버넌스 테스트의 cosine_distance 호출 소스 스캔 allowlist로 동결한다.
+
+subject는 **컬럼/스코프에만** 들어간다 — 임베딩 *텍스트*(`join_embedding_text` 계열)에는 절대
+넣지 않는다(`EMBEDDING_TEXT_FORMAT_VERSION` 불변·기존 벡터 재임베딩 0 보증).
 """
 
 from __future__ import annotations
@@ -36,6 +63,14 @@ if TYPE_CHECKING:
 # 대비 합성/분해 유니코드·전각/반각을 통일해 실제 provider(bge-m3·OpenAI) 입력의 표기 흔들림을
 # 제거한다(FakeEmbeddingProvider가 이미 내부 NFKC를 쓰던 것을 상류로 끌어올려 정합).
 EMBEDDING_TEXT_FORMAT_VERSION = 2
+
+# 임베딩 subject 축 기본값(교과 레벨 '수학') — 세 적재기 인덱스(`ConceptEmbeddingIndex`·
+# `AtomEmbeddingIndex`·`PgVectorIndex`) 생성자 기본값·세 ORM `server_default`·거버넌스 게이트
+# 테스트가 공유하는 **단일 진실**이다. 값의 의미는 `CurriculumEntry.subject`(Overlay 정본)와
+# 같은 교과 축('수학'·'물리')이되, 임베딩 행의 subject는 *콘텐츠 팩 태그*다 — 적재기가 적재
+# 시점에 상수로 주입하는 스코프 라벨이지 교육과정 매핑 주장이 아니다(정본은 Overlay).
+# ⚠️ 이 값은 임베딩 *텍스트*에 절대 넣지 않는다(모듈 docstring namespace 불변식·재임베딩 0).
+DEFAULT_EMBEDDING_SUBJECT: str = "수학"
 
 
 def normalize_embedding_input(text: str) -> str:
@@ -187,6 +222,7 @@ def build_sync_engine(settings: Settings) -> Engine:
 
 
 __all__ = [
+    "DEFAULT_EMBEDDING_SUBJECT",
     "EMBEDDING_TEXT_FORMAT_VERSION",
     "EmbeddingProvider",
     "build_sync_engine",

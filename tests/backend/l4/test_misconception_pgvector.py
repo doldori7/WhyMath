@@ -260,6 +260,40 @@ class TestStatementConstruction:
         assert "<=>" in compiled
         assert "LIMIT" in compiled
 
+    def test_upsert_captures_default_subject(self) -> None:
+        # subject 축(namespace = 테이블 × subject·S1): 기본 생성 인덱스의 add(upsert)가 subject를
+        # DEFAULT_EMBEDDING_SUBJECT('수학')로 바인딩하고, 충돌 갱신 SET에도 subject가 포함된다.
+        from sqlalchemy.dialects import postgresql
+
+        from whymath_backend.l1.embedding_primitives import DEFAULT_EMBEDDING_SUBJECT
+
+        index, engine = _fake_pg_index()
+        index.add("distribution-over-power", [0.1, 0.2])
+        stmt = engine.executed[0]
+        compiled = _compile(stmt)
+        assert "subject = excluded.subject" in compiled
+        params = dict(stmt.compile(dialect=postgresql.dialect()).params)  # type: ignore[attr-defined]
+        assert params["subject"] == DEFAULT_EMBEDDING_SUBJECT
+
+    def test_upsert_captures_custom_subject(self) -> None:
+        # 생성자 subject('물리')가 upsert 바인딩에 그대로 흐른다(교과 스코프 실효성).
+        from sqlalchemy.dialects import postgresql
+
+        engine = _FakeEngine()
+        index = PgVectorIndex(
+            provider_name="fake",
+            model_name="fake-hash",
+            subject="물리",
+            engine=engine,  # type: ignore[arg-type]  # 가짜 엔진(구조만 충족)
+        )
+        index.upsert_entry("phys-velocity-slope", [0.1], source_text="표현")
+        params = dict(
+            engine.executed[0].compile(dialect=postgresql.dialect()).params  # type: ignore[attr-defined]
+        )
+        assert params["subject"] == "물리"
+        # 텍스트 불변 계약: subject가 달라도 text_hash는 표현만의 해시(재임베딩 0).
+        assert params["text_hash"] == text_hash("표현")
+
 
 def _compile(statement: object) -> str:
     """SQLAlchemy statement를 PostgreSQL dialect로 컴파일한 SQL 문자열(검사용)."""
