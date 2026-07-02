@@ -220,6 +220,8 @@ class Problem(BaseModel):
     )
 
     # ===== 교육과정 버전 =====
+    # 문항 본질 속성(개정판 정합)·제거 금지 — L6 게이트 ③ 살아있는 소비처(오등록 상환
+    # 2026-07-02·`Curriculum` docstring). 개념 노드와 달리 Overlay 이관 대상 아님.
     curriculum_version: Curriculum = Field(..., description="교육과정 버전(2015/2022 개정 등)")
     valid_from_year: int = Field(..., description="적용 시작 학년도(예: 2014)")
     valid_to_year: int | None = Field(

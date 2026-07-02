@@ -22,7 +22,7 @@
 | 임베딩 | **단일 pgvector, namespace 분리 없음**(`l1/embedding_primitives.py`) — concept/atom/misconception 동일 벡터공간. 방향맹 매처(둘레↔넓이 코사인 동일) 실측, 과거 FP 45.5% *(→ 정정 2026-07-02 참조 — 두 문제의 융합 서술)* |
 | Cycle | load-time DFS 게이트(`l1/atom_graph/populate.py`) + 파이프라인 validate. 모델 불변식은 self-loop만. **런타임 reachability/SCC 게이트 없음** |
 | 렌더러 | spec 렌더러 독립(노드에 fps/shader/pixel 필드 0, `extra="forbid"`). 그러나 **렌더 선택 로직 3곳 산재**(`scene_renderer.dart`·`GraphingCalculator.jsx`·WebView) |
-| 교육과정 | CurriculumEntry 단일 진실화 완료(PR #350). 그러나 **`Problem`이 아직 `Curriculum` enum 참조**(슬라이싱 미완) |
+| 교육과정 | CurriculumEntry 단일 진실화 완료(PR #350). ~~그러나 `Problem`이 아직 `Curriculum` enum 참조(슬라이싱 미완)~~ *(→ 정정 2026-07-02 — 오등록·문항 본질 속성이라 유지가 정답)* |
 | AST | SymPy(권위 `l3/symbolic_equivalence.py`)/mathjs(렌더)/`l3/speech_parse.py`(커스텀 AST)/MathLive. golden test는 SymPy↔mathjs만, **speech 파서는 notation_contract 밖** |
 
 ---
@@ -38,7 +38,7 @@
 | 3 | **semantic ambiguity** | 🔴 | 원자 백본 입도 개선 진행 | "객체(기울기) vs 해석(변화율·속도·방향)" 단일 노드 융합 |
 | 4 | **renderer coupling** | 🟢spec / 🟠선택 | spec 렌더러 독립·`extra=forbid` | 렌더 **선택** 로직 3곳 산재 → 신규 type/엔진 = 3곳 동기 수정 |
 | 5 | **interaction state leakage** | 🟢상태 / 🟠계약 | spec stateless·런타임 분리 | `event_data` JSONB 자유형·concept/scene_id 호스트 주입 무검증 |
-| 6 | **curriculum inconsistency** | 🟢 | CurriculumEntry 단일화·Concept 필드 제거(PR #350) | `Problem`의 `Curriculum` enum 잔여·US/IMO overlay 미구축 |
+| 6 | **curriculum inconsistency** | 🟢 | CurriculumEntry 단일화·Concept 필드 제거(PR #350) | ~~`Problem`의 `Curriculum` enum 잔여~~(정정 2026-07-02 — 문항 본질 속성·유지)·US/IMO overlay 미구축 |
 | 7 | **AI retrieval failure** | 🟠→🔴 | 본문 redaction·reviewed_only 게이팅 | **단일 임베딩 namespace**·방향맹·집계 hub 노드 attention 오염 |
 | 8 | **cyclic dependency** | 🟡 | load-time DFS + 파이프라인 validate | 런타임 reachability/SCC 부재 → 증분 edge-add 시 다중홉 cycle 무방비 |
 | 9 | **AST duplication** | 🟠 | notation_contract golden test(SymPy↔mathjs) | **speech 파서 계약 밖** → 낭독 AST drift |
@@ -88,8 +88,10 @@
 
 ### Q5. 교육과정 변경 시 가장 취약한 부분
 
-1. **`Problem`의 `Curriculum` enum 잔여.** Concept에선 제거됐으나 Problem이 아직
-   참조 — 개정 시 outdated 값 잔류·이중 진실. 슬라이싱 완주 필요. ← 최우선
+1. ~~**`Problem`의 `Curriculum` enum 잔여.** Concept에선 제거됐으나 Problem이 아직
+   참조 — 개정 시 outdated 값 잔류·이중 진실. 슬라이싱 완주 필요. ← 최우선~~
+   *(→ 정정 2026-07-02: 오등록. 문항은 특정 개정판을 위해 저작된 콘텐츠라 curriculum_version은
+   이중 진실이 아니라 본질 속성이며, L6 게이트 ③의 살아있는 소비처다. 제거·Overlay 이관 기각·유지 확정.)*
 2. **US/IMO overlay 열 미구축** + `national_standard_codes` 결합 — 다국 확장 시 취약.
 - overlay 설계 자체는 견고하다 — 취약점은 *잔여 결합*이지 구조가 아니다.
 
@@ -158,7 +160,7 @@
 | 2 | 임베딩 namespace 분리(논리 격리) | #7·#3 | invariant 신설(#9) |
 | 3 | 렌더 선택 단일 진실원(capability matrix) | #4·#6 | invariant 신설(#10) |
 | 4 | speech 파서를 notation_contract 안으로 | #9 | invariant 신설(#11) |
-| 5 | `Problem.Curriculum` enum 제거(슬라이싱 완주) | #6 | 부채 상환 |
+| ~~5~~ | ~~`Problem.Curriculum` enum 제거(슬라이싱 완주)~~ | #6 | ~~부채 상환~~ → **오등록·유지 확정**(정정 2026-07-02) |
 | 6 | interaction `event_data` 타입 스키마 | #5 | invariant 신설(#12) |
 | — | 런타임 SCC/reachability | #8 | **미도입**(소비처 생길 때) |
 
@@ -176,3 +178,11 @@
 
 1. **"namespace 분리 없음·동일 벡터공간"의 실체**: 실측 결과 임베딩 3테이블(`misconception_embedding`·`concept_embedding`·`atom_embedding`)은 **이미 물리 분리**되어 있고 cross-namespace 질의도 0이다(`math_dsl_retrieval_analysis.md` "테이블 분리"·risk_register Q3와 정합). 실제 부채는 ① 논리 판별자(subject 축) 부재 ② cross-table 코사인을 막는 실행 계약 부재였다. **구현 완료(2026-07-02)**: 3테이블 subject 컬럼(server_default '수학'·Alembic `b6c7d8e9f0a1`·재임베딩 0) + 공간 식별 (provider, model, subject) 3축 + 거버넌스 게이트 13건(`tests/backend/l1/test_embedding_namespace_governance.py` — 9지점 대칭·cross-table 코사인 allowlist·텍스트 불변). **불변식 정본은 코드**: `l1/embedding_primitives.py` docstring("namespace = 테이블(kind) × subject") + 거버넌스 테스트.
 2. **"방향맹 매처(둘레↔넓이)·FP 45.5%"는 별개 트랙**: 이는 오개념 의미 매칭 *내부*의 임베딩 방향맹 문제(`l4/misconception/semantic/matcher.py` 자체 문서화·완화는 LLM-judge/NLI — `04b` 트랙)이지 namespace 혼입이 아니다. invariant ⑨ 충족 여부와 무관하게 별도로 추적한다.
+
+### 정정 추가 (2026-07-02 — Q5-1 `Problem.Curriculum` enum 오등록)
+
+Q5-1·상단 표(교육과정 행)·상환 목록 #5의 "`Problem`의 `Curriculum` enum 잔여 → 슬라이싱 미완·상환 필요"는 **오등록**이다(원문 스냅샷 보존·해당 지점에 포인터).
+
+- **실측**: `Problem.curriculum_version`은 죽은 필드가 아니라 L6 학교진도 게이트 ③(2015/2022 개정 혼입 방지·`l6/school_progress/gating.py`)의 살아있는 정합 기준이자 L5 API 파라미터(`api/gating.py`)다. Concept의 curriculum 제거가 안전했던 *전제*가 바로 "게이팅은 Problem.curriculum_version을 쓴다(Concept과 독립)"였다(rev `f3a4b5c6d7e8` docstring).
+- **원칙 구분**: 플레이북 "개념은 영속·교육과정은 Overlay"는 *개념 노드*(영속 자산) 대상이다. **문항(Problem)은 특정 개정판을 위해 저작된 콘텐츠**라 curriculum_version이 이중 진실이 아니라 문항 고유 속성이다. CurriculumEntry Overlay는 concept 중심이라 Problem이 직접 닿지도 않는다(Problem→concept 다단 조인·KR-only·str/enum 불일치).
+- **판정**: 제거·Overlay 이관 **기각**, **유지가 정답**. 정본은 코드 docstring(`Curriculum` enum·`Problem.curriculum_version`)에 못박음. 부채 상환 목록에서 삭제.

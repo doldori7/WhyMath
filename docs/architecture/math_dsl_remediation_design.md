@@ -164,6 +164,14 @@
 
 ## 3. 교육과정 `curriculum_version`·`subject` 완전 Overlay 이관 (구현 완료)
 
+> **범위 명확화 (2026-07-02)**: "완전 Overlay 이관"의 대상은 ***개념 노드***(영속 자산)의
+> curriculum·subject 필드다. **`Problem`의 `curriculum_version`은 이관 대상이 아니다** — 문항은
+> 특정 개정판을 위해 저작된 *콘텐츠*라 curriculum_version이 이중 진실이 아니라 문항 본질 속성이며,
+> L6 학교진도 게이트 ③(2015/2022 혼입 방지)의 살아있는 소비처다(§3.1이 "게이팅은
+> `Problem.curriculum_version` 사용·Concept과 독립"으로 이미 명시). failure_mode_qa가 이를 "잔여
+> 부채·상환 필요"로 등록한 것은 **오등록**이며 2026-07-02 유지 확정으로 상환 목록에서 제외됐다
+> (동 문서 "정정 추가 2026-07-02"·`Curriculum` enum docstring 정본).
+
 ### 3.1 결과
 `grade_introduced`·`semester_introduced`(rev d1e2f3a4b5c6)에 이어 `curriculum_version`·`subject`도
 **제거 완료(PR #350·rev f3a4b5c6d7e8)**. 조사 결과 두 필드의 *런타임 READ/필터 소비처가 0*이었고
