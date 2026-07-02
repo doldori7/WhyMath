@@ -93,6 +93,9 @@ fields:
       - curriculum_matrix             # 다국 커리큘럼 매트릭스 교차검증
       - math_education_literature     # 수학교육학 문헌
       - expert_review                 # 도메인 전문가 검수 판단
+    # 과목 확장(readiness doc §7): 타 과목 문헌 값은 `<subject>_education_literature` 패턴으로
+    # *추가*한다(물리 엣지 첫 생성 시 physics_education_literature). 기존 값 rename 금지 —
+    # 기존 엣지 데이터 마이그레이션을 유발한다.
 
 # --- 검증 invariant (concept_graph.md §5 — tests 예정) ------------------------
 validation_invariants:

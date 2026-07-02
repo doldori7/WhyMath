@@ -18,6 +18,14 @@ norm_id 중심이라 셀(concept 중심)과 키가 어긋나 조인이 필요한
 
 graph.json 개념 키 → CurriculumEntry 필드 매핑:
   - `concept_id`            → `concept_id`(복합키)·`entry_id`(=`{concept_id}:KR`·결정적·멱등키)
+
+entry_id 규약 (과목 확장 S1 — subject_expansion_readiness.md §9):
+  셀 의미키는 (concept_id, country_code, subject) 3-튜플이고 이 로더는 KR **수학** 셀만
+  적재한다(`subject=_KR_SUBJECT`). 수학 셀 entry_id는 기존 `{concept_id}:KR` 형식 **불변**
+  (무접미 — 데이터 churn 0), 비수학 셀만 `:{subject}` 접미를 붙인다(미래 규약 — 물리 첫 적재
+  슬라이스 소관·이 로더는 수학만 적재하므로 생성 로직 현행 유지). ⚠️ 이 `subject`(교과:
+  '수학')는 NCIC `AchievementStandard.subject`(과목: '공통수학1')와 granularity가 다르다
+  (schema docstring 교차 명기).
   - `domain`               → `domain_label`(그 나라 교육과정 영역명)
   - `grade_band_hint`      → `grade_band`(학년대 라벨 직결) + `introduced_grade`(밴드 하한=최초
     도입 학년·KR 1~12 번호·_GRADE_BAND_TO_INTRODUCED_GRADE)
@@ -68,7 +76,7 @@ import json
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from whymath_backend.config import Settings, get_settings
 
@@ -85,6 +93,9 @@ if TYPE_CHECKING:
 # KR 상수 (graph.json source_citation에서 정직 도출 — 교육부 고시 제2022-33호·NCIC·공공누리 1유형)
 # ──────────────────────────────────────────────────────────────────────────
 _KR_COUNTRY: str = "KR"
+# 교과 레벨 subject 축(S1) — 이 로더는 수학 셀만 적재한다(비수학 셀은 미래 슬라이스 소관).
+# NCIC AchievementStandard.subject(과목 레벨 '공통수학1')와 granularity 다름(모듈 docstring).
+_KR_SUBJECT: Final[str] = "수학"
 _KR_LICENSE: CurriculumLicense = CurriculumLicense.KR_NCIC
 _KR_SOURCE_NAME: str = "2022 개정 교육과정 — 수학과 교육과정"
 _KR_SOURCE_CODE: str = "교육부 고시 제2022-33호 [수학과 교육과정]"
@@ -173,9 +184,11 @@ def _kr_entry_from_concept(concept: dict[str, Any], *, now: datetime) -> Curricu
     )
 
     return CurriculumEntry(
-        # 식별 — 복합키 (concept_id, "KR") + 결정적 표면키 entry_id(멱등키)
+        # 식별 — 복합키 (concept_id, "KR", "수학") + 결정적 표면키 entry_id(멱등키).
+        # 수학 셀 entry_id는 무접미 불변(S1 규약 — 모듈 docstring "entry_id 규약").
         concept_id=concept_id,
         country_code=_KR_COUNTRY,
+        subject=_KR_SUBJECT,
         entry_id=f"{concept_id}:{_KR_COUNTRY}",
         # 출처 — KR 상수(graph.json source_citation 도출)
         source_name=_KR_SOURCE_NAME,

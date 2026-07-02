@@ -3,7 +3,9 @@
 # =============================================================================
 # 엔티티 목적:
 #   같은 수학 개념이 나라마다 *몇 학년에·어떤 깊이로* 다뤄지는지를 담는, 매트릭스의
-#   한 셀. (개념 Universal Concept ID × 국가 코드) 한 쌍에 대한 30필드 레코드.
+#   한 셀. (개념 Universal Concept ID × 국가 코드 × 교과) 3-튜플에 대한 31필드 레코드
+#   (PRD 부록 A 30필드 + 과목 확장 S1의 subject 축 1필드 —
+#   subject_expansion_readiness.md §9).
 #   기존 NCIC 성취기준(AchievementStandard)은 이 매트릭스의 "한국 열"이다 —
 #   매트릭스는 NCIC를 버리는 게 아니라 국제 비교 축에 끼워 넣는 구조.
 #
@@ -29,13 +31,13 @@
 entity: CurriculumEntry
 layer: L1
 storage: "PostgreSQL (3차원 정규화 — Phase 2+ 확정)"
-composite_key: [concept_id, country_code]   # 셀 PK
-field_count: 30                              # PRD 부록 A 명시 — 아래 정확히 30개
+composite_key: [concept_id, country_code, subject]   # 셀 PK — 3-튜플 (S1 subject 축)
+field_count: 31                              # PRD 부록 A 30개 + subject 1개 — 아래 정확히 31개
 phase_scope: "Phase 1 — 한국(주축) + 미국 CCSS·IMO(참고 열) 2개. Phase 3에 9~12개국."
 
 fields:
 
-  # --- 그룹 1: 식별 (3) ---------------------------------------------------
+  # --- 그룹 1: 식별 (4) ---------------------------------------------------
   concept_id:
     type: string
     required: true
@@ -52,10 +54,30 @@ fields:
     enum_phase1: ["KR", "US", "IMO"]   # Phase 1 산출물은 이 3개 외 금지 (범위 가드)
     examples: ["KR", "US", "JP", "GB", "IMO"]
 
+  subject:
+    type: string
+    required: true
+    default: "수학"
+    description: >-
+      **교과** 레벨 과목 축 (예: '수학'·'물리') — 과목 확장 S1
+      (subject_expansion_readiness.md §9). 같은 개념(예: '벡터')이 같은 나라의 수학·
+      물리 양쪽 교육과정에 등장할 수 있어 복합키의 세 번째 축이다. subject 축의 정본은
+      개념 노드가 아니라 이 Overlay다 — Concept 에서 subject 를 *제거한* 결정
+      (rev f3a4b5c6d7e8, "노드는 의미만")을 ID·노드로 되돌리지 않는다.
+      ⚠️ granularity 주의: NCIC AchievementStandard.subject 는 **과목** 레벨
+      ('공통수학1'·'미적분Ⅰ' — 교과 내 편제 단위)로 이름만 같고 축이 다르다
+      (양쪽 모델 docstring 교차 명기). country_code 선례 그대로 개방 str(enum 아님) —
+      Phase 1 산출물 범위 가드는 파이프라인 책임.
+    enum_phase1: ["수학"]   # Phase 1 산출물은 '수학' 외 금지 (범위 가드)
+    examples: ["수학", "물리"]
+
   entry_id:
     type: string
     required: true
-    description: 셀의 표면 식별자. (concept_id, country_code) 복합키와 1:1 대응하는 단일 키.
+    description: >-
+      셀의 표면 식별자. (concept_id, country_code, subject) 복합키와 1:1 대응하는
+      단일 키. 규약(S1): 수학 셀은 기존 '{concept_id}:{country_code}' 형식 불변
+      (무접미 — 데이터 churn 0), 비수학 셀만 ':{subject}' 접미를 붙인다(미래 규약).
 
   # --- 그룹 2: 출처 (5) — 국가별 교육과정 표준 ----------------------------
   source_name:
@@ -268,7 +290,8 @@ relationships:
 validation_invariants:
   - "concept_id 가 개념 그래프 노드에 실재 (키 공간 정합 — cross-dataset)"
   - "country_code 가 ISO 3166-1 alpha-2 또는 'IMO'"
-  - "(concept_id, country_code) 셀 중복 없음 (복합키 유일성)"
+  - "(concept_id, country_code, subject) 셀 중복 없음 (복합키 유일성)"
+  - "subject 비공백 · Phase 1 산출물에 '수학' 외 subject 없음 (범위 가드는 파이프라인 책임 — country_code Phase 1 가드와 동형)"
   - "is_present=true 이면 source_url 비어있지 않음"
   - "license_id 가 정의된 enum 값"
   - "confidence ∈ [0.0, 1.0]"

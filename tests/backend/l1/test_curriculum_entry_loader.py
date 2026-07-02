@@ -106,9 +106,10 @@ class TestLoadFromGraphJson:
         entries = load_kr_curriculum_entries_from_graph_json(path, now=_NOW)
         assert len(entries) == 1
         e = entries[0]
-        # 식별 — 복합키 + 결정적 entry_id
+        # 식별 — 복합키 3-튜플 + 결정적 entry_id(수학 셀 무접미 불변 — S1 entry_id 규약)
         assert e.concept_id == "HIGH-CALC-001"
         assert e.country_code == "KR"
+        assert e.subject == "수학"  # 이 로더는 KR 수학 셀만 적재(S1 subject 축)
         assert e.entry_id == "HIGH-CALC-001:KR"
         # 매핑
         assert e.domain_label == "극한과 연속"
@@ -209,6 +210,30 @@ class TestLoadFromGraphJson:
         )
         assert load_kr_curriculum_entries_from_graph_json(path, now=_NOW) == []
 
+    def test_all_loaded_cells_subject_math_entry_id_unsuffixed(self, tmp_path: Path) -> None:
+        """KR 적재 셀 *전부* subject=='수학' + entry_id 무접미 `{concept_id}:KR`(S1 규약).
+
+        수학 셀 entry_id는 기존 형식 불변(데이터 churn 0) — `:{subject}` 접미는 비수학 셀만
+        (미래 규약·이 로더 미해당). Phase 1 '수학' 외 subject 산출물 금지 범위 가드의 로더 측
+        동결이다.
+        """
+        concepts = [
+            {
+                "concept_id": f"HIGH-CALC-{i:03d}",
+                "name_ko": "x",
+                "domain": "d",
+                "grade_band_hint": "고등학교",
+                "standard_codes": [],
+                "review_status": "reviewed",
+            }
+            for i in range(5)
+        ]
+        path = self._write_graph(tmp_path, concepts)  # type: ignore[arg-type]
+        entries = load_kr_curriculum_entries_from_graph_json(path, now=_NOW)
+        assert len(entries) == 5
+        assert all(e.subject == "수학" for e in entries)
+        assert all(e.entry_id == f"{e.concept_id}:KR" for e in entries)  # 무접미 불변
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # ② upsert SQL 구성 — ON CONFLICT(entry_id)·created_at 보존·updated_at 갱신
@@ -252,6 +277,19 @@ class TestUpsertSql:
         # created_at은 SET 절에 없어야(보존), updated_at은 있어야(갱신).
         assert "created_at" not in set_clause
         assert "updated_at" in set_clause
+
+    def test_subject_included_in_insert_and_update_set(self, tmp_path: Path) -> None:
+        """subject(S1)가 INSERT 컬럼·ON CONFLICT SET 양쪽에 포함(재적재 멱등 갱신 경로).
+
+        populate는 mapper 컬럼키 필터로 값을 뽑으므로 subject 컬럼이 자동 포함된다 —
+        server_default에만 의존하지 않고 로더가 '수학'을 명시 충전함을 SQL로 동결.
+        """
+        store, engine = _fake_store()
+        store.populate([_entry(tmp_path)])  # type: ignore[list-item]
+        compiled = _compile(engine.executed[0])
+        insert_clause, set_clause = compiled.split("DO UPDATE SET", 1)
+        assert "subject" in insert_clause  # INSERT 컬럼 목록에 포함
+        assert "subject" in set_clause  # 재적재 시 갱신 대상(멱등 — 같은 값 '수학')
 
 
 # ──────────────────────────────────────────────────────────────────────────

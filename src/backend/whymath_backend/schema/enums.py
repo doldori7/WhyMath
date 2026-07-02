@@ -86,6 +86,10 @@ class Subject(str, Enum):
     """과목 — §3.1 `subject_enum` 주석(공통/미적분/확통/기하/인공지능수학).
 
     §14.3에 별도 `CREATE TYPE`이 없어 DDL 컬럼 주석(L139)을 정본으로 채택한다.
+
+    **수학 교과 한정**(실체는 수능 선택과목 축) — 타 과목(물리 등) 값 ADD VALUE 금지(축 혼동
+    영구화). 교과 축은 향후 `Problem.subject_area`로 별도 신설한다
+    (docs/architecture/subject_expansion_readiness.md §1·§8 보류 대장, 트리거: 물리 문항 첫 적재).
     """
 
     공통 = "공통"

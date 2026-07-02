@@ -1,11 +1,20 @@
 """Schema v1.1 다국 커리큘럼 매트릭스 셀(CurriculumEntry) 모델 (Pydantic) — 슬라이스 8a.
 
-설계 정본: `schemas/v1.1/curriculum_entry.schema.yaml`(`fields:` 30필드·`validation_invariants`·
+설계 정본: `schemas/v1.1/curriculum_entry.schema.yaml`(`fields:` 31필드·`validation_invariants`·
 `license`). v1.0 8개 도메인(슬라이스 1~7) *밖*의 v1.1 이식 자산이다 — 같은 수학 개념이
-나라마다 *몇 학년에·어떤 깊이로* 다뤄지는지를 담는 매트릭스의 한 셀((concept_id × country_code)
-한 쌍). 기존 NCIC 성취기준(AchievementStandard)이 이 매트릭스의 "한국(KR) 열"이며, KR 셀은
-그 크롤러 산출물(standards.json)에서 *파생*된다(새 한국 크롤러를 만드는 게 아님). 소유 7계층은
-L1(데이터 기반), 매트릭스를 소비하는 자동 커리큘럼 정렬 엔진은 L6 소관(YAML 헤더).
+나라마다 *몇 학년에·어떤 깊이로* 다뤄지는지를 담는 매트릭스의 한 셀((concept_id × country_code
+× subject) 3-튜플). 기존 NCIC 성취기준(AchievementStandard)이 이 매트릭스의 "한국(KR) 열"이며,
+KR 셀은 그 크롤러 산출물(standards.json)에서 *파생*된다(새 한국 크롤러를 만드는 게 아님). 소유
+7계층은 L1(데이터 기반), 매트릭스를 소비하는 자동 커리큘럼 정렬 엔진은 L6 소관(YAML 헤더).
+
+subject 축 (과목 확장 S1 — subject_expansion_readiness.md §9):
+  `subject`는 **교과** 레벨 과목 축('수학'·'물리')이다 — 같은 개념('벡터')이 같은 나라의 수학·
+  물리 양쪽 교육과정에 등장할 수 있어 복합 의미키가 (concept_id, country_code, subject)
+  3-튜플로 확장됐다. 과목 스코핑의 정본은 개념 노드가 아니라 이 Overlay다(rev f3a4b5c6d7e8이
+  Concept에서 subject를 제거 — "노드는 의미만"). ⚠️ granularity 교차 명기: NCIC
+  `AchievementStandard.subject`는 **과목** 레벨('공통수학1'·'미적분Ⅰ' — 교과 내 편제 단위)로
+  이름만 같고 축이 다르다. country_code 선례 그대로 개방 str(enum 아님·default '수학') —
+  Phase 1 산출물 '수학' 외 금지 범위 가드는 파이프라인 책임.
 
 Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포) — 이 슬라이스도 순수 Pydantic
 모델이다. SQLAlchemy/alembic 매핑은 후속 Phase(슬라이스 1~7 동일 패턴). 스키마는 9~12개국
@@ -52,13 +61,15 @@ Phase 메모: 코드베이스 전체가 *Pydantic-schema-only*(DB 미배포) —
   가짜 validator 금지).
 
 cross-dataset 메모(YAML `validation_invariants` 중 모델 단독 강제 불가 항목):
-  YAML invariant 10개 중 *다른 데이터셋이 있어야 검증 가능한 것*은 모델이 강제하지 않는다 —
+  YAML invariant 중 *다른 데이터셋이 있어야 검증 가능한 것*은 모델이 강제하지 않는다 —
   ① concept_id가 개념 그래프(concept.schema.yaml) 노드에 실재(키 공간 정합), ② KR 셀의
-  national_standard_codes가 NCIC standards.json에 실재, ③ (concept_id, country_code) 셀
-  중복 없음(복합키 유일성 — 단일 인스턴스로는 검증 불가, DB/파이프라인 레벨), ④ Phase 1
-  산출물에 KR·US·IMO 외 국가 코드 없음(범위 가드). 이 넷은 *파이프라인 책임*이다(슬라이스 3
-  `ConceptEdge`의 복합 UNIQUE가 DB 제약이라 모델 레벨에서 표현 안 한 선례와 동일).
-  *모델 내부로 강제 가능한* invariant만 아래 validator 2개로 구현한다.
+  national_standard_codes가 NCIC standards.json에 실재, ③ (concept_id, country_code, subject)
+  셀 중복 없음(복합키 유일성 — 단일 인스턴스로는 검증 불가, DB/파이프라인 레벨), ④ Phase 1
+  산출물에 KR·US·IMO 외 국가 코드 없음(범위 가드), ⑤ Phase 1 산출물에 '수학' 외 subject
+  없음(범위 가드 — ④와 동형). 이들은 *파이프라인 책임*이다(슬라이스 3 `ConceptEdge`의 복합
+  UNIQUE가 DB 제약이라 모델 레벨에서 표현 안 한 선례와 동일). subject *비공백*만 모델이
+  강제한다(Field min_length=1 — 구조 신호가 모델 안에 있으므로). *모델 내부로 강제 가능한*
+  invariant만 아래 validator 2개로 구현한다.
 """
 
 from __future__ import annotations
@@ -74,20 +85,23 @@ from whymath_backend.schema.enums import (
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 핵심: CurriculumEntry (curriculum_entry.schema.yaml — 매트릭스 셀, 30필드)
+# 핵심: CurriculumEntry (curriculum_entry.schema.yaml — 매트릭스 셀, 31필드)
 # ──────────────────────────────────────────────────────────────────────────
 class CurriculumEntry(BaseModel):
-    """다국 커리큘럼 매트릭스 셀 — YAML `CurriculumEntry`(30필드). 같은 개념이 나라마다 몇
-    학년에·어떤 깊이로 다뤄지는지를 담는 (concept_id × country_code) 한 쌍의 레코드.
+    """다국 커리큘럼 매트릭스 셀 — YAML `CurriculumEntry`(31필드). 같은 개념이 나라마다 몇
+    학년에·어떤 깊이로 다뤄지는지를 담는 (concept_id × country_code × subject) 3-튜플 레코드.
 
-    복합키 `(concept_id, country_code)`가 셀 PK이고, `entry_id`는 그 복합키와 1:1 대응하는
-    표면 식별자다 — 셋 다 YAML required:true이므로 모두 required `str`로 둔다(슬라이스 6
-    `ConceptMasteryHistory`가 복합 PK 구성요소를 모두 required로 둔 선례). 복합키 유일성
-    검증은 단일 인스턴스로 불가하므로 DB/파이프라인 책임이다(모듈 docstring cross-dataset 메모).
+    복합키 `(concept_id, country_code, subject)`가 셀 PK이고, `entry_id`는 그 복합키와 1:1
+    대응하는 표면 식별자다 — subject 외 셋은 YAML required:true이므로 required `str`로 두고
+    (슬라이스 6 `ConceptMasteryHistory`가 복합 PK 구성요소를 모두 required로 둔 선례),
+    subject는 YAML default '수학'이라 default 부여로 기존 호출부·payload를 깨지 않는다(S1).
+    복합키 유일성 검증은 단일 인스턴스로 불가하므로 DB/파이프라인 책임이다(모듈 docstring
+    cross-dataset 메모).
 
     required는 9개다 — 식별 3종(concept_id·country_code·entry_id) + source_name + license_id
-    + is_present + confidence + created_at + updated_at. 나머지 21개는 nullable/기본값이라
-    `is_present=false`(그 나라에 개념 없음)인 *시점·깊이 필드가 빈* 셀도 표현할 수 있다.
+    + is_present + confidence + created_at + updated_at. 나머지 22개(subject 포함)는
+    nullable/기본값이라 `is_present=false`(그 나라에 개념 없음)인 *시점·깊이 필드가 빈* 셀도
+    표현할 수 있다.
 
     불변식(`@model_validator(mode="after")`, 모델 내부로 강제 가능한 invariant만 — 모듈
     docstring cross-dataset 메모):
@@ -111,7 +125,7 @@ class CurriculumEntry(BaseModel):
         str_strip_whitespace=True,
     )
 
-    # ===== 그룹 1: 식별 (3) — 복합키 (concept_id, country_code) + 표면키 entry_id =====
+    # ===== 그룹 1: 식별 (4) — 복합키 (concept_id, country_code, subject) + 표면키 entry_id =====
     concept_id: str = Field(
         ...,
         description="Universal Concept ID(복합키 구성요소). concept.schema.yaml의 concept_id와 "
@@ -123,9 +137,20 @@ class CurriculumEntry(BaseModel):
         "코드 'IMO'. 개방형(~250개)+IMO이라 enum 아닌 str — Phase 1 KR/US/IMO 범위 가드는 "
         "파이프라인 책임.",
     )
+    subject: str = Field(
+        default="수학",
+        min_length=1,
+        description="**교과** 레벨 과목 축(복합키 구성요소·예: '수학'·'물리') — 과목 확장 S1"
+        "(subject_expansion_readiness.md §9). ⚠️ NCIC AchievementStandard.subject(**과목** "
+        "레벨 — '공통수학1'·'미적분Ⅰ')와 이름만 같고 granularity가 다르다(교차 명기). "
+        "country_code 선례 그대로 개방 str(enum 아님) — Phase 1 산출물 '수학' 외 금지 범위 "
+        "가드는 파이프라인 책임, 비공백만 모델 강제(min_length=1).",
+    )
     entry_id: str = Field(
         ...,
-        description="셀의 표면 식별자 — (concept_id, country_code) 복합키와 1:1 대응하는 단일 키.",
+        description="셀의 표면 식별자 — (concept_id, country_code, subject) 복합키와 1:1 대응하는 "
+        "단일 키. 규약(S1): 수학 셀은 '{concept_id}:{country_code}' 무접미 불변(데이터 churn 0), "
+        "비수학 셀만 ':{subject}' 접미(미래 규약).",
     )
 
     # ===== 그룹 2: 출처 (5) — 국가별 교육과정 표준 =====

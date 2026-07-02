@@ -20,11 +20,13 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from data_pipeline.citation import build_ncic_citation_core
+
 # NCIC 승계 출처 문구(concept_graph.md §1.1) — 그래프 외부 노출·라이선싱 시 동봉 의무.
-SOURCE_CITATION: Final[str] = (
-    "개념-성취기준 매핑 근거: 교육부 고시 제2022-33호 [수학과 교육과정], "
-    "국가교육과정정보센터(NCIC, https://www.ncic.go.kr)"
-)
+# S2(subject_expansion_readiness.md §9): 과목 종속부는 build_ncic_citation_core가 단일 원천 —
+# 합성 방식만 빌더로 바꿨고 **값은 리팩토링 전과 바이트 동일**
+# (동결 테스트: tests/data_pipeline/test_citation.py).
+SOURCE_CITATION: Final[str] = "개념-성취기준 매핑 근거: " + build_ncic_citation_core()
 
 # concept_id 규약(§2.4) — **2026-06-16 전환**: `{TRACK}-{AREA}-{NNN}`(예 'ELEM-GEO-001').
 #   TRACK ∈ {ELEM, MID, HIGH, RT, OLY}(코퍼스엔 ELEM/MID/HIGH·RT 재수/OLY 영재는 예약),
