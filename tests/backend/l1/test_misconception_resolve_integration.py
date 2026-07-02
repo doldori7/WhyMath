@@ -409,9 +409,12 @@ class TestRealCorpusResolve:
             load_backend_concepts_from_graph_json,
         )
 
-        graph = Path("data/corpus/concept_graph_v1/graph.json")
-        standards = Path("data/corpus/standards_v1/standards.json")
-        misconceptions = Path("data/corpus/misconceptions_v1/misconceptions.json")
+        # 레포 루트 앵커(parents[3]) — CWD 상대 경로는 CI(cwd=src/backend)에서 항상 미존재 skip.
+        repo_root = Path(__file__).resolve().parents[3]
+        corpus_dir = repo_root / "data" / "corpus"
+        graph = corpus_dir / "concept_graph_v1" / "graph.json"
+        standards = corpus_dir / "standards_v1" / "standards.json"
+        misconceptions = corpus_dir / "misconceptions_v1" / "misconceptions.json"
         for path in (graph, standards, misconceptions):
             if not path.exists():
                 pytest.skip(f"실 코퍼스 미존재({path})")

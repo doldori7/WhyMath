@@ -55,7 +55,10 @@ class CrosslinkCoverageSummary(BaseModel):
 
     관측-단위 지표(총량·매핑률·1:N 분포)와 *distinct kebab-id* 단위 지표(실 런타임 키 커버리지)를
     함께 담는다 — canary 플립은 "얼마나 많은 *서로 다른* 런타임 kebab-id가 canonical 매핑을 갖느냐"
-    (distinct coverage)가 핵심이라 관측 빈도와 분리해 본다.
+    (distinct coverage)가 핵심이라 관측 빈도와 분리해 본다. M2부터는 원시 링크 유무
+    (`distinct_coverage_ratio`)가 아니라 `select_canonical` 정책 통과 기준
+    (`distinct_canonical_ratio`)이 canary go/no-go 핵심 변수다(1:N 원시 링크만 세면 ambiguous
+    집계가 무의미).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -88,10 +91,24 @@ class CrosslinkCoverageSummary(BaseModel):
     """1건 이상에서 매핑된 서로 다른 kebab-id 수(런타임 키 커버리지 분자)."""
 
     distinct_coverage_ratio: float
-    """`distinct_mapped / distinct_kebab_ids`(0이면 0.0) — 런타임 키 단위 커버리지(canary 핵심)."""
+    """`distinct_mapped / distinct_kebab_ids`(0이면 0.0) — 런타임 키 단위 *원시 링크* 커버리지."""
+
+    distinct_canonical: int
+    """1건 이상에서 canonical M-id가 선정된(`canonical_mis_id` NOT NULL) 서로 다른 kebab-id 수.
+
+    원시 링크(distinct_mapped)와 달리 `select_canonical` 정책(단독 최대 confidence 직접매핑)을
+    통과한 커버리지 분자 — 1:N 원시 링크만 세면 ambiguous 집계가 무의미해 canary는 이 축으로 잰다.
+    """
+
+    distinct_canonical_ratio: float
+    """`distinct_canonical / distinct_kebab_ids`(0이면 0.0) — canonical 커버리지(canary 핵심)."""
 
     ambiguous_kebab_ids: list[str]
-    """1건이라도 1:N(`mis_id_count > 1`)이던 kebab-id(정렬) — canonical 플립 전 사람 정책 필요."""
+    """1건이라도 1:N(`mis_id_count > 1`)이던 kebab-id(정렬) — 원시 링크 다중(참고 지표)."""
+
+    canonical_ambiguous_kebab_ids: list[str]
+    """1건이라도 canonical tie(`canonical_ambiguous=True`)였던 kebab-id(정렬) — 직접매핑 최고
+    confidence 동률이라 canonical 플립 전 사람 정책(우선순위 확정)이 필요한 목록."""
 
     unmapped_kebab_ids: list[str]
     """한 번도 매핑 안 된 서로 다른 kebab-id(정렬) — 크로스워크 큐레이션 우선순위(coverage 공백)."""
@@ -113,16 +130,27 @@ def summarize(
     multi_mapped = sum(1 for o in obs if o.mis_id_count > 1)
     kebab_invalid = sum(1 for o in obs if not o.kebab_valid)
 
-    # distinct kebab-id별 커버리지·모호성 접기(합집합 OR).
+    # distinct kebab-id별 커버리지·모호성 접기(합집합 OR). canonical 축(신필드)은 구 레코드에선
+    # 기본값(None/False)으로 파싱되므로 신구 혼재 스트림도 그대로 접힌다(하위호환).
     per_mapped: dict[str, bool] = {}
     per_ambiguous: dict[str, bool] = {}
+    per_canonical: dict[str, bool] = {}
+    per_canonical_ambiguous: dict[str, bool] = {}
     for o in obs:
         per_mapped[o.kebab_id] = per_mapped.get(o.kebab_id, False) or o.mapped
         per_ambiguous[o.kebab_id] = per_ambiguous.get(o.kebab_id, False) or (o.mis_id_count > 1)
+        per_canonical[o.kebab_id] = per_canonical.get(o.kebab_id, False) or (
+            o.canonical_mis_id is not None
+        )
+        per_canonical_ambiguous[o.kebab_id] = (
+            per_canonical_ambiguous.get(o.kebab_id, False) or o.canonical_ambiguous
+        )
 
     distinct = len(per_mapped)
     distinct_mapped = sum(1 for v in per_mapped.values() if v)
+    distinct_canonical = sum(1 for v in per_canonical.values() if v)
     ambiguous_ids = sorted(k for k, v in per_ambiguous.items() if v)
+    canonical_ambiguous_ids = sorted(k for k, v in per_canonical_ambiguous.items() if v)
     unmapped_ids = sorted(k for k, v in per_mapped.items() if not v)
 
     return CrosslinkCoverageSummary(
@@ -136,7 +164,10 @@ def summarize(
         distinct_kebab_ids=distinct,
         distinct_mapped=distinct_mapped,
         distinct_coverage_ratio=(distinct_mapped / distinct if distinct else 0.0),
+        distinct_canonical=distinct_canonical,
+        distinct_canonical_ratio=(distinct_canonical / distinct if distinct else 0.0),
         ambiguous_kebab_ids=ambiguous_ids,
+        canonical_ambiguous_kebab_ids=canonical_ambiguous_ids,
         unmapped_kebab_ids=unmapped_ids,
     )
 
@@ -148,6 +179,7 @@ def format_summary(summary: CrosslinkCoverageSummary) -> str:
     """
     obs_pct = f"{summary.coverage_ratio * 100:.1f}%"
     dist_pct = f"{summary.distinct_coverage_ratio * 100:.1f}%"
+    canonical_pct = f"{summary.distinct_canonical_ratio * 100:.1f}%"
     lines = [
         "# crosslink shadow coverage — 노출 전 측정(canary go/no-go 근거)",
         f"관측 total={summary.total} mapped={summary.mapped} (coverage={obs_pct}) "
@@ -156,7 +188,10 @@ def format_summary(summary: CrosslinkCoverageSummary) -> str:
         f"| kebab_invalid={summary.kebab_invalid}",
         f"distinct kebab-id: {summary.distinct_kebab_ids} / 매핑됨 {summary.distinct_mapped} "
         f"(distinct coverage={dist_pct})",
-        f"1:N 모호 kebab-id(정책 필요): {summary.ambiguous_kebab_ids}",
+        f"canonical 선정: {summary.distinct_canonical} "
+        f"(canonical coverage={canonical_pct} — canary go/no-go 핵심)",
+        f"canonical tie kebab-id(우선순위 정책 필요): {summary.canonical_ambiguous_kebab_ids}",
+        f"1:N 모호 kebab-id(참고·원시 링크): {summary.ambiguous_kebab_ids}",
         f"미매핑 kebab-id(크로스워크 큐레이션 우선순위): {summary.unmapped_kebab_ids}",
         summary.model_dump_json(),
     ]

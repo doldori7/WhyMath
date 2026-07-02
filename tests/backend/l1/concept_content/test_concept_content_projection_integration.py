@@ -34,8 +34,11 @@ from whymath_backend.l1.concept_content.projection import (
 
 pytestmark = pytest.mark.integration
 
-_K12_CORPUS = Path("data/corpus/concept_content_v1/content.json")
-_UNIV_CORPUS = Path("data/corpus/concept_content_university_v1/content.json")
+# 레포 루트 앵커(tests/backend/l1/concept_content/ → parents[4]) — CWD 상대 경로는
+# CI(cwd=src/backend)에서 항상 "코퍼스 미존재" skip(침묵 skip 결함 수정).
+_REPO_ROOT = Path(__file__).resolve().parents[4]
+_K12_CORPUS = _REPO_ROOT / "data" / "corpus" / "concept_content_v1" / "content.json"
+_UNIV_CORPUS = _REPO_ROOT / "data" / "corpus" / "concept_content_university_v1" / "content.json"
 
 
 def _sync_engine() -> object:

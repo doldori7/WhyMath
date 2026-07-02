@@ -32,10 +32,17 @@ _RECORD_LOGGER = "whymath.l4.misconception.crosslink_shadow.record"
 # fake sync 엔진(resolver 주입) — crosslink_resolve 테스트 패턴 미러
 # ──────────────────────────────────────────────────────────────────────────
 class _Row:
-    def __init__(self, kebab_id: str, mis_id: str, confidence: float | None) -> None:
+    def __init__(
+        self,
+        kebab_id: str,
+        mis_id: str,
+        confidence: float | None,
+        link_type: str = "직접매핑",
+    ) -> None:
         self.kebab_id = kebab_id
         self.mis_id = mis_id
         self.confidence = confidence
+        self.link_type = link_type
 
 
 class _FakeResult:
@@ -99,6 +106,10 @@ class TestObserveCrosslinkShadow:
         assert obs.mis_ids == ["M1", "M2"]  # confidence desc
         assert obs.mis_id_count == 2
         assert obs.mapped is True
+        # canonical 신필드 충전 — 단독 최대 confidence 직접매핑(M1 0.9)이 선정된다.
+        assert obs.canonical_mis_id == "M1"
+        assert obs.canonical_ambiguous is False
+        assert obs.direct_count == 2
 
     def test_empty_mapping_records_uncovered(self, caplog: pytest.LogCaptureFixture) -> None:
         """매핑 없음(빈 테이블) → mapped=False·count=0(coverage 0을 정직히 기록)."""
@@ -109,6 +120,51 @@ class TestObserveCrosslinkShadow:
         assert obs.mis_ids == []
         assert obs.mis_id_count == 0
         assert obs.mapped is False
+        assert obs.canonical_mis_id is None  # 링크 0 → canonical 미선정(정직)
+        assert obs.direct_count == 0
+
+    def test_canonical_tie_recorded_as_ambiguous(self, caplog: pytest.LogCaptureFixture) -> None:
+        """직접매핑 최고 confidence 동률 → canonical 미선정 + canonical_ambiguous=True."""
+        resolver = _resolver([_Row(_VALID_KEBAB, "M1", 0.8), _Row(_VALID_KEBAB, "M2", 0.8)])
+        with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+            observe_crosslink_shadow(_VALID_KEBAB, resolver=resolver)
+        obs = MisconceptionCrosslinkShadowObservation.model_validate_json(_records(caplog)[0])
+        assert obs.canonical_mis_id is None
+        assert obs.canonical_ambiguous is True
+        assert obs.direct_count == 2
+
+    def test_canonical_failure_defaults_but_still_records(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """resolve는 되나 resolve_canonical이 없는(구식) resolver → 기본값 충전·관측은 계속 적재."""
+
+        class _LegacyResolver:
+            """resolve만 있는 구식 duck-typed resolver(evidence_store 스파이 동형)."""
+
+            def resolve(self, kebab_id: str, *, min_confidence: float | None = None) -> list[str]:
+                return ["M1"]
+
+        with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+            observe_crosslink_shadow(_VALID_KEBAB, resolver=_LegacyResolver())  # type: ignore[arg-type]
+        lines = _records(caplog)
+        assert len(lines) == 1  # canonical 실패가 관측 적재를 막지 않는다(never-break)
+        obs = MisconceptionCrosslinkShadowObservation.model_validate_json(lines[0])
+        assert obs.mis_ids == ["M1"]  # 원시 매핑은 그대로
+        assert obs.canonical_mis_id is None  # 기본값(정직 미선정과 동일 형태)
+        assert obs.canonical_ambiguous is False
+        assert obs.direct_count == 0
+
+    def test_old_jsonl_without_canonical_fields_parses(self) -> None:
+        """구 JSONL(신필드 부재) 하위호환 — 기본값으로 파싱된다(harvest 신구 혼재 전제)."""
+        legacy = (
+            '{"kebab_id": "k-old", "kebab_valid": true, "mis_ids": ["M1"], '
+            '"mis_id_count": 1, "mapped": true, "observed_at": "2026-06-01T00:00:00Z"}'
+        )
+        obs = MisconceptionCrosslinkShadowObservation.model_validate_json(legacy)
+        assert obs.kebab_id == "k-old"
+        assert obs.canonical_mis_id is None
+        assert obs.canonical_ambiguous is False
+        assert obs.direct_count == 0
 
     def test_kebab_invalid_flagged(self, caplog: pytest.LogCaptureFixture) -> None:
         """카탈로그 밖 kebab → kebab_valid=False(게이트 우회 진입 감시용 신호)."""
@@ -169,6 +225,16 @@ class TestPrivacy:
             observe_crosslink_shadow(_VALID_KEBAB, resolver=resolver)
         obs = MisconceptionCrosslinkShadowObservation.model_validate_json(_records(caplog)[0])
         keys = set(obs.model_dump().keys())
-        expected = {"kebab_id", "kebab_valid", "mis_ids", "mis_id_count", "mapped", "observed_at"}
+        expected = {
+            "kebab_id",
+            "kebab_valid",
+            "mis_ids",
+            "mis_id_count",
+            "mapped",
+            "canonical_mis_id",
+            "canonical_ambiguous",
+            "direct_count",
+            "observed_at",
+        }
         assert keys == expected
         assert "student_id" not in keys
