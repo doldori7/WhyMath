@@ -139,6 +139,56 @@ export const parseSpecParam = (raw) => {
   }
 };
 
+// ====== 렌더 선택 단일 진실원(invariant ⑩) — type-first dispatch ======
+// 코어 Visualization.type이 렌더러를 정하는 단일 권위다(data/render_contract.json). 과거엔 Flutter
+// WebView 경계가 type을 페이로드에서 버려(graphing_calculator_webview) 웹이 spec 모양으로 렌더러를
+// 재추론(experiment→sim·surface→3D·그 외→2D)했고, experiment 없는 유효 sim이 2D로 오라우팅되거나
+// graph_2d spec에 experiment 키가 섞이면 sim으로 오라우팅되는 drift가 있었다. 이제 경계가 {type, spec}
+// 봉투를 실어 보내고(신규 encodeVisualizationParam) 여기서 type을 우선 소비한다. 봉투가 없는 레거시
+// 경로(공개 ?spec= 공유 링크·spec-only)는 type=null로 와서 기존 shape 덕타이핑으로 폴백한다(영구 유지).
+
+// 파싱된 페이로드가 {type, spec} 봉투인지 판별해 언랩한다.
+//   - 봉투: 최상위 `type`(문자열) + `spec`(객체) 동시 존재. bare Graph2d/Surface/Sim spec은 최상위
+//     `spec` 키를 갖지 않으므로 충돌 없음(자기 필드는 function/surface/experiment/outcomes 등).
+//   - 그 외: 레거시 spec-only → {type: null, spec: parsed}.
+export const unwrapSpecEnvelope = (parsed) => {
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    typeof parsed.type === "string" &&
+    parsed.spec &&
+    typeof parsed.spec === "object"
+  ) {
+    return { type: parsed.type, spec: parsed.spec };
+  }
+  return { type: null, spec: parsed };
+};
+
+// type→계산기 상태 어댑터 dispatch. type이 오면 그것을 *우선* 신뢰하고(코어 권위), 없으면(레거시
+// 봉투 미포함) 기존 shape 덕타이핑으로 폴백. 계약 정본: data/render_contract.json의 web_adapter.
+//   interactive_graph_2d→graph2dSpecToState · interactive_surface_3d→surface3dSpecToState ·
+//   simulation_probabilistic→simulationSpecToState · animation_prerendered→null(웹 렌더 경로 없음·Manim).
+export const specToStateForType = (type, spec) => {
+  if (!spec || typeof spec !== "object") return null;
+  switch (type) {
+    case "interactive_graph_2d":
+      return graph2dSpecToState(spec);
+    case "interactive_surface_3d":
+      return surface3dSpecToState(spec);
+    case "simulation_probabilistic":
+      return simulationSpecToState(spec);
+    case "animation_prerendered":
+      return null; // 웹 계산기엔 Manim 재생 경로 없음(Flutter도 seed 폴백) — 조용히 미렌더.
+    default:
+      // type 없음(레거시 spec-only) — 기존 shape 폴백(하위호환·영구 유지).
+      return spec.experiment != null
+        ? simulationSpecToState(spec)
+        : spec.surface != null
+          ? surface3dSpecToState(spec)
+          : graph2dSpecToState(spec);
+  }
+};
+
 // ====== 역방향 어댑터: 계산기 상태 → 코어 Graph2dSpec (내보내기) ======
 // graph2dSpecToState의 *역연산*. 계산기가 만든 그래프를 코어 선언적 명세(JSON)로 추출해
 // 백엔드·문항·공유 링크로 보낼 수 있게 한다 — "표현 ≠ 의미"(슬라이스 89) 양방향 완성.
