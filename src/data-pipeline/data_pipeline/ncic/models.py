@@ -15,13 +15,15 @@ from typing import Final, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from data_pipeline.citation import build_ncic_citation_core
+
 # ──────────────────────────────────────────────────────────────────────────
 # 라이선스·출처 (공공누리 제1유형 의무 표시)
 # ──────────────────────────────────────────────────────────────────────────
-SOURCE_CITATION: Final[str] = (
-    "출처: 교육부 고시 제2022-33호 [수학과 교육과정], "
-    "국가교육과정정보센터(NCIC, https://www.ncic.go.kr)"
-)
+# S2(subject_expansion_readiness.md §9): 과목 종속부는 build_ncic_citation_core가 단일 원천.
+# 합성 방식만 빌더로 바꿨고 **값은 리팩토링 전과 바이트 동일** — 직렬화 산출물·golden·코퍼스
+# 보존(동결 테스트: tests/data_pipeline/test_citation.py).
+SOURCE_CITATION: Final[str] = "출처: " + build_ncic_citation_core()
 """공공누리 제1유형 요구: 모든 출력에 이 문구를 메타데이터로 동봉."""
 
 LICENSE_NOTICE: Final[str] = (
@@ -55,6 +57,8 @@ DomainCode = Literal["01", "02", "03", "04", "05"]
   고등학교 공통과목 (공통수학1·2):
     01 다항식 / 02 방정식과 부등식 / 03 도형의 방정식 / 04 집합과 명제 / 05 함수와 그래프
     (과목별 영역 구성은 NCIC 원문 참조 — 검증 단계에서 사후 확인)
+
+  수학과 한정(소비처 0 · export 전용) — 타 과목 확장 시 과목별 상수로 대체(readiness doc §1).
 """
 
 # 코드 정규식: 두 가지 형식 지원 (2022 개정)
@@ -74,6 +78,9 @@ DomainCode = Literal["01", "02", "03", "04", "05"]
 #   - 영역 2자리: \d{2}
 #   - 두 번째 dash
 #   - 순번 2자리: \d{2}
+#
+# 과학과 코드도 수용([12물리01-01]·[10통과1-01-01] 등 — 실측 2026-07-02·회귀 테스트로 동결,
+# readiness doc §4.2). 정규식 변경 없이 과목 확장 가능 — 과목 토큰이 과목명을 가리지 않는다.
 STANDARD_CODE_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^\[(\d{1,2})([ㄱ-ㆎ가-힣Ⅰ-ⅿ]{1,6})(\d?)(?:-)?(\d{2})-(\d{2})\]$"
 )
