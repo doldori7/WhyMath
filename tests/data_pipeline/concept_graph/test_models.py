@@ -161,8 +161,11 @@ class TestConcept:
 
 
 class TestConceptEnrichedFields:
-    """데이터셋 v1 풍부 필드 — metaphor·accepted_expressions·ccss_code·misconception_text·
-    difficulty_tier·review_status (concept_graph_dataset_v1.md §2 모델 확장)."""
+    """데이터셋 v1 풍부 필드 — metaphor·accepted_expressions·ccss_code·
+    difficulty_tier·review_status (concept_graph_dataset_v1.md §2 모델 확장).
+
+    ※ 자유텍스트 오개념 `misconception_text`는 2026-07-02 Part 2 §3(Concept Purity)로
+    노드에서 제거됐다 — 순수성 동결은 test_concept_node_purity.py가 담당."""
 
     def test_enriched_fields_roundtrip(self) -> None:
         """풍부 필드가 그대로 보존된다."""
@@ -170,12 +173,10 @@ class TestConceptEnrichedFields:
             metaphor="가까워짐",
             accepted_expressions="극한을 ε-δ로 설명",
             ccss_code="HSF-IF.A.1",
-            misconception_text="극한값=함숫값으로 단정",
             difficulty_tier=12,
         )
         assert c.metaphor == "가까워짐"
         assert c.ccss_code == "HSF-IF.A.1"
-        assert c.misconception_text == "극한값=함숫값으로 단정"
         assert c.difficulty_tier == 12
 
     def test_enriched_fields_default_none(self) -> None:
@@ -184,16 +185,13 @@ class TestConceptEnrichedFields:
         assert c.metaphor is None
         assert c.accepted_expressions is None
         assert c.ccss_code is None
-        assert c.misconception_text is None
         assert c.difficulty_tier is None
 
-    def test_misconception_text_is_separate_from_codes(self) -> None:
-        """자유텍스트 misconception_text와 카탈로그 misconception_codes는 *별개* 슬롯."""
-        c = _concept(
-            misconception_text="자유텍스트 오개념", misconception_codes=["mc-code"]
-        )
-        assert c.misconception_text == "자유텍스트 오개념"
+    def test_misconception_codes_are_references_only(self) -> None:
+        """오개념 연결은 카탈로그 *참조 키*(misconception_codes)로만 — 자유텍스트 슬롯은 노드에 없다."""
+        c = _concept(misconception_codes=["mc-code"])
         assert c.misconception_codes == ["mc-code"]
+        assert not hasattr(c, "misconception_text")
 
     @pytest.mark.parametrize("ok", [0, 12, 24])
     def test_difficulty_tier_in_range(self, ok: int) -> None:

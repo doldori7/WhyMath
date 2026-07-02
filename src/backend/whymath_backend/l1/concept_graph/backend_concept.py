@@ -21,9 +21,11 @@ backend `Concept`의 `description`·`formal_definition`·`intuitive_explanation`
 (`_provenance.json` redacted: `concepts.description`·`concepts.formal_definition`) ② 이 적재기가
 *읽지도 않고* ③ 채우지도 않는다(삼중 방어). `metaphor` 같은 안전 자체작성 필드도 `intuitive_
 explanation`에 *욱여넣지 않는다* — 그 컬럼은 검수 통과한 직관 설명용이라 혼동·검수책임을 만들지
-않게 보수적으로 비워 둔다(필요 시 후속 검수 슬라이스). `common_misconceptions`(JSONB)에 graph의
-`misconception_text`(자유 텍스트·자체 작성)를 *선택적으로* 싣는다 — 이는 본문이 아니라 자유형
-오개념 주석이며, 카탈로그 코드(`misconception_codes`)와 *별개*임을 형태로 명시한다.
+않게 보수적으로 비워 둔다(필요 시 후속 검수 슬라이스). `common_misconceptions`(JSONB)는 **항상
+빈 리스트**로 둔다 — 2026-07-02 Part 2 §3(Concept Purity) 수정으로 개념그래프 노드에서 자유텍스트
+오개념(`misconception_text`)을 제거했기 때문이다. 오개념은 identity 노드에 내장하지 않으며(오염
+방지), 런타임 진단의 단일 진실은 검증된 오개념 *카탈로그*(`MisconceptionCatalog`·kebab-id)·활성
+가설이다. 이 컬럼은 이미 런타임 비소비로 동결돼 있다(`test_concept_misconception_runtime.py`).
 
 ────────────────────────────────────────────────────────────────────────────
 필드 매핑 (graph.json Concept → backend Concept)
@@ -34,7 +36,7 @@ explanation`에 *욱여넣지 않는다* — 그 컬럼은 검수 통과한 직�
     concept_id 문자열을 그대로 code에 넣는다. 새 형식이 별도 변경 없이 흐른다.)
   - `source_id`(재ID 전 원천 src_id) → `source_id`(추적성 보존·옛 graph.json엔 부재→None).
   - `aliases`([레거시 UC, src_id]) → `aliases`(옛 키 join 보존·옛 graph.json엔 부재→빈 배열).
-  - `common_misconceptions` ← `misconception_text`(있으면 1원소 JSONB·자유형).
+  - `common_misconceptions` = 항상 `[]`(오개념 노드 비내장 — Part 2 §3).
 유도(소스 신호가 깔끔히 대응할 때만):
   - `intrinsic_difficulty`[1,5] ← `difficulty_tier`[0,24] 선형 스케일(0→1.0·24→5.0).
 필수 NOT NULL인데 소스 부재 → 보수 유도:
@@ -164,21 +166,6 @@ def scale_difficulty(difficulty_tier: int | None) -> float | None:
     return round(scaled, _DIFFICULTY_DECIMALS)
 
 
-def _build_misconceptions(misconception_text: str | None) -> list[dict[str, Any]]:
-    """graph `misconception_text`(자유 텍스트) → `common_misconceptions` JSONB(0/1 원소).
-
-    빈/None이면 빈 리스트(컬럼 server_default '[]'와 정합). 값이 있으면 1원소 dict를 만들되,
-    *자유형 오개념 주석*임을 형태로 명시한다(`misconception`만·`correction`은 검수 책임이라
-    비움 — schema 예시 `{"misconception":"...","correction":"..."}` 호환·correction 날조 금지).
-    이는 성취기준 *본문*이 아니라 자체 작성 자유 텍스트라 redaction 대상이 아니다(자유형
-    오개념 카탈로그 코드 `misconception_codes`와는 별개 — 30-코드로 강제 매핑하지 않음).
-    """
-    text = _opt_str(misconception_text)
-    if text is None:
-        return []
-    return [{"misconception": text}]
-
-
 # ──────────────────────────────────────────────────────────────────────────
 # 적재 레코드 (graph.json → backend Concept 컬럼 값)
 # ──────────────────────────────────────────────────────────────────────────
@@ -209,8 +196,9 @@ def load_backend_concepts_from_graph_json(path: Path) -> list[BackendConceptReco
     """슬1 산출 `graph.json` → backend `Concept` 적재 레코드 목록(UC 브리지·redaction 청결).
 
     `concepts` 배열의 각 항목에서 **`concept_id`·`name_ko`·`source_id`·`aliases`** 직결 +
-    `difficulty_tier`→intrinsic_difficulty·`misconception_text`→
-    common_misconceptions를 유도한다. concept_id는 *형식 불문*으로 code에 들어가므로 재ID 새 형식
+    `difficulty_tier`→intrinsic_difficulty를 유도한다. `common_misconceptions`는 적재하지 않고
+    항상 `[]`로 둔다(Part 2 §3 순수성 — 오개념 노드 비내장). concept_id는 *형식 불문*으로 code에
+    들어가므로 재ID 새 형식
     (`{TRACK}-{AREA}-{NNN}`)이 별도 변경 없이 흐른다(옛 UC도 동일 경로). source_id/aliases는 옛
     graph.json(부재)이면 None/빈 배열로 graceful. `level`은 `세부개념` 고정(graph 노드는 전부 세부
     개념). **`description`·`formal_definition`은 읽지 않는다**(graph 부재이며, 오염돼 들어와도
@@ -244,7 +232,7 @@ def load_backend_concepts_from_graph_json(path: Path) -> list[BackendConceptReco
                 aliases=_str_list(record.get("aliases")),
                 level=_DEFAULT_LEVEL,
                 intrinsic_difficulty=scale_difficulty(_opt_int(record.get("difficulty_tier"))),
-                common_misconceptions=_build_misconceptions(record.get("misconception_text")),
+                # common_misconceptions는 default_factory([]) — 오개념 노드 비내장(Part 2 §3).
             )
         )
     return out

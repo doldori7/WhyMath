@@ -104,7 +104,7 @@ def _record(
         aliases=(aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]),
         level=ConceptLevel.세부개념,
         intrinsic_difficulty=intrinsic_difficulty,
-        common_misconceptions=[{"misconception": "극한을 대입값으로 혼동"}],
+        # common_misconceptions는 항상 빈 리스트(오개념 노드 비내장 — Part 2 §3). default_factory 사용.
     )
 
 
@@ -132,6 +132,7 @@ class TestLoadFromGraphJson:
                     "name_ko": "극한",
                     "domain": "[고]미적분",
                     "difficulty_tier": 7,
+                    # 오염 방어: 옛 graph.json이 misconception_text를 남겨도 노드로 흡수하지 않는다.
                     "misconception_text": "극한을 대입값으로 혼동",
                     "review_status": "reviewed",
                 }
@@ -146,7 +147,8 @@ class TestLoadFromGraphJson:
         assert rec.name_ko == "극한"
         assert rec.level == ConceptLevel.세부개념  # 고정 유도(NOT NULL 충족)
         assert rec.intrinsic_difficulty == scale_difficulty(7)
-        assert rec.common_misconceptions == [{"misconception": "극한을 대입값으로 혼동"}]
+        # Part 2 §3(순수성): graph의 misconception_text는 노드로 흡수되지 않는다 — 항상 빈 리스트.
+        assert rec.common_misconceptions == []
 
     def test_source_id_and_aliases_absent_graceful(self, tmp_path: Path) -> None:
         # 옛 graph.json(재ID 전·source_id/aliases 부재) → None/빈 배열 graceful(하위호환·NOT NULL
@@ -221,14 +223,14 @@ class TestLoadFromGraphJson:
         assert [c.code for c in loaded] == [_NID_A, _NID_B]
 
     def test_optional_fields_default_when_absent(self, tmp_path: Path) -> None:
-        # difficulty_tier·misconception_text 부재 → None/빈(날조 0).
+        # difficulty_tier 부재 → None(날조 0). common_misconceptions는 항상 빈(노드 비내장·Part 2 §3).
         path = self._write_graph(
             tmp_path,
             [{"concept_id": _NID_A, "name_ko": "유효", "domain": "[중]수와 연산"}],
         )
         rec = load_backend_concepts_from_graph_json(path)[0]
         assert rec.intrinsic_difficulty is None  # difficulty_tier 부재
-        assert rec.common_misconceptions == []  # misconception_text 부재
+        assert rec.common_misconceptions == []  # 항상 빈 리스트(순수성)
 
     def test_skips_when_name_ko_missing(self, tmp_path: Path) -> None:
         # name_ko 누락(오염) → 건너뜀(NOT NULL 위반 방지·조용한 빈 적재 금지).

@@ -1,0 +1,71 @@
+# Part 2. 노드 설계 — 준수 검토 판정 (2026-07-02)
+
+> `docs/standards/playbook_part_review_questions.md`의 **Part 2. 노드 설계** 체크리스트 3항목을
+> 현재 코드베이스에 대해 검토한 판정 리포트. 자매 문서: 설계 결정은
+> `docs/architecture/concept_node_layering_decision.md`(ADR), 결정 로그는 `MEMORY.md`.
+
+법칙: *노드 = 학생 사고가 바뀌는 최소 단위(= 독립 오개념 발생 단위). 우선 5노드, Formula는 마지막.*
+
+---
+
+## 판정 요약
+
+| 항목 | 판정 | 조치 |
+|---|---|---|
+| ① 입도 = 오개념 발생 단위 | **△→✅(기준 명문화·감지 동결)** | 재분할 보류(전문가 검수) + 거버넌스 테스트 |
+| ② 5노드 연결·Formula 나중 | **✅(표현 방식 확정)** | 전용 노드 폭증 없이 속성/스키마로 구성·ADR 문서화 |
+| ③ 계층 분리·노드 순수성 | **△→부분 수정** | `misconception_text` 제거(즉시) + 4계층 명문화 + Stage B 게이트 |
+
+---
+
+## 항목 ① 입도 — "함수(과대)도 기울기의 x증가량(폭발)도 아닌 오개념 발생 단위인가?"
+
+**판정 △ → 기준 명문화 + 감지 거버넌스로 축소.**
+
+- 개념그래프(437·3단)와 원자그래프(2,697·세부개념 레벨)가 **이중 truth source**로 병존
+  (`build_checkpoint_questions.md` 단계3 최우선 리스크).
+- **측정**: 세부개념 원자 1,837개는 전부 독립 오개념(`misconception`)을 보유(100%) — 현재 원자
+  입도는 과세분되어 있지 않다(Part 2 §1 법칙 충족).
+- 대규모 재분할은 전문가 검수 소관이라 즉시 손대지 않고, 기준을 ADR에 명문화 + 회귀 감지
+  테스트(`test_node_granularity_governance.py`: 이중 카운트 동결·100% 오개념 커버리지 불변식)만 둠.
+
+## 항목 ② 5노드 — "Concept→Misconception→Skill→ProblemType→Visualization 연결 완성·Formula 나중인가?"
+
+**판정 ✅ (표현 방식 확정).**
+
+- Concept(모델·437)·Misconception(`MisconceptionCatalog` 839·별도 DB)·Visualization(선언 명세)
+  존재. **Skill=`CognitiveType` enum 속성**, **ProblemType=`Problem` 스키마**로 의도적 표현 —
+  anti-explosion("핵심만 노드")상 전용 노드 승격은 노드 폭발 위험이라 하지 않는다.
+- **Formula 전용 노드 없음** → "Formula 먼저" 실패 경로 회피됨.
+- Concept은 Misconception·Visualization로 *참조 키*(`misconception_codes`·
+  `visualization_card_keys`)를 노출 — 5노드가 배선돼 있다(Phase 1 값 일부 미충전이어도 연결
+  능력 존재). 결정·재검토 트리거는 ADR §2, 동결은 `test_five_node_connectivity_governance.py`.
+
+## 항목 ③ 순수성 — "ConceptNode가 계층 분리됐고 renderer·prompt·curriculum·misconception·embedding을 안 넣었나?"
+
+**판정 △ → 부분 수정.**
+
+- renderer·prompt·embedding·curriculum은 **물리적으로 분리돼 있음**(각각 L5 명세·`docs/prompts/`·
+  별도 pgvector 테이블·CurriculumEntry Overlay). curriculum은 이미 노드에서 제거된 선례 있음
+  (`drop_concept_subject_curriculum_version`).
+- **위반**: identity 노드 `Concept`(data-pipeline)에 pedagogy 필드가 내장돼 있었다 —
+  `misconception_text`(자유텍스트 오개념·`ConceptContent`+`MisconceptionCatalog`와 삼중 중복)·
+  `metaphor`·`accepted_expressions`.
+- **수정**:
+  - `misconception_text` **즉시 제거**(DB 컬럼 미착지·유일 소비처 `common_misconceptions`가 이미
+    런타임 비소비로 동결 → 마이그레이션 불필요). graph.json 재생성. 순수성 동결 테스트 신설.
+  - `metaphor`·`accepted_expressions`는 임베딩·프로젝션이 활성 소비 → **Stage B로 게이트**
+    (ConceptContent 크로스워크 완료 후 이관). 이번 범위 아님.
+  - `difficulty_tier`는 semantic 속성이라 노드 적합(위반 아님) — 4계층 매핑에 명문화.
+
+---
+
+## 잔여 리스크 · 후속
+
+- **Stage B**(별도 PR): `metaphor`·`accepted_expressions` 노드 제거는 ConceptContent 크로스워크
+  (Phase 4) 완료가 선행 조건. 미완 상태 착수 시 의미검색 벡터 입력 소실.
+- **입도 재분할**: 세부개념/개념 이중 truth source 통합은 전문가 검수 후 별도 과제.
+- **검증**: `pytest tests/data_pipeline/concept_graph/ tests/backend/l1/test_concept_backend_load.py`
+  `tests/backend/l1/test_five_node_connectivity_governance.py`
+  `tests/backend/l1/test_node_granularity_governance.py`
+  `tests/data_pipeline/concept_graph/test_concept_node_purity.py` — 전부 green(ruff·black·mypy 포함).
