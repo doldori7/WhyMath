@@ -70,10 +70,15 @@ class TestTransformConcepts:
     def test_maps_enriched_fields(self) -> None:
         c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
         assert c.metaphor == "수처럼 더하고 곱하기"
-        assert c.misconception_text == "(a+b)²=a²+b²로 전개"  # 자유텍스트 오개념
         assert c.accepted_expressions == "동류항끼리 정리"
         assert c.ccss_code == "A-APR.A.1"
         assert c.difficulty_tier == 6  # 문자열 "6" → int
+
+    def test_input_misconception_not_mapped_to_node(self) -> None:
+        """입력 `misconception`(자유텍스트)은 노드로 흘리지 않는다(Part 2 §3 순수성)."""
+        c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
+        # 입력 _CONCEPT_A는 misconception 키를 갖지만, Concept 노드엔 슬롯 자체가 없다.
+        assert not hasattr(c, "misconception_text")
 
     def test_grade_band_hint_inferred(self) -> None:
         """첫 standard_code 학년 → NCIC 학년군 추론."""
@@ -90,7 +95,6 @@ class TestTransformConcepts:
         """빈 문자열 풍부 필드는 None으로 정규화(B는 metaphor 등이 빈 문자열)."""
         c = transform_concepts([_CONCEPT_B], _id_map())[0][0]
         assert c.metaphor is None
-        assert c.misconception_text is None
         assert c.accepted_expressions is None
 
     def test_review_status_reviewed_for_manual(self) -> None:
@@ -265,15 +269,11 @@ class TestTransformRealData:
     ) -> None:
         """§4 분포: reviewed 148(수기 검수 114 + 기본수학 34 AI 검수)·pending 289."""
         concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
-        reviewed = sum(
-            1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value
-        )
+        reviewed = sum(1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value)
         assert reviewed == 148
         assert len(concepts) - reviewed == 289
 
-    def test_no_redaction_leak_in_full_dump(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_no_redaction_leak_in_full_dump(self, concept_records: list[dict[str, object]]) -> None:
         """전체 개념 dump에 description/formal_definition 키 0건."""
         concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
         keys: set[str] = set()

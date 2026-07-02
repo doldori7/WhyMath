@@ -13,8 +13,10 @@ docs/data/concept_graph_dataset_v1.md §2(필드표)·§3(redaction)·§4(검수
   - source_id = src_id;  aliases = idmap.build_alias_map(records)[src_id](= [옛 UC, src_id])
   - name_ko = name_ko;  name_en/ja = None(Phase 1 KR 단일언어)
   - domain = category(데이터셋 영역명, 예 '[고]미적분');  grade_band_hint = 첫 코드 학년군 추론
-  - standard_codes 직결;  ccss_code/metaphor/accepted_expressions/misconception_text/
-    difficulty_tier 풍부필드 직결
+  - standard_codes 직결;  ccss_code/metaphor/accepted_expressions/difficulty_tier 풍부필드 직결
+  - **misconception(자유텍스트 오개념)은 노드로 흘리지 않는다**(2026-07-02 Part 2 §3 순수성):
+    Concept 모델에서 misconception_text 슬롯을 제거했다. 원시 `misconception` 값은 콘텐츠
+    코퍼스(pedagogy 계층·ConceptContent)로만 흐르고 identity 노드엔 담지 않는다.
   - review_status: definition_provenance가 "수기 검수"면 reviewed, 그 외 pending(§4)
   - prerequisite_concept_ids: 엣지에서 역으로 채움(to=후행 개념의 캐시에 from=선수 ID 추가)
 
@@ -177,7 +179,6 @@ def transform_concepts(
                 metaphor=_opt(record.get("metaphor")),
                 accepted_expressions=_opt(record.get("accepted_expressions")),
                 ccss_code=_opt(record.get("ccss_code")),
-                misconception_text=_opt(record.get("misconception")),
                 difficulty_tier=_int_opt(record.get("difficulty_tier")),
                 review_status=_review_status(_opt(record.get("definition_provenance"))),
             )

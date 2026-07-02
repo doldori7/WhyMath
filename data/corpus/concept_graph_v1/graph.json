@@ -22,7 +22,6 @@
       "metaphor": "사물 하나에 손가락·바둑돌 하나씩 짝지어(일대일 대응) 세고, 마지막에 센 수가 곧 전체 개수가 된다.",
       "accepted_expressions": "하나씩 빠뜨리거나 겹치지 않게 세고 마지막 수가 개수라고 말함 / '몇 개'(개수)와 '몇째'(순서)를 구분함",
       "ccss_code": "1.NBT.A.1",
-      "misconception_text": "세는 차례를 나타내는 '서수(첫째·둘째)'와 전체 양을 나타내는 '기수(다섯 개)'를 혼동한다. 또 셀 때 사물을 건너뛰거나 두 번 세어 개수가 틀린다.",
       "difficulty_tier": 0,
       "review_status": "reviewed",
       "notes": null
@@ -50,7 +49,6 @@
       "metaphor": "같은 숫자라도 자리가 다르면 값이 다르다. 동전으로 치면 '십의 자리 1'은 10원, '일의 자리 1'은 1원처럼.",
       "accepted_expressions": "3이 자리에 따라 3·30·300이 됨을 말함 / 각 자리가 아래 자리의 10배임을 안다",
       "ccss_code": "2.NBT.A.1",
-      "misconception_text": "234를 그냥 2+3+4로 읽어 자릿값을 무시한다(실제로는 200+30+4). 빈 자리에 0을 빠뜨려 25를 205처럼 쓰기도 한다.",
       "difficulty_tier": 1,
       "review_status": "reviewed",
       "notes": null
@@ -78,7 +76,6 @@
       "metaphor": "키 큰 사람을 찾듯, 수도 가장 높은 자리(앞자리)부터 한 자리씩 견주어 큰 수를 가린다.",
       "accepted_expressions": "맨 앞(높은) 자리부터 비교한다고 말함 / 자릿수가 많다고 무조건 큰 수는 아님을 안다",
       "ccss_code": "1.NBT.B.3",
-      "misconception_text": "자릿수(숫자 개수)가 많으면 무조건 큰 수라고 생각한다. 자연수에선 대개 맞지만 소수(0.5 vs 0.45)에서는 깨진다.",
       "difficulty_tier": 2,
       "review_status": "reviewed",
       "notes": null
@@ -106,7 +103,6 @@
       "metaphor": "수 하나를 두 묶음으로 나눠 담거나(가르기) 다시 합치는(모으기) 것. 5는 2와 3, 1과 4로 가를 수 있다.",
       "accepted_expressions": "5를 1과 4, 2와 3 등으로 가른다고 말함 / 두 수를 모으면 원래 수가 됨을 안다",
       "ccss_code": "K.OA.A.3",
-      "misconception_text": "가르기와 모으기를 단순 암기로만 익혀, '5는 2와 3'처럼 다양한 분해 방법이 여럿임을 떠올리지 못한다.",
       "difficulty_tier": 1,
       "review_status": "pending",
       "notes": null
@@ -135,7 +131,6 @@
       "metaphor": "덧셈은 두 묶음을 합치는 것, 뺄셈은 한 묶음에서 덜어내거나 두 양의 차이를 재는 것이다.",
       "accepted_expressions": "합치면 덧셈, 덜어내거나 차이를 구하면 뺄셈으로 식을 세움 / 뺄셈이 '차이' 상황도 됨을 안다",
       "ccss_code": "1.OA.A.1",
-      "misconception_text": "뺄셈을 늘 '큰 수−작은 수'로만 인식해 5−8 같은 상황(차이·부족)을 떠올리지 못한다. 덧셈·뺄셈을 한 가지 상황으로만 좁게 본다.",
       "difficulty_tier": 2,
       "review_status": "reviewed",
       "notes": null
@@ -164,7 +159,6 @@
       "metaphor": "받아올림은 10이 모이면 윗자리로 '한 묶음 보내기', 받아내림은 윗자리에서 10을 '꿔 오기'다.",
       "accepted_expressions": "같은 자리끼리 계산하고 10이 넘으면 올리고 모자라면 윗자리에서 빌림",
       "ccss_code": "2.NBT.B.5",
-      "misconception_text": "받아올림한 1을 윗자리에 더하는 것을 빠뜨린다. 자리를 어긋나게 적어(십의 자리와 일의 자리를 섞어) 더한다.",
       "difficulty_tier": 3,
       "review_status": "reviewed",
       "notes": null
@@ -192,7 +186,6 @@
       "metaphor": "시소처럼, 더한 만큼 다시 빼면 제자리로 돌아온다. 덧셈식과 뺄셈식은 서로 거꾸로(역연산)다.",
       "accepted_expressions": "더한 것을 다시 빼면 처음으로 돌아온다고 말함 / 한 상황을 덧셈식과 뺄셈식으로 함께 나타냄",
       "ccss_code": "1.OA.B.4",
-      "misconception_text": "3+□=7을 풀 때 덧셈·뺄셈이 역관계임을 못 써서 무작정 더하기만 시도한다(7−3으로 풀면 됨).",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -220,7 +213,6 @@
       "metaphor": "줄 서서 차례로 계산하기. 세 수의 덧셈·뺄셈은 앞에서부터 순서대로 하나씩 처리한다.",
       "accepted_expressions": "왼쪽부터 차례로 계산함 / 10−3+2를 (10−3)+2로 봄",
       "ccss_code": "K.OA.A.2",
-      "misconception_text": "뺄셈이 섞이면 묶는 위치를 함부로 바꿔 답이 달라진다(10−3−2와 10−(3−2)는 다름). 앞에서부터 차례로 해야 함을 놓친다.",
       "difficulty_tier": 4,
       "review_status": "reviewed",
       "notes": null
@@ -248,7 +240,6 @@
       "metaphor": "□가 든 양팔저울의 균형 맞추기. □ 자리에 어떤 수가 들어가야 식이 참이 되는지 찾는다(방정식의 싹).",
       "accepted_expressions": "□에 들어갈 수를 찾는다고 말함 / 3+□=7을 7−3으로 구함",
       "ccss_code": "1.OA.D.8",
-      "misconception_text": "□를 '아무 수나 들어가는 빈칸'으로 여겨, 식을 참으로 만드는 '정해진 한 값'을 찾는 것임을 놓친다.",
       "difficulty_tier": 4,
       "review_status": "pending",
       "notes": null
@@ -277,7 +268,6 @@
       "metaphor": "3씩 4묶음을 한꺼번에 세는 것이 3×4. 같은 수를 여러 번 더하는 일을 짧게 쓴 것이다.",
       "accepted_expressions": "3×4를 3을 4번 더한 것으로 설명 / 묶음 수×묶음 크기로 봄",
       "ccss_code": "3.OA.A.1",
-      "misconception_text": "3×4(3을 4번 더함=12)와 3+4(=7)를 혼동한다. '몇씩 몇 묶음'의 두 수 역할을 헷갈린다.",
       "difficulty_tier": 4,
       "review_status": "reviewed",
       "notes": null
@@ -305,7 +295,6 @@
       "metaphor": "구구단은 '몇씩 뛰어 세기' 표. 잊으면 옆 칸의 곱에서 한 묶음 더하거나 빼서 되살릴 수 있다(6×7을 잊으면 6×6+6).",
       "accepted_expressions": "곱셈구구를 빠르게 답함 / 7×8을 7×7+7로 복원함",
       "ccss_code": "3.OA.C.7",
-      "misconception_text": "원리 없이 소리로만 외워, 한 곳을 잊으면 통째로 막힌다. 7×8 같은 큰 단을 특히 자주 틀린다.",
       "difficulty_tier": 5,
       "review_status": "reviewed",
       "notes": null
@@ -331,7 +320,6 @@
       "metaphor": "반복되는 무늬 패턴 찾기. △○△○ 다음에 무엇이 올지 규칙을 알아내 말이나 그림으로 나타낸다.",
       "accepted_expressions": "반복되는 부분(규칙)을 찾아 말로 설명함 / 다음에 올 것을 규칙으로 예상함",
       "ccss_code": "4.OA.C.5",
-      "misconception_text": "눈앞의 한두 개만 보고 규칙을 성급히 정해, 반복 단위(△○가 한 묶음)를 잘못 잡는다.",
       "difficulty_tier": 1,
       "review_status": "pending",
       "notes": null
@@ -359,7 +347,6 @@
       "metaphor": "정한 규칙을 레시피처럼 따라가며 블록·수를 차례로 늘어놓는다(규칙 만들기).",
       "accepted_expressions": "정한 규칙대로 다음 것을 이어 놓음 / 규칙이 끝까지 일정함을 안다",
       "ccss_code": "5.OA.B.3",
-      "misconception_text": "규칙을 중간에 슬쩍 바꾸거나, 반복 단위를 일정하게 유지하지 못한다.",
       "difficulty_tier": 1,
       "review_status": "pending",
       "notes": null
@@ -385,7 +372,6 @@
       "metaphor": "주변 물건에서 입체 모양 찾기. 음료수 캔은 원기둥, 주사위는 직육면체, 공은 구처럼.",
       "accepted_expressions": "캔은 원기둥, 상자는 직육면체, 공은 구라고 말함 / 굴러가는지·쌓이는지로 구분함",
       "ccss_code": "K.G.A.3",
-      "misconception_text": "굴러가는지(구·원기둥)·잘 쌓이는지(직육면체) 같은 기능과, 면·모서리 같은 모양 특징을 구별하지 못한다.",
       "difficulty_tier": 0,
       "review_status": "pending",
       "notes": null
@@ -413,7 +399,6 @@
       "metaphor": "쌓기나무로 똑같은 모양을 만들고, '오른쪽 위 칸'처럼 위치와 방향을 말로 설명한다.",
       "accepted_expressions": "'오른쪽 위에 한 개'처럼 위치를 방향으로 말함 / 같은 모양을 똑같이 쌓음",
       "ccss_code": "K.G.B.5",
-      "misconception_text": "보이지 않는(뒤·아래) 나무를 빠뜨리고 세거나, 위치를 말할 때 기준(보는 방향)을 정하지 않아 설명이 엇갈린다.",
       "difficulty_tier": 1,
       "review_status": "pending",
       "notes": null
@@ -439,7 +424,6 @@
       "metaphor": "주변에서 평면 모양 찾기. 시계는 원, 책은 사각형, 삼각김밥은 삼각형처럼.",
       "accepted_expressions": "시계는 원, 책은 사각형이라고 말함 / 기울거나 커도 같은 모양임을 안다",
       "ccss_code": "K.G.A.2",
-      "misconception_text": "기울이거나 크기가 다르면 같은 종류 도형임을 못 알아본다(뾰족한 삼각형도 삼각형).",
       "difficulty_tier": 0,
       "review_status": "pending",
       "notes": null
@@ -467,7 +451,6 @@
       "metaphor": "자나 본을 대고 삼각형·사각형·원을 직관적으로 그려 본다.",
       "accepted_expressions": "자나 본을 대고 모양을 그림 / 변이 곧고 끝이 만나게 그림",
       "ccss_code": "5.G.B.4",
-      "misconception_text": "변이 곧지 않거나 끝이 만나지 않게 그려, 그린 모양이 그 도형의 조건을 못 갖춘다.",
       "difficulty_tier": 1,
       "review_status": "pending",
       "notes": null
@@ -495,7 +478,6 @@
       "metaphor": "삼각형과 사각형을 늘어놓고 닮은 점 찾기. 둘 다 곧은 변과 뾰족한 꼭짓점으로 둘러싸여 있다.",
       "accepted_expressions": "둘 다 곧은 변과 꼭짓점이 있다고 말함 / 변·꼭짓점 수로 둘을 구별함",
       "ccss_code": "2.G.A.1",
-      "misconception_text": "변과 꼭짓점의 '개수'에만 주목하고, '곧은 선분으로 둘러싸였다'는 공통된 본질을 놓친다.",
       "difficulty_tier": 1,
       "review_status": "pending",
       "notes": null
@@ -521,7 +503,6 @@
       "metaphor": "두 물건을 나란히·포개어 직접 견주기. 누가 더 긴지·무거운지·많이 담기는지를 자 없이 맞대어 본다.",
       "accepted_expressions": "둘을 나란히·포개어 길고 짧음을 비교함 / 한쪽 끝을 맞추고 비교함",
       "ccss_code": "K.MD.A.2",
-      "misconception_text": "길이를 잴 때 시작점을 맞추지 않고 끝만 본다. 그릇 모양이 다르면 키 큰 쪽이 무조건 많이 담긴다고 여긴다.",
       "difficulty_tier": 0,
       "review_status": "pending",
       "notes": null
@@ -547,7 +528,6 @@
       "metaphor": "시계의 짧은바늘은 '시', 긴바늘은 '분'을 가리킨다. 짧은바늘은 시 사이를 천천히 옮겨 간다.",
       "accepted_expressions": "짧은 바늘=시, 긴 바늘=분으로 읽음",
       "ccss_code": "1.MD.B.3",
-      "misconception_text": "시침과 분침의 역할을 뒤바꿔 읽는다. 3시 50분을 짧은바늘이 4에 가까우니 4시대로 착각한다.",
       "difficulty_tier": 1,
       "review_status": "reviewed",
       "notes": null
@@ -577,7 +557,6 @@
       "metaphor": "시간에도 단위와 묶음이 있다. 60초가 1분, 60분이 1시간, 24시간이 하루로 한 단계씩 묶인다.",
       "accepted_expressions": "60초가 1분, 60분이 1시간이라고 말함 / 시·분·초를 서로 바꿔 나타냄",
       "ccss_code": "2.MD.A.2",
-      "misconception_text": "단위 사이를 10진법처럼 다뤄 1시간을 100분으로 계산한다(실제 60분).",
       "difficulty_tier": 2,
       "review_status": "pending",
       "notes": null
@@ -605,7 +584,6 @@
       "metaphor": "자를 대고 표준 단위로 재기. 손뼘 대신 누구나 같은 cm·m를 쓰면 어디서든 길이가 통한다.",
       "accepted_expressions": "m와 cm를 100배 관계로 환산",
       "ccss_code": "2.MD.A.1",
-      "misconception_text": "1m=100cm 환산을 틀린다. 자의 0이 아닌 눈금에서 재기 시작한다.",
       "difficulty_tier": 1,
       "review_status": "reviewed",
       "notes": null
@@ -633,7 +611,6 @@
       "metaphor": "130cm를 '1m 30cm'처럼, 큰 단위와 작은 단위로 나눠 읽고 쓴다.",
       "accepted_expressions": "130cm를 1m 30cm로 나타냄 / m와 cm로 나눠 읽음",
       "ccss_code": "2.MD.A.3",
-      "misconception_text": "1m 3cm를 1m 30cm로 쓰는 등, 자리(10·1의 자리)를 안 맞춰 cm 부분을 잘못 적는다.",
       "difficulty_tier": 2,
       "review_status": "pending",
       "notes": null
@@ -661,7 +638,6 @@
       "metaphor": "내 키·한 걸음처럼 아는 길이를 자 삼아 '대략 얼마'인지 어림한다(양감).",
       "accepted_expressions": "'약 2m쯤'처럼 대강 어림해 말함 / 실제와 큰 차이 없게 짐작함",
       "ccss_code": "2.MD.A.3",
-      "misconception_text": "기준이 될 만한 실제 길이 감각이 없어, 1m와 10cm를 비슷하게 어림하는 등 크게 빗나간다.",
       "difficulty_tier": 2,
       "review_status": "pending",
       "notes": null
@@ -690,7 +666,6 @@
       "metaphor": "같은 단위(cm는 cm끼리, m는 m끼리)로 맞춘 뒤 수처럼 더하고 뺀다.",
       "accepted_expressions": "같은 단위끼리 더하고 뺌 / cm가 100을 넘으면 m로 올림",
       "ccss_code": "2.MD.B.5",
-      "misconception_text": "단위를 맞추지 않고 그냥 더한다(1m 50cm + 30cm를 80으로). 받아올림(100cm=1m)을 빠뜨린다.",
       "difficulty_tier": 2,
       "review_status": "pending",
       "notes": null
@@ -716,7 +691,6 @@
       "metaphor": "서랍에 종류별로 정리하기. 분명한 기준(색·모양)을 정해 자료를 나누고 칸마다 개수를 센다.",
       "accepted_expressions": "색·모양 같은 기준으로 나눠 셈 / 빠뜨리거나 겹치지 않게 분류함",
       "ccss_code": "K.MD.B.3",
-      "misconception_text": "기준을 도중에 바꾸거나 겹치게 잡아, 같은 자료가 두 칸에 들어가거나 빠진다.",
       "difficulty_tier": 0,
       "review_status": "pending",
       "notes": null
@@ -744,7 +718,6 @@
       "metaphor": "센 개수를 한눈에 보이게 칸 표에 적어 정리한다. 표는 자료를 깔끔히 담는 정리함이다.",
       "accepted_expressions": "항목과 개수를 표 칸에 적음 / 표에서 합계를 구함",
       "ccss_code": "5.MD.B.2",
-      "misconception_text": "표의 합계를 빠뜨리거나, 항목과 개수를 엉뚱한 칸에 적는다.",
       "difficulty_tier": 1,
       "review_status": "pending",
       "notes": null
@@ -772,7 +745,6 @@
       "metaphor": "○를 하나씩 쌓아 높이로 많고 적음을 보여 주는 그림(간단한 그래프).",
       "accepted_expressions": "○를 개수만큼 쌓아 나타냄 / 한 칸이 하나임을 지켜 그림",
       "ccss_code": "4.MD.B.4",
-      "misconception_text": "○ 한 칸의 크기를 들쭉날쭉 그려 높이 비교가 공정하지 않게 된다(한 칸=한 개 약속을 어김).",
       "difficulty_tier": 1,
       "review_status": "pending",
       "notes": null
@@ -800,7 +772,6 @@
       "metaphor": "네 자리마다 만·억·조로 끊어 읽기. 큰 수도 일·십·백·천이 한 묶음씩 반복되는 구조다.",
       "accepted_expressions": "네 자리씩 끊어 만·억·조로 읽음 / 큰 수의 각 자리 값을 말할 수 있음",
       "ccss_code": "4.NBT.A.2",
-      "misconception_text": "자리를 잘못 끊어(세 자리씩) 읽는다. 중간의 빈 자리에 0을 빠뜨려 자릿수가 어긋난다.",
       "difficulty_tier": 3,
       "review_status": "reviewed",
       "notes": null
@@ -829,7 +800,6 @@
       "metaphor": "큰 수도 키 재듯 가장 높은 자리부터 비교한다. 자릿수가 많으면 대체로 큰 수다.",
       "accepted_expressions": "자릿수가 많은 수가 크다고 말함 / 자릿수가 같으면 앞자리부터 비교함",
       "ccss_code": "4.NBT.A.2",
-      "misconception_text": "자릿수가 같을 때 앞자리부터 비교하지 않고 끝자리나 눈에 띄는 숫자로 성급히 판단한다.",
       "difficulty_tier": 4,
       "review_status": "pending",
       "notes": null
@@ -857,7 +827,6 @@
       "metaphor": "세 자리 수의 덧셈·뺄셈도 자리를 맞춰 일의 자리부터 차례로, 받아올림·받아내림을 챙기며 한다.",
       "accepted_expressions": "자리를 맞춰 일의 자리부터 계산함 / 10 넘으면 올리고 모자라면 빌림",
       "ccss_code": "3.NBT.A.2",
-      "misconception_text": "여러 번 연속된 받아내림(예: 300−167)에서 가운데 0 자리 처리를 빠뜨린다.",
       "difficulty_tier": 5,
       "review_status": "pending",
       "notes": null
@@ -886,7 +855,6 @@
       "metaphor": "각 자리별로 따로 곱한 '부분곱'을 자리를 맞춰 쌓아 더한다(23×4 = 20×4 + 3×4).",
       "accepted_expressions": "자리마다 곱하고 자리를 맞춰 더함",
       "ccss_code": "4.NBT.B.5",
-      "misconception_text": "윗자리 부분곱을 한 칸 밀어 적지 않아 자리가 어긋난다. 받아올림한 수를 다음 자리 곱에 더하는 것을 빠뜨린다.",
       "difficulty_tier": 6,
       "review_status": "reviewed",
       "notes": null
@@ -915,7 +883,6 @@
       "metaphor": "12개를 3명에게 똑같이 나눠 주기(12÷3). 나눗셈은 똑같이 가르기이자 곱셈의 거꾸로다.",
       "accepted_expressions": "똑같이 나누는/몇 묶음인지 구하는 상황을 나눗셈으로 봄 / 나눗셈 결과를 곱셈으로 확인함",
       "ccss_code": "3.OA.B.6",
-      "misconception_text": "'나누면 항상 작아진다'고 믿는다. 1보다 작은 수로 나누면 오히려 커진다(6÷0.5=12).",
       "difficulty_tier": 6,
       "review_status": "reviewed",
       "notes": null
@@ -943,7 +910,6 @@
       "metaphor": "나누고 남은 것이 나머지. 더 나눌 수 있으면 안 되므로 나머지는 늘 나누는 수보다 작아야 한다.",
       "accepted_expressions": "나머지<나누는 수임을 안다 / 나머지가 나누는 수 이상이면 더 나눌 수 있다고 말함",
       "ccss_code": "4.NBT.B.6",
-      "misconception_text": "나머지가 나누는 수보다 큰데도(더 나눌 수 있는데) 멈춘다. 몫을 너무 작게 잡는다.",
       "difficulty_tier": 7,
       "review_status": "reviewed",
       "notes": null
@@ -972,7 +938,6 @@
       "metaphor": "나누는 수가 두 자리여도 '몇 번 들어가는지' 어림해 몫을 한 자리씩 세워 나간다.",
       "accepted_expressions": "몇 번 들어가는지 어림해 몫을 세움 / 나머지가 나누는 수보다 작음을 확인함",
       "ccss_code": "5.NBT.B.6",
-      "misconception_text": "몫을 어림할 때 너무 크거나 작게 잡아 여러 번 고쳐야 한다. 몫의 자리를 한 칸 잘못 놓는다.",
       "difficulty_tier": 8,
       "review_status": "pending",
       "notes": null
@@ -1002,7 +967,6 @@
       "metaphor": "장 보기 전 대략 합을 가늠하듯, 정확한 답 대신 '약 얼마'인지 빠르게 어림한다.",
       "accepted_expressions": "큰 수를 반올림해 대략 계산함 / '약 얼마'로 결과를 가늠함",
       "ccss_code": "3.OA.D.8",
-      "misconception_text": "어림과 정확한 계산을 구분하지 못해, 어림인데 끝까지 정확히 계산하려 한다(어림의 목적은 빠른 가늠).",
       "difficulty_tier": 8,
       "review_status": "pending",
       "notes": null
@@ -1031,7 +995,6 @@
       "metaphor": "피자를 똑같이 4조각 내고 그중 3조각이 3/4. 분수는 '전체를 똑같이 나눈 것 중 몇 개'다.",
       "accepted_expressions": "'똑같이' 나눈 것 중 몇 개로 설명 / 전체(1)와의 관계로 분수를 말함",
       "ccss_code": "3.NF.A.1",
-      "misconception_text": "'똑같이' 나눈다는 조건을 빠뜨린다. 분모가 클수록 분수가 크다고 착각한다(1/8 < 1/4).",
       "difficulty_tier": 5,
       "review_status": "reviewed",
       "notes": null
@@ -1059,7 +1022,6 @@
       "metaphor": "분자가 1인 단위분수는 한 조각의 크기. 똑같은 것을 더 많이 쪼갤수록(분모가 클수록) 한 조각은 작아진다.",
       "accepted_expressions": "분모가 클수록 작다고 말함 / 1/4<1/2을 조각/그림으로 설명",
       "ccss_code": "3.NF.A.1",
-      "misconception_text": "분모가 큰 1/4가 1/2보다 크다고 착각한다(많이 쪼갤수록 한 조각은 작음).",
       "difficulty_tier": 6,
       "review_status": "reviewed",
       "notes": null
@@ -1087,7 +1049,6 @@
       "metaphor": "1보다 작으면 진분수, 1이거나 크면 가분수, 자연수와 진분수를 합쳐 쓰면 대분수(1과 1/2).",
       "accepted_expressions": "가분수와 대분수를 서로 바꿈 / 가분수가 틀린 분수가 아님을 안다",
       "ccss_code": "5.NF.B.7",
-      "misconception_text": "가분수를 '틀린 분수'로 오해한다. 대분수 1과 1/2를 곱셈(1×1/2)으로 잘못 본다.",
       "difficulty_tier": 6,
       "review_status": "reviewed",
       "notes": null
@@ -1115,7 +1076,6 @@
       "metaphor": "같은 크기 조각이면 개수가 많은 쪽이 크다. 분모가 같으면 분자가 큰 분수가 크다.",
       "accepted_expressions": "분모 같으면 분자 큰 쪽이 큼 / 조각 수가 많은 쪽이 큼",
       "ccss_code": "3.NF.A.3",
-      "misconception_text": "분모가 같은데도 분모까지 비교하거나, 분자가 작은 쪽을 크다고 거꾸로 본다.",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -1144,7 +1104,6 @@
       "metaphor": "1을 10조각 낸 것 중 하나가 0.1. 분모가 10인 분수(1/10)를 소수로 바꾼 것이다.",
       "accepted_expressions": "1/10을 0.1로 씀 / 0.1이 1보다 작은 수임을 안다",
       "ccss_code": "4.NF.C.6",
-      "misconception_text": "0.1을 '1보다 큰 무엇'으로 여기거나, 0.1과 1/10이 같은 값임을 연결하지 못한다.",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -1172,7 +1131,6 @@
       "metaphor": "분모가 10인 분수와 소수 한 자리는 같은 값의 두 얼굴(3/10 = 0.3).",
       "accepted_expressions": "3/10을 0.3으로 바꿔 씀 / 같은 값을 분수·소수로 함께 나타냄",
       "ccss_code": "4.NF.C.6",
-      "misconception_text": "3/10을 0.3이 아닌 0.10·3.0 등으로 잘못 바꾼다(자리 대응을 놓침).",
       "difficulty_tier": 7,
       "review_status": "pending",
       "notes": null
@@ -1201,7 +1159,6 @@
       "metaphor": "소수점 아래로도 십분의 일, 백분의 일… 자리가 이어진다. 0.01은 1을 100조각 낸 하나.",
       "accepted_expressions": "0.01은 1을 100으로 나눈 하나라고 말함 / 소수점 아래 자리값을 말함",
       "ccss_code": "5.NBT.A.3",
-      "misconception_text": "0.07을 0.7과 같다고 보는 등 소수점 아래 자릿값을 무시한다.",
       "difficulty_tier": 7,
       "review_status": "pending",
       "notes": null
@@ -1229,7 +1186,6 @@
       "metaphor": "소수도 정수 부분 먼저, 같으면 소수점 아래 높은 자리부터 비교한다.",
       "accepted_expressions": "소수점 아래도 높은 자리부터 비교 / 자릿수가 많다고 큰 게 아님을 안다",
       "ccss_code": "4.NF.C.7",
-      "misconception_text": "'자리 수가 많은 소수가 크다'고 여겨 0.45를 0.5보다 크다고 착각한다.",
       "difficulty_tier": 8,
       "review_status": "reviewed",
       "notes": null
@@ -1258,7 +1214,6 @@
       "metaphor": "같은 크기 조각끼리의 셈. 분모가 같으면 조각 수(분자)만 더하거나 빼고 분모는 그대로 둔다.",
       "accepted_expressions": "분모는 그대로, 분자만 더하거나 뺌 / 분모를 더하면 안 됨을 안다",
       "ccss_code": "4.NF.B.3",
-      "misconception_text": "분모까지 더한다(2/5+1/5을 3/10으로). 조각 크기(분모)는 변하지 않음을 놓친다.",
       "difficulty_tier": 7,
       "review_status": "reviewed",
       "notes": null
@@ -1287,7 +1242,6 @@
       "metaphor": "소수점을 세로로 나란히 맞춘 뒤 같은 자리끼리 더하고 뺀다.",
       "accepted_expressions": "소수점을 맞춰 계산 / 끝자리가 아니라 소수점 기준으로 맞춤",
       "ccss_code": "5.NBT.B.7",
-      "misconception_text": "소수점을 안 맞추고 끝자리만 맞춰 더한다. 자릿수가 다른 소수(1.2+0.35)에서 특히 자주 어긋난다.",
       "difficulty_tier": 8,
       "review_status": "reviewed",
       "notes": null
@@ -1315,7 +1269,6 @@
       "metaphor": "커지는 무늬의 규칙을 말 대신 수와 식으로 짧게 나타낸다(3, 5, 7… → 2씩 늘기).",
       "accepted_expressions": "'2씩 커진다'처럼 규칙을 수로 말함 / 순서와 값의 관계를 식으로 나타냄",
       "ccss_code": "5.OA.A.2",
-      "misconception_text": "이웃한 두 항의 차이만 보고 규칙을 잡아, 순서(몇 번째)와 값의 관계로 넓히지 못한다.",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1343,7 +1296,6 @@
       "metaphor": "계산식이 줄지어 변하는 규칙 찾기(11×11, 111×111…). 다음 식의 결과를 규칙으로 미리 추측한다.",
       "accepted_expressions": "식이 변하는 규칙으로 다음 결과를 예상함 / 규칙이 계속 성립하는지 확인함",
       "ccss_code": "3.OA.D.9",
-      "misconception_text": "한두 줄의 우연한 결과를 규칙으로 단정해, 다음 식에서 어긋난다.",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1371,7 +1323,6 @@
       "metaphor": "등호(=)는 양팔저울처럼 '양쪽이 같다'는 표시지, '답이 나온다'는 신호가 아니다.",
       "accepted_expressions": "등호를 '양쪽이 같다'로 봄 / 7=3+4도 옳다고 인정",
       "ccss_code": "6.EE.A.4",
-      "misconception_text": "등호를 '계산 결과를 적는 자리'로만 이해해 3+4=7+2처럼 이어 쓴다(양변이 같아야 함).",
       "difficulty_tier": 3,
       "review_status": "reviewed",
       "notes": null
@@ -1397,7 +1348,6 @@
       "metaphor": "선분은 양 끝이 있는 실, 반직선은 한쪽으로만 뻗는 빛줄기, 직선은 양쪽으로 끝없이 뻗는 길.",
       "accepted_expressions": "끝점 유무로 셋을 구별",
       "ccss_code": "4.G.A.1",
-      "misconception_text": "직선·선분·반직선의 '끝이 있나/없나'를 구별하지 못해 같은 것으로 본다.",
       "difficulty_tier": 2,
       "review_status": "reviewed",
       "notes": null
@@ -1425,7 +1375,6 @@
       "metaphor": "각의 크기는 두 변이 '벌어진 정도'다. 부채를 더 펼칠수록 각이 커진다(변 길이와 무관).",
       "accepted_expressions": "변을 늘여도 각은 그대로임을 안다 / 직각·예각·둔각을 구분",
       "ccss_code": "4.G.A.1",
-      "misconception_text": "변(부채살)을 길게 그리면 각이 커진다고 착각한다. 각의 크기는 벌어진 정도로만 정해진다.",
       "difficulty_tier": 2,
       "review_status": "reviewed",
       "notes": null
@@ -1453,7 +1402,6 @@
       "metaphor": "철길은 영원히 안 만나는 평행, 십자 교차로는 직각으로 만나는 수직.",
       "accepted_expressions": "직각으로 만나면 수직, 안 만나면 평행이라 말함 / 십자=수직, 철길=평행으로 봄",
       "ccss_code": "4.G.A.1",
-      "misconception_text": "'가까이 있으면 평행'이라 여긴다(거리가 아니라 만나지 않음이 핵심). 비스듬히 만나는 것을 수직으로 본다.",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1481,7 +1429,6 @@
       "metaphor": "밀기는 그대로 옮기기, 뒤집기는 거울에 비추기, 돌리기는 제자리에서 회전이다.",
       "accepted_expressions": "뒤집기와 돌리기의 결과가 다름을 안다",
       "ccss_code": "4.G.A.3",
-      "misconception_text": "뒤집기(거울상)와 돌리기(회전)를 혼동한다. 밀기에서는 모양·방향이 안 바뀜을 놓친다.",
       "difficulty_tier": 2,
       "review_status": "reviewed",
       "notes": null
@@ -1509,7 +1456,6 @@
       "metaphor": "모눈 위에서 점이 '오른쪽 3칸, 위 2칸'처럼 옮겨 간 경로를 방향과 칸수로 설명한다.",
       "accepted_expressions": "'오른쪽 3칸, 위 2칸'처럼 이동을 말함 / 방향과 칸 수로 위치 변화를 설명함",
       "ccss_code": "K.G.A.2",
-      "misconception_text": "이동 방향(오른쪽/왼쪽, 위/아래)을 반대로 말하거나 칸 수를 하나 어긋나게 센다.",
       "difficulty_tier": 2,
       "review_status": "pending",
       "notes": null
@@ -1537,7 +1483,6 @@
       "metaphor": "원은 중심에서 같은 거리에 있는 점들의 모임. 반지름은 중심에서 가장자리까지, 지름은 그 두 배.",
       "accepted_expressions": "반지름은 중심에서 가장자리까지라고 말함 / 지름=반지름×2임을 안다",
       "ccss_code": "K.G.B.5",
-      "misconception_text": "지름과 반지름을 혼동한다(지름=반지름×2). 중심을 지나지 않는 선을 지름으로 본다.",
       "difficulty_tier": 2,
       "review_status": "pending",
       "notes": null
@@ -1565,7 +1510,6 @@
       "metaphor": "컴퍼스의 벌린 폭이 곧 반지름. 폭을 고정하고 한 바퀴 돌리면 원이 그려진다.",
       "accepted_expressions": "벌린 폭이 반지름임을 알고 원을 그림 / 폭을 바꿔 크기 다른 원을 그림",
       "ccss_code": "K.G.B.5",
-      "misconception_text": "도는 동안 컴퍼스 폭(반지름)이 흔들려 찌그러진 원이 된다.",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1593,7 +1537,6 @@
       "metaphor": "두 변이 같으면 이등변삼각형, 세 변이 모두 같으면 정삼각형(이등변삼각형의 특별한 경우).",
       "accepted_expressions": "두 변 같으면 이등변, 세 변 같으면 정삼각형이라 말함 / 정삼각형도 이등변삼각형임을 안다",
       "ccss_code": "4.G.A.2",
-      "misconception_text": "정삼각형이 이등변삼각형이기도 하다는 포함관계를 부정한다.",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1621,7 +1564,6 @@
       "metaphor": "가장 큰 각을 기준으로 분류한다. 한 각이 직각이면 직각삼각형, 모두 90°보다 작으면 예각, 하나가 크면 둔각삼각형.",
       "accepted_expressions": "직각 있으면 직각삼각형이라 말함 / 세 각이 다 예각이어야 예각삼각형임을 안다",
       "ccss_code": "4.G.A.2",
-      "misconception_text": "예각삼각형을 '예각이 하나라도 있는 삼각형'으로 오해한다(모든 각이 예각이어야 함).",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1649,7 +1591,6 @@
       "metaphor": "사각형들은 가족 관계다. 정사각형은 직사각형이자 마름모이고, 마름모·직사각형은 평행사변형이다.",
       "accepted_expressions": "정사각형이 직사각형에 포함됨을 안다 / 포함관계로 분류함",
       "ccss_code": "5.G.B.4",
-      "misconception_text": "정사각형이 직사각형임을 부정하는 등 포함관계를 끊어 본다.",
       "difficulty_tier": 3,
       "review_status": "reviewed",
       "notes": null
@@ -1677,7 +1618,6 @@
       "metaphor": "곧은 변으로만 둘러싸인 도형이 다각형, 변과 각이 모두 같으면 정다각형.",
       "accepted_expressions": "곧은 변으로 둘러싸이면 다각형이라 말함 / 변·각이 모두 같아야 정다각형임을 안다",
       "ccss_code": "2.G.A.1",
-      "misconception_text": "변의 길이만 같으면(각은 다른데) 정다각형이라 여긴다(변·각 둘 다 같아야 함).",
       "difficulty_tier": 4,
       "review_status": "pending",
       "notes": null
@@ -1705,7 +1645,6 @@
       "metaphor": "같은 도형을 빈틈·겹침 없이 바닥 타일처럼 깔아 평면을 채운다(테셀레이션).",
       "accepted_expressions": "빈틈·겹침 없이 바닥을 채움 / 도형을 돌리고 뒤집어 이어 붙임",
       "ccss_code": "K.G.B.5",
-      "misconception_text": "도형 사이에 틈이 생기거나 겹치는데도 채워졌다고 본다(한 점에 모인 각의 합이 360°여야 함).",
       "difficulty_tier": 4,
       "review_status": "pending",
       "notes": null
@@ -1734,7 +1673,6 @@
       "metaphor": "시간도 60진법 묶음(60초=1분, 60분=1시간)으로 받아올림·받아내림하며 더하고 뺀다.",
       "accepted_expressions": "같은 단위끼리 더하고 뺌 / 초가 60을 넘으면 분으로 올림",
       "ccss_code": "2.MD.B.5",
-      "misconception_text": "분·초를 10진법으로 받아올림한다(70초를 1분 10초로 안 바꾸고 그대로 둠).",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1763,7 +1701,6 @@
       "metaphor": "작은 단위 mm와 큰 단위 km. 1cm=10mm, 1km=1000m로 상황에 맞는 단위를 고른다.",
       "accepted_expressions": "1km=1000m, 1cm=10mm로 환산함 / 길이에 맞는 단위를 고름",
       "ccss_code": "2.MD.A.3",
-      "misconception_text": "단위 환산 배수를 혼동한다(1km를 100m로). 연필 길이를 km로 재려는 등 단위 감각이 어긋난다.",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1792,7 +1729,6 @@
       "metaphor": "들이는 '담기는 양'. 1L=1000mL로, 큰 병은 L, 작은 컵은 mL로 잰다.",
       "accepted_expressions": "큰 것은 L, 작은 것은 mL로 잼 / 1L=1000mL로 환산함",
       "ccss_code": "3.MD.C.6",
-      "misconception_text": "들이(담기는 양)와 그릇의 높이를 혼동한다. 1L=1000mL 환산을 틀린다.",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1821,7 +1757,6 @@
       "metaphor": "같은 단위로 맞춘 뒤 더하고 빼며, 1000mL가 모이면 1L로 받아올린다.",
       "accepted_expressions": "같은 단위끼리 더하고 뺌 / mL가 1000을 넘으면 L로 올림",
       "ccss_code": "2.MD.B.5",
-      "misconception_text": "L와 mL를 안 맞추고 더한다. 1000 받아올림(1500mL=1L 500mL)을 빠뜨린다.",
       "difficulty_tier": 4,
       "review_status": "pending",
       "notes": null
@@ -1851,7 +1786,6 @@
       "metaphor": "무게의 단위 묶음은 1kg=1000g, 1t=1000kg. 무거울수록 큰 단위를 쓴다.",
       "accepted_expressions": "가벼우면 g, 무거우면 kg·t로 잼 / 1kg=1000g으로 환산함",
       "ccss_code": "2.MD.A.2",
-      "misconception_text": "g·kg·t 사이 환산 배수(1000배)를 혼동한다. 무게와 들이를 같은 것으로 본다.",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1880,7 +1814,6 @@
       "metaphor": "같은 단위로 맞춰 더하고 빼며, 1000g이 모이면 1kg으로 받아올린다.",
       "accepted_expressions": "같은 단위끼리 더하고 뺌 / g이 1000을 넘으면 kg으로 올림",
       "ccss_code": "2.MD.B.5",
-      "misconception_text": "단위를 안 맞추고 계산한다. 받아올림·받아내림(1kg=1000g)을 빠뜨린다.",
       "difficulty_tier": 4,
       "review_status": "pending",
       "notes": null
@@ -1908,7 +1841,6 @@
       "metaphor": "각도기로 두 변이 벌어진 정도를 1도 단위로 잰다. 직각은 90도.",
       "accepted_expressions": "각도기로 벌어진 정도를 잼 / 직각을 90도로 앎",
       "ccss_code": "4.MD.C.6",
-      "misconception_text": "각도기의 안쪽·바깥쪽 눈금을 잘못 읽는다(0도를 맞춘 변 쪽 눈금을 봐야 함).",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1937,7 +1869,6 @@
       "metaphor": "삼각형 세 각을 뜯어 한 줄로 모으면 평각(180°), 사각형은 그 두 배(360°)가 된다.",
       "accepted_expressions": "삼각형 내각 합이 180도라고 말함 / 사각형은 그 두 배(360도)임을 안다",
       "ccss_code": "8.G.A.5",
-      "misconception_text": "도형이 크거나 모양이 다르면 내각의 합도 달라진다고 생각한다(모양과 무관하게 일정).",
       "difficulty_tier": 4,
       "review_status": "pending",
       "notes": null
@@ -1965,7 +1896,6 @@
       "metaphor": "그림 크기나 막대 높이로 양을 한눈에 비교한다. 막대가 높을수록 그 항목이 많다.",
       "accepted_expressions": "막대가 길수록 많다고 읽음 / 한 칸이 나타내는 값을 보고 읽음",
       "ccss_code": "3.MD.B.3",
-      "misconception_text": "막대 한 칸이 나타내는 값(눈금 단위)을 무시하고 칸 수만 센다. 눈금이 0에서 시작하지 않으면 오해한다.",
       "difficulty_tier": 3,
       "review_status": "pending",
       "notes": null
@@ -1993,7 +1923,6 @@
       "metaphor": "점을 선으로 이어 변화의 흐름을 보여 준다. 꺾은선은 '변해 가는 모습', 막대는 '항목 간 비교'에 알맞다.",
       "accepted_expressions": "변화는 꺾은선, 비교는 막대로 선택",
       "ccss_code": "2.MD.D.10",
-      "misconception_text": "막대(범주 비교)와 꺾은선(시간에 따른 변화)의 쓰임을 바꿔 쓴다.",
       "difficulty_tier": 3,
       "review_status": "reviewed",
       "notes": null
@@ -2022,7 +1951,6 @@
       "metaphor": "궁금한 것을 정하고 자료를 모아 막대·꺾은선으로 정리한 뒤 읽어 내는 한 바퀴 탐구.",
       "accepted_expressions": "자료를 모아 그래프로 나타내고 해석함 / 그래프에서 알 수 있는 점을 말함",
       "ccss_code": "1.MD.C.4",
-      "misconception_text": "그래프를 그리는 데만 집중하고, 거기서 '무엇을 알 수 있는지' 해석을 빠뜨린다.",
       "difficulty_tier": 4,
       "review_status": "pending",
       "notes": null
@@ -2052,7 +1980,6 @@
       "metaphor": "계산에도 순서 규칙이 있다. 괄호 먼저, 다음 곱셈·나눗셈, 마지막에 덧셈·뺄셈.",
       "accepted_expressions": "곱·나눗셈을 덧·뺄셈보다 먼저 함 / 괄호를 가장 먼저 계산",
       "ccss_code": "K.OA.A.2",
-      "misconception_text": "무조건 왼쪽부터 차례로 계산해 2+3×4를 20으로(실제 14). 곱셈을 덧셈보다 먼저 함을 잊는다.",
       "difficulty_tier": 9,
       "review_status": "reviewed",
       "notes": null
@@ -2081,7 +2008,6 @@
       "metaphor": "놀이기구 키 제한 표지판. '이상·이하'는 경곗값을 포함(그 키도 OK), '초과·미만'은 제외한다.",
       "accepted_expressions": "이상/이하는 그 수 포함, 초과/미만은 미포함이라고 말함",
       "ccss_code": "2.OA.C.3",
-      "misconception_text": "경곗값 포함 여부를 혼동한다(10 이상에 10이 들어감 / 10 초과엔 10이 빠짐).",
       "difficulty_tier": 6,
       "review_status": "reviewed",
       "notes": null
@@ -2110,7 +2036,6 @@
       "metaphor": "올림은 무조건 위로, 버림은 무조건 아래로, 반올림은 바로 아랫자리가 5 이상이면 올린다.",
       "accepted_expressions": "세 어림법을 상황에 맞게 구분 / 반올림 기준 자리를 바르게 정함",
       "ccss_code": "5.NBT.A.4",
-      "misconception_text": "어느 자리에서 어림하는지(기준 자리)를 헷갈린다. 반올림 기준(5 이상)을 '5 초과'로 잘못 안다.",
       "difficulty_tier": 7,
       "review_status": "reviewed",
       "notes": null
@@ -2139,7 +2064,6 @@
       "metaphor": "약수는 어떤 수를 '딱 나누어떨어지게' 하는 수. 두 수의 공약수 중 가장 큰 것이 최대공약수다.",
       "accepted_expressions": "나누어떨어지면 약수 / 두 수를 동시에 나누는 가장 큰 수가 최대공약수",
       "ccss_code": "6.NS.B.4",
-      "misconception_text": "약수와 배수를 거꾸로 안다(약수는 그 수보다 작거나 같음). 1과 자기 자신도 약수임을 빠뜨린다.",
       "difficulty_tier": 7,
       "review_status": "reviewed",
       "notes": null
@@ -2168,7 +2092,6 @@
       "metaphor": "배수는 그 수를 정수배한 것(곱하기 표). 두 수의 공배수 중 가장 작은 것이 최소공배수다.",
       "accepted_expressions": "공통 배수 중 가장 작은 것이 최소공배수 / 최대공약수와 구분함",
       "ccss_code": "6.NS.B.4",
-      "misconception_text": "최대공약수와 최소공배수를 헷갈린다(공약수는 작아지고, 공배수는 커지는 쪽).",
       "difficulty_tier": 7,
       "review_status": "reviewed",
       "notes": null
@@ -2197,7 +2120,6 @@
       "metaphor": "같은 양을 더 잘게 자른 것뿐. 1/2 = 2/4 = 3/6은 크기가 같은 분수다(동치분수).",
       "accepted_expressions": "1/2와 2/4가 같은 양이라고 말함 / 분자·분모에 같은 수를 곱해 만든다",
       "ccss_code": "4.NF.A.1",
-      "misconception_text": "분자·분모에 다른 수를 곱하거나, 한쪽에만 곱해 크기가 달라지는데도 같다고 본다.",
       "difficulty_tier": 8,
       "review_status": "pending",
       "notes": null
@@ -2226,7 +2148,6 @@
       "metaphor": "분자와 분모를 같은 수(공약수)로 나눠 더 간단한 분수로 줄인다(약분). 크기는 그대로다.",
       "accepted_expressions": "분자·분모를 같은 수로 나눠 간단히 함 / 약분해도 크기는 같음을 안다",
       "ccss_code": "4.NF.C.6",
-      "misconception_text": "분자·분모를 서로 다른 수로 나눈다. 공약수가 아닌 수로 나눠 값이 바뀐다.",
       "difficulty_tier": 9,
       "review_status": "pending",
       "notes": null
@@ -2255,7 +2176,6 @@
       "metaphor": "조각 크기가 다른 케이크를 같은 크기 조각으로 다시 맞추기. 분모를 같게 만드는 것이 통분이다.",
       "accepted_expressions": "분모를 같게 맞춤 / 분자도 같은 배수로 곱해야 함을 안다",
       "ccss_code": "5.NF.A.1",
-      "misconception_text": "분모만 같게 하고 분자는 그대로 둔다(분자도 같은 배수로 곱해야 값이 보존됨).",
       "difficulty_tier": 9,
       "review_status": "pending",
       "notes": null
@@ -2284,7 +2204,6 @@
       "metaphor": "분모가 다르면 바로 비교가 안 된다. 통분해 같은 조각으로 맞춘 뒤 분자를 견준다.",
       "accepted_expressions": "통분한 뒤 분자를 비교함 / 분모가 다르면 바로 비교할 수 없음을 안다",
       "ccss_code": "4.NF.A.2",
-      "misconception_text": "통분 없이 분자만(또는 분모만) 보고 큰 분수를 고른다.",
       "difficulty_tier": 10,
       "review_status": "pending",
       "notes": null
@@ -2313,7 +2232,6 @@
       "metaphor": "같은 조각으로 맞춘(통분) 뒤 조각 수(분자)끼리 더하고 뺀다.",
       "accepted_expressions": "통분 후 분자끼리 계산 / 공통분모를 만든다",
       "ccss_code": "5.NF.A.1",
-      "misconception_text": "통분하지 않고 분자는 분자끼리·분모는 분모끼리 더한다(1/2+1/3을 2/5로).",
       "difficulty_tier": 10,
       "review_status": "reviewed",
       "notes": null
@@ -2343,7 +2261,6 @@
       "metaphor": "분수의 곱은 '~의 ~'. 1/2의 1/2은 1/4처럼, 1보다 작은 수를 곱하면 오히려 작아진다.",
       "accepted_expressions": "분자×분자, 분모×분모",
       "ccss_code": "5.NF.B.4",
-      "misconception_text": "'곱하면 항상 커진다'고 믿는다(1/2×1/2=1/4). 분자끼리·분모끼리 곱하는 규칙을 헷갈린다.",
       "difficulty_tier": 10,
       "review_status": "reviewed",
       "notes": null
@@ -2371,7 +2288,6 @@
       "metaphor": "나눗셈의 몫을 분수로. 3÷4는 '3을 4명이 나눠 갖기'여서 3/4이다.",
       "accepted_expressions": "3÷4를 3/4로 나타냄 / 나누는 수가 분모가 됨을 안다",
       "ccss_code": "5.NF.B.3",
-      "misconception_text": "3÷4를 4÷3으로 뒤집어 4/3으로 쓴다(나누는 수가 분모).",
       "difficulty_tier": 9,
       "review_status": "pending",
       "notes": null
@@ -2400,7 +2316,6 @@
       "metaphor": "÷분수는 '뒤집어 곱하기'. 나누는 분수의 역수를 곱하면 된다(÷(2/3) = ×(3/2)).",
       "accepted_expressions": "÷를 ×역수로 바꿈 / 1보다 작은 수로 나누면 커질 수 있음을 안다",
       "ccss_code": "6.NS.A.1",
-      "misconception_text": "분자÷분자, 분모÷분모로 따로 나눈다. 역수로 만드는 분수(나누는 쪽)를 헷갈린다.",
       "difficulty_tier": 11,
       "review_status": "reviewed",
       "notes": null
@@ -2430,7 +2345,6 @@
       "metaphor": "분수와 소수는 같은 수의 두 표현. 3/4 = 0.75처럼 서로 바꿔 비교할 수 있다.",
       "accepted_expressions": "3/4=0.75로 바꿔 비교함 / 분수를 나눗셈으로 소수로 고침",
       "ccss_code": "5.NF.B.7",
-      "misconception_text": "나누는 방향을 헷갈려 3/4를 4÷3으로 계산한다. 1/3 같은 순환소수를 딱 떨어진다고 본다.",
       "difficulty_tier": 11,
       "review_status": "pending",
       "notes": null
@@ -2459,7 +2373,6 @@
       "metaphor": "정수처럼 곱한 뒤, 두 소수의 소수점 아래 자리 수를 합한 만큼 소수점을 찍는다(0.2×0.3=0.06).",
       "accepted_expressions": "정수처럼 곱하고 소수점을 찍음 / 자리 수를 합한 만큼 소수점을 옮김",
       "ccss_code": "5.NBT.B.7",
-      "misconception_text": "소수점 자리 수의 합을 잘못 세어 점을 엉뚱한 곳에 찍는다(0.2×0.3을 0.6으로).",
       "difficulty_tier": 10,
       "review_status": "pending",
       "notes": null
@@ -2488,7 +2401,6 @@
       "metaphor": "나눗셈의 몫을 소수로. 3÷4는 끝까지 나누면 0.75가 된다.",
       "accepted_expressions": "3÷4를 0.75로 나타냄 / 나누어떨어질 때까지 0을 내려 나눔",
       "ccss_code": "5.NF.B.3",
-      "misconception_text": "나누어떨어지지 않으면 멈춰 버린다. 몫의 소수점 위치를 잘못 잡는다.",
       "difficulty_tier": 9,
       "review_status": "pending",
       "notes": null
@@ -2517,7 +2429,6 @@
       "metaphor": "나누는 수의 소수점을 자연수가 되게 옮기고, 나뉘는 수도 같은 칸만큼 옮긴 뒤 나눈다.",
       "accepted_expressions": "나누는 수를 자연수로 만들어 나눔 / 양쪽 소수점을 같은 칸 옮김",
       "ccss_code": "6.NS.B.3",
-      "misconception_text": "한쪽 소수점만 옮기고 다른 쪽은 그대로 둔다(양쪽을 같은 칸 옮겨야 몫이 보존됨).",
       "difficulty_tier": 11,
       "review_status": "pending",
       "notes": null
@@ -2545,7 +2456,6 @@
       "metaphor": "버튼을 누르면 정해진 값이 나오는 기계. 한 양이 정해지면 다른 양이 따라 정해지는 짝 관계(함수의 싹).",
       "accepted_expressions": "△가 2배면 ○도 2배처럼 관계를 말함 / 표에서 두 양의 규칙을 찾음",
       "ccss_code": "6.EE.C.9",
-      "misconception_text": "두 양의 대응 규칙을 한 방향으로만 보고, 표 전체에 일관된 규칙(△=○×2+1)을 찾지 못한다.",
       "difficulty_tier": 5,
       "review_status": "pending",
       "notes": null
@@ -2574,7 +2484,6 @@
       "metaphor": "요리 레시피의 재료 비율. 비 3:2는 두 양을 순서 있게 견준 것으로, 앞뒤를 바꾸면 뜻이 달라진다.",
       "accepted_expressions": "순서가 바뀌면 다른 비임을 안다",
       "ccss_code": "6.RP.A.1",
-      "misconception_text": "비 3:2와 2:3을 같다고 본다(순서가 중요). 비를 '차이'(3−2)로 오해한다.",
       "difficulty_tier": 5,
       "review_status": "reviewed",
       "notes": null
@@ -2603,7 +2512,6 @@
       "metaphor": "같은 비율을 분수·소수·백분율 세 옷으로 갈아입힌 것(1/2 = 0.5 = 50%).",
       "accepted_expressions": "1/2=0.5=50%가 같음을 안다",
       "ccss_code": "6.RP.A.3.c",
-      "misconception_text": "비와 비율을 혼동한다. 백분율은 100%를 못 넘는다고 오해한다(150%도 가능).",
       "difficulty_tier": 6,
       "review_status": "reviewed",
       "notes": null
@@ -2632,7 +2540,6 @@
       "metaphor": "비례식은 두 비가 같다는 등식. 바깥끼리 곱한 값과 안쪽끼리 곱한 값이 같다(외항의 곱=내항의 곱).",
       "accepted_expressions": "외항의 곱=내항의 곱을 적용",
       "ccss_code": "7.RP.A.2",
-      "misconception_text": "외항·내항을 잘못 짝지어 곱한다(3:4=6:□에서 엉뚱한 자리끼리 곱함).",
       "difficulty_tier": 6,
       "review_status": "reviewed",
       "notes": null
@@ -2660,7 +2567,6 @@
       "metaphor": "전체를 정해진 비로 나눠 갖기. 비의 합을 분모로 삼아 각자 자기 몫만큼 가져간다(3:2면 5칸 중 3칸, 2칸).",
       "accepted_expressions": "비의 합으로 등분 후 분배",
       "ccss_code": "6.RP.A.3.c",
-      "misconception_text": "전체를 비의 합으로 먼저 나누지 않고 비의 수를 그대로 양으로 쓴다(3:2를 3개·2개로).",
       "difficulty_tier": 7,
       "review_status": "reviewed",
       "notes": null
@@ -2689,7 +2595,6 @@
       "metaphor": "모양과 크기가 완전히 같아 포개면 딱 맞는 두 도형이 합동. 대응변·대응각이 모두 같다.",
       "accepted_expressions": "포개면 딱 맞으면 합동이라 말함 / 대응변·대응각이 같음을 안다",
       "ccss_code": "8.G.A.2",
-      "misconception_text": "겉모습만 비슷하면(크기가 다른 닮은꼴) 합동이라 여긴다. 뒤집힌 합동을 다른 도형으로 본다.",
       "difficulty_tier": 5,
       "review_status": "pending",
       "notes": null
@@ -2717,7 +2622,6 @@
       "metaphor": "선대칭은 거울에 비친 모습(접으면 포개짐), 점대칭은 한 점을 중심으로 반 바퀴(180°) 돌린 모습.",
       "accepted_expressions": "접어서 겹치면 선대칭이라 말함 / 반 바퀴 돌려 겹치면 점대칭임을 안다",
       "ccss_code": "4.G.A.3",
-      "misconception_text": "선대칭과 점대칭을 혼동한다. 대칭축의 위치를 아무 데나 잡는다.",
       "difficulty_tier": 5,
       "review_status": "pending",
       "notes": null
@@ -2745,7 +2649,6 @@
       "metaphor": "직육면체는 직사각형 6장으로 둘러싼 상자, 정육면체는 정사각형 6장의 특별한 상자(주사위).",
       "accepted_expressions": "면 6개로 둘러싸인 상자라고 말함 / 면·모서리·꼭짓점 수를 안다",
       "ccss_code": "K.G.B.5",
-      "misconception_text": "면·모서리·꼭짓점의 개수를 혼동한다(면 6·모서리 12·꼭짓점 8). 보이지 않는 모서리를 빠뜨린다.",
       "difficulty_tier": 5,
       "review_status": "pending",
       "notes": null
@@ -2773,7 +2676,6 @@
       "metaphor": "겨냥도는 입체를 비스듬히 그린 그림, 전개도는 상자를 가위로 펼친 도면. 다시 접으면 마주 보는 면이 만난다.",
       "accepted_expressions": "접었을 때 마주 보는 면을 찾음",
       "ccss_code": "2.G.A.1",
-      "misconception_text": "전개도를 접었을 때 마주 보는 면의 위치를 잘못 배치한다. 겨냥도에서 안 보이는 모서리를 실선으로 그린다.",
       "difficulty_tier": 6,
       "review_status": "reviewed",
       "notes": null
@@ -2801,7 +2703,6 @@
       "metaphor": "각기둥은 위아래가 같은 다각형인 기둥, 각뿔은 한 점으로 뾰족하게 모이는 고깔.",
       "accepted_expressions": "위아래가 같으면 기둥, 한 점으로 모이면 뿔이라 말함 / 밑면 수(기둥 2·뿔 1)를 안다",
       "ccss_code": "K.G.B.5",
-      "misconception_text": "기둥과 뿔의 옆면 모양을 혼동한다(기둥은 직사각형, 뿔은 삼각형). 밑면의 개수(기둥 2·뿔 1)를 헷갈린다.",
       "difficulty_tier": 5,
       "review_status": "pending",
       "notes": null
@@ -2829,7 +2730,6 @@
       "metaphor": "각기둥을 펼치면 밑면 두 개와 옆면(직사각형)들이 띠처럼 이어진 도면이 된다.",
       "accepted_expressions": "펼치면 밑면 2개와 옆면들이 나옴 / 접었을 때 기둥이 되게 그림",
       "ccss_code": "K.G.B.5",
-      "misconception_text": "옆면의 개수나 밑면 위치를 잘못 그려, 접었을 때 기둥이 안 만들어진다.",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -2857,7 +2757,6 @@
       "metaphor": "원기둥은 굴러가는 캔, 원뿔은 아이스크림콘, 구는 공. 굽은 면으로 이루어진 입체다.",
       "accepted_expressions": "캔은 원기둥, 콘은 원뿔, 공은 구라 말함 / 밑면이 원임을 안다",
       "ccss_code": "K.G.B.5",
-      "misconception_text": "원뿔과 각뿔, 원기둥과 각기둥을 혼동한다. 구의 반지름·지름을 평면 원과 헷갈린다.",
       "difficulty_tier": 5,
       "review_status": "pending",
       "notes": null
@@ -2885,7 +2784,6 @@
       "metaphor": "원기둥을 펼치면 위아래 원 두 개와, 옆면이 펴진 직사각형(가로=밑면 둘레)이 된다.",
       "accepted_expressions": "펼치면 원 2개와 직사각형이 나옴 / 옆면 가로가 밑면 둘레와 같음을 안다",
       "ccss_code": "K.G.B.5",
-      "misconception_text": "옆면 직사각형의 가로 길이가 밑면의 둘레(원주)와 같다는 점을 놓친다.",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -2913,7 +2811,6 @@
       "metaphor": "보이지 않는 뒤·아래 칸까지 헤아려 쌓기나무의 전체 개수를 센다.",
       "accepted_expressions": "가려진 나무까지 세어 전체 개수를 구함 / 층·줄로 나눠 셈",
       "ccss_code": "2.G.A.2",
-      "misconception_text": "보이는 면만 세고 가려진 나무를 빠뜨린다.",
       "difficulty_tier": 5,
       "review_status": "pending",
       "notes": null
@@ -2941,7 +2838,6 @@
       "metaphor": "같은 모양도 위·앞·옆 어디서 보느냐에 따라 다른 평면 모양으로 보인다.",
       "accepted_expressions": "방향마다 보이는 모양을 그림 / 세 방향 모양으로 입체를 알아냄",
       "ccss_code": "K.G.A.2",
-      "misconception_text": "한 방향에서 본 모양만으로 전체 모양을 단정한다(세 방향을 종합해야 함).",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -2971,7 +2867,6 @@
       "metaphor": "둘레는 도형의 테두리를 따라 한 바퀴 잰 길이(단위 cm). 울타리의 길이에 해당한다.",
       "accepted_expressions": "둘레는 길이, 넓이는 면적임을 구분",
       "ccss_code": "3.MD.D.8",
-      "misconception_text": "둘레와 넓이를 혼동한다(둘레는 cm, 넓이는 ㎠). 둘레가 같으면 넓이도 같다고 오해한다.",
       "difficulty_tier": 5,
       "review_status": "reviewed",
       "notes": null
@@ -2997,7 +2892,6 @@
       "metaphor": "넓이의 단위는 한 변이 1cm·1m인 정사각형(㎠·㎡). 1㎡는 1만 ㎠다.",
       "accepted_expressions": "1㎡가 1만 ㎠라고 말함 / 넓은 땅은 ㎡·㎢로 잼",
       "ccss_code": "3.MD.C.5",
-      "misconception_text": "길이 단위 환산(100배)을 넓이에 그대로 써서 1㎡=100㎠로 잘못 안다(실제 10000㎠).",
       "difficulty_tier": 5,
       "review_status": "pending",
       "notes": null
@@ -3027,7 +2921,6 @@
       "metaphor": "바닥에 단위정사각형(1㎠)을 빈틈없이 깐 개수가 넓이. 직사각형은 가로×세로로 한 번에 센다.",
       "accepted_expressions": "가로×세로로 넓이를 구함 / 단위정사각형 개수로 봄",
       "ccss_code": "3.MD.C.7",
-      "misconception_text": "넓이를 둘레처럼 변을 더해 구한다. 단위정사각형이 곧 넓이의 단위임을 놓친다.",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -3056,7 +2949,6 @@
       "metaphor": "평행사변형은 직사각형으로 펴서 밑변×높이, 삼각형은 그 절반, 사다리꼴은 (윗변+아랫변)×높이÷2.",
       "accepted_expressions": "삼각형 넓이에 ÷2를 적용 / 공식을 도형 자르기로 설명",
       "ccss_code": "6.G.A.1",
-      "misconception_text": "삼각형 넓이에서 ÷2를 빠뜨린다. '높이'로 비스듬한 변(빗변)을 쓴다(높이는 밑변과 수직).",
       "difficulty_tier": 7,
       "review_status": "reviewed",
       "notes": null
@@ -3084,7 +2976,6 @@
       "metaphor": "어떤 원이든 둘레를 지름으로 나누면 늘 같은 값(약 3.14)이 나온다. 이 일정한 비가 원주율 π다.",
       "accepted_expressions": "원주÷지름이 항상 일정함을 안다 / 3.14가 근삿값임을 안다",
       "ccss_code": "7.G.B.4",
-      "misconception_text": "π=3.14를 정확한 값으로 여긴다(끝이 없는 근삿값). 원주율을 반지름과 관련짓는다(지름 기준).",
       "difficulty_tier": 6,
       "review_status": "reviewed",
       "notes": null
@@ -3113,7 +3004,6 @@
       "metaphor": "원주는 지름×π, 원의 넓이는 반지름×반지름×π. 원을 잘게 잘라 직사각형으로 펴면 넓이가 보인다.",
       "accepted_expressions": "둘레는 지름×π로 구함 / 넓이는 반지름×반지름×π로 구함",
       "ccss_code": "7.G.B.4",
-      "misconception_text": "둘레 공식(지름 기준)과 넓이 공식(반지름 기준)을 섞어 쓴다. 반지름과 지름을 헷갈린다.",
       "difficulty_tier": 7,
       "review_status": "pending",
       "notes": null
@@ -3142,7 +3032,6 @@
       "metaphor": "겉넓이는 상자를 펼친 모든 면의 넓이의 합. 포장지로 상자를 감쌀 때 필요한 종이의 양이다.",
       "accepted_expressions": "모든 면의 넓이를 합함 / 마주 보는 면은 넓이가 같음을 이용함",
       "ccss_code": "6.G.A.4",
-      "misconception_text": "마주 보는 면을 빠뜨려 일부 면만 더한다. 겉넓이(㎠)와 부피(㎤)를 혼동한다.",
       "difficulty_tier": 7,
       "review_status": "pending",
       "notes": null
@@ -3168,7 +3057,6 @@
       "metaphor": "부피의 단위는 한 모서리가 1cm·1m인 정육면체(㎤·㎥). 공간을 채운 작은 상자의 개수다.",
       "accepted_expressions": "1㎤는 한 모서리 1cm인 정육면체라고 말함 / 큰 공간은 ㎥로 잼",
       "ccss_code": "5.MD.C.3",
-      "misconception_text": "넓이 단위와 부피 단위를 혼동한다. 1㎥를 100㎤로 잘못 환산한다(실제 100만 ㎤).",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -3198,7 +3086,6 @@
       "metaphor": "부피는 공간을 채운 단위정육면체(1㎤)의 개수. 직육면체는 가로×세로×높이로 한 번에 센다.",
       "accepted_expressions": "부피=가로×세로×높이 / 부피와 겉넓이를 단위로 구분",
       "ccss_code": "5.MD.C.5",
-      "misconception_text": "겉넓이(㎠)와 부피(㎤)를 혼동한다. 세 모서리 중 하나를 곱셈에서 빠뜨린다.",
       "difficulty_tier": 7,
       "review_status": "reviewed",
       "notes": null
@@ -3227,7 +3114,6 @@
       "metaphor": "여러 값을 평평하게 고른 키. 합을 개수로 나눈 값으로, 자료를 대표하는 '고른 자리'다.",
       "accepted_expressions": "합÷개수로 구함 / 평균이 최빈값과 다를 수 있음을 안다",
       "ccss_code": "6.SP.B.5",
-      "misconception_text": "평균을 '가장 많이 나온 값(최빈값)'으로 오해한다. 아주 크거나 작은 값(극단값) 하나에 평균이 크게 휘둘림을 모른다.",
       "difficulty_tier": 5,
       "review_status": "reviewed",
       "notes": null
@@ -3256,7 +3142,6 @@
       "metaphor": "피자를 비율대로 나눈 그림. 띠·원그래프는 전체에서 각 부분이 차지하는 비율을 보여 준다.",
       "accepted_expressions": "비율대로 띠·원을 나눠 나타냄 / 각 부분의 합이 전체(100%)임을 안다",
       "ccss_code": "4.MD.B.4",
-      "misconception_text": "각 부분의 비율 합이 100%(전체)임을 놓친다. 비율 그래프로 실제 양(개수)까지 바로 비교하려 한다.",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -3285,7 +3170,6 @@
       "metaphor": "목적에 맞는 그래프 고르기. 변화는 꺾은선, 비교는 막대, 비율은 띠·원그래프가 어울린다.",
       "accepted_expressions": "비교는 막대, 변화는 꺾은선처럼 골라 씀 / 목적에 맞는 그래프를 정함",
       "ccss_code": "3.MD.B.3",
-      "misconception_text": "어떤 자료든 익숙한 한 가지 그래프로만 나타내, 자료의 특징이 잘 안 드러난다.",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -3311,7 +3195,6 @@
       "metaphor": "'불가능~확실' 사이의 눈금자. 일이 일어날 가능성을 '~할 것 같다' 같은 말로 가늠한다.",
       "accepted_expressions": "'~할 것 같다/없다'로 가능성을 말함 / 두 사건의 가능성을 비교함",
       "ccss_code": "7.SP.C.5",
-      "misconception_text": "가능성과 실제 결과를 혼동한다(가능성이 높아도 안 일어날 수 있음).",
       "difficulty_tier": 5,
       "review_status": "pending",
       "notes": null
@@ -3340,7 +3223,6 @@
       "metaphor": "가능성을 0(불가능)에서 1(확실) 사이의 수로 나타낸다. 반반이면 1/2.",
       "accepted_expressions": "확실하면 1, 불가능하면 0이라 말함 / 반반을 1/2로 나타냄",
       "ccss_code": "7.SP.C.5",
-      "misconception_text": "가능성을 1보다 큰 수로 적는다. 동전 앞면이 '반반'인데 다른 값으로 본다.",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -3368,7 +3250,6 @@
       "metaphor": "자료와 경험을 근거로 '어느 쪽이 더 그럴듯한지' 따져 판단·예상한다.",
       "accepted_expressions": "근거를 들어 어느 쪽이 더 그럴듯한지 말함 / 가능성으로 결과를 예상함",
       "ccss_code": "7.SP.C.5",
-      "misconception_text": "근거 없이 느낌으로 가능성을 정한다. 적은 횟수의 결과를 전체 경향으로 단정한다.",
       "difficulty_tier": 6,
       "review_status": "pending",
       "notes": null
@@ -3396,7 +3277,6 @@
       "metaphor": "수를 더 이상 쪼갤 수 없는 '소수(素數) 벽돌'로 분해하기. 모든 자연수는 소수들의 곱으로 단 한 가지 방법으로 표현된다.",
       "accepted_expressions": "12를 2²×3으로 나타냄 / 소수들의 곱으로 끝까지 쪼갬",
       "ccss_code": "6.NS.B.4",
-      "misconception_text": "1을 소수로 여긴다(소수는 2부터). 분해를 중간에 멈춰 합성수가 남는다. 거듭제곱 표기(2³)를 빠뜨린다.",
       "difficulty_tier": 8,
       "review_status": "pending",
       "notes": null
@@ -3425,7 +3305,6 @@
       "metaphor": "두 수를 소수 벽돌로 분해해, 공통 벽돌만 모으면 최대공약수, 각 벽돌을 '더 많이 필요한 쪽의 개수'만큼 모으면 최소공배수다.",
       "accepted_expressions": "공통 소인수만 곱해 최대공약수를 구함 / 큰 지수로 모아 최소공배수를 구함",
       "ccss_code": "6.NS.B.4",
-      "misconception_text": "공통 소인수의 '지수'를 잘못 고른다(GCD는 작은 지수, LCM은 큰 지수). LCM을 두 수의 곱으로 단정한다.",
       "difficulty_tier": 9,
       "review_status": "pending",
       "notes": null
@@ -3454,7 +3333,6 @@
       "metaphor": "음수는 빚·영하 기온·지하층처럼 0보다 '아래'를 나타낸다. 수직선이 0의 왼쪽으로 이어진 셈.",
       "accepted_expressions": "빚·영하를 음수로 나타냄 / 분수로 쓸 수 있으면 유리수라 함",
       "ccss_code": "6.NS.C.5",
-      "misconception_text": "−5가 −2보다 크다고 본다(절댓값이 크면 큰 수로 착각). 음수에는 크기만 있고 부호 의미를 놓친다.",
       "difficulty_tier": 8,
       "review_status": "pending",
       "notes": null
@@ -3482,7 +3360,6 @@
       "metaphor": "수직선 위에서 오른쪽에 있을수록 큰 수. 음수는 0보다 왼쪽이라 절댓값이 클수록 더 작다.",
       "accepted_expressions": "수직선에서 오른쪽일수록 큼 / 음수는 절댓값 큰 쪽이 더 작음을 안다",
       "ccss_code": "6.NS.C.7",
-      "misconception_text": "−8 < −3인데 8>3이라는 이유로 −8을 더 크다고 본다(절댓값과 대소를 혼동).",
       "difficulty_tier": 9,
       "review_status": "pending",
       "notes": null
@@ -3512,7 +3389,6 @@
       "metaphor": "부호는 방향, 수는 크기. 같은 부호의 곱은 양(+), 다른 부호의 곱은 음(−)으로 방향이 정해진다.",
       "accepted_expressions": "부호 규칙을 바르게 적용",
       "ccss_code": "7.NS.A.1",
-      "misconception_text": "(−)−(−) 같은 부호 처리에서 실수한다. (−2)²과 −2²을 같다고 본다(앞은 4, 뒤는 −4).",
       "difficulty_tier": 10,
       "review_status": "reviewed",
       "notes": null
@@ -3541,7 +3417,6 @@
       "metaphor": "끝없이 같은 마디가 도는 소수(0.333…). 이런 순환소수는 모두 분수로 바꿀 수 있는 유리수다.",
       "accepted_expressions": "순환소수를 분수로 바꿈 / 0.999…=1을 설명",
       "ccss_code": "7.NS.A.2",
-      "misconception_text": "0.999…를 1보다 작다고 생각한다(실제로 정확히 1). 순환마디를 잘못 잡는다.",
       "difficulty_tier": 10,
       "review_status": "reviewed",
       "notes": null
@@ -3570,7 +3445,6 @@
       "metaphor": "넓이가 2인 정사각형의 한 변 길이가 √2. 제곱하면 그 수가 되는 '되돌린 수'다.",
       "accepted_expressions": "제곱하면 a가 되는 수 / √a≥0임을 안다",
       "ccss_code": "8.EE.A.2",
-      "misconception_text": "√(a²)=a로 단정한다(실제 |a|, a가 음수면 부호 주의). √a+√b를 √(a+b)로 합친다.",
       "difficulty_tier": 11,
       "review_status": "reviewed",
       "notes": null
@@ -3598,7 +3472,6 @@
       "metaphor": "분수로는 절대 나타낼 수 없고 소수점 아래가 불규칙하게 끝없이 이어지는 수(√2, π).",
       "accepted_expressions": "분수로 못 쓰는 수라고 말함 / √2, π를 무리수로 듦",
       "ccss_code": "8.NS.A.1",
-      "misconception_text": "√4처럼 딱 떨어지는 것도 무리수로 본다(√4=2는 유리수). 무리수는 소수로 못 쓴다고 오해한다.",
       "difficulty_tier": 12,
       "review_status": "pending",
       "notes": null
@@ -3627,7 +3500,6 @@
       "metaphor": "유리수와 무리수를 모두 수직선 위 한 점으로 보고, 위치(오른쪽일수록 큼)로 크기를 견준다.",
       "accepted_expressions": "수직선 위 위치로 크기를 비교함 / 어림값으로 무리수를 견줌",
       "ccss_code": "8.NS.A.2",
-      "misconception_text": "√ 안의 수만 보고 대소를 판단한다. 무리수의 어림값을 못 잡아 위치를 틀린다.",
       "difficulty_tier": 12,
       "review_status": "pending",
       "notes": null
@@ -3655,7 +3527,6 @@
       "metaphor": "√는 하나의 수 묶음. 같은 √끼리는 '√2 두 개=2√2'처럼 동류항으로, 곱셈은 √ 안끼리 묶어 계산한다.",
       "accepted_expressions": "√끼리 곱은 근호 안으로 묶음 / 같은 √끼리만 더하고 뺌",
       "ccss_code": "8.EE.A.2",
-      "misconception_text": "√2+√3을 √5로 합친다(더할 수 없음). √a×√b=√(ab)인데 덧셈에도 같은 규칙을 쓴다.",
       "difficulty_tier": 12,
       "review_status": "pending",
       "notes": null
@@ -3684,7 +3555,6 @@
       "metaphor": "문자는 '변하는 수를 담는 그릇'. 3a는 3×a를 줄여 쓴 것으로, a에 값을 넣으면 식의 값이 나온다.",
       "accepted_expressions": "3a=3×a로 읽음 / 문자에 값을 대입해 식의 값을 구함",
       "ccss_code": "6.EE.A.2",
-      "misconception_text": "3a를 3+a로 읽는다. a²과 2a를 같다고 본다. 대입할 때 음수에 괄호를 안 씌워 부호를 틀린다.",
       "difficulty_tier": 9,
       "review_status": "reviewed",
       "notes": null
@@ -3712,7 +3582,6 @@
       "metaphor": "문자와 차수가 같은 항(동류항)은 같은 종류 물건. 사과는 사과끼리 모으듯 2x와 3x만 합친다.",
       "accepted_expressions": "동류항끼리만 더함 / 2x+3을 더 합치지 않음",
       "ccss_code": "7.EE.A.1",
-      "misconception_text": "동류항이 아닌 2x와 3x²을 합친다. 괄호 앞 −를 일부 항에만 분배한다.",
       "difficulty_tier": 10,
       "review_status": "reviewed",
       "notes": null
@@ -3741,7 +3610,6 @@
       "metaphor": "양팔저울. 양변에 똑같은 일(같은 수 더하기·곱하기)을 하면 균형(등식)이 그대로 유지된다.",
       "accepted_expressions": "등식을 참으로 만드는 값을 해라 함 / 양변에 같은 일을 해도 등식이 유지됨을 안다",
       "ccss_code": "6.EE.B.5",
-      "misconception_text": "한쪽 변에만 연산을 적용한다. 양변을 0으로 나눌 수 있다고 본다(0으로 나누기는 불가).",
       "difficulty_tier": 10,
       "review_status": "pending",
       "notes": null
@@ -3769,7 +3637,6 @@
       "metaphor": "저울의 균형을 지키며 미지수를 한쪽으로 모으기. 이항은 '반대편으로 옮기며 부호 바꾸기'다.",
       "accepted_expressions": "이항하여 x를 구함 / 양변에 같은 연산을 적용",
       "ccss_code": "7.EE.B.4",
-      "misconception_text": "이항할 때 부호를 안 바꾼다. 양변을 미지수의 계수로 나누는 마지막 단계를 빠뜨린다.",
       "difficulty_tier": 11,
       "review_status": "reviewed",
       "notes": null
@@ -3798,7 +3665,6 @@
       "metaphor": "좌표는 평면 위 주소. (3, 2)는 'x로 3칸, y로 2칸' 떨어진 한 점을 가리킨다.",
       "accepted_expressions": "(가로, 세로) 순서로 점을 나타냄 / (3,2)와 (2,3)이 다름을 안다",
       "ccss_code": "6.NS.C.6",
-      "misconception_text": "(3, 2)와 (2, 3)을 같은 점으로 본다(x·y 순서가 중요). x축과 y축을 바꿔 읽는다.",
       "difficulty_tier": 9,
       "review_status": "pending",
       "notes": null
@@ -3826,7 +3692,6 @@
       "metaphor": "그래프는 변화의 이야기. 시간에 따른 거리·온도처럼, 선의 오르내림이 상황의 변화를 보여 준다.",
       "accepted_expressions": "그래프의 증가·감소로 상황을 설명함 / 축이 무엇인지 보고 읽음",
       "ccss_code": "8.F.B.5",
-      "misconception_text": "그래프의 모양(올라감)을 실제 경로(언덕을 오름)로 오해한다(축이 무엇인지 봐야 함).",
       "difficulty_tier": 10,
       "review_status": "pending",
       "notes": null
@@ -3856,7 +3721,6 @@
       "metaphor": "정비례는 '한쪽이 2배면 다른 쪽도 2배'(y=ax), 반비례는 '한쪽이 2배면 다른 쪽은 절반'(y=a/x).",
       "accepted_expressions": "한쪽 2배에 다른 쪽 2배면 정비례라 함 / 두 양의 곱이 일정하면 반비례임을 안다",
       "ccss_code": "7.RP.A.2",
-      "misconception_text": "정비례와 반비례를 혼동한다. 반비례 그래프가 직선이라고 생각한다(실제 곡선).",
       "difficulty_tier": 10,
       "review_status": "pending",
       "notes": null
@@ -3885,7 +3749,6 @@
       "metaphor": "거듭제곱은 '같은 수를 몇 번 곱했나'의 횟수 표. 같은 밑끼리 곱하면 횟수(지수)를 더한다.",
       "accepted_expressions": "aᵐ·aⁿ=a^(m+n)을 적용",
       "ccss_code": "8.EE.A.1",
-      "misconception_text": "a²·a³을 a⁶로 한다(실제 a⁵, 지수는 더함). (a²)³과 a²·a³을 헷갈린다.",
       "difficulty_tier": 10,
       "review_status": "reviewed",
       "notes": null
@@ -3913,7 +3776,6 @@
       "metaphor": "다항식도 동류항(같은 문자·차수)끼리만 모아 정리한다. 차수가 다르면 합칠 수 없다.",
       "accepted_expressions": "동류항끼리 모아 계산함 / 뺄셈은 뒤 식 전체의 부호를 바꿈",
       "ccss_code": "7.EE.A.1",
-      "misconception_text": "차수가 다른 항을 합친다. 뺄셈에서 뒤 다항식 전체에 −를 분배하지 않는다.",
       "difficulty_tier": 11,
       "review_status": "pending",
       "notes": null
@@ -3942,7 +3804,6 @@
       "metaphor": "분배법칙은 '빠짐없이 나눠 주기'. 단항식을 다항식 each 항에 곱하거나, 각 항을 단항식으로 나눈다.",
       "accepted_expressions": "각 항에 빠짐없이 곱함 / 각 항을 단항식으로 나눔",
       "ccss_code": "7.EE.A.1",
-      "misconception_text": "분배할 때 일부 항을 빠뜨린다. 나눗셈에서 일부 항만 나눈다.",
       "difficulty_tier": 11,
       "review_status": "pending",
       "notes": null
@@ -3971,7 +3832,6 @@
       "metaphor": "부등식도 저울이지만 한쪽이 더 무거운 상태. 단, 음수를 곱하거나 나누면 저울이 '뒤집혀' 부등호 방향이 바뀐다.",
       "accepted_expressions": "음수 곱/나눗셈 시 부등호를 뒤집음",
       "ccss_code": "6.EE.B.8",
-      "misconception_text": "음수를 곱하거나 나눌 때 부등호 방향을 그대로 둔다(반드시 뒤집어야 함).",
       "difficulty_tier": 10,
       "review_status": "reviewed",
       "notes": null
@@ -4000,7 +3860,6 @@
       "metaphor": "일차방정식 풀듯 미지수를 한쪽에 모으되, 음수로 곱·나눗셈할 때만 부등호 방향을 뒤집는다.",
       "accepted_expressions": "방정식처럼 미지수를 모아 풂 / 음수로 곱·나눗셈하면 부등호를 뒤집음",
       "ccss_code": "7.EE.B.4",
-      "misconception_text": "이항은 부호만, 음수 나눗셈은 방향까지 바꾸는데 이 둘을 헷갈린다.",
       "difficulty_tier": 11,
       "review_status": "pending",
       "notes": null
@@ -4028,7 +3887,6 @@
       "metaphor": "미지수가 둘이면 식도 둘 필요. 두 식의 '동시에 맞는' 값을 찾는다(대입·가감으로 하나씩 소거).",
       "accepted_expressions": "두 식을 모두 만족하는 값을 구함 / 한 문자를 없애 하나씩 구함",
       "ccss_code": "8.EE.C.8",
-      "misconception_text": "한 식만으로 두 미지수를 정하려 한다. 소거 과정에서 한쪽 식에만 연산을 적용한다.",
       "difficulty_tier": 12,
       "review_status": "pending",
       "notes": null
@@ -4057,7 +3915,6 @@
       "metaphor": "자판기: 버튼(입력 x)을 누르면 정해진 상품(출력 y) 하나가 나온다. 한 입력에 출력이 둘이면 함수가 아니다.",
       "accepted_expressions": "한 입력에 출력이 하나면 함수라 함 / x를 넣어 f(x)를 구함",
       "ccss_code": "8.F.A.1",
-      "misconception_text": "하나의 x에 y가 여럿 대응해도 함수로 본다. y가 변하지 않는 상수함수를 함수가 아니라고 본다.",
       "difficulty_tier": 11,
       "review_status": "pending",
       "notes": null
@@ -4086,7 +3943,6 @@
       "metaphor": "y=ax+b의 그래프는 직선. a는 '얼마나 가파른가(기울기)', b는 'y축과 만나는 높이(y절편)'다.",
       "accepted_expressions": "a=기울기, b=절편으로 직선을 그림",
       "ccss_code": "8.F.A.3",
-      "misconception_text": "기울기 a와 y절편 b의 역할을 바꾼다. 기울기를 Δx/Δy로 뒤집어 계산한다.",
       "difficulty_tier": 12,
       "review_status": "reviewed",
       "notes": null
@@ -4114,7 +3970,6 @@
       "metaphor": "기울기가 양수면 오른쪽 위로 오르는 길, 음수면 내려가는 길. 절댓값이 클수록 가파르다.",
       "accepted_expressions": "기울기 부호로 증감을 판단",
       "ccss_code": "8.F.B.4",
-      "misconception_text": "기울기의 부호와 그래프의 증가·감소를 반대로 본다. 기울기가 0인 가로선을 빠뜨린다.",
       "difficulty_tier": 12,
       "review_status": "reviewed",
       "notes": null
@@ -4143,7 +3998,6 @@
       "metaphor": "직선 위의 모든 점이 곧 그 일차방정식의 해. 그래프와 방정식은 같은 것의 두 표현이다.",
       "accepted_expressions": "직선 위 점이 방정식의 해임을 안다 / 일차방정식을 y= 꼴로 고쳐 그림",
       "ccss_code": "8.EE.C.8.a",
-      "misconception_text": "직선 ax+by+c=0에서 b=0인 세로선(x=k)을 함수의 그래프로 오해한다.",
       "difficulty_tier": 12,
       "review_status": "pending",
       "notes": null
@@ -4172,7 +4026,6 @@
       "metaphor": "두 직선이 만나는 교점이 곧 연립방정식의 해. 한 점에서 두 식이 동시에 참이 된다.",
       "accepted_expressions": "두 직선의 교점이 연립의 해임을 안다 / 평행이면 해가 없음을 안다",
       "ccss_code": "8.EE.C.8.a",
-      "misconception_text": "평행(교점 없음)·일치(교점 무수)일 때도 교점이 하나라고 단정한다.",
       "difficulty_tier": 13,
       "review_status": "pending",
       "notes": null
@@ -4200,7 +4053,6 @@
       "metaphor": "곱셈공식은 '펼치기', 인수분해는 그 '거꾸로(묶기)'. (a+b)²처럼 자주 나오는 꼴을 통째로 외워 쓴다.",
       "accepted_expressions": "(a±b)²·(a+b)(a−b)를 전개·복원",
       "ccss_code": "7.EE.A.1",
-      "misconception_text": "(a+b)²을 a²+b²으로(가운데 2ab 누락). 부호를 틀린다. 공통인수를 빠뜨리고 묶는다.",
       "difficulty_tier": 12,
       "review_status": "reviewed",
       "notes": null
@@ -4229,7 +4081,6 @@
       "metaphor": "이차방정식은 답이 둘일 수 있다. 인수분해해 '둘 중 하나가 0'을 쓰거나 근의 공식으로 푼다.",
       "accepted_expressions": "인수분해 또는 근의 공식 사용",
       "ccss_code": "HSA-REI.B.4",
-      "misconception_text": "ax²=bx에서 양변을 x로 나눠 근(x=0)을 하나 잃는다(이항해 인수분해해야 함).",
       "difficulty_tier": 13,
       "review_status": "reviewed",
       "notes": null
@@ -4258,7 +4109,6 @@
       "metaphor": "y=ax²처럼 최고차항이 2차인 함수. 한쪽으로 갈수록 점점 가팔라지는 변화를 나타낸다.",
       "accepted_expressions": "최고차항이 2차인 함수라 함 / y=ax² 꼴을 이차함수로 봄",
       "ccss_code": "HSF-IF.C.7.a",
-      "misconception_text": "이차함수의 그래프를 직선으로 생각한다. a의 부호가 볼록 방향을 정함을 놓친다.",
       "difficulty_tier": 13,
       "review_status": "pending",
       "notes": null
@@ -4286,7 +4136,6 @@
       "metaphor": "분수대 물줄기 같은 포물선. a>0이면 아래로 볼록(U자), a<0이면 위로 볼록(∩자)이다.",
       "accepted_expressions": "U자·∩자 포물선이라 함 / a의 부호로 볼록 방향을 판단함",
       "ccss_code": "HSF-IF.C.7.a",
-      "misconception_text": "꼭짓점을 잘못 찾는다. a의 부호와 볼록 방향을 반대로 본다. 축의 위치를 헷갈린다.",
       "difficulty_tier": 14,
       "review_status": "pending",
       "notes": null
@@ -4315,7 +4164,6 @@
       "metaphor": "점·선·면은 도형의 기본 재료. 두 직선·직선과 평면 등은 만나거나(교점) 나란하거나(평행) 꼬인 위치에 놓인다.",
       "accepted_expressions": "두 직선이 만나거나 평행임을 말함 / 공간엔 꼬인 위치가 있음을 안다",
       "ccss_code": "4.G.A.1",
-      "misconception_text": "평면에서는 안 만나면 평행이지만, 공간에서는 안 만나도 평행이 아닌 '꼬인 위치'가 있음을 놓친다.",
       "difficulty_tier": 9,
       "review_status": "pending",
       "notes": null
@@ -4344,7 +4192,6 @@
       "metaphor": "평행한 두 철길을 한 막대가 가로지를 때, 같은 자리의 각(동위각)과 엇갈린 자리의 각(엇각)이 각각 같다.",
       "accepted_expressions": "같은 위치=동위각, 엇갈린 위치=엇각으로 구분",
       "ccss_code": "8.G.A.5",
-      "misconception_text": "동위각과 엇각의 위치를 혼동한다. 평행하지 않은데도 각이 같다고 본다(평행이 전제).",
       "difficulty_tier": 10,
       "review_status": "reviewed",
       "notes": null
@@ -4373,7 +4220,6 @@
       "metaphor": "주어진 변·각으로 삼각형을 자·컴퍼스만으로 똑같이 그려내기(작도).",
       "accepted_expressions": "자·컴퍼스로 조건에 맞는 삼각형을 그림 / 삼각형이 하나로 정해지는 조건을 안다",
       "ccss_code": "7.G.A.2",
-      "misconception_text": "삼각형이 정해지는 조건(SSS·SAS·ASA)을 모르고, 아무 세 정보나 주면 그려진다고 본다.",
       "difficulty_tier": 10,
       "review_status": "pending",
       "notes": null
@@ -4402,7 +4248,6 @@
       "metaphor": "두 삼각형이 포개지는지(합동) 판정하는 세 가지 열쇠: SSS·SAS·ASA. 끼인각이 핵심이다.",
       "accepted_expressions": "세 합동 조건을 적용 / SSA가 합동 조건이 아님을 안다",
       "ccss_code": "8.G.A.2",
-      "misconception_text": "SSA(두 변과 끼인각이 아닌 각)를 합동 조건으로 착각한다(보장되지 않음).",
       "difficulty_tier": 11,
       "review_status": "reviewed",
       "notes": null
@@ -4431,7 +4276,6 @@
       "metaphor": "다각형 내각의 합은 삼각형으로 쪼갠 개수×180°. 외각의 합은 어떤 다각형이든 늘 360°다.",
       "accepted_expressions": "삼각형으로 쪼개 내각 합을 구함 / 외각의 합이 항상 360도임을 안다",
       "ccss_code": "8.G.A.5",
-      "misconception_text": "외각의 합도 변의 수에 따라 달라진다고 본다(항상 360°). 내각·외각을 헷갈린다.",
       "difficulty_tier": 11,
       "review_status": "pending",
       "notes": null
@@ -4460,7 +4304,6 @@
       "metaphor": "부채꼴은 피자 한 조각. 중심각이 클수록 호도 넓이도 같은 비율로 커진다(원의 일부).",
       "accepted_expressions": "중심각이 2배면 호·넓이도 2배라 함 / 원의 일부 비율로 구함",
       "ccss_code": "7.G.B.4",
-      "misconception_text": "호의 길이·넓이를 중심각에 비례시키지 않는다. 호의 길이와 넓이 공식을 헷갈린다.",
       "difficulty_tier": 10,
       "review_status": "pending",
       "notes": null
@@ -4489,7 +4332,6 @@
       "metaphor": "다면체는 평평한 면들로, 회전체는 평면도형을 축 둘레로 돌려 만든 입체(컵·팽이).",
       "accepted_expressions": "면이 모두 다각형이면 다면체라 함 / 평면도형을 돌려 만든 입체를 회전체라 함",
       "ccss_code": "HSG-GMD.B.4",
-      "misconception_text": "회전체의 회전축·단면 모양을 잘못 그린다. 다면체의 꼭짓점·모서리·면 수(오일러 관계)를 헷갈린다.",
       "difficulty_tier": 10,
       "review_status": "pending",
       "notes": null
@@ -4520,7 +4362,6 @@
       "metaphor": "기둥은 '밑면×높이', 뿔은 그 1/3, 구는 따로 정해진 공식. 겉넓이는 펼친 모든 면의 합이다.",
       "accepted_expressions": "기둥은 밑넓이×높이로 부피를 구함 / 뿔은 그 1/3임을 안다",
       "ccss_code": "7.G.B.6",
-      "misconception_text": "뿔의 부피에서 ×1/3을 빠뜨린다. 겉넓이와 부피를 혼동하고 단위(㎠·㎤)를 섞는다.",
       "difficulty_tier": 11,
       "review_status": "pending",
       "notes": null
@@ -4549,7 +4390,6 @@
       "metaphor": "이등변삼각형은 좌우 대칭. 두 밑각이 같고, 꼭지각의 이등분선이 밑변을 수직이등분한다.",
       "accepted_expressions": "두 밑각이 같다고 말함 / 대칭(합동)을 이용해 성질을 설명함",
       "ccss_code": "HSG-CO.C.10",
-      "misconception_text": "성질을 외우기만 하고 '왜 그런지(대칭·합동)'를 설명하지 못한다. 어느 각이 밑각인지 헷갈린다.",
       "difficulty_tier": 12,
       "review_status": "pending",
       "notes": null
@@ -4577,7 +4417,6 @@
       "metaphor": "외심은 세 꼭짓점에서 같은 거리(외접원 중심), 내심은 세 변에서 같은 거리(내접원 중심)인 점.",
       "accepted_expressions": "외심은 꼭짓점에서, 내심은 변에서 같은 거리라 함 / 외접원·내접원의 중심으로 구별함",
       "ccss_code": "HSG-CO.C.10",
-      "misconception_text": "외심과 내심의 정의·위치를 뒤바꾼다. 어떤 선들의 교점인지(수직이등분선 vs 각의 이등분선)를 헷갈린다.",
       "difficulty_tier": 12,
       "review_status": "pending",
       "notes": null
@@ -4606,7 +4445,6 @@
       "metaphor": "평행사변형·마름모·직사각형 등은 변·각·대각선의 성질이 조금씩 더해진 가족이다.",
       "accepted_expressions": "각 사각형의 변·각·대각선 성질을 말함 / 정사각형이 마름모이자 직사각형임을 안다",
       "ccss_code": "HSG-CO.C.11",
-      "misconception_text": "한 사각형의 성질을 다른 사각형에 함부로 적용한다. 포함관계(정사각형⊂마름모)를 끊어 본다.",
       "difficulty_tier": 12,
       "review_status": "pending",
       "notes": null
@@ -4635,7 +4473,6 @@
       "metaphor": "확대·축소 복사. 닮은 도형은 대응변의 비(닮음비)가 일정하고 대응각은 그대로다.",
       "accepted_expressions": "대응변 비가 일정함을 안다 / 닮음비를 구함",
       "ccss_code": "8.G.A.4",
-      "misconception_text": "둘레의 비를 넓이의 비로 쓴다(넓이비=닮음비², 부피비=닮음비³).",
       "difficulty_tier": 12,
       "review_status": "reviewed",
       "notes": null
@@ -4663,7 +4500,6 @@
       "metaphor": "삼각형 닮음의 세 열쇠: 두 각이 같으면(AA), 두 변의 비와 끼인각(SAS), 세 변의 비(SSS)가 같으면 닮음.",
       "accepted_expressions": "두 각이 같으면 닮음(AA)이라 함 / 대응변의 비가 같으면 닮음임을 안다",
       "ccss_code": "HSG-SRT.A.2",
-      "misconception_text": "합동 조건과 닮음 조건을 혼동한다. AA에서 각 하나만 같아도 닮음이라 본다(두 각 필요).",
       "difficulty_tier": 13,
       "review_status": "pending",
       "notes": null
@@ -4691,7 +4527,6 @@
       "metaphor": "평행선이 가른 선분은 같은 비로 나뉜다(삼각형에서 한 변에 평행한 선이 다른 두 변을 같은 비로 나눔).",
       "accepted_expressions": "평행선이 두 변을 같은 비로 나눈다고 함 / 대응 선분끼리 비를 세움",
       "ccss_code": "HSG-SRT.B.4",
-      "misconception_text": "대응하는 선분을 잘못 짝지어 비를 거꾸로 세운다.",
       "difficulty_tier": 13,
       "review_status": "pending",
       "notes": null
@@ -4721,7 +4556,6 @@
       "metaphor": "직각삼각형에서 빗변을 한 변으로 한 정사각형의 넓이는, 나머지 두 변의 정사각형 넓이의 합과 같다.",
       "accepted_expressions": "a²+b²=c²을 적용 / 빗변이 가장 긴 변임을 안다",
       "ccss_code": "8.G.B.7",
-      "misconception_text": "직각이 아닌 삼각형에 적용한다. 빗변(가장 긴 변)이 어느 것인지 헷갈려 식을 잘못 세운다.",
       "difficulty_tier": 13,
       "review_status": "reviewed",
       "notes": null
@@ -4750,7 +4584,6 @@
       "metaphor": "직각삼각형에서 각이 정해지면 변의 비도 정해진다. sin=높이/빗변, cos=밑변/빗변, tan=높이/밑변.",
       "accepted_expressions": "세 비를 변의 비로 정의 / 빗변 위치를 바르게 봄",
       "ccss_code": "HSG-SRT.C.6",
-      "misconception_text": "기준각에 대한 대변·인접변·빗변을 혼동한다. 직각삼각형이 아닌데 삼각비를 그대로 쓴다.",
       "difficulty_tier": 14,
       "review_status": "reviewed",
       "notes": null
@@ -4778,7 +4611,6 @@
       "metaphor": "직접 못 재는 높이·거리를 삼각비로 알아내기. 나무 그림자와 각으로 나무 키를 구하듯.",
       "accepted_expressions": "각과 한 변으로 높이를 구함 / 직각삼각형을 만들어 삼각비를 적용함",
       "ccss_code": "HSG-SRT.C.8",
-      "misconception_text": "기준각의 위치를 잘못 잡아 어떤 변이 분모·분자인지 틀린다.",
       "difficulty_tier": 14,
       "review_status": "pending",
       "notes": null
@@ -4806,7 +4638,6 @@
       "metaphor": "현은 원 위 두 점을 잇는 줄, 접선은 원에 살짝 닿는 선. 접선은 그 접점의 반지름과 수직이다.",
       "accepted_expressions": "원에 한 점에서 닿는 직선을 접선이라 함 / 접선이 반지름과 수직임을 안다",
       "ccss_code": "HSG-C.A.2",
-      "misconception_text": "접선과 현을 혼동한다. 접선이 반지름과 수직임을 놓친다.",
       "difficulty_tier": 12,
       "review_status": "pending",
       "notes": null
@@ -4835,7 +4666,6 @@
       "metaphor": "같은 호를 바라보는 원주각은 모두 같고, 그 호의 중심각의 절반이다.",
       "accepted_expressions": "같은 호의 원주각은 같다고 함 / 원주각이 중심각의 절반임을 안다",
       "ccss_code": "HSG-C.A.2",
-      "misconception_text": "원주각과 중심각의 관계(절반)를 거꾸로 본다. 다른 호를 보는 원주각까지 같다고 본다.",
       "difficulty_tier": 13,
       "review_status": "pending",
       "notes": null
@@ -4863,7 +4693,6 @@
       "metaphor": "대푯값은 자료를 대신하는 한 수. 중앙값은 줄 세웠을 때 한가운데, 최빈값은 가장 자주 나온 값이다.",
       "accepted_expressions": "극단값이 있을 때 중앙값을 택함",
       "ccss_code": "6.SP.A.3",
-      "misconception_text": "평균만 대푯값으로 쓴다. 극단값이 있으면 평균이 휘둘려, 중앙값이 더 대표적임을 놓친다.",
       "difficulty_tier": 8,
       "review_status": "reviewed",
       "notes": null
@@ -4892,7 +4721,6 @@
       "metaphor": "자료를 구간(계급)으로 묶어 개수를 세고, 막대를 붙여 분포 모양을 한눈에 보는 히스토그램.",
       "accepted_expressions": "구간별 개수를 표로 정리함 / 계급을 막대로 나타냄",
       "ccss_code": "6.SP.B.4",
-      "misconception_text": "계급의 경계·계급값을 헷갈린다. 히스토그램(연속 구간, 막대 붙음)과 막대그래프(범주)를 혼동한다.",
       "difficulty_tier": 9,
       "review_status": "pending",
       "notes": null
@@ -4921,7 +4749,6 @@
       "metaphor": "상대도수는 '전체 중 차지하는 비율'. 자료 수가 다른 두 집단도 비율로 공정하게 견줄 수 있다.",
       "accepted_expressions": "도수를 전체로 나눈 비율이라 함 / 자료 수가 다른 집단을 비율로 비교함",
       "ccss_code": "7.SP.C.6",
-      "misconception_text": "상대도수의 합이 1(=100%)임을 놓친다. 도수와 상대도수를 혼동한다.",
       "difficulty_tier": 10,
       "review_status": "pending",
       "notes": null
@@ -4950,7 +4777,6 @@
       "metaphor": "궁금한 것을 정해 자료를 모으고(수집)·정리하고·해석해 결론을 내리는 한 바퀴 탐구.",
       "accepted_expressions": "자료를 모아 분석해 결론을 냄 / 표본이 치우치지 않게 모음",
       "ccss_code": "7.SP.A.2",
-      "misconception_text": "표본이 한쪽으로 치우쳤는데(편향) 전체를 대표한다고 단정한다.",
       "difficulty_tier": 11,
       "review_status": "pending",
       "notes": null
@@ -4978,7 +4804,6 @@
       "metaphor": "'또는'이면 길이 갈라지니 더하고(합의 법칙), '그리고'면 길이 이어지니 곱한다(곱의 법칙).",
       "accepted_expressions": "또는=더하기, 그리고=곱하기로 구분",
       "ccss_code": "7.SP.C.8",
-      "misconception_text": "합의 법칙(또는)과 곱의 법칙(그리고)을 혼동한다. 동시에 일어나는지 여부를 안 따진다.",
       "difficulty_tier": 9,
       "review_status": "reviewed",
       "notes": null
@@ -5007,7 +4832,6 @@
       "metaphor": "확률은 일어날 가능성을 0~1로 잰 값. (해당 경우의 수)÷(전체 경우의 수)로, 각 경우가 똑같이 일어날 때 쓴다.",
       "accepted_expressions": "해당 경우÷전체 경우로 계산",
       "ccss_code": "7.SP.C.5",
-      "misconception_text": "경우의 수가 많으면 확률도 크다고 단정한다(전체로 나눠야 함). 확률이 1을 넘을 수 있다고 본다.",
       "difficulty_tier": 10,
       "review_status": "reviewed",
       "notes": null
@@ -5035,7 +4859,6 @@
       "metaphor": "평균에서 자료들이 얼마나 흩어졌는가. 분산은 그 흩어짐의 제곱평균, 표준편차는 그 제곱근(원래 단위로 복귀)이다.",
       "accepted_expressions": "평균에서 흩어진 정도라 함 / 표준편차가 클수록 더 퍼졌음을 안다",
       "ccss_code": "6.SP.B.5",
-      "misconception_text": "퍼짐이 큰데 표준편차가 작다고 보는 등 의미를 거꾸로 안다. 분산의 단위(제곱)와 표준편차를 혼동한다.",
       "difficulty_tier": 11,
       "review_status": "pending",
       "notes": null
@@ -5063,7 +4886,6 @@
       "metaphor": "상자그림은 자료를 4등분(사분위수)해 상자와 수염으로 그린 분포 요약. 여러 집단을 나란히 비교하기 좋다.",
       "accepted_expressions": "다섯 수로 자료를 요약함 / 여러 집단의 분포를 나란히 비교함",
       "ccss_code": "6.SP.B.4",
-      "misconception_text": "상자의 길이를 자료의 '개수'로 오해한다(자료의 흩어진 정도를 나타냄).",
       "difficulty_tier": 10,
       "review_status": "pending",
       "notes": null
@@ -5092,7 +4914,6 @@
       "metaphor": "산점도는 두 양을 점으로 흩뿌린 그림. 점들이 오른쪽 위로 몰리면 양의 상관처럼, 함께 변하는 경향을 본다.",
       "accepted_expressions": "상관과 인과를 구분",
       "ccss_code": "8.SP.A.1",
-      "misconception_text": "상관관계를 인과관계로 단정한다(함께 변할 뿐, 한쪽이 원인이라는 보장은 없음).",
       "difficulty_tier": 11,
       "review_status": "reviewed",
       "notes": null
@@ -5121,7 +4942,6 @@
       "metaphor": "다항식의 사칙연산도 동류항(문자·차수가 같은 항)끼리만 묶는다. 차수가 다르면 다른 종류라 합칠 수 없다.",
       "accepted_expressions": "동류항만 합침",
       "ccss_code": "HSA-APR.A.1",
-      "misconception_text": "동류항이 아닌 항을 더한다(2x+3x²을 5x³으로). 나눗셈에서 차수를 낮추는 과정의 부호를 틀린다.",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -5149,7 +4969,6 @@
       "metaphor": "항등식은 'x에 무엇을 넣어도 늘 참'인 식. 그래서 양변의 같은 차수 계수가 각각 똑같아야 한다(미정계수법).",
       "accepted_expressions": "항등식과 방정식을 구분 / 계수 비교로 미정계수를 구함",
       "ccss_code": "HSA-APR.C.4 (+)",
-      "misconception_text": "방정식(특정 값에서만 참)과 항등식(항상 참)을 혼동한다. 계수비교와 수치대입을 섞어 쓰다 실수한다.",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -5177,7 +4996,6 @@
       "metaphor": "수의 나눗셈에서 '나머지'를 식으로 넓힌 것. f(x)를 (x−a)로 나눈 나머지는 곧 f(a)다.",
       "accepted_expressions": "x=a를 넣은 값이 나머지라 함 / f(a)=0이면 (x−a)로 나누어떨어짐을 안다",
       "ccss_code": "HSA-APR.B.2",
-      "misconception_text": "나머지정리의 대입값 부호를 틀린다((x−a)면 a를 대입). 인수정리(f(a)=0이면 (x−a)가 인수)와 헷갈린다.",
       "difficulty_tier": 16,
       "review_status": "pending",
       "notes": null
@@ -5208,7 +5026,6 @@
       "metaphor": "복잡한 식을 곱의 형태로 되묶기. 공통인수 빼기, 곱셈공식 거꾸로, 인수정리를 차례로 시도한다.",
       "accepted_expressions": "공통인수를 먼저 확인 / a²−b²=(a+b)(a−b)를 적용",
       "ccss_code": "HSA-SSE.A.2",
-      "misconception_text": "공통인수를 빠뜨린다. a²−b²을 (a−b)²으로 한다(실제 (a+b)(a−b)).",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -5237,7 +5054,6 @@
       "metaphor": "제곱하면 음수가 되는 새로운 수 i를 들여, 모든 수를 a+bi 꼴로 넓힌 것이 복소수.",
       "accepted_expressions": "i²=−1인 수라 함 / a+bi에서 a를 실수부, b를 허수부라 함",
       "ccss_code": "HSN-CN.A.1",
-      "misconception_text": "i²=−1인데 i²=1로 본다. 실수부와 허수부를 더해 하나로 합친다(a+bi는 더 못 합침).",
       "difficulty_tier": 16,
       "review_status": "pending",
       "notes": null
@@ -5267,7 +5083,6 @@
       "metaphor": "이차방정식의 답이 실수면 실근, 복소수(허수 포함)면 허근. 그래프가 x축과 만나면 실근이다.",
       "accepted_expressions": "그래프가 x축과 만나면 실근이라 함 / 판별식이 음수면 허근임을 안다",
       "ccss_code": "HSA-REI.B.4",
-      "misconception_text": "허근이면 '해가 없다'고 본다(복소수 범위에선 존재). 실근·허근의 개수를 헷갈린다.",
       "difficulty_tier": 17,
       "review_status": "pending",
       "notes": null
@@ -5296,7 +5111,6 @@
       "metaphor": "근의 개수를 미리 알려 주는 신호등. D=b²−4ac가 양수면 둘, 0이면 하나(중근), 음수면 실근 없음.",
       "accepted_expressions": "D 부호로 근의 개수를 판정",
       "ccss_code": "HSN-CN.C.7",
-      "misconception_text": "D<0을 '해가 없다'로 단정한다(실근이 없을 뿐 허근은 존재). D=0의 중근을 근이 없다고 본다.",
       "difficulty_tier": 18,
       "review_status": "reviewed",
       "notes": null
@@ -5324,7 +5138,6 @@
       "metaphor": "근을 직접 구하지 않아도, 두 근의 합은 −b/a, 곱은 c/a로 계수에서 바로 읽어 낸다.",
       "accepted_expressions": "합=−b/a, 곱=c/a를 적용",
       "ccss_code": "HSA-APR.C.4 (+)",
-      "misconception_text": "합=−b/a, 곱=c/a의 부호를 반대로 쓴다. 최고차항 계수 a로 나누는 것을 빠뜨린다.",
       "difficulty_tier": 18,
       "review_status": "reviewed",
       "notes": null
@@ -5354,7 +5167,6 @@
       "metaphor": "이차방정식의 실근은 곧 이차함수 그래프가 x축과 만나는 점(x절편)의 x좌표다.",
       "accepted_expressions": "근이 곧 x절편이라 함 / 교점 개수와 판별식 부호를 연결함",
       "ccss_code": "HSA-REI.D.11",
-      "misconception_text": "근(x절편)을 y절편과 혼동한다. 교점의 개수와 판별식 부호를 연결하지 못한다.",
       "difficulty_tier": 18,
       "review_status": "pending",
       "notes": null
@@ -5383,7 +5195,6 @@
       "metaphor": "이차함수와 직선이 만나는 점은 두 식을 연립한 이차방정식의 해. 판별식으로 만남(둘·접함·없음)을 가린다.",
       "accepted_expressions": "연립해서 판별식으로 만남을 판정함 / 접하면 중근임을 안다",
       "ccss_code": "HSA-REI.D.11",
-      "misconception_text": "접한다(중근)와 만나지 않는다(허근)를 헷갈린다. 연립 후 판별식 적용을 빠뜨린다.",
       "difficulty_tier": 19,
       "review_status": "pending",
       "notes": null
@@ -5411,7 +5222,6 @@
       "metaphor": "포물선의 꼭짓점이 최대 또는 최소 자리. 단, 정의역이 잘려 있으면 양 끝점도 함께 비교해야 한다.",
       "accepted_expressions": "정의역이 제한되면 끝점을 확인",
       "ccss_code": "HSA-SSE.B.3.b",
-      "misconception_text": "정의역이 제한됐는데 꼭짓점만 보고 최대·최소를 정한다(끝점 확인 필요).",
       "difficulty_tier": 19,
       "review_status": "reviewed",
       "notes": null
@@ -5440,7 +5250,6 @@
       "metaphor": "삼·사차방정식은 인수분해해 '여러 개의 (일·이차)=0'으로 쪼개어 푼다.",
       "accepted_expressions": "인수분해해 각 인수=0으로 풂 / 차수만큼 근이 있을 수 있음을 안다",
       "ccss_code": "HSA-APR.B.3",
-      "misconception_text": "고차방정식의 근을 두 개로 단정한다(차수만큼 근). 인수정리로 한 근을 찾는 단계를 빠뜨린다.",
       "difficulty_tier": 18,
       "review_status": "pending",
       "notes": null
@@ -5469,7 +5278,6 @@
       "metaphor": "미지수가 둘인 연립이차방정식은, 한 식에서 한 문자를 다른 문자로 나타내(대입) 차수를 줄여 푼다.",
       "accepted_expressions": "한 식을 대입해 미지수를 줄임 / 해의 (x, y) 짝을 모두 적음",
       "ccss_code": "HSA-REI.C.7",
-      "misconception_text": "대입 후 생기는 모든 근의 짝(x, y)을 끝까지 구하지 않고 일부만 적는다.",
       "difficulty_tier": 18,
       "review_status": "pending",
       "notes": null
@@ -5497,7 +5305,6 @@
       "metaphor": "여러 부등식을 동시에 만족하는 공통 범위 찾기. 수직선에 각 해를 겹쳐 겹치는 구간(교집합)이 답이다.",
       "accepted_expressions": "공통 범위(교집합)를 구함",
       "ccss_code": "HSA-REI.D.12",
-      "misconception_text": "두 부등식의 공통범위(교집합)를 합집합으로 잘못 합친다. 경계 포함(≤) 여부를 빠뜨린다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -5525,7 +5332,6 @@
       "metaphor": "|x|는 수직선에서 0까지의 거리. (a>0일 때) |x|<a는 0에서 a보다 가까운 안쪽 구간(−a<x<a), |x|>a는 그 바깥(x<−a 또는 x>a)이다.",
       "accepted_expressions": "|x|<a를 −a<x<a로 풂 / |x|를 0에서의 거리로 봄",
       "ccss_code": "HSA-REI.B.3",
-      "misconception_text": "|x|<a를 x<a로만 본다(음수쪽 −a<x 누락). |x|>a(바깥)와 |x|<a(안쪽)의 해 모양을 뒤바꾼다.",
       "difficulty_tier": 17,
       "review_status": "pending",
       "notes": null
@@ -5554,7 +5360,6 @@
       "metaphor": "이차부등식은 포물선이 x축 위/아래 어느 쪽인지 보는 문제. 그래프가 0보다 큰(위) 구간이 해다.",
       "accepted_expressions": "그래프 부호로 해 구간을 정함",
       "ccss_code": "HSA-REI.D.12",
-      "misconception_text": "부등호 방향과 그래프 위·아래를 반대로 본다. 해를 항상 '두 근 사이'로만 단정한다.",
       "difficulty_tier": 20,
       "review_status": "reviewed",
       "notes": null
@@ -5582,7 +5387,6 @@
       "metaphor": "'또는'이면 길이 갈라지니 더하고(합의 법칙), '그리고'면 길이 이어지니 곱한다(곱의 법칙).",
       "accepted_expressions": "또는=더하기, 그리고=곱하기",
       "ccss_code": "HSS-CP.A.1",
-      "misconception_text": "'또는'(합)과 '그리고'(곱)를 혼동한다. 중복을 빼지 않고 그냥 더한다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -5611,7 +5415,6 @@
       "metaphor": "순서가 있는 줄 세우기. 1등·2등이 구별되므로 뽑은 뒤 나열 순서까지 센다(nPr).",
       "accepted_expressions": "순서가 있는 줄 세우기라 함 / 1등·2등이 다르면 순열로 셈",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "순서를 구별하지 않고 조합처럼 계산한다. nPr 공식의 분모 (n−r)! 처리를 틀린다.",
       "difficulty_tier": 17,
       "review_status": "pending",
       "notes": null
@@ -5640,7 +5443,6 @@
       "metaphor": "순서가 없는 뽑기. 대표 3명을 고를 때 누가 먼저든 같으므로 순서를 무시한다(nCr).",
       "accepted_expressions": "순서 없는 선택임을 안다(순열과 구분)",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "순열과 조합(순서 유무)을 혼동한다. nCr=nPr/r!의 r!로 나누기를 빠뜨린다.",
       "difficulty_tier": 18,
       "review_status": "reviewed",
       "notes": null
@@ -5669,7 +5471,6 @@
       "metaphor": "엑셀 표처럼 수를 가로줄(행)·세로줄(열)로 정리해 괄호로 묶은 묶음. 자료(표)를 하나의 수학적 대상으로 다룬다.",
       "accepted_expressions": "수를 직사각형으로 배열해 괄호로 묶은 것 / 행과 열로 이루어진 수의 배열",
       "ccss_code": "HSN-VM.C.6 (+)",
-      "misconception_text": "행과 열을 혼동한다(m×n에서 m을 열로). 행렬을 단순한 표로만 여겨 연산이 정의된 대상임을 놓친다.",
       "difficulty_tier": 18,
       "review_status": "pending",
       "notes": null
@@ -5698,7 +5499,6 @@
       "metaphor": "덧셈은 같은 자리끼리 더하기, 곱셈은 '앞 행렬의 행을 눕혀 뒤 행렬의 열에 포개 곱해 더하기'다.",
       "accepted_expressions": "행렬끼리 더하고 빼고 실수배·곱셈하는 규칙 / 행과 열을 곱해 더하는 연산",
       "ccss_code": "HSN-VM.C.8 (+)",
-      "misconception_text": "곱셈에서 AB=BA가 늘 성립한다고 본다(일반적으로 다름). 크기 조건(앞 열 수=뒤 행 수)을 무시한다.",
       "difficulty_tier": 19,
       "review_status": "pending",
       "notes": null
@@ -5727,7 +5527,6 @@
       "metaphor": "두 점 사이 거리는 피타고라스 정리의 좌표판. 가로 차·세로 차를 두 변으로 한 직각삼각형의 빗변이다.",
       "accepted_expressions": "좌표 차의 제곱을 더해 루트를 씌움 / 피타고라스로 거리를 구함",
       "ccss_code": "8.G.B.8",
-      "misconception_text": "좌표 차를 제곱하지 않고 그냥 빼거나, 루트 씌우기를 빠뜨린다.",
       "difficulty_tier": 16,
       "review_status": "pending",
       "notes": null
@@ -5755,7 +5554,6 @@
       "metaphor": "선분을 m:n으로 나누는 점의 좌표. 내분점은 안쪽에서, 외분점은 한쪽을 넘어선 바깥에서 나눈다.",
       "accepted_expressions": "m:n으로 나누는 점의 좌표를 구함 / 내분은 사이, 외분은 바깥임을 안다",
       "ccss_code": "HSG-GPE.B.6",
-      "misconception_text": "내분점과 외분점 공식을 혼동한다. 외분에서 부호(−n) 처리를 빠뜨린다.",
       "difficulty_tier": 17,
       "review_status": "pending",
       "notes": null
@@ -5784,7 +5582,6 @@
       "metaphor": "직선은 'y=기울기×x+높이'. 단, 세로선(x=k)은 기울기가 없어 따로 표현한다.",
       "accepted_expressions": "세로선을 빠뜨리지 않음",
       "ccss_code": "HSG-GPE.B.5",
-      "misconception_text": "기울기가 없는 세로선을 빠뜨린다. 기울기와 y절편을 바꿔 식을 세운다.",
       "difficulty_tier": 17,
       "review_status": "reviewed",
       "notes": null
@@ -5812,7 +5609,6 @@
       "metaphor": "나란한 두 길은 기울기가 같고(평행), 직각으로 만나는 두 길은 기울기의 곱이 −1(수직)이다.",
       "accepted_expressions": "기울기가 같으면 평행이라 함 / 기울기 곱이 −1이면 수직임을 안다",
       "ccss_code": "HSG-GPE.B.5",
-      "misconception_text": "평행·수직 조건을 뒤바꾼다. 수직을 m₁=−m₂로 본다(곱이 −1이어야 함).",
       "difficulty_tier": 18,
       "review_status": "pending",
       "notes": null
@@ -5841,7 +5637,6 @@
       "metaphor": "점에서 직선까지 '가장 가까운(수직) 거리'를 한 번에 주는 공식. 분모 √(a²+b²)이 핵심이다.",
       "accepted_expressions": "분모 √(a²+b²)을 포함해 계산",
       "ccss_code": "HSG-GPE.B.4",
-      "misconception_text": "거리 공식의 분모 √(a²+b²)을 빠뜨린다. 직선을 ax+by+c=0 꼴로 안 맞추고 대입한다.",
       "difficulty_tier": 18,
       "review_status": "reviewed",
       "notes": null
@@ -5869,7 +5664,6 @@
       "metaphor": "컴퍼스로 그린 자취. 중심 (a,b)에서 같은 거리 r에 있는 점들의 모임이 (x−a)²+(y−b)²=r²이다.",
       "accepted_expressions": "중심·반지름으로 식을 세움",
       "ccss_code": "HSG-GPE.A.1",
-      "misconception_text": "반지름 r과 r²(우변)을 혼동한다. 중심 (a,b)의 부호를 반대로 읽는다.",
       "difficulty_tier": 17,
       "review_status": "reviewed",
       "notes": null
@@ -5899,7 +5693,6 @@
       "metaphor": "원과 직선이 만나는지는 '중심에서 직선까지 거리 d'와 반지름 r를 견주면 안다. d<r면 두 점에서 만난다.",
       "accepted_expressions": "거리 d와 반지름 r를 비교함 / d=r이면 접함을 안다",
       "ccss_code": "HSG-C.A.2",
-      "misconception_text": "거리 d와 반지름 r 비교를 거꾸로 본다(d<r를 안 만남으로). 판별식 부호를 헷갈린다.",
       "difficulty_tier": 19,
       "review_status": "pending",
       "notes": null
@@ -5928,7 +5721,6 @@
       "metaphor": "그래프를 통째로 밀기. x축으로 a만큼 옮기면 식의 x 자리에 (x−a)를 넣는다.",
       "accepted_expressions": "오른쪽 이동 시 x−a로 바꿈",
       "ccss_code": "HSG-CO.B.6",
-      "misconception_text": "+a 평행이동인데 식을 x+a로 바꾼다(실제 x−a, 방향과 부호가 반대).",
       "difficulty_tier": 18,
       "review_status": "reviewed",
       "notes": null
@@ -5957,7 +5749,6 @@
       "metaphor": "거울에 비추기. x축 대칭은 y→−y, y축 대칭은 x→−x, 원점 대칭은 둘 다, y=x 대칭은 x와 y를 맞바꾼다.",
       "accepted_expressions": "거울에 비추듯 좌표 부호를 바꿈 / y=x 대칭은 x와 y를 맞바꿈을 안다",
       "ccss_code": "8.G.A.1",
-      "misconception_text": "어느 좌표의 부호가 바뀌는지 헷갈린다. y=x 대칭에서 좌표 교환을 빠뜨린다.",
       "difficulty_tier": 19,
       "review_status": "pending",
       "notes": null
@@ -5983,7 +5774,6 @@
       "metaphor": "집합은 기준이 분명한 모임. 원소를 일일이 적거나(원소나열), 조건으로 묶어(조건제시) 나타낸다.",
       "accepted_expressions": "기준이 분명한 모임을 집합이라 함 / 원소를 나열하거나 조건으로 나타냄",
       "ccss_code": "-",
-      "misconception_text": "기준이 모호한 모임도 집합으로 본다. 원소를 중복해 세거나 공집합을 빠뜨린다.",
       "difficulty_tier": 15,
       "review_status": "pending",
       "notes": null
@@ -6011,7 +5801,6 @@
       "metaphor": "작은 상자가 큰 상자에 통째로 들어가는 관계. A의 모든 원소가 B에 있으면 A⊂B다.",
       "accepted_expressions": "공집합·자기 자신도 부분집합임을 안다",
       "ccss_code": "HSS-CP.A.1",
-      "misconception_text": "공집합과 자기 자신을 부분집합에서 빠뜨린다. 원소(∈)와 부분집합(⊂)을 혼동한다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -6039,7 +5828,6 @@
       "metaphor": "벤다이어그램(겹친 두 원). 합집합은 모두, 교집합은 겹친 부분, 여집합은 바깥, 차집합은 한쪽만.",
       "accepted_expressions": "벤다이어그램으로 합·교·차·여집합을 나타냄 / 합집합과 교집합 기호를 구별함",
       "ccss_code": "HSS-CP.A.1",
-      "misconception_text": "합집합과 교집합 기호를 뒤바꾼다. 여집합에서 전체집합 U를 정하지 않는다.",
       "difficulty_tier": 17,
       "review_status": "pending",
       "notes": null
@@ -6067,7 +5855,6 @@
       "metaphor": "명제는 참·거짓을 가릴 수 있는 문장. '모든'은 하나라도 어긋나면 거짓, '어떤'은 하나만 맞아도 참이다.",
       "accepted_expressions": "참·거짓이 분명한 문장을 명제라 함 / '모든·어떤'의 부정을 안다",
       "ccss_code": "-",
-      "misconception_text": "참·거짓을 못 가리는 문장(의견)도 명제로 본다. '모든/어떤'의 부정을 헷갈린다.",
       "difficulty_tier": 16,
       "review_status": "pending",
       "notes": null
@@ -6095,7 +5882,6 @@
       "metaphor": "명제와 그 대우(~q→~p)는 운명을 같이해 참·거짓이 늘 같다. 하지만 역(q→p)은 다를 수 있다.",
       "accepted_expressions": "대우는 참·거짓이 같고 역은 다를 수 있음을 안다",
       "ccss_code": "-",
-      "misconception_text": "명제가 참이면 역도 참이라 단정한다. 역·이·대우를 헷갈린다.",
       "difficulty_tier": 17,
       "review_status": "reviewed",
       "notes": null
@@ -6124,7 +5910,6 @@
       "metaphor": "p⇒q가 참이면 p는 'q이기에 충분한' 충분조건. 작은 원(p)이 큰 원(q) 안에 든 그림이다.",
       "accepted_expressions": "충분조건·필요조건의 방향을 바르게 봄",
       "ccss_code": "-",
-      "misconception_text": "충분조건과 필요조건의 방향을 혼동한다. 필요충분조건(서로 ⇒)을 한쪽만으로 단정한다.",
       "difficulty_tier": 18,
       "review_status": "reviewed",
       "notes": null
@@ -6152,7 +5937,6 @@
       "metaphor": "정면 증명이 어려우면 우회한다. 대우를 증명하거나(대우증명), '아니라고 가정해 모순'을 보인다(귀류법).",
       "accepted_expressions": "대우를 증명해 원명제를 보임 / '아니라고 하면 모순'을 보여 증명함",
       "ccss_code": "-",
-      "misconception_text": "귀류법에서 무엇을 부정해 가정할지 잘못 잡는다. 대우와 역을 헷갈려 엉뚱한 명제를 증명한다.",
       "difficulty_tier": 18,
       "review_status": "pending",
       "notes": null
@@ -6180,7 +5964,6 @@
       "metaphor": "어떤 값을 넣어도 늘 성립하는 부등식. 대표적으로 산술평균≥기하평균(AM≥GM)이 있다.",
       "accepted_expressions": "항상 성립하는 부등식이라 함 / 등호가 언제 성립하는지 함께 밝힘",
       "ccss_code": "HSA-APR.C.4 (+)",
-      "misconception_text": "등호가 성립하는 조건(언제 같아지나)을 빠뜨린다. AM≥GM을 양수가 아닌 수에 적용한다.",
       "difficulty_tier": 19,
       "review_status": "pending",
       "notes": null
@@ -6208,7 +5991,6 @@
       "metaphor": "함수는 입력마다 출력 하나. 그래프에 세로선을 그었을 때 두 번 만나면 함수가 아니다(수직선 판정).",
       "accepted_expressions": "한 x에 y 하나임을 안다(세로선 판정)",
       "ccss_code": "HSF-IF.A.1",
-      "misconception_text": "세로선 판정을 통과 못 하는 그래프(원 등)를 함수로 본다. 정의역·치역을 헷갈린다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -6236,7 +6018,6 @@
       "metaphor": "기계 두 대를 호스로 연결. (f∘g)(x)=f(g(x))는 g를 먼저, 그다음 f를 적용한다.",
       "accepted_expressions": "g 먼저 f 나중 / 순서에 따라 결과가 다름을 안다",
       "ccss_code": "HSF-BF.B.4.b (+)",
-      "misconception_text": "f∘g와 g∘f를 같다고 본다(순서가 중요). 어느 것을 먼저 적용하는지 헷갈린다.",
       "difficulty_tier": 18,
       "review_status": "reviewed",
       "notes": null
@@ -6265,7 +6046,6 @@
       "metaphor": "되돌리기 버튼. 입력과 출력을 맞바꾼 함수가 역함수이고, 그래프는 y=x에 대칭이다.",
       "accepted_expressions": "일대일대응이어야 역함수가 있음을 안다",
       "ccss_code": "HSF-BF.B.4.a",
-      "misconception_text": "역함수 f⁻¹과 1/f(분수)를 혼동한다. 일대일대응이 아닌데 역함수가 있다고 본다.",
       "difficulty_tier": 18,
       "review_status": "reviewed",
       "notes": null
@@ -6294,7 +6074,6 @@
       "metaphor": "점근선은 '다가가지만 끝내 닿지 않는 벽'. y=(ax+b)/(cx+d) 그래프는 두 점근선 둘레로 휜다.",
       "accepted_expressions": "분모에 x가 있는 분수 함수라 함 / 분모=0인 값을 정의역에서 뺌",
       "ccss_code": "HSF-IF.C.7.d (+)",
-      "misconception_text": "분모를 0으로 만드는 x(정의역에서 제외)를 빠뜨린다. 점근선의 위치를 잘못 잡는다.",
       "difficulty_tier": 18,
       "review_status": "pending",
       "notes": null
@@ -6322,7 +6101,6 @@
       "metaphor": "제곱의 되돌리기. y=√(ax+b)+c는 근호 안이 0 이상인 곳에서만 정의된다(정의역 제한).",
       "accepted_expressions": "근호 안≥0으로 정의역을 정함",
       "ccss_code": "HSF-IF.C.7.b",
-      "misconception_text": "정의역(근호 안 ≥0) 조건을 빠뜨린다. 치역의 부호(√는 0 이상)를 놓친다.",
       "difficulty_tier": 18,
       "review_status": "reviewed",
       "notes": null
@@ -6350,7 +6128,6 @@
       "metaphor": "거듭제곱은 같은 수를 여러 번 곱한 것, 거듭제곱근은 그 되돌리기(n제곱하면 a가 되는 수)다.",
       "accepted_expressions": "√(a²)=|a|임을 안다",
       "ccss_code": "HSN-RN.A.2",
-      "misconception_text": "√(a²)=a로 단정한다(실제 |a|). 음수의 짝수 거듭제곱근을 실수에서 구하려 한다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6378,7 +6155,6 @@
       "metaphor": "2⁰=1, 2^(1/2)=√2처럼 지수의 뜻을 정수 너머 유리수·실수까지 자연스럽게 잇는다.",
       "accepted_expressions": "2^(1/2)을 √2로 봄 / a⁰=1, a⁻¹=1/a로 씀",
       "ccss_code": "HSN-RN.A.1",
-      "misconception_text": "음수·분수 지수를 '여러 번 곱하기'로만 해석해 의미를 못 받아들인다. a^(1/2)을 a/2로 본다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -6406,7 +6182,6 @@
       "metaphor": "지수는 곱한 '횟수' 표. 같은 밑끼리 곱하면 횟수를 더하고(aᵐaⁿ=a^{m+n}), 거듭제곱은 횟수를 곱한다.",
       "accepted_expressions": "지수의 곱·나눗셈·거듭제곱 법칙을 구분 적용",
       "ccss_code": "HSN-RN.A.2",
-      "misconception_text": "aᵐ·aⁿ을 a^(mn)으로 한다(실제 a^{m+n}). (a+b)ⁿ을 aⁿ+bⁿ으로 분배한다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6432,7 +6207,6 @@
       "metaphor": "로그는 '밑을 몇 제곱해야 그 수가 되나?'를 묻는 거듭제곱의 거꾸로. logₐb는 그 지수다.",
       "accepted_expressions": "로그를 지수로 바꿔 해석",
       "ccss_code": "HSF-LE.A.4",
-      "misconception_text": "log(a+b)를 log a+log b로 한다(실제 log(ab)=log a+log b). 진수·밑의 조건(>0)을 놓친다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6460,7 +6234,6 @@
       "metaphor": "밑이 10인 상용로그는 '자릿수 재는 자'. pH·소리(데시벨)·지진 규모처럼 아주 큰 수를 다루기 쉽게 줄인다.",
       "accepted_expressions": "밑이 10인 로그라 함 / log 1000=3임을 안다",
       "ccss_code": "HSF-LE.A.4",
-      "misconception_text": "log 10000을 4가 아닌 다른 값으로 본다. 지표·가수의 의미를 헷갈린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -6490,7 +6263,6 @@
       "metaphor": "지수함수(폭발적 증가·감소)와 로그함수는 서로 되돌리는 짝. 그래프가 y=x에 대칭이다.",
       "accepted_expressions": "y=2ˣ 같은 함수를 지수함수라 함 / 지수함수와 로그함수가 서로 역함수임을 안다",
       "ccss_code": "HSF-IF.C.7.e",
-      "misconception_text": "지수함수와 로그함수를 별개로만 보고 역함수 관계를 놓친다. 밑의 조건(>0, ≠1)을 빠뜨린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -6518,7 +6290,6 @@
       "metaphor": "밑이 1보다 크면 오른쪽으로 치솟고(증가), 1보다 작으면 가라앉는다(감소). 두 함수는 서로 역함수다.",
       "accepted_expressions": "밑의 크기로 증감 판단",
       "ccss_code": "HSF-IF.C.7.e",
-      "misconception_text": "밑이 1보다 큰지/작은지에 따른 증가·감소를 혼동한다. 점근선(지수: y=0, 로그: x=0)을 놓친다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6547,7 +6318,6 @@
       "metaphor": "복리·인구·방사성 붕괴처럼 '비율로 변하는' 현상을 지수·로그함수로 풀어낸다.",
       "accepted_expressions": "복리·인구 증가를 지수함수로 나타냄 / 로그로 큰 수의 자릿수를 다룸",
       "ccss_code": "HSF-IF.C.7.e",
-      "misconception_text": "지수적 변화를 일정량 증가(일차)로 본다. 로그 방정식에서 진수 조건을 확인하지 않는다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -6575,7 +6345,6 @@
       "metaphor": "호도법은 각을 '반지름으로 잰' 단위(호의 길이÷반지름). 한 바퀴 360°가 2π라디안이다.",
       "accepted_expressions": "도와 라디안을 환산 / 단위를 섞지 않음",
       "ccss_code": "HSF-TF.A.1",
-      "misconception_text": "도(°)와 라디안을 섞어 쓴다. π라디안을 3.14°쯤으로 착각한다(실제 180°).",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6603,7 +6372,6 @@
       "metaphor": "사인·코사인은 원 위를 도는 점의 높이·가로 위치라 물결처럼 오르내린다(주기). 탄젠트는 점근선이 있다.",
       "accepted_expressions": "진폭과 주기를 구분",
       "ccss_code": "HSF-TF.A.2",
-      "misconception_text": "주기와 진폭을 혼동한다. 탄젠트 그래프의 점근선(끊김)을 빠뜨린다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6631,7 +6399,6 @@
       "metaphor": "사인법칙은 '변과 마주보는 각의 비'가 일정, 코사인법칙은 피타고라스를 일반 삼각형으로 넓힌 것.",
       "accepted_expressions": "주어진 조건에 맞는 법칙을 선택",
       "ccss_code": "HSG-SRT.D.11 (+)",
-      "misconception_text": "주어진 정보(두 변과 끼인각 vs 한 변과 두 각)에 맞는 법칙을 잘못 고른다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6659,7 +6426,6 @@
       "metaphor": "수열은 규칙에 따라 줄지어 놓인 수들. 몇 번째(n)에 어떤 값이 오는지(일반항)가 핵심이다.",
       "accepted_expressions": "규칙대로 늘어놓은 수들을 수열이라 함 / n번째 수를 aₙ으로 나타냄",
       "ccss_code": "HSF-IF.A.3",
-      "misconception_text": "항의 순서(n)와 항의 값(aₙ)을 혼동한다. 첫째 항이 a₁인지 a₀인지 헷갈린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -6687,7 +6453,6 @@
       "metaphor": "일정하게 더해 올라가는 계단(공차 d). 일반항은 첫 항에서 (n−1)번 더한 a+(n−1)d다.",
       "accepted_expressions": "일반항에 (n−1)d를 적용",
       "ccss_code": "HSF-BF.A.2",
-      "misconception_text": "일반항에서 (n−1)을 n으로 쓴다. 합 공식의 항수 n을 잘못 센다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6715,7 +6480,6 @@
       "metaphor": "일정 배율로 불어나는 증식(공비 r). 일반항은 첫 항에 r를 (n−1)번 곱한 ar^{n−1}이다.",
       "accepted_expressions": "공비가 음수·분수인 경우도 다룸",
       "ccss_code": "HSA-SSE.B.4",
-      "misconception_text": "공비가 음수·분수인 경우를 간과한다. 합 공식에서 r=1인 경우를 따로 처리하지 않는다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6744,7 +6508,6 @@
       "metaphor": "Σ는 '여러 항을 한꺼번에 더하라'는 묶음 기호. Σc=cn이고, Σ(ab)는 ΣaΣb와 다르다.",
       "accepted_expressions": "Σ(상수)=상수×n / 곱을 시그마 밖으로 빼지 않음",
       "ccss_code": "HSA-SSE.B.4",
-      "misconception_text": "Σ(상수)=상수로 본다(실제 ×n). Σ(ab)=Σa·Σb로 분배한다(성립하지 않음).",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6772,7 +6535,6 @@
       "metaphor": "계차·부분분수처럼 통째로 안 더해지는 합도, 식을 변형해 '망원경처럼' 소거하며 구한다.",
       "accepted_expressions": "Σ 공식으로 합을 구함 / 분수 수열은 부분분수로 소거해 더함",
       "ccss_code": "HSA-SSE.B.4",
-      "misconception_text": "공식을 무작정 대입하고, 어떤 수열 유형(계차·분수)인지 먼저 파악하지 않는다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -6800,7 +6562,6 @@
       "metaphor": "앞 항으로 다음 항을 정하는 '이어달리기' 규칙(aₙ₊₁=aₙ+d 등). 첫 항과 규칙만 있으면 전체가 정해진다.",
       "accepted_expressions": "앞 항으로 다음 항을 정하는 식이라 함 / 첫 항과 규칙으로 수열을 만듦",
       "ccss_code": "HSF-BF.A.2",
-      "misconception_text": "귀납적 정의에서 첫 항(출발점)을 빠뜨린다. 점화식의 항 번호(n, n+1)를 헷갈린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -6828,7 +6589,6 @@
       "metaphor": "도미노. 첫 장이 넘어지고(n=1), '한 장이 넘어지면 다음도 넘어짐(n=k→k+1)'을 보이면 모두 넘어진다.",
       "accepted_expressions": "기초 단계와 귀납 단계를 모두 보임",
       "ccss_code": "-",
-      "misconception_text": "n=1만 확인하고 끝낸다(귀납 가정 단계 누락). k+1단계에서 가정(n=k 성립)을 안 쓴다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6858,7 +6618,6 @@
       "metaphor": "x를 어떤 값에 한없이 가까이 보냈을 때 함숫값이 다가가는 목표값. 그 점의 실제 함숫값과 다를 수도 있다.",
       "accepted_expressions": "함숫값이 없어도 극한이 있을 수 있음을 안다",
       "ccss_code": "HSF-IF.A.2",
-      "misconception_text": "극한값=함숫값으로 단정한다(연속이 아니어도 극한은 존재 가능). 좌극한·우극한이 다를 때 극한이 있다고 본다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6886,7 +6645,6 @@
       "metaphor": "극한도 사칙연산이 통한다(합의 극한=극한의 합). 단, ∞−∞·0/0 꼴은 변형해서 따져야 한다.",
       "accepted_expressions": "극한의 합은 합의 극한과 같다고 함 / 0/0 꼴은 식을 변형해 구함",
       "ccss_code": "HSF-IF.A.2",
-      "misconception_text": "0/0·∞/∞ 같은 부정형을 그대로 0이나 1로 단정한다(인수분해·유리화로 변형 필요).",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -6914,7 +6672,6 @@
       "metaphor": "연필을 떼지 않고 한 붓에 그리는 그래프. 한 점에서 연속이려면 극한값과 함숫값이 같아야 한다.",
       "accepted_expressions": "구멍·점프가 있으면 불연속임을 안다",
       "ccss_code": "HSF-IF.A.2",
-      "misconception_text": "정의역의 '구멍'(정의 안 됨)을 무시한다. 그래프가 이어져 보이면 무조건 연속이라 본다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -6942,7 +6699,6 @@
       "metaphor": "끊김 없는 구간이면 최댓값·최솟값이 반드시 있고(최대최소정리), 두 값 사이를 빠짐없이 지난다(사잇값정리).",
       "accepted_expressions": "닫힌구간 연속이면 최대·최소가 있다고 함 / 사잇값 정리로 근의 존재를 보임",
       "ccss_code": "HSF-IF.C.8",
-      "misconception_text": "사잇값정리를 불연속 함수에 적용한다. 닫힌구간이 아닌데 최대·최소 존재를 단정한다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -6970,7 +6726,6 @@
       "metaphor": "미분계수는 '바로 그 순간의 변화율' = 그 점에서 그래프에 살짝 댄 접선의 기울기다.",
       "accepted_expressions": "순간변화율=접선의 기울기라 함 / 평균변화율의 극한으로 구함",
       "ccss_code": "HSF-TF.B.6 (+)",
-      "misconception_text": "평균변화율(두 점 사이)과 순간변화율(한 점)을 혼동한다. 분모 h를 0으로 바로 대입한다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -6998,7 +6753,6 @@
       "metaphor": "매끄러우면 미분 가능. 미분 가능하면 반드시 연속이지만, 연속이어도 뾰족하면 미분이 안 된다.",
       "accepted_expressions": "미분가능⇒연속, 역은 거짓임을 안다",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "연속이면 미분 가능으로 단정한다(뾰족점·꺾인 점이 반례). 역방향 함의를 헷갈린다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7026,7 +6780,6 @@
       "metaphor": "y=xⁿ을 미분하면 지수를 앞으로 내리고 지수를 1 줄인다(nxⁿ⁻¹). 거듭제곱 미분의 기본 공식.",
       "accepted_expressions": "지수를 앞으로 내리고 지수를 1 줄임 / x³의 도함수를 3x²로 구함",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "지수를 앞으로 내리는 것과 1 줄이는 것 중 하나를 빠뜨린다. 상수의 미분(0)을 헷갈린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7054,7 +6807,6 @@
       "metaphor": "복잡한 다항함수도 항마다 따로 미분해 더하면 된다(합·차·실수배의 미분법).",
       "accepted_expressions": "항마다 미분해 더함 / 상수배는 그대로 두고 미분함",
       "ccss_code": "HSF-TF.A.2",
-      "misconception_text": "곱의 미분을 '각각 미분한 곱'으로 한다(곱의 미분법은 따로). 상수배 처리를 빠뜨린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7083,7 +6835,6 @@
       "metaphor": "접선은 곡선에 살짝 댄 직선. 접점에서의 미분계수가 곧 그 접선의 기울기다.",
       "accepted_expressions": "접점의 미분계수를 기울기로 씀 / 접점을 지나고 그 기울기인 직선을 세움",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "접점의 좌표와 기울기를 따로 구하지 않는다. 곡선 밖의 점에서 그은 접선의 접점을 미지수로 두는 것을 빠뜨린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7111,7 +6862,6 @@
       "metaphor": "어떤 구간에서 '평균 속도'와 똑같은 '순간 속도'를 내는 지점이 적어도 하나 있다(평균값 정리).",
       "accepted_expressions": "평균 속도와 같은 순간 속도인 점이 있다고 함 / 조건(연속·미분가능)을 확인함",
       "ccss_code": "HSF-TF.C.9 (+)",
-      "misconception_text": "조건(연속·미분가능)을 확인하지 않고 적용한다. 평균값정리와 롤의 정리를 헷갈린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7139,7 +6889,6 @@
       "metaphor": "도함수의 부호가 곧 오르막(+)·내리막(−). 기울기가 0이면서 부호가 바뀌는 곳이 산봉우리·골짜기(극값)다.",
       "accepted_expressions": "f'=0이 항상 극값은 아님을 안다",
       "ccss_code": "HSF-BF.B.4.b (+)",
-      "misconception_text": "f′=0이면 무조건 극값으로 본다(부호가 안 바뀌는 변곡점은 극값 아님).",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7167,7 +6916,6 @@
       "metaphor": "증감·극값·볼록을 종합해 그래프의 큰 윤곽(개형)을 그린다. 도함수가 '안내도' 역할을 한다.",
       "accepted_expressions": "증감표를 만들어 개형을 그림 / 극값과 절편을 표시함",
       "ccss_code": "HSF-IF.B.5",
-      "misconception_text": "증감표 없이 몇 점만 찍어 잇는다. 극값과 변곡점을 구분하지 않는다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7195,7 +6943,6 @@
       "metaphor": "방정식의 실근 개수나 부등식 성립을, 함수의 그래프(증감·최솟값)로 바꿔 푼다.",
       "accepted_expressions": "f(x)=k의 근을 그래프와 가로선 교점으로 봄 / 최솟값으로 부등식 성립을 보임",
       "ccss_code": "-",
-      "misconception_text": "f(x)=k의 근의 개수를 그래프와 가로선 y=k의 교점으로 보는 관점을 못 쓴다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7223,7 +6970,6 @@
       "metaphor": "위치를 미분하면 속도, 속도를 미분하면 가속도. 변화율이 한 단계씩 빨라지는 관계다.",
       "accepted_expressions": "위치를 미분하면 속도라 함 / 속도의 부호로 방향을 봄",
       "ccss_code": "-",
-      "misconception_text": "속도의 부호(방향)를 무시하고 속력으로만 본다. 위치·속도·가속도의 미분 단계를 헷갈린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7251,7 +6997,6 @@
       "metaphor": "부정적분은 미분의 거꾸로. 단, 미분하면 사라지는 상수 때문에 적분상수 +C를 꼭 붙인다.",
       "accepted_expressions": "+C를 빠뜨리지 않음",
       "ccss_code": "-",
-      "misconception_text": "적분상수 +C를 빠뜨린다. 적분과 미분의 방향을 헷갈린다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7279,7 +7024,6 @@
       "metaphor": "미분 공식을 거꾸로. xⁿ의 부정적분은 지수를 1 올리고 그 수로 나눈다(xⁿ⁺¹/(n+1)).",
       "accepted_expressions": "지수를 1 올리고 그 수로 나눔 / +C를 붙임",
       "ccss_code": "HSF-BF.B.4.a",
-      "misconception_text": "지수를 올리는 것과 나누는 것 중 하나를 빠뜨린다. +C를 잊는다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7307,7 +7051,6 @@
       "metaphor": "정적분은 잘게 쪼갠 막대들의 넓이를 무한히 더한 값(구분구적). 구간 [a,b]에서의 '쌓인 양'이다.",
       "accepted_expressions": "잘게 나눈 합의 극한이라 함 / 구간을 나눠 더할 수 있음을 안다",
       "ccss_code": "HSF-TF.A.1",
-      "misconception_text": "정적분을 늘 '넓이'로만 본다(부호 있는 넓이라 음수도 가능). 적분 구간의 위아래를 바꿔도 부호가 안 바뀐다고 본다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7335,7 +7078,6 @@
       "metaphor": "정적분은 부정적분(원시함수)의 양 끝값 차이로 한 번에 구한다(미적분의 기본정리).",
       "accepted_expressions": "원시함수의 양 끝값 차로 구함 / F(b)−F(a)로 계산함",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "F(b)−F(a)에서 위·아래 끝을 바꿔 뺀다. 정적분에 +C를 붙인다(정적분은 수).",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7363,7 +7105,6 @@
       "metaphor": "곡선과 x축 사이 넓이. x축 아래 부분은 정적분이 음수로 나오므로 절댓값으로 따로 더한다.",
       "accepted_expressions": "x축 아래는 절댓값/부호로 처리",
       "ccss_code": "-",
-      "misconception_text": "x축 아래(음의 넓이) 처리를 빠뜨려 넓이가 작게 나온다. 두 곡선 사이는 (위−아래)임을 놓친다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7391,7 +7132,6 @@
       "metaphor": "속도를 시간으로 적분하면 이동 거리. 단, 방향이 바뀌면 '위치 변화'와 '실제 이동거리'가 달라진다.",
       "accepted_expressions": "속도를 적분해 위치 변화를 구함 / 방향이 바뀌면 |속도|로 이동거리를 구함",
       "ccss_code": "HSF-TF.C.9 (+)",
-      "misconception_text": "속도가 음수인 구간을 그냥 더해 위치 변화와 이동거리를 혼동한다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7420,7 +7160,6 @@
       "metaphor": "중복순열은 '쓴 것을 또 써도 되는' 줄 세우기(비밀번호), 같은 것이 있는 순열은 똑같은 것끼리 겹침을 나눠 준다.",
       "accepted_expressions": "중복을 허용해 줄 세우면 nʳ이라 함 / 같은 것은 그 개수의 곱으로 나눔",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "같은 것이 있는 순열에서 중복으로 나누는 단계를 빠뜨린다. 중복순열과 일반순열을 혼동한다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7448,7 +7187,6 @@
       "metaphor": "중복조합은 '같은 것을 또 골라도 되는' 순서 없는 뽑기. 칸막이와 공으로 바꿔 세면 쉽다(별과 막대).",
       "accepted_expressions": "중복을 허용한 순서 없는 뽑기라 함 / 칸막이와 공으로 바꿔 셈",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "중복조합과 중복순열(순서)을 혼동한다. 공식 H의 식을 잘못 세운다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7476,7 +7214,6 @@
       "metaphor": "(a+b)ⁿ을 펼친 각 항의 계수가 파스칼의 삼각형. 조합 nCr이 곧 그 계수다.",
       "accepted_expressions": "(a+b)ⁿ 전개의 계수가 조합임을 안다 / 파스칼의 삼각형으로 계수를 구함",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "전개항의 계수와 지수를 헷갈린다. 일반항에서 r의 범위(0~n)를 놓친다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7504,7 +7241,6 @@
       "metaphor": "확률은 가능성을 0~1로 잰 값. 동전·주사위의 각 번 던지기는 서로 영향이 없다(독립).",
       "accepted_expressions": "도박사의 오류를 범하지 않음",
       "ccss_code": "HSS-MD.B.5 (+)",
-      "misconception_text": "도박사의 오류: 앞면이 5번 나왔으니 다음엔 뒷면 차례라고 본다(독립이라 영향 없음).",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7532,7 +7268,6 @@
       "metaphor": "두 사건 중 하나라도 일어날 확률은 더하되, 겹치는 부분(둘 다)은 한 번만 세도록 뺀다.",
       "accepted_expressions": "겹침이 있으면 교집합을 뺌",
       "ccss_code": "HSS-CP.B.8 (+)",
-      "misconception_text": "배반이 아닌데 그냥 더한다(교집합 P(A∩B)를 빼야 함).",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7560,7 +7295,6 @@
       "metaphor": "'적어도 하나'는 직접 세기 어렵다. '하나도 안 일어남'의 여사건을 구해 1에서 빼면 쉽다.",
       "accepted_expressions": "1에서 빼서 여사건 확률을 구함 / '적어도 하나'를 여사건으로 풂",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "여사건을 잘못 설정한다('적어도 1개'의 여사건은 '0개'). 1에서 빼는 것을 빠뜨린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7588,7 +7322,6 @@
       "metaphor": "이미 A가 일어났다는 조건에서 B의 확률. 표본공간이 A로 줄어든 뒤 그 안에서 B를 본다(P(A∩B)/P(A)).",
       "accepted_expressions": "조건부확률을 정의대로 계산",
       "ccss_code": "HSS-CP.B.6",
-      "misconception_text": "P(A|B)와 P(B|A)를 같다고 본다(검사의 역설). 분모를 전체로 둔다(조건인 A로 줄여야 함).",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7616,7 +7349,6 @@
       "metaphor": "독립은 '서로 영향 없음', 배반은 '동시에 못 일어남'. 전혀 다른 개념이다.",
       "accepted_expressions": "독립과 배반을 구분",
       "ccss_code": "HSS-CP.A.2",
-      "misconception_text": "배반(동시에 안 일어남)과 독립(서로 영향 없음)을 혼동한다(배반이면 오히려 종속).",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7644,7 +7376,6 @@
       "metaphor": "'그리고'로 이어지는 두 사건의 확률은 곱한다. 종속이면 뒤 사건은 조건부확률을 쓴다.",
       "accepted_expressions": "두 사건이 함께 일어날 확률을 곱으로 구함 / 종속이면 조건부확률을 곱함",
       "ccss_code": "HSS-CP.B.8 (+)",
-      "misconception_text": "종속인데 독립처럼 그냥 곱한다(조건부확률 필요). 곱셈정리와 덧셈정리를 혼동한다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7673,7 +7404,6 @@
       "metaphor": "확률변수는 '결과에 숫자를 매기는 규칙', 확률분포는 그 숫자마다 확률을 짝지은 표다.",
       "accepted_expressions": "결과에 수를 매긴 것을 확률변수라 함 / 값마다 확률을 짝지은 표를 확률분포라 함",
       "ccss_code": "HSS-MD.A.1 (+)",
-      "misconception_text": "확률의 합이 1임을 빠뜨린다. 확률변수(값)와 확률(가능성)을 혼동한다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7701,7 +7431,6 @@
       "metaphor": "기댓값은 (값×확률)을 모두 더한 '장기 평균'. 여러 번 반복했을 때 평균적으로 기대되는 값이다.",
       "accepted_expressions": "기댓값이 실현값이 아님을 안다",
       "ccss_code": "HSS-MD.A.2 (+)",
-      "misconception_text": "기댓값이 '실제로 한 번에 나오는 값'이라 오해한다(평균이라 실제와 다를 수 있음).",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7730,7 +7459,6 @@
       "metaphor": "성공/실패만 있는 시행을 n번 독립 반복했을 때 성공 횟수의 분포(동전 n번 던지기).",
       "accepted_expressions": "성공 횟수의 분포라 함 / 평균을 np로 구함",
       "ccss_code": "HSS-MD.A.3 (+)",
-      "misconception_text": "각 시행이 독립·동일 조건이라는 전제를 놓친다. 평균 np, 분산 npq 공식을 헷갈린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7758,7 +7486,6 @@
       "metaphor": "평균을 중심으로 좌우 대칭인 종 모양 곡선. 평균 근처가 가장 많고 멀어질수록 드물다.",
       "accepted_expressions": "모든 분포가 정규분포가 아님을 안다",
       "ccss_code": "HSS-ID.A.4",
-      "misconception_text": "모든 자료가 정규분포라 가정한다(아닐 수 있음). 표준화(z=(x−m)/σ) 과정을 빠뜨린다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7784,7 +7511,6 @@
       "metaphor": "전체(모집단)를 다 조사하기 어려우니 일부(표본)를 뽑아 살핀다. 치우치지 않게 뽑는 것이 관건이다.",
       "accepted_expressions": "전체가 모집단, 뽑은 일부가 표본이라 함 / 치우치지 않게 무작위로 뽑음",
       "ccss_code": "HSS-IC.A.1",
-      "misconception_text": "표본이 한쪽으로 치우쳤는데(편의표본) 전체를 대표한다고 본다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7813,7 +7539,6 @@
       "metaphor": "표본을 여러 번 뽑아 평균을 내면, 그 표본평균들도 모평균 둘레로 종 모양으로 모인다(표본 클수록 촘촘).",
       "accepted_expressions": "표본평균의 평균이 모평균과 같음을 안다 / 표본이 클수록 분포가 좁아짐을 안다",
       "ccss_code": "HSS-IC.B.4",
-      "misconception_text": "표본평균의 표준편차(표준오차 σ/√n)와 모집단 표준편차를 혼동한다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -7841,7 +7566,6 @@
       "metaphor": "표본으로 모수를 콕 집지 못하니 '이쯤일 것'이라는 범위(신뢰구간)로 추정한다.",
       "accepted_expressions": "점추정이 아니라 구간으로 말함",
       "ccss_code": "HSS-IC.B.4",
-      "misconception_text": "신뢰수준 95%를 '참값이 이 구간에 있을 확률 95%'로 오해한다(구간 쪽이 변하는 것).",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -7869,7 +7593,6 @@
       "metaphor": "항이 한 값으로 점점 정착하면 수렴, 흩어지거나 무한대로 달아나면 발산이다.",
       "accepted_expressions": "한 값에 다가가면 수렴이라 함 / 무한히 커지거나 진동하면 발산임을 안다",
       "ccss_code": "-",
-      "misconception_text": "항이 계속 변하면 무조건 발산으로 본다(진동하지 않고 한 값에 다가가면 수렴). 진동(−1,1,…)도 수렴으로 본다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -7897,7 +7620,6 @@
       "metaphor": "수렴하는 수열의 극한도 사칙연산이 통한다(합의 극한=극한의 합).",
       "accepted_expressions": "극한의 합은 합의 극한과 같다고 함 / ∞/∞ 꼴은 최고차항으로 나눠 구함",
       "ccss_code": "HSF-IF.A.2",
-      "misconception_text": "∞−∞·∞/∞ 같은 부정형을 그대로 0이나 1로 단정한다(식을 변형해 따져야 함).",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -7926,7 +7648,6 @@
       "metaphor": "공비 r의 크기가 운명을 가른다. |r|<1이면 0으로 사그라들고, |r|>1이면 폭발한다.",
       "accepted_expressions": "|r|<1이면 0으로 수렴이라 함 / r=1과 |r|>1을 따로 봄",
       "ccss_code": "-",
-      "misconception_text": "r=1(상수)·r=−1(진동) 같은 경곗값을 구분하지 않는다. |r|<1 조건을 놓친다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -7954,7 +7675,6 @@
       "metaphor": "급수는 항을 무한히 더한 합. 부분합이 한 값으로 모이면 수렴이다.",
       "accepted_expressions": "일반항→0이 수렴 보장이 아님을 안다",
       "ccss_code": "-",
-      "misconception_text": "일반항이 0으로 가면 급수가 수렴한다고 단정한다(조화급수 Σ1/n은 0으로 가도 발산).",
       "difficulty_tier": 24,
       "review_status": "reviewed",
       "notes": null
@@ -7982,7 +7702,6 @@
       "metaphor": "0.999…=1을 설명하는 도구. |공비|<1이면 첫 항÷(1−공비)로 무한합이 딱 떨어진다.",
       "accepted_expressions": "|r|<1일 때 a/(1−r)로 합을 구함 / 0.999…=1을 등비급수로 설명함",
       "ccss_code": "HSF-IF.A.2",
-      "misconception_text": "|공비|≥1인데 합 공식을 적용한다(수렴 조건 |r|<1을 무시).",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8010,7 +7729,6 @@
       "metaphor": "e는 연속 복리의 극한값. eˣ는 미분해도 자기 자신이고, ln x의 미분은 1/x이다.",
       "accepted_expressions": "eˣ의 미분이 자기 자신임을 안다 / ln x의 미분을 1/x로 함",
       "ccss_code": "HSF-IF.C.7.e",
-      "misconception_text": "(eˣ)′을 x·eˣ⁻¹로 한다(거듭제곱 규칙 오용, 실제 eˣ). 밑이 e가 아닌 지수·로그 미분을 헷갈린다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8038,7 +7756,6 @@
       "metaphor": "두 각을 더한 삼각비를 분해하는 공식. sin(a+b)=sin a cos b+cos a sin b.",
       "accepted_expressions": "덧셈정리를 그냥 분배하지 않음",
       "ccss_code": "HSF-TF.C.9 (+)",
-      "misconception_text": "sin(a+b)=sin a+sin b로 분배한다(성립하지 않음). 코사인 덧셈정리의 부호(−)를 틀린다.",
       "difficulty_tier": 24,
       "review_status": "reviewed",
       "notes": null
@@ -8066,7 +7783,6 @@
       "metaphor": "각이 0에 가까울 때 sin x ≈ x. 이 극한(sin x/x→1)에서 (sin x)′=cos x가 나온다.",
       "accepted_expressions": "(sin x)′=cos x로 미분함 / 각이 라디안일 때 공식이 성립함을 안다",
       "ccss_code": "HSF-TF.C.9 (+)",
-      "misconception_text": "각이 도(°)일 때도 그대로 미분한다(공식은 라디안 기준). x→0에서 sin x/x를 0/0이라 값이 없다거나 0으로 단정한다(실제 극한은 1).",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8096,7 +7812,6 @@
       "metaphor": "분수 꼴 함수의 미분 공식. (분자′·분모 − 분자·분모′)÷분모² 순서가 핵심이다.",
       "accepted_expressions": "분자=분자′·분모−분자·분모′ 순서로 씀 / 분모의 제곱으로 나눔",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "(f/g)′을 f′/g′로 한다(몫의 미분법은 따로). 분자의 뺄셈 순서를 바꿔 부호를 틀린다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8124,7 +7839,6 @@
       "metaphor": "양파 껍질을 밖에서 안으로 벗기듯, 겉함수를 미분하고 속함수의 미분을 곱한다(연쇄법칙).",
       "accepted_expressions": "겉함수를 미분하고 속함수의 미분을 곱함 / 양파 껍질 벗기듯 차례로 미분함",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "속함수의 미분(곱하기)을 빠뜨린다. 어디까지가 겉·속함수인지 잘못 나눈다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8152,7 +7866,6 @@
       "metaphor": "x도 y도 시간 t의 함수일 때, 기울기는 (dy/dt)÷(dx/dt)로 구한다.",
       "accepted_expressions": "y′을 (dy/dt)÷(dx/dt)로 구함 / t로 각각 미분해 나눔",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "dy/dt만으로 기울기를 본다(dx/dt로 나눠야 함). t로 미분한 것과 x로 미분한 것을 혼동한다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8180,7 +7893,6 @@
       "metaphor": "y를 x로 풀어내지 못해도 양변을 그대로 미분한다. 이때 y는 x의 함수로 보고 연쇄법칙을 쓴다.",
       "accepted_expressions": "y를 미분할 때 dy/dx를 붙임 / 역함수의 기울기를 원함수 기울기의 역수로 봄",
       "ccss_code": "HSF-TF.B.6 (+)",
-      "misconception_text": "음함수에서 y를 미분할 때 dy/dx 붙이는 것을 빠뜨린다(y를 상수처럼 본다).",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8208,7 +7920,6 @@
       "metaphor": "어떤 곡선이든 접점에서의 미분계수가 곧 접선의 기울기. 음함수·매개변수 곡선도 마찬가지다.",
       "accepted_expressions": "접점에서의 기울기로 접선을 세움 / 곡선 밖 점은 접점을 미지수로 둠",
       "ccss_code": "-",
-      "misconception_text": "곡선 위 점과 곡선 밖 점에서의 접선을 같은 방법으로 본다(밖의 점은 접점을 미지수로).",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8236,7 +7947,6 @@
       "metaphor": "증감(1계도함수)과 볼록(2계도함수)·점근선을 종합해 그래프의 윤곽을 그린다.",
       "accepted_expressions": "증감과 볼록을 표로 정리해 개형을 그림 / 변곡점을 표시함",
       "ccss_code": "HSF-IF.B.5",
-      "misconception_text": "이계도함수(볼록·변곡)를 안 보고 개형을 단정한다. 정의역·점근선을 빠뜨린다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8264,7 +7974,6 @@
       "metaphor": "방정식의 실근 개수나 부등식 성립을, 함수 그래프와 가로선 y=k의 교점 문제로 바꿔 푼다.",
       "accepted_expressions": "f(x)=k 근의 수를 그래프 교점으로 봄 / 최솟값으로 부등식을 보임",
       "ccss_code": "-",
-      "misconception_text": "f(x)=k의 근의 개수를 그래프로 보는 관점을 못 쓴다. 극값과 k의 대소 비교를 빠뜨린다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8292,7 +8001,6 @@
       "metaphor": "위치를 미분하면 속도, 속도를 미분하면 가속도. 변화율의 사다리다.",
       "accepted_expressions": "위치→속도→가속도로 미분함 / 속도의 크기를 속력이라 함",
       "ccss_code": "-",
-      "misconception_text": "속도의 부호(방향)를 무시하고 속력으로만 본다. 속도가 0인 순간(방향 전환)을 놓친다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8322,7 +8030,6 @@
       "metaphor": "미분 공식을 거꾸로. xⁿ·지수함수·삼각함수의 적분은 각자의 미분을 되짚어 구한다.",
       "accepted_expressions": "미분 공식을 거꾸로 적용해 적분함 / 1/x는 ln|x|로 적분함",
       "ccss_code": "HSF-IF.C.7.e",
-      "misconception_text": "1/x의 적분을 x⁰꼴로 한다(실제 ln|x|). 적분상수 +C를 빠뜨린다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8350,7 +8057,6 @@
       "metaphor": "복잡한 적분을 변수를 갈아끼워 익숙한 꼴로 바꾸기(치환적분).",
       "accepted_expressions": "변수를 바꿔 익숙한 꼴로 만듦 / 정적분은 구간도 함께 바꿈",
       "ccss_code": "HSF-TF.A.1",
-      "misconception_text": "치환 후 dx를 du로 바꾸지 않는다. 정적분에서 적분 구간을 새 변수로 안 바꾼다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8378,7 +8084,6 @@
       "metaphor": "곱의 미분을 거꾸로 한 것. '한쪽은 미분, 다른 쪽은 적분'으로 떠넘겨 더 쉬운 적분으로 만든다.",
       "accepted_expressions": "한쪽은 미분, 한쪽은 적분으로 떠넘김 / 미분하면 간단해지는 쪽을 u로 둠",
       "ccss_code": "HSF-TF.A.1",
-      "misconception_text": "u와 dv 선택을 잘못해 오히려 더 복잡해진다(미분하면 간단해지는 쪽을 u로).",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8407,7 +8112,6 @@
       "metaphor": "구간을 잘게 쪼갠 막대 넓이의 합을, 무한히 잘게 한 극한이 정적분이다(구분구적).",
       "accepted_expressions": "잘게 나눈 합의 극한이 정적분임을 안다 / 급수를 정적분으로 바꿔 구함",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "급수의 합을 정적분으로 바꿀 때 구간·폭(Δx)을 잘못 잡는다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8435,7 +8139,6 @@
       "metaphor": "두 곡선 사이 넓이는 '위 곡선 − 아래 곡선'을 적분한 값이다.",
       "accepted_expressions": "위 곡선에서 아래 곡선을 빼 적분함 / 교점을 구해 구간을 나눔",
       "ccss_code": "-",
-      "misconception_text": "교점을 먼저 구하지 않아 적분 구간을 틀린다. 위·아래가 뒤바뀌는 구간을 한꺼번에 적분한다.",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8463,7 +8166,6 @@
       "metaphor": "얇은 단면(원판·껍질)을 무한히 쌓아 부피를 구한다. 단면의 넓이를 적분하는 것.",
       "accepted_expressions": "단면적을 적분해 부피를 구함 / 회전체는 원 단면을 쌓아 구함",
       "ccss_code": "-",
-      "misconception_text": "단면적 함수를 잘못 세운다(반지름을 좌표로 표현하는 단계를 빠뜨림).",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8491,7 +8193,6 @@
       "metaphor": "속도를 시간으로 적분하면 거리. 단, 방향이 바뀌면 위치 변화와 실제 이동거리가 달라진다.",
       "accepted_expressions": "속도를 적분해 위치 변화를 구함 / 방향이 바뀌면 |속도|로 거리 구함",
       "ccss_code": "-",
-      "misconception_text": "속도가 음수인 구간을 그대로 더해 위치 변화와 이동거리를 혼동한다(이동거리는 |속도| 적분).",
       "difficulty_tier": 24,
       "review_status": "pending",
       "notes": null
@@ -8519,7 +8220,6 @@
       "metaphor": "초점과 준선(기준선)에서 같은 거리인 점들의 자취. 위성안테나·손전등 반사면이 이 모양이다.",
       "accepted_expressions": "초점과 준선에서 같은 거리인 점들이라 함 / y²=4px 꼴로 나타냄",
       "ccss_code": "HSG-GPE.A.2",
-      "misconception_text": "포물선을 늘 이차함수 그래프(y=x²)와만 동일시한다(축이 기운 포물선도 있음). 초점·준선 정의를 놓친다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8547,7 +8247,6 @@
       "metaphor": "두 압정에 실을 걸고 팽팽히 돌려 그린 곡선. 두 초점까지 거리의 합이 일정하다.",
       "accepted_expressions": "두 초점까지 거리의 합이 일정하다고 함 / 두 압정과 실로 그린 곡선으로 봄",
       "ccss_code": "HSG-GPE.A.3 (+)",
-      "misconception_text": "타원을 그냥 '찌그러진 원'으로만 본다(두 초점 정의가 핵심). a²=b²+c²의 관계를 헷갈린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8573,7 +8272,6 @@
       "metaphor": "두 초점까지 거리의 '차'가 일정한 곡선. 멀어지면 두 직선(점근선)에 한없이 다가간다.",
       "accepted_expressions": "두 초점까지 거리의 차가 일정하다고 함 / 점근선을 가짐을 안다",
       "ccss_code": "HSG-GPE.A.3 (+)",
-      "misconception_text": "쌍곡선의 점근선을 빠뜨린다. 타원 식(+)과 쌍곡선 식(−)의 부호를 혼동한다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8604,7 +8302,6 @@
       "metaphor": "이차곡선에 살짝 댄 직선. 접점에서 곡선과 기울기가 같다.",
       "accepted_expressions": "접점을 식에 대입해 접선을 구함 / 곡선과 한 점에서 만나는 직선이라 함",
       "ccss_code": "-",
-      "misconception_text": "원의 접선 공식을 그대로 타원·쌍곡선에 쓴다. 판별식=0(접함) 조건을 빠뜨린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8630,7 +8327,6 @@
       "metaphor": "공간에서는 두 직선이 만나지도 평행하지도 않을 수 있다(꼬인 위치).",
       "accepted_expressions": "공간엔 꼬인 위치가 있음을 안다 / 직선·평면의 위치 관계를 분류함",
       "ccss_code": "-",
-      "misconception_text": "평면에서의 직관('안 만나면 평행')을 공간에 그대로 적용해 꼬인 위치를 간과한다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8658,7 +8354,6 @@
       "metaphor": "평면 밖 한 점에서 내린 세 수선의 직각 관계를 이어 주는 정리.",
       "accepted_expressions": "세 수선의 직각 관계를 이용함 / 공간의 수직을 평면 문제로 바꿈",
       "ccss_code": "-",
-      "misconception_text": "세 수선 중 어느 두 선이 수직인지 헷갈린다. 정사영과 혼동한다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8686,7 +8381,6 @@
       "metaphor": "빛을 수직으로 비췄을 때 생기는 그림자. 기울어진 도형이 평면에 눕는다.",
       "accepted_expressions": "수직으로 비춘 그림자라 함 / 정사영 넓이가 원래의 cosθ배임을 안다",
       "ccss_code": "-",
-      "misconception_text": "정사영의 넓이를 원래 넓이와 같다고 본다(실제 원래 넓이×cosθ).",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8714,7 +8408,6 @@
       "metaphor": "평면 좌표 (x, y)에 높이 z를 더한 3차원 주소.",
       "accepted_expressions": "점을 (x, y, z)로 나타냄 / 거리 공식에 z 차이를 더함",
       "ccss_code": "8.G.B.8",
-      "misconception_text": "두 점 사이 거리 공식에서 z 차이 항을 빠뜨린다(2차원 공식을 그대로 씀).",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8743,7 +8436,6 @@
       "metaphor": "공간판 원. 중심에서 같은 거리 r에 있는 점들이 (x−a)²+(y−b)²+(z−c)²=r²이다.",
       "accepted_expressions": "공간의 원이라 함 / 중심과 반지름으로 식을 세움",
       "ccss_code": "-",
-      "misconception_text": "반지름 r과 r²(우변)을 혼동한다. 중심 좌표의 부호를 반대로 읽는다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8771,7 +8463,6 @@
       "metaphor": "크기와 방향을 가진 화살표. 위치를 평행이동해도 크기·방향이 같으면 같은 벡터다.",
       "accepted_expressions": "크기와 방향을 함께 가짐을 안다",
       "ccss_code": "HSN-VM.B.4 (+)",
-      "misconception_text": "위치를 옮기면 다른 벡터로 본다. 벡터를 크기(스칼라)만으로 다룬다(방향 무시).",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -8799,7 +8490,6 @@
       "metaphor": "원점에서 한 점까지 그은 화살표가 위치벡터. 그 끝점 좌표가 곧 성분이다.",
       "accepted_expressions": "원점에서 점까지의 화살표라 함 / 종점 좌표를 성분으로 씀",
       "ccss_code": "HSN-VM.A.1 (+)",
-      "misconception_text": "점의 좌표와 벡터 성분을 구분하지 못한다. 시점이 원점이 아닌 벡터의 성분을 좌표로 본다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8827,7 +8517,6 @@
       "metaphor": "두 화살표가 '얼마나 같은 방향인가'를 재는 수. |a||b|cosθ이며, 수직이면 0이다.",
       "accepted_expressions": "수직이면 내적이 0임을 안다",
       "ccss_code": "-",
-      "misconception_text": "내적의 결과를 벡터로 본다(실제 스칼라). 두 벡터가 수직이면 내적이 0임을 놓친다.",
       "difficulty_tier": 22,
       "review_status": "reviewed",
       "notes": null
@@ -8856,7 +8545,6 @@
       "metaphor": "한 점에서 방향벡터를 따라 쭉 뻗은 길이 직선. 점과 방향만 있으면 정해진다.",
       "accepted_expressions": "한 점과 방향벡터로 직선을 나타냄 / 매개변수 t로 점을 나타냄",
       "ccss_code": "-",
-      "misconception_text": "방향벡터와 법선벡터를 혼동한다. 매개변수 t의 역할을 놓친다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8885,7 +8573,6 @@
       "metaphor": "평면은 그에 수직인 화살표(법선벡터) 하나로 기울기가 정해진다.",
       "accepted_expressions": "법선벡터로 평면을 정함 / 중심·반지름으로 구를 나타냄",
       "ccss_code": "-",
-      "misconception_text": "평면의 법선벡터와 평면 위에 놓인 벡터를 혼동한다. 구의 중심·반지름 설정을 틀린다.",
       "difficulty_tier": 22,
       "review_status": "pending",
       "notes": null
@@ -8913,7 +8600,6 @@
       "metaphor": "물가·실업률 같은 경제지표는 경제의 '체온계'. 기준 시점을 100으로 잡아 변화를 읽는다.",
       "accepted_expressions": "물가지수 같은 지표로 경제를 읽음 / 기준 100 대비 변화율로 봄",
       "ccss_code": "HSA-APR.D.7 (+)",
-      "misconception_text": "지수(기준=100)의 변화율과 절대 수치를 혼동한다. 명목값과 실질값(물가 반영)을 구분하지 못한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -8941,7 +8627,6 @@
       "metaphor": "환율은 두 나라 돈의 교환 비율, 곧 외국 돈의 가격표다.",
       "accepted_expressions": "외국 돈의 가격이라 함 / 환율 상승=자국 통화 약세임을 안다",
       "ccss_code": "HSA-SSE.B.4",
-      "misconception_text": "원/달러 환율이 오르면 원화 가치도 오른다고 본다(환율 상승=원화 약세).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -8969,7 +8654,6 @@
       "metaphor": "세금은 거래·소득에서 정해진 비율로 떼는 몫이다.",
       "accepted_expressions": "과세표준에 세율을 곱해 구함 / 누진세는 구간마다 세율이 다름을 안다",
       "ccss_code": "HSA-SSE.B.4",
-      "misconception_text": "누진세에서 전체 소득에 최고 세율을 한꺼번에 적용한다(구간별로 차등 적용).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -8997,7 +8681,6 @@
       "metaphor": "단리는 원금에만 이자가 붙고, 복리는 '이자에 또 이자'가 눈덩이처럼 불어난다.",
       "accepted_expressions": "복리는 이자에 이자가 붙는다고 함 / 미래 금액을 할인해 현재가치를 구함",
       "ccss_code": "HSA-APR.D.7 (+)",
-      "misconception_text": "복리를 단리처럼 일정액 증가로 본다. 현재가치(할인)와 미래가치(원리합계)를 거꾸로 쓴다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9025,7 +8708,6 @@
       "metaphor": "매년 받을 돈을 각각 '지금 가치'로 당겨 모두 더한 것이 연금의 현재가치다.",
       "accepted_expressions": "받을 돈을 모두 현재가치로 당겨 더함 / 등비급수로 합을 구함",
       "ccss_code": "HSF-LE.A.1",
-      "misconception_text": "미래에 받을 총액을 그대로 현재가치로 본다(시점마다 할인하는 과정을 빠뜨림).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9053,7 +8735,6 @@
       "metaphor": "가격↔수량처럼 함께 변하는 두 경제량의 관계를 함수로 나타낸다.",
       "accepted_expressions": "두 경제량의 관계를 함수로 나타냄 / 그래프로 변화를 봄",
       "ccss_code": "HSF-TF.B.5",
-      "misconception_text": "경제 변수 사이 관계를 늘 직선(일차)으로만 가정한다(곡선일 수 있음).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9082,7 +8763,6 @@
       "metaphor": "수요곡선은 우하향(싸면 더 산다), 공급곡선은 우상향(비싸면 더 판다).",
       "accepted_expressions": "싸면 더 산다(수요), 비싸면 더 판다(공급)고 함 / 가격이 세로축임을 안다",
       "ccss_code": "HSA-REI.D.10",
-      "misconception_text": "곡선 위 이동(수요량 변화)과 곡선 자체의 이동(수요 변화)을 혼동한다. 가격이 세로축임을 헷갈린다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9110,7 +8790,6 @@
       "metaphor": "효용은 만족의 크기를 수로 나타낸 것. 많이 가질수록 추가 만족(한계효용)은 줄어든다.",
       "accepted_expressions": "만족을 수로 나타낸 함수라 함 / 한계효용이 점점 줄어듦을 안다",
       "ccss_code": "HSS-MD.A.1 (+)",
-      "misconception_text": "총효용과 한계효용을 혼동한다. 한계효용이 줄어도 총효용은 늘 수 있음을 놓친다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9138,7 +8817,6 @@
       "metaphor": "수요와 공급 두 곡선이 만나는 점에서 균형가격이 정해진다(시소의 균형점).",
       "accepted_expressions": "수요·공급이 만나는 점의 가격이라 함 / 교점에서 균형이 정해짐을 안다",
       "ccss_code": "HSA-REI.D.11",
-      "misconception_text": "균형에서 벗어난 가격이 그대로 유지된다고 본다(초과수요·공급이 가격을 균형으로 되돌림).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9166,7 +8844,6 @@
       "metaphor": "세금·소득이 변하면 곡선이 통째로 옮겨가고, 그에 따라 균형점도 이동한다.",
       "accepted_expressions": "곡선이 이동하면 균형점도 옮겨감을 안다 / 어느 곡선이 움직이는지 봄",
       "ccss_code": "HSS-CP.A.2",
-      "misconception_text": "곡선 위 이동과 곡선 자체의 이동을 혼동한다. 세금이 어느 곡선을 옮기는지 헷갈린다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9194,7 +8871,6 @@
       "metaphor": "예산·생산 제약을 부등식 영역으로 그리면, 가능한 선택의 '땅(영역)'이 보인다.",
       "accepted_expressions": "제약을 만족하는 영역을 그림 / 경계 포함 여부를 따짐",
       "ccss_code": "HSA-CED.A.1",
-      "misconception_text": "경곗값(등호) 포함 여부를 놓친다. 부등식이 나타내는 영역의 위·아래를 헷갈린다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9222,7 +8898,6 @@
       "metaphor": "여러 상품·지역의 자료를 표(행렬)로 묶어 한꺼번에 더하고 곱한다.",
       "accepted_expressions": "자료를 행렬로 묶어 계산함 / 곱셈의 크기 조건을 지킴",
       "ccss_code": "HSS-ID.B.6",
-      "misconception_text": "행렬 곱의 크기 조건(앞 열 수=뒤 행 수)과 순서를 무시한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9250,7 +8925,6 @@
       "metaphor": "역행렬은 행렬의 '나누기'. 곱하면 단위행렬이 되는, 되돌리는 행렬이다.",
       "accepted_expressions": "곱하면 단위행렬이 되는 행렬이라 함 / 행렬식이 0이면 없음을 안다",
       "ccss_code": "HSA-REI.C.9 (+)",
-      "misconception_text": "행렬식(ad−bc)이 0인데 역행렬이 있다고 본다(0이면 역행렬 없음).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9278,7 +8952,6 @@
       "metaphor": "여러 제약이 얽힌 연립방정식을 행렬·역행렬로 한 번에 푼다.",
       "accepted_expressions": "연립방정식을 행렬로 풂 / 역행렬을 곱해 해를 구함",
       "ccss_code": "HSA-REI.C.9 (+)",
-      "misconception_text": "역행렬을 곱하는 좌·우 위치를 헷갈린다(행렬 곱은 순서가 중요).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9306,7 +8979,6 @@
       "metaphor": "한 단위 더 만들 때 비용·수입이 얼마 변하나(한계비용·한계수입)를 미분으로 잡는다.",
       "accepted_expressions": "한 단위 추가의 변화(한계)를 미분으로 구함 / 평균과 한계를 구별함",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "평균비용과 한계비용을 혼동한다(한계는 '한 단위 추가분').",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9334,7 +9006,6 @@
       "metaphor": "도함수의 부호로 증감을, 0이 되는 곳으로 최적점을 찾아 그래프 윤곽을 읽는다.",
       "accepted_expressions": "도함수로 증감·극값을 봄 / 최적점을 그래프로 해석함",
       "ccss_code": "HSA-REI.D.10",
-      "misconception_text": "f′=0인 점을 무조건 최댓값(또는 최솟값)으로 단정한다(2계조건·끝점 확인 필요).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9362,7 +9033,6 @@
       "metaphor": "탄력성은 '가격이 1% 변할 때 수요가 몇 % 변하나'를 재는 민감도다.",
       "accepted_expressions": "가격 1% 변화에 수요 몇 % 변하나로 봄 / 변화율의 비라 단위에 무관함을 안다",
       "ccss_code": "HSS-CP.A.2",
-      "misconception_text": "탄력성을 기울기와 같다고 본다(탄력성은 변화율의 비, 단위에 무관).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9391,7 +9061,6 @@
       "metaphor": "이윤이 최대가 되는 지점은 도함수가 0인 곳(산봉우리 꼭대기). 한계수입=한계비용일 때다.",
       "accepted_expressions": "도함수=0인 점에서 최적을 찾음 / 한계수입=한계비용 조건을 이용함",
       "ccss_code": "-",
-      "misconception_text": "1계조건(f′=0)만 보고 최대·최소를 단정한다(2계조건·정의역 끝점도 확인). 한계 개념을 놓친다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9417,7 +9086,6 @@
       "metaphor": "AI 학습은 수많은 예시로 오차를 줄여 가는 시행착오. 본질은 함수의 매개변수를 조정하는 일이다.",
       "accepted_expressions": "데이터로 규칙을 배우는 시스템이라 함 / 오차를 줄이는 매개변수 조정으로 봄",
       "ccss_code": "HSS-MD.A.2 (+)",
-      "misconception_text": "AI가 사람처럼 '이해'한다고 본다(실제는 데이터 기반 수치 최적화).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9445,7 +9113,6 @@
       "metaphor": "오늘의 AI는 통계·선형대수·미분 같은 오래된 수학 위에 세워졌다.",
       "accepted_expressions": "AI에 쓰인 수학의 사례를 조사함 / 오래된 수학이 바탕임을 안다",
       "ccss_code": "HSF-TF.C.9 (+)",
-      "misconception_text": "AI를 최근 갑자기 등장한 기술로만 본다(오랜 수학적 토대 위에 있음).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9473,7 +9140,6 @@
       "metaphor": "빅데이터는 양(Volume)·속도(Velocity)·다양성(Variety)이 큰 데이터의 바다다.",
       "accepted_expressions": "양·속도·다양성이 큰 데이터라 함 / 품질·편향도 중요함을 안다",
       "ccss_code": "-",
-      "misconception_text": "데이터는 많기만 하면 좋다고 본다(편향·품질이 양보다 중요할 수 있음).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9501,7 +9167,6 @@
       "metaphor": "단어·문장을 좌표(벡터)로 바꿔, 컴퓨터가 '수'로 다룰 수 있게 만든다.",
       "accepted_expressions": "단어를 벡터로 바꿔 나타냄 / 텍스트를 수로 표현함",
       "ccss_code": "-",
-      "misconception_text": "글자를 수로 바꾸는 것이 의미를 그대로 옮기는 것이라 본다(표현 방식에 따라 정보가 달라짐).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9529,7 +9194,6 @@
       "metaphor": "문서를 '어떤 단어가 몇 번 나왔나' 목록(빈도수벡터)으로 요약한다.",
       "accepted_expressions": "단어 출현 횟수를 벡터로 나타냄 / 자주 나온 단어로 주제를 봄(불용어는 제외)",
       "ccss_code": "-",
-      "misconception_text": "흔한 단어(조사·관사)가 중요하다고 본다(불용어 처리가 필요). 빈도만으로 핵심어를 정한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9557,7 +9221,6 @@
       "metaphor": "두 문서를 벡터로 보고, 그 '사이 각도(코사인 유사도)'로 닮은 정도를 잰다.",
       "accepted_expressions": "벡터 사이 각도로 문서 유사도를 잼 / 가까운 벡터를 비슷한 글로 봄",
       "ccss_code": "-",
-      "misconception_text": "단어 빈도만으로 의미를 단정한다(어순·맥락·동음이의를 무시).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9585,7 +9248,6 @@
       "metaphor": "사진은 픽셀의 밝기를 칸칸이 적은 숫자 표(행렬)다.",
       "accepted_expressions": "사진을 픽셀값 행렬로 나타냄 / 칸마다 밝기를 수로 적음",
       "ccss_code": "-",
-      "misconception_text": "이미지를 그림으로만 보고 수(행렬)로 다룰 수 있음을 받아들이지 못한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9613,7 +9275,6 @@
       "metaphor": "행렬을 곱해 이미지를 회전·확대·밝기 조절한다(픽셀값의 변환).",
       "accepted_expressions": "행렬 곱으로 이미지를 변환함 / 변환 순서가 결과에 영향을 줌을 안다",
       "ccss_code": "-",
-      "misconception_text": "변환 순서를 바꿔도 결과가 같다고 본다(행렬 곱은 순서가 중요).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9641,7 +9302,6 @@
       "metaphor": "이미지의 특징을 좌표로 바꾼 뒤, '경계선'으로 종류를 가른다(분류).",
       "accepted_expressions": "특징을 수로 뽑아 종류를 나눔 / 경계로 분류함",
       "ccss_code": "HSF-TF.A.2",
-      "misconception_text": "한 번 잘 맞은 분류기가 모든 새 이미지도 맞힌다고 본다(과적합·일반화 한계).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9669,7 +9329,6 @@
       "metaphor": "과거 데이터로 '얼마나 그럴듯한가'를 확률로 따져 다음을 예측한다.",
       "accepted_expressions": "데이터로 확률을 구해 예측함 / 상관과 인과를 구별함",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "상관관계를 인과관계로 본다. 과거 빈도를 미래의 확정으로 단정한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9697,7 +9356,6 @@
       "metaphor": "흩어진 점들 사이로 '대표 직선·곡선(추세선)'을 그어 경향을 읽는다.",
       "accepted_expressions": "점들의 경향을 대표 직선으로 나타냄 / 추세선이 모든 점을 지나진 않음을 안다",
       "ccss_code": "HSS-ID.B.6",
-      "misconception_text": "추세선이 모든 점을 지나야 한다고 본다(전체 경향일 뿐). 범위 밖 예측(외삽)을 과신한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9726,7 +9384,6 @@
       "metaphor": "손실함수는 예측이 틀린 정도(벌점)를 모은 함수. 학습은 이 벌점을 가장 작게 만드는 일이다.",
       "accepted_expressions": "예측 오차를 모은 함수라 함 / 손실을 가장 작게 하는 쪽을 찾음",
       "ccss_code": "HSF-TF.B.6 (+)",
-      "misconception_text": "손실함수와 정확도를 혼동한다. 손실이 0이어야만 좋은 모델로 본다(과적합 위험).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9755,7 +9412,6 @@
       "metaphor": "안갯속 산에서 가장 가파른 내리막을 따라 한 걸음씩 골짜기(최솟값)로 내려가는 방법.",
       "accepted_expressions": "가장 가파른 내리막으로 한 걸음씩 내려감 / 반복해서 최솟값에 다가감",
       "ccss_code": "-",
-      "misconception_text": "한 번에 최솟값에 도달한다고 본다(반복 필요). 학습률이 크면 발산·작으면 느림을, 지역최솟값에 갇힐 수 있음을 간과한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9784,7 +9440,6 @@
       "metaphor": "추천·번역·진단처럼, 실생활 문제를 수학(확률·최적화)으로 풀어내는 사례를 찾는다.",
       "accepted_expressions": "AI가 수학으로 문제를 푸는 사례를 찾음 / 결과에 데이터 편향이 반영됨을 안다",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "AI의 답을 늘 객관적·정답으로 신뢰한다(데이터 편향이 결과에 그대로 반영됨).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9812,7 +9467,6 @@
       "metaphor": "관심 있는 AI 주제를 정해, 그 속 수학 원리를 스스로 파고드는 탐구.",
       "accepted_expressions": "관심 주제의 수학 원리를 파고듦 / 작동 원리를 수학으로 설명함",
       "ccss_code": "-",
-      "misconception_text": "결과(작동함)만 보고 그 바탕의 수학 원리를 따지지 않는다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9840,7 +9494,6 @@
       "metaphor": "재고·급여·매출 계산처럼 일터에서 매일 쓰는 기본 셈이다.",
       "accepted_expressions": "재고·급여를 사칙연산으로 계산함 / 단위·자릿수를 맞춰 계산함",
       "ccss_code": "HSA-APR.D.7 (+)",
-      "misconception_text": "단위나 자릿수를 놓쳐 계산 규모(천 원/만 원)를 틀린다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9868,7 +9521,6 @@
       "metaphor": "견적·예산을 '대략 얼마'로 빠르게 가늠해 의사결정에 쓴다.",
       "accepted_expressions": "큰 수를 반올림해 어림함 / 어림값으로 크기를 비교함",
       "ccss_code": "HSA-SSE.B.4",
-      "misconception_text": "어림과 정확값을 혼동한다. 상황(자재는 올림 필요)에 안 맞는 어림 방법을 쓴다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9896,7 +9548,6 @@
       "metaphor": "현장마다 다른 단위를 누구나 통하는 공통 자(표준단위)로 맞춘다.",
       "accepted_expressions": "상황에 맞는 표준단위를 씀 / 1kg=1000g처럼 환산함",
       "ccss_code": "-",
-      "misconception_text": "환산 배수를 틀린다(1t=1000kg, 1L=1000mL). 단위를 안 맞추고 그대로 계산한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9924,7 +9575,6 @@
       "metaphor": "혼합 비율·축척처럼 두 양의 관계를 비로 나타내 직무에 적용한다.",
       "accepted_expressions": "두 양을 비로 나타내 적용함 / 비의 앞뒤 순서를 지킴",
       "ccss_code": "-",
-      "misconception_text": "비의 앞뒤 순서를 바꿔 쓴다. 비를 두 양의 '차이'로 오해한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9952,7 +9602,6 @@
       "metaphor": "할인율·불량률·이자율을 100 기준 백분율로 나타내 비교한다.",
       "accepted_expressions": "비율을 %로 바꿔 나타냄 / 할인·불량률을 %로 다룸",
       "ccss_code": "HSS-CP.B.6",
-      "misconception_text": "백분율을 그대로 더한다(20% 할인 후 10% 추가 할인 ≠ 30% 할인).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -9980,7 +9629,6 @@
       "metaphor": "투입↔산출을 정리한 표에서 일정한 규칙을 찾아 예측에 쓴다.",
       "accepted_expressions": "표에서 두 양의 규칙을 찾음 / 규칙으로 다음 값을 예측함",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "이웃한 값의 차이만 보고, 순서와 값의 전체 관계(식)로 넓히지 못한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10008,7 +9656,6 @@
       "metaphor": "생산량·매출의 오르내림을 그래프로 읽어 흐름을 파악한다.",
       "accepted_expressions": "그래프의 오르내림으로 상황을 설명함 / 축이 무엇인지 보고 읽음",
       "ccss_code": "HSF-BF.A.1",
-      "misconception_text": "그래프 모양을 실제 상황과 혼동한다(축이 무엇인지 확인). 기울기(변화율)를 값 자체로 본다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10036,7 +9683,6 @@
       "metaphor": "손익분기·목표 생산량 같은 직무 문제를 일차방정식·부등식으로 세워 푼다.",
       "accepted_expressions": "손익분기 등을 식으로 세워 풂 / 음수 곱셈 시 부등호를 뒤집음",
       "ccss_code": "HSA-REI.B.3",
-      "misconception_text": "부등식에서 음수를 곱할 때 방향을 안 바꾼다. 조건을 식으로 옮길 때 부호를 틀린다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10064,7 +9710,6 @@
       "metaphor": "포장 상자를 펼친 도면(전개도)과 비스듬히 본 그림(겨냥도)으로 입체를 다룬다.",
       "accepted_expressions": "전개도를 그려 접으면 입체가 됨을 안다 / 마주 보는 면 위치를 맞춤",
       "ccss_code": "-",
-      "misconception_text": "전개도를 접었을 때 마주 보는 면의 배치를 틀린다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10092,7 +9737,6 @@
       "metaphor": "한 부품을 위·앞·옆 세 방향에서 본 설계 도면으로 나타낸다.",
       "accepted_expressions": "세 방향에서 본 모양을 그림 / 세 모양으로 입체를 알아냄",
       "ccss_code": "-",
-      "misconception_text": "한 방향에서 본 모양만으로 전체 입체를 단정한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10120,7 +9764,6 @@
       "metaphor": "부품의 확대·축소·복제·뒤집기를 이동·합동·닮음으로 다룬다.",
       "accepted_expressions": "부품의 이동·복제·확대를 다룸 / 닮음에서 넓이비는 닮음비의 제곱임을 안다",
       "ccss_code": "HSA-SSE.B.4",
-      "misconception_text": "닮음에서 길이비·넓이비·부피비를 모두 같다고 본다(넓이비=닮음비², 부피비=닮음비³).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10148,7 +9791,6 @@
       "metaphor": "바닥재·울타리 양처럼 직무 현장의 평면도형 둘레와 넓이를 구한다.",
       "accepted_expressions": "울타리는 둘레, 바닥재는 넓이로 구함 / 둘레와 넓이를 구별함",
       "ccss_code": "HSA-SSE.A.1",
-      "misconception_text": "둘레와 넓이를 혼동한다(둘레는 길이, 넓이는 ㎡).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10176,7 +9818,6 @@
       "metaphor": "도색할 면적(겉넓이)과 담기는 양(부피)을 구분해 계산한다.",
       "accepted_expressions": "도색은 겉넓이, 용량은 부피로 구함 / 단위(㎡·㎥)를 구별함",
       "ccss_code": "HSA-CED.A.3",
-      "misconception_text": "겉넓이(㎡)와 부피(㎥)를 혼동한다. 단위를 섞어 쓴다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10204,7 +9845,6 @@
       "metaphor": "배치·일정·조합의 가짓수를 합·곱의 법칙으로 센다.",
       "accepted_expressions": "배치·일정의 가짓수를 셈 / '또는'은 더하고 '그리고'는 곱함",
       "ccss_code": "-",
-      "misconception_text": "'또는'(합)과 '그리고'(곱)를 혼동한다. 중복을 빼지 않고 더한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10232,7 +9872,6 @@
       "metaphor": "불량·성공 같은 사건의 가능성을 0~1 수치로 나타낸다.",
       "accepted_expressions": "불량·성공 가능성을 수로 나타냄 / 가능성과 결과를 구별함",
       "ccss_code": "HSA-CED.A.3",
-      "misconception_text": "가능성과 실제 결과를 혼동한다. 적은 횟수의 결과를 전체 비율로 단정한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10260,7 +9899,6 @@
       "metaphor": "현장 데이터를 목적에 맞는 표·그래프로 한눈에 보이게 정리한다.",
       "accepted_expressions": "자료를 표·그래프로 정리함 / 자료 성격에 맞는 그래프를 고름",
       "ccss_code": "HSS-ID.A.1",
-      "misconception_text": "자료 성격에 안 맞는 그래프를 골라 특징이 드러나지 않는다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10288,7 +9926,6 @@
       "metaphor": "정리된 표·그래프에서 의미와 추세를 읽어 낸다.",
       "accepted_expressions": "표·그래프에서 추세를 읽음 / 눈금·축을 확인하고 해석함",
       "ccss_code": "HSA-APR.B.3",
-      "misconception_text": "눈금·축을 무시하고 그래프 모양만으로 판단한다(0이 아닌 축은 차이를 과장).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10316,7 +9953,6 @@
       "metaphor": "비교는 막대, 추이는 꺾은선, 비율은 원그래프처럼 목적에 맞는 표현을 고른다.",
       "accepted_expressions": "목적에 맞는 그래프를 골라 나타냄 / 왜곡 없이 표현함",
       "ccss_code": "HSA-REI.D.12",
-      "misconception_text": "익숙한 그래프 한 가지만 쓴다. 축을 왜곡해 오해를 부른다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10344,7 +9980,6 @@
       "metaphor": "음의 높이는 진동수의 비. 옥타브는 2:1, 어울리는 화음은 간단한 정수비로 이루어진다.",
       "accepted_expressions": "옥타브가 2:1임을 안다 / 음계·박자의 비를 찾음",
       "ccss_code": "-",
-      "misconception_text": "음악과 수학은 무관하다고 본다(음계·박자에 비와 등비가 숨어 있음).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10373,7 +10008,6 @@
       "metaphor": "황금비·원근법·대칭이 그림과 조형의 숨은 뼈대 역할을 한다.",
       "accepted_expressions": "황금비·원근법을 미술에서 찾음 / 황금비가 절대 기준은 아님을 안다",
       "ccss_code": "-",
-      "misconception_text": "황금비가 모든 아름다움의 절대 기준이라 본다(미적 판단의 한 요소일 뿐, 과잉 일반화).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10401,7 +10035,6 @@
       "metaphor": "시의 운율·연 구성, 이야기 구조 속에 수와 패턴이 숨어 있다.",
       "accepted_expressions": "운율·구조 속 패턴을 찾음 / 형식에 규칙이 있음을 안다",
       "ccss_code": "-",
-      "misconception_text": "수학과 문학은 정반대 영역이라 본다(형식·구조에 수학적 규칙이 작동함).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10429,7 +10062,6 @@
       "metaphor": "영화 속 CG·암호·확률 장면처럼 수학이 이야기와 기술에 쓰인다.",
       "accepted_expressions": "CG·암호 속 수학을 찾음 / 영화 묘사를 비판적으로 봄",
       "ccss_code": "-",
-      "misconception_text": "영화가 그린 수학·수학자 묘사를 사실 그대로 받아들인다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10457,7 +10089,6 @@
       "metaphor": "기록·각도·확률로 경기를 분석해 전략을 세운다(세이버메트릭스).",
       "accepted_expressions": "기록·확률로 경기를 분석함 / 적은 표본의 일반화를 경계함",
       "ccss_code": "-",
-      "misconception_text": "표본이 적은 기록(몇 경기)을 실력으로 일반화한다(우연을 능력으로 혼동).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10485,7 +10116,6 @@
       "metaphor": "확률과 기댓값이 게임의 승률·보상 설계의 핵심이다.",
       "accepted_expressions": "확률·기댓값으로 게임을 분석함 / 도박사의 오류를 경계함",
       "ccss_code": "-",
-      "misconception_text": "도박사의 오류(독립 시행을 종속으로 봄). 기댓값을 한 판에서 실제로 나오는 값으로 본다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10513,7 +10143,6 @@
       "metaphor": "0과 1(이진법)이 모든 디지털 기술이 쓰는 언어다.",
       "accepted_expressions": "0과 1(이진법)이 바탕임을 안다 / 정보가 수로 표현됨을 안다",
       "ccss_code": "-",
-      "misconception_text": "이진법을 십진법처럼 자릿값을 해석한다. 디지털 정보가 '연속'이라 여긴다(이산).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10541,7 +10170,6 @@
       "metaphor": "다수결 외에도 집계 방식에 따라 당선자가 달라진다(투표의 역설).",
       "accepted_expressions": "집계 방식에 따라 결과가 달라짐을 안다 / 다수결의 한계를 봄",
       "ccss_code": "HSS-MD.B.6",
-      "misconception_text": "다수결이 언제나 가장 공정하다고 본다(방식에 따라 결과가 바뀔 수 있음).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10569,7 +10197,6 @@
       "metaphor": "전통 문양·건축에 대칭·비례·반복 같은 수학 원리가 담겨 있다.",
       "accepted_expressions": "전통 문양·건축의 대칭·비례를 찾음 / 문화마다 수학이 있음을 안다",
       "ccss_code": "HSS-CP.A.2",
-      "misconception_text": "전통 디자인을 단순한 장식으로만 본다(수학적 규칙이 바탕에 있음).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10597,7 +10224,6 @@
       "metaphor": "점 6개의 있고 없음(이진) 조합으로 글자를 만드는 것이 점자다.",
       "accepted_expressions": "점의 조합으로 글자를 만듦을 안다 / 이진·경우의 수로 설명함",
       "ccss_code": "-",
-      "misconception_text": "점자를 단순한 그림 기호로 본다(조합·이진법 원리로 설계됨).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10625,7 +10251,6 @@
       "metaphor": "대중매체 속 통계·그래프를 비판적으로 검증해 의미를 해석한다.",
       "accepted_expressions": "기사 속 통계를 검증함 / 축 왜곡·표본 편향을 살핌",
       "ccss_code": "-",
-      "misconception_text": "그래프·통계는 객관적이라며 무비판적으로 받아들인다(축 왜곡·표본 편향 가능).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10653,7 +10278,6 @@
       "metaphor": "여러 기준에 가중치를 줘 점수를 매기면 합리적 소비 결정을 도울 수 있다.",
       "accepted_expressions": "기준마다 가중치를 줘 비교함 / 한 기준만으로 정하지 않음",
       "ccss_code": "HSS-MD.B.5 (+)",
-      "misconception_text": "가격 한 가지 기준만으로 결정한다. 기준마다 중요도(가중치)를 안 두고 단순 합산한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10681,7 +10305,6 @@
       "metaphor": "열량·영양 성분을 수치로 분석해 식생활 문제를 진단한다.",
       "accepted_expressions": "열량·영양을 수치로 분석함 / 평균뿐 아니라 분포도 봄",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "평균 섭취량만 보고 분포(개인차·편차)를 무시한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10709,7 +10332,6 @@
       "metaphor": "미세먼지 농도 변화를 그래프·통계로 분석해 개선책을 찾는다.",
       "accepted_expressions": "농도 변화를 그래프로 분석함 / 상관과 인과를 구별함",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "상관관계를 인과관계로 단정한다(함께 변한다고 원인은 아님).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10737,7 +10359,6 @@
       "metaphor": "사막 면적의 변화율로 추세를 분석하고 대책을 제안한다.",
       "accepted_expressions": "면적 변화율로 추세를 봄 / 외삽의 한계를 안다",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "단기 추세를 먼 미래까지 그대로 이어진다고 과신한다(외삽의 위험).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10765,7 +10386,6 @@
       "metaphor": "종 수·개체 수를 통계·지수로 분석해 생태 변화를 읽는다.",
       "accepted_expressions": "종 수·개체 수를 통계로 분석함 / 표본의 한계를 안다",
       "ccss_code": "HSS-ID.A.2",
-      "misconception_text": "일부 지역 표본 결과를 전체 생태계로 단정한다(표본 편향).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10791,7 +10411,6 @@
       "metaphor": "통계는 불확실한 세상을 수로 읽어 합리적 판단을 돕는 도구다.",
       "accepted_expressions": "통계로 불확실한 것을 판단함 / 설계·해석에 따라 결론이 달라짐을 안다",
       "ccss_code": "HSS-IC.A.1",
-      "misconception_text": "통계는 늘 객관적 진실이라 본다(자료 설계·해석에 따라 결론이 달라짐).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10819,7 +10438,6 @@
       "metaphor": "문제 정하기→자료 수집→분석→결론의 한 바퀴(통계적 문제해결 과정).",
       "accepted_expressions": "문제→수집→분석→결론 순으로 진행함 / 문제 정의가 먼저임을 안다",
       "ccss_code": "HSS-IC.A.1",
-      "misconception_text": "자료를 먼저 모으고 질문(문제)을 나중에 끼워 맞춘다(문제 정의가 먼저).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10848,7 +10466,6 @@
       "metaphor": "국 한 숟갈로 간을 보듯, 잘 섞인 표본으로 전체(모집단)를 가늠한다.",
       "accepted_expressions": "전체는 모집단, 일부는 표본이라 함 / 무작위로 치우침 없이 뽑음",
       "ccss_code": "HSS-IC.A.1",
-      "misconception_text": "주변 사람만 조사하는 편의표본으로 전체를 대표시킨다(무작위 추출이 필요).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10874,7 +10491,6 @@
       "metaphor": "수로 재는 양적 자료와 종류로 나누는 질적 자료로 크게 나뉜다.",
       "accepted_expressions": "수로 재면 양적, 분류하면 질적이라 함 / 범주 번호는 수가 아님을 안다",
       "ccss_code": "HSS-ID.A.1",
-      "misconception_text": "범주에 매긴 번호(1=남, 2=여)를 수처럼 평균 낸다(질적 자료).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10902,7 +10518,6 @@
       "metaphor": "설문·실험·관찰 등 목적에 맞는 그물로 자료를 모은다.",
       "accepted_expressions": "상황에 맞는 방법으로 자료를 모음 / 유도 질문의 편향을 경계함",
       "ccss_code": "HSS-IC.B.3",
-      "misconception_text": "질문 문항이 특정 답을 유도하는 편향을 간과한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10931,7 +10546,6 @@
       "metaphor": "자료 성격에 맞는 시각화를 고른다(비교는 막대, 추이는 꺾은선).",
       "accepted_expressions": "자료에 맞는 그래프를 골라 그림 / 축을 0부터 시작해 왜곡을 피함",
       "ccss_code": "HSS-ID.A.1",
-      "misconception_text": "세로축을 0이 아닌 곳에서 시작해 작은 차이를 크게 과장한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10961,7 +10575,6 @@
       "metaphor": "중심(평균·중앙값)과 흩어짐(표준편차)을 함께 봐야 자료가 제대로 보인다.",
       "accepted_expressions": "중심은 대푯값, 흩어짐은 산포도로 봄 / 평균만으로 단정하지 않음",
       "ccss_code": "HSS-ID.A.2",
-      "misconception_text": "평균만 보고 분포를 단정한다(평균이 같아도 퍼짐이 다름). 극단값에 약한 평균을 과신한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -10989,7 +10602,6 @@
       "metaphor": "둘 다 종 모양이지만, 표본이 작으면 꼬리가 두꺼운 t분포를 쓴다.",
       "accepted_expressions": "둘 다 종 모양이라 함 / 표본이 작으면 t분포를 씀",
       "ccss_code": "HSS-ID.A.4",
-      "misconception_text": "표본이 작은데도 정규분포(z)를 그대로 적용한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11018,7 +10630,6 @@
       "metaphor": "표본평균 둘레에 '오차 범위'를 두른 구간으로 모평균을 추정한다(신뢰구간).",
       "accepted_expressions": "표본평균에 오차범위를 더해 추정함 / 신뢰구간으로 나타냄",
       "ccss_code": "HSS-IC.B.4",
-      "misconception_text": "신뢰수준 95%를 '참값이 이 구간에 있을 확률 95%'로 오해한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11046,7 +10657,6 @@
       "metaphor": "지지율 ±오차처럼, 비율도 점이 아니라 구간으로 추정한다.",
       "accepted_expressions": "표본비율에 오차범위를 더해 추정함 / 지지율 ±오차로 나타냄",
       "ccss_code": "HSS-IC.B.4",
-      "misconception_text": "표본이 작거나 치우쳤는데 좁은 구간으로 단정한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11074,7 +10684,6 @@
       "metaphor": "'차이가 없다(귀무가설)'를 일단 믿고, 증거가 충분히 어긋나면 뒤집는 재판 같은 절차다.",
       "accepted_expressions": "'차이 없다'를 세우고 증거로 판정함 / p값을 귀무가설이 참일 확률로 오해하지 않음",
       "ccss_code": "HSS-IC.B.6",
-      "misconception_text": "p값을 '귀무가설이 참일 확률'로 오해한다. '기각 실패'를 '참으로 증명됨'으로 본다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11103,7 +10712,6 @@
       "metaphor": "데이터를 근거로 결론을 내려 합리적 의사결정에 활용한다.",
       "accepted_expressions": "자료 근거로 결정함 / 원하는 결론에 맞는 자료만 고르지 않음",
       "ccss_code": "HSS-MD.B.6",
-      "misconception_text": "원하는 결론에 맞는 데이터만 골라 쓴다(확증 편향).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11131,7 +10739,6 @@
       "metaphor": "내 분석의 표본·방법·편향과 한계를 비판적으로 되짚어 본다.",
       "accepted_expressions": "표본·방법의 한계를 되짚음 / 결과뿐 아니라 과정도 평가함",
       "ccss_code": "HSS-IC.A.1",
-      "misconception_text": "결과 수치만 보고 과정(표본·방법)의 타당성과 한계를 따지지 않는다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11157,7 +10764,6 @@
       "metaphor": "정답이 정해진 문제풀이를 넘어, 스스로 묻고 답을 찾아가는 작은 연구다.",
       "accepted_expressions": "스스로 묻고 답을 찾는 활동이라 함 / 좋은 질문 만들기가 핵심임을 안다",
       "ccss_code": "-",
-      "misconception_text": "탐구를 어려운 문제풀이의 연장으로만 본다('좋은 질문 만들기'가 핵심).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11185,7 +10791,6 @@
       "metaphor": "남의 생각엔 출처를, 내 데이터엔 정직을. 표절·조작은 연구의 금기다.",
       "accepted_expressions": "출처를 밝히고 정직하게 다룸 / 표절·조작을 하지 않음",
       "ccss_code": "HSS-IC.A.1",
-      "misconception_text": "인터넷 자료는 출처 없이 써도 된다고 본다. 결과가 안 나오면 데이터를 손본다(조작).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11213,7 +10818,6 @@
       "metaphor": "거인의 어깨 위에 서기. 기존 문헌을 딛고 탐구를 시작한다.",
       "accepted_expressions": "기존 연구를 딛고 시작함 / 출처의 신뢰도를 따짐",
       "ccss_code": "-",
-      "misconception_text": "출처의 신뢰도를 안 따지고 모든 자료를 똑같이 믿고 인용한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11241,7 +10845,6 @@
       "metaphor": "실제 사례를 깊이 들여다보며 원리를 끌어낸다.",
       "accepted_expressions": "실제 사례를 깊이 살펴봄 / 한두 사례의 일반화를 경계함",
       "ccss_code": "-",
-      "misconception_text": "한두 사례를 전체로 일반화한다(사례는 보편 증명이 아님).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11269,7 +10872,6 @@
       "metaphor": "값을 바꿔 가며 규칙을 찾는 수학 실험으로 가설을 세운다.",
       "accepted_expressions": "값을 바꿔 규칙을 찾음 / 관찰은 증명이 아님을 안다",
       "ccss_code": "-",
-      "misconception_text": "몇 개의 예가 맞으면 증명된 것으로 본다(관찰·귀납은 증명이 아님).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11297,7 +10899,6 @@
       "metaphor": "교구·프로그램 같은 산출물을 직접 만들며 탐구한다.",
       "accepted_expressions": "산출물을 만들며 탐구함 / 바탕 원리를 설명함",
       "ccss_code": "-",
-      "misconception_text": "만드는 데만 집중하고, 그 바탕의 수학 원리·근거를 설명하지 못한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11328,7 +10929,6 @@
       "metaphor": "너무 크지도 작지도 않은, '풀어낼 수 있는' 질문을 고르는 것이 출발이다.",
       "accepted_expressions": "풀 수 있는 크기의 주제를 고름 / 단계별 계획을 세움",
       "ccss_code": "HSS-CP.B.9 (+)",
-      "misconception_text": "주제를 지나치게 넓게 잡아 끝맺지 못한다(범위 좁히기가 필요).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11356,7 +10956,6 @@
       "metaphor": "계획에 따라 자료와 근거를 모아 단계적으로 논증한다.",
       "accepted_expressions": "계획대로 근거를 모아 논증함 / 결론을 미리 정해 끼워 맞추지 않음",
       "ccss_code": "-",
-      "misconception_text": "결론을 먼저 정해 놓고 거기에 맞는 근거만 끼워 맞춘다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11384,7 +10983,6 @@
       "metaphor": "남이 이해하도록 과정·근거·결과를 정리해 산출물로 보인다.",
       "accepted_expressions": "과정과 근거를 함께 보임 / 남이 이해하게 정리함",
       "ccss_code": "HSS-MD.B.5 (+)",
-      "misconception_text": "결과만 보이고 풀이 과정과 근거를 생략한다.",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11412,7 +11010,6 @@
       "metaphor": "무엇이 잘됐고 부족했는지 과정을 되돌아보며 다음을 준비한다.",
       "accepted_expressions": "과정과 결과를 되짚어 평가함 / 성패뿐 아니라 방법도 평가함",
       "ccss_code": "HSS-MD.B.5 (+)",
-      "misconception_text": "결과의 성패로만 평가한다(과정의 타당성·방법도 평가 대상).",
       "difficulty_tier": 21,
       "review_status": "pending",
       "notes": null
@@ -11438,7 +11035,6 @@
       "metaphor": "문자와 차수가 같은 항(동류항)은 같은 종류 물건. 사과는 사과끼리 모으듯 2x와 3x만 합친다.",
       "accepted_expressions": "내림차순 정리",
       "ccss_code": null,
-      "misconception_text": "동류항이 아닌 2x와 3x²을 더한다(2x+3x²을 5x³처럼). 괄호 앞 '−'를 일부 항에만 분배한다.",
       "difficulty_tier": 13,
       "review_status": "reviewed",
       "notes": null
@@ -11466,7 +11062,6 @@
       "metaphor": "분배법칙은 '여러 칸에 빠짐없이 나눠 주는 우편배달'. 각 항을 빠짐없이 곱하고, 나눗셈은 차수를 낮추며 진행한다.",
       "accepted_expressions": "x^m·x^n=x^(m+n)",
       "ccss_code": null,
-      "misconception_text": "지수법칙을 혼동한다(x²·x³을 x⁶로, 실제 x⁵). 분배할 때 일부 항을 빠뜨린다. 나눗셈에서 몫·나머지를 헷갈린다.",
       "difficulty_tier": 14,
       "review_status": "reviewed",
       "notes": null
@@ -11494,7 +11089,6 @@
       "metaphor": "숫자를 약수의 곱으로 쪼개듯(12=3×4), 식을 인수(곱의 조각)의 곱으로 되묶는다.",
       "accepted_expressions": "a²−b²=(a+b)(a−b)",
       "ccss_code": null,
-      "misconception_text": "공통인수를 빠뜨린다. a²−b²을 (a−b)²으로 한다(실제 (a+b)(a−b)). 부호를 틀린다.",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -11522,7 +11116,6 @@
       "metaphor": "포물선이 x축과 만나는 자리를 찾는 일. 인수분해해 '둘 중 하나가 0'으로 풀거나 근의 공식을 쓴다.",
       "accepted_expressions": "근의 공식",
       "ccss_code": null,
-      "misconception_text": "x²=4에서 x=2만 답한다(x=±2, −2 누락). 인수분해 후 한쪽 해만 적는다.",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -11550,7 +11143,6 @@
       "metaphor": "포물선과 x축이 몇 번 만날지 미리 알려 주는 신호등. D=b²−4ac가 양수면 둘, 0이면 하나(중근), 음수면 안 만난다.",
       "accepted_expressions": "D=b²−4ac",
       "ccss_code": null,
-      "misconception_text": "D=0을 '근 없음'으로 단정한다(중근 하나 존재). D<0인데 실근이 있다고 본다. 부호와 개수 매칭을 혼동한다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -11578,7 +11170,6 @@
       "metaphor": "y=a(x−p)²+q는 꼭짓점 (p, q)인 그릇 모양. a>0이면 U자, a<0이면 ∩자다.",
       "accepted_expressions": "꼭짓점 (p,q)",
       "ccss_code": null,
-      "misconception_text": "꼭짓점을 (−p, q)로 본다(부호 반대, 실제 (p, q)). a의 부호와 볼록 방향을 혼동한다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -11607,7 +11198,6 @@
       "metaphor": "포물선이 x축을 뚫는 자리(x절편)의 x좌표가 곧 이차방정식의 답이다.",
       "accepted_expressions": "근이 곧 x절편이라 함 / 교점 개수로 근의 수를 봄",
       "ccss_code": null,
-      "misconception_text": "근을 y절편과 혼동한다. 교점의 개수와 판별식 부호를 연결하지 못한다.",
       "difficulty_tier": 17,
       "review_status": "reviewed",
       "notes": null
@@ -11635,7 +11225,6 @@
       "metaphor": "산봉우리(∩)의 꼭대기, 골짜기(U)의 바닥이 최대·최소. 단, 정의역이 잘리면 양 끝점도 비교한다.",
       "accepted_expressions": "꼭짓점에서 최대·최소를 찾음 / 정의역이 제한되면 끝점도 비교함",
       "ccss_code": null,
-      "misconception_text": "정의역이 제한됐는데 꼭짓점만 보고 정한다(꼭짓점이 범위 밖이면 끝점이 최대·최소).",
       "difficulty_tier": 17,
       "review_status": "reviewed",
       "notes": null
@@ -11661,7 +11250,6 @@
       "metaphor": "양팔저울처럼 양변에 같은 일을 하며 미지수를 모은다. 단, 음수를 곱하거나 나누면 부등호가 뒤집힌다.",
       "accepted_expressions": "음수 곱 → 부등호 방향 전환",
       "ccss_code": null,
-      "misconception_text": "음수를 곱하거나 나눌 때 부등호 방향을 안 바꾼다.",
       "difficulty_tier": 13,
       "review_status": "reviewed",
       "notes": null
@@ -11689,7 +11277,6 @@
       "metaphor": "두 그물에 모두 걸리는 것만 남기기. 각 부등식 해의 공통 범위(교집합)가 답이다.",
       "accepted_expressions": "교집합(공통범위)",
       "ccss_code": null,
-      "misconception_text": "공통범위(교집합)를 합집합으로 합친다. 수직선에서 경계 포함(=) 여부를 틀린다.",
       "difficulty_tier": 14,
       "review_status": "reviewed",
       "notes": null
@@ -11717,7 +11304,6 @@
       "metaphor": "|x|는 0까지의 거리. (a>0일 때) |x|<a는 0에서 a보다 가까운 안쪽(−a<x<a), |x|>a는 그 바깥(x<−a 또는 x>a)이다.",
       "accepted_expressions": "|x|<a ⟺ −a<x<a",
       "ccss_code": null,
-      "misconception_text": "|x|<a를 x<a로만 본다(음수쪽 −a<x 누락). |x|>a(바깥)와 |x|<a(안쪽)의 해 모양을 뒤바꾼다.",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -11746,7 +11332,6 @@
       "metaphor": "포물선이 물 위로 솟은 구간(>0) vs 물에 잠긴 구간(<0)으로 해를 읽는다.",
       "accepted_expressions": "그래프가 x축 위/아래인 구간으로 해를 읽음 / 부등호 방향과 위·아래를 맞춤",
       "ccss_code": null,
-      "misconception_text": "부등호 방향과 그래프 위·아래를 반대로 본다. 해를 늘 '두 근 사이'로만 단정한다.",
       "difficulty_tier": 17,
       "review_status": "reviewed",
       "notes": null
@@ -11772,7 +11357,6 @@
       "metaphor": "갈림길은 더하기('또는'), 이어진 길은 곱하기('그리고'). 동시에 안 일어나면 합, 잇따라 일어나면 곱한다.",
       "accepted_expressions": "합=또는, 곱=그리고",
       "ccss_code": null,
-      "misconception_text": "'또는'(합)과 '그리고'(곱)를 혼동해 법칙을 뒤바꾼다.",
       "difficulty_tier": 13,
       "review_status": "reviewed",
       "notes": null
@@ -11800,7 +11384,6 @@
       "metaphor": "순서가 있는 줄 세우기(1등·2등·3등 구분). 뽑은 뒤 나열 순서까지 센다.",
       "accepted_expressions": "nPr=n!/(n−r)!",
       "ccss_code": null,
-      "misconception_text": "순서를 고려하지 않고 조합처럼 계산한다. nPr의 분모 (n−r)! 처리를 빠뜨린다.",
       "difficulty_tier": 14,
       "review_status": "reviewed",
       "notes": null
@@ -11828,7 +11411,6 @@
       "metaphor": "순서가 없는 뽑기(대표 3명 고르기). 누가 먼저 뽑히든 결과가 같다.",
       "accepted_expressions": "nCr=nPr/r!",
       "ccss_code": null,
-      "misconception_text": "순열과 혼동한다(순서 유무). nCr=nPr/r!의 r!로 나누기를 빠뜨린다.",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -11856,7 +11438,6 @@
       "metaphor": "엑셀 표처럼 수를 가로줄(행)·세로줄(열)로 정리해 괄호로 묶은 묶음이다.",
       "accepted_expressions": "m×n = m행 n열",
       "ccss_code": null,
-      "misconception_text": "행(가로)과 열(세로)을 혼동한다(m×n에서 m을 열로). 행렬을 단순한 표로만 여긴다.",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -11884,7 +11465,6 @@
       "metaphor": "덧셈은 같은 자리끼리 더하기, 곱셈은 '앞 행렬의 행을 눕혀 뒤 행렬의 열에 포개 곱해 더하기'다.",
       "accepted_expressions": "AB≠BA",
       "ccss_code": null,
-      "misconception_text": "곱셈에 교환법칙이 성립한다고 오인한다(AB=BA, 일반적으로 다름). 곱을 성분별 곱(덧셈처럼)으로 한다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -11910,7 +11490,6 @@
       "metaphor": "가로 차·세로 차를 두 변으로 한 직각삼각형의 빗변 구하기(피타고라스).",
       "accepted_expressions": "√((x₂−x₁)²+(y₂−y₁)²)",
       "ccss_code": null,
-      "misconception_text": "루트를 씌우지 않고 제곱의 합을 거리로 본다. 좌표 차의 부호를 헷갈린다.",
       "difficulty_tier": 14,
       "review_status": "reviewed",
       "notes": null
@@ -11938,7 +11517,6 @@
       "metaphor": "경사로의 기울기와 출발 높이(y절편)로 길을 정하기. 한 점과 기울기만 있으면 직선이 정해진다.",
       "accepted_expressions": "y−y₁=m(x−x₁)",
       "ccss_code": null,
-      "misconception_text": "기울기 부호를 반대로 한다. y절편과 x절편을 혼동한다. 기울기를 Δx/Δy로 뒤집는다.",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -11966,7 +11544,6 @@
       "metaphor": "나란한 두 길은 기울기가 같고(평행), 직각으로 만나는 두 길은 기울기의 곱이 −1(수직)이다.",
       "accepted_expressions": "수직 ⟺ m₁m₂=−1",
       "ccss_code": null,
-      "misconception_text": "평행 조건과 수직 조건을 뒤바꾼다. 수직을 m₁=−m₂로 본다(곱이 −1이어야 함).",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -11994,7 +11571,6 @@
       "metaphor": "컴퍼스로 그린 자취. 중심 (a,b)에서 같은 거리 r인 점들이 (x−a)²+(y−b)²=r²이다.",
       "accepted_expressions": "(x−a)²+(y−b)²=r²",
       "ccss_code": null,
-      "misconception_text": "반지름 r과 r²(우변)을 혼동한다. 중심 (a,b)의 부호를 (−a,−b)로 읽는다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -12023,7 +11599,6 @@
       "metaphor": "중심에서 직선까지 거리 d를 반지름 r와 견줘 만남을 판정한다(d<r면 두 점에서 만남).",
       "accepted_expressions": "d vs r 비교",
       "ccss_code": null,
-      "misconception_text": "거리 d와 반지름 r 비교를 거꾸로 본다(d<r를 안 만남으로). 판별식 부호를 혼동한다.",
       "difficulty_tier": 17,
       "review_status": "reviewed",
       "notes": null
@@ -12052,7 +11627,6 @@
       "metaphor": "도형을 모양 그대로 옆·위로 밀기. x축으로 a 옮기면 식의 x를 (x−a)로 바꾼다.",
       "accepted_expressions": "x→x−a, y→y−b",
       "ccss_code": null,
-      "misconception_text": "이동 방향과 부호를 반대로 한다(오른쪽 a 이동인데 x+a 대입).",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -12080,7 +11654,6 @@
       "metaphor": "거울에 비친 상. 어느 거울(x축·y축·원점·y=x)이냐에 따라 바뀌는 좌표가 다르다.",
       "accepted_expressions": "x축:(x,−y) y축:(−x,y) y=x:(y,x)",
       "ccss_code": null,
-      "misconception_text": "x축 대칭(y→−y)과 y축 대칭(x→−x)을 뒤바꾼다. y=x 대칭에서 좌표 교환을 빠뜨린다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -12106,7 +11679,6 @@
       "metaphor": "기준이 분명한 모임이 집합, 그 안의 대상이 원소다(물건을 담는 바구니와 그 안의 물건들).",
       "accepted_expressions": "∈(원소), 원소나열·조건제시",
       "ccss_code": null,
-      "misconception_text": "기준이 모호한 모임도 집합으로 본다. 원소를 중복해 나열하거나 공집합을 빠뜨린다.",
       "difficulty_tier": 13,
       "review_status": "reviewed",
       "notes": null
@@ -12134,7 +11706,6 @@
       "metaphor": "작은 상자가 큰 상자 안에 통째로 들어가는 관계. A의 모든 원소가 B에 있으면 A⊂B다.",
       "accepted_expressions": "⊂(부분집합)",
       "ccss_code": null,
-      "misconception_text": "포함(⊂)과 원소(∈)를 혼동한다. 공집합이 모든 집합의 부분집합임을 놓친다.",
       "difficulty_tier": 14,
       "review_status": "reviewed",
       "notes": null
@@ -12162,7 +11733,6 @@
       "metaphor": "두 원이 겹친 그림(벤다이어그램)으로 보는 모임의 셈(합집합·교집합·차집합·여집합).",
       "accepted_expressions": "∪ ∩ A^c A−B",
       "ccss_code": null,
-      "misconception_text": "합집합(∪)과 교집합(∩) 기호를 뒤바꾼다. 여집합에서 전체집합 U를 정하지 않는다.",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -12190,7 +11760,6 @@
       "metaphor": "맞다/틀리다로 답할 수 있는 문장만 명제. 미지수가 있어 값에 따라 참·거짓이 갈리면 조건이다.",
       "accepted_expressions": "참·거짓이 분명한 문장을 명제라 함 / 미지수가 있으면 조건임을 안다",
       "ccss_code": null,
-      "misconception_text": "참·거짓을 못 가리는 문장(의견·감탄)도 명제로 본다. 명제와 조건을 혼동한다.",
       "difficulty_tier": 15,
       "review_status": "reviewed",
       "notes": null
@@ -12218,7 +11787,6 @@
       "metaphor": "원래 문장을 뒤집은 역(q→p)은 참이 깨질 수 있지만, 대우(~q→~p)는 원명제와 늘 운명을 같이한다.",
       "accepted_expressions": "원명제 ⟺ 대우",
       "ccss_code": null,
-      "misconception_text": "역과 대우를 혼동한다. 명제가 참이면 역도 참이라 오인한다. 대우의 참·거짓이 원명제와 같음을 모른다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -12244,7 +11812,6 @@
       "metaphor": "버튼을 누르면 정해진 한 가지가 나오는 자판기. 한 입력 x에 출력 y가 하나만 대응한다.",
       "accepted_expressions": "x 하나 → y 하나",
       "ccss_code": null,
-      "misconception_text": "하나의 x에 여러 y가 대응해도 함수로 본다. 수직선 판정법을 모른다.",
       "difficulty_tier": 14,
       "review_status": "reviewed",
       "notes": null
@@ -12272,7 +11839,6 @@
       "metaphor": "기계 두 대를 호스로 연결. (g∘f)(x)=g(f(x))로 f를 먼저, g를 나중에 적용한다.",
       "accepted_expressions": "(g∘f)(x)=g(f(x))",
       "ccss_code": null,
-      "misconception_text": "합성 순서를 반대로 한다(g∘f를 f(g(x))로). 합성에 교환법칙이 성립한다고 오인한다.",
       "difficulty_tier": 16,
       "review_status": "reviewed",
       "notes": null
@@ -12300,7 +11866,6 @@
       "metaphor": "되돌리기 버튼. 입력과 출력을 맞바꾼 함수로, 그래프는 y=x에 대칭이다.",
       "accepted_expressions": "y=x 대칭, f⁻¹≠1/f",
       "ccss_code": null,
-      "misconception_text": "역함수와 역수(1/f)를 혼동한다. 일대일대응이 아닌데 역함수가 있다고 본다. 정의역·치역 교환을 빠뜨린다.",
       "difficulty_tier": 17,
       "review_status": "reviewed",
       "notes": null
@@ -12328,7 +11893,6 @@
       "metaphor": "반비례 시소(한쪽이 커지면 다른 쪽이 작아짐). y=k/x 그래프는 두 점근선 둘레로 휜다.",
       "accepted_expressions": "점근선 x=0,y=0",
       "ccss_code": null,
-      "misconception_text": "분모=0인 값을 정의역에서 빼지 않는다. 점근선을 좌표축이 아닌 곳에 잘못 그린다.",
       "difficulty_tier": 17,
       "review_status": "reviewed",
       "notes": null
@@ -12356,7 +11920,6 @@
       "metaphor": "제곱의 되돌리기(넓이에서 한 변 길이 찾기). y=√x 꼴로, 근호 안이 0 이상인 곳에서만 정의된다.",
       "accepted_expressions": "정의역 x≥0",
       "ccss_code": null,
-      "misconception_text": "정의역(근호 안 ≥0) 조건을 무시한다. 치역의 부호(√는 0 이상)를 빠뜨린다.",
       "difficulty_tier": 17,
       "review_status": "reviewed",
       "notes": null
