@@ -386,7 +386,9 @@ class TestRealCorpusLoad:
 
         from sqlalchemy import text
 
-        corpus = Path("data/corpus/concept_graph_v1/graph.json")
+        # 레포 루트 앵커(parents[3]) — CWD 상대 경로는 CI(cwd=src/backend)에서 항상 미존재 skip.
+        repo_root = Path(__file__).resolve().parents[3]
+        corpus = repo_root / "data" / "corpus" / "concept_graph_v1" / "graph.json"
         if not corpus.exists():
             pytest.skip("실 코퍼스 미존재(data/corpus/concept_graph_v1/graph.json)")
 
@@ -625,7 +627,9 @@ class TestRealCorpusEdgeLoad:
 
         from sqlalchemy import text
 
-        corpus = Path("data/corpus/concept_graph_v1/graph.json")
+        # 레포 루트 앵커(parents[3]) — CWD 상대 경로는 CI(cwd=src/backend)에서 항상 미존재 skip.
+        repo_root = Path(__file__).resolve().parents[3]
+        corpus = repo_root / "data" / "corpus" / "concept_graph_v1" / "graph.json"
         if not corpus.exists():
             pytest.skip("실 코퍼스 미존재(data/corpus/concept_graph_v1/graph.json)")
 
@@ -683,6 +687,19 @@ class TestRealCorpusEdgeLoad:
                         ),
                         {"src": sample_src, "dst": sample_dst},
                     ).one()
+                    # ⑥ 멱등 준비 — 샘플 엣지의 현재 edge_id(PK) 확보. 연결이 살아있는
+                    # with 블록 *안*에서 조회해야 한다(블록 밖 conn은 닫혀 있어
+                    # ResourceClosedError — 침묵 skip 시절엔 한 번도 실행되지 않아 잠복).
+                    first_edge_id = conn.execute(
+                        text(
+                            "SELECT e.edge_id FROM concept_edge e "
+                            "JOIN concept f ON e.from_concept_id = f.concept_id "
+                            "JOIN concept t ON e.to_concept_id = t.concept_id "
+                            "WHERE f.code = :src AND t.code = :dst "
+                            "AND e.edge_type = 'PREREQUISITE'"
+                        ),
+                        {"src": sample_src, "dst": sample_dst},
+                    ).scalar_one()
                 # ③ 방향: from=선수(src)·to=후행(dst) — to의 선수가 from.
                 assert row.from_code == sample_src
                 assert row.to_code == sample_dst
@@ -695,18 +712,6 @@ class TestRealCorpusEdgeLoad:
                 # ⑤ 날조 회피: gap_signal·notes는 NULL(evidence 미적재).
                 assert row.typical_gap_signal is None
                 assert row.notes is None
-
-                # ⑥ 멱등 준비 — 샘플 엣지의 현재 edge_id(PK) 확보.
-                first_edge_id = conn.execute(
-                    text(
-                        "SELECT e.edge_id FROM concept_edge e "
-                        "JOIN concept f ON e.from_concept_id = f.concept_id "
-                        "JOIN concept t ON e.to_concept_id = t.concept_id "
-                        "WHERE f.code = :src AND t.code = :dst "
-                        "AND e.edge_type = 'PREREQUISITE'"
-                    ),
-                    {"src": sample_src, "dst": sample_dst},
-                ).scalar_one()
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
 

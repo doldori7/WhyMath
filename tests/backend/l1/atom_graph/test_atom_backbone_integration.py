@@ -26,7 +26,9 @@ from whymath_backend.l1.atom_graph.populate import populate_atom_backbone
 
 pytestmark = pytest.mark.integration
 
-_CORPUS = Path("data/corpus/atom_graph_v1/graph.json")
+# 레포 루트 앵커(tests/backend/l1/atom_graph/ → parents[4]) — CWD 상대 경로는 CI(cwd=src/backend)
+# 에서 항상 "코퍼스 미존재" skip(침묵 skip 결함 수정).
+_CORPUS = Path(__file__).resolve().parents[4] / "data" / "corpus" / "atom_graph_v1" / "graph.json"
 
 
 def _sync_engine() -> object:

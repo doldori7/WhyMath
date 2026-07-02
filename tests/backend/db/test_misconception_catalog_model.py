@@ -62,9 +62,13 @@ def test_catalog_pk_is_mis_id() -> None:
 
 
 def test_catalog_mis_id_string_length() -> None:
-    """mis_id는 String(16) NOT NULL(PK)다."""
+    """mis_id는 String(32) NOT NULL(PK)다.
+
+    구 String(16)은 atom 투영 mis_id('ATOM:'+code — 실측 최장 18자·348건이 16자 초과)를
+    담지 못해 확폭했다(마이그레이션 a5b6c7d8e9f0·Phase 5 kebab→ATOM 이전 대비 헤드룸).
+    """
     col = OrmMisconceptionCatalog.__table__.c.mis_id
-    assert col.type.length == 16  # type: ignore[attr-defined]
+    assert col.type.length == 32  # type: ignore[attr-defined]
     assert col.nullable is False
     assert col.primary_key is True
 

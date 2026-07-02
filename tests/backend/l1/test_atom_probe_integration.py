@@ -29,7 +29,9 @@ from whymath_backend.l1.atom_probe.projection import (
 
 pytestmark = pytest.mark.integration
 
-_CORPUS = Path("data/corpus/atom_graph_v1/graph.json")
+# 레포 루트 앵커(tests/backend/l1/ → parents[3]) — CWD 상대 경로는 CI(cwd=src/backend)에서 항상
+# "코퍼스 미존재" skip(침묵 skip 결함 수정).
+_CORPUS = Path(__file__).resolve().parents[3] / "data" / "corpus" / "atom_graph_v1" / "graph.json"
 # 원자 ②③ 전건(원자 1,837 전량이 진단문항·소크라테스 보유 — Phase 1 산출 정합).
 _EXPECTED_ROWS = 1837
 
