@@ -54,7 +54,7 @@
   - **기계 몫 완주(2026-07-02)**: 검수 큐 75행+promote 원커맨드(M1)·canonical 선택 정책+shadow 측정(M2)·mis_id 확폭+침묵 skip 결함 수정(M0). **잔여 = 사람 검수**: 큐 기입 → promote --load → shadow 측정 윈도 → canary go/no-go (MEMORY 2026-07-02 구현 로그)
 - [x] ★ **임베딩 namespace 분리** — concept/atom/misconception 벡터공간 분리(invariant ⑨). 이 설계에 **과목 축을 함께 반영**(로드맵의 "ChromaDB 컬렉션 분리" 항목의 올바른 실체 — 저장소는 pgvector)
   - **완료(2026-07-02)**: 실측상 물리 분리·질의 분리는 기존재 — 논리 경계를 구현(3테이블 subject 컬럼·3축 스코프 9지점·cross-table 코사인 금지 게이트·재임베딩 0). 방향맹 FP 45.5%는 별개 트랙(04b judge)으로 분리 명문화 (MEMORY 2026-07-02)
-- [ ] `Problem`의 `Curriculum` enum 잔여 제거 — 교육과정 Overlay 이관 완주(2026-07-01 failure-mode QA 우선순위 목록)
+- [x] ~~`Problem`의 `Curriculum` enum 잔여 제거~~ — **오등록 상환(2026-07-02)**: 문항 본질 속성·L6 게이트 ③ 살아있는 소비처라 유지가 정답(개념≠문항). 제거·Overlay 이관 기각(MEMORY 2026-07-02·`Curriculum` docstring 정본)
 - [ ] 그래프 위생 게이트 — 런타임 reachability/SCC(현재 load-time DFS만). 단, 소비처(증분 edge-add 경로) 생길 때 — premature 금지
 - [ ] 렌더 선택 단일 진실원(invariant ⑩ — 3곳 산재) · speech 파서 notation_contract 편입(⑪) — 과목 확장 시 렌더/음성 규칙이 과목별로 늘어나기 전에
 

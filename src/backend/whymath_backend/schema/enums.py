@@ -75,7 +75,17 @@ class ExamType(str, Enum):
 
 
 class Curriculum(str, Enum):
-    """교육과정 버전 — §14.3 `curriculum_enum` 값 그대로(영어)."""
+    """교육과정 버전 — §14.3 `curriculum_enum` 값 그대로(영어).
+
+    **문항의 본질 속성 축(개정판 정합)이다 — Overlay 이관 대상 아님.** 개념 노드의
+    curriculum은 Overlay(`CurriculumEntry`)로 뺐지만(rev `f3a4b5c6d7e8`·"개념은 영속·교육과정은
+    Overlay"는 *개념 노드* 원칙), 문항(`Problem`)은 특정 개정판을 위해 저작된 *콘텐츠*라
+    curriculum_version이 이중 진실이 아니라 문항 고유 속성이다. `Problem`이 유일 프로덕션
+    소비자이며 L6 학교진도 게이트 ③(2015/2022 혼입 방지·`l6/school_progress/gating.py`)의
+    살아있는 기준 — 실제로 Concept의 curriculum 제거가 안전했던 *전제*가 이 필드였다
+    (게이팅이 Concept 아닌 Problem을 봄). 오등록 상환 판정 2026-07-02(MEMORY) — 제거·Overlay
+    이관 기각.
+    """
 
     REVISION_2009 = "2009_REVISION"
     REVISION_2015 = "2015_REVISION"

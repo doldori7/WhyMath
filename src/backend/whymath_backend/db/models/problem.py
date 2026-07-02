@@ -102,6 +102,8 @@ class Problem(Base):
     exam_authority_weight: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
 
     # ===== 교육과정 버전 =====
+    # 문항 본질 속성·제거 금지(오등록 상환 2026-07-02) — L6 학교진도 게이트 ③(2015/2022
+    # 혼입 방지)의 정합 기준. 개념 노드와 달리 Overlay 이관 대상 아님(`Curriculum` docstring).
     curriculum_version: Mapped[Curriculum] = mapped_column(
         _pg_enum(Curriculum, "curriculum_enum"),
         nullable=False,
