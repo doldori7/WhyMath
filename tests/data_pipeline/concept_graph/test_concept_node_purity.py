@@ -38,16 +38,18 @@ _SEMANTIC_FIELDS = frozenset(
 # 이는 Concept Purity 위반이 *아니다*(내장이 아니라 참조).
 _REFERENCE_KEY_FIELDS = frozenset({"misconception_codes", "visualization_card_keys"})
 
-# pedagogy(교수학) 잔류 부채 — 은유·허용표현은 아직 의미검색 임베딩·노드 프로젝션이 소비하므로
-# 노드에 *잠정* 남아 있다. `ConceptContent` 크로스워크 완료 후 제거(Stage B). 이 집합이 *커지면*
-# red — 새 pedagogy 필드를 노드에 추가하지 못하게 막는 부채 경계다(2026-07-02 Part 2 §3).
-_STAGE_B_PEDAGOGY_DEBT = frozenset({"metaphor", "accepted_expressions"})
+# pedagogy(교수학) 잔류 부채 — **Stage B(2026-07-02)로 청산됨(빈 집합)**. metaphor·accepted_
+# expressions를 노드에서 제거하고 pedagogy 계층(ConceptContent)으로 이관했다. 이 집합이 다시
+# 비어있지 않게 되면(새 pedagogy 필드를 노드에 추가) 아래 테스트가 red — 부채 재발 방지 경계다.
+_STAGE_B_PEDAGOGY_DEBT: frozenset[str] = frozenset()
 
-# 노드에 **절대 있어서는 안 되는** 필드(즉시 금칙). 오개념 자유텍스트·본문·설명·렌더러·프롬프트·
-# 임베딩 벡터·교육과정 오버레이. 누가 다시 넣으면 이 테스트가 즉시 잡는다.
+# 노드에 **절대 있어서는 안 되는** 필드(즉시 금칙). 오개념 자유텍스트·은유·허용표현·본문·설명·
+# 렌더러·프롬프트·임베딩 벡터·교육과정 오버레이. 누가 다시 넣으면 이 테스트가 즉시 잡는다.
 _FORBIDDEN_NODE_FIELDS = frozenset(
     {
-        "misconception_text",  # 자유텍스트 오개념(2026-07-02 제거 — 삼중 중복·오염 위험)
+        "misconception_text",  # 자유텍스트 오개념(Stage A 제거 — 삼중 중복·오염 위험)
+        "metaphor",  # 은유(pedagogy·Stage B 제거 — ConceptContent 단일 진실)
+        "accepted_expressions",  # 허용표현(pedagogy·Stage B 제거 — ConceptContent 단일 진실)
         "description",  # 성취기준 본문 근접 복제 위험(redaction)
         "formal_definition",  # 동
         "intuitive_explanation",  # pedagogy 설명(콘텐츠 계층 소관)
@@ -65,9 +67,8 @@ _FORBIDDEN_NODE_FIELDS = frozenset(
 )
 
 # 현재 노드가 가져야 할 필드의 *정확한* 스냅샷. 추가/삭제 시 의식적 리뷰를 강제한다(무단 변경 차단).
-_EXPECTED_MODEL_FIELDS = (
-    _IDENTITY_FIELDS | _SEMANTIC_FIELDS | _REFERENCE_KEY_FIELDS | _STAGE_B_PEDAGOGY_DEBT
-)
+# Stage B 이후 pedagogy 부채는 0이므로 identity·semantic·참조 키 3계층만 남는다.
+_EXPECTED_MODEL_FIELDS = _IDENTITY_FIELDS | _SEMANTIC_FIELDS | _REFERENCE_KEY_FIELDS
 
 
 def test_forbidden_pedagogy_and_renderer_fields_absent() -> None:
@@ -87,18 +88,17 @@ def test_misconception_link_is_reference_only() -> None:
     assert "misconception_text" not in Concept.model_fields  # 자유텍스트 내장 — 금지
 
 
-def test_stage_b_pedagogy_debt_is_frozen() -> None:
-    """노드에 남은 pedagogy 필드는 *정확히* Stage B 부채 집합이어야 한다(새 pedagogy 추가 차단).
+def test_stage_b_pedagogy_debt_is_cleared() -> None:
+    """노드의 pedagogy 잔류 부채는 *0*이어야 한다(Stage B 완료·부채 재발 차단).
 
-    metaphor·accepted_expressions는 임베딩/프로젝션 크로스워크 미완으로 잠정 잔류한다. 이 집합이
-    커지면(새 pedagogy 필드 추가) red, 줄면(Stage B 이관 완료) 이 테스트를 갱신하며 순수성 강화.
+    metaphor·accepted_expressions를 노드에서 제거하고 ConceptContent로 이관했다(Stage B). 노드에
+    pedagogy 필드가 다시 생기면(부채 재발) red — `_STAGE_B_PEDAGOGY_DEBT`는 빈 집합으로 동결한다.
     """
     present = set(Concept.model_fields)
     pedagogy_in_node = present & (_STAGE_B_PEDAGOGY_DEBT | _FORBIDDEN_NODE_FIELDS)
     assert pedagogy_in_node == set(_STAGE_B_PEDAGOGY_DEBT), (
-        f"노드의 pedagogy 잔류가 예상 부채와 다르다: {sorted(pedagogy_in_node)} "
-        f"≠ {sorted(_STAGE_B_PEDAGOGY_DEBT)}. 새 pedagogy 필드를 추가했거나 Stage B 이관을 "
-        "완료했다면 이 동결 집합을 의식적으로 갱신하라."
+        f"노드에 pedagogy/금칙 필드가 잔류한다: {sorted(pedagogy_in_node)}(기대: 빈 집합). "
+        "Stage B로 청산됐어야 하며, 새 pedagogy 필드를 추가했다면 pedagogy 계층으로 외부화하라."
     )
 
 

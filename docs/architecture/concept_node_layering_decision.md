@@ -30,15 +30,26 @@ identity 노드(`data_pipeline.concept_graph.models.Concept`)의 필드는 아�
 담지 않는 *다리(참조 키)*라 순수성 위반이 아니다. 반대로 자유텍스트 오개념(`misconception_text`)·
 은유 본문·설명은 *내장*이라 금지 — pedagogy 계층으로 외부화한다.
 
-**2026-07-02 순수성 수정**: 자유텍스트 오개념 `misconception_text`를 노드에서 제거했다(삼중
-중복 — `ConceptContent.misconception`·`MisconceptionCatalog` 839건과 겹침·오염 위험). 코드 동결:
-`tests/data_pipeline/concept_graph/test_concept_node_purity.py`.
+**2026-07-02 순수성 수정(Stage A+B)**: pedagogy 필드 3종을 노드에서 제거했다 —
+- **Stage A**: 자유텍스트 오개념 `misconception_text`(삼중 중복 — `ConceptContent.misconception`·
+  `MisconceptionCatalog` 839건과 겹침·오염 위험). 소비처가 이미 런타임 비소비 동결이라 마이그레이션 0.
+- **Stage B**: 은유 `metaphor`·허용표현 `accepted_expressions`. 소비처(의미검색 임베딩·노드
+  프로젝션)를 `ConceptContent`(source_id↔code 조인)로 재배선(값 동일·재임베딩 0) 후 노드·`concept_
+  node` 컬럼 제거(Alembic `c7d8e9f0a1b2`).
 
-**Stage B 잔여 부채**: `metaphor`·`accepted_expressions`(pedagogy)는 의미검색 임베딩
-(`l1/concept_graph/embedding.py`)·노드 프로젝션(`node_projection.py`)이 아직 소비하므로 노드에
-잠정 잔류한다. `ConceptContent`(code 키) 크로스워크 완료 후 별도 이관한다 — 그때 순수성 테스트의
-`_STAGE_B_PEDAGOGY_DEBT` 집합을 비운다. Stage B를 크로스워크 미완 상태로 착수하면 벡터 입력이
-소실되므로 **크로스워크 완료를 게이트**로 둔다.
+코드 동결: `tests/data_pipeline/concept_graph/test_concept_node_purity.py`(세 필드 전부 금칙 집합).
+
+**Stage B 완료(2026-07-02)**: `metaphor`·`accepted_expressions`를 identity 노드에서 제거하고
+pedagogy 계층 `ConceptContent`(`code` 키)로 단일화했다. 소비처 재배선:
+- 의미검색 임베딩(`l1/concept_graph/embedding.py`)이 두 필드를 `content.json`에서 `source_id↔code`
+  조인으로 소싱한다. 크로스워크는 **437 전단사**(source_id==code)이고 값이 노드 잔류분과 바이트
+  동일이라 표현·text_hash 불변 → **재임베딩 0**(skip-if-unchanged).
+- 노드 메타 프로젝션(`node_projection.py`·`concept_node` 테이블)은 두 컬럼을 제거했다 — reader가
+  없던 write-only였다(`fetch_node_meta`는 name_ko·domain·review_status만 조회). Alembic
+  `c7d8e9f0a1b2`로 drop(up/down 대칭·`drop_concept_subject_curriculum_version` 선례 답습).
+
+순수성 테스트 `_STAGE_B_PEDAGOGY_DEBT`는 빈 집합으로 동결했고, metaphor/accepted는 `_FORBIDDEN_
+NODE_FIELDS`로 이동했다(부채 재발 시 red). 이로써 identity 노드의 pedagogy 잔류는 **0**이다.
 
 ---
 

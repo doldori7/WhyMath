@@ -69,16 +69,16 @@ class TestTransformConcepts:
 
     def test_maps_enriched_fields(self) -> None:
         c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
-        assert c.metaphor == "수처럼 더하고 곱하기"
-        assert c.accepted_expressions == "동류항끼리 정리"
         assert c.ccss_code == "A-APR.A.1"
         assert c.difficulty_tier == 6  # 문자열 "6" → int
 
-    def test_input_misconception_not_mapped_to_node(self) -> None:
-        """입력 `misconception`(자유텍스트)은 노드로 흘리지 않는다(Part 2 §3 순수성)."""
+    def test_input_pedagogy_not_mapped_to_node(self) -> None:
+        """입력 pedagogy(misconception·metaphor·accepted)는 노드로 흘리지 않는다(Part 2 §3 A+B)."""
         c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
-        # 입력 _CONCEPT_A는 misconception 키를 갖지만, Concept 노드엔 슬롯 자체가 없다.
-        assert not hasattr(c, "misconception_text")
+        # _CONCEPT_A는 misconception·metaphor·accepted_expressions 키를 갖지만, 노드엔 슬롯이 없다.
+        assert not hasattr(c, "misconception_text")  # Stage A
+        assert not hasattr(c, "metaphor")  # Stage B
+        assert not hasattr(c, "accepted_expressions")  # Stage B
 
     def test_grade_band_hint_inferred(self) -> None:
         """첫 standard_code 학년 → NCIC 학년군 추론."""
@@ -92,10 +92,11 @@ class TestTransformConcepts:
         assert c.name_ja is None
 
     def test_empty_enriched_become_none(self) -> None:
-        """빈 문자열 풍부 필드는 None으로 정규화(B는 metaphor 등이 빈 문자열)."""
-        c = transform_concepts([_CONCEPT_B], _id_map())[0][0]
-        assert c.metaphor is None
-        assert c.accepted_expressions is None
+        """빈 문자열 풍부 필드(ccss_code)는 None으로 정규화(`_opt`)."""
+        record = dict(_CONCEPT_A)
+        record["ccss_code"] = ""
+        c = transform_concepts([record], _id_map())[0][0]
+        assert c.ccss_code is None
 
     def test_review_status_reviewed_for_manual(self) -> None:
         """definition_provenance='수기 검수' → reviewed."""

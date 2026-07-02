@@ -125,8 +125,6 @@ def _node(concept_id: str, *, name_ko: str, review_status: str) -> ConceptNodeRe
         standard_codes=("10공수1-01-01",),
         ccss_code=None,
         difficulty_tier=3,
-        metaphor=None,
-        accepted_expressions=None,
     )
 
 

@@ -33,8 +33,11 @@ json`의 redacted: `concepts.description`·`concepts.formal_definition`) ② 적
   - `review_status`(reviewed/pending): 검수 게이팅 플래그(메타 상태값).
   - `standard_codes`(NCIC 코드[])·`ccss_code`·`difficulty_tier`: 코드·층위(코드는 사실정보·
     공공이며 *본문 statement는 아님* — `Concept` 모델 §법적 주석과 동일).
-  - `metaphor`·`accepted_expressions`: 자체 작성 교수 주석(슬3에서 *임베딩 입력*으로도 쓴 안전
-    필드 — 표시 가능).
+
+pedagogy 이관(2026-07-02 Part 2 §3 Stage B): `metaphor`·`accepted_expressions` 컬럼을 *제거*했다.
+두 필드는 pedagogy 정보라 identity/메타 프로젝션이 아니라 pedagogy 계층 `concept_content`(code 키)가
+단일 진실이다(Concept Purity). 이 컬럼들은 reader가 없던 write-only였고(`fetch_node_meta`는
+name_ko·domain·review_status만 조회), 임베딩은 이제 ConceptContent에서 소싱한다. Alembic drop.
 
 review_status는 PG enum 타입을 새로 만들지 않고 **plain `sa.Text`**로 둔다(`concept_embedding`이
 enum 타입 없이 plain text만 쓴 것과 동형). graph.json은 `use_enum_values=True`로 이미 문자열
@@ -98,10 +101,7 @@ class ConceptNode(Base):
     ccss_code: Mapped[str | None] = mapped_column(sa.Text)
     # 난이도층 [0, 24](graph.json difficulty_tier·nullable). 0=가장 기초.
     difficulty_tier: Mapped[int | None] = mapped_column(sa.Integer)
-    # 개념을 직관화하는 은유(graph.json metaphor·nullable·자체 작성 안전 필드·표시 가능).
-    metaphor: Mapped[str | None] = mapped_column(sa.Text)
-    # '이해했다'고 볼 허용표현(graph.json accepted_expressions·nullable·자체 작성·표시 가능).
-    accepted_expressions: Mapped[str | None] = mapped_column(sa.Text)
+    # (metaphor·accepted_expressions 컬럼은 Part 2 §3 Stage B로 제거 — pedagogy=concept_content.)
     # 마지막 upsert 시각 — 운영·신선도. server_default now()(upsert 시 코드가 갱신·슬3 동형).
     updated_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
