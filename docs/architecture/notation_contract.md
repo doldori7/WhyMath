@@ -44,9 +44,37 @@ golden test가 보증한다(`numeric_cases`). 동치 판정(`equivalence_cases`)
 - js: `numeric_cases`를 `math.evaluate`로 평가해 기대값 일치 + `**`→`^` 어댑터 1건. (동치 판정 없음.)
 - 새 표기 케이스는 **fixture에만 추가**하면 양측이 자동 검증한다(계약 단일 출처).
 
+## 5. 프레젠테이션 계층(speech) 경계 — 이 계약 밖이 설계상 정상 (2026-07-02 명문화)
+
+수식 음성화(Math-to-Speech·`l3/speech_parse.py`·`l3/speech.py`)는 **이 계약의 당사자가 아니다.**
+failure_mode_qa가 invariant ⑪("모든 수식 AST는 notation_contract 안·speech 포함")로 등록했으나,
+실측 결과 speech는 SymPy↔mathjs와 **교차검증이 원리적으로 불가·불필요**한 별도 표기 계층이다:
+
+- **입력 언어가 다르다**: 이 계약은 *ASCII 수식 소스*(`x^3`·`3*x^2`)의 SymPy↔mathjs 수치 상호운용이다.
+  speech 입력은 *프레젠테이션 LaTeX*(`\frac`·`\sqrt{}`·`\int_a^b`·`\sin`)다.
+- **산출이 다르다**: 계약은 수치값(`numeric_cases`)·동치 bool(`equivalence_cases`)로 검증한다.
+  speech 산출은 한국어 낭독 문자열(운율 토큰·SSML)이라 "value"도 "equivalent"도 없다 — fixture에
+  넣을 케이스 형(型)이 없다.
+- **권위가 다르다**: 낭독은 국제 표준 canonical이 부재해 *자체 정본*(교사 검수 골든 코퍼스
+  `tests/backend/l3/test_speech_rules.py`의 `HIGH_SCHOOL_GOLDEN` 38케이스 + `test_golden_corpus_size_gate`
+  ≥30 동결)으로 검증된다. 이것이 speech의 표기 계약이다.
+- **자족 파서(hermetic·의도적)**: speech는 자체 AST·토크나이저·재귀하강 파서를 갖고 SymPy/mathjs/
+  `to_sympy_source`를 부르지 않는다 — *시각 그룹핑을 청각으로 보존*하려면 SymPy의 의미 정규화가
+  오히려 해롭기 때문(`speech_parse.py` 상단 주석). `l5/ocr/verify.py` hermetic 철학 답습.
+
+**공유 표기 축(caret `^`·명시 `*`·`/`)은 이미 speech와 정합**(`^`→Power·`*`→"곱하기"). 유일한 잠재
+접점은 **유니코드 위첨자**(`to_sympy_source`는 `²`→`**2`로 접지만 speech는 미지 문자로 "알 수 없는
+기호" 처리)인데, **같은 문자열을 두 경로에 동시에 흘리는 소비처가 없어**(speech는 LaTeX `x^2`로 입력·
+아직 L4/L5 소비 배선 0) 활성 위험이 아니다. speech가 유니코드 위첨자를 낭독해야 하는 소비처가 생기면
+그때 `_SUPERSCRIPT` 매핑과 정합시킨다(그 전까지 premature).
+
+⇒ **결론**: ⑪은 "speech를 계약 3자로 확장"이 아니라 **경계 명문화**(본 절)로 충족한다. speech는 이
+계약과 별개의 자족 표기 계층이며, 그 계약은 `test_speech_rules.py` 골든이다.
+
 ---
 
 ## 참고
 - 코드: `l3/verify_step.py`·`l3/verify_answer.py`·`src/web/graphing-calculator/src/lib/{graph2dSpec,mathExpr}.js`
 - 상위: `math_dsl_risk_register.md`·`math_dsl_remediation_design.md`
-- 변경 이력: v0.1 (2026-06-30 — 계약 명문화 + golden test 착수)
+- 변경 이력: v0.1 (2026-06-30 — 계약 명문화 + golden test 착수) · v0.2 (2026-07-02 — §5 speech
+  프레젠테이션 계층 경계 명문화: invariant ⑪은 계약 3자 확장이 아니라 경계 명시로 충족)

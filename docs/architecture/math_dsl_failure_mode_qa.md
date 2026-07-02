@@ -23,7 +23,7 @@
 | Cycle | load-time DFS 게이트(`l1/atom_graph/populate.py`) + 파이프라인 validate. 모델 불변식은 self-loop만. **런타임 reachability/SCC 게이트 없음** |
 | 렌더러 | spec 렌더러 독립(노드에 fps/shader/pixel 필드 0, `extra="forbid"`). 그러나 **렌더 선택 로직 3곳 산재**(`scene_renderer.dart`·`GraphingCalculator.jsx`·WebView) |
 | 교육과정 | CurriculumEntry 단일 진실화 완료(PR #350). ~~그러나 `Problem`이 아직 `Curriculum` enum 참조(슬라이싱 미완)~~ *(→ 정정 2026-07-02 — 오등록·문항 본질 속성이라 유지가 정답)* |
-| AST | SymPy(권위 `l3/symbolic_equivalence.py`)/mathjs(렌더)/`l3/speech_parse.py`(커스텀 AST)/MathLive. golden test는 SymPy↔mathjs만, **speech 파서는 notation_contract 밖** |
+| AST | SymPy(권위 `l3/symbolic_equivalence.py`)/mathjs(렌더)/`l3/speech_parse.py`(커스텀 AST)/MathLive. golden test는 SymPy↔mathjs만, ~~speech 파서는 notation_contract 밖~~ *(→ 정정 2026-07-02 — speech는 별도 표기 계층·자체 골든 검증·"계약 밖"이 설계상 정상)* |
 
 ---
 
@@ -41,7 +41,7 @@
 | 6 | **curriculum inconsistency** | 🟢 | CurriculumEntry 단일화·Concept 필드 제거(PR #350) | ~~`Problem`의 `Curriculum` enum 잔여~~(정정 2026-07-02 — 문항 본질 속성·유지)·US/IMO overlay 미구축 |
 | 7 | **AI retrieval failure** | 🟠→🔴 | 본문 redaction·reviewed_only 게이팅 | **단일 임베딩 namespace**·방향맹·집계 hub 노드 attention 오염 |
 | 8 | **cyclic dependency** | 🟡 | load-time DFS + 파이프라인 validate | 런타임 reachability/SCC 부재 → 증분 edge-add 시 다중홉 cycle 무방비 |
-| 9 | **AST duplication** | 🟠 | notation_contract golden test(SymPy↔mathjs) | **speech 파서 계약 밖** → 낭독 AST drift |
+| 9 | **AST duplication** | 🟢 | notation_contract golden test(SymPy↔mathjs) + speech 자체 골든(`test_speech_rules.py`) | ~~speech 파서 계약 밖 → 낭독 AST drift~~ *(정정 2026-07-02 — speech는 별도 표기 계층·자체 골든 검증·drift는 유니코드 위첨자 1점·활성 경로 0)* |
 | 10 | **misconception overlap** | 🔴 | crosswalk 골격·resolver·shadow 배선 | 3중 표현 FK 없음·매핑 사람검수 미완·canonical 미확정 |
 
 **한 줄 종합**: 표현 계층(시각화·장면·"노드=의미")은 invariant가 스키마로 박혀 견고.
@@ -144,7 +144,9 @@
 **추가 4 (이번 조사 근거)**
 9. **임베딩 namespace 분리** — concept/atom/misconception 벡터 경계 불변식 *(→ 정정 2026-07-02 — 물리 분리는 기존재·논리 경계가 실체, 구현 완료)*
 10. **렌더 선택 단일 진실원** — 플랫폼 capability matrix를 코어에, 산재 금지
-11. **모든 수식 AST는 notation_contract 계약 안** — speech 파서 포함(현재 이탈)
+11. ~~**모든 수식 AST는 notation_contract 계약 안** — speech 파서 포함(현재 이탈)~~
+    *(→ 정정 2026-07-02: speech는 별도 표기 계층(LaTeX 프레젠테이션)·자체 골든 정본이라 계약 3자
+    편입은 카테고리 오류. 경계 명문화로 충족 — notation_contract.md §5·구현 완료.)*
 12. **interaction `event_data` 타입 스키마** — 자유 JSONB 금지, payload 타입별 계약
 
 ---
@@ -159,7 +161,7 @@
 | 1 | 오개념 canonical ID 수렴(crosswalk 사람검수 → canary) | #10·#3 | 부채 상환(진행 중) |
 | 2 | 임베딩 namespace 분리(논리 격리) | #7·#3 | invariant 신설(#9) |
 | 3 | 렌더 선택 단일 진실원(capability matrix) | #4·#6 | invariant 신설(#10) |
-| 4 | speech 파서를 notation_contract 안으로 | #9 | invariant 신설(#11) |
+| ~~4~~ | ~~speech 파서를 notation_contract 안으로~~ | #9 | ~~invariant 신설(#11)~~ → **경계 명문화로 충족**(정정 2026-07-02·notation_contract.md §5) |
 | ~~5~~ | ~~`Problem.Curriculum` enum 제거(슬라이싱 완주)~~ | #6 | ~~부채 상환~~ → **오등록·유지 확정**(정정 2026-07-02) |
 | 6 | interaction `event_data` 타입 스키마 | #5 | invariant 신설(#12) |
 | — | 런타임 SCC/reachability | #8 | **미도입**(소비처 생길 때) |
@@ -186,3 +188,24 @@ Q5-1·상단 표(교육과정 행)·상환 목록 #5의 "`Problem`의 `Curriculu
 - **실측**: `Problem.curriculum_version`은 죽은 필드가 아니라 L6 학교진도 게이트 ③(2015/2022 개정 혼입 방지·`l6/school_progress/gating.py`)의 살아있는 정합 기준이자 L5 API 파라미터(`api/gating.py`)다. Concept의 curriculum 제거가 안전했던 *전제*가 바로 "게이팅은 Problem.curriculum_version을 쓴다(Concept과 독립)"였다(rev `f3a4b5c6d7e8` docstring).
 - **원칙 구분**: 플레이북 "개념은 영속·교육과정은 Overlay"는 *개념 노드*(영속 자산) 대상이다. **문항(Problem)은 특정 개정판을 위해 저작된 콘텐츠**라 curriculum_version이 이중 진실이 아니라 문항 고유 속성이다. CurriculumEntry Overlay는 concept 중심이라 Problem이 직접 닿지도 않는다(Problem→concept 다단 조인·KR-only·str/enum 불일치).
 - **판정**: 제거·Overlay 이관 **기각**, **유지가 정답**. 정본은 코드 docstring(`Curriculum` enum·`Problem.curriculum_version`)에 못박음. 부채 상환 목록에서 삭제.
+
+### 정정 추가 (2026-07-02 — invariant ⑪ speech 파서 "계약 이탈" 오등록)
+
+상단 AST 행·실패모드 #9·invariant #11·상환 목록 #4의 "speech 파서가 notation_contract 밖 → 낭독
+AST drift·계약 안으로 편입 필요"는 **오등록**이다(원문 스냅샷 보존·해당 지점에 포인터).
+
+- **실측**: speech(`l3/speech_parse.py`·`l3/speech.py`)는 *프레젠테이션 LaTeX*(`\frac`·`\sqrt{}`)를
+  입력받아 *한국어 낭독 문자열*을 산출하는 **별도 표기 계층**이다. notation_contract는 *ASCII 수식*의
+  SymPy↔mathjs *수치 상호운용*(numeric·equivalence)이라 입력 언어·산출·권위가 모두 달라 speech를
+  fixture에 넣을 케이스 형(型)이 없다 — 교차검증 원리적 불가.
+- **미검증 아님**: speech는 자체 골든 코퍼스(`tests/backend/l3/test_speech_rules.py`
+  `HIGH_SCHOOL_GOLDEN` 38케이스 + ≥30 크기 게이트 + 모호성·정직성 테스트)로 검증된다 — 이것이
+  speech의 표기 계약이다. 자체 AST·hermetic(SymPy/mathjs 미호출)은 시각 그룹핑의 청각 보존을 위한
+  *의도적* 설계(`speech_parse.py` 주석).
+- **drift 실증 = 유니코드 위첨자 1점·활성 경로 0**: `to_sympy_source`는 `²`→`**2`로 접지만 speech는
+  미지 문자로 "알 수 없는 기호" 처리. 그러나 같은 문자열을 두 경로에 동시에 흘리는 소비처가 없고
+  (speech는 LaTeX `x^2` 입력·L4/L5 소비 배선 0) 활성 위험이 아니다. 소비처 생길 때 `_SUPERSCRIPT`
+  매핑과 정합(그 전까지 premature).
+- **판정**: ⑪은 "계약 3자 확장"(카테고리 오류)이 아니라 **경계 명문화**(`notation_contract.md` §5)로
+  충족. speech는 이 계약과 별개의 자족 표기 계층이며 그 계약은 `test_speech_rules.py` 골든이다.
+  #9는 🟠→🟢, invariant #11·상환 #4는 경계 명문화로 상환 대체.

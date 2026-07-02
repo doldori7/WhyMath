@@ -56,9 +56,9 @@
   - **완료(2026-07-02)**: 실측상 물리 분리·질의 분리는 기존재 — 논리 경계를 구현(3테이블 subject 컬럼·3축 스코프 9지점·cross-table 코사인 금지 게이트·재임베딩 0). 방향맹 FP 45.5%는 별개 트랙(04b judge)으로 분리 명문화 (MEMORY 2026-07-02)
 - [x] ~~`Problem`의 `Curriculum` enum 잔여 제거~~ — **오등록 상환(2026-07-02)**: 문항 본질 속성·L6 게이트 ③ 살아있는 소비처라 유지가 정답(개념≠문항). 제거·Overlay 이관 기각(MEMORY 2026-07-02·`Curriculum` docstring 정본)
 - [ ] 그래프 위생 게이트 — 런타임 reachability/SCC(현재 load-time DFS만). 단, 소비처(증분 edge-add 경로) 생길 때 — premature 금지
-- [~] 렌더 선택 단일 진실원(invariant ⑩) **완료(2026-07-02)** · speech 파서 notation_contract 편입(⑪) 잔여
+- [x] 렌더 선택 단일 진실원(invariant ⑩) **완료(2026-07-02)** · speech 파서 notation_contract 편입(⑪) **오등록 상환(2026-07-02)**
   - **⑩ 완료**: 실측상 3곳 중 scene_renderer(위젯 선택)는 정당한 계층 분리·부채 아님. 진짜 부채는 WebView 경계가 viz.type을 버려 웹이 spec 모양 재추론하던 drift 1건 — 경계 {type,spec} 봉투(B)+웹 type-first dispatch(A)+골든 계약 data/render_contract.json(A/C 교차검증)으로 해소. 마이그레이션·재임베딩 0 (MEMORY 2026-07-02)
-  - **⑪ speech 파서 notation_contract 편입**: 잔여(별 트랙)
+  - **⑪ 오등록 상환**: speech는 별도 표기 계층(LaTeX 프레젠테이션)의 자족 파서·자체 골든(`test_speech_rules.py` 38케이스)으로 검증됨 — SymPy↔mathjs notation_contract와 입력 언어·산출·권위가 달라 계약 3자 편입은 카테고리 오류. **경계 명문화**(notation_contract.md §5)로 충족. drift는 유니코드 위첨자 1점·활성 경로 0(소비처 생길 때 정합·premature 보류). 코드 0·마이그레이션 0 (MEMORY 2026-07-02)
 
 ---
 
