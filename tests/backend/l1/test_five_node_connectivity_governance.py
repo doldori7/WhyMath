@@ -25,8 +25,9 @@ import re
 from pathlib import Path
 
 import data_pipeline
-import whymath_backend
 from data_pipeline.concept_graph.models import Concept
+
+import whymath_backend
 from whymath_backend.l4.misconception.catalog import CATALOG
 from whymath_backend.schema.enums import CognitiveType
 from whymath_backend.schema.problem import Problem
@@ -103,6 +104,7 @@ def test_no_dedicated_formula_skill_problemtype_node_classes() -> None:
     offending = {name: locs for name, locs in hits.items() if locs}
     assert not offending, (
         f"anti-explosion 위반 — 전용 노드 클래스가 추가됐다: {offending}. "
-        "Skill/ProblemType/Formula는 속성/스키마로 표현한다(노드 폭발·'Formula 먼저' 실패 경로 방지). "
+        "Skill/ProblemType/Formula는 속성/스키마로 표현한다"
+        "(노드 폭발·'Formula 먼저' 실패 경로 방지). "
         "승격이 정말 정당하면 concept_node_layering_decision.md ADR을 갱신하고 이 동결을 수정하라."
     )

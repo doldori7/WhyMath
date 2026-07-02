@@ -104,7 +104,8 @@ def _record(
         aliases=(aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]),
         level=ConceptLevel.세부개념,
         intrinsic_difficulty=intrinsic_difficulty,
-        # common_misconceptions는 항상 빈 리스트(오개념 노드 비내장 — Part 2 §3). default_factory 사용.
+        # common_misconceptions는 항상 빈 리스트(오개념 노드 비내장 — Part 2 §3).
+        # default_factory 사용.
     )
 
 
@@ -223,7 +224,8 @@ class TestLoadFromGraphJson:
         assert [c.code for c in loaded] == [_NID_A, _NID_B]
 
     def test_optional_fields_default_when_absent(self, tmp_path: Path) -> None:
-        # difficulty_tier 부재 → None(날조 0). common_misconceptions는 항상 빈(노드 비내장·Part 2 §3).
+        # difficulty_tier 부재 → None(날조 0).
+        # common_misconceptions는 항상 빈(노드 비내장·Part 2 §3).
         path = self._write_graph(
             tmp_path,
             [{"concept_id": _NID_A, "name_ko": "유효", "domain": "[중]수와 연산"}],

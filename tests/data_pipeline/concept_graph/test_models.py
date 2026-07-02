@@ -248,7 +248,6 @@ class TestConceptPurity:
             "metaphor",
             "accepted_expressions",
             "ccss_code",
-            "misconception_text",
             "difficulty_tier",
             "review_status",
             "notes",
