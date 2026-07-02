@@ -24,6 +24,7 @@ from whymath_backend.schema.enums import (
     SourceType,
     StepType,
     Subject,
+    Visualizability,
     VisualizationStyle,
     VisualType,
 )
@@ -41,6 +42,7 @@ _ALL_ENUMS: list[type[Enum]] = [
     Persona,
     VisualType,
     VisualizationStyle,
+    Visualizability,
     LicenseType,
     GenerationType,
     ReviewStatus,
@@ -288,6 +290,21 @@ class TestVisualizationStyle:
     def test_count(self) -> None:
         """양식은 정확히 16종(v1 통제 어휘 — 변경은 의도적 결정)."""
         assert len(list(VisualizationStyle)) == 16
+
+
+class TestVisualizability:
+    def test_values_are_four_classification(self) -> None:
+        """구축 플레이북 Part 5: 시각화 가능성 4분류(직접/동적/추상/불가·한글 값)."""
+        assert {v.value for v in Visualizability} == {"직접", "동적", "부분", "추상"}
+
+    def test_exactly_four_members(self) -> None:
+        """정확히 4분류(플레이북 법칙 — 변경은 의도적 결정·마이그레이션 동반)."""
+        assert len(list(Visualizability)) == 4
+
+    def test_member_name_equals_value(self) -> None:
+        """멤버명==값(한글) — 마이그레이션 native enum 라벨과 일치."""
+        for member in Visualizability:
+            assert member.name == member.value
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -472,6 +472,9 @@ class TestConceptNodeFieldGovernance:
             "pixel",
             "canvas",
             "color",
+            # 시각화 가능성 분류(노드 비내장·Overlay `concept_visualization` 이관) — 재내장 차단.
+            # ADR concept_node_layering §1(visualization=노드 비내장)·subject Overlay 선례 동형.
+            "visualizability",
             # 프롬프트·런타임·사용자(외부화 — 노드에 결합 금지).
             "prompt",
             "runtime_state",

@@ -69,6 +69,7 @@ from whymath_backend.db.models.concept_content import (
 from whymath_backend.db.models.concept_embedding import ConceptEmbedding
 from whymath_backend.db.models.concept_node import ConceptNode
 from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
+from whymath_backend.db.models.concept_visualization import ConceptVisualization
 from whymath_backend.db.models.curriculum_entry import CurriculumEntry
 from whymath_backend.db.models.dead_end_log import DeadEndLog
 from whymath_backend.db.models.device import DeviceCredential
@@ -176,6 +177,7 @@ __all__ = [
     "ConceptNode",
     # 원자 Phase 3 Slice 1: ConceptContent (콘텐츠 4종 PG 프로젝션·code 키·K-12/대학·additive)
     "ConceptContent",
+    "ConceptVisualization",
     "CONTENT_REVIEW_STATUS_AI_ESTIMATED",
     "CONTENT_SCOPE_K12",
     "CONTENT_SCOPE_UNIVERSITY",
