@@ -19,7 +19,7 @@
 | L1 그래프 | 노드 2,697(단원 217·소단원 643·원자 1,837), 엣지 2,213 **전량 `PREREQUISITE`·strength 0.8 균일** |
 | EdgeType | 6종 정의(`schema/enums.py`), **PREREQUISITE만 적재** — 약한 5종 load-time skip + 거버넌스 테스트(`test_edge_relation_governance.py`) |
 | 오개념 | 3중 표현 — kebab 30(런타임 정본 `l4/misconception/catalog.py`)·M-id 839(콘텐츠 `schema/misconception_catalog.py`)·JSONB(`Concept.common_misconceptions`, 런타임 미사용). **FK 없음**, crosswalk N:M + read-time resolver |
-| 임베딩 | **단일 pgvector, namespace 분리 없음**(`l1/embedding_primitives.py`) — concept/atom/misconception 동일 벡터공간. 방향맹 매처(둘레↔넓이 코사인 동일) 실측, 과거 FP 45.5% |
+| 임베딩 | **단일 pgvector, namespace 분리 없음**(`l1/embedding_primitives.py`) — concept/atom/misconception 동일 벡터공간. 방향맹 매처(둘레↔넓이 코사인 동일) 실측, 과거 FP 45.5% *(→ 정정 2026-07-02 참조 — 두 문제의 융합 서술)* |
 | Cycle | load-time DFS 게이트(`l1/atom_graph/populate.py`) + 파이프라인 validate. 모델 불변식은 self-loop만. **런타임 reachability/SCC 게이트 없음** |
 | 렌더러 | spec 렌더러 독립(노드에 fps/shader/pixel 필드 0, `extra="forbid"`). 그러나 **렌더 선택 로직 3곳 산재**(`scene_renderer.dart`·`GraphingCalculator.jsx`·WebView) |
 | 교육과정 | CurriculumEntry 단일 진실화 완료(PR #350). 그러나 **`Problem`이 아직 `Curriculum` enum 참조**(슬라이싱 미완) |
@@ -140,7 +140,7 @@
 8. LLM은 전체 그래프 미열람 — bounded traversal(depth ≤ 2·max_nodes ~12) 명문화
 
 **추가 4 (이번 조사 근거)**
-9. **임베딩 namespace 분리** — concept/atom/misconception 벡터 경계 불변식
+9. **임베딩 namespace 분리** — concept/atom/misconception 벡터 경계 불변식 *(→ 정정 2026-07-02 — 물리 분리는 기존재·논리 경계가 실체, 구현 완료)*
 10. **렌더 선택 단일 진실원** — 플랫폼 capability matrix를 코어에, 산재 금지
 11. **모든 수식 AST는 notation_contract 계약 안** — speech 파서 포함(현재 이탈)
 12. **interaction `event_data` 타입 스키마** — 자유 JSONB 금지, payload 타입별 계약
@@ -167,3 +167,12 @@
 > **의미 축(오개념·임베딩)**과 **그래프 위생 축(cycle·relation)**의 invariant를,
 > 폭발이 시작되기 전인 지금 박는 일이다. premature abstraction은 피하되(Q9), invariant
 > 게이트는 지금 세운다.
+
+-----
+
+## 정정 (2026-07-02 — invariant ⑨ 실측 교정·구현 랜딩)
+
+원문(작성일 2026-07-01)의 임베딩 행과 invariant ⑨ 서술은 **서로 다른 두 문제를 한 문장에 융합**하고 있어 실측으로 교정한다(원문은 스냅샷 보존).
+
+1. **"namespace 분리 없음·동일 벡터공간"의 실체**: 실측 결과 임베딩 3테이블(`misconception_embedding`·`concept_embedding`·`atom_embedding`)은 **이미 물리 분리**되어 있고 cross-namespace 질의도 0이다(`math_dsl_retrieval_analysis.md` "테이블 분리"·risk_register Q3와 정합). 실제 부채는 ① 논리 판별자(subject 축) 부재 ② cross-table 코사인을 막는 실행 계약 부재였다. **구현 완료(2026-07-02)**: 3테이블 subject 컬럼(server_default '수학'·Alembic `b6c7d8e9f0a1`·재임베딩 0) + 공간 식별 (provider, model, subject) 3축 + 거버넌스 게이트 13건(`tests/backend/l1/test_embedding_namespace_governance.py` — 9지점 대칭·cross-table 코사인 allowlist·텍스트 불변). **불변식 정본은 코드**: `l1/embedding_primitives.py` docstring("namespace = 테이블(kind) × subject") + 거버넌스 테스트.
+2. **"방향맹 매처(둘레↔넓이)·FP 45.5%"는 별개 트랙**: 이는 오개념 의미 매칭 *내부*의 임베딩 방향맹 문제(`l4/misconception/semantic/matcher.py` 자체 문서화·완화는 LLM-judge/NLI — `04b` 트랙)이지 namespace 혼입이 아니다. invariant ⑨ 충족 여부와 무관하게 별도로 추적한다.
