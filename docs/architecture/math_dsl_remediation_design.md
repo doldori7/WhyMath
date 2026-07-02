@@ -68,8 +68,27 @@
    kebab→M-id 매핑 coverage(관측/distinct 커버리지·1:N 모호·미매핑 kebab-id 목록)를 집계한다
    (`step_shadow_harvest` 동형·오프라인·순수·비노출). canary 플립 go/no-go와 크로스워크 큐레이션
    우선순위(미매핑·1:N)의 정량 근거 — "노출 전 측정"을 산출하는 도구.
-   *(잔여)* 나머지 두 게이트(`learning_scene.py`·`wh1_loop.py`) shadow 배선 + shadow 측정 후
-   canary/full 노출(M-id canonical 플립) — 매핑 채택(2-잔여) 선행 필요.
+   *(완료·M2)* **canonical 선택 정책 + canonical 기준 shadow 측정** — canonical M-id는
+   *confidence NOT NULL 직접매핑의 strict 최대가 단독*일 때만 선정(`select_canonical`·
+   `crosslink_resolve.py`). 동률(tie)·직접 부재·링크 부재는 사유와 함께 미선정(자동 임의 선택 =
+   오귀속 위험이라 정직 미선정 — 우선순위 #1·#3). confidence 임계(0.6) 강제는 매핑 승격(promote)
+   슬라이스 몫(정책 중복 금지). shadow 관측이 canonical 결과(`canonical_mis_id`·
+   `canonical_ambiguous`·`direct_count`)를 additive 기본값 필드로 충전하고(구 JSONL 하위호환·
+   실패 시 기본값·never-break), harvest가 `distinct_canonical_ratio`를 canary go/no-go 핵심
+   변수로 집계한다(1:N 원시 링크 수만 세면 ambiguous 집계가 무의미 —
+   `shadow_measurement_runbook.md` crosswalk 절). 런타임 노출 소비(리포트·canary 플립 배선)는
+   premature라 미배선.
+   *(종결·불필요 — 재개 트리거 명기)* "나머지 두 게이트(`learning_scene.py`·`wh1_loop.py`) shadow
+   배선" 항목은 **불필요로 종결**한다. 근거: ① `wh1_loop`의 `LogEvidenceAction`은 *in-memory
+   하네스*다 — 증거를 `state.evidence`(프로세스 내 리스트)에만 적재하고 DB에 접근하지 않는다
+   (`harness/wh1_loop.py:424-445`). ② `learning_scene`은 *생성물 검증 게이트*다 —
+   `parse_learning_scene`이 `misconception_id ∈ CATALOG_BY_ID` 무결성을 검사할 뿐 kebab-id를
+   영속하지 않는다(영속 좌석 아님). 학생 데이터에 kebab-id가 *영속되는* 좌석은
+   `evidence_store`·`hypothesis_store` 2곳뿐이고 둘 다 shadow 배선 완료 — 측정 목적(영속 kebab의
+   canonical coverage 관측)에 두 게이트 배선은 기여가 없다. **재개 트리거**: 두 경로 중 하나라도
+   영속을 얻으면(예: wh1_loop 증거의 DB 적재 배선, learning_scene 저장) 그 시점에 shadow 배선을
+   재개한다.
+   *(잔여)* shadow 측정 후 canary/full 노출(M-id canonical 플립) — 매핑 채택(2-잔여) 선행 필요.
 4. **학생 데이터 마이그레이션** *(불필요화·결정)* — 런타임 테이블은 kebab `misconception_id`를
    TEXT(FK 아님)로 보존하므로 **read-time resolver로 rekey 없이** M-id 해석 가능(채택). 물리 일괄
    재키잉(option b)은 미성년 PII·되돌리기 위험으로 **비채택**(우선순위 #1·#2). 1:N 매핑 시 confidence

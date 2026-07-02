@@ -19,7 +19,7 @@
 
 | 게이트 | 켜기(env) | record 로거 | harvest 모듈 | 핵심 결정 변수 |
 |---|---|---|---|---|
-| crosswalk 매핑 | `WHYMATH_MISCONCEPTION_CROSSLINK_MODE=shadow` | `whymath.l4.misconception.crosslink_shadow.record` | `crosslink_shadow_harvest` | `distinct_coverage_ratio`·`unmapped_kebab_ids`·`ambiguous_kebab_ids` |
+| crosswalk 매핑 | `WHYMATH_MISCONCEPTION_CROSSLINK_MODE=shadow` | `whymath.l4.misconception.crosslink_shadow.record` | `crosslink_shadow_harvest` | `distinct_canonical_ratio`·`unmapped_kebab_ids`·`canonical_ambiguous_kebab_ids` |
 | wrong-form(SymPy) | `WHYMATH_MISCONCEPTION_WRONG_FORM_MODE=shadow` | `whymath.l4.misconception.wrong_form_shadow.record` | `wrong_form_shadow_harvest` | `sympy_only_id_freq`(가치)·`substring_only_id_freq`(결합 유지) |
 | semantic 매칭 | `WHYMATH_MISCONCEPTION_SEMANTIC_MODE=shadow` | `whymath.l4.misconception.shadow.record` | `semantic_shadow_harvest` | `semantic_only_id_freq`·`sim_ge_*`(feed 임계) |
 | judge 필터 | `…SEMANTIC_MODE=shadow` + `WHYMATH_MISCONCEPTION_JUDGE_SHADOW=true` | `whymath.l4.misconception.judge_shadow.record` | `judge_shadow_harvest` | `remove_rate`(가치)·`uncertain_rate`(신뢰) |
@@ -57,12 +57,17 @@ python -m whymath_backend.l4.misconception.judge_shadow_harvest       obs.jsonl
 
 ## crosswalk 매핑 (kebab-id → canonical M-id)
 
-- **가치 변수**: `distinct_coverage_ratio` — 실 런타임에 등장한 *서로 다른* kebab-id 중 canonical
-  매핑을 가진 비율. canary(M-id canonical 플립)는 이 커버리지가 *충분히 차오른 뒤* 검토한다.
+- **가치 변수**: `distinct_canonical_ratio` — 실 런타임에 등장한 *서로 다른* kebab-id 중
+  **canonical 선택 정책**(`select_canonical` — confidence NOT NULL 직접매핑의 strict 최대가
+  *단독*일 때만 선정)을 통과한 비율. canary(M-id canonical 플립)는 이 커버리지가 *충분히
+  차오른 뒤* 검토한다 — 원시 링크 유무(`distinct_coverage_ratio`)는 1:N을 구분 못 해 참고
+  지표로 강등(1:N 링크만 세면 ambiguous 집계가 무의미).
 - **큐레이션 우선순위**: `unmapped_kebab_ids` — 자주 등장하나 매핑이 없는 kebab-id부터 사람이
   crosswalk를 채운다(coverage를 올리는 최단 경로).
-- **정책 필요**: `ambiguous_kebab_ids` — 1:N(한 kebab이 여러 M-id) 매핑. canonical 플립 전
-  confidence 우선순위·다중 표시 정책을 사람이 확정해야 한다.
+- **정책 필요**: `canonical_ambiguous_kebab_ids` — 직접매핑 최고 confidence *동률(tie)*이라
+  canonical이 자동 선정되지 않은 kebab-id. 플립 전 사람이 우선순위를 확정해야 한다(자동 임의
+  선택은 오귀속 위험이라 resolver가 정직하게 미선정). `ambiguous_kebab_ids`(1:N 원시 링크)는
+  다중 표시 정책 검토용 참고 목록.
 - **게이트 우회 감시**: `kebab_invalid` > 0 — 정본 카탈로그 밖 kebab-id가 게이트를 통과했다는 신호
   (조사 대상).
 
