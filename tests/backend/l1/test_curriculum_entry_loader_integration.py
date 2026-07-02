@@ -123,16 +123,18 @@ class TestCurriculumEntryRoundtrip:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     row = conn.execute(
                         text(
-                            "SELECT entry_id, concept_id, country_code, domain_label, grade_band, "
-                            "introduced_grade, national_standard_codes, curriculum_revision, "
-                            "license_id, is_present, confidence, source_url, required_depth, "
-                            "created_at, updated_at FROM curriculum_entry WHERE entry_id = :e"
+                            "SELECT entry_id, concept_id, country_code, subject, domain_label, "
+                            "grade_band, introduced_grade, national_standard_codes, "
+                            "curriculum_revision, license_id, is_present, confidence, source_url, "
+                            "required_depth, created_at, updated_at "
+                            "FROM curriculum_entry WHERE entry_id = :e"
                         ),
                         {"e": _ENTRY_ID},
                     ).one()
                 assert row.entry_id == _ENTRY_ID
                 assert row.concept_id == _NID
                 assert row.country_code == "KR"
+                assert row.subject == "수학"  # S1 — KR 적재 셀은 전부 수학(교과 레벨 축)
                 assert row.domain_label == "적분"
                 assert row.grade_band == "고등학교"
                 assert row.introduced_grade == 10
