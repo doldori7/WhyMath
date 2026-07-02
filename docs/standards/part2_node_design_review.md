@@ -43,29 +43,26 @@
 
 ## 항목 ③ 순수성 — "ConceptNode가 계층 분리됐고 renderer·prompt·curriculum·misconception·embedding을 안 넣었나?"
 
-**판정 △ → 부분 수정.**
+**판정 △ → ✅(Stage A+B 완료).**
 
 - renderer·prompt·embedding·curriculum은 **물리적으로 분리돼 있음**(각각 L5 명세·`docs/prompts/`·
   별도 pgvector 테이블·CurriculumEntry Overlay). curriculum은 이미 노드에서 제거된 선례 있음
   (`drop_concept_subject_curriculum_version`).
-- **위반**: identity 노드 `Concept`(data-pipeline)에 pedagogy 필드가 내장돼 있었다 —
+- **위반(수정 전)**: identity 노드 `Concept`(data-pipeline)에 pedagogy 필드가 내장돼 있었다 —
   `misconception_text`(자유텍스트 오개념·`ConceptContent`+`MisconceptionCatalog`와 삼중 중복)·
   `metaphor`·`accepted_expressions`.
 - **수정**:
-  - `misconception_text` **즉시 제거**(DB 컬럼 미착지·유일 소비처 `common_misconceptions`가 이미
+  - **Stage A**: `misconception_text` 제거(DB 컬럼 미착지·유일 소비처 `common_misconceptions`가 이미
     런타임 비소비로 동결 → 마이그레이션 불필요). graph.json 재생성. 순수성 동결 테스트 신설.
-  - `metaphor`·`accepted_expressions`는 임베딩·프로젝션이 활성 소비 → **Stage B로 게이트**
-    (ConceptContent 크로스워크 완료 후 이관). 이번 범위 아님.
+  - **Stage B**: `metaphor`·`accepted_expressions` 제거. 활성 소비처를 pedagogy 계층 `ConceptContent`
+    (source_id↔code 조인·437 전단사·값 바이트 동일→재임베딩 0)로 재배선 후 노드·`concept_node`
+    컬럼 제거(Alembic `c7d8e9f0a1b2`·write-only 컬럼). 순수성 테스트 금칙 집합에 편입.
   - `difficulty_tier`는 semantic 속성이라 노드 적합(위반 아님) — 4계층 매핑에 명문화.
 
 ---
 
 ## 잔여 리스크 · 후속
 
-- **Stage B**(별도 PR): `metaphor`·`accepted_expressions` 노드 제거는 ConceptContent 크로스워크
-  (Phase 4) 완료가 선행 조건. 미완 상태 착수 시 의미검색 벡터 입력 소실.
 - **입도 재분할**: 세부개념/개념 이중 truth source 통합은 전문가 검수 후 별도 과제.
-- **검증**: `pytest tests/data_pipeline/concept_graph/ tests/backend/l1/test_concept_backend_load.py`
-  `tests/backend/l1/test_five_node_connectivity_governance.py`
-  `tests/backend/l1/test_node_granularity_governance.py`
-  `tests/data_pipeline/concept_graph/test_concept_node_purity.py` — 전부 green(ruff·black·mypy 포함).
+- **검증**: data-pipeline 642 passed·backend 4,776 passed(비통합)·ruff·black·mypy --strict·
+  lint-imports 전부 green. 실 PG 마이그레이션(`c7d8e9f0a1b2` up/down)·통합은 CI에서 검증.

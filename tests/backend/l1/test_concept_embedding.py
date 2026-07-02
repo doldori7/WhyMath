@@ -7,7 +7,8 @@ upsert/search의 *실 라운드트립*은 통합테스트(`test_concept_embeddin
 
   ① 임베딩 텍스트 구성 — name_ko+metaphor+accepted만,
      **description·formal_definition 미포함**(redaction)
-  ② graph.json 로딩 — UC concept_id 추출·안전 필드 표현·redaction 키 무시·빈 표현 제외
+  ② graph.json+content.json 로딩 — UC concept_id·name_ko는 graph, metaphor·accepted는 pedagogy
+     계층 content(source_id↔code 조인·Part 2 §3 Stage B)·redaction 키 무시·빈 표현 제외
   ③ upsert SQL 구성(가짜 엔진 주입 — ON CONFLICT(concept_id) upsert·바인딩 관찰)
   ④ search SQL 구성 — provider/model 필터·<=> 코사인·LIMIT + similarity=1-distance 변환·top_k 경계
   ⑤ populate — Fake provider + 가짜 엔진으로 전 개념 upsert(횟수=개념 수)·dim 일치
@@ -173,90 +174,134 @@ class TestConceptEmbeddingText:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# ② graph.json 로딩 — UC 키·안전 필드·redaction 키 무시·빈 표현 제외
+# ② graph.json+content.json 로딩 — UC 키·name_ko(graph)·metaphor/accepted(content 조인)·
+#    redaction 키 무시·빈 표현 제외 (Part 2 §3 Stage B — pedagogy는 ConceptContent 소싱)
 # ──────────────────────────────────────────────────────────────────────────
-class TestLoadFromGraphJson:
-    def _write_graph(self, tmp_path: Path, concepts: list[dict[str, object]]) -> Path:
-        path = tmp_path / "graph.json"
-        path.write_text(
-            json.dumps({"concepts": concepts, "edges": []}, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        return path
+# 조인 축: graph concept.source_id == content.code. 픽스처 소스 ID.
+_SID_A = "SA"
+_SID_B = "SB"
 
-    def test_extracts_uc_and_safe_text(self, tmp_path: Path) -> None:
-        path = self._write_graph(
-            tmp_path,
-            [
-                {
-                    "concept_id": _UC_A,
-                    "name_ko": "극한",
-                    "metaphor": "다가감",
-                    "accepted_expressions": "수렴 설명",
-                }
-            ],
+
+class TestLoadFromGraphJson:
+    def _write_corpus(
+        self,
+        tmp_path: Path,
+        concepts: list[dict[str, object]],
+        content: list[dict[str, object]] | None = None,
+        *,
+        graph_extra: dict[str, object] | None = None,
+    ) -> tuple[Path, Path]:
+        graph_path = tmp_path / "graph.json"
+        payload: dict[str, object] = {"concepts": concepts, "edges": []}
+        if graph_extra:
+            payload.update(graph_extra)
+        graph_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        content_path = tmp_path / "content.json"
+        content_path.write_text(
+            json.dumps({"content": content or []}, ensure_ascii=False), encoding="utf-8"
         )
-        loaded = load_concepts_from_graph_json(path)
+        return graph_path, content_path
+
+    def test_joins_name_from_graph_and_pedagogy_from_content(self, tmp_path: Path) -> None:
+        # name_ko는 graph, metaphor·accepted는 content(source_id↔code 조인)에서 온다.
+        graph, content = self._write_corpus(
+            tmp_path,
+            [{"concept_id": _UC_A, "name_ko": "극한", "source_id": _SID_A}],
+            [{"code": _SID_A, "metaphor": "다가감", "accepted_expressions": "수렴 설명"}],
+        )
+        loaded = load_concepts_from_graph_json(graph, content_path=content)
         assert loaded == [ConceptText(concept_id=_UC_A, text="극한. 다가감. 수렴 설명")]
 
-    def test_ignores_description_and_formal_definition_if_present(self, tmp_path: Path) -> None:
-        # graph.json엔 본디 없지만, *오염되어 들어와도* 임베딩 표현에 유입되지 않음을 못 박는다.
-        path = self._write_graph(
+    def test_inline_graph_pedagogy_is_ignored(self, tmp_path: Path) -> None:
+        # Stage B: graph.json에 metaphor/accepted가 (오염되어) 있어도 노드 소스는 무시하고
+        # content(pedagogy 단일 진실)만 쓴다. 노드엔 슬롯 자체가 없어야 정상.
+        graph, content = self._write_corpus(
             tmp_path,
             [
                 {
                     "concept_id": _UC_A,
                     "name_ko": "극한",
-                    "metaphor": "다가감",
-                    "accepted_expressions": "수렴",
+                    "source_id": _SID_A,
+                    "metaphor": "노드-오염-은유(무시돼야 함)",
+                    "accepted_expressions": "노드-오염-허용표현(무시돼야 함)",
+                }
+            ],
+            [{"code": _SID_A, "metaphor": "content-은유", "accepted_expressions": "content-허용"}],
+        )
+        loaded = load_concepts_from_graph_json(graph, content_path=content)
+        assert loaded == [ConceptText(concept_id=_UC_A, text="극한. content-은유. content-허용")]
+        assert "오염" not in loaded[0].text  # 노드 잔류분은 표현에 유입되지 않는다.
+
+    def test_ignores_description_and_formal_definition_if_present(self, tmp_path: Path) -> None:
+        # graph·content 어느 쪽에 본문류가 오염돼도 임베딩 표현에 유입되지 않음을 못 박는다.
+        graph, content = self._write_corpus(
+            tmp_path,
+            [
+                {
+                    "concept_id": _UC_A,
+                    "name_ko": "극한",
+                    "source_id": _SID_A,
                     "description": "교과서 본문 근접 서술(절대 임베딩 금지)",
                     "formal_definition": "∀ε>0 ∃δ>0 ... (절대 임베딩 금지)",
                 }
             ],
+            [
+                {
+                    "code": _SID_A,
+                    "metaphor": "다가감",
+                    "accepted_expressions": "수렴",
+                    "formal_definition_internal": "∀ε>0 ... (콘텐츠 비노출·임베딩 금지)",
+                }
+            ],
         )
-        loaded = load_concepts_from_graph_json(path)
+        loaded = load_concepts_from_graph_json(graph, content_path=content)
         assert len(loaded) == 1
         text = loaded[0].text
         assert text == "극한. 다가감. 수렴"
-        # 본문 토큰이 표현에 *전혀* 없다.
+        # 본문 토큰이 표현에 *전혀* 없다(graph·content 양쪽).
         assert "본문" not in text
         assert "∀ε" not in text
         assert "formal" not in text.lower()
 
+    def test_concept_without_content_match_uses_name_ko_only(self, tmp_path: Path) -> None:
+        # content에 매칭 code가 없으면 name_ko만으로 표현(graceful·크로스워크 미스 방어).
+        graph, content = self._write_corpus(
+            tmp_path,
+            [{"concept_id": _UC_A, "name_ko": "고립개념", "source_id": _SID_A}],
+            [],  # 매칭 code 없음
+        )
+        loaded = load_concepts_from_graph_json(graph, content_path=content)
+        assert loaded == [ConceptText(concept_id=_UC_A, text="고립개념")]
+
     def test_skips_concepts_with_empty_safe_text(self, tmp_path: Path) -> None:
-        # 안전 필드가 전부 빈 개념은 제외(빈 벡터 적재 방지).
-        path = self._write_graph(
+        # 안전 필드가 전부 빈 개념은 제외(빈 벡터 적재 방지). B는 name_ko 공백·content 없음 → 빈.
+        graph, content = self._write_corpus(
             tmp_path,
             [
-                {"concept_id": _UC_A, "name_ko": "유효", "metaphor": "은유"},
-                {"concept_id": _UC_B, "name_ko": "", "metaphor": None, "accepted_expressions": ""},
+                {"concept_id": _UC_A, "name_ko": "유효", "source_id": _SID_A},
+                {"concept_id": _UC_B, "name_ko": "", "source_id": _SID_B},
             ],
+            [{"code": _SID_A, "metaphor": "은유"}],
         )
-        loaded = load_concepts_from_graph_json(path)
+        loaded = load_concepts_from_graph_json(graph, content_path=content)
         assert [c.concept_id for c in loaded] == [_UC_A]
 
     def test_missing_concept_id_raises(self, tmp_path: Path) -> None:
         import pytest
 
-        path = self._write_graph(tmp_path, [{"name_ko": "키 없음"}])
+        graph, content = self._write_corpus(tmp_path, [{"name_ko": "키 없음"}], [])
         with pytest.raises(ValueError, match="concept_id"):
-            load_concepts_from_graph_json(path)
+            load_concepts_from_graph_json(graph, content_path=content)
 
     def test_does_not_read_flashcards_or_intl(self, tmp_path: Path) -> None:
         # 그래프 외 자산(flashcards_raw·intl_raw)은 임베딩 대상이 아니다(읽지 않음).
-        path = tmp_path / "graph.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "concepts": [{"concept_id": _UC_A, "name_ko": "개념"}],
-                    "flashcards_raw": [{"front": "무시"}],
-                    "intl_raw": [{"ccss": "무시"}],
-                },
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
+        graph, content = self._write_corpus(
+            tmp_path,
+            [{"concept_id": _UC_A, "name_ko": "개념", "source_id": _SID_A}],
+            [{"code": _SID_A, "metaphor": "은유"}],
+            graph_extra={"flashcards_raw": [{"front": "무시"}], "intl_raw": [{"ccss": "무시"}]},
         )
-        loaded = load_concepts_from_graph_json(path)
+        loaded = load_concepts_from_graph_json(graph, content_path=content)
         assert [c.concept_id for c in loaded] == [_UC_A]
 
 

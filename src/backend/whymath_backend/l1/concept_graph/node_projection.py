@@ -13,9 +13,15 @@ enrichment·게이팅을 PG 조인으로 하기 위한 *적재* 좌석이다(조
 redaction (CLAUDE.md 우선순위 #2 — 협상 불가)
 ────────────────────────────────────────────────────────────────────────────
 적재 필드는 **안전 메타만** — `name_ko`·`domain`·`review_status`·`standard_codes`·`ccss_code`·
-`difficulty_tier`·`metaphor`·`accepted_expressions`. **`description`·`formal_definition`은 읽지도
-적재하지도 않는다**(성취기준 본문 근접 필드·graph.json 부재·ORM 컬럼 부재의 삼중 방어). 슬3
-임베딩 로더와 같은 redaction 규약을 메타 적재에도 적용한다.
+`difficulty_tier`. **`description`·`formal_definition`은 읽지도 적재하지도 않는다**(성취기준 본문
+근접 필드·graph.json 부재·ORM 컬럼 부재의 삼중 방어). 슬3 임베딩 로더와 같은 redaction 규약을
+메타 적재에도 적용한다.
+
+pedagogy 이관(2026-07-02 Part 2 §3 Stage B): `metaphor`·`accepted_expressions`는 이 프로젝션에서
+*제거*했다 — Concept Purity로 identity 노드(graph.json)에서 뺐고, 두 필드는 pedagogy 계층
+`concept_content`(code 키)가 단일 진실이다. 이 테이블(`concept_node`)은 검색 enrichment·게이팅
+메타만 투영하며 pedagogy는 담지 않는다(reader는 원래 없었다 — `fetch_node_meta`는 name_ko·
+domain·review_status만 조회). ORM 컬럼도 Alembic으로 drop한다.
 
 ────────────────────────────────────────────────────────────────────────────
 sync 엔진 재사용 (신규 seam 0)
@@ -71,8 +77,6 @@ _SAFE_META_KEYS: tuple[str, ...] = (
     "standard_codes",
     "ccss_code",
     "difficulty_tier",
-    "metaphor",
-    "accepted_expressions",
 )
 
 
@@ -92,8 +96,6 @@ class ConceptNodeRecord:
     standard_codes: tuple[str, ...]
     ccss_code: str | None
     difficulty_tier: int | None
-    metaphor: str | None
-    accepted_expressions: str | None
 
 
 def _opt_str(value: object) -> str | None:
@@ -160,8 +162,6 @@ def load_concept_nodes_from_graph_json(path: Path) -> list[ConceptNodeRecord]:
                 standard_codes=codes,
                 ccss_code=_opt_str(record.get("ccss_code")),
                 difficulty_tier=_opt_int(record.get("difficulty_tier")),
-                metaphor=_opt_str(record.get("metaphor")),
-                accepted_expressions=_opt_str(record.get("accepted_expressions")),
             )
         )
     return out
@@ -218,8 +218,6 @@ class ConceptNodeStore:
             standard_codes=list(record.standard_codes),
             ccss_code=record.ccss_code,
             difficulty_tier=record.difficulty_tier,
-            metaphor=record.metaphor,
-            accepted_expressions=record.accepted_expressions,
         )
         # PK 충돌 시 갱신 — updated_at은 now()로 새로 찍는다(server_default는 INSERT 전용).
         stmt = stmt.on_conflict_do_update(
@@ -231,8 +229,6 @@ class ConceptNodeStore:
                 "standard_codes": stmt.excluded.standard_codes,
                 "ccss_code": stmt.excluded.ccss_code,
                 "difficulty_tier": stmt.excluded.difficulty_tier,
-                "metaphor": stmt.excluded.metaphor,
-                "accepted_expressions": stmt.excluded.accepted_expressions,
                 "updated_at": func.now(),
             },
         )

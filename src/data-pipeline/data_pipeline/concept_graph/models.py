@@ -112,24 +112,23 @@ class Concept(BaseModel):
     `standard_codes`는 NCIC 성취기준 코드 참조(truth source) — 본문은 복제하지 않는다.
 
     풍부 필드(데이터셋 v1·concept_graph_dataset_v1.md §2 — 2026-06-12 모델 확장 결정):
-    `metaphor`(은유)·`accepted_expressions`(허용표현)·`ccss_code`(매칭 CCSS)·
-    `difficulty_tier`(난이도층 0~24)·`review_status`(적재 보류 표식).
+    `ccss_code`(매칭 CCSS)·`difficulty_tier`(난이도층 0~24)·`review_status`(적재 보류 표식).
 
     노드 계층(플레이북 Part 2 §3 — ConceptNode identity/semantic/pedagogy/visualization 분리):
       - identity(식별): `concept_id`·`source_id`·`aliases`·`name_*`·`domain`
-      - semantic(의미): `difficulty_tier`(난이도)·`standard_codes`·`prerequisite_concept_ids`
+      - semantic(의미): `difficulty_tier`·`standard_codes`·`prerequisite_concept_ids`·`ccss_code`
         — 개념의 의미 속성이라 노드에 둔다("핵심만 노드, 나머지는 속성" — CLAUDE.md).
-      - pedagogy(교수학): 오개념·설명·은유는 **원칙상 노드 비내장**(pedagogy 계층이 단일 진실).
+      - pedagogy(교수학): 오개념·설명·은유·허용표현은 **노드 비내장**(pedagogy 계층이 단일 진실).
         `misconception_codes`/`visualization_card_keys`는 *참조 키*(다리)라 순수성 위반 아님.
       - visualization(시각화): `visualization_card_keys`(참조만 — L5 자산 실체는 노드 밖).
 
-    **오개념 노드 비내장(2026-07-02 Part 2 §3 순수성 수정)**: 자유텍스트 오개념 필드
-    `misconception_text`를 이 모델에서 *제거*했다 — 오개념은 identity 노드에 내장하지 않는다
-    (Concept Purity·misconception contamination 방지). 노드는 `misconception_codes`(카탈로그
-    참조)로만 오개념과 이어지고, 자유텍스트 오개념의 단일 진실은 pedagogy 계층
-    (`concept_content.ConceptContent.misconception`)·검증 카탈로그(`MisconceptionCatalog` 839건)다.
-    ※ `metaphor`·`accepted_expressions`(pedagogy)는 의미검색 임베딩·노드 프로젝션이 아직 소비하므로
-      노드에 잠정 잔류 — `ConceptContent` 크로스워크 완료 후 별도 이관(Stage B).
+    **pedagogy 노드 비내장(2026-07-02 Part 2 §3 순수성 — Stage A+B 완료)**: 자유텍스트 오개념
+    `misconception_text`(Stage A)와 은유·허용표현 `metaphor`·`accepted_expressions`(Stage B)를 이
+    모델에서 *제거*했다 — pedagogy 정보는 identity 노드에 내장하지 않는다(Concept Purity·오염 방지).
+    세 필드의 단일 진실은 pedagogy 계층 `concept_content.ConceptContent`(`code` 키·source_id↔code
+    크로스워크로 조인)이고, 검증 오개념은 `MisconceptionCatalog`(839)다. 노드는
+    `misconception_codes`(카탈로그 참조)로만 오개념과 이어진다. 의미검색 임베딩·노드 프로젝션은
+    metaphor/accepted를 ConceptContent에서 소싱한다(값 동일 — 재임베딩 0).
 
     법적·redaction(concept_graph_dataset_v1.md §3·CLAUDE.md): 성취기준 *본문* 근접 복제
     위험인 `description`·`formal_definition`은 이 모델에 **일부러 부재** — 모델에 슬롯이
@@ -197,14 +196,6 @@ class Concept(BaseModel):
     standard_codes: list[str] = Field(
         default_factory=list,
         description="매핑된 NCIC 성취기준 코드(truth source 연결). 본문은 복제 금지.",
-    )
-    metaphor: str | None = Field(
-        default=None,
-        description="개념을 직관화하는 은유(데이터셋 v1 교수학 주석). 비어있을 수 있음.",
-    )
-    accepted_expressions: str | None = Field(
-        default=None,
-        description="학생이 개념을 '이해했다'고 볼 허용표현(데이터셋 v1). 비어있을 수 있음.",
     )
     ccss_code: str | None = Field(
         default=None,

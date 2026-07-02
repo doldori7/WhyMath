@@ -161,37 +161,32 @@ class TestConcept:
 
 
 class TestConceptEnrichedFields:
-    """데이터셋 v1 풍부 필드 — metaphor·accepted_expressions·ccss_code·
-    difficulty_tier·review_status (concept_graph_dataset_v1.md §2 모델 확장).
+    """데이터셋 v1 풍부 필드 — ccss_code·difficulty_tier·review_status
+    (concept_graph_dataset_v1.md §2 모델 확장).
 
-    ※ 자유텍스트 오개념 `misconception_text`는 2026-07-02 Part 2 §3(Concept Purity)로
-    노드에서 제거됐다 — 순수성 동결은 test_concept_node_purity.py가 담당."""
+    ※ pedagogy 필드는 2026-07-02 Part 2 §3(Concept Purity)로 노드에서 제거됐다 —
+    자유텍스트 오개념 `misconception_text`(Stage A)·은유 `metaphor`·허용표현
+    `accepted_expressions`(Stage B). 순수성 동결은 test_concept_node_purity.py가 담당."""
 
     def test_enriched_fields_roundtrip(self) -> None:
         """풍부 필드가 그대로 보존된다."""
-        c = _concept(
-            metaphor="가까워짐",
-            accepted_expressions="극한을 ε-δ로 설명",
-            ccss_code="HSF-IF.A.1",
-            difficulty_tier=12,
-        )
-        assert c.metaphor == "가까워짐"
+        c = _concept(ccss_code="HSF-IF.A.1", difficulty_tier=12)
         assert c.ccss_code == "HSF-IF.A.1"
         assert c.difficulty_tier == 12
 
     def test_enriched_fields_default_none(self) -> None:
         """풍부 필드는 모두 선택(기본 None)."""
         c = _concept()
-        assert c.metaphor is None
-        assert c.accepted_expressions is None
         assert c.ccss_code is None
         assert c.difficulty_tier is None
 
-    def test_misconception_codes_are_references_only(self) -> None:
-        """오개념 연결은 카탈로그 *참조 키*(misconception_codes)로만 — 자유텍스트 슬롯은 노드에 없다."""
+    def test_pedagogy_fields_are_not_node_slots(self) -> None:
+        """오개념 연결은 참조 키(misconception_codes)로만 — pedagogy 자유텍스트 슬롯은 노드에 없다."""
         c = _concept(misconception_codes=["mc-code"])
         assert c.misconception_codes == ["mc-code"]
-        assert not hasattr(c, "misconception_text")
+        assert not hasattr(c, "misconception_text")  # Stage A
+        assert not hasattr(c, "metaphor")  # Stage B
+        assert not hasattr(c, "accepted_expressions")  # Stage B
 
     @pytest.mark.parametrize("ok", [0, 12, 24])
     def test_difficulty_tier_in_range(self, ok: int) -> None:
@@ -245,14 +240,12 @@ class TestConceptPurity:
             "misconception_codes",
             "visualization_card_keys",
             "standard_codes",
-            "metaphor",
-            "accepted_expressions",
             "ccss_code",
             "difficulty_tier",
             "review_status",
             "notes",
         }
-    )
+    )  # metaphor·accepted_expressions는 Part 2 §3 Stage B로 제거(pedagogy=ConceptContent).
     # Runtime Graph(투영/실행) 관심사 토큰 — 노드 필드명에 등장 금지(참조 키 예외는 화이트리스트).
     _FORBIDDEN_TOKENS = (
         "renderer",

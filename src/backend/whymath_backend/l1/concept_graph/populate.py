@@ -58,6 +58,9 @@ from whymath_backend.l1.embedding_provider import build_provider
 
 # graph.json 기본 경로(슬1 transform-v1 --output-dir 관례). 명시 --graph로 오버라이드.
 _DEFAULT_GRAPH_PATH = Path("data/concept_graph/graph.json")
+# pedagogy 콘텐츠 코퍼스 기본 경로 — metaphor·accepted_expressions 임베딩 소스(Part 2 §3 Stage B).
+# graph.json에서 두 필드를 제거했으므로 임베딩 표현은 이 content.json(code 키)에서 소싱한다.
+_DEFAULT_CONTENT_PATH = Path("data/corpus/concept_content_v1/content.json")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -81,6 +84,15 @@ def main(argv: list[str] | None = None) -> int:
         default=_DEFAULT_GRAPH_PATH,
         help=f"슬1 transform-v1 산출 graph.json 경로(기본 {_DEFAULT_GRAPH_PATH}).",
     )
+    parser.add_argument(
+        "--content",
+        type=Path,
+        default=_DEFAULT_CONTENT_PATH,
+        help=(
+            "pedagogy 콘텐츠 코퍼스 content.json 경로 — 임베딩 metaphor·accepted 소스"
+            f"(source_id↔code 조인·Stage B·기본 {_DEFAULT_CONTENT_PATH})."
+        ),
+    )
     args = parser.parse_args(argv)
 
     settings = get_settings()
@@ -98,9 +110,17 @@ def main(argv: list[str] | None = None) -> int:
             "(`python -m data_pipeline.concept_graph transform-v1 --output-dir ...`)."
         )
         return 2
+    content_path: Path = args.content
+    if not content_path.exists():
+        print(
+            f"content.json 없음: {content_path} — 임베딩 metaphor·accepted 소스입니다. "
+            "--content로 경로를 지정하거나 콘텐츠 코퍼스를 먼저 준비하세요."
+        )
+        return 2
 
     # ① 임베딩 벡터 적재(슬3) — 안전 표현 임베딩 → concept_embedding upsert.
-    concepts = load_concepts_from_graph_json(graph_path)
+    #    metaphor·accepted는 pedagogy 계층 content.json에서 source_id↔code 조인 소싱(Stage B).
+    concepts = load_concepts_from_graph_json(graph_path, content_path=content_path)
     provider = build_provider(settings)
     embedding_count = populate_concept_embeddings(concepts, provider, settings=settings)
 
