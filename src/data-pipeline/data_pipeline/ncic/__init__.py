@@ -4,7 +4,8 @@
 라이선스: 공공누리 제1유형 (출처 표시 필수)
 
 법적 출처 표시 양식 (모든 출력에 메타데이터로 동봉):
-    출처: 교육부 고시 제2022-33호 [수학과 교육과정], 국가교육과정정보센터(NCIC)
+    `models.SOURCE_CITATION` — `data_pipeline.citation.build_ncic_citation_core()` 합성이
+    단일 원천(S3 과목 중립성 게이트가 라벨 리터럴 재등장을 차단, readiness doc §9).
 
 공개 API:
   - AchievementStandard / ConceptStandardLink: 성취기준·개념연결 Pydantic 모델
