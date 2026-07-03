@@ -48,7 +48,7 @@
 
 | jsonl | 레코드 | 핵심 필드 |
 |---|---|---|
-| `concepts.jsonl` | 437 | `src_id`(G01·N1·HK01·J0105·H:…·`10기수1/2-*`), `name_ko`, `category`, `difficulty_tier`(0~24), `standard_codes`[], `ccss_code`, `metaphor`, **`misconception`**, `accepted_expressions`, `definition_provenance`, `flashcard_count` |
+| `concepts.jsonl` | 437 | `src_id`(G01·N1·HK01·J0105·H:…·`10기수1/2-*`), `name_ko`, `category`, `difficulty_tier`(0~24), `standard_codes`[], `ccss_code`, `metaphor`, **`misconception`**, `accepted_expressions`, `definition_provenance`, `flashcard_count`, **`behavior_skills`[]**(Phase 2b-1·concept→skill 참조) |
 | `prerequisite_edges.jsonl` | 581 | `from_id`, `from_name`, `relation`(선수), `to_id`, `to_name` |
 | `standard_ccss_map.jsonl` | 437 | `src_id`, `name_ko`, `standard_code_kr`, `ccss_code` |
 | `flashcards.jsonl` | 113 | `grade`(A·…), `category`, `difficulty_tier`, `src_id`, `name_ko`, `front`, `back`, `mnemonic`, `exposure_condition` |
@@ -58,6 +58,20 @@
 > 등)는 적재 시 정본 `concept_id`로 *재발급*된다. 정본 형식은 **`{TRACK}-{AREA}-{NNN}`**(예
 > `ELEM-GEO-001`) — 기존 `UC.<domain>.<topic>.<slug>`에서 P2a에서 *전환*했다(아래 §5b.1). 추적성은
 > `source_id`(=`src_id`)·`aliases`(=[옛 UC, `src_id`])로 보존된다.
+
+### 2.1 concept→skill 매핑 `behavior_skills` (Phase 2b-1·2026-07-03)
+
+각 개념이 학습·사용 시 exercise하는 스킬(`skill_graph_v1`의 27 skill_id·6 BehaviorArea)을 1~3개
+매핑한 참조 키 배열이다. cognition 계층·본문 아님(`standard_codes` 동형 안전 배열). 런타임엔
+`concept_node.behavior_skills`로 투영되어 (Phase 2b-2) skill mastery 해소의 조인 백킹이 된다.
+
+- **품질=`ai_estimated`(v1)**: 와이매스 자체 저작(자동 유도 아님·교수학 판단). **전문 검수 전**이라
+  정직하게 v1로 표기하며, 이후 검수로 승격한다. 자동 통계 유도는 금지(교수학 날조·CLAUDE.md).
+- **커버리지 404/437**(≥1 스킬)·**33 미매핑(`[]`)**: 27 스킬이 중등 대수 중심이라 초등 산술
+  (자연수·덧셈·곱셈·나눗셈)·문화/탐구 등 적합 스킬이 없는 개념은 `[]`가 정직하다(전량 매핑 강요
+  아님). 6 BehaviorArea 모두 사용(REPRESENT 최다·VERIFY 최소).
+- **dangling 0**: 모든 참조가 정본 27 skill_id에 존재(`tests/data_pipeline/test_concept_skill_
+  crosswalk.py`가 크로스코퍼스 동결). **재임베딩 0**(behavior_skills는 임베딩 안전 필드 밖).
 
 ---
 

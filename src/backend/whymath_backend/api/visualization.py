@@ -26,6 +26,7 @@ from whymath_backend.api._l3_state import get_cache, get_provider, get_trace
 from whymath_backend.api._rate_limit import RateLimitedVisualization
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.session import get_session
+from whymath_backend.l1.concept_visualization import get_visualizability
 from whymath_backend.l2.concept_diagnosis import (
     ConceptDiagnosis,
     compute_concept_diagnoses,
@@ -38,6 +39,7 @@ from whymath_backend.l3.visualization import (
     visualization_spec_for_concept,
 )
 from whymath_backend.l4.lthc import mastery_to_level
+from whymath_backend.l4.visualization_policy import is_visualizable
 from whymath_backend.schema.enums import VisualizationType
 from whymath_backend.schema.visualization import Visualization, VisualizationShareLink
 
@@ -60,7 +62,9 @@ async def visualize_for_concept_diagnosis(
     약점 개념을 골라 넘긴다.
 
     검증 실패(`InvalidVisualizationSpecError`)는 *전파*된다(관측이 아닌 산출물·슬93과 동일).
-    Concept가 DB에 없으면(orphan id) None을 돌려준다(시각화 스킵·예외 아님).
+    None을 돌려주는 두 경우(시각화 스킵·예외 아님): ① Concept가 DB에 없음(orphan id) ② 개념의
+    시각화 가능성 4분류가 *추상·불가*라 자동 시각화를 보류(플레이북 Part 5 게이트·05b) — 억지
+    그림 대신 다른 접근이 교수학적으로 옳다(CLAUDE.md 교수학 정확성).
 
     Args:
         diagnosis: 개념 진단(`compute_concept_diagnoses`의 원소·약점 먼저 정렬됨).
@@ -69,10 +73,16 @@ async def visualize_for_concept_diagnosis(
         student_subscription: 클라우드 승급 가드용 구독 등급(기본 free).
 
     Returns:
-        검증된 `Visualization`, Concept 미존재면 None.
+        검증된 `Visualization`, Concept 미존재 또는 시각화 보류(추상·불가) 시 None.
     """
     concept_orm = await session.get(Concept, diagnosis.concept_id)
     if concept_orm is None:
+        return None
+    concept_schema = concept_orm.to_schema()
+    # 시각화 가능성 게이트(Part 5·05b) — 시각화 계층 Overlay에서 4분류 조회(노드 비내장).
+    # 추상·불가 개념은 억지 시각화를 하지 않는다(행 부재=미태깅→기존 동작).
+    visualizability = await get_visualizability(session, concept_orm.code)
+    if not is_visualizable(visualizability):
         return None
     mastery = (
         diagnosis.bkt_mastery if diagnosis.bkt_mastery is not None else diagnosis.irt_mastery_proxy
@@ -88,7 +98,7 @@ async def visualize_for_concept_diagnosis(
         sync=True,
     )
     return await visualization_spec_for_concept(
-        concept_orm.to_schema(),
+        concept_schema,
         level,
         req,
         provider=provider,
@@ -146,9 +156,11 @@ async def post_weak_concept_visualization(
             detail="시각화 생성 LLM을 현재 사용할 수 없습니다(잠시 후 재시도).",
         ) from exc
     if viz is None:
+        # None = 개념 데이터 부재(orphan) 또는 시각화 가능성이 추상·불가라 자동 시각화 보류
+        # (플레이북 Part 5 게이트·05b) — 둘 다 "시각화 산출물 없음"이라 404로 정직히 반환한다.
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="개념 데이터를 찾을 수 없습니다.",
+            detail="이 개념은 시각화 대상이 아니거나(추상·불가) 개념 데이터가 없습니다.",
         )
     return viz
 

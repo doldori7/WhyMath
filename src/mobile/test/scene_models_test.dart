@@ -61,8 +61,8 @@ Map<String, dynamic> _sceneJson() => {
         },
         {
           'kind': 'skill_focus',
-          'cognitive_type': 'THEOREM',
-          'focus_prompt': '이 정리를 적용하려면 먼저 가정이 성립하는지 확인하세요.',
+          'behavior_area': 'VERIFY',
+          'focus_prompt': '결과가 조건을 만족하는지 반례·특수값으로 점검하세요.',
         },
       ],
     };
@@ -120,11 +120,11 @@ void main() {
     expect(ann.kind, 'annotation');
     expect(ann.targetElementIndex, 0);
 
-    // skill_focus(행동영역 focus·S5j).
+    // skill_focus(행동영역 focus·S5k).
     final skill = scene.elements[6];
     expect(skill.kind, 'skill_focus');
-    expect(skill.cognitiveType, 'THEOREM');
-    expect(skill.focusPrompt, '이 정리를 적용하려면 먼저 가정이 성립하는지 확인하세요.');
+    expect(skill.behaviorArea, 'VERIFY');
+    expect(skill.focusPrompt, '결과가 조건을 만족하는지 반례·특수값으로 점검하세요.');
   });
 
   test('fromJson∘toJson 라운드트립 — 동치', () {

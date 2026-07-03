@@ -41,9 +41,7 @@ from whymath_backend.l4.learning_scene import (
 def _import_targets_of(module: str) -> list[str]:
     """`module`이 실제로 import하는 이름 목록(AST — 주석/docstring 언급 제외)."""
     spec = importlib.util.find_spec(module)
-    assert (
-        spec is not None and spec.origin is not None
-    ), f"모듈 경로 해석 실패: {module}"
+    assert spec is not None and spec.origin is not None, f"모듈 경로 해석 실패: {module}"
     with open(spec.origin, encoding="utf-8") as fh:
         tree = ast.parse(fh.read(), filename=spec.origin)
     names: list[str] = []
@@ -77,9 +75,7 @@ def test_l3_scene_pipeline_seat_has_no_l4_import(module: str) -> None:
     생성기(`l4/scene_generation.py`)가 L3를 부르는 건 정방향(L4→L3)이므로 허용된다. 반대로 L3가
     L4를 끌어오면 역의존 → 순환·계층 붕괴. 재발 시 어느 import가 방향을 깼는지 이름까지 노출한다.
     """
-    offending = [
-        name for name in _import_targets_of(module) if "whymath_backend.l4" in name
-    ]
+    offending = [name for name in _import_targets_of(module) if "whymath_backend.l4" in name]
     assert not offending, f"{module}에 L4 역방향 import(역류):\n" + "\n".join(offending)
 
 
@@ -96,9 +92,9 @@ def test_scene_schema_seat_imports_no_layer(module: str) -> None:
         for layer in ("l1", "l2", "l3", "l4", "l5", "l6")
         if f"whymath_backend.{layer}" in name
     ]
-    assert (
-        not offending
-    ), f"{module}(schema)가 L레이어를 import(순수성 붕괴):\n" + "\n".join(offending)
+    assert not offending, f"{module}(schema)가 L레이어를 import(순수성 붕괴):\n" + "\n".join(
+        offending
+    )
 
 
 # (c) SceneElement 6종 필드 화이트리스트(동결) — 새 필드 추가 시 red → "이 필드가 정답/판정/런타임
@@ -114,7 +110,7 @@ _ELEMENT_ALLOWED_FIELDS: dict[type, frozenset[str]] = {
         {"kind", "socratic_category", "polya_stage", "hint_level", "prompt_text"}
     ),
     AnnotationElement: frozenset({"kind", "target_element_index", "highlight_spec"}),
-    SkillFocusElement: frozenset({"kind", "cognitive_type", "focus_prompt"}),
+    SkillFocusElement: frozenset({"kind", "behavior_area", "focus_prompt"}),
 }
 
 # 정답 유출(낙인·즉답)·런타임/interaction state 관심사 토큰 — 어떤 요소 필드명에도 등장 금지.
@@ -136,9 +132,7 @@ _FORBIDDEN_ELEMENT_TOKENS: tuple[str, ...] = (
 
 
 @pytest.mark.parametrize("element_cls, allowed", _ELEMENT_ALLOWED_FIELDS.items())
-def test_scene_element_field_set_frozen(
-    element_cls: type, allowed: frozenset[str]
-) -> None:
+def test_scene_element_field_set_frozen(element_cls: type, allowed: frozenset[str]) -> None:
     """(c-1) 각 SceneElement 변형의 필드 집합이 화이트리스트와 정확히 일치(순수 장면 요소만)."""
     got = sorted(element_cls.model_fields)
     assert set(element_cls.model_fields) == allowed, (
@@ -192,7 +186,5 @@ def test_scene_kind_taxonomy_matches_crosswalk() -> None:
     )
     # LearningScene 최상위에도 런타임/UI 상태 필드가 새어들지 않았는지 동시 확인(항목 ③).
     scene_forbidden = {"session", "runtime", "pixel", "widget", "current_value"}
-    leaked = [
-        f for f in LearningScene.model_fields for t in scene_forbidden if t in f.lower()
-    ]
+    leaked = [f for f in LearningScene.model_fields for t in scene_forbidden if t in f.lower()]
     assert not leaked, f"LearningScene에 런타임/UI 상태 필드 누수: {leaked}"

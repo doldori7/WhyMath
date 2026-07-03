@@ -31,11 +31,13 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from whymath_backend.config import get_settings
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.crosslink_shadow import observe_crosslink_shadow
 from whymath_backend.l4.misconception.models import InterventionPattern
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.socratic.categories import SocraticCategory
-from whymath_backend.schema.enums import CognitiveType, VisualizationType
+from whymath_backend.schema.enums import BehaviorArea, VisualizationType
 from whymath_backend.schema.visualization import Graph2dSpec, Visualization
 
 
@@ -127,9 +129,7 @@ class StepPanelElement(_ElementBase):
     """
 
     kind: Literal["step_panel"] = "step_panel"
-    solution_path_id: str = Field(
-        description="참조할 검증 풀이 경로 id(`SolutionPath`)."
-    )
+    solution_path_id: str = Field(description="참조할 검증 풀이 경로 id(`SolutionPath`).")
     reveal_policy: Literal["deferred"] = Field(
         default="deferred", description="점층 노출만 허용(답 미루기·다른 값 불가)."
     )
@@ -182,17 +182,17 @@ class AnnotationElement(_ElementBase):
 
 
 class SkillFocusElement(_ElementBase):
-    """행동영역 focus 블록 — 개념의 *행동영역*(cognitive_type)이 요구하는 인지 행동을 드러낸다.
+    """행동영역 focus 블록 — 개념의 *행동영역*(`BehaviorArea`)이 요구하는 인지 행동을 드러낸다.
 
-    관점 문서의 SkillBlock("조건 강조") 선언적 형태 — S5i 요소 조합 프로파일이 *어느 행동영역에서
-    이 블록을 낼지 자동 분기*(THEOREM/TECHNIQUE/PATTERN)한다. `focus_prompt`는 *행동 focus 지시*
-    (정본·질문 아님·**정답 아님**) — `misconception_probe`처럼 정답/수정 필드 부재(extra=forbid가
-    구조 차단·answer-deferral·낙인 금지). interactive 경우분할 트리는 WH-S Tier3 종속(초기 제외).
+    관점 문서의 SkillBlock("조건 강조") 선언적 형태 — 생성기가 *어느 행동영역에서 이 블록을 낼지
+    자동 분기*한다(주 행동영역별·미매핑=미부여·S5k). `focus_prompt`는 *행동 focus 지시*(정본·질문
+    아님·**정답 아님**) — `misconception_probe`처럼 정답/수정 필드 부재(extra=forbid가 구조 차단·
+    answer-deferral·낙인 금지). interactive 경우분할 트리는 WH-S Tier3 종속(초기 제외).
     """
 
     kind: Literal["skill_focus"] = "skill_focus"
-    cognitive_type: CognitiveType = Field(
-        description="이 블록이 드러내는 행동영역(개념 cognitive_type·S5i 축 참조)."
+    behavior_area: BehaviorArea = Field(
+        description="이 블록이 드러내는 행동영역(정본 `BehaviorArea`·#418·SkillNode 축)."
     )
     focus_prompt: str = Field(
         min_length=1, description="선언적 행동 focus 지시(정본·정답/질문 아님)."
@@ -243,9 +243,7 @@ class LearningScene(BaseModel):
     learner_context: SceneLearnerContext | None = Field(
         default=None, description="생성 시점 학습자 스냅샷(읽기전용·판정 아님)."
     )
-    elements: list[SceneElement] = Field(
-        description="합성 요소(순서 = 렌더/레이아웃 순서)."
-    )
+    elements: list[SceneElement] = Field(description="합성 요소(순서 = 렌더/레이아웃 순서).")
 
     @model_validator(mode="after")
     def _validate_invariants(self) -> LearningScene:
@@ -332,18 +330,21 @@ def parse_learning_scene(data: dict[str, Any] | str) -> LearningScene:
     try:
         scene = LearningScene.model_validate(payload)
     except ValidationError as exc:
-        raise LearningSceneValidationError(
-            f"LearningScene 스키마/불변식 위반: {exc}"
-        ) from exc
+        raise LearningSceneValidationError(f"LearningScene 스키마/불변식 위반: {exc}") from exc
 
     # 참조 무결성 — 오개념 카탈로그(30종). concept_id 개념그래프 검증은 S3(DB 필요).
+    crosslink_shadow = get_settings().misconception_crosslink_mode != "off"
     for idx, el in enumerate(scene.elements):
-        if (
-            isinstance(el, MisconceptionProbeElement)
-            and el.misconception_id not in CATALOG_BY_ID
-        ):
+        if not isinstance(el, MisconceptionProbeElement):
+            continue
+        if el.misconception_id not in CATALOG_BY_ID:
             raise LearningSceneValidationError(
                 f"elements[{idx}].misconception_id='{el.misconception_id}'가 오개념 카탈로그에 없다"
             )
+        # crosswalk shadow(비노출·비차단) — 게이트 통과한 kebab-id의 M-id 매핑 coverage를
+        # 로그로만 관측(반환 scene은 kebab-id 그대로·불변). off면 조회 0(evidence_store 미러·
+        # per-write 왕복 회피). 매핑 채택·canary 플립 전 "노출 전 측정"(remediation §1.3 step3).
+        if crosslink_shadow:
+            observe_crosslink_shadow(el.misconception_id)
 
     return scene

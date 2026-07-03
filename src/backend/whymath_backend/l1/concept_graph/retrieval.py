@@ -67,9 +67,10 @@ _REVIEWED: str = "reviewed"
 class ConceptSearchHit:
     """개념 의미검색 결과 1건 — concept_id + 코사인 유사도 + *안전* 메타(enrich·소비 슬1).
 
-    `concept_id`는 개념 정본 키(`{TRACK}-{AREA}-{NNN}`·구 UC는 aliases 보존·슬2 Neo4j 노드 키·슬3
-    concept_embedding과 동일 키 공간)다. `similarity`는 질의 임베딩과의 코사인 [-1, 1](클수록 의미
-    근접). `name_ko`·`domain`·`review_status`는 `concept_node`(PG 프로젝션) 조인으로 붙인 *안전
+    `concept_id`는 개념 정본 키(재-ID(P2d) 후 `math.<area>.<slug>`·옛 TRACK-AREA-NNN·옛 UC는
+    aliases 보존·슬2 Neo4j 노드 키·슬3 concept_embedding과 동일 키 공간)다. `similarity`는 질의
+    임베딩과의 코사인 [-1, 1](클수록 의미 근접). `name_ko`·`domain`·`review_status`는
+    `concept_node`(PG 프로젝션) 조인으로 붙인 *안전
     표시·게이팅 필드*다 — `concept_node`에 해당 개념 메타가 없으면(적재 누락) **None**(graceful).
     **본문(description·formal_definition)은 미포함** — 프로젝션 테이블에 컬럼 자체가 없다
     (redaction·노출 계약). 소비처(L2/L4·교사 도구)는 concept_id 키 + 이 안전 메타로 동작한다.

@@ -127,6 +127,13 @@ Kiki가 제시한 재검토 관점은 9블록을 *이름*만이 아니라 **블�
 > 오개념·행동영역) 모두 분기하나, ②는 여전히 **△** — *가시 SkillBlock element kind*(조건강조·경우분할 트리)·
 > 인터랙션 다양성·Tutoring Adapter·AssessmentBlock 합성이 남았다(아래 갭 표 🔴 항목).
 
+> **⚠️ 정정(2026-07-03·S5k)**: S5i/S5j는 조사 시점 "행동영역 taxonomy 없음"이라 축을 **`CognitiveType`**
+> (개념 성격)으로 근사했으나, 그 사이 머지된 **#418**이 **정본 `BehaviorArea` 6종**(COMPUTE/TRANSFORM/
+> INTERPRET/REPRESENT/REASON/VERIFY·"행동영역(cognitive action)")을, **#419**가 concept→skill 매핑을
+> 도입했다. 따라서 lead/skill_focus 축을 **`BehaviorArea`로 재정렬**(S5k·단일 진실원천) — 직교 2축으로
+> 소크라테스는 개념축(`cognitive_type`) 유지, 진입 순서·`skill_focus.behavior_area`는 행동영역축이 담당.
+> concept→skill 미매핑 개념은 중립(탐구 진입·focus 0)이라 초기 관찰 효과는 매핑 coverage에 종속.
+
 **관점 9블록 → 현 구현 능력 갭(실측)**
 
 | 관점 블록 / 엔진 | 요구 동작 | 현 구현 | 판정 |

@@ -7,6 +7,12 @@
 > **범위**: 분석만 — 수정은 *방향*만 제시(작업 항목화는 별도 `/plan`).
 > **동반(retrieval 심화)**: `math_dsl_retrieval_analysis.md` — 본 레지스터의 "AI retrieval failure" 축을 검색 10렌즈+4전략으로 심화(2026-07-01).
 
+> ⚠️ **2026-07-03 개정 예고 — ③ FormulaNode·리스크 8**: "③ 미도입 FormulaNode가 정답"·리스크 8
+> (node explosion) 판정은 리치 Part 2 스펙 **전면 채택**(사용자 확정·`concept_node_layering_
+> decision.md` §0)으로 재판정됐다 — FormulaNode를 **canonical-only**(변형식 노드화 금지)로 도입하되
+> SymPy 검증커널·AST 참조전용 경계는 유지한다. node explosion 방어는 "canonical 단위 승격 + 신규
+> 엣지 타입 0" 원칙으로 대체. 실제 개정(③·Q3/Q8·리스크 8 정정)은 로드맵 Phase 5에서 수행.
+
 ---
 
 ## 0. 현재 구조 스냅샷
@@ -20,7 +26,7 @@
 | 시각화 spec | 렌더러 종속 필드 **0**(no fps/shader/canvas/pixel/color)·`extra="forbid"` | `schema/visualization.py:132-199` |
 | LearningScene | 6 element kind·불변식 3종·참조 무결성 게이트·interaction state 누출 **0** | `l4/learning_scene.py:79-312` |
 | 오개념 | **3중 표현**: kebab 30종(런타임)·M-id 839종(콘텐츠)·개념노드 JSONB 자유서술 — **FK 없음** | `l4/misconception/catalog.py`·`schema/misconception_catalog.py:9-12`·`schema/concept.py:213` |
-| 수식 동치 | 명시 AST 없음 — SymPy(py)·mathjs(js) **각자 파싱·정규화** | `l3/verify_step.py`·`src/web/graphing-calculator/src/lib/graph2dSpec.js` |
+| 수식 동치 | 명시 AST 없음 — SymPy(py)·mathjs(js) **각자 파싱·정규화**. py 측 *입력 표기 정규화*(implicit mult·전각/NFKC·연산자·그리스·chained eq)는 `to_sympy_source` **단일 권위**로 일원화(2026-07-02·Part 4 항목4) | `l3/symbolic_equivalence.py`·`l3/verify_step.py`·`src/web/graphing-calculator/src/lib/graph2dSpec.js` |
 
 **한 줄 평**: *표현 계층은 invariant가 스키마로 박혀 견고, 그래프 위생은 아직 무방비, 오개념
 정체성은 이미 부채.* 폭발은 대부분 *시작 전* — 지금이 invariant를 박을 적기다.
@@ -36,7 +42,7 @@
 | 3 | **curriculum inconsistency** | 🟠 중상 | 교육과정 정보 **노드 내장 + Overlay 이중**·atom code에 개정연도 박힘 (`schema/concept.py:147-160`) |
 | 4 | **AI retrieval failure** | 🟠 중간 | 방향맹 임베딩·hybrid fusion 전략 부재·가설 store 미연결 (`semantic/matcher.py:9-18`·`api/scene.py`) |
 | 5 | **relation explosion** | 🟠 중간(잠재) | `ANALOGOUS_TO`·`CONTRASTS`·`TRIGGERS_DISTRACTOR` 선언·미적재 → 적재 시 N² (`enums.py` EdgeType) |
-| 6 | **AST duplication** | 🟠 중간 | SymPy(py)·mathjs(js) 병렬 정규화 → drift (`verify_step.py`·`graph2dSpec.js`) |
+| 6 | **AST duplication** | 🟠 중간(완화) | SymPy(py)·mathjs(js) 병렬 정규화 → drift. py 입력 정규화는 `to_sympy_source` 단일 권위로 일원화돼 py 내부 drift 표면 축소(2026-07-02·`math_dsl_part4_ast_review.md`) — py↔js 계약은 golden test가 계속 방어 (`symbolic_equivalence.py`·`graph2dSpec.js`) |
 | 7 | **cyclic dependency** | 🟡 낮음(무방비) | 현재 acyclic이나 reachability/SCC 게이트 없음 (`populate.py`) |
 | 8 | **node explosion** | 🟡 낮음 | 입도 판정 규칙 미명문(과분할)·Formula/Proof 미도입 |
 | 9 | **renderer coupling** | 🟢 낮음 | spec 렌더러 독립·`extra="forbid"` (`visualization.py:186-199`) |
@@ -150,8 +156,12 @@ crosswalk 골격+resolver·증거저장소 shadow), **premature한 것은 도입
 | Q2 약한 relation 폭발 | EdgeType 약한 값 전부 스윕→PREREQUISITE만 적재 + traversal 배제 + 어휘 보존 | `test_edge_relation_governance.py`·`test_prerequisite_traversal_integration.py` |
 | Q10-⑥ 오개념 단일 정체성 | `_persist_active_set` crosswalk shadow 배선(비노출·비차단) | `l4/misconception/hypothesis_store.py` |
 | Q10-⑧(부분) traversal 예산 | `MAX_PREREQUISITE_DEPTH` 단일 출처 | `l2/prerequisite_recommendation.py`·`api/me.py` |
+| Q10-⑧ "전체 그래프 미열람" | LLM 경계 그래프-컬렉션 주입 금지 + traversal 예산 단일 출처 (Part 10 검토·2026-07-03) | `tests/backend/l3/test_llm_subgraph_budget_invariant.py` |
 
-**미채택(premature/dead)**: LLM subgraph 예산·증분 edge-add reachability·SCC 크론·약한 타입 reject
+**미채택(premature/dead)**: LLM subgraph **예산 guard**(능동 max_nodes·max_tokens 절단 builder — 트리거:
+graph→LLM 컨텍스트 소비처 최초 등장 시 `l2/reasoning_subgraph.py` canonical seam 신설. *불변식 자체*는
+위 표에서 CI 동결됨 — Part 10 검토 §4·`docs/standards/build_roadmap_part10_review.md`)·증분 edge-add
+reachability·SCC 크론·약한 타입 reject
 validator·crosswalk 매핑 *자동* 적재(사람 검수 산출물·우선순위 #1·#3). **잔여(사람 검수 게이트)**:
 오개념 crosswalk 매핑 채택·적재(`docs/data/misconception_crosslink_candidates.md` 검수→로더 적재→
 shadow 측정→canary)·교육과정 Overlay US/IMO·`required_depth` 큐레이션.

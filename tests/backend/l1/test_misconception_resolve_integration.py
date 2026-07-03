@@ -135,7 +135,6 @@ def _seed_concepts() -> None:
                 aliases=[],
                 level=ConceptLevel.세부개념,
                 intrinsic_difficulty=None,
-                common_misconceptions=[],
             ),
             BackendConceptRecord(
                 code=_CONCEPT_CODE_B,
@@ -144,7 +143,6 @@ def _seed_concepts() -> None:
                 aliases=[],
                 level=ConceptLevel.세부개념,
                 intrinsic_difficulty=None,
-                common_misconceptions=[],
             ),
         ],
         settings=Settings(),

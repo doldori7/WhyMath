@@ -69,6 +69,7 @@ from whymath_backend.db.models.concept_content import (
 from whymath_backend.db.models.concept_embedding import ConceptEmbedding
 from whymath_backend.db.models.concept_node import ConceptNode
 from whymath_backend.db.models.concept_standard_link import ConceptStandardLink
+from whymath_backend.db.models.concept_visualization import ConceptVisualization
 from whymath_backend.db.models.curriculum_entry import CurriculumEntry
 from whymath_backend.db.models.dead_end_log import DeadEndLog
 from whymath_backend.db.models.device import DeviceCredential
@@ -94,6 +95,10 @@ from whymath_backend.db.models.provenance import (
     GenerationLog,
 )
 from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
+from whymath_backend.db.models.skill_node import (
+    SKILL_REVIEW_STATUS_DEFAULT,
+    SkillNode,
+)
 from whymath_backend.db.models.solution_node import (
     NodeVerifyStatus,
     SolutionNode,
@@ -176,6 +181,7 @@ __all__ = [
     "ConceptNode",
     # 원자 Phase 3 Slice 1: ConceptContent (콘텐츠 4종 PG 프로젝션·code 키·K-12/대학·additive)
     "ConceptContent",
+    "ConceptVisualization",
     "CONTENT_REVIEW_STATUS_AI_ESTIMATED",
     "CONTENT_SCOPE_K12",
     "CONTENT_SCOPE_UNIVERSITY",
@@ -199,6 +205,9 @@ __all__ = [
     "VerifiedLemma",
     # OAuth-a3b: RefreshTokenSession (리프레시 토큰 서버측 취소 allowlist·PK=jti)
     "RefreshTokenSession",
+    # Part 2 Phase 2a: SkillNode (L1 스킬 메타 PG 프로젝션·skill_id 키·behavior_area native enum)
+    "SkillNode",
+    "SKILL_REVIEW_STATUS_DEFAULT",
     # PIPA §22-2: ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사·surrogate UUID PK)
     "ParentalConsent",
     # P1-2: AchievementStandard (NCIC 성취기준 영속·norm_id PK·official_code 비유일)

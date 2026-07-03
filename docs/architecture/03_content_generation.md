@@ -115,6 +115,8 @@ class SolutionStep(BaseModel):
     concept_node_id: str              # 이 단계가 통과하는 L1 개념 그래프 노드
     hint: str                         # 이 단계에서 막힌 학생용 힌트 (L4 graded Hint와 연결)
     common_errors: list[str]          # 이 단계에서 흔한 오류 (L1 misconceptions와 매핑)
+    reasoning_type: ReasoningType | None   # 스텝 단위 추론 유형 (폐쇄 7종·선택·§ReasoningStep)
+    justification: Justification | None    # 정당화 근거 참조 (정리·개념·이전 스텝·선택)
     sympy_verified: bool              # 이 단계가 SymPy 자동 검증을 통과했는지
     lean_verified: bool | None        # 형식 증명 단계인 경우 Lean 검증 여부
 
@@ -132,6 +134,19 @@ class SolutionPath(BaseModel):
 - **`steps`**: 각 단계의 내용 + 막힌 학생용 힌트 + 흔한 오류 + SymPy/Lean 검증 표시. 힌트는 L4 교수학 엔진의 graded `Hint`로 전달되고, 흔한 오류는 L2 오개념 매핑·L1 misconceptions 카탈로그와 연결된다.
 - **`embedding`**: 풀이 임베딩 벡터. 유사 풀이 검색(벡터 DB)·풀이 군집화에 사용. 임베딩 모델은 CLAUDE.md 기술 스택 표의 OpenAI text-embedding-3-large.
 - **L2 연결**: L2 `MasteryState.preferred_solution_style`(02 문서 참조)은 이 `SolutionPath.approach_type`을 값으로 갖는다. L2가 "이 학생은 기하적 `SolutionPath`에서 정답률·체류시간이 좋다"를 추적하면, L4가 힌트·다중 풀이 제시 순서를 정할 때 그 유형의 `SolutionPath`를 우선 노출한다.
+
+### ReasoningStep — 추론 유형·정당화의 얇은 도입 (교육 추론 엔진 §2.2)
+
+`docs/architecture/math_dsl_evolution.md`는 MATH DSL이 **교육 추론 엔진**(§2.2·권장 1순위)으로 진화해야 한다고 판정했고, 그 첫 벽돌로 **추론 스텝의 기계가독화**(§3.5 Phase 1)를 지목한다. 지금까지 `SolutionStep.content`는 자연어+LaTeX *불투명 문자열*이라, 기계가 "이 단계가 어떤 추론 유형이며 무엇에 근거하는가"를 읽지 못했다. 이를 **얇은 선택 필드 2종**으로 연다 (기존 스펙 100% 하위호환 — strict superset).
+
+- **`reasoning_type`** (`ReasoningType | None`): 스텝 단위 추론 유형. **폐쇄 7종** — `DEDUCTION`(연역)·`SUBSTITUTION`(치환)·`CASE_SPLIT`(사례분류)·`INDUCTION`(귀납)·`TRANSFORMATION`(동치변형)·`HEURISTIC`(휴리스틱)·`BACKWARD`(역방향). 구현 정본은 `schema/enums.py`의 `ReasoningType`(단일 좌석). `approach_type`(풀이 *전체* 6유형)과는 **다른 축** — 한 대수적 풀이 안에서도 스텝마다 치환·사례분류·귀납이 섞인다.
+- **`justification`** (`Justification | None`): 이 스텝이 "왜 정당한가"의 근거 참조 — 정리 개념노드(`theorem_concept_ids`)·일반 개념노드(`concept_node_ids`)·이전 스텝(`prior_step_orders`, 각 값 < 현재 order·전방참조 금지)의 얇은 묶음. 스펙은 `schemas/v1.1/solution_path.schema.yaml`의 `Justification` 블록.
+
+**경계 (premature abstraction 금지·§4)**:
+- 둘 다 **선택(nullable·빈 기본값)** — 미지정 스텝도 유효(기존 `SolutionStep` 그대로).
+- Phase 1은 **태그·근거 표현만** 둔다. 유형별 검증 결선(PRM/SymPy가 `reasoning_type`별로 검증)·LLM 태깅 파이프라인·`SolutionStep` Pydantic/ORM 실체화는 **Phase 2**(다중 풀이 생성이라는 소비처가 설 때).
+- `justification`은 **참조(ID/order)만** 담는 인라인 묶음 — 완전 형식논리 증명 트리·자체 정리증명기·그래프 엣지/ORM 테이블로 승격하지 않는다(경계된 Tier3 Lean 위임·§2.9).
+- `ReasoningType`은 **폐쇄집합** — 무한 세분화 온톨로지 금지(§2.2 금기). 유형 추가는 의도적 결정.
 
 ### 🚨 개념 시퀀스 동치성 판정 — 휴리스틱 + 사람 검수 병행
 

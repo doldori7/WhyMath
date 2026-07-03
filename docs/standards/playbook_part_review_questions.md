@@ -60,9 +60,13 @@
 
 법칙: *4분류(직접 / 동적 / 추상 / 불가). Renderer 독립. 5상태 분리.*
 
-- [ ] 개념을 **시각화 4분류**로 판별하나, 전부 똑같이 그리려 하나?
-- [ ] VisualizationNode에 Desmos / Canvas / WebGL **구현체 이름**이 없나? (Concept → Visualization Intent → Renderer Adapter)
-- [ ] Math / Pedagogy / Interaction / Animation / UI **5상태 분리** + 의존 방향 Math → … → UI **단방향**인가?
+> **검토 판정(2026-07-02)**: 정본 `docs/architecture/05b_visualization_classification.md`. CP1은
+> 인지 4분류가 전무했으나 `Visualizability` enum + 생성 게이트로 해소, CP2는 충족(구현체명은
+> render_contract·L5만), CP3는 `test_visualization_state_separation.py`로 CI 강제.
+
+- [x] 개념을 **시각화 4분류**로 판별하나, 전부 똑같이 그리려 하나? — 시각화 Overlay `concept_visualization`(직접/동적/추상/불가·노드 비내장) + `l4/visualization_policy.py` 게이트(추상·불가→폴백)
+- [x] VisualizationNode에 Desmos / Canvas / WebGL **구현체 이름**이 없나? (Concept → Visualization Intent → Renderer Adapter) — 노드·`Visualization` 스키마 0, 구현체명은 `render_contract.json` family·L5 어댑터
+- [x] Math / Pedagogy / Interaction / Animation / UI **5상태 분리** + 의존 방향 Math → … → UI **단방향**인가? — `test_visualization_state_separation.py`(stateless spec·Intent≠구현체) + import-linter 7계층 계약(단방향) CI 강제
 
 ## Part 6. 오개념 시스템
 

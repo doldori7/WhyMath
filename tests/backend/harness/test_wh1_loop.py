@@ -14,6 +14,7 @@ import asyncio
 
 import pytest
 
+from whymath_backend.config import get_settings
 from whymath_backend.harness.wh1_loop import (
     Action,
     CurateHypothesisAction,
@@ -245,6 +246,108 @@ class TestEvidenceGateAndRefutation:
         )
         ids = {h.misconception_id for h in out.hypotheses}  # type: ignore[attr-defined]
         assert _MID not in ids  # 반박으로 제거
+
+
+class _SpyObserve:
+    """observe_crosslink_shadow 호출 인자를 기록하는 스파이(log_evidence 게이트 배선 검증용)."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def __call__(self, misconception_id: str) -> None:
+        self.calls.append(misconception_id)
+
+
+class _BoomResolver:
+    """resolve가 항상 raise — never-break(증거 적재 무결성) 단언용(evidence_store 선례 동형)."""
+
+    def resolve(self, *args: object, **kwargs: object) -> list[str]:
+        raise RuntimeError("crosswalk DB 미도달")
+
+
+class TestLogEvidenceCrosslinkShadowWiring:
+    """log_evidence가 게이트 통과한 kebab-id를 shadow 관측하는지 — off 기본·비노출·post-gate.
+
+    관측 함수 자체(record·never-break)는 crosslink_shadow/evidence_store 테스트가 단위 검증한다 —
+    여기선 WH-1 log_evidence *호출부 배선*만 본다(순수 루프·`state`/`ToolResult` 불변).
+    """
+
+    def test_off_skips_observe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """off(기본) → observe 미호출·증거는 kebab 그대로 적재."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "off")
+        get_settings.cache_clear()
+        spy = _SpyObserve()
+        monkeypatch.setattr("whymath_backend.harness.wh1_loop.observe_crosslink_shadow", spy)
+        try:
+            out = _run(
+                [
+                    LogEvidenceAction(misconception_id=_MID, polarity=1, weight=1.0),
+                    EndTurnAction(action_type="격려", utterance="ok"),
+                ]
+            )
+            assert spy.calls == []
+            assert len(out.evidence) == 1  # type: ignore[attr-defined]
+        finally:
+            get_settings.cache_clear()
+
+    def test_shadow_observes_valid_evidence(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """shadow → 게이트 통과 kebab으로 observe 1회·증거 적재 정상(ok·kebab 보존)."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        spy = _SpyObserve()
+        monkeypatch.setattr("whymath_backend.harness.wh1_loop.observe_crosslink_shadow", spy)
+        try:
+            out = _run(
+                [
+                    LogEvidenceAction(misconception_id=_MID, polarity=1, weight=1.0),
+                    EndTurnAction(action_type="격려", utterance="ok"),
+                ]
+            )
+            assert spy.calls == [_MID]
+            ev_results = [r for r in out.trace if r.kind == "log_evidence"]  # type: ignore[attr-defined]
+            assert [r.ok for r in ev_results] == [True]
+            assert out.evidence[0].misconception_id == _MID  # type: ignore[attr-defined]
+        finally:
+            get_settings.cache_clear()
+
+    def test_rejected_evidence_skips_observe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """미등록 kebab → 게이트 거부·observe 미호출(훅은 post-gate)."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        spy = _SpyObserve()
+        monkeypatch.setattr("whymath_backend.harness.wh1_loop.observe_crosslink_shadow", spy)
+        try:
+            out = _run(
+                [
+                    LogEvidenceAction(misconception_id="nonexistent-xyz", polarity=1),
+                    EndTurnAction(action_type="격려", utterance="ok"),
+                ]
+            )
+            assert spy.calls == []  # 거부된 kebab은 관측 안 함
+            assert len(out.evidence) == 0  # type: ignore[attr-defined]
+        finally:
+            get_settings.cache_clear()
+
+    def test_shadow_never_breaks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """shadow에서 resolve raise → 증거 적재 정상(never-break·실 observe 경유)."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        # 실 observe_crosslink_shadow를 쓰되 내부 resolver만 boom으로 — 관측 실패가 적재를 안 깬다.
+        monkeypatch.setattr(
+            "whymath_backend.l4.misconception.crosslink_shadow.MisconceptionCrosslinkResolver",
+            _BoomResolver,
+        )
+        try:
+            out = _run(
+                [
+                    LogEvidenceAction(misconception_id=_MID, polarity=1, weight=1.0),
+                    EndTurnAction(action_type="격려", utterance="ok"),
+                ]
+            )
+            assert len(out.evidence) == 1  # type: ignore[attr-defined]
+            assert out.evidence[0].misconception_id == _MID  # type: ignore[attr-defined]
+        finally:
+            get_settings.cache_clear()
 
 
 class TestEndTurnUtterance:

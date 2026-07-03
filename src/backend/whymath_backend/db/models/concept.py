@@ -13,26 +13,23 @@
   - `concept_role_enum`/`edge_type_enum`/`concept_level_enum` → `_pg_enum(...)`(values_callable).
   - `cognitive_type_enum[]`·`visualization_style_enum[]`(슬라이스 88) → `ARRAY(_pg_enum(...))`
     (DDL NOT NULL 아님 → nullable list).
-  - `JSONB`(common_misconceptions) → schema가 NOT NULL 의미(default_factory=list)라 problem.py
-    `conditions_parsed`처럼 `nullable=False, server_default "'[]'::jsonb"`.
   - `UUID[] NOT NULL`(concept_fusion.concept_ids) → `ARRAY(sa.Uuid)`(*배열이라 FK 아님* —
     schema docstring 명시) + `nullable=False, server_default "'{}'::uuid[]"`.
   - nullable `UUID[]`(exemplar_problem_ids) → `ARRAY(sa.Uuid)`(배열, FK 아님, nullable).
   - 인덱스(§4.2 `CREATE INDEX`) → `__table_args__`.
 
-법적 메모: `description`·`formal_definition`·`intuitive_explanation`의 자체 작성 불변식은
-`schema.Concept`(자유 서술이라 구조 신호 없음 → 검수 책임) 소관이며, ORM에는 컬럼만 둔다
-(problem.py 본문 미보유 불변식이 schema 책임인 것과 동형).
+법적 메모(Phase 1b redaction·2026-07-03): 본문 근접 자유 서술 3종(description·formal_definition·
+intuitive_explanation)과 자유텍스트 오개념(common_misconceptions)은 런타임 노드에서 *제거*했다
+(마이그레이션 동반). 정본은 정본 identity 노드 semantic 계층·ConceptContent·독립 오개념 DB다.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
@@ -69,7 +66,11 @@ class Concept(Base):
         primary_key=True,
         server_default=sa.text("gen_random_uuid()"),
     )
-    code: Mapped[str] = mapped_column(sa.String(64), unique=True, nullable=False)
+    # code = concept_id(개념그래프 UC). Part 9(#409)가 `math.<area>.<slug>`로 재-ID하며 최장
+    # 83자(예 'math.measurement.pyeonghaengsabyeonhyeong-…-neolbi')가 돼 구 String(64)를 넘어섰다
+    # → Text로 확폭(같은 UC 키의 다른 투영 `concept_node.concept_id`가 이미 Text·단일 키공간 정합).
+    # unique 유지(PG Text 유니크 인덱스 정상)·FK 무영향(타 테이블은 concept_id UUID를 참조).
+    code: Mapped[str] = mapped_column(sa.Text, unique=True, nullable=False)
     name_ko: Mapped[str] = mapped_column(sa.String(200), nullable=False)
     name_en: Mapped[str | None] = mapped_column(sa.String(200))
     # source_id: 재ID(2026-06-16) 이전 원천 식별자(src_id) 보존 — concept_id가 src_id에서
@@ -114,20 +115,19 @@ class Concept(Base):
     recommended_visual_styles: Mapped[list[VisualizationStyle] | None] = mapped_column(
         ARRAY(_pg_enum(VisualizationStyle, "visualization_style_enum"))
     )
+    # 시각화 가능성 4분류는 *노드 비내장* — 시각화 계층 Overlay `concept_visualization`
+    # (`db/models/concept_visualization.py`·code 키)가 단일 진실(ADR 계층분리·CurriculumEntry 선례).
 
     # ===== 난이도·중요도 =====
     intrinsic_difficulty: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
     exam_frequency: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
     weight_in_curriculum: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
 
-    # ===== 설명·예제 (자체 작성 불변식은 schema.Concept 검수 책임) =====
-    description: Mapped[str | None] = mapped_column(sa.Text)
-    formal_definition: Mapped[str | None] = mapped_column(sa.Text)
-    intuitive_explanation: Mapped[str | None] = mapped_column(sa.Text)
-    # schema는 default_factory=list(NOT NULL 의미) → problem.py conditions_parsed 패턴.
-    common_misconceptions: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
-    )
+    # ===== 설명·예제(본문 계층) — 런타임 노드 비내장(Phase 1b 청산·redaction) =====
+    # description·formal_definition·intuitive_explanation(Text×3)과 common_misconceptions(JSONB)는
+    # 2026-07-03 Part 2 리치 채택 Phase 1b로 *제거*했다(마이그레이션 동반). 앞 3개는 성취기준·교과서
+    # 본문 근접(redaction), 마지막은 자유텍스트 오개념(독립 오개념 DB·CLAUDE.md #6)이라 런타임
+    # 노드에 담지 않는다. 네 컬럼 모두 소비처 0·전량 NULL/`[]`이었다(죽은 컬럼 청산·계약 변경).
 
     # ===== 벡터 임베딩 ID (pgvector·Postgres 동거 참조 — 벡터 저장 아님·슬98) =====
     embedding_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)

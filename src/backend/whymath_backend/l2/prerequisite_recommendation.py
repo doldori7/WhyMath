@@ -88,8 +88,11 @@ _REVIEWED: str = "reviewed"
 # 보장(data-pipeline validate.py prerequisite_cycle hard error)이라 재귀는 자연 종료하나, 비용·
 # 노이즈를 막으려 상한으로 bound한다(부분 적재·미래 데이터 대비 방어). API 경계(`api/me.py`
 # MaxDepth)가 이 상한을 공유해 매직 넘버 중복을 없앤다.
-# ⚠️ 이것은 *그래프 traversal 깊이 예산*이지 "LLM 컨텍스트 예산"(max_nodes·max_tokens)이 아니다 —
-# 후자는 LLM에 subgraph를 주입하는 소비처가 생긴 뒤에 별도로 도입한다(지금 미존재·premature).
+# ⚠️ 이것은 *그래프 traversal 깊이 예산*이지 "LLM 컨텍스트 예산"(max_nodes·max_tokens)이 아니다.
+# 후자(Q10-⑧ Minimal Reasoning Subgraph 예산 guard)는 LLM에 subgraph를 주입하는 소비처가 생긴 뒤
+# canonical seam(`l2/reasoning_subgraph.py`)으로 신설한다(지금 미존재·premature — risk_register
+# 미채택·build_roadmap_part10_review §4). 그 seam 전까지 "전체 그래프 미열람" 경계는 거버넌스
+# 테스트 `tests/backend/l3/test_llm_subgraph_budget_invariant.py`로 CI 동결돼 있다.
 MAX_PREREQUISITE_DEPTH: int = 5
 
 

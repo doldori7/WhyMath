@@ -56,31 +56,30 @@ def _calc_samples() -> list[AchievementStandard]:
 
 class TestBuildConceptId:
     def test_deterministic_and_valid(self) -> None:
-        """동일 코드 → 동일 새 ID(멱등) + 새 규약 통과."""
+        """동일 코드 → 동일 잠정 seed ID(멱등) + canonical 규약 통과."""
         first = build_concept_id("[9수01-01]")
         assert first == build_concept_id("[9수01-01]")
         assert CONCEPT_ID_PATTERN.match(first)
-        # [9수01-01] → 학년9=MID·영역01=A01(잠정)·순번01→001
-        assert first == "MID-A01-001"
+        # [9수01-01] → 잠정 seed 네임스페이스·영역01=a01·순번01→001(Wall D)
+        assert first == "math.seed.a01-001"
 
-    def test_track_from_grade(self) -> None:
-        """학년대수 → TRACK(9=MID·10=HIGH·6=ELEM)."""
-        assert build_concept_id("[6수01-01]").startswith("ELEM-")
-        assert build_concept_id("[9수01-01]").startswith("MID-")
-        assert build_concept_id("[10공수1-01-01]").startswith("HIGH-")
-        assert build_concept_id("[12미적Ⅰ01-01]").startswith("HIGH-")
+    def test_seed_namespace_regardless_of_grade(self) -> None:
+        """Wall D — 시드는 name_ko가 없어 의미론 slug 불가라 학년 무관 잠정 seed 네임스페이스."""
+        for code in ("[6수01-01]", "[9수01-01]", "[10공수1-01-01]", "[12미적Ⅰ01-01]"):
+            cid = build_concept_id(code)
+            assert cid.startswith("math.seed.")
+            assert CONCEPT_ID_PATTERN.match(cid)
 
     def test_distinct_codes_distinct_ids(self) -> None:
-        ids = {
-            build_concept_id(c) for c in ("[9수01-01]", "[9수01-02]", "[10공수1-01-01]")
-        }
+        # 시드 ID는 (영역코드, 순번) 파생 — 학년 무관이라 (domain, seq)를 서로 다르게 선택.
+        ids = {build_concept_id(c) for c in ("[9수01-01]", "[9수01-02]", "[9수03-01]")}
         assert len(ids) == 3
 
     def test_unmapped_subject_still_valid(self) -> None:
-        """미수록 과목약칭이라도 코드가 파싱되면 새 규약 ID 생성(AREA=영역코드 잠정)."""
+        """미수록 과목약칭이라도 코드가 파싱되면 잠정 seed ID 생성(영역코드→a<NN>)."""
         cid = build_concept_id("[12서양Ⅰ01-01]")  # '서양Ⅰ' 미수록이나 파싱 가능
         assert CONCEPT_ID_PATTERN.match(cid)
-        assert cid == "HIGH-A01-001"
+        assert cid == "math.seed.a01-001"
 
 
 class TestSeedConcepts:
@@ -96,11 +95,9 @@ class TestSeedConcepts:
         assert all("미적Ⅰ" in r["standard_codes"] for r in rows)
 
     def test_expert_fields_blank(self) -> None:
-        """표기(한·영·일)·오개념·시각화는 빈칸(전문가 작성 대기)."""
+        """오개념·시각화는 빈칸(전문가 작성 대기). 표시이름은 노드 비내장이라 컬럼 자체가 없다."""
         row = seed_concepts([_std("[9수01-01]", subject="수학", domain="수와 연산")])[0]
-        assert row["name_ko"] == ""
-        assert row["name_en"] == ""
-        assert row["name_ja"] == ""
+        assert "name_ko" not in row  # P2d Concept Purity — 표시이름 컬럼 제거
         assert row["misconception_codes"] == ""
         assert row["visualization_card_keys"] == ""
         assert row["notes"].startswith("[seed]")
@@ -167,7 +164,7 @@ class TestWriteCsv:
             read = list(csv.DictReader(f))
         assert len(read) == 3
         assert "concept_id" in read[0]
-        assert "name_ko" in read[0]  # 빈칸 컬럼도 존재
+        assert "name_ko" not in read[0]  # 표시이름 컬럼 제거(locale 분리)
 
     def test_edges_csv_and_sidecar(self, tmp_path: Path) -> None:
         rows = seed_edges(_calc_samples(), domain_filter="미적분")

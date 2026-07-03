@@ -130,9 +130,9 @@ class SceneElement with _$SceneElement {
     /// 강조/라벨 선언 명세(annotation kind·자유 JSON).
     @JsonKey(name: 'highlight_spec') Map<String, dynamic>? highlightSpec,
 
-    // skill_focus (행동영역 focus·S5j)
-    /// 이 블록이 드러내는 행동영역(skill_focus kind·개념 cognitive_type).
-    @JsonKey(name: 'cognitive_type') String? cognitiveType,
+    // skill_focus (행동영역 focus·S5k)
+    /// 이 블록이 드러내는 행동영역(skill_focus kind·정본 BehaviorArea 6종).
+    @JsonKey(name: 'behavior_area') String? behaviorArea,
 
     /// 선언적 행동 focus 지시(skill_focus kind·정답 아님).
     @JsonKey(name: 'focus_prompt') String? focusPrompt,

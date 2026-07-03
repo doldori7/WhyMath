@@ -20,7 +20,7 @@
 | 3 개념구조화 | 개념그래프 403노드·541엣지 / 원자 1,837·선수 3,220 | 🟢 구현 |
 | 4 오개념 DB | 839개 카탈로그 + 판정 엔진 | 🟢 구현 |
 | 9 평가·개인화 | BKT·IRT·mastery·학습경로 | 🟢 구현 |
-| 5 시각화 · 6 Math UI DSL · 8 AI튜터 · 10 자동화 | Graph2dSpec·L3 라우터 30KB·WH-1·파이프라인 | 🟡 진행 |
+| 5 시각화 · 6 Math UI DSL · 8 AI튜터 · 10 자동화 | Graph2dSpec·L3 라우터 30KB·WH-1·파이프라인 (5: Part 5 4분류(Overlay)·Renderer독립·5상태 검토 완료 2026-07-02·`05b`) | 🟡 진행 |
 | 7 렌더링 | Flutter/web 계산기·three.js·MathLive | 🟡 프로토타입 |
 | 보류/리스크 | DSL 자기진화(Lean4)·Manim 동영상·WH-1 전략단계(Lv2~3)·**개념↔원자 이중 truth source** | 🔴 |
 
@@ -28,8 +28,8 @@
 
 ## 🔴 최우선 점검 2곳 (현재 상태상 붕괴 위험 최고)
 
-- **단계 3** — 개념그래프(403) vs 원자그래프(1,837) **단일 진실 원천 붕괴** & 노드 폭발
-- **단계 8** — LLM에 **전체 그래프 노출** & token/traversal guard 부재
+- **단계 3** — 개념그래프(403) vs 원자그래프(1,837) **단일 진실 원천 붕괴** & 노드 폭발 (추적 항목·동기화 governance 동결·Part 10 검토 §1)
+- **단계 8** — LLM에 **전체 그래프 노출** — Part 10 검토(2026-07-03) 재확인 결과 **잠재/미래 리스크지 현존 결함 아님**(graph→LLM 컨텍스트 빌더 부재). Q10-⑧ 불변식 CI 동결(`test_llm_subgraph_budget_invariant.py`) + 수치 예산 guard는 소비처 트리거까지 보류. 상세: `build_roadmap_part10_review.md`
 
 ---
 
@@ -67,8 +67,12 @@
 
 ## 단계 5. 시각화 (VisualizationNode) `[구현 · 3대핵심②]` — Graph2dSpec
 
-- [ ] **Renderer는 Plugin**: VisualizationNode에 Desmos/Canvas/three.js **구현체 이름**이 없나? (Concept → Visualization Intent → Renderer Adapter)
-- [ ] Math / Pedagogy / Interaction / Animation / UI **5상태가 분리**되고 의존 방향이 **Math → … → UI 단방향**인가?
+> **검토 완료(2026-07-02)**: 정본 `docs/architecture/05b_visualization_classification.md`. 4분류
+> 판별(`Visualizability`)·Renderer 독립·5상태 분리 모두 충족·CI 강제.
+
+- [x] **개념 4분류 판별**(직접/동적/추상/불가): 시각화 Overlay `concept_visualization`(노드 비내장) + `l4/visualization_policy.py` 게이트(추상·불가→보류·소크라테스 폴백). "전부 똑같이 그리려" 방지
+- [x] **Renderer는 Plugin**: VisualizationNode에 Desmos/Canvas/three.js **구현체 이름**이 없나? (Concept → Visualization Intent → Renderer Adapter) — 노드·스키마 0, 구현체명은 `render_contract.json`·L5 어댑터
+- [x] Math / Pedagogy / Interaction / Animation / UI **5상태가 분리**되고 의존 방향이 **Math → … → UI 단방향**인가? — `test_visualization_state_separation.py` + import-linter 7계층 계약 CI 강제
 
 ## 단계 6. Math UI DSL `[진행 · 리스크]`
 

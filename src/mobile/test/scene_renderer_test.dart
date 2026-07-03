@@ -161,13 +161,13 @@ void main() {
         _scene(const [
           SceneElement(
             kind: 'skill_focus',
-            cognitiveType: 'THEOREM',
-            focusPrompt: '이 정리를 적용하려면 먼저 가정이 성립하는지 확인하세요.',
+            behaviorArea: 'VERIFY',
+            focusPrompt: '결과가 조건을 만족하는지 반례·특수값으로 점검하세요.',
           ),
         ]),
       ),
     );
-    expect(find.textContaining('가정이 성립하는지'), findsOneWidget);
+    expect(find.textContaining('반례·특수값으로'), findsOneWidget);
     // 정답/낙인 가드: 정답·틀렸 미렌더(선언적 행동 지시일 뿐).
     expect(find.textContaining('정답'), findsNothing);
     expect(find.textContaining('틀렸'), findsNothing);
@@ -218,8 +218,8 @@ void main() {
           SceneElement(kind: 'annotation'),
           SceneElement(
             kind: 'skill_focus',
-            cognitiveType: 'PATTERN',
-            focusPrompt: '성립하는 경우를 나눠 각각을 따로 살펴보세요.',
+            behaviorArea: 'INTERPRET',
+            focusPrompt: '주어진 조건을 먼저 수학 구조(식·관계)로 해석하세요.',
           ),
         ]),
       ),
@@ -230,6 +230,6 @@ void main() {
     expect(find.textContaining('구체적인 예'), findsOneWidget);
     expect(find.text('왜 그렇게 생각했어?'), findsOneWidget);
     expect(find.text('강조 표시'), findsOneWidget);
-    expect(find.textContaining('경우를 나눠'), findsOneWidget);
+    expect(find.textContaining('수학 구조'), findsOneWidget);
   });
 }

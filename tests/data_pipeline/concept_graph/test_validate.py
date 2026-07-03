@@ -17,17 +17,13 @@ from data_pipeline.concept_graph.validate import (
 def _concept(
     concept_id: str, *, standard_codes: list[str] | None = None, **over: object
 ) -> Concept:
-    # source_id·aliases는 새 alias_roundtrip 불변식을 만족하도록 합성(옛 UC 별칭 + src_id).
-    # concept_id를 소문자화해 합성 옛 UC slug로 쓴다(LEGACY_UC_PATTERN 통과·고유).
+    # 기본은 *신규* 후보(source_id==concept_id) — alias_roundtrip 옛 키 요건 면제. 표시이름은
+    # 노드 비내장(P2d Concept Purity)이라 name_* 인자 없음. 마이그레이션 케이스는 over로 주입.
     src_id = concept_id
-    legacy_uc = f"UC.calc.a01.{concept_id.lower().replace('-', '')}"
     data: dict[str, object] = {
         "concept_id": concept_id,
         "source_id": src_id,
-        "aliases": [legacy_uc, src_id],
-        "name_ko": "개념",
-        "name_en": "concept",
-        "name_ja": "概念",
+        "aliases": [],
         "domain": "미적분",
         "standard_codes": standard_codes or [],
     }
@@ -50,9 +46,9 @@ def _edge(
     return ConceptEdge(**data)  # type: ignore[arg-type]
 
 
-_A = "HIGH-CALC-001"
-_B = "HIGH-CALC-002"
-_C = "HIGH-CALC-003"
+_A = "math.calculus.aa"
+_B = "math.calculus.bb"
+_C = "math.calculus.cc"
 
 
 def _rules(report: object) -> set[str]:
@@ -282,12 +278,14 @@ class TestValidateIdmap:
         return [
             {
                 "src_id": "HK01",
+                "name_ko": "다항식의 사칙연산",
                 "category": "[공통]식·방정식·부등식",
                 "difficulty_tier": "6",
                 "standard_codes": ["[10공수1-01-01]"],
             },
             {
                 "src_id": "HK02",
+                "name_ko": "나머지정리와 인수정리",
                 "category": "[공통]식·방정식·부등식",
                 "difficulty_tier": "7",
                 "standard_codes": ["[10공수1-01-02]"],

@@ -105,11 +105,12 @@ LearningScene
 | `misconception_probe` | 오개념 카탈로그 30종·`InterventionPattern` | `misconception_id`·`intervention` | **정답·수정 필드 없음** |
 | `socratic_prompt` | `PedagogyDecision`(L4) | `socratic_category`·`polya_stage`·`hint_level`·`prompt_text` | `hint_level ≤ max_level` |
 | `annotation` | overlay | `target_element_index`·`highlight_spec` | 강조·라벨만 |
-| `skill_focus` | `CognitiveType`(행동영역·S5j) | `cognitive_type`·`focus_prompt` | **정답·수정 필드 없음**(행동 지시·질문 아님) |
+| `skill_focus` | `BehaviorArea`(정본 행동영역·#418·S5k) | `behavior_area`·`focus_prompt` | **정답·수정 필드 없음**(행동 지시·질문 아님) |
 
-`skill_focus`는 관점 문서 **SkillBlock**의 선언적 형태(조건 강조) — 주 행동영역이 THEOREM/TECHNIQUE/
-PATTERN일 때 자동 부여(S5i 프로파일이 블록 유무를 행동영역별로 분기). interactive 경우분할 트리는
-WH-S Tier3 종속(초기 scope 제외).
+`skill_focus`는 관점 문서 **SkillBlock**의 선언적 형태(조건 강조) — 주 행동영역(`BehaviorArea`·정본
+6종·#418)이 있으면 그 행동영역의 focus cue를 자동 부여(미매핑=미부여·블록 유무를 행동영역별로 분기).
+행동영역은 L5 `get_behavior_areas`가 concept→skill 조인(`concept_node.behavior_skills`→`skill_node
+.behavior_area`·#419)으로 해소해 주입한다. interactive 경우분할 트리는 WH-S Tier3 종속(초기 scope 제외).
 
 `intervention`은 L4 `InterventionPattern` 4종(`COUNTEREXAMPLE` 반례·`CONCRETE_CASE` 구체사례·
 `VISUALIZATION` 시각화·`REVERSE_REASONING` 거꾸로) 중 하나 — *수정법이 아니라 사고 유도*다.
@@ -151,11 +152,11 @@ WH-S Tier3 종속(초기 scope 제외).
 1. **결정론적 골격** — 개념(`schema/concept.py`)의 구조 필드에서 요소 kind를 코드가 결정:
    - `recommended_visual_styles`(16종·예: 함수그래프 → `visualization`+`param_control`, 단위원 → `visualization`)
    - `common_misconceptions` → `misconception_probe` 후보(학습자 가설과 교차)
-   - `cognitive_type`(DEFINITION/THEOREM/TECHNIQUE/PATTERN/VISUAL_REASONING) → **요소 조합 프로파일**
-     (**구현됨·S5i**: `l4/scene_generation.py::CompositionProfile`·`_COMPOSITION_PROFILE` — 행동영역을
-     *1급 분기 입력*으로 승격. 소크라테스 프레이밍 + **인지 진입 순서**(`lead`: visual=시각화 먼저·
-     inquiry=질문 먼저)를 결정. 다중 유형은 `_primary_cognitive_type` precedence로 주 행동영역 선택.
-     Part 7 재검토 "행동영역 축 미분기" 상환)
+   - **직교 2축**(**구현됨·S5i→S5k 재정렬**): ① `cognitive_type`(개념 성격) → 소크라테스 프레이밍
+     (`_COGNITIVE_SOCRATIC_MAP`). ② **`BehaviorArea`(정본 행동영역 6종·#418)** → **인지 진입 순서**
+     (`_LEAD_BY_BEHAVIOR`·visual=시각화 먼저·inquiry=질문 먼저) + `skill_focus` 블록. 행동영역은
+     `get_behavior_areas`가 concept→skill 조인으로 해소·주입(미매핑=중립). S5i는 축을 CognitiveType으로
+     근사했으나 #418 정본 `BehaviorArea` 채택 후 S5k로 재정렬(단일 진실원천). Part 7 재검토 상환.
 2. **요소별 `spec` 충전** — `visualization` 요소의 `spec`만 `l3/visualization.py::generate_visualization_spec`
    재사용(라우터 경유·Langfuse 추적·응답 캐싱·로컬 LLM 우선 — CLAUDE.md). 골격·참조는 코드가 채움.
 3. **적응** — `learner_context`에 활성 오개념 가설이 있으면 해당 `misconception_probe`를 골격에 삽입(중기).
@@ -233,6 +234,7 @@ WH-S Tier3 종속(초기 scope 제외).
 | S5h ✅ | **evidence_links 연동(렌더 시점 증거 재확인)** — `net_support_by_misconception`(evidence_store 배치 GROUP BY)로 학생 증거 그래프를 단일 쿼리 집계, 순지지도<0(반박 우세) 활성 가설은 프로브에서 제외(RS2 낙인 회피·`curate` net_support<0 archived 규약 동형·턴 후 신규 증거 반영). 증거 없는 가설은 유지(과도 억제 회피) | **완료**: evidence_store 단위 2개·서비스 1개·통합 1개 테스트·회귀 0 | 0 |
 | S5i ✅ | **행동영역 분기축 승격** — `cognitive_type`을 `_COGNITIVE_SOCRATIC_MAP` 부수효과에서 `CompositionProfile`(소크라테스 프레이밍 + 인지 진입 순서 `lead`)로 흡수·1급 분기 입력화. `_primary_cognitive_type` precedence(VISUAL_REASONING>PATTERN>TECHNIQUE>THEOREM>DEFINITION)로 주 행동영역 선택 → visual 진입은 시각화 먼저·inquiry 진입은 질문 먼저. `bound_visualization_index`는 append 시점 계산이라 순서 변경에도 정합. Part 7 재검토 "행동영역 축 미분기" 상환(신규 element kind 0·SkillBlock 가시 UI는 잔여) | **완료**: 축 테스트 5개(진입 순서·precedence·인덱스 정합)·기존 26 무회귀·layout/게이트/동결 무영향 | 0 |
 | S5j ✅ | **가시 SkillBlock element kind** — `skill_focus`(7번째 kind·`cognitive_type`+`focus_prompt`·정답 필드 0) 신설. 주 행동영역 THEOREM/TECHNIQUE/PATTERN에 정본 focus cue 자동 부여(블록 유무를 행동영역별 자동 분기)·맨 앞 프레이밍. 모바일 렌더러 focus 카드·동결 크로스워크 6→7 갱신. interactive 경우분할 트리는 잔여(Tier3) | **완료**: 백엔드 축 테스트 10개(생성·분기·게이트·필드 동결)·모바일 파싱/렌더 테스트·회귀 0 | 0 |
+| S5k ✅ | **정본 BehaviorArea로 재정렬** — S5i/S5j가 근사했던 `CognitiveType` 축을 #418 정본 `BehaviorArea` 6종으로 이전(직교 2축: 소크라테스=개념축·lead/skill_focus=행동영역축). `skill_focus.behavior_area`·L1 `get_behavior_areas`(concept→skill 조인·#419)·L5 `api/scene.py` 스레딩. 미매핑=중립(탐구 진입·focus 0). main #404/#408~#419 재베이스 병합(visualizability 게이팅 보존) | **완료**: 축·skill·접근자·엔드포인트 테스트 재작성·l4/api 2001 passed·ruff·black·mypy·lint-imports green·모바일 JSON 키 갱신 | 0 |
 | S5+ | 적응형 장면 잔여(1:N crosswalk 정책)·과목 확장·교과서 자동 UI·interactive 경우분할 트리(SkillBlock Tier3) | Phase 2~3 | 해당 시 |
 
 **적용 범위 원칙**: verify 가능·표기 안정 단원(대수·함수 그래프)부터 켜고, 기하·증명(드래그·
