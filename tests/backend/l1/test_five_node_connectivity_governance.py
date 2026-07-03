@@ -3,18 +3,21 @@
 법칙: *노드 = 학생 사고가 바뀌는 최소 단위*. 우선 5노드(Concept → Misconception → Skill →
 ProblemType → Visualization)를 연결하고 **Formula를 먼저 만들지 않는다**(실패 경로 회피).
 
-WhyMath는 anti-explosion(CLAUDE.md "수학 전체 완벽 모델링 금지·핵심만 노드")에 따라 Skill·
-ProblemType·Formula를 *전용 노드 테이블로 승격하지 않고* 속성/스키마로 표현한다(설계 결정:
-docs/architecture/concept_node_layering_decision.md). 이 테스트는 그 결정을 코드로 동결한다:
+WhyMath는 anti-explosion(CLAUDE.md "수학 전체 완벽 모델링 금지·핵심만 노드")에 따라 노드 승격을
+*canonical·mastery 독립추정 가치*가 있을 때만 허용한다(설계 결정: docs/architecture/
+concept_node_layering_decision.md §2). **Skill은 2026-07-03 Phase 2a로 1급 노드 승격**(ADR 갱신
+완료·mastery 독립추정 canonical) — CognitiveType enum 속성에서 `SkillNode`+`BehaviorArea`(6종)로
+격상했다. ProblemType·Formula는 아직 속성/스키마로 표현(각 P3·P5 승격 대기). 이 테스트는 그 결정을
+코드로 동결한다:
 
-  ① **5노드 대체 표현 존재**: Concept(모델)·Misconception(카탈로그)·Skill(=CognitiveType enum)·
-     ProblemType(=Problem 스키마)·Visualization(스키마)이 전부 로드 가능·비어있지 않다.
+  ① **노드 대체 표현/승격 존재**: Concept(모델)·Misconception(카탈로그)·**Skill(=SkillNode 1급
+     노드·Phase 2a)**·ProblemType(=Problem 스키마)·Visualization(스키마)이 전부 로드·비어있지 않다.
   ② **연결(다리) 존재**: identity 노드가 Misconception·Visualization로 *참조 키*를 노출한다
      (`misconception_codes`·`visualization_card_keys`) — 5노드가 배선돼 있다(Phase 1 값 미충전이어도
      연결 *능력*은 존재).
-  ③ **Formula/Skill/ProblemType 전용 노드 부재 동결**: 소스 스캔으로 `FormulaNode`/`SkillNode`/
-     `ProblemTypeNode` 클래스가 코드베이스에 없음을 단언 — 누가 승격하면 red가 되어 ADR 재검토를
-     강제한다(노드 폭발·"Formula 먼저" 실패 경로 차단).
+  ③ **Formula/ProblemType 전용 노드 부재 동결**: 소스 스캔으로 `FormulaNode`/`ProblemTypeNode`
+     클래스가 코드베이스에 없음을 단언 — 누가 승격하면 red가 되어 ADR 재검토를 강제한다(노드 폭발·
+     "Formula 먼저" 실패 경로 차단). **SkillNode는 Phase 2a로 승격돼 이 금지집합에서 제외**된다.
 
 hermetic: DB 불요(모델·enum import·소스 텍스트 스캔만).
 """
@@ -26,10 +29,12 @@ from pathlib import Path
 
 import data_pipeline
 from data_pipeline.concept_graph.models import Concept
+from data_pipeline.skill_graph.models import BehaviorArea
+from data_pipeline.skill_graph.models import SkillNode as PipelineSkillNode
 
 import whymath_backend
+from whymath_backend.db.models.skill_node import SkillNode as OrmSkillNode
 from whymath_backend.l4.misconception.catalog import CATALOG
-from whymath_backend.schema.enums import CognitiveType
 from whymath_backend.schema.problem import Problem
 from whymath_backend.schema.visualization import Visualization
 
@@ -40,8 +45,9 @@ _PKG_ROOTS = (
 )
 
 # 승격 금지 노드 클래스명(anti-explosion — 속성/스키마로만 표현). *Node 접미사 정확 매칭.
-_FORBIDDEN_NODE_CLASSES = ("FormulaNode", "SkillNode", "ProblemTypeNode")
-_FORBIDDEN_CLASS_RE = re.compile(r"^\s*class\s+(FormulaNode|SkillNode|ProblemTypeNode)\b", re.M)
+# SkillNode는 Phase 2a(2026-07-03)로 1급 승격돼 이 집합에서 제외(ADR §2 갱신·mastery canonical).
+_FORBIDDEN_NODE_CLASSES = ("FormulaNode", "ProblemTypeNode")
+_FORBIDDEN_CLASS_RE = re.compile(r"^\s*class\s+(FormulaNode|ProblemTypeNode)\b", re.M)
 
 
 def _scan_forbidden_node_classes() -> dict[str, list[str]]:
@@ -75,10 +81,16 @@ def test_misconception_nodes_exist() -> None:
     assert len(CATALOG) > 0
 
 
-def test_skill_is_cognitive_type_attribute() -> None:
-    """Skill — 전용 노드 대신 CognitiveType enum 속성으로 표현(개념의 인지 유형)."""
-    values = [c.value for c in CognitiveType]
-    assert values, "CognitiveType(=Skill 축) enum이 비어있으면 안 된다"
+def test_skill_is_first_class_node() -> None:
+    """Skill — Phase 2a로 1급 노드 승격(SkillNode 모델·ORM + BehaviorArea 6종 축).
+
+    CognitiveType enum 속성에서 격상됐다: data-pipeline `SkillNode`(빌드타임 노드)·backend
+    `skill_node`(PG 프로젝션 ORM)이 실재하고, 폐쇄 행동영역 `BehaviorArea`가 정확히 6종이다.
+    """
+    assert "skill_id" in PipelineSkillNode.model_fields
+    assert "behavior_area" in PipelineSkillNode.model_fields
+    assert OrmSkillNode.__tablename__ == "skill_node"
+    assert len(BehaviorArea) == 6
 
 
 def test_problem_type_is_problem_schema() -> None:

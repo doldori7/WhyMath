@@ -569,6 +569,34 @@ class CognitiveType(str, Enum):
     """시각적 추론 — 그래프·도형 기반 사고."""
 
 
+class BehaviorArea(str, Enum):
+    """행동영역(cognitive action) — SkillNode의 폐쇄 6종 축(리치 Part 2 Phase 2a·2026-07-03 확정).
+
+    개념이 *어떻게* 작동하는지(행동)의 축으로, 개념(무엇)과 직교한다. `skill_node.behavior_area`
+    (PG native `behavior_area_enum`)의 백킹이며, data-pipeline `data_pipeline.skill_graph.models
+    .BehaviorArea`와 **값이 정확히 일치**한다(정합 테스트 동결). 폐쇄 6종 — 확장은 ADR 갱신 전제
+    (무분별 증식 금지·`test_skill_governance` 동결).
+    """
+
+    COMPUTE = "COMPUTE"
+    """계산실행 — 절차·연산 수행(예: 다항식 나눗셈)."""
+
+    TRANSFORM = "TRANSFORM"
+    """식변형 — 표현을 등가 형태로 변형(예: 인수분해)."""
+
+    INTERPRET = "INTERPRET"
+    """조건해석 — 주어진 조건·문제를 수학 구조로 해석."""
+
+    REPRESENT = "REPRESENT"
+    """표상/표현 — 그래프·도형·다중표현 전환."""
+
+    REASON = "REASON"
+    """추론 — 연역·논리적 근거 전개."""
+
+    VERIFY = "VERIFY"
+    """검증 — 결과 점검·반례·타당성 확인(Polya 반성)."""
+
+
 class EdgeType(str, Enum):
     """개념 간 관계(DAG 엣지) — §4.2 `edge_type_enum`(L345-350, 영어 6종)."""
 

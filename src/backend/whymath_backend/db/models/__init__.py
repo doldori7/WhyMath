@@ -95,6 +95,10 @@ from whymath_backend.db.models.provenance import (
     GenerationLog,
 )
 from whymath_backend.db.models.refresh_token_session import RefreshTokenSession
+from whymath_backend.db.models.skill_node import (
+    SKILL_REVIEW_STATUS_DEFAULT,
+    SkillNode,
+)
 from whymath_backend.db.models.solution_node import (
     NodeVerifyStatus,
     SolutionNode,
@@ -201,6 +205,9 @@ __all__ = [
     "VerifiedLemma",
     # OAuth-a3b: RefreshTokenSession (리프레시 토큰 서버측 취소 allowlist·PK=jti)
     "RefreshTokenSession",
+    # Part 2 Phase 2a: SkillNode (L1 스킬 메타 PG 프로젝션·skill_id 키·behavior_area native enum)
+    "SkillNode",
+    "SKILL_REVIEW_STATUS_DEFAULT",
     # PIPA §22-2: ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사·surrogate UUID PK)
     "ParentalConsent",
     # P1-2: AchievementStandard (NCIC 성취기준 영속·norm_id PK·official_code 비유일)
