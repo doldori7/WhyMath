@@ -48,6 +48,9 @@ from whymath_backend.config import Settings, get_settings
 # 슬3 sync 엔진 빌더 재사용(신규 seam 0) — 같은 sync psycopg 좌석 규약.
 from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
 
+# name_ko는 재-ID(P2d)로 노드에서 제거돼 형제 `locales/ko.json`에서 재소싱한다(공유 헬퍼).
+from whymath_backend.l1.concept_graph.locale import load_locale_ko
+
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
@@ -126,27 +129,34 @@ def load_concept_nodes_from_graph_json(path: Path) -> list[ConceptNodeRecord]:
     메타가 없으면 None graceful이지만, 누락 자체를 만들지 않는 게 옳다 — 슬3 임베딩은 전량,
     메타도 전량).
 
-    `name_ko`·`domain`·`review_status`는 graph.json `Concept`이 항상 보유한다(필수 필드·
-    use_enum_values). 누락 시(오염된 입력) 빈 문자열로 적재하지 않고 *건너뛴다*(NOT NULL 위반
-    방지·정직). `standard_codes`는 리스트가 아니면 빈 튜플로 정규화한다.
+    `name_ko`는 재-ID(P2d)로 노드에서 제거돼 형제 `locales/ko.json`(`{concept_id: name_ko}`)에서
+    재소싱한다 — 노드 내장 `name_ko`가 있으면(옛 graph.json) 그것을 우선하고, 없으면 locale에서
+    concept_id로 조회한다(`record.get("name_ko") or locale.get(id)`·옛/새 둘 다 graceful). 값은
+    재-ID 전 노드 내장분과 바이트 동일이라 적재 값이 불변이다. `domain`·`review_status`는 여전히
+    노드가 항상 보유한다(필수 필드·use_enum_values). 셋 중 하나라도 누락 시(오염·locale 부재)
+    빈 문자열로 적재하지 않고 *건너뛴다*(NOT NULL 위반 방지·정직). `standard_codes`는 리스트가
+    아니면 빈 튜플로 정규화한다.
 
     Raises:
         FileNotFoundError: graph.json 부재.
-        ValueError: concept_id 없는 항목(슬1 산출은 항상 UC를 갖는다 — 방어).
+        ValueError: concept_id 없는 항목(슬1 산출은 항상 concept_id를 갖는다 — 방어).
     """
     payload = json.loads(path.read_text(encoding="utf-8"))
+    locale_ko = load_locale_ko(path)
     out: list[ConceptNodeRecord] = []
     for record in payload.get("concepts", []):
         concept_id = str(record.get("concept_id", "")).strip()
         if not concept_id:
             raise ValueError(f"graph.json 개념에 concept_id가 없습니다: {record!r}")
 
-        name_ko = _opt_str(record.get("name_ko"))
+        # name_ko: 노드 내장(옛 graph.json) 우선, 없으면 locale 조인(새 graph.json·P2d).
+        name_ko = _opt_str(record.get("name_ko")) or locale_ko.get(concept_id)
         domain = _opt_str(record.get("domain"))
         review_status = _opt_str(record.get("review_status"))
         if name_ko is None or domain is None or review_status is None:
             # 필수 표시·게이팅 필드 누락 — NOT NULL 위반 대신 건너뛴다(정직·조용한 빈 적재 금지).
-            # graph.json 정상 산출은 셋 다 보유하므로 실제 경로에선 발생하지 않는다.
+            # 정상 산출은 domain·review_status를 노드가, name_ko를 locale이 보유하므로
+            # 실제 경로에선 발생하지 않는다(locale 부재·오염 시에만 skip).
             continue
 
         raw_codes = record.get("standard_codes")

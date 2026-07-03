@@ -47,9 +47,10 @@ data-pipeline `ReviewStatus`에 결합하기보다, 경량 프로젝션엔 문�
 ────────────────────────────────────────────────────────────────────────────
 키 일관성 (이중→삼중 store 단일 UC 키)
 ────────────────────────────────────────────────────────────────────────────
-PK `concept_id`(TEXT·UC)는 **슬2 Neo4j 노드 키·슬3 `concept_embedding.concept_id`와 동일 키
-공간**(`UC.<domain>.<topic>.<slug>`). 이로써 한 UC 키가 *세 투영*(Neo4j 그래프·pgvector 벡터·
-PG 메타)을 잇는다. upsert가 PK 충돌로 멱등(`ON CONFLICT(concept_id) DO UPDATE`) — 같은 개념
+PK `concept_id`(TEXT·opaque)는 **슬2 Neo4j 노드 키·슬3 `concept_embedding.concept_id`와 동일 키
+공간**(재-ID(P2d) 후 `math.<area>.<slug>`·형식 불가지 opaque str). 이로써 한 키가 *세 투영*
+(Neo4j 그래프·pgvector 벡터·PG 메타)을 잇는다. upsert가 PK 충돌로 멱등(`ON CONFLICT(concept_id)
+DO UPDATE`) — 같은 개념
 재적재가 행을 갱신한다. (주의: backend PG `concept` 테이블[UUID PK+code]과는 *여전히 별개*다 —
 이 테이블은 UC 공간 전용 프로젝션이고, 그 둘을 잇지 않는다.)
 
@@ -84,13 +85,14 @@ class ConceptNode(Base):
     # PK = Universal Concept ID(슬1 idmap 발급·슬2 Neo4j 노드 키·슬3 concept_embedding과 동일).
     # upsert 충돌 키 — 같은 UC 재적재 시 행 갱신(멱등).
     concept_id: Mapped[str] = mapped_column(sa.Text, primary_key=True)
-    # 한국어 명칭(graph.json name_ko·필수). 검색 enrichment의 핵심 표시 필드.
+    # 한국어 명칭(재-ID(P2d)로 노드에서 분리·`locales/ko.json`에서 concept_id 조인 재소싱·필수).
+    # 검색 enrichment의 핵심 표시 필드. 로더가 locale 조인으로 충전하므로 값·계약 불변.
     name_ko: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 영역명(graph.json domain=category, 예 '[고]미적분'·필수). 표시·필터 보조.
     domain: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 검수 게이팅 플래그 — 'reviewed'/'pending' 문자열(graph.json review_status·use_enum_values).
     # PG native enum을 새로 만들지 않고 plain text(concept_embedding 동형·docstring 참조).
-    # 게이팅(reviewed_only)이 이 값을 리터럴 'reviewed'와 비교한다. NOT NULL(graph.json 항상 보유).
+    # 게이팅(reviewed_only)이 이 값을 리터럴 'reviewed'와 비교한다. NOT NULL(노드 필수 필드).
     review_status: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 매핑된 NCIC 성취기준 *코드* 목록(graph.json standard_codes·기본 빈 배열). 코드는 사실정보·
     # 공공이며 *본문 statement는 아님*(redaction 무관). nullable=False·server_default 빈 배열.
