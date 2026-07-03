@@ -9,6 +9,13 @@
 > (LearningScene DSL) · `notation_contract.md`(표기 계약) · `03b_wh_s_solver_harness.md`
 > (WH-S) · `04a_wh1_tutoring_harness.md`(WH-1) · `math_dsl_remediation_design.md`(부채 교정)
 
+> ⚠️ **2026-07-03 개정 예고 — FormulaNode 재판정**: 본 문서가 "anti-goal"·"즉사"로 판정한
+> 자체 `FormulaNode`는, 리치 Part 2 스펙 **전면 채택**(사용자 확정·`concept_node_layering_
+> decision.md` §0)에 따라 도입 방향으로 재판정됐다. **단 경계 유지**: (a) **canonical 표현만**
+> (변형식·변수명·항순서 노드화 금지 — 폭발 방지), (b) SymPy는 여전히 *검증 커널*(재구현 금지),
+> (c) AST는 **참조·정규화용만**(full 5계층 자체 엔진 금지·Q8 경계). 실제 개정(관련 표·Q3/Q8
+> 정정)은 로드맵 Phase 5에서 수행하며, 그 전까지 아래 본문은 원본을 유지한다.
+
 ---
 
 ## 0. Context (왜 이 문서인가)
