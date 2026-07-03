@@ -156,8 +156,12 @@ crosswalk 골격+resolver·증거저장소 shadow), **premature한 것은 도입
 | Q2 약한 relation 폭발 | EdgeType 약한 값 전부 스윕→PREREQUISITE만 적재 + traversal 배제 + 어휘 보존 | `test_edge_relation_governance.py`·`test_prerequisite_traversal_integration.py` |
 | Q10-⑥ 오개념 단일 정체성 | `_persist_active_set` crosswalk shadow 배선(비노출·비차단) | `l4/misconception/hypothesis_store.py` |
 | Q10-⑧(부분) traversal 예산 | `MAX_PREREQUISITE_DEPTH` 단일 출처 | `l2/prerequisite_recommendation.py`·`api/me.py` |
+| Q10-⑧ "전체 그래프 미열람" | LLM 경계 그래프-컬렉션 주입 금지 + traversal 예산 단일 출처 (Part 10 검토·2026-07-03) | `tests/backend/l3/test_llm_subgraph_budget_invariant.py` |
 
-**미채택(premature/dead)**: LLM subgraph 예산·증분 edge-add reachability·SCC 크론·약한 타입 reject
+**미채택(premature/dead)**: LLM subgraph **예산 guard**(능동 max_nodes·max_tokens 절단 builder — 트리거:
+graph→LLM 컨텍스트 소비처 최초 등장 시 `l2/reasoning_subgraph.py` canonical seam 신설. *불변식 자체*는
+위 표에서 CI 동결됨 — Part 10 검토 §4·`docs/standards/build_roadmap_part10_review.md`)·증분 edge-add
+reachability·SCC 크론·약한 타입 reject
 validator·crosswalk 매핑 *자동* 적재(사람 검수 산출물·우선순위 #1·#3). **잔여(사람 검수 게이트)**:
 오개념 crosswalk 매핑 채택·적재(`docs/data/misconception_crosslink_candidates.md` 검수→로더 적재→
 shadow 측정→canary)·교육과정 Overlay US/IMO·`required_depth` 큐레이션.
