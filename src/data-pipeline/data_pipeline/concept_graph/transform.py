@@ -14,7 +14,8 @@ docs/data/concept_graph_dataset_v1.md §2(필드표)·§3(redaction)·§4(검수
   - **표시이름(name_ko/en/ja)은 노드로 흘리지 않는다**(2026-07-02 P2d·Part 9 Concept Purity) —
     Concept 모델에서 세 슬롯을 제거했다. name_ko는 `build_locales`가 locale 레이어
     (`locales/ko.json`·canonical_id 키)로 분리한다(노드는 언어-무관 식별자만·표기는 locale 조인).
-  - domain = category(데이터셋 영역명, 예 '[고]미적분');  grade_band_hint = 첫 코드 학년군 추론
+  - domain = category의 순수 영역명(교육과정 레벨 접두 `[고]/[중]/[공통]/[기본]` 제거·P2e·Part 9,
+    예 '[고]미적분'→'미적분');  grade_band_hint = 첫 코드 학년군 추론
   - standard_codes 직결;  ccss_code/difficulty_tier 풍부필드 직결
   - **pedagogy(misconception 자유텍스트·metaphor·accepted_expressions)은 노드로 흘리지 않는다**
     (2026-07-02 Part 2 §3 순수성 — Stage A+B). Concept 모델에서 세 슬롯을 제거했다. 원시
@@ -69,6 +70,13 @@ _DATASET_PREREQ_RELATION: str = "선수(prereq)"
 _DEFAULT_EDGE_EVIDENCE: str = "전문가 작성 개념그래프 v1"
 _DEFAULT_EDGE_STRENGTH: float = 0.8
 
+# domain 정화용 교육과정 레벨 접두(P2e·Part 9 [C] 후속). category의 `[고]/[중]/[공통]/[기본]`은
+# *교육과정 트랙* 표식이라 순수 영역명 domain에서 제거한다. ⚠️ idmap.strip_level_prefix(`[고]/[중]/
+# [공통]`만·`[기본]` 미포함)와 **의도적으로 다르다** — idmap은 `category`를 AREA 코드로 매핑하며
+# `[기본]…`을 full key로 유지해 `B*` AREA 네임스페이스(concept_id 브리지)를 지킨다. domain 정화는
+# 그 ID 파이프라인과 무관한 *표시·필터 문자열* 정화라, 별도 접두 목록으로 `[기본]`까지 벗긴다.
+_DOMAIN_LEVEL_PREFIXES: tuple[str, ...] = ("[고]", "[중]", "[공통]", "[기본]")
+
 # 절대 읽지 않는 redaction 대상 키(방어적 명시 — 입력에 없어야 하지만 들어와도 무시).
 _REDACTED_INPUT_KEYS: frozenset[str] = frozenset({"description", "formal_definition"})
 
@@ -98,6 +106,20 @@ class TransformResult:
             f"flashcards(raw) {len(self.passthrough_flashcards)}개, "
             f"intl(raw) {len(self.passthrough_intl)}개, skip {len(self.skipped)}건"
         )
+
+
+def _strip_domain_prefix(category: str) -> str:
+    """category → 순수 영역명 domain(교육과정 레벨 접두 `[고]/[중]/[공통]/[기본]` 제거·P2e).
+
+    '[고]미적분'→'미적분', '[기본]다항식'→'다항식', '자연수·자릿값'→'자연수·자릿값'(접두 없음).
+    domain은 표시·필터용 문자열이므로 접두를 벗겨 교육과정 결합을 제거한다(Part 9 [C] 후속).
+    idmap 경로(concept_id 파생)와 독립 — 여기서만 쓴다.
+    """
+    text = category.strip()
+    for prefix in _DOMAIN_LEVEL_PREFIXES:
+        if text.startswith(prefix):
+            return text[len(prefix) :].strip()
+    return text
 
 
 def _grade_band_hint(standard_codes: Sequence[str]) -> str | None:
@@ -174,7 +196,7 @@ def transform_concepts(
                 concept_id=cid,
                 source_id=src_id,
                 aliases=list(aliases_by_src.get(src_id, [])),
-                domain=str(record.get("category", "")),
+                domain=_strip_domain_prefix(str(record.get("category", ""))),
                 grade_band_hint=_grade_band_hint(codes),
                 standard_codes=codes,
                 ccss_code=_opt(record.get("ccss_code")),

@@ -74,7 +74,7 @@ class TestTransformConcepts:
             "UC.common1.a01.hk01",
             "HK01",
         ]  # 축코드·옛 UC·src_id
-        assert c.domain == "[공통]식·방정식·부등식"  # category → domain
+        assert c.domain == "식·방정식·부등식"  # category → domain(교육과정 접두 `[공통]` 제거·P2e)
         assert c.standard_codes == ["[10공수1-01-01]"]
 
     def test_maps_enriched_fields(self) -> None:
@@ -310,6 +310,28 @@ class TestTransformRealData:
         """모든 개념은 성취기준 코드 1개+ 태그(CLAUDE.md ALWAYS)."""
         concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
         assert all(len(c.standard_codes) >= 1 for c in concepts)
+
+
+class TestDomainPurity:
+    """domain 교육과정 접두 정화(P2e·Part 9 [C]) — 표시·필터 문자열의 커리큘럼 결합 제거."""
+
+    def test_strip_domain_prefix_all_levels(self) -> None:
+        """`[고]/[중]/[공통]/[기본]` 접두 제거·접두 없는 값은 그대로."""
+        from data_pipeline.concept_graph.transform import _strip_domain_prefix
+
+        assert _strip_domain_prefix("[고]미적분") == "미적분"
+        assert _strip_domain_prefix("[중]수와 연산") == "수와 연산"
+        assert _strip_domain_prefix("[공통]식·방정식·부등식") == "식·방정식·부등식"
+        assert _strip_domain_prefix("[기본]다항식") == "다항식"  # idmap과 달리 [기본]도 벗김
+        assert _strip_domain_prefix("자연수·자릿값") == "자연수·자릿값"  # 접두 없음
+
+    def test_real_corpus_domains_have_no_curriculum_prefix(
+        self, concept_records: list[dict[str, object]]
+    ) -> None:
+        """실데이터 437 개념의 domain에 교육과정 레벨 접두(`[…]`) 0건 — 정화 잠금."""
+        concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
+        prefixed = [c.domain for c in concepts if c.domain.startswith("[")]
+        assert prefixed == [], f"교육과정 접두 잔존 domain: {sorted(set(prefixed))}"
 
 
 def _real_id_map(records: list[dict[str, object]]) -> dict[str, str]:

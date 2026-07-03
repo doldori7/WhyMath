@@ -2786,7 +2786,7 @@
         "UC.math.a01.j0101",
         "J0101"
       ],
-      "domain": "[중]수와 연산",
+      "domain": "수와 연산",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.number-property.yaksu-gongyaksu-choedaegongyaksu"
@@ -2809,7 +2809,7 @@
         "UC.math.a01.j0102",
         "J0102"
       ],
-      "domain": "[중]수와 연산",
+      "domain": "수와 연산",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.arithmetic.soinsubunhae",
@@ -2833,7 +2833,7 @@
         "UC.math.a01.j0103",
         "J0103"
       ],
-      "domain": "[중]수와 연산",
+      "domain": "수와 연산",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.place-value.suui-gyeyeol-keugi-bigyo",
@@ -2857,7 +2857,7 @@
         "UC.math.a01.j0104",
         "J0104"
       ],
-      "domain": "[중]수와 연산",
+      "domain": "수와 연산",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.arithmetic.eumsu-jeongsu-yurisuui-gaenyeom"
@@ -2880,7 +2880,7 @@
         "UC.math.a01.j0105",
         "J0105"
       ],
-      "domain": "[중]수와 연산",
+      "domain": "수와 연산",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.arithmetic.jeongsu-yurisuui-daeso",
@@ -2905,7 +2905,7 @@
         "UC.math.a01.j0106",
         "J0106"
       ],
-      "domain": "[중]수와 연산",
+      "domain": "수와 연산",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.arithmetic.jeongsu-yurisuui-sachikgyesan",
@@ -2929,7 +2929,7 @@
         "UC.math.a01.j0107",
         "J0107"
       ],
-      "domain": "[중]수와 연산",
+      "domain": "수와 연산",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.measurement.jiksagakhyeong-jeongsagakhyeongui-neolbi",
@@ -2953,7 +2953,7 @@
         "UC.math.a01.j0108",
         "J0108"
       ],
-      "domain": "[중]수와 연산",
+      "domain": "수와 연산",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.arithmetic.jegopgeun"
@@ -2976,7 +2976,7 @@
         "UC.math.a01.j0109",
         "J0109"
       ],
-      "domain": "[중]수와 연산",
+      "domain": "수와 연산",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.arithmetic.murisu",
@@ -3000,7 +3000,7 @@
         "UC.math.a01.j0110",
         "J0110"
       ],
-      "domain": "[중]수와 연산",
+      "domain": "수와 연산",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.arithmetic.jegopgeun"
@@ -3023,7 +3023,7 @@
         "UC.math.a02.j0201",
         "J0201"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.pattern.byeonhwa-gyuchikeul-su-sikeuro",
@@ -3047,7 +3047,7 @@
         "UC.math.a02.j0202",
         "J0202"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.equation.munjareul-sayonghan-sik-sikui-gaps"
@@ -3070,7 +3070,7 @@
         "UC.math.a02.j0203",
         "J0203"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.equation.ilchasikui-deotsem-ppaelsem",
@@ -3094,7 +3094,7 @@
         "UC.math.a02.j0204",
         "J0204"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.equation.bangjeongsikgwa-hae-deungsikui-seongjil"
@@ -3117,7 +3117,7 @@
         "UC.math.a02.j0205",
         "J0205"
       ],
-      "domain": "[중]함수",
+      "domain": "함수",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.pattern.daeeung-gwangye",
@@ -3141,7 +3141,7 @@
         "UC.math.a02.j0206",
         "J0206"
       ],
-      "domain": "[중]함수",
+      "domain": "함수",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.function.sunseossanggwa-jwapyo"
@@ -3164,7 +3164,7 @@
         "UC.math.a02.j0207",
         "J0207"
       ],
-      "domain": "[중]함수",
+      "domain": "함수",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.ratio.biui-gaenyeom",
@@ -3189,7 +3189,7 @@
         "UC.math.a02.j0208",
         "J0208"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.multiplication.yeoreo-jari-suui-gopsem",
@@ -3213,7 +3213,7 @@
         "UC.math.a02.j0209",
         "J0209"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.equation.munjareul-sayonghan-sik-sikui-gaps"
@@ -3236,7 +3236,7 @@
         "UC.math.a02.j0210",
         "J0210"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.equation.dahangsikui-deotsem-ppaelsem",
@@ -3260,7 +3260,7 @@
         "UC.math.a02.j0211",
         "J0211"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.number-property.suui-beomwi",
@@ -3284,7 +3284,7 @@
         "UC.math.a02.j0212",
         "J0212"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.equation.budeungsikgwa-hae-seongjil",
@@ -3308,7 +3308,7 @@
         "UC.math.a02.j0213",
         "J0213"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.equation.ilchabangjeongsik-puli-hwalyong"
@@ -3331,7 +3331,7 @@
         "UC.math.a02.j0214",
         "J0214"
       ],
-      "domain": "[중]함수",
+      "domain": "함수",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.function.sunseossanggwa-jwapyo",
@@ -3355,7 +3355,7 @@
         "UC.math.a02.j0215",
         "J0215"
       ],
-      "domain": "[중]함수",
+      "domain": "함수",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeom-hamsutgaps",
@@ -3379,7 +3379,7 @@
         "UC.math.a02.j0216",
         "J0216"
       ],
-      "domain": "[중]함수",
+      "domain": "함수",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.function.ilchahamsuwa-geuraepeu"
@@ -3402,7 +3402,7 @@
         "UC.math.a02.j0217",
         "J0217"
       ],
-      "domain": "[중]함수",
+      "domain": "함수",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.function.ilchahamsuwa-geuraepeu",
@@ -3426,7 +3426,7 @@
         "UC.math.a02.j0218",
         "J0218"
       ],
-      "domain": "[중]함수",
+      "domain": "함수",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.function.ilchahamsuwa-ilchabangjeongsikui-gwangye",
@@ -3450,7 +3450,7 @@
         "UC.math.a02.j0219",
         "J0219"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.equation.danhangsik-dahangsik-dahangsik-danhangsik"
@@ -3473,7 +3473,7 @@
         "UC.math.a02.j0220",
         "J0220"
       ],
-      "domain": "[중]문자·식·방정식",
+      "domain": "문자·식·방정식",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.equation.dahangsikui-gopsem-insubunhae",
@@ -3497,7 +3497,7 @@
         "UC.math.a02.j0221",
         "J0221"
       ],
-      "domain": "[중]함수",
+      "domain": "함수",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.function.ilchahamsuwa-geuraepeu",
@@ -3521,7 +3521,7 @@
         "UC.math.a02.j0222",
         "J0222"
       ],
-      "domain": "[중]함수",
+      "domain": "함수",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.function.ichahamsuui-gaenyeom"
@@ -3544,7 +3544,7 @@
         "UC.math.a03.j0301",
         "J0301"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.shape-element.jikseon-seonbun-banjikseon",
@@ -3568,7 +3568,7 @@
         "UC.math.a03.j0302",
         "J0302"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.shape-element.sujikgwa-pyeonghaeng",
@@ -3592,7 +3592,7 @@
         "UC.math.a03.j0303",
         "J0303"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.shape-element.keompeoseuro-won-geurigi",
@@ -3616,7 +3616,7 @@
         "UC.math.a03.j0304",
         "J0304"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.transformation.dohyeongui-hapdong",
@@ -3640,7 +3640,7 @@
         "UC.math.a03.j0305",
         "J0305"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.shape.dagakhyeong-jeongdagakhyeong",
@@ -3664,7 +3664,7 @@
         "UC.math.a03.j0306",
         "J0306"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.shape-element.wonui-jungsim-banjireum-jireum",
@@ -3688,7 +3688,7 @@
         "UC.math.a03.j0307",
         "J0307"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.shape.gakgidung-gakppul",
@@ -3712,7 +3712,7 @@
         "UC.math.a03.j0308",
         "J0308"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.geometry.damyeonchewa-hoejeonche",
@@ -3738,7 +3738,7 @@
         "UC.math.a03.j0309",
         "J0309"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.shape.samgakhyeong-bunryu-ideungbyeon-jeongsamgakhyeong",
@@ -3762,7 +3762,7 @@
         "UC.math.a03.j0310",
         "J0310"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.geometry.samgakhyeongui-hapdong-jogeon"
@@ -3785,7 +3785,7 @@
         "UC.math.a03.j0311",
         "J0311"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.shape.sagakhyeong-bunryu",
@@ -3809,7 +3809,7 @@
         "UC.math.a03.j0312",
         "J0312"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.transformation.dohyeongui-hapdong",
@@ -3833,7 +3833,7 @@
         "UC.math.a03.j0313",
         "J0313"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.geometry.dohyeongui-dalmeum-dalmeumbi"
@@ -3856,7 +3856,7 @@
         "UC.math.a03.j0314",
         "J0314"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.geometry.samgakhyeongui-dalmeum-jogeon"
@@ -3879,7 +3879,7 @@
         "UC.math.a03.j0315",
         "J0315"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.measurement.jiksagakhyeong-jeongsagakhyeongui-neolbi",
@@ -3904,7 +3904,7 @@
         "UC.math.a03.j0316",
         "J0316"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.geometry.pitagoraseu-jeongri",
@@ -3928,7 +3928,7 @@
         "UC.math.a03.j0317",
         "J0317"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.geometry.samgakbi"
@@ -3951,7 +3951,7 @@
         "UC.math.a03.j0318",
         "J0318"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.shape-element.wonui-jungsim-banjireum-jireum"
@@ -3974,7 +3974,7 @@
         "UC.math.a03.j0319",
         "J0319"
       ],
-      "domain": "[중]기하",
+      "domain": "기하",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.geometry.wonui-hyeon-jeopseon",
@@ -3998,7 +3998,7 @@
         "UC.math.a04.j0401",
         "J0401"
       ],
-      "domain": "[중]자료와 가능성",
+      "domain": "자료와 가능성",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.graph.pyeonggyun"
@@ -4021,7 +4021,7 @@
         "UC.math.a04.j0402",
         "J0402"
       ],
-      "domain": "[중]자료와 가능성",
+      "domain": "자료와 가능성",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.graph.geurimgeuraepeu-makdaegeuraepeu",
@@ -4045,7 +4045,7 @@
         "UC.math.a04.j0403",
         "J0403"
       ],
-      "domain": "[중]자료와 가능성",
+      "domain": "자료와 가능성",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.data.dosubunpopyo-hiseutogeuraem",
@@ -4069,7 +4069,7 @@
         "UC.math.a04.j0404",
         "J0404"
       ],
-      "domain": "[중]자료와 가능성",
+      "domain": "자료와 가능성",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.graph.tamgu-jeokjeolhan-geuraepeu-seontaek",
@@ -4093,7 +4093,7 @@
         "UC.math.a04.j0405",
         "J0405"
       ],
-      "domain": "[중]자료와 가능성",
+      "domain": "자료와 가능성",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.multiplication.gopsemui-uimi"
@@ -4116,7 +4116,7 @@
         "UC.math.a04.j0406",
         "J0406"
       ],
-      "domain": "[중]자료와 가능성",
+      "domain": "자료와 가능성",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.chance.ganeungseong-suro-pyohyeon",
@@ -4140,7 +4140,7 @@
         "UC.math.a04.j0407",
         "J0407"
       ],
-      "domain": "[중]자료와 가능성",
+      "domain": "자료와 가능성",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.data.daepyotgaps"
@@ -4163,7 +4163,7 @@
         "UC.math.a04.j0408",
         "J0408"
       ],
-      "domain": "[중]자료와 가능성",
+      "domain": "자료와 가능성",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.data.dosubunpopyo-hiseutogeuraem"
@@ -4186,7 +4186,7 @@
         "UC.math.a04.j0409",
         "J0409"
       ],
-      "domain": "[중]자료와 가능성",
+      "domain": "자료와 가능성",
       "grade_band_hint": "중학교 1~3학년군",
       "prerequisite_concept_ids": [
         "math.graph.kkeokkeunseongeuraepeu",
@@ -4210,7 +4210,7 @@
         "UC.common1.a01.hk01",
         "HK01"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.dahangsikui-deotsem-ppaelsem",
@@ -4234,7 +4234,7 @@
         "UC.common1.a01.hk02",
         "HK02"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.dahangsikui-sachikyeonsan"
@@ -4257,7 +4257,7 @@
         "UC.common1.a01.hk03",
         "HK03"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.hangdeungsikgwa-mijeonggyesu"
@@ -4280,7 +4280,7 @@
         "UC.common1.a01.hk04",
         "HK04"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.dahangsikui-sachikyeonsan",
@@ -4306,7 +4306,7 @@
         "UC.common1.a02.hk05",
         "HK05"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.arithmetic.jegopgeun",
@@ -4330,7 +4330,7 @@
         "UC.common1.a02.hk06",
         "HK06"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.boksosu",
@@ -4355,7 +4355,7 @@
         "UC.common1.a02.hk07",
         "HK07"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ichabangjeongsikui-geun",
@@ -4379,7 +4379,7 @@
         "UC.common1.a02.hk08",
         "HK08"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ichabangjeongsikui-geun"
@@ -4402,7 +4402,7 @@
         "UC.common1.a02.hk09",
         "HK09"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ichabangjeongsikui-geun",
@@ -4427,7 +4427,7 @@
         "UC.common1.a02.hk10",
         "HK10"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ichabangjeongsikgwa-ichahamsuui-gwangye-2",
@@ -4451,7 +4451,7 @@
         "UC.common1.a02.hk11",
         "HK11"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ichabangjeongsikgwa-ichahamsuui-gwangye-2"
@@ -4474,7 +4474,7 @@
         "UC.common1.a02.hk12",
         "HK12"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.dahangsikui-insubunhae",
@@ -4498,7 +4498,7 @@
         "UC.common1.a02.hk13",
         "HK13"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ichabangjeongsikui-geun",
@@ -4522,7 +4522,7 @@
         "UC.common1.a02.hk14",
         "HK14"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ilchabudeungsik"
@@ -4545,7 +4545,7 @@
         "UC.common1.a02.hk15",
         "HK15"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.yeonripilchabudeungsik-2"
@@ -4568,7 +4568,7 @@
         "UC.common1.a02.hk16",
         "HK16"
       ],
-      "domain": "[공통]식·방정식·부등식",
+      "domain": "식·방정식·부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.yeonripilchabudeungsik-2",
@@ -4592,7 +4592,7 @@
         "UC.common1.a03.hk39",
         "HK39"
       ],
-      "domain": "[공통]경우의 수",
+      "domain": "경우의 수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.data.gyeonguui-su"
@@ -4615,7 +4615,7 @@
         "UC.common1.a03.hk40",
         "HK40"
       ],
-      "domain": "[공통]경우의 수",
+      "domain": "경우의 수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.combinatorics.hapuibeopchik-gopuibeopchik",
@@ -4639,7 +4639,7 @@
         "UC.common1.a03.hk41",
         "HK41"
       ],
-      "domain": "[공통]경우의 수",
+      "domain": "경우의 수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.combinatorics.sunyeol-2",
@@ -4663,7 +4663,7 @@
         "UC.common1.a04.hk42",
         "HK42"
       ],
-      "domain": "[공통]행렬",
+      "domain": "행렬",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.dahangsikui-sachikyeonsan",
@@ -4687,7 +4687,7 @@
         "UC.common1.a04.hk43",
         "HK43"
       ],
-      "domain": "[공통]행렬",
+      "domain": "행렬",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.matrix.haengryeolui-tteutgwa-pyohyeon-2",
@@ -4711,7 +4711,7 @@
         "UC.common2.a01.hk17",
         "HK17"
       ],
-      "domain": "[공통]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.sunseossanggwa-jwapyo",
@@ -4735,7 +4735,7 @@
         "UC.common2.a01.hk18",
         "HK18"
       ],
-      "domain": "[공통]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.du-jeom-saiui-geori-2"
@@ -4758,7 +4758,7 @@
         "UC.common2.a01.hk19",
         "HK19"
       ],
-      "domain": "[공통]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.du-jeom-saiui-geori-2",
@@ -4782,7 +4782,7 @@
         "UC.common2.a01.hk20",
         "HK20"
       ],
-      "domain": "[공통]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.jikseonui-bangjeongsik-2"
@@ -4805,7 +4805,7 @@
         "UC.common2.a01.hk21",
         "HK21"
       ],
-      "domain": "[공통]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.jikseonui-bangjeongsik-2",
@@ -4829,7 +4829,7 @@
         "UC.common2.a01.hk22",
         "HK22"
       ],
-      "domain": "[공통]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.du-jeom-saiui-geori-2"
@@ -4852,7 +4852,7 @@
         "UC.common2.a01.hk23",
         "HK23"
       ],
-      "domain": "[공통]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.wonui-bangjeongsik-2",
@@ -4877,7 +4877,7 @@
         "UC.common2.a01.hk24",
         "HK24"
       ],
-      "domain": "[공통]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.jikseonui-bangjeongsik-2",
@@ -4901,7 +4901,7 @@
         "UC.common2.a01.hk25",
         "HK25"
       ],
-      "domain": "[공통]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.pyeonghaengidong-2",
@@ -4925,7 +4925,7 @@
         "UC.common2.a02.hk26",
         "HK26"
       ],
-      "domain": "[공통]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -4946,7 +4946,7 @@
         "UC.common2.a02.hk27",
         "HK27"
       ],
-      "domain": "[공통]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.jiphapgwa-pyohyeon"
@@ -4969,7 +4969,7 @@
         "UC.common2.a02.hk28",
         "HK28"
       ],
-      "domain": "[공통]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.bubunjiphap-pohamgwangye"
@@ -4992,7 +4992,7 @@
         "UC.common2.a02.hk29",
         "HK29"
       ],
-      "domain": "[공통]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.jiphapgwa-pyohyeon"
@@ -5015,7 +5015,7 @@
         "UC.common2.a02.hk30",
         "HK30"
       ],
-      "domain": "[공통]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.myeongjewa-jogeon-2"
@@ -5038,7 +5038,7 @@
         "UC.common2.a02.hk31",
         "HK31"
       ],
-      "domain": "[공통]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.myeongjeui-yeok-daeu",
@@ -5062,7 +5062,7 @@
         "UC.common2.a02.hk32",
         "HK32"
       ],
-      "domain": "[공통]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.myeongjeui-yeok-daeu"
@@ -5085,7 +5085,7 @@
         "UC.common2.a02.hk33",
         "HK33"
       ],
-      "domain": "[공통]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.daeujeungmyeong-gwiryubeop"
@@ -5108,7 +5108,7 @@
         "UC.common2.a03.hk34",
         "HK34"
       ],
-      "domain": "[공통]함수",
+      "domain": "함수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeom-hamsutgaps"
@@ -5131,7 +5131,7 @@
         "UC.common2.a03.hk35",
         "HK35"
       ],
-      "domain": "[공통]함수",
+      "domain": "함수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeom-geuraepeu"
@@ -5154,7 +5154,7 @@
         "UC.common2.a03.hk36",
         "HK36"
       ],
-      "domain": "[공통]함수",
+      "domain": "함수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeom-geuraepeu",
@@ -5178,7 +5178,7 @@
         "UC.common2.a03.hk37",
         "HK37"
       ],
-      "domain": "[공통]함수",
+      "domain": "함수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeom-geuraepeu",
@@ -5202,7 +5202,7 @@
         "UC.common2.a03.hk38",
         "HK38"
       ],
-      "domain": "[공통]함수",
+      "domain": "함수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeom-geuraepeu"
@@ -5225,7 +5225,7 @@
         "UC.algebra.a01.h-12-01-01",
         "H:12대수01-01"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.jisubeopchik"
@@ -5248,7 +5248,7 @@
         "UC.algebra.a01.h-12-01-02",
         "H:12대수01-02"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.geodeupjegopgwa-geodeupjegopgeun"
@@ -5271,7 +5271,7 @@
         "UC.algebra.a01.h-12-01-03",
         "H:12대수01-03"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.jisuui-hwakjang"
@@ -5294,7 +5294,7 @@
         "UC.algebra.a01.h-12-01-04",
         "H:12대수01-04"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -5315,7 +5315,7 @@
         "UC.algebra.a01.h-12-01-05",
         "H:12대수01-05"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.rogeuui-tteutgwa-seongjil"
@@ -5338,7 +5338,7 @@
         "UC.algebra.a01.h-12-01-06",
         "H:12대수01-06"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.jisubeopchik",
@@ -5363,7 +5363,7 @@
         "UC.algebra.a01.h-12-01-07",
         "H:12대수01-07"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.jisuhamsuwa-rogeuhamsuui-tteut"
@@ -5386,7 +5386,7 @@
         "UC.algebra.a01.h-12-01-08",
         "H:12대수01-08"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.jisuhamsu-rogeuhamsuui-geuraepeuwa-seongjil",
@@ -5410,7 +5410,7 @@
         "UC.algebra.a02.h-12-02-01",
         "H:12대수02-01"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.wonui-bangjeongsik-2"
@@ -5433,7 +5433,7 @@
         "UC.algebra.a02.h-12-02-02",
         "H:12대수02-02"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.ilbangakgwa-hodobeop"
@@ -5456,7 +5456,7 @@
         "UC.algebra.a02.h-12-02-03",
         "H:12대수02-03"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.samgakhamsuui-tteutgwa-geuraepeu"
@@ -5479,7 +5479,7 @@
         "UC.algebra.a03.h-12-03-01",
         "H:12대수03-01"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.pattern.daeeung-gwangye"
@@ -5502,7 +5502,7 @@
         "UC.algebra.a03.h-12-03-02",
         "H:12대수03-02"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.suyeolui-tteut"
@@ -5525,7 +5525,7 @@
         "UC.algebra.a03.h-12-03-03",
         "H:12대수03-03"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.suyeolui-tteut"
@@ -5548,7 +5548,7 @@
         "UC.algebra.a03.h-12-03-04",
         "H:12대수03-04"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.deungchasuyeolui-ilbanhanggwa-hap",
@@ -5572,7 +5572,7 @@
         "UC.algebra.a03.h-12-03-05",
         "H:12대수03-05"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.hapui-giho"
@@ -5595,7 +5595,7 @@
         "UC.algebra.a03.h-12-03-06",
         "H:12대수03-06"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.suyeolui-tteut"
@@ -5618,7 +5618,7 @@
         "UC.algebra.a03.h-12-03-07",
         "H:12대수03-07"
       ],
-      "domain": "[고]대수",
+      "domain": "대수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.suyeolui-gwinapjeok-jeongui"
@@ -5641,7 +5641,7 @@
         "UC.calc1.a01.h-12-01-01",
         "H:12미적Ⅰ01-01"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeom-geuraepeu",
@@ -5666,7 +5666,7 @@
         "UC.calc1.a01.h-12-01-02",
         "H:12미적Ⅰ01-02"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.hamsuui-geukhanui-tteut"
@@ -5689,7 +5689,7 @@
         "UC.calc1.a01.h-12-01-03",
         "H:12미적Ⅰ01-03"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.hamsuui-geukhanui-seongjilgwa-geukhangaps"
@@ -5712,7 +5712,7 @@
         "UC.calc1.a01.h-12-01-04",
         "H:12미적Ⅰ01-04"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.hamsuui-yeonsok"
@@ -5735,7 +5735,7 @@
         "UC.calc1.a02.h-12-02-01",
         "H:12미적Ⅰ02-01"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.hamsuui-geukhanui-seongjilgwa-geukhangaps"
@@ -5758,7 +5758,7 @@
         "UC.calc1.a02.h-12-02-02",
         "H:12미적Ⅰ02-02"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.mibungyesu"
@@ -5781,7 +5781,7 @@
         "UC.calc1.a02.h-12-02-03",
         "H:12미적Ⅰ02-03"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.mibungyesu"
@@ -5804,7 +5804,7 @@
         "UC.calc1.a02.h-12-02-04",
         "H:12미적Ⅰ02-04"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.hamsu-y-x-nui-dohamsu"
@@ -5827,7 +5827,7 @@
         "UC.calc1.a02.h-12-02-05",
         "H:12미적Ⅰ02-05"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.mibungyesu",
@@ -5851,7 +5851,7 @@
         "UC.calc1.a02.h-12-02-06",
         "H:12미적Ⅰ02-06"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.mibunbeopgwa-dahanghamsuui-dohamsu"
@@ -5874,7 +5874,7 @@
         "UC.calc1.a02.h-12-02-07",
         "H:12미적Ⅰ02-07"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.mibunbeopgwa-dahanghamsuui-dohamsu"
@@ -5897,7 +5897,7 @@
         "UC.calc1.a02.h-12-02-08",
         "H:12미적Ⅰ02-08"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.hamsuui-jeungga-gamsowa-geukdae-geukso"
@@ -5920,7 +5920,7 @@
         "UC.calc1.a02.h-12-02-09",
         "H:12미적Ⅰ02-09"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.hamsuui-jeungga-gamsowa-geukdae-geukso"
@@ -5943,7 +5943,7 @@
         "UC.calc1.a02.h-12-02-10",
         "H:12미적Ⅰ02-10"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.mibunbeopgwa-dahanghamsuui-dohamsu"
@@ -5966,7 +5966,7 @@
         "UC.calc1.a03.h-12-03-01",
         "H:12미적Ⅰ03-01"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.mibunbeopgwa-dahanghamsuui-dohamsu"
@@ -5989,7 +5989,7 @@
         "UC.calc1.a03.h-12-03-02",
         "H:12미적Ⅰ03-02"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.bujeongjeokbunui-tteut"
@@ -6012,7 +6012,7 @@
         "UC.calc1.a03.h-12-03-03",
         "H:12미적Ⅰ03-03"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.dahanghamsuui-bujeongjeokbun"
@@ -6035,7 +6035,7 @@
         "UC.calc1.a03.h-12-03-04",
         "H:12미적Ⅰ03-04"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.jeongjeokbunui-gaenyeomgwa-seongjil"
@@ -6058,7 +6058,7 @@
         "UC.calc1.a03.h-12-03-05",
         "H:12미적Ⅰ03-05"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.bujeongjeokbungwa-jeongjeokbunui-gwangye"
@@ -6081,7 +6081,7 @@
         "UC.calc1.a03.h-12-03-06",
         "H:12미적Ⅰ03-06"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.bujeongjeokbungwa-jeongjeokbunui-gwangye"
@@ -6104,7 +6104,7 @@
         "UC.prob.a01.h-12-01-01",
         "H:12확통01-01"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.combinatorics.johap-2",
@@ -6128,7 +6128,7 @@
         "UC.prob.a01.h-12-01-02",
         "H:12확통01-02"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.jungboksunyeol-gateun-geoti-itneun-sunyeol"
@@ -6151,7 +6151,7 @@
         "UC.prob.a01.h-12-01-03",
         "H:12확통01-03"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.jungbokjohap"
@@ -6174,7 +6174,7 @@
         "UC.prob.a02.h-12-02-01",
         "H:12확통02-01"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.data.hwakryul"
@@ -6197,7 +6197,7 @@
         "UC.prob.a02.h-12-02-02",
         "H:12확통02-02"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.hwakryului-tteutgwa-gibon-seongjil"
@@ -6220,7 +6220,7 @@
         "UC.prob.a02.h-12-02-03",
         "H:12확통02-03"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.hwakryului-deotsemjeongri"
@@ -6243,7 +6243,7 @@
         "UC.prob.a02.h-12-02-04",
         "H:12확통02-04"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.hwakryului-tteutgwa-gibon-seongjil"
@@ -6266,7 +6266,7 @@
         "UC.prob.a02.h-12-02-05",
         "H:12확통02-05"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.jogeonbuhwakryul"
@@ -6289,7 +6289,7 @@
         "UC.prob.a02.h-12-02-06",
         "H:12확통02-06"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.sageonui-dokripgwa-jongsok"
@@ -6312,7 +6312,7 @@
         "UC.prob.a03.h-12-03-01",
         "H:12확통03-01"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.hwakryului-tteutgwa-gibon-seongjil",
@@ -6336,7 +6336,7 @@
         "UC.prob.a03.h-12-03-02",
         "H:12확통03-02"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.hwakryulbyeonsuwa-hwakryulbunpo"
@@ -6359,7 +6359,7 @@
         "UC.prob.a03.h-12-03-03",
         "H:12확통03-03"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.isanhwakryulbyeonsuui-gidaetgapsgwa-pyojunpyeoncha",
@@ -6383,7 +6383,7 @@
         "UC.prob.a03.h-12-03-04",
         "H:12확통03-04"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.ihangbunpo"
@@ -6406,7 +6406,7 @@
         "UC.prob.a03.h-12-03-05",
         "H:12확통03-05"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -6427,7 +6427,7 @@
         "UC.prob.a03.h-12-03-06",
         "H:12확통03-06"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.mojipdangwa-pyobon-pyobonchuchul",
@@ -6451,7 +6451,7 @@
         "UC.prob.a03.h-12-03-07",
         "H:12확통03-07"
       ],
-      "domain": "[고]확률·통계",
+      "domain": "확률·통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.probability.pyobonpyeonggyun-pyobonbiyului-bunpo"
@@ -6474,7 +6474,7 @@
         "UC.calc2.a01.h-12-01-01",
         "H:12미적Ⅱ01-01"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.yeonsokhamsuui-seongjil"
@@ -6497,7 +6497,7 @@
         "UC.calc2.a01.h-12-01-02",
         "H:12미적Ⅱ01-02"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.suyeolui-suryeomgwa-balsan"
@@ -6520,7 +6520,7 @@
         "UC.calc2.a01.h-12-01-03",
         "H:12미적Ⅱ01-03"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.suyeolui-geukhanui-seongjil",
@@ -6544,7 +6544,7 @@
         "UC.calc2.a01.h-12-01-04",
         "H:12미적Ⅱ01-04"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.deungbisuyeolui-geukhan"
@@ -6567,7 +6567,7 @@
         "UC.calc2.a01.h-12-01-05",
         "H:12미적Ⅱ01-05"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.geupsuui-suryeomgwa-balsan"
@@ -6590,7 +6590,7 @@
         "UC.calc2.a02.h-12-02-01",
         "H:12미적Ⅱ02-01"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.jisuhamsu-rogeuhamsuui-geuraepeuwa-seongjil"
@@ -6613,7 +6613,7 @@
         "UC.calc2.a02.h-12-02-02",
         "H:12미적Ⅱ02-02"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.algebra.samgakhamsuui-tteutgwa-geuraepeu"
@@ -6636,7 +6636,7 @@
         "UC.calc2.a02.h-12-02-03",
         "H:12미적Ⅱ02-03"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.samgakhamsuui-deotsemjeongri"
@@ -6659,7 +6659,7 @@
         "UC.calc2.a02.h-12-02-04",
         "H:12미적Ⅱ02-04"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.jisuhamsu-rogeuhamsuui-geukhangwa-mibun",
@@ -6684,7 +6684,7 @@
         "UC.calc2.a02.h-12-02-05",
         "H:12미적Ⅱ02-05"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.moksui-mibunbeop"
@@ -6707,7 +6707,7 @@
         "UC.calc2.a02.h-12-02-06",
         "H:12미적Ⅱ02-06"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.hapseonghamsuui-mibunbeop"
@@ -6730,7 +6730,7 @@
         "UC.calc2.a02.h-12-02-07",
         "H:12미적Ⅱ02-07"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.hapseonghamsuui-mibunbeop"
@@ -6753,7 +6753,7 @@
         "UC.calc2.a02.h-12-02-08",
         "H:12미적Ⅱ02-08"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.moksui-mibunbeop"
@@ -6776,7 +6776,7 @@
         "UC.calc2.a02.h-12-02-09",
         "H:12미적Ⅱ02-09"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.yeoreo-gaji-gokseonui-jeopseonui-bangjeongsik"
@@ -6799,7 +6799,7 @@
         "UC.calc2.a02.h-12-02-10",
         "H:12미적Ⅱ02-10"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.hamsuui-geuraepeu-gaehyeong-2"
@@ -6822,7 +6822,7 @@
         "UC.calc2.a02.h-12-02-11",
         "H:12미적Ⅱ02-11"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.eumhamsuwa-yeokhamsuui-mibunbeop"
@@ -6845,7 +6845,7 @@
         "UC.calc2.a03.h-12-03-01",
         "H:12미적Ⅱ03-01"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.jisuhamsu-rogeuhamsuui-geukhangwa-mibun",
@@ -6870,7 +6870,7 @@
         "UC.calc2.a03.h-12-03-02",
         "H:12미적Ⅱ03-02"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.yeoreo-gaji-hamsuui-bujeongjeokbungwa-jeongjeokbun"
@@ -6893,7 +6893,7 @@
         "UC.calc2.a03.h-12-03-03",
         "H:12미적Ⅱ03-03"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.chihwanjeokbunbeop"
@@ -6916,7 +6916,7 @@
         "UC.calc2.a03.h-12-03-04",
         "H:12미적Ⅱ03-04"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.yeoreo-gaji-hamsuui-bujeongjeokbungwa-jeongjeokbun",
@@ -6940,7 +6940,7 @@
         "UC.calc2.a03.h-12-03-05",
         "H:12미적Ⅱ03-05"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.yeoreo-gaji-hamsuui-bujeongjeokbungwa-jeongjeokbun"
@@ -6963,7 +6963,7 @@
         "UC.calc2.a03.h-12-03-06",
         "H:12미적Ⅱ03-06"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.gokseoneuro-dulreossain-dohyeongui-neolbi-2"
@@ -6986,7 +6986,7 @@
         "UC.calc2.a03.h-12-03-07",
         "H:12미적Ⅱ03-07"
       ],
-      "domain": "[고]미적분",
+      "domain": "미적분",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.calculus.yeoreo-gaji-hamsuui-bujeongjeokbungwa-jeongjeokbun"
@@ -7009,7 +7009,7 @@
         "UC.geom.a01.h-12-01-01",
         "H:12기하01-01"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.wonui-bangjeongsik-2"
@@ -7032,7 +7032,7 @@
         "UC.geom.a01.h-12-01-02",
         "H:12기하01-02"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.wonui-bangjeongsik-2"
@@ -7055,7 +7055,7 @@
         "UC.geom.a01.h-12-01-03",
         "H:12기하01-03"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -7076,7 +7076,7 @@
         "UC.geom.a01.h-12-01-04",
         "H:12기하01-04"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.geometry.pomulseonui-bangjeongsik",
@@ -7102,7 +7102,7 @@
         "UC.geom.a02.h-12-02-01",
         "H:12기하02-01"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -7123,7 +7123,7 @@
         "UC.geom.a02.h-12-02-02",
         "H:12기하02-02"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.geometry.jikseongwa-pyeongmyeonui-wichi-gwangye"
@@ -7146,7 +7146,7 @@
         "UC.geom.a02.h-12-02-03",
         "H:12기하02-03"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.geometry.samsuseon-jeongri"
@@ -7169,7 +7169,7 @@
         "UC.geom.a02.h-12-02-04",
         "H:12기하02-04"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.du-jeom-saiui-geori-2"
@@ -7192,7 +7192,7 @@
         "UC.geom.a02.h-12-02-05",
         "H:12기하02-05"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.geometry.gongganjwapyo",
@@ -7216,7 +7216,7 @@
         "UC.geom.a03.h-12-03-01",
         "H:12기하03-01"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.du-jeom-saiui-geori-2"
@@ -7239,7 +7239,7 @@
         "UC.geom.a03.h-12-03-02",
         "H:12기하03-02"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.geometry.bekteoui-tteutgwa-yeonsan"
@@ -7262,7 +7262,7 @@
         "UC.geom.a03.h-12-03-03",
         "H:12기하03-03"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.geometry.wichibekteowa-bekteoui-seongbun"
@@ -7285,7 +7285,7 @@
         "UC.geom.a03.h-12-03-04",
         "H:12기하03-04"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.geometry.wichibekteowa-bekteoui-seongbun",
@@ -7309,7 +7309,7 @@
         "UC.geom.a03.h-12-03-05",
         "H:12기하03-05"
       ],
-      "domain": "[고]기하",
+      "domain": "기하",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.geometry.bekteoreul-iyonghan-jikseonui-bangjeongsik",
@@ -7333,7 +7333,7 @@
         "UC.x7b1854.a01.h-12-01-01",
         "H:12경수01-01"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.graph.pyeonggyun"
@@ -7356,7 +7356,7 @@
         "UC.x7b1854.a01.h-12-01-02",
         "H:12경수01-02"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ratio.biyul"
@@ -7379,7 +7379,7 @@
         "UC.x7b1854.a01.h-12-01-03",
         "H:12경수01-03"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ratio.biyul"
@@ -7402,7 +7402,7 @@
         "UC.x7b1854.a01.h-12-01-04",
         "H:12경수01-04"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ratio.biyul"
@@ -7425,7 +7425,7 @@
         "UC.x7b1854.a01.h-12-01-05",
         "H:12경수01-05"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.danri-bokriwa-hyeonjaegachi"
@@ -7448,7 +7448,7 @@
         "UC.x7b1854.a02.h-12-02-01",
         "H:12경수02-01"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeom-geuraepeu"
@@ -7471,7 +7471,7 @@
         "UC.x7b1854.a02.h-12-02-02",
         "H:12경수02-02"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.gyeongje-hyeonsangui-hamsu-pyohyeon",
@@ -7495,7 +7495,7 @@
         "UC.x7b1854.a02.h-12-02-03",
         "H:12경수02-03"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.gyeongje-hyeonsangui-hamsu-pyohyeon"
@@ -7518,7 +7518,7 @@
         "UC.x7b1854.a02.h-12-02-04",
         "H:12경수02-04"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.suyogokseongwa-gonggeupgokseon"
@@ -7541,7 +7541,7 @@
         "UC.x7b1854.a02.h-12-02-05",
         "H:12경수02-05"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.gyunhyeonggagyeokui-gyeoljeong"
@@ -7564,7 +7564,7 @@
         "UC.x7b1854.a02.h-12-02-06",
         "H:12경수02-06"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ichabudeungsik-yeonripichabudeungsik"
@@ -7587,7 +7587,7 @@
         "UC.x7b1854.a03.h-12-03-01",
         "H:12경수03-01"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.graph.pyoro-natanaegi"
@@ -7610,7 +7610,7 @@
         "UC.x7b1854.a03.h-12-03-02",
         "H:12경수03-02"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.gyeongje-hyeonsangui-haengryeol-pyohyeongwa-yeonsan"
@@ -7633,7 +7633,7 @@
         "UC.x7b1854.a03.h-12-03-03",
         "H:12경수03-03"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.yeokhaengryeol"
@@ -7656,7 +7656,7 @@
         "UC.x7b1854.a04.h-12-04-01",
         "H:12경수04-01"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeom-geuraepeu"
@@ -7679,7 +7679,7 @@
         "UC.x7b1854.a04.h-12-04-02",
         "H:12경수04-02"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.gyeongje-hamsuui-mibun"
@@ -7702,7 +7702,7 @@
         "UC.x7b1854.a04.h-12-04-03",
         "H:12경수04-03"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.gyeongje-hamsuui-mibun"
@@ -7725,7 +7725,7 @@
         "UC.x7b1854.a04.h-12-04-04",
         "H:12경수04-04"
       ],
-      "domain": "[고]경제 수학",
+      "domain": "경제 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.mibungwa-geuraepeuui-gaehyeong",
@@ -7749,7 +7749,7 @@
         "UC.xe589a8.a01.h-12-01-01",
         "H:12인수01-01"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -7770,7 +7770,7 @@
         "UC.xe589a8.a01.h-12-01-02",
         "H:12인수01-02"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ai-math.ingongjineungui-gaenyeomgwa-suhakjeok-hakseup-bangsik"
@@ -7793,7 +7793,7 @@
         "UC.xe589a8.a01.h-12-01-03",
         "H:12인수01-03"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ai-math.ingongjineungui-gaenyeomgwa-suhakjeok-hakseup-bangsik"
@@ -7816,7 +7816,7 @@
         "UC.xe589a8.a02.h-12-02-01",
         "H:12인수02-01"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.jiphapui-yeonsan-2"
@@ -7839,7 +7839,7 @@
         "UC.xe589a8.a02.h-12-02-02",
         "H:12인수02-02"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ai-math.tekseuteu-deiteoui-pyohyeon"
@@ -7862,7 +7862,7 @@
         "UC.xe589a8.a02.h-12-02-03",
         "H:12인수02-03"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ai-math.bindosubekteowa-tekseuteu-yoyak"
@@ -7885,7 +7885,7 @@
         "UC.xe589a8.a03.h-12-03-01",
         "H:12인수03-01"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.economics.gyeongje-hyeonsangui-haengryeol-pyohyeongwa-yeonsan"
@@ -7908,7 +7908,7 @@
         "UC.xe589a8.a03.h-12-03-02",
         "H:12인수03-02"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ai-math.imiji-deiteoui-haengryeol-pyohyeon"
@@ -7931,7 +7931,7 @@
         "UC.xe589a8.a03.h-12-03-03",
         "H:12인수03-03"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ai-math.haengryeol-yeonsangwa-imiji-byeonhwan"
@@ -7954,7 +7954,7 @@
         "UC.xe589a8.a04.h-12-04-01",
         "H:12인수04-01"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.data.hwakryul"
@@ -7977,7 +7977,7 @@
         "UC.xe589a8.a04.h-12-04-02",
         "H:12인수04-02"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.data.sanjeomdo-sanggwangwangye"
@@ -8000,7 +8000,7 @@
         "UC.xe589a8.a04.h-12-04-03",
         "H:12인수04-03"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ai-math.chuseseongwa-deiteoui-gyeonghyangseong",
@@ -8024,7 +8024,7 @@
         "UC.xe589a8.a04.h-12-04-04",
         "H:12인수04-04"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ai-math.sonsilhamsuwa-choejeokhwa",
@@ -8048,7 +8048,7 @@
         "UC.xe589a8.a05.h-12-05-01",
         "H:12인수05-01"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ai-math.gyeongsahagangbeop",
@@ -8072,7 +8072,7 @@
         "UC.xe589a8.a05.h-12-05-02",
         "H:12인수05-02"
       ],
-      "domain": "[고]인공지능 수학",
+      "domain": "인공지능 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ai-math.ingongjineungui-silsaenghwal-munje-haegyeol-wonri"
@@ -8095,7 +8095,7 @@
         "UC.xb30a19.a01.h-12-01-01",
         "H:12직수01-01"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.multiplication.yeoreo-jari-suui-gopsem"
@@ -8118,7 +8118,7 @@
         "UC.xb30a19.a01.h-12-01-02",
         "H:12직수01-02"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.number-property.eorim"
@@ -8141,7 +8141,7 @@
         "UC.xb30a19.a01.h-12-01-03",
         "H:12직수01-03"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.unit.gili-danwi-mm-kmwa-gwangye"
@@ -8164,7 +8164,7 @@
         "UC.xb30a19.a02.h-12-02-01",
         "H:12직수02-01"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ratio.biui-gaenyeom"
@@ -8187,7 +8187,7 @@
         "UC.xb30a19.a02.h-12-02-02",
         "H:12직수02-02"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ratio.biyul"
@@ -8210,7 +8210,7 @@
         "UC.xb30a19.a02.h-12-02-03",
         "H:12직수02-03"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.pattern.daeeung-gwangye"
@@ -8233,7 +8233,7 @@
         "UC.xb30a19.a02.h-12-02-04",
         "H:12직수02-04"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.graph.kkeokkeunseongeuraepeu"
@@ -8256,7 +8256,7 @@
         "UC.xb30a19.a02.h-12-02-05",
         "H:12직수02-05"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ilchabudeungsik"
@@ -8279,7 +8279,7 @@
         "UC.xb30a19.a03.h-12-03-01",
         "H:12직수03-01"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.shape.gyeonyangdo-jeongaedo"
@@ -8302,7 +8302,7 @@
         "UC.xb30a19.a03.h-12-03-02",
         "H:12직수03-02"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.shape.ssatginamu-wi-ap-yeop-moyang"
@@ -8325,7 +8325,7 @@
         "UC.xb30a19.a03.h-12-03-03",
         "H:12직수03-03"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.geometry.dohyeongui-dalmeum-dalmeumbi"
@@ -8348,7 +8348,7 @@
         "UC.xb30a19.a03.h-12-03-04",
         "H:12직수03-04"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.measurement.pyeonghaengsabyeonhyeong-samgakhyeong-sadarikkol-mareummoui-neolbi"
@@ -8371,7 +8371,7 @@
         "UC.xb30a19.a03.h-12-03-05",
         "H:12직수03-05"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.measurement.jikyukmyeonche-jeongyukmyeoncheui-bupi"
@@ -8394,7 +8394,7 @@
         "UC.xb30a19.a04.h-12-04-01",
         "H:12직수04-01"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.data.gyeonguui-su"
@@ -8417,7 +8417,7 @@
         "UC.xb30a19.a04.h-12-04-02",
         "H:12직수04-02"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.data.hwakryul"
@@ -8440,7 +8440,7 @@
         "UC.xb30a19.a04.h-12-04-03",
         "H:12직수04-03"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.graph.tamgu-makdae-kkeokkeunseon-hwalyong"
@@ -8463,7 +8463,7 @@
         "UC.xb30a19.a04.h-12-04-04",
         "H:12직수04-04"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.vocational-math.pyowa-geuraepeuro-jaryo-jeongri"
@@ -8486,7 +8486,7 @@
         "UC.xb30a19.a04.h-12-04-05",
         "H:12직수04-05"
       ],
-      "domain": "[고]직무 수학",
+      "domain": "직무 수학",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.vocational-math.pyowa-geuraepeuui-haeseok"
@@ -8509,7 +8509,7 @@
         "UC.x31955d.a01.h-12-01-01",
         "H:12수문01-01"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.ratio.biui-gaenyeom"
@@ -8532,7 +8532,7 @@
         "UC.x31955d.a01.h-12-01-02",
         "H:12수문01-02"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.transformation.seondaeching-jeomdaeching",
@@ -8556,7 +8556,7 @@
         "UC.x31955d.a01.h-12-01-03",
         "H:12수문01-03"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.pattern.gyuchik-chatgi-pyohyeon"
@@ -8579,7 +8579,7 @@
         "UC.x31955d.a01.h-12-01-04",
         "H:12수문01-04"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.transformation.milgi-dwijipgi-dolrigi"
@@ -8602,7 +8602,7 @@
         "UC.x31955d.a02.h-12-02-01",
         "H:12수문02-01"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.graph.tamgu-jeokjeolhan-geuraepeu-seontaek"
@@ -8625,7 +8625,7 @@
         "UC.x31955d.a02.h-12-02-02",
         "H:12수문02-02"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.data.hwakryul"
@@ -8648,7 +8648,7 @@
         "UC.x31955d.a02.h-12-02-03",
         "H:12수문02-03"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.arithmetic.soinsubunhae"
@@ -8671,7 +8671,7 @@
         "UC.x31955d.a02.h-12-02-04",
         "H:12수문02-04"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.chance.ganeungseong-geungeo-pandan"
@@ -8694,7 +8694,7 @@
         "UC.x31955d.a03.h-12-03-01",
         "H:12수문03-01"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.shape.dagakhyeong-jeongdagakhyeong"
@@ -8717,7 +8717,7 @@
         "UC.x31955d.a03.h-12-03-02",
         "H:12수문03-02"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.combinatorics.sunyeol-2"
@@ -8740,7 +8740,7 @@
         "UC.x31955d.a03.h-12-03-03",
         "H:12수문03-03"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.graph.ttigeuraepeu-wongeuraepeu"
@@ -8763,7 +8763,7 @@
         "UC.x31955d.a03.h-12-03-04",
         "H:12수문03-04"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.chance.ganeungseong-geungeo-pandan"
@@ -8786,7 +8786,7 @@
         "UC.x31955d.a04.h-12-04-01",
         "H:12수문04-01"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.graph.tamgu-jeokjeolhan-geuraepeu-seontaek"
@@ -8809,7 +8809,7 @@
         "UC.x31955d.a04.h-12-04-02",
         "H:12수문04-02"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.graph.tamgu-jeokjeolhan-geuraepeu-seontaek"
@@ -8832,7 +8832,7 @@
         "UC.x31955d.a04.h-12-04-03",
         "H:12수문04-03"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.graph.tamgu-jeokjeolhan-geuraepeu-seontaek"
@@ -8855,7 +8855,7 @@
         "UC.x31955d.a04.h-12-04-04",
         "H:12수문04-04"
       ],
-      "domain": "[고]수학과 문화",
+      "domain": "수학과 문화",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.graph.tamgu-jeokjeolhan-geuraepeu-seontaek"
@@ -8878,7 +8878,7 @@
         "UC.x189b6f.a01.h-12-01-01",
         "H:12실통01-01"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -8899,7 +8899,7 @@
         "UC.x189b6f.a01.h-12-01-02",
         "H:12실통01-02"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.statistics.tonggyeui-yuyongseonggwa-pilyoseong"
@@ -8922,7 +8922,7 @@
         "UC.x189b6f.a01.h-12-01-03",
         "H:12실통01-03"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.statistics.tonggyejeok-munjehaegyeol-gwajeong",
@@ -8946,7 +8946,7 @@
         "UC.x189b6f.a02.h-12-02-01",
         "H:12실통02-01"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -8967,7 +8967,7 @@
         "UC.x189b6f.a02.h-12-02-02",
         "H:12실통02-02"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.statistics.jaryoui-jongryu"
@@ -8990,7 +8990,7 @@
         "UC.x189b6f.a02.h-12-02-03",
         "H:12실통02-03"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.statistics.jaryoui-sujip-bangbeop",
@@ -9014,7 +9014,7 @@
         "UC.x189b6f.a02.h-12-02-04",
         "H:12실통02-04"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.statistics.jaryoui-sujip-bangbeop",
@@ -9039,7 +9039,7 @@
         "UC.x189b6f.a03.h-12-03-01",
         "H:12실통03-01"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.data.hwakryul"
@@ -9062,7 +9062,7 @@
         "UC.x189b6f.a03.h-12-03-02",
         "H:12실통03-02"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.statistics.jeonggyubunpowa-tbunpo",
@@ -9086,7 +9086,7 @@
         "UC.x189b6f.a03.h-12-03-03",
         "H:12실통03-03"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.statistics.jeonggyubunpowa-tbunpo"
@@ -9109,7 +9109,7 @@
         "UC.x189b6f.a03.h-12-03-04",
         "H:12실통03-04"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.statistics.mopyeonggyunui-chujeong"
@@ -9132,7 +9132,7 @@
         "UC.x189b6f.a04.h-12-04-01",
         "H:12실통04-01"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.statistics.mopyeonggyunui-chujeong",
@@ -9156,7 +9156,7 @@
         "UC.x189b6f.a04.h-12-04-02",
         "H:12실통04-02"
       ],
-      "domain": "[고]실용 통계",
+      "domain": "실용 통계",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.statistics.tonggyejeok-tamguwa-uisa-gyeoljeong"
@@ -9179,7 +9179,7 @@
         "UC.x68c8f7.a01.h-12-01-01",
         "H:12수과01-01"
       ],
-      "domain": "[고]수학과제 탐구",
+      "domain": "수학과제 탐구",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -9200,7 +9200,7 @@
         "UC.x68c8f7.a01.h-12-01-02",
         "H:12수과01-02"
       ],
-      "domain": "[고]수학과제 탐구",
+      "domain": "수학과제 탐구",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.inquiry.suhakgwaje-tamguui-uimiwa-pilyoseong"
@@ -9223,7 +9223,7 @@
         "UC.x68c8f7.a02.h-12-02-01",
         "H:12수과02-01"
       ],
-      "domain": "[고]수학과제 탐구",
+      "domain": "수학과제 탐구",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.inquiry.suhakgwaje-tamguui-uimiwa-pilyoseong"
@@ -9246,7 +9246,7 @@
         "UC.x68c8f7.a02.h-12-02-02",
         "H:12수과02-02"
       ],
-      "domain": "[고]수학과제 탐구",
+      "domain": "수학과제 탐구",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.inquiry.suhakgwaje-tamguui-uimiwa-pilyoseong"
@@ -9269,7 +9269,7 @@
         "UC.x68c8f7.a02.h-12-02-03",
         "H:12수과02-03"
       ],
-      "domain": "[고]수학과제 탐구",
+      "domain": "수학과제 탐구",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.inquiry.suhakgwaje-tamguui-uimiwa-pilyoseong"
@@ -9292,7 +9292,7 @@
         "UC.x68c8f7.a02.h-12-02-04",
         "H:12수과02-04"
       ],
-      "domain": "[고]수학과제 탐구",
+      "domain": "수학과제 탐구",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.inquiry.suhakgwaje-tamguui-uimiwa-pilyoseong"
@@ -9315,7 +9315,7 @@
         "UC.x68c8f7.a03.h-12-03-01",
         "H:12수과03-01"
       ],
-      "domain": "[고]수학과제 탐구",
+      "domain": "수학과제 탐구",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.inquiry.munheon-josa-tamgu",
@@ -9341,7 +9341,7 @@
         "UC.x68c8f7.a03.h-12-03-02",
         "H:12수과03-02"
       ],
-      "domain": "[고]수학과제 탐구",
+      "domain": "수학과제 탐구",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.inquiry.tamgu-juje-seonjeonggwa-gyehoek-surip"
@@ -9364,7 +9364,7 @@
         "UC.x68c8f7.a03.h-12-03-03",
         "H:12수과03-03"
       ],
-      "domain": "[고]수학과제 탐구",
+      "domain": "수학과제 탐구",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.inquiry.tamguui-suhaeng"
@@ -9387,7 +9387,7 @@
         "UC.x68c8f7.a03.h-12-03-04",
         "H:12수과03-04"
       ],
-      "domain": "[고]수학과제 탐구",
+      "domain": "수학과제 탐구",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.inquiry.sanchulmul-jejakgwa-balpyo"
@@ -9410,7 +9410,7 @@
         "UC.x5e8f2a.a01.10-1-01-01",
         "10기수1-01-01"
       ],
-      "domain": "[기본]다항식",
+      "domain": "다항식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -9431,7 +9431,7 @@
         "UC.x5e8f2a.a01.10-1-01-02",
         "10기수1-01-02"
       ],
-      "domain": "[기본]다항식",
+      "domain": "다항식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.polynomial.dahangsikui-deotsemgwa-ppaelsem"
@@ -9454,7 +9454,7 @@
         "UC.x5e8f2a.a01.10-1-01-03",
         "10기수1-01-03"
       ],
-      "domain": "[기본]다항식",
+      "domain": "다항식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.polynomial.dahangsikui-gopsemgwa-nanutsem"
@@ -9477,7 +9477,7 @@
         "UC.x5e8f2a.a02.10-1-02-01",
         "10기수1-02-01"
       ],
-      "domain": "[기본]방정식과 부등식",
+      "domain": "방정식과 부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.polynomial.insubunhae"
@@ -9500,7 +9500,7 @@
         "UC.x5e8f2a.a02.10-1-02-02",
         "10기수1-02-02"
       ],
-      "domain": "[기본]방정식과 부등식",
+      "domain": "방정식과 부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.gandanhan-ichabangjeongsik"
@@ -9523,7 +9523,7 @@
         "UC.x5e8f2a.a02.10-1-02-03",
         "10기수1-02-03"
       ],
-      "domain": "[기본]방정식과 부등식",
+      "domain": "방정식과 부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.gandanhan-ichabangjeongsik"
@@ -9546,7 +9546,7 @@
         "UC.x5e8f2a.a02.10-1-02-04",
         "10기수1-02-04"
       ],
-      "domain": "[기본]방정식과 부등식",
+      "domain": "방정식과 부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ichabangjeongsikui-panbyeolsik",
@@ -9570,7 +9570,7 @@
         "UC.x5e8f2a.a02.10-1-02-05",
         "10기수1-02-05"
       ],
-      "domain": "[기본]방정식과 부등식",
+      "domain": "방정식과 부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ichabangjeongsikgwa-ichahamsuui-gwangye"
@@ -9593,7 +9593,7 @@
         "UC.x5e8f2a.a02.10-1-02-06",
         "10기수1-02-06"
       ],
-      "domain": "[기본]방정식과 부등식",
+      "domain": "방정식과 부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -9614,7 +9614,7 @@
         "UC.x5e8f2a.a02.10-1-02-07",
         "10기수1-02-07"
       ],
-      "domain": "[기본]방정식과 부등식",
+      "domain": "방정식과 부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ilchabudeungsik-2"
@@ -9637,7 +9637,7 @@
         "UC.x5e8f2a.a02.10-1-02-08",
         "10기수1-02-08"
       ],
-      "domain": "[기본]방정식과 부등식",
+      "domain": "방정식과 부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ilchabudeungsik-2"
@@ -9660,7 +9660,7 @@
         "UC.x5e8f2a.a02.10-1-02-09",
         "10기수1-02-09"
       ],
-      "domain": "[기본]방정식과 부등식",
+      "domain": "방정식과 부등식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.equation.ichahamsuui-geuraepeu",
@@ -9684,7 +9684,7 @@
         "UC.x5e8f2a.a03.10-1-03-01",
         "10기수1-03-01"
       ],
-      "domain": "[기본]경우의 수",
+      "domain": "경우의 수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -9705,7 +9705,7 @@
         "UC.x5e8f2a.a03.10-1-03-02",
         "10기수1-03-02"
       ],
-      "domain": "[기본]경우의 수",
+      "domain": "경우의 수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.combinatorics.hapui-beopchikgwa-gopui-beopchik"
@@ -9728,7 +9728,7 @@
         "UC.x5e8f2a.a03.10-1-03-03",
         "10기수1-03-03"
       ],
-      "domain": "[기본]경우의 수",
+      "domain": "경우의 수",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.combinatorics.sunyeol"
@@ -9751,7 +9751,7 @@
         "UC.x5e8f2a.a04.10-1-04-01",
         "10기수1-04-01"
       ],
-      "domain": "[기본]행렬",
+      "domain": "행렬",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.polynomial.dahangsikui-deotsemgwa-ppaelsem"
@@ -9774,7 +9774,7 @@
         "UC.x5e8f2a.a04.10-1-04-02",
         "10기수1-04-02"
       ],
-      "domain": "[기본]행렬",
+      "domain": "행렬",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.matrix.haengryeolui-tteutgwa-pyohyeon"
@@ -9797,7 +9797,7 @@
         "UC.x32f29f.a01.10-2-01-01",
         "10기수2-01-01"
       ],
-      "domain": "[기본]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -9818,7 +9818,7 @@
         "UC.x32f29f.a01.10-2-01-02",
         "10기수2-01-02"
       ],
-      "domain": "[기본]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.du-jeom-saiui-geori"
@@ -9841,7 +9841,7 @@
         "UC.x32f29f.a01.10-2-01-03",
         "10기수2-01-03"
       ],
-      "domain": "[기본]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.jikseonui-bangjeongsik"
@@ -9864,7 +9864,7 @@
         "UC.x32f29f.a01.10-2-01-04",
         "10기수2-01-04"
       ],
-      "domain": "[기본]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.du-jeom-saiui-geori"
@@ -9887,7 +9887,7 @@
         "UC.x32f29f.a01.10-2-01-05",
         "10기수2-01-05"
       ],
-      "domain": "[기본]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.jikseonui-bangjeongsik",
@@ -9911,7 +9911,7 @@
         "UC.x32f29f.a01.10-2-01-06",
         "10기수2-01-06"
       ],
-      "domain": "[기본]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.jikseonui-bangjeongsik",
@@ -9935,7 +9935,7 @@
         "UC.x32f29f.a01.10-2-01-07",
         "10기수2-01-07"
       ],
-      "domain": "[기본]도형의 방정식",
+      "domain": "도형의 방정식",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.coordinate.pyeonghaengidong"
@@ -9958,7 +9958,7 @@
         "UC.x32f29f.a02.10-2-02-01",
         "10기수2-02-01"
       ],
-      "domain": "[기본]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -9979,7 +9979,7 @@
         "UC.x32f29f.a02.10-2-02-02",
         "10기수2-02-02"
       ],
-      "domain": "[기본]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.jiphapui-gaenyeomgwa-pyohyeon"
@@ -10002,7 +10002,7 @@
         "UC.x32f29f.a02.10-2-02-03",
         "10기수2-02-03"
       ],
-      "domain": "[기본]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.du-jiphapui-pohamgwangye"
@@ -10025,7 +10025,7 @@
         "UC.x32f29f.a02.10-2-02-04",
         "10기수2-02-04"
       ],
-      "domain": "[기본]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.jiphapui-gaenyeomgwa-pyohyeon"
@@ -10048,7 +10048,7 @@
         "UC.x32f29f.a02.10-2-02-05",
         "10기수2-02-05"
       ],
-      "domain": "[기본]집합과 명제",
+      "domain": "집합과 명제",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.logic.myeongjewa-jogeon"
@@ -10071,7 +10071,7 @@
         "UC.x32f29f.a03.10-2-03-01",
         "10기수2-03-01"
       ],
-      "domain": "[기본]함수와 그래프",
+      "domain": "함수와 그래프",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [],
       "misconception_codes": [],
@@ -10092,7 +10092,7 @@
         "UC.x32f29f.a03.10-2-03-02",
         "10기수2-03-02"
       ],
-      "domain": "[기본]함수와 그래프",
+      "domain": "함수와 그래프",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeomgwa-geuraepeu"
@@ -10115,7 +10115,7 @@
         "UC.x32f29f.a03.10-2-03-03",
         "10기수2-03-03"
       ],
-      "domain": "[기본]함수와 그래프",
+      "domain": "함수와 그래프",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeomgwa-geuraepeu"
@@ -10138,7 +10138,7 @@
         "UC.x32f29f.a03.10-2-03-04",
         "10기수2-03-04"
       ],
-      "domain": "[기본]함수와 그래프",
+      "domain": "함수와 그래프",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.hamsuui-gaenyeomgwa-geuraepeu"
@@ -10161,7 +10161,7 @@
         "UC.x32f29f.a03.10-2-03-05",
         "10기수2-03-05"
       ],
-      "domain": "[기본]함수와 그래프",
+      "domain": "함수와 그래프",
       "grade_band_hint": "고등학교",
       "prerequisite_concept_ids": [
         "math.function.yeokhamsu"
