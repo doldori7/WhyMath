@@ -26,10 +26,10 @@
 - **alembic head(현재)**: `a8b9c0d1e2f3` (Phase 3 Slice 1 concept_content_projection·down `f7a8b9c0d1e2`. Slice 2는 기존 `misconception_catalog` 재사용 → **PG 마이그레이션 무추가·head 불변**. Phase 2c Neo4j·U1~U4·R1·R2도 마이그레이션 무관)
 - ✅ **Phase 3 Slice 1 (backend)** — 콘텐츠 4종 DB 투영(`concept_content` 테이블·로더·CLI·마이그레이션 `a8b9c0d1e2f3`·`1470b83`). 캡처 코퍼스 437+409 투영. 상세 §5.3.
 - ✅ **Phase 3 Slice 2 (backend)** — ①오개념 atom→`misconception_catalog` 승격(`l1/misconception/atom_catalog.py`·CLI `populate_atom.py`). 기존 테이블·로더 재사용·**마이그레이션 0**(head 불변). 원자 1,837행 `ATOM:` 네임스페이스·구 839과 병존. 상세 §5.3.
-- **다음 작업**: **Phase 3 Slice 3**(②진단문항·③소크라테스 — 경량 진단 테이블 vs 기존 `problem` 결합 설계) — §5.3. 새 세션 권장(컨텍스트 위생).
+- **다음 작업**: **Phase 4·5 (= 로드맵 S0 정합성 회복)** — §5.4·§5.5 통합 정의 참조. **Phase 3 Slice 3(②진단문항·③소크라테스)은 S1(E2E 수직 슬라이스)로 이관** (2026-07-03 S0 계획 확정 — 소비처[E2E 루프] 생길 때 구현, "소비처 없는 추상 미도입" 원칙).
 
 ## 2. locked 결정 (요약 — 상세는 MEMORY.md)
-① 전면 교체·원자화 ② 크로스워크=문제 corpus만 ③ 4요소→정식 소스 승격 ④ 대학 513 포함+2015·2022 병행
+① 전면 교체·원자화 ② 크로스워크=문제 corpus만 **(→ 2026-07-03 S0 계획 확정으로 확장: 문제 corpus + 437-키 잔존 자산[behavior_skills·concept_content K-12]. 사유: Phase 5 폐기 시 437-키 자산의 원천 소멸 — §5.4 참조)** ③ 4요소→정식 소스 승격 ④ 대학 513 포함+2015·2022 병행
 ⑤ 개념·소개념도 노드화(단원/소단원/원자 3단 계층) ⑥ 콘텐츠 4종(은유·정식정의·허용표현·암기카드)=
 개념/소개념 레벨·**자체/AI 원창작**(정식정의도 원창작).
 - **정규화(파이프라인 transform)**: 미적Ⅰ/Ⅱ 43코드 하이픈 추가(NCIC 일치)·사이시옷(자리값/경계값→표준형).
@@ -65,10 +65,14 @@
 3. **Phase 3 — 4요소 승격 + 콘텐츠 4종 DB 투영** (크므로 슬라이스 분할):
    - ✅ **Slice 1 — 콘텐츠 4종 DB 투영**(`1470b83`·완료) — 신규 `concept_content` 테이블(code PK·`scope` K-12|대학·은유/오개념/정식정의/허용표현·`standard_codes` TEXT[]·`flashcards` JSONB·review_status='ai_estimated'). 로더 `l1/concept_content/projection.py`(`atom_node_projection` 미러)·CLI `populate.py`(--k12/--university)·마이그레이션 `a8b9c0d1e2f3`(**ID는 sliding-window hex 스킴 준수 — 임의 ID는 alembic CycleDetected**). additive(FK 0). 캡처 코퍼스 437+409 투영. hermetic 22 + 통합(실 PG 846행). 키: K-12=구 437 개념코드(원자 연결은 Phase 4)·대학=소단원코드. 정식정의 학생 비노출.
    - ✅ **Slice 2 — ①오개념 atom→`misconception_catalog` 승격**(`dae8d82`·완료) — **기존 테이블 재사용**(사용자 확정 — Phase 1이 atom을 기존 `concept`/`concept_edge`에 additive 적재한 것과 동형·신규 테이블 거부). 신규 `l1/misconception/atom_catalog.py`(graph.json 세부개념 ①오개념→`MisconceptionCatalog` 행 투영·`mis_id`=`"ATOM:"+code`·canonical_statement←misconception·error_type←misconception_type(6종)·concept_src_id←code·standard_code←standard_codes[0]·domain←subject_area)·CLI `populate_atom.py`. 검증·dedup·ON CONFLICT(mis_id) 멱등 upsert는 **기존 `load_misconceptions`/`MisconceptionCatalogStore` 재사용**(신규 store 0). **마이그레이션 0**(head `a8b9c0d1e2f3` 유지)·data-pipeline 변경 0. atom_node_projection이 미적재한 ①요소의 유일 승격 좌석. 구 839(misconceptions_v1)와 `ATOM:` 접두·provenance('atom_graph_v1')로 네임스페이스 분리·병존(Phase 5 구 폐기). hermetic(매핑·필터·schema 적합·load 위임·store 배선·CLI) + @integration(실 PG 1,837행·멱등·표본·네임스페이스). 신규 두 모듈 커버리지 100%·전체 96%. 데이터카드 `misconception_catalog_v1.md` §6.
-   - **Slice 3 (다음)** — ②진단문항·③소크라테스: `problem`/`problem_step`(socratic_prompt)·`problem_concept`·`distractor_map`은 *이미 존재*(성숙). atom 경량 진단을 무거운 problem에 넣을지 vs 경량 진단 테이블 신설 설계 판단 필요.
+   - **Slice 3 — S1 이관** (2026-07-03 S0 계획 확정) — ②진단문항·③소크라테스: `problem`/`problem_step`(socratic_prompt)·`problem_concept`·`distractor_map`은 *이미 존재*(성숙). atom 경량 진단을 무거운 problem에 넣을지 vs 경량 진단 테이블 신설 설계 판단은 **E2E 루프(S1)가 소비처를 확정할 때** 수행.
    - ④전이=이미 atom_node(Phase 2a). 콘텐츠 4종 임베딩/검색은 후속.
-4. **Phase 4 — 문제 크로스워크**: 기존 문제의 *소단원/단원 매칭* + *성취기준 코드* 2중 다리로 `problem_concept`를 원자 code로 재연결(교차검증·검수 큐).
-5. **Phase 5 — 정리**: 구 `concept_graph_v1` 코퍼스·구 437 concept 폐기, 전 계층 통합테스트, `MEMORY.md`·`ROADMAP.md` 갱신.
+4. **Phase 4 — 크로스워크 (통합 정의, 2026-07-03 S0 계획 확정·사용자 승인)** — 구(舊) 이원 정의(본 문서 "문제 크로스워크" vs `docs/strategy/status_roadmap_2026-07.md:79` "437↔원자 concept_src_id 연결")를 다음 3요소로 통합. **본 절이 정본**:
+   - **ⓐ 437↔원자 크로스워크 코퍼스** (S0-1): `data/corpus/`에 crosswalk 신규 저작(437 concept code → atom code, 1:N 허용·귀속 규칙·근거 필드·`ai_estimated`) + validate(커버리지 하한·dangling 0·양측 code 실재) + 거버넌스 테스트. **rekey 금지**(ID 이원화 크로스워크 유지 — mastery 이력 등 기존 키는 불변, 크로스워크가 다리).
+   - **ⓑ problem_concept 재연결** (S0-3, locked ② 원계획): 기존 문제의 *소단원/단원 매칭* + *성취기준 코드* 2중 다리로 `problem_concept`를 원자 code로 재연결(교차검증·검수 큐).
+   - **ⓒ 437-키 잔존 자산의 원자 축 이전** (S0-2): #419 `behavior_skills`(concept_graph_v1/concepts.jsonl 437행 저작분)와 `concept_content` K-12 키(구 437 개념코드 — §5.3 Slice 1 "원자 연결은 Phase 4" 예고분)를 ⓐ 크로스워크 경유로 원자 축에 투영. dangling 0 게이트.
+5. **Phase 5 — 구 그래프 폐기 + 재유입 동결** (S0-4): 소비처 6종 단계 차단 — ①corpus `concept_graph_v1/` ②pipeline `concept_graph/` 모듈 ③backend `l1/concept_graph/` ④`concept_node`·`concept_embedding` ⑤`concept` 테이블 내 437행(**FK 파급 검증 선행**: `problem_concept`·`concept_mastery_history`) ⑥Neo4j `:Concept`/`:PREREQUISITE`. 각 차단에 거버넌스 재유입 동결 테스트(기존 `_FORBIDDEN_NODE_FIELDS` 선례 패턴). 전 계층 통합테스트, `MEMORY.md`·`ROADMAP.md` 갱신(S0-7).
+   - **병행 독립 슬라이스**: S0-5(prod 미적분 raw 129 orphan 진단 스크립트 — prod 실조회는 Kiki 수동), S0-6(커버리지 하니스 복구 — `tests/backend/conftest.py` numpy 선import로 pgvector 이중임포트 회피).
 
 ## 6. ✅ 대학 성취기준 파일 (2026-06-22 수신·U1~U4 완료 — 아래는 원래 계획·이력)
 
