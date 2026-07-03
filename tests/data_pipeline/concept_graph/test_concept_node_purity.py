@@ -18,10 +18,9 @@ from data_pipeline.concept_graph.models import Concept
 # ──────────────────────────────────────────────────────────────────────────
 # 4계층 분류(플레이북 Part 2 §3 — identity/semantic/pedagogy/visualization)
 # ──────────────────────────────────────────────────────────────────────────
-# identity(식별) — 개념을 유일 식별하는 순수 정체성.
-_IDENTITY_FIELDS = frozenset(
-    {"concept_id", "source_id", "aliases", "name_ko", "name_en", "name_ja", "domain"}
-)
+# identity(식별) — 개념을 유일 식별하는 순수 정체성. 표시이름(name_ko/en/ja)은 P2d·Part 9로
+# 노드에서 제거하고 locale 레이어로 분리했다(언어-무관 식별자만 노드에 남긴다).
+_IDENTITY_FIELDS = frozenset({"concept_id", "source_id", "aliases", "domain"})
 # semantic(의미) — 개념의 의미 속성. "핵심만 노드, 나머지는 속성"(CLAUDE.md)에 따라 노드 적합.
 _SEMANTIC_FIELDS = frozenset(
     {

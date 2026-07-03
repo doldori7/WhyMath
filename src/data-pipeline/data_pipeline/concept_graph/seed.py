@@ -1,7 +1,7 @@
 """단계 3 — NCIC 성취기준에서 *후보* 개념 노드·prerequisite 엣지 시드 생성.
 
 정본: docs/data/concept_graph.md §3.1·§4·§6.2. 자동화 범위는 (a) 성취기준 → 후보 Concept
-*시드*, (b) parent_codes에서 prerequisite 후보 엣지 *제안*까지다. 노드 표기(한·영·일)·
+*시드*, (b) parent_codes에서 prerequisite 후보 엣지 *제안*까지다. 노드 표기(locale)·
 6종 관계 확정·strength·evidence는 **전문가 작성**(단계 4) 몫이라 CSV에 *빈칸*으로 남긴다.
 
 ncic의 `RawStandardRecord`(느슨) → `AchievementStandard`(strict) 2단 패턴과 동형:
@@ -44,29 +44,15 @@ _SUBJECT_ABBR: dict[str, str] = {
     "기하": "geom",
 }
 
-# 학년대수 → TRACK(새 concept_id 접두). idmap._GRADE_TRACK_MAP과 동일 의미 — 순환 import 회피로
-# seed에 *국소 복제*(seed는 하위 모듈이라 idmap을 import할 수 없다). 두 곳을 함께 갱신한다.
-_GRADE_TRACK_MAP: dict[str, str] = {
-    "2": "ELEM",
-    "4": "ELEM",
-    "6": "ELEM",
-    "9": "MID",
-    "10": "HIGH",
-    "12": "HIGH",
-}
-# 학년 미수록 시 폴백 TRACK(시드는 NCIC 코드 기반이라 정상 경로에선 도달하지 않음).
-_SEED_TRACK_FALLBACK: str = "MID"
-
 # CSV 컬럼(= Concept / ConceptEdge 필드). 빈칸 컬럼은 전문가가 채운다.
 # source_id: 시드는 외부 src_id가 없어 concept_id로 채운다(신규 후보 = 자기 정체).
-# aliases: 시드는 *신규* ID라 보존할 옛 키가 없다 — 빈칸(코퍼스 재ID 경로만 옛 UC 보존).
+# aliases: 시드는 *신규* ID라 보존할 옛 키가 없다 — 빈칸(코퍼스 재ID 경로만 옛 키 보존).
+# 표시이름(name_ko/en/ja): P2d·Part 9 Concept Purity로 노드에서 제거 — locale 레이어가 단일 진실.
+# 시드는 후보 CSV라 표기 컬럼을 두지 않는다(전문가는 코퍼스 파이프라인에서 locale로 채움).
 _CONCEPT_CSV_FIELDS: tuple[str, ...] = (
     "concept_id",
     "source_id",
     "aliases",
-    "name_ko",
-    "name_en",
-    "name_ja",
     "domain",
     "grade_band_hint",
     "prerequisite_concept_ids",
@@ -84,7 +70,7 @@ _EDGE_CSV_FIELDS: tuple[str, ...] = (
     "evidence_source",
 )
 
-_SEED_NOTE: str = "[seed] 전문가 작성 대기 — 표기(한·영·일)·오개념·시각화 빈칸"
+_SEED_NOTE: str = "[seed] 전문가 작성 대기 — 표기(locale)·오개념·시각화 빈칸"
 
 
 def _subject_abbr(subject_token: str) -> str:
@@ -95,20 +81,19 @@ def _subject_abbr(subject_token: str) -> str:
 
 
 def build_concept_id(code: str) -> str:
-    """NCIC 성취기준 코드 → 결정론적 *후보* concept_id(새 규약 `{TRACK}-{AREA}-{NNN}`).
+    """NCIC 성취기준 코드 → 결정론적 *후보* concept_id(잠정 seed 네임스페이스 `math.seed.<...>`).
 
-    `[9수01-01]` → `MID-A01-001`. 매핑: TRACK=학년대수(9→MID)·**AREA=`A`+영역코드**(잠정 — NCIC
-    영역코드 2자리. 시드는 토픽 니모닉이 없어 영역코드를 ascii AREA로 *잠정* 사용·전문가가 재명명
-    가능)·NNN=코드 순번(2자리→3자리 zero-pad). 코드 유일 → ID 유일·재실행 동일(멱등).
+    `[9수01-01]` → `math.seed.a01-001`. 매핑: area=고정 `seed`(잠정 네임스페이스)·slug=`a`+영역코드
+    (NCIC 2자리)+`-`+순번(3자리 zero-pad). 코드 유일 → ID 유일·재실행 동일(멱등).
 
-    주의: 시드 경로의 AREA(`A01`)는 *코퍼스 경로*(`GEO`·`CALC` 등 `_TOPIC_AREA_MAP` 니모닉)와
-    체계가 다르다 — 시드는 NCIC `category`가 아닌 *코드*만 알기에 토픽 니모닉을 못 만든다(잠정·후속
-    재명명). 두 경로 산출물은 P2a에서 ID 레벨로 병합되지 않는다(시드→후보 CSV·코퍼스→graph.json).
+    **Wall D(P2d·Part 9)**: 시드 경로는 NCIC *코드*만 알고 name_ko(→ 의미론 slug 원천)가 없어
+    canonical 의미론 slug를 만들 수 없다. 따라서 canonical 규약(`^math\\.[a-z]+…`)을 *통과하되*
+    전용 `seed` 네임스페이스로 잠정 발급한다(명백히 후보·동결). 시드 후보는 graph.json에 도달하지
+    않으며(코퍼스 경로만 P2d canonical 발급), 전문가 채택 시 코퍼스 파이프라인에서 재발급된다.
     """
-    grade, _subject_token, domain_code, seq = parse_standard_code(code)
-    track = _GRADE_TRACK_MAP.get(grade, _SEED_TRACK_FALLBACK)
+    _grade, _subject_token, domain_code, seq = parse_standard_code(code)
     seq_num = int(seq)
-    return f"{track}-A{domain_code}-{seq_num:03d}"
+    return f"math.seed.a{domain_code}-{seq_num:03d}"
 
 
 def _matches_domain(standard: AchievementStandard, domain_filter: str | None) -> bool:
@@ -144,9 +129,6 @@ def seed_concepts(
                 "concept_id": concept_id,
                 "source_id": concept_id,  # 시드는 외부 src_id 없음 — 자기 정체
                 "aliases": "",  # 신규 후보 — 보존할 옛 키 없음
-                "name_ko": "",  # 전문가
-                "name_en": "",  # 전문가
-                "name_ja": "",  # 전문가
                 "domain": std.domain,
                 "grade_band_hint": std.grade_band,
                 "prerequisite_concept_ids": ";".join(prereq_ids),

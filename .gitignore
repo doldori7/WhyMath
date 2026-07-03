@@ -113,3 +113,6 @@ service-account.json
 *.parquet.gz
 *.arrow
 data/cache/
+
+# 개념그래프 재ID 생성물 — ids.yaml이 정본 registry로 대체(미추적 빌드 산출물·P2d)
+/data/corpus/concept_graph_v1/id_map.csv
