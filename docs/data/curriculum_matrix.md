@@ -4,10 +4,12 @@
 > 교차표로 정리. **기존 NCIC 성취기준(`ncic.md`)이 이 매트릭스의 "한국 열"이다** —
 > 매트릭스는 NCIC를 버리는 게 아니라 국제 비교 축에 끼워 넣는 구조.
 >
-> **2026-06-16 v2 통합 검토(설계)**: ⑴ `concept_id` 정본이 `UC.<domain>.<topic>.<slug>`→
-> `{트랙}-{영역}-{3자리}`(ELEM-GEO)로 **전환** 예정 — 본 매트릭스의 `concept_id` 키 공간도 함께
-> 갱신(별칭 보존). ⑵ 한국 열의 성취기준이 **2022+2015 듀얼(895)·`norm_id`**로 확장되고, corpus의
-> CCSS·국제트랙(13)을 US/IMO 열로 흡수한다. 설계: `curriculum_master_v2_integration_review.md`.
+> **concept_id 정본(2026-07-02 P2d·Part 9)**: `math.<area>.<slug>`(교육과정·언어 무관 의미론).
+> `UC.<domain>.<topic>.<slug>`(~2026-06-16)·`{트랙}-{영역}-{3자리}`(P2a)는 폐기됐고 `aliases`에
+> 개념축 오버레이 코드로 보존된다 — 본 매트릭스의 `concept_id` 키 공간은 canonical을 정본으로
+> 쓰되 옛 키로도 alias 조회 가능(별칭 보존). ⑵ 한국 열의 성취기준이 **2022+2015 듀얼(895)·
+> `norm_id`**로 확장되고, corpus의 CCSS·국제트랙(13)을 US/IMO 열로 흡수한다. 설계:
+> `curriculum_master_v2_integration_review.md`·`docs/standards/part9_id_policy_review.md`.
 
 ---
 
@@ -53,9 +55,11 @@ Universal Concept ID  ─┐
 국가 코드 (ISO 3166-1) ─┘
 ```
 
-- **Universal Concept ID**: 개념 그래프(`concept_graph.md`)의 `concept_id`와
+- **Concept ID(canonical)**: 개념 그래프(`concept_graph.md`)의 `concept_id`와
   **동일 키 공간**. 두 자산이 같은 개념을 다른 ID로 부르면 정합 붕괴 — 키
-  공유가 강제 사항. 형식 `WM-C-<domain약칭>-<순번4자리>`.
+  공유가 강제 사항. 형식 `math.<area>.<slug>`(2026-07-02 P2d·Part 9). 옛
+  `{TRACK}-{AREA}-{NNN}`은 개념축 오버레이 코드로 `aliases`에 보존돼 alias 조회로 계속 join
+  가능(`WM-C-…`/`UC.*` 표기는 stale).
 - **국가 코드**: ISO 3166-1 alpha-2 (`KR`·`US`·`JP`·`GB` 등). IMO는 국가가
   아니므로 의사 코드 `IMO` 사용 (국제 올림피아드 신택터스).
 - **CurriculumEntry**: (개념, 국가) 한 쌍에 대한 30필드 레코드. 셀이 비어 있을
