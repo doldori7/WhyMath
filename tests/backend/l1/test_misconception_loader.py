@@ -22,8 +22,12 @@ from types import TracebackType
 from typing import Any
 
 import pytest
+import sqlalchemy as sa
 
 from whymath_backend.config import Settings
+from whymath_backend.db.models.misconception_catalog import (
+    MisconceptionCatalog as MisconceptionCatalogRow,
+)
 from whymath_backend.l1.misconception import populate
 from whymath_backend.l1.misconception.catalog_loader import (
     MisconceptionCatalogStore,
@@ -35,6 +39,10 @@ from whymath_backend.schema.misconception_catalog import MisconceptionCatalog
 
 # 실 코퍼스 행 모양을 본뜬 전체 16필드 row(채우율 100% 케이스).
 _MIS_ID = "M0425"
+
+# 레포 루트 기준 실 코퍼스 경로(test_crosslink_populate.py 패턴 미러).
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+_CORPUS = _REPO_ROOT / "data/corpus/misconceptions_v1/misconceptions.json"
 
 
 def _full_row(mis_id: str = _MIS_ID) -> dict[str, Any]:
@@ -302,3 +310,54 @@ class TestPopulateMain:
         monkeypatch.setattr(populate, "load_misconceptions", lambda _s, _p: 5)
         rc = populate.main(["--misconceptions", str(src), "--verbose"])
         assert rc == 0
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑥ 코퍼스 자산 무결성 — 문자열 컬럼 길이 회귀 가드(hermetic·PG 불요)
+# ──────────────────────────────────────────────────────────────────────────
+class TestCorpusColumnLengths:
+    """실 코퍼스 행이 ORM `String(n)` 컬럼 한계를 넘지 않음을 *커밋 시점*에 못 박는다.
+
+    회귀 배경: 신규 M-id(M0862·M0863)의 `provenance_note`가 62/63자였는데 DB 컬럼은
+    `sa.String(32)`라 실 PG 적재에서 `StringDataRightTruncation`으로만 터졌다 — pydantic 스키마
+    `MisconceptionCatalog`엔 `max_length`가 없어 단위테스트가 못 잡았다. 이 가드는 `provenance_note`
+    한 필드가 아니라 **모델의 String 한정 컬럼 전체**를 `__table__` introspection으로 읽어(하드코딩
+    금지·모델과 드리프트 0) 실 PG 없이 CI hermetic 잡에서 이 클래스 전체를 차단한다.
+    """
+
+    @staticmethod
+    def _string_column_limits() -> dict[str, int]:
+        """ORM 모델에서 `String(length)` 컬럼만 {필드명: length}로 수집.
+
+        `sa.Text`는 `String` 서브클래스지만 `length is None`이라 자연히 제외된다(무제한).
+        컬럼명 = schema 필드명(오개념 로더는 rename 0 — 코퍼스 키 그대로)이라 코퍼스와 직접 대조.
+        """
+        return {
+            col.name: col.type.length
+            for col in MisconceptionCatalogRow.__table__.columns
+            if isinstance(col.type, sa.String) and col.type.length is not None
+        }
+
+    @staticmethod
+    def _rows() -> list[dict[str, Any]]:
+        data: dict[str, Any] = json.loads(_CORPUS.read_text(encoding="utf-8"))
+        rows: list[dict[str, Any]] = data["misconceptions"]
+        return rows
+
+    def test_limits_discovered_from_model(self) -> None:
+        """introspection이 한정 컬럼을 잡는지(빈 dict면 무의미) — provenance_note 포함."""
+        limits = self._string_column_limits()
+        assert limits, "String(length) 컬럼을 하나도 못 찾음 — introspection 파손"
+        assert limits.get("provenance_note") == 32  # 회귀 대상 컬럼
+
+    def test_all_corpus_rows_fit_column_limits(self) -> None:
+        """841행의 각 String 필드가 컬럼 한계 이하 — 초과 시 (mis_id·컬럼·길이·한계) 명시 실패."""
+        limits = self._string_column_limits()
+        violations: list[str] = []
+        for row in self._rows():
+            mis_id = row.get("mis_id", "<no-id>")
+            for field, limit in limits.items():
+                value = row.get(field)
+                if isinstance(value, str) and len(value) > limit:
+                    violations.append(f"{mis_id}.{field}: {len(value)}자 > {limit}(한계)")
+        assert not violations, "컬럼 길이 초과(실 PG 적재 실패 유발):\n" + "\n".join(violations)

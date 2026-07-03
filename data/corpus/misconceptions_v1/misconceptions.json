@@ -15122,7 +15122,7 @@
       "subunit": "삼각함수의 그래프",
       "mapping_confidence": "기준(원본)",
       "mapping_score": 1.0,
-      "provenance_note": "WhyMath 저작 — kebab 카탈로그 이관(crosswalk 신규·period-of-scaled-sine)"
+      "provenance_note": "WhyMath 저작(crosswalk 신규)"
     },
     {
       "mis_id": "M0863",
@@ -15140,7 +15140,7 @@
       "subunit": "다각형의 내각과 외각",
       "mapping_confidence": "기준(원본)",
       "mapping_score": 1.0,
-      "provenance_note": "WhyMath 저작 — kebab 카탈로그 이관(crosswalk 신규·angle-sum-non-triangle)"
+      "provenance_note": "WhyMath 저작(crosswalk 신규)"
     }
   ]
 }
