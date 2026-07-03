@@ -170,6 +170,9 @@ def transform_concepts(
 
         raw_codes = record.get("standard_codes") or []
         codes = [str(c) for c in raw_codes] if isinstance(raw_codes, Sequence) else []
+        # cognition 참조(Phase 2b-1) — concept→skill 매핑(standard_codes 정규화 미러).
+        raw_skills = record.get("behavior_skills") or []
+        skills = [str(s) for s in raw_skills] if isinstance(raw_skills, Sequence) else []
         try:
             concept = Concept(
                 concept_id=cid,
@@ -183,6 +186,7 @@ def transform_concepts(
                 # semantic 복원(Phase 1·Stage B 역방향) — raw 은유·허용표현을 노드 semantic으로.
                 intuition=_opt(record.get("metaphor")),
                 representations=_opt(record.get("accepted_expressions")),
+                behavior_skills=skills,  # cognition 참조(Phase 2b-1·concept→skill 매핑)
                 review_status=_review_status(_opt(record.get("definition_provenance"))),
             )
         except (ValueError, TypeError) as exc:

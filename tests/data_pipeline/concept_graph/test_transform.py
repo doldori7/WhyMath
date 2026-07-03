@@ -88,6 +88,20 @@ class TestTransformConcepts:
         assert c.intuition == "수처럼 더하고 곱하기"  # raw metaphor
         assert c.representations == "동류항끼리 정리"  # raw accepted_expressions
 
+    def test_maps_behavior_skills(self) -> None:
+        """concept→skill 매핑(Phase 2b-1): raw behavior_skills → 노드 참조 키(standard_codes 미러)."""
+        record = dict(_CONCEPT_A)
+        record["behavior_skills"] = ["skill.polynomial-arithmetic", "skill.factorization"]
+        c = transform_concepts([record], _id_map())[0][0]
+        assert c.behavior_skills == ["skill.polynomial-arithmetic", "skill.factorization"]
+
+    def test_behavior_skills_absent_defaults_empty(self) -> None:
+        """behavior_skills 키 부재 → 빈 목록(초등 산술 등 미매핑 개념·정직·dangling 허용)."""
+        record = dict(_CONCEPT_A)
+        record.pop("behavior_skills", None)
+        c = transform_concepts([record], _id_map())[0][0]
+        assert c.behavior_skills == []
+
     def test_input_misconception_freetext_not_mapped(self) -> None:
         """자유텍스트 오개념(raw misconception)은 노드로 흘리지 않는다(독립 DB·CLAUDE.md #6)."""
         c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
@@ -293,15 +307,11 @@ class TestTransformRealData:
     ) -> None:
         """§4 분포: reviewed 148(수기 검수 114 + 기본수학 34 AI 검수)·pending 289."""
         concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
-        reviewed = sum(
-            1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value
-        )
+        reviewed = sum(1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value)
         assert reviewed == 148
         assert len(concepts) - reviewed == 289
 
-    def test_no_redaction_leak_in_full_dump(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_no_redaction_leak_in_full_dump(self, concept_records: list[dict[str, object]]) -> None:
         """전체 개념 dump에 description/formal_definition 키 0건."""
         concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
         keys: set[str] = set()

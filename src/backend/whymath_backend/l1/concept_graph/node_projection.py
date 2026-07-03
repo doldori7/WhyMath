@@ -80,6 +80,7 @@ _SAFE_META_KEYS: tuple[str, ...] = (
     "standard_codes",
     "ccss_code",
     "difficulty_tier",
+    "behavior_skills",
 )
 
 
@@ -89,7 +90,8 @@ class ConceptNodeRecord:
 
     `graph.json`의 `Concept.model_dump()` 항목에서 안전 키만 추린 값이다. **description·
     formal_definition은 슬롯 자체가 없다**(redaction — 구조적 차단). 적재기가 이 레코드를 UC
-    키로 upsert한다.
+    키로 upsert한다. `behavior_skills`는 concept→skill 참조 키(Phase 2b-1·cognition 계층·본문
+    아님·표준코드 동형 안전 배열) — (Phase 2b-2) skill mastery 런타임 해소의 조인 백킹이다.
     """
 
     concept_id: str
@@ -99,6 +101,7 @@ class ConceptNodeRecord:
     standard_codes: tuple[str, ...]
     ccss_code: str | None
     difficulty_tier: int | None
+    behavior_skills: tuple[str, ...]
 
 
 def _opt_str(value: object) -> str | None:
@@ -163,6 +166,10 @@ def load_concept_nodes_from_graph_json(path: Path) -> list[ConceptNodeRecord]:
         codes: tuple[str, ...] = (
             tuple(str(c) for c in raw_codes) if isinstance(raw_codes, (list, tuple)) else ()
         )
+        raw_skills = record.get("behavior_skills")
+        skills: tuple[str, ...] = (
+            tuple(str(s) for s in raw_skills) if isinstance(raw_skills, (list, tuple)) else ()
+        )
         out.append(
             ConceptNodeRecord(
                 concept_id=concept_id,
@@ -172,6 +179,7 @@ def load_concept_nodes_from_graph_json(path: Path) -> list[ConceptNodeRecord]:
                 standard_codes=codes,
                 ccss_code=_opt_str(record.get("ccss_code")),
                 difficulty_tier=_opt_int(record.get("difficulty_tier")),
+                behavior_skills=skills,
             )
         )
     return out
@@ -228,6 +236,7 @@ class ConceptNodeStore:
             standard_codes=list(record.standard_codes),
             ccss_code=record.ccss_code,
             difficulty_tier=record.difficulty_tier,
+            behavior_skills=list(record.behavior_skills),
         )
         # PK 충돌 시 갱신 — updated_at은 now()로 새로 찍는다(server_default는 INSERT 전용).
         stmt = stmt.on_conflict_do_update(
@@ -239,6 +248,7 @@ class ConceptNodeStore:
                 "standard_codes": stmt.excluded.standard_codes,
                 "ccss_code": stmt.excluded.ccss_code,
                 "difficulty_tier": stmt.excluded.difficulty_tier,
+                "behavior_skills": stmt.excluded.behavior_skills,
                 "updated_at": func.now(),
             },
         )

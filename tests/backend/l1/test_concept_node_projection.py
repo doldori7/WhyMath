@@ -119,6 +119,7 @@ def _record(
         standard_codes=("10공수1-01-01",),
         ccss_code=None,
         difficulty_tier=3,
+        behavior_skills=("skill.factorization",),
     )
 
 
@@ -146,6 +147,7 @@ class TestLoadFromGraphJson:
                     "standard_codes": ["10공수1-01-01", "10공수1-01-02"],
                     "ccss_code": "HSF.IF.B.4",
                     "difficulty_tier": 7,
+                    "behavior_skills": ["skill.factorization", "skill.quadratic-equation-solving"],
                     # metaphor·accepted는 Stage B로 프로젝션에서 제거됨 — 입력에 있어도 *무시*된다.
                     "metaphor": "무시돼야 함",
                     "accepted_expressions": "무시돼야 함",
@@ -162,6 +164,7 @@ class TestLoadFromGraphJson:
                 standard_codes=("10공수1-01-01", "10공수1-01-02"),
                 ccss_code="HSF.IF.B.4",
                 difficulty_tier=7,
+                behavior_skills=("skill.factorization", "skill.quadratic-equation-solving"),
             )
         ]
 
@@ -321,6 +324,7 @@ class TestUpsertStatement:
             "standard_codes",
             "ccss_code",
             "difficulty_tier",
+            "behavior_skills",
         ):
             assert col in compiled
 

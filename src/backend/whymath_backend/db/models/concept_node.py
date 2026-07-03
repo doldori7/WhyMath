@@ -103,6 +103,12 @@ class ConceptNode(Base):
     ccss_code: Mapped[str | None] = mapped_column(sa.Text)
     # 난이도층 [0, 24](graph.json difficulty_tier·nullable). 0=가장 기초.
     difficulty_tier: Mapped[int | None] = mapped_column(sa.Integer)
+    # concept→skill 참조 키 목록(graph.json behavior_skills·Phase 2b-1·기본 빈 배열). skill_id
+    # (`skill.<slug>`) 참조·본문 아님(standard_codes 동형 안전 배열). (Phase 2b-2) skill mastery
+    # 런타임 해소의 조인 백킹 — junction 테이블 아님(참조 키 배열·신규 엣지 타입 0·anti-explosion).
+    behavior_skills: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
+    )
     # (metaphor·accepted_expressions 컬럼은 Part 2 §3 Stage B로 제거 — pedagogy=concept_content.)
     # 마지막 upsert 시각 — 운영·신선도. server_default now()(upsert 시 코드가 갱신·슬3 동형).
     updated_at: Mapped[datetime] = mapped_column(
