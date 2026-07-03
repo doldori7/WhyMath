@@ -1,10 +1,17 @@
-# Part 2. 노드 설계 — 준수 검토 판정 (2026-07-02)
+# Part 2. 노드 설계 — 준수 검토 판정 (2026-07-02) + 리치 스펙 재검토 (2026-07-03)
 
 > `docs/standards/playbook_part_review_questions.md`의 **Part 2. 노드 설계** 체크리스트 3항목을
 > 현재 코드베이스에 대해 검토한 판정 리포트. 자매 문서: 설계 결정은
 > `docs/architecture/concept_node_layering_decision.md`(ADR), 결정 로그는 `MEMORY.md`.
 
 법칙: *노드 = 학생 사고가 바뀌는 최소 단위(= 독립 오개념 발생 단위). 우선 5노드, Formula는 마지막.*
+
+> 🔄 **2026-07-03 재검토·전면 채택 결정**: 3항목 체크리스트보다 상세한 **리치 Part 2 스펙**(12노드
+> taxonomy·9계층 ConceptNode·7계층 MisconceptionNode·SkillNode/ProblemTypeNode 1급화·canonical
+> FormulaNode)으로 재검토한 결과 갭 확인 → 사용자가 **전면 채택** 결정. 이는 초판의 anti-explosion
+> 판정(항목 ②의 "속성/스키마 구성")과 Stage B semantic 외부화를 **반전**한다(단 CLAUDE.md
+> 금기·redaction 안에서). 판정·로드맵: ADR §0·`part-2-scalable-lobster.md`(Phase 0~6). 아래 초판
+> 판정은 이력으로 보존한다.
 
 ---
 

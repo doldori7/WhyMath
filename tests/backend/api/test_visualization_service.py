@@ -17,6 +17,7 @@ from whymath_backend.l3.models import RoutingDecision
 from whymath_backend.schema.concept import Concept
 from whymath_backend.schema.enums import (
     ConceptLevel,
+    Visualizability,
     VisualizationStyle,
     VisualizationType,
 )
@@ -40,18 +41,34 @@ class _FakeConceptOrm:
 
     def __init__(self, schema: Concept) -> None:
         self._schema = schema
+        self.code = schema.code
 
     def to_schema(self) -> Concept:
         return self._schema
 
 
-class _FakeSession:
-    """가짜 AsyncSession — get()만 모사(concept ORM 또는 None 반환)."""
+class _FakeVizRow:
+    """가짜 ConceptVisualization Overlay 행 — visualizability만 보유."""
 
-    def __init__(self, orm: object) -> None:
+    def __init__(self, visualizability: Visualizability) -> None:
+        self.visualizability = visualizability
+
+
+class _FakeSession:
+    """가짜 AsyncSession — get()을 모델별로 디스패치.
+
+    `Concept` 조회는 concept ORM(또는 None), `ConceptVisualization` 조회는 code→4분류 맵에서
+    행(또는 None·미태깅)을 돌려준다(시각화 계층 Overlay 조회·노드 비내장).
+    """
+
+    def __init__(self, orm: object, *, viz: dict[str, Visualizability] | None = None) -> None:
         self._orm = orm
+        self._viz = viz or {}
 
     async def get(self, model: object, key: object) -> object:
+        if getattr(model, "__name__", "") == "ConceptVisualization":
+            value = self._viz.get(str(key))
+            return _FakeVizRow(value) if value is not None else None
         return self._orm
 
 
@@ -114,6 +131,30 @@ async def test_concept_not_found_returns_none() -> None:
     )
     assert v is None
     assert provider.calls == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("v", [Visualizability.추상])
+async def test_abstract_or_impossible_concept_returns_none(v: Visualizability) -> None:
+    """Overlay 4분류가 추상이면 억지 리터럴 시각화 대신 None·L3 미호출(Part 5 게이트·05b)."""
+    concept = Concept(
+        code="LOGIC-FORMAL",
+        name_ko="극한의 엄밀한 정의",
+        level=ConceptLevel.세부개념,
+        recommended_visual_styles=[VisualizationStyle.함수그래프],
+    )
+    provider = _FakeProvider(_VALID_JSON)
+    # 시각화 계층 Overlay에 code→4분류 태깅(노드 비내장).
+    session = _FakeSession(_FakeConceptOrm(concept), viz={"LOGIC-FORMAL": v})
+    result = await visualize_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert result is None
+    assert provider.calls == []  # 억지 그림을 위해 LLM을 부르지 않는다
 
 
 @pytest.mark.asyncio

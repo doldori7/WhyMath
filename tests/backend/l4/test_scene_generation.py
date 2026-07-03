@@ -33,6 +33,7 @@ from whymath_backend.schema.concept import Concept
 from whymath_backend.schema.enums import (
     CognitiveType,
     ConceptLevel,
+    Visualizability,
     VisualizationStyle,
 )
 
@@ -97,6 +98,7 @@ async def _generate(
     *,
     text: str = _GRAPH2D_WITH_PARAMS,
     learner_context: SceneLearnerContext | None = None,
+    visualizability: Visualizability | None = None,
     max_level: int = 4,
 ) -> tuple[LearningScene, _FakeProvider]:
     provider = _FakeProvider(text)
@@ -108,6 +110,7 @@ async def _generate(
         cache=InMemoryCache(),
         trace=RecordingTraceSink(),
         learner_context=learner_context,
+        visualizability=visualizability,
         answer_deferral_max_level=max_level,
     )
     return scene, provider
@@ -163,6 +166,67 @@ class TestVisualizationElement:
             await _generate(
                 _concept(styles=[VisualizationStyle.함수그래프]), text="죄송합니다, 못 만듭니다."
             )
+
+
+# ── 시각화 가능성 4분류 게이트(플레이북 Part 5·05b) ──────────────────────────
+class TestVisualizabilityGate:
+    """개념 `visualizability`(직접/동적/부분/추상)가 시각화 요소 생성을 게이트하는지 검증."""
+
+    @pytest.mark.asyncio
+    async def test_abstract_skips_literal_visualization(self) -> None:
+        """추상(군론·논리) → 리터럴 미생성·LLM 미호출, 소크라테스 폴백(StructureGraph 목표)."""
+        scene, provider = await _generate(
+            _concept(
+                styles=[VisualizationStyle.함수그래프],
+                cognitive=[CognitiveType.DEFINITION],
+            ),
+            visualizability=Visualizability.추상,
+        )
+        assert not any(isinstance(el, VisualizationElement) for el in scene.elements)
+        assert not any(isinstance(el, ParamControlElement) for el in scene.elements)
+        assert provider.calls == []  # 억지 리터럴 그림을 위해 LLM을 부르지 않는다
+        assert _socratics(scene)  # 대체 접근(소크라테스)은 유지된다
+
+    @pytest.mark.asyncio
+    async def test_partial_visualizes(self) -> None:
+        """부분(확률 등) → 부분 시각화 대상(AnalogyVisual) — 억지 아님·viz 생성."""
+        scene, provider = await _generate(
+            _concept(styles=[VisualizationStyle.수형도]),
+            visualizability=Visualizability.부분,
+        )
+        assert any(isinstance(el, VisualizationElement) for el in scene.elements)
+        assert provider.calls
+
+    @pytest.mark.asyncio
+    async def test_dynamic_visualizes_with_param_control(self) -> None:
+        """동적 → 시각화 + 슬라이더(조작이 인지 조건) — 기존 graph_2d 동작과 동일."""
+        scene, provider = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]),
+            visualizability=Visualizability.동적,
+        )
+        assert any(isinstance(el, VisualizationElement) for el in scene.elements)
+        assert any(isinstance(el, ParamControlElement) for el in scene.elements)
+        assert provider.calls
+
+    @pytest.mark.asyncio
+    async def test_direct_visualizes_without_param_control(self) -> None:
+        """직접 → 시각화는 하되 슬라이더 생략(정적 그림으로 충분·직접/동적 구분)."""
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]),
+            visualizability=Visualizability.직접,
+        )
+        assert any(isinstance(el, VisualizationElement) for el in scene.elements)
+        assert not any(isinstance(el, ParamControlElement) for el in scene.elements)
+
+    @pytest.mark.asyncio
+    async def test_untagged_none_preserves_legacy_behavior(self) -> None:
+        """미태깅(None) → 기존 동작 유지(시각화 + 슬라이더) — 하위호환."""
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]),
+            visualizability=None,
+        )
+        assert any(isinstance(el, VisualizationElement) for el in scene.elements)
+        assert any(isinstance(el, ParamControlElement) for el in scene.elements)
 
 
 # ── 소크라테스 발화(인지유형 결정론) ─────────────────────────────────────────
