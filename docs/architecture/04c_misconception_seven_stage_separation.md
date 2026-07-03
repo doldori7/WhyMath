@@ -46,7 +46,7 @@ embedding이 오염되어 AI가 *오개념 문장을 정상 개념의 일부처�
 
 | # | 정본 레벨 | 상태 | 개념 ↔ 오개념 분리 지점 | 구현 앵커 | 동결 테스트 |
 |---|---|---|---|---|---|
-| 1 | **Storage** | ✅ | 오개념 4테이블 개념과 별도·FK로 개념에 결합 안 됨(loose ref)·노드에 자유텍스트 비내장 | `db/models/misconception_{catalog,hypothesis,crosslink,embedding}.py` | `test_concept_node_purity.py` · `test_concept_misconception_runtime.py` |
+| 1 | **Storage** | ✅ | 오개념 4테이블 개념과 별도·FK로 개념에 결합 안 됨(loose ref)·노드에 자유텍스트 비내장(런타임 `common_misconceptions` 컬럼도 Phase 1b로 제거) | `db/models/misconception_{catalog,hypothesis,crosslink,embedding}.py` | `test_concept_node_purity.py` · `test_concept.py`(`_FORBIDDEN_NODE_FIELDS`) |
 | 2 | **Relation** | ✅ traversal 진입 차단 / ⚠️ 관계셋 미구현 | 오개념이 개념 traversal에 진입 불가(키공간·FK·edge_type 삼중 차단)·약한 토큰 금지 | `schema/enums.py`(EdgeType) · `l1/concept_graph/backend_edge.py:145` · `data_pipeline/concept_graph/relation_crosswalk.py:62-68` · `l2/prerequisite_recommendation.py`(PREREQUISITE-only CTE) | `test_edge_relation_governance.py` |
 | 3 | **Embedding** | ✅ | 3 임베딩 테이블 물리 분리 + cross-table 코사인 금지 | `l4/misconception/semantic/pgvector_index.py` · `l1/concept_graph/embedding.py` · `l1/atom_graph/embedding.py` | `test_embedding_namespace_governance.py` · `test_misconception_namespace_gate.py` |
 | 4 | **Retrieval** | ✅ reactive + classifier-first | reactive `diagnose()`(요청 시)·규칙 분류기 우선·vector는 보조 recall | `l4/misconception/diagnose.py` · `combined.py` · `match_gate.py` | `test_misconception_diagnose.py` |
@@ -89,13 +89,14 @@ embedding이 오염되어 AI가 *오개념 문장을 정상 개념의 일부처�
 ### 항목 ① 오개념 concept node preload 금지 — ✅ 다중 방어
 - data-pipeline 노드에서 자유텍스트 `misconception_text` **제거**(commit `500b0cc`) + 순수성 동결
   `tests/data_pipeline/concept_graph/test_concept_node_purity.py`.
-- backend 적재기가 `common_misconceptions=[]`를 **항상** 씀(`l1/concept_graph/backend_concept.py`).
+- backend 적재기가 오개념 컬럼을 아예 쓰지 않음 — Phase 1b로 레코드·ORM에서 제거
+  (`l1/concept_graph/backend_concept.py`).
 - 검색 서빙 프로젝션 `concept_node`에 오개념 필드 없음. 프로브가 노드 자유서술을 근거로 안 씀
   (`l4/scene_generation.py`) — 활성 가설 ∩ 카탈로그만.
-- **수용된 부채**: backend `Concept` ORM이 `common_misconceptions: JSONB` 컬럼을 아직 보유
-  (`db/models/concept.py:128`). 단 런타임 미사용이 정적 소스스캔으로 동결됨
-  (`tests/backend/schema/test_concept_misconception_runtime.py` — `.common_misconceptions` 접근이
-  L1 seed 적재기 1곳뿐·L4/하네스 런타임 0). 제거는 schema v1.0 breaking이라 **동결 유지**(오염 0).
+- **청산(cleared·2026-07-03 Phase 1b)**: backend `Concept` ORM/schema가 보유하던
+  `common_misconceptions: JSONB` 컬럼(+ 본문 3종)을 **제거**했다(`db/models/concept.py`·
+  `schema/concept.py`·Alembic `f0a1b2c3d4e5`). 런타임 소비처 0·전량 `[]`이라 breaking 아님. 재유입은
+  `test_concept.py::_FORBIDDEN_NODE_FIELDS`·schema↔ORM 정합 테스트가 차단(정적 소스스캔 가드는 불요).
 
 ### 항목 ③ reactive retrieval만 + 인덱스 분리 — ✅ (레벨 3·4·5 참조)
 게이트 off면 substring `diagnose()`만·의미 매처 미호출·임베딩 로드 0(`config.py`·`api/coach.py`).

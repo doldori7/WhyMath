@@ -16,16 +16,14 @@ L2 mastery(UUID concept) → `concept.code`(UC) → `concept_node`/`concept_embe
 ────────────────────────────────────────────────────────────────────────────
 redaction (CLAUDE.md 우선순위 #2 — 협상 불가)
 ────────────────────────────────────────────────────────────────────────────
-backend `Concept`의 `description`·`formal_definition`·`intuitive_explanation`은 **건드리지 않는다**
-(NULL 유지). 셋 다 *검수 책임 자유 서술*(`schema.Concept` 법적 메모)이고, ① graph.json에 부재이며
-(`_provenance.json` redacted: `concepts.description`·`concepts.formal_definition`) ② 이 적재기가
-*읽지도 않고* ③ 채우지도 않는다(삼중 방어). `metaphor` 같은 안전 자체작성 필드도 `intuitive_
-explanation`에 *욱여넣지 않는다* — 그 컬럼은 검수 통과한 직관 설명용이라 혼동·검수책임을 만들지
-않게 보수적으로 비워 둔다(필요 시 후속 검수 슬라이스). `common_misconceptions`(JSONB)는 **항상
-빈 리스트**로 둔다 — 2026-07-02 Part 2 §3(Concept Purity) 수정으로 개념그래프 노드에서 자유텍스트
-오개념(`misconception_text`)을 제거했기 때문이다. 오개념은 identity 노드에 내장하지 않으며(오염
-방지), 런타임 진단의 단일 진실은 검증된 오개념 *카탈로그*(`MisconceptionCatalog`·kebab-id)·활성
-가설이다. 이 컬럼은 이미 런타임 비소비로 동결돼 있다(`test_concept_misconception_runtime.py`).
+backend `Concept`의 `description`·`formal_definition`·`intuitive_explanation`·
+`common_misconceptions`는 2026-07-03 Part 2 리치 채택 **Phase 1b로 런타임 노드에서 제거**됐다
+(컬럼 자체 부재·마이그레이션 동반). 앞 3개는 *검수 책임 자유 서술*(성취기준·교과서 본문 근접·
+redaction)이고 graph.json에도 부재이며, 마지막은 자유텍스트 오개념 리스트(낙인·즉답·날조 위험)라
+identity 노드에 내장하지 않는다. 정본: 자체작성 교수 텍스트는 정본 identity 노드 semantic 계층
+(intuition·representations)·ConceptContent가, 오개념은 검증된 *카탈로그*(`MisconceptionCatalog`·
+kebab-id)·활성 가설이 단일 진실이다(CLAUDE.md #6). 이 적재기는 넷 다 *읽지도 채우지도 않는다* —
+컬럼이 없어 구조적으로 재유입이 차단된다(4중 방어). 네 컬럼 모두 소비처 0·전량 NULL/`[]`이었다.
 
 ────────────────────────────────────────────────────────────────────────────
 필드 매핑 (graph.json Concept → backend Concept)
@@ -37,7 +35,6 @@ explanation`에 *욱여넣지 않는다* — 그 컬럼은 검수 통과한 직�
     {NNN}`·옛 UC·새 canonical 모두 별도 변경 없이 흐른다.
   - `source_id`(재ID 전 원천 src_id) → `source_id`(추적성 보존·옛 graph.json엔 부재→None).
   - `aliases`([레거시 UC, src_id]) → `aliases`(옛 키 join 보존·옛 graph.json엔 부재→빈 배열).
-  - `common_misconceptions` = 항상 `[]`(오개념 노드 비내장 — Part 2 §3).
 유도(소스 신호가 깔끔히 대응할 때만):
   - `intrinsic_difficulty`[1,5] ← `difficulty_tier`[0,24] 선형 스케일(0→1.0·24→5.0).
 필수 NOT NULL인데 소스 부재 → 보수 유도:
@@ -46,8 +43,8 @@ explanation`에 *욱여넣지 않는다* — 그 컬럼은 검수 통과한 직�
     'unspecified' enum 값 추가·nullable화 같은 스키마 변경을 피한다(마이그레이션 0).
 미매핑(NULL/기본 유지·교수학 내용 날조 금지):
   - `name_en`·`parent_concept_id`·`is_signature_korean`(기본 False)·`cognitive_type`·
-    `recommended_visual_styles`·`exam_frequency`·`weight_in_curriculum`·`embedding_id`·
-    `description`·`formal_definition`·`intuitive_explanation` — 소스에 합당한 대응 없음 → 검수 대기.
+    `recommended_visual_styles`·`exam_frequency`·`weight_in_curriculum`·`embedding_id` — 소스에
+    합당한 대응 없음 → 검수 대기. (본문 3종·오개념 컬럼은 Phase 1b로 아예 제거됨 — 위 redaction.)
   (`aliases`·`source_id`는 더는 미매핑이 아니다 — 재ID(2026-06-16)로 graph.json이 둘을 산출하므로
   직결 적재한다. 옛 graph.json(둘 다 부재)도 None/빈 배열로 graceful.)
 
@@ -55,7 +52,7 @@ graph의 `grade_band_hint`·`standard_codes`·`ccss_code`·`metaphor`·`accepted
 `review_status`·`prerequisite_concept_ids`·`misconception_codes`·`visualization_card_keys`·`notes`는
 backend `Concept` 스키마에 *대응 컬럼이 없다* — `concept_node`(슬117) 프로젝션이 그 메타를 UC 키로
 이미 보관하므로, 이 런타임 엔티티엔 *런타임 결선에 필요한 최소 식별*(code=UC·name_ko·
-난이도·오개념)만 적재한다(이중 보관 회피·후속 consolidation 후보 — 보고 ⑥).
+난이도)만 적재한다(이중 보관 회피·후속 consolidation 후보 — 보고 ⑥).
 
 ────────────────────────────────────────────────────────────────────────────
 멱등 (UC 충돌 upsert·UUID PK 보존)
@@ -105,9 +102,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from whymath_backend.config import Settings, get_settings
 
@@ -214,15 +211,14 @@ class BackendConceptRecord:
     # 유도
     level: ConceptLevel  # 세부개념 고정(NOT NULL 충족)
     intrinsic_difficulty: float | None  # difficulty_tier 스케일
-    common_misconceptions: list[dict[str, Any]] = field(default_factory=list)
 
 
 def load_backend_concepts_from_graph_json(path: Path) -> list[BackendConceptRecord]:
     """슬1 산출 `graph.json` → backend `Concept` 적재 레코드 목록(UC 브리지·redaction 청결).
 
     `concepts` 배열의 각 항목에서 **`concept_id`·`source_id`·`aliases`** 직결 + name_ko(locale
-    조인·아래) + `difficulty_tier`→intrinsic_difficulty를 유도한다. `common_misconceptions`는
-    적재하지 않고 항상 `[]`로 둔다(Part 2 §3 순수성 — 오개념 노드 비내장). concept_id는 *형식 불문*
+    조인·아래) + `difficulty_tier`→intrinsic_difficulty를 유도한다(본문 3종·오개념 컬럼은 Phase
+    1b로 노드에서 제거·redaction). concept_id는 *형식 불문*
     으로 code에 들어가므로 재-ID 후 canonical 형식(`math.<area>.<slug>`)이 별도 변경 없이 흐른다
     (옛 `{TRACK}-{AREA}-{NNN}`·옛 UC도 동일 경로). source_id/aliases는 옛
     graph.json(부재)이면 None/빈 배열로 graceful. `level`은 `세부개념` 고정(graph 노드는 전부 세부
@@ -262,7 +258,6 @@ def load_backend_concepts_from_graph_json(path: Path) -> list[BackendConceptReco
                 aliases=_str_list(record.get("aliases")),
                 level=_DEFAULT_LEVEL,
                 intrinsic_difficulty=scale_difficulty(_opt_int(record.get("difficulty_tier"))),
-                # common_misconceptions는 default_factory([]) — 오개념 노드 비내장(Part 2 §3).
             )
         )
     return out
@@ -308,11 +303,10 @@ class BackendConceptStore:
         """단일 개념을 backend `concept`에 upsert (멱등·`code` 충돌 갱신·UUID PK 보존).
 
         `INSERT ... ON CONFLICT(code) DO UPDATE` — 런타임 식별 필드(name_ko·source_id·aliases·
-        level·intrinsic_difficulty·common_misconceptions)를 갱신한다. **PK(concept_id)는
-        SET하지 않아 보존**되고(재적재 시 기존 UUID 유지), 신규 행만 server_default로 발급한다.
-        **description·formal_definition·intuitive_explanation은 INSERT/SET 컬럼에 없다**(redaction —
-        레코드에 슬롯 부재·검수 본문 보존). `level`은 enum 값(문자열)으로 바인딩한다
-        (`use_enum_values` 직렬화 등가 — PG enum 컬럼에 한글 값).
+        level·intrinsic_difficulty)를 갱신한다. **PK(concept_id)는 SET하지 않아 보존**되고
+        (재적재 시 기존 UUID 유지), 신규 행만 server_default로 발급한다. **본문 3종·오개념 컬럼은
+        Phase 1b로 제거돼 INSERT/SET에 아예 없다**(redaction·구조적 차단). `level`은 enum 값으로
+        바인딩한다(`use_enum_values` 직렬화 등가 — PG enum 컬럼에 한글 값).
         """
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -325,9 +319,8 @@ class BackendConceptStore:
             aliases=record.aliases,
             level=record.level.value,
             intrinsic_difficulty=record.intrinsic_difficulty,
-            common_misconceptions=record.common_misconceptions,
         )
-        # code 충돌 시 갱신 — concept_id(PK)·created_at·본문은 SET하지 않는다(보존·redaction).
+        # code 충돌 시 갱신 — concept_id(PK)·created_at은 SET하지 않는다(보존·redaction).
         stmt = stmt.on_conflict_do_update(
             index_elements=[Concept.code],
             set_={
@@ -336,7 +329,6 @@ class BackendConceptStore:
                 "aliases": stmt.excluded.aliases,
                 "level": stmt.excluded.level,
                 "intrinsic_difficulty": stmt.excluded.intrinsic_difficulty,
-                "common_misconceptions": stmt.excluded.common_misconceptions,
             },
         )
         with self._get_engine().begin() as conn:

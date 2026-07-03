@@ -73,10 +73,9 @@ def test_concept_orm_tablenames() -> None:
 # 2) PG DDL 컴파일
 # ──────────────────────────────────────────────────────────────────────────
 def test_concept_ddl_compiles_to_postgres() -> None:
-    """Concept DDL에 JSONB·concept_level_enum·cognitive_type_enum·visualization_style_enum·
-    gen_random_uuid()·UUID 포함."""
+    """Concept DDL에 concept_level_enum·cognitive_type_enum·visualization_style_enum·
+    gen_random_uuid()·UUID 포함(본문·오개념 컬럼은 Phase 1b로 제거 — JSONB 없음)."""
     ddl = _pg_ddl(OrmConcept.__table__)
-    assert "JSONB" in ddl  # common_misconceptions
     assert "concept_level_enum" in ddl  # level
     assert "cognitive_type_enum" in ddl  # cognitive_type[] (enum 배열)
     assert "visualization_style_enum" in ddl  # recommended_visual_styles[] (슬라이스 88)
@@ -172,7 +171,7 @@ def test_recommended_visual_styles_array_enum_values() -> None:
 # 4) 변환 roundtrip
 # ──────────────────────────────────────────────────────────────────────────
 def test_concept_roundtrip_preserves_core_fields() -> None:
-    """schema.Concept → ORM → schema가 핵심 필드(id·code·계층·인지유형·오개념)를 보존."""
+    """schema.Concept → ORM → schema가 핵심 필드(id·code·계층·인지유형·추적성)를 보존."""
     cid = uuid.uuid4()
     s = SchemaConcept(
         concept_id=cid,
@@ -182,7 +181,6 @@ def test_concept_roundtrip_preserves_core_fields() -> None:
         source_id="N1",  # P2b 재ID 추적성(원천 src_id)
         level=ConceptLevel.세부개념,
         cognitive_type=[CognitiveType.THEOREM, CognitiveType.TECHNIQUE],
-        common_misconceptions=[{"misconception": "정적분=넓이", "correction": "부호 있는 넓이"}],
         aliases=["UC.calc.ftc", "N1"],  # [레거시 UC, src_id]
     )
     orm = OrmConcept.from_schema(s)
@@ -193,9 +191,6 @@ def test_concept_roundtrip_preserves_core_fields() -> None:
     assert orm.aliases == ["UC.calc.ftc", "N1"]
     assert orm.level == "세부개념"
     assert orm.cognitive_type == ["THEOREM", "TECHNIQUE"]
-    assert orm.common_misconceptions == [
-        {"misconception": "정적분=넓이", "correction": "부호 있는 넓이"}
-    ]
 
     back = orm.to_schema()
     assert back.concept_id == cid
@@ -203,8 +198,33 @@ def test_concept_roundtrip_preserves_core_fields() -> None:
     assert back.source_id == s.source_id
     assert back.level == s.level
     assert back.cognitive_type == s.cognitive_type
-    assert back.common_misconceptions == s.common_misconceptions
     assert back.aliases == s.aliases
+
+
+def test_schema_orm_field_parity_frozen() -> None:
+    """schema.Concept 필드 집합 == ORM 매퍼 컬럼 집합(정합 동결·Phase 1b redaction 계약).
+
+    `from_schema`/`to_schema`는 두 집합의 *교집합*만 흐르므로, 한쪽에만 있는 필드는 조용히
+    유실되거나(from_schema) 검증 실패(to_schema)한다. 이 동결은 그 드리프트를 코드리뷰로 끌어낸다
+    — 특히 Phase 1b로 제거한 본문 3종·오개념 컬럼이 어느 한쪽에만 되살아나는 회귀를 막는다.
+    """
+    import sqlalchemy as sa
+
+    schema_fields = set(SchemaConcept.model_fields)
+    orm_columns = {col.key for col in sa.inspect(OrmConcept).mapper.column_attrs}
+    assert schema_fields == orm_columns, (
+        f"schema↔ORM 필드 드리프트 — schema만: {sorted(schema_fields - orm_columns)}, "
+        f"ORM만: {sorted(orm_columns - schema_fields)}. 한쪽 추가 시 반드시 양쪽을 함께 갱신."
+    )
+    # Phase 1b 청산 컬럼은 양쪽 모두에 부재(redaction 계약).
+    for redacted in (
+        "description",
+        "formal_definition",
+        "intuitive_explanation",
+        "common_misconceptions",
+    ):
+        assert redacted not in schema_fields
+        assert redacted not in orm_columns
 
 
 def test_concept_edge_roundtrip() -> None:

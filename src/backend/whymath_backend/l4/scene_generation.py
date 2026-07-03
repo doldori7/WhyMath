@@ -16,8 +16,8 @@
     (RS5 환각 방어). LLM 호출은 1회(스타일 있을 때만)·로컬 우선(`generate_visualization_spec`).
   - 소크라테스 발화는 정답이 아니라 *정본 유도 질문*(`EXAMPLE_QUESTION`)·`hint_level=1`(가장 은근).
   - `misconception_probe`는 **학습자 활성 가설(`active_hypothesis_ids`) ∩ 오개념 카탈로그**에만
-    생성(RS2 거짓 낙인 차단) — 개념의 자유서술 `common_misconceptions`(정답/수정 텍스트)는
-    카탈로그 id가 아니라 *프로브 근거로 쓰지 않는다*(낙인·즉답 금지).
+    생성(RS2 거짓 낙인 차단). 개념의 자유서술 오개념(`common_misconceptions`)은 Phase 1b로 런타임
+    Concept에서 제거돼(컬럼 부재) 애초에 프로브 근거가 될 수 없다(낙인·즉답 구조적 차단).
 
 범위(S3): 골격 + spec 충전 + 게이트 통과 명세 반환. `concept_id`는 `Concept.code`(개념그래프 UC).
 개념그래프 *존재* 검증(DB)·다중 시각화·step_panel(SolutionPath Python 구현 후속)·L5 렌더러는 S4+.

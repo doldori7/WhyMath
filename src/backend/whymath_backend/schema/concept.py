@@ -27,25 +27,24 @@ Pydantic 모델이다. SQLAlchemy/alembic 매핑은 후속 Phase(슬라이스 1 
   - nullable `UUID[]` → `list[uuid.UUID]`(default_factory=list)(예: exemplar_problem_ids)
   - `DECIMAL` → `float | None`(ge/le); 범위는 DDL 인라인 주석을 따르고, 미명시는
     의미에 맞는 보수값을 골라 각 필드 description에 1줄로 명시(슬라이스 1·2 방식)
-  - `JSONB` 배열 → `list[dict[str, Any]]`(default_factory=list)(예: common_misconceptions)
   - `INTEGER` → `int | None`(ge/le)
   - `BOOLEAN DEFAULT FALSE` → `bool = False`
   - `TIMESTAMPTZ` → `datetime | None`
 
-법적 메모(CLAUDE.md 절대 금기·저작권 가이드 v2.0):
-  `Concept.description`·`formal_definition`·`intuitive_explanation`은 *WhyMath 자체 작성*
-  교수 텍스트여야 하며, 검정교과서·EBS의 본문/학습목표 *표현*을 복제하지 않는다(교육과정
-  *코드*는 공공이나 교과서 *표현*은 출판사 저작물). 이 제약은 자유 서술 텍스트의
-  성격상 *구조 validator로 강제할 신호가 없다* — 가짜 validator를 만들지 않고 검수(review)
-  단계 책임으로 남긴다(이 docstring이 그 문서화). 슬라이스 1·2의 본문 차단 불변식은
-  `source_type`/`license`라는 *구조 신호*가 있어 강제 가능했던 것과 대비된다.
+법적 메모(CLAUDE.md 절대 금기·저작권 가이드 v2.0·Phase 1b redaction):
+  본문 근접 자유 서술(`description`·`formal_definition`·`intuitive_explanation`)과 자유텍스트
+  오개념(`common_misconceptions`)은 2026-07-03 Part 2 리치 채택 **Phase 1b로 런타임 Concept
+  노드에서 제거**했다 — 성취기준·교과서 본문 근접(앞 3개) 또는 낙인/즉답/날조 위험 오개념
+  리스트(마지막)라 노드에 담지 않는다(redaction·CLAUDE.md #6). 자체작성 교수 텍스트의 정본은
+  정본 identity 노드 semantic 계층(intuition·representations)과 ConceptContent가, 오개념은
+  독립 오개념 DB(카탈로그 kebab-id)가 단일 진실이다. 노드 재내장은 `test_concept.py`의
+  `_FORBIDDEN_NODE_FIELDS`와 schema↔ORM 정합 테스트가 정적으로 차단한다.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -73,10 +72,9 @@ class Concept(BaseModel):
     패턴): `parent_concept_id`가 있으면 `concept_id != parent_concept_id`(자기 자신을
     부모로 둘 수 없음).
 
-    법적 메모(모듈 docstring 참조): `description`·`formal_definition`·`intuitive_explanation`은
-    *WhyMath 자체 작성* 교수 텍스트여야 하며 검정교과서·EBS 본문/학습목표 표현을 복제하지
-    않는다(CLAUDE.md 금기·저작권 가이드 v2.0). 자유 서술 텍스트라 구조 validator로 강제할
-    신호가 없으므로 *검수(review) 단계 책임*이며 여기서는 문서화만 한다(가짜 validator 금지).
+    본문 근접 자유 서술(`description`·`formal_definition`·`intuitive_explanation`)과 자유텍스트
+    오개념(`common_misconceptions`)은 Phase 1b(2026-07-03)로 이 런타임 노드에서 제거했다 —
+    정본은 identity 노드 semantic 계층·ConceptContent·독립 오개념 DB다(모듈 docstring 법적 메모).
 
     `embedding_id`는 벡터 저장소(pgvector·Postgres 동거·슬98) 참조일 뿐 *임베딩 벡터 저장이
     아니다* (§4.3 pgvector 설계는 인프라 설정·이 모델 밖; 통합 시 동일 테이블 벡터 컬럼으로 정리).
@@ -182,29 +180,13 @@ class Concept(BaseModel):
         le=1.0,
     )
 
-    # ===== 설명·예제 =====
-    # 법적 메모(클래스 docstring): 아래 3개 자유 서술 텍스트는 WhyMath 자체 작성이어야 하며
-    # 교과서·EBS 본문/학습목표 표현 복제 금지. 구조 신호가 없어 검수 단계 책임(validator 없음).
-    description: str | None = Field(
-        default=None,
-        description="개념 설명(자체 작성 — 교과서/EBS 표현 복제 금지)",
-    )
-    formal_definition: str | None = Field(
-        default=None,
-        description="엄밀한 수학적 정의(자체 작성)",
-    )
-    intuitive_explanation: str | None = Field(
-        default=None,
-        description="직관적 설명 — Socratic용(자체 작성)",
-    )
-    common_misconceptions: list[dict[str, Any]] = Field(
-        default_factory=list,
-        description='흔한 오개념 목록 [{"misconception":"...","correction":"..."}](자유형 JSONB). '
-        "*seed 메타 전용* — 런타임 오개념 프로브/진단 근거로 쓰지 않는다(낙인·즉답·날조 차단). "
-        "런타임 정본은 검증된 오개념 카탈로그(kebab-id)·활성 가설이다(Q1/Q8·플레이북 §3.4 "
-        "'노드에 오개념 리스트 내장 금지'). 이 미사용은 test_concept_misconception_runtime.py가 "
-        "정적으로 동결한다.",
-    )
+    # ===== 설명·예제(본문 계층) — 런타임 노드 비내장(Phase 1b 청산·redaction) =====
+    # description·formal_definition·intuitive_explanation·common_misconceptions는 성취기준·
+    # 교과서 *본문* 근접(앞 3개) 또는 자유텍스트 오개념(마지막)이라 런타임 Concept 노드에서
+    # *제거*했다(Part 2 리치 채택 Phase 1b·2026-07-03). 앞 3개의 자체작성 정본은 정본 identity
+    # 노드(semantic 계층·intuition/representations)와 ConceptContent가, 오개념은 독립 오개념
+    # DB(카탈로그 kebab-id·CLAUDE.md #6)가 단일 진실이다. 노드 재내장은 test_concept.py의
+    # `_FORBIDDEN_NODE_FIELDS`·schema↔ORM 정합 테스트가 차단한다.
 
     # ===== 벡터 임베딩 ID (pgvector·Postgres 동거 참조·슬98) =====
     embedding_id: uuid.UUID | None = Field(

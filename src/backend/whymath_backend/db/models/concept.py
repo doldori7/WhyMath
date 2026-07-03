@@ -13,26 +13,23 @@
   - `concept_role_enum`/`edge_type_enum`/`concept_level_enum` → `_pg_enum(...)`(values_callable).
   - `cognitive_type_enum[]`·`visualization_style_enum[]`(슬라이스 88) → `ARRAY(_pg_enum(...))`
     (DDL NOT NULL 아님 → nullable list).
-  - `JSONB`(common_misconceptions) → schema가 NOT NULL 의미(default_factory=list)라 problem.py
-    `conditions_parsed`처럼 `nullable=False, server_default "'[]'::jsonb"`.
   - `UUID[] NOT NULL`(concept_fusion.concept_ids) → `ARRAY(sa.Uuid)`(*배열이라 FK 아님* —
     schema docstring 명시) + `nullable=False, server_default "'{}'::uuid[]"`.
   - nullable `UUID[]`(exemplar_problem_ids) → `ARRAY(sa.Uuid)`(배열, FK 아님, nullable).
   - 인덱스(§4.2 `CREATE INDEX`) → `__table_args__`.
 
-법적 메모: `description`·`formal_definition`·`intuitive_explanation`의 자체 작성 불변식은
-`schema.Concept`(자유 서술이라 구조 신호 없음 → 검수 책임) 소관이며, ORM에는 컬럼만 둔다
-(problem.py 본문 미보유 불변식이 schema 책임인 것과 동형).
+법적 메모(Phase 1b redaction·2026-07-03): 본문 근접 자유 서술 3종(description·formal_definition·
+intuitive_explanation)과 자유텍스트 오개념(common_misconceptions)은 런타임 노드에서 *제거*했다
+(마이그레이션 동반). 정본은 정본 identity 노드 semantic 계층·ConceptContent·독립 오개념 DB다.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
@@ -126,14 +123,11 @@ class Concept(Base):
     exam_frequency: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
     weight_in_curriculum: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
 
-    # ===== 설명·예제 (자체 작성 불변식은 schema.Concept 검수 책임) =====
-    description: Mapped[str | None] = mapped_column(sa.Text)
-    formal_definition: Mapped[str | None] = mapped_column(sa.Text)
-    intuitive_explanation: Mapped[str | None] = mapped_column(sa.Text)
-    # schema는 default_factory=list(NOT NULL 의미) → problem.py conditions_parsed 패턴.
-    common_misconceptions: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
-    )
+    # ===== 설명·예제(본문 계층) — 런타임 노드 비내장(Phase 1b 청산·redaction) =====
+    # description·formal_definition·intuitive_explanation(Text×3)과 common_misconceptions(JSONB)는
+    # 2026-07-03 Part 2 리치 채택 Phase 1b로 *제거*했다(마이그레이션 동반). 앞 3개는 성취기준·교과서
+    # 본문 근접(redaction), 마지막은 자유텍스트 오개념(독립 오개념 DB·CLAUDE.md #6)이라 런타임
+    # 노드에 담지 않는다. 네 컬럼 모두 소비처 0·전량 NULL/`[]`이었다(죽은 컬럼 청산·계약 변경).
 
     # ===== 벡터 임베딩 ID (pgvector·Postgres 동거 참조 — 벡터 저장 아님·슬98) =====
     embedding_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)
