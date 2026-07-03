@@ -95,7 +95,6 @@ class TestConceptCreation:
         assert c.aliases == []
         assert c.cognitive_type == []
         assert c.recommended_visual_styles == []
-        assert c.common_misconceptions == []
         assert c.is_signature_korean is False
         assert c.embedding_id is None
 
@@ -120,12 +119,6 @@ class TestConceptCreation:
             intrinsic_difficulty=4.5,
             exam_frequency=0.82,
             weight_in_curriculum=0.6,
-            description="적분과 미분의 관계를 잇는 정리(자체 작성).",
-            formal_definition="F'(x)=f(x)이면 ∫_a^b f = F(b)-F(a).",
-            intuitive_explanation="넓이의 변화율이 곧 함수값이다.",
-            common_misconceptions=[
-                {"misconception": "적분상수를 빼먹음", "correction": "+C를 항상 명시"}
-            ],
             embedding_id=emb,
             created_at=now,
         )
@@ -137,7 +130,6 @@ class TestConceptCreation:
         ]
         assert c.intrinsic_difficulty == pytest.approx(4.5)
         assert c.embedding_id == emb
-        assert c.common_misconceptions[0]["misconception"] == "적분상수를 빼먹음"
 
     def test_extra_forbidden(self) -> None:
         """extra='forbid' — 알 수 없는 필드 거부."""
@@ -475,6 +467,13 @@ class TestConceptNodeFieldGovernance:
             # 시각화 가능성 분류(노드 비내장·Overlay `concept_visualization` 이관) — 재내장 차단.
             # ADR concept_node_layering §1(visualization=노드 비내장)·subject Overlay 선례 동형.
             "visualizability",
+            # 본문 근접 자유 서술·자유텍스트 오개념(redaction·Phase 1b 청산) — 재내장 차단.
+            #   앞 3개=성취기준·교과서 본문 근접(정본=identity 노드 semantic·ConceptContent),
+            #   마지막=자유텍스트 오개념(정본=독립 오개념 카탈로그·CLAUDE.md #6). 2026-07-03 제거.
+            "description",
+            "formal_definition",
+            "intuitive_explanation",
+            "common_misconceptions",
             # 프롬프트·런타임·사용자(외부화 — 노드에 결합 금지).
             "prompt",
             "runtime_state",
@@ -502,10 +501,6 @@ class TestConceptNodeFieldGovernance:
             "intrinsic_difficulty",
             "exam_frequency",
             "weight_in_curriculum",
-            "description",
-            "formal_definition",
-            "intuitive_explanation",
-            "common_misconceptions",
             "embedding_id",
             "created_at",
         }

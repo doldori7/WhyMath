@@ -375,70 +375,11 @@ class TestMisconceptionProbes:
         assert probes[0].intervention == InterventionPattern.COUNTEREXAMPLE
 
 
-# ── common_misconceptions 런타임 미사용 가드(Q1/Q8 — 노드 자유서술은 프로브 근거 아님) ──────
-class TestCommonMisconceptionsNotConsumed:
-    """노드의 자유서술 `common_misconceptions`(정답/수정 텍스트)가 *런타임 프로브 근거로 쓰이지
-    않음*을 동결하는 가드.
-
-    프로브는 학습자의 *근거 있는* 활성 가설(`active_hypothesis_ids`) ∩ 오개념 카탈로그
-    (`CATALOG_BY_ID`)에서만 나와야 한다(05a RS2 거짓 낙인 차단). 자유서술 필드를 프로브로 쓰면
-    검증 불가 텍스트로 낙인·즉답·날조 위험(CLAUDE.md 학생 안전 #1·교수학 #3). 현재 미사용이나
-    *코드로 강제된 미사용 가드가 없어* 누군가 generate_learning_scene에서 읽으면 막을 게 없다 —
-    그 회귀를 동결한다.
-    """
-
-    @staticmethod
-    def _concept_with_misconceptions(
-        cm: list[dict[str, str]],
-    ) -> Concept:
-        """common_misconceptions를 채운 개념(나머지는 _concept 기본·시각화 없음)."""
-        return Concept(
-            code="ALG-QUAD-DEF",
-            name_ko="이차함수의 그래프",
-            level=ConceptLevel.세부개념,
-            cognitive_type=[CognitiveType.DEFINITION],
-            common_misconceptions=cm,
-        )
-
-    @pytest.mark.asyncio
-    async def test_populated_common_misconceptions_produce_no_probes(self) -> None:
-        """common_misconceptions가 가득 차 있어도 *학습자 활성 가설이 없으면* 프로브 0.
-
-        자유서술 오개념이 프로브 *원천*이라면 여기서 프로브가 생겼을 것 — 0이라는 것은 그 필드가
-        프로브 경로에 *들어가지 않음*을 보인다(스파이 페이로드).
-        """
-        spy = [
-            {"misconception": "(a+b)^2 = a^2+b^2로 전개", "correction": "교차항 2ab 누락"},
-            {"misconception": "이차함수는 항상 최솟값을 갖는다", "correction": "a<0이면 최댓값"},
-        ]
-        scene, _ = await _generate(self._concept_with_misconceptions(spy), learner_context=None)
-        probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
-        assert probes == []
-
-    @pytest.mark.asyncio
-    async def test_probe_set_invariant_to_common_misconceptions(self) -> None:
-        """동일 학습자 컨텍스트에서, common_misconceptions가 비었든 가득 찼든 프로브 집합이 동일.
-
-        프로브 id 집합이 자유서술 필드 내용에 *불변*임을 보여, 프로브가 오직 활성 가설 ∩ 카탈로그
-        에서만 결정됨을 동결한다.
-        """
-        ctx = SceneLearnerContext(active_hypothesis_ids=[_VALID_MC_ID])
-        empty_scene, _ = await _generate(self._concept_with_misconceptions([]), learner_context=ctx)
-        filled_scene, _ = await _generate(
-            self._concept_with_misconceptions(
-                [{"misconception": "스파이 오개념", "correction": "스파이 정정"}]
-            ),
-            learner_context=ctx,
-        )
-
-        def _probe_ids(scene: LearningScene) -> set[str]:
-            return {
-                el.misconception_id
-                for el in scene.elements
-                if isinstance(el, MisconceptionProbeElement)
-            }
-
-        assert _probe_ids(empty_scene) == _probe_ids(filled_scene) == {_VALID_MC_ID}
+# common_misconceptions 런타임 미사용 가드는 Phase 1b(2026-07-03)로 제거했다 — 자유서술
+# `common_misconceptions` 컬럼 자체가 런타임 Concept에서 삭제돼(schema/db 슬롯 부재·extra="forbid")
+# "프로브가 자유서술을 근거로 삼는" 회귀 경로가 *구조적으로 불가능*해졌다(스파이 페이로드 주입
+# 불가). 프로브가 오직 활성 가설 ∩ 오개념 카탈로그에서만 나옴은 아래 TestMisconceptionProbe가
+# 계속 동결한다(05a RS2 거짓 낙인 차단·CLAUDE.md 학생 안전 #1).
 
 
 # ── 배치·메타·게이트 라운드트립 ──────────────────────────────────────────────

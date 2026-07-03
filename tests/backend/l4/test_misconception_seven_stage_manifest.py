@@ -112,7 +112,8 @@ _RELATION_CROSSWALK_SRC = f"{_CONCEPT_GRAPH_SRC_DIR}/relation_crosswalk.py"
 # (repo 상대경로). 이들이 사라지면 04c 감사·갭 장부가 근거를 잃는다.
 _REFERENCED_GUARD_TESTS = (
     "tests/data_pipeline/concept_graph/test_concept_node_purity.py",
-    "tests/backend/schema/test_concept_misconception_runtime.py",
+    # test_concept_misconception_runtime.py는 Phase 1b(2026-07-03)로 제거됐다 — 동결 대상
+    # 런타임 `common_misconceptions` 컬럼 자체가 삭제돼(schema/db 슬롯 부재) 정적 가드가 moot.
     "tests/backend/l1/test_embedding_namespace_governance.py",
     "tests/backend/l1/test_edge_relation_governance.py",
     "tests/backend/l4/test_misconception_namespace_gate.py",
