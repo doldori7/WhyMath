@@ -132,6 +132,19 @@ class Settings(BaseSettings):
         ),
     )
 
+    prerequisite_traversal_metrics_enabled: bool = Field(
+        default=False,
+        description=(
+            "선수 traversal 계기화 hook(math_dsl_risk_register ④·graph partition 트리거 관측) "
+            "활성 여부. True면 `fetch_prerequisites`가 순회 노드 수·결과 수·최대 깊이·소요 "
+            "latency를 인메모리 히스토그램(`l2._traversal_metrics`)에 방출해 '수만 노드·순회 p95 "
+            "상승·hub 오염'이 임계에 접근하는지 실측한다(파티션 시점 판단 근거). **student-facing "
+            "미노출**(반환·응답 불변). **False(기본·opt-in)**: 방출 0·비용 불변·CI hermetic 보존. "
+            "production OTel exporter 결선은 후속(hook 먼저·exporter 후속 관용). "
+            "WHYMATH_PREREQUISITE_TRAVERSAL_METRICS_ENABLED=true로 켠다."
+        ),
+    )
+
     l4_server_mastery_enabled: bool = Field(
         default=True,
         description=(

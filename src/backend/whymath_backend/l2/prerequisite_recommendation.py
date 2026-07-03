@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 import uuid
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
@@ -70,8 +71,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy import literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from whymath_backend.config import get_settings
 from whymath_backend.db.models.concept import Concept, ConceptEdge
 from whymath_backend.l1.concept_graph.node_projection import ConceptNodeMeta, fetch_node_meta
+from whymath_backend.l2._traversal_metrics import observe_traversal
 from whymath_backend.l2.concept_diagnosis import (
     Agreement,
     ConceptDiagnosis,
@@ -288,7 +291,11 @@ async def fetch_prerequisites(
             traversal.c.concept_id,
         )
     )
+    # traversal 계기화(④) — 쿼리 벽시계만 잰다(perf_counter는 nanosecond·비용 무시). 관측 방출은
+    # observe_traversal이 opt-in 게이트(기본 off=no-op) 뒤에서 하므로 여기선 항상 측정만 한다.
+    _t0 = time.perf_counter()
     rows = (await session.execute(stmt)).all()
+    _elapsed_ms = (time.perf_counter() - _t0) * 1000.0
 
     # dedup — 같은 선수가 여러 경로/깊이로 나오면 MIN depth 1건만(정렬이 depth asc라 첫 등장이
     # MIN depth·동률이면 강도 큰 것). origin C 자체는 방어적으로 제외(DAG라 안 나오나 안전).
@@ -309,7 +316,18 @@ async def fetch_prerequisites(
         )
     # breadth 안전밸브 — dedup 이후 최종 목록에 노드 수 예산을 적용(MIN-depth 선택 왜곡 없음).
     # 현재 규모 미발동(행동 불변)·규모 폭발만 차단·초과 시 로깅(silent 금지).
-    return _cap_by_node_budget(result)
+    capped = _cap_by_node_budget(result)
+
+    # 계기화(④·opt-in 게이트 뒤) — 순회 규모(visited=dedup 전 행)·결과 수(cap 후)·최대 깊이·latency
+    # 를 방출해 파티션 트리거(수만 노드·순회 p95·hub 오염)를 실측. 게이트 off면 no-op(방출·비용 0).
+    observe_traversal(
+        get_settings(),
+        visited=len(rows),
+        result=len(capped),
+        max_depth=max((r.depth for r in capped), default=0),
+        elapsed_ms=_elapsed_ms,
+    )
+    return capped
 
 
 async def recommend_prerequisite_gaps(

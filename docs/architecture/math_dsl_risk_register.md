@@ -222,6 +222,17 @@ misconception_crosslink_candidates.md`→로더 적재→shadow→canary)·교�
 **도메인 파티션**(대수/기하/해석/확통)으로 순회를 서브그래프에 가둠 · 집계 노드는 retrieval에서 배제 ·
 Community 한계 도달 시 Enterprise/샤딩은 *마지막*. 관측 트리거값을 먼저 계기화(노드 수·p95 latency).
 
+> **④ 계기화 착수 (2026-07-03) — hook 먼저, 파티션은 마지막** — 처방의 "계기화 먼저"를 시작했다.
+> 선수 traversal(`fetch_prerequisites`·프로덕션)에 **관측 hook**을 배선: 순회 노드 수(dedup 전 행)·
+> 결과 수·최대 깊이·쿼리 latency를 인메모리 버킷 히스토그램(`l2/_traversal_metrics.py`)에 방출해
+> 트리거(a 수만 노드·b 순회 p95·c hub 오염 규모)를 *실측*한다. `api/_device_metrics.py`의 "hook
+> 도입만·exporter 후속" 관용 계승 — **opt-in**(`prerequisite_traversal_metrics_enabled`·기본 off라
+> 방출·비용 0·행동 불변)이며 `get_traversal_metrics()`가 운영자/후속 exporter 조회점이다.
+>
+> **deferred(파티션은 "마지막")**: **p95 HTTP 미들웨어·OTel exporter 배선**(관용상 후속·지금은
+> traversal-함수 레벨 latency까지)·**hub fan-out 집계·retrieval 배제 필터**·**도메인 파티션 자체**
+> (대수/기하/해석/확통 서브그래프·Enterprise/샤딩) — 계기화 지표가 실측으로 임계에 접근할 때 착수.
+
 **⑤ plugin architecture 필요 시점** — 이미 부분 존재(L3 라우터 3축 `l3/router.py`·L6 모드 디렉토리·
 `InterventionPattern`). 임계 트리거: renderer 다중화 × **visualization 수백 type** → `_SPEC_MODEL_BY_TYPE`
 정적 맵(`schema/visualization.py`)과 `SceneElement` **6 kind 하드코딩 union**(`l4/learning_scene.py:79-312`)이
@@ -324,7 +335,7 @@ multi-language = **국가 × 개정 축의 곱**, (c) 2028 개정 유입. 처방
 | ⑩ curriculum ×국가×개정 | multi-language 착수 | Overlay 단일 진실 | 🔴 곱 축 진입 전 |
 | ① Formula/Proof 노드화 | proof system 착수 | Theorem≠Proof·canonical만 | 🟠 신규 폭발원 |
 | ⑥ retrieval 오염 | 벡터 수·recall 저하 | namespace→fusion→Qdrant | 🟠 단계적 |
-| ④ graph partition | 수만 노드·p95 지연 | 도메인 파티션 | 🟠 계기화 후 |
+| ④ graph partition | 수만 노드·p95 지연 | 계기화(hook 착수)→도메인 파티션 | 🟠 계기화 착수·파티션 대기 |
 | ⑤ plugin 필요 | type/패턴 정적관리 불가 | 등록제·adapter | 🟡 관측 기반 |
 | ⑦ AST 병목 | SymPy 처리량·proof scope | 캐싱·범위 경계 고수 | 🟡 |
 | ⑨ tutoring 붕괴 | subgraph 예산 초과 | 예산 명문화 | 🟡 ①②연동 |

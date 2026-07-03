@@ -25,6 +25,11 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from whymath_backend.config import Settings
 from whymath_backend.db.models.concept import Concept, ConceptEdge
+from whymath_backend.l2 import prerequisite_recommendation
+from whymath_backend.l2._traversal_metrics import (
+    get_traversal_metrics,
+    reset_traversal_metrics,
+)
 from whymath_backend.l2.prerequisite_recommendation import fetch_prerequisites
 from whymath_backend.schema.concept import Concept as ConceptSchema
 from whymath_backend.schema.enums import ConceptLevel, EdgeType
@@ -297,3 +302,65 @@ def test_fetch_prerequisites_excludes_weak_relations_on_live_pg() -> None:
         asyncio.run(_run())
     finally:
         asyncio.run(_cleanup([c, p, w]))
+
+
+def test_fetch_prerequisites_emits_traversal_metrics_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """계기화(④) — flag on이면 실 PG traversal이 `_traversal_metrics`에 관측 1건을 방출한다.
+
+    hermetic 단위(`test_traversal_metrics.py`)는 hook·게이트를 못 박지만, `fetch_prerequisites`의
+    *실 배선*(len(rows)/len(capped)/max_depth/latency 산출→observe_traversal)은 실 PG에서만 돈다.
+    게이트는 모듈 `get_settings`를 monkeypatch해 켠다(전역 settings 캐시 비침습).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    sfx = uuid.uuid4().hex[:8]
+    c, p1, p2 = (uuid.uuid4() for _ in range(3))
+
+    on = Settings(jwt_secret_key=SecretStr(_SECRET), prerequisite_traversal_metrics_enabled=True)
+    monkeypatch.setattr(prerequisite_recommendation, "get_settings", lambda: on)
+    reset_traversal_metrics()
+
+    async def _setup() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as s:
+                s.add_all(
+                    [
+                        _concept(c, f"UC.met.{sfx}.c", "후행"),
+                        _concept(p1, f"UC.met.{sfx}.p1", "선수1"),
+                        _concept(p2, f"UC.met.{sfx}.p2", "선수2"),
+                    ]
+                )
+                await s.commit()
+            async with sm() as s:
+                s.add_all([_edge(p1, c, 0.9), _edge(p2, p1, 0.8)])
+                await s.commit()
+        finally:
+            await engine.dispose()
+
+    async def _run() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            sm = async_sessionmaker(engine, expire_on_commit=False)
+            async with sm() as session:
+                rows = await fetch_prerequisites(session, c, max_depth=2)
+                assert {r.concept_id for r in rows} == {p1, p2}  # 배선 정상(2건)
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        asyncio.run(_run())
+        snap = get_traversal_metrics()
+        assert snap["total"] == 1  # traversal 1회 관측 방출
+        assert snap["max_depth"] == 2  # 최대 깊이 반영
+        assert snap["result_count"] == {"<=2": 1}  # 결과 2건 → <=2 버킷
+        assert snap["visited_count"] == {"<=2": 1}  # dedup 전 2행 → <=2 버킷
+        # latency 버킷은 벽시계라 비결정(어느 버킷인지 불특정) — total==1이 방출 자체를 보장한다.
+    finally:
+        reset_traversal_metrics()
+        asyncio.run(_cleanup([c, p1, p2]))
