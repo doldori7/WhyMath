@@ -16,10 +16,11 @@ docs/data/concept_graph_dataset_v1.md §2(필드표)·§3(redaction)·§4(검수
     (`locales/ko.json`·canonical_id 키)로 분리한다(노드는 언어-무관 식별자만·표기는 locale 조인).
   - domain = category(데이터셋 영역명, 예 '[고]미적분');  grade_band_hint = 첫 코드 학년군 추론
   - standard_codes 직결;  ccss_code/difficulty_tier 풍부필드 직결
-  - **pedagogy(misconception 자유텍스트·metaphor·accepted_expressions)은 노드로 흘리지 않는다**
-    (2026-07-02 Part 2 §3 순수성 — Stage A+B). Concept 모델에서 세 슬롯을 제거했다. 원시
-    `misconception`·`metaphor`·`accepted_expressions`는 콘텐츠 코퍼스(pedagogy 계층·ConceptContent
-    `code` 키)로만 흐르고 identity 노드엔 담지 않는다(의미검색·프로젝션은 source_id↔code 조인 소싱).
+  - **semantic 계층(intuition·representations) 복원**(2026-07-03 Part 2 전면 채택 Phase 1·Stage B
+    역방향): 리치 기준 은유·허용표현은 semantic이라 노드로 되돌린다 — `intuition=metaphor`·
+    `representations=accepted_expressions`(raw 소싱·pre-Stage-B와 값 동일). `core_meaning`·
+    `formal_definition_ref` 등 참조/신규는 None 기본(후속 저작). **단 misconception 자유텍스트는
+    노드 비내장 유지**(독립 오개념 DB·CLAUDE.md #6) — 원시 `misconception`은 콘텐츠 코퍼스로만 흐름.
   - review_status: definition_provenance가 "수기 검수"면 reviewed, 그 외 pending(§4)
   - prerequisite_concept_ids: 엣지에서 역으로 채움(to=후행 개념의 캐시에 from=선수 ID 추가)
 
@@ -179,6 +180,9 @@ def transform_concepts(
                 standard_codes=codes,
                 ccss_code=_opt(record.get("ccss_code")),
                 difficulty_tier=_int_opt(record.get("difficulty_tier")),
+                # semantic 복원(Phase 1·Stage B 역방향) — raw 은유·허용표현을 노드 semantic으로.
+                intuition=_opt(record.get("metaphor")),
+                representations=_opt(record.get("accepted_expressions")),
                 review_status=_review_status(_opt(record.get("definition_provenance"))),
             )
         except (ValueError, TypeError) as exc:

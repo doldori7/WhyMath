@@ -148,9 +148,9 @@ class TestTransformV1:
         assert (out / "locales" / "ko.json").exists()
         assert (out / "locales" / "en.json").exists()
         text = graph.read_text(encoding="utf-8")
-        # redaction: 산출 JSON에 본문 키 없음
+        # redaction: 산출 JSON에 본문 *키* 없음(참조 키 `formal_definition_ref`는 본문 아님·허용).
         assert '"description"' not in text
-        assert "formal_definition" not in text
+        assert '"formal_definition"' not in text  # 본문 키(따옴표 종결) — `_ref`와 구분
         # 표시이름은 노드 비내장 → 어떤 concept 노드에도 name_* 키가 없다(raw 패스스루는 별개).
         payload = json.loads(text)
         for concept in payload["concepts"]:
