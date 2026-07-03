@@ -115,11 +115,17 @@ Kiki가 제시한 재검토 관점은 9블록을 *이름*만이 아니라 **블�
 |---|---|---|
 | 개념(무엇을 배우나) | `cognitive_type`→소크라테스(`_COGNITIVE_SOCRATIC_MAP`)·`recommended_visual_styles`→시각화 | ✅ 분기함 |
 | 오개념(무엇을 틀리나) | `active_hypothesis_ids ∩ CATALOG`→프로브(reactive·신뢰도로 개입 다양화) | ✅ 분기함(reactive) |
-| **행동영역(어떤 행동을 요구하나)** | 없음 — Skill=`CognitiveType` 속성이 *소크라테스 매핑에만* 소비되고, 골격의 **독립 분기 입력이 아님** | ❌ **미분기** |
+| **행동영역(어떤 행동을 요구하나)** | ~~없음~~ **→ S5i 승격**: `CompositionProfile`(`cognitive_type`→소크라테스 프레이밍 + 인지 진입 순서 `lead`)로 1급 분기 입력화·`_primary_cognitive_type` precedence | 🟡 **축 배선됨**(가시 SkillBlock UI는 잔여) |
 
-→ 3축 중 2축만 분기한다. 체크리스트 ②가 명시한 "행동영역" 축이 planner 입력이 아니므로 판정은
-**△(부분)**이 정확하다. 초판의 "△→✅"는 9블록을 "외부화됨"으로 처리해 과대평가했다 — 능력이 다른
-계층에 *존재*하는 것과 *장면 자동 분기에 배선*된 것은 다르다.
+→ 초판 시점 3축 중 2축만 분기했다(행동영역 ❌). 체크리스트 ②가 명시한 "행동영역" 축이 planner 입력이
+아니었으므로 판정은 **△(부분)**이 정확했다. 초판의 "△→✅"는 9블록을 "외부화됨"으로 처리해 과대평가했다 —
+능력이 다른 계층에 *존재*하는 것과 *장면 자동 분기에 배선*된 것은 다르다.
+
+> **후속(2026-07-03·S5i)**: **행동영역 분기 축 승격 완료** — `l4/scene_generation.py`에 `CompositionProfile`
+> 신설, `cognitive_type`을 소크라테스 매핑 부수효과에서 *1급 분기 입력*으로 흡수. 이제 행동영역이 장면의
+> **인지 진입 순서**(visual=시각화 먼저·inquiry=질문 먼저)를 결정한다(축 테스트 5개·회귀 0). 3축(개념·
+> 오개념·행동영역) 모두 분기하나, ②는 여전히 **△** — *가시 SkillBlock element kind*(조건강조·경우분할 트리)·
+> 인터랙션 다양성·Tutoring Adapter·AssessmentBlock 합성이 남았다(아래 갭 표 🔴 항목).
 
 **관점 9블록 → 현 구현 능력 갭(실측)**
 
@@ -127,7 +133,7 @@ Kiki가 제시한 재검토 관점은 9블록을 *이름*만이 아니라 **블�
 |---|---|---|---|
 | VisualizationBlock · Visualization Selector | VizNode→자동 시각화(그래프·애니·트리·논리흐름) | `recommended_visual_styles`(16종)+4 `VisualizationType`(graph_2d·surface_3d·sim·anim) 자동선택 | 🟡 부분(경우의수 **트리**·증명 **논리흐름** 타입 부재) |
 | InteractionBlock · Interaction Generator | slider·drag·tree expansion·단계선택 | `param_control`(slider)만 | 🔴 slider 단일(표의 5종 중 4종 미구현) |
-| SkillBlock | 행동영역 UI(조건 강조·경우분할 트리) | 없음 | 🔴 미구현 |
+| SkillBlock | 행동영역 UI(조건 강조·경우분할 트리) | 분기 축은 S5i 승격(`CompositionProfile`)·가시 UI element kind는 없음 | 🟡 축 배선·🔴 가시 UI |
 | MisconceptionBlock | 오개념 "일부러 드러냄"(접근 vs 도달 대비) | reactive-only 사고 유도(preload·낙인 금지) | 🟡 설계 긴장(아래 해소) |
 | TutoringBlock | AI 설명·힌트·소크라테스 | `socratic_prompt`(개념 `cognitive_type` 분기) | 🟢 개념적응(단 *학생*적응 아님) |
 | AssessmentBlock | 장면 내 문제생성·행동영역 측정·오개념 진단 | 장면 미합성(`schema/assessment`·L2·gating 분산) | 🔴 장면 미합성 |
@@ -149,8 +155,8 @@ MisconceptionBlock을 확장한다.
 
 **로드맵(설계 방향만·이번 구현 0·honest boundary)**
 
-- **행동영역 분기 축 승격**: `CognitiveType`/Skill을 planner 골격의 *독립 분기 입력*으로 올린다(현재는
-  소크라테스 매핑 부수효과). 조건 강조·경우분할 트리는 신규 element kind로 별도 슬라이스.
+- **행동영역 분기 축 승격** ✅ **(완료·S5i·2026-07-03)**: `CognitiveType`을 `CompositionProfile`로 흡수해
+  planner *독립 분기 입력*으로 승격(인지 진입 순서 결정). 조건 강조·경우분할 트리 *가시 element kind*는 잔여(별도 슬라이스).
 - **Tutoring Adapter**: *선행 조건 = L2 학습양식 신호 신설*(현재 부재). 신호 없이 explanationMode를
   자동선택하면 근거 없는 추측 → 금지(AI 신뢰 금기). 신호 확보 후에야 설명 element에 modality 축 추가.
 - **Interaction/Viz 다양성(tree·drag·단계선택·트리/논리흐름 VizType)**: 기하·증명은 표기·작도 성숙도
@@ -158,10 +164,11 @@ MisconceptionBlock을 확장한다.
 - **AssessmentBlock**: 장면 내 평가 합성은 답 미루기·"빠른 정답 KPI 금지" 불변식과의 충돌을 먼저 검토한
   뒤 슬라이스(평가가 사고 추적기를 문제은행으로 되돌리지 않도록).
 
-**정정된 종합**: ① ✅(개념적응까지·학생적응은 미도달) · ② **△**(3축 중 행동영역·학생모델 축 미분기·
-인터랙션 단일·평가 미합성) · ③ ✅(역류 없음·불변). 관점 문서는 아키텍처(표현≠의미·개념→자동화면)를
-*재확인*하되, 현 구현이 그 비전의 **개념·오개념 2축 / slider 1인터랙션** 단계임을 드러낸다 — "전부 아니면
-전무"가 아니라 회수 가능한 슬라이스로 나머지 축을 점증한다.
+**정정된 종합**: ① ✅(개념적응까지·학생적응은 미도달) · ② **△**(S5i로 행동영역 축까지 3축 분기 달성·
+잔여는 학생모델 축·인터랙션 다양성·가시 SkillBlock/AssessmentBlock element kind) · ③ ✅(역류 없음·불변).
+관점 문서는 아키텍처(표현≠의미·개념→자동화면)를 *재확인*하되, 현 구현이 그 비전의 **3분기축 / slider
+1인터랙션** 단계임을 드러낸다(S5i 전 2축 → 후 3축) — "전부 아니면 전무"가 아니라 회수 가능한 슬라이스로
+나머지(가시 UI·학생모델)를 점증한다.
 
 ---
 

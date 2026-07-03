@@ -25,6 +25,8 @@
 
 from __future__ import annotations
 
+from typing import Literal, NamedTuple
+
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.visualization import generate_visualization_spec
@@ -40,28 +42,83 @@ from whymath_backend.l4.learning_scene import (
 )
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.intervene import select_intervention
-from whymath_backend.l4.misconception.models import InterventionPattern, MisconceptionMatch
+from whymath_backend.l4.misconception.models import (
+    InterventionPattern,
+    MisconceptionMatch,
+)
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.socratic.categories import EXAMPLE_QUESTION, SocraticCategory
 from whymath_backend.schema.concept import Concept
 from whymath_backend.schema.enums import CognitiveType, VisualizationType
 from whymath_backend.schema.visualization import Graph2dSpec
 
-# 인지 유형 → (소크라테스 카테고리, Polya 단계) 결정론 매핑 — 05a §5.1.
-# 개념의 *성격*에 맞는 메타인지 발화 종류를 코드가 고른다(LLM 추측 아님). 정답이 아니라 유도 질문.
-_COGNITIVE_SOCRATIC_MAP: dict[CognitiveType, tuple[SocraticCategory, PolyaStage]] = {
-    CognitiveType.DEFINITION: (SocraticCategory.CLARIFICATION, PolyaStage.UNDERSTAND),
-    CognitiveType.THEOREM: (SocraticCategory.EVIDENCE, PolyaStage.PLAN),
-    CognitiveType.TECHNIQUE: (SocraticCategory.PERSPECTIVE, PolyaStage.PLAN),
-    CognitiveType.PATTERN: (SocraticCategory.IMPLICATION, PolyaStage.EXECUTE),
-    CognitiveType.VISUAL_REASONING: (SocraticCategory.ASSUMPTION, PolyaStage.UNDERSTAND),
+
+# 인지 유형(행동영역) → 요소 조합 프로파일 — 05a §5.1 구현(S5i).
+# cognitive_type을 소비하는 *단일 1급 구조*: 소크라테스 프레이밍 + 인지 진입 순서(lead)를 결정.
+# 행동영역을 소크라테스 매핑 *부수효과*가 아니라 planner **독립 분기 입력**으로 승격(Part 7 재검토).
+# "표면 표현이 아니라 인지 행동(cognitive action) 기준"(플레이북) — 행동영역이 진입점을 가른다.
+class CompositionProfile(NamedTuple):
+    """행동영역별 장면 조합 프로파일 — 소크라테스 (카테고리, Polya단계) + 인지 진입 순서.
+
+    `lead`: 장면이 시각화로 진입("visual": 보고→추론)하는지 탐구로 진입("inquiry": 질문→확인)하는지.
+    정답이 아니라 *인지 진입점*을 행동영역에 맞춘다(LLM 추측 아님·결정론).
+    """
+
+    socratic: tuple[SocraticCategory, PolyaStage]
+    lead: Literal["visual", "inquiry"]
+
+
+# 개념 *성격*에 맞는 메타인지 발화·진입 순서를 코드가 고른다(LLM 추측 아님). 정답 아니라 유도 질문.
+_COMPOSITION_PROFILE: dict[CognitiveType, CompositionProfile] = {
+    # 정의·정리 = 언어/논리 진입(질문 먼저) · 기법·패턴·시각추론 = 행동/시각 진입(그림 먼저)
+    CognitiveType.DEFINITION: CompositionProfile(
+        (SocraticCategory.CLARIFICATION, PolyaStage.UNDERSTAND), "inquiry"
+    ),
+    CognitiveType.THEOREM: CompositionProfile(
+        (SocraticCategory.EVIDENCE, PolyaStage.PLAN), "inquiry"
+    ),
+    CognitiveType.TECHNIQUE: CompositionProfile(
+        (SocraticCategory.PERSPECTIVE, PolyaStage.PLAN), "visual"
+    ),
+    CognitiveType.PATTERN: CompositionProfile(
+        (SocraticCategory.IMPLICATION, PolyaStage.EXECUTE), "visual"
+    ),
+    CognitiveType.VISUAL_REASONING: CompositionProfile(
+        (SocraticCategory.ASSUMPTION, PolyaStage.UNDERSTAND), "visual"
+    ),
 }
-# 인지 유형이 없을 때의 기본 메타인지 발화 — "메타인지 중심" 정체성(CLAUDE.md)상 장면은 최소
-# 한 개의 유도 질문을 갖는다.
-_DEFAULT_SOCRATIC: tuple[SocraticCategory, PolyaStage] = (
-    SocraticCategory.META,
-    PolyaStage.REVIEW,
+# 인지 유형이 없을 때의 기본 프로파일 — "메타인지 중심" 정체성(CLAUDE.md)상 장면은 최소 한 개의
+# 유도 질문을 가지며, 진입은 탐구(질문)가 기본값.
+_DEFAULT_PROFILE = CompositionProfile(
+    (SocraticCategory.META, PolyaStage.REVIEW), "inquiry"
 )
+
+# 다중 cognitive_type일 때 *주 행동영역* precedence(결정론) — 행동/시각 지향이 진입을 이끈다.
+# 값이 작을수록 우선. 예: [DEFINITION, VISUAL_REASONING] → VISUAL_REASONING이 주 → visual 진입.
+_COGNITIVE_PRECEDENCE: dict[CognitiveType, int] = {
+    CognitiveType.VISUAL_REASONING: 0,
+    CognitiveType.PATTERN: 1,
+    CognitiveType.TECHNIQUE: 2,
+    CognitiveType.THEOREM: 3,
+    CognitiveType.DEFINITION: 4,
+}
+
+
+def _primary_cognitive_type(concept: Concept) -> CognitiveType | None:
+    """다중 cognitive_type에서 *주 행동영역*을 결정론적으로 고른다(precedence 최소값). 없으면 None.
+
+    use_enum_values=True라 `concept.cognitive_type` 원소는 런타임 str → `CognitiveType`로 정규화.
+    """
+    types = [CognitiveType(raw) for raw in concept.cognitive_type]
+    if not types:
+        return None
+    return min(types, key=lambda t: _COGNITIVE_PRECEDENCE[t])
+
+
+def _profile_for(concept: Concept) -> CompositionProfile:
+    """개념의 주 행동영역 → 요소 조합 프로파일(없으면 기본 탐구 진입)."""
+    primary = _primary_cognitive_type(concept)
+    return _COMPOSITION_PROFILE[primary] if primary is not None else _DEFAULT_PROFILE
 
 
 def _socratic_elements(concept: Concept) -> list[SocraticPromptElement]:
@@ -70,7 +127,7 @@ def _socratic_elements(concept: Concept) -> list[SocraticPromptElement]:
     seen: set[SocraticCategory] = set()
     # use_enum_values=True라 concept.cognitive_type 원소는 런타임 str → CognitiveType로 정규화.
     for raw in concept.cognitive_type:
-        category, stage = _COGNITIVE_SOCRATIC_MAP[CognitiveType(raw)]
+        category, stage = _COMPOSITION_PROFILE[CognitiveType(raw)].socratic
         if category in seen:
             continue
         seen.add(category)
@@ -79,11 +136,13 @@ def _socratic_elements(concept: Concept) -> list[SocraticPromptElement]:
                 socratic_category=category,
                 polya_stage=stage,
                 hint_level=1,  # 가장 은근한 단계(답 미루기) — 장면 도입은 부드럽게
-                prompt_text=EXAMPLE_QUESTION[category],  # 정본 유도 질문(자체 생성 아님)
+                prompt_text=EXAMPLE_QUESTION[
+                    category
+                ],  # 정본 유도 질문(자체 생성 아님)
             )
         )
     if not elements:
-        category, stage = _DEFAULT_SOCRATIC
+        category, stage = _DEFAULT_PROFILE.socratic
         elements.append(
             SocraticPromptElement(
                 socratic_category=category,
@@ -119,14 +178,18 @@ def _misconception_probes(
         if confidences is not None and mid in confidences:
             # 가설 신뢰도로 doc 결정트리 구동(재사용) — <0.5는 None(보류) → 프로브 미생성.
             decision = select_intervention(
-                MisconceptionMatch(misconception=misconception, confidence=confidences[mid])
+                MisconceptionMatch(
+                    misconception=misconception, confidence=confidences[mid]
+                )
             )
             if decision is None:
                 continue
             intervention = decision.pattern
         else:
             intervention = InterventionPattern.COUNTEREXAMPLE  # 레거시(신뢰도 미제공).
-        probes.append(MisconceptionProbeElement(misconception_id=mid, intervention=intervention))
+        probes.append(
+            MisconceptionProbeElement(misconception_id=mid, intervention=intervention)
+        )
     return probes
 
 
@@ -151,12 +214,15 @@ async def generate_learning_scene(
 ) -> LearningScene:
     """개념 노드 → 검증된 `LearningScene` 합성 명세(05a §5). 라우터 경유·결정론 골격.
 
-    골격(코드 결정론): ① `recommended_visual_styles`가 있으면 `visualization` 요소 1개 —
-    `generate_visualization_spec`(L3·라우터·Langfuse·캐시)로 spec 충전, 그 결과가 graph_2d이고
-    파라미터를 선언하면 그 파라미터를 타깃하는 `param_control`을 덧붙인다. ② `cognitive_type` →
-    소크라테스 발화(정본 유도 질문·`hint_level=1`). ③ `learner_context`의 활성 가설 ∩ 카탈로그 →
-    `misconception_probe`(적응·낙인 금지). 반환 전 `LearningScene` 불변식(답 미루기·param/annotation
-    정합)을 통과한다 — 검증 안 된 명세는 나가지 않는다(CLAUDE.md).
+    골격(코드 결정론): 주 행동영역(`_primary_cognitive_type`)의 **요소 조합 프로파일**(05a §5.1)이
+    *인지 진입 순서*를 결정한다 — `visual` 진입(기법·패턴·시각추론)은 시각화 먼저, `inquiry` 진입
+    (정의·정리)은 소크라테스(질문) 먼저. ① 시각화 블록: `recommended_visual_styles`가 있으면
+    `visualization` 요소 1개(`generate_visualization_spec`·L3), 결과가 graph_2d이고
+    파라미터를 선언하면 그를 타깃하는 `param_control`을 덧붙인다(bound index는 append 시점
+    계산이라 진입 순서와 무관하게 정합). ② 소크라테스 블록: `cognitive_type` → 발화(프로파일
+    소싱·정본 유도 질문·`hint_level=1`). ③ 활성 가설 ∩ 카탈로그 → `misconception_probe`
+    (적응·낙인 금지·항상 본문 뒤). 반환 전 `LearningScene` 불변식(답 미루기·param/annotation 정합)을
+    통과한다 — 검증 안 된 명세는 나가지 않는다(CLAUDE.md).
 
     LLM 호출은 시각화 spec 1회뿐(스타일 있을 때)·나머지는 결정론 — 환각 표면을 최소화한다(RS5).
 
@@ -174,10 +240,18 @@ async def generate_learning_scene(
     Raises:
         InvalidVisualizationSpecError: 시각화 spec LLM 출력이 검증 게이트를 통과 못 함(전파).
     """
+    profile = _profile_for(concept)
     elements: list[SceneElement] = []
 
-    # ① 시각화(+param_control) — 권장 양식이 있을 때만(없으면 강제 안 함·정직한 경계)
-    if concept.recommended_visual_styles:
+    async def _append_visual_block() -> None:
+        """시각화(+graph_2d면 param_control)를 공유 `elements`에 append.
+
+        `bound_visualization_index`를 append 시점 `len(elements)`로 계산하므로, 소크라테스가 앞서
+        진입(inquiry)해 viz가 뒤 인덱스에 놓여도 항상 정합한다(불변식 통과). 권장 양식 없으면 강제
+        안 함(정직한 경계). LLM 호출은 여기 1회뿐(스타일 있을 때)·나머지는 결정론(RS5).
+        """
+        if not concept.recommended_visual_styles:
+            return
         viz = await generate_visualization_spec(
             concept.name_ko,
             level,
@@ -195,11 +269,21 @@ async def generate_learning_scene(
             declared = [p.name for p in params if p.name]
             if declared:
                 elements.append(
-                    ParamControlElement(targets=declared, bound_visualization_index=viz_index)
+                    ParamControlElement(
+                        targets=declared, bound_visualization_index=viz_index
+                    )
                 )
 
-    # ② 소크라테스 발화(인지 유형 결정론) ③ 오개념 프로브(적응)
-    elements.extend(_socratic_elements(concept))
+    # 행동영역(주 cognitive_type) 프로파일이 *인지 진입 순서*를 결정한다(05a §5.1).
+    # visual → 시각화 먼저(보고→추론) · inquiry → 소크라테스(질문) 먼저(질문→확인).
+    if profile.lead == "visual":
+        await _append_visual_block()
+        elements.extend(_socratic_elements(concept))
+    else:  # "inquiry"
+        elements.extend(_socratic_elements(concept))
+        await _append_visual_block()
+
+    # ③ 오개념 프로브(적응·reactive) — 항상 본문 뒤
     elements.extend(_misconception_probes(learner_context))
 
     # 조립 + 불변식 통과(미통과 명세는 반환 안 됨). misconception_id는 카탈로그로 사전 필터됨.
