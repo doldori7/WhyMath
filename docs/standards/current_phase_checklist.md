@@ -55,6 +55,7 @@
 - [x] ★ **임베딩 namespace 분리** — concept/atom/misconception 벡터공간 분리(invariant ⑨). 이 설계에 **과목 축을 함께 반영**(로드맵의 "ChromaDB 컬렉션 분리" 항목의 올바른 실체 — 저장소는 pgvector)
   - **완료(2026-07-02)**: 실측상 물리 분리·질의 분리는 기존재 — 논리 경계를 구현(3테이블 subject 컬럼·3축 스코프 9지점·cross-table 코사인 금지 게이트·재임베딩 0). 방향맹 FP 45.5%는 별개 트랙(04b judge)으로 분리 명문화 (MEMORY 2026-07-02)
 - [x] ~~`Problem`의 `Curriculum` enum 잔여 제거~~ — **오등록 상환(2026-07-02)**: 문항 본질 속성·L6 게이트 ③ 살아있는 소비처라 유지가 정답(개념≠문항). 제거·Overlay 이관 기각(MEMORY 2026-07-02·`Curriculum` docstring 정본)
+- [x] **단계8 Q10-⑧ "LLM 전체 그래프 미열람" 불변식 CI 동결(2026-07-03·Part 10 검토)** — graph→LLM 컨텍스트 빌더 부재 재확인(잠재 리스크·현존 결함 아님). `test_llm_subgraph_budget_invariant.py`가 LLM 경계 그래프-컬렉션 주입 금지 + traversal 예산 단일 출처 동결. 수치 예산 guard(`l2/reasoning_subgraph.py` builder)는 **소비처(graph→LLM 컨텍스트) 트리거까지 보류**(10-2 tier상 중급/최종·risk_register 미채택). 상세: `build_roadmap_part10_review.md`
 - [ ] 그래프 위생 게이트 — 런타임 reachability/SCC(현재 load-time DFS만). 단, 소비처(증분 edge-add 경로) 생길 때 — premature 금지
 - [x] 렌더 선택 단일 진실원(invariant ⑩) **완료(2026-07-02)** · speech 파서 notation_contract 편입(⑪) **오등록 상환(2026-07-02)**
   - **⑩ 완료**: 실측상 3곳 중 scene_renderer(위젯 선택)는 정당한 계층 분리·부채 아님. 진짜 부채는 WebView 경계가 viz.type을 버려 웹이 spec 모양 재추론하던 drift 1건 — 경계 {type,spec} 봉투(B)+웹 type-first dispatch(A)+골든 계약 data/render_contract.json(A/C 교차검증)으로 해소. 마이그레이션·재임베딩 0 (MEMORY 2026-07-02)
