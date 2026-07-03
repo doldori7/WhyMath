@@ -236,6 +236,23 @@ type이 코어 재컴파일 없이 등록). 단 §2 Q9 경고 준수 — **Dart 
 방향·부정·등치 보강) → (3순위) 벡터 수·recall·재색인 시간이 pgvector 한계 초과 시 **Qdrant 이관**(슬98 예고·
 `MEMORY.md`). 트리거값(벡터 수·재색인 벽시계·recall@k)을 먼저 계기화.
 
+> **⑥ 정정 + 불변식 동결 (2026-07-03)** — 위 "namespace 미분리"는 부정확하다(§3.6 review 시점 미확인
+> 서술). 실제로 **1순위 namespace 분리는 이미 완료**:
+> - concept/misconception/atom 임베딩이 **별도 물리 테이블**(`concept_embedding`·`misconception_
+>   embedding`·`atom_embedding`, 각 `Vector(1024)`)에 격리. 검색 3함수(`ConceptEmbeddingIndex.search`·
+>   `PgVectorIndex.search`·`AtomEmbeddingIndex.search`)가 **자기 테이블만 SELECT**해 cross-type 오염이
+>   구조적으로 불가능하다(cross-table 벡터 JOIN/UNION 부재). Q3(`:70-71`)의 "namespace 분리·안전"이 맞고,
+>   본 절·§3.6의 "미분리"가 stale. 이 격리는 회귀 가드로 동결(`test_embedding_namespace_governance.py`·
+>   벡터 테이블 집합=등록부·타입별 단일 PK — 새 임베딩은 자기 테이블로).
+> - **"FP 45.5% 방향맹"은 cross-type이 아니라 misconception 임베딩 *내부*의 방향·부정·등치 맹점**
+>   (`semantic/matcher.py:14-18`가 자기 명세로 못 박음). → namespace(1순위)로 풀리지 않고 **2순위 hybrid
+>   fusion/judge**의 몫이다(후속 슬라이스).
+>
+> **deferred(소비처·데이터 트리거 대기)**: (i) **example(문제/풀이) 임베딩 축 미구현** — 3분할 중 한 축이
+> 빔. 도입 시 *별 테이블*로(등록부 갱신·위 가드가 강제). (ii) **hybrid fusion**(2순위) — 방향맹 해소용
+> ML 슬라이스. (iii) **HNSW 인덱스·Qdrant 이관**(3순위) — 벡터 수·재색인 시간이 pgvector 한계 초과 시.
+> 지금 도입은 데이터 규모 미달로 premature(계기화 먼저).
+
 **⑦ AST canonicalization 병목** — SymPy **단일 권위**(`notation_contract.md`·`l3/verify_step.py`). 두 병목:
 (a) 처리량 — 10만 문제 × 다중 풀이 × 단계 검증의 SymPy 호출량, (b) **결정불가능 경계** — proof system 진입
 시 canonical 정규화가 교육적 범위를 넘으면(일반 항등식 판정) 정지 위험(`05a` RS4·§2 Q9). mathjs 병렬
