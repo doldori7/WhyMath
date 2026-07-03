@@ -79,6 +79,20 @@ STANDARD_CODE_PATTERN: Final[re.Pattern[str]] = re.compile(
 )
 """성취기준 코드 패턴. 학년대수·과목한글·(과목숫자)·영역·순번."""
 
+# 지원 교육과정 개정 — curriculum_revision 검증·norm_id prefix의 **단일 진실**(risk_register ⑩).
+# 개정 추가(예 '2028 개정')는 *여기 한 곳*만 고치면 아래 NORM_ID_PATTERN 정규식이 파생으로 따라온다
+# (하드코딩 drift 0). 노드/코드가 개정을 의미로 들지 않고 이 폐집합이 개정 축을 쥔다.
+_VALID_CURRICULUM_REVISIONS: Final[frozenset[str]] = frozenset({"2022 개정", "2015 개정"})
+"""허용 교육과정 개정 집합 (2022·2015)."""
+
+# norm_id/official_code prefix에 쓰는 개정연도 토큰 — 위 단일 진실에서 *파생*(내림차순·최신 우선).
+# "2022 개정" → "2022". NORM_ID_PATTERN alternation이 이 파생을 공유해 폐집합↔정규식 drift를 없앤다.
+# 개정 라벨 형식이 "<연도> 개정"임을 전제(split()[0]=연도) — 형식 변경 시 이 파생도 조정.
+_REVISION_YEAR_TOKENS: Final[tuple[str, ...]] = tuple(
+    sorted((rev.split()[0] for rev in _VALID_CURRICULUM_REVISIONS), reverse=True)
+)
+"""개정연도 토큰(내림차순) — _VALID_CURRICULUM_REVISIONS 파생 ('2022', '2015')."""
+
 # norm_id: 교육과정(2022/2015) × 학년·과목 토큰 × 영역 × 순번을 합친 **교육과정 간 유일 식별자**.
 #
 # 형식:  <개정연도>_<학년+과목토큰>_<영역2자리>_<순번2자리>
@@ -92,14 +106,11 @@ STANDARD_CODE_PATTERN: Final[re.Pattern[str]] = re.compile(
 #   File A(성취기준 마스터 xlsx) 도착 전이라 실제 토큰 집합이 미확정이므로, 로마숫자(Ⅰ/Ⅱ)는
 #   build_norm_id가 ASCII(I/II)로 정규화한 뒤 이 패턴에 통과시키는 것을 전제로 한다.
 #   File A 도착 시 정밀 토큰셋(예: 허용 과목 enum)으로 좁힐 것 — 그때 이 주석과 함께 조정.
+# 개정연도 alternation은 _REVISION_YEAR_TOKENS(단일 진실 파생)에서 만든다 — 하드코딩 금지(⑩ drift).
 NORM_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"^(2022|2015)_[가-힣A-Za-z0-9]{1,8}_\d{2}_\d{2}$"
+    r"^(" + "|".join(_REVISION_YEAR_TOKENS) + r")_[가-힣A-Za-z0-9]{1,8}_\d{2}_\d{2}$"
 )
 """norm_id 패턴. <개정연도>_<학년+과목토큰>_<영역>_<순번> (예: '2022_2수_01_01')."""
-
-# 지원 교육과정 개정 — curriculum_revision 검증·norm_id prefix 매핑의 단일 진실.
-_VALID_CURRICULUM_REVISIONS: Final[frozenset[str]] = frozenset({"2022 개정", "2015 개정"})
-"""허용 교육과정 개정 집합 (2022·2015)."""
 
 # 연결 유형 — 개념↔성취기준 링크의 의미.
 #   직접   = 개념이 해당 성취기준을 곧장 다룸

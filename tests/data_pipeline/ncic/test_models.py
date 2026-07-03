@@ -6,6 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from data_pipeline.ncic.models import (
+    _REVISION_YEAR_TOKENS,
+    _VALID_CURRICULUM_REVISIONS,
     LICENSE_NOTICE,
     NORM_ID_PATTERN,
     SOURCE_CITATION,
@@ -144,6 +146,34 @@ class TestCurriculumRevision:
             AchievementStandard(**_std_kwargs(curriculum_revision="2009 개정"))  # type: ignore[arg-type]
 
 
+class TestRevisionSingleSource:
+    """개정 폐집합 단일출처 drift 가드 — `_VALID_CURRICULUM_REVISIONS` → `NORM_ID_PATTERN` 파생.
+
+    math_dsl_risk_register.md ⑩(curriculum versioning). 이전엔 `NORM_ID_PATTERN`이 `(2022|2015)`를
+    정규식에 *따로* 하드코딩해 `_VALID_CURRICULUM_REVISIONS`와 침묵 drift할 수 있었다(개정 추가 시
+    한쪽만 바뀌면 norm_id 검증이 조용히 깨짐). 이제 정규식 alternation은 단일 진실에서 파생되며, 이
+    가드가 그 파생을 동결한다 — 누군가 정규식에 개정연도를 재-하드코딩하면 실패한다
+    (`test_edge_relation_governance.py` 스윕 가드 정신).
+    """
+
+    def test_year_tokens_derived_from_valid_revisions(self) -> None:
+        """`_REVISION_YEAR_TOKENS` == 폐집합의 연도 토큰(파생 일관·내림차순)."""
+        expected = sorted((r.split()[0] for r in _VALID_CURRICULUM_REVISIONS), reverse=True)
+        assert list(_REVISION_YEAR_TOKENS) == expected
+
+    def test_pattern_alternation_is_exactly_the_single_source(self) -> None:
+        """정규식 개정 alternation이 단일출처 파생과 일치 — 재-하드코딩 시 실패(drift 가드)."""
+        assert f"^({'|'.join(_REVISION_YEAR_TOKENS)})_" in NORM_ID_PATTERN.pattern
+
+    def test_pattern_accepts_every_valid_revision_and_rejects_others(self) -> None:
+        """폐집합의 모든 개정연도는 통과·집합 밖 연도(2009·2028)는 거부 — 정규식↔검증 정합."""
+        for year in _REVISION_YEAR_TOKENS:
+            assert NORM_ID_PATTERN.match(f"{year}_9수_01_01") is not None
+        for absent in ("2009", "2028"):  # 폐집합 밖 — 코드/정규식 어디에도 없어야
+            assert absent not in _REVISION_YEAR_TOKENS
+            assert NORM_ID_PATTERN.match(f"{absent}_9수_01_01") is None
+
+
 class TestCodeValidation:
     @pytest.mark.parametrize(
         "code",
@@ -249,9 +279,7 @@ class TestExtraFieldsForbidden:
 # ──────────────────────────────────────────────────────────────────────
 class TestConceptStandardLink:
     def test_valid_link(self) -> None:
-        link = ConceptStandardLink(
-            concept_src_id="N1", norm_id="2022_9수_01_01", link_type="직접"
-        )
+        link = ConceptStandardLink(concept_src_id="N1", norm_id="2022_9수_01_01", link_type="직접")
         assert link.concept_src_id == "N1"
         assert link.link_type == "직접"
         assert link.note is None
@@ -279,9 +307,7 @@ class TestConceptStandardLink:
 
     def test_blank_concept_src_id_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            ConceptStandardLink(
-                concept_src_id="", norm_id="2022_9수_01_01", link_type="직접"
-            )
+            ConceptStandardLink(concept_src_id="", norm_id="2022_9수_01_01", link_type="직접")
 
     def test_extra_field_forbidden(self) -> None:
         with pytest.raises(ValidationError):
@@ -309,12 +335,8 @@ class TestCollections:
         assert coll.count == 2
 
     def test_link_collection_count_and_metadata(self) -> None:
-        link = ConceptStandardLink(
-            concept_src_id="N1", norm_id="2022_9수_01_01", link_type="직접"
-        )
-        coll = ConceptStandardLinkCollection(
-            collected_at="2026-06-16T00:00:00Z", links=[link]
-        )
+        link = ConceptStandardLink(concept_src_id="N1", norm_id="2022_9수_01_01", link_type="직접")
+        coll = ConceptStandardLinkCollection(collected_at="2026-06-16T00:00:00Z", links=[link])
         assert coll.count == 1
         assert coll.source_citation == SOURCE_CITATION
         assert coll.license_notice == LICENSE_NOTICE

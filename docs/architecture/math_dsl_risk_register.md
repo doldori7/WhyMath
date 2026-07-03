@@ -33,7 +33,7 @@
 |---|---|---|---|
 | 1 | **misconception overlap** | 🔴 높음 | 3중 표현(kebab/M-id/JSONB) FK 없음·방향맹 매처 (`catalog.py`·`misconception_catalog.py:9-12`) |
 | 2 | **semantic ambiguity** | 🔴 높음 | 위 + "객체 vs 해석" 미구분·원자 임베딩 신호 얇음 (`atom_graph/embedding.py:81`) |
-| 3 | **curriculum inconsistency** | 🟠 중상 | 교육과정 정보 **노드 내장 + Overlay 이중**·atom code에 개정연도 박힘 (`schema/concept.py:147-160`) |
+| 3 | **curriculum inconsistency** | 🟠 중상 | atom code에 개정연도 박힘 (⚠️ "노드 내장 + Overlay 이중"은 2026-06-30 제거 완료·§5 ⑩ 박스 — 잔여는 atom code 개정 분리뿐) |
 | 4 | **AI retrieval failure** | 🟠 중간 | 방향맹 임베딩·hybrid fusion 전략 부재·가설 store 미연결 (`semantic/matcher.py:9-18`·`api/scene.py`) |
 | 5 | **relation explosion** | 🟠 중간(잠재) | `ANALOGOUS_TO`·`CONTRASTS`·`TRIGGERS_DISTRACTOR` 선언·미적재 → 적재 시 N² (`enums.py` EdgeType) |
 | 6 | **AST duplication** | 🟠 중간 | SymPy(py)·mathjs(js) 병렬 정규화 → drift (`verify_step.py`·`graph2dSpec.js`) |
@@ -74,7 +74,8 @@ namespace 분리·희소 그래프라 상대적으로 안전.
 "Single change → global rebuild" 후보 3:
 - **오개념 3중 표현**(kebab 30 / M-id 839 / JSONB) FK 없음 — 하나 고치면 나머지 침묵 drift.
 - **교육과정 이중**(노드 내장 `grade_introduced`·`curriculum_version` + `CurriculumEntry` overlay)
-  — 진실 출처 2개.
+  — 진실 출처 2개. **⚠️ 정정(2026-07-03·§5 ⑩ 박스)**: 노드 4필드는 2026-06-30 제거·Overlay 단일 진실
+  전환 완료 — 본 줄은 제거 *이전* 스냅샷.
 - **수식 파서 이중**(SymPy + mathjs) — 동치 규칙이 두 언어에 따로.
 
 ### Q5. 교육과정 변경 시 가장 취약한 부분
@@ -83,6 +84,10 @@ namespace 분리·희소 그래프라 상대적으로 안전.
 플레이북 철칙은 "concept_id는 영속, curriculum은 Overlay". 지금은 Overlay(`CurriculumEntry`)가
 있으면서도 노드가 교육과정을 들고 있어, 2028 개정·다국 확장 시 둘이 충돌. → **방향**: 노드 내장
 필드를 동결/제거하고 Overlay를 단일 진실로.
+
+> **⚠️ 정정(2026-07-03·§5 ⑩ 박스)**: 노드 내장 4필드는 2026-06-30 drop 마이그레이션으로 제거됐고
+> (`schema/concept.py:147-160` 인용 무효) Overlay `CurriculumEntry`가 단일 진실이다. 본 절은 제거
+> *이전* 스냅샷 — 남은 것은 atom code 개정 분리(deferred-with-spec)와 개정 폐집합 단일출처(완료)뿐.
 
 ### Q6. visualization/plugin 교체 시 깨질 부분
 대부분 안전(spec 렌더러 독립). 깨질 좁은 지점만:
@@ -270,6 +275,28 @@ type이 코어 재컴파일 없이 등록). 단 §2 Q9 경고 준수 — **Dart 
 multi-language = **국가 × 개정 축의 곱**, (c) 2028 개정 유입. 처방: **concept_id 영속·curriculum=Overlay
 단일 진실**(§2 Q8·Q10-①) · code에서 개정 의미 분리 · 국가/개정을 **Overlay 차원**으로(노드 불변). 목표
 규모에서 versioning은 "노드가 교육과정을 들면 즉시 붕괴, Overlay면 선형 증가"로 갈린다.
+
+> **⑩ 불변식 동결 + 현 상태 정정 (2026-07-03)** — 처방의 큰 축은 *이미 완료*됐다(§0~§3의 "노드 내장
+> 잔재" 서술은 2026-06-30 drop 마이그레이션 *이전* 스냅샷 — 아래가 현재 진실):
+> - **Overlay가 노드 밖 단일 진실** — `CurriculumEntry`(`schema/curriculum_entry.py`)가 `country_code`×
+>   `curriculum_revision`을 **복합키/필드로 이미 수용**(`db/models/curriculum_entry.py` UniqueConstraint).
+>   국가×개정 축은 구조적으로 준비됨.
+> - **`Concept` 노드 교육과정 4필드 제거 완료** — drop 마이그레이션 2건(`20260630_1200`·`20260630_1600
+>   _f3a4b5c6d7e8`) + 회귀 가드(`tests/backend/schema/test_concept.py` `TestConceptNodeFieldGovernance`).
+>   → §1 표 3행·§2 Q4·Q5의 "노드 내장 + Overlay 이중"·`schema/concept.py:147-160` 인용은 **stale**.
+> - **성취기준은 개정을 축으로 분리** — `official_code`는 개정 비유일(맨 앞=학년), 개정은 별도 필드
+>   `curriculum_revision` + `norm_id` prefix로 유일화. 개정 폐집합은 **단일 진실 `_VALID_CURRICULUM_
+>   REVISIONS`에서 `NORM_ID_PATTERN` 정규식을 파생**(2026-07-03·`ncic/models.py`) — 한 곳만 고치면
+>   개정 추가가 정규식·검증에 함께 반영(하드코딩 drift 0).
+> - **의도된 잔재**(제거 대상 아님): `Problem.curriculum_version`(문항 정합 게이팅·Concept과 독립)·
+>   `concept_node`/`atom_node`의 `standard_codes`·`ccss_code`(코드=사실정보·공공·본문 아님).
+>
+> **deferred-with-spec (multi-language 착수 전 premature — ⑨ spec 동결과 동형)**: atom code 개정 파서·
+> multi-country resolver·US/IMO 교육과정 데이터 적재는 소비처 미도입이라 *코드 미구현*. atom code는
+> 이질(K-12·대학)이라 **불투명 문자열 유지**(개정 파싱 강제 금지)하고, 개정·국가는 **Overlay 축
+> (`country_code`×`curriculum_revision`)을 단일 출처로 참조**한다 — 소비처가 생기면 그 축으로 해석하고
+> code에서 개정을 떼어내지 않는다. 목표 규모에서 versioning은 "노드/코드가 교육과정을 들면 즉시 붕괴,
+> Overlay 축이면 선형 증가"로 갈린다.
 
 ### 5.2 종합 — 임계 우선순위
 
