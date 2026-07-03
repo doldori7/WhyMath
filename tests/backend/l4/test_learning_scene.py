@@ -15,6 +15,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from whymath_backend.config import get_settings
 from whymath_backend.l4.learning_scene import (
     AnnotationElement,
     LearningScene,
@@ -379,3 +380,104 @@ class TestNoAnswerFields:
                     forbidden_field: "정답을 여기 밀반입",
                 }
             )
+
+
+# ── crosswalk shadow 배선 (게이트 공존·비노출·off 기본·post-gate) ─────────────
+class _SpyObserve:
+    """observe_crosslink_shadow 호출 인자를 기록하는 스파이(게이트 배선 검증용·hermetic)."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def __call__(self, misconception_id: str) -> None:
+        self.calls.append(misconception_id)
+
+
+class _BoomResolver:
+    """resolve가 항상 raise — never-break(장면 반환 무결성) 단언용(evidence_store 선례 동형)."""
+
+    def resolve(self, *args: object, **kwargs: object) -> list[str]:
+        raise RuntimeError("crosswalk DB 미도달")
+
+
+class TestCrosslinkShadowWiring:
+    """게이트 통과한 kebab-id를 shadow 관측하는지 — off 기본·비노출·post-gate.
+
+    관측 함수 자체(record 방출·never-break)는 `test_misconception_crosslink_shadow.py`·
+    `test_evidence_store.py`가 이미 단위 검증한다 — 여기선 *게이트 호출부 배선*만 본다.
+    """
+
+    def _probe_scene(self) -> dict[str, Any]:
+        return _scene(
+            [
+                {
+                    "kind": "misconception_probe",
+                    "misconception_id": _VALID_MC_ID,
+                    "intervention": "counterexample",
+                }
+            ]
+        )
+
+    def test_off_skips_observe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """off(기본) → observe 미호출(per-write 조회 0)·scene 정상 반환."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "off")
+        get_settings.cache_clear()
+        spy = _SpyObserve()
+        monkeypatch.setattr("whymath_backend.l4.learning_scene.observe_crosslink_shadow", spy)
+        try:
+            scene = parse_learning_scene(self._probe_scene())
+            assert spy.calls == []
+            assert isinstance(scene.elements[0], MisconceptionProbeElement)
+        finally:
+            get_settings.cache_clear()
+
+    def test_shadow_observes_valid_probe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """shadow → 게이트 통과 probe의 kebab-id로 observe 1회·scene 불변(노출·반환 그대로)."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        spy = _SpyObserve()
+        monkeypatch.setattr("whymath_backend.l4.learning_scene.observe_crosslink_shadow", spy)
+        try:
+            scene = parse_learning_scene(self._probe_scene())
+            assert spy.calls == [_VALID_MC_ID]
+            assert scene.elements[0].misconception_id == _VALID_MC_ID  # type: ignore[union-attr]
+        finally:
+            get_settings.cache_clear()
+
+    def test_invalid_probe_raises_and_skips_observe(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """카탈로그 밖 kebab → 게이트가 거부(raise)·observe 미호출(훅은 post-gate)."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        spy = _SpyObserve()
+        monkeypatch.setattr("whymath_backend.l4.learning_scene.observe_crosslink_shadow", spy)
+        try:
+            with pytest.raises(LearningSceneValidationError):
+                parse_learning_scene(
+                    _scene(
+                        [
+                            {
+                                "kind": "misconception_probe",
+                                "misconception_id": "nonexistent-misconception-xyz",
+                                "intervention": "counterexample",
+                            }
+                        ]
+                    )
+                )
+            assert spy.calls == []  # 게이트 실패 시 관측 없음(post-gate 배선)
+        finally:
+            get_settings.cache_clear()
+
+    def test_shadow_never_breaks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """shadow에서 resolve raise → parse가 정상 scene 반환(never-break·실 observe 경유)."""
+        monkeypatch.setenv("WHYMATH_MISCONCEPTION_CROSSLINK_MODE", "shadow")
+        get_settings.cache_clear()
+        # 실 observe_crosslink_shadow·내부 resolver만 boom — 관측 실패가 게이트를 안 깬다.
+        monkeypatch.setattr(
+            "whymath_backend.l4.misconception.crosslink_shadow.MisconceptionCrosslinkResolver",
+            _BoomResolver,
+        )
+        try:
+            scene = parse_learning_scene(self._probe_scene())
+            assert isinstance(scene.elements[0], MisconceptionProbeElement)
+        finally:
+            get_settings.cache_clear()
