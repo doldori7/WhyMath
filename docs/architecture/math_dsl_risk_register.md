@@ -149,12 +149,15 @@ crosswalk 골격+resolver·증거저장소 shadow), **premature한 것은 도입
 | Q1/Q8 오개념 자유서술 | `common_misconceptions` 런타임 미사용(행동+정적) + seed 전용 주석 | `test_scene_generation.py`·`test_concept_misconception_runtime.py`·`schema/concept.py` |
 | Q2 약한 relation 폭발 | EdgeType 약한 값 전부 스윕→PREREQUISITE만 적재 + traversal 배제 + 어휘 보존 | `test_edge_relation_governance.py`·`test_prerequisite_traversal_integration.py` |
 | Q10-⑥ 오개념 단일 정체성 | crosswalk shadow 배선(비노출·비차단) — 저장 좌석(`_persist_active_set`·`log_evidence`) + **노출 표면 좌석**(`generate_learning_scene` 프로브별 관측 = canary 노출 가중 분모). wh1_loop는 커밋 좌석 중복이라 비채택 | `l4/misconception/hypothesis_store.py`·`evidence_store.py`·`l4/scene_generation.py`·`test_scene_generation_crosslink_shadow.py` |
-| Q10-⑧(부분) traversal 예산 | `MAX_PREREQUISITE_DEPTH` 단일 출처 | `l2/prerequisite_recommendation.py`·`api/me.py` |
+| Q10-⑧(부분) traversal 예산 | `MAX_PREREQUISITE_DEPTH`(깊이)·`MAX_PREREQUISITE_NODES`(노드 수 안전밸브·2026-07-03) 단일 출처 | `l2/prerequisite_recommendation.py`·`api/me.py` |
 
-**미채택(premature/dead)**: LLM subgraph 예산·증분 edge-add reachability·SCC 크론·약한 타입 reject
-validator·crosswalk 매핑 *자동* 적재(사람 검수 산출물·우선순위 #1·#3). **잔여(사람 검수 게이트)**:
-오개념 crosswalk 매핑 채택·적재(`docs/data/misconception_crosslink_candidates.md` 검수→로더 적재→
-shadow 측정→canary)·교육과정 Overlay US/IMO·`required_depth` 큐레이션.
+**미채택(premature)**: 증분 edge-add reachability·SCC 크론·약한 타입 reject validator·crosswalk 매핑
+*자동* 적재(사람 검수 산출물·우선순위 #1·#3). **deferred-with-spec**: **LLM subgraph 컨텍스트 예산** —
+소비처(WH-1 LLM 정책) 미도입이라 코드는 미구현이나, 불변식(depth≤2·max_nodes~12·약한 관계 배제)은 §5 ⑨에
+**권위 단일 출처 spec으로 동결**(2026-07-03). 소비처가 생기는 순간 그 spec을 참조·별도 재발명 금지.
+**잔여(사람 검수 게이트)**: 오개념 crosswalk 매핑 채택·적재(완료 2026-07-03·`docs/data/
+misconception_crosslink_candidates.md`→로더 적재→shadow→canary)·교육과정 Overlay US/IMO·`required_depth`
+큐레이션.
 
 ---
 
@@ -247,8 +250,20 @@ type이 코어 재컴파일 없이 등록). 단 §2 Q9 경고 준수 — **Dart 
   LLM에 과대 서브그래프 유입 → 일관성 붕괴. 예산을 **단일 출처로 명문화 유지**가 방어선.
 - **약한 relation traversal 유입**: ①·② 폭발이 그대로 subgraph 폭발로 전이. 처방: 약한 관계 traversal 배제.
 - **오개념 정체성 3중**: 수천 종이면 LLM이 canonical을 못 가려 진단이 흔들림(§2 Q7). 처방: canonical 일원화.
-현재 `MAX_PREREQUISITE_DEPTH` 단일 출처·crosswalk shadow(§4)가 예방선. 규모 확장 시 **LLM subgraph 예산
-명문화**(§4 "미채택"에 보류됨)가 승격 후보.
+현재 `MAX_PREREQUISITE_DEPTH`(깊이)·`MAX_PREREQUISITE_NODES`(노드 수 안전밸브·2026-07-03)
+단일 출처·crosswalk shadow(§4)가 예방선.
+
+> **LLM subgraph 컨텍스트 예산 spec (2026-07-03 동결·코드는 소비처 대기)** — LLM에 서브그래프를
+> 주입하는 소비처(WH-1 `TutorPolicy` LLM 정책)가 *아직 없어*(§4·`harness/wh1_loop.py` query_curriculum
+> 스텁) 코드 게이트는 premature다(§2 Q9). 그러나 불변식은 **지금 권위 단일 출처로 못 박아** 미래
+> 소비처가 재발명·drift하지 못하게 한다:
+> - **depth ≤ 2** — LLM 컨텍스트에 넣는 서브그래프는 2-hop 이내(전체 그래프 미열람).
+> - **max_nodes ~ 12** — 노드 수 상한(과대 서브그래프 유입 차단).
+> - **약한 관계 배제** — `ANALOGOUS_TO`·`CONTRASTS`·`TRIGGERS_DISTRACTOR`는 LLM 컨텍스트 traversal에서
+>   제외(②의 N² 폭발이 subgraph 폭발로 전이하는 것 차단).
+> WH-1 LLM 정책이 서브그래프를 소비하는 순간 **이 spec을 단일 출처로 참조**하고, 그래프 traversal
+> 예산(`MAX_PREREQUISITE_*`, L2)과 별개의 *LLM 컨텍스트* 상수로 신설한다(별도 재발명 금지). 그 전엔
+> 코드 0(dead code 회피·§4 원칙).
 
 **⑩ curriculum versioning 문제** — 노드 내장 교육과정 4필드는 §4에서 제거·`CurriculumEntry` Overlay 전환
 완료. 잔여 위험: (a) **atom code 자체에 개정연도 의미**('2수01-01-2'에 2022 개정 박힘, §2 Q5), (b)
