@@ -24,13 +24,12 @@ from data_pipeline.concept_graph.models import (
 
 
 def _concept(**overrides: object) -> Concept:
+    # 표시이름(name_*)은 노드 비내장(P2d Concept Purity) — 인자에 없다. concept_id는 canonical
+    # (math.<area>.<slug>). aliases는 [교육과정축 코드, 옛 UC, src_id](비공백만 강제).
     data: dict[str, object] = {
-        "concept_id": "HIGH-CALC-001",
+        "concept_id": "math.calculus.epsilon-delta-geukhan",
         "source_id": "H:12미적Ⅰ01-01",
-        "aliases": ["UC.calc1.a01.h-12-01-01", "H:12미적Ⅰ01-01"],
-        "name_ko": "엡실론-델타 극한 정의",
-        "name_en": "epsilon-delta definition of limit",
-        "name_ja": "イプシロン・デルタ論法",
+        "aliases": ["HIGH-CALC-001", "UC.calc1.a01.h-12-01-01", "H:12미적Ⅰ01-01"],
         "domain": "미적분",
     }
     data.update(overrides)
@@ -39,8 +38,8 @@ def _concept(**overrides: object) -> Concept:
 
 def _edge(**overrides: object) -> ConceptEdge:
     data: dict[str, object] = {
-        "src_concept_id": "HIGH-CALC-001",
-        "dst_concept_id": "HIGH-CALC-002",
+        "src_concept_id": "math.calculus.geukhanui-jeongui",
+        "dst_concept_id": "math.calculus.misibun",
         "relation": "prerequisite",
         "strength": 0.9,
         "evidence": "NCIC 성취기준 학년 인접 + 수학교육 문헌",
@@ -54,78 +53,69 @@ class TestConcept:
     def test_valid_instance(self) -> None:
         """유효 인스턴스 생성 + 기본값(빈 리스트)."""
         c = _concept()
-        assert c.concept_id == "HIGH-CALC-001"
+        assert c.concept_id == "math.calculus.epsilon-delta-geukhan"
         assert c.source_id == "H:12미적Ⅰ01-01"
-        assert c.aliases == ["UC.calc1.a01.h-12-01-01", "H:12미적Ⅰ01-01"]
+        assert c.aliases == [
+            "HIGH-CALC-001",
+            "UC.calc1.a01.h-12-01-01",
+            "H:12미적Ⅰ01-01",
+        ]
         assert c.prerequisite_concept_ids == []
         assert c.standard_codes == []
 
     @pytest.mark.parametrize(
         "good_id",
         [
-            "ELEM-GEO-001",
-            "MID-ARITH-042",
-            "HIGH-CALC-999",
-            "RT-FUN-001",  # 재수 트랙(예약)
-            "OLY-NT-007",  # 영재 트랙(예약)
+            "math.geometry.samgakhyeong",
+            "math.calculus.geukhan",
+            "math.place-value.su-gaenyeom",  # 하이픈 포함 영역어
+            "math.equation.ilchabangjeongsik-2",  # 충돌 접미
+            "math.arithmetic.a01",  # slug에 숫자 허용
         ],
     )
     def test_accepts_valid_concept_id(self, good_id: str) -> None:
-        """새 규약(`{TRACK}-{AREA}-{NNN}`)을 지키는 ID는 통과(RT/OLY 예약 트랙 포함)."""
+        """canonical 규약(`math.<area>.<slug>`)을 지키는 ID는 통과(하이픈 영역어·충돌 접미 포함)."""
         assert _concept(concept_id=good_id).concept_id == good_id
 
     @pytest.mark.parametrize(
         "bad_id",
         [
             "UC.calc.limit.epsilon-delta",  # 옛 UC 형식 거부
-            "ELEM-GEO-1",  # NNN 3자리 아님
-            "ELEM-GEO-0001",  # NNN 4자리
-            "ELEM-geo-001",  # AREA 소문자
-            "FOO-GEO-001",  # 미지원 TRACK
-            "ELEM-G-001",  # AREA 1자리(2~8 위반)
-            "ELEM-GEOMETRYX-001",  # AREA 9자리(2~8 위반)
-            "ELEM-GEO",  # NNN 누락
-            "ELEMGEO001",  # 구분자 없음
+            "ELEM-GEO-001",  # 옛 교육과정축 코드(P2a) 거부 — 이제 별칭일 뿐
+            "MATH.geometry.x",  # subject 대문자
+            "math.Geometry.x",  # AREA 대문자
+            "math.geometry.삼각형",  # slug 비-ASCII
+            "math.geometry",  # slug 세그먼트 누락
+            "math.geometry.",  # slug 비어있음
+            "math..x",  # AREA 비어있음
+            "geometry.x",  # math 접두 누락
         ],
     )
     def test_rejects_malformed_concept_id(self, bad_id: str) -> None:
-        """새 규약 위반 ID는 ValidationError."""
+        """canonical 규약 위반 ID는 ValidationError."""
         with pytest.raises(ValidationError):
             _concept(concept_id=bad_id)
 
     def test_concept_id_pattern_matches_examples(self) -> None:
-        """CONCEPT_ID_PATTERN이 새 형식만·LEGACY_UC_PATTERN이 옛 형식만 매칭(분리 확인)."""
-        assert CONCEPT_ID_PATTERN.match("ELEM-GEO-001")
+        """CONCEPT_ID_PATTERN이 canonical만·LEGACY_UC_PATTERN이 옛 UC만 매칭(분리 확인)."""
+        assert CONCEPT_ID_PATTERN.match("math.geometry.samgakhyeong")
         assert not CONCEPT_ID_PATTERN.match("UC.calc.limit.def")
+        assert not CONCEPT_ID_PATTERN.match(
+            "ELEM-GEO-001"
+        )  # 옛 축코드는 canonical 아님
         assert LEGACY_UC_PATTERN.match("UC.calc.limit.def")
-        assert not LEGACY_UC_PATTERN.match("ELEM-GEO-001")
+        assert not LEGACY_UC_PATTERN.match("math.geometry.samgakhyeong")
 
-    @pytest.mark.parametrize("field", ["name_ko", "name_en", "name_ja"])
-    def test_rejects_empty_multilingual_name(self, field: str) -> None:
-        """빈 문자열 이름은 거부 — name_ko 필수, name_en/ja는 Optional이나 *있다면* 비공백."""
+    def test_display_names_not_model_fields(self) -> None:
+        """표시이름(name_ko/en/ja)은 노드 필드가 아니다(P2d Concept Purity·locale 분리)."""
+        assert "name_ko" not in Concept.model_fields
+        assert "name_en" not in Concept.model_fields
+        assert "name_ja" not in Concept.model_fields
+
+    def test_rejects_name_field_as_extra(self) -> None:
+        """name_* 인자는 extra='forbid'로 거부(노드에 표시이름 슬롯 없음)."""
         with pytest.raises(ValidationError):
-            _concept(**{field: ""})
-
-    @pytest.mark.parametrize("field", ["name_ko", "name_en", "name_ja"])
-    def test_rejects_whitespace_only_name(self, field: str) -> None:
-        """공백만 있는 이름은 strip 후 빈 문자열 → 거부."""
-        with pytest.raises(ValidationError):
-            _concept(**{field: "   "})
-
-    @pytest.mark.parametrize("field", ["name_en", "name_ja"])
-    def test_allows_none_for_en_ja(self, field: str) -> None:
-        """name_en/ja는 None 허용(Phase 1 KR 단일언어 데이터 수용)."""
-        c = _concept(**{field: None})
-        assert getattr(c, field) is None
-
-    def test_name_ko_required(self) -> None:
-        """name_ko는 여전히 필수(누락 시 거부)."""
-        with pytest.raises(ValidationError):
-            Concept(
-                concept_id="HIGH-CALC-001",  # type: ignore[call-arg]
-                source_id="H:12미적Ⅰ01-01",
-                domain="미적분",
-            )
+            _concept(name_ko="극한")
 
     def test_source_id_required_and_nonempty(self) -> None:
         """source_id는 필수·비공백(원천 추적 키)."""
@@ -137,9 +127,8 @@ class TestConcept:
     def test_aliases_default_empty(self) -> None:
         """aliases는 선택(기본 빈 목록)."""
         c = Concept(
-            concept_id="HIGH-CALC-001",  # type: ignore[call-arg]
+            concept_id="math.calculus.geukhan",  # type: ignore[call-arg]
             source_id="H:12미적Ⅰ01-01",
-            name_ko="극한",
             domain="미적분",
         )
         assert c.aliases == []
@@ -181,7 +170,7 @@ class TestConceptEnrichedFields:
         assert c.difficulty_tier is None
 
     def test_pedagogy_fields_are_not_node_slots(self) -> None:
-        """오개념 연결은 참조 키(misconception_codes)로만 — pedagogy 자유텍스트 슬롯은 노드에 없다."""
+        """오개념 연결은 참조 키(misconception_codes)로만 — pedagogy 자유텍스트 슬롯 부재."""
         c = _concept(misconception_codes=["mc-code"])
         assert c.misconception_codes == ["mc-code"]
         assert not hasattr(c, "misconception_text")  # Stage A
@@ -231,9 +220,6 @@ class TestConceptPurity:
             "concept_id",
             "source_id",
             "aliases",
-            "name_ko",
-            "name_en",
-            "name_ja",
             "domain",
             "grade_band_hint",
             "prerequisite_concept_ids",
@@ -245,7 +231,7 @@ class TestConceptPurity:
             "review_status",
             "notes",
         }
-    )  # metaphor·accepted_expressions는 Part 2 §3 Stage B로 제거(pedagogy=ConceptContent).
+    )  # name_ko/en/ja는 P2d·Part 9로 제거(표시이름=locale 레이어). metaphor·accepted는 §3 Stage B.
     # Runtime Graph(투영/실행) 관심사 토큰 — 노드 필드명에 등장 금지(참조 키 예외는 화이트리스트).
     _FORBIDDEN_TOKENS = (
         "renderer",

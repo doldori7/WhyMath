@@ -9,9 +9,11 @@ docs/data/concept_graph_dataset_v1.md §2(필드표)·§3(redaction)·§4(검수
 불요(데이터 검증으로 확인 — concept.ccss_code로 흡수).
 
 매핑 규칙(concepts.jsonl → Concept):
-  - concept_id = idmap.build_id_map(records)[src_id]  ← 새 ID(`{TRACK}-{AREA}-{NNN}`·충돌 0)
-  - source_id = src_id;  aliases = idmap.build_alias_map(records)[src_id](= [옛 UC, src_id])
-  - name_ko = name_ko;  name_en/ja = None(Phase 1 KR 단일언어)
+  - concept_id = idmap.build_id_map(records)[src_id]  ← canonical ID(`math.<area>.<slug>`·충돌 접미)
+  - source_id = src_id;  aliases = build_alias_map(records)[src_id](= [교육과정축, 옛 UC, src_id])
+  - **표시이름(name_ko/en/ja)은 노드로 흘리지 않는다**(2026-07-02 P2d·Part 9 Concept Purity) —
+    Concept 모델에서 세 슬롯을 제거했다. name_ko는 `build_locales`가 locale 레이어
+    (`locales/ko.json`·canonical_id 키)로 분리한다(노드는 언어-무관 식별자만·표기는 locale 조인).
   - domain = category(데이터셋 영역명, 예 '[고]미적분');  grade_band_hint = 첫 코드 학년군 추론
   - standard_codes 직결;  ccss_code/difficulty_tier 풍부필드 직결
   - **pedagogy(misconception 자유텍스트·metaphor·accepted_expressions)은 노드로 흘리지 않는다**
@@ -82,6 +84,7 @@ class TransformResult:
 
     concepts: list[Concept] = field(default_factory=list)
     edges: list[ConceptEdge] = field(default_factory=list)
+    locales: dict[str, dict[str, str]] = field(default_factory=dict)
     passthrough_flashcards: list[dict[str, object]] = field(default_factory=list)
     passthrough_intl: list[dict[str, object]] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
@@ -171,9 +174,6 @@ def transform_concepts(
                 concept_id=cid,
                 source_id=src_id,
                 aliases=list(aliases_by_src.get(src_id, [])),
-                name_ko=str(record.get("name_ko", "")),
-                name_en=None,
-                name_ja=None,
                 domain=str(record.get("category", "")),
                 grade_band_hint=_grade_band_hint(codes),
                 standard_codes=codes,
@@ -231,6 +231,29 @@ def transform_edges(
     return edges, skipped
 
 
+def build_locales(
+    concept_records: Iterable[Mapping[str, object]],
+    id_map: Mapping[str, str],
+) -> dict[str, dict[str, str]]:
+    """concepts 레코드 + id_map → locale 테이블 `{lang: {canonical_id: name}}`(표시이름 분리).
+
+    Phase 1은 한국어 전용이라 `ko`만 채우고(`en`/`ja`는 빈 dict — 후속 저작 시 채움), 키는 **새
+    canonical concept_id**다(노드 identity ↔ locale 조인 축). name_ko가 빈/결측인 레코드는 건너뛴다
+    (검증 `locale_nonblank`가 노드⇄locale 패리티를 강제).
+    """
+    ko: dict[str, str] = {}
+    for record in concept_records:
+        src_id = str(record.get("src_id", "")).strip()
+        cid = id_map.get(src_id)
+        if cid is None:
+            continue
+        name_ko = str(record.get("name_ko", "")).strip()
+        if not name_ko:
+            continue
+        ko[cid] = name_ko
+    return {"ko": ko, "en": {}, "ja": {}}
+
+
 def _fill_prerequisite_cache(concepts: Sequence[Concept], edges: Sequence[ConceptEdge]) -> None:
     """엣지(src=선수→dst=후행) → 각 dst 개념의 prerequisite_concept_ids 캐시 채움(in-place).
 
@@ -286,10 +309,12 @@ def transform_dataset(
     concepts, c_skips = transform_concepts(concept_records, id_map, alias_map)
     edges, e_skips = transform_edges(edge_records, id_map)
     _fill_prerequisite_cache(concepts, edges)
+    locales = build_locales(concept_records, id_map)
 
     result = TransformResult(
         concepts=concepts,
         edges=edges,
+        locales=locales,
         passthrough_flashcards=_passthrough(flashcard_records or []),
         passthrough_intl=_passthrough(intl_records or []),
         skipped=c_skips + e_skips,
@@ -300,6 +325,7 @@ def transform_dataset(
 
 __all__ = [
     "TransformResult",
+    "build_locales",
     "transform_concepts",
     "transform_dataset",
     "transform_edges",

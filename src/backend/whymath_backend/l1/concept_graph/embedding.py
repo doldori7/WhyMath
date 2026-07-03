@@ -9,8 +9,9 @@ join된다(이중 store 단일 키). L4 오개념 영속(`pgvector_index.PgVecto
 ────────────────────────────────────────────────────────────────────────────
 redaction (CLAUDE.md 우선순위 #2 — 협상 불가)
 ────────────────────────────────────────────────────────────────────────────
-임베딩 입력 표현은 **자체 작성 안전 필드만** 쓴다 — `name_ko`(한국어 명칭·graph.json)·
-`metaphor`(은유)·`accepted_expressions`(허용표현). **`description`·`formal_definition`은 절대 읽지
+임베딩 입력 표현은 **자체 작성 안전 필드만** 쓴다 — `name_ko`(한국어 명칭·재-ID(P2d)로 노드에서
+제거돼 형제 `locales/ko.json`에서 재소싱)·`metaphor`(은유)·`accepted_expressions`(허용표현).
+**`description`·`formal_definition`은 절대 읽지
 않는다**: 성취기준 *본문* 근접 복제 위험 필드이고, 슬1 정형화에서 `Concept` 모델 슬롯 부재로 이미
 제거돼 `graph.json`에도 없다(`_provenance.json`의 redacted 목록). 이 모듈은 그 키를 *읽지도
 않으므로* 입력이 오염돼도 본문이 임베딩에 유입되지 않는다(이중 방어). 임베딩 *벡터*만 적재하고
@@ -44,6 +45,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from whymath_backend.config import Settings, get_settings
+
+# name_ko는 재-ID(P2d)로 노드에서 제거돼 형제 `locales/ko.json`에서 재소싱한다(공유 헬퍼).
+from whymath_backend.l1.concept_graph.locale import load_locale_ko
 from whymath_backend.l1.embedding_primitives import (
     DEFAULT_EMBEDDING_SUBJECT,
     embed_changed,
@@ -67,8 +71,9 @@ if TYPE_CHECKING:
     from whymath_backend.l1.embedding_primitives import EmbeddingProvider
 
 # 임베딩 입력으로 *허용된* 안전 필드(자체 작성·본문 아님). 이 집합 밖 키는 임베딩에 쓰지 않는다
-# (특히 description·formal_definition은 어느 소스에도 부재이며 읽지도 않음). name_ko는 graph.json,
-# metaphor·accepted는 pedagogy 계층 ConceptContent(source_id↔code 조인)에서 온다(Stage B).
+# (특히 description·formal_definition은 어느 소스에도 부재이며 읽지도 않음). name_ko는
+# locales/ko.json(concept_id 조인·P2d), metaphor·accepted는 pedagogy 계층 ConceptContent
+# (source_id↔code 조인)에서 온다(Stage B).
 _SAFE_TEXT_FIELDS: tuple[str, ...] = ("name_ko", "metaphor", "accepted_expressions")
 
 # 콘텐츠 코퍼스 최상위 배열·조인 키. pedagogy(metaphor·accepted)의 단일 진실은 ConceptContent다.
@@ -138,11 +143,14 @@ def concept_embedding_text(
 def load_concepts_from_graph_json(graph_path: Path, *, content_path: Path) -> list[ConceptText]:
     """graph.json + pedagogy content.json → 임베딩 대상 (UC concept_id, 안전 표현) 목록.
 
-    `graph.json`(슬1 `transform-v1` 정제 산출·UC 키)에서 `concept_id`(UC)·`name_ko`·`source_id`를
-    읽고, **metaphor·accepted_expressions는 pedagogy 계층 `content.json`**(`code` 키)에서
-    source_id↔code 조인으로 소싱한다(Part 2 §3 Stage B — 두 필드를 identity 노드에서 제거). 안전
-    필드(name_ko·metaphor·accepted)만 표현에 합성한다 — `description`·`formal_definition`은 어느
-    소스에도 없고 읽지도 않는다.
+    `graph.json`(슬1 `transform-v1` 정제 산출)에서 `concept_id`·`source_id`를 읽고, **`name_ko`는
+    형제 `locales/ko.json`**(`{concept_id: name_ko}`)에서 concept_id 조인으로 재소싱한다(P2d — 재-ID
+    로 표시이름을 identity 노드에서 제거·Concept Purity). 노드 내장 name_ko가 있으면(옛 graph.json)
+    우선한다(`record.get("name_ko") or locale.get(id)`·옛/새 둘 다 graceful). **metaphor·
+    accepted_expressions는 pedagogy 계층 `content.json`**(`code` 키)에서 source_id↔code 조인으로
+    소싱한다(Part 2 §3 Stage B — 두 필드를 identity 노드에서 제거). 안전 필드(name_ko·metaphor·
+    accepted)만 표현에 합성한다 — `description`·`formal_definition`은 어느 소스에도 없고 읽지도
+    않는다. locale 값은 노드 내장 잔류분과 바이트 동일이라 표현·text_hash가 불변이다(재임베딩 0).
 
     표현이 빈(안전 필드 전부 공백) 개념은 제외한다(임베딩 무의미 — 빈 벡터 적재 방지). content에
     없는 개념은 name_ko만으로 표현을 만든다(graceful — 크로스워크 437 전단사라 실경로엔 미발생).
@@ -150,10 +158,11 @@ def load_concepts_from_graph_json(graph_path: Path, *, content_path: Path) -> li
 
     Raises:
         FileNotFoundError: graph.json·content.json 부재.
-        ValueError: concept_id 없는 항목(슬1 산출은 항상 UC를 갖는다 — 방어).
+        ValueError: concept_id 없는 항목(슬1 산출은 항상 concept_id를 갖는다 — 방어).
     """
     pedagogy = _load_pedagogy_by_code(content_path)
     payload = json.loads(graph_path.read_text(encoding="utf-8"))
+    locale_ko = load_locale_ko(graph_path)
     out: list[ConceptText] = []
     for record in payload.get("concepts", []):
         concept_id = str(record.get("concept_id", "")).strip()
@@ -161,8 +170,10 @@ def load_concepts_from_graph_json(graph_path: Path, *, content_path: Path) -> li
             raise ValueError(f"graph.json 개념에 concept_id가 없습니다: {record!r}")
         source_id = str(record.get("source_id", "")).strip()
         metaphor, accepted_expressions = pedagogy.get(source_id, (None, None))
+        # name_ko: 노드 내장(옛 graph.json) 우선, 없으면 locale 조인(새 graph.json·P2d).
+        name_ko = _opt_str(record.get("name_ko")) or locale_ko.get(concept_id)
         text = concept_embedding_text(
-            name_ko=record.get("name_ko"),
+            name_ko=name_ko,
             metaphor=metaphor,
             accepted_expressions=accepted_expressions,
         )

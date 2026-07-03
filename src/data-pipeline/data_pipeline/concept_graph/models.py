@@ -28,11 +28,22 @@ from data_pipeline.citation import build_ncic_citation_core
 # (동결 테스트: tests/data_pipeline/test_citation.py).
 SOURCE_CITATION: Final[str] = "개념-성취기준 매핑 근거: " + build_ncic_citation_core()
 
-# concept_id 규약(§2.4) — **2026-06-16 전환**: `{TRACK}-{AREA}-{NNN}`(예 'ELEM-GEO-001').
-#   TRACK ∈ {ELEM, MID, HIGH, RT, OLY}(코퍼스엔 ELEM/MID/HIGH·RT 재수/OLY 영재는 예약),
-#   AREA  = 토픽 ascii 코드(2~8 대문자/숫자), NNN = (TRACK, AREA) 안 3자리 순번.
-# 기존 `UC.<domain>.<topic>.<slug>`에서 *의도적 breaking* 전환(추적성은 source_id·aliases 보존).
+# concept_id 규약(§2.4) — **2026-07-02 P2d·Part 9 전환**: 교육과정·언어·렌더러 무관 의미론적
+# canonical ID `math.<area>.<slug>`(예 'math.geometry.samgakhyeongui-hapdong').
+#   math  = 고정 subject(Phase 1 전건 수학),
+#   <area> = 교육과정-독립 영역어(소문자 로마자·하이픈 허용, 예 geometry·place-value),
+#   <slug> = name_ko의 결정론적 로마자화(hangul_romanize.romanize·충돌 시 -2/-3 접미).
+# 2026-06-16 P2a의 `{TRACK}-{AREA}-{NNN}`(학년대=교육과정 결합 안티패턴)을 *되돌린* breaking
+# 마이그레이션 — 옛 키(교육과정축 코드·UC)는 `aliases`·`ids.yaml` registry로 보존(추적·롤백).
+# ★ 영역어(place-value·ai-math 등)는 하이픈을 포함하므로 area 세그먼트도 하이픈 그룹을 허용한다.
 CONCEPT_ID_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^math\.[a-z]+(-[a-z]+)*\.[a-z0-9]+(-[a-z0-9]+)*$"
+)
+
+# 교육과정축 코드 규약(옛 P2a 형식 `{TRACK}-{AREA}-{NNN}`·예 'ELEM-GEO-001') — 이제 정본이 아니라
+# `aliases`에 보존하는 **오버레이/별칭("curriculum-axis code")**이다(curriculum_matrix '개념 축').
+# 새 PK는 CONCEPT_ID_PATTERN(math.<area>.<slug>)을 쓴다. 이 패턴은 별칭값이 옛 규약 준수인지 확인만.
+CURRICULUM_AXIS_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"^(ELEM|MID|HIGH|RT|OLY)-[A-Z0-9]{2,8}-\d{3}$"
 )
 
@@ -42,11 +53,11 @@ LEGACY_UC_PATTERN: Final[re.Pattern[str]] = re.compile(r"^UC\.[a-z0-9]+\.[a-z0-9
 
 
 def _require_concept_id(value: str) -> str:
-    """concept_id가 새 규약(`{TRACK}-{AREA}-{NNN}`)을 지키는지 검증(노드 PK·엣지 src/dst 공용)."""
+    """concept_id가 새 규약(`math.<area>.<slug>`)을 지키는지 검증(노드 PK·엣지 src/dst 공용)."""
     if not CONCEPT_ID_PATTERN.match(value):
         raise ValueError(
-            f"concept_id 규약 위반: {value!r}. 예상 '{{TRACK}}-{{AREA}}-{{NNN}}' "
-            "(TRACK∈ELEM/MID/HIGH/RT/OLY·AREA 2~8 대문자숫자·NNN 3자리, 예: 'ELEM-GEO-001')"
+            f"concept_id 규약 위반: {value!r}. 예상 'math.<area>.<slug>' "
+            "(area=교육과정-독립 영역어·slug=name_ko 로마자화, 예: 'math.geometry.hapdong')"
         )
     return value
 
@@ -105,17 +116,24 @@ MIN_EDGE_STRENGTH: Final[float] = 0.3
 class Concept(BaseModel):
     """개념 그래프 노드 — `concept.schema.yaml` + 데이터셋 v1 풍부 필드 확장.
 
-    `concept_id`는 새 규약(`{TRACK}-{AREA}-{NNN}`·예 'ELEM-GEO-001') PK(curriculum_entry·
-    textbook_mapping과 공유 키). 2026-06-16 결정으로 기존 UC에서 *전환*했고, 추적성은
-    `source_id`(원천 src_id)·`aliases`(옛 UC + src_id)로 보존한다(롤백·하위호환). `name_ko`는
-    필수, `name_en/ja`는 **선택(Phase 1 KR 단일언어 데이터 수용)** — 다국 표기는 후속.
-    `standard_codes`는 NCIC 성취기준 코드 참조(truth source) — 본문은 복제하지 않는다.
+    `concept_id`는 새 규약(`math.<area>.<slug>`·예 'math.geometry.samgakhyeongui-hapdong') PK
+    (curriculum_entry·textbook_mapping과 공유 키). 2026-07-02 P2d로 옛 `{TRACK}-{AREA}-{NNN}`(P2a)를
+    *교육과정-독립 의미론 ID*로 전환했고, 추적성은 `source_id`(원천 src_id)·`aliases`(교육과정축 +
+    옛 UC + src_id)·`ids.yaml` registry로 보존한다(롤백·하위호환). `standard_codes`는 NCIC 성취기준
+    코드 참조(truth source) — 본문은 복제하지 않는다.
+
+    **표시이름(name_ko/en/ja) 비내장(2026-07-02 P2d·Part 9 · Concept Purity)**: 표시이름은 노드
+    identity에서 *제거*했고 locale 레이어(`locales/ko.json` 등·canonical_id 키)로 분리한다. 노드는
+    언어-무관 식별자(concept_id·source_id·aliases)만 보유 — 표기는 locale 조인으로 재소싱한다(값
+    동일·재임베딩 0). canonical `<slug>`가 name_ko에서 *파생*되지만 발급 후 동결이므로, name_en을
+    나중에 저작해도 canonical_id는 불변이고 locale만 개선된다(§동결 정책).
 
     풍부 필드(데이터셋 v1·concept_graph_dataset_v1.md §2 — 2026-06-12 모델 확장 결정):
     `ccss_code`(매칭 CCSS)·`difficulty_tier`(난이도층 0~24)·`review_status`(적재 보류 표식).
 
     노드 계층(플레이북 Part 2 §3 — ConceptNode identity/semantic/pedagogy/visualization 분리):
-      - identity(식별): `concept_id`·`source_id`·`aliases`·`name_*`·`domain`
+      - identity(식별): `concept_id`·`source_id`·`aliases`·`domain`
+        (표시이름 name_*는 노드 비내장 — locale 레이어가 단일 진실)
       - semantic(의미): `difficulty_tier`·`standard_codes`·`prerequisite_concept_ids`·`ccss_code`
         — 개념의 의미 속성이라 노드에 둔다("핵심만 노드, 나머지는 속성" — CLAUDE.md).
       - pedagogy(교수학): 오개념·설명·은유·허용표현은 **노드 비내장**(pedagogy 계층이 단일 진실).
@@ -144,8 +162,9 @@ class Concept(BaseModel):
     concept_id: str = Field(
         ...,
         description=(
-            "concept_id (PK). '{TRACK}-{AREA}-{NNN}'(예 'ELEM-GEO-001'). 2026-06-16 UC→이 형식 전환"
-            "(breaking) — 추적성은 source_id·aliases로 보존."
+            "concept_id (PK). 'math.<area>.<slug>'(예 'math.geometry.samgakhyeongui-hapdong'). "
+            "2026-07-02 P2d로 옛 {TRACK}-{AREA}-{NNN}를 교육과정-독립 의미론 ID로 전환(breaking) — "
+            "추적성은 source_id·aliases·ids.yaml로 보존."
         ),
     )
     source_id: str = Field(
@@ -159,20 +178,9 @@ class Concept(BaseModel):
     aliases: list[str] = Field(
         default_factory=list,
         description=(
-            "옛 키 별칭 목록 — [레거시 UC(UC.<domain>.<topic>.<slug>), src_id]. 새 concept_id로 "
-            "전환한 뒤에도 옛 키·원천 키로 join/조회 가능하게 보존(하위호환)."
+            "옛 키 별칭 목록 — [교육과정축 코드({TRACK}-{AREA}-{NNN}), 레거시 UC, src_id]. 새 "
+            "concept_id로 전환한 뒤에도 옛 키·원천 키로 join/조회하게 보존(하위호환·matrix 개념축)."
         ),
-    )
-    name_ko: str = Field(..., min_length=1, description="한국어 명칭(빈 문자열 금지).")
-    name_en: str | None = Field(
-        default=None,
-        min_length=1,
-        description="영어 명칭(다국 join 축). Phase 1 KR은 미보유 — None 허용·빈 문자열 금지.",
-    )
-    name_ja: str | None = Field(
-        default=None,
-        min_length=1,
-        description="일본어 명칭(다국 정합성 키). Phase 1 KR은 미보유 — None 허용·빈 문자열 금지.",
     )
     domain: str = Field(
         ..., min_length=1, description="영역명(NCIC 영역 어휘와 정렬, 예 '미적분')."
@@ -222,7 +230,7 @@ class Concept(BaseModel):
     @field_validator("concept_id")
     @classmethod
     def _validate_concept_id(cls, v: str) -> str:
-        """concept_id가 새 규약(`{TRACK}-{AREA}-{NNN}`)을 지키는지(§2.4)."""
+        """concept_id가 새 규약(`math.<area>.<slug>`)을 지키는지(§2.4)."""
         return _require_concept_id(v)
 
     @field_validator("aliases")
@@ -248,8 +256,8 @@ class ConceptEdge(BaseModel):
         str_strip_whitespace=True,
     )
 
-    src_concept_id: str = Field(..., description="관계 출발 개념(UC concept_id).")
-    dst_concept_id: str = Field(..., description="관계 도착 개념(UC concept_id).")
+    src_concept_id: str = Field(..., description="관계 출발 개념(canonical concept_id).")
+    dst_concept_id: str = Field(..., description="관계 도착 개념(canonical concept_id).")
     relation: Relation = Field(..., description="관계 유형(7종 enum). 6종 산문은 stale.")
     strength: float = Field(..., ge=0.0, le=1.0, description="관계 강도 [0.0, 1.0].")
     evidence: str = Field(
@@ -262,5 +270,5 @@ class ConceptEdge(BaseModel):
     @field_validator("src_concept_id", "dst_concept_id")
     @classmethod
     def _validate_endpoints(cls, v: str) -> str:
-        """엣지 양끝도 UC 규약을 지키는지(노드 PK와 동일 키 공간)."""
+        """엣지 양끝도 canonical 규약을 지키는지(노드 PK와 동일 키 공간)."""
         return _require_concept_id(v)

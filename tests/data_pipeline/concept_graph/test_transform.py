@@ -5,12 +5,19 @@
 
 from __future__ import annotations
 
+from data_pipeline.concept_graph.idmap import build_id_map
 from data_pipeline.concept_graph.models import EvidenceSource, Relation, ReviewStatus
 from data_pipeline.concept_graph.transform import (
+    build_locales,
     transform_concepts,
     transform_dataset,
     transform_edges,
 )
+
+# 합성 픽스처용 고정 canonical ID(math.<area>.<slug>·pattern 통과). HK01·HK02는 [공통]식·방정식·
+# 부등식(area=equation)이라 area는 equation으로 고정하고 slug만 임의 부여한다.
+_ID_A = "math.equation.dahangsigui-yeonsan"
+_ID_B = "math.equation.nameojijeongni"
 
 # 최소 합성 레코드(단위테스트용 — 실데이터는 fixture).
 _CONCEPT_A = {
@@ -43,15 +50,15 @@ _CONCEPT_B = {
 
 
 def _id_map() -> dict[str, str]:
-    """HK01·HK02 → 새 ID(HIGH·EQN·tier 6<7 정렬 — 001·002). 합성 픽스처용 고정 매핑."""
-    return {"HK01": "HIGH-EQN-001", "HK02": "HIGH-EQN-002"}
+    """HK01·HK02 → canonical ID. 합성 픽스처용 고정 매핑(transform_concepts는 이 값을 직결)."""
+    return {"HK01": _ID_A, "HK02": _ID_B}
 
 
 def _alias_map() -> dict[str, list[str]]:
-    """HK01·HK02 별칭(옛 UC + src_id) — source_id·aliases 단언용."""
+    """HK01·HK02 별칭([교육과정축 코드, 옛 UC, src_id]) — source_id·aliases 단언용."""
     return {
-        "HK01": ["UC.common1.a01.hk01", "HK01"],
-        "HK02": ["UC.common1.a01.hk02", "HK02"],
+        "HK01": ["HIGH-EQN-001", "UC.common1.a01.hk01", "HK01"],
+        "HK02": ["HIGH-EQN-002", "UC.common1.a01.hk02", "HK02"],
     }
 
 
@@ -60,10 +67,13 @@ class TestTransformConcepts:
         concepts, skipped = transform_concepts([_CONCEPT_A], _id_map(), _alias_map())
         assert skipped == []
         c = concepts[0]
-        assert c.concept_id == "HIGH-EQN-001"  # 새 ID 변환
+        assert c.concept_id == _ID_A  # canonical ID 변환
         assert c.source_id == "HK01"  # 원천 보존
-        assert c.aliases == ["UC.common1.a01.hk01", "HK01"]  # 옛 UC + src_id
-        assert c.name_ko == "다항식의 연산"
+        assert c.aliases == [
+            "HIGH-EQN-001",
+            "UC.common1.a01.hk01",
+            "HK01",
+        ]  # 축코드·옛 UC·src_id
         assert c.domain == "[공통]식·방정식·부등식"  # category → domain
         assert c.standard_codes == ["[10공수1-01-01]"]
 
@@ -85,11 +95,13 @@ class TestTransformConcepts:
         c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
         assert c.grade_band_hint == "고등학교"  # [10...] → 고등학교
 
-    def test_name_en_ja_none_phase1(self) -> None:
-        """Phase 1 KR 단일언어 — name_en/ja는 None."""
+    def test_display_names_not_on_node(self) -> None:
+        """표시이름(name_ko/en/ja)은 노드 비내장(P2d Concept Purity) — locale 레이어로 분리."""
         c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
-        assert c.name_en is None
-        assert c.name_ja is None
+        assert not hasattr(c, "name_ko")
+        assert not hasattr(c, "name_en")
+        assert not hasattr(c, "name_ja")
+        assert "name_ko" not in c.model_dump()
 
     def test_empty_enriched_become_none(self) -> None:
         """빈 문자열 풍부 필드(ccss_code)는 None으로 정규화(`_opt`)."""
@@ -144,17 +156,19 @@ class TestTransformConcepts:
         """파싱 불가 standard_code만 있으면 grade_band_hint=None(단정 아닌 힌트)."""
         record = dict(_CONCEPT_A)
         record["standard_codes"] = ["not-a-code"]
-        id_map = {"HK01": "HIGH-EQN-001"}
+        id_map = {"HK01": _ID_A}
         c = transform_concepts([record], id_map)[0][0]
         assert c.grade_band_hint is None
 
-    def test_missing_name_ko_is_skipped(self) -> None:
-        """name_ko 빈 레코드는 Concept 생성 실패 → skip(예외 흡수)."""
+    def test_missing_name_ko_absent_from_locale(self) -> None:
+        """name_ko 빈 레코드는 노드는 만들되(표시이름 비내장) locale(ko)에서 제외된다."""
         record = dict(_CONCEPT_A)
         record["name_ko"] = ""
         concepts, skipped = transform_concepts([record], _id_map())
-        assert concepts == []
-        assert len(skipped) == 1
+        assert len(concepts) == 1  # 표시이름은 노드에 없으므로 노드 생성은 성공
+        assert skipped == []
+        locales = build_locales([record], _id_map())
+        assert _ID_A not in locales["ko"]  # 빈 name_ko → locale 제외
 
     def test_record_without_src_id_skipped(self) -> None:
         concepts, skipped = transform_concepts([{"name_ko": "x"}], _id_map())
@@ -177,8 +191,8 @@ class TestTransformEdges:
         edges, skipped = transform_edges(records, _id_map())
         assert skipped == []
         e = edges[0]
-        assert e.src_concept_id == "HIGH-EQN-001"  # 새 ID 변환
-        assert e.dst_concept_id == "HIGH-EQN-002"
+        assert e.src_concept_id == _ID_A  # canonical ID 변환
+        assert e.dst_concept_id == _ID_B
         assert e.relation == Relation.PREREQUISITE.value
         assert e.evidence  # 비공백(합성)
         assert e.evidence_source == EvidenceSource.EXPERT_REVIEW.value
@@ -214,9 +228,12 @@ class TestTransformDataset:
             concept_records=[_CONCEPT_A, _CONCEPT_B],
             edge_records=[edge],
         )
+        # transform_dataset은 name_ko 파생 canonical ID를 쓴다 — 하드코딩 대신 매핑을 재계산해 조회.
+        id_map = build_id_map([_CONCEPT_A, _CONCEPT_B])
+        a_id, b_id = id_map["HK01"], id_map["HK02"]
         by_id = {c.concept_id: c for c in result.concepts}
-        assert by_id["HIGH-EQN-002"].prerequisite_concept_ids == ["HIGH-EQN-001"]
-        assert by_id["HIGH-EQN-001"].prerequisite_concept_ids == []
+        assert by_id[b_id].prerequisite_concept_ids == [a_id]
+        assert by_id[a_id].prerequisite_concept_ids == []
 
     def test_passthrough_redacts_intl(self) -> None:
         """intl 패스스루는 redaction 키(ccss_statement_en) 제외."""
@@ -270,11 +287,15 @@ class TestTransformRealData:
     ) -> None:
         """§4 분포: reviewed 148(수기 검수 114 + 기본수학 34 AI 검수)·pending 289."""
         concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
-        reviewed = sum(1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value)
+        reviewed = sum(
+            1 for c in concepts if c.review_status == ReviewStatus.REVIEWED.value
+        )
         assert reviewed == 148
         assert len(concepts) - reviewed == 289
 
-    def test_no_redaction_leak_in_full_dump(self, concept_records: list[dict[str, object]]) -> None:
+    def test_no_redaction_leak_in_full_dump(
+        self, concept_records: list[dict[str, object]]
+    ) -> None:
         """전체 개념 dump에 description/formal_definition 키 0건."""
         concepts, _ = transform_concepts(concept_records, _real_id_map(concept_records))
         keys: set[str] = set()

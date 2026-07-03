@@ -86,8 +86,7 @@ def _concept(concept_id: str, **over: object) -> Concept:
     data: dict[str, object] = {
         "concept_id": concept_id,
         "source_id": concept_id,  # 적재 테스트는 추적성 무관 — 자기 정체로 충족
-        "name_ko": "개념",
-        "domain": "미적분",
+        "domain": "미적분",  # 표시이름(name_ko)은 노드 비내장(P2d) — locale 레이어 소관
         "standard_codes": ["[12미적Ⅰ01-01]"],
     }
     data.update(over)
@@ -107,8 +106,8 @@ def _edge(src: str, dst: str, **over: object) -> ConceptEdge:
     return ConceptEdge(**data)  # type: ignore[arg-type]
 
 
-_A = "HIGH-CALC-001"
-_B = "HIGH-CALC-002"
+_A = "math.calculus.hamsuui-geukhan"
+_B = "math.calculus.dohamsu"
 
 
 @pytest.fixture
@@ -209,15 +208,15 @@ class TestEmittedCypher:
         assert "relation" not in props
 
     def test_none_props_omitted(self) -> None:
-        """None 속성(name_en 미보유 등)은 props에서 제거(Neo4j null 속성 방지)."""
+        """None 속성(ccss_code·grade_band_hint 미보유 등)은 props에서 제거(Neo4j null 속성 방지)."""
         driver = _FakeDriver()
         result = TransformResult(concepts=[_concept(_A)], edges=[])
         load_graph(result, driver=driver)
         props = _node_calls(driver.calls)[0].params["props"]
-        # Phase 1 KR은 name_en/ja None → props에 없어야 함
-        assert "name_en" not in props
-        assert "name_ja" not in props
-        assert props["name_ko"] == "개념"
+        # 미설정 Optional(ccss_code·grade_band_hint) → props에 없어야 함
+        assert "ccss_code" not in props
+        assert "grade_band_hint" not in props
+        assert props["domain"] == "미적분"
 
 
 # ──────────────────────────────────────────────────────────────────────

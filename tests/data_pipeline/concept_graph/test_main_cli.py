@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import csv
 import json
+import shutil
 from importlib.util import find_spec
 from pathlib import Path
 
 import pytest
+import yaml
 from typer.testing import CliRunner
 
 from data_pipeline.concept_graph.__main__ import app
@@ -48,14 +50,14 @@ def _standards_json(tmp_path: Path) -> Path:
 
 
 def _write_filled_concepts(path: Path, ids: list[str]) -> None:
-    """전문가가 표기를 채운 concepts.csv 모사(검증 통과용). source_id=concept_id(신규 후보)."""
+    """전문가가 채운 concepts.csv 모사(검증 통과용). source_id=concept_id(신규 후보).
+
+    표시이름(name_ko/en/ja)은 노드 비내장(P2d)이라 CSV 컬럼이 없다(locale 레이어 소관).
+    """
     fields = [
         "concept_id",
         "source_id",
         "aliases",
-        "name_ko",
-        "name_en",
-        "name_ja",
         "domain",
         "grade_band_hint",
         "prerequisite_concept_ids",
@@ -67,15 +69,12 @@ def _write_filled_concepts(path: Path, ids: list[str]) -> None:
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
-        for i, cid in enumerate(ids):
+        for cid in ids:
             w.writerow(
                 {
                     "concept_id": cid,
                     "source_id": cid,  # 신규 후보 = 자기 정체
                     "aliases": "",
-                    "name_ko": f"개념{i}",
-                    "name_en": f"concept{i}",
-                    "name_ja": f"概念{i}",
                     "domain": "미적분",
                     "grade_band_hint": "고등학교",
                     "prerequisite_concept_ids": "",
@@ -133,7 +132,7 @@ class TestTransformV1:
         assert "PASS" in result.stdout
 
     def test_writes_outputs(self, corpus_dir: Path, tmp_path: Path) -> None:
-        """--output-dir 주면 graph.json·id_map.csv 저장 + redaction 유지."""
+        """--output-dir 주면 graph.json·id_map.csv·ids.yaml·locales 저장 + redaction 유지."""
         out = tmp_path / "out"
         result = runner.invoke(
             app,
@@ -144,13 +143,25 @@ class TestTransformV1:
         idmap = out / "id_map.csv"
         assert graph.exists()
         assert idmap.exists()
+        # P2d co-generate: registry(ids.yaml)·locale(ko/en/ja) 동반 산출
+        assert (out / "ids.yaml").exists()
+        assert (out / "locales" / "ko.json").exists()
+        assert (out / "locales" / "en.json").exists()
         text = graph.read_text(encoding="utf-8")
         # redaction: 산출 JSON에 본문 키 없음
         assert '"description"' not in text
         assert "formal_definition" not in text
+        # 표시이름은 노드 비내장 → 어떤 concept 노드에도 name_* 키가 없다(raw 패스스루는 별개).
+        payload = json.loads(text)
+        for concept in payload["concepts"]:
+            assert "name_ko" not in concept
+            assert "name_en" not in concept
+            assert "name_ja" not in concept
         with idmap.open(encoding="utf-8-sig") as f:
             rows = list(csv.DictReader(f))
         assert len(rows) == 437  # src_id → concept_id 매핑(공통 403 + 기본수학 34)
+        ko = json.loads((out / "locales" / "ko.json").read_text(encoding="utf-8"))
+        assert len(ko) == 437  # 표시이름은 locale(ko)로 분리
 
     def test_missing_corpus_exits_2(self, tmp_path: Path) -> None:
         result = runner.invoke(
@@ -164,6 +175,56 @@ class TestTransformV1:
         result = runner.invoke(
             app, ["transform-v1", "--corpus-dir", str(tmp_path / "empty")]
         )
+        assert result.exit_code == 2
+
+
+class TestGenIds:
+    def _corpus_copy(self, corpus_dir: Path, tmp_path: Path) -> Path:
+        """실 코퍼스를 tmp로 복제(원본 불변) + graph.json을 canonical로 재생성."""
+        dst = tmp_path / "corpus"
+        dst.mkdir()
+        for name in (
+            "concepts.jsonl",
+            "prerequisite_edges.jsonl",
+            "flashcards.jsonl",
+            "ccss_only_intl.jsonl",
+        ):
+            src = corpus_dir / name
+            if src.exists():
+                shutil.copy(src, dst / name)
+        # 커밋된 canonical graph.json을 tmp에 생성(transform-v1로).
+        assert (
+            runner.invoke(
+                app,
+                ["transform-v1", "--corpus-dir", str(dst), "--output-dir", str(dst)],
+            ).exit_code
+            == 0
+        )
+        return dst
+
+    def test_gen_ids_regenerates_and_validates(
+        self, corpus_dir: Path, tmp_path: Path
+    ) -> None:
+        """gen-ids가 ids.yaml·locale을 재생성하고 graph.json에 대해 검증 통과(종료코드 0)."""
+        dst = self._corpus_copy(corpus_dir, tmp_path)
+        (dst / "ids.yaml").unlink()  # 재생성 대상 삭제 후 gen-ids로 복원
+        result = runner.invoke(app, ["gen-ids", "--corpus-dir", str(dst)])
+        assert result.exit_code == 0, result.output
+        assert (dst / "ids.yaml").exists()
+        registry = yaml.safe_load((dst / "ids.yaml").read_text(encoding="utf-8"))
+        assert registry["version"] == 1
+        assert len(registry["concepts"]) == 437
+        ko = json.loads((dst / "locales" / "ko.json").read_text(encoding="utf-8"))
+        assert len(ko) == 437
+
+    def test_gen_ids_missing_graph_exits_2(
+        self, corpus_dir: Path, tmp_path: Path
+    ) -> None:
+        """graph.json 없으면 종료코드 2(검증 대상 부재)."""
+        dst = tmp_path / "nograph"
+        dst.mkdir()
+        shutil.copy(corpus_dir / "concepts.jsonl", dst / "concepts.jsonl")
+        result = runner.invoke(app, ["gen-ids", "--corpus-dir", str(dst)])
         assert result.exit_code == 2
 
 
@@ -211,7 +272,7 @@ class TestValidate:
         assert "그래프 검증" in result.stdout
 
     def test_validate_unfilled_seed_reports_parse_errors(self, tmp_path: Path) -> None:
-        """빈칸 표기(name) seed CSV는 파싱 실패 → 종료코드 1."""
+        """빈칸(strength·evidence) seed 엣지 CSV는 파싱 실패 → 종료코드 1."""
         ncic = _standards_json(tmp_path)
         out_dir = tmp_path / "seed"
         runner.invoke(
@@ -240,7 +301,7 @@ class TestValidate:
         assert "파싱 실패" in result.stdout
 
     def test_validate_detects_cycle_exits_1(self, tmp_path: Path) -> None:
-        a, b = "HIGH-CALC-001", "HIGH-CALC-002"
+        a, b = "math.calculus.aa", "math.calculus.bb"
         cpath, epath = tmp_path / "c.csv", tmp_path / "e.csv"
         _write_filled_concepts(cpath, [a, b])
         _write_filled_edges(epath, [(a, b), (b, a)])  # 순환
@@ -280,10 +341,13 @@ class TestLoad:
                     "source_citation": "x",
                     "concepts": [
                         {
-                            "concept_id": "HIGH-CALC-001",
+                            "concept_id": "math.calculus.geukhan",
                             "source_id": "H:12미적Ⅰ01-01",
-                            "aliases": ["UC.calc1.a01.h-12-01-01", "H:12미적Ⅰ01-01"],
-                            "name_ko": "극한",
+                            "aliases": [
+                                "HIGH-CALC-001",
+                                "UC.calc1.a01.h-12-01-01",
+                                "H:12미적Ⅰ01-01",
+                            ],
                             "domain": "미적분",
                             "review_status": "reviewed",
                         }
