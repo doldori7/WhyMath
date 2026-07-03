@@ -59,18 +59,25 @@ class _FakeConceptOrm:
 
     def __init__(self, schema: Concept) -> None:
         self._schema = schema
+        self.code = schema.code
 
     def to_schema(self) -> Concept:
         return self._schema
 
 
 class _FakeSession:
-    """가짜 AsyncSession — get()만 모사(concept ORM 또는 None 반환)."""
+    """가짜 AsyncSession — get()을 모델별로 디스패치.
+
+    `Concept` 조회는 concept ORM(또는 None). `ConceptVisualization`(시각화 계층 Overlay) 조회는
+    None(미태깅) — 이 테스트들은 시각화 4분류를 다루지 않으므로 기존 동작을 유지한다.
+    """
 
     def __init__(self, orm: object) -> None:
         self._orm = orm
 
     async def get(self, model: object, key: object) -> object:
+        if getattr(model, "__name__", "") == "ConceptVisualization":
+            return None
         return self._orm
 
 

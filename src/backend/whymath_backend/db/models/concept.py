@@ -114,6 +114,8 @@ class Concept(Base):
     recommended_visual_styles: Mapped[list[VisualizationStyle] | None] = mapped_column(
         ARRAY(_pg_enum(VisualizationStyle, "visualization_style_enum"))
     )
+    # 시각화 가능성 4분류는 *노드 비내장* — 시각화 계층 Overlay `concept_visualization`
+    # (`db/models/concept_visualization.py`·code 키)가 단일 진실(ADR 계층분리·CurriculumEntry 선례).
 
     # ===== 난이도·중요도 =====
     intrinsic_difficulty: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))

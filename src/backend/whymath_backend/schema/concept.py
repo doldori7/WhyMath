@@ -156,6 +156,10 @@ class Concept(BaseModel):
         description="권장 시각화 양식 배열 — 개념을 가장 잘 드러내는 교수학적 표현 형식 "
         "(예: 삼각함수→단위원·확률→수형도). 슬라이스 88·visualization_style_enum[] nullable.",
     )
+    # 시각화 가능성 4분류(직접/동적/추상/불가)는 *노드 비내장* — 시각화 계층 Overlay
+    # `concept_visualization`(`db/models/concept_visualization.py`·code 키)가 단일 진실이다
+    # (ADR concept_node_layering_decision §1 "visualization 계층=노드 비내장"·CurriculumEntry
+    # Overlay 선례). 노드 재내장은 `test_concept.py::_FORBIDDEN_NODE_FIELDS`가 차단한다.
 
     # ===== 난이도·중요도 =====
     intrinsic_difficulty: float | None = Field(

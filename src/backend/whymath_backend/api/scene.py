@@ -26,6 +26,7 @@ from whymath_backend.api._l3_state import get_cache, get_provider, get_trace
 from whymath_backend.api._rate_limit import RateLimitedVisualization
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.session import get_session
+from whymath_backend.l1.concept_visualization import get_visualizability
 from whymath_backend.l2.concept_diagnosis import (
     ConceptDiagnosis,
     compute_concept_diagnoses,
@@ -85,6 +86,8 @@ async def scene_for_concept_diagnosis(
     concept_orm = await session.get(Concept, diagnosis.concept_id)
     if concept_orm is None:
         return None
+    # 시각화 가능성 4분류(Part 5)를 시각화 계층 Overlay에서 조회(노드 비내장·ADR 계층분리).
+    visualizability = await get_visualizability(session, concept_orm.code)
     mastery = (
         diagnosis.bkt_mastery if diagnosis.bkt_mastery is not None else diagnosis.irt_mastery_proxy
     )
@@ -125,6 +128,7 @@ async def scene_for_concept_diagnosis(
         cache=cache,
         trace=trace,
         learner_context=learner_context,
+        visualizability=visualizability,
     )
 
 
