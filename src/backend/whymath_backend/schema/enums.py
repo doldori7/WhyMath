@@ -837,6 +837,10 @@ class EventType(str, Enum):
     """학생 풀이 단계 이벤트 — §6.1 `event_type_enum`(한글 8종 + 검산결과 + 힌트제공 + 시각화조작).
 
     실시간 분석용(TimescaleDB hypertable `attempt_event`)의 이벤트 종류.
+
+    페이로드 계약(invariant ⑫): *생산되는* 3종(검산결과·힌트제공·시각화조작)의 `event_data`
+    모양은 `schema/event_data_contract.py`(EVENT_DATA_CONTRACT)가 단일 진실원으로 고정한다.
+    나머지 8종(문제읽기…답입력)은 생산자가 아직 0이라 계약 면제(휴면)다.
     """
 
     문제읽기 = "문제읽기"
