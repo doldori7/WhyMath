@@ -12,10 +12,10 @@ join된다. 슬98 결정(벡터 DB=pgvector·Postgres 16 통합)을 개념 자�
 `vector(N)`·HNSW 인덱스 없음)는 동일 규약이다.
 
 설계 결정:
-- **PK는 concept_id(TEXT·UC)**: 슬1 `idmap`이 발급한 Universal Concept ID(`UC.<domain>.
-  <topic>.<slug>`). 슬2 Neo4j 노드 키와 *동일 키 공간*이라 그래프↔벡터가 한 키로 join된다
-  (이중 store 단일 키 일관성). upsert가 PK 충돌로 멱등 동작한다(`ON CONFLICT(concept_id) DO
-  UPDATE`) — 같은 개념 재적재가 행을 갱신.
+- **PK는 concept_id(TEXT·opaque)**: 슬1 `idmap`이 발급한 canonical concept_id(재-ID(P2d) 후
+  `math.<area>.<slug>`·형식 불가지 opaque str·옛 UC/TRACK-AREA-NNN은 aliases 보존). 슬2 Neo4j
+  노드 키와 *동일 키 공간*이라 그래프↔벡터가 한 키로 join된다(이중 store 단일 키 일관성). upsert가
+  PK 충돌로 멱등 동작한다(`ON CONFLICT(concept_id) DO UPDATE`) — 같은 개념 재적재가 행을 갱신.
 - **embedding은 `pgvector.sqlalchemy.Vector(dim)`**(차원 고정·`config.embedding_dim` 기본
   1024·bge-m3): `misconception_embedding`과 *같은 컬럼 차원 규약*. 401+ 개념도 현재 규모에선
   seq-scan이 정합하나(스케일 시 HNSW cosine 인덱스가 정석 — 후속), SQLAlchemy `Vector` 타입·

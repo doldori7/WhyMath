@@ -1,0 +1,6996 @@
+# 자동 생성물 — 수기 편집 금지. 재생성: python -m data_pipeline.concept_graph gen-ids
+version: 1
+generated_by: python -m data_pipeline.concept_graph gen-ids
+concepts:
+- canonical_id: math.place-value.su-gaenyeomgwa-segi
+  src_id: N1
+  aliases:
+  - ELEM-NPLACE-001
+  - UC.math.a01.n1
+  - N1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.n1
+    to: ELEM-NPLACE-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NPLACE-001
+    to: math.place-value.su-gaenyeomgwa-segi
+- canonical_id: math.place-value.jaritgaps-wichijeok-gisubeop
+  src_id: N2
+  aliases:
+  - ELEM-NPLACE-002
+  - UC.math.a01.n2
+  - N2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.n2
+    to: ELEM-NPLACE-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NPLACE-002
+    to: math.place-value.jaritgaps-wichijeok-gisubeop
+- canonical_id: math.place-value.suui-gyeyeol-keugi-bigyo
+  src_id: N3
+  aliases:
+  - ELEM-NPLACE-004
+  - UC.math.a01.n3
+  - N3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.n3
+    to: ELEM-NPLACE-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NPLACE-004
+    to: math.place-value.suui-gyeyeol-keugi-bigyo
+- canonical_id: math.place-value.suui-bunhae-hapseong
+  src_id: N4
+  aliases:
+  - ELEM-NPLACE-003
+  - UC.math.a01.n4
+  - N4
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.n4
+    to: ELEM-NPLACE-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NPLACE-003
+    to: math.place-value.suui-bunhae-hapseong
+- canonical_id: math.addition.deotsem-ppaelsemui-uimi
+  src_id: A1
+  aliases:
+  - ELEM-ADDSUB-001
+  - UC.math.a01.a1
+  - A1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.a1
+    to: ELEM-ADDSUB-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-ADDSUB-001
+    to: math.addition.deotsem-ppaelsemui-uimi
+- canonical_id: math.addition.du-jari-deotsem-ppaelsem
+  src_id: A2
+  aliases:
+  - ELEM-ADDSUB-002
+  - UC.math.a01.a2
+  - A2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.a2
+    to: ELEM-ADDSUB-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-ADDSUB-002
+    to: math.addition.du-jari-deotsem-ppaelsem
+- canonical_id: math.addition.deotsemgwa-ppaelsemui-gwangye
+  src_id: A3
+  aliases:
+  - ELEM-ADDSUB-003
+  - UC.math.a01.a3
+  - A3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.a3
+    to: ELEM-ADDSUB-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-ADDSUB-003
+    to: math.addition.deotsemgwa-ppaelsemui-gwangye
+- canonical_id: math.addition.se-suui-deotsem-ppaelsem
+  src_id: A4
+  aliases:
+  - ELEM-ADDSUB-004
+  - UC.math.a01.a4
+  - A4
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.a4
+    to: ELEM-ADDSUB-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-ADDSUB-004
+    to: math.addition.se-suui-deotsem-ppaelsem
+- canonical_id: math.addition.ga-itneun-sik
+  src_id: A5
+  aliases:
+  - ELEM-ADDSUB-005
+  - UC.math.a01.a5
+  - A5
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.a5
+    to: ELEM-ADDSUB-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-ADDSUB-005
+    to: math.addition.ga-itneun-sik
+- canonical_id: math.multiplication.gopsemui-uimi
+  src_id: M1
+  aliases:
+  - ELEM-MUL-001
+  - UC.math.a01.m1
+  - M1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.m1
+    to: ELEM-MUL-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MUL-001
+    to: math.multiplication.gopsemui-uimi
+- canonical_id: math.multiplication.gopsemgugu
+  src_id: M2
+  aliases:
+  - ELEM-MUL-002
+  - UC.math.a01.m2
+  - M2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.m2
+    to: ELEM-MUL-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MUL-002
+    to: math.multiplication.gopsemgugu
+- canonical_id: math.pattern.gyuchik-chatgi-pyohyeon
+  src_id: Q1
+  aliases:
+  - ELEM-PATTERN-001
+  - UC.math.a02.q1
+  - Q1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.q1
+    to: ELEM-PATTERN-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-PATTERN-001
+    to: math.pattern.gyuchik-chatgi-pyohyeon
+- canonical_id: math.pattern.gyuchike-ttara-baeyeol
+  src_id: Q2
+  aliases:
+  - ELEM-PATTERN-002
+  - UC.math.a02.q2
+  - Q2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.q2
+    to: ELEM-PATTERN-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-PATTERN-002
+    to: math.pattern.gyuchike-ttara-baeyeol
+- canonical_id: math.shape.ipchedohyeong-jikgwan
+  src_id: G01
+  aliases:
+  - ELEM-SHAPE-001
+  - UC.math.a03.g01
+  - G01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g01
+    to: ELEM-SHAPE-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-001
+    to: math.shape.ipchedohyeong-jikgwan
+- canonical_id: math.shape.ssatginamuro-ipche-mandeulgi
+  src_id: G02
+  aliases:
+  - ELEM-SHAPE-003
+  - UC.math.a03.g02
+  - G02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g02
+    to: ELEM-SHAPE-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-003
+    to: math.shape.ssatginamuro-ipche-mandeulgi
+- canonical_id: math.shape.pyeongmyeondohyeong-jikgwan
+  src_id: G03
+  aliases:
+  - ELEM-SHAPE-002
+  - UC.math.a03.g03
+  - G03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g03
+    to: ELEM-SHAPE-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-002
+    to: math.shape.pyeongmyeondohyeong-jikgwan
+- canonical_id: math.shape.pyeongmyeondohyeong-geurigi
+  src_id: G04
+  aliases:
+  - ELEM-SHAPE-004
+  - UC.math.a03.g04
+  - G04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g04
+    to: ELEM-SHAPE-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-004
+    to: math.shape.pyeongmyeondohyeong-geurigi
+- canonical_id: math.shape.samgakhyeong-sagakhyeongui-gongtongjeom
+  src_id: G05
+  aliases:
+  - ELEM-SHAPE-005
+  - UC.math.a03.g05
+  - G05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g05
+    to: ELEM-SHAPE-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-005
+    to: math.shape.samgakhyeong-sagakhyeongui-gongtongjeom
+- canonical_id: math.unit.yangui-bigyo
+  src_id: L0
+  aliases:
+  - ELEM-UNIT-001
+  - UC.math.a03.l0
+  - L0
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.l0
+    to: ELEM-UNIT-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-001
+    to: math.unit.yangui-bigyo
+- canonical_id: math.unit.sigak-ilkgi
+  src_id: T1
+  aliases:
+  - ELEM-UNIT-003
+  - UC.math.a03.t1
+  - T1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.t1
+    to: ELEM-UNIT-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-003
+    to: math.unit.sigak-ilkgi
+- canonical_id: math.unit.siganui-danwiwa-gwangye
+  src_id: T2
+  aliases:
+  - ELEM-UNIT-007
+  - UC.math.a03.t2
+  - T2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.t2
+    to: ELEM-UNIT-007
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-007
+    to: math.unit.siganui-danwiwa-gwangye
+- canonical_id: math.unit.gili-danwi-cm-m
+  src_id: L1
+  aliases:
+  - ELEM-UNIT-002
+  - UC.math.a03.l1
+  - L1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.l1
+    to: ELEM-UNIT-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-002
+    to: math.unit.gili-danwi-cm-m
+- canonical_id: math.unit.gili-danwi-gwangye-pyohyeon
+  src_id: L2
+  aliases:
+  - ELEM-UNIT-004
+  - UC.math.a03.l2
+  - L2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.l2
+    to: ELEM-UNIT-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-004
+    to: math.unit.gili-danwi-gwangye-pyohyeon
+- canonical_id: math.unit.gili-eorim
+  src_id: L3
+  aliases:
+  - ELEM-UNIT-005
+  - UC.math.a03.l3
+  - L3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.l3
+    to: ELEM-UNIT-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-005
+    to: math.unit.gili-eorim
+- canonical_id: math.unit.giliui-deotsem-ppaelsem
+  src_id: L4
+  aliases:
+  - ELEM-UNIT-006
+  - UC.math.a03.l4
+  - L4
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.l4
+    to: ELEM-UNIT-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-006
+    to: math.unit.giliui-deotsem-ppaelsem
+- canonical_id: math.graph.bunryuhago-gaesu-segi
+  src_id: P1
+  aliases:
+  - ELEM-GRAPH-001
+  - UC.math.a04.p1
+  - P1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p1
+    to: ELEM-GRAPH-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-GRAPH-001
+    to: math.graph.bunryuhago-gaesu-segi
+- canonical_id: math.graph.pyoro-natanaegi
+  src_id: P2
+  aliases:
+  - ELEM-GRAPH-002
+  - UC.math.a04.p2
+  - P2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p2
+    to: ELEM-GRAPH-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-GRAPH-002
+    to: math.graph.pyoro-natanaegi
+- canonical_id: math.graph.geuraepeu
+  src_id: P3
+  aliases:
+  - ELEM-GRAPH-003
+  - UC.math.a04.p3
+  - P3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p3
+    to: ELEM-GRAPH-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-GRAPH-003
+    to: math.graph.geuraepeu
+- canonical_id: math.place-value.keun-su
+  src_id: N5
+  aliases:
+  - ELEM-NPLACE-005
+  - UC.math.a01.n5
+  - N5
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.n5
+    to: ELEM-NPLACE-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NPLACE-005
+    to: math.place-value.keun-su
+- canonical_id: math.place-value.keun-suui-gyeyeol-bigyo
+  src_id: N6
+  aliases:
+  - ELEM-NPLACE-006
+  - UC.math.a01.n6
+  - N6
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.n6
+    to: ELEM-NPLACE-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NPLACE-006
+    to: math.place-value.keun-suui-gyeyeol-bigyo
+- canonical_id: math.addition.se-jari-deotsem-ppaelsem
+  src_id: A6
+  aliases:
+  - ELEM-ADDSUB-006
+  - UC.math.a01.a6
+  - A6
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.a6
+    to: ELEM-ADDSUB-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-ADDSUB-006
+    to: math.addition.se-jari-deotsem-ppaelsem
+- canonical_id: math.multiplication.yeoreo-jari-suui-gopsem
+  src_id: M3
+  aliases:
+  - ELEM-MUL-003
+  - UC.math.a01.m3
+  - M3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.m3
+    to: ELEM-MUL-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MUL-003
+    to: math.multiplication.yeoreo-jari-suui-gopsem
+- canonical_id: math.division.nanutsemui-uimi-gopsemgwaui-gwangye
+  src_id: D1
+  aliases:
+  - ELEM-DIV-001
+  - UC.math.a01.d1
+  - D1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.d1
+    to: ELEM-DIV-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-DIV-001
+    to: math.division.nanutsemui-uimi-gopsemgwaui-gwangye
+- canonical_id: math.division.nanutsem-moksgwa-nameoji
+  src_id: D2
+  aliases:
+  - ELEM-DIV-002
+  - UC.math.a01.d2
+  - D2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.d2
+    to: ELEM-DIV-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-DIV-002
+    to: math.division.nanutsem-moksgwa-nameoji
+- canonical_id: math.division.nanutsem
+  src_id: D3
+  aliases:
+  - ELEM-DIV-003
+  - UC.math.a01.d3
+  - D3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.d3
+    to: ELEM-DIV-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-DIV-003
+    to: math.division.nanutsem
+- canonical_id: math.number-property.eorimsem
+  src_id: E1
+  aliases:
+  - ELEM-NUMPROP-005
+  - UC.math.a01.e1
+  - E1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.e1
+    to: ELEM-NUMPROP-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NUMPROP-005
+    to: math.number-property.eorimsem
+- canonical_id: math.fraction.bunsuui-uimi
+  src_id: F1
+  aliases:
+  - ELEM-FRAC-001
+  - UC.math.a01.f1
+  - F1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f1
+    to: ELEM-FRAC-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-001
+    to: math.fraction.bunsuui-uimi
+- canonical_id: math.fraction.danwibunsu
+  src_id: F2
+  aliases:
+  - ELEM-FRAC-002
+  - UC.math.a01.f2
+  - F2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f2
+    to: ELEM-FRAC-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-002
+    to: math.fraction.danwibunsu
+- canonical_id: math.fraction.jinbunsu-gabunsu-daebunsu
+  src_id: F3
+  aliases:
+  - ELEM-FRAC-003
+  - UC.math.a01.f3
+  - F3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f3
+    to: ELEM-FRAC-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-003
+    to: math.fraction.jinbunsu-gabunsu-daebunsu
+- canonical_id: math.fraction.bunmoga-gateun-bunsuui-keugi-bigyo
+  src_id: F4
+  aliases:
+  - ELEM-FRAC-004
+  - UC.math.a01.f4
+  - F4
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f4
+    to: ELEM-FRAC-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-004
+    to: math.fraction.bunmoga-gateun-bunsuui-keugi-bigyo
+- canonical_id: math.decimal.sosu-han-jari
+  src_id: S1
+  aliases:
+  - ELEM-DECIMAL-001
+  - UC.math.a01.s1
+  - S1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.s1
+    to: ELEM-DECIMAL-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-DECIMAL-001
+    to: math.decimal.sosu-han-jari
+- canonical_id: math.fraction.bunsuwa-sosu-yeongyeol
+  src_id: F6
+  aliases:
+  - ELEM-FRAC-006
+  - UC.math.a01.f6
+  - F6
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f6
+    to: ELEM-FRAC-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-006
+    to: math.fraction.bunsuwa-sosu-yeongyeol
+- canonical_id: math.decimal.sosu-du-se-jari
+  src_id: S2
+  aliases:
+  - ELEM-DECIMAL-002
+  - UC.math.a01.s2
+  - S2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.s2
+    to: ELEM-DECIMAL-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-DECIMAL-002
+    to: math.decimal.sosu-du-se-jari
+- canonical_id: math.decimal.sosuui-keugi-bigyo
+  src_id: S3
+  aliases:
+  - ELEM-DECIMAL-003
+  - UC.math.a01.s3
+  - S3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.s3
+    to: ELEM-DECIMAL-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-DECIMAL-003
+    to: math.decimal.sosuui-keugi-bigyo
+- canonical_id: math.fraction.bunmoga-gateun-bunsuui-deotsem-ppaelsem
+  src_id: F5
+  aliases:
+  - ELEM-FRAC-005
+  - UC.math.a01.f5
+  - F5
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f5
+    to: ELEM-FRAC-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-005
+    to: math.fraction.bunmoga-gateun-bunsuui-deotsem-ppaelsem
+- canonical_id: math.decimal.sosuui-deotsem-ppaelsem
+  src_id: S4
+  aliases:
+  - ELEM-DECIMAL-004
+  - UC.math.a01.s4
+  - S4
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.s4
+    to: ELEM-DECIMAL-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-DECIMAL-004
+    to: math.decimal.sosuui-deotsem-ppaelsem
+- canonical_id: math.pattern.byeonhwa-gyuchikeul-su-sikeuro
+  src_id: Q3
+  aliases:
+  - ELEM-PATTERN-003
+  - UC.math.a02.q3
+  - Q3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.q3
+    to: ELEM-PATTERN-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-PATTERN-003
+    to: math.pattern.byeonhwa-gyuchikeul-su-sikeuro
+- canonical_id: math.pattern.gyesansikui-baeyeol-gyuchik
+  src_id: Q4
+  aliases:
+  - ELEM-PATTERN-004
+  - UC.math.a02.q4
+  - Q4
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.q4
+    to: ELEM-PATTERN-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-PATTERN-004
+    to: math.pattern.gyesansikui-baeyeol-gyuchik
+- canonical_id: math.pattern.deungho-gateun-yangui-gwangye
+  src_id: Q5
+  aliases:
+  - ELEM-PATTERN-005
+  - UC.math.a02.q5
+  - Q5
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.q5
+    to: ELEM-PATTERN-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-PATTERN-005
+    to: math.pattern.deungho-gateun-yangui-gwangye
+- canonical_id: math.shape-element.jikseon-seonbun-banjikseon
+  src_id: G06
+  aliases:
+  - ELEM-SHELEM-001
+  - UC.math.a03.g06
+  - G06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g06
+    to: ELEM-SHELEM-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHELEM-001
+    to: math.shape-element.jikseon-seonbun-banjikseon
+- canonical_id: math.shape-element.gak-jikgak-yegak-dungak
+  src_id: G07
+  aliases:
+  - ELEM-SHELEM-002
+  - UC.math.a03.g07
+  - G07
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g07
+    to: ELEM-SHELEM-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHELEM-002
+    to: math.shape-element.gak-jikgak-yegak-dungak
+- canonical_id: math.shape-element.sujikgwa-pyeonghaeng
+  src_id: G08
+  aliases:
+  - ELEM-SHELEM-004
+  - UC.math.a03.g08
+  - G08
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g08
+    to: ELEM-SHELEM-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHELEM-004
+    to: math.shape-element.sujikgwa-pyeonghaeng
+- canonical_id: math.transformation.milgi-dwijipgi-dolrigi
+  src_id: G11
+  aliases:
+  - ELEM-TRANSF-001
+  - UC.math.a03.g11
+  - G11
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g11
+    to: ELEM-TRANSF-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-TRANSF-001
+    to: math.transformation.milgi-dwijipgi-dolrigi
+- canonical_id: math.transformation.jeomui-idong
+  src_id: G12
+  aliases:
+  - ELEM-TRANSF-002
+  - UC.math.a03.g12
+  - G12
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g12
+    to: ELEM-TRANSF-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-TRANSF-002
+    to: math.transformation.jeomui-idong
+- canonical_id: math.shape-element.wonui-jungsim-banjireum-jireum
+  src_id: G09
+  aliases:
+  - ELEM-SHELEM-003
+  - UC.math.a03.g09
+  - G09
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g09
+    to: ELEM-SHELEM-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHELEM-003
+    to: math.shape-element.wonui-jungsim-banjireum-jireum
+- canonical_id: math.shape-element.keompeoseuro-won-geurigi
+  src_id: G10
+  aliases:
+  - ELEM-SHELEM-005
+  - UC.math.a03.g10
+  - G10
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g10
+    to: ELEM-SHELEM-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHELEM-005
+    to: math.shape-element.keompeoseuro-won-geurigi
+- canonical_id: math.shape.samgakhyeong-bunryu-ideungbyeon-jeongsamgakhyeong
+  src_id: G13
+  aliases:
+  - ELEM-SHAPE-006
+  - UC.math.a03.g13
+  - G13
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g13
+    to: ELEM-SHAPE-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-006
+    to: math.shape.samgakhyeong-bunryu-ideungbyeon-jeongsamgakhyeong
+- canonical_id: math.shape.samgakhyeong-bunryu-jikgak-yegak-dungak
+  src_id: G14
+  aliases:
+  - ELEM-SHAPE-007
+  - UC.math.a03.g14
+  - G14
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g14
+    to: ELEM-SHAPE-007
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-007
+    to: math.shape.samgakhyeong-bunryu-jikgak-yegak-dungak
+- canonical_id: math.shape.sagakhyeong-bunryu
+  src_id: G15
+  aliases:
+  - ELEM-SHAPE-008
+  - UC.math.a03.g15
+  - G15
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g15
+    to: ELEM-SHAPE-008
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-008
+    to: math.shape.sagakhyeong-bunryu
+- canonical_id: math.shape.dagakhyeong-jeongdagakhyeong
+  src_id: G16
+  aliases:
+  - ELEM-SHAPE-009
+  - UC.math.a03.g16
+  - G16
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g16
+    to: ELEM-SHAPE-009
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-009
+    to: math.shape.dagakhyeong-jeongdagakhyeong
+- canonical_id: math.shape.moyang-mandeulgi
+  src_id: G17
+  aliases:
+  - ELEM-SHAPE-010
+  - UC.math.a03.g17
+  - G17
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g17
+    to: ELEM-SHAPE-010
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-010
+    to: math.shape.moyang-mandeulgi
+- canonical_id: math.unit.siganui-deotsem-ppaelsem
+  src_id: T3
+  aliases:
+  - ELEM-UNIT-010
+  - UC.math.a03.t3
+  - T3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.t3
+    to: ELEM-UNIT-010
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-010
+    to: math.unit.siganui-deotsem-ppaelsem
+- canonical_id: math.unit.gili-danwi-mm-kmwa-gwangye
+  src_id: L5
+  aliases:
+  - ELEM-UNIT-009
+  - UC.math.a03.l5
+  - L5
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.l5
+    to: ELEM-UNIT-009
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-009
+    to: math.unit.gili-danwi-mm-kmwa-gwangye
+- canonical_id: math.unit.deuli-danwi-l-ml-gwangye
+  src_id: V1
+  aliases:
+  - ELEM-UNIT-011
+  - UC.math.a03.v1
+  - V1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.v1
+    to: ELEM-UNIT-011
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-011
+    to: math.unit.deuli-danwi-l-ml-gwangye
+- canonical_id: math.unit.deuliui-deotsem-ppaelsem
+  src_id: V2
+  aliases:
+  - ELEM-UNIT-013
+  - UC.math.a03.v2
+  - V2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.v2
+    to: ELEM-UNIT-013
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-013
+    to: math.unit.deuliui-deotsem-ppaelsem
+- canonical_id: math.unit.muge-danwi-g-kg-t-gwangye
+  src_id: W1
+  aliases:
+  - ELEM-UNIT-012
+  - UC.math.a03.w1
+  - W1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.w1
+    to: ELEM-UNIT-012
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-012
+    to: math.unit.muge-danwi-g-kg-t-gwangye
+- canonical_id: math.unit.mugeui-deotsem-ppaelsem
+  src_id: W2
+  aliases:
+  - ELEM-UNIT-014
+  - UC.math.a03.w2
+  - W2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.w2
+    to: ELEM-UNIT-014
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-014
+    to: math.unit.mugeui-deotsem-ppaelsem
+- canonical_id: math.unit.gakui-keugi-cheukjeong
+  src_id: AD
+  aliases:
+  - ELEM-UNIT-008
+  - UC.math.a03.ad
+  - AD
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.ad
+    to: ELEM-UNIT-008
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-UNIT-008
+    to: math.unit.gakui-keugi-cheukjeong
+- canonical_id: math.shape-element.samgakhyeong-sagakhyeong-naegakui-hap
+  src_id: G25
+  aliases:
+  - ELEM-SHELEM-006
+  - UC.math.a03.g25
+  - G25
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g25
+    to: ELEM-SHELEM-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHELEM-006
+    to: math.shape-element.samgakhyeong-sagakhyeong-naegakui-hap
+- canonical_id: math.graph.geurimgeuraepeu-makdaegeuraepeu
+  src_id: P4
+  aliases:
+  - ELEM-GRAPH-004
+  - UC.math.a04.p4
+  - P4
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p4
+    to: ELEM-GRAPH-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-GRAPH-004
+    to: math.graph.geurimgeuraepeu-makdaegeuraepeu
+- canonical_id: math.graph.kkeokkeunseongeuraepeu
+  src_id: P5
+  aliases:
+  - ELEM-GRAPH-005
+  - UC.math.a04.p5
+  - P5
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p5
+    to: ELEM-GRAPH-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-GRAPH-005
+    to: math.graph.kkeokkeunseongeuraepeu
+- canonical_id: math.graph.tamgu-makdae-kkeokkeunseon-hwalyong
+  src_id: P6
+  aliases:
+  - ELEM-GRAPH-006
+  - UC.math.a04.p6
+  - P6
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p6
+    to: ELEM-GRAPH-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-GRAPH-006
+    to: math.graph.tamgu-makdae-kkeokkeunseon-hwalyong
+- canonical_id: math.number-property.honhap-gyesan
+  src_id: X1
+  aliases:
+  - ELEM-NUMPROP-006
+  - UC.math.a01.x1
+  - X1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.x1
+    to: ELEM-NUMPROP-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NUMPROP-006
+    to: math.number-property.honhap-gyesan
+- canonical_id: math.number-property.suui-beomwi
+  src_id: R1
+  aliases:
+  - ELEM-NUMPROP-001
+  - UC.math.a01.r1
+  - R1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.r1
+    to: ELEM-NUMPROP-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NUMPROP-001
+    to: math.number-property.suui-beomwi
+- canonical_id: math.number-property.eorim
+  src_id: R2
+  aliases:
+  - ELEM-NUMPROP-004
+  - UC.math.a01.r2
+  - R2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.r2
+    to: ELEM-NUMPROP-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NUMPROP-004
+    to: math.number-property.eorim
+- canonical_id: math.number-property.yaksu-gongyaksu-choedaegongyaksu
+  src_id: B1
+  aliases:
+  - ELEM-NUMPROP-002
+  - UC.math.a01.b1
+  - B1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.b1
+    to: ELEM-NUMPROP-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NUMPROP-002
+    to: math.number-property.yaksu-gongyaksu-choedaegongyaksu
+- canonical_id: math.number-property.baesu-gongbaesu-choesogongbaesu
+  src_id: B2
+  aliases:
+  - ELEM-NUMPROP-003
+  - UC.math.a01.b2
+  - B2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.b2
+    to: ELEM-NUMPROP-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-NUMPROP-003
+    to: math.number-property.baesu-gongbaesu-choesogongbaesu
+- canonical_id: math.fraction.dongchibunsu
+  src_id: F7
+  aliases:
+  - ELEM-FRAC-007
+  - UC.math.a01.f7
+  - F7
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f7
+    to: ELEM-FRAC-007
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-007
+    to: math.fraction.dongchibunsu
+- canonical_id: math.fraction.yakbun
+  src_id: F8
+  aliases:
+  - ELEM-FRAC-009
+  - UC.math.a01.f8
+  - F8
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f8
+    to: ELEM-FRAC-009
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-009
+    to: math.fraction.yakbun
+- canonical_id: math.fraction.tongbun
+  src_id: F9
+  aliases:
+  - ELEM-FRAC-010
+  - UC.math.a01.f9
+  - F9
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f9
+    to: ELEM-FRAC-010
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-010
+    to: math.fraction.tongbun
+- canonical_id: math.fraction.bunmoga-dareun-bunsuui-keugi-bigyo
+  src_id: F10
+  aliases:
+  - ELEM-FRAC-011
+  - UC.math.a01.f10
+  - F10
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f10
+    to: ELEM-FRAC-011
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-011
+    to: math.fraction.bunmoga-dareun-bunsuui-keugi-bigyo
+- canonical_id: math.fraction.bunmoga-dareun-bunsuui-deotsem-ppaelsem
+  src_id: F11
+  aliases:
+  - ELEM-FRAC-012
+  - UC.math.a01.f11
+  - F11
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f11
+    to: ELEM-FRAC-012
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-012
+    to: math.fraction.bunmoga-dareun-bunsuui-deotsem-ppaelsem
+- canonical_id: math.fraction.bunsuui-gopsem
+  src_id: F12
+  aliases:
+  - ELEM-FRAC-013
+  - UC.math.a01.f12
+  - F12
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f12
+    to: ELEM-FRAC-013
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-013
+    to: math.fraction.bunsuui-gopsem
+- canonical_id: math.fraction.ui-mokseul-bunsuro
+  src_id: F13
+  aliases:
+  - ELEM-FRAC-008
+  - UC.math.a01.f13
+  - F13
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f13
+    to: ELEM-FRAC-008
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-008
+    to: math.fraction.ui-mokseul-bunsuro
+- canonical_id: math.fraction.bunsuui-nanutsem
+  src_id: F14
+  aliases:
+  - ELEM-FRAC-014
+  - UC.math.a01.f14
+  - F14
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f14
+    to: ELEM-FRAC-014
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-014
+    to: math.fraction.bunsuui-nanutsem
+- canonical_id: math.fraction.bunsuwa-sosuui-gwangye
+  src_id: F15
+  aliases:
+  - ELEM-FRAC-015
+  - UC.math.a01.f15
+  - F15
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.f15
+    to: ELEM-FRAC-015
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-FRAC-015
+    to: math.fraction.bunsuwa-sosuui-gwangye
+- canonical_id: math.decimal.sosuui-gopsem
+  src_id: S5
+  aliases:
+  - ELEM-DECIMAL-006
+  - UC.math.a01.s5
+  - S5
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.s5
+    to: ELEM-DECIMAL-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-DECIMAL-006
+    to: math.decimal.sosuui-gopsem
+- canonical_id: math.decimal.ui-mokseul-sosuro
+  src_id: S6
+  aliases:
+  - ELEM-DECIMAL-005
+  - UC.math.a01.s6
+  - S6
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.s6
+    to: ELEM-DECIMAL-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-DECIMAL-005
+    to: math.decimal.ui-mokseul-sosuro
+- canonical_id: math.decimal.sosuui-nanutsem
+  src_id: S7
+  aliases:
+  - ELEM-DECIMAL-007
+  - UC.math.a01.s7
+  - S7
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.s7
+    to: ELEM-DECIMAL-007
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-DECIMAL-007
+    to: math.decimal.sosuui-nanutsem
+- canonical_id: math.pattern.daeeung-gwangye
+  src_id: Q6
+  aliases:
+  - ELEM-PATTERN-006
+  - UC.math.a02.q6
+  - Q6
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.q6
+    to: ELEM-PATTERN-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-PATTERN-006
+    to: math.pattern.daeeung-gwangye
+- canonical_id: math.ratio.biui-gaenyeom
+  src_id: Q7
+  aliases:
+  - ELEM-RATIO-001
+  - UC.math.a02.q7
+  - Q7
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.q7
+    to: ELEM-RATIO-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-RATIO-001
+    to: math.ratio.biui-gaenyeom
+- canonical_id: math.ratio.biyul
+  src_id: Q8
+  aliases:
+  - ELEM-RATIO-002
+  - UC.math.a02.q8
+  - Q8
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.q8
+    to: ELEM-RATIO-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-RATIO-002
+    to: math.ratio.biyul
+- canonical_id: math.ratio.biryesikgwa-geu-seongjil
+  src_id: Q9
+  aliases:
+  - ELEM-RATIO-003
+  - UC.math.a02.q9
+  - Q9
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.q9
+    to: ELEM-RATIO-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-RATIO-003
+    to: math.ratio.biryesikgwa-geu-seongjil
+- canonical_id: math.ratio.biryebaebun
+  src_id: Q10
+  aliases:
+  - ELEM-RATIO-004
+  - UC.math.a02.q10
+  - Q10
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.q10
+    to: ELEM-RATIO-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-RATIO-004
+    to: math.ratio.biryebaebun
+- canonical_id: math.transformation.dohyeongui-hapdong
+  src_id: G18
+  aliases:
+  - ELEM-TRANSF-003
+  - UC.math.a03.g18
+  - G18
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g18
+    to: ELEM-TRANSF-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-TRANSF-003
+    to: math.transformation.dohyeongui-hapdong
+- canonical_id: math.transformation.seondaeching-jeomdaeching
+  src_id: G19
+  aliases:
+  - ELEM-TRANSF-004
+  - UC.math.a03.g19
+  - G19
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g19
+    to: ELEM-TRANSF-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-TRANSF-004
+    to: math.transformation.seondaeching-jeomdaeching
+- canonical_id: math.shape.jikyukmyeonche-jeongyukmyeonche
+  src_id: G20
+  aliases:
+  - ELEM-SHAPE-011
+  - UC.math.a03.g20
+  - G20
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g20
+    to: ELEM-SHAPE-011
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-011
+    to: math.shape.jikyukmyeonche-jeongyukmyeonche
+- canonical_id: math.shape.gyeonyangdo-jeongaedo
+  src_id: G21
+  aliases:
+  - ELEM-SHAPE-015
+  - UC.math.a03.g21
+  - G21
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g21
+    to: ELEM-SHAPE-015
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-015
+    to: math.shape.gyeonyangdo-jeongaedo
+- canonical_id: math.shape.gakgidung-gakppul
+  src_id: G22
+  aliases:
+  - ELEM-SHAPE-012
+  - UC.math.a03.g22
+  - G22
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g22
+    to: ELEM-SHAPE-012
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-012
+    to: math.shape.gakgidung-gakppul
+- canonical_id: math.shape.gakgidungui-jeongaedo
+  src_id: G23
+  aliases:
+  - ELEM-SHAPE-016
+  - UC.math.a03.g23
+  - G23
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g23
+    to: ELEM-SHAPE-016
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-016
+    to: math.shape.gakgidungui-jeongaedo
+- canonical_id: math.shape.wongidung-wonppul-gu
+  src_id: G24
+  aliases:
+  - ELEM-SHAPE-013
+  - UC.math.a03.g24
+  - G24
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g24
+    to: ELEM-SHAPE-013
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-013
+    to: math.shape.wongidung-wonppul-gu
+- canonical_id: math.shape.wongidungui-jeongaedo
+  src_id: G26
+  aliases:
+  - ELEM-SHAPE-017
+  - UC.math.a03.g26
+  - G26
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g26
+    to: ELEM-SHAPE-017
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-017
+    to: math.shape.wongidungui-jeongaedo
+- canonical_id: math.shape.ssatginamu-gaesu-guhagi
+  src_id: G27
+  aliases:
+  - ELEM-SHAPE-014
+  - UC.math.a03.g27
+  - G27
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g27
+    to: ELEM-SHAPE-014
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-014
+    to: math.shape.ssatginamu-gaesu-guhagi
+- canonical_id: math.shape.ssatginamu-wi-ap-yeop-moyang
+  src_id: G28
+  aliases:
+  - ELEM-SHAPE-018
+  - UC.math.a03.g28
+  - G28
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.g28
+    to: ELEM-SHAPE-018
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-SHAPE-018
+    to: math.shape.ssatginamu-wi-ap-yeop-moyang
+- canonical_id: math.measurement.pyeongmyeondohyeongui-dulre
+  src_id: ME1
+  aliases:
+  - ELEM-MEAS-001
+  - UC.math.a03.me1
+  - ME1
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.me1
+    to: ELEM-MEAS-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MEAS-001
+    to: math.measurement.pyeongmyeondohyeongui-dulre
+- canonical_id: math.measurement.neolbi-danwi
+  src_id: ME2
+  aliases:
+  - ELEM-MEAS-002
+  - UC.math.a03.me2
+  - ME2
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.me2
+    to: ELEM-MEAS-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MEAS-002
+    to: math.measurement.neolbi-danwi
+- canonical_id: math.measurement.jiksagakhyeong-jeongsagakhyeongui-neolbi
+  src_id: ME3
+  aliases:
+  - ELEM-MEAS-003
+  - UC.math.a03.me3
+  - ME3
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.me3
+    to: ELEM-MEAS-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MEAS-003
+    to: math.measurement.jiksagakhyeong-jeongsagakhyeongui-neolbi
+- canonical_id: math.measurement.pyeonghaengsabyeonhyeong-samgakhyeong-sadarikkol-mareummoui-neolbi
+  src_id: ME4
+  aliases:
+  - ELEM-MEAS-006
+  - UC.math.a03.me4
+  - ME4
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.me4
+    to: ELEM-MEAS-006
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MEAS-006
+    to: math.measurement.pyeonghaengsabyeonhyeong-samgakhyeong-sadarikkol-mareummoui-neolbi
+- canonical_id: math.measurement.wonjuyul
+  src_id: ME5
+  aliases:
+  - ELEM-MEAS-004
+  - UC.math.a03.me5
+  - ME5
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.me5
+    to: ELEM-MEAS-004
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MEAS-004
+    to: math.measurement.wonjuyul
+- canonical_id: math.measurement.wonjuwa-wonui-neolbi
+  src_id: ME6
+  aliases:
+  - ELEM-MEAS-007
+  - UC.math.a03.me6
+  - ME6
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.me6
+    to: ELEM-MEAS-007
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MEAS-007
+    to: math.measurement.wonjuwa-wonui-neolbi
+- canonical_id: math.measurement.geotneolbi
+  src_id: ME7
+  aliases:
+  - ELEM-MEAS-008
+  - UC.math.a03.me7
+  - ME7
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.me7
+    to: ELEM-MEAS-008
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MEAS-008
+    to: math.measurement.geotneolbi
+- canonical_id: math.measurement.bupi-danwi
+  src_id: ME8
+  aliases:
+  - ELEM-MEAS-005
+  - UC.math.a03.me8
+  - ME8
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.me8
+    to: ELEM-MEAS-005
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MEAS-005
+    to: math.measurement.bupi-danwi
+- canonical_id: math.measurement.jikyukmyeonche-jeongyukmyeoncheui-bupi
+  src_id: ME9
+  aliases:
+  - ELEM-MEAS-009
+  - UC.math.a03.me9
+  - ME9
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.me9
+    to: ELEM-MEAS-009
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-MEAS-009
+    to: math.measurement.jikyukmyeonche-jeongyukmyeoncheui-bupi
+- canonical_id: math.graph.pyeonggyun
+  src_id: P7
+  aliases:
+  - ELEM-GRAPH-007
+  - UC.math.a04.p7
+  - P7
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p7
+    to: ELEM-GRAPH-007
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-GRAPH-007
+    to: math.graph.pyeonggyun
+- canonical_id: math.graph.ttigeuraepeu-wongeuraepeu
+  src_id: P8
+  aliases:
+  - ELEM-GRAPH-008
+  - UC.math.a04.p8
+  - P8
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p8
+    to: ELEM-GRAPH-008
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-GRAPH-008
+    to: math.graph.ttigeuraepeu-wongeuraepeu
+- canonical_id: math.graph.tamgu-jeokjeolhan-geuraepeu-seontaek
+  src_id: P9
+  aliases:
+  - ELEM-GRAPH-009
+  - UC.math.a04.p9
+  - P9
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p9
+    to: ELEM-GRAPH-009
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-GRAPH-009
+    to: math.graph.tamgu-jeokjeolhan-geuraepeu-seontaek
+- canonical_id: math.chance.ganeungseong-malro-pyohyeon
+  src_id: P10
+  aliases:
+  - ELEM-CHANCE-001
+  - UC.math.a04.p10
+  - P10
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p10
+    to: ELEM-CHANCE-001
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-CHANCE-001
+    to: math.chance.ganeungseong-malro-pyohyeon
+- canonical_id: math.chance.ganeungseong-suro-pyohyeon
+  src_id: P11
+  aliases:
+  - ELEM-CHANCE-002
+  - UC.math.a04.p11
+  - P11
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p11
+    to: ELEM-CHANCE-002
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-CHANCE-002
+    to: math.chance.ganeungseong-suro-pyohyeon
+- canonical_id: math.chance.ganeungseong-geungeo-pandan
+  src_id: P12
+  aliases:
+  - ELEM-CHANCE-003
+  - UC.math.a04.p12
+  - P12
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.p12
+    to: ELEM-CHANCE-003
+  - event: P2d
+    date: '2026-07-02'
+    from: ELEM-CHANCE-003
+    to: math.chance.ganeungseong-geungeo-pandan
+- canonical_id: math.arithmetic.soinsubunhae
+  src_id: J0101
+  aliases:
+  - MID-ARITH-001
+  - UC.math.a01.j0101
+  - J0101
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.j0101
+    to: MID-ARITH-001
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-ARITH-001
+    to: math.arithmetic.soinsubunhae
+- canonical_id: math.arithmetic.choedaegongyaksu-choesogongbaesu
+  src_id: J0102
+  aliases:
+  - MID-ARITH-003
+  - UC.math.a01.j0102
+  - J0102
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.j0102
+    to: MID-ARITH-003
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-ARITH-003
+    to: math.arithmetic.choedaegongyaksu-choesogongbaesu
+- canonical_id: math.arithmetic.eumsu-jeongsu-yurisuui-gaenyeom
+  src_id: J0103
+  aliases:
+  - MID-ARITH-002
+  - UC.math.a01.j0103
+  - J0103
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.j0103
+    to: MID-ARITH-002
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-ARITH-002
+    to: math.arithmetic.eumsu-jeongsu-yurisuui-gaenyeom
+- canonical_id: math.arithmetic.jeongsu-yurisuui-daeso
+  src_id: J0104
+  aliases:
+  - MID-ARITH-004
+  - UC.math.a01.j0104
+  - J0104
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.j0104
+    to: MID-ARITH-004
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-ARITH-004
+    to: math.arithmetic.jeongsu-yurisuui-daeso
+- canonical_id: math.arithmetic.jeongsu-yurisuui-sachikgyesan
+  src_id: J0105
+  aliases:
+  - MID-ARITH-005
+  - UC.math.a01.j0105
+  - J0105
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.j0105
+    to: MID-ARITH-005
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-ARITH-005
+    to: math.arithmetic.jeongsu-yurisuui-sachikgyesan
+- canonical_id: math.arithmetic.sunhwansosu
+  src_id: J0106
+  aliases:
+  - MID-ARITH-006
+  - UC.math.a01.j0106
+  - J0106
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.j0106
+    to: MID-ARITH-006
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-ARITH-006
+    to: math.arithmetic.sunhwansosu
+- canonical_id: math.arithmetic.jegopgeun
+  src_id: J0107
+  aliases:
+  - MID-ARITH-007
+  - UC.math.a01.j0107
+  - J0107
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.j0107
+    to: MID-ARITH-007
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-ARITH-007
+    to: math.arithmetic.jegopgeun
+- canonical_id: math.arithmetic.murisu
+  src_id: J0108
+  aliases:
+  - MID-ARITH-008
+  - UC.math.a01.j0108
+  - J0108
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.j0108
+    to: MID-ARITH-008
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-ARITH-008
+    to: math.arithmetic.murisu
+- canonical_id: math.arithmetic.silsuui-daeso
+  src_id: J0109
+  aliases:
+  - MID-ARITH-009
+  - UC.math.a01.j0109
+  - J0109
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.j0109
+    to: MID-ARITH-009
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-ARITH-009
+    to: math.arithmetic.silsuui-daeso
+- canonical_id: math.arithmetic.geunhoreul-pohamhan-sikui-gyesan
+  src_id: J0110
+  aliases:
+  - MID-ARITH-010
+  - UC.math.a01.j0110
+  - J0110
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a01.j0110
+    to: MID-ARITH-010
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-ARITH-010
+    to: math.arithmetic.geunhoreul-pohamhan-sikui-gyesan
+- canonical_id: math.equation.munjareul-sayonghan-sik-sikui-gaps
+  src_id: J0201
+  aliases:
+  - MID-EQN-001
+  - UC.math.a02.j0201
+  - J0201
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0201
+    to: MID-EQN-001
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-001
+    to: math.equation.munjareul-sayonghan-sik-sikui-gaps
+- canonical_id: math.equation.ilchasikui-deotsem-ppaelsem
+  src_id: J0202
+  aliases:
+  - MID-EQN-002
+  - UC.math.a02.j0202
+  - J0202
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0202
+    to: MID-EQN-002
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-002
+    to: math.equation.ilchasikui-deotsem-ppaelsem
+- canonical_id: math.equation.bangjeongsikgwa-hae-deungsikui-seongjil
+  src_id: J0203
+  aliases:
+  - MID-EQN-003
+  - UC.math.a02.j0203
+  - J0203
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0203
+    to: MID-EQN-003
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-003
+    to: math.equation.bangjeongsikgwa-hae-deungsikui-seongjil
+- canonical_id: math.equation.ilchabangjeongsik-puli-hwalyong
+  src_id: J0204
+  aliases:
+  - MID-EQN-006
+  - UC.math.a02.j0204
+  - J0204
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0204
+    to: MID-EQN-006
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-006
+    to: math.equation.ilchabangjeongsik-puli-hwalyong
+- canonical_id: math.function.sunseossanggwa-jwapyo
+  src_id: J0205
+  aliases:
+  - MID-FUN-001
+  - UC.math.a02.j0205
+  - J0205
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0205
+    to: MID-FUN-001
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-FUN-001
+    to: math.function.sunseossanggwa-jwapyo
+- canonical_id: math.function.geuraepeuui-haeseok
+  src_id: J0206
+  aliases:
+  - MID-FUN-002
+  - UC.math.a02.j0206
+  - J0206
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0206
+    to: MID-FUN-002
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-FUN-002
+    to: math.function.geuraepeuui-haeseok
+- canonical_id: math.function.jeongbirye-banbirye
+  src_id: J0207
+  aliases:
+  - MID-FUN-003
+  - UC.math.a02.j0207
+  - J0207
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0207
+    to: MID-FUN-003
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-FUN-003
+    to: math.function.jeongbirye-banbirye
+- canonical_id: math.equation.jisubeopchik
+  src_id: J0208
+  aliases:
+  - MID-EQN-004
+  - UC.math.a02.j0208
+  - J0208
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0208
+    to: MID-EQN-004
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-004
+    to: math.equation.jisubeopchik
+- canonical_id: math.equation.dahangsikui-deotsem-ppaelsem
+  src_id: J0209
+  aliases:
+  - MID-EQN-007
+  - UC.math.a02.j0209
+  - J0209
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0209
+    to: MID-EQN-007
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-007
+    to: math.equation.dahangsikui-deotsem-ppaelsem
+- canonical_id: math.equation.danhangsik-dahangsik-dahangsik-danhangsik
+  src_id: J0210
+  aliases:
+  - MID-EQN-008
+  - UC.math.a02.j0210
+  - J0210
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0210
+    to: MID-EQN-008
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-008
+    to: math.equation.danhangsik-dahangsik-dahangsik-danhangsik
+- canonical_id: math.equation.budeungsikgwa-hae-seongjil
+  src_id: J0211
+  aliases:
+  - MID-EQN-005
+  - UC.math.a02.j0211
+  - J0211
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0211
+    to: MID-EQN-005
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-005
+    to: math.equation.budeungsikgwa-hae-seongjil
+- canonical_id: math.equation.ilchabudeungsik
+  src_id: J0212
+  aliases:
+  - MID-EQN-009
+  - UC.math.a02.j0212
+  - J0212
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0212
+    to: MID-EQN-009
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-009
+    to: math.equation.ilchabudeungsik
+- canonical_id: math.equation.yeonripilchabangjeongsik
+  src_id: J0213
+  aliases:
+  - MID-EQN-010
+  - UC.math.a02.j0213
+  - J0213
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0213
+    to: MID-EQN-010
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-010
+    to: math.equation.yeonripilchabangjeongsik
+- canonical_id: math.function.hamsuui-gaenyeom-hamsutgaps
+  src_id: J0214
+  aliases:
+  - MID-FUN-004
+  - UC.math.a02.j0214
+  - J0214
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0214
+    to: MID-FUN-004
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-FUN-004
+    to: math.function.hamsuui-gaenyeom-hamsutgaps
+- canonical_id: math.function.ilchahamsuwa-geuraepeu
+  src_id: J0215
+  aliases:
+  - MID-FUN-005
+  - UC.math.a02.j0215
+  - J0215
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0215
+    to: MID-FUN-005
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-FUN-005
+    to: math.function.ilchahamsuwa-geuraepeu
+- canonical_id: math.function.ilchahamsu-geuraepeuui-seongjil-hwalyong
+  src_id: J0216
+  aliases:
+  - MID-FUN-006
+  - UC.math.a02.j0216
+  - J0216
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0216
+    to: MID-FUN-006
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-FUN-006
+    to: math.function.ilchahamsu-geuraepeuui-seongjil-hwalyong
+- canonical_id: math.function.ilchahamsuwa-ilchabangjeongsikui-gwangye
+  src_id: J0217
+  aliases:
+  - MID-FUN-007
+  - UC.math.a02.j0217
+  - J0217
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0217
+    to: MID-FUN-007
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-FUN-007
+    to: math.function.ilchahamsuwa-ilchabangjeongsikui-gwangye
+- canonical_id: math.function.du-ilchahamsuwa-yeonripbangjeongsik
+  src_id: J0218
+  aliases:
+  - MID-FUN-008
+  - UC.math.a02.j0218
+  - J0218
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0218
+    to: MID-FUN-008
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-FUN-008
+    to: math.function.du-ilchahamsuwa-yeonripbangjeongsik
+- canonical_id: math.equation.dahangsikui-gopsem-insubunhae
+  src_id: J0219
+  aliases:
+  - MID-EQN-011
+  - UC.math.a02.j0219
+  - J0219
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0219
+    to: MID-EQN-011
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-011
+    to: math.equation.dahangsikui-gopsem-insubunhae
+- canonical_id: math.equation.ichabangjeongsik
+  src_id: J0220
+  aliases:
+  - MID-EQN-012
+  - UC.math.a02.j0220
+  - J0220
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0220
+    to: MID-EQN-012
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-EQN-012
+    to: math.equation.ichabangjeongsik
+- canonical_id: math.function.ichahamsuui-gaenyeom
+  src_id: J0221
+  aliases:
+  - MID-FUN-009
+  - UC.math.a02.j0221
+  - J0221
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0221
+    to: MID-FUN-009
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-FUN-009
+    to: math.function.ichahamsuui-gaenyeom
+- canonical_id: math.function.ichahamsuui-geuraepeu-seongjil
+  src_id: J0222
+  aliases:
+  - MID-FUN-010
+  - UC.math.a02.j0222
+  - J0222
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a02.j0222
+    to: MID-FUN-010
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-FUN-010
+    to: math.function.ichahamsuui-geuraepeu-seongjil
+- canonical_id: math.geometry.jeom-seon-myeon-gak-wichi-gwangye
+  src_id: J0301
+  aliases:
+  - MID-GEO-001
+  - UC.math.a03.j0301
+  - J0301
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0301
+    to: MID-GEO-001
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-001
+    to: math.geometry.jeom-seon-myeon-gak-wichi-gwangye
+- canonical_id: math.geometry.dongwigak-eotgak
+  src_id: J0302
+  aliases:
+  - MID-GEO-002
+  - UC.math.a03.j0302
+  - J0302
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0302
+    to: MID-GEO-002
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-002
+    to: math.geometry.dongwigak-eotgak
+- canonical_id: math.geometry.samgakhyeongui-jakdo
+  src_id: J0303
+  aliases:
+  - MID-GEO-003
+  - UC.math.a03.j0303
+  - J0303
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0303
+    to: MID-GEO-003
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-003
+    to: math.geometry.samgakhyeongui-jakdo
+- canonical_id: math.geometry.samgakhyeongui-hapdong-jogeon
+  src_id: J0304
+  aliases:
+  - MID-GEO-006
+  - UC.math.a03.j0304
+  - J0304
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0304
+    to: MID-GEO-006
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-006
+    to: math.geometry.samgakhyeongui-hapdong-jogeon
+- canonical_id: math.geometry.dagakhyeongui-seongjil
+  src_id: J0305
+  aliases:
+  - MID-GEO-007
+  - UC.math.a03.j0305
+  - J0305
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0305
+    to: MID-GEO-007
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-007
+    to: math.geometry.dagakhyeongui-seongjil
+- canonical_id: math.geometry.buchaekkol
+  src_id: J0306
+  aliases:
+  - MID-GEO-004
+  - UC.math.a03.j0306
+  - J0306
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0306
+    to: MID-GEO-004
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-004
+    to: math.geometry.buchaekkol
+- canonical_id: math.geometry.damyeonchewa-hoejeonche
+  src_id: J0307
+  aliases:
+  - MID-GEO-005
+  - UC.math.a03.j0307
+  - J0307
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0307
+    to: MID-GEO-005
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-005
+    to: math.geometry.damyeonchewa-hoejeonche
+- canonical_id: math.geometry.ipchedohyeongui-geotneolbi-bupi
+  src_id: J0308
+  aliases:
+  - MID-GEO-008
+  - UC.math.a03.j0308
+  - J0308
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0308
+    to: MID-GEO-008
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-008
+    to: math.geometry.ipchedohyeongui-geotneolbi-bupi
+- canonical_id: math.geometry.ideungbyeonsamgakhyeongui-seongjil
+  src_id: J0309
+  aliases:
+  - MID-GEO-009
+  - UC.math.a03.j0309
+  - J0309
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0309
+    to: MID-GEO-009
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-009
+    to: math.geometry.ideungbyeonsamgakhyeongui-seongjil
+- canonical_id: math.geometry.samgakhyeongui-oesim-naesim
+  src_id: J0310
+  aliases:
+  - MID-GEO-010
+  - UC.math.a03.j0310
+  - J0310
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0310
+    to: MID-GEO-010
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-010
+    to: math.geometry.samgakhyeongui-oesim-naesim
+- canonical_id: math.geometry.sagakhyeongui-seongjil
+  src_id: J0311
+  aliases:
+  - MID-GEO-011
+  - UC.math.a03.j0311
+  - J0311
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0311
+    to: MID-GEO-011
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-011
+    to: math.geometry.sagakhyeongui-seongjil
+- canonical_id: math.geometry.dohyeongui-dalmeum-dalmeumbi
+  src_id: J0312
+  aliases:
+  - MID-GEO-012
+  - UC.math.a03.j0312
+  - J0312
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0312
+    to: MID-GEO-012
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-012
+    to: math.geometry.dohyeongui-dalmeum-dalmeumbi
+- canonical_id: math.geometry.samgakhyeongui-dalmeum-jogeon
+  src_id: J0313
+  aliases:
+  - MID-GEO-014
+  - UC.math.a03.j0313
+  - J0313
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0313
+    to: MID-GEO-014
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-014
+    to: math.geometry.samgakhyeongui-dalmeum-jogeon
+- canonical_id: math.geometry.pyeonghaengseon-sai-seonbunui-gili-bi
+  src_id: J0314
+  aliases:
+  - MID-GEO-015
+  - UC.math.a03.j0314
+  - J0314
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0314
+    to: MID-GEO-015
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-015
+    to: math.geometry.pyeonghaengseon-sai-seonbunui-gili-bi
+- canonical_id: math.geometry.pitagoraseu-jeongri
+  src_id: J0315
+  aliases:
+  - MID-GEO-016
+  - UC.math.a03.j0315
+  - J0315
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0315
+    to: MID-GEO-016
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-016
+    to: math.geometry.pitagoraseu-jeongri
+- canonical_id: math.geometry.samgakbi
+  src_id: J0316
+  aliases:
+  - MID-GEO-018
+  - UC.math.a03.j0316
+  - J0316
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0316
+    to: MID-GEO-018
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-018
+    to: math.geometry.samgakbi
+- canonical_id: math.geometry.samgakbiui-hwalyong
+  src_id: J0317
+  aliases:
+  - MID-GEO-019
+  - UC.math.a03.j0317
+  - J0317
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0317
+    to: MID-GEO-019
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-019
+    to: math.geometry.samgakbiui-hwalyong
+- canonical_id: math.geometry.wonui-hyeon-jeopseon
+  src_id: J0318
+  aliases:
+  - MID-GEO-013
+  - UC.math.a03.j0318
+  - J0318
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0318
+    to: MID-GEO-013
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-013
+    to: math.geometry.wonui-hyeon-jeopseon
+- canonical_id: math.geometry.wonjugak
+  src_id: J0319
+  aliases:
+  - MID-GEO-017
+  - UC.math.a03.j0319
+  - J0319
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a03.j0319
+    to: MID-GEO-017
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-GEO-017
+    to: math.geometry.wonjugak
+- canonical_id: math.data.daepyotgaps
+  src_id: J0401
+  aliases:
+  - MID-DATA-001
+  - UC.math.a04.j0401
+  - J0401
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.j0401
+    to: MID-DATA-001
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-DATA-001
+    to: math.data.daepyotgaps
+- canonical_id: math.data.dosubunpopyo-hiseutogeuraem
+  src_id: J0402
+  aliases:
+  - MID-DATA-002
+  - UC.math.a04.j0402
+  - J0402
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.j0402
+    to: MID-DATA-002
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-DATA-002
+    to: math.data.dosubunpopyo-hiseutogeuraem
+- canonical_id: math.data.sangdaedosu
+  src_id: J0403
+  aliases:
+  - MID-DATA-004
+  - UC.math.a04.j0403
+  - J0403
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.j0403
+    to: MID-DATA-004
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-DATA-004
+    to: math.data.sangdaedosu
+- canonical_id: math.data.tonggyejeok-tamgu
+  src_id: J0404
+  aliases:
+  - MID-DATA-007
+  - UC.math.a04.j0404
+  - J0404
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.j0404
+    to: MID-DATA-007
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-DATA-007
+    to: math.data.tonggyejeok-tamgu
+- canonical_id: math.data.gyeonguui-su
+  src_id: J0405
+  aliases:
+  - MID-DATA-003
+  - UC.math.a04.j0405
+  - J0405
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.j0405
+    to: MID-DATA-003
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-DATA-003
+    to: math.data.gyeonguui-su
+- canonical_id: math.data.hwakryul
+  src_id: J0406
+  aliases:
+  - MID-DATA-005
+  - UC.math.a04.j0406
+  - J0406
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.j0406
+    to: MID-DATA-005
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-DATA-005
+    to: math.data.hwakryul
+- canonical_id: math.data.bunsan-pyojunpyeoncha
+  src_id: J0407
+  aliases:
+  - MID-DATA-008
+  - UC.math.a04.j0407
+  - J0407
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.j0407
+    to: MID-DATA-008
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-DATA-008
+    to: math.data.bunsan-pyojunpyeoncha
+- canonical_id: math.data.sangjageurim
+  src_id: J0408
+  aliases:
+  - MID-DATA-006
+  - UC.math.a04.j0408
+  - J0408
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.j0408
+    to: MID-DATA-006
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-DATA-006
+    to: math.data.sangjageurim
+- canonical_id: math.data.sanjeomdo-sanggwangwangye
+  src_id: J0409
+  aliases:
+  - MID-DATA-009
+  - UC.math.a04.j0409
+  - J0409
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.math.a04.j0409
+    to: MID-DATA-009
+  - event: P2d
+    date: '2026-07-02'
+    from: MID-DATA-009
+    to: math.data.sanjeomdo-sanggwangwangye
+- canonical_id: math.equation.dahangsikui-sachikyeonsan
+  src_id: HK01
+  aliases:
+  - HIGH-EQN-001
+  - UC.common1.a01.hk01
+  - HK01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a01.hk01
+    to: HIGH-EQN-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-001
+    to: math.equation.dahangsikui-sachikyeonsan
+- canonical_id: math.equation.hangdeungsikgwa-mijeonggyesu
+  src_id: HK02
+  aliases:
+  - HIGH-EQN-002
+  - UC.common1.a01.hk02
+  - HK02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a01.hk02
+    to: HIGH-EQN-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-002
+    to: math.equation.hangdeungsikgwa-mijeonggyesu
+- canonical_id: math.equation.nameojijeongri-insujeongri
+  src_id: HK03
+  aliases:
+  - HIGH-EQN-003
+  - UC.common1.a01.hk03
+  - HK03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a01.hk03
+    to: HIGH-EQN-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-003
+    to: math.equation.nameojijeongri-insujeongri
+- canonical_id: math.equation.dahangsikui-insubunhae
+  src_id: HK04
+  aliases:
+  - HIGH-EQN-004
+  - UC.common1.a01.hk04
+  - HK04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a01.hk04
+    to: HIGH-EQN-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-004
+    to: math.equation.dahangsikui-insubunhae
+- canonical_id: math.equation.boksosu
+  src_id: HK05
+  aliases:
+  - HIGH-EQN-005
+  - UC.common1.a02.hk05
+  - HK05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk05
+    to: HIGH-EQN-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-005
+    to: math.equation.boksosu
+- canonical_id: math.equation.ichabangjeongsikui-geun
+  src_id: HK06
+  aliases:
+  - HIGH-EQN-007
+  - UC.common1.a02.hk06
+  - HK06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk06
+    to: HIGH-EQN-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-007
+    to: math.equation.ichabangjeongsikui-geun
+- canonical_id: math.equation.panbyeolsik
+  src_id: HK07
+  aliases:
+  - HIGH-EQN-009
+  - UC.common1.a02.hk07
+  - HK07
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk07
+    to: HIGH-EQN-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-009
+    to: math.equation.panbyeolsik
+- canonical_id: math.equation.geungwa-gyesuui-gwangye
+  src_id: HK08
+  aliases:
+  - HIGH-EQN-010
+  - UC.common1.a02.hk08
+  - HK08
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk08
+    to: HIGH-EQN-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-010
+    to: math.equation.geungwa-gyesuui-gwangye
+- canonical_id: math.equation.ichabangjeongsikgwa-ichahamsuui-gwangye-2
+  src_id: HK09
+  aliases:
+  - HIGH-EQN-011
+  - UC.common1.a02.hk09
+  - HK09
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk09
+    to: HIGH-EQN-011
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-011
+    to: math.equation.ichabangjeongsikgwa-ichahamsuui-gwangye-2
+- canonical_id: math.equation.ichahamsuui-geuraepeuwa-jikseon
+  src_id: HK10
+  aliases:
+  - HIGH-EQN-014
+  - UC.common1.a02.hk10
+  - HK10
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk10
+    to: HIGH-EQN-014
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-014
+    to: math.equation.ichahamsuui-geuraepeuwa-jikseon
+- canonical_id: math.equation.ichahamsuui-choedae-choeso-2
+  src_id: HK11
+  aliases:
+  - HIGH-EQN-015
+  - UC.common1.a02.hk11
+  - HK11
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk11
+    to: HIGH-EQN-015
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-015
+    to: math.equation.ichahamsuui-choedae-choeso-2
+- canonical_id: math.equation.sam-sachabangjeongsik
+  src_id: HK12
+  aliases:
+  - HIGH-EQN-012
+  - UC.common1.a02.hk12
+  - HK12
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk12
+    to: HIGH-EQN-012
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-012
+    to: math.equation.sam-sachabangjeongsik
+- canonical_id: math.equation.yeonripichabangjeongsik
+  src_id: HK13
+  aliases:
+  - HIGH-EQN-013
+  - UC.common1.a02.hk13
+  - HK13
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk13
+    to: HIGH-EQN-013
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-013
+    to: math.equation.yeonripichabangjeongsik
+- canonical_id: math.equation.yeonripilchabudeungsik-2
+  src_id: HK14
+  aliases:
+  - HIGH-EQN-006
+  - UC.common1.a02.hk14
+  - HK14
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk14
+    to: HIGH-EQN-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-006
+    to: math.equation.yeonripilchabudeungsik-2
+- canonical_id: math.equation.jeoldaetgaps-poham-budeungsik
+  src_id: HK15
+  aliases:
+  - HIGH-EQN-008
+  - UC.common1.a02.hk15
+  - HK15
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk15
+    to: HIGH-EQN-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-008
+    to: math.equation.jeoldaetgaps-poham-budeungsik
+- canonical_id: math.equation.ichabudeungsik-yeonripichabudeungsik
+  src_id: HK16
+  aliases:
+  - HIGH-EQN-016
+  - UC.common1.a02.hk16
+  - HK16
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a02.hk16
+    to: HIGH-EQN-016
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-EQN-016
+    to: math.equation.ichabudeungsik-yeonripichabudeungsik
+- canonical_id: math.combinatorics.hapuibeopchik-gopuibeopchik
+  src_id: HK39
+  aliases:
+  - HIGH-COUNT-001
+  - UC.common1.a03.hk39
+  - HK39
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a03.hk39
+    to: HIGH-COUNT-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COUNT-001
+    to: math.combinatorics.hapuibeopchik-gopuibeopchik
+- canonical_id: math.combinatorics.sunyeol-2
+  src_id: HK40
+  aliases:
+  - HIGH-COUNT-002
+  - UC.common1.a03.hk40
+  - HK40
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a03.hk40
+    to: HIGH-COUNT-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COUNT-002
+    to: math.combinatorics.sunyeol-2
+- canonical_id: math.combinatorics.johap-2
+  src_id: HK41
+  aliases:
+  - HIGH-COUNT-003
+  - UC.common1.a03.hk41
+  - HK41
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a03.hk41
+    to: HIGH-COUNT-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COUNT-003
+    to: math.combinatorics.johap-2
+- canonical_id: math.matrix.haengryeolui-tteutgwa-pyohyeon-2
+  src_id: HK42
+  aliases:
+  - HIGH-MATRIX-001
+  - UC.common1.a04.hk42
+  - HK42
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a04.hk42
+    to: HIGH-MATRIX-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-MATRIX-001
+    to: math.matrix.haengryeolui-tteutgwa-pyohyeon-2
+- canonical_id: math.matrix.haengryeolui-yeonsan-2
+  src_id: HK43
+  aliases:
+  - HIGH-MATRIX-002
+  - UC.common1.a04.hk43
+  - HK43
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common1.a04.hk43
+    to: HIGH-MATRIX-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-MATRIX-002
+    to: math.matrix.haengryeolui-yeonsan-2
+- canonical_id: math.coordinate.du-jeom-saiui-geori-2
+  src_id: HK17
+  aliases:
+  - HIGH-COORD-001
+  - UC.common2.a01.hk17
+  - HK17
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a01.hk17
+    to: HIGH-COORD-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COORD-001
+    to: math.coordinate.du-jeom-saiui-geori-2
+- canonical_id: math.coordinate.naebunjeom-oebunjeom
+  src_id: HK18
+  aliases:
+  - HIGH-COORD-002
+  - UC.common2.a01.hk18
+  - HK18
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a01.hk18
+    to: HIGH-COORD-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COORD-002
+    to: math.coordinate.naebunjeom-oebunjeom
+- canonical_id: math.coordinate.jikseonui-bangjeongsik-2
+  src_id: HK19
+  aliases:
+  - HIGH-COORD-003
+  - UC.common2.a01.hk19
+  - HK19
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a01.hk19
+    to: HIGH-COORD-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COORD-003
+    to: math.coordinate.jikseonui-bangjeongsik-2
+- canonical_id: math.coordinate.du-jikseonui-pyeonghaeng-sujik
+  src_id: HK20
+  aliases:
+  - HIGH-COORD-005
+  - UC.common2.a01.hk20
+  - HK20
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a01.hk20
+    to: HIGH-COORD-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COORD-005
+    to: math.coordinate.du-jikseonui-pyeonghaeng-sujik
+- canonical_id: math.coordinate.jeomgwa-jikseon-saiui-geori
+  src_id: HK21
+  aliases:
+  - HIGH-COORD-006
+  - UC.common2.a01.hk21
+  - HK21
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a01.hk21
+    to: HIGH-COORD-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COORD-006
+    to: math.coordinate.jeomgwa-jikseon-saiui-geori
+- canonical_id: math.coordinate.wonui-bangjeongsik-2
+  src_id: HK22
+  aliases:
+  - HIGH-COORD-004
+  - UC.common2.a01.hk22
+  - HK22
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a01.hk22
+    to: HIGH-COORD-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COORD-004
+    to: math.coordinate.wonui-bangjeongsik-2
+- canonical_id: math.coordinate.wongwa-jikseonui-wichi-gwangye-2
+  src_id: HK23
+  aliases:
+  - HIGH-COORD-008
+  - UC.common2.a01.hk23
+  - HK23
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a01.hk23
+    to: HIGH-COORD-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COORD-008
+    to: math.coordinate.wongwa-jikseonui-wichi-gwangye-2
+- canonical_id: math.coordinate.pyeonghaengidong-2
+  src_id: HK24
+  aliases:
+  - HIGH-COORD-007
+  - UC.common2.a01.hk24
+  - HK24
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a01.hk24
+    to: HIGH-COORD-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COORD-007
+    to: math.coordinate.pyeonghaengidong-2
+- canonical_id: math.coordinate.daechingidong-2
+  src_id: HK25
+  aliases:
+  - HIGH-COORD-009
+  - UC.common2.a01.hk25
+  - HK25
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a01.hk25
+    to: HIGH-COORD-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-COORD-009
+    to: math.coordinate.daechingidong-2
+- canonical_id: math.logic.jiphapgwa-pyohyeon
+  src_id: HK26
+  aliases:
+  - HIGH-LOGIC-001
+  - UC.common2.a02.hk26
+  - HK26
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a02.hk26
+    to: HIGH-LOGIC-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-LOGIC-001
+    to: math.logic.jiphapgwa-pyohyeon
+- canonical_id: math.logic.bubunjiphap-pohamgwangye
+  src_id: HK27
+  aliases:
+  - HIGH-LOGIC-002
+  - UC.common2.a02.hk27
+  - HK27
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a02.hk27
+    to: HIGH-LOGIC-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-LOGIC-002
+    to: math.logic.bubunjiphap-pohamgwangye
+- canonical_id: math.logic.jiphapui-yeonsan-2
+  src_id: HK28
+  aliases:
+  - HIGH-LOGIC-004
+  - UC.common2.a02.hk28
+  - HK28
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a02.hk28
+    to: HIGH-LOGIC-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-LOGIC-004
+    to: math.logic.jiphapui-yeonsan-2
+- canonical_id: math.logic.myeongjewa-jogeon-2
+  src_id: HK29
+  aliases:
+  - HIGH-LOGIC-003
+  - UC.common2.a02.hk29
+  - HK29
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a02.hk29
+    to: HIGH-LOGIC-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-LOGIC-003
+    to: math.logic.myeongjewa-jogeon-2
+- canonical_id: math.logic.myeongjeui-yeok-daeu
+  src_id: HK30
+  aliases:
+  - HIGH-LOGIC-005
+  - UC.common2.a02.hk30
+  - HK30
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a02.hk30
+    to: HIGH-LOGIC-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-LOGIC-005
+    to: math.logic.myeongjeui-yeok-daeu
+- canonical_id: math.logic.chungbunjogeon-pilyojogeon
+  src_id: HK31
+  aliases:
+  - HIGH-LOGIC-006
+  - UC.common2.a02.hk31
+  - HK31
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a02.hk31
+    to: HIGH-LOGIC-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-LOGIC-006
+    to: math.logic.chungbunjogeon-pilyojogeon
+- canonical_id: math.logic.daeujeungmyeong-gwiryubeop
+  src_id: HK32
+  aliases:
+  - HIGH-LOGIC-007
+  - UC.common2.a02.hk32
+  - HK32
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a02.hk32
+    to: HIGH-LOGIC-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-LOGIC-007
+    to: math.logic.daeujeungmyeong-gwiryubeop
+- canonical_id: math.logic.jeoldaebudeungsik-jeungmyeong
+  src_id: HK33
+  aliases:
+  - HIGH-LOGIC-008
+  - UC.common2.a02.hk33
+  - HK33
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a02.hk33
+    to: HIGH-LOGIC-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-LOGIC-008
+    to: math.logic.jeoldaebudeungsik-jeungmyeong
+- canonical_id: math.function.hamsuui-gaenyeom-geuraepeu
+  src_id: HK34
+  aliases:
+  - HIGH-FUN-001
+  - UC.common2.a03.hk34
+  - HK34
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a03.hk34
+    to: HIGH-FUN-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-FUN-001
+    to: math.function.hamsuui-gaenyeom-geuraepeu
+- canonical_id: math.function.hapseonghamsu
+  src_id: HK35
+  aliases:
+  - HIGH-FUN-002
+  - UC.common2.a03.hk35
+  - HK35
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a03.hk35
+    to: HIGH-FUN-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-FUN-002
+    to: math.function.hapseonghamsu
+- canonical_id: math.function.yeokhamsu-2
+  src_id: HK36
+  aliases:
+  - HIGH-FUN-003
+  - UC.common2.a03.hk36
+  - HK36
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a03.hk36
+    to: HIGH-FUN-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-FUN-003
+    to: math.function.yeokhamsu-2
+- canonical_id: math.function.yurihamsu
+  src_id: HK37
+  aliases:
+  - HIGH-FUN-004
+  - UC.common2.a03.hk37
+  - HK37
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a03.hk37
+    to: HIGH-FUN-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-FUN-004
+    to: math.function.yurihamsu
+- canonical_id: math.function.murihamsu
+  src_id: HK38
+  aliases:
+  - HIGH-FUN-005
+  - UC.common2.a03.hk38
+  - HK38
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.common2.a03.hk38
+    to: HIGH-FUN-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-FUN-005
+    to: math.function.murihamsu
+- canonical_id: math.algebra.geodeupjegopgwa-geodeupjegopgeun
+  src_id: H:12대수01-01
+  aliases:
+  - HIGH-ALG-001
+  - UC.algebra.a01.h-12-01-01
+  - H:12대수01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a01.h-12-01-01
+    to: HIGH-ALG-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-001
+    to: math.algebra.geodeupjegopgwa-geodeupjegopgeun
+- canonical_id: math.algebra.jisuui-hwakjang
+  src_id: H:12대수01-02
+  aliases:
+  - HIGH-ALG-002
+  - UC.algebra.a01.h-12-01-02
+  - H:12대수01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a01.h-12-01-02
+    to: HIGH-ALG-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-002
+    to: math.algebra.jisuui-hwakjang
+- canonical_id: math.algebra.jisubeopchik
+  src_id: H:12대수01-03
+  aliases:
+  - HIGH-ALG-003
+  - UC.algebra.a01.h-12-01-03
+  - H:12대수01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a01.h-12-01-03
+    to: HIGH-ALG-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-003
+    to: math.algebra.jisubeopchik
+- canonical_id: math.algebra.rogeuui-tteutgwa-seongjil
+  src_id: H:12대수01-04
+  aliases:
+  - HIGH-ALG-004
+  - UC.algebra.a01.h-12-01-04
+  - H:12대수01-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a01.h-12-01-04
+    to: HIGH-ALG-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-004
+    to: math.algebra.rogeuui-tteutgwa-seongjil
+- canonical_id: math.algebra.sangyongrogeu
+  src_id: H:12대수01-05
+  aliases:
+  - HIGH-ALG-005
+  - UC.algebra.a01.h-12-01-05
+  - H:12대수01-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a01.h-12-01-05
+    to: HIGH-ALG-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-005
+    to: math.algebra.sangyongrogeu
+- canonical_id: math.algebra.jisuhamsuwa-rogeuhamsuui-tteut
+  src_id: H:12대수01-06
+  aliases:
+  - HIGH-ALG-006
+  - UC.algebra.a01.h-12-01-06
+  - H:12대수01-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a01.h-12-01-06
+    to: HIGH-ALG-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-006
+    to: math.algebra.jisuhamsuwa-rogeuhamsuui-tteut
+- canonical_id: math.algebra.jisuhamsu-rogeuhamsuui-geuraepeuwa-seongjil
+  src_id: H:12대수01-07
+  aliases:
+  - HIGH-ALG-007
+  - UC.algebra.a01.h-12-01-07
+  - H:12대수01-07
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a01.h-12-01-07
+    to: HIGH-ALG-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-007
+    to: math.algebra.jisuhamsu-rogeuhamsuui-geuraepeuwa-seongjil
+- canonical_id: math.algebra.jisuhamsu-rogeuhamsuui-hwalyong
+  src_id: H:12대수01-08
+  aliases:
+  - HIGH-ALG-008
+  - UC.algebra.a01.h-12-01-08
+  - H:12대수01-08
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a01.h-12-01-08
+    to: HIGH-ALG-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-008
+    to: math.algebra.jisuhamsu-rogeuhamsuui-hwalyong
+- canonical_id: math.algebra.ilbangakgwa-hodobeop
+  src_id: H:12대수02-01
+  aliases:
+  - HIGH-ALG-009
+  - UC.algebra.a02.h-12-02-01
+  - H:12대수02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a02.h-12-02-01
+    to: HIGH-ALG-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-009
+    to: math.algebra.ilbangakgwa-hodobeop
+- canonical_id: math.algebra.samgakhamsuui-tteutgwa-geuraepeu
+  src_id: H:12대수02-02
+  aliases:
+  - HIGH-ALG-010
+  - UC.algebra.a02.h-12-02-02
+  - H:12대수02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a02.h-12-02-02
+    to: HIGH-ALG-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-010
+    to: math.algebra.samgakhamsuui-tteutgwa-geuraepeu
+- canonical_id: math.algebra.sainbeopchikgwa-kosainbeopchik
+  src_id: H:12대수02-03
+  aliases:
+  - HIGH-ALG-011
+  - UC.algebra.a02.h-12-02-03
+  - H:12대수02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a02.h-12-02-03
+    to: HIGH-ALG-011
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-011
+    to: math.algebra.sainbeopchikgwa-kosainbeopchik
+- canonical_id: math.algebra.suyeolui-tteut
+  src_id: H:12대수03-01
+  aliases:
+  - HIGH-ALG-012
+  - UC.algebra.a03.h-12-03-01
+  - H:12대수03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a03.h-12-03-01
+    to: HIGH-ALG-012
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-012
+    to: math.algebra.suyeolui-tteut
+- canonical_id: math.algebra.deungchasuyeolui-ilbanhanggwa-hap
+  src_id: H:12대수03-02
+  aliases:
+  - HIGH-ALG-013
+  - UC.algebra.a03.h-12-03-02
+  - H:12대수03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a03.h-12-03-02
+    to: HIGH-ALG-013
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-013
+    to: math.algebra.deungchasuyeolui-ilbanhanggwa-hap
+- canonical_id: math.algebra.deungbisuyeolui-ilbanhanggwa-hap
+  src_id: H:12대수03-03
+  aliases:
+  - HIGH-ALG-014
+  - UC.algebra.a03.h-12-03-03
+  - H:12대수03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a03.h-12-03-03
+    to: HIGH-ALG-014
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-014
+    to: math.algebra.deungbisuyeolui-ilbanhanggwa-hap
+- canonical_id: math.algebra.hapui-giho
+  src_id: H:12대수03-04
+  aliases:
+  - HIGH-ALG-015
+  - UC.algebra.a03.h-12-03-04
+  - H:12대수03-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a03.h-12-03-04
+    to: HIGH-ALG-015
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-015
+    to: math.algebra.hapui-giho
+- canonical_id: math.algebra.yeoreo-gaji-suyeolui-hap
+  src_id: H:12대수03-05
+  aliases:
+  - HIGH-ALG-016
+  - UC.algebra.a03.h-12-03-05
+  - H:12대수03-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a03.h-12-03-05
+    to: HIGH-ALG-016
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-016
+    to: math.algebra.yeoreo-gaji-suyeolui-hap
+- canonical_id: math.algebra.suyeolui-gwinapjeok-jeongui
+  src_id: H:12대수03-06
+  aliases:
+  - HIGH-ALG-017
+  - UC.algebra.a03.h-12-03-06
+  - H:12대수03-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a03.h-12-03-06
+    to: HIGH-ALG-017
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-017
+    to: math.algebra.suyeolui-gwinapjeok-jeongui
+- canonical_id: math.algebra.suhakjeok-gwinapbeop
+  src_id: H:12대수03-07
+  aliases:
+  - HIGH-ALG-018
+  - UC.algebra.a03.h-12-03-07
+  - H:12대수03-07
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.algebra.a03.h-12-03-07
+    to: HIGH-ALG-018
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ALG-018
+    to: math.algebra.suhakjeok-gwinapbeop
+- canonical_id: math.calculus.hamsuui-geukhanui-tteut
+  src_id: H:12미적Ⅰ01-01
+  aliases:
+  - HIGH-CALC-001
+  - UC.calc1.a01.h-12-01-01
+  - H:12미적Ⅰ01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a01.h-12-01-01
+    to: HIGH-CALC-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-001
+    to: math.calculus.hamsuui-geukhanui-tteut
+- canonical_id: math.calculus.hamsuui-geukhanui-seongjilgwa-geukhangaps
+  src_id: H:12미적Ⅰ01-02
+  aliases:
+  - HIGH-CALC-002
+  - UC.calc1.a01.h-12-01-02
+  - H:12미적Ⅰ01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a01.h-12-01-02
+    to: HIGH-CALC-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-002
+    to: math.calculus.hamsuui-geukhanui-seongjilgwa-geukhangaps
+- canonical_id: math.calculus.hamsuui-yeonsok
+  src_id: H:12미적Ⅰ01-03
+  aliases:
+  - HIGH-CALC-003
+  - UC.calc1.a01.h-12-01-03
+  - H:12미적Ⅰ01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a01.h-12-01-03
+    to: HIGH-CALC-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-003
+    to: math.calculus.hamsuui-yeonsok
+- canonical_id: math.calculus.yeonsokhamsuui-seongjil
+  src_id: H:12미적Ⅰ01-04
+  aliases:
+  - HIGH-CALC-004
+  - UC.calc1.a01.h-12-01-04
+  - H:12미적Ⅰ01-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a01.h-12-01-04
+    to: HIGH-CALC-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-004
+    to: math.calculus.yeonsokhamsuui-seongjil
+- canonical_id: math.calculus.mibungyesu
+  src_id: H:12미적Ⅰ02-01
+  aliases:
+  - HIGH-CALC-005
+  - UC.calc1.a02.h-12-02-01
+  - H:12미적Ⅰ02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a02.h-12-02-01
+    to: HIGH-CALC-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-005
+    to: math.calculus.mibungyesu
+- canonical_id: math.calculus.mibunganeungseonggwa-yeonsokseong
+  src_id: H:12미적Ⅰ02-02
+  aliases:
+  - HIGH-CALC-006
+  - UC.calc1.a02.h-12-02-02
+  - H:12미적Ⅰ02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a02.h-12-02-02
+    to: HIGH-CALC-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-006
+    to: math.calculus.mibunganeungseonggwa-yeonsokseong
+- canonical_id: math.calculus.hamsu-y-x-nui-dohamsu
+  src_id: H:12미적Ⅰ02-03
+  aliases:
+  - HIGH-CALC-007
+  - UC.calc1.a02.h-12-02-03
+  - H:12미적Ⅰ02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a02.h-12-02-03
+    to: HIGH-CALC-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-007
+    to: math.calculus.hamsu-y-x-nui-dohamsu
+- canonical_id: math.calculus.mibunbeopgwa-dahanghamsuui-dohamsu
+  src_id: H:12미적Ⅰ02-04
+  aliases:
+  - HIGH-CALC-008
+  - UC.calc1.a02.h-12-02-04
+  - H:12미적Ⅰ02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a02.h-12-02-04
+    to: HIGH-CALC-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-008
+    to: math.calculus.mibunbeopgwa-dahanghamsuui-dohamsu
+- canonical_id: math.calculus.jeopseonui-bangjeongsik
+  src_id: H:12미적Ⅰ02-05
+  aliases:
+  - HIGH-CALC-009
+  - UC.calc1.a02.h-12-02-05
+  - H:12미적Ⅰ02-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a02.h-12-02-05
+    to: HIGH-CALC-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-009
+    to: math.calculus.jeopseonui-bangjeongsik
+- canonical_id: math.calculus.pyeonggyungaps-jeongri
+  src_id: H:12미적Ⅰ02-06
+  aliases:
+  - HIGH-CALC-010
+  - UC.calc1.a02.h-12-02-06
+  - H:12미적Ⅰ02-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a02.h-12-02-06
+    to: HIGH-CALC-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-010
+    to: math.calculus.pyeonggyungaps-jeongri
+- canonical_id: math.calculus.hamsuui-jeungga-gamsowa-geukdae-geukso
+  src_id: H:12미적Ⅰ02-07
+  aliases:
+  - HIGH-CALC-011
+  - UC.calc1.a02.h-12-02-07
+  - H:12미적Ⅰ02-07
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a02.h-12-02-07
+    to: HIGH-CALC-011
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-011
+    to: math.calculus.hamsuui-jeungga-gamsowa-geukdae-geukso
+- canonical_id: math.calculus.hamsuui-geuraepeu-gaehyeong
+  src_id: H:12미적Ⅰ02-08
+  aliases:
+  - HIGH-CALC-012
+  - UC.calc1.a02.h-12-02-08
+  - H:12미적Ⅰ02-08
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a02.h-12-02-08
+    to: HIGH-CALC-012
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-012
+    to: math.calculus.hamsuui-geuraepeu-gaehyeong
+- canonical_id: math.calculus.bangjeongsik-budeungsikeui-hwalyong
+  src_id: H:12미적Ⅰ02-09
+  aliases:
+  - HIGH-CALC-013
+  - UC.calc1.a02.h-12-02-09
+  - H:12미적Ⅰ02-09
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a02.h-12-02-09
+    to: HIGH-CALC-013
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-013
+    to: math.calculus.bangjeongsik-budeungsikeui-hwalyong
+- canonical_id: math.calculus.sokdowa-gasokdo
+  src_id: H:12미적Ⅰ02-10
+  aliases:
+  - HIGH-CALC-014
+  - UC.calc1.a02.h-12-02-10
+  - H:12미적Ⅰ02-10
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a02.h-12-02-10
+    to: HIGH-CALC-014
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-014
+    to: math.calculus.sokdowa-gasokdo
+- canonical_id: math.calculus.bujeongjeokbunui-tteut
+  src_id: H:12미적Ⅰ03-01
+  aliases:
+  - HIGH-CALC-015
+  - UC.calc1.a03.h-12-03-01
+  - H:12미적Ⅰ03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a03.h-12-03-01
+    to: HIGH-CALC-015
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-015
+    to: math.calculus.bujeongjeokbunui-tteut
+- canonical_id: math.calculus.dahanghamsuui-bujeongjeokbun
+  src_id: H:12미적Ⅰ03-02
+  aliases:
+  - HIGH-CALC-016
+  - UC.calc1.a03.h-12-03-02
+  - H:12미적Ⅰ03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a03.h-12-03-02
+    to: HIGH-CALC-016
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-016
+    to: math.calculus.dahanghamsuui-bujeongjeokbun
+- canonical_id: math.calculus.jeongjeokbunui-gaenyeomgwa-seongjil
+  src_id: H:12미적Ⅰ03-03
+  aliases:
+  - HIGH-CALC-017
+  - UC.calc1.a03.h-12-03-03
+  - H:12미적Ⅰ03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a03.h-12-03-03
+    to: HIGH-CALC-017
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-017
+    to: math.calculus.jeongjeokbunui-gaenyeomgwa-seongjil
+- canonical_id: math.calculus.bujeongjeokbungwa-jeongjeokbunui-gwangye
+  src_id: H:12미적Ⅰ03-04
+  aliases:
+  - HIGH-CALC-018
+  - UC.calc1.a03.h-12-03-04
+  - H:12미적Ⅰ03-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a03.h-12-03-04
+    to: HIGH-CALC-018
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-018
+    to: math.calculus.bujeongjeokbungwa-jeongjeokbunui-gwangye
+- canonical_id: math.calculus.gokseoneuro-dulreossain-dohyeongui-neolbi
+  src_id: H:12미적Ⅰ03-05
+  aliases:
+  - HIGH-CALC-019
+  - UC.calc1.a03.h-12-03-05
+  - H:12미적Ⅰ03-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a03.h-12-03-05
+    to: HIGH-CALC-019
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-019
+    to: math.calculus.gokseoneuro-dulreossain-dohyeongui-neolbi
+- canonical_id: math.calculus.sokdowa-geori
+  src_id: H:12미적Ⅰ03-06
+  aliases:
+  - HIGH-CALC-020
+  - UC.calc1.a03.h-12-03-06
+  - H:12미적Ⅰ03-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc1.a03.h-12-03-06
+    to: HIGH-CALC-020
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-020
+    to: math.calculus.sokdowa-geori
+- canonical_id: math.probability.jungboksunyeol-gateun-geoti-itneun-sunyeol
+  src_id: H:12확통01-01
+  aliases:
+  - HIGH-PROB-001
+  - UC.prob.a01.h-12-01-01
+  - H:12확통01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a01.h-12-01-01
+    to: HIGH-PROB-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-001
+    to: math.probability.jungboksunyeol-gateun-geoti-itneun-sunyeol
+- canonical_id: math.probability.jungbokjohap
+  src_id: H:12확통01-02
+  aliases:
+  - HIGH-PROB-002
+  - UC.prob.a01.h-12-01-02
+  - H:12확통01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a01.h-12-01-02
+    to: HIGH-PROB-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-002
+    to: math.probability.jungbokjohap
+- canonical_id: math.probability.ihangjeongri
+  src_id: H:12확통01-03
+  aliases:
+  - HIGH-PROB-003
+  - UC.prob.a01.h-12-01-03
+  - H:12확통01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a01.h-12-01-03
+    to: HIGH-PROB-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-003
+    to: math.probability.ihangjeongri
+- canonical_id: math.probability.hwakryului-tteutgwa-gibon-seongjil
+  src_id: H:12확통02-01
+  aliases:
+  - HIGH-PROB-004
+  - UC.prob.a02.h-12-02-01
+  - H:12확통02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a02.h-12-02-01
+    to: HIGH-PROB-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-004
+    to: math.probability.hwakryului-tteutgwa-gibon-seongjil
+- canonical_id: math.probability.hwakryului-deotsemjeongri
+  src_id: H:12확통02-02
+  aliases:
+  - HIGH-PROB-005
+  - UC.prob.a02.h-12-02-02
+  - H:12확통02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a02.h-12-02-02
+    to: HIGH-PROB-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-005
+    to: math.probability.hwakryului-deotsemjeongri
+- canonical_id: math.probability.yeosageonui-hwakryul
+  src_id: H:12확통02-03
+  aliases:
+  - HIGH-PROB-006
+  - UC.prob.a02.h-12-02-03
+  - H:12확통02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a02.h-12-02-03
+    to: HIGH-PROB-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-006
+    to: math.probability.yeosageonui-hwakryul
+- canonical_id: math.probability.jogeonbuhwakryul
+  src_id: H:12확통02-04
+  aliases:
+  - HIGH-PROB-007
+  - UC.prob.a02.h-12-02-04
+  - H:12확통02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a02.h-12-02-04
+    to: HIGH-PROB-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-007
+    to: math.probability.jogeonbuhwakryul
+- canonical_id: math.probability.sageonui-dokripgwa-jongsok
+  src_id: H:12확통02-05
+  aliases:
+  - HIGH-PROB-008
+  - UC.prob.a02.h-12-02-05
+  - H:12확통02-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a02.h-12-02-05
+    to: HIGH-PROB-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-008
+    to: math.probability.sageonui-dokripgwa-jongsok
+- canonical_id: math.probability.hwakryului-gopsemjeongri
+  src_id: H:12확통02-06
+  aliases:
+  - HIGH-PROB-009
+  - UC.prob.a02.h-12-02-06
+  - H:12확통02-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a02.h-12-02-06
+    to: HIGH-PROB-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-009
+    to: math.probability.hwakryului-gopsemjeongri
+- canonical_id: math.probability.hwakryulbyeonsuwa-hwakryulbunpo
+  src_id: H:12확통03-01
+  aliases:
+  - HIGH-PROB-010
+  - UC.prob.a03.h-12-03-01
+  - H:12확통03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a03.h-12-03-01
+    to: HIGH-PROB-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-010
+    to: math.probability.hwakryulbyeonsuwa-hwakryulbunpo
+- canonical_id: math.probability.isanhwakryulbyeonsuui-gidaetgapsgwa-pyojunpyeoncha
+  src_id: H:12확통03-02
+  aliases:
+  - HIGH-PROB-011
+  - UC.prob.a03.h-12-03-02
+  - H:12확통03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a03.h-12-03-02
+    to: HIGH-PROB-011
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-011
+    to: math.probability.isanhwakryulbyeonsuui-gidaetgapsgwa-pyojunpyeoncha
+- canonical_id: math.probability.ihangbunpo
+  src_id: H:12확통03-03
+  aliases:
+  - HIGH-PROB-012
+  - UC.prob.a03.h-12-03-03
+  - H:12확통03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a03.h-12-03-03
+    to: HIGH-PROB-012
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-012
+    to: math.probability.ihangbunpo
+- canonical_id: math.probability.jeonggyubunpo
+  src_id: H:12확통03-04
+  aliases:
+  - HIGH-PROB-013
+  - UC.prob.a03.h-12-03-04
+  - H:12확통03-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a03.h-12-03-04
+    to: HIGH-PROB-013
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-013
+    to: math.probability.jeonggyubunpo
+- canonical_id: math.probability.mojipdangwa-pyobon-pyobonchuchul
+  src_id: H:12확통03-05
+  aliases:
+  - HIGH-PROB-014
+  - UC.prob.a03.h-12-03-05
+  - H:12확통03-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a03.h-12-03-05
+    to: HIGH-PROB-014
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-014
+    to: math.probability.mojipdangwa-pyobon-pyobonchuchul
+- canonical_id: math.probability.pyobonpyeonggyun-pyobonbiyului-bunpo
+  src_id: H:12확통03-06
+  aliases:
+  - HIGH-PROB-015
+  - UC.prob.a03.h-12-03-06
+  - H:12확통03-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a03.h-12-03-06
+    to: HIGH-PROB-015
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-015
+    to: math.probability.pyobonpyeonggyun-pyobonbiyului-bunpo
+- canonical_id: math.probability.mopyeonggyun-mobiyului-chujeong
+  src_id: H:12확통03-07
+  aliases:
+  - HIGH-PROB-016
+  - UC.prob.a03.h-12-03-07
+  - H:12확통03-07
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.prob.a03.h-12-03-07
+    to: HIGH-PROB-016
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-PROB-016
+    to: math.probability.mopyeonggyun-mobiyului-chujeong
+- canonical_id: math.calculus.suyeolui-suryeomgwa-balsan
+  src_id: H:12미적Ⅱ01-01
+  aliases:
+  - HIGH-CALC-021
+  - UC.calc2.a01.h-12-01-01
+  - H:12미적Ⅱ01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a01.h-12-01-01
+    to: HIGH-CALC-021
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-021
+    to: math.calculus.suyeolui-suryeomgwa-balsan
+- canonical_id: math.calculus.suyeolui-geukhanui-seongjil
+  src_id: H:12미적Ⅱ01-02
+  aliases:
+  - HIGH-CALC-022
+  - UC.calc2.a01.h-12-01-02
+  - H:12미적Ⅱ01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a01.h-12-01-02
+    to: HIGH-CALC-022
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-022
+    to: math.calculus.suyeolui-geukhanui-seongjil
+- canonical_id: math.calculus.deungbisuyeolui-geukhan
+  src_id: H:12미적Ⅱ01-03
+  aliases:
+  - HIGH-CALC-023
+  - UC.calc2.a01.h-12-01-03
+  - H:12미적Ⅱ01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a01.h-12-01-03
+    to: HIGH-CALC-023
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-023
+    to: math.calculus.deungbisuyeolui-geukhan
+- canonical_id: math.calculus.geupsuui-suryeomgwa-balsan
+  src_id: H:12미적Ⅱ01-04
+  aliases:
+  - HIGH-CALC-024
+  - UC.calc2.a01.h-12-01-04
+  - H:12미적Ⅱ01-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a01.h-12-01-04
+    to: HIGH-CALC-024
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-024
+    to: math.calculus.geupsuui-suryeomgwa-balsan
+- canonical_id: math.calculus.deungbigeupsu
+  src_id: H:12미적Ⅱ01-05
+  aliases:
+  - HIGH-CALC-025
+  - UC.calc2.a01.h-12-01-05
+  - H:12미적Ⅱ01-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a01.h-12-01-05
+    to: HIGH-CALC-025
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-025
+    to: math.calculus.deungbigeupsu
+- canonical_id: math.calculus.jisuhamsu-rogeuhamsuui-geukhangwa-mibun
+  src_id: H:12미적Ⅱ02-01
+  aliases:
+  - HIGH-CALC-026
+  - UC.calc2.a02.h-12-02-01
+  - H:12미적Ⅱ02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-01
+    to: HIGH-CALC-026
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-026
+    to: math.calculus.jisuhamsu-rogeuhamsuui-geukhangwa-mibun
+- canonical_id: math.calculus.samgakhamsuui-deotsemjeongri
+  src_id: H:12미적Ⅱ02-02
+  aliases:
+  - HIGH-CALC-027
+  - UC.calc2.a02.h-12-02-02
+  - H:12미적Ⅱ02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-02
+    to: HIGH-CALC-027
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-027
+    to: math.calculus.samgakhamsuui-deotsemjeongri
+- canonical_id: math.calculus.samgakhamsuui-geukhangwa-mibun
+  src_id: H:12미적Ⅱ02-03
+  aliases:
+  - HIGH-CALC-028
+  - UC.calc2.a02.h-12-02-03
+  - H:12미적Ⅱ02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-03
+    to: HIGH-CALC-028
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-028
+    to: math.calculus.samgakhamsuui-geukhangwa-mibun
+- canonical_id: math.calculus.moksui-mibunbeop
+  src_id: H:12미적Ⅱ02-04
+  aliases:
+  - HIGH-CALC-029
+  - UC.calc2.a02.h-12-02-04
+  - H:12미적Ⅱ02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-04
+    to: HIGH-CALC-029
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-029
+    to: math.calculus.moksui-mibunbeop
+- canonical_id: math.calculus.hapseonghamsuui-mibunbeop
+  src_id: H:12미적Ⅱ02-05
+  aliases:
+  - HIGH-CALC-030
+  - UC.calc2.a02.h-12-02-05
+  - H:12미적Ⅱ02-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-05
+    to: HIGH-CALC-030
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-030
+    to: math.calculus.hapseonghamsuui-mibunbeop
+- canonical_id: math.calculus.maegaebyeonsuro-natanaen-hamsuui-mibunbeop
+  src_id: H:12미적Ⅱ02-06
+  aliases:
+  - HIGH-CALC-031
+  - UC.calc2.a02.h-12-02-06
+  - H:12미적Ⅱ02-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-06
+    to: HIGH-CALC-031
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-031
+    to: math.calculus.maegaebyeonsuro-natanaen-hamsuui-mibunbeop
+- canonical_id: math.calculus.eumhamsuwa-yeokhamsuui-mibunbeop
+  src_id: H:12미적Ⅱ02-07
+  aliases:
+  - HIGH-CALC-032
+  - UC.calc2.a02.h-12-02-07
+  - H:12미적Ⅱ02-07
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-07
+    to: HIGH-CALC-032
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-032
+    to: math.calculus.eumhamsuwa-yeokhamsuui-mibunbeop
+- canonical_id: math.calculus.yeoreo-gaji-gokseonui-jeopseonui-bangjeongsik
+  src_id: H:12미적Ⅱ02-08
+  aliases:
+  - HIGH-CALC-033
+  - UC.calc2.a02.h-12-02-08
+  - H:12미적Ⅱ02-08
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-08
+    to: HIGH-CALC-033
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-033
+    to: math.calculus.yeoreo-gaji-gokseonui-jeopseonui-bangjeongsik
+- canonical_id: math.calculus.hamsuui-geuraepeu-gaehyeong-2
+  src_id: H:12미적Ⅱ02-09
+  aliases:
+  - HIGH-CALC-034
+  - UC.calc2.a02.h-12-02-09
+  - H:12미적Ⅱ02-09
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-09
+    to: HIGH-CALC-034
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-034
+    to: math.calculus.hamsuui-geuraepeu-gaehyeong-2
+- canonical_id: math.calculus.bangjeongsik-budeungsikeui-hwalyong-2
+  src_id: H:12미적Ⅱ02-10
+  aliases:
+  - HIGH-CALC-035
+  - UC.calc2.a02.h-12-02-10
+  - H:12미적Ⅱ02-10
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-10
+    to: HIGH-CALC-035
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-035
+    to: math.calculus.bangjeongsik-budeungsikeui-hwalyong-2
+- canonical_id: math.calculus.sokdowa-gasokdo-2
+  src_id: H:12미적Ⅱ02-11
+  aliases:
+  - HIGH-CALC-036
+  - UC.calc2.a02.h-12-02-11
+  - H:12미적Ⅱ02-11
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a02.h-12-02-11
+    to: HIGH-CALC-036
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-036
+    to: math.calculus.sokdowa-gasokdo-2
+- canonical_id: math.calculus.yeoreo-gaji-hamsuui-bujeongjeokbungwa-jeongjeokbun
+  src_id: H:12미적Ⅱ03-01
+  aliases:
+  - HIGH-CALC-037
+  - UC.calc2.a03.h-12-03-01
+  - H:12미적Ⅱ03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a03.h-12-03-01
+    to: HIGH-CALC-037
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-037
+    to: math.calculus.yeoreo-gaji-hamsuui-bujeongjeokbungwa-jeongjeokbun
+- canonical_id: math.calculus.chihwanjeokbunbeop
+  src_id: H:12미적Ⅱ03-02
+  aliases:
+  - HIGH-CALC-038
+  - UC.calc2.a03.h-12-03-02
+  - H:12미적Ⅱ03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a03.h-12-03-02
+    to: HIGH-CALC-038
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-038
+    to: math.calculus.chihwanjeokbunbeop
+- canonical_id: math.calculus.bubunjeokbunbeop
+  src_id: H:12미적Ⅱ03-03
+  aliases:
+  - HIGH-CALC-039
+  - UC.calc2.a03.h-12-03-03
+  - H:12미적Ⅱ03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a03.h-12-03-03
+    to: HIGH-CALC-039
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-039
+    to: math.calculus.bubunjeokbunbeop
+- canonical_id: math.calculus.jeongjeokbungwa-geupsuui-hap
+  src_id: H:12미적Ⅱ03-04
+  aliases:
+  - HIGH-CALC-040
+  - UC.calc2.a03.h-12-03-04
+  - H:12미적Ⅱ03-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a03.h-12-03-04
+    to: HIGH-CALC-040
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-040
+    to: math.calculus.jeongjeokbungwa-geupsuui-hap
+- canonical_id: math.calculus.gokseoneuro-dulreossain-dohyeongui-neolbi-2
+  src_id: H:12미적Ⅱ03-05
+  aliases:
+  - HIGH-CALC-041
+  - UC.calc2.a03.h-12-03-05
+  - H:12미적Ⅱ03-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a03.h-12-03-05
+    to: HIGH-CALC-041
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-041
+    to: math.calculus.gokseoneuro-dulreossain-dohyeongui-neolbi-2
+- canonical_id: math.calculus.ipchedohyeongui-bupi
+  src_id: H:12미적Ⅱ03-06
+  aliases:
+  - HIGH-CALC-042
+  - UC.calc2.a03.h-12-03-06
+  - H:12미적Ⅱ03-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a03.h-12-03-06
+    to: HIGH-CALC-042
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-042
+    to: math.calculus.ipchedohyeongui-bupi
+- canonical_id: math.calculus.sokdowa-geori-2
+  src_id: H:12미적Ⅱ03-07
+  aliases:
+  - HIGH-CALC-043
+  - UC.calc2.a03.h-12-03-07
+  - H:12미적Ⅱ03-07
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.calc2.a03.h-12-03-07
+    to: HIGH-CALC-043
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CALC-043
+    to: math.calculus.sokdowa-geori-2
+- canonical_id: math.geometry.pomulseonui-bangjeongsik
+  src_id: H:12기하01-01
+  aliases:
+  - HIGH-GEO-001
+  - UC.geom.a01.h-12-01-01
+  - H:12기하01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a01.h-12-01-01
+    to: HIGH-GEO-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-001
+    to: math.geometry.pomulseonui-bangjeongsik
+- canonical_id: math.geometry.tawonui-bangjeongsik
+  src_id: H:12기하01-02
+  aliases:
+  - HIGH-GEO-002
+  - UC.geom.a01.h-12-01-02
+  - H:12기하01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a01.h-12-01-02
+    to: HIGH-GEO-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-002
+    to: math.geometry.tawonui-bangjeongsik
+- canonical_id: math.geometry.ssanggokseonui-bangjeongsik
+  src_id: H:12기하01-03
+  aliases:
+  - HIGH-GEO-003
+  - UC.geom.a01.h-12-01-03
+  - H:12기하01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a01.h-12-01-03
+    to: HIGH-GEO-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-003
+    to: math.geometry.ssanggokseonui-bangjeongsik
+- canonical_id: math.geometry.ichagokseonui-jeopseonui-bangjeongsik
+  src_id: H:12기하01-04
+  aliases:
+  - HIGH-GEO-004
+  - UC.geom.a01.h-12-01-04
+  - H:12기하01-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a01.h-12-01-04
+    to: HIGH-GEO-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-004
+    to: math.geometry.ichagokseonui-jeopseonui-bangjeongsik
+- canonical_id: math.geometry.jikseongwa-pyeongmyeonui-wichi-gwangye
+  src_id: H:12기하02-01
+  aliases:
+  - HIGH-GEO-005
+  - UC.geom.a02.h-12-02-01
+  - H:12기하02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a02.h-12-02-01
+    to: HIGH-GEO-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-005
+    to: math.geometry.jikseongwa-pyeongmyeonui-wichi-gwangye
+- canonical_id: math.geometry.samsuseon-jeongri
+  src_id: H:12기하02-02
+  aliases:
+  - HIGH-GEO-006
+  - UC.geom.a02.h-12-02-02
+  - H:12기하02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a02.h-12-02-02
+    to: HIGH-GEO-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-006
+    to: math.geometry.samsuseon-jeongri
+- canonical_id: math.geometry.jeongsayeong
+  src_id: H:12기하02-03
+  aliases:
+  - HIGH-GEO-007
+  - UC.geom.a02.h-12-02-03
+  - H:12기하02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a02.h-12-02-03
+    to: HIGH-GEO-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-007
+    to: math.geometry.jeongsayeong
+- canonical_id: math.geometry.gongganjwapyo
+  src_id: H:12기하02-04
+  aliases:
+  - HIGH-GEO-008
+  - UC.geom.a02.h-12-02-04
+  - H:12기하02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a02.h-12-02-04
+    to: HIGH-GEO-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-008
+    to: math.geometry.gongganjwapyo
+- canonical_id: math.geometry.guui-bangjeongsik
+  src_id: H:12기하02-05
+  aliases:
+  - HIGH-GEO-009
+  - UC.geom.a02.h-12-02-05
+  - H:12기하02-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a02.h-12-02-05
+    to: HIGH-GEO-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-009
+    to: math.geometry.guui-bangjeongsik
+- canonical_id: math.geometry.bekteoui-tteutgwa-yeonsan
+  src_id: H:12기하03-01
+  aliases:
+  - HIGH-GEO-010
+  - UC.geom.a03.h-12-03-01
+  - H:12기하03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a03.h-12-03-01
+    to: HIGH-GEO-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-010
+    to: math.geometry.bekteoui-tteutgwa-yeonsan
+- canonical_id: math.geometry.wichibekteowa-bekteoui-seongbun
+  src_id: H:12기하03-02
+  aliases:
+  - HIGH-GEO-011
+  - UC.geom.a03.h-12-03-02
+  - H:12기하03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a03.h-12-03-02
+    to: HIGH-GEO-011
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-011
+    to: math.geometry.wichibekteowa-bekteoui-seongbun
+- canonical_id: math.geometry.bekteoui-naejeok
+  src_id: H:12기하03-03
+  aliases:
+  - HIGH-GEO-012
+  - UC.geom.a03.h-12-03-03
+  - H:12기하03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a03.h-12-03-03
+    to: HIGH-GEO-012
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-012
+    to: math.geometry.bekteoui-naejeok
+- canonical_id: math.geometry.bekteoreul-iyonghan-jikseonui-bangjeongsik
+  src_id: H:12기하03-04
+  aliases:
+  - HIGH-GEO-013
+  - UC.geom.a03.h-12-03-04
+  - H:12기하03-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a03.h-12-03-04
+    to: HIGH-GEO-013
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-013
+    to: math.geometry.bekteoreul-iyonghan-jikseonui-bangjeongsik
+- canonical_id: math.geometry.bekteoreul-iyonghan-pyeongmyeon-guui-bangjeongsik
+  src_id: H:12기하03-05
+  aliases:
+  - HIGH-GEO-014
+  - UC.geom.a03.h-12-03-05
+  - H:12기하03-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.geom.a03.h-12-03-05
+    to: HIGH-GEO-014
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-GEO-014
+    to: math.geometry.bekteoreul-iyonghan-pyeongmyeon-guui-bangjeongsik
+- canonical_id: math.economics.gyeongjejipyowa-tonggye
+  src_id: H:12경수01-01
+  aliases:
+  - HIGH-ECON-001
+  - UC.x7b1854.a01.h-12-01-01
+  - H:12경수01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a01.h-12-01-01
+    to: HIGH-ECON-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-001
+    to: math.economics.gyeongjejipyowa-tonggye
+- canonical_id: math.economics.hwanyul
+  src_id: H:12경수01-02
+  aliases:
+  - HIGH-ECON-002
+  - UC.x7b1854.a01.h-12-01-02
+  - H:12경수01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a01.h-12-01-02
+    to: HIGH-ECON-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-002
+    to: math.economics.hwanyul
+- canonical_id: math.economics.segeum
+  src_id: H:12경수01-03
+  aliases:
+  - HIGH-ECON-003
+  - UC.x7b1854.a01.h-12-01-03
+  - H:12경수01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a01.h-12-01-03
+    to: HIGH-ECON-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-003
+    to: math.economics.segeum
+- canonical_id: math.economics.danri-bokriwa-hyeonjaegachi
+  src_id: H:12경수01-04
+  aliases:
+  - HIGH-ECON-004
+  - UC.x7b1854.a01.h-12-01-04
+  - H:12경수01-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a01.h-12-01-04
+    to: HIGH-ECON-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-004
+    to: math.economics.danri-bokriwa-hyeonjaegachi
+- canonical_id: math.economics.yeongeumui-hyeonjaegachi
+  src_id: H:12경수01-05
+  aliases:
+  - HIGH-ECON-005
+  - UC.x7b1854.a01.h-12-01-05
+  - H:12경수01-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a01.h-12-01-05
+    to: HIGH-ECON-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-005
+    to: math.economics.yeongeumui-hyeonjaegachi
+- canonical_id: math.economics.gyeongje-hyeonsangui-hamsu-pyohyeon
+  src_id: H:12경수02-01
+  aliases:
+  - HIGH-ECON-006
+  - UC.x7b1854.a02.h-12-02-01
+  - H:12경수02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a02.h-12-02-01
+    to: HIGH-ECON-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-006
+    to: math.economics.gyeongje-hyeonsangui-hamsu-pyohyeon
+- canonical_id: math.economics.suyogokseongwa-gonggeupgokseon
+  src_id: H:12경수02-02
+  aliases:
+  - HIGH-ECON-007
+  - UC.x7b1854.a02.h-12-02-02
+  - H:12경수02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a02.h-12-02-02
+    to: HIGH-ECON-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-007
+    to: math.economics.suyogokseongwa-gonggeupgokseon
+- canonical_id: math.economics.hyoyonghamsu
+  src_id: H:12경수02-03
+  aliases:
+  - HIGH-ECON-008
+  - UC.x7b1854.a02.h-12-02-03
+  - H:12경수02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a02.h-12-02-03
+    to: HIGH-ECON-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-008
+    to: math.economics.hyoyonghamsu
+- canonical_id: math.economics.gyunhyeonggagyeokui-gyeoljeong
+  src_id: H:12경수02-04
+  aliases:
+  - HIGH-ECON-009
+  - UC.x7b1854.a02.h-12-02-04
+  - H:12경수02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a02.h-12-02-04
+    to: HIGH-ECON-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-009
+    to: math.economics.gyunhyeonggagyeokui-gyeoljeong
+- canonical_id: math.economics.segeum-sodeuk-byeonhwawa-gyunhyeonggagyeok
+  src_id: H:12경수02-05
+  aliases:
+  - HIGH-ECON-010
+  - UC.x7b1854.a02.h-12-02-05
+  - H:12경수02-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a02.h-12-02-05
+    to: HIGH-ECON-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-010
+    to: math.economics.segeum-sodeuk-byeonhwawa-gyunhyeonggagyeok
+- canonical_id: math.economics.budeungsikui-yeongyeokgwa-gyeongje-munje
+  src_id: H:12경수02-06
+  aliases:
+  - HIGH-ECON-011
+  - UC.x7b1854.a02.h-12-02-06
+  - H:12경수02-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a02.h-12-02-06
+    to: HIGH-ECON-011
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-011
+    to: math.economics.budeungsikui-yeongyeokgwa-gyeongje-munje
+- canonical_id: math.economics.gyeongje-hyeonsangui-haengryeol-pyohyeongwa-yeonsan
+  src_id: H:12경수03-01
+  aliases:
+  - HIGH-ECON-012
+  - UC.x7b1854.a03.h-12-03-01
+  - H:12경수03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a03.h-12-03-01
+    to: HIGH-ECON-012
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-012
+    to: math.economics.gyeongje-hyeonsangui-haengryeol-pyohyeongwa-yeonsan
+- canonical_id: math.economics.yeokhaengryeol
+  src_id: H:12경수03-02
+  aliases:
+  - HIGH-ECON-013
+  - UC.x7b1854.a03.h-12-03-02
+  - H:12경수03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a03.h-12-03-02
+    to: HIGH-ECON-013
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-013
+    to: math.economics.yeokhaengryeol
+- canonical_id: math.economics.haengryeoleul-hwalyonghan-gyeongje-munje-haegyeol
+  src_id: H:12경수03-03
+  aliases:
+  - HIGH-ECON-014
+  - UC.x7b1854.a03.h-12-03-03
+  - H:12경수03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a03.h-12-03-03
+    to: HIGH-ECON-014
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-014
+    to: math.economics.haengryeoleul-hwalyonghan-gyeongje-munje-haegyeol
+- canonical_id: math.economics.gyeongje-hamsuui-mibun
+  src_id: H:12경수04-01
+  aliases:
+  - HIGH-ECON-015
+  - UC.x7b1854.a04.h-12-04-01
+  - H:12경수04-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a04.h-12-04-01
+    to: HIGH-ECON-015
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-015
+    to: math.economics.gyeongje-hamsuui-mibun
+- canonical_id: math.economics.mibungwa-geuraepeuui-gaehyeong
+  src_id: H:12경수04-02
+  aliases:
+  - HIGH-ECON-016
+  - UC.x7b1854.a04.h-12-04-02
+  - H:12경수04-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a04.h-12-04-02
+    to: HIGH-ECON-016
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-016
+    to: math.economics.mibungwa-geuraepeuui-gaehyeong
+- canonical_id: math.economics.tanryeokseong
+  src_id: H:12경수04-03
+  aliases:
+  - HIGH-ECON-017
+  - UC.x7b1854.a04.h-12-04-03
+  - H:12경수04-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a04.h-12-04-03
+    to: HIGH-ECON-017
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-017
+    to: math.economics.tanryeokseong
+- canonical_id: math.economics.mibungwa-choejeokhwa
+  src_id: H:12경수04-04
+  aliases:
+  - HIGH-ECON-018
+  - UC.x7b1854.a04.h-12-04-04
+  - H:12경수04-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x7b1854.a04.h-12-04-04
+    to: HIGH-ECON-018
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-ECON-018
+    to: math.economics.mibungwa-choejeokhwa
+- canonical_id: math.ai-math.ingongjineungui-gaenyeomgwa-suhakjeok-hakseup-bangsik
+  src_id: H:12인수01-01
+  aliases:
+  - HIGH-AIM-001
+  - UC.xe589a8.a01.h-12-01-01
+  - H:12인수01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a01.h-12-01-01
+    to: HIGH-AIM-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-001
+    to: math.ai-math.ingongjineungui-gaenyeomgwa-suhakjeok-hakseup-bangsik
+- canonical_id: math.ai-math.ingongjineung-sok-suhakui-yeoksajeok-sarye
+  src_id: H:12인수01-02
+  aliases:
+  - HIGH-AIM-002
+  - UC.xe589a8.a01.h-12-01-02
+  - H:12인수01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a01.h-12-01-02
+    to: HIGH-AIM-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-002
+    to: math.ai-math.ingongjineung-sok-suhakui-yeoksajeok-sarye
+- canonical_id: math.ai-math.bikdeiteoui-gaenyeomgwa-hwalyong
+  src_id: H:12인수01-03
+  aliases:
+  - HIGH-AIM-003
+  - UC.xe589a8.a01.h-12-01-03
+  - H:12인수01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a01.h-12-01-03
+    to: HIGH-AIM-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-003
+    to: math.ai-math.bikdeiteoui-gaenyeomgwa-hwalyong
+- canonical_id: math.ai-math.tekseuteu-deiteoui-pyohyeon
+  src_id: H:12인수02-01
+  aliases:
+  - HIGH-AIM-004
+  - UC.xe589a8.a02.h-12-02-01
+  - H:12인수02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a02.h-12-02-01
+    to: HIGH-AIM-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-004
+    to: math.ai-math.tekseuteu-deiteoui-pyohyeon
+- canonical_id: math.ai-math.bindosubekteowa-tekseuteu-yoyak
+  src_id: H:12인수02-02
+  aliases:
+  - HIGH-AIM-005
+  - UC.xe589a8.a02.h-12-02-02
+  - H:12인수02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a02.h-12-02-02
+    to: HIGH-AIM-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-005
+    to: math.ai-math.bindosubekteowa-tekseuteu-yoyak
+- canonical_id: math.ai-math.tekseuteu-bunseokui-suhakjeok-bangbeop
+  src_id: H:12인수02-03
+  aliases:
+  - HIGH-AIM-006
+  - UC.xe589a8.a02.h-12-02-03
+  - H:12인수02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a02.h-12-02-03
+    to: HIGH-AIM-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-006
+    to: math.ai-math.tekseuteu-bunseokui-suhakjeok-bangbeop
+- canonical_id: math.ai-math.imiji-deiteoui-haengryeol-pyohyeon
+  src_id: H:12인수03-01
+  aliases:
+  - HIGH-AIM-007
+  - UC.xe589a8.a03.h-12-03-01
+  - H:12인수03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a03.h-12-03-01
+    to: HIGH-AIM-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-007
+    to: math.ai-math.imiji-deiteoui-haengryeol-pyohyeon
+- canonical_id: math.ai-math.haengryeol-yeonsangwa-imiji-byeonhwan
+  src_id: H:12인수03-02
+  aliases:
+  - HIGH-AIM-008
+  - UC.xe589a8.a03.h-12-03-02
+  - H:12인수03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a03.h-12-03-02
+    to: HIGH-AIM-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-008
+    to: math.ai-math.haengryeol-yeonsangwa-imiji-byeonhwan
+- canonical_id: math.ai-math.imiji-bunryuui-suhakjeok-bangbeop
+  src_id: H:12인수03-03
+  aliases:
+  - HIGH-AIM-009
+  - UC.xe589a8.a03.h-12-03-03
+  - H:12인수03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a03.h-12-03-03
+    to: HIGH-AIM-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-009
+    to: math.ai-math.imiji-bunryuui-suhakjeok-bangbeop
+- canonical_id: math.ai-math.hwakryulgwa-yecheuk
+  src_id: H:12인수04-01
+  aliases:
+  - HIGH-AIM-010
+  - UC.xe589a8.a04.h-12-04-01
+  - H:12인수04-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a04.h-12-04-01
+    to: HIGH-AIM-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-010
+    to: math.ai-math.hwakryulgwa-yecheuk
+- canonical_id: math.ai-math.chuseseongwa-deiteoui-gyeonghyangseong
+  src_id: H:12인수04-02
+  aliases:
+  - HIGH-AIM-011
+  - UC.xe589a8.a04.h-12-04-02
+  - H:12인수04-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a04.h-12-04-02
+    to: HIGH-AIM-011
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-011
+    to: math.ai-math.chuseseongwa-deiteoui-gyeonghyangseong
+- canonical_id: math.ai-math.sonsilhamsuwa-choejeokhwa
+  src_id: H:12인수04-03
+  aliases:
+  - HIGH-AIM-012
+  - UC.xe589a8.a04.h-12-04-03
+  - H:12인수04-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a04.h-12-04-03
+    to: HIGH-AIM-012
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-012
+    to: math.ai-math.sonsilhamsuwa-choejeokhwa
+- canonical_id: math.ai-math.gyeongsahagangbeop
+  src_id: H:12인수04-04
+  aliases:
+  - HIGH-AIM-013
+  - UC.xe589a8.a04.h-12-04-04
+  - H:12인수04-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a04.h-12-04-04
+    to: HIGH-AIM-013
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-013
+    to: math.ai-math.gyeongsahagangbeop
+- canonical_id: math.ai-math.ingongjineungui-silsaenghwal-munje-haegyeol-wonri
+  src_id: H:12인수05-01
+  aliases:
+  - HIGH-AIM-014
+  - UC.xe589a8.a05.h-12-05-01
+  - H:12인수05-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a05.h-12-05-01
+    to: HIGH-AIM-014
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-014
+    to: math.ai-math.ingongjineungui-silsaenghwal-munje-haegyeol-wonri
+- canonical_id: math.ai-math.ingongjineung-suhak-juje-tamgu
+  src_id: H:12인수05-02
+  aliases:
+  - HIGH-AIM-015
+  - UC.xe589a8.a05.h-12-05-02
+  - H:12인수05-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xe589a8.a05.h-12-05-02
+    to: HIGH-AIM-015
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-AIM-015
+    to: math.ai-math.ingongjineung-suhak-juje-tamgu
+- canonical_id: math.vocational-math.su-gaenyeomgwa-sachikyeonsanui-jikmu-hwalyong
+  src_id: H:12직수01-01
+  aliases:
+  - HIGH-VOCA-001
+  - UC.xb30a19.a01.h-12-01-01
+  - H:12직수01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a01.h-12-01-01
+    to: HIGH-VOCA-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-001
+    to: math.vocational-math.su-gaenyeomgwa-sachikyeonsanui-jikmu-hwalyong
+- canonical_id: math.vocational-math.eorimgwa-suui-keugi-bigyo
+  src_id: H:12직수01-02
+  aliases:
+  - HIGH-VOCA-002
+  - UC.xb30a19.a01.h-12-01-02
+  - H:12직수01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a01.h-12-01-02
+    to: HIGH-VOCA-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-002
+    to: math.vocational-math.eorimgwa-suui-keugi-bigyo
+- canonical_id: math.vocational-math.pyojundanwiwa-danwi-hwansan
+  src_id: H:12직수01-03
+  aliases:
+  - HIGH-VOCA-003
+  - UC.xb30a19.a01.h-12-01-03
+  - H:12직수01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a01.h-12-01-03
+    to: HIGH-VOCA-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-003
+    to: math.vocational-math.pyojundanwiwa-danwi-hwansan
+- canonical_id: math.vocational-math.biui-gaenyeomgwa-jeokyong
+  src_id: H:12직수02-01
+  aliases:
+  - HIGH-VOCA-004
+  - UC.xb30a19.a02.h-12-02-01
+  - H:12직수02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a02.h-12-02-01
+    to: HIGH-VOCA-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-004
+    to: math.vocational-math.biui-gaenyeomgwa-jeokyong
+- canonical_id: math.vocational-math.biyulgwa-baekbunyul
+  src_id: H:12직수02-02
+  aliases:
+  - HIGH-VOCA-005
+  - UC.xb30a19.a02.h-12-02-02
+  - H:12직수02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a02.h-12-02-02
+    to: HIGH-VOCA-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-005
+    to: math.vocational-math.biyulgwa-baekbunyul
+- canonical_id: math.vocational-math.daeeung-gwangyewa-gyuchik-chatgi
+  src_id: H:12직수02-03
+  aliases:
+  - HIGH-VOCA-006
+  - UC.xb30a19.a02.h-12-02-03
+  - H:12직수02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a02.h-12-02-03
+    to: HIGH-VOCA-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-006
+    to: math.vocational-math.daeeung-gwangyewa-gyuchik-chatgi
+- canonical_id: math.vocational-math.byeonhwa-geuraepeuui-haeseok
+  src_id: H:12직수02-04
+  aliases:
+  - HIGH-VOCA-007
+  - UC.xb30a19.a02.h-12-02-04
+  - H:12직수02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a02.h-12-02-04
+    to: HIGH-VOCA-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-007
+    to: math.vocational-math.byeonhwa-geuraepeuui-haeseok
+- canonical_id: math.vocational-math.ilchabangjeongsik-ilchabudeungsikui-hwalyong
+  src_id: H:12직수02-05
+  aliases:
+  - HIGH-VOCA-008
+  - UC.xb30a19.a02.h-12-02-05
+  - H:12직수02-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a02.h-12-02-05
+    to: HIGH-VOCA-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-008
+    to: math.vocational-math.ilchabangjeongsik-ilchabudeungsikui-hwalyong
+- canonical_id: math.vocational-math.gyeonyangdowa-jeongaedo
+  src_id: H:12직수03-01
+  aliases:
+  - HIGH-VOCA-009
+  - UC.xb30a19.a03.h-12-03-01
+  - H:12직수03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a03.h-12-03-01
+    to: HIGH-VOCA-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-009
+    to: math.vocational-math.gyeonyangdowa-jeongaedo
+- canonical_id: math.vocational-math.ipchedohyeongui-wi-ap-yeop-moyang
+  src_id: H:12직수03-02
+  aliases:
+  - HIGH-VOCA-010
+  - UC.xb30a19.a03.h-12-03-02
+  - H:12직수03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a03.h-12-03-02
+    to: HIGH-VOCA-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-010
+    to: math.vocational-math.ipchedohyeongui-wi-ap-yeop-moyang
+- canonical_id: math.vocational-math.dohyeongui-idong-hapdong-dalmeum
+  src_id: H:12직수03-03
+  aliases:
+  - HIGH-VOCA-011
+  - UC.xb30a19.a03.h-12-03-03
+  - H:12직수03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a03.h-12-03-03
+    to: HIGH-VOCA-011
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-011
+    to: math.vocational-math.dohyeongui-idong-hapdong-dalmeum
+- canonical_id: math.vocational-math.pyeongmyeondohyeongui-dulrewa-neolbi
+  src_id: H:12직수03-04
+  aliases:
+  - HIGH-VOCA-012
+  - UC.xb30a19.a03.h-12-03-04
+  - H:12직수03-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a03.h-12-03-04
+    to: HIGH-VOCA-012
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-012
+    to: math.vocational-math.pyeongmyeondohyeongui-dulrewa-neolbi
+- canonical_id: math.vocational-math.ipchedohyeongui-geotneolbiwa-bupi
+  src_id: H:12직수03-05
+  aliases:
+  - HIGH-VOCA-013
+  - UC.xb30a19.a03.h-12-03-05
+  - H:12직수03-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a03.h-12-03-05
+    to: HIGH-VOCA-013
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-013
+    to: math.vocational-math.ipchedohyeongui-geotneolbiwa-bupi
+- canonical_id: math.vocational-math.jikmu-sanghwangui-gyeonguui-su
+  src_id: H:12직수04-01
+  aliases:
+  - HIGH-VOCA-014
+  - UC.xb30a19.a04.h-12-04-01
+  - H:12직수04-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a04.h-12-04-01
+    to: HIGH-VOCA-014
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-014
+    to: math.vocational-math.jikmu-sanghwangui-gyeonguui-su
+- canonical_id: math.vocational-math.ganeungseongui-suchihwa
+  src_id: H:12직수04-02
+  aliases:
+  - HIGH-VOCA-015
+  - UC.xb30a19.a04.h-12-04-02
+  - H:12직수04-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a04.h-12-04-02
+    to: HIGH-VOCA-015
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-015
+    to: math.vocational-math.ganeungseongui-suchihwa
+- canonical_id: math.vocational-math.pyowa-geuraepeuro-jaryo-jeongri
+  src_id: H:12직수04-03
+  aliases:
+  - HIGH-VOCA-016
+  - UC.xb30a19.a04.h-12-04-03
+  - H:12직수04-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a04.h-12-04-03
+    to: HIGH-VOCA-016
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-016
+    to: math.vocational-math.pyowa-geuraepeuro-jaryo-jeongri
+- canonical_id: math.vocational-math.pyowa-geuraepeuui-haeseok
+  src_id: H:12직수04-04
+  aliases:
+  - HIGH-VOCA-017
+  - UC.xb30a19.a04.h-12-04-04
+  - H:12직수04-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a04.h-12-04-04
+    to: HIGH-VOCA-017
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-017
+    to: math.vocational-math.pyowa-geuraepeuui-haeseok
+- canonical_id: math.vocational-math.jaryo-teukseonge-matneun-pyo-geuraepeu-pyohyeon
+  src_id: H:12직수04-05
+  aliases:
+  - HIGH-VOCA-018
+  - UC.xb30a19.a04.h-12-04-05
+  - H:12직수04-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.xb30a19.a04.h-12-04-05
+    to: HIGH-VOCA-018
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-VOCA-018
+    to: math.vocational-math.jaryo-teukseonge-matneun-pyo-geuraepeu-pyohyeon
+- canonical_id: math.culture.eumakgwa-suhak
+  src_id: H:12수문01-01
+  aliases:
+  - HIGH-CULT-001
+  - UC.x31955d.a01.h-12-01-01
+  - H:12수문01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a01.h-12-01-01
+    to: HIGH-CULT-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-001
+    to: math.culture.eumakgwa-suhak
+- canonical_id: math.culture.misulgwa-suhak
+  src_id: H:12수문01-02
+  aliases:
+  - HIGH-CULT-002
+  - UC.x31955d.a01.h-12-01-02
+  - H:12수문01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a01.h-12-01-02
+    to: HIGH-CULT-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-002
+    to: math.culture.misulgwa-suhak
+- canonical_id: math.culture.munhakgwa-suhak
+  src_id: H:12수문01-03
+  aliases:
+  - HIGH-CULT-003
+  - UC.x31955d.a01.h-12-01-03
+  - H:12수문01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a01.h-12-01-03
+    to: HIGH-CULT-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-003
+    to: math.culture.munhakgwa-suhak
+- canonical_id: math.culture.yeonghwawa-suhak
+  src_id: H:12수문01-04
+  aliases:
+  - HIGH-CULT-004
+  - UC.x31955d.a01.h-12-01-04
+  - H:12수문01-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a01.h-12-01-04
+    to: HIGH-CULT-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-004
+    to: math.culture.yeonghwawa-suhak
+- canonical_id: math.culture.seupocheuwa-suhak
+  src_id: H:12수문02-01
+  aliases:
+  - HIGH-CULT-005
+  - UC.x31955d.a02.h-12-02-01
+  - H:12수문02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a02.h-12-02-01
+    to: HIGH-CULT-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-005
+    to: math.culture.seupocheuwa-suhak
+- canonical_id: math.culture.geimgwa-suhak
+  src_id: H:12수문02-02
+  aliases:
+  - HIGH-CULT-006
+  - UC.x31955d.a02.h-12-02-02
+  - H:12수문02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a02.h-12-02-02
+    to: HIGH-CULT-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-006
+    to: math.culture.geimgwa-suhak
+- canonical_id: math.culture.dijiteol-gisulgwa-suhak
+  src_id: H:12수문02-03
+  aliases:
+  - HIGH-CULT-007
+  - UC.x31955d.a02.h-12-02-03
+  - H:12수문02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a02.h-12-02-03
+    to: HIGH-CULT-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-007
+    to: math.culture.dijiteol-gisulgwa-suhak
+- canonical_id: math.culture.tupyowa-uisa-gyeoljeong
+  src_id: H:12수문02-04
+  aliases:
+  - HIGH-CULT-008
+  - UC.x31955d.a02.h-12-02-04
+  - H:12수문02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a02.h-12-02-04
+    to: HIGH-CULT-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-008
+    to: math.culture.tupyowa-uisa-gyeoljeong
+- canonical_id: math.culture.minsok-suhakgwa-geonchuk-yangsik
+  src_id: H:12수문03-01
+  aliases:
+  - HIGH-CULT-009
+  - UC.x31955d.a03.h-12-03-01
+  - H:12수문03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a03.h-12-03-01
+    to: HIGH-CULT-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-009
+    to: math.culture.minsok-suhakgwa-geonchuk-yangsik
+- canonical_id: math.culture.jeomjapyowa-suhakjeok-wonri
+  src_id: H:12수문03-02
+  aliases:
+  - HIGH-CULT-010
+  - UC.x31955d.a03.h-12-03-02
+  - H:12수문03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a03.h-12-03-02
+    to: HIGH-CULT-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-010
+    to: math.culture.jeomjapyowa-suhakjeok-wonri
+- canonical_id: math.culture.daejungmaeche-deiteoui-bunseok
+  src_id: H:12수문03-03
+  aliases:
+  - HIGH-CULT-011
+  - UC.x31955d.a03.h-12-03-03
+  - H:12수문03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a03.h-12-03-03
+    to: HIGH-CULT-011
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-011
+    to: math.culture.daejungmaeche-deiteoui-bunseok
+- canonical_id: math.culture.gachisobiwa-uisa-gyeoljeong
+  src_id: H:12수문03-04
+  aliases:
+  - HIGH-CULT-012
+  - UC.x31955d.a03.h-12-03-04
+  - H:12수문03-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a03.h-12-03-04
+    to: HIGH-CULT-012
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-012
+    to: math.culture.gachisobiwa-uisa-gyeoljeong
+- canonical_id: math.culture.siksaenghwal-munjeui-suhakjeok-bunseok
+  src_id: H:12수문04-01
+  aliases:
+  - HIGH-CULT-013
+  - UC.x31955d.a04.h-12-04-01
+  - H:12수문04-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a04.h-12-04-01
+    to: HIGH-CULT-013
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-013
+    to: math.culture.siksaenghwal-munjeui-suhakjeok-bunseok
+- canonical_id: math.culture.daegi-oyeom-munjeui-suhakjeok-bunseok
+  src_id: H:12수문04-02
+  aliases:
+  - HIGH-CULT-014
+  - UC.x31955d.a04.h-12-04-02
+  - H:12수문04-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a04.h-12-04-02
+    to: HIGH-CULT-014
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-014
+    to: math.culture.daegi-oyeom-munjeui-suhakjeok-bunseok
+- canonical_id: math.culture.samakhwa-hyeonsangui-suhakjeok-bunseok
+  src_id: H:12수문04-03
+  aliases:
+  - HIGH-CULT-015
+  - UC.x31955d.a04.h-12-04-03
+  - H:12수문04-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a04.h-12-04-03
+    to: HIGH-CULT-015
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-015
+    to: math.culture.samakhwa-hyeonsangui-suhakjeok-bunseok
+- canonical_id: math.culture.saengmul-dayangseonggwa-saengtae-bunseok
+  src_id: H:12수문04-04
+  aliases:
+  - HIGH-CULT-016
+  - UC.x31955d.a04.h-12-04-04
+  - H:12수문04-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x31955d.a04.h-12-04-04
+    to: HIGH-CULT-016
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-CULT-016
+    to: math.culture.saengmul-dayangseonggwa-saengtae-bunseok
+- canonical_id: math.statistics.tonggyeui-yuyongseonggwa-pilyoseong
+  src_id: H:12실통01-01
+  aliases:
+  - HIGH-STAT-001
+  - UC.x189b6f.a01.h-12-01-01
+  - H:12실통01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a01.h-12-01-01
+    to: HIGH-STAT-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-001
+    to: math.statistics.tonggyeui-yuyongseonggwa-pilyoseong
+- canonical_id: math.statistics.tonggyejeok-munjehaegyeol-gwajeong
+  src_id: H:12실통01-02
+  aliases:
+  - HIGH-STAT-002
+  - UC.x189b6f.a01.h-12-01-02
+  - H:12실통01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a01.h-12-01-02
+    to: HIGH-STAT-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-002
+    to: math.statistics.tonggyejeok-munjehaegyeol-gwajeong
+- canonical_id: math.statistics.mojipdangwa-pyobon-pyobonchuchul
+  src_id: H:12실통01-03
+  aliases:
+  - HIGH-STAT-003
+  - UC.x189b6f.a01.h-12-01-03
+  - H:12실통01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a01.h-12-01-03
+    to: HIGH-STAT-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-003
+    to: math.statistics.mojipdangwa-pyobon-pyobonchuchul
+- canonical_id: math.statistics.jaryoui-jongryu
+  src_id: H:12실통02-01
+  aliases:
+  - HIGH-STAT-004
+  - UC.x189b6f.a02.h-12-02-01
+  - H:12실통02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a02.h-12-02-01
+    to: HIGH-STAT-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-004
+    to: math.statistics.jaryoui-jongryu
+- canonical_id: math.statistics.jaryoui-sujip-bangbeop
+  src_id: H:12실통02-02
+  aliases:
+  - HIGH-STAT-005
+  - UC.x189b6f.a02.h-12-02-02
+  - H:12실통02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a02.h-12-02-02
+    to: HIGH-STAT-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-005
+    to: math.statistics.jaryoui-sujip-bangbeop
+- canonical_id: math.statistics.geuraepeuui-jongryuwa-jakseong
+  src_id: H:12실통02-03
+  aliases:
+  - HIGH-STAT-006
+  - UC.x189b6f.a02.h-12-02-03
+  - H:12실통02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a02.h-12-02-03
+    to: HIGH-STAT-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-006
+    to: math.statistics.geuraepeuui-jongryuwa-jakseong
+- canonical_id: math.statistics.daepyotgapsgwa-sanpodo
+  src_id: H:12실통02-04
+  aliases:
+  - HIGH-STAT-007
+  - UC.x189b6f.a02.h-12-02-04
+  - H:12실통02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a02.h-12-02-04
+    to: HIGH-STAT-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-007
+    to: math.statistics.daepyotgapsgwa-sanpodo
+- canonical_id: math.statistics.jeonggyubunpowa-tbunpo
+  src_id: H:12실통03-01
+  aliases:
+  - HIGH-STAT-008
+  - UC.x189b6f.a03.h-12-03-01
+  - H:12실통03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a03.h-12-03-01
+    to: HIGH-STAT-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-008
+    to: math.statistics.jeonggyubunpowa-tbunpo
+- canonical_id: math.statistics.mopyeonggyunui-chujeong
+  src_id: H:12실통03-02
+  aliases:
+  - HIGH-STAT-009
+  - UC.x189b6f.a03.h-12-03-02
+  - H:12실통03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a03.h-12-03-02
+    to: HIGH-STAT-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-009
+    to: math.statistics.mopyeonggyunui-chujeong
+- canonical_id: math.statistics.mobiyului-chujeong
+  src_id: H:12실통03-03
+  aliases:
+  - HIGH-STAT-010
+  - UC.x189b6f.a03.h-12-03-03
+  - H:12실통03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a03.h-12-03-03
+    to: HIGH-STAT-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-010
+    to: math.statistics.mobiyului-chujeong
+- canonical_id: math.statistics.gaseolgeomjeong
+  src_id: H:12실통03-04
+  aliases:
+  - HIGH-STAT-011
+  - UC.x189b6f.a03.h-12-03-04
+  - H:12실통03-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a03.h-12-03-04
+    to: HIGH-STAT-011
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-011
+    to: math.statistics.gaseolgeomjeong
+- canonical_id: math.statistics.tonggyejeok-tamguwa-uisa-gyeoljeong
+  src_id: H:12실통04-01
+  aliases:
+  - HIGH-STAT-012
+  - UC.x189b6f.a04.h-12-04-01
+  - H:12실통04-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a04.h-12-04-01
+    to: HIGH-STAT-012
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-012
+    to: math.statistics.tonggyejeok-tamguwa-uisa-gyeoljeong
+- canonical_id: math.statistics.tonggyejeok-tamguui-seongchal
+  src_id: H:12실통04-02
+  aliases:
+  - HIGH-STAT-013
+  - UC.x189b6f.a04.h-12-04-02
+  - H:12실통04-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x189b6f.a04.h-12-04-02
+    to: HIGH-STAT-013
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-STAT-013
+    to: math.statistics.tonggyejeok-tamguui-seongchal
+- canonical_id: math.inquiry.suhakgwaje-tamguui-uimiwa-pilyoseong
+  src_id: H:12수과01-01
+  aliases:
+  - HIGH-INQ-001
+  - UC.x68c8f7.a01.h-12-01-01
+  - H:12수과01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x68c8f7.a01.h-12-01-01
+    to: HIGH-INQ-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-INQ-001
+    to: math.inquiry.suhakgwaje-tamguui-uimiwa-pilyoseong
+- canonical_id: math.inquiry.yeonguyunri
+  src_id: H:12수과01-02
+  aliases:
+  - HIGH-INQ-002
+  - UC.x68c8f7.a01.h-12-01-02
+  - H:12수과01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x68c8f7.a01.h-12-01-02
+    to: HIGH-INQ-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-INQ-002
+    to: math.inquiry.yeonguyunri
+- canonical_id: math.inquiry.munheon-josa-tamgu
+  src_id: H:12수과02-01
+  aliases:
+  - HIGH-INQ-003
+  - UC.x68c8f7.a02.h-12-02-01
+  - H:12수과02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x68c8f7.a02.h-12-02-01
+    to: HIGH-INQ-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-INQ-003
+    to: math.inquiry.munheon-josa-tamgu
+- canonical_id: math.inquiry.sarye-josa-tamgu
+  src_id: H:12수과02-02
+  aliases:
+  - HIGH-INQ-004
+  - UC.x68c8f7.a02.h-12-02-02
+  - H:12수과02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x68c8f7.a02.h-12-02-02
+    to: HIGH-INQ-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-INQ-004
+    to: math.inquiry.sarye-josa-tamgu
+- canonical_id: math.inquiry.suhak-silheom-tamgu
+  src_id: H:12수과02-03
+  aliases:
+  - HIGH-INQ-005
+  - UC.x68c8f7.a02.h-12-02-03
+  - H:12수과02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x68c8f7.a02.h-12-02-03
+    to: HIGH-INQ-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-INQ-005
+    to: math.inquiry.suhak-silheom-tamgu
+- canonical_id: math.inquiry.gaebal-yeongu-tamgu
+  src_id: H:12수과02-04
+  aliases:
+  - HIGH-INQ-006
+  - UC.x68c8f7.a02.h-12-02-04
+  - H:12수과02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x68c8f7.a02.h-12-02-04
+    to: HIGH-INQ-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-INQ-006
+    to: math.inquiry.gaebal-yeongu-tamgu
+- canonical_id: math.inquiry.tamgu-juje-seonjeonggwa-gyehoek-surip
+  src_id: H:12수과03-01
+  aliases:
+  - HIGH-INQ-007
+  - UC.x68c8f7.a03.h-12-03-01
+  - H:12수과03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x68c8f7.a03.h-12-03-01
+    to: HIGH-INQ-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-INQ-007
+    to: math.inquiry.tamgu-juje-seonjeonggwa-gyehoek-surip
+- canonical_id: math.inquiry.tamguui-suhaeng
+  src_id: H:12수과03-02
+  aliases:
+  - HIGH-INQ-008
+  - UC.x68c8f7.a03.h-12-03-02
+  - H:12수과03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x68c8f7.a03.h-12-03-02
+    to: HIGH-INQ-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-INQ-008
+    to: math.inquiry.tamguui-suhaeng
+- canonical_id: math.inquiry.sanchulmul-jejakgwa-balpyo
+  src_id: H:12수과03-03
+  aliases:
+  - HIGH-INQ-009
+  - UC.x68c8f7.a03.h-12-03-03
+  - H:12수과03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x68c8f7.a03.h-12-03-03
+    to: HIGH-INQ-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-INQ-009
+    to: math.inquiry.sanchulmul-jejakgwa-balpyo
+- canonical_id: math.inquiry.tamguui-banseonggwa-pyeongga
+  src_id: H:12수과03-04
+  aliases:
+  - HIGH-INQ-010
+  - UC.x68c8f7.a03.h-12-03-04
+  - H:12수과03-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x68c8f7.a03.h-12-03-04
+    to: HIGH-INQ-010
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-INQ-010
+    to: math.inquiry.tamguui-banseonggwa-pyeongga
+- canonical_id: math.polynomial.dahangsikui-deotsemgwa-ppaelsem
+  src_id: 10기수1-01-01
+  aliases:
+  - HIGH-BPOLY-001
+  - UC.x5e8f2a.a01.10-1-01-01
+  - 10기수1-01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a01.10-1-01-01
+    to: HIGH-BPOLY-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BPOLY-001
+    to: math.polynomial.dahangsikui-deotsemgwa-ppaelsem
+- canonical_id: math.polynomial.dahangsikui-gopsemgwa-nanutsem
+  src_id: 10기수1-01-02
+  aliases:
+  - HIGH-BPOLY-002
+  - UC.x5e8f2a.a01.10-1-01-02
+  - 10기수1-01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a01.10-1-01-02
+    to: HIGH-BPOLY-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BPOLY-002
+    to: math.polynomial.dahangsikui-gopsemgwa-nanutsem
+- canonical_id: math.polynomial.insubunhae
+  src_id: 10기수1-01-03
+  aliases:
+  - HIGH-BPOLY-003
+  - UC.x5e8f2a.a01.10-1-01-03
+  - 10기수1-01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a01.10-1-01-03
+    to: HIGH-BPOLY-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BPOLY-003
+    to: math.polynomial.insubunhae
+- canonical_id: math.equation.gandanhan-ichabangjeongsik
+  src_id: 10기수1-02-01
+  aliases:
+  - HIGH-BEQN-003
+  - UC.x5e8f2a.a02.10-1-02-01
+  - 10기수1-02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a02.10-1-02-01
+    to: HIGH-BEQN-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BEQN-003
+    to: math.equation.gandanhan-ichabangjeongsik
+- canonical_id: math.equation.ichabangjeongsikui-panbyeolsik
+  src_id: 10기수1-02-02
+  aliases:
+  - HIGH-BEQN-005
+  - UC.x5e8f2a.a02.10-1-02-02
+  - 10기수1-02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a02.10-1-02-02
+    to: HIGH-BEQN-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BEQN-005
+    to: math.equation.ichabangjeongsikui-panbyeolsik
+- canonical_id: math.equation.ichahamsuui-geuraepeu
+  src_id: 10기수1-02-03
+  aliases:
+  - HIGH-BEQN-006
+  - UC.x5e8f2a.a02.10-1-02-03
+  - 10기수1-02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a02.10-1-02-03
+    to: HIGH-BEQN-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BEQN-006
+    to: math.equation.ichahamsuui-geuraepeu
+- canonical_id: math.equation.ichabangjeongsikgwa-ichahamsuui-gwangye
+  src_id: 10기수1-02-04
+  aliases:
+  - HIGH-BEQN-007
+  - UC.x5e8f2a.a02.10-1-02-04
+  - 10기수1-02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a02.10-1-02-04
+    to: HIGH-BEQN-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BEQN-007
+    to: math.equation.ichabangjeongsikgwa-ichahamsuui-gwangye
+- canonical_id: math.equation.ichahamsuui-choedae-choeso
+  src_id: 10기수1-02-05
+  aliases:
+  - HIGH-BEQN-008
+  - UC.x5e8f2a.a02.10-1-02-05
+  - 10기수1-02-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a02.10-1-02-05
+    to: HIGH-BEQN-008
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BEQN-008
+    to: math.equation.ichahamsuui-choedae-choeso
+- canonical_id: math.equation.ilchabudeungsik-2
+  src_id: 10기수1-02-06
+  aliases:
+  - HIGH-BEQN-001
+  - UC.x5e8f2a.a02.10-1-02-06
+  - 10기수1-02-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a02.10-1-02-06
+    to: HIGH-BEQN-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BEQN-001
+    to: math.equation.ilchabudeungsik-2
+- canonical_id: math.equation.yeonripilchabudeungsik
+  src_id: 10기수1-02-07
+  aliases:
+  - HIGH-BEQN-002
+  - UC.x5e8f2a.a02.10-1-02-07
+  - 10기수1-02-07
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a02.10-1-02-07
+    to: HIGH-BEQN-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BEQN-002
+    to: math.equation.yeonripilchabudeungsik
+- canonical_id: math.equation.jeoldaetgapseul-pohamhan-ilchabudeungsik
+  src_id: 10기수1-02-08
+  aliases:
+  - HIGH-BEQN-004
+  - UC.x5e8f2a.a02.10-1-02-08
+  - 10기수1-02-08
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a02.10-1-02-08
+    to: HIGH-BEQN-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BEQN-004
+    to: math.equation.jeoldaetgapseul-pohamhan-ilchabudeungsik
+- canonical_id: math.equation.ichabudeungsikgwa-ichahamsuui-gwangye
+  src_id: 10기수1-02-09
+  aliases:
+  - HIGH-BEQN-009
+  - UC.x5e8f2a.a02.10-1-02-09
+  - 10기수1-02-09
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a02.10-1-02-09
+    to: HIGH-BEQN-009
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BEQN-009
+    to: math.equation.ichabudeungsikgwa-ichahamsuui-gwangye
+- canonical_id: math.combinatorics.hapui-beopchikgwa-gopui-beopchik
+  src_id: 10기수1-03-01
+  aliases:
+  - HIGH-BCOUNT-001
+  - UC.x5e8f2a.a03.10-1-03-01
+  - 10기수1-03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a03.10-1-03-01
+    to: HIGH-BCOUNT-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BCOUNT-001
+    to: math.combinatorics.hapui-beopchikgwa-gopui-beopchik
+- canonical_id: math.combinatorics.sunyeol
+  src_id: 10기수1-03-02
+  aliases:
+  - HIGH-BCOUNT-002
+  - UC.x5e8f2a.a03.10-1-03-02
+  - 10기수1-03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a03.10-1-03-02
+    to: HIGH-BCOUNT-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BCOUNT-002
+    to: math.combinatorics.sunyeol
+- canonical_id: math.combinatorics.johap
+  src_id: 10기수1-03-03
+  aliases:
+  - HIGH-BCOUNT-003
+  - UC.x5e8f2a.a03.10-1-03-03
+  - 10기수1-03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a03.10-1-03-03
+    to: HIGH-BCOUNT-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BCOUNT-003
+    to: math.combinatorics.johap
+- canonical_id: math.matrix.haengryeolui-tteutgwa-pyohyeon
+  src_id: 10기수1-04-01
+  aliases:
+  - HIGH-BMATRIX-001
+  - UC.x5e8f2a.a04.10-1-04-01
+  - 10기수1-04-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a04.10-1-04-01
+    to: HIGH-BMATRIX-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BMATRIX-001
+    to: math.matrix.haengryeolui-tteutgwa-pyohyeon
+- canonical_id: math.matrix.haengryeolui-yeonsan
+  src_id: 10기수1-04-02
+  aliases:
+  - HIGH-BMATRIX-002
+  - UC.x5e8f2a.a04.10-1-04-02
+  - 10기수1-04-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x5e8f2a.a04.10-1-04-02
+    to: HIGH-BMATRIX-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BMATRIX-002
+    to: math.matrix.haengryeolui-yeonsan
+- canonical_id: math.coordinate.du-jeom-saiui-geori
+  src_id: 10기수2-01-01
+  aliases:
+  - HIGH-BCOORD-001
+  - UC.x32f29f.a01.10-2-01-01
+  - 10기수2-01-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a01.10-2-01-01
+    to: HIGH-BCOORD-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BCOORD-001
+    to: math.coordinate.du-jeom-saiui-geori
+- canonical_id: math.coordinate.jikseonui-bangjeongsik
+  src_id: 10기수2-01-02
+  aliases:
+  - HIGH-BCOORD-002
+  - UC.x32f29f.a01.10-2-01-02
+  - 10기수2-01-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a01.10-2-01-02
+    to: HIGH-BCOORD-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BCOORD-002
+    to: math.coordinate.jikseonui-bangjeongsik
+- canonical_id: math.coordinate.du-jikseonui-pyeonghaeng-sujik-jogeon
+  src_id: 10기수2-01-03
+  aliases:
+  - HIGH-BCOORD-004
+  - UC.x32f29f.a01.10-2-01-03
+  - 10기수2-01-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a01.10-2-01-03
+    to: HIGH-BCOORD-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BCOORD-004
+    to: math.coordinate.du-jikseonui-pyeonghaeng-sujik-jogeon
+- canonical_id: math.coordinate.wonui-bangjeongsik
+  src_id: 10기수2-01-04
+  aliases:
+  - HIGH-BCOORD-005
+  - UC.x32f29f.a01.10-2-01-04
+  - 10기수2-01-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a01.10-2-01-04
+    to: HIGH-BCOORD-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BCOORD-005
+    to: math.coordinate.wonui-bangjeongsik
+- canonical_id: math.coordinate.wongwa-jikseonui-wichi-gwangye
+  src_id: 10기수2-01-05
+  aliases:
+  - HIGH-BCOORD-007
+  - UC.x32f29f.a01.10-2-01-05
+  - 10기수2-01-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a01.10-2-01-05
+    to: HIGH-BCOORD-007
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BCOORD-007
+    to: math.coordinate.wongwa-jikseonui-wichi-gwangye
+- canonical_id: math.coordinate.pyeonghaengidong
+  src_id: 10기수2-01-06
+  aliases:
+  - HIGH-BCOORD-003
+  - UC.x32f29f.a01.10-2-01-06
+  - 10기수2-01-06
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a01.10-2-01-06
+    to: HIGH-BCOORD-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BCOORD-003
+    to: math.coordinate.pyeonghaengidong
+- canonical_id: math.coordinate.daechingidong
+  src_id: 10기수2-01-07
+  aliases:
+  - HIGH-BCOORD-006
+  - UC.x32f29f.a01.10-2-01-07
+  - 10기수2-01-07
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a01.10-2-01-07
+    to: HIGH-BCOORD-006
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BCOORD-006
+    to: math.coordinate.daechingidong
+- canonical_id: math.logic.jiphapui-gaenyeomgwa-pyohyeon
+  src_id: 10기수2-02-01
+  aliases:
+  - HIGH-BLOGIC-001
+  - UC.x32f29f.a02.10-2-02-01
+  - 10기수2-02-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a02.10-2-02-01
+    to: HIGH-BLOGIC-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BLOGIC-001
+    to: math.logic.jiphapui-gaenyeomgwa-pyohyeon
+- canonical_id: math.logic.du-jiphapui-pohamgwangye
+  src_id: 10기수2-02-02
+  aliases:
+  - HIGH-BLOGIC-002
+  - UC.x32f29f.a02.10-2-02-02
+  - 10기수2-02-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a02.10-2-02-02
+    to: HIGH-BLOGIC-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BLOGIC-002
+    to: math.logic.du-jiphapui-pohamgwangye
+- canonical_id: math.logic.jiphapui-yeonsan
+  src_id: 10기수2-02-03
+  aliases:
+  - HIGH-BLOGIC-003
+  - UC.x32f29f.a02.10-2-02-03
+  - 10기수2-02-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a02.10-2-02-03
+    to: HIGH-BLOGIC-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BLOGIC-003
+    to: math.logic.jiphapui-yeonsan
+- canonical_id: math.logic.myeongjewa-jogeon
+  src_id: 10기수2-02-04
+  aliases:
+  - HIGH-BLOGIC-004
+  - UC.x32f29f.a02.10-2-02-04
+  - 10기수2-02-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a02.10-2-02-04
+    to: HIGH-BLOGIC-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BLOGIC-004
+    to: math.logic.myeongjewa-jogeon
+- canonical_id: math.logic.myeongjeui-yeokgwa-daeu
+  src_id: 10기수2-02-05
+  aliases:
+  - HIGH-BLOGIC-005
+  - UC.x32f29f.a02.10-2-02-05
+  - 10기수2-02-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a02.10-2-02-05
+    to: HIGH-BLOGIC-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BLOGIC-005
+    to: math.logic.myeongjeui-yeokgwa-daeu
+- canonical_id: math.function.hamsuui-gaenyeomgwa-geuraepeu
+  src_id: 10기수2-03-01
+  aliases:
+  - HIGH-BFUN-001
+  - UC.x32f29f.a03.10-2-03-01
+  - 10기수2-03-01
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a03.10-2-03-01
+    to: HIGH-BFUN-001
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BFUN-001
+    to: math.function.hamsuui-gaenyeomgwa-geuraepeu
+- canonical_id: math.function.hamsuui-hapseong
+  src_id: 10기수2-03-02
+  aliases:
+  - HIGH-BFUN-002
+  - UC.x32f29f.a03.10-2-03-02
+  - 10기수2-03-02
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a03.10-2-03-02
+    to: HIGH-BFUN-002
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BFUN-002
+    to: math.function.hamsuui-hapseong
+- canonical_id: math.function.yeokhamsu
+  src_id: 10기수2-03-03
+  aliases:
+  - HIGH-BFUN-003
+  - UC.x32f29f.a03.10-2-03-03
+  - 10기수2-03-03
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a03.10-2-03-03
+    to: HIGH-BFUN-003
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BFUN-003
+    to: math.function.yeokhamsu
+- canonical_id: math.function.yurihamsuui-geuraepeu
+  src_id: 10기수2-03-04
+  aliases:
+  - HIGH-BFUN-004
+  - UC.x32f29f.a03.10-2-03-04
+  - 10기수2-03-04
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a03.10-2-03-04
+    to: HIGH-BFUN-004
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BFUN-004
+    to: math.function.yurihamsuui-geuraepeu
+- canonical_id: math.function.murihamsuui-geuraepeu
+  src_id: 10기수2-03-05
+  aliases:
+  - HIGH-BFUN-005
+  - UC.x32f29f.a03.10-2-03-05
+  - 10기수2-03-05
+  slug_source: name_ko
+  migrations:
+  - event: P2a
+    date: '2026-06-16'
+    from: UC.x32f29f.a03.10-2-03-05
+    to: HIGH-BFUN-005
+  - event: P2d
+    date: '2026-07-02'
+    from: HIGH-BFUN-005
+    to: math.function.murihamsuui-geuraepeu

@@ -98,8 +98,9 @@ TextbookUnit  ──< N:M >──  Universal Concept ID   (curriculum_matrix.md 
 
 - 한 단원이 여러 개념을 다루고(N), 한 개념이 여러 교과서의 여러 단원에 흩어진다(M).
 - `concept_ids`는 개념 그래프(`concept_graph.md`)·다국 매트릭스
-  (`curriculum_matrix.md`)와 **같은 Universal Concept ID 키 공간**(`UC.<domain>.<topic>.<slug>`)을
-  쓴다. 키가 어긋나면 join이 깨진다 — 키 공유는 강제 사항.
+  (`curriculum_matrix.md`)와 **같은 canonical concept_id 키 공간**(`math.<area>.<slug>`·
+  2026-07-02 P2d·Part 9)을 쓴다. 옛 `UC.<domain>.<topic>.<slug>`·`{TRACK}-{AREA}-{NNN}`은
+  `aliases`에 보존(개념축 오버레이·alias 조회). 키가 어긋나면 join이 깨진다 — 키 공유는 강제 사항.
 - `standard_codes`는 `ncic.md`의 성취기준 코드를 가리킨다 — **교과서 매핑의
   매칭 타겟이 NCIC 성취기준**이다(`01_data_foundation.md` 자산 연결도).
 

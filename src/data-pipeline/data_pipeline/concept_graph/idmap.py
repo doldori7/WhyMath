@@ -1,50 +1,54 @@
-"""데이터셋 v1 `src_id` → **새 concept_id**(`{TRACK}-{AREA}-{NNN}`) 결정론적 매핑.
+"""데이터셋 v1 `src_id` → **canonical concept_id**(`math.<area>.<slug>`) 결정론적 매핑.
 
 정본: docs/data/concept_graph.md §2.4(ID 규약)·§3.5(ID 안정성) +
 docs/data/concept_graph_dataset_v1.md §2(주의)·§5b.1(매핑) +
-docs/data/curriculum_master_v2_integration_review.md(P2 마이그레이션 설계).
+docs/standards/part9_id_policy_review.md(P2d 마이그레이션 설계).
 
-배경(2026-06-16 결정·`MEMORY.md`): concept_id 정본을 기존 `UC.<domain>.<topic>.<slug>`에서
-**`{TRACK}-{AREA}-{NNN}`**(예 `ELEM-GEO-001`)로 *전환*한다. 이는 의도적 breaking change다 —
-`concept.schema.yaml`의 "발급 후 변경금지"를 깨되, 추적성은 **별칭(aliases)**과 **source_id**로
-보존한다(롤백·하위호환). 커밋된 코퍼스는 `src_id` 기반이고 UC/새 ID는 *파생*이라, 재ID는
-대부분 *파생 규칙 교체 + 하위 변경*으로 끝난다.
+배경(2026-07-02 P2d·Part 9 엄격 시정·`MEMORY.md`): concept_id 정본을 옛 `{TRACK}-{AREA}-{NNN}`
+(P2a·학년대=교육과정 배치가 key에 결합된 안티패턴)에서 **교육과정·언어·렌더러 무관 의미론 ID**
+`math.<area>.<slug>`로 *전환*한다(P2a를 되돌리는 breaking change). 추적성은 **별칭(aliases)**·
+**source_id**·**ids.yaml registry**로 보존한다(롤백·하위호환). 옛 `{TRACK}-{AREA}-{NNN}`은 폐기가
+아니라 **교육과정축 코드(curriculum-axis code)** 오버레이/별칭으로 살려 matrix '개념 축' 조인을
+떠받친다(curriculum overlay 원칙).
 
-ID 포맷(Kiki 확정):
+canonical ID 포맷(P2d 확정):
 
-    concept_id = {TRACK}-{AREA}-{NNN}
-      TRACK ∈ {ELEM, MID, HIGH, RT, OLY}   # 코퍼스엔 ELEM/MID/HIGH만·RT/OLY는 regex 예약
-      AREA  = 토픽 ascii 코드(2~8 대문자/숫자) — `category`에서 파생
-      NNN   = (TRACK, AREA) 안 3자리 zero-pad 순번
+    concept_id = math.<area>.<slug>
+      math   = 고정 subject(Phase 1 전건 수학)
+      <area> = 교육과정-독립 영역어(_AREA_SLUG_MAP: GEO→geometry·CALC→calculus…·소문자·하이픈 허용)
+      <slug> = name_ko의 결정론적 로마자화(hangul_romanize.romanize·외부 lib 0)
 
-  - **TRACK**: 첫 `standard_code` 학년대수 → 2/4/6=`ELEM`·9=`MID`·10/12=`HIGH`
-    (`parse_standard_code`+`_GRADE_TRACK_MAP`). standard_codes가 없거나 모두 파싱 실패면
-    `difficulty_tier` 밴드로 폴백(0~8=ELEM·9~16=MID·17~24=HIGH). tier도 없으면 최종 `MID`.
-    실데이터 403건은 전부 standard_codes를 가져 폴백은 이론 경로지만 구현·문서화한다.
-  - **AREA**: `category`의 레벨 접두사(`[고]`/`[중]`/`[공통]`)를 *먼저 제거*한 뒤 토픽 한글을
-    짧은 ascii 니모닉으로 매핑(`_TOPIC_AREA_MAP`·37개 category 전수). 같은 토픽 어간이 레벨만
-    다르면(예 `[중]기하`·`[고]기하`) **AREA를 공유**하고 TRACK이 구분한다. 미수록 category는
-    *침묵 폴백 금지* — `KeyError`로 시끄럽게 실패한다(taxonomy 누수 가드).
-  - **NNN**: (TRACK, AREA) 그룹 안에서 `(int(difficulty_tier), src_id)`로 정렬해 001·002…
-    부여. 재실행 시 동일 ID 재현(멱등). difficulty_tier 결측은 큰 값(맨 뒤)으로 취급.
+  - **area**: `_area_for_record`가 돌려주는 AREA 코드(GEO·CALC…·학년-독립)를 `_AREA_SLUG_MAP`으로
+    교육과정-독립 영역어에 사상. 미매핑 category는 `_area_for_record`가 KeyError(taxonomy 가드).
+  - **slug**: name_ko를 국립국어원 표기 간이 로마자화(결정론·멱등). 해독 불가면 romanize가 실패.
+  - **충돌 접미**: grade 제거로 `[중]지수법칙`·`[고]지수법칙`이 같은 `math.algebra.…`로 충돌한다.
+    `(area, slug)` 그룹 내 `(int(difficulty_tier), src_id)` 정렬(옛 NNN 정렬키 재사용)로 첫 항목은
+    무접미·이후 `-2`/`-3`… 접미. 결정론·멱등. 접미 사실은 `ids.yaml`에 기록한다.
 
-추적성(P2 핵심):
+추적성(P2d 핵심):
   - 각 개념의 **source_id = src_id**(원천 보존).
-  - 각 개념의 **aliases = [old_UC, src_id]** — old_UC는 *이전 알고리즘*(`_build_legacy_uc`)이
-    만들던 UC다(롤백·하위호환 join용). 새 ID로의 전환 후에도 옛 키로 찾을 수 있게 보존한다.
-  - `build_id_map`은 `{src_id: new_id}`를 반환(검토·적재 입력), `build_alias_map`은
-    `{src_id: [old_UC, src_id]}`를 반환한다.
+  - 각 개념의 **aliases = [교육과정축 코드, old_UC, src_id]** — 교육과정축 코드는 옛 P2a 알고리즘
+    (`build_curriculum_axis_map`)의 `{TRACK}-{AREA}-{NNN}`, old_UC는 옛 UC(`_build_legacy_uc`).
+    새 canonical ID로 전환한 뒤에도 옛 키·원천 키로 찾을 수 있게 보존한다.
+  - `build_id_map`은 `{src_id: canonical_id}`(정본·적재 입력), `build_curriculum_axis_map`은
+    `{src_id: TRACK-AREA-NNN}`(오버레이), `build_legacy_uc_map`은 `{src_id: UC…}`,
+    `build_alias_map`은 `{src_id: [axis, uc, src_id]}`를 반환한다.
 
-법적: 여기서는 성취기준 *코드*만 읽어 TRACK/AREA를 만든다 — 본문은 일절 만지지 않는다.
+법적: 여기서는 성취기준 *코드*와 name_ko만 읽어 area/slug를 만든다 — 성취기준 본문은 만지지 않는다.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 
-from data_pipeline.concept_graph.models import CONCEPT_ID_PATTERN, LEGACY_UC_PATTERN
+from data_pipeline.concept_graph.hangul_romanize import romanize
+from data_pipeline.concept_graph.models import (
+    CONCEPT_ID_PATTERN,
+    CURRICULUM_AXIS_PATTERN,
+    LEGACY_UC_PATTERN,
+)
 from data_pipeline.concept_graph.seed import _subject_abbr
 from data_pipeline.ncic.transform import TransformError, parse_standard_code
 
@@ -138,6 +142,71 @@ for _stem, _area in _TOPIC_AREA_MAP.items():
     if not _AREA_TOKEN_PATTERN.match(_area):  # pragma: no cover - 상수 가드(개발 중 오타 차단)
         raise ValueError(f"_TOPIC_AREA_MAP AREA 코드 규약 위반: {_stem!r} → {_area!r}")
 del _stem, _area
+
+# ──────────────────────────────────────────────────────────────────────
+# AREA 코드(GEO·CALC…) → 교육과정-독립 영역어(canonical `<area>` 세그먼트·P2d).
+# `_TOPIC_AREA_MAP` 값(41종)과 1:1 — import 시점에 전수 커버리지·형식을 단언한다.
+# 기본수학 B*접두 코드(BEQN·BFUN…)는 대응 공통수학 영역어(equation·function…)로 합류한다 —
+# canonical은 교육과정-독립이라 track 구분(옛 BEQN vs EQN)을 area에 담지 않고, 같은 name_ko가
+# 두 트랙에 겹치면 결정론적 충돌 접미(-2)로 가른다(기본↔공통 22군 예상).
+# ──────────────────────────────────────────────────────────────────────
+_AREA_SLUG_MAP: dict[str, str] = {
+    "ADDSUB": "addition",
+    "ALG": "algebra",
+    "ARITH": "arithmetic",
+    "AIM": "ai-math",
+    "BCOORD": "coordinate",
+    "BCOUNT": "combinatorics",
+    "BEQN": "equation",
+    "BFUN": "function",
+    "BLOGIC": "logic",
+    "BMATRIX": "matrix",
+    "BPOLY": "polynomial",
+    "CALC": "calculus",
+    "CHANCE": "chance",
+    "COORD": "coordinate",
+    "COUNT": "combinatorics",
+    "CULT": "culture",
+    "DATA": "data",
+    "DECIMAL": "decimal",
+    "DIV": "division",
+    "ECON": "economics",
+    "EQN": "equation",
+    "FRAC": "fraction",
+    "FUN": "function",
+    "GEO": "geometry",
+    "GRAPH": "graph",
+    "INQ": "inquiry",
+    "LOGIC": "logic",
+    "MATRIX": "matrix",
+    "MEAS": "measurement",
+    "MUL": "multiplication",
+    "NPLACE": "place-value",
+    "NUMPROP": "number-property",
+    "PATTERN": "pattern",
+    "PROB": "probability",
+    "RATIO": "ratio",
+    "SHAPE": "shape",
+    "SHELEM": "shape-element",
+    "STAT": "statistics",
+    "TRANSF": "transformation",
+    "UNIT": "unit",
+    "VOCA": "vocational-math",
+}
+
+# 전수 커버리지·형식 가드(import 시 1회) — _TOPIC_AREA_MAP 값 전건에 영역어가 있고, 영역어는
+# 소문자로 시작하는 [a-z0-9-] 토큰(canonical <area> 세그먼트 규약)인지 단언한다.
+_AREA_SLUG_TOKEN_PATTERN: re.Pattern[str] = re.compile(r"^[a-z][a-z0-9-]*$")
+if set(_AREA_SLUG_MAP) != set(_TOPIC_AREA_MAP.values()):  # pragma: no cover - 상수 가드
+    _missing = set(_TOPIC_AREA_MAP.values()) - set(_AREA_SLUG_MAP)
+    _extra = set(_AREA_SLUG_MAP) - set(_TOPIC_AREA_MAP.values())
+    raise ValueError(
+        f"_AREA_SLUG_MAP이 _TOPIC_AREA_MAP AREA 코드와 불일치 — 누락 {_missing}·잉여 {_extra}"
+    )
+for _area_code, _area_slug in _AREA_SLUG_MAP.items():
+    if not _AREA_SLUG_TOKEN_PATTERN.match(_area_slug):  # pragma: no cover - 상수 가드
+        raise ValueError(f"_AREA_SLUG_MAP 영역어 규약 위반: {_area_code!r} → {_area_slug!r}")
+del _area_code, _area_slug
 
 # category 레벨 접두사 — AREA 매핑 전에 제거. (없으면 그대로 — 초등 category엔 접두사 없음.)
 _LEVEL_PREFIXES: tuple[str, ...] = ("[고]", "[중]", "[공통]")
@@ -281,49 +350,33 @@ def _normalized_codes(record: Mapping[str, object]) -> list[str]:
     return []
 
 
-def _validate_overrides(override_map: Mapping[str, str]) -> None:
-    """override concept_id들이 새 규약을 지키고 서로 충돌하지 않는지 선검증."""
+def _validate_overrides(
+    override_map: Mapping[str, str], pattern: re.Pattern[str], label: str
+) -> None:
+    """override id들이 주어진 규약(pattern)을 지키고 서로 충돌하지 않는지 선검증."""
     seen: dict[str, str] = {}
     for src_id, cid in override_map.items():
-        if not CONCEPT_ID_PATTERN.match(cid):
-            raise ValueError(f"override concept_id 규약 위반: {src_id!r} → {cid!r}")
+        if not pattern.match(cid):
+            raise ValueError(f"override {label} 규약 위반: {src_id!r} → {cid!r}")
         if cid in seen:
-            raise ValueError(f"override concept_id 충돌: {cid!r}를 {seen[cid]!r}·{src_id!r}가 공유")
+            raise ValueError(f"override {label} 충돌: {cid!r}를 {seen[cid]!r}·{src_id!r}가 공유")
         seen[cid] = src_id
 
 
-def build_id_map(
+# tier 결측 정렬키(맨 뒤로) — 어떤 실제 tier(≤24)보다 큼. 충돌 접미·옛 NNN 공용.
+_TIER_LAST_SORT_KEY: int = 1 << 30
+
+
+def _order_and_group(
     concepts: Iterable[Mapping[str, object]],
-    *,
-    overrides: Mapping[str, str] | None = None,
-) -> dict[str, str]:
-    """concepts 레코드들 → `{src_id: concept_id}` 매핑(검토용·transform 입력).
+    key_of: Callable[[Mapping[str, object]], tuple[str, str]],
+) -> tuple[list[str], dict[str, int | None], dict[tuple[str, str], list[str]]]:
+    """1-pass 공용 헬퍼 — src_id 순서 보존 + tier 계산 + `key_of(record)` 그룹 버킷.
 
-    새 ID(`{TRACK}-{AREA}-{NNN}`)는 *전역 2-pass*로 결정한다 — NNN이 (TRACK, AREA) 그룹 안의
-    상대 순번이라 단건 함수로는 못 만들고 전체를 봐야 한다:
-
-      1. **1-pass(그룹화)**: 각 src_id의 (TRACK, AREA, tier)를 계산해 그룹 버킷에 모은다.
-      2. **2-pass(번호부여)**: 그룹 안에서 `(tier, src_id)` 정렬 → 001·002… 부여(멱등).
-         override가 있으면 그 src_id는 자동 번호 대신 override concept_id를 쓴다.
-
-    Args:
-        concepts: 각 레코드는 최소 'src_id'·'category'를 가진 매핑(+ standard_codes·tier).
-        overrides: 전문가 재명명 {src_id: concept_id}. 주입 시 그 src_id는 자동 번호 대신 override를
-            쓴다(단, override도 CONCEPT_ID_PATTERN 통과·매핑 내 유일해야 함).
-
-    Returns:
-        {src_id: concept_id}. 입력 순서 보존(dict 삽입 순서).
-
-    Raises:
-        ValueError: src_id 중복/빈 src_id, override 규약 위반·충돌, 또는 (이론상) 새 ID 충돌.
-        KeyError: category가 _TOPIC_AREA_MAP에 없음(침묵 폴백 금지).
+    `key_of`는 레코드 → (grp_a, grp_b) 그룹키 함수(canonical=(area_slug, slug)·axis=(track, area)).
+    반환: (입력순 src_id 목록, {src_id: tier}, {그룹키: [src_id…]}).
     """
-    override_map = dict(overrides or {})
-    _validate_overrides(override_map)
-
-    # ── 1-pass: src_id 순서 보존 + (TRACK, AREA, tier) 계산 + 그룹 버킷.
     order: list[str] = []
-    track_area_of: dict[str, tuple[str, str]] = {}
     tier_of: dict[str, int | None] = {}
     seen_src: set[str] = set()
     groups: dict[tuple[str, str], list[str]] = {}
@@ -337,74 +390,176 @@ def build_id_map(
         seen_src.add(src_id)
         order.append(src_id)
 
-        codes = _normalized_codes(record)
-        tier = _coerce_tier(record.get("difficulty_tier"))
-        track = track_for_record(codes, tier)
-        area = _area_for_record(record)
-        track_area_of[src_id] = (track, area)
-        tier_of[src_id] = tier
-        groups.setdefault((track, area), []).append(src_id)
+        tier_of[src_id] = _coerce_tier(record.get("difficulty_tier"))
+        groups.setdefault(key_of(record), []).append(src_id)
+    return order, tier_of, groups
 
-    # ── 2-pass: 그룹 안 (tier, src_id) 정렬 → 자동 NNN. tier 결측은 맨 뒤(큰 값 대용).
-    _tier_last = 1 << 30  # tier 결측 정렬키(맨 뒤로) — 어떤 실제 tier(≤24)보다 큼.
 
-    def _sort_key(src_id: str) -> tuple[int, str]:
-        """(tier, src_id) 정렬키 — tier 결측은 맨 뒤. 멱등 NNN 보장."""
+def _sort_members(members: Sequence[str], tier_of: Mapping[str, int | None]) -> list[str]:
+    """그룹 멤버를 `(tier, src_id)`로 정렬(tier 결측은 맨 뒤). 멱등 순번/접미 보장."""
+
+    def _key(src_id: str) -> tuple[int, str]:
         tier = tier_of[src_id]
-        return (tier if tier is not None else _tier_last, src_id)
+        return (tier if tier is not None else _TIER_LAST_SORT_KEY, src_id)
 
-    auto_id: dict[str, str] = {}
-    for (track, area), members in groups.items():
-        for seq, src_id in enumerate(sorted(members, key=_sort_key), start=1):
-            auto_id[src_id] = f"{track}-{area}-{seq:03d}"
+    return sorted(members, key=_key)
 
-    # ── 산출: 입력 순서로 {src_id: concept_id}. override 우선. 충돌 검사(override 교차 가드).
+
+def _assemble_result(
+    order: Sequence[str],
+    auto_id: Mapping[str, str],
+    override_map: Mapping[str, str],
+    label: str,
+) -> dict[str, str]:
+    """입력 순서로 {src_id: id}. override 우선·충돌 검사(override 교차 가드)."""
     result: dict[str, str] = {}
     id_to_src: dict[str, str] = {}
     for src_id in order:
         cid = override_map.get(src_id, auto_id[src_id])
         if cid in id_to_src and id_to_src[cid] != src_id:
             raise ValueError(
-                f"concept_id 충돌: {cid!r}를 {id_to_src[cid]!r}·{src_id!r}가 공유 "
+                f"{label} 충돌: {cid!r}를 {id_to_src[cid]!r}·{src_id!r}가 공유 "
                 "(override가 자동 ID와 겹쳤을 가능성 — override 값을 확인하세요)"
             )
         id_to_src[cid] = src_id
         result[src_id] = cid
+    return result
 
+
+def build_id_map(
+    concepts: Iterable[Mapping[str, object]],
+    *,
+    overrides: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """concepts 레코드들 → `{src_id: canonical_id}` 매핑(정본·transform 입력).
+
+    canonical ID(`math.<area>.<slug>`)는 *전역 2-pass*로 결정한다 — 충돌 접미가 (area, slug) 그룹
+    안의 상대 순번이라 단건 함수로는 못 만들고 전체를 봐야 한다:
+
+      1. **1-pass(그룹화)**: 각 src_id의 (area 영역어, slug, tier)를 (area, slug) 그룹에 모은다.
+      2. **2-pass(접미부여)**: 그룹 안 `(tier, src_id)` 정렬 → 첫 항목 무접미·이후 `-2`/`-3`…(멱등).
+         override가 있으면 그 src_id는 자동 접미 대신 override canonical_id를 쓴다.
+
+    Args:
+        concepts: 각 레코드는 최소 'src_id'·'category'·'name_ko'를 가진 매핑(+ standard_codes·tier).
+        overrides: 전문가 재명명 {src_id: canonical_id}. 주입 시 그 src_id는 자동 발급 대신 override
+            (단, override도 CONCEPT_ID_PATTERN 통과·매핑 내 유일해야 함).
+
+    Returns:
+        {src_id: canonical_id}. 입력 순서 보존(dict 삽입 순서).
+
+    Raises:
+        ValueError: src_id 중복/빈 src_id, override 위반·충돌, romanize 실패, 또는 canonical 충돌.
+        KeyError: category가 _TOPIC_AREA_MAP에 없음(침묵 폴백 금지).
+    """
+    override_map = dict(overrides or {})
+    _validate_overrides(override_map, CONCEPT_ID_PATTERN, "canonical_id")
+
+    # ── (area 영역어, slug)로 계산·그룹. name_ko 로마자화 실패는 romanize가 ValueError.
+    slug_of: dict[str, str] = {}
+    area_slug_of: dict[str, str] = {}
+
+    def _key(record: Mapping[str, object]) -> tuple[str, str]:
+        src_id = str(record.get("src_id", "")).strip()
+        area_slug = _AREA_SLUG_MAP[_area_for_record(record)]
+        slug = romanize(str(record.get("name_ko", "")))
+        area_slug_of[src_id] = area_slug
+        slug_of[src_id] = slug
+        return (area_slug, slug)
+
+    order, tier_of, groups = _order_and_group(concepts, _key)
+
+    # ── 2-pass: 그룹 안 (tier, src_id) 정렬 → 첫 무접미·이후 -N 접미.
+    auto_id: dict[str, str] = {}
+    for (area_slug, slug), members in groups.items():
+        for seq, src_id in enumerate(_sort_members(members, tier_of), start=1):
+            suffix = "" if seq == 1 else f"-{seq}"
+            auto_id[src_id] = f"math.{area_slug}.{slug}{suffix}"
+
+    result = _assemble_result(order, auto_id, override_map, "canonical_id")
     logger.info(
-        "concept_id 매핑 생성: %d개 src_id → %d개 유일 ID(그룹 %d개)",
+        "canonical_id 매핑 생성: %d개 src_id → %d개 유일 ID((area,slug) 그룹 %d개)",
         len(result),
-        len(id_to_src),
+        len(set(result.values())),
         len(groups),
     )
     return result
 
 
-def build_alias_map(concepts: Iterable[Mapping[str, object]]) -> dict[str, list[str]]:
-    """concepts 레코드들 → `{src_id: [old_UC, src_id]}` 별칭 테이블(추적성·롤백).
+def build_curriculum_axis_map(
+    concepts: Iterable[Mapping[str, object]],
+    *,
+    overrides: Mapping[str, str] | None = None,
+) -> dict[str, str]:
+    """concepts 레코드들 → `{src_id: 교육과정축 코드}`(옛 P2a `{TRACK}-{AREA}-{NNN}`) 매핑.
 
-    old_UC는 이전 알고리즘(`_build_legacy_uc`)이 만들던 UC다. 새 ID로 전환한 뒤에도 옛 키·원천
-    키로 개념을 찾을 수 있도록 보존한다. transform이 각 `Concept.aliases`에 그대로 싣는다.
+    **이 값은 이제 정본이 아니라 오버레이/별칭("curriculum-axis code")** — canonical(build_id_map)로
+    이관하기 전 P2a ID를 그대로 산출해 `aliases`·`ids.yaml`에 보존한다(matrix '개념 축' 조인·롤백).
+    산출 로직은 P2a와 동일: (TRACK, AREA) 그룹 안 `(tier, src_id)` 정렬 → NNN 부여(멱등).
+
+    Args:
+        concepts: 각 레코드는 최소 'src_id'·'category'를 가진 매핑(+ standard_codes·tier).
+        overrides: {src_id: 교육과정축 코드}. override도 CURRICULUM_AXIS_PATTERN 통과·유일해야 함.
+
+    Returns:
+        {src_id: TRACK-AREA-NNN}. 입력 순서 보존.
     """
-    aliases: dict[str, list[str]] = {}
+    override_map = dict(overrides or {})
+    _validate_overrides(override_map, CURRICULUM_AXIS_PATTERN, "curriculum_axis_code")
+
+    def _key(record: Mapping[str, object]) -> tuple[str, str]:
+        codes = _normalized_codes(record)
+        tier = _coerce_tier(record.get("difficulty_tier"))
+        return (track_for_record(codes, tier), _area_for_record(record))
+
+    order, tier_of, groups = _order_and_group(concepts, _key)
+
+    auto_id: dict[str, str] = {}
+    for (track, area), members in groups.items():
+        for seq, src_id in enumerate(_sort_members(members, tier_of), start=1):
+            auto_id[src_id] = f"{track}-{area}-{seq:03d}"
+
+    return _assemble_result(order, auto_id, override_map, "curriculum_axis_code")
+
+
+def build_legacy_uc_map(concepts: Iterable[Mapping[str, object]]) -> dict[str, str]:
+    """concepts 레코드들 → `{src_id: 레거시 UC}`(옛 `UC.<domain>.<topic>.<slug>`) 매핑.
+
+    옛 UC 알고리즘(`_build_legacy_uc`)을 재현한다 — canonical 전환 뒤에도 옛 UC 키로 개념을 찾을 수
+    있게 `aliases`·`ids.yaml`에 보존한다(롤백·하위호환 join).
+    """
+    uc_map: dict[str, str] = {}
     for record in concepts:
         src_id = str(record.get("src_id", "")).strip()
         if not src_id:
             raise ValueError(f"src_id가 빈 레코드: {record!r}")
-        codes = _normalized_codes(record)
-        old_uc = _build_legacy_uc(src_id, codes)
-        aliases[src_id] = [old_uc, src_id]
-    return aliases
+        uc_map[src_id] = _build_legacy_uc(src_id, _normalized_codes(record))
+    return uc_map
+
+
+def build_alias_map(concepts: Iterable[Mapping[str, object]]) -> dict[str, list[str]]:
+    """concepts 레코드들 → `{src_id: [교육과정축 코드, old_UC, src_id]}` 별칭 테이블(추적성·롤백).
+
+    별칭 순서는 [교육과정축 코드(P2a), 레거시 UC, src_id]다 — canonical 전환 뒤에도 옛 키·원천 키로
+    개념을 찾도록 보존한다(matrix 개념축 조인·롤백·하위호환). transform이 각 `Concept.aliases`에
+    그대로 싣는다. records를 세 번 순회하지 않도록 axis/uc 맵을 합성한다.
+    """
+    records = list(concepts)
+    axis_map = build_curriculum_axis_map(records)
+    uc_map = build_legacy_uc_map(records)
+    return {src_id: [axis_map[src_id], uc_map[src_id], src_id] for src_id in axis_map}
 
 
 def to_csv_rows(id_map: Mapping[str, str]) -> list[dict[str, str]]:
-    """매핑 테이블 → CSV 행(검토용). 컬럼: src_id, concept_id(새 ID)."""
+    """매핑 테이블 → CSV 행(검토용). 컬럼: src_id, concept_id(canonical ID)."""
     return [{"src_id": src_id, "concept_id": cid} for src_id, cid in id_map.items()]
 
 
 __all__ = [
     "build_alias_map",
+    "build_curriculum_axis_map",
     "build_id_map",
+    "build_legacy_uc_map",
     "strip_level_prefix",
     "to_csv_rows",
     "track_for_record",

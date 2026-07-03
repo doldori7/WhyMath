@@ -59,9 +59,15 @@ def _scan_forbidden_node_classes() -> dict[str, list[str]]:
 # ① 5노드 대체 표현 존재
 # ──────────────────────────────────────────────────────────────────────────
 def test_concept_node_exists() -> None:
-    """Concept — identity 노드 모델이 존재하고 식별 필드를 갖는다."""
+    """Concept — identity 노드 모델이 존재하고 식별 필드를 갖는다.
+
+    name_ko는 재-ID(P2d)로 노드에서 분리돼 `locales/ko.json`이 단일 진실이다(Concept Purity —
+    표시이름은 개념이 아니라 투영). identity 노드는 concept_id·source_id로 식별된다.
+    """
     assert "concept_id" in Concept.model_fields
-    assert "name_ko" in Concept.model_fields
+    assert "source_id" in Concept.model_fields
+    # 표시이름(name_ko/en/ja)은 노드에 없다 — locale 분리(P2d·Concept Purity).
+    assert "name_ko" not in Concept.model_fields
 
 
 def test_misconception_nodes_exist() -> None:
