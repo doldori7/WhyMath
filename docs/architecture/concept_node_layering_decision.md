@@ -93,7 +93,7 @@ AST·성취기준 본문은 내장 금지.
 |---|---|---|---|
 | Concept | ✅ | ✅ 9계층화(P1) | — |
 | Misconception | ✅ 독립 DB | ✅ 7계층화(P4) | 오개념 독립 DB(#6) |
-| **Skill** | 속성(enum) | **1급 노드(P2)** | mastery 독립추정 가치·행동영역 canonical |
+| **Skill** | 속성(enum) | **✅ 1급 노드(P2a 완료)** | mastery 독립추정 가치·행동영역 canonical |
 | **ProblemType** | 스키마 | **1급 노드(P3)** | cognitive-action canonical(≠surface SignaturePattern) |
 | Visualization | 선언 명세 | ✅ 유지·계약 정합 | "무엇을"만·"어떻게" 금지 |
 | **Formula** | 비노드 | **canonical-only 노드(P5)** | canonical 표현만(변형 노드화 금지)·SymPy 검증커널 유지 |
@@ -110,7 +110,21 @@ misconception↔skill·concept↔formula 연결은 *참조 키*와 기존 `prere
 
 **동결 반전**: `tests/backend/l1/test_five_node_connectivity_governance.py`의 `_FORBIDDEN_NODE_CLASSES`
 (SkillNode/ProblemTypeNode/FormulaNode 부재 동결)는 각 노드를 실제 추가하는 Phase PR에서 하나씩
-제거하고 "승격된 노드 존재+연결" positive 테스트로 반전한다(red 구간 없이).
+제거하고 "승격된 노드 존재+연결" positive 테스트로 반전한다(red 구간 없이). **Phase 2a(2026-07-03)로
+SkillNode를 이 집합에서 제거**했다 — `_FORBIDDEN_NODE_CLASSES=("FormulaNode","ProblemTypeNode")`로
+축소하고 `test_skill_is_first_class_node`(SkillNode 모델·ORM + BehaviorArea 6종)로 반전. 신규 거버넌스
+`test_skill_governance`가 BehaviorArea 6종 폐쇄·backend↔pipeline enum 값 정합·신규 엣지 타입 0을 동결.
+
+### Phase 2a 완료 — Skill 1급 노드 승격 (2026-07-03)
+- **BehaviorArea 폐쇄 6종**(사용자 결정): `COMPUTE`·`TRANSFORM`·`INTERPRET`·`REPRESENT`·`REASON`·
+  `VERIFY`(계산실행·식변형·조건해석·표상·추론·검증). 개념(무엇)과 직교하는 cognitive-action 축.
+- **data-pipeline `skill_graph`**(models·transform·validate·CLI) + 정본 코퍼스 `skill_graph_v1`
+  (27 스킬·6영역·12 Skill Family·전량 자체작성). **backend `skill_node`**(PG 프로젝션·skill_id 키·
+  `behavior_area_enum` native·마이그레이션 `0a1b2c3d4e5f`). 스킬 연결은 참조 키(`prerequisite_
+  skill_ids`·개념측 `behavior_skills`)만 — **신규 엣지 타입 0**(검증됨).
+- **skill mastery + concept→skill 매핑은 Phase 2b로 분리**: 실측상 전 437개념 `behavior_skills=[]`·
+  concept→skill 신호 전무 → mastery를 지금 만들면 데이터 원천 없는 dead code(CLAUDE.md "소비처 없는
+  추상 미도입"). 2a는 노드·택소노미·코퍼스·프로젝션·거버넌스만(buildable·testable·P3/P4 unblock).
 
 ---
 
