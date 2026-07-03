@@ -69,7 +69,11 @@ class Concept(Base):
         primary_key=True,
         server_default=sa.text("gen_random_uuid()"),
     )
-    code: Mapped[str] = mapped_column(sa.String(64), unique=True, nullable=False)
+    # code = concept_id(개념그래프 UC). Part 9(#409)가 `math.<area>.<slug>`로 재-ID하며 최장
+    # 83자(예 'math.measurement.pyeonghaengsabyeonhyeong-…-neolbi')가 돼 구 String(64)를 넘어섰다
+    # → Text로 확폭(같은 UC 키의 다른 투영 `concept_node.concept_id`가 이미 Text·단일 키공간 정합).
+    # unique 유지(PG Text 유니크 인덱스 정상)·FK 무영향(타 테이블은 concept_id UUID를 참조).
+    code: Mapped[str] = mapped_column(sa.Text, unique=True, nullable=False)
     name_ko: Mapped[str] = mapped_column(sa.String(200), nullable=False)
     name_en: Mapped[str | None] = mapped_column(sa.String(200))
     # source_id: 재ID(2026-06-16) 이전 원천 식별자(src_id) 보존 — concept_id가 src_id에서
