@@ -24,7 +24,8 @@ CI hermetic: 이 모듈 import만으로는 임베딩·PG 연결이 없다(provid
 
 redaction(우선순위 #2): 세 투영 모두 *안전 필드만* — description·formal_definition·intuitive_
 explanation은 임베딩 입력에도 메타 컬럼에도 런타임 엔티티에도 없다(graph.json 부재·로더 미독·컬럼
-미수록/미작성의 삼중 방어). ③ backend `concept`은 본문 3컬럼을 NULL로 남겨 검수 대기로 둔다.
+부재의 삼중 방어). ③ backend `concept`은 본문 3컬럼·오개념 컬럼을 2026-07-03 Phase 1b로 아예
+제거했다(런타임 소비처 0·redaction 청산 — `db/models/concept.py`·`schema/concept.py`).
 
 사용:
     WHYMATH_VECTOR_STORE=pgvector \

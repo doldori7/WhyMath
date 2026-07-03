@@ -68,6 +68,15 @@ AST·성취기준 본문은 내장 금지.
   semantic으로 되돌린다. 순수성 테스트의 `_FORBIDDEN_NODE_FIELDS`↔`_SEMANTIC_FIELDS` 이동은
   **모델 필드 복원과 원자적으로(Phase 1 PR)** — Phase 0은 red 구간을 만들지 않는다.
 
+### Phase 1b 완료 — 런타임 Concept 본문·오개념 4컬럼 청산 (2026-07-03·10금지 잔재 해소)
+- backend 런타임 `Concept`(schema+ORM)이 보유하던 `description`·`formal_definition`·
+  `intuitive_explanation`(TEXT×3)·`common_misconceptions`(JSONB)을 **제거**했다(Alembic
+  `f0a1b2c3d4e5` drop×4·up/down 대칭). 넷 다 런타임 소비처 0·전량 NULL/`[]`인 죽은 컬럼이었다.
+- 이로써 "노드에 넣지 말 10가지"의 마지막 런타임 잔재(본문 근접 서술·자유텍스트 오개념)가 정본
+  노드·backend 양쪽에서 해소됐다. 재유입은 `test_concept.py::_FORBIDDEN_NODE_FIELDS`(4필드 추가)와
+  신규 schema↔ORM 필드 정합 동결 테스트가 차단한다. 정본: semantic(intuition·representations)·
+  `formal_definition_ref`(참조)·독립 오개념 카탈로그(#6).
+
 ### 이력(2026-07-02 Stage A/B — 초판)
 - Stage A: 자유텍스트 오개념 `misconception_text` 제거(삼중 중복·오염 위험·마이그레이션 0).
 - Stage B: `metaphor`·`accepted_expressions` 제거 → ConceptContent 이관(재임베딩 0·Alembic
