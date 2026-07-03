@@ -251,9 +251,7 @@ class TestEmbeddingTextInvariance:
 
     def test_concept_text_builder_output_has_no_subject(self) -> None:
         """개념 표현 = 안전 필드 결합 그대로(subject 미포함) — 정확 일치로 동결."""
-        text = concept_embedding_text(
-            name_ko="극한", metaphor="다가감", accepted_expressions="수렴"
-        )
+        text = concept_embedding_text(name_ko="극한", intuition="다가감", representations="수렴")
         assert text == "극한. 다가감. 수렴"
         assert DEFAULT_EMBEDDING_SUBJECT not in text
 

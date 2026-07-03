@@ -131,22 +131,25 @@ class Concept(BaseModel):
     풍부 필드(데이터셋 v1·concept_graph_dataset_v1.md §2 — 2026-06-12 모델 확장 결정):
     `ccss_code`(매칭 CCSS)·`difficulty_tier`(난이도층 0~24)·`review_status`(적재 보류 표식).
 
-    노드 계층(플레이북 Part 2 §3 — ConceptNode identity/semantic/pedagogy/visualization 분리):
-      - identity(식별): `concept_id`·`source_id`·`aliases`·`domain`
-        (표시이름 name_*는 노드 비내장 — locale 레이어가 단일 진실)
-      - semantic(의미): `difficulty_tier`·`standard_codes`·`prerequisite_concept_ids`·`ccss_code`
-        — 개념의 의미 속성이라 노드에 둔다("핵심만 노드, 나머지는 속성" — CLAUDE.md).
-      - pedagogy(교수학): 오개념·설명·은유·허용표현은 **노드 비내장**(pedagogy 계층이 단일 진실).
-        `misconception_codes`/`visualization_card_keys`는 *참조 키*(다리)라 순수성 위반 아님.
-      - visualization(시각화): `visualization_card_keys`(참조만 — L5 자산 실체는 노드 밖).
+    노드 계층(리치 Part 2 9계층 — 물리 내장은 identity+semantic(self-authored)만·나머지는 참조/투영;
+    ADR `concept_node_layering_decision.md` §1):
+      - identity: `concept_id`·`source_id`·`aliases`·`domain`(표시이름 name_*는 노드 비내장·P2d
+        locale 레이어가 단일 진실 — 위 §표시이름 비내장 참조).
+      - **semantic(내장·가장 중요)**: core_meaning·intuition·representations(self-authored) +
+        difficulty_tier·standard_codes·ccss_code. formal_definition_ref는 참조(본문 미내장).
+      - pedagogy: 설명·flashcards는 ConceptContent. 노드엔 선수관계만.
+      - visualization: visualization_card_keys(참조만·L5 자산은 노드 밖).
+      - assessment: difficulty_tier·ccss_code + assessment_ids(참조).
+      - misconception: misconception_codes(카탈로그 참조·실체는 독립 DB).
+      - cognition: cognitive_type(후속)·behavior_skills(참조)·cognitive_load·abstraction_required.
+      - graph_links: ConceptEdge(별 엔티티·7종) + prerequisite_concept_ids 캐시.
+      - ast_binding: formula_refs(FormulaNode 참조·AST 미내장).
 
-    **pedagogy 노드 비내장(2026-07-02 Part 2 §3 순수성 — Stage A+B 완료)**: 자유텍스트 오개념
-    `misconception_text`(Stage A)와 은유·허용표현 `metaphor`·`accepted_expressions`(Stage B)를 이
-    모델에서 *제거*했다 — pedagogy 정보는 identity 노드에 내장하지 않는다(Concept Purity·오염 방지).
-    세 필드의 단일 진실은 pedagogy 계층 `concept_content.ConceptContent`(`code` 키·source_id↔code
-    크로스워크로 조인)이고, 검증 오개념은 `MisconceptionCatalog`(839)다. 노드는
-    `misconception_codes`(카탈로그 참조)로만 오개념과 이어진다. 의미검색 임베딩·노드 프로젝션은
-    metaphor/accepted를 ConceptContent에서 소싱한다(값 동일 — 재임베딩 0).
+    **semantic 복원(2026-07-03 Part 2 전면 채택 Phase 1·Stage B 역방향)**: 리치 기준 은유·허용표현은
+    semantic(intuition·representations)이라 노드로 **복원**했다(Stage B의 pedagogy 외부화를 정정).
+    값은 raw concepts.jsonl(metaphor·accepted_expressions)에서 소싱 — pre-Stage-B와 바이트 동일
+    (재임베딩 0). 단 **self-authored만**: 자유텍스트 오개념 misconception_text는 여전히 노드 비내장
+    (독립 오개념 DB·CLAUDE.md #6), 성취기준 본문 근접 description·formal_definition도 비내장.
 
     법적·redaction(concept_graph_dataset_v1.md §3·CLAUDE.md): 성취기준 *본문* 근접 복제
     위험인 `description`·`formal_definition`은 이 모델에 **일부러 부재** — 모델에 슬롯이
@@ -225,6 +228,50 @@ class Concept(BaseModel):
     notes: str | None = Field(
         default=None,
         description="전문가 검수 메모. 개념 합치기·쪼개기 이력도 기록(ID 안정성 §3.5).",
+    )
+    # ── semantic 계층(리치 9계층·"가장 중요") — self-authored만(성취기준 본문 금지·redaction) ──
+    core_meaning: str | None = Field(
+        default=None,
+        description="핵심 의미 1줄(자체 작성·리치 semantic.coreMeaning). 현재 코퍼스 부재→None.",
+    )
+    intuition: str | None = Field(
+        default=None,
+        description="직관적 은유(리치 semantic.intuition·= metaphor 복원·raw 소싱).",
+    )
+    representations: str | None = Field(
+        default=None,
+        description="허용 표현형(리치 semantic.representations·= accepted_expressions 복원).",
+    )
+    formal_definition_ref: str | None = Field(
+        default=None,
+        description=(
+            "형식 정의 *참조 키*(ConceptContent.formal_definition_internal·본문 미내장·redaction). "
+            "성취기준·교과서 본문은 노드에 담지 않는다 — 참조만·초기 None."
+        ),
+    )
+    # ── cognition 계층(리치 9계층) — 스칼라/참조만(자유텍스트 금지) ──
+    behavior_skills: list[str] = Field(
+        default_factory=list,
+        description="행동영역(SkillNode·Phase 2) 참조 키. 초기 dangling 허용(신규 엣지 타입 0).",
+    )
+    cognitive_load: int | None = Field(
+        default=None, ge=1, le=5, description="인지 부하 [1,5](리치 cognitiveLoad). 초기 None."
+    )
+    abstraction_required: int | None = Field(
+        default=None,
+        ge=1,
+        le=5,
+        description="요구 추상화 수준 [1,5](리치 abstractionRequired). 초기 None.",
+    )
+    # ── assessment 계층(참조) ──
+    assessment_ids: list[str] = Field(
+        default_factory=list,
+        description="평가 자산(AssessmentNode) 참조 키. 초기 dangling 허용.",
+    )
+    # ── ast_binding 계층(참조) — AST는 참조만(엔진 미내장·Phase 5 FormulaNode) ──
+    formula_refs: list[str] = Field(
+        default_factory=list,
+        description="canonical formula(FormulaNode·Phase 5) 참조 키. AST 참조만·초기 dangling.",
     )
 
     @field_validator("concept_id")

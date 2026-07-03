@@ -10,19 +10,18 @@ join된다(이중 store 단일 키). L4 오개념 영속(`pgvector_index.PgVecto
 redaction (CLAUDE.md 우선순위 #2 — 협상 불가)
 ────────────────────────────────────────────────────────────────────────────
 임베딩 입력 표현은 **자체 작성 안전 필드만** 쓴다 — `name_ko`(한국어 명칭·재-ID(P2d)로 노드에서
-제거돼 형제 `locales/ko.json`에서 재소싱)·`metaphor`(은유)·`accepted_expressions`(허용표현).
-**`description`·`formal_definition`은 절대 읽지
-않는다**: 성취기준 *본문* 근접 복제 위험 필드이고, 슬1 정형화에서 `Concept` 모델 슬롯 부재로 이미
-제거돼 `graph.json`에도 없다(`_provenance.json`의 redacted 목록). 이 모듈은 그 키를 *읽지도
-않으므로* 입력이 오염돼도 본문이 임베딩에 유입되지 않는다(이중 방어). 임베딩 *벡터*만 적재하고
-원문은 `concept_embedding`에 저장하지 않는다(ORM docstring·중복·프라이버시).
+제거돼 형제 `locales/ko.json`에서 재소싱)·`intuition`(직관/은유)·`representations`(허용 표현형).
+**`description`·`formal_definition`은 절대 읽지 않는다**: 성취기준 *본문* 근접 복제 위험 필드이고,
+슬1 정형화에서 `Concept` 모델 슬롯 부재로 이미 제거돼 `graph.json`에도 없다(`_provenance.json`의
+redacted 목록). 이 모듈은 그 키를 *읽지도 않으므로* 입력이 오염돼도 본문이 임베딩에 유입되지
+않는다(이중 방어). 임베딩 *벡터*만 적재하고 원문은 `concept_embedding`에 저장하지 않는다(ORM
+docstring·중복·프라이버시).
 
-pedagogy 소싱(2026-07-02 Part 2 §3 Stage B): `metaphor`·`accepted_expressions`는 이제 identity
-노드(graph.json)가 아니라 **pedagogy 계층 `ConceptContent`**(`content.json`·`code` 키)에서
-소싱한다 — Concept Purity로 두 필드를 노드에서 제거했기 때문이다. graph.json 개념의 `source_id`가
-곧 content `code`(source_id↔code 크로스워크·437 전단사)라 그 키로 조인한다. 값이 노드 잔류분과
-바이트 동일이라 표현·text_hash 불변 → **재임베딩 0**(skip-if-unchanged). content에 없는 개념은
-metaphor/accepted 없이 name_ko만으로 표현을 만든다(graceful).
+semantic 소싱(2026-07-03 Part 2 전면 채택 Phase 1 — Stage B 되돌림): `intuition`·`representations`는
+리치 스펙상 **semantic 계층**이라 identity 노드(graph.json)로 복원됐다 — 노드가 semantic의 단일
+진실이다. 따라서 이 로더는 두 필드를 **graph.json에서 직접** 읽는다(Stage B의 content.json 조인
+소싱을 되돌림). 값은 Stage B 소싱분과 동일(둘 다 raw metaphor·accepted 유래)이라 표현·text_hash
+불변 → **재임베딩 0**(skip-if-unchanged).
 
 ────────────────────────────────────────────────────────────────────────────
 sync 엔진 (async 전용 코드베이스에 *벡터 store 좌석에 한정*된 sync 드라이버)
@@ -70,15 +69,11 @@ if TYPE_CHECKING:
 
     from whymath_backend.l1.embedding_primitives import EmbeddingProvider
 
-# 임베딩 입력으로 *허용된* 안전 필드(자체 작성·본문 아님). 이 집합 밖 키는 임베딩에 쓰지 않는다
-# (특히 description·formal_definition은 어느 소스에도 부재이며 읽지도 않음). name_ko는
-# locales/ko.json(concept_id 조인·P2d), metaphor·accepted는 pedagogy 계층 ConceptContent
-# (source_id↔code 조인)에서 온다(Stage B).
-_SAFE_TEXT_FIELDS: tuple[str, ...] = ("name_ko", "metaphor", "accepted_expressions")
-
-# 콘텐츠 코퍼스 최상위 배열·조인 키. pedagogy(metaphor·accepted)의 단일 진실은 ConceptContent다.
-_CONTENT_ARRAY_KEY: str = "content"
-_CONTENT_CODE_KEY: str = "code"
+# 임베딩 입력 안전 필드(self-authored·본문 아님·description/formal_definition 배제). name_ko는
+# 재-ID(P2d)로 노드에서 제거돼 형제 `locales/ko.json`(concept_id 조인)에서 재소싱하고, intuition·
+# representations는 graph.json 노드가 단일 진실이다(Phase 1·Stage B content 소싱 되돌림·리치
+# "semantic=노드 핵심").
+_SAFE_TEXT_FIELDS: tuple[str, ...] = ("name_ko", "intuition", "representations")
 
 
 def _opt_str(value: object) -> str | None:
@@ -87,28 +82,6 @@ def _opt_str(value: object) -> str | None:
         return None
     text = str(value).strip()
     return text or None
-
-
-def _load_pedagogy_by_code(content_path: Path) -> dict[str, tuple[str | None, str | None]]:
-    """콘텐츠 코퍼스 `content.json` → {code: (metaphor, accepted_expressions)} 조인 맵.
-
-    pedagogy 계층(ConceptContent)이 metaphor·accepted의 단일 진실이다(Part 2 §3 Stage B).
-    graph.json 개념의 `source_id`가 content `code`와 같으므로 이 맵을 그 키로 조회한다. **안전
-    필드만** 읽는다 — description·formal_definition_internal 같은 비노출/본문 필드는 읽지 않는다
-    (임베딩 표현엔 은유·허용표현만 유입). 값은 `_opt_str`로 정규화(빈→None·`join_embedding_text`가
-    어차피 빈 조각을 건너뛰므로 표현·해시는 노드 잔류분과 동일)하고, code 없는 항목은 건너뛴다.
-    """
-    payload = json.loads(content_path.read_text(encoding="utf-8"))
-    out: dict[str, tuple[str | None, str | None]] = {}
-    for record in payload.get(_CONTENT_ARRAY_KEY, []):
-        code = record.get(_CONTENT_CODE_KEY)
-        if not code:
-            continue
-        out[str(code)] = (
-            _opt_str(record.get("metaphor")),
-            _opt_str(record.get("accepted_expressions")),
-        )
-    return out
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,41 +99,39 @@ class ConceptText:
 def concept_embedding_text(
     *,
     name_ko: str | None,
-    metaphor: str | None = None,
-    accepted_expressions: str | None = None,
+    intuition: str | None = None,
+    representations: str | None = None,
 ) -> str:
-    """개념을 임베딩할 자연어 표현으로 직렬화 — **안전 필드만**(name_ko·metaphor·accepted).
+    """개념을 임베딩할 자연어 표현으로 직렬화 — **안전 필드만**(name_ko·intuition·representations).
 
     L4 `catalog_text`(f"{name_kr}. {canonical_statement}")의 개념판이다. 의미 신호를 키우려고
-    명칭·은유·허용표현을 잇되, **description·formal_definition은 인자로 받지도 않는다**(redaction —
+    명칭·직관·표현형을 잇되, **description·formal_definition은 인자로 받지도 않는다**(redaction —
     본문 근접 필드 구조적 차단). 비어 있는 필드는 건너뛰고, 남은 조각을 `". "`로 잇는다.
     name_ko가 비면(이론상 graph.json은 name_ko 필수) 나머지만으로 표현을 만든다(빈 표현 가능 —
     호출자가 빈 표현을 임베딩하지 않도록 거를 수 있으나, 여기선 합성만 한다).
     """
-    return join_embedding_text(name_ko, metaphor, accepted_expressions)
+    return join_embedding_text(name_ko, intuition, representations)
 
 
-def load_concepts_from_graph_json(graph_path: Path, *, content_path: Path) -> list[ConceptText]:
-    """graph.json + pedagogy content.json → 임베딩 대상 (UC concept_id, 안전 표현) 목록.
+def load_concepts_from_graph_json(graph_path: Path) -> list[ConceptText]:
+    """graph.json → 임베딩 대상 (UC concept_id, 안전 표현) 목록.
 
-    `graph.json`(슬1 `transform-v1` 정제 산출)에서 `concept_id`·`source_id`를 읽고, **`name_ko`는
-    형제 `locales/ko.json`**(`{concept_id: name_ko}`)에서 concept_id 조인으로 재소싱한다(P2d — 재-ID
-    로 표시이름을 identity 노드에서 제거·Concept Purity). 노드 내장 name_ko가 있으면(옛 graph.json)
-    우선한다(`record.get("name_ko") or locale.get(id)`·옛/새 둘 다 graceful). **metaphor·
-    accepted_expressions는 pedagogy 계층 `content.json`**(`code` 키)에서 source_id↔code 조인으로
-    소싱한다(Part 2 §3 Stage B — 두 필드를 identity 노드에서 제거). 안전 필드(name_ko·metaphor·
-    accepted)만 표현에 합성한다 — `description`·`formal_definition`은 어느 소스에도 없고 읽지도
-    않는다. locale 값은 노드 내장 잔류분과 바이트 동일이라 표현·text_hash가 불변이다(재임베딩 0).
+    `graph.json`(슬1 `transform-v1` 정제 산출)에서 `concept_id`를 읽고, **`name_ko`는 형제
+    `locales/ko.json`**(`{concept_id: name_ko}`)에서 concept_id 조인으로 재소싱한다(P2d — 재-ID로
+    표시이름을 identity 노드에서 제거·Concept Purity). 노드 내장 name_ko가 있으면(옛 graph.json)
+    우선한다(`record.get("name_ko") or locale.get(id)`·옛/새 둘 다 graceful). **`intuition`·
+    `representations`는 graph.json 노드에서 직접** 읽는다 — 리치 스펙상 semantic 계층이라 노드가
+    단일 진실이다(Phase 1·Stage B content.json 소싱 되돌림). 안전 필드(name_ko·intuition·
+    representations)만 표현에 합성한다 — `description`·`formal_definition`은 어느 소스에도 없고
+    읽지도 않는다(redaction). 값은 pre-Stage-B와 바이트 동일이라 표현·text_hash 불변(재임베딩 0).
 
-    표현이 빈(안전 필드 전부 공백) 개념은 제외한다(임베딩 무의미 — 빈 벡터 적재 방지). content에
-    없는 개념은 name_ko만으로 표현을 만든다(graceful — 크로스워크 437 전단사라 실경로엔 미발생).
-    flashcards_raw·intl_raw 등 그래프 외 자산은 임베딩 대상이 아니므로 읽지 않는다.
+    표현이 빈(안전 필드 전부 공백) 개념은 제외한다(임베딩 무의미 — 빈 벡터 적재 방지). flashcards_
+    raw·intl_raw 등 그래프 외 자산은 임베딩 대상이 아니므로 읽지 않는다.
 
     Raises:
-        FileNotFoundError: graph.json·content.json 부재.
+        FileNotFoundError: graph.json 부재.
         ValueError: concept_id 없는 항목(슬1 산출은 항상 concept_id를 갖는다 — 방어).
     """
-    pedagogy = _load_pedagogy_by_code(content_path)
     payload = json.loads(graph_path.read_text(encoding="utf-8"))
     locale_ko = load_locale_ko(graph_path)
     out: list[ConceptText] = []
@@ -168,14 +139,12 @@ def load_concepts_from_graph_json(graph_path: Path, *, content_path: Path) -> li
         concept_id = str(record.get("concept_id", "")).strip()
         if not concept_id:
             raise ValueError(f"graph.json 개념에 concept_id가 없습니다: {record!r}")
-        source_id = str(record.get("source_id", "")).strip()
-        metaphor, accepted_expressions = pedagogy.get(source_id, (None, None))
         # name_ko: 노드 내장(옛 graph.json) 우선, 없으면 locale 조인(새 graph.json·P2d).
         name_ko = _opt_str(record.get("name_ko")) or locale_ko.get(concept_id)
         text = concept_embedding_text(
             name_ko=name_ko,
-            metaphor=metaphor,
-            accepted_expressions=accepted_expressions,
+            intuition=record.get("intuition"),
+            representations=record.get("representations"),
         )
         if not text:
             # 안전 필드가 전부 비어 임베딩할 표현이 없는 개념 — 제외(빈 벡터 적재 방지).
