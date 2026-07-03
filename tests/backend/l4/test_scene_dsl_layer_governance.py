@@ -31,6 +31,7 @@ from whymath_backend.l4.learning_scene import (
     LearningScene,
     MisconceptionProbeElement,
     ParamControlElement,
+    SkillFocusElement,
     SocraticPromptElement,
     StepPanelElement,
     VisualizationElement,
@@ -113,6 +114,7 @@ _ELEMENT_ALLOWED_FIELDS: dict[type, frozenset[str]] = {
         {"kind", "socratic_category", "polya_stage", "hint_level", "prompt_text"}
     ),
     AnnotationElement: frozenset({"kind", "target_element_index", "highlight_spec"}),
+    SkillFocusElement: frozenset({"kind", "cognitive_type", "focus_prompt"}),
 }
 
 # 정답 유출(낙인·즉답)·런타임/interaction state 관심사 토큰 — 어떤 요소 필드명에도 등장 금지.
@@ -169,6 +171,7 @@ _EXPECTED_SCENE_KINDS: frozenset[str] = frozenset(
         "misconception_probe",  # 9블록 Misconception
         "socratic_prompt",  # 9블록 Tutoring(소크라테스)
         "annotation",  # 9블록 Interaction(강조/라벨)
+        "skill_focus",  # 9블록 Skill(행동영역 focus·선언적 조건 강조·S5j)
     }
 )
 
@@ -176,10 +179,10 @@ _EXPECTED_SCENE_KINDS: frozenset[str] = frozenset(
 def test_scene_kind_taxonomy_matches_crosswalk() -> None:
     """(d) SceneElement 판별 kind 집합이 검토 크로스워크의 6종과 일치한다.
 
-    Scene=LearningScene 자체, Concept=L1 참조(`concept_id`), Skill=CognitiveType 속성+L2,
-    Assessment=schema/assessment+gating, AIExplanation=같은 장면의 렌더 타깃 — 이 셋은 *의도적으로*
-    전용 scene 블록이 아니다(anti-explosion·Concept Purity). kind가 늘거나 줄면 이 테스트가 red →
-    `part7_math_ui_dsl_review.md` 크로스워크를 함께 갱신하도록 강제한다.
+    Scene=LearningScene 자체, Concept=L1 참조(`concept_id`), **Skill=`skill_focus` 블록(S5j·행동영역
+    focus)**, Assessment=schema/assessment+gating, AIExplanation=같은 장면의 렌더 타깃 — 이 중
+    Assessment/AIExplanation만 *의도적으로* 전용 scene 블록이 아니다(anti-explosion·Concept Purity).
+    kind가 늘거나 줄면 red → `part7_math_ui_dsl_review.md` 크로스워크를 함께 갱신하도록 강제한다.
     """
     # LearningScene.elements의 판별자 유니온에서 각 변형의 kind 기본값을 수집.
     actual = {cls.model_fields["kind"].default for cls in _ELEMENT_ALLOWED_FIELDS}

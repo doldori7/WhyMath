@@ -133,7 +133,7 @@ Kiki가 제시한 재검토 관점은 9블록을 *이름*만이 아니라 **블�
 |---|---|---|---|
 | VisualizationBlock · Visualization Selector | VizNode→자동 시각화(그래프·애니·트리·논리흐름) | `recommended_visual_styles`(16종)+4 `VisualizationType`(graph_2d·surface_3d·sim·anim) 자동선택 | 🟡 부분(경우의수 **트리**·증명 **논리흐름** 타입 부재) |
 | InteractionBlock · Interaction Generator | slider·drag·tree expansion·단계선택 | `param_control`(slider)만 | 🔴 slider 단일(표의 5종 중 4종 미구현) |
-| SkillBlock | 행동영역 UI(조건 강조·경우분할 트리) | 분기 축은 S5i 승격(`CompositionProfile`)·가시 UI element kind는 없음 | 🟡 축 배선·🔴 가시 UI |
+| SkillBlock | 행동영역 UI(조건 강조·경우분할 트리) | **S5j: `skill_focus` element kind**(선언적 조건 강조·행동영역별 자동 부여)·모바일 focus 카드 | 🟢 선언적 focus 블록(interactive 경우분할 트리는 Tier3 잔여) |
 | MisconceptionBlock | 오개념 "일부러 드러냄"(접근 vs 도달 대비) | reactive-only 사고 유도(preload·낙인 금지) | 🟡 설계 긴장(아래 해소) |
 | TutoringBlock | AI 설명·힌트·소크라테스 | `socratic_prompt`(개념 `cognitive_type` 분기) | 🟢 개념적응(단 *학생*적응 아님) |
 | AssessmentBlock | 장면 내 문제생성·행동영역 측정·오개념 진단 | 장면 미합성(`schema/assessment`·L2·gating 분산) | 🔴 장면 미합성 |
@@ -156,7 +156,10 @@ MisconceptionBlock을 확장한다.
 **로드맵(설계 방향만·이번 구현 0·honest boundary)**
 
 - **행동영역 분기 축 승격** ✅ **(완료·S5i·2026-07-03)**: `CognitiveType`을 `CompositionProfile`로 흡수해
-  planner *독립 분기 입력*으로 승격(인지 진입 순서 결정). 조건 강조·경우분할 트리 *가시 element kind*는 잔여(별도 슬라이스).
+  planner *독립 분기 입력*으로 승격(인지 진입 순서 결정).
+- **가시 SkillBlock element kind** ✅ **(완료·S5j·2026-07-03)**: `skill_focus`(7번째 kind·정답 필드 0)
+  신설 — THEOREM/TECHNIQUE/PATTERN에 정본 조건-강조 focus cue 자동 부여(블록 유무 행동영역별 분기)·
+  모바일 focus 카드·동결 6→7 갱신. **interactive 경우분할 트리는 잔여**(WH-S Tier3 종속).
 - **Tutoring Adapter**: *선행 조건 = L2 학습양식 신호 신설*(현재 부재). 신호 없이 explanationMode를
   자동선택하면 근거 없는 추측 → 금지(AI 신뢰 금기). 신호 확보 후에야 설명 element에 modality 축 추가.
 - **Interaction/Viz 다양성(tree·drag·단계선택·트리/논리흐름 VizType)**: 기하·증명은 표기·작도 성숙도
@@ -164,11 +167,11 @@ MisconceptionBlock을 확장한다.
 - **AssessmentBlock**: 장면 내 평가 합성은 답 미루기·"빠른 정답 KPI 금지" 불변식과의 충돌을 먼저 검토한
   뒤 슬라이스(평가가 사고 추적기를 문제은행으로 되돌리지 않도록).
 
-**정정된 종합**: ① ✅(개념적응까지·학생적응은 미도달) · ② **△**(S5i로 행동영역 축까지 3축 분기 달성·
-잔여는 학생모델 축·인터랙션 다양성·가시 SkillBlock/AssessmentBlock element kind) · ③ ✅(역류 없음·불변).
-관점 문서는 아키텍처(표현≠의미·개념→자동화면)를 *재확인*하되, 현 구현이 그 비전의 **3분기축 / slider
-1인터랙션** 단계임을 드러낸다(S5i 전 2축 → 후 3축) — "전부 아니면 전무"가 아니라 회수 가능한 슬라이스로
-나머지(가시 UI·학생모델)를 점증한다.
+**정정된 종합**: ① ✅(개념적응까지·학생적응은 미도달) · ② **△**(S5i 행동영역 축 3분기 + S5j 가시
+SkillBlock까지 달성·잔여는 학생모델 축·인터랙션 다양성·경우분할 트리·AssessmentBlock) · ③ ✅(역류
+없음·불변). 관점 문서는 아키텍처(표현≠의미·개념→자동화면)를 *재확인*하되, 현 구현이 그 비전을 회수
+가능한 슬라이스(S5i 2→3축·S5j 가시 SkillBlock)로 점증 중임을 드러낸다 — 잔여(학생모델·인터랙션
+다양성·평가 합성)도 동일 방식으로 이어간다.
 
 ---
 

@@ -21,6 +21,7 @@ from whymath_backend.l4.learning_scene import (
     ParamControlElement,
     SceneLayout,
     SceneLearnerContext,
+    SkillFocusElement,
     SocraticPromptElement,
     VisualizationElement,
     parse_learning_scene,
@@ -602,5 +603,69 @@ class TestBehaviorDomainAxis:
         # 그럼에도 bound index는 그 visualization을 가리킨다
         assert scene.elements[pcs[0].bound_visualization_index] is viz[0]
         # 게이트(불변식 + 카탈로그 무결성) 라운드트립 통과
+        reparsed = parse_learning_scene(scene.model_dump(mode="json"))
+        assert isinstance(reparsed, LearningScene)
+
+
+# ── 가시 SkillBlock(행동영역 focus·05a §3.2·S5j) ──────────────────────────────
+def _skill_focus(scene: LearningScene) -> list[SkillFocusElement]:
+    return [el for el in scene.elements if isinstance(el, SkillFocusElement)]
+
+
+class TestSkillFocusBlock:
+    """행동영역 focus 블록 — 행동영역(cognitive_type)에 따라 블록 유무가 자동 분기(체크리스트 ②)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "cognitive",
+        [CognitiveType.THEOREM, CognitiveType.TECHNIQUE, CognitiveType.PATTERN],
+    )
+    async def test_condition_domain_emits_skill_focus_first(
+        self, cognitive: CognitiveType
+    ) -> None:
+        """조건/경우 행동영역(정리·기법·패턴) → skill_focus 1개·맨 앞·해당 cognitive_type."""
+        scene, _ = await _generate(_concept(styles=[], cognitive=[cognitive]))
+        focus = _skill_focus(scene)
+        assert len(focus) == 1
+        assert scene.elements[0] is focus[0]  # 맨 앞(행동영역 프레이밍)
+        assert focus[0].cognitive_type == cognitive.value
+        assert focus[0].focus_prompt  # 정본 지시 비어있지 않음
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "cognitive", [CognitiveType.DEFINITION, CognitiveType.VISUAL_REASONING]
+    )
+    async def test_non_condition_domain_no_skill_focus(
+        self, cognitive: CognitiveType
+    ) -> None:
+        """정의·시각추론 → skill_focus 미생성(행동영역별 자동 분기·소크라테스가 대신)."""
+        scene, _ = await _generate(_concept(styles=[], cognitive=[cognitive]))
+        assert _skill_focus(scene) == []
+
+    @pytest.mark.asyncio
+    async def test_no_cognitive_type_no_skill_focus(self) -> None:
+        """cognitive_type 부재 → skill_focus 미생성."""
+        scene, _ = await _generate(_concept(styles=[], cognitive=[]))
+        assert _skill_focus(scene) == []
+
+    @pytest.mark.asyncio
+    async def test_skill_focus_has_no_answer_fields(self) -> None:
+        """skill_focus는 정답/수정 필드를 담을 수 없다(answer-deferral·낙인 금지·스키마 차단)."""
+        assert set(SkillFocusElement.model_fields) == {
+            "kind",
+            "cognitive_type",
+            "focus_prompt",
+        }
+
+    @pytest.mark.asyncio
+    async def test_scene_with_skill_focus_passes_gate(self) -> None:
+        """skill_focus 포함 장면이 parse_learning_scene 게이트 라운드트립을 통과한다."""
+        scene, _ = await _generate(
+            _concept(
+                styles=[VisualizationStyle.함수그래프],
+                cognitive=[CognitiveType.PATTERN],
+            )
+        )
+        assert _skill_focus(scene)  # PATTERN이라 존재
         reparsed = parse_learning_scene(scene.model_dump(mode="json"))
         assert isinstance(reparsed, LearningScene)

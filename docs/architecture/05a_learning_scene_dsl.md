@@ -105,6 +105,11 @@ LearningScene
 | `misconception_probe` | 오개념 카탈로그 30종·`InterventionPattern` | `misconception_id`·`intervention` | **정답·수정 필드 없음** |
 | `socratic_prompt` | `PedagogyDecision`(L4) | `socratic_category`·`polya_stage`·`hint_level`·`prompt_text` | `hint_level ≤ max_level` |
 | `annotation` | overlay | `target_element_index`·`highlight_spec` | 강조·라벨만 |
+| `skill_focus` | `CognitiveType`(행동영역·S5j) | `cognitive_type`·`focus_prompt` | **정답·수정 필드 없음**(행동 지시·질문 아님) |
+
+`skill_focus`는 관점 문서 **SkillBlock**의 선언적 형태(조건 강조) — 주 행동영역이 THEOREM/TECHNIQUE/
+PATTERN일 때 자동 부여(S5i 프로파일이 블록 유무를 행동영역별로 분기). interactive 경우분할 트리는
+WH-S Tier3 종속(초기 scope 제외).
 
 `intervention`은 L4 `InterventionPattern` 4종(`COUNTEREXAMPLE` 반례·`CONCRETE_CASE` 구체사례·
 `VISUALIZATION` 시각화·`REVERSE_REASONING` 거꾸로) 중 하나 — *수정법이 아니라 사고 유도*다.
@@ -171,6 +176,7 @@ LearningScene
 | `misconception_probe` | overlay — 코칭 발화 카드(**정답 없음**·반례/시각화 유도) |
 | `socratic_prompt` | 대화 버블(기존 `_MessageBubble` 재사용) |
 | `annotation` | overlay 강조/라벨 |
+| `skill_focus` | 행동 focus 카드(`_SceneRow`·flag 아이콘·**정답 없음**·행동 지시 cue만) |
 
 `coach_models.dart`에 `Visualization` 계약을 추가하고 `_SceneRenderer` 위젯을 `chat_screen`
 메시지 빌드에 삽입하는 것이 자연 확장 경로다. **Flutter SDK 부재 → CI mobile 잡이 게이트.**
@@ -226,7 +232,8 @@ LearningScene
 | S5g ✅ | **프로브 개입 다양화** — 가설 *누적 신뢰도*(`active_hypothesis_confidences`)로 doc 결정트리(`select_intervention` 재사용·>0.8 반례·≥0.5 거꾸로·<0.5 보류)를 구동해 개입 패턴을 가설별로 선택(고정 `COUNTEREXAMPLE` 탈피·<0.5 프로브 미생성·낙인 회피). 신뢰도 미제공 시 레거시 반례 폴백(하위호환) | **완료**: 생성기 6개·서비스 1개 테스트·회귀 0 | 0 |
 | S5h ✅ | **evidence_links 연동(렌더 시점 증거 재확인)** — `net_support_by_misconception`(evidence_store 배치 GROUP BY)로 학생 증거 그래프를 단일 쿼리 집계, 순지지도<0(반박 우세) 활성 가설은 프로브에서 제외(RS2 낙인 회피·`curate` net_support<0 archived 규약 동형·턴 후 신규 증거 반영). 증거 없는 가설은 유지(과도 억제 회피) | **완료**: evidence_store 단위 2개·서비스 1개·통합 1개 테스트·회귀 0 | 0 |
 | S5i ✅ | **행동영역 분기축 승격** — `cognitive_type`을 `_COGNITIVE_SOCRATIC_MAP` 부수효과에서 `CompositionProfile`(소크라테스 프레이밍 + 인지 진입 순서 `lead`)로 흡수·1급 분기 입력화. `_primary_cognitive_type` precedence(VISUAL_REASONING>PATTERN>TECHNIQUE>THEOREM>DEFINITION)로 주 행동영역 선택 → visual 진입은 시각화 먼저·inquiry 진입은 질문 먼저. `bound_visualization_index`는 append 시점 계산이라 순서 변경에도 정합. Part 7 재검토 "행동영역 축 미분기" 상환(신규 element kind 0·SkillBlock 가시 UI는 잔여) | **완료**: 축 테스트 5개(진입 순서·precedence·인덱스 정합)·기존 26 무회귀·layout/게이트/동결 무영향 | 0 |
-| S5+ | 적응형 장면 잔여(1:N crosswalk 정책)·과목 확장·교과서 자동 UI·가시 SkillBlock element kind(조건강조·경우분할 트리) | Phase 2~3 | 해당 시 |
+| S5j ✅ | **가시 SkillBlock element kind** — `skill_focus`(7번째 kind·`cognitive_type`+`focus_prompt`·정답 필드 0) 신설. 주 행동영역 THEOREM/TECHNIQUE/PATTERN에 정본 focus cue 자동 부여(블록 유무를 행동영역별 자동 분기)·맨 앞 프레이밍. 모바일 렌더러 focus 카드·동결 크로스워크 6→7 갱신. interactive 경우분할 트리는 잔여(Tier3) | **완료**: 백엔드 축 테스트 10개(생성·분기·게이트·필드 동결)·모바일 파싱/렌더 테스트·회귀 0 | 0 |
+| S5+ | 적응형 장면 잔여(1:N crosswalk 정책)·과목 확장·교과서 자동 UI·interactive 경우분할 트리(SkillBlock Tier3) | Phase 2~3 | 해당 시 |
 
 **적용 범위 원칙**: verify 가능·표기 안정 단원(대수·함수 그래프)부터 켜고, 기하·증명(드래그·
 스내핑·제약·작도)은 WH-S Tier3(Lean) 성숙도에 종속하므로 초기 scope 제외(정직한 경계).

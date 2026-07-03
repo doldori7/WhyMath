@@ -37,6 +37,7 @@ from whymath_backend.l4.learning_scene import (
     SceneElement,
     SceneLayout,
     SceneLearnerContext,
+    SkillFocusElement,
     SocraticPromptElement,
     VisualizationElement,
 )
@@ -119,6 +120,29 @@ def _profile_for(concept: Concept) -> CompositionProfile:
     """개념의 주 행동영역 → 요소 조합 프로파일(없으면 기본 탐구 진입)."""
     primary = _primary_cognitive_type(concept)
     return _COMPOSITION_PROFILE[primary] if primary is not None else _DEFAULT_PROFILE
+
+
+# 행동영역별 *가시 focus 블록* 정본 지시(조건/경우 행동이 살아있는 3영역만) — 05a §3.2 SkillFocus.
+# 정답·질문 아니라 *어떤 인지 행동*을 하라는 선언적 지시(EXAMPLE_QUESTION 드리프트 제어 답습).
+# DEFINITION/VISUAL_REASONING은 소크라테스가 대신하므로 미부여(행동영역에 따라 블록 유무 자동 분기).
+_SKILL_FOCUS_CUE: dict[CognitiveType, str] = {
+    CognitiveType.THEOREM: "이 정리를 적용하려면 먼저 가정(전제 조건)이 성립하는지 확인하세요.",
+    CognitiveType.TECHNIQUE: "이 절차를 쓰기 전에 적용 조건이 충족되는지 점검하세요.",
+    CognitiveType.PATTERN: "성립하는 경우를 나눠 각각을 따로 살펴보세요.",
+}
+
+
+def _skill_focus_element(concept: Concept) -> SkillFocusElement | None:
+    """주 행동영역이 조건/경우 행동 영역(THEOREM/TECHNIQUE/PATTERN)이면 focus 블록 1개. 아니면 None.
+
+    행동영역이 *블록의 유무*를 자동 분기한다(체크리스트 ② "9블록이 행동영역에 따라 자동 분기").
+    """
+    primary = _primary_cognitive_type(concept)
+    if primary is None or primary not in _SKILL_FOCUS_CUE:
+        return None
+    return SkillFocusElement(
+        cognitive_type=primary, focus_prompt=_SKILL_FOCUS_CUE[primary]
+    )
 
 
 def _socratic_elements(concept: Concept) -> list[SocraticPromptElement]:
@@ -216,7 +240,8 @@ async def generate_learning_scene(
 
     골격(코드 결정론): 주 행동영역(`_primary_cognitive_type`)의 **요소 조합 프로파일**(05a §5.1)이
     *인지 진입 순서*를 결정한다 — `visual` 진입(기법·패턴·시각추론)은 시각화 먼저, `inquiry` 진입
-    (정의·정리)은 소크라테스(질문) 먼저. ① 시각화 블록: `recommended_visual_styles`가 있으면
+    (정의·정리)은 소크라테스 먼저. ⓪ 행동영역 focus: THEOREM/TECHNIQUE/PATTERN이면 `skill_focus`를
+    맨 앞에 둔다(행동영역별 자동 분기·05a §3.2). ① 시각화 블록: `recommended_visual_styles`가 있으면
     `visualization` 요소 1개(`generate_visualization_spec`·L3), 결과가 graph_2d이고
     파라미터를 선언하면 그를 타깃하는 `param_control`을 덧붙인다(bound index는 append 시점
     계산이라 진입 순서와 무관하게 정합). ② 소크라테스 블록: `cognitive_type` → 발화(프로파일
@@ -242,6 +267,12 @@ async def generate_learning_scene(
     """
     profile = _profile_for(concept)
     elements: list[SceneElement] = []
+
+    # ⓪ 행동영역 focus 블록(있으면 맨 앞·프레이밍) — 05a §3.2·행동영역(THEOREM/TECHNIQUE/PATTERN)별
+    # 자동 분기(없는 영역은 미부여). 정답 아님·소크라테스 질문과 구분되는 *행동 지시*.
+    skill_focus = _skill_focus_element(concept)
+    if skill_focus is not None:
+        elements.append(skill_focus)
 
     async def _append_visual_block() -> None:
         """시각화(+graph_2d면 param_control)를 공유 `elements`에 append.
