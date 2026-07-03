@@ -1,13 +1,16 @@
-"""정본 7단계 분리 manifest 동결 — 명세(`docs/architecture/04c…`)↔코드 드리프트 차단.
+"""정본 7레벨 분리 manifest 동결 — 명세(`docs/architecture/04c…`)↔코드 드리프트 차단.
 
-`04c_misconception_seven_stage_separation.md`가 "개념 ↔ 오개념이 7단계에서 분리된다"고 열거한
-각 앵커(모듈·테이블·기존 동결 테스트·게이트 기본값)가 *실제로 존재*함을 확인한다. 이 테스트는
-기존 governance 테스트(namespace·purity·runtime)의 단언을 **중복하지 않는다** — 그 방어들이
-저장소에 *실재*한다는 연결 무결성과, 명세가 이름 댄 앵커가 *import/존재 가능*하다는 것만 동결한다.
+`04c_misconception_seven_stage_separation.md`가 열거한 **정본 7레벨**(Storage · Relation ·
+Embedding · Retrieval · Runtime Context · Repair Strategy · Renderer)의 각 앵커(모듈·테이블·약한
+관계 금지 상수·게이트 기본값·기존 동결 테스트·문서)가 *실제로 존재*함을 확인한다. 이 테스트는
+기존 governance 테스트(namespace·purity·runtime·edge-relation)의 단언을 **중복하지 않는다** — 그
+방어들이 저장소에 *실재*한다는 연결 무결성과, 명세가 이름 댄 앵커가 *import/존재 가능*하다는 것만
+동결한다.
 
-명세를 바꾸면(단계 추가·앵커 이동) 이 테스트가 red가 되어 문서와 코드가 함께 움직이도록 강제한다.
+명세를 바꾸면(레벨 추가·앵커 이동·레벨명 변경) 이 테스트가 red가 되어 문서와 코드가 함께 움직이도록
+강제한다.
 
-hermetic: 외부 의존·DB 불요(모듈 import·ORM 메타데이터·파일 존재·Field 기본값만).
+hermetic: 외부 의존·DB 불요(모듈 import·ORM 메타데이터·소스 텍스트 스캔·파일 존재·Field 기본값만).
 """
 
 from __future__ import annotations
@@ -23,49 +26,62 @@ from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
 )
 
-# 저장소 루트 — 이 파일: tests/backend/l4/…  →  parents[3] = repo root(tests·docs 보유).
+# 저장소 루트 — 이 파일: tests/backend/l4/…  →  parents[3] = repo root(tests·docs·src 보유).
 _REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 단계 1~7 앵커 모듈 — 04c §2 표의 "구현 앵커"(dotted path). 전부 import 가능해야 한다.
-# (명세가 이름 댄 좌석이 실재하는지 — 좌석이 사라지면 명세가 거짓말이 된다.)
+# 정본 7레벨 — 플레이북 Part 6 §6-2 표. 레벨명·순서를 코드로 동결(초판 파생 7단계 교정).
 # ──────────────────────────────────────────────────────────────────────────
-_STAGE_ANCHOR_MODULES: dict[int, tuple[str, ...]] = {
-    1: (  # Storage / DB
+_LEVEL_NAMES: dict[int, str] = {
+    1: "Storage",
+    2: "Relation",
+    3: "Embedding",
+    4: "Retrieval",
+    5: "Runtime Context",
+    6: "Repair Strategy",
+    7: "Renderer",
+}
+
+# 각 레벨의 구현 앵커(dotted path·04c §2 표). 전부 import 가능해야 한다 — 좌석이 사라지면 명세가
+# 거짓말이 된다. (data-pipeline 크로스패키지 import는 피하고, Level 2 약한관계 금지 상수는 아래
+# 별도 소스 스캔으로 동결한다 — mypy/경로 취약성 회피.)
+_LEVEL_ANCHOR_MODULES: dict[int, tuple[str, ...]] = {
+    1: (  # Storage
         "whymath_backend.db.models.misconception_catalog",
         "whymath_backend.db.models.misconception_hypothesis",
         "whymath_backend.db.models.misconception_crosslink",
         "whymath_backend.db.models.misconception_embedding",
     ),
-    2: (  # Retrieval
-        "whymath_backend.l4.misconception.diagnose",
-        "whymath_backend.l4.misconception.combined",
+    2: (  # Relation — 오개념이 개념 traversal에 진입 불가(선수 전용 필터·적재기)
+        "whymath_backend.l1.concept_graph.backend_edge",
+        "whymath_backend.l2.prerequisite_recommendation",
     ),
-    3: (  # Embedding index
+    3: (  # Embedding
         "whymath_backend.l4.misconception.semantic.pgvector_index",
         "whymath_backend.l1.concept_graph.embedding",
         "whymath_backend.l1.atom_graph.embedding",
     ),
-    4: (  # Context (LLM)
-        "whymath_backend.api.coach",
-        "whymath_backend.harness.wh1_loop",
-    ),
-    5: (  # Runtime / detection gate
+    4: (  # Retrieval — reactive + classifier-first
+        "whymath_backend.l4.misconception.diagnose",
+        "whymath_backend.l4.misconception.combined",
         "whymath_backend.l4.misconception.match_gate",
+    ),
+    5: (  # Runtime Context — 2-stage·게이트 off 기본
+        "whymath_backend.api.coach",
         "whymath_backend.api._misconception_state",
     ),
-    6: (  # Judge / Validation
-        "whymath_backend.l4.misconception.judge",
-        "whymath_backend.l4.misconception.judge_seam",
+    6: (  # Repair Strategy — intervene(교정)은 카탈로그와 별도 모듈
+        "whymath_backend.l4.misconception.intervene",
+        "whymath_backend.l4.misconception.distractor",
     ),
-    7: (  # Identity / Canonical
-        "whymath_backend.l4.misconception.catalog",
-        "whymath_backend.l1.misconception.crosslink_resolve",
+    7: (  # Renderer — Visualization Intent → L3 spec → L5 렌더(구현체 비내장)
+        "whymath_backend.l4.misconception.visualize",
+        "whymath_backend.schema.visualization",
     ),
 }
 
-# 오개념 4 ORM 테이블(단계 1) — 개념 테이블과 disjoint·개념에 FK 결합 안 됨을 확인할 대상.
+# 오개념 4 ORM 테이블(Level 1) — 개념 테이블과 disjoint·개념에 FK 결합 안 됨을 확인할 대상.
 _MISCONCEPTION_MODELS = (
     MisconceptionCatalog,
     MisconceptionHypothesisRecord,
@@ -87,12 +103,18 @@ _CONCEPT_TABLE_NAMES = frozenset(
     }
 )
 
-# 항목 ①③·preload 동결을 담당하는 *기존* 방어 — 명세가 "존재한다"고 주장한 테스트들의 실재 확인
-# (repo 상대경로). 이들이 사라지면 04c 감사 결과표가 근거를 잃는다.
+# Level 2 약한 관계 금지 상수의 단일 진실(data-pipeline). 소스 텍스트로 실재만 확인(크로스패키지
+# import·mypy 취약성 회피). 상세 거버넌스는 test_edge_relation_governance.py 몫(중복 단언 안 함).
+_CONCEPT_GRAPH_SRC_DIR = "src/data-pipeline/data_pipeline/concept_graph"
+_RELATION_CROSSWALK_SRC = f"{_CONCEPT_GRAPH_SRC_DIR}/relation_crosswalk.py"
+
+# 항목 ①③·preload·관계 동결을 담당하는 *기존* 방어 — 명세가 근거로 든 테스트들의 실재 확인
+# (repo 상대경로). 이들이 사라지면 04c 감사·갭 장부가 근거를 잃는다.
 _REFERENCED_GUARD_TESTS = (
     "tests/data_pipeline/concept_graph/test_concept_node_purity.py",
     "tests/backend/schema/test_concept_misconception_runtime.py",
     "tests/backend/l1/test_embedding_namespace_governance.py",
+    "tests/backend/l1/test_edge_relation_governance.py",
     "tests/backend/l4/test_misconception_namespace_gate.py",
 )
 
@@ -101,28 +123,43 @@ _SPEC_DOC = "docs/architecture/04c_misconception_seven_stage_separation.md"
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 단계 1~7 — 앵커 모듈 전수 import
+# 정본 7레벨 — 열거·레벨명·앵커 import
 # ──────────────────────────────────────────────────────────────────────────
-def test_all_seven_stages_are_enumerated() -> None:
-    """명세는 정확히 7단계다(체크리스트 5 + 구현 2층 = 7·04c §0)."""
-    assert set(_STAGE_ANCHOR_MODULES) == set(range(1, 8))
+def test_seven_levels_are_enumerated() -> None:
+    """명세는 정확히 7레벨이고 앵커·레벨명 키가 일치한다(1..7)."""
+    assert set(_LEVEL_ANCHOR_MODULES) == set(range(1, 8))
+    assert set(_LEVEL_NAMES) == set(range(1, 8))
 
 
-def test_every_stage_anchor_module_importable() -> None:
-    """7단계 각 앵커 모듈이 import 가능 — 명세가 이름 댄 좌석이 실재한다.
+def test_level_names_are_canonical() -> None:
+    """레벨명·순서가 정본 표와 정확히 일치(초판 파생 7단계로의 재드리프트 차단)."""
+    ordered = tuple(_LEVEL_NAMES[i] for i in range(1, 8))
+    assert ordered == (
+        "Storage",
+        "Relation",
+        "Embedding",
+        "Retrieval",
+        "Runtime Context",
+        "Repair Strategy",
+        "Renderer",
+    )
 
-    소실 시 `importlib.import_module`이 ImportError로 즉시 red(해당 단계 앵커 소실).
+
+def test_every_level_anchor_module_importable() -> None:
+    """7레벨 각 앵커 모듈이 import 가능 — 명세가 이름 댄 좌석이 실재한다.
+
+    소실 시 `importlib.import_module`이 ImportError로 즉시 red(해당 레벨 앵커 소실).
     """
-    for modules in _STAGE_ANCHOR_MODULES.values():
+    for modules in _LEVEL_ANCHOR_MODULES.values():
         for dotted in modules:
             importlib.import_module(dotted)
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 단계 1 — 오개념 테이블 분리(개념과 disjoint·FK 비결합)
+# Level 1·2 — 오개념 테이블 분리(개념과 disjoint·FK 비결합)
 # ──────────────────────────────────────────────────────────────────────────
 def test_misconception_tables_disjoint_from_concept_tables() -> None:
-    """오개념 4테이블명이 개념 측 테이블명과 겹치지 않는다(별도 store)."""
+    """오개념 4테이블명이 개념 측 테이블명과 겹치지 않는다(별도 store·Level 1)."""
     mis_tables = {m.__tablename__ for m in _MISCONCEPTION_MODELS}
     assert mis_tables == {
         "misconception_catalog",
@@ -134,7 +171,7 @@ def test_misconception_tables_disjoint_from_concept_tables() -> None:
 
 
 def test_misconception_tables_have_no_foreign_key_into_concept() -> None:
-    """오개념 테이블의 어떤 FK도 개념 측 테이블을 가리키지 않는다(loose ref — 04c §2 단계 1).
+    """오개념 테이블의 어떤 FK도 개념 측 테이블을 가리키지 않는다(loose ref — Level 2).
 
     오개념→개념 참조는 `concept_src_id`(원천 문자열)·kebab-id 같은 *느슨참조*로만 존재하고 DB
     FK로 개념 identity에 결합되지 않는다(개념↔오개념 결합 폭발·순환 차단). 허용 FK 타깃은
@@ -145,15 +182,31 @@ def test_misconception_tables_have_no_foreign_key_into_concept() -> None:
         offenders = referenced & _CONCEPT_TABLE_NAMES
         assert offenders == set(), (
             f"{model.__tablename__}가 개념 테이블에 FK 결합됨 — {sorted(offenders)}. 오개념은 "
-            "개념에 느슨참조(원천 문자열)로만 이어야 한다(04c 단계 1·Concept Purity)."
+            "개념에 느슨참조(원천 문자열)로만 이어야 한다(04c Level 2·Concept Purity)."
         )
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 단계 5 — 런타임 게이트 기본값이 reactive(off·opt-in)
+# Level 2 — 약한 관계 금지 상수 실재(traversal dense화 방어)
+# ──────────────────────────────────────────────────────────────────────────
+def test_weak_relation_ban_constants_present() -> None:
+    """`FORBIDDEN_RELATION_TOKENS`에 similar_to·related_to가, 배제 집합 상수가 소스에 실재한다.
+
+    상세 거버넌스(로더가 PREREQUISITE만 적재 등)는 `test_edge_relation_governance.py` 몫 — 여기선
+    Level 2 traversal 배제의 단일 진실 상수가 *존재*함만 동결한다(중복 단언 회피·소스 텍스트 스캔).
+    """
+    src = (_REPO_ROOT / _RELATION_CROSSWALK_SRC).read_text(encoding="utf-8")
+    assert "FORBIDDEN_RELATION_TOKENS" in src
+    assert '"similar_to"' in src
+    assert '"related_to"' in src
+    assert "TRAVERSAL_EXCLUDED_BACKEND_EDGE_TYPES" in src
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Level 5 — 런타임 게이트 기본값이 reactive(off·opt-in)
 # ──────────────────────────────────────────────────────────────────────────
 def test_runtime_gate_defaults_are_reactive() -> None:
-    """의미 매칭·judge 노출 게이트 기본값 동결 — off·False(substring 우선·reactive·04c 단계 5).
+    """의미 매칭·judge 노출 게이트 기본값 동결 — off·False(substring 우선·reactive·Level 5).
 
     env 무관하게 *Field 기본값*을 읽는다(런타임 Settings 인스턴스가 아니라 선언 기본).
     """
@@ -166,11 +219,11 @@ def test_runtime_gate_defaults_are_reactive() -> None:
 # 연결 무결성 — 명세가 근거로 든 기존 방어·문서가 실재
 # ──────────────────────────────────────────────────────────────────────────
 def test_referenced_guard_tests_exist() -> None:
-    """04c 감사 결과표가 인용한 기존 동결 테스트들이 저장소에 실재한다(근거 무결성)."""
+    """04c 감사·갭 장부가 인용한 기존 동결 테스트들이 저장소에 실재한다(근거 무결성)."""
     for rel in _REFERENCED_GUARD_TESTS:
         assert (_REPO_ROOT / rel).is_file(), f"명세가 인용한 방어 테스트 부재: {rel}"
 
 
 def test_spec_document_exists() -> None:
-    """정본 7단계 명세 문서 자체가 실재한다(이 manifest의 대응 문서)."""
-    assert (_REPO_ROOT / _SPEC_DOC).is_file(), f"7단계 정본 명세 부재: {_SPEC_DOC}"
+    """정본 7레벨 명세 문서 자체가 실재한다(이 manifest의 대응 문서)."""
+    assert (_REPO_ROOT / _SPEC_DOC).is_file(), f"7레벨 정본 명세 부재: {_SPEC_DOC}"
