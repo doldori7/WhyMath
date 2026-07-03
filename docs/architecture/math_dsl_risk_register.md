@@ -7,6 +7,12 @@
 > **범위**: 분석만 — 수정은 *방향*만 제시(작업 항목화는 별도 `/plan`).
 > **동반(retrieval 심화)**: `math_dsl_retrieval_analysis.md` — 본 레지스터의 "AI retrieval failure" 축을 검색 10렌즈+4전략으로 심화(2026-07-01).
 
+> ⚠️ **2026-07-03 개정 예고 — ③ FormulaNode·리스크 8**: "③ 미도입 FormulaNode가 정답"·리스크 8
+> (node explosion) 판정은 리치 Part 2 스펙 **전면 채택**(사용자 확정·`concept_node_layering_
+> decision.md` §0)으로 재판정됐다 — FormulaNode를 **canonical-only**(변형식 노드화 금지)로 도입하되
+> SymPy 검증커널·AST 참조전용 경계는 유지한다. node explosion 방어는 "canonical 단위 승격 + 신규
+> 엣지 타입 0" 원칙으로 대체. 실제 개정(③·Q3/Q8·리스크 8 정정)은 로드맵 Phase 5에서 수행.
+
 ---
 
 ## 0. 현재 구조 스냅샷
