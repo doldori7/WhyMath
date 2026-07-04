@@ -60,6 +60,7 @@ from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.router import Router
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.misconception.probe_selection import ProbeCandidate
 
 __all__ = ["LLMTutorPolicy"]
@@ -101,6 +102,23 @@ JSON 객체 하나만 출력하세요. 다른 텍스트·설명·코드펜스 �
 
 _ENCOURAGE_TYPE: EndTurnType = "격려"
 _SOCRATIC_SAFE_TYPES: tuple[EndTurnType, ...] = ("질문", "힌트", "격려")
+
+# ──────────────────────────────────────────────────────────────────────
+# Minimal Reasoning Subgraph 예산(플레이북 Part 8·CLAUDE.md 하드 게이트·감사 Q2).
+#
+# "LLM에게 전체 그래프를 통째로 주지 마라 — 더 많이 넣을수록 더 멍청해진다"(Part 8). 이 정책의
+# `_build_prompt`가 LLM에 컨텍스트를 실제로 주입하는 *첫 소비처*(S1-a)이므로, Part 8이 규정한
+# 예산 상한(depth ≤ 2·max_nodes ≤ 12~20·max_tokens ≤ 3000)을 프롬프트 컨텍스트 크기에 코드로
+# 박는다. depth는 현재 소비처가 그래프 traversal을 하지 않으므로(TurnState 요약만) 무관 —
+# 아래 `_build_prompt` 주석의 traversal guard 유예 근거 참조.
+# ──────────────────────────────────────────────────────────────────────
+# 컨텍스트 노드 총합 상한(가설 + last_match). Part 8 max_nodes 상한(12~20)의 최댓값 20을 택함.
+_MAX_CONTEXT_NODES = 20
+# recent history 상한. Part 8 예산 안에서 최근 트레이스만 남기는 합리적 창(가설 5·노드 20보다
+# 작게 잡아 어텐션 희석 방지). 인스턴스 `max_history`는 이 천장 안에서만 조절된다(min).
+_MAX_HISTORY = 8
+# 프롬프트 토큰 근사 상한. Part 8 max_tokens 상한을 그대로 채택. 외부 tokenizer 금지(경량 근사).
+_MAX_PROMPT_TOKENS = 3000
 
 
 class LLMTutorPolicy:
@@ -170,43 +188,147 @@ class LLMTutorPolicy:
         action = self._parse_action(raw, state)
         return self._enforce_invariants(action, state)
 
-    # ── 상태 요약(비민감) ──────────────────────────────────────────────
+    # ── 상태 요약(비민감·Minimal Reasoning Subgraph 예산 적용) ──────────
     def _build_prompt(self, state: TurnState) -> str:
         """`TurnState`를 비민감 JSON 요약으로 압축 — 학생 원문·정답 원문 미포함(요구사항 ⑥).
 
         오개념은 id + 한국어 라벨(name_kr)만(원문 아님). history는 kind/ok만(detail 미포함 —
         detail에 문항 id 등 내부값이 있을 수 있어 요약에서 배제). last_matches도 id만.
+
+        **Minimal Reasoning Subgraph 예산(Part 8·감사 Q2)을 여기서 강제한다.** 이 요약이 LLM에
+        주입되는 *유일한* 컨텍스트이므로 팽창하면 어텐션이 희석돼 도구 선택이 나빠진다("더 많이
+        넣을수록 더 멍청해진다"). 3중 상한을 적용한다:
+          ① 컨텍스트 노드(가설+last_match) 총합 ≤ `_MAX_CONTEXT_NODES` — 초과 시 confidence
+             내림차순 상위만 남기고 절단(가장 관련 높은 것 우선).
+          ② recent history ≤ min(인스턴스 max_history, `_MAX_HISTORY`).
+          ③ 프롬프트 토큰 근사 ≤ `_MAX_PROMPT_TOKENS` — 초과 시 추가 절단(history 먼저,
+             그다음 저confidence 가설·마지막으로 match id).
+        절단이 일어나면 **fail-closed 정직 신호**(`context_truncated`·`omitted_count`)를 요약에
+        표기해 LLM이 "컨텍스트가 제한됐음"을 알게 한다(감사 §3·조용한 무동작 금지). 절단 순서는
+        confidence·인덱스 등 결정론 기준만 사용(random/시각 금지).
+
+        **traversal guard 유예 근거**: 현재 소비처는 `TurnState` 요약만 다루고 실제 그래프
+        traversal을 하지 않는다(가설·매치·history는 이미 상위 계층이 채워 넣은 값). 따라서 visited
+        set·timeout 같은 traversal guard는 *지금* 필요 없고, 없는 traversal에 가짜 guard를 만들지
+        않는다. 향후 `query_curriculum`이 L1(개념 그래프)+L2 조인을 이 프롬프트로 실제 순회·주입하게
+        배선될 때 visited set·timeout·token budget guard를 그 지점에 동반한다.
         """
-        hypotheses = [
-            {
-                "id": h.misconception_id,
-                "name": (
-                    CATALOG_BY_ID[h.misconception_id].name_kr
-                    if h.misconception_id in CATALOG_BY_ID
-                    else h.misconception_id
-                ),
-                "confidence": round(h.confidence, 3),
-            }
-            for h in state.hypotheses
+        # ① 컨텍스트 노드 예산(가설+last_match 총합 상한, confidence 우선).
+        hyp_summaries, match_ids, omitted = self._budget_context_nodes(state)
+        # ② history 예산 — 인스턴스 조절값을 Part 8 천장 안으로 클램프.
+        history_limit = min(self._max_history, _MAX_HISTORY)
+        recent = [{"kind": r.kind, "ok": r.ok} for r in state.history[-history_limit:]]
+        omitted += max(0, len(state.history) - history_limit)
+
+        # ③ 토큰 근사 예산 — 초과 시 history부터, 그다음 저confidence 가설·match id를 결정론 절단.
+        prompt = self._render_summary(state, hyp_summaries, match_ids, recent, omitted)
+        while self._approx_tokens(prompt) > _MAX_PROMPT_TOKENS:
+            if recent:
+                recent.pop(0)  # 가장 오래된 history 먼저
+                omitted += 1
+            elif hyp_summaries:
+                # 저confidence 가설 절단(결정론: 최소 confidence, 동률이면 뒤쪽 인덱스).
+                lo = min(
+                    range(len(hyp_summaries)),
+                    key=lambda i: (hyp_summaries[i]["confidence"], -i),
+                )
+                hyp_summaries.pop(lo)
+                omitted += 1
+            elif match_ids:
+                match_ids.pop()  # 마지막 match id부터(결정론)
+                omitted += 1
+            else:
+                break  # 고정 필드만 남아 더 줄일 수 없음(안전 탈출).
+            prompt = self._render_summary(state, hyp_summaries, match_ids, recent, omitted)
+        return prompt
+
+    def _budget_context_nodes(
+        self, state: TurnState
+    ) -> tuple[list[dict[str, object]], list[str], int]:
+        """가설+last_match를 컨텍스트 노드로 보고 총합을 `_MAX_CONTEXT_NODES`로 제한.
+
+        초과 시 confidence 내림차순 상위만 유지(가장 관련 높은 것 우선). 결정론 tiebreak은
+        (kind_rank, 원본 인덱스) — random·시각 미사용. 생존자는 원본 순서로 렌더한다.
+        반환: (가설 요약 리스트, match id 리스트, 절단된 노드 수).
+        """
+        # (confidence, kind_rank[0=가설,1=매치], 원본 인덱스) — 인덱스로 충돌·동률을 결정론 처리.
+        scored: list[tuple[float, int, int]] = []
+        for i, h in enumerate(state.hypotheses):
+            scored.append((h.confidence, 0, i))
+        for j, m in enumerate(state.last_matches):
+            scored.append((m.confidence, 1, j))
+
+        total = len(scored)
+        if total <= _MAX_CONTEXT_NODES:
+            keep_hyp = set(range(len(state.hypotheses)))
+            keep_match = set(range(len(state.last_matches)))
+            omitted = 0
+        else:
+            ranked = sorted(scored, key=lambda t: (-t[0], t[1], t[2]))[:_MAX_CONTEXT_NODES]
+            keep_hyp = {t[2] for t in ranked if t[1] == 0}
+            keep_match = {t[2] for t in ranked if t[1] == 1}
+            omitted = total - _MAX_CONTEXT_NODES
+
+        hyp_summaries = [
+            self._hypothesis_summary(h) for i, h in enumerate(state.hypotheses) if i in keep_hyp
         ]
-        recent = [{"kind": r.kind, "ok": r.ok} for r in state.history[-self._max_history :]]
-        summary = {
+        match_ids = [
+            m.misconception.id for j, m in enumerate(state.last_matches) if j in keep_match
+        ]
+        return hyp_summaries, match_ids, omitted
+
+    @staticmethod
+    def _hypothesis_summary(h: MisconceptionHypothesis) -> dict[str, object]:
+        """가설 1건 → 비민감 요약(id + 한국어 라벨 + 반올림 confidence). 원문 미포함."""
+        return {
+            "id": h.misconception_id,
+            "name": (
+                CATALOG_BY_ID[h.misconception_id].name_kr
+                if h.misconception_id in CATALOG_BY_ID
+                else h.misconception_id
+            ),
+            "confidence": round(h.confidence, 3),
+        }
+
+    @staticmethod
+    def _render_summary(
+        state: TurnState,
+        hyp_summaries: list[dict[str, object]],
+        match_ids: list[str],
+        recent: list[dict[str, object]],
+        omitted: int,
+    ) -> str:
+        """예산 적용된 조각들로 최종 프롬프트 문자열을 조립(순수·결정론)."""
+        summary: dict[str, object] = {
             "turn_index": state.turn_index,
             "has_solution_steps": state.has_solution_steps,
             "verify_called": state.verify_called,
             "last_verdict": state.last_verdict,
             "tool_calls": state.tool_calls,
-            "active_hypotheses": hypotheses,
-            "last_match_ids": [m.misconception.id for m in state.last_matches],
+            "active_hypotheses": hyp_summaries,
+            "last_match_ids": match_ids,
             "recent_tools": recent,
             "verify_obligation_pending": state.has_solution_steps and not state.verify_called,
         }
+        if omitted > 0:
+            # fail-closed 정직 신호 — 예산으로 컨텍스트를 절단했음을 LLM에 명시(조용한 무동작 금지).
+            summary["context_truncated"] = True
+            summary["omitted_count"] = omitted
         state_json = json.dumps(summary, ensure_ascii=False, indent=2)
         return (
             "현재 튜터링 상태(요약·학생 원문/정답 미포함):\n"
             f"{state_json}\n\n"
             "위 상태에서 다음 도구 하나를 골라 JSON 하나로만 답하세요."
         )
+
+    @staticmethod
+    def _approx_tokens(text: str) -> int:
+        """경량 토큰 근사 — 외부 tokenizer 금지(Part 8 예산은 정밀 회계가 아닌 상한 가드).
+
+        문자수/4 근사. 한글은 문자당 토큰이 더 나올 수 있어 이 근사는 *과소 추정*일 수 있으나,
+        1차 구조 가드는 노드·history 상한(①②)이 담당하고 토큰 가드는 팽창 방지용 보조 상한이다.
+        """
+        return len(text) // 4
 
     def _routing_request(self) -> RoutingRequest:
         """도구 선택 호출의 라우팅 신호 — 8개 중 택1은 *구조화 상태에 대한 분류 결정*이라

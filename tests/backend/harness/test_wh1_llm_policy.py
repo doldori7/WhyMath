@@ -12,18 +12,26 @@ kind) ⑤학생 원문·정답의 프롬프트 미노출(요구사항 ⑥) ⑥ru
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Sequence
 
-from whymath_backend.harness.wh1_llm_policy import LLMTutorPolicy
+from whymath_backend.harness.wh1_llm_policy import (
+    _MAX_CONTEXT_NODES,
+    _MAX_HISTORY,
+    _MAX_PROMPT_TOKENS,
+    LLMTutorPolicy,
+)
 from whymath_backend.harness.wh1_loop import (
     Action,
     EndTurnAction,
     MatchMisconceptionAction,
+    ToolResult,
     TurnState,
     VerifyStepAction,
     run_tutoring_turn,
 )
 from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 
 # diagnose가 confidence 1.0으로 잡는 실 신호(wh1_loop 테스트와 동일).
 _MATCH_TEXT = "(a+b) a² + b²"
@@ -270,3 +278,113 @@ class TestIntegration:
         outcome = asyncio.run(run_tutoring_turn(policy=policy, max_tool_calls=3))
         assert outcome.status == "budget_exhausted"
         assert outcome.tool_calls == 3
+
+
+def _hyp(mid: str, confidence: float) -> MisconceptionHypothesis:
+    """테스트용 가설 — 카탈로그 밖 id면 라벨은 id로 폴백(임의 id 허용)."""
+    return MisconceptionHypothesis(
+        misconception_id=mid,
+        confidence=confidence,
+        turns_since_evidence=0,
+        evidence_count=1,
+    )
+
+
+def _prompt_summary(provider: FakeProvider) -> dict[str, object]:
+    """provider가 받은 첫 프롬프트에서 JSON 요약 블록을 추출·파싱(예산 검증용)."""
+    assert provider.calls, "provider가 호출되어야 한다"
+    prompt = provider.calls[0][0]
+    start = prompt.find("{")
+    end = prompt.rfind("}")
+    assert start != -1 and end > start
+    obj = json.loads(prompt[start : end + 1])
+    assert isinstance(obj, dict)
+    return obj
+
+
+class TestMinimalReasoningSubgraphBudget:
+    """플레이북 Part 8 예산(depth≤2·max_nodes≤12~20·max_tokens≤3000)의 프롬프트 배선 검증.
+
+    감사 Q2: "예산 상한 코드 부재 → S1-a 빌드 시 반드시 동반". `_build_prompt`가 유일 소비처.
+    """
+
+    def test_context_nodes_capped_keeps_top_confidence(self) -> None:
+        """가설 수가 `_MAX_CONTEXT_NODES` 초과 시 상위 confidence만 남고 나머지 절단·정직 신호."""
+        n = _MAX_CONTEXT_NODES + 5
+        # confidence를 인덱스로 결정론적으로 부여(0.10, 0.11, ...): 상위 20개만 생존해야 함.
+        hyps = [_hyp(f"mc-{i:02d}", 0.10 + i * 0.01) for i in range(n)]
+        provider = FakeProvider(['{"kind": "end_turn", "action_type": "격려"}'])
+        policy = LLMTutorPolicy(provider)
+        state = TurnState(turn_index=1, has_solution_steps=False, hypotheses=hyps)
+        _next(policy, state)
+        summary = _prompt_summary(provider)
+        kept = summary["active_hypotheses"]
+        assert isinstance(kept, list)
+        assert len(kept) == _MAX_CONTEXT_NODES  # 20개만 실림
+        # 생존자는 confidence 상위 20 — 잘린 5개는 최저 confidence(mc-00..mc-04).
+        kept_ids = {h["id"] for h in kept}
+        assert "mc-00" not in kept_ids and "mc-04" not in kept_ids
+        assert "mc-24" in kept_ids  # 최고 confidence는 반드시 생존
+        assert summary["context_truncated"] is True
+        assert summary["omitted_count"] == 5
+
+    def test_history_capped_to_recent(self) -> None:
+        """history가 `_MAX_HISTORY` 초과 시 최근 것만 남는다(오래된 것 절단)."""
+        history = [
+            ToolResult(kind=f"tool-{i}", ok=True, detail="x") for i in range(_MAX_HISTORY + 12)
+        ]
+        provider = FakeProvider(['{"kind": "end_turn", "action_type": "격려"}'])
+        # 인스턴스 max_history를 크게 줘도 Part 8 천장(_MAX_HISTORY)으로 클램프됨을 검증.
+        policy = LLMTutorPolicy(provider, max_history=100)
+        state = TurnState(turn_index=1, has_solution_steps=False, hypotheses=[], history=history)
+        _next(policy, state)
+        summary = _prompt_summary(provider)
+        recent = summary["recent_tools"]
+        assert isinstance(recent, list)
+        assert len(recent) == _MAX_HISTORY  # 8개로 절단
+        # 최근 것만: 마지막 도구가 포함되고 오래된 tool-0는 빠짐.
+        assert recent[-1]["kind"] == f"tool-{_MAX_HISTORY + 11}"
+        assert all(r["kind"] != "tool-0" for r in recent)
+        assert summary["context_truncated"] is True
+
+    def test_token_budget_forces_additional_truncation(self) -> None:
+        """토큰 근사가 `_MAX_PROMPT_TOKENS` 초과면 추가 절단 → 프롬프트가 근사 상한 이하로 축소."""
+        # 카탈로그 밖의 초장문 id → name이 id로 폴백해 프롬프트가 토큰 예산을 크게 초과.
+        huge = "x" * 6000
+        hyps = [_hyp(f"{huge}-{i}", 0.10 + i * 0.01) for i in range(3)]
+        provider = FakeProvider(['{"kind": "end_turn", "action_type": "격려"}'])
+        policy = LLMTutorPolicy(provider)
+        state = TurnState(turn_index=1, has_solution_steps=False, hypotheses=hyps)
+        _next(policy, state)
+        prompt = provider.calls[0][0]
+        # 토큰 근사(문자수/4)가 상한 이하로 줄었다.
+        assert len(prompt) // 4 <= _MAX_PROMPT_TOKENS
+        summary = _prompt_summary(provider)
+        # 입력 3개보다 적게 남고, 절단 신호가 켜져야 한다(노드 cap은 미발동·토큰 cap만).
+        assert len(summary["active_hypotheses"]) < 3
+        assert summary["context_truncated"] is True
+
+    def test_truncation_is_deterministic(self) -> None:
+        """같은 입력 2회 → 동일 프롬프트(random·시각 미사용)."""
+        hyps = [_hyp(f"mc-{i:02d}", 0.10 + i * 0.01) for i in range(_MAX_CONTEXT_NODES + 5)]
+        prompts: list[str] = []
+        for _ in range(2):
+            provider = FakeProvider(['{"kind": "end_turn", "action_type": "격려"}'])
+            policy = LLMTutorPolicy(provider)
+            state = TurnState(turn_index=1, has_solution_steps=False, hypotheses=list(hyps))
+            _next(policy, state)
+            prompts.append(provider.calls[0][0])
+        assert prompts[0] == prompts[1]
+
+    def test_within_budget_has_no_truncation_signal(self) -> None:
+        """예산 내(소수 가설·짧은 history)면 절단 신호가 없다(정상 케이스)."""
+        hyps = [_hyp("mc-01", 0.5), _hyp("mc-02", 0.4)]
+        history = [ToolResult(kind="read_student_state", ok=True, detail="x")]
+        provider = FakeProvider(['{"kind": "end_turn", "action_type": "격려"}'])
+        policy = LLMTutorPolicy(provider)
+        state = TurnState(turn_index=1, has_solution_steps=False, hypotheses=hyps, history=history)
+        _next(policy, state)
+        summary = _prompt_summary(provider)
+        assert "context_truncated" not in summary
+        assert "omitted_count" not in summary
+        assert len(summary["active_hypotheses"]) == 2
