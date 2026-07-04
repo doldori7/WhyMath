@@ -35,6 +35,7 @@ from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProv
 # 슬2 idmap이 발급하는 UC 규약 키 예시(슬2 Neo4j 노드 키·슬3 concept_embedding과 동일 공간).
 _UC_A = "UC.calc.alimit.epsilon-delta"
 _UC_B = "UC.alg.afunction.composition"
+_UC_C = "UC.calc.acont.continuity"
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -417,6 +418,141 @@ def test_hit_has_only_safe_fields() -> None:
     assert fields == {"concept_id", "similarity", "name_ko", "domain", "review_status"}
     assert "description" not in fields
     assert "formal_definition" not in fields
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑧ 임계 게이팅(min_similarity) — 근접도 미만 제외·기본 None 불변·정렬 유지
+# ──────────────────────────────────────────────────────────────────────────
+class TestMinSimilarityGating:
+    def test_filters_below_threshold(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # sim(_UC_A)=1.0, sim(_UC_B)=0.6. 임계 0.8 → _UC_B 제외(semantic 실패 침묵 차단).
+        _patch_meta(monkeypatch)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.4)])
+        hits = search_concepts(
+            "극한",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            min_similarity=0.8,
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        assert [h.concept_id for h in hits] == [_UC_A]
+        assert hits[0].similarity == 1.0
+
+    def test_threshold_is_inclusive(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 경계값(similarity == min_similarity)은 포함(< 만 제외).
+        _patch_meta(monkeypatch)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.25)])  # sim = 0.75
+        hits = search_concepts(
+            "극한",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            min_similarity=0.75,
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        assert [h.concept_id for h in hits] == [_UC_A]
+
+    def test_none_keeps_all_unchanged(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 기본 None이면 임계 없음(기존 동작 불변 — 낮은 유사도도 유지).
+        _patch_meta(monkeypatch)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.9)])
+        hits = search_concepts(
+            "극한",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        assert [h.concept_id for h in hits] == [_UC_A, _UC_B]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑨ 도메인 스코프(domain) — 일치만 통과·불일치/메타없음 제외·기본 None 불변
+# ──────────────────────────────────────────────────────────────────────────
+class TestDomainScoping:
+    def test_filters_mismatched_domain(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 동명 개념 collision 방어 — 지정 도메인과 다른 히트 제외.
+        meta = {
+            _UC_A: ConceptNodeMeta(name_ko="함수", domain="[고]미적분", review_status="reviewed"),
+            _UC_B: ConceptNodeMeta(name_ko="함수", domain="[중]함수", review_status="reviewed"),
+        }
+        _patch_meta(monkeypatch, meta)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.1)])
+        hits = search_concepts(
+            "함수",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            domain="[고]미적분",
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        assert [h.concept_id for h in hits] == [_UC_A]
+        assert hits[0].domain == "[고]미적분"
+
+    def test_excludes_missing_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 메타 없어 도메인 확인 불가인 UC는 스코프 모드에서 보수적 제외(정직).
+        meta = {
+            _UC_A: ConceptNodeMeta(name_ko="함수", domain="[고]미적분", review_status="reviewed")
+        }
+        _patch_meta(monkeypatch, meta)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.1)])
+        hits = search_concepts(
+            "함수",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            domain="[고]미적분",
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        assert [h.concept_id for h in hits] == [_UC_A]  # _UC_B(메타 없음) 제외
+
+    def test_none_keeps_all_domains(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 기본 None이면 전 도메인 유지(기존 동작 불변).
+        meta = {
+            _UC_A: ConceptNodeMeta(name_ko="함수", domain="[고]미적분", review_status="reviewed"),
+            _UC_B: ConceptNodeMeta(name_ko="함수", domain="[중]함수", review_status="reviewed"),
+        }
+        _patch_meta(monkeypatch, meta)
+        index, _engine = _index_with_rows([_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.1)])
+        hits = search_concepts(
+            "함수",
+            top_k=5,
+            provider=FakeEmbeddingProvider(),
+            index=index,
+            settings=_pgvector_settings(),
+        )
+        assert [h.concept_id for h in hits] == [_UC_A, _UC_B]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑩ 게이팅 조합 — reviewed_only·min_similarity·domain 동시 적용·정렬 유지
+# ──────────────────────────────────────────────────────────────────────────
+def test_combined_gating_preserves_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    # _UC_A: reviewed·sim1.0·미적분(통과). _UC_B: pending(reviewed_only 탈락).
+    # 세 게이팅이 함께 걸려도 남은 히트의 유사도 내림차순 정렬은 유지.
+    meta = {
+        _UC_A: ConceptNodeMeta(name_ko="극한", domain="[고]미적분", review_status="reviewed"),
+        _UC_B: ConceptNodeMeta(name_ko="합성", domain="[고]미적분", review_status="pending"),
+        _UC_C: ConceptNodeMeta(name_ko="연속", domain="[고]미적분", review_status="reviewed"),
+    }
+    _patch_meta(monkeypatch, meta)
+    index, _engine = _index_with_rows(
+        [_FakeRow(_UC_A, 0.0), _FakeRow(_UC_B, 0.1), _FakeRow(_UC_C, 0.15)]
+    )
+    hits = search_concepts(
+        "극한 연속",
+        top_k=5,
+        provider=FakeEmbeddingProvider(),
+        reviewed_only=True,
+        min_similarity=0.5,
+        domain="[고]미적분",
+        index=index,
+        settings=_pgvector_settings(),
+    )
+    # _UC_B는 pending으로 탈락. _UC_A(1.0)·_UC_C(0.85) 통과·정렬 유지.
+    assert [h.concept_id for h in hits] == [_UC_A, _UC_C]
+    assert [h.similarity for h in hits] == [1.0, 0.85]
 
 
 def test_accepts_any_embedding_provider(monkeypatch: pytest.MonkeyPatch) -> None:

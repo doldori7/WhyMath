@@ -1,0 +1,32 @@
+{
+  "version": "1.0",
+  "note": "렌더 선택 단일 진실원(invariant ⑩). 코어의 Visualization.type(선언적 렌더 의도)를 각 클라(웹 SPA·Flutter WebView)가 *같은 기준*으로 렌더러에 매핑하도록, type→렌더러 계약을 한 곳에 선언한다. 백엔드(pytest)는 이 파일의 renderers 키가 VisualizationType enum과 정확히 일치하는지, 웹(vitest)은 각 type이 web_adapter로 dispatch되는지 교차검증한다 — notation_contract.json 선례. 이전엔 Flutter WebView 경계가 viz.type을 페이로드에서 버려(graphing_calculator_webview) 웹이 spec 모양으로 렌더러를 재추론했고(drift), 이 계약과 경계 봉투(type+spec)로 그 이중 진실을 해소한다. 렌더러 계열 근거: docs/architecture/05_interaction.md §5.2.",
+  "authority": "backend schema/enums.py::VisualizationType (05 §5.2 정본)",
+  "consumers": [
+    "web dispatch: src/web/graphing-calculator/src/lib/graph2dSpec.js::specToStateForType",
+    "flutter boundary: src/mobile/lib/features/chat/presentation/graphing_calculator_webview.dart::encodeVisualizationParam",
+    "flutter widget select(webview vs seed): scene_renderer.dart (계층 분리 — 물리 위젯 선택)"
+  ],
+  "renderers": {
+    "interactive_graph_2d": {
+      "family": ["D3.js", "Plotly", "Desmos"],
+      "interactive": true,
+      "web_adapter": "graph2dSpecToState"
+    },
+    "interactive_surface_3d": {
+      "family": ["three.js"],
+      "interactive": true,
+      "web_adapter": "surface3dSpecToState"
+    },
+    "simulation_probabilistic": {
+      "family": ["D3.js", "Plotly"],
+      "interactive": true,
+      "web_adapter": "simulationSpecToState"
+    },
+    "animation_prerendered": {
+      "family": ["Manim"],
+      "interactive": false,
+      "web_adapter": null
+    }
+  }
+}

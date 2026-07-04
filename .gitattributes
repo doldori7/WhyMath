@@ -31,6 +31,12 @@
 *.md        text
 *.json      text
 
+# 병렬 세션 — append-only 로그는 union merge (양쪽 줄 모두 보존, conflict 회피)
+#   여러 Claude Code 세션이 동시에 결정 로그를 끝에 append해도 git 이 자동 병합.
+#   주의: 같은 항목을 양쪽이 수정하면 중복 라인이 남을 수 있으므로 "새 항목은 파일 끝에
+#   append" 관행을 지킬 것 (docs/standards/parallel_sessions.md 참조).
+MEMORY.md   merge=union
+
 # 바이너리 — 변환·diff 금지
 *.png       binary
 *.jpg       binary

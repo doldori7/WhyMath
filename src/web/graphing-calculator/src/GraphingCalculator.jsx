@@ -12,9 +12,9 @@ import {
 } from "./lib/mathExpr";
 import {
   graph2dSpecToState,
-  surface3dSpecToState,
-  simulationSpecToState,
   parseSpecParam,
+  unwrapSpecEnvelope,
+  specToStateForType,
   calcStateToGraph2dSpec,
 } from "./lib/graph2dSpec";
 import { emitInteraction } from "./lib/interactionEmitter";
@@ -1677,15 +1677,12 @@ export default function GraphingCalculator() {
     // base64(JSON)/raw JSON 문자열을 받아 계산기 상태로 적용(잘못된 입력은 무시·false 반환).
     const apply = (raw) => {
       try {
-        const spec = parseSpecParam(raw);
-        if (!spec) return false;
-        // 실험(experiment)→시뮬, 곡면식(surface)→3D, 그 외→2D 어댑터.
-        const st =
-          spec.experiment != null
-            ? simulationSpecToState(spec)
-            : spec.surface != null
-              ? surface3dSpecToState(spec)
-              : graph2dSpecToState(spec);
+        const parsed = parseSpecParam(raw);
+        if (!parsed) return false;
+        // 렌더 선택 단일 진실원(invariant ⑩): {type, spec} 봉투면 type을 우선 신뢰(코어 권위),
+        // 레거시 spec-only(공개 ?spec= 공유 링크)면 type=null로 와서 기존 shape 폴백.
+        const { type, spec } = unwrapSpecEnvelope(parsed);
+        const st = specToStateForType(type, spec);
         if (!st) return false;
         applyState(st);
         return true;

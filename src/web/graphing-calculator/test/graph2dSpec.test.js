@@ -4,6 +4,8 @@ import {
   surface3dSpecToState,
   simulationSpecToState,
   parseSpecParam,
+  unwrapSpecEnvelope,
+  specToStateForType,
   calcStateToGraph2dSpec,
 } from "../src/lib/graph2dSpec";
 
@@ -37,6 +39,30 @@ describe("graph2dSpecToState — 코어 Graph2dSpec → 계산기 상태", () =>
   it("domain [xMin,xMax] → view의 x 범위 (y는 기본 ±10)", () => {
     const st = graph2dSpecToState({ function: "x", domain: [-3, 3] });
     expect(st.view).toEqual({ xMin: -3, xMax: 3, yMin: -10, yMax: 10 });
+  });
+
+  it("y_range가 well-formed면 view의 y 범위로 반영", () => {
+    const st = graph2dSpecToState({ function: "x", domain: [-3, 3], y_range: [-5, 5] });
+    expect(st.view).toEqual({ xMin: -3, xMax: 3, yMin: -5, yMax: 5 });
+  });
+
+  it("잘못된/누락 y_range는 기본 ±10 폴백", () => {
+    expect(graph2dSpecToState({ function: "x", domain: [-3, 3], y_range: [5, 5] }).view).toEqual({
+      xMin: -3,
+      xMax: 3,
+      yMin: -10,
+      yMax: 10,
+    });
+    expect(graph2dSpecToState({ function: "x", domain: [-3, 3], y_range: [1] }).view).toEqual({
+      xMin: -3,
+      xMax: 3,
+      yMin: -10,
+      yMax: 10,
+    });
+  });
+
+  it("y_range만 있고 domain 없으면 view 없음(x 범위 날조 안 함)", () => {
+    expect(graph2dSpecToState({ function: "x", y_range: [-5, 5] }).view).toBeUndefined();
   });
 
   it("잘못된 domain은 무시(view 없음)", () => {
@@ -93,12 +119,22 @@ describe("calcStateToGraph2dSpec — 계산기 상태 → 코어 Graph2dSpec (�
     expect(spec.parameters).toEqual([{ name: "a", min: 0, max: 5, step: 0.5, default: 2 }]);
   });
 
-  it("view → domain [xMin,xMax] (y 범위는 명세에 안 실음)", () => {
+  it("기본 y(±10)는 y_range를 명세에 안 실음(클린 라운드트립)", () => {
     const spec = calcStateToGraph2dSpec({
       rows: [{ expr: "x" }],
       view: { xMin: -3, xMax: 3, yMin: -10, yMax: 10 },
     });
     expect(spec.domain).toEqual([-3, 3]);
+    expect(spec.y_range).toBeUndefined();
+  });
+
+  it("커스텀 y 범위는 y_range로 실음", () => {
+    const spec = calcStateToGraph2dSpec({
+      rows: [{ expr: "x" }],
+      view: { xMin: -3, xMax: 3, yMin: -5, yMax: 5 },
+    });
+    expect(spec.domain).toEqual([-3, 3]);
+    expect(spec.y_range).toEqual([-5, 5]);
   });
 
   it("유효하지 않은 view는 domain 생략", () => {
@@ -134,6 +170,22 @@ describe("Graph2dSpec 라운드트립 (spec → state → spec 동치)", () => {
     };
     const st = graph2dSpecToState(spec);
     // graph2dSpecToState는 sliders/view를 부분 상태로 주므로 그대로 역변환에 투입.
+    const back = calcStateToGraph2dSpec({
+      rows: st.rows,
+      sliders: st.sliders,
+      view: st.view,
+    });
+    expect(back).toEqual(spec);
+  });
+
+  it("커스텀 y_range도 왕복 후 보존된다", () => {
+    const spec = {
+      function: "a*sin(x)",
+      domain: [-6, 6],
+      y_range: [-2, 2],
+      parameters: [{ name: "a", min: 1, max: 3, step: 0.1, default: 2 }],
+    };
+    const st = graph2dSpecToState(spec);
     const back = calcStateToGraph2dSpec({
       rows: st.rows,
       sliders: st.sliders,
@@ -261,5 +313,59 @@ describe("simulationSpecToState — outcomes 통과 (구조화 우선)", () => {
     };
     const b64 = Buffer.from(JSON.stringify(spec)).toString("base64");
     expect(simulationSpecToState(parseSpecParam(b64)).outcomes).toEqual(spec.outcomes);
+  });
+});
+
+describe("unwrapSpecEnvelope — {type, spec} 봉투 판별(invariant ⑩)", () => {
+  it("봉투는 {type, spec}로 언랩", () => {
+    const r = unwrapSpecEnvelope({ type: "interactive_graph_2d", spec: { function: "x" } });
+    expect(r.type).toBe("interactive_graph_2d");
+    expect(r.spec).toEqual({ function: "x" });
+  });
+  it("레거시 spec-only(function)는 type=null·spec=원본", () => {
+    const bare = { function: "x^2" };
+    const r = unwrapSpecEnvelope(bare);
+    expect(r.type).toBeNull();
+    expect(r.spec).toBe(bare);
+  });
+  it("spec-only에 우연히 type 필드가 있어도 spec(객체) 없으면 봉투 아님", () => {
+    // bare spec은 최상위 `spec` 키를 갖지 않음 — 봉투 오판 방지.
+    const r = unwrapSpecEnvelope({ type: "x", function: "x" });
+    expect(r.type).toBeNull();
+  });
+});
+
+describe("specToStateForType — type-first dispatch(레거시 shape 폴백)", () => {
+  it("type=graph_2d → 2D 어댑터(rows)", () => {
+    const st = specToStateForType("interactive_graph_2d", { function: "x" });
+    expect(Array.isArray(st.rows)).toBe(true);
+  });
+  it("type=surface_3d → 3D 어댑터", () => {
+    const st = specToStateForType("interactive_surface_3d", { surface: "x+y" });
+    expect(st.mode3D).toBe(true);
+  });
+  it("type=simulation → sim 어댑터", () => {
+    const st = specToStateForType("simulation_probabilistic", { experiment: "동전" });
+    expect(st.simulationMode).toBe(true);
+  });
+  it("type=animation → null(웹 렌더 경로 없음)", () => {
+    expect(specToStateForType("animation_prerendered", { asset_id: "a" })).toBeNull();
+  });
+  it("drift 수정 ②: graph_2d spec에 experiment 키 혼입돼도 type 우선 → 2D(sim 오라우팅 방지)", () => {
+    const st = specToStateForType("interactive_graph_2d", { function: "x", experiment: "동전" });
+    expect(Array.isArray(st.rows)).toBe(true);
+    expect(st.simulationMode).toBeUndefined();
+  });
+  it("레거시 type=null: experiment 있으면 shape 폴백으로 sim", () => {
+    const st = specToStateForType(null, { experiment: "동전" });
+    expect(st.simulationMode).toBe(true);
+  });
+  it("레거시 type=null: surface 있으면 shape 폴백으로 3D", () => {
+    const st = specToStateForType(null, { surface: "x+y" });
+    expect(st.mode3D).toBe(true);
+  });
+  it("레거시 type=null: 그 외는 2D 폴백", () => {
+    const st = specToStateForType(null, { function: "x" });
+    expect(Array.isArray(st.rows)).toBe(true);
   });
 });

@@ -1,0 +1,318 @@
+{
+  "source_citation": "행동영역·스킬 택소노미: 와이매스 자체작성(성취기준 본문 미포함).",
+  "skills": [
+    {
+      "skill_id": "skill.polynomial-arithmetic",
+      "name_ko": "다항식 사칙연산",
+      "behavior_area": "COMPUTE",
+      "family": "다항식 연산",
+      "mastery_estimable": true,
+      "description": "다항식의 덧셈·뺄셈·곱셈을 규칙에 따라 수행한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.polynomial-division",
+      "name_ko": "다항식 나눗셈",
+      "behavior_area": "COMPUTE",
+      "family": "다항식 연산",
+      "mastery_estimable": true,
+      "description": "다항식을 다항식으로 나누어 몫과 나머지를 구한다.",
+      "prerequisite_skill_ids": [
+        "skill.polynomial-arithmetic"
+      ],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.fraction-arithmetic",
+      "name_ko": "분수 사칙연산",
+      "behavior_area": "COMPUTE",
+      "family": "수와 연산",
+      "mastery_estimable": true,
+      "description": "분수의 사칙연산을 통분·약분과 함께 수행한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.exponent-computation",
+      "name_ko": "지수·로그 계산",
+      "behavior_area": "COMPUTE",
+      "family": "수와 연산",
+      "mastery_estimable": true,
+      "description": "지수법칙·로그의 성질을 이용해 값을 계산한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.linear-equation-solving",
+      "name_ko": "일차방정식 풀이",
+      "behavior_area": "COMPUTE",
+      "family": "방정식 풀이",
+      "mastery_estimable": true,
+      "description": "일차방정식을 이항·정리해 해를 구한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.quadratic-equation-solving",
+      "name_ko": "이차방정식 풀이",
+      "behavior_area": "COMPUTE",
+      "family": "방정식 풀이",
+      "mastery_estimable": true,
+      "description": "인수분해·근의 공식으로 이차방정식의 해를 구한다.",
+      "prerequisite_skill_ids": [
+        "skill.linear-equation-solving",
+        "skill.factorization"
+      ],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.expansion",
+      "name_ko": "전개",
+      "behavior_area": "TRANSFORM",
+      "family": "인수분해와 전개",
+      "mastery_estimable": true,
+      "description": "곱셈 공식으로 식을 전개해 등가 형태로 변형한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.factorization",
+      "name_ko": "인수분해",
+      "behavior_area": "TRANSFORM",
+      "family": "인수분해와 전개",
+      "mastery_estimable": true,
+      "description": "식을 인수의 곱으로 변형한다.",
+      "prerequisite_skill_ids": [
+        "skill.expansion"
+      ],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.equation-rearrangement",
+      "name_ko": "식 이항·정리",
+      "behavior_area": "TRANSFORM",
+      "family": "식 정리",
+      "mastery_estimable": true,
+      "description": "등식·부등식을 이항·정리해 목표 형태로 변형한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.completing-square",
+      "name_ko": "완전제곱식 변형",
+      "behavior_area": "TRANSFORM",
+      "family": "식 정리",
+      "mastery_estimable": true,
+      "description": "이차식을 완전제곱식 꼴로 변형한다.",
+      "prerequisite_skill_ids": [
+        "skill.expansion"
+      ],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.rational-simplification",
+      "name_ko": "유리식 간단히 하기",
+      "behavior_area": "TRANSFORM",
+      "family": "유리·무리식",
+      "mastery_estimable": true,
+      "description": "유리식을 약분·통분해 간단한 등가 형태로 변형한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.radical-simplification",
+      "name_ko": "근호 정리",
+      "behavior_area": "TRANSFORM",
+      "family": "유리·무리식",
+      "mastery_estimable": true,
+      "description": "무리식의 근호를 유리화·간단히 정리한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.word-problem-modeling",
+      "name_ko": "문장제 식 세우기",
+      "behavior_area": "INTERPRET",
+      "family": "문장제 해석",
+      "mastery_estimable": true,
+      "description": "문장으로 주어진 상황을 미지수·식으로 정식화한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.condition-extraction",
+      "name_ko": "조건 추출·정식화",
+      "behavior_area": "INTERPRET",
+      "family": "조건 해석",
+      "mastery_estimable": true,
+      "description": "문제의 조건을 수학적 제약으로 추출·정식화한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.constraint-interpretation",
+      "name_ko": "제약 해석",
+      "behavior_area": "INTERPRET",
+      "family": "조건 해석",
+      "mastery_estimable": true,
+      "description": "정의역·범위 등 제약이 해에 주는 영향을 해석한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.graph-sketching",
+      "name_ko": "함수 그래프 개형",
+      "behavior_area": "REPRESENT",
+      "family": "그래프 표현",
+      "mastery_estimable": true,
+      "description": "함수의 특징을 이용해 그래프의 개형을 그린다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.graph-reading",
+      "name_ko": "그래프 읽기",
+      "behavior_area": "REPRESENT",
+      "family": "그래프 표현",
+      "mastery_estimable": true,
+      "description": "그래프에서 교점·증감·극값 등 정보를 읽는다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.figure-drawing",
+      "name_ko": "도형 작도·표현",
+      "behavior_area": "REPRESENT",
+      "family": "도형·다이어그램",
+      "mastery_estimable": true,
+      "description": "조건에 맞는 도형을 작도하거나 그림으로 표현한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.diagram-modeling",
+      "name_ko": "수형도·표 표현",
+      "behavior_area": "REPRESENT",
+      "family": "도형·다이어그램",
+      "mastery_estimable": true,
+      "description": "경우의 수·관계를 수형도·표로 표현한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.representation-switching",
+      "name_ko": "표현 전환",
+      "behavior_area": "REPRESENT",
+      "family": "표현 전환",
+      "mastery_estimable": true,
+      "description": "대수·기하·표·그래프 표현을 서로 전환한다.",
+      "prerequisite_skill_ids": [
+        "skill.graph-sketching",
+        "skill.figure-drawing"
+      ],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.deductive-reasoning",
+      "name_ko": "연역 논증",
+      "behavior_area": "REASON",
+      "family": "연역 추론",
+      "mastery_estimable": true,
+      "description": "정의·정리에서 연역적으로 결론을 이끈다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.proof-construction",
+      "name_ko": "증명 구성",
+      "behavior_area": "REASON",
+      "family": "연역 추론",
+      "mastery_estimable": true,
+      "description": "논리적 단계로 명제의 증명을 구성한다.",
+      "prerequisite_skill_ids": [
+        "skill.deductive-reasoning"
+      ],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.case-analysis",
+      "name_ko": "경우 분할·분석",
+      "behavior_area": "REASON",
+      "family": "경우 분석",
+      "mastery_estimable": true,
+      "description": "문제를 상호배타적 경우로 나누어 각각 분석한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.pattern-generalization",
+      "name_ko": "규칙 일반화",
+      "behavior_area": "REASON",
+      "family": "귀납·유추",
+      "mastery_estimable": true,
+      "description": "구체 사례에서 규칙을 찾아 일반식으로 일반화한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.solution-checking",
+      "name_ko": "해 검산",
+      "behavior_area": "VERIFY",
+      "family": "결과 검증",
+      "mastery_estimable": true,
+      "description": "구한 해를 원식에 대입해 타당성을 검산한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.counterexample-finding",
+      "name_ko": "반례 찾기",
+      "behavior_area": "VERIFY",
+      "family": "결과 검증",
+      "mastery_estimable": true,
+      "description": "명제가 거짓임을 보이는 반례를 찾는다.",
+      "prerequisite_skill_ids": [
+        "skill.deductive-reasoning"
+      ],
+      "standard_codes": [],
+      "notes": null
+    },
+    {
+      "skill_id": "skill.reasonableness-check",
+      "name_ko": "타당성·단위 점검",
+      "behavior_area": "VERIFY",
+      "family": "타당성 점검",
+      "mastery_estimable": true,
+      "description": "결과의 크기·단위·부호가 문맥에 타당한지 점검한다.",
+      "prerequisite_skill_ids": [],
+      "standard_codes": [],
+      "notes": null
+    }
+  ]
+}

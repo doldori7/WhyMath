@@ -5,9 +5,10 @@ upsert/search의 *실 라운드트립*은 통합테스트(`test_concept_embeddin
 게이트)로 미룬다. 여기서는 PG 없이 검증 가능한 것만 못 박는다(L4 `test_misconception_pgvector.py`
 패턴 미러):
 
-  ① 임베딩 텍스트 구성 — name_ko+metaphor+accepted만,
+  ① 임베딩 텍스트 구성 — name_ko+intuition+representations만,
      **description·formal_definition 미포함**(redaction)
-  ② graph.json 로딩 — UC concept_id 추출·안전 필드 표현·redaction 키 무시·빈 표현 제외
+  ② graph.json 로딩 — UC concept_id·name_ko·intuition·representations 전부 graph.json 노드에서
+     읽음(Phase 1·semantic=노드 단일 진실)·redaction 키 무시·빈 표현 제외
   ③ upsert SQL 구성(가짜 엔진 주입 — ON CONFLICT(concept_id) upsert·바인딩 관찰)
   ④ search SQL 구성 — provider/model 필터·<=> 코사인·LIMIT + similarity=1-distance 변환·top_k 경계
   ⑤ populate — Fake provider + 가짜 엔진으로 전 개념 upsert(횟수=개념 수)·dim 일치
@@ -32,7 +33,7 @@ from whymath_backend.l1.concept_graph.embedding import (
     load_concepts_from_graph_json,
     populate_concept_embeddings,
 )
-from whymath_backend.l1.embedding_primitives import text_hash
+from whymath_backend.l1.embedding_primitives import DEFAULT_EMBEDDING_SUBJECT, text_hash
 from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProvider
 
 
@@ -143,23 +144,23 @@ class TestConceptEmbeddingText:
     def test_joins_safe_fields_in_order(self) -> None:
         text = concept_embedding_text(
             name_ko="극한",
-            metaphor="가까이 다가가지만 닿지 않는 거리",
-            accepted_expressions="ε-δ 논법으로 수렴을 설명함",
+            intuition="가까이 다가가지만 닿지 않는 거리",
+            representations="ε-δ 논법으로 수렴을 설명함",
         )
         assert text == "극한. 가까이 다가가지만 닿지 않는 거리. ε-δ 논법으로 수렴을 설명함"
 
     def test_skips_empty_and_none_fields(self) -> None:
-        # metaphor 없음·accepted 공백 → name_ko만. None/공백 조각은 건너뛴다.
-        assert concept_embedding_text(name_ko="함수", metaphor=None, accepted_expressions="  ") == (
-            "함수"
+        # intuition 없음·representations 공백 → name_ko만. None/공백 조각은 건너뛴다.
+        assert (
+            concept_embedding_text(name_ko="함수", intuition=None, representations="  ") == "함수"
         )
 
     def test_name_ko_missing_uses_remaining(self) -> None:
         # name_ko가 비어도 나머지 안전 필드로 표현 합성(빈 표현 방지는 로더가 처리).
-        assert concept_embedding_text(name_ko=None, metaphor="은유만 있음") == "은유만 있음"
+        assert concept_embedding_text(name_ko=None, intuition="은유만 있음") == "은유만 있음"
 
     def test_all_empty_gives_empty_string(self) -> None:
-        assert concept_embedding_text(name_ko=None, metaphor=None, accepted_expressions=None) == ""
+        assert concept_embedding_text(name_ko=None, intuition=None, representations=None) == ""
 
     def test_signature_has_no_description_or_formal_definition(self) -> None:
         # redaction 구조적 차단: 함수 시그니처에 description·formal_definition 인자가 *없다*.
@@ -168,95 +169,95 @@ class TestConceptEmbeddingText:
         params = set(inspect.signature(concept_embedding_text).parameters)
         assert "description" not in params
         assert "formal_definition" not in params
-        # 허용 인자는 안전 필드 3종 + (keyword-only) 뿐.
-        assert params == {"name_ko", "metaphor", "accepted_expressions"}
+        # 허용 인자는 안전 semantic 필드 3종 뿐(name_ko·intuition·representations).
+        assert params == {"name_ko", "intuition", "representations"}
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# ② graph.json 로딩 — UC 키·안전 필드·redaction 키 무시·빈 표현 제외
+# ② graph.json 로딩 — UC 키·안전 semantic 필드(name_ko·intuition·representations)를 graph.json
+#    노드에서 직접 읽음·redaction 키 무시·빈 표현 제외 (Phase 1 — semantic=노드 단일 진실)
 # ──────────────────────────────────────────────────────────────────────────
 class TestLoadFromGraphJson:
-    def _write_graph(self, tmp_path: Path, concepts: list[dict[str, object]]) -> Path:
-        path = tmp_path / "graph.json"
-        path.write_text(
-            json.dumps({"concepts": concepts, "edges": []}, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        return path
+    def _write_graph(
+        self,
+        tmp_path: Path,
+        concepts: list[dict[str, object]],
+        *,
+        graph_extra: dict[str, object] | None = None,
+    ) -> Path:
+        graph_path = tmp_path / "graph.json"
+        payload: dict[str, object] = {"concepts": concepts, "edges": []}
+        if graph_extra:
+            payload.update(graph_extra)
+        graph_path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        return graph_path
 
-    def test_extracts_uc_and_safe_text(self, tmp_path: Path) -> None:
-        path = self._write_graph(
+    def test_extracts_uc_and_semantic(self, tmp_path: Path) -> None:
+        # name_ko·intuition·representations 모두 graph.json 노드에서 온다(노드 authoritative).
+        graph = self._write_graph(
             tmp_path,
             [
                 {
                     "concept_id": _UC_A,
                     "name_ko": "극한",
-                    "metaphor": "다가감",
-                    "accepted_expressions": "수렴 설명",
+                    "intuition": "다가감",
+                    "representations": "수렴 설명",
                 }
             ],
         )
-        loaded = load_concepts_from_graph_json(path)
+        loaded = load_concepts_from_graph_json(graph)
         assert loaded == [ConceptText(concept_id=_UC_A, text="극한. 다가감. 수렴 설명")]
 
     def test_ignores_description_and_formal_definition_if_present(self, tmp_path: Path) -> None:
-        # graph.json엔 본디 없지만, *오염되어 들어와도* 임베딩 표현에 유입되지 않음을 못 박는다.
-        path = self._write_graph(
+        # graph.json에 본문류가 (오염되어) 있어도 임베딩 표현에 유입되지 않음을 못 박는다.
+        graph = self._write_graph(
             tmp_path,
             [
                 {
                     "concept_id": _UC_A,
                     "name_ko": "극한",
-                    "metaphor": "다가감",
-                    "accepted_expressions": "수렴",
+                    "intuition": "다가감",
+                    "representations": "수렴",
                     "description": "교과서 본문 근접 서술(절대 임베딩 금지)",
                     "formal_definition": "∀ε>0 ∃δ>0 ... (절대 임베딩 금지)",
                 }
             ],
         )
-        loaded = load_concepts_from_graph_json(path)
+        loaded = load_concepts_from_graph_json(graph)
         assert len(loaded) == 1
         text = loaded[0].text
         assert text == "극한. 다가감. 수렴"
-        # 본문 토큰이 표현에 *전혀* 없다.
         assert "본문" not in text
         assert "∀ε" not in text
         assert "formal" not in text.lower()
 
     def test_skips_concepts_with_empty_safe_text(self, tmp_path: Path) -> None:
         # 안전 필드가 전부 빈 개념은 제외(빈 벡터 적재 방지).
-        path = self._write_graph(
+        graph = self._write_graph(
             tmp_path,
             [
-                {"concept_id": _UC_A, "name_ko": "유효", "metaphor": "은유"},
-                {"concept_id": _UC_B, "name_ko": "", "metaphor": None, "accepted_expressions": ""},
+                {"concept_id": _UC_A, "name_ko": "유효", "intuition": "은유"},
+                {"concept_id": _UC_B, "name_ko": "", "intuition": None, "representations": ""},
             ],
         )
-        loaded = load_concepts_from_graph_json(path)
+        loaded = load_concepts_from_graph_json(graph)
         assert [c.concept_id for c in loaded] == [_UC_A]
 
     def test_missing_concept_id_raises(self, tmp_path: Path) -> None:
         import pytest
 
-        path = self._write_graph(tmp_path, [{"name_ko": "키 없음"}])
+        graph = self._write_graph(tmp_path, [{"name_ko": "키 없음"}])
         with pytest.raises(ValueError, match="concept_id"):
-            load_concepts_from_graph_json(path)
+            load_concepts_from_graph_json(graph)
 
     def test_does_not_read_flashcards_or_intl(self, tmp_path: Path) -> None:
         # 그래프 외 자산(flashcards_raw·intl_raw)은 임베딩 대상이 아니다(읽지 않음).
-        path = tmp_path / "graph.json"
-        path.write_text(
-            json.dumps(
-                {
-                    "concepts": [{"concept_id": _UC_A, "name_ko": "개념"}],
-                    "flashcards_raw": [{"front": "무시"}],
-                    "intl_raw": [{"ccss": "무시"}],
-                },
-                ensure_ascii=False,
-            ),
-            encoding="utf-8",
+        graph = self._write_graph(
+            tmp_path,
+            [{"concept_id": _UC_A, "name_ko": "개념", "intuition": "은유"}],
+            graph_extra={"flashcards_raw": [{"front": "무시"}], "intl_raw": [{"ccss": "무시"}]},
         )
-        loaded = load_concepts_from_graph_json(path)
+        loaded = load_concepts_from_graph_json(graph)
         assert [c.concept_id for c in loaded] == [_UC_A]
 
 
@@ -278,6 +279,38 @@ class TestUpsertStatement:
         index.upsert(_UC_A, [0.5], source_text="표현")
         compiled = _compile(engine.executed[0])
         assert "concept_embedding.concept_id" in compiled or "(concept_id)" in compiled
+
+    def test_upsert_captures_default_subject(self) -> None:
+        # subject 축(namespace = 테이블 × subject·S1): 기본 생성 인덱스의 upsert가 subject를
+        # DEFAULT_EMBEDDING_SUBJECT('수학')로 바인딩하고, 충돌 갱신 SET에도 subject가 포함된다.
+        from sqlalchemy.dialects import postgresql
+
+        index, engine = _fake_index()
+        index.upsert(_UC_A, [0.5], source_text="표현")
+        stmt = engine.executed[0]
+        compiled = _compile(stmt)
+        assert "subject = excluded.subject" in compiled
+        params = dict(stmt.compile(dialect=postgresql.dialect()).params)  # type: ignore[attr-defined]
+        assert params["subject"] == DEFAULT_EMBEDDING_SUBJECT
+
+    def test_upsert_captures_custom_subject(self) -> None:
+        # 생성자 subject('물리')가 upsert 바인딩에 그대로 흐른다(교과 스코프 실효성).
+        from sqlalchemy.dialects import postgresql
+
+        engine = _FakeEngine()
+        index = ConceptEmbeddingIndex(
+            provider_name="fake",
+            model_name="fake-hash",
+            subject="물리",
+            engine=engine,  # type: ignore[arg-type]  # 가짜 엔진(구조만 충족)
+        )
+        index.upsert(_UC_A, [0.5], source_text="표현")
+        params = dict(
+            engine.executed[0].compile(dialect=postgresql.dialect()).params  # type: ignore[attr-defined]
+        )
+        assert params["subject"] == "물리"
+        # 텍스트 불변 계약: subject가 달라도 text_hash는 표현만의 해시(재임베딩 0).
+        assert params["text_hash"] == text_hash("표현")
 
 
 # ──────────────────────────────────────────────────────────────────────────

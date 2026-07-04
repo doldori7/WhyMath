@@ -16,7 +16,11 @@ from whymath_backend.l1.misconception.crosslink_loader import (
     MisconceptionCrosslinkStore,
     load_crosslinks,
 )
-from whymath_backend.l1.misconception.crosslink_resolve import MisconceptionCrosslinkResolver
+from whymath_backend.l1.misconception.crosslink_resolve import (
+    MisconceptionCrosslinkResolver,
+    ResolvedLink,
+    select_canonical,
+)
 from whymath_backend.schema.misconception_crosslink import MisconceptionCrosslink
 
 
@@ -62,10 +66,17 @@ class TestSchema:
 # fake sync 엔진 (store/resolver 주입)
 # ──────────────────────────────────────────────────────────────────────
 class _Row:
-    def __init__(self, kebab_id: str, mis_id: str, confidence: float | None) -> None:
+    def __init__(
+        self,
+        kebab_id: str,
+        mis_id: str,
+        confidence: float | None,
+        link_type: str = "직접매핑",
+    ) -> None:
         self.kebab_id = kebab_id
         self.mis_id = mis_id
         self.confidence = confidence
+        self.link_type = link_type
 
 
 class _FakeResult:
@@ -190,3 +201,110 @@ class TestResolver:
         engine = _FakeEngine(rows=[_Row("k", "M_null", None), _Row("k", "M_hi", 0.6)])
         resolver = MisconceptionCrosslinkResolver(engine=engine)  # type: ignore[arg-type]
         assert resolver.resolve("k") == ["M_hi", "M_null"]  # 값 있는 것 먼저, NULL 마지막
+
+
+# ──────────────────────────────────────────────────────────────────────
+# canonical 선택 정책 (select_canonical — 순수·DB 0)
+# ──────────────────────────────────────────────────────────────────────
+def _link(mis_id: str, link_type: str = "직접매핑", confidence: float | None = 0.9) -> ResolvedLink:
+    return ResolvedLink(mis_id=mis_id, link_type=link_type, confidence=confidence)
+
+
+class TestSelectCanonical:
+    def test_single_direct_max_is_ok(self) -> None:
+        """단독 최대 confidence 직접매핑 → canonical 선정(reason='ok')."""
+        sel = select_canonical(
+            [
+                _link("M1", confidence=0.9),
+                _link("M2", confidence=0.7),
+                _link("M3", "부분매핑", confidence=0.95),  # 비직접은 아무리 높아도 후보 아님
+            ]
+        )
+        assert sel.canonical_mis_id == "M1"
+        assert sel.ambiguous is False
+        assert sel.direct_count == 2  # confidence NOT NULL 직접매핑 수
+        assert sel.reason == "ok"
+
+    def test_tie_is_ambiguous_and_unselected(self) -> None:
+        """직접매핑 최고 confidence 동률 → 자동 임의 선택 금지(canonical 없음·ambiguous)."""
+        sel = select_canonical([_link("M1", confidence=0.8), _link("M2", confidence=0.8)])
+        assert sel.canonical_mis_id is None
+        assert sel.ambiguous is True
+        assert sel.direct_count == 2
+        assert sel.reason == "tie"
+
+    def test_only_non_direct_is_no_direct(self) -> None:
+        """부분매핑·개념겹침만 존재 → 직접 부재(reason='no_direct')."""
+        sel = select_canonical(
+            [_link("M1", "부분매핑", confidence=0.9), _link("M2", "개념겹침", confidence=0.9)]
+        )
+        assert sel.canonical_mis_id is None
+        assert sel.ambiguous is False
+        assert sel.direct_count == 0
+        assert sel.reason == "no_direct"
+
+    def test_null_confidence_direct_excluded(self) -> None:
+        """confidence NULL 직접매핑은 후보 제외 — NULL 무시하고 값 있는 단독 최대가 선정된다."""
+        sel = select_canonical([_link("M_null", confidence=None), _link("M1", confidence=0.7)])
+        assert sel.canonical_mis_id == "M1"
+        assert sel.direct_count == 1  # NULL은 후보 수에서도 제외
+        assert sel.reason == "ok"
+        # 전부 NULL이면 직접 부재와 동일 취급(선정 불가·정직).
+        all_null = select_canonical([_link("M_null", confidence=None)])
+        assert all_null.canonical_mis_id is None
+        assert all_null.reason == "no_direct"
+
+    def test_empty_links_is_no_links(self) -> None:
+        """링크 0 → reason='no_links'(빈 crosswalk 초기 상태를 정직히 구분)."""
+        sel = select_canonical([])
+        assert sel.canonical_mis_id is None
+        assert sel.ambiguous is False
+        assert sel.direct_count == 0
+        assert sel.reason == "no_links"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# link_type 포함 일반화 조회 + resolve_canonical (fake 엔진)
+# ──────────────────────────────────────────────────────────────────────
+class TestResolveLinks:
+    def test_resolve_links_includes_type_and_confidence(self) -> None:
+        engine = _FakeEngine(
+            rows=[_Row("k", "M2", 0.7, "부분매핑"), _Row("k", "M1", 0.9, "직접매핑")]
+        )
+        resolver = MisconceptionCrosslinkResolver(engine=engine)  # type: ignore[arg-type]
+        links = resolver.resolve_links("k")
+        # confidence 내림차순(기존 결정론 그대로) + link_type·confidence 동반.
+        assert links == [
+            ResolvedLink(mis_id="M1", link_type="직접매핑", confidence=0.9),
+            ResolvedLink(mis_id="M2", link_type="부분매핑", confidence=0.7),
+        ]
+
+    def test_resolve_links_missing_returns_empty(self) -> None:
+        resolver = MisconceptionCrosslinkResolver(engine=_FakeEngine(rows=[]))  # type: ignore[arg-type]
+        assert resolver.resolve_links("nope") == []
+
+    def test_resolve_links_many_groups_by_kebab(self) -> None:
+        engine = _FakeEngine(
+            rows=[
+                _Row("a", "M1", 0.9),
+                _Row("b", "M2", 0.8, "개념겹침"),
+                _Row("a", "M3", None),
+            ]
+        )
+        resolver = MisconceptionCrosslinkResolver(engine=engine)  # type: ignore[arg-type]
+        out = resolver.resolve_links_many(["a", "b"])
+        assert [link.mis_id for link in out["a"]] == ["M1", "M3"]  # NULL 마지막
+        assert out["b"][0].link_type == "개념겹침"
+
+    def test_resolve_canonical_applies_policy(self) -> None:
+        """resolve_canonical = 조회(resolve_links) + select_canonical 정책 합성."""
+        engine = _FakeEngine(
+            rows=[
+                _Row("k", "M1", 0.9, "직접매핑"),
+                _Row("k", "M2", 0.9, "부분매핑"),  # 비직접 동률은 tie 아님
+            ]
+        )
+        resolver = MisconceptionCrosslinkResolver(engine=engine)  # type: ignore[arg-type]
+        sel = resolver.resolve_canonical("k")
+        assert sel.canonical_mis_id == "M1"
+        assert sel.reason == "ok"

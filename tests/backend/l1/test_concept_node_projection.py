@@ -119,8 +119,7 @@ def _record(
         standard_codes=("10공수1-01-01",),
         ccss_code=None,
         difficulty_tier=3,
-        metaphor=None,
-        accepted_expressions=None,
+        behavior_skills=("skill.factorization",),
     )
 
 
@@ -148,8 +147,10 @@ class TestLoadFromGraphJson:
                     "standard_codes": ["10공수1-01-01", "10공수1-01-02"],
                     "ccss_code": "HSF.IF.B.4",
                     "difficulty_tier": 7,
-                    "metaphor": "다가감",
-                    "accepted_expressions": "수렴 설명",
+                    "behavior_skills": ["skill.factorization", "skill.quadratic-equation-solving"],
+                    # metaphor·accepted는 Stage B로 프로젝션에서 제거됨 — 입력에 있어도 *무시*된다.
+                    "metaphor": "무시돼야 함",
+                    "accepted_expressions": "무시돼야 함",
                 }
             ],
         )
@@ -163,8 +164,7 @@ class TestLoadFromGraphJson:
                 standard_codes=("10공수1-01-01", "10공수1-01-02"),
                 ccss_code="HSF.IF.B.4",
                 difficulty_tier=7,
-                metaphor="다가감",
-                accepted_expressions="수렴 설명",
+                behavior_skills=("skill.factorization", "skill.quadratic-equation-solving"),
             )
         ]
 
@@ -324,9 +324,17 @@ class TestUpsertStatement:
             "standard_codes",
             "ccss_code",
             "difficulty_tier",
-            "metaphor",
+            "behavior_skills",
         ):
             assert col in compiled
+
+    def test_upsert_omits_pedagogy_columns(self) -> None:
+        # Stage B: metaphor·accepted_expressions는 프로젝션에서 제거(pedagogy=concept_content).
+        store, engine = _fake_store()
+        store.upsert(_record())
+        compiled = _compile(engine.executed[0])
+        assert "metaphor" not in compiled
+        assert "accepted_expressions" not in compiled
 
 
 # ──────────────────────────────────────────────────────────────────────────

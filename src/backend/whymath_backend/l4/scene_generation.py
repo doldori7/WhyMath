@@ -16,8 +16,8 @@
     (RS5 환각 방어). LLM 호출은 1회(스타일 있을 때만)·로컬 우선(`generate_visualization_spec`).
   - 소크라테스 발화는 정답이 아니라 *정본 유도 질문*(`EXAMPLE_QUESTION`)·`hint_level=1`(가장 은근).
   - `misconception_probe`는 **학습자 활성 가설(`active_hypothesis_ids`) ∩ 오개념 카탈로그**에만
-    생성(RS2 거짓 낙인 차단) — 개념의 자유서술 `common_misconceptions`(정답/수정 텍스트)는
-    카탈로그 id가 아니라 *프로브 근거로 쓰지 않는다*(낙인·즉답 금지).
+    생성(RS2 거짓 낙인 차단). 개념의 자유서술 오개념(`common_misconceptions`)은 Phase 1b로 런타임
+    Concept에서 제거돼(컬럼 부재) 애초에 프로브 근거가 될 수 없다(낙인·즉답 구조적 차단).
 
 범위(S3): 골격 + spec 충전 + 게이트 통과 명세 반환. `concept_id`는 `Concept.code`(개념그래프 UC).
 개념그래프 *존재* 검증(DB)·다중 시각화·step_panel(SolutionPath Python 구현 후속)·L5 렌더러는 S4+.
@@ -45,8 +45,9 @@ from whymath_backend.l4.misconception.intervene import select_intervention
 from whymath_backend.l4.misconception.models import InterventionPattern, MisconceptionMatch
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.socratic.categories import EXAMPLE_QUESTION, SocraticCategory
+from whymath_backend.l4.visualization_policy import is_visualizable, prefers_static_visual
 from whymath_backend.schema.concept import Concept
-from whymath_backend.schema.enums import CognitiveType, VisualizationType
+from whymath_backend.schema.enums import CognitiveType, Visualizability, VisualizationType
 from whymath_backend.schema.visualization import Graph2dSpec
 
 # 인지 유형 → (소크라테스 카테고리, Polya 단계) 결정론 매핑 — 05a §5.1.
@@ -149,6 +150,7 @@ async def generate_learning_scene(
     cache: CacheBackend,
     trace: TraceSink,
     learner_context: SceneLearnerContext | None = None,
+    visualizability: Visualizability | None = None,
     answer_deferral_max_level: int = 4,
 ) -> LearningScene:
     """개념 노드 → 검증된 `LearningScene` 합성 명세(05a §5). 라우터 경유·결정론 골격.
@@ -178,8 +180,10 @@ async def generate_learning_scene(
     """
     elements: list[SceneElement] = []
 
-    # ① 시각화(+param_control) — 권장 양식이 있을 때만(없으면 강제 안 함·정직한 경계)
-    if concept.recommended_visual_styles:
+    # ① 시각화(+param_control) — 권장 양식이 있고, *시각화 가능성 4분류가 이를 허용*할 때만
+    #    (플레이북 Part 5 게이트·05b). 추상·불가 개념은 억지 그림 대신 소크라테스/단계로 폴백해
+    #    "전부 똑같이 그리려" 실패를 막는다(CLAUDE.md 교수학 정확성). 미태깅(None)은 기존 동작.
+    if concept.recommended_visual_styles and is_visualizable(visualizability):
         viz = await generate_visualization_spec(
             concept.name_ko,
             level,
@@ -191,8 +195,11 @@ async def generate_learning_scene(
         )
         viz_index = len(elements)
         elements.append(VisualizationElement(ref=viz))
-        # graph_2d이고 파라미터를 선언했으면 그 파라미터를 조작하는 슬라이더를 결정론적으로 덧붙임
-        if VisualizationType(viz.type) == VisualizationType.interactive_graph_2d:
+        # graph_2d이고 파라미터를 선언했으면 슬라이더를 덧붙이되, *직접(정적 충분)* 개념은 조작이
+        # 인지 조건이 아니므로 슬라이더를 생략한다(동적·미태깅은 허용) — 직접/동적 구분을 반영(05b).
+        if VisualizationType(
+            viz.type
+        ) == VisualizationType.interactive_graph_2d and not prefers_static_visual(visualizability):
             params = Graph2dSpec.model_validate(viz.spec).parameters or []
             declared = [p.name for p in params if p.name]
             if declared:

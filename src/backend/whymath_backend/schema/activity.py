@@ -353,5 +353,6 @@ class AttemptEvent(BaseModel):
     )
     event_data: dict[str, Any] | None = Field(
         default=None,
-        description="이벤트 부가 데이터(자유형 JSONB)",
+        description="이벤트 부가 데이터(JSONB). 생산 3종(검산결과·힌트제공·시각화조작)은 "
+        "event_data_contract 계약으로 모양 고정(invariant ⑫)·휴면 8종은 자유형.",
     )

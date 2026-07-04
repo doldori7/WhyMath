@@ -346,3 +346,50 @@ class TestCollections:
         assert "2022-33호" in SOURCE_CITATION
         assert "NCIC" in SOURCE_CITATION
         assert "ncic.go.kr" in SOURCE_CITATION
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 과학과 코드 수용성 동결 — S2 회귀 (subject_expansion_readiness.md §4.2)
+# ──────────────────────────────────────────────────────────────────────
+class TestScienceCodeAcceptance:
+    """과학과 성취기준 코드가 기존 정규식·모델을 *그대로* 통과함을 동결.
+
+    정규식·모델 개편 불필요가 실측 확인됨(2026-07-02) — 과목 한글 토큰
+    `[ㄱ-ㆎ가-힣Ⅰ-ⅿ]{1,6}`이 과목명을 가리지 않는다. 이 테스트는 수용성이
+    이후 변경으로 *후퇴*하지 않도록 회귀만 잠근다(정규식 변경 자체는 금지).
+    """
+
+    @pytest.mark.parametrize(
+        "code",
+        [
+            "[12물리01-01]",  # 고교 물리학 (A형식)
+            "[10통과1-01-01]",  # 고1 통합과학1 (B형식 — 과목 숫자 접미)
+            "[12화학02-03]",  # 고교 화학
+            "[9과01-05]",  # 중학교 과학
+            "[12물리Ⅱ03-02]",  # 로마숫자 과목 접미
+        ],
+    )
+    def test_science_codes_pass_regex(self, code: str) -> None:
+        """과학과 5종 코드가 STANDARD_CODE_PATTERN에 매치."""
+        assert STANDARD_CODE_PATTERN.match(code) is not None
+
+    def test_science_norm_id_passes_pattern(self) -> None:
+        """과학과 norm_id(`2022_12물리_01_01`)가 NORM_ID_PATTERN 통과 — 수학과 비충돌 축."""
+        assert NORM_ID_PATTERN.match("2022_12물리_01_01") is not None
+
+    def test_physics_standard_instance_created(self) -> None:
+        """물리학 성취기준으로 `AchievementStandard` 생성 성공 — 모델 개편 불필요 증명."""
+        std = AchievementStandard(
+            **_std_kwargs(
+                norm_id="2022_12물리_01_01",
+                code="[12물리01-01]",
+                grade_band="고등학교",
+                school_type="고등학교",
+                subject="물리학Ⅰ",
+                domain="역학과 에너지",
+                statement="물체의 운동을 시간·변위·속도·가속도로 기술한다.",
+            )  # type: ignore[arg-type]
+        )
+        assert std.subject == "물리학Ⅰ"
+        assert std.norm_id == "2022_12물리_01_01"
+        assert std.code == "[12물리01-01]"

@@ -1,16 +1,23 @@
 """v1.1 다국 커리큘럼 매트릭스 셀(CurriculumEntry) ORM 모델 (SQLAlchemy 2.0 영속 레이어).
 
-설계 정본: `schemas/v1.1/curriculum_entry.schema.yaml`(`fields:` 30필드·`composite_key:
-[concept_id, country_code]`·`storage: PostgreSQL`). 이 ORM은 `schema/curriculum_entry.py`
+설계 정본: `schemas/v1.1/curriculum_entry.schema.yaml`(`fields:` 31필드·`composite_key:
+[concept_id, country_code, subject]`·`storage: PostgreSQL`). 이 ORM은 `schema/curriculum_entry.py`
 (Pydantic, 검증·API)와 *별도*로 세운 영속 매핑이며 `from_schema`/`to_schema` 변환 헬퍼가
 둘을 잇는다(슬라이스 1 `problem.py` 동일 패턴).
 
 PK 판단(이 모듈의 핵심 결정):
-  YAML의 셀 의미키는 복합키 `(concept_id, country_code)`이지만 `entry_id`가 그 복합키와 1:1
-  대응하는 *표면 식별자*다(셋 다 schema required). ORM PK는 `entry_id` *단일 PK*로 두고
-  복합키는 `UniqueConstraint(concept_id, country_code)`로 강제한다 — 표면키가 단일 PK로
+  YAML의 셀 의미키는 복합키 `(concept_id, country_code, subject)`이지만 `entry_id`가 그
+  복합키와 1:1 대응하는 *표면 식별자*다. ORM PK는 `entry_id` *단일 PK*로 두고 복합키는
+  `UniqueConstraint(concept_id, country_code, subject)`로 강제한다 — 표면키가 단일 PK로
   자연스럽고(조인·FK 타깃이 단순해짐), 복합키 유일성은 UNIQUE로 보존된다. 복합키 유일성의
   cross-dataset 검증(개념 그래프 노드 실재 등)은 *파이프라인 책임*이다(schema docstring).
+
+subject 축 (과목 확장 S1 — subject_expansion_readiness.md §9):
+  `subject`는 **교과** 레벨 과목 축('수학'·'물리')이다 — 같은 개념·같은 나라에서 교과가 다르면
+  별개 셀(벡터: 수학·물리학)이라 UNIQUE가 3-튜플이다. NOT NULL + `server_default "수학"`으로
+  기존 행·기존 INSERT 경로를 깨지 않는다(마이그레이션 rev a4b5c6d7e8f9). ⚠️ NCIC
+  `AchievementStandard.subject`(**과목** 레벨 — '공통수학1')와 이름만 같고 축이 다르다
+  (schema docstring 교차 명기).
 
 타입 매핑(YAML → ORM, problem.py 선례 그대로):
   - `string`(entry_id, PK) → `sa.String`(UUID 아님 → server_default gen_random_uuid() 없음).
@@ -49,14 +56,14 @@ from whymath_backend.schema.enums import CurriculumLicense, RequiredDepth
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 핵심: CurriculumEntry (curriculum_entry.schema.yaml — 매트릭스 셀, 30필드)
+# 핵심: CurriculumEntry (curriculum_entry.schema.yaml — 매트릭스 셀, 31필드)
 # ──────────────────────────────────────────────────────────────────────────
 class CurriculumEntry(Base):
-    """다국 커리큘럼 매트릭스 셀 영속 ORM — YAML `CurriculumEntry`(30필드).
+    """다국 커리큘럼 매트릭스 셀 영속 ORM — YAML `CurriculumEntry`(31필드).
 
-    PK는 `entry_id`(표면키, 단일 PK), 복합 의미키 `(concept_id, country_code)`는
-    `UniqueConstraint`로 강제한다(모듈 docstring PK 판단). `concept_id`·`country_code`·
-    `national_standard_codes` 등은 cross-dataset 느슨참조라 FK가 아니다.
+    PK는 `entry_id`(표면키, 단일 PK), 복합 의미키 `(concept_id, country_code, subject)`는
+    `UniqueConstraint`로 강제한다(모듈 docstring PK 판단·subject 축). `concept_id`·
+    `country_code`·`national_standard_codes` 등은 cross-dataset 느슨참조라 FK가 아니다.
 
     불변식(is_present=true면 source_url 필수·IMO 셀 confidence≤0.7)은 `schema.CurriculumEntry`의
     `@model_validator`가 강제한다 — ORM에는 컬럼만 두고 DB CHECK를 만들지 않는다(problem.py 방침).
@@ -64,12 +71,15 @@ class CurriculumEntry(Base):
 
     __tablename__ = "curriculum_entry"
 
-    # ===== 그룹 1: 식별 — 표면키 entry_id(PK) + 복합 의미키 (concept_id, country_code) =====
+    # ===== 그룹 1: 식별 — 표면키 entry_id(PK) + 복합 의미키 (concept_id, country_code, subject) ==
     # entry_id는 str(UUID 아님)이라 gen_random_uuid() server_default 없음 — schema가 채운다.
     entry_id: Mapped[str] = mapped_column(sa.String, primary_key=True)
     # cross-dataset 느슨참조 → FK 아님(개념 그래프·국가 코드 키 공간, 파이프라인 책임).
     concept_id: Mapped[str] = mapped_column(sa.String, nullable=False)
     country_code: Mapped[str] = mapped_column(sa.String, nullable=False)
+    # 교과 레벨 과목 축(S1) — NOT NULL + server_default '수학'(기존 행·INSERT 무손상 백필).
+    # NCIC AchievementStandard.subject(과목 레벨 '공통수학1')와 granularity 다름(모듈 docstring).
+    subject: Mapped[str] = mapped_column(sa.String, nullable=False, server_default="수학")
 
     # ===== 그룹 2: 출처 =====
     source_name: Mapped[str] = mapped_column(sa.String, nullable=False)
@@ -125,8 +135,8 @@ class CurriculumEntry(Base):
     created_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
 
-    # ── 제약 (복합 의미키 유일성 — 모듈 docstring PK 판단) ──
-    __table_args__ = (sa.UniqueConstraint("concept_id", "country_code"),)
+    # ── 제약 (복합 의미키 유일성 3-튜플 — 모듈 docstring PK 판단·subject 축) ──
+    __table_args__ = (sa.UniqueConstraint("concept_id", "country_code", "subject"),)
 
     # ── 변환 헬퍼 (schema↔db seam, problem.py 패턴) ──────────────────────
     @classmethod

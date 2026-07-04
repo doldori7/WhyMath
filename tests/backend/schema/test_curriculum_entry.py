@@ -1,7 +1,7 @@
 """Schema v1.1 CurriculumEntry 모델 단위 테스트 — 생성·extra forbid·범위·required·enum·
 validator 2종 분기.
 
-설계 정본: `schemas/v1.1/curriculum_entry.schema.yaml`(30필드·validation_invariants·license).
+설계 정본: `schemas/v1.1/curriculum_entry.schema.yaml`(31필드·validation_invariants·license).
 v1.0 도메인 밖의 v1.1 이식 자산(다국 커리큘럼 매트릭스 셀). 신규 ENUM 2종(RequiredDepth 4종·
 CurriculumLicense 5종, 하이픈 값)을 함께 검증한다.
 
@@ -10,7 +10,8 @@ invariant — concept_id 실재·NCIC 코드 실재·복합키 유일성·Phase1
 책임이라 모델·테스트 대상 아님). 따라서 검증 대상은: ① 9개 required 누락 거부, ② confidence
 범위([0,1], Field), ③ validator A(is_present=true → source_url 비어있지 않음), ④ validator B
 (country_code='IMO' → confidence ≤ 0.7), ⑤ extra forbid, ⑥ use_enum_values(license_id가
-하이픈 값 'KR-NCIC'로 직렬화), ⑦ 전 30필드 roundtrip(KR·US·IMO 셀).
+하이픈 값 'KR-NCIC'로 직렬화), ⑦ 전 필드 roundtrip(KR·US·IMO 셀), ⑧ subject 축(S1 —
+default '수학'·개방 str·비공백 min_length=1·직렬화 포함).
 """
 
 from __future__ import annotations
@@ -391,6 +392,40 @@ class TestImoConfidenceCap:
         """country_code='KR' + confidence=0.9 → 통과(IMO 상한은 IMO 셀에만 적용)."""
         e = CurriculumEntry(**_minimal_kwargs(confidence=0.9))  # type: ignore[arg-type]
         assert e.confidence == pytest.approx(0.9)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# subject 축 (과목 확장 S1) — default '수학'·개방 str·비공백·직렬화 포함
+# ──────────────────────────────────────────────────────────────────────
+class TestSubjectAxis:
+    def test_subject_defaults_to_math(self) -> None:
+        """subject 미지정 → default '수학'(기존 호출부·payload 무파손 — S1)."""
+        e = CurriculumEntry(**_minimal_kwargs())  # type: ignore[arg-type]
+        assert e.subject == "수학"
+
+    def test_subject_open_str_accepts_physics(self) -> None:
+        """subject는 개방 str(enum 아님) — '물리' 셀 표현 가능(같은 개념·같은 나라·다른 교과).
+
+        Phase 1 산출물 '수학' 외 금지는 *파이프라인* 범위 가드이지 모델 강제가 아니다
+        (country_code Phase 1 KR/US/IMO 가드와 동형 — 모듈 docstring cross-dataset 메모).
+        """
+        e = CurriculumEntry(**_minimal_kwargs(subject="물리"))  # type: ignore[arg-type]
+        assert e.subject == "물리"
+
+    def test_subject_empty_rejected(self) -> None:
+        """subject='' → 거부(min_length=1 — 비공백 invariant는 모델 강제)."""
+        with pytest.raises(ValidationError):
+            CurriculumEntry(**_minimal_kwargs(subject=""))  # type: ignore[arg-type]
+
+    def test_subject_whitespace_only_rejected(self) -> None:
+        """subject='   ' → 거부(str_strip_whitespace로 ''가 된 뒤 min_length=1)."""
+        with pytest.raises(ValidationError):
+            CurriculumEntry(**_minimal_kwargs(subject="   "))  # type: ignore[arg-type]
+
+    def test_subject_included_in_model_dump(self) -> None:
+        """model_dump에 subject 포함(직렬화 — ORM from_schema 경유 영속까지 흐르는 값)."""
+        e = CurriculumEntry(**_minimal_kwargs())  # type: ignore[arg-type]
+        assert e.model_dump()["subject"] == "수학"
 
 
 # ──────────────────────────────────────────────────────────────────────

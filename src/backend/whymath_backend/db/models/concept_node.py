@@ -33,8 +33,11 @@ json`의 redacted: `concepts.description`·`concepts.formal_definition`) ② 적
   - `review_status`(reviewed/pending): 검수 게이팅 플래그(메타 상태값).
   - `standard_codes`(NCIC 코드[])·`ccss_code`·`difficulty_tier`: 코드·층위(코드는 사실정보·
     공공이며 *본문 statement는 아님* — `Concept` 모델 §법적 주석과 동일).
-  - `metaphor`·`accepted_expressions`: 자체 작성 교수 주석(슬3에서 *임베딩 입력*으로도 쓴 안전
-    필드 — 표시 가능).
+
+pedagogy 이관(2026-07-02 Part 2 §3 Stage B): `metaphor`·`accepted_expressions` 컬럼을 *제거*했다.
+두 필드는 pedagogy 정보라 identity/메타 프로젝션이 아니라 pedagogy 계층 `concept_content`(code 키)가
+단일 진실이다(Concept Purity). 이 컬럼들은 reader가 없던 write-only였고(`fetch_node_meta`는
+name_ko·domain·review_status만 조회), 임베딩은 이제 ConceptContent에서 소싱한다. Alembic drop.
 
 review_status는 PG enum 타입을 새로 만들지 않고 **plain `sa.Text`**로 둔다(`concept_embedding`이
 enum 타입 없이 plain text만 쓴 것과 동형). graph.json은 `use_enum_values=True`로 이미 문자열
@@ -44,9 +47,10 @@ data-pipeline `ReviewStatus`에 결합하기보다, 경량 프로젝션엔 문�
 ────────────────────────────────────────────────────────────────────────────
 키 일관성 (이중→삼중 store 단일 UC 키)
 ────────────────────────────────────────────────────────────────────────────
-PK `concept_id`(TEXT·UC)는 **슬2 Neo4j 노드 키·슬3 `concept_embedding.concept_id`와 동일 키
-공간**(`UC.<domain>.<topic>.<slug>`). 이로써 한 UC 키가 *세 투영*(Neo4j 그래프·pgvector 벡터·
-PG 메타)을 잇는다. upsert가 PK 충돌로 멱등(`ON CONFLICT(concept_id) DO UPDATE`) — 같은 개념
+PK `concept_id`(TEXT·opaque)는 **슬2 Neo4j 노드 키·슬3 `concept_embedding.concept_id`와 동일 키
+공간**(재-ID(P2d) 후 `math.<area>.<slug>`·형식 불가지 opaque str). 이로써 한 키가 *세 투영*
+(Neo4j 그래프·pgvector 벡터·PG 메타)을 잇는다. upsert가 PK 충돌로 멱등(`ON CONFLICT(concept_id)
+DO UPDATE`) — 같은 개념
 재적재가 행을 갱신한다. (주의: backend PG `concept` 테이블[UUID PK+code]과는 *여전히 별개*다 —
 이 테이블은 UC 공간 전용 프로젝션이고, 그 둘을 잇지 않는다.)
 
@@ -81,13 +85,14 @@ class ConceptNode(Base):
     # PK = Universal Concept ID(슬1 idmap 발급·슬2 Neo4j 노드 키·슬3 concept_embedding과 동일).
     # upsert 충돌 키 — 같은 UC 재적재 시 행 갱신(멱등).
     concept_id: Mapped[str] = mapped_column(sa.Text, primary_key=True)
-    # 한국어 명칭(graph.json name_ko·필수). 검색 enrichment의 핵심 표시 필드.
+    # 한국어 명칭(재-ID(P2d)로 노드에서 분리·`locales/ko.json`에서 concept_id 조인 재소싱·필수).
+    # 검색 enrichment의 핵심 표시 필드. 로더가 locale 조인으로 충전하므로 값·계약 불변.
     name_ko: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 영역명(graph.json domain=category, 예 '[고]미적분'·필수). 표시·필터 보조.
     domain: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 검수 게이팅 플래그 — 'reviewed'/'pending' 문자열(graph.json review_status·use_enum_values).
     # PG native enum을 새로 만들지 않고 plain text(concept_embedding 동형·docstring 참조).
-    # 게이팅(reviewed_only)이 이 값을 리터럴 'reviewed'와 비교한다. NOT NULL(graph.json 항상 보유).
+    # 게이팅(reviewed_only)이 이 값을 리터럴 'reviewed'와 비교한다. NOT NULL(노드 필수 필드).
     review_status: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 매핑된 NCIC 성취기준 *코드* 목록(graph.json standard_codes·기본 빈 배열). 코드는 사실정보·
     # 공공이며 *본문 statement는 아님*(redaction 무관). nullable=False·server_default 빈 배열.
@@ -98,10 +103,13 @@ class ConceptNode(Base):
     ccss_code: Mapped[str | None] = mapped_column(sa.Text)
     # 난이도층 [0, 24](graph.json difficulty_tier·nullable). 0=가장 기초.
     difficulty_tier: Mapped[int | None] = mapped_column(sa.Integer)
-    # 개념을 직관화하는 은유(graph.json metaphor·nullable·자체 작성 안전 필드·표시 가능).
-    metaphor: Mapped[str | None] = mapped_column(sa.Text)
-    # '이해했다'고 볼 허용표현(graph.json accepted_expressions·nullable·자체 작성·표시 가능).
-    accepted_expressions: Mapped[str | None] = mapped_column(sa.Text)
+    # concept→skill 참조 키 목록(graph.json behavior_skills·Phase 2b-1·기본 빈 배열). skill_id
+    # (`skill.<slug>`) 참조·본문 아님(standard_codes 동형 안전 배열). (Phase 2b-2) skill mastery
+    # 런타임 해소의 조인 백킹 — junction 테이블 아님(참조 키 배열·신규 엣지 타입 0·anti-explosion).
+    behavior_skills: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
+    )
+    # (metaphor·accepted_expressions 컬럼은 Part 2 §3 Stage B로 제거 — pedagogy=concept_content.)
     # 마지막 upsert 시각 — 운영·신선도. server_default now()(upsert 시 코드가 갱신·슬3 동형).
     updated_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False

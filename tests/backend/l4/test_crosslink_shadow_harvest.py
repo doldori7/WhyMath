@@ -28,6 +28,9 @@ def _obs(
     kebab_id: str = "k-1",
     kebab_valid: bool = True,
     mis_ids: list[str] | None = None,
+    canonical_mis_id: str | None = None,
+    canonical_ambiguous: bool = False,
+    direct_count: int = 0,
 ) -> MisconceptionCrosslinkShadowObservation:
     ids = mis_ids if mis_ids is not None else []
     return MisconceptionCrosslinkShadowObservation(
@@ -36,6 +39,9 @@ def _obs(
         mis_ids=ids,
         mis_id_count=len(ids),
         mapped=len(ids) > 0,
+        canonical_mis_id=canonical_mis_id,
+        canonical_ambiguous=canonical_ambiguous,
+        direct_count=direct_count,
     )
 
 
@@ -97,6 +103,47 @@ class TestSummarize:
         assert s.distinct_mapped == 1  # k-1만(합집합)
         assert s.distinct_coverage_ratio == pytest.approx(0.5)
         assert s.unmapped_kebab_ids == ["k-2"]  # k-1은 한 번이라도 매핑돼 제외
+
+    def test_canonical_distinct_coverage_and_ratio(self) -> None:
+        """canonical 기준 커버리지 — 원시 링크(distinct_mapped)와 별도 축으로 접힌다."""
+        s = summarize(
+            [
+                # k-1: 1:N 원시 링크지만 canonical 단독 선정 — canonical 커버리지에 든다.
+                _obs(kebab_id="k-1", mis_ids=["M1", "M2"], canonical_mis_id="M1", direct_count=2),
+                # k-2: 원시 링크는 있으나 tie로 canonical 미선정 — canonical 분자에서 빠진다.
+                _obs(
+                    kebab_id="k-2",
+                    mis_ids=["M3", "M4"],
+                    canonical_ambiguous=True,
+                    direct_count=2,
+                ),
+                # k-3: 미매핑.
+                _obs(kebab_id="k-3"),
+            ]
+        )
+        assert s.distinct_kebab_ids == 3
+        assert s.distinct_mapped == 2  # 원시 링크 축(기존 필드 보존)
+        assert s.distinct_canonical == 1  # canonical 축(k-1만)
+        assert s.distinct_canonical_ratio == pytest.approx(1 / 3)
+        assert s.canonical_ambiguous_kebab_ids == ["k-2"]
+
+    def test_mixed_old_and_new_records_aggregate(self) -> None:
+        """신구 레코드 혼재 — 구 JSONL(신필드 부재)은 기본값으로 접혀 canonical 합집합 OR 유지."""
+        legacy_line = (
+            '{"kebab_id": "k-1", "kebab_valid": true, "mis_ids": ["M1"], '
+            '"mis_id_count": 1, "mapped": true, "observed_at": "2026-06-01T00:00:00Z"}'
+        )
+        new_line = _obs(
+            kebab_id="k-1", mis_ids=["M1"], canonical_mis_id="M1", direct_count=1
+        ).model_dump_json()
+        obs = load_observations(legacy_line + "\n" + new_line + "\n")
+        s = summarize(obs)
+        assert s.total == 2
+        assert s.distinct_kebab_ids == 1
+        # 구 레코드는 canonical 기본값(None)이지만 신 레코드가 한 번이라도 선정 → 합집합 OR.
+        assert s.distinct_canonical == 1
+        assert s.distinct_canonical_ratio == pytest.approx(1.0)
+        assert s.canonical_ambiguous_kebab_ids == []
 
     def test_ambiguous_and_unmapped_lists_sorted(self) -> None:
         s = summarize(

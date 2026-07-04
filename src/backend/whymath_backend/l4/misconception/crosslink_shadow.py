@@ -25,12 +25,34 @@ from datetime import datetime, timezone
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from whymath_backend.l1.misconception.crosslink_resolve import MisconceptionCrosslinkResolver
+from whymath_backend.l1.misconception.crosslink_resolve import (
+    CanonicalSelection,
+    MisconceptionCrosslinkResolver,
+)
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 
 logger = logging.getLogger("whymath.l4.misconception.crosslink_shadow")  # shadow.py 네이밍 동형
 # 구조화 레코드 JSON 한 줄(harvest 입력) — 평문 로그와 분리된 자식 로거(shadow.record 미러).
 record_logger = logging.getLogger("whymath.l4.misconception.crosslink_shadow.record")
+
+# canonical 미해석 시 기본값(관측은 계속 적재 — never-break·정직 미선정과 동일 형태).
+_CANONICAL_DEFAULT = CanonicalSelection(
+    canonical_mis_id=None, ambiguous=False, direct_count=0, reason="no_links"
+)
+
+
+def _resolve_canonical_safe(
+    resolver: MisconceptionCrosslinkResolver, kebab_id: str
+) -> CanonicalSelection:
+    """canonical 선정을 *실패 허용*으로 해석 — 실패(예: 구식 fake resolver·DB 오류)면 기본값.
+
+    canonical은 shadow 관측의 *부가* 지표라, 해석 실패가 원시 매핑(mis_ids) 관측 적재를 막으면
+    안 된다(never-break 계열 — 관측 자체도 잃지 않는다). 기본값은 "미선정"과 동일 형태(정직)다.
+    """
+    try:
+        return resolver.resolve_canonical(kebab_id)
+    except Exception:  # noqa: BLE001 — canonical 실패는 관측 적재를 안 깬다(부가 지표)
+        return _CANONICAL_DEFAULT
 
 
 class MisconceptionCrosslinkShadowObservation(BaseModel):
@@ -60,6 +82,17 @@ class MisconceptionCrosslinkShadowObservation(BaseModel):
     mapped: bool
     """매핑이 1개 이상 존재하는지(`mis_id_count > 0`) — coverage 집계용 플래그."""
 
+    # ── canonical 선정(M2·additive 기본값 — 구 JSONL은 필드 부재 → 기본값 파싱·하위호환) ──
+    canonical_mis_id: str | None = None
+    """`select_canonical` 정책이 선정한 canonical M-id — 단독 최대 confidence 직접매핑일 때만.
+    None이면 미선정(no_links/no_direct/tie 또는 resolve_canonical 실패 — 정직 미선정)."""
+
+    canonical_ambiguous: bool = False
+    """직접매핑 최고 confidence 동률(tie) — canonical 플립 전 사람 정책 확정 필요 신호."""
+
+    direct_count: int = 0
+    """canonical 후보 자격 링크 수(confidence NOT NULL 직접매핑) — tie·큐레이션 진단용."""
+
     observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -84,12 +117,18 @@ def observe_crosslink_shadow(
     try:
         resolver = resolver or MisconceptionCrosslinkResolver()
         mis_ids = resolver.resolve(misconception_id, min_confidence=min_confidence)
+        # canonical 선정(부가 지표) — 실패해도 원시 관측 적재 불변(_resolve_canonical_safe).
+        canonical = _resolve_canonical_safe(resolver, misconception_id)
         logger.info(
-            "crosslink shadow(비노출) — kebab=%s valid=%s mis_ids=%s (count=%d)",
+            "crosslink shadow(비노출) — kebab=%s valid=%s mis_ids=%s (count=%d) canonical=%s "
+            "(ambiguous=%s direct=%d)",
             misconception_id,
             misconception_id in CATALOG_BY_ID,
             mis_ids,
             len(mis_ids),
+            canonical.canonical_mis_id,
+            canonical.ambiguous,
+            canonical.direct_count,
         )
         record_logger.info(
             MisconceptionCrosslinkShadowObservation(
@@ -98,6 +137,9 @@ def observe_crosslink_shadow(
                 mis_ids=mis_ids,
                 mis_id_count=len(mis_ids),
                 mapped=len(mis_ids) > 0,
+                canonical_mis_id=canonical.canonical_mis_id,
+                canonical_ambiguous=canonical.ambiguous,
+                direct_count=canonical.direct_count,
             ).model_dump_json()
         )
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(비차단 방어선·shadow.py:107 미러)

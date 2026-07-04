@@ -6,12 +6,12 @@ top 후보·임계 필터·top_k 캡·link_type 밴드·결정론을 검증한�
 
 from __future__ import annotations
 
-from whymath_backend.l1.misconception.crosslink_candidates import (
+from whymath_backend.l1.embedding_provider import FakeEmbeddingProvider
+from whymath_backend.l4.misconception.crosslink_candidates import (
     CrosslinkCandidate,
     propose_crosslink_candidates,
 )
 from whymath_backend.l4.misconception.models import Misconception
-from whymath_backend.l4.misconception.semantic.provider import FakeEmbeddingProvider
 from whymath_backend.schema.misconception_catalog import MisconceptionCatalog
 
 

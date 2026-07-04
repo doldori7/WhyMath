@@ -112,7 +112,6 @@ def _seed_concept(*, code: str = _CODE, source_id: str = _SRC_ID) -> None:
                 aliases=[],
                 level=ConceptLevel.세부개념,
                 intrinsic_difficulty=None,
-                common_misconceptions=[],
             )
         ],
         settings=Settings(),
@@ -513,7 +512,9 @@ class TestRealCorpusLoad:
 
         from sqlalchemy import text
 
-        corpus = Path("data/corpus/standards_v1/standards.json")
+        # 레포 루트 앵커(parents[3]) — CWD 상대 경로는 CI(cwd=src/backend)에서 항상 미존재 skip.
+        repo_root = Path(__file__).resolve().parents[3]
+        corpus = repo_root / "data" / "corpus" / "standards_v1" / "standards.json"
         if not corpus.exists():
             pytest.skip("실 코퍼스 미존재(data/corpus/standards_v1/standards.json)")
         payload = json.loads(corpus.read_text(encoding="utf-8"))
@@ -556,7 +557,9 @@ class TestUniversityCorpusLoad:
 
         from sqlalchemy import text
 
-        corpus = Path("data/corpus/standards_university_v1/standards.json")
+        # 레포 루트 앵커(parents[3]) — CWD 상대 경로는 CI(cwd=src/backend)에서 항상 미존재 skip.
+        repo_root = Path(__file__).resolve().parents[3]
+        corpus = repo_root / "data" / "corpus" / "standards_university_v1" / "standards.json"
         if not corpus.exists():
             pytest.skip("대학 코퍼스 미존재(data/corpus/standards_university_v1/standards.json)")
         payload = json.loads(corpus.read_text(encoding="utf-8"))

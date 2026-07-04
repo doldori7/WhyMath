@@ -123,16 +123,18 @@ class TestCurriculumEntryRoundtrip:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     row = conn.execute(
                         text(
-                            "SELECT entry_id, concept_id, country_code, domain_label, grade_band, "
-                            "introduced_grade, national_standard_codes, curriculum_revision, "
-                            "license_id, is_present, confidence, source_url, required_depth, "
-                            "created_at, updated_at FROM curriculum_entry WHERE entry_id = :e"
+                            "SELECT entry_id, concept_id, country_code, subject, domain_label, "
+                            "grade_band, introduced_grade, national_standard_codes, "
+                            "curriculum_revision, license_id, is_present, confidence, source_url, "
+                            "required_depth, created_at, updated_at "
+                            "FROM curriculum_entry WHERE entry_id = :e"
                         ),
                         {"e": _ENTRY_ID},
                     ).one()
                 assert row.entry_id == _ENTRY_ID
                 assert row.concept_id == _NID
                 assert row.country_code == "KR"
+                assert row.subject == "수학"  # S1 — KR 적재 셀은 전부 수학(교과 레벨 축)
                 assert row.domain_label == "적분"
                 assert row.grade_band == "고등학교"
                 assert row.introduced_grade == 10
@@ -142,9 +144,33 @@ class TestCurriculumEntryRoundtrip:
                 assert row.is_present is True
                 assert float(row.confidence) == pytest.approx(0.9)
                 assert row.source_url == "https://www.ncic.go.kr"
-                assert row.required_depth is None  # 코퍼스에 깊이 신호 없음(날조 금지)
+                assert row.required_depth == "mastery"  # 고등학교 → grade_band 학년진행 휴리스틱
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
+        finally:
+            _cleanup([_ENTRY_ID])
+
+    def test_depth_resolver_reads_heuristic_depth(self, tmp_path: Path) -> None:
+        """전 체인 잠금 — graph.json grade_band → 로더 휴리스틱 → curriculum_entry → resolver 복원.
+
+        #380 depth 휴리스틱(고등학교→mastery)이 적재된 뒤 `CurriculumDepthResolver`가 그 깊이를
+        *읽어* 돌려줌을 실 PG로 입증한다(자동 커리큘럼 정렬 깊이 축이 코퍼스 신호부터 read-time
+        해석까지 살아있음). 로더 통합(DB row 단언)·resolver 단위(fake 엔진·수동 depth)가 각자
+        덮던 두 끝을 이 테스트가 잇는다. api 주입(`_inject_curriculum_required_depth`)이 이
+        resolver를 `to_thread`로 호출하므로 그 위 계층까지 같은 신호가 흐른다.
+        """
+        _skip_if_unreachable()
+        from whymath_backend.l1.curriculum.curriculum_resolve import CurriculumDepthResolver
+        from whymath_backend.schema.enums import RequiredDepth
+
+        try:
+            entries = load_kr_curriculum_entries_from_graph_json(_graph(tmp_path), now=_NOW)
+            populate_kr_curriculum_entries(entries, settings=Settings())
+            resolver = CurriculumDepthResolver()
+            # 고등학교 → mastery(학년진행 휴리스틱)를 resolver가 read-back한다.
+            assert resolver.resolve(_NID, country_code="KR") is RequiredDepth.mastery
+            # 미적재 개념은 None(graceful — 깊이 신호 없음).
+            assert resolver.resolve("HIGH-CALC-UNMAPPED-941", country_code="KR") is None
         finally:
             _cleanup([_ENTRY_ID])
 

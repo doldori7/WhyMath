@@ -9,7 +9,8 @@ PG 미도달 시 graceful skip(슬117 미러).
 
 검증:
   ① 적재 → `concept` row 존재·`code`=UC·name_ko·level=세부개념·유도 필드 반영
-  ② **redaction** — description·formal_definition·intuitive_explanation이 실제 NULL
+  ② **redaction** — description·formal_definition·intuitive_explanation·common_misconceptions
+     컬럼이 테이블에서 제거됨(Phase 1b drop·information_schema 부재 확인)
   ③ 멱등 — 같은 UC 재적재 시 행 1개·값 갱신·**UUID PK 보존**(브리지 안정성)
   ④ **L2 mastery 연결 가능성** — 적재된 concept UUID로 `concept_mastery_history`가 INSERT됨
      (UUID concept ↔ UC 브리지가 런타임 숙달 키로 동작 — get_current_mastery 폴백/조회 경로)
@@ -103,7 +104,6 @@ def _record(
     source_id: str | None = "N1",
     aliases: list[str] | None = None,
     intrinsic_difficulty: float | None = 2.17,
-    misconceptions: list[dict[str, str]] | None = None,
 ) -> BackendConceptRecord:
     return BackendConceptRecord(
         code=code,
@@ -112,7 +112,6 @@ def _record(
         aliases=(aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]),
         level=ConceptLevel.세부개념,
         intrinsic_difficulty=intrinsic_difficulty,
-        common_misconceptions=list(misconceptions or []),
     )
 
 
@@ -133,7 +132,6 @@ class TestBackendConceptRoundtrip:
                         source_id="N1",
                         aliases=["UC.calc.alimit.epsilon-delta", "N1"],
                         intrinsic_difficulty=2.17,
-                        misconceptions=[{"misconception": "극한을 대입값으로 혼동"}],
                     )
                 ],
                 settings=Settings(),
@@ -146,12 +144,30 @@ class TestBackendConceptRoundtrip:
                     row = conn.execute(
                         text(
                             "SELECT concept_id, code, name_ko, source_id, aliases, level, "
-                            "intrinsic_difficulty, common_misconceptions, "
-                            "description, formal_definition, intuitive_explanation "
+                            "intrinsic_difficulty "
                             "FROM concept WHERE code = :c"
                         ),
                         {"c": _NID_A},
                     ).one()
+                    # ② redaction: 본문 3컬럼·오개념 컬럼이 테이블에 *부재*(Phase 1b drop).
+                    absent = (
+                        conn.execute(
+                            text(
+                                "SELECT column_name FROM information_schema.columns "
+                                "WHERE table_name = 'concept' AND column_name = ANY(:cols)"
+                            ),
+                            {
+                                "cols": [
+                                    "description",
+                                    "formal_definition",
+                                    "intuitive_explanation",
+                                    "common_misconceptions",
+                                ]
+                            },
+                        )
+                        .scalars()
+                        .all()
+                    )
                 # ① 브리지·유도 반영.
                 assert row.code == _NID_A  # concept_id = code(브리지 키)
                 assert isinstance(row.concept_id, uuid.UUID)  # UUID PK 발급
@@ -161,12 +177,8 @@ class TestBackendConceptRoundtrip:
                 assert row.aliases == ["UC.calc.alimit.epsilon-delta", "N1"]
                 assert row.level == "세부개념"  # 고정 유도(NOT NULL enum·한글 값)
                 assert float(row.intrinsic_difficulty) == pytest.approx(2.17)
-                # JSONB 오개념(자유형) — 자체 작성 주석(본문 아님).
-                assert row.common_misconceptions == [{"misconception": "극한을 대입값으로 혼동"}]
-                # ② redaction: 본문 3컬럼 NULL(검수 대기).
-                assert row.description is None
-                assert row.formal_definition is None
-                assert row.intuitive_explanation is None
+                # ② redaction: 네 컬럼 모두 스키마에서 제거됨(Phase 1b·컬럼 부재 = 구조적 차단).
+                assert absent == []
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:
@@ -195,15 +207,14 @@ class TestBackendConceptRoundtrip:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     row = conn.execute(
                         text(
-                            "SELECT source_id, aliases, intrinsic_difficulty, "
-                            "common_misconceptions FROM concept WHERE code = :c"
+                            "SELECT source_id, aliases, intrinsic_difficulty "
+                            "FROM concept WHERE code = :c"
                         ),
                         {"c": _NID_B},
                     ).one()
                 assert row.source_id is None  # 부재 → NULL(옛 데이터 graceful)
                 assert row.aliases == []  # 빈 배열(NOT NULL 컬럼 — NULL 아님)
                 assert row.intrinsic_difficulty is None
-                assert row.common_misconceptions == []  # JSONB server_default '[]'
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:
@@ -375,7 +386,7 @@ class TestRealCorpusLoad:
       ① 로드 → 437 레코드(슬1 transform counts 정합)
       ② 적재 count 437·재적재 멱등(행수 불변·UUID PK 보존)
       ③ source_id/aliases 직결(재ID 추적성)·`code`=재ID concept_id 직결
-      ④ **redaction** — 본문(description·formal_definition·intuitive_explanation) 실제 NULL
+      ④ **redaction** — 본문 3컬럼·오개념 컬럼이 테이블에서 제거됨(Phase 1b·컬럼 부재)
     graph.json 미존재 시 graceful skip(코퍼스 미커밋 환경 보호). 정리는 코퍼스 437 code 전건.
     """
 
@@ -386,7 +397,9 @@ class TestRealCorpusLoad:
 
         from sqlalchemy import text
 
-        corpus = Path("data/corpus/concept_graph_v1/graph.json")
+        # 레포 루트 앵커(parents[3]) — CWD 상대 경로는 CI(cwd=src/backend)에서 항상 미존재 skip.
+        repo_root = Path(__file__).resolve().parents[3]
+        corpus = repo_root / "data" / "corpus" / "concept_graph_v1" / "graph.json"
         if not corpus.exists():
             pytest.skip("실 코퍼스 미존재(data/corpus/concept_graph_v1/graph.json)")
 
@@ -430,15 +443,33 @@ class TestRealCorpusLoad:
                         text("SELECT count(*) FROM concept WHERE code = ANY(:codes)"),
                         {"codes": codes},
                     ).scalar_one()
-                    # ③ source_id/aliases 직결·code=concept_id 직결 + ④ redaction NULL.
+                    # ③ source_id/aliases 직결·code=concept_id 직결.
                     row = conn.execute(
                         text(
-                            "SELECT concept_id, code, source_id, aliases, "
-                            "description, formal_definition, intuitive_explanation "
+                            "SELECT concept_id, code, source_id, aliases "
                             "FROM concept WHERE code = :c"
                         ),
                         {"c": first_code},
                     ).one()
+                    # ④ redaction: 본문 3컬럼·오개념 컬럼이 테이블에 *부재*(Phase 1b drop).
+                    absent = (
+                        conn.execute(
+                            text(
+                                "SELECT column_name FROM information_schema.columns "
+                                "WHERE table_name = 'concept' AND column_name = ANY(:cols)"
+                            ),
+                            {
+                                "cols": [
+                                    "description",
+                                    "formal_definition",
+                                    "intuitive_explanation",
+                                    "common_misconceptions",
+                                ]
+                            },
+                        )
+                        .scalars()
+                        .all()
+                    )
                 # ② 멱등 — 437행·UUID PK 보존(브리지 안정성·FK 참조 보존).
                 assert total == 437
                 assert row.concept_id == first_uuid
@@ -446,10 +477,8 @@ class TestRealCorpusLoad:
                 assert row.code == first_code
                 assert row.source_id == first_src
                 assert row.aliases == list(first_aliases)
-                # ④ redaction: 본문 3컬럼 NULL(graph.json 부재·로더 미적재·검수 대기).
-                assert row.description is None
-                assert row.formal_definition is None
-                assert row.intuitive_explanation is None
+                # ④ redaction: 네 컬럼 모두 스키마에서 제거됨(Phase 1b·구조적 차단).
+                assert absent == []
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:
@@ -625,7 +654,9 @@ class TestRealCorpusEdgeLoad:
 
         from sqlalchemy import text
 
-        corpus = Path("data/corpus/concept_graph_v1/graph.json")
+        # 레포 루트 앵커(parents[3]) — CWD 상대 경로는 CI(cwd=src/backend)에서 항상 미존재 skip.
+        repo_root = Path(__file__).resolve().parents[3]
+        corpus = repo_root / "data" / "corpus" / "concept_graph_v1" / "graph.json"
         if not corpus.exists():
             pytest.skip("실 코퍼스 미존재(data/corpus/concept_graph_v1/graph.json)")
 
@@ -683,6 +714,19 @@ class TestRealCorpusEdgeLoad:
                         ),
                         {"src": sample_src, "dst": sample_dst},
                     ).one()
+                    # ⑥ 멱등 준비 — 샘플 엣지의 현재 edge_id(PK) 확보. 연결이 살아있는
+                    # with 블록 *안*에서 조회해야 한다(블록 밖 conn은 닫혀 있어
+                    # ResourceClosedError — 침묵 skip 시절엔 한 번도 실행되지 않아 잠복).
+                    first_edge_id = conn.execute(
+                        text(
+                            "SELECT e.edge_id FROM concept_edge e "
+                            "JOIN concept f ON e.from_concept_id = f.concept_id "
+                            "JOIN concept t ON e.to_concept_id = t.concept_id "
+                            "WHERE f.code = :src AND t.code = :dst "
+                            "AND e.edge_type = 'PREREQUISITE'"
+                        ),
+                        {"src": sample_src, "dst": sample_dst},
+                    ).scalar_one()
                 # ③ 방향: from=선수(src)·to=후행(dst) — to의 선수가 from.
                 assert row.from_code == sample_src
                 assert row.to_code == sample_dst
@@ -695,18 +739,6 @@ class TestRealCorpusEdgeLoad:
                 # ⑤ 날조 회피: gap_signal·notes는 NULL(evidence 미적재).
                 assert row.typical_gap_signal is None
                 assert row.notes is None
-
-                # ⑥ 멱등 준비 — 샘플 엣지의 현재 edge_id(PK) 확보.
-                first_edge_id = conn.execute(
-                    text(
-                        "SELECT e.edge_id FROM concept_edge e "
-                        "JOIN concept f ON e.from_concept_id = f.concept_id "
-                        "JOIN concept t ON e.to_concept_id = t.concept_id "
-                        "WHERE f.code = :src AND t.code = :dst "
-                        "AND e.edge_type = 'PREREQUISITE'"
-                    ),
-                    {"src": sample_src, "dst": sample_dst},
-                ).scalar_one()
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
 

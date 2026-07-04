@@ -19,7 +19,10 @@ PK 판단(이 모듈의 핵심 결정):
   느슨참조라 FK가 아니다(`concept_standard_link.concept_code` 선례 — 해소는 로더 후속).
 
 타입 매핑(schema → ORM, achievement_standard.py 선례 그대로):
-  - `mis_id`(PK) → `sa.String(16)`(의미 문자열·server_default 없음).
+  - `mis_id`(PK) → `sa.String(32)`(의미 문자열·server_default 없음). 원래 String(16)이었으나
+    atom 투영 mis_id(`"ATOM:"+code`, `l1/misconception/atom_catalog.py`)가 실측 최장 18자
+    (1,837건 중 348건이 16자 초과·예 'ATOM:10공수1-01-01-1')라 오버플로 — 32로 확폭했다
+    (Phase 5 kebab→ATOM 이전 대비 헤드룸 포함, 마이그레이션 `a5b6c7d8e9f0`).
   - `canonical_statement`·`student_wrong_thinking`·`distractor_rule`·`correction_point`
     (자유 서술) → `sa.Text`(nullable·와이매스 자체 저작 보유 허용).
   - `error_type` → `sa.String(32)`(8종이나 닫힌 enum 강제는 파이프라인 책임 — str).
@@ -62,7 +65,9 @@ class MisconceptionCatalog(Base):
 
     # ===== 식별 — mis_id(PK·의미 문자열·UUID 아님) =====
     # mis_id는 UUID가 아니라 의미 문자열(예 'M0425')이라 gen_random_uuid() server_default 없음.
-    mis_id: Mapped[str] = mapped_column(sa.String(16), primary_key=True)
+    # String(32) — atom 투영 mis_id('ATOM:'+code)가 실측 최장 18자라 구 String(16)은 오버플로.
+    # Phase 5 kebab→ATOM 이전 대비 헤드룸까지 32로 확폭(마이그레이션 a5b6c7d8e9f0).
+    mis_id: Mapped[str] = mapped_column(sa.String(32), primary_key=True)
 
     # ===== 본문 (와이매스 자체 저작 — 본문 보유 허용·redaction 불요) =====
     canonical_statement: Mapped[str | None] = mapped_column(sa.Text)

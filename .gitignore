@@ -70,6 +70,9 @@ logs/
 .claude/cache/
 .claude/sessions/
 
+# 병렬 세션용 git worktree (추적 안 함 — scripts/new-session-worktree.sh 생성물)
+worktrees/
+
 
 # WhyMath 추가 보안 패턴 (자동 생성)
 # 대용량 아카이브 파일 (의도적 추가 시 git add -f 사용)
@@ -110,3 +113,6 @@ service-account.json
 *.parquet.gz
 *.arrow
 data/cache/
+
+# 개념그래프 재ID 생성물 — ids.yaml이 정본 registry로 대체(미추적 빌드 산출물·P2d)
+/data/corpus/concept_graph_v1/id_map.csv

@@ -10,25 +10,32 @@
   - 고립 노드(엣지 0개) → warning
   - dangling 참조(엣지 양끝·prerequisite 캐시·오개념·시각화) → warning(에러 아님 §3.3)
   - 데이터 상관: prerequisite 엣지의 src·dst 성취기준 학년 단조성(역전 시 warning)
-  - **id_conformance**(새 규약·전 노드) → error
-  - **id_unique**(새 concept_id 충돌) → error
-  - **alias_roundtrip**(source_id 존재·옛 UC 별칭 보존) → error
+  - **id_conformance**(canonical 규약·전 노드) → error
+  - **curriculum_independence**(학년/트랙 토큰·NCIC 코드조각 부재·Part 9 하드게이트) → error
+  - **id_unique**(canonical concept_id 충돌) → error
+  - **alias_roundtrip**(source_id 존재·교육과정축 코드 AND 옛 UC AND src_id 별칭 보존) → error
 
-별도로 `validate_idmap`(원천 레코드 대상)은 **area_map_total**(37 category 전수 매핑·0 미매핑)·
-**id_unique**·**alias_roundtrip**를 *재ID 산출 직전*에 검증한다(P2 재ID 불변식).
+별도로 `validate_idmap`(원천 레코드 대상)은 **area_map_total**(category 전수 매핑·0 미매핑)·
+**id_unique**·**alias_roundtrip**를 *재ID 산출 직전*에 검증한다(P2d 불변식). `validate_registry`
+(ids.yaml 대상)는 **registry_graph_parity·registry_id_unique·registry_field_match·
+registry_migration_roundtrip**를, `validate_locales`(locales 대상)는 **locale_node_parity·
+locale_nonblank**를 검증한다.
 
 성공 기준은 **error 0건**(warning은 그래프 구축을 막지 않음 — 보수적, §3.3).
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 
 from data_pipeline.concept_graph.idmap import build_alias_map, build_id_map
 from data_pipeline.concept_graph.models import (
     CONCEPT_ID_PATTERN,
+    CURRICULUM_AXIS_PATTERN,
     LEGACY_UC_PATTERN,
+    MIN_EDGE_STRENGTH,
     Concept,
     ConceptEdge,
     Relation,
@@ -38,6 +45,10 @@ from data_pipeline.ncic.transform import TransformError, parse_standard_code
 
 _ERROR = "error"
 _WARNING = "warning"
+
+# curriculum_independence 가드 — canonical concept_id에 학년/트랙 토큰(교육과정 배치 결합)이
+# 섞이지 않았는지 단언(Part 9 하드게이트 자동화). 단어 경계(\b·점 구분 토큰)로만 매칭한다.
+_GRADE_TOKEN_PATTERN: re.Pattern[str] = re.compile(r"(?i)\b(elem|mid|high|rt|oly)\b")
 
 
 @dataclass(slots=True)
@@ -281,6 +292,49 @@ def validate_graph(
                 )
             )
 
+    # 7b. weight floor (warning) — strength가 MIN_EDGE_STRENGTH 미만인 약한 엣지(Part 3
+    #     "낮은 weight는 제거되나?"). 데이터 품질 하한 — build-time에 약한 엣지를 가시화한다.
+    #     Phase 1은 warning(적재 비차단). 런타임 동적 pruning은 소비처 생길 때 후속.
+    for edge in edges:
+        if edge.strength < MIN_EDGE_STRENGTH:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_WARNING,
+                    ref=f"{edge.src_concept_id}→{edge.dst_concept_id}",
+                    rule="weak_edge",
+                    detail=(
+                        f"strength {edge.strength} < 하한 {MIN_EDGE_STRENGTH} — "
+                        "약한 엣지(그래프 dense화·traversal 희석 의심)"
+                    ),
+                )
+            )
+
+    # 7c. prerequisite 캐시 일관성 (warning) — 노드의 prerequisite_concept_ids 캐시가
+    #     prerequisite *엣지*와 어긋나지 않는지(dual-truth drift 방어·단일 진실 원천).
+    #     캐시 집합 == {src | prerequisite 엣지 ∧ dst==concept_id}. dangling(§5)은 별도 검사.
+    prereq_edge_srcs: dict[str, set[str]] = {}
+    for edge in edges:
+        if edge.relation == Relation.PREREQUISITE:
+            prereq_edge_srcs.setdefault(edge.dst_concept_id, set()).add(edge.src_concept_id)
+    for concept in concepts:
+        cache = set(concept.prerequisite_concept_ids)
+        from_edges = prereq_edge_srcs.get(concept.concept_id, set())
+        if cache != from_edges:
+            missing = from_edges - cache  # 엣지엔 있으나 캐시에 없음
+            extra = cache - from_edges  # 캐시에 있으나 엣지엔 없음
+            report.issues.append(
+                ValidationIssue(
+                    severity=_WARNING,
+                    ref=concept.concept_id,
+                    rule="prerequisite_cache_consistency",
+                    detail=(
+                        "prerequisite_concept_ids 캐시가 prerequisite 엣지와 불일치 — "
+                        f"엣지에만(캐시 누락): {sorted(missing)}·"
+                        f"캐시에만(엣지 없음): {sorted(extra)}"
+                    ),
+                )
+            )
+
     # 8. concept_id 새 규약 적합성 (error) — 생성 시 강제되나 *전 노드 명시 단언*(재ID 불변식).
     for concept in concepts:
         if not CONCEPT_ID_PATTERN.match(concept.concept_id):
@@ -289,7 +343,25 @@ def validate_graph(
                     severity=_ERROR,
                     ref=concept.concept_id,
                     rule="id_conformance",
-                    detail="concept_id가 '{TRACK}-{AREA}-{NNN}' 규약 위반",
+                    detail="concept_id가 'math.<area>.<slug>' 규약 위반",
+                )
+            )
+
+    # 8b. curriculum_independence (error) — Part 9 하드게이트 자동화. canonical concept_id에
+    #     학년/트랙 토큰(elem·mid·high·rt·oly = 교육과정 배치)이나 NCIC 코드조각이 섞이지 않고,
+    #     교육과정-독립 canonical 규약을 완전 만족하는지 단언(옛 {TRACK}-{AREA}-{NNN} 결합 방지).
+    for concept in concepts:
+        cid = concept.concept_id
+        if _GRADE_TOKEN_PATTERN.search(cid) or not CONCEPT_ID_PATTERN.fullmatch(cid):
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=cid,
+                    rule="curriculum_independence",
+                    detail=(
+                        "concept_id에 학년/트랙 토큰 또는 교육과정 결합 흔적 — canonical은 "
+                        "교육과정-독립이어야 함(math.<area>.<slug>·학년/NCIC 코드조각 금지)"
+                    ),
                 )
             )
 
@@ -326,6 +398,18 @@ def validate_graph(
         migrated = concept.source_id != concept.concept_id
         if not migrated:
             continue  # 신규 후보(시드) — 옛 키 없음·면제
+        axis = [a for a in concept.aliases if CURRICULUM_AXIS_PATTERN.match(a)]
+        if not axis:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=concept.concept_id,
+                    rule="alias_roundtrip",
+                    detail=(
+                        f"교육과정축 코드 별칭 미보존(aliases={concept.aliases!r}) — 조인 불가"
+                    ),
+                )
+            )
         legacy = [a for a in concept.aliases if LEGACY_UC_PATTERN.match(a)]
         if not legacy:
             report.issues.append(
@@ -418,7 +502,7 @@ def validate_idmap(
                     severity=_ERROR,
                     ref=src_id,
                     rule="id_conformance",
-                    detail=f"새 ID 규약 위반: {cid!r}",
+                    detail=f"canonical ID 규약 위반: {cid!r}",
                 )
             )
         if cid in id_to_src:
@@ -433,8 +517,18 @@ def validate_idmap(
         else:
             id_to_src[cid] = src_id
 
-    # alias_roundtrip — src_id → 별칭에 옛 UC·src_id 보존
+    # alias_roundtrip — src_id → 별칭에 교육과정축 코드·옛 UC·src_id 보존
     for src_id, aliases in alias_map.items():
+        axis = [a for a in aliases if CURRICULUM_AXIS_PATTERN.match(a)]
+        if not axis:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=src_id,
+                    rule="alias_roundtrip",
+                    detail=f"교육과정축 코드 별칭 미보존: {aliases!r}",
+                )
+            )
         legacy = [a for a in aliases if LEGACY_UC_PATTERN.match(a)]
         if not legacy:
             report.issues.append(
@@ -452,6 +546,191 @@ def validate_idmap(
                     ref=src_id,
                     rule="alias_roundtrip",
                     detail=f"src_id가 aliases에 미포함: {aliases!r}",
+                )
+            )
+
+    return report
+
+
+def validate_registry(
+    registry: Mapping[str, object],
+    concepts: Sequence[Concept],
+) -> GraphValidationReport:
+    """`ids.yaml` registry ⇄ 그래프 노드 정합성 검증(P2d ③ — Canonical ID Registry 불변식).
+
+    ERROR 규칙:
+      - **registry_graph_parity**: registry canonical_id 집합 == 그래프 concept_id 집합(고아 0·437).
+      - **registry_id_unique**: registry canonical_id·src_id 중복 0.
+      - **registry_field_match**: 개념별 registry source_id/aliases == 노드 source_id/aliases.
+      - **registry_migration_roundtrip**: 재ID된 개념은 P2a·P2d 이벤트 보유·P2d.to==canonical_id·
+        P2d.from이 교육과정축 별칭(CURRICULUM_AXIS_PATTERN·aliases 소속).
+    """
+    entries_raw = registry.get("concepts", [])
+    entries: list[Mapping[str, object]] = (
+        [e for e in entries_raw if isinstance(e, Mapping)] if isinstance(entries_raw, list) else []
+    )
+    report = GraphValidationReport(node_count=len(entries), edge_count=0)
+
+    # registry_id_unique — canonical_id·src_id 중복.
+    reg_by_canonical: dict[str, Mapping[str, object]] = {}
+    seen_src: set[str] = set()
+    for entry in entries:
+        cid = str(entry.get("canonical_id", ""))
+        sid = str(entry.get("src_id", ""))
+        if cid in reg_by_canonical:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=cid,
+                    rule="registry_id_unique",
+                    detail=f"registry canonical_id 중복: {cid!r}",
+                )
+            )
+        else:
+            reg_by_canonical[cid] = entry
+        if sid in seen_src:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=sid,
+                    rule="registry_id_unique",
+                    detail=f"registry src_id 중복: {sid!r}",
+                )
+            )
+        seen_src.add(sid)
+
+    node_by_id = {c.concept_id: c for c in concepts}
+
+    # registry_graph_parity — 집합 일치(고아 양방향).
+    reg_ids = set(reg_by_canonical)
+    node_ids = set(node_by_id)
+    for orphan in sorted(reg_ids - node_ids):
+        report.issues.append(
+            ValidationIssue(
+                severity=_ERROR,
+                ref=orphan,
+                rule="registry_graph_parity",
+                detail="registry에 있으나 그래프 노드에 없는 canonical_id",
+            )
+        )
+    for orphan in sorted(node_ids - reg_ids):
+        report.issues.append(
+            ValidationIssue(
+                severity=_ERROR,
+                ref=orphan,
+                rule="registry_graph_parity",
+                detail="그래프 노드에 있으나 registry에 없는 concept_id",
+            )
+        )
+
+    # registry_field_match + registry_migration_roundtrip(양쪽 존재하는 id만).
+    for cid in sorted(reg_ids & node_ids):
+        entry = reg_by_canonical[cid]
+        node = node_by_id[cid]
+        raw_aliases = entry.get("aliases", [])
+        reg_aliases = [str(a) for a in raw_aliases] if isinstance(raw_aliases, list) else []
+        if str(entry.get("src_id", "")) != node.source_id or reg_aliases != node.aliases:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=cid,
+                    rule="registry_field_match",
+                    detail=(
+                        f"registry↔노드 필드 불일치: registry(src_id={entry.get('src_id')!r}·"
+                        f"aliases={reg_aliases!r}) vs 노드(source_id={node.source_id!r}·"
+                        f"aliases={node.aliases!r})"
+                    ),
+                )
+            )
+
+        if node.source_id == node.concept_id:
+            continue  # 비-마이그레이션(신규 후보) — 이벤트 요건 면제
+        migrations_raw = entry.get("migrations", [])
+        migrations: list[Mapping[str, object]] = (
+            [m for m in migrations_raw if isinstance(m, Mapping)]
+            if isinstance(migrations_raw, list)
+            else []
+        )
+        events = {str(m.get("event", "")) for m in migrations}
+        if not {"P2a", "P2d"} <= events:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=cid,
+                    rule="registry_migration_roundtrip",
+                    detail=f"P2a·P2d 이벤트 미보유(events={sorted(events)})",
+                )
+            )
+            continue
+        p2d = next(m for m in migrations if str(m.get("event", "")) == "P2d")
+        if str(p2d.get("to", "")) != cid:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=cid,
+                    rule="registry_migration_roundtrip",
+                    detail=f"P2d.to({p2d.get('to')!r}) != canonical_id({cid!r})",
+                )
+            )
+        p2d_from = str(p2d.get("from", ""))
+        if not CURRICULUM_AXIS_PATTERN.match(p2d_from) or p2d_from not in reg_aliases:
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=cid,
+                    rule="registry_migration_roundtrip",
+                    detail=f"P2d.from({p2d_from!r}) 교육과정축 별칭 아님(aliases={reg_aliases!r})",
+                )
+            )
+
+    return report
+
+
+def validate_locales(
+    locales: Mapping[str, object],
+    concepts: Sequence[Concept],
+) -> GraphValidationReport:
+    """locale 테이블 ⇄ 그래프 노드 정합성 검증(P2d ② — 표시이름 분리 불변식).
+
+    ERROR 규칙:
+      - **locale_node_parity**: `locales["ko"]` 키 집합 == 그래프 concept_id 집합(양쪽 437·고아 0).
+      - **locale_nonblank**: 모든 ko 표시이름이 비공백(빈 표기 금지).
+    """
+    ko_raw = locales.get("ko", {})
+    ko: dict[str, str] = (
+        {str(k): str(v) for k, v in ko_raw.items()} if isinstance(ko_raw, Mapping) else {}
+    )
+    report = GraphValidationReport(node_count=len(ko), edge_count=0)
+
+    node_ids = {c.concept_id for c in concepts}
+    ko_ids = set(ko)
+    for orphan in sorted(ko_ids - node_ids):
+        report.issues.append(
+            ValidationIssue(
+                severity=_ERROR,
+                ref=orphan,
+                rule="locale_node_parity",
+                detail="locale(ko)에 있으나 그래프 노드에 없는 concept_id",
+            )
+        )
+    for orphan in sorted(node_ids - ko_ids):
+        report.issues.append(
+            ValidationIssue(
+                severity=_ERROR,
+                ref=orphan,
+                rule="locale_node_parity",
+                detail="그래프 노드에 있으나 locale(ko) 표기가 없는 concept_id",
+            )
+        )
+
+    for cid, name in ko.items():
+        if not name.strip():
+            report.issues.append(
+                ValidationIssue(
+                    severity=_ERROR,
+                    ref=cid,
+                    rule="locale_nonblank",
+                    detail="ko 표시이름이 비공백 규약 위반(빈 표기)",
                 )
             )
 
@@ -483,4 +762,6 @@ __all__ = [
     "validate_dataset",
     "validate_graph",
     "validate_idmap",
+    "validate_locales",
+    "validate_registry",
 ]

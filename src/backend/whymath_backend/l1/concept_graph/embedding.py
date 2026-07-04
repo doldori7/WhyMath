@@ -9,12 +9,19 @@ join된다(이중 store 단일 키). L4 오개념 영속(`pgvector_index.PgVecto
 ────────────────────────────────────────────────────────────────────────────
 redaction (CLAUDE.md 우선순위 #2 — 협상 불가)
 ────────────────────────────────────────────────────────────────────────────
-임베딩 입력 표현은 **자체 작성 안전 필드만** 쓴다 — `name_ko`(한국어 명칭)·`metaphor`(은유)·
-`accepted_expressions`(허용표현). **`description`·`formal_definition`은 절대 읽지 않는다**:
-성취기준 *본문* 근접 복제 위험 필드이고, 슬1 정형화에서 `Concept` 모델 슬롯 부재로 이미
-제거돼 `graph.json`에도 없다(`_provenance.json`의 redacted 목록). 이 모듈은 그 키를 *읽지도
-않으므로* 입력이 오염돼도 본문이 임베딩에 유입되지 않는다(이중 방어). 임베딩 *벡터*만 적재하고
-원문은 `concept_embedding`에 저장하지 않는다(ORM docstring·중복·프라이버시).
+임베딩 입력 표현은 **자체 작성 안전 필드만** 쓴다 — `name_ko`(한국어 명칭·재-ID(P2d)로 노드에서
+제거돼 형제 `locales/ko.json`에서 재소싱)·`intuition`(직관/은유)·`representations`(허용 표현형).
+**`description`·`formal_definition`은 절대 읽지 않는다**: 성취기준 *본문* 근접 복제 위험 필드이고,
+슬1 정형화에서 `Concept` 모델 슬롯 부재로 이미 제거돼 `graph.json`에도 없다(`_provenance.json`의
+redacted 목록). 이 모듈은 그 키를 *읽지도 않으므로* 입력이 오염돼도 본문이 임베딩에 유입되지
+않는다(이중 방어). 임베딩 *벡터*만 적재하고 원문은 `concept_embedding`에 저장하지 않는다(ORM
+docstring·중복·프라이버시).
+
+semantic 소싱(2026-07-03 Part 2 전면 채택 Phase 1 — Stage B 되돌림): `intuition`·`representations`는
+리치 스펙상 **semantic 계층**이라 identity 노드(graph.json)로 복원됐다 — 노드가 semantic의 단일
+진실이다. 따라서 이 로더는 두 필드를 **graph.json에서 직접** 읽는다(Stage B의 content.json 조인
+소싱을 되돌림). 값은 Stage B 소싱분과 동일(둘 다 raw metaphor·accepted 유래)이라 표현·text_hash
+불변 → **재임베딩 0**(skip-if-unchanged).
 
 ────────────────────────────────────────────────────────────────────────────
 sync 엔진 (async 전용 코드베이스에 *벡터 store 좌석에 한정*된 sync 드라이버)
@@ -38,6 +45,16 @@ from typing import TYPE_CHECKING
 
 from whymath_backend.config import Settings, get_settings
 
+# name_ko는 재-ID(P2d)로 노드에서 제거돼 형제 `locales/ko.json`에서 재소싱한다(공유 헬퍼).
+from whymath_backend.l1.concept_graph.locale import load_locale_ko
+from whymath_backend.l1.embedding_primitives import (
+    DEFAULT_EMBEDDING_SUBJECT,
+    embed_changed,
+    join_embedding_text,
+    provider_model_identity,
+    text_hash,
+)
+
 # 임베딩 provider seam 재사용(신규 금지·CLAUDE.md 로컬 우선) — 좌석 Protocol·표현 해시·공간
 # 식별자는 *레이어-중립 L1*(`l1/embedding_primitives.py`)이 소유한다. 과거엔 이 심볼들이 L4
 # (`semantic.pgvector_index`)에 살아 L1이 L4를 위로 import(지연 import로 가린 순환)했으나,
@@ -46,21 +63,25 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.l1.embedding_primitives import (
     build_sync_engine as _build_sync_engine,
 )
-from whymath_backend.l1.embedding_primitives import (
-    embed_changed,
-    join_embedding_text,
-    provider_model_identity,
-    text_hash,
-)
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
     from whymath_backend.l1.embedding_primitives import EmbeddingProvider
 
-# graph.json에서 임베딩 입력으로 *허용된* 안전 필드(자체 작성·본문 아님). 이 집합 밖 키는
-# 임베딩에 쓰지 않는다(특히 description·formal_definition은 graph.json에 부재이며 읽지도 않음).
-_SAFE_TEXT_FIELDS: tuple[str, ...] = ("name_ko", "metaphor", "accepted_expressions")
+# 임베딩 입력 안전 필드(self-authored·본문 아님·description/formal_definition 배제). name_ko는
+# 재-ID(P2d)로 노드에서 제거돼 형제 `locales/ko.json`(concept_id 조인)에서 재소싱하고, intuition·
+# representations는 graph.json 노드가 단일 진실이다(Phase 1·Stage B content 소싱 되돌림·리치
+# "semantic=노드 핵심").
+_SAFE_TEXT_FIELDS: tuple[str, ...] = ("name_ko", "intuition", "representations")
+
+
+def _opt_str(value: object) -> str | None:
+    """빈 문자열·None → None, 그 외 strip한 str(node_projection·transform 미러)."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,45 +99,52 @@ class ConceptText:
 def concept_embedding_text(
     *,
     name_ko: str | None,
-    metaphor: str | None = None,
-    accepted_expressions: str | None = None,
+    intuition: str | None = None,
+    representations: str | None = None,
 ) -> str:
-    """개념을 임베딩할 자연어 표현으로 직렬화 — **안전 필드만**(name_ko·metaphor·accepted).
+    """개념을 임베딩할 자연어 표현으로 직렬화 — **안전 필드만**(name_ko·intuition·representations).
 
     L4 `catalog_text`(f"{name_kr}. {canonical_statement}")의 개념판이다. 의미 신호를 키우려고
-    명칭·은유·허용표현을 잇되, **description·formal_definition은 인자로 받지도 않는다**(redaction —
+    명칭·직관·표현형을 잇되, **description·formal_definition은 인자로 받지도 않는다**(redaction —
     본문 근접 필드 구조적 차단). 비어 있는 필드는 건너뛰고, 남은 조각을 `". "`로 잇는다.
     name_ko가 비면(이론상 graph.json은 name_ko 필수) 나머지만으로 표현을 만든다(빈 표현 가능 —
     호출자가 빈 표현을 임베딩하지 않도록 거를 수 있으나, 여기선 합성만 한다).
     """
-    return join_embedding_text(name_ko, metaphor, accepted_expressions)
+    return join_embedding_text(name_ko, intuition, representations)
 
 
-def load_concepts_from_graph_json(path: Path) -> list[ConceptText]:
-    """슬1 산출 `graph.json` → 임베딩 대상 (UC concept_id, 안전 표현) 목록.
+def load_concepts_from_graph_json(graph_path: Path) -> list[ConceptText]:
+    """graph.json → 임베딩 대상 (UC concept_id, 안전 표현) 목록.
 
-    `graph.json`은 슬1 `transform-v1`이 만든 정제 산출이다(UC 키·redaction 청결). 여기서는
-    `concepts` 배열의 각 항목에서 `concept_id`(UC)와 **안전 필드(name_ko·metaphor·
-    accepted_expressions)만** 읽어 표현을 합성한다 — `description`·`formal_definition`은 읽지
-    않는다(graph.json에 부재이며, 있더라도 이 함수가 무시).
+    `graph.json`(슬1 `transform-v1` 정제 산출)에서 `concept_id`를 읽고, **`name_ko`는 형제
+    `locales/ko.json`**(`{concept_id: name_ko}`)에서 concept_id 조인으로 재소싱한다(P2d — 재-ID로
+    표시이름을 identity 노드에서 제거·Concept Purity). 노드 내장 name_ko가 있으면(옛 graph.json)
+    우선한다(`record.get("name_ko") or locale.get(id)`·옛/새 둘 다 graceful). **`intuition`·
+    `representations`는 graph.json 노드에서 직접** 읽는다 — 리치 스펙상 semantic 계층이라 노드가
+    단일 진실이다(Phase 1·Stage B content.json 소싱 되돌림). 안전 필드(name_ko·intuition·
+    representations)만 표현에 합성한다 — `description`·`formal_definition`은 어느 소스에도 없고
+    읽지도 않는다(redaction). 값은 pre-Stage-B와 바이트 동일이라 표현·text_hash 불변(재임베딩 0).
 
     표현이 빈(안전 필드 전부 공백) 개념은 제외한다(임베딩 무의미 — 빈 벡터 적재 방지). flashcards_
     raw·intl_raw 등 그래프 외 자산은 임베딩 대상이 아니므로 읽지 않는다.
 
     Raises:
         FileNotFoundError: graph.json 부재.
-        ValueError: concept_id 없는 항목(슬1 산출은 항상 UC를 갖는다 — 방어).
+        ValueError: concept_id 없는 항목(슬1 산출은 항상 concept_id를 갖는다 — 방어).
     """
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(graph_path.read_text(encoding="utf-8"))
+    locale_ko = load_locale_ko(graph_path)
     out: list[ConceptText] = []
     for record in payload.get("concepts", []):
         concept_id = str(record.get("concept_id", "")).strip()
         if not concept_id:
             raise ValueError(f"graph.json 개념에 concept_id가 없습니다: {record!r}")
+        # name_ko: 노드 내장(옛 graph.json) 우선, 없으면 locale 조인(새 graph.json·P2d).
+        name_ko = _opt_str(record.get("name_ko")) or locale_ko.get(concept_id)
         text = concept_embedding_text(
-            name_ko=record.get("name_ko"),
-            metaphor=record.get("metaphor"),
-            accepted_expressions=record.get("accepted_expressions"),
+            name_ko=name_ko,
+            intuition=record.get("intuition"),
+            representations=record.get("representations"),
         )
         if not text:
             # 안전 필드가 전부 비어 임베딩할 표현이 없는 개념 — 제외(빈 벡터 적재 방지).
@@ -137,6 +165,11 @@ class ConceptEmbeddingIndex:
     provider/model은 *임베딩 공간 식별자*다 — 같은 provider라도 model이 다르면 다른 공간으로
     본다. 호출자(적재기)는 upsert/search에 *같은* provider·model을 일관되게 넘겨야 한다. 차원
     불일치는 pgvector가 적재 시점에 오류로 막는다(컬럼 `vector(N)`).
+
+    `subject`는 임베딩 namespace의 *교과 축*이다(namespace = 테이블 × subject —
+    `l1/embedding_primitives.py` 불변식). upsert·search·existing_text_hashes 전부가 이 스코프를
+    건다 — 다른 교과 행은 서로 보이지 않는다. 기본값 `DEFAULT_EMBEDDING_SUBJECT`('수학')라
+    기존 호출자(populate·retrieval)는 무수정으로 수학 스코프를 흡수한다(파라미터 관통 금지).
     """
 
     def __init__(
@@ -144,11 +177,13 @@ class ConceptEmbeddingIndex:
         *,
         provider_name: str,
         model_name: str,
+        subject: str = DEFAULT_EMBEDDING_SUBJECT,
         engine: Engine | None = None,
         settings: Settings | None = None,
     ) -> None:
         self._provider_name = provider_name
         self._model_name = model_name
+        self._subject = subject
         self._engine = engine
         self._settings = settings
 
@@ -188,6 +223,7 @@ class ConceptEmbeddingIndex:
             embedding=values,
             provider=self._provider_name,
             model=self._model_name,
+            subject=self._subject,
             dim=len(values),
             text_hash=text_hash(source_text),
         )
@@ -198,6 +234,7 @@ class ConceptEmbeddingIndex:
                 "embedding": stmt.excluded.embedding,
                 "provider": stmt.excluded.provider,
                 "model": stmt.excluded.model,
+                "subject": stmt.excluded.subject,
                 "dim": stmt.excluded.dim,
                 "text_hash": stmt.excluded.text_hash,
                 "updated_at": func.now(),
@@ -233,6 +270,8 @@ class ConceptEmbeddingIndex:
             .where(
                 ConceptEmbedding.provider == self._provider_name,
                 ConceptEmbedding.model == self._model_name,
+                # 교과 스코프 — 다른 subject 행은 랭킹에 안 잡힌다(namespace 불변식).
+                ConceptEmbedding.subject == self._subject,
             )
             .order_by(distance)
             .limit(top_k)
@@ -265,6 +304,8 @@ class ConceptEmbeddingIndex:
             ConceptEmbedding.concept_id.in_(list(dict.fromkeys(concept_ids))),
             ConceptEmbedding.provider == self._provider_name,
             ConceptEmbedding.model == self._model_name,
+            # 교과 스코프 — 다른 subject 행은 조회에 안 잡혀 "변경"으로 취급(재임베딩).
+            ConceptEmbedding.subject == self._subject,
         )
         with self._get_engine().connect() as conn:
             rows = conn.execute(stmt).all()

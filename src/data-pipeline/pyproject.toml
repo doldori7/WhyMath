@@ -18,6 +18,9 @@ dependencies = [
     "pdfplumber>=0.11.4",
     # CLI
     "typer>=0.12.5",
+    # Canonical ID Registry(ids.yaml) 직렬화·재검증 (P2d·Part 9). 플레이북이 registry
+    # 형식을 YAML로 명시 — 코퍼스 산출 ids.yaml 생성/파싱 단일 원천. 2026-07-02 P2d 결정.
+    "pyyaml>=6.0.1",
 ]
 
 [project.optional-dependencies]
@@ -34,6 +37,7 @@ dev = [
     "ruff>=0.7.0,<0.16",
     "black>=24.10.0,<27",
     "types-beautifulsoup4>=4.12.0.20240907",
+    "types-PyYAML>=6.0.12",
 ]
 # JS 렌더가 필요한 NCIC 페이지에 대한 폴백. 기본 의존성은 아님.
 playwright = [

@@ -75,7 +75,17 @@ class ExamType(str, Enum):
 
 
 class Curriculum(str, Enum):
-    """교육과정 버전 — §14.3 `curriculum_enum` 값 그대로(영어)."""
+    """교육과정 버전 — §14.3 `curriculum_enum` 값 그대로(영어).
+
+    **문항의 본질 속성 축(개정판 정합)이다 — Overlay 이관 대상 아님.** 개념 노드의
+    curriculum은 Overlay(`CurriculumEntry`)로 뺐지만(rev `f3a4b5c6d7e8`·"개념은 영속·교육과정은
+    Overlay"는 *개념 노드* 원칙), 문항(`Problem`)은 특정 개정판을 위해 저작된 *콘텐츠*라
+    curriculum_version이 이중 진실이 아니라 문항 고유 속성이다. `Problem`이 유일 프로덕션
+    소비자이며 L6 학교진도 게이트 ③(2015/2022 혼입 방지·`l6/school_progress/gating.py`)의
+    살아있는 기준 — 실제로 Concept의 curriculum 제거가 안전했던 *전제*가 이 필드였다
+    (게이팅이 Concept 아닌 Problem을 봄). 오등록 상환 판정 2026-07-02(MEMORY) — 제거·Overlay
+    이관 기각.
+    """
 
     REVISION_2009 = "2009_REVISION"
     REVISION_2015 = "2015_REVISION"
@@ -86,6 +96,10 @@ class Subject(str, Enum):
     """과목 — §3.1 `subject_enum` 주석(공통/미적분/확통/기하/인공지능수학).
 
     §14.3에 별도 `CREATE TYPE`이 없어 DDL 컬럼 주석(L139)을 정본으로 채택한다.
+
+    **수학 교과 한정**(실체는 수능 선택과목 축) — 타 과목(물리 등) 값 ADD VALUE 금지(축 혼동
+    영구화). 교과 축은 향후 `Problem.subject_area`로 별도 신설한다
+    (docs/architecture/subject_expansion_readiness.md §1·§8 보류 대장, 트리거: 물리 문항 첫 적재).
     """
 
     공통 = "공통"
@@ -363,6 +377,39 @@ class VisualizationStyle(str, Enum):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 시각화 가능성 4분류 (구축 플레이북 Part 5 — 개념을 "어떻게/그려야 하는가"로 판별)
+# ──────────────────────────────────────────────────────────────────────────
+class Visualizability(str, Enum):
+    """개념의 *시각화 가능성* 4분류 — 구축 플레이북 Part 5-1(직접/동적/부분/추상).
+
+    핵심 원칙: **모든 개념이 똑같이 시각화되지 않는다**. 네 분류는 "그릴 수 있는가"가 아니라 개념이
+    학생 인지에서 *어떤 방식으로 파악되는가*(인지 행동)로 나뉜다 — 어느 것도 "시각화 불가"가 아니라
+    *각기 다른 시각화 전략*을 요구한다(설계 정본 `05b_visualization_classification.md`).
+    억지 리터럴 시각화는 오개념을 유발하므로("그릴 수 있다 ≠ 교육적으로 좋다"), 분류가 렌더 전략을
+    가른다. `VisualizationStyle`(어떤 양식)·`VisualizationType`(어떤 렌더 기술)과는 **다른 축**이다.
+
+    **표면 표현이 아니라 인지 행동(cognitive action) 기준으로 정의한다**(플레이북 공통 문장).
+    `use_enum_values=True` 모델에서 값(한글)이 그대로 직렬화된다.
+    """
+
+    직접 = "직접"
+    """직접 시각화 가능 — 형태 자체가 보인다(도형·함수그래프·좌표·벡터). 정지된 한 장이 핵심 인지를
+    *즉시* 드러내 조작 없이 이해가 성립한다. 렌더 전략: Geometry2D(정적)."""
+
+    동적 = "동적"
+    """동적 시각화 가능 — 변화 과정을 표현해야 한다(극한·미분·적분·함수변환). **AI 수학교육의 핵심
+    영역**: 한국 학생이 가장 어려워하고 정적 그림으론 이해가 안 된다. 렌더: 애니메이션·슬라이더."""
+
+    부분 = "부분"
+    """부분 시각화 가능 — 일부 의미만 그림이 담는다(확률·벡터공간·복소수·수렴). 렌더 전략:
+    AnalogyVisual(비유 시각화 + *coverage 표시* — 무엇이 안 담기는지 정직 노출)."""
+
+    추상 = "추상"
+    """추상적이라 어려움 — 구조 자체가 추상적이다(군론·위상·범주론·논리). 리터럴 그래프는 거짓
+    구체성으로 오개념을 부른다. 렌더 전략: StructureGraph(구조 그래프·**메타포 중심**)."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 시각화 렌더 기술 (슬라이스 90: 05 §5.2 Visualization.type — 선언적 명세 렌더 도구 축)
 # ──────────────────────────────────────────────────────────────────────────
 class VisualizationType(str, Enum):
@@ -483,6 +530,50 @@ class RelationType(str, Enum):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# 추론 유형 (MATH DSL 진화 — 교육 추론 엔진 §2.2 · SolutionStep.reasoning_type)
+# ──────────────────────────────────────────────────────────────────────────
+class ReasoningType(str, Enum):
+    """풀이 *스텝 단위* 추론 유형 — 폐쇄 7종(`SolutionStep.reasoning_type`).
+
+    근거: `docs/architecture/math_dsl_evolution.md` §2.2(교육 추론 엔진 — 권장 1순위).
+    불투명한 `SolutionStep.content`(자연어+LaTeX 문자열) 옆에 "이 스텝이 어떤 추론을
+    수행하는가"를 태그해, "왜 이 변형이 정당한가"를 *기계가 읽게* 한다(엔진 정체성의 첫 벽돌).
+
+    축 구분 주의: `approach_type`(SolutionPath — 풀이 *전체* 6유형: 대수/기하/조합/귀납/
+    시각/역방향)과는 다른 축이다. ReasoningType은 *한 스텝*의 추론 유형이다(한 대수적 풀이
+    안에서도 스텝마다 치환·사례분류·귀납이 섞일 수 있다).
+
+    ⚠️ 폐쇄집합(6~8종) — *제거는 어렵고 추가는 신중해야* 한다(무한 추론 온톨로지 금지·
+    math_dsl_evolution §2.2 금기). 유형 무한 세분화는 유지 불가·과설계다. 완전 형식논리
+    증명 유형은 여기 두지 않는다(경계된 Tier3 Lean 위임·§2.9).
+
+    멤버명·값 모두 영어(국제 인지 과정 어휘 — `BloomLevel`·`CognitiveType` 선례).
+    use_enum_values=True 직렬화 시 영어 값 보존(예: reasoning_type="DEDUCTION").
+    """
+
+    DEDUCTION = "DEDUCTION"
+    """연역 — 정리·정의에서 논리적으로 도출한다."""
+
+    SUBSTITUTION = "SUBSTITUTION"
+    """치환 — 변수·식을 대입해 변형한다."""
+
+    CASE_SPLIT = "CASE_SPLIT"
+    """사례분류 — 조건에 따라 경우를 나눈다(케이스 분석)."""
+
+    INDUCTION = "INDUCTION"
+    """귀납 — 패턴·수학적 귀납법으로 일반화한다."""
+
+    TRANSFORMATION = "TRANSFORMATION"
+    """동치변형 — 등식·부등식을 동치로 재작성한다(동치 판정 권위는 SymPy·§2.1)."""
+
+    HEURISTIC = "HEURISTIC"
+    """휴리스틱 — 통찰·추측으로 나아간다(검증 미완일 수 있음·정직 표시)."""
+
+    BACKWARD = "BACKWARD"
+    """역방향 — 결론에서 거꾸로 추론한다."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 개념 그래프 (§4.2 concept 도메인 인라인 DDL — 4종)
 # ──────────────────────────────────────────────────────────────────────────
 # §14.3에 별도 `CREATE TYPE`이 없어 §4.2 DDL의 컬럼 인라인 주석을 정본으로 채택한다
@@ -520,6 +611,34 @@ class CognitiveType(str, Enum):
 
     VISUAL_REASONING = "VISUAL_REASONING"
     """시각적 추론 — 그래프·도형 기반 사고."""
+
+
+class BehaviorArea(str, Enum):
+    """행동영역(cognitive action) — SkillNode의 폐쇄 6종 축(리치 Part 2 Phase 2a·2026-07-03 확정).
+
+    개념이 *어떻게* 작동하는지(행동)의 축으로, 개념(무엇)과 직교한다. `skill_node.behavior_area`
+    (PG native `behavior_area_enum`)의 백킹이며, data-pipeline `data_pipeline.skill_graph.models
+    .BehaviorArea`와 **값이 정확히 일치**한다(정합 테스트 동결). 폐쇄 6종 — 확장은 ADR 갱신 전제
+    (무분별 증식 금지·`test_skill_governance` 동결).
+    """
+
+    COMPUTE = "COMPUTE"
+    """계산실행 — 절차·연산 수행(예: 다항식 나눗셈)."""
+
+    TRANSFORM = "TRANSFORM"
+    """식변형 — 표현을 등가 형태로 변형(예: 인수분해)."""
+
+    INTERPRET = "INTERPRET"
+    """조건해석 — 주어진 조건·문제를 수학 구조로 해석."""
+
+    REPRESENT = "REPRESENT"
+    """표상/표현 — 그래프·도형·다중표현 전환."""
+
+    REASON = "REASON"
+    """추론 — 연역·논리적 근거 전개."""
+
+    VERIFY = "VERIFY"
+    """검증 — 결과 점검·반례·타당성 확인(Polya 반성)."""
 
 
 class EdgeType(str, Enum):
@@ -718,6 +837,10 @@ class EventType(str, Enum):
     """학생 풀이 단계 이벤트 — §6.1 `event_type_enum`(한글 8종 + 검산결과 + 힌트제공 + 시각화조작).
 
     실시간 분석용(TimescaleDB hypertable `attempt_event`)의 이벤트 종류.
+
+    페이로드 계약(invariant ⑫): *생산되는* 3종(검산결과·힌트제공·시각화조작)의 `event_data`
+    모양은 `schema/event_data_contract.py`(EVENT_DATA_CONTRACT)가 단일 진실원으로 고정한다.
+    나머지 8종(문제읽기…답입력)은 생산자가 아직 0이라 계약 면제(휴면)다.
     """
 
     문제읽기 = "문제읽기"

@@ -20,6 +20,7 @@ from collections.abc import Sequence
 import pytest
 
 from whymath_backend.config import Settings
+from whymath_backend.l1.embedding_primitives import normalize_embedding_input
 from whymath_backend.l4.misconception import MisconceptionMatch, diagnose
 from whymath_backend.l4.misconception.catalog import CATALOG, CATALOG_BY_ID
 from whymath_backend.l4.misconception.models import Misconception
@@ -459,8 +460,31 @@ class TestMatcherCatalogBuild:
             matcher.match("X", top_k=1, threshold=0.1)
 
     def test_catalog_text_format(self) -> None:
+        # 포맷 v2: `name_kr. canonical_statement`를 NFKC 정규화(질의 경로와 같은 정규화·표기 정합).
         m = CATALOG_BY_ID["division-by-zero"]
-        assert catalog_text(m) == f"{m.name_kr}. {m.canonical_statement}"
+        assert catalog_text(m) == normalize_embedding_input(f"{m.name_kr}. {m.canonical_statement}")
+
+    def test_safe_embed_fields_pinned(self) -> None:
+        # redaction drift 가드 — 안전 필드 집합을 *리뷰 없이 확대하면* 실패한다(개념판 규율 대칭).
+        # 향후 출처 인용·본문 발췌 필드가 추가돼도 임베딩에 자동 유입되지 않도록 집합을 고정한다.
+        assert matcher_mod._SAFE_EMBED_FIELDS == ("name_kr", "canonical_statement")
+
+    def test_catalog_text_excludes_non_safe_fields(self) -> None:
+        # counterexample·signals·regex_signals·correct_form는 표면/구조 용도라 임베딩에 안 들어간다.
+        m = Misconception(
+            id="redaction-probe",
+            name_kr="라벨",
+            domain="대수",
+            canonical_statement="가정진술",
+            counterexample="COUNTEREX_SENTINEL",
+            signals=("SIGNAL_SENTINEL",),
+            regex_signals=("REGEX_SENTINEL",),
+            correct_form="CORRECT_SENTINEL",
+        )
+        text = catalog_text(m)
+        assert text == "라벨. 가정진술"
+        for sentinel in ("COUNTEREX", "SIGNAL", "REGEX", "CORRECT"):
+            assert sentinel not in text
 
     def test_semantic_matches_default_threshold_from_settings(self) -> None:
         # threshold 미지정 → Settings 기본(0.55). Fake로 무관 텍스트는 임계 미달 → 빈/소수.

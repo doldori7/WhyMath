@@ -51,8 +51,10 @@ class MisconceptionCrosslink(BaseModel):
     )
     mis_id: str = Field(
         ...,
+        # max_length=32 — DB 컬럼 폭(String(32))과 정합. atom 투영 mis_id('ATOM:'+code)가
+        # 실측 최장 18자(348건이 16자 초과)라 구 16은 오버플로(Phase 5 이전 대비 헤드룸 포함).
         description="콘텐츠 카탈로그 M-id(FK 대상 misconception_catalog.mis_id — 예 'M0425')",
-        max_length=16,
+        max_length=32,
     )
     link_type: CrosslinkType = Field(
         ...,

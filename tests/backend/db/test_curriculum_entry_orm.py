@@ -2,7 +2,7 @@
 
 problem ORM 테스트 패턴 답습: 메타데이터 등록 / PG DDL 컴파일(enum·DATE·UNIQUE) / enum
 values_callable(⚠️ CurriculumLicense는 멤버명≠값 하이픈 케이스 — KR-NCIC) / schema↔ORM 변환
-roundtrip / PK 판단(entry_id 단일 PK + UNIQUE(concept_id, country_code)).
+roundtrip / PK 판단(entry_id 단일 PK + UNIQUE(concept_id, country_code, subject) — S1 3-튜플).
 
 설계 정본: schemas/v1.1/curriculum_entry.schema.yaml.
 """
@@ -57,13 +57,28 @@ def test_curriculum_entry_registered_in_metadata() -> None:
 # 2) PG DDL 컴파일 + PK 판단
 # ──────────────────────────────────────────────────────────────────────────
 def test_curriculum_entry_pk_is_entry_id_single() -> None:
-    """PK는 entry_id 단일 PK다(복합키 (concept_id, country_code)는 UNIQUE로 강제)."""
+    """PK는 entry_id 단일 PK다(복합키 (concept_id, country_code, subject)는 UNIQUE로 강제)."""
     ddl = _pg_ddl(OrmCurriculumEntry.__table__)
     assert "PRIMARY KEY (entry_id)" in ddl
-    # 복합 의미키는 UNIQUE 제약으로.
-    assert "UNIQUE (concept_id, country_code)" in ddl
+    # 복합 의미키는 3-튜플 UNIQUE 제약으로(S1 subject 축 — 2-튜플 회귀 방지).
+    assert "UNIQUE (concept_id, country_code, subject)" in ddl
+    assert "UNIQUE (concept_id, country_code)\n" not in ddl  # 구 2-튜플 잔존 금지
     pk_cols = [c.name for c in OrmCurriculumEntry.__table__.primary_key.columns]
     assert pk_cols == ["entry_id"]
+
+
+def test_curriculum_entry_subject_column_not_null_default_math() -> None:
+    """subject 컬럼(S1) — NOT NULL + server_default '수학'(기존 행·INSERT 무손상 백필).
+
+    교과 레벨 축('수학'·'물리') — NCIC AchievementStandard.subject(과목 레벨)와 granularity
+    다름(모듈 docstring 교차 명기). 마이그레이션 rev a4b5c6d7e8f9와 정의 일치(드리프트 0).
+    """
+    col = OrmCurriculumEntry.__table__.c.subject
+    assert col.nullable is False
+    assert col.server_default is not None
+    assert col.server_default.arg == "수학"  # type: ignore[union-attr]
+    ddl = _pg_ddl(OrmCurriculumEntry.__table__)
+    assert "subject VARCHAR DEFAULT '수학' NOT NULL" in ddl
 
 
 def test_curriculum_entry_ddl_enum_and_date() -> None:
@@ -124,6 +139,7 @@ def test_curriculum_entry_roundtrip_preserves_core_fields() -> None:
     assert orm.entry_id == "KR::UC-CAL-INT-DEF"
     assert orm.concept_id == "UC-CAL-INT-DEF"
     assert orm.country_code == "KR"
+    assert orm.subject == "수학"  # S1 — schema default가 mapper 컬럼키 필터로 자동 포함
     assert orm.license_id == "KR-NCIC"  # use_enum_values=True → 하이픈 값 문자열
     assert orm.required_depth == "conceptual"
     assert orm.effective_from == date(2025, 3, 1)
@@ -135,6 +151,7 @@ def test_curriculum_entry_roundtrip_preserves_core_fields() -> None:
     assert back.entry_id == s.entry_id
     assert back.concept_id == s.concept_id
     assert back.country_code == s.country_code
+    assert back.subject == "수학"  # S1 — 왕복 보존
     assert back.license_id == s.license_id  # 'KR-NCIC' 값 보존
     assert back.required_depth == s.required_depth
     assert back.effective_from == date(2025, 3, 1)
@@ -165,3 +182,20 @@ def test_curriculum_entry_roundtrip_absent_cell() -> None:
     assert back.is_present is False
     assert back.source_url is None
     assert back.license_id == s.license_id
+
+
+def test_curriculum_entry_roundtrip_preserves_non_math_subject() -> None:
+    """subject='물리' 셀도 왕복 보존(S1 — 개방 str·같은 개념의 물리 교육과정 셀 표현).
+
+    3-튜플 유일성(수학·물리 두 행 공존 + 동일 3-튜플 거부)은 DB 제약이라 실 PG 통합테스트
+    (`test_curriculum_entry_subject_migration_integration.py`) 소관 — 여기서는 변환만.
+    """
+    s = _valid_entry(
+        entry_id="KR:물리:UC-VEC",
+        concept_id="UC-VEC",
+        subject="물리",
+    )
+    orm = OrmCurriculumEntry.from_schema(s)
+    assert orm.subject == "물리"
+    back = orm.to_schema()
+    assert back.subject == "물리"

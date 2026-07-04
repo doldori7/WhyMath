@@ -21,12 +21,17 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from data_pipeline.citation import build_ncic_citation_core
+
 # NCIC 승계 출처 문구(concept_graph.md §1.1 미러) — 그래프 외부 노출·라이선싱 시 동봉 의무.
 # 원자 백본은 자체작성이나, standard_codes로 연결한 성취기준 *코드*가 공공누리 1유형이라 동봉한다.
+# S2(subject_expansion_readiness.md §9): 과목 종속부는 build_ncic_citation_core가 단일 원천 —
+# 합성 방식만 빌더로 바꿨고 **값은 리팩토링 전과 바이트 동일**
+# (동결 테스트: tests/data_pipeline/test_citation.py).
 SOURCE_CITATION: Final[str] = (
-    "원자-성취기준 매핑 근거: 교육부 고시 제2022-33호 [수학과 교육과정], "
-    "국가교육과정정보센터(NCIC, https://www.ncic.go.kr). "
-    "원자화·교수학 주석(4요소·원자성)·대학 축은 와이매스 자체작성."
+    "원자-성취기준 매핑 근거: "
+    + build_ncic_citation_core()
+    + ". 원자화·교수학 주석(4요소·원자성)·대학 축은 와이매스 자체작성."
 )
 
 

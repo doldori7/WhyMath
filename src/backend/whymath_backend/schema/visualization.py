@@ -63,7 +63,15 @@ class Graph2dSpec(BaseModel):
     model_config = ConfigDict(extra="allow", str_strip_whitespace=True)
 
     function: str | None = Field(default=None, description="함수·관계식(예: 'a*x**2+b*x+c')")
-    domain: list[float] | None = Field(default=None, description="정의역 범위(예: [-3, 3])")
+    domain: list[float] | None = Field(default=None, description="정의역(x축) 범위(예: [-3, 3])")
+    y_range: list[float] | None = Field(
+        default=None,
+        description=(
+            "치역(y축) 범위(예: [-5, 5]) — *선택*. 미지정 시 렌더러 기본값(클라 폴백). 명세가 "
+            "y 범위를 *표현*할 수 있게 해 렌더러가 y축 범위의 유일 권위가 되지 않게 한다"
+            "(표현≠의미·05 §5.2). domain 동형(타입만 검증·2원소 [min,max]·well-formed는 렌더러)."
+        ),
+    )
     parameters: list[Graph2dParam] | None = Field(
         default=None, description="학생 조작 슬라이더 파라미터 목록"
     )

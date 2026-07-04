@@ -1,0 +1,18 @@
+{
+  "source_file": "skills.jsonl",
+  "source_sha256": "57d16b08a7eaf8d055cb25e34317049741d033be444e83bf6741274585ff0f0a",
+  "source_citation": "행동영역·스킬 택소노미: 와이매스 자체작성(성취기준 본문 미포함).",
+  "counts": {
+    "skills": 27,
+    "families": 16,
+    "behavior_areas": 6
+  },
+  "validation": {
+    "success": true,
+    "errors": 0,
+    "warnings": 0,
+    "counts_by_rule": {}
+  },
+  "skipped": [],
+  "determinism": "결정론 — 동일 sha256 입력 2회 transform 시 byte 동일 산출"
+}

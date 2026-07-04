@@ -24,7 +24,8 @@ CI hermetic: 이 모듈 import만으로는 임베딩·PG 연결이 없다(provid
 
 redaction(우선순위 #2): 세 투영 모두 *안전 필드만* — description·formal_definition·intuitive_
 explanation은 임베딩 입력에도 메타 컬럼에도 런타임 엔티티에도 없다(graph.json 부재·로더 미독·컬럼
-미수록/미작성의 삼중 방어). ③ backend `concept`은 본문 3컬럼을 NULL로 남겨 검수 대기로 둔다.
+부재의 삼중 방어). ③ backend `concept`은 본문 3컬럼·오개념 컬럼을 2026-07-03 Phase 1b로 아예
+제거했다(런타임 소비처 0·redaction 청산 — `db/models/concept.py`·`schema/concept.py`).
 
 사용:
     WHYMATH_VECTOR_STORE=pgvector \
@@ -54,7 +55,7 @@ from whymath_backend.l1.concept_graph.node_projection import (
     load_concept_nodes_from_graph_json,
     populate_concept_nodes,
 )
-from whymath_backend.l4.misconception.semantic.provider import build_provider
+from whymath_backend.l1.embedding_provider import build_provider
 
 # graph.json 기본 경로(슬1 transform-v1 --output-dir 관례). 명시 --graph로 오버라이드.
 _DEFAULT_GRAPH_PATH = Path("data/concept_graph/graph.json")
@@ -98,8 +99,8 @@ def main(argv: list[str] | None = None) -> int:
             "(`python -m data_pipeline.concept_graph transform-v1 --output-dir ...`)."
         )
         return 2
-
     # ① 임베딩 벡터 적재(슬3) — 안전 표현 임베딩 → concept_embedding upsert.
+    #    name_ko·intuition·representations는 전부 graph.json 노드에서 읽는다(Phase 1).
     concepts = load_concepts_from_graph_json(graph_path)
     provider = build_provider(settings)
     embedding_count = populate_concept_embeddings(concepts, provider, settings=settings)

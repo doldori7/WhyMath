@@ -116,6 +116,14 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - ❌ API 키·시크릿을 코드에 하드코딩 금지
 - ❌ 학교·학년 정보로 *개인 식별 가능한* 분석 결과 외부 노출 금지
 
+### 구조 붕괴 (구축 플레이북 2대 철칙 — 어기면 시스템은 반드시 무너진다)
+- ❌ 수학 *전체*를 완벽 모델링 금지 — *교육적으로 압축된 인지 그래프*만 (개념 원자 단위, 핵심만 노드·나머지는 속성/AI 생성)
+- ❌ LLM에 *전체 그래프*를 통째로 주기 금지 — Minimal Reasoning Subgraph만 (depth ≤ 2, max_nodes ≤ 12~20, max_tokens ≤ 3000). "더 많이 넣을수록 더 멍청해진다"
+- ❌ 노드에 renderer·curriculum·prompt·misconception·UI·embedding *혼입* 금지 (Concept Purity — 노드는 순수 개념만)
+- ❌ 관계 타입 *폭발* 금지 — 5~8개 핵심 관계만. `similar_to`/`related_to`를 traversal에 사용 금지
+- ❌ 오개념을 초기 context에 *preload* 금지 — reactive retrieval만 (misconception contamination 방지)
+- ❌ 노드 embedding *전체* 생성 금지 — chunk 단위(`limit.definition`/`limit.intuition`/`limit.example`, 150~500 tokens)로 분리, semantic vector 오염 방지
+
 ---
 
 ## ✅ 절대 원칙 (ALWAYS)
@@ -142,6 +150,66 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - 모든 학습 경로는 Polya 4단계 매핑
 - 모든 오답은 *오개념 후보* 분석 시도
 - 모든 콘텐츠는 성취기준 코드 1개 이상 태그
+
+---
+
+## 🧱 구축 플레이북 불변식 & AI 질문 프로토콜
+
+> 출처: **WhyMath 구축 플레이북 v1.0**(55개 설계문서 통합) Part 8·11·12.
+> 이 프로젝트의 최대 리스크는 *컨텍스트 오염*이므로, "매번 잘 질문하기"에 의존하지 않고 아래 규칙을 **모든 세션이 자동으로 강제**받는다. **AI에게 질문하는 법 = 이 프로토콜을 그대로 따르는 것.**
+
+### 단 하나의 원칙
+1. **"수학 전체를 모델링하지 말고, 교육적으로 압축된 인지 그래프만 만들어라."**
+2. **"LLM에게 전체 그래프를 절대 통째로 보여주지 마라."**
+
+> 이 문서의 거의 모든 규칙은 사실 이 두 문장의 구체적 실천법이다. 두 문장을 어기는 순간 시스템은 반드시 무너진다.
+
+### 8대 구조 원칙 (12-2 요약)
+1. **Concept Purity** — 노드는 순수 개념만 (renderer·UI·prompt·curriculum·misconception 금지)
+2. **Layer Separation** — Concept/Relation/Pedagogy/Misconception/Renderer/Curriculum/AI 계층 분리
+3. **Relation Typing 최소화** — 5~8개 핵심 관계만
+4. **Renderer는 Plugin** — Concept → Visualization Intent → Renderer Adapter (구현체 이름을 노드에 넣지 않음)
+5. **Curriculum은 Overlay** — 개념은 영속, 교육과정 매핑만 교체
+6. **오개념은 독립 DB** — Reactive Retrieval
+7. **AI Context Slimming** — 필요한 subgraph만 전달
+8. **AST 중심** — 표현 통합의 기준축
+
+### 7대 붕괴 연쇄 (12-1 — 이 순서로 무너진다)
+`노드 폭발 → 관계 폭발 → 순환참조 → 유지보수 지옥 → 성능 병목 → AI 추론 실패 → 교육 일관성 붕괴`
+- **노드 폭발** ← "모든 것을 노드화" · 방어: 개념 원자 단위, 핵심만 노드
+- **관계 폭발** ← Edge ≈ N² · 방어: Edge 타입 5~8개 제한, `similar_to` 제거
+- **순환참조** ← 교육 그래프는 본질적 순환 · 방어: `prerequisite`만 DAG 강제 + Reachability Check
+- **유지보수 지옥** ← truth source가 하나가 아님 · 방어: 단일 진실 원천
+- **성능 병목** ← context traversal 폭증 · 방어: depth·max_nodes·token budget guard
+- **AI 추론 실패** ← attention dilution · 방어: Minimal Reasoning Subgraph
+- **교육 일관성 붕괴** ← 위 6개의 최종 귀결
+
+### AI 질문 프로토콜 (Part 11 — "어떻게 질문할까"의 답)
+- **AI를 "답변기"가 아니라 "구조 붕괴 감지기"로 쓴다.** 코드 생성기 ❌ → 구조 비평가·boundary 검사기·explosion 탐지기·schema validator ⭕
+- **4종 질문 축으로 묻는다**: ①존재 이유(왜 필요한가) ②경계(어디까지인가) ③붕괴(어디서 실패하는가) ④분리(무엇을 독립시켜야 하는가)
+- **질문 골격을 강제한다**: `[역할] 당신은 OO 전문가 · [목표] OO 설계 · [환경] 기술·대상·제약(AST 기반·오개념 추적) · [출력] 아키텍처/핵심모듈/데이터흐름/예상난점/테스트전략 · [검증] 실패 가능성·예외 상황·테스트 방법`
+  - ❌ "수학앱 만들어줘"(범위 무한·목표 없음 → 일반론만) · ❌ "한 번에 전부 구현해줘"(피상적·누락·구조 붕괴)
+- **단계적 심화로 나눈다**: `생성 → 비판 → 반례 → 개선 → 테스트 → 자동화`. 각 노드 설계 끝에 반드시 묻는다 — *"이 구조가 실제 서비스에서 실패하는 이유를 분석해줘"*
+- **노드 설계 시 공통 출력 형식을 강제한다**: `1.구조적 2.교육적 3.AI retrieval 4.scaling 5.maintenance 6.canonicalization 위험 7.mitigation 전략`으로 분리. 공통 문장: **"표면 표현이 아니라 인지 행동(cognitive action) 기준으로 설명하라."**
+
+### 작업 전/후 하드 게이트 (12-3 — 통과 전 설계·구현 진행 금지)
+**노드 추가 시**:
+- [ ] 이 데이터는 "개념 자체"인가, "해석/투영/실행 정보"인가? (후자면 외부화)
+- [ ] 노드 파일이 1~4KB 이내인가? (10KB 이상 금지)
+- [ ] renderer·curriculum·prompt·misconception·UI·embedding을 노드에 넣지 않았는가?
+- [ ] ID가 파일명·언어·교육과정과 독립적인가? (`math.calculus.limit` 형태)
+
+**관계 추가 시**:
+- [ ] 이 관계가 없으면 AI 튜터링에서 실제 어떤 오류가 발생하는가? (불명확하면 weak → 제거)
+- [ ] `prerequisite`이면 DAG를 깨지 않는가? (Reachability Check 통과)
+- [ ] `related_to`/`similar_to`를 traversal에 쓰고 있지 않은가?
+- [ ] 단방향 canonical edge로 저장했는가?
+
+**AI 연동 시**:
+- [ ] LLM에 전체 그래프가 아니라 subgraph(depth ≤ 2, max_nodes ≤ 12~20)만 주는가?
+- [ ] 오개념을 초기 context에 preload하지 않고 reactive로 가져오는가?
+- [ ] concept/atom/misconception embedding이 물리(테이블)·논리(subject 스코프 + 거버넌스 테스트) 분리되어 있는가? (DB cross-table 코사인 금지 — `test_embedding_namespace_governance.py`)
+- [ ] traversal에 visited set·timeout·token budget guard가 있는가?
 
 ---
 
@@ -212,6 +280,8 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - `ROADMAP.md` — Phase별 일정
 - `docs/architecture/00_overview.md` — 7계층 요약
 - `docs/standards/prompt_engineering.md` — 프롬프트 기준
+- `docs/standards/build_checkpoint_questions.md` — 구축 플레이북 단계별 진행 점검 질문 세트 (`/review`·`/status` 시)
+- `docs/standards/playbook_part_review_questions.md` — 구축 플레이북 Part 0~12 순차 설계-준수 점검 질문 세트
 
 ### 상세 (필요 시 읽기)
 - `docs/architecture/01-07_*.md` — 각 계층 상세 명세
@@ -230,6 +300,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 2. **새 영역 진입 시 컨텍스트 비우기** — `/status` 후 새 세션
 3. **MEMORY.md를 진실 원천으로** — 대화 휘발에 의존 금지
 4. **결정은 항상 문서화** — "전에 말했잖아"가 통하지 않는 환경
+5. **여러 세션 병렬 개발 시** — `docs/standards/parallel_sessions.md` 준수 (1 세션 = 1 도메인 = 1 브랜치 = 1 worktree, `scripts/new-session-worktree.sh`)
 
 ---
 

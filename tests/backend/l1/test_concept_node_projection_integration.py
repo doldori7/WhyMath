@@ -125,8 +125,7 @@ def _node(concept_id: str, *, name_ko: str, review_status: str) -> ConceptNodeRe
         standard_codes=("10공수1-01-01",),
         ccss_code=None,
         difficulty_tier=3,
-        metaphor=None,
-        accepted_expressions=None,
+        behavior_skills=("skill.factorization",),
     )
 
 
@@ -172,7 +171,7 @@ class TestNodeRoundtrip:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     rows = conn.execute(
                         text(
-                            "SELECT name_ko, review_status FROM concept_node "
+                            "SELECT name_ko, review_status, behavior_skills FROM concept_node "
                             "WHERE concept_id = :k"
                         ),
                         {"k": key},
@@ -181,6 +180,8 @@ class TestNodeRoundtrip:
                 assert len(rows) == 1
                 assert rows[0].name_ko == "둘째 이름"
                 assert rows[0].review_status == "reviewed"
+                # behavior_skills 참조 배열 왕복(Phase 2b-1·TEXT[]).
+                assert rows[0].behavior_skills == ["skill.factorization"]
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:

@@ -10,8 +10,10 @@ PK·참조 판단(concept_standard_link 선례 그대로):
     (kebab_id, mis_id, link_type)). from_schema가 link_id를 비우고 DB server_default가 채운다.
   - `kebab_id`(String(64)·NOT NULL) — L4 탐지 카탈로그 id *느슨참조*. **FK 아님** — kebab 카탈로그는
     코드 상수(`CATALOG_BY_ID`)라 DB 테이블이 없다(concept_standard_link.concept_code와 동형).
-  - `mis_id`(String(16)·NOT NULL·**REAL FK** → `misconception_catalog.mis_id`·CASCADE) —
+  - `mis_id`(String(32)·NOT NULL·**REAL FK** → `misconception_catalog.mis_id`·CASCADE) —
     M-id 삭제 시 매핑도 함께 삭제(연결은 M-id에 종속·concept_standard_link.norm_id 선례).
+    참조 대상 `misconception_catalog.mis_id`와 동일 폭 String(32) — atom 투영 mis_id
+    ('ATOM:'+code)가 실측 최장 18자라 구 String(16)에서 확폭(마이그레이션 a5b6c7d8e9f0).
 
 `link_type`('직접매핑'/'부분매핑'/'개념겹침')·`method`('manual'/'standard_code'/'embedding')는 닫힌
 어휘를 schema Literal·to_schema 재검증이 강제하므로 DB는 값만 담는다(String —
@@ -48,8 +50,9 @@ class MisconceptionCrosslink(Base):
     # L4 탐지 카탈로그 id 느슨참조 — FK 아님(kebab 카탈로그는 코드 상수·DB 테이블 없음).
     kebab_id: Mapped[str] = mapped_column(sa.String(64), nullable=False)
     # M-id 실 FK — M-id 삭제 시 매핑도 함께 삭제(연결은 M-id에 종속).
+    # String(32) — 참조 대상 misconception_catalog.mis_id와 동일 폭(atom mis_id 최장 18자 실측).
     mis_id: Mapped[str] = mapped_column(
-        sa.String(16),
+        sa.String(32),
         sa.ForeignKey("misconception_catalog.mis_id", ondelete="CASCADE"),
         nullable=False,
     )

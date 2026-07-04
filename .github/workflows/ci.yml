@@ -159,6 +159,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
+          # 교차계층 거버넌스 테스트(tests/backend/l1/test_five_node_connectivity_governance.py)가
+          # data_pipeline(L1)을 import한다 → 백엔드 잡에도 설치(수집 ImportError 방지).
+          pip install -e ../data-pipeline
 
       # lint(ruff·black)는 src(.)뿐 아니라 tests(../../tests/backend)도 검사한다(PR #223).
       # 과거 CI는 src만 lint해 tests의 위반(B905·N817·E501·I001 등)이 검출 없이 머지돼 왔다 —
@@ -176,6 +179,9 @@ jobs:
 
       - name: Mypy (strict type check)
         run: mypy --strict whymath_backend
+
+      - name: Import contracts (import-linter — 7계층 단방향)
+        run: lint-imports
 
       - name: Pytest (with coverage)
         run: |
@@ -253,6 +259,9 @@ jobs:
           # torch 설치가 분당 과금만 태웠다. 슬110의 find_spec 사전체크가 미설치를 깨끗이
           # skip 처리한다. 라이브 측정은 Kiki가 Phaiakes9에서 .[dev,embedding]으로 실행.
           pip install -e ".[dev]"
+          # 교차계층 거버넌스 테스트(tests/backend/l1/test_five_node_connectivity_governance.py)가
+          # data_pipeline(L1)을 import한다 → 백엔드 잡에도 설치(수집 ImportError 방지).
+          pip install -e ../data-pipeline
 
       - name: Alembic upgrade head (fresh DB — 전 마이그레이션 적용)
         run: alembic upgrade head

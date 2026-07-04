@@ -45,10 +45,10 @@
 
 ```python
 class Concept(BaseModel):
-    concept_id: str                  # PK. Universal Concept ID — 매트릭스와 공유. 'UC.calc.limit.epsilon-delta'
-    name_ko: str                     # 한국어 명칭. '엡실론-델타 극한 정의'
-    name_en: str                     # 영어 명칭. 'epsilon-delta definition of limit'
-    name_ja: str                     # 일본어 명칭. 다국 정합성 키 — `01_data_foundation.md` 자산 9번 "표기(한·영·일)" 필수
+    concept_id: str                  # PK(canonical). 'math.<area>.<slug>' — 매트릭스와 공유. 'math.calculus.epsilon-delta-geukhan-jeongui'
+    source_id: str                   # 원천 src_id(파생 추적·롤백). 'H:12미적Ⅰ01-01'
+    aliases: list[str]               # 옛 키 — [교육과정축 코드, 옛 UC, src_id]. 하위호환 join·matrix 개념축 오버레이
+    # 표시이름(name_ko/en/ja)은 노드 비내장 — locale 계층(locales/{lang}.json·canonical 키)이 단일 진실(P2d·Concept Purity)
     domain: str                      # '미적분' 등 (NCIC 영역명과 정렬)
     grade_band_hint: str | None      # 전형적 도입 학년군 (NCIC grade_band 어휘 재사용)
     prerequisite_concept_ids: list[str]   # 선수개념 — Edge(prerequisite)와 *중복 저장* (조회 편의)
@@ -58,7 +58,7 @@ class Concept(BaseModel):
     notes: str | None                # 전문가 검수 메모
 ```
 
-### 2.2 `Edge` (관계) — 6가지 유형
+### 2.2 `Edge` (관계) — 7가지 유형
 
 ```python
 class ConceptEdge(BaseModel):
@@ -85,30 +85,70 @@ class ConceptEdge(BaseModel):
 CREATE CONSTRAINT concept_id_unique IF NOT EXISTS
   FOR (c:Concept) REQUIRE c.concept_id IS UNIQUE;
 
-// 조회 인덱스
+// 조회 인덱스 (표시이름은 노드 비내장 — name_ko 인덱스 제거·P2d. 표시 조회는 locale 계층 소관)
 CREATE INDEX concept_domain IF NOT EXISTS FOR (c:Concept) ON (c.domain);
-CREATE INDEX concept_name_ko IF NOT EXISTS FOR (c:Concept) ON (c.name_ko);
 
-// 관계는 6개 타입을 Cypher 관계 타입으로 직접 사용:
+// 관계는 7개 타입을 Cypher 관계 타입으로 직접 사용:
 // (:Concept)-[:PREREQUISITE {strength, evidence, evidence_source}]->(:Concept)
 // (:Concept)-[:GENERALIZATION {...}]->(:Concept)  등
 ```
 
-`relation` enum 6종은 `data_pipeline/concept_graph/transform.py`의 `_RELATION_TYPES`로 단일 관리. 관계 추가 시 *이 한 곳만* 갱신.
+`relation` enum 7종은 `data_pipeline/concept_graph/models.py`의 `Relation`(→ `RELATION_TYPES`)로 단일 관리. 관계 추가 시 *이 한 곳만* 갱신. (산문 "6종"은 stale — `notation_variant` 포함 7종이 정본. enum 값이 산문 카운트에 우선.)
 
-### 2.4 ID 규약 — concept_id (`{TRACK}-{AREA}-{NNN}`)
+### 2.2b 관계 어휘 crosswalk — pipeline `Relation` ↔ backend `EdgeType`
 
-> **2026-06-16 전환(P2a·data-pipeline)**: 정본 ID를 기존 `UC.<domain>.<topic>.<slug>`에서 아래 형식으로 *전환*했다(의도적 breaking — §3.5 "발급 후 변경금지"를 깸). 옛 UC는 `aliases`에, 원천 `src_id`는 `source_id`에 보존한다(롤백·하위호환 join). 결정 로그: `MEMORY.md` 2026-06-16 P2a.
+관계 어휘가 계층별로 나뉘어 있다(이름·개수 상이). **단일 진실 원천은 아래 표**이며,
+`data_pipeline/concept_graph/relation_crosswalk.py`가 코드로, 양쪽 거버넌스 테스트가 동결한다.
+
+- **L1 pipeline `Relation`**(models.py·7종·소문자) = **canonical 데이터 어휘**.
+- **L2 backend `EdgeType`**(`whymath_backend/schema/enums.py`·6종·대문자) = **런타임 투영 어휘**.
+- **atom `AtomRelation`**(atom_graph·1종 `prerequisite`) = 원자 백본.
+
+| pipeline `Relation` | backend `EdgeType` 투영 | 적재 | 비고 |
+|---|---|---|---|
+| `prerequisite` | `PREREQUISITE` | ✅ 적재 | traversal 대상(유일). DAG 강제·`prerequisite_concept_ids` 캐시 동기 |
+| `generalization` | `EXTENDS` | ⏸ deferred | A→일반화 |
+| `specialization` | `EXTENDS` | ⏸ deferred | EXTENDS의 역방향 해석 |
+| `contrast` | `CONTRASTS` | ⏸ deferred | 대조 학습 |
+| `composition` | `COMPOSED_OF` | ⏸ deferred | 합성 |
+| `application` | *(deferred)* | ⏸ deferred | backend 런타임 대응 없음 |
+| `notation_variant` | *(deferred)* | ⏸ deferred | backend 런타임 대응 없음 |
+
+backend 전용 타입 `ANALOGOUS_TO`(유사)·`TRIGGERS_DISTRACTOR`(오개념 유발 선지)는 pipeline 원천이
+없다 — 각각 traversal 배제(약한 관계·N² dense화 방어)·오개념 op-code 카탈로그 어휘다.
+**현 범위는 `prerequisite`만 backend `concept_edge`에 적재**한다(약한 관계 유입 차단 —
+`tests/backend/l1/test_edge_relation_governance.py`). `similar_to`/`related_to`는 어느 어휘에도
+없다(관계 타입 폭발 방어 — 8대 원칙 ③).
+
+### 2.2c AI Graph vs Runtime Graph 분리 (Concept Purity)
+
+플레이북 Part 3 "AI용 Graph ↔ Runtime Graph 분리"는 이 프로젝트에서 **Concept Purity + 3중 store**로
+구현된다(같은 원칙, 다른 명칭). 대응:
+
+| 플레이북 라벨 | 구성 | 저장 위치 |
+|---|---|---|
+| **AI Graph** | 개념 + 최소 relation(prerequisite) + 오개념 subset(reactive) + AST | Neo4j(구조) + PG `concept_node`(안전 메타) |
+| **Runtime Graph** | renderer·animation·layout·UI state | `data/render_contract.json`(렌더 계열 맵) + L5 클라이언트(Flutter·웹)·Learning Scene DSL |
+| (별도 축) | embedding 벡터 | pgvector `concept_embedding`(노드에 미저장 — 참조만) |
+
+노드(`Concept`)는 **순수 개념만** 보유한다 — renderer·animation·layout·UI·embedding·prompt를
+필드로 갖지 않는다(모델 필드 화이트리스트 동결: `test_models.py::TestConceptPurity`). 시각화·오개념은
+*참조 키*(`visualization_card_keys`·`misconception_codes`)만 두고 실체는 노드 밖에 산다.
+
+### 2.4 ID 규약 — concept_id (`math.<area>.<slug>`)
+
+> **2026-07-02 전환(P2d·Part 9 엄격 시정)**: 정본 ID를 `{TRACK}-{AREA}-{NNN}`(P2a·학년대=교육과정 결합·비의미론 순번)에서 아래 **교육과정·언어·렌더러 무관 의미론** 형식으로 *전환*했다(breaking). 옛 `{TRACK}-{AREA}-{NNN}`(교육과정축 오버레이 코드)·옛 UC·원천 `src_id`는 `aliases`에, `src_id`는 `source_id`에 보존한다(롤백·하위호환·matrix 개념축 join). 결정 로그: `MEMORY.md` 2026-07-02 P2d. (P2a `{TRACK}-{AREA}-{NNN}`은 플레이북 Part 9가 경고하는 `KR2022.math2.limit` 안티패턴이라 폐기 — `docs/standards/part9_id_policy_review.md`.)
 
 ```
-{TRACK}-{AREA}-{NNN}      예: ELEM-GEO-001
+math.<area>.<slug>      예: math.geometry.hapdong-daeching-idong
 ```
 
-- **TRACK** ∈ `{ELEM, MID, HIGH, RT, OLY}` — 첫 `standard_codes` 학년대수에서 파생(2/4/6=ELEM·9=MID·10/12=HIGH). 코드가 없으면 `difficulty_tier` 밴드 폴백(0~8 ELEM·9~16 MID·17~24 HIGH·그것도 없으면 MID). `RT`(재수 유형카드)·`OLY`(영재 정리)는 *예약*(코퍼스엔 없음).
-- **AREA** = 토픽 ascii 코드(2~8 대문자/숫자) — `category`의 레벨 접두사(`[고]`/`[중]`/`[공통]`)를 제거한 토픽을 짧은 니모닉으로 매핑(`data_pipeline.concept_graph.idmap._TOPIC_AREA_MAP`·37 category 전수). 같은 토픽 어간이 레벨만 다르면(예 `[중]기하`·`[고]기하` → `GEO`) AREA를 공유하고 TRACK이 구분한다. 미수록 category는 *침묵 폴백 없이 KeyError*(taxonomy 누수 가드).
-- **NNN** = (TRACK, AREA) 그룹 안에서 `(int(difficulty_tier), src_id)` 정렬로 부여하는 3자리 zero-pad 순번(멱등 — 재실행 동일).
-- 예: `ELEM-GEO-001`(초등/기하), `HIGH-CALC-042`(고등/미적분), `MID-ARITH-007`(중등/수와 연산).
-- **이 ID는 `curriculum_matrix.md`의 "개념 축"과 동일 값을 공유한다.** 그래프 노드와 매트릭스 셀이 같은 키로 join 가능해야 함(`curriculum_matrix.md`의 'WM-C-…' 표기는 stale — 이 형식이 정본).
+- **`math`** = 고정 subject 도메인(Phase 1 전건 수학·향후 확장 시 추가).
+- **`<area>`** = 교육과정-독립 영역어(소문자·`[a-z]`+하이픈) — `category`(레벨 접두사 `[고]`/`[중]`/`[공통]` 제거 후 토픽)를 AREA 코드로 매핑(`idmap._TOPIC_AREA_MAP`·전수)한 뒤 영역어로 사상(`idmap._AREA_SLUG_MAP`·GEO→geometry·CALC→calculus·ALG→algebra 등). area는 이미 학년-독립이라(`[중]기하`·`[고]기하`→`geometry`) **학년/교육과정 결합이 ID에서 사라진다**(Part 9 핵심). 미수록 category는 *침묵 폴백 없이 KeyError*(taxonomy 누수 가드).
+- **`<slug>`** = `name_ko`의 결정론적 로마자화(`hangul_romanize.romanize`·국립국어원 표기법 기반 간이 음역·외부 lib 0). `name_en` 저작 후에도 canonical은 불변(locale만 개선·동결 정책).
+- **충돌**: grade 제거로 `(area, slug)`가 겹치면(기본수학↔공통수학 22쌍) `(int(difficulty_tier), src_id)` 정렬로 첫 항목 무접미·이후 `-2`/`-3`(멱등). 접미 사실은 `ids.yaml`에 기록.
+- 예: `math.place-value.su-gaenyeomgwa-segi`(수 개념과 세기)·`math.equation.dahangsigui-sachik-yeonsan`(다항식의 사칙연산).
+- **matrix "개념 축" join**: 정본 키는 canonical이고, 옛 `{TRACK}-{AREA}-{NNN}`은 `aliases`의 교육과정축 오버레이 코드로 보존돼 alias 조회로 계속 join 가능(`curriculum_matrix.md`·curriculum overlay 원칙·'WM-C-…' 표기는 stale).
 
 ---
 
@@ -138,9 +178,9 @@ CREATE INDEX concept_name_ko IF NOT EXISTS FOR (c:Concept) ON (c.name_ko);
 
 ### 3.5 concept_id 안정성
 
-- 한 번 발급한 `concept_id`는 *변경 금지* (매트릭스·교과서 매핑이 이 키로 join). 개념을 합치거나 쪼갤 때는 ID 폐기·신규 발급 + `notes`에 이력 기록.
-- **예외 — P2a 전환(2026-06-16)**: 정본 ID 체계를 `UC.*` → `{TRACK}-{AREA}-{NNN}`으로 *일괄 전환*하며 이 "변경금지"를 의도적으로 한 번 깼다. 단발 마이그레이션이며 추적성은 깨지 않았다 — 모든 노드가 옛 UC와 원천 `src_id`를 **`aliases`**로, 원천 `src_id`를 **`source_id`**로 보존한다(옛 키로도 join·롤백 가능). 코퍼스가 `src_id` 기반이고 UC/새 ID 모두 *파생*이라(idmap), 재발급이 안전했다. 전환 *이후*에는 다시 발급 후 불변 원칙이 적용된다.
-- 검증: `data_pipeline.concept_graph.validate`의 `id_conformance`·`id_unique`·`alias_roundtrip`(그래프 레벨)와 `validate_idmap`의 `area_map_total`(원천 레코드 레벨)이 재ID 불변식을 강제한다.
+- 한 번 발급한 `concept_id`는 *변경 금지* (매트릭스·교과서 매핑이 이 키로 join). 개념을 합치거나 쪼갤 때는 ID 폐기·신규 발급 + `notes`에 이력 기록. canonical의 `<slug>`는 발급 시 동결 — `name_en` 저작 등으로 표시이름이 바뀌어도 canonical은 불변(locale만 개선). slug 교체는 명시적 rename 마이그레이션 이벤트로만(침묵 변경 금지·`ids.yaml` migrations 기록).
+- **예외 — 2회 전환(추적성 무손실)**: ⑴ **P2a(2026-06-16)** `UC.*` → `{TRACK}-{AREA}-{NNN}`, ⑵ **P2d(2026-07-02·Part 9)** `{TRACK}-{AREA}-{NNN}` → `math.<area>.<slug>`(교육과정 결합 제거). 두 전환 모두 "변경금지"를 일괄로 깬 단발 마이그레이션이며, 추적성은 깨지 않았다 — 모든 노드가 옛 `{TRACK}-{AREA}-{NNN}`(교육과정축 코드)·옛 UC·원천 `src_id`를 **`aliases`**로, `src_id`를 **`source_id`**로 보존하고 `ids.yaml`이 P2a·P2d 이관 이력을 기록한다(옛 키로도 join·롤백). 코퍼스가 `src_id` 기반이고 모든 ID가 *파생*이라(idmap), 재발급이 안전했다. 전환 *이후*엔 다시 발급 후 불변 원칙이 적용된다.
+- 검증: `data_pipeline.concept_graph.validate`의 `id_conformance`·`curriculum_independence`·`id_unique`·`alias_roundtrip`(그래프 레벨)·`validate_registry`(ids.yaml)·`validate_locales`(locales)와 `validate_idmap`의 `area_map_total`(원천 레코드 레벨)이 재ID·registry·locale 불변식을 강제한다.
 
 ---
 
@@ -153,7 +193,7 @@ CREATE INDEX concept_name_ko IF NOT EXISTS FOR (c:Concept) ON (c.name_ko);
 | 1. 라이선스 확인 | `docs/data/licensing_safety.md` | 자체 자산 + NCIC 승계 출처 의무 확인 |
 | 2. 데이터 카드 | 이 문서 | 본 .md |
 | 3. 시드 생성 | `seed.py` | NCIC 성취기준 → 후보 `Concept` 노드 + `prerequisite` 후보 엣지 자동 제안 |
-| 4. 전문가 작성 | 수동 (수학교육 도메인 파트너 — `MEMORY.md` M1.3 게이트) | 노드 3개 언어 표기(한·영·일)·6종 관계·strength·evidence 작성 |
+| 4. 전문가 작성 | 수동 (수학교육 도메인 파트너 — `MEMORY.md` M1.3 게이트) | name_ko(→locale)·7종 관계·strength·evidence 작성 (name_en/ja는 후속 locale 저작) |
 | 5. 정형화 | `transform.py` | 작성 시트 → `Concept` / `ConceptEdge` Pydantic |
 | 6. 검증 | `validate.py` | ID 규약·enum·역방향 쌍 경고·dangling 참조 경고·고립 노드 탐지 |
 | 7. 저장 | `load.py` | Neo4j 적재 (Cypher MERGE — 멱등) + JSON 백업 |
@@ -168,9 +208,9 @@ CREATE INDEX concept_name_ko IF NOT EXISTS FOR (c:Concept) ON (c.name_ko);
 
 | Invariant | 테스트 (예정) |
 |---|---|
-| `concept_id`가 `{TRACK}-{AREA}-{NNN}` 규약 준수·유일 | `test_idmap.py`(regex·충돌0)·`validate`의 `id_conformance`·`id_unique` |
+| `concept_id`가 `math.<area>.<slug>` 규약 준수·유일·교육과정 무관 | `test_idmap.py`(regex·충돌0)·`test_id_registry_governance.py`·`validate`의 `id_conformance`·`curriculum_independence`·`id_unique` |
 | 모든 `category`가 AREA로 매핑(미매핑 0)·`src_id`→새 ID 가역·옛 UC 별칭 보존 | `validate_idmap`의 `area_map_total`·`alias_roundtrip` + `test_idmap.py::TestBuildAliasMap` |
-| `relation`이 6종 enum 밖이면 ValidationError | `test_edge_rejects_unknown_relation` |
+| `relation`이 7종 enum 밖이면 ValidationError | `test_edge_rejects_unknown_relation` |
 | `strength`가 0.0~1.0 범위 밖이면 거부 | `test_edge_strength_bounds` |
 | `evidence`가 빈 문자열이면 거부 (근거 없는 엣지 차단) | `test_edge_requires_evidence` |
 | `generalization`↔`specialization` 역방향 쌍 존재 시 경고 | `test_validate_warns_inverse_pair` |
@@ -186,7 +226,7 @@ NCIC 성취기준과의 *상관*을 점검한다 (PRD "데이터 상관" 검증 
 
 - [ ] `prerequisite` 엣지로 연결된 두 개념의 NCIC 성취기준 학년이 단조 증가하는가 (선수개념이 후행 학년에 오지 않는가)
 - [ ] 한 성취기준에 매핑된 개념들이 그래프상 *근접*해 있는가 (같은 성취기준인데 그래프상 멀면 매핑 오류 의심)
-- [ ] 전문가 검수: 6종 관계 분류가 수학교육학적으로 타당한가, `evidence`가 실제 근거인가
+- [ ] 전문가 검수: 7종 관계 분류가 수학교육학적으로 타당한가, `evidence`가 실제 근거인가
 
 ---
 
@@ -248,7 +288,7 @@ for e in sample:
 ```
 
 체크리스트:
-- [ ] 6종 관계 분류가 수학교육학적으로 타당
+- [ ] 7종 관계 분류가 수학교육학적으로 타당
 - [ ] `strength`가 관계 강도를 합리적으로 반영
 - [ ] `evidence`가 실제 근거 (NCIC 인접·문헌·다국 교차검증 중 하나)
 - [ ] `prerequisite` 사이클 없음

@@ -30,14 +30,24 @@ from pydantic import ValidationError
 
 from data_pipeline.concept_graph.idmap import build_id_map, to_csv_rows
 from data_pipeline.concept_graph.models import SOURCE_CITATION, Concept, ConceptEdge
+from data_pipeline.concept_graph.registry import build_registry, dump_registry_yaml
 from data_pipeline.concept_graph.seed import (
     seed_concepts,
     seed_edges,
     write_concepts_csv,
     write_edges_csv,
 )
-from data_pipeline.concept_graph.transform import TransformResult, transform_dataset
-from data_pipeline.concept_graph.validate import validate_dataset, validate_graph
+from data_pipeline.concept_graph.transform import (
+    TransformResult,
+    build_locales,
+    transform_dataset,
+)
+from data_pipeline.concept_graph.validate import (
+    validate_dataset,
+    validate_graph,
+    validate_locales,
+    validate_registry,
+)
 from data_pipeline.ncic.models import AchievementStandardCollection
 
 app = typer.Typer(
@@ -99,7 +109,7 @@ def seed(
     print(f"[시드] 후보 개념 {n_concepts}개 → {output_dir / 'concepts.csv'}")
     print(f"[시드] 후보 prerequisite 엣지 {n_edges}개 → {output_dir / 'edges.csv'}")
     print(
-        "\n[다음 단계] 단계 4 — 전문가가 표기(한·영·일)·6종 관계·strength·evidence를 채운 뒤\n"
+        "\n[다음 단계] 단계 4 — 전문가가 표기(locale)·6종 관계·strength·evidence를 채운 뒤\n"
         "  python -m data_pipeline.concept_graph validate --concepts ... --edges ..."
     )
 
@@ -117,9 +127,6 @@ def _read_concepts_csv(path: Path) -> tuple[list[Concept], list[str]]:
                         # source_id 컬럼 없으면 concept_id로 폴백(시드/신규 후보 = 자기 정체).
                         source_id=row.get("source_id") or row["concept_id"],
                         aliases=_split_list(row.get("aliases", "")),
-                        name_ko=row["name_ko"],
-                        name_en=row["name_en"],
-                        name_ja=row["name_ja"],
                         domain=row["domain"],
                         grade_band_hint=row.get("grade_band_hint") or None,
                         prerequisite_concept_ids=_split_list(
@@ -254,13 +261,18 @@ def transform_v1(
     flashcards_path = corpus_dir / "flashcards.jsonl"
     intl_path = corpus_dir / "ccss_only_intl.jsonl"
 
+    concept_records = _read_jsonl(concepts_path)
     result = transform_dataset(
-        concept_records=_read_jsonl(concepts_path),
+        concept_records=concept_records,
         edge_records=_read_jsonl(edges_path),
         flashcard_records=(_read_jsonl(flashcards_path) if flashcards_path.exists() else None),
         intl_records=_read_jsonl(intl_path) if intl_path.exists() else None,
     )
     report = validate_dataset(result)
+    # ids.yaml registry ⇄ 그래프 · locale ⇄ 노드 정합성(P2d ②③) — 단일 result 원천으로 검증.
+    registry = build_registry(concept_records)
+    registry_report = validate_registry(registry, result.concepts)
+    locales_report = validate_locales(result.locales, result.concepts)
 
     print(f"[정형화] {result.summary()}")
     if result.skipped:
@@ -268,13 +280,25 @@ def transform_v1(
         for msg in result.skipped[:10]:
             print(f"  - {msg}")
     print(f"[검증] {report.report_text()}")
+    print(f"[registry] {registry_report.summary()}")
+    print(f"[locale] {locales_report.summary()}")
 
     if output_dir is not None:
         _write_graph_json(result, output_dir / "graph.json")
-        _write_id_map_csv(_read_jsonl(concepts_path), output_dir / "id_map.csv")
-        print(f"[저장] {output_dir / 'graph.json'} · {output_dir / 'id_map.csv'}")
+        _write_id_map_csv(concept_records, output_dir / "id_map.csv")
+        _write_locales(result, output_dir)
+        _write_registry_yaml(concept_records, output_dir / "ids.yaml")
+        print(
+            f"[저장] {output_dir / 'graph.json'} · {output_dir / 'id_map.csv'} · "
+            f"{output_dir / 'ids.yaml'} · {output_dir / 'locales'}/(ko·en·ja).json"
+        )
 
-    if result.skipped or not report.success:
+    if (
+        result.skipped
+        or not report.success
+        or not registry_report.success
+        or not locales_report.success
+    ):
         raise typer.Exit(code=1)
 
 
@@ -295,13 +319,38 @@ def _write_graph_json(result: TransformResult, path: Path) -> None:
 
 
 def _write_id_map_csv(concept_records: list[dict[str, object]], path: Path) -> None:
-    """src_id → UC 매핑 테이블 → id_map.csv(검토·슬라이스 2 적재 입력)."""
+    """src_id → canonical_id 매핑 테이블 → id_map.csv(검토·슬라이스 2 적재 입력)."""
     id_map = build_id_map(concept_records)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["src_id", "concept_id"])
         writer.writeheader()
         writer.writerows(to_csv_rows(id_map))
+
+
+def _write_locales(result: TransformResult, output_dir: Path) -> None:
+    """정형화 산출의 locale 테이블 → `locales/{ko,en,ja}.json`(표시이름 분리 레이어·P2d ②).
+
+    Phase 1은 ko만 채워지고 en/ja는 `{}`(후속 저작). 키는 canonical concept_id(노드⇄locale 조인 축).
+    """
+    locales_dir = output_dir / "locales"
+    locales_dir.mkdir(parents=True, exist_ok=True)
+    for lang in ("ko", "en", "ja"):
+        table = result.locales.get(lang, {})
+        (locales_dir / f"{lang}.json").write_text(
+            json.dumps(table, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+
+def _write_registry_yaml(concept_records: list[dict[str, object]], path: Path) -> None:
+    """Canonical ID Registry → `ids.yaml`(canonical·별칭·마이그레이션 이력·P2d ③).
+
+    graph.json·locale과 동일 `concept_records` 원천에서 co-generate — 드리프트 차단(단일 진실).
+    """
+    registry = build_registry(concept_records)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dump_registry_yaml(registry), encoding="utf-8")
 
 
 def _graph_json_to_result(path: Path) -> TransformResult:
@@ -376,6 +425,60 @@ def load(
         "[멱등] MERGE 기반 — 재실행해도 노드·엣지 수 불변(§5 #9). "
         f"개념 {report.nodes_merged}개·엣지 {report.edges_merged}개."
     )
+
+
+@app.command(name="gen-ids")
+def gen_ids(
+    corpus_dir: Annotated[
+        Path,
+        typer.Option(
+            "--corpus-dir",
+            "-i",
+            help="concepts.jsonl·graph.json이 있는 코퍼스 디렉토리(ids.yaml·locales 재생성 대상).",
+        ),
+    ] = Path("data/corpus/concept_graph_v1"),
+    verbose: Annotated[bool, typer.Option("--verbose", "-v", help="DEBUG 로그.")] = False,
+) -> None:
+    """`ids.yaml`·locale을 코퍼스 concepts.jsonl에서 재생성하고 커밋된 graph.json에 대해 검증.
+
+    concepts.jsonl로 registry·locale을 다시 만들어 `corpus-dir`에 쓰고(수기 편집 금지 생성물),
+    커밋된 graph.json의 노드와 registry⇄graph·locale⇄node·curriculum-independence 정합성을
+    단언한다. error 발생 시 비정상 종료(생성물 드리프트·재ID 위반 CI 차단).
+    """
+    _setup_logging(verbose)
+    print(SOURCE_CITATION)
+    print()
+
+    concepts_path = corpus_dir / "concepts.jsonl"
+    graph_path = corpus_dir / "graph.json"
+    for label, p in (("concepts.jsonl", concepts_path), ("graph.json", graph_path)):
+        if not p.exists():
+            typer.echo(f"[!] {label} 없음: {p}", err=True)
+            raise typer.Exit(code=2)
+
+    concept_records = _read_jsonl(concepts_path)
+    id_map = build_id_map(concept_records)
+    registry = build_registry(concept_records)
+    locales = build_locales(concept_records, id_map)
+
+    graph_result = _graph_json_to_result(graph_path)
+    registry_report = validate_registry(registry, graph_result.concepts)
+    locales_report = validate_locales(locales, graph_result.concepts)
+    graph_report = validate_graph(graph_result.concepts, graph_result.edges)
+
+    _write_registry_yaml(concept_records, corpus_dir / "ids.yaml")
+    graph_result.locales = locales
+    _write_locales(graph_result, corpus_dir)
+    print(
+        f"[저장] {corpus_dir / 'ids.yaml'} · {corpus_dir / 'locales'}/(ko·en·ja).json "
+        f"(개념 {len(registry['concepts'])}개)"
+    )
+    print(f"[registry] {registry_report.report_text()}")
+    print(f"[locale] {locales_report.summary()}")
+    print(f"[graph] {graph_report.summary()}")
+
+    if not (registry_report.success and locales_report.success and graph_report.success):
+        raise typer.Exit(code=1)
 
 
 if __name__ == "__main__":  # pragma: no cover

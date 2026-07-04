@@ -91,6 +91,10 @@ dev = [
     "mypy>=1.13.0,<3",
     "ruff>=0.7.0,<0.16",
     "black>=24.10.0,<27",
+    # import-linter — 7계층 단방향(L_n→L_{n-1}) 정적 강제(감사 I4). `lint-imports`가 CI lint
+    # 잡에서 계약 위반(예: L1이 L4를 위로 import)을 차단한다. 순수 정적 그래프 분석이라 런타임·
+    # 라이브 의존 0(hermetic).
+    "import-linter>=2.0,<3",
     # 메모(M1.2): 기존 dev 핀에 있던 `mocktail>=1.0.0`은 *배포된 버전이 없어*
     # (PyPI 최신 0.0.4) `pip install -e .[dev]`를 실패시켜 CI를 깨뜨린다. M1.2
     # 라우터 단위테스트는 외부 모킹 라이브러리가 필요 없으므로(순수 결정 로직 +
@@ -142,6 +146,31 @@ ignore_missing_imports = true
 init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
+
+# ──────────────────────────────────────────────────────────────────────
+# import-linter — 7계층 단방향 의존 강제 (감사 I4·CLAUDE.md "L_n→L_{n-1}, 역방향 금지")
+# ──────────────────────────────────────────────────────────────────────
+# 수학 코어(L1~L4)를 UI 밖 독립 플랫폼으로 지키는 핵심 invariant를 *정적*으로 못 박는다.
+# layers 계약: 위 레이어는 아래를 import할 수 있으나(호출), 아래는 위를 import할 수 없다(역방향
+# 금지). schema는 최하위(순수 타입·어느 계층도 import 안 함). 미열거 패키지(config·db·privacy·
+# harness·whs)는 계약 밖(무제약) — harness/whs는 L3/L4 하네스라 상위 호출이 정상이고, config·db·
+# privacy는 횡단 인프라다. `lint-imports`(CI lint 잡)가 위반을 차단한다.
+[tool.importlinter]
+root_package = "whymath_backend"
+
+[[tool.importlinter.contracts]]
+name = "7계층 단방향 (L_n → L_{n-1}, 역방향 금지)"
+type = "layers"
+layers = [
+    "whymath_backend.api",
+    "whymath_backend.l6",
+    "whymath_backend.l5",
+    "whymath_backend.l4",
+    "whymath_backend.l3",
+    "whymath_backend.l2",
+    "whymath_backend.l1",
+    "whymath_backend.schema",
+]
 
 # ──────────────────────────────────────────────────────────────────────
 # 테스트

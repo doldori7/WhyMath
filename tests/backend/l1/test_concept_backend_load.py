@@ -104,7 +104,6 @@ def _record(
         aliases=(aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]),
         level=ConceptLevel.세부개념,
         intrinsic_difficulty=intrinsic_difficulty,
-        common_misconceptions=[{"misconception": "극한을 대입값으로 혼동"}],
     )
 
 
@@ -132,6 +131,7 @@ class TestLoadFromGraphJson:
                     "name_ko": "극한",
                     "domain": "[고]미적분",
                     "difficulty_tier": 7,
+                    # 오염 방어: 옛 graph.json이 misconception_text를 남겨도 노드로 흡수하지 않는다.
                     "misconception_text": "극한을 대입값으로 혼동",
                     "review_status": "reviewed",
                 }
@@ -146,7 +146,9 @@ class TestLoadFromGraphJson:
         assert rec.name_ko == "극한"
         assert rec.level == ConceptLevel.세부개념  # 고정 유도(NOT NULL 충족)
         assert rec.intrinsic_difficulty == scale_difficulty(7)
-        assert rec.common_misconceptions == [{"misconception": "극한을 대입값으로 혼동"}]
+        # Part 2 §3(순수성): graph의 misconception_text는 노드로 흡수되지 않는다 — 오개념 컬럼은
+        # Phase 1b로 레코드·ORM에서 아예 제거됐다(redaction 청산).
+        assert not hasattr(rec, "common_misconceptions")
 
     def test_source_id_and_aliases_absent_graceful(self, tmp_path: Path) -> None:
         # 옛 graph.json(재ID 전·source_id/aliases 부재) → None/빈 배열 graceful(하위호환·NOT NULL
@@ -192,11 +194,12 @@ class TestLoadFromGraphJson:
         )
         loaded = load_backend_concepts_from_graph_json(path)
         assert len(loaded) == 1
-        # BackendConceptRecord에 본문 3슬롯이 *없다*(구조적 차단 — dataclass 필드에 부재).
+        # BackendConceptRecord에 본문 3슬롯·오개념 슬롯이 *없다*(구조적 차단·Phase 1b 청산).
         fields = set(BackendConceptRecord.__dataclass_fields__)
         assert "description" not in fields
         assert "formal_definition" not in fields
         assert "intuitive_explanation" not in fields
+        assert "common_misconceptions" not in fields
 
     def test_loads_all_concepts_regardless_of_review_status(self, tmp_path: Path) -> None:
         # 전량 적재(review_status 무관·게이팅은 조회 몫·슬2/3/117 동형).
@@ -221,14 +224,14 @@ class TestLoadFromGraphJson:
         assert [c.code for c in loaded] == [_NID_A, _NID_B]
 
     def test_optional_fields_default_when_absent(self, tmp_path: Path) -> None:
-        # difficulty_tier·misconception_text 부재 → None/빈(날조 0).
+        # difficulty_tier 부재 → None(날조 0). 오개념 컬럼은 Phase 1b로 레코드에서 제거됨.
         path = self._write_graph(
             tmp_path,
             [{"concept_id": _NID_A, "name_ko": "유효", "domain": "[중]수와 연산"}],
         )
         rec = load_backend_concepts_from_graph_json(path)[0]
         assert rec.intrinsic_difficulty is None  # difficulty_tier 부재
-        assert rec.common_misconceptions == []  # misconception_text 부재
+        assert not hasattr(rec, "common_misconceptions")  # Phase 1b 제거
 
     def test_skips_when_name_ko_missing(self, tmp_path: Path) -> None:
         # name_ko 누락(오염) → 건너뜀(NOT NULL 위반 방지·조용한 빈 적재 금지).
@@ -282,13 +285,14 @@ class TestUpsertStatement:
         assert "(code)" in compiled or "concept.code" in compiled
 
     def test_upsert_omits_redacted_body_columns(self) -> None:
-        # redaction: INSERT/SET 컬럼에 본문 3개가 *없다*(검수 책임 필드·NULL 유지).
+        # redaction: INSERT/SET 컬럼에 본문 3개·오개념 컬럼이 *없다*(Phase 1b로 컬럼 자체 제거).
         store, engine = _fake_store()
         store.upsert(_record())
         compiled = _compile(engine.executed[0])
         assert "description" not in compiled
         assert "formal_definition" not in compiled
         assert "intuitive_explanation" not in compiled
+        assert "common_misconceptions" not in compiled
 
     def test_upsert_does_not_set_pk_or_created_at_on_conflict(self) -> None:
         # UUID 보존: ON CONFLICT DO UPDATE SET이 concept_id(PK)·created_at을 *대입하지 않아야*
@@ -368,11 +372,12 @@ class TestPopulate:
 
 
 def test_record_has_no_body_slots() -> None:
-    # 노출 계약: 적재 레코드는 본문 3슬롯을 갖지 않는다(구조적 redaction).
+    # 노출 계약: 적재 레코드는 본문 3슬롯·오개념 슬롯을 갖지 않는다(구조적 redaction·Phase 1b).
     fields = set(BackendConceptRecord.__dataclass_fields__)
     assert "description" not in fields
     assert "formal_definition" not in fields
     assert "intuitive_explanation" not in fields
+    assert "common_misconceptions" not in fields
     # 런타임 식별 필드 + 재ID 추적성(source_id·aliases)은 보유.
     assert {
         "code",

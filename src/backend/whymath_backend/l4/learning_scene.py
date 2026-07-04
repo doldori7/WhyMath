@@ -31,7 +31,9 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from whymath_backend.config import get_settings
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.crosslink_shadow import observe_crosslink_shadow
 from whymath_backend.l4.misconception.models import InterventionPattern
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.socratic.categories import SocraticCategory
@@ -312,10 +314,18 @@ def parse_learning_scene(data: dict[str, Any] | str) -> LearningScene:
         raise LearningSceneValidationError(f"LearningScene 스키마/불변식 위반: {exc}") from exc
 
     # 참조 무결성 — 오개념 카탈로그(30종). concept_id 개념그래프 검증은 S3(DB 필요).
+    crosslink_shadow = get_settings().misconception_crosslink_mode != "off"
     for idx, el in enumerate(scene.elements):
-        if isinstance(el, MisconceptionProbeElement) and el.misconception_id not in CATALOG_BY_ID:
+        if not isinstance(el, MisconceptionProbeElement):
+            continue
+        if el.misconception_id not in CATALOG_BY_ID:
             raise LearningSceneValidationError(
                 f"elements[{idx}].misconception_id='{el.misconception_id}'가 오개념 카탈로그에 없다"
             )
+        # crosswalk shadow(비노출·비차단) — 게이트 통과한 kebab-id의 M-id 매핑 coverage를
+        # 로그로만 관측(반환 scene은 kebab-id 그대로·불변). off면 조회 0(evidence_store 미러·
+        # per-write 왕복 회피). 매핑 채택·canary 플립 전 "노출 전 측정"(remediation §1.3 step3).
+        if crosslink_shadow:
+            observe_crosslink_shadow(el.misconception_id)
 
     return scene

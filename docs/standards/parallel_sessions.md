@@ -1,0 +1,124 @@
+# 병렬 세션 개발 표준 (Parallel Claude Code Sessions)
+
+> 여러 Claude Code 세션을 **동시에** 열어 앱을 개발할 때 git 충돌·상호 간섭을 최소화하는 규칙.
+> 이 저장소는 도메인이 물리적으로 분리(`src/*`)되어 있고 CI가 경로 기반이라 병렬 개발에
+> 유리하다. 아래 규칙만 지키면 충돌은 예외적 상황으로 줄어든다.
+
+---
+
+## 핵심 원칙 (한 줄)
+
+> **1 세션 = 1 도메인 = 1 브랜치 = 1 worktree**
+
+세션마다 건드리는 최상위 도메인 폴더가 겹치지 않게 배정한다. 이것만으로 충돌 대부분이 사라진다.
+
+---
+
+## 1. 도메인 소유 지도
+
+| 도메인 슬러그 | 폴더 | 담당 서브에이전트 | 계층 |
+|---|---|---|---|
+| `backend` | `src/backend/` | backend-engineer · llm-architect | L3·L5 |
+| `data-pipeline` | `src/data-pipeline/`, `data/`, `docs/data/` | data-engineer | L1 |
+| `ml-models` | `src/ml-models/` | ml-engineer | L2 |
+| `mobile` | `src/mobile/` | flutter-engineer | L5 |
+| `web` | `src/web/` | (프론트) | L5 |
+| `docs` | `docs/` (아래 hot-file 제외) | 전원 | 횡단 |
+| `infra` | `infra/`, `.github/` | backend-engineer | 횡단 |
+
+- 한 세션은 **자기 도메인 폴더 밖을 수정하지 않는다.** 다른 도메인 변경이 필요하면 그
+  도메인 세션에 맡기거나, 그 작업만 별도 브랜치로 분리한다.
+- `.github/CODEOWNERS` 의 영역 구분과 정합한다(현재 Phase 1은 전부 `@doldori7`).
+
+---
+
+## 2. 동시 편집 금지 — 공유 hot files
+
+아래 파일들은 여러 세션이 동시에 만지면 충돌이 잘 난다. **원칙적으로 한 번에 한 세션만** 수정:
+
+| 파일/경로 | 이유 | 규칙 |
+|---|---|---|
+| `MEMORY.md` | 대형 append 로그 | `.gitattributes` **union-merge** 로 자동 병합됨. 단 **새 항목은 항상 파일 끝에 append**(같은 줄 동시 수정 금지) |
+| `src/backend/.../schema/` | 공유 스키마·계약 | 스키마 변경은 **전용 단독 세션에서 먼저 머지** 후 다른 세션이 rebase |
+| `src/backend/pyproject.toml`, `src/data-pipeline/pyproject.toml` | 의존성 | 의존성 bump는 전용 세션·전용 PR로 분리, 먼저 머지 |
+| `src/mobile/pubspec.yaml` | Flutter 의존성 | 동상 |
+| `src/web/graphing-calculator/package-lock.json` | 13만 줄 lock | 의존성 변경 세션에서만 재생성 |
+| `CLAUDE.md`, `ROADMAP.md` | 구조화 문서(union 부적합) | 동시 편집 금지 — 필요 시 짧게 한 세션이 처리 |
+
+> **왜 `CLAUDE.md`/`ROADMAP.md`는 union-merge를 안 쓰나?**
+> union merge는 append-only 로그에만 안전하다. 구조화된 문서에 쓰면 논리적으로 깨진 병합이
+> 생기므로 `MEMORY.md`에만 적용한다.
+
+---
+
+## 3. 브랜치 네이밍
+
+```
+claude/<domain>-<task-slug>-<짧은난수>
+예) claude/backend-prm-verify-a1b2c3
+    claude/mobile-ocr-overlay-7f9e21
+```
+
+- `main` 직접 push 금지 (`.github/branch-protection-setup.md` 참조). 항상 PR 경유.
+- Linear history(squash/rebase)만. merge commit 금지.
+
+---
+
+## 4. worktree 워크플로우 (권장)
+
+단일 워킹트리에서 브랜치를 오가면 세션끼리 인덱스가 충돌한다. 세션마다 **독립 worktree**를 쓴다.
+
+### 헬퍼 스크립트 (권장)
+```bash
+scripts/new-session-worktree.sh <domain> <task-slug>
+# 예)
+scripts/new-session-worktree.sh backend prm-verify
+#  → worktrees/backend-prm-verify-<난수>/ 에 새 브랜치로 체크아웃
+#  → 그 디렉토리에서 `claude` 실행
+```
+
+### 수동 (동일 동작)
+```bash
+git fetch origin main
+git worktree add -b claude/backend-prm-verify worktrees/backend-prm-verify origin/main
+cd worktrees/backend-prm-verify && claude
+```
+
+### 정리
+```bash
+git worktree remove worktrees/backend-prm-verify
+git branch -D claude/backend-prm-verify   # 원격 머지 완료 후
+```
+
+`worktrees/` 는 `.gitignore` 에 있어 추적되지 않는다.
+
+---
+
+## 5. 머지 순서 (충돌 최소화)
+
+1. **작고 공유되는 변경 먼저**: 스키마·의존성·`docs` 공용 변경을 먼저 머지한다.
+2. 큰 도메인 브랜치는 자주 최신 `main` 을 rebase 한다:
+   ```bash
+   git fetch origin main && git rebase origin/main
+   ```
+3. CI는 경로 기반(`ci.yml`)이라 도메인 브랜치는 자기 영역 테스트만 돌아 빠르다.
+4. PR별 이전 CI 실행은 자동 취소되므로 재푸시 부담이 낮다.
+
+---
+
+## 6. 충돌이 났을 때
+
+- **`MEMORY.md`**: union-merge라 대개 자동 병합됨. 중복 라인이 보이면 수동 정리.
+- **의존성 파일**: 충돌 시 한쪽 기준으로 재생성(`uv lock` / `flutter pub get` / `npm install`) 후 커밋.
+- **스키마**: 절대 임의 병합하지 말 것 — 스키마 소유 세션이 조정.
+
+---
+
+## 요약 체크리스트
+
+- [ ] 세션마다 도메인을 하나씩 배정했는가?
+- [ ] `scripts/new-session-worktree.sh` 로 격리 worktree를 만들었는가?
+- [ ] 자기 도메인 폴더 밖(특히 hot files)을 건드리지 않는가?
+- [ ] `MEMORY.md` 새 항목을 **파일 끝에** append 했는가?
+- [ ] 의존성·스키마 변경을 전용 세션·전용 PR로 분리했는가?
+- [ ] 큰 브랜치를 자주 `main` 에 rebase 하는가?

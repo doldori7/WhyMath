@@ -77,12 +77,13 @@
 **`Concept` 노드 필드**:
 | 필드 | 설명 |
 |---|---|
-| 표기 (한·영·일) | 다국 정합성을 위해 3개 언어 명칭 보유 |
+| concept_id (canonical) | `math.<area>.<slug>` — 교육과정·언어·렌더러 무관 의미론 PK (2026-07-02 P2d·Part 9). 옛 `{TRACK}-{AREA}-{NNN}`·UC는 `aliases` 보존 |
+| 표기 (한·영·일) | **노드 비내장** — locale 계층(`locales/{lang}.json`·canonical 키)이 3개 언어 명칭 단일 진실 (P2d·Concept Purity). Phase 1은 `ko`만 충전 |
 | 선수개념 참조 | 이 개념을 이해하기 위해 선행돼야 하는 개념들 |
 | 오개념 참조 | 이 개념에서 전형적으로 발생하는 오개념(기존 7번 카탈로그 연결) |
 | 시각화 카드 참조 | L5 시각화 자산 키 (L1은 *참조만* 보유, 렌더링은 L5) |
 
-**`Edge` — 6가지 관계 유형**:
+**`Edge` — 7가지 관계 유형** (`notation_variant` 포함 — pipeline `Relation` 정본, backend 투영은 `docs/data/concept_graph.md` §2.2b crosswalk):
 | 관계 | 의미 |
 |---|---|
 | `prerequisite` | 선수 — A를 알아야 B를 배움 |

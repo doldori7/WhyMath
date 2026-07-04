@@ -56,8 +56,10 @@ from typing import Annotated, Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.config import get_settings
 from whymath_backend.l3.verify_solution import SolutionVerificationResult, verify_solution
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
+from whymath_backend.l4.misconception.crosslink_shadow import observe_crosslink_shadow
 from whymath_backend.l4.misconception.diagnose import diagnose
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis, curate
 from whymath_backend.l4.misconception.intervene import select_intervention_from_hypotheses
@@ -435,6 +437,11 @@ def _exec(state: TurnState, action: Action, *, explore_period: int) -> ToolResul
                 ok=False,
                 detail=f"log_evidence 거부 — 극성 위반({action.polarity}).",
             )
+        # crosswalk shadow(비노출·비차단) — 게이트 통과한 kebab-id의 M-id 매핑 coverage를
+        # 로그로만 관측(state·ToolResult 불변). off(기본)면 조회 0이라 "순수·DB 무접근" 유지 —
+        # shadow일 때만 never-break resolver를 touch(비차단·evidence_store 미러·remediation §1.3).
+        if get_settings().misconception_crosslink_mode != "off":
+            observe_crosslink_shadow(action.misconception_id)
         state.evidence.append(
             EvidenceEdge(
                 misconception_id=action.misconception_id,

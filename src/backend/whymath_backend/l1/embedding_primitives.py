@@ -9,15 +9,44 @@ L계층도 import하지 않는다(순환 불가).
 
 담는 것(전부 순수·인프라):
   - `EmbeddingProvider`(Protocol): 텍스트 배치 → 벡터. 구조적 타이핑(구현체는 L4 provider.py).
+  - `normalize_embedding_input`: 임베딩 입력 단일 정규화 권위(NFKC·표현/질의 경로 공유).
   - `text_hash`: 임베딩 원본 표현의 안정 해시(표현 변경=재임베딩 필요 감지).
   - `provider_model_identity`: provider 객체 + Settings → (provider_name, model_name) 공간 식별자.
   - `embed_changed`: skip-if-unchanged 적재 코어(개념·원자·오개념 공유).
   - `build_sync_engine`: pgvector sync(psycopg) 엔진 빌더 + register_vector 리스너(sync 좌석 공유).
+  - `DEFAULT_EMBEDDING_SUBJECT`: 임베딩 subject 축 기본값('수학') — 세 인덱스·ORM·게이트 공유.
+
+────────────────────────────────────────────────────────────────────────────
+임베딩 namespace 불변식 (과목 확장 S1 — subject_expansion_readiness.md §8 namespace 과목 축)
+────────────────────────────────────────────────────────────────────────────
+**namespace = 테이블(kind) × subject.** 임베딩 저장소의 논리 경계는 두 축의 곱이다:
+
+  - **kind(자산 종류)**: 테이블 자체가 표현한다 — `misconception_embedding`·`concept_embedding`·
+    `atom_embedding`은 물리적으로 분리된 별개 테이블이고, 별도 namespace 컬럼은 **두지 않는다**
+    (테이블명이 이미 kind를 함의 — 컬럼 중복 기각). kind 경계는 거버넌스 테스트
+    (`tests/backend/l1/test_embedding_namespace_governance.py`)로 동결한다.
+  - **subject(교과 축)**: 각 테이블의 `subject` 컬럼('수학'·'물리' — 교과 레벨). 세 인덱스의
+    search·existing_text_hashes·upsert가 *전부* subject 스코프를 건다 — 다른 교과 행은 서로
+    보이지 않는다(과목 확장 시 벡터 공간 혼입 0).
+  - **provider/model은 별개 공간 축**이다 — subject와 직교한다. provider/model은 "어느 임베딩
+    모델의 벡터 공간인가"(코사인 비교 가능성)이고, subject는 "어느 교과의 콘텐츠인가"(도메인
+    경계)다. 둘을 합성한 4-튜플 (테이블, subject, provider, model)이 완전한 비교 가능 스코프다.
+
+**DB cross-table 코사인 금지**: 서로 다른 kind 테이블 간 임베딩 벡터를 SQL에서 직접 코사인
+비교(`<=>` join)하는 질의는 금지한다 — kind 경계가 곧 의미 공간 경계다(오개념 벡터와 개념
+벡터의 근접은 도메인 로직이 해석해야지 SQL 랭킹이 섞으면 안 된다). 유일 예외:
+`l4/misconception/crosslink_candidates.py`의 **in-memory 교차**(개념 키워드 ↔ 오개념 표현) —
+이는 오개념 도메인 *내부*의 후보 생성 휴리스틱이라 DB 질의 경계를 넘지 않는다(예외로 명문).
+이 금지는 거버넌스 테스트의 cosine_distance 호출 소스 스캔 allowlist로 동결한다.
+
+subject는 **컬럼/스코프에만** 들어간다 — 임베딩 *텍스트*(`join_embedding_text` 계열)에는 절대
+넣지 않는다(`EMBEDDING_TEXT_FORMAT_VERSION` 불변·기존 벡터 재임베딩 0 보증).
 """
 
 from __future__ import annotations
 
 import hashlib
+import unicodedata
 from collections.abc import Callable, Sequence
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -27,21 +56,52 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
 # 임베딩 원본 표현(embed-text) *포맷 계약 버전*. 개념·원자·오개념 텍스트 빌더가 공유하는
-# 결합 규칙(구분자 `". "`·strip·빈값 skip)을 바꾸면(예: 구분자 교체·필드 순서) 이 값을 올린다 —
-# 사전 계산된 벡터가 *조용히* stale 되는 것을 감지할 근거(차후 임베딩 행에 함께 영속 시 drift
-# 비교). math_dsl 감사 §5(포맷 계약 미고정) 대응. 현재 v1 = `". ".join(strip·non-empty)`.
-EMBEDDING_TEXT_FORMAT_VERSION = 1
+# 결합·정규화 규칙(구분자 `". "`·strip·빈값 skip·**NFKC 정규화**)을 바꾸면(예: 구분자 교체·필드
+# 순서·정규화 방식) 이 값을 올린다 — 사전 계산된 벡터가 *조용히* stale 되는 것을 감지할 근거
+# (차후 임베딩 행에 함께 영속 시 drift 비교). math_dsl 감사 §5(포맷 계약 미고정)·retrieval
+# ambiguity(입력 정규화 비대칭) 대응. **v2 = NFKC(`". ".join(strip·non-empty)`)** — v1(NFKC 없음)
+# 대비 합성/분해 유니코드·전각/반각을 통일해 실제 provider(bge-m3·OpenAI) 입력의 표기 흔들림을
+# 제거한다(FakeEmbeddingProvider가 이미 내부 NFKC를 쓰던 것을 상류로 끌어올려 정합).
+EMBEDDING_TEXT_FORMAT_VERSION = 2
+
+# 임베딩 subject 축 기본값(교과 레벨 '수학') — 세 적재기 인덱스(`ConceptEmbeddingIndex`·
+# `AtomEmbeddingIndex`·`PgVectorIndex`) 생성자 기본값·세 ORM `server_default`·거버넌스 게이트
+# 테스트가 공유하는 **단일 진실**이다. 값의 의미는 `CurriculumEntry.subject`(Overlay 정본)와
+# 같은 교과 축('수학'·'물리')이되, 임베딩 행의 subject는 *콘텐츠 팩 태그*다 — 적재기가 적재
+# 시점에 상수로 주입하는 스코프 라벨이지 교육과정 매핑 주장이 아니다(정본은 Overlay).
+# ⚠️ 이 값은 임베딩 *텍스트*에 절대 넣지 않는다(모듈 docstring namespace 불변식·재임베딩 0).
+DEFAULT_EMBEDDING_SUBJECT: str = "수학"
+
+
+def normalize_embedding_input(text: str) -> str:
+    """임베딩 입력 *단일 정규화 권위* — NFKC(합성/분해·전각/반각 통일).
+
+    카탈로그/개념/원자 표현(`join_embedding_text`)과 *질의* 경로(오개념 매처·개념 검색·crosswalk)가
+    **같은** 정규화를 거치게 하는 하나의 함수다. 이전에는 표현 빌더는 정규화가 없고 질의는 raw라,
+    학생이 합성문자 `x²`(U+00B2)로 입력하면 저장 표현과 다른 벡터가 나와 무매칭이 될 수 있었다
+    (감사 "retrieval ambiguity — 입력 NFKC 미적용"). NFKC는 substring 경로(`diagnose._normalize`)·
+    Fake provider가 이미 쓰던 정규화라 관례와 일치한다. 결정론·멱등(NFKC(NFKC(x))=NFKC(x)).
+
+    주의: 이 정규화는 *임베딩 recall* 전용이다 — 기호 등치(SymPy)의 정본 정규화는 별개
+    (`l3/symbolic_equivalence.to_sympy_source`, 위첨자→`**`). NFKC가 `²`를 `2`로 접는 것은 의미
+    검색엔 무해(오히려 표기 흔들림 흡수)하나 등치 판정엔 쓰지 않는다.
+    """
+    return unicodedata.normalize("NFKC", text)
 
 
 def join_embedding_text(*parts: object) -> str:
     """임베딩 원본 표현 결합 — *단일 포맷 권위*(개념·원자·오개념 빌더 공유·감사 §2 3중복 제거).
 
-    각 조각을 `str().strip()`하고 빈/None은 건너뛴 뒤 `". "`로 잇는다(포맷 v1·
-    `EMBEDDING_TEXT_FORMAT_VERSION`). 과거엔 이 결합 규칙이 `concept_embedding_text`·
-    `atom_embedding_text`·`catalog_text` 세 곳에 따로 박혀 있어 구분자·순서 변경이 *조용한* drift를
-    낳을 수 있었다 — 한 곳으로 모아 포맷 계약을 고정한다(필드 *선택*은 호출자 몫·결합만 공유).
+    각 조각을 `str().strip()`하고 빈/None은 건너뛴 뒤 `". "`로 이어 **NFKC 정규화**한다(포맷 v2·
+    `EMBEDDING_TEXT_FORMAT_VERSION`·`normalize_embedding_input`). 과거엔 이 결합 규칙이
+    `concept_embedding_text`·`atom_embedding_text`·`catalog_text` 세 곳에 따로 박혀 있어 구분자·순서
+    변경이 *조용한* drift를 낳을 수 있었고, 정규화가 없어 질의 경로와 표기가 어긋날 수 있었다 —
+    한 곳으로 모아 포맷·정규화 계약을 고정한다(필드 *선택*은 호출자 몫·결합·정규화만 공유).
     """
-    return ". ".join(str(part).strip() for part in parts if part is not None and str(part).strip())
+    joined = ". ".join(
+        str(part).strip() for part in parts if part is not None and str(part).strip()
+    )
+    return normalize_embedding_input(joined)
 
 
 @runtime_checkable
@@ -162,11 +222,13 @@ def build_sync_engine(settings: Settings) -> Engine:
 
 
 __all__ = [
+    "DEFAULT_EMBEDDING_SUBJECT",
     "EMBEDDING_TEXT_FORMAT_VERSION",
     "EmbeddingProvider",
     "build_sync_engine",
     "embed_changed",
     "join_embedding_text",
+    "normalize_embedding_input",
     "provider_model_identity",
     "text_hash",
 ]
