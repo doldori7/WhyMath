@@ -32,8 +32,10 @@ from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 _RECORD_LOGGER = "whymath.harness.wh1_shadow.record"
 
 # 학생 풀이 원문·정답 — 레코드/로그에 *절대* 새면 안 되는 프라이버시 sentinel 토큰(미성년 PII).
+# 정답 sentinel은 *고유 알파벳 토큰*이어야 한다 — 숫자('42' 등)는 레코드의 타임스탬프
+# 초/마이크로초와 우연히 겹쳐 위양성(flaky)을 만든다(예: ...T22:33:42.8Z에 '42' 포함).
 _STUDENT_SOLUTION = "내 풀이는 (a+b)² = a² + b²로 전개했어"
-_ANSWER = "정답은 42다"
+_ANSWER = "정답은 ZZANSWERZZ다"
 
 
 class _FakeProvider:
@@ -172,7 +174,7 @@ class TestNoRawLeak:
         raw = _records(caplog)[0]
         assert "(a+b)" not in raw  # 학생 풀이 원문 미포함
         assert "전개했어" not in raw
-        assert "42" not in raw  # 정답 미포함
+        assert "ZZANSWERZZ" not in raw  # 정답 미포함
         # 파싱된 레코드에도 원문/정답 성격의 자유 텍스트 필드가 없다(고정 스키마·extra="forbid").
         parsed = json.loads(raw)
         assert set(parsed.keys()) <= {
@@ -225,7 +227,7 @@ class TestPolicyPrivateInjection:
             blob = prompt + system
             assert "(a+b)" not in blob
             assert "전개했어" not in blob
-            assert "42" not in blob
+            assert "ZZANSWERZZ" not in blob
             assert "x + 1 = 3" not in blob  # 풀이 단계 원문도 미노출
 
 
