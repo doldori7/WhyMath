@@ -9,7 +9,7 @@ end-to-end 적재한다. CI `backend — 마이그레이션·통합 (실 PG)` �
   ① 적재 — concepts 2,697(원자1837·단원217·소단원643)·edges 2,213(orphan 0 기대)
   ② parent 위계 — 원자→소단원→단원 체인(2수01-01-2 → 초수연-U1-S1 → 초수연-U1)
   ③ relation_subtype 적재(관계유형)·edge 방향(from=선수)
-  ④ redaction — 본문 컬럼(description·formal_definition)은 #417로 `concept`에서 제거·부재 확인
+  ④ redaction — 본문 컬럼(description·formal_definition)은 Phase 1b에서 물리 제거(컬럼 부재)
   ⑤ 멱등 — 재적재 시 concept/edge 행수 불변
 구 437 개념과 병존(code 공간 무충돌)을 건드리지 않는다. 정리는 원자 code 전건(FK 안전 순서).
 """
@@ -117,15 +117,20 @@ class TestAtomBackboneLoad:
                     assert chain.subunit == "초수연-U1-S1"
                     assert chain.unit == "초수연-U1"
                     assert chain.atom_level == "세부개념"
-                    # ④ redaction — 본문 컬럼(description·formal_definition)은 #417로 제거됨.
-                    # 컬럼 부재가 redaction을 구조적으로 강제(NULL보다 강함) → 부재 확인.
-                    redacted_cols = conn.execute(
-                        text(
-                            "SELECT column_name FROM information_schema.columns "
-                            "WHERE table_name = 'concept' AND column_name = ANY(:cols)"
-                        ),
-                        {"cols": ["description", "formal_definition"]},
-                    ).all()
+                    # ④ redaction — 본문 컬럼(description·formal_definition)은 Phase 1b에서
+                    # *물리 제거*됐다(NULL 아님·컬럼 부재). 재등장하면 redaction 회귀 →
+                    # 컬럼 부재를 단언한다(구 SELECT a.description은 컬럼 제거로 UndefinedColumn).
+                    redacted_cols = (
+                        conn.execute(
+                            text(
+                                "SELECT column_name FROM information_schema.columns "
+                                "WHERE table_name = 'concept' "
+                                "AND column_name IN ('description', 'formal_definition')"
+                            )
+                        )
+                        .scalars()
+                        .all()
+                    )
                     assert redacted_cols == []
 
                     # ③ relation_subtype 적재(관계유형 비어있지 않은 엣지 존재).
