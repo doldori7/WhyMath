@@ -26,7 +26,7 @@
 - **alembic head(현재)**: `a8b9c0d1e2f3` (Phase 3 Slice 1 concept_content_projection·down `f7a8b9c0d1e2`. Slice 2는 기존 `misconception_catalog` 재사용 → **PG 마이그레이션 무추가·head 불변**. Phase 2c Neo4j·U1~U4·R1·R2도 마이그레이션 무관)
 - ✅ **Phase 3 Slice 1 (backend)** — 콘텐츠 4종 DB 투영(`concept_content` 테이블·로더·CLI·마이그레이션 `a8b9c0d1e2f3`·`1470b83`). 캡처 코퍼스 437+409 투영. 상세 §5.3.
 - ✅ **Phase 3 Slice 2 (backend)** — ①오개념 atom→`misconception_catalog` 승격(`l1/misconception/atom_catalog.py`·CLI `populate_atom.py`). 기존 테이블·로더 재사용·**마이그레이션 0**(head 불변). 원자 1,837행 `ATOM:` 네임스페이스·구 839과 병존. 상세 §5.3.
-- **다음 작업**: **Phase 4·5 (= 로드맵 S0 정합성 회복)** — §5.4·§5.5 통합 정의 참조. **Phase 3 Slice 3(②진단문항·③소크라테스)은 S1(E2E 수직 슬라이스)로 이관** (2026-07-03 S0 계획 확정 — 소비처[E2E 루프] 생길 때 구현, "소비처 없는 추상 미도입" 원칙).
+- **Phase 4·5 (= 로드맵 S0 정합성 회복) ✅ 완료** (2026-07-04) — §5.4·§5.5 통합 정의 참조. **Phase 4**: 크로스워크 코퍼스(S0-1)·437-키 자산 원자 이전(S0-2)·problem_concept 재연결은 실데이터 0으로 **S2 연기**(S0-3). **Phase 5**: 물리 삭제 대신 **구 437 = legacy_snapshot 격하**(사용자 결정) — 원자 검색 좌석+런타임 전환(S0-4a)·L2 mastery enrich 원자화(S0-4d)·격하 형식화+거버넌스 동결(S0-4b)·Neo4j audit_only 문서(S0-4c). **runtime truth source = 원자 단일 달성**(런타임 437 reader 0·거버넌스 동결). **Phase 3 Slice 3(②진단문항·③소크라테스)은 S1(E2E 수직 슬라이스)로 이관**. 상세: MEMORY.md 2026-07-04 결정 로그·`docs/strategy/status_roadmap_2026-07.md`.
 
 ## 2. locked 결정 (요약 — 상세는 MEMORY.md)
 ① 전면 교체·원자화 ② 크로스워크=문제 corpus만 **(→ 2026-07-03 S0 계획 확정으로 확장: 문제 corpus + 437-키 잔존 자산[behavior_skills·concept_content K-12]. 사유: Phase 5 폐기 시 437-키 자산의 원천 소멸 — §5.4 참조)** ③ 4요소→정식 소스 승격 ④ 대학 513 포함+2015·2022 병행
