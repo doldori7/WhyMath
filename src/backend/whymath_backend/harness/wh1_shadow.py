@@ -108,6 +108,7 @@ async def observe_wh1_harness_shadow(
     max_tool_calls: int = 16,
     dialogue_id: str | None = None,
     problem_id: str | None = None,
+    warmstart_outside_mids: Sequence[str] = (),
 ) -> None:
     """WH-1 하네스를 한 턴 돌려 *거동 요약만* 로그로 관측(shadow·비노출·무영속). 반환 `None`.
 
@@ -120,6 +121,13 @@ async def observe_wh1_harness_shadow(
     `has_solution_steps`는 `solution_steps` 유무로 정한다 — 풀이 단계가 있으면 verify 의무(§3.1)가
     걸려 하네스가 verify_step을 강제하므로, 실 트래픽에서 verify 판정 분포를 관측할 수 있다.
 
+    **웜스타트 probe 힌트(S1-c·감사 Q5)**: `warmstart_outside_mids`(진단 시작 시 조립된 외부 오개념
+    후보·`l4.misconception.warmstart`)를 `LLMTutorPolicy`의 *사적 probe 컨텍스트*(outside_mids)로만
+    주입한다 — 정책이 select_probe를 고르면 `SelectProbeAction.outside_mids`에 실려 하네스의
+    `plan_probe`(진단 문항 *선별*)로 흐른다. **이 힌트는 진단 probe 타깃팅 전용이다**: 코칭 context·
+    개입 발화에 오개념을 preload하지 않는다(reactive retrieval 유지·CLAUDE.md). student_text·
+    solution_steps와 같은 사적 주입 계약이라 LLM 프롬프트에도, shadow 레코드에도 실리지 않는다.
+
     **never-break**(비차단 방어선·judge shadow의 async 미러): 정책 구성·하네스 실행·직렬화·로깅을
     한 `try`로 감싸 *어떤 예외도* 본류(fire-and-forget task)를 깨지 않는다. 정책(`LLMTutorPolicy`)은
     provider 장애를 안전 강등으로 흡수하지만(never-break), 그 위 직렬화·로깅 실패까지 방어한다
@@ -131,6 +139,9 @@ async def observe_wh1_harness_shadow(
             # 학생 원문·풀이 단계는 프롬프트가 아니라 정책 보유값으로만 사적 사용(S1-a·요구사항 ⑥).
             student_text=student_solution,
             solution_steps=list(solution_steps),
+            # 웜스타트 outside_mids도 사적 probe 컨텍스트로만 주입 — select_probe→plan_probe 전용
+            # (진단 타깃팅). 코칭 context·프롬프트·레코드에 오개념 preload 0(감사 Q5·CLAUDE.md).
+            outside_mids=list(warmstart_outside_mids),
         )
         outcome: TurnOutcome = await run_tutoring_turn(
             policy=policy,

@@ -282,3 +282,50 @@ def test_shadow_failure_does_not_break_response(monkeypatch: pytest.MonkeyPatch)
         captured.close()  # 캡처 코루틴 정리(구동 안 함 — 응답 무관 확인이 목적)
     finally:
         asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ④ 웜스타트(S1-c) — 플래그 OFF면 warmstart 미호출·ON이면 호출(진단 probe 타깃팅 전용)
+# ──────────────────────────────────────────────────────────────────────────
+def test_warmstart_called_only_when_flag_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        captured = _CapturedSpawn()
+        monkeypatch.setattr(coach, "_spawn", captured)
+        _patch_shadow_provider(monkeypatch)
+
+        # warmstart 좌석을 스파이로 감싸 호출 횟수를 센다(빈 힌트 반환·라이브 0).
+        warmstart_calls: list[dict[str, Any]] = []
+
+        async def _spy_warmstart(_session: Any, **kwargs: Any) -> list[str]:
+            warmstart_calls.append(kwargs)
+            return []
+
+        monkeypatch.setattr(coach, "assemble_warmstart_probe_hints", _spy_warmstart)
+
+        # OFF(기본) → warmstart 미호출(플래그 게이트 안).
+        get_settings.cache_clear()
+        with _client() as client:
+            off = client.post(
+                "/v1/coach/sessions", headers=_auth(uid), json={"student_input": _STUDENT_INPUT}
+            )
+            assert off.status_code == 201, off.text
+            dialogue_ids.append(uuid.UUID(off.json()["dialogue_id"]))
+        assert warmstart_calls == []  # OFF → 웜스타트 조립 비용 0
+
+        # ON → warmstart 1회 호출(진단 probe 힌트 조립).
+        _enable_wh1_shadow(monkeypatch)
+        with _client() as client:
+            on = client.post(
+                "/v1/coach/sessions", headers=_auth(uid), json={"student_input": _STUDENT_INPUT}
+            )
+            assert on.status_code == 201, on.text
+            dialogue_ids.append(uuid.UUID(on.json()["dialogue_id"]))
+        assert len(warmstart_calls) == 1  # ON → 웜스타트 조립 1회
+        captured.close()  # spawn된 코루틴 정리(구동 불요)
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))

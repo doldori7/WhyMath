@@ -46,6 +46,7 @@ from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.session import get_session
 from whymath_backend.harness.wh1_shadow import observe_wh1_harness_shadow
+from whymath_backend.l1.embedding_provider import build_provider
 from whymath_backend.l2 import (
     AbilityReading,
     get_current_ability,
@@ -95,6 +96,7 @@ from whymath_backend.l4.misconception.shadow import (
     observe_misconception_judge_shadow,
     observe_misconception_shadow,
 )
+from whymath_backend.l4.misconception.warmstart import assemble_warmstart_probe_hints
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
@@ -1073,6 +1075,20 @@ async def create_session(
     # (fire-and-forget) 패턴 미러 — 응답 경로는 하네스 도구 루프(수 초)를 await하지 않는다. 플래그
     # OFF(기본)면 spawn 0·기존과 비트동일(완전 되돌리기 가능·04a '측정 없는 도입 없음').
     if get_settings().wh1_harness_shadow_enabled:
+        # S1-c: 웜스타트 probe 힌트(outside_mids) 조립 — 진단 시작 시 하네스 탐색 probe가 겨냥할
+        # 외부 오개념 후보를 단원 고빈도+atom 확장으로 미리 공급한다(감사 Q5). **진단 probe 타깃팅
+        # 전용** — 코칭 context·개입엔 오개념을 preload하지 않는다(reactive 유지·CLAUDE.md). 플래그
+        # ON일 때만 호출(OFF면 warmstart 비용 0). warmstart는 조회만이라 실패해도 학생 응답을 깨면
+        # 안 되므로 never-break로 감싸 빈 리스트로 폴백한다(가용성 #1≫진단 관측 #6).
+        warmstart_mids: list[str] = []
+        try:
+            warmstart_mids = await assemble_warmstart_probe_hints(
+                session,
+                problem_id=body.problem_id,
+                provider=build_provider(get_settings()),
+            )
+        except Exception:  # noqa: BLE001 — 웜스타트 실패는 학생 응답을 안 깬다(never-break).
+            logger.warning("웜스타트 probe 힌트 조립 실패 — 빈 힌트로 진행", exc_info=True)
         _spawn(
             observe_wh1_harness_shadow(
                 # 학생 원문·풀이 단계는 정책의 *사적 필드*로만 주입(S1-a·프롬프트·레코드 미노출).
@@ -1080,6 +1096,8 @@ async def create_session(
                 solution_steps=body.solution_steps or [],
                 active_hypotheses=active_hypotheses,
                 problem_id=str(body.problem_id) if body.problem_id is not None else None,
+                # 웜스타트 outside_mids는 정책 사적 probe 컨텍스트로만(plan_probe 전용).
+                warmstart_outside_mids=warmstart_mids,
             )
         )
     decision, matches, intervention, lthc, entry_category, solution_coaching = (

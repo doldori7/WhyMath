@@ -252,3 +252,74 @@ class TestNeverBreak:
             )
         assert result is None  # 예외 전파 0(never-break)
         assert _records(caplog) == []  # 실패라 부분 기록도 0
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑤ 웜스타트 배선(S1-c) — warmstart_outside_mids가 정책 사적 probe 컨텍스트로만 흐른다
+# ──────────────────────────────────────────────────────────────────────────
+class TestWarmstartWiring:
+    """`warmstart_outside_mids`가 `LLMTutorPolicy(outside_mids=...)`로만 주입되는지 구조 동결.
+
+    경계(감사 Q5): 웜스타트 힌트는 **진단 probe 타깃팅 전용**이라 정책의 `outside_mids`
+    (→select_probe→plan_probe)로만 흘러야 하고, 코칭 관련 인자에는 결코 실리지 않는다.
+    `LLMTutorPolicy`를 스파이로 감싸 생성 kwargs를 캡처해 못 박는다(preload 금기 회귀 가드).
+    """
+
+    def test_warmstart_flows_to_policy_outside_mids_only(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        captured: dict[str, object] = {}
+        real_policy = wh1_shadow.LLMTutorPolicy
+
+        def _spy_policy(provider: object, **kwargs: object) -> object:
+            captured.update(kwargs)
+            return real_policy(provider, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(wh1_shadow, "LLMTutorPolicy", _spy_policy)
+        warmstart = ["M0001", "M0002", "M0003"]
+        asyncio.run(
+            observe_wh1_harness_shadow(
+                student_solution="풀이",
+                solution_steps=[],
+                active_hypotheses=[],
+                provider=_FakeProvider(['{"kind": "end_turn", "action_type": "격려"}']),
+                warmstart_outside_mids=warmstart,
+            )
+        )
+        # 웜스타트는 정책의 outside_mids로만 주입된다(사적 probe 컨텍스트).
+        assert captured.get("outside_mids") == warmstart
+        # 코칭·발화 인자로는 warmstart가 새지 않는다(preload 금기 — 코칭은 reactive 유지).
+        assert captured.get("student_text") == "풀이"  # 학생 원문만 사적 주입
+        for key in ("probe_candidates", "solution_steps"):
+            assert warmstart != captured.get(key)
+
+    def test_warmstart_reaches_select_probe_action(self) -> None:
+        # 정책이 select_probe를 고르면 warmstart outside_mids가 SelectProbeAction에 실린다
+        # (plan_probe 소비처로 흐르는 최종 경로·hermetic).
+        policy = wh1_shadow.LLMTutorPolicy(
+            _FakeProvider([]),
+            outside_mids=["M0001", "M0002"],
+        )
+        action = policy._build_action({"kind": "select_probe"})
+        assert action is not None
+        assert getattr(action, "outside_mids", None) == ["M0001", "M0002"]
+
+    def test_default_empty_warmstart(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # warmstart 미주입(기본 빈 튜플)이면 정책 outside_mids는 빈 리스트(기존 동작 불변).
+        captured: dict[str, object] = {}
+        real_policy = wh1_shadow.LLMTutorPolicy
+
+        def _spy_policy(provider: object, **kwargs: object) -> object:
+            captured.update(kwargs)
+            return real_policy(provider, **kwargs)  # type: ignore[arg-type]
+
+        monkeypatch.setattr(wh1_shadow, "LLMTutorPolicy", _spy_policy)
+        asyncio.run(
+            observe_wh1_harness_shadow(
+                student_solution="풀이",
+                solution_steps=[],
+                active_hypotheses=[],
+                provider=_FakeProvider(['{"kind": "end_turn", "action_type": "격려"}']),
+            )
+        )
+        assert captured.get("outside_mids") == []
