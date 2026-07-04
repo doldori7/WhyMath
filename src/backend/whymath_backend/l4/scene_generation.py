@@ -25,6 +25,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingRequest
 from whymath_backend.l3.visualization import generate_visualization_spec
@@ -35,21 +37,30 @@ from whymath_backend.l4.learning_scene import (
     SceneElement,
     SceneLayout,
     SceneLearnerContext,
+    SkillFocusElement,
     SocraticPromptElement,
     VisualizationElement,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.intervene import select_intervention
-from whymath_backend.l4.misconception.models import InterventionPattern, MisconceptionMatch
+from whymath_backend.l4.misconception.models import (
+    InterventionPattern,
+    MisconceptionMatch,
+)
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.socratic.categories import EXAMPLE_QUESTION, SocraticCategory
 from whymath_backend.l4.visualization_policy import is_visualizable, prefers_static_visual
 from whymath_backend.schema.concept import Concept
-from whymath_backend.schema.enums import CognitiveType, Visualizability, VisualizationType
+from whymath_backend.schema.enums import (
+    BehaviorArea,
+    CognitiveType,
+    Visualizability,
+    VisualizationType,
+)
 from whymath_backend.schema.visualization import Graph2dSpec
 
-# 인지 유형 → (소크라테스 카테고리, Polya 단계) 결정론 매핑 — 05a §5.1.
-# 개념의 *성격*에 맞는 메타인지 발화 종류를 코드가 고른다(LLM 추측 아님). 정답이 아니라 유도 질문.
+# ── 개념 축(CognitiveType·개념 성격) → 소크라테스 (카테고리, Polya 단계). BehaviorArea와 직교.
+# 개념의 *성격*에 맞는 메타인지 발화를 코드가 고른다(LLM 추측 아님). 정답이 아니라 유도 질문.
 _COGNITIVE_SOCRATIC_MAP: dict[CognitiveType, tuple[SocraticCategory, PolyaStage]] = {
     CognitiveType.DEFINITION: (SocraticCategory.CLARIFICATION, PolyaStage.UNDERSTAND),
     CognitiveType.THEOREM: (SocraticCategory.EVIDENCE, PolyaStage.PLAN),
@@ -57,12 +68,77 @@ _COGNITIVE_SOCRATIC_MAP: dict[CognitiveType, tuple[SocraticCategory, PolyaStage]
     CognitiveType.PATTERN: (SocraticCategory.IMPLICATION, PolyaStage.EXECUTE),
     CognitiveType.VISUAL_REASONING: (SocraticCategory.ASSUMPTION, PolyaStage.UNDERSTAND),
 }
-# 인지 유형이 없을 때의 기본 메타인지 발화 — "메타인지 중심" 정체성(CLAUDE.md)상 장면은 최소
-# 한 개의 유도 질문을 갖는다.
+# 인지 유형이 없을 때의 기본 메타인지 발화 — 장면은 최소 한 개의 유도 질문(CLAUDE.md 메타인지 중심).
 _DEFAULT_SOCRATIC: tuple[SocraticCategory, PolyaStage] = (
     SocraticCategory.META,
     PolyaStage.REVIEW,
 )
+
+# ── 행동영역 축(BehaviorArea·정본 6종·#418) — 개념과 직교. 인지 진입 순서(lead) + 가시 focus 블록.
+# S5i/S5j를 정본 행동영역 축으로 재정렬(S5k). 이전엔 CognitiveType으로 근사했으나 #418이 정본
+# `BehaviorArea`(SkillNode)를, #419가 concept→skill 매핑(`concept_node.behavior_skills`)을 도입했다.
+# 행동영역은 개념→skill 조인으로 해소돼(L5 `get_behavior_areas`) 생성기에 주입(미매핑=중립).
+
+# 행동영역 → 진입 순서: 표상/변형/계산=시각 진입(그림 먼저)·해석/추론/검증=탐구(질문 먼저).
+_LEAD_BY_BEHAVIOR: dict[BehaviorArea, Literal["visual", "inquiry"]] = {
+    BehaviorArea.COMPUTE: "visual",
+    BehaviorArea.TRANSFORM: "visual",
+    BehaviorArea.REPRESENT: "visual",
+    BehaviorArea.INTERPRET: "inquiry",
+    BehaviorArea.REASON: "inquiry",
+    BehaviorArea.VERIFY: "inquiry",
+}
+# 미매핑(behavior_area 없음) 개념은 탐구(질문) 진입 기본값.
+_DEFAULT_LEAD: Literal["visual", "inquiry"] = "inquiry"
+
+# 다중 skill(행동영역)일 때 *주 행동영역* precedence(결정론). 값이 작을수록 우선.
+_BEHAVIOR_PRECEDENCE: dict[BehaviorArea, int] = {
+    BehaviorArea.REPRESENT: 0,
+    BehaviorArea.TRANSFORM: 1,
+    BehaviorArea.COMPUTE: 2,
+    BehaviorArea.INTERPRET: 3,
+    BehaviorArea.REASON: 4,
+    BehaviorArea.VERIFY: 5,
+}
+
+# 행동영역별 *가시 focus 블록* 정본 지시 — 05a §3.2 SkillFocus. 정답·질문 아니라 *어떤 인지 행동을
+# 하라*는 선언적 지시(EXAMPLE_QUESTION 드리프트 제어 답습). 6종 폐쇄 — 미매핑 행동영역은 미부여.
+_SKILL_FOCUS_CUE: dict[BehaviorArea, str] = {
+    BehaviorArea.COMPUTE: "연산 규칙과 순서를 정확히 적용해 단계적으로 계산하세요.",
+    BehaviorArea.TRANSFORM: "식을 바꾸기 전에 어떤 등가 변형 규칙을 쓰는지 확인하세요.",
+    BehaviorArea.INTERPRET: "주어진 조건을 먼저 수학 구조(식·관계)로 해석하세요.",
+    BehaviorArea.REPRESENT: "같은 대상을 그래프·식·표 등 다른 표현으로 바꿔 살펴보세요.",
+    BehaviorArea.REASON: "결론으로 가는 논리적 근거를 한 단계씩 전개하세요.",
+    BehaviorArea.VERIFY: "결과가 조건을 만족하는지 반례·특수값으로 점검하세요.",
+}
+
+
+def _primary_behavior_area(
+    behavior_areas: list[BehaviorArea] | None,
+) -> BehaviorArea | None:
+    """다중 행동영역에서 *주 행동영역*을 결정론적으로 고른다(precedence 최소값). 없으면 None."""
+    if not behavior_areas:
+        return None
+    return min(behavior_areas, key=lambda a: _BEHAVIOR_PRECEDENCE[a])
+
+
+def _lead_for(behavior_areas: list[BehaviorArea] | None) -> Literal["visual", "inquiry"]:
+    """주 행동영역 → 인지 진입 순서(미매핑이면 기본 탐구 진입)."""
+    primary = _primary_behavior_area(behavior_areas)
+    return _LEAD_BY_BEHAVIOR[primary] if primary is not None else _DEFAULT_LEAD
+
+
+def _skill_focus_element(
+    behavior_areas: list[BehaviorArea] | None,
+) -> SkillFocusElement | None:
+    """주 행동영역이 있으면 그 행동영역의 focus 블록 1개. 미매핑이면 None.
+
+    행동영역이 *블록의 유무·내용*을 자동 분기한다(체크리스트 ② "9블록이 행동영역에 따라 자동 분기").
+    """
+    primary = _primary_behavior_area(behavior_areas)
+    if primary is None:
+        return None
+    return SkillFocusElement(behavior_area=primary, focus_prompt=_SKILL_FOCUS_CUE[primary])
 
 
 def _socratic_elements(concept: Concept) -> list[SocraticPromptElement]:
@@ -149,16 +225,20 @@ async def generate_learning_scene(
     trace: TraceSink,
     learner_context: SceneLearnerContext | None = None,
     visualizability: Visualizability | None = None,
+    behavior_areas: list[BehaviorArea] | None = None,
     answer_deferral_max_level: int = 4,
 ) -> LearningScene:
     """개념 노드 → 검증된 `LearningScene` 합성 명세(05a §5). 라우터 경유·결정론 골격.
 
-    골격(코드 결정론): ① `recommended_visual_styles`가 있으면 `visualization` 요소 1개 —
-    `generate_visualization_spec`(L3·라우터·Langfuse·캐시)로 spec 충전, 그 결과가 graph_2d이고
-    파라미터를 선언하면 그 파라미터를 타깃하는 `param_control`을 덧붙인다. ② `cognitive_type` →
-    소크라테스 발화(정본 유도 질문·`hint_level=1`). ③ `learner_context`의 활성 가설 ∩ 카탈로그 →
-    `misconception_probe`(적응·낙인 금지). 반환 전 `LearningScene` 불변식(답 미루기·param/annotation
-    정합)을 통과한다 — 검증 안 된 명세는 나가지 않는다(CLAUDE.md).
+    골격(코드 결정론): **행동영역(BehaviorArea·정본 6종)**이 *인지 진입 순서*를 결정한다(S5k) —
+    표상/변형/계산은 시각화 먼저, 해석/추론/검증은 질문 먼저. 개념과 직교하므로 소크라테스
+    프레이밍은 개념 축(`cognitive_type`)이 계속 담당한다. ⓪ 행동영역 focus: 주 행동영역이 있으면
+    그 행동영역의 `skill_focus`를 맨 앞에 둔다(미매핑=미부여·05a §3.2). ① 시각화 블록:
+    `recommended_visual_styles`가 있고 `visualizability`가 허용할 때만 `visualization`(+graph_2d·
+    비정적이면 `param_control`)을 붙인다(bound index는 append 시점 계산이라 진입 순서와 무관 정합).
+    ② 소크라테스 블록: `cognitive_type` → 발화(정본 유도 질문). ③ 활성 가설 ∩ 카탈로그
+    → `misconception_probe`(적응·낙인 금지·항상 본문 뒤). 반환 전 `LearningScene` 불변식(답 미루기·
+    param/annotation 정합)을 통과한다 — 검증 안 된 명세는 나가지 않는다(CLAUDE.md).
 
     LLM 호출은 시각화 spec 1회뿐(스타일 있을 때)·나머지는 결정론 — 환각 표면을 최소화한다(RS5).
 
@@ -168,6 +248,9 @@ async def generate_learning_scene(
         req: 라우팅 입력(task_type="generate" 권장·sync 여부는 호출자). 동기 경로 전제.
         provider/cache/trace: L3 `pipeline.generate` DI(라우터·캐시·관측).
         learner_context: L2/WH-1 스냅샷(선택). 활성 가설이 있으면 프로브를 *적응적으로* 삽입.
+        visualizability: 시각화 가능성 4분류(L1·05b). 추상/불가면 시각화 생략(억지 그림 방지).
+        behavior_areas: 개념의 행동영역 목록(L5 `get_behavior_areas`가 concept→skill 조인으로 해소).
+            진입 순서·focus 블록을 결정. 미매핑(빈 목록/None)이면 중립(탐구 진입·focus 0).
         answer_deferral_max_level: 장면 힌트 상한(1~4·기본 4). 소크라테스 발화는 1단계라 항상 충족.
 
     Returns:
@@ -176,12 +259,25 @@ async def generate_learning_scene(
     Raises:
         InvalidVisualizationSpecError: 시각화 spec LLM 출력이 검증 게이트를 통과 못 함(전파).
     """
+    lead = _lead_for(behavior_areas)
     elements: list[SceneElement] = []
 
-    # ① 시각화(+param_control) — 권장 양식이 있고, *시각화 가능성 4분류가 이를 허용*할 때만
-    #    (플레이북 Part 5 게이트·05b). 추상·불가 개념은 억지 그림 대신 소크라테스/단계로 폴백해
-    #    "전부 똑같이 그리려" 실패를 막는다(CLAUDE.md 교수학 정확성). 미태깅(None)은 기존 동작.
-    if concept.recommended_visual_styles and is_visualizable(visualizability):
+    # ⓪ 행동영역 focus(있으면 맨 앞·프레이밍) — 주 행동영역별 자동 분기(미매핑=미부여).
+    # 정답 아님·소크라테스 질문과 구분되는 *행동 지시*(05a §3.2·S5k).
+    skill_focus = _skill_focus_element(behavior_areas)
+    if skill_focus is not None:
+        elements.append(skill_focus)
+
+    async def _append_visual_block() -> None:
+        """시각화(+graph_2d면 param_control)를 공유 `elements`에 append.
+
+        권장 양식이 있고 `visualizability`가 허용할 때만(추상·불가면 억지 그림 대신 폴백·05b Part 5
+        게이트·CLAUDE.md 교수학 정확성). `bound_visualization_index`를 append 시점 `len(elements)`로
+        계산하므로, 소크라테스가 앞서(inquiry) viz가 뒤 인덱스여도 정합(불변식 통과). LLM 호출은
+        여기 1회뿐(스타일 있을 때).
+        """
+        if not (concept.recommended_visual_styles and is_visualizable(visualizability)):
+            return
         viz = await generate_visualization_spec(
             concept.name_ko,
             level,
@@ -205,8 +301,16 @@ async def generate_learning_scene(
                     ParamControlElement(targets=declared, bound_visualization_index=viz_index)
                 )
 
-    # ② 소크라테스 발화(인지 유형 결정론) ③ 오개념 프로브(적응)
-    elements.extend(_socratic_elements(concept))
+    # 행동영역(BehaviorArea)이 *인지 진입 순서*를 결정한다(S5k).
+    # visual → 시각화 먼저(보고→추론) · inquiry → 소크라테스(질문) 먼저(질문→확인).
+    if lead == "visual":
+        await _append_visual_block()
+        elements.extend(_socratic_elements(concept))
+    else:  # "inquiry"
+        elements.extend(_socratic_elements(concept))
+        await _append_visual_block()
+
+    # ③ 오개념 프로브(적응·reactive) — 항상 본문 뒤
     elements.extend(_misconception_probes(learner_context))
 
     # 조립 + 불변식 통과(미통과 명세는 반환 안 됨). misconception_id는 카탈로그로 사전 필터됨.

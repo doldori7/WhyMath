@@ -1,13 +1,13 @@
 // L4 LearningScene DSL 데이터 모델 — 백엔드 `LearningScene`(05a §3) 계약을 *구조 그대로* 옮긴다.
 //
-// 정본: `src/backend/whymath_backend/l4/learning_scene.py`(`LearningScene`·`SceneElement` 6종
+// 정본: `src/backend/whymath_backend/l4/learning_scene.py`(`LearningScene`·`SceneElement` 7종
 // 판별 유니온·`SceneLearnerContext`) + `schema/visualization.py`(`Visualization`).
 //
 // **경계(CLAUDE.md·슬라이스 89 표현≠의미)**: 이 클래스들은 *수신 컨테이너*일 뿐이다 — 장면의
 // 조립·검증(불변식·참조 무결성)은 전부 서버(L4)에 있고, 클라는 검증된 명세를 받아 렌더만 한다.
 // 정답·수정 같은 누출 위험 필드는 백엔드 스키마가 애초에 담지 않는다(misconception_probe엔 정답 없음).
 //
-// **판별 유니온 표현 방침**: 백엔드 `SceneElement`는 `kind` 판별 유니온 6종이지만, 클라는
+// **판별 유니온 표현 방침**: 백엔드 `SceneElement`는 `kind` 판별 유니온 7종이지만, 클라는
 // 코드젠 리스크(freezed union 선례 0)를 피해 **단일 flat 모델 + `kind` 문자열 + 변형별 nullable
 // 필드**로 받는다. 렌더러가 `kind`로 분기한다(기존 String enum + nullable 관례·coach_models.dart).
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -71,8 +71,8 @@ class SceneLearnerContext with _$SceneLearnerContext {
 // 장면 요소 — SceneElement (flat·kind 판별·변형별 nullable)
 // ─────────────────────────────────────────────────────────────────────────
 
-/// 장면 합성 요소 1개 — `kind`로 6종을 구분한다(visualization·param_control·step_panel·
-/// misconception_probe·socratic_prompt·annotation).
+/// 장면 합성 요소 1개 — `kind`로 7종을 구분한다(visualization·param_control·step_panel·
+/// misconception_probe·socratic_prompt·annotation·skill_focus).
 ///
 /// 백엔드 판별 유니온을 단일 flat 모델로 받는다 — 변형별 필드는 해당 kind에서만 채워지고
 /// 나머지는 null. 렌더러는 `kind`로 분기한다.
@@ -82,7 +82,7 @@ class SceneLearnerContext with _$SceneLearnerContext {
 @freezed
 class SceneElement with _$SceneElement {
   const factory SceneElement({
-    /// 요소 종류 판별자(위 6종 중 하나).
+    /// 요소 종류 판별자(위 7종 중 하나).
     @JsonKey(name: 'kind') required String kind,
 
     // visualization
@@ -129,6 +129,13 @@ class SceneElement with _$SceneElement {
 
     /// 강조/라벨 선언 명세(annotation kind·자유 JSON).
     @JsonKey(name: 'highlight_spec') Map<String, dynamic>? highlightSpec,
+
+    // skill_focus (행동영역 focus·S5k)
+    /// 이 블록이 드러내는 행동영역(skill_focus kind·정본 BehaviorArea 6종).
+    @JsonKey(name: 'behavior_area') String? behaviorArea,
+
+    /// 선언적 행동 focus 지시(skill_focus kind·정답 아님).
+    @JsonKey(name: 'focus_prompt') String? focusPrompt,
   }) = _SceneElement;
 
   factory SceneElement.fromJson(Map<String, dynamic> json) =>
