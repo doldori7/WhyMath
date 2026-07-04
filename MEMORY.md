@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-04 (구현·harness/L5/L3·mock 우선): **S1 착수 — 기반 3슬라이스(S1-a·b·e) 완료** (Kiki 설계 승인)
+
+**무엇/왜**: 블록 A 설계(`s1_e2e_vertical_slice_design.md`) Kiki 승인 후 S1 빌드 착수. S1 = "짓기 아닌 잇기"(엔진 존재·글루 미배선). 라이브 키 없이 mock 우선 자율 진행 가능한 백엔드-only 기반 3슬라이스 완료:
+- **S1-a** `harness/wh1_llm_policy.py::LLMTutorPolicy`(G1) — WH-1 `TutorPolicy` Protocol의 프로덕션 두뇌. L3 라우터 경유로 8 Action 중 next_action 구조화 선택(직접 LLM 호출 0). **민감 인자 격리**: student_text·solution_steps는 정책 사적 주입·LLM은 kind+비민감 스칼라만 → 프롬프트/트레이스 원문 미노출. 불변식 이중 방어(프롬프트+코드): verify 의무 시 end_turn→verify_step 재지정·unverifiable 시 정답 발화 제거·출제→질문 강등(Polya). 안전 폴백(파싱 실패·provider 예외). ScriptedTutorPolicy 존치. 테스트 16.
+- **S1-b** `harness/wh1_shadow.py`(G2/G3 안전 첫걸음·**shadow 우선**·Kiki 결정) — coach 세션에 하네스를 **비노출·비블로킹 shadow 관측**으로 배선(`l4/misconception/shadow.py` 패턴 미러). 플래그 `wh1_harness_shadow_enabled` **기본 OFF** → 학생 응답 비트동일(결정론 경로 무변경). 기록: status·action_type·verify_verdict·tool_calls·id만(원문 0·extra=forbid). **verify 게이트 primary 승격은 shadow 측정 후 후속**(04a "측정 없는 도입 없음"). 테스트 10(hermetic 7+@integration 3 실 PG).
+- **S1-e** Minimal Reasoning Subgraph 예산(Part 8 해제 트리거·감사 Q2·"AI 추론 실패" 최대 인지리스크 상환) — `LLMTutorPolicy._build_prompt`에 nodes≤20·history≤8·tokens≤3000 상한. 절단 우선순위 결정론·**fail-closed 정직 신호**(context_truncated·omitted_count). traversal guard는 소비처(실 graph traversal) 부재로 미신설(향후 query_curriculum 배선 시 동반·docstring). 테스트 5.
+**검증 규율**: 3슬라이스 전부 메인 ground truth 재검증(게이트 직접 실행·원문 미노출 grep·플래그 OFF 비트동일 실 PG·예산 절단 실측). 5게이트 green(pytest 5,007p). **로컬 PG(포트 54329) 재사용**해 @integration 검증. **다음(잔여 S1)**: S1-c(웜스타트 시딩·온보딩 학년/트랙·atom search 배선 — **mobile 도메인+오개념 preload 금기[감사 Q5] 제약**·Kiki 방향 확인 대기), S1-d(mobile OCR→coach 글루), S1-f(Kiki: 클라우드 튜닝·실기기·verify 게이트 승격). **NOT**: 학생-대면 동작 변화 0(shadow OFF)·아키텍처 결정론 경로 무변경·직접 LLM 호출 0·소비처 없는 추상 0.
+
 ### 2026-07-04 (자율 24h·설계·감사·prep/문서·스크립트·테스트): **24시간 자율 작업 4블록 완료** — S1 설계·구조 감사·orphan prep·통합 테스트 하드닝
 
 **무엇/왜**: Kiki 24h 외부 부재 동안 Kiki 불필요·되돌리기 쉬운 작업(설계·감사 중심·아키텍처 commit 0)만 자율 진행. 4블록:
