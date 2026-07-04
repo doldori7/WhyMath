@@ -9,7 +9,7 @@
   ① 합성 row 적재 → 컬럼 라운드트립(mis_id·canonical_statement·concept_src_id/standard_code 원천
      저장·mapping_score Decimal)
   ② 멱등 — 재적재 행수 불변·값 갱신
-  ③ 실 코퍼스(`data/corpus/misconceptions_v1/misconceptions.json`) 적재 → 839행·멱등·cleanup
+  ③ 실 코퍼스(`data/corpus/misconceptions_v1/`) 적재 → 전건(코퍼스 파생 count)·멱등·cleanup
 """
 
 from __future__ import annotations
@@ -205,10 +205,12 @@ class TestIdempotent:
 
 
 class TestRealCorpusLoad:
-    """③ 실 코퍼스(`data/corpus/misconceptions_v1`) 적재 — 839행·멱등(#290 코퍼스 정합).
+    """③ 실 코퍼스(`data/corpus/misconceptions_v1`) 적재 — 전건·멱등(#290 코퍼스 정합).
 
     합성 행이 아니라 #290이 커밋한 실 Collection JSON을 `load_misconceptions`로 적재해 B.3 로더가
-    실 데이터에 서는지 본다(839 레코드). 정리는 코퍼스 mis_id 전건.
+    실 데이터에 서는지 본다. 기대 행수는 코퍼스에서 *파생*한다(`len(mis_ids)`) — 하드코딩 금지라
+    코퍼스가 자라도(예 ③ crosswalk M0862·M0863 추가로 839→841) drift하지 않는다. 정리는 코퍼스
+    mis_id 전건.
     """
 
     def test_load_real_corpus_idempotent(self) -> None:
@@ -226,11 +228,12 @@ class TestRealCorpusLoad:
         payload = json.loads(corpus.read_text(encoding="utf-8"))
         mis_ids = [str(m["mis_id"]) for m in payload["misconceptions"]]
         try:
+            expected = len(mis_ids)  # 코퍼스 파생(하드코딩 금지·drift 방지)
             count = load_misconceptions(None, corpus, settings=Settings())
-            assert count == 839
+            assert count == expected
             # 재적재 멱등 — 같은 코퍼스 → DB 행수 불변.
             recount = load_misconceptions(None, corpus, settings=Settings())
-            assert recount == 839
+            assert recount == expected
             engine = _sync_engine()
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
@@ -238,7 +241,7 @@ class TestRealCorpusLoad:
                         text("SELECT count(*) FROM misconception_catalog WHERE mis_id = ANY(:ids)"),
                         {"ids": mis_ids},
                     ).scalar_one()
-                assert total == 839  # 멱등(2회 적재 후에도 839행)
+                assert total == expected  # 멱등(2회 적재 후에도 코퍼스 전건)
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:
