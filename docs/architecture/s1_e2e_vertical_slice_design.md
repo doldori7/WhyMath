@@ -39,10 +39,11 @@
 - **계약 상태**: 🟡 **제시 좌석 존재 / 동등문제 생성은 S2**. 현 좌석은 기존 문제 풀 선별이지 진단 오개념→동등문제 라우팅 아님. S1은 **소수 시드 문제(수동 저작 or S2 선행분)로 제시만 실증**, 생성 스케일은 S2.
 - **S1 배선**: 진단 약점 개념 → `search_atoms`(⑧) → 해당 원자 태그 문제 선별. (문제 풀이 얇아도 1루프 실증엔 충분)
 
-### ④ 풀이입력 (MathLive/OCR)
-- **엔진/좌석**: OCR `api/ocr.py:40`(`POST /v1/ocr`)·서버측 글루 `api/ocr_handoff.py`(plain_latex→`CoachRequest.student_solution`·계약 테스트 `test_ocr_handoff.py`) · MathLive WebView `features/chat/presentation/graphing_calculator_webview.dart` · 풀이 전송 `chat_controller.dart:81`(줄 단위→`solution_steps`).
-- **계약 상태**: 🟡 **서버 계약 정의 / mobile 끊김(G4)**. `features/chat/`가 `ocr_api` 미import — OCR 화면 결과가 chat 제출로 안 이어짐. 음성 풀이입력(STT) HTTP 좌석 부재(speech는 TTS 낭독만).
-- **S1 배선(G4)**: mobile에서 OCR 결과→chat `solution_steps` 글루. MathLive 입력 우선(OCR은 병행). **S1은 MathLive 경로만으로도 완주 가능** — OCR은 실모델(Qwen3-VL) Kiki 필요라 후순위.
+### ④ 풀이입력 (평문 텍스트 / OCR)
+> **정정(구조 감사 2026-07-04)**: 초안의 "MathLive 경로"는 오칭. **MathLive는 웹 그래핑 계산기의 수식 입력칸(시각화 렌더러)이지 풀이 제출기가 아니다**(`GraphingCalculator.jsx:23-41`·`graphing_calculator_webview.dart`는 검증된 `Visualization.spec` 렌더). **실제 풀이입력 = 평문 `TextField`**(`chat_screen.dart:38`)→줄 분해→`solution_steps`.
+- **엔진/좌석**: 평문 풀이 `chat_controller.dart:89-108`(줄 단위→`CoachRequest(solution_steps)`·`ocr_confidence` 미설정) · OCR `api/ocr.py:40`(`POST /v1/ocr`)·서버측 글루 `api/ocr_handoff.py`(plain_latex→`student_solution`·계약 테스트 `test_ocr_handoff.py`).
+- **계약 상태**: 🟢 **평문 경로 완결 / 🟡 OCR 서버 계약 정의·mobile 끊김(G4)**. `features/chat/`가 `ocr_api` 미import — OCR 화면 결과가 chat 제출로 안 이어짐. 음성 풀이입력(STT) HTTP 좌석 부재(speech는 TTS 낭독만).
+- **S1 배선**: **평문→solution_steps→coach 경로만으로 완주 가능**(OCR 무관). OCR 브리지(G4·mobile OCR→coach)는 병행·후순위(실모델 Qwen3-VL은 Kiki). OCR 경로가 추가로 주는 것은 `ocr_confidence` 저신뢰 게이팅(손글씨 오인식 보호)뿐 — verify_solution 단계별 검증 자체는 두 경로 동일.
 
 ### ⑤ WH-1 코칭 (도구 루프)
 - **엔진/좌석**: 🟢 **도구 8종 전부 구현** (`harness/wh1_loop.py::_exec` `:361` — read_student_state·verify_step·match_misconception·curate_hypothesis·query_curriculum·select_probe(ε-탐색 강제 `:409`)·log_evidence·end_turn `:454`). 멀티턴 `wh1_session.py`. L4 교수학(polya·socratic·misconception judge·lthc) 완비. coach 엔드포인트 `api/coach.py:995`(`/v1/coach`)·`:1029`(sessions).
