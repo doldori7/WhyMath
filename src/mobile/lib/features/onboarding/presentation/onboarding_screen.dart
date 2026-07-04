@@ -54,10 +54,11 @@ const List<_OnboardingPage> _pages = [
 ];
 
 /// 안내 페이지 뒤에 붙는 목표 입력 폼 페이지의 인덱스(안내 3페이지 다음).
-const int _formPageIndex = _pages.length;
+/// `_pages.length`는 const 표현식에서 접근 불가(Dart const-eval 제약) → `final`.
+final int _formPageIndex = _pages.length;
 
 /// 전체 페이지 수 = 안내 페이지 + 목표 입력 폼 1페이지.
-const int _totalPages = _pages.length + 1;
+final int _totalPages = _pages.length + 1;
 
 /// 온보딩 화면 — PageView로 메타인지 철학을 안내한 뒤 목표 입력 폼으로 마무리한다.
 class OnboardingScreen extends ConsumerStatefulWidget {
