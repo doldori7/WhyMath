@@ -99,6 +99,7 @@ from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
 from whymath_backend.schema.enums import ContentType, EventType, StepType, TurnRole
+from whymath_backend.schema.event_data_contract import build_event_data
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -775,7 +776,11 @@ async def _log_verify_event(
         user_id=user_id,
         problem_id=problem_id,
         event_type=EventType.검산결과,
-        event_data={"passed": passed, "error_kind": (signal.kind if signal else None)},
+        event_data=build_event_data(
+            EventType.검산결과,
+            passed=passed,
+            error_kind=(signal.kind if signal else None),
+        ),
     )
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
     return passed  # clean→True·거짓관계 적발→False(핸들러의 반박 증거 결선이 소비).
@@ -819,7 +824,7 @@ async def _log_hint_event(
         user_id=user_id,
         problem_id=problem_id,
         event_type=EventType.힌트제공,
-        event_data={"hint_level": hint_level},
+        event_data=build_event_data(EventType.힌트제공, hint_level=hint_level),
     )
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
 
