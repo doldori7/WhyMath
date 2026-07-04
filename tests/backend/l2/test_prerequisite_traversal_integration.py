@@ -10,7 +10,7 @@ MIN depth dedup·origin 제외·1-hop 계약)는 *실 PG*에서만 검증된다.
   - P2는 P1의 선수(from=P2·to=P1)
   - P3는 P2의 선수(from=P3·to=P2)
 DAG 보장(data-pipeline validate.py prerequisite_cycle hard error)이라 재귀는 자연 종료.
-concept_node·mastery·user_profile은 traversal에 불요(순수 그래프 조회)라 적재하지 않는다.
+atom_node(enrich 메타)·mastery·user_profile은 traversal에 불요(순수 그래프 조회)라 적재하지 않는다.
 """
 
 from __future__ import annotations
