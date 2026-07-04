@@ -1,4 +1,9 @@
-"""개념 메타 PG 프로젝션 적재 — `concept_node` 테이블 UC 키 멱등 upsert (소비 슬라이스 1).
+"""[LEGACY_SNAPSHOT · non_runtime · audit_only] 구 437 격하(S0-4b).
+
+런타임 truth source는 원자 백본(atom_graph_v1). 이 모듈은 audit·빌드타임 provenance이며 런타임
+호출자 0(api·l2·l3·l4 구 437 reader 0). 물리 삭제 0·형식 격하만(S0-4b).
+
+개념 메타 PG 프로젝션 적재 — `concept_node` 테이블 UC 키 멱등 upsert (소비 슬라이스 1).
 
 슬1 산출 `graph.json`(UC 키·정제)의 개념 *안전 메타*를 `concept_node`(PG) 테이블에 멱등
 upsert한다. 슬3 `embedding.py`(임베딩 *벡터* 적재)의 *메타 투영* 짝이다 — 같은 `graph.json`을

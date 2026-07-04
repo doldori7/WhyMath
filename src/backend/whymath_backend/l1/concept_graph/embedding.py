@@ -1,4 +1,11 @@
-"""개념 의미 임베딩 적재 — pgvector 영속 좌석 (L1 개념그래프 아크 슬라이스 3).
+"""[LEGACY_SNAPSHOT · non_runtime · audit_only] 구 437 격하(S0-4b).
+
+런타임 truth source는 원자 백본(atom_graph_v1). 이 모듈은 audit·빌드타임 provenance이며 런타임
+호출자 0(api·l2·l3·l4 구 437 reader 0). 물리 삭제 0·형식 격하만(S0-4b).
+단, 공유 sync-엔진 빌더 `_build_sync_engine`은 원자·기타 L1 projection이 재사용하는 인프라
+유틸이라 격하 대상 아님(개념 데이터 read 아님).
+
+개념 의미 임베딩 적재 — pgvector 영속 좌석 (L1 개념그래프 아크 슬라이스 3).
 
 슬1 산출 `graph.json`(UC 키·정제)의 각 개념을 *안전 필드 표현*으로 임베딩해 `concept_embedding`
 테이블(pgvector)에 멱등 upsert한다. 슬2 Neo4j 적재와 *동일 UC 키*라 그래프↔벡터가 한 키로

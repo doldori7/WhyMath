@@ -29,6 +29,9 @@ _ATOM_GRAPH = _REPO_ROOT / "data" / "corpus" / "atom_graph_v1" / "graph.json"
 
 # 동결 스냅샷(2026-07-02 기준·Part 2 검토). 값이 바뀌면 *의식적으로* 갱신하라 —
 # 무단 재분할/중복 증식/누락을 잡는 회귀 가드다(단일 진실 원천 붕괴 감지).
+# 관점(2026-07-04·S0-4b): 구 437 개념그래프는 `legacy_snapshot`으로 격하됐고 원자 2,697이
+# runtime truth source다. 여기서는 *카운트 스냅샷만* 동결한다(값·로직 불변). 격하 자체의 회귀
+# 가드는 `test_legacy_snapshot_governance.py` 소관.
 _EXPECTED_CONCEPT_NODES = 437
 _EXPECTED_ATOM_NODES = 2697
 _ATOM_DETAIL_LEVEL = "세부개념"

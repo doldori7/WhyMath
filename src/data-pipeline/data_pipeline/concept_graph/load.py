@@ -1,4 +1,10 @@
-"""개념 그래프 → Neo4j 멱등 적재(단계 7).
+"""[LEGACY_SNAPSHOT · audit_only] 구 437 :Concept Neo4j 적재 격하(S0-4c).
+
+런타임 읽기 0 — backend는 pgvector 단일 평면(런타임 Neo4j 드라이버 도입 0·`retrieval.py` 참조).
+:Atom이 runtime 그래프이고 :Concept는 audit 전용 스냅샷이다. 물리 삭제 불요(격하만·행 보존).
+상세: docs/data/atom_graph_v1.md·docs/handoff/atom_backbone_next_session.md §5.5.
+
+개념 그래프 → Neo4j 멱등 적재(단계 7).
 
 정본: docs/data/concept_graph.md §2.3(Cypher DDL)·§4 단계 7(저장·멱등 MERGE)·
 §5 #9(적재 멱등성 invariant)·§6.1(접속 env). ncic/load.py(PG 적재)의 *지연 import +

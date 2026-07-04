@@ -1,4 +1,9 @@
-"""개념그래프 선수엣지 → backend `concept_edge` ORM 적재 — 선수 관계 적재기(소비 아크 선수 슬1).
+"""[LEGACY_SNAPSHOT · non_runtime · audit_only] 구 437 격하(S0-4b).
+
+런타임 truth source는 원자 백본(atom_graph_v1). 이 모듈은 audit·빌드타임 provenance이며 런타임
+호출자 0(api·l2·l3·l4 구 437 reader 0). 물리 삭제 0·형식 격하만(S0-4b).
+
+개념그래프 선수엣지 → backend `concept_edge` ORM 적재 — 선수 관계 적재기(소비 아크 선수 슬1).
 
 `backend_concept.py`(개념 *노드* 적재)의 *엣지* 짝이다. 브리지 슬1이 graph.json 개념을 backend
 `concept`(UUID PK·`code`=UC)로 적재해 런타임 노드 평면을 채웠으나, **개념 *관계*(`concept_edge`
