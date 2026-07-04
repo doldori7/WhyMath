@@ -56,6 +56,24 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
 
+@dataclass(frozen=True, slots=True)
+class AtomNodeMeta:
+    """원자 검색 enrichment용 *안전* 메타 한 묶음 — `atom_node` 조회 결과.
+
+    `concept_node`의 `ConceptNodeMeta`(name_ko·domain·review_status)의 *원자 백본* 짝이다.
+    `search_atoms`가 code 키로 이 메타를 붙여 `AtomSearchHit`를 풍부하게 한다(name_ko·subject_area
+    표시·review_status 게이팅). concept의 `domain` 자리에 원자는 `subject_area`(nullable)를
+    둔다 — 의미는 대응하나 원자 subject_area는 단원/소단원/일부 원자에서 비어 있을 수 있어 `None`을
+    허용한다(`atom_node.subject_area` 컬럼이 nullable). **본문 필드(core_proposition·description·
+    formal_definition)는 없다** — `atom_node`에 컬럼 자체가 없으므로 구조적으로 흐를 수 없다
+    (redaction). 검색 결과에 실리는 안전 표시·게이팅 메타만 담는다.
+    """
+
+    name_ko: str
+    subject_area: str | None
+    review_status: str
+
+
 def _opt_str(value: object) -> str | None:
     """빈 문자열·None → None, 그 외 strip한 str(node_projection `_opt_str` 미러)."""
     if value is None:
@@ -254,6 +272,51 @@ class AtomNodeStore:
             conn.execute(stmt)
 
 
+def fetch_atom_node_meta(
+    codes: Sequence[str],
+    *,
+    engine: Engine | None = None,
+    settings: Settings | None = None,
+) -> dict[str, AtomNodeMeta]:
+    """code 키 목록 → `atom_node` 안전 메타 dict (원자 검색 enrichment용 단일 IN 조회·sync).
+
+    `concept_graph/node_projection.fetch_node_meta`(UC 키 concept_node 조인)의 *원자 백본* 짝이다.
+    `WHERE code = ANY(:codes)` 단일 쿼리로 표시·게이팅 *안전 필드*(name_ko·subject_area·
+    review_status)만 SELECT한다 — **core_proposition·description·formal_definition은 컬럼이 없어
+    조회 자체가 불가**(redaction·구조적 차단). `atom_node`에 없는 code(적재 누락)는 결과 dict에서
+    빠진다 → 호출자가 None으로 graceful 처리(`search_atoms`). 입력이 비면 빈 dict(쿼리 생략).
+
+    sync 엔진은 슬3 `_build_sync_engine`을 재사용한다(신규 seam 0·`fetch_node_meta` 동형) — 검색
+    좌석이 이미 sync(블로킹)라 같은 엔진 평면에서 enrichment 조회가 일어난다(`search` 직후 같은
+    워커 스레드). engine 주입 가능(테스트 격리·검색 좌석이 index가 든 같은 엔진을 넘김).
+    """
+    ids = [str(c) for c in codes]
+    if not ids:
+        return {}
+    from sqlalchemy import select
+
+    from whymath_backend.db.models.atom_node import AtomNode
+
+    resolved = settings if settings is not None else get_settings()
+    eng = engine if engine is not None else _build_sync_engine(resolved)
+    stmt = select(
+        AtomNode.code,
+        AtomNode.name_ko,
+        AtomNode.subject_area,
+        AtomNode.review_status,
+    ).where(AtomNode.code.in_(ids))
+    with eng.connect() as conn:
+        rows = conn.execute(stmt).all()
+    return {
+        row.code: AtomNodeMeta(
+            name_ko=row.name_ko,
+            subject_area=row.subject_area,
+            review_status=row.review_status,
+        )
+        for row in rows
+    }
+
+
 def populate_atom_nodes(
     records: Sequence[AtomNodeRecord],
     *,
@@ -274,8 +337,10 @@ def populate_atom_nodes(
 
 
 __all__ = [
+    "AtomNodeMeta",
     "AtomNodeRecord",
     "AtomNodeStore",
+    "fetch_atom_node_meta",
     "load_atom_nodes_from_graph_json",
     "populate_atom_nodes",
 ]
