@@ -45,6 +45,7 @@ from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.session import get_session
+from whymath_backend.harness.wh1_shadow import observe_wh1_harness_shadow
 from whymath_backend.l2 import (
     AbilityReading,
     get_current_ability,
@@ -1066,6 +1067,21 @@ async def create_session(
     # 결정 *앞에서* 적용한다 — 갱신된 가설 세트를 _build_response_payload로 넘겨 소크라테스
     # 카테고리(ASSUMPTION 가정 표면화)까지 구동(개입 채널과 동일한 post-apply 세트·단일 진실원천).
     active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
+    # S1-b: WH-1 하네스 *shadow 관측*(비노출·비블로킹·무영속). 플래그 ON일 때만 하네스를 병렬로
+    # 돌려 '하네스가 어떤 도구를 골랐는지·verify 판정이 무엇인지'만 서버 로그로 남긴다 — 학생 응답은
+    # 아래 결정론 경로(`_build_response_payload`) 그대로다(노출 불변). judge shadow의 `_spawn`
+    # (fire-and-forget) 패턴 미러 — 응답 경로는 하네스 도구 루프(수 초)를 await하지 않는다. 플래그
+    # OFF(기본)면 spawn 0·기존과 비트동일(완전 되돌리기 가능·04a '측정 없는 도입 없음').
+    if get_settings().wh1_harness_shadow_enabled:
+        _spawn(
+            observe_wh1_harness_shadow(
+                # 학생 원문·풀이 단계는 정책의 *사적 필드*로만 주입(S1-a·프롬프트·레코드 미노출).
+                student_solution=body.student_solution or body.student_input,
+                solution_steps=body.solution_steps or [],
+                active_hypotheses=active_hypotheses,
+                problem_id=str(body.problem_id) if body.problem_id is not None else None,
+            )
+        )
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,

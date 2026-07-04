@@ -132,6 +132,24 @@ class Settings(BaseSettings):
         ),
     )
 
+    wh1_harness_shadow_enabled: bool = Field(
+        default=False,
+        description=(
+            "WH-1 튜터링 하네스(`LLMTutorPolicy`·S1-a) *shadow 관측*(비노출·비블로킹)을 켤지"
+            "(S1-b·04a '측정 없는 도입 없음'). **False(기본·opt-in)·학생 응답 불변**: 노출은 "
+            "*절대* 기존 결정론 경로(`_build_response_payload`) 그대로이고, True일 때만 coach "
+            "세션 엔드포인트가 하네스를 *비차단*(_spawn=create_task)으로 *병렬* 실행해 '하네스가 "
+            "어떤 도구를 골랐는지·verify 판정이 무엇인지'만 서버 로그로 관측한다. 목적은 실 "
+            "트래픽에서 하네스 거동을 *측정*한 뒤(후속) verify 게이트를 primary로 승격하기 위함 — "
+            "지금은 학생-대면 동작 변화 0·완전 되돌리기 가능(플래그 OFF면 spawn 0·비트동일). "
+            "하네스는 응답 경로를 *지연시키지 않는다*(fire-and-forget·coach는 await 안 함)·**DB "
+            "영속 0**(shadow는 로그만·순수 한 턴 `run_tutoring_turn`). 레코드엔 *학생 원문·풀이 "
+            "단계·발화·정답 미저장*(미성년 PII — status·action_type·verify verdict·도구 수·가설 수·"
+            "식별자 id만). `l4_step_shadow_enabled`·`misconception_judge_shadow` 미러. "
+            "WHYMATH_WH1_HARNESS_SHADOW_ENABLED=true로 켠다(측정용·후속)."
+        ),
+    )
+
     l4_server_mastery_enabled: bool = Field(
         default=True,
         description=(
