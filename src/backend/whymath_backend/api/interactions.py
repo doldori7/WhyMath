@@ -23,6 +23,7 @@ from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.db.models.activity import AttemptEvent
 from whymath_backend.db.session import get_session
 from whymath_backend.schema.enums import EventType
+from whymath_backend.schema.event_data_contract import build_event_data
 
 router = APIRouter(prefix="/v1/interactions", tags=["activity"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -75,13 +76,14 @@ async def post_interaction(
             event_at=datetime.now(timezone.utc),
             user_id=user.user_id,
             event_type=EventType.시각화조작,
-            event_data={
-                "interaction": body.type,
-                "payload": body.payload,
-                "client_at": body.at,
-                "concept_id": body.concept_id,
-                "scene_id": body.scene_id,
-            },
+            event_data=build_event_data(
+                EventType.시각화조작,
+                interaction=body.type,
+                payload=body.payload,
+                client_at=body.at,
+                concept_id=body.concept_id,
+                scene_id=body.scene_id,
+            ),
         )
     )
     await session.commit()

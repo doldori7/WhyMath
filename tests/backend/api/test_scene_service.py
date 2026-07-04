@@ -19,6 +19,7 @@ from whymath_backend.l3.visualization import InvalidVisualizationSpecError
 from whymath_backend.l4.learning_scene import (
     LearningScene,
     MisconceptionProbeElement,
+    SkillFocusElement,
     SocraticPromptElement,
     VisualizationElement,
 )
@@ -27,6 +28,7 @@ from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.misconception.models import InterventionPattern
 from whymath_backend.schema.concept import Concept
 from whymath_backend.schema.enums import (
+    BehaviorArea,
     CognitiveType,
     ConceptLevel,
     VisualizationStyle,
@@ -68,15 +70,16 @@ class _FakeConceptOrm:
 class _FakeSession:
     """가짜 AsyncSession — get()을 모델별로 디스패치.
 
-    `Concept` 조회는 concept ORM(또는 None). `ConceptVisualization`(시각화 계층 Overlay) 조회는
-    None(미태깅) — 이 테스트들은 시각화 4분류를 다루지 않으므로 기존 동작을 유지한다.
+    `Concept` 조회는 concept ORM(또는 None). `ConceptVisualization`(시각화 Overlay)·`AtomNode`
+    (행동영역 조인 백킹·S0-2가 원자 축으로 이전) 조회는 None — 이 테스트들은 시각화 4분류·행동영역을
+    다루지 않으므로 기존 동작(중립 폴백)을 유지한다.
     """
 
     def __init__(self, orm: object) -> None:
         self._orm = orm
 
     async def get(self, model: object, key: object) -> object:
-        if getattr(model, "__name__", "") == "ConceptVisualization":
+        if getattr(model, "__name__", "") in {"ConceptVisualization", "AtomNode"}:
             return None
         return self._orm
 
@@ -336,3 +339,82 @@ async def test_invalid_spec_propagates() -> None:
             cache=InMemoryCache(),
             trace=RecordingTraceSink(),
         )
+
+
+# ── 행동영역 스레딩(concept→skill → skill_focus·S5k) ────────────────────────────
+class _FakeResult:
+    def __init__(self, values: list[BehaviorArea]) -> None:
+        self._values = values
+
+    def scalars(self) -> "_FakeResult":
+        return self
+
+    def all(self) -> list[BehaviorArea]:
+        return self._values
+
+
+class _FakeNode:
+    def __init__(self, behavior_skills: list[str]) -> None:
+        self.behavior_skills = behavior_skills
+
+
+class _BehaviorSession:
+    """concept ORM + AtomNode(behavior_skills) + execute(behavior_area) 디스패치 가짜 세션.
+
+    behavior_skills는 S0-2가 원자 축(`atom_node`)으로 이전했고 resolve.py가
+    `session.get(AtomNode, ...)`로 읽으므로, 행동영역 백킹 노드는 AtomNode 디스패치로 반환한다.
+    """
+
+    def __init__(self, orm: object, node: object, areas: list[BehaviorArea]) -> None:
+        self._orm = orm
+        self._node = node
+        self._areas = areas
+
+    async def get(self, model: object, key: object) -> object:
+        name = getattr(model, "__name__", "")
+        if name == "ConceptVisualization":
+            return None
+        if name == "AtomNode":
+            return self._node
+        return self._orm
+
+    async def execute(self, stmt: object) -> _FakeResult:
+        return _FakeResult(self._areas)
+
+
+@pytest.mark.asyncio
+async def test_behavior_area_threads_to_skill_focus() -> None:
+    """concept→skill 매핑이 있으면 해소된 행동영역이 skill_focus로 장면에 반영된다(S5k)."""
+    provider = _FakeProvider(_VALID_JSON)
+    session = _BehaviorSession(
+        _FakeConceptOrm(_concept()),
+        _FakeNode(["skill.polynomial-arithmetic"]),
+        [BehaviorArea.COMPUTE],
+    )
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert scene is not None
+    focus = [el for el in scene.elements if isinstance(el, SkillFocusElement)]
+    assert len(focus) == 1
+    assert focus[0].behavior_area == BehaviorArea.COMPUTE.value
+
+
+@pytest.mark.asyncio
+async def test_no_behavior_mapping_no_skill_focus() -> None:
+    """concept→skill 매핑 부재(AtomNode None) → skill_focus 0(중립 폴백)."""
+    provider = _FakeProvider(_VALID_JSON)
+    session = _BehaviorSession(_FakeConceptOrm(_concept()), None, [])
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.3),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert scene is not None
+    assert not any(isinstance(el, SkillFocusElement) for el in scene.elements)

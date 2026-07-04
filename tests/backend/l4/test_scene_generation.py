@@ -21,6 +21,7 @@ from whymath_backend.l4.learning_scene import (
     ParamControlElement,
     SceneLayout,
     SceneLearnerContext,
+    SkillFocusElement,
     SocraticPromptElement,
     VisualizationElement,
     parse_learning_scene,
@@ -31,6 +32,7 @@ from whymath_backend.l4.scene_generation import generate_learning_scene
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.concept import Concept
 from whymath_backend.schema.enums import (
+    BehaviorArea,
     CognitiveType,
     ConceptLevel,
     Visualizability,
@@ -47,7 +49,7 @@ _GRAPH2D_WITH_PARAMS = (
     '"interactive": true}'
 )
 _GRAPH2D_NO_PARAMS = (
-    '{"type": "interactive_graph_2d", "spec": {"function": "x**2"}, "interactive": true}'
+    '{"type": "interactive_graph_2d", "spec": {"function": "x**2"}, ' '"interactive": true}'
 )
 _SURFACE3D = (
     '{"type": "interactive_surface_3d", "spec": {"surface": "z = x**2 + y**2"}, '
@@ -99,6 +101,7 @@ async def _generate(
     text: str = _GRAPH2D_WITH_PARAMS,
     learner_context: SceneLearnerContext | None = None,
     visualizability: Visualizability | None = None,
+    behavior_areas: list[BehaviorArea] | None = None,
     max_level: int = 4,
 ) -> tuple[LearningScene, _FakeProvider]:
     provider = _FakeProvider(text)
@@ -111,6 +114,7 @@ async def _generate(
         trace=RecordingTraceSink(),
         learner_context=learner_context,
         visualizability=visualizability,
+        behavior_areas=behavior_areas,
         answer_deferral_max_level=max_level,
     )
     return scene, provider
@@ -131,7 +135,8 @@ class TestVisualizationElement:
         assert len(viz) == 1
         assert len(pcs) == 1
         assert pcs[0].targets == ["a"]
-        assert pcs[0].bound_visualization_index == 0
+        # bound index는 절대 위치가 아니라 *그 visualization 요소*를 가리킨다(진입 순서 무관 정합).
+        assert scene.elements[pcs[0].bound_visualization_index] is viz[0]
         # spec 충전이 라우터(provider) 경유로 일어났고, 개념명이 프롬프트에 들어갔다.
         assert provider.calls
         assert "이차함수의 그래프" in provider.calls[0][0]
@@ -164,7 +169,8 @@ class TestVisualizationElement:
         """시각화 spec LLM 출력이 게이트를 통과 못 하면 예외 전파(검증 안 된 명세 비반환)."""
         with pytest.raises(InvalidVisualizationSpecError):
             await _generate(
-                _concept(styles=[VisualizationStyle.함수그래프]), text="죄송합니다, 못 만듭니다."
+                _concept(styles=[VisualizationStyle.함수그래프]),
+                text="죄송합니다, 못 만듭니다.",
             )
 
 
@@ -238,7 +244,10 @@ class TestSocraticElements:
             _concept(styles=[], cognitive=[CognitiveType.DEFINITION, CognitiveType.THEOREM])
         )
         cats = {s.socratic_category for s in _socratics(scene)}
-        assert cats == {SocraticCategory.CLARIFICATION.value, SocraticCategory.EVIDENCE.value}
+        assert cats == {
+            SocraticCategory.CLARIFICATION.value,
+            SocraticCategory.EVIDENCE.value,
+        }
         assert all(s.hint_level == 1 for s in _socratics(scene))
 
     @pytest.mark.asyncio
@@ -253,7 +262,10 @@ class TestSocraticElements:
     async def test_duplicate_cognitive_type_deduped(self) -> None:
         """같은 인지 유형 중복 → 동일 카테고리 발화는 1개로 중복 제거."""
         scene, _ = await _generate(
-            _concept(styles=[], cognitive=[CognitiveType.DEFINITION, CognitiveType.DEFINITION])
+            _concept(
+                styles=[],
+                cognitive=[CognitiveType.DEFINITION, CognitiveType.DEFINITION],
+            )
         )
         assert len(_socratics(scene)) == 1
 
@@ -276,7 +288,8 @@ class TestMisconceptionProbes:
         """활성 가설이 카탈로그에 있으면 프로브 생성(반례 개입)."""
         ctx = SceneLearnerContext(active_hypothesis_ids=[_VALID_MC_ID])
         scene, _ = await _generate(
-            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
         )
         probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
         assert len(probes) == 1
@@ -287,7 +300,8 @@ class TestMisconceptionProbes:
         """카탈로그에 없는 가설 id는 조용히 제외(거짓 낙인 차단·RS2)."""
         ctx = SceneLearnerContext(active_hypothesis_ids=[_VALID_MC_ID, "nonexistent-xyz"])
         scene, _ = await _generate(
-            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
         )
         probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
         assert len(probes) == 1  # 카탈로그 id 1개만
@@ -297,7 +311,8 @@ class TestMisconceptionProbes:
         """신뢰도 맵 미제공(레거시) → 개입은 반례(`COUNTEREXAMPLE`) 폴백."""
         ctx = SceneLearnerContext(active_hypothesis_ids=[_VALID_MC_ID])
         scene, _ = await _generate(
-            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
         )
         probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
         assert len(probes) == 1
@@ -311,7 +326,8 @@ class TestMisconceptionProbes:
             active_hypothesis_confidences={_VALID_MC_ID: 0.9},
         )
         scene, _ = await _generate(
-            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
         )
         probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
         assert len(probes) == 1
@@ -325,7 +341,8 @@ class TestMisconceptionProbes:
             active_hypothesis_confidences={_VALID_MC_ID: 0.6},
         )
         scene, _ = await _generate(
-            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
         )
         probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
         assert len(probes) == 1
@@ -339,7 +356,8 @@ class TestMisconceptionProbes:
             active_hypothesis_confidences={_VALID_MC_ID: 0.3},
         )
         scene, _ = await _generate(
-            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
         )
         assert not any(isinstance(el, MisconceptionProbeElement) for el in scene.elements)
 
@@ -351,7 +369,8 @@ class TestMisconceptionProbes:
             active_hypothesis_confidences={_VALID_MC_ID: 0.9, _VALID_MC_ID2: 0.6},
         )
         scene, _ = await _generate(
-            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
         )
         probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
         by_id = {p.misconception_id: p.intervention for p in probes}
@@ -368,7 +387,8 @@ class TestMisconceptionProbes:
             active_hypothesis_confidences={},  # 맵 제공되었으나 해당 id 부재
         )
         scene, _ = await _generate(
-            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]), learner_context=ctx
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
         )
         probes = [el for el in scene.elements if isinstance(el, MisconceptionProbeElement)]
         assert len(probes) == 1
@@ -395,7 +415,10 @@ class TestSceneAssembly:
     async def test_two_panel_when_visual_present(self) -> None:
         """시각화 + 코칭 → two_panel."""
         scene, _ = await _generate(
-            _concept(styles=[VisualizationStyle.함수그래프], cognitive=[CognitiveType.DEFINITION])
+            _concept(
+                styles=[VisualizationStyle.함수그래프],
+                cognitive=[CognitiveType.DEFINITION],
+            )
         )
         assert scene.layout == SceneLayout.two_panel.value
 
@@ -411,7 +434,12 @@ class TestSceneAssembly:
     @pytest.mark.asyncio
     async def test_concept_id_and_topic_label(self) -> None:
         scene, _ = await _generate(
-            _concept(styles=[], cognitive=[CognitiveType.DEFINITION], code="UC-XYZ", name="개념명")
+            _concept(
+                styles=[],
+                cognitive=[CognitiveType.DEFINITION],
+                code="UC-XYZ",
+                name="개념명",
+            )
         )
         assert scene.concept_id == "UC-XYZ"
         assert scene.topic_label == "개념명"
@@ -421,7 +449,10 @@ class TestSceneAssembly:
         """생성된 명세는 parse_learning_scene 게이트(불변식 + 카탈로그 무결성)를 통과한다."""
         ctx = SceneLearnerContext(active_hypothesis_ids=[_VALID_MC_ID])
         scene, _ = await _generate(
-            _concept(styles=[VisualizationStyle.함수그래프], cognitive=[CognitiveType.DEFINITION]),
+            _concept(
+                styles=[VisualizationStyle.함수그래프],
+                cognitive=[CognitiveType.DEFINITION],
+            ),
             learner_context=ctx,
         )
         # dump → 게이트 재검증(엔드투엔드: 골격 산출물이 게이트 호환)
@@ -435,3 +466,132 @@ class TestSceneAssembly:
             _concept(styles=[], cognitive=[CognitiveType.PATTERN]), max_level=1
         )
         assert all(s.hint_level <= 1 for s in _socratics(scene))
+
+
+# ── 행동영역 분기 축(BehaviorArea·정본 6종·S5k) ──────────────────────────────
+def _first_index(scene: LearningScene, cls: type) -> int:
+    """장면에서 `cls` 요소의 첫 인덱스(없으면 -1)."""
+    return next((i for i, el in enumerate(scene.elements) if isinstance(el, cls)), -1)
+
+
+class TestBehaviorDomainAxis:
+    """행동영역(BehaviorArea)이 *인지 진입 순서*를 결정한다(S5k·정본 축).
+
+    행동영역이 planner 독립 분기 입력임을 검증(Part 7 재검토·#418 BehaviorArea로 재정렬).
+    소크라테스는 개념 축(cognitive_type)이 담당하므로 여기선 진입 순서만 본다.
+    """
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "area",
+        [BehaviorArea.COMPUTE, BehaviorArea.TRANSFORM, BehaviorArea.REPRESENT],
+    )
+    async def test_visual_lead_puts_visualization_first(self, area: BehaviorArea) -> None:
+        """visual 진입(계산·변형·표상) → 시각화 요소가 소크라테스보다 앞에 온다."""
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]), behavior_areas=[area]
+        )
+        viz_i = _first_index(scene, VisualizationElement)
+        soc_i = _first_index(scene, SocraticPromptElement)
+        assert viz_i >= 0 and soc_i >= 0
+        assert viz_i < soc_i
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "area", [BehaviorArea.INTERPRET, BehaviorArea.REASON, BehaviorArea.VERIFY]
+    )
+    async def test_inquiry_lead_puts_socratic_first(self, area: BehaviorArea) -> None:
+        """inquiry 진입(해석·추론·검증) → 소크라테스(질문)가 시각화보다 앞에 온다."""
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]), behavior_areas=[area]
+        )
+        viz_i = _first_index(scene, VisualizationElement)
+        soc_i = _first_index(scene, SocraticPromptElement)
+        assert viz_i >= 0 and soc_i >= 0
+        assert soc_i < viz_i
+
+    @pytest.mark.asyncio
+    async def test_primary_behavior_area_precedence(self) -> None:
+        """다중 행동영역 precedence — [VERIFY, REPRESENT] → REPRESENT 주 → visual 진입."""
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]),
+            behavior_areas=[BehaviorArea.VERIFY, BehaviorArea.REPRESENT],
+        )
+        assert _first_index(scene, VisualizationElement) < _first_index(
+            scene, SocraticPromptElement
+        )
+
+    @pytest.mark.asyncio
+    async def test_no_behavior_area_defaults_inquiry(self) -> None:
+        """behavior_area 미매핑 → 기본(inquiry) → 소크라테스 먼저."""
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]), behavior_areas=None
+        )
+        assert _first_index(scene, SocraticPromptElement) < _first_index(
+            scene, VisualizationElement
+        )
+
+    @pytest.mark.asyncio
+    async def test_inquiry_lead_param_control_index_valid(self) -> None:
+        """★인덱스 정합: inquiry 진입으로 viz가 뒤 index여도 param_control이 그 viz를 가리키고
+        게이트를 통과한다(순서 변경이 불변식을 깨지 않음)."""
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]),
+            behavior_areas=[BehaviorArea.VERIFY],
+        )
+        pcs = [el for el in scene.elements if isinstance(el, ParamControlElement)]
+        viz = [el for el in scene.elements if isinstance(el, VisualizationElement)]
+        assert len(pcs) == 1 and len(viz) == 1
+        # 소크라테스·skill_focus가 앞서므로 viz는 index 0이 아님(진입 순서 실제 변화 확인)
+        assert scene.elements.index(viz[0]) > 0
+        # 그럼에도 bound index는 그 visualization을 가리킨다
+        assert scene.elements[pcs[0].bound_visualization_index] is viz[0]
+        # 게이트(불변식 + 카탈로그 무결성) 라운드트립 통과
+        reparsed = parse_learning_scene(scene.model_dump(mode="json"))
+        assert isinstance(reparsed, LearningScene)
+
+
+# ── 가시 SkillBlock(행동영역 focus·05a §3.2·S5k) ──────────────────────────────
+def _skill_focus(scene: LearningScene) -> list[SkillFocusElement]:
+    return [el for el in scene.elements if isinstance(el, SkillFocusElement)]
+
+
+class TestSkillFocusBlock:
+    """행동영역 focus 블록 — BehaviorArea 매핑 유무가 블록 유무를 자동 분기(체크리스트 ②)."""
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("area", list(BehaviorArea))
+    async def test_mapped_behavior_area_emits_skill_focus_first(self, area: BehaviorArea) -> None:
+        """행동영역이 매핑되면 → skill_focus 1개·맨 앞·해당 behavior_area."""
+        scene, _ = await _generate(_concept(styles=[]), behavior_areas=[area])
+        focus = _skill_focus(scene)
+        assert len(focus) == 1
+        assert scene.elements[0] is focus[0]  # 맨 앞(행동영역 프레이밍)
+        assert focus[0].behavior_area == area.value
+        assert focus[0].focus_prompt  # 정본 지시 비어있지 않음
+
+    @pytest.mark.asyncio
+    async def test_no_behavior_area_no_skill_focus(self) -> None:
+        """behavior_area 미매핑 → skill_focus 미생성(행동영역별 자동 분기·중립 폴백)."""
+        scene, _ = await _generate(_concept(styles=[]), behavior_areas=None)
+        assert _skill_focus(scene) == []
+
+    @pytest.mark.asyncio
+    async def test_skill_focus_has_no_answer_fields(self) -> None:
+        """skill_focus는 정답/수정 필드를 담을 수 없다(answer-deferral·낙인 금지·스키마 차단)."""
+        assert set(SkillFocusElement.model_fields) == {
+            "kind",
+            "behavior_area",
+            "focus_prompt",
+        }
+
+    @pytest.mark.asyncio
+    async def test_scene_with_skill_focus_passes_gate(self) -> None:
+        """skill_focus 포함 장면이 parse_learning_scene 게이트 라운드트립을 통과한다."""
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]),
+            behavior_areas=[BehaviorArea.COMPUTE],
+        )
+        assert _skill_focus(scene)  # 매핑 있으므로 존재
+        reparsed = parse_learning_scene(scene.model_dump(mode="json"))
+        assert isinstance(reparsed, LearningScene)

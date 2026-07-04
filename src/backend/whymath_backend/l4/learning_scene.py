@@ -37,7 +37,7 @@ from whymath_backend.l4.misconception.crosslink_shadow import observe_crosslink_
 from whymath_backend.l4.misconception.models import InterventionPattern
 from whymath_backend.l4.models import PolyaStage
 from whymath_backend.l4.socratic.categories import SocraticCategory
-from whymath_backend.schema.enums import VisualizationType
+from whymath_backend.schema.enums import BehaviorArea, VisualizationType
 from whymath_backend.schema.visualization import Graph2dSpec, Visualization
 
 
@@ -181,6 +181,24 @@ class AnnotationElement(_ElementBase):
     )
 
 
+class SkillFocusElement(_ElementBase):
+    """행동영역 focus 블록 — 개념의 *행동영역*(`BehaviorArea`)이 요구하는 인지 행동을 드러낸다.
+
+    관점 문서의 SkillBlock("조건 강조") 선언적 형태 — 생성기가 *어느 행동영역에서 이 블록을 낼지
+    자동 분기*한다(주 행동영역별·미매핑=미부여·S5k). `focus_prompt`는 *행동 focus 지시*(정본·질문
+    아님·**정답 아님**) — `misconception_probe`처럼 정답/수정 필드 부재(extra=forbid가 구조 차단·
+    answer-deferral·낙인 금지). interactive 경우분할 트리는 WH-S Tier3 종속(초기 제외).
+    """
+
+    kind: Literal["skill_focus"] = "skill_focus"
+    behavior_area: BehaviorArea = Field(
+        description="이 블록이 드러내는 행동영역(정본 `BehaviorArea`·#418·SkillNode 축)."
+    )
+    focus_prompt: str = Field(
+        min_length=1, description="선언적 행동 focus 지시(정본·정답/질문 아님)."
+    )
+
+
 SceneElement = Annotated[
     Union[
         VisualizationElement,
@@ -189,10 +207,11 @@ SceneElement = Annotated[
         MisconceptionProbeElement,
         SocraticPromptElement,
         AnnotationElement,
+        SkillFocusElement,
     ],
     Field(discriminator="kind"),
 ]
-"""장면 요소 6종 판별 유니온 — `kind`로 변형 선택(05a §3.2)."""
+"""장면 요소 7종 판별 유니온 — `kind`로 변형 선택(05a §3.2)."""
 
 
 # ──────────────────────────────────────────────────────────────────────────

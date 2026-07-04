@@ -60,6 +60,8 @@
 - [x] 렌더 선택 단일 진실원(invariant ⑩) **완료(2026-07-02)** · speech 파서 notation_contract 편입(⑪) **오등록 상환(2026-07-02)**
   - **⑩ 완료**: 실측상 3곳 중 scene_renderer(위젯 선택)는 정당한 계층 분리·부채 아님. 진짜 부채는 WebView 경계가 viz.type을 버려 웹이 spec 모양 재추론하던 drift 1건 — 경계 {type,spec} 봉투(B)+웹 type-first dispatch(A)+골든 계약 data/render_contract.json(A/C 교차검증)으로 해소. 마이그레이션·재임베딩 0 (MEMORY 2026-07-02)
   - **⑪ 오등록 상환**: speech는 별도 표기 계층(LaTeX 프레젠테이션)의 자족 파서·자체 골든(`test_speech_rules.py` 38케이스)으로 검증됨 — SymPy↔mathjs notation_contract와 입력 언어·산출·권위가 달라 계약 3자 편입은 카테고리 오류. **경계 명문화**(notation_contract.md §5)로 충족. drift는 유니코드 위첨자 1점·활성 경로 0(소비처 생길 때 정합·premature 보류). 코드 0·마이그레이션 0 (MEMORY 2026-07-02)
+- [x] interaction event_data 타입 계약(invariant ⑫) **완료(2026-07-03)**
+  - **⑫ 실상환**(재분류 아님): event_data 자유 JSONB·EventType 11종 중 실제 생산 3종(검산결과·힌트제공·시각화조작)만 계약 대상·휴면 8종 면제. 하네스가 `passed`·`hint_level`을 실제로 읽는 활성 소비처 존재라 premature 아님. 계약 단일원(`schema/event_data_contract.py`·pydantic `extra="forbid"` 모델 + `build_event_data` 강제 헬퍼)으로 3 생산자 배선 → produce 좌석에서 stray key 구조적 불가 + 거버넌스 테스트 15건. 무거운 discriminated-union 런타임 재작성·휴면 구속·payload 내부 구속은 기각(premature). 마이그레이션·재임베딩 0 (MEMORY 2026-07-03)
 
 ---
 

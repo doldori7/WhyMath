@@ -83,6 +83,12 @@ class SceneRenderer extends StatelessWidget {
         return _SocraticBubble(text: element.promptText ?? '');
       case 'annotation':
         return const _SceneRow(icon: Icons.label_outline, label: '강조 표시');
+      case 'skill_focus':
+        // 행동영역 focus(S5k) — 정답 아님, *어떤 인지 행동을 하라*는 선언적 지시 cue만.
+        return _SceneRow(
+          icon: Icons.flag_outlined,
+          label: element.focusPrompt ?? '',
+        );
       default:
         return const SizedBox.shrink();
     }

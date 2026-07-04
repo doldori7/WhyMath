@@ -1,11 +1,11 @@
-// LearningScene 데이터 모델 테스트 — 6종 요소 파싱 + fromJson∘toJson 라운드트립.
+// LearningScene 데이터 모델 테스트 — 7종 요소 파싱 + fromJson∘toJson 라운드트립.
 //
 // 백엔드 `LearningScene`(05a §3) 직렬화 계약을 클라가 *구조 그대로* 받는지 검증한다
 // (coach_models_test 패턴). 네트워크 없이 canned JSON으로 확인.
 import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/features/chat/data/scene_models.dart';
 
-/// 6종 요소·중첩 ref·learner_context를 모두 담은 장면 JSON.
+/// 7종 요소·중첩 ref·learner_context를 모두 담은 장면 JSON.
 Map<String, dynamic> _sceneJson() => {
       'scene_id': '11111111-1111-1111-1111-111111111111',
       'concept_id': 'ALG-QUAD-DEF',
@@ -59,11 +59,16 @@ Map<String, dynamic> _sceneJson() => {
           'target_element_index': 0,
           'highlight_spec': {'color': 'blue'},
         },
+        {
+          'kind': 'skill_focus',
+          'behavior_area': 'VERIFY',
+          'focus_prompt': '결과가 조건을 만족하는지 반례·특수값으로 점검하세요.',
+        },
       ],
     };
 
 void main() {
-  test('6종 요소·중첩 ref·learner_context를 정확히 파싱한다', () {
+  test('7종 요소·중첩 ref·learner_context를 정확히 파싱한다', () {
     final scene = LearningScene.fromJson(_sceneJson());
 
     expect(scene.sceneId, '11111111-1111-1111-1111-111111111111');
@@ -71,7 +76,7 @@ void main() {
     expect(scene.topicLabel, '이차함수의 그래프');
     expect(scene.layout, 'two_panel');
     expect(scene.answerDeferralMaxLevel, 4);
-    expect(scene.elements, hasLength(6));
+    expect(scene.elements, hasLength(7));
 
     // 학습자 컨텍스트(중첩).
     expect(scene.learnerContext, isNotNull);
@@ -114,6 +119,12 @@ void main() {
     final ann = scene.elements[5];
     expect(ann.kind, 'annotation');
     expect(ann.targetElementIndex, 0);
+
+    // skill_focus(행동영역 focus·S5k).
+    final skill = scene.elements[6];
+    expect(skill.kind, 'skill_focus');
+    expect(skill.behaviorArea, 'VERIFY');
+    expect(skill.focusPrompt, '결과가 조건을 만족하는지 반례·특수값으로 점검하세요.');
   });
 
   test('fromJson∘toJson 라운드트립 — 동치', () {
