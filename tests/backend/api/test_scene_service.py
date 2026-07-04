@@ -21,6 +21,7 @@ from whymath_backend.l4.learning_scene import (
     MisconceptionProbeElement,
     SkillFocusElement,
     SocraticPromptElement,
+    TutoringPromptElement,
     VisualizationElement,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
@@ -414,3 +415,40 @@ async def test_no_behavior_mapping_no_skill_focus() -> None:
     )
     assert scene is not None
     assert not any(isinstance(el, SkillFocusElement) for el in scene.elements)
+
+
+# ── 숙달도 스레딩(진단 mastery → LTHC 튜터링 프롬프트·S5l) ────────────────────
+# api/scene.py는 이미 진단 mastery를 SceneLearnerContext로 넘기므로 *코드 변경 0* — L4 어댑터가
+# 그 신호로 튜터링 프롬프트를 분기함을 끝단에서 확인한다(진단→장면 학생적응 배선).
+@pytest.mark.asyncio
+async def test_beginner_diagnosis_threads_to_entry_tutoring() -> None:
+    """초보 진단(bkt=0.2) → LTHC 진입(entry) 튜터링 프롬프트가 장면에 반영된다."""
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.2),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert scene is not None
+    roles = {el.role for el in scene.elements if isinstance(el, TutoringPromptElement)}
+    assert "entry" in roles and "extension" not in roles
+
+
+@pytest.mark.asyncio
+async def test_mastered_diagnosis_threads_to_extension_tutoring() -> None:
+    """숙달 진단(bkt=0.9) → LTHC 확장(extension) 튜터링 프롬프트만 반영된다."""
+    provider = _FakeProvider(_VALID_JSON)
+    session = _FakeSession(_FakeConceptOrm(_concept()))
+    scene = await scene_for_concept_diagnosis(
+        _diagnosis(0.9),
+        session,  # type: ignore[arg-type]
+        provider=provider,
+        cache=InMemoryCache(),
+        trace=RecordingTraceSink(),
+    )
+    assert scene is not None
+    roles = {el.role for el in scene.elements if isinstance(el, TutoringPromptElement)}
+    assert roles == {"extension"}

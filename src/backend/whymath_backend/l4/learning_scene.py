@@ -199,6 +199,27 @@ class SkillFocusElement(_ElementBase):
     )
 
 
+class TutoringPromptElement(_ElementBase):
+    """LTHC 튜터링 프롬프트 — 학습자 *숙달도*(mastery)에 맞춰 진입점·비계·확장을 분기(S5l).
+
+    관점 문서의 TutoringBlock을 *학생적응*으로 완성한다. 좌석=L4 `adapt_lthc`(Polya/NRICH
+    정본·04_pedagogy_engine.md LTHC): 초보→진입(entry)+비계(scaffold)·숙달→확장(extension)·
+    발전중→균형. `role`이 그 축을 드러내고(가시적 학생적응 블록·미매핑/무mastery=미부여·중립),
+    `focus_prompt`처럼 `prompt_text`는 *유도 발화*(정본·**정답 아님**·adapt.py "답을 주지 않는
+    가이드"). `misconception_probe`·`skill_focus`처럼 정답/수정/hint_level 필드 부재(extra=forbid가
+    구조 차단·낙인/즉답 금지). `SocraticPromptElement`가 아닌 별 kind인 이유: LTHC 발화는
+    socratic_category가 없어 재사용하면 *가짜 카테고리*를 지어내야 한다(허위 라벨링 회피).
+    """
+
+    kind: Literal["tutoring_prompt"] = "tutoring_prompt"
+    role: Literal["entry", "scaffold", "extension"] = Field(
+        description="LTHC 적응 역할 — 진입점(낮은 진입)·비계(막힘 보조)·확장(높은 천장)."
+    )
+    prompt_text: str = Field(
+        min_length=1, description="LTHC 유도 발화(정본·정답 아님·유도 질문/지시)."
+    )
+
+
 SceneElement = Annotated[
     Union[
         VisualizationElement,
@@ -208,10 +229,11 @@ SceneElement = Annotated[
         SocraticPromptElement,
         AnnotationElement,
         SkillFocusElement,
+        TutoringPromptElement,
     ],
     Field(discriminator="kind"),
 ]
-"""장면 요소 7종 판별 유니온 — `kind`로 변형 선택(05a §3.2)."""
+"""장면 요소 8종 판별 유니온 — `kind`로 변형 선택(05a §3.2)."""
 
 
 # ──────────────────────────────────────────────────────────────────────────

@@ -39,8 +39,10 @@ from whymath_backend.l4.learning_scene import (
     SceneLearnerContext,
     SkillFocusElement,
     SocraticPromptElement,
+    TutoringPromptElement,
     VisualizationElement,
 )
+from whymath_backend.l4.lthc import adapt_lthc, mastery_to_level
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.intervene import select_intervention
 from whymath_backend.l4.misconception.models import (
@@ -172,6 +174,52 @@ def _socratic_elements(concept: Concept) -> list[SocraticPromptElement]:
     return elements
 
 
+# ── 학습자모델 축(mastery) — LTHC 적응을 튜터링 프롬프트로(S5l). 개념·행동영역과 직교(3번째 축).
+# 좌석=`adapt_lthc`(Polya/NRICH 정본). 숙달도가 어떤 역할의 발화가 나올지 분기 — 초보=진입+비계·
+# 숙달=확장·발전중=균형. mastery 없으면 미부여(중립). 축당 [:1] 캡(장면 비대 방지).
+_LTHC_ROLE_AXES: tuple[tuple[Literal["entry", "scaffold", "extension"], str], ...] = (
+    ("entry", "entry_suggestions"),
+    ("scaffold", "scaffolds"),
+    ("extension", "extensions"),
+)
+
+
+def _primary_polya_stage(concept: Concept) -> PolyaStage:
+    """개념의 *주* 소크라테스 프롬프트가 겨냥하는 Polya 단계(결정론·`adapt_lthc` 입력).
+
+    첫 `cognitive_type`의 `_COGNITIVE_SOCRATIC_MAP` 단계, 없으면 `_DEFAULT_SOCRATIC` 단계(REVIEW).
+    맵에서 enum을 직접 취한다(요소의 str화된 polya_stage 역coerce 회피). 다중 cognitive_type은
+    주(첫) 단계로만 adapt해 장면을 tight하게 유지(의도적).
+    """
+    for raw in concept.cognitive_type:
+        return _COGNITIVE_SOCRATIC_MAP[CognitiveType(raw)][1]
+    return _DEFAULT_SOCRATIC[1]
+
+
+def _lthc_prompts(
+    concept: Concept,
+    learner_context: SceneLearnerContext | None,
+) -> list[TutoringPromptElement]:
+    """숙달도 → LTHC 적응 튜터링 프롬프트(학습자모델 축·결정론·`adapt_lthc` 재사용).
+
+    mastery 없으면 `[]`(중립·정직한 경계·학생적응 미부여). 있으면 `mastery_to_level`로 숙달도
+    라벨화 → `adapt_lthc(주 Polya 단계, 라벨)` → 축(entry/scaffold/extension)당 *첫 1개*만 요소화
+    (장면 비대 방지). 결과 수: 초보 2·숙달 1·발전중 3. `role`이 학생모델 분기를 가시화한다
+    (체크리스트 ② "9블록이 학습자모델에 따라 자동 분기"). 발화는 정본 유도 가이드(정답 아님).
+    """
+    if learner_context is None or learner_context.mastery_level is None:
+        return []
+    adaptation = adapt_lthc(
+        _primary_polya_stage(concept),
+        mastery_to_level(learner_context.mastery_level),
+    )
+    prompts: list[TutoringPromptElement] = []
+    for role, attr in _LTHC_ROLE_AXES:
+        for text in getattr(adaptation, attr)[:1]:  # 축당 캡([:1]) — 발전중 균형과 동형.
+            prompts.append(TutoringPromptElement(role=role, prompt_text=text))
+    return prompts
+
+
 def _misconception_probes(
     learner_context: SceneLearnerContext | None,
 ) -> list[MisconceptionProbeElement]:
@@ -236,9 +284,11 @@ async def generate_learning_scene(
     그 행동영역의 `skill_focus`를 맨 앞에 둔다(미매핑=미부여·05a §3.2). ① 시각화 블록:
     `recommended_visual_styles`가 있고 `visualizability`가 허용할 때만 `visualization`(+graph_2d·
     비정적이면 `param_control`)을 붙인다(bound index는 append 시점 계산이라 진입 순서와 무관 정합).
-    ② 소크라테스 블록: `cognitive_type` → 발화(정본 유도 질문). ③ 활성 가설 ∩ 카탈로그
-    → `misconception_probe`(적응·낙인 금지·항상 본문 뒤). 반환 전 `LearningScene` 불변식(답 미루기·
-    param/annotation 정합)을 통과한다 — 검증 안 된 명세는 나가지 않는다(CLAUDE.md).
+    ② 소크라테스 블록: `cognitive_type` → 발화(정본 유도 질문). ③ 학습자모델 축(mastery) → LTHC
+    튜터링 프롬프트(`adapt_lthc` 재사용·초보=진입+비계·숙달=확장·발전중=균형·무mastery=미부여·S5l).
+    ④ 활성 가설 ∩ 카탈로그 → `misconception_probe`(적응·낙인 금지·항상 본문 뒤). 반환 전
+    `LearningScene` 불변식(답 미루기·param/annotation 정합)을 통과한다 — 검증 안 된 명세는 나가지
+    않는다(CLAUDE.md).
 
     LLM 호출은 시각화 spec 1회뿐(스타일 있을 때)·나머지는 결정론 — 환각 표면을 최소화한다(RS5).
 
@@ -247,7 +297,8 @@ async def generate_learning_scene(
         level: 대상 수준 라벨(예: "고2") — `generate_visualization_spec`에 전달.
         req: 라우팅 입력(task_type="generate" 권장·sync 여부는 호출자). 동기 경로 전제.
         provider/cache/trace: L3 `pipeline.generate` DI(라우터·캐시·관측).
-        learner_context: L2/WH-1 스냅샷(선택). 활성 가설이 있으면 프로브를 *적응적으로* 삽입.
+        learner_context: L2/WH-1 스냅샷(선택). `mastery_level`이 있으면 LTHC 튜터링 프롬프트를
+            숙달도에 맞춰 삽입하고(진입/비계/확장), 활성 가설이 있으면 프로브를 *적응적으로* 삽입.
         visualizability: 시각화 가능성 4분류(L1·05b). 추상/불가면 시각화 생략(억지 그림 방지).
         behavior_areas: 개념의 행동영역 목록(L5 `get_behavior_areas`가 concept→skill 조인으로 해소).
             진입 순서·focus 블록을 결정. 미매핑(빈 목록/None)이면 중립(탐구 진입·focus 0).
@@ -310,7 +361,11 @@ async def generate_learning_scene(
         elements.extend(_socratic_elements(concept))
         await _append_visual_block()
 
-    # ③ 오개념 프로브(적응·reactive) — 항상 본문 뒤
+    # ③ 학습자모델 축(mastery) → LTHC 튜터링 프롬프트(S5l·lead 무관 고정 슬롯·본문 뒤·프로브 앞).
+    # 숙달도가 진입/비계/확장을 자동 분기(학생적응 가시화·미매핑/무mastery=미부여·중립).
+    elements.extend(_lthc_prompts(concept, learner_context))
+
+    # ④ 오개념 프로브(적응·reactive) — 항상 본문 뒤
     elements.extend(_misconception_probes(learner_context))
 
     # 조립 + 불변식 통과(미통과 명세는 반환 안 됨). misconception_id는 카탈로그로 사전 필터됨.

@@ -89,6 +89,9 @@ class SceneRenderer extends StatelessWidget {
           icon: Icons.flag_outlined,
           label: element.focusPrompt ?? '',
         );
+      case 'tutoring_prompt':
+        // LTHC 학생적응(S5l) — 숙달도별 진입/비계/확장 유도 발화. 정답 아님·부드러운 가이드.
+        return _TutoringRow(role: element.role, text: element.promptText ?? '');
       default:
         return const SizedBox.shrink();
     }
@@ -268,6 +271,82 @@ class _SceneRow extends StatelessWidget {
         Flexible(
           child: Text(
             label,
+            style: theme.textTheme.bodySmall?.copyWith(color: color),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// LTHC 튜터링 발화 한 줄(S5l) — 숙달도 적응 역할 배지(진입점/비계/확장) + 유도 발화.
+///
+/// 정답이 아니라 *부드러운 가이드*다(adapt.py "답을 주지 않는 가이드"). 역할 배지가 학생적응을
+/// 드러내되, 낙인 없는 지원 문구만 보인다(초보=진입/비계, 숙달=확장). 미지 역할은 일반 코칭 폴백.
+class _TutoringRow extends StatelessWidget {
+  const _TutoringRow({required this.role, required this.text});
+
+  /// LTHC 적응 역할("entry"·"scaffold"·"extension"·미지면 null).
+  final String? role;
+
+  /// 학생에게 보일 유도 발화(부드러운 가이드·정답 아님).
+  final String text;
+
+  /// 역할 → 한글 배지 라벨(미지 역할은 일반 코칭 폴백).
+  static String _label(String? role) {
+    switch (role) {
+      case 'entry':
+        return '진입점';
+      case 'scaffold':
+        return '비계';
+      case 'extension':
+        return '확장';
+      default:
+        return '코칭';
+    }
+  }
+
+  /// 역할 → 아이콘(미지 역할은 학습 아이콘 폴백).
+  static IconData _icon(String? role) {
+    switch (role) {
+      case 'entry':
+        return Icons.login_outlined;
+      case 'scaffold':
+        return Icons.support_outlined;
+      case 'extension':
+        return Icons.trending_up_outlined;
+      default:
+        return Icons.school_outlined;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = theme.colorScheme.onSurfaceVariant;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(_icon(role), size: 16, color: color),
+        const SizedBox(width: 8),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.secondaryContainer,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(
+            _label(role),
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSecondaryContainer,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            text,
             style: theme.textTheme.bodySmall?.copyWith(color: color),
           ),
         ),

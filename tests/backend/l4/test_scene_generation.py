@@ -23,6 +23,7 @@ from whymath_backend.l4.learning_scene import (
     SceneLearnerContext,
     SkillFocusElement,
     SocraticPromptElement,
+    TutoringPromptElement,
     VisualizationElement,
     parse_learning_scene,
 )
@@ -595,3 +596,116 @@ class TestSkillFocusBlock:
         assert _skill_focus(scene)  # 매핑 있으므로 존재
         reparsed = parse_learning_scene(scene.model_dump(mode="json"))
         assert isinstance(reparsed, LearningScene)
+
+
+# ── LTHC 학생적응 튜터링 프롬프트(mastery 축·S5l) ─────────────────────────────
+def _tutoring(scene: LearningScene) -> list[TutoringPromptElement]:
+    return [el for el in scene.elements if isinstance(el, TutoringPromptElement)]
+
+
+class TestTutoringAdapter:
+    """숙달도(mastery)가 LTHC 튜터링 프롬프트를 자동 분기(체크리스트 ② 학습자모델 축·S5l).
+
+    초보=진입+비계·숙달=확장·발전중=균형(`adapt_lthc` 재사용). mastery 없으면 미부여(중립·정직한
+    경계). tutoring_prompt엔 hint_level이 없어 답 미루기 불변식과 무관(정답 아닌 유도 가이드).
+    """
+
+    @pytest.mark.asyncio
+    async def test_no_learner_context_no_tutoring(self) -> None:
+        """learner_context 없음 → 튜터링 프롬프트 0(중립·정직한 경계)."""
+        scene, _ = await _generate(_concept(styles=[], cognitive=[CognitiveType.DEFINITION]))
+        assert _tutoring(scene) == []
+
+    @pytest.mark.asyncio
+    async def test_none_mastery_no_tutoring(self) -> None:
+        """mastery_level None(가설만 있음) → 튜터링 프롬프트 0."""
+        ctx = SceneLearnerContext(active_hypothesis_ids=[_VALID_MC_ID])
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
+        )
+        assert _tutoring(scene) == []
+
+    @pytest.mark.asyncio
+    async def test_beginner_entry_and_scaffold(self) -> None:
+        """초보(mastery<0.4) → 진입(entry)+비계(scaffold), 확장 없음."""
+        ctx = SceneLearnerContext(mastery_level=0.2)
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
+        )
+        assert {t.role for t in _tutoring(scene)} == {"entry", "scaffold"}
+
+    @pytest.mark.asyncio
+    async def test_mastered_extension_only(self) -> None:
+        """숙달(mastery≥0.8) → 확장(extension)만."""
+        ctx = SceneLearnerContext(mastery_level=0.9)
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
+        )
+        assert {t.role for t in _tutoring(scene)} == {"extension"}
+
+    @pytest.mark.asyncio
+    async def test_developing_balanced(self) -> None:
+        """발전 중(0.4≤mastery<0.8) → 진입+비계+확장 균형(3개)."""
+        ctx = SceneLearnerContext(mastery_level=0.5)
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
+        )
+        tutoring = _tutoring(scene)
+        assert {t.role for t in tutoring} == {"entry", "scaffold", "extension"}
+        assert len(tutoring) == 3
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("mastery", [0.1, 0.2, 0.5, 0.8, 0.95])
+    async def test_volume_cap_per_axis(self, mastery: float) -> None:
+        """어느 숙달도 밴드에서도 축당 ≤1·총 ≤3(장면 비대 방지)."""
+        ctx = SceneLearnerContext(mastery_level=mastery)
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.PATTERN]),
+            learner_context=ctx,
+        )
+        tutoring = _tutoring(scene)
+        assert len(tutoring) <= 3
+        role_counts: dict[str, int] = {}
+        for t in tutoring:
+            role_counts[t.role] = role_counts.get(t.role, 0) + 1
+        assert all(c <= 1 for c in role_counts.values())
+
+    @pytest.mark.asyncio
+    async def test_placement_after_socratic_before_probes(self) -> None:
+        """튜터링 프롬프트는 소크라테스 뒤·오개념 프로브 앞 고정 슬롯(lead 무관)."""
+        ctx = SceneLearnerContext(mastery_level=0.2, active_hypothesis_ids=[_VALID_MC_ID])
+        scene, _ = await _generate(
+            _concept(styles=[], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
+        )
+        tut_idx = [
+            i for i, el in enumerate(scene.elements) if isinstance(el, TutoringPromptElement)
+        ]
+        soc_last = max(
+            i for i, el in enumerate(scene.elements) if isinstance(el, SocraticPromptElement)
+        )
+        probe_first = _first_index(scene, MisconceptionProbeElement)
+        assert tut_idx  # 존재
+        assert min(tut_idx) > soc_last  # 소크라테스 뒤
+        assert probe_first >= 0 and max(tut_idx) < probe_first  # 프로브 앞
+
+    @pytest.mark.asyncio
+    async def test_tutoring_scene_passes_gate(self) -> None:
+        """튜터링 프롬프트 포함 장면이 parse_learning_scene 게이트 라운드트립을 통과한다."""
+        ctx = SceneLearnerContext(mastery_level=0.5)
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프], cognitive=[CognitiveType.DEFINITION]),
+            learner_context=ctx,
+        )
+        assert _tutoring(scene)
+        reparsed = parse_learning_scene(scene.model_dump(mode="json"))
+        assert isinstance(reparsed, LearningScene)
+
+    @pytest.mark.asyncio
+    async def test_tutoring_prompt_has_no_answer_fields(self) -> None:
+        """tutoring_prompt는 정답/수정/hint_level 필드 부재(answer-deferral·낙인 금지)."""
+        assert set(TutoringPromptElement.model_fields) == {"kind", "role", "prompt_text"}

@@ -1,13 +1,13 @@
 // L4 LearningScene DSL 데이터 모델 — 백엔드 `LearningScene`(05a §3) 계약을 *구조 그대로* 옮긴다.
 //
-// 정본: `src/backend/whymath_backend/l4/learning_scene.py`(`LearningScene`·`SceneElement` 7종
+// 정본: `src/backend/whymath_backend/l4/learning_scene.py`(`LearningScene`·`SceneElement` 8종
 // 판별 유니온·`SceneLearnerContext`) + `schema/visualization.py`(`Visualization`).
 //
 // **경계(CLAUDE.md·슬라이스 89 표현≠의미)**: 이 클래스들은 *수신 컨테이너*일 뿐이다 — 장면의
 // 조립·검증(불변식·참조 무결성)은 전부 서버(L4)에 있고, 클라는 검증된 명세를 받아 렌더만 한다.
 // 정답·수정 같은 누출 위험 필드는 백엔드 스키마가 애초에 담지 않는다(misconception_probe엔 정답 없음).
 //
-// **판별 유니온 표현 방침**: 백엔드 `SceneElement`는 `kind` 판별 유니온 7종이지만, 클라는
+// **판별 유니온 표현 방침**: 백엔드 `SceneElement`는 `kind` 판별 유니온 8종이지만, 클라는
 // 코드젠 리스크(freezed union 선례 0)를 피해 **단일 flat 모델 + `kind` 문자열 + 변형별 nullable
 // 필드**로 받는다. 렌더러가 `kind`로 분기한다(기존 String enum + nullable 관례·coach_models.dart).
 import 'package:freezed_annotation/freezed_annotation.dart';
@@ -71,8 +71,8 @@ class SceneLearnerContext with _$SceneLearnerContext {
 // 장면 요소 — SceneElement (flat·kind 판별·변형별 nullable)
 // ─────────────────────────────────────────────────────────────────────────
 
-/// 장면 합성 요소 1개 — `kind`로 7종을 구분한다(visualization·param_control·step_panel·
-/// misconception_probe·socratic_prompt·annotation·skill_focus).
+/// 장면 합성 요소 1개 — `kind`로 8종을 구분한다(visualization·param_control·step_panel·
+/// misconception_probe·socratic_prompt·annotation·skill_focus·tutoring_prompt).
 ///
 /// 백엔드 판별 유니온을 단일 flat 모델로 받는다 — 변형별 필드는 해당 kind에서만 채워지고
 /// 나머지는 null. 렌더러는 `kind`로 분기한다.
@@ -82,7 +82,7 @@ class SceneLearnerContext with _$SceneLearnerContext {
 @freezed
 class SceneElement with _$SceneElement {
   const factory SceneElement({
-    /// 요소 종류 판별자(위 7종 중 하나).
+    /// 요소 종류 판별자(위 8종 중 하나).
     @JsonKey(name: 'kind') required String kind,
 
     // visualization
@@ -120,7 +120,7 @@ class SceneElement with _$SceneElement {
     /// 답 미루기 단계 1~4(socratic_prompt kind).
     @JsonKey(name: 'hint_level') int? hintLevel,
 
-    /// 학생에게 던질 유도 질문(socratic_prompt kind·정답 아님).
+    /// 학생에게 던질 유도 발화(socratic_prompt·tutoring_prompt kind 공유·정답 아님).
     @JsonKey(name: 'prompt_text') String? promptText,
 
     // annotation
@@ -136,6 +136,11 @@ class SceneElement with _$SceneElement {
 
     /// 선언적 행동 focus 지시(skill_focus kind·정답 아님).
     @JsonKey(name: 'focus_prompt') String? focusPrompt,
+
+    // tutoring_prompt (LTHC 학생적응·mastery 분기·S5l)
+    /// LTHC 적응 역할("entry"·"scaffold"·"extension")(tutoring_prompt kind).
+    /// 발화 본문은 공유 필드 `promptText`(prompt_text)를 재사용한다(정답 아님·유도 가이드).
+    @JsonKey(name: 'role') String? role,
   }) = _SceneElement;
 
   factory SceneElement.fromJson(Map<String, dynamic> json) =>

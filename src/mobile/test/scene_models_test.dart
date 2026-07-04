@@ -64,11 +64,16 @@ Map<String, dynamic> _sceneJson() => {
           'behavior_area': 'VERIFY',
           'focus_prompt': '결과가 조건을 만족하는지 반례·특수값으로 점검하세요.',
         },
+        {
+          'kind': 'tutoring_prompt',
+          'role': 'entry',
+          'prompt_text': '주어진 정보를 한 줄씩 적어볼래?',
+        },
       ],
     };
 
 void main() {
-  test('7종 요소·중첩 ref·learner_context를 정확히 파싱한다', () {
+  test('8종 요소·중첩 ref·learner_context를 정확히 파싱한다', () {
     final scene = LearningScene.fromJson(_sceneJson());
 
     expect(scene.sceneId, '11111111-1111-1111-1111-111111111111');
@@ -76,7 +81,7 @@ void main() {
     expect(scene.topicLabel, '이차함수의 그래프');
     expect(scene.layout, 'two_panel');
     expect(scene.answerDeferralMaxLevel, 4);
-    expect(scene.elements, hasLength(7));
+    expect(scene.elements, hasLength(8));
 
     // 학습자 컨텍스트(중첩).
     expect(scene.learnerContext, isNotNull);
@@ -125,6 +130,12 @@ void main() {
     expect(skill.kind, 'skill_focus');
     expect(skill.behaviorArea, 'VERIFY');
     expect(skill.focusPrompt, '결과가 조건을 만족하는지 반례·특수값으로 점검하세요.');
+
+    // tutoring_prompt(LTHC 학생적응·S5l·발화는 공유 promptText 재사용).
+    final tutoring = scene.elements[7];
+    expect(tutoring.kind, 'tutoring_prompt');
+    expect(tutoring.role, 'entry');
+    expect(tutoring.promptText, '주어진 정보를 한 줄씩 적어볼래?');
   });
 
   test('fromJson∘toJson 라운드트립 — 동치', () {

@@ -173,6 +173,25 @@ void main() {
     expect(find.textContaining('틀렸'), findsNothing);
   });
 
+  testWidgets('tutoring_prompt는 역할 배지 + 유도 발화만·정답 없음', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        _scene(const [
+          SceneElement(
+            kind: 'tutoring_prompt',
+            role: 'entry',
+            promptText: '주어진 정보를 한 줄씩 적어볼래?',
+          ),
+        ]),
+      ),
+    );
+    expect(find.text('진입점'), findsOneWidget); // 숙달도 적응 역할 배지
+    expect(find.textContaining('한 줄씩'), findsOneWidget); // 유도 발화(정답 아님)
+    // 정답/낙인 가드.
+    expect(find.textContaining('정답'), findsNothing);
+    expect(find.textContaining('틀렸'), findsNothing);
+  });
+
   testWidgets('topicLabel 헤더를 렌더한다', (tester) async {
     await tester.pumpWidget(
       _wrap(
@@ -203,7 +222,7 @@ void main() {
     expect(find.text('알려진 발화'), findsOneWidget);
   });
 
-  testWidgets('7종 요소가 한 장면에서 모두 렌더된다', (tester) async {
+  testWidgets('8종 요소가 한 장면에서 모두 렌더된다', (tester) async {
     await tester.pumpWidget(
       _wrap(
         _scene(const [
@@ -221,6 +240,11 @@ void main() {
             behaviorArea: 'INTERPRET',
             focusPrompt: '주어진 조건을 먼저 수학 구조(식·관계)로 해석하세요.',
           ),
+          SceneElement(
+            kind: 'tutoring_prompt',
+            role: 'extension',
+            promptText: '이 발상을 다른 문제에도 쓸 수 있을까?',
+          ),
         ]),
       ),
     );
@@ -231,5 +255,7 @@ void main() {
     expect(find.text('왜 그렇게 생각했어?'), findsOneWidget);
     expect(find.text('강조 표시'), findsOneWidget);
     expect(find.textContaining('수학 구조'), findsOneWidget);
+    expect(find.text('확장'), findsOneWidget); // tutoring_prompt 역할 배지
+    expect(find.textContaining('다른 문제에도'), findsOneWidget);
   });
 }
