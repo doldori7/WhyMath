@@ -201,6 +201,9 @@ class AtomNodeStore:
         상수) + updated_at(now())을 갱신한다. **core_proposition·description·formal_definition·
         4요소(misconception/diagnostic/socratic)는 INSERT 컬럼에 없다**(redaction — 레코드에 슬롯이
         없어 구조적 차단). standard_codes는 리스트로 바인딩(PG TEXT[])·atomicity는 dict(PG JSONB).
+        **`behavior_skills`는 여기서 건드리지 않는다**(INSERT·set_ 미등장 — 신규 행은 server_default
+        '{}', 기존 행 값은 보존): 채움 좌석은 S0-2 크로스워크 전파(`l1/concept_atom_crosswalk/
+        transfer.py`)이며, 메타 재적재가 전파 결과를 지우면 안 된다.
         """
         from sqlalchemy import func
         from sqlalchemy.dialects.postgresql import insert as pg_insert

@@ -71,7 +71,37 @@
   것 자체가 손실 압축임을 소비 측이 인지해야 한다(후보 전체는 `atom_codes`에 보존).
 - 소스 코퍼스가 바뀌면 재유도 필요 — 거버넌스 테스트가 드리프트(dangling·누락)를 잡는다.
 
-## 7. 검증·게이트
+## 7. 소비처 (S0-2 — 437-키 자산의 원자 축 이전·2026-07-03)
+
+backend `whymath_backend/l1/concept_atom_crosswalk/`(`transfer.py` 유도·갱신 + `populate.py` CLI)가
+이 크로스워크를 *읽기만* 하여(rekey 금지) 두 437-키 자산을 원자 축에 투영한다. 조인 축은 유도와
+동일: 크로스워크 `concept_id` ↔ `concept_graph_v1/graph.json`의 `source_id`(=`src_id`).
+마이그레이션 `b2c3d4e5f0a1`이 두 이전 컬럼(ARRAY(Text)·NOT NULL·기본 `'{}'`)을 신설했다.
+
+### ① behavior_skills 전파 → `atom_node.behavior_skills`
+- 원천: #419가 `concept_graph_v1/concepts.jsonl`에 저작한 concept→skill 매핑(404/437·미매핑 33은 `[]`).
+- **전파 규칙 (S0-2 확정)**: 각 크로스워크 행의 **`atom_codes` 전체**(primary만 아님)에 concept의
+  behavior_skills를 전파. 한 원자에 복수 concept이 닿으면 **union+dedup·사전순 정렬**.
+  - 근거: 스킬은 개념의 *구성 원자 전체*에 적용되는 인지 행동이며 배타 귀속이 아니다. §4의
+    primary 귀속 규칙은 mastery/오개념 *이력 귀속*용이지 스킬 *전파*용이 아니다(역할 분리).
+  - `unmapped` 행은 skip + 보고(§4 계약 그대로). 스킬 빈 concept의 원자도 빈 배열로 갱신
+    (재실행 시 stale 청소·멱등).
+- 실측(2026-07-03): 전파 대상 원자 **1,324** · 스킬 보유 원자 **1,211** · 유니크 스킬 **27/27**.
+
+### ② K-12 콘텐츠 원자 연결 → `concept_content.atom_codes`
+- 대상: `concept_content` K-12 행 437(code=구 437 개념코드 — Phase 3 Slice 1이 "원자 연결은
+  Phase 4"로 예고한 좌석). 크로스워크 행의 `atom_codes`(dedup·사전순)를 그대로 투영.
+- **대학 행(409·소단원코드 키)은 무변경**('{}' 유지) — 이미 원자 그래프와 같은 키 공간이라 원자
+  정합(다리 불요). 갱신 SQL의 `scope='K-12'` 필터가 구조적으로 차단(키 공간 무교차와 이중 방어).
+- 실측(2026-07-03): K-12 **437/437** 전량 연결·dangling 0.
+
+### 게이트
+- 거버넌스(hermetic): `tests/backend/l1/concept_atom_crosswalk/test_crosswalk_transfer_governance.py`
+  — 전파 스킬 ⊆ 27 정본·전파 원자 ⊆ 세부개념·K-12 437 전량·대학 키 무교차·커버리지 하한.
+- 전파 규칙 동결·SQL 배선: `test_crosswalk_transfer.py`(hermetic) · 실 PG end-to-end:
+  `test_crosswalk_transfer_integration.py`(@integration).
+
+## 8. 검증·게이트
 
 - 파이프라인: `data_pipeline/concept_atom_crosswalk/` (`models.py`·`derive.py`·`validate.py`·CLI)
 - CLI: `python -m data_pipeline.concept_atom_crosswalk derive|validate` (error 시 비정상 종료)
@@ -82,4 +112,4 @@
 
 ---
 
-**버전**: v1 (2026-07-03) | **작성**: data-engineer (S0-1) | **다음**: S0-2 DB 투영·사람 검수
+**버전**: v1 (2026-07-03) | **작성**: data-engineer (S0-1) · §7 소비처: backend-engineer (S0-2) | **다음**: S0-3 problem_concept 재연결·사람 검수
