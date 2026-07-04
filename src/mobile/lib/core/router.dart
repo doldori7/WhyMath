@@ -13,6 +13,7 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/application/auth_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/chat/presentation/chat_screen.dart';
+import '../features/ocr/presentation/ocr_capture_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 
 /// 앱 라우트 경로·이름 상수.
@@ -36,6 +37,12 @@ abstract final class AppRoutes {
 
   /// 로그인 라우트 이름.
   static const String loginName = 'login';
+
+  /// 풀이 사진 OCR 경로 — 채팅에서 push해 진입하고, 인식 결과를 pop 결과로 돌려준다(S1-d).
+  static const String ocrPath = '/ocr';
+
+  /// OCR 라우트 이름.
+  static const String ocrName = 'ocr';
 }
 
 /// 앱 전역 [GoRouter] provider.
@@ -79,6 +86,15 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.loginPath,
         name: AppRoutes.loginName,
         builder: (context, state) => const LoginScreen(),
+      ),
+      // 풀이 사진 OCR(S1-d) — 채팅에서 push로 진입한다. 인식 결과를 코치에게 넘길 땐
+      // `context.pop(result)`로 `OcrResult`를 호출자(채팅)에게 돌려주고, 채팅이
+      // `chat_controller.sendOcrSolution`으로 매핑·전송한다(OCR 화면은 채팅을 알지 못한다·
+      // 단방향 chat→ocr 의존 유지).
+      GoRoute(
+        path: AppRoutes.ocrPath,
+        name: AppRoutes.ocrName,
+        builder: (context, state) => const OcrCaptureScreen(),
       ),
     ],
     // 미정의 경로 안전 처리 — 잘못된 딥링크/오타로 앱이 죽지 않게 채팅으로 안내한다.

@@ -70,16 +70,16 @@ class _FakeConceptOrm:
 class _FakeSession:
     """가짜 AsyncSession — get()을 모델별로 디스패치.
 
-    `Concept` 조회는 concept ORM(또는 None). `ConceptVisualization`(시각화 Overlay)·`ConceptNode`
-    (행동영역 조인 백킹) 조회는 None — 이 테스트들은 시각화 4분류·행동영역을 다루지 않으므로 기존
-    동작(중립 폴백)을 유지한다.
+    `Concept` 조회는 concept ORM(또는 None). `ConceptVisualization`(시각화 Overlay)·`AtomNode`
+    (행동영역 조인 백킹·S0-2가 원자 축으로 이전) 조회는 None — 이 테스트들은 시각화 4분류·행동영역을
+    다루지 않으므로 기존 동작(중립 폴백)을 유지한다.
     """
 
     def __init__(self, orm: object) -> None:
         self._orm = orm
 
     async def get(self, model: object, key: object) -> object:
-        if getattr(model, "__name__", "") in {"ConceptVisualization", "ConceptNode"}:
+        if getattr(model, "__name__", "") in {"ConceptVisualization", "AtomNode"}:
             return None
         return self._orm
 
@@ -359,7 +359,11 @@ class _FakeNode:
 
 
 class _BehaviorSession:
-    """concept ORM + ConceptNode(behavior_skills) + execute(behavior_area) 디스패치 가짜 세션."""
+    """concept ORM + AtomNode(behavior_skills) + execute(behavior_area) 디스패치 가짜 세션.
+
+    behavior_skills는 S0-2가 원자 축(`atom_node`)으로 이전했고 resolve.py가
+    `session.get(AtomNode, ...)`로 읽으므로, 행동영역 백킹 노드는 AtomNode 디스패치로 반환한다.
+    """
 
     def __init__(self, orm: object, node: object, areas: list[BehaviorArea]) -> None:
         self._orm = orm
@@ -370,7 +374,7 @@ class _BehaviorSession:
         name = getattr(model, "__name__", "")
         if name == "ConceptVisualization":
             return None
-        if name == "ConceptNode":
+        if name == "AtomNode":
             return self._node
         return self._orm
 
@@ -402,7 +406,7 @@ async def test_behavior_area_threads_to_skill_focus() -> None:
 
 @pytest.mark.asyncio
 async def test_no_behavior_mapping_no_skill_focus() -> None:
-    """concept→skill 매핑 부재(ConceptNode None) → skill_focus 0(중립 폴백)."""
+    """concept→skill 매핑 부재(AtomNode None) → skill_focus 0(중립 폴백)."""
     provider = _FakeProvider(_VALID_JSON)
     session = _BehaviorSession(_FakeConceptOrm(_concept()), None, [])
     scene = await scene_for_concept_diagnosis(

@@ -9,6 +9,7 @@
 // 터치 타깃(IconButton/FilledButton 기본 48dp)을 가진다.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../application/ocr_controller.dart';
 import '../application/ocr_state.dart';
@@ -128,6 +129,11 @@ class _ResultView extends StatelessWidget {
       children: [
         _OverallSummary(result: result),
         const SizedBox(height: 8),
+        // 인식된 영역이 있으면 코치에게 넘기는 진입을 준다(빈 인식이면 넘길 게 없어 숨긴다).
+        if (result.regions.isNotEmpty) ...[
+          _CoachHandoffButton(result: result),
+          const SizedBox(height: 8),
+        ],
         // 영역이 없으면(빈 인식) 부드러운 안내만.
         if (result.regions.isEmpty)
           const Padding(
@@ -141,6 +147,29 @@ class _ResultView extends StatelessWidget {
           for (var i = 0; i < result.regions.length; i++)
             _RegionCard(index: i, region: result.regions[i]),
       ],
+    );
+  }
+}
+
+/// 코치 핸드오프 버튼 — 인식 결과를 호출자(채팅)에게 돌려주고 복귀한다(S1-d).
+///
+/// OCR 화면은 채팅을 *알지 못한다*(단방향 chat→ocr 의존 유지) — 여기선 `context.pop(result)`로
+/// [OcrResult]만 돌려주고, 매핑(정전 미러)·전송은 호출자(`chat_controller.sendOcrSolution`)가
+/// 한다. 저신뢰 인식이어도 넘길 수 있다(재확인 게이트는 서버 코치가 낸다·정서 안전 톤 유지).
+class _CoachHandoffButton extends StatelessWidget {
+  const _CoachHandoffButton({required this.result});
+
+  final OcrResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      child: FilledButton.icon(
+        icon: const Icon(Icons.send_outlined),
+        label: const Text('이 풀이로 코치에게'),
+        onPressed: () => context.pop(result),
+      ),
     );
   }
 }

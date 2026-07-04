@@ -209,7 +209,8 @@ async def _inject_curriculum_required_depth(
     경로: ① `_fetch_problem_concept_codes`로 {problem_id: {concept_code}} 조회(async) → ② 전체
     concept_code를 모아 `CurriculumDepthResolver.resolve_many`(sync·단일 SELECT·N+1 0)로
     {concept_code: RequiredDepth} 조회 — sync 엔진 좌석이라 `asyncio.to_thread`로 이벤트 루프를
-    막지 않고 워커 스레드에 격리(weak_concept_recommendation의 fetch_node_meta 선례 동형) → ③
+    막지 않고 워커 스레드에 격리(weak_concept_recommendation의 fetch_atom_node_meta 선례 동형·
+    S0-4d로 원자 축 전환) → ③
     문항별 *가장 깊은* 깊이 주입. curriculum_entry 미적재·깊이 미큐레이션·개념 미해석이면 키가 빠져
     None으로 남는다(L6 깊이정렬 무신호 폴백·데이터0 안전).
 

@@ -1,14 +1,16 @@
 """L2 약개념 추천 — `weak_concept_recommendation` 단위테스트 (hermetic·PG 불요).
 
-개념그래프 소비 슬2. `recommend_weak_concepts`는 두 좌석을 *재사용*한다:
+원자그래프 소비 슬2(S0-4d·runtime truth=원자). `recommend_weak_concepts`는 두 좌석을 *재사용*한다:
   ① `compute_concept_diagnoses`(L2·BKT/IRT 융합·약점 정렬) — 진단 입력
-  ② `fetch_node_meta`(L1·concept_node UC 안전 메타) — UC enrich
+  ② `fetch_atom_node_meta`(L1·atom_node code 안전 메타) — code enrich(구 concept_node 대체)
 
 이 둘을 *패치*해 PG 없이 좌석 *배선*만 못 박는다(진단 로직·실 PG 조인은 각자 테스트 몫):
   - 약점 필터(임계 경계·신호 0건 제외)·정렬 보존·limit 상한
-  - UC enrich(name_ko·domain·review_status 부착)·미적재 UC graceful None·orphan(UC 없음)
+  - code enrich(name_ko·domain(←원자 subject_area)·review_status 부착)·미적재 code graceful
+    None·orphan(code 없음)
   - reviewed_only 게이팅(메타 없으면 보수적 제외·정렬 유지)
-  - sync 좌석 to_thread 격리 — fetch_node_meta가 단일 호출·UC 중복 제거(N+1 0)
+  - sync 좌석 to_thread 격리 — fetch_atom_node_meta가 단일 호출·code 중복 제거(N+1 0)
+  - enrich 대상이 atom_node임을 동결(fetch_atom_node_meta 호출·domain 필드가 subject_area 값)
   - redaction(추천 스키마에 본문 필드 부재)
 """
 
@@ -22,7 +24,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import whymath_backend.l2.weak_concept_recommendation as wcr_mod
-from whymath_backend.l1.concept_graph.node_projection import ConceptNodeMeta
+from whymath_backend.l1.atom_graph.atom_node_projection import AtomNodeMeta
 from whymath_backend.l2.concept_diagnosis import Agreement, ConceptDiagnosis
 from whymath_backend.l2.weak_concept_recommendation import (
     WeakConceptRecommendation,
@@ -30,7 +32,7 @@ from whymath_backend.l2.weak_concept_recommendation import (
 )
 
 _UID = uuid.uuid4()
-# 슬2 idmap UC 규약 키 예시(concept.code·concept_node PK와 동일 공간).
+# 슬2 idmap UC 규약 키 예시(concept.code 공간·이제 atom_node code로 enrich·구 437 UC 유입 가능·격하)
 _UC_A = "UC.alg.afunction.linear"
 _UC_B = "UC.calc.alimit.epsilon-delta"
 
@@ -72,25 +74,25 @@ def _patch_diagnoses(monkeypatch: pytest.MonkeyPatch, diagnoses: list[ConceptDia
 
 
 def _patch_meta(
-    monkeypatch: pytest.MonkeyPatch, meta: dict[str, ConceptNodeMeta] | None = None
+    monkeypatch: pytest.MonkeyPatch, meta: dict[str, AtomNodeMeta] | None = None
 ) -> dict[str, Any]:
-    """`fetch_node_meta`를 패치해 enrich 메타를 제어·호출 인자(UC 리스트·engine)를 기록.
+    """`fetch_atom_node_meta`를 패치해 enrich 메타를 제어·호출 인자(code 리스트·engine)를 기록.
 
-    반환 captured["calls"]에 호출 횟수를, ["concept_ids"]에 마지막 호출 UC를 담는다 — 좌석이
-    약점 후보 UC를 *단일 호출*(N+1 0)로 넘기는지 관찰. meta 미지정이면 빈 dict(enrich 없음).
+    반환 captured["calls"]에 호출 횟수를, ["concept_ids"]에 마지막 호출 code를 담는다 — 좌석이
+    약점 후보 code를 *단일 호출*(N+1 0)로 넘기는지 관찰. meta 미지정이면 빈 dict(enrich 없음).
     """
     captured: dict[str, Any] = {"calls": 0}
     resolved_meta = meta if meta is not None else {}
 
     def _fake_fetch(
         concept_ids: Sequence[str], *, engine: object = None, settings: object = None
-    ) -> dict[str, ConceptNodeMeta]:
+    ) -> dict[str, AtomNodeMeta]:
         captured["calls"] += 1
         captured["concept_ids"] = list(concept_ids)
         captured["engine"] = engine
         return resolved_meta
 
-    monkeypatch.setattr(wcr_mod, "fetch_node_meta", _fake_fetch)
+    monkeypatch.setattr(wcr_mod, "fetch_atom_node_meta", _fake_fetch)
     return captured
 
 
@@ -183,12 +185,14 @@ class TestLimit:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# ④ enrich — concept_node 메타 부착·미적재 UC None·orphan(UC 없음)·단일 호출
+# ④ enrich — atom_node 메타 부착·미적재 code None·orphan(code 없음)·단일 호출
 # ──────────────────────────────────────────────────────────────────────────
 class TestEnrichment:
     async def test_attaches_node_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
         meta = {
-            _UC_A: ConceptNodeMeta(name_ko="일차함수", domain="[중]함수", review_status="reviewed")
+            _UC_A: AtomNodeMeta(
+                name_ko="일차함수", subject_area="[중]함수", review_status="reviewed"
+            )
         }
         captured = _patch_meta(monkeypatch, meta)
         _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, bkt=0.2, proxy=0.3)])
@@ -201,8 +205,8 @@ class TestEnrichment:
         assert captured["concept_ids"] == [_UC_A]
 
     async def test_missing_meta_is_none_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # concept_node에 _UC_B 메타가 없으면(적재 누락) enrich 필드 None(추천은 유지).
-        meta = {_UC_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="reviewed")}
+        # atom_node에 _UC_B 메타가 없으면(적재 누락·구 437 미스) enrich 필드 None(추천은 유지).
+        meta = {_UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed")}
         _patch_meta(monkeypatch, meta)
         _patch_diagnoses(
             monkeypatch,
@@ -230,7 +234,7 @@ class TestEnrichment:
 
     async def test_dedupes_uc_in_single_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 같은 UC 중복 후보는 메타 조회 UC 목록에서 중복 제거(IN 1회·중복 키 0).
-        meta = {_UC_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="reviewed")}
+        meta = {_UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed")}
         captured = _patch_meta(monkeypatch, meta)
         _patch_diagnoses(
             monkeypatch,
@@ -250,8 +254,8 @@ class TestEnrichment:
 class TestReviewedOnlyGating:
     async def test_gates_pending(self, monkeypatch: pytest.MonkeyPatch) -> None:
         meta = {
-            _UC_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="reviewed"),
-            _UC_B: ConceptNodeMeta(name_ko="B", domain="d", review_status="pending"),
+            _UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed"),
+            _UC_B: AtomNodeMeta(name_ko="B", subject_area="d", review_status="pending"),
         }
         _patch_meta(monkeypatch, meta)
         _patch_diagnoses(
@@ -266,7 +270,7 @@ class TestReviewedOnlyGating:
 
     async def test_gates_missing_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 메타 없어 reviewed 확인 불가인 UC는 gated 모드에서 보수적 제외(정직).
-        meta = {_UC_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="reviewed")}
+        meta = {_UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed")}
         _patch_meta(monkeypatch, meta)
         _patch_diagnoses(
             monkeypatch,
@@ -280,7 +284,7 @@ class TestReviewedOnlyGating:
         assert [r.concept_code for r in out] == [_UC_A]  # 메타 없음·orphan 모두 제외
 
     async def test_default_keeps_all_recall(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        meta = {_UC_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="pending")}
+        meta = {_UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="pending")}
         _patch_meta(monkeypatch, meta)
         _patch_diagnoses(
             monkeypatch,
@@ -295,8 +299,8 @@ class TestReviewedOnlyGating:
     async def test_gating_then_limit(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # 게이팅 후 limit — reviewed만 카운트해 상위 N(게이팅이 limit보다 먼저).
         meta = {
-            _UC_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="reviewed"),
-            _UC_B: ConceptNodeMeta(name_ko="B", domain="d", review_status="reviewed"),
+            _UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed"),
+            _UC_B: AtomNodeMeta(name_ko="B", subject_area="d", review_status="reviewed"),
         }
         _patch_meta(monkeypatch, meta)
         _patch_diagnoses(
@@ -333,3 +337,39 @@ def test_recommendation_has_only_safe_fields() -> None:
     assert "description" not in fields
     assert "formal_definition" not in fields
     assert "intuitive_explanation" not in fields
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑦ 원자 축 동결 — enrich 대상이 atom_node(fetch_atom_node_meta)이며 domain←subject_area (S0-4d)
+# ──────────────────────────────────────────────────────────────────────────
+class TestAtomAxisFrozen:
+    async def test_enrich_targets_atom_node_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # S0-4d 동결: enrich는 `fetch_atom_node_meta`(atom_node 조회)를 통과하고, 결과 `domain`
+        # 필드는 원자 `subject_area` 값을 담는다(값 소스 교체·필드명 유지). fake는 subject_area
+        # 라벨을 명시적으로 다르게 줘 domain이 그 값을 실는지 못 박는다.
+        captured = _patch_meta(
+            monkeypatch,
+            {
+                _UC_A: AtomNodeMeta(
+                    name_ko="극한", subject_area="[고]미적분", review_status="reviewed"
+                )
+            },
+        )
+        _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, bkt=0.2, proxy=0.3)])
+        out = await recommend_weak_concepts(_fake_session(), _UID)
+        # atom_node 좌석이 정확히 한 번, 약점 code로 호출됐다(구 fetch_node_meta 아님).
+        assert captured["calls"] == 1
+        assert captured["concept_ids"] == [_UC_A]
+        # domain(계약 필드명 유지) 값이 원자 subject_area를 담는다.
+        assert out[0].domain == "[고]미적분"
+        assert out[0].name_ko == "극한"
+
+    async def test_atom_miss_is_none_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 구 437 UC가 concept_code로 흘러도 atom_node 미스면 enrich None graceful(격하 취지).
+        _patch_meta(monkeypatch, {})  # atom_node에 아무 code도 없음(전량 미스)
+        _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, bkt=0.2, proxy=0.3)])
+        out = await recommend_weak_concepts(_fake_session(), _UID)
+        assert out[0].concept_code == _UC_A  # 추천 자체는 유지(rekey 0)
+        assert out[0].domain is None
+        assert out[0].name_ko is None
+        assert out[0].review_status is None

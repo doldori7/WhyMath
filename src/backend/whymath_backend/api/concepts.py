@@ -17,14 +17,22 @@ PG 행을 직접 만지지 않고 검증된 Pydantic 모델만 주고받는다.
 하며(검정교과서·EBS 본문 복제 금지) — 이 불변식은 schema.Concept 검수 단계 책임이고 이
 라우터는 이미 검증된 모델을 영속화할 뿐이다.
 
-의미검색(슬라이스 4 + 소비 슬1): `GET /v1/concepts/search`가 적재된 개념 임베딩
-(`concept_embedding` pgvector·슬3)을 조회하고, 잡힌 UC들의 안전 메타(name_ko·domain·
-review_status)를 `concept_node`(PG 프로젝션·소비 슬1) 조인으로 enrich한다. `reviewed_only`
-쿼리로 검수 게이팅(필터)을 건다. 이건 *조회 좌석*(L1 데이터 서빙)을 HTTP로 노출하는 표면이고,
-검색·enrich·게이팅 로직은 `l1/concept_graph/retrieval.search_concepts`가 소유한다(L5는 표면·
-L1은 서빙). 메타 브리지는 **PG 프로젝션**(backend↔Neo4j 런타임 연결 0 — 확정 설계 결정).
-**학생 직접 노출이 아니라** L2/L4·교사 도구가 소비하는 내부 표면이고, enrich는 안전 표시·
-게이팅 필드뿐(본문 0 — concept_node에 description·formal_definition 컬럼 자체가 없음·redaction).
+의미검색(S0-4a — runtime truth source=원자 전환): `GET /v1/concepts/search`가 적재된 *원자*
+임베딩(`atom_embedding` pgvector·Phase 2b)을 조회하고, 잡힌 원자 code들의 안전 메타(name_ko·
+subject_area·review_status)를 `atom_node`(PG 프로젝션·Phase 2a) 조인으로 enrich한다.
+`reviewed_only` 쿼리로 검수 게이팅(필터)을 건다. 이건 *조회 좌석*(L1 데이터 서빙)을 HTTP로
+노출하는 표면이고, 검색·enrich·게이팅 로직은 `l1/atom_graph/retrieval.search_atoms`가 소유한다
+(L5는 표면·L1은 서빙). 메타 브리지는 **PG 프로젝션**(backend↔Neo4j 런타임 연결 0 — 확정 설계
+결정). **학생 직접 노출이 아니라** L2/L4·교사 도구가 소비하는 내부 표면이고, enrich는 안전 표시·
+게이팅 필드뿐(본문 0 — atom_node에 core_proposition·description·formal_definition 컬럼 자체가
+없음·redaction).
+
+**응답 계약 안정(경로·스키마 유지)**: 클라 계약 안정을 위해 경로(`/v1/concepts/search`)·응답
+스키마(`ConceptSearchResponse`)를 유지한다 — 단 `concept_id` 필드는 이제 *원자 code*를, `domain`
+필드는 원자 `subject_area`를 담는다(runtime truth source=원자). 구 437(`concept_embedding`/
+`concept_node`)은 런타임에서 더 이상 읽지 않는다(S0-4b legacy_snapshot 격하 전제). 원자
+`review_status`는 전 행 'ai_estimated'라 `reviewed_only=true`면 결과가 빈다(원자 검수 승격 전
+정상·정직).
 """
 
 from __future__ import annotations
@@ -47,7 +55,7 @@ from whymath_backend.api._concurrency import (
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.concept import Concept, ConceptEdge
 from whymath_backend.db.session import get_session
-from whymath_backend.l1.concept_graph.retrieval import search_concepts
+from whymath_backend.l1.atom_graph.retrieval import search_atoms
 from whymath_backend.l4.misconception.semantic.provider import (
     EmbeddingProvider,
     build_provider,
@@ -86,36 +94,44 @@ EmbeddingProviderDep = Annotated[EmbeddingProvider, Depends(get_embedding_provid
 
 
 class ConceptSearchResultItem(BaseModel):
-    """개념 의미검색 결과 1건(HTTP) — UC concept_id + 코사인 유사도 + *안전* 메타(enrich·소비 슬1).
+    """의미검색 결과 1건(HTTP) — code + 코사인 유사도 + *안전* 메타(enrich).
 
-    `retrieval.ConceptSearchHit`의 HTTP 직렬화 형태다. `concept_id`는 Universal Concept ID
-    (UC.<domain>.<topic>.<slug>·슬2 Neo4j 노드 키·슬3 concept_embedding과 동일 공간), `similarity`는
-    코사인 [-1, 1]. `name_ko`·`domain`·`review_status`는 `concept_node`(PG 프로젝션) 조인으로 붙인
-    *안전 표시·게이팅 필드*다 — 메타 미적재 UC는 **null**(graceful). **본문(description·
-    formal_definition)은 미포함** — 프로젝션 테이블에 컬럼 자체가 없다(redaction·노출 계약). 소비처
-    (L2/L4·교사 도구)가 UC 키 + 안전 메타로 동작한다.
+    (S0-4a) `atom_graph.retrieval.AtomSearchHit`의 HTTP 직렬화 형태다. 클라 계약 안정을 위해 필드명
+    (`concept_id`·`domain`)을 유지하되, 값의 의미는 원자 축으로 바뀌었다: `concept_id`는 이제
+    *원자 code*(`atom_embedding`/`atom_node`와 동일 공간·원자ID/소단원코드/단원코드), `domain`은
+    원자 `subject_area`다. `similarity`는 코사인 [-1, 1]. `name_ko`·`domain`·`review_status`는
+    `atom_node`(PG 프로젝션) 조인으로 붙인 *안전 표시·게이팅 필드*다 — 메타 미적재 code는
+    **null**(graceful). **본문(core_proposition·description·formal_definition)은 미포함** —
+    프로젝션 테이블에 컬럼 자체가 없다(redaction·노출 계약). 소비처(L2/L4·교사 도구)가 code 키 +
+    안전 메타로 동작한다.
     """
 
     model_config = ConfigDict(extra="forbid")
 
     concept_id: str = Field(
-        description="Universal Concept ID(UC 키·슬2 Neo4j 노드 키·슬3 임베딩과 동일 공간)."
+        description=(
+            "원자 code(runtime truth source=원자·`atom_embedding`/`atom_node`와 동일 공간). "
+            "필드명은 클라 계약 안정을 위해 유지하되 값은 원자 code다(S0-4a)."
+        )
     )
     similarity: float = Field(
         description="질의 임베딩과의 코사인 유사도 [-1, 1](클수록 의미 근접)."
     )
     name_ko: str | None = Field(
         default=None,
-        description="개념 한국어 명칭(concept_node 조인·안전 표시 필드). 메타 미적재 시 null.",
+        description="원자 한국어 명칭(atom_node 조인·안전 표시 필드). 메타 미적재 시 null.",
     )
     domain: str | None = Field(
         default=None,
-        description="개념 영역명(concept_node 조인·안전 표시 필드). 메타 미적재 시 null.",
+        description=(
+            "원자 영역명(atom_node.subject_area 조인·안전 표시 필드). 필드명은 계약 안정 유지·"
+            "값은 subject_area. 메타 미적재·subject_area 부재 시 null."
+        ),
     )
     review_status: str | None = Field(
         default=None,
         description=(
-            "검수 상태('reviewed'/'pending'·concept_node 조인·게이팅 플래그). 메타 미적재 시 null."
+            "검수 상태(atom_node 조인·게이팅·원자는 전 행 'ai_estimated'). 미적재 시 null."
         ),
     )
 
@@ -167,36 +183,43 @@ async def search_concepts_endpoint(
         ),
     ] = False,
 ) -> ConceptSearchResponse:
-    """적재된 개념 임베딩(pgvector·슬3)에 대한 의미검색 — 코사인 상위 k + 메타 enrich·검수 게이팅.
+    """적재된 *원자* 임베딩(pgvector·Phase 2b)에 대한 의미검색 — 코사인 상위 k + 메타 enrich·게이팅.
 
-    질의 `q`를 임베딩해 `search_concepts`(L1 조회 좌석)로 코사인 상위 k를 받고, 잡힌 UC들의 안전
-    메타(name_ko·domain·review_status)를 `concept_node`(PG 프로젝션) 조인으로 enrich한다(소비 슬1 —
-    메타 브리지=PG 프로젝션·backend↔Neo4j 런타임 연결 0). `reviewed_only=true`면 검수 안 된 개념을
-    *필터*한다(유사도 정렬 유지). 검색 좌석은 *블로킹*(임베딩 + sync psycopg 검색·메타 조인)이라
-    `asyncio.to_thread`로 워커 스레드에서 돌린다 — 이벤트 루프를 막지 않게(CLAUDE.md p50<2s·동시
-    요청 보호·coach `_compute_matches` 패턴 미러). 요청 검증은 Query 제약(q 필수·비공백·k 범위)이
-    한다(위반 시 422 — list 엔드포인트 패턴 동형).
+    (S0-4a) 질의 `q`를 임베딩해 `search_atoms`(L1 조회 좌석)로 코사인 상위 k를 받고, 잡힌 원자
+    code들의 안전 메타(name_ko·subject_area·review_status)를 `atom_node`(PG 프로젝션) 조인으로
+    enrich한다(메타 브리지=PG 프로젝션·backend↔Neo4j 런타임 연결 0). `reviewed_only=true`면 검수 안
+    된 원자를 *필터*한다(유사도 정렬 유지 — 원자는 전 행 'ai_estimated'라 이 경우 결과가 빈다).
+    검색 좌석은 *블로킹*(임베딩 + sync psycopg 검색·메타 조인)이라 `asyncio.to_thread`로 워커
+    스레드에서 돌린다 — 이벤트 루프를 막지 않게(CLAUDE.md p50<2s·동시 요청 보호). 요청 검증은
+    Query 제약(q 필수·비공백·k 범위)이 한다(위반 시 422 — list 엔드포인트 패턴 동형).
+
+    **응답 계약**: 경로·응답 스키마는 유지한다(클라 계약 안정) — `concept_id` 필드는 원자 code를,
+    `domain` 필드는 원자 subject_area를 담는다(runtime truth source=원자). 구 437은 런타임에서
+    읽지 않는다.
 
     **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 L2/L4·교사 도구가 소비하는 *조회 좌석*이다.
-    enrich되는 건 안전 표시·게이팅 필드(name_ko·domain·review_status)뿐 — **본문(description·
-    formal_definition) 0**(concept_node에 컬럼 자체가 없음·redaction). 우열 매기기·정답 빠르게 등
-    금기 표현 0. memory 모드면 `vector_store_enabled=false` + 빈 `results`로 *명시* 안내한다(조용한
-    무동작 금지 — 좌석이 정직하게 "미가용/없음"을 반환하고 표면이 그 신호를 그대로 노출).
+    enrich되는 건 안전 표시·게이팅 필드(name_ko·subject_area·review_status)뿐 — **본문
+    (core_proposition·description·formal_definition) 0**(atom_node에 컬럼 자체가 없음·redaction).
+    우열 매기기·정답 빠르게 등 금기 표현 0. memory 모드면 `vector_store_enabled=false` + 빈
+    `results`로 *명시* 안내한다(조용한 무동작 금지 — 좌석이 정직하게 "미가용/없음"을 반환하고
+    표면이 그 신호를 그대로 노출).
     """
     enabled = get_settings().vector_store == "pgvector"
     # 검색 좌석은 동기(블로킹 임베딩·sync psycopg 검색+메타 조인) → 워커 스레드로(이벤트 루프
-    # 보호). memory 모드면 search_concepts가 즉시 빈 리스트를 돌려준다(좌석 내부 graceful).
+    # 보호). memory 모드면 search_atoms가 즉시 빈 리스트를 돌려준다(좌석 내부 graceful).
+    # (S0-4a) runtime truth source=원자 — 좌석을 `search_atoms`로 전환. 응답 필드 `concept_id`는
+    # 이제 *원자 code*를, `domain`은 원자 `subject_area`를 담는다(스키마·경로 계약 안정 유지).
     hits = await asyncio.to_thread(
-        search_concepts, q, top_k=k, provider=provider, reviewed_only=reviewed_only
+        search_atoms, q, top_k=k, provider=provider, reviewed_only=reviewed_only
     )
     return ConceptSearchResponse(
         query=q,
         results=[
             ConceptSearchResultItem(
-                concept_id=hit.concept_id,
+                concept_id=hit.atom_code,
                 similarity=hit.similarity,
                 name_ko=hit.name_ko,
-                domain=hit.domain,
+                domain=hit.subject_area,
                 review_status=hit.review_status,
             )
             for hit in hits

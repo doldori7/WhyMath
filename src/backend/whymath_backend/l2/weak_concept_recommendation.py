@@ -1,11 +1,9 @@
-"""L2 약개념 추천 — BKT/IRT 약점 진단 + 개념그래프 안전 메타 enrich (개념그래프 소비 슬2).
+"""L2 약개념 추천 — BKT/IRT 약점 진단 + 원자그래프 안전 메타 enrich (원자그래프 소비 슬2).
 
-L1 개념그래프 *소비* 아크의 다음 좌석이다. 적재 아크(슬1~4)·브리지(#167)로 backend `concept`
-(UUID PK·`code`=UC)·`concept_node`(UC PK)·`concept_embedding`(UC)가 *동일 UC 키*로 사중 store에
-연결됐고, 소비 슬1(`l1/concept_graph/retrieval.search_concepts`)이 의미검색에 `concept_node` 안전
-메타를 enrich하는 길을 열었다. 이 모듈은 그 enrich 경로를 *학습자 약점*으로 끌어온다 — L2
-학습자 모델(BKT/IRT)이 식별한 약개념에 `concept_node`(UC) 안전 그래프 메타(name_ko·domain·
-review_status)를 붙여 "지금 무엇을 복습할지" 후보를 돌려준다.
+L1 *원자그래프* 소비 아크의 좌석이다. runtime truth source가 원자 단일로 확정되며(S0-4 legacy_
+snapshot 격하), 메타 enrich 대상 테이블을 `concept_node`(구 437 UC)에서 `atom_node`(code 키·원자
+백본)로 전환했다(S0-4d). L2 학습자 모델(BKT/IRT)이 식별한 약개념에 `atom_node`(code) 안전 그래프
+메타(name_ko·subject_area·review_status)를 붙여 "지금 무엇을 복습할지" 후보를 돌려준다.
 
 ────────────────────────────────────────────────────────────────────────────
 재사용 좌석 (신규 진단·정렬 로직 0)
@@ -13,31 +11,33 @@ review_status)를 붙여 "지금 무엇을 복습할지" 후보를 돌려준다.
 ① 진단·약점 정렬 — `l2.concept_diagnosis.compute_concept_diagnoses`를 *그대로* 입력으로 쓴다
    (BKT 최신 숙달 + IRT θ 융합·agreement·*약점 먼저* 정렬 이미 수행). 여기서 IRT/BKT 융합이나
    약점 정렬을 재구현하지 않는다 — 진단 결과에 *필터·enrich·상한*만 얹는다.
-② UC enrich — `l1.concept_graph.node_projection.fetch_node_meta`(UC 리스트 → concept_node 안전
-   메타 단일 IN 조회)를 재사용한다. 검색 좌석(`search_concepts`)이 enrich에 쓴 *같은* 좌석이다.
+② code enrich — `l1.atom_graph.atom_node_projection.fetch_atom_node_meta`(code 리스트 →
+   `atom_node` 안전 메타 단일 IN 조회)를 재사용한다. 원자 검색 좌석(`search_atoms`)이 enrich에 쓴
+   *같은* 원자 메타 좌석이다(S0-4a 신설·`fetch_node_meta`의 원자 짝·시그니처 동형).
 
 ────────────────────────────────────────────────────────────────────────────
 sync 엔진 재사용 (검색 좌석과 동일 패턴 — 신규 동시성 0)
 ────────────────────────────────────────────────────────────────────────────
-`fetch_node_meta`는 *sync 엔진*(블로킹 psycopg)이고 이 함수는 async다. 검색 좌석(api/concepts·
+`fetch_atom_node_meta`는 *sync 엔진*(블로킹 psycopg)이고 이 함수는 async다. 검색 좌석(api/concepts·
 coach)이 sync 좌석을 `asyncio.to_thread`로 워커 스레드에 격리하는 *바로 그 패턴*을 따른다 —
 이벤트 루프를 막지 않게(CLAUDE.md p50<2s·동시 요청 보호). 새 동시성 패턴을 발명하지 않는다.
 
 ────────────────────────────────────────────────────────────────────────────
 redaction·노출 계약 (CLAUDE.md 우선순위 #2 — 협상 불가)
 ────────────────────────────────────────────────────────────────────────────
-enrich되는 건 *안전 표시·게이팅 필드*뿐(name_ko·domain·review_status). **description·
-formal_definition·intuitive_explanation은 어디에도 유입되지 않는다** — `concept_node`에 컬럼
-자체가 없어(`node_projection`·`ConceptNodeMeta` redaction) 조회로 흐를 경로가 구조적으로 없다.
-이 좌석은 *학생 직접 노출이 아니라* 내부 조회 좌석이다(소비 슬1 노출 계약과 일관) — 우열 매기기·
+enrich되는 건 *안전 표시·게이팅 필드*뿐(name_ko·subject_area·review_status). **description·
+formal_definition·core_proposition은 어디에도 유입되지 않는다** — `atom_node`에 본문 컬럼
+자체가 없어(`atom_node_projection`·`AtomNodeMeta` redaction) 조회로 흐를 경로가 구조적으로 없다.
+이 좌석은 *학생 직접 노출이 아니라* 내부 조회 좌석이다(소비 슬 노출 계약과 일관) — 우열 매기기·
 정답 빠르게 등 금기 표현 0.
 
 검수 게이팅(`reviewed_only`)은 *필터*다 — 약점 정렬은 유지하고, True면 `review_status ==
-"reviewed"`인 개념만 남긴다(메타 없어 확인 불가인 UC는 보수적 제외 — 소비 슬1 게이팅 규약과
+"reviewed"`인 개념만 남긴다(메타 없어 확인 불가인 code는 보수적 제외 — 소비 슬 게이팅 규약과
 일관·"확실하지 않으면 노출 안 함"). 기본 False는 recall 보존.
 
-7계층: L2 학습자 모델이 L1 `fetch_node_meta`를 *호출*(L_n→L_{n-1} 허용·경계 준수). L4 코칭·L5
-노출은 부착하지 않는다(역방향 의존 회피 — 코칭은 L4·HTTP 표면은 api/me).
+7계층: L2 학습자 모델이 L1 `fetch_atom_node_meta`를 *호출*(L_n→L_{n-1} 허용·경계 준수·원자 축도
+동일 방향 `l1.atom_graph`). L4 코칭·L5 노출은 부착하지 않는다(역방향 의존 회피 — 코칭은 L4·
+HTTP 표면은 api/me).
 """
 
 from __future__ import annotations
@@ -49,7 +49,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.l1.concept_graph.node_projection import ConceptNodeMeta, fetch_node_meta
+from whymath_backend.l1.atom_graph.atom_node_projection import AtomNodeMeta, fetch_atom_node_meta
 from whymath_backend.l2.concept_diagnosis import (
     Agreement,
     ConceptDiagnosis,
@@ -59,20 +59,22 @@ from whymath_backend.l2.concept_diagnosis import (
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
 
-# 검수 게이팅 비교 리터럴 — `concept_node.review_status`가 싣는 reviewed 값(retrieval `_REVIEWED`
-# 와 동일 규약). graph.json `use_enum_values`가 같은 문자열을 적재한다.
+# 검수 게이팅 비교 리터럴 — `atom_node.review_status`가 싣는 reviewed 값(원자 검색 좌석과 동일
+# 규약). 단, 원자 메타 적재는 review_status를 상수 'ai_estimated'로 박으므로(원자 메타는 AI 추정·
+# atom_node_projection redaction), 원자 축에서 reviewed_only=True는 사실상 전부 게이팅될 수 있다
+# — 검수 승격은 후속 좌석 몫이고, 기본 False(recall 보존) 경로가 정상 운용이다(S0-4d).
 _REVIEWED: str = "reviewed"
 
 
 class WeakConceptRecommendation(BaseModel):
-    """약개념 추천 1건 — 진단 약점 신호 + `concept_node`(UC) 안전 그래프 메타(enrich·소비 슬2).
+    """약개념 추천 1건 — 진단 약점 신호 + `atom_node`(code) 안전 그래프 메타(enrich·소비 슬2).
 
-    `compute_concept_diagnoses`의 약점 진단(BKT/IRT)에 `concept_node` 안전 메타를 붙인 형태다.
-    `weakness`는 비교 가능한 두 신호(bkt_mastery·irt_mastery_proxy) 중 *최저값*(정렬·필터 기준).
-    `domain`·`review_status`·`name_ko`는 `concept_node`(PG 프로젝션) UC 조인으로 붙인 *안전
-    표시·게이팅 필드*다 — 메타 미적재 UC(또는 orphan으로 UC 없음)면 **None**(graceful).
-    **본문(description·formal_definition)은 미포함** — `concept_node`에 컬럼 자체가 없어 구조적
-    으로 흐를 수 없다(redaction·노출 계약).
+    `compute_concept_diagnoses`의 약점 진단(BKT/IRT)에 `atom_node` 안전 메타를 붙인 형태다(S0-4d·
+    runtime truth=원자). `weakness`는 비교 가능한 두 신호(bkt_mastery·irt_mastery_proxy) 중
+    *최저값*(정렬·필터 기준). `domain`·`review_status`·`name_ko`는 `atom_node`(PG 프로젝션) code
+    조인으로 붙인 *안전 표시·게이팅 필드*다 — 메타 미적재 code(또는 orphan으로 code 없음)면
+    **None**(graceful). **본문(description·formal_definition·core_proposition)은 미포함** —
+    `atom_node`에 본문 컬럼 자체가 없어 구조적으로 흐를 수 없다(redaction·노출 계약).
     """
 
     concept_id: uuid.UUID = Field(description="개념 id(backend `concept` UUID PK).")
@@ -98,16 +100,18 @@ class WeakConceptRecommendation(BaseModel):
     )
     domain: str | None = Field(
         default=None,
-        description="개념 영역명(concept_node 조인·안전 표시 필드). 메타 미적재 시 null.",
+        description="개념 영역명(atom_node 조인·안전 표시 필드). 필드명은 계약 안정을 위해 "
+        "`domain`을 유지하나, 값 소스는 이제 원자 `subject_area`다(S0-4d·runtime truth=원자). "
+        "메타 미적재 시 null.",
     )
     review_status: str | None = Field(
         default=None,
-        description="검수 상태('reviewed'/'pending'·concept_node 조인·게이팅 플래그). "
+        description="검수 상태('reviewed'/'pending'·atom_node 조인·게이팅 플래그). "
         "메타 미적재 시 null.",
     )
     name_ko: str | None = Field(
         default=None,
-        description="개념 한국어 표시명(concept_node 조인·안전 표시 필드). 메타 미적재 시 null.",
+        description="개념 한국어 표시명(atom_node 조인·안전 표시 필드). 메타 미적재 시 null.",
     )
 
 
@@ -131,24 +135,27 @@ async def recommend_weak_concepts(
     reviewed_only: bool = False,
     meta_engine: Engine | None = None,
 ) -> list[WeakConceptRecommendation]:
-    """학습자 약점(BKT/IRT) → 약점 필터 → `concept_node`(UC) 안전 메타 enrich → 상위 N 추천.
+    """학습자 약점(BKT/IRT) → 약점 필터 → `atom_node`(code) 안전 메타 enrich → 상위 N 추천.
 
     흐름:
       ① `compute_concept_diagnoses`로 개념별 진단(BKT 최신 + IRT θ 융합·*약점 먼저* 정렬)을 받는다
          — 진단·정렬은 L2 좌석 재사용(신규 0). 정렬은 이미 약점 우선이라 이 함수가 보존한다.
       ② **약점 필터** — 비교 가능한 신호(bkt_mastery·irt_mastery_proxy 중 존재) 최저값이
          `mastery_threshold` *미만*인 개념만(약점). 신호가 하나도 없으면 추천 근거 없음으로 제외.
-      ③ **UC enrich** — 약점 후보들의 `concept_code`(None 아닌 UC)를 모아 `fetch_node_meta`를
-         *단일 호출*(N+1 0)로 `concept_node` 안전 메타를 받아 붙인다. UC 없거나(orphan) 메타
-         미적재면 enrich 필드 None graceful. `fetch_node_meta`는 sync(블로킹 psycopg)라
+      ③ **code enrich** — 약점 후보들의 `concept_code`(None 아닌 code)를 모아 `fetch_atom_node_meta`
+         를 *단일 호출*(N+1 0)로 `atom_node` 안전 메타를 받아 붙인다(S0-4d·runtime truth=원자).
+         code 없거나(orphan) 메타 미적재(구 437 UC가 흘러도 atom_node 미스)면 enrich 필드 None
+         graceful — 격하 취지 부합. `fetch_atom_node_meta`는 sync(블로킹 psycopg)라
          `asyncio.to_thread`로 워커 스레드에 격리한다(검색 좌석 패턴 미러·이벤트 루프 보호).
       ④ **검수 게이팅** — `reviewed_only=True`면 `review_status == "reviewed"`인 개념만(메타
-         없어 확인 불가인 UC는 보수적 제외 — 소비 슬1 규약). 기본 False는 recall 보존.
+         없어 확인 불가인 code는 보수적 제외 — 소비 슬 규약). 기본 False는 recall 보존.
       ⑤ **상한** — 약점 정렬을 보존하며 상위 `limit`개만 반환.
 
     user_id 스코핑·읽기 전용(마이그레이션 불필요). `meta_engine` 주입 가능(테스트 격리·검색
-    좌석이 같은 엔진을 공유하듯). enrich되는 건 안전 필드(name_ko·domain·review_status)뿐 —
-    본문(description·formal_definition)은 `concept_node`에 컬럼이 없어 구조적으로 0(redaction).
+    좌석이 같은 엔진을 공유하듯). enrich되는 건 안전 필드(name_ko·subject_area·review_status)뿐 —
+    본문(description·formal_definition·core_proposition)은 `atom_node`에 본문 컬럼이 없어 구조적
+    으로 0(redaction). mastery 파생 로직·`concept_code` 키 축은 건드리지 않는다(메타 *조회 대상
+    테이블*만 concept_node→atom_node로 교체·rekey 0).
     """
     # ① 진단(약점 먼저 정렬) — L2 좌석 재사용. 융합·정렬·합집합은 이 좌석이 이미 수행.
     diagnoses = await compute_concept_diagnoses(session, user_id)
@@ -163,19 +170,21 @@ async def recommend_weak_concepts(
     if not weak:
         return []
 
-    # ③ UC enrich — 약점 후보의 UC(concept_code) 중복 제거해 단일 IN 조회. orphan(UC None)은 제외.
-    #    fetch_node_meta는 sync 엔진(블로킹)이라 워커 스레드로 격리(검색 좌석 to_thread 패턴 미러).
+    # ③ code enrich — 약점 후보의 code(concept_code) 중복 제거해 단일 IN 조회. orphan(code None)은
+    #    제외. fetch_atom_node_meta는 sync 엔진(블로킹)이라 워커 스레드로 격리(검색 좌석 to_thread
+    #    패턴 미러). uc_list는 변수명만 유지하되 이제 원자 code 목록이다(concept_code 키 축은 불변·
+    #    조회 대상 테이블만 atom_node로 교체). 구 437 UC가 흘러도 atom_node 미스→None(격하 부합).
     uc_list = sorted({d.concept_code for d, _ in weak if d.concept_code is not None})
-    meta: dict[str, ConceptNodeMeta] = {}
+    meta: dict[str, AtomNodeMeta] = {}
     if uc_list:
-        meta = await asyncio.to_thread(fetch_node_meta, uc_list, engine=meta_engine)
+        meta = await asyncio.to_thread(fetch_atom_node_meta, uc_list, engine=meta_engine)
 
     # ④/⑤ 게이팅 필터 + 상한 — 약점 정렬 보존하며 reviewed 필터 후 상위 limit.
     out: list[WeakConceptRecommendation] = []
     for diagnosis, weakness in weak:
         node = meta.get(diagnosis.concept_code) if diagnosis.concept_code is not None else None
         if reviewed_only and (node is None or node.review_status != _REVIEWED):
-            # 게이팅 — reviewed 아니거나 메타 미적재(확인 불가)면 제외(보수적·정직·소비 슬1 규약).
+            # 게이팅 — reviewed 아니거나 메타 미적재(확인 불가)면 제외(보수적·정직·소비 슬 규약).
             continue
         out.append(
             WeakConceptRecommendation(
@@ -186,7 +195,8 @@ async def recommend_weak_concepts(
                 irt_mastery_proxy=diagnosis.irt_mastery_proxy,
                 weakness=weakness,
                 agreement=diagnosis.agreement,
-                domain=node.domain if node is not None else None,
+                # DTO 필드명 `domain`은 유지(계약 안정)·값 소스만 원자 subject_area로 교체(S0-4d).
+                domain=node.subject_area if node is not None else None,
                 review_status=node.review_status if node is not None else None,
                 name_ko=node.name_ko if node is not None else None,
             )

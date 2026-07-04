@@ -170,7 +170,10 @@ class ConceptContentStore:
         `INSERT ... ON CONFLICT(code) DO UPDATE` — 콘텐츠 4종·설명·standard_codes·flashcards +
         review_status('ai_estimated' 상수) + updated_at(now())을 갱신한다. 성취기준 *본문* 컬럼은
         없다(코퍼스 부재·레코드 슬롯 부재의 이중 차단). standard_codes는 PG TEXT[]·flashcards는
-        dict 리스트(PG JSONB)로 바인딩한다.
+        dict 리스트(PG JSONB)로 바인딩한다. **`atom_codes`는 여기서 건드리지 않는다**(INSERT·set_
+        미등장 — 신규 행은 server_default '{}', 기존 행 값은 보존): 채움 좌석은 S0-2 크로스워크
+        전파(`l1/concept_atom_crosswalk/transfer.py`)이며, 콘텐츠 재적재가 전파 결과를 지우면
+        안 된다.
         """
         from sqlalchemy import func
         from sqlalchemy.dialects.postgresql import insert as pg_insert

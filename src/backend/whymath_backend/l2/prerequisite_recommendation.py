@@ -41,21 +41,23 @@ CTE**(`select(...).cte(recursive=True)`·`union_all`·`literal`)로 traversal한
 ① mastery — `l2.concept_diagnosis.compute_concept_diagnoses`를 *한 번* 호출해 `{concept_id:
    diagnosis}` 맵으로 선수들의 BKT/IRT 숙달을 조회한다(약개념 추천과 동일 좌석·신규 0). 측정 없는
    선수는 맵에 없어 mastery None(graceful).
-② UC enrich — `l1.concept_graph.node_projection.fetch_node_meta`(UC→concept_node 안전 메타
-   단일 IN 조회)를 재사용한다(약개념 추천과 동일 enrich 좌석). sync(블로킹 psycopg)라
-   `asyncio.to_thread`로 워커 스레드에 격리한다(이벤트 루프 보호·검색 좌석 패턴 미러).
+② code enrich — `l1.atom_graph.atom_node_projection.fetch_atom_node_meta`(code→`atom_node` 안전
+   메타 단일 IN 조회)를 재사용한다(약개념 추천과 동일 enrich 좌석·S0-4d로 concept_node→atom_node
+   전환·runtime truth=원자). sync(블로킹 psycopg)라 `asyncio.to_thread`로 워커 스레드에 격리한다
+   (이벤트 루프 보호·검색 좌석 패턴 미러).
 
 ────────────────────────────────────────────────────────────────────────────
 redaction·노출 계약 (CLAUDE.md 우선순위 #2 — 협상 불가)
 ────────────────────────────────────────────────────────────────────────────
-enrich되는 건 *안전 표시·게이팅 필드*뿐(name_ko·domain·review_status). **description·
-formal_definition·intuitive_explanation은 어디에도 유입되지 않는다** — `concept_node`·`Concept`
+enrich되는 건 *안전 표시·게이팅 필드*뿐(name_ko·subject_area·review_status). **description·
+formal_definition·core_proposition은 어디에도 유입되지 않는다** — `atom_node`·`Concept`
 조회 컬럼에 본문이 없고, `PrerequisiteGap` 스키마에 *슬롯 자체가 없다*(삼중 방어). 이 좌석은
 학생 직접 노출이 아니라 *내부 조회 좌석*이다(소비 슬 일관). `reviewed_only` 게이팅은 약개념
 추천과 동일 규약(reviewed만·메타 없으면 보수적 제외).
 
-7계층: L2 학습자 모델이 L1 데이터(concept_edge ORM·fetch_node_meta)를 *조회*(L_n→L_{n-1} 허용).
-ORM 쿼리빌더만(원시 SQL 0). L4 코칭·L5 노출은 부착하지 않는다(역방향 의존 회피).
+7계층: L2 학습자 모델이 L1 데이터(concept_edge ORM·fetch_atom_node_meta)를 *조회*(L_n→L_{n-1}
+허용·원자 축도 동일 방향 `l1.atom_graph`). ORM 쿼리빌더만(원시 SQL 0). L4 코칭·L5 노출은 부착
+하지 않는다(역방향 의존 회피). 선수 traversal(`concept_edge`)은 이 전환에서 건드리지 않는다.
 """
 
 from __future__ import annotations
@@ -70,7 +72,7 @@ from sqlalchemy import literal, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.db.models.concept import Concept, ConceptEdge
-from whymath_backend.l1.concept_graph.node_projection import ConceptNodeMeta, fetch_node_meta
+from whymath_backend.l1.atom_graph.atom_node_projection import AtomNodeMeta, fetch_atom_node_meta
 from whymath_backend.l2.concept_diagnosis import (
     Agreement,
     ConceptDiagnosis,
@@ -114,14 +116,15 @@ class PrerequisiteRow:
 
 
 class PrerequisiteGap(BaseModel):
-    """막힌 선수개념 1건 — 선수 traversal + BKT/IRT 약점 + concept_node 안전 메타 enrich.
+    """막힌 선수개념 1건 — 선수 traversal + BKT/IRT 약점 + atom_node 안전 메타 enrich.
 
     약개념 C의 선수개념 중 학습자가 약한(막힌) 것이다. `weakness`는 비교 가능한 두 신호
     (bkt_mastery·irt_mastery_proxy) 중 *최저값*(약점 정렬·필터 기준). 측정 없는 선수는 두 신호·
     weakness 모두 None(agreement="insufficient"). `domain`·`review_status`·`name_ko`는
-    `concept_node`(UC) 조인 *안전 표시·게이팅 필드*(메타 미적재면 None graceful). `edge_strength`는
-    선수관계 강도(강한 선수일수록 후행에 결정적). **본문(description·formal_definition)은 미포함** —
-    조회 컬럼·스키마에 슬롯이 없어 구조적으로 흐를 수 없다(redaction·노출 계약).
+    `atom_node`(code) 조인 *안전 표시·게이팅 필드*(메타 미적재면 None graceful·S0-4d·runtime
+    truth=원자). `edge_strength`는 선수관계 강도(강한 선수일수록 후행에 결정적). **본문
+    (description·formal_definition·core_proposition)은 미포함** — 조회 컬럼·스키마에 슬롯이 없어
+    구조적으로 흐를 수 없다(redaction·노출 계약).
     """
 
     concept_id: uuid.UUID = Field(description="선수개념 id(backend `concept` UUID PK).")
@@ -148,16 +151,18 @@ class PrerequisiteGap(BaseModel):
     )
     domain: str | None = Field(
         default=None,
-        description="선수개념 영역명(concept_node 조인·안전 표시 필드). 메타 미적재 시 null.",
+        description="선수개념 영역명(atom_node 조인·안전 표시 필드). 필드명은 계약 안정을 위해 "
+        "`domain`을 유지하나, 값 소스는 이제 원자 `subject_area`다(S0-4d·runtime truth=원자). "
+        "메타 미적재 시 null.",
     )
     review_status: str | None = Field(
         default=None,
-        description="검수 상태('reviewed'/'pending'·concept_node 조인·게이팅 플래그). "
+        description="검수 상태('reviewed'/'pending'·atom_node 조인·게이팅 플래그). "
         "메타 미적재 시 null.",
     )
     name_ko: str | None = Field(
         default=None,
-        description="선수개념 한국어 표시명(concept_node 조인·안전 표시 필드). 미적재 시 null.",
+        description="선수개념 한국어 표시명(atom_node 조인·안전 표시 필드). 미적재 시 null.",
     )
     edge_strength: float | None = Field(
         default=None,
@@ -298,18 +303,20 @@ async def recommend_prerequisite_gaps(
       ③ **weak_only**(기본 True) — weakness(두 신호 최저)가 `mastery_threshold` *미만*인 선수만
          (= 막힌). weakness None(미측정)은 weak_only=True면 제외(약점 근거 없음)·False면 포함.
          weak_only=False면 모든 선수(약점 무관).
-      ④ **UC enrich** — 선수들의 UC(None 아닌 것) dedupe→`fetch_node_meta` *단일 호출*(N+1 0·
-         sync라 `asyncio.to_thread`로 격리)로 concept_node 안전 메타를 붙인다(미적재 None graceful).
+      ④ **code enrich** — 선수들의 code(None 아닌 것) dedupe→`fetch_atom_node_meta` *단일 호출*
+         (N+1 0·sync라 `asyncio.to_thread`로 격리)로 `atom_node` 안전 메타를 붙인다(S0-4d·runtime
+         truth=원자·미적재 None graceful — 구 437 UC가 흘러도 atom_node 미스→None·격하 취지 부합).
       ⑤ **reviewed_only 게이팅** — True면 `review_status == "reviewed"`인 선수만(메타 없으면 보수적
-         제외 — 소비 슬1 규약). 기본 False는 recall 보존.
+         제외 — 소비 슬 규약). 기본 False는 recall 보존.
       정렬: weakness 오름차순(가장 약한 선수 = root blocker 먼저)·weakness None은 뒤·동률은
       **depth asc**(가까운 선수 먼저 — 더 직접 실행 가능)·그 다음 edge_strength desc(강한 선수
       우선·None 뒤)·concept_id로 결정론. 각 깊이의 선수는 mastery·weak_only·enrich·게이팅을
       *모두 동일하게* 처리한다(깊이는 정렬 tie-break에만 관여·필터링엔 무관).
 
     user_id 스코핑·읽기 전용(마이그레이션 0). `meta_engine` 주입 가능(테스트 격리). enrich되는 건
-    안전 필드뿐 — 본문(description·formal_definition)은 컬럼·스키마에 슬롯이 없어 구조적으로 0
-    (redaction·노출 계약).
+    안전 필드뿐 — 본문(description·formal_definition·core_proposition)은 컬럼·스키마에 슬롯이 없어
+    구조적으로 0(redaction·노출 계약). 선수 traversal(`concept_edge`)·mastery 파생·`concept_code`
+    키 축은 이 전환에서 불변 — 메타 *조회 대상 테이블*만 concept_node→atom_node로 교체(rekey 0).
     """
     # ① 선수 traversal(to==C → from·재귀 CTE·max_depth bound·미측정 포함). max_depth=1이면
     # base만 = 직접 선수(기존 1-hop 계약)·>1이면 선수의 선수…(다단계).
@@ -334,11 +341,13 @@ async def recommend_prerequisite_gaps(
     if not kept:
         return []
 
-    # ④ UC enrich — 선수 UC(None 아닌 것) dedupe 단일 IN 조회(N+1 0·sync to_thread 격리).
+    # ④ code enrich — 선수 code(None 아닌 것) dedupe 단일 IN 조회(N+1 0·sync to_thread 격리).
+    #    uc_list는 변수명만 유지하되 이제 원자 code 목록이다(concept_code 키 축 불변·조회 대상
+    #    테이블만 atom_node로 교체). 구 437 UC가 흘러도 atom_node 미스→None graceful(S0-4d·격하).
     uc_list = sorted({r.concept_code for r, _, _ in kept if r.concept_code is not None})
-    meta: dict[str, ConceptNodeMeta] = {}
+    meta: dict[str, AtomNodeMeta] = {}
     if uc_list:
-        meta = await asyncio.to_thread(fetch_node_meta, uc_list, engine=meta_engine)
+        meta = await asyncio.to_thread(fetch_atom_node_meta, uc_list, engine=meta_engine)
 
     # ⑤ 게이팅 + 조립 — reviewed_only면 reviewed만(메타 없으면 보수적 제외).
     gaps: list[PrerequisiteGap] = []
@@ -355,7 +364,8 @@ async def recommend_prerequisite_gaps(
                 irt_mastery_proxy=diag.irt_mastery_proxy if diag is not None else None,
                 weakness=weakness,
                 agreement=diag.agreement if diag is not None else "insufficient",
-                domain=node.domain if node is not None else None,
+                # DTO 필드명 `domain`은 유지(계약 안정)·값 소스만 원자 subject_area로 교체(S0-4d).
+                domain=node.subject_area if node is not None else None,
                 review_status=node.review_status if node is not None else None,
                 name_ko=node.name_ko if node is not None else None,
                 edge_strength=row.edge_strength,

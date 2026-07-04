@@ -85,6 +85,14 @@ class ConceptContent(Base):
     standard_codes: Mapped[list[str]] = mapped_column(
         ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
     )
+    # 연결 원자 code 목록(S0-2·437↔원자 크로스워크 경유 연결 — Slice 1이 "원자 연결은 Phase 4"로
+    # 예고한 좌석). K-12 행만 크로스워크 atom_codes(사전순·dedup)로 채우고, **대학 행은 '{}' 유지**
+    # (대학 code=소단원코드가 이미 원자 그래프 `atom_node.code`와 같은 키 공간이라 원자 정합 —
+    # 다리 불요). FK 없는 느슨참조(standard_codes 동형·적재 순서 독립). 채움 좌석은
+    # `l1/concept_atom_crosswalk/transfer.py`(콘텐츠 4종 projection은 이 컬럼을 건드리지 않는다).
+    atom_codes: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
+    )
     # 암기카드 목록(corpus `flashcards`·front/back/mnemonic/exposure_condition/grade/difficulty_tier
     # dict 배열·0개 이상). JSONB로 보관(중첩 구조·atom_node.atomicity JSONB 선례). 기본 빈 배열.
     flashcards: Mapped[list[dict[str, object]]] = mapped_column(

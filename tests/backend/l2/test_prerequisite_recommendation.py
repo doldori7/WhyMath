@@ -1,16 +1,19 @@
 """L2 선수개념 추천 — `prerequisite_recommendation` 단위테스트 (hermetic·PG 불요).
 
-개념그래프 소비 선수 슬1. `recommend_prerequisite_gaps`는 세 좌석을 *조합*한다:
-  ① `fetch_prerequisites`(이 모듈·concept_edge to==C→from traversal) — 선수 조회
+원자그래프 소비 선수 슬1(S0-4d·runtime truth=원자). `recommend_prerequisite_gaps`는 세 좌석을
+*조합*한다:
+  ① `fetch_prerequisites`(이 모듈·concept_edge to==C→from traversal) — 선수 조회(불변)
   ② `compute_concept_diagnoses`(L2·BKT/IRT) — 선수 mastery lookup
-  ③ `fetch_node_meta`(L1·concept_node UC 안전 메타) — UC enrich
+  ③ `fetch_atom_node_meta`(L1·atom_node code 안전 메타) — code enrich(구 concept_node 대체)
 
 셋을 *패치*해 PG 없이 좌석 *배선*만 못 박는다(실 SQL traversal·진단·조인은 통합 몫):
-  - 선수 traversal 방향(to==C→from)·강도 desc
+  - 선수 traversal 방향(to==C→from)·강도 desc(concept_edge 불변)
   - weak_only(막힌 선수만·미측정 제외/포함)·임계 경계
   - 정렬(weakness asc=root blocker 먼저·tie는 edge_strength desc)
-  - UC enrich(name_ko·domain·review_status)·미적재 None·orphan(UC 없음)·단일 호출(N+1 0)
+  - code enrich(name_ko·domain(←원자 subject_area)·review_status)·미적재 None·orphan(code 없음)·
+    단일 호출(N+1 0)
   - reviewed_only 게이팅(메타 없으면 보수적 제외)
+  - enrich 대상이 atom_node임을 동결(fetch_atom_node_meta 호출·domain 필드가 subject_area 값)
   - redaction(스키마에 본문 필드 부재)
 """
 
@@ -24,7 +27,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import whymath_backend.l2.prerequisite_recommendation as prq_mod
-from whymath_backend.l1.concept_graph.node_projection import ConceptNodeMeta
+from whymath_backend.l1.atom_graph.atom_node_projection import AtomNodeMeta
 from whymath_backend.l2.concept_diagnosis import Agreement, ConceptDiagnosis
 from whymath_backend.l2.prerequisite_recommendation import (
     PrerequisiteGap,
@@ -107,19 +110,19 @@ def _patch_diagnoses(monkeypatch: pytest.MonkeyPatch, diagnoses: list[ConceptDia
 
 
 def _patch_meta(
-    monkeypatch: pytest.MonkeyPatch, meta: dict[str, ConceptNodeMeta] | None = None
+    monkeypatch: pytest.MonkeyPatch, meta: dict[str, AtomNodeMeta] | None = None
 ) -> dict[str, Any]:
     captured: dict[str, Any] = {"calls": 0}
     resolved = meta if meta is not None else {}
 
     def _fake_fetch(
         concept_ids: Sequence[str], *, engine: object = None, settings: object = None
-    ) -> dict[str, ConceptNodeMeta]:
+    ) -> dict[str, AtomNodeMeta]:
         captured["calls"] += 1
         captured["concept_ids"] = list(concept_ids)
         return resolved
 
-    monkeypatch.setattr(prq_mod, "fetch_node_meta", _fake_fetch)
+    monkeypatch.setattr(prq_mod, "fetch_atom_node_meta", _fake_fetch)
     return captured
 
 
@@ -321,7 +324,7 @@ class TestSorting:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# ④ enrich — concept_node 메타·미적재 None·orphan·단일 호출(N+1 0)
+# ④ enrich — atom_node 메타·미적재 None·orphan·단일 호출(N+1 0)
 # ──────────────────────────────────────────────────────────────────────────
 class TestEnrichment:
     async def test_attaches_node_meta_single_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -331,8 +334,8 @@ class TestEnrichment:
         cap = _patch_meta(
             monkeypatch,
             {
-                _UC_PRE_A: ConceptNodeMeta(
-                    name_ko="일차함수", domain="[중]함수", review_status="reviewed"
+                _UC_PRE_A: AtomNodeMeta(
+                    name_ko="일차함수", subject_area="[중]함수", review_status="reviewed"
                 )
             },
         )
@@ -391,8 +394,8 @@ class TestReviewedOnlyGating:
         _patch_meta(
             monkeypatch,
             {
-                _UC_PRE_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="reviewed"),
-                _UC_PRE_B: ConceptNodeMeta(name_ko="B", domain="d", review_status="pending"),
+                _UC_PRE_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed"),
+                _UC_PRE_B: AtomNodeMeta(name_ko="B", subject_area="d", review_status="pending"),
             },
         )
         out = await recommend_prerequisite_gaps(
@@ -415,7 +418,7 @@ class TestReviewedOnlyGating:
         )
         _patch_meta(
             monkeypatch,
-            {_UC_PRE_A: ConceptNodeMeta(name_ko="A", domain="d", review_status="pending")},
+            {_UC_PRE_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="pending")},
         )
         out = await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C)
         assert {g.concept_id for g in out} == {pre_a, pre_b}  # 기본 False·둘 다
@@ -463,3 +466,41 @@ async def test_depth_propagates_row_to_gap(monkeypatch: pytest.MonkeyPatch) -> N
     _patch_meta(monkeypatch)
     out = await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C, max_depth=2)
     assert out[0].depth == 2
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑦ 원자 축 동결 — enrich 대상이 atom_node(fetch_atom_node_meta)이며 domain←subject_area (S0-4d)
+# ──────────────────────────────────────────────────────────────────────────
+class TestAtomAxisFrozen:
+    async def test_enrich_targets_atom_node_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # S0-4d 동결: 선수 enrich는 `fetch_atom_node_meta`(atom_node 조회)를 통과하고, 결과
+        # `domain` 필드는 원자 `subject_area` 값을 담는다(값 소스 교체·필드명 유지). concept_edge
+        # travers(fetch_prerequisites)·concept_code 키 축은 불변(rekey 0).
+        pre_a = uuid.uuid4()
+        _patch_prereqs(monkeypatch, [_row(cid=pre_a, code=_UC_PRE_A)])
+        _patch_diagnoses(monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)])
+        cap = _patch_meta(
+            monkeypatch,
+            {
+                _UC_PRE_A: AtomNodeMeta(
+                    name_ko="집합", subject_area="[중]집합과명제", review_status="reviewed"
+                )
+            },
+        )
+        out = await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C)
+        assert cap["calls"] == 1
+        assert cap["concept_ids"] == [_UC_PRE_A]
+        assert out[0].domain == "[중]집합과명제"  # domain 값이 원자 subject_area
+        assert out[0].name_ko == "집합"
+
+    async def test_atom_miss_is_none_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 구 437 UC가 concept_code로 흘러도 atom_node 미스면 enrich None graceful(격하 취지).
+        pre_a = uuid.uuid4()
+        _patch_prereqs(monkeypatch, [_row(cid=pre_a, code=_UC_PRE_A)])
+        _patch_diagnoses(monkeypatch, [_diagnosis(cid=pre_a, code=_UC_PRE_A, bkt=0.2, proxy=0.3)])
+        _patch_meta(monkeypatch, {})  # atom_node 전량 미스
+        out = await recommend_prerequisite_gaps(_fake_session(), _UID, _CONCEPT_C)
+        assert out[0].concept_code == _UC_PRE_A  # 추천·traversal 유지(rekey 0)
+        assert out[0].domain is None
+        assert out[0].name_ko is None
+        assert out[0].review_status is None

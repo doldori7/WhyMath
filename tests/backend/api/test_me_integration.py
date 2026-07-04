@@ -21,9 +21,9 @@ from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.activity import LearningSession, ProblemAttempt
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
+from whymath_backend.db.models.atom_node import AtomNode
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import Concept, ConceptEdge, ProblemConcept
-from whymath_backend.db.models.concept_node import ConceptNode
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.l2.ability_tracking import get_current_theta
@@ -1463,11 +1463,13 @@ def test_me_session_end_auto_captures_concept_snapshots_on_live_pg() -> None:
 
 # ── 개념그래프 소비 슬2: GET /v1/me/weak-concepts (약개념 추천 — 진단 약점 + UC 메타 enrich) ──
 async def _cleanup_concept_nodes(uc_ids: list[str]) -> None:
+    # S0-4d: enrich 소스가 concept_node → atom_node로 전환됐으므로 시드·정리 좌석도 atom_node.
+    # atom_node PK는 code(=concept.code=UC 브리지 키)라 code 컬럼으로 정리한다.
     engine = create_async_engine(_settings().database_url)
     try:
         async with engine.begin() as conn:
             await conn.execute(
-                text("DELETE FROM concept_node WHERE concept_id = ANY(:ids)"),
+                text("DELETE FROM atom_node WHERE code = ANY(:ids)"),
                 {"ids": uc_ids},
             )
     finally:
@@ -1481,17 +1483,30 @@ def _concept_with_code(cid: uuid.UUID, code: str, name: str) -> Concept:
     )
 
 
-def _node_meta(uc: str, name_ko: str, domain: str, review_status: str) -> ConceptNode:
-    """concept_node(UC PK) 안전 메타 행 — fetch_node_meta enrich가 sync 조회로 읽는다."""
-    return ConceptNode(concept_id=uc, name_ko=name_ko, domain=domain, review_status=review_status)
+def _node_meta(uc: str, name_ko: str, domain: str, review_status: str) -> AtomNode:
+    """atom_node(code PK) 안전 메타 행 — S0-4d로 enrich가 fetch_atom_node_meta로 전환됐다.
+
+    enrich는 code(=concept.code=UC 브리지 키)로 atom_node를 조회해 name_ko·subject_area·
+    review_status를 붙인다. 응답 DTO 필드 `domain`의 값 소스는 원자 `subject_area`이므로(S0-4d·
+    필드명 유지·값 소스 교체) 인자 `domain`을 subject_area 컬럼에 시드한다. `level`은 NOT NULL이라
+    시드 필수지만 enrich 대상이 아니라 표시 상수 '세부개념'을 박는다(값 무관).
+    """
+    return AtomNode(
+        code=uc,
+        name_ko=name_ko,
+        level="세부개념",
+        subject_area=domain,
+        review_status=review_status,
+    )
 
 
 def test_me_weak_concepts_enrich_and_gating_on_live_pg() -> None:
-    """GET /v1/me/weak-concepts — 약점(BKT) 식별 → code(UC) → concept_node 메타 enrich.
+    """GET /v1/me/weak-concepts — 약점(BKT) 식별 → code(UC) → atom_node 메타 enrich.
 
-    end-to-end: mastery 약점 → backend `concept`(code=UC) join → `concept_node`(UC) 안전 메타
-    enrich(name_ko·domain·review_status)·검수 게이팅·limit·redaction(본문 0)·401. 강개념(고숙달)
-    은 제외, 메타 미적재 UC는 enrich None(graceful), reviewed_only=true면 reviewed만.
+    end-to-end: mastery 약점 → backend `concept`(code=UC) join → `atom_node`(code) 안전 메타
+    enrich(name_ko·domain(←subject_area)·review_status)·검수 게이팅·limit·redaction(본문 0)·401.
+    강개념(고숙달)은 제외, 메타 미적재 code는 enrich None(graceful), reviewed_only=true면 reviewed.
+    S0-4d로 enrich 소스가 concept_node → atom_node 전환(값 소스만 교체·필드명 유지).
     """
     if not asyncio.run(_pg_reachable()):
         pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
@@ -1514,7 +1529,7 @@ def test_me_weak_concepts_enrich_and_gating_on_live_pg() -> None:
                 _concept_with_code(c_d, uc_d, "집합"),
             )
         )
-        # concept_node 메타 — a(reviewed)·b(pending)·c는 미적재(enrich None)·d(reviewed·강개념)
+        # atom_node 메타 — a(reviewed)·b(pending)·c는 미적재(enrich None)·d(reviewed·강개념)
         asyncio.run(
             _add_all(
                 _node_meta(uc_a, "일차함수", "[중]함수", "reviewed"),
@@ -1539,12 +1554,12 @@ def test_me_weak_concepts_enrich_and_gating_on_live_pg() -> None:
             assert resp.status_code == 200, resp.text
             rows = resp.json()
             assert [r["concept_code"] for r in rows] == [uc_a, uc_b, uc_c]  # 약점 정렬
-            assert rows[0]["name_ko"] == "일차함수"  # concept_node enrich
-            assert rows[0]["domain"] == "[중]함수"
+            assert rows[0]["name_ko"] == "일차함수"  # atom_node enrich
+            assert rows[0]["domain"] == "[중]함수"  # 값 소스=atom_node.subject_area
             assert rows[0]["review_status"] == "reviewed"
             assert rows[0]["weakness"] == 0.2
             assert rows[1]["review_status"] == "pending"  # b
-            # c는 concept_node 미적재 → enrich None graceful(추천은 유지)
+            # c는 atom_node 미적재 → enrich None graceful(추천은 유지)
             assert rows[2]["concept_code"] == uc_c
             assert rows[2]["name_ko"] is None
             assert rows[2]["domain"] is None
@@ -1604,7 +1619,7 @@ def test_me_prerequisite_gaps_traversal_and_gating_on_live_pg() -> None:
     """GET /v1/me/weak-concepts/{concept_id}/prerequisites — 약개념의 막힌 선수 추천.
 
     end-to-end: 약개념 C + 선수 2(하나 weak·하나 strong) + concept_edge(to=C·from=선수)·
-    concept_node 메타·mastery 적재 → 방향(to==C→from)·weak_only(약한 선수만)·enrich·게이팅·
+    atom_node 메타·mastery 적재 → 방향(to==C→from)·weak_only(약한 선수만)·enrich·게이팅·
     정렬(weakness asc)·redaction·401 왕복.
     """
     if not asyncio.run(_pg_reachable()):
@@ -1627,7 +1642,7 @@ def test_me_prerequisite_gaps_traversal_and_gating_on_live_pg() -> None:
                 _concept_with_code(c_ps, uc_ps, "사칙연산"),  # 선수(강함)
             )
         )
-        # concept_node 메타 — 선수 둘 다 reviewed(게이팅 통과·enrich).
+        # atom_node 메타 — 선수 둘 다 reviewed(게이팅 통과·enrich).
         asyncio.run(
             _add_all(
                 _node_meta(uc_pw, "일차함수", "[중]함수", "reviewed"),
@@ -1658,8 +1673,8 @@ def test_me_prerequisite_gaps_traversal_and_gating_on_live_pg() -> None:
             assert resp.status_code == 200, resp.text
             rows = resp.json()
             assert [r["concept_code"] for r in rows] == [uc_pw]  # 약한 선수만
-            assert rows[0]["name_ko"] == "일차함수"  # concept_node enrich
-            assert rows[0]["domain"] == "[중]함수"
+            assert rows[0]["name_ko"] == "일차함수"  # atom_node enrich
+            assert rows[0]["domain"] == "[중]함수"  # 값 소스=atom_node.subject_area
             assert rows[0]["review_status"] == "reviewed"
             assert rows[0]["weakness"] == 0.2
             assert rows[0]["edge_strength"] == 0.9
