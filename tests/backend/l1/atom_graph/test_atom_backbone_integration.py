@@ -9,7 +9,9 @@ end-to-end 적재한다. CI `backend — 마이그레이션·통합 (실 PG)` �
   ① 적재 — concepts 2,697(원자1837·단원217·소단원643)·edges 2,213(orphan 0 기대)
   ② parent 위계 — 원자→소단원→단원 체인(2수01-01-2 → 초수연-U1-S1 → 초수연-U1)
   ③ relation_subtype 적재(관계유형)·edge 방향(from=선수)
-  ④ redaction — 적재 원자의 본문 컬럼(description·formal_definition) NULL
+  ④ redaction — Phase 1b(f0a1b2c3d4e5)가 런타임 `concept`에서 본문 컬럼(description·
+     formal_definition·intuitive_explanation)을 *드롭*했다(원자는 본문 비보유가 정상). 검증
+     쿼리는 남은 안전 컬럼만 SELECT — 드롭 컬럼은 조회 불가(UndefinedColumn)
   ⑤ 멱등 — 재적재 시 concept/edge 행수 불변
 구 437 개념과 병존(code 공간 무충돌)을 건드리지 않는다. 정리는 원자 code 전건(FK 안전 순서).
 """
@@ -103,10 +105,14 @@ class TestAtomBackboneLoad:
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
                     # ② parent 위계 체인 — 원자 → 소단원 → 단원.
+                    # ④ redaction — Phase 1b(f0a1b2c3d4e5·2026-07-03)가 런타임 `concept`에서
+                    #    description·formal_definition·intuitive_explanation 컬럼을 *드롭*했다
+                    #    (본문 redaction·원자는 본문 비보유가 정상). 검증 쿼리는 남은 안전 컬럼
+                    #    (code·level·parent 계층)만 SELECT — 드롭 컬럼 SELECT는 UndefinedColumn.
                     chain = conn.execute(
                         text(
                             "SELECT a.code AS atom, su.code AS subunit, u.code AS unit, "
-                            "a.level AS atom_level, a.description, a.formal_definition "
+                            "a.level AS atom_level "
                             "FROM concept a "
                             "JOIN concept su ON a.parent_concept_id = su.concept_id "
                             "JOIN concept u ON su.parent_concept_id = u.concept_id "
@@ -117,9 +123,6 @@ class TestAtomBackboneLoad:
                     assert chain.subunit == "초수연-U1-S1"
                     assert chain.unit == "초수연-U1"
                     assert chain.atom_level == "세부개념"
-                    # ④ redaction — 적재 원자 본문 NULL.
-                    assert chain.description is None
-                    assert chain.formal_definition is None
 
                     # ③ relation_subtype 적재(관계유형 비어있지 않은 엣지 존재).
                     subtype_count = conn.execute(
