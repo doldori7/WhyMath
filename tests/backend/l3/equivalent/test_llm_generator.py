@@ -65,12 +65,16 @@ _HAPPY = json.dumps(
 # provider 대역 — 스크립트 JSON / 예외 (LLMTutorPolicy 테스트 미러·라이브 0).
 # ──────────────────────────────────────────────────────────────────────
 class FakeProvider:
-    """스크립트된 응답을 순서대로 방출하는 L3 provider 대역 — LLMProvider 충족(네트워크 0)."""
+    """스크립트된 응답을 순서대로 방출하는 L3 provider 대역 — LLMProvider 충족(네트워크 0).
+
+    S2-g: `temperature`를 캡처해 생성기가 고온도(다양성)로 호출하는지 검증한다.
+    """
 
     def __init__(self, responses: Sequence[str]) -> None:
         self._responses = list(responses)
         self._index = 0
         self.calls: list[tuple[str, str]] = []
+        self.temperatures: list[float | None] = []
 
     async def generate(
         self,
@@ -79,8 +83,10 @@ class FakeProvider:
         decision: RoutingDecision,
         *,
         images: Sequence[str] | None = None,
+        temperature: float | None = None,
     ) -> str:
         self.calls.append((prompt, system))
+        self.temperatures.append(temperature)
         if self._index < len(self._responses):
             out = self._responses[self._index]
             self._index += 1
@@ -98,6 +104,7 @@ class RaisingProvider:
         decision: RoutingDecision,
         *,
         images: Sequence[str] | None = None,
+        temperature: float | None = None,
     ) -> str:
         raise RuntimeError("provider 다운(테스트)")
 
@@ -192,6 +199,32 @@ class TestAssembly:
         _, system = provider.calls[0]
         assert "하나로" in system  # 답 유일성 지시
         assert "플레이스홀더" in system  # 예시 텍스트 베끼기 금지
+
+
+# ──────────────────────────────────────────────────────────────────────
+# S2-g: 생성 다양성 — 고온도 호출 + 프롬프트 다양성 지시.
+# ──────────────────────────────────────────────────────────────────────
+class TestGenerationDiversity:
+    def test_generator_calls_provider_with_default_high_temperature(self) -> None:
+        # 튜터링(결정론)과 달리 동등문제 저작은 다양성이 목표 → 기본 0.9 고온도로 호출한다.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        assert provider.temperatures == [0.9]
+
+    def test_temperature_override_is_forwarded(self) -> None:
+        # 생성자 override 값이 그대로 provider.generate(temperature=)로 전달된다.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider, temperature=1.1).generate(_spec())
+        assert provider.temperatures == [1.1]
+
+    def test_system_prompt_instructs_diversity(self) -> None:
+        # 매번 다른 문제·계수/상수/물음/근의 종류 다양화·반복 금지 지시가 시스템 프롬프트에 있다.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        _, system = provider.calls[0]
+        assert "다른 문제" in system  # 매번 다른 문제
+        assert "반복하지 마세요" in system  # 직전 구조 반복 금지
+        assert "근의 종류" in system  # 근의 종류 다양화
 
 
 # ──────────────────────────────────────────────────────────────────────

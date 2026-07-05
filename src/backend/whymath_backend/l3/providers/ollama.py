@@ -210,6 +210,7 @@ class OllamaProvider:
         decision: RoutingDecision,
         *,
         images: Sequence[str] | None = None,
+        temperature: float | None = None,
     ) -> str:
         """라우터 결정에 따라 로컬 Ollama로 생성 (LLMProvider 구현).
 
@@ -219,6 +220,9 @@ class OllamaProvider:
           VISION/FAST→qwen3-vl 멀티모달).
         - `images`(base64 목록)가 주어지면 ollama generate의 `images=`로 전달한다 —
           VL 모델(qwen3-vl)이 이미지를 받는다. None이면 기존 텍스트 호출과 동일.
+        - `temperature`(S2-g 생성 다양성)가 주어지면 ollama generate의 `options=`에
+          `{"temperature": ...}`로 실어 샘플링 온도를 올린다(동등문제 저작 mode collapse 방어).
+          None(기본)이면 options에 온도를 넣지 않아 Ollama 기본 온도를 쓴다 — *기존 동작 무변경*.
 
         주의: QUALITY(27b)의 *동기 디스패치 차단*은 파이프라인(pipeline.generate)의
         책임이다(03a §D.3). 제공자 자체는 모델 ID 해석·호출만 담당한다 —
@@ -238,17 +242,22 @@ class OllamaProvider:
         # VISION/FAST는 매트릭스에서 qwen3-vl로 해석된다(텍스트 패밀리와 동일 경로).
         model_id = resolve_model(decision.local_family, decision.local_model)
 
-        # images는 *있을 때만* 전달한다 — 텍스트 전용 클라이언트(기존 가짜 시임)는 images
-        # 인자 없이도 동작(하위호환). 멀티모달(VL)일 때만 ollama generate의 images=로 싣는다.
-        client = self._get_client()
+        # 선택 인자(images·temperature)는 *있을 때만* 호출 kwargs에 싣는다 — 텍스트 전용·온도
+        # 미지정 하위 클라이언트(기존 가짜 시임)는 해당 인자 없이도 동작(하위호환). 멀티모달일
+        # 때만 images=, 온도 지정 시에만 options={"temperature": ...}가 붙는다.
+        call_kwargs: dict[str, Any] = {
+            "model": model_id,
+            "prompt": prompt,
+            "system": system,
+            "stream": False,
+        }
         if images is not None:
-            response = await client.generate(
-                model=model_id, prompt=prompt, system=system, images=images, stream=False
-            )
-        else:
-            response = await client.generate(
-                model=model_id, prompt=prompt, system=system, stream=False
-            )
+            call_kwargs["images"] = images
+        if temperature is not None:
+            # 기존 options가 없으므로 새 dict; 있으면 병합(현재는 온도만 실음).
+            call_kwargs["options"] = {"temperature": temperature}
+        client = self._get_client()
+        response = await client.generate(**call_kwargs)
         return _extract_text(response)
 
     async def check_status(self) -> OllamaStatus:

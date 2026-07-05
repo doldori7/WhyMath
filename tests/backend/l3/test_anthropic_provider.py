@@ -273,6 +273,20 @@ class TestTuningKnobs:
         assert kwargs["thinking"] == {"type": "adaptive"}
         assert kwargs["cache_control"] == {"type": "ephemeral"}
 
+    async def test_temperature_omitted_by_default(self) -> None:
+        """온도 미지정(기본) → messages.create에 temperature 키를 싣지 않는다(기존 동작)."""
+        client = FakeAnthropicClient()
+        provider = AnthropicProvider(client=client, settings=_model_settings())
+        await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
+        assert "temperature" not in client.messages.calls[0]["kwargs"]
+
+    async def test_temperature_passed_when_set(self) -> None:
+        """온도 지정(S2-g 생성 다양성) → messages.create의 temperature 인자로 전달된다."""
+        client = FakeAnthropicClient()
+        provider = AnthropicProvider(client=client, settings=_model_settings())
+        await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID), temperature=0.9)
+        assert client.messages.calls[0]["kwargs"]["temperature"] == 0.9
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # _extract_text — content 블록 정규화 (dict·객체·엣지)

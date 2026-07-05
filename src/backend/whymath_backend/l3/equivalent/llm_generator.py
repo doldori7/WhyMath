@@ -155,6 +155,14 @@ _SYSTEM_PROMPT = """당신은 WhyMath의 **동등문제 저작자**입니다. �
 - 근이 둘인 이차방정식 등은 "**두 근 중 큰 근을 구하시오**"·"작은 근"·"두 근의 합"처럼 **답이
   하나가 되도록** 물으세요. `answer`는 단일 값, `answer_map`은 그 값 하나입니다.
 
+## 매번 다른 문제로 (생성 다양성 — 매우 중요)
+- 호출할 때마다 **서로 다른 문제**를 만드세요. **직전과 같은 계수·구조를 반복하지 마세요**
+  (예 `x^2-8x+c`에서 상수항만 바꾸는 식의 얕은 변주 금지).
+- 다음을 **폭넓게 다양화**하세요:
+  - **계수·상수항**: 이차·일차·상수항을 매번 다르게(특정 형태에 고착되지 말 것).
+  - **물음**: 큰 근 / 작은 근 / 두 근의 합 / 두 근의 곱 등을 번갈아 물으세요.
+  - **근의 종류**: 서로 다른 정수근 / 중근 / 유리근 등 유형을 다양하게 섞으세요.
+
 ## 출력 형식 — JSON 객체 하나만 (코드펜스·설명 없이)
 필드: question_text(발문·한국어), answer(단일 값 문자열), answer_explanation(간결 해설),
 conditions(정답 검산용 조건식·SymPy 표기·여러 개면 배열), answer_map(조건에 답을 대입할 치환맵),
@@ -204,6 +212,7 @@ class LLMEquivalentProblemGenerator:
         topic_hint: str | None = None,
         subscription: str = "free",
         difficulty: str | None = None,
+        temperature: float = 0.9,
         slug_prefix: str = "wm-gen",
         subject: Subject = Subject.공통,
         curriculum_version: Curriculum = Curriculum.REVISION_2022,
@@ -224,6 +233,12 @@ class LLMEquivalentProblemGenerator:
                 근을 구하는 형태"). None이면 스펙 코드만 준다(약한 모델은 주제를 못 맞힐 수 있음).
             subscription: 라우팅 신호(구독 — 클라우드 승급 가드).
             difficulty: 라우팅 난이도 라벨(None이면 spec.difficulty_overall에서 파생).
+            temperature: **생성 샘플링 온도**(S2-g 생성 다양성·기본 0.9). 튜터링(도구선택·다음
+                행동)은 *결정론*이 좋아 온도를 지정하지 않지만(제공자 기본), *동등문제 저작*은
+                **다양성이 목표**라 고온도로 호출한다 — Phaiakes9 실측에서 온도 무지정 시 같은
+                문제(예 `x^2-8x+c`·상수만 변주)를 반복하는 mode collapse가 관측됐다. 0.9는
+                다양성과 형식 안정의 균형점이다: 더 높이면(>1.2) JSON 붕괴·수식 오류가 급증하고,
+                낮추면 다시 collapse로 회귀한다. 값을 provider.generate(temperature=)로 전달한다.
             slug_prefix: 안정 slug 접두사(결정론 해시와 결합해 멱등 upsert 키 생성).
             subject·curriculum_version·valid_from_year: Problem 필수 메타 기본값(스펙 밖·저작 배선).
             fallback_unit_codes: LLM이 unit_codes를 안 주면 쓰는 폴백(비면 결측 시 생성 실패).
@@ -241,6 +256,7 @@ class LLMEquivalentProblemGenerator:
         self._topic_hint = topic_hint
         self._subscription = subscription
         self._difficulty = difficulty
+        self._temperature = temperature
         self._slug_prefix = slug_prefix
         self._subject = subject
         self._curriculum_version = curriculum_version
@@ -284,8 +300,13 @@ class LLMEquivalentProblemGenerator:
         오케스트레이터(`run_batch`)는 sync라 여기서 `asyncio.run`으로 코루틴을 완주시킨다
         (LLMTutorPolicy 테스트의 `asyncio.run(next_action)` 경계 미러). 이미 러닝 루프가 있는
         async 문맥에서의 호출은 이 배치 좌석의 계약 밖이다(명확한 RuntimeError로 드러남).
+
+        `temperature=self._temperature`(기본 0.9)를 실어 *생성 다양성*을 확보한다 — 튜터링과
+        달리 콘텐츠 저작은 고온도가 필요하다(mode collapse 방어·__init__ temperature 참조).
         """
-        return asyncio.run(self._provider.generate(prompt, _SYSTEM_PROMPT, decision))
+        return asyncio.run(
+            self._provider.generate(prompt, _SYSTEM_PROMPT, decision, temperature=self._temperature)
+        )
 
     # ── 라우팅 신호 ────────────────────────────────────────────────────
     def _routing_request(self, spec: EquivalenceSpec) -> RoutingRequest:

@@ -29,12 +29,19 @@ class LLMProvider(Protocol):
         decision: RoutingDecision,
         *,
         images: Sequence[str] | None = None,
+        temperature: float | None = None,
     ) -> str:
         """라우터 결정(decision)에 따라 응답을 생성한다(미구현).
 
         `images`(base64 인코딩 이미지 목록)는 멀티모달(VL) 호출용 *선택적* 입력이다.
         None(기본·텍스트 호출)이면 기존 동작과 동일하다. 비전 미지원 제공자는 images가
         주어지면 *조용한 무시 없이* 명확한 오류를 던진다(CLAUDE.md "모르면 모른다고").
+
+        `temperature`(샘플링 온도)는 *생성 다양성* 제어용 *선택적* 입력이다(S2-g). None(기본)
+        이면 제공자가 자기 기본 온도를 쓴다 — 즉 **기존 동작 무변경**(튜터링·도구선택 등 결정론이
+        바람직한 호출부는 지정하지 않아 종전 그대로다). 값을 주면(예 동등문제 저작=0.9) 제공자가
+        그 온도로 호출한다. 온도를 지원하지 않는 백엔드(예 Opus 4.7·temperature 거부)는 이를
+        조용히 무시하지 않고 호출부가 지정하지 않도록 하는 것이 계약이다(아래 각 제공자 주석).
         """
         ...
 

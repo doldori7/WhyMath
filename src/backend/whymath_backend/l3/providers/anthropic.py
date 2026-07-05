@@ -251,6 +251,7 @@ class AnthropicProvider:
         decision: RoutingDecision,
         *,
         images: Sequence[str] | None = None,
+        temperature: float | None = None,
     ) -> str:
         """라우터 결정에 따라 Anthropic Claude로 생성 (LLMProvider 구현).
 
@@ -259,6 +260,11 @@ class AnthropicProvider:
           plain messages.create로 호출한다(샘플링·thinking 인자 없음 — Opus 4.7 호환).
         - `images`가 주어지면 *명확한 오류*를 던진다 — 멀티모달은 로컬 Qwen3-VL 경유이며
           (미성년자 프라이버시·로컬-우선) 클라우드 비전은 미배선이다(조용한 무시 금지).
+        - `temperature`(S2-g 생성 다양성)가 주어지면 messages.create의 `temperature=`로
+          전달한다. None(기본)이면 온도를 싣지 않아 API 기본 온도를 쓴다 — *기존 동작 무변경*.
+          ⚠️ 주의(모듈 docstring): **Opus 4.7(CLOUD_HIGH)는 temperature를 거부(400)**한다 —
+          따라서 CLOUD_HIGH 경로로 가는 호출부는 temperature를 지정하지 말아야 한다. 동등문제
+          저작(S2-g)은 라우팅상 LOCAL/CLOUD_MID로 흐르며 CLOUD_HIGH(killer/prove)로는 가지 않는다.
 
         반환 텍스트는 *검증 전 원시 출력*이다(모듈 docstring 경계 메모 참조).
         """
@@ -284,6 +290,10 @@ class AnthropicProvider:
             extra["thinking"] = {"type": "adaptive"}
         if settings.anthropic_prompt_caching:
             extra["cache_control"] = {"type": "ephemeral"}
+        # S2-g 생성 다양성 — 온도 지정 시에만 싣는다(기본 미지정=현 동작). Opus 4.7은 temperature를
+        # 거부하므로 CLOUD_HIGH 호출부는 지정하지 않는다(위 docstring ⚠️).
+        if temperature is not None:
+            extra["temperature"] = temperature
 
         response = await self._get_client().messages.create(
             model=model_id,
