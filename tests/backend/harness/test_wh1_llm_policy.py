@@ -152,10 +152,10 @@ class TestVerifyObligationDefense:
 
 
 class TestAnswerSuppression:
-    """correct가 아닌(incorrect·unverifiable) 상태의 정답 억제 — 정책 선제 방어(하네스 백스톱과 이중)."""
+    """correct 아닌(incorrect·unverifiable) verdict의 정답 억제 — 정책 선제 방어."""
 
     def test_incorrect_strips_answer_and_downgrades_to_socratic(self) -> None:
-        """오답 상태의 end_turn도 명시 발화 제거 + 정답 제시형(출제) → 질문 강등(unverifiable 동형)."""
+        """오답도 명시 발화 제거 + 출제형 → 질문 강등(unverifiable와 동형)."""
         provider = FakeProvider(
             ['{"kind": "end_turn", "action_type": "출제", "utterance": "정답은 x=3이야."}']
         )
