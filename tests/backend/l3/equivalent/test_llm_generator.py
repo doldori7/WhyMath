@@ -33,7 +33,11 @@ from whymath_backend.l3.equivalent.acceptance import (
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.l3.equivalent.llm_generator import LLMEquivalentProblemGenerator
 from whymath_backend.l3.equivalent.orchestrator import run_equivalent_generation
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import (
+    LocalModelTier,
+    ModelFamily,
+    RoutingDecision,
+)
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.schema.enums import AnswerFormat, LicenseType, SourceType
 
@@ -75,6 +79,7 @@ class FakeProvider:
         self._index = 0
         self.calls: list[tuple[str, str]] = []
         self.temperatures: list[float | None] = []
+        self.decisions: list[RoutingDecision] = []
 
     async def generate(
         self,
@@ -87,6 +92,7 @@ class FakeProvider:
     ) -> str:
         self.calls.append((prompt, system))
         self.temperatures.append(temperature)
+        self.decisions.append(decision)
         if self._index < len(self._responses):
             out = self._responses[self._index]
             self._index += 1
@@ -225,6 +231,48 @@ class TestGenerationDiversity:
         assert "다른 문제" in system  # 매번 다른 문제
         assert "반복하지 마세요" in system  # 직전 구조 반복 금지
         assert "근의 종류" in system  # 근의 종류 다양화
+
+
+# ──────────────────────────────────────────────────────────────────────
+# S2-h: 저작용 로컬 패밀리 — 기본 GENERAL(qwen2.5)로 라우팅(qwen2-math mode collapse 회피).
+# ──────────────────────────────────────────────────────────────────────
+class TestAuthoringFamily:
+    def test_default_routes_local_generation_to_general_family(self) -> None:
+        # 라우터는 task_type='generate'를 MATH로 보내지만, 저작은 GENERAL이 낫다 →
+        # 기본값이 GENERAL로 로컬 저작 패밀리를 갈아탄다(free·예산0 → 라우터가 LOCAL 결정).
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        decision = provider.decisions[0]
+        assert decision.cost_tier == "local"  # free·예산0 → 로컬 확정
+        assert decision.local_family == ModelFamily.GENERAL.value  # MATH가 아니라 GENERAL
+        assert decision.local_model in (LocalModelTier.FAST.value, LocalModelTier.MID.value)
+
+    def test_medium_difficulty_uses_general_mid_qwen25_7b(self) -> None:
+        # medium 난이도(기본 스펙 3.0) → 라우터가 MID를 고르고, 패밀리는 GENERAL로 갈아탄다
+        # ⇒ (GENERAL, MID) = qwen2.5:7b(저작용 최적 로컬 모델).
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        decision = provider.decisions[0]
+        assert decision.local_family == ModelFamily.GENERAL.value
+        assert decision.local_model == LocalModelTier.MID.value
+
+    def test_opt_out_keeps_router_default_math_family(self) -> None:
+        # authoring_family=None이면 라우터 결정을 그대로 쓴다(옵트아웃) → MATH 유지.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider, authoring_family=None).generate(_spec())
+        decision = provider.decisions[0]
+        assert decision.local_family == ModelFamily.MATH.value
+
+    def test_explicit_math_family_override_is_honored(self) -> None:
+        # 명시적으로 MATH를 요청하면 그대로 MATH(선호를 강제하지 않고 존중).
+        provider = FakeProvider([_HAPPY])
+        _gen(provider, authoring_family=ModelFamily.MATH).generate(_spec())
+        assert provider.decisions[0].local_family == ModelFamily.MATH.value
+
+    def test_family_override_still_assembles_candidate(self) -> None:
+        # 패밀리 갈아타기가 결정을 깨지 않고(불변식 4 유지) 후보 조립이 정상 동작한다.
+        candidate = _gen(FakeProvider([_HAPPY])).generate(_spec())
+        assert isinstance(candidate, CandidateProblem)
 
 
 # ──────────────────────────────────────────────────────────────────────

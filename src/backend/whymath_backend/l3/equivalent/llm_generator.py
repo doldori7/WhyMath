@@ -62,10 +62,15 @@ docstring이 못 박은 원칙("L1/L3은 형태만, 카탈로그 실재는 L4·�
          )
      provider=None으로 두면 표준 CompositeProvider(Ollama+Anthropic)가 자동 구성된다(라우터가
      로컬로 결정하면 Anthropic 키 없이도 로컬만 태운다).
-     **모델 선택 주의**: `qwen2-math:*`는 문제를 *푸는* 데 특화돼 *저작·JSON·지시 준수*가 약하다
-     (플레이스홀더 베끼기·주제 이탈·영어 leak). 저작에는 instruction-following이 좋은 일반 모델
-     (`qwen2.5:7b` 이상)이 낫다 — 라우터 패밀리를 GENERAL로 태우거나 provider에서 모델을 명시.
-     `topic_hint`는 코드→주제 번역을 사람이 미리 줘 모델의 주제 이탈(이차 요청→일차 생성)을 막는다.
+     **모델 선택(S2-h·기본 GENERAL)**: `qwen2-math:*`는 문제를 *푸는* 데 특화돼 *저작·JSON·지시
+     준수*가 약하다(플레이스홀더 베끼기·주제 이탈·영어 leak·같은 계수 반복 mode collapse — 온도
+     ↑로도 안 풀림, Phaiakes9 실측). 저작에는 instruction-following이 좋은 일반 모델
+     (`qwen2.5:7b`)이 낫다. 그래서 이 생성기는 **`authoring_family=GENERAL`을 기본값**으로 두어,
+     라우터가 task_type='generate'를 MATH로 보내도 로컬 저작 패밀리만 GENERAL로 갈아탄다(라우터의
+     비용·크기·모드 결정은 그대로 존중·아래 `_decide_routing` 참조). 수학 정확성은 하류 SymPy
+     게이트(S2-a)가 검증하므로 저작 모델은 지시 준수·다양성이 우선이다. `authoring_family=None`
+     으로 두면 라우터 결정을 그대로 쓴다(옵트아웃). `topic_hint`는 코드→주제 번역을 사람이 미리
+     줘 모델의 주제 이탈(이차 요청→일차 생성)을 막는다.
 
   3. **배치 생성**(`orchestrator.run_batch`)로 코퍼스를 채운다 — 생성물은 **S2-a 게이트 +
      S2-c dedup을 통과한 분만** 저장된다(store 좌석 주입 시). 게이트가 `검수필요`로 보낸 분은
@@ -103,7 +108,13 @@ from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.l3.interfaces import LLMProvider
-from whymath_backend.l3.models import RoutingDecision, RoutingRequest
+from whymath_backend.l3.models import (
+    CostTier,
+    LocalModelTier,
+    ModelFamily,
+    RoutingDecision,
+    RoutingRequest,
+)
 from whymath_backend.l3.router import Router
 from whymath_backend.schema.enums import (
     AnswerFormat,
@@ -213,6 +224,7 @@ class LLMEquivalentProblemGenerator:
         subscription: str = "free",
         difficulty: str | None = None,
         temperature: float = 0.9,
+        authoring_family: ModelFamily | None = ModelFamily.GENERAL,
         slug_prefix: str = "wm-gen",
         subject: Subject = Subject.공통,
         curriculum_version: Curriculum = Curriculum.REVISION_2022,
@@ -239,6 +251,13 @@ class LLMEquivalentProblemGenerator:
                 문제(예 `x^2-8x+c`·상수만 변주)를 반복하는 mode collapse가 관측됐다. 0.9는
                 다양성과 형식 안정의 균형점이다: 더 높이면(>1.2) JSON 붕괴·수식 오류가 급증하고,
                 낮추면 다시 collapse로 회귀한다. 값을 provider.generate(temperature=)로 전달한다.
+            authoring_family: **저작용 로컬 모델 패밀리**(S2-h·기본 GENERAL). 라우터는
+                task_type='generate'를 MATH 패밀리(qwen2-math)로 보내지만, qwen2-math는 *풀이*
+                특화라 저작 시 같은 문제를 반복한다(mode collapse — 온도로도 안 풀림, Phaiakes9
+                실측). 동등문제 저작은 본질적으로 instruction-following 과업이고 수학 정확성은 하류
+                SymPy 게이트가 검증하므로 로컬 저작은 GENERAL(qwen2.5)로 태운다. 라우터의 비용·
+                크기·모드 결정은 그대로 두고 *로컬 FAST/MID 결정의 패밀리 축만* 이 값으로 바꾼다
+                (불변식 4 유지·`_decide_routing`). None이면 라우터 결정을 그대로 쓴다(옵트아웃).
             slug_prefix: 안정 slug 접두사(결정론 해시와 결합해 멱등 upsert 키 생성).
             subject·curriculum_version·valid_from_year: Problem 필수 메타 기본값(스펙 밖·저작 배선).
             fallback_unit_codes: LLM이 unit_codes를 안 주면 쓰는 폴백(비면 결측 시 생성 실패).
@@ -257,6 +276,7 @@ class LLMEquivalentProblemGenerator:
         self._subscription = subscription
         self._difficulty = difficulty
         self._temperature = temperature
+        self._authoring_family = authoring_family
         self._slug_prefix = slug_prefix
         self._subject = subject
         self._curriculum_version = curriculum_version
@@ -272,7 +292,7 @@ class LLMEquivalentProblemGenerator:
         돌려 오케스트레이터가 `generation_failed`로 정직히 처리하게 한다.
         """
         prompt = self._build_user_prompt(spec)
-        decision = Router().route(self._routing_request(spec))
+        decision = self._decide_routing(spec)
         try:
             raw = self._invoke(prompt, decision)
         except Exception as exc:  # noqa: BLE001 — provider 장애 시 배치 크래시 금지·안전 폴백.
@@ -308,12 +328,53 @@ class LLMEquivalentProblemGenerator:
             self._provider.generate(prompt, _SYSTEM_PROMPT, decision, temperature=self._temperature)
         )
 
+    # ── 라우팅 결정(라우터 경유 + 저작 패밀리 선호) ─────────────────────
+    def _decide_routing(self, spec: EquivalenceSpec) -> RoutingDecision:
+        """라우터 결정 + 저작 패밀리 선호 적용(S2-h).
+
+        라우터는 task_type='generate'를 MATH 패밀리(qwen2-math)로 보내지만, qwen2-math는 문제를
+        *푸는* 데 특화돼 저작 시 같은 계수를 반복한다(mode collapse — 온도↑로도 안 풀림,
+        Phaiakes9 실측). 동등문제 저작은 본질적으로 instruction-following 과업이고 수학 정확성은
+        하류 SymPy 게이트(S2-a)가 검증하므로, 로컬 저작은 GENERAL(qwen2.5)로 태운다.
+
+        라우터의 *비용·크기·모드* 결정은 그대로 존중한다 — 오직 **로컬 FAST/MID 결정의 패밀리
+        축만** `authoring_family`로 바꾼다(불변식 4가 성립하는 지점뿐). QUALITY(27b·패밀리 무관)·
+        CLOUD_*(축3 없음)·이미 원하는 패밀리·`authoring_family=None`(옵트아웃)이면 라우터 결정을
+        그대로 반환한다. 재구성 시 RoutingDecision 검증기가 다시 돌아 불변식을 재확인한다.
+
+        전역 라우터 정책은 건드리지 않는다(scene·visualization 등 다른 'generate' 소비처 무영향)
+        — 저작 선호는 이 생성기 스코프에 국한한다.
+        """
+        decision = Router().route(self._routing_request(spec))
+        if self._authoring_family is None:
+            return decision
+        # 필드는 use_enum_values=True라 문자열일 수 있으나, CostTier/LocalModelTier는 str-Enum이라
+        # `.value` 비교가 enum·문자열 양쪽에 성립한다(str 서브클래스 동치).
+        is_local = decision.cost_tier == CostTier.LOCAL.value
+        family_applicable = is_local and decision.local_model in (
+            LocalModelTier.FAST.value,
+            LocalModelTier.MID.value,
+        )
+        if not family_applicable or decision.local_family == self._authoring_family.value:
+            return decision  # 패밀리 축이 없는 티어(QUALITY·CLOUD)·이미 원하는 패밀리 → 그대로
+        return RoutingDecision(
+            cost_tier=decision.cost_tier,
+            local_family=self._authoring_family,  # 저작 패밀리로 갈아탐(GENERAL=qwen2.5)
+            local_model=decision.local_model,
+            mode=decision.mode,
+            reason=f"{decision.reason} → 저작:{self._authoring_family.value}",
+            est_latency_ms=decision.est_latency_ms,
+            est_cost_krw=decision.est_cost_krw,
+        )
+
     # ── 라우팅 신호 ────────────────────────────────────────────────────
     def _routing_request(self, spec: EquivalenceSpec) -> RoutingRequest:
-        """생성 호출의 라우팅 신호 — task_type='generate'(→ MATH 패밀리·수학 저작).
+        """생성 호출의 라우팅 신호 — task_type='generate'.
 
-        난이도는 스펙에서 파생(생성자 override 우선), 다단계 추론 필요(정답이 조건을 만족하는
-        새 문제 구성). 무료·예산 0이면 라우터가 LOCAL로 강제한다(Phaiakes9 로컬 우선).
+        라우터는 이 신호로 비용·크기·모드를 정한다. 패밀리 축은 기본이 MATH지만, 저작에는
+        GENERAL이 낫기에 `_decide_routing`이 로컬 FAST/MID 결정의 패밀리만 `authoring_family`로
+        갈아탄다(라우터 결정 후처리). 난이도는 스펙에서 파생(생성자 override 우선), 다단계 추론
+        필요(정답이 조건을 만족하는 새 문제 구성). 무료·예산 0이면 라우터가 LOCAL로 강제한다.
         """
         difficulty = self._difficulty or self._difficulty_label(spec.difficulty_overall)
         return RoutingRequest(
