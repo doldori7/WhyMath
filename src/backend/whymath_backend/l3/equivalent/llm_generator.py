@@ -56,11 +56,16 @@ docstring이 못 박은 원칙("L1/L3은 형태만, 카탈로그 실재는 L4·�
          gen = LLMEquivalentProblemGenerator(
              OllamaProvider(),                       # 실 Ollama(지연 연결)
              misconception_catalog={mid: m.name_kr for mid, m in CATALOG_BY_ID.items()},
-             subject=Subject.미적분,
-             slug_prefix="wm-gen-cal",
+             topic_hint="이차방정식 — 두 근 중 큰 근을 구하는 형태(답 하나)",  # 코드→주제 번역
+             subject=Subject.공통,
+             slug_prefix="wm-gen-quad",
          )
      provider=None으로 두면 표준 CompositeProvider(Ollama+Anthropic)가 자동 구성된다(라우터가
      로컬로 결정하면 Anthropic 키 없이도 로컬만 태운다).
+     **모델 선택 주의**: `qwen2-math:*`는 문제를 *푸는* 데 특화돼 *저작·JSON·지시 준수*가 약하다
+     (플레이스홀더 베끼기·주제 이탈·영어 leak). 저작에는 instruction-following이 좋은 일반 모델
+     (`qwen2.5:7b` 이상)이 낫다 — 라우터 패밀리를 GENERAL로 태우거나 provider에서 모델을 명시.
+     `topic_hint`는 코드→주제 번역을 사람이 미리 줘 모델의 주제 이탈(이차 요청→일차 생성)을 막는다.
 
   3. **배치 생성**(`orchestrator.run_batch`)로 코퍼스를 채운다 — 생성물은 **S2-a 게이트 +
      S2-c dedup을 통과한 분만** 저장된다(store 좌석 주입 시). 게이트가 `검수필요`로 보낸 분은
@@ -136,39 +141,46 @@ _DIFFICULTY_HARD_MAX = 4.5
 # LLM 출력의 출처 주장은 코드가 무시하므로(source_type/license 구조적 강제), 프롬프트는
 # "본문 복제 금지·순수 자작"을 명령하고 정확성·형식만 요구한다.
 # ──────────────────────────────────────────────────────────────────────────
-_SYSTEM_PROMPT = """당신은 WhyMath의 **동등문제 저작자**입니다. 주어진 스펙(성취기준·타깃
-오개념·난이도·답 형태)에 *대응하는 새 수학 문제를 스스로 생성*하세요.
+_SYSTEM_PROMPT = """당신은 WhyMath의 **동등문제 저작자**입니다. 주어진 주제·난이도에 맞는
+*새 수학 문제를 스스로 지어* JSON 하나로 출력하세요.
 
 ## 절대 금기 (반드시 지킬 것)
 - **평가원·EBS·검정 교과서의 본문·문제·풀이·그림·기출을 절대 복제·재현하지 마세요.**
-  기억에 있는 기출 문항을 그대로 옮기거나 살짝 바꾸지 말고, **순수하게 새로 만든 자작 수식
-  문제**만 출제하세요(저작권 절대 금기).
+  기억의 기출을 옮기거나 살짝 바꾸지 말고, **순수 자작 문제**만 출제하세요(저작권 절대 금기).
 - 정답이 반드시 문제의 원 조건을 만족해야 합니다(거짓 문제 금지).
 - 발문·해설에 틀린 수치 등식("3×4=11" 같은)을 쓰지 마세요.
 
-## 출력 형식 (엄수)
-JSON 객체 **하나만** 출력하세요. 코드펜스·설명·다른 텍스트 없이 JSON만:
+## 답이 하나로 정해지게 출제 (매우 중요)
+- **답이 유일하게 하나로 정해지는 문제**만 출제하세요 — 답이 여러 개면 기계가 검증할 수 없습니다.
+- 근이 둘인 이차방정식 등은 "**두 근 중 큰 근을 구하시오**"·"작은 근"·"두 근의 합"처럼 **답이
+  하나가 되도록** 물으세요. `answer`는 단일 값, `answer_map`은 그 값 하나입니다.
+
+## 출력 형식 — JSON 객체 하나만 (코드펜스·설명 없이)
+필드: question_text(발문·한국어), answer(단일 값 문자열), answer_explanation(간결 해설),
+conditions(정답 검산용 조건식·SymPy 표기·여러 개면 배열), answer_map(조건에 답을 대입할 치환맵),
+difficulty_overall(1.0~5.0 숫자), unit_codes(단원 코드 배열·최소 1개),
+answer_format(자연수/분수/실수/식), achievement_standard_codes(성취기준 코드 배열).
+선택: distractor_map·solution_steps·concept_tags.
+
+### 예시 — *형식만* 참고하고 숫자·문맥은 반드시 새로 지어 다르게 만드세요(그대로 베끼지 말 것)
 {
-  "question_text": "발문(자작·한국어·순수 자작 수식)",
-  "answer": "정답(문자열)",
-  "answer_explanation": "간결한 해설(틀린 수치 등식 금지)",
-  "conditions": "정답 검산용 조건식(SymPy 표기, 예: 'x**2 - 5*x + 6 = 0'). 여러 개면 배열",
-  "answer_map": {"변수": "값"},   // 조건에 정답을 대입할 치환맵, 예: {"x": "3"}
-  "difficulty_overall": 3.0,       // 1.0~5.0
-  "unit_codes": ["단원코드", ...], // 최소 1개
-  "answer_format": "자연수",       // 자연수/분수/실수/식 중 하나
-  "achievement_standard_codes": ["성취기준 고시코드", ...],
-  "distractor_map": [{"choice_index": 1, "misconception_id": "오개념id"}],  // 선택
-  "solution_steps": ["단계1", "단계2", ...],   // 선택(제공 시 각 단계가 검증돼야 함)
-  "concept_tags": [{"concept_src_id": "개념id", "role": "PRIMARY", "relevance": 0.9}]  // 선택
+  "question_text": "이차방정식 x^2 - 6x + 8 = 0 의 두 근 중 큰 근을 구하시오.",
+  "answer": "4",
+  "answer_explanation": "인수분해하면 (x-2)(x-4)=0 이고 두 근은 2와 4, 큰 근은 4.",
+  "conditions": "x**2 - 6*x + 8 = 0",
+  "answer_map": {"x": "4"},
+  "difficulty_overall": 2.0,
+  "unit_codes": ["QUAD-EQ"],
+  "answer_format": "자연수",
+  "achievement_standard_codes": ["[10공수1-02-02]"]
 }
 
-수식은 SymPy가 파싱할 수 있는 표기(`**`=거듭제곱·`*`=곱)로 쓰세요. `conditions`와 `answer_map`은
-정답이 조건을 만족하는지 기계가 검산하는 데 쓰이니 정확히 채우세요.
-
-**중요(JSON 안전)**: 발문·해설 등 *모든 문자열*에 LaTeX 백슬래시 명령(`\\(`·`\\)`·`\\frac`·`\\sqrt`
-등)을 쓰지 마세요 — JSON이 깨집니다. 수식은 `x^2`·`(x-2)(x-3)`처럼 일반 텍스트로 쓰고, 백슬래시
-자체를 문자열에 넣지 마세요.
+## 규칙
+- 수식은 SymPy 표기(`**`=거듭제곱·`*`=곱)로. `conditions`·`answer_map`은 기계 검산에 쓰이니 정확히.
+- **LaTeX 백슬래시(`\\(`·`\\)`·`\\frac`·`\\sqrt` 등) 절대 금지** — JSON이 깨집니다. 수식은
+  `x^2`·`(x-2)(x-3)`처럼 일반 텍스트로 쓰고, 문자열에 백슬래시 자체를 넣지 마세요.
+- 발문에 예시 문구·설명·플레이스홀더("발문", "자작", "Calculation" 등)를 그대로 쓰지 말고
+  **실제 수학 문제 문장**을 쓰세요.
 """
 
 
@@ -189,6 +201,7 @@ class LLMEquivalentProblemGenerator:
         *,
         settings: Settings | None = None,
         misconception_catalog: Mapping[str, str] | None = None,
+        topic_hint: str | None = None,
         subscription: str = "free",
         difficulty: str | None = None,
         slug_prefix: str = "wm-gen",
@@ -205,6 +218,10 @@ class LLMEquivalentProblemGenerator:
             misconception_catalog: 오개념 id→한국어 라벨 맵(주입). **L4 카탈로그를 직접 import하지
                 않기 위한 주입 지점**(레이어 순수성) — 키는 distractor 오개념 allowlist, 값은
                 프롬프트 라벨. None이면 `spec.target_misconception_ids`를 안전 allowlist로 폴백.
+            topic_hint: **주제 힌트**(사람이 읽는 단원·출제 형태). 스펙의 성취기준 *코드*만으로는
+                모델이 "무엇을 출제할지" 모른다(예 `[10공수1-02-02]`가 이차방정식인 줄 모름) —
+                이 힌트를 프롬프트에 실어 주제·답 형태를 명시한다(예 "이차방정식 — 두 근 중 큰
+                근을 구하는 형태"). None이면 스펙 코드만 준다(약한 모델은 주제를 못 맞힐 수 있음).
             subscription: 라우팅 신호(구독 — 클라우드 승급 가드).
             difficulty: 라우팅 난이도 라벨(None이면 spec.difficulty_overall에서 파생).
             slug_prefix: 안정 slug 접두사(결정론 해시와 결합해 멱등 upsert 키 생성).
@@ -221,6 +238,7 @@ class LLMEquivalentProblemGenerator:
         self._provider = provider
         self._settings = settings
         self._catalog = dict(misconception_catalog) if misconception_catalog is not None else None
+        self._topic_hint = topic_hint
         self._subscription = subscription
         self._difficulty = difficulty
         self._slug_prefix = slug_prefix
@@ -314,9 +332,17 @@ class LLMEquivalentProblemGenerator:
             "answer_format": self._enum_value(spec.answer_format),
         }
         spec_json = json.dumps(summary, ensure_ascii=False, indent=2)
+        # 주제 힌트 — 성취기준 *코드*만으론 모델이 주제를 못 맞히므로(예 [10공수1-02-02]=이차방정식)
+        # 사람이 읽는 주제·출제 형태를 최상단에 명시한다(있을 때만).
+        topic_line = (
+            f"주제(반드시 이 주제의 문제를 만드세요): {self._topic_hint}\n"
+            if self._topic_hint
+            else ""
+        )
         return (
-            "다음 스펙에 대응하는 *새 자작 동등문제*를 만들어 JSON 하나로만 출력하세요"
-            "(평가원·EBS·교과서 본문/기출 복제 절대 금지):\n"
+            f"{topic_line}"
+            "위 주제에 맞는 *새 자작 문제*를 만들어 JSON 하나로만 출력하세요 — 기출 복제 금지·"
+            "답이 하나로 정해지게(근이 둘이면 '큰 근/작은 근/두 근의 합'). 참고 스펙:\n"
             f"{spec_json}"
         )
 
