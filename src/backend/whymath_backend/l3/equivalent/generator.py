@@ -1,0 +1,110 @@
+"""자체생성 동등문제 *생성기 좌석* — S2-d 생성부(생성기 Protocol + 결정론 자리표시자).
+
+S2 파이프라인(S2-a 수용 게이트·S2-b 코퍼스 저장·S2-c 임베딩 dedup)을 end-to-end로 잇는
+오케스트레이터(`orchestrator.py`)의 *입력측*이다. 이 모듈은 "동등문제 후보를 어떻게 만드는가"의
+**좌석**만 둔다 — 실제 내용(발문·풀이·검증재료)은 정책/생성기 구현이 공급한다.
+
+mock-first(설계 정본 미러): WH-S `ScriptedPolicy`(`whs/harness.py`)·WH-1 `ScriptedTutorPolicy`가
+LLM 정책의 *자리표시자*로 결정론 시퀀스를 방출하듯, 여기 `ScriptedGenerator`는 미리 준비한
+`CandidateProblem` 시퀀스를 순서대로 낸다. Kiki가 Phaiakes9 키를 열면 이 Protocol을 구현하는 실
+LLM 생성기(Qwen3-Math·Claude 초안→검증)로 *교체*한다 — 오케스트레이터는 무변경(좌석 계약 동형).
+
+7계층: 생성(=LLM 라우터 도메인)은 **L3**다. 이 좌석은 L3 안에 살며, 게이트(L3 acceptance)·저장
+(L1 problem_bank)·dedup(L1 embedding)을 오케스트레이터가 조합한다(L3→L1 하향 import는 허용,
+역방향 금지). 이 모듈 자체는 순수 타입·자리표시자만 담아 어떤 저장소·네트워크도 건드리지 않는다.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from typing import Protocol, runtime_checkable
+
+from pydantic import BaseModel, ConfigDict, Field
+
+# ConceptTag(개념 태깅·problem_concept 적재 재료)는 S2-b L1 적재기가 소유한다 — 재구현 0으로
+# 그대로 재사용한다(L3→L1 하향 import·허용). 후보가 실은 태깅을 오케스트레이터가 그대로 저장 레코드
+# 로 넘긴다(같은 타입이라 변환 0).
+from whymath_backend.l1.problem_bank.populate import ConceptTag
+from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
+from whymath_backend.schema.problem import Problem
+from whymath_backend.schema.provenance import ContentProvenance
+
+__all__ = [
+    "CandidateProblem",
+    "EquivalentProblemGenerator",
+    "ScriptedGenerator",
+]
+
+
+class CandidateProblem(BaseModel):
+    """생성기가 내는 *후보 번들* — S2-a 게이트·S2-b 저장에 필요한 전부를 한 묶음으로 담는다.
+
+    생성기는 `Problem`(본문)만 내는 게 아니라, 수용 게이트(`evaluate_equivalent_candidate`)가
+    정확성·저작권을 판정하는 데 쓰는 *재료*(provenance·conditions·answer_map·solution_steps)와
+    저장 시 `problem_concept`에 태깅할 개념 목록(`concept_tags`)까지 함께 낸다. 오케스트레이터는
+    이 번들을 게이트→dedup→저장으로 흘려보내며 *추가 파싱·발명 없이* 필드를 그대로 소비한다.
+
+    frozen: 후보는 생성 시점에 확정된 불변 값이다(파이프라인이 변형하지 않음).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    problem: Problem = Field(description="후보 문제 본문(자체생성·WHYMATH_GENERATED).")
+    provenance: ContentProvenance = Field(
+        description="저작권 이력 — 게이트 저작권 게이트(값 확인)·저장 provenance 메타 재료.",
+    )
+    conditions: str | list[str] = Field(
+        description="답 검산용 원 조건(발문 파싱 밖·호출자 제공) — 게이트 정확성 Tier1 재료.",
+    )
+    answer_map: dict[str, str] = Field(
+        default_factory=dict,
+        description="조건 치환맵({변수: 값}) — 게이트 정확성 Tier1 재료.",
+    )
+    solution_steps: list[str] | None = Field(
+        default=None,
+        description="(선택) 분해된 풀이 단계 — 게이트 정확성 Tier2(단계 동치) 재료. None=미제공.",
+    )
+    concept_tags: list[ConceptTag] = Field(
+        default_factory=list,
+        description=(
+            "개념 태깅(problem_concept 적재용) — 각 원소 (concept_src_id·role·relevance). S2-b "
+            "적재기의 `ConceptTag`를 그대로 재사용(변환 0). 저장 시 concept_src_id→concept_id 해석."
+        ),
+    )
+
+
+@runtime_checkable
+class EquivalentProblemGenerator(Protocol):
+    """동등문제 생성기 좌석 — 명세(`EquivalenceSpec`)를 받아 후보 1건을 낸다(실패=None).
+
+    프로덕션=LLM 생성기(Qwen3-Math 초안→Claude 검증·Phaiakes9)·테스트/데모=`ScriptedGenerator`.
+    오케스트레이터는 이 좌석이 낸 후보를 *신뢰하지 않고* S2-a 게이트로 검증한 뒤에야 저장한다
+    (WH-S 하네스가 정책 추론을 verify로 검증하는 것과 동형). `generate`가 None이면 생성 실패다
+    (프롬프트 미충족·모델 거부 등) — 오케스트레이터가 `generation_failed`로 정직히 기록한다.
+    """
+
+    def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
+        """명세에 맞는 동등문제 후보 1건을 생성(실패 시 None)."""
+        ...
+
+
+class ScriptedGenerator:
+    """결정론 생성기 — 준비한 `CandidateProblem` 시퀀스를 순서대로 방출(테스트·데모·자리표시자).
+
+    LLM 생성기의 *자리표시자*다(WH-S `ScriptedPolicy` 미러). 시퀀스가 소진되면 `None`(생성 실패)을
+    돌려줘 배치 러너가 안전 종료하게 한다. 시퀀스 원소로 `None`을 섞으면 특정 위치의 생성 실패도
+    결정론적으로 재현할 수 있다(파이프라인 `generation_failed` 분기 테스트).
+    """
+
+    def __init__(self, candidates: Sequence[CandidateProblem | None]) -> None:
+        self._candidates: list[CandidateProblem | None] = list(candidates)
+        self._index = 0
+
+    def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
+        """다음 후보를 방출(소진 시 None) — spec은 무시(스크립트가 이미 후보를 확정)."""
+        del spec  # 스크립트 생성기는 명세에 반응하지 않는다(미리 확정된 후보를 재생).
+        if self._index >= len(self._candidates):
+            return None
+        candidate = self._candidates[self._index]
+        self._index += 1
+        return candidate
