@@ -249,15 +249,15 @@
 
 ---
 
-## 📍 현재 위치 (2026-07-04)
+## 📍 현재 위치 (2026-07-05)
 
 **Phase 1 MVP 심화 개발 중.** 로드맵 정본은 `docs/strategy/status_roadmap_2026-07.md`(S0~S5 단계·병목 Top 5·단계별 AI 질문 리스트). 아래 S0~S5는 그 요약이며, 상세·체크리스트·탈출 게이트는 정본 문서 참조.
 
 **종합 판정**: "코어(L1–L4)는 과잉 성숙, 제품 루프(L5 E2E·L6 수능 모드)는 미성숙." 무게중심을 설계 정본화 → 수직 슬라이스 실증으로 이동하는 국면.
 
 **수학 완성 로드맵 S0~S5**:
-- **S0 정합성 회복** 🔄 진행 중 — 원자 백본이 runtime truth source 단일화. 완료: 크로스워크 코퍼스(437↔원자·S0-1)·437-키 자산 원자 이전(behavior_skills·concept_content·S0-2)·원자 검색 좌석+`/concepts/search` 전환(S0-4a)·L2 mastery enrich 원자 전환(S0-4d)·**구 437 = legacy_snapshot 격하**(readonly·non_runtime·audit_only·S0-4b/c). 연기/위임: problem_concept 재연결(→S2)·orphan 129 진단(prod 실행은 Kiki).
-- **S1 E2E 수직 슬라이스** — 고3 수능 wedge 1루프 실동작 + Phaiakes9 라이브 검증
+- **S0 정합성 회복** ✅ 완료 — 원자 백본이 runtime truth source 단일화. 크로스워크 코퍼스(S0-1)·437-키 자산 원자 이전(S0-2)·원자 검색 좌석+`/concepts/search` 전환(S0-4a)·L2 mastery enrich 원자 전환(S0-4d)·**구 437 = legacy_snapshot 격하**(readonly·non_runtime·audit_only·S0-4b/c). 연기/위임: problem_concept 재연결(→S2)·orphan 129 진단(prod 실행은 Kiki).
+- **S1 E2E 수직 슬라이스** 🔄 진행 중 — 글루 배선. 완료(자율·mock/라이브 무관): S1-a LLM 도구 정책·S1-b 하네스 shadow 관측·S1-c 웜스타트/온보딩·S1-e Minimal Subgraph 예산·S1-d mobile OCR→coach·**감사 상환 #2(PII 봉투 암호화·#425)·#3부분(정답 억제 하네스 불변식·#426)**·**E2E 관통 증명 하니스(실 PG·#428)**·**verify-answer 도구 엔드포인트(#429)**. 대기(라이브 선행): 상환 #1·#3완전(coach→하네스 단일 수렴)·Phaiakes9 라이브 검증(비용 실측·verify 게이트 승격).
 - **S2 콘텐츠 공장** — 동등문제 100문+·WH-S 가동·도메인 파트너
 - **S3 파일럿** — L6 수능 엔진·시범 5~10명·측정 하네스
 - **S4 수학 K-12 완성** · **S5 타과목 확장 게이트**(물리)
@@ -270,5 +270,5 @@
 
 ---
 
-**최종 수정**: 2026-07-04 (S0 정합성 회복 진행 반영 — 원자 백본 runtime 단일화·구 437 legacy_snapshot 격하)  
-**다음 검토**: S1 탈출 게이트 판정 시
+**최종 수정**: 2026-07-05 (S0 완료·S1 진행 반영 — 감사 상환 #2/#3부분·E2E 관통 증명 하니스·verify-answer 도구 4 PR 머지)  
+**다음 검토**: S1 탈출 게이트 판정 시 (라이브 선행분 = Phaiakes9 키 투입 후)

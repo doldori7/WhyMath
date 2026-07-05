@@ -65,10 +65,25 @@ class _StubSchema:
 
 
 class _StubRow:
-    """ORM 행 흉내 — to_schema()만 가진다(_row_to_json이 부르는 표면)."""
+    """ORM 행 흉내 — to_schema() + 대화 본문 봉투 암호화 컬럼(감사상환 #2 export 복호 표면).
 
-    def __init__(self, payload: dict[str, Any]) -> None:
+    dialogue_turns 조회 행은 export가 `content`/`content_encrypted`/`content_nonce`를 읽어
+    노출 직전 복호한다(키 미설정 hermetic에선 평문 폴백 passthrough). 다른 카테고리 행은 이
+    속성을 안 읽으므로 기본 None으로 둔다.
+    """
+
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        content: str | None = None,
+        content_encrypted: bytes | None = None,
+        content_nonce: bytes | None = None,
+    ) -> None:
         self._payload = payload
+        self.content = content
+        self.content_encrypted = content_encrypted
+        self.content_nonce = content_nonce
 
     def to_schema(self) -> _StubSchema:
         return _StubSchema(self._payload)
@@ -142,7 +157,7 @@ class TestExportUserData:
                 [_StubRow({"cat": "ubm"})],
                 [_StubRow({"cat": "dlg"})],
                 [_StubRow({"cat": "aev"})],
-                [_StubRow({"cat": "dlt"})],
+                [_StubRow({"cat": "dlt", "content": "평문 본문"}, content="평문 본문")],
                 [_StubRow({"cat": "profile"})],
             ]
         )
@@ -159,7 +174,8 @@ class TestExportUserData:
         assert out.data["user_behavior_metrics"] == [{"cat": "ubm"}]  # 증분 4 신규
         assert out.data["dialogues"] == [{"cat": "dlg"}]  # 증분 5 신규(대화 세션 메타)
         assert out.data["attempt_events"] == [{"cat": "aev"}]  # 증분 7 신규(세부 시도 이벤트)
-        assert out.data["dialogue_turns"] == [{"cat": "dlt"}]  # 증분 6 신규(대화 턴 본문·조인)
+        # 증분 6(대화 턴 본문·조인) + 감사상환 #2: 키 미설정이라 content 평문 passthrough 복호.
+        assert out.data["dialogue_turns"] == [{"cat": "dlt", "content": "평문 본문"}]
         assert out.user_profile == {"cat": "profile"}
         assert len(out.not_included) >= 1  # 부분 export 정직 고지
         assert fake.commits == 0 and fake.flushes == 0  # 읽기 전용(저장소 패턴)

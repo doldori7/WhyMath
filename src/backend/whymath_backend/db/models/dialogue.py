@@ -164,7 +164,15 @@ class DialogueTurn(Base):
 
     # ===== 내용 (content는 *미성년 채팅 데이터*) =====
     role: Mapped[TurnRole | None] = mapped_column(_pg_enum(TurnRole, "turn_role_enum"))
+    # 감사상환 #2: 봉투 암호화(AES-256-GCM) 시 평문 대신 content_encrypted+content_nonce에
+    # 저장하므로 content는 암호화 행에서 NULL(원래부터 nullable). 기존/암호화 비활성 행은 평문
+    # 유지(dual-read 폴백). CLAUDE.md 절대 금기 '미성년 채팅 평문 저장 금지'의 저장계층 시행.
     content: Mapped[str | None] = mapped_column(sa.Text)
+    # 감사상환 #2: 대화 본문 at-rest 봉투 암호화 — 마스터 키(DB 밖·env)로 암호화된 본문 +
+    # 96-bit nonce. 둘 다 NULL이면 평문(content) 행. 키가 DB에 없어 dump 단독 복호 불가.
+    # device.secret_encrypted/secret_nonce 선례 미러. schema round-trip 제외(_NON_SCHEMA_COLUMNS).
+    content_encrypted: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
+    content_nonce: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
     content_type: Mapped[ContentType | None] = mapped_column(
         _pg_enum(ContentType, "content_type_enum")
     )
@@ -193,17 +201,35 @@ class DialogueTurn(Base):
         sa.Index("idx_turn_dialogue", "dialogue_id", "turn_order"),
     )
 
+    # 감사상환 #2: schema round-trip에서 제외하는 봉투 암호화 컬럼(schema는 extra="forbid"라
+    # 이 키가 model_validate에 들어가면 실패). 복호는 handler/헬퍼 층이 담당하고(순수 seam에
+    # cipher 미주입), schema.content엔 복호된 평문을 별도 설정한다. ciphertext는 API·export에
+    # 절대 노출하지 않는다(schema 밖 유지).
+    _NON_SCHEMA_COLUMNS = frozenset({"content_encrypted", "content_nonce"})
+
     @classmethod
     def from_schema(cls, schema: SchemaDialogueTurn) -> DialogueTurn:
-        """검증된 `schema.DialogueTurn` → 영속 ORM(schema↔db seam)."""
+        """검증된 `schema.DialogueTurn` → 영속 ORM(schema↔db seam).
+
+        암호화 컬럼(content_encrypted/content_nonce)은 schema에 없어 여기서 설정되지 않는다 —
+        handler/헬퍼 층(`_build_dialogue_turn`)이 content를 암호화해 채운다(순수 seam).
+        """
         data = schema.model_dump()
         mapped_keys = {col.key for col in sa.inspect(cls).mapper.column_attrs}
         kwargs = {k: v for k, v in data.items() if k in mapped_keys}
         return cls(**kwargs)
 
     def to_schema(self) -> SchemaDialogueTurn:
-        """영속 ORM → `schema.DialogueTurn`(Pydantic 검증 복원)."""
-        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        """영속 ORM → `schema.DialogueTurn`(Pydantic 검증 복원).
+
+        봉투 암호화 컬럼은 `_NON_SCHEMA_COLUMNS`로 제외(schema extra="forbid"·ciphertext 비노출).
+        암호화 행은 content가 NULL이므로 handler/헬퍼 층이 복호값을 schema.content에 덮어쓴다.
+        """
+        mapped_keys = {
+            col.key
+            for col in sa.inspect(type(self)).mapper.column_attrs
+            if col.key not in self._NON_SCHEMA_COLUMNS
+        }
         data = {key: getattr(self, key) for key in mapped_keys}
         return SchemaDialogueTurn.model_validate(data)
 
