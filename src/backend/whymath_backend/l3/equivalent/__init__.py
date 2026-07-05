@@ -5,7 +5,10 @@
 분류*만 한다("휴리스틱으로 좁히고 사람이 닫는다"). 저작권은 구조적 불변식이 강제하므로
 게이트는 값 확인만·정확성은 Tier1+Tier2 결합·위생은 시드 검증기·동등성은 4성분 가중 분류.
 
-후속: 동등문제 생성부(LLM)·사람 검수 큐 결선·임계값 점진 보정.
+S2-d(`generator.py`·`orchestrator.py`): 생성부 좌석(`ScriptedGenerator`·LLM 자리표시자)과
+S2 파이프라인 end-to-end 오케스트레이터(생성→게이트→dedup→저장)를 담아 S2를 닫는다.
+
+후속: 실 LLM 생성기(Phaiakes9)·사람 검수 큐 결선·임계값 점진 보정.
 """
 
 from whymath_backend.l3.equivalent.acceptance import (
@@ -14,10 +17,28 @@ from whymath_backend.l3.equivalent.acceptance import (
     EquivalenceVerdict,
     evaluate_equivalent_candidate,
 )
+from whymath_backend.l3.equivalent.generator import (
+    CandidateProblem,
+    EquivalentProblemGenerator,
+    ScriptedGenerator,
+)
+from whymath_backend.l3.equivalent.orchestrator import (
+    GenerationOutcome,
+    ProblemBankSink,
+    run_batch,
+    run_equivalent_generation,
+)
 
 __all__ = [
     "AcceptanceVerdict",
+    "CandidateProblem",
     "EquivalenceSpec",
     "EquivalenceVerdict",
+    "EquivalentProblemGenerator",
+    "GenerationOutcome",
+    "ProblemBankSink",
+    "ScriptedGenerator",
     "evaluate_equivalent_candidate",
+    "run_batch",
+    "run_equivalent_generation",
 ]
