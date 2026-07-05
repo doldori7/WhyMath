@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-05 (구현·l3/equivalent·라이브 피드백 3슬라이스): **S2-h/i/j — 저작 모델 GENERAL 전환·근 선택 검증·structured output** + 생성 파이프라인 우선순위 채택
+
+**무엇/왜**: Kiki Phaiakes9 라이브 실측이 드러낸 결함을 즉시 상환한 3슬라이스(브랜치 직push·커밋 4ac602d·9363faa·49f1451):
+- **S2-h 저작용 모델 선택** — 라우터가 task_type='generate'를 MATH(qwen2-math)로 보내는데, qwen2-math는 풀이 특화라 저작 시 같은 계수 반복(mode collapse·온도 0.9→1.1로도 안 풀림 실측). 생성기에 `authoring_family=GENERAL` 기본값 — 라우터의 비용·크기·모드는 존중하고 로컬 FAST/MID의 패밀리 축만 교체(불변식 4 유지·전역 라우터 무변경·scene/visualization 무영향). (GENERAL,MID)=qwen2.5:7b. 실측 9회 8개 상이 문제로 collapse 해소 확인. **"저작=instruction-following 과업·수학 진실은 하류 SymPy가 검증"** — 외부 리뷰(ChatGPT)도 동일 결론 독립 확인.
+- **S2-i 근 선택 검증** — 실측 안전 구멍: `3x²+11x-4=0` 큰 근(1/3) 요구에 작은 근 -4를 줘도 Tier1 pass(방정식 만족만 검사)→accepted. `verify_root_selection`(solve로 실근 확정·largest/smallest/unique 판정·적용 밖은 보수적 unverifiable) 신설, 게이트 결합: 선택 위반=failed·선택 미표기+다근=verified→unverified 강등(needs_review). `==`(파이썬식 등호) 등식 파싱 내성 추가(sympify가 False로 접던 회귀). CandidateProblem/ProblemVerifyMeta에 answer_selection·코퍼스 시드 태깅·근의 개수 문제는 정직하게 검수필요 예외.
+- **S2-j structured output 문법 강제** — LLMProvider Protocol에 json_schema(기본 None·무변경), Ollama format= 제약 디코딩, Anthropic 명확 거부(조용한 무시 금지), 생성기는 LOCAL 결정일 때만 스키마 탑재(required 5필드·enum·난이도 범위). 관대 파서·게이트는 이중 방어로 유지.
+
+**우선순위 채택(외부 리뷰 검토 후 Kiki 승인)**: ① S2-j structured output(완료) → ② S2-k canonicalization(conditions SymPy 정규형+구조 해시·임베딩 dedup 보완) → ③ S2-l 커리큘럼 drift 체커(rule-based·금지개념/학년/표기) → ④ S2-m rule-based 난이도 추정기 → ⑤ 4단계 배치 코퍼스(형식 안정 후). 배치 선행안은 철회 — 형식 불안정 상태의 대량 생성은 retry cascade 오염(리뷰 논거 수용).
+
 ### 2026-07-05 (구현·backend/harness/api/test·머지 5 PR): **S1 감사 상환 완주 + E2E 증명 하니스 + verify-answer 도구** (자율·라이브 무관)
 
 **무엇/왜**: Kiki 부재 중 라이브 LLM 무관·되돌리기 쉬운 슬라이스만 자율 진행 — 5 PR 머지(#425~429·전부 CI green·SQUASH). S1 구조 감사(블록 B) 상환 Top 3 중 라이브 불요분 완주 + E2E 병목 실증 + 검증 도구 표면 완성:
