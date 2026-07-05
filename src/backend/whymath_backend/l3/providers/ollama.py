@@ -14,7 +14,7 @@ bench_latency.py(`_OllamaClientProtocol` 경유 가짜 클라이언트 주입)�
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 
@@ -49,9 +49,14 @@ class _OllamaClient(Protocol):
         system: str,
         images: Sequence[str] | None = None,
         options: dict[str, Any] | None = None,
+        format: Any = None,  # noqa: A002 — ollama API 인자명 그대로(JSON schema 제약 디코딩)
         stream: bool = False,
     ) -> Any:
-        """단일 프롬프트 생성 (ollama generate API). `images`=멀티모달(VL) base64 목록."""
+        """단일 프롬프트 생성 (ollama generate API). `images`=멀티모달(VL) base64 목록.
+
+        `format`은 structured output 제약(S2-j) — JSON 스키마 dict를 주면 Ollama가 출력을
+        그 스키마에 맞는 JSON으로 문법 수준에서 제약한다(ollama 0.5+ 제약 디코딩).
+        """
         ...
 
     async def list(self) -> Any:
@@ -211,6 +216,7 @@ class OllamaProvider:
         *,
         images: Sequence[str] | None = None,
         temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
     ) -> str:
         """라우터 결정에 따라 로컬 Ollama로 생성 (LLMProvider 구현).
 
@@ -223,6 +229,10 @@ class OllamaProvider:
         - `temperature`(S2-g 생성 다양성)가 주어지면 ollama generate의 `options=`에
           `{"temperature": ...}`로 실어 샘플링 온도를 올린다(동등문제 저작 mode collapse 방어).
           None(기본)이면 options에 온도를 넣지 않아 Ollama 기본 온도를 쓴다 — *기존 동작 무변경*.
+        - `json_schema`(S2-j structured output)가 주어지면 ollama generate의 `format=`에
+          스키마 dict를 그대로 실어 출력을 *문법 수준에서 제약*한다(제약 디코딩 — 자유 텍스트·
+          코드펜스·필드 누락을 원천 차단). None(기본)이면 format을 싣지 않아 자유 텍스트 생성
+          — *기존 동작 무변경*. 문법 제약은 형식만 보장하며 수학적 진실 검증은 하류 게이트 소관.
 
         주의: QUALITY(27b)의 *동기 디스패치 차단*은 파이프라인(pipeline.generate)의
         책임이다(03a §D.3). 제공자 자체는 모델 ID 해석·호출만 담당한다 —
@@ -256,6 +266,9 @@ class OllamaProvider:
         if temperature is not None:
             # 기존 options가 없으므로 새 dict; 있으면 병합(현재는 온도만 실음).
             call_kwargs["options"] = {"temperature": temperature}
+        if json_schema is not None:
+            # S2-j structured output — 스키마 dict를 format=으로 실어 제약 디코딩(ollama 0.5+).
+            call_kwargs["format"] = dict(json_schema)
         client = self._get_client()
         response = await client.generate(**call_kwargs)
         return _extract_text(response)

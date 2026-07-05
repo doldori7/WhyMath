@@ -18,7 +18,7 @@ FakeProvider(스크립트된 JSON)로 생성기 계약을 검증한다 — 실 �
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import pytest
 
@@ -82,6 +82,7 @@ class FakeProvider:
         self.calls: list[tuple[str, str]] = []
         self.temperatures: list[float | None] = []
         self.decisions: list[RoutingDecision] = []
+        self.json_schemas: list[Mapping[str, object] | None] = []
 
     async def generate(
         self,
@@ -91,10 +92,12 @@ class FakeProvider:
         *,
         images: Sequence[str] | None = None,
         temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
     ) -> str:
         self.calls.append((prompt, system))
         self.temperatures.append(temperature)
         self.decisions.append(decision)
+        self.json_schemas.append(json_schema)
         if self._index < len(self._responses):
             out = self._responses[self._index]
             self._index += 1
@@ -113,6 +116,7 @@ class RaisingProvider:
         *,
         images: Sequence[str] | None = None,
         temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
     ) -> str:
         raise RuntimeError("provider 다운(테스트)")
 
@@ -234,6 +238,47 @@ class TestGenerationDiversity:
         assert "다른 문제" in system  # 매번 다른 문제
         assert "반복하지 마세요" in system  # 직전 구조 반복 금지
         assert "근의 종류" in system  # 근의 종류 다양화
+
+
+# ──────────────────────────────────────────────────────────────────────
+# S2-j: structured output — LOCAL 결정이면 출력 JSON 스키마를 실어 문법 강제.
+# ──────────────────────────────────────────────────────────────────────
+class TestStructuredOutput:
+    def test_local_decision_sends_json_schema(self) -> None:
+        # free·예산0 → 라우터가 LOCAL 결정 → 스키마가 provider로 실린다(Ollama format= 제약).
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        schema = provider.json_schemas[0]
+        assert schema is not None
+        assert schema["type"] == "object"
+
+    def test_schema_requires_hard_fields(self) -> None:
+        # 결측 시 생성 실패가 되는 필수 필드들이 스키마 required로 문법 강제된다.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        schema = provider.json_schemas[0]
+        assert schema is not None
+        required = schema["required"]
+        assert isinstance(required, list)
+        for field in ("question_text", "answer", "conditions", "answer_map", "unit_codes"):
+            assert field in required
+
+    def test_schema_constrains_enums(self) -> None:
+        # answer_selection(S2-i)·answer_format이 enum으로 문법 제약된다.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        schema = provider.json_schemas[0]
+        assert schema is not None
+        props = schema["properties"]
+        assert isinstance(props, dict)
+        assert props["answer_selection"]["enum"] == ["largest", "smallest", "unique"]
+        assert "자연수" in props["answer_format"]["enum"]
+
+    def test_lenient_parser_still_backstops(self) -> None:
+        # 스키마 강제와 무관하게 관대 파서는 유지된다(이중 방어) — 코드펜스 응답도 구제.
+        fenced = f"```json\n{_HAPPY}\n```"
+        candidate = _gen(FakeProvider([fenced])).generate(_spec())
+        assert candidate is not None
 
 
 # ──────────────────────────────────────────────────────────────────────

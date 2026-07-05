@@ -223,6 +223,18 @@ class TestGenerate:
         with pytest.raises(RuntimeError, match="API 키"):
             await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
 
+    async def test_json_schema_rejected(self) -> None:
+        """S2-j: json_schema(문법 제약)는 명확히 거부 — plain messages는 제약 디코딩이 없다
+        (조용한 무시 금지). 호출 자체가 없어야 한다."""
+        client = FakeAnthropicClient()
+        provider = AnthropicProvider(client=client, settings=_model_settings())
+
+        with pytest.raises(RuntimeError, match="json_schema"):
+            await provider.generate(
+                "p", "s", _cloud_decision(CostTier.CLOUD_MID), json_schema={"type": "object"}
+            )
+        assert client.messages.calls == []
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # 튜닝 노브 — effort/thinking/caching은 *설정된 경우에만* 전달 (기본 OFF, 03a §H#4)

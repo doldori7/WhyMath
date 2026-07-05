@@ -35,6 +35,7 @@ class FakeProvider:
         self._status = status
         self.calls: list[tuple[str, str, RoutingDecision]] = []
         self.temperatures: list[float | None] = []
+        self.json_schemas: list[Any] = []
 
     async def generate(
         self,
@@ -43,9 +44,11 @@ class FakeProvider:
         decision: RoutingDecision,
         *,
         temperature: float | None = None,
+        json_schema: Any = None,
     ) -> str:
         self.calls.append((prompt, system, decision))
         self.temperatures.append(temperature)
+        self.json_schemas.append(json_schema)
         return self._text
 
     async def check_status(self) -> Any:
@@ -150,6 +153,21 @@ class TestDispatch:
         composite = CompositeProvider(local=local)
         await composite.generate("p", "s", _local_decision())
         assert local.temperatures == [None]
+
+    async def test_json_schema_forwarded_to_target(self) -> None:
+        """S2-j: json_schema는 위임받는 제공자로 그대로 전달된다(제약 처리는 하위 책임)."""
+        local = FakeProvider()
+        composite = CompositeProvider(local=local)
+        schema = {"type": "object", "required": ["answer"]}
+        await composite.generate("p", "s", _local_decision(), json_schema=schema)
+        assert local.json_schemas == [schema]
+
+    async def test_json_schema_omitted_by_default(self) -> None:
+        """스키마 미지정이면 하위 제공자에 json_schema를 싣지 않는다(기본 None·하위호환)."""
+        local = FakeProvider()
+        composite = CompositeProvider(local=local)
+        await composite.generate("p", "s", _local_decision())
+        assert local.json_schemas == [None]
 
 
 # ──────────────────────────────────────────────────────────────────────────

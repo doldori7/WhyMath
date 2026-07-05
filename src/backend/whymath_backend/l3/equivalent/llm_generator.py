@@ -138,6 +138,40 @@ _VALID_ROLES: frozenset[str] = frozenset(r.value for r in ConceptRole)
 # 근 선택(S2-i) 유효값 — LLM이 낸 answer_selection 검증용. verify_root_selection 계약과 동일.
 _VALID_ROOT_SELECTIONS: frozenset[str] = frozenset({"largest", "smallest", "unique"})
 
+# ──────────────────────────────────────────────────────────────────────────
+# 출력 JSON 스키마(S2-j structured output) — 로컬(Ollama) 결정일 때 format= 제약 디코딩으로
+# 강제한다. 자유 텍스트·코드펜스·LaTeX 이스케이프·필수 필드 누락을 *문법 수준에서 원천 차단*.
+# 필수(required)는 결측 시 어차피 생성 실패(None 폴백)가 되는 4필드 + unit_codes만 최소로
+# 잡는다(과잉 제약은 모델과 싸움). enum(answer_format·answer_selection)·수치 범위(난이도)도
+# 문법으로 제약한다. 이 스키마는 *형식*만 보장한다 — 관대 파서(_extract_json)·조립 검증
+# (_assemble)·S2-a 게이트는 그대로 유지된다(이중 방어: 클라우드 경로·의미 오류는 여전히
+# 파서·게이트 소관).
+# ──────────────────────────────────────────────────────────────────────────
+_OUTPUT_JSON_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "properties": {
+        "question_text": {"type": "string"},
+        "answer": {"type": "string"},
+        "answer_explanation": {"type": "string"},
+        "conditions": {
+            "anyOf": [
+                {"type": "string"},
+                {"type": "array", "items": {"type": "string"}},
+            ],
+        },
+        "answer_map": {"type": "object", "additionalProperties": {"type": "string"}},
+        "answer_selection": {"type": "string", "enum": sorted(_VALID_ROOT_SELECTIONS)},
+        "difficulty_overall": {"type": "number", "minimum": 1.0, "maximum": 5.0},
+        "unit_codes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "answer_format": {"type": "string", "enum": [f.value for f in AnswerFormat]},
+        "achievement_standard_codes": {"type": "array", "items": {"type": "string"}},
+        "distractor_map": {"type": "array", "items": {"type": "object"}},
+        "solution_steps": {"type": "array", "items": {"type": "string"}},
+        "concept_tags": {"type": "array", "items": {"type": "object"}},
+    },
+    "required": ["question_text", "answer", "conditions", "answer_map", "unit_codes"],
+}
+
 # 유효하지 않은 JSON 백슬래시 이스케이프 탐지 — LLM이 발문·해설에 LaTeX(`\(`·`\)`·`\frac`·`\sqrt`
 # 등)를 넣으면 `json.loads`가 "Invalid \escape"로 거부한다(실 LLM 실측·Phaiakes9). 유효 이스케이프
 # (`\"`·`\\`·`\/`·`\b`·`\f`·`\n`·`\r`·`\t`·`\uXXXX`)를 뒤따르지 *않는* 백슬래시만 매칭한다.
@@ -332,9 +366,22 @@ class LLMEquivalentProblemGenerator:
 
         `temperature=self._temperature`(기본 0.9)를 실어 *생성 다양성*을 확보한다 — 튜터링과
         달리 콘텐츠 저작은 고온도가 필요하다(mode collapse 방어·__init__ temperature 참조).
+
+        `json_schema`(S2-j structured output)는 **LOCAL 결정일 때만** 싣는다 — Ollama는
+        format= 제약 디코딩으로 출력을 스키마에 맞는 JSON으로 문법 강제하고, 클라우드
+        (Anthropic)는 문법 제약이 없어 스키마를 주면 명확히 거부하므로(조용한 무시 금지)
+        클라우드 경로는 종전처럼 프롬프트+관대 파서(_extract_json)로 동작한다(이중 방어).
         """
+        is_local = decision.cost_tier == CostTier.LOCAL.value
+        schema = _OUTPUT_JSON_SCHEMA if is_local else None
         return asyncio.run(
-            self._provider.generate(prompt, _SYSTEM_PROMPT, decision, temperature=self._temperature)
+            self._provider.generate(
+                prompt,
+                _SYSTEM_PROMPT,
+                decision,
+                temperature=self._temperature,
+                json_schema=schema,
+            )
         )
 
     # ── 라우팅 결정(라우터 경유 + 저작 패밀리 선호) ─────────────────────
