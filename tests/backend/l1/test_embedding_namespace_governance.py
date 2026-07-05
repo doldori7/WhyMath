@@ -215,21 +215,24 @@ class TestSubjectScopeSymmetry:
 # ──────────────────────────────────────────────────────────────────────────
 # ③ cross-table 코사인 금지 게이트 — `.cosine_distance(` 사용 모듈 allowlist 동결
 # ──────────────────────────────────────────────────────────────────────────
-# DB 코사인(`<=>`·cosine_distance)을 쓸 수 있는 모듈은 *자기 kind 테이블 전용* 인덱스 3개뿐이다.
+# DB 코사인(`<=>`·cosine_distance)을 쓸 수 있는 모듈은 *자기 kind 테이블 전용* 인덱스뿐이다.
 # 새 모듈이 cosine_distance를 쓰면(특히 cross-table join) 이 allowlist를 *의식적으로* 수정해야
 # 한다 — 그 리뷰 시점이 곧 namespace 경계 심사다. (in-memory `cosine_similarity`는 별개 —
 # crosslink_candidates의 오개념 도메인 내부 교차는 DB 질의 경계를 넘지 않아 예외로 명문.)
+# `problem_bank/embedding.py`(S2-c)는 `problem_embedding` *자기-kind* dedup 인덱스라 정당하다 —
+# 다른 kind 테이블과 SQL 코사인 join을 하지 않고 problem_embedding 행끼리만 비교한다(추가 승인).
 _COSINE_DISTANCE_ALLOWLIST: frozenset[str] = frozenset(
     {
         "l4/misconception/semantic/pgvector_index.py",
         "l1/concept_graph/embedding.py",
         "l1/atom_graph/embedding.py",
+        "l1/problem_bank/embedding.py",
     }
 )
 
 
-def test_cosine_distance_usage_frozen_to_three_index_modules() -> None:
-    """`.cosine_distance(` 소스 스캔 — 사용 모듈이 정확히 3개 인덱스 모듈(추가·누락 모두 red)."""
+def test_cosine_distance_usage_frozen_to_index_modules() -> None:
+    """`.cosine_distance(` 소스 스캔 — 사용 모듈이 정확히 allowlist(추가·누락 모두 red)."""
     import whymath_backend
 
     package_root = Path(whymath_backend.__file__).parent
