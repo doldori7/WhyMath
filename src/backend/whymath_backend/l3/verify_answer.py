@@ -62,6 +62,7 @@ from pydantic import BaseModel, ConfigDict, Field
 __all__ = [
     "AnswerVerdict",
     "verify_answer",
+    "verify_root_selection",
 ]
 
 
@@ -155,7 +156,16 @@ def _parse_condition(condition: str) -> tuple[sympy.Expr, str]:
         rhs = sympy.sympify(rhs_text, convert_xor=True)
         return sympy.sympify(lhs - rhs), "!="
 
-    # `=`(단일 등호, `==`/`<=`/`>=` 아님)를 등식 잔차로 변환. `==`는 파이썬 비교라 따로 처리.
+    # `==`(파이썬식 등호)를 등식 잔차로 변환 — sympify가 `==`를 *구조 비교*로 접어 `False`(상수
+    # 진리값)로 만들기 전에 문자열에서 직접 분해한다. 실 LLM이 `x**2-1 == 0`처럼 파이썬식 등호를
+    # 쓰는 회귀(Phaiakes9 실측·S2-i) — 단일 `=` 경로와 동형이되 `==` 토큰을 별도로 받는다.
+    if "==" in text:
+        lhs_text, rhs_text = text.split("==", 1)
+        lhs = sympy.sympify(lhs_text, convert_xor=True)
+        rhs = sympy.sympify(rhs_text, convert_xor=True)
+        return sympy.sympify(lhs - rhs), "=="
+
+    # `=`(단일 등호, `==`/`<=`/`>=` 아님)를 등식 잔차로 변환. `==`는 위에서 이미 처리했다.
     if (
         "=" in text
         and "==" not in text
@@ -486,3 +496,116 @@ def _sample_parametric(
 
     # 모든 유효 샘플에서 조건 만족 → pass(단, 샘플 점 만족이지 증명 아님·Tier2 결합 필수).
     return _pass(samples_checked=valid_samples)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 근 선택 검증(S2-i) — "큰 근/작은 근/유일" 문제의 *어느 근인가*를 판정.
+# ──────────────────────────────────────────────────────────────────────────
+RootSelection = Literal["largest", "smallest", "unique"]
+
+
+def _real_value(expr: sympy.Expr, tol: float) -> float | None:
+    """식을 실수값으로 수치 평가 — 복소/NaN/무한이면 None(보수적)."""
+    try:
+        value = complex(expr.evalf())
+    except (TypeError, ValueError, AttributeError):
+        return None
+    if value != value or abs(value.real) == float("inf") or abs(value.imag) > tol:
+        return None
+    return value.real
+
+
+def _approx_equal(a: float, b: float, tol: float) -> bool:
+    """상대·절대 허용치를 겸한 근사 동치(큰 값에서도 안전)."""
+    return abs(a - b) <= max(tol, tol * abs(b))
+
+
+def _distinct_values(values: Sequence[float], tol: float) -> list[float]:
+    """근사 중복을 접은 서로 다른 값 목록(중근을 1개로)."""
+    out: list[float] = []
+    for v in values:
+        if not any(_approx_equal(v, u, tol) for u in out):
+            out.append(v)
+    return out
+
+
+def verify_root_selection(
+    conditions: str | Sequence[str],
+    answer: Mapping[str, str],
+    selection: RootSelection,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """답이 조건의 실근 집합에서 *요구된 선택*(largest/smallest/unique)에 해당하는지 검증(S2-i).
+
+    `verify_answer`(Tier1)이 "답이 조건을 만족하는가"만 보는 반면, 이 함수는 "여러 실근 중
+    발문이 요구한 그 근(가장 큰/작은/유일)인가"를 본다. `큰 근을 구하시오`류 문제는 *방정식만으론
+    답이 유일하게 정해지지 않아*(두 근 다 방정식을 만족) Tier1이 **틀린 근도 통과**시키기 때문이다
+    (Phaiakes9 실측: `3x²+11x-4=0`의 큰 근에 작은 근 -4를 줘도 Tier1 pass).
+
+    적용 범위: **단일 변수·단일 등식** 조건만. 연립·다변수·파라미터·부등식·비다항 등 풀 수 없거나
+    실근이 없거나 답이 실근이 아니면 **unverifiable**(보수적·pass 위장 금지 — verify_answer 정직성
+    상속). 이 함수는 답이 조건을 *만족*하는지는 검사하지 않는다(그건 verify_answer 소관) — 오직
+    *선택*만 판정한다. 판정:
+      - **pass**: 답이 요구된 근(largest=최대·smallest=최소·unique=유일)과 일치.
+      - **fail**: 답이 실근이나 *요구된 근이 아님*(예 큰 근 요구에 작은 근·unique 요구에 다근).
+      - **unverifiable**: 적용 밖(풀 수 없음·다변수·실근 없음 등) — Tier1에 판정을 맡긴다.
+    """
+    # 단일 등식만 — 연립/빈 조건은 선택 의미가 불명확(보수적 회피).
+    if isinstance(conditions, str):
+        condition: str | None = conditions
+    else:
+        condition_list = list(conditions)
+        condition = condition_list[0] if len(condition_list) == 1 else None
+    if condition is None:
+        return _unverifiable("근 선택 — 단일 등식이 아님(연립/빈 조건)·안전 회피")
+
+    try:
+        residual, op = _parse_condition(condition)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("근 선택 — 조건 파싱 불가·안전 회피")
+    if op != "==":
+        return _unverifiable("근 선택 — 등식이 아님(부등식/≠)·안전 회피")
+
+    free = sorted(residual.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("근 선택 — 단일 변수 방정식이 아님·안전 회피")
+    var = free[0]
+
+    ans_text = answer.get(str(var))
+    if ans_text is None:
+        return _unverifiable(f"근 선택 — answer_map에 변수 {var} 없음·안전 회피")
+
+    try:
+        ans_val = _real_value(sympy.sympify(ans_text, convert_xor=True), tol)
+        raw_roots = sympy.solve(sympy.Eq(residual, 0), var)
+    except Exception:  # noqa: BLE001 — 풀이/치환 불가는 보수적 unverifiable
+        return _unverifiable("근 선택 — 방정식 풀이/치환 불가·안전 회피")
+    if ans_val is None:
+        return _unverifiable("근 선택 — 답이 실수가 아님·안전 회피")
+
+    real_roots = [rv for r in raw_roots if (rv := _real_value(r, tol)) is not None]
+    if not real_roots:
+        return _unverifiable("근 선택 — 실근 없음(복소근/풀이 불가)·안전 회피")
+
+    # 답이 실근 중 하나인지(Tier1이 이미 보장하나 방어적 확인 — 아니면 Tier1에 판정을 맡긴다).
+    if not any(_approx_equal(ans_val, r, tol) for r in real_roots):
+        return _unverifiable("근 선택 — 답이 실근 집합에 없음(Tier1 소관)·안전 회피")
+
+    distinct = _distinct_values(real_roots, tol)
+    if selection == "unique":
+        if len(distinct) == 1:
+            return _pass(samples_checked=len(real_roots))
+        return _fail(
+            f"근 선택(unique) — 실근이 {len(distinct)}개라 답이 유일하게 정해지지 않음",
+            samples_checked=len(real_roots),
+        )
+
+    target = max(distinct) if selection == "largest" else min(distinct)
+    if _approx_equal(ans_val, target, tol):
+        return _pass(samples_checked=len(real_roots))
+    return _fail(
+        f"근 선택({selection}) — 답 {ans_val}가 요구된 근 {target}가 아님"
+        f"(실근 {sorted(distinct)}).",
+        samples_checked=len(real_roots),
+    )

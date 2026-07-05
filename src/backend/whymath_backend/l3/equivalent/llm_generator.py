@@ -135,6 +135,9 @@ _LOGGER = logging.getLogger(__name__)
 # 개념 태깅 role 유효값(ConceptRole) — LLM이 낸 role 문자열 검증용(schema는 최하위·import 허용).
 _VALID_ROLES: frozenset[str] = frozenset(r.value for r in ConceptRole)
 
+# 근 선택(S2-i) 유효값 — LLM이 낸 answer_selection 검증용. verify_root_selection 계약과 동일.
+_VALID_ROOT_SELECTIONS: frozenset[str] = frozenset({"largest", "smallest", "unique"})
+
 # 유효하지 않은 JSON 백슬래시 이스케이프 탐지 — LLM이 발문·해설에 LaTeX(`\(`·`\)`·`\frac`·`\sqrt`
 # 등)를 넣으면 `json.loads`가 "Invalid \escape"로 거부한다(실 LLM 실측·Phaiakes9). 유효 이스케이프
 # (`\"`·`\\`·`\/`·`\b`·`\f`·`\n`·`\r`·`\t`·`\uXXXX`)를 뒤따르지 *않는* 백슬래시만 매칭한다.
@@ -165,6 +168,10 @@ _SYSTEM_PROMPT = """당신은 WhyMath의 **동등문제 저작자**입니다. �
 - **답이 유일하게 하나로 정해지는 문제**만 출제하세요 — 답이 여러 개면 기계가 검증할 수 없습니다.
 - 근이 둘인 이차방정식 등은 "**두 근 중 큰 근을 구하시오**"·"작은 근"·"두 근의 합"처럼 **답이
   하나가 되도록** 물으세요. `answer`는 단일 값, `answer_map`은 그 값 하나입니다.
+- **근을 고르는 문제는 `answer_selection` 필드를 반드시 넣으세요** — 큰 근이면 `"largest"`,
+  작은 근이면 `"smallest"`, 답이 유일하면(중근·유일해) `"unique"`. 방정식만으론 두 근이 다 성립해
+  기계가 "어느 근인지" 못 가리므로, 이 필드가 없으면 검수 대기로 빠집니다. **`answer`·`answer_map`
+  은 반드시 이 선택에 맞는 값이어야 합니다**(큰 근이라 했으면 실제로 더 큰 근을 답으로).
 
 ## 매번 다른 문제로 (생성 다양성 — 매우 중요)
 - 호출할 때마다 **서로 다른 문제**를 만드세요. **직전과 같은 계수·구조를 반복하지 마세요**
@@ -179,7 +186,8 @@ _SYSTEM_PROMPT = """당신은 WhyMath의 **동등문제 저작자**입니다. �
 conditions(정답 검산용 조건식·SymPy 표기·여러 개면 배열), answer_map(조건에 답을 대입할 치환맵),
 difficulty_overall(1.0~5.0 숫자), unit_codes(단원 코드 배열·최소 1개),
 answer_format(자연수/분수/실수/식), achievement_standard_codes(성취기준 코드 배열).
-선택: distractor_map·solution_steps·concept_tags.
+선택: answer_selection(largest/smallest/unique·근 선택 문제엔 필수)·distractor_map·
+solution_steps·concept_tags.
 
 ### 예시 — *형식만* 참고하고 숫자·문맥은 반드시 새로 지어 다르게 만드세요(그대로 베끼지 말 것)
 {
@@ -188,6 +196,7 @@ answer_format(자연수/분수/실수/식), achievement_standard_codes(성취기
   "answer_explanation": "인수분해하면 (x-2)(x-4)=0 이고 두 근은 2와 4, 큰 근은 4.",
   "conditions": "x**2 - 6*x + 8 = 0",
   "answer_map": {"x": "4"},
+  "answer_selection": "largest",
   "difficulty_overall": 2.0,
   "unit_codes": ["QUAD-EQ"],
   "answer_format": "자연수",
@@ -475,6 +484,7 @@ class LLMEquivalentProblemGenerator:
         answer_explanation = self._opt_str(data, "answer_explanation")
         conditions = self._parse_conditions(data.get("conditions"))
         answer_map = self._parse_answer_map(data.get("answer_map"))
+        answer_selection = self._parse_answer_selection(data.get("answer_selection"))
         difficulty_overall = self._parse_difficulty(data.get("difficulty_overall"), spec)
         unit_codes = self._parse_unit_codes(data.get("unit_codes"))
         answer_format = self._parse_answer_format(data.get("answer_format"), spec)
@@ -517,6 +527,7 @@ class LLMEquivalentProblemGenerator:
             provenance=provenance,
             conditions=conditions,
             answer_map=answer_map,
+            answer_selection=answer_selection,
             solution_steps=solution_steps,
             concept_tags=concept_tags,
         )
@@ -546,6 +557,17 @@ class LLMEquivalentProblemGenerator:
             if items:
                 return items
         raise ValueError("conditions 결측/무효 — 정확성 검산 재료가 없습니다.")
+
+    @staticmethod
+    def _parse_answer_selection(value: object) -> str | None:
+        """근 선택(S2-i) — largest/smallest/unique만 허용, 그 외·결측은 None(선택 요구 없음).
+
+        게이트가 "어느 근인가"를 검증하는 신호다(`verify_root_selection`). 미지 값은 조용히
+        None으로 떨궈(오분류 방지) 다근 유일성 강등 경로에 맡긴다(조용한 오채택 금지).
+        """
+        if isinstance(value, str) and value.strip() in _VALID_ROOT_SELECTIONS:
+            return value.strip()
+        return None
 
     @staticmethod
     def _parse_answer_map(value: object) -> dict[str, str]:

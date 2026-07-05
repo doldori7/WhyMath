@@ -41,7 +41,7 @@ from whymath_backend.l3.pregenerate.validator import (
     default_seed_validator,
     validate_response,
 )
-from whymath_backend.l3.verify_answer import verify_answer
+from whymath_backend.l3.verify_answer import verify_answer, verify_root_selection
 from whymath_backend.l3.verify_solution import verify_solution
 from whymath_backend.schema.enums import (
     AnswerFormat,
@@ -206,14 +206,25 @@ def _evaluate_verification(
     answer_map: Mapping[str, str],
     solution_steps: Sequence[str] | None,
     solution_step_types: Sequence[StepType | None] | None,
+    answer_selection: str | None,
 ) -> tuple[Literal["verified", "failed", "unverified"], list[str]]:
-    """정확성 게이트 — Tier1(답 검산) + (있으면) Tier2(단계 동치)를 직접 결합(whs 규칙 미러).
+    """정확성 게이트 — Tier1(답 검산) + (있으면) Tier2(단계 동치) + 근 선택(S2-i) 결합.
 
-    결합 규칙(whs/verdict §4 미러·l3→whs 역참조 회피):
+    Tier1/Tier2 결합 규칙(whs/verdict §4 미러·l3→whs 역참조 회피):
       - **failed**: Tier1 fail *또는* 단계 has_incorrect=True(틀린 과정은 답 무관 차단).
       - **verified**: Tier1 pass *그리고* (단계 없음 OR has_incorrect=False·n_unverifiable=0·
         n_correct≥1). 결정론적으로 전부 검증되고 답도 통과한 경우만.
       - **unverified**: 그 외(Tier1 판정 불가·일부 단계 미검증·단 incorrect 없음). 격리 등급.
+
+    근 선택(S2-i·`verify_root_selection`): "큰 근/작은 근/유일" 문제는 *방정식만으론 답이 유일하게
+    정해지지 않아* Tier1이 **틀린 근도 통과**시킨다(Phaiakes9 실측: 큰 근 요구에 작은 근 -4도 pass).
+    따라서 Tier1/Tier2 결합 뒤 선택을 추가로 판정한다:
+      - `answer_selection`이 명시됨(largest/smallest/unique):
+        · 선택 위반이 확정되면(틀린 근) → **failed**(오답을 verified로 통과시키지 않음).
+        · 선택 확인 불가(풀 수 없음 등)면 verified를 → **unverified**로 강등(확신 없으면 단정 금지).
+      - `answer_selection`이 없음 + Tier1 verified: 다근 방정식이면 답이 유일하게 확정되지 않으므로
+        (선택 미declared) verified를 → **unverified**로 강등(needs_review). 틀린 근을 조용히
+        통과시키는 구멍 차단. 단근·파라미터·연립 등 유일성 판정 밖은 그대로 둔다(회귀 0).
     """
     reasons: list[str] = []
     answer_verdict = verify_answer(conditions, answer_map)
@@ -232,24 +243,44 @@ def _evaluate_verification(
         reasons.append(f"정확성 실패 — Tier2 풀이 단계 {idx}에 incorrect(틀린 과정).")
         return "failed", reasons
 
-    # ② verified — Tier1 pass AND (단계 없음 OR 전 단계 correct·미검증 0·correct≥1).
+    # ② 기저 상태 — Tier1 pass AND (단계 없음 OR 전 단계 correct·미검증 0·correct≥1).
     steps_ok = steps_result is None or (
         not steps_result.has_incorrect
         and steps_result.n_unverifiable == 0
         and steps_result.n_correct >= 1
     )
     if tier1 == "pass" and steps_ok:
-        return "verified", reasons
+        state: Literal["verified", "failed", "unverified"] = "verified"
+    else:
+        state = "unverified"
+        if tier1 != "pass":
+            reasons.append(f"정확성 미검증 — Tier1 답 검산 {tier1}: {answer_verdict.reason}")
+        elif steps_result is not None:
+            reasons.append(
+                "정확성 미검증 — Tier2 단계 미검증"
+                f"(unverifiable {steps_result.n_unverifiable}·correct {steps_result.n_correct})."
+            )
 
-    # ③ unverified — 판정 불가 격리(pass 위장 금지).
-    if tier1 != "pass":
-        reasons.append(f"정확성 미검증 — Tier1 답 검산 {tier1}: {answer_verdict.reason}")
-    elif steps_result is not None:
-        reasons.append(
-            "정확성 미검증 — Tier2 단계 미검증"
-            f"(unverifiable {steps_result.n_unverifiable}·correct {steps_result.n_correct})."
-        )
-    return "unverified", reasons
+    # ③ 근 선택(S2-i) — Tier1이 확정 못 하는 "어느 근인가"를 판정.
+    if answer_selection in ("largest", "smallest", "unique"):
+        sel = verify_root_selection(conditions, answer_map, answer_selection)  # type: ignore[arg-type]
+        if sel.state == "fail":
+            reasons.append(f"정확성 실패 — 근 선택({answer_selection}) 위반: {sel.reason}")
+            return "failed", reasons
+        if sel.state == "unverifiable" and state == "verified":
+            state = "unverified"
+            reasons.append(f"정확성 미검증 — 근 선택({answer_selection}) 확인 불가: {sel.reason}")
+    elif state == "verified":
+        # 선택 미declared + Tier1 통과 → 다근이면 답이 유일 확정 안 됨 → 강등(needs_review).
+        probe = verify_root_selection(conditions, answer_map, "unique")
+        if probe.state == "fail":
+            state = "unverified"
+            reasons.append(
+                "정확성 미검증 — 답이 여러 실근 중 하나이나 선택(큰 근/작은 근/유일)이 명시되지 "
+                f"않아 유일하게 확정되지 않음: {probe.reason}"
+            )
+
+    return state, reasons
 
 
 def _evaluate_hygiene(
@@ -340,6 +371,7 @@ def evaluate_equivalent_candidate(
     answer_map: Mapping[str, str],
     solution_steps: Sequence[str] | None = None,
     solution_step_types: Sequence[StepType | None] | None = None,
+    answer_selection: str | None = None,
     validator: SeedValidator | None = None,
     difficulty_tol: float = 0.5,
 ) -> AcceptanceVerdict:
@@ -353,6 +385,10 @@ def evaluate_equivalent_candidate(
 
     인자:
       - `conditions`·`answer_map`: 후보 답 검산용 원 조건·치환맵(호출자 제공·L5 파싱 밖).
+      - `answer_selection`: (선택·S2-i) "큰 근/작은 근/유일" 문제의 근 선택(largest/smallest/
+        unique). 방정식만으론 답이 유일하게 정해지지 않는 문제에서 *어느 근인가*를 검증한다 —
+        위반 시 failed, 미declared·다근이면 verified→unverified(needs_review) 강등. None=선택 요구
+        없음(단, 다근 방정식이면 유일성 미확정으로 강등될 수 있음).
       - `solution_steps`·`solution_step_types`: (선택) 이미 분해된 단계·전이당 타입.
       - `validator`: (선택) 위생 검증기(기본 `default_seed_validator()`).
       - `difficulty_tol`: 난이도 격차 허용치(만점 밴드).
@@ -369,9 +405,9 @@ def evaluate_equivalent_candidate(
     copyright_ok, copyright_reasons = _evaluate_copyright(candidate, provenance)
     reasons.extend(copyright_reasons)
 
-    # ② 정확성 게이트 (Tier1 + Tier2 결합).
+    # ② 정확성 게이트 (Tier1 + Tier2 + 근 선택 S2-i 결합).
     verification, verification_reasons = _evaluate_verification(
-        conditions, answer_map, solution_steps, solution_step_types
+        conditions, answer_map, solution_steps, solution_step_types, answer_selection
     )
     reasons.extend(verification_reasons)
 

@@ -95,6 +95,7 @@ def _candidate(
     provenance: ContentProvenance | None = None,
     conditions: str | list[str] = _CONDITIONS,
     answer_map: dict[str, str] | None = None,
+    answer_selection: str | None = "largest",  # 두 근 2·3 중 큰 근 3 — S2-i 유일성 확정
     solution_steps: list[str] | None = None,
     concept_tags: list[ConceptTag] | None = None,
 ) -> CandidateProblem:
@@ -103,6 +104,7 @@ def _candidate(
         provenance=provenance if provenance is not None else _provenance(),
         conditions=conditions,
         answer_map=answer_map if answer_map is not None else dict(_ANSWER_MAP),
+        answer_selection=answer_selection,
         solution_steps=solution_steps,
         concept_tags=concept_tags if concept_tags is not None else [],
     )

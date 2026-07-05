@@ -46,14 +46,16 @@ _STANDARD = "[12미적01-01]"
 _MISCONCEPTION = "distribution-over-power"  # 실 카탈로그 id
 _CATALOG = {mid: m.name_kr for mid, m in CATALOG_BY_ID.items()}
 
-# 정상 응답 JSON — x=3은 x²-5x+6=0의 근(9-15+6=0) → Tier1 pass. 발문·해설은 위생-청정(거짓 등식 0).
+# 정상 응답 JSON — 두 근 2·3 중 큰 근 3. answer_selection=largest로 근 선택(S2-i)을 명시해
+# Tier1 pass + 근 선택 확정 → verified. 발문·해설은 위생-청정(거짓 등식 0).
 _HAPPY = json.dumps(
     {
-        "question_text": "주어진 이차 방정식의 자연수 근을 구하시오.",
+        "question_text": "이차방정식 x^2 - 5x + 6 = 0 의 두 근 중 큰 근을 구하시오.",
         "answer": "3",
-        "answer_explanation": "조건을 만족하는 자연수 근을 구하면 됩니다.",
+        "answer_explanation": "인수분해하면 (x-2)(x-3)=0, 두 근은 2와 3, 큰 근은 3.",
         "conditions": "x**2 - 5*x + 6 = 0",
         "answer_map": {"x": "3"},
+        "answer_selection": "largest",
         "difficulty_overall": 3.0,
         "unit_codes": ["CAL-INT-DEF"],
         "answer_format": "자연수",
@@ -145,7 +147,8 @@ class TestAssembly:
         # 검산 재료 정합.
         assert candidate.conditions == "x**2 - 5*x + 6 = 0"
         assert candidate.answer_map == {"x": "3"}
-        assert candidate.problem.question_text == "주어진 이차 방정식의 자연수 근을 구하시오."
+        assert candidate.answer_selection == "largest"  # 근 선택(S2-i) 파싱
+        assert candidate.problem.question_text == json.loads(_HAPPY)["question_text"]
         assert candidate.problem.answer == "3"
 
     def test_slug_is_stable_and_deterministic(self) -> None:
@@ -234,6 +237,37 @@ class TestGenerationDiversity:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# S2-i: 근 선택(answer_selection) 파싱 + 프롬프트 지시.
+# ──────────────────────────────────────────────────────────────────────
+class TestRootSelectionParsing:
+    def test_answer_selection_parsed(self) -> None:
+        candidate = _gen(FakeProvider([_HAPPY])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_selection == "largest"
+
+    def test_missing_answer_selection_is_none(self) -> None:
+        payload = json.loads(_HAPPY)
+        del payload["answer_selection"]
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_selection is None
+
+    def test_invalid_answer_selection_dropped_to_none(self) -> None:
+        payload = json.loads(_HAPPY)
+        payload["answer_selection"] = "biggest"  # 미지 값 — 조용히 None으로 떨군다.
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_selection is None
+
+    def test_system_prompt_instructs_answer_selection(self) -> None:
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        _, system = provider.calls[0]
+        assert "answer_selection" in system
+        assert "largest" in system
+
+
+# ──────────────────────────────────────────────────────────────────────
 # S2-h: 저작용 로컬 패밀리 — 기본 GENERAL(qwen2.5)로 라우팅(qwen2-math mode collapse 회피).
 # ──────────────────────────────────────────────────────────────────────
 class TestAuthoringFamily:
@@ -288,6 +322,7 @@ class TestGatePasses:
             provenance=candidate.provenance,
             conditions=candidate.conditions,
             answer_map=candidate.answer_map,
+            answer_selection=candidate.answer_selection,  # 근 선택(S2-i) 결선
             solution_steps=candidate.solution_steps,
         )
         assert verdict.accepted is True

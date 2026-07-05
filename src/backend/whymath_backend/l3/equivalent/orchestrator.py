@@ -212,6 +212,7 @@ def run_equivalent_generation(
         conditions=candidate.conditions,
         answer_map=candidate.answer_map,
         solution_steps=candidate.solution_steps,
+        answer_selection=candidate.answer_selection,
     )
     reasons.extend(verdict.reasons)
     if not verdict.accepted:

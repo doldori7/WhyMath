@@ -63,8 +63,15 @@ def _evaluate(record: ProblemBankRecord) -> object:
         provenance=provenance,
         conditions=record.verify.conditions,
         answer_map=record.verify.answer_map,
+        answer_selection=record.verify.answer_selection,  # 근 선택(S2-i)
         solution_steps=record.verify.solution_steps,
     )
+
+
+# S2-i: "서로 다른 실근의 개수는?" 류(근의 *개수*)는 답이 근 값이 아니라 개수라 근 대입으로 자동
+# 검증할 수 없다(현 conditions/answer_map 계약 밖). 정직하게 needs_review로 남긴다 — 사람 검수·
+# 후속 count 검증기 소관. 이 시드만 예외(나머지는 자동 verified/accepted).
+_REVIEW_ONLY_SLUGS: frozenset[str] = frozenset({"wm-quad-eq-root-count-mc"})
 
 
 def test_every_seed_passes_acceptance_gate() -> None:
@@ -72,6 +79,10 @@ def test_every_seed_passes_acceptance_gate() -> None:
     assert len(records) >= 3  # 손저작 시드 3~5개
     for record in records:
         verdict = _evaluate(record)
+        if record.slug in _REVIEW_ONLY_SLUGS:
+            # 근의 개수 문제 — 근 대입 자동검증 밖이라 정직하게 검수필요(pass 위장 금지).
+            assert verdict.verification == "unverified"  # type: ignore[attr-defined]
+            continue
         # 계약: 최소 정확성 검증(verified) — 시드가 S2-a 정확성 게이트를 실증.
         assert verdict.verification == "verified", (  # type: ignore[attr-defined]
             f"{record.slug} 정확성 미검증: {verdict.reasons}"  # type: ignore[attr-defined]
@@ -80,8 +91,13 @@ def test_every_seed_passes_acceptance_gate() -> None:
 
 def test_every_seed_is_accepted() -> None:
     # 더 강한 실증 — 4종 게이트 모두 통과(accepted=True). 자기-정합 spec이라 동치후보 보장.
+    # 단 근의 개수 문제(_REVIEW_ONLY)는 자동검증 밖이라 needs_review(검수필요)로 남는다.
     for record in _records():
         verdict = _evaluate(record)
+        if record.slug in _REVIEW_ONLY_SLUGS:
+            assert verdict.accepted is False  # type: ignore[attr-defined]
+            assert verdict.equivalence == "검수필요"  # type: ignore[attr-defined]
+            continue
         assert verdict.accepted is True, (  # type: ignore[attr-defined]
             f"{record.slug} 미수용: {verdict.reasons}"  # type: ignore[attr-defined]
         )
