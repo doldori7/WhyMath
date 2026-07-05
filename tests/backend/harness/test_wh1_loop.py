@@ -156,6 +156,59 @@ class TestVerifyObligation:
         assert any(r.kind == "verify_step" and "incorrect" in r.detail for r in out.trace)  # type: ignore[attr-defined]
 
 
+class TestAnswerSuppression:
+    """정답 억제 백스톱(§3.4·감사 Q6) — correct가 아닌 턴은 정책 명시 발화를 버리고 파생한다.
+
+    *하네스* 강제라 정책 무관: 어떤 TutorPolicy가 정답을 utterance에 실어도 학생에게 닿지 못한다
+    (CLAUDE.md "막혔을 때 바로 정답 금지"). correct·검증 없는 대화 턴에서만 명시 발화를 존중한다.
+    """
+
+    _LEAK = "정답은 x=3이야"
+
+    def test_incorrect_suppresses_free_text_utterance(self) -> None:
+        """오답 검증 후 end_turn의 명시 발화 → 버리고 소크라테스 파생(정답 문자열 미노출)."""
+        out = _run(
+            [
+                VerifyStepAction(steps=["x+x", "3*x"]),  # incorrect
+                EndTurnAction(action_type="힌트", utterance=self._LEAK),
+            ],
+            has_solution_steps=True,
+        )
+        assert out.status == "ended"  # type: ignore[attr-defined]
+        assert out.utterance != self._LEAK  # 정책 명시 발화 무시  # type: ignore[attr-defined]
+        assert self._LEAK not in (out.utterance or "")  # type: ignore[attr-defined]
+
+    def test_unverifiable_suppresses_free_text_utterance(self) -> None:
+        """미검증(막힘) 후 end_turn의 명시 발화 → 버리고 파생(정답 문자열 미노출)."""
+        out = _run(
+            [
+                VerifyStepAction(steps=["x+1", "어떤 서술형 논증"]),  # unverifiable
+                EndTurnAction(action_type="힌트", utterance=self._LEAK),
+            ],
+            has_solution_steps=True,
+        )
+        assert out.status == "ended"  # type: ignore[attr-defined]
+        assert self._LEAK not in (out.utterance or "")  # type: ignore[attr-defined]
+
+    def test_correct_honors_free_text_utterance(self) -> None:
+        """정답 검증 후에는 명시 발화 존중 — 학생이 이미 맞혀 정답 노출 위험 0."""
+        msg = "정확해, 잘 풀었어!"
+        out = _run(
+            [
+                VerifyStepAction(steps=["x+x", "2*x"]),  # correct
+                EndTurnAction(action_type="격려", utterance=msg),
+            ],
+            has_solution_steps=True,
+        )
+        assert out.utterance == msg  # type: ignore[attr-defined]
+
+    def test_no_verdict_honors_free_text_utterance(self) -> None:
+        """검증 없는 순수 대화 턴(verdict None) → 명시 발화 존중(억제 대상 아님)."""
+        msg = "무엇이 궁금해?"
+        out = _run([EndTurnAction(action_type="질문", utterance=msg)])
+        assert out.utterance == msg  # type: ignore[attr-defined]
+
+
 class TestExploreInvariant:
     """ε-탐색 강제(§2.2 규칙2) — 탐색 턴 probe는 활성 세트 밖을 겨냥해야 한다."""
 

@@ -22,9 +22,11 @@ Protocol을 *프로덕션*으로 구현한다 — 지금까지 두뇌는 `Script
 정책도 선제적으로 존중한다:
   - **verify 의무**: `has_solution_steps and not verify_called`면 LLM이 end_turn을 내도 정책이
     `verify_step`으로 재지정(하네스의 end_turn 거부·루프 낭비 사전 차단).
-  - **정답 억제(Polya 우선)**: `last_verdict == "unverifiable"`이면 end_turn의 *명시 발화*를
-    제거하고 소크라테스 유도(질문/힌트/격려)로 강등 — 정답을 노출하는 발화를 막는다(CLAUDE.md
-    "막혔을 때 바로 정답 금지"). 하네스의 개입 발화 결선이 대신 말한다.
+  - **정답 억제(Polya 우선)**: `last_verdict`가 correct가 아니면(incorrect·unverifiable=오답·막힘)
+    end_turn의 *명시 발화*를 제거하고 소크라테스 유도(질문/힌트/격려)로 강등 — 정답 노출
+    발화를 막는다(CLAUDE.md "막혔을 때 바로 정답 금지"). 하네스의 개입 발화 결선이 대신 말한다.
+    이는 하네스 `_end_turn_utterance`의 *최종* 정답 억제 백스톱(정책 무관)과 이중 방어를 이룬다 —
+    정책이 선제 존중하되, 어떤 정책이 어겨도 하네스가 명시 발화를 버려 정답이 학생에게 닿지 않는다.
 
 **안전 폴백(조용한 크래시 금지).** 파싱 실패·미지 kind·provider 오류는 크래시 대신 안전 액션으로
 강등한다 — verify 의무가 걸려 있으면 `verify_step`, 아니면 `end_turn(격려)`. 학생 앞에서 루프가
@@ -44,6 +46,7 @@ from pydantic import ValidationError
 
 from whymath_backend.config import Settings
 from whymath_backend.harness.wh1_loop import (
+    _ANSWER_SUPPRESSED_VERDICTS,
     Action,
     CurateHypothesisAction,
     EndTurnAction,
@@ -467,9 +470,10 @@ class LLMTutorPolicy:
         ):
             return VerifyStepAction(steps=list(self._solution_steps))
 
-        # 정답 억제(Polya 우선): unverifiable의 end_turn은 명시 발화를 제거하고 소크라테스로 강등.
-        # LLM이 utterance에 정답을 실었을 위험을 제거하고, 하네스의 개입 발화 결선이 대신 말한다.
-        if state.last_verdict == "unverifiable" and isinstance(action, EndTurnAction):
+        # 정답 억제(Polya 우선): correct가 아닌(incorrect·unverifiable=오답/막힘) end_turn은 명시
+        # 발화를 제거하고 소크라테스로 강등. LLM이 utterance에 정답을 실었을 위험을 제거하고,
+        # 하네스의 개입 발화 결선이 대신 말한다(하네스 백스톱과 이중 방어).
+        if state.last_verdict in _ANSWER_SUPPRESSED_VERDICTS and isinstance(action, EndTurnAction):
             safe_type: EndTurnType = (
                 action.action_type if action.action_type in _SOCRATIC_SAFE_TYPES else "질문"
             )

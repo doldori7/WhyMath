@@ -20,6 +20,11 @@ log_evidence`·BKT 커밋 결선은 후속). 그래서 본 골격은 *순수·DB
   - **verify 호출 의무**(§3.1·§3.4-1): 학생 *풀이 단계 제출 턴*(`has_solution_steps=True`)은
     `verify_step`을 호출해야 한다 — 미호출 상태의 `end_turn`은 *거부*(WH-S "verify 없는 finalize
     거부" 동형). `unverifiable`이어도 *호출*했으면 통과(§3.1 3-state).
+  - **정답 억제 백스톱**(감사 Q6·CLAUDE.md "막혔을 때 바로 정답 금지"): 학생 풀이가 `correct`가
+    아닌 턴(`incorrect`·`unverifiable`=오답/막힘)에서는 정책이 실은 *명시 발화*(`utterance`)를
+    신뢰하지 않고 하네스가 소크라테스 유도 발화를 파생한다 — LLM이 정답을 발화에 흘려도 학생에게
+    닿지 못한다. 이 강제는 *하네스*에 있어 정책 선의에 의존하지 않는다(어떤 `TutorPolicy`가 와도
+    성립). `correct`·검증 없는 순수 대화 턴에서만 명시 발화를 존중한다(정답 노출 위험 0).
   - **ε-탐색 강제**(§2.2 규칙2): `is_exploration_turn(turn_index)`인 턴의 `select_probe`는 활성
     가설 세트 *밖*을 겨냥해야 한다 — 외부 후보 미제공 등으로 탐색이 안 되면 probe 요청을 *거부*
     (하네스가 카운터 관리·위반 거부).
@@ -93,6 +98,10 @@ __all__ = [
 ]
 
 _VALID_POLARITY = (-1, 1)
+
+# 정답 억제 백스톱이 발동하는 3-state verdict — 학생 풀이가 correct가 아닌(오답·미검증=막힘)
+# 상태. 이때 end_turn의 정책 명시 발화를 신뢰하지 않고 하네스가 소크라테스 발화를 파생한다.
+_ANSWER_SUPPRESSED_VERDICTS: tuple[str, ...] = ("incorrect", "unverifiable")
 
 EndTurnType = Literal["질문", "힌트", "출제", "격려"]
 """end_turn 행위 4종(§3 도구8) — 학생에게 전달되는 발화 유형."""
@@ -329,8 +338,17 @@ def _refuted_mids(state: TurnState) -> frozenset[str]:
 
 
 def _end_turn_utterance(state: TurnState, action: EndTurnAction) -> str:
-    """end_turn 발화 산출 — *유일한* 학생 노출(§3.4-3). 질문/힌트는 가설 세트 개입 발화로 결선."""
-    if action.utterance is not None:
+    """end_turn 발화 산출 — *유일한* 학생 노출(§3.4-3). 질문/힌트는 가설 세트 개입 발화로 결선.
+
+    정답 억제 백스톱(§3.4·감사 Q6): 학생 풀이가 `correct`가 아닌 턴(`incorrect`·`unverifiable`)에선
+    정책 명시 발화(`action.utterance`)를 *무시*하고 아래 파생 경로(소크라테스 개입·출제·중립)로만
+    말한다 — 정책이 정답을 발화에 실어도 학생에게 닿지 못하게 하는 *하네스* 강제(정책 무관). 파생
+    발화는 가설·직전 probe·중립 유도뿐이라 구조적으로 정답을 담지 않는다.
+    """
+    # correct·검증 없는 순수 대화 턴에서만 정책 명시 발화 존중(정답 노출 위험 0). 그 외(오답·막힘)는
+    # 명시 발화를 버리고 파생한다.
+    answer_suppressed = state.last_verdict in _ANSWER_SUPPRESSED_VERDICTS
+    if action.utterance is not None and not answer_suppressed:
         return action.utterance
     if action.action_type in ("질문", "힌트"):
         # 개입 발화 결선(#237) — 누적 가설 세트가 소크라테스 발화를 구동.

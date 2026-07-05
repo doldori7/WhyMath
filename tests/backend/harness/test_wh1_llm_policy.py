@@ -151,7 +151,23 @@ class TestVerifyObligationDefense:
         assert action.steps == ["x+1", "x=2"]
 
 
-class TestUnverifiableSuppression:
+class TestAnswerSuppression:
+    """correct가 아닌(incorrect·unverifiable) 상태의 정답 억제 — 정책 선제 방어(하네스 백스톱과 이중)."""
+
+    def test_incorrect_strips_answer_and_downgrades_to_socratic(self) -> None:
+        """오답 상태의 end_turn도 명시 발화 제거 + 정답 제시형(출제) → 질문 강등(unverifiable 동형)."""
+        provider = FakeProvider(
+            ['{"kind": "end_turn", "action_type": "출제", "utterance": "정답은 x=3이야."}']
+        )
+        policy = LLMTutorPolicy(provider)
+        action = _next(
+            policy,
+            _state(has_solution_steps=True, verify_called=True, last_verdict="incorrect"),
+        )
+        assert isinstance(action, EndTurnAction)
+        assert action.action_type == "질문"  # 정답 제시형(출제) → 소크라테스 질문으로 강등
+        assert action.utterance is None  # LLM 정답 발화 제거
+
     def test_unverifiable_strips_answer_and_downgrades_to_socratic(self) -> None:
         """unverifiable 상태의 end_turn은 명시 발화 제거 + 정답 제시형(출제) → 질문 강등."""
         provider = FakeProvider(
