@@ -16,8 +16,11 @@ from pydantic import SecretStr
 from whymath_backend.api._crypto import (
     MultiKeyCipher,
     SecretCipher,
+    build_dialogue_content_cipher,
     build_secret_cipher,
+    encrypt_dialogue_content,
     encrypt_secret_for_storage,
+    resolve_dialogue_content,
     resolve_stored_secret,
 )
 from whymath_backend.config import Settings
@@ -31,6 +34,14 @@ def _settings(enc_key_b64: str = "", fallback_keys_b64: str = "") -> Settings:
         jwt_secret_key=SecretStr(_SECRET),
         device_secret_encryption_key=SecretStr(enc_key_b64),
         device_secret_decryption_fallback_keys=SecretStr(fallback_keys_b64),
+    )
+
+
+def _dialogue_settings(enc_key_b64: str = "", fallback_keys_b64: str = "") -> Settings:
+    return Settings(
+        jwt_secret_key=SecretStr(_SECRET),
+        dialogue_content_encryption_key=SecretStr(enc_key_b64),
+        dialogue_content_decryption_fallback_keys=SecretStr(fallback_keys_b64),
     )
 
 
@@ -205,3 +216,96 @@ class TestStorageHelpers:
         """평문·암호화 둘 다 없으면 데이터 무결성 오류(RuntimeError)."""
         with pytest.raises(RuntimeError, match="무결성"):
             resolve_stored_secret(SecretCipher(_KEY), None, None, None)
+
+
+class TestBuildDialogueContentCipher:
+    """감사상환 #2: 대화 본문 전용 cipher 빌더 — device 키와 *분리*된 키 소스."""
+
+    def test_none_when_key_unset(self) -> None:
+        """키 미설정(빈 문자열)이면 None — 평문 폴백(CI·기존 배포 무영향·점진 도입)."""
+        assert build_dialogue_content_cipher(_dialogue_settings("")) is None
+
+    def test_cipher_when_key_set(self) -> None:
+        """base64 32바이트 키 설정 시 round-trip 동작."""
+        key_b64 = base64.b64encode(os.urandom(32)).decode()
+        cipher = build_dialogue_content_cipher(_dialogue_settings(key_b64))
+        assert cipher is not None
+        ct, nonce = cipher.encrypt("본문")
+        assert cipher.decrypt(ct, nonce) == "본문"
+
+    def test_key_source_separated_from_device(self) -> None:
+        """대화 본문 키와 device secret 키는 *분리* — device 키만 설정해도 대화 cipher는 None."""
+        device_only = Settings(
+            jwt_secret_key=SecretStr(_SECRET),
+            device_secret_encryption_key=SecretStr(base64.b64encode(os.urandom(32)).decode()),
+        )
+        assert build_dialogue_content_cipher(device_only) is None
+        # 역방향도: 대화 키만 설정 시 device cipher는 None
+        dialogue_only = _dialogue_settings(base64.b64encode(os.urandom(32)).decode())
+        assert build_secret_cipher(dialogue_only) is None
+        assert build_dialogue_content_cipher(dialogue_only) is not None
+
+    def test_fallback_keys_enable_rotation(self) -> None:
+        """대화 본문 키 회전 — 구 키(fallback)로 암호화한 행을 새 키 primary에서 복호."""
+        old_b64 = base64.b64encode(os.urandom(32)).decode()
+        new_b64 = base64.b64encode(os.urandom(32)).decode()
+        old_cipher = build_dialogue_content_cipher(_dialogue_settings(old_b64))
+        assert old_cipher is not None
+        ct, nonce = old_cipher.encrypt("legacy-본문")
+        rotated = build_dialogue_content_cipher(_dialogue_settings(new_b64, old_b64))
+        assert rotated is not None
+        assert rotated.decrypt(ct, nonce) == "legacy-본문"
+
+
+class TestEncryptDialogueContent:
+    """감사상환 #2: 대화 본문 저장 표현 결정(nullable content 분기 포함)."""
+
+    def test_with_cipher(self) -> None:
+        """cipher 있으면 (None, ciphertext, nonce) — 평문 컬럼 비움."""
+        cipher = SecretCipher(_KEY)
+        plain, enc, nonce = encrypt_dialogue_content(cipher, "학생 풀이 본문")
+        assert plain is None
+        assert enc is not None and nonce is not None
+        assert cipher.decrypt(enc, nonce) == "학생 풀이 본문"
+
+    def test_without_cipher_plaintext_fallback(self) -> None:
+        """cipher None이면 (content, None, None) — 평문 폴백(명시적)."""
+        assert encrypt_dialogue_content(None, "본문") == ("본문", None, None)
+
+    def test_none_content_yields_all_none(self) -> None:
+        """content None(본문 없는 턴)이면 (None, None, None) — 암호화 대상 없음."""
+        assert encrypt_dialogue_content(SecretCipher(_KEY), None) == (None, None, None)
+        assert encrypt_dialogue_content(None, None) == (None, None, None)
+
+
+class TestResolveDialogueContent:
+    """감사상환 #2: 대화 본문 노출 직전 복호(nullable content — None 허용, 무결성 raise 없음)."""
+
+    def test_encrypted_round_trip(self) -> None:
+        """암호화 저장 → resolve가 복호해 원문 복원."""
+        cipher = SecretCipher(_KEY)
+        _plain, enc, nonce = encrypt_dialogue_content(cipher, "복호대상")
+        assert resolve_dialogue_content(cipher, None, enc, nonce) == "복호대상"
+
+    def test_plaintext_fallback(self) -> None:
+        """평문 행(content만)은 cipher 유무와 무관하게 그대로 반환(하위 호환)."""
+        assert resolve_dialogue_content(None, "평문본문", None, None) == "평문본문"
+        assert resolve_dialogue_content(SecretCipher(_KEY), "평문본문", None, None) == "평문본문"
+
+    def test_none_content_returns_none(self) -> None:
+        """평문·암호문 둘 다 None(본문 없는 턴)이면 None 반환 — device와 달리 raise 없음."""
+        assert resolve_dialogue_content(SecretCipher(_KEY), None, None, None) is None
+        assert resolve_dialogue_content(None, None, None, None) is None
+
+    def test_encrypted_without_cipher_raises(self) -> None:
+        """암호화 행인데 cipher 미설정 → RuntimeError(조용한 평문 유출 금지·시끄러운 실패)."""
+        cipher = SecretCipher(_KEY)
+        _plain, enc, nonce = encrypt_dialogue_content(cipher, "본문")
+        with pytest.raises(RuntimeError, match="복호 키"):
+            resolve_dialogue_content(None, None, enc, nonce)
+
+    def test_key_loss_wrong_key_raises_invalid_tag(self) -> None:
+        """키 유실(다른 키) → InvalidTag(조용한 넘어감 금지)."""
+        _plain, enc, nonce = encrypt_dialogue_content(SecretCipher(_KEY), "본문")
+        with pytest.raises(InvalidTag):
+            resolve_dialogue_content(SecretCipher(os.urandom(32)), None, enc, nonce)

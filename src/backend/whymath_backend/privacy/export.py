@@ -214,7 +214,25 @@ async def export_user_data(session: AsyncSession, *, user_id: uuid.UUID) -> User
         .where(Dialogue.user_id == user_id)
         .order_by(DialogueTurn.dialogue_id, DialogueTurn.turn_order)
     )
-    data["dialogue_turns"] = [_row_to_json(row) for row in turn_result.scalars().all()]
+    # 감사상환 #2: content가 봉투 암호화됐으면 노출(본인 열람권) 직전 복호한다. cipher 빌더·복호
+    # 헬퍼는 함수-지역 import — privacy → api 모듈 로드 순환(api.me → privacy) 회피(요청 시점
+    # import이라 안전). `_row_to_json`은 ciphertext 컬럼을 제외(to_schema)하므로 export엔 평문만
+    # 실린다. 키 유실 시 resolve가 RuntimeError(조용한 평문/빈 export 금지).
+    from whymath_backend.api._crypto import (
+        build_dialogue_content_cipher,
+        resolve_dialogue_content,
+    )
+    from whymath_backend.config import get_settings
+
+    content_cipher = build_dialogue_content_cipher(get_settings())
+    turn_dicts: list[dict[str, Any]] = []
+    for row in turn_result.scalars().all():
+        turn_json = _row_to_json(row)
+        turn_json["content"] = resolve_dialogue_content(
+            content_cipher, row.content, row.content_encrypted, row.content_nonce
+        )
+        turn_dicts.append(turn_json)
+    data["dialogue_turns"] = turn_dicts
 
     profile_result = await session.execute(
         select(UserProfile).where(UserProfile.user_id == user_id)
