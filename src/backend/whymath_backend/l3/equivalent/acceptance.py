@@ -1,0 +1,419 @@
+"""자체생성 동등문제 *수용 게이트* — S2-a(순수·결정론·DB 0·LLM 0).
+
+설계 정본: `docs/architecture/03_content_generation.md` §"개념 시퀀스 동치성 판정 —
+휴리스틱 + 사람 검수 병행". 핵심 명제: **동등성은 미해결 연구 난제**이므로 스코어러는
+*확정이 아니라 분류*만 한다("휴리스틱으로 좁히고 사람이 닫는다"). 따라서 본 게이트는 두
+등급(`동치후보`·`비동치후보`)과 *사람 검수 큐*로 보낼 중간 등급(`검수필요`)만 낸다.
+
+이 게이트는 자체생성 동등문제(평가원·교과서 본문 복제 없이 성취기준·오개념·난이도를 대응)가
+코퍼스에 *저장되기 전에* 통과해야 하는 4종 게이트를 결정론으로 조합한다:
+
+  1. **저작권 게이트**(`copyright_ok`) — provenance/Problem 생성 시 Pydantic 불변식이 이미
+     A/B/C를 강제하므로(`schema/provenance.py`·`schema/problem.py`) 여기선 *값 확인*만 한다
+     (재구현 0). generation_type이 변형/생성류이고 license가 WHYMATH_GENERATED이며
+     source_type이 자체생성인지 확인한다.
+  2. **정확성 게이트**(`verification`) — Tier1 답 검산(`l3/verify_answer`) + (있으면) Tier2
+     단계 동치(`l3/verify_solution`)를 *직접 조합*한다. whs/verdict의 결합 규칙을 미러하되
+     l3→whs 역참조를 피하려고 두 검증기를 직접 부른다(계층 규칙).
+  3. **위생 게이트**(`hygiene_ok`) — 후보 본문(해설·발문)에 거짓 수치 등식 등 슬립이 있는지
+     `l3/pregenerate/validator`의 시드 검증기로 본다(신호 None=통과).
+  4. **동등성 분류**(`equivalence`·`equivalence_score`) — 성취기준·오개념·난이도·답 형태 4성분을
+     가중 평균해 점수를 내고 임계값으로 3등급 분류한다(확정 아님).
+
+정직성(CLAUDE.md "확실하지 않으면 모른다"·"조용한 실패 금지"): 정확성 판정 불가·중간 점수는
+`검수필요`로 사람 큐에 보낸다. 최종 `accepted`는 4종이 *모두* 깨끗할 때만 True다. 모든 거부/검수
+사유는 `reasons`에 정직히 기록한다(학생 비노출·감사/운영용).
+
+범위 메모(S2-a): *수용 게이트*만이다. 동등문제 *생성부*(LLM 호출·프롬프트)는 후속 슬라이스다.
+사람 검수 큐 *결선*·임계값 점진 보정(검수 누적→임계값 학습)도 후속(§03 로드맵).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Mapping, Sequence
+from enum import Enum
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from whymath_backend.l3.pregenerate.validator import (
+    SeedValidator,
+    default_seed_validator,
+    validate_response,
+)
+from whymath_backend.l3.verify_answer import verify_answer
+from whymath_backend.l3.verify_solution import verify_solution
+from whymath_backend.schema.enums import (
+    AnswerFormat,
+    GenerationType,
+    LicenseType,
+    SourceType,
+    StepType,
+)
+from whymath_backend.schema.problem import Problem
+from whymath_backend.schema.provenance import (
+    _TRANSFORMED_GENERATION_TYPES,
+    ContentProvenance,
+)
+
+__all__ = [
+    "AcceptanceVerdict",
+    "EquivalenceSpec",
+    "EquivalenceVerdict",
+    "evaluate_equivalent_candidate",
+]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 동등성 스코어 가중치·임계값 — 코드 상수(문서화). 합=1.0.
+# 성취기준을 최상위 축으로(같은 성취기준을 다루는가), 오개념·난이도·답형태 순.
+# ──────────────────────────────────────────────────────────────────────────
+_W_STANDARD = 0.40
+_W_MISCONCEPTION = 0.30
+_W_DIFFICULTY = 0.20
+_W_ANSWER_FORMAT = 0.10
+
+# 난이도 초과분 선형 감쇠 스케일 — 난이도는 1~5 척도라 최대 격차가 4.0.
+_DIFFICULTY_DECAY_SCALE = 4.0
+
+# 동등성 분류 임계값 — HIGH 이상 동치후보·LOW 미만 비동치후보·그 사이(또는 정확성
+# 미검증) 검수필요. §03 "경계 구간은 반드시 사람 검수 큐"의 코드화.
+_EQUIVALENCE_HIGH = 0.85
+_EQUIVALENCE_LOW = 0.50
+
+# 저작권 게이트가 허용하는 generation_type(변형/생성류 ∪ FULLY_GENERATED). FULLY_GENERATED는
+# 이미 _TRANSFORMED_GENERATION_TYPES에 포함되나, 계약을 자기설명적으로 두려고 명시 union 한다.
+_ACCEPTED_GENERATION_TYPES: frozenset[GenerationType] = frozenset(
+    _TRANSFORMED_GENERATION_TYPES | {GenerationType.FULLY_GENERATED}
+)
+# use_enum_values=True 환경(provenance)이라 값이 문자열일 수 있어 *문자열 값 집합*으로 비교한다.
+_ACCEPTED_GENERATION_VALUES: frozenset[str] = frozenset(
+    str(g.value) for g in _ACCEPTED_GENERATION_TYPES
+)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 타입
+# ──────────────────────────────────────────────────────────────────────────
+class EquivalenceSpec(BaseModel):
+    """원본이 요구하는 *대응 명세* — 동등문제가 맞춰야 할 성취기준·오개념·난이도·답형태.
+
+    스코어러는 후보(`Problem`)의 대응 필드를 이 명세와 비교해 동등성 점수를 낸다. 빈 frozenset은
+    "요구 없음"(= 그 축은 만점)으로 해석한다 — 부분 명세를 허용한다(원본이 특정 오개념을 겨냥하지
+    않을 수 있음). L3-지역 타입이다(schema는 l3를 import하지 않는 계층 규칙을 지키려 여기 둔다).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    achievement_standard_codes: frozenset[str] = Field(
+        default_factory=frozenset,
+        description="원본이 다루는 성취기준 고시코드 집합(빈 집합=요구 없음·만점).",
+    )
+    target_misconception_ids: frozenset[str] = Field(
+        default_factory=frozenset,
+        description=(
+            "원본이 겨냥한 오개념 id 집합. 후보 distractor 오개념 집합과 Jaccard로 비교한다 "
+            "— 둘 다 비면 1.0(요구·보유 모두 없음)이나, 빈 spec에 후보가 오개념을 도입하면 "
+            "0.0(겨냥 밖 오개념)."
+        ),
+    )
+    difficulty_overall: float = Field(
+        ...,
+        ge=1.0,
+        le=5.0,
+        description="원본 종합 난이도 1.0~5.0.",
+    )
+    answer_format: AnswerFormat | None = Field(
+        default=None,
+        description="원본 정답 형식(None=제약 없음·만점).",
+    )
+
+
+# 동등성 3등급 — 확정이 아니라 *분류*. `검수필요`는 사람 검수 큐로(§03 정본).
+EquivalenceVerdict = Literal["동치후보", "비동치후보", "검수필요"]
+
+
+class AcceptanceVerdict(BaseModel):
+    """수용 게이트 결과 — 4종 게이트 신호 + 최종 accepted + 사유(학생 비노출).
+
+    `accepted`는 copyright_ok·verification=="verified"·hygiene_ok·equivalence=="동치후보"가
+    *모두* 참일 때만 True다. 그 외(검수필요·비동치·실패)는 사람 큐 또는 거부다. `reasons`는
+    사람이 읽는 거부/검수 사유(감사·운영용)이며 학생에게 노출하지 않는다.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    accepted: bool = Field(description="4종 게이트 모두 통과 시에만 True(코퍼스 저장 허용).")
+    equivalence: EquivalenceVerdict = Field(description="동등성 분류(3등급).")
+    equivalence_score: float = Field(ge=0.0, le=1.0, description="동등성 가중 점수 0~1.")
+    copyright_ok: bool = Field(description="저작권 게이트 — 값 확인 통과 여부.")
+    verification: Literal["verified", "failed", "unverified"] = Field(
+        description="정확성 게이트 — Tier1+Tier2 결합 판정.",
+    )
+    hygiene_ok: bool = Field(description="위생 게이트 — 본문 슬립 검출 없음 여부.")
+    reasons: list[str] = Field(
+        default_factory=list,
+        description="거부/검수 사유(사람 가독·학생 비노출·조용한 실패 금지).",
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 내부 헬퍼
+# ──────────────────────────────────────────────────────────────────────────
+def _enum_str(value: Enum | str | None) -> str | None:
+    """enum/문자열/None을 *문자열 값*으로 정규화(use_enum_values=True 대응).
+
+    provenance·Problem은 use_enum_values=True라 런타임 필드가 문자열일 수 있으나, 타입 계약은
+    enum이다 — 양쪽을 문자열 값으로 접어 비교한다(`problem.py`·`provenance.py` 정규화 패턴).
+    """
+    if value is None:
+        return None
+    if isinstance(value, Enum):
+        return str(value.value)
+    return value
+
+
+def _evaluate_copyright(
+    candidate: Problem,
+    provenance: ContentProvenance,
+) -> tuple[bool, list[str]]:
+    """저작권 게이트 — 값 확인만(재구현 0). 불변식은 이미 생성 시 강제됐다.
+
+    ContentProvenance·Problem 생성 시 Pydantic 불변식이 A/B/C(원본 그대로 금지·본문 미보유·
+    지배 license 강제)를 이미 던진다. 여기선 그 *값*이 동등문제 수용 조건에 맞는지 확인한다:
+    generation_type ∈ 변형/생성류, license == WHYMATH_GENERATED, source_type == 자체생성.
+    """
+    reasons: list[str] = []
+    gen = _enum_str(provenance.generation_type)
+    lic = _enum_str(provenance.license)
+    src = _enum_str(candidate.source_type)
+
+    ok = True
+    if gen not in _ACCEPTED_GENERATION_VALUES:
+        ok = False
+        reasons.append(f"저작권 게이트 — generation_type={gen!r}가 변형/생성류가 아님.")
+    if lic != LicenseType.WHYMATH_GENERATED.value:
+        ok = False
+        reasons.append(f"저작권 게이트 — license={lic!r}가 WHYMATH_GENERATED가 아님.")
+    if src != SourceType.자체생성.value:
+        ok = False
+        reasons.append(f"저작권 게이트 — source_type={src!r}가 자체생성이 아님.")
+    return ok, reasons
+
+
+def _evaluate_verification(
+    conditions: str | Sequence[str],
+    answer_map: Mapping[str, str],
+    solution_steps: Sequence[str] | None,
+    solution_step_types: Sequence[StepType | None] | None,
+) -> tuple[Literal["verified", "failed", "unverified"], list[str]]:
+    """정확성 게이트 — Tier1(답 검산) + (있으면) Tier2(단계 동치)를 직접 결합(whs 규칙 미러).
+
+    결합 규칙(whs/verdict §4 미러·l3→whs 역참조 회피):
+      - **failed**: Tier1 fail *또는* 단계 has_incorrect=True(틀린 과정은 답 무관 차단).
+      - **verified**: Tier1 pass *그리고* (단계 없음 OR has_incorrect=False·n_unverifiable=0·
+        n_correct≥1). 결정론적으로 전부 검증되고 답도 통과한 경우만.
+      - **unverified**: 그 외(Tier1 판정 불가·일부 단계 미검증·단 incorrect 없음). 격리 등급.
+    """
+    reasons: list[str] = []
+    answer_verdict = verify_answer(conditions, answer_map)
+    tier1 = answer_verdict.state
+
+    steps_result = (
+        verify_solution(solution_steps, solution_step_types) if solution_steps is not None else None
+    )
+
+    # ① failed — 답 fail 또는 틀린 과정(단계 incorrect). 답이 맞아도 과정이 틀리면 차단.
+    if tier1 == "fail":
+        reasons.append(f"정확성 실패 — Tier1 답 검산 fail: {answer_verdict.reason}")
+        return "failed", reasons
+    if steps_result is not None and steps_result.has_incorrect:
+        idx = steps_result.first_incorrect_index
+        reasons.append(f"정확성 실패 — Tier2 풀이 단계 {idx}에 incorrect(틀린 과정).")
+        return "failed", reasons
+
+    # ② verified — Tier1 pass AND (단계 없음 OR 전 단계 correct·미검증 0·correct≥1).
+    steps_ok = steps_result is None or (
+        not steps_result.has_incorrect
+        and steps_result.n_unverifiable == 0
+        and steps_result.n_correct >= 1
+    )
+    if tier1 == "pass" and steps_ok:
+        return "verified", reasons
+
+    # ③ unverified — 판정 불가 격리(pass 위장 금지).
+    if tier1 != "pass":
+        reasons.append(f"정확성 미검증 — Tier1 답 검산 {tier1}: {answer_verdict.reason}")
+    elif steps_result is not None:
+        reasons.append(
+            "정확성 미검증 — Tier2 단계 미검증"
+            f"(unverifiable {steps_result.n_unverifiable}·correct {steps_result.n_correct})."
+        )
+    return "unverified", reasons
+
+
+def _evaluate_hygiene(
+    candidate: Problem,
+    validator: SeedValidator | None,
+) -> tuple[bool, list[str]]:
+    """위생 게이트 — 후보 해설·발문에 시드 검증기를 적용(신호 None=통과).
+
+    거짓 수치 등식("3×4=11")·거짓 부등식·틀린 단변수 해 등 결정론으로 반증 가능한 슬립을 거른다
+    (`default_seed_validator`). 비어있는 필드는 검사 대상에서 제외한다(부재는 슬립이 아님).
+    """
+    active = validator if validator is not None else default_seed_validator()
+    reasons: list[str] = []
+    ok = True
+    fields: tuple[tuple[str, str | None], ...] = (
+        ("answer_explanation", candidate.answer_explanation),
+        ("question_text", candidate.question_text),
+    )
+    for label, text in fields:
+        if not text:
+            continue
+        signal = validate_response(active, text)
+        if signal is not None:
+            ok = False
+            reasons.append(f"위생 게이트 — {label} {signal.kind}: {signal.reason}")
+    return ok, reasons
+
+
+def _standard_score(spec_codes: frozenset[str], cand_codes: frozenset[str]) -> float:
+    """성취기준 점수 — spec ⊆ cand면 1.0·부분 교집합 비율·공집합이면 0. 빈 spec=만점."""
+    if not spec_codes:
+        return 1.0
+    return len(spec_codes & cand_codes) / len(spec_codes)
+
+
+def _jaccard(a: frozenset[str], b: frozenset[str]) -> float:
+    """오개념 점수 — 두 집합의 Jaccard. 둘 다 비면 1.0(요구·보유 모두 없음=정합)."""
+    union = a | b
+    if not union:
+        return 1.0
+    return len(a & b) / len(union)
+
+
+def _difficulty_score(cand_diff: float | None, spec_diff: float, tol: float) -> float:
+    """난이도 점수 — |격차|≤tol이면 1.0·초과분 선형 감쇠. 후보 난이도 None이면 0(비교 불가)."""
+    if cand_diff is None:
+        return 0.0
+    gap = abs(cand_diff - spec_diff)
+    if gap <= tol:
+        return 1.0
+    return max(0.0, 1.0 - (gap - tol) / _DIFFICULTY_DECAY_SCALE)
+
+
+def _answer_format_score(spec_af: AnswerFormat | None, cand_af: AnswerFormat | None) -> float:
+    """답형태 점수 — spec None(제약 없음) 또는 후보와 일치면 1.0·아니면 0."""
+    if spec_af is None:
+        return 1.0
+    return 1.0 if _enum_str(spec_af) == _enum_str(cand_af) else 0.0
+
+
+def _classify_equivalence(
+    score: float,
+    verification: Literal["verified", "failed", "unverified"],
+) -> EquivalenceVerdict:
+    """동등성 점수 + 정확성 상태 → 3등급. 정확성 미검증 또는 경계 구간은 검수필요.
+
+    §03 정본: 경계 점수·판정 불가는 확정하지 않고 사람 검수 큐(`검수필요`)로 보낸다. 정확성이
+    unverified면 점수가 높아도 검수필요다(정확성 신뢰가 없으면 동치를 단정하지 않음).
+    """
+    if verification == "unverified":
+        return "검수필요"
+    if score >= _EQUIVALENCE_HIGH:
+        return "동치후보"
+    if score < _EQUIVALENCE_LOW:
+        return "비동치후보"
+    return "검수필요"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 공개 진입점
+# ──────────────────────────────────────────────────────────────────────────
+def evaluate_equivalent_candidate(
+    spec: EquivalenceSpec,
+    candidate: Problem,
+    *,
+    provenance: ContentProvenance,
+    conditions: str | Sequence[str],
+    answer_map: Mapping[str, str],
+    solution_steps: Sequence[str] | None = None,
+    solution_step_types: Sequence[StepType | None] | None = None,
+    validator: SeedValidator | None = None,
+    difficulty_tol: float = 0.5,
+) -> AcceptanceVerdict:
+    """자체생성 동등문제 후보를 4종 게이트로 평가 — 순수·결정론·DB 0·LLM 0.
+
+    게이트 4종을 *순서·단락평가 무관*하게 전부 평가해 `reasons`를 모은다(조용한 실패 금지):
+      1. 저작권(`_evaluate_copyright`) — 값 확인(불변식 재구현 0).
+      2. 정확성(`_evaluate_verification`) — Tier1 답 검산 + (있으면) Tier2 단계 동치 결합.
+      3. 위생(`_evaluate_hygiene`) — 본문 슬립 검출.
+      4. 동등성(성분 가중 평균 → 3등급 분류).
+
+    인자:
+      - `conditions`·`answer_map`: 후보 답 검산용 원 조건·치환맵(호출자 제공·L5 파싱 밖).
+      - `solution_steps`·`solution_step_types`: (선택) 이미 분해된 단계·전이당 타입.
+      - `validator`: (선택) 위생 검증기(기본 `default_seed_validator()`).
+      - `difficulty_tol`: 난이도 격차 허용치(만점 밴드).
+
+    최종 `accepted` = copyright_ok AND verification=="verified" AND hygiene_ok AND
+    equivalence=="동치후보". 그 외는 사람 큐(검수필요) 또는 거부(비동치·실패)다.
+
+    동등성은 미해결 연구 난제이므로 스코어러는 *확정이 아니라 분류*만 한다(§03). 정확성 판정 불가·
+    중간 점수는 `검수필요`로 보낸다.
+    """
+    reasons: list[str] = []
+
+    # ① 저작권 게이트 (값 확인).
+    copyright_ok, copyright_reasons = _evaluate_copyright(candidate, provenance)
+    reasons.extend(copyright_reasons)
+
+    # ② 정확성 게이트 (Tier1 + Tier2 결합).
+    verification, verification_reasons = _evaluate_verification(
+        conditions, answer_map, solution_steps, solution_step_types
+    )
+    reasons.extend(verification_reasons)
+
+    # ③ 위생 게이트 (본문 슬립).
+    hygiene_ok, hygiene_reasons = _evaluate_hygiene(candidate, validator)
+    reasons.extend(hygiene_reasons)
+
+    # ④ 동등성 분류 (성분 가중 평균).
+    cand_codes = frozenset(candidate.achievement_standard_codes)
+    cand_misc = frozenset(entry.misconception_id for entry in (candidate.distractor_map or []))
+    s_standard = _standard_score(spec.achievement_standard_codes, cand_codes)
+    s_misconception = _jaccard(spec.target_misconception_ids, cand_misc)
+    s_difficulty = _difficulty_score(
+        candidate.difficulty_overall, spec.difficulty_overall, difficulty_tol
+    )
+    s_answer_format = _answer_format_score(spec.answer_format, candidate.answer_format)
+    score = (
+        _W_STANDARD * s_standard
+        + _W_MISCONCEPTION * s_misconception
+        + _W_DIFFICULTY * s_difficulty
+        + _W_ANSWER_FORMAT * s_answer_format
+    )
+    # 부동소수 오차로 [0,1] 경계를 살짝 벗어날 수 있어 클램프(Field ge/le 위반 방지).
+    score = min(1.0, max(0.0, score))
+
+    equivalence = _classify_equivalence(score, verification)
+    if equivalence != "동치후보":
+        reasons.append(
+            f"동등성 {equivalence} — 점수 {score:.2f}"
+            f"(성취기준 {s_standard:.2f}·오개념 {s_misconception:.2f}·"
+            f"난이도 {s_difficulty:.2f}·답형태 {s_answer_format:.2f})."
+        )
+
+    accepted = (
+        copyright_ok and verification == "verified" and hygiene_ok and equivalence == "동치후보"
+    )
+    return AcceptanceVerdict(
+        accepted=accepted,
+        equivalence=equivalence,
+        equivalence_score=score,
+        copyright_ok=copyright_ok,
+        verification=verification,
+        hygiene_ok=hygiene_ok,
+        reasons=reasons,
+    )
