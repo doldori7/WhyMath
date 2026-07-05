@@ -1,11 +1,15 @@
-"""풀이 단계 검증 도구 HTTP 표면 — `POST /v1/verify-step`·`POST /v1/verify-solution`(stateless).
+"""풀이 검증 도구 HTTP 표면 — `verify-step`·`verify-solution`·`verify-answer`(stateless).
 
-WH-1 1단계(`verify_step` 도구화·§3.1)의 *엔드포인트 좌석*.
+WH-1/WH-S 검증기 스택(§3.1·§4)의 *엔드포인트 좌석*. 3-tier 도구 primitive를 stateless HTTP로 노출:
 - `/v1/verify-step`: 학생 풀이의 *한 단계*(expr_before → expr_after)가 올바른 변형인지
-  **3상태**(correct/incorrect/unverifiable)로 판정한다.
+  **3상태**(correct/incorrect/unverifiable)로 판정한다(Tier2 기호 단계 동치).
 - `/v1/verify-solution`: *이미 분해된* 단계 시퀀스(표현식 리스트)에 verify_step을 *연쇄 적용*해
   집계한다(상태별 카운트·`unverified_ratio`·첫 incorrect 위치·§3.1 연쇄 검증). 텍스트→단계
   분해는 L5(OCR·공간정보) 책임이라 여기 밖이다 — 호출자가 *이미 분해된* steps를 보낸다.
+- `/v1/verify-answer`: *구한 답*(치환맵)을 원 조건(들)에 대입해 만족 여부를 **3상태**
+  (pass/fail/unverifiable)로 검산한다(Tier1 수치 샘플링·§4). Tier2(단계 동치)와 *다른 질문* —
+  "답이 원 조건을 만족하는가"다. Tier1 단독 pass는 증명이 아니므로(신뢰도 최저) 최종 통과엔
+  Tier2와 결합해야 한다(`whs/verdict.final_verdict`). 자체 동등문제 답 검산·다중 풀이 동치 도구.
 
 **경계**:
 - *stateless* — DB 무접근·LLM 호출 0·세션 없음(순수 SymPy 결정론 검증).
@@ -24,15 +28,22 @@ verify_solution은 신규 좌석).
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.l3.verify_answer import AnswerVerdict, verify_answer
 from whymath_backend.l3.verify_solution import (
     SolutionVerificationResult,
     verify_solution,
 )
 from whymath_backend.l3.verify_step import VerifyStepResult, verify_step
 from whymath_backend.schema.enums import StepType
+
+# 남용 방어 상한(verify-step max_length=4000·verify-solution 200 미러) — 조건식/치환식 길이·
+# 연립 조건 수·치환 변수 수 상한. 초과는 422(입력 검증 실패).
+_MAX_EXPR_LEN = 4000
+_MAX_CONDITIONS = 50
+_MAX_ANSWER_VARS = 50
 
 router = APIRouter(prefix="/v1", tags=["verify"])
 
@@ -133,3 +144,85 @@ async def post_verify_solution(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)
         ) from exc
+
+
+class VerifyAnswerRequest(BaseModel):
+    """`POST /v1/verify-answer` 요청 — *구한 답*(치환맵)을 원 조건(들)에 대입한 Tier1 수치 검산.
+
+    `conditions`는 단일 조건 str 또는 연립 list[str](AND). `answer`는 변수→식 치환맵
+    (예 `{"x": "3"}`·`{"x": "b/(2*a)"}`·`{"x": "2", "y": "1"}`). 값은 SymPy 식 문자열이다.
+    Tier1(수치 샘플링)이라 pass는 "샘플 점에서 조건 만족"이지 *증명이 아니다*(단독 최종 통과
+    금지·§4). 남용 방어로 조건식/치환식 길이·연립 개수·치환 변수 수에 상한을 둔다(초과 422).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    conditions: str | list[str] = Field(
+        description="단일 조건 식(str) 또는 연립(list[str]·AND). 등식·부등식·≠ 관계.",
+    )
+    answer: dict[str, str] = Field(
+        description='변수→식 치환맵(예 {"x": "3"}). 값은 SymPy 식 문자열.',
+    )
+    n_samples: int = Field(
+        default=8,
+        ge=1,
+        le=64,
+        description="자유변수(파라미터) 조건의 수치 샘플 수. 상한은 남용(DoS) 방어.",
+    )
+    tol: float = Field(
+        default=1e-9,
+        gt=0.0,
+        le=1.0,
+        description="수치 잔차 허용오차(|residual|<tol → 만족). 상한은 남용 방어.",
+    )
+
+    @field_validator("conditions")
+    @classmethod
+    def _cap_conditions(cls, v: str | list[str]) -> str | list[str]:
+        """조건 문자열 길이·연립 개수 상한(남용 방어) — 초과 시 422."""
+        if isinstance(v, list):
+            if len(v) > _MAX_CONDITIONS:
+                raise ValueError(f"conditions 연립은 최대 {_MAX_CONDITIONS}개입니다.")
+            items = v
+        else:
+            items = [v]
+        for cond in items:
+            if len(cond) > _MAX_EXPR_LEN:
+                raise ValueError(f"각 조건 식은 최대 {_MAX_EXPR_LEN}자입니다.")
+        return v
+
+    @field_validator("answer")
+    @classmethod
+    def _cap_answer(cls, v: dict[str, str]) -> dict[str, str]:
+        """치환 변수 수·치환식 길이 상한(남용 방어) — 초과 시 422."""
+        if len(v) > _MAX_ANSWER_VARS:
+            raise ValueError(f"answer 치환맵은 최대 {_MAX_ANSWER_VARS}개 변수입니다.")
+        for val in v.values():
+            if len(val) > _MAX_EXPR_LEN:
+                raise ValueError(f"각 치환식은 최대 {_MAX_EXPR_LEN}자입니다.")
+        return v
+
+
+@router.post(
+    "/verify-answer",
+    response_model=AnswerVerdict,
+    summary="구한 답을 원 조건에 대입한 Tier1 수치 검산(pass/fail/unverifiable·stateless)",
+)
+async def post_verify_answer(
+    body: VerifyAnswerRequest,
+    user: ConsentedUser,
+) -> AnswerVerdict:
+    """답(치환맵)을 원 조건(들)에 대입해 만족 여부를 Tier1 *3상태*로 판정 — DB 무접근(§4).
+
+    등식·부등식·≠·연립(AND)을 지원하며, 파라미터(자유변수) 조건은 *고정 시드* 수치 샘플링으로
+    검산한다. `verify_answer`(l3) 소관이라(재구현 아님) 그 정직성을 상속한다 — 파싱 불가·미지원
+    관계·유효 샘플 0은 *pass로 위장하지 않고* unverifiable로 보수 처리한다(CLAUDE.md "확실하지
+    않으면 모른다"). **Tier1 단독 pass는 증명이 아니다**(신뢰도 최저·§4) — 최종 통과엔 Tier2
+    (verify-step/solution)와 결합해야 한다.
+
+    노출 계약(verify-step 동형): 조건·답은 *입력*(호출자 제공)이고 응답은 *판정 결과*
+    (state·reason·samples_checked)뿐이다 — 서버 정답을 조회하지도, 누출하지도 않는다.
+    `user`는 인증 게이트만(stateless라 user 데이터 미사용).
+    """
+    _ = user.user_id  # 인증 게이트 통과 확인용(stateless라 user 데이터 미사용).
+    return verify_answer(body.conditions, body.answer, n_samples=body.n_samples, tol=body.tol)
