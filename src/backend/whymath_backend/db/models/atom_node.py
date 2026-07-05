@@ -117,6 +117,16 @@ class AtomNode(Base):
     transfer_example: Mapped[str | None] = mapped_column(sa.Text)
     # 원자성 판정(graph.json `atomicity`·a/b/c/d dict·nullable·구조 메타·본문 아님). JSONB.
     atomicity: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    # 원자→skill 참조 키 목록(S0-2·437↔원자 크로스워크 경유 이전·`concept_node.behavior_skills`
+    # 동형 미러). skill_id(`skill.<slug>`) 목록이며 본문 아님(안전 배열·junction 아님·신규 엣지
+    # 타입 0 — anti-explosion). 채움 좌석은 `l1/concept_atom_crosswalk/transfer.py`(크로스워크
+    # 전파)이며 graph.json 메타 프로젝션(`atom_node_projection`)은 이 컬럼을 건드리지 않는다.
+    # 전파 규칙: crosswalk 행의 atom_codes *전체*에 concept의 behavior_skills를 전파, 복수
+    # concept이 닿으면 union+dedup·사전순 — 스킬은 개념의 구성 원자 전체에 적용되는 인지 행동
+    # 이라 배타 귀속이 아니다(primary 귀속 규칙은 mastery/오개념용·데이터카드 §4).
+    behavior_skills: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
+    )
     # 검수 게이팅 플래그 — 원자 메타는 *AI 추정*이라 기본 'ai_estimated'(정직 표기). PG native enum
     # 미생성(concept_node.review_status 동형·plain text). 게이팅이 이 값과 리터럴 비교. NOT NULL.
     review_status: Mapped[str] = mapped_column(sa.Text, nullable=False)

@@ -8,6 +8,12 @@
 > **상태(2026-06-22)**: 통합 코퍼스 마스터 정본화 — graph.json 재생성(미적 원자ID 하이픈 채택·
 > 대학 fill 재실행). 코퍼스(`data/corpus/atom_graph_v1/`)는 신규 파이프라인 `data_pipeline/atom_graph/`
 > 산출(§6). (직전 상태 2026-06-21: Phase 0 데이터카드 작성.)
+>
+> **runtime truth source(2026-07-04·S0-4b/4c)**: 이 원자 백본이 런타임 진실 원천이다. 구
+> 개념그래프(437·`concept_graph_dataset_v1.md`)는 `legacy_snapshot`으로 격하됐다(readonly·
+> non_runtime·audit_only·물리 삭제 0). 런타임 조회(`/concepts/search`·L2 enrich)는 원자
+> (`search_atoms`·`fetch_atom_node_meta`)를 읽고, 구 437은 크로스워크·curriculum populate·
+> audit 전용이다. 거버넌스: `tests/backend/l1/test_legacy_snapshot_governance.py`.
 
 ---
 

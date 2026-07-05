@@ -249,19 +249,26 @@
 
 ---
 
-## 📍 현재 위치
+## 📍 현재 위치 (2026-07-04)
 
-**Phase 1 착수 — MathScope PRD v1.2 재정렬 반영 (공유 코어 + 고3 우선, 법적 안전조합).**
+**Phase 1 MVP 심화 개발 중.** 로드맵 정본은 `docs/strategy/status_roadmap_2026-07.md`(S0~S5 단계·병목 Top 5·단계별 AI 질문 리스트). 아래 S0~S5는 그 요약이며, 상세·체크리스트·탈출 게이트는 정본 문서 참조.
 
-**완료**: NCIC 성취기준 크롤러 코드(`e41e487`) · Phaiakes9 LLM 인프라 스크립트(`b75730b`·`3a2f55f`) · `main` 보호 자동 부분(`1207760`)
+**종합 판정**: "코어(L1–L4)는 과잉 성숙, 제품 루프(L5 E2E·L6 수능 모드)는 미성숙." 무게중심을 설계 정본화 → 수직 슬라이스 실증으로 이동하는 국면.
 
-**진행 중**: PRD v1.1 → WhyMath 하네스 5단계 정렬 (MEMORY → CLAUDE·ROADMAP → architecture → agents·data·strategy·legal → schemas)
+**수학 완성 로드맵 S0~S5**:
+- **S0 정합성 회복** 🔄 진행 중 — 원자 백본이 runtime truth source 단일화. 완료: 크로스워크 코퍼스(437↔원자·S0-1)·437-키 자산 원자 이전(behavior_skills·concept_content·S0-2)·원자 검색 좌석+`/concepts/search` 전환(S0-4a)·L2 mastery enrich 원자 전환(S0-4d)·**구 437 = legacy_snapshot 격하**(readonly·non_runtime·audit_only·S0-4b/c). 연기/위임: problem_concept 재연결(→S2)·orphan 129 진단(prod 실행은 Kiki).
+- **S1 E2E 수직 슬라이스** — 고3 수능 wedge 1루프 실동작 + Phaiakes9 라이브 검증
+- **S2 콘텐츠 공장** — 동등문제 100문+·WH-S 가동·도메인 파트너
+- **S3 파일럿** — L6 수능 엔진·시범 5~10명·측정 하네스
+- **S4 수학 K-12 완성** · **S5 타과목 확장 게이트**(물리)
 
-**Kiki 수동 대기**: Phaiakes9 머신 셋업(M1.0a) · NCIC PDF crawl 실행 · GitHub main 보호 UI
+**병목 Top 5**: ①이중 truth source(S0에서 legacy_snapshot 격하로 해소 중) ②Phaiakes9 라이브 검증(Kiki 수동) ③E2E 루프 부재 ④도메인 파트너(Kiki 수동) ⑤L6 수능 모드 얇음.
 
-상세는 `MEMORY.md`의 현재 상태 + 결정 로그 섹션 참조.
+**Kiki 수동 대기**: Phaiakes9 라이브 키·실측 비용 검증 · orphan 진단 스크립트 prod 실행(`scripts/diagnose_atom_orphans.py`) · 도메인 파트너 트랙.
+
+상세는 `docs/strategy/status_roadmap_2026-07.md` + `MEMORY.md` 결정 로그 참조.
 
 ---
 
-**최종 수정**: 2026-05-28 (MathScope PRD v1.2 재검토 — 공유 코어+고3 우선, 법적 안전조합 반영)  
-**다음 검토**: 매월 첫째 주
+**최종 수정**: 2026-07-04 (S0 정합성 회복 진행 반영 — 원자 백본 runtime 단일화·구 437 legacy_snapshot 격하)  
+**다음 검토**: S1 탈출 게이트 판정 시

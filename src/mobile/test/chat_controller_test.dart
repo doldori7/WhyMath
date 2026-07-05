@@ -9,6 +9,7 @@ import 'package:korean_math_app/features/chat/application/chat_controller.dart';
 import 'package:korean_math_app/features/chat/data/coach_api.dart';
 import 'package:korean_math_app/features/chat/data/coach_models.dart';
 import 'package:korean_math_app/features/chat/domain/chat_message.dart';
+import 'package:korean_math_app/features/ocr/data/ocr_models.dart';
 
 /// 미리 짠 응답을 그대로 돌려주는 fake — 또는 [shouldThrow]면 예외를 던진다.
 ///
@@ -272,6 +273,80 @@ void main() {
 
       expect(fake.lastRequest, isNotNull);
       expect(fake.lastRequest!.solutionSteps, <String>['x=1']);
+    });
+  });
+
+  group('ChatController.sendOcrSolution', () {
+    // 영역이 있는 인식 결과(정상 손글씨 풀이) — 착지점이 모두 채워진다.
+    OcrResult filledResult({double overall = 0.6}) => OcrResult(
+          regions: [
+            OcrRegion(
+              bbox: const BBox(x: 0, y: 0, width: 10, height: 10),
+              contentType: '수식',
+              latex: r'D = b^2 - 4ac',
+              confidence: overall,
+            ),
+          ],
+          plainLatex: r'D = b^2 - 4ac',
+          solutionSteps: const <String>['x^2-4=0', 'x=2'],
+          solutionStepTypes: const <String>['계산'],
+          overallConfidence: overall,
+          minConfidence: overall,
+        );
+
+    test('regions가 있으면 OCR 착지점을 정전 매핑대로 전송한다', () async {
+      final fake = _FakeCoachApi(
+        response: CoachResponse(decision: _decision()),
+      );
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      await notifier.sendOcrSolution(filledResult(overall: 0.6));
+
+      final req = fake.lastRequest!;
+      expect(req.studentSolution, r'D = b^2 - 4ac');
+      // regions가 있으므로 overall_confidence를 그대로 넘긴다(게이트 정상 판정).
+      expect(req.ocrConfidence, 0.6);
+      expect(req.solutionSteps, <String>['x^2-4=0', 'x=2']);
+      expect(req.solutionStepTypes, <String>['계산']);
+
+      // 학생 버블은 인식 풀이를 풀이 입력(isSolution)으로 남긴다.
+      final state = container.read(chatControllerProvider);
+      expect(state.messages.first.role, ChatRole.student);
+      expect(state.messages.first.isSolution, isTrue);
+      expect(state.messages.first.text, r'D = b^2 - 4ac');
+    });
+
+    test('regions가 비면 ocr_confidence를 null로 낮춘다(게이트 거짓 발동 방지)', () async {
+      final fake = _FakeCoachApi(
+        response: CoachResponse(decision: _decision()),
+      );
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      // 빈 인식 — 모든 착지점이 dormant(null)여야 한다(overall 0.0을 넘기지 않는다).
+      await notifier.sendOcrSolution(const OcrResult());
+
+      final req = fake.lastRequest!;
+      expect(req.studentSolution, isNull);
+      expect(req.ocrConfidence, isNull);
+      expect(req.solutionSteps, isNull);
+      expect(req.solutionStepTypes, isNull);
+    });
+
+    test('studentInput(대화 발화)은 그대로 전달한다', () async {
+      final fake = _FakeCoachApi(
+        response: CoachResponse(decision: _decision()),
+      );
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      await notifier.sendOcrSolution(
+        filledResult(),
+        studentInput: '이 풀이가 맞나요?',
+      );
+
+      expect(fake.lastRequest!.studentInput, '이 풀이가 맞나요?');
     });
   });
 }

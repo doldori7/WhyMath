@@ -5,7 +5,10 @@
 // 그 문장 자체를 버블로 보여줄 뿐, 정답·정오 강조 UI를 두지 않는다(절대 금기 준수).
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../core/router.dart';
+import '../../ocr/data/ocr_models.dart';
 import '../application/chat_controller.dart';
 import '../domain/chat_message.dart';
 import 'coach_signal_card.dart';
@@ -80,6 +83,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     await ref.read(chatControllerProvider.notifier).requestScene();
   }
 
+  /// 풀이 사진 OCR 화면(`/ocr`)으로 진입하고, 돌아온 인식 결과를 코치에게 넘긴다(S1-d).
+  ///
+  /// OCR 화면은 채팅을 알지 못한 채 `context.pop(result)`로 [OcrResult]만 돌려준다(단방향
+  /// chat→ocr 의존). 여기서 결과를 받아 `sendOcrSolution`으로 매핑·전송한다 — 사용자가 그냥
+  /// 뒤로 가면(null) 아무 일도 하지 않는다.
+  Future<void> _onCaptureSolution() async {
+    final result = await context.push<OcrResult>(AppRoutes.ocrPath);
+    if (result != null && mounted) {
+      await ref.read(chatControllerProvider.notifier).sendOcrSolution(result);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatControllerProvider);
@@ -101,6 +116,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       appBar: AppBar(
         title: const Text('WhyMath'),
         actions: [
+          // 풀이 사진 보내기 — OCR 화면으로 진입(전송 중엔 비활성·중복 진입 방지).
+          IconButton(
+            icon: const Icon(Icons.camera_alt_outlined),
+            tooltip: '풀이 사진 보내기',
+            onPressed: state.isSending ? null : _onCaptureSolution,
+          ),
           // 약점개념 학습 장면 요청 — 전송 중엔 비활성(중복 요청 방지).
           IconButton(
             icon: const Icon(Icons.auto_awesome_outlined),

@@ -38,7 +38,7 @@ def recommend_prerequisite_coaching(gaps: Sequence[PrerequisiteGap]) -> Coaching
     기준으로 `CoachingTrigger(focus="prerequisite_review", ...)`를 빌드한다.
 
     rationale(교사용)·prompt(학생용)는 정적 dict 일반 템플릿 대신 **top blocker 이름으로 동적
-    구성**한다(구체화). 표시명은 `name_ko`(concept_node 안전 메타) → `concept_name`(backend
+    구성**한다(구체화). 표시명은 `name_ko`(atom_node 안전 메타·S0-4d) → `concept_name`(backend
     concept) → "선수개념" 순으로 안전하게 fallback한다(둘 다 표시용 안전 필드·본문 아님).
     선수가 2개 이상이면 rationale 끝에 "(다른 막힌 선수 N개 더 있음)"을 부가한다.
 
@@ -50,7 +50,7 @@ def recommend_prerequisite_coaching(gaps: Sequence[PrerequisiteGap]) -> Coaching
         return None  # 막힌 선수 없음 → 선수 코칭 안 함(L5가 일반 메타인지 코칭으로 fallback).
 
     top = gaps[0]  # L2가 weakness asc 정렬 → gaps[0] = 가장 약한 선수 = top blocker.
-    # 표시명 — concept_node 안전 메타(name_ko) → backend concept명 → 일반어 순 fallback.
+    # 표시명 — atom_node 안전 메타(name_ko·S0-4d) → backend concept명 → 일반어 순 fallback.
     # 셋 다 *안전 표시 필드*다(본문 슬롯 없음·redaction은 PrerequisiteGap 스키마가 보장).
     display = top.name_ko or top.concept_name or "선수개념"
 

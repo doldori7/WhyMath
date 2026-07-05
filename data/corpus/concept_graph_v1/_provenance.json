@@ -1,4 +1,13 @@
 {
+  "lifecycle": {
+    "status": "legacy_snapshot",
+    "readonly": true,
+    "non_runtime": true,
+    "audit_only": true,
+    "demoted": "2026-07-04",
+    "reason": "원자 백본이 runtime truth source. 구 437은 크로스워크 provenance·audit 전용(런타임 미참조). 상세: docs/handoff/atom_backbone_next_session.md §5.5",
+    "runtime_truth_source": "atom_graph_v1"
+  },
   "source_sha256": "4e5a880bc7ff41a5f67a876da9fb8125f518638c0cbea73b3377447eb79d29cd",
   "uploaded": "2026-06-17",
   "sheets": {

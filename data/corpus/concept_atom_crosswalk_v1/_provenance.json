@@ -1,0 +1,42 @@
+{
+  "source_citation": "437↔원자 크로스워크: 와이매스 자체 유도(양측 자체작성 코퍼스의 코드·이름만 사용, 성취기준 본문 미포함).",
+  "sources": {
+    "concept_graph": {
+      "path": "data/corpus/concept_graph_v1/graph.json",
+      "sha256": "2d960a4322aaeb4b5ddcd29ce1de7bdcebc4be7a5032efa27500d72a53087f94"
+    },
+    "concepts_jsonl": {
+      "path": "data/corpus/concept_graph_v1/concepts.jsonl",
+      "sha256": "0810a1d11acd96e863f5251b7076c85e3a7f8556cbe46978ad6db6f9915fe82e"
+    },
+    "atom_graph": {
+      "path": "data/corpus/atom_graph_v1/graph.json",
+      "sha256": "92bdacaa17f951d9e9e020448e81dddc8468b5163331f5f743d21d69e544797c"
+    }
+  },
+  "derivation": "프로그램적 유도 — ①양측 standard_codes 교집합으로 원자(level=='세부개념') 후보 ②후보 복수 시 이름 토큰(단어 run+문자 bigram) 자카드 랭킹으로 primary ③후보 0이면 unmapped 정직 표기(강제 매핑 금지). 동률 시 code 사전순.",
+  "counts": {
+    "entries": 437,
+    "mapped": 437,
+    "unmapped": 0,
+    "method_counts": {
+      "standard_code+name": 437
+    },
+    "fanout_counts": {
+      "3": 421,
+      "4": 8,
+      "5": 2,
+      "6": 3,
+      "7": 1,
+      "9": 2
+    }
+  },
+  "validation": {
+    "success": true,
+    "errors": 0,
+    "warnings": 0,
+    "counts_by_rule": {}
+  },
+  "review_status": "ai_estimated — 전량 프로그램적 유도·사람 검수 전",
+  "determinism": "결정론 — 동일 sha256 입력 2회 derive 시 byte 동일 산출(동률은 code 사전순)"
+}

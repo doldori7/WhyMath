@@ -1,17 +1,20 @@
-"""concept 의미검색 엔드포인트 단위테스트 — `GET /v1/concepts/search` (hermetic·PG 불요).
+"""의미검색 엔드포인트 단위테스트 — `GET /v1/concepts/search` (hermetic·PG 불요·S0-4a 원자 전환).
 
-`search_concepts`(L1 조회 좌석)는 별 단위테스트(`tests/backend/l1/test_concept_retrieval.py`)가
-실 좌석 흐름을·통합테스트가 실 pgvector 라운드트립을 본다. 여기서는 *HTTP 표면 결선*만 못 박는다
-(concept API 단위테스트 `test_concepts.py`의 TestClient + dependency_overrides 패턴 미러):
+(S0-4a) 이 엔드포인트는 이제 *원자* 조회 좌석(`search_atoms`)을 호출한다. 응답 스키마·경로는
+클라 계약 안정을 위해 유지하되(`ConceptSearchResponse`), `concept_id` 필드는 *원자 code*를,
+`domain` 필드는 원자 `subject_area`를 담는다. `search_atoms`(L1 조회 좌석)는 별 단위테스트
+(`tests/backend/l1/atom_graph/test_atom_retrieval.py`)가 실 좌석 흐름을·통합테스트가 실 pgvector
+라운드트립을 본다. 여기서는 *HTTP 표면 결선*만 못 박는다(TestClient + dependency_overrides):
 
   ① 요청 검증 — q 필수·비공백·길이·k 범위 위반 시 422(Query 제약)
-  ② 응답 shape — query 에코·results[concept_id,similarity]·vector_store_enabled 신호
+  ② 응답 shape — query 에코·results[concept_id(=원자 code),similarity]·vector_store_enabled 신호
   ③ 라우팅 — /search가 /{concept_id}(UUID 경로)에 먹히지 않고 검색으로 매칭
   ④ provider 주입 — dependency_overrides[get_embedding_provider]로 Fake 주입(라이브 0)
   ⑤ memory 모드 신호 — vector_store_enabled=false + 빈 results(조용한 무동작 금지)
 
-검색 *결과*가 있는 경로는 좌석(`search_concepts`)을 가짜로 패치해 HTTP 직렬화만 본다 — 실 코사인·
-실 pgvector는 좌석 단위/통합 테스트 몫(여기선 표면이 좌석 결과를 응답 모델로 옳게 싣는지).
+검색 *결과*가 있는 경로는 좌석(`search_atoms`)을 가짜로 패치해 HTTP 직렬화만 본다 — 실 코사인·
+실 pgvector는 좌석 단위/통합 테스트 몫(여기선 표면이 좌석 결과를 응답 모델로 옳게 싣는지·
+특히 atom_code→concept_id·subject_area→domain 매핑).
 """
 
 from __future__ import annotations
@@ -26,10 +29,11 @@ import whymath_backend.api.concepts as concepts_api
 from whymath_backend.api.concepts import get_embedding_provider
 from whymath_backend.app import create_app
 from whymath_backend.db.session import get_session
-from whymath_backend.l1.concept_graph.retrieval import ConceptSearchHit
+from whymath_backend.l1.atom_graph.retrieval import AtomSearchHit
 
-_UC_A = "UC.calc.alimit.epsilon-delta"
-_UC_B = "UC.alg.afunction.composition"
+# 원자 code 규약 예시(atom_embedding/atom_node와 동일 공간·runtime truth source).
+_ATOM_A = "2수01-01-2"
+_ATOM_B = "2수02-03-1"
 
 
 class _FakeProvider:
@@ -94,8 +98,9 @@ class TestRequestValidation:
 # ──────────────────────────────────────────────────────────────────────────
 class TestResponseShape:
     def test_returns_ranked_results(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 좌석(search_concepts)을 가짜로 패치 — HTTP 표면이 좌석 결과(enrich 메타 포함)를 응답
-        # 모델로 옳게 싣는지. _UC_A는 메타 enrich·_UC_B는 메타 없음(None graceful)로 둘 다 검증.
+        # 좌석(search_atoms)을 가짜로 패치 — HTTP 표면이 좌석 결과(enrich 메타 포함)를 응답 모델로
+        # 옳게 싣는지. atom_code→concept_id·subject_area→domain 매핑을 검증한다. _ATOM_A는 메타
+        # enrich·_ATOM_B는 메타 없음(None graceful)로 둘 다 확인.
         captured: dict[str, Any] = {}
 
         def _fake_search(
@@ -105,23 +110,23 @@ class TestResponseShape:
             provider: object,
             reviewed_only: bool = False,
             **_kw: Any,
-        ) -> list[ConceptSearchHit]:
+        ) -> list[AtomSearchHit]:
             captured["query"] = query_text
             captured["top_k"] = top_k
             captured["provider"] = provider
             captured["reviewed_only"] = reviewed_only
             return [
-                ConceptSearchHit(
-                    concept_id=_UC_A,
+                AtomSearchHit(
+                    atom_code=_ATOM_A,
                     similarity=0.91,
                     name_ko="극한",
-                    domain="[고]미적분",
-                    review_status="reviewed",
+                    subject_area="해석",
+                    review_status="ai_estimated",
                 ),
-                ConceptSearchHit(concept_id=_UC_B, similarity=0.42),  # 메타 미적재 → null
+                AtomSearchHit(atom_code=_ATOM_B, similarity=0.42),  # 메타 미적재 → null
             ]
 
-        monkeypatch.setattr(concepts_api, "search_concepts", _fake_search)
+        monkeypatch.setattr(concepts_api, "search_atoms", _fake_search)
         # pgvector 모드 신호를 보려고 vector_store=pgvector로 설정 리로드.
         _force_pgvector(monkeypatch)
 
@@ -131,16 +136,17 @@ class TestResponseShape:
         body = resp.json()
         assert body["query"] == "극한 수렴"
         assert body["vector_store_enabled"] is True
+        # concept_id 필드에 *원자 code*가, domain 필드에 subject_area가 실린다(계약 안정).
         assert body["results"] == [
             {
-                "concept_id": _UC_A,
+                "concept_id": _ATOM_A,
                 "similarity": 0.91,
                 "name_ko": "극한",
-                "domain": "[고]미적분",
-                "review_status": "reviewed",
+                "domain": "해석",
+                "review_status": "ai_estimated",
             },
             {
-                "concept_id": _UC_B,
+                "concept_id": _ATOM_B,
                 "similarity": 0.42,
                 "name_ko": None,
                 "domain": None,
@@ -164,11 +170,11 @@ class TestResponseShape:
             provider: object,
             reviewed_only: bool = False,
             **_kw: Any,
-        ) -> list[ConceptSearchHit]:
+        ) -> list[AtomSearchHit]:
             captured["reviewed_only"] = reviewed_only
             return []
 
-        monkeypatch.setattr(concepts_api, "search_concepts", _fake_search)
+        monkeypatch.setattr(concepts_api, "search_atoms", _fake_search)
         resp = _client().get("/v1/concepts/search?q=극한&reviewed_only=true")
         assert resp.status_code == 200
         assert captured["reviewed_only"] is True
@@ -178,11 +184,11 @@ class TestResponseShape:
 
         def _fake_search(
             query_text: str, *, top_k: int, provider: object, **_kw: Any
-        ) -> list[ConceptSearchHit]:
+        ) -> list[AtomSearchHit]:
             captured["top_k"] = top_k
             return []
 
-        monkeypatch.setattr(concepts_api, "search_concepts", _fake_search)
+        monkeypatch.setattr(concepts_api, "search_atoms", _fake_search)
         resp = _client().get("/v1/concepts/search?q=함수")
         assert resp.status_code == 200
         assert captured["top_k"] == concepts_api._SEARCH_DEFAULT_K
@@ -190,7 +196,7 @@ class TestResponseShape:
     def test_empty_results_serialize_as_empty_list(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(
             concepts_api,
-            "search_concepts",
+            "search_atoms",
             lambda *a, **k: [],  # noqa: ARG005 — 빈 결과 패치
         )
         resp = _client().get("/v1/concepts/search?q=없는질의")
@@ -206,7 +212,7 @@ class TestRouting:
         # /search가 GET /{concept_id}(UUID)보다 먼저 매칭돼야 한다 — UUID 파싱 422가 아니라 200.
         monkeypatch.setattr(
             concepts_api,
-            "search_concepts",
+            "search_atoms",
             lambda *a, **k: [],  # noqa: ARG005
         )
         resp = _client().get("/v1/concepts/search?q=극한")

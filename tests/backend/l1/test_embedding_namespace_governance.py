@@ -44,6 +44,9 @@ from whymath_backend.l4.misconception.semantic.matcher import catalog_text
 from whymath_backend.l4.misconception.semantic.pgvector_index import PgVectorIndex
 
 # 세 임베딩 ORM — kind(자산 종류)는 *테이블명이 함의*한다(별도 컬럼 기각·docstring ①).
+# 관점(2026-07-04·S0-4b): `ConceptEmbedding`(구 437 `concept_embedding`)은 `legacy_snapshot`으로
+# 격하됐다(런타임 검색은 원자 임베딩을 읽음). 단 namespace 불변식(subject 스코프·cross-table 코사인
+# 금지)은 스냅샷 테이블에도 그대로 유효하므로 여기 3-ORM 대칭 검사에서 계속 동결한다(로직 불변).
 _EMBEDDING_MODELS = (MisconceptionEmbedding, ConceptEmbedding, AtomEmbedding)
 
 

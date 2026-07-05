@@ -1,7 +1,9 @@
 """`get_behavior_areas` 단위테스트 — concept→skill 행동영역 해소 (Part 2 Phase 2b-2·S5k).
 
-DB 없이 가짜 세션으로 로직 분기를 검증한다: concept_node 부재·매핑 없음·중복 제거·정렬·매칭 skill 0.
-2-hop 조인(concept_node.behavior_skills→skill_node.behavior_area)의 실 PG 정합은 통합테스트 소관.
+DB 없이 가짜 세션으로 로직 분기를 검증한다: atom_node 부재·매핑 없음·중복 제거·정렬·매칭 skill 0.
+2-hop 조인(atom_node.behavior_skills→skill_node.behavior_area)의 실 PG 정합은 통합테스트 소관.
+behavior_skills는 S0-2가 원자 축(atom_node)으로 이전했고 resolve.py는 `session.get(AtomNode, ...)`로
+읽는다.
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ class _FakeResult:
 
 
 class _FakeSession:
-    """`get`(ConceptNode 반환/None) + `execute`(behavior_area 목록) 디스패치 가짜 세션."""
+    """`get`(AtomNode 반환/None) + `execute`(behavior_area 목록) 디스패치 가짜 세션."""
 
     def __init__(self, node: object, areas: list[BehaviorArea]) -> None:
         self._node = node
@@ -46,7 +48,7 @@ class _FakeSession:
 
 @pytest.mark.asyncio
 async def test_missing_concept_node_returns_empty() -> None:
-    """concept_node 부재 → 빈 목록·조인 미실행(미매핑=중립)."""
+    """atom_node 부재 → 빈 목록·조인 미실행(미매핑=중립)."""
     session = _FakeSession(node=None, areas=[])
     assert await get_behavior_areas(session, "UC-NONE") == []  # type: ignore[arg-type]
     assert session.executed is False

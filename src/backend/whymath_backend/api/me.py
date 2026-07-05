@@ -1115,11 +1115,12 @@ async def get_my_diagnosis_summary(
     )
 
 
-# ── 개념그래프 소비 슬2: GET /v1/me/weak-concepts (약개념 추천 — 진단 약점 + UC 메타 enrich) ──
-# L2 약점 진단(`recommend_weak_concepts`·BKT/IRT 융합·약점 정렬·약점 필터)에 `concept_node`(UC)
-# 안전 그래프 메타(name_ko·domain·review_status)를 enrich해 "지금 무엇을 복습할지" 후보를 돌려준다.
-# *학생 직접 노출이 아니라* 내부 조회 좌석(소비 슬1 노출 계약과 일관 — 안전 필드만·본문 0). 진단·
-# enrich·게이팅 로직은 L2 좌석이 소유(L5는 표면·user_id 스코핑·읽기 전용·마이그레이션 0).
+# ── 원자그래프 소비 슬2: GET /v1/me/weak-concepts (약개념 추천 — 진단 약점 + code 메타 enrich) ──
+# L2 약점 진단(`recommend_weak_concepts`·BKT/IRT 융합·약점 정렬·약점 필터)에 `atom_node`(code)
+# 안전 그래프 메타(name_ko·subject_area·review_status)를 enrich해 "지금 무엇을 복습할지" 후보를
+# 돌려준다(S0-4d·runtime truth=원자·`domain` 응답 필드는 이제 원자 subject_area 값). *학생 직접
+# 노출이 아니라* 내부 조회 좌석(소비 슬 노출 계약과 일관 — 안전 필드만·본문 0). 진단·enrich·
+# 게이팅 로직은 L2 좌석이 소유(L5는 표면·user_id 스코핑·읽기 전용·마이그레이션 0).
 WeakLimit = Annotated[int, Query(ge=1, le=50, description="약점(저신호) 먼저 정렬 후 상위 N개만.")]
 WeakThreshold = Annotated[
     float,
@@ -1134,7 +1135,7 @@ WeakReviewedOnly = Annotated[
     Query(
         description=(
             "검수 게이팅. false(기본)=recall 보존(pending·메타 미적재 개념도 노출). true="
-            "review_status='reviewed'인 개념만(메타 없어 확인 불가인 UC는 보수적 제외·필터)."
+            "review_status='reviewed'인 개념만(메타 없어 확인 불가인 code는 보수적 제외·필터)."
         ),
     ),
 ]
@@ -1152,18 +1153,20 @@ async def get_my_weak_concepts(
     threshold: WeakThreshold = 0.7,
     reviewed_only: WeakReviewedOnly = False,
 ) -> list[WeakConceptRecommendation]:
-    """학습자 약점(BKT/IRT)을 식별해 개념그래프(`concept_node`·UC) 안전 메타를 붙여 추천.
+    """학습자 약점(BKT/IRT)을 식별해 원자그래프(`atom_node`·code) 안전 메타를 붙여 추천.
 
     L2 진단(`compute_concept_diagnoses`·BKT 최신 + IRT θ 융합·*약점 먼저* 정렬)을 재사용해
     약점(비교 가능한 두 신호 중 최저값 < `threshold`)인 개념만 거르고, 그 개념의 `concept_code`
-    (=UC)로 `concept_node`(PG 프로젝션·소비 슬1 브리지) 안전 메타(name_ko·domain·review_status)를
-    *단일 IN 조회*로 enrich한다(N+1 0·UC 없거나 메타 미적재면 None graceful). `reviewed_only=true`
-    면 검수 안 된 개념을 *필터*(약점 정렬 유지)하고, `limit`로 상위 N만 돌려준다. 진단·enrich·
-    게이팅은 L2 좌석이 소유(`recommend_weak_concepts`)·user_id 스코핑·읽기 전용.
+    (=code)로 `atom_node`(PG 프로젝션·원자 메타 좌석) 안전 메타(name_ko·subject_area·review_status)
+    를 *단일 IN 조회*로 enrich한다(S0-4d·runtime truth=원자·N+1 0·code 없거나 미적재면 None
+    graceful). 응답 `domain` 필드는 계약 안정을 위해 이름을 유지하나 값은 원자 subject_area다.
+    `reviewed_only=true`면 검수 안 된 개념을 *필터*(약점 정렬 유지)하고, `limit`로 상위 N만
+    돌려준다. 진단·enrich·게이팅은 L2 좌석이 소유(`recommend_weak_concepts`)·user_id 스코핑·읽기
+    전용.
 
-    **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 *조회 좌석*(소비 슬1과 일관)이다. enrich
-    되는 건 안전 표시·게이팅 필드뿐 — **본문(description·formal_definition) 0**(concept_node에
-    컬럼 자체가 없음·redaction). 우열 매기기·정답 빠르게 등 금기 표현 0.
+    **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 *조회 좌석*(소비 슬과 일관)이다. enrich
+    되는 건 안전 표시·게이팅 필드뿐 — **본문(description·formal_definition·core_proposition) 0**
+    (atom_node에 본문 컬럼 자체가 없음·redaction). 우열 매기기·정답 빠르게 등 금기 표현 0.
     """
     return await recommend_weak_concepts(
         session,
@@ -1174,9 +1177,9 @@ async def get_my_weak_concepts(
     )
 
 
-# ── 개념그래프 소비 선수 슬1: GET /v1/me/weak-concepts/{concept_id}/prerequisites ──
+# ── 원자그래프 소비 선수 슬1: GET /v1/me/weak-concepts/{concept_id}/prerequisites ──
 # 약개념 C의 *막힌 선수개념* 추천 — concept_edge(to==C·PREREQUISITE) traversal로 선수를 찾고,
-# 그 중 학습자가 약한(막힌) 것을 mastery·concept_node 안전 메타와 함께 돌려준다(선수 복습 우선).
+# 그 중 학습자가 약한(막힌) 것을 mastery·atom_node 안전 메타와 함께 돌려준다(선수 복습 우선·S0-4d).
 # 후행 개념이 안 되는 *근본 원인*이 선수 결손일 수 있으므로 "먼저 복습할 선수"를 가린다(LTHC).
 # traversal·약점 필터·enrich·게이팅 로직은 L2 좌석이 소유(L5는 표면·user_id 스코핑·읽기 전용).
 WeakOnly = Annotated[
@@ -1224,8 +1227,9 @@ async def get_my_prerequisite_gaps(
     `concept_edge`에서 `to_concept_id == concept_id AND edge_type == PREREQUISITE`인 행의
     `from_concept_id`(선수)들을 traversal하고(방향: from은 to의 선수), 각 선수의 BKT/IRT 숙달을
     L2 진단(`compute_concept_diagnoses`)으로 lookup해 `weak_only=true`(기본)면 막힌(숙달 <
-    `threshold`) 선수만 남긴다. 선수의 `concept_code`(=UC)로 `concept_node` 안전 메타(name_ko·
-    domain·review_status)를 *단일 IN 조회*로 enrich하고(N+1 0·미적재 None graceful),
+    `threshold`) 선수만 남긴다. 선수의 `concept_code`(=code)로 `atom_node` 안전 메타(name_ko·
+    subject_area·review_status)를 *단일 IN 조회*로 enrich하고(S0-4d·runtime truth=원자·N+1 0·미적재
+    None graceful·응답 `domain` 필드는 계약 안정상 이름 유지·값은 원자 subject_area),
     `reviewed_only=true`면 검수 안 된 선수를 *필터*한다.
 
     **다단계(multi-hop) traversal**: `max_depth=1`(기본)이면 직접 선수만(기존 1-hop·후방 호환)·
@@ -1239,8 +1243,9 @@ async def get_my_prerequisite_gaps(
     enrich·게이팅은 L2 좌석이 소유(`recommend_prerequisite_gaps`)·user_id 스코핑·읽기 전용.
 
     **노출 계약(CLAUDE.md)**: 학생 직접 노출이 아니라 *조회 좌석*(약개념 추천과 일관)이다. enrich
-    되는 건 안전 표시·게이팅 필드뿐 — **본문(description·formal_definition) 0**(concept_node·
-    PrerequisiteGap 스키마에 컬럼/슬롯 자체가 없음·redaction). 우열 매기기·정답 빠르게 등 금기 0.
+    되는 건 안전 표시·게이팅 필드뿐 — **본문(description·formal_definition·core_proposition) 0**
+    (atom_node·PrerequisiteGap 스키마에 컬럼/슬롯 자체가 없음·redaction). 우열 매기기·정답 빠르게
+    등 금기 0.
     """
     return await recommend_prerequisite_gaps(
         session,

@@ -840,3 +840,35 @@ geometric-series는 데이터셋 114에 직접 진술이 없음 — 추가 검�
    (standard_codes·difficulty_tier 등·Neo4j traversal은 *여전히 미도입*·필요 시 별도 결정).
 2. **L4 오개념 확장**(후속): §5.4 후보를 doc-first로 카탈로그에 추가(30종+ 목표).
 3. **암기카드**(L6): 113장 — `exposure_condition`("이해 마스터 후 노출")이 메타인지 정책과 정합.
+
+---
+
+## 6. Lifecycle — legacy_snapshot 격하 (2026-07-04·S0-4b/S0-4c)
+
+> **상태 전환**: 이 개념그래프(구 437)는 **runtime truth source에서 격하**되어 `legacy_snapshot`
+> (`readonly`·`non_runtime`·`audit_only`)이 되었다. **runtime truth source = 원자 백본**
+> (`atom_graph_v1` — 데이터 카드 `atom_graph_v1.md`). 물리 삭제는 **하지 않는다**(형식 격하만·행 보존).
+
+### 6.1 격하 근거·범위
+
+- **선행(완료)**: `/concepts/search`→원자(`search_atoms`, S0-4a) · L2 weak/prerequisite enrich→
+  `fetch_atom_node_meta`(`concept_node`→`atom_node`, S0-4d). 그 결과 **런타임(api·l2·l3·l4)의 구 437
+  reader = 0**(`fetch_node_meta`·`ConceptNodeMeta`·`ConceptEmbeddingIndex`·`search_concepts`·
+  `concept_node`·`concept_embedding`의 import/call 0건).
+- **구 437을 읽는 곳(허용·audit/빌드타임)**: 크로스워크(`l1/concept_atom_crosswalk` — derive·transfer)·
+  `l1/curriculum/populate.py`·거버넌스/통합 테스트. 이들은 코퍼스(`graph.json`)를 provenance·이전
+  근거로 읽는 *빌드타임* 소비처다(런타임 경로 아님).
+- **마커 위치**: 코퍼스 `_provenance.json`의 최상위 `lifecycle` 키(`status="legacy_snapshot"`·
+  `non_runtime=true`·`audit_only=true`) · backend `l1/concept_graph/` 런타임성 모듈 docstring 배지
+  `[LEGACY_SNAPSHOT · non_runtime · audit_only]` · Neo4j `:Concept` 적재기
+  (`data_pipeline/concept_graph/load.py`) docstring 배지 `[LEGACY_SNAPSHOT · audit_only]`.
+
+### 6.2 거버넌스 동결 (회귀 가드)
+
+`tests/backend/l1/test_legacy_snapshot_governance.py`가 3불변식을 동결한다:
+(i) 런타임 437 reader = 0(api·l2·l3·l4 정적 스캔·AST 기반), (ii) 구 437 소비 화이트리스트 =
+`l1/concept_atom_crosswalk`·`l1/curriculum/populate.py`만, (iii) `_provenance.json` lifecycle
+마커 존재. 신규 런타임 reader가 유입되거나 격하 표식이 지워지면 red.
+
+> **Neo4j `:Concept`(S0-4c)**: backend는 런타임에 Neo4j를 읽지 않으므로(pgvector 단일 평면),
+> `:Concept` 노드도 물리 삭제 불요·audit 전용 스냅샷이다. 런타임 그래프는 `:Atom`.

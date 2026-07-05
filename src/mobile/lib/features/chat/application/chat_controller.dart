@@ -6,6 +6,7 @@
 // 부수효과는 [CoachApi] 호출 하나뿐 — 나머지는 순수 상태 전이다.
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../ocr/data/ocr_models.dart';
 import '../data/coach_api.dart';
 import '../data/coach_models.dart';
 import '../data/scene_api.dart';
@@ -102,6 +103,46 @@ class ChatController extends _$ChatController {
       request: CoachRequest(
         studentInput: raw,
         solutionSteps: steps,
+        polyaState: PolyaState(currentStage: state.polyaState),
+      ),
+    );
+  }
+
+  /// OCR로 인식한 풀이를 코치에게 넘긴다(사진 풀이 핸드오프·S1-d).
+  ///
+  /// 매핑은 백엔드 *정전(canonical) 구현*(`api/ocr_handoff.py`
+  /// `ocr_result_to_coach_request`)을 **정확히 미러링**한다 — 착지점마다 빈 값이면 null로
+  /// 낮춘다. 특히 [OcrResult.overallConfidence]는 *영역이 하나라도 있을 때만* 넘긴다
+  /// (regions 가드): 영역이 0이면 overall_confidence가 0.0인데 그대로 넘기면 0<0.8로
+  /// `match_low_quality`가 *거짓 발동*하므로, OCR이 없을 땐 null(dormant)이 옳다.
+  ///
+  /// [studentInput]은 OCR 산출이 아니라 학생의 *대화 발화*다(호출자 제공·기본 빈 문자열).
+  /// 이후 기존 [_dispatch]를 재사용해 코치 발화·단계 전이·검산 코칭이 그대로 동작한다.
+  /// 수학·검증 로직은 서버(L3/L4)가 하고 L5는 매핑·전송만 한다(표현≠의미·클라 미구현).
+  Future<void> sendOcrSolution(
+    OcrResult result, {
+    String studentInput = '',
+  }) async {
+    if (state.isSending) {
+      return; // 전송 중 재진입 방지.
+    }
+    // 학생 버블은 인식한 풀이 원문을 보여준다(없으면 사진을 보냈다는 부드러운 안내).
+    final display = result.plainLatex.isEmpty
+        ? '(사진에서 읽은 내용이 없어요)'
+        : result.plainLatex;
+    await _dispatch(
+      studentMessage: ChatMessage.student(display, isSolution: true),
+      request: CoachRequest(
+        studentInput: studentInput,
+        // 매핑 표(정전 미러): 빈 값이면 null(발화/dormant 폴백).
+        studentSolution: result.plainLatex.isEmpty ? null : result.plainLatex,
+        // regions 가드 — 영역 0이면 null(게이트 거짓 발동 방지), 있으면 전체 신뢰도.
+        ocrConfidence: result.regions.isEmpty ? null : result.overallConfidence,
+        solutionSteps:
+            result.solutionSteps.isEmpty ? null : result.solutionSteps,
+        solutionStepTypes: result.solutionStepTypes.isEmpty
+            ? null
+            : result.solutionStepTypes,
         polyaState: PolyaState(currentStage: state.polyaState),
       ),
     );

@@ -1,4 +1,9 @@
-"""개념 의미검색 *조회 좌석* — pgvector 검색 + 메타 enrichment·검수 게이팅 (소비 슬라이스 1).
+"""[LEGACY_SNAPSHOT · non_runtime · audit_only] 구 437 격하(S0-4b).
+
+런타임 truth source는 원자 백본(atom_graph_v1). 이 모듈은 audit·빌드타임 provenance이며 런타임
+호출자 0(api·l2·l3·l4 구 437 reader 0). 물리 삭제 0·형식 격하만(S0-4b).
+
+개념 의미검색 *조회 좌석* — pgvector 검색 + 메타 enrichment·검수 게이팅 (소비 슬라이스 1).
 
 슬3(`embedding.py`)이 개념 안전 표현을 `concept_embedding`(pgvector)에 멱등 적재했고, 소비 슬1
 (`node_projection.py`)이 개념 *안전 메타*를 `concept_node`(PG)에 UC 키로 적재했다. 이 모듈은 그
