@@ -142,6 +142,20 @@ class TestAssembly:
         assert c1.problem.slug == c2.problem.slug  # 같은 내용 → 같은 slug(멱등 upsert 키)
         assert c1.problem.slug is not None and c1.problem.slug.startswith("wm-gen-")
 
+    def test_latex_backslash_in_response_still_parses(self) -> None:
+        # 실 LLM(Phaiakes9 qwen2-math:7b) 실측 회귀 — 발문에 LaTeX `\(`·`\)`가 있어
+        # `json.loads`가 "Invalid \escape"로 실패하던 케이스. sanitize 폴백이 구제해야 한다.
+        raw = (
+            '{\n  "question_text": "이차방정식 \\( x^2 - 5x + 6 = 0 \\)의 해는?",\n'
+            '  "answer": "3",\n  "conditions": "x**2 - 5*x + 6 = 0",\n'
+            '  "answer_map": {"x": "3"},\n  "unit_codes": ["QUAD-EQ"]\n}'
+        )
+        candidate = _gen(FakeProvider([raw])).generate(_spec())
+        assert candidate is not None  # 파싱 구제(None 폴백 아님)
+        assert candidate.answer_map == {"x": "3"}
+        assert candidate.conditions == "x**2 - 5*x + 6 = 0"
+        assert "\\(" in candidate.problem.question_text  # LaTeX는 보존(파싱만 구제)
+
     def test_concept_tags_parsed(self) -> None:
         candidate = _gen(FakeProvider([_HAPPY])).generate(_spec())
         assert candidate is not None

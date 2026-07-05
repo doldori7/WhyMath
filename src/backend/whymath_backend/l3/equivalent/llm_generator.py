@@ -119,6 +119,11 @@ _LOGGER = logging.getLogger(__name__)
 # 개념 태깅 role 유효값(ConceptRole) — LLM이 낸 role 문자열 검증용(schema는 최하위·import 허용).
 _VALID_ROLES: frozenset[str] = frozenset(r.value for r in ConceptRole)
 
+# 유효하지 않은 JSON 백슬래시 이스케이프 탐지 — LLM이 발문·해설에 LaTeX(`\(`·`\)`·`\frac`·`\sqrt`
+# 등)를 넣으면 `json.loads`가 "Invalid \escape"로 거부한다(실 LLM 실측·Phaiakes9). 유효 이스케이프
+# (`\"`·`\\`·`\/`·`\b`·`\f`·`\n`·`\r`·`\t`·`\uXXXX`)를 뒤따르지 *않는* 백슬래시만 매칭한다.
+_INVALID_JSON_ESCAPE = re.compile(r'\\(?!["\\/bfnrtu])')
+
 # 난이도 float(1~5) → 라우팅 난이도 라벨. 라우터는 문자열(easy/medium/hard/killer)을 받는다.
 # 콘텐츠·게이트는 spec.difficulty_overall(float)을 그대로 쓰고, 이 라벨은 *라우팅 신호*로만 쓴다.
 _DIFFICULTY_EASY_MAX = 2.0
@@ -160,6 +165,10 @@ JSON 객체 **하나만** 출력하세요. 코드펜스·설명·다른 텍스�
 
 수식은 SymPy가 파싱할 수 있는 표기(`**`=거듭제곱·`*`=곱)로 쓰세요. `conditions`와 `answer_map`은
 정답이 조건을 만족하는지 기계가 검산하는 데 쓰이니 정확히 채우세요.
+
+**중요(JSON 안전)**: 발문·해설 등 *모든 문자열*에 LaTeX 백슬래시 명령(`\\(`·`\\)`·`\\frac`·`\\sqrt`
+등)을 쓰지 마세요 — JSON이 깨집니다. 수식은 `x^2`·`(x-2)(x-3)`처럼 일반 텍스트로 쓰고, 백슬래시
+자체를 문자열에 넣지 마세요.
 """
 
 
@@ -317,29 +326,33 @@ class LLMEquivalentProblemGenerator:
             return self._catalog.get(misconception_id, misconception_id)
         return misconception_id
 
-    # ── JSON 관대 추출(LLMTutorPolicy `_extract_json` 미러) ─────────────
-    @staticmethod
-    def _extract_json(raw: str) -> dict[str, object] | None:
-        """원시 텍스트에서 JSON 객체를 관대하게 추출 — 코드펜스·주변 산문 허용."""
+    # ── JSON 관대 추출(LLMTutorPolicy `_extract_json` 미러 + LaTeX 이스케이프 내성) ──
+    @classmethod
+    def _extract_json(cls, raw: str) -> dict[str, object] | None:
+        """원시 텍스트에서 JSON 객체를 관대하게 추출 — 코드펜스·주변 산문·LaTeX 백슬래시 허용.
+
+        후보(통째로 / 첫 `{`…마지막 `}` 구간) 각각을 *원문* 그리고 *이스케이프 sanitize본*으로
+        파싱 시도한다. sanitize는 LaTeX(`\\(`·`\\frac` 등) 유효하지 않은 백슬래시 이스케이프를
+        리터럴로 이중화해 `json.loads`의 "Invalid \\escape" 실패를 구제한다(실 LLM 실측). 유효
+        이스케이프는 보존하므로 정상 JSON은 그대로 파싱된다(무해).
+        """
         text = raw.strip()
         if text.startswith("```"):
             text = re.sub(r"^```(?:json)?\s*", "", text)
             text = re.sub(r"\s*```$", "", text)
-        try:
-            obj = json.loads(text)
-            if isinstance(obj, dict):
-                return obj
-        except json.JSONDecodeError:
-            pass
+        candidates = [text]
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end > start:
-            try:
-                obj = json.loads(text[start : end + 1])
+            candidates.append(text[start : end + 1])
+        for candidate in candidates:
+            for attempt in (candidate, _INVALID_JSON_ESCAPE.sub(r"\\\\", candidate)):
+                try:
+                    obj = json.loads(attempt)
+                except json.JSONDecodeError:
+                    continue
                 if isinstance(obj, dict):
                     return obj
-            except json.JSONDecodeError:
-                pass
         return None
 
     # ── CandidateProblem 조립(저작권 메타 구조적 강제) ──────────────────
