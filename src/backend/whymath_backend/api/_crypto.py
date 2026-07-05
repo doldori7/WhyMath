@@ -99,29 +99,55 @@ class MultiKeyCipher:
         raise InvalidTag("어떤 복호 키로도 복호 실패 — 변조이거나 키 회전 fallback 누락.")
 
 
-def build_secret_cipher(settings: Any) -> MultiKeyCipher | None:
-    """`Settings`에서 `MultiKeyCipher` 생성 — primary 키 미설정이면 None.
+def _multikey_from_raw(primary_raw: str, fallbacks_raw: str) -> MultiKeyCipher | None:
+    """base64 원시 키 문자열들에서 `MultiKeyCipher` 조립 — primary 미설정이면 None.
 
-    None은 *암호화 비활성*(평문 폴백·기존 동작) 신호다(호출자가 분기). primary 키는 base64
-    인코딩 32바이트. `device_secret_decryption_fallback_keys`(쉼표 구분 base64·복호 전용)는
-    키 회전 중 구 키로 암호화된 행을 lockout 없이 복호하기 위한 fallback. 잘못된 길이면
-    `SecretCipher.__init__`이 `ValueError`(부팅 시 fail-fast).
-
-    `settings: Any` — `whymath_backend.config.Settings` 순환 import 회피(typing-only 명시).
+    device secret·대화 본문 등 *여러 자산*의 봉투 암호화기가 이 한 조립 로직을 공유한다(자산별
+    키 소스만 다름·프리미티브 재사용). primary는 base64 32바이트, `fallbacks_raw`는 쉼표 구분
+    base64(복호 전용·키 회전). 빈 토큰은 무시. 잘못된 길이는 `SecretCipher.__init__`이
+    `ValueError`(부팅 fail-fast).
     """
-    raw = settings.device_secret_encryption_key.get_secret_value()
-    if not raw:
+    if not primary_raw:
         return None
-    primary = SecretCipher(base64.b64decode(raw))
-    # 키 회전 fallback(복호 전용·쉼표 구분 base64). 빈 토큰은 무시.
+    primary = SecretCipher(base64.b64decode(primary_raw))
     fallbacks: list[SecretCipher] = []
-    fb_raw = settings.device_secret_decryption_fallback_keys.get_secret_value()
-    if fb_raw:
-        for part in fb_raw.split(","):
+    if fallbacks_raw:
+        for part in fallbacks_raw.split(","):
             token = part.strip()
             if token:
                 fallbacks.append(SecretCipher(base64.b64decode(token)))
     return MultiKeyCipher(primary, fallbacks)
+
+
+def build_secret_cipher(settings: Any) -> MultiKeyCipher | None:
+    """`Settings`에서 device secret용 `MultiKeyCipher` 생성 — primary 키 미설정이면 None.
+
+    None은 *암호화 비활성*(평문 폴백·기존 동작) 신호다(호출자가 분기). primary 키는 base64
+    인코딩 32바이트. `device_secret_decryption_fallback_keys`(쉼표 구분 base64·복호 전용)는
+    키 회전 중 구 키로 암호화된 행을 lockout 없이 복호하기 위한 fallback.
+
+    `settings: Any` — `whymath_backend.config.Settings` 순환 import 회피(typing-only 명시).
+    """
+    return _multikey_from_raw(
+        settings.device_secret_encryption_key.get_secret_value(),
+        settings.device_secret_decryption_fallback_keys.get_secret_value(),
+    )
+
+
+def build_dialogue_content_cipher(settings: Any) -> MultiKeyCipher | None:
+    """`Settings`에서 미성년 대화 본문(`dialogue_turn.content`)용 `MultiKeyCipher` 생성.
+
+    `build_secret_cipher`와 *동일 조립 로직*(`_multikey_from_raw`)이나 **키 소스가 분리**된다
+    (`dialogue_content_encryption_key`·`dialogue_content_decryption_fallback_keys`) — device
+    secret 키와 별개라 한 키 유출의 폭발 반경을 대화 본문/디바이스 사이에서 격리한다. primary
+    키 미설정이면 None(평문 폴백·CI·기존 배포 무영향·점진 도입).
+
+    `settings: Any` — `whymath_backend.config.Settings` 순환 import 회피(typing-only 명시).
+    """
+    return _multikey_from_raw(
+        settings.dialogue_content_encryption_key.get_secret_value(),
+        settings.dialogue_content_decryption_fallback_keys.get_secret_value(),
+    )
 
 
 def encrypt_secret_for_storage(
@@ -164,11 +190,54 @@ def resolve_stored_secret(
     )
 
 
+def encrypt_dialogue_content(
+    cipher: SupportsEnvelope | None, content: str | None
+) -> tuple[str | None, bytes | None, bytes | None]:
+    """대화 본문 저장용 — `(content_plain, content_encrypted, content_nonce)` 3-튜플 결정.
+
+    `encrypt_secret_for_storage`의 대화 본문 래퍼. **content가 None이면 `(None, None, None)`**
+    (본문 없는 턴·이미지 전용 턴 — 암호화 대상 자체가 없음). content 있으면 프리미티브에
+    위임: cipher 있으면 `(None, ct, nonce)`(평문 컬럼 비움), 없으면 `(content, None, None)`
+    (평문 폴백·기존 동작·명시적 폴백). device secret과 달리 content는 nullable이라 None 분기가
+    추가된다.
+    """
+    if content is None:
+        return None, None, None
+    return encrypt_secret_for_storage(cipher, content)
+
+
+def resolve_dialogue_content(
+    cipher: SupportsEnvelope | None,
+    content_plain: str | None,
+    content_encrypted: bytes | None,
+    content_nonce: bytes | None,
+) -> str | None:
+    """저장 표현에서 대화 본문 평문 복원 — 노출(GET·export) 직전 복호.
+
+    암호화 행(content_encrypted+nonce)이면 복호하고, *암호화 행인데 cipher 미설정*이면
+    `RuntimeError`(조용한 평문 유출/빈 응답 대신 *시끄러운* 실패 — 운영자가 키 유실/미설정을
+    즉시 인지). 그 외(평문 행·본문 없는 턴)는 `content_plain`을 그대로 반환한다 —
+    `resolve_stored_secret`과 달리 **평문·암호문 둘 다 None이면 None을 반환**(대화 본문은
+    nullable이라 정상 상태·데이터 무결성 오류 아님).
+    """
+    if content_encrypted is not None and content_nonce is not None:
+        if cipher is None:
+            raise RuntimeError(
+                "암호화된 대화 본문이나 복호 키가 미설정입니다 — "
+                "`WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY`를 확인하세요(키 유실 시 복호 불가)."
+            )
+        return cipher.decrypt(content_encrypted, content_nonce)
+    return content_plain
+
+
 __all__ = [
     "MultiKeyCipher",
     "SecretCipher",
     "SupportsEnvelope",
+    "build_dialogue_content_cipher",
     "build_secret_cipher",
+    "encrypt_dialogue_content",
     "encrypt_secret_for_storage",
+    "resolve_dialogue_content",
     "resolve_stored_secret",
 ]

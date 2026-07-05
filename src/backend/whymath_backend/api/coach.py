@@ -34,6 +34,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._concurrency import etag_for, matches_if_none_match
+from whymath_backend.api._crypto import (
+    SupportsEnvelope,
+    build_dialogue_content_cipher,
+    encrypt_dialogue_content,
+    resolve_dialogue_content,
+)
 from whymath_backend.api._misconception_state import get_semantic_matcher
 from whymath_backend.api._rate_limit import (
     RateLimitedTripleRead,
@@ -1000,6 +1006,28 @@ def _intervention_from_hypotheses_or(
     return select_intervention_from_hypotheses(active_hypotheses) or fallback
 
 
+def _build_dialogue_turn(
+    schema: DialogueTurnSchema, cipher: SupportsEnvelope | None
+) -> DialogueTurnORM:
+    """감사상환 #2: 스키마 → 대화 턴 ORM(본문 봉투 암호화 적용) — 4개 write 경로의 단일 좌석.
+
+    순수 seam(`from_schema`)엔 cipher를 주입하지 않고(device store가 handler 층에서 암호화하는
+    선례 미러), 이 *handler/헬퍼 층* 함수가 `content`를 암호화해 저장 표현을 결정한다.
+    `encrypt_dialogue_content`가 cipher 유무·content None을 분기: cipher 있으면 content=NULL·
+    content_encrypted/content_nonce 세팅(평문 원문 DB 부재), cipher None이면 평문 폴백
+    (content=평문·encrypted=None — 조용한 무동작 아닌 *명시* 폴백·CI/기존 배포 무영향).
+    create_session·append_turns의 학생/AI 턴 4곳이 모두 이 헬퍼를 거쳐 중복·누락을 없앤다.
+    """
+    turn = DialogueTurnORM.from_schema(schema)
+    content_plain, content_encrypted, content_nonce = encrypt_dialogue_content(
+        cipher, schema.content
+    )
+    turn.content = content_plain
+    turn.content_encrypted = content_encrypted
+    turn.content_nonce = content_nonce
+    return turn
+
+
 @router.post(
     "/coach",
     response_model=CoachResponse,
@@ -1133,7 +1161,10 @@ async def create_session(
     await session.commit()
     await session.refresh(dialogue)
 
-    student_turn = DialogueTurnORM.from_schema(
+    # 감사상환 #2: 대화 본문 봉투 암호화기(키 미설정 시 None=평문 폴백). 학생/AI 턴 2곳이 동일
+    # 헬퍼(`_build_dialogue_turn`)로 content를 암호화 저장(중복 회피).
+    content_cipher = build_dialogue_content_cipher(get_settings())
+    student_turn = _build_dialogue_turn(
         DialogueTurnSchema(
             dialogue_id=dialogue.dialogue_id,
             turn_order=1,
@@ -1141,9 +1172,10 @@ async def create_session(
             role=TurnRole.student,
             content=body.student_input,
             content_type=ContentType.텍스트,
-        )
+        ),
+        content_cipher,
     )
-    assistant_turn = DialogueTurnORM.from_schema(
+    assistant_turn = _build_dialogue_turn(
         DialogueTurnSchema(
             dialogue_id=dialogue.dialogue_id,
             turn_order=2,
@@ -1151,7 +1183,8 @@ async def create_session(
             role=TurnRole.assistant,
             content=decision.prompt,
             content_type=ContentType.텍스트,
-        )
+        ),
+        content_cipher,
     )
     session.add_all([student_turn, assistant_turn])
     # WH-1 지표 ① 적재 — 풀이 제출(student_solution 비어있지 않음)이면 검산 결과를 attempt_event로
@@ -1278,7 +1311,9 @@ async def append_turns(
     assistant_order = current_total + 2
 
     now = datetime.now(timezone.utc)
-    student_turn = DialogueTurnORM.from_schema(
+    # 감사상환 #2: create_session과 동형 — 본문 봉투 암호화기·동일 헬퍼로 학생/AI 턴 저장.
+    content_cipher = build_dialogue_content_cipher(get_settings())
+    student_turn = _build_dialogue_turn(
         DialogueTurnSchema(
             dialogue_id=dialogue_id,
             turn_order=student_order,
@@ -1286,9 +1321,10 @@ async def append_turns(
             role=TurnRole.student,
             content=body.student_input,
             content_type=ContentType.텍스트,
-        )
+        ),
+        content_cipher,
     )
-    assistant_turn = DialogueTurnORM.from_schema(
+    assistant_turn = _build_dialogue_turn(
         DialogueTurnSchema(
             dialogue_id=dialogue_id,
             turn_order=assistant_order,
@@ -1296,7 +1332,8 @@ async def append_turns(
             role=TurnRole.assistant,
             content=decision.prompt,
             content_type=ContentType.텍스트,
-        )
+        ),
+        content_cipher,
     )
     session.add_all([student_turn, assistant_turn])
 
@@ -1401,7 +1438,17 @@ async def get_session_detail(
         .order_by(DialogueTurnORM.turn_order)
     )
     result = await session.execute(stmt)
-    turns = [row.to_schema() for row in result.scalars().all()]
+    # 감사상환 #2: 암호화 행은 content=NULL·content_encrypted에 저장 — 노출 직전 복호한다.
+    # to_schema는 ciphertext 컬럼을 제외하므로 복호값을 schema.content에 덮어쓴다(키 유실 시
+    # resolve_dialogue_content가 RuntimeError·조용한 평문 유출/빈 응답 금지).
+    content_cipher = build_dialogue_content_cipher(get_settings())
+    turns = []
+    for row in result.scalars().all():
+        turn_schema = row.to_schema()
+        turn_schema.content = resolve_dialogue_content(
+            content_cipher, row.content, row.content_encrypted, row.content_nonce
+        )
+        turns.append(turn_schema)
     payload = SessionGetResponse(dialogue=dialogue.to_schema(), turns=turns)
     etag = etag_for(payload)
     if matches_if_none_match(if_none_match, etag):

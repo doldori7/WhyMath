@@ -40,8 +40,19 @@ class _StubSchema:
 
 
 class _StubRow:
-    def __init__(self, payload: dict[str, Any]) -> None:
+    def __init__(
+        self,
+        payload: dict[str, Any],
+        *,
+        content: str | None = None,
+        content_encrypted: bytes | None = None,
+        content_nonce: bytes | None = None,
+    ) -> None:
         self._payload = payload
+        # 감사상환 #2: export가 dialogue_turns 행에서 봉투 암호화 컬럼을 읽어 노출 직전 복호한다.
+        self.content = content
+        self.content_encrypted = content_encrypted
+        self.content_nonce = content_nonce
 
     def to_schema(self) -> _StubSchema:
         return _StubSchema(self._payload)
@@ -101,7 +112,7 @@ def _client() -> TestClient:
                 [_StubRow({"metric": "churn_risk"})],
                 [_StubRow({"resolution": "자기풀이"})],
                 [_StubRow({"event": "step_submit"})],
-                [_StubRow({"content": "x=2?"})],
+                [_StubRow({"content": "x=2?"}, content="x=2?")],
                 [_StubRow({"uid": str(_UID)})],
             ]
         )

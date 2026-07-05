@@ -638,6 +638,29 @@ class Settings(BaseSettings):
         ),
     )
 
+    dialogue_content_encryption_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "감사상환 #2: 미성년 대화 본문(`dialogue_turn.content`) at-rest 봉투 암호화 마스터 "
+            "키(base64 인코딩 32바이트=AES-256). 빈 값=암호화 비활성(평문 저장·기존 동작 폴백·"
+            "점진 도입). **device secret 키와 분리**(폭발 반경 축소 — 한 키 유출이 다른 자산으로 "
+            "번지지 않음). DB 밖(env/Settings)에 두어 DB dump만으로는 채팅 본문 복호 불가하게 "
+            "한다(CLAUDE.md 절대 금기 '미성년 채팅 평문 저장 금지'의 기계적 시행). "
+            "`WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY` env로만 주입(SecretStr — repr/로그 평문 "
+            '차단·하드코딩 금지). 키 생성: `python -c "import base64,os; '
+            'print(base64.b64encode(os.urandom(32)).decode())"`.'
+        ),
+    )
+    dialogue_content_decryption_fallback_keys: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "대화 본문 키 회전용 *복호 전용* fallback 키 목록(쉼표 구분 base64 32바이트). "
+            "primary 키 회전 시 구 키를 여기 두면 구 키로 암호화된 행이 lockout 없이 복호된다 "
+            "(encrypt는 항상 primary). 전 행 재암호화(백필) 후 제거. 빈 값=fallback 없음. "
+            "`WHYMATH_DIALOGUE_CONTENT_DECRYPTION_FALLBACK_KEYS` env(SecretStr·하드코딩 금지)."
+        ),
+    )
+
     coach_device_hmac_secret: SecretStr = Field(
         default=SecretStr(""),
         description=(
