@@ -177,6 +177,22 @@ class TestAssembly:
         assert _STANDARD in prompt
         assert _MISCONCEPTION in prompt
 
+    def test_topic_hint_injected_into_prompt(self) -> None:
+        # S2-f: 성취기준 코드만으론 모델이 주제를 못 맞히므로(이차 요청에 일차 생성) topic_hint를
+        # 프롬프트에 실어 코드→주제를 사람이 번역해 준다. 주입 시 유저 프롬프트에 나타나야 한다.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider, topic_hint="이차방정식 — 두 근 중 큰 근").generate(_spec())
+        prompt, _ = provider.calls[0]
+        assert "이차방정식 — 두 근 중 큰 근" in prompt
+
+    def test_system_prompt_requires_single_answer_and_forbids_placeholders(self) -> None:
+        # S2-f: 답 하나로 정해지게(이차 검증 가능) + 플레이스홀더 베끼기 금지 지시가 시스템에 있다.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        _, system = provider.calls[0]
+        assert "하나로" in system  # 답 유일성 지시
+        assert "플레이스홀더" in system  # 예시 텍스트 베끼기 금지
+
 
 # ──────────────────────────────────────────────────────────────────────
 # ② 생성기 → S2-a 게이트 결선(accepted=True).
