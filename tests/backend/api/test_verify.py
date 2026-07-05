@@ -256,6 +256,128 @@ class TestVerifySolutionAuth:
         assert resp.status_code == 401
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# POST /v1/verify-answer — Tier1 수치 답 검산(§4). verify-step 패턴 미러·stateless.
+# ──────────────────────────────────────────────────────────────────────────
+class TestVerifyAnswer200:
+    def test_pass_equation_satisfied(self) -> None:
+        # x²-5x+6=0에 x=3 대입 → 9-15+6=0 → pass.
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={"conditions": "x**2 - 5*x + 6 = 0", "answer": {"x": "3"}},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["state"] == "pass"
+        assert body["reason"] is None
+        assert body["samples_checked"] >= 1
+
+    def test_fail_equation_violated(self) -> None:
+        # x=4 → 16-20+6=2≠0 → fail(한 점 반증).
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={"conditions": "x**2 - 5*x + 6 = 0", "answer": {"x": "4"}},
+        )
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["state"] == "fail"
+        assert body["reason"] is not None
+
+    def test_pass_inequality(self) -> None:
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={"conditions": "x > 0", "answer": {"x": "3"}},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["state"] == "pass"
+
+    def test_pass_parametric_sampling(self) -> None:
+        # 자유변수(a·b) 조건 — x=b/(2a)를 2ax=b에 대입하면 항등 → 수치 샘플링 pass.
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={"conditions": "2*a*x = b", "answer": {"x": "b/(2*a)"}, "n_samples": 6},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["state"] == "pass"
+
+    def test_pass_system_conjunction(self) -> None:
+        # 연립 AND — x=2,y=1이 두 조건 모두 만족.
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={
+                "conditions": ["x + y = 3", "x - y = 1"],
+                "answer": {"x": "2", "y": "1"},
+            },
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["state"] == "pass"
+
+    def test_unverifiable_unparseable(self) -> None:
+        # 관계로 파싱 불가 → pass 위장 없이 정직하게 unverifiable(보수적).
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={"conditions": "어쩌고 저쩌고", "answer": {"x": "3"}},
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["state"] == "unverifiable"
+
+
+class TestVerifyAnswerExposureContract:
+    """노출 계약 — 응답은 판정만(state·reason·samples_checked). 서버 정답 조회·누출 0."""
+
+    def test_response_field_set(self) -> None:
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={"conditions": "x = 2", "answer": {"x": "2"}},
+        )
+        assert set(resp.json().keys()) == {"state", "reason", "samples_checked"}
+
+
+class TestVerifyAnswerAuth:
+    def test_no_token_401(self) -> None:
+        resp = _no_auth_client().post(
+            "/v1/verify-answer",
+            json={"conditions": "x = 2", "answer": {"x": "2"}},
+        )
+        assert resp.status_code == 401
+
+
+class TestVerifyAnswerSchema:
+    def test_missing_answer_422(self) -> None:
+        resp = _client().post("/v1/verify-answer", json={"conditions": "x = 2"})
+        assert resp.status_code == 422
+
+    def test_extra_field_forbidden_422(self) -> None:
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={"conditions": "x = 2", "answer": {"x": "2"}, "bogus": 1},
+        )
+        assert resp.status_code == 422
+
+    def test_n_samples_out_of_range_422(self) -> None:
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={"conditions": "x = 2", "answer": {"x": "2"}, "n_samples": 0},
+        )
+        assert resp.status_code == 422
+
+    def test_condition_too_long_422(self) -> None:
+        # 남용 방어 상한(4000자) 초과 → 422.
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={"conditions": "x = " + "1" * 4001, "answer": {"x": "2"}},
+        )
+        assert resp.status_code == 422
+
+    def test_too_many_conditions_422(self) -> None:
+        # 연립 개수 상한(50) 초과 → 422.
+        resp = _client().post(
+            "/v1/verify-answer",
+            json={"conditions": ["x = 2"] * 51, "answer": {"x": "2"}},
+        )
+        assert resp.status_code == 422
+
+
 class TestVerifySolutionSchema:
     def test_missing_steps_422(self) -> None:
         resp = _client().post("/v1/verify-solution", json={})
