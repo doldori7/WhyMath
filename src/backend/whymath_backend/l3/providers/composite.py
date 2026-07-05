@@ -16,6 +16,7 @@ mode="sync"). 클라우드 결정은 항상 동기라 비동기 큐(Celery)를 �
 from __future__ import annotations
 
 from collections.abc import Sequence
+from typing import Any
 
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import CostTier, RoutingDecision
@@ -50,6 +51,7 @@ class CompositeProvider:
         decision: RoutingDecision,
         *,
         images: Sequence[str] | None = None,
+        temperature: float | None = None,
     ) -> str:
         """cost_tier로 로컬↔클라우드 디스패치 (LLMProvider 구현).
 
@@ -58,12 +60,15 @@ class CompositeProvider:
           명확한 RuntimeError(클라우드 결정이 왔으나 제공자 미구성 — 조용한 강등 금지).
         - `images`(멀티모달)는 위임받는 제공자로 그대로 전달한다(비전은 LOCAL Qwen3-VL이
           처리·클라우드 제공자는 images를 받으면 거부).
+        - `temperature`(S2-g 생성 다양성)도 위임받는 제공자로 그대로 전달한다(온도 처리는 각
+          하위 제공자 책임 — Ollama options·Anthropic API 인자).
 
         반환 텍스트는 위임받은 제공자의 *검증 전 원시 출력*이다(각 제공자 docstring 경계 메모).
         """
         cost = _as_cost_tier(decision.cost_tier)
-        # images는 *있을 때만* 위임 호출에 싣는다 — 텍스트 전용 하위 제공자(기존 구현·가짜)는
-        # images 인자 없이도 동작(하위호환). 멀티모달일 때만 images-수신 제공자로 전달된다.
+        # images·temperature는 *있을 때만* 위임 호출에 싣는다 — 텍스트 전용·온도 미지정 하위
+        # 제공자(기존 구현·가짜)는 해당 인자 없이도 동작(하위호환). 둘 다 None이면 종전과 동일하게
+        # `target.generate(prompt, system, decision)`로 호출된다.
         target = self._local if cost is CostTier.LOCAL else self._cloud
         if cost is not CostTier.LOCAL and target is None:
             raise RuntimeError(
@@ -72,9 +77,12 @@ class CompositeProvider:
                 "주입하세요(03a §H 후속 4)."
             )
         assert target is not None  # 위 가드로 보장(LOCAL은 항상 _local·CLOUD는 None 차단)
+        forward: dict[str, Any] = {}
         if images is not None:
-            return await target.generate(prompt, system, decision, images=images)
-        return await target.generate(prompt, system, decision)
+            forward["images"] = images
+        if temperature is not None:
+            forward["temperature"] = temperature
+        return await target.generate(prompt, system, decision, **forward)
 
     async def check_status(self) -> OllamaStatus:
         """로컬 제공자의 레디니스 보고 — /status 로컬 매핑 보존.

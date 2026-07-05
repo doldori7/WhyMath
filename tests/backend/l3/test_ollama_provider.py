@@ -8,6 +8,7 @@ ollama 라이브러리에 의존하지 않는다.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
@@ -58,6 +59,7 @@ class FakeOllamaClient:
         model: str,
         prompt: str,
         system: str,
+        images: Sequence[str] | None = None,
         options: dict[str, Any] | None = None,
         stream: bool = False,
     ) -> Any:
@@ -66,6 +68,7 @@ class FakeOllamaClient:
                 "model": model,
                 "prompt": prompt,
                 "system": system,
+                "images": images,
                 "options": options,
                 "stream": stream,
             }
@@ -157,6 +160,37 @@ class TestGenerate:
         with pytest.raises(ValueError, match="로컬 결정만"):
             await provider.generate("p", "s", decision)
         assert client.generate_calls == []  # 호출 자체가 없어야 함
+
+    async def test_temperature_none_omits_options(self) -> None:
+        """온도 미지정(None) → options에 온도를 싣지 않는다(기존 동작·Ollama 기본 온도)."""
+        client = FakeOllamaClient()
+        provider = OllamaProvider(client=client)
+        decision = _local_decision(ModelFamily.MATH, LocalModelTier.FAST)
+
+        await provider.generate("p", "s", decision)
+
+        assert client.generate_calls[0]["options"] is None
+
+    async def test_temperature_set_injects_options(self) -> None:
+        """온도 지정(S2-g 생성 다양성) → options={"temperature": ...}로 실린다."""
+        client = FakeOllamaClient()
+        provider = OllamaProvider(client=client)
+        decision = _local_decision(ModelFamily.GENERAL, LocalModelTier.MID)
+
+        await provider.generate("p", "s", decision, temperature=0.9)
+
+        assert client.generate_calls[0]["options"] == {"temperature": 0.9}
+
+    async def test_temperature_with_images_both_passed(self) -> None:
+        """온도+이미지 동시 지정 → options·images 모두 전달(상호 배타 아님)."""
+        client = FakeOllamaClient()
+        provider = OllamaProvider(client=client)
+        decision = _local_decision(ModelFamily.MATH, LocalModelTier.FAST)
+
+        await provider.generate("p", "s", decision, images=["b64"], temperature=0.7)
+
+        assert client.generate_calls[0]["options"] == {"temperature": 0.7}
+        assert client.generate_calls[0]["images"] == ["b64"]
 
     async def test_extract_text_from_object_response(self) -> None:
         """generate 응답이 pydantic 유사 객체(.response)여도 텍스트 추출."""

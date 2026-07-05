@@ -34,9 +34,18 @@ class FakeProvider:
         self._text = text
         self._status = status
         self.calls: list[tuple[str, str, RoutingDecision]] = []
+        self.temperatures: list[float | None] = []
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        *,
+        temperature: float | None = None,
+    ) -> str:
         self.calls.append((prompt, system, decision))
+        self.temperatures.append(temperature)
         return self._text
 
     async def check_status(self) -> Any:
@@ -127,6 +136,20 @@ class TestDispatch:
         composite = CompositeProvider(local=local)
         out = await composite.generate("p", "s", _local_decision())
         assert out == "로컬전용"
+
+    async def test_temperature_forwarded_to_target(self) -> None:
+        """S2-g: temperature는 위임받는 제공자로 그대로 전달된다."""
+        local = FakeProvider()
+        composite = CompositeProvider(local=local)
+        await composite.generate("p", "s", _local_decision(), temperature=0.9)
+        assert local.temperatures == [0.9]
+
+    async def test_temperature_omitted_by_default(self) -> None:
+        """온도 미지정이면 하위 제공자에 temperature를 싣지 않는다(기본 None·하위호환)."""
+        local = FakeProvider()
+        composite = CompositeProvider(local=local)
+        await composite.generate("p", "s", _local_decision())
+        assert local.temperatures == [None]
 
 
 # ──────────────────────────────────────────────────────────────────────────
