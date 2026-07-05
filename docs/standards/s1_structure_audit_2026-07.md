@@ -10,7 +10,9 @@
 
 1. **[높음] 검증 게이트 미강제 (G3)** — stateless `/v1/coach` 경로는 verify 실패해도 코칭을 반환한다. "학생 응답은 검증 통과 후에만"(CLAUDE.md 금기)이 **coach 경로에 미강제**. 강제는 WH-1 하네스 `_exec_end_turn`("verify 없는 finalize 거부", `wh1_loop.py:20-21`)에만 존재 → **S1-b에서 coach를 하네스 경유로 전환**해야 게이트가 자동 적용.
 2. **[높음] 미성년 대화 본문 앱-계층 평문 저장** — `DialogueTurn.content`·`image_uri`·`image_analysis`가 앱 계층에서 평문 저장(`dialogue.py:167`·`coach.py:1103,1113`). CLAUDE.md "미성년 채팅 평문 저장 금지"가 **인프라 at-rest 암호화에 전적 위임**돼 코드로 미확인. S1이 실사용자 데이터를 만들기 전 상환(또는 인프라 암호화 존재 문서 확인) 필요.
+   - **✅ 상환 완료(2026-07-05·PR #425)**: `DialogueTurn.content` 앱-계층 봉투 암호화(AES-256-GCM·`_crypto` 확장·키 미설정 시 평문 폴백·점진 도입). GET·export 노출 직전 복호·백필 CLI. `image_uri`/`image_analysis`는 후속(동일 패턴 확장 가능).
 3. **[중간] LLM 도구 정책 부재 → 이중 결정 경로 위험 (G1)** — WH-1 `TutorPolicy`는 Protocol뿐·구현체는 `ScriptedTutorPolicy`(테스트용). coach.py 주경로는 결정론적. S1에서 LLM 정책을 신설할 때 **결정론 coach와 하네스가 이중 결정 경로**가 되지 않게 단일 경로 수렴 필요.
+   - **부분 상환(2026-07-05)**: 정답 억제를 *하네스 불변식*으로 동결(§Q6) — `_end_turn_utterance`가 `incorrect`·`unverifiable` 턴에서 정책 명시 발화를 무시하고 소크라테스 파생(정책 무관 최종 강제). LLM 정책 선제 억제도 `unverifiable`→`{incorrect, unverifiable}`로 확대(이중 방어). **남은 완전 상환**: coach→하네스 단일 수렴(Phaiakes9 라이브 LLM·Kiki 수동 선행).
 
 ---
 
