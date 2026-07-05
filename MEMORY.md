@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-05 (구현·backend/harness/api/test·머지 5 PR): **S1 감사 상환 완주 + E2E 증명 하니스 + verify-answer 도구** (자율·라이브 무관)
+
+**무엇/왜**: Kiki 부재 중 라이브 LLM 무관·되돌리기 쉬운 슬라이스만 자율 진행 — 5 PR 머지(#425~429·전부 CI green·SQUASH). S1 구조 감사(블록 B) 상환 Top 3 중 라이브 불요분 완주 + E2E 병목 실증 + 검증 도구 표면 완성:
+- **#425 상환#2**(PII) — `dialogue_turn.content` 미성년 채팅 본문 **앱-계층 봉투 암호화(AES-256-GCM)**. `dialogue_content_encryption_key`(device secret 키와 분리·폭발반경 격리)·키 미설정=평문 폴백(점진 도입·CI 무영향). `_build_dialogue_turn` 단일 write 좌석(4곳)·GET/export 노출 직전 복호(키 유실 시 RuntimeError)·ciphertext schema 밖·백필 CLI. 마이그레이션 c3d4e5f0a1b2. CLAUDE.md "미성년 채팅 평문 저장 금지" 저장계층 시행.
+- **#426 상환#3(부분)**(G1/Q6) — 정답 억제를 **하네스 불변식으로 동결**. `wh1_loop._end_turn_utterance`가 `last_verdict ∈ {incorrect,unverifiable}`이면 정책 명시 발화 무시·소크라테스 파생(정책 무관 최종 강제). LLMTutorPolicy 선제 억제도 unverifiable→{incorrect,unverifiable} 확대. **완전 상환(coach→하네스 단일 수렴)은 라이브 LLM 선행**.
+- **#428 E2E** — `test_e2e_vertical_slice_integration.py` 온보딩→진단→문제→풀이→코치→verify **실 PG 관통 증명**(로드맵 병목 #3 "E2E 미실증" 공략·mock LLM·라이브 전 회귀 앵커). is_minor 서버파생·answer 비노출·verify 신호 코치↔독립 정합·턴 6개 영속 실증.
+- **#429 verify-answer** — `POST /v1/verify-answer`로 **3-tier 검증 HTTP 표면 완성**(기존 Tier1 `verify_answer`는 내부 소비만·엔드포인트 부재). 등식·부등식·연립·파라미터 샘플링·stateless·정답 누출 0·남용 상한. S2 콘텐츠(자체 동등문제 답 검산·다중 풀이 동치) 토대.
+**검증 규율**: 5 PR 전부 메인 ground truth 재검증 — **CI-정확 게이트**(`cd src/backend && ruff check . ../../tests/backend`·한글 폭 2 계산) + 로컬 실 PG(:54329) @integration 직접 실행. **교훈**: 레포 루트 ruff는 East-Asian-width를 CI(src/backend pyproject)와 다르게 세 #426 lint 회귀가 main 착지 → #427로 즉시 상환·이후 CI-정확 방식 통일. `backend — lint·type·test`가 non-required라 red가 auto-merge 통과 → **required 승격 권고**(Kiki).
+**Kiki 대기(라이브 선행)**: 상환#1(verify 게이트 완전 강제)·#3 완전 상환 = coach→하네스 단일 수렴 → Phaiakes9 라이브 shadow 측정 후 승격("측정 없는 도입 없음"). PII 암호화 활성 = `WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY` 주입. **NOT**: 학생-대면 결정론 경로 변화 0(상환은 안전 강화만)·라이브 LLM 호출 0.
+
 ### 2026-07-04 (구현·harness/L5/L3·mock 우선): **S1 착수 — 기반 3슬라이스(S1-a·b·e) 완료** (Kiki 설계 승인)
 
 **무엇/왜**: 블록 A 설계(`s1_e2e_vertical_slice_design.md`) Kiki 승인 후 S1 빌드 착수. S1 = "짓기 아닌 잇기"(엔진 존재·글루 미배선). 라이브 키 없이 mock 우선 자율 진행 가능한 백엔드-only 기반 3슬라이스 완료:
