@@ -337,6 +337,17 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-06 (구현·l3/equivalent·배치 실측 2건): **S2-k~o — 게이트 정합·canonicalization·DSL 폐쇄·derive-and-verify·스켈레톤 생성기** + 배치 파이프라인 가동
+
+**무엇/왜**: Phaiakes9 라이브·배치 실측이 이끈 연쇄 상환(전부 브랜치 직push):
+- **S2-k** 저작 solution_steps를 Tier2에서 분리(산문≠심볼릭 체인)·answer_selection 스키마 required·정확값 규칙 → 수동 실측 accepted ~80% 달성.
+- **S2-l** canonicalize.canonical_signature(SymPy 정규형·스케일/부호/인수분해/등호표기 흡수) — 오케스트레이터 3a 구조 dedup(배치 기본 ON)·임베딩 dedup과 상보.
+- **S2-m/n** condition DSL 폐쇄(largest_root()·solve()·파이썬 문법 조립 거부) + derive_selected_root(정답 유도)로 대조·정확값 정규화(불일치=원천 거부·몰래 repair 금지). 외부 리뷰 P0 채택, full IR wire는 의도적 보류(플레이북 과잉 모델링 금기).
+- **배치 실측 결함 2건 상환**: ① _to_record가 answer_selection 미영속(라운드트립 유일성 강등) ② asyncio.run 호출당 루프 생성·종료로 provider 커넥션 풀이 죽어 배치 격회 "Event loop is closed" → 생성기 지속 이벤트 루프로 교체.
+- **S2-o 스켈레톤 생성기**(사용자 승인): 배치 실측에서 LLM-first가 모델 레퍼토리(~10문제)에 포화 — 60회 중 82% 판박이·수율 5~20%→0% 붕괴. `SkeletonEquivalentProblemGenerator`(같은 Protocol 좌석·LLM 0) — 근 (r₁,r₂) 조합 풀(정수근 쌍·기약 유리근·중근, ~600개·고정 시드)에서 방정식 역산, conditions·answer_map·선택·해설 전부 결정론. 중복·틀린 근·복소근·반올림이 생성 자체가 불가. 게이트는 그대로(이중 방어·derive와 교차 검증). skip_signatures로 코퍼스 증분 재실행. 성질 테스트: 표본 100 전건 accepted·독립 유도와 전건 일치·signature 전건 상이. **하이브리드 노선**: 오개념 겨냥·novel 구조는 LLM-first 소관으로 병행, LLM 발문 다양화(수치 불변 rephrase)는 후속.
+
+**배치 가동**: run_batch_corpus.py(Phaiakes9)로 자동 생성·자동 검증 코퍼스 최초 적재(problem_bank_generated_v0·11건, LLM-first 기준). 오채택 0 실증.
+
 ### 2026-07-05 (구현·l3/equivalent·라이브 피드백 3슬라이스): **S2-h/i/j — 저작 모델 GENERAL 전환·근 선택 검증·structured output** + 생성 파이프라인 우선순위 채택
 
 **무엇/왜**: Kiki Phaiakes9 라이브 실측이 드러낸 결함을 즉시 상환한 3슬라이스(브랜치 직push·커밋 4ac602d·9363faa·49f1451):

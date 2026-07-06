@@ -1,0 +1,320 @@
+"""파라메트릭 *스켈레톤* 동등문제 생성기 — S2-o(결정론 코어·LLM 0).
+
+`EquivalentProblemGenerator` 좌석의 **결정론 구현**이다. LLM-first 생성기
+(`llm_generator.LLMEquivalentProblemGenerator`)와 정반대로 문제의 수학적 실체를 **코드가 먼저
+확정**한다: 근 (r₁, r₂)를 풀에서 고르고 → 방정식을 역산(전개)하고 → conditions·answer_map·
+answer_selection·정답·해설을 전부 결정론으로 조립한다. 발문은 한국어 템플릿(회전 변주)이다.
+
+왜(Phaiakes9 배치 실측·2026-07-06): LLM-first는 모델(qwen2.5:7b)의 좁은 레퍼토리 탓에 코퍼스
+11건에서 포화 — 배치 60회 중 ~82%가 판박이 재생성으로 dedup에 버려지고 수율이 5~20%→0%로
+붕괴했다. 스켈레톤은 근 조합을 코드가 순회하므로 **중복이 생성 자체가 안 되고**, 근을 코드가
+고르므로 **틀린 근·복소근·반올림 소수도 원천 불가능**하다(외부 리뷰 P0-2 "root-orderable
+generator를 결정론으로, LLM은 wording만" 채택 — 결정 로그 2026-07-05).
+
+정직성·이중 방어: 생성물은 여전히 S2-a 게이트(Tier1 대입·근 선택·위생·동등성)를 통과해야
+저장된다 — 생성기 자신을 신뢰하지 않는 파이프라인 원칙은 스켈레톤에도 동일하게 적용된다
+(derive-and-verify가 이 생성기의 answer_map을 재유도·재확인하는 교차 검증이 공짜로 붙는다).
+
+범위(v0): 단일변수 이차방정식·유리근(정수근·기약 유리근·중근)·근 선택(largest/smallest/unique)
+문제만. 오답지(distractor)·오개념 태깅은 미저작(빈 목록) — 오개념 겨냥 스펙은 LLM-first 생성기
+소관으로 남는다(하이브리드: 두 생성기가 같은 좌석·같은 게이트를 공유). **LLM 발문 다양화**
+(스켈레톤이 확정한 수치를 못 바꾸는 rephrase 시임)는 후속 슬라이스다 — v0 템플릿 변주만으로도
+구조 다양성(수백 조합)이 표면 단조로움을 상회한다.
+
+7계층: L3 지역(생성=LLM 라우터 도메인이나 이 구현은 LLM 0 — 좌석 계약만 공유). schema(최하위)·
+동일 패키지(canonicalize)만 import한다.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import random
+from collections.abc import Sequence
+from collections.abc import Set as AbstractSet
+from dataclasses import dataclass
+from fractions import Fraction
+from math import gcd
+
+from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
+from whymath_backend.l3.equivalent.canonicalize import canonical_signature
+from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.schema.enums import (
+    AnswerFormat,
+    Curriculum,
+    GenerationType,
+    LicenseType,
+    SourceType,
+    Subject,
+)
+from whymath_backend.schema.problem import Problem
+from whymath_backend.schema.provenance import ContentProvenance
+
+__all__ = ["SkeletonEquivalentProblemGenerator"]
+
+# 풀 셔플 고정 시드 — 같은 구성은 같은 출제 순서(재현·디버그). 비결정 난수 금지(verify 규약 미러).
+_POOL_SEED = 20260706
+
+# 근 풀 범위 — 한국 중·고 수준의 "손으로 인수분해 가능한" 작은 유리근만(커리큘럼 상식 범위).
+_INT_ROOT_MIN, _INT_ROOT_MAX = -9, 9
+_RATIONAL_LEADS: tuple[int, ...] = (2, 3)
+_RATIONAL_NUMERATORS: tuple[int, ...] = (-7, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 7)
+_RATIONAL_PARTNER_MIN, _RATIONAL_PARTNER_MAX = -6, 6
+
+# 발문 템플릿(선택별·인덱스 회전) — 표면 변주. {eq}에 사람이 읽는 방정식이 들어간다.
+_TEMPLATES: dict[str, tuple[str, ...]] = {
+    "largest": (
+        "이차방정식 {eq} 의 두 근 중 큰 근을 구하시오.",
+        "이차방정식 {eq} 의 두 근 중 더 큰 근의 값을 구하시오.",
+        "이차방정식 {eq} 를 풀어 큰 근을 구하시오.",
+    ),
+    "smallest": (
+        "이차방정식 {eq} 의 두 근 중 작은 근을 구하시오.",
+        "이차방정식 {eq} 의 두 근 중 더 작은 근의 값을 구하시오.",
+        "이차방정식 {eq} 를 풀어 작은 근을 구하시오.",
+    ),
+    "unique": (
+        "이차방정식 {eq} 의 근을 구하시오.",
+        "이차방정식 {eq} 의 중근을 구하시오.",
+    ),
+}
+
+
+@dataclass(frozen=True, slots=True)
+class _Skeleton:
+    """문제 뼈대 — 인수 (a₁x−b₁)(a₂x−b₂)=0 과 근 선택. 모든 수치의 단일 진실 원천."""
+
+    factors: tuple[tuple[int, int], tuple[int, int]]  # ((a1,b1),(a2,b2)) — aᵢ>0·기약
+    selection: str  # largest / smallest / unique
+
+    @property
+    def coefficients(self) -> tuple[int, int, int]:
+        """전개 계수 (a, b, c) — a x² + b x + c = 0. (a₁x−b₁)(a₂x−b₂) 전개."""
+        (a1, b1), (a2, b2) = self.factors
+        return a1 * a2, -(a1 * b2 + a2 * b1), b1 * b2
+
+    @property
+    def roots(self) -> tuple[Fraction, Fraction]:
+        """근 (작은, 큰) 정렬 — 중근이면 같은 값 둘."""
+        (a1, b1), (a2, b2) = self.factors
+        pair = sorted((Fraction(b1, a1), Fraction(b2, a2)))
+        return pair[0], pair[1]
+
+    @property
+    def answer_root(self) -> Fraction:
+        """선택이 가리키는 정답 근 — largest=큰, smallest=작은, unique=유일(중근)."""
+        small, large = self.roots
+        return large if self.selection == "largest" else small
+
+
+def _fraction_text(value: Fraction) -> str:
+    """Fraction → SymPy/표시 겸용 정확값 문자열('4/3'·'-6') — 반올림 소수 금지."""
+    return (
+        str(value.numerator) if value.denominator == 1 else f"{value.numerator}/{value.denominator}"
+    )
+
+
+def _term(coefficient: int, symbol: str, *, lead: bool = False) -> str:
+    """계수 하나를 사람이 읽는 항으로 — 부호·1 생략 규칙(lead=선두 항은 + 없이)."""
+    sign = "-" if coefficient < 0 else ("" if lead else "+")
+    magnitude = abs(coefficient)
+    body = symbol if magnitude == 1 and symbol else f"{magnitude}{symbol}"
+    joint = " " if sign and not lead else ""
+    return f"{sign}{joint}{body}" if lead else f"{sign} {body}"
+
+
+def _display_equation(a: int, b: int, c: int) -> str:
+    """전개 계수 → 사람이 읽는 방정식('3x^2 - 7x + 4 = 0') — 0 항 생략·1 계수 생략."""
+    parts = [_term(a, "x^2", lead=True)]
+    if b:
+        parts.append(_term(b, "x"))
+    if c:
+        parts.append(_term(c, ""))
+    return " ".join(parts) + " = 0"
+
+
+def _sympy_equation(a: int, b: int, c: int) -> str:
+    """전개 계수 → 검산용 SymPy 등식('3*x**2 - 7*x + 4 = 0') — 닫힌 DSL(맨 등식)."""
+    parts = ["x**2" if a == 1 else f"{a}*x**2"]
+    if b:
+        parts.append(f"{'-' if b < 0 else '+'} {abs(b)}*x")
+    if c:
+        parts.append(f"{'-' if c < 0 else '+'} {abs(c)}")
+    return " ".join(parts) + " = 0"
+
+
+def _factor_text(a: int, b: int) -> str:
+    """(a x − b) 인수의 사람이 읽는 표기 — 'x - 2'·'3x + 4'(b 부호 반영)."""
+    head = "x" if a == 1 else f"{a}x"
+    if b == 0:
+        return head
+    return f"{head} - {b}" if b > 0 else f"{head} + {abs(b)}"
+
+
+def _build_pool() -> tuple[_Skeleton, ...]:
+    """결정론 스켈레톤 풀 — 정수근 쌍·기약 유리근·중근을 열거하고 고정 시드로 셔플.
+
+    같은 방정식이라도 선택(largest/smallest)이 다르면 다른 문제다(정수근 쌍은 두 선택 모두 수록).
+    (a, b, c, selection) 중복은 빌드 시점에 제거한다(풀 내 판박이 0 보장 — dedup은 코퍼스 대비
+    방어로만 남는다).
+    """
+    pool: list[_Skeleton] = []
+    seen: set[tuple[int, int, int, str]] = set()
+
+    def _add(factors: tuple[tuple[int, int], tuple[int, int]], selection: str) -> None:
+        skeleton = _Skeleton(factors=factors, selection=selection)
+        key = (*skeleton.coefficients, selection)
+        if key not in seen:
+            seen.add(key)
+            pool.append(skeleton)
+
+    # ① 정수근 쌍 (r1 < r2)·a=1 — 큰 근/작은 근 문제 둘 다 수록.
+    for r1 in range(_INT_ROOT_MIN, _INT_ROOT_MAX + 1):
+        for r2 in range(r1 + 1, _INT_ROOT_MAX + 1):
+            for selection in ("largest", "smallest"):
+                _add(((1, r1), (1, r2)), selection)
+
+    # ② 기약 유리근 (a₁x−b₁)(x−r) — 선두계수 2·3, b₁/a₁ 기약, 정수근 r과 상이. 선택은
+    #    결정론 교대(합 홀짝) — 풀 크기 절제.
+    for lead in _RATIONAL_LEADS:
+        for numerator in _RATIONAL_NUMERATORS:
+            if gcd(abs(numerator), lead) != 1:
+                continue
+            for partner in range(_RATIONAL_PARTNER_MIN, _RATIONAL_PARTNER_MAX + 1):
+                if Fraction(numerator, lead) == partner:
+                    continue  # pragma: no cover — 기약 분수는 정수와 못 겹침(방어)
+                selection = "largest" if (numerator + partner) % 2 else "smallest"
+                _add(((lead, numerator), (1, partner)), selection)
+
+    # ③ 중근 (x−r)²·(2x−b)²(b 홀수) — 유일근 문제(unique).
+    for r in range(_INT_ROOT_MIN, _INT_ROOT_MAX + 1):
+        if r != 0:
+            _add(((1, r), (1, r)), "unique")
+    for b in (-7, -5, -3, -1, 1, 3, 5, 7):
+        _add(((2, b), (2, b)), "unique")
+
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+class SkeletonEquivalentProblemGenerator:
+    """결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석 구현(S2-o·LLM 0).
+
+    풀을 순서대로 소비하며 후보를 낸다(소진 시 None — 오케스트레이터가 generation_failed로
+    정직 기록). `skip_signatures`에 이미 코퍼스에 있는 구조 signature 집합을 주면 해당 뼈대를
+    건너뛴다 — 배치 재실행이 dedup 거부로 회차를 낭비하지 않게 한다(오케스트레이터의
+    `signature_index`와 같은 set을 공유하면 회차 간 증분도 자동 반영).
+    """
+
+    def __init__(
+        self,
+        *,
+        skip_signatures: AbstractSet[str] | None = None,
+        slug_prefix: str = "wm-skel",
+        subject: Subject = Subject.공통,
+        curriculum_version: Curriculum = Curriculum.REVISION_2022,
+        valid_from_year: int = 2022,
+        unit_codes: Sequence[str] = ("QUAD-EQ",),
+    ) -> None:
+        self._pool = _build_pool()
+        self._index = 0
+        self._skip = skip_signatures
+        self._slug_prefix = slug_prefix
+        self._subject = subject
+        self._curriculum_version = curriculum_version
+        self._valid_from_year = valid_from_year
+        self._unit_codes = list(unit_codes)
+
+    # ── EquivalentProblemGenerator 좌석 ────────────────────────────────
+    def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
+        """다음 뼈대를 후보로 조립 — skip 집합에 있는 구조는 건너뛰고, 풀 소진 시 None."""
+        while self._index < len(self._pool):
+            skeleton = self._pool[self._index]
+            self._index += 1
+            if self._skip is not None:
+                a, b, c = skeleton.coefficients
+                signature = canonical_signature(_sympy_equation(a, b, c), skeleton.selection)
+                if signature is not None and signature in self._skip:
+                    continue  # 이미 코퍼스에 있는 구조 — 회차 낭비 없이 다음 뼈대로.
+            return self._assemble(spec, skeleton)
+        return None
+
+    # ── 조립(전부 결정론·수치의 단일 진실 원천은 _Skeleton) ─────────────
+    def _assemble(self, spec: EquivalenceSpec, skeleton: _Skeleton) -> CandidateProblem:
+        a, b, c = skeleton.coefficients
+        display_eq = _display_equation(a, b, c)
+        answer_text = _fraction_text(skeleton.answer_root)
+
+        templates = _TEMPLATES[skeleton.selection]
+        question_text = templates[self._index % len(templates)].format(eq=display_eq)
+        explanation = self._explanation(skeleton)
+
+        answer_format = self._answer_format(skeleton.answer_root)
+        standard_codes = sorted(spec.achievement_standard_codes)
+        slug = self._stable_slug(question_text, answer_text, standard_codes)
+
+        problem = Problem(
+            slug=slug,
+            source_type=SourceType.자체생성,  # 저작권 구조적 강제(자작 뼈대·본문성 원본 0)
+            curriculum_version=self._curriculum_version,
+            valid_from_year=self._valid_from_year,
+            subject=self._subject,
+            unit_codes=list(self._unit_codes),
+            difficulty_overall=spec.difficulty_overall,  # 스펙 난이도 미러(대응 명세 충족)
+            answer_format=answer_format,
+            achievement_standard_codes=standard_codes,
+            question_text=question_text,
+            answer=answer_text,
+            answer_explanation=explanation,
+        )
+        provenance = ContentProvenance(
+            generation_type=GenerationType.FULLY_GENERATED,
+            license=LicenseType.WHYMATH_GENERATED,
+            original_source=None,
+            transformation_pipeline={
+                "steps": [
+                    "결정론 스켈레톤 조립(근→방정식 역산·S2-o)",
+                    "S2-a 수용 게이트",
+                    "사람 검수 큐(필요 시)",
+                ],
+            },
+        )
+        return CandidateProblem(
+            problem=problem,
+            provenance=provenance,
+            conditions=_sympy_equation(a, b, c),
+            answer_map={"x": answer_text},
+            answer_selection=skeleton.selection,
+            solution_steps=None,  # 검증된 단계 체인은 WH-S 솔버 몫(S2-k 규약 동일)
+            concept_tags=[],
+        )
+
+    @staticmethod
+    def _explanation(skeleton: _Skeleton) -> str:
+        """인수분해 기반 해설 — 뼈대 수치에서 결정론 생성(손저작 코퍼스 문체 미러·위생 청정)."""
+        (a1, b1), (a2, b2) = skeleton.factors
+        f1, f2 = _factor_text(a1, b1), _factor_text(a2, b2)
+        small, large = skeleton.roots
+        if skeleton.selection == "unique":
+            return (
+                f"좌변을 인수분해하면 ({f1})^2 = 0 이므로 근은 {_fraction_text(small)} "
+                "(중근) 하나뿐이다."
+            )
+        which = "큰" if skeleton.selection == "largest" else "작은"
+        return (
+            f"좌변을 인수분해하면 ({f1})({f2}) = 0 이고, 두 근은 {_fraction_text(small)}와 "
+            f"{_fraction_text(large)}이다. 이 중 {which} 근은 "
+            f"{_fraction_text(skeleton.answer_root)}이다."
+        )
+
+    @staticmethod
+    def _answer_format(root: Fraction) -> AnswerFormat:
+        """정답 근의 형태 — 양의 정수=자연수·기약 분수=분수·그 외(음의 정수 등)=실수."""
+        if root.denominator == 1:
+            return AnswerFormat.자연수 if root.numerator > 0 else AnswerFormat.실수
+        return AnswerFormat.분수
+
+    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
+        """결정론 안정 slug — 내용 해시(멱등 upsert 키·llm_generator._stable_slug 규약 미러)."""
+        payload = "|".join([question_text, answer, ",".join(sorted(codes))])
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+        return f"{self._slug_prefix}-{digest}"
