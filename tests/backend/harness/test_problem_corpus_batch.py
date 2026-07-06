@@ -40,6 +40,7 @@ class TestRunCorpusBatch:
             sqrt_n=2,
             sqrt_mc_n=2,
             calc_extremum_n=0,
+            calc_tangent_n=0,
             write=False,
         )
         assert report.fulfilled
@@ -56,7 +57,14 @@ class TestRunCorpusBatch:
         # JSONL 산출물이 코퍼스 로더로 정확히 되읽힌다 — 형식·위생·Problem 검증 통과.
         out = tmp_path / "problems.jsonl"
         report = run_corpus_batch(
-            out_path=out, short_n=6, mc_n=4, sqrt_n=3, sqrt_mc_n=2, calc_extremum_n=0, write=True
+            out_path=out,
+            short_n=6,
+            mc_n=4,
+            sqrt_n=3,
+            sqrt_mc_n=2,
+            calc_extremum_n=0,
+            calc_tangent_n=0,
+            write=True,
         )
         assert report.fulfilled and report.written == 15
 
@@ -85,10 +93,24 @@ class TestRunCorpusBatch:
         a, b = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
         # calc 포함 전체 배치도 바이트 결정론(quad 4밴드 + calc 군).
         run_corpus_batch(
-            out_path=a, short_n=5, mc_n=3, sqrt_n=2, sqrt_mc_n=2, calc_extremum_n=4, write=True
+            out_path=a,
+            short_n=5,
+            mc_n=3,
+            sqrt_n=2,
+            sqrt_mc_n=2,
+            calc_extremum_n=4,
+            calc_tangent_n=4,
+            write=True,
         )
         run_corpus_batch(
-            out_path=b, short_n=5, mc_n=3, sqrt_n=2, sqrt_mc_n=2, calc_extremum_n=4, write=True
+            out_path=b,
+            short_n=5,
+            mc_n=3,
+            sqrt_n=2,
+            sqrt_mc_n=2,
+            calc_extremum_n=4,
+            calc_tangent_n=4,
+            write=True,
         )
         assert a.read_bytes() == b.read_bytes()
 
@@ -97,7 +119,14 @@ class TestRunCorpusBatch:
         # 방정식과 signature가 겹칠 수 있어도(문제군 별 dedup) slug는 내용 해시라 충돌 없다.
         out = tmp_path / "problems.jsonl"
         run_corpus_batch(
-            out_path=out, short_n=8, mc_n=4, sqrt_n=3, sqrt_mc_n=2, calc_extremum_n=10, write=True
+            out_path=out,
+            short_n=8,
+            mc_n=4,
+            sqrt_n=3,
+            sqrt_mc_n=2,
+            calc_extremum_n=10,
+            calc_tangent_n=10,
+            write=True,
         )
         slugs = [r.slug for r in load_problem_bank_records(out)]
         assert len(slugs) == len(set(slugs))
@@ -119,6 +148,8 @@ class TestCliEntry:
                 "--sqrt-mc",
                 "2",
                 "--calc-extremum",
+                "0",
+                "--calc-tangent",
                 "0",
             ]
         )
@@ -145,6 +176,8 @@ class TestCliEntry:
                 "2",
                 "--calc-extremum",
                 "0",
+                "--calc-tangent",
+                "0",
                 "--dry-run",
             ]
         )
@@ -168,6 +201,8 @@ class TestCliEntry:
                 "0",
                 "--calc-extremum",
                 "0",
+                "--calc-tangent",
+                "0",
             ]
         )
         assert code == 1
@@ -180,20 +215,50 @@ class TestCliEntry:
 
 
 class TestCalculusBand:
-    def test_default_run_includes_calc_extremum_band(self) -> None:
-        # 기본 실행은 quad 4밴드 + calc 밴드(총 5밴드) — calc 40건 저장·총 225.
+    def test_default_run_includes_calc_bands(self) -> None:
+        # 기본 실행은 quad 4밴드 + calc 2밴드(총 6밴드) — 각 40건 저장·총 265.
         report = run_corpus_batch(out_path=Path("/nonexistent/x.jsonl"), write=False)
         names = [b.name for b in report.bands]
-        assert names == ["short", "mc", "sqrt", "sqrt_mc", "calc-extremum"]
-        calc = next(b for b in report.bands if b.name == "calc-extremum")
-        assert (calc.requested, calc.stored) == (40, 40)
-        assert report.total_stored == 225 and report.fulfilled
+        assert names == ["short", "mc", "sqrt", "sqrt_mc", "calc-extremum", "calc-tangent"]
+        for band_name in ("calc-extremum", "calc-tangent"):
+            band = next(b for b in report.bands if b.name == band_name)
+            assert (band.requested, band.stored) == (40, 40)
+        assert report.total_stored == 265 and report.fulfilled
+
+    def test_tangent_records_have_calculus_metadata(self, tmp_path: Path) -> None:
+        # calc-tangent 밴드 산출물 — 미분계수 단원/성취기준/개념 태깅·단답형·접선 기울기 발문.
+        out = tmp_path / "problems.jsonl"
+        run_corpus_batch(
+            out_path=out,
+            short_n=0,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=0,
+            calc_tangent_n=12,
+            write=True,
+        )
+        records = load_problem_bank_records(out)
+        assert len(records) == 12
+        for record in records:
+            assert record.problem.unit_codes == ["CALC-TANGENT"]
+            assert record.problem.achievement_standard_codes == ["[12미적Ⅰ-02-01]"]
+            assert [t.concept_src_id for t in record.concept_tags] == ["H:12미적Ⅰ02-01"]
+            assert record.problem.question_format == "단답형"
+            assert "접선의 기울기" in record.problem.question_text
 
     def test_calc_records_have_calculus_metadata(self, tmp_path: Path) -> None:
         # calc 밴드 산출물 — 미적분 단원/성취기준/개념 태깅·단답형(quad와 분리 확인).
         out = tmp_path / "problems.jsonl"
         run_corpus_batch(
-            out_path=out, short_n=0, mc_n=0, sqrt_n=0, sqrt_mc_n=0, calc_extremum_n=12, write=True
+            out_path=out,
+            short_n=0,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=12,
+            calc_tangent_n=0,
+            write=True,
         )
         records = load_problem_bank_records(out)
         assert len(records) == 12
@@ -210,7 +275,14 @@ class TestCalculusBand:
         # 난이도 변별(균일 회귀 차단) — calc 밴드도 rule-based로 여러 값·미적분 대역(3.0~5.0).
         out = tmp_path / "problems.jsonl"
         run_corpus_batch(
-            out_path=out, short_n=0, mc_n=0, sqrt_n=0, sqrt_mc_n=0, calc_extremum_n=30, write=True
+            out_path=out,
+            short_n=0,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=30,
+            calc_tangent_n=0,
+            write=True,
         )
         diffs = {r.problem.difficulty_overall for r in load_problem_bank_records(out)}
         assert len(diffs) >= 2
