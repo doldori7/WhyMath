@@ -72,8 +72,13 @@ _DEFAULT_SQRT_N = 30
 
 
 def _default_out_path() -> Path:
-    """기본 산출 경로 — repo의 생성 코퍼스 v0(경로 유지 전면 교체·품질 테스트와 동일 규약)."""
-    repo_root = Path(__file__).resolve().parents[3]
+    """기본 산출 경로 — repo의 생성 코퍼스 v0(경로 유지 전면 교체·품질 테스트와 동일 규약).
+
+    `__file__` = <repo>/src/backend/whymath_backend/harness/problem_corpus_batch.py 라
+    parents[4]가 repo 루트다(harness→whymath_backend→backend→src→repo — 실측 확인). editable
+    설치(개발 트리) 전제의 ops CLI — 배포 트리에선 `--out`으로 명시한다.
+    """
+    repo_root = Path(__file__).resolve().parents[4]
     return repo_root / "data" / "corpus" / "problem_bank_generated_v0" / "problems.jsonl"
 
 

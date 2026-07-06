@@ -337,6 +337,19 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-06 (구현·L3/L4/harness/data·후속): **S2-p 스켈레톤 v1 — 오개념 2종·객관식 변형·난이도 추정기·무리근·코퍼스 전면 재생성**
+
+**무엇/왜**: 스켈레톤 코퍼스 161건의 균일 메타(난이도 2.5 전건·concepts []·distractor 0·유리근만)를 결정론으로 상환 — 스켈레톤은 자기 수치를 코드로 확정하므로 메타도 같은 수치에서 유도한다(사용자 4결정: 객관식 변형 신설·오개념 신규 저작·전면 재생성·"pr"):
+- **① L4 오개념 2종(doc-first)** — `opposite-root-selected`(발문의 큰/작은 근 지시 무시)·`factor-sign-flip`((x−a)=0에서 x=−a) — 정본 doc #31-32 → catalog 30→32종(대수 11). signals gate-safe 설계(recall 프로브 substring 회피·correct-near 게이트 미달). op-code 3종(select-opposite-root·factor-sign-flip-root + 시드 코퍼스가 참조하던 미등록 root-loss-divide-by-variable 갭 상환)·프로브 94→98. crosswalk 초안 v0.2: 신규 2종 둘 다 DB 코퍼스(839) 직접 후보 부재 — 최근접 개념겹침만 낮은 conf 전사·신규 M-id 저작 후보(period-of-scaled-sine 선례). 고정 카운트 테스트 6파일 일괄 갱신.
+- **② rule-based 난이도 추정기** — `l3/equivalent/difficulty.py`(base 2.0 + 근유형 0/0.3/0.6/1.2 + 선두계수 0.3 + 계수크기 0.2/0.4·산출 2.0~3.6). 게이트 수학: 스펙 2.5 대비 최대 gap 1.1 < 3.5(감쇠 한계)라 밴드별 스펙 난이도 분리 불요. 4~5 대역 미사용은 정직 스코프(현 풀 실제 난이도 대역).
+- **③ 결정론 메타** — concept_tags 기본 HK06 PRIMARY(개념그래프 실존 src_id·[10공수1-02-02]·생성자 주입 교체 가능), problem_id=slug 기반 uuid5(재실행 바이트 동일성).
+- **④ 무리근 variant(sqrt)** — `_SqrtSkeleton`((x−p)²=q·q 비제곱 10종·풀 180)·answer=SymPy 정확값("1 + sqrt(2)")로 derive_selected_root와 문자열까지 일치(교차 검증 성립)·answer_format=실수·위생 게이트 ±√ 해설 오탐 0 실측. verify 무리근 **양성** 회귀 테스트 신설(종전 공백 — 복소→unverifiable만 있었음).
+- **⑤ 객관식 variant(multiple_choice)** — 4지선다 {정답근, 반대근, −정답근, −반대근} 값 오름차순·distractor 오답 3선지 전건 오개념 태깅. **주입 원칙**: L3에 L4 id 하드코딩 0 — 생성자 `distractor_codes`(op키→(misconception_id, op_code))로 주입·미주입 fail-fast. **형식 파티션**: canonical signature가 발문 형식을 모르므로 같은 (방정식,선택) 뼈대는 sha256 해시로 정확히 한 형식에 배정(실측 602=MC 159+단답 443·서로소) — dedup 충돌 원천 차단.
+- **⑥ 배치 CLI repo 승격** — `harness/problem_corpus_batch`(계약 밖 조성 루트·agreement_gate_cli 선례): L4 정본에서 id를 읽어 L3에 주입, 3밴드(short 90/mc 45/sqrt 30) 공유 signature_index, 밴드 스펙 target_misconception_ids=방출 집합(Jaccard 1.0). 수율 미달 exit 1·재실행 바이트 동일(테스트 봉인). Phaiakes9 전용 스크립트 의존 해소 — 순수 결정론(LLM 0·DB 0)이라 어디서든 동일 산출.
+- **⑦ 코퍼스 v0 전면 재생성**(161→165건·경로 유지) — 난이도 13종 분산·전건 HK06·객관식 45(전건 distractor 3엔트리·L4 참조 무결성)·무리근 30. 품질 봉인 확장: 난이도 분산·개념 태깅·MC 불변식(validate_distractor_map)·sqrt 레코드·canonical signature 전건 유일.
+
+**🔒 불변**: acceptance/orchestrator/canonicalize 무변경·L3→L4 import 0(lint-imports green)·저작권 레일(전건 자체생성·WHYMATH_GENERATED)·게이트 통과 ≠ 학생 노출(v0 사람 검수 전). **범위 밖(후속)**: LLM 발문 다양화·무리근 객관식·근 개수 count 검증기·crosswalk 신규 M-id 저작·DB 적재 실행·5축 난이도 나머지 축.
+
 ### 2026-07-06 (구현·l3/equivalent·배치 실측 2건): **S2-k~o — 게이트 정합·canonicalization·DSL 폐쇄·derive-and-verify·스켈레톤 생성기** + 배치 파이프라인 가동
 
 **무엇/왜**: Phaiakes9 라이브·배치 실측이 이끈 연쇄 상환(전부 브랜치 직push):
