@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-06 (구현·L1/L4 data·S2-p 후속): **crosswalk 신규 M-id 2종 저작 — 이차방정식 근 선택·부호 반전의 DB 코퍼스 직접 대응**
+
+**무엇/왜**: S2-p에서 저작한 kebab 오개념 2종(opposite-root-selected·factor-sign-flip)이 DB 오개념 코퍼스(839종)에 직접 대응이 없어 검수 큐에 "개념겹침"(저신뢰 M0831·M0848)으로만 담겼던 갭을 해소. 두 오개념을 직접 서술하는 신규 M-id를 저작:
+- **코퍼스 저작** — `data/corpus/misconceptions_v1/misconceptions.json`에 M0862(발문의 큰/작은 근 지시 무시·error_type 조건무시)·M0863(인수 (x−a)=0을 x=−a로 읽는 부호 반전·error_type 부호오류) 추가(839→841). 필드는 공수 트랙(HK06·[10공수1-02-02]·"식·방정식·부등식") — catalog.py kebab 주석의 성취기준과 일치. mapping_confidence/score는 코퍼스 관례(원본 grain="기준(원본)"/1.0), provenance_note는 "AI생성-검수필요(S2-p 신규 저작)"(사람 검수 전 정직 표기). `_provenance.json` counts 동반 갱신(841·with_ccss 773·with_error_type 732).
+- **검수 큐** — `docs/data/misconception_crosslink_review_queue.json`에 직접매핑 행 2건(M0862·M0863·conf 0.90) 추가, 기존 개념겹침 행(M0831·M0848)은 "최근접 대안"으로 rationale 갱신 유지(다른 kebab의 최상위+대안 패턴 미러). **전행 pending·무서명 유지** — 실제 승인·DB 적재는 promote --load 단계(AI 자기승인 금지 가드·`promote_approved` 승격 0건 실측). crosswalk 초안 v0.3.
+- **종착점 판단**: 세 JSON 형식(candidates/review_queue/crosslinks)이 비호환 설계로 검수 우회를 구조 차단하므로, 본 작업은 코퍼스 저작 + 검수 큐 + 테스트까지이며 `misconception_catalog`·`misconception_crosslink` 테이블 적재는 사람 승인 이후 별도 슬라이스.
+- **테스트**: 통합 카운트 839→841(loader integration), crosslink 직접매핑 화이트리스트에 `_S2P_DIRECT` 추가(전사 왜곡 가드 유지). 신규 레코드 전건 pydantic(extra=forbid) 검증·큐 mis_id 전건 코퍼스 실재 실측. CI 5409 passed·4게이트 green.
+
 ### 2026-07-06 (구현·L3/L4/harness/data·후속): **S2-p 스켈레톤 v1 — 오개념 2종·객관식 변형·난이도 추정기·무리근·코퍼스 전면 재생성**
 
 **무엇/왜**: 스켈레톤 코퍼스 161건의 균일 메타(난이도 2.5 전건·concepts []·distractor 0·유리근만)를 결정론으로 상환 — 스켈레톤은 자기 수치를 코드로 확정하므로 메타도 같은 수치에서 유도한다(사용자 4결정: 객관식 변형 신설·오개념 신규 저작·전면 재생성·"pr"):

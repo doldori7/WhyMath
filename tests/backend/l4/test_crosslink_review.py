@@ -2,8 +2,9 @@
 
 합성 큐로 승격 규칙(승인만 추출·서명 필수·직접매핑 conf<0.6 금지·kebab 실재·top key 오투입
 거부·전건 열거·exit 2)을 검증하고, 실 큐 파일(`docs/data/misconception_crosslink_review_queue.json`)
-은 초안(`misconception_crosslink_candidates.md` §2) 전사 충실성을 회귀 가드한다 — kebab 30 전원·
-M-id 실재(839 코퍼스)·전행 pending·직접매핑 conf 초안 명시값 일치(전사 왜곡 방지 스팟).
+은 초안(`misconception_crosslink_candidates.md` §2) 전사 충실성을 회귀 가드한다 — kebab 32 전원·
+M-id 실재(841 코퍼스·S2-p 신규 저작 M0862·M0863 포함)·전행 pending·직접매핑 conf 초안 명시값
+일치(전사 왜곡 방지 스팟).
 """
 
 from __future__ import annotations
@@ -272,7 +273,7 @@ def test_real_queue_covers_all_30_kebabs(real_rows: list[dict[str, Any]]) -> Non
 
 
 def test_real_queue_mis_ids_exist_in_corpus(real_rows: list[dict[str, Any]]) -> None:
-    # ② 모든 mis_id가 실 코퍼스(839종)에 실재 — 존재하지 않는 M-id 전사 방지.
+    # ② 모든 mis_id가 실 코퍼스(841종)에 실재 — 존재하지 않는 M-id 전사 방지.
     corpus = json.loads(_CORPUS_PATH.read_text(encoding="utf-8"))
     corpus_ids = {r["mis_id"] for r in corpus["misconceptions"]}
     assert corpus_ids  # 코퍼스 자체가 비면 가드 무의미
@@ -298,14 +299,24 @@ _REVIEWED_DIRECT_ALTS: dict[str, set[tuple[str, float]]] = {
     "square-root-positivity": {("M0647", 0.85)},
 }
 
+# S2-p 후속 — kebab 2종의 직접 대응 M-id를 신규 저작(misconceptions_v1 M0862·M0863)해 초안 v0.3에
+# 직접매핑 행으로 추가. 초안 최상위·검수 대안과 같은 화이트리스트라 그 밖의 새 직접매핑은 계속
+# 차단된다. 기존 최근접 개념겹침 행(M0831/M0848)은 non-null 직접매핑이 아니라 이 집합 대상 아님.
+_S2P_DIRECT: dict[str, set[tuple[str, float]]] = {
+    "opposite-root-selected": {("M0862", 0.9)},
+    "factor-sign-flip": {("M0863", 0.9)},
+}
+
 
 def test_real_queue_direct_top_confidences_match_draft(
     real_rows: list[dict[str, Any]],
 ) -> None:
-    # ④ non-null 직접매핑 = 초안 최상위 명시분 ∪ 검수 반영 대안(#392) — 그 외 유입 차단.
+    # ④ non-null 직접매핑 = 초안 최상위 ∪ 검수 반영 대안(#392) ∪ S2-p 신규 저작 — 그 외 유입 차단.
     expected: dict[str, set[tuple[str, float]]] = {
-        k: set(_DRAFT_DIRECT_TOPS.get(k, set())) | set(_REVIEWED_DIRECT_ALTS.get(k, set()))
-        for k in set(_DRAFT_DIRECT_TOPS) | set(_REVIEWED_DIRECT_ALTS)
+        k: set(_DRAFT_DIRECT_TOPS.get(k, set()))
+        | set(_REVIEWED_DIRECT_ALTS.get(k, set()))
+        | set(_S2P_DIRECT.get(k, set()))
+        for k in set(_DRAFT_DIRECT_TOPS) | set(_REVIEWED_DIRECT_ALTS) | set(_S2P_DIRECT)
     }
     actual: dict[str, set[tuple[str, float]]] = {}
     for row in real_rows:

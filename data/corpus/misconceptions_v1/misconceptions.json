@@ -2,7 +2,7 @@
   "source_citation": "출처: WhyMath 7계층 본문 코퍼스(자체 저작 — 교수학 오개념 분석).",
   "license_notice": "와이매스 자체 저작물(오개념 서술·distractor 규칙·교정포인트). 성취기준·CCSS 코드는 구조 메타(공공·사실).",
   "collected_at": "2026-06-20T11:18:19.433043+00:00",
-  "count": 839,
+  "count": 841,
   "misconceptions": [
     {
       "mis_id": "M0425",
@@ -15105,6 +15105,42 @@
       "mapping_confidence": "기준(원본)",
       "mapping_score": 1.0,
       "provenance_note": "AI생성-검수필요"
+    },
+    {
+      "mis_id": "M0862",
+      "canonical_statement": "이차방정식의 두 근 중 발문이 요구한 근(큰/작은)이 아닌 반대쪽 근을 답한다",
+      "student_wrong_thinking": "두 근을 모두 구하면 어느 근을 답해도 된다고 생각한다(발문의 '큰 근'/'작은 근' 선택 지시를 무시).",
+      "distractor_rule": "정답 근의 반대쪽(요구되지 않은) 근 값을 오답 보기로 배치",
+      "error_type": "조건무시",
+      "difficulty": "중",
+      "correction_point": "발문이 '큰 근'/'작은 근' 중 무엇을 요구하는지 먼저 확인하고, 구한 두 근 중 해당하는 근을 고르도록 유도한다.",
+      "ccss_code": "HSA-REI.B.4",
+      "concept_src_id": "HK06",
+      "standard_code": "[10공수1-02-02]",
+      "school_level": "고등학교(공통)",
+      "domain": "식·방정식·부등식",
+      "subunit": "이차방정식의 근(실근·허근)",
+      "mapping_confidence": "기준(원본)",
+      "mapping_score": 1.0,
+      "provenance_note": "AI생성-검수필요(S2-p 신규 저작·kebab opposite-root-selected 직접 대응)"
+    },
+    {
+      "mis_id": "M0863",
+      "canonical_statement": "인수 (x-a)=0에서 근을 x=-a로 읽는다(부호 반전). 올바른 근은 x=a이다",
+      "student_wrong_thinking": "괄호 안 식이 0이 되려면 x가 빼는 수와 반대 부호여야 한다고 생각해 근을 부호 반전한 값으로 적는다.",
+      "distractor_rule": "각 인수의 근을 부호 반전한 값을 오답 보기로 배치",
+      "error_type": "부호오류",
+      "difficulty": "중",
+      "correction_point": "(x-a)=0에 x=a를 대입해 실제로 0이 됨을 확인하도록 유도한다.",
+      "ccss_code": "HSA-REI.B.4",
+      "concept_src_id": "HK06",
+      "standard_code": "[10공수1-02-02]",
+      "school_level": "고등학교(공통)",
+      "domain": "식·방정식·부등식",
+      "subunit": "이차방정식의 풀이(인수분해)",
+      "mapping_confidence": "기준(원본)",
+      "mapping_score": 1.0,
+      "provenance_note": "AI생성-검수필요(S2-p 신규 저작·kebab factor-sign-flip 직접 대응)"
     }
   ]
 }

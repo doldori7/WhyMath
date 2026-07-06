@@ -227,10 +227,10 @@ class TestRealCorpusLoad:
         mis_ids = [str(m["mis_id"]) for m in payload["misconceptions"]]
         try:
             count = load_misconceptions(None, corpus, settings=Settings())
-            assert count == 839
+            assert count == 841  # S2-p: 신규 M-id 2건(M0862·M0863) 저작으로 839→841.
             # 재적재 멱등 — 같은 코퍼스 → DB 행수 불변.
             recount = load_misconceptions(None, corpus, settings=Settings())
-            assert recount == 839
+            assert recount == 841
             engine = _sync_engine()
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
@@ -238,7 +238,7 @@ class TestRealCorpusLoad:
                         text("SELECT count(*) FROM misconception_catalog WHERE mis_id = ANY(:ids)"),
                         {"ids": mis_ids},
                     ).scalar_one()
-                assert total == 839  # 멱등(2회 적재 후에도 839행)
+                assert total == 841  # 멱등(2회 적재 후에도 841행·S2-p +2)
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:
