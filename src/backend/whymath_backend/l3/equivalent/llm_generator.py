@@ -166,10 +166,21 @@ _OUTPUT_JSON_SCHEMA: dict[str, object] = {
         "answer_format": {"type": "string", "enum": [f.value for f in AnswerFormat]},
         "achievement_standard_codes": {"type": "array", "items": {"type": "string"}},
         "distractor_map": {"type": "array", "items": {"type": "object"}},
-        "solution_steps": {"type": "array", "items": {"type": "string"}},
         "concept_tags": {"type": "array", "items": {"type": "object"}},
     },
-    "required": ["question_text", "answer", "conditions", "answer_map", "unit_codes"],
+    # answer_selection을 required로 강제(S2-k) — 모델이 항상 근 선택을 선언하게 해 "선택 미명시"
+    # 유일성 강등을 없앤다(유일해면 unique). 오선언은 게이트가 failed로 안전 차단(수율 손실 감수).
+    # solution_steps는 스키마에서 뺀다 — 저작 산문은 Tier2 심볼릭 체인이 아니라 answer_explanation
+    # 소관(위 _assemble·S2-k). answer_map은 정확값(분수/정수)이어야 하나 이는 프롬프트로 강제한다
+    # (JSON schema로 "분수 문자열"을 문법 표현하기 어려움 — 하류 Tier1이 반올림 소수를 fail로 잡음).
+    "required": [
+        "question_text",
+        "answer",
+        "conditions",
+        "answer_map",
+        "answer_selection",
+        "unit_codes",
+    ],
 }
 
 # 유효하지 않은 JSON 백슬래시 이스케이프 탐지 — LLM이 발문·해설에 LaTeX(`\(`·`\)`·`\frac`·`\sqrt`
@@ -212,16 +223,17 @@ _SYSTEM_PROMPT = """당신은 WhyMath의 **동등문제 저작자**입니다. �
   (예 `x^2-8x+c`에서 상수항만 바꾸는 식의 얕은 변주 금지).
 - 다음을 **폭넓게 다양화**하세요:
   - **계수·상수항**: 이차·일차·상수항을 매번 다르게(특정 형태에 고착되지 말 것).
-  - **물음**: 큰 근 / 작은 근 / 두 근의 합 / 두 근의 곱 등을 번갈아 물으세요.
+  - **물음**: 큰 근 / 작은 근 / (유일하면) 그 근을 번갈아 물으세요. **답이 방정식의 실제 근이
+    되는 문제**만 내세요 — '두 근의 합/곱'처럼 답이 근이 아닌 문제는 기계 검산이 불가하니 피하세요.
   - **근의 종류**: 서로 다른 정수근 / 중근 / 유리근 등 유형을 다양하게 섞으세요.
 
 ## 출력 형식 — JSON 객체 하나만 (코드펜스·설명 없이)
-필드: question_text(발문·한국어), answer(단일 값 문자열), answer_explanation(간결 해설),
-conditions(정답 검산용 조건식·SymPy 표기·여러 개면 배열), answer_map(조건에 답을 대입할 치환맵),
-difficulty_overall(1.0~5.0 숫자), unit_codes(단원 코드 배열·최소 1개),
+필드(필수): question_text(발문·한국어), answer(단일 값 문자열), conditions(정답 검산용
+조건식·SymPy 표기·여러 개면 배열), answer_map(조건에 답을 대입할 치환맵),
+answer_selection(largest/smallest/unique — 항상 넣으세요), unit_codes(단원 코드 배열·최소 1개).
+필드(권장): answer_explanation(간결 해설), difficulty_overall(1.0~5.0 숫자),
 answer_format(자연수/분수/실수/식), achievement_standard_codes(성취기준 코드 배열).
-선택: answer_selection(largest/smallest/unique·근 선택 문제엔 필수)·distractor_map·
-solution_steps·concept_tags.
+선택: distractor_map·concept_tags.
 
 ### 예시 — *형식만* 참고하고 숫자·문맥은 반드시 새로 지어 다르게 만드세요(그대로 베끼지 말 것)
 {
@@ -239,6 +251,11 @@ solution_steps·concept_tags.
 
 ## 규칙
 - 수식은 SymPy 표기(`**`=거듭제곱·`*`=곱)로. `conditions`·`answer_map`은 기계 검산에 쓰이니 정확히.
+- **`answer_map`의 값은 반드시 *정확한 수***(정수 `3`, 분수 `4/3`)로 쓰세요 — **반올림 소수
+  (`1.33`·`1.333`) 금지**. 근이 유리수면 분수로(`4/3`), 무리수면 SymPy 표기로(`sqrt(2)`,
+  `(1+sqrt(5))/2`). 반올림하면 대입 잔차가 0이 아니어서 기계 검산이 실패합니다. `answer`(사람이
+  읽는 값)는 소수로 써도 되지만 `answer_map`은 정확값이어야 합니다.
+- `conditions`에 `answer_map`을 대입하면 반드시 성립해야 합니다(**answer가 conditions의 해**).
 - **LaTeX 백슬래시(`\\(`·`\\)`·`\\frac`·`\\sqrt` 등) 절대 금지** — JSON이 깨집니다. 수식은
   `x^2`·`(x-2)(x-3)`처럼 일반 텍스트로 쓰고, 문자열에 백슬래시 자체를 넣지 마세요.
 - 발문에 예시 문구·설명·플레이스홀더("발문", "자작", "Calculation" 등)를 그대로 쓰지 말고
@@ -537,7 +554,12 @@ class LLMEquivalentProblemGenerator:
         answer_format = self._parse_answer_format(data.get("answer_format"), spec)
         standard_codes = self._parse_standard_codes(data.get("achievement_standard_codes"), spec)
         distractor_map = self._parse_distractor_map(data.get("distractor_map"), spec)
-        solution_steps = self._parse_solution_steps(data.get("solution_steps"))
+        # 저작 LLM은 *검증 가능한 Tier2 심볼릭 체인*(expr_before ≡ expr_after)을 만들지 않는다 —
+        # 모델이 내는 solution_steps는 산문 설명("인수분해하면…")이라 Tier2(verify_solution)에
+        # 넣으면 전부 unverifiable로 잡혀 정답 문제까지 검수필요로 강등된다(S2-k·Phaiakes9 실측).
+        # 답 정확성은 Tier1(대입)+근 선택(S2-i)이 이미 확정하고, 사람용 설명은 answer_explanation
+        # (위생 게이트가 거짓 등식 검사)에 담긴다. 검증된 단계 체인은 WH-S 솔버의 몫이다.
+        solution_steps = None
         concept_tags = self._parse_concept_tags(data.get("concept_tags"))
         slug = self._stable_slug(question_text, answer, standard_codes)
 
@@ -694,15 +716,6 @@ class LLMEquivalentProblemGenerator:
                 DistractorEntry(choice_index=idx, misconception_id=mid.strip(), op_code=op_code)
             )
         return entries
-
-    @staticmethod
-    def _parse_solution_steps(value: object) -> list[str] | None:
-        """풀이 단계(선택) — 문자열 배열, 없거나 비면 None(미제공)."""
-        if isinstance(value, list):
-            steps = [str(v).strip() for v in value if isinstance(v, str) and str(v).strip()]
-            if steps:
-                return steps
-        return None
 
     @staticmethod
     def _parse_concept_tags(value: object) -> list[ConceptTag]:

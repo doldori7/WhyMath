@@ -188,6 +188,33 @@ class TestAssembly:
         assert candidate.problem.distractor_map is not None
         assert candidate.problem.distractor_map[0].misconception_id == _MISCONCEPTION
 
+    def test_authored_solution_steps_are_dropped(self) -> None:
+        # S2-k: 모델이 산문 solution_steps를 내도 후보엔 싣지 않는다(Tier2 심볼릭 체인이 아님).
+        # 답 정확성은 Tier1+근 선택이 확정하고, 설명은 answer_explanation 소관.
+        payload = json.loads(_HAPPY)
+        payload["solution_steps"] = ["인수분해하면 (x-2)(x-3)=0", "두 근은 2와 3", "큰 근은 3"]
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.solution_steps is None
+
+    def test_gate_verifies_without_tier2_downgrade(self) -> None:
+        # S2-k 회귀 봉인 — 정답 큰-근 문제가 산문 단계 때문에 검수필요로 강등되지 않는다.
+        payload = json.loads(_HAPPY)
+        payload["solution_steps"] = ["인수분해하면 (x-2)(x-3)=0", "큰 근은 3"]  # 산문
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        verdict = evaluate_equivalent_candidate(
+            _spec(),
+            candidate.problem,
+            provenance=candidate.provenance,
+            conditions=candidate.conditions,
+            answer_map=candidate.answer_map,
+            answer_selection=candidate.answer_selection,
+            solution_steps=candidate.solution_steps,
+        )
+        assert verdict.verification == "verified"
+        assert verdict.accepted is True
+
     def test_spec_not_leaked_verbatim_but_ids_present(self) -> None:
         provider = FakeProvider([_HAPPY])
         _gen(provider).generate(_spec())
@@ -253,15 +280,32 @@ class TestStructuredOutput:
         assert schema["type"] == "object"
 
     def test_schema_requires_hard_fields(self) -> None:
-        # 결측 시 생성 실패가 되는 필수 필드들이 스키마 required로 문법 강제된다.
+        # 결측 시 생성 실패가 되는 필수 필드 + answer_selection(S2-k 강제)이 required로 문법 강제.
         provider = FakeProvider([_HAPPY])
         _gen(provider).generate(_spec())
         schema = provider.json_schemas[0]
         assert schema is not None
         required = schema["required"]
         assert isinstance(required, list)
-        for field in ("question_text", "answer", "conditions", "answer_map", "unit_codes"):
+        for field in (
+            "question_text",
+            "answer",
+            "conditions",
+            "answer_map",
+            "answer_selection",
+            "unit_codes",
+        ):
             assert field in required
+
+    def test_schema_omits_solution_steps(self) -> None:
+        # S2-k: 저작 산문은 Tier2 심볼릭 체인이 아니므로 스키마가 solution_steps를 유도하지 않는다.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        schema = provider.json_schemas[0]
+        assert schema is not None
+        props = schema["properties"]
+        assert isinstance(props, dict)
+        assert "solution_steps" not in props
 
     def test_schema_constrains_enums(self) -> None:
         # answer_selection(S2-i)·answer_format이 enum으로 문법 제약된다.
