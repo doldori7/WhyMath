@@ -15,9 +15,10 @@ generator를 결정론으로, LLM은 wording만" 채택 — 결정 로그 2026-0
 저장된다 — 생성기 자신을 신뢰하지 않는 파이프라인 원칙은 스켈레톤에도 동일하게 적용된다
 (derive-and-verify가 이 생성기의 answer_map을 재유도·재확인하는 교차 검증이 공짜로 붙는다).
 
-범위(v1·S2-p): 단일변수 이차방정식·유리근(정수근·기약 유리근·중근)·근 선택(largest/smallest/
-unique) 문제. 개념 태깅(기본 HK06 PRIMARY)·rule-based 난이도(difficulty 모듈)·결정론
-problem_id(slug 기반 uuid5)는 결정론 저작. 오답지(distractor)·novel 구조의 오개념 겨냥은
+범위(v1·S2-p): 단일변수 이차방정식·근 선택(largest/smallest/unique) 문제. variant 2종 —
+`short_answer`(유리근: 정수근·기약 유리근·중근)·`sqrt`(무리근: (x−p)²=q 완전제곱꼴·answer는
+SymPy 정확값 'p ± sqrt(q)'). 개념 태깅(기본 HK06 PRIMARY)·rule-based 난이도(difficulty 모듈)·
+결정론 problem_id(slug 기반 uuid5)는 결정론 저작. 오답지(distractor)·novel 구조의 오개념 겨냥은
 LLM-first 생성기와의 하이브리드 분담(두 생성기가 같은 좌석·같은 게이트를 공유). **LLM 발문
 다양화**(스켈레톤이 확정한 수치를 못 바꾸는 rephrase 시임)는 후속 슬라이스다 — 템플릿
 변주만으로도 구조 다양성(수백 조합)이 표면 단조로움을 상회한다.
@@ -36,6 +37,9 @@ from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from fractions import Fraction
 from math import gcd
+from typing import Literal
+
+import sympy
 
 from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
@@ -71,6 +75,15 @@ _INT_ROOT_MIN, _INT_ROOT_MAX = -9, 9
 _RATIONAL_LEADS: tuple[int, ...] = (2, 3)
 _RATIONAL_NUMERATORS: tuple[int, ...] = (-7, -5, -4, -3, -2, -1, 1, 2, 3, 4, 5, 7)
 _RATIONAL_PARTNER_MIN, _RATIONAL_PARTNER_MAX = -6, 6
+
+# 무리근 풀 범위(S2-p) — (x−p)²=q 완전제곱꼴. q는 *비제곱* 양수만(제곱수면 유리근이 되어
+# 유리근 풀과 구조 중복·무리근 취지 상실). p·q는 고1 "간단한 무리근" 손계산 범위.
+_SQRT_P_MIN, _SQRT_P_MAX = -4, 4
+_SQRT_QS: tuple[int, ...] = (2, 3, 5, 6, 7, 8, 10, 11, 12, 13)
+
+# 생성 variant(S2-p) — 뼈대 풀·조립을 가른다. short_answer=유리근 단답형(v0 기본),
+# sqrt=무리근 단답형. (객관식 variant는 후속 커밋 — 형식 파티션과 함께.)
+GeneratorVariant = Literal["short_answer", "sqrt"]
 
 # 발문 템플릿(선택별·인덱스 회전) — 표면 변주. {eq}에 사람이 읽는 방정식이 들어간다.
 _TEMPLATES: dict[str, tuple[str, ...]] = {
@@ -136,6 +149,73 @@ class _Skeleton:
             lead_coefficient=a,
             max_abs_coefficient=max(abs(a), abs(b), abs(c)),
         )
+
+
+@dataclass(frozen=True, slots=True)
+class _SqrtSkeleton:
+    """무리근 뼈대(S2-p) — (x−p)² = q(q 비제곱 양수)·근 p±√q. 모든 수치의 단일 진실 원천.
+
+    유리근 `_Skeleton`(인수 기반·Fraction 근)과 별도 타입 — Fraction 프로퍼티 계약을 건드리지
+    않는다. 전개계수(1, −2p, p²−q)는 정수라 canonicalize(Poly)·skip signature가 그대로 동작한다.
+    """
+
+    p: int
+    q: int
+    selection: str  # largest / smallest — 두 근 p±√q는 항상 상이(q>0)라 unique 없음
+
+    @property
+    def coefficients(self) -> tuple[int, int, int]:
+        """전개 계수 (1, −2p, p²−q) — x² − 2px + (p²−q) = 0."""
+        return 1, -2 * self.p, self.p * self.p - self.q
+
+    @property
+    def answer_expr(self) -> sympy.Expr:
+        """선택이 가리키는 정답 근의 SymPy 정확값 — largest=p+√q, smallest=p−√q."""
+        offset = sympy.sqrt(self.q)
+        base = sympy.Integer(self.p)
+        expr: sympy.Expr = base + offset if self.selection == "largest" else base - offset
+        return expr
+
+    @property
+    def difficulty(self) -> float:
+        """rule-based 종합 난이도 — 근 유형 고정 irrational·선두계수 1."""
+        a, b, c = self.coefficients
+        return estimate_difficulty(
+            root_kind="irrational",
+            lead_coefficient=a,
+            max_abs_coefficient=max(abs(a), abs(b), abs(c)),
+        )
+
+
+def _sqrt_inner_text(p: int) -> str:
+    """(x−p)의 사람이 읽는 안쪽 표기 — p 부호 반영('x - 1'·'x + 3'). p=0은 호출부에서 분기."""
+    return f"x - {p}" if p > 0 else f"x + {-p}"
+
+
+def _sqrt_display_equation(p: int, q: int) -> str:
+    """완전제곱꼴의 사람이 읽는 방정식 — '(x - 1)^2 = 2'·'x^2 = 5'."""
+    if p == 0:
+        return f"x^2 = {q}"
+    return f"({_sqrt_inner_text(p)})^2 = {q}"
+
+
+def _sqrt_condition(p: int, q: int) -> str:
+    """완전제곱꼴의 검산용 SymPy 등식 — 발문 표기를 그대로 전사(닫힌 DSL·맨 등식).
+
+    전개형이 아니라 완전제곱꼴 원형을 담는 이유: conditions는 문제 진술의 구조 전사다
+    (표현≠의미). canonicalize가 전개·정규화하므로 dedup·검증엔 차이가 없다(실측 확인).
+    """
+    if p == 0:
+        return f"x**2 = {q}"
+    return f"({_sqrt_inner_text(p)})**2 = {q}"
+
+
+def _sqrt_answer_display(p: int, q: int, selection: str) -> str:
+    """정답 근의 사람이 읽는 표기('1 + √2'·'-√5') — 해설 전용(answer 필드는 SymPy 표기)."""
+    sign = "+" if selection == "largest" else "-"
+    if p == 0:
+        return f"√{q}" if selection == "largest" else f"-√{q}"
+    return f"{p} {sign} √{q}"
 
 
 def _fraction_text(value: Fraction) -> str:
@@ -228,6 +308,23 @@ def _build_pool() -> tuple[_Skeleton, ...]:
     return tuple(pool)
 
 
+def _build_sqrt_pool() -> tuple[_SqrtSkeleton, ...]:
+    """무리근 뼈대 풀(S2-p) — p×q×선택 전수 열거 후 고정 시드 셔플(9×10×2=180).
+
+    q가 전부 비제곱이라 근은 항상 무리수·두 근은 항상 상이 — 유리근 풀과 구조(근의 체)가
+    달라 signature 충돌이 원천 불가능하다. 선택은 largest/smallest 둘 다 수록(같은 방정식이라도
+    선택이 다르면 다른 문제 — signature의 `#sel=` payload가 가른다).
+    """
+    pool = [
+        _SqrtSkeleton(p=p, q=q, selection=selection)
+        for p in range(_SQRT_P_MIN, _SQRT_P_MAX + 1)
+        for q in _SQRT_QS
+        for selection in ("largest", "smallest")
+    ]
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
 class SkeletonEquivalentProblemGenerator:
     """결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석 구현(S2-o·LLM 0).
 
@@ -240,6 +337,7 @@ class SkeletonEquivalentProblemGenerator:
     def __init__(
         self,
         *,
+        variant: GeneratorVariant = "short_answer",
         skip_signatures: AbstractSet[str] | None = None,
         slug_prefix: str = "wm-skel",
         subject: Subject = Subject.공통,
@@ -248,7 +346,10 @@ class SkeletonEquivalentProblemGenerator:
         unit_codes: Sequence[str] = ("QUAD-EQ",),
         concept_tags: Sequence[ConceptTag] = _DEFAULT_CONCEPT_TAGS,
     ) -> None:
-        self._pool = _build_pool()
+        self._pool: tuple[_Skeleton | _SqrtSkeleton, ...] = (
+            _build_sqrt_pool() if variant == "sqrt" else _build_pool()
+        )
+        self._variant = variant
         self._index = 0
         self._skip = skip_signatures
         self._slug_prefix = slug_prefix
@@ -269,20 +370,61 @@ class SkeletonEquivalentProblemGenerator:
                 signature = canonical_signature(_sympy_equation(a, b, c), skeleton.selection)
                 if signature is not None and signature in self._skip:
                     continue  # 이미 코퍼스에 있는 구조 — 회차 낭비 없이 다음 뼈대로.
+            if isinstance(skeleton, _SqrtSkeleton):
+                return self._assemble_sqrt(spec, skeleton)
             return self._assemble(spec, skeleton)
         return None
 
-    # ── 조립(전부 결정론·수치의 단일 진실 원천은 _Skeleton) ─────────────
+    # ── 조립(전부 결정론·수치의 단일 진실 원천은 뼈대) ─────────────────
     def _assemble(self, spec: EquivalenceSpec, skeleton: _Skeleton) -> CandidateProblem:
         a, b, c = skeleton.coefficients
         display_eq = _display_equation(a, b, c)
         answer_text = _fraction_text(skeleton.answer_root)
-
         templates = _TEMPLATES[skeleton.selection]
-        question_text = templates[self._index % len(templates)].format(eq=display_eq)
-        explanation = self._explanation(skeleton)
+        return self._build_candidate(
+            spec,
+            question_text=templates[self._index % len(templates)].format(eq=display_eq),
+            answer_text=answer_text,
+            explanation=self._explanation(skeleton),
+            answer_format=self._answer_format(skeleton.answer_root),
+            difficulty=skeleton.difficulty,
+            condition=_sympy_equation(a, b, c),
+            selection=skeleton.selection,
+        )
 
-        answer_format = self._answer_format(skeleton.answer_root)
+    def _assemble_sqrt(self, spec: EquivalenceSpec, skeleton: _SqrtSkeleton) -> CandidateProblem:
+        """무리근 조립(S2-p) — answer는 SymPy 정확값 문자열('1 + sqrt(2)').
+
+        `sympy.sstr(answer_expr)`는 `derive_selected_root`의 반환 규약과 문자열까지 정확히
+        일치한다(실측 확인) — 교차 검증(②)이 무리근에도 그대로 성립한다.
+        """
+        display_eq = _sqrt_display_equation(skeleton.p, skeleton.q)
+        answer_text = str(sympy.sstr(skeleton.answer_expr))
+        templates = _TEMPLATES[skeleton.selection]
+        return self._build_candidate(
+            spec,
+            question_text=templates[self._index % len(templates)].format(eq=display_eq),
+            answer_text=answer_text,
+            explanation=self._sqrt_explanation(skeleton),
+            answer_format=AnswerFormat.실수,  # 무리수 전용 형식 부재 — 실수로 정직 매핑
+            difficulty=skeleton.difficulty,
+            condition=_sqrt_condition(skeleton.p, skeleton.q),
+            selection=skeleton.selection,
+        )
+
+    def _build_candidate(
+        self,
+        spec: EquivalenceSpec,
+        *,
+        question_text: str,
+        answer_text: str,
+        explanation: str,
+        answer_format: AnswerFormat,
+        difficulty: float,
+        condition: str,
+        selection: str,
+    ) -> CandidateProblem:
+        """뼈대 종류 공통 후보 조립 — Problem·Provenance·CandidateProblem(전부 결정론)."""
         standard_codes = sorted(spec.achievement_standard_codes)
         slug = self._stable_slug(question_text, answer_text, standard_codes)
 
@@ -299,7 +441,7 @@ class SkeletonEquivalentProblemGenerator:
             unit_codes=list(self._unit_codes),
             # S2-p: 스펙 미러(2.5 균일) → rule-based 결정론 추정(difficulty 모듈 공식).
             # 스펙 2.5 대비 최대 gap 1.1 < 3.5(게이트 감쇠 수학)라 동등성 성분 안전.
-            difficulty_overall=skeleton.difficulty,
+            difficulty_overall=difficulty,
             answer_format=answer_format,
             achievement_standard_codes=standard_codes,
             question_text=question_text,
@@ -321,11 +463,25 @@ class SkeletonEquivalentProblemGenerator:
         return CandidateProblem(
             problem=problem,
             provenance=provenance,
-            conditions=_sympy_equation(a, b, c),
+            conditions=condition,
             answer_map={"x": answer_text},
-            answer_selection=skeleton.selection,
+            answer_selection=selection,
             solution_steps=None,  # 검증된 단계 체인은 WH-S 솔버 몫(S2-k 규약 동일)
             concept_tags=list(self._concept_tags),  # S2-p: 결정론 개념 태깅(기본 HK06 PRIMARY)
+        )
+
+    @staticmethod
+    def _sqrt_explanation(skeleton: _SqrtSkeleton) -> str:
+        """완전제곱꼴 해설 — 뼈대 수치에서 결정론 생성(√ 표기는 사람 가독·위생 실측 청정)."""
+        p, q = skeleton.p, skeleton.q
+        which = "큰" if skeleton.selection == "largest" else "작은"
+        answer_disp = _sqrt_answer_display(p, q, skeleton.selection)
+        if p == 0:
+            return f"x^2 = {q} 이므로 x = ±√{q} 이다. 이 중 {which} 근은 {answer_disp}이다."
+        inner = _sqrt_inner_text(p)
+        return (
+            f"완전제곱꼴에서 {inner} = ±√{q} 이므로 x = {p} ± √{q} 이다. "
+            f"이 중 {which} 근은 {answer_disp}이다."
         )
 
     @staticmethod

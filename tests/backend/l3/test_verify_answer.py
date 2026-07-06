@@ -512,3 +512,40 @@ class TestDeriveSelectedRoot:
         assert derive_selected_root("x**2 - 5*x + 6 = 0", "largest") == derive_selected_root(
             "x**2 - 5*x + 6 = 0", "largest"
         )
+
+
+class TestIrrationalRootsPositive:
+    """실수 무리근 *양성* 회귀(S2-p) — 기존 sqrt 테스트는 음수 근호→복소→unverifiable뿐이었다.
+
+    무리근 스켈레톤((x−p)²=q)의 검증 계약을 봉인한다: ① Tier1이 SymPy 정확값 답('1 + sqrt(2)')을
+    pass로 검산(evalf 경로) ② 근 선택이 무리근에서도 정확(반대 근 fail) ③ derive가 SymPy 표기
+    문자열을 그대로 반환(생성기 answer 규약과 정확 일치).
+    """
+
+    def test_tier1_passes_exact_irrational_answer(self) -> None:
+        v = verify_answer("(x - 1)**2 = 2", {"x": "1 + sqrt(2)"})
+        assert v.state == "pass"
+
+    def test_tier1_passes_expanded_form(self) -> None:
+        # 전개형에서도 동일(canonicalize와 무관하게 Tier1은 대입 검산).
+        v = verify_answer("x**2 - 2*x - 1 = 0", {"x": "1 + sqrt(2)"})
+        assert v.state == "pass"
+
+    def test_tier1_fails_wrong_irrational_answer(self) -> None:
+        v = verify_answer("(x - 1)**2 = 2", {"x": "1 + sqrt(3)"})
+        assert v.state == "fail"
+
+    def test_root_selection_largest_passes(self) -> None:
+        v = verify_root_selection("(x - 1)**2 = 2", {"x": "1 + sqrt(2)"}, "largest")
+        assert v.state == "pass"
+
+    def test_root_selection_opposite_root_fails(self) -> None:
+        # 큰 근 요구에 작은 근(1−√2) — S2-i 안전 구멍 상환이 무리근에서도 성립.
+        v = verify_root_selection("(x - 1)**2 = 2", {"x": "1 - sqrt(2)"}, "largest")
+        assert v.state == "fail"
+
+    def test_derive_returns_exact_sympy_notation(self) -> None:
+        # 생성기 answer 규약(sympy.sstr)과 문자열까지 정확 일치 — 교차 검증의 전제.
+        assert derive_selected_root("(x - 1)**2 = 2", "largest") == "1 + sqrt(2)"
+        assert derive_selected_root("(x - 1)**2 = 2", "smallest") == "1 - sqrt(2)"
+        assert derive_selected_root("x**2 = 2", "smallest") == "-sqrt(2)"

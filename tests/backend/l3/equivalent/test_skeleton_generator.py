@@ -180,9 +180,81 @@ class TestDeterministicMetadata:
         assert a.problem.problem_id == b.problem.problem_id
 
 
+class TestSqrtVariant:
+    """무리근 variant(S2-p) — (x−p)²=q 완전제곱꼴·SymPy 정확값 answer."""
+
+    def _sqrt_gen(self) -> SkeletonEquivalentProblemGenerator:
+        return SkeletonEquivalentProblemGenerator(variant="sqrt")
+
+    def test_first_30_all_pass_acceptance_gate(self) -> None:
+        # 무리근도 4종 게이트 전건 통과 — 검증 인프라(evalf·solve·위생)가 sqrt를 수용함의 봉인.
+        gen = self._sqrt_gen()
+        for _ in range(30):
+            candidate = gen.generate(_spec())
+            assert candidate is not None
+            verdict = evaluate_equivalent_candidate(
+                _spec(),
+                candidate.problem,
+                provenance=candidate.provenance,
+                conditions=candidate.conditions,
+                answer_map=candidate.answer_map,
+                answer_selection=candidate.answer_selection,
+            )
+            assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
+
+    def test_answer_matches_independent_derivation(self) -> None:
+        # 교차 검증 — SymPy 표기 answer가 derive_selected_root 반환과 *문자열까지* 일치.
+        gen = self._sqrt_gen()
+        for _ in range(30):
+            candidate = gen.generate(_spec())
+            assert candidate is not None
+            assert candidate.answer_selection is not None
+            derived = derive_selected_root(candidate.conditions, candidate.answer_selection)
+            assert derived == candidate.answer_map["x"], candidate.conditions
+
+    def test_answers_are_irrational_exact_values(self) -> None:
+        gen = self._sqrt_gen()
+        for _ in range(30):
+            candidate = gen.generate(_spec())
+            assert candidate is not None
+            assert "sqrt(" in candidate.problem.answer  # 무리근 정확값(반올림 소수 0)
+            assert "." not in candidate.problem.answer
+            assert candidate.problem.answer_format == "실수"
+            assert candidate.answer_selection in {"largest", "smallest"}
+
+    def test_signatures_distinct_and_disjoint_from_rational_pool(self) -> None:
+        # 무리근 풀 내부 판박이 0 + 유리근 풀과 구조 서명 서로소(근의 체가 다름 — 충돌 원천 불가).
+        sqrt_sigs = set()
+        gen = self._sqrt_gen()
+        while (candidate := gen.generate(_spec())) is not None:
+            sig = canonical_signature(candidate.conditions, candidate.answer_selection)
+            assert sig is not None
+            assert sig not in sqrt_sigs
+            sqrt_sigs.add(sig)
+        assert len(sqrt_sigs) >= 150  # 9×10×2=180 전수(방어적 하한)
+
+        rational_sigs = set()
+        for candidate in _draw(SkeletonEquivalentProblemGenerator(), 200):
+            sig = canonical_signature(candidate.conditions, candidate.answer_selection)
+            rational_sigs.add(sig)
+        assert sqrt_sigs.isdisjoint(rational_sigs)
+
+    def test_deterministic_sequence(self) -> None:
+        a_gen, b_gen = self._sqrt_gen(), self._sqrt_gen()
+        a = [a_gen.generate(_spec()) for _ in range(5)]
+        b = [b_gen.generate(_spec()) for _ in range(5)]
+        assert [c.problem.slug for c in a if c] == [c.problem.slug for c in b if c]
+
+
 class TestOrchestratorWiring:
     def test_batch_all_accepted_no_duplicates(self) -> None:
         # 배치 30회 — 전부 accepted(dry-run)·중복/실패 0(LLM-first 실측 82% 중복과 대비).
         outcomes = run_batch(_spec(), SkeletonEquivalentProblemGenerator(), 30)
         statuses = {o.status for o in outcomes}
         assert statuses == {"accepted"}
+
+    def test_batch_sqrt_variant_all_accepted(self) -> None:
+        # 무리근 variant도 오케스트레이터 결선에서 전건 accepted.
+        gen = SkeletonEquivalentProblemGenerator(variant="sqrt")
+        outcomes = run_batch(_spec(), gen, 20)
+        assert {o.status for o in outcomes} == {"accepted"}
