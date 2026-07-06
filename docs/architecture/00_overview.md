@@ -181,6 +181,8 @@ WhyMath 아키텍처는 *서로 직교하는 두 축*으로 본다:
 ## 참조
 
 - 각 계층 상세: `01_data_foundation.md` ~ `07_community.md`
+- 시스템 심화(영역별): `system_deep_dive.md` — 각 영역 왜·어디까지·리스크(01~07 종합·현재 상태 반영)
+- 용어집: `glossary.md` — 계층·단계(S)·페이즈·하네스 용어 한 줄 정의
 - L3 라우터 설계: `03a_l3_router_design.md`
 - 하네스: `03b_wh_s_solver_harness.md`(솔버·WH-S) · `04a_wh1_tutoring_harness.md`(튜터링·WH-1)
 - 시장 전략: `../strategy/`
