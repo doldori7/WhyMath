@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-06 (구현·L3/harness·S2-p 후속): **LLM 발문 다양화(rephrase) — 수치 불변 봉인·라우터 경유·배치 분리**
+
+**무엇/왜**: S2-p 범위 밖으로 남겼던 마지막 항목. 스켈레톤(LLM 0)의 단조로운 템플릿 발문을 LLM으로 문장 다양화하되, 수치·수식·정답이 절대 안 바뀌게 결정론 게이트로 봉인.
+- **`l3/equivalent/rephrase.py`** — `QuestionRephraser`(provider 주입·라우터 경유·GENERAL 저작 패밀리·온도 0.9). 오직 `question_text`만 LLM이 다시 씀(conditions·answer·choices·distractor 불변 → S2-a 정확성 게이트 무료 재통과). **수치 불변 3중 검증**(`verify_numeric_invariance`·전부 결정론): ① 방정식 substring 봉인(스켈레톤이 박은 정확한 방정식 문자열이 글자 그대로 보존·`extract_equation` 정규식 추출) ② **추가 등식 차단**(보존 방정식 제거 후 `=` 잔존 시 거부 — 위생 validator가 한글 사이 임베디드 거짓 산술식을 토큰화 한계로 놓치는 실측 갭의 구조적 상환) ③ 위생 validator 보강. fail-closed(검증 실패·provider 예외·추출 실패 → 원문 유지·조용한 실패 금지).
+- **배치 분리(핵심 설계)** — rephrase는 비결정적이라 스켈레톤 배치(`run_corpus_batch`·바이트 동일 봉인)에 넣지 않고, 그 산출물을 입력으로 받는 **별도 opt-in 후처리 CLI**(`harness/problem_corpus_rephrase`). question_text만 교체·나머지 필드 그대로 복사. 이 환경은 LLM 0이라 라이브 산출물은 커밋 안 함(Phaiakes9 소관·llm_generator 핸드오프 동형·FakeProvider hermetic 테스트만).
+- **테스트**: rephrase 단위(추출·검증 각 봉인·라우터 GENERAL/온도 전달·fail-closed 4경로)·CLI(수치 불변 라운드트립·다양화 후 게이트 재통과·변조 fail-closed·provider 미주입 exit 0). 라이브 0.
+
+**🔒 불변**: 스켈레톤 배치 바이트 동일 봉인·acceptance/orchestrator 무변경·L3→L4 import 0. **범위 밖(후속)**: 라이브 rephrase 코퍼스 생성(Phaiakes9)·근 개수 count 검증기·DB 적재. **S2-p 슬라이스 전 항목(본체 6커밋 + 후속 3: crosswalk M-id·무리근 객관식·발문 다양화) 완료.**
+
 ### 2026-07-06 (구현·L3/harness/data·S2-p 후속): **무리근 객관식 variant(sqrt_multiple_choice) — 스켈레톤 4종(근유형×발문형식 2×2) 완성**
 
 **무엇/왜**: S2-p 범위 밖으로 남겼던 "무리근 객관식"을 구현 — 스켈레톤 variant를 근유형(유리·무리) × 발문형식(단답·객관식) 2×2로 완성.
