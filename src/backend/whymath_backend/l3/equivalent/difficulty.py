@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-__all__ = ["RootKind", "estimate_difficulty"]
+__all__ = ["RootKind", "estimate_difficulty", "estimate_difficulty_extremum"]
 
 RootKind = Literal["integer", "double", "rational", "irrational"]
 """정답 근의 유형 — integer(서로 다른 정수근)·double(중근)·rational(기약 유리근)·
@@ -72,4 +72,43 @@ def estimate_difficulty(
         score += _COEF_BIG_STEP
     elif max_abs_coefficient > _COEF_MID_BOUND:
         score += _COEF_MID_STEP
+    return min(_MAX, max(_MIN, round(score, 1)))
+
+
+# ── 미적분(극값) 스켈레톤 난이도 ─────────────────────────────────────────────
+# 극값 문제(삼차함수의 극대·극소 x좌표)는 이차방정식 근보다 한 단계 위다: 도함수를 *구하고*
+# f'(x)=0을 풀고 *부호를 판정*해 극대/극소를 가려야 한다(미분+방정식+선택 3단). 그래서 base를
+# 이차 근(2.0)보다 높은 3.0으로 둔다(미적분Ⅰ 기본 대역). 킬러(4~5)는 결합·해석축 문항의
+# 자리라 여기서 쓰지 않는다(정직 스코프·estimate_difficulty docstring 계승).
+#
+# 공식(모든 항 가산):
+#     난이도 = 3.0 (base·미분+극값 판정)
+#            + 임계점 간격 (n−m) : ≤4 +0.0 · ≤8 +0.3 · >8 +0.5 (근·계수 산술 부담)
+#            + 계수 크기 max(|b|,|c|) : ≤30 +0.0 · ≤80 +0.3 · >80 +0.5
+#     → 소수 1자리 반올림 후 [1.0, 5.0] 클램프  (산출 범위 ~3.0~4.0)
+#
+# 게이트 정합: estimate_difficulty와 동일한 감쇠 수학(|gap|≤3.5면 타 성분 만점 시 accepted).
+# 밴드 스펙 난이도를 산출 중앙(~3.3)에 두면 최대 gap ≤ 0.7 ≪ 3.5라 안전(코퍼스 CI 자기-정합).
+_EXTREMUM_BASE = 3.0
+_SPREAD_MID_STEP, _SPREAD_BIG_STEP = 0.3, 0.5
+_SPREAD_MID_BOUND, _SPREAD_BIG_BOUND = 4, 8
+_EXT_COEF_MID_STEP, _EXT_COEF_BIG_STEP = 0.3, 0.5
+_EXT_COEF_MID_BOUND, _EXT_COEF_BIG_BOUND = 30, 80
+
+
+def estimate_difficulty_extremum(*, root_spread: int, max_abs_coefficient: int) -> float:
+    """극값 스켈레톤 수치 → 종합 난이도(1.0~5.0) — 위 공식의 결정론 구현.
+
+    입력은 극값 뼈대가 확정한 수치에서 유도한다(단일 진실 원천 = 뼈대): `root_spread`
+    (두 임계점 간격 n−m > 0), `max_abs_coefficient`(삼차함수 전개 계수 절댓값 최대 max(|b|,|c|)).
+    """
+    score = _EXTREMUM_BASE
+    if root_spread > _SPREAD_BIG_BOUND:
+        score += _SPREAD_BIG_STEP
+    elif root_spread > _SPREAD_MID_BOUND:
+        score += _SPREAD_MID_STEP
+    if max_abs_coefficient > _EXT_COEF_BIG_BOUND:
+        score += _EXT_COEF_BIG_STEP
+    elif max_abs_coefficient > _EXT_COEF_MID_BOUND:
+        score += _EXT_COEF_MID_STEP
     return min(_MAX, max(_MIN, round(score, 1)))

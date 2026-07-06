@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from whymath_backend.l3.equivalent.difficulty import RootKind, estimate_difficulty
+from whymath_backend.l3.equivalent.difficulty import (
+    RootKind,
+    estimate_difficulty,
+    estimate_difficulty_extremum,
+)
 
 
 class TestFormulaTable:
@@ -67,3 +71,47 @@ class TestRangeAndDeterminism:
         ]
         assert values == sorted(values)
         assert len(set(values)) == 4
+
+
+class TestExtremumFormula:
+    """미적분 극값 난이도 — 공식 표·클램프·서열(base 3.0·간격·계수 가산)."""
+
+    @pytest.mark.parametrize(
+        ("root_spread", "max_abs", "expected"),
+        [
+            # base 3.0 — 좁은 간격·작은 계수(미적분Ⅰ 극값 기본형).
+            (2, 9, 3.0),
+            (4, 30, 3.0),  # 경계 포함(≤4·≤30은 가산 0).
+            # 임계점 간격 — 4<spread≤8 +0.3 · >8 +0.5.
+            (5, 9, 3.3),
+            (8, 9, 3.3),
+            (9, 9, 3.5),
+            # 계수 크기 — 30<c≤80 +0.3 · >80 +0.5.
+            (2, 31, 3.3),
+            (2, 80, 3.3),
+            (2, 81, 3.5),
+            # 전 항 결합.
+            (9, 81, 4.0),
+        ],
+    )
+    def test_representative_cases(self, root_spread: int, max_abs: int, expected: float) -> None:
+        assert (
+            estimate_difficulty_extremum(root_spread=root_spread, max_abs_coefficient=max_abs)
+            == expected
+        )
+
+    def test_always_within_scale_and_above_quadratic_base(self) -> None:
+        # 어떤 조합이라도 [1.0,5.0]·1자리, 그리고 극값 base(3.0)는 이차 근 base(2.0)보다 상향.
+        for spread in (1, 4, 8, 20, 10_000):
+            for max_abs in (1, 30, 80, 10_000):
+                value = estimate_difficulty_extremum(
+                    root_spread=spread, max_abs_coefficient=max_abs
+                )
+                assert 1.0 <= value <= 5.0
+                assert value == round(value, 1)
+                assert value >= 3.0  # 미분+부호판정이 이차 근보다 어렵다(base 상향)
+
+    def test_deterministic(self) -> None:
+        a = estimate_difficulty_extremum(root_spread=6, max_abs_coefficient=40)
+        b = estimate_difficulty_extremum(root_spread=6, max_abs_coefficient=40)
+        assert a == b

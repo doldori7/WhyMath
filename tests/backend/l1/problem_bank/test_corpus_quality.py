@@ -170,10 +170,14 @@ def test_generated_corpus_difficulty_varies() -> None:
 
 
 def test_generated_corpus_concepts_tagged() -> None:
-    # 결정론 개념 태깅 — 전건 비어있지 않음 + HK06(이차방정식의 근) PRIMARY 포함.
+    # 결정론 개념 태깅 — 전건 비어있지 않음 + 문제군별 PRIMARY 개념(quad=HK06·이차방정식의 근,
+    # calc=H:12미적Ⅰ02-07·극대·극소). 미지 개념 태깅은 차단(태깅 왜곡 봉인).
+    known_primary = {"HK06", "H:12미적Ⅰ02-07"}
     for record in _generated_records():
         assert record.concept_tags, f"{record.slug} concepts 비어 있음"
-        assert ("HK06", "PRIMARY") in [(t.concept_src_id, t.role) for t in record.concept_tags]
+        primary = [t.concept_src_id for t in record.concept_tags if t.role == "PRIMARY"]
+        assert primary, f"{record.slug} PRIMARY 개념 없음"
+        assert set(primary) <= known_primary, f"{record.slug} 미지 PRIMARY 개념: {primary}"
 
 
 def test_generated_corpus_mc_invariants() -> None:
@@ -205,14 +209,21 @@ def test_generated_corpus_sqrt_records() -> None:
         assert record.verify.answer_selection in {"largest", "smallest"}
 
 
-def test_generated_corpus_signatures_unique() -> None:
-    # 구조 서명(canonical_signature) 전건 상이 — 형식 파티션(뼈대당 1형식)이 실제 산출물에서
-    # 성립함의 봉인(같은 방정식·선택이 단답형·객관식으로 중복 수록되면 여기서 깨진다).
+def test_generated_corpus_signatures_unique_within_family() -> None:
+    # 구조 서명(canonical_signature) — *문제군(unit_codes)* 내에서 전건 상이(형식 파티션 봉인:
+    # 같은 방정식·선택이 단답형·객관식으로 중복 수록되면 깨진다). **문제군을 가로지른 충돌은
+    # 허용**한다 — calc 극값의 conditions는 도함수 방정식이라 quad 이차방정식과 구조 동형일 수
+    # 있고(다른 문제·다른 개념), 문제군별로 dedup되므로 공존이 정상이다. 전역 유일성은 slug가
+    # 보장(test_generated_corpus_slugs_unique).
+    from collections import defaultdict
+
     from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 
-    signatures = [
-        canonical_signature(record.verify.conditions, record.verify.answer_selection)
-        for record in _generated_records()
-    ]
-    assert all(sig is not None for sig in signatures)
-    assert len(signatures) == len(set(signatures))
+    per_family: dict[str, list[str | None]] = defaultdict(list)
+    for record in _generated_records():
+        family = record.problem.unit_codes[0] if record.problem.unit_codes else ""
+        sig = canonical_signature(record.verify.conditions, record.verify.answer_selection)
+        assert sig is not None, f"{record.slug} 서명 없음"
+        per_family[family].append(sig)
+    for family, sigs in per_family.items():
+        assert len(sigs) == len(set(sigs)), f"{family} 문제군 내 서명 중복"

@@ -1,0 +1,309 @@
+"""미적분(극값) 파라메트릭 스켈레톤 동등문제 생성기 — S2 미적분 확장(결정론·LLM 0).
+
+`SkeletonEquivalentProblemGenerator`(S2-o, 이차방정식)의 **미적분 형제**다. 같은
+`EquivalentProblemGenerator` 좌석을 구현하되 수학 실체가 다르다: 삼차함수의 극대·극소를 갖는
+x좌표를 낸다. 배경(S2 실측): 생성 코퍼스 165건이 전부 고1 이차방정식이라 S2의 명시 목표이자
+wedge(고3 킬러)인 **미적분 영역이 0건**이었다 — 이 생성기가 미적분Ⅰ 극값 코퍼스를 처음 확보한다.
+
+핵심 통찰(재구현 0): **극값 문제는 "도함수 방정식 f'(x)=0의 근"으로 환원**된다. 임계점 (m,n)을
+풀에서 골라 f'(x)=3(x−m)(x−n)을 역산·적분해 f(x)를 확정하고, conditions로 도함수 방정식을
+호출자에게 공급한다. 정답은 임계점(=f'=0의 근), answer_selection은 극대→smallest·극소→largest
+(선두계수 양수라 작은 임계점이 극대·큰 임계점이 극소). 따라서 기존 근 선택 검증 스택
+(`verify_answer`·`verify_root_selection`·`derive_selected_root`, `sympy.solve` 기반·차수 불문)이
+**무변경으로 재사용**된다 — 오케스트레이터·수용 게이트·저장 sink도 전부 그대로다.
+
+정직성·이중 방어: 생성물은 여전히 S2-a 게이트(Tier1 대입·근 선택·위생·동등성)를 통과해야
+저장된다(생성기 자기 신뢰 금지 원칙). derive-and-verify가 answer_map을 재유도해 교차 검증한다.
+
+범위(v1): **삼차함수 극대/극소의 x좌표**(=도함수 방정식의 근·근 선택으로 검증 가능한 것)만.
+서로 다른 정수 임계점 (m,n)·같은 홀짝(f 정수계수 보장)·단답형. 극값의 *값* f(x*)·근의 합/곱 등
+근-비환원 문항, 킬러 난이도, 객관식·무리근 임계점, LLM 발문 다양화는 후속(별도 검증 재료 필요).
+
+7계층: L3 지역(생성=LLM 라우터 도메인이나 이 구현은 LLM 0 — 좌석 계약만 공유). schema(최하위)·
+동일 패키지(canonicalize·difficulty)·L1 problem_bank(ConceptTag)만 import(L4 참조 0).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import random
+import uuid
+from collections.abc import Sequence
+from collections.abc import Set as AbstractSet
+from dataclasses import dataclass
+from typing import Literal
+
+from whymath_backend.l1.problem_bank.populate import ConceptTag
+from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
+from whymath_backend.l3.equivalent.canonicalize import canonical_signature
+from whymath_backend.l3.equivalent.difficulty import estimate_difficulty_extremum
+from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.schema.enums import (
+    AnswerFormat,
+    Curriculum,
+    GenerationType,
+    LicenseType,
+    QuestionFormat,
+    SourceType,
+    Subject,
+)
+from whymath_backend.schema.problem import Problem
+from whymath_backend.schema.provenance import ContentProvenance
+
+__all__ = ["CalculusExtremumSkeletonGenerator"]
+
+# 풀 셔플 고정 시드 — 같은 구성은 같은 출제 순서(재현·디버그). 비결정 난수 금지(verify 규약 미러).
+_POOL_SEED = 20260706
+
+# 기본 개념 태깅 — 극값 개념그래프 원천 src_id "함수의 증가·감소와 극대·극소"([12미적Ⅰ-02-07]
+# 정착 — data/corpus/concept_graph_v1/concepts.jsonl). L1 데이터 키라 L4 오개념 주입 원칙 밖.
+_DEFAULT_CONCEPT_TAGS: tuple[ConceptTag, ...] = (
+    ConceptTag(concept_src_id="H:12미적Ⅰ02-07", role="PRIMARY", relevance=0.95),
+)
+
+# 임계점 풀 범위 — 손계산 가능한 작은 정수(미적분Ⅰ 극값 기본형·한국 고3 상식 범위).
+_CRIT_MIN, _CRIT_MAX = -9, 9
+
+ExtremumKind = Literal["극대", "극소"]
+
+# 발문 템플릿(극값 종류별·인덱스 회전) — 표면 변주. {fx}에 사람이 읽는 삼차함수가 들어간다.
+_TEMPLATES: dict[ExtremumKind, tuple[str, ...]] = {
+    "극대": (
+        "삼차함수 f(x) = {fx} 가 극대가 되는 x의 값을 구하시오.",
+        "삼차함수 f(x) = {fx} 가 극댓값을 가질 때, 그 x의 값을 구하시오.",
+        "함수 f(x) = {fx} 가 극대가 되는 x의 값을 구하시오.",
+    ),
+    "극소": (
+        "삼차함수 f(x) = {fx} 가 극소가 되는 x의 값을 구하시오.",
+        "삼차함수 f(x) = {fx} 가 극솟값을 가질 때, 그 x의 값을 구하시오.",
+        "함수 f(x) = {fx} 가 극소가 되는 x의 값을 구하시오.",
+    ),
+}
+
+
+def _term(coefficient: int, symbol: str, *, lead: bool = False) -> str:
+    """계수 하나를 사람이 읽는 항으로 — 부호·1 생략 규칙(lead=선두 항은 + 없이). quad 미러."""
+    sign = "-" if coefficient < 0 else ("" if lead else "+")
+    magnitude = abs(coefficient)
+    body = symbol if magnitude == 1 and symbol else f"{magnitude}{symbol}"
+    joint = " " if sign and not lead else ""
+    return f"{sign}{joint}{body}" if lead else f"{sign} {body}"
+
+
+def _display_cubic(a: int, b: int, c: int, d: int) -> str:
+    """전개 계수 → 사람이 읽는 삼차함수('x^3 - 6x^2 + 9x') — 0 항 생략·1 계수 생략."""
+    parts = [_term(a, "x^3", lead=True)]
+    if b:
+        parts.append(_term(b, "x^2"))
+    if c:
+        parts.append(_term(c, "x"))
+    if d:
+        parts.append(_term(d, ""))
+    return " ".join(parts)
+
+
+def _derivative_condition(deriv_b: int, deriv_c: int) -> str:
+    """monic 도함수 계수 → 검산용 SymPy 등식('x**2 - 4*x + 3 = 0') — 닫힌 DSL(맨 등식).
+
+    f'(x)=3(x−m)(x−n)의 근은 3으로 나눈 monic x²+deriv_b·x+deriv_c=0과 동일하다(근 불변).
+    conditions는 검산용이라 monic 정규형으로 공급한다 — canonicalize가 어차피 정규화한다.
+    """
+    parts = ["x**2"]
+    if deriv_b:
+        parts.append(f"{'-' if deriv_b < 0 else '+'} {abs(deriv_b)}*x")
+    if deriv_c:
+        parts.append(f"{'-' if deriv_c < 0 else '+'} {abs(deriv_c)}")
+    return " ".join(parts) + " = 0"
+
+
+def _linear_factor(root: int) -> str:
+    """(x − root)의 사람이 읽는 표기 — 'x - 2'·'x + 3'·'x'(root 부호 반영)."""
+    if root == 0:
+        return "x"
+    return f"x - {root}" if root > 0 else f"x + {-root}"
+
+
+@dataclass(frozen=True, slots=True)
+class _ExtremumSkeleton:
+    """극값 뼈대 — 두 임계점 (m<n)·같은 홀짝 + 극값 종류. 모든 수치의 단일 진실 원천.
+
+    f'(x) = 3(x−m)(x−n) = 3x² − 3(m+n)x + 3mn 을 적분해 f(x) = x³ − (3(m+n)/2)x² + 3mn·x.
+    m+n이 짝수라 x² 계수 −3(m+n)/2가 정수 → f 전개 계수 전부 정수(canonicalize·표기 안전).
+    """
+
+    m: int  # 작은 임계점
+    n: int  # 큰 임계점 (m < n, m+n 짝수)
+    kind: ExtremumKind
+
+    @property
+    def cubic_coeffs(self) -> tuple[int, int, int, int]:
+        """f(x) 전개 계수 (a, b, c, d) — a x³ + b x² + c x + d. 상수항 d=0(극값 x좌표 무관)."""
+        s = self.m + self.n  # 짝수(같은 홀짝 불변식)
+        return 1, -(3 * s) // 2, 3 * self.m * self.n, 0
+
+    @property
+    def derivative_monic(self) -> tuple[int, int]:
+        """monic 도함수 계수 (b', c') — x² + b'x + c' (= f'/3). 근 = 임계점 (m, n)."""
+        return -(self.m + self.n), self.m * self.n
+
+    @property
+    def answer(self) -> int:
+        """정답 임계점 — 선두계수 양수라 극대=작은 임계점 m·극소=큰 임계점 n."""
+        return self.m if self.kind == "극대" else self.n
+
+    @property
+    def selection(self) -> str:
+        """근 선택 — 극대→smallest(작은 임계점)·극소→largest(큰 임계점). root_selection 검증."""
+        return "smallest" if self.kind == "극대" else "largest"
+
+    @property
+    def difficulty(self) -> float:
+        """rule-based 종합 난이도 — 임계점 간격·전개 계수 크기에서 결정론 추정(difficulty 모듈)."""
+        _, b, c, _ = self.cubic_coeffs
+        return estimate_difficulty_extremum(
+            root_spread=self.n - self.m,
+            max_abs_coefficient=max(abs(b), abs(c)),
+        )
+
+
+def _build_pool() -> tuple[_ExtremumSkeleton, ...]:
+    """결정론 극값 뼈대 풀 — 같은 홀짝 임계점 쌍 (m<n) × {극대, 극소} 열거·고정 시드 셔플.
+
+    같은 (m,n)이라도 극대/극소는 다른 문제다(정답·선택이 다름 — signature의 selection payload가
+    가른다). (도함수, 선택) 중복은 빌드 시점에 제거한다(풀 내 판박이 0). m+n 짝수만 수록
+    (f 정수계수 불변식).
+    """
+    pool: list[_ExtremumSkeleton] = []
+    seen: set[tuple[int, int, str]] = set()
+    for m in range(_CRIT_MIN, _CRIT_MAX + 1):
+        for n in range(m + 1, _CRIT_MAX + 1):
+            if (m + n) % 2 != 0:
+                continue  # 홀짝 다르면 f x² 계수가 비정수 → 제외.
+            for kind in ("극대", "극소"):
+                skeleton = _ExtremumSkeleton(m=m, n=n, kind=kind)
+                key = (*skeleton.derivative_monic, skeleton.selection)
+                if key not in seen:
+                    seen.add(key)
+                    pool.append(skeleton)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+class CalculusExtremumSkeletonGenerator:
+    """미적분 극값 결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석 구현(LLM 0).
+
+    풀을 순서대로 소비하며 후보를 낸다(소진 시 None — 오케스트레이터가 generation_failed로 정직
+    기록). `skip_signatures`에 이미 코퍼스에 있는 구조 signature 집합을 주면 해당 뼈대를 건너뛴다
+    (배치 재실행이 dedup 거부로 회차를 낭비하지 않게 함 — 오케스트레이터 `signature_index` 공유).
+    quad 형제 생성기와 동일한 좌석·게이트를 공유한다(하이브리드 분담).
+    """
+
+    def __init__(
+        self,
+        *,
+        skip_signatures: AbstractSet[str] | None = None,
+        slug_prefix: str = "wm-calc-ext",
+        subject: Subject = Subject.공통,
+        curriculum_version: Curriculum = Curriculum.REVISION_2022,
+        valid_from_year: int = 2022,
+        unit_codes: Sequence[str] = ("CALC-EXTREMUM",),
+        concept_tags: Sequence[ConceptTag] = _DEFAULT_CONCEPT_TAGS,
+    ) -> None:
+        self._pool = _build_pool()
+        self._index = 0
+        self._skip = skip_signatures
+        self._slug_prefix = slug_prefix
+        self._subject = subject
+        self._curriculum_version = curriculum_version
+        self._valid_from_year = valid_from_year
+        self._unit_codes = list(unit_codes)
+        self._concept_tags = list(concept_tags)
+
+    # ── EquivalentProblemGenerator 좌석 ────────────────────────────────────
+    def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
+        """다음 극값 뼈대를 후보로 조립 — skip 집합에 있는 구조는 건너뛰고, 풀 소진 시 None."""
+        while self._index < len(self._pool):
+            skeleton = self._pool[self._index]
+            self._index += 1
+            condition = _derivative_condition(*skeleton.derivative_monic)
+            if self._skip is not None:
+                signature = canonical_signature(condition, skeleton.selection)
+                if signature is not None and signature in self._skip:
+                    continue  # 이미 코퍼스에 있는 구조 — 회차 낭비 없이 다음 뼈대로.
+            return self._assemble(spec, skeleton, condition)
+        return None
+
+    # ── 조립(전부 결정론·수치의 단일 진실 원천은 뼈대) ─────────────────────
+    def _assemble(
+        self, spec: EquivalenceSpec, skeleton: _ExtremumSkeleton, condition: str
+    ) -> CandidateProblem:
+        a, b, c, d = skeleton.cubic_coeffs
+        fx = _display_cubic(a, b, c, d)
+        answer_text = str(skeleton.answer)
+        templates = _TEMPLATES[skeleton.kind]
+        question_text = templates[self._index % len(templates)].format(fx=fx)
+        standard_codes = sorted(spec.achievement_standard_codes)
+        slug = self._stable_slug(question_text, answer_text, standard_codes)
+
+        problem = Problem(
+            problem_id=uuid.uuid5(uuid.NAMESPACE_URL, f"whymath:problem:{slug}"),
+            slug=slug,
+            source_type=SourceType.자체생성,  # 저작권 구조적 강제(자작 뼈대·본문성 원본 0)
+            curriculum_version=self._curriculum_version,
+            valid_from_year=self._valid_from_year,
+            subject=self._subject,
+            unit_codes=list(self._unit_codes),
+            difficulty_overall=skeleton.difficulty,
+            question_format=QuestionFormat.단답형,
+            answer_format=_answer_format(skeleton.answer),
+            achievement_standard_codes=standard_codes,
+            question_text=question_text,
+            choices=None,
+            answer=answer_text,
+            answer_explanation=_explanation(skeleton),
+            distractor_map=None,
+        )
+        provenance = ContentProvenance(
+            generation_type=GenerationType.FULLY_GENERATED,
+            license=LicenseType.WHYMATH_GENERATED,
+            original_source=None,
+            transformation_pipeline={
+                "steps": [
+                    "결정론 극값 스켈레톤 조립(임계점→도함수 역산·적분)",
+                    "S2-a 수용 게이트",
+                    "사람 검수 큐(필요 시)",
+                ],
+            },
+        )
+        return CandidateProblem(
+            problem=problem,
+            provenance=provenance,
+            conditions=condition,  # 도함수 방정식(검산용·호출자 제공·L5 파싱 밖)
+            answer_map={"x": answer_text},
+            answer_selection=skeleton.selection,
+            solution_steps=None,  # 검증된 단계 체인은 WH-S 솔버 몫(S2-k 규약 동일)
+            concept_tags=list(self._concept_tags),
+        )
+
+    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
+        """결정론 안정 slug — 내용 해시(멱등 upsert 키·skeleton_generator 규약 미러)."""
+        payload = "|".join([question_text, answer, ",".join(sorted(codes))])
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+        return f"{self._slug_prefix}-{digest}"
+
+
+def _answer_format(answer: int) -> AnswerFormat:
+    """정답 임계점의 형태 — 양의 정수=자연수·그 외(0·음의 정수)=실수(정수 전용 형식 부재)."""
+    return AnswerFormat.자연수 if answer > 0 else AnswerFormat.실수
+
+
+def _explanation(skeleton: _ExtremumSkeleton) -> str:
+    """도함수 기반 해설 — 뼈대 수치에서 결정론 생성(부호 판정으로 극대·극소 확정·위생 청정)."""
+    m, n = skeleton.m, skeleton.n
+    f1, f2 = _linear_factor(m), _linear_factor(n)
+    which_val = "극댓값" if skeleton.kind == "극대" else "극솟값"
+    return (
+        f"f'(x) = 3({f1})({f2}) 이므로 f'(x)=0의 해는 x = {m}, x = {n} 이다. "
+        f"삼차항의 계수가 양수라 x = {m}에서 극대, x = {n}에서 극소이다. "
+        f"따라서 {which_val}을 갖는 x는 {skeleton.answer}이다."
+    )

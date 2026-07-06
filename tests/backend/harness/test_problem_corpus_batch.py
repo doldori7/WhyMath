@@ -39,6 +39,7 @@ class TestRunCorpusBatch:
             mc_n=3,
             sqrt_n=2,
             sqrt_mc_n=2,
+            calc_extremum_n=0,
             write=False,
         )
         assert report.fulfilled
@@ -55,7 +56,7 @@ class TestRunCorpusBatch:
         # JSONL 산출물이 코퍼스 로더로 정확히 되읽힌다 — 형식·위생·Problem 검증 통과.
         out = tmp_path / "problems.jsonl"
         report = run_corpus_batch(
-            out_path=out, short_n=6, mc_n=4, sqrt_n=3, sqrt_mc_n=2, write=True
+            out_path=out, short_n=6, mc_n=4, sqrt_n=3, sqrt_mc_n=2, calc_extremum_n=0, write=True
         )
         assert report.fulfilled and report.written == 15
 
@@ -82,14 +83,22 @@ class TestRunCorpusBatch:
     def test_rerun_is_byte_identical(self, tmp_path: Path) -> None:
         # 결정론 봉인 — 같은 인자 두 번 실행 = 바이트 동일(타임스탬프·uuid4·난수 오염 0).
         a, b = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
-        run_corpus_batch(out_path=a, short_n=5, mc_n=3, sqrt_n=2, sqrt_mc_n=2, write=True)
-        run_corpus_batch(out_path=b, short_n=5, mc_n=3, sqrt_n=2, sqrt_mc_n=2, write=True)
+        # calc 포함 전체 배치도 바이트 결정론(quad 4밴드 + calc 군).
+        run_corpus_batch(
+            out_path=a, short_n=5, mc_n=3, sqrt_n=2, sqrt_mc_n=2, calc_extremum_n=4, write=True
+        )
+        run_corpus_batch(
+            out_path=b, short_n=5, mc_n=3, sqrt_n=2, sqrt_mc_n=2, calc_extremum_n=4, write=True
+        )
         assert a.read_bytes() == b.read_bytes()
 
-    def test_cross_band_signatures_unique(self, tmp_path: Path) -> None:
-        # 공유 signature_index — 밴드 간·내 구조 판박이 0(slug도 전건 상이).
+    def test_slugs_unique_across_quad_and_calc(self, tmp_path: Path) -> None:
+        # slug(=멱등 upsert 키)은 문제군을 가로질러 전건 상이 — calc 도함수 방정식이 quad
+        # 방정식과 signature가 겹칠 수 있어도(문제군 별 dedup) slug는 내용 해시라 충돌 없다.
         out = tmp_path / "problems.jsonl"
-        run_corpus_batch(out_path=out, short_n=8, mc_n=4, sqrt_n=3, sqrt_mc_n=2, write=True)
+        run_corpus_batch(
+            out_path=out, short_n=8, mc_n=4, sqrt_n=3, sqrt_mc_n=2, calc_extremum_n=10, write=True
+        )
         slugs = [r.slug for r in load_problem_bank_records(out)]
         assert len(slugs) == len(set(slugs))
 
@@ -98,7 +107,20 @@ class TestCliEntry:
     def test_main_exit_0_and_report_json(self, tmp_path: Path, capsys: object) -> None:
         out = tmp_path / "problems.jsonl"
         code = main(
-            ["--out", str(out), "--short", "4", "--mc", "3", "--sqrt", "2", "--sqrt-mc", "2"]
+            [
+                "--out",
+                str(out),
+                "--short",
+                "4",
+                "--mc",
+                "3",
+                "--sqrt",
+                "2",
+                "--sqrt-mc",
+                "2",
+                "--calc-extremum",
+                "0",
+            ]
         )
         assert code == 0
         assert out.exists()
@@ -121,6 +143,8 @@ class TestCliEntry:
                 "2",
                 "--sqrt-mc",
                 "2",
+                "--calc-extremum",
+                "0",
                 "--dry-run",
             ]
         )
@@ -131,7 +155,20 @@ class TestCliEntry:
         # 무리근 단답형 풀(파티션 후 122) 초과 요청 → generation_failed → 수율 미달 exit 1 + 사유.
         out = tmp_path / "problems.jsonl"
         code = main(
-            ["--out", str(out), "--short", "0", "--mc", "0", "--sqrt", "130", "--sqrt-mc", "0"]
+            [
+                "--out",
+                str(out),
+                "--short",
+                "0",
+                "--mc",
+                "0",
+                "--sqrt",
+                "130",
+                "--sqrt-mc",
+                "0",
+                "--calc-extremum",
+                "0",
+            ]
         )
         assert code == 1
         captured = capsys.readouterr()  # type: ignore[attr-defined]
@@ -140,3 +177,41 @@ class TestCliEntry:
         assert report["total_stored"] == 122  # 풀 전수 소진분은 저장(정직 기록)
         sqrt_band = next(b for b in report["bands"] if b["name"] == "sqrt")
         assert sqrt_band["failure_reasons"]  # 조용한 실패 금지 — 사유 존재
+
+
+class TestCalculusBand:
+    def test_default_run_includes_calc_extremum_band(self) -> None:
+        # 기본 실행은 quad 4밴드 + calc 밴드(총 5밴드) — calc 40건 저장·총 225.
+        report = run_corpus_batch(out_path=Path("/nonexistent/x.jsonl"), write=False)
+        names = [b.name for b in report.bands]
+        assert names == ["short", "mc", "sqrt", "sqrt_mc", "calc-extremum"]
+        calc = next(b for b in report.bands if b.name == "calc-extremum")
+        assert (calc.requested, calc.stored) == (40, 40)
+        assert report.total_stored == 225 and report.fulfilled
+
+    def test_calc_records_have_calculus_metadata(self, tmp_path: Path) -> None:
+        # calc 밴드 산출물 — 미적분 단원/성취기준/개념 태깅·단답형(quad와 분리 확인).
+        out = tmp_path / "problems.jsonl"
+        run_corpus_batch(
+            out_path=out, short_n=0, mc_n=0, sqrt_n=0, sqrt_mc_n=0, calc_extremum_n=12, write=True
+        )
+        records = load_problem_bank_records(out)
+        assert len(records) == 12
+        for record in records:
+            assert record.problem.unit_codes == ["CALC-EXTREMUM"]
+            assert record.problem.achievement_standard_codes == ["[12미적Ⅰ-02-07]"]
+            assert [t.concept_src_id for t in record.concept_tags] == ["H:12미적Ⅰ02-07"]
+            assert record.problem.question_format == "단답형"
+            assert (
+                "삼차함수" in record.problem.question_text or "함수" in record.problem.question_text
+            )
+
+    def test_calc_band_difficulty_varies(self, tmp_path: Path) -> None:
+        # 난이도 변별(균일 회귀 차단) — calc 밴드도 rule-based로 여러 값·미적분 대역(3.0~5.0).
+        out = tmp_path / "problems.jsonl"
+        run_corpus_batch(
+            out_path=out, short_n=0, mc_n=0, sqrt_n=0, sqrt_mc_n=0, calc_extremum_n=30, write=True
+        )
+        diffs = {r.problem.difficulty_overall for r in load_problem_bank_records(out)}
+        assert len(diffs) >= 2
+        assert all(d is not None and 3.0 <= d <= 5.0 for d in diffs)
