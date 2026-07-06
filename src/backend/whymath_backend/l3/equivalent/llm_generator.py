@@ -343,6 +343,9 @@ class LLMEquivalentProblemGenerator:
         self._difficulty = difficulty
         self._temperature = temperature
         self._authoring_family = authoring_family
+        # 배치용 지속 이벤트 루프(지연 생성) — asyncio.run의 루프 생성·종료 반복이 provider의
+        # 캐시 커넥션 풀을 죽여 배치가 격회 실패하던 실측 회귀 방어(_invoke·_ensure_loop 참조).
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._slug_prefix = slug_prefix
         self._subject = subject
         self._curriculum_version = curriculum_version
@@ -383,8 +386,12 @@ class LLMEquivalentProblemGenerator:
     def _invoke(self, prompt: str, decision: RoutingDecision) -> str:
         """provider.generate(async)를 sync 경계에서 실행 — 오프라인 배치 문맥 전용.
 
-        오케스트레이터(`run_batch`)는 sync라 여기서 `asyncio.run`으로 코루틴을 완주시킨다
-        (LLMTutorPolicy 테스트의 `asyncio.run(next_action)` 경계 미러). 이미 러닝 루프가 있는
+        오케스트레이터(`run_batch`)는 sync라 여기서 코루틴을 완주시킨다. **인스턴스 전용 지속
+        이벤트 루프**(`_ensure_loop`)를 쓴다 — 종전 `asyncio.run`(호출마다 새 루프 생성·종료)은
+        배치에서 provider가 캐시한 AsyncClient(httpx 커넥션 풀)가 죽은 루프에 묶여 다음 호출이
+        "Event loop is closed"로 격회 실패하는 실측 회귀를 냈다(Phaiakes9 run_batch n=20 —
+        단건 프로세스에선 절대 안 드러나는 배치 전용 결함). 같은 루프를 생성기 수명 동안
+        재사용하면 커넥션 풀이 산 루프에 남아 전 회차가 정상 동작한다. 이미 러닝 루프가 있는
         async 문맥에서의 호출은 이 배치 좌석의 계약 밖이다(명확한 RuntimeError로 드러남).
 
         `temperature=self._temperature`(기본 0.9)를 실어 *생성 다양성*을 확보한다 — 튜터링과
@@ -397,7 +404,7 @@ class LLMEquivalentProblemGenerator:
         """
         is_local = decision.cost_tier == CostTier.LOCAL.value
         schema = _OUTPUT_JSON_SCHEMA if is_local else None
-        return asyncio.run(
+        return self._ensure_loop().run_until_complete(
             self._provider.generate(
                 prompt,
                 _SYSTEM_PROMPT,
@@ -406,6 +413,17 @@ class LLMEquivalentProblemGenerator:
                 json_schema=schema,
             )
         )
+
+    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
+        """인스턴스 전용 이벤트 루프 지연 생성 — 배치 전 회차가 *같은 살아있는 루프*를 공유한다.
+
+        provider의 캐시된 async 클라이언트(커넥션 풀)가 루프에 묶이므로, 루프를 호출마다 닫으면
+        (asyncio.run) 배치가 격회로 죽는다(_invoke docstring 실측). 루프는 생성기 수명과 함께
+        가고 프로세스 종료 시 정리된다(오프라인 배치 CLI 문맥·장수 서버 문맥이 아님).
+        """
+        if self._loop is None or self._loop.is_closed():
+            self._loop = asyncio.new_event_loop()
+        return self._loop
 
     # ── 라우팅 결정(라우터 경유 + 저작 패밀리 선호) ─────────────────────
     def _decide_routing(self, spec: EquivalenceSpec) -> RoutingDecision:

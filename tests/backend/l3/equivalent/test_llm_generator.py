@@ -17,6 +17,7 @@ FakeProvider(스크립트된 JSON)로 생성기 계약을 검증한다 — 실 �
 
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Mapping, Sequence
 
@@ -83,6 +84,7 @@ class FakeProvider:
         self.temperatures: list[float | None] = []
         self.decisions: list[RoutingDecision] = []
         self.json_schemas: list[Mapping[str, object] | None] = []
+        self.loops: list[object] = []
 
     async def generate(
         self,
@@ -98,6 +100,7 @@ class FakeProvider:
         self.temperatures.append(temperature)
         self.decisions.append(decision)
         self.json_schemas.append(json_schema)
+        self.loops.append(asyncio.get_running_loop())
         if self._index < len(self._responses):
             out = self._responses[self._index]
             self._index += 1
@@ -323,6 +326,25 @@ class TestStructuredOutput:
         fenced = f"```json\n{_HAPPY}\n```"
         candidate = _gen(FakeProvider([fenced])).generate(_spec())
         assert candidate is not None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 배치 동기 경계 — 전 회차가 같은 살아있는 이벤트 루프를 공유(격회 실패 회귀 봉인).
+# ──────────────────────────────────────────────────────────────────────
+class TestBatchEventLoopReuse:
+    def test_repeated_generates_share_one_living_loop(self) -> None:
+        # 실측 회귀(Phaiakes9 run_batch): asyncio.run이 호출마다 루프를 닫아 provider의 캐시
+        # 커넥션 풀이 죽은 루프에 묶임 → "Event loop is closed" 격회 실패. 같은 생성기의 연속
+        # 호출은 *같은 살아있는 루프*를 재사용해야 한다.
+        provider = FakeProvider([_HAPPY, _HAPPY, _HAPPY])
+        gen = _gen(provider)
+        for _ in range(3):
+            gen.generate(_spec())
+        assert len(provider.loops) == 3
+        assert len(set(map(id, provider.loops))) == 1  # 세 호출 모두 동일 루프
+        loop = provider.loops[0]
+        assert isinstance(loop, asyncio.AbstractEventLoop)
+        assert not loop.is_closed()  # 호출 후에도 살아 있음(커넥션 풀 유지)
 
 
 # ──────────────────────────────────────────────────────────────────────
