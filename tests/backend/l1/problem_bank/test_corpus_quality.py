@@ -171,8 +171,9 @@ def test_generated_corpus_difficulty_varies() -> None:
 
 def test_generated_corpus_concepts_tagged() -> None:
     # 결정론 개념 태깅 — 전건 비어있지 않음 + 문제군별 PRIMARY 개념(quad=HK06·이차방정식의 근,
-    # calc=H:12미적Ⅰ02-07·극대·극소). 미지 개념 태깅은 차단(태깅 왜곡 봉인).
-    known_primary = {"HK06", "H:12미적Ⅰ02-07"}
+    # calc-extremum=H:12미적Ⅰ02-07·극대극소, calc-tangent=H:12미적Ⅰ02-01·미분계수).
+    # 미지 개념 태깅은 차단(태깅 왜곡 봉인).
+    known_primary = {"HK06", "H:12미적Ⅰ02-07", "H:12미적Ⅰ02-01"}
     for record in _generated_records():
         assert record.concept_tags, f"{record.slug} concepts 비어 있음"
         primary = [t.concept_src_id for t in record.concept_tags if t.role == "PRIMARY"]

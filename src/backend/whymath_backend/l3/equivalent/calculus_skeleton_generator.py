@@ -50,7 +50,10 @@ from whymath_backend.schema.enums import (
 from whymath_backend.schema.problem import Problem
 from whymath_backend.schema.provenance import ContentProvenance
 
-__all__ = ["CalculusExtremumSkeletonGenerator"]
+__all__ = [
+    "CalculusExtremumSkeletonGenerator",
+    "CalculusTangentSlopeSkeletonGenerator",
+]
 
 # 풀 셔플 고정 시드 — 같은 구성은 같은 출제 순서(재현·디버그). 비결정 난수 금지(verify 규약 미러).
 _POOL_SEED = 20260706
@@ -307,3 +310,211 @@ def _explanation(skeleton: _ExtremumSkeleton) -> str:
         f"삼차항의 계수가 양수라 x = {m}에서 극대, x = {n}에서 극소이다. "
         f"따라서 {which_val}을 갖는 x는 {skeleton.answer}이다."
     )
+
+
+# ── 미적분(접선 기울기) 형제 생성기 — f'(x)=m의 근(접점 x좌표) ──────────────
+# 극값(f'=0)의 짝: "접선의 기울기가 m인 점"은 f'(x)=m의 근이다. 삼차함수의 f'는 이차식이라
+# f'(x)=m은 이차방정식 → 두 접점 → 근 선택(큰/작은 x)으로 극값과 동일 검증 스택을 무변경
+# 재사용한다. 개념은 미분계수(H:12미적Ⅰ02-01·미분계수=접선 기울기). m≠0(짝수)만 써서 극값
+# (f'=0)과 구조적으로 구분한다(m=0이면 수평 접선=극값과 동치·조건 충돌).
+
+TangentPick = Literal["큰", "작은"]
+
+# 접선 기울기 값 — 0이 아닌 짝수만(f 정수계수 유지·극값과 구분). p+q가 짝수라 m 짝수면 c 정수.
+_TANGENT_SLOPES: tuple[int, ...] = (-6, -4, -2, 2, 4, 6)
+
+# 발문 템플릿(x좌표 큰/작은별·인덱스 회전). {fx}=삼차함수·{m}=접선 기울기.
+_TANGENT_TEMPLATES: dict[TangentPick, tuple[str, ...]] = {
+    "큰": (
+        "곡선 y = f(x) = {fx} 위의 점 중 접선의 기울기가 {m}인 점의 x좌표가 큰 것을 구하시오.",
+        "함수 f(x) = {fx} 의 그래프 위에서 접선의 기울기가 {m}인 두 점 중 x좌표가 큰 점의 "
+        "x좌표를 구하시오.",
+    ),
+    "작은": (
+        "곡선 y = f(x) = {fx} 위의 점 중 접선의 기울기가 {m}인 점의 x좌표가 작은 것을 구하시오.",
+        "함수 f(x) = {fx} 의 그래프 위에서 접선의 기울기가 {m}인 두 점 중 x좌표가 작은 점의 "
+        "x좌표를 구하시오.",
+    ),
+}
+
+
+@dataclass(frozen=True, slots=True)
+class _TangentSkeleton:
+    """접선 기울기 뼈대 — 두 접점 (p<q)·같은 홀짝 + 기울기 m + 큰/작은. 수치의 단일 진실 원천.
+
+    f'(x) = 3(x−p)(x−q) + m 이라 두 접점 x=p, x=q에서 접선 기울기가 m이다. 적분하면
+    f(x) = x³ − (3(p+q)/2)x² + (3pq+m)x. p+q 짝수·m 짝수라 전개 계수 전부 정수. 검산 조건은
+    f'(x)=m ⟺ 3(x−p)(x−q)=0의 monic x²−(p+q)x+pq=0(근 p,q·m 무관)이다.
+    """
+
+    p: int  # 작은 접점 x좌표
+    q: int  # 큰 접점 x좌표 (p < q, p+q 짝수)
+    m: int  # 접선 기울기 (0이 아닌 짝수)
+    pick: TangentPick
+
+    @property
+    def cubic_coeffs(self) -> tuple[int, int, int, int]:
+        """f(x) 전개 계수 (a, b, c, d) — a x³ + b x² + c x + d. c=3pq+m·d=0(접점 x좌표 무관)."""
+        s = self.p + self.q  # 짝수(같은 홀짝 불변식)
+        return 1, -(3 * s) // 2, 3 * self.p * self.q + self.m, 0
+
+    @property
+    def derivative_monic(self) -> tuple[int, int]:
+        """monic 조건 계수 (b', c') — x² + b'x + c' (= (f'−m)/3). 근 = 접점 (p, q)."""
+        return -(self.p + self.q), self.p * self.q
+
+    @property
+    def answer(self) -> int:
+        """정답 접점 x좌표 — 큰=q·작은=p."""
+        return self.q if self.pick == "큰" else self.p
+
+    @property
+    def selection(self) -> str:
+        """근 선택 — 큰→largest·작은→smallest. verify_root_selection 검증."""
+        return "largest" if self.pick == "큰" else "smallest"
+
+    @property
+    def difficulty(self) -> float:
+        """rule-based 난이도 — 접점 간격·전개 계수 크기에서 추정(극값과 동일 동인·함수 재사용)."""
+        _, b, c, _ = self.cubic_coeffs
+        return estimate_difficulty_extremum(
+            root_spread=self.q - self.p,
+            max_abs_coefficient=max(abs(b), abs(c)),
+        )
+
+
+def _build_tangent_pool() -> tuple[_TangentSkeleton, ...]:
+    """결정론 접선 뼈대 풀 — 같은 홀짝 접점 쌍 (p<q) × {큰, 작은} 열거·고정 시드 셔플.
+
+    기울기 m은 (p,q)에서 결정론으로 고른다(0이 아닌 짝수·표시 변주만·조건 무관). 같은 (p,q)라도
+    큰/작은은 다른 문제다(정답·선택 상이 — signature의 selection payload가 가른다). (조건, 선택)
+    중복은 빌드 시점에 제거(m은 조건에 안 들어가 (p,q,선택)이 유효 키다).
+    """
+    pool: list[_TangentSkeleton] = []
+    seen: set[tuple[int, int, str]] = set()
+    for p in range(_CRIT_MIN, _CRIT_MAX + 1):
+        for q in range(p + 1, _CRIT_MAX + 1):
+            if (p + q) % 2 != 0:
+                continue  # 홀짝 다르면 f x² 계수가 비정수 → 제외.
+            m = _TANGENT_SLOPES[(abs(p * 7 + q * 13)) % len(_TANGENT_SLOPES)]  # 결정론·(p,q) 고정
+            for pick in ("큰", "작은"):
+                skeleton = _TangentSkeleton(p=p, q=q, m=m, pick=pick)
+                key = (*skeleton.derivative_monic, skeleton.selection)
+                if key not in seen:
+                    seen.add(key)
+                    pool.append(skeleton)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _tangent_explanation(skeleton: _TangentSkeleton) -> str:
+    """접선 기울기 기반 해설 — 뼈대 수치에서 결정론 생성(f'=m 정리·근 선택·위생 청정)."""
+    f1, f2 = _linear_factor(skeleton.p), _linear_factor(skeleton.q)
+    which = "큰" if skeleton.pick == "큰" else "작은"
+    return (
+        f"f(x)를 미분해 접선의 기울기 조건 f'(x) = {skeleton.m} 을 정리하면 "
+        f"3({f1})({f2}) = 0 이므로 접점의 x좌표는 x = {skeleton.p}, x = {skeleton.q} 이다. "
+        f"이 중 x좌표가 {which} 것은 {skeleton.answer}이다."
+    )
+
+
+class CalculusTangentSlopeSkeletonGenerator:
+    """미적분 접선 기울기 결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석(LLM 0).
+
+    "접선의 기울기가 m인 점의 x좌표"를 낸다 — f'(x)=m의 근(접점)이라 극값 생성기와 동일 좌석·
+    게이트·근 선택 검증 스택을 공유한다(하이브리드 분담). 풀을 순서대로 소비(소진 시 None),
+    `skip_signatures`로 코퍼스 기존 구조를 건너뛴다(배치 재실행 회차 낭비 방지).
+    """
+
+    def __init__(
+        self,
+        *,
+        skip_signatures: AbstractSet[str] | None = None,
+        slug_prefix: str = "wm-calc-tan",
+        subject: Subject = Subject.공통,
+        curriculum_version: Curriculum = Curriculum.REVISION_2022,
+        valid_from_year: int = 2022,
+        unit_codes: Sequence[str] = ("CALC-TANGENT",),
+        concept_tags: Sequence[ConceptTag] = (
+            ConceptTag(concept_src_id="H:12미적Ⅰ02-01", role="PRIMARY", relevance=0.95),
+        ),
+    ) -> None:
+        self._pool = _build_tangent_pool()
+        self._index = 0
+        self._skip = skip_signatures
+        self._slug_prefix = slug_prefix
+        self._subject = subject
+        self._curriculum_version = curriculum_version
+        self._valid_from_year = valid_from_year
+        self._unit_codes = list(unit_codes)
+        self._concept_tags = list(concept_tags)
+
+    def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
+        """다음 접선 뼈대를 후보로 조립 — skip 집합에 있는 구조는 건너뛰고, 풀 소진 시 None."""
+        while self._index < len(self._pool):
+            skeleton = self._pool[self._index]
+            self._index += 1
+            condition = _derivative_condition(*skeleton.derivative_monic)
+            if self._skip is not None:
+                signature = canonical_signature(condition, skeleton.selection)
+                if signature is not None and signature in self._skip:
+                    continue
+            return self._assemble(spec, skeleton, condition)
+        return None
+
+    def _assemble(
+        self, spec: EquivalenceSpec, skeleton: _TangentSkeleton, condition: str
+    ) -> CandidateProblem:
+        a, b, c, d = skeleton.cubic_coeffs
+        fx = _display_cubic(a, b, c, d)
+        answer_text = str(skeleton.answer)
+        templates = _TANGENT_TEMPLATES[skeleton.pick]
+        question_text = templates[self._index % len(templates)].format(fx=fx, m=skeleton.m)
+        standard_codes = sorted(spec.achievement_standard_codes)
+        slug = self._stable_slug(question_text, answer_text, standard_codes)
+
+        problem = Problem(
+            problem_id=uuid.uuid5(uuid.NAMESPACE_URL, f"whymath:problem:{slug}"),
+            slug=slug,
+            source_type=SourceType.자체생성,
+            curriculum_version=self._curriculum_version,
+            valid_from_year=self._valid_from_year,
+            subject=self._subject,
+            unit_codes=list(self._unit_codes),
+            difficulty_overall=skeleton.difficulty,
+            question_format=QuestionFormat.단답형,
+            answer_format=_answer_format(skeleton.answer),
+            achievement_standard_codes=standard_codes,
+            question_text=question_text,
+            choices=None,
+            answer=answer_text,
+            answer_explanation=_tangent_explanation(skeleton),
+            distractor_map=None,
+        )
+        provenance = ContentProvenance(
+            generation_type=GenerationType.FULLY_GENERATED,
+            license=LicenseType.WHYMATH_GENERATED,
+            original_source=None,
+            transformation_pipeline={
+                "steps": [
+                    "결정론 접선 스켈레톤 조립(접점→도함수 역산·적분)",
+                    "S2-a 수용 게이트",
+                    "사람 검수 큐(필요 시)",
+                ],
+            },
+        )
+        return CandidateProblem(
+            problem=problem,
+            provenance=provenance,
+            conditions=condition,  # f'(x)=m의 근 방정식(검산용·호출자 제공)
+            answer_map={"x": answer_text},
+            answer_selection=skeleton.selection,
+            solution_steps=None,
+            concept_tags=list(self._concept_tags),
+        )
+
+    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
+        """결정론 안정 slug — 내용 해시(멱등 upsert 키·극값 생성기 규약 미러)."""
+        payload = "|".join([question_text, answer, ",".join(sorted(codes))])
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+        return f"{self._slug_prefix}-{digest}"
