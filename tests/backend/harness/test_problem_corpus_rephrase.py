@@ -42,9 +42,15 @@ class _EchoRephraseProvider:
 
 
 def _seed_corpus(tmp_path: Path) -> Path:
-    """소형 결정론 코퍼스를 생성해 rephrase 입력으로 쓴다(스켈레톤 배치 재사용)."""
+    """소형 결정론 코퍼스를 생성해 rephrase 입력으로 쓴다(스켈레톤 배치 재사용).
+
+    rephrase는 이차방정식 발문(방정식 substring 추출)이 대상이라 **quad 밴드만** 시드한다
+    (calc_extremum_n=0) — 삼차 극값 발문은 방정식 추출 대상이 아니라 rephrase 범위 밖이다.
+    """
     src = tmp_path / "src.jsonl"
-    report = run_corpus_batch(out_path=src, short_n=6, mc_n=3, sqrt_n=2, sqrt_mc_n=1, write=True)
+    report = run_corpus_batch(
+        out_path=src, short_n=6, mc_n=3, sqrt_n=2, sqrt_mc_n=1, calc_extremum_n=0, write=True
+    )
     assert report.fulfilled
     return src
 

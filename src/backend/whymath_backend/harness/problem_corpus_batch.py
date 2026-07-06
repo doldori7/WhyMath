@@ -7,12 +7,14 @@ Phaiakes9 전용이던 배치 스크립트(run_batch_corpus.py·repo 밖)를 **r
 
 사용법:
     python -m whymath_backend.harness.problem_corpus_batch \\
-        [--out <jsonl>] [--short 90] [--mc 45] [--sqrt 30] [--dry-run]
+        [--out <jsonl>] [--short 90] [--mc 45] [--sqrt 30] [--sqrt-mc 20]
+        [--calc-extremum 40] [--dry-run]
 
-동작: 3밴드(short=유리근 단답형·mc=결정론 객관식·sqrt=무리근 단답형)를 **공유 signature_index**
-로 순차 실행(밴드 간 구조 중복도 차단) → 전 후보가 S2-a 4종 게이트를 통과해야 sink에 실린다 →
-JSONL로 기록. 리포트를 JSON으로 stdout에 내고, **수율 미달(요청 수 > 저장 수)이면 종료 코드 1**
-(조용한 실패 금지 — 밴드별 사유 포함).
+동작: 문제군별 밴드를 순차 실행 → 전 후보가 S2-a 4종 게이트를 통과해야 sink에 실린다 → JSONL로
+기록. **quad 문제군**(short/mc/sqrt/sqrt_mc·이차방정식 근)은 공유 signature_index로 겹침을 차단하고,
+**calc 문제군**(calc-extremum=삼차함수 극값 x좌표·미적분Ⅰ)은 별도 signature_index다(도함수 방정식이
+이차방정식과 구조 동형이라 공유 시 거짓 cross-군 dedup). 리포트를 JSON으로 stdout에 내고, **수율
+미달(요청 수 > 저장 수)이면 종료 코드 1**(조용한 실패 금지 — 밴드별 사유 포함).
 
 조성 루트 소관(주입 원칙): 객관식 distractor의 오개념/op-code id는 여기서 L4 정본
 (`CATALOG_BY_ID`·`DISTRACTOR_BY_ID`)을 읽어 L3 생성기에 *주입*한다 — L3 코드에는 L4 import·id
@@ -38,6 +40,9 @@ from whymath_backend.l1.problem_bank.populate import (
     ProblemBankRecord,
 )
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
+from whymath_backend.l3.equivalent.calculus_skeleton_generator import (
+    CalculusExtremumSkeletonGenerator,
+)
 from whymath_backend.l3.equivalent.orchestrator import run_batch
 from whymath_backend.l3.equivalent.skeleton_generator import (
     GeneratorVariant,
@@ -65,11 +70,21 @@ _MC_INJECTION: dict[str, tuple[str, str]] = {
     "sign_flip": ("factor-sign-flip", "factor-sign-flip-root"),
 }
 
-# 밴드 기본 크기 — 총 185건(CI 봉인 ≥100 여유). 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58.
+# 밴드 기본 크기 — quad 185 + calc 40 = 총 225건(CI 봉인 ≥100 여유). 풀 실측: short 443·
+# mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162.
 _DEFAULT_SHORT_N = 90
 _DEFAULT_MC_N = 45
 _DEFAULT_SQRT_N = 30
 _DEFAULT_SQRT_MC_N = 20
+_DEFAULT_CALC_EXTREMUM_N = 40
+
+# 미적분(극값) 밴드 스펙 — 별도 성취기준([12미적Ⅰ-02-07]·함수의 증가·감소와 극대·극소).
+# 난이도 3.3 고정: 극값 추정(3.0~4.0) 최대 gap 0.7 < 3.5(게이트 감쇠 수학)라 안전.
+# **별도 signature_index 사용**: 극값 conditions는 *도함수 방정식*이라 구조가 이차방정식과
+# 동형이다 — quad 밴드와 index를 공유하면 도함수 방정식이 quad 문제 방정식과 우연히 같을 때
+# (같은 선택) 거짓 dedup으로 다른 문제군을 중복 처리한다. 문제군이 다르므로 dedup도 군 내부로.
+_CALC_STANDARD_CODE = "[12미적Ⅰ-02-07]"
+_CALC_SPEC_DIFFICULTY = 3.3
 
 
 def _default_out_path() -> Path:
@@ -214,14 +229,18 @@ def run_corpus_batch(
     mc_n: int = _DEFAULT_MC_N,
     sqrt_n: int = _DEFAULT_SQRT_N,
     sqrt_mc_n: int = _DEFAULT_SQRT_MC_N,
+    calc_extremum_n: int = _DEFAULT_CALC_EXTREMUM_N,
     write: bool = True,
 ) -> CorpusBatchReport:
-    """4밴드 배치 실행 — 공유 signature_index·밴드별 스펙 정합·JSONL 기록(순수 결정론).
+    """밴드 배치 실행 — 문제군별 signature_index·밴드별 스펙 정합·JSONL 기록(순수 결정론).
 
     밴드 스펙의 `target_misconception_ids`는 그 밴드 후보가 실제로 방출하는 오개념 집합과
     일치시킨다(mc·sqrt_mc=주입 2종·나머지=∅) — 게이트 오개념 Jaccard가 항상 1.0(빈 spec에
-    오개념 도입 시 0.0인 규칙과 정합). 난이도는 전 밴드 2.5 고정(추정 gap ≤ 1.1 < 3.5 안전 —
-    모듈 docstring).
+    오개념 도입 시 0.0인 규칙과 정합). quad 4밴드 난이도는 2.5·calc 밴드는 3.3 고정(gap ≤ 안전폭).
+
+    문제군별 signature_index 분리: quad 4밴드(이차방정식 근)는 **공유** index(형식 파티션이 겹침
+    차단), calc 밴드(삼차 극값)는 **별도** index다 — calc conditions는 도함수 방정식이라 이차방정식
+    과 구조 동형이라, 공유 시 거짓 cross-군 dedup이 난다. 두 군은 sink에 순차 append(quad→calc).
     """
     resolved_out = out_path if out_path is not None else _default_out_path()
     codes = build_distractor_codes()
@@ -262,6 +281,35 @@ def run_corpus_batch(
             BandResult(name=name, requested=n, stored=stored, failure_reasons=failure_reasons)
         )
 
+    # ── calc 문제군(삼차 극값) — 별도 signature_index(도함수 방정식 cross-군 오dedup 방지) ──
+    if calc_extremum_n > 0:
+        calc_index: set[str] = set()
+        calc_spec = EquivalenceSpec(
+            achievement_standard_codes=frozenset({_CALC_STANDARD_CODE}),
+            target_misconception_ids=frozenset(),
+            difficulty_overall=_CALC_SPEC_DIFFICULTY,
+            answer_format=None,
+        )
+        calc_generator = CalculusExtremumSkeletonGenerator(skip_signatures=calc_index)
+        calc_outcomes = run_batch(
+            calc_spec, calc_generator, calc_extremum_n, signature_index=calc_index, store=sink
+        )
+        calc_stored = sum(1 for o in calc_outcomes if o.status == "accepted_stored")
+        calc_failures = [
+            reason
+            for outcome in calc_outcomes
+            if outcome.status != "accepted_stored"
+            for reason in (outcome.reasons or [f"status={outcome.status}"])
+        ]
+        bands.append(
+            BandResult(
+                name="calc-extremum",
+                requested=calc_extremum_n,
+                stored=calc_stored,
+                failure_reasons=calc_failures,
+            )
+        )
+
     total_requested = sum(b.requested for b in bands)
     total_stored = sum(b.stored for b in bands)
     written = sink.write(resolved_out) if write else None
@@ -288,6 +336,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mc", type=int, default=_DEFAULT_MC_N, help="유리근 객관식 수.")
     parser.add_argument("--sqrt", type=int, default=_DEFAULT_SQRT_N, help="무리근 단답형 수.")
     parser.add_argument("--sqrt-mc", type=int, default=_DEFAULT_SQRT_MC_N, help="무리근 객관식 수.")
+    parser.add_argument(
+        "--calc-extremum",
+        type=int,
+        default=_DEFAULT_CALC_EXTREMUM_N,
+        help="미적분 극값(삼차함수 극대·극소 x좌표) 단답형 수.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="파일 미기록 — 수율·리포트만 확인.")
     args = parser.parse_args(argv)
 
@@ -297,6 +351,7 @@ def main(argv: list[str] | None = None) -> int:
         mc_n=args.mc,
         sqrt_n=args.sqrt,
         sqrt_mc_n=args.sqrt_mc,
+        calc_extremum_n=args.calc_extremum,
         write=not args.dry_run,
     )
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)
