@@ -27,6 +27,7 @@ S2 부품을 하나로 잇는 마지막 조각이다. 학생 노출 코퍼스에
 from __future__ import annotations
 
 import uuid
+from collections.abc import MutableSet
 from typing import Literal, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -48,6 +49,7 @@ from whymath_backend.l3.equivalent.acceptance import (
     EquivalenceSpec,
     evaluate_equivalent_candidate,
 )
+from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.generator import (
     CandidateProblem,
     EquivalentProblemGenerator,
@@ -174,6 +176,7 @@ def run_equivalent_generation(
     *,
     dedup_index: ProblemEmbeddingIndex | None = None,
     embed_provider: EmbeddingProvider | None = None,
+    signature_index: MutableSet[str] | None = None,
     store: ProblemBankSink | None = None,
     dedup_threshold: float = _DEFAULT_DEDUP_THRESHOLD,
 ) -> GenerationOutcome:
@@ -190,7 +193,9 @@ def run_equivalent_generation(
          중복으로 보게* 한다(배치 누적 dedup 근간). `accepted_stored`. store 미주입이면 `accepted`.
 
     좌석 주입 규약:
-      - `dedup_index`·`embed_provider` 둘 다 줘야 dedup이 돈다(하나만 주면 dedup 스킵·순수 결정).
+      - `signature_index`(S2-l 구조 dedup·`MutableSet[str]`) 주면 임베딩 전에 SymPy 정규형
+        signature로 판박이를 결정론 차단(임베딩 불요·비용 0). 미주입이면 이 단계 스킵.
+      - `dedup_index`·`embed_provider` 둘 다 줘야 임베딩 dedup이 돈다(하나만 주면 스킵·순수 결정).
       - `store` 없으면 dry-run(검증만·저장 0). 저장 후 임베딩 영속은 `dedup_index`+`embed_provider`
         가 함께 주입됐을 때만 일어난다(임베딩 저장소 seam이 곧 dedup_index — 같은 벡터 재사용).
     """
@@ -227,7 +232,26 @@ def run_equivalent_generation(
             reasons=reasons,
         )
 
-    # ── 3. 과유사 dedup(S2-c) — 좌석 둘 다 주입 시에만 ──
+    # ── 3a. 구조 dedup(S2-l·`signature_index` 주입 시) — 임베딩 전 결정론 판박이 차단 ──
+    # 조건을 SymPy 정규형 signature로 접어(계수 스케일·부호·인수분해·등호표기·발문 문구 무관)
+    # 이미 본 구조면 rejected_duplicate. 임베딩 없이 비용 0으로 같은 방정식의 표현 변형을 잡는다.
+    # 정규화 불가(비다항 등)면 signature=None → 이 단계 스킵(임베딩 dedup에 위임).
+    signature: str | None = None
+    if signature_index is not None:
+        signature = canonical_signature(candidate.conditions, candidate.answer_selection)
+        if signature is not None and signature in signature_index:
+            reasons.append(
+                "구조 중복 — 정규형이 같은 방정식·근 선택이 이미 코퍼스에 있음"
+                "(표현만 다른 판박이·저장 차단·S2-l)."
+            )
+            return GenerationOutcome(
+                status="rejected_duplicate",
+                candidate=candidate,
+                acceptance=verdict,
+                reasons=reasons,
+            )
+
+    # ── 3b. 과유사 dedup(S2-c) — 좌석 둘 다 주입 시에만 ──
     candidate_vec: list[float] | None = None
     if dedup_index is not None and embed_provider is not None:
         text = problem_embedding_text(candidate.problem)
@@ -245,6 +269,11 @@ def run_equivalent_generation(
                 near_duplicates=near,
                 reasons=reasons,
             )
+
+    # 두 dedup을 통과한 신규 문제 — 이후 후보가 이 구조를 중복으로 보게 signature를 등록한다
+    # (배치 누적 구조 dedup·저장 여부 무관·dry-run에서도 배치 내 판박이를 잡는다).
+    if signature is not None and signature_index is not None:
+        signature_index.add(signature)
 
     # ── 4. 저장(S2-b) — 좌석 주입 시에만 ──
     if store is not None:
@@ -284,6 +313,7 @@ def run_batch(
     *,
     dedup_index: ProblemEmbeddingIndex | None = None,
     embed_provider: EmbeddingProvider | None = None,
+    signature_index: MutableSet[str] | None = None,
     store: ProblemBankSink | None = None,
     dedup_threshold: float = _DEFAULT_DEDUP_THRESHOLD,
 ) -> list[GenerationOutcome]:
@@ -293,13 +323,19 @@ def run_batch(
     걸린다 — 앞선 후보가 저장되며 그 벡터가 index에 실려, 같은 배치 안의 뒤 후보가 판박이면
     `rejected_duplicate`로 잡힌다(배치 내 중복도 차단). 생성기 소진 시 남은 회차는
     `generation_failed`(ScriptedGenerator가 None을 방출)로 정직히 기록된다.
+
+    **구조 dedup(S2-l)은 배치에서 기본 ON**: `signature_index`를 안 주면 여기서 빈 set을 만들어
+    회차 간 공유한다 — 임베딩 좌석 없이도(비용 0) 같은 방정식의 표현 변형 판박이를 결정론으로
+    차단한다(Phaiakes9 실측: 같은 이차식이 문구만 바꿔 반복). 임베딩 dedup(의미 근사)과 상보.
     """
+    shared_signatures: MutableSet[str] = signature_index if signature_index is not None else set()
     return [
         run_equivalent_generation(
             spec,
             generator,
             dedup_index=dedup_index,
             embed_provider=embed_provider,
+            signature_index=shared_signatures,
             store=store,
             dedup_threshold=dedup_threshold,
         )
