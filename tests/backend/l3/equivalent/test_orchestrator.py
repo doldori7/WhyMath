@@ -210,6 +210,9 @@ class TestAcceptedStored:
         assert len(records) == 1
         assert records[0].slug == "wm-orch-quad-root"
         assert records[0].concept_tags[0].concept_src_id == "HK06"
+        # 근 선택(S2-i)이 verify 메타로 영속 — 빠지면 저장 코퍼스가 품질 게이트에서
+        # "선택 미명시" 유일성 강등을 당한다(라운드트립 실측 회귀 봉인).
+        assert records[0].verify.answer_selection == "largest"
 
     def test_store_with_embed_upserts_vector_into_index(self) -> None:
         # 저장 + dedup_index/embed 주입 시 발문 벡터를 index에 upsert(배치 누적 dedup 근간).

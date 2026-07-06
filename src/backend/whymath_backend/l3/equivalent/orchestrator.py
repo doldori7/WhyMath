@@ -161,6 +161,9 @@ def _to_record(candidate: CandidateProblem) -> ProblemBankRecord:
             conditions=candidate.conditions,
             answer_map=dict(candidate.answer_map),
             solution_steps=candidate.solution_steps,
+            # 근 선택(S2-i)을 함께 영속 — 빠뜨리면 저장 코퍼스가 품질 게이트에서 "선택 미명시"
+            # 유일성 강등을 당한다(라운드트립 실측 회귀).
+            answer_selection=candidate.answer_selection,
         ),
         provenance=ProblemProvenanceMeta(
             generation_type=_enum_value(candidate.provenance.generation_type) or "",
