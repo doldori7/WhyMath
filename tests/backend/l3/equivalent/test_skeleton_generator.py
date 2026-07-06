@@ -246,6 +246,108 @@ class TestSqrtVariant:
         assert [c.problem.slug for c in a if c] == [c.problem.slug for c in b if c]
 
 
+class TestMultipleChoiceVariant:
+    """객관식 variant(S2-p) — 결정론 4지선다·distractor 오개념 주입·형식 파티션.
+
+    오개념 id는 *불투명 문자열*로 주입된다(L3는 L4 카탈로그를 모름) — 테스트도 가짜 id를
+    주입해 이 계약을 증명한다(hermetic·L4 import 0). 실 id 결선은 조성 루트(배치 CLI) 소관.
+    """
+
+    _CODES = {
+        "opposite_root": ("fake-opposite-id", "fake-opposite-op"),
+        "sign_flip": ("fake-sign-flip-id", "fake-sign-flip-op"),
+    }
+
+    def _mc_gen(self, **kwargs: object) -> SkeletonEquivalentProblemGenerator:
+        return SkeletonEquivalentProblemGenerator(
+            variant="multiple_choice",
+            distractor_codes=self._CODES,  # type: ignore[arg-type]
+            **kwargs,  # type: ignore[arg-type]
+        )
+
+    def _mc_spec(self) -> EquivalenceSpec:
+        # 밴드 스펙 정합 — 타깃 오개념 = 주입 id 집합(조립이 항상 두 오개념을 방출 → Jaccard 1.0).
+        return _spec(target_misconception_ids=frozenset({"fake-opposite-id", "fake-sign-flip-id"}))
+
+    def test_missing_injection_fails_fast(self) -> None:
+        # 주입 없이 객관식 생성 시도 → 생성자 ValueError(조용한 무매핑 금지).
+        try:
+            SkeletonEquivalentProblemGenerator(variant="multiple_choice")
+        except ValueError as error:
+            assert "distractor_codes" in str(error)
+        else:
+            raise AssertionError("distractor_codes 미주입인데 생성자가 통과")
+
+    def test_choices_structure(self) -> None:
+        gen = self._mc_gen()
+        for _ in range(30):
+            candidate = gen.generate(self._mc_spec())
+            assert candidate is not None
+            problem = candidate.problem
+            assert problem.question_format == "객관식"
+            assert problem.choices is not None and len(problem.choices) == 4
+            assert len(set(problem.choices)) == 4  # 선지 전부 상이
+            # 값 오름차순 정렬(결정론) — Fraction으로 되돌려 확인.
+            from fractions import Fraction
+
+            parsed = [Fraction(c) for c in problem.choices]
+            assert parsed == sorted(parsed)
+            assert problem.answer in problem.choices
+
+    def test_distractor_map_covers_all_wrong_choices(self) -> None:
+        gen = self._mc_gen()
+        candidate = gen.generate(self._mc_spec())
+        assert candidate is not None
+        problem = candidate.problem
+        assert problem.choices is not None and problem.distractor_map is not None
+        assert len(problem.distractor_map) == 3  # 정답 제외 전 선지 매핑
+        answer_index = problem.choices.index(problem.answer)
+        indexes = {entry.choice_index for entry in problem.distractor_map}
+        assert answer_index not in indexes
+        assert indexes == set(range(4)) - {answer_index}
+        # 주입 id·op_code가 그대로 실린다(하드코딩 0의 증명).
+        ids = {entry.misconception_id for entry in problem.distractor_map}
+        assert ids == {"fake-opposite-id", "fake-sign-flip-id"}
+        ops = {entry.op_code for entry in problem.distractor_map}
+        assert ops == {"fake-opposite-op", "fake-sign-flip-op"}
+
+    def test_first_30_all_pass_acceptance_gate(self) -> None:
+        # 객관식도 4종 게이트 전건 통과 — 오개념 Jaccard 성분이 밴드 스펙과 정합(1.0).
+        gen = self._mc_gen()
+        for _ in range(30):
+            candidate = gen.generate(self._mc_spec())
+            assert candidate is not None
+            verdict = evaluate_equivalent_candidate(
+                self._mc_spec(),
+                candidate.problem,
+                provenance=candidate.provenance,
+                conditions=candidate.conditions,
+                answer_map=candidate.answer_map,
+                answer_selection=candidate.answer_selection,
+            )
+            assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
+
+    def test_partition_disjoint_from_short_answer_pool(self) -> None:
+        # 뼈대당 형식 1개 — 객관식 풀과 단답형 풀의 구조 signature가 서로소(dedup 충돌 원천 차단).
+        mc_sigs = set()
+        gen = self._mc_gen()
+        while (candidate := gen.generate(self._mc_spec())) is not None:
+            mc_sigs.add(canonical_signature(candidate.conditions, candidate.answer_selection))
+        assert len(mc_sigs) >= 50  # 적격 뼈대의 해시 1/3 배정(대략 수십~백여 개)
+
+        short_gen = SkeletonEquivalentProblemGenerator()
+        short_sigs = set()
+        while (candidate := short_gen.generate(_spec())) is not None:
+            short_sigs.add(canonical_signature(candidate.conditions, candidate.answer_selection))
+        assert mc_sigs.isdisjoint(short_sigs)
+
+    def test_deterministic_sequence(self) -> None:
+        a_gen, b_gen = self._mc_gen(), self._mc_gen()
+        a = [a_gen.generate(self._mc_spec()) for _ in range(5)]
+        b = [b_gen.generate(self._mc_spec()) for _ in range(5)]
+        assert [c.problem.slug for c in a if c] == [c.problem.slug for c in b if c]
+
+
 class TestOrchestratorWiring:
     def test_batch_all_accepted_no_duplicates(self) -> None:
         # 배치 30회 — 전부 accepted(dry-run)·중복/실패 0(LLM-first 실측 82% 중복과 대비).

@@ -15,13 +15,17 @@ generator를 결정론으로, LLM은 wording만" 채택 — 결정 로그 2026-0
 저장된다 — 생성기 자신을 신뢰하지 않는 파이프라인 원칙은 스켈레톤에도 동일하게 적용된다
 (derive-and-verify가 이 생성기의 answer_map을 재유도·재확인하는 교차 검증이 공짜로 붙는다).
 
-범위(v1·S2-p): 단일변수 이차방정식·근 선택(largest/smallest/unique) 문제. variant 2종 —
-`short_answer`(유리근: 정수근·기약 유리근·중근)·`sqrt`(무리근: (x−p)²=q 완전제곱꼴·answer는
-SymPy 정확값 'p ± sqrt(q)'). 개념 태깅(기본 HK06 PRIMARY)·rule-based 난이도(difficulty 모듈)·
-결정론 problem_id(slug 기반 uuid5)는 결정론 저작. 오답지(distractor)·novel 구조의 오개념 겨냥은
-LLM-first 생성기와의 하이브리드 분담(두 생성기가 같은 좌석·같은 게이트를 공유). **LLM 발문
-다양화**(스켈레톤이 확정한 수치를 못 바꾸는 rephrase 시임)는 후속 슬라이스다 — 템플릿
-변주만으로도 구조 다양성(수백 조합)이 표면 단조로움을 상회한다.
+범위(v1·S2-p): 단일변수 이차방정식·근 선택(largest/smallest/unique) 문제. variant 3종 —
+`short_answer`(유리근 단답형: 정수근·기약 유리근·중근)·`sqrt`(무리근 단답형: (x−p)²=q
+완전제곱꼴·answer는 SymPy 정확값 'p ± sqrt(q)')·`multiple_choice`(유리근 결정론 4지선다 —
+오답값(반대 근·부호 반전 근)은 코드가 정확히 알고, 오개념/op-code id는 생성자
+`distractor_codes`로 *주입*받는다: L4 카탈로그 하드코딩 0·조성 루트 소관). 같은 (방정식,선택)
+뼈대는 결정론 해시 파티션으로 **정확히 한 형식**에만 배정된다(canonical signature가 형식을
+구분하지 않으므로 단답형·객관식 중복 시 dedup 충돌 — 원천 차단). 개념 태깅(기본 HK06
+PRIMARY)·rule-based 난이도(difficulty 모듈)·결정론 problem_id(slug 기반 uuid5)는 결정론 저작.
+novel 구조의 오개념 겨냥은 LLM-first 생성기와의 하이브리드 분담(두 생성기가 같은 좌석·같은
+게이트를 공유). **LLM 발문 다양화**(스켈레톤이 확정한 수치를 못 바꾸는 rephrase 시임)는 후속
+슬라이스다 — 템플릿 변주만으로도 구조 다양성(수백 조합)이 표면 단조로움을 상회한다.
 
 7계층: L3 지역(생성=LLM 라우터 도메인이나 이 구현은 LLM 0 — 좌석 계약만 공유). schema(최하위)·
 동일 패키지(canonicalize)만 import한다.
@@ -32,7 +36,7 @@ from __future__ import annotations
 import hashlib
 import random
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from fractions import Fraction
@@ -51,10 +55,11 @@ from whymath_backend.schema.enums import (
     Curriculum,
     GenerationType,
     LicenseType,
+    QuestionFormat,
     SourceType,
     Subject,
 )
-from whymath_backend.schema.problem import Problem
+from whymath_backend.schema.problem import DistractorEntry, Problem
 from whymath_backend.schema.provenance import ContentProvenance
 
 __all__ = ["SkeletonEquivalentProblemGenerator"]
@@ -82,8 +87,30 @@ _SQRT_P_MIN, _SQRT_P_MAX = -4, 4
 _SQRT_QS: tuple[int, ...] = (2, 3, 5, 6, 7, 8, 10, 11, 12, 13)
 
 # 생성 variant(S2-p) — 뼈대 풀·조립을 가른다. short_answer=유리근 단답형(v0 기본),
-# sqrt=무리근 단답형. (객관식 variant는 후속 커밋 — 형식 파티션과 함께.)
-GeneratorVariant = Literal["short_answer", "sqrt"]
+# sqrt=무리근 단답형, multiple_choice=유리근 결정론 4지선다(distractor 오개념 태깅).
+GeneratorVariant = Literal["short_answer", "sqrt", "multiple_choice"]
+
+# 객관식 distractor의 L3-지역 op키 — 오답값을 *코드가* 정확히 아는 두 오류연산. L4 카탈로그
+# id(misconception_id·op_code)는 여기 하드코딩하지 않고 생성자 `distractor_codes`로 주입받는다
+# (CLAUDE.md 오개념 독립 DB·preload 금지 — 조성 루트가 L4에서 읽어 주입, L3→L4 import 0).
+_MC_OP_OPPOSITE = "opposite_root"  # 요구되지 않은 반대쪽 근을 선택
+_MC_OP_SIGN_FLIP = "sign_flip"  # 인수 (x−a)=0에서 근 부호 반전(−근)
+_MC_OP_KEYS: tuple[str, ...] = (_MC_OP_OPPOSITE, _MC_OP_SIGN_FLIP)
+
+# 형식 파티션 해시 모듈러 — 대상 뼈대의 1/3을 객관식에 배정(나머지 단답형 풀에 잔류).
+_MC_PARTITION_MOD = 3
+
+# 객관식 발문 템플릿(선택별·인덱스 회전).
+_MC_TEMPLATES: dict[str, tuple[str, ...]] = {
+    "largest": (
+        "이차방정식 {eq} 의 두 근 중 큰 근은?",
+        "이차방정식 {eq} 의 두 근 중 더 큰 근을 고르시오.",
+    ),
+    "smallest": (
+        "이차방정식 {eq} 의 두 근 중 작은 근은?",
+        "이차방정식 {eq} 의 두 근 중 더 작은 근을 고르시오.",
+    ),
+}
 
 # 발문 템플릿(선택별·인덱스 회전) — 표면 변주. {eq}에 사람이 읽는 방정식이 들어간다.
 _TEMPLATES: dict[str, tuple[str, ...]] = {
@@ -185,6 +212,40 @@ class _SqrtSkeleton:
             lead_coefficient=a,
             max_abs_coefficient=max(abs(a), abs(b), abs(c)),
         )
+
+
+def _mc_choice_values(
+    skeleton: _Skeleton,
+) -> tuple[Fraction, Fraction, Fraction, Fraction] | None:
+    """객관식 4지선다 값 (정답근, 반대근, −정답근, −반대근) — 4값 전부 상이할 때만(아니면 None).
+
+    오답 3종은 전부 *코드가 정확히 아는* 오류연산의 결과다: 반대근(요구되지 않은 근 선택)·
+    부호 반전 근 2종(인수 (x−a)=0을 x=−a로 읽음). 값 충돌(예: 근 {2,−2}·근 0 포함)이면 그
+    뼈대는 객관식 부적격 — 값을 조작해 채우지 않고 단답형 풀에 남긴다(결정론 단순성).
+    """
+    if skeleton.selection not in ("largest", "smallest"):
+        return None
+    small, large = skeleton.roots
+    answer = skeleton.answer_root
+    opposite = small if answer == large else large
+    values = (answer, opposite, -answer, -opposite)
+    if len(set(values)) != 4:
+        return None
+    return values
+
+
+def _assigned_format(skeleton: _Skeleton) -> Literal["short_answer", "multiple_choice"]:
+    """뼈대당 형식 1개 결정론 배정 — 부적격은 단답형, 적격 중 해시 1/3만 객관식.
+
+    canonical signature는 (방정식, 근 선택)만 보고 발문 형식을 모른다 — 같은 뼈대를 단답형·
+    객관식 둘 다 내면 코퍼스 dedup이 뒤엣것을 버린다(회차 낭비·형식 커버리지 왜곡). 그래서
+    형식을 뼈대 내용의 해시로 *한 번만* 결정한다(전 실행 결정론·두 variant 풀이 서로소).
+    """
+    if _mc_choice_values(skeleton) is None:
+        return "short_answer"
+    a, b, c = skeleton.coefficients
+    digest = hashlib.sha256(f"{a},{b},{c},{skeleton.selection}".encode("utf-8")).hexdigest()
+    return "multiple_choice" if int(digest, 16) % _MC_PARTITION_MOD == 0 else "short_answer"
 
 
 def _sqrt_inner_text(p: int) -> str:
@@ -338,6 +399,7 @@ class SkeletonEquivalentProblemGenerator:
         self,
         *,
         variant: GeneratorVariant = "short_answer",
+        distractor_codes: Mapping[str, tuple[str, str]] | None = None,
         skip_signatures: AbstractSet[str] | None = None,
         slug_prefix: str = "wm-skel",
         subject: Subject = Subject.공통,
@@ -346,10 +408,25 @@ class SkeletonEquivalentProblemGenerator:
         unit_codes: Sequence[str] = ("QUAD-EQ",),
         concept_tags: Sequence[ConceptTag] = _DEFAULT_CONCEPT_TAGS,
     ) -> None:
-        self._pool: tuple[_Skeleton | _SqrtSkeleton, ...] = (
-            _build_sqrt_pool() if variant == "sqrt" else _build_pool()
-        )
+        if variant == "multiple_choice":
+            provided = distractor_codes or {}
+            missing = [key for key in _MC_OP_KEYS if not provided.get(key)]
+            if missing:
+                # fail-fast(조용한 무매핑 금지) — 객관식은 오답→오개념 역추적이 존재 이유라
+                # 매핑 없는 조립을 허용하지 않는다. id는 조성 루트가 L4 카탈로그에서 읽어
+                # 주입한다(llm_generator._acceptable_misconceptions 주입 선례 미러).
+                raise ValueError(
+                    "multiple_choice variant는 distractor_codes 주입이 필수입니다 — "
+                    f"누락 op키: {missing} (op키→(misconception_id, op_code))"
+                )
+        self._pool: tuple[_Skeleton | _SqrtSkeleton, ...]
+        if variant == "sqrt":
+            self._pool = _build_sqrt_pool()
+        else:
+            wanted = "multiple_choice" if variant == "multiple_choice" else "short_answer"
+            self._pool = tuple(s for s in _build_pool() if _assigned_format(s) == wanted)
         self._variant = variant
+        self._distractor_codes = dict(distractor_codes or {})
         self._index = 0
         self._skip = skip_signatures
         self._slug_prefix = slug_prefix
@@ -372,6 +449,8 @@ class SkeletonEquivalentProblemGenerator:
                     continue  # 이미 코퍼스에 있는 구조 — 회차 낭비 없이 다음 뼈대로.
             if isinstance(skeleton, _SqrtSkeleton):
                 return self._assemble_sqrt(spec, skeleton)
+            if self._variant == "multiple_choice":
+                return self._assemble_mc(spec, skeleton)
             return self._assemble(spec, skeleton)
         return None
 
@@ -412,6 +491,55 @@ class SkeletonEquivalentProblemGenerator:
             selection=skeleton.selection,
         )
 
+    def _assemble_mc(self, spec: EquivalenceSpec, skeleton: _Skeleton) -> CandidateProblem:
+        """객관식 조립(S2-p) — 4지선다(정답근·반대근·±부호반전근)·distractor 전 선지 오개념 태깅.
+
+        선지는 값 오름차순 정렬(결정론), answer는 선지 *값* 문자열(시드 wm-quad-eq-root-count-mc
+        패턴 미러 — 인덱스 아님). 오답 3선지 전부가 주입된 두 오개념으로 태깅되므로 후보의
+        오개념 집합은 항상 주입 집합과 일치 — 밴드 스펙 Jaccard가 1.0으로 고정된다(부분 방출
+        경로 없음·0.85 경계 비접촉).
+        """
+        values = _mc_choice_values(skeleton)
+        if values is None:  # pragma: no cover — 풀 필터(_assigned_format)가 부적격을 배제
+            raise RuntimeError(f"객관식 부적격 뼈대가 풀에 유입: {skeleton}")
+        answer_value, opposite_value = values[0], values[1]
+        ordered = sorted(values)
+        choices = [_fraction_text(value) for value in ordered]
+        answer_text = _fraction_text(answer_value)
+
+        op_by_value: dict[Fraction, str] = {
+            opposite_value: _MC_OP_OPPOSITE,
+            -answer_value: _MC_OP_SIGN_FLIP,
+            -opposite_value: _MC_OP_SIGN_FLIP,
+        }
+        distractor_map: list[DistractorEntry] = []
+        for index, value in enumerate(ordered):
+            if value == answer_value:
+                continue  # 정답 선지는 distractor_map에서 제외(스키마 계약).
+            misconception_id, op_code = self._distractor_codes[op_by_value[value]]
+            distractor_map.append(
+                DistractorEntry(
+                    choice_index=index, misconception_id=misconception_id, op_code=op_code
+                )
+            )
+
+        a, b, c = skeleton.coefficients
+        display_eq = _display_equation(a, b, c)
+        templates = _MC_TEMPLATES[skeleton.selection]
+        return self._build_candidate(
+            spec,
+            question_text=templates[self._index % len(templates)].format(eq=display_eq),
+            answer_text=answer_text,
+            explanation=self._explanation(skeleton),
+            answer_format=self._answer_format(skeleton.answer_root),
+            difficulty=skeleton.difficulty,
+            condition=_sympy_equation(a, b, c),
+            selection=skeleton.selection,
+            question_format=QuestionFormat.객관식,
+            choices=choices,
+            distractor_map=distractor_map,
+        )
+
     def _build_candidate(
         self,
         spec: EquivalenceSpec,
@@ -423,6 +551,9 @@ class SkeletonEquivalentProblemGenerator:
         difficulty: float,
         condition: str,
         selection: str,
+        question_format: QuestionFormat = QuestionFormat.단답형,
+        choices: list[str] | None = None,
+        distractor_map: list[DistractorEntry] | None = None,
     ) -> CandidateProblem:
         """뼈대 종류 공통 후보 조립 — Problem·Provenance·CandidateProblem(전부 결정론)."""
         standard_codes = sorted(spec.achievement_standard_codes)
@@ -442,11 +573,14 @@ class SkeletonEquivalentProblemGenerator:
             # S2-p: 스펙 미러(2.5 균일) → rule-based 결정론 추정(difficulty 모듈 공식).
             # 스펙 2.5 대비 최대 gap 1.1 < 3.5(게이트 감쇠 수학)라 동등성 성분 안전.
             difficulty_overall=difficulty,
+            question_format=question_format,
             answer_format=answer_format,
             achievement_standard_codes=standard_codes,
             question_text=question_text,
+            choices=choices,
             answer=answer_text,
             answer_explanation=explanation,
+            distractor_map=distractor_map,
         )
         provenance = ContentProvenance(
             generation_type=GenerationType.FULLY_GENERATED,
