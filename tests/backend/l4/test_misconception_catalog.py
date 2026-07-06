@@ -1,7 +1,8 @@
-"""오개념 카탈로그 정합성 단위테스트 — doc 정본 30종(Phase 1 목표).
+"""오개념 카탈로그 정합성 단위테스트 — doc 정본 32종(Phase 1 30 + S2-p 2).
 
-스코프 정직(False-attribute 금기): doc에 명시·상세화된 30종만 등록(기존 22 + §5.4
-교차검증 후보 8: 대수+2·기하+1·확률통계+1·함수+2·미적분+2), 미상세 항목 추정 작성 없음.
+스코프 정직(False-attribute 금기): doc에 명시·상세화된 32종만 등록(기존 22 + §5.4
+교차검증 후보 8: 대수+2·기하+1·확률통계+1·함수+2·미적분+2 + S2-p 대수 2: 반대 근 선택·
+인수 부호 반전), 미상세 항목 추정 작성 없음.
 """
 
 from __future__ import annotations
@@ -19,10 +20,10 @@ from whymath_backend.l4.misconception.match_gate import _DEFAULT_CONFIDENCE_FLOO
 
 
 class TestCatalogShape:
-    def test_thirty_entries_doc_explicit_only(self) -> None:
-        # doc 명시·상세화: 대수 9 + 기하 4 + 확률통계 4 + 함수 3
-        #                 + 미적분 5 + 수열 2 + 삼각함수 2 + 벡터 1 = 30 (Phase 1 목표)
-        assert len(CATALOG) == 30
+    def test_thirty_two_entries_doc_explicit_only(self) -> None:
+        # doc 명시·상세화: 대수 11 + 기하 4 + 확률통계 4 + 함수 3
+        #                 + 미적분 5 + 수열 2 + 삼각함수 2 + 벡터 1 = 32 (Phase 1 30 + S2-p 2)
+        assert len(CATALOG) == 32
 
     def test_all_ids_unique(self) -> None:
         ids = [m.id for m in CATALOG]
@@ -37,8 +38,8 @@ class TestCatalogShape:
 class TestCanonicalIdsFromDoc:
     """doc L24-50에 *명시*된 ID가 모두 존재 — 정본 정합."""
 
-    def test_algebra_nine(self) -> None:
-        # 기존 7 + 슬 §5.4 추가 2(discriminant·root-loss)
+    def test_algebra_eleven(self) -> None:
+        # 기존 7 + 슬 §5.4 추가 2(discriminant·root-loss) + S2-p 추가 2(반대 근·부호 반전)
         algebra_ids = {
             "distribution-over-power",
             "sign-flip-in-inequality",
@@ -49,9 +50,16 @@ class TestCanonicalIdsFromDoc:
             "log-distribution",
             "discriminant-negative-no-real-root",
             "root-loss-by-dividing",
+            "opposite-root-selected",
+            "factor-sign-flip",
         }
         assert algebra_ids.issubset(CATALOG_BY_ID.keys())
-        for mid in ("discriminant-negative-no-real-root", "root-loss-by-dividing"):
+        for mid in (
+            "discriminant-negative-no-real-root",
+            "root-loss-by-dividing",
+            "opposite-root-selected",
+            "factor-sign-flip",
+        ):
             assert CATALOG_BY_ID[mid].domain == "대수"
 
     def test_geometry_four(self) -> None:

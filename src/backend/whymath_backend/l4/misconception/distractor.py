@@ -58,8 +58,10 @@ class DistractorOpCode(BaseModel):
         return value
 
 
-# 시드 op-code(5종·도메인 교차) — 각 항목은 정본 카탈로그의 실재 오개념을 가리킨다. 추상 오류연산만
-# 담고 특정 시험 선지 본문은 담지 않는다(저작권). 확장은 후속 data 슬라이스(전수 코퍼스).
+# 시드 op-code(8종·도메인 교차) — 각 항목은 정본 카탈로그의 실재 오개념을 가리킨다. 추상 오류연산만
+# 담고 특정 시험 선지 본문은 담지 않는다(저작권). S2-p: 이차방정식 근 선택·부호 반전 2종 +
+# 시드 코퍼스(wm-quad-eq-root-count-mc)가 참조하던 미등록 op-code(root-loss) 1종 상환.
+# 확장은 후속 data 슬라이스(전수 코퍼스).
 DISTRACTOR_CATALOG: tuple[DistractorOpCode, ...] = (
     DistractorOpCode(
         id="power-distributed-no-cross-term",
@@ -101,8 +103,37 @@ DISTRACTOR_CATALOG: tuple[DistractorOpCode, ...] = (
         operation="sin(α+β)를 sinα+sinβ로 분배한 값을 오답 선지로 만든다.",
         misconception_id="sine-distributes-over-sum",
     ),
+    # ── S2-p: 이차방정식 근 선택 문제(동등문제 객관식 변형)의 결정론 distractor 3종 ──
+    DistractorOpCode(
+        id="select-opposite-root",
+        name_kr="반대 근 선택",
+        domain="대수",
+        operation=(
+            "큰(작은) 근을 요구하는 문항에서 요구되지 않은 반대쪽 근의 값을 " "오답 선지로 만든다."
+        ),
+        misconception_id="opposite-root-selected",
+    ),
+    DistractorOpCode(
+        id="factor-sign-flip-root",
+        name_kr="인수 근 부호 반전",
+        domain="대수",
+        operation=(
+            "(x-a)=0 인수에서 근을 x=-a로 읽어 부호가 반전된 근의 값을 " "오답 선지로 만든다."
+        ),
+        misconception_id="factor-sign-flip",
+    ),
+    DistractorOpCode(
+        id="root-loss-divide-by-variable",
+        name_kr="변수 나눗셈 근 손실",
+        domain="대수",
+        operation=(
+            "방정식 양변을 변수 x로 나눠 x=0 근을 잃은 결과(근의 개수·근 목록)를 "
+            "오답 선지로 만든다."
+        ),
+        misconception_id="root-loss-by-dividing",
+    ),
 )
-"""시드 distractor op-code 카탈로그(5종·도메인 교차) — 정본 오개념 실재 키만 참조(생성 시 검증).
+"""시드 distractor op-code 카탈로그(8종·도메인 교차) — 정본 오개념 실재 키만 참조(생성 시 검증).
 
 스캐폴드 범위: 카탈로그·모델·무결성까지. 실시간 진단 결선·선지 메타 스키마는
 후속(모듈 docstring 참조)."""

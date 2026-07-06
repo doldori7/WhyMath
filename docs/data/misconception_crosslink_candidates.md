@@ -72,12 +72,15 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 | sine-distributes-over-sum | M0707 | D | 0.97 | sin(a+b)=sin a+sin b (**직접 후보 유일·얇음**) |
 | period-of-scaled-sine | M0152 | **O** | **0.45** | "y=sin(2x) 주기=2π" 직접 진술 **부재** → **신규 M-id 추가 후보**(검수 시 결정) |
 | dot-product-is-vector | M0735 | D | 0.95 | 내적 결과를 벡터로(실제 스칼라) (+M0262 P) |
+| opposite-root-selected | M0831 | **O** | **0.40** | v0.2(S2-p) — 발문 지시(큰/작은 근) 무시의 직접 진술 **부재**: 최근접은 "x²=4에서 x=2만 답한다"(근 일부만 답하는 행동 인접) → **신규 M-id 추가 후보**(검수 시 결정) |
+| factor-sign-flip | M0848 | **O** | **0.45** | v0.2(S2-p) — (x−a)=0 근 부호 반전의 직접 진술 **부재**: 최근접은 "원 중심 (a,b) 부호를 (−a,−b)로 읽음"(동일 인지 행동·주제 상이, +M0557 O 이항 부호) → **신규 M-id 추가 후보**(검수 시 결정) |
 
 ## 3. 요약 / 검수 우선순위
 
-- 30종 전부 ≥1 후보. 직접매핑 후보 56개. 최상위 평균 conf **0.915**.
+- 32종(v0.2) 전부 ≥1 후보. 직접매핑 후보 56개. 최상위 평균 conf **0.915**(v0.1 30종 기준).
 - **우선 검수(얇거나 약함)**: `period-of-scaled-sine`(직접 부재·신규 M-id 후보) · `exponent-zero`(M0105
-  유일) · `sine-distributes-over-sum`(M0707 유일) · `fraction-cancellation`(M0118 원문 확인).
+  유일) · `sine-distributes-over-sum`(M0707 유일) · `fraction-cancellation`(M0118 원문 확인) ·
+  **v0.2 S2-p 2종**(`opposite-root-selected`·`factor-sign-flip` — 둘 다 직접 부재·신규 M-id 후보).
 - conf 0.4~0.6 대안은 "인접 오개념"으로만 — 직접매핑 승격 금지.
 
 ## 4. 승인 후 적재 절차 (검수자 → 후속 슬라이스)
@@ -98,4 +101,6 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
   `l1/misconception/crosslink_loader.py`·`crosslink_resolve.py`·alembic `e2f3a4b5c6d7`(PR #347).
 - 원천: `l4/misconception/catalog.py`(kebab 30)·`data/corpus/misconceptions_v1/misconceptions.json`(M-id 839).
 - 원칙: `CLAUDE.md`(우선순위 #1 학생 안전·#3 교수학 정확성)·`math_dsl_remediation_design.md` §1.
-- 변경 이력: v0.1 초안 (2026-06-30 — 후보 제안·검수 전·미적재).
+- 변경 이력: v0.1 초안 (2026-06-30 — 후보 제안·검수 전·미적재) · v0.2 (2026-07-06 — S2-p kebab 2종
+  `opposite-root-selected`·`factor-sign-flip` 후보 행 추가: 둘 다 직접 후보 부재·최근접 개념겹침만·
+  신규 M-id 저작 후보, period-of-scaled-sine 선례 패턴).

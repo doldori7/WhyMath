@@ -1,7 +1,7 @@
 {
   "format": "misconception_crosslink_review_queue_v1",
-  "source_draft": "docs/data/misconception_crosslink_candidates.md v0.1",
-  "notice": "사람 검수 산출물 — 로더는 이 파일을 직접 읽지 못한다(top key review_queue). [2026-07-02 #392 검수 반영] 직접 대안 4건(M0572 0.80·M0028 0.90·M0778 0.75·M0647 0.85)은 검수 신뢰도를 confidence 필드로 이전, M0556은 부분매핑 0.50 강등. 단 status는 전행 pending 유지 — 실제 승인(status=approved+reviewer+reviewed_on)과 적재는 ops promote --load 단계이며 이 템플릿에 커밋하지 않는다(AI 자기승인 금지 가드).",
+  "source_draft": "docs/data/misconception_crosslink_candidates.md v0.2",
+  "notice": "사람 검수 산출물 — 로더는 이 파일을 직접 읽지 못한다(top key review_queue). [2026-07-02 #392 검수 반영] 직접 대안 4건(M0572 0.80·M0028 0.90·M0778 0.75·M0647 0.85)은 검수 신뢰도를 confidence 필드로 이전, M0556은 부분매핑 0.50 강등. 단 status는 전행 pending 유지 — 실제 승인(status=approved+reviewer+reviewed_on)과 적재는 ops promote --load 단계이며 이 템플릿에 커밋하지 않는다(AI 자기승인 금지 가드). [2026-07-06 S2-p] kebab 2종(opposite-root-selected·factor-sign-flip) 후보 행 추가 — 둘 다 직접 후보 부재·최근접 개념겹침만·신규 M-id 저작 후보(초안 v0.2·period-of-scaled-sine 선례).",
   "review_queue": [
     {
       "kebab_id": "distribution-over-power",
@@ -823,6 +823,28 @@
       "link_type": "부분매핑",
       "confidence": null,
       "rationale": "초안 대안(P 표기) — conf 미명시",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "opposite-root-selected",
+      "mis_id": "M0831",
+      "link_type": "개념겹침",
+      "confidence": 0.4,
+      "rationale": "초안 v0.2(S2-p) — 발문 지시(큰/작은 근) 무시의 직접 진술 부재: 최근접 'x²=4에서 x=2만 답한다'(근 일부만 답하는 행동 인접) → 신규 M-id 추가 후보(검수 시 결정)",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "factor-sign-flip",
+      "mis_id": "M0848",
+      "link_type": "개념겹침",
+      "confidence": 0.45,
+      "rationale": "초안 v0.2(S2-p) — (x-a)=0 근 부호 반전의 직접 진술 부재: 최근접 '원 중심 (a,b) 부호를 (-a,-b)로 읽음'(동일 인지 행동·주제 상이) → 신규 M-id 추가 후보(검수 시 결정)",
       "status": "pending",
       "reviewer": null,
       "reviewed_on": null,

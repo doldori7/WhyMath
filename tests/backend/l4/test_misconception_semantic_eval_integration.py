@@ -1,8 +1,8 @@
 """오개념 의미 매칭 측정 하니스 *라이브* 통합 — slice 107 (WHYMATH_RUN_INTEGRATION 게이트).
 
-라이브 bge-m3(`LocalEmbeddingProvider`)로 전체 프로브셋(94줄)을 측정해 *실제* 결합 recall·방향맹
+라이브 bge-m3(`LocalEmbeddingProvider`)로 전체 프로브셋(98줄)을 측정해 *실제* 결합 recall·방향맹
 false-positive를 낸다. 이 테스트의 목적은 **측정**이다 — 품질을 hard-fail하지 않는다(Kiki가 출력
-수치를 보고 플립 임계 R·F를 확정한다). loose smoke만 단언하고(`total==94`·비율 ∈ [0,1] 등),
+수치를 보고 플립 임계 R·F를 확정한다). loose smoke만 단언하고(`total==98`·비율 ∈ [0,1] 등),
 recall/FP 숫자는 print로 흘려 `-s`로 Kiki가 확인한다.
 
 CI는 `WHYMATH_RUN_INTEGRATION`을 설정하지 않으므로 자동 skip(conftest.py 게이트). 켜져 돌더라도
@@ -43,7 +43,7 @@ class TestSemanticEvalLive:
 
     def test_full_probeset_recall_and_fp_measurement(self) -> None:
         probes = _load_real_probes()
-        assert len(probes) == 94
+        assert len(probes) == 98
 
         # 슬110(#5): bge-m3 자원 미도달은 사전체크로 skip·측정 코드 버그는 fail로 전파.
         require_local_embedding()
@@ -59,9 +59,9 @@ class TestSemanticEvalLive:
         print(format_report(report))
 
         # loose smoke(측정이 목적·품질 hard-fail 아님): 구조 무결성만 단언.
-        assert report.total == 94
-        assert report.total_recall == 61
-        assert report.total_fp == 33
+        assert report.total == 98
+        assert report.total_recall == 63
+        assert report.total_fp == 35
         rlb = report.recall_lower_bound()
         fub = report.fp_rate_upper_bound()
         assert rlb is not None and 0.0 <= rlb <= 1.0
