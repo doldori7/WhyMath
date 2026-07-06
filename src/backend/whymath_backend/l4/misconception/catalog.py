@@ -1,10 +1,11 @@
 r"""오개념 카탈로그 — `docs/prompts/misconception_diagnosis.md` "오개념 카탈로그" 정본.
 
-**스코프 정직**(False-attribute 금기, CLAUDE.md): doc에 *명시되고 상세화된* 항목만 코딩(30종).
+**스코프 정직**(False-attribute 금기, CLAUDE.md): doc에 *명시되고 상세화된* 항목만 코딩(32종).
 슬: doc에 수능 핵심 4영역(미적분·수열·삼각함수·벡터, doc #16-23)을 *먼저 정본화*한 뒤
 코드로 인코딩(doc-first). 슬: §5.4 교차검증 후보 8종을 doc에 상세화(stub #15
 continuity-implies-differentiability 포함·#24-30 신규)한 뒤 인코딩 — Phase 1 30종 목표 달성.
-여전히 *미상세 항목을 추정 작성하지 않는다*(doc-first 불변).
+S2-p: 이차방정식 근 선택·인수 부호 반전 2종(doc #31-32)을 doc-first로 추가(32종) — 동등문제
+객관식 distractor의 오개념 역추적 좌석. 여전히 *미상세 항목을 추정 작성하지 않는다*(doc-first 불변).
 
 각 `canonical_statement`·`counterexample`은 *자체 생성 기본 수학 사실*(교과서/EBS 본문 복제
 금지·CLAUDE.md). 반례는 canonical을 실제로 반증한다(수학적 정합 검증 완료).
@@ -26,7 +27,7 @@ from __future__ import annotations
 
 from whymath_backend.l4.misconception.models import Misconception
 
-# 대수 영역 — doc "대수 영역"(#1-7, #24-25) (9종).
+# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32) (11종).
 _ALGEBRA: tuple[Misconception, ...] = (
     Misconception(
         id="distribution-over-power",
@@ -157,6 +158,30 @@ _ALGEBRA: tuple[Misconception, ...] = (
         # "양변"+"x로 나누"(변수로 나눔)의 공출현이 근 손실의 양성 단편. 상수로 나누는
         # 올바른 조작("양변을 2로 나누")은 "x로 나누"를 포함하지 않아 구분된다.
         signals=("양변", "x로 나누"),
+    ),
+    Misconception(
+        id="opposite-root-selected",
+        name_kr="반대 근 선택",
+        domain="대수",
+        canonical_statement="두 근 중 어느 근을 답해도 상관없다",
+        counterexample="x²-5x+6=0의 두 근 2, 3 중 '큰 근'은 3 — 2를 답하면 요구와 불일치",
+        # "어느 근"+"상관없" 공출현 — 발문의 근 선택 지시(큰/작은)를 무시해도 된다는 양성 단편.
+        # 올바른 풀이는 "요구한/큰/작은 근을 골라"로 적어 두 토큰이 공출현하지 않는다(gate-safe).
+        # S2-p(doc #31): 동등문제 객관식 distractor(반대 근 선지)의 역추적 좌석 —
+        # [10공수1-02-02]·HK06(이차방정식의 근).
+        signals=("어느 근", "상관없"),
+    ),
+    Misconception(
+        id="factor-sign-flip",
+        name_kr="인수 근 부호 반전",
+        domain="대수",
+        canonical_statement="(x-a)=0이면 x=-a이다",
+        counterexample="(x-2)=0의 근은 x=2 — x=-2를 대입하면 -2-2=-4≠0",
+        # 기호 일반형 LHS "(x-a)"+틀린 결론 "x=-a"의 공출현(정규화 후). 수치 사례
+        # ("(x-2)=0 → x=-2")는 기호 토큰이라 미발화 — disjoint 역참조 수치 정규식은 v1.2
+        # 시연 방식대로 후속(doc §매칭 알고리즘·추측 작성 금지). 올바른 진술 "x=a"는
+        # "x=-a"를 미포함(gate-safe). S2-p(doc #32) distractor(부호 반전 근 선지) 역추적 좌석.
+        signals=("(x-a)", "x=-a"),
     ),
 )
 
@@ -395,9 +420,11 @@ _VECTOR: tuple[Misconception, ...] = (
 CATALOG: tuple[Misconception, ...] = (
     _ALGEBRA + _GEOMETRY + _PROBSTAT + _FUNCTION + _CALCULUS + _SEQUENCE + _TRIG + _VECTOR
 )
-"""정본 카탈로그(30종·Phase 1 목표 달성) — doc 명시·상세화 항목만.
+"""정본 카탈로그(32종 = Phase 1 30종 + S2-p 2종) — doc 명시·상세화 항목만.
 
 슬: §5.4 교차검증 고가치 후보 8종 추가(대수+2·기하+1·확률통계+1·함수+2·미적분+2).
+S2-p: 이차방정식 근 선택 지시 무시·인수 부호 반전 2종 추가(대수 11종) — 동등문제 객관식
+distractor 역추적 좌석(doc #31-32).
 positive-signal형(학생이 *틀린 주장을 직접 적는* 유형)만 채택 — omission형(적분상수 누락·
 정의역 끝점)은 substring이 *오류 부재*를 못 잡으므로(§5.3 한계) 의도적 회피(임베딩 후속).
 
