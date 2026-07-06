@@ -108,3 +108,49 @@ def test_seeds_have_no_metadata_only_sources() -> None:
     for record in _records():
         assert record.problem.source_type == "자체생성"
         assert record.provenance.license == "WHYMATH_GENERATED"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 생성 코퍼스(v0·사람 검수 전) — 스켈레톤 배치 산출물도 같은 게이트로 저장소 차원 봉인.
+# 게이트 통과 ≠ 학생 노출(§03 정본) — 이 테스트는 "기계 검증 전건 통과"만 동결한다.
+# ──────────────────────────────────────────────────────────────────────
+def _generated_corpus_path() -> Path:
+    return (
+        Path(__file__).resolve().parents[4]
+        / "data"
+        / "corpus"
+        / "problem_bank_generated_v0"
+        / "problems.jsonl"
+    )
+
+
+def _generated_records() -> list[ProblemBankRecord]:
+    corpus = _generated_corpus_path()
+    if not corpus.exists():
+        pytest.skip("생성 코퍼스 미존재(data/corpus/problem_bank_generated_v0/problems.jsonl)")
+    return load_problem_bank_records(corpus)
+
+
+def test_generated_corpus_every_record_is_accepted() -> None:
+    # 배치 산출물 전건이 4종 게이트를 통과(accepted) — Phaiakes9 배치 결과의 저장소 재검증.
+    records = _generated_records()
+    assert len(records) >= 100  # 스켈레톤 배치 가동 후 볼륨(2026-07-06: 161건)
+    for record in records:
+        verdict = _evaluate(record)
+        assert verdict.accepted is True, (  # type: ignore[attr-defined]
+            f"{record.slug} 미수용: {verdict.reasons}"  # type: ignore[attr-defined]
+        )
+
+
+def test_generated_corpus_copyright_rail() -> None:
+    # 저작권 레일 — 생성 코퍼스 전건 자체생성·WHYMATH_GENERATED(본문성 원본 0).
+    for record in _generated_records():
+        assert record.problem.source_type == "자체생성"
+        assert record.provenance.license == "WHYMATH_GENERATED"
+        assert record.provenance.original_source is None
+
+
+def test_generated_corpus_slugs_unique() -> None:
+    # 멱등 upsert 키(slug) 전건 상이 — 배치 dedup·내용 주소화가 실제 산출물에서 성립.
+    slugs = [record.slug for record in _generated_records()]
+    assert len(slugs) == len(set(slugs))
