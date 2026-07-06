@@ -101,11 +101,13 @@ import logging
 import re
 from collections.abc import Mapping, Sequence
 
+import sympy
 from pydantic import ValidationError
 
 from whymath_backend.config import Settings
 from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
+from whymath_backend.l3.equivalent.canonicalize import condition_dsl_violation
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import (
@@ -116,6 +118,7 @@ from whymath_backend.l3.models import (
     RoutingRequest,
 )
 from whymath_backend.l3.router import Router
+from whymath_backend.l3.verify_answer import derive_selected_root
 from whymath_backend.schema.enums import (
     AnswerFormat,
     ConceptRole,
@@ -251,6 +254,9 @@ answer_format(자연수/분수/실수/식), achievement_standard_codes(성취기
 
 ## 규칙
 - 수식은 SymPy 표기(`**`=거듭제곱·`*`=곱)로. `conditions`·`answer_map`은 기계 검산에 쓰이니 정확히.
+- **`conditions`는 맨 (부)등식 문자열만**: `"x**2 - 7*x + 12 = 0"` 형태 하나면 충분합니다.
+  `solve(...)`·`largest_root(...)` 같은 **함수 호출·리스트·프로그래밍 문법 절대 금지** — 근 선택은
+  `answer_selection` 필드로만 표현하고, 인수분해식 등 *같은 방정식을 중복*으로 넣지 마세요.
 - **`answer_map`의 값은 반드시 *정확한 수***(정수 `3`, 분수 `4/3`)로 쓰세요 — **반올림 소수
   (`1.33`·`1.333`) 금지**. 근이 유리수면 분수로(`4/3`), 무리수면 SymPy 표기로(`sqrt(2)`,
   `(1+sqrt(5))/2`). 반올림하면 대입 잔차가 0이 아니어서 기계 검산이 실패합니다. `answer`(사람이
@@ -549,6 +555,10 @@ class LLMEquivalentProblemGenerator:
         conditions = self._parse_conditions(data.get("conditions"))
         answer_map = self._parse_answer_map(data.get("answer_map"))
         answer_selection = self._parse_answer_selection(data.get("answer_selection"))
+        # derive-and-verify(S2-n) — 근 선택 문제는 정답을 우리가 유도해 대조·정확값 정규화.
+        answer, answer_map = self._derive_and_normalize(
+            answer, answer_map, conditions, answer_selection
+        )
         difficulty_overall = self._parse_difficulty(data.get("difficulty_overall"), spec)
         unit_codes = self._parse_unit_codes(data.get("unit_codes"))
         answer_format = self._parse_answer_format(data.get("answer_format"), spec)
@@ -618,14 +628,68 @@ class LLMEquivalentProblemGenerator:
 
     @staticmethod
     def _parse_conditions(value: object) -> str | list[str]:
-        """조건 — 문자열 또는 문자열 배열. 무효면 ValueError(정확성 검산 재료 결측)."""
+        """조건 — 문자열 또는 문자열 배열 + **닫힌 검증 DSL 강제**(S2-m).
+
+        결측·무효는 ValueError(정확성 검산 재료 결측). 각 조건은 `condition_dsl_violation`으로
+        언어 폐쇄를 검사한다 — 실 LLM이 흘리는 pseudo-symbolic(`largest_root(2,8)==8`·
+        `solve(...)==[6,4]`·파이썬 문법 혼입)은 검증기가 판정할 수 없어 needs_review로 새던 것을
+        조립 단계에서 거부해(생성 실패·재생성) 사람 검수 큐 오염을 막는다.
+        """
+        items: list[str]
         if isinstance(value, str) and value.strip():
-            return value.strip()
-        if isinstance(value, list):
+            items = [value.strip()]
+            single = True
+        elif isinstance(value, list):
             items = [str(v).strip() for v in value if isinstance(v, str) and str(v).strip()]
-            if items:
-                return items
-        raise ValueError("conditions 결측/무효 — 정확성 검산 재료가 없습니다.")
+            single = False
+            if not items:
+                raise ValueError("conditions 결측/무효 — 정확성 검산 재료가 없습니다.")
+        else:
+            raise ValueError("conditions 결측/무효 — 정확성 검산 재료가 없습니다.")
+        for item in items:
+            violation = condition_dsl_violation(item)
+            if violation is not None:
+                raise ValueError(f"conditions DSL 위반({item!r}) — {violation}")
+        return items[0] if single else items
+
+    @staticmethod
+    def _derive_and_normalize(
+        answer: str,
+        answer_map: dict[str, str],
+        conditions: str | list[str],
+        answer_selection: str | None,
+    ) -> tuple[str, dict[str, str]]:
+        """derive-and-verify(S2-n) — LLM 답을 신뢰하지 않고 (방정식+선택)에서 정답을 유도해 대조.
+
+        근 선택 문제(answer_selection 있음·단일변수 answer_map)는 정답이 (방정식, 선택)만으로
+        결정론 유도 가능하다(`derive_selected_root`). 유도값과 LLM 답을 수치 대조해:
+          - **일치**(부동소수 표기 차이 포함): answer_map·answer를 **유도된 정확값**(예 `'4/3'`)
+            으로 정규화한다 — 반올림 소수(`1.3333…`) display·검산 실패를 원천 제거하고 canonical
+            정답의 소유권을 코드가 가진다(리뷰 "canonical_answer 분리" 채택).
+          - **불일치**(모델이 틀린 근·산술 붕괴·과도한 반올림): ValueError → 생성 실패(None 폴백·
+            배치 재생성). 단순 repair(답 몰래 교체)는 하지 않는다 — answer_explanation 등 본문이
+            틀린 값을 참조할 수 있어 조용한 수정은 모순 콘텐츠를 만든다(정직한 거부·재생성).
+        유도 불가(파라미터·연립·비적용)는 무변경 통과 — 게이트가 기존 규약대로 판정한다.
+        """
+        if answer_selection is None or len(answer_map) != 1:
+            return answer, answer_map
+        derived = derive_selected_root(conditions, answer_selection)
+        if derived is None:
+            return answer, answer_map  # 유도 불가 — 게이트에 판정 위임(보수적).
+        var, given = next(iter(answer_map.items()))
+        try:
+            given_value = complex(sympy.sympify(given, convert_xor=True).evalf())
+            derived_value = complex(sympy.sympify(derived, convert_xor=True).evalf())
+        except Exception:  # noqa: BLE001 — 답 파싱 불가는 정규화 포기(게이트 위임)
+            return answer, answer_map
+        # 부동소수 표기 차이만 흡수(상대 1e-6) — 반올림 소수(1.33)·틀린 근은 불일치로 거부.
+        tolerance = max(1e-6, 1e-6 * abs(derived_value))
+        if abs(given_value - derived_value) > tolerance:
+            raise ValueError(
+                f"derive-and-verify 불일치 — LLM 답({given})이 유도 정답({derived})과 다름"
+                f"(근 선택 {answer_selection}·오답 원천 거부)."
+            )
+        return derived, {var: derived}
 
     @staticmethod
     def _parse_answer_selection(value: object) -> str | None:

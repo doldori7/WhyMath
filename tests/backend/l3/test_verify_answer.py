@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from whymath_backend.l3.verify_answer import (
     AnswerVerdict,
+    derive_selected_root,
     verify_answer,
     verify_root_selection,
 )
@@ -472,3 +473,42 @@ class TestRootSelection:
         r1 = verify_root_selection("x**2 - 10*x + 24 = 0", {"x": "6"}, "largest")
         r2 = verify_root_selection("x**2 - 10*x + 24 = 0", {"x": "6"}, "largest")
         assert r1.state == r2.state
+
+
+class TestDeriveSelectedRoot:
+    """S2-n: derive-and-verify — (방정식+선택)에서 정답 근을 *정확값*으로 유도."""
+
+    def test_derives_largest_rational_root_exactly(self) -> None:
+        # 3x²-7x+4=0 근은 1, 4/3 — 큰 근을 반올림 소수가 아니라 정확값 '4/3'으로 유도.
+        assert derive_selected_root("3*x**2 - 7*x + 4 = 0", "largest") == "4/3"
+
+    def test_derives_smallest_integer_root(self) -> None:
+        assert derive_selected_root("x**2 - 10*x + 24 = 0", "smallest") == "4"
+
+    def test_derives_unique_double_root(self) -> None:
+        # 중근 (2x-3)²=0 → 유일근 3/2.
+        assert derive_selected_root("(2*x - 3)**2 = 0", "unique") == "3/2"
+
+    def test_double_equals_condition_supported(self) -> None:
+        assert derive_selected_root("x**2 - 10*x + 24 == 0", "largest") == "6"
+
+    def test_unique_with_multiple_roots_is_none(self) -> None:
+        # unique 요구인데 다근 — 문제 자체가 잘못이라 유도 불가(None).
+        assert derive_selected_root("x**2 - 5*x + 6 = 0", "unique") is None
+
+    def test_parametric_is_none(self) -> None:
+        assert derive_selected_root("2*a*x = b", "largest") is None
+
+    def test_system_is_none(self) -> None:
+        assert derive_selected_root(["x + y = 3", "x - y = 1"], "largest") is None
+
+    def test_inequality_is_none(self) -> None:
+        assert derive_selected_root("x > 0", "largest") is None
+
+    def test_unknown_selection_is_none(self) -> None:
+        assert derive_selected_root("x**2 - 5*x + 6 = 0", "biggest") is None
+
+    def test_deterministic(self) -> None:
+        assert derive_selected_root("x**2 - 5*x + 6 = 0", "largest") == derive_selected_root(
+            "x**2 - 5*x + 6 = 0", "largest"
+        )

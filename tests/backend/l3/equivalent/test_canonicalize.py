@@ -9,6 +9,7 @@ from __future__ import annotations
 from whymath_backend.l3.equivalent.canonicalize import (
     canonical_condition,
     canonical_signature,
+    condition_dsl_violation,
 )
 
 
@@ -45,6 +46,39 @@ class TestCanonicalCondition:
 
     def test_empty_is_none(self) -> None:
         assert canonical_condition("   ") is None
+
+
+class TestConditionDslViolation:
+    """S2-m: 닫힌 검증 DSL — 실 LLM이 흘린 pseudo-symbolic(Phaiakes9 실측)을 거부."""
+
+    def test_undefined_function_call_is_violation(self) -> None:
+        # 실측: 'largest_root(2, 8) == 8' — SymPy 미정의 함수 호출.
+        violation = condition_dsl_violation("largest_root(2, 8) == 8")
+        assert violation is not None
+        assert "largest_root" in violation
+
+    def test_solve_pseudo_dsl_is_violation(self) -> None:
+        # 실측: 'solve(x**2 - 10*x + 24, x) == [6, 4]' — 관계 항이 list(수식 아님).
+        assert condition_dsl_violation("solve(x**2 - 10*x + 24, x) == [6, 4]") is not None
+
+    def test_python_syntax_is_violation(self) -> None:
+        # 실측: "x**2 - 8*x + answer_map['k'] = 0" — 파이썬 문법 혼입·파싱 불가.
+        assert condition_dsl_violation("x**2 - 8*x + answer_map['k'] = 0") is not None
+
+    def test_empty_is_violation(self) -> None:
+        assert condition_dsl_violation("   ") is not None
+
+    def test_plain_equations_are_legal(self) -> None:
+        for cond in (
+            "x**2 - 10*x + 24 = 0",
+            "(x-4)*(x-6) == 0",
+            "x^2 - 3*x + 2 = 0",
+            "2*a*x = b",  # 파라미터 — Tier1 샘플링 범위·적법
+            "x > 0",  # 부등식 — 적법
+            "sqrt(x) = 2",  # SymPy 내장 함수 — 적법(미정의 아님)
+            "sin(x)**2 + cos(x)**2 = 1",
+        ):
+            assert condition_dsl_violation(cond) is None, cond
 
 
 class TestCanonicalSignature:

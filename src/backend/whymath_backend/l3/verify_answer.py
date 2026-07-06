@@ -61,6 +61,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "AnswerVerdict",
+    "derive_selected_root",
     "verify_answer",
     "verify_root_selection",
 ]
@@ -609,3 +610,61 @@ def verify_root_selection(
         f"(실근 {sorted(distinct)}).",
         samples_checked=len(real_roots),
     )
+
+
+def derive_selected_root(
+    conditions: str | Sequence[str],
+    selection: str,
+    *,
+    tol: float = 1e-9,
+) -> str | None:
+    """(단일변수 등식 + 근 선택)에서 정답 근을 *유도* — 정확값 문자열(SymPy 표기), 불가 시 None.
+
+    `verify_root_selection`이 "답이 요구된 근인가"를 *판정*한다면, 이 함수는 요구된 근 자체를
+    **유도**한다(derive-and-verify·S2-n). LLM의 답을 신뢰하는 대신 우리가 (방정식+선택)에서
+    정답을 계산해 대조·정규화할 수 있게 한다 — canonical 정답의 소유권이 코드로 온다.
+
+    반환은 SymPy 정확값 문자열이다(예 `'4/3'`·`'3/2'`·`'sqrt(2)'` — 반올림 소수 아님). 적용 밖
+    (연립·다변수·부등식·실근 없음·unique인데 다근·미지 selection)은 None(보수적 — 호출자는
+    유도 없이 기존 경로를 탄다). 판정 규약은 verify_root_selection과 동일 계약을 공유한다.
+    """
+    if selection not in ("largest", "smallest", "unique"):
+        return None
+    # 단일 등식만 — verify_root_selection과 동일 규약.
+    if isinstance(conditions, str):
+        condition: str | None = conditions
+    else:
+        condition_list = list(conditions)
+        condition = condition_list[0] if len(condition_list) == 1 else None
+    if condition is None:
+        return None
+
+    try:
+        residual, op = _parse_condition(condition)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 None
+        return None
+    if op != "==":
+        return None
+    free = sorted(residual.free_symbols, key=str)
+    if len(free) != 1:
+        return None
+    try:
+        raw_roots = sympy.solve(sympy.Eq(residual, 0), free[0])
+    except Exception:  # noqa: BLE001 — 풀이 불가는 보수적 None
+        return None
+
+    # (정확근, 실수값) 쌍 — 복소근은 제외. 실수값은 선택 판정용·반환은 정확근 문자열.
+    reals = [(r, rv) for r in raw_roots if (rv := _real_value(r, tol)) is not None]
+    if not reals:
+        return None
+    distinct = _distinct_values([rv for _, rv in reals], tol)
+    if selection == "unique":
+        if len(distinct) != 1:
+            return None  # 다근인데 unique 요구 — 유도 불가(문제 자체가 잘못).
+        target = distinct[0]
+    else:
+        target = max(distinct) if selection == "largest" else min(distinct)
+    for root, value in reals:
+        if _approx_equal(value, target, tol):
+            return str(sympy.sstr(root))
+    return None  # pragma: no cover — target은 reals에서 왔으므로 도달 불가(방어)

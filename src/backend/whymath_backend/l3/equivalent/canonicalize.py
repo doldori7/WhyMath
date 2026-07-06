@@ -20,8 +20,60 @@ import hashlib
 from collections.abc import Sequence
 
 import sympy
+from sympy.core.function import AppliedUndef
 
-__all__ = ["canonical_condition", "canonical_signature"]
+__all__ = ["canonical_condition", "canonical_signature", "condition_dsl_violation"]
+
+# 관계 연산자(등호 외) — canonical_condition·condition_dsl_violation 공용 분리 규약.
+_RELATIONS: tuple[str, ...] = ("<=", ">=", "!=", "<", ">")
+
+
+def _split_relation(text: str) -> tuple[str, str, str]:
+    """조건 문자열을 (연산자, lhs, rhs)로 분리 — `==`/`=`/부등식/등호 없는 단일 식 공용 규약.
+
+    파싱 실패는 sympify 단계(호출부)에서 드러나므로 여기선 문자열 분리만 한다.
+    """
+    for rel in _RELATIONS:
+        if rel in text:
+            lhs_text, rhs_text = text.split(rel, 1)
+            return rel, lhs_text, rhs_text
+    body = text.replace("==", "=")
+    if "=" in body:
+        lhs_text, rhs_text = body.split("=", 1)
+        return "==", lhs_text, rhs_text
+    return "==", body, "0"
+
+
+def condition_dsl_violation(condition: str) -> str | None:
+    """조건이 *닫힌 검증 DSL*(맨 (부)등식)을 벗어나면 위반 사유를, 적법하면 None을 돌린다(S2-m).
+
+    실 LLM(Phaiakes9)이 conditions에 pseudo-symbolic을 흘리는 실측 회귀를 원천 차단한다:
+      - `largest_root(2, 8) == 8` — **미정의 함수 호출**(AppliedUndef). SymPy가 모르는 함수는
+        검증기가 판정할 수 없다(sqrt·sin·log 등 SymPy 내장 함수는 적법).
+      - `solve(x**2-10*x+24, x) == [6, 4]` — 관계 항이 수식이 아님(list). 근 선택은
+        `answer_selection` 필드의 몫이지 조건 DSL의 몫이 아니다.
+      - `x**2 - 8*x + answer_map['k'] = 0` — 파이썬 문법 혼입·파싱 불가.
+
+    허용 = SymPy로 파싱되는 **수식 (부)등식**만(파라미터·초월함수 포함 — Tier1이 판정을
+    책임지는 범위). 이 검사는 *언어 폐쇄*이지 수학적 참 거짓 판정이 아니다(그건 게이트 소관).
+    """
+    text = condition.strip()
+    if not text:
+        return "빈 조건 — 검증할 식이 없음"
+    op, lhs_text, rhs_text = _split_relation(text)
+    del op  # 언어 폐쇄 검사는 연산자 무관(분리만 공용 규약 사용).
+    try:
+        lhs = sympy.sympify(lhs_text, convert_xor=True)
+        rhs = sympy.sympify(rhs_text, convert_xor=True)
+    except (sympy.SympifyError, TypeError, ValueError, SyntaxError, AttributeError):
+        return "파싱 불가 — SymPy (부)등식이 아님(파이썬 문법·비수식 혼입)"
+    if not isinstance(lhs, sympy.Expr) or not isinstance(rhs, sympy.Expr):
+        return "관계 항이 수식이 아님(list/bool 등) — solve()류 pseudo-DSL 금지"
+    undefined = lhs.atoms(AppliedUndef) | rhs.atoms(AppliedUndef)
+    if undefined:
+        names = sorted({str(f.func) for f in undefined})
+        return f"미정의 함수 호출 {names} — 닫힌 검증 DSL 밖(largest_root()류 금지)"
+    return None
 
 
 def canonical_condition(condition: str) -> str | None:
@@ -35,25 +87,12 @@ def canonical_condition(condition: str) -> str | None:
     text = condition.strip()
     if not text:
         return None
-    op = "=="
-    for rel in ("<=", ">=", "!=", "<", ">"):
-        if rel in text:
-            op = rel
-            break
+    op, lhs_text, rhs_text = _split_relation(text)
     try:
-        if op == "==":
-            # 등식 — `==`/`=`(단일)·등호 없는 단일 식을 모두 잔차로 환원.
-            body = text.replace("==", "=")
-            if "=" in body:
-                lhs_text, rhs_text = body.split("=", 1)
-            else:
-                lhs_text, rhs_text = body, "0"
-        else:
-            lhs_text, rhs_text = text.split(op, 1)
         lhs = sympy.sympify(lhs_text, convert_xor=True)
         rhs = sympy.sympify(rhs_text, convert_xor=True)
         residual = sympy.expand(lhs - rhs)
-    except (sympy.SympifyError, TypeError, ValueError, SyntaxError):
+    except (sympy.SympifyError, TypeError, ValueError, SyntaxError, AttributeError):
         return None
 
     symbols = sorted(residual.free_symbols, key=str)

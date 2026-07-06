@@ -326,6 +326,100 @@ class TestStructuredOutput:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# S2-m: condition DSL 폐쇄 — pseudo-symbolic 조건은 조립 거부(생성 실패·재생성).
+# ──────────────────────────────────────────────────────────────────────
+class TestConditionDslClosure:
+    def test_undefined_function_condition_rejected(self) -> None:
+        # 실측 회귀: conditions에 'largest_root(2, 8) == 8' — 검증 불가 pseudo-DSL → None.
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = ["x**2 - 5*x + 6 = 0", "largest_root(2, 8) == 8"]
+        assert _gen(FakeProvider([json.dumps(payload)])).generate(_spec()) is None
+
+    def test_solve_pseudo_dsl_rejected(self) -> None:
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "solve(x**2 - 5*x + 6, x) == [2, 3]"
+        assert _gen(FakeProvider([json.dumps(payload)])).generate(_spec()) is None
+
+    def test_python_syntax_condition_rejected(self) -> None:
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "x**2 - 8*x + answer_map['k'] = 0"
+        assert _gen(FakeProvider([json.dumps(payload)])).generate(_spec()) is None
+
+    def test_plain_equation_still_assembles(self) -> None:
+        # 적법한 맨 등식은 종전대로 조립(회귀 0).
+        candidate = _gen(FakeProvider([_HAPPY])).generate(_spec())
+        assert candidate is not None
+
+    def test_system_prompt_forbids_pseudo_dsl(self) -> None:
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        _, system = provider.calls[0]
+        assert "solve(" in system  # 금지 예시 명시
+        assert "largest_root(" in system
+
+
+# ──────────────────────────────────────────────────────────────────────
+# S2-n: derive-and-verify — 근 선택 문제는 정답을 유도해 대조·정확값 정규화.
+# ──────────────────────────────────────────────────────────────────────
+class TestDeriveAndVerify:
+    def test_wrong_root_rejected_at_assembly(self) -> None:
+        # 실측 회귀: 2x²-7x+3=0 큰 근은 3인데 모델이 3.5 — 유도 정답과 불일치 → 조립 거부(None).
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "2*x**2 - 7*x + 3 = 0"
+        payload["answer_map"] = {"x": "3.5"}
+        payload["answer"] = "3.5"
+        assert _gen(FakeProvider([json.dumps(payload)])).generate(_spec()) is None
+
+    def test_rounded_decimal_rejected(self) -> None:
+        # 반올림 소수(1.33 vs 4/3) — 대입 잔차가 0이 아니게 되는 부정확 답 → 조립 거부.
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "3*x**2 - 7*x + 4 = 0"
+        payload["answer_map"] = {"x": "1.33"}
+        payload["answer"] = "1.33"
+        assert _gen(FakeProvider([json.dumps(payload)])).generate(_spec()) is None
+
+    def test_float_representation_normalized_to_exact(self) -> None:
+        # 부동소수 표기(1.3333…)는 유도 정확값 '4/3'으로 정규화 — display·검산 모두 canonical.
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "3*x**2 - 7*x + 4 = 0"
+        payload["answer_map"] = {"x": "1.3333333333333333"}
+        payload["answer"] = "1.3333333333333333"
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_map == {"x": "4/3"}
+        assert candidate.problem.answer == "4/3"
+
+    def test_exact_answer_stays_and_gate_accepts(self) -> None:
+        # 이미 정확값이면 그대로(4/3→4/3) + 게이트 verified·accepted(정규화가 검산을 돕는다).
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "3*x**2 - 7*x + 4 = 0"
+        payload["answer_map"] = {"x": "4/3"}
+        payload["answer"] = "1.333"
+        payload["answer_format"] = "분수"
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_map == {"x": "4/3"}
+        assert candidate.problem.answer == "4/3"  # display도 canonical로 정규화
+        verdict = evaluate_equivalent_candidate(
+            _spec(answer_format=AnswerFormat.분수),
+            candidate.problem,
+            provenance=candidate.provenance,
+            conditions=candidate.conditions,
+            answer_map=candidate.answer_map,
+            answer_selection=candidate.answer_selection,
+        )
+        assert verdict.verification == "verified"
+
+    def test_underivable_passes_through_to_gate(self) -> None:
+        # 유도 불가(선택 없음)면 무변경 통과 — 게이트가 기존 규약대로 판정(보수적).
+        payload = json.loads(_HAPPY)
+        del payload["answer_selection"]
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_map == {"x": "3"}  # 무변경
+
+
+# ──────────────────────────────────────────────────────────────────────
 # S2-i: 근 선택(answer_selection) 파싱 + 프롬프트 지시.
 # ──────────────────────────────────────────────────────────────────────
 class TestRootSelectionParsing:
