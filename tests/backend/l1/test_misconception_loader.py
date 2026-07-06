@@ -302,3 +302,49 @@ class TestPopulateMain:
         monkeypatch.setattr(populate, "load_misconceptions", lambda _s, _p: 5)
         rc = populate.main(["--misconceptions", str(src), "--verbose"])
         assert rc == 0
+
+
+class TestCorpusFitsOrmColumns:
+    """실 코퍼스 전건이 ORM varchar 폭에 맞는지 hermetic 검증 — 실 PG 오버플로 사전 차단.
+
+    schema(Pydantic)는 문자열 필드에 max_length가 없어(느슨참조·자체 저작 보유) 길이 초과를
+    검증하지 못한다 — 오버플로는 실 PG 통합 잡에서만 `value too long for type character
+    varying(N)`로 터진다(2026-07-06 S2-p M0862 provenance_note 실측). 이 테스트가 ORM 컬럼의
+    String 폭을 introspection해 코퍼스 전건 문자열 필드 길이를 PG 없이 미리 봉인한다.
+    """
+
+    def _corpus_path(self) -> Path:
+        return (
+            Path(__file__).resolve().parents[3]
+            / "data"
+            / "corpus"
+            / "misconceptions_v1"
+            / "misconceptions.json"
+        )
+
+    def test_all_string_fields_fit_orm_limits(self) -> None:
+        import sqlalchemy as sa
+
+        from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog as OrmModel
+
+        corpus = self._corpus_path()
+        if not corpus.exists():
+            pytest.skip("실 코퍼스 미존재(data/corpus/misconceptions_v1/misconceptions.json)")
+
+        # ORM 컬럼 → String 폭(길이 제약이 있는 문자열 컬럼만).
+        limits: dict[str, int] = {}
+        for column in sa.inspect(OrmModel).mapper.columns:
+            column_type = column.type
+            if isinstance(column_type, sa.String) and column_type.length is not None:
+                limits[column.key] = column_type.length
+
+        payload = json.loads(corpus.read_text(encoding="utf-8"))
+        offenders: list[str] = []
+        for row in payload["misconceptions"]:
+            for field, limit in limits.items():
+                value = row.get(field)
+                if isinstance(value, str) and len(value) > limit:
+                    offenders.append(
+                        f"{row.get('mis_id')}.{field} len={len(value)} > {limit}: {value!r}"
+                    )
+        assert not offenders, "ORM varchar 폭 초과(실 PG 오버플로 위험):\n" + "\n".join(offenders)

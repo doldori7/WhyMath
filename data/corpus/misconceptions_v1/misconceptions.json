@@ -15122,7 +15122,7 @@
       "subunit": "이차방정식의 근(실근·허근)",
       "mapping_confidence": "기준(원본)",
       "mapping_score": 1.0,
-      "provenance_note": "AI생성-검수필요(S2-p 신규 저작·kebab opposite-root-selected 직접 대응)"
+      "provenance_note": "AI생성-검수필요(S2-p 신규 저작)"
     },
     {
       "mis_id": "M0863",
@@ -15140,7 +15140,7 @@
       "subunit": "이차방정식의 풀이(인수분해)",
       "mapping_confidence": "기준(원본)",
       "mapping_score": 1.0,
-      "provenance_note": "AI생성-검수필요(S2-p 신규 저작·kebab factor-sign-flip 직접 대응)"
+      "provenance_note": "AI생성-검수필요(S2-p 신규 저작)"
     }
   ]
 }
