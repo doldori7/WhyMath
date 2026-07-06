@@ -134,6 +134,19 @@ def _promotion_violations(index: int, item: CrosslinkReviewItem) -> list[str]:
     return violations
 
 
+def parse_review_queue(queue: dict[str, Any]) -> list[CrosslinkReviewItem]:
+    """검수 큐 dict → 행 모델 리스트 — top key 검증 + 행 형식 검증(승격 규칙은 미적용).
+
+    `promote_approved`(승격)와 `crosslink_review_aid`(검수 보조 리포트)가 큐를 *같은 방식으로*
+    파싱하도록 뽑아낸 공개 헬퍼다(단일 진실 원천). top key `"review_queue"`가 아니면 즉시 오류
+    (`"candidates"`/`"crosslinks"` 오투입 명시 거부), 행 형식 위반은 전건 열거로 실패한다.
+
+    Raises:
+        CrosslinkReviewError: top key 오투입·행 형식 위반(전건 열거).
+    """
+    return _parse_items(_validate_top_key(queue))
+
+
 def promote_approved(queue: dict[str, Any]) -> dict[str, Any]:
     """검수 큐 dict → 승인분만 로더 형식 `{"crosslinks": [...]}`으로 승격(순수 함수).
 
@@ -145,7 +158,7 @@ def promote_approved(queue: dict[str, Any]) -> dict[str, Any]:
     Raises:
         CrosslinkReviewError: top key 오투입·행 형식 위반·승격 규칙 위반(전건 열거).
     """
-    items = _parse_items(_validate_top_key(queue))
+    items = parse_review_queue(queue)
 
     violations: list[str] = []
     for i, item in enumerate(items):
@@ -238,5 +251,6 @@ __all__ = [
     "CrosslinkReviewItem",
     "ReviewStatus",
     "main",
+    "parse_review_queue",
     "promote_approved",
 ]
