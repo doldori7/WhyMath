@@ -154,3 +154,65 @@ def test_generated_corpus_slugs_unique() -> None:
     # 멱등 upsert 키(slug) 전건 상이 — 배치 dedup·내용 주소화가 실제 산출물에서 성립.
     slugs = [record.slug for record in _generated_records()]
     assert len(slugs) == len(set(slugs))
+
+
+# ──────────────────────────────────────────────────────────────────────
+# S2-p 신규 불변식 — 결정론 메타(난이도·개념·distractor·무리근·구조 서명) 봉인.
+# 테스트는 계층 밖이라 L3(canonicalize)·L4(validate) 교차 import가 허용된다(코퍼스 품질 재현).
+# ──────────────────────────────────────────────────────────────────────
+def test_generated_corpus_difficulty_varies() -> None:
+    # rule-based 난이도 — 2.5 균일(스펙 미러 v0) 회귀 차단: 분산 실재 + 전건 1~5 척도.
+    records = _generated_records()
+    values = {record.problem.difficulty_overall for record in records}
+    assert len(values) >= 3, f"난이도 균일 회귀: {values}"
+    for value in values:
+        assert value is not None and 1.0 <= value <= 5.0
+
+
+def test_generated_corpus_concepts_tagged() -> None:
+    # 결정론 개념 태깅 — 전건 비어있지 않음 + HK06(이차방정식의 근) PRIMARY 포함.
+    for record in _generated_records():
+        assert record.concept_tags, f"{record.slug} concepts 비어 있음"
+        assert ("HK06", "PRIMARY") in [(t.concept_src_id, t.role) for t in record.concept_tags]
+
+
+def test_generated_corpus_mc_invariants() -> None:
+    # 객관식 밴드 — 선지 구조 + distractor 전 선지 태깅 + L4 정본 참조 무결성(validate).
+    from whymath_backend.l4.misconception.validate import validate_distractor_map
+
+    mc_records = [r for r in _generated_records() if r.problem.question_format == "객관식"]
+    assert len(mc_records) >= 30  # 객관식 밴드 볼륨(기본 45)
+    for record in mc_records:
+        problem = record.problem
+        assert problem.choices is not None and len(problem.choices) == 4
+        assert len(set(problem.choices)) == 4
+        assert problem.answer in problem.choices
+        assert problem.distractor_map is not None and len(problem.distractor_map) == 3
+        answer_index = problem.choices.index(problem.answer)
+        indexes = {entry.choice_index for entry in problem.distractor_map}
+        assert indexes == set(range(4)) - {answer_index}
+        violations = validate_distractor_map(problem.distractor_map)
+        assert violations == [], f"{record.slug} distractor 참조 무결성 위반: {violations}"
+
+
+def test_generated_corpus_sqrt_records() -> None:
+    # 무리근 밴드 — SymPy 정확값 answer('p ± sqrt(q)')·실수 형식·근 선택 명시.
+    sqrt_records = [r for r in _generated_records() if "sqrt(" in (r.problem.answer or "")]
+    assert len(sqrt_records) >= 20  # 무리근 밴드 볼륨(기본 30)
+    for record in sqrt_records:
+        assert record.problem.answer_format == "실수"
+        assert "." not in (record.problem.answer or "")  # 반올림 소수 0
+        assert record.verify.answer_selection in {"largest", "smallest"}
+
+
+def test_generated_corpus_signatures_unique() -> None:
+    # 구조 서명(canonical_signature) 전건 상이 — 형식 파티션(뼈대당 1형식)이 실제 산출물에서
+    # 성립함의 봉인(같은 방정식·선택이 단답형·객관식으로 중복 수록되면 여기서 깨진다).
+    from whymath_backend.l3.equivalent.canonicalize import canonical_signature
+
+    signatures = [
+        canonical_signature(record.verify.conditions, record.verify.answer_selection)
+        for record in _generated_records()
+    ]
+    assert all(sig is not None for sig in signatures)
+    assert len(signatures) == len(set(signatures))

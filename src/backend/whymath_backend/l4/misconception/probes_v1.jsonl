@@ -92,3 +92,7 @@
 {"statement": "두 방향량을 내적하면 그 답도 방향과 크기를 함께 가진 화살표 형태로 나온다고 생각했어", "expected_id": "dot-product-is-vector", "near_id": null, "kind": "paraphrase", "note": "내적 결과를 벡터로 봄 — signals 내적·벡터 중 '벡터' 토큰을 빼 substring AND 미발화('방향량'·'화살표 형태')"}
 {"statement": "화살표 두 개를 점 찍어 곱하면 그 답 역시 화살표 형태로 방향을 가진다고 봤어", "expected_id": "dot-product-is-vector", "near_id": null, "kind": "paraphrase", "note": "동일 오개념 — '내적'·'벡터' 토큰 회피('화살표를 점 찍어 곱하면')"}
 {"statement": "두 벡터를 내적하면 방향 없이 크기만 가지는 하나의 실수, 곧 스칼라가 나온다", "expected_id": null, "near_id": "dot-product-is-vector", "kind": "negation", "note": "내적 결과는 스칼라(|a||b|cosθ) — 올바른 진술(벡터임을 부정)"}
+{"statement": "이차방정식을 풀어 두 해를 모두 구한 다음, 문제에서 어느 쪽을 물었는지 확인하지 않고 먼저 나온 해를 답으로 냈어", "expected_id": "opposite-root-selected", "near_id": null, "kind": "paraphrase", "note": "발문의 근 선택 지시 무시 — signals '어느 근'·'상관없' 회피"}
+{"statement": "괄호 안 식이 0이 되려면 x는 빼는 수와 반대 부호여야 한다고 생각해서 근을 음수로 적었어", "expected_id": "factor-sign-flip", "near_id": null, "kind": "paraphrase", "note": "인수 근 부호 반전 — signals '(x-a)'·'x=-a' 회피"}
+{"statement": "두 근을 모두 구한 뒤 문제가 요구한 더 큰 쪽을 골라 답했다", "expected_id": null, "near_id": "opposite-root-selected", "kind": "correct-near", "note": "요구된 근을 올바르게 선택 — 오개념 아님"}
+{"statement": "(x-2)=0이 되려면 x에 2를 넣어야 하므로 근은 2다", "expected_id": null, "near_id": "factor-sign-flip", "kind": "correct-near", "note": "인수에서 근을 올바르게 읽음 — 부호 반전 없음"}
