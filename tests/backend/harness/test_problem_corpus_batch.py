@@ -41,6 +41,7 @@ class TestRunCorpusBatch:
             sqrt_mc_n=2,
             calc_extremum_n=0,
             calc_tangent_n=0,
+            calc_value_n=0,
             write=False,
         )
         assert report.fulfilled
@@ -64,6 +65,7 @@ class TestRunCorpusBatch:
             sqrt_mc_n=2,
             calc_extremum_n=0,
             calc_tangent_n=0,
+            calc_value_n=0,
             write=True,
         )
         assert report.fulfilled and report.written == 15
@@ -100,6 +102,7 @@ class TestRunCorpusBatch:
             sqrt_mc_n=2,
             calc_extremum_n=4,
             calc_tangent_n=4,
+            calc_value_n=4,
             write=True,
         )
         run_corpus_batch(
@@ -110,6 +113,7 @@ class TestRunCorpusBatch:
             sqrt_mc_n=2,
             calc_extremum_n=4,
             calc_tangent_n=4,
+            calc_value_n=4,
             write=True,
         )
         assert a.read_bytes() == b.read_bytes()
@@ -126,6 +130,7 @@ class TestRunCorpusBatch:
             sqrt_mc_n=2,
             calc_extremum_n=10,
             calc_tangent_n=10,
+            calc_value_n=10,
             write=True,
         )
         slugs = [r.slug for r in load_problem_bank_records(out)]
@@ -150,6 +155,8 @@ class TestCliEntry:
                 "--calc-extremum",
                 "0",
                 "--calc-tangent",
+                "0",
+                "--calc-value",
                 "0",
             ]
         )
@@ -178,6 +185,8 @@ class TestCliEntry:
                 "0",
                 "--calc-tangent",
                 "0",
+                "--calc-value",
+                "0",
                 "--dry-run",
             ]
         )
@@ -203,6 +212,8 @@ class TestCliEntry:
                 "0",
                 "--calc-tangent",
                 "0",
+                "--calc-value",
+                "0",
             ]
         )
         assert code == 1
@@ -216,14 +227,47 @@ class TestCliEntry:
 
 class TestCalculusBand:
     def test_default_run_includes_calc_bands(self) -> None:
-        # 기본 실행은 quad 4밴드 + calc 2밴드(총 6밴드) — 각 40건 저장·총 265.
+        # 기본 실행은 quad 4밴드 + calc 3밴드(총 7밴드) — 각 40건 저장·총 305.
         report = run_corpus_batch(out_path=Path("/nonexistent/x.jsonl"), write=False)
         names = [b.name for b in report.bands]
-        assert names == ["short", "mc", "sqrt", "sqrt_mc", "calc-extremum", "calc-tangent"]
-        for band_name in ("calc-extremum", "calc-tangent"):
+        assert names == [
+            "short",
+            "mc",
+            "sqrt",
+            "sqrt_mc",
+            "calc-extremum",
+            "calc-tangent",
+            "calc-value",
+        ]
+        for band_name in ("calc-extremum", "calc-tangent", "calc-value"):
             band = next(b for b in report.bands if b.name == band_name)
             assert (band.requested, band.stored) == (40, 40)
-        assert report.total_stored == 265 and report.fulfilled
+        assert report.total_stored == 305 and report.fulfilled
+
+    def test_value_records_have_calculus_metadata(self, tmp_path: Path) -> None:
+        # calc-value 밴드 산출물 — 극대·극소 단원/성취기준/개념 태깅(극값 x좌표와 동일)·단답형·
+        # 극댓값/극솟값 발문. 정답은 값이라 x좌표 대역을 벗어날 수 있다.
+        out = tmp_path / "problems.jsonl"
+        run_corpus_batch(
+            out_path=out,
+            short_n=0,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=0,
+            calc_tangent_n=0,
+            calc_value_n=12,
+            write=True,
+        )
+        records = load_problem_bank_records(out)
+        assert len(records) == 12
+        for record in records:
+            assert record.problem.unit_codes == ["CALC-EXTREMUM-VALUE"]
+            assert record.problem.achievement_standard_codes == ["[12미적Ⅰ-02-07]"]
+            assert [t.concept_src_id for t in record.concept_tags] == ["H:12미적Ⅰ02-07"]
+            assert record.problem.question_format == "단답형"
+            q = record.problem.question_text
+            assert "극댓값" in q or "극솟값" in q
 
     def test_tangent_records_have_calculus_metadata(self, tmp_path: Path) -> None:
         # calc-tangent 밴드 산출물 — 미분계수 단원/성취기준/개념 태깅·단답형·접선 기울기 발문.
@@ -236,6 +280,7 @@ class TestCalculusBand:
             sqrt_mc_n=0,
             calc_extremum_n=0,
             calc_tangent_n=12,
+            calc_value_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -258,6 +303,7 @@ class TestCalculusBand:
             sqrt_mc_n=0,
             calc_extremum_n=12,
             calc_tangent_n=0,
+            calc_value_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -282,6 +328,7 @@ class TestCalculusBand:
             sqrt_mc_n=0,
             calc_extremum_n=30,
             calc_tangent_n=0,
+            calc_value_n=0,
             write=True,
         )
         diffs = {r.problem.difficulty_overall for r in load_problem_bank_records(out)}
