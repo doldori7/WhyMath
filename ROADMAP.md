@@ -1,6 +1,8 @@
 # ROADMAP.md — WhyMath 로드맵
 
 > **Phase 0 → 5의 5단계 + 90일·1년·3년 마일스톤**
+>
+> **통합 사업계획**: Phase(사업)·v(제품)·S(수학 완성)·M(수학앱 완성)·E(과목 확장) 5축의 통합 매핑과 전과목 확장(물리~영어) 계획은 `docs/strategy/business_plan_master_v1.md` (2026-07-05 채택) 참조.
 
 ---
 
