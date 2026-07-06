@@ -337,6 +337,33 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-06 (구현·L3/harness·S2-p 후속): **LLM 발문 다양화(rephrase) — 수치 불변 봉인·라우터 경유·배치 분리**
+
+**무엇/왜**: S2-p 범위 밖으로 남겼던 마지막 항목. 스켈레톤(LLM 0)의 단조로운 템플릿 발문을 LLM으로 문장 다양화하되, 수치·수식·정답이 절대 안 바뀌게 결정론 게이트로 봉인.
+- **`l3/equivalent/rephrase.py`** — `QuestionRephraser`(provider 주입·라우터 경유·GENERAL 저작 패밀리·온도 0.9). 오직 `question_text`만 LLM이 다시 씀(conditions·answer·choices·distractor 불변 → S2-a 정확성 게이트 무료 재통과). **수치 불변 3중 검증**(`verify_numeric_invariance`·전부 결정론): ① 방정식 substring 봉인(스켈레톤이 박은 정확한 방정식 문자열이 글자 그대로 보존·`extract_equation` 정규식 추출) ② **추가 등식 차단**(보존 방정식 제거 후 `=` 잔존 시 거부 — 위생 validator가 한글 사이 임베디드 거짓 산술식을 토큰화 한계로 놓치는 실측 갭의 구조적 상환) ③ 위생 validator 보강. fail-closed(검증 실패·provider 예외·추출 실패 → 원문 유지·조용한 실패 금지).
+- **배치 분리(핵심 설계)** — rephrase는 비결정적이라 스켈레톤 배치(`run_corpus_batch`·바이트 동일 봉인)에 넣지 않고, 그 산출물을 입력으로 받는 **별도 opt-in 후처리 CLI**(`harness/problem_corpus_rephrase`). question_text만 교체·나머지 필드 그대로 복사. 이 환경은 LLM 0이라 라이브 산출물은 커밋 안 함(Phaiakes9 소관·llm_generator 핸드오프 동형·FakeProvider hermetic 테스트만).
+- **테스트**: rephrase 단위(추출·검증 각 봉인·라우터 GENERAL/온도 전달·fail-closed 4경로)·CLI(수치 불변 라운드트립·다양화 후 게이트 재통과·변조 fail-closed·provider 미주입 exit 0). 라이브 0.
+
+**🔒 불변**: 스켈레톤 배치 바이트 동일 봉인·acceptance/orchestrator 무변경·L3→L4 import 0. **범위 밖(후속)**: 라이브 rephrase 코퍼스 생성(Phaiakes9)·근 개수 count 검증기·DB 적재. **S2-p 슬라이스 전 항목(본체 6커밋 + 후속 3: crosswalk M-id·무리근 객관식·발문 다양화) 완료.**
+
+### 2026-07-06 (구현·L3/harness/data·S2-p 후속): **무리근 객관식 variant(sqrt_multiple_choice) — 스켈레톤 4종(근유형×발문형식 2×2) 완성**
+
+**무엇/왜**: S2-p 범위 밖으로 남겼던 "무리근 객관식"을 구현 — 스켈레톤 variant를 근유형(유리·무리) × 발문형식(단답·객관식) 2×2로 완성.
+- **`sqrt_multiple_choice` variant** — (x−p)²=q의 4지선다: 정답근 p±√q·반대근·정수부 p 부호 반전 2종. 오답 3종을 코드가 정확히 앎(유리근 MC와 대칭). 선지·answer는 SymPy 정확값 sstr(√8→2√2 자동 정리·단답형 무리근과 동일 표기). p≠0 적격(p=0이면 −p=p라 4값 안 됨) + 해시 1/3 파티션으로 무리근 단답형 풀과 서로소(dedup 충돌 차단·실측 sqrt 122 + sqrt_mc 58). distractor_codes 주입 필수(L4 하드코딩 0·미주입 fail-fast).
+- **배치 CLI 4밴드** — short 90/mc 45/sqrt 30/sqrt_mc 20 = 185건. sqrt_mc 밴드 spec target=주입 오개념 집합(Jaccard 1.0). 재실행 바이트 동일 유지.
+- **코퍼스 재생성** — 165→185건(무리근 전체 50=단답 30+객관식 20·객관식 전체 65). 품질 봉인 무변경 통과(MC 불변식·sqrt 레코드 불변식이 sqrt_mc까지 자동 커버).
+- **테스트**: sqrt MC 게이트 20건 accepted·선지 무리근 4개·distractor 3엔트리·파티션 서로소·결정론. 기존 sqrt 서명 하한 150→100(파티션으로 풀 122로 축소 반영).
+
+**🔒 불변**: acceptance/orchestrator/canonicalize/difficulty 무변경·L3→L4 import 0·저작권 레일. **범위 밖(후속)**: LLM 발문 다양화·근 개수 count 검증기·DB 적재.
+
+### 2026-07-06 (구현·L1/L4 data·S2-p 후속): **crosswalk 신규 M-id 2종 저작 — 이차방정식 근 선택·부호 반전의 DB 코퍼스 직접 대응**
+
+**무엇/왜**: S2-p에서 저작한 kebab 오개념 2종(opposite-root-selected·factor-sign-flip)이 DB 오개념 코퍼스(839종)에 직접 대응이 없어 검수 큐에 "개념겹침"(저신뢰 M0831·M0848)으로만 담겼던 갭을 해소. 두 오개념을 직접 서술하는 신규 M-id를 저작:
+- **코퍼스 저작** — `data/corpus/misconceptions_v1/misconceptions.json`에 M0862(발문의 큰/작은 근 지시 무시·error_type 조건무시)·M0863(인수 (x−a)=0을 x=−a로 읽는 부호 반전·error_type 부호오류) 추가(839→841). 필드는 공수 트랙(HK06·[10공수1-02-02]·"식·방정식·부등식") — catalog.py kebab 주석의 성취기준과 일치. mapping_confidence/score는 코퍼스 관례(원본 grain="기준(원본)"/1.0), provenance_note는 "AI생성-검수필요(S2-p 신규 저작)"(사람 검수 전 정직 표기). `_provenance.json` counts 동반 갱신(841·with_ccss 773·with_error_type 732).
+- **검수 큐** — `docs/data/misconception_crosslink_review_queue.json`에 직접매핑 행 2건(M0862·M0863·conf 0.90) 추가, 기존 개념겹침 행(M0831·M0848)은 "최근접 대안"으로 rationale 갱신 유지(다른 kebab의 최상위+대안 패턴 미러). **전행 pending·무서명 유지** — 실제 승인·DB 적재는 promote --load 단계(AI 자기승인 금지 가드·`promote_approved` 승격 0건 실측). crosswalk 초안 v0.3.
+- **종착점 판단**: 세 JSON 형식(candidates/review_queue/crosslinks)이 비호환 설계로 검수 우회를 구조 차단하므로, 본 작업은 코퍼스 저작 + 검수 큐 + 테스트까지이며 `misconception_catalog`·`misconception_crosslink` 테이블 적재는 사람 승인 이후 별도 슬라이스.
+- **테스트**: 통합 카운트 839→841(loader integration), crosslink 직접매핑 화이트리스트에 `_S2P_DIRECT` 추가(전사 왜곡 가드 유지). 신규 레코드 전건 pydantic(extra=forbid) 검증·큐 mis_id 전건 코퍼스 실재 실측. CI 5409 passed·4게이트 green.
+
 ### 2026-07-06 (구현·L3/L4/harness/data·후속): **S2-p 스켈레톤 v1 — 오개념 2종·객관식 변형·난이도 추정기·무리근·코퍼스 전면 재생성**
 
 **무엇/왜**: 스켈레톤 코퍼스 161건의 균일 메타(난이도 2.5 전건·concepts []·distractor 0·유리근만)를 결정론으로 상환 — 스켈레톤은 자기 수치를 코드로 확정하므로 메타도 같은 수치에서 유도한다(사용자 4결정: 객관식 변형 신설·오개념 신규 저작·전면 재생성·"pr"):
