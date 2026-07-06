@@ -122,11 +122,16 @@ class ConceptTag:
 
 @dataclass(frozen=True, slots=True)
 class ProblemVerifyMeta:
-    """S2-a 정확성 게이트 재료 — 원 조건·치환맵·(선택)풀이 단계. 적재엔 미사용(품질 테스트 소비)."""
+    """S2-a 정확성 게이트 재료 — 원 조건·치환맵·(선택)풀이 단계·근 선택. 적재엔 미사용(품질 테스트).
+
+    `answer_selection`(S2-i·largest/smallest/unique): "큰 근/작은 근" 문제는 방정식만으론 답이
+    유일하지 않아 게이트가 *어느 근인가*를 검증하는 데 쓴다(None=선택 요구 없음).
+    """
 
     conditions: str | list[str]
     answer_map: dict[str, str]
     solution_steps: list[str] | None = None
+    answer_selection: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,7 +257,14 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
         raise ProblemCorpusError(f"verify.conditions 형식오류: slug={slug} value={conditions!r}")
     answer_map = {str(k): str(v) for k, v in dict(answer_map_raw).items()}
     steps = [str(s) for s in steps_raw] if isinstance(steps_raw, list) else None
-    return ProblemVerifyMeta(conditions=conditions, answer_map=answer_map, solution_steps=steps)
+    sel_raw = verify_raw.get("answer_selection")
+    selection = sel_raw if sel_raw in ("largest", "smallest", "unique") else None
+    return ProblemVerifyMeta(
+        conditions=conditions,
+        answer_map=answer_map,
+        solution_steps=steps,
+        answer_selection=selection,
+    )
 
 
 def load_problem_bank_records(problems_path: Path) -> list[ProblemBankRecord]:

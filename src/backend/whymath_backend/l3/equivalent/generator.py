@@ -60,6 +60,14 @@ class CandidateProblem(BaseModel):
         default_factory=dict,
         description="조건 치환맵({변수: 값}) — 게이트 정확성 Tier1 재료.",
     )
+    answer_selection: str | None = Field(
+        default=None,
+        description=(
+            "(선택·S2-i) 근 선택 — largest(큰 근)/smallest(작은 근)/unique(유일). '큰 근을 "
+            "구하시오'류는 방정식만으론 답이 유일하지 않아 게이트가 *어느 근인가*를 검증하는 데 "
+            "쓴다. None=선택 요구 없음(다근이면 게이트가 유일성 미확정으로 강등)."
+        ),
+    )
     solution_steps: list[str] | None = Field(
         default=None,
         description="(선택) 분해된 풀이 단계 — 게이트 정확성 Tier2(단계 동치) 재료. None=미제공.",

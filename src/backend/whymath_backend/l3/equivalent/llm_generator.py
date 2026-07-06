@@ -62,10 +62,15 @@ docstring이 못 박은 원칙("L1/L3은 형태만, 카탈로그 실재는 L4·�
          )
      provider=None으로 두면 표준 CompositeProvider(Ollama+Anthropic)가 자동 구성된다(라우터가
      로컬로 결정하면 Anthropic 키 없이도 로컬만 태운다).
-     **모델 선택 주의**: `qwen2-math:*`는 문제를 *푸는* 데 특화돼 *저작·JSON·지시 준수*가 약하다
-     (플레이스홀더 베끼기·주제 이탈·영어 leak). 저작에는 instruction-following이 좋은 일반 모델
-     (`qwen2.5:7b` 이상)이 낫다 — 라우터 패밀리를 GENERAL로 태우거나 provider에서 모델을 명시.
-     `topic_hint`는 코드→주제 번역을 사람이 미리 줘 모델의 주제 이탈(이차 요청→일차 생성)을 막는다.
+     **모델 선택(S2-h·기본 GENERAL)**: `qwen2-math:*`는 문제를 *푸는* 데 특화돼 *저작·JSON·지시
+     준수*가 약하다(플레이스홀더 베끼기·주제 이탈·영어 leak·같은 계수 반복 mode collapse — 온도
+     ↑로도 안 풀림, Phaiakes9 실측). 저작에는 instruction-following이 좋은 일반 모델
+     (`qwen2.5:7b`)이 낫다. 그래서 이 생성기는 **`authoring_family=GENERAL`을 기본값**으로 두어,
+     라우터가 task_type='generate'를 MATH로 보내도 로컬 저작 패밀리만 GENERAL로 갈아탄다(라우터의
+     비용·크기·모드 결정은 그대로 존중·아래 `_decide_routing` 참조). 수학 정확성은 하류 SymPy
+     게이트(S2-a)가 검증하므로 저작 모델은 지시 준수·다양성이 우선이다. `authoring_family=None`
+     으로 두면 라우터 결정을 그대로 쓴다(옵트아웃). `topic_hint`는 코드→주제 번역을 사람이 미리
+     줘 모델의 주제 이탈(이차 요청→일차 생성)을 막는다.
 
   3. **배치 생성**(`orchestrator.run_batch`)로 코퍼스를 채운다 — 생성물은 **S2-a 게이트 +
      S2-c dedup을 통과한 분만** 저장된다(store 좌석 주입 시). 게이트가 `검수필요`로 보낸 분은
@@ -96,15 +101,24 @@ import logging
 import re
 from collections.abc import Mapping, Sequence
 
+import sympy
 from pydantic import ValidationError
 
 from whymath_backend.config import Settings
 from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
+from whymath_backend.l3.equivalent.canonicalize import condition_dsl_violation
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.l3.interfaces import LLMProvider
-from whymath_backend.l3.models import RoutingDecision, RoutingRequest
+from whymath_backend.l3.models import (
+    CostTier,
+    LocalModelTier,
+    ModelFamily,
+    RoutingDecision,
+    RoutingRequest,
+)
 from whymath_backend.l3.router import Router
+from whymath_backend.l3.verify_answer import derive_selected_root
 from whymath_backend.schema.enums import (
     AnswerFormat,
     ConceptRole,
@@ -123,6 +137,54 @@ _LOGGER = logging.getLogger(__name__)
 
 # 개념 태깅 role 유효값(ConceptRole) — LLM이 낸 role 문자열 검증용(schema는 최하위·import 허용).
 _VALID_ROLES: frozenset[str] = frozenset(r.value for r in ConceptRole)
+
+# 근 선택(S2-i) 유효값 — LLM이 낸 answer_selection 검증용. verify_root_selection 계약과 동일.
+_VALID_ROOT_SELECTIONS: frozenset[str] = frozenset({"largest", "smallest", "unique"})
+
+# ──────────────────────────────────────────────────────────────────────────
+# 출력 JSON 스키마(S2-j structured output) — 로컬(Ollama) 결정일 때 format= 제약 디코딩으로
+# 강제한다. 자유 텍스트·코드펜스·LaTeX 이스케이프·필수 필드 누락을 *문법 수준에서 원천 차단*.
+# 필수(required)는 결측 시 어차피 생성 실패(None 폴백)가 되는 4필드 + unit_codes만 최소로
+# 잡는다(과잉 제약은 모델과 싸움). enum(answer_format·answer_selection)·수치 범위(난이도)도
+# 문법으로 제약한다. 이 스키마는 *형식*만 보장한다 — 관대 파서(_extract_json)·조립 검증
+# (_assemble)·S2-a 게이트는 그대로 유지된다(이중 방어: 클라우드 경로·의미 오류는 여전히
+# 파서·게이트 소관).
+# ──────────────────────────────────────────────────────────────────────────
+_OUTPUT_JSON_SCHEMA: dict[str, object] = {
+    "type": "object",
+    "properties": {
+        "question_text": {"type": "string"},
+        "answer": {"type": "string"},
+        "answer_explanation": {"type": "string"},
+        "conditions": {
+            "anyOf": [
+                {"type": "string"},
+                {"type": "array", "items": {"type": "string"}},
+            ],
+        },
+        "answer_map": {"type": "object", "additionalProperties": {"type": "string"}},
+        "answer_selection": {"type": "string", "enum": sorted(_VALID_ROOT_SELECTIONS)},
+        "difficulty_overall": {"type": "number", "minimum": 1.0, "maximum": 5.0},
+        "unit_codes": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+        "answer_format": {"type": "string", "enum": [f.value for f in AnswerFormat]},
+        "achievement_standard_codes": {"type": "array", "items": {"type": "string"}},
+        "distractor_map": {"type": "array", "items": {"type": "object"}},
+        "concept_tags": {"type": "array", "items": {"type": "object"}},
+    },
+    # answer_selection을 required로 강제(S2-k) — 모델이 항상 근 선택을 선언하게 해 "선택 미명시"
+    # 유일성 강등을 없앤다(유일해면 unique). 오선언은 게이트가 failed로 안전 차단(수율 손실 감수).
+    # solution_steps는 스키마에서 뺀다 — 저작 산문은 Tier2 심볼릭 체인이 아니라 answer_explanation
+    # 소관(위 _assemble·S2-k). answer_map은 정확값(분수/정수)이어야 하나 이는 프롬프트로 강제한다
+    # (JSON schema로 "분수 문자열"을 문법 표현하기 어려움 — 하류 Tier1이 반올림 소수를 fail로 잡음).
+    "required": [
+        "question_text",
+        "answer",
+        "conditions",
+        "answer_map",
+        "answer_selection",
+        "unit_codes",
+    ],
+}
 
 # 유효하지 않은 JSON 백슬래시 이스케이프 탐지 — LLM이 발문·해설에 LaTeX(`\(`·`\)`·`\frac`·`\sqrt`
 # 등)를 넣으면 `json.loads`가 "Invalid \escape"로 거부한다(실 LLM 실측·Phaiakes9). 유효 이스케이프
@@ -154,21 +216,27 @@ _SYSTEM_PROMPT = """당신은 WhyMath의 **동등문제 저작자**입니다. �
 - **답이 유일하게 하나로 정해지는 문제**만 출제하세요 — 답이 여러 개면 기계가 검증할 수 없습니다.
 - 근이 둘인 이차방정식 등은 "**두 근 중 큰 근을 구하시오**"·"작은 근"·"두 근의 합"처럼 **답이
   하나가 되도록** 물으세요. `answer`는 단일 값, `answer_map`은 그 값 하나입니다.
+- **근을 고르는 문제는 `answer_selection` 필드를 반드시 넣으세요** — 큰 근이면 `"largest"`,
+  작은 근이면 `"smallest"`, 답이 유일하면(중근·유일해) `"unique"`. 방정식만으론 두 근이 다 성립해
+  기계가 "어느 근인지" 못 가리므로, 이 필드가 없으면 검수 대기로 빠집니다. **`answer`·`answer_map`
+  은 반드시 이 선택에 맞는 값이어야 합니다**(큰 근이라 했으면 실제로 더 큰 근을 답으로).
 
 ## 매번 다른 문제로 (생성 다양성 — 매우 중요)
 - 호출할 때마다 **서로 다른 문제**를 만드세요. **직전과 같은 계수·구조를 반복하지 마세요**
   (예 `x^2-8x+c`에서 상수항만 바꾸는 식의 얕은 변주 금지).
 - 다음을 **폭넓게 다양화**하세요:
   - **계수·상수항**: 이차·일차·상수항을 매번 다르게(특정 형태에 고착되지 말 것).
-  - **물음**: 큰 근 / 작은 근 / 두 근의 합 / 두 근의 곱 등을 번갈아 물으세요.
+  - **물음**: 큰 근 / 작은 근 / (유일하면) 그 근을 번갈아 물으세요. **답이 방정식의 실제 근이
+    되는 문제**만 내세요 — '두 근의 합/곱'처럼 답이 근이 아닌 문제는 기계 검산이 불가하니 피하세요.
   - **근의 종류**: 서로 다른 정수근 / 중근 / 유리근 등 유형을 다양하게 섞으세요.
 
 ## 출력 형식 — JSON 객체 하나만 (코드펜스·설명 없이)
-필드: question_text(발문·한국어), answer(단일 값 문자열), answer_explanation(간결 해설),
-conditions(정답 검산용 조건식·SymPy 표기·여러 개면 배열), answer_map(조건에 답을 대입할 치환맵),
-difficulty_overall(1.0~5.0 숫자), unit_codes(단원 코드 배열·최소 1개),
+필드(필수): question_text(발문·한국어), answer(단일 값 문자열), conditions(정답 검산용
+조건식·SymPy 표기·여러 개면 배열), answer_map(조건에 답을 대입할 치환맵),
+answer_selection(largest/smallest/unique — 항상 넣으세요), unit_codes(단원 코드 배열·최소 1개).
+필드(권장): answer_explanation(간결 해설), difficulty_overall(1.0~5.0 숫자),
 answer_format(자연수/분수/실수/식), achievement_standard_codes(성취기준 코드 배열).
-선택: distractor_map·solution_steps·concept_tags.
+선택: distractor_map·concept_tags.
 
 ### 예시 — *형식만* 참고하고 숫자·문맥은 반드시 새로 지어 다르게 만드세요(그대로 베끼지 말 것)
 {
@@ -177,6 +245,7 @@ answer_format(자연수/분수/실수/식), achievement_standard_codes(성취기
   "answer_explanation": "인수분해하면 (x-2)(x-4)=0 이고 두 근은 2와 4, 큰 근은 4.",
   "conditions": "x**2 - 6*x + 8 = 0",
   "answer_map": {"x": "4"},
+  "answer_selection": "largest",
   "difficulty_overall": 2.0,
   "unit_codes": ["QUAD-EQ"],
   "answer_format": "자연수",
@@ -185,6 +254,14 @@ answer_format(자연수/분수/실수/식), achievement_standard_codes(성취기
 
 ## 규칙
 - 수식은 SymPy 표기(`**`=거듭제곱·`*`=곱)로. `conditions`·`answer_map`은 기계 검산에 쓰이니 정확히.
+- **`conditions`는 맨 (부)등식 문자열만**: `"x**2 - 7*x + 12 = 0"` 형태 하나면 충분합니다.
+  `solve(...)`·`largest_root(...)` 같은 **함수 호출·리스트·프로그래밍 문법 절대 금지** — 근 선택은
+  `answer_selection` 필드로만 표현하고, 인수분해식 등 *같은 방정식을 중복*으로 넣지 마세요.
+- **`answer_map`의 값은 반드시 *정확한 수***(정수 `3`, 분수 `4/3`)로 쓰세요 — **반올림 소수
+  (`1.33`·`1.333`) 금지**. 근이 유리수면 분수로(`4/3`), 무리수면 SymPy 표기로(`sqrt(2)`,
+  `(1+sqrt(5))/2`). 반올림하면 대입 잔차가 0이 아니어서 기계 검산이 실패합니다. `answer`(사람이
+  읽는 값)는 소수로 써도 되지만 `answer_map`은 정확값이어야 합니다.
+- `conditions`에 `answer_map`을 대입하면 반드시 성립해야 합니다(**answer가 conditions의 해**).
 - **LaTeX 백슬래시(`\\(`·`\\)`·`\\frac`·`\\sqrt` 등) 절대 금지** — JSON이 깨집니다. 수식은
   `x^2`·`(x-2)(x-3)`처럼 일반 텍스트로 쓰고, 문자열에 백슬래시 자체를 넣지 마세요.
 - 발문에 예시 문구·설명·플레이스홀더("발문", "자작", "Calculation" 등)를 그대로 쓰지 말고
@@ -213,6 +290,7 @@ class LLMEquivalentProblemGenerator:
         subscription: str = "free",
         difficulty: str | None = None,
         temperature: float = 0.9,
+        authoring_family: ModelFamily | None = ModelFamily.GENERAL,
         slug_prefix: str = "wm-gen",
         subject: Subject = Subject.공통,
         curriculum_version: Curriculum = Curriculum.REVISION_2022,
@@ -239,6 +317,13 @@ class LLMEquivalentProblemGenerator:
                 문제(예 `x^2-8x+c`·상수만 변주)를 반복하는 mode collapse가 관측됐다. 0.9는
                 다양성과 형식 안정의 균형점이다: 더 높이면(>1.2) JSON 붕괴·수식 오류가 급증하고,
                 낮추면 다시 collapse로 회귀한다. 값을 provider.generate(temperature=)로 전달한다.
+            authoring_family: **저작용 로컬 모델 패밀리**(S2-h·기본 GENERAL). 라우터는
+                task_type='generate'를 MATH 패밀리(qwen2-math)로 보내지만, qwen2-math는 *풀이*
+                특화라 저작 시 같은 문제를 반복한다(mode collapse — 온도로도 안 풀림, Phaiakes9
+                실측). 동등문제 저작은 본질적으로 instruction-following 과업이고 수학 정확성은 하류
+                SymPy 게이트가 검증하므로 로컬 저작은 GENERAL(qwen2.5)로 태운다. 라우터의 비용·
+                크기·모드 결정은 그대로 두고 *로컬 FAST/MID 결정의 패밀리 축만* 이 값으로 바꾼다
+                (불변식 4 유지·`_decide_routing`). None이면 라우터 결정을 그대로 쓴다(옵트아웃).
             slug_prefix: 안정 slug 접두사(결정론 해시와 결합해 멱등 upsert 키 생성).
             subject·curriculum_version·valid_from_year: Problem 필수 메타 기본값(스펙 밖·저작 배선).
             fallback_unit_codes: LLM이 unit_codes를 안 주면 쓰는 폴백(비면 결측 시 생성 실패).
@@ -257,6 +342,10 @@ class LLMEquivalentProblemGenerator:
         self._subscription = subscription
         self._difficulty = difficulty
         self._temperature = temperature
+        self._authoring_family = authoring_family
+        # 배치용 지속 이벤트 루프(지연 생성) — asyncio.run의 루프 생성·종료 반복이 provider의
+        # 캐시 커넥션 풀을 죽여 배치가 격회 실패하던 실측 회귀 방어(_invoke·_ensure_loop 참조).
+        self._loop: asyncio.AbstractEventLoop | None = None
         self._slug_prefix = slug_prefix
         self._subject = subject
         self._curriculum_version = curriculum_version
@@ -272,7 +361,7 @@ class LLMEquivalentProblemGenerator:
         돌려 오케스트레이터가 `generation_failed`로 정직히 처리하게 한다.
         """
         prompt = self._build_user_prompt(spec)
-        decision = Router().route(self._routing_request(spec))
+        decision = self._decide_routing(spec)
         try:
             raw = self._invoke(prompt, decision)
         except Exception as exc:  # noqa: BLE001 — provider 장애 시 배치 크래시 금지·안전 폴백.
@@ -297,23 +386,92 @@ class LLMEquivalentProblemGenerator:
     def _invoke(self, prompt: str, decision: RoutingDecision) -> str:
         """provider.generate(async)를 sync 경계에서 실행 — 오프라인 배치 문맥 전용.
 
-        오케스트레이터(`run_batch`)는 sync라 여기서 `asyncio.run`으로 코루틴을 완주시킨다
-        (LLMTutorPolicy 테스트의 `asyncio.run(next_action)` 경계 미러). 이미 러닝 루프가 있는
+        오케스트레이터(`run_batch`)는 sync라 여기서 코루틴을 완주시킨다. **인스턴스 전용 지속
+        이벤트 루프**(`_ensure_loop`)를 쓴다 — 종전 `asyncio.run`(호출마다 새 루프 생성·종료)은
+        배치에서 provider가 캐시한 AsyncClient(httpx 커넥션 풀)가 죽은 루프에 묶여 다음 호출이
+        "Event loop is closed"로 격회 실패하는 실측 회귀를 냈다(Phaiakes9 run_batch n=20 —
+        단건 프로세스에선 절대 안 드러나는 배치 전용 결함). 같은 루프를 생성기 수명 동안
+        재사용하면 커넥션 풀이 산 루프에 남아 전 회차가 정상 동작한다. 이미 러닝 루프가 있는
         async 문맥에서의 호출은 이 배치 좌석의 계약 밖이다(명확한 RuntimeError로 드러남).
 
         `temperature=self._temperature`(기본 0.9)를 실어 *생성 다양성*을 확보한다 — 튜터링과
         달리 콘텐츠 저작은 고온도가 필요하다(mode collapse 방어·__init__ temperature 참조).
+
+        `json_schema`(S2-j structured output)는 **LOCAL 결정일 때만** 싣는다 — Ollama는
+        format= 제약 디코딩으로 출력을 스키마에 맞는 JSON으로 문법 강제하고, 클라우드
+        (Anthropic)는 문법 제약이 없어 스키마를 주면 명확히 거부하므로(조용한 무시 금지)
+        클라우드 경로는 종전처럼 프롬프트+관대 파서(_extract_json)로 동작한다(이중 방어).
         """
-        return asyncio.run(
-            self._provider.generate(prompt, _SYSTEM_PROMPT, decision, temperature=self._temperature)
+        is_local = decision.cost_tier == CostTier.LOCAL.value
+        schema = _OUTPUT_JSON_SCHEMA if is_local else None
+        return self._ensure_loop().run_until_complete(
+            self._provider.generate(
+                prompt,
+                _SYSTEM_PROMPT,
+                decision,
+                temperature=self._temperature,
+                json_schema=schema,
+            )
+        )
+
+    def _ensure_loop(self) -> asyncio.AbstractEventLoop:
+        """인스턴스 전용 이벤트 루프 지연 생성 — 배치 전 회차가 *같은 살아있는 루프*를 공유한다.
+
+        provider의 캐시된 async 클라이언트(커넥션 풀)가 루프에 묶이므로, 루프를 호출마다 닫으면
+        (asyncio.run) 배치가 격회로 죽는다(_invoke docstring 실측). 루프는 생성기 수명과 함께
+        가고 프로세스 종료 시 정리된다(오프라인 배치 CLI 문맥·장수 서버 문맥이 아님).
+        """
+        if self._loop is None or self._loop.is_closed():
+            self._loop = asyncio.new_event_loop()
+        return self._loop
+
+    # ── 라우팅 결정(라우터 경유 + 저작 패밀리 선호) ─────────────────────
+    def _decide_routing(self, spec: EquivalenceSpec) -> RoutingDecision:
+        """라우터 결정 + 저작 패밀리 선호 적용(S2-h).
+
+        라우터는 task_type='generate'를 MATH 패밀리(qwen2-math)로 보내지만, qwen2-math는 문제를
+        *푸는* 데 특화돼 저작 시 같은 계수를 반복한다(mode collapse — 온도↑로도 안 풀림,
+        Phaiakes9 실측). 동등문제 저작은 본질적으로 instruction-following 과업이고 수학 정확성은
+        하류 SymPy 게이트(S2-a)가 검증하므로, 로컬 저작은 GENERAL(qwen2.5)로 태운다.
+
+        라우터의 *비용·크기·모드* 결정은 그대로 존중한다 — 오직 **로컬 FAST/MID 결정의 패밀리
+        축만** `authoring_family`로 바꾼다(불변식 4가 성립하는 지점뿐). QUALITY(27b·패밀리 무관)·
+        CLOUD_*(축3 없음)·이미 원하는 패밀리·`authoring_family=None`(옵트아웃)이면 라우터 결정을
+        그대로 반환한다. 재구성 시 RoutingDecision 검증기가 다시 돌아 불변식을 재확인한다.
+
+        전역 라우터 정책은 건드리지 않는다(scene·visualization 등 다른 'generate' 소비처 무영향)
+        — 저작 선호는 이 생성기 스코프에 국한한다.
+        """
+        decision = Router().route(self._routing_request(spec))
+        if self._authoring_family is None:
+            return decision
+        # 필드는 use_enum_values=True라 문자열일 수 있으나, CostTier/LocalModelTier는 str-Enum이라
+        # `.value` 비교가 enum·문자열 양쪽에 성립한다(str 서브클래스 동치).
+        is_local = decision.cost_tier == CostTier.LOCAL.value
+        family_applicable = is_local and decision.local_model in (
+            LocalModelTier.FAST.value,
+            LocalModelTier.MID.value,
+        )
+        if not family_applicable or decision.local_family == self._authoring_family.value:
+            return decision  # 패밀리 축이 없는 티어(QUALITY·CLOUD)·이미 원하는 패밀리 → 그대로
+        return RoutingDecision(
+            cost_tier=decision.cost_tier,
+            local_family=self._authoring_family,  # 저작 패밀리로 갈아탐(GENERAL=qwen2.5)
+            local_model=decision.local_model,
+            mode=decision.mode,
+            reason=f"{decision.reason} → 저작:{self._authoring_family.value}",
+            est_latency_ms=decision.est_latency_ms,
+            est_cost_krw=decision.est_cost_krw,
         )
 
     # ── 라우팅 신호 ────────────────────────────────────────────────────
     def _routing_request(self, spec: EquivalenceSpec) -> RoutingRequest:
-        """생성 호출의 라우팅 신호 — task_type='generate'(→ MATH 패밀리·수학 저작).
+        """생성 호출의 라우팅 신호 — task_type='generate'.
 
-        난이도는 스펙에서 파생(생성자 override 우선), 다단계 추론 필요(정답이 조건을 만족하는
-        새 문제 구성). 무료·예산 0이면 라우터가 LOCAL로 강제한다(Phaiakes9 로컬 우선).
+        라우터는 이 신호로 비용·크기·모드를 정한다. 패밀리 축은 기본이 MATH지만, 저작에는
+        GENERAL이 낫기에 `_decide_routing`이 로컬 FAST/MID 결정의 패밀리만 `authoring_family`로
+        갈아탄다(라우터 결정 후처리). 난이도는 스펙에서 파생(생성자 override 우선), 다단계 추론
+        필요(정답이 조건을 만족하는 새 문제 구성). 무료·예산 0이면 라우터가 LOCAL로 강제한다.
         """
         difficulty = self._difficulty or self._difficulty_label(spec.difficulty_overall)
         return RoutingRequest(
@@ -414,12 +572,22 @@ class LLMEquivalentProblemGenerator:
         answer_explanation = self._opt_str(data, "answer_explanation")
         conditions = self._parse_conditions(data.get("conditions"))
         answer_map = self._parse_answer_map(data.get("answer_map"))
+        answer_selection = self._parse_answer_selection(data.get("answer_selection"))
+        # derive-and-verify(S2-n) — 근 선택 문제는 정답을 우리가 유도해 대조·정확값 정규화.
+        answer, answer_map = self._derive_and_normalize(
+            answer, answer_map, conditions, answer_selection
+        )
         difficulty_overall = self._parse_difficulty(data.get("difficulty_overall"), spec)
         unit_codes = self._parse_unit_codes(data.get("unit_codes"))
         answer_format = self._parse_answer_format(data.get("answer_format"), spec)
         standard_codes = self._parse_standard_codes(data.get("achievement_standard_codes"), spec)
         distractor_map = self._parse_distractor_map(data.get("distractor_map"), spec)
-        solution_steps = self._parse_solution_steps(data.get("solution_steps"))
+        # 저작 LLM은 *검증 가능한 Tier2 심볼릭 체인*(expr_before ≡ expr_after)을 만들지 않는다 —
+        # 모델이 내는 solution_steps는 산문 설명("인수분해하면…")이라 Tier2(verify_solution)에
+        # 넣으면 전부 unverifiable로 잡혀 정답 문제까지 검수필요로 강등된다(S2-k·Phaiakes9 실측).
+        # 답 정확성은 Tier1(대입)+근 선택(S2-i)이 이미 확정하고, 사람용 설명은 answer_explanation
+        # (위생 게이트가 거짓 등식 검사)에 담긴다. 검증된 단계 체인은 WH-S 솔버의 몫이다.
+        solution_steps = None
         concept_tags = self._parse_concept_tags(data.get("concept_tags"))
         slug = self._stable_slug(question_text, answer, standard_codes)
 
@@ -456,6 +624,7 @@ class LLMEquivalentProblemGenerator:
             provenance=provenance,
             conditions=conditions,
             answer_map=answer_map,
+            answer_selection=answer_selection,
             solution_steps=solution_steps,
             concept_tags=concept_tags,
         )
@@ -477,14 +646,79 @@ class LLMEquivalentProblemGenerator:
 
     @staticmethod
     def _parse_conditions(value: object) -> str | list[str]:
-        """조건 — 문자열 또는 문자열 배열. 무효면 ValueError(정확성 검산 재료 결측)."""
+        """조건 — 문자열 또는 문자열 배열 + **닫힌 검증 DSL 강제**(S2-m).
+
+        결측·무효는 ValueError(정확성 검산 재료 결측). 각 조건은 `condition_dsl_violation`으로
+        언어 폐쇄를 검사한다 — 실 LLM이 흘리는 pseudo-symbolic(`largest_root(2,8)==8`·
+        `solve(...)==[6,4]`·파이썬 문법 혼입)은 검증기가 판정할 수 없어 needs_review로 새던 것을
+        조립 단계에서 거부해(생성 실패·재생성) 사람 검수 큐 오염을 막는다.
+        """
+        items: list[str]
         if isinstance(value, str) and value.strip():
-            return value.strip()
-        if isinstance(value, list):
+            items = [value.strip()]
+            single = True
+        elif isinstance(value, list):
             items = [str(v).strip() for v in value if isinstance(v, str) and str(v).strip()]
-            if items:
-                return items
-        raise ValueError("conditions 결측/무효 — 정확성 검산 재료가 없습니다.")
+            single = False
+            if not items:
+                raise ValueError("conditions 결측/무효 — 정확성 검산 재료가 없습니다.")
+        else:
+            raise ValueError("conditions 결측/무효 — 정확성 검산 재료가 없습니다.")
+        for item in items:
+            violation = condition_dsl_violation(item)
+            if violation is not None:
+                raise ValueError(f"conditions DSL 위반({item!r}) — {violation}")
+        return items[0] if single else items
+
+    @staticmethod
+    def _derive_and_normalize(
+        answer: str,
+        answer_map: dict[str, str],
+        conditions: str | list[str],
+        answer_selection: str | None,
+    ) -> tuple[str, dict[str, str]]:
+        """derive-and-verify(S2-n) — LLM 답을 신뢰하지 않고 (방정식+선택)에서 정답을 유도해 대조.
+
+        근 선택 문제(answer_selection 있음·단일변수 answer_map)는 정답이 (방정식, 선택)만으로
+        결정론 유도 가능하다(`derive_selected_root`). 유도값과 LLM 답을 수치 대조해:
+          - **일치**(부동소수 표기 차이 포함): answer_map·answer를 **유도된 정확값**(예 `'4/3'`)
+            으로 정규화한다 — 반올림 소수(`1.3333…`) display·검산 실패를 원천 제거하고 canonical
+            정답의 소유권을 코드가 가진다(리뷰 "canonical_answer 분리" 채택).
+          - **불일치**(모델이 틀린 근·산술 붕괴·과도한 반올림): ValueError → 생성 실패(None 폴백·
+            배치 재생성). 단순 repair(답 몰래 교체)는 하지 않는다 — answer_explanation 등 본문이
+            틀린 값을 참조할 수 있어 조용한 수정은 모순 콘텐츠를 만든다(정직한 거부·재생성).
+        유도 불가(파라미터·연립·비적용)는 무변경 통과 — 게이트가 기존 규약대로 판정한다.
+        """
+        if answer_selection is None or len(answer_map) != 1:
+            return answer, answer_map
+        derived = derive_selected_root(conditions, answer_selection)
+        if derived is None:
+            return answer, answer_map  # 유도 불가 — 게이트에 판정 위임(보수적).
+        var, given = next(iter(answer_map.items()))
+        try:
+            given_value = complex(sympy.sympify(given, convert_xor=True).evalf())
+            derived_value = complex(sympy.sympify(derived, convert_xor=True).evalf())
+        except Exception:  # noqa: BLE001 — 답 파싱 불가는 정규화 포기(게이트 위임)
+            return answer, answer_map
+        # 부동소수 표기 차이만 흡수(상대 1e-6) — 반올림 소수(1.33)·틀린 근은 불일치로 거부.
+        tolerance = max(1e-6, 1e-6 * abs(derived_value))
+        if abs(given_value - derived_value) > tolerance:
+            raise ValueError(
+                f"derive-and-verify 불일치 — LLM 답({given})이 유도 정답({derived})과 다름"
+                f"(근 선택 {answer_selection}·오답 원천 거부)."
+            )
+        return derived, {var: derived}
+
+    @staticmethod
+    def _parse_answer_selection(value: object) -> str | None:
+        """근 선택(S2-i) — largest/smallest/unique만 허용, 그 외·결측은 None(선택 요구 없음).
+
+        게이트가 "어느 근인가"를 검증하는 신호다(`verify_root_selection`). 미지 값은 조용히
+        None으로 떨궈(오분류 방지) 다근 유일성 강등 경로에 맡긴다(조용한 오채택 금지).
+        """
+        if isinstance(value, str) and value.strip() in _VALID_ROOT_SELECTIONS:
+            return value.strip()
+        return None
 
     @staticmethod
     def _parse_answer_map(value: object) -> dict[str, str]:
@@ -564,15 +798,6 @@ class LLMEquivalentProblemGenerator:
                 DistractorEntry(choice_index=idx, misconception_id=mid.strip(), op_code=op_code)
             )
         return entries
-
-    @staticmethod
-    def _parse_solution_steps(value: object) -> list[str] | None:
-        """풀이 단계(선택) — 문자열 배열, 없거나 비면 None(미제공)."""
-        if isinstance(value, list):
-            steps = [str(v).strip() for v in value if isinstance(v, str) and str(v).strip()]
-            if steps:
-                return steps
-        return None
 
     @staticmethod
     def _parse_concept_tags(value: object) -> list[ConceptTag]:

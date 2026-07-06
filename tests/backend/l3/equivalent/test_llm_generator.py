@@ -17,8 +17,9 @@ FakeProvider(스크립트된 JSON)로 생성기 계약을 검증한다 — 실 �
 
 from __future__ import annotations
 
+import asyncio
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 import pytest
 
@@ -33,7 +34,11 @@ from whymath_backend.l3.equivalent.acceptance import (
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.l3.equivalent.llm_generator import LLMEquivalentProblemGenerator
 from whymath_backend.l3.equivalent.orchestrator import run_equivalent_generation
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import (
+    LocalModelTier,
+    ModelFamily,
+    RoutingDecision,
+)
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.schema.enums import AnswerFormat, LicenseType, SourceType
 
@@ -42,14 +47,16 @@ _STANDARD = "[12미적01-01]"
 _MISCONCEPTION = "distribution-over-power"  # 실 카탈로그 id
 _CATALOG = {mid: m.name_kr for mid, m in CATALOG_BY_ID.items()}
 
-# 정상 응답 JSON — x=3은 x²-5x+6=0의 근(9-15+6=0) → Tier1 pass. 발문·해설은 위생-청정(거짓 등식 0).
+# 정상 응답 JSON — 두 근 2·3 중 큰 근 3. answer_selection=largest로 근 선택(S2-i)을 명시해
+# Tier1 pass + 근 선택 확정 → verified. 발문·해설은 위생-청정(거짓 등식 0).
 _HAPPY = json.dumps(
     {
-        "question_text": "주어진 이차 방정식의 자연수 근을 구하시오.",
+        "question_text": "이차방정식 x^2 - 5x + 6 = 0 의 두 근 중 큰 근을 구하시오.",
         "answer": "3",
-        "answer_explanation": "조건을 만족하는 자연수 근을 구하면 됩니다.",
+        "answer_explanation": "인수분해하면 (x-2)(x-3)=0, 두 근은 2와 3, 큰 근은 3.",
         "conditions": "x**2 - 5*x + 6 = 0",
         "answer_map": {"x": "3"},
+        "answer_selection": "largest",
         "difficulty_overall": 3.0,
         "unit_codes": ["CAL-INT-DEF"],
         "answer_format": "자연수",
@@ -75,6 +82,9 @@ class FakeProvider:
         self._index = 0
         self.calls: list[tuple[str, str]] = []
         self.temperatures: list[float | None] = []
+        self.decisions: list[RoutingDecision] = []
+        self.json_schemas: list[Mapping[str, object] | None] = []
+        self.loops: list[object] = []
 
     async def generate(
         self,
@@ -84,9 +94,13 @@ class FakeProvider:
         *,
         images: Sequence[str] | None = None,
         temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
     ) -> str:
         self.calls.append((prompt, system))
         self.temperatures.append(temperature)
+        self.decisions.append(decision)
+        self.json_schemas.append(json_schema)
+        self.loops.append(asyncio.get_running_loop())
         if self._index < len(self._responses):
             out = self._responses[self._index]
             self._index += 1
@@ -105,6 +119,7 @@ class RaisingProvider:
         *,
         images: Sequence[str] | None = None,
         temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
     ) -> str:
         raise RuntimeError("provider 다운(테스트)")
 
@@ -139,7 +154,8 @@ class TestAssembly:
         # 검산 재료 정합.
         assert candidate.conditions == "x**2 - 5*x + 6 = 0"
         assert candidate.answer_map == {"x": "3"}
-        assert candidate.problem.question_text == "주어진 이차 방정식의 자연수 근을 구하시오."
+        assert candidate.answer_selection == "largest"  # 근 선택(S2-i) 파싱
+        assert candidate.problem.question_text == json.loads(_HAPPY)["question_text"]
         assert candidate.problem.answer == "3"
 
     def test_slug_is_stable_and_deterministic(self) -> None:
@@ -174,6 +190,33 @@ class TestAssembly:
         assert candidate is not None
         assert candidate.problem.distractor_map is not None
         assert candidate.problem.distractor_map[0].misconception_id == _MISCONCEPTION
+
+    def test_authored_solution_steps_are_dropped(self) -> None:
+        # S2-k: 모델이 산문 solution_steps를 내도 후보엔 싣지 않는다(Tier2 심볼릭 체인이 아님).
+        # 답 정확성은 Tier1+근 선택이 확정하고, 설명은 answer_explanation 소관.
+        payload = json.loads(_HAPPY)
+        payload["solution_steps"] = ["인수분해하면 (x-2)(x-3)=0", "두 근은 2와 3", "큰 근은 3"]
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.solution_steps is None
+
+    def test_gate_verifies_without_tier2_downgrade(self) -> None:
+        # S2-k 회귀 봉인 — 정답 큰-근 문제가 산문 단계 때문에 검수필요로 강등되지 않는다.
+        payload = json.loads(_HAPPY)
+        payload["solution_steps"] = ["인수분해하면 (x-2)(x-3)=0", "큰 근은 3"]  # 산문
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        verdict = evaluate_equivalent_candidate(
+            _spec(),
+            candidate.problem,
+            provenance=candidate.provenance,
+            conditions=candidate.conditions,
+            answer_map=candidate.answer_map,
+            answer_selection=candidate.answer_selection,
+            solution_steps=candidate.solution_steps,
+        )
+        assert verdict.verification == "verified"
+        assert verdict.accepted is True
 
     def test_spec_not_leaked_verbatim_but_ids_present(self) -> None:
         provider = FakeProvider([_HAPPY])
@@ -228,6 +271,250 @@ class TestGenerationDiversity:
 
 
 # ──────────────────────────────────────────────────────────────────────
+# S2-j: structured output — LOCAL 결정이면 출력 JSON 스키마를 실어 문법 강제.
+# ──────────────────────────────────────────────────────────────────────
+class TestStructuredOutput:
+    def test_local_decision_sends_json_schema(self) -> None:
+        # free·예산0 → 라우터가 LOCAL 결정 → 스키마가 provider로 실린다(Ollama format= 제약).
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        schema = provider.json_schemas[0]
+        assert schema is not None
+        assert schema["type"] == "object"
+
+    def test_schema_requires_hard_fields(self) -> None:
+        # 결측 시 생성 실패가 되는 필수 필드 + answer_selection(S2-k 강제)이 required로 문법 강제.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        schema = provider.json_schemas[0]
+        assert schema is not None
+        required = schema["required"]
+        assert isinstance(required, list)
+        for field in (
+            "question_text",
+            "answer",
+            "conditions",
+            "answer_map",
+            "answer_selection",
+            "unit_codes",
+        ):
+            assert field in required
+
+    def test_schema_omits_solution_steps(self) -> None:
+        # S2-k: 저작 산문은 Tier2 심볼릭 체인이 아니므로 스키마가 solution_steps를 유도하지 않는다.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        schema = provider.json_schemas[0]
+        assert schema is not None
+        props = schema["properties"]
+        assert isinstance(props, dict)
+        assert "solution_steps" not in props
+
+    def test_schema_constrains_enums(self) -> None:
+        # answer_selection(S2-i)·answer_format이 enum으로 문법 제약된다.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        schema = provider.json_schemas[0]
+        assert schema is not None
+        props = schema["properties"]
+        assert isinstance(props, dict)
+        assert props["answer_selection"]["enum"] == ["largest", "smallest", "unique"]
+        assert "자연수" in props["answer_format"]["enum"]
+
+    def test_lenient_parser_still_backstops(self) -> None:
+        # 스키마 강제와 무관하게 관대 파서는 유지된다(이중 방어) — 코드펜스 응답도 구제.
+        fenced = f"```json\n{_HAPPY}\n```"
+        candidate = _gen(FakeProvider([fenced])).generate(_spec())
+        assert candidate is not None
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 배치 동기 경계 — 전 회차가 같은 살아있는 이벤트 루프를 공유(격회 실패 회귀 봉인).
+# ──────────────────────────────────────────────────────────────────────
+class TestBatchEventLoopReuse:
+    def test_repeated_generates_share_one_living_loop(self) -> None:
+        # 실측 회귀(Phaiakes9 run_batch): asyncio.run이 호출마다 루프를 닫아 provider의 캐시
+        # 커넥션 풀이 죽은 루프에 묶임 → "Event loop is closed" 격회 실패. 같은 생성기의 연속
+        # 호출은 *같은 살아있는 루프*를 재사용해야 한다.
+        provider = FakeProvider([_HAPPY, _HAPPY, _HAPPY])
+        gen = _gen(provider)
+        for _ in range(3):
+            gen.generate(_spec())
+        assert len(provider.loops) == 3
+        assert len(set(map(id, provider.loops))) == 1  # 세 호출 모두 동일 루프
+        loop = provider.loops[0]
+        assert isinstance(loop, asyncio.AbstractEventLoop)
+        assert not loop.is_closed()  # 호출 후에도 살아 있음(커넥션 풀 유지)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# S2-m: condition DSL 폐쇄 — pseudo-symbolic 조건은 조립 거부(생성 실패·재생성).
+# ──────────────────────────────────────────────────────────────────────
+class TestConditionDslClosure:
+    def test_undefined_function_condition_rejected(self) -> None:
+        # 실측 회귀: conditions에 'largest_root(2, 8) == 8' — 검증 불가 pseudo-DSL → None.
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = ["x**2 - 5*x + 6 = 0", "largest_root(2, 8) == 8"]
+        assert _gen(FakeProvider([json.dumps(payload)])).generate(_spec()) is None
+
+    def test_solve_pseudo_dsl_rejected(self) -> None:
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "solve(x**2 - 5*x + 6, x) == [2, 3]"
+        assert _gen(FakeProvider([json.dumps(payload)])).generate(_spec()) is None
+
+    def test_python_syntax_condition_rejected(self) -> None:
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "x**2 - 8*x + answer_map['k'] = 0"
+        assert _gen(FakeProvider([json.dumps(payload)])).generate(_spec()) is None
+
+    def test_plain_equation_still_assembles(self) -> None:
+        # 적법한 맨 등식은 종전대로 조립(회귀 0).
+        candidate = _gen(FakeProvider([_HAPPY])).generate(_spec())
+        assert candidate is not None
+
+    def test_system_prompt_forbids_pseudo_dsl(self) -> None:
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        _, system = provider.calls[0]
+        assert "solve(" in system  # 금지 예시 명시
+        assert "largest_root(" in system
+
+
+# ──────────────────────────────────────────────────────────────────────
+# S2-n: derive-and-verify — 근 선택 문제는 정답을 유도해 대조·정확값 정규화.
+# ──────────────────────────────────────────────────────────────────────
+class TestDeriveAndVerify:
+    def test_wrong_root_rejected_at_assembly(self) -> None:
+        # 실측 회귀: 2x²-7x+3=0 큰 근은 3인데 모델이 3.5 — 유도 정답과 불일치 → 조립 거부(None).
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "2*x**2 - 7*x + 3 = 0"
+        payload["answer_map"] = {"x": "3.5"}
+        payload["answer"] = "3.5"
+        assert _gen(FakeProvider([json.dumps(payload)])).generate(_spec()) is None
+
+    def test_rounded_decimal_rejected(self) -> None:
+        # 반올림 소수(1.33 vs 4/3) — 대입 잔차가 0이 아니게 되는 부정확 답 → 조립 거부.
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "3*x**2 - 7*x + 4 = 0"
+        payload["answer_map"] = {"x": "1.33"}
+        payload["answer"] = "1.33"
+        assert _gen(FakeProvider([json.dumps(payload)])).generate(_spec()) is None
+
+    def test_float_representation_normalized_to_exact(self) -> None:
+        # 부동소수 표기(1.3333…)는 유도 정확값 '4/3'으로 정규화 — display·검산 모두 canonical.
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "3*x**2 - 7*x + 4 = 0"
+        payload["answer_map"] = {"x": "1.3333333333333333"}
+        payload["answer"] = "1.3333333333333333"
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_map == {"x": "4/3"}
+        assert candidate.problem.answer == "4/3"
+
+    def test_exact_answer_stays_and_gate_accepts(self) -> None:
+        # 이미 정확값이면 그대로(4/3→4/3) + 게이트 verified·accepted(정규화가 검산을 돕는다).
+        payload = json.loads(_HAPPY)
+        payload["conditions"] = "3*x**2 - 7*x + 4 = 0"
+        payload["answer_map"] = {"x": "4/3"}
+        payload["answer"] = "1.333"
+        payload["answer_format"] = "분수"
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_map == {"x": "4/3"}
+        assert candidate.problem.answer == "4/3"  # display도 canonical로 정규화
+        verdict = evaluate_equivalent_candidate(
+            _spec(answer_format=AnswerFormat.분수),
+            candidate.problem,
+            provenance=candidate.provenance,
+            conditions=candidate.conditions,
+            answer_map=candidate.answer_map,
+            answer_selection=candidate.answer_selection,
+        )
+        assert verdict.verification == "verified"
+
+    def test_underivable_passes_through_to_gate(self) -> None:
+        # 유도 불가(선택 없음)면 무변경 통과 — 게이트가 기존 규약대로 판정(보수적).
+        payload = json.loads(_HAPPY)
+        del payload["answer_selection"]
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_map == {"x": "3"}  # 무변경
+
+
+# ──────────────────────────────────────────────────────────────────────
+# S2-i: 근 선택(answer_selection) 파싱 + 프롬프트 지시.
+# ──────────────────────────────────────────────────────────────────────
+class TestRootSelectionParsing:
+    def test_answer_selection_parsed(self) -> None:
+        candidate = _gen(FakeProvider([_HAPPY])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_selection == "largest"
+
+    def test_missing_answer_selection_is_none(self) -> None:
+        payload = json.loads(_HAPPY)
+        del payload["answer_selection"]
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_selection is None
+
+    def test_invalid_answer_selection_dropped_to_none(self) -> None:
+        payload = json.loads(_HAPPY)
+        payload["answer_selection"] = "biggest"  # 미지 값 — 조용히 None으로 떨군다.
+        candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
+        assert candidate is not None
+        assert candidate.answer_selection is None
+
+    def test_system_prompt_instructs_answer_selection(self) -> None:
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        _, system = provider.calls[0]
+        assert "answer_selection" in system
+        assert "largest" in system
+
+
+# ──────────────────────────────────────────────────────────────────────
+# S2-h: 저작용 로컬 패밀리 — 기본 GENERAL(qwen2.5)로 라우팅(qwen2-math mode collapse 회피).
+# ──────────────────────────────────────────────────────────────────────
+class TestAuthoringFamily:
+    def test_default_routes_local_generation_to_general_family(self) -> None:
+        # 라우터는 task_type='generate'를 MATH로 보내지만, 저작은 GENERAL이 낫다 →
+        # 기본값이 GENERAL로 로컬 저작 패밀리를 갈아탄다(free·예산0 → 라우터가 LOCAL 결정).
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        decision = provider.decisions[0]
+        assert decision.cost_tier == "local"  # free·예산0 → 로컬 확정
+        assert decision.local_family == ModelFamily.GENERAL.value  # MATH가 아니라 GENERAL
+        assert decision.local_model in (LocalModelTier.FAST.value, LocalModelTier.MID.value)
+
+    def test_medium_difficulty_uses_general_mid_qwen25_7b(self) -> None:
+        # medium 난이도(기본 스펙 3.0) → 라우터가 MID를 고르고, 패밀리는 GENERAL로 갈아탄다
+        # ⇒ (GENERAL, MID) = qwen2.5:7b(저작용 최적 로컬 모델).
+        provider = FakeProvider([_HAPPY])
+        _gen(provider).generate(_spec())
+        decision = provider.decisions[0]
+        assert decision.local_family == ModelFamily.GENERAL.value
+        assert decision.local_model == LocalModelTier.MID.value
+
+    def test_opt_out_keeps_router_default_math_family(self) -> None:
+        # authoring_family=None이면 라우터 결정을 그대로 쓴다(옵트아웃) → MATH 유지.
+        provider = FakeProvider([_HAPPY])
+        _gen(provider, authoring_family=None).generate(_spec())
+        decision = provider.decisions[0]
+        assert decision.local_family == ModelFamily.MATH.value
+
+    def test_explicit_math_family_override_is_honored(self) -> None:
+        # 명시적으로 MATH를 요청하면 그대로 MATH(선호를 강제하지 않고 존중).
+        provider = FakeProvider([_HAPPY])
+        _gen(provider, authoring_family=ModelFamily.MATH).generate(_spec())
+        assert provider.decisions[0].local_family == ModelFamily.MATH.value
+
+    def test_family_override_still_assembles_candidate(self) -> None:
+        # 패밀리 갈아타기가 결정을 깨지 않고(불변식 4 유지) 후보 조립이 정상 동작한다.
+        candidate = _gen(FakeProvider([_HAPPY])).generate(_spec())
+        assert isinstance(candidate, CandidateProblem)
+
+
+# ──────────────────────────────────────────────────────────────────────
 # ② 생성기 → S2-a 게이트 결선(accepted=True).
 # ──────────────────────────────────────────────────────────────────────
 class TestGatePasses:
@@ -240,6 +527,7 @@ class TestGatePasses:
             provenance=candidate.provenance,
             conditions=candidate.conditions,
             answer_map=candidate.answer_map,
+            answer_selection=candidate.answer_selection,  # 근 선택(S2-i) 결선
             solution_steps=candidate.solution_steps,
         )
         assert verdict.accepted is True

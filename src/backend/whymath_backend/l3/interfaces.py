@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Protocol, runtime_checkable
 
 from whymath_backend.l3.models import RoutingDecision
@@ -30,6 +30,7 @@ class LLMProvider(Protocol):
         *,
         images: Sequence[str] | None = None,
         temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
     ) -> str:
         """라우터 결정(decision)에 따라 응답을 생성한다(미구현).
 
@@ -42,6 +43,14 @@ class LLMProvider(Protocol):
         바람직한 호출부는 지정하지 않아 종전 그대로다). 값을 주면(예 동등문제 저작=0.9) 제공자가
         그 온도로 호출한다. 온도를 지원하지 않는 백엔드(예 Opus 4.7·temperature 거부)는 이를
         조용히 무시하지 않고 호출부가 지정하지 않도록 하는 것이 계약이다(아래 각 제공자 주석).
+
+        `json_schema`(출력 JSON 스키마)는 *structured output 문법 강제*용 *선택적* 입력이다
+        (S2-j). None(기본)이면 자유 텍스트 생성 — **기존 동작 무변경**. 스키마를 주면 제공자가
+        출력을 그 스키마에 맞는 JSON으로 *문법 수준에서 제약*한다(Ollama `format=` 제약 디코딩).
+        문법 제약을 지원하지 않는 백엔드(예 Anthropic plain messages)는 *조용히 무시하지 않고*
+        명확한 오류를 던진다 — 호출부가 백엔드에 맞게 지정 여부를 결정하는 것이 계약이다(예
+        동등문제 저작은 LOCAL 결정일 때만 스키마를 싣고, 클라우드 경로는 프롬프트+관대 파서로
+        동작). 문법 제약은 *형식*만 보장하며 내용의 수학적 진실은 여전히 하류 게이트가 검증한다.
         """
         ...
 

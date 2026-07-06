@@ -8,7 +8,12 @@ pass(직접 대입)·fail(틀린 답)·파라미터 샘플링 pass/fail(자유�
 
 from __future__ import annotations
 
-from whymath_backend.l3.verify_answer import AnswerVerdict, verify_answer
+from whymath_backend.l3.verify_answer import (
+    AnswerVerdict,
+    derive_selected_root,
+    verify_answer,
+    verify_root_selection,
+)
 
 
 class TestDirectPass:
@@ -386,3 +391,124 @@ class TestConjunction:
         r2 = verify_answer(["a*x = b", "x + y = 0"], {"x": "b/a", "y": "-b/a"})
         assert r1.state == r2.state
         assert r1.samples_checked == r2.samples_checked
+
+
+class TestPythonEqualityOperator:
+    """S2-i: 실 LLM이 `==`(파이썬식 등호)를 써도 등식으로 파싱(회귀·Phaiakes9 실측)."""
+
+    def test_double_equals_parses_as_equality_pass(self) -> None:
+        # `x**2-10x+24 == 0` 은 sympify가 구조 비교로 False로 접었었다 → 이제 등식으로 파싱.
+        assert verify_answer("x**2 - 10*x + 24 == 0", {"x": "6"}).state == "pass"
+
+    def test_double_equals_wrong_answer_fail(self) -> None:
+        assert verify_answer("x**2 - 10*x + 24 == 0", {"x": "5"}).state == "fail"
+
+    def test_double_equals_factored_form_pass(self) -> None:
+        assert verify_answer("(2*x - 3)**2 == 0", {"x": "1.5"}).state == "pass"
+
+
+class TestRootSelection:
+    """S2-i: 근 선택 검증 — 여러 실근 중 큰/작은/유일 근을 골랐는지 판정.
+
+    Tier1(`verify_answer`)은 "답이 방정식을 만족하는가"만 봐서 큰 근 요구에 작은 근도 통과시킨다
+    (Phaiakes9 실측). `verify_root_selection`은 "발문이 요구한 그 근인가"를 solve로 확정한다.
+    """
+
+    def test_largest_wrong_root_fails(self) -> None:
+        # 3x²+11x-4=0 의 근은 -4, 1/3. 큰 근은 1/3인데 -4(작은 근)를 줬다 → fail.
+        v = verify_root_selection("3*x**2 + 11*x - 4 = 0", {"x": "-4"}, "largest")
+        assert v.state == "fail"
+
+    def test_largest_correct_root_passes(self) -> None:
+        v = verify_root_selection("3*x**2 + 11*x - 4 = 0", {"x": "1/3"}, "largest")
+        assert v.state == "pass"
+
+    def test_largest_integer_root_passes(self) -> None:
+        v = verify_root_selection("x**2 - 10*x + 24 = 0", {"x": "6"}, "largest")
+        assert v.state == "pass"
+
+    def test_smallest_correct_root_passes(self) -> None:
+        v = verify_root_selection("x**2 - 10*x + 24 = 0", {"x": "4"}, "smallest")
+        assert v.state == "pass"
+
+    def test_smallest_wrong_root_fails(self) -> None:
+        v = verify_root_selection("x**2 - 10*x + 24 = 0", {"x": "6"}, "smallest")
+        assert v.state == "fail"
+
+    def test_decimal_answer_matches_rational_root(self) -> None:
+        # 4x²-16x+15=0 의 근은 3/2, 5/2. 답 "2.5"(=5/2)는 큰 근 → pass(소수/유리 동치).
+        v = verify_root_selection("4*x**2 - 16*x + 15 = 0", {"x": "2.5"}, "largest")
+        assert v.state == "pass"
+
+    def test_unique_multiple_roots_fails(self) -> None:
+        # unique 요구인데 근이 둘 → 유일하지 않음 → fail.
+        v = verify_root_selection("x**2 - 5*x + 6 = 0", {"x": "3"}, "unique")
+        assert v.state == "fail"
+
+    def test_unique_double_root_passes(self) -> None:
+        # 중근(4x²-12x+9=(2x-3)²)은 실근 1개 → unique pass.
+        v = verify_root_selection("(2*x - 3)**2 = 0", {"x": "1.5"}, "unique")
+        assert v.state == "pass"
+
+    def test_double_equals_condition_supported(self) -> None:
+        # `==` 등식 조건도 근 선택 경로에서 파싱된다(Fix B와 정합).
+        v = verify_root_selection("x**2 - 10*x + 24 == 0", {"x": "6"}, "largest")
+        assert v.state == "pass"
+
+    def test_parametric_is_unverifiable(self) -> None:
+        # 파라미터(자유변수 다수)는 근 선택 적용 밖 → unverifiable(보수적·Tier1에 위임).
+        v = verify_root_selection("2*a*x = b", {"x": "b/(2*a)"}, "largest")
+        assert v.state == "unverifiable"
+
+    def test_inequality_is_unverifiable(self) -> None:
+        v = verify_root_selection("x > 0", {"x": "3"}, "largest")
+        assert v.state == "unverifiable"
+
+    def test_system_is_unverifiable(self) -> None:
+        # 연립은 선택 의미 불명확 → unverifiable.
+        v = verify_root_selection(["x + y = 3", "x - y = 1"], {"x": "2", "y": "1"}, "largest")
+        assert v.state == "unverifiable"
+
+    def test_deterministic(self) -> None:
+        r1 = verify_root_selection("x**2 - 10*x + 24 = 0", {"x": "6"}, "largest")
+        r2 = verify_root_selection("x**2 - 10*x + 24 = 0", {"x": "6"}, "largest")
+        assert r1.state == r2.state
+
+
+class TestDeriveSelectedRoot:
+    """S2-n: derive-and-verify — (방정식+선택)에서 정답 근을 *정확값*으로 유도."""
+
+    def test_derives_largest_rational_root_exactly(self) -> None:
+        # 3x²-7x+4=0 근은 1, 4/3 — 큰 근을 반올림 소수가 아니라 정확값 '4/3'으로 유도.
+        assert derive_selected_root("3*x**2 - 7*x + 4 = 0", "largest") == "4/3"
+
+    def test_derives_smallest_integer_root(self) -> None:
+        assert derive_selected_root("x**2 - 10*x + 24 = 0", "smallest") == "4"
+
+    def test_derives_unique_double_root(self) -> None:
+        # 중근 (2x-3)²=0 → 유일근 3/2.
+        assert derive_selected_root("(2*x - 3)**2 = 0", "unique") == "3/2"
+
+    def test_double_equals_condition_supported(self) -> None:
+        assert derive_selected_root("x**2 - 10*x + 24 == 0", "largest") == "6"
+
+    def test_unique_with_multiple_roots_is_none(self) -> None:
+        # unique 요구인데 다근 — 문제 자체가 잘못이라 유도 불가(None).
+        assert derive_selected_root("x**2 - 5*x + 6 = 0", "unique") is None
+
+    def test_parametric_is_none(self) -> None:
+        assert derive_selected_root("2*a*x = b", "largest") is None
+
+    def test_system_is_none(self) -> None:
+        assert derive_selected_root(["x + y = 3", "x - y = 1"], "largest") is None
+
+    def test_inequality_is_none(self) -> None:
+        assert derive_selected_root("x > 0", "largest") is None
+
+    def test_unknown_selection_is_none(self) -> None:
+        assert derive_selected_root("x**2 - 5*x + 6 = 0", "biggest") is None
+
+    def test_deterministic(self) -> None:
+        assert derive_selected_root("x**2 - 5*x + 6 = 0", "largest") == derive_selected_root(
+            "x**2 - 5*x + 6 = 0", "largest"
+        )

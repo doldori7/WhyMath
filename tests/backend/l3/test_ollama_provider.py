@@ -61,6 +61,7 @@ class FakeOllamaClient:
         system: str,
         images: Sequence[str] | None = None,
         options: dict[str, Any] | None = None,
+        format: Any = None,  # noqa: A002 — ollama API 인자명 그대로(S2-j)
         stream: bool = False,
     ) -> Any:
         self.generate_calls.append(
@@ -70,6 +71,7 @@ class FakeOllamaClient:
                 "system": system,
                 "images": images,
                 "options": options,
+                "format": format,
                 "stream": stream,
             }
         )
@@ -191,6 +193,39 @@ class TestGenerate:
 
         assert client.generate_calls[0]["options"] == {"temperature": 0.7}
         assert client.generate_calls[0]["images"] == ["b64"]
+
+    async def test_json_schema_none_omits_format(self) -> None:
+        """스키마 미지정(None) → format을 싣지 않는다(기존 동작·자유 텍스트 생성)."""
+        client = FakeOllamaClient()
+        provider = OllamaProvider(client=client)
+        decision = _local_decision(ModelFamily.GENERAL, LocalModelTier.MID)
+
+        await provider.generate("p", "s", decision)
+
+        assert client.generate_calls[0]["format"] is None
+
+    async def test_json_schema_set_injects_format(self) -> None:
+        """스키마 지정(S2-j structured output) → format=스키마 dict로 실린다(제약 디코딩)."""
+        client = FakeOllamaClient()
+        provider = OllamaProvider(client=client)
+        decision = _local_decision(ModelFamily.GENERAL, LocalModelTier.MID)
+        schema = {"type": "object", "required": ["answer"]}
+
+        await provider.generate("p", "s", decision, json_schema=schema)
+
+        assert client.generate_calls[0]["format"] == schema
+
+    async def test_json_schema_with_temperature_both_passed(self) -> None:
+        """스키마+온도 동시 지정(동등문제 저작 실제 조합) → format·options 모두 전달."""
+        client = FakeOllamaClient()
+        provider = OllamaProvider(client=client)
+        decision = _local_decision(ModelFamily.GENERAL, LocalModelTier.MID)
+        schema = {"type": "object"}
+
+        await provider.generate("p", "s", decision, temperature=0.9, json_schema=schema)
+
+        assert client.generate_calls[0]["format"] == schema
+        assert client.generate_calls[0]["options"] == {"temperature": 0.9}
 
     async def test_extract_text_from_object_response(self) -> None:
         """generate 응답이 pydantic 유사 객체(.response)여도 텍스트 추출."""

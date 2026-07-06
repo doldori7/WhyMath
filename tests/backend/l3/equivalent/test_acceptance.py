@@ -76,6 +76,7 @@ def _spec(**overrides: object) -> EquivalenceSpec:
     return EquivalenceSpec(**kwargs)  # type: ignore[arg-type]
 
 
+# 두 근 2·3인 방정식·답은 큰 근 3 → 근 선택(S2-i)을 largest로 명시해야 유일하게 확정된다.
 _CONDITIONS = "x**2 - 5*x + 6 = 0"
 _ANSWER_MAP = {"x": "3"}
 
@@ -88,6 +89,7 @@ def _evaluate(**overrides: object) -> AcceptanceVerdict:
         "provenance": _valid_provenance(),
         "conditions": _CONDITIONS,
         "answer_map": _ANSWER_MAP,
+        "answer_selection": "largest",  # 큰 근 3 — S2-i 유일성 확정
     }
     kwargs.update(overrides)
     return evaluate_equivalent_candidate(**kwargs)  # type: ignore[arg-type]
@@ -171,6 +173,69 @@ class TestVerificationGate:
         verdict = _evaluate(conditions="이 조건은 파싱 불가")
         assert verdict.verification == "unverified"
         assert verdict.equivalence == "검수필요"
+
+
+class TestRootSelectionGate:
+    """S2-i: 근 선택 — Tier1이 못 잡는 '틀린 근 통과' 구멍을 게이트가 막는지 검증.
+
+    Phaiakes9 실측 회귀: '큰 근을 구하시오'에 작은 근을 줘도 Tier1은 pass시켰다(방정식만 만족하면
+    통과). 게이트가 answer_selection으로 '어느 근인가'를 확정해 틀린 근을 failed로 차단해야 한다.
+    """
+
+    def test_wrong_root_with_selection_is_failed(self) -> None:
+        # 3x²+11x-4=0 큰 근은 1/3인데 작은 근 -4를 줬다 → 근 선택 위반 → failed·미수용.
+        verdict = _evaluate(
+            conditions="3*x**2 + 11*x - 4 = 0",
+            answer_map={"x": "-4"},
+            answer_selection="largest",
+        )
+        assert verdict.verification == "failed"
+        assert verdict.accepted is False
+        assert any("근 선택" in r for r in verdict.reasons)
+
+    def test_correct_largest_root_is_verified(self) -> None:
+        verdict = _evaluate(
+            conditions="3*x**2 + 11*x - 4 = 0",
+            answer_map={"x": "1/3"},
+            answer_selection="largest",
+        )
+        assert verdict.verification == "verified"
+        assert verdict.accepted is True
+
+    def test_correct_smallest_root_is_verified(self) -> None:
+        verdict = _evaluate(
+            conditions="x**2 - 10*x + 24 = 0",
+            answer_map={"x": "4"},
+            answer_selection="smallest",
+        )
+        assert verdict.verification == "verified"
+        assert verdict.accepted is True
+
+    def test_multiroot_without_selection_downgrades_to_review(self) -> None:
+        # 선택 미declared + 다근 → 답이 유일하게 확정되지 않음 → verified 강등 → 검수필요.
+        # (틀린 근을 조용히 verified로 통과시키던 구멍 차단.)
+        verdict = _evaluate(answer_selection=None)
+        assert verdict.verification == "unverified"
+        assert verdict.equivalence == "검수필요"
+        assert verdict.accepted is False
+
+    def test_unique_single_root_without_selection_still_verified(self) -> None:
+        # 중근(유일 실근)은 선택 없이도 유일하게 확정 → verified 유지(회귀 0).
+        verdict = _evaluate(
+            conditions="(2*x - 3)**2 = 0",
+            answer_map={"x": "1.5"},
+            answer_selection=None,
+        )
+        assert verdict.verification == "verified"
+
+    def test_selection_unverifiable_downgrades_not_fails(self) -> None:
+        # 근 선택 적용 밖(파라미터)이면 fail이 아니라 강등(확신 없으면 단정 금지).
+        verdict = _evaluate(
+            conditions="2*a*x = b",
+            answer_map={"x": "b/(2*a)"},
+            answer_selection="largest",
+        )
+        assert verdict.verification == "unverified"
         assert verdict.accepted is False
 
 

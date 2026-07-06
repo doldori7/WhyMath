@@ -95,6 +95,7 @@ def _candidate(
     provenance: ContentProvenance | None = None,
     conditions: str | list[str] = _CONDITIONS,
     answer_map: dict[str, str] | None = None,
+    answer_selection: str | None = "largest",  # 두 근 2·3 중 큰 근 3 — S2-i 유일성 확정
     solution_steps: list[str] | None = None,
     concept_tags: list[ConceptTag] | None = None,
 ) -> CandidateProblem:
@@ -103,6 +104,7 @@ def _candidate(
         provenance=provenance if provenance is not None else _provenance(),
         conditions=conditions,
         answer_map=answer_map if answer_map is not None else dict(_ANSWER_MAP),
+        answer_selection=answer_selection,
         solution_steps=solution_steps,
         concept_tags=concept_tags if concept_tags is not None else [],
     )
@@ -208,6 +210,9 @@ class TestAcceptedStored:
         assert len(records) == 1
         assert records[0].slug == "wm-orch-quad-root"
         assert records[0].concept_tags[0].concept_src_id == "HK06"
+        # 근 선택(S2-i)이 verify 메타로 영속 — 빠지면 저장 코퍼스가 품질 게이트에서
+        # "선택 미명시" 유일성 강등을 당한다(라운드트립 실측 회귀 봉인).
+        assert records[0].verify.answer_selection == "largest"
 
     def test_store_with_embed_upserts_vector_into_index(self) -> None:
         # 저장 + dedup_index/embed 주입 시 발문 벡터를 index에 upsert(배치 누적 dedup 근간).
@@ -308,6 +313,67 @@ class TestRejectedDuplicate:
             [_candidate()], dedup_index=index, embed_provider=provider, dedup_threshold=0.90
         )
         assert outcome.status == "rejected_duplicate"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 구조 dedup(S2-l) — SymPy 정규형 signature로 표현 변형 판박이 차단(임베딩 불요).
+# ──────────────────────────────────────────────────────────────────────
+class TestStructuralDedup:
+    def test_equation_variant_is_structural_duplicate(self) -> None:
+        # 같은 방정식의 인수분해 표기(다른 발문·slug) → 구조 signature 동일 → rejected_duplicate.
+        sig: set[str] = set()
+        c1 = _candidate(conditions="x**2 - 5*x + 6 = 0")
+        c2 = _candidate(conditions="(x-2)*(x-3) = 0", problem=_problem(slug="wm-b"))
+        o1 = run_equivalent_generation(_spec(), ScriptedGenerator([c1]), signature_index=sig)
+        o2 = run_equivalent_generation(_spec(), ScriptedGenerator([c2]), signature_index=sig)
+        assert o1.status == "accepted"
+        assert o2.status == "rejected_duplicate"
+        assert any("구조 중복" in r for r in o2.reasons)
+
+    def test_different_equations_not_duplicates(self) -> None:
+        sig: set[str] = set()
+        c1 = _candidate(conditions="x**2 - 5*x + 6 = 0")
+        c2 = _candidate(
+            conditions="x**2 - 7*x + 12 = 0",
+            answer_map={"x": "4"},
+            problem=_problem(slug="wm-b", answer="4"),
+        )
+        o1 = run_equivalent_generation(_spec(), ScriptedGenerator([c1]), signature_index=sig)
+        o2 = run_equivalent_generation(_spec(), ScriptedGenerator([c2]), signature_index=sig)
+        assert o1.status == "accepted"
+        assert o2.status == "accepted"
+
+    def test_same_equation_different_selection_not_duplicates(self) -> None:
+        # 같은 방정식이라도 큰 근 vs 작은 근은 별개 문제 → signature 다름 → 둘 다 통과.
+        sig: set[str] = set()
+        c1 = _candidate(conditions="x**2 - 5*x + 6 = 0", answer_selection="largest")
+        c2 = _candidate(
+            conditions="x**2 - 5*x + 6 = 0",
+            answer_map={"x": "2"},
+            answer_selection="smallest",
+            problem=_problem(slug="wm-b", answer="2"),
+        )
+        o1 = run_equivalent_generation(_spec(), ScriptedGenerator([c1]), signature_index=sig)
+        o2 = run_equivalent_generation(_spec(), ScriptedGenerator([c2]), signature_index=sig)
+        assert o1.status == "accepted"
+        assert o2.status == "accepted"
+
+    def test_no_signature_index_means_no_structural_dedup(self) -> None:
+        # signature_index 미주입이면 구조 dedup 스킵(하위호환·기존 동작).
+        c1 = _candidate(conditions="x**2 - 5*x + 6 = 0")
+        c2 = _candidate(conditions="(x-2)*(x-3) = 0", problem=_problem(slug="wm-b"))
+        o1 = _run([c1])
+        o2 = _run([c2])
+        assert o1.status == "accepted"
+        assert o2.status == "accepted"
+
+    def test_batch_structural_dedup_without_embeddings(self) -> None:
+        # 배치는 구조 dedup 기본 ON — 임베딩 좌석 없이도 판박이를 차단(S2-l 핵심 효과).
+        c1 = _candidate(conditions="x**2 - 5*x + 6 = 0")
+        c2 = _candidate(conditions="(x-2)*(x-3) == 0", problem=_problem(slug="wm-b"))
+        outcomes = run_batch(_spec(), ScriptedGenerator([c1, c2]), 2)
+        assert outcomes[0].status == "accepted"
+        assert outcomes[1].status == "rejected_duplicate"
 
 
 # ──────────────────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@ system=,messages=[{"role":"user","content":...}])`. 응답은 content 블록 리
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 
@@ -252,6 +252,7 @@ class AnthropicProvider:
         *,
         images: Sequence[str] | None = None,
         temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
     ) -> str:
         """라우터 결정에 따라 Anthropic Claude로 생성 (LLMProvider 구현).
 
@@ -265,6 +266,10 @@ class AnthropicProvider:
           ⚠️ 주의(모듈 docstring): **Opus 4.7(CLOUD_HIGH)는 temperature를 거부(400)**한다 —
           따라서 CLOUD_HIGH 경로로 가는 호출부는 temperature를 지정하지 말아야 한다. 동등문제
           저작(S2-g)은 라우팅상 LOCAL/CLOUD_MID로 흐르며 CLOUD_HIGH(killer/prove)로는 가지 않는다.
+        - `json_schema`(S2-j structured output)가 주어지면 *명확한 오류*를 던진다 — plain
+          messages.create에는 문법 제약 디코딩이 없어 스키마를 보장할 수 없다(조용한 무시 금지).
+          호출부 계약: 클라우드 결정 경로에서는 json_schema를 지정하지 말고 프롬프트+관대 파서로
+          동작해야 한다(동등문제 저작은 LOCAL 결정일 때만 스키마를 싣는다 — llm_generator._invoke).
 
         반환 텍스트는 *검증 전 원시 출력*이다(모듈 docstring 경계 메모 참조).
         """
@@ -272,6 +277,12 @@ class AnthropicProvider:
             raise RuntimeError(
                 "AnthropicProvider는 멀티모달(images) 입력을 지원하지 않습니다 — 비전 인식은 "
                 "로컬 Qwen3-VL(VISION 패밀리) 경유입니다(클라우드 비전 미배선·미성년자 프라이버시)."
+            )
+        if json_schema is not None:
+            raise RuntimeError(
+                "AnthropicProvider는 json_schema(문법 제약 디코딩)를 지원하지 않습니다 — plain "
+                "messages.create에는 structured output 강제가 없어 스키마를 보장할 수 없습니다. "
+                "클라우드 경로는 프롬프트+관대 파서로 동작하세요(조용한 무시 금지·S2-j)."
             )
         cost = _as_cost_tier(decision.cost_tier)
         if cost is CostTier.LOCAL:

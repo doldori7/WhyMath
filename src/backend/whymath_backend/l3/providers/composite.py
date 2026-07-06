@@ -15,7 +15,7 @@ mode="sync"). 클라우드 결정은 항상 동기라 비동기 큐(Celery)를 �
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 from whymath_backend.l3.interfaces import LLMProvider
@@ -52,6 +52,7 @@ class CompositeProvider:
         *,
         images: Sequence[str] | None = None,
         temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
     ) -> str:
         """cost_tier로 로컬↔클라우드 디스패치 (LLMProvider 구현).
 
@@ -62,13 +63,15 @@ class CompositeProvider:
           처리·클라우드 제공자는 images를 받으면 거부).
         - `temperature`(S2-g 생성 다양성)도 위임받는 제공자로 그대로 전달한다(온도 처리는 각
           하위 제공자 책임 — Ollama options·Anthropic API 인자).
+        - `json_schema`(S2-j structured output)도 그대로 전달한다(제약 처리·거부는 각 하위
+          제공자 책임 — Ollama format= 제약 디코딩·Anthropic 명확한 거부).
 
         반환 텍스트는 위임받은 제공자의 *검증 전 원시 출력*이다(각 제공자 docstring 경계 메모).
         """
         cost = _as_cost_tier(decision.cost_tier)
-        # images·temperature는 *있을 때만* 위임 호출에 싣는다 — 텍스트 전용·온도 미지정 하위
-        # 제공자(기존 구현·가짜)는 해당 인자 없이도 동작(하위호환). 둘 다 None이면 종전과 동일하게
-        # `target.generate(prompt, system, decision)`로 호출된다.
+        # 선택 인자(images·temperature·json_schema)는 *있을 때만* 위임 호출에 싣는다 — 해당
+        # 인자 미지원 하위 제공자(기존 구현·가짜)는 인자 없이도 동작(하위호환). 전부 None이면
+        # 종전과 동일하게 `target.generate(prompt, system, decision)`로 호출된다.
         target = self._local if cost is CostTier.LOCAL else self._cloud
         if cost is not CostTier.LOCAL and target is None:
             raise RuntimeError(
@@ -82,6 +85,8 @@ class CompositeProvider:
             forward["images"] = images
         if temperature is not None:
             forward["temperature"] = temperature
+        if json_schema is not None:
+            forward["json_schema"] = json_schema
         return await target.generate(prompt, system, decision, **forward)
 
     async def check_status(self) -> OllamaStatus:
