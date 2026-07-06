@@ -145,6 +145,41 @@ class TestSkipSignatures:
         assert canonical_signature(c2.conditions, c2.answer_selection) != sig2
 
 
+class TestDeterministicMetadata:
+    """S2-p — 난이도·개념 태깅·problem_id가 뼈대에서 결정론으로 저작되는지."""
+
+    def test_difficulty_is_estimated_not_spec_mirror(self) -> None:
+        # 2.5 균일(스펙 미러) 회귀 차단 — 표본 100의 난이도가 실제로 분산되고 척도 안이다.
+        candidates = _draw(SkeletonEquivalentProblemGenerator(), 100)
+        values = {c.problem.difficulty_overall for c in candidates}
+        assert len(values) >= 3
+        for value in values:
+            assert value is not None and 1.0 <= value <= 5.0
+
+    def test_concept_tags_default_hk06_primary(self) -> None:
+        # 기본 개념 태깅 — HK06(이차방정식의 근) PRIMARY. 코퍼스 concepts []의 상환.
+        candidate = SkeletonEquivalentProblemGenerator().generate(_spec())
+        assert candidate is not None
+        assert [(t.concept_src_id, t.role) for t in candidate.concept_tags] == [("HK06", "PRIMARY")]
+
+    def test_concept_tags_injectable(self) -> None:
+        # 다른 단원 스켈레톤 대비 — 생성자 주입으로 교체 가능(unit_codes 선례).
+        from whymath_backend.l1.problem_bank.populate import ConceptTag
+
+        tags = (ConceptTag(concept_src_id="J0220", role="SUPPORTING", relevance=0.5),)
+        candidate = SkeletonEquivalentProblemGenerator(concept_tags=tags).generate(_spec())
+        assert candidate is not None
+        assert [t.concept_src_id for t in candidate.concept_tags] == ["J0220"]
+
+    def test_problem_id_deterministic_across_instances(self) -> None:
+        # slug 기반 uuid5 — 같은 내용이면 실행·인스턴스가 달라도 같은 id(재생성 바이트 동일성).
+        a = SkeletonEquivalentProblemGenerator().generate(_spec())
+        b = SkeletonEquivalentProblemGenerator().generate(_spec())
+        assert a is not None and b is not None
+        assert a.problem.slug == b.problem.slug
+        assert a.problem.problem_id == b.problem.problem_id
+
+
 class TestOrchestratorWiring:
     def test_batch_all_accepted_no_duplicates(self) -> None:
         # 배치 30회 — 전부 accepted(dry-run)·중복/실패 0(LLM-first 실측 82% 중복과 대비).

@@ -15,11 +15,12 @@ generator를 결정론으로, LLM은 wording만" 채택 — 결정 로그 2026-0
 저장된다 — 생성기 자신을 신뢰하지 않는 파이프라인 원칙은 스켈레톤에도 동일하게 적용된다
 (derive-and-verify가 이 생성기의 answer_map을 재유도·재확인하는 교차 검증이 공짜로 붙는다).
 
-범위(v0): 단일변수 이차방정식·유리근(정수근·기약 유리근·중근)·근 선택(largest/smallest/unique)
-문제만. 오답지(distractor)·오개념 태깅은 미저작(빈 목록) — 오개념 겨냥 스펙은 LLM-first 생성기
-소관으로 남는다(하이브리드: 두 생성기가 같은 좌석·같은 게이트를 공유). **LLM 발문 다양화**
-(스켈레톤이 확정한 수치를 못 바꾸는 rephrase 시임)는 후속 슬라이스다 — v0 템플릿 변주만으로도
-구조 다양성(수백 조합)이 표면 단조로움을 상회한다.
+범위(v1·S2-p): 단일변수 이차방정식·유리근(정수근·기약 유리근·중근)·근 선택(largest/smallest/
+unique) 문제. 개념 태깅(기본 HK06 PRIMARY)·rule-based 난이도(difficulty 모듈)·결정론
+problem_id(slug 기반 uuid5)는 결정론 저작. 오답지(distractor)·novel 구조의 오개념 겨냥은
+LLM-first 생성기와의 하이브리드 분담(두 생성기가 같은 좌석·같은 게이트를 공유). **LLM 발문
+다양화**(스켈레톤이 확정한 수치를 못 바꾸는 rephrase 시임)는 후속 슬라이스다 — 템플릿
+변주만으로도 구조 다양성(수백 조합)이 표면 단조로움을 상회한다.
 
 7계층: L3 지역(생성=LLM 라우터 도메인이나 이 구현은 LLM 0 — 좌석 계약만 공유). schema(최하위)·
 동일 패키지(canonicalize)만 import한다.
@@ -29,14 +30,17 @@ from __future__ import annotations
 
 import hashlib
 import random
+import uuid
 from collections.abc import Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from fractions import Fraction
 from math import gcd
 
+from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
+from whymath_backend.l3.equivalent.difficulty import RootKind, estimate_difficulty
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.schema.enums import (
     AnswerFormat,
@@ -53,6 +57,14 @@ __all__ = ["SkeletonEquivalentProblemGenerator"]
 
 # 풀 셔플 고정 시드 — 같은 구성은 같은 출제 순서(재현·디버그). 비결정 난수 금지(verify 규약 미러).
 _POOL_SEED = 20260706
+
+# 기본 개념 태깅(S2-p) — 현 풀은 전부 단일변수 이차방정식의 근이라 개념이 결정론으로 정해진다.
+# HK06 = 개념그래프 원천 src_id "이차방정식의 근(실근·허근)"([10공수1-02-02] 정착 —
+# data/corpus/concept_graph_v1/concepts.jsonl). 다른 단원 스켈레톤은 생성자 주입으로 교체
+# (unit_codes 기본값과 같은 선례 — L1 데이터 키라 L4 오개념 id 주입 원칙의 대상이 아니다).
+_DEFAULT_CONCEPT_TAGS: tuple[ConceptTag, ...] = (
+    ConceptTag(concept_src_id="HK06", role="PRIMARY", relevance=0.95),
+)
 
 # 근 풀 범위 — 한국 중·고 수준의 "손으로 인수분해 가능한" 작은 유리근만(커리큘럼 상식 범위).
 _INT_ROOT_MIN, _INT_ROOT_MAX = -9, 9
@@ -104,6 +116,26 @@ class _Skeleton:
         """선택이 가리키는 정답 근 — largest=큰, smallest=작은, unique=유일(중근)."""
         small, large = self.roots
         return large if self.selection == "largest" else small
+
+    @property
+    def root_kind(self) -> RootKind:
+        """난이도 추정용 근 유형 — 중근=double·분모>1 근 존재=rational·그 외=integer."""
+        small, large = self.roots
+        if small == large:
+            return "double"
+        if small.denominator > 1 or large.denominator > 1:
+            return "rational"
+        return "integer"
+
+    @property
+    def difficulty(self) -> float:
+        """rule-based 종합 난이도(S2-p) — 뼈대 수치(근 유형·계수)에서 결정론 추정."""
+        a, b, c = self.coefficients
+        return estimate_difficulty(
+            root_kind=self.root_kind,
+            lead_coefficient=a,
+            max_abs_coefficient=max(abs(a), abs(b), abs(c)),
+        )
 
 
 def _fraction_text(value: Fraction) -> str:
@@ -214,6 +246,7 @@ class SkeletonEquivalentProblemGenerator:
         curriculum_version: Curriculum = Curriculum.REVISION_2022,
         valid_from_year: int = 2022,
         unit_codes: Sequence[str] = ("QUAD-EQ",),
+        concept_tags: Sequence[ConceptTag] = _DEFAULT_CONCEPT_TAGS,
     ) -> None:
         self._pool = _build_pool()
         self._index = 0
@@ -223,6 +256,7 @@ class SkeletonEquivalentProblemGenerator:
         self._curriculum_version = curriculum_version
         self._valid_from_year = valid_from_year
         self._unit_codes = list(unit_codes)
+        self._concept_tags = list(concept_tags)
 
     # ── EquivalentProblemGenerator 좌석 ────────────────────────────────
     def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
@@ -253,13 +287,19 @@ class SkeletonEquivalentProblemGenerator:
         slug = self._stable_slug(question_text, answer_text, standard_codes)
 
         problem = Problem(
+            # 결정론 problem_id — slug(내용 해시) 기반 uuid5. 재생성이 같은 내용이면 같은 id
+            # (코퍼스 전면 재생성의 바이트 동일성·멱등 upsert 키와 정합). uuid4 기본값은
+            # 실행마다 달라져 결정론 배치 CLI의 재실행 diff를 오염시킨다.
+            problem_id=uuid.uuid5(uuid.NAMESPACE_URL, f"whymath:problem:{slug}"),
             slug=slug,
             source_type=SourceType.자체생성,  # 저작권 구조적 강제(자작 뼈대·본문성 원본 0)
             curriculum_version=self._curriculum_version,
             valid_from_year=self._valid_from_year,
             subject=self._subject,
             unit_codes=list(self._unit_codes),
-            difficulty_overall=spec.difficulty_overall,  # 스펙 난이도 미러(대응 명세 충족)
+            # S2-p: 스펙 미러(2.5 균일) → rule-based 결정론 추정(difficulty 모듈 공식).
+            # 스펙 2.5 대비 최대 gap 1.1 < 3.5(게이트 감쇠 수학)라 동등성 성분 안전.
+            difficulty_overall=skeleton.difficulty,
             answer_format=answer_format,
             achievement_standard_codes=standard_codes,
             question_text=question_text,
@@ -285,7 +325,7 @@ class SkeletonEquivalentProblemGenerator:
             answer_map={"x": answer_text},
             answer_selection=skeleton.selection,
             solution_steps=None,  # 검증된 단계 체인은 WH-S 솔버 몫(S2-k 규약 동일)
-            concept_tags=[],
+            concept_tags=list(self._concept_tags),  # S2-p: 결정론 개념 태깅(기본 HK06 PRIMARY)
         )
 
     @staticmethod
