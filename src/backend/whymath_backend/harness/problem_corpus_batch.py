@@ -65,10 +65,11 @@ _MC_INJECTION: dict[str, tuple[str, str]] = {
     "sign_flip": ("factor-sign-flip", "factor-sign-flip-root"),
 }
 
-# 밴드 기본 크기 — 총 165건(CI 봉인 ≥100 여유). 풀 실측: short 443·mc 159·sqrt 180.
+# 밴드 기본 크기 — 총 185건(CI 봉인 ≥100 여유). 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58.
 _DEFAULT_SHORT_N = 90
 _DEFAULT_MC_N = 45
 _DEFAULT_SQRT_N = 30
+_DEFAULT_SQRT_MC_N = 20
 
 
 def _default_out_path() -> Path:
@@ -212,17 +213,20 @@ def run_corpus_batch(
     short_n: int = _DEFAULT_SHORT_N,
     mc_n: int = _DEFAULT_MC_N,
     sqrt_n: int = _DEFAULT_SQRT_N,
+    sqrt_mc_n: int = _DEFAULT_SQRT_MC_N,
     write: bool = True,
 ) -> CorpusBatchReport:
-    """3밴드 배치 실행 — 공유 signature_index·밴드별 스펙 정합·JSONL 기록(순수 결정론).
+    """4밴드 배치 실행 — 공유 signature_index·밴드별 스펙 정합·JSONL 기록(순수 결정론).
 
     밴드 스펙의 `target_misconception_ids`는 그 밴드 후보가 실제로 방출하는 오개념 집합과
-    일치시킨다(mc=주입 2종·나머지=∅) — 게이트 오개념 Jaccard가 항상 1.0(빈 spec에 오개념 도입
-    시 0.0인 규칙과 정합). 난이도는 전 밴드 2.5 고정(추정 gap ≤ 1.1 < 3.5 안전 — 모듈 docstring).
+    일치시킨다(mc·sqrt_mc=주입 2종·나머지=∅) — 게이트 오개념 Jaccard가 항상 1.0(빈 spec에
+    오개념 도입 시 0.0인 규칙과 정합). 난이도는 전 밴드 2.5 고정(추정 gap ≤ 1.1 < 3.5 안전 —
+    모듈 docstring).
     """
     resolved_out = out_path if out_path is not None else _default_out_path()
     codes = build_distractor_codes()
     mc_target_ids = frozenset(misconception_id for misconception_id, _ in codes.values())
+    mc_variants: frozenset[str] = frozenset({"multiple_choice", "sqrt_multiple_choice"})
 
     sink = JsonlCorpusSink()
     signature_index: set[str] = set()
@@ -230,6 +234,7 @@ def run_corpus_batch(
         ("short", "short_answer", short_n, frozenset()),
         ("mc", "multiple_choice", mc_n, mc_target_ids),
         ("sqrt", "sqrt", sqrt_n, frozenset()),
+        ("sqrt_mc", "sqrt_multiple_choice", sqrt_mc_n, mc_target_ids),
     ]
 
     bands: list[BandResult] = []
@@ -242,7 +247,7 @@ def run_corpus_batch(
         )
         generator = SkeletonEquivalentProblemGenerator(
             variant=variant,
-            distractor_codes=codes if variant == "multiple_choice" else None,
+            distractor_codes=codes if variant in mc_variants else None,
             skip_signatures=signature_index,
         )
         outcomes = run_batch(spec, generator, n, signature_index=signature_index, store=sink)
@@ -274,14 +279,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.problem_corpus_batch",
         description=(
-            "동등문제 스켈레톤 코퍼스 배치(S2-p) — 3밴드(short/mc/sqrt)를 4종 게이트에 태워 "
-            "JSONL 코퍼스를 결정론 재생성한다(LLM 0·DB 0)."
+            "동등문제 스켈레톤 코퍼스 배치(S2-p) — 4밴드(short/mc/sqrt/sqrt_mc)를 4종 게이트에 "
+            "태워 JSONL 코퍼스를 결정론 재생성한다(LLM 0·DB 0)."
         ),
     )
     parser.add_argument("--out", type=Path, default=None, help="산출 JSONL 경로(기본 코퍼스 v0).")
     parser.add_argument("--short", type=int, default=_DEFAULT_SHORT_N, help="유리근 단답형 수.")
-    parser.add_argument("--mc", type=int, default=_DEFAULT_MC_N, help="결정론 객관식 수.")
+    parser.add_argument("--mc", type=int, default=_DEFAULT_MC_N, help="유리근 객관식 수.")
     parser.add_argument("--sqrt", type=int, default=_DEFAULT_SQRT_N, help="무리근 단답형 수.")
+    parser.add_argument("--sqrt-mc", type=int, default=_DEFAULT_SQRT_MC_N, help="무리근 객관식 수.")
     parser.add_argument("--dry-run", action="store_true", help="파일 미기록 — 수율·리포트만 확인.")
     args = parser.parse_args(argv)
 
@@ -290,6 +296,7 @@ def main(argv: list[str] | None = None) -> int:
         short_n=args.short,
         mc_n=args.mc,
         sqrt_n=args.sqrt,
+        sqrt_mc_n=args.sqrt_mc,
         write=not args.dry_run,
     )
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)

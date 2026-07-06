@@ -231,7 +231,7 @@ class TestSqrtVariant:
             assert sig is not None
             assert sig not in sqrt_sigs
             sqrt_sigs.add(sig)
-        assert len(sqrt_sigs) >= 150  # 9×10×2=180 전수(방어적 하한)
+        assert len(sqrt_sigs) >= 100  # sqrt 단답형 풀(형식 파티션 후 122·방어적 하한)
 
         rational_sigs = set()
         for candidate in _draw(SkeletonEquivalentProblemGenerator(), 200):
@@ -243,6 +243,97 @@ class TestSqrtVariant:
         a_gen, b_gen = self._sqrt_gen(), self._sqrt_gen()
         a = [a_gen.generate(_spec()) for _ in range(5)]
         b = [b_gen.generate(_spec()) for _ in range(5)]
+        assert [c.problem.slug for c in a if c] == [c.problem.slug for c in b if c]
+
+
+class TestSqrtMultipleChoiceVariant:
+    """무리근 객관식 variant(S2-p 후속) — (x−p)²=q 4지선다·SymPy 정확값 선지·오개념 주입.
+
+    유리근 객관식과 대칭 — 오답값(반대근·정수부 p 부호 반전)을 코드가 알고, id는 불투명 문자열
+    주입(L4 import 0). p≠0 적격 + 해시 파티션으로 무리근 단답형 풀과 서로소.
+    """
+
+    _CODES = {
+        "opposite_root": ("fake-opposite-id", "fake-opposite-op"),
+        "sign_flip": ("fake-sign-flip-id", "fake-sign-flip-op"),
+    }
+
+    def _gen(self) -> SkeletonEquivalentProblemGenerator:
+        return SkeletonEquivalentProblemGenerator(
+            variant="sqrt_multiple_choice",
+            distractor_codes=self._CODES,  # type: ignore[arg-type]
+        )
+
+    def _mc_spec(self) -> EquivalenceSpec:
+        return _spec(target_misconception_ids=frozenset({"fake-opposite-id", "fake-sign-flip-id"}))
+
+    def test_missing_injection_fails_fast(self) -> None:
+        try:
+            SkeletonEquivalentProblemGenerator(variant="sqrt_multiple_choice")
+        except ValueError as error:
+            assert "distractor_codes" in str(error)
+        else:
+            raise AssertionError("distractor_codes 미주입인데 생성자가 통과")
+
+    def test_first_20_all_pass_acceptance_gate(self) -> None:
+        gen = self._gen()
+        for _ in range(20):
+            candidate = gen.generate(self._mc_spec())
+            assert candidate is not None
+            verdict = evaluate_equivalent_candidate(
+                self._mc_spec(),
+                candidate.problem,
+                provenance=candidate.provenance,
+                conditions=candidate.conditions,
+                answer_map=candidate.answer_map,
+                answer_selection=candidate.answer_selection,
+            )
+            assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
+
+    def test_choices_are_irrational_and_answer_present(self) -> None:
+        gen = self._gen()
+        for _ in range(20):
+            candidate = gen.generate(self._mc_spec())
+            assert candidate is not None
+            problem = candidate.problem
+            assert problem.question_format == "객관식"
+            assert problem.choices is not None and len(problem.choices) == 4
+            assert len(set(problem.choices)) == 4
+            assert all("sqrt(" in choice for choice in problem.choices)  # 4선지 전부 무리근
+            assert problem.answer in problem.choices
+            assert problem.answer_format == "실수"
+
+    def test_distractor_map_covers_all_wrong_choices(self) -> None:
+        candidate = self._gen().generate(self._mc_spec())
+        assert candidate is not None
+        problem = candidate.problem
+        assert problem.choices is not None and problem.distractor_map is not None
+        assert len(problem.distractor_map) == 3
+        answer_index = problem.choices.index(problem.answer)
+        indexes = {entry.choice_index for entry in problem.distractor_map}
+        assert answer_index not in indexes
+        assert indexes == set(range(4)) - {answer_index}
+        ids = {entry.misconception_id for entry in problem.distractor_map}
+        assert ids == {"fake-opposite-id", "fake-sign-flip-id"}
+
+    def test_partition_disjoint_from_sqrt_short_pool(self) -> None:
+        # 무리근 객관식 풀과 무리근 단답형 풀의 구조 서명 서로소(뼈대당 형식 1개·dedup 충돌 차단).
+        mc_sigs = set()
+        gen = self._gen()
+        while (candidate := gen.generate(self._mc_spec())) is not None:
+            mc_sigs.add(canonical_signature(candidate.conditions, candidate.answer_selection))
+        assert len(mc_sigs) >= 40  # 무리근 MC 풀(파티션 후 58·방어적 하한)
+
+        short_sigs = set()
+        short_gen = SkeletonEquivalentProblemGenerator(variant="sqrt")
+        while (candidate := short_gen.generate(_spec())) is not None:
+            short_sigs.add(canonical_signature(candidate.conditions, candidate.answer_selection))
+        assert mc_sigs.isdisjoint(short_sigs)
+
+    def test_deterministic_sequence(self) -> None:
+        a_gen, b_gen = self._gen(), self._gen()
+        a = [a_gen.generate(self._mc_spec()) for _ in range(5)]
+        b = [b_gen.generate(self._mc_spec()) for _ in range(5)]
         assert [c.problem.slug for c in a if c] == [c.problem.slug for c in b if c]
 
 

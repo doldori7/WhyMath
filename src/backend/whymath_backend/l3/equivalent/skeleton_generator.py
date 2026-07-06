@@ -15,11 +15,12 @@ generator를 결정론으로, LLM은 wording만" 채택 — 결정 로그 2026-0
 저장된다 — 생성기 자신을 신뢰하지 않는 파이프라인 원칙은 스켈레톤에도 동일하게 적용된다
 (derive-and-verify가 이 생성기의 answer_map을 재유도·재확인하는 교차 검증이 공짜로 붙는다).
 
-범위(v1·S2-p): 단일변수 이차방정식·근 선택(largest/smallest/unique) 문제. variant 3종 —
-`short_answer`(유리근 단답형: 정수근·기약 유리근·중근)·`sqrt`(무리근 단답형: (x−p)²=q
-완전제곱꼴·answer는 SymPy 정확값 'p ± sqrt(q)')·`multiple_choice`(유리근 결정론 4지선다 —
-오답값(반대 근·부호 반전 근)은 코드가 정확히 알고, 오개념/op-code id는 생성자
-`distractor_codes`로 *주입*받는다: L4 카탈로그 하드코딩 0·조성 루트 소관). 같은 (방정식,선택)
+범위(v1·S2-p): 단일변수 이차방정식·근 선택(largest/smallest/unique) 문제. variant 4종(근유형 ×
+발문형식 2×2) — `short_answer`(유리근 단답형: 정수근·기약 유리근·중근)·`sqrt`(무리근 단답형:
+(x−p)²=q 완전제곱꼴·answer는 SymPy 정확값 'p ± sqrt(q)')·`multiple_choice`(유리근 4지선다)·
+`sqrt_multiple_choice`(무리근 4지선다). 두 객관식 variant는 오답값(반대 근·부호 반전 근)을
+코드가 정확히 알고, 오개념/op-code id는 생성자 `distractor_codes`로 *주입*받는다: L4 카탈로그
+하드코딩 0·조성 루트 소관. 같은 (방정식,선택)
 뼈대는 결정론 해시 파티션으로 **정확히 한 형식**에만 배정된다(canonical signature가 형식을
 구분하지 않으므로 단답형·객관식 중복 시 dedup 충돌 — 원천 차단). 개념 태깅(기본 HK06
 PRIMARY)·rule-based 난이도(difficulty 모듈)·결정론 problem_id(slug 기반 uuid5)는 결정론 저작.
@@ -86,9 +87,13 @@ _RATIONAL_PARTNER_MIN, _RATIONAL_PARTNER_MAX = -6, 6
 _SQRT_P_MIN, _SQRT_P_MAX = -4, 4
 _SQRT_QS: tuple[int, ...] = (2, 3, 5, 6, 7, 8, 10, 11, 12, 13)
 
-# 생성 variant(S2-p) — 뼈대 풀·조립을 가른다. short_answer=유리근 단답형(v0 기본),
-# sqrt=무리근 단답형, multiple_choice=유리근 결정론 4지선다(distractor 오개념 태깅).
-GeneratorVariant = Literal["short_answer", "sqrt", "multiple_choice"]
+# 생성 variant(S2-p) — 뼈대 풀·조립을 가른다(근유형 × 발문형식 2×2). short_answer=유리근 단답형
+# (v0 기본), sqrt=무리근 단답형, multiple_choice=유리근 4지선다, sqrt_multiple_choice=무리근 4지선다
+# (둘 다 distractor 오개념 태깅·distractor_codes 주입 필수).
+GeneratorVariant = Literal["short_answer", "sqrt", "multiple_choice", "sqrt_multiple_choice"]
+
+# distractor_codes 주입이 필수인 객관식 variant 집합(유리근·무리근 공통).
+_MC_VARIANTS: frozenset[str] = frozenset({"multiple_choice", "sqrt_multiple_choice"})
 
 # 객관식 distractor의 L3-지역 op키 — 오답값을 *코드가* 정확히 아는 두 오류연산. L4 카탈로그
 # id(misconception_id·op_code)는 여기 하드코딩하지 않고 생성자 `distractor_codes`로 주입받는다
@@ -246,6 +251,46 @@ def _assigned_format(skeleton: _Skeleton) -> Literal["short_answer", "multiple_c
     a, b, c = skeleton.coefficients
     digest = hashlib.sha256(f"{a},{b},{c},{skeleton.selection}".encode("utf-8")).hexdigest()
     return "multiple_choice" if int(digest, 16) % _MC_PARTITION_MOD == 0 else "short_answer"
+
+
+def _sqrt_mc_choice_exprs(
+    skeleton: _SqrtSkeleton,
+) -> tuple[sympy.Expr, sympy.Expr, sympy.Expr, sympy.Expr] | None:
+    """무리근 객관식 4지선다 식 (정답근, 반대근, 부호반전 정답, 부호반전 반대) — p≠0일 때만.
+
+    (x−p)²=q의 두 근은 p±√q. 오답 3종은 코드가 아는 오류연산의 결과다: 반대근(요구되지 않은
+    근·opposite-root-selected)·정수부 p의 부호 반전 2종((x−p)의 이동을 반대 부호로 읽음 —
+    factor-sign-flip의 완전제곱꼴 대응). p=0이면 −p=p라 부호반전이 원본과 겹쳐 4값이 안 되므로
+    객관식 부적격(None) — 단답형 풀에 남긴다.
+    """
+    if skeleton.p == 0:
+        return None
+    root = sympy.sqrt(skeleton.q)
+    sign = 1 if skeleton.selection == "largest" else -1
+    p = sympy.Integer(skeleton.p)
+    answer: sympy.Expr = p + sign * root
+    opposite: sympy.Expr = p - sign * root
+    flip_answer: sympy.Expr = -p + sign * root
+    flip_opposite: sympy.Expr = -p - sign * root
+    exprs = (answer, opposite, flip_answer, flip_opposite)
+    if len({sympy.sstr(e) for e in exprs}) != 4:  # pragma: no cover — p≠0이면 항상 4값(방어)
+        return None
+    return exprs
+
+
+def _assigned_sqrt_format(skeleton: _SqrtSkeleton) -> Literal["sqrt", "sqrt_multiple_choice"]:
+    """무리근 뼈대당 형식 1개 결정론 배정 — 유리근 `_assigned_format`의 무리근 대응.
+
+    p=0(부호반전 불성립)은 단답형(sqrt), 적격(p≠0) 중 해시 1/3만 객관식. 유리근·무리근 풀은
+    근의 체가 달라 signature가 애초에 서로소이므로, 이 파티션은 *무리근 풀 내부*에서 단답형·
+    객관식이 같은 방정식을 중복 내지 않게 한다(dedup 충돌 차단).
+    """
+    if _sqrt_mc_choice_exprs(skeleton) is None:
+        return "sqrt"
+    digest = hashlib.sha256(
+        f"sqrt:{skeleton.p},{skeleton.q},{skeleton.selection}".encode("utf-8")
+    ).hexdigest()
+    return "sqrt_multiple_choice" if int(digest, 16) % _MC_PARTITION_MOD == 0 else "sqrt"
 
 
 def _sqrt_inner_text(p: int) -> str:
@@ -408,7 +453,7 @@ class SkeletonEquivalentProblemGenerator:
         unit_codes: Sequence[str] = ("QUAD-EQ",),
         concept_tags: Sequence[ConceptTag] = _DEFAULT_CONCEPT_TAGS,
     ) -> None:
-        if variant == "multiple_choice":
+        if variant in _MC_VARIANTS:
             provided = distractor_codes or {}
             missing = [key for key in _MC_OP_KEYS if not provided.get(key)]
             if missing:
@@ -416,12 +461,12 @@ class SkeletonEquivalentProblemGenerator:
                 # 매핑 없는 조립을 허용하지 않는다. id는 조성 루트가 L4 카탈로그에서 읽어
                 # 주입한다(llm_generator._acceptable_misconceptions 주입 선례 미러).
                 raise ValueError(
-                    "multiple_choice variant는 distractor_codes 주입이 필수입니다 — "
+                    f"{variant} variant는 distractor_codes 주입이 필수입니다 — "
                     f"누락 op키: {missing} (op키→(misconception_id, op_code))"
                 )
         self._pool: tuple[_Skeleton | _SqrtSkeleton, ...]
-        if variant == "sqrt":
-            self._pool = _build_sqrt_pool()
+        if variant in ("sqrt", "sqrt_multiple_choice"):
+            self._pool = tuple(s for s in _build_sqrt_pool() if _assigned_sqrt_format(s) == variant)
         else:
             wanted = "multiple_choice" if variant == "multiple_choice" else "short_answer"
             self._pool = tuple(s for s in _build_pool() if _assigned_format(s) == wanted)
@@ -448,6 +493,8 @@ class SkeletonEquivalentProblemGenerator:
                 if signature is not None and signature in self._skip:
                     continue  # 이미 코퍼스에 있는 구조 — 회차 낭비 없이 다음 뼈대로.
             if isinstance(skeleton, _SqrtSkeleton):
+                if self._variant == "sqrt_multiple_choice":
+                    return self._assemble_sqrt_mc(spec, skeleton)
                 return self._assemble_sqrt(spec, skeleton)
             if self._variant == "multiple_choice":
                 return self._assemble_mc(spec, skeleton)
@@ -489,6 +536,53 @@ class SkeletonEquivalentProblemGenerator:
             difficulty=skeleton.difficulty,
             condition=_sqrt_condition(skeleton.p, skeleton.q),
             selection=skeleton.selection,
+        )
+
+    def _assemble_sqrt_mc(self, spec: EquivalenceSpec, skeleton: _SqrtSkeleton) -> CandidateProblem:
+        """무리근 객관식 조립(S2-p 후속) — 4지선다(정답근·반대근·±부호반전)·전 선지 오개념 태깅.
+
+        선지·answer는 SymPy 정확값 문자열(sstr — 단답형 무리근과 동일 표기·`derive_selected_root`
+        규약 정합). 선지는 수치(evalf) 오름차순 정렬(결정론). 유리근 객관식과 동일하게 오답 3선지
+        전부가 주입된 두 오개념으로 태깅되어 밴드 스펙 Jaccard 1.0 고정.
+        """
+        exprs = _sqrt_mc_choice_exprs(skeleton)
+        if exprs is None:  # pragma: no cover — 풀 필터(_assigned_sqrt_format)가 부적격을 배제
+            raise RuntimeError(f"무리근 객관식 부적격 뼈대가 풀에 유입: {skeleton}")
+        answer_expr, opposite_expr, flip_answer_expr, flip_opposite_expr = exprs
+        ordered = sorted(exprs, key=lambda expr: float(expr.evalf()))
+        choices = [str(sympy.sstr(expr)) for expr in ordered]
+        answer_text = str(sympy.sstr(answer_expr))
+
+        op_by_expr: dict[sympy.Expr, str] = {
+            opposite_expr: _MC_OP_OPPOSITE,
+            flip_answer_expr: _MC_OP_SIGN_FLIP,
+            flip_opposite_expr: _MC_OP_SIGN_FLIP,
+        }
+        distractor_map: list[DistractorEntry] = []
+        for index, expr in enumerate(ordered):
+            if expr == answer_expr:
+                continue  # 정답 선지는 distractor_map에서 제외(스키마 계약).
+            misconception_id, op_code = self._distractor_codes[op_by_expr[expr]]
+            distractor_map.append(
+                DistractorEntry(
+                    choice_index=index, misconception_id=misconception_id, op_code=op_code
+                )
+            )
+
+        display_eq = _sqrt_display_equation(skeleton.p, skeleton.q)
+        templates = _MC_TEMPLATES[skeleton.selection]
+        return self._build_candidate(
+            spec,
+            question_text=templates[self._index % len(templates)].format(eq=display_eq),
+            answer_text=answer_text,
+            explanation=self._sqrt_explanation(skeleton),
+            answer_format=AnswerFormat.실수,  # 무리수 전용 형식 부재 — 실수로 정직 매핑
+            difficulty=skeleton.difficulty,
+            condition=_sqrt_condition(skeleton.p, skeleton.q),
+            selection=skeleton.selection,
+            question_format=QuestionFormat.객관식,
+            choices=choices,
+            distractor_map=distractor_map,
         )
 
     def _assemble_mc(self, spec: EquivalenceSpec, skeleton: _Skeleton) -> CandidateProblem:

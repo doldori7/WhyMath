@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-06 (구현·L3/harness/data·S2-p 후속): **무리근 객관식 variant(sqrt_multiple_choice) — 스켈레톤 4종(근유형×발문형식 2×2) 완성**
+
+**무엇/왜**: S2-p 범위 밖으로 남겼던 "무리근 객관식"을 구현 — 스켈레톤 variant를 근유형(유리·무리) × 발문형식(단답·객관식) 2×2로 완성.
+- **`sqrt_multiple_choice` variant** — (x−p)²=q의 4지선다: 정답근 p±√q·반대근·정수부 p 부호 반전 2종. 오답 3종을 코드가 정확히 앎(유리근 MC와 대칭). 선지·answer는 SymPy 정확값 sstr(√8→2√2 자동 정리·단답형 무리근과 동일 표기). p≠0 적격(p=0이면 −p=p라 4값 안 됨) + 해시 1/3 파티션으로 무리근 단답형 풀과 서로소(dedup 충돌 차단·실측 sqrt 122 + sqrt_mc 58). distractor_codes 주입 필수(L4 하드코딩 0·미주입 fail-fast).
+- **배치 CLI 4밴드** — short 90/mc 45/sqrt 30/sqrt_mc 20 = 185건. sqrt_mc 밴드 spec target=주입 오개념 집합(Jaccard 1.0). 재실행 바이트 동일 유지.
+- **코퍼스 재생성** — 165→185건(무리근 전체 50=단답 30+객관식 20·객관식 전체 65). 품질 봉인 무변경 통과(MC 불변식·sqrt 레코드 불변식이 sqrt_mc까지 자동 커버).
+- **테스트**: sqrt MC 게이트 20건 accepted·선지 무리근 4개·distractor 3엔트리·파티션 서로소·결정론. 기존 sqrt 서명 하한 150→100(파티션으로 풀 122로 축소 반영).
+
+**🔒 불변**: acceptance/orchestrator/canonicalize/difficulty 무변경·L3→L4 import 0·저작권 레일. **범위 밖(후속)**: LLM 발문 다양화·근 개수 count 검증기·DB 적재.
+
 ### 2026-07-06 (구현·L1/L4 data·S2-p 후속): **crosswalk 신규 M-id 2종 저작 — 이차방정식 근 선택·부호 반전의 DB 코퍼스 직접 대응**
 
 **무엇/왜**: S2-p에서 저작한 kebab 오개념 2종(opposite-root-selected·factor-sign-flip)이 DB 오개념 코퍼스(839종)에 직접 대응이 없어 검수 큐에 "개념겹침"(저신뢰 M0831·M0848)으로만 담겼던 갭을 해소. 두 오개념을 직접 서술하는 신규 M-id를 저작:
