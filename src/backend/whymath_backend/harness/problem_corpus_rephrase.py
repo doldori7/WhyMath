@@ -148,7 +148,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--in", dest="in_path", type=Path, required=True, help="입력 JSONL 경로.")
     parser.add_argument("--out", dest="out_path", type=Path, required=True, help="산출 JSONL 경로.")
     parser.add_argument(
-        "--temperature", type=float, default=0.9, help="rephrase 샘플링 온도(다양성·기본 0.9)."
+        "--temperature",
+        type=float,
+        default=0.7,
+        help="rephrase 샘플링 온도(기본 0.7 — 라이브 스윕 실측 스윗스팟·2026-07-07).",
     )
     parser.add_argument(
         "--limit", type=int, default=None, help="rephrase 시도 상한(온도 스윕 샘플·기본 전건)."
