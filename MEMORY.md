@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-06 (구현·L3·도메인 분담): **지수·로그 방정식 결정론 스켈레톤 생성기 — 병렬 미적분 세션과 비충돌 새 도메인**
+
+**무엇/왜**: 병렬 세션이 미적분Ⅰ 생성기(#445 극값·#446 접선)를 추가한 상황에서, 겹치지 않는 별개 도메인으로 **대수(고2·[12대수01-08] 지수함수·로그함수 활용)** 지수·로그 방정식을 확보. 생성 코퍼스가 이차방정식(고1)·미적분Ⅰ(고3)에 집중돼 대수 지수·로그가 0건이던 갭 해소.
+- **`l3/equivalent/exp_log_skeleton_generator.py`**(신규): `ExponentialEquationSkeletonGenerator`(bˣ=bᵏ→x=k)·`LogarithmicEquationSkeletonGenerator`(log_b x=k→x=bᵏ). 유일근이라 selection=unique. 밑(2,3,5,6,7,10)×(bᵏ≤1000 지수) 결정론 풀·slug 기반 uuid5·개념태그 H:12대수01-08.
+- **게이트 인프라 무변경 재사용 실증**: 지수·로그는 비다항이라 canonical signature=None이나 오케스트레이터가 1급 지원(비다항→dedup 스킵). verify_answer(evalf)·verify_root_selection/derive_selected_root(sympy.solve)가 지수·로그 내장함수를 무변경 수용 — 전건 게이트 accepted·동치후보 실측. 위생 validator가 로그 해설의 `log_b x`를 선형식 `b·x`로 오독하는 실측 갭은 해설에서 방정식 재진술을 빼(자연어+최종 해만) 상환.
+- **도메인 분담 규율**: 새 파일만(생성기+테스트) + MEMORY append(union-merge). **공유 배치 CLI(problem_corpus_batch)·생성 코퍼스 JSONL·difficulty.py는 미변경**(병렬 세션 동시 편집/재생성 충돌 회피 — 난이도는 지역 함수). 배치 밴드 wiring·코퍼스 materialization은 배치 churn 안정 후 조율 후속.
+- **테스트**: 지수·로그 각 전건 게이트 통과·answer=derive_selected_root 교차 검증·풀 유일·결정론·개념태그·유일근 선택·형제 slug 서로소(11건). CI 5500 passed·4게이트 green.
+
+**🔒 불변**: acceptance/orchestrator/canonicalize/verify_answer/difficulty 무변경·L3→L4 import 0·저작권 레일. **범위 밖(후속)**: 배치 밴드·코퍼스 materialization·지수로그 부등식·객관식·음의 지수·LLM 발문 다양화.
+
 ### 2026-07-06 (구현·L3/harness·S2-p 후속): **LLM 발문 다양화(rephrase) — 수치 불변 봉인·라우터 경유·배치 분리**
 
 **무엇/왜**: S2-p 범위 밖으로 남겼던 마지막 항목. 스켈레톤(LLM 0)의 단조로운 템플릿 발문을 LLM으로 문장 다양화하되, 수치·수식·정답이 절대 안 바뀌게 결정론 게이트로 봉인.
