@@ -30,6 +30,8 @@ E1 물리에서 이 공정 자체를 검증하고, 이후 과목은 **한계비�
 - [ ] 도메인 검수자 1인 트랙 확보 (수학 파트너가 겸하지 않음)
 - [ ] 임베딩 namespace가 `<subj>` 추가를 스키마 변경 0으로 수용 (거버넌스 테스트)
 
+> **팩 실측 스키마**: 6개 팩이 실제 저장소의 어떤 파일·필드로 채워지는지(성취기준 Collection JSON·원자 graph.json·오개념 M-id/kebab·검증 primitive·문제 JSONL)는 `docs/strategy/subject_pack_spec_v1.md`(과목 팩 명세서)에 코드 레벨로 정본화.
+
 ---
 
 ## 2. 과목별 데이터 팩 명세 (E1~E6)
