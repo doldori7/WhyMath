@@ -90,6 +90,10 @@ from whymath_backend.db.models.problem import (
     ProblemRelation,
     ProblemStep,
 )
+from whymath_backend.db.models.problem_type_node import (
+    PROBLEM_TYPE_REVIEW_STATUS_DEFAULT,
+    ProblemTypeNode,
+)
 from whymath_backend.db.models.provenance import (
     ContentProvenance,
     GenerationLog,
@@ -208,6 +212,9 @@ __all__ = [
     # Part 2 Phase 2a: SkillNode (L1 스킬 메타 PG 프로젝션·skill_id 키·behavior_area native enum)
     "SkillNode",
     "SKILL_REVIEW_STATUS_DEFAULT",
+    # Part 2 Phase 3: ProblemTypeNode (L1 문제유형 메타 PG 프로젝션·problem_type_id 키·enum 없음)
+    "ProblemTypeNode",
+    "PROBLEM_TYPE_REVIEW_STATUS_DEFAULT",
     # PIPA §22-2: ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사·surrogate UUID PK)
     "ParentalConsent",
     # P1-2: AchievementStandard (NCIC 성취기준 영속·norm_id PK·official_code 비유일)
