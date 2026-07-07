@@ -118,6 +118,16 @@ class Concept(Base):
     # 시각화 가능성 4분류는 *노드 비내장* — 시각화 계층 Overlay `concept_visualization`
     # (`db/models/concept_visualization.py`·code 키)가 단일 진실(ADR 계층분리·CurriculumEntry 선례).
 
+    # ===== cognition 참조(Part 2 Phase 2b-2) — concept→skill 브리지 =====
+    # 이 개념이 exercise하는 스킬 skill_id 목록(정본 노드 behavior_skills·2b-1 저작의 런타임 투영).
+    # skill mastery가 채점 attempt→평가 개념→스킬 해소(= ANY 멤버십 조인)에 쓴다. 참조 키 배열이라
+    # `aliases`(NOT NULL·server_default '{}') 선례 동형 — junction 테이블 아님·신규 엣지 타입 0.
+    # 구 437 concept_node가 아니라 *런타임 concept* 테이블에 싣는다(S0-4b: concept_node 런타임 read
+    # 금지·문제 태깅 축인 concept UUID에 직접 투영·concept mastery와 동일 sanctioned 축).
+    behavior_skills: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
+    )
+
     # ===== 난이도·중요도 =====
     intrinsic_difficulty: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
     exam_frequency: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))

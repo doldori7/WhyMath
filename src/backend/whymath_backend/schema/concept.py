@@ -154,6 +154,18 @@ class Concept(BaseModel):
         description="권장 시각화 양식 배열 — 개념을 가장 잘 드러내는 교수학적 표현 형식 "
         "(예: 삼각함수→단위원·확률→수형도). 슬라이스 88·visualization_style_enum[] nullable.",
     )
+    # cognition 참조 계층(Part 2 Phase 2b-2) — 이 개념이 exercise하는 스킬 skill_id 목록.
+    # 정본 identity 노드 `behavior_skills`(concepts.jsonl·ai_estimated·2b-1 저작)의 *런타임 투영*
+    # 이다. skill mastery(l2/skill_mastery_tracking)가 채점 attempt→평가 개념→스킬 해소에 쓰는
+    # 참조 배열(= ANY 멤버십 조인 백킹). **참조 키일 뿐 본문 아님**(자체작성 skill_id 공간·redaction
+    # 무관·신규 엣지 타입 0·anti-explosion). 구 437 `concept_node.behavior_skills`가 아니라 런타임
+    # `concept` 테이블에 투영한다 — S0-4b 거버넌스가 concept_node 런타임 read를 금지하므로, 문제가
+    # 태깅되는 concept(UUID) 축에 직접 싣는다(concept mastery와 동일 sanctioned 축).
+    behavior_skills: list[str] = Field(
+        default_factory=list,
+        description="이 개념이 exercise하는 스킬 skill_id 목록(`skill.<slug>`·skill_node PK 공간). "
+        "런타임 skill mastery 해소의 concept→skill 브리지. 참조 키 배열(본문 아님·자체작성).",
+    )
     # 시각화 가능성 4분류(직접/동적/추상/불가)는 *노드 비내장* — 시각화 계층 Overlay
     # `concept_visualization`(`db/models/concept_visualization.py`·code 키)가 단일 진실이다
     # (ADR concept_node_layering_decision §1 "visualization 계층=노드 비내장"·CurriculumEntry

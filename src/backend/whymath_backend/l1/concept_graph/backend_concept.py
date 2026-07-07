@@ -216,6 +216,9 @@ class BackendConceptRecord:
     # 유도
     level: ConceptLevel  # 세부개념 고정(NOT NULL 충족)
     intrinsic_difficulty: float | None  # difficulty_tier 스케일
+    # cognition 참조(Phase 2b-2) — 이 개념이 exercise하는 스킬 skill_id 목록(정본 노드
+    # behavior_skills 직결·2b-1 저작). skill mastery의 concept→skill 브리지·참조 키(본문 아님).
+    behavior_skills: list[str]
 
 
 def load_backend_concepts_from_graph_json(path: Path) -> list[BackendConceptRecord]:
@@ -263,6 +266,8 @@ def load_backend_concepts_from_graph_json(path: Path) -> list[BackendConceptReco
                 aliases=_str_list(record.get("aliases")),
                 level=_DEFAULT_LEVEL,
                 intrinsic_difficulty=scale_difficulty(_opt_int(record.get("difficulty_tier"))),
+                # 정본 노드 behavior_skills 직결(2b-1 저작·부재 시 빈 배열). concept→skill 브리지.
+                behavior_skills=_str_list(record.get("behavior_skills")),
             )
         )
     return out
@@ -308,7 +313,8 @@ class BackendConceptStore:
         """단일 개념을 backend `concept`에 upsert (멱등·`code` 충돌 갱신·UUID PK 보존).
 
         `INSERT ... ON CONFLICT(code) DO UPDATE` — 런타임 식별 필드(name_ko·source_id·aliases·
-        level·intrinsic_difficulty)를 갱신한다. **PK(concept_id)는 SET하지 않아 보존**되고
+        level·intrinsic_difficulty·behavior_skills)를 갱신한다(behavior_skills=concept→skill 참조
+        키·Phase 2b-2·skill mastery 브리지·본문 아님). **PK(concept_id)는 SET하지 않아 보존**되고
         (재적재 시 기존 UUID 유지), 신규 행만 server_default로 발급한다. **본문 3종·오개념 컬럼은
         Phase 1b로 제거돼 INSERT/SET에 아예 없다**(redaction·구조적 차단). `level`은 enum 값으로
         바인딩한다(`use_enum_values` 직렬화 등가 — PG enum 컬럼에 한글 값).
@@ -324,6 +330,7 @@ class BackendConceptStore:
             aliases=record.aliases,
             level=record.level.value,
             intrinsic_difficulty=record.intrinsic_difficulty,
+            behavior_skills=record.behavior_skills,
         )
         # code 충돌 시 갱신 — concept_id(PK)·created_at은 SET하지 않는다(보존·redaction).
         stmt = stmt.on_conflict_do_update(
@@ -334,6 +341,7 @@ class BackendConceptStore:
                 "aliases": stmt.excluded.aliases,
                 "level": stmt.excluded.level,
                 "intrinsic_difficulty": stmt.excluded.intrinsic_difficulty,
+                "behavior_skills": stmt.excluded.behavior_skills,
             },
         )
         with self._get_engine().begin() as conn:

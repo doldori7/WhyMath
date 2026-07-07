@@ -95,6 +95,7 @@ def _record(
     source_id: str | None = "N1",
     aliases: list[str] | None = None,
     intrinsic_difficulty: float | None = 2.17,
+    behavior_skills: list[str] | None = None,
 ) -> BackendConceptRecord:
     return BackendConceptRecord(
         code=code,
@@ -104,6 +105,8 @@ def _record(
         aliases=(aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]),
         level=ConceptLevel.세부개념,
         intrinsic_difficulty=intrinsic_difficulty,
+        # concept→skill 브리지(Phase 2b-2·부재 시 빈 배열).
+        behavior_skills=(behavior_skills if behavior_skills is not None else ["skill.compute"]),
     )
 
 
@@ -146,9 +149,26 @@ class TestLoadFromGraphJson:
         assert rec.name_ko == "극한"
         assert rec.level == ConceptLevel.세부개념  # 고정 유도(NOT NULL 충족)
         assert rec.intrinsic_difficulty == scale_difficulty(7)
+        assert rec.behavior_skills == []  # graph 부재 시 빈 배열(graceful·이 항목 미탑재)
         # Part 2 §3(순수성): graph의 misconception_text는 노드로 흡수되지 않는다 — 오개념 컬럼은
         # Phase 1b로 레코드·ORM에서 아예 제거됐다(redaction 청산).
         assert not hasattr(rec, "common_misconceptions")
+
+    def test_behavior_skills_loaded_when_present(self, tmp_path: Path) -> None:
+        # concept→skill 브리지(Phase 2b-2): graph.json behavior_skills가 레코드로 직결된다.
+        path = self._write_graph(
+            tmp_path,
+            [
+                {
+                    "concept_id": _NID_A,
+                    "name_ko": "극한",
+                    "domain": "[고]미적분",
+                    "behavior_skills": ["skill.compute-limit", "skill.reasonableness-check"],
+                }
+            ],
+        )
+        rec = load_backend_concepts_from_graph_json(path)[0]
+        assert rec.behavior_skills == ["skill.compute-limit", "skill.reasonableness-check"]
 
     def test_source_id_and_aliases_absent_graceful(self, tmp_path: Path) -> None:
         # 옛 graph.json(재ID 전·source_id/aliases 부재) → None/빈 배열 graceful(하위호환·NOT NULL
@@ -313,7 +333,7 @@ class TestUpsertStatement:
         store, engine = _fake_store()
         store.upsert(_record())
         compiled = _compile(engine.executed[0])
-        # 재ID 추적성(source_id·aliases)도 런타임 식별 컬럼에 포함된다.
+        # 재ID 추적성(source_id·aliases)·concept→skill 브리지(behavior_skills)도 포함된다.
         for col in (
             "code",
             "name_ko",
@@ -321,6 +341,7 @@ class TestUpsertStatement:
             "aliases",
             "level",
             "intrinsic_difficulty",
+            "behavior_skills",
         ):
             assert col in compiled
 
