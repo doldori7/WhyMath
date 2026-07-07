@@ -173,7 +173,8 @@ def test_generated_corpus_concepts_tagged() -> None:
     # 결정론 개념 태깅 — 전건 비어있지 않음 + 문제군별 PRIMARY 개념(quad=HK06·이차방정식의 근,
     # calc-extremum=H:12미적Ⅰ02-07·극대극소, calc-tangent=H:12미적Ⅰ02-01·미분계수).
     # 미지 개념 태깅은 차단(태깅 왜곡 봉인).
-    known_primary = {"HK06", "H:12미적Ⅰ02-07", "H:12미적Ⅰ02-01"}
+    # exp/log(대수·H:12대수01-08)는 지수·로그 방정식 밴드.
+    known_primary = {"HK06", "H:12미적Ⅰ02-07", "H:12미적Ⅰ02-01", "H:12대수01-08"}
     for record in _generated_records():
         assert record.concept_tags, f"{record.slug} concepts 비어 있음"
         primary = [t.concept_src_id for t in record.concept_tags if t.role == "PRIMARY"]
@@ -224,7 +225,8 @@ def test_generated_corpus_signatures_unique_within_family() -> None:
     for record in _generated_records():
         family = record.problem.unit_codes[0] if record.problem.unit_codes else ""
         sig = canonical_signature(record.verify.conditions, record.verify.answer_selection)
-        assert sig is not None, f"{record.slug} 서명 없음"
+        if sig is None:
+            continue  # 비다항 문제군(지수·로그)은 signature=None이 정상 — slug 유일성에 위임
         per_family[family].append(sig)
     for family, sigs in per_family.items():
         assert len(sigs) == len(set(sigs)), f"{family} 문제군 내 서명 중복"

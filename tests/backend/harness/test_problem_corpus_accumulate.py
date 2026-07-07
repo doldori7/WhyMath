@@ -44,6 +44,8 @@ def _seed_corpus(tmp_path: Path, short_n: int = 6) -> Path:
         calc_extremum_n=0,
         calc_tangent_n=0,
         calc_value_n=0,
+        exp_n=0,
+        log_n=0,
         write=True,
     )
     assert report.fulfilled
