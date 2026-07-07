@@ -228,6 +228,61 @@ class ConceptMasteryHistory(BaseModel):
     )
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# 핵심: SkillMasteryHistory (skill_mastery_history — 스킬 숙달 변화 시계열·Part 2 Phase 2b-2)
+# ──────────────────────────────────────────────────────────────────────────
+class SkillMasteryHistory(BaseModel):
+    """스킬별 숙달 변화 추적 — `skill_mastery_history`(Part 2 리치 채택 Phase 2b-2).
+
+    `ConceptMasteryHistory`의 *스킬 축* 짝이다 — 개념(무엇)과 직교하는 *행동*(어떻게) 숙달을
+    시계열로 적재한다. 채점 attempt가 평가하는 개념을 concept→skill 브리지(`Concept.behavior_skills`
+    ∩ mastery-estimable `skill_node`)로 해소한 각 스킬에 대해 BKT/IRT 순수 커널을 *그대로 재사용*
+    (엔티티-무관)해 갱신한다.
+
+    복합 PK `(user_id, skill_id, measured_at)` — DB 제약. **개념과의 유일한 차이**: 개념은
+    `concept_id`(UUID)지만 스킬은 `skill_id`(**TEXT**·`skill.<slug>`·`skill_node` PK 공간)다.
+    `user_id`·`skill_id`는 §느슨참조라 *FK 아님*(hypertable·ConceptMasteryHistory 선례). 운영 시
+    `measured_at` 7일 청크 hypertable로 변환(마이그레이션 레벨·모델 미표현).
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        use_enum_values=True,
+        str_strip_whitespace=True,
+    )
+
+    # ===== 복합 PK (user_id, skill_id, measured_at) =====
+    user_id: uuid.UUID = Field(..., description="학생 FK (복합 PK 구성요소)")
+    skill_id: str = Field(
+        ...,
+        description="스킬 id(`skill.<slug>`·skill_node PK 공간·복합 PK 구성요소·느슨참조).",
+        max_length=200,
+    )
+    measured_at: datetime = Field(
+        ...,
+        description="스킬 숙달 측정 시각 (복합 PK 구성요소·hypertable 7일 청크 분할 키)",
+    )
+
+    # ===== 측정값 (ConceptMasteryHistory 동형·Numeric(3,2)/Int) =====
+    mastery: float | None = Field(
+        default=None,
+        description="스킬 숙달도 0-1 (DECIMAL(3,2)·ge=0 le=1).",
+        ge=0.0,
+        le=1.0,
+    )
+    confidence: float | None = Field(
+        default=None,
+        description="측정 신뢰도 (DECIMAL(3,2)·표본 기반 휴리스틱·ge=0 le=1).",
+        ge=0.0,
+        le=1.0,
+    )
+    sample_size: int | None = Field(
+        default=None,
+        description="이 측정의 근거가 된 관측(문제) 수 (개수·ge=0).",
+        ge=0,
+    )
+
+
 class AbilitySnapshot(BaseModel):
     """IRT 능력 θ 시계열 적재 — slice 31(`ability_snapshot`). 성장 곡선 영속.
 

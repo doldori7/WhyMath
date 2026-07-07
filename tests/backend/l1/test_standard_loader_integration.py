@@ -112,6 +112,7 @@ def _seed_concept(*, code: str = _CODE, source_id: str = _SRC_ID) -> None:
                 aliases=[],
                 level=ConceptLevel.세부개념,
                 intrinsic_difficulty=None,
+                behavior_skills=[],
             )
         ],
         settings=Settings(),

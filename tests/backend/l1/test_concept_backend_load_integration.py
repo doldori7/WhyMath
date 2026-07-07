@@ -104,6 +104,7 @@ def _record(
     source_id: str | None = "N1",
     aliases: list[str] | None = None,
     intrinsic_difficulty: float | None = 2.17,
+    behavior_skills: list[str] | None = None,
 ) -> BackendConceptRecord:
     return BackendConceptRecord(
         code=code,
@@ -112,6 +113,8 @@ def _record(
         aliases=(aliases if aliases is not None else ["UC.calc.alimit.epsilon-delta", "N1"]),
         level=ConceptLevel.세부개념,
         intrinsic_difficulty=intrinsic_difficulty,
+        # concept→skill 브리지(Phase 2b-2·부재 시 빈 배열).
+        behavior_skills=(behavior_skills if behavior_skills is not None else []),
     )
 
 

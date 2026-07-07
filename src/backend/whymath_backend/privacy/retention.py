@@ -33,6 +33,7 @@ from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
     Assessment,
     ConceptMasteryHistory,
+    SkillMasteryHistory,
 )
 from whymath_backend.db.models.dialogue import Dialogue
 from whymath_backend.db.models.timeseries import DailyLearningMetrics, UserBehaviorMetrics
@@ -49,6 +50,7 @@ _RETENTION_PLAN: tuple[tuple[type[Base], str], ...] = (
     (AttemptEvent, "event_at"),  # 느슨참조·hypertable(고아 방지)
     (Assessment, "started_at"),
     (ConceptMasteryHistory, "measured_at"),  # BKT 숙달 이력·느슨참조
+    (SkillMasteryHistory, "measured_at"),  # 스킬 숙달 이력·느슨참조
     (AbilitySnapshot, "measured_at"),  # IRT θ 이력·느슨참조
     (DailyLearningMetrics, "metric_date"),  # 일 집계·DATE 컬럼·느슨참조
     (UserBehaviorMetrics, "measured_at"),  # 행동 지표·느슨참조

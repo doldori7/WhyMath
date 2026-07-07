@@ -498,6 +498,7 @@ class TestConceptNodeFieldGovernance:
             "is_signature_korean",
             "cognitive_type",
             "recommended_visual_styles",
+            "behavior_skills",  # cognition 참조(Phase 2b-2)·concept→skill 브리지·참조 키(본문 아님)
             "intrinsic_difficulty",
             "exam_frequency",
             "weight_in_curriculum",

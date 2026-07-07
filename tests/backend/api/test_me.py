@@ -751,8 +751,9 @@ class TestSubmitAttempt:
     def test_submit_with_assessed_concept(self) -> None:
         """채점 제출 → ProblemAttempt 적재 + 평가 개념 숙달 갱신 응답."""
         cid = uuid.uuid4()
-        # execute#1=개념 [cid]·execute#2=개념 prior 없음
-        session = _QueueSession([_AQResult([cid]), _AQResult([])])
+        # 개념 숙달: execute#1=개념 [cid]·#2=개념 prior 없음.
+        # 스킬 숙달(Phase 2b-2): #3=개념 [cid]·#4=스킬 해소 [](미매핑 → 스킬행 0).
+        session = _QueueSession([_AQResult([cid]), _AQResult([]), _AQResult([cid]), _AQResult([])])
         client = _attempts_client(session)
         resp = client.post(
             "/v1/me/attempts",
@@ -767,13 +768,14 @@ class TestSubmitAttempt:
         assert upd["concept_id"] == str(cid)
         assert upd["mastery"] == 0.69  # 첫 관측·정답
         assert upd["sample_size"] == 1
-        # ProblemAttempt + 숙달행 add·attempt commit 발생
+        assert body["skill_mastery_updates"] == []  # 스킬 해소 0(미매핑)
+        # ProblemAttempt + 개념 숙달행 add·attempt commit 발생(스킬행 0)
         assert len(session.added) == 2
 
     def test_submit_no_mapped_concepts(self) -> None:
-        """문제↔개념 매핑 없으면 attempt만 적재·mastery_updates 빈 리스트."""
-        # 오답(모델 B): PRIMARY 쿼리→[] → TESTED 폴백 쿼리→[]. 둘 다 비어 갱신 0.
-        session = _QueueSession([_AQResult([]), _AQResult([])])
+        """문제↔개념 매핑 없으면 attempt만 적재·mastery/skill 갱신 빈 리스트."""
+        # 오답(모델 B): 개념 PRIMARY→[]·TESTED 폴백→[]. 스킬(Phase 2b-2): PRIMARY→[]·TESTED→[].
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
         client = _attempts_client(session)
         resp = client.post(
             "/v1/me/attempts",
@@ -781,12 +783,13 @@ class TestSubmitAttempt:
         )
         assert resp.status_code == 201, resp.text
         assert resp.json()["mastery_updates"] == []
+        assert resp.json()["skill_mastery_updates"] == []
         assert len(session.added) == 1  # attempt만
 
     def test_submit_overconfident_returns_coaching(self) -> None:
         """과신 제출(틀림 + 확신≥0.7) → calibration_coaching.focus==overconfident(§11.4)."""
-        # 오답(모델 B): PRIMARY→[] → TESTED 폴백→[](개념 매핑 없음).
-        session = _QueueSession([_AQResult([]), _AQResult([])])
+        # 오답(모델 B): 개념 PRIMARY→[]·TESTED→[]·스킬 PRIMARY→[]·TESTED→[](매핑 없음).
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
         client = _attempts_client(session)
         resp = client.post(
             "/v1/me/attempts",
@@ -806,7 +809,8 @@ class TestSubmitAttempt:
 
     def test_submit_well_calibrated_no_coaching(self) -> None:
         """잘 보정됨(맞음 + 확신 높음) → calibration_coaching==null."""
-        session = _QueueSession([_AQResult([])])
+        # 정답: 개념 assessed→[]·스킬 assessed→[](매핑 없음·둘 다 갱신 0).
+        session = _QueueSession([_AQResult([]), _AQResult([])])
         client = _attempts_client(session)
         resp = client.post(
             "/v1/me/attempts",
@@ -821,8 +825,8 @@ class TestSubmitAttempt:
 
     def test_submit_no_confidence_no_coaching(self) -> None:
         """확신 미제출(confidence 없음) → calibration_coaching==null(보정 평가 불가)."""
-        # 오답(모델 B): PRIMARY→[] → TESTED 폴백→[](개념 매핑 없음).
-        session = _QueueSession([_AQResult([]), _AQResult([])])
+        # 오답(모델 B): 개념 PRIMARY→[]·TESTED→[]·스킬 PRIMARY→[]·TESTED→[](매핑 없음).
+        session = _QueueSession([_AQResult([]), _AQResult([]), _AQResult([]), _AQResult([])])
         client = _attempts_client(session)
         resp = client.post(
             "/v1/me/attempts",
