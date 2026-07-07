@@ -1,0 +1,18 @@
+{
+  "source_file": "problem_types.jsonl",
+  "source_sha256": "006b980abba05944f3643e36880d482d8ea23584ceacbeb0bd4c3f199eef1fcc",
+  "source_citation": "문제유형(cognitive-action) 택소노미: 와이매스 자체작성(평가원 기출 문항 본문 미포함).",
+  "counts": {
+    "problem_types": 17,
+    "families": 6,
+    "referenced_skills": 25
+  },
+  "validation": {
+    "success": true,
+    "errors": 0,
+    "warnings": 0,
+    "counts_by_rule": {}
+  },
+  "skipped": [],
+  "determinism": "결정론 — 동일 sha256 입력 2회 transform 시 byte 동일 산출"
+}

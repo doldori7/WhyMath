@@ -94,7 +94,7 @@ AST·성취기준 본문은 내장 금지.
 | Concept | ✅ | ✅ 9계층화(P1) | — |
 | Misconception | ✅ 독립 DB | ✅ 7계층화(P4) | 오개념 독립 DB(#6) |
 | **Skill** | 속성(enum) | **✅ 1급 노드(P2a 완료)** | mastery 독립추정 가치·행동영역 canonical |
-| **ProblemType** | 스키마 | **1급 노드(P3)** | cognitive-action canonical(≠surface SignaturePattern) |
+| **ProblemType** | 스키마 | **✅ 1급 노드(P3 완료)** | cognitive-action canonical(≠surface SignaturePattern) |
 | Visualization | 선언 명세 | ✅ 유지·계약 정합 | "무엇을"만·"어떻게" 금지 |
 | **Formula** | 비노드 | **canonical-only 노드(P5)** | canonical 표현만(변형 노드화 금지)·SymPy 검증커널 유지 |
 | Proof/Theorem | 없음 | TheoremNode≠ProofNode(P6) | 정리≠증명 분리 |
@@ -114,6 +114,22 @@ misconception↔skill·concept↔formula 연결은 *참조 키*와 기존 `prere
 SkillNode를 이 집합에서 제거**했다 — `_FORBIDDEN_NODE_CLASSES=("FormulaNode","ProblemTypeNode")`로
 축소하고 `test_skill_is_first_class_node`(SkillNode 모델·ORM + BehaviorArea 6종)로 반전. 신규 거버넌스
 `test_skill_governance`가 BehaviorArea 6종 폐쇄·backend↔pipeline enum 값 정합·신규 엣지 타입 0을 동결.
+**Phase 3(2026-07-07)로 ProblemTypeNode를 제거** — `_FORBIDDEN_NODE_CLASSES=("FormulaNode",)`로 축소하고
+`test_problem_type_is_first_class_node`(ProblemTypeNode 모델·ORM)로 반전. 신규 거버넌스
+`test_problemtype_governance`가 신규 엣지 타입 0·**ProblemType≠SignaturePattern 구별**·cross-corpus
+dangling 0을 동결. Formula만 이 집합에 남는다(P5 승격 대기).
+
+### Phase 3 완료 — ProblemType 1급 노드 승격 (2026-07-07)
+- **cognitive-action canonical 노드**(≠surface SignaturePattern): ProblemType을 `Problem` 스키마
+  표현에서 1급 노드로 격상. **신규 enum 0(D1)**: cognitive-action 축은 이미 `BehaviorArea`(Phase 2a)라
+  중복 archetype enum을 두지 않고, 유형이 exercise하는 스킬(`behavior_skills`·skill_graph_v1 참조·≥1개)로
+  "무슨 사고를 요구하는가"를 표현한다(P3→P2 참조·신규 엣지 타입 0).
+- **data-pipeline `problem_type_graph`**(models·transform·validate·CLI) + 정본 코퍼스
+  `problem_type_graph_v1`(17 유형·6 family·자체작성·ai_estimated). **backend `problem_type_node`**
+  (PG 프로젝션·problem_type_id 키·**native enum 없음**·마이그레이션 `f0a1b3c4d5e6`).
+- **Problem↔ProblemType 연결은 Phase 3b로 분리(D2)**: 문제는 L3 동적 생성이라 연결을 채울 생산자/소비처가
+  없어 지금 매핑/컬럼/junction은 dead code("소비처 없는 추상 미도입"·2a→2b 분리 선례). 분리 불변식은
+  매핑 없이 구조로 단언(노드에 surface 필드 부재·SignaturePattern 미import·id 공간 disjoint).
 
 ### Phase 2a 완료 — Skill 1급 노드 승격 (2026-07-03)
 - **BehaviorArea 폐쇄 6종**(사용자 결정): `COMPUTE`·`TRANSFORM`·`INTERPRET`·`REPRESENT`·`REASON`·
