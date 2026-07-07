@@ -100,8 +100,12 @@ def _enable_judge_shadow(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def _patch_judge(monkeypatch: pytest.MonkeyPatch, judge: JudgeProtocol) -> None:
-    """`_judge_for_gate` 좌석을 주입 judge로 교체(좌석 주입점·hermetic·라이브 0)."""
-    monkeypatch.setattr(coach, "_judge_for_gate", lambda: judge)
+    """`_judge_for_gate` 좌석을 주입 judge로 교체(좌석 주입점·hermetic·라이브 0).
+
+    좌석은 이제 app.state 공유 provider/cache/trace를 kwargs로 받으므로 대체물도 kwargs를
+    받아 무시한다(`**_`) — 실 좌석 시그니처와 호환(주입값은 FakeJudge라 소비하지 않음).
+    """
+    monkeypatch.setattr(coach, "_judge_for_gate", lambda **_: judge)
 
 
 class _CapturedSpawn:
