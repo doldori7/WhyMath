@@ -12,6 +12,8 @@ import json
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+import pytest
+
 from whymath_backend.harness.problem_corpus_batch import run_corpus_batch
 from whymath_backend.harness.problem_corpus_rephrase_sweep import (
     main,
@@ -55,6 +57,33 @@ class _TempVaryingProvider:
         base = self._base(prompt)
         temp = temperature if temperature is not None else 0.9
         return base + " (다양화)" if self._diversifies(base, temp) else base
+
+
+class _AlternatingProvider:
+    """호출 순번이 짝수면 다양화·홀수면 원문 — 반복 간 변형률이 흔들리게(min≠max 검증용).
+
+    provider 인스턴스를 반복 간 재사용하므로 전역 호출 카운터가 회차 경계를 넘어 이어진다.
+    limit=5(홀수)에 repeats=3이면 회차마다 짝수 호출 수가 3·2·3으로 갈려 변형률이 흔들린다 —
+    라이브 LLM의 회차 변동을 결정론으로 모사해 `--repeats` 집계(합산·min~max)를 검증한다.
+    """
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
+        temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
+    ) -> str:
+        base = _TempVaryingProvider._base(prompt)
+        diversify = self.calls % 2 == 0
+        self.calls += 1
+        return base + " (다양화)" if diversify else base  # 원문 그대로면 '동일'로 미변형.
 
 
 def _seed_corpus(tmp_path: Path) -> Path:
@@ -116,6 +145,49 @@ class TestRunRephraseSweep:
             assert row.attempted == 5  # 상한이 온도 간 동일 시도 → 공정 비교.
             assert row.rephrased <= 5
 
+    def test_repeats_default_one_reports_zero_spread(self, tmp_path: Path) -> None:
+        # repeats 기본 1 — 합산=단발·min=max=rate(결정론 provider라 변동 0).
+        src = _seed_corpus(tmp_path)
+        report = run_rephrase_sweep(
+            in_path=src,
+            temperatures=(0.7,),
+            limit=6,
+            rephraser_factory=_factory(_TempVaryingProvider()),
+        )
+        row = report.rows[0]
+        assert row.repeats == 1
+        assert row.attempted == 6
+        assert row.rate_min == row.rate == row.rate_max
+
+    def test_repeats_aggregates_and_reports_spread(self, tmp_path: Path) -> None:
+        # 반복 간 변형률이 흔들리는 provider — 합산·min~max 폭을 정확히 집계.
+        src = _seed_corpus(tmp_path)
+        report = run_rephrase_sweep(
+            in_path=src,
+            temperatures=(0.7,),
+            limit=5,
+            repeats=3,
+            rephraser_factory=_factory(_AlternatingProvider()),
+        )
+        row = report.rows[0]
+        assert row.repeats == 3
+        assert row.attempted == 15  # 5건 × 3회 반복 합산.
+        assert row.rephrased == 8  # 짝수 호출만 다양화: 회차별 3·2·3.
+        assert (row.rate_min, row.rate_max) == (0.4, 0.6)  # 회차 변동폭 관측.
+        assert row.rate_min <= row.rate <= row.rate_max  # 평균은 폭 안.
+        assert row.unchanged == row.attempted - row.rephrased
+
+    def test_repeats_below_one_rejected(self, tmp_path: Path) -> None:
+        src = _seed_corpus(tmp_path)
+        with pytest.raises(ValueError):
+            run_rephrase_sweep(
+                in_path=src,
+                temperatures=(0.7,),
+                limit=5,
+                repeats=0,
+                rephraser_factory=_factory(_TempVaryingProvider()),
+            )
+
     def test_sweep_writes_no_corpus(self, tmp_path: Path) -> None:
         # 측정 전용 — write=False라 어떤 산출 파일도 생기지 않는다.
         src = _seed_corpus(tmp_path)
@@ -140,6 +212,20 @@ class TestRunRephraseSweep:
         assert "0.70" in table and "0.90" in table
         assert "변형률" in table
 
+    def test_render_table_shows_repeat_count_and_range(self, tmp_path: Path) -> None:
+        src = _seed_corpus(tmp_path)
+        report = run_rephrase_sweep(
+            in_path=src,
+            temperatures=(0.7,),
+            limit=5,
+            repeats=3,
+            rephraser_factory=_factory(_AlternatingProvider()),
+        )
+        table = report.render_table()
+        assert "반복 3" in table  # 반복 횟수 표기.
+        assert "범위(min~max)" in table  # 회차 변동폭 열.
+        assert "40.0~60.0%" in table  # 실제 min~max 렌더.
+
 
 class TestCliEntry:
     def test_main_without_live_provider_fails_closed(self, tmp_path: Path, capsys: object) -> None:
@@ -161,3 +247,22 @@ class TestCliEntry:
         assert code == 0
         captured = capsys.readouterr()  # type: ignore[attr-defined]
         assert "0.70" in captured.out and "0.90" in captured.out  # 기본 온도 표
+
+    def test_main_repeats_aggregates_attempts(self, tmp_path: Path, capsys: object) -> None:
+        # --repeats N → 시도 수 = limit × N(provider 부재라 변형 0·표에 반복 N 표기).
+        src = _seed_corpus(tmp_path)
+        code = main(
+            ["--in", str(src), "--temperatures", "0.7", "--limit", "4", "--repeats", "2", "--json"]
+        )
+        assert code == 0
+        captured = capsys.readouterr()  # type: ignore[attr-defined]
+        report = json.loads(captured.out)
+        row = report["rows"][0]
+        assert row["repeats"] == 2
+        assert row["attempted"] == 8  # 4 × 2 반복
+        assert row["rephrased"] == 0
+
+    def test_main_rejects_repeats_below_one(self, tmp_path: Path) -> None:
+        src = _seed_corpus(tmp_path)
+        with pytest.raises(SystemExit):
+            main(["--in", str(src), "--limit", "3", "--repeats", "0"])
