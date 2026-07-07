@@ -18,6 +18,7 @@ import pytest
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import (
     CostTier,
+    GenerationResult,
     LocalModelTier,
     ModelFamily,
     RoutingDecision,
@@ -45,11 +46,11 @@ class FakeProvider:
         *,
         temperature: float | None = None,
         json_schema: Any = None,
-    ) -> str:
+    ) -> GenerationResult:
         self.calls.append((prompt, system, decision))
         self.temperatures.append(temperature)
         self.json_schemas.append(json_schema)
-        return self._text
+        return GenerationResult(self._text)
 
     async def check_status(self) -> Any:
         return self._status
@@ -62,9 +63,11 @@ class NoStatusProvider:
         self._text = text
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
         self.calls.append((prompt, system, decision))
-        return self._text
+        return GenerationResult(self._text)
 
 
 def _local_decision() -> RoutingDecision:
@@ -102,7 +105,7 @@ class TestDispatch:
 
         out = await composite.generate("p", "s", _local_decision())
 
-        assert out == "로컬결과"
+        assert out.text == "로컬결과"
         assert len(local.calls) == 1
         assert cloud.calls == []
 
@@ -113,7 +116,7 @@ class TestDispatch:
 
         out = await composite.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
 
-        assert out == "클라우드결과"
+        assert out.text == "클라우드결과"
         assert len(cloud.calls) == 1
         assert local.calls == []
 
@@ -124,7 +127,7 @@ class TestDispatch:
 
         out = await composite.generate("p", "s", _cloud_decision(CostTier.CLOUD_HIGH))
 
-        assert out == "opus"
+        assert out.text == "opus"
         assert len(cloud.calls) == 1
 
     async def test_cloud_decision_without_cloud_provider_raises(self) -> None:
@@ -138,7 +141,7 @@ class TestDispatch:
         local = FakeProvider(text="로컬전용")
         composite = CompositeProvider(local=local)
         out = await composite.generate("p", "s", _local_decision())
-        assert out == "로컬전용"
+        assert out.text == "로컬전용"
 
     async def test_temperature_forwarded_to_target(self) -> None:
         """S2-g: temperature는 위임받는 제공자로 그대로 전달된다."""

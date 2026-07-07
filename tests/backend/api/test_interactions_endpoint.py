@@ -19,7 +19,7 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.activity import AttemptEvent
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.schema.enums import EventType, Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
@@ -30,8 +30,10 @@ _UID = uuid.uuid4()
 class _StubProvider:
     """create_app(provider=) 주입용 — generate 미호출(이벤트 적재는 LLM 무관)."""
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
-        return ""
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
+        return GenerationResult("")
 
 
 class _CapturingSession:

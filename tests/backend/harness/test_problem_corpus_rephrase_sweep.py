@@ -20,7 +20,7 @@ from whymath_backend.harness.problem_corpus_rephrase_sweep import (
     run_rephrase_sweep,
 )
 from whymath_backend.l3.equivalent.rephrase import QuestionRephraser
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 
 
 class _TempVaryingProvider:
@@ -53,10 +53,11 @@ class _TempVaryingProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         base = self._base(prompt)
         temp = temperature if temperature is not None else 0.9
-        return base + " (다양화)" if self._diversifies(base, temp) else base
+        text = base + " (다양화)" if self._diversifies(base, temp) else base
+        return GenerationResult(text)
 
 
 class _AlternatingProvider:
@@ -79,11 +80,12 @@ class _AlternatingProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         base = _TempVaryingProvider._base(prompt)
         diversify = self.calls % 2 == 0
         self.calls += 1
-        return base + " (다양화)" if diversify else base  # 원문 그대로면 '동일'로 미변형.
+        text = base + " (다양화)" if diversify else base  # 원문 그대로면 '동일'로 미변형.
+        return GenerationResult(text)
 
 
 def _seed_corpus(tmp_path: Path) -> Path:

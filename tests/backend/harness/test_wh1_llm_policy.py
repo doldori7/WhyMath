@@ -30,7 +30,7 @@ from whymath_backend.harness.wh1_loop import (
     VerifyStepAction,
     run_tutoring_turn,
 )
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 
 # diagnose가 confidence 1.0으로 잡는 실 신호(wh1_loop 테스트와 동일).
@@ -59,13 +59,13 @@ class FakeProvider:
         decision: RoutingDecision,
         *,
         images: Sequence[str] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         self.calls.append((prompt, system))
         if self._index < len(self._responses):
             out = self._responses[self._index]
             self._index += 1
-            return out
-        return '{"kind": "end_turn", "action_type": "격려"}'
+            return GenerationResult(out)
+        return GenerationResult('{"kind": "end_turn", "action_type": "격려"}')
 
 
 class RaisingProvider:
@@ -78,7 +78,7 @@ class RaisingProvider:
         decision: RoutingDecision,
         *,
         images: Sequence[str] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         raise RuntimeError("provider 다운(테스트)")
 
 

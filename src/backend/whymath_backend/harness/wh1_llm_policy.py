@@ -185,7 +185,8 @@ class LLMTutorPolicy:
         prompt = self._build_prompt(state)
         decision = Router().route(self._routing_request())
         try:
-            raw = await self._provider.generate(prompt, _SYSTEM_PROMPT, decision)
+            # provider 반환은 GenerationResult(text, usage) — 도구 선택은 텍스트만 소비.
+            raw = (await self._provider.generate(prompt, _SYSTEM_PROMPT, decision)).text
         except Exception:  # noqa: BLE001 — provider 장애 시 학생 앞 크래시 금지·안전 강등.
             return self._safe_fallback(state)
         action = self._parse_action(raw, state)

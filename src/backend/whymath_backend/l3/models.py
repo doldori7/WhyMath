@@ -21,6 +21,7 @@ NLP를 수학 모델로 돌리면 7b조차 0%였다(03a §0.2).
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -286,3 +287,50 @@ class RoutingDecision(BaseModel):
             raise ValueError(f"mode는 'sync' 또는 'async'여야 한다(현재 {self.mode!r})")
 
         return self
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# provider 반환 계약 — 실측 usage + 원시 텍스트 (S1 탈출 게이트 ② 계측 배선)
+# ──────────────────────────────────────────────────────────────────────────
+@dataclass(slots=True, frozen=True)
+class Usage:
+    """LLM 호출 1건의 *실측* 텔레메트리 — 토큰·지연 (S1 게이트 ② 비용 실측 근거).
+
+    라우터의 *추정*(RoutingDecision.est_latency_ms/est_cost_krw)과 명시적으로 구분되는
+    **actual** 값이다 — 추정 vs 실측 구분을 코드가 유지한다(03a §F.2: est_* ↔ 실측 필드).
+    provider가 usage를 노출하지 않거나 응답 형태가 예상과 다르면 각 필드는 None이다 —
+    값을 *지어내지 않는다*(CLAUDE.md "모르면 모른다고").
+
+    출처: Anthropic `response.usage.input_tokens/output_tokens`, Ollama
+    `prompt_eval_count/eval_count`. 지연은 provider가 호출을 감싸 monotonic으로 잰다.
+    """
+
+    input_tokens: int | None = None
+    """입력(프롬프트) 토큰 수 — provider 응답 usage에서 포착. 미상이면 None."""
+
+    output_tokens: int | None = None
+    """출력(생성) 토큰 수 — provider 응답 usage에서 포착. 미상이면 None."""
+
+    latency_ms: float | None = None
+    """호출 벽시계 지연(ms) — provider가 time.monotonic()으로 실측. 미측정이면 None."""
+
+
+@dataclass(slots=True, frozen=True)
+class GenerationResult:
+    """`LLMProvider.generate`의 반환형 — 검증 전 원시 텍스트 + 실측 usage.
+
+    ⚠️ 이름 구분: `l3.pipeline.GenerationResult`(라우팅 메타데이터 + 동기/비동기 상태 —
+    파이프라인 *오케스트레이션* 결과)와 이름만 같고 **다른 타입**이다. 이 타입은
+    provider 경계의 *생성 1회* 결과다(텍스트 + usage). 파이프라인이 이 타입의
+    `.text`/`.usage`를 소비해 자기 결과·trace·GenerationLog로 흘린다.
+
+    `text`는 *검증 전 원시 모델 출력*이다 — 03 문서 환각 방어 파이프라인을 통과하기
+    전에는 학생에게 직접 노출 금지(CLAUDE.md "LLM 응답을 검증 없이 학생에게 제공 금지").
+    `usage`는 provider가 포착한 실측 텔레메트리 — 미지원 provider/테스트 가짜는 None.
+    """
+
+    text: str
+    """생성 텍스트(검증 전 원시 출력)."""
+
+    usage: Usage | None = None
+    """실측 usage — provider가 노출하지 않으면 None(지어내지 않음)."""

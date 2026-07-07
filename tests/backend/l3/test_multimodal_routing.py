@@ -16,6 +16,7 @@ from whymath_backend.l3 import pipeline
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
 from whymath_backend.l3.models import (
     CostTier,
+    GenerationResult,
     LocalModelTier,
     ModelFamily,
     RoutingDecision,
@@ -105,7 +106,7 @@ async def test_ollama_passes_images_and_resolves_vl_model() -> None:
     provider = OllamaProvider(client=client)
     decision = Router().route(_vision_request())  # LOCAL/VISION/FAST
     out = await provider.generate("이 수식을 LaTeX로", "수식 추출", decision, images=["BASE64IMG"])
-    assert out == "x^{2}"
+    assert out.text == "x^{2}"
     assert client.calls[0]["model"] == "qwen3-vl:8b"  # VISION/FAST → qwen3-vl:8b(명시 핀)
     assert client.calls[0]["images"] == ["BASE64IMG"]
 
@@ -134,10 +135,10 @@ class _RecordingProvider:
 
     async def generate(
         self, prompt: str, system: str, decision: RoutingDecision, *, images: Any = None
-    ) -> str:
+    ) -> GenerationResult:
         self.calls += 1
         self.last_images = images
-        return "LATEX_OUT"
+        return GenerationResult("LATEX_OUT")
 
 
 async def test_pipeline_forwards_images_and_caches_by_image() -> None:

@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from typing import Protocol, runtime_checkable
 
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 
 
 @runtime_checkable
@@ -31,8 +31,13 @@ class LLMProvider(Protocol):
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         """라우터 결정(decision)에 따라 응답을 생성한다(미구현).
+
+        반환은 `models.GenerationResult(text, usage)`다 — `text`는 검증 전 원시 출력,
+        `usage`는 provider가 포착한 실측 토큰·지연(S1 게이트 ② 비용 실측 배선). usage를
+        노출하지 않는 백엔드/테스트 가짜는 usage=None으로 돌려준다(값을 지어내지 않음).
+        ⚠️ `pipeline.GenerationResult`(오케스트레이션 결과)와 이름만 같은 다른 타입이다.
 
         `images`(base64 인코딩 이미지 목록)는 멀티모달(VL) 호출용 *선택적* 입력이다.
         None(기본·텍스트 호출)이면 기존 동작과 동일하다. 비전 미지원 제공자는 images가

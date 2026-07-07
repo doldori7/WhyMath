@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l3.visualization import InvalidVisualizationSpecError
 from whymath_backend.l4.misconception.models import Misconception, MisconceptionMatch
 from whymath_backend.l4.misconception.visualize import visualize_misconception
@@ -25,9 +25,11 @@ class _FakeProvider:
         self._text = text
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
         self.calls.append((prompt, system, decision))
-        return self._text
+        return GenerationResult(self._text)
 
 
 _M = Misconception(

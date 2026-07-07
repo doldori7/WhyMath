@@ -168,7 +168,7 @@ class TestGenerate:
 
         out = await provider.generate("2+2?", "system", _cloud_decision(CostTier.CLOUD_MID))
 
-        assert out == "42"
+        assert out.text == "42"
         assert len(client.messages.calls) == 1
         call = client.messages.calls[0]
         assert call["model"] == "model-mid-sentinel"
@@ -215,7 +215,7 @@ class TestGenerate:
         provider = AnthropicProvider(client=client, settings=_model_settings())
 
         out = await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
-        assert out == "객체응답"
+        assert out.text == "객체응답"
 
     async def test_generate_unconfigured_raises(self) -> None:
         """키 미설정 + 클라이언트 미주입 → generate가 명확한 오류(조용한 강등 금지)."""
@@ -482,3 +482,64 @@ def test_provider_satisfies_llm_provider_protocol() -> None:
 def test_fake_client_satisfies_seam_protocol() -> None:
     """가짜 클라이언트가 _AnthropicClient 시임을 구조적으로 충족(테스트 위생)."""
     assert isinstance(FakeAnthropicClient(), _AnthropicClient)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 실측 usage 포착 (S1 게이트 ② — response.usage 토큰 + monotonic 지연)
+# ──────────────────────────────────────────────────────────────────────────
+class TestUsageCapture:
+    async def test_dict_usage_captured(self) -> None:
+        """dict 응답의 usage.input_tokens/output_tokens → GenerationResult.usage 실측."""
+        msg = _dict_message("42") | {"usage": {"input_tokens": 12, "output_tokens": 34}}
+        client = FakeAnthropicClient(message_response=msg)
+        provider = AnthropicProvider(client=client, settings=_model_settings())
+
+        out = await provider.generate("2+2?", "system", _cloud_decision(CostTier.CLOUD_MID))
+
+        assert out.text == "42"
+        assert out.usage is not None
+        assert out.usage.input_tokens == 12
+        assert out.usage.output_tokens == 34
+        assert out.usage.latency_ms is not None and out.usage.latency_ms >= 0.0
+
+    async def test_object_usage_captured(self) -> None:
+        """pydantic 객체 스타일 usage(.input_tokens 속성)도 포착한다."""
+
+        class _Usage:
+            input_tokens = 7
+            output_tokens = 9
+
+        msg = _ObjMessage([_Block("text", "본문")])
+        msg.usage = _Usage()  # type: ignore[attr-defined]
+        client = FakeAnthropicClient(message_response=msg)
+        provider = AnthropicProvider(client=client, settings=_model_settings())
+
+        out = await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
+
+        assert out.usage is not None
+        assert out.usage.input_tokens == 7
+        assert out.usage.output_tokens == 9
+
+    async def test_missing_usage_tokens_none_not_fabricated(self) -> None:
+        """usage 없는 응답 → 토큰 None(지어내지 않음). 지연은 실측이라 항상 존재."""
+        client = FakeAnthropicClient(message_response=_dict_message("42"))
+        provider = AnthropicProvider(client=client, settings=_model_settings())
+
+        out = await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
+
+        assert out.usage is not None
+        assert out.usage.input_tokens is None
+        assert out.usage.output_tokens is None
+        assert out.usage.latency_ms is not None
+
+    async def test_malformed_usage_values_coerced_to_none(self) -> None:
+        """usage 값이 비정상 타입(str·bool·음수)이면 None으로 정규화(방어적)."""
+        msg = _dict_message("42") | {"usage": {"input_tokens": "많이", "output_tokens": -5}}
+        client = FakeAnthropicClient(message_response=msg)
+        provider = AnthropicProvider(client=client, settings=_model_settings())
+
+        out = await provider.generate("p", "s", _cloud_decision(CostTier.CLOUD_MID))
+
+        assert out.usage is not None
+        assert out.usage.input_tokens is None
+        assert out.usage.output_tokens is None

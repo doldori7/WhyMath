@@ -114,7 +114,7 @@ class TestGenerate:
 
         out = await provider.generate("2+2?", "system", decision)
 
-        assert out == "42"
+        assert out.text == "42"
         assert len(client.generate_calls) == 1
         assert client.generate_calls[0]["model"] == "qwen2-math:1.5b"
         assert client.generate_calls[0]["prompt"] == "2+2?"
@@ -238,7 +238,7 @@ class TestGenerate:
         decision = _local_decision(ModelFamily.MATH, LocalModelTier.FAST)
 
         out = await provider.generate("p", "s", decision)
-        assert out == "객체응답"
+        assert out.text == "객체응답"
 
 
 class TestCheckStatus:
@@ -354,3 +354,55 @@ def test_ollama_status_value_object() -> None:
     )
     assert st.all_present is True  # 빈 모델 목록 + reachable → all() True
     assert st.missing == ()
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 실측 usage 포착 (S1 게이트 ② — prompt_eval_count/eval_count + monotonic 지연)
+# ──────────────────────────────────────────────────────────────────────────
+class TestUsageCapture:
+    async def test_dict_counts_captured(self) -> None:
+        """dict 응답의 prompt_eval_count/eval_count → GenerationResult.usage 실측."""
+        client = FakeOllamaClient(
+            generate_response={"response": "42", "prompt_eval_count": 11, "eval_count": 22}
+        )
+        provider = OllamaProvider(client=client)
+        decision = _local_decision(ModelFamily.MATH, LocalModelTier.FAST)
+
+        out = await provider.generate("2+2?", "system", decision)
+
+        assert out.text == "42"
+        assert out.usage is not None
+        assert out.usage.input_tokens == 11
+        assert out.usage.output_tokens == 22
+        assert out.usage.latency_ms is not None and out.usage.latency_ms >= 0.0
+
+    async def test_object_counts_captured(self) -> None:
+        """pydantic 객체 스타일 응답(.prompt_eval_count 속성)도 포착한다."""
+
+        class _Resp:
+            response = "객체"
+            prompt_eval_count = 5
+            eval_count = 6
+
+        client = FakeOllamaClient(generate_response=_Resp())
+        provider = OllamaProvider(client=client)
+        decision = _local_decision(ModelFamily.MATH, LocalModelTier.FAST)
+
+        out = await provider.generate("p", "s", decision)
+
+        assert out.usage is not None
+        assert out.usage.input_tokens == 5
+        assert out.usage.output_tokens == 6
+
+    async def test_missing_counts_none_not_fabricated(self) -> None:
+        """카운트 없는 응답(구버전·경계) → 토큰 None(지어내지 않음). 지연은 항상 실측."""
+        client = FakeOllamaClient(generate_response={"response": "42"})
+        provider = OllamaProvider(client=client)
+        decision = _local_decision(ModelFamily.MATH, LocalModelTier.FAST)
+
+        out = await provider.generate("p", "s", decision)
+
+        assert out.usage is not None
+        assert out.usage.input_tokens is None
+        assert out.usage.output_tokens is None
+        assert out.usage.latency_ms is not None

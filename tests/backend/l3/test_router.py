@@ -15,6 +15,7 @@ from whymath_backend.l3.models import (
     ModelFamily,
     RoutingDecision,
     RoutingRequest,
+    Usage,
 )
 from whymath_backend.l3.router import (
     CLOUD_LATENCY_MS,
@@ -25,7 +26,10 @@ from whymath_backend.l3.router import (
     LOCAL_MODEL_MATRIX,
     QUALITY_MODEL_ID,
     SLA_GATE_MS,
+    USD_TO_KRW,
     Router,
+    actual_cost_krw,
+    actual_cost_usd,
     cache_key,
     cache_key_for,
     cloud_cost,
@@ -743,3 +747,87 @@ class TestRouteProducesValidDecisions:
         assert d.est_latency_ms > 0
         assert d.est_cost_krw >= 0.0
         assert d.reason  # 비어있지 않음
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 실측 비용 순수 함수 (S1 게이트 ② — 추정 est_*와 분리된 actual)
+# ══════════════════════════════════════════════════════════════════════
+def _decision(cost: CostTier) -> RoutingDecision:
+    """비용 축만 다른 최소 결정 객체(테스트 헬퍼)."""
+    if cost is CostTier.LOCAL:
+        return RoutingDecision(
+            cost_tier=cost,
+            local_family=ModelFamily.MATH,
+            local_model=LocalModelTier.FAST,
+            mode="sync",
+            reason="t",
+            est_latency_ms=1010,
+        )
+    return RoutingDecision(
+        cost_tier=cost,
+        local_family=None,
+        local_model=None,
+        mode="sync",
+        reason="t",
+        est_latency_ms=3000,
+        est_cost_krw=28.0,
+    )
+
+
+class TestActualCost:
+    def test_local_is_always_zero(self) -> None:
+        """로컬(Phaiakes9)은 토큰과 무관하게 0원 확정."""
+        usage = Usage(input_tokens=999_999, output_tokens=999_999, latency_ms=1.0)
+        assert actual_cost_usd(_decision(CostTier.LOCAL), usage) == 0.0
+        assert actual_cost_krw(_decision(CostTier.LOCAL), usage) == 0.0
+
+    def test_cloud_mid_token_pricing(self) -> None:
+        """CLOUD_MID(sonnet $3/$15 per 1M) 1K+1K → $0.018 = 27.72원(1540원/USD)."""
+        usage = Usage(input_tokens=1000, output_tokens=1000, latency_ms=None)
+        d = _decision(CostTier.CLOUD_MID)
+        assert actual_cost_usd(d, usage) == pytest.approx(0.018)
+        assert actual_cost_krw(d, usage) == pytest.approx(0.018 * USD_TO_KRW)
+
+    def test_cloud_high_token_pricing(self) -> None:
+        """CLOUD_HIGH(opus $5/$25 per 1M) 1K+1K → $0.03 = 46.2원."""
+        usage = Usage(input_tokens=1000, output_tokens=1000, latency_ms=None)
+        d = _decision(CostTier.CLOUD_HIGH)
+        assert actual_cost_usd(d, usage) == pytest.approx(0.03)
+        assert actual_cost_krw(d, usage) == pytest.approx(46.2)
+
+    def test_cloud_unknown_tokens_returns_zero_for_caller_to_mark_none(self) -> None:
+        """클라우드+토큰 미상 → 0.0 반환(호출부가 None 기록으로 '미상' 구분 — docstring 계약)."""
+        d = _decision(CostTier.CLOUD_MID)
+        assert actual_cost_krw(d, Usage(input_tokens=None, output_tokens=100)) == 0.0
+        assert actual_cost_krw(d, Usage(input_tokens=100, output_tokens=None)) == 0.0
+
+    def test_zero_tokens_zero_cost(self) -> None:
+        """0토큰(이론적 경계)은 0원 — 음수·환각값 없음."""
+        d = _decision(CostTier.CLOUD_MID)
+        assert actual_cost_krw(d, Usage(input_tokens=0, output_tokens=0)) == 0.0
+
+
+class TestLangfuseActualFields:
+    """langfuse_fields 실측 4키(cost_krw·latency_ms·input/output_tokens) — est_*와 공존."""
+
+    def test_actual_fields_default_none(self, router: Router) -> None:
+        """usage·cost_krw 미전달(캐시 히트·미계측) → 실측 키 4개가 None으로 존재."""
+        d = router.route(_req(task_type="extract"))
+        f = langfuse_fields(d)
+        assert f["cost_krw"] is None
+        assert f["latency_ms"] is None
+        assert f["input_tokens"] is None
+        assert f["output_tokens"] is None
+
+    def test_actual_fields_filled_from_usage(self, router: Router) -> None:
+        """usage·cost_krw 전달 → 실측 키가 채워지고 est_* 추정 키와 *별개로* 공존."""
+        d = router.route(_req(task_type="extract"))
+        usage = Usage(input_tokens=11, output_tokens=22, latency_ms=1234.5)
+        f = langfuse_fields(d, usage=usage, cost_krw=0.0)
+        assert f["input_tokens"] == 11
+        assert f["output_tokens"] == 22
+        assert f["latency_ms"] == 1234.5
+        assert f["cost_krw"] == 0.0
+        # 추정 키는 그대로(구분 유지 — 실측이 추정을 덮어쓰지 않는다).
+        assert f["est_latency_ms"] == d.est_latency_ms
+        assert f["est_cost_krw"] == d.est_cost_krw

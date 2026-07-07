@@ -21,7 +21,7 @@ from whymath_backend.l3.equivalent.rephrase import (
     extract_equation,
     verify_numeric_invariance,
 )
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 
 _Q = "이차방정식 3x^2 - 7x + 4 = 0 의 두 근 중 큰 근을 구하시오."
 _EQ = "3x^2 - 7x + 4 = 0"
@@ -44,17 +44,17 @@ class _FakeProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         self.calls.append(
             {"prompt": prompt, "system": system, "decision": decision, "temperature": temperature}
         )
         out = self._outputs[min(self._index, len(self._outputs) - 1)]
         self._index += 1
-        return out
+        return GenerationResult(out)
 
 
 class _RaisingProvider:
-    async def generate(self, *args: object, **kwargs: object) -> str:
+    async def generate(self, *args: object, **kwargs: object) -> GenerationResult:
         raise RuntimeError("provider 연결 실패")
 
 

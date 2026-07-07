@@ -26,7 +26,7 @@ from whymath_backend.db.models.concept import Concept, ProblemConcept
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.schema.assessment import (
     ConceptMasteryHistory as ConceptMasteryHistorySchema,
 )
@@ -58,8 +58,10 @@ _VALID_JSON = (
 class _StubProvider:
     """가짜 LLMProvider — 항상 유효 Visualization JSON 반환(라이브 Ollama 회피)."""
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
-        return _VALID_JSON
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
+        return GenerationResult(_VALID_JSON)
 
 
 def _settings() -> Settings:

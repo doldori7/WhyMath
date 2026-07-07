@@ -26,7 +26,7 @@ from whymath_backend.harness.wh1_shadow import (
     Wh1HarnessShadowObservation,
     observe_wh1_harness_shadow,
 )
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 
 _RECORD_LOGGER = "whymath.harness.wh1_shadow.record"
@@ -57,13 +57,13 @@ class _FakeProvider:
         decision: RoutingDecision,
         *,
         images: Sequence[str] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         self.calls.append((prompt, system))
         if self._index < len(self._responses):
             out = self._responses[self._index]
             self._index += 1
-            return out
-        return '{"kind": "end_turn", "action_type": "격려"}'
+            return GenerationResult(out)
+        return GenerationResult('{"kind": "end_turn", "action_type": "격려"}')
 
 
 def _records(caplog: pytest.LogCaptureFixture) -> list[str]:

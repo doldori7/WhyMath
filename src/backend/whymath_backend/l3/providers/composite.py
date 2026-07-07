@@ -19,7 +19,7 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 from whymath_backend.l3.interfaces import LLMProvider
-from whymath_backend.l3.models import CostTier, RoutingDecision
+from whymath_backend.l3.models import CostTier, GenerationResult, RoutingDecision
 from whymath_backend.l3.providers.anthropic import AnthropicStatus
 from whymath_backend.l3.providers.ollama import OllamaStatus
 from whymath_backend.l3.router import _as_cost_tier
@@ -53,7 +53,7 @@ class CompositeProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         """cost_tier로 로컬↔클라우드 디스패치 (LLMProvider 구현).
 
         - LOCAL → 로컬 제공자(Ollama)에 위임.
@@ -66,7 +66,8 @@ class CompositeProvider:
         - `json_schema`(S2-j structured output)도 그대로 전달한다(제약 처리·거부는 각 하위
           제공자 책임 — Ollama format= 제약 디코딩·Anthropic 명확한 거부).
 
-        반환 텍스트는 위임받은 제공자의 *검증 전 원시 출력*이다(각 제공자 docstring 경계 메모).
+        반환은 위임받은 제공자의 `GenerationResult(text, usage)` *그대로*다(전파) — text는
+        검증 전 원시 출력(각 제공자 docstring 경계 메모), usage는 하위 제공자가 포착한 실측.
         """
         cost = _as_cost_tier(decision.cost_tier)
         # 선택 인자(images·temperature·json_schema)는 *있을 때만* 위임 호출에 싣는다 — 해당

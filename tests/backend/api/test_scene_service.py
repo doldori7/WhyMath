@@ -14,7 +14,7 @@ from whymath_backend.api import scene as scene_mod
 from whymath_backend.api.scene import scene_for_concept_diagnosis
 from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l3.visualization import InvalidVisualizationSpecError
 from whymath_backend.l4.learning_scene import (
     LearningScene,
@@ -51,9 +51,11 @@ class _FakeProvider:
         self._text = text
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
         self.calls.append((prompt, system, decision))
-        return self._text
+        return GenerationResult(self._text)
 
 
 class _FakeConceptOrm:

@@ -15,7 +15,7 @@ import pytest
 from PIL import Image
 
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
-from whymath_backend.l3.models import ModelFamily, RoutingDecision
+from whymath_backend.l3.models import GenerationResult, ModelFamily, RoutingDecision
 from whymath_backend.l5.ocr.detect import DetectedRegion
 from whymath_backend.l5.ocr.factory import OcrComponents
 from whymath_backend.l5.ocr.pipeline import run_ocr_pipeline
@@ -47,10 +47,10 @@ class _FakeVisionProvider:
 
     async def generate(
         self, prompt: str, system: str, decision: RoutingDecision, *, images: Any = None
-    ) -> str:
+    ) -> GenerationResult:
         self.received_images = images
         self.decision = decision
-        return "$x^{2}$"
+        return GenerationResult("$x^{2}$")
 
 
 async def test_qwen_vl_arecognize_routes_vision_and_passes_image() -> None:

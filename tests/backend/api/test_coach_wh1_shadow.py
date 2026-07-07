@@ -35,6 +35,7 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.harness import wh1_shadow
 from whymath_backend.harness.wh1_shadow import Wh1HarnessShadowObservation
+from whymath_backend.l3.models import GenerationResult
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 from whymath_backend.security import create_access_token
@@ -146,8 +147,10 @@ class _CapturedSpawn:
 class _StubProvider:
     """스크립트된 JSON만 돌려주는 L3 provider 대역 — 하네스가 라이브 LLM을 안 부르게(네트워크 0)."""
 
-    async def generate(self, prompt: str, system: str, decision: object, **_kw: object) -> str:
-        return '{"kind": "end_turn", "action_type": "격려"}'
+    async def generate(
+        self, prompt: str, system: str, decision: object, **_kw: object
+    ) -> GenerationResult:
+        return GenerationResult('{"kind": "end_turn", "action_type": "격려"}')
 
 
 def _patch_shadow_provider(monkeypatch: pytest.MonkeyPatch) -> None:

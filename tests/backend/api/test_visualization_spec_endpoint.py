@@ -19,7 +19,7 @@ from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
@@ -34,8 +34,10 @@ _SPEC = {
 class _StubProvider:
     """create_app(provider=) 주입용 — generate 미호출(spec 엔드포인트는 LLM 무관)."""
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
-        return ""
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
+        return GenerationResult("")
 
 
 class _FakeSession:

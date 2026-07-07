@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from whymath_backend.l3.interfaces import CacheBackend, LLMProvider
+from whymath_backend.l3.models import Usage
 from whymath_backend.l3.pregenerate.models import (
     PregenItem,
     PrewarmItemResult,
@@ -104,17 +105,21 @@ class CachePrewarmer:
                 return PrewarmItemResult(cache_key=key, status="skipped_exists")
 
         # 응답 획득 — 인제스트 모드(precomputed) 우선, 없으면 provider 호출.
+        # usage(실측 토큰·지연)는 provider 생성 경로에서만 존재한다(인제스트는 None).
+        usage: Usage | None = None
         if item.precomputed_response is not None:
             response = item.precomputed_response
         else:
             try:
-                response = await self._provider.generate(item.prompt, item.system, decision)
+                generated = await self._provider.generate(item.prompt, item.system, decision)
             except Exception as exc:  # noqa: BLE001 — provider 오류는 항목 단위로 흡수
                 return PrewarmItemResult(
                     cache_key=key,
                     status="error",
                     error=f"provider.generate failed: {type(exc).__name__}: {exc}",
                 )
+            response = generated.text
+            usage = generated.usage
 
         # 검증 게이트 — 통과한 시드만 캐시에 적재(품질 위생).
         failure_reason = self._validator.validate(item, response)
@@ -124,6 +129,7 @@ class CachePrewarmer:
                 status="failed_validation",
                 # 신호의 사유 문자열만 담는다(error: str | None 계약 유지·slice 59).
                 error=failure_reason.reason,
+                usage=usage,
             )
 
         try:
@@ -133,6 +139,7 @@ class CachePrewarmer:
                 cache_key=key,
                 status="error",
                 error=f"cache.set failed: {type(exc).__name__}: {exc}",
+                usage=usage,
             )
 
-        return PrewarmItemResult(cache_key=key, status="written")
+        return PrewarmItemResult(cache_key=key, status="written", usage=usage)

@@ -404,7 +404,8 @@ class LLMEquivalentProblemGenerator:
         """
         is_local = decision.cost_tier == CostTier.LOCAL.value
         schema = _OUTPUT_JSON_SCHEMA if is_local else None
-        return self._ensure_loop().run_until_complete(
+        # provider 반환은 GenerationResult(text, usage) — 저작 배치는 텍스트만 소비.
+        generated = self._ensure_loop().run_until_complete(
             self._provider.generate(
                 prompt,
                 _SYSTEM_PROMPT,
@@ -413,6 +414,7 @@ class LLMEquivalentProblemGenerator:
                 json_schema=schema,
             )
         )
+        return generated.text
 
     def _ensure_loop(self) -> asyncio.AbstractEventLoop:
         """인스턴스 전용 이벤트 루프 지연 생성 — 배치 전 회차가 *같은 살아있는 루프*를 공유한다.

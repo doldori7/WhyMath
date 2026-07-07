@@ -14,10 +14,13 @@ from typing import Any
 
 import pytest
 
+from whymath_backend.l3.interfaces import RecordingTraceSink
 from whymath_backend.l3.models import (
     CostTier,
+    GenerationResult,
     LocalModelTier,
     RoutingDecision,
+    Usage,
 )
 from whymath_backend.l3.queue.tasks import (
     PAYLOAD_DECISION,
@@ -36,9 +39,11 @@ class FakeProvider:
         self._text = text
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
         self.calls.append((prompt, system, decision))
-        return self._text
+        return GenerationResult(self._text)
 
 
 def _quality_decision() -> RoutingDecision:
@@ -196,7 +201,9 @@ class TestWorkerShadowValidation:
 
         seen: list[object] = []
 
-        def _fake_runner(payload: dict[str, Any], *, validator: object = None) -> str:
+        def _fake_runner(
+            payload: dict[str, Any], *, validator: object = None, trace: object = None
+        ) -> str:
             seen.append(validator)
             return "x"
 
@@ -266,8 +273,13 @@ def test_register_quality_task_body_delegates_to_plain_function(
 
     seen: list[tuple[dict[str, Any], object]] = []
 
-    def _fake_payload_runner(payload: dict[str, Any], *, validator: object = None) -> str:
+    traces: list[object] = []
+
+    def _fake_payload_runner(
+        payload: dict[str, Any], *, validator: object = None, trace: object = None
+    ) -> str:
         seen.append((payload, validator))
+        traces.append(trace)
         return "위임됨"
 
     # 태스크 본체가 부르는 모듈 레벨 함수를 가짜로 교체(실제 ollama 호출 회피).
@@ -282,3 +294,68 @@ def test_register_quality_task_body_delegates_to_plain_function(
     assert len(seen) == 1
     assert seen[0][0] == {"prompt": "p", "system": "s", "decision": {}}
     assert seen[0][1] is tasks_mod._WORKER_SHADOW_VALIDATOR
+    # 워커 계측(S1 게이트 ②) — LangfuseSink가 trace로 전달된다(미설정이면 자기 no-op).
+    from whymath_backend.l3.trace.langfuse_sink import LangfuseSink
+
+    assert len(traces) == 1
+    assert isinstance(traces[0], LangfuseSink)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 워커 계측 (S1 게이트 ② — QUALITY 27b 생성 완료의 실측 usage·cost_krw 기록)
+# ──────────────────────────────────────────────────────────────────────────
+class UsageQualityProvider:
+    """가짜 provider — 텍스트 + 실측 usage 반환(워커 trace 배선 검증)."""
+
+    def __init__(self, *, text: str = "긴 검증 출력", usage: Usage | None = None) -> None:
+        self._text = text
+        self._usage = usage
+
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
+        return GenerationResult(self._text, usage=self._usage)
+
+
+class TestWorkerTraceInstrumentation:
+    def test_trace_records_usage_and_zero_cost(self) -> None:
+        """trace 주입 + usage 반환 → 실측 토큰·지연 + cost_krw=0.0(로컬 QUALITY) 기록."""
+        usage = Usage(input_tokens=200, output_tokens=800, latency_ms=13900.0)
+        trace = RecordingTraceSink()
+
+        text = run_quality_generation_payload(
+            _quality_payload(),
+            provider=UsageQualityProvider(usage=usage),
+            trace=trace,
+        )
+
+        assert text == "긴 검증 출력"  # 반환 계약(str) 불변
+        assert len(trace.records) == 1
+        rec = trace.records[0]
+        assert rec["cost_krw"] == 0.0  # QUALITY=LOCAL 27b=0원 확정
+        assert rec["input_tokens"] == 200
+        assert rec["output_tokens"] == 800
+        assert rec["latency_ms"] == 13900.0
+        assert rec["mode"] == "async"
+        assert rec["local_model"] == "quality"
+
+    def test_trace_without_usage_still_records_zero_cost(self) -> None:
+        """usage 미노출 provider여도 비용은 0.0 확정 기록·토큰은 None(지어내지 않음)."""
+        trace = RecordingTraceSink()
+
+        run_quality_generation_payload(
+            _quality_payload(), provider=UsageQualityProvider(usage=None), trace=trace
+        )
+
+        rec = trace.records[0]
+        assert rec["cost_krw"] == 0.0
+        assert rec["input_tokens"] is None
+        assert rec["output_tokens"] is None
+
+    def test_no_trace_no_records_backward_compatible(self) -> None:
+        """trace 미주입(종전 호출) → 관측 없이 종전과 동일 동작(하위호환)."""
+        text = run_quality_generation_payload(
+            _quality_payload(),
+            provider=UsageQualityProvider(usage=Usage(input_tokens=1, output_tokens=1)),
+        )
+        assert text == "긴 검증 출력"

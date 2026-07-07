@@ -11,7 +11,10 @@ from __future__ import annotations
 import pytest
 
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
-from whymath_backend.l3.models import RoutingDecision, RoutingRequest
+
+# provider 반환형은 pipeline.GenerationResult(오케스트레이션 결과)와 이름이 겹쳐 별칭으로 구분.
+from whymath_backend.l3.models import GenerationResult as ProviderResult
+from whymath_backend.l3.models import RoutingDecision, RoutingRequest, Usage
 from whymath_backend.l3.pipeline import (
     GenerationResult,
     QualityQueueUnavailableError,
@@ -33,9 +36,9 @@ class RecordingProvider:
         prompt: str,
         system: str,
         decision: RoutingDecision,
-    ) -> str:
+    ) -> ProviderResult:
         self.calls.append((prompt, system, decision))
-        return self._text
+        return ProviderResult(self._text)
 
 
 class RecordingQueue:
@@ -468,13 +471,15 @@ class TestCloudRejectedThroughProvider:
         """
 
         class CloudRejectingProvider:
-            async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+            async def generate(
+                self, prompt: str, system: str, decision: RoutingDecision
+            ) -> ProviderResult:
                 from whymath_backend.l3.models import CostTier
                 from whymath_backend.l3.router import _as_cost_tier
 
                 if _as_cost_tier(decision.cost_tier) is not CostTier.LOCAL:
                     raise ValueError("로컬 결정만 처리")
-                return "ok"
+                return ProviderResult("ok")
 
         # killer 난이도 + premium → CLOUD_HIGH로 라우팅 (예산 충분).
         cloud_req = RoutingRequest(
@@ -494,3 +499,177 @@ class TestCloudRejectedThroughProvider:
                 cache=InMemoryCache(),
                 trace=RecordingTraceSink(),
             )
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 실측 usage·비용 계측 (S1 게이트 ② — hermetic, 라이브 키 불요)
+# ══════════════════════════════════════════════════════════════════════
+class UsageProvider:
+    """가짜 provider — 정해진 텍스트 + 실측 usage(토큰·지연)를 반환.
+
+    실제 Anthropic/Ollama provider가 usage를 포착해 돌려주는 계약을 모사한다 —
+    파이프라인이 usage를 trace(cost_krw·토큰·지연)로 흘리는 배선을 검증한다.
+    """
+
+    def __init__(self, *, text: str = "결과", usage: Usage | None = None) -> None:
+        self._text = text
+        self._usage = usage
+        self.calls: list[tuple[str, str, RoutingDecision]] = []
+
+    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> ProviderResult:
+        self.calls.append((prompt, system, decision))
+        return ProviderResult(self._text, usage=self._usage)
+
+
+def _cloud_request() -> RoutingRequest:
+    """CLOUD_HIGH로 라우팅되는 요청 — killer·gifted·예산 충분."""
+    return RoutingRequest(
+        task_type="prove",
+        difficulty="killer",
+        requires_reasoning=True,
+        student_subscription="gifted",
+        budget_krw=10000.0,
+        sync=True,
+    )
+
+
+class TestActualUsageInstrumentation:
+    """provider usage → trace 실측 필드(cost_krw·토큰·지연) 배선 검증."""
+
+    async def test_cloud_miss_records_positive_actual_cost_and_tokens(self) -> None:
+        """클라우드 미스 → cost_krw>0(토큰 산정)·input/output_tokens·latency_ms 실측 기록."""
+        usage = Usage(input_tokens=1000, output_tokens=1000, latency_ms=2500.0)
+        trace = RecordingTraceSink()
+
+        await generate(
+            _cloud_request(),
+            "증명 프롬프트",
+            "시스템",
+            provider=UsageProvider(text="증명", usage=usage),
+            cache=InMemoryCache(),
+            trace=trace,
+            cache_ttl_s=60,
+        )
+
+        rec = trace.records[0]
+        # CLOUD_HIGH(opus $5/$25 per 1M)·1K+1K 토큰·1540원/USD → 46.2원 (router.py 상수 유도).
+        assert rec["cost_krw"] == pytest.approx(46.2)
+        assert rec["input_tokens"] == 1000
+        assert rec["output_tokens"] == 1000
+        assert rec["latency_ms"] == 2500.0
+        # 추정(est_*)은 실측과 *별개 키*로 공존한다 — 구분 유지(03a §F.2).
+        assert rec["est_cost_krw"] == 46.0  # 라우터 추정(CLOUD_MIN_COST_KRW)
+        assert rec["cost_tier"] == "cloud_high"
+
+    async def test_local_miss_records_zero_cost_with_tokens(self) -> None:
+        """로컬 미스 → cost_krw=0.0 확정 + 토큰·지연 실측 기록(0원이어도 토큰은 실측)."""
+        usage = Usage(input_tokens=120, output_tokens=340, latency_ms=980.5)
+        trace = RecordingTraceSink()
+
+        await generate(
+            _sync_local_request(),
+            "프롬프트",
+            "시스템",
+            provider=UsageProvider(usage=usage),
+            cache=InMemoryCache(),
+            trace=trace,
+            cache_ttl_s=60,
+        )
+
+        rec = trace.records[0]
+        assert rec["cost_krw"] == 0.0  # 로컬=0원 확정
+        assert rec["input_tokens"] == 120
+        assert rec["output_tokens"] == 340
+        assert rec["latency_ms"] == 980.5
+
+    async def test_cloud_unknown_tokens_records_none_cost_not_zero(self) -> None:
+        """클라우드인데 토큰 미상 → cost_krw=None('미상'≠'0원' — 지어내지 않음)."""
+        usage = Usage(input_tokens=None, output_tokens=None, latency_ms=1000.0)
+        trace = RecordingTraceSink()
+
+        await generate(
+            _cloud_request(),
+            "p",
+            "s",
+            provider=UsageProvider(usage=usage),
+            cache=InMemoryCache(),
+            trace=trace,
+            cache_ttl_s=60,
+        )
+
+        rec = trace.records[0]
+        assert rec["cost_krw"] is None  # 0.0이 아님!
+        assert rec["latency_ms"] == 1000.0
+
+    async def test_usage_none_provider_records_none_actuals(self) -> None:
+        """usage 미노출 provider(테스트 가짜 등) → 실측 4필드 전부 None(하위호환·정직)."""
+        trace = RecordingTraceSink()
+
+        await generate(
+            _sync_local_request(),
+            "p",
+            "s",
+            provider=UsageProvider(usage=None),
+            cache=InMemoryCache(),
+            trace=trace,
+            cache_ttl_s=60,
+        )
+
+        rec = trace.records[0]
+        assert rec["cost_krw"] is None
+        assert rec["input_tokens"] is None
+        assert rec["output_tokens"] is None
+        assert rec["latency_ms"] is None
+
+    async def test_cache_hit_records_zero_cost_and_no_tokens(self) -> None:
+        """캐시 적중 → cost_krw=0.0 확정(신규 호출 없음)·토큰/지연 None(이 요청 실측 없음)."""
+        usage = Usage(input_tokens=50, output_tokens=60, latency_ms=900.0)
+        provider = UsageProvider(usage=usage)
+        cache = InMemoryCache()
+        trace = RecordingTraceSink()
+
+        await generate(
+            _sync_local_request(),
+            "p",
+            "s",
+            provider=provider,
+            cache=cache,
+            trace=trace,
+            cache_ttl_s=60,
+        )
+        await generate(
+            _sync_local_request(),
+            "p",
+            "s",
+            provider=provider,
+            cache=cache,
+            trace=trace,
+            cache_ttl_s=60,
+        )
+
+        hit = trace.records[1]
+        assert hit["cache_hit"] is True
+        assert hit["cost_krw"] == 0.0  # 적중=신규 호출 없음=0원 확정
+        assert hit["input_tokens"] is None  # 이 요청에서 실측된 토큰 없음
+        assert hit["latency_ms"] is None
+        assert len(provider.calls) == 1  # 두 번째는 provider 미호출
+
+    async def test_async_enqueue_records_zero_cost(self) -> None:
+        """비동기(QUALITY) enqueue → cost_krw=0.0(로컬 27b=0원·생성 실측은 워커 몫)."""
+        trace = RecordingTraceSink()
+
+        result = await generate(
+            _quality_request(),
+            "p",
+            "s",
+            provider=UsageProvider(),
+            cache=InMemoryCache(),
+            trace=trace,
+            queue=RecordingQueue(),
+        )
+
+        assert result.is_queued
+        rec = trace.records[0]
+        assert rec["mode"] == "async"
+        assert rec["cost_krw"] == 0.0
+        assert rec["input_tokens"] is None  # enqueue 시점엔 생성이 없다
