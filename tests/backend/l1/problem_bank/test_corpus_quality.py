@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from whymath_backend.l3.equivalent.acceptance import (
     EquivalenceSpec,
     evaluate_equivalent_candidate,
 )
+from whymath_backend.l3.equivalent.rephrase import classify_invariance_failure, extract_equation
 from whymath_backend.schema.provenance import ContentProvenance
 
 
@@ -230,3 +232,98 @@ def test_generated_corpus_signatures_unique_within_family() -> None:
         per_family[family].append(sig)
     for family, sigs in per_family.items():
         assert len(sigs) == len(set(sigs)), f"{family} 문제군 내 서명 중복"
+
+
+# ──────────────────────────────────────────────────────────────────────
+# rephrase 코퍼스(v0·라이브 산출) — 발문만 LLM 다양화한 산출물의 저장소 봉인.
+# 핵심 계약: question_text만 바뀌고 그 외 전 필드는 소스(생성 코퍼스)와 **바이트 동일**이며,
+# 발문이 바뀐 레코드는 소스 방정식이 결정론 게이트로 재검증 통과한다(수치 불변·오염 0).
+# 이 테스트가 "rephrase는 표현만 바꾼다"는 안전 계약을 저장소 차원에서 영구 동결한다.
+# ──────────────────────────────────────────────────────────────────────
+def _rephrased_corpus_path() -> Path:
+    return (
+        Path(__file__).resolve().parents[4]
+        / "data"
+        / "corpus"
+        / "problem_bank_rephrased_v0"
+        / "problems.jsonl"
+    )
+
+
+def _raw_by_slug(path: Path) -> dict[str, dict[str, object]]:
+    text = path.read_text(encoding="utf-8")
+    records = [json.loads(line) for line in text.splitlines() if line.strip()]
+    return {str(rec["slug"]): rec for rec in records}
+
+
+def _rephrased_raw() -> dict[str, dict[str, object]]:
+    corpus = _rephrased_corpus_path()
+    if not corpus.exists():
+        pytest.skip("rephrase 코퍼스 미존재(data/corpus/problem_bank_rephrased_v0/problems.jsonl)")
+    return _raw_by_slug(corpus)
+
+
+def _rephrased_records() -> list[ProblemBankRecord]:
+    corpus = _rephrased_corpus_path()
+    if not corpus.exists():
+        pytest.skip("rephrase 코퍼스 미존재(data/corpus/problem_bank_rephrased_v0/problems.jsonl)")
+    return load_problem_bank_records(corpus)
+
+
+def test_rephrased_corpus_same_slugs_as_source() -> None:
+    # rephrase는 후처리(생성 X)라 소스(생성 코퍼스)와 건수·slug 집합이 정확히 일치해야 한다.
+    source = _raw_by_slug(_generated_corpus_path())
+    rephrased = _rephrased_raw()
+    assert set(rephrased) == set(source)
+    assert len(rephrased) == len(source)
+
+
+def test_rephrased_corpus_preserves_all_fields_but_question_text() -> None:
+    # 핵심 안전 봉인 — question_text 외 전 필드(answer·verify·choices·conditions·distractor·
+    # 난이도·개념·서명 등)가 소스와 **바이트 동일**(수치·정답·검증 메타 불변·오염 0).
+    source = _raw_by_slug(_generated_corpus_path())
+    rephrased = _rephrased_raw()
+    for slug, rec in rephrased.items():
+        src = source[slug]
+        assert set(rec) == set(src), f"{slug} 키 집합 변화"
+        for key in src:
+            if key == "question_text":
+                continue
+            assert rec[key] == src[key], f"{slug} 필드 변조: {key}"
+
+
+def test_rephrased_corpus_changed_questions_preserve_equation() -> None:
+    # 발문이 바뀐 레코드는 소스 방정식 문자열이 산출 발문에 보존(결정론 게이트 재검증 통과) —
+    # LLM 다양화가 수식을 훼손하지 않았음을 저장소 차원에서 재확인(라이브 게이트의 저장소 미러).
+    source = _raw_by_slug(_generated_corpus_path())
+    rephrased = _rephrased_raw()
+    changed = 0
+    for slug, rec in rephrased.items():
+        src_q = str(source[slug]["question_text"])
+        out_q = str(rec["question_text"])
+        if out_q == src_q:
+            continue
+        changed += 1
+        equation = extract_equation(src_q)
+        assert equation is not None, f"{slug} 소스 방정식 추출 불가인데 발문 변경됨"
+        failure = classify_invariance_failure(out_q, equation=equation)
+        assert failure is None, f"{slug} 산출 발문이 수치 불변 게이트 위반: {failure}"
+    assert changed >= 150, f"다양화 반영이 비정상적으로 적음: {changed}건"
+
+
+def test_rephrased_corpus_every_record_is_accepted() -> None:
+    # 다양화 후에도 전건이 S2-a 4종 게이트 통과(accepted) — 수치·정답·검증 메타가 불변이라
+    # 정확성 게이트는 무료 재통과하고, 위생 게이트가 새 발문의 본문성 슬립까지 봉인한다.
+    for record in _rephrased_records():
+        verdict = _evaluate(record)
+        assert verdict.accepted is True, (  # type: ignore[attr-defined]
+            f"{record.slug} 미수용: {verdict.reasons}"  # type: ignore[attr-defined]
+        )
+
+
+def test_rephrased_corpus_copyright_rail() -> None:
+    # 저작권 레일 — rephrase는 표현만 바꾸므로 자체생성·WHYMATH_GENERATED가 그대로 유지된다.
+    for record in _rephrased_records():
+        assert record.problem.source_type == "자체생성"
+        assert record.provenance.license == "WHYMATH_GENERATED"
+        assert record.provenance.original_source is None
