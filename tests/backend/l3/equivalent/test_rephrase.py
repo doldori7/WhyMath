@@ -69,8 +69,30 @@ class TestExtractEquation:
         for question, equation in cases.items():
             assert extract_equation(question) == equation
 
+    def test_extracts_exponential_forms(self) -> None:
+        # 지수방정식 — '^' 지수 표기 포함 통째 추출(회귀 방지).
+        cases = {
+            "지수방정식 5^x = 25 을 만족하는 x의 값을 구하시오.": "5^x = 25",
+            "2^x = 64 일 때, x의 값을 구하시오.": "2^x = 64",
+        }
+        for question, equation in cases.items():
+            assert extract_equation(question) == equation
+
+    def test_extracts_logarithmic_forms_with_prefix(self) -> None:
+        # 로그방정식 — **log_ 접두를 포함해 통째** 추출(2026-07-07 수복). 접두를 놓쳐 'log_5 x = 2'
+        # 를 '5 x = 2'로 오추출하면 프롬프트 앵커가 틀려 log rephrase 수율이 붕괴한다(라이브 실측).
+        cases = {
+            "로그방정식 log_5 x = 2 을 만족하는 x의 값을 구하시오.": "log_5 x = 2",
+            "log_2 x = 6 일 때, x의 값을 구하시오.": "log_2 x = 6",
+            "방정식 log_10 x = 3 의 해를 구하시오.": "log_10 x = 3",
+        }
+        for question, equation in cases.items():
+            assert extract_equation(question) == equation
+
     def test_no_equation_returns_none(self) -> None:
         assert extract_equation("발문에 방정식이 없습니다.") is None
+        # 미적분 'f(x) = 다항식' 꼴은 봉인 대상 밖(설계상 rephrase 스킵)임을 재확인.
+        assert extract_equation("함수 f(x) = x^3 - 6x^2 + 9x 의 극댓값을 구하시오.") is None
 
 
 class TestVerifyNumericInvariance:

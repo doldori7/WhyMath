@@ -165,15 +165,20 @@ def run_rephrase_diagnose(
     rephraser: QuestionRephraser,
     temperature: float,
     limit: int | None = _DEFAULT_LIMIT,
+    offset: int = 0,
 ) -> DiagnoseReport:
     """코퍼스 샘플을 rephrase에 태워 실패를 taxonomy·유형별로 진단(측정 전용·write 없음).
 
     각 발문을 `rephraser.rephrase`에 태워 실패면 reason-code·원 LLM 출력·skeleton 유형과 함께
     수집한다. `limit`은 *시도*(=LLM 호출) 상한이다(스윕과 동형·비용 통제). `NO_EQUATION`
     (방정식 추출 실패=rephrase 대상 아님)은 시도로 세지 않는다 — 시도 분모를 오염하지 않게.
+    `offset`은 파일 앞에서부터 건너뛸 레코드 수다 — 밴드가 파일 뒤쪽에 몰린 유형(예: 지수·로그는
+    코퍼스 끝 45건)을 앞의 quad 수백 건을 재실행하지 않고 `--offset`으로 저비용 타게팅한다.
     `temperature`는 dump 주석용 라벨이다(rephraser가 실제 온도를 소유·여기선 기록만).
     """
     records = _read_records(in_path)
+    if offset:
+        records = records[offset:]  # 앞 offset건 건너뛰기 — 뒤쪽 밴드(지수·로그) 저비용 타게팅.
     attempted = 0
     rephrased = 0
     reason_hist: Counter[str] = Counter()
@@ -273,17 +278,26 @@ def main(argv: list[str] | None = None) -> int:
         help=f"rephrase 시도 상한(샘플·기본 {_DEFAULT_LIMIT}·0이면 전건).",
     )
     parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="앞에서부터 건너뛸 레코드 수(뒤쪽 밴드 타게팅·예: 지수·로그는 --offset 305).",
+    )
+    parser.add_argument(
         "--dump", dest="dump_path", type=Path, default=None, help="실패 케이스 JSONL dump 경로."
     )
     parser.add_argument("--json", action="store_true", help="요약 대신 리포트 JSON을 출력.")
     args = parser.parse_args(argv)
 
+    if args.offset < 0:
+        parser.error("--offset은 0 이상이어야 합니다.")
     limit = args.limit if args.limit and args.limit > 0 else None
     report = run_rephrase_diagnose(
         in_path=args.in_path,
         rephraser=QuestionRephraser(temperature=args.temperature),
         temperature=args.temperature,
         limit=limit,
+        offset=args.offset,
     )
     if args.dump_path is not None:
         written = _write_failures(args.dump_path, report.failures)
