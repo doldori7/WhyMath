@@ -44,6 +44,9 @@ class TestRunCorpusBatch:
             calc_value_n=0,
             exp_n=0,
             log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
             write=False,
         )
         assert report.fulfilled
@@ -70,6 +73,9 @@ class TestRunCorpusBatch:
             calc_value_n=0,
             exp_n=0,
             log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
             write=True,
         )
         assert report.fulfilled and report.written == 15
@@ -109,6 +115,9 @@ class TestRunCorpusBatch:
             calc_value_n=4,
             exp_n=0,
             log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
             write=True,
         )
         run_corpus_batch(
@@ -122,6 +131,9 @@ class TestRunCorpusBatch:
             calc_value_n=4,
             exp_n=0,
             log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
             write=True,
         )
         assert a.read_bytes() == b.read_bytes()
@@ -141,6 +153,9 @@ class TestRunCorpusBatch:
             calc_value_n=10,
             exp_n=0,
             log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
             write=True,
         )
         slugs = [r.slug for r in load_problem_bank_records(out)]
@@ -171,6 +186,12 @@ class TestCliEntry:
                 "--exp",
                 "0",
                 "--log",
+                "0",
+                "--arith",
+                "0",
+                "--geo",
+                "0",
+                "--trig",
                 "0",
             ]
         )
@@ -236,6 +257,12 @@ class TestCliEntry:
                 "0",
                 "--log",
                 "0",
+                "--arith",
+                "0",
+                "--geo",
+                "0",
+                "--trig",
+                "0",
             ]
         )
         assert code == 1
@@ -249,7 +276,7 @@ class TestCliEntry:
 
 class TestCalculusBand:
     def test_default_run_includes_calc_bands(self) -> None:
-        # 기본 실행은 quad 4밴드 + calc 3밴드 + 대수(exp·log) 2밴드(총 9밴드) — 총 350.
+        # 기본 실행 = quad 4 + calc 3 + exp·log 2 + 수열·삼각 3밴드(총 12밴드) — 총 453.
         report = run_corpus_batch(out_path=Path("/nonexistent/x.jsonl"), write=False)
         names = [b.name for b in report.bands]
         assert names == [
@@ -262,13 +289,56 @@ class TestCalculusBand:
             "calc-value",
             "exp",
             "log",
+            "arith",
+            "geo",
+            "trig",
         ]
         for band_name in ("calc-extremum", "calc-tangent", "calc-value"):
             band = next(b for b in report.bands if b.name == band_name)
             assert (band.requested, band.stored) == (40, 40)
-        assert dict((b.name, b.stored) for b in report.bands)["exp"] == 25
-        assert dict((b.name, b.stored) for b in report.bands)["log"] == 20
-        assert report.total_stored == 350 and report.fulfilled
+        stored = dict((b.name, b.stored) for b in report.bands)
+        assert stored["exp"] == 25
+        assert stored["log"] == 20
+        assert stored["arith"] == 60
+        assert stored["geo"] == 30
+        assert stored["trig"] == 13
+        assert report.total_stored == 453 and report.fulfilled
+
+    def test_sequence_trig_bands_metadata(self, tmp_path: Path) -> None:
+        # 수열·삼각 밴드 산출물 — 단원(unit_code)·성취기준·개념 태깅·단답형·유일해 검증.
+        out = tmp_path / "problems.jsonl"
+        run_corpus_batch(
+            out_path=out,
+            short_n=0,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=0,
+            calc_tangent_n=0,
+            calc_value_n=0,
+            exp_n=0,
+            log_n=0,
+            arith_n=8,
+            geo_n=6,
+            trig_n=5,
+            write=True,
+        )
+        records = load_problem_bank_records(out)
+        by_unit = {r.problem.unit_codes[0]: r for r in records}
+        assert set(by_unit) == {"ARITH-SEQ", "GEO-SEQ", "TRIG-VAL"}
+        expect = {
+            "ARITH-SEQ": ("[12대수03-02]", "H:12대수03-02"),
+            "GEO-SEQ": ("[12대수03-03]", "H:12대수03-03"),
+            "TRIG-VAL": ("[12대수02-02]", "H:12대수02-02"),
+        }
+        for unit, (code, concept) in expect.items():
+            record = by_unit[unit]
+            assert record.problem.achievement_standard_codes == [code]
+            assert record.problem.question_format == "단답형"
+            assert record.verify.answer_selection == "unique"
+            assert [t.concept_src_id for t in record.concept_tags if t.role == "PRIMARY"] == [
+                concept
+            ]
 
     def test_value_records_have_calculus_metadata(self, tmp_path: Path) -> None:
         # calc-value 밴드 산출물 — 극대·극소 단원/성취기준/개념 태깅(극값 x좌표와 동일)·단답형·
@@ -285,6 +355,9 @@ class TestCalculusBand:
             calc_value_n=12,
             exp_n=0,
             log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -311,6 +384,9 @@ class TestCalculusBand:
             calc_value_n=0,
             exp_n=0,
             log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -336,6 +412,9 @@ class TestCalculusBand:
             calc_value_n=0,
             exp_n=0,
             log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -363,6 +442,9 @@ class TestCalculusBand:
             calc_value_n=0,
             exp_n=0,
             log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
             write=True,
         )
         diffs = {r.problem.difficulty_overall for r in load_problem_bank_records(out)}
@@ -385,6 +467,9 @@ class TestAlgebraBand:
             calc_value_n=0,
             exp_n=8,
             log_n=6,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
             write=True,
         )
         assert report.fulfilled

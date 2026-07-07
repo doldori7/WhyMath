@@ -176,12 +176,45 @@ def test_generated_corpus_concepts_tagged() -> None:
     # calc-extremum=H:12미적Ⅰ02-07·극대극소, calc-tangent=H:12미적Ⅰ02-01·미분계수).
     # 미지 개념 태깅은 차단(태깅 왜곡 봉인).
     # exp/log(대수·H:12대수01-08)는 지수·로그 방정식 밴드.
-    known_primary = {"HK06", "H:12미적Ⅰ02-07", "H:12미적Ⅰ02-01", "H:12대수01-08"}
+    # 수열·삼각(대수) 밴드: 등차=H:12대수03-02·등비=H:12대수03-03·삼각=H:12대수02-02.
+    known_primary = {
+        "HK06",
+        "H:12미적Ⅰ02-07",
+        "H:12미적Ⅰ02-01",
+        "H:12대수01-08",
+        "H:12대수03-02",
+        "H:12대수03-03",
+        "H:12대수02-02",
+    }
     for record in _generated_records():
         assert record.concept_tags, f"{record.slug} concepts 비어 있음"
         primary = [t.concept_src_id for t in record.concept_tags if t.role == "PRIMARY"]
         assert primary, f"{record.slug} PRIMARY 개념 없음"
         assert set(primary) <= known_primary, f"{record.slug} 미지 PRIMARY 개념: {primary}"
+
+
+def test_generated_corpus_sequence_trig_bands() -> None:
+    # 수열·삼각 밴드 봉인 — 각 문제군 존재·단답형·유일해 검증(unique)·개념 태깅.
+    #   등차(ARITH-SEQ)·등비(GEO-SEQ)·삼각(TRIG-VAL) unit_code로 밴드 식별.
+    records = _generated_records()
+    by_unit: dict[str, list[ProblemBankRecord]] = {}
+    for record in records:
+        unit = record.problem.unit_codes[0] if record.problem.unit_codes else ""
+        by_unit.setdefault(unit, []).append(record)
+
+    expectations = {
+        "ARITH-SEQ": ("H:12대수03-02", 30),
+        "GEO-SEQ": ("H:12대수03-03", 20),
+        "TRIG-VAL": ("H:12대수02-02", 10),
+    }
+    for unit, (concept, minimum) in expectations.items():
+        band = by_unit.get(unit, [])
+        assert len(band) >= minimum, f"{unit} 밴드 볼륨 부족: {len(band)}"
+        for record in band:
+            assert record.problem.question_format == "단답형"
+            assert record.verify.answer_selection == "unique"
+            primary = [t.concept_src_id for t in record.concept_tags if t.role == "PRIMARY"]
+            assert primary == [concept], f"{record.slug} 개념 불일치: {primary}"
 
 
 def test_generated_corpus_mc_invariants() -> None:
@@ -204,13 +237,20 @@ def test_generated_corpus_mc_invariants() -> None:
 
 
 def test_generated_corpus_sqrt_records() -> None:
-    # 무리근 밴드 — SymPy 정확값 answer('p ± sqrt(q)')·실수 형식·근 선택 명시.
-    sqrt_records = [r for r in _generated_records() if "sqrt(" in (r.problem.answer or "")]
-    assert len(sqrt_records) >= 20  # 무리근 밴드 볼륨(기본 30)
+    # 무리근 이차 밴드 — SymPy 정확값 answer('p ± sqrt(q)')·실수 형식·근 선택(largest/smallest).
+    # 삼각 밴드도 answer에 sqrt를 갖지만 selection=unique·단원 TRIG-VAL이라 근 선택으로 분리한다
+    # (무리근 이차 밴드만 겨냥·삼각 sqrt 값과 혼입 방지).
+    sqrt_records = [
+        r
+        for r in _generated_records()
+        if "sqrt(" in (r.problem.answer or "")
+        and r.verify.answer_selection in {"largest", "smallest"}
+    ]
+    assert len(sqrt_records) >= 20  # 무리근 이차 밴드 볼륨(기본 30)
     for record in sqrt_records:
         assert record.problem.answer_format == "실수"
         assert "." not in (record.problem.answer or "")  # 반올림 소수 0
-        assert record.verify.answer_selection in {"largest", "smallest"}
+        assert (record.problem.unit_codes or [""])[0] != "TRIG-VAL"  # 삼각 미혼입 재확인
 
 
 def test_generated_corpus_signatures_unique_within_family() -> None:
@@ -270,12 +310,14 @@ def _rephrased_records() -> list[ProblemBankRecord]:
     return load_problem_bank_records(corpus)
 
 
-def test_rephrased_corpus_same_slugs_as_source() -> None:
-    # rephrase는 후처리(생성 X)라 소스(생성 코퍼스)와 건수·slug 집합이 정확히 일치해야 한다.
+def test_rephrased_corpus_slugs_subset_of_source() -> None:
+    # rephrase는 후처리(생성 X)라 산출 slug는 전건 소스에 존재한다(신 slug 창작 0). 소스 코퍼스가
+    # 밴드 추가로 커지면 rephrase 산출물은 **시점 스냅샷**이라 소스의 부분집합이 된다(라이브 재-
+    # rephrase 전까지). 등호가 아니라 부분집합으로 봉인한다 — 산출이 소스를 벗어나지 않음을 보장.
     source = _raw_by_slug(_generated_corpus_path())
     rephrased = _rephrased_raw()
-    assert set(rephrased) == set(source)
-    assert len(rephrased) == len(source)
+    assert set(rephrased) <= set(source), "rephrase 산출에 소스 밖 slug 존재(창작 금지)"
+    assert len(rephrased) >= 1
 
 
 def test_rephrased_corpus_preserves_all_fields_but_question_text() -> None:

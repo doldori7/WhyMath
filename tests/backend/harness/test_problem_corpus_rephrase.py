@@ -60,6 +60,9 @@ def _seed_corpus(tmp_path: Path) -> Path:
         calc_value_n=0,
         exp_n=0,
         log_n=0,
+        arith_n=0,
+        geo_n=0,
+        trig_n=0,
         write=True,
     )
     assert report.fulfilled
