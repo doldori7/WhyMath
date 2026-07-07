@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-07 (라이브 실측): **축적 CLI 라이브 2회차 — derive-and-verify가 LLM 오답 실차단·레퍼토리 포화 관측**
+
+**무엇**: `problem_corpus_accumulate`를 새 Phaiakes9에서 라이브 구동(seed=생성 코퍼스 305건, out=`problem_bank_llm_v0`).
+- **축적 동작 실증**: 회차1 accepted 4·appended 4·rejected_duplicate 16 → 회차2에서 `existing_out_records=4`(축적분 인식)·seed 305+축적 4 전부 dedup → appended 1. **증분 append·회차 간 dedup·기존분 인식** 전부 확인(스모크 갭 상환 실동작).
+- **⭐ derive-and-verify 라이브 오답 차단**: 회차2에서 qwen2.5:7b가 "그럴듯하지만 틀린 답(2/3)"을 냈으나, 방정식+근 선택(largest)으로 독립 유도한 정답(2)과 불일치 → `generation_failed`로 거부(오답 원천 차단). **생성≠검증 분리(설계 원칙 2)·"그럴듯한 오답" 방어가 실전에서 오답을 실제로 잡은 첫 관측** — 사람 미개입 자동 차단.
+- **레퍼토리 포화 관측(버그 아님·하이브리드 설계 확인)**: rejected_duplicate 16~18/20 — 결정론 스켈레톤이 quad를 촘촘히 덮어(305건) LLM이 같은 구조를 반복 → dedup 차단. **quad 넓이는 스켈레톤(수율 100%)·LLM은 novel 구조** 분담이 재확인. LLM 축적의 novel 수율을 올리려면 스켈레톤 미구현 유형으로 topic_hint/spec 확장 필요.
+
+**함의(후속 방향)**: LLM 축적을 quad에 쓰는 건 저효율 — LLM은 스켈레톤이 못 하는 유형(근의 합/곱·판별식 조건·활용 문장제 등, 단 근 대입 검증 밖이면 needs_review 경로 설계 필요)에 배치. 결정론 확장(단원 스켈레톤 추가)이 코퍼스 넓이의 주력.
+
 ### 2026-07-07 (구현·harness): **코퍼스 축적 배치 CLI(problem_corpus_accumulate) — 회차 간 dedup·증분 append**
 
 **무엇/왜**: 라이브 스모크 실측 갭 상환 — 스모크는 회차마다 fresh dedup index(회차 간 판박이 미차단) + 산출 전면 교체(축적 불가)였다. 새 CLI는 ① 기존 코퍼스들(`--seed` 복수 + `--out` 기존분)의 canonical signature·slug를 로드해 `run_batch`에 주입(기존 구조는 생성 단계에서 `rejected_duplicate`) ② 수용분만 산출 파일에 **증분 append** ③ slug 충돌 방어·outcome 집계 리포트·신규 수용 0이면 exit 1(무진전 신호·조용한 실패 금지).
