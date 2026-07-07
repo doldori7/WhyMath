@@ -8,6 +8,7 @@ from whymath_backend.l3.equivalent.difficulty import (
     RootKind,
     estimate_difficulty,
     estimate_difficulty_extremum,
+    estimate_difficulty_extremum_irrational,
 )
 
 
@@ -115,3 +116,29 @@ class TestExtremumFormula:
         a = estimate_difficulty_extremum(root_spread=6, max_abs_coefficient=40)
         b = estimate_difficulty_extremum(root_spread=6, max_abs_coefficient=40)
         assert a == b
+
+
+class TestIrrationalExtremumFormula:
+    """무리 임계점 극값 난이도 — 극값 base(3.0)+무리근 가산(0.5)+계수 가산·클램프."""
+
+    @pytest.mark.parametrize(
+        ("max_abs", "expected"),
+        [
+            (9, 3.5),  # base 3.0 + 무리근 0.5 (작은 계수)
+            (30, 3.5),  # 경계 포함(≤30은 계수 가산 0)
+            (31, 3.8),  # 30<c≤80 +0.3
+            (80, 3.8),
+            (81, 4.0),  # >80 +0.5
+        ],
+    )
+    def test_representative_cases(self, max_abs: int, expected: float) -> None:
+        assert estimate_difficulty_extremum_irrational(max_abs_coefficient=max_abs) == expected
+
+    def test_above_integer_extremum_base(self) -> None:
+        # 무리 임계점은 정수 임계점(base 3.0)보다 항상 어렵다(무리근 산술 가산).
+        for max_abs in (1, 30, 80, 10_000):
+            irr = estimate_difficulty_extremum_irrational(max_abs_coefficient=max_abs)
+            integer = estimate_difficulty_extremum(root_spread=1, max_abs_coefficient=max_abs)
+            assert 1.0 <= irr <= 5.0
+            assert irr == round(irr, 1)
+            assert irr > integer

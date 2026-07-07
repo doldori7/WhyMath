@@ -337,6 +337,17 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-07 (구현·L3/harness/data·S2 슬라이스): **무리 임계점 극값 단답형 — AI-clean 코퍼스 확장(483→513·오개념 0)**
+
+**무엇/왜**: 세션 인계문서가 남긴 두 갈래 중 crosswalk M0864/M0865 검수는 **Kiki 사람 게이트**(`test_real_queue_all_pending_unsigned` 봉인·AI 자기승인 금지)라 이번 세션 밖. Kiki가 **"AI-clean 슬라이스"** 방향 선택 → 신규 오개념 저작 없이 기존 검증 스택만 재사용해 pending 게이트 미발생·자동 머지 가능한 확장으로 **무리 임계점 극값 단답형**을 저작(인계문서 "범위 밖"은 5지선다 제품표준에만 적용·Kiki 선택 옵션이 무리근 극값을 in-scope로 명시).
+- **핵심 통찰(재구현 0)** — 임계점이 p±√q여도 `f'(x)=3x²−6p·x+3(p²−q)`·`f(x)=x³−3p·x²+3(p²−q)·x`라 **삼차·도함수 계수는 전부 정수**다. *답만* 무리수. 따라서 ① 정수 극값 생성기의 근 선택 검증 스택(도함수 monic 이차방정식 근 대소 선택)과 ② sqrt quad 패밀리의 SymPy 정확값 표기(`sstr`·`AnswerFormat.실수`)를 **교집합 재사용** — 두 선례의 합류라 새 검증 로직 0.
+- **L3** — `CalculusIrrationalExtremumSkeletonGenerator`(`calculus_skeleton_generator.py`): `_IrrationalExtremumSkeleton`(p∈[−4,4]·q 비제곱 10종·극대/극소)·풀 180(dedup 키 `(도함수 monic, 선택)`·정수 극값 풀과 판별식 체가 달라 애초 서로소). 극대→smallest(p−√q)·극소→largest(p+√q). distractor_map None(단답형·오개념 주입 0).
+- **난이도** — `estimate_difficulty_extremum_irrational`(극값 base 3.0 + 무리근 0.5 + 계수 가산 → {3.5, 3.8}). 밴드 스펙 3.5 고정(최대 gap 0.3 < 0.5 tol).
+- **harness** — `calc-extremum-irr` 밴드(자체 signature_index·`target_misconception_ids=∅`·기본 30). 코퍼스 483→**513** 재생성(바이트 동일 재현 실측). CLI `--calc-extremum-irr`.
+- **테스트** — 신규 `test_calculus_irrational_extremum_generator.py`(게이트 수용·독립 유도 문자 일치·극대극소↔선택·답 무리수·삼차식 정수계수·풀 서로소·slug 접두). difficulty·batch 테스트 갱신. 격리 배치 테스트 6파일에 `calc_extremum_irr_n=0` 추가(기본 30 파급 차단).
+
+**🔒 불변**: acceptance/orchestrator/canonicalize/근 선택 검증 스택 무변경·L3→L4 import 0·저작권 레일(자체생성·WHYMATH_GENERATED). **오개념 카탈로그(34)·프로브(102/65)·M-id 코퍼스(843)·op-code(10) 전부 불변**(신규 오개념 0 → pending 게이트 미발생 → blind auto-merge 허용). **범위 밖(후속)**: 무리 접선점(calc-tangent-irr·동일 청정 패턴)·극값의 값 무리수·근의 합/곱(근-비환원)·crosswalk M0864/M0865 사람 검수(Kiki 소관).
+
 ### 2026-07-07 (라이브 산출+구현·L1): **rephrase 코퍼스 v453 재생성 — log 다양화 0→70% 회복·오염 0**
 
 **무엇/왜**: 소스 코퍼스 453(수열·삼각 포함) 확정 후 v3 프롬프트(온도 0.7·#469 log 추출 수복 적용)로 전건 재-rephrase(Phaiakes9 라이브). `problem_bank_rephrased_v0` 350→453 교체.
