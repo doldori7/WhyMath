@@ -358,9 +358,10 @@ class TestJudgeFlipEndToEnd:
     """
 
     @staticmethod
-    def _directional_judge() -> FakeJudge:
+    def _directional_judge(**_: object) -> FakeJudge:
         # 올바른 방향 judge 모사: 정답(미분가능⇒연속)은 제거(NOT_EXPRESSES)·오답(연속⇒미분가능)은
         # 유지(EXPRESSES). 실 judge 정확도가 아니라 *flip 배선*을 증명하는 결정론 시임.
+        # 좌석이 app.state 공유 provider/cache/trace를 kwargs로 넘기므로 `**_`로 받아 무시한다.
         def _rule(statement: str, _m: Misconception) -> JudgeVerdict:
             return (
                 JudgeVerdict.NOT_EXPRESSES
