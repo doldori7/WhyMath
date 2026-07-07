@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-07 (라이브 실측·인프라): **새 Phaiakes9(라이젠 AI Max+ 395) 라이브 LLM 첫 가동 — rephrase 126건·LLM 생성 수율 64%**
+
+**무엇/왜**: 새 하드웨어(GMKtec 라이젠 AI Max+ 395·Radeon 8060S·LPDDR5X·Windows 11)에서 `infra/phaiakes9/LIVE_LLM_ACTIVATION.md` 런북대로 라이브 LLM 파이프라인 첫 가동(Kiki 실행·실측).
+- **환경**: Ollama(Windows)·라우터 매트릭스 6종 모델 전부 pull(`qwen2-math:1.5b/7b`·`qwen2.5:3b/7b`·`qwen3.5:27b`·`qwen3-vl:8b`)·`check_status()` READY=True. 통합 메모리 덕에 27b QUALITY까지 로컬 상주.
+- **발문 다양화(rephrase) 라이브**: 코퍼스 305건 → quad 185 대상 중 **126건 다양화(68%)**·검증 실패 59건은 fail-closed 원문 유지(수치 불변 3중 봉인이 라이브에서 실증 — LLM이 방정식 표기를 건드린 케이스 전부 차단)·calc 120건은 설계상 범위 밖. **수학 오염 0**. 산출: `problem_bank_rephrased_v0`(별 경로·사람 검수 전).
+- **LLM 동등문제 생성 라이브**(qwen2.5:7b·GENERAL 저작·라우터 경유): 25회 시도 → **accepted_stored 16(64%)**·rejected_duplicate 8(32%·구조 dedup 차단)·needs_review 1(Tier1 unverifiable 정직 격리)·**오채택 0**. 종전 구 하드웨어 실측(qwen2.5:7b·60회 중 82% 판박이·수율 5~20%→0% 붕괴) 대비 극적 개선 — 단 스모크는 회차마다 fresh dedup index라 기존 코퍼스 대비 novel 수율은 별도 측정 필요(회차 내 중복률 32%).
+- **후속**: ① 실 코퍼스 축적 배치(기존 signature 로드→skip_signatures 주입) ② rephrase 온도 스윕(0.7 vs 0.9 수율/다양성) ③ judge shadow 측정(`general_mid` 라우팅) ④ rephrase 산출물 사람 검수 후 승격 여부.
+
+**🔒 불변**: 게이트 통과 ≠ 학생 노출·라이브 산출물 전부 v0(사람 검수 전)·LLM 원시 출력 직접 노출 0.
+
 ### 2026-07-06 (구현·L3·도메인 분담): **지수·로그 방정식 결정론 스켈레톤 생성기 — 병렬 미적분 세션과 비충돌 새 도메인**
 
 **무엇/왜**: 병렬 세션이 미적분Ⅰ 생성기(#445 극값·#446 접선)를 추가한 상황에서, 겹치지 않는 별개 도메인으로 **대수(고2·[12대수01-08] 지수함수·로그함수 활용)** 지수·로그 방정식을 확보. 생성 코퍼스가 이차방정식(고1)·미적분Ⅰ(고3)에 집중돼 대수 지수·로그가 0건이던 갭 해소.
