@@ -48,7 +48,7 @@ from __future__ import annotations
 import hashlib
 import unicodedata
 from collections.abc import Callable, Sequence
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 from whymath_backend.config import Settings
 
@@ -216,7 +216,10 @@ def build_sync_engine(settings: Settings) -> Engine:
     @event.listens_for(engine, "connect")
     def _register_vector_on_connect(dbapi_connection: object, _record: object) -> None:
         # 각 새 psycopg 연결에 vector 어댑터 등록(바인딩 list[float]→vector·디코딩 역).
-        register_vector(dbapi_connection)
+        # SQLAlchemy connect 리스너는 raw DBAPI 연결을 object로 넘기나 런타임엔 psycopg 연결이다 —
+        # register_vector(psycopg Connection 기대)의 스텁 시그니처에 맞춰 캐스트한다(불투명 DBAPI
+        # 핸들이라 Any로 캐스트: 스텁 버전별 정확한 Connection 제네릭 표기 차이에 영향받지 않음).
+        register_vector(cast(Any, dbapi_connection))
 
     return engine
 

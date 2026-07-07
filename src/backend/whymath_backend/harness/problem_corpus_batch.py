@@ -8,14 +8,14 @@ Phaiakes9 전용이던 배치 스크립트(run_batch_corpus.py·repo 밖)를 **r
 사용법:
     python -m whymath_backend.harness.problem_corpus_batch \\
         [--out <jsonl>] [--short 90] [--mc 45] [--sqrt 30] [--sqrt-mc 20]
-        [--calc-extremum 40] [--calc-tangent 40] [--dry-run]
+        [--calc-extremum 40] [--calc-tangent 40] [--calc-value 40] [--dry-run]
 
 동작: 문제군별 밴드를 순차 실행 → 전 후보가 S2-a 4종 게이트를 통과해야 sink에 실린다 → JSONL로
 기록. **quad 문제군**(short/mc/sqrt/sqrt_mc·이차방정식 근)은 공유 signature_index로 겹침을 차단하고,
-**calc 문제군**(calc-extremum=삼차 극값 x좌표·calc-tangent=삼차 접선 기울기 m인 점의 x좌표,
-둘 다 미적분Ⅰ)은 군마다 별도 signature_index다(conditions가 도함수 방정식이라 이차방정식과 구조
-동형 → 공유 시 거짓 cross-군 dedup). 리포트를 JSON으로 stdout에 내고, **수율 미달이면 종료 코드 1**
-(조용한 실패 금지 — 밴드별 사유 포함).
+**calc 문제군**(calc-extremum=삼차 극값 x좌표·calc-tangent=삼차 접선 기울기 m인 점의 x좌표·
+calc-value=삼차 극댓값·극솟값(값), 셋 다 미적분Ⅰ)은 군마다 별도 signature_index다(conditions가
+도함수/극값 이차방정식이라 이차방정식과 구조 동형 → 공유 시 거짓 cross-군 dedup). 리포트를 JSON으로
+stdout에 내고, **수율 미달이면 종료 코드 1**(조용한 실패 금지 — 밴드별 사유 포함).
 
 조성 루트 소관(주입 원칙): 객관식 distractor의 오개념/op-code id는 여기서 L4 정본
 (`CATALOG_BY_ID`·`DISTRACTOR_BY_ID`)을 읽어 L3 생성기에 *주입*한다 — L3 코드에는 L4 import·id
@@ -43,6 +43,7 @@ from whymath_backend.l1.problem_bank.populate import (
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.calculus_skeleton_generator import (
     CalculusExtremumSkeletonGenerator,
+    CalculusExtremumValueSkeletonGenerator,
     CalculusTangentSlopeSkeletonGenerator,
 )
 from whymath_backend.l3.equivalent.orchestrator import run_batch
@@ -72,14 +73,16 @@ _MC_INJECTION: dict[str, tuple[str, str]] = {
     "sign_flip": ("factor-sign-flip", "factor-sign-flip-root"),
 }
 
-# 밴드 기본 크기 — quad 185 + calc-extremum 40 + calc-tangent 40 = 총 265건(CI 봉인 ≥100 여유).
-# 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·calc-tangent 162.
+# 밴드 기본 크기 — quad 185 + calc-extremum 40 + calc-tangent 40 + calc-value 40 = 총 305건
+# (CI 봉인 ≥100 여유). 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·
+# calc-tangent 162·calc-value 150.
 _DEFAULT_SHORT_N = 90
 _DEFAULT_MC_N = 45
 _DEFAULT_SQRT_N = 30
 _DEFAULT_SQRT_MC_N = 20
 _DEFAULT_CALC_EXTREMUM_N = 40
 _DEFAULT_CALC_TANGENT_N = 40
+_DEFAULT_CALC_VALUE_N = 40
 
 # 미적분(극값) 밴드 스펙 — 별도 성취기준([12미적Ⅰ-02-07]·함수의 증가·감소와 극대·극소).
 # 난이도 3.3 고정: 극값 추정(3.0~4.0) 최대 gap 0.7 < 3.5(게이트 감쇠 수학)라 안전.
@@ -93,6 +96,12 @@ _CALC_SPEC_DIFFICULTY = 3.3
 # 계열이라 conditions도 도함수 방정식(이차 동형) → 극값과도 cross-군 충돌 가능 → **또 별도 index**.
 _TANGENT_STANDARD_CODE = "[12미적Ⅰ-02-01]"
 _TANGENT_SPEC_DIFFICULTY = 3.3
+
+# 미적분(극값의 값) 밴드 스펙 — 극값 x좌표와 *같은* 성취기준([12미적Ⅰ-02-07]·극대·극소)·개념.
+# conditions는 두 극값의 이차방정식(dummy x)이라 극값 x좌표·접선 방정식과 구조 동형 → 또 cross-군
+# 오dedup 위험(극값 x=1,3의 조건과 극값 값이 1,3인 조건이 canonical 동일) → **또 별도 index**.
+_VALUE_STANDARD_CODE = "[12미적Ⅰ-02-07]"
+_VALUE_SPEC_DIFFICULTY = 3.3
 
 
 def _default_out_path() -> Path:
@@ -239,6 +248,7 @@ def run_corpus_batch(
     sqrt_mc_n: int = _DEFAULT_SQRT_MC_N,
     calc_extremum_n: int = _DEFAULT_CALC_EXTREMUM_N,
     calc_tangent_n: int = _DEFAULT_CALC_TANGENT_N,
+    calc_value_n: int = _DEFAULT_CALC_VALUE_N,
     write: bool = True,
 ) -> CorpusBatchReport:
     """밴드 배치 실행 — 문제군별 signature_index·밴드별 스펙 정합·JSONL 기록(순수 결정론).
@@ -352,6 +362,35 @@ def run_corpus_batch(
             )
         )
 
+    # ── calc 문제군(삼차 극값의 값) — 또 별도 signature_index(극값 쌍 이차방정식 cross-군 방지) ──
+    if calc_value_n > 0:
+        value_index: set[str] = set()
+        value_spec = EquivalenceSpec(
+            achievement_standard_codes=frozenset({_VALUE_STANDARD_CODE}),
+            target_misconception_ids=frozenset(),
+            difficulty_overall=_VALUE_SPEC_DIFFICULTY,
+            answer_format=None,
+        )
+        value_generator = CalculusExtremumValueSkeletonGenerator(skip_signatures=value_index)
+        value_outcomes = run_batch(
+            value_spec, value_generator, calc_value_n, signature_index=value_index, store=sink
+        )
+        value_stored = sum(1 for o in value_outcomes if o.status == "accepted_stored")
+        value_failures = [
+            reason
+            for outcome in value_outcomes
+            if outcome.status != "accepted_stored"
+            for reason in (outcome.reasons or [f"status={outcome.status}"])
+        ]
+        bands.append(
+            BandResult(
+                name="calc-value",
+                requested=calc_value_n,
+                stored=value_stored,
+                failure_reasons=value_failures,
+            )
+        )
+
     total_requested = sum(b.requested for b in bands)
     total_stored = sum(b.stored for b in bands)
     written = sink.write(resolved_out) if write else None
@@ -390,6 +429,12 @@ def main(argv: list[str] | None = None) -> int:
         default=_DEFAULT_CALC_TANGENT_N,
         help="미적분 접선 기울기(삼차함수 접선 기울기 m인 점의 x좌표) 단답형 수.",
     )
+    parser.add_argument(
+        "--calc-value",
+        type=int,
+        default=_DEFAULT_CALC_VALUE_N,
+        help="미적분 극값의 값(삼차함수 극댓값·극솟값) 단답형 수.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="파일 미기록 — 수율·리포트만 확인.")
     args = parser.parse_args(argv)
 
@@ -401,6 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         sqrt_mc_n=args.sqrt_mc,
         calc_extremum_n=args.calc_extremum,
         calc_tangent_n=args.calc_tangent,
+        calc_value_n=args.calc_value,
         write=not args.dry_run,
     )
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)
