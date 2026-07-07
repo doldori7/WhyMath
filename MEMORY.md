@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-07 (구현·L3): **삼각·수열 결정론 스켈레톤 생성기 3종 — 코퍼스 넓이 확장(등차·등비·삼각 특수각)**
+
+**무엇/왜**: rephrase(표현 다양화) 성숙 후 코퍼스 *넓이*(커버리지) 확장으로 전환. 생성 코퍼스가 이차(고1)·미적분(고3)·지수로그(고2)에 집중돼 **수열·삼각(고2 대수)이 0건**이던 갭을 결정론 생성기로 메운다. 지수·로그 형제와 같은 `EquivalentProblemGenerator` 좌석·게이트·근 검증 스택 무변경 재사용.
+- **`sequence_skeleton_generator`(신규)**: `ArithmeticSequenceSkeletonGenerator`(등차 제n항 aₙ=a+(n−1)d·풀 90)·`GeometricSequenceSkeletonGenerator`(등비 제n항 aₙ=a·rⁿ⁻¹·풀 45). 조건식에 *일반항 계산식*을 넣어 derive-and-verify가 SymPy로 **독립 재계산**(생성≠검증·계산 버그 차단). 개념 H:12대수03-02/03-03.
+- **`trig_skeleton_generator`(신규)**: `TrigonometricValueSkeletonGenerator`(sin/cos/tan 특수각 값·풀 13). 정답은 `sympy.sstr`로 만들어 `derive_selected_root` 반환과 글자까지 일치. tan 90°·270°(미정의·zoo)는 `is_finite` 검사로 자동 제외. 개념 H:12대수02-02.
+- **⚠️ 구조 dedup 정합(핵심 설계)**: 조건이 `x − 상수`로 접혀 **같은 답/값이면 같은 canonical_signature**(비다항 아님·非None) — 서로 다른 문제(a=3·d=2·n=10 와 a=1·d=4·n=6은 둘 다 21)의 오병합을 막으려 **풀을 답/값 기준 dedup**해 답이 유일한 뼈대만 남긴다(각 답 첫 출현·결정론). 답 유일 → signature 유일 → 오케스트레이터 구조 dedup과 정합(오병합 0). exp/log(비다항→None)와 다른 정합 전략.
+- **검증(실측)**: 3종 전건 S2-a 4종 게이트 accepted·derive 교차검증 일치·signature 전건 유일·결정론 재현. 단위 테스트 19건. DSL이 sin/cos/pi/sqrt 수용 실측(verify_answer docstring의 `sin(x)²+cos(x)²=1` 선례) 후 구현.
+
+**🔒 불변**: 게이트/canonicalize/orchestrator 무변경(생성기·테스트만·additive)·L3→L4 import 0·코퍼스 미변경(이 PR은 생성기+테스트, materialize는 후속). **범위 밖**: 수열의 합(Sₙ)·음의 공차/공비·삼각방정식(다근)·일반각 삼각비(같은 값 다른 각 보존 — orchestrator 구조 dedup opt-out 설계 필요)·객관식·distractor·LLM 다양화. **다음**: 배치 밴드 wiring + 코퍼스 materialize(350→~500·품질 봉인 known_primary 3종 추가).
+
 ### 2026-07-07 (구현·L3/harness): **exp/log rephrase 갭 1차 수복 — log 추출 정규식 log_ 접두 포함 + diagnose --offset**
 
 **무엇/왜**: rephrase 코퍼스 v0에서 exp/log 45건이 사실상 다양화 0으로 드러난 갭의 결정론 부분을 수복.
