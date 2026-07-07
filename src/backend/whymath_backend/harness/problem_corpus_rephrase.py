@@ -43,6 +43,7 @@ class RephraseCorpusReport:
     """발문 다양화 리포트 — 처리·변형·유지 수 + 유지 사유 표본(조용한 실패 금지)."""
 
     total: int
+    attempted: int
     rephrased: int
     unchanged: int
     written: int | None
@@ -53,6 +54,7 @@ class RephraseCorpusReport:
     def to_json(self) -> dict[str, Any]:
         return {
             "total": self.total,
+            "attempted": self.attempted,
             "rephrased": self.rephrased,
             "unchanged": self.unchanged,
             "written": self.written,
@@ -81,16 +83,20 @@ def run_corpus_rephrase(
     in_path: Path,
     out_path: Path,
     rephraser: QuestionRephraser,
+    limit: int | None = None,
     write: bool = True,
 ) -> RephraseCorpusReport:
     """코퍼스 발문 다양화 — 각 레코드의 question_text만 rephrase(수치·정답·선지 불변).
 
     `rephraser`(주입 좌석)가 검증 게이트를 소유한다 — 검증 실패 시 원문 유지(fail-closed)라 이
     함수는 항상 유효한 코퍼스를 산출한다. question_text 외 필드는 전부 그대로 복사한다(얕은 복제
-    후 한 키만 교체).
+    후 한 키만 교체). `limit`(온도 스윕용)은 rephrase *시도* 수(=LLM 호출 수)의 상한이다 —
+    앞에서부터 limit건만 rephrase에 태우고 나머지는 그대로 복사한다(전체 코퍼스 LLM 비용 없이
+    고정 샘플로 온도별 rephrased 비율을 싸게 비교). None이면 전건.
     """
     records = _read_records(in_path)
     rephrased_count = 0
+    attempted = 0
     reasons: list[str] = []
     out_records: list[dict[str, Any]] = []
     for record in records:
@@ -98,6 +104,10 @@ def run_corpus_rephrase(
         if not isinstance(question, str) or not question:
             out_records.append(record)  # 발문 부재(메타 전용) — 그대로.
             continue
+        if limit is not None and attempted >= limit:
+            out_records.append(record)  # 샘플 상한 초과 — 그대로 복사(LLM 미호출).
+            continue
+        attempted += 1
         outcome = rephraser.rephrase(question)
         updated = dict(record)
         updated["question_text"] = outcome.text
@@ -111,6 +121,7 @@ def run_corpus_rephrase(
     total = len(records)
     return RephraseCorpusReport(
         total=total,
+        attempted=attempted,
         rephrased=rephrased_count,
         unchanged=total - rephrased_count,
         written=written,
@@ -139,12 +150,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--temperature", type=float, default=0.9, help="rephrase 샘플링 온도(다양성·기본 0.9)."
     )
+    parser.add_argument(
+        "--limit", type=int, default=None, help="rephrase 시도 상한(온도 스윕 샘플·기본 전건)."
+    )
     args = parser.parse_args(argv)
 
     report = run_corpus_rephrase(
         in_path=args.in_path,
         out_path=args.out_path,
         rephraser=QuestionRephraser(temperature=args.temperature),
+        limit=args.limit,
     )
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")

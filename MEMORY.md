@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-07 (구현·harness): **rephrase 온도 스윕 도구 — 고정 샘플 0.7 vs 0.9 변형률 비교**
+
+**무엇/왜**: 발문 다양화(`problem_corpus_rephrase`)의 샘플링 온도는 표현 다양성 ↔ 봉인 안정성을 맞바꾼다(높으면 변주↑·방정식 문자열 훼손→수치 불변 검증 실패↑, 낮으면 변주↓). 어느 온도가 "다양화는 되되 봉인은 안 깨지는" 스윗스팟인지 **실측으로 고르는 도구**를 만들었다(라이브 스윕은 Phaiakes9 소관·이 세션은 결정론 도구·테스트만).
+- **`harness/problem_corpus_rephrase`에 `--limit`(+리포트 `attempted`)**: rephrase *시도* 수(=LLM 호출 수) 상한. 온도마다 코퍼스 전건을 태우면 비용이 온도 수만큼 곱해지므로 앞 N건만 태워 온도별 비율을 싸게 뽑는다(같은 앞 N건이라 온도 간 공정). additive — 기존 rephrase 경로·테스트 무변경(limit=None 기본=전건).
+- **`harness/problem_corpus_rephrase_sweep`(신규)**: 고정 샘플을 여러 온도(기본 0.7·0.9)로 각각 `run_corpus_rephrase(limit=N, write=False)` 돌려 `rephrased/attempted`를 한 표로 비교. **측정 전용·write=False**(코퍼스 미기록·repo 오염 0). 온도마다 입력을 새로 읽어 상태 누수 0(공정 비교). `--temperatures 0.7,0.9`·`--limit`·`--json`. provider 미주입 main은 전건 provider 예외→변형 0·exit 0(fail-closed·표가 정직 관측).
+- **hermetic**: `rephraser_factory` 좌석으로 온도별 rephraser 주입(라이브=`QuestionRephraser(temperature=t)`·테스트=온도 가변 FakeProvider). 테스트 FakeProvider는 발문 sha256%100 < round(t·100)이면 다양화 흉내 → **변형률이 온도에 단조**(낮은 온도 변형분 ⊆ 높은 온도)임을 결정론으로 봉인. 테스트 6건(단조·limit 상한 동일·write 0·표 렌더·main fail-closed·main 표).
+
+**🔒 불변**: `rephrase.QuestionRephraser`/검증 게이트 무변경·L3→L4 import 0·산출 코퍼스 미기록. CI-exact 4게이트 green·pytest 5541 passed. **다음(라이브)**: Phaiakes9에서 스윕 구동해 0.7/0.9 실 변형률·오염 0 실측 후 rephrase 기본 온도 확정.
+
 ### 2026-07-07 (구현·harness/data): **지수·로그 스켈레톤 배치 밴드 wiring — 코퍼스 305→350 materialize**
 
 **무엇/왜**: 지수·로그 결정론 생성기(#451)를 배치 CLI에 밴드로 연결해 실제 코퍼스로 실체화(그간 생성기·테스트만 있고 코퍼스 미반영). 라이브 축적 실측(레퍼토리 포화)이 준 방향 — "quad 넓이는 결정론이 주력" — 을 대수(고2 지수·로그)로 확장.
