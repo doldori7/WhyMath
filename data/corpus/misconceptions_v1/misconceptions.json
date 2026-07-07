@@ -2,7 +2,7 @@
   "source_citation": "출처: WhyMath 7계층 본문 코퍼스(자체 저작 — 교수학 오개념 분석).",
   "license_notice": "와이매스 자체 저작물(오개념 서술·distractor 규칙·교정포인트). 성취기준·CCSS 코드는 구조 메타(공공·사실).",
   "collected_at": "2026-06-20T11:18:19.433043+00:00",
-  "count": 841,
+  "count": 843,
   "misconceptions": [
     {
       "mis_id": "M0425",
@@ -15141,6 +15141,42 @@
       "mapping_confidence": "기준(원본)",
       "mapping_score": 1.0,
       "provenance_note": "AI생성-검수필요(S2-p 신규 저작)"
+    },
+    {
+      "mis_id": "M0864",
+      "canonical_statement": "삼차함수에서 극댓값과 극솟값 중 어느 것이 어느 임계점에서 나오는지 구별하지 않고 서로 바꿔 답한다. 삼차항 계수가 양수면 작은 임계점에서 극대, 큰 임계점에서 극소이다",
+      "student_wrong_thinking": "극대와 극소의 위치(작은/큰 임계점)를 구별하지 못해, 극댓값을 물으면 극솟값을·극솟값을 물으면 극댓값을 답한다.",
+      "distractor_rule": "요구된 극값의 반대 극값(극댓값↔극솟값)을 오답 보기로 배치",
+      "error_type": "극대극소혼동",
+      "difficulty": "중",
+      "correction_point": "삼차항 계수의 부호로 극대·극소의 임계점 순서를 먼저 판정하도록 유도한다(계수 양수→작은 임계점이 극대).",
+      "ccss_code": "HSF-IF.B.4",
+      "concept_src_id": "H:12미적Ⅰ02-07",
+      "standard_code": "[12미적Ⅰ-02-07]",
+      "school_level": "고등학교(일반선택)",
+      "domain": "미분",
+      "subunit": "함수의 증가·감소와 극대·극소",
+      "mapping_confidence": "기준(원본)",
+      "mapping_score": 1.0,
+      "provenance_note": "AI생성-검수필요(극값 MC 신규 저작)"
+    },
+    {
+      "mis_id": "M0865",
+      "canonical_statement": "극값의 값(극댓값·극솟값)과 극점의 x좌표를 혼동해, 극댓값을 극대가 되는 점의 x좌표로 답한다. 극댓값은 그 점에서의 함숫값 f(x)이다",
+      "student_wrong_thinking": "극댓값을 구할 때 극대가 되는 점의 x좌표를 그대로 답으로 적는다(함수 f에 대입한 함숫값을 구하지 않음).",
+      "distractor_rule": "극점의 x좌표(임계점)를 극값의 값 대신 오답 보기로 배치",
+      "error_type": "값좌표혼동",
+      "difficulty": "중",
+      "correction_point": "극댓값은 극대가 되는 x를 함수 f에 대입한 함숫값(f(x*))임을 확인하도록 유도한다.",
+      "ccss_code": "HSF-IF.B.4",
+      "concept_src_id": "H:12미적Ⅰ02-07",
+      "standard_code": "[12미적Ⅰ-02-07]",
+      "school_level": "고등학교(일반선택)",
+      "domain": "미분",
+      "subunit": "함수의 증가·감소와 극대·극소",
+      "mapping_confidence": "기준(원본)",
+      "mapping_score": 1.0,
+      "provenance_note": "AI생성-검수필요(극값 MC 신규 저작)"
     }
   ]
 }

@@ -58,10 +58,10 @@ class DistractorOpCode(BaseModel):
         return value
 
 
-# 시드 op-code(8종·도메인 교차) — 각 항목은 정본 카탈로그의 실재 오개념을 가리킨다. 추상 오류연산만
+# 시드 op-code(10종·도메인 교차) — 각 항목은 정본 카탈로그의 실재 오개념을 가리킨다. 추상 오류연산만
 # 담고 특정 시험 선지 본문은 담지 않는다(저작권). S2-p: 이차방정식 근 선택·부호 반전 2종 +
 # 시드 코퍼스(wm-quad-eq-root-count-mc)가 참조하던 미등록 op-code(root-loss) 1종 상환.
-# 확장은 후속 data 슬라이스(전수 코퍼스).
+# 극값 MC: 극댓값↔극솟값·극값 대신 x좌표 2종(삼차 극값 객관식). 확장은 후속 data 슬라이스.
 DISTRACTOR_CATALOG: tuple[DistractorOpCode, ...] = (
     DistractorOpCode(
         id="power-distributed-no-cross-term",
@@ -131,6 +131,27 @@ DISTRACTOR_CATALOG: tuple[DistractorOpCode, ...] = (
             "오답 선지로 만든다."
         ),
         misconception_id="root-loss-by-dividing",
+    ),
+    # ── 극값 MC: 삼차 극값 동등문제 객관식 distractor 2종(극댓값/극솟값 값 문제) ──
+    DistractorOpCode(
+        id="select-min-for-max",
+        name_kr="극댓값 자리에 극솟값",
+        domain="미적분",
+        operation=(
+            "극댓값(극솟값)을 묻는 문항에서 반대 극값인 극솟값(극댓값)을 오답 선지로 만든다 "
+            "— 극대·극소의 임계점 순서를 혼동."
+        ),
+        misconception_id="extremum-max-min-confused",
+    ),
+    DistractorOpCode(
+        id="report-x-coordinate-for-value",
+        name_kr="극값 대신 극점 x좌표",
+        domain="미적분",
+        operation=(
+            "극값의 *값*을 묻는 문항에서 극점의 *x좌표*(임계점)를 오답 선지로 만든다 "
+            "— 값과 좌표를 혼동."
+        ),
+        misconception_id="extremum-value-vs-point-confused",
     ),
 )
 """시드 distractor op-code 카탈로그(8종·도메인 교차) — 정본 오개념 실재 키만 참조(생성 시 검증).

@@ -300,7 +300,7 @@ _FUNCTION: tuple[Misconception, ...] = (
 )
 
 
-# 미적분 — doc "미적분 영역"(#16-18, #15 재참조·#30) (5종·수능 핵심).
+# 미적분 — doc "미적분 영역"(#16-18, #15 재참조·#30, 극값 MC #33-34) (7종·수능 핵심).
 # 주: continuity-implies-differentiability는 doc 함수 슬롯 #15에 상세하나 domain=미적분
 # ([H:12미적Ⅰ02-02] 정착)이라 본 튜플에 둔다(doc 미적분 영역에서 재참조).
 _CALCULUS: tuple[Misconception, ...] = (
@@ -358,6 +358,35 @@ _CALCULUS: tuple[Misconception, ...] = (
         # *단정*한 양성 단편. 한계(§5.3): 부호변화를 함께 본 올바른 진술("f′=0이고 부호변화→극값")
         # 에도 공출현→오탐 가능. 필요조건/충분조건 구별은 임베딩/LLM-judged 후속.
         signals=("f′=0", "극값"),
+    ),
+    Misconception(
+        id="extremum-max-min-confused",
+        name_kr="극대·극소 혼동",
+        domain="미적분",
+        # x³ 계수 양수 삼차함수는 극대가 *작은* 임계점, 극소가 *큰* 임계점에서 나오는데, 학생이
+        # 이 순서를 구별하지 못하고 극댓값·극솟값을 서로 바꿔 답한다.
+        canonical_statement="극댓값과 극솟값 중 어느 것이 어느 임계점에서 나오는지 상관없다",
+        counterexample=(
+            "f(x)=x^3-3x는 x=-1(작은 임계점)에서 극대(2)·x=1에서 극소(-2) — 계수 양수라 순서 고정"
+        ),
+        # "극댓값"+"극솟값" 공출현 — 둘의 순서를 구별 못한 양성 단편. §5.3 한계: 둘을 올바로 병기한
+        # 정답(극댓값 2·극솟값 -2)에도 공출현→오탐 가능(substring은 방향·정오 무판별). 두 토큰 AND라
+        # 무관 풀이엔 미발화하고, 정본 해법(계수 부호→극대극소 순서 판정)은 임베딩/LLM-judged 후속.
+        # 극값 동등문제 객관식 distractor(극솟값 선지) 역추적 좌석([H:12미적Ⅰ02-07]).
+        signals=("극댓값", "극솟값"),
+    ),
+    Misconception(
+        id="extremum-value-vs-point-confused",
+        name_kr="극값·극점 혼동",
+        domain="미적분",
+        # 극값의 *값*(f의 함숫값)과 극점의 *x좌표*를 혼동 — "극댓값"을 극대가 되는 점의 x좌표로 답.
+        canonical_statement="극댓값은 극대가 되는 점의 x좌표이다",
+        counterexample="f(x)=x^3-3x의 극대는 x=-1에서지만 극댓값은 f(-1)=2 — x좌표 -1이 아님",
+        # "극댓값"+"x좌표" 공출현 — 값을 x좌표로 답한 양성 단편. §5.3 한계: "극댓값을 구하려 극점의
+        # x좌표를 먼저 찾는다"류 올바른 풀이에도 공출현→오탐 가능(두 토큰 AND·무관 풀이 미발화).
+        # 값/좌표 구별의 정본 판정은 임베딩/LLM-judged 후속. 극값 동등문제 객관식 distractor(극점
+        # x좌표 선지) 역추적 좌석([H:12미적Ⅰ02-07]).
+        signals=("극댓값", "x좌표"),
     ),
 )
 
@@ -420,11 +449,12 @@ _VECTOR: tuple[Misconception, ...] = (
 CATALOG: tuple[Misconception, ...] = (
     _ALGEBRA + _GEOMETRY + _PROBSTAT + _FUNCTION + _CALCULUS + _SEQUENCE + _TRIG + _VECTOR
 )
-"""정본 카탈로그(32종 = Phase 1 30종 + S2-p 2종) — doc 명시·상세화 항목만.
+"""정본 카탈로그(34종 = Phase 1 30종 + S2-p 2종 + 극값 MC 2종) — doc 명시·상세화 항목만.
 
 슬: §5.4 교차검증 고가치 후보 8종 추가(대수+2·기하+1·확률통계+1·함수+2·미적분+2).
 S2-p: 이차방정식 근 선택 지시 무시·인수 부호 반전 2종 추가(대수 11종) — 동등문제 객관식
-distractor 역추적 좌석(doc #31-32).
+distractor 역추적 좌석(doc #31-32). 극값 MC: 극대·극소 혼동·극값의 값↔극점 x좌표 혼동 2종
+추가(미적분 7종·doc #33-34) — 삼차 극값 동등문제 객관식 distractor 역추적 좌석.
 positive-signal형(학생이 *틀린 주장을 직접 적는* 유형)만 채택 — omission형(적분상수 누락·
 정의역 끝점)은 substring이 *오류 부재*를 못 잡으므로(§5.3 한계) 의도적 회피(임베딩 후속).
 

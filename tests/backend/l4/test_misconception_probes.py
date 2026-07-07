@@ -46,7 +46,7 @@ class TestPackageDataLoading:
         assert text.strip()  # 비어있지 않음
         # 각 (주석·빈 줄 아닌) 줄이 JSON 객체다.
         lines = [ln for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
-        assert len(lines) == 98  # 94줄 + S2-p 근 선택·부호 반전 recall·FP 각 2건
+        assert len(lines) == 102  # 98줄 + 극값 MC recall·FP 각 2건
         for ln in lines:
             rec = json.loads(ln)
             assert "statement" in rec
@@ -70,8 +70,8 @@ class TestPackageDataLoading:
                 recall += 1
             else:
                 fp += 1
-        assert recall == 63  # recall 프로브 수(②의 표본·S2-p +2)
-        assert fp == 35  # FP 프로브(precision·semantic_eval 별도·② 대상 아님·S2-p +2)
+        assert recall == 65  # recall 프로브 수(②의 표본·극값 MC +2)
+        assert fp == 37  # FP 프로브(precision·semantic_eval 별도·② 대상 아님·극값 MC +2)
 
     def test_all_expected_ids_in_catalog(self) -> None:
         # recall 프로브의 expected_id는 모두 카탈로그 id(매처가 잡을 수 있는 라벨).
@@ -91,8 +91,8 @@ class TestPackageDataLoading:
 class TestComputeDiagnosticRecall:
     def test_returns_hits_and_total_recall_probes(self) -> None:
         hits, total = compute_diagnostic_recall()
-        # total = recall 프로브 수(expected_id null=FP 제외) = 63.
-        assert total == 63
+        # total = recall 프로브 수(expected_id null=FP 제외) = 65.
+        assert total == 65
         # hits ∈ [0, total](실측 — substring·regex 매처 품질).
         assert 0 <= hits <= total
 
@@ -124,15 +124,15 @@ class TestComputeDiagnosticRecall:
         assert (manual_hits, manual_total) == compute_diagnostic_recall()
 
     def test_fp_probes_excluded_from_total(self) -> None:
-        # total(recall 프로브 63) < 전체 프로브(98) — FP 프로브 35건이 제외됐다.
+        # total(recall 프로브 65) < 전체 프로브(102) — FP 프로브 37건이 제외됐다.
         _, total = compute_diagnostic_recall()
         all_probes = sum(
             1
             for ln in read_probes_text().splitlines()
             if ln.strip() and not ln.strip().startswith("#")
         )
-        assert all_probes == 98
-        assert total == 63
+        assert all_probes == 102
+        assert total == 65
         assert total < all_probes
 
 
@@ -182,9 +182,9 @@ class TestParsingTolerance:
 # ──────────────────────────────────────────────────────────────────────────
 class TestIterFpProbes:
     def test_returns_only_fp_statements(self) -> None:
-        # 실 프로브셋의 FP(올바른 진술·expected_id null)만 추출 — 수는 split 테스트와 일치(35).
+        # 실 프로브셋의 FP(올바른 진술·expected_id null)만 추출 — 수는 split 테스트와 일치(37).
         fp = _iter_fp_probes()
-        assert len(fp) == 35
+        assert len(fp) == 37
         assert all(isinstance(s, str) and s for s in fp)
         # FP statement 집합은 recall statement와 서로소여야(같은 진술이 양쪽일 수 없음).
         recall_statements = {
