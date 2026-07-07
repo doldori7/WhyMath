@@ -14,12 +14,13 @@ bench_latency.py(`_OllamaClientProtocol` 경유 가짜 클라이언트 주입)�
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 
 from whymath_backend.config import Settings, get_settings
-from whymath_backend.l3.models import CostTier, RoutingDecision
+from whymath_backend.l3.models import CostTier, GenerationResult, RoutingDecision, Usage
 from whymath_backend.l3.router import (
     LOCAL_MODEL_MATRIX,
     QUALITY_MODEL_ID,
@@ -148,6 +149,39 @@ def _extract_text(generate_response: Any) -> str:
     return ""
 
 
+def _coerce_token_count(value: Any) -> int | None:
+    """usage 필드값을 int|None으로 방어적 정규화 — 비정상 타입·음수는 None(지어내지 않음)."""
+    # bool은 int의 서브클래스지만 토큰 수가 아니다 — 배제.
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= 0 else None
+
+
+def _read_field(response: Any, name: str) -> Any:
+    """generate 응답(pydantic 객체 또는 dict)에서 필드값을 방어적으로 읽는다."""
+    if hasattr(response, name):
+        return getattr(response, name)
+    if isinstance(response, dict):
+        return response.get(name)
+    return None
+
+
+def _extract_usage(generate_response: Any, latency_ms: float) -> Usage:
+    """ollama generate 응답에서 실측 usage를 방어적으로 추출 (S1 게이트 ②).
+
+    ollama 응답의 `prompt_eval_count`(입력 토큰)/`eval_count`(출력 토큰)를 포착한다.
+    pydantic `GenerateResponse`·dict 양쪽을 흡수하고, 형태가 예상과 다르면 토큰은 None —
+    *값을 지어내지 않는다*(_extract_text와 동일한 보수적 정규화). 지연(latency_ms)은
+    호출부가 monotonic으로 잰 실측값을 그대로 싣는다. 로컬은 0원이라 비용 산정에는
+    쓰이지 않지만, 토큰·지연 분포는 SLA·튜닝 근거가 된다(03a §F.2).
+    """
+    return Usage(
+        input_tokens=_coerce_token_count(_read_field(generate_response, "prompt_eval_count")),
+        output_tokens=_coerce_token_count(_read_field(generate_response, "eval_count")),
+        latency_ms=latency_ms,
+    )
+
+
 def _build_default_client(settings: Settings) -> _OllamaClient:
     """기본 ollama AsyncClient 생성 (지연 import).
 
@@ -217,7 +251,7 @@ class OllamaProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         """라우터 결정에 따라 로컬 Ollama로 생성 (LLMProvider 구현).
 
         - CostTier.LOCAL이 아니면 즉시 거부(클라우드는 S5 범위 밖).
@@ -238,7 +272,8 @@ class OllamaProvider:
         책임이다(03a §D.3). 제공자 자체는 모델 ID 해석·호출만 담당한다 —
         비동기 워커가 같은 제공자로 QUALITY를 호출할 수 있어야 하기 때문.
 
-        반환 텍스트는 *검증 전 원시 출력*이다(모듈 docstring 경계 메모 참조).
+        반환은 `GenerationResult(text, usage)` — text는 *검증 전 원시 출력*(모듈 docstring
+        경계 메모), usage는 prompt_eval_count/eval_count + monotonic 실측 지연(S1 게이트 ②).
         """
         cost = _as_cost_tier(decision.cost_tier)
         if cost is not CostTier.LOCAL:
@@ -270,8 +305,14 @@ class OllamaProvider:
             # S2-j structured output — 스키마 dict를 format=으로 실어 제약 디코딩(ollama 0.5+).
             call_kwargs["format"] = dict(json_schema)
         client = self._get_client()
+        # 지연 실측 — 호출을 monotonic으로 감싼다(추정 est_latency_ms와 구분되는 actual).
+        start = time.monotonic()
         response = await client.generate(**call_kwargs)
-        return _extract_text(response)
+        latency_ms = (time.monotonic() - start) * 1000.0
+        return GenerationResult(
+            text=_extract_text(response),
+            usage=_extract_usage(response, latency_ms),
+        )
 
     async def check_status(self) -> OllamaStatus:
         """Ollama 도달성 + 라우팅 모델 매트릭스 설치 여부 점검 (/status용).

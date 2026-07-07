@@ -24,6 +24,7 @@ from typing import Any
 import pytest
 
 from whymath_backend.config import Settings
+from whymath_backend.l3.models import GenerationResult
 from whymath_backend.l3.queue.celery_app import build_celery_app
 from whymath_backend.l3.queue.celery_job_queue import CeleryJobQueue
 
@@ -72,8 +73,8 @@ def test_eager_apply_and_poll_e2e() -> None:
     )
 
     class _FakeProvider:
-        async def generate(self, prompt: str, system: str, decision: Any) -> str:
-            return f"eager-ok::{prompt}"
+        async def generate(self, prompt: str, system: str, decision: Any) -> GenerationResult:
+            return GenerationResult(f"eager-ok::{prompt}")
 
     @app.task(name=QUALITY_TASK_NAME, bind=False)
     def _eager_task(payload: dict[str, Any]) -> str:

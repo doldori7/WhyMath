@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
-from whymath_backend.l3.models import RoutingDecision, RoutingRequest
+from whymath_backend.l3.models import GenerationResult, RoutingDecision, RoutingRequest
 from whymath_backend.l3.visualization import (
     InvalidVisualizationSpecError,
     generate_visualization_spec,
@@ -35,9 +35,11 @@ class _FakeProvider:
         self._text = text
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
         self.calls.append((prompt, system, decision))
-        return self._text
+        return GenerationResult(self._text)
 
 
 _VALID_JSON = (

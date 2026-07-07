@@ -22,7 +22,7 @@ import sympy
 
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
-from whymath_backend.l3.models import RoutingDecision, RoutingRequest
+from whymath_backend.l3.models import GenerationResult, RoutingDecision, RoutingRequest, Usage
 from whymath_backend.l3.pregenerate import (
     BasicSeedValidator,
     CachePrewarmer,
@@ -66,11 +66,13 @@ class FakePregenProvider:
         self._raises = raises
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
         self.calls.append((prompt, system, decision))
         if self._raises is not None:
             raise self._raises
-        return self._text
+        return GenerationResult(self._text)
 
 
 class AlwaysFailValidator:
@@ -1457,3 +1459,48 @@ class TestClassifyStepBreak:
 
     def test_indeterminate_when_solset_unparseable(self) -> None:
         assert classify_step_break(_break("oops", "{4}"), "3") == "indeterminate"
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 실측 usage 전파 (S1 게이트 ② — provider usage → PrewarmItemResult.usage)
+# ──────────────────────────────────────────────────────────────────────────
+class UsagePregenProvider:
+    """가짜 provider — 텍스트 + 실측 usage 반환(사전생성 텔레메트리 전파 검증)."""
+
+    def __init__(self, *, text: str = "GENERATED", usage: Usage | None = None) -> None:
+        self._text = text
+        self._usage = usage
+
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
+        return GenerationResult(self._text, usage=self._usage)
+
+
+class TestPrewarmUsagePropagation:
+    async def test_generate_mode_propagates_usage(self) -> None:
+        """생성 모드 → provider usage가 written 결과에 실려 GenerationLog 적재 근거가 된다."""
+        usage = Usage(input_tokens=10, output_tokens=20, latency_ms=500.0)
+        prewarmer = CachePrewarmer(
+            provider=UsagePregenProvider(usage=usage),
+            cache=InMemoryCache(),
+            validator=AlwaysPassValidator(),
+        )
+
+        report = await prewarmer.prewarm([_item()])
+
+        assert report.written == 1
+        assert report.items[0].usage == usage
+
+    async def test_ingest_mode_usage_none(self) -> None:
+        """인제스트 모드(provider 미호출) → usage=None(실측이 없으면 지어내지 않음)."""
+        prewarmer = CachePrewarmer(
+            provider=UsagePregenProvider(usage=Usage(input_tokens=1, output_tokens=1)),
+            cache=InMemoryCache(),
+            validator=AlwaysPassValidator(),
+        )
+
+        report = await prewarmer.prewarm([_item(precomputed="INGESTED")])
+
+        assert report.written == 1
+        assert report.items[0].usage is None

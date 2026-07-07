@@ -24,7 +24,7 @@ from whymath_backend.l3.equivalent.rephrase import (
     REASON_PROVIDER_ERROR,
     QuestionRephraser,
 )
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 
 
 def _base(prompt: str) -> str:
@@ -49,17 +49,19 @@ class _ScriptedProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         base = _base(prompt)
         if self._transform == "success":
-            return base + " (다양화)"
+            return GenerationResult(base + " (다양화)")
         if self._transform == "altered":
-            return "이차방정식의 근을 구하시오"  # 방정식 substring 소실 → EQUATION_ALTERED.
+            # 방정식 substring 소실 → EQUATION_ALTERED.
+            return GenerationResult("이차방정식의 근을 구하시오")
         if self._transform == "extra_eq":
-            return base + " 참고 2+2=5"  # 방정식 외 추가 등식 → EXTRA_EQUATION.
+            # 방정식 외 추가 등식 → EXTRA_EQUATION.
+            return GenerationResult(base + " 참고 2+2=5")
         if self._transform == "empty":
-            return ""  # → EMPTY.
-        return base  # echo → NO_CHANGE.
+            return GenerationResult("")  # → EMPTY.
+        return GenerationResult(base)  # echo → NO_CHANGE.
 
 
 def _seed_corpus(tmp_path: Path, *, short_n: int = 8, mc_n: int = 4) -> Path:

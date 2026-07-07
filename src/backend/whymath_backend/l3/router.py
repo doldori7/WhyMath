@@ -25,6 +25,7 @@ from whymath_backend.l3.models import (
     ModelFamily,
     RoutingDecision,
     RoutingRequest,
+    Usage,
 )
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -115,6 +116,49 @@ CLOUD_MIN_COST_KRW: Final[dict[CostTier, float]] = {
     CostTier.CLOUD_HIGH: 46.0,  # opus-4-7 1K+1K × ₩1,540 — 라이브 토큰 계측 시 보정
 }
 """클라우드 티어 1회 호출 추정 비용(원). 공개 가격 유도(2026-06-23)·라이브 토큰 계측 보정 대상."""
+
+# ──────────────────────────────────────────────────────────────────────────
+# 실측 비용 산정 상수 — 위 CLOUD_MIN_COST_KRW 유도(104-117행)와 *같은 근거*를
+# 토큰 단위로 노출한다(S1 게이트 ② 루프당 비용 실측). 추정(est_cost_krw)은 그대로
+# 두고, 실측(actual_cost_*)만 이 상수로 계산한다 — 추정 vs 실측 구분 유지.
+# ──────────────────────────────────────────────────────────────────────────
+CLOUD_TOKEN_PRICE_USD_PER_1M: Final[dict[CostTier, tuple[float, float]]] = {
+    # (입력, 출력) USD per 1M tokens — 공개 가격(2026-06-23 확인, 위 유도 주석 근거).
+    CostTier.CLOUD_MID: (3.0, 15.0),  # claude-sonnet-4-6 $3/$15
+    CostTier.CLOUD_HIGH: (5.0, 25.0),  # claude-opus-4-7 $5/$25
+}
+"""클라우드 티어 토큰 가격(USD/1M, 입력·출력). CLOUD_MIN_COST_KRW와 동일 출처."""
+
+USD_TO_KRW: Final[float] = 1540.0
+"""환율(원/USD) — 2026-06-23 기준(위 유도 주석 근거). 라이브 보정 대상."""
+
+
+def actual_cost_usd(decision: RoutingDecision, usage: Usage) -> float:
+    """실측 토큰 → 호출 비용(USD) 순수 함수 (S1 게이트 ② 비용 실측).
+
+    - LOCAL(Phaiakes9) → 0.0 (토큰 무관·0원 확정).
+    - CLOUD_* → (입력토큰×입력단가 + 출력토큰×출력단가)/1M.
+    - CLOUD_*인데 토큰이 미상(None)이면 0.0을 돌려주지만, 이는 '0원 확정'이 아니라
+      '산정 불가'다 — 호출부(파이프라인)는 usage 토큰이 None이면 cost를 **None으로
+      기록**해 미상과 0원을 구분한다(값을 지어내지 않음, CLAUDE.md).
+    """
+    cost = _as_cost_tier(decision.cost_tier)
+    if cost is CostTier.LOCAL:
+        return 0.0
+    if usage.input_tokens is None or usage.output_tokens is None:
+        return 0.0  # 토큰 미상 — 호출부가 None 기록으로 구분(지어내지 않음)
+    price_in, price_out = CLOUD_TOKEN_PRICE_USD_PER_1M[cost]
+    return (usage.input_tokens * price_in + usage.output_tokens * price_out) / 1_000_000
+
+
+def actual_cost_krw(decision: RoutingDecision, usage: Usage) -> float:
+    """실측 토큰 → 호출 비용(원) 순수 함수 — actual_cost_usd × 환율 (S1 게이트 ②).
+
+    추정 `est_cost_krw`(라우터 결정 시점·대표 토큰 가정)와 *명시적으로 분리*된 실측이다.
+    LOCAL=0.0. 토큰 미상 시 0.0 — '미상' 표시는 호출부가 usage 토큰 None으로 판단한다.
+    """
+    return actual_cost_usd(decision, usage) * USD_TO_KRW
+
 
 CLOUD_LATENCY_MS: Final[dict[CostTier, int]] = {
     # 03a §A.1 표에서 CLOUD는 "가변" — 네트워크·모델 의존. 지연은 *측정값*이라 공개 가격처럼
@@ -301,12 +345,16 @@ def langfuse_fields(
     call_site: CallSite | str | None = None,
     student_id_hash: str | None = None,
     validation_signal: str | None = None,
+    usage: Usage | None = None,
+    cost_krw: float | None = None,
 ) -> dict[str, object]:
     """Langfuse 기록 필드 dict 생성 (03a §F.2 표).
 
-    범위 메모: *dict만* 반환한다. 실제 Langfuse 전송은 TraceSink 구현의 책임이며
-    M1.2 범위 밖이다. `latency_ms`·`cost_krw`는 *실측* 필드라 여기서는 채우지 않고
-    (라우터는 추정만 함), 추정치는 est_* 로 별도 노출한다.
+    범위 메모: *dict만* 반환한다. 실제 Langfuse 전송은 TraceSink 구현의 책임이다.
+    추정치는 est_*(라우터 결정 시점), 실측치는 `usage`/`cost_krw` 인자로 받아
+    `input_tokens`/`output_tokens`/`latency_ms`/`cost_krw` 키로 노출한다(S1 게이트 ② —
+    추정 vs 실측 구분 유지). 실측을 모르는 호출부(캐시 히트·비동기 enqueue·미계측)는
+    인자를 생략하면 실측 키가 None으로 남는다(지어내지 않음).
 
     `validation_signal`은 런타임 shadow 검증(L3 결정론 도구) 결과다 — None=통과(또는
     미검증), 문자열=거짓 수치 관계 등 *환각 신호 사유*. 비차단 관측 전용이며 반환
@@ -332,6 +380,11 @@ def langfuse_fields(
         "mode": decision.mode,  # SLA 평가 분리(동기만 게이트 대상)
         "est_latency_ms": decision.est_latency_ms,  # 추정 지연(실측은 latency_ms)
         "est_cost_krw": decision.est_cost_krw,  # 추정 비용(실측은 cost_krw)
+        # ── 실측 (S1 게이트 ② — est_*와 분리된 actual, 미계측이면 None) ──
+        "input_tokens": usage.input_tokens if usage is not None else None,  # 실측 입력 토큰
+        "output_tokens": usage.output_tokens if usage is not None else None,  # 실측 출력 토큰
+        "latency_ms": usage.latency_ms if usage is not None else None,  # 실측 지연(ms)
+        "cost_krw": cost_krw,  # 실측 비용(원) — 로컬 0.0·클라우드 토큰 산정·미상 None
         "call_site": site.value if site is not None else None,  # 호출지점별 분포
         "cache_hit": cache_hit,  # 캐싱 적중률 KPI
         "escalated_from": escalated,  # 에스컬레이션 빈도 분석

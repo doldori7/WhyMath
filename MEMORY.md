@@ -437,6 +437,19 @@
 - **테스트**: 지수·로그 각 전건 게이트 통과·answer=derive_selected_root 교차 검증·풀 유일·결정론·개념태그·유일근 선택·형제 slug 서로소(11건). CI 5500 passed·4게이트 green.
 
 **🔒 불변**: acceptance/orchestrator/canonicalize/verify_answer/difficulty 무변경·L3→L4 import 0·저작권 레일. **범위 밖(후속)**: 배치 밴드·코퍼스 materialization·지수로그 부등식·객관식·음의 지수·LLM 발문 다양화.
+### 2026-07-07 (구현·L3/harness·S1 게이트 ②): **LLM usage/실측 비용 계측 파이프 배선 — `generate` 계약 확장(A안)**
+
+**무엇/왜**: S1 탈출 게이트 3조건 중 ②"루프당 LLM 비용 실측"이 Phaiakes9 라이브 키(Kiki 수동) 대기 중이라, 병목 완화 원칙(status_roadmap §4)에 따라 **키 투입 순간 코드 변경 0으로 루프당 실측 비용·로컬 비율이 나오도록** 계측 파이프를 선제 배선. 배선 공백은 `LLMProvider.generate`가 provider 응답의 usage(토큰·지연)를 **폐기**하던 한 곳에 집중돼 있었음(비용 상수·저장 스키마·Langfuse 싱크·집계 쿼리는 이미 제자리).
+- **계약 확장(A안)** — `LLMProvider.generate` 반환 `str`→`GenerationResult(text, usage)`(`l3/models.py` 신규 frozen dataclass `Usage`·`GenerationResult`). 파급: 소스 9곳(생산 2 anthropic·ollama / 전파 1 composite / 소비 6 pipeline·prewarmer·wh1_llm_policy·rephrase·llm_generator·queue) + 테스트 fake 34 def/31파일 `.text` 갱신. L4 2-인자 seam(`generate(prompt, system)` — judge/polya)은 다른 seam이라 불변.
+- **provider usage 포착** — anthropic `response.usage.input/output_tokens`·ollama `prompt_eval_count/eval_count`, 지연은 `time.monotonic()` 랩.
+- **토큰→원화 순수 함수** — `router.py` `actual_cost_usd/krw`(`CLOUD_TOKEN_PRICE_USD_PER_1M` Sonnet 3/15·Opus 5/25 + `USD_TO_KRW=1540`, 기존 CLOUD_MIN_COST_KRW 유도 주석과 동일 근거). 로컬=0.0.
+- **추정 vs 실측 분리 유지(핵심)** — `est_cost_krw`/`est_latency_ms`(라우터 추정)는 불변, 실측은 `langfuse_fields`에 별개 4키(`cost_krw`·`latency_ms`·`input_tokens`·`output_tokens`)로 공존. **'미상'≠'0원'**: 클라우드인데 토큰 미상이면 cost_krw를 None으로 기록(지어내지 않음, CLAUDE.md).
+- **캐시히트=0.0·비동기 enqueue=0.0**(신규 LLM 호출 없음 확정), **QUALITY 워커에 자기비활성 `LangfuseSink` 주입**(`queue/tasks.py` — 로컬 27b 관측 공백 보완, Celery 반환 str 불변).
+- **범위 외 1건**: `l1/embedding_primitives.py` — pgvector 0.5 타입 스텁 동봉 × 느슨한 핀으로 clean tree에서도 mypy --strict가 깨지는 잠복 회귀 → 좁은 `cast(Connection[Any], ...)`로 해소(미수정 시 게이트 green 불가).
+
+**결과**: 4게이트+lint-imports green — **pytest 5517 passed / 238 skipped / 0 failed**, 커버리지 94.77%, mypy --strict 316파일 무이슈. 신규 테스트: `test_pipeline.py::TestActualUsageInstrumentation`(6)·`test_router.py::TestActualCost`+`TestLangfuseActualFields`·provider `TestUsageCapture`·`test_provenance_bridge.py::TestTelemetryFromUsage`·`test_celery_tasks.py::TestWorkerTraceInstrumentation`·`test_wh1_evaluation.py::TestTokensPerTurnTransition`(지표 ④ NO_DATA→MEASURED 증명).
+
+**🔒 불변**: `guard_cloud`/결정 로직·저장 스키마(`GenerationLog`·`Dialogue`)·Langfuse 싱크 PII 경계. **범위 밖(후속)**: L4 순수 seam 비용 계측 · 모델 alias(`anthropic_model_mid/high`) 실 API ID 확인(라이브 과금 정확도 전제) · pipeline→Dialogue 토큰 영속(대화 서비스 소관) · pgvector 상한 핀(`<0.6`) 검토. **게이트 ③(하네스 shadow→라이브 승격)은 "측정 없는 도입 없음" 원칙상 본 계측 베이스라인 확보 후 별도 계획.**
 
 ### 2026-07-06 (구현·L3/harness·S2-p 후속): **LLM 발문 다양화(rephrase) — 수치 불변 봉인·라우터 경유·배치 분리**
 

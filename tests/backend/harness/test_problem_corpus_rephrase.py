@@ -14,7 +14,7 @@ from whymath_backend.harness.problem_corpus_batch import run_corpus_batch
 from whymath_backend.harness.problem_corpus_rephrase import main, run_corpus_rephrase
 from whymath_backend.l1.problem_bank.populate import load_problem_bank_records
 from whymath_backend.l3.equivalent.rephrase import QuestionRephraser
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 
 
 class _EchoRephraseProvider:
@@ -33,12 +33,12 @@ class _EchoRephraseProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         # 프롬프트의 '원 발문: ...' 줄에서 발문을 되읽어 접미사를 붙인다(방정식 보존).
         for line in prompt.splitlines():
             if line.startswith("원 발문: "):
-                return line[len("원 발문: ") :] + " (다양화)"
-        return "무효"  # pragma: no cover — 프롬프트 형식 보증
+                return GenerationResult(line[len("원 발문: ") :] + " (다양화)")
+        return GenerationResult("무효")  # pragma: no cover — 프롬프트 형식 보증
 
 
 def _seed_corpus(tmp_path: Path) -> Path:
@@ -136,8 +136,8 @@ class TestRunCorpusRephrase:
     def test_failed_rephrase_keeps_original(self, tmp_path: Path) -> None:
         # provider가 방정식을 변조 → 전건 fail-closed(원문 유지)·리포트에 사유 관측.
         class _CorruptProvider:
-            async def generate(self, *args: object, **kwargs: object) -> str:
-                return "이차방정식 9x^2 = 0 큰 근은?"  # 방정식 substring 미보존
+            async def generate(self, *args: object, **kwargs: object) -> GenerationResult:
+                return GenerationResult("이차방정식 9x^2 = 0 큰 근은?")  # 방정식 substring 미보존
 
         src = _seed_corpus(tmp_path)
         out = tmp_path / "rephrased.jsonl"

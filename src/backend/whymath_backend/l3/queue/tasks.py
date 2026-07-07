@@ -21,9 +21,12 @@ asyncio 경계: Celery 태스크는 *동기* 함수다. OllamaProvider.generate�
 
 shadow 관측 (slice 43): 워커는 결정론 검증기로 생성물을 검사해 *거짓 수치 관계* 등
 환각 신호를 **로그로만** 남긴다(WARNING·비차단). 동기 파이프라인의 shadow 검증
-(`pipeline.generate`, slice 40)을 비동기 워커로 확장한 것 — 워커엔 TraceSink가 없어
-logging이 관측 경로다. 반환 텍스트는 *불변*(게이트가 아니라 관측, CLAUDE.md "환각
-발견 시 로그").
+(`pipeline.generate`, slice 40)을 비동기 워커로 확장한 것. 반환 텍스트는 *불변*
+(게이트가 아니라 관측, CLAUDE.md "환각 발견 시 로그").
+
+usage 계측 (S1 게이트 ②): 워커 태스크는 TraceSink(LangfuseSink — 미설정 시 자기 no-op)
+를 주입받아 QUALITY 생성 완료의 실측 usage(토큰·지연)·cost_krw(=0.0 로컬)를 기록한다 —
+종전엔 워커에 sink가 없어 로컬 QUALITY(27b) 경로가 관측 공백이었다. 비차단·never-break.
 """
 
 from __future__ import annotations
@@ -33,7 +36,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from whymath_backend.config import get_settings
-from whymath_backend.l3.interfaces import LLMProvider
+from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import RoutingDecision
 from whymath_backend.l3.pregenerate.validator import (
     SeedValidator,
@@ -41,6 +44,7 @@ from whymath_backend.l3.pregenerate.validator import (
     validate_response,
 )
 from whymath_backend.l3.queue.celery_app import build_celery_app
+from whymath_backend.l3.router import actual_cost_krw, langfuse_fields
 
 if TYPE_CHECKING:  # pragma: no cover — 타입 체크 전용(런타임 import 회피)
     from celery import Celery
@@ -80,6 +84,7 @@ def run_quality_generation_payload(
     *,
     provider: LLMProvider | None = None,
     validator: SeedValidator | None = None,
+    trace: TraceSink | None = None,
 ) -> str:
     """QUALITY 생성 핵심 로직 (플레인 함수 — broker 없이 직접 테스트 가능).
 
@@ -93,8 +98,12 @@ def run_quality_generation_payload(
         validator: 런타임 shadow 검증기(L3 결정론 도구). 주입 시 생성물의 거짓 수치 관계
             등 환각 신호를 *로그로만* 남긴다(WARNING). **비차단** — 반환 텍스트는 원시
             출력 *그대로*(바이트 동일·계약 불변). 동기 파이프라인의 shadow 검증(slice 40)
-            을 비동기 워커로 확장한 것 — 워커엔 TraceSink가 없어 logging이 관측 경로다
-            (CLAUDE.md "환각 발견 시 로그"). None이면 검증 미실행(오버헤드 0).
+            을 비동기 워커로 확장한 것(CLAUDE.md "환각 발견 시 로그"). None이면 검증
+            미실행(오버헤드 0).
+        trace: 관측성 싱크(S1 게이트 ② 워커 계측). 주입 시 생성 완료 후 실측 usage
+            (토큰·지연)·cost_krw(로컬 QUALITY=0.0)를 record한다 — 동기 파이프라인의
+            trace.record와 같은 langfuse_fields 스키마. **비차단** — sink 오류는 sink가
+            삼킨다(LangfuseSink never-break). None이면 관측 미기록(종전 동작).
 
     Returns:
         생성된 *검증 전 원시 텍스트*(모듈 docstring 경계 메모 참조). validator가 신호를
@@ -113,7 +122,24 @@ def run_quality_generation_payload(
 
     resolved = _resolve_provider(provider)
     # Celery 태스크는 동기 → async generate를 새 이벤트 루프에서 실행(동시성 1, 루프 1개).
-    output = asyncio.run(resolved.generate(prompt, system, decision))
+    # provider 반환은 models.GenerationResult(text, usage) — 반환 계약(str)은 유지하고
+    # usage(실측 토큰·지연)는 trace로 흘린다(S1 게이트 ② — 로컬 QUALITY 27b 관측 공백 보완).
+    generated = asyncio.run(resolved.generate(prompt, system, decision))
+    output = generated.text
+
+    # 워커 계측(비차단) — enqueue 기록(pipeline)과 분리된 *생성 완료* 실측 기록.
+    # QUALITY는 불변식상 LOCAL(27b)이라 cost_krw=0.0 확정 — usage가 없어도(미노출
+    # provider) 비용은 확정 기록하고, 토큰·지연은 None으로 남긴다(지어내지 않음).
+    if trace is not None:
+        cost = actual_cost_krw(decision, generated.usage) if generated.usage is not None else 0.0
+        trace.record(
+            langfuse_fields(
+                decision,
+                cache_hit=False,
+                usage=generated.usage,
+                cost_krw=cost,
+            )
+        )
 
     # 런타임 shadow 검증(비차단·로그 관측) — 비동기 생성물의 환각 신호를 조용히 넘기지 않는다.
     if validator is not None:
@@ -142,6 +168,11 @@ def register_quality_task(app: Celery) -> Any:
     (비차단·log-only이라 default-on이 안전). 활성 여부는 `Settings.
     l3_shadow_validation_enabled`로 게이트 — 비활성이면 validator=None(검증 미실행)·
     엔드포인트(`/v1/generate`)와 *같은 플래그*로 통제(태스크 실행 시점에 settings 조회).
+
+    관측(S1 게이트 ②): 태스크는 `LangfuseSink`를 trace로 넘겨 QUALITY(27b) 생성 완료의
+    실측 usage·cost_krw(=0.0 로컬)를 기록한다 — 종전엔 워커에 sink가 없어 로컬 QUALITY
+    경로가 관측 공백이었다. 키 미설정이면 sink가 스스로 영구 no-op(자기비활성)이라
+    default-on이 안전하다(never-break·hermetic).
     """
 
     # 무시 사유: celery는 py.typed를 제공하지 않아 `@app.task`가 mypy에 *untyped
@@ -156,7 +187,11 @@ def register_quality_task(app: Celery) -> Any:
         validator = (
             _WORKER_SHADOW_VALIDATOR if get_settings().l3_shadow_validation_enabled else None
         )
-        return run_quality_generation_payload(payload, validator=validator)
+        # 관측 sink — 지연 import(langfuse 미설치 환경에서도 이 모듈 import는 hermetic).
+        # 미설정이면 LangfuseSink가 스스로 no-op(자기비활성·오류 삼킴 — never-break).
+        from whymath_backend.l3.trace.langfuse_sink import LangfuseSink
+
+        return run_quality_generation_payload(payload, validator=validator, trace=LangfuseSink())
 
     return run_quality_generation
 

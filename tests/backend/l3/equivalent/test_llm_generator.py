@@ -35,6 +35,7 @@ from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.l3.equivalent.llm_generator import LLMEquivalentProblemGenerator
 from whymath_backend.l3.equivalent.orchestrator import run_equivalent_generation
 from whymath_backend.l3.models import (
+    GenerationResult,
     LocalModelTier,
     ModelFamily,
     RoutingDecision,
@@ -95,7 +96,7 @@ class FakeProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         self.calls.append((prompt, system))
         self.temperatures.append(temperature)
         self.decisions.append(decision)
@@ -104,8 +105,8 @@ class FakeProvider:
         if self._index < len(self._responses):
             out = self._responses[self._index]
             self._index += 1
-            return out
-        return "{}"  # 소진 시 빈 객체(필수 결측 → 생성 실패)
+            return GenerationResult(out)
+        return GenerationResult("{}")  # 소진 시 빈 객체(필수 결측 → 생성 실패)
 
 
 class RaisingProvider:
@@ -120,7 +121,7 @@ class RaisingProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         raise RuntimeError("provider 다운(테스트)")
 
 

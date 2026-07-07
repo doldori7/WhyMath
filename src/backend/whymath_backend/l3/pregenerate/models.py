@@ -19,7 +19,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from whymath_backend.l3.models import RoutingRequest
+from whymath_backend.l3.models import RoutingRequest, Usage
 
 
 class PregenItem(BaseModel):
@@ -62,11 +62,16 @@ class PrewarmItemResult:
       - "failed_validation" → validator가 돌려준 실패 사유(짧은 라벨/설명).
       - "error" → 예외 타입·메시지(provider/cache 호출 중 던진 것).
       - "written"/"skipped_exists" → None.
+
+    `usage`는 provider 생성 호출의 *실측* 토큰·지연이다(S1 게이트 ② — GenerationLog
+    텔레메트리 적재 근거, provenance_bridge). 인제스트 모드(precomputed)·스킵·오류
+    경로는 provider 호출이 없어 None(지어내지 않음).
     """
 
     cache_key: str
     status: PrewarmStatus
     error: str | None = None
+    usage: Usage | None = None
 
 
 @dataclass(slots=True, frozen=True)

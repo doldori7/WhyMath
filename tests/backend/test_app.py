@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient
 from whymath_backend.app import create_app
 from whymath_backend.config import get_settings
 from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l3.providers.anthropic import AnthropicStatus
 from whymath_backend.l3.providers.ollama import ModelAvailability, OllamaStatus
 from whymath_backend.l3.queue.celery_job_queue import JobStatus
@@ -35,9 +35,11 @@ class StubProvider:
         self._status = status
         self.calls: list[tuple[str, str, RoutingDecision]] = []
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
         self.calls.append((prompt, system, decision))
-        return self._text
+        return GenerationResult(self._text)
 
     async def check_status(self) -> OllamaStatus:
         if self._status is not None:
@@ -60,8 +62,10 @@ class StubCompositeProvider:
         self._ollama_status = ollama_status
         self._cloud_status = cloud_status
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
-        return ""
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
+        return GenerationResult("")
 
     async def check_status(self) -> OllamaStatus:
         return self._ollama_status
@@ -165,8 +169,10 @@ class TestStatus:
         """check_status가 없는 provider(가짜)를 주입하면 도달 불가로 보고(500 아님)."""
 
         class NoStatusProvider:
-            async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
-                return ""
+            async def generate(
+                self, prompt: str, system: str, decision: RoutingDecision
+            ) -> GenerationResult:
+                return GenerationResult("")
 
         app = create_app(
             provider=NoStatusProvider(),

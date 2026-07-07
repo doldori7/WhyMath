@@ -1402,3 +1402,29 @@ class TestMisconceptionResolutionIntegratedWithCompute:
         assert m.misconception_resolution_rate.status is MetricStatus.NO_DATA
         assert m.misconception_resolution_rate.value is None
         assert m.sample_misconception_hypotheses == 0
+
+
+# ── ④ 턴당 토큰 — NO_DATA→MEASURED 전환 (S1 게이트 ② 계측 배선 증명) ────────────
+class TestTokensPerTurnTransition:
+    async def test_transitions_no_data_to_measured_when_dialogue_tokens_loaded(self) -> None:
+        """토큰 미적재(NO_DATA) → Dialogue.total_tokens/total_turns 적재 시 MEASURED 전환.
+
+        S1 게이트 ②의 지표 ④ 근거: usage 계측 파이프가 Dialogue 토큰을 적재하기 *전*에는
+        정직하게 NO_DATA(가짜 0 금지)이고, 적재 데이터가 주입되는 *순간* 같은 계산이
+        MEASURED·실측 평균으로 전환됨을 한 테스트로 증명한다(코드 변경 0으로 전환).
+        """
+        # 1) 적재 전 — total_tokens 채워진 Dialogue 0건 → NO_DATA.
+        before = await compute_wh1_surrogate_metrics(
+            _make_session(total_sessions=1, completed_sessions=1, avg_tokens=None, token_sample=0)
+        )
+        assert before.tokens_per_turn.status is MetricStatus.NO_DATA
+        assert before.tokens_per_turn.value is None  # 가짜 0 아님
+
+        # 2) 적재 후 — 같은 계산에 (AVG=310.0, 표본 4) 주입 → MEASURED 전환.
+        #    (예: 대화 4건의 AVG(total_tokens/total_turns)=310토큰/턴)
+        after = await compute_wh1_surrogate_metrics(
+            _make_session(total_sessions=1, completed_sessions=1, avg_tokens=310.0, token_sample=4)
+        )
+        assert after.tokens_per_turn.status is MetricStatus.MEASURED
+        assert after.tokens_per_turn.value == 310.0
+        assert after.sample_dialogues == 4

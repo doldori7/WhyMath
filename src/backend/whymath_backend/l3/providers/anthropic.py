@@ -24,12 +24,13 @@ system=,messages=[{"role":"user","content":...}])`. 응답은 content 블록 리
 
 from __future__ import annotations
 
+import time
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, cast, runtime_checkable
 
 from whymath_backend.config import Settings, get_settings
-from whymath_backend.l3.models import CostTier, RoutingDecision
+from whymath_backend.l3.models import CostTier, GenerationResult, RoutingDecision, Usage
 from whymath_backend.l3.router import _as_cost_tier
 
 
@@ -153,6 +154,42 @@ def _extract_text(message: Any) -> str:
     return "".join(parts)
 
 
+def _coerce_token_count(value: Any) -> int | None:
+    """usage 필드값을 int|None으로 방어적 정규화 — 비정상 타입·음수는 None(지어내지 않음)."""
+    # bool은 int의 서브클래스지만 토큰 수가 아니다 — 배제.
+    if isinstance(value, bool) or not isinstance(value, int):
+        return None
+    return value if value >= 0 else None
+
+
+def _extract_usage(message: Any, latency_ms: float) -> Usage:
+    """anthropic messages.create 응답에서 실측 usage를 방어적으로 추출 (S1 게이트 ②).
+
+    응답의 `usage`(pydantic 객체 또는 dict)에서 `input_tokens`/`output_tokens`를 포착한다.
+    형태가 예상과 다르면 토큰은 None — *값을 지어내지 않는다*(_extract_text와 동일한
+    보수적 정규화). 지연(latency_ms)은 호출부가 monotonic으로 잰 실측값을 그대로 싣는다.
+    """
+    raw_usage: Any = None
+    if hasattr(message, "usage"):
+        raw_usage = message.usage
+    elif isinstance(message, dict):
+        raw_usage = message.get("usage")
+
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    if raw_usage is not None:
+        if hasattr(raw_usage, "input_tokens"):
+            input_tokens = _coerce_token_count(raw_usage.input_tokens)
+        elif isinstance(raw_usage, dict):
+            input_tokens = _coerce_token_count(raw_usage.get("input_tokens"))
+        if hasattr(raw_usage, "output_tokens"):
+            output_tokens = _coerce_token_count(raw_usage.output_tokens)
+        elif isinstance(raw_usage, dict):
+            output_tokens = _coerce_token_count(raw_usage.get("output_tokens"))
+
+    return Usage(input_tokens=input_tokens, output_tokens=output_tokens, latency_ms=latency_ms)
+
+
 def _build_default_client(settings: Settings) -> _AnthropicClient:
     """기본 anthropic AsyncAnthropic 클라이언트 생성 (지연 import).
 
@@ -253,7 +290,7 @@ class AnthropicProvider:
         images: Sequence[str] | None = None,
         temperature: float | None = None,
         json_schema: Mapping[str, object] | None = None,
-    ) -> str:
+    ) -> GenerationResult:
         """라우터 결정에 따라 Anthropic Claude로 생성 (LLMProvider 구현).
 
         - CostTier.LOCAL이면 즉시 거부(로컬은 OllamaProvider 담당).
@@ -271,7 +308,8 @@ class AnthropicProvider:
           호출부 계약: 클라우드 결정 경로에서는 json_schema를 지정하지 말고 프롬프트+관대 파서로
           동작해야 한다(동등문제 저작은 LOCAL 결정일 때만 스키마를 싣는다 — llm_generator._invoke).
 
-        반환 텍스트는 *검증 전 원시 출력*이다(모듈 docstring 경계 메모 참조).
+        반환은 `GenerationResult(text, usage)` — text는 *검증 전 원시 출력*(모듈 docstring
+        경계 메모), usage는 응답 usage(input/output_tokens) + monotonic 실측 지연(S1 게이트 ②).
         """
         if images:
             raise RuntimeError(
@@ -306,6 +344,8 @@ class AnthropicProvider:
         if temperature is not None:
             extra["temperature"] = temperature
 
+        # 지연 실측 — 호출을 monotonic으로 감싼다(추정 est_latency_ms와 구분되는 actual).
+        start = time.monotonic()
         response = await self._get_client().messages.create(
             model=model_id,
             max_tokens=settings.anthropic_max_tokens,
@@ -313,7 +353,11 @@ class AnthropicProvider:
             messages=[{"role": "user", "content": prompt}],
             **extra,
         )
-        return _extract_text(response)
+        latency_ms = (time.monotonic() - start) * 1000.0
+        return GenerationResult(
+            text=_extract_text(response),
+            usage=_extract_usage(response, latency_ms),
+        )
 
     async def check_status(self) -> AnthropicStatus:
         """클라우드 구성 + 도달성(인증) 점검 (/status용).

@@ -21,7 +21,7 @@ from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
 from whymath_backend.l2.concept_diagnosis import ConceptDiagnosis
-from whymath_backend.l3.models import RoutingDecision
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l3.pipeline import QualityQueueUnavailableError
 from whymath_backend.l3.visualization import InvalidVisualizationSpecError
 from whymath_backend.schema.enums import Persona, VisualizationType
@@ -45,8 +45,10 @@ def _reset_rate_limit_store() -> None:
 class _StubProvider:
     """create_app(provider=) 주입용 — generate 미호출(visualize monkeypatch)."""
 
-    async def generate(self, prompt: str, system: str, decision: RoutingDecision) -> str:
-        return ""
+    async def generate(
+        self, prompt: str, system: str, decision: RoutingDecision
+    ) -> GenerationResult:
+        return GenerationResult("")
 
 
 class _FakeSession:

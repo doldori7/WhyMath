@@ -245,7 +245,8 @@ class QuestionRephraser:
         provider = self._resolve_provider()
         decision = self._decide_routing()
         prompt = _build_prompt(question_text, equation)
-        return self._ensure_loop().run_until_complete(
+        # provider 반환은 GenerationResult(text, usage) — rephrase는 텍스트만 소비.
+        generated = self._ensure_loop().run_until_complete(
             provider.generate(
                 prompt,
                 _SYSTEM_PROMPT,
@@ -253,6 +254,7 @@ class QuestionRephraser:
                 temperature=self._temperature,
             )
         )
+        return generated.text
 
     def _resolve_provider(self) -> LLMProvider:
         if self._provider is None:

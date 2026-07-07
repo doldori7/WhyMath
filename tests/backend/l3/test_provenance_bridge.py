@@ -16,6 +16,7 @@ import uuid
 
 import pytest
 
+from whymath_backend.l3.models import Usage
 from whymath_backend.l3.pregenerate.models import PrewarmItemResult, PrewarmStatus
 from whymath_backend.l3.pregenerate.provenance_bridge import generation_log_from_result
 
@@ -129,3 +130,42 @@ class TestArgumentPassthrough:
         )
         assert log.provenance_id == prov
         assert log.prompt_template_id == tmpl
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 텔레메트리 — usage(실측) 주입 시 GenerationLog 적재 (S1 게이트 ②)
+# ──────────────────────────────────────────────────────────────────────
+class TestTelemetryFromUsage:
+    def test_usage_fields_loaded(self) -> None:
+        """result.usage(토큰·지연 실측) + cost_usd 인자 → GenerationLog 4필드 적재."""
+        result = PrewarmItemResult(
+            cache_key="k1",
+            status="written",
+            usage=Usage(input_tokens=120, output_tokens=340, latency_ms=1234.6),
+        )
+        log = generation_log_from_result(
+            result,
+            problem_id=uuid.uuid4(),
+            model_name="qwen3.5:27b",
+            cost_usd=0.0,  # 로컬 사전생성 = 0달러 확정
+        )
+        assert log.input_tokens == 120
+        assert log.output_tokens == 340
+        assert log.latency_ms == 1235  # float(ms) 실측 → int 반올림(스키마 계약)
+        assert log.cost_usd == 0.0
+        assert log.success is True
+
+    def test_partial_usage_only_known_fields(self) -> None:
+        """usage에 지연만 있으면 지연만 적재 — 토큰은 None 유지(지어내지 않음)."""
+        result = PrewarmItemResult(
+            cache_key="k1",
+            status="written",
+            usage=Usage(input_tokens=None, output_tokens=None, latency_ms=88.2),
+        )
+        log = generation_log_from_result(
+            result, problem_id=uuid.uuid4(), model_name="qwen2-math:7b"
+        )
+        assert log.input_tokens is None
+        assert log.output_tokens is None
+        assert log.latency_ms == 88
+        assert log.cost_usd is None  # cost_usd 미지정 → None(기본)

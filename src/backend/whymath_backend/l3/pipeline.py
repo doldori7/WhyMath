@@ -33,9 +33,15 @@ from whymath_backend.l3.interfaces import (
     LLMProvider,
     TraceSink,
 )
-from whymath_backend.l3.models import RoutingDecision, RoutingRequest
+from whymath_backend.l3.models import CostTier, RoutingDecision, RoutingRequest, Usage
 from whymath_backend.l3.pregenerate.validator import SeedValidator, validate_response
-from whymath_backend.l3.router import Router, cache_key_for, langfuse_fields
+from whymath_backend.l3.router import (
+    Router,
+    _as_cost_tier,
+    actual_cost_krw,
+    cache_key_for,
+    langfuse_fields,
+)
 
 
 class QualityQueueUnavailableError(RuntimeError):
@@ -52,6 +58,11 @@ class QualityQueueUnavailableError(RuntimeError):
 @dataclass(slots=True, frozen=True)
 class GenerationResult:
     """파이프라인 결과 — 라우팅 메타데이터 + (동기) 생성 텍스트 또는 (비동기) job_id.
+
+    ⚠️ 이름 구분: `l3.models.GenerationResult`(provider 경계의 생성 1회 결과 — text+usage)
+    와 이름만 같고 **다른 타입**이다. 이 타입은 파이프라인 *오케스트레이션* 결과다 —
+    파이프라인이 provider의 models.GenerationResult에서 `.text`를 소비하고 `.usage`는
+    trace(실측 cost_krw·토큰·지연)로 흘린 뒤, 이 타입으로 상위에 돌려준다.
 
     호출자/엔드포인트가 라우팅 결정(어느 티어·패밀리·모드)과 캐시 적중 여부를
     응답에 노출할 수 있도록 decision을 함께 돌려준다.
@@ -181,7 +192,13 @@ async def generate(
             ) from exc
         # enqueue도 관측 기록한다(mode=async — SLA 평가에서 동기와 분리, 03a §F.2).
         # provider는 호출하지 않는다(QUALITY 동기 금지). 캐시도 타지 않는다(결과 미존재).
-        trace.record(langfuse_fields(decision, cache_hit=False, student_id_hash=student_id_hash))
+        # 실측 비용: enqueue 시점엔 생성이 없어 0.0(로컬 QUALITY 27b=0원 확정 — 토큰·지연
+        # 실측은 워커가 자기 trace로 기록한다, queue/tasks.py). usage는 미존재라 None.
+        trace.record(
+            langfuse_fields(
+                decision, cache_hit=False, student_id_hash=student_id_hash, cost_krw=0.0
+            )
+        )
         return GenerationResult(
             decision=decision, text="", cache_hit=False, job_id=job_id, status="queued"
         )
@@ -194,16 +211,34 @@ async def generate(
     cached = await cache.get(key)
     if cached is not None:
         # 캐시 적중도 반드시 기록(분포·KPI 왜곡 방지, 03a §F.1).
-        trace.record(langfuse_fields(decision, cache_hit=True, student_id_hash=student_id_hash))
+        # 실측 비용: 적중=신규 LLM 호출 없음=0원 *확정*(cost_krw=0.0). 토큰·지연 usage는
+        # 이 요청에서 실측된 게 없어 None(적재 시점 실측은 미스 기록에 이미 남았다).
+        trace.record(
+            langfuse_fields(decision, cache_hit=True, student_id_hash=student_id_hash, cost_krw=0.0)
+        )
         return GenerationResult(decision=decision, text=cached, cache_hit=True)
 
     # 캐시 미스 → 실제 생성(검증 전 원시 출력) → (shadow 검증) → 조건부 캐시 저장 → 기록.
     # images는 *있을 때만* 전달한다 — 텍스트 전용 제공자(기존 구현·테스트 가짜)는 images
     # 인자가 없어도 그대로 동작(하위호환). 멀티모달 호출만 images-수신 제공자를 쓴다.
+    # provider 반환은 models.GenerationResult(text, usage) — text는 종전 str 경로 그대로
+    # 소비하고, usage(실측 토큰·지연)는 trace로 흘린다(S1 게이트 ② 배선).
     if images is not None:
-        output = await provider.generate(prompt, system, decision, images=images)
+        generated = await provider.generate(prompt, system, decision, images=images)
     else:
-        output = await provider.generate(prompt, system, decision)
+        generated = await provider.generate(prompt, system, decision)
+    output = generated.text
+    usage: Usage | None = generated.usage
+    # 실측 비용(원) — 로컬=0.0 확정 / 클라우드=토큰 산정. usage 자체가 없거나(미계측 제공자)
+    # 클라우드인데 토큰이 미상이면 None으로 남긴다('미상'과 '0원'을 구분 — 지어내지 않음).
+    actual_krw: float | None
+    is_cloud = _as_cost_tier(decision.cost_tier) is not CostTier.LOCAL
+    if usage is None:
+        actual_krw = None
+    elif is_cloud and (usage.input_tokens is None or usage.output_tokens is None):
+        actual_krw = None
+    else:
+        actual_krw = actual_cost_krw(decision, usage)
     # 런타임 shadow 검증(비차단·opt-in) — 거짓 수치 관계 등 환각 신호를 관측에 남긴다.
     # 캐시 적재 *전에* 검증해야 skip_cache_on_signal이 적재 여부를 결정할 수 있다.
     signal = validate_response(validator, output) if validator is not None else None
@@ -220,6 +255,9 @@ async def generate(
             cache_hit=False,
             student_id_hash=student_id_hash,
             validation_signal=reason,
+            # 실측(S1 게이트 ②) — provider가 포착한 usage + 토큰 산정 비용(est_*와 분리).
+            usage=usage,
+            cost_krw=actual_krw,
         )
     )
     return GenerationResult(
