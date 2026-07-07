@@ -15,9 +15,11 @@ wedge(고3 킬러)인 **미적분 영역이 0건**이었다 — 이 생성기가
 정직성·이중 방어: 생성물은 여전히 S2-a 게이트(Tier1 대입·근 선택·위생·동등성)를 통과해야
 저장된다(생성기 자기 신뢰 금지 원칙). derive-and-verify가 answer_map을 재유도해 교차 검증한다.
 
-범위(v1): **삼차함수 극대/극소의 x좌표**(=도함수 방정식의 근·근 선택으로 검증 가능한 것)만.
-서로 다른 정수 임계점 (m,n)·같은 홀짝(f 정수계수 보장)·단답형. 극값의 *값* f(x*)·근의 합/곱 등
-근-비환원 문항, 킬러 난이도, 객관식·무리근 임계점, LLM 발문 다양화는 후속(별도 검증 재료 필요).
+범위: **삼차함수 극대/극소의 x좌표**(=도함수 방정식의 근·근 선택으로 검증 가능한 것)만.
+정수 임계점(같은 홀짝·f 정수계수)은 `CalculusExtremumSkeletonGenerator`, **무리 임계점 p±√q**(도함수
+계수는 여전히 정수·답만 무리수)는 `CalculusIrrationalExtremumSkeletonGenerator`가 낸다 — 후자는 정수
+극값의 근 선택 스택 + sqrt quad 패밀리의 SymPy 정확값 표기를 교집합 재사용(재구현 0). 극값의 *값*
+f(x*)·근의 합/곱 등 근-비환원 문항, 킬러 난이도, 5지선다, LLM 발문 다양화는 후속.
 
 7계층: L3 지역(생성=LLM 라우터 도메인이나 이 구현은 LLM 0 — 좌석 계약만 공유). schema(최하위)·
 동일 패키지(canonicalize·difficulty)·L1 problem_bank(ConceptTag)만 import(L4 참조 0).
@@ -33,10 +35,15 @@ from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import Literal
 
+import sympy
+
 from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
-from whymath_backend.l3.equivalent.difficulty import estimate_difficulty_extremum
+from whymath_backend.l3.equivalent.difficulty import (
+    estimate_difficulty_extremum,
+    estimate_difficulty_extremum_irrational,
+)
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.schema.enums import (
     AnswerFormat,
@@ -54,6 +61,7 @@ __all__ = [
     "CalculusExtremumMCSkeletonGenerator",
     "CalculusExtremumSkeletonGenerator",
     "CalculusExtremumValueSkeletonGenerator",
+    "CalculusIrrationalExtremumSkeletonGenerator",
     "CalculusTangentSlopeSkeletonGenerator",
 ]
 
@@ -312,6 +320,218 @@ def _explanation(skeleton: _ExtremumSkeleton) -> str:
         f"삼차항의 계수가 양수라 x = {m}에서 극대, x = {n}에서 극소이다. "
         f"따라서 {which_val}을 갖는 x는 {skeleton.answer}이다."
     )
+
+
+# ── 미적분(무리 임계점 극값) 형제 생성기 — f'(x)=0의 근이 p±√q(답만 무리수) ──
+# 정수 극값(임계점 정수)의 무리근 짝: 임계점이 p±√q여도 f'(x)=3(x−(p−√q))(x−(p+√q))
+# = 3x²−6p·x+3(p²−q)라 도함수·삼차함수 계수는 *전부 정수*다. 즉 검산은 정수 극값과 동일한 근
+# 선택 스택을 쓰고(도함수 monic x²−2p·x+(p²−q)=0의 근 대소 선택), *답만* 무리수 표기라 sqrt quad
+# 패밀리의 SymPy 정확값 경로(sstr·AnswerFormat.실수)를 그대로 미러한다(두 선례의 교집합·재구현 0).
+
+# 무리 임계점 풀 범위 — q는 *비제곱* 양수만(제곱수면 임계점이 유리수→정수 극값 풀과 구조 중복).
+# p·q는 미적분Ⅰ "간단한 무리근" 손계산 범위(sqrt quad 패밀리 `_SQRT_QS` 규약 미러).
+_IRR_P_MIN, _IRR_P_MAX = -4, 4
+_IRR_QS: tuple[int, ...] = (2, 3, 5, 6, 7, 8, 10, 11, 12, 13)
+
+
+def _display_monic_quadratic(b: int, c: int) -> str:
+    """monic 이차식 → 사람이 읽는 표기('x^2 - 2x - 1') — 0 항·1 계수 생략(_display_cubic 미러)."""
+    parts = [_term(1, "x^2", lead=True)]
+    if b:
+        parts.append(_term(b, "x"))
+    if c:
+        parts.append(_term(c, ""))
+    return " ".join(parts)
+
+
+@dataclass(frozen=True, slots=True)
+class _IrrationalExtremumSkeleton:
+    """무리 임계점 극값 뼈대 — 임계점 p±√q(q 비제곱 양수)·극값 종류. 모든 수치의 단일 진실 원천.
+
+    f'(x) = 3(x−(p−√q))(x−(p+√q)) = 3x² − 6p·x + 3(p²−q) 을 적분해 f(x) = x³ − 3p·x² + 3(p²−q)·x.
+    전개 계수(1, −3p, 3(p²−q), 0)는 전부 정수라 canonicalize·표기가 그대로 동작한다 — 답(임계점)만
+    무리수다. 정수 극값 `_ExtremumSkeleton`과 별도 타입(무리수 답 계약을 정수 프로퍼티에 안 섞음).
+    """
+
+    p: int  # 임계점 정수부
+    q: int  # 근호 안(비제곱 양수) — 임계점 p±√q
+    kind: ExtremumKind
+
+    @property
+    def cubic_coeffs(self) -> tuple[int, int, int, int]:
+        """f(x) 전개 계수 (a, b, c, d) — a x³ + b x² + c x + d. 상수항 d=0(극값 x좌표 무관)."""
+        return 1, -3 * self.p, 3 * (self.p * self.p - self.q), 0
+
+    @property
+    def derivative_monic(self) -> tuple[int, int]:
+        """monic 도함수 계수 (b', c') — x² + b'x + c'(= f'/3). 근 = 임계점 p±√q(정수계수)."""
+        return -2 * self.p, self.p * self.p - self.q
+
+    @property
+    def smaller_root(self) -> sympy.Expr:
+        """작은 임계점 p−√q의 SymPy 정확값."""
+        return sympy.Integer(self.p) - sympy.sqrt(self.q)
+
+    @property
+    def larger_root(self) -> sympy.Expr:
+        """큰 임계점 p+√q의 SymPy 정확값."""
+        return sympy.Integer(self.p) + sympy.sqrt(self.q)
+
+    @property
+    def answer_expr(self) -> sympy.Expr:
+        """정답 임계점 — 선두계수 양수라 극대=작은 근 p−√q·극소=큰 근 p+√q."""
+        return self.smaller_root if self.kind == "극대" else self.larger_root
+
+    @property
+    def answer_text(self) -> str:
+        """정답 임계점 SymPy 정확값 표기 — sqrt quad 패밀리 규약 미러(예 '3 - sqrt(2)')."""
+        return str(sympy.sstr(self.answer_expr))
+
+    @property
+    def selection(self) -> str:
+        """근 선택 — 극대→smallest(작은 임계점)·극소→largest(큰 임계점). root_selection 검증."""
+        return "smallest" if self.kind == "극대" else "largest"
+
+    @property
+    def difficulty(self) -> float:
+        """rule-based 종합 난이도 — 극값 base + 무리근 가산(difficulty 모듈·정수 spread 미사용)."""
+        _, b, c, _ = self.cubic_coeffs
+        return estimate_difficulty_extremum_irrational(max_abs_coefficient=max(abs(b), abs(c)))
+
+
+def _build_irrational_pool() -> tuple[_IrrationalExtremumSkeleton, ...]:
+    """결정론 무리 임계점 극값 뼈대 풀 — p × q(비제곱) × {극대,극소} 열거·고정 시드 셔플.
+
+    (도함수 monic, 선택) 중복은 빌드 시점에 제거한다(같은 (p,q)라도 극대/극소는 정답·선택이
+    다른 별개 문제). 무리근 monic은 판별식 4q가 비제곱이라 정수 극값 풀의 정수근 monic과 근의
+    체가 달라 signature가 애초에 서로소다(cross-군 오dedup 0·별도 밴드 index로 이중 방어).
+    """
+    pool: list[_IrrationalExtremumSkeleton] = []
+    seen: set[tuple[int, int, str]] = set()
+    for p in range(_IRR_P_MIN, _IRR_P_MAX + 1):
+        for q in _IRR_QS:
+            for kind in ("극대", "극소"):
+                skeleton = _IrrationalExtremumSkeleton(p=p, q=q, kind=kind)
+                key = (*skeleton.derivative_monic, skeleton.selection)
+                if key not in seen:
+                    seen.add(key)
+                    pool.append(skeleton)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _irrational_explanation(skeleton: _IrrationalExtremumSkeleton) -> str:
+    """무리 임계점 극값 해설 — 도함수 방정식을 풀어 x=p±√q 도출·부호 판정으로 극대/극소 확정."""
+    small_text = sympy.sstr(skeleton.smaller_root)
+    large_text = sympy.sstr(skeleton.larger_root)
+    quad = _display_monic_quadratic(*skeleton.derivative_monic)
+    which_val = "극댓값" if skeleton.kind == "극대" else "극솟값"
+    return (
+        f"f'(x)=0의 양변을 3으로 나누면 {quad} = 0 이므로 그 해는 x = {small_text}, "
+        f"x = {large_text} 이다. 삼차항의 계수가 양수라 작은 근 x = {small_text}에서 극대, "
+        f"큰 근 x = {large_text}에서 극소이다. "
+        f"따라서 {which_val}을 갖는 x는 {skeleton.answer_text}이다."
+    )
+
+
+class CalculusIrrationalExtremumSkeletonGenerator:
+    """미적분 무리 임계점 극값 결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석(LLM 0).
+
+    임계점이 p±√q인 극값 x좌표를 낸다 — 도함수 계수는 정수라 정수 극값 생성기와 동일 좌석·게이트·
+    근 선택 검증 스택을 공유하고, 답만 무리수라 sqrt quad 패밀리의 SymPy 정확값 표기를 미러한다.
+    풀을 순서대로 소비(소진 시 None), `skip_signatures`로 기존 구조를 건너뛴다(회차 낭비 방지).
+    """
+
+    def __init__(
+        self,
+        *,
+        skip_signatures: AbstractSet[str] | None = None,
+        slug_prefix: str = "wm-calc-extirr",
+        subject: Subject = Subject.공통,
+        curriculum_version: Curriculum = Curriculum.REVISION_2022,
+        valid_from_year: int = 2022,
+        unit_codes: Sequence[str] = ("CALC-EXTREMUM-IRR",),
+        concept_tags: Sequence[ConceptTag] = _DEFAULT_CONCEPT_TAGS,
+    ) -> None:
+        self._pool = _build_irrational_pool()
+        self._index = 0
+        self._skip = skip_signatures
+        self._slug_prefix = slug_prefix
+        self._subject = subject
+        self._curriculum_version = curriculum_version
+        self._valid_from_year = valid_from_year
+        self._unit_codes = list(unit_codes)
+        self._concept_tags = list(concept_tags)
+
+    def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
+        """다음 무리 극값 뼈대를 후보로 조립 — skip 집합에 있는 구조는 건너뛰고, 풀 소진 시 None."""
+        while self._index < len(self._pool):
+            skeleton = self._pool[self._index]
+            self._index += 1
+            condition = _derivative_condition(*skeleton.derivative_monic)
+            if self._skip is not None:
+                signature = canonical_signature(condition, skeleton.selection)
+                if signature is not None and signature in self._skip:
+                    continue
+            return self._assemble(spec, skeleton, condition)
+        return None
+
+    def _assemble(
+        self, spec: EquivalenceSpec, skeleton: _IrrationalExtremumSkeleton, condition: str
+    ) -> CandidateProblem:
+        a, b, c, d = skeleton.cubic_coeffs
+        fx = _display_cubic(a, b, c, d)
+        answer_text = skeleton.answer_text
+        templates = _TEMPLATES[skeleton.kind]
+        question_text = templates[self._index % len(templates)].format(fx=fx)
+        standard_codes = sorted(spec.achievement_standard_codes)
+        slug = self._stable_slug(question_text, answer_text, standard_codes)
+
+        problem = Problem(
+            problem_id=uuid.uuid5(uuid.NAMESPACE_URL, f"whymath:problem:{slug}"),
+            slug=slug,
+            source_type=SourceType.자체생성,
+            curriculum_version=self._curriculum_version,
+            valid_from_year=self._valid_from_year,
+            subject=self._subject,
+            unit_codes=list(self._unit_codes),
+            difficulty_overall=skeleton.difficulty,
+            question_format=QuestionFormat.단답형,
+            answer_format=AnswerFormat.실수,  # 무리수 전용 형식 부재 — 실수 매핑(sqrt 패밀리 미러)
+            achievement_standard_codes=standard_codes,
+            question_text=question_text,
+            choices=None,
+            answer=answer_text,
+            answer_explanation=_irrational_explanation(skeleton),
+            distractor_map=None,
+        )
+        provenance = ContentProvenance(
+            generation_type=GenerationType.FULLY_GENERATED,
+            license=LicenseType.WHYMATH_GENERATED,
+            original_source=None,
+            transformation_pipeline={
+                "steps": [
+                    "결정론 무리 극값 스켈레톤 조립(임계점 p±√q→도함수 역산·적분)",
+                    "S2-a 수용 게이트",
+                    "사람 검수 큐(필요 시)",
+                ],
+            },
+        )
+        return CandidateProblem(
+            problem=problem,
+            provenance=provenance,
+            conditions=condition,  # 도함수 방정식(정수계수·검산용·호출자 제공)
+            answer_map={"x": answer_text},
+            answer_selection=skeleton.selection,
+            solution_steps=None,
+            concept_tags=list(self._concept_tags),
+        )
+
+    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
+        """결정론 안정 slug — 내용 해시(멱등 upsert 키·극값 생성기 규약 미러)."""
+        payload = "|".join([question_text, answer, ",".join(sorted(codes))])
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+        return f"{self._slug_prefix}-{digest}"
 
 
 # ── 미적분(접선 기울기) 형제 생성기 — f'(x)=m의 근(접점 x좌표) ──────────────

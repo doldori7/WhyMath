@@ -47,6 +47,7 @@ from whymath_backend.l3.equivalent.calculus_skeleton_generator import (
     CalculusExtremumMCSkeletonGenerator,
     CalculusExtremumSkeletonGenerator,
     CalculusExtremumValueSkeletonGenerator,
+    CalculusIrrationalExtremumSkeletonGenerator,
     CalculusTangentSlopeSkeletonGenerator,
 )
 from whymath_backend.l3.equivalent.exp_log_skeleton_generator import (
@@ -94,9 +95,10 @@ _CALC_MC_INJECTION: dict[str, tuple[str, str]] = {
     "value_vs_point": ("extremum-value-vs-point-confused", "report-x-coordinate-for-value"),
 }
 
-# 밴드 기본 크기 — quad 185 + calc 120 + calc-value-mc 30 + exp 25 + log 20 + 수열 90 + 삼각 13
-# = 총 483건(CI 봉인 ≥100 여유). 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·
-# calc-tangent 162·calc-value 150·calc-value-mc 146·exp 28·log 28·arith 90·geo 45·trig 13.
+# 밴드 기본 크기 — quad 185 + calc 120 + calc-value-mc 30 + calc-extremum-irr 30 + exp 25 + log 20
+# + 수열 90 + 삼각 13 = 총 513건(CI 봉인 ≥100 여유). 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·
+# calc-extremum 162·calc-tangent 162·calc-value 150·calc-value-mc 146·calc-extremum-irr 180·
+# exp 28·log 28·arith 90·geo 45·trig 13.
 _DEFAULT_SHORT_N = 90
 _DEFAULT_MC_N = 45
 _DEFAULT_SQRT_N = 30
@@ -105,6 +107,7 @@ _DEFAULT_CALC_EXTREMUM_N = 40
 _DEFAULT_CALC_TANGENT_N = 40
 _DEFAULT_CALC_VALUE_N = 40
 _DEFAULT_CALC_VALUE_MC_N = 30
+_DEFAULT_CALC_EXTREMUM_IRR_N = 30
 _DEFAULT_EXP_N = 25
 _DEFAULT_LOG_N = 20
 _DEFAULT_ARITH_N = 60
@@ -135,6 +138,13 @@ _VALUE_SPEC_DIFFICULTY = 3.3
 # 오답 선지 오개념 2종(극대극소 혼동·값↔x좌표 혼동)을 주입하므로 target_misconception_ids도 2종.
 _VALUE_MC_STANDARD_CODE = "[12미적Ⅰ-02-07]"
 _VALUE_MC_SPEC_DIFFICULTY = 3.3
+
+# 미적분(무리 임계점 극값) 밴드 스펙 — 극값 x좌표와 *같은* 성취기준([12미적Ⅰ-02-07]·극대·극소).
+# conditions는 도함수 monic 이차방정식이나 판별식이 비제곱이라 정수 극값 밴드와 근의 체가 달라
+# canonical signature가 애초 서로소지만, calc 규약대로 **또 별도 index**(오dedup 이중 방어).
+# 난이도 3.5 고정: 무리 극값 추정({3.5, 3.8}) 최대 gap 0.3 < 0.5(tol) → 난이도 성분 만점.
+_IRR_STANDARD_CODE = "[12미적Ⅰ-02-07]"
+_IRR_SPEC_DIFFICULTY = 3.5
 
 # 지수·로그 밴드 스펙 — 대수(고2·[12대수01-08]·지수함수·로그함수 활용). conditions가 비다항
 # (b**x-v·log(x,b)-k)이라 canonical signature=None → signature_index 무의미(풀 결정론 유일이라
@@ -305,6 +315,7 @@ def run_corpus_batch(
     calc_tangent_n: int = _DEFAULT_CALC_TANGENT_N,
     calc_value_n: int = _DEFAULT_CALC_VALUE_N,
     calc_value_mc_n: int = _DEFAULT_CALC_VALUE_MC_N,
+    calc_extremum_irr_n: int = _DEFAULT_CALC_EXTREMUM_IRR_N,
     exp_n: int = _DEFAULT_EXP_N,
     log_n: int = _DEFAULT_LOG_N,
     arith_n: int = _DEFAULT_ARITH_N,
@@ -489,6 +500,37 @@ def run_corpus_batch(
             )
         )
 
+    # ── calc 문제군(무리 임계점 극값) — 또 별도 signature_index. 도함수 monic이 판별식 비제곱이라
+    #    정수 극값과 근의 체가 달라 signature가 애초 서로소지만 calc 규약대로 index 분리(이중 방어).
+    #    답만 무리수(sqrt 정확값)·오개념 주입 0(단답형)이라 target_misconception_ids=∅. ──
+    if calc_extremum_irr_n > 0:
+        irr_index: set[str] = set()
+        irr_spec = EquivalenceSpec(
+            achievement_standard_codes=frozenset({_IRR_STANDARD_CODE}),
+            target_misconception_ids=frozenset(),
+            difficulty_overall=_IRR_SPEC_DIFFICULTY,
+            answer_format=None,
+        )
+        irr_generator = CalculusIrrationalExtremumSkeletonGenerator(skip_signatures=irr_index)
+        irr_outcomes = run_batch(
+            irr_spec, irr_generator, calc_extremum_irr_n, signature_index=irr_index, store=sink
+        )
+        irr_stored = sum(1 for o in irr_outcomes if o.status == "accepted_stored")
+        irr_failures = [
+            reason
+            for outcome in irr_outcomes
+            if outcome.status != "accepted_stored"
+            for reason in (outcome.reasons or [f"status={outcome.status}"])
+        ]
+        bands.append(
+            BandResult(
+                name="calc-extremum-irr",
+                requested=calc_extremum_irr_n,
+                stored=irr_stored,
+                failure_reasons=irr_failures,
+            )
+        )
+
     # ── 대수 문제군(지수·로그 방정식) — 비다항 conditions(signature=None)이라 별도 index지만
     #    실질 dedup 없음(풀 결정론 유일). quad/calc와 구조 signature가 애초에 안 겹친다. ──
     for band_name, gen_factory, count in (
@@ -635,6 +677,12 @@ def main(argv: list[str] | None = None) -> int:
         help="미적분 극값의 값(삼차함수 극댓값·극솟값) 객관식 수(오개념 distractor 태깅).",
     )
     parser.add_argument(
+        "--calc-extremum-irr",
+        type=int,
+        default=_DEFAULT_CALC_EXTREMUM_IRR_N,
+        help="미적분 무리 임계점 극값(삼차함수 극대·극소 x좌표 p±√q) 단답형 수.",
+    )
+    parser.add_argument(
         "--exp", type=int, default=_DEFAULT_EXP_N, help="지수방정식(bˣ=bᵏ) 단답형 수."
     )
     parser.add_argument(
@@ -662,6 +710,7 @@ def main(argv: list[str] | None = None) -> int:
         calc_tangent_n=args.calc_tangent,
         calc_value_n=args.calc_value,
         calc_value_mc_n=args.calc_value_mc,
+        calc_extremum_irr_n=args.calc_extremum_irr,
         exp_n=args.exp,
         log_n=args.log,
         arith_n=args.arith,

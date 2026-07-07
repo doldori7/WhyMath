@@ -112,3 +112,27 @@ def estimate_difficulty_extremum(*, root_spread: int, max_abs_coefficient: int) 
     elif max_abs_coefficient > _EXT_COEF_MID_BOUND:
         score += _EXT_COEF_MID_STEP
     return min(_MAX, max(_MIN, round(score, 1)))
+
+
+# ── 미적분(무리 임계점 극값) 스켈레톤 난이도 ─────────────────────────────────
+# 무리근 임계점 극값(f'(x)=0의 근이 p±√q)은 정수 임계점 극값(base 3.0)보다 한 단계 위다:
+# 미분+방정식+선택 3단에 더해 *무리수 근 표기·산술*(√ 정리·대소 비교)이 얹힌다. 그래서 극값
+# base(3.0)에 무리근 가산(estimate_difficulty의 irrational 축과 정합 톤·다만 극값 base 우선이라
+# 절반값 0.6 대신 0.5 고정)을 더한다. 임계점 간격은 2√q(무리수·정수 아님)라 spread 항 대신
+# 근호 안(q)·전개 계수 크기로 산술 부담을 잰다. 산출 범위 ~3.5~4.0(미적분Ⅰ 상단·킬러 4~5 미사용).
+_EXT_IRRATIONAL_STEP = 0.5  # 무리 임계점: 근 표기·산술 부담 가산
+
+
+def estimate_difficulty_extremum_irrational(*, max_abs_coefficient: int) -> float:
+    """무리 임계점 극값 스켈레톤 수치 → 종합 난이도(1.0~5.0) — 극값 base + 무리근 가산.
+
+    입력은 무리근 극값 뼈대가 확정한 수치에서 유도한다(단일 진실 원천 = 뼈대):
+    `max_abs_coefficient`(삼차함수 전개 계수 절댓값 최대 max(|b|,|c|)). 임계점 간격(2√q)은
+    무리수라 정수 spread 항을 쓰지 않는다.
+    """
+    score = _EXTREMUM_BASE + _EXT_IRRATIONAL_STEP
+    if max_abs_coefficient > _EXT_COEF_BIG_BOUND:
+        score += _EXT_COEF_BIG_STEP
+    elif max_abs_coefficient > _EXT_COEF_MID_BOUND:
+        score += _EXT_COEF_MID_STEP
+    return min(_MAX, max(_MIN, round(score, 1)))
