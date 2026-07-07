@@ -343,6 +343,14 @@
 - **분수 skeleton 60%→89.5%·객관식 전 유형 100%** — 취약 지점이 해소됐다. v3가 v1을 +13%p 넘어선 동력은 두 앵커(정책 앵커·"복사해 붙여넣듯" 이중 앵커)로 추정 — v2에선 유효 계층이 5계층 소음에 묻혀 있었고, 경량 문면에서는 온전히 작동했다(개별 ablation은 미실시·현 상태가 실측 최고라 불요).
 - **v2 역행의 독립 재현 확보**: 머지 대기 중 우연히 v2를 2차 측정(62%·`EXTRA_EQUATION` 2건) — v2 판정(57%)이 단발 노이즈가 아님을 재확인.
 - **레버 종료**: 프롬프트·온도 축은 여기서 확정(v3·0.7). 남은 개선 여지(~5%)는 비용 대비 낮음 — 다음 레버는 전 코퍼스 rephrase 실행(350건·Phaiakes9) 또는 타 도메인 확장.
+### 2026-07-07 (구현·L5/L4·S1 게이트② 후속): **L4 judge seam 계측 갭 배선 — 공유 LangfuseSink/provider/cache 주입**
+
+**무엇/왜**: "L4 순수 seam 비용 미계측" 후속을 조사하니 전제가 실제와 달랐음 — ① Polya `LLMSeam`(`l4/models.py`)은 **죽은 seam**(`PolyaCoach.coach()` 프로덕션 호출자 0·테스트만) → LLM 미도달, 계측 대상 없음. ② 프로덕션 유일 L4 LLM 경로인 **judge seam**(`L3JudgeSeam`)은 이미 `l3.pipeline.generate` 경유라 usage/cost가 계산됨. **하지만** `_judge_for_gate()`(coach.py)가 `L3JudgeSeam()`을 무인자 생성 → 기본값 `RecordingTraceSink`(throwaway·**Langfuse 아님**)·매 호출 새 `OllamaProvider`/`InMemoryCache`를 써서, **계산된 비용이 관측 sink에 안 흐르고 버려지는** 진짜 갭이었음(docstring은 "Langfuse·캐시"라 주장했으나 미배선).
+- **수정(배선만)**: `api/coach.py`에 `_JudgeSeamDeps`(NamedTuple) + `_get_judge_seam_deps(request)` FastAPI 의존성 신설 — `app.state`의 공유 `LangfuseSink`(`_TRACE_KEY`)·`CompositeProvider`(`_PROVIDER_KEY`)·`RedisCache`(`_CACHE_KEY`) 조회(app.py 패턴 동형). 엔드포인트 3곳(`coach_decide`·`create_session`·`append_turns`)이 `JudgeSeamDeps`를 받아 → `_compute_matches(judge_deps=)` → 로컬 `_make_judge()`(sync 게이트+shadow 양쪽) → `_judge_for_gate(provider=,cache=,trace=)` → `L3JudgeSeam(...)`.
+- **불변**: `L3JudgeSeam`·pipeline·계측 로직 무변경(주입만). `_judge_for_gate` 무인자→keyword-only(모두 None 기본, 셋 다 None이면 기존 기본값과 비트동일 → off 경로·하위호환 부작용 0). L4 코어는 비용 미인지 유지(경계). import-linter 7계층 단방향 green.
+- **테스트**: 신설 `TestJudgeSeamSharedDepsWiring`(3) — 주입 인스턴스가 seam에 흐름·헬퍼가 app.state 조회·**관통 증명**(monkeypatch 없이 가짜 provider+RecordingTraceSink 주입→judge 게이트 ON→POST→공유 trace에 record 흐름 단언). 기존 judge 게이트/shadow monkeypatch 3곳은 좌석 kwargs 확장 대응(`lambda **_: judge` 등).
+
+**결과**: 5게이트 green — pytest **5594 passed / 238 skipped**, coach.py 커버리지 92%, mypy --strict 무이슈. **정정**: "L4 seam 미계측"은 프로덕션에 부분적으로만 사실이었고(계산은 됐고 관측 전달이 누락), 이 배선으로 judge 비용이 실제 Langfuse에 도달.
 
 ### 2026-07-07 (라이브 A/B 실측·⚠️역효과 판정+구현·L3): **rephrase 프롬프트 v2(5계층) 역행 확인 → v3 경량 회귀(v1 문면 + 정책 앵커 한 줄)**
 

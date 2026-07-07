@@ -27,7 +27,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Annotated, NamedTuple
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +39,15 @@ from whymath_backend.api._crypto import (
     build_dialogue_content_cipher,
     encrypt_dialogue_content,
     resolve_dialogue_content,
+)
+from whymath_backend.api._l3_state import (
+    CACHE_KEY as _CACHE_KEY,
+)
+from whymath_backend.api._l3_state import (
+    PROVIDER_KEY as _PROVIDER_KEY,
+)
+from whymath_backend.api._l3_state import (
+    TRACE_KEY as _TRACE_KEY,
 )
 from whymath_backend.api._misconception_state import get_semantic_matcher
 from whymath_backend.api._rate_limit import (
@@ -62,6 +71,11 @@ from whymath_backend.l2 import (
     theta_to_mastery_proxy,
 )
 from whymath_backend.l2.prerequisite_recommendation import recommend_prerequisite_gaps
+from whymath_backend.l3.interfaces import (
+    CacheBackend,
+    LLMProvider,
+    TraceSink,
+)
 from whymath_backend.l3.pregenerate.validator import (
     arithmetic_validator,
     validate_response,
@@ -499,20 +513,68 @@ class _MatchOutcome(NamedTuple):
     no_confident_match: bool
 
 
-def _judge_for_gate() -> JudgeProtocol:
+class _JudgeSeamDeps(NamedTuple):
+    """judge seam에 주입할 *앱 공유* L3 인프라(관측·provider·캐시) 묶음.
+
+    프로덕션에서 `_judge_for_gate`가 이 셋을 `L3JudgeSeam`에 넘겨, judge LLM 호출의
+    usage/cost가 앱 전역 `LangfuseSink`로 흐르고(관측 누락 해소) provider·캐시도 앱 전역과
+    공유되게 한다(매 호출 새 `OllamaProvider`·`InMemoryCache` 생성 회피). 셋 다 `None`이면
+    `L3JudgeSeam`이 자기 기본값(throwaway trace/새 provider/새 cache)으로 폴백한다 — app.state가
+    없는 경로(단위테스트 등) 하위호환.
+    """
+
+    provider: LLMProvider | None
+    cache: CacheBackend | None
+    trace: TraceSink | None
+
+
+def _get_judge_seam_deps(request: Request) -> _JudgeSeamDeps:
+    """app.state의 공유 provider/cache/trace를 judge seam 주입용으로 묶는 얇은 의존성.
+
+    `create_app`이 `app.state`에 1회 올린 공유 인스턴스(`CompositeProvider`·`RedisCache`·
+    `LangfuseSink`)를 요청마다 조회한다(DB 세션과 달리 앱 수명 공유라 `app.py:296-298` 패턴과
+    동형). 키가 없으면(app.state 미구성) `None` — `L3JudgeSeam` 기본값 폴백이라 안전. 이
+    조회는 *부작용 0*이며, judge 게이트 off 경로에서도 주입값이 소비되지 않으므로 현행 동작 불변.
+    """
+
+    return _JudgeSeamDeps(
+        provider=getattr(request.app.state, _PROVIDER_KEY, None),
+        cache=getattr(request.app.state, _CACHE_KEY, None),
+        trace=getattr(request.app.state, _TRACE_KEY, None),
+    )
+
+
+JudgeSeamDeps = Annotated[_JudgeSeamDeps, Depends(_get_judge_seam_deps)]
+
+
+def _judge_for_gate(
+    *,
+    provider: LLMProvider | None = None,
+    cache: CacheBackend | None = None,
+    trace: TraceSink | None = None,
+) -> JudgeProtocol:
     """coach 오개념 게이트용 judge 좌석 — 기본 L3 백킹(라우터 경유·로컬 FAST·never-break).
 
     슬108 플래그(`misconception_judge_enabled`)가 on일 때만 `_gate`가 호출한다. 기본은 L3 백킹
     seam(`L3JudgeSeam`→`l3.pipeline`·로컬 FAST·Langfuse·캐시)을 문 `LLMJudge`다 — "LLM 라우터
-    경유·로컬 우선·추적" 절대원칙을 자동 충족(직접 호출 0). 테스트는 이 팩토리를 monkeypatch해
-    `FakeJudge`(결정론·라이브 0)를 주입한다(좌석 주입점·hermetic). 플래그 off면 호출되지 않아
-    `OllamaProvider` 구성도 0(현행 비트동일).
+    경유·로컬 우선·추적" 절대원칙을 자동 충족(직접 호출 0).
+
+    provider/cache/trace는 L5(엔드포인트→`_compute_matches`)가 app.state 공유 인스턴스
+    (`CompositeProvider`·`RedisCache`·`LangfuseSink`)를 주입한다 — 그래야 judge의 usage/cost가
+    실제 Langfuse 관측으로 흐르고 캐시도 공유된다(계층 경계: L5가 L3 인프라를 L4 seam에 주입,
+    L4 코어는 비용을 모른 채 유지). 미주입(모두 None)이면 `L3JudgeSeam` 기본값 폴백(하위호환).
+    테스트는 이 팩토리를 monkeypatch해 `FakeJudge`(결정론·라이브 0)를 주입한다(좌석 주입점·
+    hermetic) — 대체물은 kwargs를 받아 무시한다(`lambda **_: judge`). 플래그 off면 호출되지 않아
+    provider/cache 구성도 0(현행 비트동일).
     """
-    return LLMJudge(L3JudgeSeam())
+    return LLMJudge(L3JudgeSeam(provider=provider, cache=cache, trace=trace))
 
 
 async def _compute_matches(
-    student_input: str, *, ocr_confidence: float | None = None
+    student_input: str,
+    *,
+    ocr_confidence: float | None = None,
+    judge_deps: _JudgeSeamDeps | None = None,
 ) -> _MatchOutcome:
     """오개념 후보 계산 + §3.3 품질 게이트 — `misconception_semantic_mode` 3값 분기(off/shadow/on).
 
@@ -561,6 +623,18 @@ async def _compute_matches(
     (CLAUDE.md "환각/장애 조용히 넘어가지 말고 로그").
     """
 
+    def _make_judge() -> JudgeProtocol:
+        # judge 좌석 생성 — 엔드포인트가 넘긴 app.state 공유 provider/cache/trace를 주입한다
+        # (미주입이면 `L3JudgeSeam` 기본값 폴백·하위호환). `_judge_for_gate`를 *모듈 전역*으로
+        # 참조하므로 테스트의 monkeypatch(`coach._judge_for_gate`)가 그대로 적용된다(좌석 유지).
+        if judge_deps is None:
+            return _judge_for_gate()
+        return _judge_for_gate(
+            provider=judge_deps.provider,
+            cache=judge_deps.cache,
+            trace=judge_deps.trace,
+        )
+
     async def _gate(candidates: list[MisconceptionMatch]) -> _MatchOutcome:
         # §3.3 품질 게이트 후처리 — 세 모드 공통 출구. 게이트를 *한 번만* 적용해 결과 전체를 받고
         # matches+플래그를 함께 반환한다(직전엔 .matches만 반환해 플래그를 드롭했음). 게이트 ①은
@@ -572,7 +646,7 @@ async def _compute_matches(
         # no_confident_match가 *judge 통과 후* top-1을 반영하게 한다. 세 모드(off/shadow/on) 공통
         # 출구라 게이트가 한 곳에 일관 적용된다. off면 좌석 호출 0·LLM 0·현행 비트동일.
         if candidates and get_settings().misconception_judge_enabled:
-            candidates = await judge_filter(candidates, student_input, judge=_judge_for_gate())
+            candidates = await judge_filter(candidates, student_input, judge=_make_judge())
         result = apply_match_quality_gate(candidates, ocr_confidence=ocr_confidence)
         return _MatchOutcome(
             matches=result.matches,
@@ -605,14 +679,15 @@ async def _compute_matches(
         # G1: judge-shadow 토글이 켜져 있고 의미 후보가 있으면, 그 후보에 judge를 돌려 *걸러질
         # 결과*(would-be removed/kept)를 무노출로 로깅한다(04b Phase 1·합성↔실 갭 검증). judge는
         # LLM(수 초)이라 *비차단*(_spawn=create_task)으로 띄우고 즉시 반환한다 — 응답 경로는 judge를
-        # await하지 않는다(노출 무지연). `_judge_for_gate()` 좌석을 spawn 직전 만들어 인자로
-        # 넘긴다(monkeypatch 타이밍 호환). 레코드엔 학생 원문·judge reason 미저장(미성년 PII).
+        # await하지 않는다(노출 무지연). `_make_judge()`(공유 provider/cache/trace 주입 좌석)를
+        # spawn 직전 만들어 인자로 넘긴다(monkeypatch 타이밍 호환). 레코드엔 학생 원문·judge
+        # reason 미저장(미성년 PII).
         if get_settings().misconception_judge_shadow and sem:
             _spawn(
                 observe_misconception_judge_shadow(
                     sem,
                     student_input,
-                    judge=_judge_for_gate(),
+                    judge=_make_judge(),
                     feed_threshold=get_settings().misconception_semantic_threshold,
                     judge_routing=get_settings().misconception_judge_routing,
                 )
@@ -1037,6 +1112,7 @@ def _build_dialogue_turn(
 async def coach_decide(
     body: CoachRequest,
     user: ConsentedUser,
+    judge_deps: JudgeSeamDeps,
 ) -> CoachResponse:
     """학생 발화 → Polya 결정 + 오개념 진단 + LTHC 조정안을 *한 번에* 반환.
 
@@ -1046,7 +1122,9 @@ async def coach_decide(
 
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
-    outcome = await _compute_matches(body.student_input, ocr_confidence=body.ocr_confidence)
+    outcome = await _compute_matches(
+        body.student_input, ocr_confidence=body.ocr_confidence, judge_deps=judge_deps
+    )
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(body, matches=outcome.matches)
     )
@@ -1073,6 +1151,7 @@ async def create_session(
     body: SessionCreateRequest,
     user: ConsentedUser,
     session: SessionDep,
+    judge_deps: JudgeSeamDeps,
 ) -> SessionCreateResponse:
     """새 대화 + 학생/AI 첫 2턴 영속. LLM 호출은 0 — AI 턴은 `decision.prompt` 저장.
 
@@ -1093,7 +1172,9 @@ async def create_session(
     prereq = await _prerequisite_coaching_for(session, user.user_id, body.problem_id)
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
-    outcome = await _compute_matches(body.student_input, ocr_confidence=body.ocr_confidence)
+    outcome = await _compute_matches(
+        body.student_input, ocr_confidence=body.ocr_confidence, judge_deps=judge_deps
+    )
     # WH-1 2단계 §8.4 슬라이스 3 — 이번 턴 매칭(증거)으로 학생 활성 가설 세트를 큐레이션·영속한다
     # (#191 순수 로직 + #192 저장소 재사용·재구현 0). 같은 `session`/같은 트랜잭션에 합류하며
     # curate_hypothesis(증거 반박·캡)는 flush만 하고 commit은 *핸들러의 기존 commit*이 담당(별도 X).
@@ -1259,6 +1340,7 @@ async def append_turns(
     body: CoachRequest,
     user: ConsentedUser,
     session: SessionDep,
+    judge_deps: JudgeSeamDeps,
 ) -> TurnAppendResponse:
     """기존 dialogue에 학생/AI 2턴 추가.
 
@@ -1286,7 +1368,9 @@ async def append_turns(
     prereq = await _prerequisite_coaching_for(session, user.user_id, dialogue.problem_id)
     # slice 106: 오개념 후보를 비블로킹 결합(게이트 off면 substring만)으로 미리 계산해 주입.
     # WH-1: ocr_confidence를 게이트로 thread하고(§3.3 게이트 ②), 게이트 플래그를 응답에 노출한다.
-    outcome = await _compute_matches(body.student_input, ocr_confidence=body.ocr_confidence)
+    outcome = await _compute_matches(
+        body.student_input, ocr_confidence=body.ocr_confidence, judge_deps=judge_deps
+    )
     # WH-1 2단계 §8.4 슬라이스 3 — create_session과 동형. 이번 턴 매칭으로 *기존* 활성 가설
     # 세트를 큐레이션(감쇠/강화·누적·증거 반박·캡)·영속한다(트랜잭션 합류·별도 commit 없음·재사용).
     # 멀티턴이라 직전 턴들의 가설 위에 누적되어 감쇠·강화가 실제로 가동된다(2단계 메커니즘).

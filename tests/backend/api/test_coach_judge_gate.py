@@ -24,7 +24,8 @@ import logging
 import uuid
 from collections.abc import AsyncIterator, Iterator
 from datetime import datetime, timezone
-from typing import Any
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -32,18 +33,22 @@ from pydantic import SecretStr
 
 from whymath_backend.api import coach
 from whymath_backend.api._auth import get_consented_user
+from whymath_backend.api._l3_state import CACHE_KEY, PROVIDER_KEY, TRACE_KEY
 from whymath_backend.api._rate_limit import reset_store
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.db.session import get_session
+from whymath_backend.l3.interfaces import InMemoryCache, RecordingTraceSink
+from whymath_backend.l3.models import GenerationResult, RoutingDecision
 from whymath_backend.l4.misconception.judge import (
     FakeJudge,
     JudgeProtocol,
     JudgeVerdict,
     LLMJudge,
 )
+from whymath_backend.l4.misconception.judge_seam import L3JudgeSeam
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
@@ -81,7 +86,9 @@ def _patch_judge(monkeypatch: pytest.MonkeyPatch, judge: JudgeProtocol) -> dict[
     """`_judge_for_gate` 좌석을 주입 judge로 교체 + 호출 횟수 스파이 반환(off면 0이어야)."""
     calls = {"n": 0}
 
-    def _factory() -> JudgeProtocol:
+    # 좌석은 이제 app.state 공유 provider/cache/trace를 kwargs로 받는다 — 대체 팩토리도
+    # `**_`로 받아 무시한다(FakeJudge라 주입값 미소비·실 좌석 시그니처와 호환).
+    def _factory(**_: object) -> JudgeProtocol:
         calls["n"] += 1
         return judge
 
@@ -332,3 +339,86 @@ class TestDirectPayloadCallUngated:
         assert calls["n"] == 0  # 직접 경로는 judge 무관
         _decision, matches, _intervention, _lthc, _entry, _sol = result
         assert matches and matches[0].misconception.id == _DOP  # diagnose 폴백·유지
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑦ 프로덕션 배선 — judge seam이 app.state 공유 LangfuseSink/provider/cache를 주입받는다
+#    (judge usage/cost가 throwaway로 버려지지 않고 실제 관측으로 흐름을 증명)
+# ──────────────────────────────────────────────────────────────────────────
+class _RecordingProvider:
+    """`LLMProvider` 가짜 — 유효 verdict 텍스트를 돌리고 호출을 캡처(라이브 Ollama 0).
+
+    judge seam→l3.pipeline이 이 provider를 부르면 pipeline이 `trace.record`를 호출하므로,
+    주입 trace로 레코드가 흐르는지로 배선을 증명한다.
+    """
+
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        **_: object,
+    ) -> GenerationResult:
+        self.calls += 1
+        return GenerationResult(text="판정: 예\n근거: 테스트 결선")
+
+
+class TestJudgeSeamSharedDepsWiring:
+    def test_judge_for_gate_injects_shared_instances_into_seam(self) -> None:
+        # 단위: `_judge_for_gate`가 주입 provider/cache/trace로 `L3JudgeSeam`을 만드는지 단언.
+        provider = _RecordingProvider()
+        cache = InMemoryCache()
+        trace = RecordingTraceSink()
+        judge = coach._judge_for_gate(provider=provider, cache=cache, trace=trace)
+        assert isinstance(judge, LLMJudge)
+        seam = judge._seam
+        assert isinstance(seam, L3JudgeSeam)
+        # seam이 *바로 그* 공유 인스턴스를 물었는지(throwaway 기본값이 아니라).
+        assert seam._provider is provider
+        assert seam._cache is cache
+        assert seam._trace is trace
+
+    def test_get_judge_seam_deps_reads_app_state(self) -> None:
+        # 의존성 헬퍼: app.state의 공유 provider/cache/trace를 그대로 묶어 반환.
+        provider = _RecordingProvider()
+        cache = InMemoryCache()
+        trace = RecordingTraceSink()
+        app = create_app(provider=provider, cache=cache, trace=trace)
+        # `request.app.state`만 참조하는 얇은 헬퍼라 app을 문 최소 Request 스텁으로 구동.
+        request = SimpleNamespace(app=app)
+        deps = coach._get_judge_seam_deps(cast(Any, request))
+        assert deps.provider is provider
+        assert deps.cache is cache
+        assert deps.trace is trace
+        # 확인: 기본이 아니라 실제 app.state 인스턴스(state 키 단일 출처).
+        assert getattr(app.state, PROVIDER_KEY) is provider
+        assert getattr(app.state, CACHE_KEY) is cache
+        assert getattr(app.state, TRACE_KEY) is trace
+
+    def test_endpoint_flows_judge_record_to_shared_trace(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 관통: judge 게이트 ON에서 /v1/coach 경로가 app.state 공유 trace로 judge usage/cost를
+        # 기록하는지. `_judge_for_gate`는 monkeypatch하지 *않는다* — 실 좌석이 주입 인스턴스로
+        # L3JudgeSeam을 구성해야 함을 증명(throwaway RecordingTraceSink로 새면 이 단언이 깨진다).
+        provider = _RecordingProvider()
+        cache = InMemoryCache()
+        trace = RecordingTraceSink()
+        app = create_app(provider=provider, cache=cache, trace=trace)
+        app.dependency_overrides[get_consented_user] = _user
+        app.dependency_overrides[get_settings] = _settings_no_limits
+
+        async def _sess() -> AsyncIterator[_FakeSession]:
+            yield _FakeSession()
+
+        app.dependency_overrides[get_session] = _sess
+        _enable_judge(monkeypatch)  # env로 게이트 ON(_compute_matches는 실 get_settings 직독)
+        resp = TestClient(app).post("/v1/coach", json={"student_input": _SUBSTR_FULL})
+        assert resp.status_code == 200, resp.text
+        # judge seam이 *공유* provider를 탔고(호출 발생), *공유* trace에 레코드가 흘렀다
+        # (throwaway였다면 provider.calls>0라도 trace.records는 비었을 것).
+        assert provider.calls >= 1
+        assert trace.records, "judge 호출 usage/cost가 공유 trace로 흐르지 않음(배선 실패)"
