@@ -8,7 +8,8 @@ Phaiakes9 전용이던 배치 스크립트(run_batch_corpus.py·repo 밖)를 **r
 사용법:
     python -m whymath_backend.harness.problem_corpus_batch \\
         [--out <jsonl>] [--short 90] [--mc 45] [--sqrt 30] [--sqrt-mc 20]
-        [--calc-extremum 40] [--calc-tangent 40] [--calc-value 40] [--exp 25] [--log 20] [--dry-run]
+        [--calc-extremum 40] [--calc-tangent 40] [--calc-value 40] [--exp 25] [--log 20]
+        [--arith 60] [--geo 30] [--trig 13] [--dry-run]
 
 동작: 문제군별 밴드를 순차 실행 → 전 후보가 S2-a 4종 게이트를 통과해야 sink에 실린다 → JSONL로
 기록. **quad 문제군**(short/mc/sqrt/sqrt_mc·이차방정식 근)은 공유 signature_index로 겹침을 차단하고,
@@ -51,9 +52,16 @@ from whymath_backend.l3.equivalent.exp_log_skeleton_generator import (
     LogarithmicEquationSkeletonGenerator,
 )
 from whymath_backend.l3.equivalent.orchestrator import run_batch
+from whymath_backend.l3.equivalent.sequence_skeleton_generator import (
+    ArithmeticSequenceSkeletonGenerator,
+    GeometricSequenceSkeletonGenerator,
+)
 from whymath_backend.l3.equivalent.skeleton_generator import (
     GeneratorVariant,
     SkeletonEquivalentProblemGenerator,
+)
+from whymath_backend.l3.equivalent.trig_skeleton_generator import (
+    TrigonometricValueSkeletonGenerator,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.distractor import DISTRACTOR_BY_ID
@@ -77,9 +85,9 @@ _MC_INJECTION: dict[str, tuple[str, str]] = {
     "sign_flip": ("factor-sign-flip", "factor-sign-flip-root"),
 }
 
-# 밴드 기본 크기 — quad 185 + calc 120 + exp 25 + log 20 = 총 350건(CI 봉인 ≥100 여유).
-# 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·calc-tangent 162·calc-value 150·
-# exp 28·log 28.
+# 밴드 기본 크기 — quad 185 + calc 120 + exp 25 + log 20 + 수열 90 + 삼각 13 = 총 453건(CI 봉인
+# ≥100 여유). 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·calc-tangent 162·
+# calc-value 150·exp 28·log 28·arith 90·geo 45·trig 13.
 _DEFAULT_SHORT_N = 90
 _DEFAULT_MC_N = 45
 _DEFAULT_SQRT_N = 30
@@ -89,6 +97,9 @@ _DEFAULT_CALC_TANGENT_N = 40
 _DEFAULT_CALC_VALUE_N = 40
 _DEFAULT_EXP_N = 25
 _DEFAULT_LOG_N = 20
+_DEFAULT_ARITH_N = 60
+_DEFAULT_GEO_N = 30
+_DEFAULT_TRIG_N = 13
 
 # 미적분(극값) 밴드 스펙 — 별도 성취기준([12미적Ⅰ-02-07]·함수의 증가·감소와 극대·극소).
 # 난이도 3.3 고정: 극값 추정(3.0~4.0) 최대 gap 0.7 < 3.5(게이트 감쇠 수학)라 안전.
@@ -115,6 +126,17 @@ _VALUE_SPEC_DIFFICULTY = 3.3
 # 최대 gap 0.4 < 0.5(tol)이라 동등성 난이도 성분 만점.
 _EXPLOG_STANDARD_CODE = "[12대수01-08]"
 _EXPLOG_SPEC_DIFFICULTY = 3.0
+
+# 수열·삼각 밴드 스펙 — 대수(고2) 성취기준. conditions는 `x − 상수`(일반항 계산식·특수각 값)이라
+# **다항 signature(非None)**이지만, 각 생성기 풀이 답/값 기준 dedup돼 밴드 내 signature가 전건
+# 유일하다(오dedup 0). 각 밴드는 **별도 signature_index**(문제군 분리·cross-군 오dedup 방지·calc
+# 패턴 미러). 난이도: 등차 3.0(추정 2.7~3.2)·등비 3.2(3.0~3.5)·삼각 3.0(2.8~3.3), gap ≤ 0.3 < tol.
+_ARITH_STANDARD_CODE = "[12대수03-02]"
+_ARITH_SPEC_DIFFICULTY = 3.0
+_GEO_STANDARD_CODE = "[12대수03-03]"
+_GEO_SPEC_DIFFICULTY = 3.2
+_TRIG_STANDARD_CODE = "[12대수02-02]"
+_TRIG_SPEC_DIFFICULTY = 3.0
 
 
 def _default_out_path() -> Path:
@@ -264,6 +286,9 @@ def run_corpus_batch(
     calc_value_n: int = _DEFAULT_CALC_VALUE_N,
     exp_n: int = _DEFAULT_EXP_N,
     log_n: int = _DEFAULT_LOG_N,
+    arith_n: int = _DEFAULT_ARITH_N,
+    geo_n: int = _DEFAULT_GEO_N,
+    trig_n: int = _DEFAULT_TRIG_N,
     write: bool = True,
 ) -> CorpusBatchReport:
     """밴드 배치 실행 — 문제군별 signature_index·밴드별 스펙 정합·JSONL 기록(순수 결정론).
@@ -444,6 +469,63 @@ def run_corpus_batch(
             )
         )
 
+    # ── 수열·삼각 문제군 — conditions가 `x − 상수`(다항·非None signature)지만 각 풀이 답/값
+    #    dedup돼 밴드 내 signature 전건 유일. 밴드마다 별도 index(문제군 분리·calc 패턴 미러). ──
+    for seq_name, seq_factory, seq_count, standard_code, difficulty in (
+        (
+            "arith",
+            ArithmeticSequenceSkeletonGenerator,
+            arith_n,
+            _ARITH_STANDARD_CODE,
+            _ARITH_SPEC_DIFFICULTY,
+        ),
+        (
+            "geo",
+            GeometricSequenceSkeletonGenerator,
+            geo_n,
+            _GEO_STANDARD_CODE,
+            _GEO_SPEC_DIFFICULTY,
+        ),
+        (
+            "trig",
+            TrigonometricValueSkeletonGenerator,
+            trig_n,
+            _TRIG_STANDARD_CODE,
+            _TRIG_SPEC_DIFFICULTY,
+        ),
+    ):
+        if seq_count <= 0:
+            continue
+        seq_index: set[str] = set()
+        seq_spec = EquivalenceSpec(
+            achievement_standard_codes=frozenset({standard_code}),
+            target_misconception_ids=frozenset(),
+            difficulty_overall=difficulty,
+            answer_format=None,
+        )
+        seq_outcomes = run_batch(
+            seq_spec,
+            seq_factory(skip_signatures=seq_index),
+            seq_count,
+            signature_index=seq_index,
+            store=sink,
+        )
+        seq_stored = sum(1 for o in seq_outcomes if o.status == "accepted_stored")
+        seq_failures = [
+            reason
+            for outcome in seq_outcomes
+            if outcome.status != "accepted_stored"
+            for reason in (outcome.reasons or [f"status={outcome.status}"])
+        ]
+        bands.append(
+            BandResult(
+                name=seq_name,
+                requested=seq_count,
+                stored=seq_stored,
+                failure_reasons=seq_failures,
+            )
+        )
+
     total_requested = sum(b.requested for b in bands)
     total_stored = sum(b.stored for b in bands)
     written = sink.write(resolved_out) if write else None
@@ -494,6 +576,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--log", type=int, default=_DEFAULT_LOG_N, help="로그방정식(log_b x=k) 단답형 수."
     )
+    parser.add_argument(
+        "--arith", type=int, default=_DEFAULT_ARITH_N, help="등차수열(제n항) 단답형 수."
+    )
+    parser.add_argument(
+        "--geo", type=int, default=_DEFAULT_GEO_N, help="등비수열(제n항) 단답형 수."
+    )
+    parser.add_argument(
+        "--trig", type=int, default=_DEFAULT_TRIG_N, help="삼각함수 특수각 값 단답형 수."
+    )
     parser.add_argument("--dry-run", action="store_true", help="파일 미기록 — 수율·리포트만 확인.")
     args = parser.parse_args(argv)
 
@@ -508,6 +599,9 @@ def main(argv: list[str] | None = None) -> int:
         calc_value_n=args.calc_value,
         exp_n=args.exp,
         log_n=args.log,
+        arith_n=args.arith,
+        geo_n=args.geo,
+        trig_n=args.trig,
         write=not args.dry_run,
     )
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)
