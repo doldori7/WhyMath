@@ -22,11 +22,17 @@ from whymath_backend.db.models.assessment import (
 from whymath_backend.db.models.assessment import (
     ConceptMasteryHistory as OrmConceptMasteryHistory,
 )
+from whymath_backend.db.models.assessment import (
+    SkillMasteryHistory as OrmSkillMasteryHistory,
+)
 from whymath_backend.schema.assessment import (
     Assessment as SchemaAssessment,
 )
 from whymath_backend.schema.assessment import (
     ConceptMasteryHistory as SchemaConceptMasteryHistory,
+)
+from whymath_backend.schema.assessment import (
+    SkillMasteryHistory as SchemaSkillMasteryHistory,
 )
 from whymath_backend.schema.enums import (
     AssessmentType,
@@ -191,6 +197,55 @@ def test_concept_mastery_history_roundtrip() -> None:
     back = orm.to_schema()
     assert back.user_id == uid
     assert back.concept_id == cid
+    assert back.measured_at == at
+    assert back.mastery == s.mastery
+    assert back.confidence == s.confidence
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# SkillMasteryHistory (Part 2 Phase 2b-2) — 스킬 축 짝·메타 등록·복합PK(skill_id TEXT)·roundtrip
+# ──────────────────────────────────────────────────────────────────────────
+def test_skill_mastery_history_registered_and_tablename() -> None:
+    """Base.metadata 등록 + __tablename__(alembic 인식·프로젝션 조인 전제)."""
+    assert "skill_mastery_history" in Base.metadata.tables
+    assert OrmSkillMasteryHistory.__tablename__ == "skill_mastery_history"
+
+
+def test_skill_mastery_history_composite_pk_text_skill_no_fk() -> None:
+    """복합 PK(user_id, skill_id, measured_at)·skill_id는 TEXT·FK 없음(느슨참조·hypertable).
+
+    개념 축과의 유일 차이는 두 번째 PK 축이 concept_id(UUID)가 아니라 skill_id(TEXT)라는 점.
+    """
+    ddl = _pg_ddl(OrmSkillMasteryHistory.__table__)
+    assert "PRIMARY KEY (user_id, skill_id, measured_at)" in ddl
+    assert len(OrmSkillMasteryHistory.__table__.foreign_keys) == 0
+    assert "REFERENCES" not in ddl
+    # skill_id는 TEXT(개념 축 UUID와 대비·skill_node PK 공간).
+    assert OrmSkillMasteryHistory.__table__.c.skill_id.type.python_type is str
+
+
+def test_skill_mastery_history_roundtrip() -> None:
+    """SkillMasteryHistory 변환이 복합 PK 구성요소(skill_id str)·측정값을 보존한다."""
+    uid = uuid.uuid4()
+    at = datetime(2026, 5, 1, 12, 0, tzinfo=timezone.utc)
+    s = SchemaSkillMasteryHistory(
+        user_id=uid,
+        skill_id="skill.compute-fraction",
+        measured_at=at,
+        mastery=0.7,
+        confidence=0.85,
+        sample_size=12,
+    )
+    orm = OrmSkillMasteryHistory.from_schema(s)
+    assert orm.user_id == uid
+    assert orm.skill_id == "skill.compute-fraction"
+    assert orm.measured_at == at
+    assert orm.mastery == 0.7
+    assert orm.sample_size == 12
+
+    back = orm.to_schema()
+    assert back.user_id == uid
+    assert back.skill_id == s.skill_id
     assert back.measured_at == at
     assert back.mastery == s.mastery
     assert back.confidence == s.confidence

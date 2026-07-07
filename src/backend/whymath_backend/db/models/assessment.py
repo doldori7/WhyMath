@@ -51,6 +51,9 @@ from whymath_backend.schema.assessment import Assessment as SchemaAssessment
 from whymath_backend.schema.assessment import (
     ConceptMasteryHistory as SchemaConceptMasteryHistory,
 )
+from whymath_backend.schema.assessment import (
+    SkillMasteryHistory as SchemaSkillMasteryHistory,
+)
 from whymath_backend.schema.enums import (
     AssessmentType,
     MentalPhase,
@@ -188,6 +191,46 @@ class ConceptMasteryHistory(Base):
         mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
         data = {key: getattr(self, key) for key in mapped_keys}
         return SchemaConceptMasteryHistory.model_validate(data)
+
+
+class SkillMasteryHistory(Base):
+    """스킬별 숙달 변화 추적 영속 ORM — `skill_mastery_history`(Part 2 리치 채택 Phase 2b-2).
+
+    `ConceptMasteryHistory`의 *스킬 축* 짝(개념=무엇 ↔ 스킬=행동). 채점 attempt가 평가하는 개념을
+    concept→skill 브리지로 해소한 각 스킬에 순수 커널(`compute_mastery_record`·엔티티-무관)을
+    재사용해 갱신·append-only 적재한다(특성 #16 학습 곡선의 행동 축).
+
+    복합 PK `(user_id, skill_id, measured_at)` — DDL 제약. **개념과의 유일 차이**: concept_id(UUID)
+    대신 `skill_id`(**Text**·`skill.<slug>`·`skill_node` PK). `user_id`·`skill_id`는 §느슨참조라
+    *FK 아님*(hypertable·ConceptMasteryHistory 선례 — DDL에 REFERENCES 없음). 운영 시 `measured_at`
+    7일 청크 hypertable로 변환되나 *그 변환은 마이그레이션 레벨*이라 ORM은 일반 테이블로 둔다.
+    """
+
+    __tablename__ = "skill_mastery_history"
+
+    # ===== 복합 PK (user_id, skill_id, measured_at) — REFERENCES 없음 → FK 아님 =====
+    user_id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True)
+    skill_id: Mapped[str] = mapped_column(sa.Text, primary_key=True)
+    measured_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), primary_key=True)
+
+    # ===== 측정값 (ConceptMasteryHistory 동형) =====
+    mastery: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
+    confidence: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
+    sample_size: Mapped[int | None] = mapped_column(sa.Integer)
+
+    @classmethod
+    def from_schema(cls, schema: SchemaSkillMasteryHistory) -> SkillMasteryHistory:
+        """검증된 `schema.SkillMasteryHistory` → 영속 ORM(schema↔db seam)."""
+        data = schema.model_dump()
+        mapped_keys = {col.key for col in sa.inspect(cls).mapper.column_attrs}
+        kwargs = {k: v for k, v in data.items() if k in mapped_keys}
+        return cls(**kwargs)
+
+    def to_schema(self) -> SchemaSkillMasteryHistory:
+        """영속 ORM → `schema.SkillMasteryHistory`(Pydantic 검증 복원)."""
+        mapped_keys = {col.key for col in sa.inspect(type(self)).mapper.column_attrs}
+        data = {key: getattr(self, key) for key in mapped_keys}
+        return SchemaSkillMasteryHistory.model_validate(data)
 
 
 class AbilitySnapshot(Base):

@@ -46,6 +46,7 @@ from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
     Assessment,
     ConceptMasteryHistory,
+    SkillMasteryHistory,
 )
 from whymath_backend.db.models.dialogue import Dialogue, DialogueTurn
 from whymath_backend.db.models.evidence_link import EvidenceLink
@@ -91,6 +92,7 @@ _EXPORT_PLAN: tuple[tuple[type[Base], str, str], ...] = (
     (ProblemAttempt, "user_id", "problem_attempts"),
     (Assessment, "user_id", "assessments"),
     (ConceptMasteryHistory, "user_id", "concept_mastery_history"),
+    (SkillMasteryHistory, "user_id", "skill_mastery_history"),  # 스킬 숙달·느슨참조·hypertable
     (AbilitySnapshot, "user_id", "ability_snapshots"),
     (ParentalConsent, "user_id", "parental_consents"),
     (UserTrackHistory, "user_id", "track_history"),

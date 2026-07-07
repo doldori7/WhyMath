@@ -51,6 +51,7 @@ from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
     Assessment,
     ConceptMasteryHistory,
+    SkillMasteryHistory,
 )
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.device import DeviceCredential
@@ -86,6 +87,7 @@ _ERASURE_PLAN: tuple[tuple[type[Base], str], ...] = (
     (AttemptEvent, "user_id"),  # 느슨참조·hypertable(고아 방지)
     (Assessment, "user_id"),
     (ConceptMasteryHistory, "user_id"),  # BKT 숙달·느슨참조·hypertable
+    (SkillMasteryHistory, "user_id"),  # 스킬 숙달·느슨참조·hypertable
     (AbilitySnapshot, "user_id"),  # IRT θ·느슨참조
     (DailyLearningMetrics, "user_id"),  # 느슨참조·hypertable
     (UserBehaviorMetrics, "user_id"),  # 느슨참조·hypertable

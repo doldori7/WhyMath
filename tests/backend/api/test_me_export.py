@@ -101,6 +101,7 @@ def _client() -> TestClient:
                 [],
                 [],
                 [],
+                [],  # skill_mastery_history(Phase 2b-2·빈 구간)
                 [],
                 [_StubRow({"cid": "c1"})],
                 [],

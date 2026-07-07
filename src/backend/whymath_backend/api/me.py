@@ -63,6 +63,7 @@ from whymath_backend.db.models.assessment import (
     AbilitySnapshot,
     Assessment,
     ConceptMasteryHistory,
+    SkillMasteryHistory,
 )
 from whymath_backend.db.models.audit import DeletionAudit
 from whymath_backend.db.models.concept import Concept, ProblemConcept
@@ -98,6 +99,7 @@ from whymath_backend.l2.prerequisite_recommendation import (
     PrerequisiteGap,
     recommend_prerequisite_gaps,
 )
+from whymath_backend.l2.skill_mastery_tracking import record_problem_attempt_skill_mastery
 from whymath_backend.l2.weak_concept_recommendation import (
     WeakConceptRecommendation,
     recommend_weak_concepts,
@@ -116,6 +118,9 @@ from whymath_backend.schema.assessment import AbilitySnapshot as AbilitySnapshot
 from whymath_backend.schema.assessment import Assessment as AssessmentSchema
 from whymath_backend.schema.assessment import (
     ConceptMasteryHistory as ConceptMasteryHistorySchema,
+)
+from whymath_backend.schema.assessment import (
+    SkillMasteryHistory as SkillMasteryHistorySchema,
 )
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
@@ -520,12 +525,30 @@ class ConceptMasteryUpdate(BaseModel):
     sample_size: int
 
 
+class SkillMasteryUpdate(BaseModel):
+    """채점으로 갱신된 한 스킬의 숙달 측정 — 응답에 포함(행동 축 학습 곡선 즉시 피드백).
+
+    `ConceptMasteryUpdate`의 스킬 축 짝 — 키가 `concept_id`(UUID)가 아니라 `skill_id`(str)다.
+    """
+
+    skill_id: str
+    mastery: float
+    sample_size: int
+
+
 class AttemptSubmitResponse(BaseModel):
-    """`POST /v1/me/attempts` 응답 — 적재된 attempt + 갱신된 개념 숙달 목록."""
+    """`POST /v1/me/attempts` 응답 — 적재된 attempt + 갱신된 개념·스킬 숙달 목록."""
 
     attempt_id: uuid.UUID
     is_correct: bool
     mastery_updates: list[ConceptMasteryUpdate]
+    skill_mastery_updates: list[SkillMasteryUpdate] = Field(
+        default_factory=list,
+        description=(
+            "채점으로 갱신된 스킬 숙달 목록(Phase 2b-2·행동 축). 정답은 평가 개념 전체의 스킬, "
+            "오답은 PRIMARY 개념의 스킬만(모델 B). concept→skill 매핑/해소가 없으면 빈 목록."
+        ),
+    )
     calibration_coaching: CoachingTrigger | None = Field(
         default=None,
         description=(
@@ -553,6 +576,10 @@ async def submit_attempt(
     이어서 `record_problem_attempt_mastery`로 숙달을 시계열에 누적한다 — **모델 B(역할 비대칭)**:
     정답은 평가 개념(PRIMARY·TESTED) *전체*, 오답은 책임귀속 가능한 PRIMARY만 갱신(L2 슬라이스 3).
     응답 `mastery_updates`엔 *실제 갱신된* 개념만 담긴다(오답 시 PRIMARY).
+
+    이어서 `record_problem_attempt_skill_mastery`로 *스킬 축* 숙달도 같은 모델 B로 전파한다(Phase
+    2b-2·행동 축) — 평가 개념을 `Concept.behavior_skills` 브리지로 mastery-estimable 스킬에 해소해
+    갱신한다. 응답 `skill_mastery_updates`는 실제 갱신된 스킬만(매핑/해소 없으면 빈 목록).
     """
     attempt = ProblemAttempt(
         attempt_id=uuid.uuid4(),  # 명시 발급(server_default 의존 X·응답에 즉시 사용)
@@ -571,6 +598,11 @@ async def submit_attempt(
     records = await record_problem_attempt_mastery(
         session, user.user_id, body.problem_id, body.is_correct
     )
+    # 스킬 숙달 전파(Phase 2b-2·행동 축) — 같은 모델 B로 concept→skill 해소 후 스킬별 측정 적재.
+    # 개념 전파와 독립 트랜잭션(자체 단일 commit)·concept→skill 매핑/해소 없으면 빈 리스트.
+    skill_records = await record_problem_attempt_skill_mastery(
+        session, user.user_id, body.problem_id, body.is_correct
+    )
     # WH-1 §11.4 보정 루프: 이미 받은 자기보고 확신도↔정오답에서 과신/과소신 코칭 결정.
     # 순수 L4 결정(DB 무접근·적재 로직 불변)·확신 미제출(None)이면 None(자연).
     calibration_coaching = recommend_calibration_coaching(
@@ -587,6 +619,15 @@ async def submit_attempt(
                 sample_size=r.sample_size if r.sample_size is not None else 0,
             )
             for r in records
+        ],
+        skill_mastery_updates=[
+            SkillMasteryUpdate(
+                skill_id=r.skill_id,
+                # 순수 커널이 항상 mastery를 채우나 ORM 타입이 float|None(개념 축 동형).
+                mastery=float(r.mastery) if r.mastery is not None else 0.0,
+                sample_size=r.sample_size if r.sample_size is not None else 0,
+            )
+            for r in skill_records
         ],
         calibration_coaching=calibration_coaching,
     )
@@ -639,6 +680,58 @@ async def list_my_mastery(
         response,
         include_total,
         select(func.count()).select_from(ConceptMasteryHistory).where(*conds),
+    )
+    return rows
+
+
+@router.get(
+    "/skill-mastery",
+    response_model=list[SkillMasteryHistorySchema],
+    summary="내 스킬 숙달 학습 곡선(SkillMasteryHistory 시계열·행동 축)",
+)
+async def list_my_skill_mastery(
+    user: ConsentedUser,
+    session: SessionDep,
+    response: Response,
+    limit: Limit = 50,
+    offset: Offset = 0,
+    skill_id: Annotated[
+        str | None, Query(description="한 스킬(`skill.<slug>`)의 곡선만 필터(선택).")
+    ] = None,
+    since: SinceParam = None,
+    until: UntilParam = None,
+    order: OrderParam = "desc",
+    include_total: IncludeTotal = False,
+) -> list[SkillMasteryHistorySchema]:
+    """본인 스킬 숙달 측정 시계열 — 행동 축 학습 곡선(Phase 2b-2). 풀이 채점이 누적한
+    `skill_mastery_history`를 user_id 스코핑으로 조회(타인 차단·`list_my_mastery` 스킬판).
+
+    `skill_id`(선택)로 한 스킬의 곡선만·`since`/`until`로 시간창·`order`로 방향(기본 desc)·
+    `include_total`로 `X-Total-Count`. 2차 정렬키 skill_id로 동률(같은 measured_at) 안정 정렬.
+    """
+    conds = [SkillMasteryHistory.user_id == user.user_id]
+    if skill_id is not None:
+        conds.append(SkillMasteryHistory.skill_id == skill_id)
+    conds += time_window_conditions(SkillMasteryHistory.measured_at, since, until)
+    primary = (
+        SkillMasteryHistory.measured_at.asc()
+        if order == "asc"
+        else SkillMasteryHistory.measured_at.desc()
+    )
+    stmt = (
+        select(SkillMasteryHistory)
+        .where(*conds)
+        .order_by(primary, SkillMasteryHistory.skill_id)
+        .limit(limit)
+        .offset(offset)
+    )
+    result = await session.execute(stmt)
+    rows = [row.to_schema() for row in result.scalars().all()]
+    await _maybe_set_total(
+        session,
+        response,
+        include_total,
+        select(func.count()).select_from(SkillMasteryHistory).where(*conds),
     )
     return rows
 

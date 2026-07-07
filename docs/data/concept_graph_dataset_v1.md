@@ -62,8 +62,11 @@
 ### 2.1 concept→skill 매핑 `behavior_skills` (Phase 2b-1·2026-07-03)
 
 각 개념이 학습·사용 시 exercise하는 스킬(`skill_graph_v1`의 27 skill_id·6 BehaviorArea)을 1~3개
-매핑한 참조 키 배열이다. cognition 계층·본문 아님(`standard_codes` 동형 안전 배열). 런타임엔
-`concept_node.behavior_skills`로 투영되어 (Phase 2b-2) skill mastery 해소의 조인 백킹이 된다.
+매핑한 참조 키 배열이다. cognition 계층·본문 아님(`standard_codes` 동형 안전 배열). 빌드타임엔
+`concept_node.behavior_skills`(2b-1)에도 투영되나, **런타임 skill mastery 해소(Phase 2b-2)는 런타임
+`concept` 테이블의 `Concept.behavior_skills`를 조인 백킹으로 쓴다** — S0-4b 격하가 `concept_node`
+(`ConceptNode`)의 런타임 read를 거버넌스로 금지했기 때문이다(문제 태깅 축인 `concept` UUID에 직접
+투영·`backend_concept.py` upsert·마이그레이션 `d4e5f0a1b3c4`·concept mastery와 동일 sanctioned 축).
 
 - **품질=`ai_estimated`(v1)**: 와이매스 자체 저작(자동 유도 아님·교수학 판단). **전문 검수 전**이라
   정직하게 v1로 표기하며, 이후 검수로 승격한다. 자동 통계 유도는 금지(교수학 날조·CLAUDE.md).
