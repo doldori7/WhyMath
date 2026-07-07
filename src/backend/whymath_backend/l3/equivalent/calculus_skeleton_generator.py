@@ -28,7 +28,7 @@ from __future__ import annotations
 import hashlib
 import random
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from typing import Literal
@@ -47,10 +47,11 @@ from whymath_backend.schema.enums import (
     SourceType,
     Subject,
 )
-from whymath_backend.schema.problem import Problem
+from whymath_backend.schema.problem import DistractorEntry, Problem
 from whymath_backend.schema.provenance import ContentProvenance
 
 __all__ = [
+    "CalculusExtremumMCSkeletonGenerator",
     "CalculusExtremumSkeletonGenerator",
     "CalculusExtremumValueSkeletonGenerator",
     "CalculusTangentSlopeSkeletonGenerator",
@@ -508,6 +509,191 @@ class CalculusTangentSlopeSkeletonGenerator:
             problem=problem,
             provenance=provenance,
             conditions=condition,  # f'(x)=m의 근 방정식(검산용·호출자 제공)
+            answer_map={"x": answer_text},
+            answer_selection=skeleton.selection,
+            solution_steps=None,
+            concept_tags=list(self._concept_tags),
+        )
+
+    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
+        """결정론 안정 slug — 내용 해시(멱등 upsert 키·극값 생성기 규약 미러)."""
+        payload = "|".join([question_text, answer, ",".join(sorted(codes))])
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+        return f"{self._slug_prefix}-{digest}"
+
+
+# ── 미적분(극값의 값) 객관식 형제 생성기 — 극댓값/극솟값 4지선다 + 오개념 distractor ──
+# 극값-값 단답형의 객관식 짝. 정답은 여전히 극값의 *값*(극댓값 v1·극솟값 v2)이라 값 환원(dummy x
+# 이차방정식 근 선택)을 그대로 재사용해 검증한다 — MC가 더하는 것은 오답 선지 3종 + 오개념 태깅뿐.
+# 4지선다 = 정렬된 {v1(극댓값), v2(극솟값), m(극대 x좌표), n(극소 x좌표)}(4값 상이할 때만 적격).
+# 오답 귀속(quad MC의 반대근×1+부호반전×2 구조 미러·무모호): 정답 아닌 극값 → 극대·극소 혼동
+# (extremum-max-min-confused), m·n(x좌표) → 극값의 값↔극점 x좌표 혼동(extremum-value-vs-point-
+# confused). v1,v2는 값이라 x좌표 m,n과 섞이지 않는 게 곧 오개념 축(값 vs 좌표). op-code id는
+# 하드코딩 0 — 조성 루트가 L4 정본에서 주입(생성자 distractor_codes·quad MC 규약 미러·계층 규칙).
+
+# MC distractor 주입 키(생성자 distractor_codes의 필수 키·harness 조성 루트가 L4 id로 채운다).
+_MC_KEY_MAX_MIN = "max_min"  # 정답 아닌 극값 선지 → 극대·극소 혼동
+_MC_KEY_VALUE_VS_POINT = "value_vs_point"  # 극점 x좌표 선지 → 값↔좌표 혼동
+
+# 발문 템플릿(극댓값/극솟값별·인덱스 회전). {fx}=삼차함수.
+_MC_VALUE_TEMPLATES: dict[ExtremumKind, tuple[str, ...]] = {
+    "극대": (
+        "삼차함수 f(x) = {fx} 의 극댓값을 구하시오.",
+        "함수 f(x) = {fx} 의 극댓값으로 옳은 것을 고르시오.",
+    ),
+    "극소": (
+        "삼차함수 f(x) = {fx} 의 극솟값을 구하시오.",
+        "함수 f(x) = {fx} 의 극솟값으로 옳은 것을 고르시오.",
+    ),
+}
+
+
+def _build_mc_pool() -> tuple[_ExtremumValueSkeleton, ...]:
+    """결정론 극값 MC 뼈대 풀 — 값 뼈대 중 4지선다 {v1,v2,m,n} 4값 상이만 수록·고정 시드 셔플.
+
+    검산 조건(dummy x 이차방정식)은 값 뼈대와 동일하므로 dedup 키·orchestrator signature는 값
+    생성기와 같은 (value_monic, 선택)이다 — 같은 극값 쌍을 내는 서로 다른 (m,n)은 조건이 같아
+    orchestrator가 어차피 하나만 수용한다. 그래서 키당 *첫 4-상이 뼈대*만 수록(4지선다 자격 확보).
+    """
+    pool: list[_ExtremumValueSkeleton] = []
+    seen: set[tuple[int, int, str]] = set()
+    for m in range(_CRIT_MIN, _CRIT_MAX + 1):
+        for n in range(m + 1, _CRIT_MAX + 1):
+            if (m + n) % 2 != 0:
+                continue  # 홀짝 다르면 f x² 계수가 비정수 → 제외.
+            for kind in ("극대", "극소"):
+                skeleton = _ExtremumValueSkeleton(m=m, n=n, kind=kind)
+                v1, v2 = skeleton.extremum_values
+                if len({v1, v2, m, n}) != 4:
+                    continue  # 4지선다 부적격(값·x좌표 충돌) — 단답형 풀에 남는다.
+                key = (*skeleton.value_monic, skeleton.selection)
+                if key in seen:
+                    continue  # 같은 조건 signature — orchestrator가 어차피 하나만 수용.
+                seen.add(key)
+                pool.append(skeleton)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+class CalculusExtremumMCSkeletonGenerator:
+    """미적분 극값 객관식 결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석(LLM 0).
+
+    "삼차함수의 극댓값/극솟값" 4지선다를 낸다 — 정답은 극값의 값이라 값 생성기와 동일 좌석·게이트·
+    근 선택 검증을 공유하고, 오답 3종(반대 극값·극점 x좌표 2종)에 오개념을 태깅한다. 오개념·op-code
+    id는 생성자 `distractor_codes`로 주입받는다(quad MC 규약 미러·L4 하드코딩 0·계층 규칙).
+    """
+
+    def __init__(
+        self,
+        distractor_codes: Mapping[str, tuple[str, str]],
+        *,
+        skip_signatures: AbstractSet[str] | None = None,
+        slug_prefix: str = "wm-calc-extmc",
+        subject: Subject = Subject.공통,
+        curriculum_version: Curriculum = Curriculum.REVISION_2022,
+        valid_from_year: int = 2022,
+        unit_codes: Sequence[str] = ("CALC-EXTREMUM-MC",),
+        concept_tags: Sequence[ConceptTag] = _DEFAULT_CONCEPT_TAGS,
+    ) -> None:
+        missing = {_MC_KEY_MAX_MIN, _MC_KEY_VALUE_VS_POINT} - set(distractor_codes)
+        if missing:
+            raise ValueError(
+                f"극값 MC distractor_codes 주입 키 누락: {sorted(missing)} "
+                f"(필수 {_MC_KEY_MAX_MIN}·{_MC_KEY_VALUE_VS_POINT})"
+            )
+        self._distractor_codes = dict(distractor_codes)
+        self._pool = _build_mc_pool()
+        self._index = 0
+        self._skip = skip_signatures
+        self._slug_prefix = slug_prefix
+        self._subject = subject
+        self._curriculum_version = curriculum_version
+        self._valid_from_year = valid_from_year
+        self._unit_codes = list(unit_codes)
+        self._concept_tags = list(concept_tags)
+
+    def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
+        """다음 극값 MC 뼈대를 후보로 조립 — skip 집합에 있는 구조는 건너뛰고, 풀 소진 시 None."""
+        while self._index < len(self._pool):
+            skeleton = self._pool[self._index]
+            self._index += 1
+            condition = _derivative_condition(*skeleton.value_monic)
+            if self._skip is not None:
+                signature = canonical_signature(condition, skeleton.selection)
+                if signature is not None and signature in self._skip:
+                    continue
+            return self._assemble(spec, skeleton, condition)
+        return None
+
+    def _assemble(
+        self, spec: EquivalenceSpec, skeleton: _ExtremumValueSkeleton, condition: str
+    ) -> CandidateProblem:
+        a, b, c, d = skeleton.cubic_coeffs
+        fx = _display_cubic(a, b, c, d)
+        v1, v2 = skeleton.extremum_values
+        answer_value = skeleton.answer  # 극대→v1·극소→v2
+        other_value = v2 if skeleton.kind == "극대" else v1  # 정답 아닌 극값(반대 극값)
+
+        # 선지 값→오개념 op-key: 반대 극값=극대극소 혼동·m·n(x좌표)=값↔좌표 혼동.
+        op_by_value: dict[int, str] = {
+            other_value: _MC_KEY_MAX_MIN,
+            skeleton.m: _MC_KEY_VALUE_VS_POINT,
+            skeleton.n: _MC_KEY_VALUE_VS_POINT,
+        }
+        ordered = sorted({v1, v2, skeleton.m, skeleton.n})  # 4값(빌드 필터가 4-상이 보장)
+        choices = [str(value) for value in ordered]
+        answer_text = str(answer_value)
+
+        distractor_map: list[DistractorEntry] = []
+        for index, value in enumerate(ordered):
+            if value == answer_value:
+                continue  # 정답 선지는 distractor_map에서 제외(스키마 계약).
+            misconception_id, op_code = self._distractor_codes[op_by_value[value]]
+            distractor_map.append(
+                DistractorEntry(
+                    choice_index=index, misconception_id=misconception_id, op_code=op_code
+                )
+            )
+
+        templates = _MC_VALUE_TEMPLATES[skeleton.kind]
+        question_text = templates[self._index % len(templates)].format(fx=fx)
+        standard_codes = sorted(spec.achievement_standard_codes)
+        slug = self._stable_slug(question_text, answer_text, standard_codes)
+
+        problem = Problem(
+            problem_id=uuid.uuid5(uuid.NAMESPACE_URL, f"whymath:problem:{slug}"),
+            slug=slug,
+            source_type=SourceType.자체생성,
+            curriculum_version=self._curriculum_version,
+            valid_from_year=self._valid_from_year,
+            subject=self._subject,
+            unit_codes=list(self._unit_codes),
+            difficulty_overall=skeleton.difficulty,
+            question_format=QuestionFormat.객관식,
+            answer_format=_answer_format(answer_value),
+            achievement_standard_codes=standard_codes,
+            question_text=question_text,
+            choices=choices,
+            answer=answer_text,
+            answer_explanation=_value_explanation(skeleton),
+            distractor_map=distractor_map,
+        )
+        provenance = ContentProvenance(
+            generation_type=GenerationType.FULLY_GENERATED,
+            license=LicenseType.WHYMATH_GENERATED,
+            original_source=None,
+            transformation_pipeline={
+                "steps": [
+                    "결정론 극값 MC 스켈레톤 조립(극값 쌍·극점 x좌표 4지선다·오개념 태깅)",
+                    "S2-a 수용 게이트",
+                    "사람 검수 큐(오개념 귀속 교수학 검수)",
+                ],
+            },
+        )
+        return CandidateProblem(
+            problem=problem,
+            provenance=provenance,
+            conditions=condition,  # 극값 쌍의 이차방정식(dummy x·정답 검증용)
             answer_map={"x": answer_text},
             answer_selection=skeleton.selection,
             solution_steps=None,

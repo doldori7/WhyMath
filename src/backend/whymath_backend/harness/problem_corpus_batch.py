@@ -33,6 +33,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -43,6 +44,7 @@ from whymath_backend.l1.problem_bank.populate import (
 )
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.calculus_skeleton_generator import (
+    CalculusExtremumMCSkeletonGenerator,
     CalculusExtremumSkeletonGenerator,
     CalculusExtremumValueSkeletonGenerator,
     CalculusTangentSlopeSkeletonGenerator,
@@ -85,9 +87,16 @@ _MC_INJECTION: dict[str, tuple[str, str]] = {
     "sign_flip": ("factor-sign-flip", "factor-sign-flip-root"),
 }
 
-# 밴드 기본 크기 — quad 185 + calc 120 + exp 25 + log 20 + 수열 90 + 삼각 13 = 총 453건(CI 봉인
-# ≥100 여유). 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·calc-tangent 162·
-# calc-value 150·exp 28·log 28·arith 90·geo 45·trig 13.
+# 극값 MC distractor 주입쌍(삼차 극값 객관식) — 정답 아닌 극값=극대극소 혼동·극점 x좌표=값↔좌표.
+# 키는 CalculusExtremumMCSkeletonGenerator가 기대하는 주입 키(max_min·value_vs_point)와 정합.
+_CALC_MC_INJECTION: dict[str, tuple[str, str]] = {
+    "max_min": ("extremum-max-min-confused", "select-min-for-max"),
+    "value_vs_point": ("extremum-value-vs-point-confused", "report-x-coordinate-for-value"),
+}
+
+# 밴드 기본 크기 — quad 185 + calc 120 + calc-value-mc 30 + exp 25 + log 20 + 수열 90 + 삼각 13
+# = 총 483건(CI 봉인 ≥100 여유). 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·
+# calc-tangent 162·calc-value 150·calc-value-mc 146·exp 28·log 28·arith 90·geo 45·trig 13.
 _DEFAULT_SHORT_N = 90
 _DEFAULT_MC_N = 45
 _DEFAULT_SQRT_N = 30
@@ -95,6 +104,7 @@ _DEFAULT_SQRT_MC_N = 20
 _DEFAULT_CALC_EXTREMUM_N = 40
 _DEFAULT_CALC_TANGENT_N = 40
 _DEFAULT_CALC_VALUE_N = 40
+_DEFAULT_CALC_VALUE_MC_N = 30
 _DEFAULT_EXP_N = 25
 _DEFAULT_LOG_N = 20
 _DEFAULT_ARITH_N = 60
@@ -119,6 +129,12 @@ _TANGENT_SPEC_DIFFICULTY = 3.3
 # 오dedup 위험(극값 x=1,3의 조건과 극값 값이 1,3인 조건이 canonical 동일) → **또 별도 index**.
 _VALUE_STANDARD_CODE = "[12미적Ⅰ-02-07]"
 _VALUE_SPEC_DIFFICULTY = 3.3
+
+# 미적분(극값의 값) 객관식 밴드 스펙 — 극값 값과 동일 성취기준·개념([12미적Ⅰ-02-07]·극대·극소).
+# conditions는 극값 쌍 이차방정식(값 밴드와 동형)이라 또 cross-군 오dedup 위험 → **또 별도 index**.
+# 오답 선지 오개념 2종(극대극소 혼동·값↔x좌표 혼동)을 주입하므로 target_misconception_ids도 2종.
+_VALUE_MC_STANDARD_CODE = "[12미적Ⅰ-02-07]"
+_VALUE_MC_SPEC_DIFFICULTY = 3.3
 
 # 지수·로그 밴드 스펙 — 대수(고2·[12대수01-08]·지수함수·로그함수 활용). conditions가 비다항
 # (b**x-v·log(x,b)-k)이라 canonical signature=None → signature_index 무의미(풀 결정론 유일이라
@@ -150,13 +166,17 @@ def _default_out_path() -> Path:
     return repo_root / "data" / "corpus" / "problem_bank_generated_v0" / "problems.jsonl"
 
 
-def build_distractor_codes() -> dict[str, tuple[str, str]]:
+def build_distractor_codes(
+    injection: Mapping[str, tuple[str, str]] | None = None,
+) -> dict[str, tuple[str, str]]:
     """L4 정본에서 객관식 주입 매핑을 조립 — 참조 무결성은 조성 루트가 소유(fail-fast).
 
     미등록 오개념 id·op-code, 또는 op-code가 다른 오개념을 가리키면 `KeyError`로 즉시 실패한다
-    (조용한 무매핑 금지) — 배치가 잘못된 태깅을 코퍼스에 싣는 것을 원천 차단.
+    (조용한 무매핑 금지) — 배치가 잘못된 태깅을 코퍼스에 싣는 것을 원천 차단. `injection` 미지정 시
+    quad 기본 매핑(`_MC_INJECTION`)을 검증한다(하위호환) — calc 극값 MC는 `_CALC_MC_INJECTION` 주입.
     """
-    for op_key, (misconception_id, op_code) in _MC_INJECTION.items():
+    inj = injection if injection is not None else _MC_INJECTION
+    for op_key, (misconception_id, op_code) in inj.items():
         if misconception_id not in CATALOG_BY_ID:
             raise KeyError(
                 f"주입 오개념 id가 정본 카탈로그에 없음: {misconception_id!r} (op키 {op_key})"
@@ -169,7 +189,7 @@ def build_distractor_codes() -> dict[str, tuple[str, str]]:
                 f"op-code {op_code!r}의 오개념({op.misconception_id!r})이 주입 오개념"
                 f"({misconception_id!r})과 불일치 — 정본 정합 위반"
             )
-    return dict(_MC_INJECTION)
+    return dict(inj)
 
 
 def _record_to_json(record: ProblemBankRecord) -> dict[str, Any]:
@@ -284,6 +304,7 @@ def run_corpus_batch(
     calc_extremum_n: int = _DEFAULT_CALC_EXTREMUM_N,
     calc_tangent_n: int = _DEFAULT_CALC_TANGENT_N,
     calc_value_n: int = _DEFAULT_CALC_VALUE_N,
+    calc_value_mc_n: int = _DEFAULT_CALC_VALUE_MC_N,
     exp_n: int = _DEFAULT_EXP_N,
     log_n: int = _DEFAULT_LOG_N,
     arith_n: int = _DEFAULT_ARITH_N,
@@ -431,6 +452,43 @@ def run_corpus_batch(
             )
         )
 
+    # ── calc 문제군(삼차 극값의 값 객관식) — 또 별도 signature_index·오개념 distractor 2종 주입 ──
+    if calc_value_mc_n > 0:
+        value_mc_codes = build_distractor_codes(_CALC_MC_INJECTION)
+        value_mc_target_ids = frozenset(mid for mid, _ in value_mc_codes.values())
+        value_mc_index: set[str] = set()
+        value_mc_spec = EquivalenceSpec(
+            achievement_standard_codes=frozenset({_VALUE_MC_STANDARD_CODE}),
+            target_misconception_ids=value_mc_target_ids,
+            difficulty_overall=_VALUE_MC_SPEC_DIFFICULTY,
+            answer_format=None,
+        )
+        value_mc_generator = CalculusExtremumMCSkeletonGenerator(
+            value_mc_codes, skip_signatures=value_mc_index
+        )
+        value_mc_outcomes = run_batch(
+            value_mc_spec,
+            value_mc_generator,
+            calc_value_mc_n,
+            signature_index=value_mc_index,
+            store=sink,
+        )
+        value_mc_stored = sum(1 for o in value_mc_outcomes if o.status == "accepted_stored")
+        value_mc_failures = [
+            reason
+            for outcome in value_mc_outcomes
+            if outcome.status != "accepted_stored"
+            for reason in (outcome.reasons or [f"status={outcome.status}"])
+        ]
+        bands.append(
+            BandResult(
+                name="calc-value-mc",
+                requested=calc_value_mc_n,
+                stored=value_mc_stored,
+                failure_reasons=value_mc_failures,
+            )
+        )
+
     # ── 대수 문제군(지수·로그 방정식) — 비다항 conditions(signature=None)이라 별도 index지만
     #    실질 dedup 없음(풀 결정론 유일). quad/calc와 구조 signature가 애초에 안 겹친다. ──
     for band_name, gen_factory, count in (
@@ -571,6 +629,12 @@ def main(argv: list[str] | None = None) -> int:
         help="미적분 극값의 값(삼차함수 극댓값·극솟값) 단답형 수.",
     )
     parser.add_argument(
+        "--calc-value-mc",
+        type=int,
+        default=_DEFAULT_CALC_VALUE_MC_N,
+        help="미적분 극값의 값(삼차함수 극댓값·극솟값) 객관식 수(오개념 distractor 태깅).",
+    )
+    parser.add_argument(
         "--exp", type=int, default=_DEFAULT_EXP_N, help="지수방정식(bˣ=bᵏ) 단답형 수."
     )
     parser.add_argument(
@@ -597,6 +661,7 @@ def main(argv: list[str] | None = None) -> int:
         calc_extremum_n=args.calc_extremum,
         calc_tangent_n=args.calc_tangent,
         calc_value_n=args.calc_value,
+        calc_value_mc_n=args.calc_value_mc,
         exp_n=args.exp,
         log_n=args.log,
         arith_n=args.arith,

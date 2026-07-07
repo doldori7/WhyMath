@@ -96,3 +96,7 @@
 {"statement": "괄호 안 식이 0이 되려면 x는 빼는 수와 반대 부호여야 한다고 생각해서 근을 음수로 적었어", "expected_id": "factor-sign-flip", "near_id": null, "kind": "paraphrase", "note": "인수 근 부호 반전 — signals '(x-a)'·'x=-a' 회피"}
 {"statement": "두 근을 모두 구한 뒤 문제가 요구한 더 큰 쪽을 골라 답했다", "expected_id": null, "near_id": "opposite-root-selected", "kind": "correct-near", "note": "요구된 근을 올바르게 선택 — 오개념 아님"}
 {"statement": "(x-2)=0이 되려면 x에 2를 넣어야 하므로 근은 2다", "expected_id": null, "near_id": "factor-sign-flip", "kind": "correct-near", "note": "인수에서 근을 올바르게 읽음 — 부호 반전 없음"}
+{"statement": "가장 큰 극값을 물었는데 가장 작게 되는 쪽 극점의 값을 답으로 골랐다", "expected_id": "extremum-max-min-confused", "near_id": null, "kind": "paraphrase", "note": "극대·극소 혼동 — signals 극댓값·극솟값 회피(substring 풀매칭 방지)"}
+{"statement": "함수가 가장 커지는 점에서의 값을 구해야 하는데, 그 점의 가로 좌표를 답으로 적었다", "expected_id": "extremum-value-vs-point-confused", "near_id": null, "kind": "paraphrase", "note": "값·좌표 혼동 — signals 극댓값·x좌표 회피(substring 풀매칭 방지)"}
+{"statement": "삼차항의 계수가 양수이므로 작은 임계점에서 극대, 큰 임계점에서 극소가 된다", "expected_id": null, "near_id": "extremum-max-min-confused", "kind": "correct-near", "note": "극대·극소 순서를 계수 부호로 올바로 판정 — 혼동 아님"}
+{"statement": "극대가 되는 점의 가로좌표를 함수에 대입한 함숫값이 그 점의 극값이다", "expected_id": null, "near_id": "extremum-value-vs-point-confused", "kind": "correct-near", "note": "극값은 함숫값 f(x*) — 좌표와 올바로 구분"}

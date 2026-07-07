@@ -871,6 +871,28 @@
       "reviewer": null,
       "reviewed_on": null,
       "note": null
+    },
+    {
+      "kebab_id": "extremum-max-min-confused",
+      "mis_id": "M0864",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
+      "rationale": "극값 MC 신규 저작(misconceptions_v1 M0864) — 극댓값↔극솟값 혼동을 직접 서술. kebab 1:1 대응([12미적Ⅰ-02-07]·H:12미적Ⅰ02-07). status=pending — Kiki 교수학 검수 후 승인·적재(AI 자기승인 금지).",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "extremum-value-vs-point-confused",
+      "mis_id": "M0865",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
+      "rationale": "극값 MC 신규 저작(misconceptions_v1 M0865) — 극값의 값↔극점 x좌표 혼동을 직접 서술. kebab 1:1 대응([12미적Ⅰ-02-07]). status=pending — Kiki 교수학 검수 후 승인·적재(AI 자기승인 금지).",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
     }
   ]
 }

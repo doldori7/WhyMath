@@ -22,8 +22,9 @@ from whymath_backend.l4.misconception.match_gate import _DEFAULT_CONFIDENCE_FLOO
 class TestCatalogShape:
     def test_thirty_two_entries_doc_explicit_only(self) -> None:
         # doc 명시·상세화: 대수 11 + 기하 4 + 확률통계 4 + 함수 3
-        #                 + 미적분 5 + 수열 2 + 삼각함수 2 + 벡터 1 = 32 (Phase 1 30 + S2-p 2)
-        assert len(CATALOG) == 32
+        #                 + 미적분 7 + 수열 2 + 삼각함수 2 + 벡터 1 = 34
+        #                 (Phase 1 30 + S2-p 2 + 극값 MC 2)
+        assert len(CATALOG) == 34
 
     def test_all_ids_unique(self) -> None:
         ids = [m.id for m in CATALOG]
