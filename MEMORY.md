@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-07 (구현·harness): **코퍼스 축적 배치 CLI(problem_corpus_accumulate) — 회차 간 dedup·증분 append**
+
+**무엇/왜**: 라이브 스모크 실측 갭 상환 — 스모크는 회차마다 fresh dedup index(회차 간 판박이 미차단) + 산출 전면 교체(축적 불가)였다. 새 CLI는 ① 기존 코퍼스들(`--seed` 복수 + `--out` 기존분)의 canonical signature·slug를 로드해 `run_batch`에 주입(기존 구조는 생성 단계에서 `rejected_duplicate`) ② 수용분만 산출 파일에 **증분 append** ③ slug 충돌 방어·outcome 집계 리포트·신규 수용 0이면 exit 1(무진전 신호·조용한 실패 금지).
+- **좌석 무관 설계**: `run_corpus_accumulate`는 생성기 좌석 계약만 요구 — 라이브 배선(LLM·CompositeProvider·L4 라벨 주입)은 `main()`의 `_build_live_generator`에 격리. hermetic 테스트는 결정론 스켈레톤 생성기 주입(고정 시드 풀이라 시드/축적분과의 중복이 재현 가능)으로 축적 로직을 LLM 0 검증: 시드 6 전부 차단→신규 4 append → 회차 2에서 10 차단→2 증분(전면 교체 아님)·시드와 slug 서로소·라이브 부재 시 전건 generation_failed·exit 1. 테스트 11건.
+- **사용(Phaiakes9)**: `python -m whymath_backend.harness.problem_corpus_accumulate --seed data/corpus/problem_bank_generated_v0/problems.jsonl --out data/corpus/problem_bank_llm_v0/problems.jsonl --n 20` — 회차 반복 시 코퍼스가 중복 없이 증분 성장.
+
+**🔒 불변**: orchestrator/acceptance 무변경·산출물 v0(사람 검수 전)·L3→L4 import 0(조성 루트만).
+
 ### 2026-07-07 (라이브 실측·인프라): **새 Phaiakes9(라이젠 AI Max+ 395) 라이브 LLM 첫 가동 — rephrase 126건·LLM 생성 수율 64%**
 
 **무엇/왜**: 새 하드웨어(GMKtec 라이젠 AI Max+ 395·Radeon 8060S·LPDDR5X·Windows 11)에서 `infra/phaiakes9/LIVE_LLM_ACTIVATION.md` 런북대로 라이브 LLM 파이프라인 첫 가동(Kiki 실행·실측).
