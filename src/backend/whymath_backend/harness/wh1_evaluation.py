@@ -48,9 +48,27 @@
                              의존·BKT 숙달 게이팅 미반영). 전이 프로브가 `_MIN_TRANSFER_PROBES`
                              미만이면 NO_DATA(날조 0)·후속은 마킹/스케줄 도구.
 
+S3 세션 대리 지표 3종 추가(`status_roadmap_2026-07.md` §3·본 슬라이스): 기존 7종과 *동일
+스코프*(user/시간창 집계·세션별 분해는 후속)로 **원천 신호를 재사용**해 편입한다(새 적재·
+마이그레이션 0):
+  ⑧ 답 미루기 도달 깊이   — 🟢 MEASURED/NO_DATA: ⑤와 *동일* 힌트제공 hint_level을 *기울기가
+                            아니라 도달 깊이*(평균·최대)로 집계. 게이밍(힌트 회피로 낮은 레벨
+                            유지)은 R15(`help_reduction_validated`)가 이미 교차 방어 — note에
+                            캐비엇·R15 참조를 정직 표기(단독 해석 금지).
+  ⑨ BKT 숙달 증가율       — 🟢 MEASURED/NO_DATA: `ConceptMasteryHistory` (user,concept)별 첫→
+                            마지막 mastery 차의 평균(증가 *방향·크기*). measured_at 간격으로
+                            나눈 *시간 정규화 rate*는 아님(후속)·그룹당 최소 `_MIN_MASTERY_
+                            POINTS`점 요구(가짜 0 금지).
+  ⑩ 오개념 해소율         — 🟢 MEASURED/NO_DATA: `MisconceptionHypothesisRecord`의 is_active=
+                            false 비율(가지치기·비활성화=*해소 근사*). 전용 resolved_at 컬럼
+                            부재라 "학습적 해소"와 "stale 정리"를 구분 못 함(후속)·note 정직 표기.
+스스로 풀이 도달율(S3 4번째)은 `Dialogue.resolution` writer 부재(어떤 라이브 경로도 값을 안
+채움)로 **본 슬라이스 제외** — coach 세션 종결 훅이 판정·적재하는 선행 슬라이스가 필요하다(후속).
+
 계층 메모(CLAUDE.md 7계층·설계안 §1): WH-1 하네스는 *새 계층이 아니라 횡단 인프라*다. 본
-모듈은 L1(활동 로그 `LearningSession`)·L2/L5(대화 `Dialogue`) 데이터를 *조회만* 하고(역방향
-의존 없음·ORM/쿼리빌더만·원시 SQL 문자열 회피), 노출은 L5(`api/me`)가 담당한다.
+모듈은 L1(활동 로그 `LearningSession`·`AttemptEvent`)·L2(`ConceptMasteryHistory`)·L4(오개념
+가설)·L2/L5(대화 `Dialogue`) 데이터를 *조회만* 하고(역방향 의존 없음·ORM/쿼리빌더만·원시 SQL
+문자열 회피), 노출은 L5(`api/me`)가 담당한다.
 """
 
 from __future__ import annotations
@@ -69,7 +87,11 @@ from whymath_backend.db.models.activity import (
     LearningSession,
     ProblemAttempt,
 )
+from whymath_backend.db.models.assessment import ConceptMasteryHistory
 from whymath_backend.db.models.dialogue import Dialogue
+from whymath_backend.db.models.misconception_hypothesis import (
+    MisconceptionHypothesisRecord,
+)
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.l2.ability_estimation import resolve_item_difficulty_b
 from whymath_backend.l4.misconception.probes import compute_diagnostic_recall
@@ -100,6 +122,11 @@ _MIN_CALIBRATION_SAMPLES = 5
 # 최소 3건을 요구한다. 완전판(§11.5)의 BKT≥0.95+2주 스케줄과 달리 풀이 이력 기반 *근사*다.
 _MIN_TRANSFER_PROBES = 3
 
+# ⑨ BKT 숙달 증가율의 *그룹당 최소 측정점*. 한 (user,concept)의 첫→마지막 mastery 차(증가량)를
+# 내려면 최소 before/after 2점이 필요하다(1점이면 변화 자체가 없음). 이보다 적은 그룹은 증가량
+# 집계에서 제외한다(가짜 0/증가량 금지). 자격 그룹이 0이면 지표는 NO_DATA다.
+_MIN_MASTERY_POINTS = 2
+
 
 def _ols_slope(ys: list[float]) -> float | None:
     """순서 인덱스 x(0..n-1) 대 ys의 OLS 단순선형회귀 기울기(순수·날조 0).
@@ -119,7 +146,9 @@ def _ols_slope(ys: list[float]) -> float | None:
     x_mean = sum(xs) / n
     y_mean = sum(ys) / n
     x_var = sum((x - x_mean) ** 2 for x in xs)
-    if x_var == 0:  # 방어적 — n>=2 등차 인덱스면 도달 불가하나 분산 0이면 None(날조 회피).
+    if (
+        x_var == 0
+    ):  # 방어적 — n>=2 등차 인덱스면 도달 불가하나 분산 0이면 None(날조 회피).
         return None
     covariance = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys, strict=True))
     return covariance / x_var
@@ -176,7 +205,9 @@ class Metric(BaseModel):
         description="실측값(MEASURED). 미계측·표본 0이면 None(가짜 0 금지).",
     )
     status: MetricStatus = Field(description="계측 상태 — 실값/미계측 사유 구분.")
-    note: str = Field(description="한국어 설명 — 무엇이 필요/근거(미계측이면 적재·라벨·도구).")
+    note: str = Field(
+        description="한국어 설명 — 무엇이 필요/근거(미계측이면 적재·라벨·도구)."
+    )
 
 
 class R15Verdict(str, Enum):
@@ -235,7 +266,9 @@ class HelpReductionValidation(BaseModel):
     이탈/무작위/세션 정렬 등 다른 gaming은 여전히 미반영(R15 완전판정이 아니다).
     """
 
-    verdict: R15Verdict = Field(description="R15 결합 판정 — 도움↓·정답률·난이도 교차 결과.")
+    verdict: R15Verdict = Field(
+        description="R15 결합 판정 — 도움↓·정답률·난이도 교차 결과."
+    )
     help_slope: float | None = Field(
         default=None,
         description="⑤ 도움 감소 OLS 기울기(raw·음수=도움 감소). 표본 부족이면 None(날조 0 금지).",
@@ -252,11 +285,13 @@ class HelpReductionValidation(BaseModel):
             "그때는 2신호 판정 + blind spot 캐비엇)."
         ),
     )
-    note: str = Field(description="한국어 판정 근거 — 임계(slope 0)·교차 결과·사유 구분·한계.")
+    note: str = Field(
+        description="한국어 판정 근거 — 임계(slope 0)·교차 결과·사유 구분·한계."
+    )
 
 
 class SurrogateMetrics(BaseModel):
-    """WH-1 0단계 대리 지표 7종 + 표본 메타 — 커버리지 맵 한 장.
+    """WH-1 0단계 대리 지표 7종 + S3 세션 지표 3종 + 표본 메타 — 커버리지 맵 한 장.
 
     계측 가능분(① verify 통과율·③ 세션 완주율·④ 턴당 토큰·⑤⑥, ② 오프라인 진단정확도, 그리고
     ⑦ *근사* 전이 점수)은 실값(또는 표본 0/부족이면 NO_DATA)으로 낸다 — 이제 7종 모두 좌석이
@@ -306,6 +341,26 @@ class SurrogateMetrics(BaseModel):
         description=(
             "R15 결합 판정 — ⑤ 도움 감소를 정답률(is_correct) 추세와 교차해 진짜 개선 vs "
             "교정기 함정(힌트 회피) 가림. ⑤ raw 기울기를 *검증*한 파생 신호(새 적재 0)."
+        )
+    )
+
+    # ── S3 세션 대리 지표 3종(status_roadmap §3·기존 신호 재사용·user/시간창 집계) ──
+    hint_depth_reached: Metric = Field(
+        description=(
+            "⑧ 답 미루기 도달 깊이 — ⑤와 동일 힌트제공 hint_level의 *평균*(note에 최대). "
+            "게이밍(힌트 회피)은 R15(help_reduction_validated)가 교차 방어·단독 해석 금지."
+        )
+    )
+    mastery_gain_rate: Metric = Field(
+        description=(
+            "⑨ BKT 숙달 증가율 — ConceptMasteryHistory (user,concept)별 첫→마지막 mastery 차 "
+            "평균(증가 방향·크기). 시간 정규화 rate는 아님(후속)·자격 그룹 0이면 NO_DATA."
+        )
+    )
+    misconception_resolution_rate: Metric = Field(
+        description=(
+            "⑩ 오개념 해소율 — MisconceptionHypothesisRecord is_active=false 비율(해소 *근사*). "
+            "resolved_at 컬럼 부재로 학습적 해소·stale 정리 미구분(후속)·total 0이면 NO_DATA."
         )
     )
 
@@ -359,6 +414,20 @@ class SurrogateMetrics(BaseModel):
             "② 진단-실제 오개념 일치율(오프라인) 대상 *recall 프로브* 수(expected_id 설정·라벨된 "
             "틀린 진술). 0이면 NO_DATA. **시스템 지표**라 user/시간창과 무관(전 user 동일값) — "
             "DB 표본이 아니라 라벨 프로브셋 크기다(LIVE per-user ground-truth 아님)."
+        ),
+    )
+    sample_mastery_groups: int = Field(
+        default=0,
+        description=(
+            "⑨ BKT 숙달 증가율 집계 대상 자격 (user,concept) 그룹 수(measured_at 측정점 "
+            f">= {_MIN_MASTERY_POINTS}·mastery NOT NULL). 미만 그룹은 제외·0이면 NO_DATA."
+        ),
+    )
+    sample_misconception_hypotheses: int = Field(
+        default=0,
+        description=(
+            "⑩ 오개념 해소율 집계 대상 MisconceptionHypothesisRecord 수(user·updated_at 시간창 "
+            "필터). 이 중 is_active=false가 해소 근사·0이면 NO_DATA."
         ),
     )
     window_start: datetime | None = Field(
@@ -555,9 +624,13 @@ def _judge_r15(
 
     # 난이도 유지/상승, 또는 난이도 추세 미가용 → 진짜 개선. 미가용이면 blind spot 캐비엇.
     if difficulty_slope is None:
-        difficulty_note = "난이도 추세 미가용(b 부족) — 쉬운문제 회피 미검증(blind spot). "
+        difficulty_note = (
+            "난이도 추세 미가용(b 부족) — 쉬운문제 회피 미검증(blind spot). "
+        )
     else:
-        difficulty_note = f"난이도 기울기 {difficulty_slope:+.4f} >= 0(쉬운문제 회피 아님). "
+        difficulty_note = (
+            f"난이도 기울기 {difficulty_slope:+.4f} >= 0(쉬운문제 회피 아님). "
+        )
     return HelpReductionValidation(
         verdict=R15Verdict.GENUINE_IMPROVEMENT,
         help_slope=help_slope,
@@ -718,6 +791,144 @@ def _transfer_from_probes(transfer_outcomes: list[bool]) -> Metric:
             "근사·심층구조 동일성은 패턴 태그에 의존·BKT 숙달 게이팅·2주 스케줄 미반영)·"
             f"표본<{_MIN_TRANSFER_PROBES} NO_DATA·패턴별 독립 집계(전이 프로브 1건=특정 "
             "(problem,패턴) 초견). 후속은 assign_transfer_probe 마킹/스케줄 도구."
+        ),
+    )
+
+
+def _hint_depth_from_levels(hint_levels: list[int]) -> Metric:
+    """⑧ 답 미루기 도달 깊이 — 힌트제공 hint_level의 평균·최대를 Metric으로(순수·날조 0).
+
+    입력 `hint_levels`는 ⑤와 *동일한* 힌트제공 이벤트 hint_level(1~4·graded 노출량) 목록이다
+    (호출부가 ⑤용으로 이미 뽑은 시계열을 재사용 — 새 쿼리 0). ⑤가 *기울기*(시간에 따른 도움
+    감소 추세)를 본다면, ⑧은 학생이 *실제로 얼마나 깊은 힌트까지 갔는가*(도달 깊이)를 본다 —
+    value는 **평균 hint_level**(윈도/스코프 내), note에 **최대 도달 깊이**와 분포 감을 덧붙인다.
+
+    표본 가드(날조 0): 힌트제공 이벤트가 0건이면 **NO_DATA**(value None) — 단순 평균이라 ④(턴당
+    토큰)·①(통과율)처럼 total==0만 NO_DATA로 막는다(종단 최소점 요구는 ⑤ 기울기 몫).
+
+    게이밍 캐비엇(정직 표기·CLAUDE.md "정답률·시간만으로 우열 금지"): "낮은 평균 깊이"는 *숙달
+    (좋음)* 또는 *힌트 회피(틀려도 낮은 레벨에 머묾·나쁨)* 둘 다일 수 있어 **단독 해석 금지**다.
+    이 함정은 이미 R15 결합 판정(`help_reduction_validated`·도움↓×정답률×난이도 교차)이 방어하므로,
+    ⑧은 R15와 *함께* 읽어야 한다 — note에 참조를 명시한다(⑧ 자체는 raw 깊이일 뿐).
+    """
+    n = len(hint_levels)
+    if n == 0:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                "힌트제공 이벤트 0건 — coach 답 미루기(LTHC)가 쌓이면 도달 깊이 계측(가짜 0 아님). "
+                "게이밍(힌트 회피)은 R15(help_reduction_validated)가 교차 방어."
+            ),
+        )
+    mean_depth = sum(hint_levels) / n
+    max_depth = max(hint_levels)
+    return Metric(
+        value=mean_depth,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"힌트제공 {n}건 hint_level 평균 {mean_depth:.4f}·최대 도달 {max_depth}(1~4 graded·"
+            "높을수록 깊은 힌트까지 감). **단독 해석 금지** — 낮은 깊이는 숙달 또는 *힌트 회피*"
+            "(교정기 함정) 둘 다일 수 있어 R15(help_reduction_validated)와 함께 읽어야 함(⑧은 "
+            "raw 깊이·게이밍 방어는 R15 몫)·세션별 분해는 후속(현재 user/시간창 집계)."
+        ),
+    )
+
+
+def _mastery_gains_from_rows(
+    rows: Sequence[tuple[uuid.UUID, uuid.UUID, float]],
+) -> list[float]:
+    """(user_id, concept_id, mastery) — (user,concept)별 첫→마지막 mastery 차 목록(순수·날조 0).
+
+    입력 `rows`는 **(user_id, concept_id) 그룹 내 measured_at 오름차순**으로 정렬된
+    `ConceptMasteryHistory` 행이다(호출부가 order_by user·concept·measured_at으로 조회). 각
+    (user,concept) 그룹에서 *첫*(최초 등장=최이른 measured_at) mastery와 *마지막*(최종 덮어쓰기=
+    최근 measured_at) mastery의 차(증가량)를 낸다 — 측정점이 `_MIN_MASTERY_POINTS` 미만인 그룹은
+    변화 자체가 없어 제외한다(가짜 0/증가량 금지).
+
+    순수·O(n): first/last/counts 3딕셔너리로 한 패스. 반환은 자격 그룹의 증가량 목록(양수=숙달
+    상승·음수=하락·0=평탄[실측된 평탄이지 날조 0 아님]). 시간 간격 정규화(Δmastery/Δt rate)는
+    하지 않는다 — 그건 후속(measured_at 간격이 그룹마다 달라 비교 가능한 rate엔 추가 설계 필요).
+    """
+    first: dict[tuple[uuid.UUID, uuid.UUID], float] = {}
+    last: dict[tuple[uuid.UUID, uuid.UUID], float] = {}
+    counts: dict[tuple[uuid.UUID, uuid.UUID], int] = {}
+    for user_id, concept_id, mastery in rows:
+        key = (user_id, concept_id)
+        if key not in first:  # 그룹 내 measured_at 오름차순이라 첫 등장 = 최이른 측정.
+            first[key] = mastery
+        last[key] = mastery  # 매번 덮어써 최종 = 최근 측정.
+        counts[key] = counts.get(key, 0) + 1
+    return [
+        last[key] - first[key] for key in first if counts[key] >= _MIN_MASTERY_POINTS
+    ]
+
+
+def _mastery_gain_from_gains(gains: list[float]) -> Metric:
+    """⑨ BKT 숙달 증가율 — (user,concept)별 mastery 증가량의 평균을 Metric으로(순수·날조 0).
+
+    입력 `gains`는 `_mastery_gains_from_rows`가 낸 자격 그룹(≥`_MIN_MASTERY_POINTS`점)의 첫→
+    마지막 mastery 차 목록이다. value = 증가량 평균(양수=평균적으로 숙달 상승). 자격 그룹이 0이면
+    **NO_DATA**(value None·가짜 0 금지) — mastery 시계열이 아직 그룹당 2점을 못 채운 상태.
+
+    정직 note(중요): 이는 *증가 방향·크기*(mean Δmastery)이지 **measured_at 간격으로 나눈 시간
+    정규화 rate가 아니다** — "증가율"의 rate는 그룹마다 다른 측정 간격을 정규화해야 비교 가능하고
+    그건 후속 설계다. 또 mastery는 BKT/능력추정 파생이라 모델 가정(전이·망각)에 의존한다(원천
+    `ConceptMasteryHistory`는 append-only 시계열). 세션별 분해가 아니라 user/시간창 집계다.
+    """
+    n = len(gains)
+    if n == 0:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                f"자격 (user,concept) 그룹(≥{_MIN_MASTERY_POINTS}점) 0개 — mastery 시계열이 그룹당 "
+                "before/after 2점을 못 채움. 측정이 쌓이면 숙달 증가량 계측(가짜 0/증가량 금지)."
+            ),
+        )
+    mean_gain = sum(gains) / n
+    return Metric(
+        value=mean_gain,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"(user,concept) {n}개 그룹 첫→마지막 mastery 차 평균 {mean_gain:+.4f}(양수=숙달↑). "
+            "**증가 방향·크기이지 시간 정규화 rate 아님**(measured_at 간격 정규화는 후속)·"
+            "mastery는 BKT 파생(모델 가정 의존)·세션별 분해는 후속(현재 user/시간창 집계)."
+        ),
+    )
+
+
+def _misconception_resolution_from_counts(inactive: int, total: int) -> Metric:
+    """⑩ 오개념 해소율 — 비활성(is_active=false) 가설 비율을 Metric으로(순수·날조 0).
+
+    입력은 (비활성 수, 전체 수) — `MisconceptionHypothesisRecord`에서 호출부가 센다. value =
+    inactive/total(비활성 비율). total==0이면 **NO_DATA**(value None·가짜 0 회피).
+
+    정직 note(중요): is_active=false는 *해소의 근사*다 — 저장소가 가설을 **가지치기(stale 정리·
+    낙인 방지)**할 때 행을 지우지 않고 비활성화하는 신호를 재사용한다(모델 `misconception_
+    hypothesis`의 `is_active` 컨벤션). **전용 resolved_at/사유 컬럼이 없어** "학생이 실제로 오개념을
+    극복한 해소"와 "증거 부족으로 stale 정리된 비활성화"를 구분하지 못한다 — note에 근사임을
+    정직 표기한다(후속: 해소 사유·resolved_at 컬럼). confidence<임계 가지치기도 비활성화로 수렴하나
+    본 지표는 is_active 단일 신호만 쓴다(정의 단순·과대해석 금지).
+    """
+    if total <= 0:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                "오개념 가설 0건 — 활성 가설이 쌓이면 해소(비활성화) 비율 계측(가짜 0 아님). "
+                "is_active=false=해소 *근사*(resolved_at 컬럼 부재)."
+            ),
+        )
+    rate = inactive / total
+    return Metric(
+        value=rate,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"오개념 가설 {total}건 중 비활성(is_active=false) {inactive}건={rate:.4f}(해소 근사). "
+            "**해소 근사** — is_active=false는 가지치기(stale 정리·낙인 방지) 신호 재사용이라 "
+            "'학습적 해소'와 'stale 비활성화'를 구분 못 함(resolved_at 컬럼 부재·후속)·updated_at "
+            "시간창 기준·세션별 분해는 후속(현재 user/시간창 집계)."
         ),
     )
 
@@ -883,7 +1094,9 @@ async def compute_wh1_surrogate_metrics(
     verify_row = (
         await session.execute(
             select(
-                func.count().filter(AttemptEvent.event_data["passed"].as_boolean().is_(True)),
+                func.count().filter(
+                    AttemptEvent.event_data["passed"].as_boolean().is_(True)
+                ),
                 func.count(),
             )
             .select_from(AttemptEvent)
@@ -898,7 +1111,9 @@ async def compute_wh1_surrogate_metrics(
         verify_metric = Metric(
             value=None,
             status=MetricStatus.NO_DATA,
-            note=("검산결과 이벤트 0건 — coach 풀이 제출이 쌓이면 통과율 계측(가짜 0 아님)."),
+            note=(
+                "검산결과 이벤트 0건 — coach 풀이 제출이 쌓이면 통과율 계측(가짜 0 아님)."
+            ),
         )
     else:
         verify_metric = Metric(
@@ -935,6 +1150,12 @@ async def compute_wh1_surrogate_metrics(
     hint_levels = [int(row[0]) for row in hint_rows if row[0] is not None]
     help_reduction = _help_reduction_from_levels(hint_levels)
 
+    # ── ⑧ 답 미루기 도달 깊이 (⑤와 동일 hint_levels 재사용·새 쿼리 0) ──
+    # ⑤가 hint_level *기울기*(도움 감소 추세)를 본다면 ⑧은 *도달 깊이*(평균·최대)를 본다 —
+    # 같은 시계열의 다른 집계(순수 함수 위임·표본은 sample_hint_events 공유). 게이밍(힌트 회피)
+    # 방어는 R15(help_reduction_validated) 몫이라 ⑧은 단독 해석 금지(note 표기).
+    hint_depth = _hint_depth_from_levels(hint_levels)
+
     # ── R15 결합 판정 (⑤ 도움 감소 × 정답률 추세) ──
     # 정답률 신호 = ProblemAttempt.is_correct(실제 정답률·① 검산 proxy보다 직접적·R15의
     # "정답률"에 정확히 대응). is_correct IS NOT NULL(미응답=NULL 제외)·started_at 오름차순으로
@@ -958,7 +1179,9 @@ async def compute_wh1_surrogate_metrics(
         )
     ).all()
     # is_correct(bool)를 1.0/0.0 시퀀스로(None은 IS NOT NULL 필터로 이미 제외·방어적 재확인).
-    accuracy_series = [1.0 if row[0] else 0.0 for row in accuracy_rows if row[0] is not None]
+    accuracy_series = [
+        1.0 if row[0] else 0.0 for row in accuracy_rows if row[0] is not None
+    ]
     help_slope = _ols_slope([float(level) for level in hint_levels])
     accuracy_slope = _ols_slope(accuracy_series)
 
@@ -1046,12 +1269,83 @@ async def compute_wh1_surrogate_metrics(
     ).all()
     # is_correct는 accuracy_conds(IS NOT NULL)로 이미 좁혀졌으나 방어적으로 bool() 변환(None→False
     # 가 아니라 필터로 None이 없음을 신뢰·타입 좁히기). 식별은 순수 함수에 위임(날조 0).
-    transfer_input: list[tuple[uuid.UUID | None, list[SignaturePattern] | None, bool]] = [
+    transfer_input: list[
+        tuple[uuid.UUID | None, list[SignaturePattern] | None, bool]
+    ] = [
         (problem_id, patterns, bool(is_correct))
         for problem_id, patterns, is_correct in transfer_rows
     ]
     transfer_outcomes = _identify_transfer_probes(transfer_input)
     transfer_score = _transfer_from_probes(transfer_outcomes)
+
+    # ── ⑨ BKT 숙달 증가율 (ConceptMasteryHistory (user,concept)별 첫→마지막 mastery 차 평균) ──
+    # mastery NOT NULL 행을 (user_id, concept_id, measured_at) 오름차순으로 뽑아 Python 순수로
+    # 그룹별 첫→마지막 차(증가량)를 낸다(_mastery_gains_from_rows·날조 0). 시간창은 measured_at
+    # 기준(활동 started_at이 아니라 측정 시각·이 원천의 자연 시간축)·ORM/쿼리빌더만(원시 SQL 0).
+    # mastery는 Numeric(3,2)라 런타임 Decimal일 수 있어 float로 변환한다(None은 필터로 제외).
+    mastery_conds: list[ColumnElement[bool]] = [
+        ConceptMasteryHistory.mastery.isnot(None)
+    ]
+    if user_id is not None:
+        mastery_conds.append(ConceptMasteryHistory.user_id == user_id)
+    if since is not None:
+        mastery_conds.append(ConceptMasteryHistory.measured_at >= since)
+    if until is not None:
+        mastery_conds.append(ConceptMasteryHistory.measured_at <= until)
+
+    mastery_rows = (
+        await session.execute(
+            select(
+                ConceptMasteryHistory.user_id,
+                ConceptMasteryHistory.concept_id,
+                ConceptMasteryHistory.mastery,
+            )
+            .select_from(ConceptMasteryHistory)
+            .where(*mastery_conds)
+            .order_by(
+                ConceptMasteryHistory.user_id.asc(),
+                ConceptMasteryHistory.concept_id.asc(),
+                ConceptMasteryHistory.measured_at.asc(),
+            )
+        )
+    ).all()
+    # (user, concept, mastery) — 그룹 내 measured_at 오름차순(order_by 보장). None은 방어적 제외.
+    mastery_input: list[tuple[uuid.UUID, uuid.UUID, float]] = [
+        (user, concept, float(mastery))
+        for user, concept, mastery in mastery_rows
+        if mastery is not None
+    ]
+    mastery_gains = _mastery_gains_from_rows(mastery_input)
+    mastery_gain_metric = _mastery_gain_from_gains(mastery_gains)
+
+    # ── ⑩ 오개념 해소율 (MisconceptionHypothesisRecord is_active=false 비율) ──
+    # (비활성 수, 전체 수)를 한 행으로 — is_active=false=해소 *근사*(가지치기·비활성화 신호 재사용·
+    # resolved_at 컬럼 부재). 시간창은 updated_at 기준(가설이 마지막으로 갱신[해소 전이 포함]된
+    # 시각)·user 필터. FILTER로 비활성만 센다(① verify 통과 카운트 동형·쿼리빌더만).
+    misconception_conds: list[ColumnElement[bool]] = []
+    if user_id is not None:
+        misconception_conds.append(MisconceptionHypothesisRecord.user_id == user_id)
+    if since is not None:
+        misconception_conds.append(MisconceptionHypothesisRecord.updated_at >= since)
+    if until is not None:
+        misconception_conds.append(MisconceptionHypothesisRecord.updated_at <= until)
+
+    misconception_row = (
+        await session.execute(
+            select(
+                func.count().filter(MisconceptionHypothesisRecord.is_active.is_(False)),
+                func.count(),
+            )
+            .select_from(MisconceptionHypothesisRecord)
+            .where(*misconception_conds)
+        )
+    ).one()
+    misconception_inactive_raw, misconception_total_raw = misconception_row
+    misconception_inactive = int(misconception_inactive_raw or 0)
+    misconception_total = int(misconception_total_raw or 0)
+    misconception_resolution = _misconception_resolution_from_counts(
+        misconception_inactive, misconception_total
+    )
 
     # ── ② 진단-실제 오개념 일치율 (오프라인 진단정확도·substring recall) ──
     # 시스템 지표라 DB·user/기간과 무관(라벨 프로브에 substring 매처 recall) — 전 user 동일값.
@@ -1059,13 +1353,18 @@ async def compute_wh1_surrogate_metrics(
 
     return SurrogateMetrics(
         verify_pass_rate=verify_metric,
-        diagnosis_agreement_rate=_diagnosis_agreement_offline(diagnostic_hits, diagnostic_total),
+        diagnosis_agreement_rate=_diagnosis_agreement_offline(
+            diagnostic_hits, diagnostic_total
+        ),
         session_completion_rate=session_completion,
         tokens_per_turn=tokens_metric,
         help_reduction_slope=help_reduction,
         calibration_brier=calibration_brier,
         transfer_score=transfer_score,
         help_reduction_validated=help_reduction_validated,
+        hint_depth_reached=hint_depth,
+        mastery_gain_rate=mastery_gain_metric,
+        misconception_resolution_rate=misconception_resolution,
         sample_sessions=int(total_sessions),
         sample_dialogues=sample_dialogues,
         sample_verify_events=verify_total,
@@ -1075,6 +1374,8 @@ async def compute_wh1_surrogate_metrics(
         sample_calibration_pairs=len(calibration_pairs),
         sample_transfer_probes=len(transfer_outcomes),
         sample_diagnostic_probes=diagnostic_total,
+        sample_mastery_groups=len(mastery_gains),
+        sample_misconception_hypotheses=misconception_total,
         window_start=since,
         window_end=until,
         user_scoped=user_id is not None,

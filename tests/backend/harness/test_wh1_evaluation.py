@@ -17,10 +17,12 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 
+from pytest import approx as pytest_approx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.harness.wh1_evaluation import (
     _MIN_CALIBRATION_SAMPLES,
+    _MIN_MASTERY_POINTS,
     _MIN_TRANSFER_PROBES,
     HelpReductionValidation,
     Metric,
@@ -29,8 +31,12 @@ from whymath_backend.harness.wh1_evaluation import (
     SurrogateMetrics,
     _calibration_from_pairs,
     _diagnosis_agreement_offline,
+    _hint_depth_from_levels,
     _identify_transfer_probes,
     _judge_r15,
+    _mastery_gain_from_gains,
+    _mastery_gains_from_rows,
+    _misconception_resolution_from_counts,
     _ols_slope,
     _transfer_from_probes,
     compute_wh1_surrogate_metrics,
@@ -46,7 +52,9 @@ _P_SEQ = SignaturePattern.INDUCTIVE_SEQUENCE
 class _FakeScalarResult:
     """`.scalar()`(count)·`.one()`(AVG, count)·`.all()`(행 목록)을 반환하는 execute 결과."""
 
-    def __init__(self, scalar: Any = None, one: Any = None, all_rows: Any = None) -> None:
+    def __init__(
+        self, scalar: Any = None, one: Any = None, all_rows: Any = None
+    ) -> None:
         self._scalar = scalar
         self._one = one
         self._all = all_rows if all_rows is not None else []
@@ -75,7 +83,11 @@ class _FakeSession:
       8) calibration rows((confidence_self_reported, is_correct) 쌍 목록·all)
       9) transfer rows(started_at 오름차순 (problem_id, signature_patterns, is_correct) 행
          목록·all·Problem join) — ⑦ 근사 전이 점수 식별 입력.
-    이 9개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
+     10) mastery rows((user_id, concept_id, mastery) 행 목록·all·(user,concept,measured_at)
+         오름차순) — ⑨ BKT 숙달 증가율(그룹별 첫→마지막 차) 입력.
+     11) misconception row((inactive_count, total_count)·one 튜플) — ⑩ 오개념 해소율
+         (is_active=false 비율) 카운트.
+    이 11개를 큐로 주입한다 — 정렬·실 SQL·join은 통합테스트가 실 PG로 검증.
     """
 
     def __init__(self, results: list[_FakeScalarResult]) -> None:
@@ -101,6 +113,9 @@ def _make_session(
     difficulty_rows: list[tuple[float | None, float | None]] | None = None,
     calibration_pairs: list[tuple[float | None, bool | None]] | None = None,
     transfer_rows: list[tuple[Any, Any, bool]] | None = None,
+    mastery_rows: list[tuple[Any, Any, float | None]] | None = None,
+    misconception_inactive: int = 0,
+    misconception_total: int = 0,
 ) -> AsyncSession:
     # ⑤ 힌트 쿼리는 단일 컬럼(.as_integer())을 event_at 오름차순으로 뽑으므로 행은 (level,) 튜플.
     # None(JSONB 파싱 실패)도 섞일 수 있게 그대로 (None,)으로 주입 — 본문이 None을 걸러낸다.
@@ -119,6 +134,10 @@ def _make_session(
     # accuracy_conds(IS NOT NULL)로 좁혀 join하므로 bool만 들어온다. problem_id None·패턴 빈 행도
     # 주입할 수 있게 그대로 둔다 — 본문/식별 함수가 초견·사전노출 규칙으로 처리한다.
     xfer_rows = list(transfer_rows or [])
+    # ⑨ 숙달 쿼리는 (user_id, concept_id, mastery)를 (user,concept,measured_at) 오름차순으로 뽑는다
+    # — 행은 (user, concept, mastery) 튜플. 그룹 내 오름차순은 본문 order_by가 보장하므로 여기선
+    # 그 순서대로 주입한다(첫 등장=최이른·마지막=최근). mastery None은 본문이 필터로 제외한다.
+    mstry_rows = list(mastery_rows or [])
     return cast(
         AsyncSession,
         _FakeSession(
@@ -132,6 +151,8 @@ def _make_session(
                 _FakeScalarResult(all_rows=diff_rows),
                 _FakeScalarResult(all_rows=calib_rows),
                 _FakeScalarResult(all_rows=xfer_rows),
+                _FakeScalarResult(all_rows=mstry_rows),
+                _FakeScalarResult(one=(misconception_inactive, misconception_total)),
             ]
         ),
     )
@@ -365,7 +386,9 @@ class TestUnmeasuredMetrics:
         assert m.status is MetricStatus.NO_DATA  # REQUIRES_TOOL 아님
         assert m.value is None
         assert "전이" in m.note
-        assert "assign_transfer_probe" not in m.note or "다른" in m.note  # 근사 표기 존재
+        assert (
+            "assign_transfer_probe" not in m.note or "다른" in m.note
+        )  # 근사 표기 존재
 
     async def test_calibration_no_longer_requires_tool(self) -> None:
         """⑥ 보정 점수 — 보정 쌍 0건이면 REQUIRES_TOOL이 아니라 NO_DATA(stale 진단 교정)."""
@@ -460,7 +483,10 @@ class TestDiagnosisAgreementOffline:
             until=datetime(2026, 6, 1, tzinfo=UTC),
         )
         # 진단정확도는 user/기간과 무관(시스템 지표) — value·표본 동일.
-        assert m_cohort.diagnosis_agreement_rate.value == m_user.diagnosis_agreement_rate.value
+        assert (
+            m_cohort.diagnosis_agreement_rate.value
+            == m_user.diagnosis_agreement_rate.value
+        )
         assert m_cohort.sample_diagnostic_probes == m_user.sample_diagnostic_probes
 
 
@@ -516,7 +542,9 @@ class TestCalibrationFromPairs:
 
     def test_too_few_pairs_is_no_data_not_fake_zero(self) -> None:
         """쌍 < _MIN_CALIBRATION_SAMPLES → NO_DATA·value None(가짜 0/Brier 금지)."""
-        m = _calibration_from_pairs(self._pairs(_MIN_CALIBRATION_SAMPLES - 1, 0.5, True))
+        m = _calibration_from_pairs(
+            self._pairs(_MIN_CALIBRATION_SAMPLES - 1, 0.5, True)
+        )
         assert m.status is MetricStatus.NO_DATA
         assert m.value is None  # 0이 아님!
         assert "표본 부족" in m.note
@@ -556,13 +584,17 @@ class TestCalibrationBrierIntegratedWithCompute:
 
     async def test_measured_perfect(self) -> None:
         """완벽 보정 5쌍 → MEASURED·Brier 0."""
-        m = await self._brier([(1.0, True), (1.0, True), (0.0, False), (0.0, False), (1.0, True)])
+        m = await self._brier(
+            [(1.0, True), (1.0, True), (0.0, False), (0.0, False), (1.0, True)]
+        )
         assert m.status is MetricStatus.MEASURED
         assert m.value == 0.0
 
     async def test_measured_total_miscalibration(self) -> None:
         """완전 오보정 5쌍 → MEASURED·Brier 1."""
-        m = await self._brier([(1.0, False), (1.0, False), (0.0, True), (0.0, True), (1.0, False)])
+        m = await self._brier(
+            [(1.0, False), (1.0, False), (0.0, True), (0.0, True), (1.0, False)]
+        )
         assert m.status is MetricStatus.MEASURED
         assert m.value == 1.0
 
@@ -847,7 +879,9 @@ class TestTransferScoreIntegratedWithCompute:
 # ── 메타·필드셋·스코핑 ───────────────────────────────────────────────────────
 class TestMetaAndFieldSet:
     async def test_field_set_complete(self) -> None:
-        """SurrogateMetrics가 7 지표 + R15 결합 판정 + 메타(표본 수 포함)를 모두 보유."""
+        """SurrogateMetrics가 7 지표 + S3 3종 + R15 결합 판정 + 메타(표본 수)를 모두 보유."""
+        u1, u2 = uuid.uuid4(), uuid.uuid4()
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
         session = _make_session(
             total_sessions=2,
             completed_sessions=1,
@@ -871,6 +905,16 @@ class TestMetaAndFieldSet:
                 (uuid.uuid4(), [_P_COND], True),  # 초견·사전 노출 → 프로브
                 (uuid.uuid4(), [_P_COND], False),  # 초견·사전 노출 → 프로브
             ],
+            # ⑨ 숙달 — 2그룹 각 2점(그룹 내 measured_at 오름차순) → 자격 그룹 2·증가량 평균.
+            mastery_rows=[
+                (u1, c1, 0.3),  # (u1,c1) 첫
+                (u1, c1, 0.7),  # (u1,c1) 마지막 → gain +0.4
+                (u2, c2, 0.5),  # (u2,c2) 첫
+                (u2, c2, 0.6),  # (u2,c2) 마지막 → gain +0.1
+            ],
+            # ⑩ 오개념 — 전체 5건 중 비활성(해소 근사) 2건 → rate 0.4.
+            misconception_inactive=2,
+            misconception_total=5,
         )
         m = await compute_wh1_surrogate_metrics(session)
         for name in (
@@ -881,6 +925,9 @@ class TestMetaAndFieldSet:
             "help_reduction_slope",
             "calibration_brier",
             "transfer_score",
+            "hint_depth_reached",
+            "mastery_gain_rate",
+            "misconception_resolution_rate",
         ):
             assert isinstance(getattr(m, name), Metric)
         assert isinstance(m.help_reduction_validated, HelpReductionValidation)
@@ -891,7 +938,13 @@ class TestMetaAndFieldSet:
         assert m.sample_difficulty_attempts == 3  # 유효 b(Problem join) 행 수
         assert m.sample_calibration_pairs == 5  # 유효 보정 쌍 수
         assert m.sample_transfer_probes == 3  # ⑦ 전이 프로브 수(초견·사전 노출·패턴별)
-        assert m.sample_diagnostic_probes == 63  # ② recall 프로브 수(시스템 지표·프로브셋 크기)
+        assert (
+            m.sample_diagnostic_probes == 63
+        )  # ② recall 프로브 수(시스템 지표·프로브셋 크기)
+        assert m.sample_mastery_groups == 2  # ⑨ 자격 (user,concept) 그룹 수(≥2점)
+        assert (
+            m.sample_misconception_hypotheses == 5
+        )  # ⑩ 오개념 가설 총수(비활성 2 포함)
         # difficulty_slope 필드 노출(양수=난이도 상승·음수=쉬워짐). 여기선 하강(1→0.5→0)이라 음수.
         assert m.help_reduction_validated.difficulty_slope is not None
         # ⑥ 보정 점수 — 5쌍 >= MIN → MEASURED·value 실수(Brier∈[0,1]).
@@ -1199,3 +1252,170 @@ class TestHelpReductionRefactorRegression:
         assert m.status is MetricStatus.NO_DATA
         assert m.value is None
         assert "표본 부족" in m.note
+
+
+# ── ⑧ 답 미루기 도달 깊이 (hint_level 평균·최대·⑤와 동일 신호 재사용) ─────────────────
+class TestHintDepthPure:
+    def test_measured_mean_and_note_max(self) -> None:
+        """hint_level [1,3,4,2] → 평균 2.5·note에 최대 4(도달 깊이)·MEASURED."""
+        m = _hint_depth_from_levels([1, 3, 4, 2])
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 2.5
+        assert "최대 도달 4" in m.note
+        # 게이밍 캐비엇·R15 참조가 note에 정직 표기(단독 해석 금지).
+        assert "R15" in m.note
+
+    def test_empty_is_no_data_not_zero(self) -> None:
+        """힌트 0건 → NO_DATA·value None(가짜 0 금지)."""
+        m = _hint_depth_from_levels([])
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+        assert "0건" in m.note
+
+
+class TestHintDepthIntegratedWithCompute:
+    async def test_measured_via_compute(self) -> None:
+        """compute가 ⑤와 동일 hint_levels로 ⑧ 평균 깊이·표본(sample_hint_events 공유) 산출."""
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            hint_levels=[4, 4, 1],  # 평균 3.0·최대 4
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.hint_depth_reached.status is MetricStatus.MEASURED
+        assert m.hint_depth_reached.value == 3.0
+        assert m.sample_hint_events == 3  # ⑤와 동일 표본(새 쿼리 0)
+
+    async def test_no_hint_events_no_data(self) -> None:
+        session = _make_session(
+            total_sessions=1, completed_sessions=1, avg_tokens=None, token_sample=0
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.hint_depth_reached.status is MetricStatus.NO_DATA
+        assert m.hint_depth_reached.value is None
+
+
+# ── ⑨ BKT 숙달 증가율 ((user,concept)별 첫→마지막 mastery 차 평균) ──────────────────
+class TestMasteryGainsPure:
+    def test_groups_first_to_last_delta(self) -> None:
+        """(user,concept)별 첫→마지막 차 — 2점 그룹 gain, 1점 그룹 제외(_MIN_MASTERY_POINTS)."""
+        u1, u2, u3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        rows = [
+            (u1, c1, 0.2),
+            (u1, c1, 0.6),  # (u1,c1) gain +0.4
+            (u2, c2, 0.5),
+            (u2, c2, 0.5),  # (u2,c2) gain 0.0(실측 평탄)
+            (u3, c1, 0.9),  # (u3,c1) 1점만 → 제외
+        ]
+        gains = _mastery_gains_from_rows(rows)
+        assert len(gains) == 2  # 자격 그룹 2(1점 그룹 제외)
+        assert sorted(gains) == [0.0, pytest_approx(0.4)]
+
+    def test_min_points_boundary(self) -> None:
+        """_MIN_MASTERY_POINTS는 2 — 그룹당 before/after 2점 요구."""
+        assert _MIN_MASTERY_POINTS == 2
+
+
+class TestMasteryGainMetric:
+    def test_measured_mean(self) -> None:
+        m = _mastery_gain_from_gains([0.4, 0.0])
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == pytest_approx(0.2)
+
+    def test_empty_no_data(self) -> None:
+        """자격 그룹 0 → NO_DATA·value None(가짜 0 금지)."""
+        m = _mastery_gain_from_gains([])
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+        assert "rate 아님" in m.note or "증가량" in m.note
+
+
+class TestMasteryGainIntegratedWithCompute:
+    async def test_measured_via_compute(self) -> None:
+        u1, u2 = uuid.uuid4(), uuid.uuid4()
+        c1, c2 = uuid.uuid4(), uuid.uuid4()
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            mastery_rows=[
+                (u1, c1, 0.3),
+                (u1, c1, 0.9),  # gain +0.6
+                (u2, c2, 0.4),
+                (u2, c2, 0.6),  # gain +0.2
+            ],
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.mastery_gain_rate.status is MetricStatus.MEASURED
+        assert m.mastery_gain_rate.value == pytest_approx(0.4)  # (0.6+0.2)/2
+        assert m.sample_mastery_groups == 2
+
+    async def test_none_mastery_excluded(self) -> None:
+        """mastery None 행은 제외 — 남은 자격 그룹 0이면 NO_DATA."""
+        u1 = uuid.uuid4()
+        c1 = uuid.uuid4()
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            mastery_rows=[
+                (u1, c1, None),
+                (u1, c1, 0.5),
+            ],  # None 제외 → 1점 → 그룹 미자격
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.mastery_gain_rate.status is MetricStatus.NO_DATA
+        assert m.mastery_gain_rate.value is None
+        assert m.sample_mastery_groups == 0
+
+
+# ── ⑩ 오개념 해소율 (is_active=false 비율·해소 근사) ─────────────────────────────────
+class TestMisconceptionResolutionPure:
+    def test_measured_ratio(self) -> None:
+        m = _misconception_resolution_from_counts(2, 5)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == pytest_approx(0.4)
+        assert "근사" in m.note  # 해소 근사 정직 표기
+
+    def test_zero_total_no_data(self) -> None:
+        """가설 0건 → NO_DATA·value None(가짜 0 금지)."""
+        m = _misconception_resolution_from_counts(0, 0)
+        assert m.status is MetricStatus.NO_DATA
+        assert m.value is None
+        assert "0건" in m.note
+
+    def test_all_active_zero_rate(self) -> None:
+        """전부 활성(비활성 0) → rate 0.0·MEASURED(실측 0·날조 아님)."""
+        m = _misconception_resolution_from_counts(0, 4)
+        assert m.status is MetricStatus.MEASURED
+        assert m.value == 0.0
+
+
+class TestMisconceptionResolutionIntegratedWithCompute:
+    async def test_measured_via_compute(self) -> None:
+        session = _make_session(
+            total_sessions=1,
+            completed_sessions=1,
+            avg_tokens=None,
+            token_sample=0,
+            misconception_inactive=3,
+            misconception_total=4,
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.misconception_resolution_rate.status is MetricStatus.MEASURED
+        assert m.misconception_resolution_rate.value == pytest_approx(0.75)
+        assert m.sample_misconception_hypotheses == 4
+
+    async def test_no_hypotheses_no_data(self) -> None:
+        session = _make_session(
+            total_sessions=1, completed_sessions=1, avg_tokens=None, token_sample=0
+        )
+        m = await compute_wh1_surrogate_metrics(session)
+        assert m.misconception_resolution_rate.status is MetricStatus.NO_DATA
+        assert m.misconception_resolution_rate.value is None
+        assert m.sample_misconception_hypotheses == 0
