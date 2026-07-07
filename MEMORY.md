@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-07 (구현·harness/data): **지수·로그 스켈레톤 배치 밴드 wiring — 코퍼스 305→350 materialize**
+
+**무엇/왜**: 지수·로그 결정론 생성기(#451)를 배치 CLI에 밴드로 연결해 실제 코퍼스로 실체화(그간 생성기·테스트만 있고 코퍼스 미반영). 라이브 축적 실측(레퍼토리 포화)이 준 방향 — "quad 넓이는 결정론이 주력" — 을 대수(고2 지수·로그)로 확장.
+- **`harness/problem_corpus_batch`**: exp·log 밴드 추가(기본 exp 25·log 20). 각 문제군 별도 signature_index(calc 패턴 미러)나 실질 dedup 없음 — 비다항 conditions(b**x·log)라 canonical signature=None이고 풀이 결정론 유일. quad/calc(다항 signature)와 cross-군 충돌 원천 불가. 스펙 [12대수01-08]·난이도 3.0(추정 2.6~3.4·gap≤0.4). `--exp`/`--log` 인자.
+- **코퍼스 305→350**(exp 25·log 20 추가)·전 밴드 수율 100%·재실행 바이트 동일 유지.
+- **품질 봉인 확장**: known_primary에 H:12대수01-08 추가·signature 유일성 테스트는 비다항(exp/log) None을 skip(slug 유일성에 위임)·신규 대수 밴드 메타 테스트(개념태그·단원·비다항 conditions).
+- **병렬 충돌 회피**: 배치 CLI는 additive 편집(신 밴드·상수·인자·별도 index)·기존 calc 밴드 무변경.
+
+**🔒 불변**: skeleton_generator/acceptance/orchestrator 무변경·산출물 v0(사람 검수 전)·L3→L4 import 0. **범위 밖**: 지수·로그 객관식·부등식·음의 지수·LLM 대수 novel 생성.
+
 ### 2026-07-07 (라이브 실측): **축적 CLI 라이브 2회차 — derive-and-verify가 LLM 오답 실차단·레퍼토리 포화 관측**
 
 **무엇**: `problem_corpus_accumulate`를 새 Phaiakes9에서 라이브 구동(seed=생성 코퍼스 305건, out=`problem_bank_llm_v0`).

@@ -8,7 +8,7 @@ Phaiakes9 전용이던 배치 스크립트(run_batch_corpus.py·repo 밖)를 **r
 사용법:
     python -m whymath_backend.harness.problem_corpus_batch \\
         [--out <jsonl>] [--short 90] [--mc 45] [--sqrt 30] [--sqrt-mc 20]
-        [--calc-extremum 40] [--calc-tangent 40] [--calc-value 40] [--dry-run]
+        [--calc-extremum 40] [--calc-tangent 40] [--calc-value 40] [--exp 25] [--log 20] [--dry-run]
 
 동작: 문제군별 밴드를 순차 실행 → 전 후보가 S2-a 4종 게이트를 통과해야 sink에 실린다 → JSONL로
 기록. **quad 문제군**(short/mc/sqrt/sqrt_mc·이차방정식 근)은 공유 signature_index로 겹침을 차단하고,
@@ -46,6 +46,10 @@ from whymath_backend.l3.equivalent.calculus_skeleton_generator import (
     CalculusExtremumValueSkeletonGenerator,
     CalculusTangentSlopeSkeletonGenerator,
 )
+from whymath_backend.l3.equivalent.exp_log_skeleton_generator import (
+    ExponentialEquationSkeletonGenerator,
+    LogarithmicEquationSkeletonGenerator,
+)
 from whymath_backend.l3.equivalent.orchestrator import run_batch
 from whymath_backend.l3.equivalent.skeleton_generator import (
     GeneratorVariant,
@@ -73,9 +77,9 @@ _MC_INJECTION: dict[str, tuple[str, str]] = {
     "sign_flip": ("factor-sign-flip", "factor-sign-flip-root"),
 }
 
-# 밴드 기본 크기 — quad 185 + calc-extremum 40 + calc-tangent 40 + calc-value 40 = 총 305건
-# (CI 봉인 ≥100 여유). 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·
-# calc-tangent 162·calc-value 150.
+# 밴드 기본 크기 — quad 185 + calc 120 + exp 25 + log 20 = 총 350건(CI 봉인 ≥100 여유).
+# 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·calc-tangent 162·calc-value 150·
+# exp 28·log 28.
 _DEFAULT_SHORT_N = 90
 _DEFAULT_MC_N = 45
 _DEFAULT_SQRT_N = 30
@@ -83,6 +87,8 @@ _DEFAULT_SQRT_MC_N = 20
 _DEFAULT_CALC_EXTREMUM_N = 40
 _DEFAULT_CALC_TANGENT_N = 40
 _DEFAULT_CALC_VALUE_N = 40
+_DEFAULT_EXP_N = 25
+_DEFAULT_LOG_N = 20
 
 # 미적분(극값) 밴드 스펙 — 별도 성취기준([12미적Ⅰ-02-07]·함수의 증가·감소와 극대·극소).
 # 난이도 3.3 고정: 극값 추정(3.0~4.0) 최대 gap 0.7 < 3.5(게이트 감쇠 수학)라 안전.
@@ -102,6 +108,13 @@ _TANGENT_SPEC_DIFFICULTY = 3.3
 # 오dedup 위험(극값 x=1,3의 조건과 극값 값이 1,3인 조건이 canonical 동일) → **또 별도 index**.
 _VALUE_STANDARD_CODE = "[12미적Ⅰ-02-07]"
 _VALUE_SPEC_DIFFICULTY = 3.3
+
+# 지수·로그 밴드 스펙 — 대수(고2·[12대수01-08]·지수함수·로그함수 활용). conditions가 비다항
+# (b**x-v·log(x,b)-k)이라 canonical signature=None → signature_index 무의미(풀 결정론 유일이라
+# dedup 불요)·quad/calc(다항 signature)와 cross-군 충돌 원천 불가. 난이도 3.0: 추정(2.6~3.4)
+# 최대 gap 0.4 < 0.5(tol)이라 동등성 난이도 성분 만점.
+_EXPLOG_STANDARD_CODE = "[12대수01-08]"
+_EXPLOG_SPEC_DIFFICULTY = 3.0
 
 
 def _default_out_path() -> Path:
@@ -249,6 +262,8 @@ def run_corpus_batch(
     calc_extremum_n: int = _DEFAULT_CALC_EXTREMUM_N,
     calc_tangent_n: int = _DEFAULT_CALC_TANGENT_N,
     calc_value_n: int = _DEFAULT_CALC_VALUE_N,
+    exp_n: int = _DEFAULT_EXP_N,
+    log_n: int = _DEFAULT_LOG_N,
     write: bool = True,
 ) -> CorpusBatchReport:
     """밴드 배치 실행 — 문제군별 signature_index·밴드별 스펙 정합·JSONL 기록(순수 결정론).
@@ -391,6 +406,44 @@ def run_corpus_batch(
             )
         )
 
+    # ── 대수 문제군(지수·로그 방정식) — 비다항 conditions(signature=None)이라 별도 index지만
+    #    실질 dedup 없음(풀 결정론 유일). quad/calc와 구조 signature가 애초에 안 겹친다. ──
+    for band_name, gen_factory, count in (
+        ("exp", ExponentialEquationSkeletonGenerator, exp_n),
+        ("log", LogarithmicEquationSkeletonGenerator, log_n),
+    ):
+        if count <= 0:
+            continue
+        explog_index: set[str] = set()
+        explog_spec = EquivalenceSpec(
+            achievement_standard_codes=frozenset({_EXPLOG_STANDARD_CODE}),
+            target_misconception_ids=frozenset(),
+            difficulty_overall=_EXPLOG_SPEC_DIFFICULTY,
+            answer_format=None,
+        )
+        explog_outcomes = run_batch(
+            explog_spec,
+            gen_factory(skip_signatures=explog_index),
+            count,
+            signature_index=explog_index,
+            store=sink,
+        )
+        explog_stored = sum(1 for o in explog_outcomes if o.status == "accepted_stored")
+        explog_failures = [
+            reason
+            for outcome in explog_outcomes
+            if outcome.status != "accepted_stored"
+            for reason in (outcome.reasons or [f"status={outcome.status}"])
+        ]
+        bands.append(
+            BandResult(
+                name=band_name,
+                requested=count,
+                stored=explog_stored,
+                failure_reasons=explog_failures,
+            )
+        )
+
     total_requested = sum(b.requested for b in bands)
     total_stored = sum(b.stored for b in bands)
     written = sink.write(resolved_out) if write else None
@@ -435,6 +488,12 @@ def main(argv: list[str] | None = None) -> int:
         default=_DEFAULT_CALC_VALUE_N,
         help="미적분 극값의 값(삼차함수 극댓값·극솟값) 단답형 수.",
     )
+    parser.add_argument(
+        "--exp", type=int, default=_DEFAULT_EXP_N, help="지수방정식(bˣ=bᵏ) 단답형 수."
+    )
+    parser.add_argument(
+        "--log", type=int, default=_DEFAULT_LOG_N, help="로그방정식(log_b x=k) 단답형 수."
+    )
     parser.add_argument("--dry-run", action="store_true", help="파일 미기록 — 수율·리포트만 확인.")
     args = parser.parse_args(argv)
 
@@ -447,6 +506,8 @@ def main(argv: list[str] | None = None) -> int:
         calc_extremum_n=args.calc_extremum,
         calc_tangent_n=args.calc_tangent,
         calc_value_n=args.calc_value,
+        exp_n=args.exp,
+        log_n=args.log,
         write=not args.dry_run,
     )
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)

@@ -42,6 +42,8 @@ class TestRunCorpusBatch:
             calc_extremum_n=0,
             calc_tangent_n=0,
             calc_value_n=0,
+            exp_n=0,
+            log_n=0,
             write=False,
         )
         assert report.fulfilled
@@ -66,6 +68,8 @@ class TestRunCorpusBatch:
             calc_extremum_n=0,
             calc_tangent_n=0,
             calc_value_n=0,
+            exp_n=0,
+            log_n=0,
             write=True,
         )
         assert report.fulfilled and report.written == 15
@@ -103,6 +107,8 @@ class TestRunCorpusBatch:
             calc_extremum_n=4,
             calc_tangent_n=4,
             calc_value_n=4,
+            exp_n=0,
+            log_n=0,
             write=True,
         )
         run_corpus_batch(
@@ -114,6 +120,8 @@ class TestRunCorpusBatch:
             calc_extremum_n=4,
             calc_tangent_n=4,
             calc_value_n=4,
+            exp_n=0,
+            log_n=0,
             write=True,
         )
         assert a.read_bytes() == b.read_bytes()
@@ -131,6 +139,8 @@ class TestRunCorpusBatch:
             calc_extremum_n=10,
             calc_tangent_n=10,
             calc_value_n=10,
+            exp_n=0,
+            log_n=0,
             write=True,
         )
         slugs = [r.slug for r in load_problem_bank_records(out)]
@@ -157,6 +167,10 @@ class TestCliEntry:
                 "--calc-tangent",
                 "0",
                 "--calc-value",
+                "0",
+                "--exp",
+                "0",
+                "--log",
                 "0",
             ]
         )
@@ -187,6 +201,10 @@ class TestCliEntry:
                 "0",
                 "--calc-value",
                 "0",
+                "--exp",
+                "0",
+                "--log",
+                "0",
                 "--dry-run",
             ]
         )
@@ -214,6 +232,10 @@ class TestCliEntry:
                 "0",
                 "--calc-value",
                 "0",
+                "--exp",
+                "0",
+                "--log",
+                "0",
             ]
         )
         assert code == 1
@@ -227,7 +249,7 @@ class TestCliEntry:
 
 class TestCalculusBand:
     def test_default_run_includes_calc_bands(self) -> None:
-        # 기본 실행은 quad 4밴드 + calc 3밴드(총 7밴드) — 각 40건 저장·총 305.
+        # 기본 실행은 quad 4밴드 + calc 3밴드 + 대수(exp·log) 2밴드(총 9밴드) — 총 350.
         report = run_corpus_batch(out_path=Path("/nonexistent/x.jsonl"), write=False)
         names = [b.name for b in report.bands]
         assert names == [
@@ -238,11 +260,15 @@ class TestCalculusBand:
             "calc-extremum",
             "calc-tangent",
             "calc-value",
+            "exp",
+            "log",
         ]
         for band_name in ("calc-extremum", "calc-tangent", "calc-value"):
             band = next(b for b in report.bands if b.name == band_name)
             assert (band.requested, band.stored) == (40, 40)
-        assert report.total_stored == 305 and report.fulfilled
+        assert dict((b.name, b.stored) for b in report.bands)["exp"] == 25
+        assert dict((b.name, b.stored) for b in report.bands)["log"] == 20
+        assert report.total_stored == 350 and report.fulfilled
 
     def test_value_records_have_calculus_metadata(self, tmp_path: Path) -> None:
         # calc-value 밴드 산출물 — 극대·극소 단원/성취기준/개념 태깅(극값 x좌표와 동일)·단답형·
@@ -257,6 +283,8 @@ class TestCalculusBand:
             calc_extremum_n=0,
             calc_tangent_n=0,
             calc_value_n=12,
+            exp_n=0,
+            log_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -281,6 +309,8 @@ class TestCalculusBand:
             calc_extremum_n=0,
             calc_tangent_n=12,
             calc_value_n=0,
+            exp_n=0,
+            log_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -304,6 +334,8 @@ class TestCalculusBand:
             calc_extremum_n=12,
             calc_tangent_n=0,
             calc_value_n=0,
+            exp_n=0,
+            log_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -329,8 +361,42 @@ class TestCalculusBand:
             calc_extremum_n=30,
             calc_tangent_n=0,
             calc_value_n=0,
+            exp_n=0,
+            log_n=0,
             write=True,
         )
         diffs = {r.problem.difficulty_overall for r in load_problem_bank_records(out)}
         assert len(diffs) >= 2
         assert all(d is not None and 3.0 <= d <= 5.0 for d in diffs)
+
+
+class TestAlgebraBand:
+    def test_exp_log_bands_metadata(self, tmp_path: Path) -> None:
+        # 지수·로그 밴드 산출물 — 대수 개념(H:12대수01-08)·단원(EXP-EQ/LOG-EQ)·비다항 conditions.
+        out = tmp_path / "problems.jsonl"
+        report = run_corpus_batch(
+            out_path=out,
+            short_n=0,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=0,
+            calc_tangent_n=0,
+            calc_value_n=0,
+            exp_n=8,
+            log_n=6,
+            write=True,
+        )
+        assert report.fulfilled
+        # quad 밴드는 n=0이어도 리포트에 남으므로(요청 0·저장 0), exp·log 저장분만 확인.
+        stored = {b.name: b.stored for b in report.bands}
+        assert stored["exp"] == 8 and stored["log"] == 6
+        records = load_problem_bank_records(out)
+        assert len(records) == 14
+        for record in records:
+            assert [t.concept_src_id for t in record.concept_tags] == ["H:12대수01-08"]
+            assert record.problem.unit_codes[0] in {"EXP-EQ", "LOG-EQ"}
+            assert record.verify.answer_selection == "unique"
+        # conditions는 비다항(지수·로그) — b**x 또는 log( 포함.
+        assert any("**x" in r.verify.conditions for r in records)  # 지수
+        assert any("log(" in r.verify.conditions for r in records)  # 로그
