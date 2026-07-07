@@ -46,9 +46,33 @@ from whymath_backend.l3.pregenerate.validator import (
 )
 from whymath_backend.l3.router import Router
 
-__all__ = ["QuestionRephraser", "RephraseOutcome", "extract_equation", "verify_numeric_invariance"]
+__all__ = [
+    "QuestionRephraser",
+    "RephraseOutcome",
+    "classify_invariance_failure",
+    "extract_equation",
+    "verify_numeric_invariance",
+]
 
 _logger = logging.getLogger(__name__)
+
+# 실패 reason-code taxonomy — rephrase가 원문을 유지한 *구조적 사유*를 분류한다(디버깅 온톨로지).
+# 우리 게이트는 수치 '값' 동치가 아니라 방정식 '문자열' 보존을 보므로, 코드는 실제 코드 경로에
+# 1:1 대응한다(검출 못 하는 사유를 지어내지 않는다 — 정직 taxonomy).
+#   NO_EQUATION       발문에서 방정식 substring 추출 실패(봉인 대상 부재·rephrase 미시도)
+#   PROVIDER_ERROR    LLM 호출 예외(라이브 provider 부재·네트워크·타임아웃)
+#   EMPTY             LLM 빈 출력
+#   EQUATION_ALTERED  방정식 문자열 미보존 — 표기·공백·지수·부호 변형(가장 흔한 훼손)
+#   EXTRA_EQUATION    방정식 외 추가 '=' — 거짓 등식 주입 벡터
+#   HYGIENE_REJECT    위생 validator 거부(격리된 거짓 수치 등식·틀린 해 등)
+#   NO_CHANGE         출력이 원문과 동일 — 다양화 실패(오염 아님·안전)
+REASON_NO_EQUATION = "NO_EQUATION"
+REASON_PROVIDER_ERROR = "PROVIDER_ERROR"
+REASON_EMPTY = "EMPTY"
+REASON_EQUATION_ALTERED = "EQUATION_ALTERED"
+REASON_EXTRA_EQUATION = "EXTRA_EQUATION"
+REASON_HYGIENE_REJECT = "HYGIENE_REJECT"
+REASON_NO_CHANGE = "NO_CHANGE"
 
 _SYSTEM_PROMPT = """당신은 WhyMath의 **발문 다양화 편집자**입니다. 주어진 한국어 수학 문제의
 *발문 문장 표현만* 자연스럽게 다시 씁니다. 절대 규칙:
@@ -69,16 +93,20 @@ _EQUATION_RE = re.compile(r"[0-9x(][0-9x^()+\-*/ ]*=\s*[0-9]+")
 
 @dataclass(frozen=True, slots=True)
 class RephraseOutcome:
-    """rephrase 1건 결과 — 최종 발문 + 실제 변경 여부 + 사유(fail-closed 관측).
+    """rephrase 1건 결과 — 최종 발문 + 실제 변경 여부 + 사유·reason-code·원 LLM 출력.
 
     `text`는 항상 유효한 발문이다: rephrase가 검증을 통과하면 다양화된 문장, 실패(추출 불가·검증
     실패·provider 예외)면 **원문 그대로**(fail-closed — 비결정 오염이 수치에 새지 않음). `rephrased`
-    가 False면 `reason`이 왜 원문을 유지했는지 설명한다(조용한 실패 금지).
+    가 False면 `reason`이 왜 원문을 유지했는지(사람용 문장)·`reason_code`가 구조적 분류(taxonomy·
+    위 `REASON_*`)를 준다. `raw_output`은 실패 시 LLM이 실제로 낸 문자열(검증 전)이라 무엇이 봉인을
+    깼는지 사후 디버깅할 수 있다(성공·추출 실패 시 None). 조용한 실패 금지 + 사후 분석 가능.
     """
 
     text: str
     rephrased: bool
     reason: str | None = None
+    reason_code: str | None = None
+    raw_output: str | None = None
 
 
 def extract_equation(question_text: str) -> str | None:
@@ -91,17 +119,21 @@ def extract_equation(question_text: str) -> str | None:
     return match.group(0).strip() if match is not None else None
 
 
-def verify_numeric_invariance(
+def classify_invariance_failure(
     rephrased_text: str,
     *,
     equation: str,
     validator: SeedValidator | None = None,
 ) -> str | None:
-    """rephrase 결과의 수치 불변을 결정론으로 검증 — 통과=정제 문자열, 실패=None.
+    """rephrase 결과가 수치 불변 봉인을 어겼으면 *어느 관문*인지 reason-code로 분류 — 통과=None.
 
-    ① 비어있지 않음 ② 방정식 문자열이 substring으로 그대로 보존 ③ **추가 등식 금지**(보존
-    방정식을 제거한 나머지에 `=`가 없음 — 거짓 등식 주입 벡터의 구조적 봉인) ④ 위생 validator
-    통과(보강). 하나라도 어기면 None(호출부가 원문 유지). LLM·DB·네트워크 0(순수 결정론).
+    검사 순서(먼저 걸린 사유 반환): ① 비어있음(`EMPTY`) ② 방정식 substring 미보존
+    (`EQUATION_ALTERED` — 표기·공백·지수·부호 변형) ③ 방정식 외 추가 `=`(`EXTRA_EQUATION` —
+    거짓 등식 주입) ④ 위생 validator 거부(`HYGIENE_REJECT`). 모두 통과면 None(수치 불변).
+
+    이것이 검증의 단일 진실 원천이다 — `verify_numeric_invariance`가 이 위에 얇게 얹힌다(중복
+    로직 금지). reason-code는 진단 harness가 실패를 taxonomy로 집계하고 raw 출력을 dump해 "왜
+    깨졌나"를 사후 분석하게 한다(온톨로지화). LLM·DB·네트워크 0(순수 결정론).
 
     ③이 핵심 봉인인 이유: 위생 validator(default_seed_validator)는 한글 문장 사이에 임베디드된
     거짓 산술식('… 2+2=5 …')을 토큰화 한계로 놓친다(실측). 우리 발문은 방정식 외 `=`이 없으므로,
@@ -110,15 +142,34 @@ def verify_numeric_invariance(
     """
     text = rephrased_text.strip()
     if not text:
-        return None
+        return REASON_EMPTY
     if equation not in text:
-        return None  # 방정식 substring 봉인 위반 — 수식이 바뀌었거나 표기 변형됨.
+        return REASON_EQUATION_ALTERED  # 방정식 substring 봉인 위반 — 수식·표기 변형.
     if "=" in text.replace(equation, "", 1):
-        return None  # 방정식 외 추가 등식 — 거짓 등식 주입 차단(구조적 봉인).
+        return REASON_EXTRA_EQUATION  # 방정식 외 추가 등식 — 거짓 등식 주입.
     active = validator if validator is not None else default_seed_validator()
     if validate_response(active, text) is not None:
-        return None  # 위생 게이트(보강) — 격리된 거짓 수치 등식/부등식/틀린 해.
-    return text
+        return REASON_HYGIENE_REJECT  # 위생 게이트 — 격리된 거짓 수치 등식/부등식/틀린 해.
+    return None
+
+
+def verify_numeric_invariance(
+    rephrased_text: str,
+    *,
+    equation: str,
+    validator: SeedValidator | None = None,
+) -> str | None:
+    """rephrase 결과의 수치 불변을 결정론으로 검증 — 통과=정제 문자열, 실패=None.
+
+    `classify_invariance_failure`에 위임한다(단일 진실 원천) — 사유 코드가 없으면(통과) strip한
+    문자열을, 있으면 None을 돌려 호출부가 원문을 유지하게 한다(fail-closed).
+    """
+    if (
+        classify_invariance_failure(rephrased_text, equation=equation, validator=validator)
+        is not None
+    ):
+        return None
+    return rephrased_text.strip()
 
 
 class QuestionRephraser:
@@ -146,22 +197,35 @@ class QuestionRephraser:
         self._loop: asyncio.AbstractEventLoop | None = None
 
     def rephrase(self, question_text: str) -> RephraseOutcome:
-        """발문 1건을 다양화 — 수식 보존·위생 통과 시 정제, 아니면 원문(fail-closed)."""
+        """발문 1건을 다양화 — 수식 보존·위생 통과 시 정제, 아니면 원문(fail-closed).
+
+        실패 시 `reason_code`(taxonomy)와 `raw_output`(LLM 실제 출력)을 실어 사후 진단을 가능케
+        한다 — 성공·추출 실패 외에는 원 출력을 버리지 않는다(무엇이 봉인을 깼는지 dump 가능).
+        """
         equation = extract_equation(question_text)
         if equation is None:
-            return RephraseOutcome(question_text, False, "방정식 추출 실패 — 봉인 대상 부재")
+            return RephraseOutcome(
+                question_text, False, "방정식 추출 실패 — 봉인 대상 부재", REASON_NO_EQUATION
+            )
 
         try:
             raw = self._invoke(question_text, equation)
         except Exception as error:  # noqa: BLE001 — provider 장애는 조용한 크래시 금지·원문 폴백
             _logger.warning("발문 rephrase provider 예외 — 원문 유지: %s", error)
-            return RephraseOutcome(question_text, False, f"provider 예외: {error}")
+            return RephraseOutcome(
+                question_text, False, f"provider 예외: {error}", REASON_PROVIDER_ERROR
+            )
 
-        verified = verify_numeric_invariance(raw, equation=equation, validator=self._validator)
-        if verified is None:
-            return RephraseOutcome(question_text, False, "수치 불변 검증 실패 — 원문 유지")
+        failure = classify_invariance_failure(raw, equation=equation, validator=self._validator)
+        if failure is not None:
+            return RephraseOutcome(
+                question_text, False, "수치 불변 검증 실패 — 원문 유지", failure, raw_output=raw
+            )
+        verified = raw.strip()
         if verified == question_text:
-            return RephraseOutcome(question_text, False, "출력이 원문과 동일 — 다양화 없음")
+            return RephraseOutcome(
+                question_text, False, "출력이 원문과 동일 — 다양화 없음", REASON_NO_CHANGE, raw
+            )
         return RephraseOutcome(verified, True, None)
 
     # ── LLM 호출(라우터 경유·GENERAL 저작 패밀리·지속 이벤트 루프) ────────

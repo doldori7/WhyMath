@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-07 (구현·L3+harness): **rephrase 실패 진단 — reason-code taxonomy + 실패 dump(raw output) + skeleton별 수율**
+
+**무엇/왜**: 온도 스윕은 *얼마나* 실패하는지(변형률)만 보여주고 *왜·무엇이* 실패하는지는 "수치 불변 검증 실패" 한 줄뿐이라 디버깅이 불가능했다(라이브 관찰). 실패를 온톨로지화하는 진단 계층을 추가.
+- **reason-code taxonomy(`l3/equivalent/rephrase.py`)**: `classify_invariance_failure`가 실패를 `EMPTY`·`EQUATION_ALTERED`(방정식 표기 훼손)·`EXTRA_EQUATION`(거짓 등식 주입)·`HYGIENE_REJECT`(거짓 부등식 등)로 분류(검사 순서=코드 경로). `verify_numeric_invariance`는 이 위에 얇게 재구현(단일 진실 원천·중복 제거). rephrase()가 `NO_EQUATION`·`PROVIDER_ERROR`·`NO_CHANGE`까지 7코드로 `RephraseOutcome.reason_code`·`raw_output`(실패 시 LLM 실제 출력 보존) 방출. **우리가 실제 검출하는 경로에만 1:1**(값 동치 3.0↔3·단위 spacing 등은 우리 게이트가 안 봐서 코드 미발명 — 정직 taxonomy).
+- **진단 harness(`harness/problem_corpus_rephrase_diagnose`)**: 코퍼스 샘플을 rephrase에 태워 ① reason-code 히스토그램 ② skeleton 유형별 수율(성취기준·발문형식·답형식으로 유형 유도 — 자연수/분수/실수 근이 갈림·취약 유형 탐지) ③ 실패 케이스 `--dump`(JSONL: slug·temperature·reason_code·skeleton_key·original·**rephrased_raw**) 방출. 측정 전용·코퍼스 미기록·limit 시도 상한(스윕 동형).
+- **hermetic**: 실패 유형별 FakeProvider로 라이브 0 검증(taxonomy 유닛 5·진단 harness 9·rephrase reason_code 봉인). 실 진단은 Phaiakes9.
+
+**🔒 불변**: `RephraseOutcome`/`verify_numeric_invariance` 하위호환(신규 필드 optional·verify 반환 계약 동일)·L3→L4 import 0·dump 산출 repo 미커밋(라이브 아티팩트). CI-exact 4게이트 green·pytest 5561 passed. **다음(라이브)**: `--dump`로 실패 표본 뽑아 EQUATION_ALTERED 실제 변형 패턴 분석 → rephrase 프롬프트 방정식 보존 강화(순 병목 저감).
+
 ### 2026-07-07 (라이브 실측+구현·harness): **온도 스윕 라이브 실측 — 0.7 vs 0.9 차이가 n=50 노이즈에 묻힘 → `--repeats` 반복 평균화 추가**
 
 **라이브 실측(새 Phaiakes9·Ollama qwen2.5 GENERAL·seed=생성 코퍼스 350건·limit 50)**:

@@ -1,0 +1,168 @@
+"""rephrase 실패 진단 CLI 단위테스트(hermetic) — 실패 유형별 FakeProvider로 라이브 0.
+
+핵심: 각 실패 유형(EQUATION_ALTERED·EXTRA_EQUATION·EMPTY·NO_CHANGE·성공)을 흉내내는 provider로
+① reason-code taxonomy 집계 ② 원 LLM 출력이 실패 케이스에 dump되는지 ③ skeleton 유형별 수율
+그룹핑 ④ --dump JSONL 기록 ⑤ provider 미주입 main이 PROVIDER_ERROR로 정직 관측됨을 봉인한다.
+"""
+
+from __future__ import annotations
+
+import json
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+
+from whymath_backend.harness.problem_corpus_batch import run_corpus_batch
+from whymath_backend.harness.problem_corpus_rephrase_diagnose import (
+    main,
+    run_rephrase_diagnose,
+)
+from whymath_backend.l3.equivalent.rephrase import (
+    REASON_EMPTY,
+    REASON_EQUATION_ALTERED,
+    REASON_EXTRA_EQUATION,
+    REASON_NO_CHANGE,
+    REASON_PROVIDER_ERROR,
+    QuestionRephraser,
+)
+from whymath_backend.l3.models import RoutingDecision
+
+
+def _base(prompt: str) -> str:
+    for line in prompt.splitlines():
+        if line.startswith("원 발문: "):
+            return line[len("원 발문: ") :]
+    return "무효"  # pragma: no cover — 프롬프트 형식 보증
+
+
+class _ScriptedProvider:
+    """발문을 고정 규칙으로 변형해 특정 실패 유형을 결정론으로 유발(hermetic 좌석)."""
+
+    def __init__(self, transform: str) -> None:
+        self._transform = transform
+
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
+        temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
+    ) -> str:
+        base = _base(prompt)
+        if self._transform == "success":
+            return base + " (다양화)"
+        if self._transform == "altered":
+            return "이차방정식의 근을 구하시오"  # 방정식 substring 소실 → EQUATION_ALTERED.
+        if self._transform == "extra_eq":
+            return base + " 참고 2+2=5"  # 방정식 외 추가 등식 → EXTRA_EQUATION.
+        if self._transform == "empty":
+            return ""  # → EMPTY.
+        return base  # echo → NO_CHANGE.
+
+
+def _seed_corpus(tmp_path: Path, *, short_n: int = 8, mc_n: int = 4) -> Path:
+    src = tmp_path / "src.jsonl"
+    report = run_corpus_batch(
+        out_path=src,
+        short_n=short_n,
+        mc_n=mc_n,
+        sqrt_n=0,
+        sqrt_mc_n=0,
+        calc_extremum_n=0,
+        calc_tangent_n=0,
+        calc_value_n=0,
+        exp_n=0,
+        log_n=0,
+        write=True,
+    )
+    assert report.fulfilled
+    return src
+
+
+def _diagnose(src: Path, transform: str, *, limit: int | None = None):
+    provider = _ScriptedProvider(transform)
+    return run_rephrase_diagnose(
+        in_path=src,
+        rephraser=QuestionRephraser(provider, temperature=0.7),  # type: ignore[arg-type]
+        temperature=0.7,
+        limit=limit,
+    )
+
+
+class TestRunRephraseDiagnose:
+    def test_success_provider_has_no_failures(self, tmp_path: Path) -> None:
+        report = _diagnose(_seed_corpus(tmp_path), "success")
+        assert report.attempted == report.rephrased == 12
+        assert report.reason_histogram == {}
+        assert report.failures == []
+        for stat in report.skeleton_stats:
+            assert stat.rate == 1.0
+
+    def test_altered_provider_classifies_and_keeps_raw_output(self, tmp_path: Path) -> None:
+        report = _diagnose(_seed_corpus(tmp_path), "altered")
+        assert report.rephrased == 0
+        assert report.reason_histogram == {REASON_EQUATION_ALTERED: 12}
+        assert len(report.failures) == 12
+        for case in report.failures:
+            assert case.reason_code == REASON_EQUATION_ALTERED
+            assert case.rephrased_raw == "이차방정식의 근을 구하시오"  # 원 LLM 출력 보존.
+            assert case.original  # 원문도 함께 기록.
+
+    def test_extra_equation_classified(self, tmp_path: Path) -> None:
+        report = _diagnose(_seed_corpus(tmp_path), "extra_eq")
+        assert report.reason_histogram == {REASON_EXTRA_EQUATION: 12}
+
+    def test_empty_output_classified(self, tmp_path: Path) -> None:
+        report = _diagnose(_seed_corpus(tmp_path), "empty")
+        assert report.reason_histogram == {REASON_EMPTY: 12}
+        assert all(case.rephrased_raw == "" for case in report.failures)
+
+    def test_echo_output_is_no_change(self, tmp_path: Path) -> None:
+        report = _diagnose(_seed_corpus(tmp_path), "echo")
+        assert report.reason_histogram == {REASON_NO_CHANGE: 12}
+
+    def test_skeleton_stats_group_by_type(self, tmp_path: Path) -> None:
+        # short(단답형)·mc(객관식)는 발문형식이 달라 skeleton 키가 갈린다.
+        report = _diagnose(_seed_corpus(tmp_path, short_n=8, mc_n=4), "success")
+        keys = {stat.skeleton_key for stat in report.skeleton_stats}
+        assert len(keys) >= 2  # 최소 단답형·객관식 2유형.
+        assert sum(stat.attempted for stat in report.skeleton_stats) == report.attempted
+
+    def test_limit_caps_attempts(self, tmp_path: Path) -> None:
+        report = _diagnose(_seed_corpus(tmp_path), "altered", limit=5)
+        assert report.attempted == 5
+        assert report.limit == 5
+        assert len(report.failures) == 5
+
+
+class TestCliEntry:
+    def test_dump_writes_failures_jsonl(self, tmp_path: Path, capsys: object) -> None:
+        src = _seed_corpus(tmp_path)
+        dump = tmp_path / "failures.jsonl"
+        # provider 미주입 main → 전건 PROVIDER_ERROR(라이브 부재)·그 실패가 dump된다.
+        code = main(["--in", str(src), "--limit", "4", "--dump", str(dump), "--json"])
+        assert code == 0
+        assert dump.exists()
+        rows = [json.loads(line) for line in dump.read_text(encoding="utf-8").splitlines() if line]
+        assert len(rows) == 4
+        for row in rows:
+            assert row["reason_code"] == REASON_PROVIDER_ERROR
+            assert set(row) == {
+                "slug",
+                "temperature",
+                "reason_code",
+                "skeleton_key",
+                "original",
+                "rephrased_raw",
+            }
+        report = json.loads(capsys.readouterr().out)  # type: ignore[attr-defined]
+        assert report["reason_histogram"] == {REASON_PROVIDER_ERROR: 4}
+
+    def test_main_summary_output(self, tmp_path: Path, capsys: object) -> None:
+        src = _seed_corpus(tmp_path)
+        code = main(["--in", str(src), "--limit", "3"])
+        assert code == 0
+        out = capsys.readouterr().out  # type: ignore[attr-defined]
+        assert "reason-code" in out and "skeleton 유형별 수율" in out
