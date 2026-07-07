@@ -83,13 +83,14 @@ def _seed_corpus(tmp_path: Path, *, short_n: int = 8, mc_n: int = 4) -> Path:
     return src
 
 
-def _diagnose(src: Path, transform: str, *, limit: int | None = None):
+def _diagnose(src: Path, transform: str, *, limit: int | None = None, offset: int = 0):
     provider = _ScriptedProvider(transform)
     return run_rephrase_diagnose(
         in_path=src,
         rephraser=QuestionRephraser(provider, temperature=0.7),  # type: ignore[arg-type]
         temperature=0.7,
         limit=limit,
+        offset=offset,
     )
 
 
@@ -138,6 +139,15 @@ class TestRunRephraseDiagnose:
         assert report.limit == 5
         assert len(report.failures) == 5
 
+    def test_offset_skips_leading_records(self, tmp_path: Path) -> None:
+        # 앞 offset건 건너뛰기 — 뒤쪽 밴드(지수·로그) 저비용 타게팅(quad 재실행 회피).
+        src = _seed_corpus(tmp_path)  # 12건
+        full = _diagnose(src, "success")
+        tail = _diagnose(src, "success", offset=8)
+        assert full.attempted == 12
+        assert tail.attempted == 4  # 앞 8건 건너뜀 → 남은 4건만 시도.
+        assert tail.total == 4  # 처리 창 크기.
+
 
 class TestCliEntry:
     def test_dump_writes_failures_jsonl(self, tmp_path: Path, capsys: object) -> None:
@@ -168,3 +178,18 @@ class TestCliEntry:
         assert code == 0
         out = capsys.readouterr().out  # type: ignore[attr-defined]
         assert "reason-code" in out and "skeleton 유형별 수율" in out
+
+    def test_main_offset_reaches_tail(self, tmp_path: Path, capsys: object) -> None:
+        src = _seed_corpus(tmp_path)  # 12건
+        code = main(["--in", str(src), "--offset", "10", "--json"])
+        assert code == 0
+        report = json.loads(capsys.readouterr().out)  # type: ignore[attr-defined]
+        assert report["total"] == 2  # 앞 10건 건너뜀 → 처리 창 2건.
+        assert report["attempted"] == 2
+
+    def test_main_rejects_negative_offset(self, tmp_path: Path) -> None:
+        import pytest
+
+        src = _seed_corpus(tmp_path)
+        with pytest.raises(SystemExit):
+            main(["--in", str(src), "--offset", "-1"])

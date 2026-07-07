@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-07 (구현·L3/harness): **exp/log rephrase 갭 1차 수복 — log 추출 정규식 log_ 접두 포함 + diagnose --offset**
+
+**무엇/왜**: rephrase 코퍼스 v0에서 exp/log 45건이 사실상 다양화 0으로 드러난 갭의 결정론 부분을 수복.
+- **log 추출 버그 수복(핵심)**: `_EQUATION_RE`가 `log_5 x = 2`에서 `log_` 접두를 놓쳐 `5 x = 2`(선형식처럼 보이는 부분)만 추출 → 프롬프트 앵커가 "보존할 방정식: 5 x = 2"라는 **틀린 문자열**을 줘서 LLM을 혼란시켰다(log 수율 붕괴의 유력 원인). `log_[0-9]+\s*x\s*=\s*[0-9]+` 대안을 앞에 추가(leftmost 우선으로 `log`부터 매치) → 온전한 `log_5 x = 2` 추출. **전 코퍼스 검증: 20건(전부 log) 온전 추출·비-log(quad/exp/calc) 회귀 0·이상적 rephrase 게이트 전건 통과.** 이건 correctness 버그 수복이자 안전 강화(구 추출은 `log_5`→`log_6` 변형을 놓칠 여지).
+- **exp는 추출 정상**(`5^x = 25` 온전) — 정규식 문제 아님. exp ~0% 실패는 미측정이라 **추측 금지**(v2 교훈): 실 raw dump 확보 후 evidence로 처리.
+- **diagnose `--offset` 추가**: 파일 앞 N건 건너뛰기 — 지수·로그가 코퍼스 끝 45건(idx 305~349)에 몰려 있어 `--offset 305 --limit 45`로 quad 수백 건 재실행 없이 exp/log만 저비용 진단. 테스트 4건(offset 함수·CLI·음수 거부·tail 도달).
+
+**🔒 불변**: 검증 게이트 로직·taxonomy·기존 quad/exp 추출 무변경(additive 대안). 커밋된 rephrase 코퍼스 v0 무영향(추출은 rephrase *시점* 함수·정적 데이터 불변). **다음(라이브)**: ① `--offset 305`로 exp/log 진단 재실행 → log 수율 회복 확인 + exp raw failure dump 확보 ② exp 실패 패턴(표기 변형 추정) 확인 후 evidence 기반 처리 ③ 개선 확인 시 코퍼스 재-rephrase.
+
 ### 2026-07-07 (라이브 산출+구현·L1): **rephrase 코퍼스 v0 라이브 산출(176/350 다양화·오염 0) + 저장소 품질 봉인**
 
 **무엇/왜**: v3 프롬프트로 생성 코퍼스 350건 전건을 Phaiakes9에서 rephrase(`problem_bank_rephrased_v0/problems.jsonl`). 리포트 rephrased 172·산출 발문 변경 176(4건 차는 count 나노이즈·무해). 결정론 재검증으로 **오염 0 확인**: ① question_text 외 전 필드 소스와 바이트 동일(answer·verify·choices·conditions·distractor·난이도·개념·서명) ② 발문 변경 176건 전부 소스 방정식이 게이트 재검증 통과.
