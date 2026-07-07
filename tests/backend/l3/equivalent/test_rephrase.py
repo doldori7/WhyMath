@@ -148,18 +148,18 @@ class TestRephrase:
         QuestionRephraser(provider).rephrase(_Q)
         assert provider.calls[0]["temperature"] == 0.7
 
-    def test_system_prompt_carries_preservation_layers(self) -> None:
-        # 프롬프트 5계층 보존 강화 봉인 — 불변식·금지 목록·negative example·자가 점검·정책 앵커.
-        # (실측: 실패 100%가 EQUATION_ALTERED — 이 계층들이 그 과녁을 겨냥하는지 회귀 방지.)
+    def test_system_prompt_is_lean_with_policy_anchor(self) -> None:
+        # v3 프롬프트 봉인 — 라이브 A/B 실측(v2 5계층이 82%→57% 역행·EXTRA_EQUATION 누출·
+        # attention 희석)에 따라: 정책 앵커(v2에서 유일 유효 계층)는 유지하되, 역효과 계층
+        # (negative example·마크다운 섹션)의 재유입을 회귀 차단한다.
         provider = _FakeProvider(["이차방정식 3x^2 - 7x + 4 = 0 의 더 큰 근을 구하라."])
         QuestionRephraser(provider).rephrase(_Q)
         system = provider.calls[0]["system"]
         assert isinstance(system, str)
-        assert "수학 불변식" in system  # ① 불변식 명시
-        assert "금지되는 변형" in system and "허용되는 변형" in system  # ② 허용/금지 연산
-        assert "잘못된 예" in system  # ③ negative examples(실측 훼손 패턴)
-        assert "자가 점검" in system  # ④ 출력 전 self-check
-        assert "원 발문을 그대로" in system  # ⑤ 정책 앵커(보존 불가 시 원문)
+        assert "원 발문을 그대로" in system  # 정책 앵커 — 보존 불가 시 원문(NO_CHANGE 안전 흡수).
+        assert "잘못된 예" not in system  # negative example 금지 — 소형 모델 시연 오독·누출(실측).
+        # 방정식 리터럴은 규칙 예시 1개만 — 프롬프트 내 방정식 수가 곧 출력 누출 표면(실측).
+        assert system.count("= 0") == 1
 
     def test_altered_equation_fails_closed_to_original(self) -> None:
         altered = "이차방정식 3x^2 - 7x + 9 = 0 큰 근은?"
