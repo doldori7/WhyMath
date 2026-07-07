@@ -52,9 +52,7 @@ _P_SEQ = SignaturePattern.INDUCTIVE_SEQUENCE
 class _FakeScalarResult:
     """`.scalar()`(count)·`.one()`(AVG, count)·`.all()`(행 목록)을 반환하는 execute 결과."""
 
-    def __init__(
-        self, scalar: Any = None, one: Any = None, all_rows: Any = None
-    ) -> None:
+    def __init__(self, scalar: Any = None, one: Any = None, all_rows: Any = None) -> None:
         self._scalar = scalar
         self._one = one
         self._all = all_rows if all_rows is not None else []
@@ -386,9 +384,7 @@ class TestUnmeasuredMetrics:
         assert m.status is MetricStatus.NO_DATA  # REQUIRES_TOOL 아님
         assert m.value is None
         assert "전이" in m.note
-        assert (
-            "assign_transfer_probe" not in m.note or "다른" in m.note
-        )  # 근사 표기 존재
+        assert "assign_transfer_probe" not in m.note or "다른" in m.note  # 근사 표기 존재
 
     async def test_calibration_no_longer_requires_tool(self) -> None:
         """⑥ 보정 점수 — 보정 쌍 0건이면 REQUIRES_TOOL이 아니라 NO_DATA(stale 진단 교정)."""
@@ -483,10 +479,7 @@ class TestDiagnosisAgreementOffline:
             until=datetime(2026, 6, 1, tzinfo=UTC),
         )
         # 진단정확도는 user/기간과 무관(시스템 지표) — value·표본 동일.
-        assert (
-            m_cohort.diagnosis_agreement_rate.value
-            == m_user.diagnosis_agreement_rate.value
-        )
+        assert m_cohort.diagnosis_agreement_rate.value == m_user.diagnosis_agreement_rate.value
         assert m_cohort.sample_diagnostic_probes == m_user.sample_diagnostic_probes
 
 
@@ -542,9 +535,7 @@ class TestCalibrationFromPairs:
 
     def test_too_few_pairs_is_no_data_not_fake_zero(self) -> None:
         """쌍 < _MIN_CALIBRATION_SAMPLES → NO_DATA·value None(가짜 0/Brier 금지)."""
-        m = _calibration_from_pairs(
-            self._pairs(_MIN_CALIBRATION_SAMPLES - 1, 0.5, True)
-        )
+        m = _calibration_from_pairs(self._pairs(_MIN_CALIBRATION_SAMPLES - 1, 0.5, True))
         assert m.status is MetricStatus.NO_DATA
         assert m.value is None  # 0이 아님!
         assert "표본 부족" in m.note
@@ -584,17 +575,13 @@ class TestCalibrationBrierIntegratedWithCompute:
 
     async def test_measured_perfect(self) -> None:
         """완벽 보정 5쌍 → MEASURED·Brier 0."""
-        m = await self._brier(
-            [(1.0, True), (1.0, True), (0.0, False), (0.0, False), (1.0, True)]
-        )
+        m = await self._brier([(1.0, True), (1.0, True), (0.0, False), (0.0, False), (1.0, True)])
         assert m.status is MetricStatus.MEASURED
         assert m.value == 0.0
 
     async def test_measured_total_miscalibration(self) -> None:
         """완전 오보정 5쌍 → MEASURED·Brier 1."""
-        m = await self._brier(
-            [(1.0, False), (1.0, False), (0.0, True), (0.0, True), (1.0, False)]
-        )
+        m = await self._brier([(1.0, False), (1.0, False), (0.0, True), (0.0, True), (1.0, False)])
         assert m.status is MetricStatus.MEASURED
         assert m.value == 1.0
 
@@ -938,13 +925,9 @@ class TestMetaAndFieldSet:
         assert m.sample_difficulty_attempts == 3  # 유효 b(Problem join) 행 수
         assert m.sample_calibration_pairs == 5  # 유효 보정 쌍 수
         assert m.sample_transfer_probes == 3  # ⑦ 전이 프로브 수(초견·사전 노출·패턴별)
-        assert (
-            m.sample_diagnostic_probes == 63
-        )  # ② recall 프로브 수(시스템 지표·프로브셋 크기)
+        assert m.sample_diagnostic_probes == 63  # ② recall 프로브 수(시스템 지표·프로브셋 크기)
         assert m.sample_mastery_groups == 2  # ⑨ 자격 (user,concept) 그룹 수(≥2점)
-        assert (
-            m.sample_misconception_hypotheses == 5
-        )  # ⑩ 오개념 가설 총수(비활성 2 포함)
+        assert m.sample_misconception_hypotheses == 5  # ⑩ 오개념 가설 총수(비활성 2 포함)
         # difficulty_slope 필드 노출(양수=난이도 상승·음수=쉬워짐). 여기선 하강(1→0.5→0)이라 음수.
         assert m.help_reduction_validated.difficulty_slope is not None
         # ⑥ 보정 점수 — 5쌍 >= MIN → MEASURED·value 실수(Brier∈[0,1]).
