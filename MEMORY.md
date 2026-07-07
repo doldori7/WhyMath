@@ -347,6 +347,14 @@
 - **테스트** — 신규 `test_calculus_irrational_extremum_generator.py`(게이트 수용·독립 유도 문자 일치·극대극소↔선택·답 무리수·삼차식 정수계수·풀 서로소·slug 접두). difficulty·batch 테스트 갱신. 격리 배치 테스트 6파일에 `calc_extremum_irr_n=0` 추가(기본 30 파급 차단).
 
 **🔒 불변**: acceptance/orchestrator/canonicalize/근 선택 검증 스택 무변경·L3→L4 import 0·저작권 레일(자체생성·WHYMATH_GENERATED). **오개념 카탈로그(34)·프로브(102/65)·M-id 코퍼스(843)·op-code(10) 전부 불변**(신규 오개념 0 → pending 게이트 미발생 → blind auto-merge 허용). **범위 밖(후속)**: 무리 접선점(calc-tangent-irr·동일 청정 패턴)·극값의 값 무리수·근의 합/곱(근-비환원)·crosswalk M0864/M0865 사람 검수(Kiki 소관).
+### 2026-07-07 (구현·ops·§10 라이브 준비): **라이브 프리플라이트 검증 모듈 — 키 투입 직후 1콜 검증**
+
+**무엇/왜**: Phaiakes9 라이브 키 투입(Kiki 수동)을 턴키화. 투입 **직후 1회** `python -m whymath_backend.ops.live_preflight` 실행 → ① cloud_configured(`Settings().anthropic_configured`) ② langfuse_configured(`Settings().langfuse_configured`) ③ (설정 시) 실 클라우드 **CLOUD_MID(Sonnet) 1콜** → 실측 usage→`actual_cost_krw` 비용 출력. §11 계측(#465/#467)이 실제로 흐르는지 즉석 확인. 런북 §10의 다단계 pytest 스모크를 이 단일 명령으로 교체.
+- **설계**: 순수 코어 `run_preflight(settings, *, smoke, provider factories) -> Report` + 얇은 CLI `main`. 판정·비용·CLOUD 강제·None-vs-0(pipeline.py:234-241 동형·'미상'≠'0원')은 **전부 기존 함수 재사용**(신규 로직 최소). **서버 불필요**(provider.check_status 직접). **시크릿 값 미출력**(설정 여부 bool·비용·토큰만).
+- **위치**: `whymath_backend/ops/`(신규 패키지) — import-linter named layers 밖 단독 진입점이라 config/l3 import 무제약(`lint-imports` green 확인). scripts/(비게이트) 대신 패키지 내라 mypy/pytest 게이트 대상.
+- **판단**: Ollama 도달성은 stdout/JSON에 보고하되 **종료코드에서 제외** — 이 도구가 검증하는 건 방금 주입한 *클라우드/관측성* 키 흐름이고, 로컬 스택 없는 드라이런/CI에서 항상 non-zero가 되는 걸 피함. exit=2는 *클라우드 설정됐는데* 도달 불가/스모크 예외일 때만.
+
+**결과**: 5게이트 green(mypy 329파일·pytest exit 0·ops 커버리지 94%·ops 테스트 14). 드라이런(키 무) exit 0·"미설정·스모크 skip" 정상. **후속(범위 밖)**: 실 키 스모크는 Kiki 라이브 머신에서(모델 alias 실재성도 이때 확인).
 
 ### 2026-07-07 (라이브 산출+구현·L1): **rephrase 코퍼스 v453 재생성 — log 다양화 0→70% 회복·오염 0**
 

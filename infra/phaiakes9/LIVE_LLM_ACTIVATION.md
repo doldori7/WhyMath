@@ -224,19 +224,22 @@ gen = LLMEquivalentProblemGenerator(
 > 그 ID가 `404 model not found`면 `WHYMATH_ANTHROPIC_MODEL_MID`/`_HIGH`로 **키에서 실제 사용 가능한
 > ID**를 핀한다(코드 변경 0 — env 오버라이드가 정본, config.py 주석).
 
-**활성 확인**:
+**활성 확인 — 단일 명령(키 투입 직후 1회)**:
 ```powershell
-# API 서버 기동 후
-# GET /status → cloud_configured=True (Anthropic 키 감지) · Langfuse 활성 여부
+cd WhyMath\src\backend; .venv\Scripts\Activate.ps1
+python -m whymath_backend.ops.live_preflight            # 스모크 on(기본) — 실 CLOUD_MID 1콜
+# python -m whymath_backend.ops.live_preflight --no-smoke        # 판정·도달성만(실 호출 없음)
+# python -m whymath_backend.ops.live_preflight --json preflight.json   # JSON 리포트도 저장
 ```
-- 코드 경로: `AnthropicProvider.check_status()`(anthropic.py:362) · `Settings.langfuse_configured`
-  (config.py:956, 공개키+시크릿키 둘 다 존재 시 True).
-- 스모크(라이브 통합 테스트, 기본 SKIP): `WHYMATH_RUN_INTEGRATION=1` + 위 키로
-  ```powershell
-  cd WhyMath\src\backend; .venv\Scripts\Activate.ps1
-  $env:WHYMATH_RUN_INTEGRATION="1"
-  python -m pytest ..\..\tests\backend\l3\test_anthropic_integration.py ..\..\tests\backend\l3\test_langfuse_integration.py -q
-  ```
+이 한 명령이 서버 기동 없이 방금 넣은 키의 계측 흐름을 즉석 검증한다(내부적으로 /status가 하는
+`check_status()`를 provider 직접 호출로 대체):
+- **① cloud_configured** = `Settings().anthropic_configured`(config.py:965) — Anthropic 키 감지.
+- **② langfuse_configured** = `Settings().langfuse_configured`(config.py:956) — 공개키+시크릿키 둘 다.
+- **도달성** — Anthropic `check_status()`(anthropic.py:362)·Ollama `check_status()`(ollama.py:317).
+- **③ 클라우드 스모크** — 스모크 on·키 설정 시 실 **CLOUD_MID(Sonnet)** 1콜 → 실측 `cost_krw`·토큰
+  출력(`actual_cost_krw`, router.py:154). 키 없으면 "스모크 skip(키 없음)"으로 graceful skip.
+- 종료 코드: **0**=정상(미설정은 정보) · **2**=설정됐는데 도달 불가/스모크 실패. 시크릿 값은 절대
+  출력하지 않는다(설정 여부 bool·비용·토큰만). 출력의 **③ 실측 비용·토큰**을 아래 §11 판독과 대조한다.
 
 ---
 
