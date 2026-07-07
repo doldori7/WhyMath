@@ -133,7 +133,7 @@ class TestRephrase:
         assert result.text == out
 
     def test_routes_with_general_family_and_temperature(self) -> None:
-        # 라우터 경유·저작 패밀리(GENERAL)·고온도(0.9) 전달 봉인.
+        # 라우터 경유·저작 패밀리(GENERAL)·명시 온도(0.9) 전달 봉인.
         provider = _FakeProvider(["이차방정식 3x^2 - 7x + 4 = 0 의 더 큰 근을 구하라."])
         QuestionRephraser(provider, temperature=0.9).rephrase(_Q)
         call = provider.calls[0]
@@ -141,6 +141,25 @@ class TestRephrase:
         decision = call["decision"]
         assert isinstance(decision, RoutingDecision)
         assert decision.local_family == "general"
+
+    def test_default_temperature_is_live_measured_sweet_spot(self) -> None:
+        # 기본 온도 0.7 봉인 — 라이브 스윕 실측(repeats 5·n=250/온도: 0.7=78.4% vs 0.9=72.8%).
+        provider = _FakeProvider(["이차방정식 3x^2 - 7x + 4 = 0 의 더 큰 근을 구하라."])
+        QuestionRephraser(provider).rephrase(_Q)
+        assert provider.calls[0]["temperature"] == 0.7
+
+    def test_system_prompt_carries_preservation_layers(self) -> None:
+        # 프롬프트 5계층 보존 강화 봉인 — 불변식·금지 목록·negative example·자가 점검·정책 앵커.
+        # (실측: 실패 100%가 EQUATION_ALTERED — 이 계층들이 그 과녁을 겨냥하는지 회귀 방지.)
+        provider = _FakeProvider(["이차방정식 3x^2 - 7x + 4 = 0 의 더 큰 근을 구하라."])
+        QuestionRephraser(provider).rephrase(_Q)
+        system = provider.calls[0]["system"]
+        assert isinstance(system, str)
+        assert "수학 불변식" in system  # ① 불변식 명시
+        assert "금지되는 변형" in system and "허용되는 변형" in system  # ② 허용/금지 연산
+        assert "잘못된 예" in system  # ③ negative examples(실측 훼손 패턴)
+        assert "자가 점검" in system  # ④ 출력 전 self-check
+        assert "원 발문을 그대로" in system  # ⑤ 정책 앵커(보존 불가 시 원문)
 
     def test_altered_equation_fails_closed_to_original(self) -> None:
         altered = "이차방정식 3x^2 - 7x + 9 = 0 큰 근은?"
