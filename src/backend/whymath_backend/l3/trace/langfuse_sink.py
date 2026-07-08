@@ -203,3 +203,32 @@ class LangfuseSink:
         except Exception:  # noqa: BLE001 — 관측성 장애가 학생 생성을 깨면 안 됨
             # 시크릿·PII 없이 *사실*만 경고 로그(필드값은 남기지 않는다). 삼키고 계속.
             logger.warning("Langfuse 기록 실패 — 무시하고 계속(생성 비차단)", exc_info=False)
+
+    def flush(self) -> None:
+        """버퍼된 Langfuse 이벤트를 *즉시* 강제 전송한다 (짧게 끝나는 프로세스용).
+
+        langfuse SDK는 create_event를 백그라운드 배치로 전송하므로, 프로세스가 곧바로
+        종료하는 실행(예: CLI 프리플라이트 1콜)에서는 배치가 나가기 전에 죽어 이벤트가
+        유실될 수 있다. `flush()`는 그 배치를 지금 밀어내 전송을 확정한다. *서버 상시
+        실행 경로는 이 메서드를 호출하지 않으므로 기존 동작은 완전히 무변경*이다.
+
+        record()와 *같은 안전 방침*을 그대로 따른다(모듈 docstring never-break 보장):
+          - 미설정(키 없음) → no-op(_get_client가 None). 네트워크·클라이언트 없음.
+          - 클라이언트가 flush를 노출하지 않으면(테스트 가짜·구버전) → no-op.
+          - 호출 오류 → 삼킨다(전파 금지). 관측성 장애가 흐름을 깨면 안 된다(#1 ≫ #6).
+
+        `_LangfuseClient` 시임에 flush를 넣지 않는 이유: 그 Protocol은 runtime_checkable로
+        가짜 클라이언트 위생 테스트(`isinstance(fake, _LangfuseClient)`)에 쓰인다 —
+        flush를 요구하면 flush 없는 가짜가 시임을 깨므로, 여기서 `getattr`로 *있으면
+        호출*하는 선택적 능력으로 다룬다(mypy strict 안전: Any 콜러블 가드).
+        """
+        client = self._get_client()
+        if client is None:
+            return  # 미설정 → no-op
+        flush = getattr(client, "flush", None)
+        if not callable(flush):
+            return  # flush 미노출(가짜·구버전) → no-op
+        try:
+            flush()
+        except Exception:  # noqa: BLE001 — flush 실패도 흐름을 깨면 안 됨(record와 동일 방침)
+            logger.warning("Langfuse flush 실패 — 무시하고 계속(비차단)", exc_info=False)
