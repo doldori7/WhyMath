@@ -270,3 +270,42 @@ python -m whymath_backend.ops.live_preflight            # 스모크 on(기본) �
 1회 유발 → Langfuse에서 그 `l3_routing` 레코드의 `cost_tier=CLOUD_*`·`cost_krw>0`·토큰 실측 확인.
 로컬 호출은 같은 레코드가 `cost_tier=LOCAL`·`cost_krw=0.0`. 두 분포 비율이 **S1 게이트② "루프당 비용
 실측·로컬 80%"** 판정의 근거다.
+
+---
+
+## 12. 대표 코칭 부하 측정 → router.py 4노브 튜닝 (S1-f)
+
+> **왜 §11 프리플라이트만으론 부족한가**: `live_preflight`의 스모크는 `"1+1은?"`(입력 63·출력 5
+> 토큰)이라 **비대표 1콜**이다 — 계측 흐름 검증용이지 코칭 생성 부하가 아니다. router.py의 est
+> 가정 토큰·클라우드 지연을 실측으로 튜닝하려면 **대표 코칭 크기의 호출을 여러 번** 흘려
+> p50(중앙값)를 얻어야 한다(정직성 게이트: 비대표 1건으로 수치 변경 금지).
+
+**측정 도구**(신규 `ops/measure_cloud_cost.py` — 대표 코칭 프롬프트[문제+학생 풀이+소크라테스 지시]를
+티어별 N회 `pipeline.generate` 경유, 캐시 항상-미스로 매 콜 실호출):
+
+```powershell
+# WhyMath\src\backend 에서 (§10 클라우드·Langfuse 키 설정 후)
+python -m whymath_backend.ops.measure_cloud_cost --samples 12               # MID·HIGH 각 12콜
+# python -m whymath_backend.ops.measure_cloud_cost --samples 20 --tier mid  # MID만
+# python -m whymath_backend.ops.measure_cloud_cost --samples 12 --json cost.json
+```
+
+출력은 티어별 `input_tokens`·`output_tokens`·`latency_ms`의 **p50/p90**와, 대표 표본(티어별 유효
+≥ 5) 충족 시 **router.py에 넣을 값**을 직접 안내한다. 시크릿(키)은 출력하지 않는다.
+
+**router.py 반영 4노브**(측정 p50 → 상수 대입, 나머지는 자동 재계산):
+
+| 노브 | 위치 | 입력(측정 p50) |
+|---|---|---|
+| `_EST_ASSUMED_INPUT_TOKENS` | `l3/router.py` | CLOUD_MID input_tokens p50 |
+| `_EST_ASSUMED_OUTPUT_TOKENS` | `l3/router.py` | CLOUD_MID output_tokens p50 |
+| `CLOUD_LATENCY_MS[CLOUD_MID/HIGH]` | `l3/router.py` | 각 티어 latency_ms p50 |
+| `USD_TO_KRW` | `l3/router.py` | 라이브 시점 환율(측정 무관·수동) |
+
+반영 후 `tests/backend/l3/test_router.py::test_default_1k_1k_values`(현 1K/1K·유도 비용 봉인)를 새
+p50 유도값으로 갱신 — **이 테스트 갱신이 "실측 반영했다"의 증거 지점**. 유도 공식 봉인 테스트는
+값 비의존이라 그대로 통과.
+
+**대표성 경계(정직)**: 파일럿(S3) 전이라 실 프로덕션 코칭 트래픽이 없어, 픽스처는 실 코칭 턴의
+**대표 추정**이다. 토큰 p50는 est 가정 토큰의 1차 보정 근거이고(프리플라이트 63/5보다 훨씬 대표적),
+파일럿 실트래픽 확보 시 Langfuse `l3_routing` 실분포로 재보정한다.
