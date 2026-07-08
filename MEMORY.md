@@ -340,6 +340,49 @@
 ### 2026-07-08 (구현·L1/문서·마이그레이션 1): 리치 Part 2 **Phase 5 = 5a** — FormulaNode canonical-only 1급 노드 승격 + **위험문서 2건 정식 개정**(anti-goal→조건부 허용)
 
 **무엇/왜(최고위험·기존 결정 반전)**: Formula를 부재에서 1급 노드로 승격. FormulaNode는 두 위험문서(`math_dsl_evolution` §2.1·§3.3·§1·`math_dsl_risk_register` Q1③·리스크8·Q9)가 **유일하게 anti-goal("즉사")로 명시 반대**했던 노드다. 반대 3축: 변형식 노드화=조합폭발·자체 CAS/재작성규칙 트리=SymPy 재구현=즉사·premature abstraction. 사용자 §0 전면 채택으로 **canonical-only 조건부 허용** 재판정(Phase 0 예고→5a 정식 개정). **사용자 확정 결정(2026-07-08)**: ① **ID≠Signature 분리** — `formula_id`는 사람 관리 안정 code(`formula.<slug>`)이지 SymPy 계산값 아님(알고리즘 변경 시 KG id 참사 방지)·`canonical_signature`는 검색/dedup 보조 메타(정체성 아님)·**SymPy는 정체성이 아니라 동등성 판정 도구로만**·`equivalence_class`/`sympy_repr` 저장 안 함(변형 열거=anti-explosion·동치는 런타임 SymPy 위임). ② **범위=5a(소비처 분리)** — 노드+코퍼스+ID정책+거버넌스+위험문서개정만·`formula_refs` 대량 매핑/resolution/Tutor·Verifier 연동/signature backfill은 **Phase 5b**(소비처 실재 시·dead code 회피·2a→2b·3→3b 선례). **신규(problem_type_graph 미러)**: data-pipeline `formula_graph`(models `FormulaNode`·formula_id `formula.<slug>` field_validator·latex·dsl[SymPy-parseable]·canonical_signature optional·aliases·transform·validate[formula_id_unique·family_singleton]·transform-v1 CLI) + 코퍼스 `formula_graph_v1`(**25 canonical 수식·8 family**[곱셈공식·인수분해공식·근의공식·지수로그·삼각공식·미적분기본공식·기하공식·수열공식]·자체작성·ai_estimated·전 dsl SymPy-parseable) + 데이터카드 + backend `db/models/formula_node.py`(TEXT PK·family 인덱스·enum 없음·**sympy 미import**)·`l1/formula_graph/`(projection[ON CONFLICT·`_build_sync_engine` 재사용·신규 seam 0]·populate CLI)·마이그레이션 `b3c4d5e6f0a1`(down `a2b3c4d5e6f0`·create_table·up/down 대칭). **거버넌스 반전(원자적)**: `_FORBIDDEN_NODE_CLASSES`→`()`(Formula가 마지막·비움)·`test_no_dedicated_formula_node_class`→`test_formula_is_first_class_node`. 신규 `test_formula_governance`(① 신규 엣지 타입 0 ② canonical-only[변형/equivalence_class/sympy_repr 필드 부재·id 공간 formula.<slug>] ③ **SymPy 재구현 금지 경계**[노드 모듈 pipeline models·backend projection·ORM이 sympy 미import·AST 스캔·동치 권위는 l3 단일] ④ **dsl SymPy-parseable**[전 코퍼스 dsl이 `to_sympy_source`+`condition_dsl_violation` 통과]). **위험문서 2건 정식 개정(기존 결정 반전)**: evolution(§2.1 판정을 "자체 기호엔진 구축=anti-goal, canonical 참조 노드=허용"으로 분리·§3.3 금지표에 "재작성규칙 트리·자체 CAS·변형 노드화 금지, canonical 참조 노드 허용" 명시·예고→완료)·risk_register(Q1③·리스크8·Q9 반대→canonical-only 허용·"변형 노드화 즉시 폭발" 논거는 불변식 근거로 보존·예고→완료). ADR §2 Formula row "✅ canonical-only 노드(P5a 완료)"·"Phase 5a 완료" 섹션·part2 review. **검증**: data-pipeline(모델·transform·validate·corpus·거버넌스) + backend(프로젝션 단위 + @integration 실 PG 25행·family 8·멱등 + 거버넌스 반전 + test_formula_governance). 4게이트 green·lint-imports KEPT·alembic 단일 head `b3c4d5e6f0a1`. **NOT(경계·5b=소비처)**: formula_refs 채움/resolution 0·Tutor/Verifier 연동 0·canonical_signature 계산 backfill 0·equivalence_class/sympy_repr 저장 0·SymPy 재구현/재작성규칙 0(동치 권위 l3 유지)·변형 노드화 0·기출 본문 0(수학 사실·표준 표기 자체작성). **다음**: Phase 5b(formula 소비처 연동)·6(Proof/Theorem/Hint/Strategy)·3b·4b-2. **로드맵 순서 확정(사용자)**: 4b-1 → 5a → 6 → 3b → L3 Generator → Tutor → Verifier.
+### 2026-07-08 (구현·L3·S2 넓이 확장 2차 PR-B): **수열합·삼각방정식 배치 밴드 wiring + 코퍼스 513→590 materialize**
+
+**무엇/왜**: PR-A(#476·생성기 3종+테스트)에 이어 배치 파이프라인에 밴드를 붙여 코퍼스를 실제로 넓혔다. 고2 대수에서 아직 0건이던 **수열의 합(Sₙ)**·**삼각방정식**을 채운다(도메인 분담·기존 검증 스택 무변경 재사용).
+- **`harness/problem_corpus_batch.py`**: 기존 수열·삼각 밴드 루프에 `arith-sum`·`geo-sum`·`trig-eq` 3밴드 **additive** 추가(세 생성기 모두 `skip_signatures` 좌석 공유 → 루프 튜플 확장만). 밴드마다 별도 `signature_index`(문제군 분리·calc 패턴 미러). 기본값 arith-sum 45·geo-sum 20·trig-eq 12. CLI `--arith-sum`/`--geo-sum`/`--trig-eq`. 스펙 난이도 3.2/3.3/3.3(추정 gap ≤ 0.2 < 0.5 tol → 동등성 난이도 만점).
+- **dedup 두 전략**: 수열합은 조건 `x−(합 공식)`이 다항이라 signature 非None·답 dedup(같은 합 오병합 방지); 삼각방정식은 초월함수라 **signature=None**(exp/log형)·slug 유일성 위임.
+- **코퍼스 materialize**: 병렬 세션 #477(calc-extremum-irr·513) 위에 additive → **513→590**(+77). 2회 실행 바이트 동일(결정론 봉인).
+- **품질 봉인**: `known_primary` **무변경**(세 개념 03-02/03-03/02-02 기존 존재). 신규 밴드 테스트 2건(배치 메타·품질 불변식). **삼각방정식 답은 정수 각**이라 무리근 sqrt 필터(`answer_selection∈{largest,smallest}` + `sqrt(` in answer)에 **0건 혼입** 실측 확인 — 근 선택은 겹치나 답에 sqrt가 없어 분리됨. signature-unique 테스트는 None을 skip하므로 trig-eq 무충돌.
+- 전건 100% 수율(590/590)·L3→L4 import 0·게이트/orchestrator 무변경.
+
+### 2026-07-08 (구현·L3·라이브 §11 후속): **라우터 est 비용 구조 개선 — 단일 공식(실측 단가표 유도)·수치는 데이터 대기**
+
+**무엇/왜**: 라이브 §11에서 실측 `cost_krw≈0.4원` vs 추정 `est_cost_krw=28원`(1/69) 괴리 확인. 원인은 단가가 아니라 `CLOUD_MIN_COST_KRW`(28/46)가 "1K입력+1K출력" 가정의 **하드코딩 매직넘버**. 그러나 실측이 프리플라이트 1콜(63/5 토큰·비대표)뿐이라 **숫자를 내리는 건 부당**(실 튜터링 턴은 훨씬 큼·guard 보수성은 안전선). → Kiki 결정: **구조 개선만**.
+- **`l3/router.py`**: `CLOUD_MIN_COST_KRW`를 하드코딩 → **`CLOUD_TOKEN_PRICE_USD_PER_1M`·`USD_TO_KRW`에서 유도**하는 단일 공식으로 교체(신규 명시 상수 `_EST_ASSUMED_INPUT/OUTPUT_TOKENS=1000`). 값은 1K+1K이라 MID **27.72**·HIGH **46.2**(≈현행 28/46). est가 이제 actual과 **같은 단가표를 근거**로 삼음(개선점). guard(`cloud_min_cost`)·est(`cloud_cost`)는 같은 상수 참조라 자동 반영·동작 불변.
+- **est/actual 분리 보존(#465)**: est=가정 토큰×단가(사전 추정·route 시점 토큰 미상), actual=실측 토큰×단가. `actual_cost_*`·단가 상수·`TestActualCost`·pipeline 분기 **불변**.
+- **데이터 후 튜닝 절차 코드/문서에 심음**: 라이브 트래픽 축적 후 Langfuse `l3_routing` 실측 `input/output_tokens` p50를 `_EST_ASSUMED_*`에 대입 → `CLOUD_MIN_COST_KRW` 자동 재계산. **"보정 완료" 아님 — 구조만 개선, 수치는 데이터 대기**(정직성: 비대표 1건으로 수치 안 바꿈).
+- 테스트: 신규 정합성(est가 단가표에서 유도됨 봉인)·`test_pipeline.py` est 기대값 46.0→46.2 상환(라우팅 decision의 est 검증). 문서 `03a §H4` 갱신.
+
+**결과**: 5게이트 green(mypy 331파일·ruff·black·lint-imports·pytest — 전체 스위트 est 리팩터 반영 후 0 실패). guard 안전·est/actual 분리 유지.
+
+### 2026-07-08 (검수 승인·L4·Kiki 사인오프): **극값 오개념 M0864·M0865 crosswalk 승인 — 문구 refinement + promote 산출물(적재 pending)**
+
+**무엇/왜**: 검수 보조 리포트(체크리스트) 검토 후 **Kiki가 M0864·M0865 두 오개념을 승인**(사람 게이트 사인오프). 승인과 함께 2개 문구 refinement 지시:
+- **M0864**(extremum-max-min-confused): 반례에 "이 예에서는" 추가 — 작은 임계점=극대가 *이 예(계수 양수) 한정*임을 명시(과일반화 방지).
+- **M0865**(extremum-value-vs-point-confused): 반례에 "극대점(극대가 되는 점)·그 x좌표(-1)·극댓값(함숫값 2)은 각각 다른 대상이다" 한 줄 부가(3-way 구분 명시).
+- **편집 위치**: `catalog.py` 두 `counterexample` + `docs/prompts/misconception_diagnosis.md` #33·#34 동기(doc-first). **correct_form 미사용**(구분 문구가 signals 2토큰[극댓값·x좌표]을 다 담아 gate-safe 자기매칭 conf=1.0 → `test_correct_form_is_gate_safe` 실패, 실측 확인 → counterexample 부가로 우회). `signals`·`canonical_statement` 무변경 → detection·probe(102/65)·counts(34/102/65/843/10) 전부 불변·테스트 변경 0.
+- **② promote 산출물**: scratch 승인본(M0864·M0865 행만 `status=approved`·`reviewer=Kiki`·`reviewed_on=2026-07-08`)으로 `crosslink_review promote --out approved.json` 실행 → **2 crosslinks**(`method=manual`·note `검수:Kiki 2026-07-08`·둘 다 conf 0.9≥0.6·kebab∈카탈로그 승격 통과) 검증. **커밋 안 함**(transient ops 입력).
+- **🔒 봉인 유지**: 커밋 review_queue 템플릿은 **전행 pending 무변경**(`test_real_queue_all_pending_unsigned` green) — 승인은 복사본+본 로그로 기록하며 템플릿을 approved로 바꾸지 않는다(사람 승인이지 AI 자기승인 아님). **DB `misconception_crosslink` 적재(`promote --load`)는 Phaiakes9 ops**(이 환경 DB 0) — 위 서명(2행·Kiki·2026-07-08)으로 ops가 승인본 재구성·load 가능.
+
+### 2026-07-08 (구현·L4·Kiki 게이트 지원): **crosswalk 검수 보조 — 결정 체크리스트(증거+기계 전제, 판정은 Kiki)**
+
+**무엇/왜**: 인계문서 item 1(M0864·M0865 crosswalk 검수)은 **Kiki 사람 검수 전용** 게이트다(`test_real_queue_all_pending_unsigned`가 커밋 템플릿을 전행 pending으로 봉인·AI 자기승인 금지). Kiki 결정(3택): ① 검수 보조 리포트를 먼저 *구현*(AI는 증거+체크리스트만·판정은 Kiki) → ② 승인분만 promote 산출물 → ③ 게이트 구조는 문서화하되 중심 아님. 기존 `crosslink_review_aid.py`는 kebab별 근거 조인까지였고 **행동 가능한 결정 체크리스트가 없던** 갭을 메운다.
+- **L4 `crosslink_review_aid.py`** — 후보 1건마다 체크리스트 2종 추가: **기계 전제(객관 ✓/✗)** — `promote_approved`가 강제할 규칙을 서명 전 노출(kebab∈카탈로그·M-id∈코퍼스·직접매핑 conf≥0.6, 임계값은 `crosslink_review._DIRECT_MIN_CONFIDENCE` 재사용·단일 원천) + **교수학 판단(빈 박스·Kiki)** `[ ] canonical·반례 타당 [ ] 4지선다 귀속 타당 [ ] approve [ ] reject`. 순수 `candidate_gate_checks()->GateChecks`·`ReviewAidSummary.gate_blocked_mis_ids`(기계 전제 미달 신호)·`--kebab` 반복 포커스 필터. **핵심 불변 유지**: status 미변경·큐 미기록·어떤 행도 approve/reject 표시 안 함(빈 박스+객관 사실만).
+- **검증**: M0864(extremum-max-min-confused)·M0865(extremum-value-vs-point-confused) 리포트 생성 — 기계 전제 3종 전부 ✓(conf 0.9·in-catalog·corpus-found)·gate_blocked 0·교수학 박스 공란. `test_crosslink_review_aid.py` +11 테스트(gate_checks·체크리스트·필터·gate_blocked·판정없음 불변). l4 1099 passed·seal test green·카운트 34/102/65/843/10 불변·ruff·black·mypy(329) green.
+
+**🔒 불변**: `crosslink_review.py`·봉인 큐 템플릿·catalog·corpus 무변경(게이트/seal 유지). **② promote 경로**(승인본 복사본→`promote --out approved.json`, 이 환경 DB 없어 `--load`는 Phaiakes9 ops)는 기존 CLI·테스트가 이미 커버 — 신규 코드 0. **③ 실제 승인·적재는 Kiki의 몫**(AI가 승인 날조 안 함): 리포트 검토→approve/reject 결정→승인본 서명→promote.
+### 2026-07-08 (구현·ops/L3·§11 라이브 후속): **프리플라이트 `--via-pipeline` — Redis·서버 없이 Langfuse 기록**
+
+**무엇/왜**: 라이브 머신에서 §11(Langfuse에 비용 기록) 확인이 환경 문제로 막힘 — 전체 앱(`uvicorn /v1/generate`)이 conda base + venv 뒤엉킴으로 `_cffi_backend`(cryptography) import 실패 + Redis 필요. 프리플라이트는 가벼운 l3 import만 타서 잘 돎(실측 0.4066원 검증 완료). 그래서 `--via-pipeline`로 스모크를 **`pipeline.generate` + InMemoryCache + LangfuseSink** 경유로 태워 Langfuse에 `l3_routing` 기록 — crypto/db/Redis/서버 전부 우회.
+- **`LangfuseSink.flush()` 추가**(langfuse_sink.py): CLI가 짧게 끝나므로 배치 전송 확정용. 미설정/미노출 no-op·오류 삼킴(record와 동일 비차단). `_LangfuseClient` Protocol은 불변(getattr 선택적 능력) — 위생 테스트 무손상. 서버 상시 경로는 호출 안 함(무변경).
+- **`ops/live_preflight.py` `--via-pipeline`**: `_CapturingTraceSink`(record dict 갈무리+위임+flush)로 pipeline이 trace로만 흘리는 cost_krw/토큰을 표시. RoutingRequest는 anthropic 설정 시 **CLOUD_MID sync**(premium·budget≥임계·hard·requires_reasoning·task=diagnose — QUALITY 비동기/HIGH 회피), 미설정 시 **LOCAL 폴백**(cost_tier=LOCAL·0원이라도 기록 증명 성립). langfuse 미설정이면 graceful skip. 기본 경로(직접 provider.generate) 불변.
+- **환경 진단(코드 아님)**: 전체 서버는 conda/venv 뒤엉킴 정리(깨끗한 env 재생성) 필요 — §11 목적엔 불필요. crypto/db import 미도입(`ops`는 layers 계약 밖 단독 진입점, lint-imports green).
+
+**결과**: 5게이트 green(mypy 331파일·pytest 5732 passed/241 skipped·커버리지 게이트 통과·신규 --via-pipeline 테스트 6). 드라이런(키 무) langfuse 미설정 graceful·exit 0. **머지 후 Kiki: `git pull` → `python -m whymath_backend.ops.live_preflight --via-pipeline` → Langfuse 대시보드 `l3_routing` 확인.**
 
 ### 2026-07-08 (구현·L1/L4/문서·마이그레이션 0): 리치 Part 2 **Phase 4b = 4b-1** — Crosswalk Gate Contract(승인·적재 조건 단일 정본·load 게이트 경화) + 커버리지 갭 리포트
 

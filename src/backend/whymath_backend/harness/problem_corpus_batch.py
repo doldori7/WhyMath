@@ -59,9 +59,16 @@ from whymath_backend.l3.equivalent.sequence_skeleton_generator import (
     ArithmeticSequenceSkeletonGenerator,
     GeometricSequenceSkeletonGenerator,
 )
+from whymath_backend.l3.equivalent.sequence_sum_skeleton_generator import (
+    ArithmeticSumSkeletonGenerator,
+    GeometricSumSkeletonGenerator,
+)
 from whymath_backend.l3.equivalent.skeleton_generator import (
     GeneratorVariant,
     SkeletonEquivalentProblemGenerator,
+)
+from whymath_backend.l3.equivalent.trig_equation_skeleton_generator import (
+    TrigonometricEquationSkeletonGenerator,
 )
 from whymath_backend.l3.equivalent.trig_skeleton_generator import (
     TrigonometricValueSkeletonGenerator,
@@ -96,9 +103,10 @@ _CALC_MC_INJECTION: dict[str, tuple[str, str]] = {
 }
 
 # 밴드 기본 크기 — quad 185 + calc 120 + calc-value-mc 30 + calc-extremum-irr 30 + exp 25 + log 20
-# + 수열 90 + 삼각 13 = 총 513건(CI 봉인 ≥100 여유). 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·
-# calc-extremum 162·calc-tangent 162·calc-value 150·calc-value-mc 146·calc-extremum-irr 180·
-# exp 28·log 28·arith 90·geo 45·trig 13.
+# + 수열항 90 + 삼각값 13 + 수열합 65 + 삼각방정식 12 = 총 590건(CI 봉인 ≥100 여유). 풀 실측:
+# short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·calc-tangent 162·calc-value 150·
+# calc-value-mc 146·calc-extremum-irr 180·exp 28·log 28·arith 90·geo 45·trig 13·
+# arith-sum 261·geo-sum 58·trig-eq 18.
 _DEFAULT_SHORT_N = 90
 _DEFAULT_MC_N = 45
 _DEFAULT_SQRT_N = 30
@@ -113,6 +121,9 @@ _DEFAULT_LOG_N = 20
 _DEFAULT_ARITH_N = 60
 _DEFAULT_GEO_N = 30
 _DEFAULT_TRIG_N = 13
+_DEFAULT_ARITH_SUM_N = 45
+_DEFAULT_GEO_SUM_N = 20
+_DEFAULT_TRIG_EQ_N = 12
 
 # 미적분(극값) 밴드 스펙 — 별도 성취기준([12미적Ⅰ-02-07]·함수의 증가·감소와 극대·극소).
 # 난이도 3.3 고정: 극값 추정(3.0~4.0) 최대 gap 0.7 < 3.5(게이트 감쇠 수학)라 안전.
@@ -163,6 +174,18 @@ _GEO_STANDARD_CODE = "[12대수03-03]"
 _GEO_SPEC_DIFFICULTY = 3.2
 _TRIG_STANDARD_CODE = "[12대수02-02]"
 _TRIG_SPEC_DIFFICULTY = 3.0
+
+# 수열합·삼각방정식 밴드 스펙 — 일반항·특수각값 형제와 같은 성취기준(도메인 분담). 등차·등비합은
+# conditions `x − (합 공식)`이라 **다항 signature(非None)**·답 dedup으로 밴드 내 유일; 삼각방정식은
+# 초월함수라 **signature=None**(exp/log형·slug 유일성에 위임). 각 밴드 **별도 index**(문제군 분리·
+# calc 패턴 미러). 난이도: 등차합 3.2(추정 3.0~3.4)·등비합 3.3(3.2~3.5)·삼각방정식 3.3(3.2~3.5),
+# 최대 gap ≤ 0.2 < 0.5(tol) → 동등성 난이도 성분 만점.
+_ARITH_SUM_STANDARD_CODE = "[12대수03-02]"
+_ARITH_SUM_SPEC_DIFFICULTY = 3.2
+_GEO_SUM_STANDARD_CODE = "[12대수03-03]"
+_GEO_SUM_SPEC_DIFFICULTY = 3.3
+_TRIG_EQ_STANDARD_CODE = "[12대수02-02]"
+_TRIG_EQ_SPEC_DIFFICULTY = 3.3
 
 
 def _default_out_path() -> Path:
@@ -321,6 +344,9 @@ def run_corpus_batch(
     arith_n: int = _DEFAULT_ARITH_N,
     geo_n: int = _DEFAULT_GEO_N,
     trig_n: int = _DEFAULT_TRIG_N,
+    arith_sum_n: int = _DEFAULT_ARITH_SUM_N,
+    geo_sum_n: int = _DEFAULT_GEO_SUM_N,
+    trig_eq_n: int = _DEFAULT_TRIG_EQ_N,
     write: bool = True,
 ) -> CorpusBatchReport:
     """밴드 배치 실행 — 문제군별 signature_index·밴드별 스펙 정합·JSONL 기록(순수 결정론).
@@ -569,8 +595,9 @@ def run_corpus_batch(
             )
         )
 
-    # ── 수열·삼각 문제군 — conditions가 `x − 상수`(다항·非None signature)지만 각 풀이 답/값
-    #    dedup돼 밴드 내 signature 전건 유일. 밴드마다 별도 index(문제군 분리·calc 패턴 미러). ──
+    # ── 수열·삼각 문제군 — 일반항·특수각값(다항 `x − 상수`·답 dedup)과 수열합(등차·등비합·다항
+    #    답 dedup)·삼각방정식(초월함수·signature=None·slug 위임)을 함께 소비. 밴드마다 별도 index
+    #    (문제군 분리·calc 패턴 미러) — 모두 `skip_signatures` 생성자 좌석을 공유(도메인 분담). ──
     for seq_name, seq_factory, seq_count, standard_code, difficulty in (
         (
             "arith",
@@ -592,6 +619,27 @@ def run_corpus_batch(
             trig_n,
             _TRIG_STANDARD_CODE,
             _TRIG_SPEC_DIFFICULTY,
+        ),
+        (
+            "arith-sum",
+            ArithmeticSumSkeletonGenerator,
+            arith_sum_n,
+            _ARITH_SUM_STANDARD_CODE,
+            _ARITH_SUM_SPEC_DIFFICULTY,
+        ),
+        (
+            "geo-sum",
+            GeometricSumSkeletonGenerator,
+            geo_sum_n,
+            _GEO_SUM_STANDARD_CODE,
+            _GEO_SUM_SPEC_DIFFICULTY,
+        ),
+        (
+            "trig-eq",
+            TrigonometricEquationSkeletonGenerator,
+            trig_eq_n,
+            _TRIG_EQ_STANDARD_CODE,
+            _TRIG_EQ_SPEC_DIFFICULTY,
         ),
     ):
         if seq_count <= 0:
@@ -697,6 +745,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--trig", type=int, default=_DEFAULT_TRIG_N, help="삼각함수 특수각 값 단답형 수."
     )
+    parser.add_argument(
+        "--arith-sum",
+        type=int,
+        default=_DEFAULT_ARITH_SUM_N,
+        help="등차수열의 합(Sₙ=n(2a+(n−1)d)/2) 단답형 수.",
+    )
+    parser.add_argument(
+        "--geo-sum",
+        type=int,
+        default=_DEFAULT_GEO_SUM_N,
+        help="등비수열의 합(Sₙ=a(rⁿ−1)/(r−1)·정수 합) 단답형 수.",
+    )
+    parser.add_argument(
+        "--trig-eq",
+        type=int,
+        default=_DEFAULT_TRIG_EQ_N,
+        help="삼각방정식(sin/cos x=v·0°≤x<360°·작은/큰 해) 단답형 수.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="파일 미기록 — 수율·리포트만 확인.")
     args = parser.parse_args(argv)
 
@@ -716,6 +782,9 @@ def main(argv: list[str] | None = None) -> int:
         arith_n=args.arith,
         geo_n=args.geo,
         trig_n=args.trig,
+        arith_sum_n=args.arith_sum,
+        geo_sum_n=args.geo_sum,
+        trig_eq_n=args.trig_eq,
         write=not args.dry_run,
     )
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)

@@ -7,8 +7,11 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
+from whymath_backend.l3 import pipeline
+from whymath_backend.l3.interfaces import InMemoryCache
 from whymath_backend.l3.models import CostTier, GenerationResult, RoutingDecision, Usage
 from whymath_backend.l3.providers.anthropic import AnthropicStatus
 from whymath_backend.l3.providers.ollama import ModelAvailability, OllamaStatus
@@ -318,6 +321,217 @@ def test_json_report_roundtrip(tmp_path: Path) -> None:
     assert loaded["exit_code"] == 0
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# --via-pipeline — 스모크를 pipeline.generate로 태워 Langfuse 기록·flush (hermetic)
+# ──────────────────────────────────────────────────────────────────────────
+class _FakePipelineProvider:
+    """가짜 LLMProvider — pipeline.generate가 호출하는 generate 표면만 흉내.
+
+    라우팅 결정과 무관하게 고정 결과(text+usage)를 돌려준다(라이브 0). images/temperature/
+    json_schema 키워드는 pipeline이 텍스트 호출 시 넘기지 않으므로 선택적으로만 받는다.
+    """
+
+    def __init__(self, result: GenerationResult, *, raise_exc: Exception | None = None) -> None:
+        self._result = result
+        self._raise = raise_exc
+        self.calls: list[RoutingDecision] = []
+
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
+        temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
+    ) -> GenerationResult:
+        self.calls.append(decision)
+        if self._raise is not None:
+            raise self._raise
+        return self._result
+
+
+class _SpyInnerSink:
+    """record/flush 호출 횟수를 세는 스파이 — _CapturingTraceSink의 내부 싱크로 주입.
+
+    LangfuseSink 자리에 들어가 실전송 없이 'pipeline이 record를 불렀는가·CLI가 flush를
+    불렀는가'만 관측한다(_FlushTraceSink 표면 충족).
+    """
+
+    def __init__(self) -> None:
+        self.record_count = 0
+        self.flush_count = 0
+
+    def record(self, fields: dict[str, object]) -> None:
+        self.record_count += 1
+
+    def flush(self) -> None:
+        self.flush_count += 1
+
+
+def _pipeline_deps(
+    provider: _FakePipelineProvider, spy: _SpyInnerSink
+) -> tuple[lp.PipelineDeps, InMemoryCache]:
+    """가짜 provider·스파이 trace로 PipelineDeps 조립 — pipeline.generate는 실물(순수)."""
+    cache = InMemoryCache()
+    deps = lp.PipelineDeps(
+        provider=provider,  # type: ignore[arg-type]
+        cache=cache,
+        trace=lp._CapturingTraceSink(spy),  # type: ignore[arg-type]
+        generate=pipeline.generate,
+    )
+    return deps, cache
+
+
+async def test_via_pipeline_cloud_mid_records_and_flushes() -> None:
+    """anthropic 설정 시 CLOUD_MID(sync)로 라우팅되고 record·flush가 불린다."""
+    usage = Usage(input_tokens=100, output_tokens=50, latency_ms=1234.5)
+    provider = _FakePipelineProvider(GenerationResult(text="2", usage=usage))
+    spy = _SpyInnerSink()
+    deps, cache = _pipeline_deps(provider, spy)
+
+    report = await lp.run_preflight(
+        _settings(anthropic=True, langfuse=True),
+        smoke=True,
+        via_pipeline=True,
+        cloud_provider_factory=_cloud_factory(
+            _FakeCloud(configured=True, reachable=True, result=GenerationResult(text="x"))
+        ),
+        local_provider_factory=_local_factory(_FakeOllama(reachable=True)),
+        pipeline_deps_factory=lambda _s: deps,
+    )
+    smoke = report.smoke
+    assert smoke.via_pipeline is True
+    assert smoke.ran is True
+    # 라우터가 실제로 CLOUD_MID로 결정했는가(목표대로).
+    assert smoke.routed_cost_tier == CostTier.CLOUD_MID.value
+    assert provider.calls[0].cost_tier == CostTier.CLOUD_MID.value
+    # Langfuse record(파이프라인 경유)·flush(CLI 후처리)가 각각 불렸다.
+    assert spy.record_count == 1
+    assert spy.flush_count == 1
+    assert smoke.langfuse_recorded is True
+    # 클라우드 실측 비용 — 토큰 있으면 actual_cost_krw로 산정(>0).
+    assert smoke.cost_krw is not None and smoke.cost_krw > 0.0
+    assert smoke.input_tokens == 100
+    assert smoke.output_tokens == 50
+    # InMemoryCache에 미스 생성물이 적재됐다(캐시 경유 확인).
+    assert len(cache._store) == 1
+    assert report.exit_code == 0
+
+
+async def test_via_pipeline_local_fallback_when_anthropic_unset() -> None:
+    """anthropic 미설정이면 LOCAL(easy/free) 폴백 — cost_tier=LOCAL·0원이라도 기록 성립."""
+    usage = Usage(input_tokens=20, output_tokens=10, latency_ms=900.0)
+    provider = _FakePipelineProvider(GenerationResult(text="2", usage=usage))
+    spy = _SpyInnerSink()
+    deps, _cache = _pipeline_deps(provider, spy)
+
+    report = await lp.run_preflight(
+        _settings(anthropic=False, langfuse=True),
+        smoke=True,
+        via_pipeline=True,
+        cloud_provider_factory=_cloud_factory(_FakeCloud(configured=False, reachable=False)),
+        local_provider_factory=_local_factory(_FakeOllama(reachable=True)),
+        pipeline_deps_factory=lambda _s: deps,
+    )
+    smoke = report.smoke
+    assert smoke.routed_cost_tier == CostTier.LOCAL.value
+    assert provider.calls[0].cost_tier == CostTier.LOCAL.value
+    assert smoke.cost_krw == 0.0  # 로컬은 0원 확정(None 아님)
+    assert spy.record_count == 1
+    assert spy.flush_count == 1
+    assert smoke.langfuse_recorded is True
+    assert smoke.pipeline_note is not None and "폴백" in smoke.pipeline_note
+    assert report.exit_code == 0
+
+
+async def test_via_pipeline_skips_when_langfuse_unconfigured() -> None:
+    """Langfuse 미설정이면 pipeline 호출 없이 graceful skip(exit 0) — provider 미호출."""
+    provider = _FakePipelineProvider(GenerationResult(text="2"))
+    spy = _SpyInnerSink()
+    deps, _cache = _pipeline_deps(provider, spy)
+
+    report = await lp.run_preflight(
+        _settings(anthropic=True, langfuse=False),
+        smoke=True,
+        via_pipeline=True,
+        cloud_provider_factory=_cloud_factory(
+            _FakeCloud(configured=True, reachable=True, result=GenerationResult(text="x"))
+        ),
+        local_provider_factory=_local_factory(_FakeOllama(reachable=True)),
+        pipeline_deps_factory=lambda _s: deps,
+    )
+    smoke = report.smoke
+    assert smoke.ran is False
+    assert smoke.via_pipeline is True
+    assert smoke.skipped_reason is not None and "Langfuse 미설정" in smoke.skipped_reason
+    assert provider.calls == []  # pipeline 호출 자체가 없다
+    assert spy.record_count == 0 and spy.flush_count == 0
+    assert report.exit_code == 0
+
+
+async def test_via_pipeline_error_yields_exit_2() -> None:
+    """pipeline 경유 스모크가 예외로 실패하면 종료 코드 2, 오류는 리포트에 흡수된다."""
+    provider = _FakePipelineProvider(GenerationResult(text=""), raise_exc=RuntimeError("boom"))
+    spy = _SpyInnerSink()
+    deps, _cache = _pipeline_deps(provider, spy)
+
+    report = await lp.run_preflight(
+        _settings(anthropic=True, langfuse=True),
+        smoke=True,
+        via_pipeline=True,
+        cloud_provider_factory=_cloud_factory(
+            _FakeCloud(configured=True, reachable=True, result=GenerationResult(text="x"))
+        ),
+        local_provider_factory=_local_factory(_FakeOllama(reachable=True)),
+        pipeline_deps_factory=lambda _s: deps,
+    )
+    assert report.smoke.error is not None and "boom" in report.smoke.error
+    assert report.smoke.via_pipeline is True
+    assert report.exit_code == 2
+
+
+def test_capturing_trace_sink_forwards_and_captures() -> None:
+    """_CapturingTraceSink는 record를 갈무리하며 내부로 전달하고 flush를 위임한다."""
+    spy = _SpyInnerSink()
+    sink = lp._CapturingTraceSink(spy)
+    sink.record({"cost_krw": 1.5})
+    sink.flush()
+    assert sink.records == [{"cost_krw": 1.5}]
+    assert spy.record_count == 1
+    assert spy.flush_count == 1
+
+
+def test_via_pipeline_stdout_render_shows_langfuse_and_tier() -> None:
+    """via_pipeline 스모크 렌더는 라우팅 결과·Langfuse 기록 문구를 담는다."""
+    report = lp.Report(
+        cloud_configured=True,
+        langfuse_configured=True,
+        cloud_reachable=True,
+        cloud_error=None,
+        ollama_reachable=True,
+        ollama_error=None,
+        smoke=lp.SmokeResult(
+            ran=True,
+            via_pipeline=True,
+            routed_cost_tier="cloud_mid",
+            langfuse_recorded=True,
+            pipeline_note="CLOUD_MID(sync) 목표 — 실 클라우드 1콜",
+            cost_krw=1.617,
+            input_tokens=100,
+            output_tokens=50,
+            latency_ms=1234.5,
+            text_chars=1,
+        ),
+        exit_code=0,
+    )
+    text = lp._render_stdout(report)
+    assert "pipeline.generate 경유" in text
+    assert "cost_tier=cloud_mid" in text
+    assert "l3_routing 이벤트 기록·flush 완료" in text
+
+
 def test_main_dry_run_unconfigured_returns_zero(monkeypatch, capsys) -> None:  # type: ignore[no-untyped-def]
     """main: 키 없는 환경에서 스모크 skip·exit 0(드라이런 계약)."""
 
@@ -325,8 +539,10 @@ def test_main_dry_run_unconfigured_returns_zero(monkeypatch, capsys) -> None:  #
         settings: object,
         *,
         smoke: bool,
+        via_pipeline: bool = False,
         cloud_provider_factory: object = None,
         local_provider_factory: object = None,
+        pipeline_deps_factory: object = None,
     ) -> lp.Report:
         # run_preflight을 가짜로 대체 — main의 파싱·출력·종료 코드 경로만 검증.
         return lp.Report(
