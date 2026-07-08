@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-08 (구현·L3·라이브 §11 후속): **라우터 est 비용 구조 개선 — 단일 공식(실측 단가표 유도)·수치는 데이터 대기**
+
+**무엇/왜**: 라이브 §11에서 실측 `cost_krw≈0.4원` vs 추정 `est_cost_krw=28원`(1/69) 괴리 확인. 원인은 단가가 아니라 `CLOUD_MIN_COST_KRW`(28/46)가 "1K입력+1K출력" 가정의 **하드코딩 매직넘버**. 그러나 실측이 프리플라이트 1콜(63/5 토큰·비대표)뿐이라 **숫자를 내리는 건 부당**(실 튜터링 턴은 훨씬 큼·guard 보수성은 안전선). → Kiki 결정: **구조 개선만**.
+- **`l3/router.py`**: `CLOUD_MIN_COST_KRW`를 하드코딩 → **`CLOUD_TOKEN_PRICE_USD_PER_1M`·`USD_TO_KRW`에서 유도**하는 단일 공식으로 교체(신규 명시 상수 `_EST_ASSUMED_INPUT/OUTPUT_TOKENS=1000`). 값은 1K+1K이라 MID **27.72**·HIGH **46.2**(≈현행 28/46). est가 이제 actual과 **같은 단가표를 근거**로 삼음(개선점). guard(`cloud_min_cost`)·est(`cloud_cost`)는 같은 상수 참조라 자동 반영·동작 불변.
+- **est/actual 분리 보존(#465)**: est=가정 토큰×단가(사전 추정·route 시점 토큰 미상), actual=실측 토큰×단가. `actual_cost_*`·단가 상수·`TestActualCost`·pipeline 분기 **불변**.
+- **데이터 후 튜닝 절차 코드/문서에 심음**: 라이브 트래픽 축적 후 Langfuse `l3_routing` 실측 `input/output_tokens` p50를 `_EST_ASSUMED_*`에 대입 → `CLOUD_MIN_COST_KRW` 자동 재계산. **"보정 완료" 아님 — 구조만 개선, 수치는 데이터 대기**(정직성: 비대표 1건으로 수치 안 바꿈).
+- 테스트: 신규 정합성(est가 단가표에서 유도됨 봉인)·`test_pipeline.py` est 기대값 46.0→46.2 상환(라우팅 decision의 est 검증). 문서 `03a §H4` 갱신.
+
+**결과**: 5게이트 green(mypy 331파일·ruff·black·lint-imports·pytest — 전체 스위트 est 리팩터 반영 후 0 실패). guard 안전·est/actual 분리 유지.
+
 ### 2026-07-08 (검수 승인·L4·Kiki 사인오프): **극값 오개념 M0864·M0865 crosswalk 승인 — 문구 refinement + promote 산출물(적재 pending)**
 
 **무엇/왜**: 검수 보조 리포트(체크리스트) 검토 후 **Kiki가 M0864·M0865 두 오개념을 승인**(사람 게이트 사인오프). 승인과 함께 2개 문구 refinement 지시:
