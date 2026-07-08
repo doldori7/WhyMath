@@ -829,12 +829,17 @@ class TestEstCostDerivedFromPriceTable:
         )
         assert CLOUD_MIN_COST_KRW[tier] == pytest.approx(expected)
 
-    def test_default_1k_1k_values(self) -> None:
-        """1K+1K 가정(보수적 기본) → MID≈27.72·HIGH≈46.2 (현행 수치 유지)."""
-        assert _EST_ASSUMED_INPUT_TOKENS == 1000
-        assert _EST_ASSUMED_OUTPUT_TOKENS == 1000
-        assert CLOUD_MIN_COST_KRW[CostTier.CLOUD_MID] == pytest.approx(27.72)
-        assert CLOUD_MIN_COST_KRW[CostTier.CLOUD_HIGH] == pytest.approx(46.2)
+    def test_measured_p50_est_tokens(self) -> None:
+        """라이브 실측 p50 가정(2026-07-08·CLOUD_MID 대표 코칭) → MID≈6.60·HIGH≈11.00.
+
+        과거 보수적 1K/1K 가정을 대체한 실측 반영 증거 지점(ops/measure_cloud_cost 산출
+        input p50=453·output p50=195). 재튜닝 시 이 기대값을 새 유도값으로 갱신한다.
+        """
+        assert _EST_ASSUMED_INPUT_TOKENS == 453
+        assert _EST_ASSUMED_OUTPUT_TOKENS == 195
+        # (453*3 + 195*15)/1e6 * 1540 = 6.59736 ; (453*5 + 195*25)/1e6 * 1540 = 10.9956
+        assert CLOUD_MIN_COST_KRW[CostTier.CLOUD_MID] == pytest.approx(6.59736)
+        assert CLOUD_MIN_COST_KRW[CostTier.CLOUD_HIGH] == pytest.approx(10.9956)
 
     def test_high_gt_mid_invariant(self) -> None:
         """순서 불변식 — CLOUD_HIGH > CLOUD_MID (Opus가 Sonnet보다 비쌈)."""
@@ -843,10 +848,14 @@ class TestEstCostDerivedFromPriceTable:
     def test_est_and_actual_share_price_table(self) -> None:
         """est(CLOUD_MIN_COST_KRW)와 actual(actual_cost_*)이 *같은 단가표*를 근거로 삼음(#465).
 
-        가정 토큰(1K+1K)을 실측 토큰(1K+1K)으로 준 actual과 est가 일치 —
-        같은 단가·같은 토큰이면 같은 값(둘의 차이는 토큰 출처뿐임을 봉인).
+        가정 토큰(_EST_ASSUMED_*)을 실측 토큰으로 그대로 준 actual과 est가 일치 —
+        같은 단가·같은 토큰이면 같은 값(둘의 차이는 토큰 출처뿐임을 봉인·수치 비의존).
         """
-        usage = Usage(input_tokens=1000, output_tokens=1000, latency_ms=None)
+        usage = Usage(
+            input_tokens=_EST_ASSUMED_INPUT_TOKENS,
+            output_tokens=_EST_ASSUMED_OUTPUT_TOKENS,
+            latency_ms=None,
+        )
         for tier in (CostTier.CLOUD_MID, CostTier.CLOUD_HIGH):
             actual = actual_cost_krw(_decision(tier), usage)
             assert CLOUD_MIN_COST_KRW[tier] == pytest.approx(actual)

@@ -118,27 +118,28 @@ USD_TO_KRW: Final[float] = 1540.0
 # ──────────────────────────────────────────────────────────────────────────
 # est(사전 추정) 가정 토큰 상수 — route() 시점엔 실제 토큰이 미상이므로, 사전
 # 추정(est_cost_krw·guard_cloud 예산 판정)은 *대표 호출 토큰 수*를 가정해야 한다.
-# 값의 근거: 입력 1K + 출력 1K(대표 코칭 생성) — 실측 데이터가 비대표 1건뿐이라
-# *보수적 기본*으로 유지한다(과소추정보다 과대추정이 안전 — 예산 가드가 보수적으로 걸림).
+# 값의 근거: **라이브 실측 p50**(2026-07-08 Phaiakes9·CLOUD_MID 대표 코칭 12콜,
+# `ops/measure_cloud_cost`) — input p50=453·output p50=195. 과거 보수적 1K/1K 가정을
+# 대체한다(프리플라이트 비대표 1콜 63/5가 아니라 대표 코칭 부하 측정 median).
 #
-# 튜닝 절차(수치는 데이터 대기): 라이브 트래픽 축적 후 Langfuse `l3_routing` trace의
-# 실측 `input_tokens`/`output_tokens` p50를 이 두 상수에 대입하면, 아래 CLOUD_MIN_COST_KRW가
-# *자동 재계산*된다(단가표 × 가정 토큰의 단일 공식이므로). est/actual 분리는 유지 —
+# 재튜닝 절차: 파일럿 실트래픽 축적 후 Langfuse `l3_routing` trace의 실측
+# `input_tokens`/`output_tokens` p50를 이 두 상수에 재대입하면 아래 CLOUD_MIN_COST_KRW가
+# *자동 재계산*된다(단가표 × 가정 토큰의 단일 공식). est/actual 분리는 유지 —
 # actual은 여전히 호출별 *실측* 토큰으로 계산한다(#465). §H 후속 4.
 # ──────────────────────────────────────────────────────────────────────────
-_EST_ASSUMED_INPUT_TOKENS: Final[int] = 1000
-"""est 사전 추정용 가정 입력 토큰(보수적 기본). 라이브 실측 input_tokens p50로 튜닝."""
+_EST_ASSUMED_INPUT_TOKENS: Final[int] = 453
+"""est 사전 추정용 가정 입력 토큰(라이브 실측 CLOUD_MID input p50·2026-07-08)."""
 
-_EST_ASSUMED_OUTPUT_TOKENS: Final[int] = 1000
-"""est 사전 추정용 가정 출력 토큰(보수적 기본). 라이브 실측 output_tokens p50로 튜닝."""
+_EST_ASSUMED_OUTPUT_TOKENS: Final[int] = 195
+"""est 사전 추정용 가정 출력 토큰(라이브 실측 CLOUD_MID output p50·2026-07-08)."""
 
 # ──────────────────────────────────────────────────────────────────────────
 # 클라우드 1회 호출 추정 비용(원) — 하드코딩이 아니라 *단일 공식*으로 유도:
 #   티어 = (가정 입력토큰 × 입력단가 + 가정 출력토큰 × 출력단가)/1M × 환율
 # = 가정 토큰 상수(_EST_ASSUMED_*) × 실측 단가표(CLOUD_TOKEN_PRICE_USD_PER_1M,
-#   actual_cost_*와 동일 근거) × USD_TO_KRW. 1K+1K이라 ≈27.72(MID)/46.2(HIGH).
-# guard_cloud의 "잔여 예산 부족" 판정·est_cost_krw에 쓰인다. 가정 토큰을 튜닝하면
-# 이 dict가 자동 재계산된다(위 튜닝 절차 참조·§H 후속 4).
+#   actual_cost_*와 동일 근거) × USD_TO_KRW. 453/195(실측 p50)이라 ≈6.60(MID)/11.00(HIGH).
+# guard_cloud의 "잔여 예산 부족" 판정·est_cost_krw에 쓰인다. 가정 토큰을 재튜닝하면
+# 이 dict가 자동 재계산된다(위 재튜닝 절차 참조·§H 후속 4).
 # ──────────────────────────────────────────────────────────────────────────
 CLOUD_MIN_COST_KRW: Final[dict[CostTier, float]] = {
     cost: (_EST_ASSUMED_INPUT_TOKENS * price_in + _EST_ASSUMED_OUTPUT_TOKENS * price_out)
@@ -178,11 +179,12 @@ def actual_cost_krw(decision: RoutingDecision, usage: Usage) -> float:
 
 CLOUD_LATENCY_MS: Final[dict[CostTier, int]] = {
     # 03a §A.1 표에서 CLOUD는 "가변" — 네트워크·모델 의존. 지연은 *측정값*이라 공개 가격처럼
-    # 유도할 수 없다 → placeholder 유지, 라이브 실측 보정(§H 후속 4).
-    CostTier.CLOUD_MID: 3000,  # placeholder — §H 후속 4에서 실측 보정
-    CostTier.CLOUD_HIGH: 8000,  # placeholder — §H 후속 4에서 실측 보정
+    # 유도할 수 없다 → **라이브 실측 p50**(2026-07-08 Phaiakes9·대표 코칭 12콜/티어,
+    # `ops/measure_cloud_cost`)로 보정. 과거 placeholder(3000/8000) 대체.
+    CostTier.CLOUD_MID: 4643,  # 실측 latency p50 4642.6ms (2026-07-08)
+    CostTier.CLOUD_HIGH: 4685,  # 실측 latency p50 4685.1ms (2026-07-08)
 }
-"""클라우드 티어 예상 지연(ms). 03a §A.1 "가변" — placeholder, §H 후속 4 보정 대상."""
+"""클라우드 티어 예상 지연(ms). 03a §A.1 "가변" — 라이브 실측 p50 보정(2026-07-08)."""
 
 CACHE_KEY_PREFIX: Final[str] = "llm:cache:"
 """캐시 키 네임스페이스 (llm-architect.md ResponseCache 컨벤션)."""

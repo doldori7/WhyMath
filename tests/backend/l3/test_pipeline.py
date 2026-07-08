@@ -558,11 +558,12 @@ class TestActualUsageInstrumentation:
         assert rec["output_tokens"] == 1000
         assert rec["latency_ms"] == 2500.0
         # 추정(est_*)은 실측과 *별개 키*로 공존한다 — 구분 유지(03a §F.2).
-        # est도 이제 단가표에서 유도된다(가정 1K+1K → CLOUD_HIGH 46.2). 이 호출은 실측도
-        # 1K+1K라 est==actual로 값이 우연히 일치하나, 여전히 별개 키(추정 vs 실측)다.
+        # est는 단가표 × *가정 토큰*(실측 p50 453/195)에서 유도된다 → CLOUD_HIGH est≈10.9956.
+        # 이 호출의 실측은 1K/1K라 actual(46.2)과 est(10.9956)가 *다르다* — 추정 vs 실측의
+        # 분리를 이 불일치가 명확히 봉인한다(가정 토큰 ≠ 실측 토큰이면 값도 다름).
         assert rec["est_cost_krw"] == pytest.approx(
-            46.2
-        )  # 라우터 추정(CLOUD_MIN_COST_KRW·1K+1K 유도)
+            10.9956
+        )  # 라우터 추정(CLOUD_MIN_COST_KRW·실측 p50 453/195 유도)
         assert rec["cost_tier"] == "cloud_high"
 
     async def test_local_miss_records_zero_cost_with_tokens(self) -> None:
