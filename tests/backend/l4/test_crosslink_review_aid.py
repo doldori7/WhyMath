@@ -299,7 +299,7 @@ def test_format_flags_dangling_and_missing_kebab() -> None:
     groups = build_review_aid(items, corpus=corpus)
     report = format_review_aid(groups, statuses=("pending",))
     assert "코퍼스에 없음" in report  # dangling 경고
-    assert "카탈로그(30종)에 없음" in report  # 전사 왜곡 경고
+    assert "카탈로그에 없음" in report  # 전사 왜곡 경고
 
 
 def test_format_empty_groups_still_has_summary_line() -> None:

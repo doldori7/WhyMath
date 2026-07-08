@@ -230,7 +230,13 @@ cd WhyMath\src\backend; .venv\Scripts\Activate.ps1
 python -m whymath_backend.ops.live_preflight            # 스모크 on(기본) — 실 CLOUD_MID 1콜
 # python -m whymath_backend.ops.live_preflight --no-smoke        # 판정·도달성만(실 호출 없음)
 # python -m whymath_backend.ops.live_preflight --json preflight.json   # JSON 리포트도 저장
+# python -m whymath_backend.ops.live_preflight --via-pipeline    # Redis·서버 없이 §11 Langfuse 기록까지 확인
 ```
+> **Redis·서버 없이 §11 Langfuse 기록까지 확인**: `python -m whymath_backend.ops.live_preflight --via-pipeline`.
+> 스모크를 `l3.pipeline.generate`(라우터→캐시→provider→LangfuseSink)로 태워 **`l3_routing` 이벤트를
+> 실제 기록·flush** 한다 — 전체 앱이 요구하는 PII 암호화(cryptography)·pgvector·Redis·uvicorn을 전부
+> 우회한다(conda/venv 뒤엉킴 회피). anthropic 설정 시 CLOUD_MID(sync) 실 1콜, 미설정 시 LOCAL 폴백
+> (0원이라도 기록 증명 성립), Langfuse 미설정이면 graceful skip. 실행 후 §11 대시보드에서 레코드 확인.
 이 한 명령이 서버 기동 없이 방금 넣은 키의 계측 흐름을 즉석 검증한다(내부적으로 /status가 하는
 `check_status()`를 provider 직접 호출로 대체):
 - **① cloud_configured** = `Settings().anthropic_configured`(config.py:965) — Anthropic 키 감지.
