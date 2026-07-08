@@ -175,7 +175,14 @@ gen = LLMEquivalentProblemGenerator(
 - [ ] §5 rephrase 1회 실행 → 리포트에서 rephrased>0 확인 (**첫 라이브 이정표**)
 - [ ] §6 llm_generator 소량(n=5) 배치 → accepted_stored 확인
 - [ ] §7 judge shadow 측정 → 지표 검토 → (별도 결정) gate on
+- [ ] (풀 경로) §10 클라우드·관측성 키 설정 → `/status`가 `cloud_configured`·Langfuse 활성 보고
+- [ ] (풀 경로) §11 라이브 계측 판독 → Langfuse `l3_routing`에서 `cost_tier` 분포·실측 `cost_krw` 확인
 - [ ] 결과·수율을 MEMORY.md 결정 로그에 기록
+
+> **로컬 온리 vs 풀 경로**: §1~§7은 **로컬(Ollama)** 활성화 — rephrase·동등문제 생성·judge는
+> 전부 로컬 결정이라 클라우드 키 없이 돈다. §10·§11은 **풀 경로**(클라우드 승급 + 관측성) — 라우터가
+> CLOUD_MID/HIGH를 내리는 호출(킬러·자기검증 QUALITY→클라우드)과 **비용/로컬 비율 실측**(S1 게이트②)을
+> 실제로 켜고 읽는 단계다. 로컬만 검증할 거면 §7에서 멈춰도 된다.
 
 ## 9. 알려진 함정
 
@@ -187,3 +194,79 @@ gen = LLMEquivalentProblemGenerator(
 | 저작이 같은 문제 반복(mode collapse) | MATH 패밀리로 저작 | authoring_family=GENERAL 기본 유지(S2-h) |
 | QUALITY 27b 동기 호출 503 | 설계 의도(비동기 전용) | Celery 워커(concurrency 1) 경유·Linux 이관 시 |
 | GPU 대신 CPU로 느림 | Ollama가 8060S 미감지 | Ollama·Adrenalin 최신화, `ollama ps`로 확인 |
+| 클라우드 결정인데 `RuntimeError`(키 없음) | `WHYMATH_ANTHROPIC_API_KEY` 미설정 | §10 키 설정(조용한 강등 없음이 *의도* — CLAUDE.md) |
+| 클라우드 호출 404 `model not found` | 모델 alias가 키에서 미제공 | §10 `WHYMATH_ANTHROPIC_MODEL_MID/HIGH`로 실 ID 핀 |
+| 비용/토큰이 Langfuse에 안 보임 | Langfuse 키 미설정(sink 영구 no-op) | §10 `WHYMATH_LANGFUSE_PUBLIC_KEY`/`_SECRET_KEY` 설정 |
+
+---
+
+## 10. 클라우드·관측성 활성화 (풀 경로 — 라이브 키)
+
+> **로컬 온리면 생략.** 이 단계는 라우터가 CLOUD_MID/HIGH를 내리는 호출(킬러·자기검증 QUALITY 승급)과
+> **비용 실측 관측**(S1 게이트②·PR #465/#467)을 켠다. 시크릿은 **env로만** 주입(CLAUDE.md 하드코딩 금지).
+
+```powershell
+# 클라우드 LLM (Anthropic) — CLOUD_MID(Sonnet)·CLOUD_HIGH(Opus) 경로
+[Environment]::SetEnvironmentVariable("WHYMATH_ANTHROPIC_API_KEY", "sk-ant-…", "User")
+# 관측성 (Langfuse) — 없으면 계측이 계산만 되고 버려진다(sink 영구 no-op)
+[Environment]::SetEnvironmentVariable("WHYMATH_LANGFUSE_PUBLIC_KEY", "pk-lf-…", "User")
+[Environment]::SetEnvironmentVariable("WHYMATH_LANGFUSE_SECRET_KEY", "sk-lf-…", "User")
+```
+
+| env | 역할 | 미설정 시 |
+|---|---|---|
+| `WHYMATH_ANTHROPIC_API_KEY` | CLOUD_MID/HIGH 생성 활성 | 클라우드 결정 시 **명확한 오류**(조용한 강등 없음) |
+| `WHYMATH_ANTHROPIC_MODEL_MID`/`_HIGH` | 클라우드 모델 ID 핀 | 기본 alias(`claude-sonnet-4-6`/`claude-opus-4-7`, config.py:260-273) 사용 |
+| `WHYMATH_LANGFUSE_PUBLIC_KEY`/`_SECRET_KEY` | 관측성(Langfuse) 활성 | `langfuse_configured=False` → **LangfuseSink 영구 no-op**(비용 계산은 되나 관측에 안 흐름) |
+| `WHYMATH_LANGFUSE_HOST` | 셀프호스트 Langfuse | 기본 `https://cloud.langfuse.com` |
+
+> **⚠ 모델 ID 실재성**: 기본값 `claude-sonnet-4-6`/`claude-opus-4-7`는 프로젝트 alias다. 발급 키에서
+> 그 ID가 `404 model not found`면 `WHYMATH_ANTHROPIC_MODEL_MID`/`_HIGH`로 **키에서 실제 사용 가능한
+> ID**를 핀한다(코드 변경 0 — env 오버라이드가 정본, config.py 주석).
+
+**활성 확인 — 단일 명령(키 투입 직후 1회)**:
+```powershell
+cd WhyMath\src\backend; .venv\Scripts\Activate.ps1
+python -m whymath_backend.ops.live_preflight            # 스모크 on(기본) — 실 CLOUD_MID 1콜
+# python -m whymath_backend.ops.live_preflight --no-smoke        # 판정·도달성만(실 호출 없음)
+# python -m whymath_backend.ops.live_preflight --json preflight.json   # JSON 리포트도 저장
+# python -m whymath_backend.ops.live_preflight --via-pipeline    # Redis·서버 없이 §11 Langfuse 기록까지 확인
+```
+> **Redis·서버 없이 §11 Langfuse 기록까지 확인**: `python -m whymath_backend.ops.live_preflight --via-pipeline`.
+> 스모크를 `l3.pipeline.generate`(라우터→캐시→provider→LangfuseSink)로 태워 **`l3_routing` 이벤트를
+> 실제 기록·flush** 한다 — 전체 앱이 요구하는 PII 암호화(cryptography)·pgvector·Redis·uvicorn을 전부
+> 우회한다(conda/venv 뒤엉킴 회피). anthropic 설정 시 CLOUD_MID(sync) 실 1콜, 미설정 시 LOCAL 폴백
+> (0원이라도 기록 증명 성립), Langfuse 미설정이면 graceful skip. 실행 후 §11 대시보드에서 레코드 확인.
+이 한 명령이 서버 기동 없이 방금 넣은 키의 계측 흐름을 즉석 검증한다(내부적으로 /status가 하는
+`check_status()`를 provider 직접 호출로 대체):
+- **① cloud_configured** = `Settings().anthropic_configured`(config.py:965) — Anthropic 키 감지.
+- **② langfuse_configured** = `Settings().langfuse_configured`(config.py:956) — 공개키+시크릿키 둘 다.
+- **도달성** — Anthropic `check_status()`(anthropic.py:362)·Ollama `check_status()`(ollama.py:317).
+- **③ 클라우드 스모크** — 스모크 on·키 설정 시 실 **CLOUD_MID(Sonnet)** 1콜 → 실측 `cost_krw`·토큰
+  출력(`actual_cost_krw`, router.py:154). 키 없으면 "스모크 skip(키 없음)"으로 graceful skip.
+- 종료 코드: **0**=정상(미설정은 정보) · **2**=설정됐는데 도달 불가/스모크 실패. 시크릿 값은 절대
+  출력하지 않는다(설정 여부 bool·비용·토큰만). 출력의 **③ 실측 비용·토큰**을 아래 §11 판독과 대조한다.
+
+---
+
+## 11. 라이브 계측 판독 (S1 게이트② — 투입 즉시 나오는 것)
+
+> §10 키가 들어가면 **코드 변경 0으로** 루프당 실측 비용·로컬:클라우드 비율이 관측에 흐른다
+> (PR #465 계측 배선 + #467 judge seam→Langfuse). 판독 경로:
+
+1. **Langfuse `l3_routing` 이벤트** (이벤트명 `l3_routing`, langfuse_sink.py:47) — 모든 L3 생성 1건당 1레코드:
+   - `cost_tier`(LOCAL/CLOUD_MID/CLOUD_HIGH) 분포 → **로컬:클라우드 비율**(라우터 목표 로컬 80%).
+   - `local_family`·`local_model`·`cache_hit`(캐싱 적중률 KPI).
+   - **실측**(#465): `cost_krw`·`input_tokens`·`output_tokens`·`latency_ms` — 추정 `est_cost_krw`/
+     `est_latency_ms`와 **별개 키**(추정 vs 실측 구분). **`cost_krw=None`(클라우드 토큰 미상)과
+     `0.0`(로컬)은 다르다** — 미상은 지어내지 않고 None.
+   - judge 게이트/shadow LLM 호출 비용도 이제 여기로 흐른다(#467 — `_judge_for_gate`가 공유 sink 주입).
+2. **`GET /v1/me/harness-metrics`** (api/me.py:1853, 대리 지표 7종) — 지표 ④ `tokens_per_turn`이
+   Dialogue 토큰 적재 시 `NO_DATA`→`MEASURED` 전환(본 계측은 trace/GenerationLog 경로; pipeline→
+   Dialogue 토큰 영속은 대화 서비스 소관·별도 후속).
+3. **`GenerationLog` 테이블** — 호출별 토큰·지연 실측 적재(provenance_bridge). 배치 회계·집계용.
+
+**첫 라이브 비용 이정표**: §10 키 투입 후 클라우드를 타는 호출(예: 킬러 문항·자기검증 QUALITY 승급)을
+1회 유발 → Langfuse에서 그 `l3_routing` 레코드의 `cost_tier=CLOUD_*`·`cost_krw>0`·토큰 실측 확인.
+로컬 호출은 같은 레코드가 `cost_tier=LOCAL`·`cost_krw=0.0`. 두 분포 비율이 **S1 게이트② "루프당 비용
+실측·로컬 80%"** 판정의 근거다.

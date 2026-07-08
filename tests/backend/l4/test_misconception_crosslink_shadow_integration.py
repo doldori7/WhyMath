@@ -124,7 +124,8 @@ def _link(
         "link_type": link_type,
         "confidence": confidence,
         "method": "manual",
-        "note": "통합테스트 시드",
+        # load 게이트(Gate Contract)가 검수 서명 stamp를 요구 — promote 산출물 형태로 시드한다.
+        "note": "검수:통합테스트 2026-07-08",
     }
 
 

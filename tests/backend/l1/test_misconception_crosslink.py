@@ -129,12 +129,25 @@ class TestLoader:
     def test_populate_upserts_each(self) -> None:
         engine = _FakeEngine()
         store = MisconceptionCrosslinkStore(engine=engine)  # type: ignore[arg-type]
+        # load 게이트(Gate Contract)가 method=manual·검수 서명을 요구하므로 promote 산출물 형태
+        # (method 기본 manual·note에 서명 stamp)로 준다 — sanctioned 경로 전체를 탄다.
         n = load_crosslinks(
             None,
             {
                 "crosslinks": [
-                    {"kebab_id": "k1", "mis_id": "M1", "link_type": "직접매핑", "confidence": 0.9},
-                    {"kebab_id": "k2", "mis_id": "M2", "link_type": "부분매핑"},
+                    {
+                        "kebab_id": "k1",
+                        "mis_id": "M1",
+                        "link_type": "직접매핑",
+                        "confidence": 0.9,
+                        "note": "검수:Kiki 2026-07-08",
+                    },
+                    {
+                        "kebab_id": "k2",
+                        "mis_id": "M2",
+                        "link_type": "부분매핑",
+                        "note": "검수:Kiki 2026-07-08",
+                    },
                 ]
             },
             store=store,
@@ -145,13 +158,25 @@ class TestLoader:
     def test_dedup_last_wins_on_unique_key(self) -> None:
         engine = _FakeEngine()
         store = MisconceptionCrosslinkStore(engine=engine)  # type: ignore[arg-type]
-        # 같은 (kebab, mis, link_type) 트리플 2건 → 1건으로 dedup(마지막 우선).
+        # 같은 (kebab, mis, link_type) 트리플 2건 → 1건으로 dedup(마지막 우선). 서명 stamp 필수.
         n = load_crosslinks(
             None,
             {
                 "crosslinks": [
-                    {"kebab_id": "k", "mis_id": "M1", "link_type": "직접매핑", "confidence": 0.5},
-                    {"kebab_id": "k", "mis_id": "M1", "link_type": "직접매핑", "confidence": 0.9},
+                    {
+                        "kebab_id": "k",
+                        "mis_id": "M1",
+                        "link_type": "직접매핑",
+                        "confidence": 0.5,
+                        "note": "검수:Kiki 2026-07-08",
+                    },
+                    {
+                        "kebab_id": "k",
+                        "mis_id": "M1",
+                        "link_type": "직접매핑",
+                        "confidence": 0.9,
+                        "note": "검수:Kiki 2026-07-08",
+                    },
                 ]
             },
             store=store,

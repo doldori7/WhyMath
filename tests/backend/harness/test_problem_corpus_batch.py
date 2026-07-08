@@ -43,6 +43,7 @@ class TestRunCorpusBatch:
             calc_tangent_n=0,
             calc_value_n=0,
             calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
             exp_n=0,
             log_n=0,
             arith_n=0,
@@ -73,6 +74,7 @@ class TestRunCorpusBatch:
             calc_tangent_n=0,
             calc_value_n=0,
             calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
             exp_n=0,
             log_n=0,
             arith_n=0,
@@ -190,6 +192,8 @@ class TestCliEntry:
                 "0",
                 "--calc-value-mc",
                 "0",
+                "--calc-extremum-irr",
+                "0",
                 "--exp",
                 "0",
                 "--log",
@@ -231,6 +235,8 @@ class TestCliEntry:
                 "0",
                 "--calc-value-mc",
                 "0",
+                "--calc-extremum-irr",
+                "0",
                 "--exp",
                 "0",
                 "--log",
@@ -264,6 +270,8 @@ class TestCliEntry:
                 "0",
                 "--calc-value-mc",
                 "0",
+                "--calc-extremum-irr",
+                "0",
                 "--exp",
                 "0",
                 "--log",
@@ -287,7 +295,7 @@ class TestCliEntry:
 
 class TestCalculusBand:
     def test_default_run_includes_calc_bands(self) -> None:
-        # 기본 실행 = quad 4 + calc 4 + exp·log 2 + 수열·삼각 3밴드(총 13밴드) — 총 483.
+        # 기본 실행 = quad 4 + calc 5 + exp·log 2 + 수열·삼각 3밴드(총 14밴드) — 총 513.
         report = run_corpus_batch(out_path=Path("/nonexistent/x.jsonl"), write=False)
         names = [b.name for b in report.bands]
         assert names == [
@@ -299,6 +307,7 @@ class TestCalculusBand:
             "calc-tangent",
             "calc-value",
             "calc-value-mc",
+            "calc-extremum-irr",
             "exp",
             "log",
             "arith",
@@ -310,12 +319,13 @@ class TestCalculusBand:
             assert (band.requested, band.stored) == (40, 40)
         stored = dict((b.name, b.stored) for b in report.bands)
         assert stored["calc-value-mc"] == 30
+        assert stored["calc-extremum-irr"] == 30
         assert stored["exp"] == 25
         assert stored["log"] == 20
         assert stored["arith"] == 60
         assert stored["geo"] == 30
         assert stored["trig"] == 13
-        assert report.total_stored == 483 and report.fulfilled
+        assert report.total_stored == 513 and report.fulfilled
 
     def test_value_mc_records_have_calculus_metadata(self, tmp_path: Path) -> None:
         # calc-value-mc 밴드 산출물 — 극대·극소 태깅·객관식·4지선다·오답 오개념 2종 태깅.
@@ -330,6 +340,7 @@ class TestCalculusBand:
             calc_tangent_n=0,
             calc_value_n=0,
             calc_value_mc_n=12,
+            calc_extremum_irr_n=0,
             exp_n=0,
             log_n=0,
             arith_n=0,
@@ -368,6 +379,7 @@ class TestCalculusBand:
             calc_tangent_n=0,
             calc_value_n=0,
             calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
             exp_n=0,
             log_n=0,
             arith_n=8,
@@ -406,6 +418,7 @@ class TestCalculusBand:
             calc_tangent_n=0,
             calc_value_n=12,
             calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
             exp_n=0,
             log_n=0,
             arith_n=0,
@@ -436,6 +449,7 @@ class TestCalculusBand:
             calc_tangent_n=12,
             calc_value_n=0,
             calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
             exp_n=0,
             log_n=0,
             arith_n=0,
@@ -465,6 +479,7 @@ class TestCalculusBand:
             calc_tangent_n=0,
             calc_value_n=0,
             calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
             exp_n=0,
             log_n=0,
             arith_n=0,
@@ -483,6 +498,39 @@ class TestCalculusBand:
                 "삼차함수" in record.problem.question_text or "함수" in record.problem.question_text
             )
 
+    def test_irrational_extremum_records_have_calculus_metadata(self, tmp_path: Path) -> None:
+        # calc-extremum-irr 밴드 산출물 — 극대·극소 성취기준/개념 태깅·단답형·답만 무리수(√)·
+        # 삼차식은 정수계수(발문에 √ 없음)·오개념 태그 0(단답형·pending 게이트 미발생).
+        out = tmp_path / "problems.jsonl"
+        run_corpus_batch(
+            out_path=out,
+            short_n=0,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=0,
+            calc_tangent_n=0,
+            calc_value_n=0,
+            calc_value_mc_n=0,
+            calc_extremum_irr_n=12,
+            exp_n=0,
+            log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
+            write=True,
+        )
+        records = load_problem_bank_records(out)
+        assert len(records) == 12
+        for record in records:
+            assert record.problem.unit_codes == ["CALC-EXTREMUM-IRR"]
+            assert record.problem.achievement_standard_codes == ["[12미적Ⅰ-02-07]"]
+            assert [t.concept_src_id for t in record.concept_tags] == ["H:12미적Ⅰ02-07"]
+            assert record.problem.question_format == "단답형"
+            assert record.problem.distractor_map is None  # 오개념 주입 0
+            assert "sqrt" in record.problem.answer  # 임계점만 무리수
+            assert "sqrt" not in record.problem.question_text  # 삼차식은 정수계수
+
     def test_calc_band_difficulty_varies(self, tmp_path: Path) -> None:
         # 난이도 변별(균일 회귀 차단) — calc 밴드도 rule-based로 여러 값·미적분 대역(3.0~5.0).
         out = tmp_path / "problems.jsonl"
@@ -496,6 +544,7 @@ class TestCalculusBand:
             calc_tangent_n=0,
             calc_value_n=0,
             calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
             exp_n=0,
             log_n=0,
             arith_n=0,
@@ -522,6 +571,7 @@ class TestAlgebraBand:
             calc_tangent_n=0,
             calc_value_n=0,
             calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
             exp_n=8,
             log_n=6,
             arith_n=0,
