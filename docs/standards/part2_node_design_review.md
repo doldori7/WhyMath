@@ -40,9 +40,10 @@
 
 **판정 ✅ (표현 방식 확정).**
 
-- Concept(모델·437)·Misconception(`MisconceptionCatalog` 839·별도 DB)·Visualization(선언 명세)
-  존재. **Skill=`SkillNode` 1급 노드(Phase 2a 승격)**·**ProblemType=`ProblemTypeNode` 1급 노드
-  (Phase 3 승격·cognitive-action canonical≠surface SignaturePattern)**. anti-explosion 기준
+- Concept(모델·437)·Misconception(`MisconceptionCatalog` 843·별도 DB·**Phase 4a enrichment**로
+  `severity`·`behavior_skills`[arises-in] 추가·이미 완성 노드라 승격 무·additive만)·Visualization
+  (선언 명세) 존재. **Skill=`SkillNode` 1급 노드(Phase 2a 승격)**·**ProblemType=`ProblemTypeNode`
+  1급 노드(Phase 3 승격·cognitive-action canonical≠surface SignaturePattern)**. anti-explosion 기준
   (canonical·독립추정 가치)을 통과해 승격했고, 연결은 참조 키만(신규 엣지 타입 0).
 - **Formula 전용 노드 없음** → "Formula 먼저" 실패 경로 회피됨.
 - Concept은 Misconception·Visualization로 *참조 키*(`misconception_codes`·

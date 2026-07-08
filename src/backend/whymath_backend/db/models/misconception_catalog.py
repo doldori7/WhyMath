@@ -32,6 +32,10 @@ PK 판단(이 모듈의 핵심 결정):
   - `school_level`·`domain` → `sa.String(...)` / `subunit` → `sa.String(128)` /
     `mapping_confidence` → `sa.String(16)` / `provenance_note` → `sa.String(32)`(nullable).
   - `mapping_score` → `sa.Numeric(5, 3)`(예 0.454~1.236 — 1.236까지 담는 precision/scale).
+  - `severity`(Phase 4a) → `sa.String(16)`(blocking/local/cosmetic·후속 학습 손상도·difficulty와
+    별개 축·어휘 강제는 파이프라인 책임).
+  - `behavior_skills`(Phase 4a) → `ARRAY(sa.Text)` NOT NULL server_default '{}'(arises-in skill
+    참조 배열·concept_node/problem_type_node 동형·FK·junction 아님·개념 FK 결합 없음·독립 DB 유지).
 
 법적 메모: 본문(`canonical_statement` 등)은 와이매스 자체 저작이라 보유가 허용된다
 (redaction 불요 — achievement_standard `statement` 보유 허용 선례와 동형).
@@ -42,6 +46,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import sqlalchemy as sa
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
 from whymath_backend.db.base import Base
@@ -78,6 +83,9 @@ class MisconceptionCatalog(Base):
     error_type: Mapped[str | None] = mapped_column(sa.String(32))
     difficulty: Mapped[str | None] = mapped_column(sa.String(8))
     correction_point: Mapped[str | None] = mapped_column(sa.Text)
+    # severity(Phase 4a) — 후속 학습 손상도(blocking/local/cosmetic·SEVERITY_VALUES). difficulty
+    # (문항 난이도)와 별개 축·어휘 disjoint. 어휘 강제는 파이프라인 책임(String·가짜 CHECK 없음).
+    severity: Mapped[str | None] = mapped_column(sa.String(16))
 
     # ===== 코드·매핑 (느슨참조 — FK 아님, 해소는 로더 후속) =====
     ccss_code: Mapped[str | None] = mapped_column(sa.String(32))
@@ -90,6 +98,14 @@ class MisconceptionCatalog(Base):
     # Numeric(5,3) — mapping_score float(예 0.454~1.236). Decimal로 매핑된다.
     mapping_score: Mapped[Decimal | None] = mapped_column(sa.Numeric(5, 3))
     provenance_note: Mapped[str | None] = mapped_column(sa.String(32))
+
+    # ===== cognition 참조 (Phase 4a·arises-in·신규 엣지 타입 0) =====
+    # behavior_skills — 이 오개념이 튀어나오는 skill(arises-in·진단 방향) skill_id 참조 배열.
+    # concept_node/problem_type_node.behavior_skills 동형(ARRAY(Text) NOT NULL·server_default '{}').
+    # FK·junction 아님(anti-explosion). 개념 테이블에 FK 결합 안 됨(Level 2 loose-ref·독립 DB 유지).
+    behavior_skills: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
+    )
 
     # ── 인덱스 (조회 경로 — UNIQUE는 mis_id PK뿐) ────────────────────────
     __table_args__ = (

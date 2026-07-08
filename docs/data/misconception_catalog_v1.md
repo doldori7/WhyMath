@@ -113,5 +113,36 @@ difficulty·ccss_code·mapping_*)는 원천 미보유라 **None**(날조하지 �
 
 ---
 
-**버전**: v1 (설계 전용) | **최종 수정**: 2026-06-23 | 관련: `external_corpus_ingestion_v1.md`·
-`concept_graph_dataset_v1.md`·`atom_graph_v1.md`·`l4/misconception/catalog.py`
+## 7. Phase 4a enrichment — `severity`·`behavior_skills` (2026-07-07·리치 Part 2)
+
+정본 카탈로그(`misconceptions_v1`·843)에 2필드 **additive** 추가(마이그레이션 `a2b3c4d5e6f0`·
+`add_column` ×2·독립 DB·preload 금지 무변경). Misconception은 이미 완성 노드라 노드 승격·거버넌스
+반전 없음 — enrichment만.
+
+| 필드 | 타입 | 의미 | 저작 방법(전량 **ai_estimated**·검수 전) |
+|---|---|---|---|
+| `severity` | `String(16)` nullable | 후속 학습 **손상도**(blocking/local/cosmetic·`SEVERITY_VALUES`) — 문항 난이도 `difficulty`('상/중/하')와 **별개 축·어휘 disjoint** | `error_type`→severity 교수학 규칙(coarse v1): 해석오류·조건무시·차원혼동·극값/극대극소/값좌표혼동=blocking·공식혼동·분배누락·순서오류=local·부호오류=cosmetic. error_type 없음→None |
+| `behavior_skills` | `ARRAY(Text)` NOT NULL `'{}'` | **arises-in**(진단 방향) — 이 오개념이 튀어나오는 skill_id 참조 배열(skill_graph_v1·**신규 엣지 타입 0**) | 대응 개념(`concept_src_id`)의 `behavior_skills`(2b-1)를 **승계**한 시드 |
+
+**§승계 규칙(behavior_skills·투명 문서화)**: "개념 C에 대한 오개념은 C가 exercise하는 skill 수행
+중 튀어나온다"는 명시적 모델링 가정으로, 오개념의 `concept_src_id`(843/843 개념 코퍼스 조인)가 가진
+2b-1 ai_estimated `behavior_skills`를 arises-in 시드로 승계한다(**자동 유도 아님** — 이미 저작된
+교수학 판단의 원리적 승계). 검수로 오개념별 재판단·override된다. 커버리지: **806/843**(≥1 skill),
+37은 대응 개념이 미매핑이라 `[]`(정직). cross-corpus dangling **0**(`test_misconception_enrichment_
+governance`).
+
+**분포(v1)**: severity blocking 344·local 319·cosmetic 71·None 109. behavior_skills 806/843.
+
+**재임베딩 0**: `misconception_embedding`은 kebab 탐지 카탈로그를 `catalog_text = name_kr + canonical_
+statement`로 임베딩 — 신규 2필드는 그 텍스트 밖이라 text_hash 불변(별개 체계·decoupled).
+
+**범위 밖(각 분리·차단 사유)**: crosswalk 완주(canonical 수렴)=**Phase 4b**(AI 자기승인 금지·사람 검수
+선결)·`frequency` 제외(경험적 학생 로그 필요·날조 회피)·`visual_repair` 제외(저장 viz 소비처 부재·
+dead ref). **소비처 미배선**: `behavior_skills`의 런타임 진단 라우팅 소비(diagnose/distractor)는 후속
+슬라이스(2b-1→2b-2 선례) — 이번은 저작·투영만.
+
+---
+
+**버전**: v1 (설계 전용) | **최종 수정**: 2026-07-07(Phase 4a enrichment) | 관련:
+`external_corpus_ingestion_v1.md`·`concept_graph_dataset_v1.md`·`atom_graph_v1.md`·
+`l4/misconception/catalog.py`
