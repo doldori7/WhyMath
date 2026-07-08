@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>수식 입력 — WhyMath</title>
+    <style>
+      /* 정서 안전·중립 톤: 정오 강조·빨강 경고·게임화 없음(절대 금기). */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      #host {
+        padding: 12px;
+        box-sizing: border-box;
+      }
+      math-field,
+      #fallback {
+        width: 100%;
+        min-height: 64px;
+        font-size: 22px;
+        box-sizing: border-box;
+        border: 1px solid #c9c9d4;
+        border-radius: 10px;
+        padding: 10px;
+      }
+      #fallback {
+        resize: vertical;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="host"></div>
+    <script type="module">
+      // 학생 수식 입력을 LaTeX로 Flutter에 흘린다(단방향 web→Flutter). 수학 판정·검증은 하지
+      // 않는다 — LaTeX 원문만 넘기고 백엔드(L3 verify)가 검증한다(CLAUDE.md 표현≠의미).
+      const host = document.getElementById("host");
+
+      function emit(latex) {
+        if (window.WhymathMathInput) {
+          window.WhymathMathInput.postMessage(latex == null ? "" : latex);
+        }
+      }
+
+      // MathLive 로드 실패(자산 누락·구버전 WebView) 시에도 입력이 끊기지 않도록 textarea 폴백.
+      function useFallback() {
+        const ta = document.createElement("textarea");
+        ta.id = "fallback";
+        ta.setAttribute("aria-label", "풀이 수식 입력");
+        ta.placeholder = "풀이를 입력하세요";
+        ta.addEventListener("input", () => emit(ta.value));
+        host.appendChild(ta);
+        window.whymathSetLatex = (v) => {
+          ta.value = v == null ? "" : v;
+        };
+        window.whymathClear = () => {
+          ta.value = "";
+          emit("");
+        };
+        window.whymathFocus = () => ta.focus();
+      }
+
+      try {
+        const mod = await import("./mathlive.min.js");
+        const MathfieldElement = mod.MathfieldElement;
+        // 폰트는 같은 번들에 vendored(KaTeX_*.woff2). 소리 자산은 없으므로 끈다.
+        MathfieldElement.fontsDirectory = "./fonts";
+        MathfieldElement.soundsDirectory = null;
+        if (!customElements.get("math-field")) {
+          customElements.define("math-field", MathfieldElement);
+        }
+        const mf = new MathfieldElement();
+        mf.id = "mf";
+        mf.setAttribute("aria-label", "풀이 수식 입력");
+        // 가상 키보드는 인라인 매니저에 맡긴다(플랫폼 키보드와 충돌 회피).
+        mf.mathVirtualKeyboardPolicy = "manual";
+        mf.addEventListener("input", () => emit(mf.getValue("latex")));
+        host.appendChild(mf);
+        window.whymathSetLatex = (v) => mf.setValue(v == null ? "" : v);
+        window.whymathClear = () => {
+          mf.setValue("");
+          emit("");
+        };
+        window.whymathFocus = () => mf.focus();
+      } catch (e) {
+        useFallback();
+      }
+    </script>
+  </body>
+</html>

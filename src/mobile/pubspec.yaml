@@ -67,3 +67,7 @@ flutter:
     - assets/graphing_calculator/
     - assets/graphing_calculator/assets/
     - assets/graphing_calculator/mathlive/fonts/
+    # MathLive 수식 입력기(vendored·오프라인 WebView 임베드) — 풀이 수식 입력(S1).
+    # Flutter 자산은 비재귀라 하위 디렉터리(index.html·mathlive.min.js·KaTeX 폰트)를 명시 등록한다.
+    - assets/mathlive_input/
+    - assets/mathlive_input/fonts/

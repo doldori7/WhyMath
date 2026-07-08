@@ -186,6 +186,19 @@ void main() {
     expect(find.textContaining('틀렸'), findsNothing);
   });
 
+  testWidgets('풀이 모드에서만 "수식으로 입력"(MathLive) 진입 버튼이 보인다', (tester) async {
+    await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
+
+    // 대화 모드에선 수식 입력 버튼이 없다.
+    expect(find.text('수식으로 입력'), findsNothing);
+
+    // 풀이 단계 모드로 토글하면 MathLive 진입 버튼이 나타난다(탭하면 WebView 화면이라
+    // 여기선 존재만 확인한다 — WebView 렌더 통합은 후속).
+    await tester.tap(find.byIcon(Icons.format_list_numbered));
+    await tester.pump();
+    expect(find.text('수식으로 입력'), findsOneWidget);
+  });
+
   testWidgets('API 실패 시 SnackBar로 에러를 알린다(앱은 유지)', (tester) async {
     await tester.pumpWidget(_wrap(_FakeCoachApi(shouldThrow: true)));
 
