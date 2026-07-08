@@ -15,6 +15,7 @@ import '../features/auth/presentation/login_screen.dart';
 import '../features/chat/presentation/chat_screen.dart';
 import '../features/ocr/presentation/ocr_capture_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
+import '../features/problems/presentation/problem_screen.dart';
 
 /// 앱 라우트 경로·이름 상수.
 ///
@@ -43,6 +44,12 @@ abstract final class AppRoutes {
 
   /// OCR 라우트 이름.
   static const String ocrName = 'ocr';
+
+  /// 진단→문제제시 경로 — 온보딩 완료 후 진입한다. CAT 추천 문제를 제시하고 코치로 넘긴다(S1).
+  static const String problemPath = '/problem';
+
+  /// 문제 라우트 이름.
+  static const String problemName = 'problem';
 }
 
 /// 앱 전역 [GoRouter] provider.
@@ -95,6 +102,13 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.ocrPath,
         name: AppRoutes.ocrName,
         builder: (context, state) => const OcrCaptureScreen(),
+      ),
+      // 진단→문제제시(S1) — 온보딩 완료 후 진입한다. CAT 추천 문제를 로드해 제시하고,
+      // "풀이 시작"으로 활성 문제를 세팅한 뒤 채팅(코치)으로 넘긴다(세션 묶기는 코치가 소비).
+      GoRoute(
+        path: AppRoutes.problemPath,
+        name: AppRoutes.problemName,
+        builder: (context, state) => const ProblemScreen(),
       ),
     ],
     // 미정의 경로 안전 처리 — 잘못된 딥링크/오타로 앱이 죽지 않게 채팅으로 안내한다.
