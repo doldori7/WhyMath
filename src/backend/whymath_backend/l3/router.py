@@ -100,37 +100,53 @@ DAILY_LIMIT_KRW: Final[dict[str, int]] = {
 """구독별 일일 한도(원). 출처: 03a §E.2."""
 
 # ──────────────────────────────────────────────────────────────────────────
-# 클라우드 추정 상수 — 03a는 *경로·가드 설계*만 명세하고 구체 수치는 미제공
-# (§H 후속 4 "클라우드 티어 실제 연동·비용 계측·guard_cloud 실측 임계값 보정").
-# guard_cloud의 "잔여 예산 부족" 판정·est_cost_krw에 쓰이는 1회 호출 추정 비용.
-# 비용(KRW)은 *공개 가격*에서 유도한 sourced 추정이다(fabricate 아님·2026-06-23 확인):
-#   - CLOUD_MID  = claude-sonnet-4-6  $3/$15 per 1M(in/out)
-#   - CLOUD_HIGH = claude-opus-4-7    $5/$25 per 1M(in/out)
-#   - 환율 1 USD ≈ 1,540 KRW(2026-06-23). 기준 호출 = 입력 1K + 출력 1K 토큰(대표 코칭 생성).
-#   MID = (1K·$3+1K·$15)/1M × 1540 ≈ ₩28 / HIGH = (1K·$5+1K·$25)/1M × 1540 ≈ ₩46.
-# 잔여 불확실(정직): 호출당 실 토큰 수는 워크로드별 가변 → 라이브 토큰 계측으로 최종 보정.
-# ──────────────────────────────────────────────────────────────────────────
-CLOUD_MIN_COST_KRW: Final[dict[CostTier, float]] = {
-    # 1회 호출 추정 비용(원) — 잔여 예산이 이보다 작으면 LOCAL 강등(§D.4). 위 유도 참조.
-    CostTier.CLOUD_MID: 28.0,  # sonnet-4-6 1K+1K × ₩1,540 — 라이브 토큰 계측 시 보정
-    CostTier.CLOUD_HIGH: 46.0,  # opus-4-7 1K+1K × ₩1,540 — 라이브 토큰 계측 시 보정
-}
-"""클라우드 티어 1회 호출 추정 비용(원). 공개 가격 유도(2026-06-23)·라이브 토큰 계측 보정 대상."""
-
-# ──────────────────────────────────────────────────────────────────────────
-# 실측 비용 산정 상수 — 위 CLOUD_MIN_COST_KRW 유도(104-117행)와 *같은 근거*를
-# 토큰 단위로 노출한다(S1 게이트 ② 루프당 비용 실측). 추정(est_cost_krw)은 그대로
-# 두고, 실측(actual_cost_*)만 이 상수로 계산한다 — 추정 vs 실측 구분 유지.
+# 실측 비용 산정 상수 — S1 게이트 ②(루프당 비용 실측)의 *단일 근거 단가표*.
+# est(사전 추정)·actual(실측) 둘 다 이 단가표를 근거로 삼는다(#465 — 근거는 하나,
+# 토큰 출처만 다르다: est=가정 토큰, actual=실측 토큰). 아래 CLOUD_MIN_COST_KRW도
+# 이 표에서 유도한다(더는 하드코딩 매직넘버 아님).
 # ──────────────────────────────────────────────────────────────────────────
 CLOUD_TOKEN_PRICE_USD_PER_1M: Final[dict[CostTier, tuple[float, float]]] = {
-    # (입력, 출력) USD per 1M tokens — 공개 가격(2026-06-23 확인, 위 유도 주석 근거).
+    # (입력, 출력) USD per 1M tokens — 공개 가격(2026-06-23 확인).
     CostTier.CLOUD_MID: (3.0, 15.0),  # claude-sonnet-4-6 $3/$15
     CostTier.CLOUD_HIGH: (5.0, 25.0),  # claude-opus-4-7 $5/$25
 }
-"""클라우드 티어 토큰 가격(USD/1M, 입력·출력). CLOUD_MIN_COST_KRW와 동일 출처."""
+"""클라우드 티어 토큰 가격(USD/1M, 입력·출력). est·actual 공통 단가 근거."""
 
 USD_TO_KRW: Final[float] = 1540.0
-"""환율(원/USD) — 2026-06-23 기준(위 유도 주석 근거). 라이브 보정 대상."""
+"""환율(원/USD) — 2026-06-23 기준. 라이브 보정 대상."""
+
+# ──────────────────────────────────────────────────────────────────────────
+# est(사전 추정) 가정 토큰 상수 — route() 시점엔 실제 토큰이 미상이므로, 사전
+# 추정(est_cost_krw·guard_cloud 예산 판정)은 *대표 호출 토큰 수*를 가정해야 한다.
+# 값의 근거: 입력 1K + 출력 1K(대표 코칭 생성) — 실측 데이터가 비대표 1건뿐이라
+# *보수적 기본*으로 유지한다(과소추정보다 과대추정이 안전 — 예산 가드가 보수적으로 걸림).
+#
+# 튜닝 절차(수치는 데이터 대기): 라이브 트래픽 축적 후 Langfuse `l3_routing` trace의
+# 실측 `input_tokens`/`output_tokens` p50를 이 두 상수에 대입하면, 아래 CLOUD_MIN_COST_KRW가
+# *자동 재계산*된다(단가표 × 가정 토큰의 단일 공식이므로). est/actual 분리는 유지 —
+# actual은 여전히 호출별 *실측* 토큰으로 계산한다(#465). §H 후속 4.
+# ──────────────────────────────────────────────────────────────────────────
+_EST_ASSUMED_INPUT_TOKENS: Final[int] = 1000
+"""est 사전 추정용 가정 입력 토큰(보수적 기본). 라이브 실측 input_tokens p50로 튜닝."""
+
+_EST_ASSUMED_OUTPUT_TOKENS: Final[int] = 1000
+"""est 사전 추정용 가정 출력 토큰(보수적 기본). 라이브 실측 output_tokens p50로 튜닝."""
+
+# ──────────────────────────────────────────────────────────────────────────
+# 클라우드 1회 호출 추정 비용(원) — 하드코딩이 아니라 *단일 공식*으로 유도:
+#   티어 = (가정 입력토큰 × 입력단가 + 가정 출력토큰 × 출력단가)/1M × 환율
+# = 가정 토큰 상수(_EST_ASSUMED_*) × 실측 단가표(CLOUD_TOKEN_PRICE_USD_PER_1M,
+#   actual_cost_*와 동일 근거) × USD_TO_KRW. 1K+1K이라 ≈27.72(MID)/46.2(HIGH).
+# guard_cloud의 "잔여 예산 부족" 판정·est_cost_krw에 쓰인다. 가정 토큰을 튜닝하면
+# 이 dict가 자동 재계산된다(위 튜닝 절차 참조·§H 후속 4).
+# ──────────────────────────────────────────────────────────────────────────
+CLOUD_MIN_COST_KRW: Final[dict[CostTier, float]] = {
+    cost: (_EST_ASSUMED_INPUT_TOKENS * price_in + _EST_ASSUMED_OUTPUT_TOKENS * price_out)
+    / 1_000_000
+    * USD_TO_KRW
+    for cost, (price_in, price_out) in CLOUD_TOKEN_PRICE_USD_PER_1M.items()
+}
+"""클라우드 티어 1회 호출 추정 비용(원). 가정 토큰 상수 × 실측 단가표 유도(하드코딩 아님)."""
 
 
 def actual_cost_usd(decision: RoutingDecision, usage: Usage) -> float:
@@ -249,15 +265,19 @@ def cloud_latency(cost: CostTier) -> int:
 
 
 def cloud_min_cost(desired: CostTier) -> float:
-    """클라우드 1회 최소 추정 비용(원) — guard_cloud 예산 판정용(§D.4)."""
+    """클라우드 1회 최소 추정 비용(원) — guard_cloud 예산 판정용(§D.4).
+
+    값은 실측 단가표에서 유도된 CLOUD_MIN_COST_KRW를 참조한다(하드코딩 아님).
+    """
     return CLOUD_MIN_COST_KRW[desired]
 
 
 def cloud_cost(req: RoutingRequest, cost: CostTier) -> float:
-    """클라우드 호출 예상 비용(원) — placeholder 추정(03a §E·§H 후속 4).
+    """클라우드 호출 예상 비용(원) — 가정 토큰 × 실측 단가표 유도(03a §E·§H 후속 4).
 
-    03a는 구체 비용 모델을 명세하지 않는다. 실측 연동 전까지 1회 최소 비용을
-    예상치로 사용한다(보수적). 라이브 연동 시 토큰 기반 실측으로 대체.
+    route() 시점엔 실제 토큰이 미상이라 *가정 토큰*(_EST_ASSUMED_*) 기반 사전 추정을
+    쓴다(보수적). 실측 단가표(CLOUD_TOKEN_PRICE_USD_PER_1M)를 근거로 삼아 actual_cost_*와
+    같은 단가에서 유도되며, 호출별 실측 비용은 actual_cost_krw로 별도 계산한다(#465).
     """
     return CLOUD_MIN_COST_KRW[cost]
 
