@@ -1,7 +1,8 @@
-// 채팅 컨트롤러 테스트 — send 흐름·Polya 전이·검산 코칭 추가 발화·에러 graceful 검증.
+// 채팅 컨트롤러 테스트 — send 흐름·Polya 전이·검산 코칭 추가 발화·세션 영속·에러 graceful 검증.
 //
 // 네트워크를 타지 않는다 — coachApiProvider를 미리 짠 CoachResponse를 반환(또는 throw)하는
-// fake CoachApi로 override한다. 컨트롤러는 순수 상태 전이라 동기적으로 결과를 검증할 수 있다.
+// fake CoachApi로 override한다. 컨트롤러는 영속 세션 경로(createSession→addTurn)를 쓰므로 fake는
+// 그 두 메서드를 구현한다. 컨트롤러는 순수 상태 전이라 동기적으로 결과를 검증할 수 있다.
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,10 +11,13 @@ import 'package:korean_math_app/features/chat/data/coach_api.dart';
 import 'package:korean_math_app/features/chat/data/coach_models.dart';
 import 'package:korean_math_app/features/chat/domain/chat_message.dart';
 import 'package:korean_math_app/features/ocr/data/ocr_models.dart';
+import 'package:korean_math_app/features/problems/application/active_problem.dart';
+import 'package:korean_math_app/features/problems/data/problem_models.dart';
 
 /// 미리 짠 응답을 그대로 돌려주는 fake — 또는 [shouldThrow]면 예외를 던진다.
 ///
-/// 보낸 [CoachRequest]를 [lastRequest]에 캡처해 solution_steps 전송을 검증할 수 있다.
+/// 보낸 [CoachRequest]를 [lastRequest]에 캡처해 solution_steps 전송을 검증할 수 있다. 첫 발화는
+/// [createSession]으로, 이후 발화는 [addTurn]으로 온다(호출 횟수·problem_id를 캡처).
 class _FakeCoachApi extends CoachApi {
   _FakeCoachApi({this.response, this.shouldThrow = false}) : super(Dio());
 
@@ -23,16 +27,51 @@ class _FakeCoachApi extends CoachApi {
   /// 마지막으로 받은 요청(테스트에서 전송 페이로드를 단언).
   CoachRequest? lastRequest;
 
-  @override
-  Future<CoachResponse> coach(CoachRequest request) async {
-    lastRequest = request;
-    if (shouldThrow) {
-      throw DioException(
-        requestOptions: RequestOptions(path: '/v1/coach'),
+  /// createSession에 전달된 problem_id(세션이 문제에 묶였는지 단언).
+  String? lastProblemId;
+
+  /// 세션 생성·턴 추가 호출 횟수(첫 발화=create·이후=turn 검증).
+  int createCalls = 0;
+  int turnCalls = 0;
+
+  DioException _fail() => DioException(
+        requestOptions: RequestOptions(path: '/v1/coach/sessions'),
         error: '네트워크 실패(테스트)',
       );
+
+  @override
+  Future<CoachTurnResult> createSession(
+    CoachRequest request, {
+    String? problemId,
+  }) async {
+    lastRequest = request;
+    lastProblemId = problemId;
+    createCalls++;
+    if (shouldThrow) {
+      throw _fail();
     }
-    return response!;
+    return CoachTurnResult(
+      dialogueId: 'test-dialogue',
+      response: response!,
+      wh1TurnIndex: 1,
+    );
+  }
+
+  @override
+  Future<CoachTurnResult> addTurn(
+    String dialogueId,
+    CoachRequest request,
+  ) async {
+    lastRequest = request;
+    turnCalls++;
+    if (shouldThrow) {
+      throw _fail();
+    }
+    return CoachTurnResult(
+      dialogueId: dialogueId,
+      response: response!,
+      wh1TurnIndex: turnCalls + 1,
+    );
   }
 }
 
@@ -347,6 +386,60 @@ void main() {
       );
 
       expect(fake.lastRequest!.studentInput, '이 풀이가 맞나요?');
+    });
+  });
+
+  group('ChatController 영속 세션', () {
+    test('첫 발화는 세션을 생성하고 dialogue_id를 보관한다', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      // 진입 시점엔 세션이 없다.
+      expect(container.read(chatControllerProvider).dialogueId, isNull);
+
+      await notifier.send('첫 질문이에요');
+
+      expect(fake.createCalls, 1);
+      expect(fake.turnCalls, 0);
+      expect(container.read(chatControllerProvider).dialogueId, 'test-dialogue');
+    });
+
+    test('두 번째 발화부터는 같은 세션에 턴으로 잇는다', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      await notifier.send('첫 질문');
+      await notifier.send('두 번째 질문');
+
+      // 세션은 한 번만 생성되고, 이후는 턴 추가로 간다.
+      expect(fake.createCalls, 1);
+      expect(fake.turnCalls, 1);
+      expect(container.read(chatControllerProvider).dialogueId, 'test-dialogue');
+    });
+
+    test('활성 문제가 있으면 그 problem_id로 세션을 묶는다', () async {
+      final fake = _FakeCoachApi(response: CoachResponse(decision: _decision()));
+      final container = ProviderContainer(
+        overrides: [
+          coachApiProvider.overrideWithValue(fake),
+          activeProblemProvider.overrideWith(
+            (ref) => const Problem(
+              problemId: 'prob-99',
+              sourceType: '자체생성',
+              subject: '미적분',
+              unitCodes: <String>['CAL'],
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      await notifier.send('이 문제 도와주세요');
+
+      expect(fake.lastProblemId, 'prob-99');
     });
   });
 }

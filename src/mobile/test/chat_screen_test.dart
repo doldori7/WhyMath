@@ -16,15 +16,39 @@ class _FakeCoachApi extends CoachApi {
   final CoachResponse? response;
   final bool shouldThrow;
 
-  @override
-  Future<CoachResponse> coach(CoachRequest request) async {
-    if (shouldThrow) {
-      throw DioException(
-        requestOptions: RequestOptions(path: '/v1/coach'),
+  DioException _fail() => DioException(
+        requestOptions: RequestOptions(path: '/v1/coach/sessions'),
         error: '네트워크 실패(테스트)',
       );
+
+  @override
+  Future<CoachTurnResult> createSession(
+    CoachRequest request, {
+    String? problemId,
+  }) async {
+    if (shouldThrow) {
+      throw _fail();
     }
-    return response!;
+    return CoachTurnResult(
+      dialogueId: 'test-dialogue',
+      response: response!,
+      wh1TurnIndex: 1,
+    );
+  }
+
+  @override
+  Future<CoachTurnResult> addTurn(
+    String dialogueId,
+    CoachRequest request,
+  ) async {
+    if (shouldThrow) {
+      throw _fail();
+    }
+    return CoachTurnResult(
+      dialogueId: dialogueId,
+      response: response!,
+      wh1TurnIndex: 2,
+    );
   }
 }
 
