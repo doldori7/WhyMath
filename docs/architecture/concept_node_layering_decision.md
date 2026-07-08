@@ -92,7 +92,7 @@ AST·성취기준 본문은 내장 금지.
 | 노드 | 초판 | 전면 채택(로드맵) | 승격 정당화 기준 |
 |---|---|---|---|
 | Concept | ✅ | ✅ 9계층화(P1) | — |
-| Misconception | ✅ 독립 DB | ✅ 7계층화(P4) | 오개념 독립 DB(#6) |
+| Misconception | ✅ 독립 DB·7레벨 | ✅ enrichment(P4a 완료) | 오개념 독립 DB(#6)·이미 완성 노드 |
 | **Skill** | 속성(enum) | **✅ 1급 노드(P2a 완료)** | mastery 독립추정 가치·행동영역 canonical |
 | **ProblemType** | 스키마 | **✅ 1급 노드(P3 완료)** | cognitive-action canonical(≠surface SignaturePattern) |
 | Visualization | 선언 명세 | ✅ 유지·계약 정합 | "무엇을"만·"어떻게" 금지 |
@@ -118,6 +118,24 @@ SkillNode를 이 집합에서 제거**했다 — `_FORBIDDEN_NODE_CLASSES=("Form
 `test_problem_type_is_first_class_node`(ProblemTypeNode 모델·ORM)로 반전. 신규 거버넌스
 `test_problemtype_governance`가 신규 엣지 타입 0·**ProblemType≠SignaturePattern 구별**·cross-corpus
 dangling 0을 동결. Formula만 이 집합에 남는다(P5 승격 대기).
+
+### Phase 4a 완료 — Misconception enrichment (2026-07-07)
+- **거버넌스 반전 없음**: Misconception은 *이미 완성된 독립 DB*(4테이블·`_FORBIDDEN_NODE_CLASSES`에
+  애초 부재)이고 정본 7레벨(Storage·Relation·Embedding·Retrieval·Runtime Context·Repair·Renderer·
+  `04c`)도 대부분 구현돼 있다. Phase 4a는 노드 승격이 아니라 정본 카탈로그 `misconception_catalog`
+  (mis_id PK·843)의 **additive 필드 enrichment**다.
+- **2필드 신규**: `severity`(후속 학습 손상도·blocking/local/cosmetic·`SEVERITY_VALUES`·문항 난이도
+  `difficulty`와 별개 축·어휘 disjoint) + `behavior_skills`(arises-in·이 오개념이 튀어나오는 skill_id
+  참조 배열·skill_graph_v1·**신규 엣지 타입 0**·개념 FK 0). 마이그레이션 `a2b3c4d5e6f0`.
+- **저작(전량 ai_estimated·투명 문서화)**: `severity`는 error_type→severity 교수학 규칙(coarse v1),
+  `behavior_skills`는 대응 개념(concept_src_id)의 `behavior_skills`(2b-1)를 **승계**한 arises-in 시드
+  (806/843)—"개념 C에 대한 오개념은 C가 exercise하는 skill 수행 중 튀어나온다"는 명시적 모델링 가정·
+  검수로 오개념별 override. 자동 유도 아님(이미 저작된 교수학 판단의 원리적 승계·데이터카드 §승계 규칙).
+- **범위 밖(각각 분리·차단 사유)**: **crosswalk 완주(canonical 수렴)=Phase 4b**(라이브 crosslink
+  비어있음·후보 81 pending·**AI 자기승인 금지**·사람 검수 `ops promote --load` 선결). **frequency
+  제외**(경험적 학생 로그 필요·지금 저작 시 날조). **visual_repair 제외**(저장 viz 소비처 부재·dead
+  ref). 신규 거버넌스 `test_misconception_enrichment_governance`가 신규 엣지 타입 0·cross-corpus
+  dangling 0·severity≠difficulty 축 분리·개념 FK 0을 동결. 독립 DB·preload 금지·게이트 기본값 무변경.
 
 ### Phase 3 완료 — ProblemType 1급 노드 승격 (2026-07-07)
 - **cognitive-action canonical 노드**(≠surface SignaturePattern): ProblemType을 `Problem` 스키마

@@ -115,11 +115,32 @@ def test_catalog_loose_ref_columns_lengths() -> None:
     assert len(standard_col.foreign_keys) == 0
 
 
+def test_catalog_enrichment_columns() -> None:
+    """Phase 4a — severity(String(16)·nullable)·behavior_skills(ARRAY(Text) NOT NULL·기본 '{}').
+
+    behavior_skills는 참조 배열이라 junction·FK가 아니고(신규 엣지 타입 0), severity는 어휘 강제
+    없이 String(16)이다(파이프라인 책임). 둘 다 개념 테이블에 FK 결합하지 않는다(독립 DB 유지).
+    """
+    sev = OrmMisconceptionCatalog.__table__.c.severity
+    assert sev.type.length == 16  # type: ignore[attr-defined]
+    assert sev.nullable is True
+    assert len(sev.foreign_keys) == 0
+
+    bs = OrmMisconceptionCatalog.__table__.c.behavior_skills
+    assert bs.nullable is False
+    assert isinstance(bs.type, postgresql.ARRAY)
+    assert len(bs.foreign_keys) == 0
+    ddl = _pg_ddl(OrmMisconceptionCatalog.__table__)
+    assert "behavior_skills TEXT[] DEFAULT '{}'::text[] NOT NULL" in ddl
+    # FK가 늘지 않았다(별개 체계·독립 DB — enrichment는 additive 참조 키만).
+    assert len(OrmMisconceptionCatalog.__table__.foreign_keys) == 0
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 3) 변환 roundtrip
 # ──────────────────────────────────────────────────────────────────────────
 def test_catalog_roundtrip_preserves_fields() -> None:
-    """schema → ORM → schema가 16필드(본문·코드·매핑)를 보존한다."""
+    """schema → ORM → schema가 전 필드(본문·코드·매핑·severity·behavior_skills)를 보존한다."""
     s = _valid_catalog(
         canonical_statement="분수의 분모끼리 더한다.",
         student_wrong_thinking="1/2 + 1/3 = 2/5 라고 생각함",
@@ -136,6 +157,8 @@ def test_catalog_roundtrip_preserves_fields() -> None:
         mapping_confidence="높음",
         mapping_score=0.873,
         provenance_note="gen:gpt5 / 검수:Kiki",
+        severity="blocking",
+        behavior_skills=["skill.fraction-arithmetic"],
     )
     orm = OrmMisconceptionCatalog.from_schema(s)
     assert orm.mis_id == "M0425"
@@ -144,6 +167,8 @@ def test_catalog_roundtrip_preserves_fields() -> None:
     assert orm.difficulty == "중"
     assert orm.concept_src_id == "UC-NUM-FRAC-ADD"
     assert orm.standard_code == "2022_5수01_03"
+    assert orm.severity == "blocking"
+    assert orm.behavior_skills == ["skill.fraction-arithmetic"]
 
     back = orm.to_schema()
     assert back.mis_id == s.mis_id
@@ -161,6 +186,8 @@ def test_catalog_roundtrip_preserves_fields() -> None:
     assert back.subunit == s.subunit
     assert back.mapping_confidence == s.mapping_confidence
     assert back.provenance_note == s.provenance_note
+    assert back.severity == s.severity
+    assert back.behavior_skills == s.behavior_skills
     # mapping_score는 float로 복원된다(ORM은 Decimal로 담지만 schema는 float).
     assert back.mapping_score == 0.873
 
@@ -180,6 +207,9 @@ def test_catalog_roundtrip_minimal_defaults() -> None:
     assert back.difficulty is None
     assert back.concept_src_id is None
     assert back.mapping_score is None
+    # Phase 4a — severity는 선택(None), behavior_skills는 빈 배열 기본.
+    assert back.severity is None
+    assert back.behavior_skills == []
 
 
 def test_catalog_mapping_score_high_value() -> None:

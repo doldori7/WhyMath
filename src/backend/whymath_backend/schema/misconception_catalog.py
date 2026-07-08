@@ -31,7 +31,14 @@ AchievementStandard 선례 그대로):
 
 from __future__ import annotations
 
+from typing import Final
+
 from pydantic import BaseModel, ConfigDict, Field
+
+# severity 닫힌 어휘(Phase 4a) — 오개념의 후속 학습 손상도(문항 난이도 difficulty와 별개 축).
+#   blocking = 후속 개념 습득을 막는 개념적 결손 / local = 절차·주제 국소 오류 / cosmetic = 실수성
+#   (개념 결손 없음). 강제는 파이프라인 책임(가짜 CHECK 없음)이나 어휘는 이 상수로 동결한다.
+SEVERITY_VALUES: Final[tuple[str, ...]] = ("blocking", "local", "cosmetic")
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -40,10 +47,13 @@ from pydantic import BaseModel, ConfigDict, Field
 class MisconceptionCatalog(BaseModel):
     """오개념 카탈로그 1건 — 백엔드 API/계약 모델(`data_pipeline` MisconceptionRecord 대응).
 
-    `mis_id`는 카탈로그 유일 식별자(PK·의미 문자열). 나머지 15필드는 소스 채우율이 52~100%라
-    빈 값이면 None이다. 형식 검증(error_type 8종·difficulty 3종·코드 형식)은 *데이터 파이프라인
-    책임*이며, 백엔드 계약은 파이프라인이 추출·정규화한 값을 받는 전제다(AchievementStandard가
-    cross-dataset 검증을 파이프라인에 맡긴 방침과 동형).
+    `mis_id`는 카탈로그 유일 식별자(PK·의미 문자열). 나머지 필드는 소스 채우율이 52~100%라
+    빈 값이면 None(배열은 `[]`)이다. 형식 검증(error_type 8종·difficulty 3종·severity 3종·코드
+    형식)은 *데이터 파이프라인 책임*이며, 백엔드 계약은 파이프라인이 추출·정규화한 값을 받는
+    전제다(AchievementStandard가 cross-dataset 검증을 파이프라인에 맡긴 방침과 동형).
+
+    Phase 4a enrichment 2필드: `severity`(후속 학습 손상도·difficulty와 별개 축·SEVERITY_VALUES)·
+    `behavior_skills`(arises-in skill 참조 배열·진단 방향·신규 엣지 타입 0). 상세는 각 필드 주석.
     """
 
     model_config = ConfigDict(
@@ -72,6 +82,12 @@ class MisconceptionCatalog(BaseModel):
     error_type: str | None = Field(default=None, description="오류 유형(8종 — 강제는 파이프라인)")
     difficulty: str | None = Field(default=None, description="난이도('상'/'중'/'하', 선택)")
     correction_point: str | None = Field(default=None, description="교정 포인트 (선택)")
+    # severity(Phase 4a) — 후속 학습 손상도(blocking/local/cosmetic·SEVERITY_VALUES). difficulty
+    # (문항 난이도)와 *다른 축*이며 어휘도 disjoint. 강제는 파이프라인 책임(가짜 CHECK 없음).
+    severity: str | None = Field(
+        default=None,
+        description="오개념 손상도(blocking/local/cosmetic — 후속 학습 차단도·difficulty와 별개)",
+    )
 
     # ===== 코드·매핑 (느슨참조 — 해소는 로더 책임) =====
     ccss_code: str | None = Field(default=None, description="매칭 CCSS 코드 (선택)")
@@ -93,5 +109,15 @@ class MisconceptionCatalog(BaseModel):
     )
     provenance_note: str | None = Field(default=None, description="생성·검수 출처 메모 (선택)")
 
+    # ===== cognition 참조 (Phase 4a·arises-in·신규 엣지 타입 0) =====
+    # behavior_skills — 이 오개념이 *어느 skill 수행 중 튀어나오는가*(arises-in·진단 방향). concept/
+    # problem_type의 'exercise' 의미와 구별된다. skill_graph_v1 skill_id(`skill.<slug>`) 참조 배열·
+    # FK·junction 아님(anti-explosion). v1은 대응 개념(concept_src_id)의 behavior_skills를 승계한
+    # ai_estimated 시드(검수 전·데이터카드 §승계 규칙)이고, 검수로 오개념별 재판단·override된다.
+    behavior_skills: list[str] = Field(
+        default_factory=list,
+        description="발생(arises-in) skill_id 참조 배열 — 이 오개념이 튀어나오는 skill(진단 방향)",
+    )
 
-__all__ = ["MisconceptionCatalog"]
+
+__all__ = ["MisconceptionCatalog", "SEVERITY_VALUES"]
