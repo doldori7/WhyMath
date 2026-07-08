@@ -181,3 +181,6 @@ MEMORY.md 업데이트: ✅
 ❌ 학생 데이터 *마이그레이션 없이* 스키마 변경  
 ❌ 롤백 계획 없는 배포  
 ❌ MEMORY.md 기록 없는 배포
+
+## 빌드 하네스 연동
+작업이 backlog 태스크에 대응한다면, 완료 시 `python3 scripts/harness/backlog.py done <id> --artifact <커밋/PR>` 로 상태를 갱신한다.

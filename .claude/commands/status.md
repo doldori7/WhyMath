@@ -1,70 +1,50 @@
 ---
-description: 프로젝트의 현재 상태를 종합 점검
+description: 프로젝트의 현재 상태를 종합 점검 (backlog/ 단일 진실 원천 기반)
 ---
 
 # /status — 현재 상태 점검
 
 ## 임무
 사용자가 *어디에 와 있고, 다음에 무엇을 해야 하는지* 한 화면에 보여준다.
+상태의 정본은 **backlog/** 이다 — 마크다운을 읽고 추론하지 말고 CLI 출력을 렌더링한다.
 
 ## 실행 절차
 
-### 1. 핵심 파일 읽기
-```
-view CLAUDE.md (요약 부분만)
-view MEMORY.md (현재 상태 + 미해결 의사결정 섹션)
-view ROADMAP.md (현재 위치 섹션)
+### 1. 정본 상태 조회
+```bash
+python3 scripts/harness/backlog.py status
+python3 scripts/harness/backlog.py validate --quiet
+git log --oneline -5
+git status --short
 ```
 
-### 2. 상태 보고서 출력 (다음 형식)
+### 2. 보고서 출력
+CLI 출력을 다음 순서로 정리 (한 화면):
 
 ```
 🎯 WhyMath — 현재 상태
 
-[Phase] 0 — 청사진 완료, Phase 1 착수 대기
-
-[완료]
-✅ 7계층 아키텍처 확정
-✅ 기술 스택 확정
-✅ 진입 시장 결정 (메타인지 사고력)
-
-[진행 중]
-🔄 (없음)
-
-[미해결 의사결정]
-⚠️ 수학 교육 도메인 파트너 영입 (1순위)
-⚠️ 첫 진입 학년 선택 (중2 자유학기 vs 고1 내신)
-⚠️ Cambridge/NRICH 라이선스 협상 시점
-
-[다음 단일 행동 후보 (우선순위)]
-1️⃣ 도메인 파트너 후보 3명 접촉
-2️⃣ Phaiakes9에 Qwen3-Math 배포
-3️⃣ NCIC 성취기준 크롤러 작성 시작
+[스테이지] <current_stage> — 진행률 (backlog status 그대로)
+[진행 중] ▶ <id> [브랜치]  /  (없음)
+[차단] ✖ <id> — 사유
+[사람 게이트 대기] ⏳ <G-id> [kiki] — N일 경과  ← 오래된 순
+[다음 단일 행동 후보] next 상위 3건 + 선정 사유
+[최근 커밋] git log 5건
 
 [권장 다음 명령]
-> /plan Phase1-MVP        # MVP 상세 계획
-> /implement data:ncic    # 데이터 기반 착수
-> /prompt-design socratic # 교수학 프롬프트 시작
+> /drive          # 다음 태스크부터 순차 진행
+> /gates          # 사람 게이트 처리
+> /plan <주제>    # 새 작업을 백로그에 추가
 ```
 
-### 3. Git 상태 점검 (있다면)
-```bash
-git status --short
-git log --oneline -5
-```
-
-### 4. 인프라 점검 (필요 시)
-- Phaiakes9 도달 가능 여부
-- 데이터베이스 연결 가능 여부
-- LLM API 키 설정 여부
+### 3. 서사적 맥락 (필요 시)
+스테이지의 *의미*가 궁금할 때만 ROADMAP.md·docs/strategy/status_roadmap_2026-07.md를
+보조로 읽는다. 수치·순서·다음 작업의 정본은 항상 backlog CLI다.
 
 ## 출력 원칙
-- 한 화면 안에 들어와야 함
-- 정량 수치 우선 (개수·날짜)
-- "다음 단일 행동"을 항상 제안
-- 사용자가 *결정만 하면* 되도록 옵션 정리
+- 한 화면 안에
+- "다음 단일 행동"을 항상 제안 — 사용자가 *결정만 하면* 되도록
+- validate 경고가 있으면 최상단에 표시
 
 ## 호출 빈도
-- 새 세션 시작 시 첫 명령
-- Phase 전환 시
-- 막혔을 때
+- SessionStart 훅이 요약 브리핑을 자동 주입하므로, /status는 상세가 필요할 때

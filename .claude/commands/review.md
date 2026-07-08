@@ -97,3 +97,6 @@ argument-hint: "[선택: 특정 파일 또는 PR]"
 > /review src/prompts/polya  # 특정 디렉터리
 > /review PR #42             # PR
 ```
+
+## 빌드 하네스 연동
+작업이 backlog 태스크에 대응한다면, 완료 시 `python3 scripts/harness/backlog.py done <id> --artifact <커밋/PR>` 로 상태를 갱신한다.
