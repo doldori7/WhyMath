@@ -359,6 +359,12 @@
 - **코퍼스 materialize**: 병렬 세션 #477(calc-extremum-irr·513) 위에 additive → **513→590**(+77). 2회 실행 바이트 동일(결정론 봉인).
 - **품질 봉인**: `known_primary` **무변경**(세 개념 03-02/03-03/02-02 기존 존재). 신규 밴드 테스트 2건(배치 메타·품질 불변식). **삼각방정식 답은 정수 각**이라 무리근 sqrt 필터(`answer_selection∈{largest,smallest}` + `sqrt(` in answer)에 **0건 혼입** 실측 확인 — 근 선택은 겹치나 답에 sqrt가 없어 분리됨. signature-unique 테스트는 None을 skip하므로 trig-eq 무충돌.
 - 전건 100% 수율(590/590)·L3→L4 import 0·게이트/orchestrator 무변경.
+### 2026-07-08 (구현·harness/L4/L5·S1 탈출 게이트 ③): **"학생 응답 전부 검증 통과 후" 코드 경로 증명 — 4각도 거버넌스/계약 봉인(동작 변경 0)**
+
+**무엇/왜**: S1 탈출 게이트 ③(CLAUDE.md 최상위 금기 "LLM 응답을 검증 없이 학생에게 제공 금지")을 코드로 증명. 2회 읽기전용 재조사로 확정: **coach 경로엔 게이트 ③ 위반이 없다** — `/v1/coach`·`/sessions`·`/turns`가 학생에게 방출/저장하는 건 전부 정적 결정론 템플릿(Polya 발문·오개념 반례·검산 유도, LLM 발화 0)이고, 정답(`expected_answer`)은 shadow sink(`observe_step_breaks`) 전용·응답 payload·`DialogueTurn.content`에 미노출. LLM 발화 생성기 `PolyaCoach.coach()`는 어떤 HTTP 엔드포인트도 미호출. → **전면 coach→하네스 수렴(비용·지연 결합) 없이도 게이트 ③ 성립을 지금 hermetic 봉인 가능**.
+- **신설**: `tests/backend/harness/test_gate3_student_verification_governance.py`(11 test·hermetic·정본 이식 = `test_embedding_namespace_governance.py`의 rglob frozen-allowlist 패턴). 4각도: **(A)** `.coach(` 사용 모듈 allowlist frozen(`{l4/polya/engine.py}`)·api/* 하드 가드·payload 조립 `.decide()`만 → 학생 경로에 미검증 LLM 발화 배선 시 red. **(B)** 오답(계산 슬립)+정답 sentinel 주입 → payload·AI턴 content(정적 STAGE_PROMPTS)에 정답 부재·`observe_step_breaks` monkeypatch 양면 실증(정답 sink 전용). **(C)** 하네스 verify-before-finalize 거부·미검증 verdict 정답 억제 재봉인(1차 커버 `test_wh1_loop.py::TestVerifyObligation`·`TestAnswerSuppression` 참조). **(D)** `/v1/generate` "검증 전 원시·학생 직접 노출 금지" 계약 문구 소스 고정.
+- **프로덕션 코드 변경 0건** — 기존 안전 불변식을 봉인만(D 계약 문구 이미 존재). **coach→하네스 전면 수렴은 별도 미래 작업**(LLM 주도 코칭 도입 시·게이트 ③ 무관·(A) allowlist가 그때 강제 심사).
+- **결과**: 5게이트 green(ruff·black·mypy --strict·lint-imports 1 kept 0 broken·pytest 전체 5759 passed·커버리지 95%·게이트 ③ 관련 모듈 100%). S1 탈출 게이트 잔여 = **①(Kiki 실기기 15분 완주 시연)뿐** — ②✅(§11)·③✅. 감사 `s1_structure_audit` 상환 Top 3 #1(G3) 상환 완료·설계 `s1_e2e_vertical_slice_design.md` §5·⑥ 갱신.
 
 ### 2026-07-08 (구현·L3·라이브 §11 후속): **라우터 est 비용 구조 개선 — 단일 공식(실측 단가표 유도)·수치는 데이터 대기**
 
