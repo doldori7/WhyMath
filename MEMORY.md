@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-08 (검수 승인·L4·Kiki 사인오프): **극값 오개념 M0864·M0865 crosswalk 승인 — 문구 refinement + promote 산출물(적재 pending)**
+
+**무엇/왜**: 검수 보조 리포트(체크리스트) 검토 후 **Kiki가 M0864·M0865 두 오개념을 승인**(사람 게이트 사인오프). 승인과 함께 2개 문구 refinement 지시:
+- **M0864**(extremum-max-min-confused): 반례에 "이 예에서는" 추가 — 작은 임계점=극대가 *이 예(계수 양수) 한정*임을 명시(과일반화 방지).
+- **M0865**(extremum-value-vs-point-confused): 반례에 "극대점(극대가 되는 점)·그 x좌표(-1)·극댓값(함숫값 2)은 각각 다른 대상이다" 한 줄 부가(3-way 구분 명시).
+- **편집 위치**: `catalog.py` 두 `counterexample` + `docs/prompts/misconception_diagnosis.md` #33·#34 동기(doc-first). **correct_form 미사용**(구분 문구가 signals 2토큰[극댓값·x좌표]을 다 담아 gate-safe 자기매칭 conf=1.0 → `test_correct_form_is_gate_safe` 실패, 실측 확인 → counterexample 부가로 우회). `signals`·`canonical_statement` 무변경 → detection·probe(102/65)·counts(34/102/65/843/10) 전부 불변·테스트 변경 0.
+- **② promote 산출물**: scratch 승인본(M0864·M0865 행만 `status=approved`·`reviewer=Kiki`·`reviewed_on=2026-07-08`)으로 `crosslink_review promote --out approved.json` 실행 → **2 crosslinks**(`method=manual`·note `검수:Kiki 2026-07-08`·둘 다 conf 0.9≥0.6·kebab∈카탈로그 승격 통과) 검증. **커밋 안 함**(transient ops 입력).
+- **🔒 봉인 유지**: 커밋 review_queue 템플릿은 **전행 pending 무변경**(`test_real_queue_all_pending_unsigned` green) — 승인은 복사본+본 로그로 기록하며 템플릿을 approved로 바꾸지 않는다(사람 승인이지 AI 자기승인 아님). **DB `misconception_crosslink` 적재(`promote --load`)는 Phaiakes9 ops**(이 환경 DB 0) — 위 서명(2행·Kiki·2026-07-08)으로 ops가 승인본 재구성·load 가능.
+
 ### 2026-07-08 (구현·L4·Kiki 게이트 지원): **crosswalk 검수 보조 — 결정 체크리스트(증거+기계 전제, 판정은 Kiki)**
 
 **무엇/왜**: 인계문서 item 1(M0864·M0865 crosswalk 검수)은 **Kiki 사람 검수 전용** 게이트다(`test_real_queue_all_pending_unsigned`가 커밋 템플릿을 전행 pending으로 봉인·AI 자기승인 금지). Kiki 결정(3택): ① 검수 보조 리포트를 먼저 *구현*(AI는 증거+체크리스트만·판정은 Kiki) → ② 승인분만 promote 산출물 → ③ 게이트 구조는 문서화하되 중심 아님. 기존 `crosslink_review_aid.py`는 kebab별 근거 조인까지였고 **행동 가능한 결정 체크리스트가 없던** 갭을 메운다.
