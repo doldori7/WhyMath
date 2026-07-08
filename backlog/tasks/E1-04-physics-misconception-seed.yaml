@@ -1,0 +1,18 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E1-04-physics-misconception-seed
+title: "물리 오개념 시드 — phys- 접두, FCI 분류 체계만 참조 (원문항 미사용)"
+track: subject-expansion
+stage: E1
+subject: physics
+layer: data-pipeline
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "misconceptions_phys_v1 시드 + reactive retrieval 연결"
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S1-14-exit-gate-judgement
+title: "S1 탈출 게이트 판정 (실기기 시연 후)"
+track: math-completion
+stage: S1
+subject: math
+layer: docs
+status: todo
+priority: 1
+owner: kiki
+depends_on:
+  - S1-12-phaiakes9-live-verify
+requires_gates:
+  - G-kiki-device-demo
+acceptance:
+  - 탈출 게이트 3종 판정 기록 → ROADMAP·MEMORY 갱신
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

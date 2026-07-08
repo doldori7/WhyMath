@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S1-10-audit-repay-1
+title: "감사 상환 #1 (라이브 선행분)"
+track: math-completion
+stage: S1
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates:
+  - G-phaiakes9-key
+acceptance:
+  - "s1_structure_audit_2026-07.md 상환 #1 항목 해소 + 테스트 green"
+artifacts: []
+session: null
+notes: "ROADMAP S1 대기(라이브 선행) 목록"
+updated: 2026-07-08

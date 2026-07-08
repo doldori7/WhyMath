@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S1-11-coach-harness-converge
+title: "상환 #3 완전 — coach→하네스 단일 수렴"
+track: math-completion
+stage: S1
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates:
+  - G-phaiakes9-key
+acceptance:
+  - "coach 경로가 WH-1 하네스로 단일 수렴 (이중 경로 제거)"
+  - 회귀 테스트 green
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

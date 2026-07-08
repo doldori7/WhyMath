@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S2-05-domain-partner-onboard
+title: 도메인 파트너 검수 큐 온보딩
+track: math-completion
+stage: S2
+subject: math
+layer: docs
+status: todo
+priority: 2
+owner: kiki
+depends_on: []
+requires_gates:
+  - G-domain-partner
+acceptance:
+  - 파트너가 검수 큐에서 첫 배치 검수 완료
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

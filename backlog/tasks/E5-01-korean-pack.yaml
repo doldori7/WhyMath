@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E5-01-korean-pack
+title: "국어 팩 — 법무 선행 필수 (저작권 최고 위험·지문 4트랙)"
+track: subject-expansion
+stage: E5
+subject: korean
+layer: data-pipeline
+status: todo
+priority: 1
+owner: claude
+depends_on:
+  - E4-01-history-social-pack
+requires_gates: []
+acceptance:
+  - "지문 4트랙 법무 승인 + 오독 진단 검수자 일치율 + 파일럿 D7"
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

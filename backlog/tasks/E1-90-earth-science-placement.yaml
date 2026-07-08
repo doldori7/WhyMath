@@ -1,0 +1,18 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E1-90-earth-science-placement
+title: "지구과학 E축 배치 결정 (현 E축 문서에 미배정 — 순서 날조 금지)"
+track: subject-expansion
+stage: E1
+subject: earth-science
+layer: docs
+status: todo
+priority: 3
+owner: kiki
+depends_on: []
+requires_gates: []
+acceptance:
+  - subject_expansion_e_axis_v1.md 개정으로 지구과학 스테이지 확정
+artifacts: []
+session: null
+notes: "통합과학 완전 커버는 물리·화학·생물 3부작 기준 — 지구과학 위치는 Kiki 결정"
+updated: 2026-07-08

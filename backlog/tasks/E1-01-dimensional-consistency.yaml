@@ -1,0 +1,18 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E1-01-dimensional-consistency
+title: "물리 검증 primitive — dimensional_consistency (sympy.physics.units 형제 primitive)"
+track: subject-expansion
+stage: E1
+subject: physics
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "{consistent/inconsistent/undecidable/parse_error} 4상태 계약 + 테스트"
+artifacts: []
+session: null
+notes: "subject_expansion_readiness.md §8 보류 대장 항목"
+updated: 2026-07-08

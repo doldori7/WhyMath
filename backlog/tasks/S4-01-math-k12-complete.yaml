@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-01-math-k12-complete
+title: "수학 K-12 완성 — 초·중 확장 + 대학과정 연결"
+track: math-completion
+stage: S4
+subject: math
+layer: data-pipeline
+status: todo
+priority: 1
+owner: claude
+depends_on:
+  - S3-01-pilot-cohort
+requires_gates: []
+acceptance:
+  - "초·중·고+대학 4축 활성 + traversal 성능 예산 실부하 통과"
+artifacts: []
+session: null
+notes: "대학과정 포함 — 개념 그래프는 학년 무관(Curriculum-as-Overlay)"
+updated: 2026-07-08

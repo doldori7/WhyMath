@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S2-03-problem-concept-relink
+title: "problem_concept 재연결 (S0 연기분)"
+track: math-completion
+stage: S2
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - problem_concept 링크가 원자 백본 기준으로 재연결
+  - "마이그레이션 + 테스트"
+artifacts: []
+session: null
+notes: "S0에서 S2로 연기된 항목 (ROADMAP S0 절)"
+updated: 2026-07-08

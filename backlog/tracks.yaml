@@ -1,0 +1,13 @@
+# 트랙 정의 — stage_order가 next 정렬의 1차 키다
+stage_order: [S0, S1, S2, S3, S4, S5, E1, E2, E3, E4, E5, E6]
+tracks:
+  math-completion:
+    title: "수학 완성 S0~S5 (중·고·대학 K-12+)"
+    roadmap_ref: docs/strategy/status_roadmap_2026-07.md
+  subject-expansion:
+    title: "다과목 확장 E축 — 물리→화학→생물→역사·사회(경제·역사·세계사)→국어→영어"
+    roadmap_ref: docs/strategy/subject_expansion_e_axis_v1.md
+    entry_gate: G-s5-subject-expansion
+  infra-debt:
+    title: "인프라·아키텍처 감사 상환 (플레이북 불변식 상시 감시)"
+    roadmap_ref: docs/standards/build_checkpoint_questions.md

@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S2-06-l6-suneung-mode
+title: "L6 수능 모드 보강 (병목 ⑤ — S3 파일럿 준비)"
+track: math-completion
+stage: S2
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - 수능 모드 시그니처·기출 메타 기반 문제 추천 루프 동작
+  - 테스트 green
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

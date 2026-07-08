@@ -1,0 +1,56 @@
+# 사람 게이트 대장 — clear는 evidence 필수 (backlog.py gates clear <id> --evidence ...)
+gates:
+  - id: G-phaiakes9-key
+    title: "Phaiakes9 라이브 키 투입 + 실측 비용 검증"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-07-05
+    remind_after_days: 7
+    evidence: null
+    notes: "ROADMAP 병목 ② — S1 라이브 선행분 전체의 선결 조건"
+  - id: G-kiki-device-demo
+    title: "S1 탈출 게이트 ① — 실기기 학습 루프 시연"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-07-08
+    remind_after_days: 14
+    evidence: null
+    notes: ""
+  - id: G-orphan-prod-run
+    title: "orphan 진단 스크립트 prod 실행 (scripts/diagnose_atom_orphans.py)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-07-05
+    remind_after_days: 14
+    evidence: null
+    notes: ""
+  - id: G-domain-partner
+    title: "수학 도메인 파트너 영입 (병목 ④ — 검수 큐 가동 조건)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-07-05
+    remind_after_days: 30
+    evidence: null
+    notes: ""
+  - id: G-crosswalk-approval
+    title: "crosswalk 사람 승인 (docs/standards/crosswalk_gate_contract.md)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-07-08
+    remind_after_days: 14
+    evidence: null
+    notes: ""
+  - id: G-s5-subject-expansion
+    title: "S5 타과목 확장 게이트 — E축 착수 판정 체크리스트 전부 충족 (e_axis_v1 §5)"
+    kind: decision
+    assignee: kiki
+    status: pending
+    requested: ""
+    remind_after_days: null
+    evidence: null
+    notes: "수학 K-12 완성 전 어떤 과목도 착수 금지 (불변 전제)"
