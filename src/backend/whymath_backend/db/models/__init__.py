@@ -111,6 +111,10 @@ from whymath_backend.db.models.solution_node import (
     NodeVerifyStatus,
     SolutionNode,
 )
+from whymath_backend.db.models.strategy_node import (
+    STRATEGY_REVIEW_STATUS_DEFAULT,
+    StrategyNode,
+)
 from whymath_backend.db.models.textbook_mapping import (
     TextbookMapping,
     TextbookUnit,
@@ -222,6 +226,9 @@ __all__ = [
     # Part 2 Phase 5a: FormulaNode (L1 canonical 수식 메타 PG 프로젝션·formula_id 키·enum 없음)
     "FormulaNode",
     "FORMULA_REVIEW_STATUS_DEFAULT",
+    # Part 2 Phase 6a: StrategyNode (L1 문제공략 전략 메타 PG 프로젝션·strategy_id 키·enum 없음)
+    "StrategyNode",
+    "STRATEGY_REVIEW_STATUS_DEFAULT",
     # PIPA §22-2: ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사·surrogate UUID PK)
     "ParentalConsent",
     # P1-2: AchievementStandard (NCIC 성취기준 영속·norm_id PK·official_code 비유일)
