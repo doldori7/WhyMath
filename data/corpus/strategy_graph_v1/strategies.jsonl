@@ -1,0 +1,8 @@
+{"strategy_id": "strategy.specialize", "name_ko": "특수화", "family": "reduction", "description": "일반 문제를 다루기 쉬운 특수값·소규모 사례·경계값으로 좁혀 실마리와 규칙을 얻고, 그 통찰을 원 문제로 되돌린다.", "standard_codes": []}
+{"strategy_id": "strategy.work_backward", "name_ko": "역방향 공략", "family": "reduction", "description": "구해야 할 목표에서 출발해 그것이 성립하려면 무엇이 필요한지를 거슬러 올라가며 풀이 경로를 설계한다.", "standard_codes": []}
+{"strategy_id": "strategy.analogy", "name_ko": "유추", "family": "reduction", "description": "이미 해결한 구조가 비슷한 문제를 상기해 그 방법과 발상을 현재 문제로 이전한다.", "standard_codes": []}
+{"strategy_id": "strategy.reformulate", "name_ko": "재표현", "family": "transformation", "description": "문제를 동치인 다른 표현이나 다른 영역(대수↔기하 등)으로 옮겨 더 다루기 쉬운 지형에서 공략한다.", "standard_codes": []}
+{"strategy_id": "strategy.auxiliary_construction", "name_ko": "보조요소 도입", "family": "transformation", "description": "원 문제에 없던 보조선·보조점·보조변수·보조함수를 도입해 숨은 관계를 드러낸다.", "standard_codes": []}
+{"strategy_id": "strategy.pattern_seeking", "name_ko": "규칙 발견", "family": "exploration", "description": "여러 사례를 관찰·나열해 반복 규칙을 찾아 가설을 세운다. 발견의 맥락이며 아직 증명 전이다.", "standard_codes": []}
+{"strategy_id": "strategy.case_exhaustion", "name_ko": "경우 나누기", "family": "exploration", "description": "문제 전체를 빠짐·겹침 없는 경우들로 쪼개어 각 경우를 따로 공략하기로 계획한다.", "standard_codes": []}
+{"strategy_id": "strategy.contradiction", "name_ko": "귀류법", "family": "indirect", "description": "결론의 부정을 가정하고 논리적 모순을 유도해 원 명제를 간접적으로 확립한다.", "standard_codes": []}

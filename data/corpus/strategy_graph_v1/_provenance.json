@@ -1,0 +1,17 @@
+{
+  "source_file": "strategies.jsonl",
+  "source_sha256": "b1f3ede72ed2d4e34a1734f46b9842bcaa31e144ae826f748ff6366615394cde",
+  "source_citation": "문제 공략 전략(problem-solving heuristic) 택소노미: 와이매스 자체작성(Polya 『How to Solve It』 계획 단계 표준 어휘 수렴·본문 미복제).",
+  "counts": {
+    "strategies": 8,
+    "families": 4
+  },
+  "validation": {
+    "success": true,
+    "errors": 0,
+    "warnings": 0,
+    "counts_by_rule": {}
+  },
+  "skipped": [],
+  "determinism": "결정론 — 동일 sha256 입력 2회 transform 시 byte 동일 산출"
+}

@@ -101,7 +101,7 @@ AST·성취기준 본문은 내장 금지.
 | Curriculum | Overlay | ✅ `curriculum_entry` | Overlay 유지 |
 | Assessment | 스키마 | ✅ `schema/assessment.py` | — |
 | Hint | YAML만 | ORM 신설(P6) | graded·답미루기 게이트 |
-| Strategy | 엔진 상태 | 노드화(P6) | 폐쇄 소수집합 |
+| Strategy | 엔진 상태 | **✅ 노드화(P6a 완료)** | 폐쇄 소수집합(8종·Polya 계획 축·≠ReasoningType/approach_type) |
 | UIInteraction | 이벤트 | 지식노드 아님·유지 | runtime concern |
 
 **관계 폭발 방지**(협상 불가): 새 노드종 승격 시 **신규 엣지 타입 0** 목표. concept↔skill·
@@ -143,6 +143,24 @@ dangling 0을 동결. Formula만 이 집합에 남는다(P5 승격 대기).
   Tutor/Verifier 연동·canonical_signature 계산 backfill은 소비처 실재 시(dead code 회피·2a→2b·3→3b 선례).
   거버넌스 `test_formula_governance`가 canonical-only·SymPy 재구현 금지·신규 엣지 타입 0·dsl parseable을
   동결한다.
+
+### Phase 6a 완료 — StrategyNode 폐쇄 소수집합 1급 노드 승격 (2026-07-08)
+- **폐쇄 소수집합(8종·4 family)**: 문제해결 전략을 "엔진 상태"에서 1급 노드로 승격하되 **폐쇄 소수집합**
+  으로만 노드화한다(anti-explosion). `strategy_id`는 **사람 관리 안정 code**(`strategy.<slug>`). 8종:
+  specialize·work_backward·analogy(reduction) / reformulate·auxiliary_construction(transformation) /
+  pattern_seeking·case_exhaustion(exploration) / contradiction(indirect). 근거는 Polya `How to Solve It`
+  1차 정본(Schoenfeld·Engel·Zeitz 수렴·표준 어휘·본문 미복제·description 전량 자체작성).
+- **축 구별(핵심)**: StrategyNode는 **Polya Stage 2(계획·"어떻게 뚫을까")** 축으로, `ReasoningType`
+  (스텝 단위 추론 7종)·`approach_type`(풀이 전체 6종)와 **다른 층위**(계획/결과/스텝)다. slug를 두 축
+  값과 **문자열 disjoint**하게 명명(`work_backward`≠`backward`·`case_exhaustion`≠`case_split`·
+  `pattern_seeking`≠`induction`·`reformulate`≠`transformation`). `test_strategy_governance`가 slug ∩
+  (approach_type ∪ reasoning_type) == ∅·폐쇄 8종·family 4종·신규 엣지 타입 0을 동결한다.
+- **data-pipeline `strategy_graph`**(models·transform·validate·CLI·enum-free) + 정본 코퍼스
+  `strategy_graph_v1`(8 전략·4 family·자체작성·ai_estimated). **backend `strategy_node`**(PG 프로젝션·
+  strategy_id 키·native enum 없음·마이그레이션 `c4d5e6f0a1b2`). 거버넌스 반전 없음(FormulaNode 승격으로
+  `_FORBIDDEN_NODE_CLASSES` 이미 소멸·`test_strategy_is_first_class_node`로 자립 positive 동결).
+- **소비처 연동은 후속으로 분리**: approach_type↔strategy 매핑·WH-S `strategy_tag`·Polya 전이/
+  PedagogyDecision 결선·L2 전략별 mastery는 소비처 실재 시(dead code 회피·2a→2b·3→3b·5a→5b 선례).
 
 ### Phase 4a 완료 — Misconception enrichment (2026-07-07)
 - **거버넌스 반전 없음**: Misconception은 *이미 완성된 독립 DB*(4테이블·`_FORBIDDEN_NODE_CLASSES`에
