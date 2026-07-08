@@ -217,6 +217,33 @@ def test_generated_corpus_sequence_trig_bands() -> None:
             assert primary == [concept], f"{record.slug} 개념 불일치: {primary}"
 
 
+def test_generated_corpus_sum_and_trig_eq_bands() -> None:
+    # 수열합·삼각방정식 밴드 봉인 — 문제군 존재·단답형·자연수 답·개념 태깅·근 선택 규약.
+    #   등차합(ARITH-SUM)·등비합(GEO-SUM)은 유일해(unique)·삼각방정식(TRIG-EQ)은 근 선택
+    #   (smallest/largest). 삼각방정식 답은 정수 각이라 sqrt 미포함(무리근 sqrt 필터 미혼입).
+    records = _generated_records()
+    by_unit: dict[str, list[ProblemBankRecord]] = {}
+    for record in records:
+        unit = record.problem.unit_codes[0] if record.problem.unit_codes else ""
+        by_unit.setdefault(unit, []).append(record)
+
+    expectations = {
+        "ARITH-SUM": ("H:12대수03-02", 30, {"unique"}),
+        "GEO-SUM": ("H:12대수03-03", 15, {"unique"}),
+        "TRIG-EQ": ("H:12대수02-02", 10, {"smallest", "largest"}),
+    }
+    for unit, (concept, minimum, selections) in expectations.items():
+        band = by_unit.get(unit, [])
+        assert len(band) >= minimum, f"{unit} 밴드 볼륨 부족: {len(band)}"
+        for record in band:
+            assert record.problem.question_format == "단답형"
+            assert record.problem.answer_format == "자연수"
+            assert record.verify.answer_selection in selections
+            assert "sqrt(" not in (record.problem.answer or "")  # 자연수 답(무리근 필터 미혼입)
+            primary = [t.concept_src_id for t in record.concept_tags if t.role == "PRIMARY"]
+            assert primary == [concept], f"{record.slug} 개념 불일치: {primary}"
+
+
 def test_generated_corpus_mc_invariants() -> None:
     # 객관식 밴드 — 선지 구조 + distractor 전 선지 태깅 + L4 정본 참조 무결성(validate).
     from whymath_backend.l4.misconception.validate import validate_distractor_map
