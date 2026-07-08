@@ -15,9 +15,11 @@ import pytest
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.crosslink_review import CrosslinkReviewItem
 from whymath_backend.l4.misconception.crosslink_review_aid import (
+    CandidateEvidence,
     MisconceptionCorpusEntry,
     ReviewAidSummary,
     build_review_aid,
+    candidate_gate_checks,
     format_review_aid,
     load_corpus,
     main,
@@ -185,6 +187,85 @@ def test_summarize_counts_and_signals() -> None:
     assert summary.statuses == ["pending"]
 
 
+# ── gate checks (기계 전제·객관) ──────────────────────────────────────────
+
+
+def _cand(
+    *,
+    mis_id: str = "M1",
+    link_type: str = "직접매핑",
+    confidence: float | None = 0.9,
+    has_corpus: bool = True,
+) -> CandidateEvidence:
+    return CandidateEvidence(
+        mis_id=mis_id,
+        link_type=link_type,
+        confidence=confidence,
+        rationale="근거",
+        status="pending",
+        corpus=(MisconceptionCorpusEntry(mis_id=mis_id) if has_corpus else None),
+    )
+
+
+def test_gate_checks_direct_mapping_passes_when_conf_ok() -> None:
+    checks = candidate_gate_checks(_cand(confidence=0.9), kebab_in_catalog=True)
+    assert checks.kebab_in_catalog and checks.corpus_found and checks.direct_conf_ok
+    assert checks.all_pass
+
+
+def test_gate_checks_direct_mapping_blocked_below_threshold() -> None:
+    # 직접매핑 conf 0.5 < 0.6 → direct_conf_ok False(promote 승격 금지 미러).
+    checks = candidate_gate_checks(_cand(confidence=0.5), kebab_in_catalog=True)
+    assert not checks.direct_conf_ok
+    assert not checks.all_pass
+
+
+def test_gate_checks_direct_mapping_none_conf_blocked() -> None:
+    checks = candidate_gate_checks(_cand(confidence=None), kebab_in_catalog=True)
+    assert not checks.direct_conf_ok
+
+
+def test_gate_checks_non_direct_conf_not_applicable() -> None:
+    # 부분매핑/개념겹침은 conf 임계값 해당 없음 → direct_conf_ok True(N/A).
+    checks = candidate_gate_checks(
+        _cand(link_type="부분매핑", confidence=None), kebab_in_catalog=True
+    )
+    assert checks.direct_conf_ok
+    assert checks.all_pass
+
+
+def test_gate_checks_missing_corpus_or_catalog_blocks() -> None:
+    assert not candidate_gate_checks(_cand(has_corpus=False), kebab_in_catalog=True).all_pass
+    assert not candidate_gate_checks(_cand(), kebab_in_catalog=False).all_pass
+
+
+def test_summary_gate_blocked_lists_precondition_failures() -> None:
+    corpus = load_corpus(_corpus_text("M1", "M2"))
+    items = [
+        _item(kebab_id=KEBAB_A, mis_id="M1", confidence=0.9),  # 통과
+        _item(kebab_id=KEBAB_A, mis_id="M2", confidence=0.5),  # 직접매핑 conf 미달 → blocked
+    ]
+    summary = summarize_review_aid(build_review_aid(items, corpus=corpus), statuses=("pending",))
+    assert summary.gate_blocked_mis_ids == ["M2"]
+
+
+# ── kebab 포커스 필터 ─────────────────────────────────────────────────────
+
+
+def test_build_kebab_filter_scopes_to_requested() -> None:
+    corpus = load_corpus(_corpus_text("M1", "M2"))
+    items = [_item(kebab_id=KEBAB_A, mis_id="M1"), _item(kebab_id=KEBAB_B, mis_id="M2")]
+    groups = build_review_aid(items, corpus=corpus, kebab_filter=(KEBAB_A,))
+    assert [g.kebab_id for g in groups] == [KEBAB_A]
+
+
+def test_build_kebab_filter_none_includes_all() -> None:
+    corpus = load_corpus(_corpus_text("M1", "M2"))
+    items = [_item(kebab_id=KEBAB_A, mis_id="M1"), _item(kebab_id=KEBAB_B, mis_id="M2")]
+    groups = build_review_aid(items, corpus=corpus, kebab_filter=None)
+    assert {g.kebab_id for g in groups} == {KEBAB_A, KEBAB_B}
+
+
 # ── format ───────────────────────────────────────────────────────────────
 
 
@@ -226,6 +307,30 @@ def test_format_empty_groups_still_has_summary_line() -> None:
     parsed = ReviewAidSummary.model_validate_json(report.splitlines()[-1])
     assert parsed.kebab_groups == 0
     assert parsed.candidates == 0
+
+
+def test_format_includes_decision_checklist_with_blank_boxes() -> None:
+    corpus = load_corpus(_corpus_text("M0019"))
+    items = [_item(kebab_id=KEBAB_A, mis_id="M0019", confidence=0.95)]
+    report = format_review_aid(build_review_aid(items, corpus=corpus), statuses=("pending",))
+    # 체크리스트: 기계 전제(객관 ✓/✗) + 교수학 판단(빈 박스).
+    assert "검수 체크리스트" in report
+    assert "기계 전제(promote)" in report
+    assert "kebab∈카탈로그 ✓" in report and "M-id∈코퍼스 ✓" in report
+    assert "직접매핑 conf≥0.6 ✓" in report
+    assert "교수학 판단(Kiki)" in report
+    assert "canonical·반례 타당" in report and "4지선다 귀속 타당" in report
+    # 불변: 어떤 행도 승인/반려로 *표시*하지 않는다 — 박스는 전부 공란([ ]), 체크 마크 없음.
+    assert "[ ] approve" in report and "[ ] reject" in report
+    assert "[x]" not in report and "[X]" not in report and "☑" not in report
+
+
+def test_format_checklist_flags_gate_blocked_direct_mapping() -> None:
+    # 직접매핑 conf 0.5 → 기계 전제 ✗(승인해도 promote 거부)를 체크리스트가 드러낸다.
+    corpus = load_corpus(_corpus_text("M0019"))
+    items = [_item(kebab_id=KEBAB_A, mis_id="M0019", confidence=0.5)]
+    report = format_review_aid(build_review_aid(items, corpus=corpus), statuses=("pending",))
+    assert "직접매핑 conf≥0.6 ✗" in report
 
 
 # ── CLI ──────────────────────────────────────────────────────────────────
@@ -279,6 +384,24 @@ def test_main_cli_status_all_includes_approved(
     assert rc == 0
     summary = ReviewAidSummary.model_validate_json(capsys.readouterr().out.strip().splitlines()[-1])
     assert summary.candidates == 2
+
+
+def test_main_cli_kebab_filter_scopes_report(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    queue = tmp_path / "queue.json"
+    corpus = tmp_path / "corpus.json"
+    _write_queue(
+        queue,
+        [_item(kebab_id=KEBAB_A, mis_id="M1"), _item(kebab_id=KEBAB_B, mis_id="M2")],
+    )
+    corpus.write_text(_corpus_text("M1", "M2"), encoding="utf-8")
+    rc = main(["--queue", str(queue), "--corpus", str(corpus), "--kebab", KEBAB_A])
+    assert rc == 0
+    out = capsys.readouterr().out
+    summary = ReviewAidSummary.model_validate_json(out.strip().splitlines()[-1])
+    assert summary.kebab_groups == 1  # KEBAB_A만
+    assert KEBAB_B not in out
 
 
 def test_main_cli_rejects_bad_top_key(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
