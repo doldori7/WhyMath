@@ -15,7 +15,10 @@ from whymath_backend.harness.problem_corpus_batch import (
     main,
     run_corpus_batch,
 )
-from whymath_backend.l1.problem_bank.populate import load_problem_bank_records
+from whymath_backend.l1.problem_bank.populate import (
+    ProblemBankRecord,
+    load_problem_bank_records,
+)
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.distractor import DISTRACTOR_BY_ID
 
@@ -49,6 +52,9 @@ class TestRunCorpusBatch:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=False,
         )
         assert report.fulfilled
@@ -80,6 +86,9 @@ class TestRunCorpusBatch:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         assert report.fulfilled and report.written == 15
@@ -123,6 +132,9 @@ class TestRunCorpusBatch:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         run_corpus_batch(
@@ -140,6 +152,9 @@ class TestRunCorpusBatch:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         assert a.read_bytes() == b.read_bytes()
@@ -163,6 +178,9 @@ class TestRunCorpusBatch:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         slugs = [r.slug for r in load_problem_bank_records(out)]
@@ -203,6 +221,12 @@ class TestCliEntry:
                 "--geo",
                 "0",
                 "--trig",
+                "0",
+                "--arith-sum",
+                "0",
+                "--geo-sum",
+                "0",
+                "--trig-eq",
                 "0",
             ]
         )
@@ -282,6 +306,12 @@ class TestCliEntry:
                 "0",
                 "--trig",
                 "0",
+                "--arith-sum",
+                "0",
+                "--geo-sum",
+                "0",
+                "--trig-eq",
+                "0",
             ]
         )
         assert code == 1
@@ -295,7 +325,7 @@ class TestCliEntry:
 
 class TestCalculusBand:
     def test_default_run_includes_calc_bands(self) -> None:
-        # 기본 실행 = quad 4 + calc 5 + exp·log 2 + 수열·삼각 3밴드(총 14밴드) — 총 513.
+        # 기본 실행 = quad 4 + calc 5 + exp·log 2 + 수열·삼각 6밴드 = 총 17밴드 — 총 590.
         report = run_corpus_batch(out_path=Path("/nonexistent/x.jsonl"), write=False)
         names = [b.name for b in report.bands]
         assert names == [
@@ -313,6 +343,9 @@ class TestCalculusBand:
             "arith",
             "geo",
             "trig",
+            "arith-sum",
+            "geo-sum",
+            "trig-eq",
         ]
         for band_name in ("calc-extremum", "calc-tangent", "calc-value"):
             band = next(b for b in report.bands if b.name == band_name)
@@ -325,7 +358,10 @@ class TestCalculusBand:
         assert stored["arith"] == 60
         assert stored["geo"] == 30
         assert stored["trig"] == 13
-        assert report.total_stored == 513 and report.fulfilled
+        assert stored["arith-sum"] == 45
+        assert stored["geo-sum"] == 20
+        assert stored["trig-eq"] == 12
+        assert report.total_stored == 590 and report.fulfilled
 
     def test_value_mc_records_have_calculus_metadata(self, tmp_path: Path) -> None:
         # calc-value-mc 밴드 산출물 — 극대·극소 태깅·객관식·4지선다·오답 오개념 2종 태깅.
@@ -346,6 +382,9 @@ class TestCalculusBand:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -385,6 +424,9 @@ class TestCalculusBand:
             arith_n=8,
             geo_n=6,
             trig_n=5,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -403,6 +445,58 @@ class TestCalculusBand:
             assert [t.concept_src_id for t in record.concept_tags if t.role == "PRIMARY"] == [
                 concept
             ]
+
+    def test_sum_and_trig_eq_bands_metadata(self, tmp_path: Path) -> None:
+        # 수열합·삼각방정식 밴드 산출물 — 단원(unit_code)·성취기준·개념·정답 형식 봉인.
+        #   등차합(ARITH-SUM)·등비합(GEO-SUM)은 유일해(unique)·자연수 답, 삼각방정식(TRIG-EQ)은
+        #   근 선택(smallest/largest)·자연수 각 답. 삼각방정식은 답에 sqrt가 없어(정수 각)
+        #   무리근 밴드 sqrt 필터에 혼입되지 않는다(품질 봉인과 정합).
+        out = tmp_path / "problems.jsonl"
+        run_corpus_batch(
+            out_path=out,
+            short_n=0,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=0,
+            calc_tangent_n=0,
+            calc_value_n=0,
+            calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
+            exp_n=0,
+            log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
+            arith_sum_n=10,
+            geo_sum_n=8,
+            trig_eq_n=6,
+            write=True,
+        )
+        records = load_problem_bank_records(out)
+        by_unit: dict[str, list[ProblemBankRecord]] = {}
+        for record in records:
+            by_unit.setdefault(record.problem.unit_codes[0], []).append(record)
+        assert set(by_unit) == {"ARITH-SUM", "GEO-SUM", "TRIG-EQ"}
+        expect = {
+            "ARITH-SUM": ("[12대수03-02]", "H:12대수03-02"),
+            "GEO-SUM": ("[12대수03-03]", "H:12대수03-03"),
+            "TRIG-EQ": ("[12대수02-02]", "H:12대수02-02"),
+        }
+        for unit, (code, concept) in expect.items():
+            for record in by_unit[unit]:
+                assert record.problem.achievement_standard_codes == [code]
+                assert record.problem.question_format == "단답형"
+                assert record.problem.answer_format == "자연수"
+                assert [t.concept_src_id for t in record.concept_tags if t.role == "PRIMARY"] == [
+                    concept
+                ]
+        # 수열합은 유일해·삼각방정식은 근 선택(smallest/largest).
+        for record in by_unit["ARITH-SUM"] + by_unit["GEO-SUM"]:
+            assert record.verify.answer_selection == "unique"
+        for record in by_unit["TRIG-EQ"]:
+            assert record.verify.answer_selection in {"smallest", "largest"}
+            assert "sqrt(" not in (record.problem.answer or "")  # 정수 각 — sqrt 필터 미혼입
 
     def test_value_records_have_calculus_metadata(self, tmp_path: Path) -> None:
         # calc-value 밴드 산출물 — 극대·극소 단원/성취기준/개념 태깅(극값 x좌표와 동일)·단답형·
@@ -424,6 +518,9 @@ class TestCalculusBand:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -455,6 +552,9 @@ class TestCalculusBand:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -485,6 +585,9 @@ class TestCalculusBand:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -518,6 +621,9 @@ class TestCalculusBand:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -550,6 +656,9 @@ class TestCalculusBand:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         diffs = {r.problem.difficulty_overall for r in load_problem_bank_records(out)}
@@ -577,6 +686,9 @@ class TestAlgebraBand:
             arith_n=0,
             geo_n=0,
             trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
             write=True,
         )
         assert report.fulfilled

@@ -337,6 +337,15 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-08 (구현·L3·S2 넓이 확장 2차 PR-B): **수열합·삼각방정식 배치 밴드 wiring + 코퍼스 513→590 materialize**
+
+**무엇/왜**: PR-A(#476·생성기 3종+테스트)에 이어 배치 파이프라인에 밴드를 붙여 코퍼스를 실제로 넓혔다. 고2 대수에서 아직 0건이던 **수열의 합(Sₙ)**·**삼각방정식**을 채운다(도메인 분담·기존 검증 스택 무변경 재사용).
+- **`harness/problem_corpus_batch.py`**: 기존 수열·삼각 밴드 루프에 `arith-sum`·`geo-sum`·`trig-eq` 3밴드 **additive** 추가(세 생성기 모두 `skip_signatures` 좌석 공유 → 루프 튜플 확장만). 밴드마다 별도 `signature_index`(문제군 분리·calc 패턴 미러). 기본값 arith-sum 45·geo-sum 20·trig-eq 12. CLI `--arith-sum`/`--geo-sum`/`--trig-eq`. 스펙 난이도 3.2/3.3/3.3(추정 gap ≤ 0.2 < 0.5 tol → 동등성 난이도 만점).
+- **dedup 두 전략**: 수열합은 조건 `x−(합 공식)`이 다항이라 signature 非None·답 dedup(같은 합 오병합 방지); 삼각방정식은 초월함수라 **signature=None**(exp/log형)·slug 유일성 위임.
+- **코퍼스 materialize**: 병렬 세션 #477(calc-extremum-irr·513) 위에 additive → **513→590**(+77). 2회 실행 바이트 동일(결정론 봉인).
+- **품질 봉인**: `known_primary` **무변경**(세 개념 03-02/03-03/02-02 기존 존재). 신규 밴드 테스트 2건(배치 메타·품질 불변식). **삼각방정식 답은 정수 각**이라 무리근 sqrt 필터(`answer_selection∈{largest,smallest}` + `sqrt(` in answer)에 **0건 혼입** 실측 확인 — 근 선택은 겹치나 답에 sqrt가 없어 분리됨. signature-unique 테스트는 None을 skip하므로 trig-eq 무충돌.
+- 전건 100% 수율(590/590)·L3→L4 import 0·게이트/orchestrator 무변경.
+
 ### 2026-07-08 (구현·L3·라이브 §11 후속): **라우터 est 비용 구조 개선 — 단일 공식(실측 단가표 유도)·수치는 데이터 대기**
 
 **무엇/왜**: 라이브 §11에서 실측 `cost_krw≈0.4원` vs 추정 `est_cost_krw=28원`(1/69) 괴리 확인. 원인은 단가가 아니라 `CLOUD_MIN_COST_KRW`(28/46)가 "1K입력+1K출력" 가정의 **하드코딩 매직넘버**. 그러나 실측이 프리플라이트 1콜(63/5 토큰·비대표)뿐이라 **숫자를 내리는 건 부당**(실 튜터링 턴은 훨씬 큼·guard 보수성은 안전선). → Kiki 결정: **구조 개선만**.
