@@ -253,6 +253,8 @@
 
 ## 📍 현재 위치 (2026-07-05)
 
+> **기계가독 정본은 `backlog/`** (`python3 scripts/harness/backlog.py status`) — 이 절은 서사적 요약이며, 수치·다음 작업은 빌드 하네스가 정본이다 (`docs/standards/build_harness.md`).
+
 **Phase 1 MVP 심화 개발 중.** 로드맵 정본은 `docs/strategy/status_roadmap_2026-07.md`(S0~S5 단계·병목 Top 5·단계별 AI 질문 리스트). 아래 S0~S5는 그 요약이며, 상세·체크리스트·탈출 게이트는 정본 문서 참조.
 
 **종합 판정**: "코어(L1–L4)는 과잉 성숙, 제품 루프(L5 E2E·L6 수능 모드)는 미성숙." 무게중심을 설계 정본화 → 수직 슬라이스 실증으로 이동하는 국면.

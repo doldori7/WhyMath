@@ -178,7 +178,7 @@ class TestCheckStop:
         assert task_id in err
 
     def test_태스크_갱신했으면_통과(self, seeded_repo: Path, monkeypatch, capsys):
-        task_id = self._claim_and_commit(seeded_repo, capsys)
+        self._claim_and_commit(seeded_repo, capsys)
         # claim 커밋(태스크 파일 변경 포함)이 브랜치 diff에 있으므로 통과해야 한다
         assert self._invoke(monkeypatch, {}) == 0
 
