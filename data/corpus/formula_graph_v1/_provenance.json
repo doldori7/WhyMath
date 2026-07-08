@@ -1,0 +1,18 @@
+{
+  "source_file": "formulas.jsonl",
+  "source_sha256": "4fc901d34cf540d50ebf25a5c1dc27be1c8b490d769f275a8ddcf4861cca3daf",
+  "source_citation": "canonical 수식 택소노미: 와이매스 자체작성(수학적 사실·표준 표기·교과서/기출 본문 미포함).",
+  "counts": {
+    "formulas": 25,
+    "families": 8,
+    "with_signature": 0
+  },
+  "validation": {
+    "success": true,
+    "errors": 0,
+    "warnings": 0,
+    "counts_by_rule": {}
+  },
+  "skipped": [],
+  "determinism": "결정론 — 동일 sha256 입력 2회 transform 시 byte 동일 산출"
+}

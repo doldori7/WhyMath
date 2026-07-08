@@ -9,12 +9,14 @@
 > (LearningScene DSL) · `notation_contract.md`(표기 계약) · `03b_wh_s_solver_harness.md`
 > (WH-S) · `04a_wh1_tutoring_harness.md`(WH-1) · `math_dsl_remediation_design.md`(부채 교정)
 
-> ⚠️ **2026-07-03 개정 예고 — FormulaNode 재판정**: 본 문서가 "anti-goal"·"즉사"로 판정한
-> 자체 `FormulaNode`는, 리치 Part 2 스펙 **전면 채택**(사용자 확정·`concept_node_layering_
-> decision.md` §0)에 따라 도입 방향으로 재판정됐다. **단 경계 유지**: (a) **canonical 표현만**
-> (변형식·변수명·항순서 노드화 금지 — 폭발 방지), (b) SymPy는 여전히 *검증 커널*(재구현 금지),
-> (c) AST는 **참조·정규화용만**(full 5계층 자체 엔진 금지·Q8 경계). 실제 개정(관련 표·Q3/Q8
-> 정정)은 로드맵 Phase 5에서 수행하며, 그 전까지 아래 본문은 원본을 유지한다.
+> ✅ **2026-07-08 개정 완료(Phase 5a) — FormulaNode 재판정**: 본 문서가 "anti-goal"·"즉사"로
+> 판정한 자체 `FormulaNode`는, 리치 Part 2 스펙 **전면 채택**(사용자 확정·`concept_node_layering_
+> decision.md` §0)에 따라 **canonical 참조 노드로 도입됐다(Phase 5a)**. **경계는 유지·코드 동결**:
+> (a) **canonical 표현만**(변형식·변수명·항순서 노드화 금지·변형은 SymPy 런타임 동치 위임), (b) SymPy는
+> 여전히 *검증 커널*(재구현 금지·`FormulaNode` 노드 모듈은 sympy 미import), (c) AST는 **참조·정규화용
+> 만**(full 5계층 자체 엔진 금지·Q8 경계). 아래 §2.1·§3.3·§1 본문은 그 결정으로 정정됐다 — **자체 CAS·
+> 재작성규칙 트리는 여전히 금지, canonical 참조 노드는 허용**. 거버넌스 `test_formula_governance`가
+> 이 경계를 동결한다(`formula_id`=사람 관리 code·ID≠Signature).
 
 ---
 
@@ -54,8 +56,9 @@ WhyMath는 "답이 아닌, 이유를 묻는 수학"을 정체성으로 하는 �
 
 **진화 판정을 지배하는 결정적 설계 사실 4가지**:
 
-1. **명시적 수식 AST가 없다** — SymPy를 직접 권위로 쓴다. `FormulaNode`/재작성 규칙
-   트리는 `math_dsl_risk_register.md` Q3·Q8에서 *의도적 미도입*으로 못박혔다.
+1. **명시적 수식 AST가 없다** — SymPy를 직접 동치 권위로 쓴다. `FormulaNode`는 **canonical 참조
+   노드로 도입됐으나(P5a)** *재작성 규칙 트리·자체 CAS는 여전히 미도입*(Q3·Q8 경계). 노드는 canonical
+   수식의 정체성·참조만 담고 동치 계산은 l3 SymPy 단일 권위가 한다(노드 모듈 sympy 미import).
    (과설계 회피 = 이미 내려진 아키텍처 결정)
 2. **의미와 렌더가 분리** — 코어는 구조(JSON)만 산출, 클라(Flutter·웹·PDF·AI)는
    렌더만. 같은 spec이 여러 표면에서 각자 그려진다.
@@ -84,12 +87,15 @@ WhyMath는 "답이 아닌, 이유를 묻는 수학"을 정체성으로 하는 �
   검증 신뢰 붕괴(NEVER: "LLM 응답을 검증 없이 학생에게 제공 금지" 위반 위험).
 - **④ 필수 abstraction**: (이 방향 채택 시) 항·재작성규칙·정규형 엔진 — 이는 곧
   **추가 금지 대상**이다.
-- **⑤ 금지 abstraction**: 자체 `FormulaNode`·재작성 규칙 트리(risk_register Q3·Q8).
+- **⑤ 금지 abstraction**: 자체 CAS·**재작성 규칙 트리**(risk_register Q3·Q8) — *여전히 금지*.
+  단 `FormulaNode` **canonical 참조 노드는 허용**(P5a·2026-07-08): 노드는 canonical 수식의 정체성·
+  참조만 담고 CAS/재작성 로직을 내장하지 않는다(동치는 l3 SymPy 단일 권위). "자체 기호엔진 구축"과
+  "canonical 참조 노드"는 다르다 — 전자만 anti-goal.
 - **⑥ AI 적합성 △**: LLM은 기호엔진을 *호출*하면 되지 그것이 *될* 필요가 없다.
 - **⑦ 유지보수 ✕**: CAS 정확도 유지비용은 사실상 무한. 4~5명 팀에 불가능.
 - **⑧ 생존 ✕**: Wolfram·SymPy와의 경쟁 = 즉사. 교육적 차별화 0.
-- **판정: 반대(anti-goal).** SymPy는 *검증 커널*로만 유지하되 DSL의 정체성으로
-  삼지 않는다.
+- **판정: 자체 기호엔진(CAS) 구축은 반대(anti-goal).** SymPy는 *검증 커널*로만 유지하되 DSL의 정체성
+  으로 삼지 않는다. **FormulaNode canonical 참조 노드는 이 판정과 무관하게 허용**(CAS를 만들지 않으므로).
 
 ### 2.2 Educational Reasoning Engine (교육 추론 엔진)
 
@@ -289,9 +295,13 @@ WhyMath는 "답이 아닌, 이유를 묻는 수학"을 정체성으로 하는 �
 
 | 금지 abstraction | 근거 |
 |---|---|
-| 자체 `FormulaNode`/재작성규칙 트리 | SymPy 재구현 = 즉사 (risk_register Q3·Q8) |
+| 자체 CAS·**재작성규칙 트리**·수식 변형 노드화 | SymPy 재구현 = 즉사·변형 노드화 = 조합폭발 (risk_register Q3·Q8) |
 | 튜링완전 규칙/커리큘럼 언어 | 유지 불가·범위 폭발 (§2.3·2.5) |
 | 무한증식 관계 온톨로지 | 6종 폐쇄 유지 (§2.8) |
+
+> **허용(P5a·위 금지와 구별)**: `FormulaNode` **canonical 참조 노드**(canonical 수식 1개만·변형 금지·
+> `formula_id`=사람 관리 code·동치는 l3 SymPy 위임·노드에 CAS/재작성 로직 없음). 금지되는 것은 *자체
+> CAS·재작성규칙 트리·변형 노드화*이지 canonical 참조 노드가 아니다(`test_formula_governance` 동결).
 | 학생 대면 정리증명 UI를 정체성으로 | 페르소나 불일치·유지비 (§2.9) |
 | 학생 인지의 외부공유형 프로파일 / 낙인 상태 | 미성년 PII·정서 안전 절대금기 (§2.6·2.8) |
 | 무자비 게임화 적응(스트릭·랭킹) | CLAUDE.md 절대금기 (§2.7) |

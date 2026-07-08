@@ -45,7 +45,9 @@
   (선언 명세) 존재. **Skill=`SkillNode` 1급 노드(Phase 2a 승격)**·**ProblemType=`ProblemTypeNode`
   1급 노드(Phase 3 승격·cognitive-action canonical≠surface SignaturePattern)**. anti-explosion 기준
   (canonical·독립추정 가치)을 통과해 승격했고, 연결은 참조 키만(신규 엣지 타입 0).
-- **Formula 전용 노드 없음** → "Formula 먼저" 실패 경로 회피됨.
+- **Formula=`FormulaNode` canonical-only 1급 노드(Phase 5a 승격)** → 변형은 노드화 금지·동치는 SymPy
+  위임·ID≠Signature. 위험문서 2건 anti-goal 판정을 canonical-only 조건부 허용으로 정식 개정. "Formula는
+  마지막" 단계 완료(우선 5노드 전부 승격).
 - Concept은 Misconception·Visualization로 *참조 키*(`misconception_codes`·
   `visualization_card_keys`)를 노출 — 5노드가 배선돼 있다(Phase 1 값 일부 미충전이어도 연결
   능력 존재). 결정·재검토 트리거는 ADR §2, 동결은 `test_five_node_connectivity_governance.py`.
