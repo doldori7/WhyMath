@@ -1,6 +1,6 @@
 """오개념 crosswalk 검수 *보조 리포트* — 검수 큐 행에 근거를 붙여 한 화면에 모은다(read-only).
 
-crosswalk(kebab 30 → M-id 839) 행은 **사람 검수 산출물**이고(`crosslink_review.py` 정본),
+crosswalk(kebab-id ↔ M-id) 행은 **사람 검수 산출물**이고(`crosslink_review.py` 정본),
 승인/반려·서명·적재는 전부 Kiki의 몫이다(AI 자기승인·자동 적재 절대 금지). 그 원칙을 *그대로*
 지키면서, 이 모듈은 promote 모듈이 선언한 기계의 몫 — **"검수를 30분 작업으로 만든다"** — 를
 한 걸음 더 밀어준다: 검수자가 행별 승인/반려를 판단하려면 매번 두 원천을 손으로 대조해야 한다.
@@ -108,7 +108,7 @@ class KebabReviewGroup(BaseModel):
     """kebab-id 1개에 묶인 후보 M-id들 + kebab 자체 근거 — 리포트의 검수 단위(한 화면).
 
     검수자는 이 그룹을 보고 "이 kebab 오개념(정의·반례)에 어떤 M-id 후보가 맞는가"를 판단한다.
-    `kebab is None`이면 kebab-id가 L4 탐지 카탈로그(30종)에 없다 — 전사 왜곡 의심(promote도 이
+    `kebab is None`이면 kebab-id가 L4 탐지 카탈로그에 없다 — 전사 왜곡 의심(promote도 이
     행을 거부하므로 리포트가 먼저 드러낸다).
     """
 
@@ -145,7 +145,7 @@ class ReviewAidSummary(BaseModel):
     """리포트에 오른 후보 링크(행) 총수."""
 
     kebab_not_in_catalog: list[str]
-    """L4 카탈로그(30종)에 없는 kebab-id(정렬) — 전사 왜곡 검수 신호."""
+    """L4 카탈로그에 없는 kebab-id(정렬) — 전사 왜곡 검수 신호."""
 
     dangling_mis_ids: list[str]
     """코퍼스에 없는 후보 M-id(정렬·중복 제거) — 폐기/오탈자 M-id 검수 신호."""
@@ -234,7 +234,7 @@ def _format_kebab_header(group: KebabReviewGroup) -> list[str]:
     """kebab측 근거 블록 — 정의(틀린 믿음)·반례·정정형. 카탈로그 미존재면 경고."""
     if group.kebab is None:
         return [
-            f"## {group.kebab_id}  ⚠ L4 카탈로그(30종)에 없음 — 전사 왜곡 의심(promote도 거부)",
+            f"## {group.kebab_id}  ⚠ L4 카탈로그에 없음 — 전사 왜곡 의심(promote도 거부)",
         ]
     k = group.kebab
     lines = [

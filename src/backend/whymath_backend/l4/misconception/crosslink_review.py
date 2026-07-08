@@ -1,6 +1,6 @@
 """오개념 crosswalk 검수 큐 → 승인분 승격·적재 원커맨드 — 슬라이스 M1.
 
-crosswalk(kebab 30 → M-id) 행은 **사람 검수 산출물**이다(`schema/misconception_crosslink.py`
+crosswalk(kebab-id ↔ M-id) 행은 **사람 검수 산출물**이다(`schema/misconception_crosslink.py`
 상단 주석 정본·MEMORY 2026-06-30) — AI 자기승인·자동 적재 절대 금지. 기계의 몫은 검수를 30분
 작업으로 만드는 것: ① 초안(`docs/data/misconception_crosslink_candidates.md` §2)을 전사한 검수 큐
 JSON(`docs/data/misconception_crosslink_review_queue.json`)을 사람이 행별로 승인/반려하고,
@@ -14,7 +14,7 @@ JSON(`docs/data/misconception_crosslink_review_queue.json`)을 사람이 행별�
 승격 규칙(위반은 `CrosslinkReviewError`로 *전건 열거* — 조용한 누락 금지):
 - approved 행은 reviewer·reviewed_on(검수 서명) 필수.
 - 직접매핑 승인은 confidence ≥ 0.6 필수(초안 §0.2 — conf<0.6은 인접 오개념·승격 금지).
-- kebab_id는 L4 탐지 카탈로그(`catalog.py::CATALOG_BY_ID` 30종)에 실재해야 한다(전사 왜곡 가드).
+- kebab_id는 L4 탐지 카탈로그(`catalog.py::CATALOG_BY_ID`)에 실재해야 한다(전사 왜곡 가드).
 - 출력 행은 `schema.MisconceptionCrosslink` 계약 준수·`method="manual"`(채택 주체=사람·초안 §4).
 
 CLI(`crosslink_candidates.py`·`l1/misconception/populate.py` 골격):
@@ -35,6 +35,10 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from whymath_backend.l1.misconception.crosslink_gate import (
+    promotion_violations,
+    sign,
+)
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.schema.misconception_crosslink import (
     CrosslinkType,
@@ -44,10 +48,8 @@ from whymath_backend.schema.misconception_crosslink import (
 # 검수 큐 top key — 후보 도구("candidates")·로더("crosslinks")와 *일부러* 다르다(오투입 차단).
 _QUEUE_KEY = "review_queue"
 
-# 직접매핑 승인 최소 신뢰도(초안 §0.2) — 미만은 "인접 오개념"이라 직접매핑 승격 금지.
-_DIRECT_MIN_CONFIDENCE = 0.6
-
-# 검수 상태 — pending(미검수)·approved(승인)·rejected(반려)·deferred(보류).
+# 검수 상태 — pending(미검수)·approved(승인)·rejected(반려)·deferred(보류). 런타임 어휘 정본은
+# Gate Contract `REVIEW_STATUSES`이고 이 Literal은 타입 별칭(거버넌스 테스트가 둘의 일치를 동결).
 ReviewStatus = Literal["pending", "approved", "rejected", "deferred"]
 
 
@@ -60,7 +62,7 @@ class CrosslinkReviewItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    kebab_id: str = Field(..., description="L4 탐지 카탈로그 id(CATALOG_BY_ID 30종)")
+    kebab_id: str = Field(..., description="L4 탐지 카탈로그 id(CATALOG_BY_ID)")
     mis_id: str = Field(..., description="콘텐츠 카탈로그 M-id(예 'M0049')")
     link_type: CrosslinkType = Field(..., description="연결 의미 — 직접매핑/부분매핑/개념겹침")
     confidence: float | None = Field(
@@ -115,23 +117,22 @@ def _parse_items(rows: list[Any]) -> list[CrosslinkReviewItem]:
 
 
 def _promotion_violations(index: int, item: CrosslinkReviewItem) -> list[str]:
-    """행 1건의 승격 규칙 위반 목록 — kebab 실재(전행)·서명·직접매핑 conf(승인 행)."""
-    where = f"[행 {index}] {item.kebab_id}→{item.mis_id}"
-    violations: list[str] = []
-    if item.kebab_id not in CATALOG_BY_ID:
-        violations.append(f"{where}: kebab_id가 L4 카탈로그(30종)에 없음 — 전사 왜곡 의심")
-    if item.status != "approved":
-        return violations
-    if item.reviewer is None or item.reviewed_on is None:
-        violations.append(f"{where}: 승인 행에 검수 서명(reviewer·reviewed_on) 누락")
-    if item.link_type == "직접매핑" and (
-        item.confidence is None or item.confidence < _DIRECT_MIN_CONFIDENCE
-    ):
-        violations.append(
-            f"{where}: 직접매핑 승인은 confidence ≥ {_DIRECT_MIN_CONFIDENCE} 필수"
-            f"(현재 {item.confidence}) — 초안 §0.2 승격 금지"
-        )
-    return violations
+    """행 1건의 승격 규칙 위반 목록 — Gate Contract에 위임(카탈로그 주입·단일 정본).
+
+    규칙(kebab 실재·승인 서명·직접매핑 conf 임계)의 정본은 `crosslink_gate.promotion_violations`이며
+    여기선 L4 탐지 카탈로그(`CATALOG_BY_ID`)를 주입한다(l1 gate가 l4를 import하지 않도록·계층 규칙).
+    """
+    return promotion_violations(
+        kebab_id=item.kebab_id,
+        mis_id=item.mis_id,
+        status=item.status,
+        reviewer=item.reviewer,
+        reviewed_on=item.reviewed_on,
+        link_type=item.link_type,
+        confidence=item.confidence,
+        known_kebab_ids=CATALOG_BY_ID,
+        row_label=f"[행 {index}] ",
+    )
 
 
 def parse_review_queue(queue: dict[str, Any]) -> list[CrosslinkReviewItem]:
@@ -172,7 +173,8 @@ def promote_approved(queue: dict[str, Any]) -> dict[str, Any]:
             continue
         # 위 규칙 검증으로 승인 행의 reviewer·reviewed_on은 non-None이 보장된다.
         assert item.reviewer is not None and item.reviewed_on is not None
-        stamp = f"검수:{item.reviewer} {item.reviewed_on.isoformat()}"
+        # 서명 stamp 정본은 Gate Contract `sign`(load 게이트 `is_signed`가 검증하는 형식과 동일).
+        stamp = sign(item.reviewer, item.reviewed_on)
         note = stamp if item.note is None else f"{item.note} · {stamp}"
         crosslink = MisconceptionCrosslink(
             kebab_id=item.kebab_id,

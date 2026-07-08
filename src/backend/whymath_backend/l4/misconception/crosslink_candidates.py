@@ -1,8 +1,8 @@
-"""오개념 crosswalk 후보 *자동 생성* 도구 — kebab(30) × M-id(839) 임베딩 유사도 제안.
+"""오개념 crosswalk 후보 *자동 생성* 도구 — kebab × M-id 임베딩 유사도 제안.
 
 crosswalk 골격(`crosslink_loader.py`·`crosslink_resolve.py`)의 *후보 제안* 보조 도구다. kebab
-탐지 카탈로그(`l4/misconception/catalog.py` 30종)와 M-id 콘텐츠 카탈로그(`misconception_catalog`
-839종)를 의미 임베딩 코사인으로 비교해 kebab마다 상위 후보를 제안한다.
+탐지 카탈로그(`l4/misconception/catalog.py`)와 M-id 콘텐츠 카탈로그(`misconception_catalog`)를
+의미 임베딩 코사인으로 비교해 kebab마다 상위 후보를 제안한다.
 
 **산출물 = 검수용 후보**(라이브 테이블 자동 적재 아님·우선순위 #1·#3). 출력 JSON은 top key가
 `"candidates"`라 로더(`crosslink_loader`·`"crosslinks"` 입력)가 *직접 읽을 수 없는* 형태다(자동
