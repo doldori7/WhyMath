@@ -40,6 +40,7 @@ from pydantic import BaseModel, ConfigDict
 
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.crosslink_review import (
+    _DIRECT_MIN_CONFIDENCE,
     CrosslinkReviewError,
     CrosslinkReviewItem,
     ReviewStatus,
@@ -104,6 +105,49 @@ class CandidateEvidence(BaseModel):
         return self.corpus is not None
 
 
+class GateChecks(BaseModel):
+    """후보 1건의 *기계적 promote 전제* — `promote_approved`가 강제할 규칙을 서명 전에 노출.
+
+    **판정이 아니라 사실이다**: 이 세 불리언은 `crosslink_review._promotion_violations`가 검사하는
+    객관 규칙(kebab 실재·M-id 실재·직접매핑 conf≥0.6)을 *미리* 계산해 "승인해도 promote를 통과하는
+    행인가"를 보여준다. 교수학 타당성(승인/반려)은 여기 없다 — 그건 리포트의 빈 체크박스(사람 몫)다.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kebab_in_catalog: bool
+    """kebab-id가 L4 카탈로그(CATALOG_BY_ID 34종)에 실재 — False면 promote 거부(전사 왜곡)."""
+
+    corpus_found: bool
+    """후보 M-id가 코퍼스에 실재 — False면 dangling(promote는 kebab만 검사하나 검수 신호)."""
+
+    direct_conf_ok: bool
+    """직접매핑이면 confidence ≥ 0.6 충족(아니면 승격 금지) — 직접매핑 아니면 해당 없음(True)."""
+
+    @property
+    def all_pass(self) -> bool:
+        """세 기계 전제를 모두 통과 — False면 승인해도 promote가 거부(교수학 판단과 무관)."""
+        return self.kebab_in_catalog and self.corpus_found and self.direct_conf_ok
+
+
+def candidate_gate_checks(cand: CandidateEvidence, *, kebab_in_catalog: bool) -> GateChecks:
+    """후보 + 소속 kebab 카탈로그 실재 여부 → 기계 전제(순수·객관). 임계값은 promote와 단일 원천.
+
+    `direct_conf_ok`은 promote의 직접매핑 규칙(`_DIRECT_MIN_CONFIDENCE`)을 그대로 미러한다 —
+    직접매핑인데 conf가 None이거나 0.6 미만이면 승격 금지(초안 §0.2).
+    직접매핑이 아니면 해당 없음(True).
+    """
+    direct_conf_ok = not (
+        cand.link_type == "직접매핑"
+        and (cand.confidence is None or cand.confidence < _DIRECT_MIN_CONFIDENCE)
+    )
+    return GateChecks(
+        kebab_in_catalog=kebab_in_catalog,
+        corpus_found=cand.corpus_found,
+        direct_conf_ok=direct_conf_ok,
+    )
+
+
 class KebabReviewGroup(BaseModel):
     """kebab-id 1개에 묶인 후보 M-id들 + kebab 자체 근거 — 리포트의 검수 단위(한 화면).
 
@@ -150,6 +194,9 @@ class ReviewAidSummary(BaseModel):
     dangling_mis_ids: list[str]
     """코퍼스에 없는 후보 M-id(정렬·중복 제거) — 폐기/오탈자 M-id 검수 신호."""
 
+    gate_blocked_mis_ids: list[str]
+    """기계 전제(GateChecks) 미달 후보 M-id(정렬·중복 제거) — 승인해도 promote가 거부(객관 신호)."""
+
 
 def load_corpus(text: str) -> dict[str, MisconceptionCorpusEntry]:
     """M-id 코퍼스 JSON 텍스트 → `mis_id → 엔트리` 인덱스(검수 조인용).
@@ -179,19 +226,24 @@ def build_review_aid(
     corpus: dict[str, MisconceptionCorpusEntry],
     catalog: dict[str, Misconception] | None = None,
     statuses: Iterable[ReviewStatus] = DEFAULT_STATUSES,
+    kebab_filter: Iterable[str] | None = None,
 ) -> list[KebabReviewGroup]:
     """검수 큐 행 + 코퍼스 → kebab별 근거 그룹(순수·결정론·판정 없음).
 
     `statuses`에 해당하는 행만 대상으로(기본 pending — 검수 대기분), kebab-id로 묶고 각 후보에
-    코퍼스 근거를 조인한다. kebab측은 `catalog`(기본 `CATALOG_BY_ID`)에서 조인한다. 카탈로그/코퍼스
+    코퍼스 근거를 조인한다. `kebab_filter`가 주어지면 그 kebab-id만 포함한다(특정 오개념 스코프 —
+    예 극값 M0864/M0865). kebab측은 `catalog`(기본 `CATALOG_BY_ID`)에서 조인한다. 카탈로그/코퍼스
     미존재는 조인 결과를 None으로 두고 *그대로 실어* 검수 신호로 드러낸다(조용한 누락 금지). 그룹은
     kebab-id 정렬, 그룹 내 후보는 큐 순서(초안 신뢰도 내림차순 전사)를 보존한다.
     """
     resolved_catalog = CATALOG_BY_ID if catalog is None else catalog
     wanted = set(statuses)
+    kebab_wanted = None if kebab_filter is None else set(kebab_filter)
     groups: dict[str, list[CandidateEvidence]] = {}
     for item in items:
         if item.status not in wanted:
+            continue
+        if kebab_wanted is not None and item.kebab_id not in kebab_wanted:
             continue
         groups.setdefault(item.kebab_id, []).append(
             CandidateEvidence(
@@ -221,12 +273,21 @@ def summarize_review_aid(
     candidate_count = sum(len(g.candidates) for g in group_list)
     not_in_catalog = sorted(g.kebab_id for g in group_list if not g.kebab_found)
     dangling = sorted({c.mis_id for g in group_list for c in g.candidates if not c.corpus_found})
+    gate_blocked = sorted(
+        {
+            c.mis_id
+            for g in group_list
+            for c in g.candidates
+            if not candidate_gate_checks(c, kebab_in_catalog=g.kebab_found).all_pass
+        }
+    )
     return ReviewAidSummary(
         statuses=[str(s) for s in statuses],
         kebab_groups=len(group_list),
         candidates=candidate_count,
         kebab_not_in_catalog=not_in_catalog,
         dangling_mis_ids=dangling,
+        gate_blocked_mis_ids=gate_blocked,
     )
 
 
@@ -247,28 +308,54 @@ def _format_kebab_header(group: KebabReviewGroup) -> list[str]:
     return lines
 
 
-def _format_candidate(cand: CandidateEvidence) -> list[str]:
-    """후보 M-id 1건 — 큐측(link_type·conf·rationale) + 코퍼스측 근거. dangling이면 경고."""
+def _mark(ok: bool) -> str:
+    """기계 전제 표시 — 통과 ✓ · 미달 ✗(객관 사실, 승인 표시 아님)."""
+    return "✓" if ok else "✗"
+
+
+def _format_checklist(cand: CandidateEvidence, *, kebab_in_catalog: bool) -> list[str]:
+    """후보 1건의 검수 체크리스트 — 기계 전제(객관 ✓/✗) + 교수학 판단(빈 박스·Kiki).
+
+    **판정하지 않는다**: 기계 전제는 promote가 강제할 *사실*(GateChecks)이고, 교수학 줄은
+    사람이 채울 *빈 체크박스*다. 어떤 행도 approve/reject로 표시하지 않는다(불변).
+    """
+    checks = candidate_gate_checks(cand, kebab_in_catalog=kebab_in_catalog)
+    direct = "해당없음" if cand.link_type != "직접매핑" else _mark(checks.direct_conf_ok)
+    return [
+        "     ── 검수 체크리스트 ──",
+        f"     기계 전제(promote): kebab∈카탈로그 {_mark(checks.kebab_in_catalog)} · "
+        f"M-id∈코퍼스 {_mark(checks.corpus_found)} · "
+        f"직접매핑 conf≥{_DIRECT_MIN_CONFIDENCE:g} {direct}",
+        "     교수학 판단(Kiki): [ ] canonical·반례 타당  [ ] 4지선다 귀속 타당  "
+        "[ ] approve  [ ] reject",
+    ]
+
+
+def _format_candidate(cand: CandidateEvidence, *, kebab_in_catalog: bool) -> list[str]:
+    """후보 M-id 1건 — 큐측(link_type·conf·rationale) + 코퍼스측 근거 + 검수 체크리스트."""
     conf = "null" if cand.confidence is None else f"{cand.confidence:g}"
     head = f"   → {cand.mis_id}  [{cand.link_type} conf={conf} status={cand.status}]"
+    parts: list[str]
     if cand.corpus is None:
-        return [
+        parts = [
             head + "  ⚠ 코퍼스에 없음 — dangling(폐기/오탈자 M-id 의심)",
             f"     초안근거: {cand.rationale}",
         ]
-    c = cand.corpus
-    parts: list[str] = [head]
-    if c.canonical_statement:
-        # standard_code는 코퍼스에서 이미 '[9수02-19]' 형태로 대괄호를 포함(이중 대괄호 방지).
-        std = f"  · 성취기준 {c.standard_code}" if c.standard_code else ""
-        parts.append(f"     개념: {c.canonical_statement}{std}")
-    if c.student_wrong_thinking:
-        parts.append(f"     학생 오사고: {c.student_wrong_thinking}")
-    if c.distractor_rule:
-        parts.append(f"     distractor 규칙: {c.distractor_rule}")
-    if c.error_type:
-        parts.append(f"     오류유형: {c.error_type}")
-    parts.append(f"     초안근거: {cand.rationale}")
+    else:
+        c = cand.corpus
+        parts = [head]
+        if c.canonical_statement:
+            # standard_code는 코퍼스에서 이미 '[9수02-19]' 형태로 대괄호를 포함(이중 대괄호 방지).
+            std = f"  · 성취기준 {c.standard_code}" if c.standard_code else ""
+            parts.append(f"     개념: {c.canonical_statement}{std}")
+        if c.student_wrong_thinking:
+            parts.append(f"     학생 오사고: {c.student_wrong_thinking}")
+        if c.distractor_rule:
+            parts.append(f"     distractor 규칙: {c.distractor_rule}")
+        if c.error_type:
+            parts.append(f"     오류유형: {c.error_type}")
+        parts.append(f"     초안근거: {cand.rationale}")
+    parts.extend(_format_checklist(cand, kebab_in_catalog=kebab_in_catalog))
     return parts
 
 
@@ -284,24 +371,29 @@ def format_review_aid(
     group_list = list(groups)
     status_label = ", ".join(str(s) for s in statuses)
     lines = [
-        "# crosswalk 검수 보조 — 근거 조인(read-only·판정 없음)",
+        "# crosswalk 검수 보조 — 근거 조인 + 체크리스트(read-only·판정 없음)",
         f"대상 상태: {status_label} · kebab {len(group_list)}종 · "
         f"후보 {sum(len(g.candidates) for g in group_list)}건",
-        "검수자는 kebab 오개념과 후보 M-id 근거를 대조해 approve/reject를 판단하고, 검수 큐 JSON에",
-        "status/reviewer/reviewed_on을 손기입한 뒤 promote --load로 적재한다",
-        "(이 도구는 status를 안 바꾼다·판정은 사람 몫).",
+        "검수자는 kebab 오개념과 후보 M-id 근거를 대조해 체크리스트로 approve/reject를 판단하고,",
+        "검수 큐 *복사본*에 status/reviewer/reviewed_on을 손기입한 뒤 promote로 적재한다",
+        "(이 도구는 status를 안 바꾼다·기계 전제만 계산·판정은 사람 몫).",
         "",
     ]
     for group in group_list:
         lines.extend(_format_kebab_header(group))
         for cand in group.candidates:
-            lines.extend(_format_candidate(cand))
+            lines.extend(_format_candidate(cand, kebab_in_catalog=group.kebab_found))
         lines.append("")
     lines.append(summarize_review_aid(group_list, statuses=statuses).model_dump_json())
     return "\n".join(lines)
 
 
-def _run(queue_path: Path, corpus_path: Path, statuses: tuple[ReviewStatus, ...]) -> int:
+def _run(
+    queue_path: Path,
+    corpus_path: Path,
+    statuses: tuple[ReviewStatus, ...],
+    kebab_filter: tuple[str, ...] | None = None,
+) -> int:
     """큐·코퍼스 읽어 리포트 출력. 파일 부재는 exit 2(조용한 무동작 금지·promote 규약 미러)."""
     for path, label in ((queue_path, "검수 큐"), (corpus_path, "코퍼스")):
         if not path.exists():
@@ -314,7 +406,7 @@ def _run(queue_path: Path, corpus_path: Path, statuses: tuple[ReviewStatus, ...]
         print(f"검수 큐 파싱 거부 — {exc}")
         return 1
     corpus = load_corpus(corpus_path.read_text(encoding="utf-8"))
-    groups = build_review_aid(items, corpus=corpus, statuses=statuses)
+    groups = build_review_aid(items, corpus=corpus, statuses=statuses, kebab_filter=kebab_filter)
     print(format_review_aid(groups, statuses=statuses))
     return 0
 
@@ -350,6 +442,13 @@ def main(argv: list[str] | None = None) -> int:
         default="pending",
         help="리포트 대상 검수 상태(기본 pending — 검수 대기분). all은 전 상태.",
     )
+    parser.add_argument(
+        "--kebab",
+        action="append",
+        default=None,
+        metavar="KEBAB_ID",
+        help="특정 kebab-id만 스코프(반복 지정 가능). 미지정 시 전 kebab. 예 특정 오개념 검수.",
+    )
     args = parser.parse_args(argv)
     status_arg: str = args.status
     statuses: tuple[ReviewStatus, ...] = (
@@ -357,7 +456,8 @@ def main(argv: list[str] | None = None) -> int:
         if status_arg == "all"
         else (status_arg,)  # type: ignore[assignment]
     )
-    return _run(args.queue, args.corpus, statuses)
+    kebab_filter: tuple[str, ...] | None = None if args.kebab is None else tuple(args.kebab)
+    return _run(args.queue, args.corpus, statuses, kebab_filter)
 
 
 if __name__ == "__main__":  # pragma: no cover — 엔트리포인트, _run/main이 테스트 대상
@@ -367,10 +467,12 @@ if __name__ == "__main__":  # pragma: no cover — 엔트리포인트, _run/main
 __all__ = [
     "CandidateEvidence",
     "DEFAULT_STATUSES",
+    "GateChecks",
     "KebabReviewGroup",
     "MisconceptionCorpusEntry",
     "ReviewAidSummary",
     "build_review_aid",
+    "candidate_gate_checks",
     "format_review_aid",
     "load_corpus",
     "main",
