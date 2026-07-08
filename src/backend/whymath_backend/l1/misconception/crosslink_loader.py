@@ -6,7 +6,11 @@
 
 **매핑 데이터 = 사람 검수 산출물**(math_dsl_remediation_design.md §1·CLAUDE.md 우선순위 #1·#3):
 틀린 매핑은 오도된 학부모/학생 리포트로 이어지므로 자동 생성 매핑을 검수 없이 적재하지 않는다.
-이 로더는 *적재 메커니즘*이며 실제 매핑 파일은 검수 후 별도로 공급한다(코드 슬라이스엔 미동봉).
+실제 매핑 파일은 검수 후 별도로 공급한다(코드 슬라이스엔 미동봉). `load_crosslinks`는 적재 직전
+**Gate Contract**(`crosslink_gate.load_gate_violations`)를 강제한다 — 전 행 `method="manual"`이고
+note에 검수 서명 stamp가 있어야 하므로, promote --load 산출물만 통과하고 candidate/미서명 직접
+적재는 거부된다(검수 우회·자기승인을 *코드로* 차단). 저수준 `Store.populate`는 게이트를 안 거친다
+(resolve/shadow 단위의 합성 시딩 좌석).
 
 멱등(PG ON CONFLICT — catalog_loader 규약): PK는 `link_id`(UUID·server_default)지만 *의미 유일키*는
 `(kebab_id, mis_id, link_type)`라 그 트리플 충돌 시 confidence·method·note만 갱신한다(link_id 보존).
@@ -29,6 +33,10 @@ from whymath_backend.db.models.misconception_crosslink import (
     MisconceptionCrosslink as MisconceptionCrosslinkORM,
 )
 from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
+from whymath_backend.l1.misconception.crosslink_gate import (
+    CrosslinkGateError,
+    load_gate_violations,
+)
 from whymath_backend.schema.misconception_crosslink import MisconceptionCrosslink
 
 if TYPE_CHECKING:
@@ -72,6 +80,7 @@ def load_crosslinks(
     Raises:
         FileNotFoundError: collection_json이 Path인데 파일 부재.
         pydantic.ValidationError: 행이 schema 형식을 위반.
+        CrosslinkGateError: load 게이트 위반(method≠manual·미서명 — 검수 우회·전건 열거).
     """
     del session  # async Session 미사용(sync 엔진 좌석) — 호환 자리표시.
     collection = _as_collection(collection_json)
@@ -79,6 +88,11 @@ def load_crosslinks(
     crosslinks = [_crosslink_from_row(row) for row in rows]
     if not crosslinks:
         return 0
+    # load 게이트(Gate Contract) — method=manual·검수 서명 없는 행은 거부(검수 우회·자기승인 차단).
+    # promote --load 산출물은 통과하고, candidate/미서명 직접 적재는 막는다(전건 열거).
+    violations = load_gate_violations(crosslinks)
+    if violations:
+        raise CrosslinkGateError("crosswalk load 게이트 위반:\n" + "\n".join(violations))
     resolved = settings if settings is not None else get_settings()
     cl_store = (
         store

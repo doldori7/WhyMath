@@ -1,8 +1,8 @@
 """오개념 crosswalk(kebab-id ↔ M-id) 연결 — 백엔드 계약 모델(Pydantic).
 
 오개념 정체성 통합(math_dsl_risk_register.md Q3·Q10-⑥·`math_dsl_remediation_design.md` §1)의
-*골격*이다. 두 별개 체계 — L4 런타임 탐지 정본 **kebab-id 30종**(`l4/misconception/catalog.py`)과
-콘텐츠 카탈로그 **M-id 839종**(`schema/misconception_catalog.py`) — 을 *FK로 묶지 않고* N:M 매핑
+*골격*이다. 두 별개 체계 — L4 런타임 탐지 정본 **kebab-id**(`l4/misconception/catalog.py`)와
+콘텐츠 카탈로그 **M-id**(`schema/misconception_catalog.py`) — 을 *FK로 묶지 않고* N:M 매핑
 테이블로 잇는다. 학생 데이터(`misconception_hypothesis`·`evidence_links`)는 kebab-id를 그대로
 보존하고(rekey 불필요), 조회 시점에 이 crosswalk로 M-id를 read-time 해석한다(crosslink_resolve.py).
 
@@ -33,7 +33,7 @@ CrosslinkMethod = Literal["manual", "standard_code", "embedding"]
 class MisconceptionCrosslink(BaseModel):
     """오개념 kebab-id ↔ M-id 단일 연결 — 백엔드 계약 모델.
 
-    `kebab_id`는 L4 탐지 카탈로그 id(느슨참조 — `l4/misconception/catalog.py`의 30종),
+    `kebab_id`는 L4 탐지 카탈로그 id(느슨참조 — `l4/misconception/catalog.py`),
     `mis_id`는 콘텐츠 카탈로그 PK(실 FK 대상 `misconception_catalog.mis_id`), `link_type`은 연결
     의미, `confidence`는 매핑 신뢰도(0~1), `method`는 후보 근거 방식이다. 의미 유일키는
     `(kebab_id, mis_id, link_type)`(같은 쌍·의미의 중복 금지).
