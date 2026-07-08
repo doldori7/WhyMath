@@ -78,6 +78,10 @@ from whymath_backend.db.models.dialogue import (
     DialogueTurn,
 )
 from whymath_backend.db.models.evidence_link import EvidenceLink
+from whymath_backend.db.models.formula_node import (
+    FORMULA_REVIEW_STATUS_DEFAULT,
+    FormulaNode,
+)
 from whymath_backend.db.models.misconception_catalog import MisconceptionCatalog
 from whymath_backend.db.models.misconception_crosslink import MisconceptionCrosslink
 from whymath_backend.db.models.misconception_embedding import MisconceptionEmbedding
@@ -215,6 +219,9 @@ __all__ = [
     # Part 2 Phase 3: ProblemTypeNode (L1 문제유형 메타 PG 프로젝션·problem_type_id 키·enum 없음)
     "ProblemTypeNode",
     "PROBLEM_TYPE_REVIEW_STATUS_DEFAULT",
+    # Part 2 Phase 5a: FormulaNode (L1 canonical 수식 메타 PG 프로젝션·formula_id 키·enum 없음)
+    "FormulaNode",
+    "FORMULA_REVIEW_STATUS_DEFAULT",
     # PIPA §22-2: ParentalConsent (14세 미만 법정대리인 동의 GRANT 감사·surrogate UUID PK)
     "ParentalConsent",
     # P1-2: AchievementStandard (NCIC 성취기준 영속·norm_id PK·official_code 비유일)

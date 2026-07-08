@@ -52,7 +52,7 @@ FormulaNode)과 대조한 결과 상당한 갭이 확인됐고, **사용자가 �
 | **misconception** | 참조 | `misconception_codes`(카탈로그 참조) | 실체는 독립 DB(#6) |
 | **cognition** | 부분 내장 | `cognitive_type`(enum) + Phase 1 `behavior_skills`(참조)·`cognitive_load`·`abstraction_required`(스칼라) | 스칼라/참조만·자유텍스트 금지 |
 | **graph_links** | 별 엔티티 | `ConceptEdge`(7종 relation) + `prerequisite_concept_ids` 캐시 | 리치보다 풍부 |
-| **ast_binding** | 참조 | Phase 1 `formula_refs`(FormulaNode 참조·초기 dangling) | AST 참조만(엔진 미내장) |
+| **ast_binding** | 참조 | `formula_refs`(FormulaNode[P5a 실재] 참조·채움은 5b) | AST 참조만(엔진 미내장·동치는 SymPy) |
 
 **참조 vs 내장 구분**: 참조 키(`misconception_codes`·`visualization_card_keys`·`formula_refs`·
 `behavior_skills`)는 실체 미보유 다리라 순수성 위반이 아니다. 자유텍스트 오개념·렌더 명세·formula
@@ -96,7 +96,7 @@ AST·성취기준 본문은 내장 금지.
 | **Skill** | 속성(enum) | **✅ 1급 노드(P2a 완료)** | mastery 독립추정 가치·행동영역 canonical |
 | **ProblemType** | 스키마 | **✅ 1급 노드(P3 완료)** | cognitive-action canonical(≠surface SignaturePattern) |
 | Visualization | 선언 명세 | ✅ 유지·계약 정합 | "무엇을"만·"어떻게" 금지 |
-| **Formula** | 비노드 | **canonical-only 노드(P5)** | canonical 표현만(변형 노드화 금지)·SymPy 검증커널 유지 |
+| **Formula** | 비노드 | **✅ canonical-only 노드(P5a 완료)** | canonical 표현만(변형 노드화 금지)·ID≠Signature·동치는 SymPy 위임(재구현 금지) |
 | Proof/Theorem | 없음 | TheoremNode≠ProofNode(P6) | 정리≠증명 분리 |
 | Curriculum | Overlay | ✅ `curriculum_entry` | Overlay 유지 |
 | Assessment | 스키마 | ✅ `schema/assessment.py` | — |
@@ -114,10 +114,35 @@ misconception↔skill·concept↔formula 연결은 *참조 키*와 기존 `prere
 SkillNode를 이 집합에서 제거**했다 — `_FORBIDDEN_NODE_CLASSES=("FormulaNode","ProblemTypeNode")`로
 축소하고 `test_skill_is_first_class_node`(SkillNode 모델·ORM + BehaviorArea 6종)로 반전. 신규 거버넌스
 `test_skill_governance`가 BehaviorArea 6종 폐쇄·backend↔pipeline enum 값 정합·신규 엣지 타입 0을 동결.
+**Phase 5a(2026-07-08)로 FormulaNode를 제거** — `_FORBIDDEN_NODE_CLASSES=()`로 비웠다(마지막 노드
+승격). `test_no_dedicated_formula_node_class`→`test_formula_is_first_class_node`로 반전하고, 신규
+`test_formula_governance`가 canonical-only·SymPy 재구현 금지 경계·dsl parseable·신규 엣지 타입 0을
+동결한다. 위험문서(evolution·risk_register)의 anti-goal 판정도 canonical-only 조건부 허용으로 정식
+개정했다(자체 CAS·재작성규칙 트리는 여전히 금지). 이로써 "우선 5노드, Formula는 마지막" 단계 완료.
 **Phase 3(2026-07-07)로 ProblemTypeNode를 제거** — `_FORBIDDEN_NODE_CLASSES=("FormulaNode",)`로 축소하고
 `test_problem_type_is_first_class_node`(ProblemTypeNode 모델·ORM)로 반전. 신규 거버넌스
 `test_problemtype_governance`가 신규 엣지 타입 0·**ProblemType≠SignaturePattern 구별**·cross-corpus
 dangling 0을 동결. Formula만 이 집합에 남는다(P5 승격 대기).
+
+### Phase 5a 완료 — Formula canonical-only 1급 노드 승격 (2026-07-08)
+- **canonical-only·ID≠Signature(사용자 확정)**: Formula를 부재에서 1급 노드로 승격하되 **canonical
+  표현만** 노드화한다(변형식·변수명·항순서·표기 변이는 노드화 금지·조합폭발 방지). `formula_id`는
+  **사람 관리 안정 code**(`formula.<slug>`)이지 SymPy 계산값이 아니다(알고리즘 변경 시 KG id 참사
+  방지). `canonical_signature`는 검색·dedup **보조** 메타(정체성 아님). **SymPy는 정체성이 아니라
+  동등성 판정 도구로만** — 변형↔canonical 동치는 런타임 `l3/symbolic_equivalence`가 판정하고 노드는
+  정체성·참조만 담는다(CAS/재작성규칙 미내장·노드 모듈 sympy 미import). `equivalence_class`·`sympy_repr`
+  저장 안 함(변형 열거 금지).
+- **data-pipeline `formula_graph`**(models·transform·validate·CLI) + 정본 코퍼스 `formula_graph_v1`
+  (25 canonical 수식·8 family·자체작성·ai_estimated·dsl SymPy-parseable). **backend `formula_node`**
+  (PG 프로젝션·formula_id 키·native enum 없음·마이그레이션 `b3c4d5e6f0a1`).
+- **위험문서 2건 정식 개정(P5 고유·기존 결정 반전)**: `math_dsl_evolution`·`math_dsl_risk_register`가
+  유일하게 anti-goal("즉사")로 판정했던 FormulaNode를 **canonical-only 조건부 허용**으로 정정했다 —
+  *자체 CAS·재작성규칙 트리·변형 노드화는 여전히 금지*, canonical 참조 노드만 허용. 반대 논거는
+  canonical-only 불변식의 근거로 보존.
+- **소비처 연동은 Phase 5b로 분리(D2)**: `formula_refs`(concept→formula) 대량 매핑·런타임 resolution·
+  Tutor/Verifier 연동·canonical_signature 계산 backfill은 소비처 실재 시(dead code 회피·2a→2b·3→3b 선례).
+  거버넌스 `test_formula_governance`가 canonical-only·SymPy 재구현 금지·신규 엣지 타입 0·dsl parseable을
+  동결한다.
 
 ### Phase 4a 완료 — Misconception enrichment (2026-07-07)
 - **거버넌스 반전 없음**: Misconception은 *이미 완성된 독립 DB*(4테이블·`_FORBIDDEN_NODE_CLASSES`에

@@ -1,0 +1,332 @@
+{
+  "source_citation": "canonical 수식 택소노미: 와이매스 자체작성(수학적 사실·표준 표기·교과서/기출 본문 미포함).",
+  "formulas": [
+    {
+      "formula_id": "formula.multiplication.square-of-sum",
+      "name_ko": "합의 제곱",
+      "family": "곱셈공식",
+      "latex": "(a+b)^2 = a^2 + 2ab + b^2",
+      "dsl": "(a + b)**2 == a**2 + 2*a*b + b**2",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "9수02-08"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.multiplication.square-of-difference",
+      "name_ko": "차의 제곱",
+      "family": "곱셈공식",
+      "latex": "(a-b)^2 = a^2 - 2ab + b^2",
+      "dsl": "(a - b)**2 == a**2 - 2*a*b + b**2",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "9수02-08"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.multiplication.difference-of-squares",
+      "name_ko": "합차 공식",
+      "family": "곱셈공식",
+      "latex": "(a+b)(a-b) = a^2 - b^2",
+      "dsl": "(a + b)*(a - b) == a**2 - b**2",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "9수02-08"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.multiplication.cube-of-sum",
+      "name_ko": "합의 세제곱",
+      "family": "곱셈공식",
+      "latex": "(a+b)^3 = a^3 + 3a^2 b + 3ab^2 + b^3",
+      "dsl": "(a + b)**3 == a**3 + 3*a**2*b + 3*a*b**2 + b**3",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "10공수1-01-02"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.factoring.perfect-square-trinomial",
+      "name_ko": "완전제곱식 인수분해",
+      "family": "인수분해공식",
+      "latex": "a^2 + 2ab + b^2 = (a+b)^2",
+      "dsl": "a**2 + 2*a*b + b**2 == (a + b)**2",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "9수02-09"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.factoring.difference-of-squares",
+      "name_ko": "제곱차 인수분해",
+      "family": "인수분해공식",
+      "latex": "a^2 - b^2 = (a+b)(a-b)",
+      "dsl": "a**2 - b**2 == (a + b)*(a - b)",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "9수02-09"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.factoring.sum-of-cubes",
+      "name_ko": "세제곱의 합 인수분해",
+      "family": "인수분해공식",
+      "latex": "a^3 + b^3 = (a+b)(a^2 - ab + b^2)",
+      "dsl": "a**3 + b**3 == (a + b)*(a**2 - a*b + b**2)",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "10공수1-01-02"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.quadratic.roots",
+      "name_ko": "이차방정식 근의 공식",
+      "family": "근의공식",
+      "latex": "x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}",
+      "dsl": "x == (-b + sqrt(b**2 - 4*a*c))/(2*a)",
+      "canonical_signature": null,
+      "aliases": [
+        "x = \\frac{-b - \\sqrt{b^2-4ac}}{2a}"
+      ],
+      "standard_codes": [
+        "9수02-15"
+      ],
+      "notes": "canonical은 한 근·다른 부호 근은 SymPy 동치로 판정(변형 노드화 아님)."
+    },
+    {
+      "formula_id": "formula.quadratic.discriminant",
+      "name_ko": "판별식",
+      "family": "근의공식",
+      "latex": "D = b^2 - 4ac",
+      "dsl": "D == b**2 - 4*a*c",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "9수02-15"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.quadratic.vieta-sum",
+      "name_ko": "근과 계수의 관계(합)",
+      "family": "근의공식",
+      "latex": "\\alpha + \\beta = -\\frac{b}{a}",
+      "dsl": "r_1 + r_2 == -b/a",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "10공수1-01-05"
+      ],
+      "notes": "dsl은 근 심볼 r_1·r_2 사용(α·β는 display; β는 SymPy Beta 함수와 충돌 회피)."
+    },
+    {
+      "formula_id": "formula.quadratic.vieta-product",
+      "name_ko": "근과 계수의 관계(곱)",
+      "family": "근의공식",
+      "latex": "\\alpha \\beta = \\frac{c}{a}",
+      "dsl": "r_1*r_2 == c/a",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "10공수1-01-05"
+      ],
+      "notes": "dsl은 근 심볼 r_1·r_2 사용(α·β는 display)."
+    },
+    {
+      "formula_id": "formula.exponent.product",
+      "name_ko": "지수법칙(곱)",
+      "family": "지수로그",
+      "latex": "a^m \\cdot a^n = a^{m+n}",
+      "dsl": "a**m * a**n == a**(m + n)",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "9수01-05"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.exponent.power",
+      "name_ko": "지수법칙(거듭제곱)",
+      "family": "지수로그",
+      "latex": "(a^m)^n = a^{mn}",
+      "dsl": "(a**m)**n == a**(m*n)",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "9수01-05"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.log.product",
+      "name_ko": "로그의 곱 법칙",
+      "family": "지수로그",
+      "latex": "\\log(xy) = \\log x + \\log y",
+      "dsl": "log(x*y) == log(x) + log(y)",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "12미적I-01-01"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.log.power",
+      "name_ko": "로그의 거듭제곱 법칙",
+      "family": "지수로그",
+      "latex": "\\log(x^n) = n \\log x",
+      "dsl": "log(x**n) == n*log(x)",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "12미적I-01-01"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.trig.pythagorean",
+      "name_ko": "삼각함수 피타고라스 항등식",
+      "family": "삼각공식",
+      "latex": "\\sin^2\\theta + \\cos^2\\theta = 1",
+      "dsl": "sin(theta)**2 + cos(theta)**2 == 1",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "10공수2-02-03"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.trig.sine-addition",
+      "name_ko": "사인 덧셈정리",
+      "family": "삼각공식",
+      "latex": "\\sin(a+b) = \\sin a \\cos b + \\cos a \\sin b",
+      "dsl": "sin(a + b) == sin(a)*cos(b) + cos(a)*sin(b)",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "12미적I-02-01"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.trig.cosine-addition",
+      "name_ko": "코사인 덧셈정리",
+      "family": "삼각공식",
+      "latex": "\\cos(a+b) = \\cos a \\cos b - \\sin a \\sin b",
+      "dsl": "cos(a + b) == cos(a)*cos(b) - sin(a)*sin(b)",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "12미적I-02-01"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.calculus.power-rule-derivative",
+      "name_ko": "거듭제곱 미분법",
+      "family": "미적분기본공식",
+      "latex": "\\frac{d}{dx} x^n = n x^{n-1}",
+      "dsl": "Derivative(x**n, x) == n*x**(n - 1)",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "12미적I-03-02"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.calculus.power-rule-integral",
+      "name_ko": "거듭제곱 적분법",
+      "family": "미적분기본공식",
+      "latex": "\\int x^n \\, dx = \\frac{x^{n+1}}{n+1} + C",
+      "dsl": "Integral(x**n, x) == x**(n + 1)/(n + 1) + C",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "12미적I-03-05"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.geometry.pythagorean",
+      "name_ko": "피타고라스 정리",
+      "family": "기하공식",
+      "latex": "a^2 + b^2 = c^2",
+      "dsl": "a**2 + b**2 == c**2",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "9수04-09"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.geometry.circle-area",
+      "name_ko": "원의 넓이",
+      "family": "기하공식",
+      "latex": "A = \\pi r^2",
+      "dsl": "A == pi*r**2",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "6수03-08"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.geometry.triangle-area",
+      "name_ko": "삼각형의 넓이",
+      "family": "기하공식",
+      "latex": "A = \\frac{1}{2} b h",
+      "dsl": "A == b*h/2",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "5수03-05"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.sequence.arithmetic-nth",
+      "name_ko": "등차수열의 일반항",
+      "family": "수열공식",
+      "latex": "a_n = a_1 + (n-1)d",
+      "dsl": "a_n == a_1 + (n - 1)*d",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "12미적I-01-08"
+      ],
+      "notes": null
+    },
+    {
+      "formula_id": "formula.sequence.geometric-nth",
+      "name_ko": "등비수열의 일반항",
+      "family": "수열공식",
+      "latex": "a_n = a_1 r^{n-1}",
+      "dsl": "a_n == a_1 * r**(n - 1)",
+      "canonical_signature": null,
+      "aliases": [],
+      "standard_codes": [
+        "12미적I-01-08"
+      ],
+      "notes": null
+    }
+  ]
+}
