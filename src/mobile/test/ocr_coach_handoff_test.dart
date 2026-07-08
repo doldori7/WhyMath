@@ -25,16 +25,25 @@ class _FakeCoachApi extends CoachApi {
 
   CoachRequest? lastRequest;
 
+  CoachResponse _canned() => CoachResponse(
+        decision: PedagogyDecision(
+          polyaStageToAdvance: 'stay',
+          prompt: '어느 단계부터 함께 볼까요?',
+          system: '시스템(테스트)',
+          socraticCategory: '단계분해',
+        ),
+      );
+
   @override
-  Future<CoachResponse> coach(CoachRequest request) async {
+  Future<CoachTurnResult> createSession(
+    CoachRequest request, {
+    String? problemId,
+  }) async {
     lastRequest = request;
-    return CoachResponse(
-      decision: PedagogyDecision(
-        polyaStageToAdvance: 'stay',
-        prompt: '어느 단계부터 함께 볼까요?',
-        system: '시스템(테스트)',
-        socraticCategory: '단계분해',
-      ),
+    return CoachTurnResult(
+      dialogueId: 'test-dialogue',
+      response: _canned(),
+      wh1TurnIndex: 1,
     );
   }
 }

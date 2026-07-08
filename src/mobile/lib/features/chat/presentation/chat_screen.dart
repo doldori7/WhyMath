@@ -95,6 +95,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  /// 수식(MathLive) 입력 화면(`/math-input`)으로 진입하고, 돌아온 LaTeX를 풀이로 넘긴다(S1).
+  ///
+  /// 입력 화면은 채팅을 알지 못한 채 `context.pop(latex)`로 LaTeX만 돌려준다(OCR과 동형·단방향
+  /// chat→math-input 의존). 받은 LaTeX를 `sendSolution`으로 전송한다 — 취소(null)·빈 입력이면
+  /// 아무 일도 하지 않는다(줄 분해·검증은 컨트롤러·백엔드가 한다).
+  Future<void> _onMathInput() async {
+    final latex = await context.push<String>(AppRoutes.mathInputPath);
+    if (latex != null && latex.trim().isNotEmpty && mounted) {
+      await ref.read(chatControllerProvider.notifier).sendSolution(latex);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(chatControllerProvider);
@@ -158,6 +170,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             mode: _mode,
             onSend: _onSend,
             onToggleMode: _toggleMode,
+            onMathInput: _onMathInput,
           ),
         ],
       ),
@@ -287,6 +300,7 @@ class _InputBar extends StatelessWidget {
     required this.mode,
     required this.onSend,
     required this.onToggleMode,
+    required this.onMathInput,
   });
 
   final TextEditingController controller;
@@ -294,6 +308,7 @@ class _InputBar extends StatelessWidget {
   final _InputMode mode;
   final Future<void> Function() onSend;
   final VoidCallback onToggleMode;
+  final Future<void> Function() onMathInput;
 
   @override
   Widget build(BuildContext context) {
@@ -323,6 +338,16 @@ class _InputBar extends StatelessWidget {
                   isSolution ? '풀이 단계' : '대화',
                   style: Theme.of(context).textTheme.labelMedium,
                 ),
+                // 풀이 모드에서만 — MathLive 수식 입력기로 진입(로드맵 S1 "MathLive 우선").
+                // 텍스트 입력과 병행(OCR·plain 텍스트도 그대로 지원).
+                if (isSolution) ...[
+                  const Spacer(),
+                  TextButton.icon(
+                    icon: const Icon(Icons.functions, size: 18),
+                    label: const Text('수식으로 입력'),
+                    onPressed: enabled ? onMathInput : null,
+                  ),
+                ],
               ],
             ),
             Row(

@@ -10,8 +10,8 @@
 // 한국어이며, 외부 이미지 자산에 의존하지 않고 텍스트+아이콘만으로 구성한다(asset 경고 회피).
 //
 // 범위(정직): 온보딩 1회-노출 영속은 후속(shared_preferences 미도입)이라 현재는 매 진입마다
-// 노출된다. "건너뛰기"는 목표 입력 없이 바로 채팅(`/`)으로 가고, "시작하기"는 입력을 전송한 뒤
-// (실패해도 graceful) 채팅으로 이동한다 — 입력은 모두 선택이라 비워도 진행된다.
+// 노출된다. "건너뛰기"는 목표 입력 없이 바로 학습 루프(진단→문제 `/problem`)로 가고, "시작하기"는
+// 입력을 전송한 뒤(실패해도 graceful) 같은 학습 루프로 이동한다 — 입력은 모두 선택이라 비워도 진행된다.
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -80,9 +80,10 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     super.dispose();
   }
 
-  /// 채팅(메인) 화면으로 이동한다 — "건너뛰기" 공통 동작.
-  void _goToChat() {
-    context.go(AppRoutes.chatPath);
+  /// 진단→문제제시(S1) 화면으로 이동한다 — 온보딩을 마치면(건너뛰기·시작하기 공통) 학습 루프에
+  /// 진입한다. CAT 추천 문제가 없으면 문제 화면이 코치 대화로 graceful 안내한다(가용성).
+  void _goToLoop() {
+    context.go(AppRoutes.problemPath);
   }
 
   /// 다음 페이지로 부드럽게 넘긴다(마지막 페이지면 호출되지 않음).
@@ -93,14 +94,14 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     );
   }
 
-  /// "시작하기" — 입력을 전송한 뒤(성공·실패 무관·graceful) 채팅으로 이동한다.
+  /// "시작하기" — 입력을 전송한 뒤(성공·실패 무관·graceful) 학습 루프(진단→문제)로 이동한다.
   ///
   /// 입력은 모두 선택이라 비어 있으면 컨트롤러가 전송 없이 완료 처리한다. 전송 실패(403·
-  /// 네트워크)도 온보딩을 막지 않는다 — 컨트롤러가 삼키고 화면은 그대로 채팅으로 넘어간다.
+  /// 네트워크)도 온보딩을 막지 않는다 — 컨트롤러가 삼키고 화면은 그대로 학습 루프로 넘어간다.
   Future<void> _onStart() async {
     await ref.read(onboardingControllerProvider.notifier).submit();
     if (mounted) {
-      _goToChat();
+      _goToLoop();
     }
   }
 
@@ -123,7 +124,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 child: isLast
                     ? const SizedBox(height: 48)
                     : TextButton(
-                        onPressed: _goToChat,
+                        onPressed: _goToLoop,
                         child: const Text('건너뛰기'),
                       ),
               ),

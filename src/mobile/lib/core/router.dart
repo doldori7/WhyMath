@@ -13,8 +13,10 @@ import 'package:go_router/go_router.dart';
 import '../features/auth/application/auth_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/chat/presentation/chat_screen.dart';
+import '../features/chat/presentation/mathlive_input_screen.dart';
 import '../features/ocr/presentation/ocr_capture_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
+import '../features/problems/presentation/problem_screen.dart';
 
 /// 앱 라우트 경로·이름 상수.
 ///
@@ -43,6 +45,18 @@ abstract final class AppRoutes {
 
   /// OCR 라우트 이름.
   static const String ocrName = 'ocr';
+
+  /// 진단→문제제시 경로 — 온보딩 완료 후 진입한다. CAT 추천 문제를 제시하고 코치로 넘긴다(S1).
+  static const String problemPath = '/problem';
+
+  /// 문제 라우트 이름.
+  static const String problemName = 'problem';
+
+  /// 수식(MathLive) 입력 경로 — 채팅 풀이 모드에서 push해 진입하고, LaTeX를 pop 결과로 돌려준다.
+  static const String mathInputPath = '/math-input';
+
+  /// 수식 입력 라우트 이름.
+  static const String mathInputName = 'math-input';
 }
 
 /// 앱 전역 [GoRouter] provider.
@@ -95,6 +109,21 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.ocrPath,
         name: AppRoutes.ocrName,
         builder: (context, state) => const OcrCaptureScreen(),
+      ),
+      // 진단→문제제시(S1) — 온보딩 완료 후 진입한다. CAT 추천 문제를 로드해 제시하고,
+      // "풀이 시작"으로 활성 문제를 세팅한 뒤 채팅(코치)으로 넘긴다(세션 묶기는 코치가 소비).
+      GoRoute(
+        path: AppRoutes.problemPath,
+        name: AppRoutes.problemName,
+        builder: (context, state) => const ProblemScreen(),
+      ),
+      // 수식(MathLive) 입력 — 채팅 풀이 모드에서 push로 진입한다. 완료 시 `context.pop(latex)`로
+      // LaTeX를 호출자(채팅)에게 돌려주고, 채팅이 `sendSolution`으로 매핑·전송한다(OCR과 동형·
+      // 단방향 chat→math-input 의존·수식 입력기는 채팅을 알지 못한다).
+      GoRoute(
+        path: AppRoutes.mathInputPath,
+        name: AppRoutes.mathInputName,
+        builder: (context, state) => const MathliveInputScreen(),
       ),
     ],
     // 미정의 경로 안전 처리 — 잘못된 딥링크/오타로 앱이 죽지 않게 채팅으로 안내한다.

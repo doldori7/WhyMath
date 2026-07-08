@@ -357,3 +357,79 @@ class SolutionVerificationResult with _$SolutionVerificationResult {
   factory SolutionVerificationResult.fromJson(Map<String, dynamic> json) =>
       _$SolutionVerificationResultFromJson(json);
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// 영속 세션 — POST /v1/coach/sessions(+/turns), GET /v1/coach/sessions/{id}
+// ─────────────────────────────────────────────────────────────────────────
+
+/// 세션 생성/턴 추가 결과 — 렌더 가능한 [CoachResponse] + 영속 식별자.
+///
+/// 백엔드 `SessionCreateResponse`/`TurnAppendResponse`는 `CoachResponse`에 dialogue/turn ID·
+/// wh1_turn_index 등을 *덧붙인* 상위 스키마다. Dart는 상속을 코드젠하지 못하므로 CoachResponse를
+/// *같은 JSON에서 재파싱*(미선언 키 무시)하고 영속 필드만 별도 추출하는 얇은 합성 홀더로 둔다.
+/// 재모델링 없이 기존 렌더 경로([CoachResponse])를 그대로 재사용한다.
+class CoachTurnResult {
+  const CoachTurnResult({
+    required this.dialogueId,
+    required this.response,
+    required this.wh1TurnIndex,
+  });
+
+  /// 이 대화 세션 PK(UUID 문자열) — 이후 턴 추가·세션 조회에 재사용.
+  final String dialogueId;
+
+  /// 렌더 가능한 교수학 결정(decision·solution_coaching·misconceptions 등).
+  final CoachResponse response;
+
+  /// 이 교환의 WH-1 턴 번호(1-기반·세션 누적). 생성=1·턴마다 증가.
+  final int wh1TurnIndex;
+
+  /// 세션 생성/턴 추가 응답 JSON에서 파싱한다. [dialogueId]는 생성 응답이면 본문에서,
+  /// 턴 추가 응답이면 URL에서 주입된다(TurnAppendResponse엔 dialogue_id가 없음).
+  factory CoachTurnResult.fromJson(
+    Map<String, dynamic> json, {
+    required String dialogueId,
+  }) {
+    return CoachTurnResult(
+      dialogueId: dialogueId,
+      response: CoachResponse.fromJson(json),
+      wh1TurnIndex: (json['wh1_turn_index'] as num?)?.toInt() ?? 1,
+    );
+  }
+}
+
+/// 대화 턴 1건(백엔드 `DialogueTurn` 최소 미러 — 세션 조회 검증용).
+@freezed
+class CoachTurn with _$CoachTurn {
+  const factory CoachTurn({
+    /// 턴 순서(1부터·UNIQUE(dialogue_id, turn_order)).
+    @JsonKey(name: 'turn_order') required int turnOrder,
+
+    /// 발화 주체('student'·'assistant'·'system' 등)·없으면 null.
+    @JsonKey(name: 'role') String? role,
+
+    /// 대화 본문(PII 가능)·없으면 null.
+    @JsonKey(name: 'content') String? content,
+  }) = _CoachTurn;
+
+  factory CoachTurn.fromJson(Map<String, dynamic> json) =>
+      _$CoachTurnFromJson(json);
+}
+
+/// 세션 스냅샷(GET /v1/coach/sessions/{id}) — 턴 영속 확인용 최소 표현.
+///
+/// 백엔드 `SessionGetResponse`는 `{dialogue: {...}, turns: [...]}` 중첩 구조라 flat json_serializable
+/// fromJson과 맞지 않는다 — [ProblemsApi]가 아니라 `CoachApi.getSession`이 중첩을 풀어 생성한다.
+@freezed
+class CoachSessionSnapshot with _$CoachSessionSnapshot {
+  const factory CoachSessionSnapshot({
+    /// 세션 PK(UUID 문자열).
+    required String dialogueId,
+
+    /// 누적 턴 수(system 포함)·없으면 null.
+    int? totalTurns,
+
+    /// 턴 목록(turn_order ASC).
+    @Default(<CoachTurn>[]) List<CoachTurn> turns,
+  }) = _CoachSessionSnapshot;
+}

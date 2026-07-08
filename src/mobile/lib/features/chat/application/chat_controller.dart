@@ -7,6 +7,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../ocr/data/ocr_models.dart';
+import '../../problems/application/active_problem.dart';
 import '../data/coach_api.dart';
 import '../data/coach_models.dart';
 import '../data/scene_api.dart';
@@ -164,9 +165,22 @@ class ChatController extends _$ChatController {
     );
 
     try {
-      // ② 서버 호출.
+      // ② 서버 호출 — 영속 세션 경로(WH-1 턴·가설 누적·백엔드 E2E 앵커 정합).
+      //    첫 발화면 세션을 생성(활성 문제에 묶음)하고 dialogue_id를 확보하며, 이후 발화는
+      //    같은 세션에 턴으로 잇는다. 스테이트리스 `coach()`는 자유 대화 fallback으로 남는다.
       final api = ref.read(coachApiProvider);
-      final response = await api.coach(request);
+      String? dialogueId = state.dialogueId;
+      final CoachResponse response;
+      if (dialogueId == null) {
+        // 진단→문제제시에서 넘어온 활성 문제(있으면)에 세션을 묶는다(problem_id 영속).
+        final problemId = ref.read(activeProblemProvider)?.problemId;
+        final result = await api.createSession(request, problemId: problemId);
+        dialogueId = result.dialogueId;
+        response = result.response;
+      } else {
+        final result = await api.addTurn(dialogueId, request);
+        response = result.response;
+      }
 
       // ③ 코치 발화를 만든다 — `decision.prompt`(메타인지 유도 발화)를 그대로 표시한다.
       final decision = response.decision;
@@ -199,6 +213,7 @@ class ChatController extends _$ChatController {
       state = state.copyWith(
         messages: newMessages,
         polyaState: nextStage,
+        dialogueId: dialogueId,
         isSending: false,
       );
     } catch (e) {

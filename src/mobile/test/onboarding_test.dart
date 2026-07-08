@@ -1,26 +1,49 @@
-// 온보딩·라우터 위젯 테스트 — go_router 셸의 첫 진입(온보딩)·목표 입력 폼·채팅 전이 검증.
+// 온보딩·라우터 위젯 테스트 — go_router 셸의 첫 진입(온보딩)·목표 입력 폼·학습 루프 전이 검증.
 //
 // 앱 첫 진입은 온보딩이다(initialLocation='/onboarding'). 안내 3페이지 뒤에 목표 입력 폼
-// 페이지가 붙고(S1-c), "시작하기"로 입력을 전송한 뒤 채팅(`/`)으로 도달한다. 채팅 화면은
-// coachApiProvider를, 폼은 userApiProvider를 읽으므로 네트워크 없이 빌드되도록 fake로
-// override한다(이 테스트는 실제 네트워크 호출을 하지 않는다).
+// 페이지가 붙고(S1-c), "시작하기"로 입력을 전송한 뒤 학습 루프(진단→문제 `/problem`)로 도달한다.
+// 문제 화면은 problemsApiProvider를, 폼은 userApiProvider를 읽으므로 네트워크 없이 빌드되도록
+// fake로 override한다(이 테스트는 실제 네트워크 호출을 하지 않는다).
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/app.dart';
-import 'package:korean_math_app/features/chat/data/coach_api.dart';
-import 'package:korean_math_app/features/chat/data/coach_models.dart';
-import 'package:korean_math_app/features/chat/presentation/chat_screen.dart';
 import 'package:korean_math_app/features/onboarding/data/user_api.dart';
+import 'package:korean_math_app/features/problems/data/problem_models.dart';
+import 'package:korean_math_app/features/problems/data/problems_api.dart';
+import 'package:korean_math_app/features/problems/presentation/problem_screen.dart';
 
-/// 호출되지 않는 fake — 채팅 화면이 빌드만 되도록 둔다(이 테스트는 전송하지 않음).
-class _FakeCoachApi extends CoachApi {
-  _FakeCoachApi() : super(Dio());
+/// 결정론 fake — 온보딩 완료 후 진입하는 문제 화면이 네트워크 없이 문제를 제시하도록 한다.
+class _FakeProblemsApi extends ProblemsApi {
+  _FakeProblemsApi() : super(Dio());
 
   @override
-  Future<CoachResponse> coach(CoachRequest request) async {
-    throw UnimplementedError('온보딩 테스트는 coach를 호출하지 않습니다.');
+  Future<NextProblemResponse> getNextProblem({
+    bool prioritizeWeakConcepts = false,
+  }) async {
+    return const NextProblemResponse(
+      problemId: '11111111-1111-1111-1111-111111111111',
+      theta: 0.0,
+      measurementSufficient: false,
+    );
+  }
+
+  @override
+  Future<Problem> getProblem(String problemId) async {
+    return Problem(
+      problemId: problemId,
+      sourceType: '자체생성',
+      subject: '미적분',
+      subunit: '합성함수의 미분',
+      unitCodes: const <String>['CAL-DIFF-COMP'],
+      questionText: '다음 함수를 미분하시오.',
+    );
+  }
+
+  @override
+  Future<List<ConceptDiagnosisItem>> getDiagnosisConcepts({int? limit}) async {
+    return const <ConceptDiagnosisItem>[];
   }
 }
 
@@ -39,7 +62,7 @@ class _FakeUserApi extends UserApi {
 Widget _app() {
   return ProviderScope(
     overrides: [
-      coachApiProvider.overrideWithValue(_FakeCoachApi()),
+      problemsApiProvider.overrideWithValue(_FakeProblemsApi()),
       userApiProvider.overrideWithValue(_FakeUserApi()),
     ],
     child: const WhyMathApp(),
@@ -59,10 +82,10 @@ void main() {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
-    // 첫 페이지(브랜드·답 미루기 안내)와 진행 버튼이 보인다. 아직 채팅은 아니다.
+    // 첫 페이지(브랜드·답 미루기 안내)와 진행 버튼이 보인다. 아직 문제 화면은 아니다.
     expect(find.text('답이 아닌, 이유를 묻습니다'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, '다음'), findsOneWidget);
-    expect(find.byType(ChatScreen), findsNothing);
+    expect(find.byType(ProblemScreen), findsNothing);
   });
 
   testWidgets('안내 3페이지 뒤 목표 입력 폼과 "시작하기"가 나온다', (tester) async {
@@ -88,29 +111,30 @@ void main() {
     expect(find.widgetWithText(FilledButton, '시작하기'), findsOneWidget);
   });
 
-  testWidgets('"시작하기"를 누르면 채팅 화면으로 전이한다(빈 폼도 진행)', (tester) async {
+  testWidgets('"시작하기"를 누르면 학습 루프(문제 화면)로 전이한다(빈 폼도 진행)', (tester) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
     await _advanceToForm(tester);
 
-    // 폼을 비운 채 "시작하기" → 채팅 화면(`/`)으로 이동(선택 입력이라 전송 없이 진행).
+    // 폼을 비운 채 "시작하기" → 문제 화면(`/problem`)으로 이동(선택 입력이라 전송 없이 진행).
     await tester.tap(find.widgetWithText(FilledButton, '시작하기'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(ChatScreen), findsOneWidget);
-    // 채팅 화면의 슬로건 부제가 보인다(전이 성공 확인).
-    expect(find.text('답이 아닌, 이유를 묻는 수학'), findsOneWidget);
+    expect(find.byType(ProblemScreen), findsOneWidget);
+    // CAT 추천 문제가 제시된다(전이 성공 + 로드 확인).
+    expect(find.text('다음 함수를 미분하시오.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, '풀이 시작'), findsOneWidget);
   });
 
-  testWidgets('"건너뛰기"를 누르면 바로 채팅 화면으로 전이한다', (tester) async {
+  testWidgets('"건너뛰기"를 누르면 바로 학습 루프(문제 화면)로 전이한다', (tester) async {
     await tester.pumpWidget(_app());
     await tester.pumpAndSettle();
 
-    // 첫 페이지의 "건너뛰기" → 채팅 화면으로 이동.
+    // 첫 페이지의 "건너뛰기" → 문제 화면으로 이동.
     await tester.tap(find.text('건너뛰기'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(ChatScreen), findsOneWidget);
+    expect(find.byType(ProblemScreen), findsOneWidget);
   });
 }

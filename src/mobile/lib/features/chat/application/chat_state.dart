@@ -19,6 +19,10 @@ class ChatState with _$ChatState {
     /// 백엔드 PolyaStage 진입값과 동일하게 "understand"에서 시작한다.
     @Default('understand') String polyaState,
 
+    /// 활성 코치 세션 PK(UUID 문자열)·없으면 null. 첫 발화에서 세션을 생성해 채워지고,
+    /// 이후 발화는 이 세션에 턴으로 누적된다(WH-1 턴·가설 영속·백엔드 E2E 앵커 정합).
+    String? dialogueId,
+
     /// 코치 응답 대기 중인지(입력 잠금·로딩 인디케이터 표시).
     @Default(false) bool isSending,
 
