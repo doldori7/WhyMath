@@ -100,7 +100,7 @@ AST·성취기준 본문은 내장 금지.
 | Proof/Theorem | 없음 | TheoremNode≠ProofNode(P6) | 정리≠증명 분리 |
 | Curriculum | Overlay | ✅ `curriculum_entry` | Overlay 유지 |
 | Assessment | 스키마 | ✅ `schema/assessment.py` | — |
-| Hint | YAML만 | ORM 신설(P6) | graded·답미루기 게이트 |
+| Hint | YAML만 | **⏸ ORM 연기(P6b·소비처 부재)** | graded·답미루기 게이트·L4 Runtime 구현 시 도입 |
 | Strategy | 엔진 상태 | **✅ 노드화(P6a 완료)** | 폐쇄 소수집합(8종·Polya 계획 축·≠ReasoningType/approach_type) |
 | UIInteraction | 이벤트 | 지식노드 아님·유지 | runtime concern |
 
@@ -143,6 +143,29 @@ dangling 0을 동결. Formula만 이 집합에 남는다(P5 승격 대기).
   Tutor/Verifier 연동·canonical_signature 계산 backfill은 소비처 실재 시(dead code 회피·2a→2b·3→3b 선례).
   거버넌스 `test_formula_governance`가 canonical-only·SymPy 재구현 금지·신규 엣지 타입 0·dsl parseable을
   동결한다.
+
+### Phase 6b — HintNode Persistence 연기(Deferred) (2026-07-08)
+- **Status: Deferred**(사용자 확정). `hints` ORM 테이블을 **지금 신설하지 않는다** — 순수 dead code
+  (CLAUDE.md 최우선 금기 "소비처 없는 추상 미도입" 위반). Theorem/Proof·5a→5b·3→3b 연기 선례와 정합.
+- **Reason(writer 0·reader 0)**: 런타임 흐름(`l4/hint_deferral.py`→`l4/polya/engine.py`→`l4/models.py`
+  `PedagogyDecision`→`api/coach.py`)은 **`hint_level` 정수(1~4)+불투명 `reveals` 라벨**만 운반하고
+  힌트 *content*·`reveals` 구조·`verified`는 생성도 영속도 하지 않는다. 유일 writer
+  `_log_hint_event`는 **`attempt_event`**(`event_type=힌트제공`·`event_data={"hint_level":int}`)에
+  level 정수만 적재하고, 유일 reader `harness/wh1_evaluation.py`(지표 ⑤·⑧)도 그 정수만 소비한다 —
+  텔레메트리는 attempt_event가 완결하므로 `hints` 테이블이 불필요하다. `hint.schema.yaml`은 "명세
+  단계·테스트 미구현"이고, L3는 `SolutionStep.hint` 텍스트를 실제 저작하지 않아(`class SolutionStep`
+  부재·산문 steps 폐기) graded 힌트 원천 코퍼스 자체가 비어 있다.
+- **Prerequisite(도입 시점 = L4 Runtime 구현 시)**: ① Hint generation(content 생성) ② Hint
+  validation(PRM/도구 검증·`verified`·톤 필터 `l4/tone_filter.py`) ③ Hint serving(저장 graded hint
+  서빙 reader). 셋 중 최소 하나의 **실 writer + 실 reader**가 실재할 때 도입한다.
+- **도입 시 미러 선례(설계 지도)**: 구조=`db/models/curriculum_entry.py`(v1.1 YAML·**string PK**
+  `entry_id`·cross-dataset **느슨참조**·`from_schema`/`to_schema` seam) — `hint_id`(string PK)와
+  동형. payload/느슨참조=`db/models/verified_solution.py`(JSONB 중첩·`problem_id` FK 아님). ⚠️
+  `SolutionPath`/`SolutionStep`은 **실 테이블이 아니므로**(스키마상 개념) `solution_step_ref`
+  (`solution_path_id`+`step_order`+`problem_id`)는 **FK 금지·느슨참조**여야 한다.
+- **화해 필요**: spec `level` 1~3 ↔ runtime 답 미루기 1~4(4=전체 풀이 안전망은 Hint 엔티티 밖·별도
+  경로). `attempt_event(힌트제공)`와 `hints`는 **상보 역할**(시계열 이벤트 로그 ≠ 콘텐츠 카탈로그·
+  중복 아님).
 
 ### Phase 6a 완료 — StrategyNode 폐쇄 소수집합 1급 노드 승격 (2026-07-08)
 - **폐쇄 소수집합(8종·4 family)**: 문제해결 전략을 "엔진 상태"에서 1급 노드로 승격하되 **폐쇄 소수집합**
