@@ -54,6 +54,7 @@
 - **엔진/좌석**: Tier1 수치 `l3/verify_answer.py`(`:240` SymPy 샘플링·3상태·단독 금지 `:41`) · Tier2 기호 `l3/verify_solution.py`·`l3/symbolic_equivalence.py`(`:132` 동치 단일 권위) · combiner `whs/verdict.py::final_verdict`(`:77`) · HTTP `api/verify.py:62`(`/v1/verify-step`)·`:107`(`/v1/verify-solution`).
 - **계약 상태**: 🟡 **Tier1+2 실동작 / Tier3(Lean4) 미구현(로드맵)** · 🔴 **검증 게이트 미강제(G3)**. coach는 `solution_steps` 있으면 Tier2 `verify_solution` 실호출(`solution_coaching.py:48`)하나 **검증 실패해도 코칭 반환** — verify는 게이트가 아니라 신호. verify-before-finalize 강제는 `wh1_loop.py:346`(하네스)에만.
 - **S1 배선(G3)**: WH-1 하네스 경유(G2)로 전환하면 `end_turn`이 verify 미통과 시 거부하는 강제가 자동 적용. "학생 응답은 PRM/도구 검증 통과 후에만"(CLAUDE.md)이 코드 게이트로 실현. Tier3는 S1 범위 밖(초기 능력 주장은 정직하게 Tier1+2).
+  - **✅ 게이트 ③ 코드 증명 완료(2026-07-08)**: 전면 수렴 *없이도* 게이트 ③ 성립을 확정·봉인했다. coach 경로는 정적 결정론 템플릿만 방출(LLM 발화 0)하므로 미검증 발화가 학생에 닿을 표면이 없고, 정답은 shadow sink 전용이다. 4각도 거버넌스/계약 테스트(`tests/backend/harness/test_gate3_student_verification_governance.py`)로 회귀 차단. **coach→하네스 전면 수렴(G2 완전 상환)은 LLM 주도 코칭을 실제로 켤 때의 별도 미래 작업**이며 게이트 ③의 조건이 아니다(테스트 (A) allowlist가 그 미래 배선을 강제 심사).
 
 ### ⑦ LLM 라우터 mock (전 구간 hermetic 구동)
 - `l3/router.py`(순수 결정)·`CompositeProvider`(`composite.py:27` — local Ollama 필수·cloud Anthropic **선택**`None` 허용). 라이브 키 없이: coach 결정론·verify SymPy·L2 수치·judge FakeJudge/로컬. **전 루프 hermetic 가능** → S1 빌드·통합 테스트는 mock-우선.
@@ -107,7 +108,7 @@ Kiki 승인 시 아래 순서(각 4~6게이트+커밋·mock-우선):
 5. **S1-e**: Minimal Reasoning Subgraph 예산 코드 배선(§3) + Langfuse 트레이스
 6. **S1-f (Kiki)**: 로컬 Ollama→클라우드 전환·실 비용·guard_cloud 튜닝·OCR 실모델·실기기 완주 시연
 
-**탈출 게이트**(status_roadmap §S1): 실기기 15분 내 1루프 완주 시연 + 루프당 비용 실측 + "학생 응답 전부 검증 통과 후" 코드 게이트 증명.
+**탈출 게이트**(status_roadmap §S1): ① 실기기 15분 내 1루프 완주 시연(Kiki 수동) + ② 루프당 비용 실측(**✅ §11 라이브 계측 체인 구조 완료**·수치 튜닝은 트래픽 대기) + ③ "학생 응답 전부 검증 통과 후" 코드 게이트 증명(**✅ 2026-07-08 완료** — `test_gate3_student_verification_governance.py` 4각도 봉인). → 잔여 = ①(Kiki 실기기 시연)뿐.
 
 ---
 
