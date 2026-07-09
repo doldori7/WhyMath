@@ -15,7 +15,10 @@ services:
       # trust: 로컬 throwaway 전용·비밀번호 미설정(시크릿 하드코딩 0). prod 금지.
       POSTGRES_HOST_AUTH_METHOD: trust
     ports:
-      - "127.0.0.1:5432:5432"
+      # 호스트 5432가 아니라 55432 — 개발자 PC에 흔한 로컬 PostgreSQL(서비스·다른 프로젝트)이
+      # 5432를 이미 점유해 "port is already allocated"로 기동 실패하는 충돌을 원천 회피한다.
+      # 컨테이너 내부는 표준 5432 그대로(run_demo.sh/.ps1이 호스트 55432로 접속).
+      - "127.0.0.1:55432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U whymath -d whymath"]
       interval: 2s

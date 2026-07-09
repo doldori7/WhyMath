@@ -31,8 +31,10 @@ if (-not (Test-Path (Join-Path $VenvScripts "python.exe"))) {
 $env:PATH = "$VenvScripts;$env:PATH"
 
 # ── 시연 전용 환경(런타임 생성 시크릿·하드코딩 0) ───────────────────────────────
+# 호스트 포트 55432 — docker-compose.demo.yml과 동일. Windows 개발자 PC에 흔한 로컬
+# PostgreSQL 서비스(기본 5432)와 충돌해 "port is already allocated"로 죽는 사고를 피한다.
 if (-not $env:WHYMATH_DATABASE_URL) {
-  $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:5432/whymath"
+  $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:55432/whymath"
 }
 $env:WHYMATH_DEMO_AUTH_ENABLED = "true"
 if (-not $env:WHYMATH_JWT_SECRET_KEY) {

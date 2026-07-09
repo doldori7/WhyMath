@@ -21,7 +21,8 @@ PORT="${WHYMATH_DEMO_PORT:-8000}"
 PID_FILE="$REPO_ROOT/.demo_uvicorn.pid"
 
 # ── 시연 전용 환경(런타임 생성 시크릿·하드코딩 0) ───────────────────────────────
-export WHYMATH_DATABASE_URL="${WHYMATH_DATABASE_URL:-postgresql+asyncpg://whymath@127.0.0.1:5432/whymath}"
+# 호스트 포트 55432 — docker-compose.demo.yml과 동일(로컬 PostgreSQL의 표준 5432와 충돌 회피).
+export WHYMATH_DATABASE_URL="${WHYMATH_DATABASE_URL:-postgresql+asyncpg://whymath@127.0.0.1:55432/whymath}"
 export WHYMATH_DEMO_AUTH_ENABLED=true
 export WHYMATH_JWT_SECRET_KEY="${WHYMATH_JWT_SECRET_KEY:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
 
