@@ -9,3 +9,6 @@
 {"ts": "2026-07-09T04:18:18", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "done", "id": "ARCH-10-client-mathlogic-gate", "artifacts": ["커밋 f0d3443 (게이트 2종 + ARCH-12 등록)"]}
 {"ts": "2026-07-09T04:51:05", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "start", "id": "S2-06-l6-suneung-mode", "session": "claude/app-build-harness-replace-4z7ksj"}
 {"ts": "2026-07-09T06:00:20", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "done", "id": "S2-06-l6-suneung-mode", "artifacts": ["커밋 f0faa17 (시그니처 태거+귀납수열 밴드 30문·코퍼스 620)", "커밋 d0805cc (수능 적응 추천 루프 mode=suneung)", "실환경 후속: populate_problem_bank 재실행 (멱등 upsert — 신규 30문만 insert)"]}
+{"ts": "2026-07-09T06:34:00", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "start", "id": "S2-03-problem-concept-relink", "session": "claude/app-build-harness-replace-4z7ksj"}
+{"ts": "2026-07-09T06:53:33", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "add", "id": "S2-07-curriculum-entry-atom-axis"}
+{"ts": "2026-07-09T06:53:33", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "done", "id": "S2-03-problem-concept-relink", "artifacts": ["커밋 6f36ab0 (크로스워크 해석·reconcile·gating 원자 축 전환·거버넌스 6종)", "실환경 절차: populate 3코퍼스 재실행 — reconcile이 구 437 연결 자동 청소 (alembic 무변경)"]}
