@@ -1,0 +1,20 @@
+{
+  "crosslinks": [
+    {
+      "kebab_id": "extremum-max-min-confused",
+      "mis_id": "M0864",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-08"
+    },
+    {
+      "kebab_id": "extremum-value-vs-point-confused",
+      "mis_id": "M0865",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-08"
+    }
+  ]
+}
