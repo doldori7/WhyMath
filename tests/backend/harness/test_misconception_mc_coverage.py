@@ -65,13 +65,13 @@ class TestBatchCoverageContribution:
 
 
 class TestCommittedCorpusCoverageRise:
-    def test_committed_corpora_decidable_at_least_13(self) -> None:
-        # ③ 커밋 코퍼스 전체 회계 — machine-decidable ≥13(8→13 상승)·정답 오거부 0(회귀 아님).
+    def test_committed_corpora_decidable_at_least_15(self) -> None:
+        # ③ 커밋 코퍼스 전체 회계 — machine-decidable ≥15(13→15 상승)·정답 오거부 0(회귀 아님).
         report, _ = run(
             problem_corpora=_default_problem_corpora(),
             misconceptions=_default_misconceptions(),
             cross_per_positive=60,
             same_per_positive=60,
         )
-        assert report.kebabs_decidable >= 13
+        assert report.kebabs_decidable >= 15
         assert report.positive_false_reject == 0

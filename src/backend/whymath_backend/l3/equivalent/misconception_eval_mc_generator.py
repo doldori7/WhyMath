@@ -80,6 +80,8 @@ TemplateKind = Literal[
     "log_dist",
     "func_compose",
     "sine_period",
+    "translate",
+    "product_rule",
 ]
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
@@ -93,6 +95,8 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "log_dist": ("H:12대수01-05", "LOG-DIST"),
     "func_compose": ("HK35", "FUNC-COMPOSE"),
     "sine_period": ("H:12미적Ⅱ02-02", "TRIG-PERIOD"),
+    "translate": ("10기수2-01-06", "FUNC-TRANSLATE"),
+    "product_rule": ("H:12미적Ⅰ02-01", "CALC-PRODUCT"),
 }
 
 
@@ -506,6 +510,89 @@ def _build_sine_period_pool() -> tuple[_EvalItem, ...]:
     return tuple(pool)
 
 
+def _build_translate_pool() -> tuple[_EvalItem, ...]:
+    """g(x)=f(x-1)(우로 1 평행이동)의 g(c) 뼈대 풀 — f(x)=x²+bx. 정답 f(c-1)·오개념 f(c+1).
+
+    평행이동 y=f(x-a)는 그래프를 *오른쪽*으로 a 이동(부호 반대). 오개념은 부호를 뒤집어
+    f(x+a)로 봐 g(c)=f(c+1)로 계산한다. a=1 고정·b·d(=c-1)를 순회해 정답값 f(d)=d²+bd로 다수
+    확보(정답값 dedup). filler: f(c)(이동 미적용)·d²(선형항 누락). 전부 양(0 값 위생).
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for b in range(1, 5):
+        for d in range(1, 8):  # d = c - 1 ≥ 1.
+            c = d + 1
+            correct_v = d * d + b * d  # f(d) = f(c-1).
+            if correct_v in seen:
+                continue
+            correct = sympy.Integer(correct_v)
+            misc = sympy.Integer((d + 2) ** 2 + b * (d + 2))  # f(c+1)=f(d+2)(부호 뒤집음).
+            filler1 = sympy.Integer(c * c + b * c)  # f(c)(이동 미적용).
+            filler2 = sympy.Integer(d * d)  # 선형항 bx 누락.
+            item = _assemble_item(
+                values=(correct, misc, filler1, filler2),
+                conditions=f"x = {d}**2 + {b}*{d}",
+                answer_str=str(correct_v),
+                question_text=(
+                    f"함수 f(x) = x^2 + {b}x 에 대하여 g(x) = f(x - 1) 일 때, "
+                    f"g({c}) 의 값을 구하시오."
+                ),
+                answer_explanation=(
+                    f"y = f(x-1) 은 그래프를 오른쪽으로 1 평행이동한 것이므로 "
+                    f"g({c}) = f({c}-1) = f({d}) = {correct_v} 이다. 부호를 뒤집어 f({c}+1) 로 "
+                    f"계산하면 틀린다."
+                ),
+                difficulty=_difficulty(b + d),
+                answer_format=AnswerFormat.자연수,
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_product_rule_pool() -> tuple[_EvalItem, ...]:
+    """f(x)=x^m, g(x)=x^n 의 곱의 미분계수 (fg)'(c) 뼈대 풀 — 정답 (m+n)c^(m+n-1)·오개념 f'(c)g'(c).
+
+    곱의 미분은 (fg)'=f'g+fg'인데, 오개념은 (fg)'=f'g'로 오인해 f'(c)g'(c)=mn·c^(m+n-2)로
+    계산한다. fg=x^(m+n)이라 정답은 (m+n)c^(m+n-1). (m,n,c) 순회·정답값 dedup. filler:
+    (m+n)c^(m+n)(지수 오차)·mn·c^(m+n-1)(계수 오차). 전부 양(0 값 위생).
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for m in range(1, 4):
+        for n in range(1, 4):
+            for c in range(2, 9):
+                correct_v = (m + n) * c ** (m + n - 1)
+                if correct_v in seen:
+                    continue
+                correct = sympy.Integer(correct_v)
+                misc = sympy.Integer(m * n * c ** (m + n - 2))  # f'(c)g'(c)(곱미분 오인).
+                filler1 = sympy.Integer((m + n) * c ** (m + n))  # 지수 미하강.
+                filler2 = sympy.Integer(m * n * c ** (m + n - 1))  # 계수 오합.
+                item = _assemble_item(
+                    values=(correct, misc, filler1, filler2),
+                    conditions=f"x = {m + n}*{c}**{m + n - 1}",
+                    answer_str=str(correct_v),
+                    question_text=(
+                        f"두 함수 f(x) = x^{m}, g(x) = x^{n} 에 대하여 함수 f(x)g(x) 의 "
+                        f"x = {c} 에서의 미분계수를 구하시오."
+                    ),
+                    answer_explanation=(
+                        f"f(x)g(x) = x^{m + n} 이므로 미분계수는 {m + n}·{c}^{m + n - 1} "
+                        f"= {correct_v} 이다. (fg)' = f'g' 로 오인하면 틀린 값이 된다."
+                    ),
+                    difficulty=_difficulty(m + n + c),
+                    answer_format=AnswerFormat.자연수,
+                )
+                if item is not None:
+                    seen.add(correct_v)
+                    pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "distribution": _build_distribution_pool,
     "chain_rule": _build_chain_rule_pool,
@@ -515,6 +602,8 @@ _POOL_FACTORY = {
     "log_dist": _build_log_dist_pool,
     "func_compose": _build_func_compose_pool,
     "sine_period": _build_sine_period_pool,
+    "translate": _build_translate_pool,
+    "product_rule": _build_product_rule_pool,
 }
 
 

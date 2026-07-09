@@ -110,6 +110,21 @@ _BANDS: tuple[_Band, ...] = (
     ),
     # period-of-scaled-sine: 후보 M0152=[12미적Ⅱ-02-02] agree.
     _Band("period-of-scaled-sine", "sine_period", "period-of-scaled-sine", ("[12미적Ⅱ-02-02]",)),
+    # translation-sign-flip: 후보 M0411·M0850=[10기수2-01-06], M0632=[10공수2-01-06] — 둘 다 agree.
+    _Band(
+        "translation-sign-flip",
+        "translate",
+        "translation-sign-flip",
+        ("[10기수2-01-06]", "[10공수2-01-06]"),
+    ),
+    # product-rule-naive: 후보 M0075=[12미적Ⅰ-02-01]·M0672=[12미적Ⅰ-02-04] agree(둘 다 태깅).
+    #   M0424=[10공수2-03-02](합성·부분매핑)는 곱미분과 다른 단원 → cross-standard 자율거부(정당).
+    _Band(
+        "product-rule-naive",
+        "product_rule",
+        "product-rule-naive",
+        ("[12미적Ⅰ-02-01]", "[12미적Ⅰ-02-04]"),
+    ),
 )
 
 

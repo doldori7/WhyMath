@@ -79,10 +79,11 @@ class TestMachineRejectCandidates:
 
 class TestCommittedQueueEndToEnd:
     def test_exact_machine_rejections_on_real_data(self) -> None:
-        # 커밋 큐+코퍼스 e2e — 정확히 3건·thin 제외. distribution MC 코퍼스가 그 kebab을
+        # 커밋 큐+코퍼스 e2e — 정확히 4건·thin 제외. distribution MC 코퍼스가 그 kebab을
         # well-evidenced([9수02-19] 곱셈공식)로 승격 → 지수법칙 부분매핑 M0649가 cross-standard로
-        # 자동 거부에 추가(직접매핑 M0019/M0572는 [9수02-19] agree라 인간 존치). chain-rule은 미적Ⅰ·
-        # Ⅱ 두 성취기준 태깅이라 후보(M0370·M0710·M0077) 모두 agree → 거부 0(거짓거부 회피).
+        # 자동 거부에 추가(직접매핑 M0019/M0572는 [9수02-19] agree라 인간 존치). product-rule MC는
+        # 미적Ⅰ 미분·도함수 태깅 → 합성함수 부분매핑 M0424가 cross-standard로 자동 거부(곱미분≠합성·
+        # 정당). chain-rule/translation은 다표준 태깅이라 후보 모두 agree → 거부 0(거짓거부 회피).
         rejections = run(
             queue_path=_REPO_ROOT / "docs" / "data" / "misconception_crosslink_review_queue.json",
             corpora=sorted((_REPO_ROOT / "data" / "corpus").glob("problem_bank_*/problems.jsonl")),
@@ -98,9 +99,11 @@ class TestCommittedQueueEndToEnd:
             ("opposite-root-selected", "M0831"),
             ("factor-sign-flip", "M0848"),
             ("distribution-over-power", "M0649"),
+            ("product-rule-naive", "M0424"),
         }
-        # chain-rule은 다표준 태깅이라 자동 거부 0(거짓거부 회피).
+        # chain-rule/translation은 다표준 태깅이라 자동 거부 0(거짓거부 회피).
         assert all(r.kebab_id != "chain-rule-inner-derivative-omitted" for r in rejections)
+        assert all(r.kebab_id != "translation-sign-flip" for r in rejections)
         # thin-evidence(root-loss-by-dividing, 1문항)은 제외.
         assert all(r.kebab_id != "root-loss-by-dividing" for r in rejections)
         # 전부 well-evidenced(≥20).

@@ -47,6 +47,9 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
     ("log_dist", "log-distribution", "[12대수01-05]", "H:12대수01-05", "LOG-DIST"),
     ("func_compose", "composite-function-commutes", "[10공수2-03-02]", "HK35", "FUNC-COMPOSE"),
     ("sine_period", "period-of-scaled-sine", "[12미적Ⅱ-02-02]", "H:12미적Ⅱ02-02", "TRIG-PERIOD"),
+    # 신규 2종(op-code 부재) — 커버리지 13→15.
+    ("translate", "translation-sign-flip", "[10기수2-01-06]", "10기수2-01-06", "FUNC-TRANSLATE"),
+    ("product_rule", "product-rule-naive", "[12미적Ⅰ-02-01]", "H:12미적Ⅰ02-01", "CALC-PRODUCT"),
 )
 
 

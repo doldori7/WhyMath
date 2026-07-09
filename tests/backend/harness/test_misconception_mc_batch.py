@@ -30,8 +30,10 @@ _BANDS = (
     "log-distribution",
     "composite-function-commutes",
     "period-of-scaled-sine",
+    "translation-sign-flip",
+    "product-rule-naive",
 )
-_TOTAL = 24 * len(_BANDS)  # 8 밴드 × 24 = 192
+_TOTAL = 24 * len(_BANDS)  # 10 밴드 × 24 = 240
 
 
 class TestRunMisconceptionMcBatch:
