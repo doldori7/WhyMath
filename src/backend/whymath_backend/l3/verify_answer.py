@@ -63,6 +63,7 @@ __all__ = [
     "AnswerVerdict",
     "derive_selected_root",
     "verify_answer",
+    "verify_root_aggregate",
     "verify_root_selection",
 ]
 
@@ -668,3 +669,88 @@ def derive_selected_root(
         if _approx_equal(value, target, tol):
             return str(sympy.sstr(root))
     return None  # pragma: no cover — target은 reals에서 왔으므로 도달 불가(방어)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 근의 합/곱(Vieta) 검증 — S2 킬러 확장(f'=0 근이 아니라 *근들의 집계값*이 답).
+# ──────────────────────────────────────────────────────────────────────────
+RootAggregate = Literal["sum", "product"]
+
+
+def verify_root_aggregate(
+    conditions: str | Sequence[str],
+    claimed: str,
+    kind: RootAggregate,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """답이 조건 방정식의 *모든 근의 합/곱*(Vieta)과 일치하는지 검증(S2 킬러 확장).
+
+    "삼차방정식 …의 세 근의 합/곱을 구하시오"류 킬러 문항의 답은 f(x)=0의 *근이 아니라*
+    근들의 집계값이라 `verify_answer`(답이 근인가)·`verify_root_selection`(어느 근인가)로는
+    검증할 수 없다. 이 함수가 그 빈 검증면을 채운다 — 다항식의 근을 중복도까지 정확히 구해
+    (`sympy.roots`) 합/곱을 **기호적 정확값**으로 계산하고, 주장값과 `simplify` 차 0을 본다
+    (복소근 포함 Vieta 정확값이라 근이 무리·복소여도 정확). 판정:
+      - **pass**: 근들의 합/곱이 주장값과 정확히 일치(simplify 차 0).
+      - **fail**: 불일치(주장값이 틀림).
+      - **unverifiable**: 적용 밖 — 단일 변수 다항 등식이 아님·근을 중복도까지 다 못 구함·
+        파싱/치환 불가(보수적·pass 위장 금지, verify_answer 정직성 상속).
+    """
+    # 단일 등식만(연립/빈 조건은 집계 의미 불명확 — 보수적 회피).
+    if isinstance(conditions, str):
+        condition: str | None = conditions
+    else:
+        condition_list = list(conditions)
+        condition = condition_list[0] if len(condition_list) == 1 else None
+    if condition is None:
+        return _unverifiable("근 집계 — 단일 등식이 아님(연립/빈 조건)·안전 회피")
+
+    try:
+        residual, op = _parse_condition(condition)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("근 집계 — 조건 파싱 불가·안전 회피")
+    if op != "==":
+        return _unverifiable("근 집계 — 등식이 아님(부등식/≠)·안전 회피")
+
+    free = sorted(residual.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("근 집계 — 단일 변수 방정식이 아님·안전 회피")
+    var = free[0]
+
+    try:
+        poly = sympy.Poly(residual, var)
+    except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
+        return _unverifiable("근 집계 — 다항식이 아님·안전 회피")
+
+    try:
+        root_mult = sympy.roots(poly)  # {근: 중복도} — 복소근 포함 정확값.
+        claimed_expr = sympy.sympify(claimed, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 풀이/치환 불가는 보수적 unverifiable
+        return _unverifiable("근 집계 — 근 계산/주장값 치환 불가·안전 회피")
+
+    total_mult = sum(root_mult.values())
+    if total_mult != poly.degree():
+        # 근을 중복도까지 전부 구하지 못함(라디칼 표현 불가 등) → 집계 정확값 보장 못 함.
+        return _unverifiable("근 집계 — 근을 중복도까지 전부 구하지 못함·안전 회피")
+
+    if kind == "sum":
+        actual: sympy.Expr = sum(
+            (root * mult for root, mult in root_mult.items()), sympy.Integer(0)
+        )
+    else:
+        actual = sympy.Integer(1)
+        for root, mult in root_mult.items():
+            actual = actual * root**mult
+
+    try:
+        diff = sympy.simplify(actual - claimed_expr)
+    except Exception:  # noqa: BLE001 — 단순화 실패는 보수적 unverifiable
+        return _unverifiable("근 집계 — 차 단순화 불가·안전 회피")
+
+    if diff == 0:
+        return _pass(samples_checked=total_mult)
+    return _fail(
+        f"근 {kind} — 근들의 {kind}는 {sympy.sstr(sympy.simplify(actual))}이나 "
+        f"주장값은 {claimed}(불일치)",
+        samples_checked=total_mult,
+    )

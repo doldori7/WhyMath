@@ -42,7 +42,11 @@ from whymath_backend.l3.pregenerate.validator import (
     default_seed_validator,
     validate_response,
 )
-from whymath_backend.l3.verify_answer import verify_answer, verify_root_selection
+from whymath_backend.l3.verify_answer import (
+    verify_answer,
+    verify_root_aggregate,
+    verify_root_selection,
+)
 from whymath_backend.l3.verify_solution import verify_solution
 from whymath_backend.schema.enums import (
     AnswerFormat,
@@ -215,6 +219,8 @@ def _evaluate_verification(
     solution_steps: Sequence[str] | None,
     solution_step_types: Sequence[StepType | None] | None,
     answer_selection: str | None,
+    answer_aggregate: str | None = None,
+    claimed_answer: str | None = None,
 ) -> tuple[Literal["verified", "failed", "unverified"], list[str]]:
     """정확성 게이트 — Tier1(답 검산) + (있으면) Tier2(단계 동치) + 근 선택(S2-i) 결합.
 
@@ -235,6 +241,22 @@ def _evaluate_verification(
         통과시키는 구멍 차단. 단근·파라미터·연립 등 유일성 판정 밖은 그대로 둔다(회귀 0).
     """
     reasons: list[str] = []
+
+    # ★ S2 킬러 — 근 집계(합/곱) 문항: 답이 f=0의 근이 아니라 근들의 집계값이라 Tier1
+    #    (답이 근인가) 경로가 부적합하다. verify_root_aggregate로 분기해 판정하고 즉시 반환.
+    if answer_aggregate in ("sum", "product"):
+        if claimed_answer is None:
+            reasons.append("정확성 미검증 — 근 집계 문항인데 주장값(answer) 없음.")
+            return "unverified", reasons
+        agg = verify_root_aggregate(conditions, claimed_answer, answer_aggregate)  # type: ignore[arg-type]
+        if agg.state == "pass":
+            return "verified", reasons
+        if agg.state == "fail":
+            reasons.append(f"정확성 실패 — 근 {answer_aggregate} 불일치: {agg.reason}")
+            return "failed", reasons
+        reasons.append(f"정확성 미검증 — 근 {answer_aggregate} 확인 불가: {agg.reason}")
+        return "unverified", reasons
+
     answer_verdict = verify_answer(conditions, answer_map)
     tier1 = answer_verdict.state
 
@@ -380,6 +402,7 @@ def evaluate_equivalent_candidate(
     solution_steps: Sequence[str] | None = None,
     solution_step_types: Sequence[StepType | None] | None = None,
     answer_selection: str | None = None,
+    answer_aggregate: str | None = None,
     validator: SeedValidator | None = None,
     tag_auditor: TagAuditor | None = None,
     difficulty_tol: float = 0.5,
@@ -416,7 +439,13 @@ def evaluate_equivalent_candidate(
 
     # ② 정확성 게이트 (Tier1 + Tier2 + 근 선택 S2-i 결합).
     verification, verification_reasons = _evaluate_verification(
-        conditions, answer_map, solution_steps, solution_step_types, answer_selection
+        conditions,
+        answer_map,
+        solution_steps,
+        solution_step_types,
+        answer_selection,
+        answer_aggregate,
+        candidate.answer,
     )
     reasons.extend(verification_reasons)
 

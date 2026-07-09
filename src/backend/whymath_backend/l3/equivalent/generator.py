@@ -68,6 +68,14 @@ class CandidateProblem(BaseModel):
             "쓴다. None=선택 요구 없음(다근이면 게이트가 유일성 미확정으로 강등)."
         ),
     )
+    answer_aggregate: str | None = Field(
+        default=None,
+        description=(
+            '(선택·S2 킬러) 근 집계 검증 종류 — "sum"(근의 합)/"product"(근의 곱). 설정 시 '
+            "게이트가 answer(주장 집계값)를 verify_root_aggregate로 검증한다(답이 근이 아니라 "
+            "근들의 합/곱인 킬러 문항). None=일반(답이 근)."
+        ),
+    )
     solution_steps: list[str] | None = Field(
         default=None,
         description="(선택) 분해된 풀이 단계 — 게이트 정확성 Tier2(단계 동치) 재료. None=미제공.",
