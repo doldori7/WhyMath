@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -13,7 +13,10 @@ requires_gates: []
 acceptance:
   - 수능 모드 시그니처·기출 메타 기반 문제 추천 루프 동작
   - 테스트 green
-artifacts: []
+artifacts:
+  - "커밋 f0faa17 (시그니처 태거+귀납수열 밴드 30문·코퍼스 620)"
+  - "커밋 d0805cc (수능 적응 추천 루프 mode=suneung)"
+  - "실환경 후속: populate_problem_bank 재실행 (멱등 upsert — 신규 30문만 insert)"
 session: null
 notes: ""
-updated: 2026-07-08
+updated: 2026-07-09
