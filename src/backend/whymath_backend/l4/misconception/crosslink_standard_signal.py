@@ -17,11 +17,14 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from typing import Literal
 
+from whymath_backend.l1.misconception.crosslink_gate import MACHINE_REJECT_EVIDENCE_FLOOR
 from whymath_backend.l1.problem_bank.populate import ProblemBankRecord
 
 __all__ = [
     "StandardAgreement",
+    "derive_kebab_problem_counts",
     "derive_kebab_standards",
+    "machine_rejectable",
     "standard_agreement",
 ]
 
@@ -66,3 +69,39 @@ def standard_agreement(
     if not kebab_set or not mid_standard:
         return "no_signal"
     return "agree" if mid_standard in kebab_set else "disagree"
+
+
+def derive_kebab_problem_counts(
+    records: Sequence[ProblemBankRecord],
+) -> dict[str, int]:
+    """문항 코퍼스 → {kebab_id: 그 kebab을 오답 귀인으로 쓰는 문항 수}(증거량·순수).
+
+    역유도 성취기준의 *신뢰도*는 kebab이 등장한 문항 수에 달렸다(1문항 기반 유도는 얇음). 기계
+    자동 거부는 이 증거량이 하한 이상인 kebab에만 적용한다(`machine_rejectable`).
+    """
+    counts: dict[str, int] = {}
+    for record in records:
+        for entry in record.problem.distractor_map or []:
+            kebab = entry.misconception_id
+            if kebab:
+                counts[kebab] = counts.get(kebab, 0) + 1
+    return counts
+
+
+def machine_rejectable(
+    kebab_standards: Iterable[str],
+    kebab_problem_count: int,
+    mid_standard: str | None,
+    *,
+    evidence_floor: int = MACHINE_REJECT_EVIDENCE_FLOOR,
+) -> bool:
+    """기계가 이 (kebab, M-id) 매핑을 *자율 거부*해도 되는가 — 측정된 안전 구간만(순수).
+
+    True 조건: ① kebab 증거량 ≥ `evidence_floor`(역유도 성취기준 신뢰) **그리고** ② 성취기준이
+    가로지름(`disagree`). agree·no_signal·증거 미달은 전부 False(인간 폴백). 이 함수는 *거부*만
+    판정한다 — 승인(True로 통과)은 절대 반환하지 않는다(승인은 인간 존치·초인간 검증 §3.3).
+    거부 실패 모드는 보수적(놓쳐도 오매핑 적재가 아니라 누락).
+    """
+    if kebab_problem_count < evidence_floor:
+        return False
+    return standard_agreement(kebab_standards, mid_standard) == "disagree"

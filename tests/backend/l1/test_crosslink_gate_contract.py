@@ -27,6 +27,9 @@ from whymath_backend.l1.misconception.crosslink_gate import (
     DIRECT_LINK_TYPE,
     DIRECT_MIN_CONFIDENCE,
     LOADABLE_METHOD,
+    MACHINE_REJECT_EVIDENCE_FLOOR,
+    MACHINE_REJECT_METHOD,
+    MACHINE_REJECT_REVIEWER,
     REQUIRED_SIGNATURE_FIELDS,
     REVIEW_STATUSES,
     CrosslinkGateError,
@@ -206,6 +209,10 @@ def test_contract_doc_freezes_code_constants() -> None:
     assert LOADABLE_METHOD in doc  # "manual"
     assert DIRECT_LINK_TYPE in doc  # "직접매핑"
     assert "검수:" in doc  # 서명 stamp 형식
+    # 기계 자율 거부 축(§3.3) — 상수 드리프트 동결.
+    assert MACHINE_REJECT_METHOD in doc  # "structural_reject"
+    assert MACHINE_REJECT_REVIEWER in doc  # "machine"
+    assert str(MACHINE_REJECT_EVIDENCE_FLOOR) in doc  # "20"
 
 
 def _known_kebab() -> tuple[str, ...]:
