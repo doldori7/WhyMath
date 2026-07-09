@@ -12,7 +12,9 @@ from __future__ import annotations
 
 import pytest
 
-from whymath_backend.harness.misconception_mc_batch import build_kebab_distractor_codes
+from whymath_backend.harness.misconception_mc_batch import (
+    build_kebab_distractor_codes_optional,
+)
 from whymath_backend.l3.equivalent.acceptance import (
     EquivalenceSpec,
     evaluate_equivalent_candidate,
@@ -39,6 +41,12 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
         "CALC-CHAIN",
     ),
     ("sine_sum", "sine-distributes-over-sum", "[12미적Ⅱ-02-02]", "H:12미적Ⅱ02-02", "TRIG-ADD"),
+    # 신규 5종(op-code 부재) — 커버리지 8→13.
+    ("exp_zero", "exponent-zero", "[9수02-08]", "J0208", "EXP-ZERO"),
+    ("sqrt_pos", "square-root-positivity", "[9수01-07]", "J0107", "SQRT-POS"),
+    ("log_dist", "log-distribution", "[12대수01-05]", "H:12대수01-05", "LOG-DIST"),
+    ("func_compose", "composite-function-commutes", "[10공수2-03-02]", "HK35", "FUNC-COMPOSE"),
+    ("sine_period", "period-of-scaled-sine", "[12미적Ⅱ-02-02]", "H:12미적Ⅱ02-02", "TRIG-PERIOD"),
 )
 
 
@@ -52,8 +60,9 @@ def _spec(kebab: str, code: str) -> EquivalenceSpec:
 
 
 def _gen(template: TemplateKind, kebab: str, **kw: object) -> MisconceptionEvalMCSkeletonGenerator:
+    # op-code 有/無 무관 주입(부재 시 op_code=None) — 신규 5종은 op-code 없음.
     return MisconceptionEvalMCSkeletonGenerator(
-        template, build_kebab_distractor_codes(kebab), **kw  # type: ignore[arg-type]
+        template, build_kebab_distractor_codes_optional(kebab), **kw  # type: ignore[arg-type]
     )
 
 
@@ -147,8 +156,8 @@ class TestChoicesAndTagging:
     def test_single_misconception_tag_not_on_answer(
         self, template: TemplateKind, kebab: str, code: str, _src: str, _unit: str
     ) -> None:
-        # ③ 오개념 오답 *1건*만 태깅·정답 선지 제외·op-code 정본 일치.
-        expected_op = next(iter(build_kebab_distractor_codes(kebab).values()))[1]
+        # ③ 오개념 오답 *1건*만 태깅·정답 선지 제외·op-code 정본 일치(부재 시 None).
+        expected_op = next(iter(build_kebab_distractor_codes_optional(kebab).values()))[1]
         for candidate in _drain(_gen(template, kebab), _spec(kebab, code)):
             problem = candidate.problem
             assert problem.distractor_map is not None and len(problem.distractor_map) == 1

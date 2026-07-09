@@ -1,16 +1,18 @@
 """오개념 커버리지 확대 수치평가 객관식 배치 — crosswalk machine-decidable 커버 상향(LLM 0).
 
-`root_aggregate_batch`(Vieta 킬러)의 형제다. `MisconceptionEvalMCSkeletonGenerator`로 3 서브밴드
+`root_aggregate_batch`(Vieta 킬러)의 형제다. `MisconceptionEvalMCSkeletonGenerator`로 8 서브밴드
 (오개념 kebab별)를 생성 → 기존 오케스트레이터(`run_batch`)·수용 게이트(S2-a)·`JsonlCorpusSink`를
 **재사용**해 코퍼스를 적재한다. 목적: 기존 코퍼스가 `distractor_map`으로 커버하지 못하던 오개념
-3종을 문항에 *등장*시켜 crosswalk 기계 게이트의 machine-decidable 커버리지를 5/34 → 8/34로 올린다
+8종을 문항에 *등장*시켜 crosswalk 기계 게이트의 machine-decidable 커버리지를 8/34 → 13/34로 올린다
 (`crosslink_demotion_eval`의 커버리지 회계는 `problem_bank_*/problems.jsonl` glob이라 신규 코퍼스
-자동 포함).
+자동 포함). 앞 3밴드는 op-code 실재, 뒤 5밴드(exponent-zero·square-root-positivity·log-distribution·
+composite-function-commutes·period-of-scaled-sine)는 op-code 부재(오개념만 태깅).
 
 조성 루트 소관(주입 원칙): 객관식 distractor의 오개념·op-code id는 여기서 L4 정본
 (`CATALOG_BY_ID`·`DISTRACTOR_BY_ID`)을 읽어 L3 생성기에 *주입*한다 — L3 코드에는 L4 import·id
-하드코딩이 없다(CLAUDE.md 오개념 독립 DB·계층 규칙). harness는 import-linter 계약 밖(상위 계층
-호출이 정상인 조성/ops 층 — `problem_corpus_batch` 선례).
+하드코딩이 없다(CLAUDE.md 오개념 독립 DB·계층 규칙). op-code가 없는 오개념은
+`build_kebab_distractor_codes_optional`로 op_code=None을 주입한다(fail-fast는 kebab 실재에만).
+harness는 import-linter 계약 밖(상위 계층 호출이 정상인 조성/ops 층 — `problem_corpus_batch` 선례).
 
 결정론(재실행 바이트 동일): LLM 0·DB 0·타임스탬프 0·slug 기반 uuid5 problem_id·고정 시드 풀.
 산출물은 v0(사람 검수 전) — 게이트 통과 ≠ 학생 노출(§03 정본). 밴드별 수율 미달(저장 < 요청)이면
@@ -41,11 +43,16 @@ from whymath_backend.l3.equivalent.orchestrator import run_batch
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.distractor import DISTRACTOR_BY_ID
 
-__all__ = ["build_kebab_distractor_codes", "main", "run_misconception_mc_batch"]
+__all__ = [
+    "build_kebab_distractor_codes",
+    "build_kebab_distractor_codes_optional",
+    "main",
+    "run_misconception_mc_batch",
+]
 
 # 배치 스펙 — 모든 밴드 난이도 3.0(생성기 난이도 [2.5,3.5] 밴드 중앙·게이트 tol 0.5 안이라 만점).
 _SPEC_DIFFICULTY = 3.0
-_DEFAULT_N = 24  # 서브밴드당 요청 수(요구 하한 ≥24·풀 크기 26/32/34라 100% 수율 여유).
+_DEFAULT_N = 24  # 서브밴드당 요청 수(요구 하한 ≥24·각 풀 크기 ≥24라 100% 수율 여유).
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +71,11 @@ class _Band:
     standard_codes: tuple[str, ...]
 
 
-# 3 서브밴드 — 각 오개념 1종을 오답 선지로 태깅하는 수치평가 객관식(op-code 실재·DISTRACTOR_BY_ID).
+# 8 서브밴드 — 각 오개념 1종을 오답 선지로 태깅하는 수치평가 객관식.
+#   앞 3종(distribution/chain_rule/sine_sum)은 op-code 실재(DISTRACTOR_BY_ID).
+#   뒤 5종(exp_zero~sine_period)은 op-code 부재 — op-code 없이 오개념만 태깅(op_code 옵셔널).
+#   성취기준 튜플은 *각 kebab의 후보 M-id가 전부 agree*하도록 잠갔다 — 어느 후보도 crosswalk 구조
+#   게이트에서 거짓 자율거부되지 않게 한다(machine_reject 신규 0·인간 검수 존치).
 _BANDS: tuple[_Band, ...] = (
     _Band("distribution-over-power", "distribution", "distribution-over-power", ("[9수02-19]",)),
     # chain-rule는 미적Ⅰ(미분)·미적Ⅱ(합성함수 미분법)를 함께 걸침 — 둘 다 태깅해 어느 후보도
@@ -78,6 +89,27 @@ _BANDS: tuple[_Band, ...] = (
     _Band(
         "sine-distributes-over-sum", "sine_sum", "sine-distributes-over-sum", ("[12미적Ⅱ-02-02]",)
     ),
+    # ── 신규 5종(op-code 부재) ──
+    # exponent-zero: 후보 M0105=[9수02-08] agree.
+    _Band("exponent-zero", "exp_zero", "exponent-zero", ("[9수02-08]",)),
+    # square-root-positivity: 후보 M0550·M0109=[9수01-07], M0647=[12대수01-01] — 둘 다 태깅해 agree.
+    _Band(
+        "square-root-positivity",
+        "sqrt_pos",
+        "square-root-positivity",
+        ("[9수01-07]", "[12대수01-01]"),
+    ),
+    # log-distribution: 후보 M0049=[12대수01-05], M0650=[12대수01-04] — 둘 다 태깅해 agree.
+    _Band("log-distribution", "log_dist", "log-distribution", ("[12대수01-05]", "[12대수01-04]")),
+    # composite-function-commutes: M0643·M0038=[10공수2-03-02], M0858=[10기수2-03-02] — 둘 다 agree.
+    _Band(
+        "composite-function-commutes",
+        "func_compose",
+        "composite-function-commutes",
+        ("[10공수2-03-02]", "[10기수2-03-02]"),
+    ),
+    # period-of-scaled-sine: 후보 M0152=[12미적Ⅱ-02-02] agree.
+    _Band("period-of-scaled-sine", "sine_period", "period-of-scaled-sine", ("[12미적Ⅱ-02-02]",)),
 )
 
 
@@ -103,10 +135,24 @@ def build_kebab_distractor_codes(kebab: str) -> dict[str, tuple[str, str]]:
     return {kebab: (kebab, op_code)}
 
 
+def build_kebab_distractor_codes_optional(kebab: str) -> dict[str, tuple[str, str | None]]:
+    """kebab → `{kebab: (misconception_id, op_code | None)}` — op-code 부재 허용판(fail-fast).
+
+    `build_kebab_distractor_codes`와 달리 유발 op-code가 `DISTRACTOR_BY_ID`에 없어도 `KeyError`를
+    던지지 않고 op_code=None을 담는다(수치평가 MC는 op-code 없이 오개념만 태깅 — `DistractorEntry`
+    .op_code 옵셔널). 단, kebab이 정본 오개념 카탈로그에 없으면 여전히 즉시 실패한다(조용한 무매핑
+    금지·조성 루트가 무결성 소유). op-code가 실재하면 그대로 담아 op-code 有 밴드와도 정합한다.
+    """
+    if kebab not in CATALOG_BY_ID:
+        raise KeyError(f"주입 오개념 id가 정본 카탈로그에 없음: {kebab!r}")
+    op_code = next((d.id for d in DISTRACTOR_BY_ID.values() if d.misconception_id == kebab), None)
+    return {kebab: (kebab, op_code)}
+
+
 def run_misconception_mc_batch(
     *, n_per_band: int = _DEFAULT_N, out_path: Path | None = None, write: bool = True
 ) -> CorpusBatchReport:
-    """3 서브밴드 배치 실행 — 생성→S2-a 게이트→구조 dedup→적재(순수 결정론).
+    """8 서브밴드 배치 실행 — 생성→S2-a 게이트→구조 dedup→적재(순수 결정론).
 
     각 밴드는 **별도 signature_index**(문제군 분리·calc 밴드 패턴 미러)를 쓴다. sink에는 밴드
     순서대로 append한다. `target_misconception_ids={kebab}`라 게이트 오개념 Jaccard가 1.0(후보가
@@ -117,7 +163,9 @@ def run_misconception_mc_batch(
     bands: list[BandResult] = []
 
     for band in _BANDS:
-        codes = build_kebab_distractor_codes(band.kebab)
+        # op-code 有/無 무관 주입 — 부재 시 op_code=None(옵셔널). op-code 실재 밴드는 동일 결과라
+        # 기존 3밴드 바이트 무변경(op-code를 그대로 담음).
+        codes = build_kebab_distractor_codes_optional(band.kebab)
         spec = EquivalenceSpec(
             achievement_standard_codes=frozenset(band.standard_codes),
             target_misconception_ids=frozenset({band.kebab}),
@@ -158,7 +206,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI — 오개념 수치평가 MC 배치. 수율 미달(총 저장 < 요청)이면 exit 1(조용한 실패 금지)."""
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.misconception_mc_batch",
-        description="오개념 커버리지 확대 수치평가 객관식 배치 적재(3 서브밴드·결정론).",
+        description="오개념 커버리지 확대 수치평가 객관식 배치 적재(8 서브밴드·결정론).",
     )
     parser.add_argument("--n", type=int, default=_DEFAULT_N, help="서브밴드당 요청 수(기본 24).")
     parser.add_argument("--out", default=None, help="출력 코퍼스 경로(기본 misconception_mc_v0).")

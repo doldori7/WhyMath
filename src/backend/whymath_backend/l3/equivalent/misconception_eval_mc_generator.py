@@ -1,13 +1,21 @@
 """오개념 커버리지 확대용 수치평가 객관식 스켈레톤 생성기 — S2 확장(결정론·LLM 0).
 
 `CalculusExtremumMCSkeletonGenerator`(극값 MC)의 형제다. 같은 `EquivalentProblemGenerator`
-좌석을 구현하되 목적이 다르다: 기존 코퍼스가 `distractor_map`으로 커버하지 못하던 오개념 3종을
-문항에 *등장*시켜 crosswalk 기계 게이트의 machine-decidable 커버리지(5/34)를 끌어올린다.
+좌석을 구현하되 목적이 다르다: 기존 코퍼스가 `distractor_map`으로 커버하지 못하던 오개념 여러 종을
+문항에 *등장*시켜 crosswalk 기계 게이트의 machine-decidable 커버리지(8/34→13/34)를 끌어올린다.
 
-세 템플릿(각각 오개념 1종을 오답 선지로 태깅):
-  - `distribution` — (a+b)² 의 값(오개념: 제곱을 각 항에 분배해 교차항 2ab 누락 → a²+b²).
-  - `chain_rule`  — f(x)=(kx+c)³ 의 f'(x₀)(오개념: 연쇄법칙 내부 도함수 k 누락 → 3(kx₀+c)²).
-  - `sine_sum`    — sin(A+B) 의 값(오개념: 사인을 합에 분배 → sin A + sin B).
+여덟 템플릿(각각 오개념 1종을 오답 선지로 태깅):
+  - `distribution`   — (a+b)² 의 값(오개념: 제곱을 각 항에 분배해 교차항 2ab 누락 → a²+b²).
+  - `chain_rule`     — f(x)=(kx+c)³ 의 f'(x₀)(오개념: 연쇄법칙 내부 도함수 k 누락 → 3(kx₀+c)²).
+  - `sine_sum`       — sin(A+B) 의 값(오개념: 사인을 합에 분배 → sin A + sin B).
+  - `exp_zero`       — n + a^0 의 값(오개념: a^0=0 으로 오인 → n).
+  - `sqrt_pos`       — √((-a)²) 의 값(오개념: √(x²)=x 로 오인 → -a).
+  - `log_dist`       — log₂(2^k + 2^k) 의 값(오개념: log₂(2^k)+log₂(2^k)=k+k → 2k).
+  - `func_compose`   — f(x)=x+a, g(x)=bx 의 (f∘g)(c)(오개념: 합성 순서 뒤집어 (g∘f)(c) → bc+ab).
+  - `sine_period`    — y=sin(kx) 의 주기(오개념: 계수 k 무시 주기 불변 오인 → 2π).
+
+뒤 5종(exp_zero~sine_period)은 정본 카탈로그에는 실재하나 유발 op-code가 없다(수치평가 MC는
+op-code 없이 오개념만 태깅 — `DistractorEntry.op_code` 옵셔널·`distractor_codes` op_code=None 허용).
 
 핵심 통찰(극값 MC 미러·재구현 0): 수치평가 문항은 정답이 *하나의 닫힌 값*이라, dummy 변수 x의
 등식 `x = <닫힌형 식>`(conditions)과 `{"x": <정답값>}`(answer_map)로 기존 Tier1 검산 스택
@@ -63,7 +71,16 @@ _POOL_SEED = 20260709
 # 수치 4-상이 판정 허용치 — 두 선지 값이 이보다 가까우면 사실상 같은 값(4지선다 부적격).
 _DISTINCT_TOL = 1e-9
 
-TemplateKind = Literal["distribution", "chain_rule", "sine_sum"]
+TemplateKind = Literal[
+    "distribution",
+    "chain_rule",
+    "sine_sum",
+    "exp_zero",
+    "sqrt_pos",
+    "log_dist",
+    "func_compose",
+    "sine_period",
+]
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
 # concept_src_id는 개념그래프 원천 키, unit_code는 문항 단원 코드. 성취기준 코드는 spec이 공급한다.
@@ -71,6 +88,11 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "distribution": ("J0219", "POLY-PRODUCT"),
     "chain_rule": ("H:12미적Ⅰ02-01", "CALC-CHAIN"),
     "sine_sum": ("H:12미적Ⅱ02-02", "TRIG-ADD"),
+    "exp_zero": ("J0208", "EXP-ZERO"),
+    "sqrt_pos": ("J0107", "SQRT-POS"),
+    "log_dist": ("H:12대수01-05", "LOG-DIST"),
+    "func_compose": ("HK35", "FUNC-COMPOSE"),
+    "sine_period": ("H:12미적Ⅱ02-02", "TRIG-PERIOD"),
 }
 
 
@@ -301,19 +323,209 @@ def _build_sine_pool() -> tuple[_EvalItem, ...]:
     return tuple(pool)
 
 
+def _build_exp_zero_pool() -> tuple[_EvalItem, ...]:
+    """n + a^0 값 뼈대 풀 — 정답 n+1(a^0=1)·오개념 n(a^0=0)·filler n+a(a^0=a)·n+2.
+
+    a≥2·n≥1. 정답값 n+1로 dedup(같은 n은 정답 signature 동일). filler1=n+a가 a=2일 때
+    filler2=n+2와 충돌하므로 그런 조합은 4-상이 검사에서 배제되고, 같은 n의 다른 a(≥3)로 채운다.
+    n≥1이라 네 값 {n+1, n, n+a, n+2}은 모두 양(0 값 위생 통과).
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for n in range(1, 31):
+        for a in range(2, 8):
+            correct_v = n + 1
+            if correct_v in seen:
+                continue  # 같은 n → 같은 정답값 → 구조 signature 충돌(회차 낭비 방지).
+            correct = sympy.Integer(correct_v)
+            misc = sympy.Integer(n)  # a^0=0 오인.
+            filler1 = sympy.Integer(n + a)  # a^0=a 오인.
+            filler2 = sympy.Integer(n + 2)  # 근접 오답(a^0=2 등).
+            item = _assemble_item(
+                values=(correct, misc, filler1, filler2),
+                conditions=f"x = {n} + {a}**0",
+                answer_str=str(correct_v),
+                question_text=f"자연수 a = {a} 에 대하여 {n} + a^0 의 값을 구하시오.",
+                answer_explanation=(
+                    f"a^0 = 1 이므로 {n} + a^0 = {n} + 1 = {correct_v} 이다. "
+                    f"a^0 을 0 으로 잘못 계산하면 {n} 이 되어 틀린다."
+                ),
+                difficulty=_difficulty(n + a),
+                answer_format=AnswerFormat.자연수,
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_sqrt_pos_pool() -> tuple[_EvalItem, ...]:
+    """√((-a)²) 값 뼈대 풀 — 정답 a(=|−a|)·오개념 -a(√(x²)=x 오인)·filler a²·2a.
+
+    a≥3(a=2 스킵: 2a=a²=4 충돌). 네 값 {a, -a, a², 2a}은 a≥3에서 서로 다르다(a²≠2a·a≠2a·
+    a≠a²·음수 -a는 양수들과 분리). 정답값 a로 dedup(각 a 유일). -a는 음수 선지(위생 0 값 아님).
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(3, 30):
+        correct_v = a
+        if correct_v in seen:
+            continue
+        correct = sympy.Integer(a)
+        misc = sympy.Integer(-a)  # √(x²)=x 오인(절댓값 누락).
+        filler1 = sympy.Integer(a * a)  # 제곱을 안 벗김.
+        filler2 = sympy.Integer(2 * a)  # √를 ×2로 혼동.
+        item = _assemble_item(
+            values=(correct, misc, filler1, filler2),
+            conditions=f"x = sqrt((-{a})**2)",
+            answer_str=str(correct_v),
+            question_text=f"√((-{a})^2) 의 값을 구하시오.",
+            answer_explanation=(
+                f"√(x²) = |x| 이므로 √((-{a})²) = |-{a}| = {a} 이다. "
+                f"√(x²) = x 로 오인하면 -{a} 가 되어 틀린다."
+            ),
+            difficulty=_difficulty(a),
+            answer_format=AnswerFormat.자연수,
+        )
+        if item is not None:
+            seen.add(correct_v)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_log_dist_pool() -> tuple[_EvalItem, ...]:
+    """log₂(2^k + 2^k) 값 뼈대 풀 — 정답 k+1(2^k+2^k=2^{k+1})·오개념 2k(log 분배)·filler 2k+1·k.
+
+    k≥2(k=1 스킵: k+1=2k=2 충돌). 네 값 {k+1, 2k, 2k+1, k}은 k≥2에서 서로 다르다(대수적 증명).
+    정답값 k+1로 dedup(각 k 유일). k≥2라 모두 양(0 값 위생 통과).
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for k in range(2, 28):
+        correct_v = k + 1
+        if correct_v in seen:
+            continue
+        correct = sympy.Integer(correct_v)
+        misc = sympy.Integer(2 * k)  # log₂(2^k)+log₂(2^k)=k+k 오인(로그 합 분배).
+        filler1 = sympy.Integer(2 * k + 1)  # 근접 오답.
+        filler2 = sympy.Integer(k)  # 지수만 취함.
+        item = _assemble_item(
+            values=(correct, misc, filler1, filler2),
+            conditions=f"x = log(2**{k} + 2**{k}, 2)",
+            answer_str=str(correct_v),
+            question_text=f"log_2(2^{k} + 2^{k}) 의 값을 구하시오.",
+            answer_explanation=(
+                f"2^{k} + 2^{k} = 2·2^{k} = 2^{k + 1} 이므로 값은 {correct_v} 이다. "
+                f"로그를 합에 분배해 {k}+{k} = {2 * k} 로 하면 틀린다."
+            ),
+            difficulty=_difficulty(k),
+            answer_format=AnswerFormat.자연수,
+        )
+        if item is not None:
+            seen.add(correct_v)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_func_compose_pool() -> tuple[_EvalItem, ...]:
+    """(f∘g)(c) 값 뼈대 풀 — f(x)=x+a, g(x)=bx. 정답 f(g(c))=bc+a·오개념 (g∘f)(c)=bc+ab.
+
+    filler: bc(합성 +a 누락)·bc+a+b. b≥2·a≥1·c≥1. 유일 충돌 (a,b)=(2,2)에서 오개념 bc+ab가
+    filler2 bc+a+b와 겹치나 4-상이 검사가 배제한다. 정답값 bc+a로 dedup. 모두 양(0 값 위생 통과).
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(1, 6):
+        for b in range(2, 6):
+            for c in range(1, 7):
+                correct_v = b * c + a
+                if correct_v in seen:
+                    continue
+                correct = sympy.Integer(correct_v)
+                misc = sympy.Integer(b * c + a * b)  # (g∘f)(c)=g(c+a)=bc+ab(합성 순서 뒤집음).
+                filler1 = sympy.Integer(b * c)  # +a 누락.
+                filler2 = sympy.Integer(b * c + a + b)  # 계수 오합.
+                item = _assemble_item(
+                    values=(correct, misc, filler1, filler2),
+                    conditions=f"x = {b}*{c} + {a}",
+                    answer_str=str(correct_v),
+                    question_text=(
+                        f"두 함수 f(x) = x + {a}, g(x) = {b}x 에 대하여 "
+                        f"(f∘g)({c}) 의 값을 구하시오."
+                    ),
+                    answer_explanation=(
+                        f"(f∘g)({c}) = f(g({c})) = f({b * c}) = {b * c} + {a} = {correct_v} 이다. "
+                        f"순서를 뒤집어 (g∘f)({c}) = g({c}+{a}) = {b * c + a * b} 로 하면 틀린다."
+                    ),
+                    difficulty=_difficulty(a + b + c),
+                    answer_format=AnswerFormat.자연수,
+                )
+                if item is not None:
+                    seen.add(correct_v)
+                    pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_sine_period_pool() -> tuple[_EvalItem, ...]:
+    """y = sin(kx) 주기 뼈대 풀 — 정답 2π/k·오개념 2π(계수 무시 주기 불변)·filler π/k·2πk.
+
+    k≥2. 네 값 {2π/k, 2π, π/k, 2πk}은 k≥2에서 서로 다르다(대수적 증명). 정답값(실수 근사)으로
+    dedup(각 k 유일). 모두 양(0 값 위생 통과). 정답은 무리수(2π/k)라 answer_format=실수.
+    """
+    pi = sympy.pi
+    pool: list[_EvalItem] = []
+    seen: set[float] = set()
+    for k in range(2, 28):
+        correct = sympy.Integer(2) * pi / k
+        key = round(_numeric(correct), 9)
+        if key in seen:
+            continue
+        misc = sympy.Integer(2) * pi  # 계수 k 무시(주기 불변 오인).
+        filler1 = pi / k  # 반주기 혼동.
+        filler2 = sympy.Integer(2) * pi * k  # 계수 역적용.
+        item = _assemble_item(
+            values=(correct, misc, filler1, filler2),
+            conditions=f"x = 2*pi/{k}",
+            answer_str=_display(correct),
+            question_text=f"함수 y = sin({k}x) 의 주기를 구하시오.",
+            answer_explanation=(
+                f"y = sin(bx) 의 주기는 2π/b 이므로 y = sin({k}x) 의 주기는 2π/{k} 이다. "
+                f"계수 {k} 를 무시하면 주기를 2π 로 잘못 구한다."
+            ),
+            difficulty=_difficulty(k),
+            answer_format=_answer_format_for(correct),
+        )
+        if item is not None:
+            seen.add(key)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "distribution": _build_distribution_pool,
     "chain_rule": _build_chain_rule_pool,
     "sine_sum": _build_sine_pool,
+    "exp_zero": _build_exp_zero_pool,
+    "sqrt_pos": _build_sqrt_pos_pool,
+    "log_dist": _build_log_dist_pool,
+    "func_compose": _build_func_compose_pool,
+    "sine_period": _build_sine_period_pool,
 }
 
 
 class MisconceptionEvalMCSkeletonGenerator:
     """오개념 수치평가 객관식 결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석(LLM 0).
 
-    `template`(distribution/chain_rule/sine_sum)이 수학 실체를, 생성자 `distractor_codes`가 오답
-    선지의 오개념·op-code id를 정한다(극값 MC 규약 미러·L4 하드코딩 0). `distractor_codes`는 단일
-    엔트리 `{kebab: (misconception_id, op_code)}`를 기대한다 — 각 문항이 오개념 오답 *1건*만
+    `template`(distribution/chain_rule/sine_sum/exp_zero/sqrt_pos/log_dist/func_compose/
+    sine_period)이 수학 실체를, 생성자 `distractor_codes`가 오답 선지의 오개념·op-code id를 정한다
+    (극값 MC 규약 미러·L4 하드코딩 0). `distractor_codes`는 단일 엔트리
+    `{kebab: (misconception_id, op_code)}`를 기대한다(op_code는 None 허용 — op-code 없는 오개념은
+    오개념만 태깅) — 각 문항이 오개념 오답 *1건*만
     태깅하기 때문(filler는 미태깅). 풀을 순서대로 소비하며 후보를 낸다(소진 시 None —
     generation_failed로 정직 기록). `skip_signatures`에 이미 코퍼스에 있는 구조 signature를 주면
     해당 뼈대를 건너뛴다(배치 재실행 dedup 낭비 방지·오케스트레이터 signature_index 공유).
@@ -322,7 +534,7 @@ class MisconceptionEvalMCSkeletonGenerator:
     def __init__(
         self,
         template: TemplateKind,
-        distractor_codes: Mapping[str, tuple[str, str]],
+        distractor_codes: Mapping[str, tuple[str, str | None]],
         *,
         skip_signatures: AbstractSet[str] | None = None,
         slug_prefix: str = "wm-misc-eval-mc",
@@ -332,7 +544,10 @@ class MisconceptionEvalMCSkeletonGenerator:
         concept_relevance: float = 0.95,
     ) -> None:
         if template not in _POOL_FACTORY:
-            raise ValueError(f"미지원 template: {template!r} (distribution/chain_rule/sine_sum)")
+            raise ValueError(
+                f"미지원 template: {template!r} (distribution/chain_rule/sine_sum/exp_zero/"
+                "sqrt_pos/log_dist/func_compose/sine_period)"
+            )
         if not distractor_codes:
             raise ValueError(
                 "distractor_codes 주입 누락 — 오개념 오답 태깅용 (misconception_id, op_code)가 "

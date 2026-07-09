@@ -53,9 +53,9 @@ class TestDeriveKebabStandards:
     def test_uncovered_kebab_absent(self) -> None:
         # 문항에 오답 귀인으로 안 쓰이는 kebab은 유도 집합에 없음(→ no_signal·인간 전용).
         derived = derive_kebab_standards(_all_problem_records())  # type: ignore[arg-type]
-        assert "square-root-positivity" not in derived
-        # 커버는 소수(현 5)뿐 — 정직한 경계.
-        assert len(derived) <= 10
+        assert "sign-flip-in-inequality" not in derived
+        # 커버는 소수(현 13)뿐 — 정직한 경계.
+        assert len(derived) <= 15
 
     def test_problem_counts_evidence(self) -> None:
         # 증거량(문항 수) — well-evidenced kebab은 하한 20 이상·thin(root-loss)은 1.

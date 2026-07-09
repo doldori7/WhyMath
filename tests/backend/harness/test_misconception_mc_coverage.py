@@ -30,11 +30,17 @@ _NEW_KEBABS: dict[str, str] = {
     "distribution-over-power": "[9수02-19]",
     "chain-rule-inner-derivative-omitted": "[12미적Ⅰ-02-01]",
     "sine-distributes-over-sum": "[12미적Ⅱ-02-02]",
+    # 신규 5종(op-code 부재) — 커버리지 8→13.
+    "exponent-zero": "[9수02-08]",
+    "square-root-positivity": "[9수01-07]",
+    "log-distribution": "[12대수01-05]",
+    "composite-function-commutes": "[10공수2-03-02]",
+    "period-of-scaled-sine": "[12미적Ⅱ-02-02]",
 }
 
 
 class TestKebabsAreCatalogued:
-    def test_three_kebabs_in_catalog(self) -> None:
+    def test_kebabs_in_catalog(self) -> None:
         # ① 회계 분모(CATALOG_BY_ID)에 실재해야 decidable 카운트에 잡힌다.
         for kebab in _NEW_KEBABS:
             assert kebab in CATALOG_BY_ID
@@ -42,7 +48,7 @@ class TestKebabsAreCatalogued:
 
 class TestBatchCoverageContribution:
     def test_new_kebabs_decidable_with_count_ge_24(self, tmp_path: Path) -> None:
-        # ② 배치 산출 코퍼스에서 3 kebab이 각각 count≥24·성취기준 역유도됨(derive_kebab_standards).
+        # ② 배치 산출 코퍼스에서 8 kebab이 각각 count≥24·성취기준 역유도됨(derive_kebab_standards).
         out = tmp_path / "problems.jsonl"
         run_misconception_mc_batch(n_per_band=24, out_path=out, write=True)
         records = load_problem_bank_records(out)
@@ -53,19 +59,19 @@ class TestBatchCoverageContribution:
             assert counts.get(kebab, 0) >= 24  # 오답 귀인 문항 ≥24
             assert code in standards.get(kebab, frozenset())  # 성취기준 역유도
 
-        # 이 코퍼스만으로도 3 kebab이 machine-decidable(구조 신호 有).
+        # 이 코퍼스만으로도 8 kebab이 machine-decidable(구조 신호 有).
         decidable = sum(1 for k in CATALOG_BY_ID if standards.get(k))
-        assert decidable >= 3
+        assert decidable >= 8
 
 
 class TestCommittedCorpusCoverageRise:
-    def test_committed_corpora_decidable_at_least_8(self) -> None:
-        # ③ 커밋 코퍼스 전체 회계 — machine-decidable ≥8(5→8 상승)·정답 오거부 0(회귀 아님).
+    def test_committed_corpora_decidable_at_least_13(self) -> None:
+        # ③ 커밋 코퍼스 전체 회계 — machine-decidable ≥13(8→13 상승)·정답 오거부 0(회귀 아님).
         report, _ = run(
             problem_corpora=_default_problem_corpora(),
             misconceptions=_default_misconceptions(),
             cross_per_positive=60,
             same_per_positive=60,
         )
-        assert report.kebabs_decidable >= 8
+        assert report.kebabs_decidable >= 13
         assert report.positive_false_reject == 0
