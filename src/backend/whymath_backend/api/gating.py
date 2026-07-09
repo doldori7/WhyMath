@@ -132,8 +132,9 @@ async def _fetch_achievement_codes(
     소비처(L6 진도 정합)의 매칭 축이 불변이다. 배열 컬럼이라 행별 코드 배열을 파이썬에서
     평탄화한다(`{problem_id: set(codes)}`).
 
-    curriculum_entry 깊이 조인(`_fetch_problem_concept_codes` → resolver)의 원자 축 정렬은 후속
-    태스크(S2-07-curriculum-entry-atom-axis) 소관 — 여기서는 성취기준 축만 전환한다.
+    curriculum_entry 깊이 조인(`_fetch_problem_concept_codes` → resolver)의 원자 축 정렬은
+    S2-07 완료 — 크로스워크 전파로 유도한 원자-키 curriculum_entry 행(`l1/curriculum/
+    curriculum_loader.py` `derive_atom_curriculum_entries`)이 적재되어 조인이 hit한다.
 
     `me.py`의 `select(...).join(...).where(...in_(...))` 선례를 답습한 *단일 쿼리 IN 일괄*이라
     후보 수와 무관하게 쿼리 1회(N+1 0). INNER 조인이라 원자 행이 달린 (문항,개념) 행만 나오고,
