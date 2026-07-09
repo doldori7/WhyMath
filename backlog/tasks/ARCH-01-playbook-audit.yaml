@@ -5,7 +5,7 @@ track: infra-debt
 stage: S1
 subject: cross
 layer: docs
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - build_checkpoint_questions.md 10단계 스냅샷 갱신
   - "playbook_part_review_questions.md Part 0~12 위반 여부 기록"
   - 위반 발견 시 상환 태스크를 backlog add로 등록
-artifacts: []
-session: claude/app-build-harness-replace-4z7ksj
+artifacts:
+  - "커밋 3576d24 (docs/standards/arch_audit_2026-07-09.md)"
+session: null
 notes: "반복 태스크 — done 시 다음 회차(ARCH-02...)를 add로 재생성한다"
 updated: 2026-07-09
