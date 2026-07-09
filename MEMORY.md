@@ -337,6 +337,10 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-09 (문서·SSM 리마인더): 분기 스캔 스케줄 스펙 명문화 (라이브 Routine은 대화형 세션에서 생성)
+
+**무엇/왜(사용자 승인 "자동 실행+draft PR·분기 1일")**: SSM 분기 스캔이 "잊혀서 안 도는" 실패를 막는 자동 리마인더(Routine)를 설정하려 했으나, **비대화형 세션에서 스케줄링 도구(`create_trigger`, claude-code-remote)가 승인 게이트에 막혀 3회 실패**. 대안으로 **스케줄 스펙을 SSM 표준 §8에 명문화**(진실 원천·대화 휘발 방지)해 라이브 Routine 생성 전까지 수동 발동 대체·생성 시 그대로 복제. **스펙**: cron `0 0 1 1,4,7,10 *`(1/4/7/10월 1일 00:00 UTC=09:00 KST·다음 앵커 2026-10-01 Q4)·새 세션 발동(fresh-session-per-fire·컨테이너 휘발 대비)·푸시 알림·자동 스캔 후 **draft PR(auto-merge 금지·Kiki 검수·머지)**·발동 프롬프트 요지 포함. **NOT**: 코드 0·테스트 0·라이브 Routine 미생성(승인 게이트 대기·대화형 세션 필요)·즉시 트리거(§4-2)는 별개. **다음**: 대화형 세션에서 스펙대로 Routine 생성·2026-Q4 첫 자동 스캔.
+
 ### 2026-07-09 (문서·정합 정정): 임베딩 표기 현행화 — CLAUDE.md 표 ↔ 코드(이중 provider) 진실 일치 (결정은 미결 유지)
 
 **무엇/왜(SSM 2026-Q3 스캔 ③축 특수항목 #9 후속·사용자 승인 "현황 반영+미결 명시")**: CLAUDE.md 기술 스택 표의 임베딩 행이 `OpenAI text-embedding-3-large` 단독 표기였으나, **실코드는 이중 provider 설계**(`config.embedding_provider: Literal["local","openai","fake"]` **기본=local**·`embedding_model_local="BAAI/bge-m3"`·`embedding_model_openai="text-embedding-3-large"`·`embedding_dim=1024`, `l1/embedding_provider.py` Local/OpenAI 두 구현·슬105 `misconception_embedding vector(1024)`). 표가 로컬 우선 기본(bge-m3)을 누락해 문서-코드 truth가 이원화(유지보수 지옥 씨앗). **정정(문서 1줄)**: 표 임베딩 행을 "기본(로컬)=bge-m3(BAAI/bge-m3·1024) · 클라우드 옵션=OpenAI te-3-large(3072) · `embedding_provider` 셀렉터 · **최종 확정 미결**(bge-m3 vs te-3-large)"으로 현행화. **핵심 경계**: 이는 *진실 일치*일 뿐 **모델 확정 결정이 아님** — bge-m3 vs te-3-large 정본화는 여전히 미결(SSM ③ Qwen3-Embedding 파일럿·Phaiakes9 실측과 함께 후속). **NOT**: 코드 0·테스트 0·config 0(코드는 이미 이중 provider·정확)·스택 실변경 0(표기 정합만). **다음**: 임베딩 모델 정본화는 라이브 계측 후 SSM 게이트에서 판정.
