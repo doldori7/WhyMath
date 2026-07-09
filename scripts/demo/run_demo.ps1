@@ -1,4 +1,4 @@
-# S1 탈출 게이트 ① — 실기기 학습 루프 15분 시연 원커맨드 기동 (Windows/Phaiakes9 네이티브).
+﻿# S1 탈출 게이트 ① — 실기기 학습 루프 15분 시연 원커맨드 기동 (Windows/Phaiakes9 네이티브).
 #
 # run_demo.sh(bash)의 PowerShell 미러. 하드 블로커 3종을 한 번에 해소:
 #   ① 인증  — WHYMATH_DEMO_AUTH_ENABLED=true + /v1/auth/demo/callback으로 실 JWT 자동 발급 → DEMO_TOKEN

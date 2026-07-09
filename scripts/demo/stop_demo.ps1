@@ -1,4 +1,4 @@
-# S1 시연 정리(Windows) — uvicorn 종료 + throwaway Postgres(볼륨째) 제거.
+﻿# S1 시연 정리(Windows) — uvicorn 종료 + throwaway Postgres(볼륨째) 제거.
 # 사용법(리포 루트, PowerShell):  .\scripts\demo\stop_demo.ps1
 
 $ErrorActionPreference = "SilentlyContinue"
