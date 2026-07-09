@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import argparse
+import re
 from collections.abc import Iterable, Mapping, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -31,6 +32,7 @@ __all__ = [
     "DEFAULT_SAMPLE_ANSWERS",
     "AssetAuditItem",
     "audit_socratic_assets",
+    "extract_example_responses",
     "main",
     "render_asset_audit_markdown",
 ]
@@ -38,6 +40,12 @@ __all__ = [
 # 표본 정답 배터리 기본값 — 자산이 어떤 대표 정답도 유출 안 함을 교차 검증(수치·식·다자리).
 # pedagogical_rubric 회귀 테스트의 `_SAMPLE_ANSWERS`와 동일 표본(일관).
 DEFAULT_SAMPLE_ANSWERS: tuple[str, ...] = ("42", "13", "x=7", "3.14", "100")
+
+# 프롬프트 문서 예시 발화 마커 — `docs/prompts/socratic_template.md`의 `- 응답 예: "..."` 한 줄
+# 관례. 직선 큰따옴표 안의 발화 1건을 캡처(펜스 블록·JSON은 이 마커가 없어 자동 배제).
+_EXAMPLE_MARKER = re.compile(r'^\s*-\s*응답 예:\s*"(.+)"\s*$')
+# 시나리오 헤더 — 예시 발화의 라벨 추적용(`### 시나리오 N: ...`).
+_SCENARIO_HEADER = re.compile(r"^\s*#{2,3}\s*(시나리오\s*\d+)")
 
 # 유출 심각도 우선순위 — 표본 배터리 중 worst_leakage 결선(클수록 심각).
 _LEAKAGE_SEVERITY: dict[LeakageVerdict, int] = {
@@ -75,6 +83,33 @@ def _normalize_assets(
     if isinstance(assets, Mapping):
         return list(assets.items())
     return list(assets)
+
+
+def extract_example_responses(markdown: str) -> list[tuple[str, str]]:
+    """프롬프트 문서 마크다운에서 예시 튜터 발화를 (라벨, 발화)로 추출한다(순수·결정론).
+
+    `docs/prompts/socratic_template.md`의 `- 응답 예: "..."` 한 줄 관례를 대상으로 한다. 줄 스캔으로
+    직전 `### 시나리오 N` 헤더를 라벨로 추적하고(헤더 없으면 `응답예{i}` 폴백), 마커 줄의 큰따옴표
+    안 발화를 뽑는다. 마커가 없는 시스템 프롬프트·JSON·펜스 코드 블록은 자동 배제(순수 문자열 처리·
+    파일 I/O 없음). 라벨 충돌 시 `#k` 접미(결정론).
+    """
+    items: list[tuple[str, str]] = []
+    current_scenario: str | None = None
+    seen_labels: dict[str, int] = {}
+    for index, line in enumerate(markdown.splitlines(), start=1):
+        header = _SCENARIO_HEADER.match(line)
+        if header is not None:
+            current_scenario = re.sub(r"\s+", "", header.group(1))
+            continue
+        marker = _EXAMPLE_MARKER.match(line)
+        if marker is None:
+            continue
+        base = current_scenario if current_scenario is not None else f"응답예{index}"
+        count = seen_labels.get(base, 0) + 1
+        seen_labels[base] = count
+        label = base if count == 1 else f"{base}#{count}"
+        items.append((label, marker.group(1)))
+    return items
 
 
 def audit_socratic_assets(
@@ -149,9 +184,20 @@ def _resolve_deployed_assets() -> dict[str, str]:  # pragma: no cover — 배포
     return {category.value: question for category, question in EXAMPLE_QUESTION.items()}
 
 
-def _run(sample_answers: Sequence[str]) -> str:  # pragma: no cover — 배포 자산 조립 glue
-    """배포 소크라테스 자산을 감사해 리포트를 렌더(순수 계산은 라이브러리·여긴 조립만)."""
-    items = audit_socratic_assets(_resolve_deployed_assets(), sample_answers=sample_answers)
+def _run(  # pragma: no cover — 배포 자산 조립·파일 읽기 glue
+    sample_answers: Sequence[str], *, prompt_file: str | None
+) -> str:
+    """배포 소크라테스 자산(+선택 문서 예시)을 감사해 리포트를 렌더(계산은 라이브러리·여긴 조립만).
+
+    기본은 `EXAMPLE_QUESTION`만. `prompt_file`이 주어지면 그 마크다운의 `- 응답 예: "..."` 예시
+    발화를 추출해 병합 감사한다(라벨 `시나리오N`·category값과 충돌 없음).
+    """
+    assets: dict[str, str] = _resolve_deployed_assets()
+    if prompt_file is not None:
+        with open(prompt_file, encoding="utf-8") as handle:
+            for label, response in extract_example_responses(handle.read()):
+                assets[label] = response
+    items = audit_socratic_assets(assets, sample_answers=sample_answers)
     return render_asset_audit_markdown(items)
 
 
@@ -160,8 +206,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.prompt_asset_audit",
         description=(
-            "배포 소크라테스 발화 자산(EXAMPLE_QUESTION)이 교수학 루브릭(정답 미유출·소크라테스 "
-            "발문)을 지키는지 감사·리포트한다. 순수·DB 무관."
+            "배포 소크라테스 발화 자산(EXAMPLE_QUESTION·선택적으로 프롬프트 문서 예시)이 교수학 "
+            "루브릭(정답 미유출·소크라테스 발문)을 지키는지 감사·리포트한다. 순수·DB 무관."
         ),
     )
     parser.add_argument(
@@ -170,8 +216,14 @@ def main(argv: list[str] | None = None) -> int:
         default=list(DEFAULT_SAMPLE_ANSWERS),
         help="유출 교차검증용 표본 정답 배터리(기본: 대표 5종).",
     )
+    parser.add_argument(
+        "--prompt-file",
+        type=str,
+        default=None,
+        help='추가 감사할 프롬프트 문서 경로(선택·`- 응답 예: "..."` 예시 발화 병합).',
+    )
     args = parser.parse_args(argv)
-    print(_run(args.answers))  # pragma: no cover
+    print(_run(args.answers, prompt_file=args.prompt_file))  # pragma: no cover
     return 0  # pragma: no cover
 
 
