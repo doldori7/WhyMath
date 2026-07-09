@@ -1,0 +1,18 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E1-02-problem-subject-area
+title: "Problem.subject_area 컬럼 도입 (스키마 변경 0 원칙 검증 동반)"
+track: subject-expansion
+stage: E1
+subject: physics
+layer: backend
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "마이그레이션 + 임베딩 namespace 거버넌스 테스트 통과"
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

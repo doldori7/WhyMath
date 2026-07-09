@@ -56,6 +56,7 @@ class TestRunCorpusBatch:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=False,
         )
         assert report.fulfilled
@@ -93,6 +94,7 @@ class TestRunCorpusBatch:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=False,
         )
         assert not report.fulfilled  # 수율 미달(정직)
@@ -127,6 +129,7 @@ class TestRunCorpusBatch:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         assert report.fulfilled and report.written == 15
@@ -173,6 +176,7 @@ class TestRunCorpusBatch:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         run_corpus_batch(
@@ -193,6 +197,7 @@ class TestRunCorpusBatch:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         assert a.read_bytes() == b.read_bytes()
@@ -219,6 +224,7 @@ class TestRunCorpusBatch:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         slugs = [r.slug for r in load_problem_bank_records(out)]
@@ -265,6 +271,8 @@ class TestCliEntry:
                 "--geo-sum",
                 "0",
                 "--trig-eq",
+                "0",
+                "--seq-inductive",
                 "0",
             ]
         )
@@ -350,6 +358,8 @@ class TestCliEntry:
                 "0",
                 "--trig-eq",
                 "0",
+                "--seq-inductive",
+                "0",
             ]
         )
         assert code == 1
@@ -363,7 +373,7 @@ class TestCliEntry:
 
 class TestCalculusBand:
     def test_default_run_includes_calc_bands(self) -> None:
-        # 기본 실행 = quad 4 + calc 5 + exp·log 2 + 수열·삼각 6밴드 = 총 17밴드 — 총 590.
+        # 기본 실행 = quad 4 + calc 5 + exp·log 2 + 수열·삼각 7밴드 = 총 18밴드 — 총 620.
         report = run_corpus_batch(out_path=Path("/nonexistent/x.jsonl"), write=False)
         names = [b.name for b in report.bands]
         assert names == [
@@ -384,6 +394,7 @@ class TestCalculusBand:
             "arith-sum",
             "geo-sum",
             "trig-eq",
+            "seq-inductive",
         ]
         for band_name in ("calc-extremum", "calc-tangent", "calc-value"):
             band = next(b for b in report.bands if b.name == band_name)
@@ -399,7 +410,8 @@ class TestCalculusBand:
         assert stored["arith-sum"] == 45
         assert stored["geo-sum"] == 20
         assert stored["trig-eq"] == 12
-        assert report.total_stored == 590 and report.fulfilled
+        assert stored["seq-inductive"] == 30
+        assert report.total_stored == 620 and report.fulfilled
 
     def test_value_mc_records_have_calculus_metadata(self, tmp_path: Path) -> None:
         # calc-value-mc 밴드 산출물 — 극대·극소 태깅·객관식·4지선다·오답 오개념 2종 태깅.
@@ -423,6 +435,7 @@ class TestCalculusBand:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -465,6 +478,7 @@ class TestCalculusBand:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -509,6 +523,7 @@ class TestCalculusBand:
             arith_sum_n=10,
             geo_sum_n=8,
             trig_eq_n=6,
+            seq_inductive_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -559,6 +574,7 @@ class TestCalculusBand:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -593,6 +609,7 @@ class TestCalculusBand:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -626,6 +643,7 @@ class TestCalculusBand:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -662,6 +680,7 @@ class TestCalculusBand:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         records = load_problem_bank_records(out)
@@ -697,6 +716,7 @@ class TestCalculusBand:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         diffs = {r.problem.difficulty_overall for r in load_problem_bank_records(out)}
@@ -727,6 +747,7 @@ class TestAlgebraBand:
             arith_sum_n=0,
             geo_sum_n=0,
             trig_eq_n=0,
+            seq_inductive_n=0,
             write=True,
         )
         assert report.fulfilled
@@ -742,3 +763,91 @@ class TestAlgebraBand:
         # conditions는 비다항(지수·로그) — b**x 또는 log( 포함.
         assert any("**x" in r.verify.conditions for r in records)  # 지수
         assert any("log(" in r.verify.conditions for r in records)  # 로그
+
+
+class TestInductiveSequenceBand:
+    def _run(self, out: Path, n: int) -> None:
+        run_corpus_batch(
+            out_path=out,
+            short_n=0,
+            mc_n=0,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=0,
+            calc_tangent_n=0,
+            calc_value_n=0,
+            calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
+            exp_n=0,
+            log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
+            seq_inductive_n=n,
+            write=True,
+        )
+
+    def test_inductive_band_metadata_and_signatures(self, tmp_path: Path) -> None:
+        # seq-inductive 밴드 산출물(S2-06) — 귀납적 정의 단원/성취기준/개념 태깅·단답형·조건 나열
+        # 메타·**시그니처 2종 태깅**(sink 기록 직전 태거 적용·태거 단일 권위)·유일해 검증.
+        out = tmp_path / "problems.jsonl"
+        self._run(out, 10)
+        records = load_problem_bank_records(out)
+        assert len(records) == 10
+        for record in records:
+            problem = record.problem
+            assert problem.slug is not None and problem.slug.startswith("wm-indseq-")
+            assert problem.unit_codes == ["IND-SEQ"]
+            assert problem.achievement_standard_codes == ["[12대수03-06]"]
+            assert [t.concept_src_id for t in record.concept_tags] == ["H:12대수03-06"]
+            assert problem.question_format == "단답형"
+            assert problem.answer_format == "자연수"
+            assert record.verify.answer_selection == "unique"
+            # 조건 나열 메타 — 발문 구조의 사실((가)(나) 2건).
+            assert problem.has_condition_list is True
+            assert problem.condition_count == 2
+            assert len(problem.conditions_parsed) == 2
+            assert "(가)" in problem.question_text and "(나)" in problem.question_text
+            # 시그니처 태깅 — 조건 나열(T1)·귀납 점화식(T2) 2종(enum 값 사전순).
+            assert problem.signature_patterns == ["CONDITION_LIST", "INDUCTIVE_SEQUENCE"]
+        # 등차 점화·등비 점화 변형이 함께 실린다(결정론 인터리브 봉인 — 운 배제).
+        assert any("aₙ + " in r.problem.question_text for r in records)
+        assert any("·aₙ" in r.problem.question_text for r in records)
+
+    def test_inductive_band_rerun_byte_identical(self, tmp_path: Path) -> None:
+        # 신규 밴드 포함 재실행 바이트 동일 — 태거 적용 후에도 결정론 봉인 유지.
+        a, b = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
+        self._run(a, 8)
+        self._run(b, 8)
+        assert a.read_bytes() == b.read_bytes()
+
+    def test_existing_bands_signatures_stay_empty(self, tmp_path: Path) -> None:
+        # 비날조 원칙 — 기존 문제군(규칙 미해당)은 태거 적용 후에도 signature_patterns가 빈 배열.
+        out = tmp_path / "problems.jsonl"
+        run_corpus_batch(
+            out_path=out,
+            short_n=4,
+            mc_n=2,
+            sqrt_n=0,
+            sqrt_mc_n=0,
+            calc_extremum_n=2,
+            calc_tangent_n=0,
+            calc_value_n=0,
+            calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
+            exp_n=2,
+            log_n=0,
+            arith_n=2,
+            geo_n=0,
+            trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
+            seq_inductive_n=0,
+            write=True,
+        )
+        for record in load_problem_bank_records(out):
+            assert record.problem.signature_patterns == []

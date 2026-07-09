@@ -12,24 +12,24 @@
 - `/review`·`/status` 세션 시작 시 이 문서를 로드해 훑고, ❌ 뜨는 항목은 **`MEMORY.md` 결정 로그**로 남긴다.
 - 이 문서는 *질문지*다. 답(현재 상태)은 코드·`MEMORY.md`가 진실 원천이며, 여기 적힌 현재 상태 태그(`[완료]`/`[구현]`/`[진행]`/`[프로토타입]`)는 점검 시작점일 뿐 — **점검할 때마다 실제 코드로 재확인**한다.
 
-### 현재 상태 스냅샷 (2026-07 · Phase 1 MVP)
+### 현재 상태 스냅샷 (2026-07-09 3회차 갱신 · Phase 1 MVP · 감사: `arch_audit_2026-07-09_r3.md`)
 
 | 단계 | 영역 | 상태 |
 |---|---|---|
-| 1 교육철학 · 2 기능분리 | 정체성·7계층 | ✅ 완료 |
-| 3 개념구조화 | 개념그래프 403노드·541엣지 / 원자 1,837·선수 3,220 | 🟢 구현 |
-| 4 오개념 DB | 839개 카탈로그 + 판정 엔진 | 🟢 구현 |
-| 9 평가·개인화 | BKT·IRT·mastery·학습경로 | 🟢 구현 |
-| 5 시각화 · 6 Math UI DSL · 8 AI튜터 · 10 자동화 | Graph2dSpec·L3 라우터 30KB·WH-1·파이프라인 (5: Part 5 4분류(Overlay)·Renderer독립·5상태 검토 완료 2026-07-02·`05b`) | 🟡 진행 |
+| 1 교육철학 · 2 기능분리 | 정체성·7계층 (백엔드 import-linter CI 강제) | ✅ 완료 |
+| 3 개념구조화 | 개념 437노드 (legacy_snapshot·audit_only) / **원자 2,697(세부 1,837) = runtime truth source 단일**. problem_concept·curriculum·성취기준 조인 전부 원자 축 정착(S2-03·S2-07) | 🟢 구현 |
+| 4 오개념 DB | 839개 카탈로그 + 판정 엔진 (reactive만·preload 0 실측) | 🟢 구현 |
+| 9 평가·개인화 | BKT·IRT·mastery·학습경로 (문제 태깅 원자 축 재연결로 mastery→enrich hit) | 🟢 구현 |
+| 5 시각화 · 6 Math UI DSL · 8 AI튜터 · 10 자동화 | Graph2dSpec·L3 라우터·WH-1·파이프라인 (8: max_nodes≤20·tokens≤3000 CI 동결·depth≤2 유예). **L3 라이브 개통**(Phaiakes9·READY:True·6모델·rephrase 184/590)·비용 실측(S1-12)은 Kiki 라이브 대기 | 🟡 진행 |
 | 7 렌더링 | Flutter/web 계산기·three.js·MathLive | 🟡 프로토타입 |
-| 보류/리스크 | DSL 자기진화(Lean4)·Manim 동영상·WH-1 전략단계(Lv2~3)·**개념↔원자 이중 truth source** | 🔴 |
+| 보류/리스크 | DSL 자기진화(Lean4)·Manim 동영상·WH-1 전략단계(Lv2~3)·**개념↔원자 입도 통합**(런타임 축은 S0-4로 해소 완료, 잔여=437↔2,697 세분도 병합·전문가 검수 대기). ~~클라이언트 무-수학로직 CI 게이트 부재~~ → **ARCH-10으로 해소**(게이트 2종 가동·2026-07-09 감사 2회차 재검증, QuizMode 예외는 ARCH-12 결정 대기) | 🔴 |
 
 ---
 
 ## 🔴 최우선 점검 2곳 (현재 상태상 붕괴 위험 최고)
 
-- **단계 3** — 개념그래프(403) vs 원자그래프(1,837) **단일 진실 원천 붕괴** & 노드 폭발 (추적 항목·동기화 governance 동결·Part 10 검토 §1)
-- **단계 8** — LLM에 **전체 그래프 노출** — Part 10 검토(2026-07-03) 재확인 결과 **잠재/미래 리스크지 현존 결함 아님**(graph→LLM 컨텍스트 빌더 부재). Q10-⑧ 불변식 CI 동결(`test_llm_subgraph_budget_invariant.py`) + 수치 예산 guard는 소비처 트리거까지 보류. 상세: `build_roadmap_part10_review.md`
+- **단계 3** — ~~단일 진실 원천 붕괴~~ → **런타임 축 해소 완료**(2026-07-04 S0-4: 원자 단일 truth source·구 437 legacy_snapshot 격하·`test_legacy_snapshot_governance.py` 동결). 잔여 = **입도 통합**(437↔2,697 세분도·전문가 검수 = `G-domain-partner` 연동) & 노드 폭발 상시 감시
+- **단계 8** — LLM에 **전체 그래프 노출** — 감사(2026-07-09) 재확인: max_nodes≤20·max_tokens≤3000은 첫 소비처(`wh1_llm_policy.py`)에서 **준수·CI 동결**, 전체 그래프 미주입 경계는 `test_llm_subgraph_budget_invariant.py` 동결. **depth≤2만 유예**(traversal 소비처 부재·해제 트리거 = coach→하네스 수렴 시 `ARCH-11`). 상세: `build_roadmap_part10_review.md`·`arch_audit_2026-07-09.md`
 
 ---
 

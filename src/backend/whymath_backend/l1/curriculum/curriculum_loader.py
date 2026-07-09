@@ -50,6 +50,30 @@ KR 상수(graph.json `source_citation`에서 정직 도출 — 교육부 고시 
   `effective_from`·`source_document`·`verified_by`.
 
 ────────────────────────────────────────────────────────────────────────────
+원자 축 이관 (S2-07 — 크로스워크 전파로 L6 깊이정렬 신호 복원)
+────────────────────────────────────────────────────────────────────────────
+S2-03이 `problem_concept`를 원자 백본 행(Concept.code=원자코드)으로 재연결하면서, gating의 깊이
+주입 체인(`api/gating.py` `_fetch_problem_concept_codes` → `CurriculumDepthResolver`)이 모으는
+concept code가 *원자 코드 공간*으로 바뀌었다 — canonical(`math.*`)만 키잉된 curriculum_entry와
+조인이 미스나 required_depth가 전부 None(깊이 랭킹 보너스 0 폴백·신호 소실)이었다.
+
+`derive_atom_curriculum_entries`가 이 미스매치를 데이터 측에서 복원한다: canonical KR 셀 ×
+크로스워크(canonical concept_id → atom_codes)를 조인해 **원자 코드로 키잉된** KR 셀을 유도한다.
+런타임 reader(`CurriculumDepthResolver` — 유일 소비처)는 무변경이다 — reader가 크로스워크
+코퍼스를 런타임에 읽게 하는 (b)안은 "런타임 코퍼스 reader 0" 원칙(코퍼스는 적재기만 읽고
+런타임은 DB만 본다)에 반해 기각, 적재 시점 유도((a)안)를 택했다.
+
+전파 규칙(스킬 전파 `derive_atom_behavior_skills` 선례):
+  - 매핑된 concept의 **atom_codes 전체**에 depth를 전파한다(primary만 아님) — required_depth는
+    grade_band 프록시의 *방송형* 속성이라 개념의 전 원자가 같은 학년 밴드에 속한다.
+    primary_atom_code는 mastery *배타 귀속* 전용이라 방송형 깊이 전파에는 부적합하다.
+  - 충돌(복수 canonical → 같은 원자): required_depth가 *가장 깊은* 원천 셀이 이긴다
+    (RequiredDepth 위계 — api/gating.py `_DEPTH_ORDER`와 동일 서열·아래 `_REQUIRED_DEPTH_RANK`).
+    동순위 tie-break는 원천 concept_id 사전순(결정론). 산출은 entry_id 정렬 — 2회 유도 동일.
+  - 크로스워크 미매핑 canonical(atom_codes 빈)·canonical 셀 없는 크로스워크 concept은 원자 행
+    0(날조 금지). canonical 셀은 그대로 존치된다(원자 행은 *추가* 축).
+
+────────────────────────────────────────────────────────────────────────────
 멱등 (PG ON CONFLICT — backend_concept·standard_loader 규약)
 ────────────────────────────────────────────────────────────────────────────
 `entry_id`(PK·`{concept_id}:KR`)는 (concept_id, country_code)와 1:1이라 `INSERT ... ON
@@ -79,6 +103,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from whymath_backend.config import Settings, get_settings
+
+# 크로스워크 로더 재사용(S2-07 원자 축 유도 — 신규 파서 0·transfer.py와 동일 코퍼스 계약).
+from whymath_backend.l1.concept_atom_crosswalk.transfer import (
+    CrosswalkRecord,
+    load_crosswalk_records,
+)
 
 # 슬3 sync 엔진 빌더 재사용(신규 seam 0) — backend_concept·standard_loader와 동일 규약.
 from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
@@ -236,6 +266,104 @@ def load_kr_curriculum_entries_from_graph_json(
     return out
 
 
+# RequiredDepth 위계(얕음→깊음) 서수 — api/gating.py `_DEPTH_ORDER`와 동일 서열(문항 주입 시
+# "가장 깊은 깊이" 선택과 같은 위계). 키는 enum *값* 문자열이다 — CurriculumEntry가
+# use_enum_values=True라 검증된 셀의 required_depth는 문자열로 저장되기 때문(schema 컨벤션).
+_REQUIRED_DEPTH_RANK: dict[str, int] = {
+    RequiredDepth.awareness.value: 0,
+    RequiredDepth.procedural.value: 1,
+    RequiredDepth.conceptual.value: 2,
+    RequiredDepth.mastery.value: 3,
+}
+
+
+def _depth_rank(entry: CurriculumEntry) -> int:
+    """셀의 required_depth 위계 서수. None(깊이 미상)은 -1 — 어떤 명시 깊이보다 얕게 취급.
+
+    충돌 시 "깊이 신호가 있는" 셀이 "없는" 셀을 이기게 한다(신호 보존 — 미상 셀이 명시 깊이를
+    덮어쓰면 L6 깊이정렬 신호가 다시 소실된다).
+    """
+    depth = entry.required_depth
+    if depth is None:
+        return -1
+    # use_enum_values=True라 보통 str이지만, 방어적으로 enum 인스턴스도 값으로 정규화한다.
+    value = depth.value if isinstance(depth, RequiredDepth) else str(depth)
+    return _REQUIRED_DEPTH_RANK[value]
+
+
+def derive_atom_curriculum_entries(
+    canonical_entries: Sequence[CurriculumEntry],
+    crosswalk_records: Sequence[CrosswalkRecord],
+) -> list[CurriculumEntry]:
+    """canonical KR 셀 × 크로스워크 조인 → **원자 코드로 키잉된** KR 셀 유도(순수·PG 불요).
+
+    S2-07 원자 축 이관 본체(모듈 docstring §원자 축 이관). 크로스워크의 각 매핑 행에 대해 원천
+    canonical 셀의 신호를 `atom_codes` **전체**에 전파한다 — required_depth는 grade_band 프록시의
+    방송형 속성이라 개념의 전 원자가 같은 학년 밴드다(primary-only는 mastery 배타 귀속 전용이라
+    부적합 — `derive_atom_behavior_skills` 전파 선례). 원자별 유도 셀은 `concept_id=원자코드`·
+    `entry_id="{원자코드}:{country_code}"`(S1 수학 셀 무접미 규약)이고 나머지 필드(required_depth·
+    is_present·source_url·confidence·country_code·subject 등)는 원천 셀을 승계한다 — schema
+    불변식(is_present=True → source_url 필수)은 원천 셀이 이미 통과했으므로 승계로 보존되고,
+    재검증(CurriculumEntry 생성자)으로 한 번 더 게이트한다.
+
+    충돌(복수 canonical → 같은 원자): required_depth가 *가장 깊은* 원천 셀 승계(`_depth_rank`
+    위계·None은 최저), 동순위는 원천 concept_id 사전순으로 앞선 쪽(결정론). 산출은 entry_id
+    정렬이라 같은 입력에 2회 유도해도 동일하다.
+
+    크로스워크 미매핑(atom_codes 빈)·canonical 셀 없는 크로스워크 concept은 원자 행 0(날조 금지).
+    canonical 셀 목록 자체는 변경하지 않는다(원자 행은 *추가* 축 — 호출자가 둘을 합쳐 적재).
+    """
+    canonical_by_id: dict[str, CurriculumEntry] = {e.concept_id: e for e in canonical_entries}
+
+    # 원자코드 → 승자 원천 셀. 결정론을 위해 크로스워크를 concept_id 사전순으로 순회한다 —
+    # 동순위 충돌에서 "사전순 앞선 원천"이 항상 이기도록(먼저 앉은 쪽 유지 + 더 깊은 쪽만 교체).
+    winner_by_atom: dict[str, CurriculumEntry] = {}
+    for record in sorted(crosswalk_records, key=lambda r: r.concept_id):
+        if not record.atom_codes:  # 미매핑 — 강제 귀속 금지(원자 행 0)
+            continue
+        source = canonical_by_id.get(record.concept_id)
+        if source is None:  # canonical 셀 없는 크로스워크 concept — 원자 행 0(날조 금지)
+            continue
+        for atom_code in record.atom_codes:
+            incumbent = winner_by_atom.get(atom_code)
+            # 최심 승계: 더 깊은 쪽만 교체(동순위는 사전순 선점 유지 → concept_id 사전순 tie-break).
+            if incumbent is None or _depth_rank(source) > _depth_rank(incumbent):
+                winner_by_atom[atom_code] = source
+
+    out: list[CurriculumEntry] = []
+    for atom_code in sorted(winner_by_atom):  # entry_id(=원자코드 접두) 정렬 — 결정론 산출
+        source = winner_by_atom[atom_code]
+        payload = source.model_dump()
+        payload["concept_id"] = atom_code
+        # S1 entry_id 규약 승계 — 수학 셀 무접미 `{concept_id}:{country_code}`.
+        payload["entry_id"] = f"{atom_code}:{source.country_code}"
+        # 생성자 재검증 — 승계 필드가 schema 불변식(is_present→source_url 등)을 만족함을 게이트.
+        out.append(CurriculumEntry(**payload))
+    return out
+
+
+def load_kr_curriculum_entries_with_atoms(
+    graph_path: Path,
+    crosswalk_path: Path,
+    *,
+    now: datetime | None = None,
+) -> tuple[list[CurriculumEntry], list[CurriculumEntry]]:
+    """graph.json + crosswalk.jsonl → (canonical KR 셀, 유도 원자 KR 셀) 조립(순수·PG 불요).
+
+    기존 `load_kr_curriculum_entries_from_graph_json`(canonical 유도·무변경 유지)과
+    `derive_atom_curriculum_entries`(원자 축 유도)를 결합한다. 반환 두 목록을 합쳐 적재하면
+    canonical 축(개념 그래프 소비처)과 원자 축(S2-03 이후 gating 깊이 조인) 양쪽이 hit한다.
+
+    Raises:
+        FileNotFoundError: graph.json 또는 crosswalk.jsonl 부재.
+        ValueError: 크로스워크 코퍼스 계약 위반(concept_id 누락/중복 — `load_crosswalk_records`).
+    """
+    canonical = load_kr_curriculum_entries_from_graph_json(graph_path, now=now)
+    crosswalk = load_crosswalk_records(crosswalk_path)
+    atoms = derive_atom_curriculum_entries(canonical, crosswalk)
+    return canonical, atoms
+
+
 class CurriculumEntryStore:
     """개념그래프 → backend `curriculum_entry` 적재기 — entry_id PK 충돌 멱등 upsert(sync).
 
@@ -326,6 +454,8 @@ def populate_kr_curriculum_entries(
 
 __all__ = [
     "CurriculumEntryStore",
+    "derive_atom_curriculum_entries",
     "load_kr_curriculum_entries_from_graph_json",
+    "load_kr_curriculum_entries_with_atoms",
     "populate_kr_curriculum_entries",
 ]

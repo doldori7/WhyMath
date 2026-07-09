@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-11-subgraph-depth-guard
+title: "Minimal Subgraph depth≤2 가드 — WH-1 traversal 소비처 착륙 시 동반 도입 (유예 B 추적)"
+track: infra-debt
+stage: S1
+subject: cross
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on:
+  - S1-11-coach-harness-converge
+requires_gates: []
+acceptance:
+  - "l2/reasoning_subgraph.py seam에 depth≤2·visited set·timeout·token budget guard 도입 + 테스트 동결"
+artifacts: []
+session: null
+notes: "arch_audit_2026-07-09.md [유예 B] — part8 review rev.2 해제 트리거 계약의 백로그 이관 (사람 기억 의존 제거)"
+updated: 2026-07-09

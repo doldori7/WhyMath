@@ -51,6 +51,10 @@ def _build_corpus(tmp_path: Path) -> Path:
         arith_n=6,
         geo_n=4,
         trig_n=2,
+        arith_sum_n=0,
+        geo_sum_n=0,
+        trig_eq_n=0,
+        seq_inductive_n=0,
         write=True,
     )
     assert report.fulfilled

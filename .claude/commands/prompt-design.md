@@ -183,3 +183,6 @@ KPI 추적:
 > /prompt-design misconception-dx-discriminant
 > /prompt-design parent-weekly-report
 ```
+
+## 빌드 하네스 연동
+작업이 backlog 태스크에 대응한다면, 완료 시 `python3 scripts/harness/backlog.py done <id> --artifact <커밋/PR>` 로 상태를 갱신한다.

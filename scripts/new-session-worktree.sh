@@ -89,4 +89,5 @@ cat <<EOF
   git branch -D $branch     # 원격 머지 완료 후
 
 병렬 세션 규칙: docs/standards/parallel_sessions.md
+세션 시작 후: python3 scripts/harness/backlog.py next --layer $domain → start <id>  (빌드 하네스: docs/standards/build_harness.md)
 EOF

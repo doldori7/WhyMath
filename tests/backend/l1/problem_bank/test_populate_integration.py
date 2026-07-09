@@ -1,11 +1,15 @@
-"""문제 코퍼스 → backend 적재 *통합테스트*(WHYMATH_RUN_INTEGRATION·실 PG).
+"""문제 코퍼스 → backend 적재 *통합테스트*(WHYMATH_RUN_INTEGRATION·실 PG — S2-03 원자 재연결).
 
 마이그레이션 head가 적용된 **실 PostgreSQL**(`problem`·`problem_concept`·`concept`)에 실 코퍼스
-(`data/corpus/problem_bank_v1/problems.jsonl`)를 적재해 S2-b 파이프라인이 실제로 서는지 본다:
-  ① 개념 선적재(HK06/HK10/HK11/HK09 source_id) → 코퍼스 적재 → `problem` 행 + `problem_concept`
-     태깅 행 존재(concept 해석 성공).
-  ② 멱등 — 2회 적재 후 slug 기준 `problem` 행 수·`problem_concept` 행 수 불변(count 안정).
-PG 미도달 시 graceful skip(`test_misconception_loader_integration.py` 미러). 정리는 전건 DELETE.
+(`data/corpus/problem_bank_v1/problems.jsonl`)를 적재해 S2-03 원자 재연결 파이프라인이 실제로
+서는지 본다:
+  ① 개념 선적재를 **원자 code 행**(크로스워크 primary: HK06→10공수1-02-02-1 등·source_id NULL)
+     으로 심고 → 코퍼스 적재 → `problem_concept.concept_id`가 *원자 행 UUID*를 가리킴을 단언
+     (구 437 legacy 행 아님 — 크로스워크 해석 체인 실증).
+  ② stale 구 링크 삽입 → 재적재 → reconcile DELETE가 그 잔재를 청소함을 실증.
+  ③ 멱등 — 2회 적재 후 `problem`·`problem_concept` 행 수 불변(count 안정).
+PG 미도달 시 graceful skip(`test_misconception_loader_integration.py` 미러). 정리는 이 테스트가
+*만든* 행만 DELETE한다(실 DB에 원자 백본이 이미 적재돼 있으면 그 행은 건드리지 않음).
 """
 
 from __future__ import annotations
@@ -16,12 +20,20 @@ from pathlib import Path
 import pytest
 
 from whymath_backend.config import Settings
-from whymath_backend.l1.problem_bank.populate import populate_problem_bank
+from whymath_backend.l1.problem_bank.populate import ProblemBankStore, populate_problem_bank
 
 pytestmark = pytest.mark.integration
 
-# 통합 전용 개념 src_id → 실 데이터와 충돌 안 나게 it 슬러그 code로 삽입.
-_CONCEPT_SRC_IDS = ["HK06", "HK10", "HK11", "HK09"]
+# 코퍼스 태그 src → 크로스워크 primary_atom_code(실 crosswalk.jsonl 실측·재연결 목적지 행 code).
+_SRC_TO_ATOM = {
+    "HK06": "10공수1-02-02-1",
+    "HK10": "10공수1-02-05-1",
+    "HK11": "10공수1-02-06-2",
+    "HK09": "10공수1-02-04-1",
+}
+_ATOM_CODES = sorted(_SRC_TO_ATOM.values())
+# stale 구 링크 실증용 가짜 legacy 개념(테스트 전용 code — 실 데이터와 충돌 없음).
+_STALE_CODE = "IT-PROBBANK-STALE"
 _SLUGS = [
     "wm-quad-eq-larger-root",
     "wm-quad-eq-smaller-root",
@@ -29,14 +41,19 @@ _SLUGS = [
     "wm-quad-eq-root-count-mc",
 ]
 
+_ROOT = Path(__file__).resolve().parents[4]
+
 
 def _corpus_path() -> Path:
-    return (
-        Path(__file__).resolve().parents[4]
-        / "data"
-        / "corpus"
-        / "problem_bank_v1"
-        / "problems.jsonl"
+    return _ROOT / "data" / "corpus" / "problem_bank_v1" / "problems.jsonl"
+
+
+def _store() -> ProblemBankStore:
+    """실 코퍼스 크로스워크/다리 경로를 레포 앵커로 주입한 store(기본 경로는 CWD 의존)."""
+    return ProblemBankStore(
+        settings=Settings(),
+        crosswalk_path=_ROOT / "data" / "corpus" / "concept_atom_crosswalk_v1" / "crosswalk.jsonl",
+        concept_graph_path=_ROOT / "data" / "corpus" / "concept_graph_v1" / "graph.json",
     )
 
 
@@ -75,32 +92,39 @@ def _skip_if_unreachable() -> None:
         )
 
 
-def _seed_concepts() -> None:
-    """통합 전용 개념 4건 삽입 — source_id로 문제 태깅이 concept_id를 해석하게 한다."""
+def _seed_atom_concepts() -> list[str]:
+    """원자 code 행 선적재 — 크로스워크 해석이 닿을 목적지 행. *새로 만든* code만 반환(정리용).
+
+    실 DB에 원자 백본(`l1/atom_graph` populate)이 이미 적재돼 있으면 그 행을 그대로 쓰고
+    (ON CONFLICT DO NOTHING), 정리 때도 건드리지 않는다(공유 실 데이터 보호).
+    """
     from sqlalchemy import text
 
     engine = _sync_engine()
+    created: list[str] = []
     try:
         with engine.begin() as conn:  # type: ignore[attr-defined]
-            for src_id in _CONCEPT_SRC_IDS:
+            for code in [*_ATOM_CODES, _STALE_CODE]:
+                exists = conn.execute(
+                    text("SELECT 1 FROM concept WHERE code = :code"), {"code": code}
+                ).first()
+                if exists:
+                    continue
                 conn.execute(
                     text(
-                        "INSERT INTO concept (concept_id, code, name_ko, level, source_id) "
-                        "VALUES (:cid, :code, :name, '세부개념', :src) "
+                        "INSERT INTO concept (concept_id, code, name_ko, level) "
+                        "VALUES (:cid, :code, :name, '세부개념') "
                         "ON CONFLICT (code) DO NOTHING"
                     ),
-                    {
-                        "cid": uuid.uuid4(),
-                        "code": f"IT-PROBBANK-{src_id}",
-                        "name": f"통합테스트 개념 {src_id}",
-                        "src": src_id,
-                    },
+                    {"cid": uuid.uuid4(), "code": code, "name": f"통합테스트 원자 {code}"},
                 )
+                created.append(code)
     finally:
         engine.dispose()  # type: ignore[attr-defined]
+    return created
 
 
-def _cleanup() -> None:
+def _cleanup(created_codes: list[str] | None = None) -> None:
     from sqlalchemy import text
 
     engine = _sync_engine()
@@ -114,10 +138,12 @@ def _cleanup() -> None:
                 {"slugs": _SLUGS},
             )
             conn.execute(text("DELETE FROM problem WHERE slug = ANY(:slugs)"), {"slugs": _SLUGS})
-            conn.execute(
-                text("DELETE FROM concept WHERE source_id = ANY(:srcs)"),
-                {"srcs": _CONCEPT_SRC_IDS},
-            )
+            if created_codes:
+                # 이 테스트가 *만든* 개념 행만 제거 — 실 원자 백본 행은 보호.
+                conn.execute(
+                    text("DELETE FROM concept WHERE code = ANY(:codes)"),
+                    {"codes": created_codes},
+                )
     finally:
         engine.dispose()  # type: ignore[attr-defined]
 
@@ -133,18 +159,54 @@ def _count(sql: str, params: dict[str, object]) -> int:
         engine.dispose()  # type: ignore[attr-defined]
 
 
-class TestRealCorpusLoad:
-    def test_load_creates_problems_and_concept_tags(self) -> None:
+def _concept_id_of(code: str) -> uuid.UUID:
+    from sqlalchemy import text
+
+    engine = _sync_engine()
+    try:
+        with engine.connect() as conn:  # type: ignore[attr-defined]
+            return uuid.UUID(
+                str(
+                    conn.execute(
+                        text("SELECT concept_id FROM concept WHERE code = :code"), {"code": code}
+                    ).scalar_one()
+                )
+            )
+    finally:
+        engine.dispose()  # type: ignore[attr-defined]
+
+
+def _linked_concept_ids(slug: str) -> set[uuid.UUID]:
+    from sqlalchemy import text
+
+    engine = _sync_engine()
+    try:
+        with engine.connect() as conn:  # type: ignore[attr-defined]
+            rows = conn.execute(
+                text(
+                    "SELECT pc.concept_id FROM problem_concept pc "
+                    "JOIN problem p ON p.problem_id = pc.problem_id WHERE p.slug = :slug"
+                ),
+                {"slug": slug},
+            ).all()
+        return {uuid.UUID(str(r[0])) for r in rows}
+    finally:
+        engine.dispose()  # type: ignore[attr-defined]
+
+
+class TestRealCorpusRelink:
+    def test_load_links_to_atom_rows(self) -> None:
+        """적재 후 problem_concept.concept_id가 *원자 code 행* UUID를 가리킨다(재연결 실증)."""
         _skip_if_unreachable()
         corpus = _corpus_path()
         if not corpus.exists():
             pytest.skip("실 코퍼스 미존재(data/corpus/problem_bank_v1/problems.jsonl)")
+        created = _seed_atom_concepts()
         try:
-            _cleanup()  # 선행 잔여 제거
-            _seed_concepts()
-            report = populate_problem_bank(None, problems_path=corpus, settings=Settings())
+            _cleanup(None)  # 선행 잔여 문제 제거(개념 행은 유지)
+            report = populate_problem_bank(None, problems_path=corpus, store=_store())
             assert report.problems_loaded == 4
-            # 개념 선적재 → 태깅 전건 해석(orphan 0). 시드 태깅 총 6건(HK06×3+HK10+HK11+HK09).
+            # 원자 행 선재 → 태깅 전건 해석(orphan 0). 시드 태깅 총 6건(HK06×3+HK10+HK11+HK09).
             assert report.concepts_skipped == 0
             assert report.problem_concepts_loaded == 6
 
@@ -158,18 +220,63 @@ class TestRealCorpusLoad:
             )
             assert prob_rows == 4
             assert pc_rows == 6
+            # 재연결 목적지 단언 — larger-root(HK06)의 링크가 원자 행 10공수1-02-02-1 UUID다.
+            hk06_atom_id = _concept_id_of(_SRC_TO_ATOM["HK06"])
+            assert _linked_concept_ids("wm-quad-eq-larger-root") == {hk06_atom_id}
+            # fn-axis(HK10+HK11) — 두 원자 행 UUID.
+            assert _linked_concept_ids("wm-quad-fn-axis") == {
+                _concept_id_of(_SRC_TO_ATOM["HK10"]),
+                _concept_id_of(_SRC_TO_ATOM["HK11"]),
+            }
         finally:
-            _cleanup()
+            _cleanup(created)
+
+    def test_reconcile_removes_stale_links(self) -> None:
+        """구 연결(다른 concept 행) 잔재를 삽입해두면 재적재 reconcile이 삭제한다."""
+        _skip_if_unreachable()
+        corpus = _corpus_path()
+        if not corpus.exists():
+            pytest.skip("실 코퍼스 미존재(data/corpus/problem_bank_v1/problems.jsonl)")
+        from sqlalchemy import text
+
+        created = _seed_atom_concepts()
+        try:
+            _cleanup(None)
+            populate_problem_bank(None, problems_path=corpus, store=_store())
+            # stale 링크 삽입 — 구 437 legacy 행을 모사하는 별도 concept로 연결(구 연결 잔재).
+            stale_cid = _concept_id_of(_STALE_CODE)
+            engine = _sync_engine()
+            try:
+                with engine.begin() as conn:  # type: ignore[attr-defined]
+                    conn.execute(
+                        text(
+                            "INSERT INTO problem_concept (problem_id, concept_id, role) "
+                            "SELECT problem_id, :cid, 'PRIMARY' FROM problem WHERE slug = :slug"
+                        ),
+                        {"cid": stale_cid, "slug": "wm-quad-eq-larger-root"},
+                    )
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+            assert stale_cid in _linked_concept_ids("wm-quad-eq-larger-root")
+
+            # 재적재 → reconcile DELETE가 stale 잔재를 청소(해석 집합 밖 행 삭제).
+            report = populate_problem_bank(None, problems_path=corpus, store=_store())
+            assert report.problem_concepts_reconciled >= 1
+            links = _linked_concept_ids("wm-quad-eq-larger-root")
+            assert stale_cid not in links
+            assert links == {_concept_id_of(_SRC_TO_ATOM["HK06"])}
+        finally:
+            _cleanup(created)
 
     def test_reload_is_idempotent(self) -> None:
         _skip_if_unreachable()
         corpus = _corpus_path()
         if not corpus.exists():
             pytest.skip("실 코퍼스 미존재(data/corpus/problem_bank_v1/problems.jsonl)")
+        created = _seed_atom_concepts()
         try:
-            _cleanup()
-            _seed_concepts()
-            populate_problem_bank(None, problems_path=corpus, settings=Settings())
+            _cleanup(None)
+            populate_problem_bank(None, problems_path=corpus, store=_store())
             first_prob = _count(
                 "SELECT count(*) FROM problem WHERE slug = ANY(:slugs)", {"slugs": _SLUGS}
             )
@@ -178,8 +285,8 @@ class TestRealCorpusLoad:
                 "(SELECT problem_id FROM problem WHERE slug = ANY(:slugs))",
                 {"slugs": _SLUGS},
             )
-            # 2회차 재적재 — slug/복합 PK 충돌 upsert라 행 수 불변.
-            populate_problem_bank(None, problems_path=corpus, settings=Settings())
+            # 2회차 재적재 — slug/복합 PK 충돌 upsert + reconcile(정합 집합 동일)라 행 수 불변.
+            populate_problem_bank(None, problems_path=corpus, store=_store())
             second_prob = _count(
                 "SELECT count(*) FROM problem WHERE slug = ANY(:slugs)", {"slugs": _SLUGS}
             )
@@ -193,4 +300,4 @@ class TestRealCorpusLoad:
             assert first_pc == 6
             assert second_pc == 6  # 멱등(태깅 행 안정)
         finally:
-            _cleanup()
+            _cleanup(created)

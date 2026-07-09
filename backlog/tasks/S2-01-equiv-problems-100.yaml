@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S2-01-equiv-problems-100
+title: "동등문제 100문+ 생성 파이프라인 가동 (저작권 안전 대체 코퍼스)"
+track: math-completion
+stage: S2
+subject: math
+layer: data-pipeline
+status: todo
+priority: 1
+owner: claude
+depends_on:
+  - S1-12-phaiakes9-live-verify
+requires_gates:
+  - G-crosswalk-approval
+acceptance:
+  - "동등문제 100문 이상 materialize + 인간 검수 큐 적재"
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08
