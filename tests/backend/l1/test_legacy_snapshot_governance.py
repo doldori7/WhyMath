@@ -64,6 +64,9 @@ _AUDIT_WHITELIST = frozenset(
     {
         "l1/concept_atom_crosswalk",  # 크로스워크(derive·transfer) — provenance·이전 근거
         "l1/curriculum/populate.py",  # KR 교육과정 셀 빌드타임 적재 CLI
+        # S2-03 원자 재연결 — 문제 태깅 src 태그를 크로스워크로 해석할 때 다리(graph.json의
+        # concept_id→src_id)만 빌드타임에 읽는다(개념 *데이터* read 아님·런타임 reader 아님).
+        "l1/problem_bank/populate.py",
     }
 )
 
