@@ -337,6 +337,10 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-09 (문서·SSM 후속): 측정 계측선 가동 런북 — 6 파일럿 선결 인에이블 절차 명문화
+
+**무엇/왜(SSM 2026-Q3 메타 발견 후속)**: 스캔이 "도입 0의 근본 원인=측정 계측선 미가동, 차분기 최우선 인에이블러=Phaiakes9 라이브 키·Langfuse 실측 가동"으로 지목 → 파일럿 6건 공통 선결인 계측 가동 절차를 런북으로 명문화. **조사 판정(위임 Explore)**: 6 계측선 **전부 코드/문서 배선 완료·"코드 부재" 0건**(WH-1 지표 11종 `harness/wh1_evaluation.py`·베이스라인 CLI `harness/surrogate_baseline_report.py`·Langfuse config/sink·비용/지연 단가표 `l3/router.py`·프리플라이트 `ops/live_preflight.py`) — 단일 병목=**키 투입·GPU 활성·라이브 표본**(신규 개발 아님). **신규 문서**(`docs/standards/measurement_line_enablement.md` v1.0): 상태표(배선 vs 대기)·4 인에이블러(A Langfuse키·B Anthropic키·C Phaiakes9 GPU+모델pull·D 라이브 표본)·**4단계 런북**(S1 키+프리플라이트 `live_preflight --via-pipeline` / S2 GPU 활성+모델6종 pull·p50<2s / S3 표본 축적+`surrogate_baseline_report` 코호트 캡처·커버리지 n/11 / S4 실측 토큰 p50→`_EST_ASSUMED_*` 대입·`CLOUD_MIN_COST_KRW` 재계산·지연 placeholder 보정)·파일럿↔단계 매핑(#4 법적 게이트 별개·#12 WH-1 자체평가 부분 선행·나머지 5건 S1~S4 전제)·수용 게이트·소관 경계. **NOT**: 코드 0·테스트 0·신규 개발 0·시크릿 하드코딩 0(env 키 *이름*만)·실제 키/GPU/모델 pull은 Kiki 라이브 머신(범위 밖). **다음**: 런북 실행→베이스라인 확립→파일럿 6건 SSM 게이트 재판정(2026-Q4 스캔 전 이상적).
+
 ### 2026-07-09 (문서·SSM 리마인더): 분기 스캔 스케줄 스펙 명문화 (라이브 Routine은 대화형 세션에서 생성)
 
 **무엇/왜(사용자 승인 "자동 실행+draft PR·분기 1일")**: SSM 분기 스캔이 "잊혀서 안 도는" 실패를 막는 자동 리마인더(Routine)를 설정하려 했으나, **비대화형 세션에서 스케줄링 도구(`create_trigger`, claude-code-remote)가 승인 게이트에 막혀 3회 실패**. 대안으로 **스케줄 스펙을 SSM 표준 §8에 명문화**(진실 원천·대화 휘발 방지)해 라이브 Routine 생성 전까지 수동 발동 대체·생성 시 그대로 복제. **스펙**: cron `0 0 1 1,4,7,10 *`(1/4/7/10월 1일 00:00 UTC=09:00 KST·다음 앵커 2026-10-01 Q4)·새 세션 발동(fresh-session-per-fire·컨테이너 휘발 대비)·푸시 알림·자동 스캔 후 **draft PR(auto-merge 금지·Kiki 검수·머지)**·발동 프롬프트 요지 포함. **NOT**: 코드 0·테스트 0·라이브 Routine 미생성(승인 게이트 대기·대화형 세션 필요)·즉시 트리거(§4-2)는 별개. **다음**: 대화형 세션에서 스펙대로 Routine 생성·2026-Q4 첫 자동 스캔.
