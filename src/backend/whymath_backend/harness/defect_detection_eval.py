@@ -41,6 +41,7 @@ from whymath_backend.l3.equivalent.defect_seeder import (
     SeededItem,
     build_defect_seeded_set,
 )
+from whymath_backend.l3.equivalent.retag import StatementConsistencyAuditor
 
 _EXIT_OK = 0
 _EXIT_GATE_FAIL = 1
@@ -63,11 +64,21 @@ class MachineOutcome(BaseModel):
     verification: str = Field(description="정확성 게이트 상태(진단용).")
 
 
-def _run_machine(items: list[SeededItem]) -> list[MachineOutcome]:
-    """각 시험지를 기계 스택(4종 게이트)에 태워 검출 여부를 판정."""
+def _run_machine(items: list[SeededItem], *, with_auditor: bool = False) -> list[MachineOutcome]:
+    """각 시험지를 기계 스택에 태워 검출 여부를 판정.
+
+    `with_auditor=True`면 발문-수식 정합 감사기(StatementConsistencyAuditor·S3 독립 주체)를
+    좌석에 주입한다 — 이때 statement_mismatch(발문↔조건 불일치) 결함까지 걸러진다. 기본
+    False는 감사기 없는 baseline(그 공백을 눈가림 없이 노출).
+    """
     outcomes: list[MachineOutcome] = []
     for item in items:
         c = item.candidate
+        auditor = (
+            StatementConsistencyAuditor(conditions=c.conditions)
+            if with_auditor and isinstance(c.conditions, str)
+            else None
+        )
         verdict = evaluate_equivalent_candidate(
             item.spec,
             c.problem,
@@ -77,6 +88,7 @@ def _run_machine(items: list[SeededItem]) -> list[MachineOutcome]:
             solution_steps=c.solution_steps,
             solution_step_types=None,
             answer_selection=c.answer_selection,
+            tag_auditor=auditor,
         )
         outcomes.append(
             MachineOutcome(
@@ -264,6 +276,11 @@ def main(argv: list[str] | None = None) -> int:
         default=1.0,
         help="무결함 오검출 Wilson 상한 임계 — 초과면 exit 1(기본 1.0=off).",
     )
+    parser.add_argument(
+        "--with-auditor",
+        action="store_true",
+        help="발문-수식 정합 감사기(S3 독립 주체)를 스택에 배선 — statement_mismatch까지 검출.",
+    )
     args = parser.parse_args(argv)
 
     items = build_defect_seeded_set(
@@ -277,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"블라인드 시험지 {len(items)}문 저장: {args.emit_blind} / 정답지: {args.answer_key}")
         return _EXIT_OK
 
-    outcomes = _run_machine(items)
+    outcomes = _run_machine(items, with_auditor=args.with_auditor)
     report = summarize(outcomes)
     human_rate = (
         _human_detection_rate(Path(args.human_labels)) if args.human_labels is not None else None

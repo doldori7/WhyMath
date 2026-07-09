@@ -112,6 +112,37 @@ def test_report_wilson_bounds_present() -> None:
     assert ub is not None and ub < 0.05
 
 
+def test_with_auditor_detects_all_six_classes() -> None:
+    # 감사기 배선 시 statement_mismatch까지 검출 → 6종 전부 60/60, 오검출 0.
+    items = build_defect_seeded_set(n_defective=60, n_clean=60, seed=20260708)
+    report = dd.summarize(dd._run_machine(items, with_auditor=True))
+    for name in DEFECT_CLASSES:
+        detected, total = report.per_class[name]
+        assert detected == total == 10, f"{name}: {detected}/{total}"
+    assert report.false_alarm == 0
+    # 120/120 검출 → 하한이 baseline(~0.74)보다 크게 상승(≈0.95+).
+    lb = report.detection_lower_bound(0.95)
+    assert lb is not None and lb > 0.94
+
+
+def test_cli_with_auditor_passes_high_gate() -> None:
+    # --with-auditor면 검출률 하한이 0.95 게이트를 통과한다.
+    rc = dd.main(
+        [
+            "--n-defective",
+            "120",
+            "--n-clean",
+            "120",
+            "--seed",
+            "20260708",
+            "--with-auditor",
+            "--min-detection-lower",
+            "0.95",
+        ]
+    )
+    assert rc == 0
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # CLI — 기계 측정·블라인드 발행·강등 판정·게이트 exit code.
 # ──────────────────────────────────────────────────────────────────────────
