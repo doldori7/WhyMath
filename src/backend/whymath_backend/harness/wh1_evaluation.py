@@ -149,9 +149,7 @@ def _ols_slope(ys: list[float]) -> float | None:
     x_mean = sum(xs) / n
     y_mean = sum(ys) / n
     x_var = sum((x - x_mean) ** 2 for x in xs)
-    if (
-        x_var == 0
-    ):  # 방어적 — n>=2 등차 인덱스면 도달 불가하나 분산 0이면 None(날조 회피).
+    if x_var == 0:  # 방어적 — n>=2 등차 인덱스면 도달 불가하나 분산 0이면 None(날조 회피).
         return None
     covariance = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys, strict=True))
     return covariance / x_var
@@ -208,9 +206,7 @@ class Metric(BaseModel):
         description="실측값(MEASURED). 미계측·표본 0이면 None(가짜 0 금지).",
     )
     status: MetricStatus = Field(description="계측 상태 — 실값/미계측 사유 구분.")
-    note: str = Field(
-        description="한국어 설명 — 무엇이 필요/근거(미계측이면 적재·라벨·도구)."
-    )
+    note: str = Field(description="한국어 설명 — 무엇이 필요/근거(미계측이면 적재·라벨·도구).")
 
 
 class R15Verdict(str, Enum):
@@ -269,9 +265,7 @@ class HelpReductionValidation(BaseModel):
     이탈/무작위/세션 정렬 등 다른 gaming은 여전히 미반영(R15 완전판정이 아니다).
     """
 
-    verdict: R15Verdict = Field(
-        description="R15 결합 판정 — 도움↓·정답률·난이도 교차 결과."
-    )
+    verdict: R15Verdict = Field(description="R15 결합 판정 — 도움↓·정답률·난이도 교차 결과.")
     help_slope: float | None = Field(
         default=None,
         description="⑤ 도움 감소 OLS 기울기(raw·음수=도움 감소). 표본 부족이면 None(날조 0 금지).",
@@ -288,9 +282,7 @@ class HelpReductionValidation(BaseModel):
             "그때는 2신호 판정 + blind spot 캐비엇)."
         ),
     )
-    note: str = Field(
-        description="한국어 판정 근거 — 임계(slope 0)·교차 결과·사유 구분·한계."
-    )
+    note: str = Field(description="한국어 판정 근거 — 임계(slope 0)·교차 결과·사유 구분·한계.")
 
 
 class SurrogateMetrics(BaseModel):
@@ -640,13 +632,9 @@ def _judge_r15(
 
     # 난이도 유지/상승, 또는 난이도 추세 미가용 → 진짜 개선. 미가용이면 blind spot 캐비엇.
     if difficulty_slope is None:
-        difficulty_note = (
-            "난이도 추세 미가용(b 부족) — 쉬운문제 회피 미검증(blind spot). "
-        )
+        difficulty_note = "난이도 추세 미가용(b 부족) — 쉬운문제 회피 미검증(blind spot). "
     else:
-        difficulty_note = (
-            f"난이도 기울기 {difficulty_slope:+.4f} >= 0(쉬운문제 회피 아님). "
-        )
+        difficulty_note = f"난이도 기울기 {difficulty_slope:+.4f} >= 0(쉬운문제 회피 아님). "
     return HelpReductionValidation(
         verdict=R15Verdict.GENUINE_IMPROVEMENT,
         help_slope=help_slope,
@@ -875,9 +863,7 @@ def _mastery_gains_from_rows(
             first[key] = mastery
         last[key] = mastery  # 매번 덮어써 최종 = 최근 측정.
         counts[key] = counts.get(key, 0) + 1
-    return [
-        last[key] - first[key] for key in first if counts[key] >= _MIN_MASTERY_POINTS
-    ]
+    return [last[key] - first[key] for key in first if counts[key] >= _MIN_MASTERY_POINTS]
 
 
 def _mastery_gain_from_gains(gains: list[float]) -> Metric:
@@ -1146,9 +1132,7 @@ async def compute_wh1_surrogate_metrics(
     verify_row = (
         await session.execute(
             select(
-                func.count().filter(
-                    AttemptEvent.event_data["passed"].as_boolean().is_(True)
-                ),
+                func.count().filter(AttemptEvent.event_data["passed"].as_boolean().is_(True)),
                 func.count(),
             )
             .select_from(AttemptEvent)
@@ -1163,9 +1147,7 @@ async def compute_wh1_surrogate_metrics(
         verify_metric = Metric(
             value=None,
             status=MetricStatus.NO_DATA,
-            note=(
-                "검산결과 이벤트 0건 — coach 풀이 제출이 쌓이면 통과율 계측(가짜 0 아님)."
-            ),
+            note=("검산결과 이벤트 0건 — coach 풀이 제출이 쌓이면 통과율 계측(가짜 0 아님)."),
         )
     else:
         verify_metric = Metric(
@@ -1231,9 +1213,7 @@ async def compute_wh1_surrogate_metrics(
         )
     ).all()
     # is_correct(bool)를 1.0/0.0 시퀀스로(None은 IS NOT NULL 필터로 이미 제외·방어적 재확인).
-    accuracy_series = [
-        1.0 if row[0] else 0.0 for row in accuracy_rows if row[0] is not None
-    ]
+    accuracy_series = [1.0 if row[0] else 0.0 for row in accuracy_rows if row[0] is not None]
     help_slope = _ols_slope([float(level) for level in hint_levels])
     accuracy_slope = _ols_slope(accuracy_series)
 
@@ -1321,9 +1301,7 @@ async def compute_wh1_surrogate_metrics(
     ).all()
     # is_correct는 accuracy_conds(IS NOT NULL)로 이미 좁혀졌으나 방어적으로 bool() 변환(None→False
     # 가 아니라 필터로 None이 없음을 신뢰·타입 좁히기). 식별은 순수 함수에 위임(날조 0).
-    transfer_input: list[
-        tuple[uuid.UUID | None, list[SignaturePattern] | None, bool]
-    ] = [
+    transfer_input: list[tuple[uuid.UUID | None, list[SignaturePattern] | None, bool]] = [
         (problem_id, patterns, bool(is_correct))
         for problem_id, patterns, is_correct in transfer_rows
     ]
@@ -1335,9 +1313,7 @@ async def compute_wh1_surrogate_metrics(
     # 그룹별 첫→마지막 차(증가량)를 낸다(_mastery_gains_from_rows·날조 0). 시간창은 measured_at
     # 기준(활동 started_at이 아니라 측정 시각·이 원천의 자연 시간축)·ORM/쿼리빌더만(원시 SQL 0).
     # mastery는 Numeric(3,2)라 런타임 Decimal일 수 있어 float로 변환한다(None은 필터로 제외).
-    mastery_conds: list[ColumnElement[bool]] = [
-        ConceptMasteryHistory.mastery.isnot(None)
-    ]
+    mastery_conds: list[ColumnElement[bool]] = [ConceptMasteryHistory.mastery.isnot(None)]
     if user_id is not None:
         mastery_conds.append(ConceptMasteryHistory.user_id == user_id)
     if since is not None:
@@ -1433,9 +1409,7 @@ async def compute_wh1_surrogate_metrics(
 
     return SurrogateMetrics(
         verify_pass_rate=verify_metric,
-        diagnosis_agreement_rate=_diagnosis_agreement_offline(
-            diagnostic_hits, diagnostic_total
-        ),
+        diagnosis_agreement_rate=_diagnosis_agreement_offline(diagnostic_hits, diagnostic_total),
         session_completion_rate=session_completion,
         tokens_per_turn=tokens_metric,
         help_reduction_slope=help_reduction,

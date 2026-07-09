@@ -152,15 +152,11 @@ ResourceTypeFilter = Annotated[
 # 동형. naive datetime·since>until은 _query_filters.time_window_conditions가 422.
 SinceParam = Annotated[
     datetime | None,
-    Query(
-        description="이 시각 *이후* 항목만(inclusive·TZ-aware ISO8601). until과 함께 시간창."
-    ),
+    Query(description="이 시각 *이후* 항목만(inclusive·TZ-aware ISO8601). until과 함께 시간창."),
 ]
 UntilParam = Annotated[
     datetime | None,
-    Query(
-        description="이 시각 *이전* 항목만(inclusive·TZ-aware ISO8601). since와 함께 시간창."
-    ),
+    Query(description="이 시각 *이전* 항목만(inclusive·TZ-aware ISO8601). since와 함께 시간창."),
 ]
 # slice 69: lifecycle 종료 시각 시간창 — sessions·dialogues는 ended_at, assessments는
 # completed_at 기준(파라미터명으로 구분). started_at(SinceParam)과 *독립* 시간창이라 둘 다
@@ -176,18 +172,14 @@ CloseUntil = Annotated[
 # slice 70: 정렬 방향 — desc(최신순·기본·slice 58 동작 보존)·asc(오래된순). device 목록
 # (slice 46)과 동형. 1차 정렬 컬럼(started_at/deleted_at)에 적용·PK 2차키는 안정 정렬용 유지.
 OrderDir = Literal["asc", "desc"]
-OrderParam = Annotated[
-    OrderDir, Query(description="정렬 방향 — desc(최신순·기본)·asc(오래된순).")
-]
+OrderParam = Annotated[OrderDir, Query(description="정렬 방향 — desc(최신순·기본)·asc(오래된순).")]
 # slice 71: 총 개수 opt-in — true면 *같은 필터*(limit/offset 제외) 적용 후 총 건수를
 # `X-Total-Count` 응답 헤더로 노출(페이지네이션 "총 N건"·"Page X of Y"). 기본 false라 추가
 # COUNT 쿼리 비용 회피. device 목록(slice 39)은 응답 envelope의 total 필드를 쓰지만 /me는
 # bare array 응답이라 *비파괴적* 헤더 방식 채택(REST 관용·기존 클라이언트 무영향).
 IncludeTotal = Annotated[
     bool,
-    Query(
-        description="true면 `X-Total-Count` 헤더에 필터 적용 총 건수(limit/offset 무시)."
-    ),
+    Query(description="true면 `X-Total-Count` 헤더에 필터 적용 총 건수(limit/offset 무시)."),
 ]
 _TOTAL_HEADER = "X-Total-Count"
 # slice L2-5: 학습곡선 조회의 개념 필터 — 특정 개념 1개의 측정 시계열(학습 곡선)만.
@@ -199,9 +191,7 @@ ConceptIdFilter = Annotated[
 SnapshotOrderBy = Literal["concept_id", "mastery"]
 SnapshotOrderByParam = Annotated[
     SnapshotOrderBy,
-    Query(
-        description="스냅샷 정렬 기준 — concept_id(기본) 또는 mastery(order=asc면 약점 우선)."
-    ),
+    Query(description="스냅샷 정렬 기준 — concept_id(기본) 또는 mastery(order=asc면 약점 우선)."),
 ]
 
 
@@ -237,9 +227,7 @@ async def _get_owned_or_404(
     """PK 조회 후 본인 소유 검증 — 미존재·타인 소유 모두 404(정보 비누설·slice 24 패턴)."""
     row = await session.get(model, pk)
     if row is None or row.user_id != owner_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=not_found_detail
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=not_found_detail)
     return row
 
 
@@ -299,9 +287,7 @@ async def _delete_owned_resource(
     await session.commit()
 
 
-@router.get(
-    "/sessions", response_model=list[LearningSessionSchema], summary="내 학습 세션"
-)
+@router.get("/sessions", response_model=list[LearningSessionSchema], summary="내 학습 세션")
 async def list_my_sessions(
     user: ConsentedUser,
     session: SessionDep,
@@ -334,9 +320,7 @@ async def list_my_sessions(
         ),
     ]
     primary = (
-        LearningSession.started_at.asc()
-        if order == "asc"
-        else LearningSession.started_at.desc()
+        LearningSession.started_at.asc() if order == "asc" else LearningSession.started_at.desc()
     )
     stmt = (
         select(LearningSession)
@@ -356,9 +340,7 @@ async def list_my_sessions(
     return rows
 
 
-@router.get(
-    "/assessments", response_model=list[AssessmentSchema], summary="내 진단 이력"
-)
+@router.get("/assessments", response_model=list[AssessmentSchema], summary="내 진단 이력")
 async def list_my_assessments(
     user: ConsentedUser,
     session: SessionDep,
@@ -390,9 +372,7 @@ async def list_my_assessments(
             until_name="completed_until",
         ),
     ]
-    primary = (
-        Assessment.started_at.asc() if order == "asc" else Assessment.started_at.desc()
-    )
+    primary = Assessment.started_at.asc() if order == "asc" else Assessment.started_at.desc()
     stmt = (
         select(Assessment)
         .where(*conds)
@@ -443,9 +423,7 @@ async def list_my_dialogues(
         ),
         *time_window_conditions(Dialogue.started_at, since, until),
     ]
-    primary = (
-        Dialogue.started_at.asc() if order == "asc" else Dialogue.started_at.desc()
-    )
+    primary = Dialogue.started_at.asc() if order == "asc" else Dialogue.started_at.desc()
     stmt = (
         select(Dialogue)
         .where(*conds)
@@ -501,14 +479,8 @@ async def list_my_deletions(
         *time_window_conditions(DeletionAudit.deleted_at, since, until),
     ]
     if resource_type:
-        conds.append(
-            DeletionAudit.resource_type.in_([rt.value for rt in resource_type])
-        )
-    primary = (
-        DeletionAudit.deleted_at.asc()
-        if order == "asc"
-        else DeletionAudit.deleted_at.desc()
-    )
+        conds.append(DeletionAudit.resource_type.in_([rt.value for rt in resource_type]))
+    primary = DeletionAudit.deleted_at.asc() if order == "asc" else DeletionAudit.deleted_at.desc()
     stmt = (
         select(DeletionAudit)
         .where(*conds)
@@ -539,15 +511,9 @@ class AttemptSubmitRequest(BaseModel):
 
     problem_id: uuid.UUID = Field(description="채점 대상 문제 FK.")
     is_correct: bool = Field(description="정답 여부(v1 클라이언트 보고).")
-    student_answer: str | None = Field(
-        default=None, description="학생 제출 답안(선택)."
-    )
-    duration_seconds: int | None = Field(
-        default=None, ge=0, description="풀이 소요 시간(초)."
-    )
-    session_id: uuid.UUID | None = Field(
-        default=None, description="소속 학습 세션(선택)."
-    )
+    student_answer: str | None = Field(default=None, description="학생 제출 답안(선택).")
+    duration_seconds: int | None = Field(default=None, ge=0, description="풀이 소요 시간(초).")
+    session_id: uuid.UUID | None = Field(default=None, description="소속 학습 세션(선택).")
     confidence_self_reported: float | None = Field(
         default=None, ge=0.0, le=1.0, description="학생 자기보고 확신도 0~1(선택)."
     )
@@ -783,9 +749,7 @@ class ConceptMasterySnapshotItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     concept_id: uuid.UUID
-    concept_code: str | None = Field(
-        default=None, description="개념 코드(예: CAL-INT-...)."
-    )
+    concept_code: str | None = Field(default=None, description="개념 코드(예: CAL-INT-...).")
     concept_name: str | None = Field(default=None, description="개념 한글명(name_ko).")
     mastery: float | None = None
     confidence: float | None = None
@@ -860,9 +824,7 @@ class AbilityResponse(BaseModel):
     """`GET /v1/me/ability` 응답 — IRT 능력 추정(θ + 측정 정밀도)."""
 
     theta: float = Field(description="IRT 능력 추정 θ(logit). 채점 응답 없으면 0.")
-    response_count: int = Field(
-        description="추정에 쓰인 채점(is_correct 있는) 풀이 수."
-    )
+    response_count: int = Field(description="추정에 쓰인 채점(is_correct 있는) 풀이 수.")
     standard_error: float | None = Field(
         default=None,
         description="θ 추정 표준오차 SE=1/√I(θ)(slice 13). 응답 없으면(측정 불가) null.",
@@ -917,9 +879,7 @@ AbilityHistoryLimit = Annotated[
 # slice 33: 캡처 시 전과목 θ뿐 아니라 개념별 θ도 함께 적재(개념 곡선).
 IncludeConcepts = Annotated[
     bool,
-    Query(
-        description="true면 전과목 θ + *개념별* θ를 함께 적재(개념별 성장 곡선). 기본 false."
-    ),
+    Query(description="true면 전과목 θ + *개념별* θ를 함께 적재(개념별 성장 곡선). 기본 false."),
 ]
 
 
@@ -979,11 +939,7 @@ async def list_ability_snapshots(
         conds.append(AbilitySnapshot.concept_id == concept_id)
     else:
         conds.append(AbilitySnapshot.concept_id.is_(None))  # 기본=전과목 곡선
-    stmt = (
-        select(AbilitySnapshot)
-        .where(*conds)
-        .order_by(AbilitySnapshot.measured_at.asc())
-    )
+    stmt = select(AbilitySnapshot).where(*conds).order_by(AbilitySnapshot.measured_at.asc())
     snaps = [row.to_schema() for row in (await session.execute(stmt)).scalars().all()]
     if limit is not None:
         snaps = snaps[-limit:]
@@ -1045,9 +1001,7 @@ async def _add_concept_ability_snapshots(
 class AbilityHistoryPoint(BaseModel):
     """`GET /v1/me/ability/history`의 한 시점 — k번째 채점 직후 누적 θ."""
 
-    as_of: datetime = Field(
-        description="이 지점에 반영된 마지막 채점 시각(created_at)."
-    )
+    as_of: datetime = Field(description="이 지점에 반영된 마지막 채점 시각(created_at).")
     theta: float = Field(description="이 시점까지 누적 응답으로 추정한 θ(logit).")
     standard_error: float | None = Field(
         default=None, description="이 시점 θ의 표준오차. 측정 불가면 null."
@@ -1086,16 +1040,13 @@ async def get_my_ability_history(
             ProblemAttempt.user_id == user.user_id,
             ProblemAttempt.is_correct.isnot(None),
             ProblemAttempt.created_at.isnot(None),
-            Problem.irt_difficulty_b.isnot(None)
-            | Problem.difficulty_overall.isnot(None),
+            Problem.irt_difficulty_b.isnot(None) | Problem.difficulty_overall.isnot(None),
         )
         .order_by(ProblemAttempt.created_at.asc())
     )
     responses: list[tuple[IrtItem, bool]] = []
     points: list[AbilityHistoryPoint] = []
-    for created_at, is_correct, difficulty, irt_b in (
-        await session.execute(stmt)
-    ).all():
+    for created_at, is_correct, difficulty, irt_b in (await session.execute(stmt)).all():
         b = resolve_item_difficulty_b(irt_b, difficulty)
         if b is None:
             continue
@@ -1124,12 +1075,8 @@ class ConceptDiagnosisItem(BaseModel):
     """개념별 BKT↔IRT 교차검증 — `GET /v1/me/diagnosis/concepts`의 한 개념 항목."""
 
     concept_id: uuid.UUID = Field(description="개념 id.")
-    concept_code: str | None = Field(
-        default=None, description="개념 코드(orphan이면 null)."
-    )
-    concept_name: str | None = Field(
-        default=None, description="개념명(orphan이면 null)."
-    )
+    concept_code: str | None = Field(default=None, description="개념 코드(orphan이면 null).")
+    concept_name: str | None = Field(default=None, description="개념명(orphan이면 null).")
     bkt_mastery: float | None = Field(
         default=None, description="BKT 최신 숙달 P(L). 측정 없으면 null."
     )
@@ -1162,9 +1109,7 @@ AgreementFilter = Annotated[
 ]
 DiagnosisLimit = Annotated[
     int | None,
-    Query(
-        ge=1, le=200, description="약점(저신호) 먼저 정렬 후 상위 N개만. 생략 시 전체."
-    ),
+    Query(ge=1, le=200, description="약점(저신호) 먼저 정렬 후 상위 N개만. 생략 시 전체."),
 ]
 
 
@@ -1229,9 +1174,7 @@ class ConceptDiagnosisSummary(BaseModel):
     irt_higher: int = Field(description="θ는 높은데 BKT 낮음(추측/지연) 개념 수.")
     bkt_higher: int = Field(description="BKT는 높은데 θ 낮음(망각/고난도) 개념 수.")
     insufficient: int = Field(description="한쪽 신호만(교차검증 불가) 개념 수.")
-    attention_count: int = Field(
-        description="주의 필요(불일치=irt_higher+bkt_higher) 개념 수."
-    )
+    attention_count: int = Field(description="주의 필요(불일치=irt_higher+bkt_higher) 개념 수.")
     weakest_concept_id: uuid.UUID | None = Field(
         default=None, description="가장 약한(저신호) 개념 id. 진단 개념 없으면 null."
     )
@@ -1278,9 +1221,7 @@ async def get_my_diagnosis_summary(
 # 돌려준다(S0-4d·runtime truth=원자·`domain` 응답 필드는 이제 원자 subject_area 값). *학생 직접
 # 노출이 아니라* 내부 조회 좌석(소비 슬 노출 계약과 일관 — 안전 필드만·본문 0). 진단·enrich·
 # 게이팅 로직은 L2 좌석이 소유(L5는 표면·user_id 스코핑·읽기 전용·마이그레이션 0).
-WeakLimit = Annotated[
-    int, Query(ge=1, le=50, description="약점(저신호) 먼저 정렬 후 상위 N개만.")
-]
+WeakLimit = Annotated[int, Query(ge=1, le=50, description="약점(저신호) 먼저 정렬 후 상위 N개만.")]
 WeakThreshold = Annotated[
     float,
     Query(
@@ -1532,9 +1473,7 @@ async def get_my_learning_path(
 
 
 # ── slice L2-12: GET /v1/me/next-problem (적응형 출제 — IRT 정보량 최대 미응답 문항) ──
-_CANDIDATE_POOL_SIZE = (
-    50  # θ 근방 후보 풀 크기(SQL로 거리순 선별 후 파이썬 정보량 비교)
-)
+_CANDIDATE_POOL_SIZE = 50  # θ 근방 후보 풀 크기(SQL로 거리순 선별 후 파이썬 정보량 비교)
 # slice 15: CAT 중단 규칙 목표 표준오차 — 응답한 문항 기준 SE가 이 값 이하로 내려가면
 # "충분히 정밀하게 측정됨"으로 보고 적응 검사 중단을 권고(measurement_sufficient=True).
 # 0.3은 통상적 CAT 종료 임계(θ ± ~0.6 95% 구간). 추후 모드/설정별 보정은 후속.
@@ -1549,9 +1488,7 @@ _WEAK_CONCEPT_BOOST = 1.0
 # 개념 우선(개념 숙달 스냅샷·후보 문항 개념 매핑을 추가 조회해 가중).
 PrioritizeWeakConcepts = Annotated[
     bool,
-    Query(
-        description="true면 BKT 약점 개념(저숙달) 우선 출제(정보량×약점 가중). 기본 false."
-    ),
+    Query(description="true면 BKT 약점 개념(저숙달) 우선 출제(정보량×약점 가중). 기본 false."),
 ]
 
 
@@ -1568,9 +1505,7 @@ def _weak_concept_weights(
     """
     weights = []
     for pid in candidate_problem_ids:
-        relevant = [
-            mastery[c] for c in problem_concepts.get(pid, set()) if c in mastery
-        ]
+        relevant = [mastery[c] for c in problem_concepts.get(pid, set()) if c in mastery]
         if relevant:
             weights.append(1.0 + _WEAK_CONCEPT_BOOST * (1.0 - min(relevant)))
         else:
@@ -1585,9 +1520,7 @@ class NextProblemResponse(BaseModel):
         default=None,
         description="추천 문항 id. 후보(미응답·난이도 라벨 보유)가 없으면 null.",
     )
-    theta: float = Field(
-        description="추천에 쓰인 현재 능력 추정 θ(logit). 응답 없으면 0."
-    )
+    theta: float = Field(description="추천에 쓰인 현재 능력 추정 θ(logit). 응답 없으면 0.")
     difficulty: float | None = Field(
         default=None,
         description="추천 문항의 difficulty_overall(전문가 1~5). 없으면 null.",
@@ -1679,9 +1612,7 @@ async def recommend_next_problem(
 
     # 보정 b 우선·없으면 휴리스틱(difficulty_overall NOT NULL 보장 → 항상 값·candidate_rows와 1:1).
     items = [
-        IrtItem(
-            difficulty=irt_b if irt_b is not None else difficulty_to_logit(float(d))
-        )
+        IrtItem(difficulty=irt_b if irt_b is not None else difficulty_to_logit(float(d)))
         for _pid, d, irt_b in candidate_rows
     ]
 
@@ -1699,9 +1630,7 @@ async def recommend_next_problem(
             )
         )
         mastery = {
-            cid: float(m)
-            for cid, m in (await session.execute(mastery_stmt)).all()
-            if m is not None
+            cid: float(m) for cid, m in (await session.execute(mastery_stmt)).all() if m is not None
         }
         pc_stmt = select(ProblemConcept.problem_id, ProblemConcept.concept_id).where(
             ProblemConcept.problem_id.in_(candidate_ids),
@@ -1762,9 +1691,7 @@ async def end_my_session(
     return row.to_schema()
 
 
-async def _add_ability_snapshot_if_attempts(
-    session: AsyncSession, user_id: uuid.UUID
-) -> None:
+async def _add_ability_snapshot_if_attempts(session: AsyncSession, user_id: uuid.UUID) -> None:
     """채점 이력이 있으면 전과목+개념별 θ 스냅샷을 세션에 *추가만*(commit은 호출자)·빈 θ 미적재.
 
     slice 32 수동 캡처와 동일 산식·전과목 단일 θ(concept_id null). 세션 종료 트리거(slice 34/35).
@@ -1865,9 +1792,7 @@ async def end_my_dialogue(
     if body is not None and body.resolution is not None and row.resolution is None:
         row.resolution = body.resolution
         resolution_written = True
-    if (
-        newly_closed or resolution_written
-    ):  # 변경이 있을 때만 커밋(완전 idempotent 재호출은 no-op).
+    if newly_closed or resolution_written:  # 변경이 있을 때만 커밋(완전 idempotent 재호출은 no-op).
         await session.commit()
     return row.to_schema()
 
@@ -1963,9 +1888,7 @@ class AccountErasureResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user_id: uuid.UUID = Field(description="삭제된 사용자 id.")
-    total_rows_deleted: int = Field(
-        ge=0, description="삭제된 총 행수(전 테이블 + user_profile)."
-    )
+    total_rows_deleted: int = Field(ge=0, description="삭제된 총 행수(전 테이블 + user_profile).")
 
 
 @router.delete(
@@ -2012,9 +1935,7 @@ async def erase_my_account(
         len(report.pending_external),
         ", ".join(t.store for t in report.pending_external),
     )
-    return AccountErasureResponse(
-        user_id=user_id, total_rows_deleted=report.total_rows_deleted
-    )
+    return AccountErasureResponse(user_id=user_id, total_rows_deleted=report.total_rows_deleted)
 
 
 @router.get(
