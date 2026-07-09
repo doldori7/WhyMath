@@ -25,13 +25,15 @@
 
 ## 1. ⚠️ 사전 세팅 — 하드 블로커 3종 (녹화 전 반드시 확인)
 
-앱 UI 글루는 완주 배선 완료. 시연을 막는 건 **백엔드/설정 의존성 3가지**다:
+앱 UI 글루는 완주 배선 완료. 시연을 막는 건 **백엔드/설정 의존성 3가지**인데, **`bash scripts/demo/run_demo.sh` 한 번으로 3종을 모두 해소**하도록 인에이블먼트 킷이 배선돼 있다(리포 루트에서 실행):
 
-1. **인증(최우선)** — 보호 엔드포인트(`/v1/me/next-problem`·코치 세션·`/v1/ocr`)는 토큰 없으면 **401** → 진단이 "문제를 불러오지 못했어요"로 빠져 루프가 안 돈다. 실 로그인 webview(c3)는 미배선(`router.dart:6-9`). **대응**: 사전 시딩된 토큰(`token_store` 복원, `main.dart:18`) 또는 인증 완화된 dev 백엔드.
-2. **API_URL 도달성** — 기본 `http://localhost:8000`(`core/env.dart:10`). 실기기에서 localhost는 자기 자신 → 안 붙는다. **대응**: `flutter run --dart-define=API_URL=https://<도달 가능 호스트>`.
-3. **백엔드 LLM 키** — 코치 발문·문제 생성이 서버 LLM. 키 없으면 degraded/canned. **대응**: 라이브 키 또는 로컬 Ollama 기동(코칭 자체는 결정론 경로로도 발문·검증 표시됨).
+1. **인증(최우선)** — 보호 엔드포인트(`/v1/me/next-problem`·코치 세션·`/v1/ocr`)는 토큰 없으면 **401** → 진단이 "문제를 불러오지 못했어요"로 빠져 루프가 안 돈다. 실 로그인 webview(c3)는 미배선(`router.dart:6-9`). **대응**: 킷이 `WHYMATH_DEMO_AUTH_ENABLED=true`로 가짜 OAuth provider(`api/demo_auth.py`)를 등록하고 `POST /v1/auth/demo/callback`으로 고정 데모 계정의 실 JWT를 자동 발급한다 → 앱엔 `--dart-define=DEMO_TOKEN=<발급 토큰>`으로 주입(`AuthController.restore`가 저장소에 심어 인증 부팅). *기본 OFF·prod 이중 방어(실 provider 구성 시 등록 거부)·로컬 시연 호스트 밖 금지.*
+2. **API_URL 도달성** — 기본 `http://localhost:8000`(`core/env.dart:10`). 실기기에서 localhost는 자기 자신 → 안 붙는다. **대응**: 킷이 LAN IP를 탐지해 `flutter run --dart-define=API_URL=http://<LAN_IP>:8000` 명령을 그대로 출력한다(uvicorn은 `0.0.0.0` 바인딩).
+3. **백엔드 LLM 키** — 코치 발문·문제 생성이 서버 LLM. 키 없으면 degraded/canned. **대응**: 킷이 `/status`로 LLM 모드(라이브/Ollama/결정론)를 보고한다. 라이브 키·로컬 Ollama 없으면 **결정론 경로로도 발문·검증 신호가 표시돼 루프는 완주**된다(정직 프레이밍 유지).
 
-**세팅 순서**: dev 백엔드 기동(시드 문제 + 인증 토큰) → `--dart-define=API_URL` 로 앱 실행 → (선택) 문제 카드 1회 워밍업 → 녹화 시작.
+**세팅 순서(원커맨드)**: 리포 루트에서 `bash scripts/demo/run_demo.sh` → (throwaway PG 기동 · alembic · 문제 시드 · uvicorn · 데모 토큰 발급 · LAN IP·LLM 모드 출력) → 출력된 `flutter run …` 명령을 패드에서 실행 → 녹화 시작. 정리: `bash scripts/demo/stop_demo.sh`.
+
+> **경계**: 이 킷은 녹화를 *turnkey*로 만들 뿐 **탈출 게이트 `G-kiki-device-demo`를 clear하지 않는다** — 게이트는 Kiki가 실기기 15분 루프를 *녹화*할 때까지 PENDING 유지. 녹화 후 `S1-14-exit-gate-judgement`(owner=kiki)가 3종 게이트 판정을 기록해 S1을 공식 탈출한다.
 
 ---
 
@@ -88,3 +90,5 @@
 ---
 
 **참조**: `docs/architecture/s1_e2e_vertical_slice_design.md`(6단계 정본) · `src/mobile/lib/features/{onboarding,problems,chat}` · `src/mobile/test/e2e_loop_flow_test.dart` · `src/backend/whymath_backend/api/{coach,me,users,problems,verify}.py` · `docs/strategy/status_roadmap_2026-07.md §S1`.
+
+**인에이블먼트 킷(원커맨드 시연 기동)**: `scripts/demo/run_demo.sh`·`scripts/demo/stop_demo.sh`·`scripts/demo/seed_demo.py` · `docker-compose.demo.yml`(pgvector/pgvector:pg16) · 가짜 provider `src/backend/whymath_backend/api/demo_auth.py`(게이트 `WHYMATH_DEMO_AUTH_ENABLED`·기본 OFF) · Flutter `core/env.dart`(`DEMO_TOKEN`)·`features/auth/application/auth_controller.dart`(`demoTokenProvider`·`restore` 시연 분기) · 테스트 `tests/backend/api/test_demo_auth.py`·`src/mobile/test/demo_token_restore_test.dart`.

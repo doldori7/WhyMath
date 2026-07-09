@@ -16,6 +16,7 @@ from __future__ import annotations
 import httpx
 
 from whymath_backend.api.auth import OAuthIdentity, OAuthProvider, OAuthProviderError
+from whymath_backend.api.demo_auth import register_demo_provider
 from whymath_backend.config import Settings
 
 _TIMEOUT = httpx.Timeout(10.0)
@@ -163,4 +164,7 @@ def build_oauth_providers(settings: Settings) -> dict[str, OAuthProvider]:
             client_id=settings.naver_client_id,
             client_secret=settings.naver_client_secret.get_secret_value(),
         )
+    # 시연 전용 가짜 provider(S1 게이트 ①) — demo_auth_enabled일 때만·실 provider 미구성 시에만
+    # 등록(이중 방어는 register_demo_provider가 담당). 실 provider 등록 뒤 호출한다.
+    register_demo_provider(providers, settings)
     return providers

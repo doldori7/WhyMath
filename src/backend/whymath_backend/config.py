@@ -375,6 +375,24 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── 시연(데모) 전용 가짜 OAuth provider(S1 게이트 ① 실기기 시연) ──
+    # 실기기 학습 루프 녹화를 turnkey로 만들기 위한 하드 블로커 ①(인증) 해소 수단이다.
+    # 실 로그인 webview(OAuth-c3)가 미배선이라 보호 엔드포인트가 401로 막히는데, 이 플래그를
+    # 켜면 create_app이 FakeOAuthProvider를 레지스트리에 등록해 기존 콜백 경로 그대로 고정
+    # 데모 계정의 실 JWT를 발급한다(security.py/_auth.py 무변경). 신원 검증이 전혀 없으므로
+    # prod에서 켜면 누구나 데모 계정 토큰을 얻는다 — 로컬 시연 호스트 밖에서 절대 금지.
+    demo_auth_enabled: bool = Field(
+        default=False,
+        description=(
+            "시연 전용 가짜 OAuth provider 활성 여부. **기본 False(prod 절대 안전)**: True면 "
+            "create_app이 FakeOAuthProvider(api/demo_auth.py)를 등록해 POST /v1/auth/demo/callback "
+            "이 고정 데모 사용자의 실 JWT를 발급한다(신원 검증 0). S1 탈출 게이트 ①(실기기 15분 "
+            "루프 녹화)의 인증 블로커 해소용. **이중 방어**: 실 provider(kakao/naver) 구성 시엔 "
+            "이 플래그가 True여도 등록을 거부한다(prod 추정). prod에서 켜면 임의 데모 계정 토큰 "
+            "발급이 가능하므로 로컬 시연 호스트 밖에서 절대 금지. WHYMATH_DEMO_AUTH_ENABLED로 조정."
+        ),
+    )
+
     # ── OAuth 로그인(카카오·네이버 SSO, OAuth-a2) ──
     # client_id는 공개 식별자(일반 str)·client_secret은 SecretStr·env-only(하드코딩 금지).
     # 비면 해당 provider 미등록(create_app이 레지스트리에서 제외 → 콜백 404).
