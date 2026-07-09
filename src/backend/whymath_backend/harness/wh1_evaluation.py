@@ -48,9 +48,9 @@
                              의존·BKT 숙달 게이팅 미반영). 전이 프로브가 `_MIN_TRANSFER_PROBES`
                              미만이면 NO_DATA(날조 0)·후속은 마킹/스케줄 도구.
 
-S3 세션 대리 지표 3종 추가(`status_roadmap_2026-07.md` §3·본 슬라이스): 기존 7종과 *동일
-스코프*(user/시간창 집계·세션별 분해는 후속)로 **원천 신호를 재사용**해 편입한다(새 적재·
-마이그레이션 0):
+S3 세션 대리 지표 4종 추가(`status_roadmap_2026-07.md` §3): 기존 7종과 *동일 스코프*
+(user/시간창 집계·세션별 분해는 후속)로 **원천 신호를 재사용**해 편입한다(새 적재·마이그레이션
+0). ⑧⑨⑩은 기존 라이브 신호 재사용, ⑪은 클라이언트 보고 resolution writer 편입분:
   ⑧ 답 미루기 도달 깊이   — 🟢 MEASURED/NO_DATA: ⑤와 *동일* 힌트제공 hint_level을 *기울기가
                             아니라 도달 깊이*(평균·최대)로 집계. 게이밍(힌트 회피로 낮은 레벨
                             유지)은 R15(`help_reduction_validated`)가 이미 교차 방어 — note에
@@ -62,8 +62,11 @@ S3 세션 대리 지표 3종 추가(`status_roadmap_2026-07.md` §3·본 슬라�
   ⑩ 오개념 해소율         — 🟢 MEASURED/NO_DATA: `MisconceptionHypothesisRecord`의 is_active=
                             false 비율(가지치기·비활성화=*해소 근사*). 전용 resolved_at 컬럼
                             부재라 "학습적 해소"와 "stale 정리"를 구분 못 함(후속)·note 정직 표기.
-스스로 풀이 도달율(S3 4번째)은 `Dialogue.resolution` writer 부재(어떤 라이브 경로도 값을 안
-채움)로 **본 슬라이스 제외** — coach 세션 종결 훅이 판정·적재하는 선행 슬라이스가 필요하다(후속).
+  ⑪ 스스로 풀이 도달율     — 🟢 MEASURED/NO_DATA: `Dialogue.resolution`이 `학생자력해결`인 비율
+                            (분모=resolution 채워진 세션). resolution은 **클라이언트 보고**
+                            (`PATCH /v1/me/dialogues/{id}/end`가 적재·⑥ 자기보고 확신도 동형)
+                            로 편입 — 서버가 신호로 판정하지 않는다(정답성·hint_level의 dialogue
+                            귀속·포기 영속은 후속). `Socratic유도성공`은 별개 축(후속 분해 가능).
 
 계층 메모(CLAUDE.md 7계층·설계안 §1): WH-1 하네스는 *새 계층이 아니라 횡단 인프라*다. 본
 모듈은 L1(활동 로그 `LearningSession`·`AttemptEvent`)·L2(`ConceptMasteryHistory`)·L4(오개념
@@ -95,7 +98,7 @@ from whymath_backend.db.models.misconception_hypothesis import (
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.l2.ability_estimation import resolve_item_difficulty_b
 from whymath_backend.l4.misconception.probes import compute_diagnostic_recall
-from whymath_backend.schema.enums import EventType, SignaturePattern
+from whymath_backend.schema.enums import EventType, Resolution, SignaturePattern
 
 __all__ = [
     "HelpReductionValidation",
@@ -146,7 +149,9 @@ def _ols_slope(ys: list[float]) -> float | None:
     x_mean = sum(xs) / n
     y_mean = sum(ys) / n
     x_var = sum((x - x_mean) ** 2 for x in xs)
-    if x_var == 0:  # 방어적 — n>=2 등차 인덱스면 도달 불가하나 분산 0이면 None(날조 회피).
+    if (
+        x_var == 0
+    ):  # 방어적 — n>=2 등차 인덱스면 도달 불가하나 분산 0이면 None(날조 회피).
         return None
     covariance = sum((x - x_mean) * (y - y_mean) for x, y in zip(xs, ys, strict=True))
     return covariance / x_var
@@ -203,7 +208,9 @@ class Metric(BaseModel):
         description="실측값(MEASURED). 미계측·표본 0이면 None(가짜 0 금지).",
     )
     status: MetricStatus = Field(description="계측 상태 — 실값/미계측 사유 구분.")
-    note: str = Field(description="한국어 설명 — 무엇이 필요/근거(미계측이면 적재·라벨·도구).")
+    note: str = Field(
+        description="한국어 설명 — 무엇이 필요/근거(미계측이면 적재·라벨·도구)."
+    )
 
 
 class R15Verdict(str, Enum):
@@ -262,7 +269,9 @@ class HelpReductionValidation(BaseModel):
     이탈/무작위/세션 정렬 등 다른 gaming은 여전히 미반영(R15 완전판정이 아니다).
     """
 
-    verdict: R15Verdict = Field(description="R15 결합 판정 — 도움↓·정답률·난이도 교차 결과.")
+    verdict: R15Verdict = Field(
+        description="R15 결합 판정 — 도움↓·정답률·난이도 교차 결과."
+    )
     help_slope: float | None = Field(
         default=None,
         description="⑤ 도움 감소 OLS 기울기(raw·음수=도움 감소). 표본 부족이면 None(날조 0 금지).",
@@ -279,11 +288,13 @@ class HelpReductionValidation(BaseModel):
             "그때는 2신호 판정 + blind spot 캐비엇)."
         ),
     )
-    note: str = Field(description="한국어 판정 근거 — 임계(slope 0)·교차 결과·사유 구분·한계.")
+    note: str = Field(
+        description="한국어 판정 근거 — 임계(slope 0)·교차 결과·사유 구분·한계."
+    )
 
 
 class SurrogateMetrics(BaseModel):
-    """WH-1 0단계 대리 지표 7종 + S3 세션 지표 3종 + 표본 메타 — 커버리지 맵 한 장.
+    """WH-1 0단계 대리 지표 7종 + S3 세션 지표 4종 + 표본 메타 — 커버리지 맵 한 장.
 
     계측 가능분(① verify 통과율·③ 세션 완주율·④ 턴당 토큰·⑤⑥, ② 오프라인 진단정확도, 그리고
     ⑦ *근사* 전이 점수)은 실값(또는 표본 0/부족이면 NO_DATA)으로 낸다 — 이제 7종 모두 좌석이
@@ -336,7 +347,7 @@ class SurrogateMetrics(BaseModel):
         )
     )
 
-    # ── S3 세션 대리 지표 3종(status_roadmap §3·기존 신호 재사용·user/시간창 집계) ──
+    # ── S3 세션 대리 지표 4종(status_roadmap §3·기존 신호 재사용·user/시간창 집계) ──
     hint_depth_reached: Metric = Field(
         description=(
             "⑧ 답 미루기 도달 깊이 — ⑤와 동일 힌트제공 hint_level의 *평균*(note에 최대). "
@@ -353,6 +364,12 @@ class SurrogateMetrics(BaseModel):
         description=(
             "⑩ 오개념 해소율 — MisconceptionHypothesisRecord is_active=false 비율(해소 *근사*). "
             "resolved_at 컬럼 부재로 학습적 해소·stale 정리 미구분(후속)·total 0이면 NO_DATA."
+        )
+    )
+    self_solve_rate: Metric = Field(
+        description=(
+            "⑪ 스스로 풀이 도달율 — Dialogue.resolution=학생자력해결 비율(분모=resolution 채워진 "
+            "세션). resolution은 클라이언트 보고(PATCH .../end·서버 미판정)·resolved 0이면 NO_DATA."
         )
     )
 
@@ -420,6 +437,13 @@ class SurrogateMetrics(BaseModel):
         description=(
             "⑩ 오개념 해소율 집계 대상 MisconceptionHypothesisRecord 수(user·updated_at 시간창 "
             "필터). 이 중 is_active=false가 해소 근사·0이면 NO_DATA."
+        ),
+    )
+    sample_resolved_dialogues: int = Field(
+        default=0,
+        description=(
+            "⑪ 스스로 풀이 도달율 집계 대상 Dialogue 수(resolution NOT NULL·user·started_at 시간창 "
+            "필터). 분모 — 이 중 학생자력해결이 분자·0이면 NO_DATA(미보고 NULL은 제외)."
         ),
     )
     window_start: datetime | None = Field(
@@ -616,9 +640,13 @@ def _judge_r15(
 
     # 난이도 유지/상승, 또는 난이도 추세 미가용 → 진짜 개선. 미가용이면 blind spot 캐비엇.
     if difficulty_slope is None:
-        difficulty_note = "난이도 추세 미가용(b 부족) — 쉬운문제 회피 미검증(blind spot). "
+        difficulty_note = (
+            "난이도 추세 미가용(b 부족) — 쉬운문제 회피 미검증(blind spot). "
+        )
     else:
-        difficulty_note = f"난이도 기울기 {difficulty_slope:+.4f} >= 0(쉬운문제 회피 아님). "
+        difficulty_note = (
+            f"난이도 기울기 {difficulty_slope:+.4f} >= 0(쉬운문제 회피 아님). "
+        )
     return HelpReductionValidation(
         verdict=R15Verdict.GENUINE_IMPROVEMENT,
         help_slope=help_slope,
@@ -847,7 +875,9 @@ def _mastery_gains_from_rows(
             first[key] = mastery
         last[key] = mastery  # 매번 덮어써 최종 = 최근 측정.
         counts[key] = counts.get(key, 0) + 1
-    return [last[key] - first[key] for key in first if counts[key] >= _MIN_MASTERY_POINTS]
+    return [
+        last[key] - first[key] for key in first if counts[key] >= _MIN_MASTERY_POINTS
+    ]
 
 
 def _mastery_gain_from_gains(gains: list[float]) -> Metric:
@@ -915,6 +945,42 @@ def _misconception_resolution_from_counts(inactive: int, total: int) -> Metric:
             "**해소 근사** — is_active=false는 가지치기(stale 정리·낙인 방지) 신호 재사용이라 "
             "'학습적 해소'와 'stale 비활성화'를 구분 못 함(resolved_at 컬럼 부재·후속)·updated_at "
             "시간창 기준·세션별 분해는 후속(현재 user/시간창 집계)."
+        ),
+    )
+
+
+def _self_solve_from_counts(self_solved: int, resolved_total: int) -> Metric:
+    """⑪ 스스로 풀이 도달율 — resolution=학생자력해결 비율을 Metric으로(순수·날조 0).
+
+    입력은 (자력해결 수, 결말 도달 세션 수) — `Dialogue.resolution`에서 호출부가 센다. **분모는
+    resolution이 채워진(결말 도달) 세션**이다(resolution NULL=결말 미보고는 제외 — "자력해결
+    아님"이 아니라 "결말 미상"이라 분모에서 뺀다·③ 완주율이 전체 세션을 분모로 쓰는 것과 *다른*
+    선택: 여기선 NULL을 0으로 세면 미보고를 실패로 왜곡하므로 가짜 0 금지 규약상 제외한다).
+    value = self_solved/resolved_total. resolved_total==0이면 **NO_DATA**(value None·가짜 0 회피).
+
+    정직 note(중요): resolution은 **클라이언트 보고**다(`PATCH /v1/me/dialogues/{id}/end`가 적재·
+    ⑥ 자기보고 확신도와 동형) — 서버가 정답성·hint_level 신호로 판정한 게 아니다(그 신호의
+    dialogue 귀속·포기 영속은 후속). `Socratic유도성공`(유도로 도달)은 자력해결과 *별개 축*이라
+    분자에 넣지 않는다 — 필요 시 후속에서 5종 분해로 노출(과대해석 금지·세션별 집계는 후속).
+    """
+    if resolved_total <= 0:
+        return Metric(
+            value=None,
+            status=MetricStatus.NO_DATA,
+            note=(
+                "resolution 채워진(결말 도달) 대화 0건 — 종료 시 resolution 보고가 쌓이면 "
+                "자력해결 비율 계측(가짜 0 아님). resolution은 클라이언트 보고(서버 미판정)."
+            ),
+        )
+    rate = self_solved / resolved_total
+    return Metric(
+        value=rate,
+        status=MetricStatus.MEASURED,
+        note=(
+            f"결말 도달 대화 {resolved_total}건 중 학생자력해결 {self_solved}건={rate:.4f}. "
+            "resolution은 **클라이언트 보고**(PATCH .../end 적재·서버가 정답성/hint_level로 판정 "
+            "아님·그 신호 귀속은 후속)·분모=resolution NOT NULL(미보고 NULL은 제외·실패로 왜곡 "
+            "금지)·Socratic유도성공은 별개 축(분자 제외)·세션별 분해는 후속(현재 user/시간창 집계)."
         ),
     )
 
@@ -1080,7 +1146,9 @@ async def compute_wh1_surrogate_metrics(
     verify_row = (
         await session.execute(
             select(
-                func.count().filter(AttemptEvent.event_data["passed"].as_boolean().is_(True)),
+                func.count().filter(
+                    AttemptEvent.event_data["passed"].as_boolean().is_(True)
+                ),
                 func.count(),
             )
             .select_from(AttemptEvent)
@@ -1095,7 +1163,9 @@ async def compute_wh1_surrogate_metrics(
         verify_metric = Metric(
             value=None,
             status=MetricStatus.NO_DATA,
-            note=("검산결과 이벤트 0건 — coach 풀이 제출이 쌓이면 통과율 계측(가짜 0 아님)."),
+            note=(
+                "검산결과 이벤트 0건 — coach 풀이 제출이 쌓이면 통과율 계측(가짜 0 아님)."
+            ),
         )
     else:
         verify_metric = Metric(
@@ -1161,7 +1231,9 @@ async def compute_wh1_surrogate_metrics(
         )
     ).all()
     # is_correct(bool)를 1.0/0.0 시퀀스로(None은 IS NOT NULL 필터로 이미 제외·방어적 재확인).
-    accuracy_series = [1.0 if row[0] else 0.0 for row in accuracy_rows if row[0] is not None]
+    accuracy_series = [
+        1.0 if row[0] else 0.0 for row in accuracy_rows if row[0] is not None
+    ]
     help_slope = _ols_slope([float(level) for level in hint_levels])
     accuracy_slope = _ols_slope(accuracy_series)
 
@@ -1249,7 +1321,9 @@ async def compute_wh1_surrogate_metrics(
     ).all()
     # is_correct는 accuracy_conds(IS NOT NULL)로 이미 좁혀졌으나 방어적으로 bool() 변환(None→False
     # 가 아니라 필터로 None이 없음을 신뢰·타입 좁히기). 식별은 순수 함수에 위임(날조 0).
-    transfer_input: list[tuple[uuid.UUID | None, list[SignaturePattern] | None, bool]] = [
+    transfer_input: list[
+        tuple[uuid.UUID | None, list[SignaturePattern] | None, bool]
+    ] = [
         (problem_id, patterns, bool(is_correct))
         for problem_id, patterns, is_correct in transfer_rows
     ]
@@ -1261,7 +1335,9 @@ async def compute_wh1_surrogate_metrics(
     # 그룹별 첫→마지막 차(증가량)를 낸다(_mastery_gains_from_rows·날조 0). 시간창은 measured_at
     # 기준(활동 started_at이 아니라 측정 시각·이 원천의 자연 시간축)·ORM/쿼리빌더만(원시 SQL 0).
     # mastery는 Numeric(3,2)라 런타임 Decimal일 수 있어 float로 변환한다(None은 필터로 제외).
-    mastery_conds: list[ColumnElement[bool]] = [ConceptMasteryHistory.mastery.isnot(None)]
+    mastery_conds: list[ColumnElement[bool]] = [
+        ConceptMasteryHistory.mastery.isnot(None)
+    ]
     if user_id is not None:
         mastery_conds.append(ConceptMasteryHistory.user_id == user_id)
     if since is not None:
@@ -1323,13 +1399,43 @@ async def compute_wh1_surrogate_metrics(
         misconception_inactive, misconception_total
     )
 
+    # ── ⑪ 스스로 풀이 도달율 (Dialogue.resolution=학생자력해결 비율·클라이언트 보고) ──
+    # (자력해결 수, resolution 채워진 세션 수)를 한 행으로 — 분모는 resolution NOT NULL(결말 도달)
+    # 세션이다(미보고 NULL은 제외·실패로 왜곡 금지·가짜 0 회피). resolution은 PATCH .../end가
+    # 적재한 *클라이언트 보고*(서버 미판정). 시간창은 started_at 기준(④ 토큰과 동일 Dialogue
+    # 필터)·user 필터. FILTER로 학생자력해결·NOT NULL을 각각 센다(⑩ 동형·쿼리빌더만·원시 SQL 0).
+    self_solve_conds: list[ColumnElement[bool]] = [Dialogue.resolution.isnot(None)]
+    if user_id is not None:
+        self_solve_conds.append(Dialogue.user_id == user_id)
+    if since is not None:
+        self_solve_conds.append(Dialogue.started_at >= since)
+    if until is not None:
+        self_solve_conds.append(Dialogue.started_at <= until)
+
+    self_solve_row = (
+        await session.execute(
+            select(
+                func.count().filter(Dialogue.resolution == Resolution.학생자력해결),
+                func.count(),
+            )
+            .select_from(Dialogue)
+            .where(*self_solve_conds)
+        )
+    ).one()
+    self_solved_raw, resolved_total_raw = self_solve_row
+    self_solved = int(self_solved_raw or 0)
+    resolved_total = int(resolved_total_raw or 0)
+    self_solve = _self_solve_from_counts(self_solved, resolved_total)
+
     # ── ② 진단-실제 오개념 일치율 (오프라인 진단정확도·substring recall) ──
     # 시스템 지표라 DB·user/기간과 무관(라벨 프로브에 substring 매처 recall) — 전 user 동일값.
     diagnostic_hits, diagnostic_total = compute_diagnostic_recall()
 
     return SurrogateMetrics(
         verify_pass_rate=verify_metric,
-        diagnosis_agreement_rate=_diagnosis_agreement_offline(diagnostic_hits, diagnostic_total),
+        diagnosis_agreement_rate=_diagnosis_agreement_offline(
+            diagnostic_hits, diagnostic_total
+        ),
         session_completion_rate=session_completion,
         tokens_per_turn=tokens_metric,
         help_reduction_slope=help_reduction,
@@ -1339,6 +1445,7 @@ async def compute_wh1_surrogate_metrics(
         hint_depth_reached=hint_depth,
         mastery_gain_rate=mastery_gain_metric,
         misconception_resolution_rate=misconception_resolution,
+        self_solve_rate=self_solve,
         sample_sessions=int(total_sessions),
         sample_dialogues=sample_dialogues,
         sample_verify_events=verify_total,
@@ -1350,6 +1457,7 @@ async def compute_wh1_surrogate_metrics(
         sample_diagnostic_probes=diagnostic_total,
         sample_mastery_groups=len(mastery_gains),
         sample_misconception_hypotheses=misconception_total,
+        sample_resolved_dialogues=resolved_total,
         window_start=since,
         window_end=until,
         user_scoped=user_id is not None,
