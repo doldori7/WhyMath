@@ -15,3 +15,5 @@
 {"ts": "2026-07-09T06:59:49", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "start", "id": "ARCH-02-playbook-audit", "session": "claude/app-build-harness-replace-4z7ksj"}
 {"ts": "2026-07-09T07:01:48", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "done", "id": "ARCH-02-playbook-audit", "artifacts": ["커밋 9cf3f3e (arch_audit_2026-07-09_r2.md — 신규 위반 0·상환 태스크 추가 없음)"]}
 {"ts": "2026-07-09T07:01:48", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "add", "id": "ARCH-03-playbook-audit"}
+{"ts": "2026-07-09T07:15:04", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "start", "id": "S2-07-curriculum-entry-atom-axis", "session": "claude/app-build-harness-replace-4z7ksj"}
+{"ts": "2026-07-09T07:28:27", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "done", "id": "S2-07-curriculum-entry-atom-axis", "artifacts": ["커밋 21add5f (derive_atom_curriculum_entries — 원자 행 1,324개 유도·resolver hit 실증)", "실환경 절차: curriculum populate 재실행 (멱등 upsert — 원자 행 추가)"]}

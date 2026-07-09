@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: data-pipeline
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -13,7 +13,9 @@ depends_on:
 requires_gates: []
 acceptance:
   - curriculum_entry가 원자 code 공간으로 유도되어 gating 깊이 조인이 원자 링크에서 hit
-artifacts: []
+artifacts:
+  - "커밋 21add5f (derive_atom_curriculum_entries — 원자 행 1,324개 유도·resolver hit 실증)"
+  - "실환경 절차: curriculum populate 재실행 (멱등 upsert — 원자 행 추가)"
 session: null
 notes: "S2-03에서 분리 — gating.py 깊이 조인은 현재 graceful 폴백(None). Curriculum-as-Overlay 원자 축 재유도 필요"
 updated: 2026-07-09
