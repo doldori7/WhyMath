@@ -5,7 +5,7 @@ track: infra-debt
 stage: S1
 subject: cross
 layer: mobile
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -14,6 +14,6 @@ acceptance:
   - Dart 거버넌스 테스트 또는 CI 소스 스캔이 채점·판정·수식동치 로직의 클라 유입 시 red
   - "기존 코드 위반 0 확인 (현재 규범 준수 상태를 게이트로 동결)"
 artifacts: []
-session: null
+session: claude/app-build-harness-replace-4z7ksj
 notes: "arch_audit_2026-07-09.md [갭 A] — import-linter는 Python만 검사, CLAUDE.md 슬라이스 89 규범의 CI 강제"
 updated: 2026-07-09

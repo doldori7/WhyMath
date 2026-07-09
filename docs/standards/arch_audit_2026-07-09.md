@@ -35,6 +35,7 @@
 - import-linter(`src/backend/pyproject.toml:158` `api > l6 > l5 > l4 > l3 > l2 > l1 > schema`)는 **Python 패키지만** 검사 — Flutter(`src/mobile`)·웹(`src/web`)은 계약 밖.
 - s1_structure_audit Q8의 "subject 하드코딩 0"은 수동 확인이었고 회귀 방지 게이트가 없음.
 - **판정**: 위반 사례는 미발견이나, 재발 방지 장치 부재 = 갭. → 상환 태스크 `ARCH-10-client-mathlogic-gate` 등록 (Dart 측 거버넌스 테스트 또는 CI 소스 스캔: 채점·판정·수식 동치 로직 패턴의 클라 유입 차단).
+- **상환 이행 (2026-07-09, ARCH-10)**: 게이트 2종 신설 — ① `src/mobile/test/governance/no_math_logic_governance_test.dart` (lib 43파일 전수 스캔: 판정 식별자 0 동결·수식 평가 패키지 import 금지·Problem 모델 정답 5키 소스 동결, `answer_format` 렌더 힌트는 합법) ② `src/web/graphing-calculator/test/no_math_judgement_governance.test.js` (채점 심볼 포함 파일 = 화이트리스트 정확 일치). **이행 중 실위반 1건 발견**: 웹 QuizMode(`GraphingCalculator.jsx:535-600`)가 클라 채점(`sameGraph`)·오개념 진단(`diagnose`)·localStorage 점수 저장 수행 — 독립 데모 도구이며 앱 임베드 경로(spec 주입 렌더)는 무관. legacy_snapshot 선례에 따라 **화이트리스트 2건(`GraphingCalculator.jsx`·`lib/mathExpr.js`)으로 동결**하고 존치/리팩터 결정은 `ARCH-12-quizmode-grading-decision`(owner: kiki)으로 분리. 게이트 red 검증 완료(웹: 위반 파일 유입 시 2 failed 실측·원복 후 green / Flutter: 동일 정규식 시뮬레이션·CI 실행 위임).
 
 ### [유예 B] Minimal Subgraph depth≤2 능동 가드 부재 — 문서화된 의도적 유예
 - 현 LLM 소비처(`wh1_llm_policy._build_prompt`)는 그래프 traversal을 하지 않으므로 depth 축이 무관 (docstring 명문).

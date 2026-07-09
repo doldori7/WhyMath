@@ -4,3 +4,5 @@
 {"ts": "2026-07-09T01:01:19", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "add", "id": "ARCH-11-subgraph-depth-guard"}
 {"ts": "2026-07-09T01:01:51", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "done", "id": "ARCH-01-playbook-audit", "artifacts": ["커밋 3576d24 (docs/standards/arch_audit_2026-07-09.md)"]}
 {"ts": "2026-07-09T01:01:51", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "add", "id": "ARCH-02-playbook-audit"}
+{"ts": "2026-07-09T04:06:50", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "start", "id": "ARCH-10-client-mathlogic-gate", "session": "claude/app-build-harness-replace-4z7ksj"}
+{"ts": "2026-07-09T04:17:40", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "add", "id": "ARCH-12-quizmode-grading-decision"}
