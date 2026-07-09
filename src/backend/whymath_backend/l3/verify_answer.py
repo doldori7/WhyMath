@@ -61,6 +61,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "AnswerVerdict",
+    "SolvabilityVerdict",
+    "classify_solvability",
     "derive_selected_root",
     "verify_answer",
     "verify_root_aggregate",
@@ -753,4 +755,119 @@ def verify_root_aggregate(
         f"근 {kind} — 근들의 {kind}는 {sympy.sstr(sympy.simplify(actual))}이나 "
         f"주장값은 {claimed}(불일치)",
         samples_checked=total_mult,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 해 존재성·유일성 분류(문항 품질 15축 ②③) — *답과 무관하게* 방정식 자체가 성립 문제인가.
+# ──────────────────────────────────────────────────────────────────────────
+# 정본: `docs/standards/superhuman_verification_standard.md`(측정된 게이트) + 문항 품질 15축 진단
+# ②(답이 존재하지 않음)·③(답이 여러 개). verify_answer가 "주어진 답이 조건을 만족하는가"만 보는
+# 반면, 이 분류기는 "방정식 자체가 *풀 수 있는 문제*인가"를 답 이전에 판정한다:
+#   - 항등식(무한해·예 `2*(x+1)=2*x+2`)은 residual이 항등적 0이라 *어떤 답도* Tier1 pass →
+#     단일 정답 문항으로 malformed(현 게이트의 구멍: unique 프로브가 실근 0으로 unverifiable을
+#     돌려 강등 안 됨 → verified로 통과). 이 축이 그 구멍을 닫는다.
+#   - 해 없음(예 `x+1=x+2`의 상수 잔차·실근 없는 다항)은 malformed이며, 기존엔 Tier1 fail로만
+#     *우연히* 걸려 사유가 모호했다 — 여기서 명시 사유로 승격.
+SolvabilityClass = Literal["no_solution", "identity", "unique", "multiple", "undecidable"]
+
+
+class SolvabilityVerdict(BaseModel):
+    """`classify_solvability`의 결과 — 방정식의 해 존재/유일 5분류 + 사유·서로 다른 실근 수.
+
+    `state`는 방정식 *자체*의 성질이다(주장 답과 무관): no_solution(해 없음)·identity(무한해·
+    항등식)·unique(서로 다른 실근 1개)·multiple(≥2)·undecidable(단일변수 다항 등식 밖·판정 회피).
+    정직성(verify_answer 상속): 비다항·다변수·파싱 불가는 `undecidable`로 보수 처리한다 —
+    sympy.solve의 빈 결과를 "해 없음"으로 *오판하지 않는다*(다항에서만 존재성을 단정).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    state: SolvabilityClass = Field(description="해 존재/유일 5분류(방정식 자체 성질·답 무관).")
+    reason: str | None = Field(
+        default=None, description="분류 사유(한국어·undecidable/특이 케이스)."
+    )
+    n_distinct_real_roots: int = Field(
+        default=0, description="서로 다른 실근 수(unique=1·multiple≥2·그 외 0)."
+    )
+
+
+def classify_solvability(
+    conditions: str | Sequence[str],
+    *,
+    tol: float = 1e-9,
+) -> SolvabilityVerdict:
+    """단일변수 (실계수) 방정식의 해 존재/유일을 5분류 — 답 이전에 방정식이 성립 문제인지 판정.
+
+    실수해 스코프(K-12·수능 실답 전제): 실근을 기준으로 unique/multiple/no_solution을 가른다.
+    보수성(핵심): **다항식일 때만** sympy 근을 신뢰해 존재성을 단정하고, 비다항·다변수·파싱 불가는
+    `undecidable`로 회피한다 — sympy.solve가 "못 푼" 빈 결과를 "해 없음"으로 오판해 정상 문항을
+    거짓 거부하지 않기 위함. 판정:
+      - **identity**(무한해): lhs-rhs가 항등적 0(예 `2*(x+1)=2*x+2`) — 모든 값이 해.
+      - **no_solution**: lhs-rhs가 0 아닌 상수(예 `x+1=x+2`) 또는 다항인데 실근이 하나도 없음.
+      - **unique**: 서로 다른 실근 1개(중근은 1개로 접음).
+      - **multiple**: 서로 다른 실근 ≥2개.
+      - **undecidable**: 단일변수 다항 등식이 아님(연립·부등식·다변수·비다항·파싱 불가)·안전 회피.
+    """
+    # 단일 등식만 — 연립/빈 조건은 존재성 의미가 불명확(보수적 회피).
+    if isinstance(conditions, str):
+        condition: str | None = conditions
+    else:
+        condition_list = list(conditions)
+        condition = condition_list[0] if len(condition_list) == 1 else None
+    if condition is None:
+        return SolvabilityVerdict(state="undecidable", reason="단일 등식이 아님(연립/빈 조건)")
+
+    try:
+        residual, op = _parse_condition(condition)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 undecidable
+        return SolvabilityVerdict(state="undecidable", reason="조건 파싱 불가")
+    if op != "==":
+        return SolvabilityVerdict(state="undecidable", reason="등식이 아님(부등식/≠)")
+
+    # 항등식·상수 잔차 판정 — simplify가 자유변수를 다 지우면 상수(답 무관 결론).
+    try:
+        simplified = sympy.simplify(residual)
+    except Exception:  # noqa: BLE001 — 단순화 실패는 보수적 undecidable
+        return SolvabilityVerdict(state="undecidable", reason="잔차 단순화 불가")
+    if not simplified.free_symbols:
+        if simplified == 0:
+            return SolvabilityVerdict(
+                state="identity", reason="lhs-rhs가 항등적 0 — 모든 값이 해(무한해)"
+            )
+        return SolvabilityVerdict(
+            state="no_solution", reason=f"lhs-rhs가 0 아닌 상수 {simplified} — 해 없음"
+        )
+
+    free = sorted(residual.free_symbols, key=str)
+    if len(free) != 1:
+        return SolvabilityVerdict(
+            state="undecidable", reason="단일 변수 방정식이 아님(다변수/파라미터)"
+        )
+    var = free[0]
+
+    # 다항일 때만 근 존재성을 신뢰(sympy 완전). 비다항은 solve 빈결과 오판 회피 → undecidable.
+    try:
+        sympy.Poly(residual, var)
+    except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
+        return SolvabilityVerdict(state="undecidable", reason="다항식이 아님 — 존재성 단정 회피")
+
+    try:
+        raw_roots = sympy.solve(sympy.Eq(residual, 0), var)
+    except Exception:  # noqa: BLE001 — 풀이 불가는 보수적 undecidable
+        return SolvabilityVerdict(state="undecidable", reason="방정식 풀이 불가")
+
+    real_roots = [rv for r in raw_roots if (rv := _real_value(r, tol)) is not None]
+    distinct = _distinct_values(real_roots, tol)
+    n = len(distinct)
+    if n == 0:
+        return SolvabilityVerdict(
+            state="no_solution", reason="다항이나 실근이 하나도 없음(복소근만)"
+        )
+    if n == 1:
+        return SolvabilityVerdict(state="unique", reason=None, n_distinct_real_roots=1)
+    return SolvabilityVerdict(
+        state="multiple",
+        reason=f"서로 다른 실근 {n}개 — 답이 유일하게 확정되려면 근 선택 필요",
+        n_distinct_real_roots=n,
     )

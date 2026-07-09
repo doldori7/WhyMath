@@ -43,6 +43,7 @@ from whymath_backend.l3.pregenerate.validator import (
     validate_response,
 )
 from whymath_backend.l3.verify_answer import (
+    classify_solvability,
     verify_answer,
     verify_root_aggregate,
     verify_root_selection,
@@ -222,7 +223,11 @@ def _evaluate_verification(
     answer_aggregate: str | None = None,
     claimed_answer: str | None = None,
 ) -> tuple[Literal["verified", "failed", "unverified"], list[str]]:
-    """정확성 게이트 — Tier1(답 검산) + (있으면) Tier2(단계 동치) + 근 선택(S2-i) 결합.
+    """정확성 게이트 — 존재성/유일성 + Tier1(답 검산) + (있으면) Tier2(단계 동치) + 근 선택(S2-i).
+
+    존재성/유일성 축(문항 품질 ②③·`classify_solvability`): 답 검산 이전에 방정식 *자체*가 성립
+    문제인지 본다 — 항등식(무한해)·해 없음이면 어떤 답을 줘도 malformed이라 **failed**(명시 사유).
+    이 축이 없으면 항등식이 Tier1 pass + unique 프로브 unverifiable로 verified 통과하는 구멍이 있다.
 
     Tier1/Tier2 결합 규칙(whs/verdict §4 미러·l3→whs 역참조 회피):
       - **failed**: Tier1 fail *또는* 단계 has_incorrect=True(틀린 과정은 답 무관 차단).
@@ -256,6 +261,18 @@ def _evaluate_verification(
             return "failed", reasons
         reasons.append(f"정확성 미검증 — 근 {answer_aggregate} 확인 불가: {agg.reason}")
         return "unverified", reasons
+
+    # ★ 존재성·유일성 축(문항 품질 ②③·Kiki #1) — 답과 무관하게 방정식 *자체*가 성립 문제인가.
+    #    항등식(무한해)·해 없음은 어떤 답을 줘도 단일 정답 문항으로 malformed → 즉시 failed(명시
+    #    사유). 다근(선택 미declared)은 아래 근 선택 강등이 이어받고, unique/undecidable은 통과해
+    #    기존 Tier1/Tier2 경로가 판정한다(회귀 0 — 정상 문항은 unique/multiple/undecidable뿐).
+    solv = classify_solvability(conditions)
+    if solv.state == "identity":
+        reasons.append(f"정확성 실패 — 무한해(항등식): {solv.reason}")
+        return "failed", reasons
+    if solv.state == "no_solution":
+        reasons.append(f"정확성 실패 — 해 없음: {solv.reason}")
+        return "failed", reasons
 
     answer_verdict = verify_answer(conditions, answer_map)
     tier1 = answer_verdict.state
