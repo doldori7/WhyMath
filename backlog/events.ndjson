@@ -1,1 +1,4 @@
 {"ts": "2026-07-08T16:04:02", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "seed", "id": "backlog", "tasks": 25, "gates": 6, "tracks": 3}
+{"ts": "2026-07-09T00:59:15", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "start", "id": "ARCH-01-playbook-audit", "session": "claude/app-build-harness-replace-4z7ksj"}
+{"ts": "2026-07-09T01:01:19", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "add", "id": "ARCH-10-client-mathlogic-gate"}
+{"ts": "2026-07-09T01:01:19", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "add", "id": "ARCH-11-subgraph-depth-guard"}
