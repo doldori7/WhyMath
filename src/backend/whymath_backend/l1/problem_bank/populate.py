@@ -134,6 +134,8 @@ class ProblemVerifyMeta:
     answer_selection: str | None = None
     answer_aggregate: str | None = None
     """S2 킬러 — 근 집계 검증 종류(sum/product). 답이 근이 아니라 근들의 합/곱인 킬러 문항."""
+    answer_kind: str | None = None
+    """개념형 — 개수 검증 종류(real_root_count/extremum_count). 답이 값이 아니라 개수인 문항."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -263,12 +265,15 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
     selection = sel_raw if sel_raw in ("largest", "smallest", "unique") else None
     agg_raw = verify_raw.get("answer_aggregate")
     aggregate = agg_raw if agg_raw in ("sum", "product") else None
+    kind_raw = verify_raw.get("answer_kind")
+    kind = kind_raw if kind_raw in ("real_root_count", "extremum_count") else None
     return ProblemVerifyMeta(
         conditions=conditions,
         answer_map=answer_map,
         solution_steps=steps,
         answer_selection=selection,
         answer_aggregate=aggregate,
+        answer_kind=kind,
     )
 
 

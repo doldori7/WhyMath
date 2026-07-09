@@ -26,6 +26,8 @@ from pathlib import Path
 from whymath_backend.l3.equivalent.counterexample_fuzz import fuzz_answer
 from whymath_backend.l3.verify_answer import (
     verify_answer,
+    verify_extremum_count,
+    verify_real_root_count,
     verify_root_aggregate,
     verify_root_selection,
 )
@@ -90,6 +92,20 @@ def _reverify_one(record: dict[str, object], *, use_fuzz: bool) -> tuple[str, st
         if agg.state == "pass":
             return "pass", None
         return "skip", f"근 집계 unverifiable: {agg.reason}"
+
+    # 개념형 개수 문항 — 답이 값이 아니라 개수(실근 개수·극값 개수)라 SymPy 독립 계산으로 재검증.
+    kind = verify.get("answer_kind")
+    if kind in ("real_root_count", "extremum_count"):
+        claimed = record.get("answer")
+        if not isinstance(claimed, str):
+            return "skip", "개수 문항인데 answer 없음"
+        verifier = verify_real_root_count if kind == "real_root_count" else verify_extremum_count
+        cnt = verifier(conditions, claimed)
+        if cnt.state == "fail":
+            return "fail", f"{kind} 불일치: {cnt.reason}"
+        if cnt.state == "pass":
+            return "pass", None
+        return "skip", f"{kind} unverifiable: {cnt.reason}"
 
     # Tier1 답 검산.
     tier1 = verify_answer(conditions, amap)

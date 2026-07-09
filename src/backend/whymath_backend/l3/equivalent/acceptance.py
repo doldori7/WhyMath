@@ -45,6 +45,8 @@ from whymath_backend.l3.pregenerate.validator import (
 from whymath_backend.l3.verify_answer import (
     classify_solvability,
     verify_answer,
+    verify_extremum_count,
+    verify_real_root_count,
     verify_root_aggregate,
     verify_root_selection,
 )
@@ -222,6 +224,7 @@ def _evaluate_verification(
     answer_selection: str | None,
     answer_aggregate: str | None = None,
     claimed_answer: str | None = None,
+    answer_kind: str | None = None,
 ) -> tuple[Literal["verified", "failed", "unverified"], list[str]]:
     """정확성 게이트 — 존재성/유일성 + Tier1(답 검산) + (있으면) Tier2(단계 동치) + 근 선택(S2-i).
 
@@ -260,6 +263,24 @@ def _evaluate_verification(
             reasons.append(f"정확성 실패 — 근 {answer_aggregate} 불일치: {agg.reason}")
             return "failed", reasons
         reasons.append(f"정확성 미검증 — 근 {answer_aggregate} 확인 불가: {agg.reason}")
+        return "unverified", reasons
+
+    # ★ 개념형 개수 문항 — 답이 값이 아니라 *개수*(실근 개수·극값 개수)라 SymPy로 독립 계산해
+    #    검증한다. 오개념의 틀린 개수(판별식 무시·임계점=극값)는 여기서 failed로 걸린다.
+    if answer_kind in ("real_root_count", "extremum_count"):
+        if claimed_answer is None:
+            reasons.append("정확성 미검증 — 개수 문항인데 주장값(answer) 없음.")
+            return "unverified", reasons
+        verifier = (
+            verify_real_root_count if answer_kind == "real_root_count" else verify_extremum_count
+        )
+        cnt = verifier(conditions, claimed_answer)
+        if cnt.state == "pass":
+            return "verified", reasons
+        if cnt.state == "fail":
+            reasons.append(f"정확성 실패 — {answer_kind} 불일치: {cnt.reason}")
+            return "failed", reasons
+        reasons.append(f"정확성 미검증 — {answer_kind} 확인 불가: {cnt.reason}")
         return "unverified", reasons
 
     # ★ 존재성·유일성 축(문항 품질 ②③·Kiki #1) — 답과 무관하게 방정식 *자체*가 성립 문제인가.
@@ -420,6 +441,7 @@ def evaluate_equivalent_candidate(
     solution_step_types: Sequence[StepType | None] | None = None,
     answer_selection: str | None = None,
     answer_aggregate: str | None = None,
+    answer_kind: str | None = None,
     validator: SeedValidator | None = None,
     tag_auditor: TagAuditor | None = None,
     difficulty_tol: float = 0.5,
@@ -463,6 +485,7 @@ def evaluate_equivalent_candidate(
         answer_selection,
         answer_aggregate,
         candidate.answer,
+        answer_kind,
     )
     reasons.extend(verification_reasons)
 

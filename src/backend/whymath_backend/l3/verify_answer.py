@@ -65,6 +65,8 @@ __all__ = [
     "classify_solvability",
     "derive_selected_root",
     "verify_answer",
+    "verify_extremum_count",
+    "verify_real_root_count",
     "verify_root_aggregate",
     "verify_root_selection",
 ]
@@ -870,4 +872,135 @@ def classify_solvability(
         state="multiple",
         reason=f"서로 다른 실근 {n}개 — 답이 유일하게 확정되려면 근 선택 필요",
         n_distinct_real_roots=n,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 개념형(개수/존재) 검증 — 답이 값이 아니라 *개수*(실근 개수·극값 개수)인 문항.
+# ──────────────────────────────────────────────────────────────────────────
+# 정본: 문항 품질 15축 개념형 확장. 수치평가(x=<닫힌형>)의 약한 잔차와 달리, 개수는 SymPy로
+# *독립 계산*해 주장값과 대조하므로 오개념의 틀린 개수는 fail한다(진짜 개념 검증). 판별식을 무시해
+# "이차방정식은 늘 두 실근"으로 오인(discriminant-negative-no-real-root)·임계점(f'=0)을 곧 극값으로
+# 오인(critical-point-implies-extremum)하는 오개념을 정확히 겨눈다.
+
+
+def _single_condition(conditions: str | Sequence[str]) -> str | None:
+    """단일 등식/식만 허용 — 연립·빈 조건은 None(개념형 개수 검증의 공통 전제)."""
+    if isinstance(conditions, str):
+        return conditions
+    condition_list = list(conditions)
+    return condition_list[0] if len(condition_list) == 1 else None
+
+
+def _claimed_int(claimed: str, tol: float) -> int | None:
+    """주장 개수를 정수로 — 실수로 평가해 정수 근방이면 그 정수, 아니면 None(개수 아님)."""
+    value = _real_value(sympy.sympify(claimed, convert_xor=True), tol) if claimed else None
+    if value is None:
+        return None
+    rounded = round(value)
+    return rounded if abs(value - rounded) < 1e-6 and rounded >= 0 else None
+
+
+def verify_real_root_count(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """답이 단일변수 다항식 방정식의 *서로 다른 실근 개수*와 일치하는지 검증(개념형).
+
+    "이차방정식 …의 서로 다른 실근의 개수"류 문항의 답은 근이 아니라 *개수*라 verify_answer로는
+    검증 못 한다. 이 함수가 다항식의 실근을 중복도까지 구해(`sympy.roots`) 서로 다른 실근 수를
+    세고 주장 개수와 대조한다. 판별식 무시("늘 2근") 오개념은 실근 0/1을 2로 답해 fail한다.
+      - pass: 실제 서로 다른 실근 수 == 주장 개수.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 다항 등식 아님·근을 다 못 구함·주장이 개수 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("실근 개수 — 단일 등식이 아님·안전 회피")
+    try:
+        residual, op = _parse_condition(condition)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("실근 개수 — 조건 파싱 불가·안전 회피")
+    if op != "==":
+        return _unverifiable("실근 개수 — 등식이 아님·안전 회피")
+    free = sorted(residual.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("실근 개수 — 단일 변수 방정식이 아님·안전 회피")
+    var = free[0]
+    try:
+        poly = sympy.Poly(residual, var)
+        root_mult = sympy.roots(poly)
+    except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
+        return _unverifiable("실근 개수 — 다항식이 아님·안전 회피")
+    except Exception:  # noqa: BLE001 — 근 계산 불가는 보수적 unverifiable
+        return _unverifiable("실근 개수 — 근 계산 불가·안전 회피")
+    if sum(root_mult.values()) != poly.degree():
+        return _unverifiable("실근 개수 — 근을 중복도까지 다 못 구함·안전 회피")
+
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n is None:
+        return _unverifiable("실근 개수 — 주장값이 개수(비음 정수)가 아님·안전 회피")
+    real = [rv for r in root_mult if (rv := _real_value(r, tol)) is not None]
+    actual = len(_distinct_values(real, tol))
+    if actual == claimed_n:
+        return _pass(samples_checked=actual)
+    return _fail(
+        f"실근 개수 — 실제 {actual}개이나 주장은 {claimed_n}개(불일치)", samples_checked=actual
+    )
+
+
+def verify_extremum_count(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """답이 다항함수 f(x)의 *극값 개수*와 일치하는지 검증(개념형).
+
+    극값 개수 = f'의 실근 중 *부호가 바뀌는*(중복도 홀수) 근 수다. f'=0이나 부호 불변(예 x³의
+    f'=3x²)이면 임계점은 있으나 극값은 없다 — "임계점=극값" 오개념은 임계점 수를 극값 수로 답해
+    fail한다. `conditions`는 f(x) *식*(등식 아님·예 "x**3 - 3*x").
+      - pass: 실제 극값 수 == 주장 개수.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 다항식 아님·f' 근을 다 못 구함·주장이 개수 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("극값 개수 — 단일 식이 아님·안전 회피")
+    try:
+        expr = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("극값 개수 — 식 파싱 불가·안전 회피")
+    if isinstance(expr, sympy.core.relational.Relational):
+        return _unverifiable("극값 개수 — 함수 식이어야 함(등식/부등식 아님)·안전 회피")
+    free = sorted(expr.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("극값 개수 — 단일 변수 함수가 아님·안전 회피")
+    var = free[0]
+    try:
+        fprime = sympy.diff(expr, var)
+        poly = sympy.Poly(fprime, var)
+        root_mult = sympy.roots(poly)
+    except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
+        return _unverifiable("극값 개수 — 도함수가 다항식이 아님·안전 회피")
+    except Exception:  # noqa: BLE001 — 근 계산 불가는 보수적 unverifiable
+        return _unverifiable("극값 개수 — 도함수 근 계산 불가·안전 회피")
+    if sum(root_mult.values()) != poly.degree():
+        return _unverifiable("극값 개수 — 도함수 근을 중복도까지 다 못 구함·안전 회피")
+
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n is None:
+        return _unverifiable("극값 개수 — 주장값이 개수(비음 정수)가 아님·안전 회피")
+    # 극값 = 실근 중 중복도 홀수(부호 변화). 짝수 중복도(예 x³의 f'=3x²)는 극값 아님.
+    actual = sum(
+        1
+        for root, mult in root_mult.items()
+        if _real_value(root, tol) is not None and mult % 2 == 1
+    )
+    if actual == claimed_n:
+        return _pass(samples_checked=actual)
+    return _fail(
+        f"극값 개수 — 실제 {actual}개이나 주장은 {claimed_n}개(불일치)", samples_checked=actual
     )

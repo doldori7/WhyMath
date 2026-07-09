@@ -76,6 +76,14 @@ class CandidateProblem(BaseModel):
             "근들의 합/곱인 킬러 문항). None=일반(답이 근)."
         ),
     )
+    answer_kind: str | None = Field(
+        default=None,
+        description=(
+            '(선택·개념형) 개수 검증 종류 — "real_root_count"(실근 개수)/"extremum_count"(극값 '
+            "개수). 설정 시 게이트가 answer(주장 개수)를 SymPy로 독립 계산해 검증한다(답이 값이 "
+            "아니라 개수인 개념형 문항). None=일반."
+        ),
+    )
     solution_steps: list[str] | None = Field(
         default=None,
         description="(선택) 분해된 풀이 단계 — 게이트 정확성 Tier2(단계 동치) 재료. None=미제공.",
