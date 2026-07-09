@@ -88,3 +88,34 @@ def test_cli_multiple_paths(tmp_path: Path) -> None:
     dirty.write_text(json.dumps(_WRONG_ANSWER, ensure_ascii=False) + "\n", encoding="utf-8")
     # 하나라도 실패면 전체 exit 1.
     assert cr.main([str(clean), str(dirty)]) == 1
+
+
+# ── 근 집계(합/곱) 문항 재검증 ─────────────────────────────────────────────
+_AGG_OK = {
+    "slug": "agg-ok",
+    "answer": "10",
+    "verify": {
+        "conditions": "x**3 - 9*x - 10 = 0",
+        "answer_map": {},
+        "answer_aggregate": "product",
+    },
+}
+_AGG_BAD = {
+    "slug": "agg-bad",
+    "answer": "11",
+    "verify": {
+        "conditions": "x**3 - 9*x - 10 = 0",
+        "answer_map": {},
+        "answer_aggregate": "product",
+    },
+}
+
+
+def test_aggregate_pass() -> None:
+    report = cr.reverify_corpus([_AGG_OK], use_fuzz=False)
+    assert report.passed == 1 and report.failed == 0
+
+
+def test_aggregate_wrong_fails() -> None:
+    report = cr.reverify_corpus([_AGG_BAD], use_fuzz=False)
+    assert report.failed == 1

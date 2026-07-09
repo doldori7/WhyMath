@@ -24,7 +24,11 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from whymath_backend.l3.equivalent.counterexample_fuzz import fuzz_answer
-from whymath_backend.l3.verify_answer import verify_answer, verify_root_selection
+from whymath_backend.l3.verify_answer import (
+    verify_answer,
+    verify_root_aggregate,
+    verify_root_selection,
+)
 
 _EXIT_OK = 0
 _EXIT_FAIL = 1
@@ -73,6 +77,19 @@ def _reverify_one(record: dict[str, object], *, use_fuzz: bool) -> tuple[str, st
     if not isinstance(conditions, str) or not isinstance(answer_map, dict):
         return "skip", "conditions/answer_map 형식 부적합"
     amap = {str(k): str(v) for k, v in answer_map.items()}
+
+    # 근 집계(합/곱) 문항 — 답이 근이 아니라 근들의 집계값(Vieta)이라 Tier1(답이 근) 부적합.
+    aggregate = verify.get("answer_aggregate")
+    if aggregate in ("sum", "product"):
+        claimed = record.get("answer")
+        if not isinstance(claimed, str):
+            return "skip", "근 집계 문항인데 answer 없음"
+        agg = verify_root_aggregate(conditions, claimed, aggregate)
+        if agg.state == "fail":
+            return "fail", f"근 {aggregate} 불일치: {agg.reason}"
+        if agg.state == "pass":
+            return "pass", None
+        return "skip", f"근 집계 unverifiable: {agg.reason}"
 
     # Tier1 답 검산.
     tier1 = verify_answer(conditions, amap)
