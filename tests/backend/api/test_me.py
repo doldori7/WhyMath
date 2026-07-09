@@ -40,7 +40,7 @@ from whymath_backend.schema.assessment import (
 )
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
-from whymath_backend.schema.enums import AuditResourceType, Persona
+from whymath_backend.schema.enums import AuditResourceType, Persona, Resolution
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 _UID = uuid.uuid4()
@@ -549,12 +549,18 @@ class TestDeleteSession:
 class TestDialogueLifecycle:
     """slice 52: Dialogue end + delete — slice 50/51 패턴 답습 invariant 3회차."""
 
-    def _dialogue_row(self, owner: uuid.UUID, ended: bool = False) -> Dialogue:
+    def _dialogue_row(
+        self,
+        owner: uuid.UUID,
+        ended: bool = False,
+        resolution: Resolution | None = None,
+    ) -> Dialogue:
         did = uuid.uuid4()
         schema = DialogueSchema(
             dialogue_id=did,
             user_id=owner,
             ended_at=datetime.now(UTC) if ended else None,
+            resolution=resolution,
         )
         return Dialogue.from_schema(schema)
 
@@ -565,6 +571,48 @@ class TestDialogueLifecycle:
         resp = client.patch(f"/v1/me/dialogues/{row.dialogue_id}/end")
         assert resp.status_code == 200
         assert resp.json()["ended_at"] is not None
+        assert resp.json()["resolution"] is None  # 본문 미제공 → resolution 미설정(하위호환)
+        assert fake.commits == 1
+
+    # ── PATCH end + resolution(클라이언트 보고·⑪ self_solve_rate 원천) ──
+    def test_end_with_resolution_persists(self) -> None:
+        """본문 resolution 제공 → ended_at과 같은 트랜잭션에 적재·commit 1회."""
+        row = self._dialogue_row(_UID, ended=False)
+        client, fake = _client([], get_map={row.dialogue_id: row})
+        resp = client.patch(
+            f"/v1/me/dialogues/{row.dialogue_id}/end",
+            json={"resolution": Resolution.학생자력해결.value},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["ended_at"] is not None
+        assert resp.json()["resolution"] == Resolution.학생자력해결.value
+        assert row.resolution == Resolution.학생자력해결
+        assert fake.commits == 1
+
+    def test_end_resolution_first_write_wins(self) -> None:
+        """이미 resolution 있으면 보존(낙인 방지)·이미 ended면 commit 0(완전 idempotent)."""
+        row = self._dialogue_row(_UID, ended=True, resolution=Resolution.학생자력해결)
+        client, fake = _client([], get_map={row.dialogue_id: row})
+        resp = client.patch(
+            f"/v1/me/dialogues/{row.dialogue_id}/end",
+            json={"resolution": Resolution.포기.value},  # 다른 값 시도 → 무시(보존)
+        )
+        assert resp.status_code == 200
+        assert row.resolution == Resolution.학생자력해결  # 첫 기록 보존
+        assert fake.commits == 0
+
+    def test_end_resolution_on_already_ended(self) -> None:
+        """이미 ended지만 resolution 미설정이면 첫 보고를 적재(종료 먼저·결말 나중)·commit 1."""
+        row = self._dialogue_row(_UID, ended=True, resolution=None)
+        original_ended = row.ended_at
+        client, fake = _client([], get_map={row.dialogue_id: row})
+        resp = client.patch(
+            f"/v1/me/dialogues/{row.dialogue_id}/end",
+            json={"resolution": Resolution.힌트필요.value},
+        )
+        assert resp.status_code == 200
+        assert row.ended_at == original_ended  # ended_at 보존
+        assert row.resolution == Resolution.힌트필요
         assert fake.commits == 1
 
     def test_end_idempotent_already_ended(self) -> None:
