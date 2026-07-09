@@ -2,7 +2,9 @@
 
 > **목적**: S1 탈출 게이트 ①(`G-kiki-device-demo` — "실기기(패드)에서 1루프 15분 완주 시연 녹화")을
 > Kiki가 그대로 따라 하며 촬영할 수 있게, 녹화 전 하드 블로커 3종(인증·API_URL·LLM 키)을 원커맨드로
-> 해소하는 인에이블먼트 킷 사용법이다. 이 문서는 **Phaiakes9(리눅스·라이브 Ollama)** 호스트 기준.
+> 해소하는 인에이블먼트 킷 사용법이다. 호스트 OS별로 **Windows(PowerShell)** 경로(§A)와
+> **리눅스/WSL**(bash) 경로(§B)를 모두 제공한다. Kiki의 Phaiakes9(라이젠 AI Max+ 395)가
+> Windows면 §A를 따르면 된다.
 >
 > **경계**: 이 킷은 녹화를 *turnkey*로 만들 뿐 **게이트를 clear하지 않는다** — 게이트는 Kiki가 실기기
 > 15분 루프를 *녹화*할 때까지 PENDING이다. 대본은 `docs/architecture/s1_e2e_demo_script.md`.
@@ -23,7 +25,76 @@
 
 ---
 
-## ⓪ 사전 확인 (Phaiakes9에서, 1분)
+# §A. Windows(PowerShell) 경로 — 이 PC가 Phaiakes9인 경우 (권장)
+
+## A-0. 전제 (한 번 확인)
+
+```powershell
+docker version                              # Docker Desktop 실행 중이어야 함(고래 아이콘)
+Invoke-RestMethod http://localhost:11434/api/tags   # Ollama for Windows 가동 → 코치 라이브(없어도 루프 완주)
+pip install uv                              # uv 없으면(conda base에서 1회)
+```
+> `docker`가 PowerShell에서 안 되면 Docker Desktop이 꺼졌거나 WSL 전용 상태 — **PowerShell(네이티브)** 에서 실행하세요.
+
+## A-1. 브랜치 + 백엔드 venv (최초 1회, 리포 루트에서)
+
+```powershell
+git fetch origin claude/g-kiki-device-demo-fv831n
+git checkout claude/g-kiki-device-demo-fv831n
+
+cd src\backend
+uv venv --python 3.12 .venv
+.\.venv\Scripts\Activate.ps1        # ← 리눅스 'source .venv/bin/activate' 대응(Scripts, bin 아님)
+uv pip install -e ".[dev]"
+cd ..\..
+```
+> `Activate.ps1`에서 "스크립트를 실행할 수 없습니다" 오류 → 먼저 `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도.
+
+## A-2. 원커맨드 기동 (리포 루트에서)
+
+```powershell
+.\scripts\demo\run_demo.ps1
+```
+- 자동으로: PG(pgvector) → alembic → 문제 시드 → uvicorn(`0.0.0.0:8000`·백그라운드) → 데모 토큰 발급 →
+  LAN IP·LLM 모드 + **패드에서 칠 `flutter run …` 명령** 출력. (venv는 스크립트가 자동 결선하지만 A-1 설치는 필수.)
+- **처음 실행 시 Windows 방화벽 팝업**이 뜨면 Python에 **개인 네트워크 허용**(패드가 8000 포트로 붙게).
+- 출력된 `flutter run …` 명령을 복사. 이 창은 서버가 백그라운드로 도는 동안 그대로 둡니다.
+
+## A-3. 패드에서 앱 실행
+
+패드를 이 PC와 **같은 WiFi**에 두고 연결한 뒤 `src\mobile`에서:
+```powershell
+cd src\mobile
+flutter pub get
+dart run build_runner build --delete-conflicting-outputs   # ⚠️ 필수 — .g.dart 생성(안 하면 컴파일 실패)
+# A-2에서 복사한 명령 그대로:
+flutter run --dart-define=API_URL=http://<이 PC LAN IP>:8000 --dart-define=DEMO_TOKEN=<토큰>
+```
+
+## A-4. 녹화 → 정리 → 게이트 clear
+
+- **④ 15분 루프 녹화**: 아래 §공통 "15분 루프 녹화" 표를 따른다(OS 무관).
+- **정리·게이트 clear**:
+```powershell
+.\scripts\demo\stop_demo.ps1
+python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence <녹화 링크>
+```
+
+## A-*. Windows 함정
+
+| 증상 | 원인·해결 |
+|---|---|
+| `uv`/`alembic`/`uvicorn` not found | venv 미설치(A-1) 또는 스크립트가 venv를 못 찾음(`src\backend\.venv\Scripts`). |
+| `docker` not found | Docker Desktop 미실행 or WSL 전용. **PowerShell**에서 실행. |
+| `Activate.ps1` 차단 | `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도. |
+| 패드에서 서버 못 붙음 | 첫 실행 방화벽 팝업에서 **개인 네트워크 허용**·API_URL이 이 PC Wi-Fi LAN IP인지 확인(`ipconfig`). |
+| 코치 발문이 밋밋 | Ollama for Windows 미가동. Ollama 앱 실행/`ollama serve` 후 재시도(`/status`가 라이브로 바뀜). |
+
+---
+
+# §B. 리눅스/WSL 경로 (bash)
+
+## ⓪ 사전 확인 (호스트에서, 1분)
 
 ```bash
 # (a) 라이브 Ollama 살아있나 — 코치 발문 품질의 전제(없어도 루프는 결정론으로 완주)
