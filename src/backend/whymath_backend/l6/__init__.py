@@ -70,9 +70,12 @@ from whymath_backend.l6.school_progress import (
     select_school_progress_items,
 )
 from whymath_backend.l6.suneung import (
+    SUNEUNG_EXAM_TYPES,
     SUNEUNG_PERSONAS,
     is_suneung_eligible,
+    recommend_suneung_index,
     select_suneung_items,
+    suneung_item_weight,
     suneung_priority,
 )
 from whymath_backend.l6.thinking import (
@@ -88,6 +91,7 @@ __all__ = [
     "METACOGNITION_SCORING_TYPES",
     "RETAKE_PERSONAS",
     "SCHOOL_PROGRESS_PERSONAS",
+    "SUNEUNG_EXAM_TYPES",
     "SUNEUNG_PERSONAS",
     "THINKING_BLOOM_LEVELS",
     "gifted_priority",
@@ -98,6 +102,7 @@ __all__ = [
     "is_suneung_eligible",
     "is_thinking_eligible",
     "metacognition_priority",
+    "recommend_suneung_index",
     "retake_priority",
     "school_progress_priority",
     "select_gifted_items",
@@ -106,6 +111,7 @@ __all__ = [
     "select_school_progress_items",
     "select_suneung_items",
     "select_thinking_items",
+    "suneung_item_weight",
     "suneung_priority",
     "thinking_priority",
 ]

@@ -40,7 +40,16 @@ from whymath_backend.schema.assessment import (
 )
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
-from whymath_backend.schema.enums import AuditResourceType, Persona
+from whymath_backend.schema.enums import (
+    AuditResourceType,
+    Curriculum,
+    ExamType,
+    Persona,
+    SignaturePattern,
+    SourceType,
+    Subject,
+)
+from whymath_backend.schema.problem import Problem as SchemaProblem
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
 _UID = uuid.uuid4()
@@ -1460,6 +1469,140 @@ class TestNextProblem:
         client = _attempts_client(session)
         body = client.get("/v1/me/next-problem?prioritize_weak_concepts=true").json()
         assert body["problem_id"] is None
+
+
+# ── S2-06: GET /v1/me/next-problem?mode=suneung (수능 적응 추천 — L6 게이팅 × IRT CAT) ──
+def _suneung_problem(**over: object) -> SchemaProblem:
+    """수능 모드 후보용 최소 자체생성 schema Problem 빌더(l6 test_gating `_problem` 답습)."""
+    kwargs: dict[str, object] = {
+        "source_type": SourceType.자체생성,
+        "curriculum_version": Curriculum.REVISION_2022,
+        "valid_from_year": 2022,
+        "subject": Subject.미적분,
+        "unit_codes": ["CAL-INT-DEF"],
+        "difficulty_overall": 3.0,
+    }
+    kwargs.update(over)
+    return SchemaProblem(**kwargs)  # type: ignore[arg-type]
+
+
+class _OrmProblemRow:
+    """`select(Problem)` ORM 행 시뮬 — 핸들러는 `.to_schema()`만 호출한다(hermetic)."""
+
+    def __init__(self, problem: SchemaProblem) -> None:
+        self._problem = problem
+
+    def to_schema(self) -> SchemaProblem:
+        return self._problem
+
+
+class TestNextProblemSuneungMode:
+    """S2-06: ?mode=suneung — 수능 게이팅(진실 게이트) × IRT CAT 결합 분기.
+
+    _QueueSession 큐: ①채점 이력 ②수능 후보(ORM 행 — scalars().all()이 그대로 반환되어
+    `.to_schema()`만 요구). prioritize_weak_concepts=true면 ③숙달 스냅샷 ④개념 매핑 추가.
+    SQL 사전필터(저작권·수능 신호·θ 근방)는 stmt 무시(FakeSession)라 여기선 *진실 게이트*
+    (recommend_suneung_index 내부 is_suneung_eligible)의 최종 판정만 검증된다 — 사전필터가
+    못 거른 행도 게이트가 차단함을 그대로 보여준다(설계 계약).
+    """
+
+    def test_recommends_signature_item_same_response_schema(self) -> None:
+        """시그니처 보유 자체생성 문항 추천 — 응답 스키마는 기본 CAT과 동일(회귀 0 계약)."""
+        problem = _suneung_problem(
+            signature_patterns=[SignaturePattern.COMPOUND_CHOICES],
+        )
+        session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(problem)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?mode=suneung").json()
+        # 응답 모델(NextProblemResponse) 무변경 — 기본 CAT과 같은 5개 필드.
+        assert set(body) == {
+            "problem_id",
+            "theta",
+            "difficulty",
+            "standard_error",
+            "measurement_sufficient",
+        }
+        assert body["problem_id"] == str(problem.problem_id)
+        assert body["difficulty"] == 3.0
+        assert body["theta"] == 0.0
+
+    def test_no_eligible_candidates_null(self) -> None:
+        """적격 0 → problem_id null(기본 CAT과 동일한 null 응답 계약)."""
+        # 수능 신호 전무(기출 아님·시그니처 없음·적합도 없음) → 진실 게이트에서 탈락.
+        no_signal = _suneung_problem()
+        session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(no_signal)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?mode=suneung").json()
+        assert body == {
+            "problem_id": None,
+            "theta": 0.0,
+            "difficulty": None,
+            "standard_error": None,
+            "measurement_sufficient": False,
+        }
+
+    def test_copyright_blocked_source_null_even_if_sql_leaks(self) -> None:
+        """평가원 출처가 후보에 섞여 들어와도(사전필터 실패 가정) 진실 게이트가 차단 → null.
+
+        수능 모드 핵심 저작권 계약 — 평가원 기출 본문 절대 노출 불가(자체생성 동등문제만).
+        """
+        blocked = _suneung_problem(source_type=SourceType.평가원, exam_type=ExamType.수능)
+        session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(blocked)])])
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?mode=suneung").json()
+        assert body["problem_id"] is None
+
+    def test_persona_d_blocks_all(self) -> None:
+        """persona=D_학종고2(비응시) → 적격 후보가 있어도 전부 차단 → null."""
+        eligible = _suneung_problem(exam_type=ExamType.수능)
+        session = _QueueSession([_AQResult([]), _AQResult([_OrmProblemRow(eligible)])])
+        client = _attempts_client(session)
+        body = client.get(
+            "/v1/me/next-problem", params={"mode": "suneung", "persona": "D_학종고2"}
+        ).json()
+        assert body["problem_id"] is None
+
+    def test_weak_concept_priority_combines(self) -> None:
+        """prioritize_weak_concepts 결합 — 동률 수능 후보 중 약점 개념 문항이 곱 가중으로 선택.
+
+        쿼리 4회: ①채점 이력 ②수능 후보 ③숙달 스냅샷 ④후보 개념 매핑(기본 CAT과 동일 헬퍼).
+        """
+        strong = _suneung_problem(exam_type=ExamType.수능)
+        weak = _suneung_problem(exam_type=ExamType.수능)
+        c_strong, c_weak = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [
+                _AQResult([]),  # 채점 이력 없음 → θ=0
+                _AQResult([_OrmProblemRow(strong), _OrmProblemRow(weak)]),  # 동률 후보
+                _AQResult([(c_strong, 1.0), (c_weak, 0.0)]),  # 숙달: 강·약
+                _AQResult([(strong.problem_id, c_strong), (weak.problem_id, c_weak)]),  # 개념 매핑
+            ]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem?mode=suneung&prioritize_weak_concepts=true").json()
+        # 균등이면 동률→strong(낮은 인덱스)이나, 약점 곱 가중으로 weak 선택.
+        assert body["problem_id"] == str(weak.problem_id)
+
+    def test_mode_unspecified_regression_preserved(self) -> None:
+        """mode 미지정 → 기존 기본 CAT 경로 그대로(튜플 행 후보·동률은 낮은 인덱스·회귀 0)."""
+        pid_a, pid_b = uuid.uuid4(), uuid.uuid4()
+        session = _QueueSession(
+            [_AQResult([]), _AQResult([(pid_a, 3.0, None), (pid_b, 3.0, None)])]
+        )
+        client = _attempts_client(session)
+        body = client.get("/v1/me/next-problem").json()
+        assert body["problem_id"] == str(pid_a)
+
+    def test_requires_auth(self) -> None:
+        """미인증 → 401(기본 CAT과 동일 — 세션 전 인증 게이트)."""
+        app = create_app()
+
+        async def _sess() -> AsyncIterator[_QueueSession]:
+            yield _QueueSession([_AQResult([]), _AQResult([])])
+
+        app.dependency_overrides[get_session] = _sess
+        resp = TestClient(app).get("/v1/me/next-problem?mode=suneung")
+        assert resp.status_code == 401
 
 
 class TestWeakConceptWeights:
