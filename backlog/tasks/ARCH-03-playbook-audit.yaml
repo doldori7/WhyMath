@@ -5,7 +5,7 @@ track: infra-debt
 stage: S2
 subject: cross
 layer: docs
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "arch_audit 보고서 신설 + build_checkpoint 스냅샷 갱신"
   - "2회차 초점 4항목(arch_audit_2026-07-09_r2.md §5) 이행 상태 판정"
   - 위반 발견 시 상환 태스크 backlog add
-artifacts: []
+artifacts:
+  - "커밋 4c25175 (arch_audit_2026-07-09_r3.md — 초점 4항목 판정·S2-07 위반 0·상환 추가 없음)"
 session: null
 notes: "반복 태스크 — done 시 ARCH-04를 add로 재생성"
 updated: 2026-07-09
