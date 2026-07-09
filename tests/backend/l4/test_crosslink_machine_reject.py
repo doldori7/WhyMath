@@ -42,7 +42,9 @@ def _row(kebab: str, mis: str, status: str = "pending") -> dict[str, object]:
 
 class TestMachineRejectCandidates:
     def test_rejects_cross_standard_pending(self) -> None:
-        q = _queue([_row("opposite-root-selected", "M0900")])  # cross-standard·well-evidenced
+        q = _queue(
+            [_row("opposite-root-selected", "M0900")]
+        )  # cross-standard·well-evidenced
         out = machine_reject_candidates(
             queue=q,
             kebab_standards=_KEBAB_STANDARDS,
@@ -50,7 +52,9 @@ class TestMachineRejectCandidates:
             mid_standards=_MID_STANDARDS,
             evidence_floor=20,
         )
-        assert [(r.kebab_id, r.mis_id) for r in out] == [("opposite-root-selected", "M0900")]
+        assert [(r.kebab_id, r.mis_id) for r in out] == [
+            ("opposite-root-selected", "M0900")
+        ]
 
     def test_never_rejects_agreeing_mapping(self) -> None:
         # 성취기준 일치(정답 방향)는 거부 목록에 없음 — 승인은 인간 존치(기계 approve 0).
@@ -85,8 +89,13 @@ class TestCommittedQueueEndToEnd:
         # 미적Ⅰ 미분·도함수 태깅 → 합성함수 부분매핑 M0424가 cross-standard로 자동 거부(곱미분≠합성·
         # 정당). chain-rule/translation은 다표준 태깅이라 후보 모두 agree → 거부 0(거짓거부 회피).
         rejections = run(
-            queue_path=_REPO_ROOT / "docs" / "data" / "misconception_crosslink_review_queue.json",
-            corpora=sorted((_REPO_ROOT / "data" / "corpus").glob("problem_bank_*/problems.jsonl")),
+            queue_path=_REPO_ROOT
+            / "docs"
+            / "data"
+            / "misconception_crosslink_review_queue.json",
+            corpora=sorted(
+                (_REPO_ROOT / "data" / "corpus").glob("problem_bank_*/problems.jsonl")
+            ),
             misconceptions=_REPO_ROOT
             / "data"
             / "corpus"
@@ -102,8 +111,15 @@ class TestCommittedQueueEndToEnd:
             ("product-rule-naive", "M0424"),
         }
         # chain-rule/translation은 다표준 태깅이라 자동 거부 0(거짓거부 회피).
-        assert all(r.kebab_id != "chain-rule-inner-derivative-omitted" for r in rejections)
+        assert all(
+            r.kebab_id != "chain-rule-inner-derivative-omitted" for r in rejections
+        )
         assert all(r.kebab_id != "translation-sign-flip" for r in rejections)
+        # 개념형 개수/판정 2 kebab도 후보 전부 agree 태깅이라 자동 거부 0(거짓거부 회피).
+        assert all(r.kebab_id != "invertibility-without-1-1" for r in rejections)
+        assert all(
+            r.kebab_id != "geometric-series-always-converges" for r in rejections
+        )
         # thin-evidence(root-loss-by-dividing, 1문항)은 제외.
         assert all(r.kebab_id != "root-loss-by-dividing" for r in rejections)
         # 전부 well-evidenced(≥20).
@@ -114,8 +130,11 @@ class TestCommittedQueueEndToEnd:
         import json
 
         q = json.loads(
-            (_REPO_ROOT / "docs" / "data" / "misconception_crosslink_review_queue.json").read_text(
-                encoding="utf-8"
-            )
+            (
+                _REPO_ROOT
+                / "docs"
+                / "data"
+                / "misconception_crosslink_review_queue.json"
+            ).read_text(encoding="utf-8")
         )
         assert all(row["status"] == "pending" for row in q["review_queue"])

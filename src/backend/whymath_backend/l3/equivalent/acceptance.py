@@ -30,7 +30,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
 from typing import Literal
 
@@ -43,9 +43,12 @@ from whymath_backend.l3.pregenerate.validator import (
     validate_response,
 )
 from whymath_backend.l3.verify_answer import (
+    AnswerVerdict,
     classify_solvability,
     verify_answer,
     verify_extremum_count,
+    verify_geometric_convergence,
+    verify_is_one_to_one,
     verify_real_root_count,
     verify_root_aggregate,
     verify_root_selection,
@@ -98,6 +101,15 @@ _ACCEPTED_GENERATION_TYPES: frozenset[GenerationType] = frozenset(
 _ACCEPTED_GENERATION_VALUES: frozenset[str] = frozenset(
     str(g.value) for g in _ACCEPTED_GENERATION_TYPES
 )
+
+# 개념형 검증기 디스패치 — answer_kind → SymPy 독립 검증 프리미티브. 답이 값이 아니라 개수/판정인
+# 문항(실근·극값 개수·일대일·등비급수 수렴)을 게이트가 이 표로 분기해 검증한다(축 확장은 여기 등록).
+_CONCEPTUAL_VERIFIERS: dict[str, Callable[[str | Sequence[str], str], AnswerVerdict]] = {
+    "real_root_count": verify_real_root_count,
+    "extremum_count": verify_extremum_count,
+    "is_one_to_one": verify_is_one_to_one,
+    "geometric_convergence": verify_geometric_convergence,
+}
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -265,16 +277,14 @@ def _evaluate_verification(
         reasons.append(f"정확성 미검증 — 근 {answer_aggregate} 확인 불가: {agg.reason}")
         return "unverified", reasons
 
-    # ★ 개념형 개수 문항 — 답이 값이 아니라 *개수*(실근 개수·극값 개수)라 SymPy로 독립 계산해
-    #    검증한다. 오개념의 틀린 개수(판별식 무시·임계점=극값)는 여기서 failed로 걸린다.
-    if answer_kind in ("real_root_count", "extremum_count"):
+    # ★ 개념형 문항 — 답이 값이 아니라 개수/판정(실근·극값 개수·일대일·등비급수 수렴)이라 SymPy로
+    #    독립 계산해 검증한다. 오개념의 틀린 답(판별식 무시·임계점=극값·역함수 오인·늘 수렴)은
+    #    여기서 failed로 걸린다.
+    if answer_kind in _CONCEPTUAL_VERIFIERS:
         if claimed_answer is None:
-            reasons.append("정확성 미검증 — 개수 문항인데 주장값(answer) 없음.")
+            reasons.append("정확성 미검증 — 개념형 문항인데 주장값(answer) 없음.")
             return "unverified", reasons
-        verifier = (
-            verify_real_root_count if answer_kind == "real_root_count" else verify_extremum_count
-        )
-        cnt = verifier(conditions, claimed_answer)
+        cnt = _CONCEPTUAL_VERIFIERS[answer_kind](conditions, claimed_answer)
         if cnt.state == "pass":
             return "verified", reasons
         if cnt.state == "fail":

@@ -266,7 +266,12 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
     agg_raw = verify_raw.get("answer_aggregate")
     aggregate = agg_raw if agg_raw in ("sum", "product") else None
     kind_raw = verify_raw.get("answer_kind")
-    kind = kind_raw if kind_raw in ("real_root_count", "extremum_count") else None
+    kind = (
+        kind_raw
+        if kind_raw
+        in ("real_root_count", "extremum_count", "is_one_to_one", "geometric_convergence")
+        else None
+    )
     return ProblemVerifyMeta(
         conditions=conditions,
         answer_map=answer_map,

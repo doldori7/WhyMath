@@ -20,17 +20,29 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 from whymath_backend.l3.equivalent.counterexample_fuzz import fuzz_answer
 from whymath_backend.l3.verify_answer import (
+    AnswerVerdict,
     verify_answer,
     verify_extremum_count,
+    verify_geometric_convergence,
+    verify_is_one_to_one,
     verify_real_root_count,
     verify_root_aggregate,
     verify_root_selection,
 )
+
+# 개념형 검증기 디스패치 — answer_kind → SymPy 독립 재검증 프리미티브(acceptance와 동일 표·S6).
+_CONCEPTUAL_VERIFIERS: dict[str, Callable[[str | Sequence[str], str], AnswerVerdict]] = {
+    "real_root_count": verify_real_root_count,
+    "extremum_count": verify_extremum_count,
+    "is_one_to_one": verify_is_one_to_one,
+    "geometric_convergence": verify_geometric_convergence,
+}
 
 _EXIT_OK = 0
 _EXIT_FAIL = 1
@@ -93,14 +105,14 @@ def _reverify_one(record: dict[str, object], *, use_fuzz: bool) -> tuple[str, st
             return "pass", None
         return "skip", f"근 집계 unverifiable: {agg.reason}"
 
-    # 개념형 개수 문항 — 답이 값이 아니라 개수(실근 개수·극값 개수)라 SymPy 독립 계산으로 재검증.
+    # 개념형 문항 — 답이 값이 아니라 개수/판정(실근·극값 개수·일대일·등비급수 수렴)이라 SymPy
+    # 독립 계산으로 재검증(축 확장은 _CONCEPTUAL_VERIFIERS에 등록).
     kind = verify.get("answer_kind")
-    if kind in ("real_root_count", "extremum_count"):
+    if isinstance(kind, str) and kind in _CONCEPTUAL_VERIFIERS:
         claimed = record.get("answer")
         if not isinstance(claimed, str):
-            return "skip", "개수 문항인데 answer 없음"
-        verifier = verify_real_root_count if kind == "real_root_count" else verify_extremum_count
-        cnt = verifier(conditions, claimed)
+            return "skip", "개념형 문항인데 answer 없음"
+        cnt = _CONCEPTUAL_VERIFIERS[kind](conditions, claimed)
         if cnt.state == "fail":
             return "fail", f"{kind} 불일치: {cnt.reason}"
         if cnt.state == "pass":

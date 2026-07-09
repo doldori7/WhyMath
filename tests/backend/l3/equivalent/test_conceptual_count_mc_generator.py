@@ -7,8 +7,13 @@ from __future__ import annotations
 
 import pytest
 
-from whymath_backend.harness.misconception_mc_batch import build_kebab_distractor_codes_optional
-from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec, evaluate_equivalent_candidate
+from whymath_backend.harness.misconception_mc_batch import (
+    build_kebab_distractor_codes_optional,
+)
+from whymath_backend.l3.equivalent.acceptance import (
+    EquivalenceSpec,
+    evaluate_equivalent_candidate,
+)
 from whymath_backend.l3.equivalent.conceptual_count_mc_generator import (
     ConceptualCountMCSkeletonGenerator,
     CountTemplateKind,
@@ -17,6 +22,8 @@ from whymath_backend.l3.equivalent.conceptual_count_mc_generator import (
 _CASES: tuple[tuple[CountTemplateKind, str, tuple[str, ...]], ...] = (
     ("real_root_count", "discriminant-negative-no-real-root", ("[10공수1-02-02]",)),
     ("extremum_count", "critical-point-implies-extremum", ("[12미적Ⅰ-02-01]",)),
+    ("is_one_to_one", "invertibility-without-1-1", ("[10기수2-03-03]",)),
+    ("geometric_convergence", "geometric-series-always-converges", ("[12대수03-01]",)),
 )
 
 
@@ -45,7 +52,9 @@ def test_yields_and_deterministic(
     out_a = [a.generate(spec) for _ in range(24)]
     out_b = [b.generate(spec) for _ in range(24)]
     assert all(c is not None for c in out_a)  # 풀 ≥24
-    assert [c.conditions for c in out_a if c] == [c.conditions for c in out_b if c]  # 결정론
+    assert [c.conditions for c in out_a if c] == [
+        c.conditions for c in out_b if c
+    ]  # 결정론
 
 
 @pytest.mark.parametrize("template,kebab,codes", _CASES)

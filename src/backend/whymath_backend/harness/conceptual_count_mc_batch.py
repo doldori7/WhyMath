@@ -1,10 +1,11 @@
 """개념형(개수) 객관식 배치 — crosswalk machine-decidable 커버 상향(개수 검증·LLM 0).
 
-`misconception_mc_batch`(수치평가)의 개념형 형제다. `ConceptualCountMCSkeletonGenerator`로 2 밴드
-(실근 개수·극값 개수)를 생성 → 기존 오케스트레이터(`run_batch`)·수용 게이트(S2-a·개수 SymPy 독립
-검증)·`JsonlCorpusSink`를 **재사용**해 코퍼스를 적재한다. 목적: 수치평가로 안 되는 개념형 오개념
-2종(discriminant-negative-no-real-root·critical-point-implies-extremum)을 문항에 등장시켜 커버를
-15/34 → 17/34로 올린다.
+`misconception_mc_batch`(수치평가)의 개념형 형제다. `ConceptualCountMCSkeletonGenerator`로 4 밴드
+(실근 개수·극값 개수·일대일대응 판정·등비급수 수렴 판정)을 생성 → 기존 오케스트레이터(`run_batch`)·
+수용 게이트(S2-a·개수/판정 SymPy 독립 검증)·`JsonlCorpusSink`를 **재사용**해 코퍼스를 적재한다.
+목적: 수치평가로 안 되는 개념형 오개념 4종(discriminant-negative-no-real-root·critical-point-
+implies-extremum·invertibility-without-1-1·geometric-series-always-converges)을 문항에 등장시켜
+커버를 15/34 → 19/34로 올린다.
 
 성취기준 튜플은 *각 kebab 후보 M-id가 전부 agree*하도록 잠갔다(거짓 자율거부 0). 이 2 kebab은
 op-code 부재라 오개념만 태깅(`build_kebab_distractor_codes_optional`). 결정론·산출 v0(사람 검수 전).
@@ -19,7 +20,9 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-from whymath_backend.harness.misconception_mc_batch import build_kebab_distractor_codes_optional
+from whymath_backend.harness.misconception_mc_batch import (
+    build_kebab_distractor_codes_optional,
+)
 from whymath_backend.harness.problem_corpus_batch import (
     BandResult,
     CorpusBatchReport,
@@ -48,7 +51,7 @@ class _Band:
     standard_codes: tuple[str, ...]
 
 
-# 2 서브밴드 — 개념형 개수 객관식. 표준 튜플은 각 kebab 후보가 전부 agree하도록 잠금(거짓거부 0).
+# 4 서브밴드 — 개념형 개수/판정 MC. 표준 튜플은 각 kebab 후보가 전부 agree하도록 잠금(거짓거부 0).
 _BANDS: tuple[_Band, ...] = (
     # discriminant: 후보 M0610=[10공수1-02-02]·M0832=[10기수1-02-02]·M0124=[9수02-20] 모두 agree.
     _Band(
@@ -64,6 +67,20 @@ _BANDS: tuple[_Band, ...] = (
         "critical-point-implies-extremum",
         ("[12미적Ⅰ-02-01]", "[12미적Ⅰ-02-07]"),
     ),
+    # invertibility: 후보 M0144·M0859=[10기수2-03-03]·M0644=[10공수2-03-03] 모두 agree.
+    _Band(
+        "invertibility-without-1-1",
+        "is_one_to_one",
+        "invertibility-without-1-1",
+        ("[10기수2-03-03]", "[10공수2-03-03]"),
+    ),
+    # geometric: 후보 M0209=[12대수03-01]·M0705=[12미적Ⅱ-01-05]·M0703=[12미적Ⅱ-01-03] 모두 agree.
+    _Band(
+        "geometric-series-always-converges",
+        "geometric_convergence",
+        "geometric-series-always-converges",
+        ("[12대수03-01]", "[12미적Ⅱ-01-05]", "[12미적Ⅱ-01-03]"),
+    ),
 )
 
 
@@ -75,7 +92,7 @@ def _default_out_path() -> Path:
 def run_conceptual_count_mc_batch(
     *, n_per_band: int = _DEFAULT_N, out_path: Path | None = None, write: bool = True
 ) -> CorpusBatchReport:
-    """2 서브밴드 배치 실행 — 생성→S2-a 게이트(개수 검증)→구조 dedup→적재(순수 결정론)."""
+    """4 서브밴드 배치 실행 — 생성→S2-a 게이트(개수/판정 검증)→구조 dedup→적재(순수 결정론)."""
     resolved_out = out_path if out_path is not None else _default_out_path()
     sink = JsonlCorpusSink()
     bands: list[BandResult] = []
@@ -89,8 +106,12 @@ def run_conceptual_count_mc_batch(
             answer_format=None,
         )
         index: set[str] = set()
-        generator = ConceptualCountMCSkeletonGenerator(band.template, codes, skip_signatures=index)
-        outcomes = run_batch(spec, generator, n_per_band, signature_index=index, store=sink)
+        generator = ConceptualCountMCSkeletonGenerator(
+            band.template, codes, skip_signatures=index
+        )
+        outcomes = run_batch(
+            spec, generator, n_per_band, signature_index=index, store=sink
+        )
         stored = sum(1 for o in outcomes if o.status == "accepted_stored")
         failures = [
             reason
@@ -100,7 +121,10 @@ def run_conceptual_count_mc_batch(
         ]
         bands.append(
             BandResult(
-                name=band.name, requested=n_per_band, stored=stored, failure_reasons=failures
+                name=band.name,
+                requested=n_per_band,
+                stored=stored,
+                failure_reasons=failures,
             )
         )
 
@@ -117,14 +141,20 @@ def run_conceptual_count_mc_batch(
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI — 개념형 개수 MC 배치. 수율 미달(총 저장 < 요청)이면 exit 1(조용한 실패 금지)."""
+    """CLI — 개념형 개수/판정 MC 배치. 수율 미달(총 저장 < 요청)이면 exit 1(조용한 실패 금지)."""
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.conceptual_count_mc_batch",
-        description="개념형(실근 개수·극값 개수) 객관식 배치 적재(2 서브밴드·결정론).",
+        description="개념형(실근·극값·일대일·등비급수 수렴) MC 배치 적재(4 서브밴드·결정론).",
     )
-    parser.add_argument("--n", type=int, default=_DEFAULT_N, help="서브밴드당 요청 수(기본 24).")
-    parser.add_argument("--out", default=None, help="출력 코퍼스 경로(기본 conceptual_v0).")
-    parser.add_argument("--dry-run", action="store_true", help="파일 기록 없이 밴드별 수율만 출력.")
+    parser.add_argument(
+        "--n", type=int, default=_DEFAULT_N, help="서브밴드당 요청 수(기본 24)."
+    )
+    parser.add_argument(
+        "--out", default=None, help="출력 코퍼스 경로(기본 conceptual_v0)."
+    )
+    parser.add_argument(
+        "--dry-run", action="store_true", help="파일 기록 없이 밴드별 수율만 출력."
+    )
     args = parser.parse_args(argv)
 
     report = run_conceptual_count_mc_batch(

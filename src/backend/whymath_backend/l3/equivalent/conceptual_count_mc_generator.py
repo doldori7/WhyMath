@@ -1,15 +1,20 @@
-"""개념형(개수) 수치평가 객관식 스켈레톤 생성기 — 개수 검증 축(결정론·LLM 0).
+"""개념형(개수/판정) 수치평가 객관식 스켈레톤 생성기 — 개수/판정 검증 축(결정론·LLM 0).
 
-수치평가 MC(`misconception_eval_mc_generator`)의 개념형 형제다. 답이 *값*이 아니라 *개수*(실근
-개수·극값 개수)인 문항을 낸다 — 이 개수는 게이트가 SymPy로 *독립 계산*해 검증(`verify_real_root_
-count`·`verify_extremum_count`)하므로 오개념의 틀린 개수는 fail한다(진짜 개념 검증). 겨누는 오개념:
+수치평가 MC(`misconception_eval_mc_generator`)의 개념형 형제다. 답이 *값*이 아니라 *개수/판정*(실근
+개수·극값 개수·일대일 여부·등비급수 수렴 여부)인 문항을 낸다 — 이 답은 게이트가 SymPy로 *독립
+계산*해 검증(`verify_real_root_count`·`verify_extremum_count`·`verify_is_one_to_one`·
+`verify_geometric_convergence`)하므로 오개념의 틀린 답은 fail한다(진짜 개념 검증). 겨누는 오개념:
   - `real_root_count`: 판별식을 무시해 "이차방정식은 늘 두 실근"으로 오인(discriminant-negative-
     no-real-root) — 실근 0/1개인데 2로 답한다.
   - `extremum_count`: 임계점(f'=0)을 곧 극값으로 오인(critical-point-implies-extremum) — f(x)=(x-a)³
     은 임계점 1개(x=a)이나 극값 0개인데 1로 답한다.
+  - `is_one_to_one`: "일대일 아니어도 역함수가 있다"고 오인(invertibility-without-1-1) — 포물선은
+    일대일이 아니라 0인데 1로 답한다.
+  - `geometric_convergence`: "등비급수는 늘 수렴한다"고 오인(geometric-series-always-converges) —
+    |r|>1은 발산(0)인데 1로 답한다.
 
-`CandidateProblem`에 `answer_kind`를 담고 `answer_map={}`(개수는 근 대입 아님)로 오케스트레이터·
-수용 게이트·저장 sink를 재사용한다. 오답 선지 오개념 id는 생성자 `distractor_codes`로 주입받는다
+`CandidateProblem`에 `answer_kind`를 담고 `answer_map={}`(개수/판정은 근 대입 아님)로 오케스트레이터
+·수용 게이트·저장 sink를 재사용한다. 오답 선지 오개념 id는 생성자 `distractor_codes`로 주입받는다
 (L4 하드코딩 0·계층 규칙). 산출물은 v0(사람 검수 전) — 게이트 통과 ≠ 학생 노출.
 """
 
@@ -20,6 +25,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
+from math import gcd
 from typing import Literal
 
 from whymath_backend.l1.problem_bank.populate import ConceptTag
@@ -43,15 +49,22 @@ __all__ = [
     "CountTemplateKind",
 ]
 
-CountTemplateKind = Literal["real_root_count", "extremum_count"]
+CountTemplateKind = Literal[
+    "real_root_count",
+    "extremum_count",
+    "is_one_to_one",
+    "geometric_convergence",
+]
 
-# 개수 선지 — 4지선다는 항상 개수 {0,1,2,3}. 정답·오개념 개수는 그 안의 위치.
+# 개수/판정 선지 — 4지선다는 항상 {0,1,2,3}. 판정형(일대일·수렴)은 0/1을 쓴다.
 _COUNT_CHOICES: tuple[str, str, str, str] = ("0", "1", "2", "3")
 
 # 템플릿별 L1 메타(개념 원천 src_id·단원 코드). 성취기준 코드는 spec이 공급.
 _TEMPLATE_META: dict[CountTemplateKind, tuple[str, str]] = {
     "real_root_count": ("HK07", "DISC-COUNT"),
     "extremum_count": ("H:12미적Ⅰ02-01", "EXTREMUM-COUNT"),
+    "is_one_to_one": ("10기수2-03-03", "FUNC-INVERSE"),
+    "geometric_convergence": ("H:12미적Ⅱ01-05", "GEO-SERIES-CONV"),
 }
 
 
@@ -104,7 +117,11 @@ def _build_real_root_count_pool() -> tuple[_CountItem, ...]:
                     ),
                     answer_explanation=(
                         f"판별식 D = {b}^2 - 4·{c} = {disc} 이므로 "
-                        + ("중근을 가져 서로 다른 실근은 1개" if disc == 0 else "실근이 없다(0개)")
+                        + (
+                            "중근을 가져 서로 다른 실근은 1개"
+                            if disc == 0
+                            else "실근이 없다(0개)"
+                        )
                         + ". 판별식을 무시하고 늘 2근이라 답하면 틀린다."
                     ),
                     difficulty=_difficulty(b + c),
@@ -148,18 +165,102 @@ def _build_extremum_count_pool() -> tuple[_CountItem, ...]:
     return tuple(pool)
 
 
+def _build_is_one_to_one_pool() -> tuple[_CountItem, ...]:
+    """f(x)=x²+bx+c 가 ℝ에서 일대일대응인지 뼈대 풀 — 포물선은 늘 일대일 아님(오개념 정확 표적).
+
+    이차함수 f'(x)=2x+b는 x=-b/2에서 부호가 바뀌므로(꼭짓점 좌우 단조 반전) f는 일대일이 아니다 —
+    정답 0. "일대일이 아니어도 역함수가 있다"는 오개념(invertibility-without-1-1)은 1로 답해 fail.
+    단항식(a=1·monic)으로 두어 정준 signature 충돌을 피하고(상수 c가 signature를 갈라줌), (b,c)
+    순회. 상수항은 일대일 여부를 바꾸지 않는다(여전히 0). 답은 판정값(0/1)이라 SymPy 독립 검증.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for b in range(0, 5):
+        for c in range(0, 6):
+            terms = "x**2"
+            if b:
+                terms += f" + {b}*x"
+            if c:
+                terms += f" + {c}"
+            conditions = terms
+            if conditions in seen:
+                continue
+            seen.add(conditions)
+            b_disp = f" + {b}x" if b else ""
+            c_disp = f" + {c}" if c else ""
+            pool.append(
+                _CountItem(
+                    conditions=conditions,
+                    answer_kind="is_one_to_one",
+                    answer_str="0",
+                    misc_str="1",
+                    question_text=(
+                        f"함수 f(x) = x^2{b_disp}{c_disp} 가 실수 전체에서 일대일대응이면 1, "
+                        "아니면 0을 쓰시오."
+                    ),
+                    answer_explanation=(
+                        "이차함수는 꼭짓점을 기준으로 증가·감소가 뒤바뀌어 서로 다른 두 x가 같은 "
+                        "값을 가지므로 일대일대응이 아니다 — 0이다. 일대일이 아니어도 역함수가 "
+                        "있다고 오인하면 1로 잘못 답한다."
+                    ),
+                    difficulty=_difficulty(b + c),
+                )
+            )
+    return tuple(pool)
+
+
+def _build_geometric_convergence_pool() -> tuple[_CountItem, ...]:
+    """공비 r=p/q(|r|>1)인 등비급수의 수렴 여부 뼈대 풀 — 발산만(오개념 정확 표적).
+
+    |r|≥1이면 등비급수는 발산한다 — 정답 0. "등비급수는 늘 수렴한다"는 오개념(geometric-series-
+    always-converges)은 1로 답해 fail. 기약분수 p/q(p>q≥1) 순회·conditions dedup. 답은 판정값(0/1)
+    이라 answer_kind=geometric_convergence로 SymPy 독립 검증.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for q in range(1, 5):
+        for p in range(q + 1, q + 11):
+            if gcd(p, q) != 1:
+                continue
+            conditions = f"{p}/{q}"
+            if conditions in seen:
+                continue
+            seen.add(conditions)
+            r_disp = f"{p}/{q}" if q != 1 else f"{p}"
+            pool.append(
+                _CountItem(
+                    conditions=conditions,
+                    answer_kind="geometric_convergence",
+                    answer_str="0",
+                    misc_str="1",
+                    question_text=(
+                        f"공비가 r = {r_disp} 인 등비급수가 수렴하면 1, 발산하면 0을 쓰시오."
+                    ),
+                    answer_explanation=(
+                        f"등비급수는 |r| < 1 일 때만 수렴하는데 r = {r_disp} 는 |r| > 1 이므로 "
+                        "발산한다 — 0이다. 등비급수가 늘 수렴한다고 오인하면 1로 잘못 답한다."
+                    ),
+                    difficulty=_difficulty(p + q),
+                )
+            )
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "real_root_count": _build_real_root_count_pool,
     "extremum_count": _build_extremum_count_pool,
+    "is_one_to_one": _build_is_one_to_one_pool,
+    "geometric_convergence": _build_geometric_convergence_pool,
 }
 
 
 class ConceptualCountMCSkeletonGenerator:
-    """개념형 개수 객관식 결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석(LLM 0).
+    """개념형 개수/판정 객관식 결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석(LLM 0).
 
-    `template`(real_root_count/extremum_count)이 수학 실체를, `distractor_codes`가 오답 선지의
-    오개념 id를 정한다(L4 하드코딩 0·계층 규칙). 각 문항은 개수 오답 1건만 태깅(filler 미태깅). 풀을
-    순서대로 소비(소진 시 None). `skip_signatures`로 코퍼스에 이미 있는 구조를 건너뛴다.
+    `template`(real_root_count/extremum_count/is_one_to_one/geometric_convergence)이 수학 실체를,
+    `distractor_codes`가 오답 선지의 오개념 id를 정한다(L4 하드코딩 0·계층 규칙). 각 문항은 오답
+    1건만 태깅(filler 미태깅). 풀을 순서대로 소비(소진 시 None). `skip_signatures`로 기존 구조
+    건너뜀.
     """
 
     def __init__(
@@ -175,9 +276,14 @@ class ConceptualCountMCSkeletonGenerator:
         concept_relevance: float = 0.95,
     ) -> None:
         if template not in _POOL_FACTORY:
-            raise ValueError(f"미지원 template: {template!r} (real_root_count/extremum_count)")
+            raise ValueError(
+                f"미지원 template: {template!r} (real_root_count/extremum_count/"
+                "is_one_to_one/geometric_convergence)"
+            )
         if not distractor_codes:
-            raise ValueError("distractor_codes 주입 누락 — 오개념 오답 태깅용 id가 필요하다.")
+            raise ValueError(
+                "distractor_codes 주입 누락 — 오개념 오답 태깅용 id가 필요하다."
+            )
         self._misconception_id, self._op_code = next(iter(distractor_codes.values()))
         self._template: CountTemplateKind = template
         self._pool = _POOL_FACTORY[template]()
@@ -190,7 +296,11 @@ class ConceptualCountMCSkeletonGenerator:
         concept_src_id, unit_code = _TEMPLATE_META[template]
         self._unit_codes = [unit_code]
         self._concept_tags = [
-            ConceptTag(concept_src_id=concept_src_id, role="PRIMARY", relevance=concept_relevance)
+            ConceptTag(
+                concept_src_id=concept_src_id,
+                role="PRIMARY",
+                relevance=concept_relevance,
+            )
         ]
 
     def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
@@ -199,7 +309,9 @@ class ConceptualCountMCSkeletonGenerator:
             item = self._pool[self._index]
             self._index += 1
             if self._skip is not None:
-                signature = canonical_signature(item.conditions, f"kind:{item.answer_kind}")
+                signature = canonical_signature(
+                    item.conditions, f"kind:{item.answer_kind}"
+                )
                 if signature is not None and signature in self._skip:
                     continue
             return self._assemble(spec, item)
@@ -259,7 +371,9 @@ class ConceptualCountMCSkeletonGenerator:
             concept_tags=list(self._concept_tags),
         )
 
-    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
+    def _stable_slug(
+        self, question_text: str, answer: str, codes: Sequence[str]
+    ) -> str:
         """결정론 안정 slug — 내용 해시(멱등 upsert 키)."""
         payload = "|".join([question_text, answer, ",".join(sorted(codes))])
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]

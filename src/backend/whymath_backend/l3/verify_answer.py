@@ -66,6 +66,8 @@ __all__ = [
     "derive_selected_root",
     "verify_answer",
     "verify_extremum_count",
+    "verify_geometric_convergence",
+    "verify_is_one_to_one",
     "verify_real_root_count",
     "verify_root_aggregate",
     "verify_root_selection",
@@ -132,7 +134,9 @@ def _fail(reason: str, samples_checked: int) -> AnswerVerdict:
 
 def _unverifiable(reason: str, samples_checked: int = 0) -> AnswerVerdict:
     """unverifiable 결과 조립 — 정직 회피의 단일 출구(절대 pass 위장 금지)."""
-    return AnswerVerdict(state="unverifiable", reason=reason, samples_checked=samples_checked)
+    return AnswerVerdict(
+        state="unverifiable", reason=reason, samples_checked=samples_checked
+    )
 
 
 # 부등식·≠ 관계 연산자 — 잔차(lhs-rhs) 진리값 평가 경로에서 쓰는 연산자 집합.
@@ -245,7 +249,11 @@ def _eval_numeric(expr: sympy.Expr, tol: float) -> bool | None:
     except (TypeError, ValueError, AttributeError):
         return None
     # NaN·무한 — 평가 불가.
-    if value != value or abs(value.real) == float("inf") or abs(value.imag) == float("inf"):
+    if (
+        value != value
+        or abs(value.real) == float("inf")
+        or abs(value.imag) == float("inf")
+    ):
         return None
     # 허수부가 유의미하면 실수 조건 평가 불가(복소 — 보수적 None).
     if abs(value.imag) > tol:
@@ -347,7 +355,9 @@ def _verify_single(
     # ① condition → (잔차, 연산자). 파싱 불가·미지원 관계는 보수적 unverifiable.
     try:
         residual, op = _parse_condition(condition)
-    except Exception:  # noqa: BLE001 — 파싱·미지원 관계는 보수적 unverifiable(pass 위장 금지)
+    except (
+        Exception
+    ):  # noqa: BLE001 — 파싱·미지원 관계는 보수적 unverifiable(pass 위장 금지)
         return _unverifiable("condition 파싱 불가/미지원 관계 — 검증 안전 회피")
 
     # ② answer 치환맵 대입(키·값 모두 sympify). 치환 실패는 보수적 unverifiable.
@@ -374,16 +384,22 @@ def _verify_single(
         # 부등식 — 잔차 실수값을 연산자 진리값으로 판정.
         magnitude = _eval_relation_residual(substituted, tol)
         if magnitude is None:
-            return _unverifiable("부등식 잔차 수치 평가 불가(복소/NaN 등) — 검증 안전 회피")
+            return _unverifiable(
+                "부등식 잔차 수치 평가 불가(복소/NaN 등) — 검증 안전 회피"
+            )
         truth = _eval_relation(magnitude, op, tol)
         if truth is True:
             return _pass(samples_checked=1)
         if truth is False:
-            return _fail(f"부등식 조건 위반({op}) — 잔차 {magnitude}", samples_checked=1)
+            return _fail(
+                f"부등식 조건 위반({op}) — 잔차 {magnitude}", samples_checked=1
+            )
         return _unverifiable(f"부등식 경계 모호({op}) — 검증 안전 회피")
 
     # ④ 자유변수 있음(파라미터 문제) → 수치 샘플링(Tier1 핵심·고정 시드 결정론).
-    return _sample_parametric(substituted, free_symbols, op, n_samples=n_samples, tol=tol)
+    return _sample_parametric(
+        substituted, free_symbols, op, n_samples=n_samples, tol=tol
+    )
 
 
 def _eval_relation_residual(expr: sympy.Expr, tol: float) -> float | None:
@@ -395,7 +411,11 @@ def _eval_relation_residual(expr: sympy.Expr, tol: float) -> float | None:
         value = complex(expr.evalf())
     except (TypeError, ValueError, AttributeError):
         return None
-    if value != value or abs(value.real) == float("inf") or abs(value.imag) == float("inf"):
+    if (
+        value != value
+        or abs(value.real) == float("inf")
+        or abs(value.imag) == float("inf")
+    ):
         return None
     if abs(value.imag) > tol:
         return None  # 복소 — 실수 부등식 평가 불가(보수적).
@@ -460,7 +480,9 @@ def _sample_parametric(
 
     # (1) 단일 점 대입(모든 자유변수에 같은 값) — 경계값 + 난수.
     sample_points: list[float] = list(_BOUNDARY_VALUES)
-    sample_points.extend(rng.uniform(_SAMPLE_LOW, _SAMPLE_HIGH) for _ in range(n_samples))
+    sample_points.extend(
+        rng.uniform(_SAMPLE_LOW, _SAMPLE_HIGH) for _ in range(n_samples)
+    )
     for point in sample_points:
         substitution = {symbol: sympy.Float(point) for symbol in free_symbols}
         residual = _evaluate_point(expr, substitution, tol)
@@ -771,7 +793,9 @@ def verify_root_aggregate(
 #     돌려 강등 안 됨 → verified로 통과). 이 축이 그 구멍을 닫는다.
 #   - 해 없음(예 `x+1=x+2`의 상수 잔차·실근 없는 다항)은 malformed이며, 기존엔 Tier1 fail로만
 #     *우연히* 걸려 사유가 모호했다 — 여기서 명시 사유로 승격.
-SolvabilityClass = Literal["no_solution", "identity", "unique", "multiple", "undecidable"]
+SolvabilityClass = Literal[
+    "no_solution", "identity", "unique", "multiple", "undecidable"
+]
 
 
 class SolvabilityVerdict(BaseModel):
@@ -785,7 +809,9 @@ class SolvabilityVerdict(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    state: SolvabilityClass = Field(description="해 존재/유일 5분류(방정식 자체 성질·답 무관).")
+    state: SolvabilityClass = Field(
+        description="해 존재/유일 5분류(방정식 자체 성질·답 무관)."
+    )
     reason: str | None = Field(
         default=None, description="분류 사유(한국어·undecidable/특이 케이스)."
     )
@@ -818,7 +844,9 @@ def classify_solvability(
         condition_list = list(conditions)
         condition = condition_list[0] if len(condition_list) == 1 else None
     if condition is None:
-        return SolvabilityVerdict(state="undecidable", reason="단일 등식이 아님(연립/빈 조건)")
+        return SolvabilityVerdict(
+            state="undecidable", reason="단일 등식이 아님(연립/빈 조건)"
+        )
 
     try:
         residual, op = _parse_condition(condition)
@@ -852,7 +880,9 @@ def classify_solvability(
     try:
         sympy.Poly(residual, var)
     except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
-        return SolvabilityVerdict(state="undecidable", reason="다항식이 아님 — 존재성 단정 회피")
+        return SolvabilityVerdict(
+            state="undecidable", reason="다항식이 아님 — 존재성 단정 회피"
+        )
 
     try:
         raw_roots = sympy.solve(sympy.Eq(residual, 0), var)
@@ -894,7 +924,9 @@ def _single_condition(conditions: str | Sequence[str]) -> str | None:
 
 def _claimed_int(claimed: str, tol: float) -> int | None:
     """주장 개수를 정수로 — 실수로 평가해 정수 근방이면 그 정수, 아니면 None(개수 아님)."""
-    value = _real_value(sympy.sympify(claimed, convert_xor=True), tol) if claimed else None
+    value = (
+        _real_value(sympy.sympify(claimed, convert_xor=True), tol) if claimed else None
+    )
     if value is None:
         return None
     rounded = round(value)
@@ -947,7 +979,8 @@ def verify_real_root_count(
     if actual == claimed_n:
         return _pass(samples_checked=actual)
     return _fail(
-        f"실근 개수 — 실제 {actual}개이나 주장은 {claimed_n}개(불일치)", samples_checked=actual
+        f"실근 개수 — 실제 {actual}개이나 주장은 {claimed_n}개(불일치)",
+        samples_checked=actual,
     )
 
 
@@ -1002,5 +1035,97 @@ def verify_extremum_count(
     if actual == claimed_n:
         return _pass(samples_checked=actual)
     return _fail(
-        f"극값 개수 — 실제 {actual}개이나 주장은 {claimed_n}개(불일치)", samples_checked=actual
+        f"극값 개수 — 실제 {actual}개이나 주장은 {claimed_n}개(불일치)",
+        samples_checked=actual,
+    )
+
+
+def verify_is_one_to_one(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """다항함수 f(x)가 ℝ에서 *일대일대응*(역함수 존재 가능)인지 0/1로 검증(개념형).
+
+    다항함수는 f'이 부호를 바꾸지 않을 때만(단조) 일대일이다 — f'의 부호 변화(도함수 실근 중
+    중복도 홀수) 개수가 0이면 1(일대일)·아니면 0. "일대일 아니어도 역함수가 있다"는 오개념
+    (invertibility-without-1-1)은 x²류(부호 변화 有)를 1로 답해 fail한다. `conditions`는 f(x) 식.
+      - pass: 실제 일대일 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 다항식 아님·주장이 0/1 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("일대일 — 단일 식이 아님·안전 회피")
+    try:
+        expr = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("일대일 — 식 파싱 불가·안전 회피")
+    if isinstance(expr, sympy.core.relational.Relational):
+        return _unverifiable("일대일 — 함수 식이어야 함(등식/부등식 아님)·안전 회피")
+    free = sorted(expr.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("일대일 — 단일 변수 함수가 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("일대일 — 주장값이 0/1이 아님·안전 회피")
+    var = free[0]
+    fprime = sympy.diff(expr, var)
+    if fprime == 0:
+        actual = 0  # 상수함수 → 일대일 아님.
+    else:
+        try:
+            poly = sympy.Poly(fprime, var)
+            root_mult = sympy.roots(poly)
+        except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
+            return _unverifiable("일대일 — 도함수가 다항식이 아님·안전 회피")
+        if sum(root_mult.values()) != poly.degree():
+            return _unverifiable("일대일 — 도함수 근을 중복도까지 다 못 구함·안전 회피")
+        sign_changes = sum(
+            1
+            for root, mult in root_mult.items()
+            if _real_value(root, tol) is not None and mult % 2 == 1
+        )
+        actual = 1 if sign_changes == 0 else 0  # 부호 변화 없음(단조) → 일대일.
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    return _fail(
+        f"일대일 — 실제 {actual}이나 주장은 {claimed_n}(불일치)", samples_checked=1
+    )
+
+
+def verify_geometric_convergence(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """공비 r인 등비급수의 *수렴 여부*를 0/1로 검증(개념형). `conditions`는 공비 r(값/식).
+
+    등비급수는 |r|<1일 때만 수렴한다(1)·그 외 발산(0). "등비급수는 늘 수렴한다"는 오개념
+    (geometric-series-always-converges)은 |r|≥1인데 1로 답해 fail한다.
+      - pass: 실제 수렴 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: r이 실수가 아님·주장이 0/1 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("등비급수 수렴 — 단일 값이 아님·안전 회피")
+    try:
+        ratio = _real_value(sympy.sympify(condition, convert_xor=True), tol)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("등비급수 수렴 — 공비 파싱 불가·안전 회피")
+    if ratio is None:
+        return _unverifiable("등비급수 수렴 — 공비가 실수가 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("등비급수 수렴 — 주장값이 0/1이 아님·안전 회피")
+    actual = 1 if abs(ratio) < 1 - tol else 0  # |r|<1 수렴(경계 |r|=1은 발산).
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "수렴" if actual else "발산"
+    return _fail(
+        f"등비급수 수렴 — 공비 {ratio}는 {verdict}이나 주장 {claimed_n}(불일치)",
+        samples_checked=1,
     )

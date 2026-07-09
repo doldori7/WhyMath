@@ -27,14 +27,20 @@ class TestSummarize:
     def test_tier_counts_and_false_reject(self) -> None:
         trials = [
             CrosslinkTrial("opposite-root-selected", "M0862", "correct", "positive"),
-            CrosslinkTrial("opposite-root-selected", "M0500", "wrong", "cross_standard_neg"),
-            CrosslinkTrial("opposite-root-selected", "M0864", "wrong", "same_standard_neg"),
+            CrosslinkTrial(
+                "opposite-root-selected", "M0500", "wrong", "cross_standard_neg"
+            ),
+            CrosslinkTrial(
+                "opposite-root-selected", "M0864", "wrong", "same_standard_neg"
+            ),
         ]
         # M0864 standard [12미적Ⅰ-02-07] not in opposite-root([10공수1-02-02]) → 실제로 cross지만
         # 여기선 tier를 명시 지정해 집계 경로만 검증. gate는 성취기준으로 판정한다.
         report = ev.summarize(trials, _KEBAB_STANDARDS, _MID_STANDARDS)
         assert report.positive_total == 1 and report.positive_false_reject == 0
-        assert report.cross_total == 1 and report.cross_detected == 1  # M0500 cross → reject
+        assert (
+            report.cross_total == 1 and report.cross_detected == 1
+        )  # M0500 cross → reject
         # M0864는 opposite-root 성취기준과 다르므로 게이트가 reject → same_detected=1
         assert report.same_total == 1
 
@@ -75,9 +81,9 @@ class TestCliEndToEnd:
         # cross-standard 전건 거부(구조 신호 정확)·정답 오거부 0.
         assert report.cross_detected == report.cross_total and report.cross_total > 0
         assert report.positive_false_reject == 0
-        # same-standard는 못 잡음(false accept·인간 존치)·커버 17/34
-        # (오개념 수치평가 MC 코퍼스가 8 kebab을 machine-decidable로 승격 — 5→8→13→15→17).
+        # same-standard는 못 잡음(false accept·인간 존치)·커버 19/34
+        # (수치평가 MC 5→8→13→15→17, 개념형 개수/판정 MC가 +2 승격 → 19).
         assert report.same_detected == 0
-        assert report.kebabs_decidable == 17 and report.kebabs_total == 34
+        assert report.kebabs_decidable == 19 and report.kebabs_total == 34
         text = ev.format_report(report, confidence=0.95, human_reject_rate=None)
         assert "인간 존치" in text and "machine-decidable" in text
