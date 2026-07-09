@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from whymath_backend.harness.needs_review_worklist import build_worklist
 from whymath_backend.harness.problem_corpus_batch import (
     build_distractor_codes,
     main,
@@ -66,6 +67,43 @@ class TestRunCorpusBatch:
             ("sqrt_mc", 2, 2),
         ]
         assert all(b.failure_reasons == [] for b in report.bands)
+        # 전량 수용 → 비수용 outcome 없음(워크리스트 대상 0).
+        assert report.review_outcomes == []
+        assert report.to_json()["review_outcomes_count"] == 0
+
+    def test_review_outcomes_captured_on_shortfall(self) -> None:
+        # 무리근 풀(122) 초과 요청 → generation_failed 8건이 review_outcomes에 포착(휘발 방지).
+        # 밴드 블록 무접촉 shadowing 래퍼가 비수용 outcome만 누적함을 검증(수율·리포트는 불변).
+        report = run_corpus_batch(
+            out_path=Path("/nonexistent/never-written.jsonl"),
+            short_n=0,
+            mc_n=0,
+            sqrt_n=130,
+            sqrt_mc_n=0,
+            calc_extremum_n=0,
+            calc_tangent_n=0,
+            calc_value_n=0,
+            calc_value_mc_n=0,
+            calc_extremum_irr_n=0,
+            exp_n=0,
+            log_n=0,
+            arith_n=0,
+            geo_n=0,
+            trig_n=0,
+            arith_sum_n=0,
+            geo_sum_n=0,
+            trig_eq_n=0,
+            write=False,
+        )
+        assert not report.fulfilled  # 수율 미달(정직)
+        assert report.total_stored == 122  # 풀 전수 소진분은 저장(기존 동작 불변)
+        assert len(report.review_outcomes) == 130 - 122  # 8건 포착
+        assert all(o.status == "generation_failed" for o in report.review_outcomes)
+        assert report.to_json()["review_outcomes_count"] == 8
+        # 워크리스트 라이브러리가 이 포착분을 소비 가능(end-to-end).
+        items = build_worklist(report.review_outcomes)
+        assert len(items) == 8
+        assert all(it.status == "generation_failed" for it in items)
 
     def test_written_corpus_roundtrips_through_loader(self, tmp_path: Path) -> None:
         # JSONL 산출물이 코퍼스 로더로 정확히 되읽힌다 — 형식·위생·Problem 검증 통과.

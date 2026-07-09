@@ -33,11 +33,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, MutableSet
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from whymath_backend.harness.needs_review_worklist import (
+    build_worklist,
+    render_worklist_markdown,
+)
 from whymath_backend.l1.problem_bank.populate import (
     ProblemBankPopulateReport,
     ProblemBankRecord,
@@ -54,7 +58,14 @@ from whymath_backend.l3.equivalent.exp_log_skeleton_generator import (
     ExponentialEquationSkeletonGenerator,
     LogarithmicEquationSkeletonGenerator,
 )
-from whymath_backend.l3.equivalent.orchestrator import run_batch
+from whymath_backend.l3.equivalent.generator import EquivalentProblemGenerator
+from whymath_backend.l3.equivalent.orchestrator import (
+    GenerationOutcome,
+    ProblemBankSink,
+)
+from whymath_backend.l3.equivalent.orchestrator import (
+    run_batch as _orchestrator_run_batch,
+)
 from whymath_backend.l3.equivalent.sequence_skeleton_generator import (
     ArithmeticSequenceSkeletonGenerator,
     GeometricSequenceSkeletonGenerator,
@@ -295,13 +306,19 @@ class BandResult:
 
 @dataclass(frozen=True, slots=True)
 class CorpusBatchReport:
-    """배치 전체 리포트 — 밴드별 결과·총 저장 수·기록 행 수(dry-run이면 None)."""
+    """배치 전체 리포트 — 밴드별 결과·총 저장 수·기록 행 수(dry-run이면 None).
+
+    `review_outcomes`는 전 밴드에서 *비수용*(수용/적재 안 됨)으로 판정된 GenerationOutcome을
+    누적한 것 — needs_review 후보의 사람 검수·거부 후보 진단·임계값 보정 입력(휘발 방지·후보+근거
+    보존). `to_json`엔 카운트만 싣는다(outcome 객체는 워크리스트 렌더 전용).
+    """
 
     bands: list[BandResult]
     total_requested: int
     total_stored: int
     written: int | None
     out_path: str
+    review_outcomes: list[GenerationOutcome] = field(default_factory=list)
 
     @property
     def fulfilled(self) -> bool:
@@ -324,6 +341,7 @@ class CorpusBatchReport:
             "written": self.written,
             "out_path": self.out_path,
             "fulfilled": self.fulfilled,
+            "review_outcomes_count": len(self.review_outcomes),
         }
 
 
@@ -363,6 +381,28 @@ def run_corpus_batch(
     codes = build_distractor_codes()
     mc_target_ids = frozenset(misconception_id for misconception_id, _ in codes.values())
     mc_variants: frozenset[str] = frozenset({"multiple_choice", "sqrt_multiple_choice"})
+
+    # 비수용 outcome 포착(휘발 방지) — 밴드 블록을 *건드리지 않고* orchestrator `run_batch`를
+    # 얇은 로컬 래퍼로 감싼다. 아래 모든 밴드의 `run_batch(...)` 호출이 이름해석상 이 래퍼로
+    # 잡혀(모듈 import는 `_orchestrator_run_batch`), 수용 외 outcome만 `review_outcomes`에 쌓는다.
+    # 반환·수율·리포트는 원본 그대로(side-effect는 누적뿐·결정론/바이트 동일 불변).
+    review_outcomes: list[GenerationOutcome] = []
+
+    def run_batch(
+        spec: EquivalenceSpec,
+        generator: EquivalentProblemGenerator,
+        n: int,
+        *,
+        signature_index: MutableSet[str],
+        store: ProblemBankSink,
+    ) -> list[GenerationOutcome]:
+        outcomes = _orchestrator_run_batch(
+            spec, generator, n, signature_index=signature_index, store=store
+        )
+        review_outcomes.extend(
+            o for o in outcomes if o.status not in ("accepted_stored", "accepted")
+        )
+        return outcomes
 
     sink = JsonlCorpusSink()
     signature_index: set[str] = set()
@@ -683,6 +723,7 @@ def run_corpus_batch(
         total_stored=total_stored,
         written=written,
         out_path=str(resolved_out),
+        review_outcomes=review_outcomes,
     )
 
 
@@ -764,6 +805,12 @@ def main(argv: list[str] | None = None) -> int:
         help="삼각방정식(sin/cos x=v·0°≤x<360°·작은/큰 해) 단답형 수.",
     )
     parser.add_argument("--dry-run", action="store_true", help="파일 미기록 — 수율·리포트만 확인.")
+    parser.add_argument(
+        "--worklist-out",
+        type=Path,
+        default=None,
+        help="비수용 후보(검수필요·거부) 워크리스트 마크다운 경로(선택·미지정 시 미생성).",
+    )
     args = parser.parse_args(argv)
 
     report = run_corpus_batch(
@@ -787,6 +834,14 @@ def main(argv: list[str] | None = None) -> int:
         trig_eq_n=args.trig_eq,
         write=not args.dry_run,
     )
+    if args.worklist_out is not None:  # 비수용 후보 워크리스트 산출(선택·off by default)
+        worklist_md = render_worklist_markdown(
+            build_worklist(report.review_outcomes),
+            total_outcomes=report.total_requested,
+        )
+        worklist_path = Path(args.worklist_out)
+        worklist_path.write_text(worklist_md, encoding="utf-8")
+
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 0 if report.fulfilled else 1
