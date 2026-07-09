@@ -1,7 +1,7 @@
-"""개념형 검증 프리미티브 테스트 — 실근·극값 개수·일대일·등비급수 수렴(순수·SymPy·라이브 0).
+"""개념형 검증 프리미티브 테스트 — 개수·일대일·수렴·극한=함숫값·미분가능(순수·SymPy·라이브 0).
 
-정답 개수/판정 pass·오개념(판별식 무시·임계점=극값·역함수 오인·늘 수렴)의 틀린 답 fail·범위 밖
-unverifiable을 동결한다.
+정답 개수/판정 pass·오개념(판별식 무시·임계점=극값·역함수 오인·늘 수렴·극한=함숫값·연속→미분가능·
+일반항→0⇒수렴)의 틀린 답 fail·범위 밖 unverifiable을 동결한다.
 """
 
 from __future__ import annotations
@@ -9,8 +9,11 @@ from __future__ import annotations
 from whymath_backend.l3.verify_answer import (
     verify_extremum_count,
     verify_geometric_convergence,
+    verify_is_differentiable,
     verify_is_one_to_one,
+    verify_limit_equals_value,
     verify_real_root_count,
+    verify_series_converges,
 )
 
 
@@ -110,3 +113,70 @@ class TestGeometricConvergence:
 
     def test_non_count_claim_unverifiable(self) -> None:
         assert verify_geometric_convergence("1/2", "3").state == "unverifiable"
+
+
+class TestLimitEqualsValue:
+    def test_removable_singularity_mismatch_pass(self) -> None:
+        # 제거가능 특이점 x=1 — 함수값 미정의·극한 유한 → lim ≠ f(a)(0).
+        assert (
+            verify_limit_equals_value("(x**2 - 3*x + 2)/(x - 1)", "0").state == "pass"
+        )
+
+    def test_misconception_always_equal_fails(self) -> None:
+        # "극한값=함수값 항상" 오개념 — 0인데 1로 답 → fail.
+        assert (
+            verify_limit_equals_value("(x**2 - 3*x + 2)/(x - 1)", "1").state == "fail"
+        )
+
+    def test_no_singularity_unverifiable(self) -> None:
+        # 특이점 없는 함수는 오개념 표적 아님 → 보수적 회피.
+        assert verify_limit_equals_value("x + 1", "1").state == "unverifiable"
+
+    def test_non_count_claim_unverifiable(self) -> None:
+        assert (
+            verify_limit_equals_value("(x**2 - 1)/(x - 1)", "2").state == "unverifiable"
+        )
+
+
+class TestIsDifferentiable:
+    def test_abs_corner_not_differentiable_pass(self) -> None:
+        # |x-2|+3 → x=2 좌우 미분계수 상이 → 미분 불가(0).
+        assert verify_is_differentiable("Abs(x - 2) + 3", "0").state == "pass"
+
+    def test_misconception_continuity_implies_diff_fails(self) -> None:
+        # "연속이면 미분가능" 오개념 — 0인데 1로 답 → fail.
+        assert verify_is_differentiable("Abs(x - 2) + 3", "1").state == "fail"
+
+    def test_polynomial_is_differentiable(self) -> None:
+        # 다항식은 ℝ 전체에서 미분가능(1).
+        assert verify_is_differentiable("x**2", "1").state == "pass"
+        assert verify_is_differentiable("x**2", "0").state == "fail"
+
+    def test_rational_unverifiable(self) -> None:
+        # 유리식은 도메인 복잡 → 보수적 회피.
+        assert verify_is_differentiable("1/x", "1").state == "unverifiable"
+
+    def test_non_count_claim_unverifiable(self) -> None:
+        assert verify_is_differentiable("Abs(x - 2)", "2").state == "unverifiable"
+
+
+class TestSeriesConverges:
+    def test_harmonic_diverges_pass(self) -> None:
+        # 조화급수 Σ1/n — 항→0이나 발산(0).
+        assert verify_series_converges("1/n", "0").state == "pass"
+        assert verify_series_converges("1/sqrt(n)", "0").state == "pass"
+
+    def test_misconception_term_zero_implies_conv_fails(self) -> None:
+        # "일반항→0이면 수렴" 오개념 — 발산(0)인데 1로 답 → fail.
+        assert verify_series_converges("1/n", "1").state == "fail"
+
+    def test_p_series_converges(self) -> None:
+        # Σ1/n² 수렴(1).
+        assert verify_series_converges("1/n**2", "1").state == "pass"
+        assert verify_series_converges("1/n**2", "0").state == "fail"
+
+    def test_multivariate_unverifiable(self) -> None:
+        assert verify_series_converges("1/(n*m)", "1").state == "unverifiable"
+
+    def test_non_count_claim_unverifiable(self) -> None:
+        assert verify_series_converges("1/n", "2").state == "unverifiable"

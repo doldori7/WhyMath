@@ -115,11 +115,15 @@ class TestCommittedQueueEndToEnd:
             r.kebab_id != "chain-rule-inner-derivative-omitted" for r in rejections
         )
         assert all(r.kebab_id != "translation-sign-flip" for r in rejections)
-        # 개념형 개수/판정 2 kebab도 후보 전부 agree 태깅이라 자동 거부 0(거짓거부 회피).
-        assert all(r.kebab_id != "invertibility-without-1-1" for r in rejections)
-        assert all(
-            r.kebab_id != "geometric-series-always-converges" for r in rejections
-        )
+        # 개념형 개수/판정 5 kebab도 후보 전부 agree 태깅이라 자동 거부 0(거짓거부 회피).
+        for kebab in (
+            "invertibility-without-1-1",
+            "geometric-series-always-converges",
+            "limit-equals-function-value",
+            "continuity-implies-differentiability",
+            "term-to-zero-implies-convergence",
+        ):
+            assert all(r.kebab_id != kebab for r in rejections)
         # thin-evidence(root-loss-by-dividing, 1문항)은 제외.
         assert all(r.kebab_id != "root-loss-by-dividing" for r in rejections)
         # 전부 well-evidenced(≥20).

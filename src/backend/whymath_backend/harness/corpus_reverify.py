@@ -30,18 +30,26 @@ from whymath_backend.l3.verify_answer import (
     verify_answer,
     verify_extremum_count,
     verify_geometric_convergence,
+    verify_is_differentiable,
     verify_is_one_to_one,
+    verify_limit_equals_value,
     verify_real_root_count,
     verify_root_aggregate,
     verify_root_selection,
+    verify_series_converges,
 )
 
 # 개념형 검증기 디스패치 — answer_kind → SymPy 독립 재검증 프리미티브(acceptance와 동일 표·S6).
-_CONCEPTUAL_VERIFIERS: dict[str, Callable[[str | Sequence[str], str], AnswerVerdict]] = {
+_CONCEPTUAL_VERIFIERS: dict[
+    str, Callable[[str | Sequence[str], str], AnswerVerdict]
+] = {
     "real_root_count": verify_real_root_count,
     "extremum_count": verify_extremum_count,
     "is_one_to_one": verify_is_one_to_one,
     "geometric_convergence": verify_geometric_convergence,
+    "limit_equals_value": verify_limit_equals_value,
+    "is_differentiable": verify_is_differentiable,
+    "series_converges": verify_series_converges,
 }
 
 _EXIT_OK = 0
@@ -76,7 +84,9 @@ def _iter_records(text: str) -> list[dict[str, object]]:
     return records
 
 
-def _reverify_one(record: dict[str, object], *, use_fuzz: bool) -> tuple[str, str | None]:
+def _reverify_one(
+    record: dict[str, object], *, use_fuzz: bool
+) -> tuple[str, str | None]:
     """레코드 1건 재검증 → (상태, 사유). 상태: 'pass'/'fail'/'skip'. 사유는 fail/skip 때만.
 
     verify 재료(conditions/answer_map)가 없으면 skip. Tier1 fail 또는 근 선택 위반 또는
@@ -132,7 +142,9 @@ def _reverify_one(record: dict[str, object], *, use_fuzz: bool) -> tuple[str, st
 
     # 수치 반례 fuzz(옵션) — fail만 오염으로 본다.
     if use_fuzz:
-        fuzz = fuzz_answer(conditions, amap, selection if isinstance(selection, str) else None)
+        fuzz = fuzz_answer(
+            conditions, amap, selection if isinstance(selection, str) else None
+        )
         if fuzz.state == "fail":
             return "fail", f"수치 반례: {fuzz.reason}"
 
@@ -142,7 +154,9 @@ def _reverify_one(record: dict[str, object], *, use_fuzz: bool) -> tuple[str, st
     return "skip", f"Tier1 unverifiable: {tier1.reason}"
 
 
-def reverify_corpus(records: list[dict[str, object]], *, use_fuzz: bool) -> ReverifyReport:
+def reverify_corpus(
+    records: list[dict[str, object]], *, use_fuzz: bool
+) -> ReverifyReport:
     """레코드 리스트 전수 재검증 → 집계 리포트(순수)."""
     passed = failed = skipped = 0
     failures: list[tuple[str, str]] = []
@@ -156,7 +170,9 @@ def reverify_corpus(records: list[dict[str, object]], *, use_fuzz: bool) -> Reve
             failures.append((ident, reason or ""))
         else:
             skipped += 1
-    return ReverifyReport(passed=passed, failed=failed, skipped=skipped, failures=tuple(failures))
+    return ReverifyReport(
+        passed=passed, failed=failed, skipped=skipped, failures=tuple(failures)
+    )
 
 
 def format_report(report: ReverifyReport, *, path: str) -> str:
@@ -197,7 +213,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("paths", nargs="+", help="코퍼스 JSONL 경로(들).")
     parser.add_argument(
-        "--fuzz", action="store_true", help="수치 반례 fuzz까지 실행(느리지만 야간 배치용)."
+        "--fuzz",
+        action="store_true",
+        help="수치 반례 fuzz까지 실행(느리지만 야간 배치용).",
     )
     args = parser.parse_args(argv)
     return _run([Path(p) for p in args.paths], use_fuzz=args.fuzz)

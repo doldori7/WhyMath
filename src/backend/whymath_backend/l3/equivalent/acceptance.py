@@ -48,10 +48,13 @@ from whymath_backend.l3.verify_answer import (
     verify_answer,
     verify_extremum_count,
     verify_geometric_convergence,
+    verify_is_differentiable,
     verify_is_one_to_one,
+    verify_limit_equals_value,
     verify_real_root_count,
     verify_root_aggregate,
     verify_root_selection,
+    verify_series_converges,
 )
 from whymath_backend.l3.verify_solution import verify_solution
 from whymath_backend.schema.enums import (
@@ -104,11 +107,16 @@ _ACCEPTED_GENERATION_VALUES: frozenset[str] = frozenset(
 
 # 개념형 검증기 디스패치 — answer_kind → SymPy 독립 검증 프리미티브. 답이 값이 아니라 개수/판정인
 # 문항(실근·극값 개수·일대일·등비급수 수렴)을 게이트가 이 표로 분기해 검증한다(축 확장은 여기 등록).
-_CONCEPTUAL_VERIFIERS: dict[str, Callable[[str | Sequence[str], str], AnswerVerdict]] = {
+_CONCEPTUAL_VERIFIERS: dict[
+    str, Callable[[str | Sequence[str], str], AnswerVerdict]
+] = {
     "real_root_count": verify_real_root_count,
     "extremum_count": verify_extremum_count,
     "is_one_to_one": verify_is_one_to_one,
     "geometric_convergence": verify_geometric_convergence,
+    "limit_equals_value": verify_limit_equals_value,
+    "is_differentiable": verify_is_differentiable,
+    "series_converges": verify_series_converges,
 }
 
 
@@ -163,9 +171,13 @@ class AcceptanceVerdict(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    accepted: bool = Field(description="게이트 모두 통과 시에만 True(코퍼스 저장 허용).")
+    accepted: bool = Field(
+        description="게이트 모두 통과 시에만 True(코퍼스 저장 허용)."
+    )
     equivalence: EquivalenceVerdict = Field(description="동등성 분류(3등급).")
-    equivalence_score: float = Field(ge=0.0, le=1.0, description="동등성 가중 점수 0~1.")
+    equivalence_score: float = Field(
+        ge=0.0, le=1.0, description="동등성 가중 점수 0~1."
+    )
     copyright_ok: bool = Field(description="저작권 게이트 — 값 확인 통과 여부.")
     verification: Literal["verified", "failed", "unverified"] = Field(
         description="정확성 게이트 — Tier1+Tier2 결합 판정.",
@@ -309,7 +321,9 @@ def _evaluate_verification(
     tier1 = answer_verdict.state
 
     steps_result = (
-        verify_solution(solution_steps, solution_step_types) if solution_steps is not None else None
+        verify_solution(solution_steps, solution_step_types)
+        if solution_steps is not None
+        else None
     )
 
     # ① failed — 답 fail 또는 틀린 과정(단계 incorrect). 답이 맞아도 과정이 틀리면 차단.
@@ -332,7 +346,9 @@ def _evaluate_verification(
     else:
         state = "unverified"
         if tier1 != "pass":
-            reasons.append(f"정확성 미검증 — Tier1 답 검산 {tier1}: {answer_verdict.reason}")
+            reasons.append(
+                f"정확성 미검증 — Tier1 답 검산 {tier1}: {answer_verdict.reason}"
+            )
         elif steps_result is not None:
             reasons.append(
                 "정확성 미검증 — Tier2 단계 미검증"
@@ -343,11 +359,15 @@ def _evaluate_verification(
     if answer_selection in ("largest", "smallest", "unique"):
         sel = verify_root_selection(conditions, answer_map, answer_selection)  # type: ignore[arg-type]
         if sel.state == "fail":
-            reasons.append(f"정확성 실패 — 근 선택({answer_selection}) 위반: {sel.reason}")
+            reasons.append(
+                f"정확성 실패 — 근 선택({answer_selection}) 위반: {sel.reason}"
+            )
             return "failed", reasons
         if sel.state == "unverifiable" and state == "verified":
             state = "unverified"
-            reasons.append(f"정확성 미검증 — 근 선택({answer_selection}) 확인 불가: {sel.reason}")
+            reasons.append(
+                f"정확성 미검증 — 근 선택({answer_selection}) 확인 불가: {sel.reason}"
+            )
     elif state == "verified":
         # 선택 미declared + Tier1 통과 → 다근이면 답이 유일 확정 안 됨 → 강등(needs_review).
         probe = verify_root_selection(conditions, answer_map, "unique")
@@ -412,7 +432,9 @@ def _difficulty_score(cand_diff: float | None, spec_diff: float, tol: float) -> 
     return max(0.0, 1.0 - (gap - tol) / _DIFFICULTY_DECAY_SCALE)
 
 
-def _answer_format_score(spec_af: AnswerFormat | None, cand_af: AnswerFormat | None) -> float:
+def _answer_format_score(
+    spec_af: AnswerFormat | None, cand_af: AnswerFormat | None
+) -> float:
     """답형태 점수 — spec None(제약 없음) 또는 후보와 일치면 1.0·아니면 0."""
     if spec_af is None:
         return 1.0
@@ -505,7 +527,9 @@ def evaluate_equivalent_candidate(
 
     # ④ 동등성 분류 (성분 가중 평균).
     cand_codes = frozenset(candidate.achievement_standard_codes)
-    cand_misc = frozenset(entry.misconception_id for entry in (candidate.distractor_map or []))
+    cand_misc = frozenset(
+        entry.misconception_id for entry in (candidate.distractor_map or [])
+    )
     s_standard = _standard_score(spec.achievement_standard_codes, cand_codes)
     s_misconception = _jaccard(spec.target_misconception_ids, cand_misc)
     s_difficulty = _difficulty_score(

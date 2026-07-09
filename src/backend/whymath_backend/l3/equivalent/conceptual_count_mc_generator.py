@@ -54,9 +54,12 @@ CountTemplateKind = Literal[
     "extremum_count",
     "is_one_to_one",
     "geometric_convergence",
+    "limit_equals_value",
+    "is_differentiable",
+    "series_converges",
 ]
 
-# 개수/판정 선지 — 4지선다는 항상 {0,1,2,3}. 판정형(일대일·수렴)은 0/1을 쓴다.
+# 개수/판정 선지 — 4지선다는 항상 {0,1,2,3}. 판정형(일대일·수렴·극한=함숫값·미분가능)은 0/1을 쓴다.
 _COUNT_CHOICES: tuple[str, str, str, str] = ("0", "1", "2", "3")
 
 # 템플릿별 L1 메타(개념 원천 src_id·단원 코드). 성취기준 코드는 spec이 공급.
@@ -65,6 +68,9 @@ _TEMPLATE_META: dict[CountTemplateKind, tuple[str, str]] = {
     "extremum_count": ("H:12미적Ⅰ02-01", "EXTREMUM-COUNT"),
     "is_one_to_one": ("10기수2-03-03", "FUNC-INVERSE"),
     "geometric_convergence": ("H:12미적Ⅱ01-05", "GEO-SERIES-CONV"),
+    "limit_equals_value": ("H:12미적Ⅰ01-01", "LIMIT-VALUE"),
+    "is_differentiable": ("H:12미적Ⅰ02-02", "DIFFERENTIABILITY"),
+    "series_converges": ("H:12미적Ⅱ01-04", "SERIES-CONV"),
 }
 
 
@@ -246,11 +252,127 @@ def _build_geometric_convergence_pool() -> tuple[_CountItem, ...]:
     return tuple(pool)
 
 
+def _build_limit_equals_value_pool() -> tuple[_CountItem, ...]:
+    """유리식 f(x)=(x−a)(x−b)/(x−a)의 x=a에서 lim=f(a) 여부 뼈대 풀 — 제거가능 특이점(오개념 표적).
+
+    x=a에서 분자·분모가 함께 0(0/0)이라 함수값은 미정의이나 극한은 유한(b−a 방향)이라 lim ≠ f(a) —
+    정답 0. "극한값은 늘 함수값과 같다"는 오개념(limit-equals-function-value)은 1로 답해 fail. 자동
+    약분을 막으려 **분자는 전개형** x²−(a+b)x+ab로 낸다(약분되면 특이점 소멸). (a,b≠a) 순회.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for a in range(1, 7):
+        for b in range(1, 7):
+            if b == a:
+                continue  # a=b면 중근이라 극한도 특이(0 or ∞)·표적 아님.
+            s, p = a + b, a * b
+            conditions = f"(x**2 - {s}*x + {p})/(x - {a})"
+            if conditions in seen:
+                continue
+            seen.add(conditions)
+            pool.append(
+                _CountItem(
+                    conditions=conditions,
+                    answer_kind="limit_equals_value",
+                    answer_str="0",
+                    misc_str="1",
+                    question_text=(
+                        f"함수 f(x) = (x^2 - {s}x + {p}) / (x - {a}) 에서 "
+                        f"lim(x→{a}) f(x) = f({a}) 가 성립하면 1, 아니면 0을 쓰시오."
+                    ),
+                    answer_explanation=(
+                        f"x = {a} 에서 분자·분모가 함께 0이 되어 함수값 f({a})는 정의되지 않지만 "
+                        f"약분하면 극한값은 {b - a}로 유한하다 — 극한값과 함수값이 달라 0이다. "
+                        "극한값이 늘 함수값과 같다고 오인하면 1로 잘못 답한다."
+                    ),
+                    difficulty=_difficulty(a + b),
+                )
+            )
+    return tuple(pool)
+
+
+def _build_is_differentiable_pool() -> tuple[_CountItem, ...]:
+    """f(x)=|x−a|+c 가 ℝ에서 미분가능한지 뼈대 풀 — 절댓값 꺾인점(연속이나 미분불가·오개념 표적).
+
+    x=a에서 좌·우 미분계수가 −1·+1로 달라 미분 불가(연속은 성립) — 정답 0. "연속이면 미분가능"이라는
+    오개념(continuity-implies-differentiability)은 1로 답해 fail. (a,c) 순회·conditions dedup.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for a in range(1, 7):
+        for c in range(0, 5):
+            conditions = f"Abs(x - {a}) + {c}" if c else f"Abs(x - {a})"
+            if conditions in seen:
+                continue
+            seen.add(conditions)
+            c_disp = f" + {c}" if c else ""
+            pool.append(
+                _CountItem(
+                    conditions=conditions,
+                    answer_kind="is_differentiable",
+                    answer_str="0",
+                    misc_str="1",
+                    question_text=(
+                        f"함수 f(x) = |x - {a}|{c_disp} 가 실수 전체에서 미분가능하면 1, "
+                        "아니면 0을 쓰시오."
+                    ),
+                    answer_explanation=(
+                        f"x = {a} 에서 좌미분계수 −1·우미분계수 +1로 서로 달라 미분가능하지 않다 "
+                        "(연속이기는 하다) — 0이다. 연속이면 곧 미분가능하다고 오인하면 1로 잘못 "
+                        "답한다."
+                    ),
+                    difficulty=_difficulty(a + c),
+                )
+            )
+    return tuple(pool)
+
+
+def _build_series_converges_pool() -> tuple[_CountItem, ...]:
+    """일반항 a_n→0이나 급수가 발산하는 뼈대 풀 — 조화형·p<1(오개념 정확 표적).
+
+    일반항이 0에 수렴해도 Σa_n은 발산할 수 있다(조화급수 Σ1/n·Σ1/√n) — 정답 0. "일반항이 0이면
+    급수도 수렴"이라는 오개념(term-to-zero-implies-convergence)은 1로 답해 fail. 두 발산 계열
+    (1/(n+c)·1/√(n+c)) 순회·conditions dedup. 모두 일반항→0이라 오개념이 정확히 틀린 유형이다.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for c in range(0, 15):
+        for form in (
+            f"1/(n + {c})" if c else "1/n",
+            f"1/sqrt(n + {c})" if c else "1/sqrt(n)",
+        ):
+            conditions = form
+            if conditions in seen:
+                continue
+            seen.add(conditions)
+            disp = form.replace("sqrt", "√").replace("*", "")
+            pool.append(
+                _CountItem(
+                    conditions=conditions,
+                    answer_kind="series_converges",
+                    answer_str="0",
+                    misc_str="1",
+                    question_text=(
+                        f"일반항이 a_n = {disp} 인 급수 Σa_n 이 수렴하면 1, 발산하면 0을 쓰시오."
+                    ),
+                    answer_explanation=(
+                        "일반항은 0에 수렴하지만 이 급수는 발산한다(조화급수류) — 0이다. 일반항이 "
+                        "0에 수렴하면 급수도 수렴한다고 오인하면 1로 잘못 답한다."
+                    ),
+                    difficulty=_difficulty(c),
+                )
+            )
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "real_root_count": _build_real_root_count_pool,
     "extremum_count": _build_extremum_count_pool,
     "is_one_to_one": _build_is_one_to_one_pool,
     "geometric_convergence": _build_geometric_convergence_pool,
+    "limit_equals_value": _build_limit_equals_value_pool,
+    "is_differentiable": _build_is_differentiable_pool,
+    "series_converges": _build_series_converges_pool,
 }
 
 

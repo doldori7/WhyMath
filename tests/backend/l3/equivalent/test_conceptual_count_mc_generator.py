@@ -24,6 +24,9 @@ _CASES: tuple[tuple[CountTemplateKind, str, tuple[str, ...]], ...] = (
     ("extremum_count", "critical-point-implies-extremum", ("[12미적Ⅰ-02-01]",)),
     ("is_one_to_one", "invertibility-without-1-1", ("[10기수2-03-03]",)),
     ("geometric_convergence", "geometric-series-always-converges", ("[12대수03-01]",)),
+    ("limit_equals_value", "limit-equals-function-value", ("[12미적Ⅰ-01-01]",)),
+    ("is_differentiable", "continuity-implies-differentiability", ("[12미적Ⅰ-02-02]",)),
+    ("series_converges", "term-to-zero-implies-convergence", ("[12미적Ⅱ-01-04]",)),
 )
 
 

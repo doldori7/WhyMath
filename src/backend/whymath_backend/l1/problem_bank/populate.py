@@ -135,7 +135,7 @@ class ProblemVerifyMeta:
     answer_aggregate: str | None = None
     """S2 킬러 — 근 집계 검증 종류(sum/product). 답이 근이 아니라 근들의 합/곱인 킬러 문항."""
     answer_kind: str | None = None
-    """개념형 — 개수 검증 종류(real_root_count/extremum_count). 답이 값이 아니라 개수인 문항."""
+    """개념형 — 개수/판정 검증 종류(개수·일대일·수렴·극한=함숫값·미분가능). 답이 값이 아닌 문항."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,7 +184,9 @@ def _concept_tag_from_dict(raw: dict[str, Any], *, slug: str) -> ConceptTag:
     src_id = raw.get("concept_src_id")
     role = raw.get("role")
     if not isinstance(src_id, str) or not src_id:
-        raise ProblemCorpusError(f"개념 태깅 concept_src_id 누락/형식오류: slug={slug} raw={raw!r}")
+        raise ProblemCorpusError(
+            f"개념 태깅 concept_src_id 누락/형식오류: slug={slug} raw={raw!r}"
+        )
     if not isinstance(role, str) or role not in _CONCEPT_ROLE_VALUES:
         raise ProblemCorpusError(
             f"개념 태깅 role이 ConceptRole 밖: slug={slug} role={role!r} "
@@ -233,7 +235,9 @@ def _record_from_line(raw: dict[str, Any]) -> ProblemBankRecord:
 
     # ── ④ 저작 메타 조립 ──
     concept_tags = tuple(
-        _concept_tag_from_dict(c, slug=slug) for c in concepts_raw if isinstance(c, dict)
+        _concept_tag_from_dict(c, slug=slug)
+        for c in concepts_raw
+        if isinstance(c, dict)
     )
     verify_meta = _verify_meta_from_raw(verify_raw, slug=slug)
     provenance_meta = ProblemProvenanceMeta(
@@ -258,7 +262,9 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
     answer_map_raw = verify_raw.get("answer_map", {})
     steps_raw = verify_raw.get("solution_steps")
     if not isinstance(conditions, (str, list)):
-        raise ProblemCorpusError(f"verify.conditions 형식오류: slug={slug} value={conditions!r}")
+        raise ProblemCorpusError(
+            f"verify.conditions 형식오류: slug={slug} value={conditions!r}"
+        )
     answer_map = {str(k): str(v) for k, v in dict(answer_map_raw).items()}
     steps = [str(s) for s in steps_raw] if isinstance(steps_raw, list) else None
     sel_raw = verify_raw.get("answer_selection")
@@ -269,7 +275,15 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
     kind = (
         kind_raw
         if kind_raw
-        in ("real_root_count", "extremum_count", "is_one_to_one", "geometric_convergence")
+        in (
+            "real_root_count",
+            "extremum_count",
+            "is_one_to_one",
+            "geometric_convergence",
+            "limit_equals_value",
+            "is_differentiable",
+            "series_converges",
+        )
         else None
     )
     return ProblemVerifyMeta(
@@ -354,9 +368,13 @@ class ProblemBankStore:
         stmt = select(Concept.source_id, Concept.concept_id)
         with self._get_engine().connect() as conn:
             rows = conn.execute(stmt).all()
-        return {row.source_id: row.concept_id for row in rows if row.source_id is not None}
+        return {
+            row.source_id: row.concept_id for row in rows if row.source_id is not None
+        }
 
-    def populate(self, records: Sequence[ProblemBankRecord]) -> ProblemBankPopulateReport:
+    def populate(
+        self, records: Sequence[ProblemBankRecord]
+    ) -> ProblemBankPopulateReport:
         """문제·개념 태깅을 `problem`/`problem_concept`에 멱등 upsert(해석·orphan skip·PK 보존).
 
         ① slug 기준 *마지막 우선* dedup(단일 배치 ON CONFLICT 중복행 오류 방지) → ② `{source_id:
@@ -372,7 +390,9 @@ class ProblemBankStore:
         import sqlalchemy as sa
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        from whymath_backend.db.models.concept import ProblemConcept as ProblemConceptORM
+        from whymath_backend.db.models.concept import (
+            ProblemConcept as ProblemConceptORM,
+        )
         from whymath_backend.db.models.problem import Problem as ProblemORM
 
         # ① slug 기준 dedup(마지막 우선) — 단일 배치 ON CONFLICT 중복행 오류 방지.
@@ -398,7 +418,9 @@ class ProblemBankStore:
                 insert_stmt = pg_insert(ProblemORM).values(**values)
                 problem_stmt = insert_stmt.on_conflict_do_update(
                     index_elements=[ProblemORM.slug],
-                    set_={key: insert_stmt.excluded[key] for key in problem_update_keys},
+                    set_={
+                        key: insert_stmt.excluded[key] for key in problem_update_keys
+                    },
                 ).returning(ProblemORM.problem_id)
                 problem_id = conn.execute(problem_stmt).scalar_one()
                 problems_loaded += 1
@@ -497,7 +519,9 @@ def main(argv: list[str] | None = None) -> int:
 
     path: Path = args.problems
     if not path.exists():
-        print(f"문제 코퍼스 없음: {path} — 코퍼스 생성기(손저작 시드)로 먼저 생성하세요.")
+        print(
+            f"문제 코퍼스 없음: {path} — 코퍼스 생성기(손저작 시드)로 먼저 생성하세요."
+        )
         return 2
 
     report = populate_problem_bank(None, problems_path=path)
@@ -505,7 +529,11 @@ def main(argv: list[str] | None = None) -> int:
         f"문제 적재 완료: {report.problems_loaded}건·개념 태깅: "
         f"{report.problem_concepts_loaded}건 (src={path}). "
         f"개념 orphan skip: {report.concepts_skipped}건"
-        + (" (개념 미적재 — l1.concept_graph/atom_graph 선행)." if report.concepts_skipped else ".")
+        + (
+            " (개념 미적재 — l1.concept_graph/atom_graph 선행)."
+            if report.concepts_skipped
+            else "."
+        )
     )
     return 0
 

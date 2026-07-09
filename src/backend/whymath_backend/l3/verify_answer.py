@@ -67,10 +67,13 @@ __all__ = [
     "verify_answer",
     "verify_extremum_count",
     "verify_geometric_convergence",
+    "verify_is_differentiable",
     "verify_is_one_to_one",
+    "verify_limit_equals_value",
     "verify_real_root_count",
     "verify_root_aggregate",
     "verify_root_selection",
+    "verify_series_converges",
 ]
 
 
@@ -1127,5 +1130,196 @@ def verify_geometric_convergence(
     verdict = "수렴" if actual else "발산"
     return _fail(
         f"등비급수 수렴 — 공비 {ratio}는 {verdict}이나 주장 {claimed_n}(불일치)",
+        samples_checked=1,
+    )
+
+
+def verify_limit_equals_value(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """유리식 f(x)가 특이점에서 lim = f(a)를 만족하는지 0/1로 검증(개념형). `conditions`는 f(x).
+
+    분모가 0이 되는 실수 특이점 a에서 극한값(유한)과 함수값을 비교한다 — 제거가능 특이점(0/0 꼴)은
+    극한은 존재하나 함수값이 미정의라 lim ≠ f(a)(0). "극한값은 늘 함수값과 같다"는 오개념
+    (limit-equals-function-value)은 1로 답해 fail한다. 자동 약분을 막으려 분자는 전개형으로 받는다.
+      - pass: 실제 일치 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 유리식 아님·특이점 없음·주장 0/1 아님·극한 계산 불가(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("극한=함숫값 — 단일 식이 아님·안전 회피")
+    try:
+        expr = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("극한=함숫값 — 식 파싱 불가·안전 회피")
+    if isinstance(expr, sympy.core.relational.Relational):
+        return _unverifiable(
+            "극한=함숫값 — 함수 식이어야 함(등식/부등식 아님)·안전 회피"
+        )
+    free = sorted(expr.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("극한=함숫값 — 단일 변수 함수가 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("극한=함숫값 — 주장값이 0/1이 아님·안전 회피")
+    var = free[0]
+    _, den = expr.as_numer_denom()
+    try:
+        singular = sympy.solve(sympy.Eq(den, 0), var)
+    except (NotImplementedError, sympy.PolynomialError, ValueError):
+        return _unverifiable("극한=함숫값 — 특이점 계산 불가·안전 회피")
+    real_singular = [s for s in singular if s.is_real]
+    if not real_singular:
+        return _unverifiable(
+            "극한=함숫값 — 실수 특이점 없음(오개념 표적 아님)·안전 회피"
+        )
+    actual = 1
+    for point in real_singular:
+        try:
+            lim = sympy.limit(expr, var, point)
+        except Exception:  # noqa: BLE001 — 극한 계산 불가는 보수적 회피
+            return _unverifiable("극한=함숫값 — 극한 계산 불가·안전 회피")
+        if (
+            lim in (sympy.zoo, sympy.oo, -sympy.oo, sympy.nan)
+            or lim.is_finite is not True
+        ):
+            return _unverifiable("극한=함숫값 — 극한이 유한하지 않음·안전 회피")
+        value = expr.subs(var, point)
+        # 함수값 미정의(0/0 → nan 등) 또는 극한과 불일치 → lim ≠ f(a).
+        if value.is_finite is not True or sympy.simplify(lim - value) != 0:
+            actual = 0
+            break
+    if actual == claimed_n:
+        return _pass(samples_checked=len(real_singular))
+    verdict = "일치" if actual else "불일치(함숫값 미정의)"
+    return _fail(
+        f"극한=함숫값 — 특이점에서 {verdict}이나 주장 {claimed_n}(불일치)",
+        samples_checked=len(real_singular),
+    )
+
+
+def verify_is_differentiable(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """함수 f(x)가 ℝ 전체에서 *미분가능*한지 0/1로 검증(개념형). `conditions`는 f(x) 식.
+
+    절댓값 꺾인점(좌·우 미분계수 상이)에서 미분가능하지 않다 — |x-a| 꼴은 연속이나 x=a에서 미분
+    불가(0). "연속이면 미분가능"이라는 오개념(continuity-implies-differentiability)은 1로 답해
+    fail한다. 꺾인점 후보는 식 안 Abs 인자의 실근이며, 각 점에서 좌·우 차분몫 극한을 비교한다.
+      - pass: 실제 미분가능 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 아님·주장 0/1 아님·유리식 등 도메인 복잡·극한 불가(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("미분가능 — 단일 식이 아님·안전 회피")
+    try:
+        expr = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("미분가능 — 식 파싱 불가·안전 회피")
+    if isinstance(expr, sympy.core.relational.Relational):
+        return _unverifiable("미분가능 — 함수 식이어야 함(등식/부등식 아님)·안전 회피")
+    free = sorted(expr.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("미분가능 — 단일 변수 함수가 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("미분가능 — 주장값이 0/1이 아님·안전 회피")
+    var = free[0]
+    abs_terms = expr.atoms(sympy.Abs)
+    if not abs_terms:
+        # Abs 없는 다항식은 ℝ 전체에서 매끄러워 미분가능(1). 그 외(유리식 등)는 도메인 복잡 → 회피.
+        if expr.is_polynomial(var):
+            actual = 1
+        else:
+            return _unverifiable("미분가능 — 다항식·절댓값 꼴이 아님·안전 회피")
+    else:
+        corners: set[sympy.Expr] = set()
+        for term in abs_terms:
+            try:
+                roots = sympy.solve(sympy.Eq(term.args[0], 0), var)
+            except (NotImplementedError, sympy.PolynomialError, ValueError):
+                return _unverifiable("미분가능 — 꺾인점 계산 불가·안전 회피")
+            corners.update(r for r in roots if r.is_real)
+        actual = 1
+        for corner in corners:
+            f_corner = expr.subs(var, corner)
+            if f_corner.is_finite is not True:
+                return _unverifiable("미분가능 — 꺾인점에서 함수값 미정의·안전 회피")
+            quotient = (expr - f_corner) / (var - corner)
+            try:
+                left = sympy.limit(quotient, var, corner, "-")
+                right = sympy.limit(quotient, var, corner, "+")
+            except Exception:  # noqa: BLE001 — 극한 불가는 보수적 회피
+                return _unverifiable("미분가능 — 좌우 미분계수 계산 불가·안전 회피")
+            if (
+                left.is_finite is not True
+                or right.is_finite is not True
+                or left != right
+            ):
+                actual = 0  # 좌·우 미분계수 상이(또는 발산) → 그 점에서 미분 불가.
+                break
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "미분가능" if actual else "미분 불가(꺾인점)"
+    return _fail(
+        f"미분가능 — 실제 {verdict}이나 주장 {claimed_n}(불일치)",
+        samples_checked=1,
+    )
+
+
+def verify_series_converges(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """일반항 a_n의 급수 Σa_n 수렴 여부를 0/1로 검증(개념형). `conditions`는 일반항 a_n(n 식).
+
+    일반항이 0에 수렴해도 급수는 발산할 수 있다 — 조화급수 Σ1/n은 항→0이나 발산(0). "일반항이
+    0이면 급수도 수렴"이라는 오개념(term-to-zero-implies-convergence)은 1로 답해 fail한다. SymPy
+    `Sum.is_convergent`로 독립 판정한다.
+      - pass: 실제 수렴 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 아님·주장 0/1 아님·수렴성 판정 불가(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("급수 수렴 — 단일 식이 아님·안전 회피")
+    try:
+        term = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("급수 수렴 — 식 파싱 불가·안전 회피")
+    if isinstance(term, sympy.core.relational.Relational):
+        return _unverifiable(
+            "급수 수렴 — 일반항 식이어야 함(등식/부등식 아님)·안전 회피"
+        )
+    free = sorted(term.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("급수 수렴 — 단일 변수 일반항이 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("급수 수렴 — 주장값이 0/1이 아님·안전 회피")
+    var = free[0]
+    try:
+        converges = sympy.Sum(term, (var, 1, sympy.oo)).is_convergent()
+    except Exception:  # noqa: BLE001 — 수렴성 판정 불가는 보수적 회피
+        return _unverifiable("급수 수렴 — 수렴성 판정 불가·안전 회피")
+    # is_convergent는 SymPy Boolean(true/false)을 돌려준다(파이썬 bool 아님·is 비교 금지).
+    if converges not in (sympy.true, sympy.false):
+        return _unverifiable("급수 수렴 — 수렴성 미결정·안전 회피")
+    actual = 1 if bool(converges) else 0
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "수렴" if actual else "발산"
+    return _fail(
+        f"급수 수렴 — Σa_n은 {verdict}이나 주장 {claimed_n}(불일치)",
         samples_checked=1,
     )
