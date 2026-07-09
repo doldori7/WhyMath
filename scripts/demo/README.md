@@ -73,8 +73,12 @@ FVM으로 프로젝트만 3.24.5를 쓰게 한다(전역 Flutter는 안 건드�
 ```powershell
 # FVM 설치(최초 1회) — dart는 Flutter에 포함(flutter가 되면 dart도 됨)
 dart pub global activate fvm
-#   'fvm'이 안 잡히면 pub-global bin을 PATH에 추가(현재 세션):
-#   $env:PATH = "$env:LOCALAPPDATA\Pub\Cache\bin;$env:PATH"
+
+# ⚠️ 반드시 실행(주석 아님!) — fvm 설치 직후 뜨는 경고("not on your path")를 그대로 해소한다.
+# 이 줄을 건너뛰면 바로 다음 'fvm install'부터 "'fvm' 용어가 인식되지 않습니다" 오류가 난다.
+# 세션 한정(이 PowerShell 창에서만 유효) — 새 창을 열면 다시 실행해야 한다.
+$env:PATH = "$env:LOCALAPPDATA\Pub\Cache\bin;$env:PATH"
+fvm --version   # 여기서 버전이 찍혀야 다음 단계로 진행(안 찍히면 위 PATH 줄을 다시 확인)
 
 cd src\mobile
 fvm install 3.24.5      # .fvmrc의 3.24.5 다운로드(최초 1회)
@@ -86,6 +90,10 @@ fvm dart run build_runner build --delete-conflicting-outputs   # ⚠️ 필수 �
 fvm flutter run --dart-define=API_URL=http://<이 PC LAN IP>:8000 --dart-define=DEMO_TOKEN=<토큰>
 ```
 > 이후로는 `src\mobile`에서 Flutter/Dart 명령 앞에 항상 **`fvm`** 을 붙인다(`fvm flutter …`·`fvm dart …`).
+>
+> **매번 새 창마다 PATH를 다시 치기 싫으면(영구 등록)**: 설정 → 시스템 → 정보 → 고급 시스템 설정 →
+> 환경 변수 → 사용자 변수의 `Path`에 `%LOCALAPPDATA%\Pub\Cache\bin`을 추가(재부팅/새 터미널부터 적용).
+> 또는 PowerShell에서: `[Environment]::SetEnvironmentVariable('Path', "$env:Path;$env:LOCALAPPDATA\Pub\Cache\bin", 'User')`.
 
 ## A-4. 녹화 → 정리 → 게이트 clear
 
@@ -102,6 +110,7 @@ python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence <녹
 |---|---|
 | `uv` not found | uv가 Python3.13 사용자 폴더에 깔려 PATH에 없음. **uv 대신 `python -m venv`** 사용(A-1·base가 3.12면 uv 불필요). |
 | `alembic`/`uvicorn` not found | 백엔드 venv 미설치(A-1) 또는 스크립트가 venv를 못 찾음(`src\backend\.venv\Scripts`). |
+| `alembic upgrade` 시 `UnicodeDecodeError: 'cp949' codec ...` | 구버전 체크아웃. Alembic이 `alembic.ini`를 OS 로케일(한국어 Windows=cp949)로 읽어 UTF-8 한글 주석을 못 읽던 버그 — `alembic.ini`를 ASCII로 고쳐 해결됨. `git pull`로 최신 받기. |
 | `docker` not found | Docker Desktop 미실행 or WSL 전용. **PowerShell**에서 실행. |
 | `Activate.ps1` 차단 | `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도. |
 | **build_runner 실패**(`retrofit_generator ... Parser` 등) | Flutter가 3.24.5보다 최신이라 비호환 패키지 조합. **FVM으로 3.24.5 고정**(A-3)·이후 `fvm flutter`/`fvm dart`로 실행. |
