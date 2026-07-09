@@ -47,7 +47,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,7 +99,9 @@ from whymath_backend.l2.prerequisite_recommendation import (
     PrerequisiteGap,
     recommend_prerequisite_gaps,
 )
-from whymath_backend.l2.skill_mastery_tracking import record_problem_attempt_skill_mastery
+from whymath_backend.l2.skill_mastery_tracking import (
+    record_problem_attempt_skill_mastery,
+)
 from whymath_backend.l2.weak_concept_recommendation import (
     WeakConceptRecommendation,
     recommend_weak_concepts,
@@ -124,7 +126,7 @@ from whymath_backend.schema.assessment import (
 )
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
-from whymath_backend.schema.enums import ASSESSED_ROLES, AuditResourceType
+from whymath_backend.schema.enums import ASSESSED_ROLES, AuditResourceType, Resolution
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
 
@@ -1739,25 +1741,59 @@ async def delete_my_session(
     )
 
 
+class DialogueEndRequest(BaseModel):
+    """대화 종료 시 세션 결말(resolution) 선택 보고 — `PATCH /v1/me/dialogues/{id}/end` 본문.
+
+    `resolution`은 *클라이언트 보고*다(`AttemptSubmitRequest.is_correct` 동형) — 클라이언트가
+    LTHC 답 미루기 루프를 구동해 세션 결말(자력해결/유도/힌트/풀이공개/포기)의 자연 권위자다.
+    서버는 이를 *영속만* 하고 신호로 판정하지 않는다(정답성·hint_level의 dialogue 귀속·포기
+    영속은 후속 슬라이스). 본문 자체가 선택(미제공 시 `ended_at`만 채우는 기존 동작 보존).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    resolution: Resolution | None = Field(
+        default=None,
+        description="세션 결말(클라이언트 보고·선택). 미제공 시 ended_at만 채움(하위호환).",
+    )
+
+
 @router.patch(
     "/dialogues/{dialogue_id}/end",
     response_model=DialogueSchema,
-    summary="내 Socratic 대화 종료(ended_at 채움)",
+    summary="내 Socratic 대화 종료(ended_at 채움·resolution 선택 보고)",
 )
 async def end_my_dialogue(
     dialogue_id: uuid.UUID,
     user: ConsentedUser,
     session: SessionDep,
+    body: Annotated[DialogueEndRequest | None, Body()] = None,
 ) -> DialogueSchema:
-    """slice 52 (slice 55 리팩터): 본인 Dialogue 종료(`ended_at`=now)·idempotent·404 비누설."""
-    row, _ = await _close_owned_resource(
+    """slice 52 (slice 55 리팩터): 본인 Dialogue 종료(`ended_at`=now)·idempotent·404 비누설.
+
+    resolution(세션 결말·**클라이언트 보고**)을 선택 적재한다 — 서버는 영속만 하고 신호로
+    판정하지 않는다(정답성·hint_level의 dialogue 귀속·포기 영속은 후속). **첫-종결-우선**:
+    이미 resolution이 있으면 보존한다(낙인 방지·`ended_at` idempotency와 동형). resolution은
+    ended_at과 *같은 트랜잭션*에 커밋한다(부분 적용 방지). 이 값은 self_solve_rate 대리 지표
+    (`harness/wh1_evaluation.py` ⑪)의 원천이 된다.
+    """
+    row, newly_closed = await _close_owned_resource(
         session,
         Dialogue,
         dialogue_id,
         user.user_id,
         "ended_at",
         "대화를 찾을 수 없습니다.",
+        commit=False,  # resolution 쓰기와 같은 트랜잭션에 묶어 원자 커밋(부분 적용 방지).
     )
+    # resolution은 클라 보고(선택)·첫 기록 우선 — 이미 있으면 보존(낙인 방지). ended_at 재호출
+    # 후에도 처음 제공되면 채울 수 있다(종료 먼저·결말 나중 보고 허용).
+    resolution_written = False
+    if body is not None and body.resolution is not None and row.resolution is None:
+        row.resolution = body.resolution
+        resolution_written = True
+    if newly_closed or resolution_written:  # 변경이 있을 때만 커밋(완전 idempotent 재호출은 no-op).
+        await session.commit()
     return row.to_schema()
 
 
@@ -1935,17 +1971,17 @@ async def export_my_data(
     return export
 
 
-# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종 + S3 3종 커버리지 맵 — 본인 스코핑) ──
+# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종 + S3 4종 커버리지 맵 — 본인 스코핑) ──
 # 설계안 04a §8.4 "0단계 대리 지표 베이스라인 좌석"의 노출 표면. 이제 대리 지표 7종 모두 계측
-# 좌석이 가동(⑦은 근사)이고, S3(status_roadmap §3) 세션 대리 지표 3종(⑧ 답 미루기 도달 깊이·
-# ⑨ BKT 숙달 증가율·⑩ 오개념 해소율)이 기존 신호 재사용으로 편입됐다. 각 지표는 표본 0/부족이면
+# 좌석이 가동(⑦은 근사)이고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
+# ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
 # value=None + status(NO_DATA) + note로 갭을 표면화한다(날조 금지·CLAUDE.md "모르면 모른다").
 # 코호트 전체 집계(user_id=None)는 ops/스크립트가 직접 호출 — 이 엔드포인트는 *본인 집계 신호만*
 # 노출(타 학생 0·admin auth 범위 밖).
 @router.get(
     "/harness-metrics",
     response_model=SurrogateMetrics,
-    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 3종 커버리지 맵)",
+    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 4종 커버리지 맵)",
 )
 async def get_my_harness_metrics(
     user: ConsentedUser,
@@ -1953,14 +1989,15 @@ async def get_my_harness_metrics(
     since: SinceParam = None,
     until: UntilParam = None,
 ) -> SurrogateMetrics:
-    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 3종 — *본인* 집계의 커버리지 맵.
+    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 — *본인* 집계의 커버리지 맵.
 
     설계안 04a §8.4 "측정 없는 도입 없음" 0단계 베이스라인. 대리 지표 7종(① verify 통과율·
     ② 진단정확도·③ 세션 완주율·④ 턴당 토큰·⑤ 도움 감소 곡선·⑥ 보정 점수·⑦ 전이 점수[근사])은
-    모두 계측 좌석이 살아 있고, S3(status_roadmap §3) 세션 대리 지표 3종(⑧ 답 미루기 도달 깊이·
-    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율)이 기존 신호 재사용으로 편입됐다. 각 지표는 표본 0/부족이면
+    모두 계측 좌석이 살아 있고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
+    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
     value=None + status + note로 "무엇을 만들면 잴 수 있는지"를 정직하게 드러낸다(가짜 0/stub 금지).
-    ⑨는 measured_at·⑩은 updated_at 시간창을 쓰고, 나머지는 started_at/event_at 기준이다.
+    ⑨는 measured_at·⑩은 updated_at·⑪은 started_at(resolution) 시간창을 쓰고, 나머지는
+    started_at/event_at 기준이다. ⑪ resolution은 클라이언트 보고(PATCH .../end 적재·서버 미판정).
 
     `since`/`until`(선택)로 시간창(inclusive·TZ-aware ISO8601·naive·since>until은
     422). user_id는 인증에서 주입(본인 집계만).
