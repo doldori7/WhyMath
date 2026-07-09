@@ -645,4 +645,5 @@ jobs:
         run: |
           python -m whymath_backend.harness.corpus_reverify \
             ../../data/corpus/problem_bank_generated_v0/problems.jsonl \
-            ../../data/corpus/problem_bank_rephrased_v0/problems.jsonl
+            ../../data/corpus/problem_bank_rephrased_v0/problems.jsonl \
+            ../../data/corpus/problem_bank_killer_v0/problems.jsonl
