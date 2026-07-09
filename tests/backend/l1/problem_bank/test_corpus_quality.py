@@ -176,7 +176,8 @@ def test_generated_corpus_concepts_tagged() -> None:
     # calc-extremum=H:12미적Ⅰ02-07·극대극소, calc-tangent=H:12미적Ⅰ02-01·미분계수).
     # 미지 개념 태깅은 차단(태깅 왜곡 봉인).
     # exp/log(대수·H:12대수01-08)는 지수·로그 방정식 밴드.
-    # 수열·삼각(대수) 밴드: 등차=H:12대수03-02·등비=H:12대수03-03·삼각=H:12대수02-02.
+    # 수열·삼각(대수) 밴드: 등차=H:12대수03-02·등비=H:12대수03-03·삼각=H:12대수02-02·
+    # 귀납 정의(seq-inductive·S2-06)=H:12대수03-06.
     known_primary = {
         "HK06",
         "H:12미적Ⅰ02-07",
@@ -185,6 +186,7 @@ def test_generated_corpus_concepts_tagged() -> None:
         "H:12대수03-02",
         "H:12대수03-03",
         "H:12대수02-02",
+        "H:12대수03-06",
     }
     for record in _generated_records():
         assert record.concept_tags, f"{record.slug} concepts 비어 있음"

@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-10-client-mathlogic-gate
+title: "L5 클라이언트(Flutter/웹) 무-수학로직 자동 게이트 — 감사 갭 A 상환"
+track: infra-debt
+stage: S1
+subject: cross
+layer: mobile
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - Dart 거버넌스 테스트 또는 CI 소스 스캔이 채점·판정·수식동치 로직의 클라 유입 시 red
+  - "기존 코드 위반 0 확인 (현재 규범 준수 상태를 게이트로 동결)"
+artifacts:
+  - "커밋 f0d3443 (게이트 2종 + ARCH-12 등록)"
+session: null
+notes: "arch_audit_2026-07-09.md [갭 A] — import-linter는 Python만 검사, CLAUDE.md 슬라이스 89 규범의 CI 강제"
+updated: 2026-07-09

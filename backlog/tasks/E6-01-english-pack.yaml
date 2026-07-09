@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E6-01-english-pack
+title: "영어 팩 — 루브릭 평가 하네스 (인간 채점 일치율 κ 목표)"
+track: subject-expansion
+stage: E6
+subject: english
+layer: data-pipeline
+status: todo
+priority: 1
+owner: claude
+depends_on:
+  - E5-01-korean-pack
+requires_gates: []
+acceptance:
+  - "루브릭 평가 인간 일치율(κ) 목표 도달 + 학교 영어 파일럿"
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

@@ -82,6 +82,10 @@ def _seed_corpus(tmp_path: Path, *, short_n: int = 8, mc_n: int = 4) -> Path:
         arith_n=0,
         geo_n=0,
         trig_n=0,
+        arith_sum_n=0,
+        geo_sum_n=0,
+        trig_eq_n=0,
+        seq_inductive_n=0,
         write=True,
     )
     assert report.fulfilled

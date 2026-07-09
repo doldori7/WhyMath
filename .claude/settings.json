@@ -9,6 +9,7 @@
       "Bash(mypy:*)",
       "Bash(flutter:*)",
       "Bash(dart:*)",
+      "Bash(python3 scripts/harness/*)",
       "Bash(git:status)",
       "Bash(git:diff)",
       "Bash(git:log)",
@@ -43,13 +44,40 @@
   "model": "claude-opus-4-7",
   "env": {
     "LANGUAGE": "ko",
-    "PROJECT_PHASE": "0",
     "LLM_ROUTER_DEFAULT": "local-qwen3-math",
     "PHAIAKES9_ENDPOINT": "http://phaiakes9.local:11434"
   },
   "hooks": {
-    "PreToolUse": [],
-    "PostToolUse": [],
-    "Stop": []
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/harness/backlog.py\" brief --format hook 2>/dev/null || echo '[빌드하네스] 브리핑 실패 — python3 scripts/harness/backlog.py validate 로 진단하세요'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/harness/backlog.py\" check-edit"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/scripts/harness/backlog.py\" check-stop"
+          }
+        ]
+      }
+    ]
   }
 }

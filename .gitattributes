@@ -36,6 +36,7 @@
 #   주의: 같은 항목을 양쪽이 수정하면 중복 라인이 남을 수 있으므로 "새 항목은 파일 끝에
 #   append" 관행을 지킬 것 (docs/standards/parallel_sessions.md 참조).
 MEMORY.md   merge=union
+backlog/events.ndjson   merge=union
 
 # 바이너리 — 변환·diff 금지
 *.png       binary

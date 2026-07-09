@@ -12,7 +12,9 @@
   - `suneung_priority(problem)` — 노출 우선순위 가중치(높을수록 먼저). 교수학 근거 반영.
   - `select_suneung_items(problems, persona, *, min_fit, limit)` — 적격 필터 → 우선순위
     내림차순 안정정렬 → limit 적용.
-  - `SUNEUNG_PERSONAS`·`METADATA_ONLY_SOURCES` — 게이팅 상수(아래 docstring에 근거).
+  - `SUNEUNG_PERSONAS`·`METADATA_ONLY_SOURCES`·`SUNEUNG_EXAM_TYPES` — 게이팅 상수(아래
+    docstring에 근거). `SUNEUNG_EXAM_TYPES`는 S2-06(수능 적응 추천)에서 api의 SQL 사전축소가
+    같은 기출 유형 신호 집합을 참조해야 해서 공개로 승격했다(정본은 여전히 이 모듈).
 
 레이어 규칙(CLAUDE.md): L6→L1만 의존(`schema.problem`·`schema.enums`). L4/L2/L3를 import하지
 않는다 — 이 모듈은 기존 `Problem` 필드의 *존재·값*만 보므로 하위 카탈로그·검증자·모델이
@@ -46,6 +48,7 @@ from whymath_backend.schema.problem import Problem
 # 정의 정본은 `l6/_shared.py`(Rule of three 추출 완료). `__all__`에도 그대로 둔다.
 __all__ = [
     "METADATA_ONLY_SOURCES",
+    "SUNEUNG_EXAM_TYPES",
     "SUNEUNG_PERSONAS",
     "is_suneung_eligible",
     "select_suneung_items",
@@ -79,7 +82,9 @@ PRD 5종 페르소나(`enums.Persona`) 중 *정시(수능)* 트랙에 있는 셋
 # 정시 대비의 핵심은 *평가원·교육청 기출 유형*에 대한 숙달이므로 이 셋을 적합 신호로 본다
 # (EBS교재·N제·자체생성은 그 자체로는 "기출 유형" 신호가 아니라 다른 적합 신호로 판정).
 # (수능 전용 신호라 공용 추출 대상이 아니다 — 이 모듈에 남긴다.)
-_SUNEUNG_EXAM_TYPES: frozenset[ExamType] = frozenset({ExamType.수능, ExamType.모평, ExamType.학평})
+# S2-06에서 비공개(_SUNEUNG_EXAM_TYPES) → 공개로 승격: api의 수능 후보 SQL 사전축소가
+# 같은 집합을 참조한다(중복 재정의 방지 — 정본은 이 모듈 하나).
+SUNEUNG_EXAM_TYPES: frozenset[ExamType] = frozenset({ExamType.수능, ExamType.모평, ExamType.학평})
 
 
 def is_suneung_eligible(
@@ -123,7 +128,7 @@ def is_suneung_eligible(
         return False
 
     # ③ 수능 적합 신호 — 기출 유형 / 시그니처 패턴 / 페르소나 적합도 중 하나라도.
-    suneung_exam_values = {e.value for e in _SUNEUNG_EXAM_TYPES}
+    suneung_exam_values = {e.value for e in SUNEUNG_EXAM_TYPES}
     is_exam_signal = _shared.normalize_enum_value(problem.exam_type) in suneung_exam_values
     has_signature = bool(problem.signature_patterns)
     meets_fit = _shared.persona_fit(problem, persona) >= min_fit

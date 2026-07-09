@@ -1,0 +1,18 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E1-03-phy-area-registration
+title: "물리 AREA 니모닉 실등록 — MECH·ELEC·WAVE·THERMO·MODPHY"
+track: subject-expansion
+stage: E1
+subject: physics
+layer: data-pipeline
+status: todo
+priority: 1
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "_TOPIC_AREA_MAP 레지스트리 규약으로 5종 등록 + 성취기준 크롤 연결"
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

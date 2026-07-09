@@ -215,10 +215,21 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 
 ## 🧠 워크플로우 표준
 
+### 작업일정 정본 = 빌드 하네스 (`backlog/` + `scripts/harness/`)
+- "다음 할 일"은 추론하지 말고 `python3 scripts/harness/backlog.py next`가 계산한다
+- SessionStart 훅이 매 세션 브리핑(현재 스테이지·next·게이트 리마인드)을 자동 주입한다
+- 상세 규약: `docs/standards/build_harness.md`
+
+### 순차 진행 (기본 모드)
+```
+/drive                      ← 백로그의 다음 태스크를 순차 처리 (사람 게이트에서 정지)
+/gates                      ← Kiki 행동 대기 게이트 점검·clear(evidence 필수)
+```
+
 ### 새 기능 개발 시
 ```
-1. /plan [기능명]            ← 계획 수립, 7계층 어디에 속하는지 확인
-2. /implement [영역]         ← 해당 서브에이전트 위임
+1. /plan [기능명]            ← 계획 수립 + backlog 태스크 등록 (7계층 확인)
+2. /implement [태스크 id]    ← start(claim) → 서브에이전트 위임 → done(증적 필수)
 3. /review                  ← 코드·테스트·문서 점검
 4. MEMORY.md 업데이트         ← 주요 결정 기록
 5. git commit               ← 의미 있는 커밋 메시지
@@ -280,6 +291,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - `ROADMAP.md` — Phase별 일정
 - `docs/architecture/00_overview.md` — 7계층 요약
 - `docs/standards/prompt_engineering.md` — 프롬프트 기준
+- `docs/standards/build_harness.md` — 빌드 하네스 규약 (작업일정 정본 `backlog/`·순차 조율·게이트)
 - `docs/standards/build_checkpoint_questions.md` — 구축 플레이북 단계별 진행 점검 질문 세트 (`/review`·`/status` 시)
 - `docs/standards/playbook_part_review_questions.md` — 구축 플레이북 Part 0~12 순차 설계-준수 점검 질문 세트
 

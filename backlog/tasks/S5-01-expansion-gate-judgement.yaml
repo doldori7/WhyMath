@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S5-01-expansion-gate-judgement
+title: S5 타과목 확장 게이트 판정 → 통과 시 G-s5-subject-expansion clear
+track: math-completion
+stage: S5
+subject: math
+layer: docs
+status: todo
+priority: 1
+owner: kiki
+depends_on:
+  - S4-01-math-k12-complete
+requires_gates: []
+acceptance:
+  - "e_axis_v1 §5 체크리스트 전수 판정 + 게이트 clear (evidence 필수)"
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

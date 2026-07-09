@@ -1,0 +1,18 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-12-quizmode-grading-decision
+title: "QuizMode 클라 채점·진단 존치 여부 결정 — (a) 데모 예외 공식화 vs (b) 백엔드 verify 리팩터"
+track: infra-debt
+stage: S1
+subject: math
+layer: web
+status: todo
+priority: 3
+owner: kiki
+depends_on: []
+requires_gates: []
+acceptance:
+  - "결정 기록 (MEMORY.md 결정로그) + 게이트 화이트리스트 갱신 방향 확정"
+artifacts: []
+session: null
+notes: "감사 갭 A 후속 — 위반 좌표: GraphingCalculator.jsx:535-600 (sameGraph 채점·diagnose 오개념 진단·quiz_history 점수 저장). 앱 임베드 경로(spec 주입 렌더)는 무관. 게이트: test/no_math_judgement_governance.test.js 화이트리스트 2건 동결"
+updated: 2026-07-09

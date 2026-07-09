@@ -18,22 +18,34 @@ L6은 아무도 import하지 않는 최상위 소비자다.
 저작권(CLAUDE.md 우선순위 #2): 수능 대비 핵심 자원인 평가원 기출의 *본문* 복제는 절대 금지
 (저작권법 §32 단서·MEMORY 2026-05-28) — 평가원/EBS/교과서 출처는 게이트로 원천 차단하고,
 학생에게는 *자체생성 동등문제*(WHYMATH_GENERATED)만 노출한다.
+
+S2-06 수능 적응 추천(`recommendation.py`): 위 게이팅(진실 게이트)과 L2 IRT CAT을 결합해
+"적격 후보 중 가중 정보량 최대" 문항을 고른다 — 게이팅과 달리 L6→L2 *하향* import를 한다
+(import-linter 합법 방향 — recommendation 모듈 docstring 참조).
 """
 
 from __future__ import annotations
 
 from whymath_backend.l6.suneung.gating import (
     METADATA_ONLY_SOURCES,
+    SUNEUNG_EXAM_TYPES,
     SUNEUNG_PERSONAS,
     is_suneung_eligible,
     select_suneung_items,
     suneung_priority,
 )
+from whymath_backend.l6.suneung.recommendation import (
+    recommend_suneung_index,
+    suneung_item_weight,
+)
 
 __all__ = [
     "METADATA_ONLY_SOURCES",
+    "SUNEUNG_EXAM_TYPES",
     "SUNEUNG_PERSONAS",
     "is_suneung_eligible",
+    "recommend_suneung_index",
     "select_suneung_items",
+    "suneung_item_weight",
     "suneung_priority",
 ]

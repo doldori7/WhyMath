@@ -37,7 +37,25 @@ SMART 기준으로 분해:
 - **Relevant**: 현재 Phase 목표와 일치?
 - **Time-bound**: 예상 소요 시간
 
-### 4. 계획서 출력 형식
+### 4. 백로그 등록 (계획의 최종 산출물 — 문서만 남기고 끝내기 금지)
+분해된 작업 단위를 **backlog 태스크로 실체화**한다. 계획은 backlog에 등록되어야
+/drive가 이어받을 수 있다:
+
+```bash
+python3 scripts/harness/backlog.py add \
+  --id <STAGE-NN-slug> --title "..." \
+  --track <math-completion|subject-expansion|infra-debt> \
+  --stage <S0~S5|E1~E6> --layer <worktree 7종> --subject <과목> \
+  --priority <1~5> \
+  --depends <선행 태스크 id> --gates <G-id> \
+  --acceptance "완료 기준 1" --acceptance "완료 기준 2"
+```
+
+- 의존성·게이트·acceptance를 빠뜨리지 않는다 (순차 조율의 입력이다)
+- 사람이 해야 하는 작업은 `--owner kiki` (자동 착수 제외)
+- 등록 후 `backlog.py validate` green 확인
+
+### 5. 계획서 출력 형식
 
 ```markdown
 # 계획: [기능명]
@@ -70,10 +88,10 @@ SMART 기준으로 분해:
 [지금 당장 할 1가지]
 ```
 
-### 5. 사용자 확인
+### 6. 사용자 확인
 - 계획에 대한 피드백 요청
 - 우선순위 조정 옵션 제시
-- 즉시 `/implement`로 넘어갈지 묻기
+- 즉시 `/drive` 또는 `/implement <태스크 id>`로 넘어갈지 묻기
 
 ## 원칙
 

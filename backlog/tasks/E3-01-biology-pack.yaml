@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E3-01-biology-pack
+title: "생물 팩 — 사실 검증 축(근거 인용 RAG) 신설·과학 3부작 완성"
+track: subject-expansion
+stage: E3
+subject: biology
+layer: data-pipeline
+status: todo
+priority: 1
+owner: claude
+depends_on:
+  - E2-01-chemistry-pack
+requires_gates: []
+acceptance:
+  - "사실 검증 축 undecidable 비율 허용선 이내 + 과학 3과목 통합 진단"
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

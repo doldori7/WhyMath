@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S1-12-phaiakes9-live-verify
+title: "Phaiakes9 라이브 검증 — 비용/지연 실측·verify 게이트 승격"
+track: math-completion
+stage: S1
+subject: math
+layer: backend
+status: todo
+priority: 1
+owner: kiki
+depends_on: []
+requires_gates: []
+acceptance:
+  - 라이브 호출 비용·지연 실측치를 docs/strategy에 기록
+  - "verify 커버리지 게이트 승격 판정 + MEMORY.md 결정로그"
+artifacts: []
+session: null
+notes: "ROADMAP 병목 ② 대응. 라이브 실측은 Phaiakes9 실호출 필수(클라우드 환경 도달 불가) → owner kiki. 런북=docs/strategy/live_cost_measurement_2026-07.md. 결과표 채워지면 done"
+updated: 2026-07-09
