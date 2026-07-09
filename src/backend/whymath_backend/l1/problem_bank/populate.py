@@ -132,6 +132,8 @@ class ProblemVerifyMeta:
     answer_map: dict[str, str]
     solution_steps: list[str] | None = None
     answer_selection: str | None = None
+    answer_aggregate: str | None = None
+    """S2 킬러 — 근 집계 검증 종류(sum/product). 답이 근이 아니라 근들의 합/곱인 킬러 문항."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,11 +261,14 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
     steps = [str(s) for s in steps_raw] if isinstance(steps_raw, list) else None
     sel_raw = verify_raw.get("answer_selection")
     selection = sel_raw if sel_raw in ("largest", "smallest", "unique") else None
+    agg_raw = verify_raw.get("answer_aggregate")
+    aggregate = agg_raw if agg_raw in ("sum", "product") else None
     return ProblemVerifyMeta(
         conditions=conditions,
         answer_map=answer_map,
         solution_steps=steps,
         answer_selection=selection,
+        answer_aggregate=aggregate,
     )
 
 

@@ -164,6 +164,7 @@ def _to_record(candidate: CandidateProblem) -> ProblemBankRecord:
             # 근 선택(S2-i)을 함께 영속 — 빠뜨리면 저장 코퍼스가 품질 게이트에서 "선택 미명시"
             # 유일성 강등을 당한다(라운드트립 실측 회귀).
             answer_selection=candidate.answer_selection,
+            answer_aggregate=candidate.answer_aggregate,
         ),
         provenance=ProblemProvenanceMeta(
             generation_type=_enum_value(candidate.provenance.generation_type) or "",
@@ -221,6 +222,7 @@ def run_equivalent_generation(
         answer_map=candidate.answer_map,
         solution_steps=candidate.solution_steps,
         answer_selection=candidate.answer_selection,
+        answer_aggregate=candidate.answer_aggregate,
     )
     reasons.extend(verdict.reasons)
     if not verdict.accepted:
@@ -241,7 +243,12 @@ def run_equivalent_generation(
     # 정규화 불가(비다항 등)면 signature=None → 이 단계 스킵(임베딩 dedup에 위임).
     signature: str | None = None
     if signature_index is not None:
-        signature = canonical_signature(candidate.conditions, candidate.answer_selection)
+        # aggregate 문항은 answer_selection=None이라 같은 조건식의 합/곱이 충돌한다 —
+        # signature payload를 agg 종류로 구분(생성기 skip의 'agg:{kind}'와 정합).
+        _sig_payload = candidate.answer_selection or (
+            f"agg:{candidate.answer_aggregate}" if candidate.answer_aggregate else None
+        )
+        signature = canonical_signature(candidate.conditions, _sig_payload)
         if signature is not None and signature in signature_index:
             reasons.append(
                 "구조 중복 — 정규형이 같은 방정식·근 선택이 이미 코퍼스에 있음"
