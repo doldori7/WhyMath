@@ -32,23 +32,26 @@
 ```powershell
 docker version                              # Docker Desktop 실행 중이어야 함(고래 아이콘)
 Invoke-RestMethod http://localhost:11434/api/tags   # Ollama for Windows 가동 → 코치 라이브(없어도 루프 완주)
-pip install uv                              # uv 없으면(conda base에서 1회)
+python --version                            # conda base가 3.12.x면 그대로 사용(아래 A-1은 python -m venv)
 ```
 > `docker`가 PowerShell에서 안 되면 Docker Desktop이 꺼졌거나 WSL 전용 상태 — **PowerShell(네이티브)** 에서 실행하세요.
 
 ## A-1. 브랜치 + 백엔드 venv (최초 1회, 리포 루트에서)
 
+conda base가 이미 Python 3.12.x면 **`python -m venv`** 로 만드는 게 가장 확실하다(별도 uv 설치·PATH 불필요):
 ```powershell
 git fetch origin claude/g-kiki-device-demo-fv831n
 git checkout claude/g-kiki-device-demo-fv831n
 
 cd src\backend
-uv venv --python 3.12 .venv
+python -m venv .venv                # base가 3.12 → 3.12 venv (uv 불필요)
 .\.venv\Scripts\Activate.ps1        # ← 리눅스 'source .venv/bin/activate' 대응(Scripts, bin 아님)
-uv pip install -e ".[dev]"
+pip install -e ".[dev]"
 cd ..\..
 ```
-> `Activate.ps1`에서 "스크립트를 실행할 수 없습니다" 오류 → 먼저 `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도.
+> - `Activate.ps1`에서 "스크립트를 실행할 수 없습니다" 오류 → 먼저 `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도.
+> - base가 3.12가 아니면 uv 사용: `pip install uv` 후 `python -m uv venv --python 3.12 .venv`(또는 `uv`가
+>   PATH에 있으면 `uv venv --python 3.12 .venv`). uv는 3.12를 자동 내려받는다.
 
 ## A-2. 원커맨드 기동 (리포 루트에서)
 
@@ -60,16 +63,29 @@ cd ..\..
 - **처음 실행 시 Windows 방화벽 팝업**이 뜨면 Python에 **개인 네트워크 허용**(패드가 8000 포트로 붙게).
 - 출력된 `flutter run …` 명령을 복사. 이 창은 서버가 백그라운드로 도는 동안 그대로 둡니다.
 
-## A-3. 패드에서 앱 실행
+## A-3. 패드에서 앱 실행 (⚠️ FVM으로 Flutter 3.24.5 고정 필수)
 
-패드를 이 PC와 **같은 WiFi**에 두고 연결한 뒤 `src\mobile`에서:
+이 프로젝트는 **Flutter 3.24.5**에 고정돼 있다(CI·`src/mobile/.fvmrc`). 최신 Flutter로 빌드하면
+호환 안 되는 패키지(예: `retrofit_generator` ↔ `retrofit`)가 풀려 **build_runner가 실패**한다.
+FVM으로 프로젝트만 3.24.5를 쓰게 한다(전역 Flutter는 안 건드림).
+
+패드를 이 PC와 **같은 WiFi**에 두고 연결한 뒤:
 ```powershell
+# FVM 설치(최초 1회) — dart는 Flutter에 포함(flutter가 되면 dart도 됨)
+dart pub global activate fvm
+#   'fvm'이 안 잡히면 pub-global bin을 PATH에 추가(현재 세션):
+#   $env:PATH = "$env:LOCALAPPDATA\Pub\Cache\bin;$env:PATH"
+
 cd src\mobile
-flutter pub get
-dart run build_runner build --delete-conflicting-outputs   # ⚠️ 필수 — .g.dart 생성(안 하면 컴파일 실패)
-# A-2에서 복사한 명령 그대로:
-flutter run --dart-define=API_URL=http://<이 PC LAN IP>:8000 --dart-define=DEMO_TOKEN=<토큰>
+fvm install 3.24.5      # .fvmrc의 3.24.5 다운로드(최초 1회)
+fvm use 3.24.5          # 프로젝트에 3.24.5 연결(.fvm/ 생성)
+
+fvm flutter pub get
+fvm dart run build_runner build --delete-conflicting-outputs   # ⚠️ 필수 — .g.dart 생성
+# A-2에서 복사한 명령을 그대로(fvm 접두):
+fvm flutter run --dart-define=API_URL=http://<이 PC LAN IP>:8000 --dart-define=DEMO_TOKEN=<토큰>
 ```
+> 이후로는 `src\mobile`에서 Flutter/Dart 명령 앞에 항상 **`fvm`** 을 붙인다(`fvm flutter …`·`fvm dart …`).
 
 ## A-4. 녹화 → 정리 → 게이트 clear
 
@@ -84,9 +100,12 @@ python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence <녹
 
 | 증상 | 원인·해결 |
 |---|---|
-| `uv`/`alembic`/`uvicorn` not found | venv 미설치(A-1) 또는 스크립트가 venv를 못 찾음(`src\backend\.venv\Scripts`). |
+| `uv` not found | uv가 Python3.13 사용자 폴더에 깔려 PATH에 없음. **uv 대신 `python -m venv`** 사용(A-1·base가 3.12면 uv 불필요). |
+| `alembic`/`uvicorn` not found | 백엔드 venv 미설치(A-1) 또는 스크립트가 venv를 못 찾음(`src\backend\.venv\Scripts`). |
 | `docker` not found | Docker Desktop 미실행 or WSL 전용. **PowerShell**에서 실행. |
 | `Activate.ps1` 차단 | `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도. |
+| **build_runner 실패**(`retrofit_generator ... Parser` 등) | Flutter가 3.24.5보다 최신이라 비호환 패키지 조합. **FVM으로 3.24.5 고정**(A-3)·이후 `fvm flutter`/`fvm dart`로 실행. |
+| `fvm` not found | `dart pub global activate fvm` 후 pub-global bin 미등록. `$env:PATH = "$env:LOCALAPPDATA\Pub\Cache\bin;$env:PATH"`. |
 | 패드에서 서버 못 붙음 | 첫 실행 방화벽 팝업에서 **개인 네트워크 허용**·API_URL이 이 PC Wi-Fi LAN IP인지 확인(`ipconfig`). |
 | 코치 발문이 밋밋 | Ollama for Windows 미가동. Ollama 앱 실행/`ollama serve` 후 재시도(`/status`가 라이브로 바뀜). |
 
