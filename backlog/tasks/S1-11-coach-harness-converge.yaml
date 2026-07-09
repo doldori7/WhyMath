@@ -8,13 +8,13 @@ layer: backend
 status: todo
 priority: 1
 owner: claude
-depends_on: []
-requires_gates:
-  - G-phaiakes9-key
+depends_on:
+  - S1-12-phaiakes9-live-verify
+requires_gates: []
 acceptance:
   - "coach 경로가 WH-1 하네스로 단일 수렴 (이중 경로 제거)"
   - 회귀 테스트 green
 artifacts: []
 session: null
-notes: ""
-updated: 2026-07-08
+notes: "학생-대면 primary 승격 flip은 라이브 shadow 실측(S1-12) 선행 필수 — '측정 없는 도입 없음'(04a 원칙). 하네스 부품·안전장치는 완성(S1-a~e). S1-12 데이터 확보 후 착수"
+updated: 2026-07-09
