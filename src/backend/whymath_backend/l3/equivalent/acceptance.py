@@ -36,6 +36,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.l3.equivalent.retag import TagAuditor
 from whymath_backend.l3.pregenerate.validator import (
     SeedValidator,
     default_seed_validator,
@@ -143,7 +144,7 @@ class AcceptanceVerdict(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    accepted: bool = Field(description="4종 게이트 모두 통과 시에만 True(코퍼스 저장 허용).")
+    accepted: bool = Field(description="게이트 모두 통과 시에만 True(코퍼스 저장 허용).")
     equivalence: EquivalenceVerdict = Field(description="동등성 분류(3등급).")
     equivalence_score: float = Field(ge=0.0, le=1.0, description="동등성 가중 점수 0~1.")
     copyright_ok: bool = Field(description="저작권 게이트 — 값 확인 통과 여부.")
@@ -151,6 +152,13 @@ class AcceptanceVerdict(BaseModel):
         description="정확성 게이트 — Tier1+Tier2 결합 판정.",
     )
     hygiene_ok: bool = Field(description="위생 게이트 — 본문 슬립 검출 없음 여부.")
+    consistency_ok: bool = Field(
+        default=True,
+        description=(
+            "발문-수식 정합 감사(초인간 검증 S3·독립 주체) — 감사기 미주입 시 True(기존 동작 "
+            "비트동일). 발문의 수식/선택 문구가 검산 조건과 확정적으로 어긋나면만 False."
+        ),
+    )
     reasons: list[str] = Field(
         default_factory=list,
         description="거부/검수 사유(사람 가독·학생 비노출·조용한 실패 금지).",
@@ -373,6 +381,7 @@ def evaluate_equivalent_candidate(
     solution_step_types: Sequence[StepType | None] | None = None,
     answer_selection: str | None = None,
     validator: SeedValidator | None = None,
+    tag_auditor: TagAuditor | None = None,
     difficulty_tol: float = 0.5,
 ) -> AcceptanceVerdict:
     """자체생성 동등문제 후보를 4종 게이트로 평가 — 순수·결정론·DB 0·LLM 0.
@@ -441,8 +450,21 @@ def evaluate_equivalent_candidate(
             f"난이도 {s_difficulty:.2f}·답형태 {s_answer_format:.2f})."
         )
 
+    # ⑤ 발문-수식 정합 감사 (초인간 검증 S3·독립 주체). 감사기 미주입이면 True(기존 동작
+    #    비트동일 — 자기신고 태그의 자기 채점을 독립 검증기로 교차한다).
+    consistency_ok = True
+    if tag_auditor is not None:
+        audit = tag_auditor.audit(candidate, answer_selection=answer_selection)
+        consistency_ok = audit.consistency_ok
+        if not consistency_ok and audit.reason is not None:
+            reasons.append(f"발문-수식 정합 감사 실패 — {audit.reason}")
+
     accepted = (
-        copyright_ok and verification == "verified" and hygiene_ok and equivalence == "동치후보"
+        copyright_ok
+        and verification == "verified"
+        and hygiene_ok
+        and equivalence == "동치후보"
+        and consistency_ok
     )
     return AcceptanceVerdict(
         accepted=accepted,
@@ -451,5 +473,6 @@ def evaluate_equivalent_candidate(
         copyright_ok=copyright_ok,
         verification=verification,
         hygiene_ok=hygiene_ok,
+        consistency_ok=consistency_ok,
         reasons=reasons,
     )
