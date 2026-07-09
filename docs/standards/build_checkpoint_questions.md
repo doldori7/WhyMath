@@ -12,15 +12,15 @@
 - `/review`·`/status` 세션 시작 시 이 문서를 로드해 훑고, ❌ 뜨는 항목은 **`MEMORY.md` 결정 로그**로 남긴다.
 - 이 문서는 *질문지*다. 답(현재 상태)은 코드·`MEMORY.md`가 진실 원천이며, 여기 적힌 현재 상태 태그(`[완료]`/`[구현]`/`[진행]`/`[프로토타입]`)는 점검 시작점일 뿐 — **점검할 때마다 실제 코드로 재확인**한다.
 
-### 현재 상태 스냅샷 (2026-07-09 갱신 · Phase 1 MVP · 감사: `arch_audit_2026-07-09.md`)
+### 현재 상태 스냅샷 (2026-07-09 3회차 갱신 · Phase 1 MVP · 감사: `arch_audit_2026-07-09_r3.md`)
 
 | 단계 | 영역 | 상태 |
 |---|---|---|
 | 1 교육철학 · 2 기능분리 | 정체성·7계층 (백엔드 import-linter CI 강제) | ✅ 완료 |
-| 3 개념구조화 | 개념 437노드 (legacy_snapshot·audit_only) / **원자 2,697(세부 1,837) = runtime truth source 단일** | 🟢 구현 |
+| 3 개념구조화 | 개념 437노드 (legacy_snapshot·audit_only) / **원자 2,697(세부 1,837) = runtime truth source 단일**. problem_concept·curriculum·성취기준 조인 전부 원자 축 정착(S2-03·S2-07) | 🟢 구현 |
 | 4 오개념 DB | 839개 카탈로그 + 판정 엔진 (reactive만·preload 0 실측) | 🟢 구현 |
-| 9 평가·개인화 | BKT·IRT·mastery·학습경로 | 🟢 구현 |
-| 5 시각화 · 6 Math UI DSL · 8 AI튜터 · 10 자동화 | Graph2dSpec·L3 라우터·WH-1·파이프라인 (8: max_nodes≤20·tokens≤3000 CI 동결·depth≤2 유예[트리거 계약]) | 🟡 진행 |
+| 9 평가·개인화 | BKT·IRT·mastery·학습경로 (문제 태깅 원자 축 재연결로 mastery→enrich hit) | 🟢 구현 |
+| 5 시각화 · 6 Math UI DSL · 8 AI튜터 · 10 자동화 | Graph2dSpec·L3 라우터·WH-1·파이프라인 (8: max_nodes≤20·tokens≤3000 CI 동결·depth≤2 유예). **L3 라이브 개통**(Phaiakes9·READY:True·6모델·rephrase 184/590)·비용 실측(S1-12)은 Kiki 라이브 대기 | 🟡 진행 |
 | 7 렌더링 | Flutter/web 계산기·three.js·MathLive | 🟡 프로토타입 |
 | 보류/리스크 | DSL 자기진화(Lean4)·Manim 동영상·WH-1 전략단계(Lv2~3)·**개념↔원자 입도 통합**(런타임 축은 S0-4로 해소 완료, 잔여=437↔2,697 세분도 병합·전문가 검수 대기). ~~클라이언트 무-수학로직 CI 게이트 부재~~ → **ARCH-10으로 해소**(게이트 2종 가동·2026-07-09 감사 2회차 재검증, QuizMode 예외는 ARCH-12 결정 대기) | 🔴 |
 
