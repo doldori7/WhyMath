@@ -1,0 +1,430 @@
+"""오개념 커버리지 확대용 수치평가 객관식 스켈레톤 생성기 — S2 확장(결정론·LLM 0).
+
+`CalculusExtremumMCSkeletonGenerator`(극값 MC)의 형제다. 같은 `EquivalentProblemGenerator`
+좌석을 구현하되 목적이 다르다: 기존 코퍼스가 `distractor_map`으로 커버하지 못하던 오개념 3종을
+문항에 *등장*시켜 crosswalk 기계 게이트의 machine-decidable 커버리지(5/34)를 끌어올린다.
+
+세 템플릿(각각 오개념 1종을 오답 선지로 태깅):
+  - `distribution` — (a+b)² 의 값(오개념: 제곱을 각 항에 분배해 교차항 2ab 누락 → a²+b²).
+  - `chain_rule`  — f(x)=(kx+c)³ 의 f'(x₀)(오개념: 연쇄법칙 내부 도함수 k 누락 → 3(kx₀+c)²).
+  - `sine_sum`    — sin(A+B) 의 값(오개념: 사인을 합에 분배 → sin A + sin B).
+
+핵심 통찰(극값 MC 미러·재구현 0): 수치평가 문항은 정답이 *하나의 닫힌 값*이라, dummy 변수 x의
+등식 `x = <닫힌형 식>`(conditions)과 `{"x": <정답값>}`(answer_map)로 기존 Tier1 검산 스택
+(`verify_answer`·`classify_solvability`)을 **무변경 재사용**한다 — 오케스트레이터·수용 게이트·
+저장 sink 전부 그대로다. 오답 선지 오개념·op-code id는 생성자 `distractor_codes`로 주입받는다
+(L4 하드코딩 0·계층 규칙·극값 MC 규약 미러).
+
+정직성·이중 방어: 생성물은 S2-a 게이트(정확성·저작권·위생·동등성)를 통과해야 저장된다. 각 문항의
+4지선다는 *4값이 서로 다른* 경우만 수록하고(정답·오개념 오답·filler 2종), 오개념 오답 1건만
+`distractor_map`에 태깅한다(filler는 미태깅·스키마 계약). 산출물은 v0(사람 검수 전) —
+게이트 통과 ≠ 학생 노출(§03 정본).
+
+7계층: L3 지역(생성=LLM 라우터 도메인이나 이 구현은 LLM 0 — 좌석 계약만 공유). schema(최하위)·
+동일 패키지(generator·acceptance·canonicalize)·L1 problem_bank(ConceptTag)만 import(L4 참조 0).
+"""
+
+from __future__ import annotations
+
+import hashlib
+import random
+import uuid
+from collections.abc import Mapping, Sequence
+from collections.abc import Set as AbstractSet
+from dataclasses import dataclass
+from typing import Literal
+
+import sympy
+
+from whymath_backend.l1.problem_bank.populate import ConceptTag
+from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
+from whymath_backend.l3.equivalent.canonicalize import canonical_signature
+from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.schema.enums import (
+    AnswerFormat,
+    Curriculum,
+    GenerationType,
+    LicenseType,
+    QuestionFormat,
+    SourceType,
+    Subject,
+)
+from whymath_backend.schema.problem import DistractorEntry, Problem
+from whymath_backend.schema.provenance import ContentProvenance
+
+__all__ = [
+    "MisconceptionEvalMCSkeletonGenerator",
+    "TemplateKind",
+]
+
+# 풀 셔플 고정 시드 — 같은 구성은 같은 출제 순서(재현·디버그). 비결정 난수 금지(verify 규약 미러).
+_POOL_SEED = 20260709
+
+# 수치 4-상이 판정 허용치 — 두 선지 값이 이보다 가까우면 사실상 같은 값(4지선다 부적격).
+_DISTINCT_TOL = 1e-9
+
+TemplateKind = Literal["distribution", "chain_rule", "sine_sum"]
+
+# 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
+# concept_src_id는 개념그래프 원천 키, unit_code는 문항 단원 코드. 성취기준 코드는 spec이 공급한다.
+_TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
+    "distribution": ("J0219", "POLY-PRODUCT"),
+    "chain_rule": ("H:12미적Ⅰ02-01", "CALC-CHAIN"),
+    "sine_sum": ("H:12미적Ⅱ02-02", "TRIG-ADD"),
+}
+
+
+@dataclass(frozen=True, slots=True)
+class _EvalItem:
+    """수치평가 MC 뼈대 — 한 문항의 전 계산 결과(수치의 단일 진실 원천·결정론).
+
+    선지(`choices`)는 4값을 *수치 오름차순*으로 정렬한 표기 문자열이고, `answer_index`·`misc_index`
+    는 그 정렬 안의 정답·오개념 오답 위치다(정렬 확정으로 결정론). `conditions`/`answer_str`은 Tier1
+    검산 재료(dummy x 등식·정답값). 오개념 id·op-code는 뼈대에 담지 않는다 — 생성기가 주입한다.
+    """
+
+    conditions: str
+    answer_str: str
+    choices: tuple[str, str, str, str]
+    answer_index: int
+    misc_index: int
+    question_text: str
+    answer_explanation: str
+    difficulty: float
+    answer_format: AnswerFormat
+
+
+def _difficulty(seed: int) -> float:
+    """종합 난이도를 [2.5, 3.5] 밴드에 결정론 분산 — spec 난이도 3.0·tol 0.5 안이라 동등성 만점."""
+    return round(2.5 + (seed % 11) * 0.1, 1)
+
+
+def _answer_format_for(value: sympy.Expr) -> AnswerFormat:
+    """정답값 형태 — 양의 정수=자연수·유리(비정수)=분수·그 외(무리·음수·0)=실수."""
+    if value.is_integer and value > 0:
+        return AnswerFormat.자연수
+    if value.is_rational:
+        return AnswerFormat.분수
+    return AnswerFormat.실수
+
+
+def _display(value: sympy.Expr) -> str:
+    """선지·정답 표기 문자열 — SymPy 정확값(반올림 소수 아님·파싱 가능 형태 'sqrt(3)/2')."""
+    return str(sympy.sstr(value))
+
+
+def _numeric(value: sympy.Expr) -> float:
+    """정렬·상이 판정용 실수 근사(SymPy 정확값을 float로)."""
+    return float(value)
+
+
+def _four_distinct(values: Sequence[sympy.Expr]) -> bool:
+    """네 선지 값이 수치적으로 서로 다른가(4지선다 자격) + 0 값 없음(위생·filler 규약)."""
+    nums = [_numeric(v) for v in values]
+    if any(abs(n) < _DISTINCT_TOL for n in nums):
+        return False  # 0 선지 금지(filler·정답 모두 — 위생).
+    for i in range(len(nums)):
+        for j in range(i + 1, len(nums)):
+            if abs(nums[i] - nums[j]) < _DISTINCT_TOL:
+                return False
+    return True
+
+
+def _assemble_item(
+    *,
+    values: tuple[sympy.Expr, sympy.Expr, sympy.Expr, sympy.Expr],
+    conditions: str,
+    answer_str: str,
+    question_text: str,
+    answer_explanation: str,
+    difficulty: float,
+    answer_format: AnswerFormat,
+) -> _EvalItem | None:
+    """4값(정답·오개념·filler1·filler2)을 수치 오름차순 선지로 접어 뼈대 조립 — 4-상이 아니면 None.
+
+    `values`는 (정답, 오개념 오답, filler1, filler2) 순서다. 표기 문자열까지 서로 다른지도 확인해
+    (수치는 다르나 표기가 겹치는 병리 케이스) 4지선다 자격을 이중 보장한다.
+    """
+    if not _four_distinct(values):
+        return None
+    roles = ("correct", "misc", "f1", "f2")
+    entries = sorted(zip(roles, values, strict=True), key=lambda e: _numeric(e[1]))
+    choices = tuple(_display(v) for _, v in entries)
+    if len(set(choices)) != 4:
+        return None  # 표기 충돌(수치는 달랐으나 문자열이 같음) — 안전 배제.
+    ordered_roles = [role for role, _ in entries]
+    return _EvalItem(
+        conditions=conditions,
+        answer_str=answer_str,
+        choices=(choices[0], choices[1], choices[2], choices[3]),
+        answer_index=ordered_roles.index("correct"),
+        misc_index=ordered_roles.index("misc"),
+        question_text=question_text,
+        answer_explanation=answer_explanation,
+        difficulty=difficulty,
+        answer_format=answer_format,
+    )
+
+
+def _build_distribution_pool() -> tuple[_EvalItem, ...]:
+    """(a+b)² 값 뼈대 풀 — 정답 (a+b)²·오개념 a²+b²(교차항 누락)·filler 2ab·a²+b²+ab.
+
+    정답값 (a+b)²=합²으로 dedup(같은 합은 conditions 정규형이 같아 구조 dedup 충돌). a<b·a,b≥2라
+    네 값 {(a+b)², a²+b², 2ab, a²+b²+ab}은 항상 서로 다르다(대수적 증명·전건 4-상이).
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 8):
+        for b in range(a + 1, 24):
+            correct_v = (a + b) ** 2
+            if correct_v in seen:
+                continue  # 같은 합 → 같은 정답값 → 구조 signature 충돌(회차 낭비 방지).
+            correct = sympy.Integer(correct_v)
+            misc = sympy.Integer(a * a + b * b)  # 교차항 2ab 누락.
+            filler1 = sympy.Integer(2 * a * b)  # 교차항만.
+            filler2 = sympy.Integer(a * a + b * b + a * b)  # 교차항을 1배만(2배를 1배로).
+            item = _assemble_item(
+                values=(correct, misc, filler1, filler2),
+                conditions=f"x = ({a}+{b})**2",
+                answer_str=str(correct_v),
+                question_text=(
+                    f"두 수 a, b에 대하여 a = {a}, b = {b} 일 때, (a+b)^2 의 값을 구하시오."
+                ),
+                answer_explanation=(
+                    f"(a+b)^2 = a^2 + 2ab + b^2 이므로 a = {a}, b = {b} 를 대입하면 "
+                    f"(a+b)^2 = {correct_v} 이다. 교차항 2ab 를 빠뜨리면 a^2+b^2 가 되어 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=AnswerFormat.자연수,
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_chain_rule_pool() -> tuple[_EvalItem, ...]:
+    """f(x)=(kx+c)³ 의 f'(x₀) 뼈대 풀 — 정답 3k(kx₀+c)²·오개념 3(kx₀+c)²(내부 도함수 k 누락).
+
+    filler: 3k²(kx₀+c)²(k 이중 적용)·k(kx₀+c)²(거듭제곱 계수 3 누락). k≥2·k≠3라 네 계수
+    {3k, 3, 3k², k}가 서로 달라(대수적 증명) 전건 4-상이. 정답값으로 dedup(구조 signature 충돌↓).
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for k in (2, 4, 5):  # k≥2(3k≠3)·k≠3(3≠k, 즉 오개념≠filler2 계수 충돌 회피).
+        for x0 in range(1, 4):
+            for c in range(1, 5):
+                inner = k * x0 + c  # ≥3 > 0.
+                correct_v = 3 * k * inner * inner
+                if correct_v in seen:
+                    continue
+                inner_sq = sympy.Integer(inner * inner)
+                correct = sympy.Integer(correct_v)
+                misc = sympy.Integer(3) * inner_sq  # 내부 도함수 k 누락.
+                filler1 = sympy.Integer(3 * k * k) * inner_sq  # k 이중 적용.
+                filler2 = sympy.Integer(k) * inner_sq  # 거듭제곱 계수 3 누락.
+                item = _assemble_item(
+                    values=(correct, misc, filler1, filler2),
+                    conditions=f"x = 3*{k}*({k}*{x0}+{c})**2",
+                    answer_str=str(correct_v),
+                    question_text=(
+                        f"함수 f(x) = ({k}x + {c})^3 의 x = {x0} 에서의 미분계수 "
+                        f"f'({x0}) 의 값을 구하시오."
+                    ),
+                    answer_explanation=(
+                        f"연쇄법칙으로 도함수를 구하면 내부 함수의 도함수 {k} 를 곱해야 한다. "
+                        f"x = {x0} 을 대입하면 미분계수는 {correct_v} 이다. "
+                        f"내부 도함수 {k} 를 곱하지 않으면 틀린 값이 된다."
+                    ),
+                    difficulty=_difficulty(k + inner),
+                    answer_format=AnswerFormat.자연수,
+                )
+                if item is not None:
+                    seen.add(correct_v)
+                    pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_sine_pool() -> tuple[_EvalItem, ...]:
+    """sin(A+B) 값 뼈대 풀 — 정답 k·sin(A+B)·오개념 k·(sinA+sinB)(사인을 합에 분배).
+
+    filler: k·sinA·cosB(덧셈정리 한 항만)·k·cosA·cosB(코사인 정리와 혼동). A=aπ/12·B=bπ/12(15°
+    격자)라 sin(A+B)는 덧셈정리의 정본 산출값(sin15°·sin45°·sin75° 등 표준 특수각)이다 — 이 오개념
+    (sin의 합 분배)이 정확히 겨냥하는 문항 유형. 15° 격자만으론 서로 다른 sin(A+B) 값이 12종뿐이라,
+    작은 정수 배수 k(1~3)를 곱해 서로 다른 정답값을 넉넉히 확보한다(k배는 오개념 충실도를 보존 —
+    학생이 sin을 합에 분배하면 k(sinA+sinB)가 됨). 정답값으로 dedup(sin 특수각은 대수 상수로 접혀
+    conditions가 다항 signature를 가지므로 값 dedup=구조 dedup 정합). 0 값·4-비상이는 배제.
+    """
+    pi = sympy.pi
+    pool: list[_EvalItem] = []
+    seen: set[float] = set()
+    for a in range(1, 12):
+        for b in range(a, 12):  # a ≤ b(대칭 중복 축소)·A,B ∈ (0, π).
+            a_ang = sympy.Rational(a, 12) * pi
+            b_ang = sympy.Rational(b, 12) * pi
+            base = sympy.sin(a_ang + b_ang)
+            base_misc = sympy.sin(a_ang) + sympy.sin(b_ang)
+            base_f1 = sympy.sin(a_ang) * sympy.cos(b_ang)
+            base_f2 = sympy.cos(a_ang) * sympy.cos(b_ang)
+            for k in (1, 2, 3):
+                correct = sympy.Integer(k) * base
+                key = round(_numeric(correct), 9)
+                if abs(key) < _DISTINCT_TOL or key in seen:
+                    continue  # 0(위생)·정답값 중복(구조 dedup 충돌) 배제.
+                coeff = "" if k == 1 else f"{k} "
+                item = _assemble_item(
+                    values=(
+                        correct,
+                        sympy.Integer(k) * base_misc,  # 사인 합 분배(오개념).
+                        sympy.Integer(k) * base_f1,  # 덧셈정리 한 항만.
+                        sympy.Integer(k) * base_f2,  # 코사인 정리와 혼동.
+                    ),
+                    conditions=f"x = {k}*sin({a}*pi/12 + {b}*pi/12)",
+                    answer_str=_display(correct),
+                    question_text=(
+                        f"두 각 A = {a}π/12, B = {b}π/12 에 대하여 "
+                        f"{coeff}sin(A + B) 의 값을 구하시오."
+                    ),
+                    answer_explanation=(
+                        "삼각함수의 덧셈정리에 의해 sin(A + B) = sin A cos B + cos A sin B 이다. "
+                        "사인을 합에 분배하여 sin A + sin B 로 계산하면 틀린 값이 된다."
+                    ),
+                    difficulty=_difficulty(a + b + k),
+                    answer_format=_answer_format_for(correct),
+                )
+                if item is not None:
+                    seen.add(key)
+                    pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+_POOL_FACTORY = {
+    "distribution": _build_distribution_pool,
+    "chain_rule": _build_chain_rule_pool,
+    "sine_sum": _build_sine_pool,
+}
+
+
+class MisconceptionEvalMCSkeletonGenerator:
+    """오개념 수치평가 객관식 결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석(LLM 0).
+
+    `template`(distribution/chain_rule/sine_sum)이 수학 실체를, 생성자 `distractor_codes`가 오답
+    선지의 오개념·op-code id를 정한다(극값 MC 규약 미러·L4 하드코딩 0). `distractor_codes`는 단일
+    엔트리 `{kebab: (misconception_id, op_code)}`를 기대한다 — 각 문항이 오개념 오답 *1건*만
+    태깅하기 때문(filler는 미태깅). 풀을 순서대로 소비하며 후보를 낸다(소진 시 None —
+    generation_failed로 정직 기록). `skip_signatures`에 이미 코퍼스에 있는 구조 signature를 주면
+    해당 뼈대를 건너뛴다(배치 재실행 dedup 낭비 방지·오케스트레이터 signature_index 공유).
+    """
+
+    def __init__(
+        self,
+        template: TemplateKind,
+        distractor_codes: Mapping[str, tuple[str, str]],
+        *,
+        skip_signatures: AbstractSet[str] | None = None,
+        slug_prefix: str = "wm-misc-eval-mc",
+        subject: Subject = Subject.공통,
+        curriculum_version: Curriculum = Curriculum.REVISION_2022,
+        valid_from_year: int = 2022,
+        concept_relevance: float = 0.95,
+    ) -> None:
+        if template not in _POOL_FACTORY:
+            raise ValueError(f"미지원 template: {template!r} (distribution/chain_rule/sine_sum)")
+        if not distractor_codes:
+            raise ValueError(
+                "distractor_codes 주입 누락 — 오개념 오답 태깅용 (misconception_id, op_code)가 "
+                "최소 1건 필요하다(L4 정본에서 조성 루트가 주입)."
+            )
+        # 각 문항이 오개념 오답 1건만 태깅하므로 단일 (misconception_id, op_code)만 쓴다.
+        self._misconception_id, self._op_code = next(iter(distractor_codes.values()))
+        self._template: TemplateKind = template
+        self._pool = _POOL_FACTORY[template]()
+        self._index = 0
+        self._skip = skip_signatures
+        self._slug_prefix = slug_prefix
+        self._subject = subject
+        self._curriculum_version = curriculum_version
+        self._valid_from_year = valid_from_year
+        concept_src_id, unit_code = _TEMPLATE_META[template]
+        self._unit_codes = [unit_code]
+        self._concept_tags = [
+            ConceptTag(concept_src_id=concept_src_id, role="PRIMARY", relevance=concept_relevance)
+        ]
+
+    # ── EquivalentProblemGenerator 좌석 ────────────────────────────────────
+    def generate(self, spec: EquivalenceSpec) -> CandidateProblem | None:
+        """다음 뼈대를 후보로 조립 — skip 집합에 있는 구조는 건너뛰고, 풀 소진 시 None."""
+        while self._index < len(self._pool):
+            item = self._pool[self._index]
+            self._index += 1
+            if self._skip is not None:
+                signature = canonical_signature(item.conditions, None)
+                if signature is not None and signature in self._skip:
+                    continue  # 이미 코퍼스에 있는 구조 — 회차 낭비 없이 다음 뼈대로.
+            return self._assemble(spec, item)
+        return None
+
+    # ── 조립(전부 결정론·수치의 단일 진실 원천은 뼈대) ─────────────────────
+    def _assemble(self, spec: EquivalenceSpec, item: _EvalItem) -> CandidateProblem:
+        standard_codes = sorted(spec.achievement_standard_codes)
+        answer_text = item.choices[item.answer_index]
+        slug = self._stable_slug(item.question_text, answer_text, standard_codes)
+
+        # 오개념 오답 1건만 태깅(filler는 미태깅·스키마 계약: 정답 선지 제외).
+        distractor_map = [
+            DistractorEntry(
+                choice_index=item.misc_index,
+                misconception_id=self._misconception_id,
+                op_code=self._op_code,
+            )
+        ]
+
+        problem = Problem(
+            problem_id=uuid.uuid5(uuid.NAMESPACE_URL, f"whymath:problem:{slug}"),
+            slug=slug,
+            source_type=SourceType.자체생성,  # 저작권 구조적 강제(자작 뼈대·본문성 원본 0)
+            curriculum_version=self._curriculum_version,
+            valid_from_year=self._valid_from_year,
+            subject=self._subject,
+            unit_codes=list(self._unit_codes),
+            difficulty_overall=item.difficulty,
+            question_format=QuestionFormat.객관식,
+            answer_format=item.answer_format,
+            achievement_standard_codes=standard_codes,
+            question_text=item.question_text,
+            choices=list(item.choices),
+            answer=answer_text,
+            answer_explanation=item.answer_explanation,
+            distractor_map=distractor_map,
+        )
+        provenance = ContentProvenance(
+            generation_type=GenerationType.FULLY_GENERATED,
+            license=LicenseType.WHYMATH_GENERATED,
+            original_source=None,
+            transformation_pipeline={
+                "steps": [
+                    "결정론 수치평가 MC 스켈레톤 조립(닫힌 값 4지선다·오개념 오답 태깅)",
+                    "S2-a 수용 게이트",
+                    "사람 검수 큐(오개념 귀속 교수학 검수)",
+                ],
+            },
+        )
+        return CandidateProblem(
+            problem=problem,
+            provenance=provenance,
+            conditions=item.conditions,  # dummy x 등식(정답 검산용·호출자 제공)
+            answer_map={"x": item.answer_str},
+            answer_selection=None,  # 유일해(닫힌 값)라 근 선택 불요.
+            answer_aggregate=None,
+            solution_steps=None,
+            concept_tags=list(self._concept_tags),
+        )
+
+    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
+        """결정론 안정 slug — 내용 해시(멱등 upsert 키·극값 MC 규약 미러)."""
+        payload = "|".join([question_text, answer, ",".join(sorted(codes))])
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]
+        return f"{self._slug_prefix}-{digest}"
