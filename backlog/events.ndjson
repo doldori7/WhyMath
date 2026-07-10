@@ -23,3 +23,6 @@
 {"ts": "2026-07-09T12:10:15", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "start", "id": "ARCH-03-playbook-audit", "session": "claude/app-build-harness-replace-4z7ksj"}
 {"ts": "2026-07-09T12:11:47", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "done", "id": "ARCH-03-playbook-audit", "artifacts": ["커밋 4c25175 (arch_audit_2026-07-09_r3.md — 초점 4항목 판정·S2-07 위반 0·상환 추가 없음)"]}
 {"ts": "2026-07-09T12:11:47", "actor": "claude/app-build-harness-replace-4z7ksj", "action": "add", "id": "ARCH-04-playbook-audit"}
+{"ts": "2026-07-10T11:04:13", "actor": "claude/g-kiki-device-demo-fv831n", "action": "gate_clear", "id": "G-domain-partner", "evidence": "검수 자문 1인 확정(채널 X·날짜) + reviewer_sample_30 첫 배치 착수 합의", "reason": null}
+{"ts": "2026-07-10T11:04:21", "actor": "claude/g-kiki-device-demo-fv831n", "action": "gate_clear", "id": "G-domain-partner", "evidence": "검수 자문 1인 확정(채널 X·날짜) + reviewer_sample_30 첫 배치 착수 합의", "reason": null}
+{"ts": "2026-07-10T11:04:27", "actor": "claude/g-kiki-device-demo-fv831n", "action": "gate_clear", "id": "G-domain-partner", "evidence": "검수 자문 1인 확정(채널 C·2026-07-15) + reviewer_sample_30 첫 배치 착수 합의", "reason": null}
