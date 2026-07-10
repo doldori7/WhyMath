@@ -51,6 +51,7 @@ fvm flutter run --dart-define=API_URL=http://<출력된 IP>:8000 --dart-define=D
 | `.ps1` 파싱 오류(한글 깨짐·"종결자가 없습니다") | PS 5.1이 BOM 없는 .ps1을 CP949로 읽음 | 수정 완료(UTF-8 BOM + `.gitattributes *.ps1 eol=crlf`) → `git pull` |
 | 고친 설정이 적용 안 되고 같은 오류 재발 | 이전 실행의 env 잔재가 같은 창에 잔존 | 수정 완료(스크립트가 항상 덮어씀·오버라이드는 `WHYMATH_DEMO_DATABASE_URL` 전용) → `git pull` |
 | `'<' 연산자는 예약되어 있습니다` | 자리표시 `<...>`를 그대로 입력 | 실제 값으로 교체·URL은 따옴표(`--evidence "https://..."`) |
+| `.\scripts\demo\run_demo.ps1` 용어가 인식되지 않습니다 | **리포 루트가 아닌 폴더**에서 실행(중첩 폴더 `Desktop\__AI\WhyMath\WhyMath` 혼동) | `cd C:\Users\kiki\Desktop\__AI\WhyMath\WhyMath` 후 재실행. `dir`로 `scripts`·`src`·`docker-compose.demo.yml`이 보이면 정위치 |
 
 ### B. Docker / Postgres / alembic
 | 증상 | 원인 | 해법 |
