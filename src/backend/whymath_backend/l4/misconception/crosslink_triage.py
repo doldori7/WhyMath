@@ -34,6 +34,7 @@ from whymath_backend.l1.misconception.crosslink_gate import (
     MACHINE_REJECT_EVIDENCE_FLOOR,
 )
 from whymath_backend.l1.problem_bank.populate import load_problem_bank_records
+from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.l4.misconception.crosslink_machine_reject import (
     _default_corpora,
     _load_mid_standards,
@@ -51,6 +52,7 @@ __all__ = [
     "TriageBucket",
     "TriageReport",
     "TriagedCandidate",
+    "format_worksheet",
     "run",
     "triage_candidates",
 ]
@@ -212,6 +214,58 @@ def _report_json(report: TriageReport) -> dict[str, object]:
     }
 
 
+def _load_mid_texts(path: Path) -> dict[str, tuple[str, str]]:
+    """M-id 콘텐츠 서술 로드 — mis_id → (canonical_statement, student_wrong_thinking)."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    items = data.get("misconceptions", data)
+    out: dict[str, tuple[str, str]] = {}
+    for m in items:
+        if isinstance(m, dict) and "mis_id" in m:
+            out[str(m["mis_id"])] = (
+                str(m.get("canonical_statement") or ""),
+                str(m.get("student_wrong_thinking") or ""),
+            )
+    return out
+
+
+def format_worksheet(
+    report: TriageReport,
+    *,
+    kebab_statements: Mapping[str, tuple[str, str]],
+    mid_texts: Mapping[str, tuple[str, str]],
+    bucket: TriageBucket = "corroborated",
+) -> str:
+    """사람 검토 워크시트 — 한 버킷의 두 서술(kebab↔M-id)을 대조 + 판정란(승인은 사람만).
+
+    `kebab_statements`: kebab_id → (name_kr, canonical_statement)(L4 탐지 카탈로그).
+    `mid_texts`: mis_id → (canonical_statement, student_wrong_thinking)(콘텐츠 카탈로그).
+    기계는 우선순위·근거만 제공하고 승인은 담지 않는다 — 판정란은 사람이 채운다(초인간 검증 §3.3).
+    """
+    candidates = report.bucket(bucket)
+    lines = [
+        "=" * 72,
+        f"crosswalk 검토 워크시트 — [{bucket}] {len(candidates)}건 (사람 승인 대상·기계 승인 0)",
+        "=" * 72,
+        "두 서술을 대조해 판정하세요. 승인은 사람만 — 기계는 우선순위·구조 근거만 제공.",
+        "",
+    ]
+    for i, c in enumerate(candidates, start=1):
+        k_name, k_stmt = kebab_statements.get(c.kebab_id, ("", ""))
+        m_stmt, m_think = mid_texts.get(c.mis_id, ("", ""))
+        conf = f"{c.confidence:.2f}" if c.confidence is not None else "—"
+        shared = ", ".join(c.kebab_standards) or "—"
+        lines.append(f"[{i:2d}] {c.kebab_id} → {c.mis_id}  ({c.link_type}·conf {conf})")
+        lines.append(f"     성취기준 정합: {c.mid_standard} ∈ {{{shared}}}")
+        lines.append(f"     오개념(kebab·{k_name}): {k_stmt}")
+        lines.append(f"     콘텐츠(M-id): {m_stmt}")
+        if m_think:
+            lines.append(f"       학생 오사고: {m_think}")
+        lines.append("     판정: [ ] 승인   [ ] 반려    근거: ______")
+        lines.append("")
+    lines.append("=" * 72)
+    return "\n".join(lines)
+
+
 def format_report(report: TriageReport) -> str:
     """사람 가독 요약 — 버킷별 카운트 + 인간 우선 검토 목록(승인 아님·advisory)."""
     counts = report.counts
@@ -260,6 +314,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--json", action="store_true", help="JSON 리포트 출력(기본 사람 가독)."
     )
+    parser.add_argument(
+        "--worksheet",
+        default=None,
+        help="검토 워크시트 버킷(예 corroborated) — 두 서술 대조 + 판정란 출력.",
+    )
     args = parser.parse_args(argv)
 
     queue_path = (
@@ -285,7 +344,19 @@ def main(argv: list[str] | None = None) -> int:
         misconceptions=mis_path,
         evidence_floor=args.floor,
     )
-    if args.json:
+    if args.worksheet:
+        kebab_statements = {
+            k: (m.name_kr, m.canonical_statement) for k, m in CATALOG_BY_ID.items()
+        }
+        print(
+            format_worksheet(
+                report,
+                kebab_statements=kebab_statements,
+                mid_texts=_load_mid_texts(mis_path),
+                bucket=args.worksheet,
+            )
+        )
+    elif args.json:
         print(json.dumps(_report_json(report), ensure_ascii=False, indent=2))
     else:
         print(format_report(report))

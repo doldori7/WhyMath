@@ -12,10 +12,12 @@ from pathlib import Path
 
 from whymath_backend.l4.misconception.crosslink_machine_reject import run as reject_run
 from whymath_backend.l4.misconception.crosslink_triage import (
-    run as triage_run,
+    _load_mid_texts,
+    format_worksheet,
+    triage_candidates,
 )
 from whymath_backend.l4.misconception.crosslink_triage import (
-    triage_candidates,
+    run as triage_run,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -185,3 +187,48 @@ class TestCommittedQueueEndToEnd:
             ).read_text(encoding="utf-8")
         )
         assert all(row["status"] == "pending" for row in q["review_queue"])
+
+
+class TestWorksheet:
+    def test_shows_both_statements_and_decision(self) -> None:
+        # 워크시트는 두 서술(kebab↔M-id)을 대조하고 판정란을 낸다·기계 승인 없음.
+        q = _queue([_row("opposite-root-selected", "M0862")])
+        report = triage_candidates(
+            queue=q,
+            kebab_standards=_KEBAB_STANDARDS,
+            kebab_counts=_KEBAB_COUNTS,
+            mid_standards=_MID_STANDARDS,
+            evidence_floor=20,
+        )
+        text = format_worksheet(
+            report,
+            kebab_statements={
+                "opposite-root-selected": ("반대근 선택", "작은 근을 답한다")
+            },
+            mid_texts={"M0862": ("부호 반대 근", "큰 근 대신 작은 근")},
+            bucket="corroborated",
+        )
+        assert "작은 근을 답한다" in text  # kebab 서술
+        assert "부호 반대 근" in text  # M-id 서술
+        assert "[ ] 승인" in text and "[ ] 반려" in text  # 판정란
+        assert "기계 승인 0" in text  # 봉인 문구
+        assert "opposite-root-selected → M0862" in text
+
+    def test_load_mid_texts(self, tmp_path: Path) -> None:
+        path = tmp_path / "mis.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "misconceptions": [
+                        {
+                            "mis_id": "M0001",
+                            "canonical_statement": "진술 A",
+                            "student_wrong_thinking": "오사고 B",
+                        }
+                    ]
+                }
+            ),
+            encoding="utf-8",
+        )
+        texts = _load_mid_texts(path)
+        assert texts["M0001"] == ("진술 A", "오사고 B")
