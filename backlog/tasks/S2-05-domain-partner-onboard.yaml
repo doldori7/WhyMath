@@ -1,21 +1,20 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: S2-05-domain-partner-onboard
-title: 도메인 파트너 검수 큐 온보딩
+title: 검수 큐 가동 (AI 검수 전환 — 2026-07-10 결정)
 track: math-completion
 stage: S2
 subject: math
 layer: docs
 status: todo
 priority: 2
-owner: kiki
+owner: claude
 depends_on: []
-requires_gates:
-  - G-domain-partner
+requires_gates: []
 acceptance:
-  - 파트너가 검수 큐에서 첫 배치 검수 완료
+  - "AI 검수 첫 배치 30문(reviewer_sample_30_v0) 완료 — ①~⑥ 판정·`·AI 검수` 마커 기록"
 artifacts:
   - docs/strategy/domain_partner_handoff_2026-07.md
-  - docs/data/reviewer_first_batch_cover_2026-07.md
+  - docs/data/ai_review_first_batch_2026-07.md
 session: null
-notes: "G-domain-partner cleared(2026-07-10·채널 C). 첫 배치 = reviewer_sample_30_v0 + 커버(reviewer_first_batch_cover) 발송. 절차 정본 = domain_partner_handoff_2026-07.md §2"
+notes: "2026-07-10 Kiki 결정: 사람 판단 ①~⑥ → AI 검수 전환(MEMORY 결정 로그). G-domain-partner 요건 소멸(evidence 정정은 Kiki — 핸드오프 §3). 파트너 영입은 정규 격상 트랙 분리. crosswalk 계약(오개념 적재)은 불변."
 updated: 2026-07-10

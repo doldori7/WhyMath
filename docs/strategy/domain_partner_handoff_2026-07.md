@@ -1,8 +1,9 @@
 # 도메인 파트너 영입·검수 큐 온보딩 핸드오프 (`G-domain-partner` · ROADMAP 병목 ④)
 
-> **상태**: ✅ 게이트 clear(2026-07-10 · 채널 C 확정) — **첫 배치 전달 단계** | **owner**: kiki(영입은 사람만)
-> **다음 액션**: `reviewer_first_batch_cover_2026-07.md`(커버)의 §4 실무 빈칸(fee·기한·회신 방법)을 채워
-> 표본 30문(`reviewer_sample_30_v0.md`)과 함께 자문에게 발송.
+> **상태**: 🔁 **AI 검수 전환 (2026-07-10 Kiki 결정)** — 검수 큐는 AI 검수로 가동, 파트너 영입은
+> 정규 격상 트랙으로 분리 (MEMORY.md 2026-07-10 결정 로그 정본)
+> **다음 액션**: ① Kiki — §3의 evidence 정정 re-clear ② AI — 첫 배치 30문 AI 검수
+> (`docs/data/ai_review_first_batch_2026-07.md`)
 > **목적**: 크리티컬 패스에 남은 **유일한 사람 병목 ④**(도메인 파트너 부재)를 언블록한다. 이 문서는
 > Kiki가 즉시 실행할 (1)검수 자문 1인 모집 브리프 · (2)검수 큐 온보딩 절차 · (3)게이트 clear 조건을
 > 단일 핸드오프로 묶는다. §3의 evidence 조건이 충족되면 `G-domain-partner` clear → S2 탈출 언블록.
@@ -23,7 +24,11 @@
 
 ---
 
-## §1 모집 브리프 — 검수 자문 1인 (게이트 통과 최소본)
+## §1 모집 브리프 — 검수 자문 1인 (~~게이트 통과 최소본~~ → **정규 격상 트랙 전용으로 재배치**)
+
+> ⚠️ **2026-07-10 결정으로 이 절의 성격이 바뀌었다**: 검수는 AI가 수행하므로 파트너 영입은 더 이상
+> 게이트 요건이 아니다. 아래 브리프는 **정규 파트너 트랙**(교수학 자문·네트워크·인사이트 —
+> `partnerships.md` §1순위)을 진행할 때 재사용한다. 이력 보존 목적으로 원문 유지.
 
 ### 1.1 완화된 최소 요건
 
@@ -53,56 +58,43 @@
 |---|---|---|---|---|---|
 | A | 학회 | 한국수학교육학회 활동가 | "고3 킬러문항 자체생성 동등문제 30문 배치 검수 자문(건당 fee). 저작권 안전 코퍼스, 원격·비동기." | | |
 | B | 영재교육원 | KAIST 영재교육원·수교과 출신 | "성취기준 태깅·오개념 귀속 검수 1배치 파일럿. 서명 규약 표준화되어 부담 최소." | | |
-| C | 현장교사 | 과학고·영재학교 수학 교사 | "현장 감각으로 오답↔오개념 귀속·발문 자연성 검수. 방학/주말 비동기 가능." | **확정** | ✅ (게이트 evidence: 채널 C·2026-07-15) |
+| C | 현장교사 | 과학고·영재학교 수학 교사 | "현장 감각으로 오답↔오개념 귀속·발문 자연성 검수. 방학/주말 비동기 가능." | | |
 
 **공통 첨부**: 이 문서 링크 + `docs/data/reviewer_sample_30_v0.md`(무엇을 검수하는지 즉시 이해 가능한 30문 표본).
 
 ---
 
-## §2 검수 큐 온보딩 체크리스트 (S2-05 가동 조건)
+## §2 검수 큐 가동 절차 (S2-05 · **AI 검수 전환 후**)
 
-파트너 도착 즉시 실행. 새 규약을 만들지 않고 **기존 자산·계약을 그대로 재사용**한다.
+> 구 버전(사람 자문 온보딩 체크리스트)은 2026-07-10 결정으로 대체됐다. 정규 파트너 합류 시
+> 이 절차 위에 사람 검수를 **추가**하는 방식으로 복원 가능(규약 동일).
 
-### 2.1 첫 배치 (파트너 도착 즉시)
-
-- [ ] 첫 배치 = `docs/data/reviewer_sample_30_v0.md`의 **30문 표본**(이미 존재·결정론 재현). 신규 표본 생성 불요.
-- [ ] 저작권 브리핑: 전건 자체생성(`WHYMATH_GENERATED`·본문 미보유) — 유사도 스캔이 아니라 **생성 방식**이 근거
-      (`licensing_safety.md` §109-112·§125). 사람 판단 ⑥이 우연 유사 공백을 메움.
-- [ ] 검수 도구/큐: `docs/data/misconception_crosslink_review_queue.json` 좌석 확인(오개념 귀속 검수분).
-
-### 2.2 검수 규약 (신설 금지 — `crosswalk_gate_contract.md` 재사용)
-
-- [ ] **상태 어휘**: `pending` / `approved` / `rejected` / `deferred` (동일 4종).
-- [ ] **서명 규약**: 승인 행은 `reviewer` + `reviewed_on` 필수 → stamp `검수:{reviewer} {reviewed_on}`
-      (예 `검수:홍길동 2026-07-10`). 서명 없는 approved는 승격·적재 불가(코드가 동결).
-- [ ] **직접매핑 신뢰도**: `link_type=직접매핑`은 `confidence ≥ 0.6` 미만 승격 금지(오개념 crosswalk 한정).
-
-### 2.3 사람 판단 항목 (AI가 대체 못 하는 부분 — `reviewer_sample_30_v0.md` 인용)
-
-- [ ] **⑤ 오답↔오개념 귀속** — 객관식에만 유효(단답형엔 오개념 태그 없음). 오답 보기 → 오개념 후보 확정.
-- [ ] **⑥ 우연 유사** — 자체생성 문항이 기존 저작물과 우연히 닮았는지 사람 눈으로 확인(유사도 스캔 부재분 보완).
-- [ ] 경계 문항(휴리스틱 애매): 사람이 최종 확정(`system_deep_dive.md` §12 동치성 경계 정책).
+- [ ] 첫 배치 = `docs/data/reviewer_sample_30_v0.md` **30문 표본** → **AI 검수** 수행
+      (판단 ①~⑥ · 산출물 `docs/data/ai_review_first_batch_2026-07.md`).
+- [ ] **상태 어휘·마커**: `pending`/`approved`/`rejected`/`deferred`(crosswalk 계약과 동일 4종) +
+      `·AI 검수` 마커(2026-06-17 규약 미러 — 인간 수기검수 아님 정직 명시·모델ID 미기재).
+- [ ] **⑥ 우연 유사 한계 고지**: AI는 기출 본문 미보유 — 학습 지식 기반 판정. 잔여 저작권 리스크는
+      결정 로그(MEMORY 2026-07-10)에 수용 기록(변호사 검토 권장 유지).
+- [ ] **경계 불변**: 오개념 crosswalk 적재(`crosswalk_gate_contract.md`)는 여전히 사람 게이트 —
+      이 절차는 동등문제 코퍼스 노출 게이팅에만 적용.
+- [ ] 전체 코퍼스(513문+) 검수는 S2-01 흐름에서 같은 절차로 후속.
 
 ---
 
-## §3 게이트 clear 조건 (evidence 정의)
+## §3 게이트 기록 (evidence 정정 필요 — Kiki 액션)
 
-`G-domain-partner`는 **문서 준비만으론 clear되지 않는다**. 아래 evidence가 실제 발생해야 Kiki가 clear한다.
+**이력**: 2026-07-10 clear 당시 evidence("검수 자문 1인 확정(채널 C·2026-07-15)…")는 예시 문구를 그대로
+복사한 **자리표시자**였음이 확인됐다(실제 자문 미확정). 같은 날 Kiki가 "검수를 AI로 전환" 결정을 내려
+게이트의 존재 이유(사람 검수 큐 가동 조건) 자체가 소멸 — clear 상태는 유효하나 **근거를 정직하게 교체**한다.
 
-**clear 최소 조건 (둘 다)**:
-1. 검수 자문 1인 **확정**(계약/합의 — 채널 A/B/C 중 1명).
-2. 첫 배치(30문) **검수 착수 합의**(일정·fee 확정).
+**정정 방법** (Kiki 머신 · gates.yaml이 있는 브랜치에서 — clear 재실행이 evidence를 덮어씀):
 
-**실행 예시** (조건 충족 후):
-
-```bash
-python3 scripts/harness/backlog.py gates clear G-domain-partner \
-  --evidence "검수 자문 1인 확정(채널 X·YYYY-MM-DD) + reviewer_sample_30 첫 배치 검수 착수 합의"
+```powershell
+python3 scripts/harness/backlog.py gates clear G-domain-partner --evidence "AI 검수 전환 결정(2026-07-10·MEMORY 결정 로그) — 검수 큐는 AI 검수로 가동. 파트너 영입은 정규 격상 트랙 분리(게이트 요건 아님)"
+git add backlog/gates.yaml backlog/events.ndjson
+git commit -m "gates: G-domain-partner evidence 정정 (AI 검수 전환 결정)"
+git push
 ```
-
-**✅ clear 완료 (2026-07-10)**: evidence = "검수 자문 1인 확정(채널 C·2026-07-15) + reviewer_sample_30
-첫 배치 검수 착수 합의" — `backlog/gates.yaml` 기록(`claude/g-kiki-device-demo-fv831n` 브랜치 경유,
-머지 시 정본 수렴). 이 문서 §1은 이력 보존용으로 유지한다.
 
 **격상(후속·게이트와 무관)**: 파일럿 검증 후 정규 파트너 협상 → `partnerships.md` §1순위 조건(지분/컨설팅·
 Phase 1 종료 전 1명 확정)으로 복귀. 이 격상은 별도 트랙이며 게이트 재개폐 대상이 아니다.
@@ -111,8 +103,8 @@ Phase 1 종료 전 1명 확정)으로 복귀. 이 격상은 별도 트랙이며 
 
 ## 이후 연결
 
-- 게이트 clear ✅ → `S2-05-domain-partner-onboard` 착수 가능(acceptance: 파트너 첫 배치 검수 완료).
-  전달물 = `docs/data/reviewer_first_batch_cover_2026-07.md`(커버) + `reviewer_sample_30_v0.md`(30문).
+- AI 검수 전환 ✅ → `S2-05-domain-partner-onboard`(재모델링: AI 검수 첫 배치) 착수.
+  산출물 = `docs/data/ai_review_first_batch_2026-07.md`(30문 ①~⑥ 판정 · `·AI 검수` 마커).
 - 첫 배치 검수 완료 → `S2-01`(동등문제 100문)의 인간 검수 큐 소진 → **S2 탈출 게이트** 판정.
 - 참조: `partnerships.md`(정규 파트너 전략) · `reviewer_sample_30_v0.md`(첫 배치) ·
   `crosswalk_gate_contract.md`(검수 규약) · `status_roadmap_2026-07.md` §4(병목 ④).
