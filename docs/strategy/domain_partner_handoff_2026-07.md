@@ -1,6 +1,8 @@
 # 도메인 파트너 영입·검수 큐 온보딩 핸드오프 (`G-domain-partner` · ROADMAP 병목 ④)
 
-> **상태**: 🔄 대기 — 문서 준비 완료(AI), 접촉·확정 대기(Kiki 수동) | **owner**: kiki(영입은 사람만)
+> **상태**: ✅ 게이트 clear(2026-07-10 · 채널 C 확정) — **첫 배치 전달 단계** | **owner**: kiki(영입은 사람만)
+> **다음 액션**: `reviewer_first_batch_cover_2026-07.md`(커버)의 §4 실무 빈칸(fee·기한·회신 방법)을 채워
+> 표본 30문(`reviewer_sample_30_v0.md`)과 함께 자문에게 발송.
 > **목적**: 크리티컬 패스에 남은 **유일한 사람 병목 ④**(도메인 파트너 부재)를 언블록한다. 이 문서는
 > Kiki가 즉시 실행할 (1)검수 자문 1인 모집 브리프 · (2)검수 큐 온보딩 절차 · (3)게이트 clear 조건을
 > 단일 핸드오프로 묶는다. §3의 evidence 조건이 충족되면 `G-domain-partner` clear → S2 탈출 언블록.
@@ -51,7 +53,7 @@
 |---|---|---|---|---|---|
 | A | 학회 | 한국수학교육학회 활동가 | "고3 킬러문항 자체생성 동등문제 30문 배치 검수 자문(건당 fee). 저작권 안전 코퍼스, 원격·비동기." | | |
 | B | 영재교육원 | KAIST 영재교육원·수교과 출신 | "성취기준 태깅·오개념 귀속 검수 1배치 파일럿. 서명 규약 표준화되어 부담 최소." | | |
-| C | 현장교사 | 과학고·영재학교 수학 교사 | "현장 감각으로 오답↔오개념 귀속·발문 자연성 검수. 방학/주말 비동기 가능." | | |
+| C | 현장교사 | 과학고·영재학교 수학 교사 | "현장 감각으로 오답↔오개념 귀속·발문 자연성 검수. 방학/주말 비동기 가능." | **확정** | ✅ (게이트 evidence: 채널 C·2026-07-15) |
 
 **공통 첨부**: 이 문서 링크 + `docs/data/reviewer_sample_30_v0.md`(무엇을 검수하는지 즉시 이해 가능한 30문 표본).
 
@@ -98,6 +100,10 @@ python3 scripts/harness/backlog.py gates clear G-domain-partner \
   --evidence "검수 자문 1인 확정(채널 X·YYYY-MM-DD) + reviewer_sample_30 첫 배치 검수 착수 합의"
 ```
 
+**✅ clear 완료 (2026-07-10)**: evidence = "검수 자문 1인 확정(채널 C·2026-07-15) + reviewer_sample_30
+첫 배치 검수 착수 합의" — `backlog/gates.yaml` 기록(`claude/g-kiki-device-demo-fv831n` 브랜치 경유,
+머지 시 정본 수렴). 이 문서 §1은 이력 보존용으로 유지한다.
+
 **격상(후속·게이트와 무관)**: 파일럿 검증 후 정규 파트너 협상 → `partnerships.md` §1순위 조건(지분/컨설팅·
 Phase 1 종료 전 1명 확정)으로 복귀. 이 격상은 별도 트랙이며 게이트 재개폐 대상이 아니다.
 
@@ -105,7 +111,8 @@ Phase 1 종료 전 1명 확정)으로 복귀. 이 격상은 별도 트랙이며 
 
 ## 이후 연결
 
-- 게이트 clear → `S2-05-domain-partner-onboard` 착수 가능(acceptance: 파트너 첫 배치 검수 완료).
+- 게이트 clear ✅ → `S2-05-domain-partner-onboard` 착수 가능(acceptance: 파트너 첫 배치 검수 완료).
+  전달물 = `docs/data/reviewer_first_batch_cover_2026-07.md`(커버) + `reviewer_sample_30_v0.md`(30문).
 - 첫 배치 검수 완료 → `S2-01`(동등문제 100문)의 인간 검수 큐 소진 → **S2 탈출 게이트** 판정.
 - 참조: `partnerships.md`(정규 파트너 전략) · `reviewer_sample_30_v0.md`(첫 배치) ·
   `crosswalk_gate_contract.md`(검수 규약) · `status_roadmap_2026-07.md` §4(병목 ④).

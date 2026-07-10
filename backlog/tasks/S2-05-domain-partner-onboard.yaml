@@ -15,6 +15,7 @@ acceptance:
   - 파트너가 검수 큐에서 첫 배치 검수 완료
 artifacts:
   - docs/strategy/domain_partner_handoff_2026-07.md
+  - docs/data/reviewer_first_batch_cover_2026-07.md
 session: null
-notes: "온보딩 절차·검수 규약·게이트 clear 조건 = docs/strategy/domain_partner_handoff_2026-07.md"
+notes: "G-domain-partner cleared(2026-07-10·채널 C). 첫 배치 = reviewer_sample_30_v0 + 커버(reviewer_first_batch_cover) 발송. 절차 정본 = domain_partner_handoff_2026-07.md §2"
 updated: 2026-07-10
