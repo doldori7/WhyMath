@@ -33,8 +33,11 @@ $env:PATH = "$VenvScripts;$env:PATH"
 # ── 시연 전용 환경(런타임 생성 시크릿·하드코딩 0) ───────────────────────────────
 # 호스트 포트 55432 — docker-compose.demo.yml과 동일. Windows 개발자 PC에 흔한 로컬
 # PostgreSQL 서비스(기본 5432)와 충돌해 "port is already allocated"로 죽는 사고를 피한다.
+# ssl=disable — throwaway trust-auth 로컬 PG(SSL 미설정)라 안전하고, Windows에서 asyncpg의
+# SSL 협상 단계가 깨지는(ConnectionError: unexpected connection_lost()) 문제를 원천 회피한다
+# (asyncpg SSLMode.disable — 공식 지원 값·SQLAlchemy가 URL 쿼리를 그대로 asyncpg.connect에 전달).
 if (-not $env:WHYMATH_DATABASE_URL) {
-  $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:55432/whymath"
+  $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:55432/whymath?ssl=disable"
 }
 $env:WHYMATH_DEMO_AUTH_ENABLED = "true"
 if (-not $env:WHYMATH_JWT_SECRET_KEY) {

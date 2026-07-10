@@ -22,7 +22,10 @@ PID_FILE="$REPO_ROOT/.demo_uvicorn.pid"
 
 # ── 시연 전용 환경(런타임 생성 시크릿·하드코딩 0) ───────────────────────────────
 # 호스트 포트 55432 — docker-compose.demo.yml과 동일(로컬 PostgreSQL의 표준 5432와 충돌 회피).
-export WHYMATH_DATABASE_URL="${WHYMATH_DATABASE_URL:-postgresql+asyncpg://whymath@127.0.0.1:55432/whymath}"
+# ssl=disable — throwaway trust-auth 로컬 PG(SSL 미설정)라 안전하고, Windows에서 asyncpg의
+# SSL 협상 단계가 깨지는(ConnectionError: unexpected connection_lost()) 문제를 원천 회피한다
+# (asyncpg SSLMode.disable — 공식 지원 값·SQLAlchemy가 URL 쿼리를 그대로 asyncpg.connect에 전달).
+export WHYMATH_DATABASE_URL="${WHYMATH_DATABASE_URL:-postgresql+asyncpg://whymath@127.0.0.1:55432/whymath?ssl=disable}"
 export WHYMATH_DEMO_AUTH_ENABLED=true
 export WHYMATH_JWT_SECRET_KEY="${WHYMATH_JWT_SECRET_KEY:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
 

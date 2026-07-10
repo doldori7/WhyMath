@@ -51,9 +51,7 @@ class FakeOAuthProvider:
         )
 
 
-def register_demo_provider(
-    providers: dict[str, OAuthProvider], settings: Settings
-) -> None:
+def register_demo_provider(providers: dict[str, OAuthProvider], settings: Settings) -> None:
     """`demo_auth_enabled`일 때만 시연 provider를 레지스트리에 추가한다(loud warning).
 
     **이중 방어**: 실 provider(kakao/naver)가 구성된 환경(=prod 신호)에서는 플래그가 True여도

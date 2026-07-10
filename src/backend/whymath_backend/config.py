@@ -952,14 +952,23 @@ class Settings(BaseSettings):
         패스워드 인코딩·포트 등 엣지를 안전 처리한다(시크릿은 코드에 0 — `database_url`이
         env에서 오고 이 프로퍼티는 변환만). asyncpg가 아닌 다른 드라이버(예: 이미 psycopg)면
         그대로 psycopg로 정규화한다(드라이버 토큰만 교체).
+
+        **`ssl` → `sslmode` 파라미터명 이식**: asyncpg는 SSL 모드를 쿼리파라미터 `ssl=`
+        (예: `ssl=disable`, asyncpg `SSLMode.parse` 지원값)로 받지만, psycopg/libpq는
+        같은 개념을 `sslmode=`로 받는다(`ssl=`은 psycopg에서 `invalid connection option
+        "ssl"`로 즉시 실패 — 실측 확인). 드라이버만 바꾸는 이 프로퍼티의 취지상 값도 드라이버
+        관례에 맞게 이식해야 두 드라이버 모두에서 유효한 URL이 된다. 값 자체는 두 드라이버가
+        같은 enum 이름(disable/allow/prefer/require/verify-ca/verify-full)을 쓰므로 키만
+        바꾸면 된다.
         """
         from sqlalchemy.engine import make_url
 
-        return (
-            make_url(self.database_url)
-            .set(drivername="postgresql+psycopg")
-            .render_as_string(hide_password=False)
-        )
+        url = make_url(self.database_url).set(drivername="postgresql+psycopg")
+        if "ssl" in url.query:
+            query = dict(url.query)
+            query["sslmode"] = query.pop("ssl")
+            url = url.set(query=query)
+        return url.render_as_string(hide_password=False)
 
     @property
     def openai_configured(self) -> bool:

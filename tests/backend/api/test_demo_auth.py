@@ -117,10 +117,7 @@ def test_demo_on_issues_valid_token() -> None:
 def test_demo_user_is_non_minor() -> None:
     """비미성년 불변식 — 데모 사용자 is_minor=False라 동의 게이트를 통과한다."""
     # 상수 수준: 데모 출생연도가 비미성년으로 파생됨.
-    assert (
-        derive_is_minor(DEMO_BIRTH_YEAR, current_year=current_year_kst(), threshold=14)
-        is False
-    )
+    assert derive_is_minor(DEMO_BIRTH_YEAR, current_year=current_year_kst(), threshold=14) is False
     # 콜백이 만든 실제 사용자도 is_minor=False.
     session = _FakeSession()
     resp = _client(_demo_settings(), session).post(_DEMO_PATH, json=_BODY)
