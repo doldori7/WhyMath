@@ -1,0 +1,88 @@
+---
+description: 실기기 시연 트러블슈팅 닥터 — Windows/PowerShell 데모 기동~실기기 구동까지 실측된 전 문제·해법 카탈로그로 즉시 진단
+argument-hint: "[에러 메시지 또는 증상] (인자 없으면 골든 패스 점검)"
+---
+
+# /demo-doctor — 실기기 시연 트러블슈팅
+
+## 임무
+S1 실기기 시연(백엔드 기동 → 앱 빌드 → 실기기 구동)에서 발생하는 문제를,
+**2026-07-09~10 Kiki의 Windows(Phaiakes9)에서 실측·해결된 전 사례 카탈로그**로 즉시 진단한다.
+새로 디버깅하지 말고 **먼저 아래 표에서 증상을 매칭**하라 — 전부 한 번씩 실제로 겪고 고친 것들이다.
+
+## 사용법
+1. 사용자가 에러/증상을 주면 → 아래 카탈로그에서 매칭 → 해법 제시. 대부분의 수정은 이미
+   브랜치에 착지돼 있으므로 **1차 처방은 항상 `git pull` 후 재시도**다.
+2. 인자가 없으면 → §골든 패스를 순서대로 점검한다.
+3. 카탈로그에 없는 새 문제면 → 진단 후 **이 파일에 행을 추가**하고 커밋한다(카탈로그는 살아있는 문서).
+
+## 대원칙 (이 여정에서 배운 것)
+- **Windows는 PowerShell 네이티브로**: WSL bash는 Docker 미연동·경로 혼선. `.ps1` 스크립트를 쓴다.
+- **자리표시 `<...>`는 치는 게 아니라 실제 값으로 바꾼다**: PowerShell은 `<`를 예약어로 거부하고,
+  flutter run은 구문 오류를 낸다. 스크립트가 출력한 **값이 채워진 명령을 한 줄 통째로** 복사한다.
+- **버전은 고정한다**: Flutter는 FVM 3.24.5(`.fvmrc`), Python은 3.12, Gradle 8.7/AGP 8.3.2.
+  "최신"이 끌어오는 비호환 조합이 이 여정 실패의 절반이었다.
+- **환경변수 잔재를 의심한다**: PowerShell env는 스크립트가 끝나도 창에 살아남는다.
+  이전 실행의 값이 새 실행에 새어들 수 있다(데모 스크립트는 이제 항상 덮어씀).
+
+## 골든 패스 (전 과정 요약 · 상세는 scripts/demo/README.md §A)
+```powershell
+# [백엔드 — 리포 루트] Docker Desktop 실행 중 + Ollama 가동 상태에서
+git pull
+cd src\backend ; python -m venv .venv ; .\.venv\Scripts\Activate.ps1 ; pip install -e ".[dev]" ; cd ..\..
+.\scripts\demo\run_demo.ps1        # → 마지막 상자의 flutter run 명령 복사·이 창 유지
+
+# [앱 — src\mobile] 기기 USB 연결(개발자 모드·USB 디버깅) + 같은 WiFi
+$env:PATH = "$env:LOCALAPPDATA\Pub\Cache\bin;$env:PATH"   # fvm PATH(새 창마다)
+fvm flutter pub get
+fvm dart run build_runner build --delete-conflicting-outputs
+fvm flutter run --dart-define=API_URL=http://<출력된 IP>:8000 --dart-define=DEMO_TOKEN=<출력된 토큰>
+```
+
+## 문제 카탈로그 (증상 → 원인 → 해법 · 전부 실측)
+
+### A. PowerShell / 환경
+| 증상 | 원인 | 해법 |
+|---|---|---|
+| `uv` 용어가 인식되지 않습니다 | pip가 uv를 Python3.13 사용자 폴더에 설치·PATH 밖 | **uv 불필요** — conda base가 3.12면 `python -m venv .venv` |
+| `source` 용어가 인식되지 않습니다 | 리눅스 명령 | Windows는 `.\.venv\Scripts\Activate.ps1` (bin 아님·Scripts) |
+| `Activate.ps1` 실행 차단 | 실행 정책 | `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도 |
+| `.venv` 삭제 시 "액세스 거부" | 활성 venv/편집기가 파일 잠금 | **새 PowerShell 창**에서 `Remove-Item -Recurse -Force .venv` |
+| `.ps1` 파싱 오류(한글 깨짐·"종결자가 없습니다") | PS 5.1이 BOM 없는 .ps1을 CP949로 읽음 | 수정 완료(UTF-8 BOM + `.gitattributes *.ps1 eol=crlf`) → `git pull` |
+| 고친 설정이 적용 안 되고 같은 오류 재발 | 이전 실행의 env 잔재가 같은 창에 잔존 | 수정 완료(스크립트가 항상 덮어씀·오버라이드는 `WHYMATH_DEMO_DATABASE_URL` 전용) → `git pull` |
+| `'<' 연산자는 예약되어 있습니다` | 자리표시 `<...>`를 그대로 입력 | 실제 값으로 교체·URL은 따옴표(`--evidence "https://..."`) |
+
+### B. Docker / Postgres / alembic
+| 증상 | 원인 | 해법 |
+|---|---|---|
+| `docker could not be found in WSL` | WSL 배포판에 Docker 미연동 | **PowerShell 네이티브**에서 `.ps1` 실행 |
+| `Bind for 0.0.0.0:5432 failed: port is already allocated` | 로컬 PostgreSQL이 5432 점유 | 수정 완료(데모는 호스트 **55432**) → `git pull` |
+| `CREATE EXTENSION vector` 실패 | 순정 postgres:16엔 pgvector 없음 | 수정 완료(`pgvector/pgvector:pg16`) → `git pull` |
+| `UnicodeDecodeError: 'cp949' codec ...` (alembic) | Alembic이 ini를 OS 로케일로 읽음(하드코딩·우회 불가) | 수정 완료(alembic.ini ASCII화) → `git pull` |
+| `ConnectionError: unexpected connection_lost()` (alembic/asyncpg) | Windows asyncpg SSL 협상 버그 | 수정 완료(데모 URL `?ssl=disable`) → `git pull` |
+
+### C. Flutter / 빌드
+| 증상 | 원인 | 해법 |
+|---|---|---|
+| `intl 0.20.2 is required ... version solving failed` | intl 좁은 핀 vs 최신 Flutter | 수정 완료(`>=0.19.0 <0.21.0`) → `git pull` |
+| build_runner 실패(`retrofit_generator ... Parser`) | Flutter 최신판이 비호환 패키지 조합을 끌어옴 | **FVM 3.24.5 고정**: `fvm install 3.24.5`·`fvm use 3.24.5` 후 모든 명령에 `fvm` 접두 |
+| `fvm` 용어가 인식되지 않습니다 | pub-global bin이 PATH 밖 | `$env:PATH = "$env:LOCALAPPDATA\Pub\Cache\bin;$env:PATH"` (주석 아님·실행) |
+| Gradle `Unsupported class file major version` 류 | Gradle 8.3은 Java 21 미지원 | 수정 완료(Gradle 8.7 + AGP 8.3.2) → `git pull` |
+| `Could not get unknown property 'flutter'` (speech_to_text) | 플러그인이 Flutter 3.27+ 전용 gradle 패턴 | 수정 완료(미사용 음성 플러그인 2종 제거) → `git pull` + `fvm flutter pub get` |
+| `No supported devices connected` | ①구버전 체크아웃(android/ 부재) ②실기기 미연결 | ①`git pull` ②개발자 모드(빌드번호 7연타)→USB 디버깅→연결 팝업 승인→`fvm flutter devices` 확인 |
+| 기기 목록엔 뜨는데 설치 실패(Xiaomi) | MIUI 추가 보안 | 개발자 옵션 → **"USB를 통해 설치"** 허용 + "USB 디버깅(보안 설정)" |
+| compileSdk 35/NDK 버전 경고 | 플러그인 권고 | **경고일 뿐·빌드 성공** — 무시 |
+
+### D. 실행 / 앱
+| 증상 | 원인 | 해법 |
+|---|---|---|
+| 앱은 떴는데 "문제를 불러오지 못했어요" | ①`API_URL=` 부분 복사 유실(`--dart-define==http://`) ②방화벽 ③토큰 만료 | ①명령 한 줄 통째 재복사 ②첫 실행 방화벽 팝업 "개인 네트워크 허용"·`ipconfig`로 LAN IP 확인 ③24h 지났으면 `run_demo.ps1` 재실행 |
+| 온보딩에 노랑/검정 줄무늬 | RenderFlex overflow(키보드 시) | 수정 완료(스크롤 강등) → `git pull` 재빌드 |
+| "수식으로 입력"이 밋밋한 텍스트창 | MathLive ESM이 WebView file:// CORS 차단(textarea 폴백) | 수정 완료(IIFE 재번들 3단 폴백) → `git pull` 재빌드 |
+| 코치가 같은 질문 반복·답변 무반영 | **설계된 S1 범위** — 학생-대면 코치는 결정론 Polya 비계(LLM 미호출·Ollama 무관) | 버그 아님. LLM 튜터링 승격은 S1-11(실측 후). 시연은 코치 2~3턴 후 풀이 제출→검증 신호로 진행 |
+
+## 참조
+- 전체 런북: `scripts/demo/README.md` (§A Windows 경로·함정표)
+- 시연 대본: `docs/architecture/s1_e2e_demo_script.md`
+- 실측 기록: `MEMORY.md` 2026-07-09~10 결정 로그
+- 정리: `.\scripts\demo\stop_demo.ps1` · 게이트: `python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence "https://..."`
