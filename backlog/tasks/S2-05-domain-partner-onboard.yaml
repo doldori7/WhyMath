@@ -13,7 +13,8 @@ requires_gates:
   - G-domain-partner
 acceptance:
   - 파트너가 검수 큐에서 첫 배치 검수 완료
-artifacts: []
+artifacts:
+  - docs/strategy/domain_partner_handoff_2026-07.md
 session: null
-notes: ""
-updated: 2026-07-08
+notes: "온보딩 절차·검수 규약·게이트 clear 조건 = docs/strategy/domain_partner_handoff_2026-07.md"
+updated: 2026-07-10
