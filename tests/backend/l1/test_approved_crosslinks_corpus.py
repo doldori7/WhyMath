@@ -1,10 +1,11 @@
-"""승인 crosswalk 코퍼스 거버넌스 — Kiki 검수 승인분(M0864·M0865)의 무결성·게이트·해석 동결.
+"""승인 crosswalk 코퍼스 거버넌스 — Kiki 검수 승인분의 무결성·게이트·해석 동결.
 
 `data/corpus/misconception_crosslinks_v1/crosslinks.json`은 검수 큐(전행 pending) 중 **Kiki가
-2026-07-08 직접 승인한 2건**을 promote 산출(로더 형식)해 커밋한 것이다(사람 사인오프·AI 자기승인
-아님). 이 테스트는 hermetic(DB 0)으로 봉인한다: ① 로더 형식·게이트 통과(method=manual·검수 서명)
-② kebab∈34 카탈로그·M-id∈843 코퍼스(참조 무결성) ③ `select_canonical`이 두 kebab에 canonical
-M-id를 실제로 돌려줌(단절 해소 = 843 콘텐츠가 34 탐지에 도달하는 첫 실현).
+직접 승인한 매핑**을 promote 산출(로더 형식)해 커밋한 것이다(사람 사인오프·AI 자기승인 아님).
+2026-07-08 극값 2건(M0864·M0865)에 이어 2026-07-10 트리아지 corroborated A그룹 11건(직접매핑·
+conf≥0.9·두 서술 거의 동일)을 승인해 **총 13건**이다. 이 테스트는 hermetic(DB 0)으로 봉인한다:
+① 로더 형식·게이트 통과(method=manual·검수 서명) ② kebab∈34 카탈로그·M-id∈843 코퍼스(참조 무결성)
+③ `select_canonical`이 각 kebab에 canonical M-id를 실제로 돌려줌(단절 해소·843→34 도달).
 """
 
 from __future__ import annotations
@@ -28,10 +29,21 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _CROSSLINKS = _REPO_ROOT / "data" / "corpus" / "misconception_crosslinks_v1" / "crosslinks.json"
 _MISCONCEPTIONS = _REPO_ROOT / "data" / "corpus" / "misconceptions_v1" / "misconceptions.json"
 
-# Kiki 2026-07-08 승인분(MEMORY 정본) — 기대 매핑 동결.
+# Kiki 승인분(MEMORY 정본·2026-07-08 극값 2 + 2026-07-10 A그룹 11) — 기대 매핑 동결.
 _EXPECTED: dict[str, str] = {
     "extremum-max-min-confused": "M0864",
     "extremum-value-vs-point-confused": "M0865",
+    "continuity-implies-differentiability": "M0670",
+    "sine-distributes-over-sum": "M0707",
+    "composite-function-commutes": "M0643",
+    "discriminant-negative-no-real-root": "M0610",
+    "limit-equals-function-value": "M0665",
+    "term-to-zero-implies-convergence": "M0704",
+    "factor-sign-flip": "M0863",
+    "distribution-over-power": "M0019",
+    "critical-point-implies-extremum": "M0080",
+    "product-rule-naive": "M0075",
+    "log-distribution": "M0049",
 }
 
 
@@ -47,7 +59,7 @@ def _corpus_mis_ids() -> set[str]:
 
 
 def test_exact_approved_pairs() -> None:
-    # 정확히 Kiki 승인 2건 — 기대 kebab→M-id 매핑 동결(드리프트 시 즉시 실패).
+    # 정확히 Kiki 승인 13건 — 기대 kebab→M-id 매핑 동결(드리프트 시 즉시 실패).
     rows = _load_rows()
     assert {r.kebab_id: r.mis_id for r in rows} == _EXPECTED
 
@@ -59,7 +71,7 @@ def test_load_gate_passes() -> None:
     for r in rows:
         assert r.method == LOADABLE_METHOD
         assert is_signed(r.note)
-        assert r.confidence == 0.9
+        assert r.confidence is not None and r.confidence >= 0.9  # 직접매핑 승인분(≥0.6 하한 여유)
         assert r.link_type == "직접매핑"
 
 
