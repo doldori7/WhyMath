@@ -1,0 +1,26 @@
+# S1 실기기 시연 전용 — throwaway Postgres 16 (앱+백엔드 통합 실행이 리포에 없어 시연용으로만 둔다).
+#
+# ★로컬 시연 전용: trust auth(비밀번호 없음)로 자격증명 하드코딩을 피한다. 127.0.0.1에만 바인딩해
+# 외부 노출을 막고, 시연이 끝나면 `scripts/demo/stop_demo.sh`가 볼륨째 버린다(영속 데이터 아님).
+# prod/스테이징에서 절대 사용 금지 — 실 DB는 별도 관리형 인스턴스.
+services:
+  demo-db:
+    # pgvector 포함 이미지 필수 — alembic 마이그레이션이 `CREATE EXTENSION vector`를 실행한다
+    # (임베딩·의미검색, 기술스택 pgvector). 순정 postgres:16은 vector.control이 없어 upgrade가 실패.
+    image: pgvector/pgvector:pg16
+    container_name: whymath-demo-db
+    environment:
+      POSTGRES_USER: whymath
+      POSTGRES_DB: whymath
+      # trust: 로컬 throwaway 전용·비밀번호 미설정(시크릿 하드코딩 0). prod 금지.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      # 호스트 5432가 아니라 55432 — 개발자 PC에 흔한 로컬 PostgreSQL(서비스·다른 프로젝트)이
+      # 5432를 이미 점유해 "port is already allocated"로 기동 실패하는 충돌을 원천 회피한다.
+      # 컨테이너 내부는 표준 5432 그대로(run_demo.sh/.ps1이 호스트 55432로 접속).
+      - "127.0.0.1:55432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whymath -d whymath"]
+      interval: 2s
+      timeout: 3s
+      retries: 30

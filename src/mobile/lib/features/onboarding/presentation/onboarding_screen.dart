@@ -177,30 +177,37 @@ class _OnboardingPageView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    // Center+SingleChildScrollView — 키보드가 올라와 세로 제약이 좁아지면(실기기 실측: h≈200)
+    // 넘치는 대신 스크롤로 강등한다(RenderFlex overflow 줄무늬가 시연 녹화에 찍히는 사고 방지).
+    // 넉넉한 화면에선 Center가 기존과 동일하게 가운데 정렬한다(레이아웃 의미 불변).
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(page.icon, size: 96, color: theme.colorScheme.primary),
-          const SizedBox(height: 32),
-          Text(
-            page.title,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-            ),
+      child: Center(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(page.icon, size: 96, color: theme.colorScheme.primary),
+              const SizedBox(height: 32),
+              Text(
+                page.title,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                page.body,
+                textAlign: TextAlign.center,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                  height: 1.5,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
-          Text(
-            page.body,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              height: 1.5,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

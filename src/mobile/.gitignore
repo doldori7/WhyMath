@@ -10,6 +10,9 @@
 build/
 pubspec.lock
 
+# FVM — 프로젝트 Flutter 버전 고정. .fvmrc(버전 선언)만 커밋하고, .fvm/(로컬 SDK 심링크·캐시)는 미커밋.
+.fvm/
+
 # IDE
 .idea/
 .vscode/

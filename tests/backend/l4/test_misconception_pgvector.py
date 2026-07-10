@@ -149,6 +149,18 @@ class TestSyncDatabaseUrl:
         assert "psycopg" in s.sync_database_url
         assert s.sync_database_url.startswith("postgresql+psycopg://")
 
+    def test_ssl_param_renamed_to_sslmode(self) -> None:
+        # asyncpg 쿼리파라미터 ssl=은 psycopg에서 무효(invalid connection option "ssl",
+        # 실측 확인) — 드라이버 교체 시 sslmode=로 이식돼야 두 드라이버 모두 유효한 URL.
+        s = Settings(database_url="postgresql+asyncpg://whymath@127.0.0.1:5432/whymath?ssl=disable")
+        assert "sslmode=disable" in s.sync_database_url
+        assert "ssl=disable" not in s.sync_database_url  # 원래 키는 남지 않는다(교체·중복 아님)
+
+    def test_no_ssl_param_untouched(self) -> None:
+        # ssl= 쿼리파라미터가 없으면 query 자체를 건드리지 않는다(no-op 분기 확인).
+        s = Settings(database_url="postgresql+asyncpg://whymath@127.0.0.1:5432/whymath")
+        assert "sslmode" not in s.sync_database_url
+
 
 # ──────────────────────────────────────────────────────────────────────────
 # ② vector_store selector + build_vector_index 팩토리

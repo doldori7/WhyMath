@@ -5,6 +5,12 @@
 > **근거**: PR #488("Flutter 학습 루프 관통 배선") 이후 실 코드 매핑(파일:라인) · `src/mobile/test/e2e_loop_flow_test.dart`(정본 시퀀스).
 >
 > **탈출 게이트 현황**: ②비용 실측 ✅(§11)·③검증 게이트 ✅(2026-07-08 봉인) → **잔여 = 본 시연(①)뿐.**
+>
+> **기기 판정(2026-07-10 실측 결정)**: "실기기(패드)"의 "(패드)"는 예시이지 필수 요건이 아니다 —
+> 핵심 요건은 *에뮬레이터가 아닌 진짜 하드웨어*에서 루프가 완주되는 것. Kiki는 iOS 태블릿(아이패드)만
+> 보유해 Windows PC에서 iOS 빌드가 원천 불가(macOS+Xcode 필수·리포에 `ios/` 스캐폴딩도 아직 없음) —
+> **안드로이드 실기기(폰 포함)로 정본 녹화**하기로 확정. 안드로이드 폰(M2007J20CG)에서 온보딩→문제
+> 카드→풀이 제출→검증 카드까지 전체 루프 완주를 이미 실측 완료(2026-07-10).
 
 ---
 
@@ -17,7 +23,12 @@
 따라서 **②진단·③문제제시도 화면으로 보인다** — API 보조노출 불필요. `e2e_loop_flow_test.dart`가 앱 계층에서 관통을 증명한다.
 
 **정직한 프레이밍(내레이션에 반드시)**:
-- 코치 발문(`decision.prompt`)·문제 생성은 **서버 L4가 담당**(앱엔 LLM 없음) → 코치 품질은 백엔드 LLM 키 상태에 종속.
+- 코치 발문(`decision.prompt`)은 **서버 L4의 결정론 Polya 비계**다(단계별 고정 발문 + 키워드 전이
+  휴리스틱·LLM 미호출) — LLM 키/Ollama 상태와 **무관**하다(2026-07-10 실기기 실측·코드 확정:
+  `l4/polya/prompts.py` 고정 템플릿·`transitions.py` 키워드 전이·WH-1 하네스는 shadow 전용).
+  같은 단계에 머무르면 같은 발문이 반복될 수 있다 — 이는 "미검증 LLM 응답 학생 제공 금지"(CLAUDE.md
+  절대 금기)에 따른 **의도된 S1 범위**이고, LLM 튜터링의 학생-대면 승격은 S1-11(라이브 실측 후)이다.
+  내레이션은 "S1은 결정론 코칭 비계·검증 신호까지의 루프 관통을 시연한다"로 프레이밍한다.
 - **정답값·"틀렸다" 단정·θ/SE 수치는 화면에 안 뜬다**(`coach_signal_card.dart`는 요약 문구만) — 답 미루기·"이유를 묻는 수학" 정체성의 시각 증거.
 - 진단은 반복 문항 루프가 아니라 **추천 문제 1장 제시**다(적응형 재출제는 "문제가 바뀌어 나온다"로만 시각화 가능).
 
@@ -25,13 +36,15 @@
 
 ## 1. ⚠️ 사전 세팅 — 하드 블로커 3종 (녹화 전 반드시 확인)
 
-앱 UI 글루는 완주 배선 완료. 시연을 막는 건 **백엔드/설정 의존성 3가지**다:
+앱 UI 글루는 완주 배선 완료. 시연을 막는 건 **백엔드/설정 의존성 3가지**인데, **`bash scripts/demo/run_demo.sh` 한 번으로 3종을 모두 해소**하도록 인에이블먼트 킷이 배선돼 있다(리포 루트에서 실행):
 
-1. **인증(최우선)** — 보호 엔드포인트(`/v1/me/next-problem`·코치 세션·`/v1/ocr`)는 토큰 없으면 **401** → 진단이 "문제를 불러오지 못했어요"로 빠져 루프가 안 돈다. 실 로그인 webview(c3)는 미배선(`router.dart:6-9`). **대응**: 사전 시딩된 토큰(`token_store` 복원, `main.dart:18`) 또는 인증 완화된 dev 백엔드.
-2. **API_URL 도달성** — 기본 `http://localhost:8000`(`core/env.dart:10`). 실기기에서 localhost는 자기 자신 → 안 붙는다. **대응**: `flutter run --dart-define=API_URL=https://<도달 가능 호스트>`.
-3. **백엔드 LLM 키** — 코치 발문·문제 생성이 서버 LLM. 키 없으면 degraded/canned. **대응**: 라이브 키 또는 로컬 Ollama 기동(코칭 자체는 결정론 경로로도 발문·검증 표시됨).
+1. **인증(최우선)** — 보호 엔드포인트(`/v1/me/next-problem`·코치 세션·`/v1/ocr`)는 토큰 없으면 **401** → 진단이 "문제를 불러오지 못했어요"로 빠져 루프가 안 돈다. 실 로그인 webview(c3)는 미배선(`router.dart:6-9`). **대응**: 킷이 `WHYMATH_DEMO_AUTH_ENABLED=true`로 가짜 OAuth provider(`api/demo_auth.py`)를 등록하고 `POST /v1/auth/demo/callback`으로 고정 데모 계정의 실 JWT를 자동 발급한다 → 앱엔 `--dart-define=DEMO_TOKEN=<발급 토큰>`으로 주입(`AuthController.restore`가 저장소에 심어 인증 부팅). *기본 OFF·prod 이중 방어(실 provider 구성 시 등록 거부)·로컬 시연 호스트 밖 금지.*
+2. **API_URL 도달성** — 기본 `http://localhost:8000`(`core/env.dart:10`). 실기기에서 localhost는 자기 자신 → 안 붙는다. **대응**: 킷이 LAN IP를 탐지해 `flutter run --dart-define=API_URL=http://<LAN_IP>:8000` 명령을 그대로 출력한다(uvicorn은 `0.0.0.0` 바인딩).
+3. **백엔드 LLM 키** — 코치 발문·문제 생성이 서버 LLM. 키 없으면 degraded/canned. **대응**: 킷이 `/status`로 LLM 모드(라이브/Ollama/결정론)를 보고한다. 라이브 키·로컬 Ollama 없으면 **결정론 경로로도 발문·검증 신호가 표시돼 루프는 완주**된다(정직 프레이밍 유지).
 
-**세팅 순서**: dev 백엔드 기동(시드 문제 + 인증 토큰) → `--dart-define=API_URL` 로 앱 실행 → (선택) 문제 카드 1회 워밍업 → 녹화 시작.
+**세팅 순서(원커맨드)**: 리포 루트에서 `bash scripts/demo/run_demo.sh` → (throwaway PG 기동 · alembic · 문제 시드 · uvicorn · 데모 토큰 발급 · LAN IP·LLM 모드 출력) → 출력된 `flutter run …` 명령을 패드에서 실행 → 녹화 시작. 정리: `bash scripts/demo/stop_demo.sh`.
+
+> **경계**: 이 킷은 녹화를 *turnkey*로 만들 뿐 **탈출 게이트 `G-kiki-device-demo`를 clear하지 않는다** — 게이트는 Kiki가 실기기 15분 루프를 *녹화*할 때까지 PENDING 유지. 녹화 후 `S1-14-exit-gate-judgement`(owner=kiki)가 3종 게이트 판정을 기록해 S1을 공식 탈출한다.
 
 ---
 
@@ -61,6 +74,14 @@
 > **온보딩 후 `/problem` 문제 카드가 뜨고 → "풀이 시작" → 채팅에서 풀이 전송 → 코치 버블(`decision.prompt`)이 나오며
 > → 그 아래 CoachSignalCard 검증 신호("N단계 중 M단계 확인" 등)가 뜨면 1루프 완주.** 앱 UI 하드 블로커 없음(§1 백엔드 3종만 사전 충족).
 
+> **⚠️ 실측 함정(2026-07-10)**: CoachSignalCard는 "풀이를 제출했다"만으로 뜨지 않는다 —
+> `api/coach.py::_build_response_payload`가 `solution_coaching`을 채우는 건 **`arithmetic_error`가
+> 감지됐을 때뿐**(완전히 맞는 풀이·파싱 불가한 수식은 `None`이라 카드 미출력). 시연 녹화에서 카드를
+> 확실히 띄우려면 **풀이에 순수 숫자 오류를 한 줄 일부러 포함**한다(예: `4 / 2 = 3`) —
+> `l3/pregenerate/validator.py::SymPyArithmeticValidator`가 즉시 거짓으로 판정해 "스스로 검산해볼까?"
+> 카드를 띄운다. MathLive(수식 키보드)보다 "풀이 단계" 텍스트칸에 직접 타이핑이 안정적(WebView
+> file:// CORS로 MathLive 입력이 깨질 수 있음).
+
 ---
 
 ## 5. 15분 예산 · 병목
@@ -88,3 +109,5 @@
 ---
 
 **참조**: `docs/architecture/s1_e2e_vertical_slice_design.md`(6단계 정본) · `src/mobile/lib/features/{onboarding,problems,chat}` · `src/mobile/test/e2e_loop_flow_test.dart` · `src/backend/whymath_backend/api/{coach,me,users,problems,verify}.py` · `docs/strategy/status_roadmap_2026-07.md §S1`.
+
+**인에이블먼트 킷(원커맨드 시연 기동)**: `scripts/demo/run_demo.sh`·`scripts/demo/stop_demo.sh`·`scripts/demo/seed_demo.py` · `docker-compose.demo.yml`(pgvector/pgvector:pg16) · 가짜 provider `src/backend/whymath_backend/api/demo_auth.py`(게이트 `WHYMATH_DEMO_AUTH_ENABLED`·기본 OFF) · Flutter `core/env.dart`(`DEMO_TOKEN`)·`features/auth/application/auth_controller.dart`(`demoTokenProvider`·`restore` 시연 분기) · 테스트 `tests/backend/api/test_demo_auth.py`·`src/mobile/test/demo_token_restore_test.dart`.
