@@ -36,9 +36,10 @@ dependencies:
   flutter_math_fork: ^0.7.2
   # 웹뷰 (Desmos·GeoGebra)
   webview_flutter: ^4.7.0
-  # 음성
-  flutter_tts: ^4.0.2
-  speech_to_text: ^7.0.0
+  # 음성 — 클라 TTS/STT는 *기능 착수 시* 재도입한다(현재 lib/test 사용처 0·선언만 있던 상태).
+  # 제거 이유: speech_to_text 7.4.0은 자기 gradle에서 flutter.compileSdkVersion을 참조해
+  # (Flutter 3.27+ 전용 주입) 고정판 3.24.5의 안드로이드 빌드를 치명 실패시키고, flutter_tts
+  # 4.2.5는 compileSdk 36 하드코딩. 재도입 시 고정 Flutter와의 Gradle 호환을 실기기 빌드로 검증할 것.
   # 차트
   fl_chart: ^0.69.0
   # 푸시

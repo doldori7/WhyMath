@@ -138,6 +138,7 @@ python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence "htt
 | `alembic upgrade` 시 `ConnectionError: unexpected connection_lost()` | Windows에서 asyncpg의 SSL 협상 단계가 깨지는 알려진 문제. 데모 URL에 **`?ssl=disable`** 이 고정돼 있고, 같은 창에 남은 이전 실행의 `WHYMATH_DATABASE_URL` 잔재도 **항상 덮어써서** 재발하지 않는다(`git pull` 후 재실행). 데모 아닌 DB를 쓰려면 전용 `WHYMATH_DEMO_DATABASE_URL`로 지정. |
 | `Activate.ps1` 차단 | `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도. |
 | **build_runner 실패**(`retrofit_generator ... Parser` 등) | Flutter가 3.24.5보다 최신이라 비호환 패키지 조합. **FVM으로 3.24.5 고정**(A-3)·이후 `fvm flutter`/`fvm dart`로 실행. |
+| Gradle 빌드 실패: `Could not get unknown property 'flutter'`(speech_to_text) | 구버전 체크아웃. speech_to_text 7.4.0이 Flutter 3.27+ 전용 gradle 패턴을 써서 3.24.5에서 빌드 불가 — 미사용 음성 패키지 2종(speech_to_text·flutter_tts)을 pubspec에서 제거해 해결됨. `git pull` 후 `fvm flutter pub get` 재실행. |
 | `fvm` not found | `dart pub global activate fvm` 후 pub-global bin 미등록. `$env:PATH = "$env:LOCALAPPDATA\Pub\Cache\bin;$env:PATH"`. |
 | `No supported devices connected` | 실기기 미연결 **또는 구버전 체크아웃(android/ 스캐폴딩 이전)**. `git pull` 후 A-3 기기 연결 4단계(개발자 모드→USB 디버깅→연결·팝업 승인→`fvm flutter devices`) 수행. Windows/Chrome/Edge가 "not supported"로 뜨는 건 정상(android 전용). |
 | 기기는 목록에 뜨는데 설치가 안 됨(Xiaomi/샤오미) | MIUI는 추가로 **개발자 옵션 → "USB를 통해 설치" 허용**(Mi 계정 로그인 요구될 수 있음)과 **"USB 디버깅(보안 설정)"** 을 켜야 apk 설치가 진행된다. |
