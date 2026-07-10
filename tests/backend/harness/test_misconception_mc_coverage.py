@@ -36,6 +36,11 @@ _NEW_KEBABS: dict[str, str] = {
     "log-distribution": "[12대수01-05]",
     "composite-function-commutes": "[10공수2-03-02]",
     "period-of-scaled-sine": "[12미적Ⅱ-02-02]",
+    # Tier B 계산가능(값형) 4종.
+    "fraction-cancellation": "[9수01-04]",
+    "angle-sum-non-triangle": "[9수03-05]",
+    "area-perimeter-confusion": "[6수03-11]",
+    "circle-radius-squared": "[10공수2-01-04]",
 }
 
 
@@ -59,19 +64,19 @@ class TestBatchCoverageContribution:
             assert counts.get(kebab, 0) >= 24  # 오답 귀인 문항 ≥24
             assert code in standards.get(kebab, frozenset())  # 성취기준 역유도
 
-        # 이 코퍼스만으로도 8 kebab이 machine-decidable(구조 신호 有).
+        # 이 코퍼스만으로도 신규 kebab들이 machine-decidable(구조 신호 有).
         decidable = sum(1 for k in CATALOG_BY_ID if standards.get(k))
-        assert decidable >= 8
+        assert decidable >= 12
 
 
 class TestCommittedCorpusCoverageRise:
-    def test_committed_corpora_decidable_at_least_15(self) -> None:
-        # ③ 커밋 코퍼스 전체 회계 — machine-decidable ≥15(13→15 상승)·정답 오거부 0(회귀 아님).
+    def test_committed_corpora_decidable_at_least_27(self) -> None:
+        # ③ 커밋 코퍼스 전체 회계 — machine-decidable ≥27(수치평가 15+개념형 7+Tier B 5)·오거부 0.
         report, _ = run(
             problem_corpora=_default_problem_corpora(),
             misconceptions=_default_misconceptions(),
             cross_per_positive=60,
             same_per_positive=60,
         )
-        assert report.kebabs_decidable >= 15
+        assert report.kebabs_decidable >= 27
         assert report.positive_false_reject == 0

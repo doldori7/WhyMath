@@ -82,6 +82,10 @@ TemplateKind = Literal[
     "sine_period",
     "translate",
     "product_rule",
+    "fraction_cancel",
+    "polygon_angle_sum",
+    "area_perimeter",
+    "circle_radius",
 ]
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
@@ -97,6 +101,10 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "sine_period": ("H:12미적Ⅱ02-02", "TRIG-PERIOD"),
     "translate": ("10기수2-01-06", "FUNC-TRANSLATE"),
     "product_rule": ("H:12미적Ⅰ02-01", "CALC-PRODUCT"),
+    "fraction_cancel": ("J0104", "FRACTION-CANCEL"),
+    "polygon_angle_sum": ("J0305", "POLYGON-ANGLE-SUM"),
+    "area_perimeter": ("J0312", "AREA-PERIMETER"),
+    "circle_radius": ("10공수2-01-04", "CIRCLE-RADIUS"),
 }
 
 
@@ -208,7 +216,9 @@ def _build_distribution_pool() -> tuple[_EvalItem, ...]:
             correct = sympy.Integer(correct_v)
             misc = sympy.Integer(a * a + b * b)  # 교차항 2ab 누락.
             filler1 = sympy.Integer(2 * a * b)  # 교차항만.
-            filler2 = sympy.Integer(a * a + b * b + a * b)  # 교차항을 1배만(2배를 1배로).
+            filler2 = sympy.Integer(
+                a * a + b * b + a * b
+            )  # 교차항을 1배만(2배를 1배로).
             item = _assemble_item(
                 values=(correct, misc, filler1, filler2),
                 conditions=f"x = ({a}+{b})**2",
@@ -449,7 +459,9 @@ def _build_func_compose_pool() -> tuple[_EvalItem, ...]:
                 if correct_v in seen:
                     continue
                 correct = sympy.Integer(correct_v)
-                misc = sympy.Integer(b * c + a * b)  # (g∘f)(c)=g(c+a)=bc+ab(합성 순서 뒤집음).
+                misc = sympy.Integer(
+                    b * c + a * b
+                )  # (g∘f)(c)=g(c+a)=bc+ab(합성 순서 뒤집음).
                 filler1 = sympy.Integer(b * c)  # +a 누락.
                 filler2 = sympy.Integer(b * c + a + b)  # 계수 오합.
                 item = _assemble_item(
@@ -526,7 +538,9 @@ def _build_translate_pool() -> tuple[_EvalItem, ...]:
             if correct_v in seen:
                 continue
             correct = sympy.Integer(correct_v)
-            misc = sympy.Integer((d + 2) ** 2 + b * (d + 2))  # f(c+1)=f(d+2)(부호 뒤집음).
+            misc = sympy.Integer(
+                (d + 2) ** 2 + b * (d + 2)
+            )  # f(c+1)=f(d+2)(부호 뒤집음).
             filler1 = sympy.Integer(c * c + b * c)  # f(c)(이동 미적용).
             filler2 = sympy.Integer(d * d)  # 선형항 bx 누락.
             item = _assemble_item(
@@ -568,7 +582,9 @@ def _build_product_rule_pool() -> tuple[_EvalItem, ...]:
                 if correct_v in seen:
                     continue
                 correct = sympy.Integer(correct_v)
-                misc = sympy.Integer(m * n * c ** (m + n - 2))  # f'(c)g'(c)(곱미분 오인).
+                misc = sympy.Integer(
+                    m * n * c ** (m + n - 2)
+                )  # f'(c)g'(c)(곱미분 오인).
                 filler1 = sympy.Integer((m + n) * c ** (m + n))  # 지수 미하강.
                 filler2 = sympy.Integer(m * n * c ** (m + n - 1))  # 계수 오합.
                 item = _assemble_item(
@@ -593,6 +609,159 @@ def _build_product_rule_pool() -> tuple[_EvalItem, ...]:
     return tuple(pool)
 
 
+def _build_fraction_cancel_pool() -> tuple[_EvalItem, ...]:
+    """(a+b)/a 값 뼈대 풀 — 정답 (a+b)/a·오개념 b(분모 a만 약분해 b로 남김)·filler a·a+b.
+
+    (a+b)/a = 1 + b/a 인데, 분자의 a와 분모의 a를 지워 b로 오인한다(잘못된 약분). 네 값
+    {(a+b)/a, b, a, a+b}는 대체로 서로 다르며 4-상이 검사로 이중 보장한다. 정답값(실수 근사)으로
+    dedup. 값이 정수면 자연수·아니면 분수 answer_format.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[float] = set()
+    for a in range(2, 8):
+        for b in range(2, 16):
+            correct = sympy.Rational(a + b, a)
+            key = round(_numeric(correct), 9)
+            if key in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    correct,
+                    sympy.Integer(b),  # 분모 a만 약분해 b로 오인(잘못된 약분).
+                    sympy.Integer(a),  # 분모.
+                    sympy.Integer(a + b),  # 분자.
+                ),
+                conditions=f"x = ({a}+{b})/{a}",
+                answer_str=_display(correct),
+                question_text=(
+                    f"두 자연수 a = {a}, b = {b} 에 대하여 (a + b) / a 의 값을 구하시오."
+                ),
+                answer_explanation=(
+                    f"(a + b) / a = 1 + b/a 이므로 a = {a}, b = {b} 를 대입하면 "
+                    f"{_display(correct)} 이다. 분자와 분모의 a 를 지워 b 로 약분하면 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=_answer_format_for(correct),
+            )
+            if item is not None:
+                seen.add(key)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_polygon_angle_sum_pool() -> tuple[_EvalItem, ...]:
+    """n각형 내각의 합 뼈대 풀 — 정답 (n-2)·180·오개념 180(삼각형 값 고정)·filler n·180·(n-1)·180.
+
+    n각형 내각의 합은 (n-2)·180° 인데, 모든 다각형에서 180° 로 고정 오인한다. n≥4라 네 값
+    {(n-2)·180, 180, n·180, (n-1)·180}는 서로 다르다. 정답값으로 dedup. 모두 자연수.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for n in range(4, 30):
+        correct_v = (n - 2) * 180
+        if correct_v in seen:
+            continue
+        item = _assemble_item(
+            values=(
+                sympy.Integer(correct_v),
+                sympy.Integer(180),  # 다각형 무관 180° 고정 오인.
+                sympy.Integer(n * 180),  # -2 누락.
+                sympy.Integer((n - 1) * 180),  # 한 변 오차.
+            ),
+            conditions=f"x = ({n}-2)*180",
+            answer_str=str(correct_v),
+            question_text=f"{n}각형의 내각의 크기의 합을 구하시오. (단위: 도)",
+            answer_explanation=(
+                f"n각형의 내각의 합은 (n - 2)·180° 이므로 {n}각형은 "
+                f"({n} - 2)·180 = {correct_v}° 이다. 모든 다각형의 내각의 합을 180° 로 여기면 "
+                "틀린다."
+            ),
+            difficulty=_difficulty(n),
+            answer_format=AnswerFormat.자연수,
+        )
+        if item is not None:
+            seen.add(correct_v)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_area_perimeter_pool() -> tuple[_EvalItem, ...]:
+    """직사각형 넓이 뼈대 풀 — 정답 a·b·오개념 2(a+b)(넓이-둘레 혼동)·filler a+b·2ab.
+
+    가로 a·세로 b 직사각형의 넓이는 a·b 인데, 둘레 2(a+b)와 혼동한다("둘레가 크면 넓이도 크다"류).
+    네 값 {ab, 2(a+b), a+b, 2ab}는 4-상이 검사로 이중 보장한다. 정답값 ab로 dedup. 모두 자연수.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 12):
+        for b in range(a + 1, 16):
+            correct_v = a * b
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(correct_v),
+                    sympy.Integer(2 * (a + b)),  # 둘레와 혼동.
+                    sympy.Integer(a + b),  # 반둘레.
+                    sympy.Integer(2 * a * b),  # 넓이 2배.
+                ),
+                conditions=f"x = {a}*{b}",
+                answer_str=str(correct_v),
+                question_text=(
+                    f"가로가 {a}, 세로가 {b} 인 직사각형의 넓이를 구하시오."
+                ),
+                answer_explanation=(
+                    f"직사각형의 넓이는 가로×세로 = {a}×{b} = {correct_v} 이다. "
+                    f"둘레 2×({a}+{b}) = {2 * (a + b)} 와 혼동하면 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=AnswerFormat.자연수,
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_circle_radius_pool() -> tuple[_EvalItem, ...]:
+    """원 x²+y²=r² 반지름 뼈대 풀 — 정답 r·오개념 r²(r²을 반지름으로 오인)·filler 2r·r²+r.
+
+    x² + y² = r² 의 반지름은 r 인데, 우변 r² 을 곧 반지름으로 오인한다(제곱을 안 벗김). r≥3라 네 값
+    {r, r², 2r, r²+r}는 서로 다르다. 문항 우변은 r² 을 정수로 제시(완전제곱). 정답값 r로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for r in range(3, 30):
+        r_sq = r * r
+        if r in seen:
+            continue
+        item = _assemble_item(
+            values=(
+                sympy.Integer(r),
+                sympy.Integer(r_sq),  # r² 을 반지름으로 오인.
+                sympy.Integer(2 * r),  # 지름과 혼동.
+                sympy.Integer(r_sq + r),  # 근접 오답.
+            ),
+            conditions=f"x = sqrt({r_sq})",
+            answer_str=str(r),
+            question_text=f"원 x^2 + y^2 = {r_sq} 의 반지름의 길이를 구하시오.",
+            answer_explanation=(
+                f"x² + y² = r² 에서 반지름은 r 이므로 r² = {r_sq} 이면 반지름은 {r} 이다. "
+                f"우변 {r_sq} 을 반지름으로 여기면 틀린다."
+            ),
+            difficulty=_difficulty(r),
+            answer_format=AnswerFormat.자연수,
+        )
+        if item is not None:
+            seen.add(r)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "distribution": _build_distribution_pool,
     "chain_rule": _build_chain_rule_pool,
@@ -604,6 +773,10 @@ _POOL_FACTORY = {
     "sine_period": _build_sine_period_pool,
     "translate": _build_translate_pool,
     "product_rule": _build_product_rule_pool,
+    "fraction_cancel": _build_fraction_cancel_pool,
+    "polygon_angle_sum": _build_polygon_angle_sum_pool,
+    "area_perimeter": _build_area_perimeter_pool,
+    "circle_radius": _build_circle_radius_pool,
 }
 
 
@@ -635,7 +808,8 @@ class MisconceptionEvalMCSkeletonGenerator:
         if template not in _POOL_FACTORY:
             raise ValueError(
                 f"미지원 template: {template!r} (distribution/chain_rule/sine_sum/exp_zero/"
-                "sqrt_pos/log_dist/func_compose/sine_period)"
+                "sqrt_pos/log_dist/func_compose/sine_period/translate/product_rule/"
+                "fraction_cancel/polygon_angle_sum/area_perimeter/circle_radius)"
             )
         if not distractor_codes:
             raise ValueError(
@@ -655,7 +829,11 @@ class MisconceptionEvalMCSkeletonGenerator:
         concept_src_id, unit_code = _TEMPLATE_META[template]
         self._unit_codes = [unit_code]
         self._concept_tags = [
-            ConceptTag(concept_src_id=concept_src_id, role="PRIMARY", relevance=concept_relevance)
+            ConceptTag(
+                concept_src_id=concept_src_id,
+                role="PRIMARY",
+                relevance=concept_relevance,
+            )
         ]
 
     # ── EquivalentProblemGenerator 좌석 ────────────────────────────────────
@@ -727,7 +905,9 @@ class MisconceptionEvalMCSkeletonGenerator:
             concept_tags=list(self._concept_tags),
         )
 
-    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
+    def _stable_slug(
+        self, question_text: str, answer: str, codes: Sequence[str]
+    ) -> str:
         """결정론 안정 slug — 내용 해시(멱등 upsert 키·극값 MC 규약 미러)."""
         payload = "|".join([question_text, answer, ",".join(sorted(codes))])
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]

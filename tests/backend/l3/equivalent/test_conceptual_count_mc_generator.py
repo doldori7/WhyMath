@@ -27,6 +27,7 @@ _CASES: tuple[tuple[CountTemplateKind, str, tuple[str, ...]], ...] = (
     ("limit_equals_value", "limit-equals-function-value", ("[12미적Ⅰ-01-01]",)),
     ("is_differentiable", "continuity-implies-differentiability", ("[12미적Ⅰ-02-02]",)),
     ("series_converges", "term-to-zero-implies-convergence", ("[12미적Ⅱ-01-04]",)),
+    ("excluded_point_count", "division-by-zero", ("[9수01-03]",)),
 )
 
 

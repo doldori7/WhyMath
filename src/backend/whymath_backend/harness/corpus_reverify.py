@@ -50,6 +50,7 @@ _CONCEPTUAL_VERIFIERS: dict[
     "limit_equals_value": verify_limit_equals_value,
     "is_differentiable": verify_is_differentiable,
     "series_converges": verify_series_converges,
+    "excluded_point_count": verify_real_root_count,
 }
 
 _EXIT_OK = 0

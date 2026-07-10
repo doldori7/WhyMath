@@ -1,10 +1,11 @@
 """개념형(개수/판정) 객관식 배치 — crosswalk machine-decidable 커버 상향(개수/판정 검증·LLM 0).
 
-`misconception_mc_batch`(수치평가)의 개념형 형제다. `ConceptualCountMCSkeletonGenerator`로 7 밴드
-(실근·극값 개수·일대일·등비급수 수렴·극한=함숫값·미분가능·급수 수렴 판정)을 생성 → 기존
-오케스트레이터(`run_batch`)·수용 게이트(S2-a·개수/판정 SymPy 독립 검증)·`JsonlCorpusSink`를
-**재사용**해 코퍼스를 적재한다. 목적: 수치평가로 안 되는 개념형 오개념 7종(판별식·임계점·일대일·
-등비급수·극한=함숫값·연속→미분가능·일반항→0⇒수렴)을 문항에 등장시켜 커버를 15/34 → 22/34로 올린다.
+`misconception_mc_batch`(수치평가)의 개념형 형제다. `ConceptualCountMCSkeletonGenerator`로 8 밴드
+(실근·극값 개수·일대일·등비급수 수렴·극한=함숫값·미분가능·급수 수렴·정의역 제외점 개수)를 생성 →
+기존 오케스트레이터(`run_batch`)·수용 게이트(S2-a·개수/판정 SymPy 독립 검증)·`JsonlCorpusSink`를
+**재사용**해 코퍼스를 적재한다. 목적: 수치평가로 안 되는 개념형 오개념 8종(판별식·임계점·일대일·
+등비급수·극한=함숫값·연속→미분가능·일반항→0⇒수렴·division-by-zero)을 문항에 등장시켜 커버를 올린다
+(division-by-zero는 제외점 개수=분모 실근 개수라 `verify_real_root_count`를 그대로 재사용).
 
 성취기준 튜플은 *각 kebab 후보 M-id가 전부 agree*하도록 잠갔다(거짓 자율거부 0). 이 kebab들은
 op-code 부재라 오개념만 태깅(`build_kebab_distractor_codes_optional`). 결정론·산출 v0(사람 검수 전).
@@ -50,7 +51,7 @@ class _Band:
     standard_codes: tuple[str, ...]
 
 
-# 7 서브밴드 — 개념형 개수/판정 MC. 표준 튜플은 각 kebab 후보가 전부 agree하도록 잠금(거짓거부 0).
+# 8 서브밴드 — 개념형 개수/판정 MC. 표준 튜플은 각 kebab 후보가 전부 agree하도록 잠금(거짓거부 0).
 _BANDS: tuple[_Band, ...] = (
     # discriminant: 후보 M0610=[10공수1-02-02]·M0832=[10기수1-02-02]·M0124=[9수02-20] 모두 agree.
     _Band(
@@ -101,6 +102,14 @@ _BANDS: tuple[_Band, ...] = (
         "term-to-zero-implies-convergence",
         ("[12미적Ⅱ-01-04]", "[12대수03-01]"),
     ),
+    # division-by-zero(Tier B·값형 아님·제외점 개수=분모 실근 개수·verify_real_root_count 재사용):
+    #   후보 M0003=[9수01-03]·M0556=[9수02-03]·M0146=[10공수2-03-04] 모두 태깅해 agree.
+    _Band(
+        "division-by-zero",
+        "excluded_point_count",
+        "division-by-zero",
+        ("[9수01-03]", "[9수02-03]", "[10공수2-03-04]"),
+    ),
 )
 
 
@@ -112,7 +121,7 @@ def _default_out_path() -> Path:
 def run_conceptual_count_mc_batch(
     *, n_per_band: int = _DEFAULT_N, out_path: Path | None = None, write: bool = True
 ) -> CorpusBatchReport:
-    """7 서브밴드 배치 실행 — 생성→S2-a 게이트(개수/판정 검증)→구조 dedup→적재(순수 결정론)."""
+    """8 서브밴드 배치 실행 — 생성→S2-a 게이트(개수/판정 검증)→구조 dedup→적재(순수 결정론)."""
     resolved_out = out_path if out_path is not None else _default_out_path()
     sink = JsonlCorpusSink()
     bands: list[BandResult] = []
@@ -164,7 +173,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI — 개념형 개수/판정 MC 배치. 수율 미달(총 저장 < 요청)이면 exit 1(조용한 실패 금지)."""
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.conceptual_count_mc_batch",
-        description="개념형(개수·일대일·수렴·극한·미분가능) MC 배치 적재(7 서브밴드·결정론).",
+        description="개념형(개수·판정·극한·미분가능·제외점) MC 배치 적재(8 서브밴드·결정론).",
     )
     parser.add_argument(
         "--n", type=int, default=_DEFAULT_N, help="서브밴드당 요청 수(기본 24)."

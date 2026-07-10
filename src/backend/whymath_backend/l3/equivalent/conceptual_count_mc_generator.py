@@ -57,6 +57,7 @@ CountTemplateKind = Literal[
     "limit_equals_value",
     "is_differentiable",
     "series_converges",
+    "excluded_point_count",
 ]
 
 # 개수/판정 선지 — 4지선다는 항상 {0,1,2,3}. 판정형(일대일·수렴·극한=함숫값·미분가능)은 0/1을 쓴다.
@@ -71,6 +72,7 @@ _TEMPLATE_META: dict[CountTemplateKind, tuple[str, str]] = {
     "limit_equals_value": ("H:12미적Ⅰ01-01", "LIMIT-VALUE"),
     "is_differentiable": ("H:12미적Ⅰ02-02", "DIFFERENTIABILITY"),
     "series_converges": ("H:12미적Ⅱ01-04", "SERIES-CONV"),
+    "excluded_point_count": ("J0103", "DOMAIN-EXCLUDE"),
 }
 
 
@@ -365,6 +367,46 @@ def _build_series_converges_pool() -> tuple[_CountItem, ...]:
     return tuple(pool)
 
 
+def _build_excluded_point_count_pool() -> tuple[_CountItem, ...]:
+    """f(x)=1/(분모)의 정의역에서 제외되는 실수 개수 뼈대 풀 — 분모=0 실근 개수(오개념 정확 표적).
+
+    유리함수는 분모가 0인 점에서 정의되지 않는다 — 제외점 개수 = 분모의 서로 다른 실근 개수(1~3).
+    "분모에 변수가 와도 항상 정의됨"이라는 오개념(division-by-zero)은 0으로 답해 fail. conditions는
+    분모=0 방정식이라 `verify_real_root_count`(kind=excluded_point_count)가 근 개수로 검증한다.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    roots_sets: list[tuple[int, ...]] = [(a,) for a in range(1, 8)]
+    roots_sets += [(a, b) for a in range(1, 6) for b in range(a + 1, 7)]
+    roots_sets += [(1, 2, 3), (1, 2, 4), (2, 3, 5), (1, 3, 5), (2, 4, 6)]
+    for roots in roots_sets:
+        factors = "*".join(f"(x - {r})" for r in roots)
+        conditions = f"{factors} = 0"
+        if conditions in seen:
+            continue
+        seen.add(conditions)
+        count = len(roots)
+        denom_disp = "".join(f"(x - {r})" for r in roots)
+        pool.append(
+            _CountItem(
+                conditions=conditions,
+                answer_kind="excluded_point_count",
+                answer_str=str(count),
+                misc_str="0",
+                question_text=(
+                    f"함수 f(x) = 1/({denom_disp}) 의 정의역에서 제외되는 실수의 개수를 구하시오."
+                ),
+                answer_explanation=(
+                    f"분모가 0이 되는 x = {', '.join(str(r) for r in roots)} 에서 함수가 정의되지 "
+                    f"않으므로 제외되는 실수는 {count}개다. 분모에 변수가 와도 항상 정의된다고 "
+                    "여기면 0으로 잘못 답한다."
+                ),
+                difficulty=_difficulty(sum(roots)),
+            )
+        )
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "real_root_count": _build_real_root_count_pool,
     "extremum_count": _build_extremum_count_pool,
@@ -373,6 +415,7 @@ _POOL_FACTORY = {
     "limit_equals_value": _build_limit_equals_value_pool,
     "is_differentiable": _build_is_differentiable_pool,
     "series_converges": _build_series_converges_pool,
+    "excluded_point_count": _build_excluded_point_count_pool,
 }
 
 

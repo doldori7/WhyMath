@@ -283,6 +283,7 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
             "limit_equals_value",
             "is_differentiable",
             "series_converges",
+            "excluded_point_count",
         )
         else None
     )

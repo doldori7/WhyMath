@@ -81,9 +81,9 @@ class TestCliEndToEnd:
         # cross-standard 전건 거부(구조 신호 정확)·정답 오거부 0.
         assert report.cross_detected == report.cross_total and report.cross_total > 0
         assert report.positive_false_reject == 0
-        # same-standard는 못 잡음(false accept·인간 존치)·커버 22/34
-        # (수치평가 MC 5→8→13→15→17, 개념형 개수/판정 MC가 +2→19, +3(극한·미분·수렴)→22).
+        # same-standard는 못 잡음(false accept·인간 존치)·커버 27/34
+        # (수치평가 15→17→19→22, Tier B 값형 4종+division-by-zero 개수 → 27).
         assert report.same_detected == 0
-        assert report.kebabs_decidable == 22 and report.kebabs_total == 34
+        assert report.kebabs_decidable == 27 and report.kebabs_total == 34
         text = ev.format_report(report, confidence=0.95, human_reject_rate=None)
         assert "인간 존치" in text and "machine-decidable" in text
