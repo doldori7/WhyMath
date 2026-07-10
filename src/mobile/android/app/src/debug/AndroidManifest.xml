@@ -1,0 +1,11 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- The INTERNET permission is required for development. Specifically,
+         the Flutter tool needs it to communicate with the running application
+         to allow setting breakpoints, to provide hot reload, etc.
+    -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- 시연/개발 전용 cleartext 허용 — 데모 API_URL이 http://<LAN IP>:8000(비TLS)라 API 28+의
+         cleartext 기본 차단을 debug 빌드에서만 해제한다(flutter run=debug). release 매니페스트엔
+         이 속성이 없어 secure-by-default 유지 — prod는 https 종단 후 별도 구성. -->
+    <application android:usesCleartextTraffic="true" />
+</manifest>

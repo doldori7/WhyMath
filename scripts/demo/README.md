@@ -69,9 +69,16 @@ cd ..\..
 호환 안 되는 패키지(예: `retrofit_generator` ↔ `retrofit`)가 풀려 **build_runner가 실패**한다.
 FVM으로 프로젝트만 3.24.5를 쓰게 한다(전역 Flutter는 안 건드림).
 
+**전제: Android SDK** — 안드로이드 빌드에는 Android SDK가 필요하다. 없으면
+[Android Studio](https://developer.android.com/studio) 설치(SDK 포함) 후:
+```powershell
+fvm flutter doctor                      # "Android toolchain"에 ✓ 떠야 함
+fvm flutter doctor --android-licenses   # 라이선스 미동의 표시가 있으면 실행해 전부 y
+```
+
 **먼저 실기기(안드로이드)를 PC에 인식시킨다** — 연결 없이는 `flutter run`이
-"No supported devices connected"로 거부한다(이 프로젝트는 android/ios 전용이라 Windows/Chrome
-데스크톱 타깃이 안 뜨는 것은 정상):
+"No supported devices connected"로 거부한다(이 프로젝트는 android 전용 스캐폴딩이라
+Windows/Chrome 데스크톱 타깃이 안 뜨는 것은 정상):
 
 1. 기기에서 **설정 → 휴대전화(태블릿) 정보 → 소프트웨어 정보 → 빌드번호 7번 연타** → 개발자 모드 on
 2. **설정 → 개발자 옵션 → USB 디버깅** on
@@ -115,7 +122,8 @@ fvm flutter run --dart-define=API_URL=http://<이 PC LAN IP>:8000 --dart-define=
 - **정리·게이트 clear**:
 ```powershell
 .\scripts\demo\stop_demo.ps1
-python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence <녹화 링크>
+# 녹화가 끝난 *뒤에만* 실행. <>는 치지 말고 실제 링크를 따옴표로 감싼다(PowerShell은 < 를 예약어로 거부).
+python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence "https://실제-녹화-링크"
 ```
 
 ## A-*. Windows 함정
@@ -131,7 +139,8 @@ python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence <녹
 | `Activate.ps1` 차단 | `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도. |
 | **build_runner 실패**(`retrofit_generator ... Parser` 등) | Flutter가 3.24.5보다 최신이라 비호환 패키지 조합. **FVM으로 3.24.5 고정**(A-3)·이후 `fvm flutter`/`fvm dart`로 실행. |
 | `fvm` not found | `dart pub global activate fvm` 후 pub-global bin 미등록. `$env:PATH = "$env:LOCALAPPDATA\Pub\Cache\bin;$env:PATH"`. |
-| `No supported devices connected` | 실기기 미연결. A-3 서두의 **기기 연결 4단계**(개발자 모드→USB 디버깅→연결·팝업 승인→`fvm flutter devices`) 수행. Windows/Chrome/Edge가 "not supported"로 뜨는 건 정상(이 프로젝트는 android/ios 전용). |
+| `No supported devices connected` | 실기기 미연결 **또는 구버전 체크아웃(android/ 스캐폴딩 이전)**. `git pull` 후 A-3 기기 연결 4단계(개발자 모드→USB 디버깅→연결·팝업 승인→`fvm flutter devices`) 수행. Windows/Chrome/Edge가 "not supported"로 뜨는 건 정상(android 전용). |
+| 기기는 목록에 뜨는데 설치가 안 됨(Xiaomi/샤오미) | MIUI는 추가로 **개발자 옵션 → "USB를 통해 설치" 허용**(Mi 계정 로그인 요구될 수 있음)과 **"USB 디버깅(보안 설정)"** 을 켜야 apk 설치가 진행된다. |
 | 앱은 떴는데 "문제를 불러오지 못했어요" | `flutter run` 인자에서 `API_URL=`이 유실됐을 가능성(`--dart-define==http://…`) — 앱이 localhost 기본값으로 부팅됨. A-2 출력 명령을 **한 줄 통째로** 다시 복사해 실행. 방화벽·LAN IP도 확인. |
 | 어제 발급한 토큰으로 401 | 데모 토큰 만료는 **24시간**. 날이 바뀌었으면 `.\scripts\demo\run_demo.ps1` 재실행으로 새 토큰 발급(출력 명령의 토큰으로 교체). |
 | 패드에서 서버 못 붙음 | 첫 실행 방화벽 팝업에서 **개인 네트워크 허용**·API_URL이 이 PC Wi-Fi LAN IP인지 확인(`ipconfig`). |
@@ -245,7 +254,8 @@ flutter run --dart-define=API_URL=http://<Phaiakes9 LAN IP>:8000 --dart-define=D
 ```bash
 bash scripts/demo/stop_demo.sh     # uvicorn 종료 + throwaway PG(볼륨째) 제거
 # 녹화 증적(링크)을 걸어 게이트 clear:
-python3 scripts/harness/backlog.py gates clear G-kiki-device-demo --evidence <녹화 링크>
+# 녹화가 끝난 뒤에만 실행 — 실제 링크를 따옴표로 감싼다.
+python3 scripts/harness/backlog.py gates clear G-kiki-device-demo --evidence "https://실제-녹화-링크"
 ```
 게이트가 clear되면 `S1-14-exit-gate-judgement`(owner=kiki)로 3종 게이트 판정을 기록해 S1을 공식 탈출한다.
 
