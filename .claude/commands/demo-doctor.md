@@ -77,7 +77,7 @@ fvm flutter run --dart-define=API_URL=http://<출력된 IP>:8000 --dart-define=D
 ### D. 실행 / 앱
 | 증상 | 원인 | 해법 |
 |---|---|---|
-| 앱은 떴는데 "문제를 불러오지 못했어요" | ①`API_URL=` 부분 복사 유실(`--dart-define==http://`) ②방화벽 ③토큰 만료 | ①명령 한 줄 통째 재복사 ②첫 실행 방화벽 팝업 "개인 네트워크 허용"·`ipconfig`로 LAN IP 확인 ③24h 지났으면 `run_demo.ps1` 재실행 |
+| 앱은 떴는데 "문제를 불러오지 못했어요" | ①`API_URL=` 부분 복사 유실(`--dart-define==http://`) ②방화벽 ③토큰 만료 ④**서버 재기동으로 서명 키 로테이션**(구 토큰 재사용) | ①명령 한 줄 통째 재복사 ②첫 실행 방화벽 팝업 "개인 네트워크 허용"·`ipconfig`로 LAN IP 확인 ③24h 지났으면 `run_demo.ps1` 재실행 ④`run_demo.ps1`을 재실행할 때마다 `WHYMATH_JWT_SECRET_KEY`가 매번 새 랜덤값 — **이전 실행의 토큰은 24h 안 지났어도 즉시 무효**(서명 자체가 안 맞음). 대화·터미널을 위로 스크롤해 예전 명령을 재사용하지 말고, **항상 가장 최근 `run_demo.ps1` 출력**에서 토큰을 복사 |
 | 온보딩에 노랑/검정 줄무늬 | RenderFlex overflow(키보드 시) | 수정 완료(스크롤 강등) → `git pull` 재빌드 |
 | "수식으로 입력"이 밋밋한 텍스트창 | MathLive ESM이 WebView file:// CORS 차단(textarea 폴백) | 수정 완료(IIFE 재번들 3단 폴백) → `git pull` 재빌드 |
 | 코치가 같은 질문 반복·답변 무반영 | **설계된 S1 범위** — 학생-대면 코치는 결정론 Polya 비계(LLM 미호출·Ollama 무관) | 버그 아님. LLM 튜터링 승격은 S1-11(실측 후). 시연은 코치 2~3턴 후 풀이 제출→검증 신호로 진행 |
