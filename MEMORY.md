@@ -337,6 +337,26 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-10 (마일스톤·L5·게이트 조준): **실기기 1루프 완주 실측 확인 + 검증 카드 메커니즘 확정 + 기기 판정**
+
+**무엇/왜**: 안드로이드 폰(M2007J20CG)에서 **온보딩→문제 카드→풀이 제출→검증 카드까지 전체 루프
+완주를 실측 확인** — 게이트 ①의 완주 판정선(CoachSignalCard "스스로 검산해볼까?")이 실제로 뜨는
+것을 눈으로 확인. 도달 과정에서 두 가지 실측 함정을 규명·문서화(`s1_e2e_demo_script.md`·
+`.claude/commands/demo-doctor.md` 갱신): ①UNDERSTAND 단계는 재진술 문장(20자+·마침표 등, 수식·
+단답 불가) 없인 안 넘어감(설계대로) ②**CoachSignalCard는 "풀이 제출" 자체가 아니라 실제 계산
+오류 감지 시에만 뜬다**(`api/coach.py::_build_response_payload` — `arithmetic_error` 게이트, 정답이
+맞으면 카드 자체가 `None`) — 완전히 맞는 풀이나 파싱 불가 수식(MathLive `\cdot` 오타 등)으론 카드가
+안 뜬다. **해법**: 풀이에 순수 숫자 오류 한 줄을 일부러 포함(`4/2=3`)하면
+`SymPyArithmeticValidator`가 즉시 감지·카드 발동 — 실측 재현 성공.
+
+**기기 판정**: Kiki 보유 태블릿이 **아이패드(iOS)뿐** — Windows PC에선 iOS 빌드가 macOS+Xcode
+필수라 원천 불가(리포에 `ios/` 스캐폴딩도 없음). 게이트 제목 "실기기(패드)"의 "(패드)"는 예시일 뿐
+필수 요건이 아니라고 판단해 **안드로이드 실기기(폰 포함)로 정본 녹화 확정**(대본에 결정 기록).
+
+**다음**: Kiki가 같은 흐름(오류 1줄 포함 풀이 제출)을 **안드로이드 폰 화면 녹화로 15분 이내 정본
+캡처** → `gates clear G-kiki-device-demo --evidence "<녹화 경로/링크>"` → `S1-14-exit-gate-judgement`로
+3종 게이트 판정 기록 → S1 공식 탈출.
+
 ### 2026-07-10 (마일스톤·L5·실측): **실기기 최초 구동 성공 + 실사용 결함 4건 실측** — 코치 결정론 한계는 S1-11 유지(Kiki 판정)
 
 **무엇/왜**: 인에이블먼트 킷 반복 수정 끝에 **리포 최초로 실기기(Xiaomi M2007J20CG·API 31) 빌드·설치·구동 성공** — 문제 카드 표시 확인 = 데모 인증·LAN·시드·CAT 추천 API 전부 온디바이스 검증. 도달 과정에서 상환한 결함: ①`android/` 플랫폼 스캐폴딩 부재(리포가 애초에 실기기 설치 불가 상태였음 — flutter create 3.24.5 + Gradle 8.7/AGP 8.3.2[Java 21]·minSdk 23·debug 한정 cleartext) ②미사용 음성 플러그인 2종 제거(speech_to_text 7.4.0이 Flutter 3.27+ 전용 gradle 패턴이라 3.24.5 빌드 치명 실패·flutter_tts compileSdk 36 — 둘 다 lib 사용처 0) ③Windows 환경 4종(.ps1 CP949 BOM·intl 범위·FVM 3.24.5 고정·asyncpg SSL/포트 55432/잔재 env). **실사용 피드백 4건 실측**: ⑴문제가 채팅에 안 보임 → **채팅 상단 접이식 문제 배너 신설**(커밋 3ce5aa5) ⑵온보딩 RenderFlex overflow(키보드 시 h≈200) → 스크롤 강등+회귀 테스트(2e419c1) ⑶MathLive ESM import가 WebView file:// CORS 차단 → textarea 폴백으로 강등돼 있었음 → **esbuild IIFE 재번들 3단 폴백**(2e419c1) ⑷**코치가 답변 무반영·같은 질문 반복** → 진단 확정: 학생-대면 코치는 **결정론 Polya 비계**(prompts.py 단계별 고정 발문 4개·transitions.py 키워드 전이·LLM 미호출·WH-1 하네스는 shadow 전용 기본 OFF) — Ollama 라이브와 무관. 시연 대본의 "코치 품질은 LLM 키 종속" 서술이 부정확했음(교정 완료). **Kiki 판정: 그대로 녹화 진행** — 게이트 ① 기준(루프 완주+검증 신호)은 결정론 경로로 충족·미검증 LLM 학생 제공 금기 준수·LLM 튜터링 학생-대면 승격은 S1-11("측정 없는 도입 없음") 유지. 이 실측 답답함이 곧 S1-11의 실증 근거. **다음**: Kiki 재빌드(git pull) → 폰 재검증 → 패드 15분 녹화 → `gates clear G-kiki-device-demo`.
