@@ -69,7 +69,20 @@ cd ..\..
 호환 안 되는 패키지(예: `retrofit_generator` ↔ `retrofit`)가 풀려 **build_runner가 실패**한다.
 FVM으로 프로젝트만 3.24.5를 쓰게 한다(전역 Flutter는 안 건드림).
 
-패드를 이 PC와 **같은 WiFi**에 두고 연결한 뒤:
+**먼저 실기기(안드로이드)를 PC에 인식시킨다** — 연결 없이는 `flutter run`이
+"No supported devices connected"로 거부한다(이 프로젝트는 android/ios 전용이라 Windows/Chrome
+데스크톱 타깃이 안 뜨는 것은 정상):
+
+1. 기기에서 **설정 → 휴대전화(태블릿) 정보 → 소프트웨어 정보 → 빌드번호 7번 연타** → 개발자 모드 on
+2. **설정 → 개발자 옵션 → USB 디버깅** on
+3. USB 케이블로 PC에 연결 → 기기 화면의 **"USB 디버깅 허용?" 팝업 승인**
+4. `fvm flutter devices` 로 기기가 목록에 뜨는지 확인 후 아래 진행
+
+> 안드로이드 폰으로 루프를 먼저 검증해도 된다(코드 검증 목적). 단 **탈출 게이트 ① 정본 녹화는
+> 패드(태블릿)** 기준. ⚠️ **아이패드는 Windows에서 빌드/설치 불가**(iOS 빌드는 macOS 전용) —
+> 안드로이드 태블릿을 쓴다.
+
+기기를 이 PC와 **같은 WiFi**에 두고 연결한 뒤:
 ```powershell
 # FVM 설치(최초 1회) — dart는 Flutter에 포함(flutter가 되면 dart도 됨)
 dart pub global activate fvm
@@ -86,7 +99,8 @@ fvm use 3.24.5          # 프로젝트에 3.24.5 연결(.fvm/ 생성)
 
 fvm flutter pub get
 fvm dart run build_runner build --delete-conflicting-outputs   # ⚠️ 필수 — .g.dart 생성
-# A-2에서 복사한 명령을 그대로(fvm 접두):
+# A-2에서 복사한 명령을 그대로(fvm 접두). ⚠️ 명령 전체를 한 번에 복사할 것 —
+# 부분 복사로 `API_URL=`이 유실되면(`--dart-define==http://…`) 앱이 localhost로 부팅돼 서버에 안 붙는다.
 fvm flutter run --dart-define=API_URL=http://<이 PC LAN IP>:8000 --dart-define=DEMO_TOKEN=<토큰>
 ```
 > 이후로는 `src\mobile`에서 Flutter/Dart 명령 앞에 항상 **`fvm`** 을 붙인다(`fvm flutter …`·`fvm dart …`).
@@ -117,6 +131,9 @@ python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence <녹
 | `Activate.ps1` 차단 | `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도. |
 | **build_runner 실패**(`retrofit_generator ... Parser` 등) | Flutter가 3.24.5보다 최신이라 비호환 패키지 조합. **FVM으로 3.24.5 고정**(A-3)·이후 `fvm flutter`/`fvm dart`로 실행. |
 | `fvm` not found | `dart pub global activate fvm` 후 pub-global bin 미등록. `$env:PATH = "$env:LOCALAPPDATA\Pub\Cache\bin;$env:PATH"`. |
+| `No supported devices connected` | 실기기 미연결. A-3 서두의 **기기 연결 4단계**(개발자 모드→USB 디버깅→연결·팝업 승인→`fvm flutter devices`) 수행. Windows/Chrome/Edge가 "not supported"로 뜨는 건 정상(이 프로젝트는 android/ios 전용). |
+| 앱은 떴는데 "문제를 불러오지 못했어요" | `flutter run` 인자에서 `API_URL=`이 유실됐을 가능성(`--dart-define==http://…`) — 앱이 localhost 기본값으로 부팅됨. A-2 출력 명령을 **한 줄 통째로** 다시 복사해 실행. 방화벽·LAN IP도 확인. |
+| 어제 발급한 토큰으로 401 | 데모 토큰 만료는 **24시간**. 날이 바뀌었으면 `.\scripts\demo\run_demo.ps1` 재실행으로 새 토큰 발급(출력 명령의 토큰으로 교체). |
 | 패드에서 서버 못 붙음 | 첫 실행 방화벽 팝업에서 **개인 네트워크 허용**·API_URL이 이 PC Wi-Fi LAN IP인지 확인(`ipconfig`). |
 | 코치 발문이 밋밋 | Ollama for Windows 미가동. Ollama 앱 실행/`ollama serve` 후 재시도(`/status`가 라이브로 바뀜). |
 
