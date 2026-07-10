@@ -36,7 +36,12 @@ $env:PATH = "$VenvScripts;$env:PATH"
 # ssl=disable — throwaway trust-auth 로컬 PG(SSL 미설정)라 안전하고, Windows에서 asyncpg의
 # SSL 협상 단계가 깨지는(ConnectionError: unexpected connection_lost()) 문제를 원천 회피한다
 # (asyncpg SSLMode.disable — 공식 지원 값·SQLAlchemy가 URL 쿼리를 그대로 asyncpg.connect에 전달).
-if (-not $env:WHYMATH_DATABASE_URL) {
+# **항상 덮어쓴다**: PowerShell env는 같은 창에서 스크립트 종료 후에도 살아남아, 이전 실행(구버전
+# URL)의 WHYMATH_DATABASE_URL이 새 실행에 그대로 새어드는 사고가 실측됨(-not 가드는 그 잔재까지
+# 재사용). 데모 아닌 DB를 쓰려면 *전용* 오버라이드 WHYMATH_DEMO_DATABASE_URL로만 지정한다.
+if ($env:WHYMATH_DEMO_DATABASE_URL) {
+  $env:WHYMATH_DATABASE_URL = $env:WHYMATH_DEMO_DATABASE_URL
+} else {
   $env:WHYMATH_DATABASE_URL = "postgresql+asyncpg://whymath@127.0.0.1:55432/whymath?ssl=disable"
 }
 $env:WHYMATH_DEMO_AUTH_ENABLED = "true"

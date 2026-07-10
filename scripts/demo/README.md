@@ -113,7 +113,7 @@ python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence <녹
 | `alembic upgrade` 시 `UnicodeDecodeError: 'cp949' codec ...` | 구버전 체크아웃. Alembic이 `alembic.ini`를 OS 로케일(한국어 Windows=cp949)로 읽어 UTF-8 한글 주석을 못 읽던 버그 — `alembic.ini`를 ASCII로 고쳐 해결됨. `git pull`로 최신 받기. |
 | `docker` not found | Docker Desktop 미실행 or WSL 전용. **PowerShell**에서 실행. |
 | `docker compose` 시 `port is already allocated`(5432) | PC에 이미 로컬 PostgreSQL(서비스·다른 프로젝트)이 5432를 쓰고 있음. 데모는 **호스트 55432**로 고정돼 있어(`docker-compose.demo.yml`) 최신 버전을 받으면 재발하지 않는다(`git pull`). 그래도 나면: `docker compose -f docker-compose.demo.yml down` 후 재시도. |
-| `alembic upgrade` 시 `ConnectionError: unexpected connection_lost()` | Windows에서 asyncpg의 SSL 협상 단계가 깨지는 알려진 문제. 데모 URL에 **`?ssl=disable`** 이 고정돼 있어(throwaway trust-auth PG라 안전) 최신 버전을 받으면 재발하지 않는다(`git pull`). |
+| `alembic upgrade` 시 `ConnectionError: unexpected connection_lost()` | Windows에서 asyncpg의 SSL 협상 단계가 깨지는 알려진 문제. 데모 URL에 **`?ssl=disable`** 이 고정돼 있고, 같은 창에 남은 이전 실행의 `WHYMATH_DATABASE_URL` 잔재도 **항상 덮어써서** 재발하지 않는다(`git pull` 후 재실행). 데모 아닌 DB를 쓰려면 전용 `WHYMATH_DEMO_DATABASE_URL`로 지정. |
 | `Activate.ps1` 차단 | `Set-ExecutionPolicy -Scope Process -Bypass` 후 재시도. |
 | **build_runner 실패**(`retrofit_generator ... Parser` 등) | Flutter가 3.24.5보다 최신이라 비호환 패키지 조합. **FVM으로 3.24.5 고정**(A-3)·이후 `fvm flutter`/`fvm dart`로 실행. |
 | `fvm` not found | `dart pub global activate fvm` 후 pub-global bin 미등록. `$env:PATH = "$env:LOCALAPPDATA\Pub\Cache\bin;$env:PATH"`. |

@@ -25,7 +25,9 @@ PID_FILE="$REPO_ROOT/.demo_uvicorn.pid"
 # ssl=disable — throwaway trust-auth 로컬 PG(SSL 미설정)라 안전하고, Windows에서 asyncpg의
 # SSL 협상 단계가 깨지는(ConnectionError: unexpected connection_lost()) 문제를 원천 회피한다
 # (asyncpg SSLMode.disable — 공식 지원 값·SQLAlchemy가 URL 쿼리를 그대로 asyncpg.connect에 전달).
-export WHYMATH_DATABASE_URL="${WHYMATH_DATABASE_URL:-postgresql+asyncpg://whymath@127.0.0.1:55432/whymath?ssl=disable}"
+# **항상 덮어쓴다**: 셸 세션에 남은 이전 실행(구버전 URL)의 WHYMATH_DATABASE_URL이 새 실행에
+# 새어드는 사고 방지(Windows .ps1에서 실측). 데모 아닌 DB는 *전용* WHYMATH_DEMO_DATABASE_URL로만.
+export WHYMATH_DATABASE_URL="${WHYMATH_DEMO_DATABASE_URL:-postgresql+asyncpg://whymath@127.0.0.1:55432/whymath?ssl=disable}"
 export WHYMATH_DEMO_AUTH_ENABLED=true
 export WHYMATH_JWT_SECRET_KEY="${WHYMATH_JWT_SECRET_KEY:-$(python3 -c 'import secrets;print(secrets.token_urlsafe(48))')}"
 
