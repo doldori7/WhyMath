@@ -81,6 +81,8 @@ fvm flutter run --dart-define=API_URL=http://<출력된 IP>:8000 --dart-define=D
 | 온보딩에 노랑/검정 줄무늬 | RenderFlex overflow(키보드 시) | 수정 완료(스크롤 강등) → `git pull` 재빌드 |
 | "수식으로 입력"이 밋밋한 텍스트창 | MathLive ESM이 WebView file:// CORS 차단(textarea 폴백) | 수정 완료(IIFE 재번들 3단 폴백) → `git pull` 재빌드 |
 | 코치가 같은 질문 반복·답변 무반영 | **설계된 S1 범위** — 학생-대면 코치는 결정론 Polya 비계(LLM 미호출·Ollama 무관) | 버그 아님. LLM 튜터링 승격은 S1-11(실측 후). 시연은 코치 2~3턴 후 풀이 제출→검증 신호로 진행 |
+| "이 문제 같이 읽어볼까?"가 계속 반복(문장으로 답해도) | UNDERSTAND 단계 전이는 **자기 언어 재진술**만 인정 — 길이 20자↑ **+** 마침표·물음표·쉼표 중 1개 이상 필수(`l4/polya/transitions.py::_RESTATE_MIN_LEN`). 수식·짧은 단답은 조건 미충족 | 실제 문장으로 답한다: "주어진 건 ...이고, 구할 건 ...이야." 처럼 20자 이상 + 마침표 포함 |
+| 풀이를 제출해도 **검증 카드("스스로 검산해볼까?" 등)가 안 뜸** | 카드는 "풀이 제출 자체"가 아니라 **실제 계산 오류를 감지했을 때만** 뜬다(`api/coach.py::_build_response_payload` — `solution_coaching`은 `arithmetic_error`가 True일 때만 채워짐, 정답이 맞으면 `None`이라 카드 자체가 안 뜬다). 실측: 오타로 파싱 불가한 수식(`\cdot` 등)이나 완전히 맞는 풀이는 카드 미출력 | **일부러 순수 숫자 오류를 한 줄 포함**해 제출한다 — 예: `4 / 2 = 3`(SymPy가 즉시 거짓으로 판정·`l3/pregenerate/validator.py::SymPyArithmeticValidator`). "풀이 단계" 텍스트칸에 직접 타이핑(MathLive 아님)이 가장 안정적. 뜨면: 코치 말풍선 옆에 "계산을 한 단계씩 다시 짚어보면서..." 발화 + **색이 다른 카드형 박스**("스스로 검산해볼까?") = 이게 완주 신호(게이트 ① 판정선) |
 
 ## 참조
 - 전체 런북: `scripts/demo/README.md` (§A Windows 경로·함정표)
