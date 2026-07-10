@@ -9,6 +9,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router.dart';
 import '../../ocr/data/ocr_models.dart';
+import '../../problems/application/active_problem.dart';
+import '../../problems/data/problem_models.dart';
 import '../application/chat_controller.dart';
 import '../domain/chat_message.dart';
 import 'coach_signal_card.dart';
@@ -152,6 +154,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ),
       body: Column(
         children: [
+          // 풀이 중인 문제를 채팅 위에 상시 노출(접기 가능) — 실기기 시연 피드백:
+          // "문제가 한 화면에 같이 안 나옴". 학생이 문제를 다시 보러 화면을 떠나지 않게 한다.
+          const _ActiveProblemBanner(),
           Expanded(
             child: state.messages.isEmpty
                 ? const _EmptyHint()
@@ -173,6 +178,88 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             onMathInput: _onMathInput,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 풀이 중인 문제 배너 — 활성 문제(발문·과목)를 채팅 상단에 접이식으로 상시 노출한다.
+///
+/// 활성 문제가 없으면(자유 대화 진입) 아무것도 그리지 않는다. 발문이 길면 접어서 채팅
+/// 공간을 확보한다(기본 펼침 — 시연·풀이 맥락 우선). 정답·힌트는 어떤 형태로도 싣지
+/// 않는다(서버가 답을 안 주는 계약과 동일·표현≠의미).
+class _ActiveProblemBanner extends ConsumerStatefulWidget {
+  const _ActiveProblemBanner();
+
+  @override
+  ConsumerState<_ActiveProblemBanner> createState() =>
+      _ActiveProblemBannerState();
+}
+
+class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
+  /// 펼침 상태(기본 펼침) — 학생이 접으면 발문을 숨기고 한 줄 요약만 남긴다.
+  bool _expanded = true;
+
+  @override
+  Widget build(BuildContext context) {
+    final Problem? problem = ref.watch(activeProblemProvider);
+    if (problem == null) {
+      return const SizedBox.shrink();
+    }
+    final theme = Theme.of(context);
+    final question = problem.questionText ?? problem.questionTextMd;
+
+    return Material(
+      color: theme.colorScheme.surfaceContainerHighest,
+      child: InkWell(
+        onTap: () => setState(() => _expanded = !_expanded),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.menu_book_outlined,
+                    size: 18,
+                    color: theme.colorScheme.primary,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      '풀이 중인 문제 · ${problem.subject}'
+                      '${problem.subunit != null ? ' · ${problem.subunit}' : ''}',
+                      style: theme.textTheme.labelMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(
+                    _expanded ? Icons.expand_less : Icons.expand_more,
+                    size: 20,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+              if (_expanded && question != null) ...[
+                const SizedBox(height: 6),
+                Text(question, style: theme.textTheme.bodyMedium),
+                if (problem.choices != null && problem.choices!.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  for (var i = 0; i < problem.choices!.length; i++)
+                    Text(
+                      '${i + 1}. ${problem.choices![i]}',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                ],
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
