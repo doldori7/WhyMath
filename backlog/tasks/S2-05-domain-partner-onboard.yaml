@@ -1,11 +1,11 @@
 # 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
 id: S2-05-domain-partner-onboard
-title: 검수 큐 가동 (AI 검수 전환 — 2026-07-10 결정)
+title: "검수 큐 가동 (AI 검수 전환 — 2026-07-10 결정)"
 track: math-completion
 stage: S2
 subject: math
 layer: docs
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
