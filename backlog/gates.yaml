@@ -13,10 +13,10 @@ gates:
     title: "수학 도메인 파트너 영입 (병목 ④ — 검수 큐 가동 조건)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-07-05
     remind_after_days: 30
-    evidence: null
+    evidence: "검수 자문 1인 확정(채널 C·2026-07-15) + reviewer_sample_30 첫 배치 착수 합의"
     notes: ""
   - id: G-kiki-device-demo
     title: "S1 탈출 게이트 ① — 실기기 학습 루프 시연"
