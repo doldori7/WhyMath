@@ -26,3 +26,5 @@
 {"ts": "2026-07-10T11:04:13", "actor": "claude/g-kiki-device-demo-fv831n", "action": "gate_clear", "id": "G-domain-partner", "evidence": "검수 자문 1인 확정(채널 X·날짜) + reviewer_sample_30 첫 배치 착수 합의", "reason": null}
 {"ts": "2026-07-10T11:04:21", "actor": "claude/g-kiki-device-demo-fv831n", "action": "gate_clear", "id": "G-domain-partner", "evidence": "검수 자문 1인 확정(채널 X·날짜) + reviewer_sample_30 첫 배치 착수 합의", "reason": null}
 {"ts": "2026-07-10T11:04:27", "actor": "claude/g-kiki-device-demo-fv831n", "action": "gate_clear", "id": "G-domain-partner", "evidence": "검수 자문 1인 확정(채널 C·2026-07-15) + reviewer_sample_30 첫 배치 착수 합의", "reason": null}
+{"ts": "2026-07-10T12:57:35", "actor": "claude/g-kiki-device-demo-fv831n", "action": "gate_clear", "id": "G-kiki-device-demo", "evidence": "https://drive.google.com/file/d/1r-N8alLcKzbDiqdevGHWUFUG65imtjw-/view?usp=drivesdk", "reason": null}
+{"ts": "2026-07-10T14:04:22", "actor": "claude/g-kiki-device-demo-fv831n", "action": "gate_clear", "id": "G-domain-partner", "evidence": "AI 검수 전환 결정(2026-07-10·MEMORY 결정 로그) — 검수 큐는 AI 검수로 가동. 파트너 영입은 정규 격상 트랙 분리(게이트 요건 아님)", "reason": null}
