@@ -137,4 +137,21 @@ void main() {
 
     expect(find.byType(ProblemScreen), findsOneWidget);
   });
+
+  testWidgets('좁은 세로 제약(키보드 노출 상당)에서도 안내 페이지가 넘치지 않는다', (tester) async {
+    // 실기기 회귀 가드: 키보드가 올라와 세로가 좁아진 상황(실측 h≈200)에서
+    // _OnboardingPageView Column이 RenderFlex overflow를 내던 결함(35px 줄무늬가
+    // 시연 녹화에 찍힘). 스크롤 강등으로 예외가 없어야 한다 — overflow가 나면
+    // 테스트 프레임워크가 예외로 실패시킨다.
+    tester.view.physicalSize = const Size(1080, 500);
+    tester.view.devicePixelRatio = 2.5; // 논리 432x200 — 실측 제약 재현.
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_app());
+    await tester.pumpAndSettle();
+
+    // 예외 없이 렌더되고 첫 페이지 콘텐츠가 존재한다(스크롤 안쪽).
+    expect(tester.takeException(), isNull);
+    expect(find.text('답이 아닌, 이유를 묻습니다'), findsOneWidget);
+  });
 }

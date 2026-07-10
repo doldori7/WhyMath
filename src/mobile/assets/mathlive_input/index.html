@@ -33,6 +33,10 @@
   </head>
   <body>
     <div id="host"></div>
+    <!-- IIFE 번들(1순위) — Android WebView는 file://(origin null)에서 ES 모듈 import를 CORS로
+         차단하므로(실기기 실측), CORS가 적용되지 않는 클래식 스크립트로 같은 라이브러리를 싣는다.
+         esbuild --format=iife --global-name=MathLiveBundle 산출물(mathlive.min.js와 동일 소스). -->
+    <script src="./mathlive.iife.js"></script>
     <script type="module">
       // 학생 수식 입력을 LaTeX로 Flutter에 흘린다(단방향 web→Flutter). 수학 판정·검증은 하지
       // 않는다 — LaTeX 원문만 넘기고 백엔드(L3 verify)가 검증한다(CLAUDE.md 표현≠의미).
@@ -62,8 +66,17 @@
         window.whymathFocus = () => ta.focus();
       }
 
+      // 3단 폴백: ①IIFE 전역(실기기 file:// 안전) → ②동적 import(개발·http 서빙 환경) →
+      // ③textarea(둘 다 실패 시 — 입력 자체는 절대 끊기지 않는다).
+      async function loadMathLive() {
+        if (window.MathLiveBundle && window.MathLiveBundle.MathfieldElement) {
+          return window.MathLiveBundle;
+        }
+        return await import("./mathlive.min.js");
+      }
+
       try {
-        const mod = await import("./mathlive.min.js");
+        const mod = await loadMathLive();
         const MathfieldElement = mod.MathfieldElement;
         // 폰트는 같은 번들에 vendored(KaTeX_*.woff2). 소리 자산은 없으므로 끈다.
         MathfieldElement.fontsDirectory = "./fonts";
