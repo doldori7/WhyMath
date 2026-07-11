@@ -4,9 +4,9 @@
   "origin": "docs/data/misconception_crosslink_review_queue.json (검수 큐·전행 pending) 의 승인분",
   "review_method": "human sign-off (AI 자기승인 금지·Gate Contract crosswalk_gate_contract.md)",
   "counts": {
-    "crosslinks": 13,
+    "crosslinks": 18,
     "link_types": {
-      "직접매핑": 13
+      "직접매핑": 18
     }
   },
   "signatures": [
@@ -25,6 +25,14 @@
       "reviewed_on": "2026-07-08",
       "confidence": 0.9,
       "note_stamp": "검수:Kiki 2026-07-08"
+    },
+    {
+      "kebab_id": "area-perimeter-confusion",
+      "mis_id": "M0529",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-10",
+      "confidence": 0.95,
+      "note_stamp": "검수:Kiki 2026-07-10"
     },
     {
       "kebab_id": "composite-function-commutes",
@@ -67,11 +75,35 @@
       "note_stamp": "검수:Kiki 2026-07-10"
     },
     {
+      "kebab_id": "exponent-zero",
+      "mis_id": "M0105",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-10",
+      "confidence": 0.92,
+      "note_stamp": "검수:Kiki 2026-07-10"
+    },
+    {
       "kebab_id": "factor-sign-flip",
       "mis_id": "M0863",
       "reviewer": "Kiki",
       "reviewed_on": "2026-07-10",
       "confidence": 0.9,
+      "note_stamp": "검수:Kiki 2026-07-10"
+    },
+    {
+      "kebab_id": "geometric-series-always-converges",
+      "mis_id": "M0209",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-10",
+      "confidence": 0.92,
+      "note_stamp": "검수:Kiki 2026-07-10"
+    },
+    {
+      "kebab_id": "invertibility-without-1-1",
+      "mis_id": "M0144",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-10",
+      "confidence": 0.92,
       "note_stamp": "검수:Kiki 2026-07-10"
     },
     {
@@ -88,6 +120,14 @@
       "reviewer": "Kiki",
       "reviewed_on": "2026-07-10",
       "confidence": 0.97,
+      "note_stamp": "검수:Kiki 2026-07-10"
+    },
+    {
+      "kebab_id": "opposite-root-selected",
+      "mis_id": "M0862",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-10",
+      "confidence": 0.9,
       "note_stamp": "검수:Kiki 2026-07-10"
     },
     {
@@ -118,5 +158,5 @@
   "generation": "promote_approved(review_queue 승인본) 산출 — method=manual·검수 서명 stamp 부착(load 게이트 통과분).",
   "license_notice": "와이매스 자체 저작 매핑(kebab 카탈로그 × M-id 코퍼스 대응·검수 판단). 성취기준 코드는 구조 메타(공공·사실).",
   "cascade_warning": "Phase 5(M#### 코퍼스 폐기) 시 misconception_crosslink FK가 ondelete=CASCADE라 M-id 삭제 전 이 검수 행을 반드시 이전할 것(조용한 전멸 방지 — MEMORY 2026-07-08).",
-  "source_of_truth": "MEMORY.md 2026-07-08 '극값 오개념 M0864·M0865 crosswalk 승인' + 2026-07-10 'crosswalk 트리아지 corroborated A그룹 11건 승인'(직접매핑·conf≥0.9)."
+  "source_of_truth": "MEMORY.md 2026-07-08 극값 2 + 2026-07-10 트리아지 corroborated A그룹 11 + B그룹 ① 5(직접매핑·conf≥0.9) 승인."
 }

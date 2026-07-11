@@ -1,6 +1,14 @@
 {
   "crosslinks": [
     {
+      "kebab_id": "area-perimeter-confusion",
+      "mis_id": "M0529",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-10"
+    },
+    {
       "kebab_id": "composite-function-commutes",
       "mis_id": "M0643",
       "link_type": "직접매핑",
@@ -41,6 +49,14 @@
       "note": "검수:Kiki 2026-07-10"
     },
     {
+      "kebab_id": "exponent-zero",
+      "mis_id": "M0105",
+      "link_type": "직접매핑",
+      "confidence": 0.92,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-10"
+    },
+    {
       "kebab_id": "extremum-max-min-confused",
       "mis_id": "M0864",
       "link_type": "직접매핑",
@@ -65,6 +81,22 @@
       "note": "검수:Kiki 2026-07-10"
     },
     {
+      "kebab_id": "geometric-series-always-converges",
+      "mis_id": "M0209",
+      "link_type": "직접매핑",
+      "confidence": 0.92,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-10"
+    },
+    {
+      "kebab_id": "invertibility-without-1-1",
+      "mis_id": "M0144",
+      "link_type": "직접매핑",
+      "confidence": 0.92,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-10"
+    },
+    {
       "kebab_id": "limit-equals-function-value",
       "mis_id": "M0665",
       "link_type": "직접매핑",
@@ -77,6 +109,14 @@
       "mis_id": "M0049",
       "link_type": "직접매핑",
       "confidence": 0.97,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-10"
+    },
+    {
+      "kebab_id": "opposite-root-selected",
+      "mis_id": "M0862",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
       "method": "manual",
       "note": "검수:Kiki 2026-07-10"
     },
