@@ -9,6 +9,14 @@
       "note": "검수:Kiki 2026-07-10"
     },
     {
+      "kebab_id": "circle-radius-squared",
+      "mis_id": "M0848",
+      "link_type": "직접매핑",
+      "confidence": 0.93,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-10"
+    },
+    {
       "kebab_id": "composite-function-commutes",
       "mis_id": "M0643",
       "link_type": "직접매핑",
