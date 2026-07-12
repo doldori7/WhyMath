@@ -193,6 +193,14 @@
    "note": "검수:Kiki 2026-07-10"
   },
   {
+   "kebab_id": "period-of-scaled-sine",
+   "mis_id": "M0152",
+   "link_type": "직접매핑",
+   "confidence": 0.85,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "product-rule-naive",
    "mis_id": "M0075",
    "link_type": "직접매핑",

@@ -4,9 +4,9 @@
  "origin": "docs/data/misconception_crosslink_review_queue.json (검수 큐·전행 pending) 의 승인분",
  "review_method": "human sign-off (AI 자기승인 금지·Gate Contract crosswalk_gate_contract.md)",
  "counts": {
-  "crosslinks": 32,
+  "crosslinks": 33,
   "link_types": {
-   "직접매핑": 32
+   "직접매핑": 33
   }
  },
  "signatures": [
@@ -264,6 +264,14 @@
    "reviewer": "Kiki",
    "reviewed_on": "2026-07-12",
    "confidence": 0.9,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "period-of-scaled-sine",
+   "mis_id": "M0152",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.85,
    "note_stamp": "검수:Kiki 2026-07-12"
   }
  ],
