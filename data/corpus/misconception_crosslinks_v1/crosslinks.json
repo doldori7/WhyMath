@@ -97,6 +97,14 @@
       "note": "검수:Kiki 2026-07-10"
     },
     {
+      "kebab_id": "fraction-cancellation",
+      "mis_id": "M0118",
+      "link_type": "직접매핑",
+      "confidence": 0.8,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-10"
+    },
+    {
       "kebab_id": "geometric-series-always-converges",
       "mis_id": "M0209",
       "link_type": "직접매핑",
