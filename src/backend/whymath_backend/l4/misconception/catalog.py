@@ -10,6 +10,8 @@ S2-p: 이차방정식 근 선택·인수 부호 반전 2종(doc #31-32)을 doc-f
 ·합차공식 혼동)을 doc-first로 추가(34→40종) — 843 콘텐츠↔탐지 커버 확장·수치평가 MC로 기계 검증.
 843 확장 트랜치2(2026-07-12): 거듭제곱·분배·부호 계산형 6종(doc #41-46·거듭제곱 곱셈/거듭제곱·음수
 제곱 우선순위·분배 뒷항 누락·음수 분배 부호·차의 제곱 교차항)을 doc-first로 추가(40→46종).
+843 확장 트랜치3(2026-07-12): 중점·비례·부호·동류항·완전제곱·켤레 계산형 6종(doc #47-52)을
+doc-first로 추가(46→52종).
 
 각 `canonical_statement`·`counterexample`은 *자체 생성 기본 수학 사실*(교과서/EBS 본문 복제
 금지·CLAUDE.md). 반례는 canonical을 실제로 반증한다(수학적 정합 검증 완료).
@@ -31,7 +33,7 @@ from __future__ import annotations
 
 from whymath_backend.l4.misconception.models import Misconception
 
-# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32, #35-46) (23종).
+# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32, #35-52) (29종).
 _ALGEBRA: tuple[Misconception, ...] = (
     Misconception(
         id="distribution-over-power",
@@ -308,6 +310,67 @@ _ALGEBRA: tuple[Misconception, ...] = (
         # 차의 제곱에서 교차항 -2ab 누락. "차의 제곱"+"교차항" 공출현(doc #46).
         # 수치평가 MC distractor(a²-b² 선지)의 역추적 좌석. ([9수02-19]·M0020)
         signals=("차의 제곱", "교차항"),
+    ),
+    # ── 843 확장 트랜치3(doc #47-52·중점·비례·부호·동류항·완전제곱·켤레 계산형 6종) ──
+    Misconception(
+        id="midpoint-sum-only",
+        name_kr="중점 2로 안 나눔",
+        domain="대수",
+        canonical_statement="두 점 a, b의 중점 = a + b",
+        counterexample="a=2, b=6의 중점은 (2+6)/2=4 — 8은 2로 나누기를 누락한 값",
+        # 중점 좌표에서 2로 나누기 누락. "중점"+"더해" 공출현(doc #47).
+        # 수치평가 MC distractor(a+b 선지)의 역추적 좌석. ([9수02-05]·M0066)
+        signals=("중점", "더해"),
+    ),
+    Misconception(
+        id="scale-area-linear",
+        name_kr="닮음 넓이 선형 오인",
+        domain="대수",
+        canonical_statement="닮음비 k이면 넓이의 비도 k",
+        counterexample="닮음비 2이면 넓이의 비는 2²=4 — 2는 선형으로 오인한 값",
+        # 넓이는 길이의 제곱에 비례함을 놓침. "닮음비"+"넓이" 공출현(doc #48).
+        # 수치평가 MC distractor(k 선지)의 역추적 좌석. ([9수02-07]·M0013)
+        signals=("닮음비", "넓이"),
+    ),
+    Misconception(
+        id="negative-even-power-sign",
+        name_kr="음수 짝수 거듭제곱 부호",
+        domain="대수",
+        canonical_statement="(-a)^짝수 = 음수",
+        counterexample="(-2)⁴=16>0 — -16은 짝수 거듭제곱을 음수로 본 값",
+        # 음수의 짝수 거듭제곱이 양수임을 놓침. "짝수"+"거듭제곱" 공출현(doc #49).
+        # 수치평가 MC distractor(-a^n 선지)의 역추적 좌석. ([9수02-08]·M0201)
+        signals=("짝수", "거듭제곱"),
+    ),
+    Misconception(
+        id="combine-unlike-terms",
+        name_kr="동류항 차수 무시",
+        domain="대수",
+        canonical_statement="ax + bx² = (a+b)x³",
+        counterexample="2x+3x²은 차수가 달라 결합 불가 — x=2에서 16 ≠ 5·8=40",
+        # 차수가 다른 항을 동류항처럼 결합. "차수"+"동류항" 공출현(doc #50).
+        # 수치평가 MC distractor((a+b)x³ 값 선지)의 역추적 좌석. ([9수02-09]·M0016)
+        signals=("차수", "동류항"),
+    ),
+    Misconception(
+        id="complete-square-naive",
+        name_kr="완전제곱식 오인",
+        domain="대수",
+        canonical_statement="x² + bx = (x+b)²",
+        counterexample="x²+6x ≠ (x+6)² — x=2에서 16 ≠ 64 (올바른 완전제곱은 (x+3)²-9)",
+        # 완전제곱식에서 일차항 계수를 반으로 나누지 않음. "완전제곱"+"괄호" 공출현(doc #51).
+        # 수치평가 MC distractor((x+b)² 값 선지)의 역추적 좌석. ([9수02-19]·M0119)
+        signals=("완전제곱", "괄호"),
+    ),
+    Misconception(
+        id="conjugate-product-sum",
+        name_kr="켤레 무리수 곱 부호",
+        domain="대수",
+        canonical_statement="(√a+1)(√a-1) = a + 1",
+        counterexample="(√3+1)(√3-1)=3-1=2 — 4는 합차공식 부호를 오용한 값",
+        # 켤레 무리수의 곱에서 합차공식 부호 오용. "켤레"+"무리수" 공출현(doc #52).
+        # 수치평가 MC distractor(a+1 선지)의 역추적 좌석. ([9수01-07]·M0206)
+        signals=("켤레", "무리수"),
     ),
 )
 

@@ -124,3 +124,15 @@
 {"statement": "괄호 앞 마이너스는 안쪽 모든 항의 부호를 반대로 만든다", "expected_id": null, "near_id": "negative-distribute-sign", "kind": "correct-near", "note": "올바른 부호 분배 — signals 미공출현"}
 {"statement": "차를 제곱하면 각각을 제곱해서 빼면 된다고 적었어", "expected_id": "square-of-difference-no-cross", "near_id": null, "kind": "paraphrase", "note": "(a-b)²=a²-b² — signals 차의 제곱·교차항 회피"}
 {"statement": "두 수의 차를 제곱하면 가운데 -2ab 항이 생긴다", "expected_id": null, "near_id": "square-of-difference-no-cross", "kind": "correct-near", "note": "올바른 완전제곱 — signals 미공출현"}
+{"statement": "두 점의 좌표를 합쳐서 그대로 가운데 값으로 삼았어", "expected_id": "midpoint-sum-only", "near_id": null, "kind": "paraphrase", "note": "중점 = a+b — signals 중점·더해 회피"}
+{"statement": "두 점의 좌표를 더한 뒤 2로 나눠야 중점이 된다", "expected_id": null, "near_id": "midpoint-sum-only", "kind": "correct-near", "note": "올바른 중점 — 더해 미포함(부분)"}
+{"statement": "닮은 도형은 길이가 두 배면 넓이도 두 배라고 봤어", "expected_id": "scale-area-linear", "near_id": null, "kind": "paraphrase", "note": "넓이비=k 오인 — signals 닮음비·넓이 회피(닮음비 미포함)"}
+{"statement": "길이가 k배 늘면 넓이는 k제곱배 늘어난다", "expected_id": null, "near_id": "scale-area-linear", "kind": "correct-near", "note": "올바른 넓이비 — 닮음비 미포함(부분)"}
+{"statement": "마이너스 이를 네 번 곱하면 음수가 나온다고 적었어", "expected_id": "negative-even-power-sign", "near_id": null, "kind": "paraphrase", "note": "(-a)^짝수=음수 — signals 짝수·거듭제곱 회피"}
+{"statement": "마이너스를 짝수 번 곱하면 결과는 양수다", "expected_id": null, "near_id": "negative-even-power-sign", "kind": "correct-near", "note": "올바른 부호 — 거듭제곱 미포함(부분)"}
+{"statement": "일차항과 이차항을 그냥 계수끼리 합쳐서 한 항으로 만들었어", "expected_id": "combine-unlike-terms", "near_id": null, "kind": "paraphrase", "note": "ax+bx²=(a+b)x³ — signals 차수·동류항 회피"}
+{"statement": "일차항과 이차항은 서로 다른 항이라 하나로 합칠 수 없다", "expected_id": null, "near_id": "combine-unlike-terms", "kind": "correct-near", "note": "올바른 동류항 — signals 미공출현"}
+{"statement": "이차식을 통째로 하나의 제곱 꼴로 묶으면 상수 조정이 필요 없다고 봤어", "expected_id": "complete-square-naive", "near_id": null, "kind": "paraphrase", "note": "x²+bx=(x+b)² — signals 완전제곱·괄호 회피"}
+{"statement": "이차식을 제곱 꼴로 만들 땐 일차항 계수의 절반을 써야 한다", "expected_id": null, "near_id": "complete-square-naive", "kind": "correct-near", "note": "올바른 완전제곱 — signals 미공출현"}
+{"statement": "루트를 포함한 두 식의 곱에서 부호를 무시하고 더했어", "expected_id": "conjugate-product-sum", "near_id": null, "kind": "paraphrase", "note": "(√a+1)(√a-1)=a+1 — signals 켤레·무리수 회피"}
+{"statement": "루트를 포함한 켤레의 곱은 제곱의 차로 유리수가 된다", "expected_id": null, "near_id": "conjugate-product-sum", "kind": "correct-near", "note": "올바른 켤레 곱 — 무리수 미포함(부분)"}

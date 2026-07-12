@@ -4,9 +4,9 @@
  "origin": "docs/data/misconception_crosslink_review_queue.json (검수 큐·전행 pending) 의 승인분",
  "review_method": "human sign-off (AI 자기승인 금지·Gate Contract crosswalk_gate_contract.md)",
  "counts": {
-  "crosslinks": 46,
+  "crosslinks": 52,
   "link_types": {
-   "직접매핑": 46
+   "직접매핑": 52
   }
  },
  "signatures": [
@@ -373,6 +373,54 @@
   {
    "kebab_id": "square-of-difference-no-cross",
    "mis_id": "M0020",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "combine-unlike-terms",
+   "mis_id": "M0016",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "complete-square-naive",
+   "mis_id": "M0119",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "conjugate-product-sum",
+   "mis_id": "M0206",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "midpoint-sum-only",
+   "mis_id": "M0066",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "negative-even-power-sign",
+   "mis_id": "M0201",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "scale-area-linear",
+   "mis_id": "M0013",
    "reviewer": "Kiki",
    "reviewed_on": "2026-07-12",
    "confidence": 0.95,

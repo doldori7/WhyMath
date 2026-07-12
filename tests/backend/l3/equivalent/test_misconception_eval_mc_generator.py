@@ -161,6 +161,13 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
     ),
     ("negative_distribute", "negative-distribute-sign", "[9수02-09]", "J0209", "NEG-DISTRIBUTE"),
     ("square_difference", "square-of-difference-no-cross", "[9수02-19]", "J0219", "SQUARE-DIFF"),
+    # 843 확장 트랜치3 — 중점·비례·부호·동류항·완전제곱·켤레 계산형 6종(신규 탐지 kebab).
+    ("midpoint_no_half", "midpoint-sum-only", "[9수02-05]", "J0205", "MIDPOINT-NO-HALF"),
+    ("scale_area", "scale-area-linear", "[9수02-07]", "J0207", "SCALE-AREA"),
+    ("negative_even_power", "negative-even-power-sign", "[9수02-08]", "J0208", "NEG-EVEN-POWER"),
+    ("combine_unlike", "combine-unlike-terms", "[9수02-09]", "J0209", "COMBINE-UNLIKE"),
+    ("complete_square", "complete-square-naive", "[9수02-19]", "J0219", "COMPLETE-SQUARE"),
+    ("conjugate_product", "conjugate-product-sum", "[9수01-07]", "J0107", "CONJUGATE-PRODUCT"),
 )
 
 

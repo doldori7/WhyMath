@@ -1025,6 +1025,72 @@
       "reviewer": null,
       "reviewed_on": null,
       "note": null
+    },
+    {
+      "kebab_id": "midpoint-sum-only",
+      "mis_id": "M0066",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치3 — 중점 (a+b)/2 대신 a+b 오인 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "scale-area-linear",
+      "mis_id": "M0013",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치3 — 닮음비 k 넓이비 k² 대신 k 오인 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "negative-even-power-sign",
+      "mis_id": "M0201",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치3 — (-2)⁴를 음수로 오인 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "combine-unlike-terms",
+      "mis_id": "M0016",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치3 — 2x+3x²=5x³ 차수 무시 결합 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "complete-square-naive",
+      "mis_id": "M0119",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치3 — x²+6x=(x+6)² 완전제곱 오인 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "conjugate-product-sum",
+      "mis_id": "M0206",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치3 — (√a+1)(√a-1)=a+1 부호 오용 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
     }
   ]
 }

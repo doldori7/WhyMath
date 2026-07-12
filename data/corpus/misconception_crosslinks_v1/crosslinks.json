@@ -41,12 +41,36 @@
    "note": "검수:Kiki 2026-07-10"
   },
   {
+   "kebab_id": "combine-unlike-terms",
+   "mis_id": "M0016",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "complete-square-naive",
+   "mis_id": "M0119",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "composite-function-commutes",
    "mis_id": "M0643",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",
    "note": "검수:Kiki 2026-07-10"
+  },
+  {
+   "kebab_id": "conjugate-product-sum",
+   "mis_id": "M0206",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
   },
   {
    "kebab_id": "continuity-implies-differentiability",
@@ -217,6 +241,14 @@
    "note": "검수:Kiki 2026-07-12"
   },
   {
+   "kebab_id": "midpoint-sum-only",
+   "mis_id": "M0066",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "mutually-exclusive-implies-independent",
    "mis_id": "M0692",
    "link_type": "직접매핑",
@@ -227,6 +259,14 @@
   {
    "kebab_id": "negative-distribute-sign",
    "mis_id": "M0018",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "negative-even-power-sign",
+   "mis_id": "M0201",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",
@@ -291,6 +331,14 @@
   {
    "kebab_id": "root-loss-by-dividing",
    "mis_id": "M0573",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "scale-area-linear",
+   "mis_id": "M0013",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",

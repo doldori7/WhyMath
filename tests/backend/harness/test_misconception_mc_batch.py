@@ -49,8 +49,14 @@ _BANDS = (
     "distribute-first-term-only",
     "negative-distribute-sign",
     "square-of-difference-no-cross",
+    "midpoint-sum-only",
+    "scale-area-linear",
+    "negative-even-power-sign",
+    "combine-unlike-terms",
+    "complete-square-naive",
+    "conjugate-product-sum",
 )
-_TOTAL = 24 * len(_BANDS)  # 27 밴드 × 24 = 648
+_TOTAL = 24 * len(_BANDS)  # 33 밴드 × 24 = 792
 
 
 class TestRunMisconceptionMcBatch:

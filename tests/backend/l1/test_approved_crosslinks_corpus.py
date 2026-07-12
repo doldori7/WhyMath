@@ -3,8 +3,8 @@
 `data/corpus/misconception_crosslinks_v1/crosslinks.json`은 검수 큐(전행 pending) 중 **Kiki가
 직접 승인한 매핑**을 promote 산출(로더 형식)해 커밋한 것이다(사람 사인오프·AI 자기승인 아님).
 2026-07-08 극값 2(M0864·M0865)·2026-07-10 트리아지 A 11 + B 8 + frac 1·2026-07-12 미매핑 Tier C
-Tier C 10 + period + root-loss + 843 트랜치1 6 + 트랜치2 6(신규 탐지 kebab·계산형)을 승인해
-**총 46건(탐지 카탈로그 46 전수 매핑)**이다. 이 테스트는 hermetic(DB 0)으로 봉인한다:
+Tier C 10 + period + root-loss + 843 트랜치1·2·3 각 6(신규 탐지 kebab·계산형)을 승인해
+**총 52건(탐지 카탈로그 52 전수 매핑)**이다. 이 테스트는 hermetic(DB 0)으로 봉인한다:
 ① 로더 형식·게이트 통과(method=manual·검수 서명) ② kebab∈34 카탈로그·M-id∈843 코퍼스(참조 무결성)
 ③ `select_canonical`이 각 kebab에 canonical M-id를 실제로 돌려줌(단절 해소·843→34 도달).
 """
@@ -30,8 +30,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _CROSSLINKS = _REPO_ROOT / "data" / "corpus" / "misconception_crosslinks_v1" / "crosslinks.json"
 _MISCONCEPTIONS = _REPO_ROOT / "data" / "corpus" / "misconceptions_v1" / "misconceptions.json"
 
-# Kiki 승인분(MEMORY 정본·극값 2·A/B/frac 20·Tier C 10·period·root-loss·843 트랜치1 6·트랜치2 6)
-# — 탐지 카탈로그 46 전수 매핑·기대 매핑 동결.
+# Kiki 승인분(MEMORY 정본·극값 2·A/B/frac 20·Tier C 10·period·root-loss·843 트랜치1·2·3 각 6)
+# — 탐지 카탈로그 52 전수 매핑·기대 매핑 동결.
 _EXPECTED: dict[str, str] = {
     "extremum-max-min-confused": "M0864",
     "extremum-value-vs-point-confused": "M0865",
@@ -79,6 +79,12 @@ _EXPECTED: dict[str, str] = {
     "distribute-first-term-only": "M0017",
     "negative-distribute-sign": "M0018",
     "square-of-difference-no-cross": "M0020",
+    "midpoint-sum-only": "M0066",
+    "scale-area-linear": "M0013",
+    "negative-even-power-sign": "M0201",
+    "combine-unlike-terms": "M0016",
+    "complete-square-naive": "M0119",
+    "conjugate-product-sum": "M0206",
 }
 
 
@@ -94,7 +100,7 @@ def _corpus_mis_ids() -> set[str]:
 
 
 def test_exact_approved_pairs() -> None:
-    # 정확히 Kiki 승인 46건 — 기대 kebab→M-id 매핑 동결(드리프트 시 즉시 실패).
+    # 정확히 Kiki 승인 52건 — 기대 kebab→M-id 매핑 동결(드리프트 시 즉시 실패).
     rows = _load_rows()
     assert {r.kebab_id: r.mis_id for r in rows} == _EXPECTED
 

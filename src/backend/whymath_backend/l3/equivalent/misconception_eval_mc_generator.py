@@ -100,6 +100,12 @@ TemplateKind = Literal[
     "distribute_partial",
     "negative_distribute",
     "square_difference",
+    "midpoint_no_half",
+    "scale_area",
+    "negative_even_power",
+    "combine_unlike",
+    "complete_square",
+    "conjugate_product",
 ]
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
@@ -134,6 +140,13 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "distribute_partial": ("J0209", "DISTRIBUTE-PARTIAL"),
     "negative_distribute": ("J0209", "NEG-DISTRIBUTE"),
     "square_difference": ("J0219", "SQUARE-DIFF"),
+    # 843 확장 트랜치3(중점·비례·부호·동류항·완전제곱·켤레 계산형 6종).
+    "midpoint_no_half": ("J0205", "MIDPOINT-NO-HALF"),
+    "scale_area": ("J0207", "SCALE-AREA"),
+    "negative_even_power": ("J0208", "NEG-EVEN-POWER"),
+    "combine_unlike": ("J0209", "COMBINE-UNLIKE"),
+    "complete_square": ("J0219", "COMPLETE-SQUARE"),
+    "conjugate_product": ("J0107", "CONJUGATE-PRODUCT"),
 }
 
 
@@ -1286,6 +1299,229 @@ def _build_square_difference_pool() -> tuple[_EvalItem, ...]:
     return tuple(pool)
 
 
+def _build_midpoint_no_half_pool() -> tuple[_EvalItem, ...]:
+    """두 점 a, b의 중점 값 뼈대 풀 — 정답 (a+b)/2·오개념 a+b(2로 안 나눔)·filler a·b.
+
+    수직선 위 두 점 a, b의 중점은 (a+b)/2이다. 2로 나누기를 누락하면 a+b로 틀린다. a<b라 네 값
+    {(a+b)/2, a+b, a, b}은 서로 다르다. 정답값으로 dedup. 값이 정수면 자연수·아니면 분수.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[float] = set()
+    for a in range(1, 12):
+        for b in range(a + 1, 20):
+            correct = sympy.Rational(a + b, 2)
+            key = round(_numeric(correct), 9)
+            if key in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    correct,
+                    sympy.Integer(a + b),  # 2로 나누기 누락.
+                    sympy.Integer(a),
+                    sympy.Integer(b),
+                ),
+                conditions=f"x = ({a}+{b})/2",
+                answer_str=_display(correct),
+                question_text=f"수직선 위 두 점 {a}, {b} 의 중점의 좌표를 구하시오.",
+                answer_explanation=(
+                    f"두 점의 중점은 좌표의 평균이므로 ({a}+{b})/2 = {_display(correct)} 이다. "
+                    f"2로 나누지 않고 {a + b}로 답하면 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=_answer_format_for(correct),
+            )
+            if item is not None:
+                seen.add(key)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_scale_area_pool() -> tuple[_EvalItem, ...]:
+    """닮음비 k의 넓이비 뼈대 풀 — 정답 k²·오개념 k(선형 오인)·filler 2k·k³.
+
+    닮음비가 k이면 넓이의 비는 k²이다(길이의 제곱에 비례). 선형으로 여겨 k로 답하면 틀린다. k≥3라
+    네 값 {k², k, 2k, k³}은 서로 다르다(k=2는 k²=2k 충돌로 제외). 정답값 k²으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for k in range(3, 27):
+        correct_v = k * k
+        if correct_v in seen:
+            continue
+        item = _assemble_item(
+            values=(
+                sympy.Integer(k * k),
+                sympy.Integer(k),  # 선형 오인.
+                sympy.Integer(2 * k),
+                sympy.Integer(k**3),
+            ),
+            conditions=f"x = {k}**2",
+            answer_str=str(correct_v),
+            question_text=f"닮음비가 {k} 인 두 도형의 넓이의 비를 구하시오.",
+            answer_explanation=(
+                f"넓이는 길이의 제곱에 비례하므로 닮음비 {k} 의 넓이의 비는 {k}² = {correct_v} "
+                f"이다. 닮음비 {k} 를 그대로 넓이의 비로 답하면 틀린다."
+            ),
+            difficulty=_difficulty(k),
+            answer_format=_answer_format_for(sympy.Integer(correct_v)),
+        )
+        if item is not None:
+            seen.add(correct_v)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_negative_even_power_pool() -> tuple[_EvalItem, ...]:
+    """(-a)^짝수 값 뼈대 풀 — 정답 a^n(양수)·오개념 -a^n(음수로 오인)·filler a·-a.
+
+    음수의 짝수 거듭제곱은 양수다: (-a)^n = a^n(n 짝수). 음수로 여겨 -a^n으로 답하면 틀린다. 밑 a와
+    짝수 지수 n을 순회하며 정답값 ≤ 10^5만 담아 dedup(값 폭주 방지). 네 값 {a^n, -a^n, a, -a} 상이.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for n in (2, 4, 6):
+        for a in range(2, 22):
+            correct_v = a**n
+            if correct_v > 10**5 or correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(a**n),
+                    sympy.Integer(-(a**n)),  # 음수로 오인.
+                    sympy.Integer(a),
+                    sympy.Integer(-a),
+                ),
+                conditions=f"x = {a}**{n}",
+                answer_str=str(correct_v),
+                question_text=f"(-{a})^{n} 의 값을 구하시오.",
+                answer_explanation=(
+                    f"음수의 짝수 거듭제곱은 양수이므로 (-{a})^{n} = {a}^{n} = {correct_v} 이다. "
+                    f"음수로 여겨 -{correct_v}로 답하면 틀린다."
+                ),
+                difficulty=_difficulty(a + n),
+                answer_format=_answer_format_for(sympy.Integer(correct_v)),
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_combine_unlike_pool() -> tuple[_EvalItem, ...]:
+    """ax+bx²를 x=c에서 값 뼈대 풀 — 정답 ac+bc²·오개념 (a+b)c³(차수 무시 결합)·filler ac·bc².
+
+    차수가 다른 항은 동류항이 아니라 결합할 수 없다: ax+bx²는 x=c에서 ac+bc²이다. 차수를 무시하고
+    (a+b)x³으로 결합하면 (a+b)c³로 틀린다. 조합이 네 값 {ac+bc², (a+b)c³, ac, bc²}을 상이하게 한다.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 7):
+        for b in range(2, 8):
+            for c in range(2, 9):
+                correct_v = a * c + b * c * c
+                if correct_v in seen:
+                    continue
+                item = _assemble_item(
+                    values=(
+                        sympy.Integer(a * c + b * c * c),
+                        sympy.Integer((a + b) * c**3),  # 차수 무시 결합.
+                        sympy.Integer(a * c),
+                        sympy.Integer(b * c * c),
+                    ),
+                    conditions=f"x = {a}*{c} + {b}*{c}**2",
+                    answer_str=str(correct_v),
+                    question_text=f"{a}x + {b}x² 에서 x = {c} 일 때의 값을 구하시오.",
+                    answer_explanation=(
+                        f"차수가 다른 항은 따로 계산하므로 {a}x + {b}x² 는 x = {c} 에서 "
+                        f"{a * c} + {b * c * c} = {correct_v} 이다. 차수를 무시하고 {a + b}x³으로 "
+                        "결합하면 틀린다."
+                    ),
+                    difficulty=_difficulty(a + b + c),
+                    answer_format=_answer_format_for(sympy.Integer(correct_v)),
+                )
+                if item is not None:
+                    seen.add(correct_v)
+                    pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_complete_square_pool() -> tuple[_EvalItem, ...]:
+    """x²+bx를 x=c에서 값 뼈대 풀 — 정답 c²+bc·오개념 (c+b)²(완전제곱 오인)·filler c²·bc.
+
+    x²+bx는 (x+b)²이 아니다(일차항 계수를 반으로 나눠야 함). x=c에서 c²+bc이다. (x+b)²으로 오인하면
+    (c+b)²로 틀린다. b,c 조합이 네 값 {c²+bc, (c+b)², c², bc}을 상이하게 한다. 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for b in range(2, 12):
+        for c in range(2, 12):
+            correct_v = c * c + b * c
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(c * c + b * c),
+                    sympy.Integer((c + b) ** 2),  # 완전제곱 오인.
+                    sympy.Integer(c * c),
+                    sympy.Integer(b * c),
+                ),
+                conditions=f"x = {c}**2 + {b}*{c}",
+                answer_str=str(correct_v),
+                question_text=f"x² + {b}x 에서 x = {c} 일 때의 값을 구하시오.",
+                answer_explanation=(
+                    f"x² + {b}x 는 x = {c} 에서 {c * c} + {b * c} = {correct_v} 이다. "
+                    f"이를 (x+{b})²으로 오인하면 (c+{b})²로 틀린다."
+                ),
+                difficulty=_difficulty(b + c),
+                answer_format=_answer_format_for(sympy.Integer(correct_v)),
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_conjugate_product_pool() -> tuple[_EvalItem, ...]:
+    """(√a+1)(√a-1) 값 뼈대 풀 — 정답 a-1·오개념 a+1(부호 오용)·filler a·2a.
+
+    켤레 무리수의 곱은 합차공식으로 (√a)²-1² = a-1이다. 부호를 오용해 a+1로 답하면 틀린다.
+    a≥3라 네 값 {a-1, a+1, a, 2a}은 서로 다르다. 정답값 a-1으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(3, 28):
+        correct_v = a - 1
+        if correct_v in seen:
+            continue
+        item = _assemble_item(
+            values=(
+                sympy.Integer(a - 1),
+                sympy.Integer(a + 1),  # 부호 오용.
+                sympy.Integer(a),
+                sympy.Integer(2 * a),
+            ),
+            conditions=f"x = {a} - 1",
+            answer_str=str(correct_v),
+            question_text=f"(√{a} + 1)(√{a} - 1) 의 값을 구하시오.",
+            answer_explanation=(
+                f"켤레 무리수의 곱은 (√{a})² - 1² = {a} - 1 = {correct_v} 이다. "
+                f"합차공식 부호를 오용해 {a} + 1로 답하면 틀린다."
+            ),
+            difficulty=_difficulty(a),
+            answer_format=_answer_format_for(sympy.Integer(correct_v)),
+        )
+        if item is not None:
+            seen.add(correct_v)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "distribution": _build_distribution_pool,
     "chain_rule": _build_chain_rule_pool,
@@ -1314,6 +1550,12 @@ _POOL_FACTORY = {
     "distribute_partial": _build_distribute_partial_pool,
     "negative_distribute": _build_negative_distribute_pool,
     "square_difference": _build_square_difference_pool,
+    "midpoint_no_half": _build_midpoint_no_half_pool,
+    "scale_area": _build_scale_area_pool,
+    "negative_even_power": _build_negative_even_power_pool,
+    "combine_unlike": _build_combine_unlike_pool,
+    "complete_square": _build_complete_square_pool,
+    "conjugate_product": _build_conjugate_product_pool,
 }
 
 
@@ -1349,7 +1591,8 @@ class MisconceptionEvalMCSkeletonGenerator:
                 "fraction_cancel/polygon_angle_sum/area_perimeter/circle_radius/gambler_streak/"
                 "fraction_addition/negative_product/subtract_negative/absolute_value/sqrt_sum/"
                 "difference_of_squares/exponent_product/power_of_power/negative_square/"
-                "distribute_partial/negative_distribute/square_difference)"
+                "distribute_partial/negative_distribute/square_difference/midpoint_no_half/"
+                "scale_area/negative_even_power/combine_unlike/complete_square/conjugate_product)"
             )
         if not distractor_codes:
             raise ValueError(
