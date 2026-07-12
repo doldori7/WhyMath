@@ -8,6 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:korean_math_app/features/chat/data/coach_api.dart';
 import 'package:korean_math_app/features/chat/data/coach_models.dart';
 import 'package:korean_math_app/features/chat/presentation/chat_screen.dart';
+import 'package:korean_math_app/features/problems/application/active_problem.dart';
+import 'package:korean_math_app/features/problems/data/problem_models.dart';
 
 /// 미리 짠 응답을 돌려주는 fake(또는 throw) — 위젯 테스트용.
 class _FakeCoachApi extends CoachApi {
@@ -210,5 +212,46 @@ void main() {
     // 학생 발화는 남고 SnackBar(에러)가 뜬다.
     expect(find.text('도와주세요'), findsOneWidget);
     expect(find.byType(SnackBar), findsOneWidget);
+  });
+
+  testWidgets('활성 문제가 있으면 채팅 상단 배너에 발문이 보인다(접기 가능)', (tester) async {
+    // 실기기 시연 피드백 회귀 가드: "문제가 한 화면에 같이 안 나옴" — 풀이 중 문제를
+    // 다시 보러 화면을 떠나지 않도록 채팅 위에 발문을 상시 노출한다.
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          coachApiProvider.overrideWithValue(_FakeCoachApi(response: _response())),
+          activeProblemProvider.overrideWith(
+            (ref) => const Problem(
+              problemId: 'p-1',
+              sourceType: '자체생성',
+              subject: '공통',
+              questionText: '이차방정식 x^2-5x+6=0의 두 근 중 큰 근을 구하시오.',
+            ),
+          ),
+        ],
+        child: const MaterialApp(home: ChatScreen()),
+      ),
+    );
+
+    // 기본 펼침 — 발문이 보인다.
+    expect(
+      find.text('이차방정식 x^2-5x+6=0의 두 근 중 큰 근을 구하시오.'),
+      findsOneWidget,
+    );
+
+    // 배너를 탭하면 접혀 발문이 숨고 요약 행만 남는다.
+    await tester.tap(find.textContaining('풀이 중인 문제'));
+    await tester.pump();
+    expect(
+      find.text('이차방정식 x^2-5x+6=0의 두 근 중 큰 근을 구하시오.'),
+      findsNothing,
+    );
+    expect(find.textContaining('풀이 중인 문제'), findsOneWidget);
+  });
+
+  testWidgets('활성 문제가 없으면 배너가 그려지지 않는다', (tester) async {
+    await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
+    expect(find.textContaining('풀이 중인 문제'), findsNothing);
   });
 }

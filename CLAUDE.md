@@ -75,7 +75,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 | 캐시 | Redis 7 | 세션·핫 데이터 |
 | 로컬 LLM | Ollama + Qwen3-Math, DeepSeek-Math, **Qwen3-VL**(멀티모달·그래프 개형) | Phaiakes9 |
 | 클라우드 LLM | Claude Sonnet/Opus, GPT-5, Gemini 2.5 | 라우터 경유 |
-| 임베딩 | OpenAI text-embedding-3-large | 의미 검색·클러스터링 |
+| 임베딩 | **기본(로컬)=bge-m3**(`BAAI/bge-m3`·1024) · 클라우드 옵션=OpenAI text-embedding-3-large(3072) | 의미 검색·클러스터링. `embedding_provider` 셀렉터(local 기본·openai·fake)·로컬 우선(비용·Phaiakes9). **최종 확정 미결**(bge-m3 vs te-3-large — MEMORY 슬105·SSM 2026-Q3 스캔 ③) |
 | OCR | **PaddleOCR + Qwen3-VL 하이브리드** (로컬, PaddleOCR fallback) | 손글씨·그래프, Phaiakes9·미성년자 프라이버시. 2026-05-28 결정 (Mathpix 대체) |
 | 시각화 | Manim (서버 렌더), Desmos/GeoGebra 임베드, D3.js·three.js·Plotly | 선언적 JSON 명세 |
 | 클러스터링 | HDBSCAN + UMAP | 풀이 유형 클러스터링 |
@@ -223,10 +223,21 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 
 ## 🧠 워크플로우 표준
 
+### 작업일정 정본 = 빌드 하네스 (`backlog/` + `scripts/harness/`)
+- "다음 할 일"은 추론하지 말고 `python3 scripts/harness/backlog.py next`가 계산한다
+- SessionStart 훅이 매 세션 브리핑(현재 스테이지·next·게이트 리마인드)을 자동 주입한다
+- 상세 규약: `docs/standards/build_harness.md`
+
+### 순차 진행 (기본 모드)
+```
+/drive                      ← 백로그의 다음 태스크를 순차 처리 (사람 게이트에서 정지)
+/gates                      ← Kiki 행동 대기 게이트 점검·clear(evidence 필수)
+```
+
 ### 새 기능 개발 시
 ```
-1. /plan [기능명]            ← 계획 수립, 7계층 어디에 속하는지 확인
-2. /implement [영역]         ← 해당 서브에이전트 위임
+1. /plan [기능명]            ← 계획 수립 + backlog 태스크 등록 (7계층 확인)
+2. /implement [태스크 id]    ← start(claim) → 서브에이전트 위임 → done(증적 필수)
 3. /review                  ← 코드·테스트·문서 점검
 4. MEMORY.md 업데이트         ← 주요 결정 기록
 5. git commit               ← 의미 있는 커밋 메시지
@@ -288,12 +299,14 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - `ROADMAP.md` — Phase별 일정
 - `docs/architecture/00_overview.md` — 7계층 요약
 - `docs/standards/prompt_engineering.md` — 프롬프트 기준
+- `docs/standards/build_harness.md` — 빌드 하네스 규약 (작업일정 정본 `backlog/`·순차 조율·게이트)
 - `docs/standards/build_checkpoint_questions.md` — 구축 플레이북 단계별 진행 점검 질문 세트 (`/review`·`/status` 시)
 - `docs/standards/playbook_part_review_questions.md` — 구축 플레이북 Part 0~12 순차 설계-준수 점검 질문 세트
 
 ### 상세 (필요 시 읽기)
 - `docs/architecture/01-07_*.md` — 각 계층 상세 명세
 - `docs/architecture/03b_wh_s_solver_harness.md`·`04a_wh1_tutoring_harness.md` — 하네스 설계안(WH-S 솔버·WH-1 튜터링·횡단 인프라)
+- `docs/standards/system_superiority_maintenance.md` — 시스템 우월성 유지(SSM): 분기별 기술 트렌드 능동 스캔·도입 게이트(상시 붕괴 방어와 상보)
 - `docs/strategy/*.md` — 시장·차별화·리스크
 - `docs/data/licensing_safety.md` — 데이터 라이선스 매트릭스
 - `docs/prompts/*.md` — 프롬프트 템플릿 라이브러리

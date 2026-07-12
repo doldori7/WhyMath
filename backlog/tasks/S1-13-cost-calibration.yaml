@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S1-13-cost-calibration
+title: "비용/지연 실측 보정 + 프롬프트 캐싱 검토"
+track: math-completion
+stage: S1
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on:
+  - S1-12-phaiakes9-live-verify
+requires_gates: []
+acceptance:
+  - 라우터 est 단가표를 실측으로 보정
+  - 캐싱 적용 여부 결정로그
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

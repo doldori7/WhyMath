@@ -1,0 +1,157 @@
+"""순차 조율 알고리즘 — "다음 할 일"을 결정적으로 계산한다.
+
+후보 조건 (전부 만족해야 착수 가능):
+    status == todo
+    ∧ depends_on 전부 done
+    ∧ requires_gates 전부 cleared/waived
+    ∧ owner == claude          (사람 소유 태스크는 자동 착수 금지)
+    ∧ 소속 트랙 entry_gate 통과 (예: E축은 S5 게이트 전 하드락)
+    ∧ session == null          (다른 세션이 claim하지 않음)
+
+정렬 (결정적 — 같은 입력이면 항상 같은 순서):
+    (stage_order 인덱스, priority, -해금 후속 수, id)
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from models import Backlog, Task
+
+
+@dataclass
+class Exclusion:
+    """todo 태스크가 후보에서 제외된 사유 (정지 사유 판별·설명에 사용)."""
+
+    task_id: str
+    reason: str                              # deps|gates|owner|track_gate|claimed
+    detail: list[str] = field(default_factory=list)
+
+
+def track_gate_passed(backlog: Backlog, task: Task) -> bool:
+    track = backlog.tracks.get(task.track)
+    if track is None or not track.entry_gate:
+        return True
+    gate = backlog.gates.get(track.entry_gate)
+    return gate is not None and gate.passed
+
+
+def unmet_dependencies(backlog: Backlog, task: Task) -> list[str]:
+    return [
+        dep for dep in task.depends_on
+        if dep not in backlog.tasks or backlog.tasks[dep].status != "done"
+    ]
+
+
+def unmet_gates(backlog: Backlog, task: Task) -> list[str]:
+    return [
+        gid for gid in task.requires_gates
+        if gid not in backlog.gates or not backlog.gates[gid].passed
+    ]
+
+
+def classify_todo(backlog: Backlog, task: Task) -> Exclusion | None:
+    """todo 태스크의 제외 사유 (None = 착수 가능 후보)."""
+    if task.owner != "claude":
+        return Exclusion(task.id, "owner", [task.owner])
+    if not track_gate_passed(backlog, task):
+        track = backlog.tracks[task.track]
+        return Exclusion(task.id, "track_gate", [track.entry_gate or "?"])
+    deps = unmet_dependencies(backlog, task)
+    if deps:
+        return Exclusion(task.id, "deps", deps)
+    gates = unmet_gates(backlog, task)
+    if gates:
+        return Exclusion(task.id, "gates", gates)
+    if task.session:
+        return Exclusion(task.id, "claimed", [task.session])
+    return None
+
+
+def unblock_count(backlog: Backlog, task: Task) -> int:
+    """이 태스크 완료가 직접 해금하는 후속 태스크 수 (병목 우선 지표)."""
+    return sum(1 for other in backlog.tasks.values() if task.id in other.depends_on)
+
+
+def sort_key(backlog: Backlog, task: Task) -> tuple[int, int, int, str]:
+    return (
+        backlog.stage_index(task.stage),
+        task.priority,
+        -unblock_count(backlog, task),
+        task.id,
+    )
+
+
+def candidates(
+    backlog: Backlog,
+    layer: str | None = None,
+    subject: str | None = None,
+    track: str | None = None,
+) -> tuple[list[Task], list[Exclusion]]:
+    """(정렬된 착수 가능 후보, 제외 사유 목록) 반환."""
+    ready: list[Task] = []
+    excluded: list[Exclusion] = []
+    for task in backlog.tasks.values():
+        if task.status != "todo":
+            continue
+        if layer and task.layer != layer:
+            continue
+        if subject and task.subject != subject:
+            continue
+        if track and task.track != track:
+            continue
+        exclusion = classify_todo(backlog, task)
+        if exclusion is None:
+            ready.append(task)
+        else:
+            excluded.append(exclusion)
+    ready.sort(key=lambda t: sort_key(backlog, t))
+    return ready, excluded
+
+
+def selection_rationale(backlog: Backlog, task: Task) -> str:
+    """왜 이 태스크가 지금 최우선인지 한 줄 설명."""
+    parts = [f"stage={task.stage}", f"priority={task.priority}"]
+    unlocks = unblock_count(backlog, task)
+    if unlocks:
+        parts.append(f"완료 시 후속 {unlocks}건 해금")
+    if task.depends_on:
+        parts.append(f"의존성 {len(task.depends_on)}건 전부 해소됨")
+    if task.requires_gates:
+        parts.append(f"게이트 {len(task.requires_gates)}건 전부 통과")
+    return " · ".join(parts)
+
+
+def stall_reason(backlog: Backlog, excluded: list[Exclusion]) -> tuple[str, list[str]]:
+    """후보 0일 때의 정지 사유 판별 — /drive 정지 신호.
+
+    반환: (사유 코드, 상세 목록)
+        all_done    : 진행할 태스크 자체가 없음 → 스테이지/트랙 전환 제안
+        human_gate  : 사람 게이트만 해소되면 진행 가능 → 게이트 목록 제시
+        in_progress : 다른 세션이 진행 중 → 대기 또는 다른 layer 선택
+        blocked     : 나머지 (blocked 태스크·미해소 의존성 연쇄)
+    """
+    active = [t for t in backlog.tasks.values() if t.status in ("in_progress", "review")]
+    open_todo = [t for t in backlog.tasks.values() if t.status in ("todo", "blocked")]
+    if not open_todo and not active:
+        return "all_done", []
+
+    # 사람 게이트만 걷어내면 풀리는가 — 게이트 제외 + owner 제외만 남은 경우
+    gate_ids: list[str] = []
+    other_reasons = False
+    for exc in excluded:
+        if exc.reason in ("gates", "track_gate"):
+            gate_ids.extend(exc.detail)
+        elif exc.reason == "owner":
+            continue  # 사람 소유 태스크도 사람 대기의 일종
+        else:
+            other_reasons = True
+    pending_gates = sorted({g for g in gate_ids if g in backlog.gates and not backlog.gates[g].passed})
+    if pending_gates and not other_reasons:
+        return "human_gate", pending_gates
+
+    if active:
+        return "in_progress", sorted(f"{t.id} ({t.session or '?'})" for t in active)
+    if pending_gates:
+        return "human_gate", pending_gates
+    return "blocked", sorted(t.id for t in open_todo)

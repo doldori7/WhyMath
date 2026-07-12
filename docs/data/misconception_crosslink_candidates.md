@@ -100,6 +100,8 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
 ---
 
 ## 참고
+- 검수 결정 패키지(dossier): `docs/data/misconception_crosslink_review_dossier.md` — coverage·근거
+  조인·81행 결정 체크리스트 통합(게이트 `G-crosswalk-approval` 검수용·read-only 준비물).
 - 골격: `schema/misconception_crosslink.py`·`db/models/misconception_crosslink.py`·
   `l1/misconception/crosslink_loader.py`·`crosslink_resolve.py`·alembic `e2f3a4b5c6d7`(PR #347).
 - 원천: `l4/misconception/catalog.py`(kebab·현 34)·`data/corpus/misconceptions_v1/misconceptions.json`(M-id·현 843).

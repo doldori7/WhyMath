@@ -23,14 +23,20 @@ argument-hint: "[영역:기능명] 예: data:ncic-crawler, mobile:chat-ui"
 | `backend:` | backend-engineer | L5 |
 | `content:` | content-curator | L6/L7 |
 
-### 2. 사전 점검
+### 2. 사전 점검 + 백로그 착수 (필수)
 구현 전 다음 확인:
 
-- [ ] `/plan` 단계 완료되었는가? (없으면 `/plan` 먼저)
+- [ ] 대응하는 backlog 태스크가 있는가? (없으면 `/plan`으로 먼저 등록)
 - [ ] CLAUDE.md의 금기·원칙 위반 없는가?
 - [ ] 의존하는 하위 계층 *준비 완료*?
 - [ ] 테스트 전략 있는가?
 - [ ] 어떤 데이터·시크릿 필요한가? (사전 확인)
+
+태스크를 **claim하고 시작한다** (의존성·게이트 미해소면 CLI가 거부한다):
+
+```bash
+python3 scripts/harness/backlog.py start <태스크 id>
+```
 
 ### 3. 서브에이전트 호출
 해당 에이전트 정의(`.claude/agents/[name].md`)를 컨텍스트로 두고 작업 수행.
@@ -65,7 +71,14 @@ f. PR 준비
 - [ ] CLAUDE.md 금기 위반 없음
 - [ ] MEMORY.md 결정 기록 필요한가?
 
-### 6. 결과 보고
+### 6. 백로그 완료 처리 (필수 — 커밋/PR 증적 동반)
+```bash
+python3 scripts/harness/backlog.py done <태스크 id> --artifact "<커밋 해시 또는 PR>"
+```
+증적 없는 done은 CLI가 거부한다. 해금된 후속 태스크를 확인해 보고에 포함.
+(이 단계를 건너뛰면 Stop 훅이 세션 종료를 차단한다.)
+
+### 7. 결과 보고
 사용자에게 짧게 보고:
 
 ```

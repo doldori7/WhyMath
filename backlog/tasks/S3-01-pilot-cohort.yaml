@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-01-pilot-cohort
+title: "파일럿 5~10명 + 측정 하네스 가동"
+track: math-completion
+stage: S3
+subject: math
+layer: docs
+status: todo
+priority: 1
+owner: kiki
+depends_on:
+  - S2-01-equiv-problems-100
+  - S2-06-l6-suneung-mode
+requires_gates: []
+acceptance:
+  - 파일럿 코호트 모집·측정 하네스 KPI 베이스라인 기록
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

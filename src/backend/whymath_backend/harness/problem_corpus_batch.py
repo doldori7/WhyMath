@@ -9,7 +9,7 @@ Phaiakes9 전용이던 배치 스크립트(run_batch_corpus.py·repo 밖)를 **r
     python -m whymath_backend.harness.problem_corpus_batch \\
         [--out <jsonl>] [--short 90] [--mc 45] [--sqrt 30] [--sqrt-mc 20]
         [--calc-extremum 40] [--calc-tangent 40] [--calc-value 40] [--exp 25] [--log 20]
-        [--arith 60] [--geo 30] [--trig 13] [--dry-run]
+        [--arith 60] [--geo 30] [--trig 13] [--seq-inductive 30] [--dry-run]
 
 동작: 문제군별 밴드를 순차 실행 → 전 후보가 S2-a 4종 게이트를 통과해야 sink에 실린다 → JSONL로
 기록. **quad 문제군**(short/mc/sqrt/sqrt_mc·이차방정식 근)은 공유 signature_index로 겹침을 차단하고,
@@ -26,6 +26,10 @@ stdout에 내고, **수율 미달이면 종료 코드 1**(조용한 실패 금�
 결정론 보장(재실행 바이트 동일): LLM 0·DB 0·타임스탬프 0·slug 기반 uuid5 problem_id·고정 시드
 풀·값 정렬 선지 — 같은 인자로 두 번 실행하면 산출 파일이 바이트까지 같다(테스트 봉인). 산출물은
 v0(사람 검수 전) — 게이트 통과 ≠ 학생 노출(§03 정본).
+
+시그니처 태깅(S2-06): sink 기록 직전 전 레코드에 `l1/problem_bank/signature_tagger.
+apply_signatures`를 적용한다 — 태거가 시그니처의 단일 권위(생성기는 빈 배열)다. 규칙 미해당
+레코드는 원본 객체 그대로라(멱등) 기존 문항의 직렬화 바이트가 불변이다(비날조 원칙).
 """
 
 from __future__ import annotations
@@ -33,15 +37,20 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from collections.abc import Mapping
-from dataclasses import dataclass, field
+from collections.abc import Mapping, MutableSet
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+from whymath_backend.harness.needs_review_worklist import (
+    build_worklist,
+    render_worklist_markdown,
+)
 from whymath_backend.l1.problem_bank.populate import (
     ProblemBankPopulateReport,
     ProblemBankRecord,
 )
+from whymath_backend.l1.problem_bank.signature_tagger import apply_signatures
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.calculus_skeleton_generator import (
     CalculusExtremumMCSkeletonGenerator,
@@ -54,7 +63,17 @@ from whymath_backend.l3.equivalent.exp_log_skeleton_generator import (
     ExponentialEquationSkeletonGenerator,
     LogarithmicEquationSkeletonGenerator,
 )
-from whymath_backend.l3.equivalent.orchestrator import run_batch
+from whymath_backend.l3.equivalent.generator import EquivalentProblemGenerator
+from whymath_backend.l3.equivalent.inductive_sequence_skeleton_generator import (
+    InductiveSequenceSkeletonGenerator,
+)
+from whymath_backend.l3.equivalent.orchestrator import (
+    GenerationOutcome,
+    ProblemBankSink,
+)
+from whymath_backend.l3.equivalent.orchestrator import (
+    run_batch as _orchestrator_run_batch,
+)
 from whymath_backend.l3.equivalent.sequence_skeleton_generator import (
     ArithmeticSequenceSkeletonGenerator,
     GeometricSequenceSkeletonGenerator,
@@ -103,10 +122,10 @@ _CALC_MC_INJECTION: dict[str, tuple[str, str]] = {
 }
 
 # 밴드 기본 크기 — quad 185 + calc 120 + calc-value-mc 30 + calc-extremum-irr 30 + exp 25 + log 20
-# + 수열항 90 + 삼각값 13 + 수열합 65 + 삼각방정식 12 = 총 590건(CI 봉인 ≥100 여유). 풀 실측:
-# short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·calc-tangent 162·calc-value 150·
+# + 수열항 90 + 삼각값 13 + 수열합 65 + 삼각방정식 12 + 귀납수열 30 = 총 620건(CI 봉인 ≥100 여유).
+# 풀 실측: short 443·mc 159·sqrt 122·sqrt_mc 58·calc-extremum 162·calc-tangent 162·calc-value 150·
 # calc-value-mc 146·calc-extremum-irr 180·exp 28·log 28·arith 90·geo 45·trig 13·
-# arith-sum 261·geo-sum 58·trig-eq 18.
+# arith-sum 261·geo-sum 58·trig-eq 18·seq-inductive 98.
 _DEFAULT_SHORT_N = 90
 _DEFAULT_MC_N = 45
 _DEFAULT_SQRT_N = 30
@@ -124,6 +143,7 @@ _DEFAULT_TRIG_N = 13
 _DEFAULT_ARITH_SUM_N = 45
 _DEFAULT_GEO_SUM_N = 20
 _DEFAULT_TRIG_EQ_N = 12
+_DEFAULT_SEQ_INDUCTIVE_N = 30
 
 # 미적분(극값) 밴드 스펙 — 별도 성취기준([12미적Ⅰ-02-07]·함수의 증가·감소와 극대·극소).
 # 난이도 3.3 고정: 극값 추정(3.0~4.0) 최대 gap 0.7 < 3.5(게이트 감쇠 수학)라 안전.
@@ -186,6 +206,14 @@ _GEO_SUM_STANDARD_CODE = "[12대수03-03]"
 _GEO_SUM_SPEC_DIFFICULTY = 3.3
 _TRIG_EQ_STANDARD_CODE = "[12대수02-02]"
 _TRIG_EQ_SPEC_DIFFICULTY = 3.3
+
+# 귀납 정의 수열 밴드 스펙(S2-06) — 수열의 귀납적 정의([12대수03-06]·`standards_v1` 실재 고시코드).
+# conditions는 점화식 폐형 `x − 상수`(다항 signature 非None)·답 dedup(등차·등비 가로질러)으로 밴드
+# 내 유일 — **별도 signature_index**(문제군 분리·calc 패턴 미러). 난이도 3.4 고정: rule-based
+# 추정(3.3~3.5) 최대 gap 0.1 < 0.5(tol) → 동등성 난이도 성분 만점. 이 밴드가 시그니처 태거(T1
+# 조건 나열·T2 점화식)의 실제 양성 코퍼스다 — 기존 문항 날조 없이 수능 신호를 점화한다.
+_INDSEQ_STANDARD_CODE = "[12대수03-06]"
+_INDSEQ_SPEC_DIFFICULTY = 3.4
 
 
 def _default_out_path() -> Path:
@@ -256,6 +284,18 @@ def _record_to_json(record: ProblemBankRecord) -> dict[str, Any]:
     return data
 
 
+def _tagged_record(record: ProblemBankRecord) -> ProblemBankRecord:
+    """sink 기록 직전 시그니처 태깅(S2-06) — 태거가 단일 권위(생성기는 빈 배열).
+
+    `apply_signatures`는 유도 결과가 기존과 같으면 **원본 Problem 객체 그대로** 돌려주므로(멱등),
+    규칙 미해당인 기존 문제군 레코드는 여기서도 원본 레코드 그대로다 — 직렬화 바이트 불변(비날조).
+    """
+    problem = apply_signatures(record.problem)
+    if problem is record.problem:
+        return record
+    return replace(record, problem=problem)
+
+
 class JsonlCorpusSink:
     """JSONL 저장 좌석 — `ProblemBankSink` 구조 충족(populate만)·메모리 수집 후 `write`로 기록.
 
@@ -280,9 +320,16 @@ class JsonlCorpusSink:
         )
 
     def write(self, path: Path) -> int:
-        """수집분 전체를 JSONL로 기록(기존 파일 전면 교체) — 기록 행 수 반환."""
+        """수집분 전체를 JSONL로 기록(기존 파일 전면 교체) — 기록 행 수 반환.
+
+        기록 직전 전 레코드에 시그니처 태거를 적용한다(`_tagged_record`·S2-06) — 규칙 미해당
+        레코드는 원본 그대로라 기존 문제군의 바이트가 불변이다.
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
-        lines = [json.dumps(_record_to_json(r), ensure_ascii=False) for r in self._records]
+        lines = [
+            json.dumps(_record_to_json(_tagged_record(r)), ensure_ascii=False)
+            for r in self._records
+        ]
         path.write_text("\n".join(lines) + "\n" if lines else "", encoding="utf-8")
         return len(lines)
 
@@ -299,13 +346,19 @@ class BandResult:
 
 @dataclass(frozen=True, slots=True)
 class CorpusBatchReport:
-    """배치 전체 리포트 — 밴드별 결과·총 저장 수·기록 행 수(dry-run이면 None)."""
+    """배치 전체 리포트 — 밴드별 결과·총 저장 수·기록 행 수(dry-run이면 None).
+
+    `review_outcomes`는 전 밴드에서 *비수용*(수용/적재 안 됨)으로 판정된 GenerationOutcome을
+    누적한 것 — needs_review 후보의 사람 검수·거부 후보 진단·임계값 보정 입력(휘발 방지·후보+근거
+    보존). `to_json`엔 카운트만 싣는다(outcome 객체는 워크리스트 렌더 전용).
+    """
 
     bands: list[BandResult]
     total_requested: int
     total_stored: int
     written: int | None
     out_path: str
+    review_outcomes: list[GenerationOutcome] = field(default_factory=list)
 
     @property
     def fulfilled(self) -> bool:
@@ -328,6 +381,7 @@ class CorpusBatchReport:
             "written": self.written,
             "out_path": self.out_path,
             "fulfilled": self.fulfilled,
+            "review_outcomes_count": len(self.review_outcomes),
         }
 
 
@@ -351,6 +405,7 @@ def run_corpus_batch(
     arith_sum_n: int = _DEFAULT_ARITH_SUM_N,
     geo_sum_n: int = _DEFAULT_GEO_SUM_N,
     trig_eq_n: int = _DEFAULT_TRIG_EQ_N,
+    seq_inductive_n: int = _DEFAULT_SEQ_INDUCTIVE_N,
     write: bool = True,
 ) -> CorpusBatchReport:
     """밴드 배치 실행 — 문제군별 signature_index·밴드별 스펙 정합·JSONL 기록(순수 결정론).
@@ -367,6 +422,28 @@ def run_corpus_batch(
     codes = build_distractor_codes()
     mc_target_ids = frozenset(misconception_id for misconception_id, _ in codes.values())
     mc_variants: frozenset[str] = frozenset({"multiple_choice", "sqrt_multiple_choice"})
+
+    # 비수용 outcome 포착(휘발 방지) — 밴드 블록을 *건드리지 않고* orchestrator `run_batch`를
+    # 얇은 로컬 래퍼로 감싼다. 아래 모든 밴드의 `run_batch(...)` 호출이 이름해석상 이 래퍼로
+    # 잡혀(모듈 import는 `_orchestrator_run_batch`), 수용 외 outcome만 `review_outcomes`에 쌓는다.
+    # 반환·수율·리포트는 원본 그대로(side-effect는 누적뿐·결정론/바이트 동일 불변).
+    review_outcomes: list[GenerationOutcome] = []
+
+    def run_batch(
+        spec: EquivalenceSpec,
+        generator: EquivalentProblemGenerator,
+        n: int,
+        *,
+        signature_index: MutableSet[str],
+        store: ProblemBankSink,
+    ) -> list[GenerationOutcome]:
+        outcomes = _orchestrator_run_batch(
+            spec, generator, n, signature_index=signature_index, store=store
+        )
+        review_outcomes.extend(
+            o for o in outcomes if o.status not in ("accepted_stored", "accepted")
+        )
+        return outcomes
 
     sink = JsonlCorpusSink()
     signature_index: set[str] = set()
@@ -645,6 +722,15 @@ def run_corpus_batch(
             _TRIG_EQ_STANDARD_CODE,
             _TRIG_EQ_SPEC_DIFFICULTY,
         ),
+        (
+            # 귀납 정의 수열(S2-06) — (가)(나) 조건 나열 + 점화식 발문. 시그니처 태거의 실제
+            # 양성 밴드. **마지막 밴드**로 append해 기존 코퍼스 590행 뒤에 붙는다(diff 최소).
+            "seq-inductive",
+            InductiveSequenceSkeletonGenerator,
+            seq_inductive_n,
+            _INDSEQ_STANDARD_CODE,
+            _INDSEQ_SPEC_DIFFICULTY,
+        ),
     ):
         if seq_count <= 0:
             continue
@@ -687,6 +773,7 @@ def run_corpus_batch(
         total_stored=total_stored,
         written=written,
         out_path=str(resolved_out),
+        review_outcomes=review_outcomes,
     )
 
 
@@ -767,7 +854,19 @@ def main(argv: list[str] | None = None) -> int:
         default=_DEFAULT_TRIG_EQ_N,
         help="삼각방정식(sin/cos x=v·0°≤x<360°·작은/큰 해) 단답형 수.",
     )
+    parser.add_argument(
+        "--seq-inductive",
+        type=int,
+        default=_DEFAULT_SEQ_INDUCTIVE_N,
+        help="귀납 정의 수열((가)(나) 조건 나열+점화식·aₖ 값) 단답형 수 — 시그니처 양성 밴드.",
+    )
     parser.add_argument("--dry-run", action="store_true", help="파일 미기록 — 수율·리포트만 확인.")
+    parser.add_argument(
+        "--worklist-out",
+        type=Path,
+        default=None,
+        help="비수용 후보(검수필요·거부) 워크리스트 마크다운 경로(선택·미지정 시 미생성).",
+    )
     args = parser.parse_args(argv)
 
     report = run_corpus_batch(
@@ -789,8 +888,17 @@ def main(argv: list[str] | None = None) -> int:
         arith_sum_n=args.arith_sum,
         geo_sum_n=args.geo_sum,
         trig_eq_n=args.trig_eq,
+        seq_inductive_n=args.seq_inductive,
         write=not args.dry_run,
     )
+    if args.worklist_out is not None:  # 비수용 후보 워크리스트 산출(선택·off by default)
+        worklist_md = render_worklist_markdown(
+            build_worklist(report.review_outcomes),
+            total_outcomes=report.total_requested,
+        )
+        worklist_path = Path(args.worklist_out)
+        worklist_path.write_text(worklist_md, encoding="utf-8")
+
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 0 if report.fulfilled else 1

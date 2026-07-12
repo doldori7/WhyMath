@@ -9,6 +9,8 @@ Overlay가 실제로 서는지 본다. CI `backend — 마이그레이션·통�
   ① 적재 → `curriculum_entry` row 존재·entry_id=`{concept_id}:KR`·매핑 필드 반영(domain_label·
      grade_band·introduced_grade·national_standard_codes·confidence·KR 상수)
   ② 멱등 — 같은 셀 재적재 시 행 1개·값 갱신·**created_at 보존**(updated_at은 갱신)
+  ③ 원자 축(S2-07) — 크로스워크 유도 원자-키 행 적재 → `CurriculumDepthResolver.resolve_many
+     ([원자코드])` hit(acceptance 직접 실증) + 멱등(2회 populate 행 수 안정)
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ import pytest
 from whymath_backend.config import Settings
 from whymath_backend.l1.curriculum.curriculum_loader import (
     load_kr_curriculum_entries_from_graph_json,
+    load_kr_curriculum_entries_with_atoms,
     populate_kr_curriculum_entries,
 )
 
@@ -173,6 +176,67 @@ class TestCurriculumEntryRoundtrip:
             assert resolver.resolve("HIGH-CALC-UNMAPPED-941", country_code="KR") is None
         finally:
             _cleanup([_ENTRY_ID])
+
+    def test_atom_axis_rows_hit_depth_resolver_and_idempotent(self, tmp_path: Path) -> None:
+        """원자 축(S2-07) acceptance 직접 실증 — 원자-키 행 적재 → resolver 원자코드 hit + 멱등.
+
+        S2-03 이후 gating 깊이 조인(`_fetch_problem_concept_codes` → resolver)이 모으는 코드는
+        *원자 코드*다 — 크로스워크 전파로 유도한 원자-키 curriculum_entry 행이 적재되면
+        `CurriculumDepthResolver.resolve_many([원자코드])`가 hit해 L6 깊이정렬 신호가 복원됨을
+        실 PG로 입증한다. 2회 populate에도 행 수가 안정(멱등 — entry_id ON CONFLICT)함을 함께
+        동결한다.
+        """
+        _skip_if_unreachable()
+        from sqlalchemy import text
+
+        from whymath_backend.l1.curriculum.curriculum_resolve import CurriculumDepthResolver
+        from whymath_backend.schema.enums import RequiredDepth
+
+        # 통합테스트 전용 원자 코드(실 데이터와 충돌하지 않도록 9xx 순번) — 크로스워크 유도 대상.
+        atom_codes = ["12미적02-95-1", "12미적02-95-2"]
+        entry_ids = [_ENTRY_ID, *[f"{code}:KR" for code in atom_codes]]
+        crosswalk = tmp_path / "crosswalk.jsonl"
+        crosswalk.write_text(
+            json.dumps(
+                {
+                    "concept_id": _NID,
+                    "atom_codes": atom_codes,
+                    "primary_atom_code": atom_codes[0],
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        try:
+            canonical, atoms = load_kr_curriculum_entries_with_atoms(
+                _graph(tmp_path), crosswalk, now=_NOW
+            )
+            count = populate_kr_curriculum_entries([*canonical, *atoms], settings=Settings())
+            assert count == 3  # canonical 1 + 원자 2
+
+            # acceptance — resolver가 *원자 코드*로 깊이를 복원한다(고등학교 → mastery 승계).
+            resolver = CurriculumDepthResolver()
+            depth_by_code = resolver.resolve_many(atom_codes, country_code="KR")
+            assert depth_by_code == {code: RequiredDepth.mastery for code in atom_codes}
+
+            # 멱등 — 2회 populate에도 행 수 안정(entry_id ON CONFLICT upsert).
+            canonical2, atoms2 = load_kr_curriculum_entries_with_atoms(
+                _graph(tmp_path), crosswalk, now=_LATER
+            )
+            populate_kr_curriculum_entries([*canonical2, *atoms2], settings=Settings())
+            engine = _sync_engine()
+            try:
+                with engine.connect() as conn:  # type: ignore[attr-defined]
+                    n = conn.execute(
+                        text("SELECT count(*) FROM curriculum_entry WHERE entry_id = ANY(:ids)"),
+                        {"ids": entry_ids},
+                    ).scalar_one()
+                assert n == 3  # 재적재에도 행 수 동일(멱등)
+            finally:
+                engine.dispose()  # type: ignore[attr-defined]
+        finally:
+            _cleanup(entry_ids)
 
     def test_reload_preserves_created_at_updates_updated_at(self, tmp_path: Path) -> None:
         _skip_if_unreachable()

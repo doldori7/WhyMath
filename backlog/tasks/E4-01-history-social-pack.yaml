@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E4-01-history-social-pack
+title: "역사·사회 팩 — 통합사회 진입 (경제·역사·세계사, 사건 네트워크·Polya 역사 대응)"
+track: subject-expansion
+stage: E4
+subject: social
+layer: data-pipeline
+status: todo
+priority: 1
+owner: claude
+depends_on:
+  - E3-01-biology-pack
+requires_gates: []
+acceptance:
+  - "서술형 근거-주장 평가 검수자 일치율 실측 + 사료 라이선스 법무 확인"
+artifacts: []
+session: null
+notes: "경제학·역사·세계사는 이 팩의 하위 코퍼스 (subject 세분: economics/history/world-history)"
+updated: 2026-07-08

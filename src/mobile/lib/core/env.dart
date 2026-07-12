@@ -14,4 +14,11 @@ class Env {
 
   /// 에러 리포팅 DSN(옵션) — 미주입 시 빈 문자열(리포팅 비활성).
   static const String sentryDsn = String.fromEnvironment('SENTRY_DSN');
+
+  /// 시연 전용 사전주입 토큰(S1 실기기 시연 게이트 ①) — `--dart-define=DEMO_TOKEN=...`.
+  ///
+  /// 실 로그인 webview(OAuth-c3)가 미배선이라 보호 엔드포인트가 401로 막히는데, 시연에선 이
+  /// 토큰을 주입해 인증 상태로 부팅한다(`AuthController.restore`가 저장소에 심어 인증). 미주입
+  /// 시 빈 문자열 → prod 빌드는 이 define을 넘기지 않으므로 항상 빈 값(시연 경로 미실행·누출 없음).
+  static const String demoToken = String.fromEnvironment('DEMO_TOKEN');
 }

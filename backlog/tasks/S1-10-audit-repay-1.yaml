@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S1-10-audit-repay-1
+title: "감사 상환 #1 (라이브 선행분)"
+track: math-completion
+stage: S1
+subject: math
+layer: backend
+status: done
+priority: 1
+owner: claude
+depends_on: []
+requires_gates:
+  - G-phaiakes9-key
+acceptance:
+  - "s1_structure_audit_2026-07.md 상환 #1 항목 해소 + 테스트 green"
+artifacts:
+  - "감사 #1(G3 검증 게이트) = 2026-07-08 게이트③ 코드 상환 완료 (커밋 #487·test_gate3_student_verification_governance.py) — 본 세션 재검증 11 passed. coach→하네스 전면 수렴은 S1-11로 분리(감사문서 명시·게이트③ 블로커 아님)"
+session: null
+notes: "ROADMAP S1 대기(라이브 선행) 목록"
+updated: 2026-07-09

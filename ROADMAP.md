@@ -249,9 +249,14 @@
 3. 1개 우선순위로 좁히기 (병렬 작업 금지)
 4. 2~4주 시도 → 재평가
 
+### 검토 주기 — 시스템 우월성 유지(SSM)
+- **분기별 기술 지평 스캔**(3개월) + **즉시 트리거**(비용·지연·정확도 드리프트·경쟁 신제품·법 개정)로 새 기술·데이터 트렌드를 능동 스캔하고 도입을 게이트로 관리 — 상시 붕괴 방어(reactive)와 상보. 표준: `docs/standards/system_superiority_maintenance.md`.
+
 ---
 
 ## 📍 현재 위치 (2026-07-05)
+
+> **기계가독 정본은 `backlog/`** (`python3 scripts/harness/backlog.py status`) — 이 절은 서사적 요약이며, 수치·다음 작업은 빌드 하네스가 정본이다 (`docs/standards/build_harness.md`).
 
 **Phase 1 MVP 심화 개발 중.** 로드맵 정본은 `docs/strategy/status_roadmap_2026-07.md`(S0~S5 단계·병목 Top 5·단계별 AI 질문 리스트). 아래 S0~S5는 그 요약이며, 상세·체크리스트·탈출 게이트는 정본 문서 참조.
 

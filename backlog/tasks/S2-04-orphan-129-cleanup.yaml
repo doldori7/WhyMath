@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S2-04-orphan-129-cleanup
+title: 원자 그래프 orphan 129건 정리
+track: math-completion
+stage: S2
+subject: math
+layer: data-pipeline
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates:
+  - G-orphan-prod-run
+acceptance:
+  - "prod 진단 결과 기반 orphan 정리 + cleanup_atom_orphans.py 실행 기록"
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

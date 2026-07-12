@@ -1,0 +1,45 @@
+plugins {
+    id "com.android.application"
+    id "kotlin-android"
+    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
+    id "dev.flutter.flutter-gradle-plugin"
+}
+
+android {
+    namespace = "app.whymath.korean_math_app"
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = flutter.ndkVersion
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    defaultConfig {
+        // 잠정 applicationId — 앱 ID 등 코드 식별자 일괄 rename은 별도 작업(MEMORY 결정 로그
+        // 2026-06 "코드 식별자 마이그레이션 영향 검토 후 일괄 변경"). 스토어 배포 전까지 변경 자유.
+        applicationId = "app.whymath.korean_math_app"
+        // minSdk 23 — flutter 기본(21)보다 올림: firebase 계열(BoM 상향 대비)·플러그인 여유·
+        // 시연 기기(API 31)와 실사용층(중·고생 최신 기기) 기준 손실 없음.
+        minSdk = 23
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
+    }
+
+    buildTypes {
+        release {
+            // TODO: Add your own signing config for the release build.
+            // Signing with the debug keys for now, so `flutter run --release` works.
+            signingConfig = signingConfigs.debug
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}

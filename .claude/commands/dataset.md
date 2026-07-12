@@ -171,3 +171,6 @@ argument-hint: "[소스명] 예: ncic, school-info, kice-past-exams"
 ❌ 사용자 데이터 *동의 없이* 학습용 활용  
 ❌ 미성년자 PII를 분석·마케팅에 사용  
 ❌ 출처 표시 의무 무시
+
+## 빌드 하네스 연동
+작업이 backlog 태스크에 대응한다면, 완료 시 `python3 scripts/harness/backlog.py done <id> --artifact <커밋/PR>` 로 상태를 갱신한다.

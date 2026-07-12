@@ -11,6 +11,8 @@ CI hermetic 잡엔 PostgreSQL이 없으므로 `CurriculumEntryStore`/`populate_k
   ② upsert SQL 구성 — ON CONFLICT(entry_id) upsert·created_at는 SET에서 제외(보존)·updated_at은
      SET에 포함(갱신)
   ③ populate — 전 셀 upsert(횟수=dedup 후 수)·입력 내 entry_id 중복 dedup
+  ④ 원자 축 유도(S2-07) — 크로스워크 전파(atom_codes 전체·최심 승계·사전순 tie-break)·미매핑
+     원자 행 0·canonical 존치·결정론·실 코퍼스 원자 행 수 하한 동결(드리프트 감지)
 """
 
 from __future__ import annotations
@@ -20,9 +22,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import TracebackType
 
+from whymath_backend.l1.concept_atom_crosswalk.transfer import (
+    CrosswalkRecord,
+    load_crosswalk_records,
+)
 from whymath_backend.l1.curriculum.curriculum_loader import (
     CurriculumEntryStore,
+    derive_atom_curriculum_entries,
     load_kr_curriculum_entries_from_graph_json,
+    load_kr_curriculum_entries_with_atoms,
     populate_kr_curriculum_entries,
 )
 
@@ -315,3 +323,255 @@ class TestPopulate:
         count = populate_kr_curriculum_entries(entries, store=store)  # type: ignore[arg-type]
         assert count == 1
         assert len(engine.executed) == 1
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ④ 원자 축 유도(S2-07) — 크로스워크 전파·충돌 규칙·결정론·실 코퍼스 하한
+# ──────────────────────────────────────────────────────────────────────────
+# 레포 루트 앵커(tests/backend/l1/ → parents[3]) — CWD 상대 경로는 CI(cwd=src/backend)에서 깨진다
+# (atom_probe·relink governance `_ROOT` 선례). 실 코퍼스 하한 동결 테스트가 사용.
+_ROOT = Path(__file__).resolve().parents[3]
+_REAL_GRAPH = _ROOT / "data" / "corpus" / "concept_graph_v1" / "graph.json"
+_REAL_CROSSWALK = _ROOT / "data" / "corpus" / "concept_atom_crosswalk_v1" / "crosswalk.jsonl"
+
+
+def _canonical(
+    tmp_path: Path,
+    specs: list[dict[str, object]],
+) -> list[object]:
+    """graph.json 스펙 목록 → 검증된 canonical KR 셀 목록(기존 로더 경유·헬퍼).
+
+    각 spec은 최소 concept_id를 담고, grade_band_hint(깊이 휴리스틱 축)·domain(승자 구분 축)·
+    standard_codes를 선택적으로 덮어쓴다. 유도 테스트의 원천 셀을 실제 로더 산출물로 만들어
+    schema 검증(불변식 게이트)을 그대로 통과시킨다.
+    """
+    concepts = [
+        {
+            "concept_id": spec["concept_id"],
+            "name_ko": "x",
+            "domain": spec.get("domain", "d"),
+            "grade_band_hint": spec.get("grade_band_hint", "고등학교"),
+            "standard_codes": spec.get("standard_codes", []),
+            "review_status": "reviewed",
+        }
+        for spec in specs
+    ]
+    path = tmp_path / "graph_atoms.json"
+    path.write_text(
+        json.dumps({"concepts": concepts, "edges": []}, ensure_ascii=False), encoding="utf-8"
+    )
+    return list(load_kr_curriculum_entries_from_graph_json(path, now=_NOW))
+
+
+class TestDeriveAtomEntries:
+    def test_propagates_to_all_atoms_with_inherited_fields(self, tmp_path: Path) -> None:
+        """매핑 concept의 atom_codes *전체*에 전파 — 원자별 entry_id `{원자}:KR`·필드 승계."""
+        canonical = _canonical(
+            tmp_path,
+            [{"concept_id": "math.calc.c1", "standard_codes": ["[12미적01-01]"]}],
+        )
+        records = [
+            CrosswalkRecord(
+                concept_id="math.calc.c1",
+                atom_codes=("12미적01-01-1", "12미적01-01-2", "12미적01-01-3"),
+                primary_atom_code="12미적01-01-2",
+            )
+        ]
+        atoms = derive_atom_curriculum_entries(canonical, records)  # type: ignore[arg-type]
+        # primary만이 아니라 atom_codes 3개 전부(방송형 depth 전파 — mastery 배타 귀속과 다름).
+        assert len(atoms) == 3
+        assert [a.concept_id for a in atoms] == [
+            "12미적01-01-1",
+            "12미적01-01-2",
+            "12미적01-01-3",
+        ]
+        for a in atoms:
+            assert a.entry_id == f"{a.concept_id}:KR"  # S1 수학 셀 무접미 규약 승계
+            assert a.country_code == "KR"
+            assert a.subject == "수학"
+            # 원천 셀 승계 — 깊이(고등학교→mastery 휴리스틱)·존재·출처·신뢰도·표준코드.
+            assert a.required_depth == "mastery"
+            assert a.is_present is True
+            assert a.source_url == "https://www.ncic.go.kr"
+            assert a.confidence == 0.9
+            assert a.national_standard_codes == ["[12미적01-01]"]
+            assert a.grade_band == "고등학교"
+
+    def test_conflict_deepest_depth_wins(self, tmp_path: Path) -> None:
+        """복수 canonical → 같은 원자: required_depth 최심 원천 승계(_DEPTH_ORDER 위계)."""
+        canonical = _canonical(
+            tmp_path,
+            [
+                # 중학교 → conceptual(얕음), 고등학교 → mastery(깊음) — 휴리스틱 매핑.
+                {"concept_id": "math.a", "grade_band_hint": "중학교 1~3학년군", "domain": "얕음"},
+                {"concept_id": "math.b", "grade_band_hint": "고등학교", "domain": "깊음"},
+            ],
+        )
+        records = [
+            CrosswalkRecord(
+                concept_id="math.a", atom_codes=("9수01-01-1",), primary_atom_code=None
+            ),
+            CrosswalkRecord(
+                concept_id="math.b", atom_codes=("9수01-01-1",), primary_atom_code=None
+            ),
+        ]
+        atoms = derive_atom_curriculum_entries(canonical, records)  # type: ignore[arg-type]
+        assert len(atoms) == 1
+        assert atoms[0].required_depth == "mastery"  # 최심 승계
+        assert atoms[0].domain_label == "깊음"  # 승자 셀 *전체* 승계(깊이만 아님)
+
+    def test_conflict_none_depth_loses_to_explicit(self, tmp_path: Path) -> None:
+        """depth None(미지 밴드) 원천은 명시 깊이 원천에 진다 — 신호 보존(미상이 덮어쓰기 금지)."""
+        canonical = _canonical(
+            tmp_path,
+            [
+                {"concept_id": "math.z", "grade_band_hint": "대학교", "domain": "미상"},  # None
+                {"concept_id": "math.a", "grade_band_hint": "초등학교 1~2학년군", "domain": "명시"},
+            ],
+        )
+        records = [
+            CrosswalkRecord(
+                concept_id="math.z", atom_codes=("2수01-01-1",), primary_atom_code=None
+            ),
+            CrosswalkRecord(
+                concept_id="math.a", atom_codes=("2수01-01-1",), primary_atom_code=None
+            ),
+        ]
+        atoms = derive_atom_curriculum_entries(canonical, records)  # type: ignore[arg-type]
+        assert len(atoms) == 1
+        # awareness(최저 명시 깊이)라도 None(신호 없음)을 이긴다.
+        assert atoms[0].required_depth == "awareness"
+        assert atoms[0].domain_label == "명시"
+
+    def test_conflict_tie_breaks_by_source_concept_id_lexicographic(self, tmp_path: Path) -> None:
+        """동순위 깊이 충돌 — 원천 concept_id 사전순 앞선 셀 승계(결정론)."""
+        canonical = _canonical(
+            tmp_path,
+            [
+                {"concept_id": "math.bbb", "domain": "뒤"},  # 둘 다 고등학교 → mastery 동순위
+                {"concept_id": "math.aaa", "domain": "앞"},
+            ],
+        )
+        records = [
+            CrosswalkRecord(
+                concept_id="math.bbb", atom_codes=("10공수1-01-1",), primary_atom_code=None
+            ),
+            CrosswalkRecord(
+                concept_id="math.aaa", atom_codes=("10공수1-01-1",), primary_atom_code=None
+            ),
+        ]
+        atoms = derive_atom_curriculum_entries(canonical, records)  # type: ignore[arg-type]
+        assert len(atoms) == 1
+        assert atoms[0].domain_label == "앞"  # 사전순 "math.aaa" < "math.bbb"
+
+    def test_unmapped_and_missing_yield_zero_atoms(self, tmp_path: Path) -> None:
+        """미매핑(atom_codes 빈)·canonical 셀 없는 크로스워크 concept — 원자 행 0(날조 금지)."""
+        canonical = _canonical(tmp_path, [{"concept_id": "math.only.canonical"}])
+        records = [
+            # canonical은 있으나 크로스워크 미매핑(unmapped) — 강제 귀속 금지.
+            CrosswalkRecord(
+                concept_id="math.only.canonical", atom_codes=(), primary_atom_code=None
+            ),
+            # 크로스워크에만 있고 canonical 셀 없음 — 원천 신호 부재.
+            CrosswalkRecord(
+                concept_id="math.ghost", atom_codes=("9수01-99-1",), primary_atom_code=None
+            ),
+        ]
+        assert derive_atom_curriculum_entries(canonical, records) == []  # type: ignore[arg-type]
+
+    def test_canonical_entries_are_not_mutated(self, tmp_path: Path) -> None:
+        """유도는 canonical 셀을 변경하지 않는다(원자 행은 *추가* 축·in-place 오염 금지)."""
+        canonical = _canonical(tmp_path, [{"concept_id": "math.keep"}])
+        before = [e.model_dump() for e in canonical]  # type: ignore[attr-defined]
+        records = [
+            CrosswalkRecord(
+                concept_id="math.keep", atom_codes=("10공수1-02-1",), primary_atom_code=None
+            )
+        ]
+        derive_atom_curriculum_entries(canonical, records)  # type: ignore[arg-type]
+        assert [e.model_dump() for e in canonical] == before  # type: ignore[attr-defined]
+
+    def test_derivation_is_deterministic(self, tmp_path: Path) -> None:
+        """같은 입력 2회 유도 — 동일 산출(entry_id 정렬·승자 결정론). 입력 순서 뒤집어도 동일."""
+        canonical = _canonical(
+            tmp_path,
+            [
+                {"concept_id": "math.p", "grade_band_hint": "중학교 1~3학년군"},
+                {"concept_id": "math.q", "grade_band_hint": "고등학교"},
+            ],
+        )
+        records = [
+            CrosswalkRecord(
+                concept_id="math.p", atom_codes=("9수01-05-1", "9수01-05-2"), primary_atom_code=None
+            ),
+            CrosswalkRecord(
+                concept_id="math.q", atom_codes=("9수01-05-2", "9수01-05-3"), primary_atom_code=None
+            ),
+        ]
+        first = derive_atom_curriculum_entries(canonical, records)  # type: ignore[arg-type]
+        second = derive_atom_curriculum_entries(canonical, list(reversed(records)))  # type: ignore[arg-type]
+        assert [e.model_dump() for e in first] == [e.model_dump() for e in second]
+        assert [e.entry_id for e in first] == sorted(e.entry_id for e in first)  # 정렬 산출
+
+    def test_assembly_returns_canonical_plus_atoms(self, tmp_path: Path) -> None:
+        """조립 함수 — canonical(기존 로더와 동일 산출·무변경) + 원자 행을 함께 반환."""
+        graph = tmp_path / "g.json"
+        graph.write_text(
+            json.dumps(
+                {
+                    "concepts": [
+                        {
+                            "concept_id": "math.asm",
+                            "name_ko": "x",
+                            "domain": "d",
+                            "grade_band_hint": "고등학교",
+                            "standard_codes": [],
+                            "review_status": "reviewed",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        crosswalk = tmp_path / "cw.jsonl"
+        crosswalk.write_text(
+            json.dumps(
+                {
+                    "concept_id": "math.asm",
+                    "atom_codes": ["10공수1-03-1", "10공수1-03-2"],
+                    "primary_atom_code": "10공수1-03-1",
+                },
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        canonical, atoms = load_kr_curriculum_entries_with_atoms(graph, crosswalk, now=_NOW)
+        # canonical은 기존 로더 산출과 동일(하위호환 — 기존 함수 무변경).
+        plain = load_kr_curriculum_entries_from_graph_json(graph, now=_NOW)
+        assert [e.model_dump() for e in canonical] == [e.model_dump() for e in plain]
+        assert [a.concept_id for a in atoms] == ["10공수1-03-1", "10공수1-03-2"]
+        assert all(a.required_depth == "mastery" for a in atoms)
+
+    def test_real_corpus_atom_floor_frozen(self) -> None:
+        """실 코퍼스(graph.json+crosswalk.jsonl) 유도 — 원자 행 수 하한 동결(드리프트 감지).
+
+        2026-07-09 실측: canonical 437 셀 → 유도 원자 행 1,324개(크로스워크 전 437 concept 매핑·
+        고유 원자 1,324). 코퍼스 재유도로 수치가 내려가면 여기서 잡는다(relink governance ⑤
+        하한 동결 스타일 — 소스는 repo 커밋 코퍼스라 hermetic·PG 불요).
+        """
+        assert _REAL_GRAPH.exists(), f"실 코퍼스 부재: {_REAL_GRAPH}"
+        assert _REAL_CROSSWALK.exists(), f"실 코퍼스 부재: {_REAL_CROSSWALK}"
+        canonical = load_kr_curriculum_entries_from_graph_json(_REAL_GRAPH, now=_NOW)
+        atoms = derive_atom_curriculum_entries(canonical, load_crosswalk_records(_REAL_CROSSWALK))
+        assert (
+            len(canonical) >= 437
+        ), f"canonical {len(canonical)} < 하한 437(코퍼스 축소 드리프트?)"
+        assert len(atoms) >= 1324, f"원자 행 {len(atoms)} < 하한 1324(코퍼스 축소 드리프트?)"
+        # entry_id 유일(원자당 1셀·충돌 승자 단일) + 무접미 `{원자}:KR` 규약.
+        entry_ids = [a.entry_id for a in atoms]
+        assert len(set(entry_ids)) == len(entry_ids)
+        assert all(eid == f"{a.concept_id}:KR" for eid, a in zip(entry_ids, atoms, strict=True))
+        # canonical 키 공간(`math.*`)과 원자 키 공간 무교차 — 축 분리 보존(덮어쓰기 오염 0).
+        assert not any(a.concept_id.startswith("math.") for a in atoms)

@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: E2-01-chemistry-pack
+title: "화학 팩 6단계 — 플레이북 첫 재실행 (한계비용 50% 이하 실증)"
+track: subject-expansion
+stage: E2
+subject: chemistry
+layer: data-pipeline
+status: todo
+priority: 1
+owner: claude
+depends_on:
+  - E1-01-dimensional-consistency
+  - E1-02-problem-subject-area
+  - E1-03-phy-area-registration
+  - E1-04-physics-misconception-seed
+requires_gates: []
+acceptance:
+  - "6단계 소요 실측이 E1 대비 50~60% + 통합과학 cross-subject 진단 작동"
+artifacts: []
+session: null
+notes: ""
+updated: 2026-07-08

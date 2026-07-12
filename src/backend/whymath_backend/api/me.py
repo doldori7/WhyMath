@@ -47,9 +47,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal, TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._auth import ConsentedUser, CurrentUser
@@ -99,7 +99,9 @@ from whymath_backend.l2.prerequisite_recommendation import (
     PrerequisiteGap,
     recommend_prerequisite_gaps,
 )
-from whymath_backend.l2.skill_mastery_tracking import record_problem_attempt_skill_mastery
+from whymath_backend.l2.skill_mastery_tracking import (
+    record_problem_attempt_skill_mastery,
+)
 from whymath_backend.l2.weak_concept_recommendation import (
     WeakConceptRecommendation,
     recommend_weak_concepts,
@@ -107,6 +109,11 @@ from whymath_backend.l2.weak_concept_recommendation import (
 from whymath_backend.l4.calibration_coaching import recommend_calibration_coaching
 from whymath_backend.l4.metacognitive_trigger import CoachingTrigger, recommend_coaching
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
+from whymath_backend.l6.suneung import (
+    METADATA_ONLY_SOURCES,
+    SUNEUNG_EXAM_TYPES,
+    recommend_suneung_index,
+)
 from whymath_backend.privacy import (
     UserDataExport,
     erase_user,
@@ -124,7 +131,12 @@ from whymath_backend.schema.assessment import (
 )
 from whymath_backend.schema.audit import DeletionAudit as DeletionAuditSchema
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
-from whymath_backend.schema.enums import ASSESSED_ROLES, AuditResourceType
+from whymath_backend.schema.enums import (
+    ASSESSED_ROLES,
+    AuditResourceType,
+    Persona,
+    Resolution,
+)
 
 router = APIRouter(prefix="/v1/me", tags=["me"])
 
@@ -1488,6 +1500,18 @@ PrioritizeWeakConcepts = Annotated[
     bool,
     Query(description="true면 BKT 약점 개념(저숙달) 우선 출제(정보량×약점 가중). 기본 false."),
 ]
+# S2-06: ?mode=suneung — 수능 적응 추천(L6 게이팅 × L2 IRT CAT). 미지정(None)이면 기존
+# 기본 CAT(슬라이스 12~17) 경로 그대로(회귀 0). 값 공간은 Literal로 닫는다(오타 → 422).
+NextProblemMode = Annotated[
+    Literal["suneung"] | None,
+    Query(description="응용 모드. 'suneung'=수능 적응 추천(L6 게이팅×IRT CAT). 미지정=기본 CAT."),
+]
+# S2-06: 수능 모드 대상 페르소나 — L6 게이팅(`is_suneung_eligible`)의 판정 축. mode=suneung
+# 에서만 쓰인다(기본 CAT 경로는 무시). 기본 A_일반고고3(MVP 정시 정면 대상 — L6 기본과 동일).
+SuneungPersona = Annotated[
+    Persona,
+    Query(description="수능 모드 대상 페르소나(mode=suneung에서만 사용). 기본 A_일반고고3."),
+]
 
 
 def _weak_concept_weights(
@@ -1509,6 +1533,40 @@ def _weak_concept_weights(
         else:
             weights.append(1.0)
     return weights
+
+
+async def _load_weak_concept_weights(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    candidate_ids: list[uuid.UUID],
+) -> list[float]:
+    """슬라이스 17 약점 가중 *조회 배선* — 숙달 스냅샷·개념 매핑 2쿼리 후 가중치 산출.
+
+    S2-06에서 기존 기본 CAT 경로의 인라인 블록을 헬퍼로 추출했다(동작 무변경) — 기본 CAT과
+    수능 모드(mode=suneung) *양 분기*가 같은 약점 가중을 공유하기 위함이다. 조회 2회:
+      ① 개념별 BKT 숙달 스냅샷(개념당 최신 — DISTINCT ON), ② 후보 문항의 평가 개념 매핑
+      (`ASSESSED_ROLES`만). 순수 산출은 `_weak_concept_weights`에 위임한다.
+    """
+    mastery_stmt = (
+        select(ConceptMasteryHistory.concept_id, ConceptMasteryHistory.mastery)
+        .where(ConceptMasteryHistory.user_id == user_id)
+        .distinct(ConceptMasteryHistory.concept_id)
+        .order_by(
+            ConceptMasteryHistory.concept_id,
+            ConceptMasteryHistory.measured_at.desc(),
+        )
+    )
+    mastery = {
+        cid: float(m) for cid, m in (await session.execute(mastery_stmt)).all() if m is not None
+    }
+    pc_stmt = select(ProblemConcept.problem_id, ProblemConcept.concept_id).where(
+        ProblemConcept.problem_id.in_(candidate_ids),
+        ProblemConcept.role.in_(ASSESSED_ROLES),
+    )
+    problem_concepts: dict[uuid.UUID, set[uuid.UUID]] = {}
+    for pid, cid in (await session.execute(pc_stmt)).all():
+        problem_concepts.setdefault(pid, set()).add(cid)
+    return _weak_concept_weights(candidate_ids, problem_concepts, mastery)
 
 
 class NextProblemResponse(BaseModel):
@@ -1542,6 +1600,8 @@ async def recommend_next_problem(
     user: ConsentedUser,
     session: SessionDep,
     prioritize_weak_concepts: PrioritizeWeakConcepts = False,
+    mode: NextProblemMode = None,
+    persona: SuneungPersona = Persona.A_일반고고3,
 ) -> NextProblemResponse:
     """본인 능력 θ에 *정보량 최대*인 *미응답* 문항을 추천 — IRT CAT(적응형 출제) 루프.
 
@@ -1560,6 +1620,19 @@ async def recommend_next_problem(
     정보량에 가중(`_weak_concept_weights`)을 줘 선택. 즉 "능력에 맞는 난이도" + "약한 개념 우선"을
     동시 만족(CLAUDE.md 약점 진단). 후보 풀 자체는 여전히 θ 근방이라, 약점이라도 난이도가 θ에서
     멀면 풀 밖일 수 있다(풀 확장은 후속). 기본 false면 균등 가중(slice 12~15 동작 보존).
+
+    수능 적응 추천(S2-06·`?mode=suneung`): θ·SE 계산은 공통, *후보 조회·선택만* 분기한다.
+      - SQL 사전필터는 **축소 전용**(저작권 출처 사전배제·수능 신호(기출 유형 ∪ 시그니처 보유)·
+        미응답·θ 근방 50개) — 성능 장치일 뿐, **최종 적격 판정은 `recommend_suneung_index`
+        내부의 `is_suneung_eligible`(L6 진실 게이트)이 재수행**한다(저작권·페르소나 재검증 —
+        사전필터가 느슨해도 부적격이 새지 않는다).
+      - persona_fit-only 적격(기출·시그니처 없이 적합도만 충족) 문항은 사전필터에 안 잡히는
+        *의도적 축소*다 — 현 코퍼스 persona_fit은 전부 {}라 실손실 0(적합도 적재 시 재검토).
+      - 선택은 L6×L2 결합: 수능 우선순위 가중(`suneung_item_weight`) × 약점 가중
+        (`prioritize_weak_concepts` — 기본 CAT과 공유하는 `_load_weak_concept_weights`)을
+        곱해 가중 정보량 최대 문항(`l2.select_weighted_item`)을 고른다.
+      - `persona`는 수능 모드에서만 쓰인다(기본 A_일반고고3). D·E는 게이트에서 전부 차단 →
+        problem_id=null. mode 미지정 경로는 코드 무변경(회귀 0)·응답 모델 동일.
     """
     attempt_stmt = (
         select(
@@ -1589,6 +1662,70 @@ async def recommend_next_problem(
     standard_error = None if math.isinf(se) else se
     measurement_sufficient = standard_error is not None and standard_error <= _TARGET_SE
 
+    # ── S2-06: 수능 적응 추천 분기 — θ·SE는 위 공통, 후보 조회·선택만 다르다. ──
+    if mode == "suneung":
+        # SQL 사전필터 = *축소 전용*(성능 장치). 최종 판정은 recommend_suneung_index 내부의
+        # is_suneung_eligible(진실 게이트)이 재수행한다(핸들러 docstring 참조). 게이팅에
+        # source_type·persona_fit·signature_patterns 등 전 필드가 필요해 ORM 전체 행을 뽑는다.
+        suneung_stmt = select(Problem).where(
+            # 응답 difficulty 노출·b 폴백을 위해 기본 CAT과 동일하게 난이도 라벨 보유만 후보.
+            Problem.difficulty_overall.isnot(None),
+            # 저작권 사전축소 — 본문 미보유 출처(평가원/EBS/교과서)는 SQL에서 미리 배제
+            # (게이트가 어차피 재차단하지만, 차단될 행이 θ 근방 50개 풀을 잠식하지 않게).
+            Problem.source_type.notin_([s.value for s in METADATA_ONLY_SOURCES]),
+            # 수능 신호 사전축소 — 기출 유형(수능/모평/학평) 또는 시그니처 패턴 보유
+            # (signature_patterns는 enum ARRAY — cardinality>0, GIN 인덱스 활용 가능).
+            or_(
+                Problem.exam_type.in_([e.value for e in SUNEUNG_EXAM_TYPES]),
+                func.cardinality(Problem.signature_patterns) > 0,
+            ),
+        )
+        if attempted_ids:
+            suneung_stmt = suneung_stmt.where(Problem.problem_id.notin_(attempted_ids))
+        # θ 근방 정렬·풀 크기는 기본 CAT과 동일(보정 b 우선·휴리스틱 폴백 COALESCE).
+        suneung_stmt = suneung_stmt.order_by(
+            func.abs(
+                func.coalesce(
+                    Problem.irt_difficulty_b,
+                    Problem.difficulty_overall - _DIFFICULTY_MIDPOINT,
+                )
+                - theta
+            )
+        ).limit(_CANDIDATE_POOL_SIZE)
+        candidates = [
+            row.to_schema() for row in (await session.execute(suneung_stmt)).scalars().all()
+        ]
+
+        # 약점 가중(슬라이스 17)은 기본 CAT과 *같은 헬퍼*를 공유 — extra_weights로 곱 결합.
+        extra_weights: list[float] | None = None
+        if prioritize_weak_concepts and candidates:
+            extra_weights = await _load_weak_concept_weights(
+                session, user.user_id, [p.problem_id for p in candidates]
+            )
+        chosen_index = recommend_suneung_index(
+            theta, candidates, persona, extra_weights=extra_weights
+        )
+        if chosen_index is None:
+            # 적격 후보 0(전부 차단·신호 없음·b 없음) — 기본 CAT과 동일한 null 계약.
+            return NextProblemResponse(
+                problem_id=None,
+                theta=theta,
+                difficulty=None,
+                standard_error=standard_error,
+                measurement_sufficient=measurement_sufficient,
+            )
+        picked = candidates[chosen_index]
+        return NextProblemResponse(
+            problem_id=picked.problem_id,
+            theta=theta,
+            # SQL이 difficulty_overall NOT NULL을 보장하나, 스키마 타입(Optional) 정합 방어.
+            difficulty=(
+                None if picked.difficulty_overall is None else float(picked.difficulty_overall)
+            ),
+            standard_error=standard_error,
+            measurement_sufficient=measurement_sufficient,
+        )
+
     # 후보를 θ 근방(|b-θ| 최소)으로 SQL 정렬 — 보정 b(irt_difficulty_b) 우선·없으면 전문가
     # 난이도→logit(difficulty_overall - 중앙값) 폴백(COALESCE). 응답 difficulty 노출을 위해
     # difficulty_overall 보유 문항만 후보(보정-only 문항 후보화는 후속).
@@ -1615,29 +1752,12 @@ async def recommend_next_problem(
     ]
 
     # slice 17: 약점 개념 가중(BKT+IRT 융합) — 후보가 있을 때만 추가 2쿼리로 가중치 산출.
+    # S2-06에서 조회 배선을 `_load_weak_concept_weights`로 추출(수능 분기와 공유·동작 무변경).
     weights: list[float] | None = None
     if prioritize_weak_concepts and candidate_rows:
-        candidate_ids = [pid for pid, _d, _b in candidate_rows]
-        mastery_stmt = (
-            select(ConceptMasteryHistory.concept_id, ConceptMasteryHistory.mastery)
-            .where(ConceptMasteryHistory.user_id == user.user_id)
-            .distinct(ConceptMasteryHistory.concept_id)
-            .order_by(
-                ConceptMasteryHistory.concept_id,
-                ConceptMasteryHistory.measured_at.desc(),
-            )
+        weights = await _load_weak_concept_weights(
+            session, user.user_id, [pid for pid, _d, _b in candidate_rows]
         )
-        mastery = {
-            cid: float(m) for cid, m in (await session.execute(mastery_stmt)).all() if m is not None
-        }
-        pc_stmt = select(ProblemConcept.problem_id, ProblemConcept.concept_id).where(
-            ProblemConcept.problem_id.in_(candidate_ids),
-            ProblemConcept.role.in_(ASSESSED_ROLES),
-        )
-        problem_concepts: dict[uuid.UUID, set[uuid.UUID]] = {}
-        for pid, cid in (await session.execute(pc_stmt)).all():
-            problem_concepts.setdefault(pid, set()).add(cid)
-        weights = _weak_concept_weights(candidate_ids, problem_concepts, mastery)
 
     best = select_weighted_item(theta, items, weights=weights)
     if best is None:
@@ -1739,25 +1859,59 @@ async def delete_my_session(
     )
 
 
+class DialogueEndRequest(BaseModel):
+    """대화 종료 시 세션 결말(resolution) 선택 보고 — `PATCH /v1/me/dialogues/{id}/end` 본문.
+
+    `resolution`은 *클라이언트 보고*다(`AttemptSubmitRequest.is_correct` 동형) — 클라이언트가
+    LTHC 답 미루기 루프를 구동해 세션 결말(자력해결/유도/힌트/풀이공개/포기)의 자연 권위자다.
+    서버는 이를 *영속만* 하고 신호로 판정하지 않는다(정답성·hint_level의 dialogue 귀속·포기
+    영속은 후속 슬라이스). 본문 자체가 선택(미제공 시 `ended_at`만 채우는 기존 동작 보존).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    resolution: Resolution | None = Field(
+        default=None,
+        description="세션 결말(클라이언트 보고·선택). 미제공 시 ended_at만 채움(하위호환).",
+    )
+
+
 @router.patch(
     "/dialogues/{dialogue_id}/end",
     response_model=DialogueSchema,
-    summary="내 Socratic 대화 종료(ended_at 채움)",
+    summary="내 Socratic 대화 종료(ended_at 채움·resolution 선택 보고)",
 )
 async def end_my_dialogue(
     dialogue_id: uuid.UUID,
     user: ConsentedUser,
     session: SessionDep,
+    body: Annotated[DialogueEndRequest | None, Body()] = None,
 ) -> DialogueSchema:
-    """slice 52 (slice 55 리팩터): 본인 Dialogue 종료(`ended_at`=now)·idempotent·404 비누설."""
-    row, _ = await _close_owned_resource(
+    """slice 52 (slice 55 리팩터): 본인 Dialogue 종료(`ended_at`=now)·idempotent·404 비누설.
+
+    resolution(세션 결말·**클라이언트 보고**)을 선택 적재한다 — 서버는 영속만 하고 신호로
+    판정하지 않는다(정답성·hint_level의 dialogue 귀속·포기 영속은 후속). **첫-종결-우선**:
+    이미 resolution이 있으면 보존한다(낙인 방지·`ended_at` idempotency와 동형). resolution은
+    ended_at과 *같은 트랜잭션*에 커밋한다(부분 적용 방지). 이 값은 self_solve_rate 대리 지표
+    (`harness/wh1_evaluation.py` ⑪)의 원천이 된다.
+    """
+    row, newly_closed = await _close_owned_resource(
         session,
         Dialogue,
         dialogue_id,
         user.user_id,
         "ended_at",
         "대화를 찾을 수 없습니다.",
+        commit=False,  # resolution 쓰기와 같은 트랜잭션에 묶어 원자 커밋(부분 적용 방지).
     )
+    # resolution은 클라 보고(선택)·첫 기록 우선 — 이미 있으면 보존(낙인 방지). ended_at 재호출
+    # 후에도 처음 제공되면 채울 수 있다(종료 먼저·결말 나중 보고 허용).
+    resolution_written = False
+    if body is not None and body.resolution is not None and row.resolution is None:
+        row.resolution = body.resolution
+        resolution_written = True
+    if newly_closed or resolution_written:  # 변경이 있을 때만 커밋(완전 idempotent 재호출은 no-op).
+        await session.commit()
     return row.to_schema()
 
 
@@ -1935,17 +2089,17 @@ async def export_my_data(
     return export
 
 
-# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종 + S3 3종 커버리지 맵 — 본인 스코핑) ──
+# ── WH-1 0단계: GET /v1/me/harness-metrics (대리 지표 7종 + S3 4종 커버리지 맵 — 본인 스코핑) ──
 # 설계안 04a §8.4 "0단계 대리 지표 베이스라인 좌석"의 노출 표면. 이제 대리 지표 7종 모두 계측
-# 좌석이 가동(⑦은 근사)이고, S3(status_roadmap §3) 세션 대리 지표 3종(⑧ 답 미루기 도달 깊이·
-# ⑨ BKT 숙달 증가율·⑩ 오개념 해소율)이 기존 신호 재사용으로 편입됐다. 각 지표는 표본 0/부족이면
+# 좌석이 가동(⑦은 근사)이고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
+# ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
 # value=None + status(NO_DATA) + note로 갭을 표면화한다(날조 금지·CLAUDE.md "모르면 모른다").
 # 코호트 전체 집계(user_id=None)는 ops/스크립트가 직접 호출 — 이 엔드포인트는 *본인 집계 신호만*
 # 노출(타 학생 0·admin auth 범위 밖).
 @router.get(
     "/harness-metrics",
     response_model=SurrogateMetrics,
-    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 3종 커버리지 맵)",
+    summary="내 WH-1 0단계 대리 지표(7종 + S3 세션 4종 커버리지 맵)",
 )
 async def get_my_harness_metrics(
     user: ConsentedUser,
@@ -1953,14 +2107,15 @@ async def get_my_harness_metrics(
     since: SinceParam = None,
     until: UntilParam = None,
 ) -> SurrogateMetrics:
-    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 3종 — *본인* 집계의 커버리지 맵.
+    """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 — *본인* 집계의 커버리지 맵.
 
     설계안 04a §8.4 "측정 없는 도입 없음" 0단계 베이스라인. 대리 지표 7종(① verify 통과율·
     ② 진단정확도·③ 세션 완주율·④ 턴당 토큰·⑤ 도움 감소 곡선·⑥ 보정 점수·⑦ 전이 점수[근사])은
-    모두 계측 좌석이 살아 있고, S3(status_roadmap §3) 세션 대리 지표 3종(⑧ 답 미루기 도달 깊이·
-    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율)이 기존 신호 재사용으로 편입됐다. 각 지표는 표본 0/부족이면
+    모두 계측 좌석이 살아 있고, S3(status_roadmap §3) 세션 대리 지표 4종(⑧ 답 미루기 도달 깊이·
+    ⑨ BKT 숙달 증가율·⑩ 오개념 해소율·⑪ 스스로 풀이 도달율)이 편입됐다. 각 지표는 표본 0/부족이면
     value=None + status + note로 "무엇을 만들면 잴 수 있는지"를 정직하게 드러낸다(가짜 0/stub 금지).
-    ⑨는 measured_at·⑩은 updated_at 시간창을 쓰고, 나머지는 started_at/event_at 기준이다.
+    ⑨는 measured_at·⑩은 updated_at·⑪은 started_at(resolution) 시간창을 쓰고, 나머지는
+    started_at/event_at 기준이다. ⑪ resolution은 클라이언트 보고(PATCH .../end 적재·서버 미판정).
 
     `since`/`until`(선택)로 시간창(inclusive·TZ-aware ISO8601·naive·since>until은
     422). user_id는 인증에서 주입(본인 집계만).

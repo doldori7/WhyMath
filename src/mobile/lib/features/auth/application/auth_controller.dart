@@ -6,11 +6,19 @@
 // 여기엔 code만 들어온다. `ChatController`(@riverpod) 패턴을 따른다.
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
+import '../../../core/env.dart';
 import '../../../core/token_store.dart';
 import '../data/auth_api.dart';
 import 'auth_state.dart';
 
 part 'auth_controller.g.dart';
+
+/// 시연 전용 사전주입 토큰 소스(S1 실기기 시연 게이트 ①) — 기본은 컴파일 타임 [Env.demoToken].
+///
+/// 별도 provider로 감싸 (1) `restore()`가 시연 토큰을 *주입 가능한 seam*으로 읽게 하고
+/// (2) 테스트가 dart-define 없이 override로 시연 분기를 검증하게 한다. 미주입(prod 빌드) 시
+/// [Env.demoToken]은 빈 문자열이라 시연 분기는 실행되지 않는다(누출 없음).
+final demoTokenProvider = Provider<String>((ref) => Env.demoToken);
 
 /// 인증 세션을 관리하는 Riverpod Notifier.
 @riverpod
@@ -26,6 +34,15 @@ class AuthController extends _$AuthController {
   /// 미인증으로 처리해 앱이 죽지 않게 한다.
   Future<void> restore() async {
     try {
+      // 시연 전용(S1 게이트 ①): DEMO_TOKEN 주입 시 저장소에 심고 인증한다 — 실 로그인 webview
+      // (OAuth-c3) 미배선 상태에서 실기기 시연 루프를 인증된 채로 부팅한다. prod 빌드는 이
+      // define을 넘기지 않아 빈 값 → 이 분기 미실행(누출 없음). 저장 후엔 인터셉터가 Bearer 첨부.
+      final demoToken = ref.read(demoTokenProvider);
+      if (demoToken.isNotEmpty) {
+        await ref.read(tokenStoreProvider).saveAccessToken(demoToken);
+        state = state.copyWith(isAuthenticated: true);
+        return;
+      }
       final token = await ref.read(tokenStoreProvider).readAccessToken();
       if (token != null && token.isNotEmpty) {
         state = state.copyWith(isAuthenticated: true);

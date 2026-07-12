@@ -17,6 +17,11 @@
 *.sh        text eol=lf
 *.bash      text eol=lf
 
+# PowerShell — Windows 실행 환경. CRLF 고정(Windows 관례) + UTF-8 BOM은 파일 내용이라 보존된다.
+#   (BOM 없으면 Windows PowerShell 5.1이 .ps1을 시스템 코드페이지로 읽어 비ASCII(한글)가 깨져
+#    파서 오류. BOM은 이 변환과 무관하게 유지됨.)
+*.ps1       text eol=crlf
+
 # Python — Linux/macOS 빌드 호환 (Windows 에서도 LF 동작)
 *.py        text eol=lf
 *.pyi       text eol=lf
@@ -36,6 +41,7 @@
 #   주의: 같은 항목을 양쪽이 수정하면 중복 라인이 남을 수 있으므로 "새 항목은 파일 끝에
 #   append" 관행을 지킬 것 (docs/standards/parallel_sessions.md 참조).
 MEMORY.md   merge=union
+backlog/events.ndjson   merge=union
 
 # 바이너리 — 변환·diff 금지
 *.png       binary
