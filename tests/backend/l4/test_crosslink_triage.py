@@ -130,11 +130,11 @@ class TestCommittedQueueEndToEnd:
         )
 
     def test_committed_bucket_counts(self) -> None:
-        # 커밋 큐 e2e — 29/34 커버 상태의 버킷 분포 동결(coverage 확장의 산출·Tier C 2 kebab 등장).
+        # 커밋 큐 e2e — 32/34 커버 상태의 버킷 분포 동결(Tier C 5 kebab 등장).
         report = self._run()
         assert report.counts == {  # type: ignore[attr-defined]
-            "corroborated": 64,
-            "no_signal": 12,
+            "corroborated": 70,
+            "no_signal": 6,
             "auto_reject": 4,
             "thin_disagree": 1,
         }

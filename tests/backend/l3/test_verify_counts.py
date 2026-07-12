@@ -7,6 +7,9 @@
 from __future__ import annotations
 
 from whymath_backend.l3.verify_answer import (
+    verify_conditional_equal,
+    verify_congruent_by_ratio,
+    verify_dot_product_scalar,
     verify_events_independent,
     verify_extremum_count,
     verify_geometric_convergence,
@@ -230,3 +233,59 @@ class TestEventsIndependent:
 
     def test_non_count_claim_unverifiable(self) -> None:
         assert verify_events_independent("1/3,1/4,0", "3").state == "unverifiable"
+
+
+class TestConditionalEqual:
+    def test_asymmetric_not_equal_pass(self) -> None:
+        # P(A)≠P(B) → P(A|B)≠P(B|A)(0).
+        assert verify_conditional_equal("1/2,1/10,9/10", "0").state == "pass"
+
+    def test_misconception_prosecutor_fails(self) -> None:
+        # "P(A|B)=P(B|A)" 오개념 — 0인데 1로 답 → fail.
+        assert verify_conditional_equal("1/2,1/10,9/10", "1").state == "fail"
+
+    def test_symmetric_when_equal_marginals(self) -> None:
+        # P(A)=P(B) → 대칭(1).
+        assert verify_conditional_equal("1/2,1/2,1/3", "1").state == "pass"
+
+    def test_zero_marginal_unverifiable(self) -> None:
+        assert verify_conditional_equal("0,1/2,1/3", "0").state == "unverifiable"
+
+    def test_non_count_claim_unverifiable(self) -> None:
+        assert verify_conditional_equal("1/2,1/10,9/10", "2").state == "unverifiable"
+
+
+class TestCongruentByRatio:
+    def test_ratio_not_one_not_congruent_pass(self) -> None:
+        # 닮음비≠1 → 비합동(0).
+        assert verify_congruent_by_ratio("3/2", "0").state == "pass"
+
+    def test_misconception_similar_implies_congruent_fails(self) -> None:
+        # "닮으면 합동" 오개념 — 0인데 1로 답 → fail.
+        assert verify_congruent_by_ratio("3/2", "1").state == "fail"
+
+    def test_ratio_one_congruent(self) -> None:
+        assert verify_congruent_by_ratio("1", "1").state == "pass"
+        assert verify_congruent_by_ratio("1", "0").state == "fail"
+
+    def test_non_positive_unverifiable(self) -> None:
+        assert verify_congruent_by_ratio("-2", "0").state == "unverifiable"
+
+    def test_non_count_claim_unverifiable(self) -> None:
+        assert verify_congruent_by_ratio("3/2", "2").state == "unverifiable"
+
+
+class TestDotProductScalar:
+    def test_dot_is_scalar_pass(self) -> None:
+        # 내적은 스칼라 → 벡터 아님(0).
+        assert verify_dot_product_scalar("1,2,3,4", "0").state == "pass"
+
+    def test_misconception_dot_is_vector_fails(self) -> None:
+        # "내적은 벡터" 오개념 — 0인데 1로 답 → fail.
+        assert verify_dot_product_scalar("1,2,3,4", "1").state == "fail"
+
+    def test_wrong_arity_unverifiable(self) -> None:
+        assert verify_dot_product_scalar("1,2,3", "0").state == "unverifiable"
+
+    def test_non_count_claim_unverifiable(self) -> None:
+        assert verify_dot_product_scalar("1,2,3,4", "2").state == "unverifiable"

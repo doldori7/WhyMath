@@ -62,6 +62,9 @@ CountTemplateKind = Literal[
     "excluded_point_count",
     "mean_equals_median",
     "events_independent",
+    "conditional_equal",
+    "congruent_by_ratio",
+    "dot_product_scalar",
 ]
 
 # 개수/판정 선지 — 4지선다는 항상 {0,1,2,3}. 판정형(일대일·수렴·극한=함숫값·미분가능)은 0/1을 쓴다.
@@ -79,6 +82,9 @@ _TEMPLATE_META: dict[CountTemplateKind, tuple[str, str]] = {
     "excluded_point_count": ("J0103", "DOMAIN-EXCLUDE"),
     "mean_equals_median": ("J0401", "STAT-MEAN-MEDIAN"),
     "events_independent": ("H:12확통02-05", "PROB-INDEPENDENCE"),
+    "conditional_equal": ("H:12확통02-04", "PROB-CONDITIONAL"),
+    "congruent_by_ratio": ("J0301", "GEOM-SIMILAR-CONGRUENT"),
+    "dot_product_scalar": ("H:12기하03-03", "VEC-DOT-PRODUCT"),
 }
 
 
@@ -131,7 +137,11 @@ def _build_real_root_count_pool() -> tuple[_CountItem, ...]:
                     ),
                     answer_explanation=(
                         f"판별식 D = {b}^2 - 4·{c} = {disc} 이므로 "
-                        + ("중근을 가져 서로 다른 실근은 1개" if disc == 0 else "실근이 없다(0개)")
+                        + (
+                            "중근을 가져 서로 다른 실근은 1개"
+                            if disc == 0
+                            else "실근이 없다(0개)"
+                        )
                         + ". 판별식을 무시하고 늘 2근이라 답하면 틀린다."
                     ),
                     difficulty=_difficulty(b + c),
@@ -483,6 +493,119 @@ def _build_events_independent_pool() -> tuple[_CountItem, ...]:
     return tuple(pool)
 
 
+def _build_conditional_equal_pool() -> tuple[_CountItem, ...]:
+    """P(A)≠P(B)인 조건에서 P(A|B)=P(B|A) 여부 뼈대 풀 — 비대칭만(오개념 정확 표적).
+
+    베이즈로 P(B|A)=P(A|B)P(B)/P(A)라 P(A)≠P(B)면 P(A|B)≠P(B|A)다 — 정답 0. "P(A|B)=P(B|A)"라는
+    오개념(prosecutor-fallacy)은 1로 답해 fail. conditions="P(A),P(B),P(A|B)"·(i≠j) 순회.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for i in range(1, 9):
+        for j in range(1, 9):
+            if i == j:  # P(A)=P(B)면 대칭이라 오개념 표적 아님.
+                continue
+            m = 6  # P(A|B)=6/12=1/2(임의 유효값·대칭 판정은 P(A),P(B)로 결정).
+            conditions = f"{i}/12,{j}/12,{m}/12"
+            if conditions in seen:
+                continue
+            seen.add(conditions)
+            pa, pb, pab = (sympy.Rational(x, 12) for x in (i, j, m))
+            pool.append(
+                _CountItem(
+                    conditions=conditions,
+                    answer_kind="conditional_equal",
+                    answer_str="0",
+                    misc_str="1",
+                    question_text=(
+                        f"P(A) = {pa}, P(B) = {pb}, P(A|B) = {pab} 일 때, "
+                        "P(A|B) = P(B|A) 이면 1, 아니면 0을 쓰시오."
+                    ),
+                    answer_explanation=(
+                        f"베이즈 정리로 P(B|A) = P(A|B)·P(B)/P(A) = {pab * pb / pa} 인데 "
+                        f"P(A|B) = {pab} 와 달라 P(A|B) ≠ P(B|A)다 — 0이다. 둘을 같다고 여기는 "
+                        "검사의 오류에 빠지면 1로 잘못 답한다."
+                    ),
+                    difficulty=_difficulty(i + j),
+                )
+            )
+    return tuple(pool)
+
+
+def _build_congruent_by_ratio_pool() -> tuple[_CountItem, ...]:
+    """닮음비 k=p/q(≠1)인 두 도형의 합동 여부 뼈대 풀 — 닮음비≠1만(오개념 정확 표적).
+
+    합동 ⇔ 닮음비 1인데 k≠1이면 닮았으나 합동이 아니다 — 정답 0. "닮으면 합동"이라는 오개념
+    (similarity-vs-congruence)은 1로 답해 fail. 기약 p/q(p≠q) 순회·conditions dedup.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for q in range(1, 5):
+        for p in range(1, 10):
+            if p == q or gcd(p, q) != 1:
+                continue
+            conditions = f"{p}/{q}"
+            if conditions in seen:
+                continue
+            seen.add(conditions)
+            k_disp = f"{p}/{q}" if q != 1 else f"{p}"
+            pool.append(
+                _CountItem(
+                    conditions=conditions,
+                    answer_kind="congruent_by_ratio",
+                    answer_str="0",
+                    misc_str="1",
+                    question_text=(
+                        f"닮음비가 {k_disp} 인 두 도형이 합동이면 1, 아니면 0을 쓰시오."
+                    ),
+                    answer_explanation=(
+                        f"두 도형이 합동이려면 닮음비가 1이어야 하는데 닮음비가 {k_disp}(≠1)이므로 "
+                        "닮았을 뿐 합동은 아니다 — 0이다. 닮으면 곧 합동이라고 오인하면 1로 잘못 "
+                        "답한다."
+                    ),
+                    difficulty=_difficulty(p + q),
+                )
+            )
+    return tuple(pool)
+
+
+def _build_dot_product_scalar_pool() -> tuple[_CountItem, ...]:
+    """두 벡터의 내적이 벡터인지 뼈대 풀 — 내적은 늘 스칼라(오개념 정확 표적).
+
+    내적 a·b = a1b1+a2b2는 하나의 수(스칼라)라 벡터가 아니다 — 정답 0. "내적은 벡터"라는 오개념
+    (dot-product-is-vector)은 1로 답해 fail. (a1,a2,b1,b2) 순회·conditions dedup.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for a1 in range(1, 4):
+        for a2 in range(1, 4):
+            for b1 in range(1, 4):
+                for b2 in range(1, 4):
+                    conditions = f"{a1},{a2},{b1},{b2}"
+                    if conditions in seen:
+                        continue
+                    seen.add(conditions)
+                    pool.append(
+                        _CountItem(
+                            conditions=conditions,
+                            answer_kind="dot_product_scalar",
+                            answer_str="0",
+                            misc_str="1",
+                            question_text=(
+                                f"두 벡터 a = ({a1}, {a2}), b = ({b1}, {b2}) 의 내적 a·b 가 "
+                                "벡터이면 1, 스칼라(수)이면 0을 쓰시오."
+                            ),
+                            answer_explanation=(
+                                f"내적 a·b = {a1}·{b1} + {a2}·{b2} = {a1 * b1 + a2 * b2} 은 "
+                                "하나의 수(스칼라)라 벡터가 아니다 — 0이다. 내적을 벡터로 여기면 "
+                                "1로 잘못 답한다."
+                            ),
+                            difficulty=_difficulty(a1 + a2 + b1 + b2),
+                        )
+                    )
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "real_root_count": _build_real_root_count_pool,
     "extremum_count": _build_extremum_count_pool,
@@ -494,6 +617,9 @@ _POOL_FACTORY = {
     "excluded_point_count": _build_excluded_point_count_pool,
     "mean_equals_median": _build_mean_equals_median_pool,
     "events_independent": _build_events_independent_pool,
+    "conditional_equal": _build_conditional_equal_pool,
+    "congruent_by_ratio": _build_congruent_by_ratio_pool,
+    "dot_product_scalar": _build_dot_product_scalar_pool,
 }
 
 
@@ -524,7 +650,9 @@ class ConceptualCountMCSkeletonGenerator:
                 "is_one_to_one/geometric_convergence)"
             )
         if not distractor_codes:
-            raise ValueError("distractor_codes 주입 누락 — 오개념 오답 태깅용 id가 필요하다.")
+            raise ValueError(
+                "distractor_codes 주입 누락 — 오개념 오답 태깅용 id가 필요하다."
+            )
         self._misconception_id, self._op_code = next(iter(distractor_codes.values()))
         self._template: CountTemplateKind = template
         self._pool = _POOL_FACTORY[template]()
@@ -550,7 +678,9 @@ class ConceptualCountMCSkeletonGenerator:
             item = self._pool[self._index]
             self._index += 1
             if self._skip is not None:
-                signature = canonical_signature(item.conditions, f"kind:{item.answer_kind}")
+                signature = canonical_signature(
+                    item.conditions, f"kind:{item.answer_kind}"
+                )
                 if signature is not None and signature in self._skip:
                     continue
             return self._assemble(spec, item)
@@ -610,7 +740,9 @@ class ConceptualCountMCSkeletonGenerator:
             concept_tags=list(self._concept_tags),
         )
 
-    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
+    def _stable_slug(
+        self, question_text: str, answer: str, codes: Sequence[str]
+    ) -> str:
         """결정론 안정 slug — 내용 해시(멱등 upsert 키)."""
         payload = "|".join([question_text, answer, ",".join(sorted(codes))])
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]

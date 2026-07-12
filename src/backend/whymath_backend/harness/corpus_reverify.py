@@ -28,6 +28,9 @@ from whymath_backend.l3.equivalent.counterexample_fuzz import fuzz_answer
 from whymath_backend.l3.verify_answer import (
     AnswerVerdict,
     verify_answer,
+    verify_conditional_equal,
+    verify_congruent_by_ratio,
+    verify_dot_product_scalar,
     verify_events_independent,
     verify_extremum_count,
     verify_geometric_convergence,
@@ -42,7 +45,9 @@ from whymath_backend.l3.verify_answer import (
 )
 
 # 개념형 검증기 디스패치 — answer_kind → SymPy 독립 재검증 프리미티브(acceptance와 동일 표·S6).
-_CONCEPTUAL_VERIFIERS: dict[str, Callable[[str | Sequence[str], str], AnswerVerdict]] = {
+_CONCEPTUAL_VERIFIERS: dict[
+    str, Callable[[str | Sequence[str], str], AnswerVerdict]
+] = {
     "real_root_count": verify_real_root_count,
     "extremum_count": verify_extremum_count,
     "is_one_to_one": verify_is_one_to_one,
@@ -53,6 +58,9 @@ _CONCEPTUAL_VERIFIERS: dict[str, Callable[[str | Sequence[str], str], AnswerVerd
     "excluded_point_count": verify_real_root_count,
     "mean_equals_median": verify_mean_equals_median,
     "events_independent": verify_events_independent,
+    "conditional_equal": verify_conditional_equal,
+    "congruent_by_ratio": verify_congruent_by_ratio,
+    "dot_product_scalar": verify_dot_product_scalar,
 }
 
 _EXIT_OK = 0
@@ -87,7 +95,9 @@ def _iter_records(text: str) -> list[dict[str, object]]:
     return records
 
 
-def _reverify_one(record: dict[str, object], *, use_fuzz: bool) -> tuple[str, str | None]:
+def _reverify_one(
+    record: dict[str, object], *, use_fuzz: bool
+) -> tuple[str, str | None]:
     """레코드 1건 재검증 → (상태, 사유). 상태: 'pass'/'fail'/'skip'. 사유는 fail/skip 때만.
 
     verify 재료(conditions/answer_map)가 없으면 skip. Tier1 fail 또는 근 선택 위반 또는
@@ -143,7 +153,9 @@ def _reverify_one(record: dict[str, object], *, use_fuzz: bool) -> tuple[str, st
 
     # 수치 반례 fuzz(옵션) — fail만 오염으로 본다.
     if use_fuzz:
-        fuzz = fuzz_answer(conditions, amap, selection if isinstance(selection, str) else None)
+        fuzz = fuzz_answer(
+            conditions, amap, selection if isinstance(selection, str) else None
+        )
         if fuzz.state == "fail":
             return "fail", f"수치 반례: {fuzz.reason}"
 
@@ -153,7 +165,9 @@ def _reverify_one(record: dict[str, object], *, use_fuzz: bool) -> tuple[str, st
     return "skip", f"Tier1 unverifiable: {tier1.reason}"
 
 
-def reverify_corpus(records: list[dict[str, object]], *, use_fuzz: bool) -> ReverifyReport:
+def reverify_corpus(
+    records: list[dict[str, object]], *, use_fuzz: bool
+) -> ReverifyReport:
     """레코드 리스트 전수 재검증 → 집계 리포트(순수)."""
     passed = failed = skipped = 0
     failures: list[tuple[str, str]] = []
@@ -167,7 +181,9 @@ def reverify_corpus(records: list[dict[str, object]], *, use_fuzz: bool) -> Reve
             failures.append((ident, reason or ""))
         else:
             skipped += 1
-    return ReverifyReport(passed=passed, failed=failed, skipped=skipped, failures=tuple(failures))
+    return ReverifyReport(
+        passed=passed, failed=failed, skipped=skipped, failures=tuple(failures)
+    )
 
 
 def format_report(report: ReverifyReport, *, path: str) -> str:
