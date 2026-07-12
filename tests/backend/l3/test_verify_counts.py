@@ -125,24 +125,18 @@ class TestGeometricConvergence:
 class TestLimitEqualsValue:
     def test_removable_singularity_mismatch_pass(self) -> None:
         # 제거가능 특이점 x=1 — 함수값 미정의·극한 유한 → lim ≠ f(a)(0).
-        assert (
-            verify_limit_equals_value("(x**2 - 3*x + 2)/(x - 1)", "0").state == "pass"
-        )
+        assert verify_limit_equals_value("(x**2 - 3*x + 2)/(x - 1)", "0").state == "pass"
 
     def test_misconception_always_equal_fails(self) -> None:
         # "극한값=함수값 항상" 오개념 — 0인데 1로 답 → fail.
-        assert (
-            verify_limit_equals_value("(x**2 - 3*x + 2)/(x - 1)", "1").state == "fail"
-        )
+        assert verify_limit_equals_value("(x**2 - 3*x + 2)/(x - 1)", "1").state == "fail"
 
     def test_no_singularity_unverifiable(self) -> None:
         # 특이점 없는 함수는 오개념 표적 아님 → 보수적 회피.
         assert verify_limit_equals_value("x + 1", "1").state == "unverifiable"
 
     def test_non_count_claim_unverifiable(self) -> None:
-        assert (
-            verify_limit_equals_value("(x**2 - 1)/(x - 1)", "2").state == "unverifiable"
-        )
+        assert verify_limit_equals_value("(x**2 - 1)/(x - 1)", "2").state == "unverifiable"
 
 
 class TestIsDifferentiable:

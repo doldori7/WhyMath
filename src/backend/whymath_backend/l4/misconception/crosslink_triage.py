@@ -117,9 +117,7 @@ class TriageReport:
         return out
 
 
-def _classify(
-    agreement: StandardAgreement, count: int, evidence_floor: int
-) -> TriageBucket:
+def _classify(agreement: StandardAgreement, count: int, evidence_floor: int) -> TriageBucket:
     """구조 신호 판정 + 증거량 → 버킷(순수·거부는 측정 안전 구간만)."""
     if agreement == "disagree":
         return "auto_reject" if count >= evidence_floor else "thin_disagree"
@@ -311,9 +309,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--queue", default=None, help="검수 큐 JSON(기본 docs/data).")
     parser.add_argument("--misconceptions", default=None, help="843 M-id 코퍼스 JSON.")
     parser.add_argument("--floor", type=int, default=MACHINE_REJECT_EVIDENCE_FLOOR)
-    parser.add_argument(
-        "--json", action="store_true", help="JSON 리포트 출력(기본 사람 가독)."
-    )
+    parser.add_argument("--json", action="store_true", help="JSON 리포트 출력(기본 사람 가독).")
     parser.add_argument(
         "--worksheet",
         default=None,
@@ -324,19 +320,12 @@ def main(argv: list[str] | None = None) -> int:
     queue_path = (
         Path(args.queue)
         if args.queue
-        else _repo_root()
-        / "docs"
-        / "data"
-        / "misconception_crosslink_review_queue.json"
+        else _repo_root() / "docs" / "data" / "misconception_crosslink_review_queue.json"
     )
     mis_path = (
         Path(args.misconceptions)
         if args.misconceptions
-        else _repo_root()
-        / "data"
-        / "corpus"
-        / "misconceptions_v1"
-        / "misconceptions.json"
+        else _repo_root() / "data" / "corpus" / "misconceptions_v1" / "misconceptions.json"
     )
     report = run(
         queue_path=queue_path,
@@ -345,9 +334,7 @@ def main(argv: list[str] | None = None) -> int:
         evidence_floor=args.floor,
     )
     if args.worksheet:
-        kebab_statements = {
-            k: (m.name_kr, m.canonical_statement) for k, m in CATALOG_BY_ID.items()
-        }
+        kebab_statements = {k: (m.name_kr, m.canonical_statement) for k, m in CATALOG_BY_ID.items()}
         print(
             format_worksheet(
                 report,

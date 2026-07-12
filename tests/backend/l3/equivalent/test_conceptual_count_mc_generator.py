@@ -67,9 +67,7 @@ def test_yields_and_deterministic(
     out_a = [a.generate(spec) for _ in range(24)]
     out_b = [b.generate(spec) for _ in range(24)]
     assert all(c is not None for c in out_a)  # 풀 ≥24
-    assert [c.conditions for c in out_a if c] == [
-        c.conditions for c in out_b if c
-    ]  # 결정론
+    assert [c.conditions for c in out_a if c] == [c.conditions for c in out_b if c]  # 결정론
 
 
 @pytest.mark.parametrize("template,kebab,codes", _CASES)
