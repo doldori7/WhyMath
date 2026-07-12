@@ -41,6 +41,7 @@ from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.equivalent.josa import eul_reul
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,
@@ -130,8 +131,13 @@ class _InductiveSkeleton:
 
     @property
     def difficulty(self) -> float:
-        """rule-based 난이도 — 기저 3.3·항 번호 크면 +0.1·등비 점화 +0.1(3.3~3.5·spec 3.4 정합)."""
-        difficulty = 3.3
+        """rule-based 난이도 — 기저 1.7·항 번호 크면 +0.1·등비 점화 +0.1(범위 1.7~1.9).
+
+        재보정(S2-08·계통 관찰 2): 점화식을 폐형으로 펴 특정 항을 구하는 정의 1스텝이라 QUAD-EQ
+        인수분해(base 2.0)보다 쉽다. 이전 base 3.3은 명백한 인플레였다 — 1.7로 내려 QUAD-EQ 아래에
+        앉힌다(항수·등비 가산 유지).
+        """
+        difficulty = 1.7
         if self.term >= 8:
             difficulty += 0.1
         if self.kind == "geo":
@@ -193,11 +199,13 @@ def _indseq_explanation(skeleton: _InductiveSkeleton) -> str:
     """귀납 해설 — 점화식을 폐형으로 푸는 과정을 자연어로 서술(결정론·위생 청정·수치 등식 회피)."""
     if skeleton.kind == "arith":
         return (
-            f"점화식에 따라 첫째항 {skeleton.first}에 {skeleton.step}을 {skeleton.term - 1}번 "
+            f"점화식에 따라 첫째항 {skeleton.first}에 "
+            f"{skeleton.step}{eul_reul(str(skeleton.step))} {skeleton.term - 1}번 "
             f"더한 값이므로, a{_subscript(skeleton.term)}의 값은 {skeleton.answer} 이다."
         )
     return (
-        f"점화식에 따라 첫째항 {skeleton.first}에 {skeleton.step}을 {skeleton.term - 1}번 "
+        f"점화식에 따라 첫째항 {skeleton.first}에 "
+        f"{skeleton.step}{eul_reul(str(skeleton.step))} {skeleton.term - 1}번 "
         f"곱한 값이므로, a{_subscript(skeleton.term)}의 값은 {skeleton.answer} 이다."
     )
 

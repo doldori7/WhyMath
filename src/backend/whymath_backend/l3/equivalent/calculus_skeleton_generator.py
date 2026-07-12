@@ -45,6 +45,7 @@ from whymath_backend.l3.equivalent.difficulty import (
     estimate_difficulty_extremum_irrational,
 )
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.equivalent.josa import eul_reul
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,
@@ -634,7 +635,7 @@ def _tangent_explanation(skeleton: _TangentSkeleton) -> str:
     f1, f2 = _linear_factor(skeleton.p), _linear_factor(skeleton.q)
     which = "큰" if skeleton.pick == "큰" else "작은"
     return (
-        f"f(x)를 미분해 접선의 기울기 조건 f'(x) = {skeleton.m} 을 정리하면 "
+        f"f(x)를 미분해 접선의 기울기 조건 f'(x) = {skeleton.m}{eul_reul(str(skeleton.m))} 정리하면 "
         f"3({f1})({f2}) = 0 이므로 접점의 x좌표는 x = {skeleton.p}, x = {skeleton.q} 이다. "
         f"이 중 x좌표가 {which} 것은 {skeleton.answer}이다."
     )

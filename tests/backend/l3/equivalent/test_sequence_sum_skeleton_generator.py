@@ -140,3 +140,24 @@ class TestCrossFamily:
         }
         geo = {c.problem.slug for c in _drain(GeometricSumSkeletonGenerator(), _GEO_STANDARD, 500)}
         assert arith.isdisjoint(geo)
+
+
+def test_difficulty_sum_around_quad_not_above() -> None:
+    # 계통 관찰 2 회귀 차단(S2-08): 수열 합은 일반항보다 산술 1단 무겁지만 QUAD-EQ(2.0)
+    # 언저리(이하/근처)를 넘지 않는다. 대표 최소 ≤ 2.0·상한 ≤ 2.4.
+    from whymath_backend.l3.equivalent.difficulty import estimate_difficulty
+
+    quad = estimate_difficulty(root_kind="integer", lead_coefficient=1, max_abs_coefficient=10)
+    assert quad == 2.0
+    arith = [
+        c.problem.difficulty_overall
+        for c in _drain(ArithmeticSumSkeletonGenerator(), _ARITH_STANDARD, 500)
+    ]
+    geo = [
+        c.problem.difficulty_overall
+        for c in _drain(GeometricSumSkeletonGenerator(), _GEO_STANDARD, 500)
+    ]
+    assert arith and geo
+    assert min(arith) < quad  # 1.9 — 등차합 기본은 인수분해보다 아래  # type: ignore[type-var]
+    assert min(geo) <= quad  # 2.0 — 등비합 기본은 언저리(초과 아님)  # type: ignore[type-var]
+    assert max(arith) <= 2.3 and max(geo) <= 2.4  # type: ignore[type-var]

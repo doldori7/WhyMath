@@ -111,7 +111,10 @@ class _ArithSkeleton:
 
     @property
     def difficulty(self) -> float:
-        difficulty = 2.7
+        # 재보정(S2-08·계통 관찰 2): 일반항 공식 aₙ=a+(n−1)d 직대입은 **1스텝**이라 QUAD-EQ
+        # 인수분해(base 2.0)보다 쉽다. 이전 base 2.7(표본 13~16 인플레)을 1.6으로 내려 평범한
+        # 대입이 2.0 미만에 앉게 하고, 항수·공차·값 크기 가산은 유지한다.
+        difficulty = 1.6
         if self.term >= 10:
             difficulty += 0.2
         if self.diff >= 4:
@@ -270,7 +273,9 @@ class _GeoSkeleton:
 
     @property
     def difficulty(self) -> float:
-        difficulty = 3.0
+        # 재보정(S2-08·계통 관찰 2): 일반항 aₙ=a·rⁿ⁻¹ 직대입 1스텝이라 QUAD-EQ(base 2.0)보다
+        # 쉽다. 이전 base 3.0(표본 27 인플레)을 1.7로 내리고 공비·항수·값 크기 가산은 유지한다.
+        difficulty = 1.7
         if self.ratio >= 5:
             difficulty += 0.2
         if self.term >= 6:

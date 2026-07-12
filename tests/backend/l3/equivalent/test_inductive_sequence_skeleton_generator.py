@@ -128,8 +128,20 @@ class TestGenerator:
         assert any("·aₙ" in t for t in texts)  # 등비 점화
 
     def test_difficulty_band(self) -> None:
-        # rule-based 난이도 — 3.3~3.5 대역(spec 3.4·tol 0.5 만점 정합)·복수 값(균일 회귀 차단).
+        # rule-based 난이도 — 재보정(S2-08) 1.7~1.9 대역·복수 값(균일 회귀 차단).
         candidates = _drain(InductiveSequenceSkeletonGenerator(), 60)
         diffs = {c.problem.difficulty_overall for c in candidates}
         assert len(diffs) >= 2
-        assert all(d is not None and 3.3 <= d <= 3.5 for d in diffs)
+        assert all(d is not None and 1.7 <= d <= 1.9 for d in diffs)
+
+    def test_one_step_below_quad_factoring(self) -> None:
+        # 계통 관찰 2 회귀 차단: 귀납 정의 1스텝은 QUAD-EQ 기초 인수분해(2.0)보다 쉬워야 한다.
+        from whymath_backend.l3.equivalent.difficulty import estimate_difficulty
+
+        quad_factoring = estimate_difficulty(
+            root_kind="integer", lead_coefficient=1, max_abs_coefficient=10
+        )
+        candidates = _drain(InductiveSequenceSkeletonGenerator(), 60)
+        diffs = [c.problem.difficulty_overall for c in candidates]
+        assert quad_factoring == 2.0
+        assert all(d is not None and d < quad_factoring for d in diffs)

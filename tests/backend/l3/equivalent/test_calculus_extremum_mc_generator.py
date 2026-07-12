@@ -32,7 +32,7 @@ _STANDARD = "[12미적Ⅰ-02-07]"
 _MAX_MIN = "extremum-max-min-confused"
 _VALUE_VS_POINT = "extremum-value-vs-point-confused"
 _CODES: dict[str, tuple[str, str]] = {
-    "max_min": (_MAX_MIN, "select-min-for-max"),
+    "max_min": (_MAX_MIN, "select-opposite-extremum"),
     "value_vs_point": (_VALUE_VS_POINT, "report-x-coordinate-for-value"),
 }
 _TARGET = frozenset({_MAX_MIN, _VALUE_VS_POINT})
@@ -92,7 +92,7 @@ class TestSeatContract:
         import pytest
 
         with pytest.raises(ValueError):
-            CalculusExtremumMCSkeletonGenerator({"max_min": (_MAX_MIN, "select-min-for-max")})
+            CalculusExtremumMCSkeletonGenerator({"max_min": (_MAX_MIN, "select-opposite-extremum")})
 
 
 class TestMathematicalSoundness:

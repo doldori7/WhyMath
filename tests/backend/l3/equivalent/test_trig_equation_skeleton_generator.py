@@ -97,3 +97,18 @@ class TestTrigEquationGenerator:
         a = _drain(TrigonometricEquationSkeletonGenerator(), 6)
         b = _drain(TrigonometricEquationSkeletonGenerator(), 6)
         assert [c.problem.slug for c in a] == [c.problem.slug for c in b]
+
+
+def test_difficulty_below_quad_factoring() -> None:
+    # 계통 관찰 2 회귀 차단(S2-08): 삼각방정식은 값 조회보단 무겁지만 QUAD-EQ(2.0) 언저리 —
+    # 대표 최소 < 2.0·상한 ≤ 2.1.
+    from whymath_backend.l3.equivalent.difficulty import estimate_difficulty
+
+    quad = estimate_difficulty(root_kind="integer", lead_coefficient=1, max_abs_coefficient=10)
+    assert quad == 2.0
+    diffs = [
+        c.problem.difficulty_overall for c in _drain(TrigonometricEquationSkeletonGenerator(), 100)
+    ]
+    assert diffs
+    assert min(diffs) < quad  # type: ignore[type-var]
+    assert max(diffs) <= 2.1  # type: ignore[type-var]

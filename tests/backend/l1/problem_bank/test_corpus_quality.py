@@ -325,6 +325,29 @@ def _raw_by_slug(path: Path) -> dict[str, dict[str, object]]:
     return {str(rec["slug"]): rec for rec in records}
 
 
+# S2-08 재조정 후 rephrase↔생성 조인은 slug가 아니라 **수정 불변 수학키**로 한다: 발문 조사
+# 수정으로 content-hash slug이 바뀐 레코드(72건)가 있어 slug 부분집합 관계가 깨졌고, rephrase는
+# 발문/slug/problem_id를 LLM 원본으로 보존하기 때문이다. 이 키(단원·조건·근선택·정답)는 조사·
+# 난이도·op-code 수정에 전부 불변이고 생성 코퍼스에서 유일하다(scripts/reconcile_rephrased_corpus_s2_08).
+def _math_key(rec: dict[str, object]) -> tuple[object, ...]:
+    verify = rec["verify"]
+    assert isinstance(verify, dict)
+    return (
+        tuple(rec["unit_codes"]),  # type: ignore[arg-type]
+        verify["conditions"],
+        verify["answer_selection"],
+        str(rec["answer"]),
+    )
+
+
+def _raw_by_math_key(path: Path) -> dict[tuple[object, ...], dict[str, object]]:
+    text = path.read_text(encoding="utf-8")
+    records = [json.loads(line) for line in text.splitlines() if line.strip()]
+    index = {_math_key(rec): rec for rec in records}
+    assert len(index) == len(records), "생성 코퍼스 수학키 충돌 — 조인 불가"
+    return index
+
+
 def _rephrased_raw() -> dict[str, dict[str, object]]:
     corpus = _rephrased_corpus_path()
     if not corpus.exists():
@@ -339,38 +362,42 @@ def _rephrased_records() -> list[ProblemBankRecord]:
     return load_problem_bank_records(corpus)
 
 
-def test_rephrased_corpus_slugs_subset_of_source() -> None:
-    # rephrase는 후처리(생성 X)라 산출 slug는 전건 소스에 존재한다(신 slug 창작 0). 소스 코퍼스가
-    # 밴드 추가로 커지면 rephrase 산출물은 **시점 스냅샷**이라 소스의 부분집합이 된다(라이브 재-
-    # rephrase 전까지). 등호가 아니라 부분집합으로 봉인한다 — 산출이 소스를 벗어나지 않음을 보장.
-    source = _raw_by_slug(_generated_corpus_path())
+def test_rephrased_corpus_joins_source_by_math_key() -> None:
+    # rephrase는 후처리(생성 X)라 산출물은 전건 소스의 같은 수학 문제에 대응한다(신 문제 창작 0).
+    # S2-08 재슬러그 후 slug 부분집합 관계는 깨졌으므로 **수정 불변 수학키**로 조인해 산출이
+    # 소스를 벗어나지 않음을 봉인한다(수학키는 조사·난이도·op-code 수정에 불변).
+    source_keys = set(_raw_by_math_key(_generated_corpus_path()))
     rephrased = _rephrased_raw()
-    assert set(rephrased) <= set(source), "rephrase 산출에 소스 밖 slug 존재(창작 금지)"
     assert len(rephrased) >= 1
+    for slug, rec in rephrased.items():
+        assert _math_key(rec) in source_keys, f"{slug} 산출이 소스 밖 수학 문제(창작 금지)"
 
 
 def test_rephrased_corpus_preserves_all_fields_but_question_text() -> None:
     # 핵심 안전 봉인 — question_text 외 전 필드(answer·verify·choices·conditions·distractor·
-    # 난이도·개념·서명 등)가 소스와 **바이트 동일**(수치·정답·검증 메타 불변·오염 0).
-    source = _raw_by_slug(_generated_corpus_path())
+    # 난이도·개념·서명 등)가 소스(수학키 조인)와 동일(수치·정답·검증 메타 불변·오염 0). slug·
+    # problem_id는 rephrase가 LLM 원본을 보존하므로 재슬러그된 레코드에서 소스와 다를 수 있어
+    # 비교에서 제외한다(S2-08·발문 조사 수정으로 소스 slug만 바뀐 경우).
+    source = _raw_by_math_key(_generated_corpus_path())
     rephrased = _rephrased_raw()
+    exclude = {"question_text", "slug", "problem_id"}
     for slug, rec in rephrased.items():
-        src = source[slug]
+        src = source[_math_key(rec)]
         assert set(rec) == set(src), f"{slug} 키 집합 변화"
         for key in src:
-            if key == "question_text":
+            if key in exclude:
                 continue
             assert rec[key] == src[key], f"{slug} 필드 변조: {key}"
 
 
 def test_rephrased_corpus_changed_questions_preserve_equation() -> None:
     # 발문이 바뀐 레코드는 소스 방정식 문자열이 산출 발문에 보존(결정론 게이트 재검증 통과) —
-    # LLM 다양화가 수식을 훼손하지 않았음을 저장소 차원에서 재확인(라이브 게이트의 저장소 미러).
-    source = _raw_by_slug(_generated_corpus_path())
+    # LLM 다양화가 수식을 훼손하지 않았음을 저장소 차원에서 재확인(수학키 조인·라이브 게이트 미러).
+    source = _raw_by_math_key(_generated_corpus_path())
     rephrased = _rephrased_raw()
     changed = 0
     for slug, rec in rephrased.items():
-        src_q = str(source[slug]["question_text"])
+        src_q = str(source[_math_key(rec)]["question_text"])
         out_q = str(rec["question_text"])
         if out_q == src_q:
             continue

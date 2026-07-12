@@ -111,7 +111,11 @@ class _TrigSkeleton:
 
     @property
     def difficulty(self) -> float:
-        difficulty = 2.8
+        # 재보정(S2-08·계통 관찰 2·표본 30): 특수각 삼각함수 값(예 cos180°)은 단위원·특수각
+        # 암기 기반 **1스텝**이라 QUAD-EQ 인수분해(base 2.0)보다 확연히 쉽다. 이전 base 2.8은
+        # 명백한 인플레였다 — 1.3으로 내려(cos180°=1.5·sin30°=1.3) 저난도 대역에 둔다. 일반각
+        # 부호 추론·tan·무리수 값 가산은 유지한다(전부 2.0 미만 유지).
+        difficulty = 1.3
         if self.degree > 90:  # 일반각 — 사분면 부호 추론 부담.
             difficulty += 0.2
         if self.func == "tan":  # 탄젠트가 sin/cos보다 까다로움.
@@ -151,15 +155,27 @@ _TRIG_TEMPLATES: tuple[str, ...] = (
 )
 
 
-def _trig_explanation(skeleton: _TrigSkeleton) -> str:
-    """삼각 해설 — 특수각 삼각비를 자연어로 서술(결정론·위생 청정·수치 등식 회피).
+# 함수별 단위원 좌표 정의 서술 — sin=y좌표·cos=x좌표·tan=y좌표를 x좌표로 나눈 값.
+_UNIT_CIRCLE_COORD: dict[str, str] = {
+    "sin": "y좌표",
+    "cos": "x좌표",
+    "tan": "y좌표를 x좌표로 나눈 값",
+}
 
-    수치 등식('sin 30° = 1/2')은 위생 validator 오탐 여지가 있어 넣지 않는다 — 자기정합적인
-    최종 값(그 값은 answer)만 자연어로 남긴다(형제 로그 해설 규약 미러).
+
+def _trig_explanation(skeleton: _TrigSkeleton) -> str:
+    """삼각 해설 — 단위원 정의로 값의 근거를 서술(결정론·위생 청정·수치 등식 회피).
+
+    교수학 교정(S2-08·표본 30): 이전 문구 "특수각의 삼각비로 구할 수 있으며"는 부정확했다 —
+    '삼각비'는 직각삼각형(예각)에서 정의되는 개념이라 180°·210° 등 일반각에는 적용되지 않는다.
+    좌표평면 **단위원 정의**(sin=대응점 y좌표·cos=x좌표·tan=y/x)로 서술해 근거 있는 논리를
+    남긴다. 수치 등식('cos 180° = −1')은 위생 validator 오탐 여지가 있어 넣지 않고, 자기정합적인
+    최종 값(그 값은 answer)만 자연어로 남긴다(형제 해설 규약 미러).
     """
+    coord = _UNIT_CIRCLE_COORD[skeleton.func]
     return (
-        f"{skeleton.func} {skeleton.degree}°는 특수각의 삼각비로 구할 수 있으며, "
-        f"그 값은 {skeleton.answer} 이다."
+        f"단위원 위에서 {skeleton.degree}°에 대응하는 점의 {coord}가 "
+        f"{skeleton.func} {skeleton.degree}°의 값이므로, 그 값은 {skeleton.answer} 이다."
     )
 
 

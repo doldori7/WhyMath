@@ -39,6 +39,7 @@ from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.equivalent.josa import eul_reul
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,
@@ -95,13 +96,15 @@ def _stable_slug(prefix: str, question_text: str, answer: str, codes: Sequence[s
 
 
 def _estimate_difficulty(*, base: int, exponent: int, magnitude: int) -> float:
-    """rule-based 종합 난이도(지수·로그) — 밑·지수·결과값 크기에서 결정론 추정. 범위 2.6~3.4.
+    """rule-based 종합 난이도(지수·로그) — 밑·지수·결과값 크기에서 결정론 추정. 범위 1.5~2.3.
 
-    지수·로그(대수 고2)는 기본이 이차방정식(고1)보다 높아 base 2.6에서 출발한다. 큰 밑(≥5)·큰
-    지수(≥4)·큰 결과값(>100)이 손계산 부담을 키운다. 형제 생성기의 difficulty 모듈 공식과 같은
-    철학(계수/간격 크기 → 난이도)이나, 공유 difficulty.py를 건드리지 않으려 지역 함수로 둔다.
+    재보정(S2-08·AI 검수 계통 관찰 2): EXP-EQ(bˣ=bᵏ)·LOG-EQ(log_b x=k)는 밑 통일·로그 정의
+    그대로 읽는 **정의 1스텝** 문제라, 두 인수를 찾아 인수분해하는 QUAD-EQ(estimate_difficulty
+    base 2.0)보다 **쉽다**. 이전 base 2.6은 인수분해보다 높아 명백한 인플레였다(표본 28·29).
+    그래서 base를 1.5로 내려 평범한 1스텝이 2.0 미만(예 log_6 x=1 → 1.8)에 앉게 하고, 크기 가산은
+    유지한다. 공유 difficulty.py는 건드리지 않고 지역 함수로 둔다(도메인 분담·병렬 세션 공유 최소화).
     """
-    difficulty = 2.6
+    difficulty = 1.5
     if base >= 5:
         difficulty += 0.3
     if exponent >= 4:
@@ -114,7 +117,7 @@ def _estimate_difficulty(*, base: int, exponent: int, magnitude: int) -> float:
 # ── 지수방정식 bˣ = bᵏ ─────────────────────────────────────────────────────
 _EXP_TEMPLATES: tuple[str, ...] = (
     "방정식 {b}^x = {v} 의 해를 구하시오.",
-    "지수방정식 {b}^x = {v} 을 만족하는 x의 값을 구하시오.",
+    "지수방정식 {b}^x = {v}{josa} 만족하는 x의 값을 구하시오.",
     "{b}^x = {v} 일 때, x의 값을 구하시오.",
 )
 
@@ -223,7 +226,7 @@ class ExponentialEquationSkeletonGenerator:
         answer_text = str(skeleton.answer)
         templates = _EXP_TEMPLATES
         question_text = templates[self._index % len(templates)].format(
-            b=skeleton.base, v=skeleton.value
+            b=skeleton.base, v=skeleton.value, josa=eul_reul(str(skeleton.value))
         )
         standard_codes = sorted(spec.achievement_standard_codes)
         slug = _stable_slug(self._slug_prefix, question_text, answer_text, standard_codes)
@@ -272,7 +275,7 @@ class ExponentialEquationSkeletonGenerator:
 # ── 로그방정식 log_b x = k ──────────────────────────────────────────────────
 _LOG_TEMPLATES: tuple[str, ...] = (
     "방정식 log_{b} x = {k} 의 해를 구하시오.",
-    "로그방정식 log_{b} x = {k} 을 만족하는 x의 값을 구하시오.",
+    "로그방정식 log_{b} x = {k}{josa} 만족하는 x의 값을 구하시오.",
     "log_{b} x = {k} 일 때, x의 값을 구하시오.",
 )
 
@@ -322,8 +325,8 @@ def _log_explanation(skeleton: _LogSkeleton) -> str:
     서술하고 등식은 자기정합적인 최종 해(x=answer)만 남긴다. 순수 수치 등식('bᵏ=answer')도 피한다.
     """
     return (
-        f"로그의 정의에 따라 이 방정식의 해는 밑 {skeleton.base}를 {skeleton.exponent}번 "
-        f"거듭제곱한 값이므로, x = {skeleton.answer} 이다."
+        f"로그의 정의에 따라 이 방정식의 해는 밑 {skeleton.base}{eul_reul(str(skeleton.base))} "
+        f"{skeleton.exponent}번 거듭제곱한 값이므로, x = {skeleton.answer} 이다."
     )
 
 
@@ -375,7 +378,7 @@ class LogarithmicEquationSkeletonGenerator:
         answer_text = str(skeleton.answer)
         templates = _LOG_TEMPLATES
         question_text = templates[self._index % len(templates)].format(
-            b=skeleton.base, k=skeleton.exponent
+            b=skeleton.base, k=skeleton.exponent, josa=eul_reul(str(skeleton.exponent))
         )
         standard_codes = sorted(spec.achievement_standard_codes)
         slug = _stable_slug(self._slug_prefix, question_text, answer_text, standard_codes)

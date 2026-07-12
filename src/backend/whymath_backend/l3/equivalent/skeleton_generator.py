@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+import re
 import uuid
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
@@ -51,6 +52,7 @@ from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.difficulty import RootKind, estimate_difficulty
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.equivalent.josa import eul_reul, wa_gwa
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,
@@ -122,18 +124,30 @@ _TEMPLATES: dict[str, tuple[str, ...]] = {
     "largest": (
         "이차방정식 {eq} 의 두 근 중 큰 근을 구하시오.",
         "이차방정식 {eq} 의 두 근 중 더 큰 근의 값을 구하시오.",
-        "이차방정식 {eq} 를 풀어 큰 근을 구하시오.",
+        "이차방정식 {eq}{josa} 풀어 큰 근을 구하시오.",
     ),
     "smallest": (
         "이차방정식 {eq} 의 두 근 중 작은 근을 구하시오.",
         "이차방정식 {eq} 의 두 근 중 더 작은 근의 값을 구하시오.",
-        "이차방정식 {eq} 를 풀어 작은 근을 구하시오.",
+        "이차방정식 {eq}{josa} 풀어 작은 근을 구하시오.",
     ),
     "unique": (
         "이차방정식 {eq} 의 근을 구하시오.",
         "이차방정식 {eq} 의 중근을 구하시오.",
     ),
 }
+
+
+def _eq_trailing_josa(display_eq: str) -> str:
+    """발문 '{eq}{josa} 풀어'의 을/를 — 방정식 표기의 마지막 정수(우변)를 수 읽기로 판별.
+
+    display_eq는 항상 '… = 0'(이차 표준형)·'… = q'(완전제곱꼴) 꼴이라 마지막 정수가 조사를
+    지배한다(예 '= 0'→0(영)→'을'·'= 13'→13(십삼)→'을'). 표기 마지막 정수를 뽑아 josa.eul_reul에
+    위임한다(하드코딩 금지·값 기반 판별).
+    """
+    numbers = re.findall(r"-?\d+", display_eq)
+    tail = numbers[-1] if numbers else "0"
+    return eul_reul(tail)
 
 
 @dataclass(frozen=True, slots=True)
@@ -509,7 +523,9 @@ class SkeletonEquivalentProblemGenerator:
         templates = _TEMPLATES[skeleton.selection]
         return self._build_candidate(
             spec,
-            question_text=templates[self._index % len(templates)].format(eq=display_eq),
+            question_text=templates[self._index % len(templates)].format(
+                eq=display_eq, josa=_eq_trailing_josa(display_eq)
+            ),
             answer_text=answer_text,
             explanation=self._explanation(skeleton),
             answer_format=self._answer_format(skeleton.answer_root),
@@ -529,7 +545,9 @@ class SkeletonEquivalentProblemGenerator:
         templates = _TEMPLATES[skeleton.selection]
         return self._build_candidate(
             spec,
-            question_text=templates[self._index % len(templates)].format(eq=display_eq),
+            question_text=templates[self._index % len(templates)].format(
+                eq=display_eq, josa=_eq_trailing_josa(display_eq)
+            ),
             answer_text=answer_text,
             explanation=self._sqrt_explanation(skeleton),
             answer_format=AnswerFormat.실수,  # 무리수 전용 형식 부재 — 실수로 정직 매핑
@@ -573,7 +591,9 @@ class SkeletonEquivalentProblemGenerator:
         templates = _MC_TEMPLATES[skeleton.selection]
         return self._build_candidate(
             spec,
-            question_text=templates[self._index % len(templates)].format(eq=display_eq),
+            question_text=templates[self._index % len(templates)].format(
+                eq=display_eq, josa=_eq_trailing_josa(display_eq)
+            ),
             answer_text=answer_text,
             explanation=self._sqrt_explanation(skeleton),
             answer_format=AnswerFormat.실수,  # 무리수 전용 형식 부재 — 실수로 정직 매핑
@@ -622,7 +642,9 @@ class SkeletonEquivalentProblemGenerator:
         templates = _MC_TEMPLATES[skeleton.selection]
         return self._build_candidate(
             spec,
-            question_text=templates[self._index % len(templates)].format(eq=display_eq),
+            question_text=templates[self._index % len(templates)].format(
+                eq=display_eq, josa=_eq_trailing_josa(display_eq)
+            ),
             answer_text=answer_text,
             explanation=self._explanation(skeleton),
             answer_format=self._answer_format(skeleton.answer_root),
@@ -724,8 +746,11 @@ class SkeletonEquivalentProblemGenerator:
                 "(중근) 하나뿐이다."
             )
         which = "큰" if skeleton.selection == "largest" else "작은"
+        # 와/과는 선행 근(작은 근)의 한국어 읽기 받침으로 결정 — 분수는 분모먼저 읽어 분자(읽기의
+        # 마지막 음절)가 지배하므로 numerator를 토큰으로 넘긴다(정수근은 numerator=정수 자신).
         return (
-            f"좌변을 인수분해하면 ({f1})({f2}) = 0 이고, 두 근은 {_fraction_text(small)}와 "
+            f"좌변을 인수분해하면 ({f1})({f2}) = 0 이고, 두 근은 "
+            f"{_fraction_text(small)}{wa_gwa(str(small.numerator))} "
             f"{_fraction_text(large)}이다. 이 중 {which} 근은 "
             f"{_fraction_text(skeleton.answer_root)}이다."
         )
