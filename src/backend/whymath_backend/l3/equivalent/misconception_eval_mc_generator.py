@@ -94,6 +94,12 @@ TemplateKind = Literal[
     "absolute_value",
     "sqrt_sum",
     "difference_of_squares",
+    "exponent_product",
+    "power_of_power",
+    "negative_square",
+    "distribute_partial",
+    "negative_distribute",
+    "square_difference",
 ]
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
@@ -121,6 +127,13 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "absolute_value": ("J0104", "ABS-VALUE"),
     "sqrt_sum": ("J0107", "SQRT-SUM"),
     "difference_of_squares": ("J0101", "DIFF-SQUARES"),
+    # 843 확장 트랜치2(거듭제곱·분배·부호 계산형 6종) — 성취기준은 spec이 공급([9수02-*]).
+    "exponent_product": ("J0208", "EXP-PRODUCT"),
+    "power_of_power": ("J0208", "POWER-OF-POWER"),
+    "negative_square": ("J0208", "NEG-SQUARE"),
+    "distribute_partial": ("J0209", "DISTRIBUTE-PARTIAL"),
+    "negative_distribute": ("J0209", "NEG-DISTRIBUTE"),
+    "square_difference": ("J0219", "SQUARE-DIFF"),
 }
 
 
@@ -1045,6 +1058,234 @@ def _build_difference_of_squares_pool() -> tuple[_EvalItem, ...]:
     return tuple(pool)
 
 
+def _build_exponent_product_pool() -> tuple[_EvalItem, ...]:
+    """a × a² 값 뼈대 풀 — 정답 a³(지수 1+2)·오개념 a²(지수를 곱함 1·2)·filler a·a⁴.
+
+    밑이 같은 거듭제곱의 곱은 지수를 더한다: a¹ × a² = a^(1+2) = a³. 지수를 곱하면 a^(1·2) = a²로
+    틀린다. 밑 a를 순회(a≥2)해 정답 a³이 유일하다. 네 값 {a³, a², a, a⁴}은 a≥2에서 서로 다르다.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 26):
+        correct_v = a**3
+        if correct_v in seen:
+            continue
+        item = _assemble_item(
+            values=(
+                sympy.Integer(a**3),
+                sympy.Integer(a**2),  # 지수를 곱함(1·2=2).
+                sympy.Integer(a),
+                sympy.Integer(a**4),
+            ),
+            conditions=f"x = {a}**3",
+            answer_str=str(correct_v),
+            question_text=f"{a} × {a}² 의 값을 구하시오.",
+            answer_explanation=(
+                f"밑이 같은 거듭제곱의 곱은 지수를 더하므로 {a} × {a}² = {a}^(1+2) = {a}³ "
+                f"= {correct_v} 이다. 지수를 곱해 {a}² 로 답하면 틀린다."
+            ),
+            difficulty=_difficulty(a),
+            answer_format=_answer_format_for(sympy.Integer(correct_v)),
+        )
+        if item is not None:
+            seen.add(correct_v)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_power_of_power_pool() -> tuple[_EvalItem, ...]:
+    """(aᵐ)ⁿ 값 뼈대 풀 — 정답 a^(mn)·오개념 a^(m+n)(지수를 더함)·filler a^m·a^n.
+
+    거듭제곱의 거듭제곱은 지수를 곱한다: (aᵐ)ⁿ = a^(mn). 지수를 더하면 a^(m+n)로 틀린다. 밑 a와
+    지수쌍(m<n)을 순회·정답값 상한 안만 담아 dedup. mn>m+n(m,n≥2)이라 오개념과 다름.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 11):
+        for m in range(2, 4):
+            for n in range(m + 1, 9):
+                correct_v = a ** (m * n)
+                if correct_v > 10**8 or correct_v in seen:
+                    continue
+                item = _assemble_item(
+                    values=(
+                        sympy.Integer(a ** (m * n)),
+                        sympy.Integer(a ** (m + n)),  # 지수를 더함.
+                        sympy.Integer(a**m),
+                        sympy.Integer(a**n),
+                    ),
+                    conditions=f"x = {a}**{m * n}",
+                    answer_str=str(correct_v),
+                    question_text=f"({a}^{m})^{n} 의 값을 구하시오.",
+                    answer_explanation=(
+                        f"거듭제곱의 거듭제곱은 지수를 곱하므로 ({a}^{m})^{n} = {a}^{m * n} "
+                        f"= {correct_v} 이다. 지수를 더해 {a}^{m + n} 로 답하면 틀린다."
+                    ),
+                    difficulty=_difficulty(a + m + n),
+                    answer_format=_answer_format_for(sympy.Integer(correct_v)),
+                )
+                if item is not None:
+                    seen.add(correct_v)
+                    pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_negative_square_pool() -> tuple[_EvalItem, ...]:
+    """-a² + b 값 뼈대 풀 — 정답 b-a²·오개념 b+a²(-a²을 (-a)²로 오인)·filler -(a²+b)·a²-b.
+
+    거듭제곱이 음의 부호보다 우선하므로 -a² = -(a²)이다. -a²을 (-a)²=a²로 계산하면 부호가 뒤집힌다.
+    a²≠b·b≥1이라 네 값 {b-a², b+a², -(a²+b), a²-b}은 서로 다르다. 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 10):
+        for b in range(1, 14):
+            if a * a == b:
+                continue  # 정답 0 회피(위생).
+            correct_v = b - a * a
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(b - a * a),
+                    sympy.Integer(b + a * a),  # -a²을 (-a)²=a²로 오인.
+                    sympy.Integer(-(a * a + b)),
+                    sympy.Integer(a * a - b),
+                ),
+                conditions=f"x = {b} - {a * a}",
+                answer_str=str(correct_v),
+                question_text=f"-{a}² + {b} 의 값을 구하시오.",
+                answer_explanation=(
+                    f"거듭제곱이 부호보다 우선하므로 -{a}² = -{a * a} 이고 -{a}² + {b} = "
+                    f"{correct_v} 이다. -{a}²을 (-{a})²={a * a}로 계산하면 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=_answer_format_for(sympy.Integer(correct_v)),
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_distribute_partial_pool() -> tuple[_EvalItem, ...]:
+    """a(x+b)를 x=c에서 값 뼈대 풀 — 정답 a(c+b)·오개념 ac+b(뒷항 분배 누락)·filler ac·ab.
+
+    분배법칙은 a(x+b)=ax+ab이므로 x=c에서 a(c+b)이다. 뒷항을 분배하지 않으면 ac+b로 틀린다.
+    a,b,c≥2·조합이 네 값 {a(c+b), ac+b, ac, ab}을 서로 다르게 만든다. 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 7):
+        for b in range(2, 8):
+            for c in range(2, 9):
+                correct_v = a * (c + b)
+                if correct_v in seen:
+                    continue
+                item = _assemble_item(
+                    values=(
+                        sympy.Integer(a * (c + b)),
+                        sympy.Integer(a * c + b),  # 뒷항 분배 누락.
+                        sympy.Integer(a * c),
+                        sympy.Integer(a * b),
+                    ),
+                    conditions=f"x = {a} * ({c} + {b})",
+                    answer_str=str(correct_v),
+                    question_text=f"{a}(x + {b}) 에서 x = {c} 일 때의 값을 구하시오.",
+                    answer_explanation=(
+                        f"분배법칙으로 {a}(x + {b}) = {a}x + {a * b} 이므로 x = {c} 를 "
+                        f"대입하면 {correct_v} 이다. 뒷항을 분배하지 않고 {a * c} + {b}로 "
+                        "계산하면 틀린다."
+                    ),
+                    difficulty=_difficulty(a + b + c),
+                    answer_format=_answer_format_for(sympy.Integer(correct_v)),
+                )
+                if item is not None:
+                    seen.add(correct_v)
+                    pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_negative_distribute_pool() -> tuple[_EvalItem, ...]:
+    """-(x-b)를 x=c에서 값 뼈대 풀 — 정답 b-c·오개념 -c-b(뒷항 부호 미반전)·filler c-b·c+b.
+
+    음의 부호 분배는 -(x-b)=-x+b이므로 x=c에서 b-c이다. 뒷항 부호를 반전하지 않으면 -c-b로 틀린다.
+    b≠c(b,c≥2)라 네 값 {b-c, -c-b, c-b, c+b}은 서로 다르다. 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for c in range(2, 15):
+        for b in range(2, 22):
+            if b == c:
+                continue
+            correct_v = b - c
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(b - c),
+                    sympy.Integer(-c - b),  # 뒷항 부호 미반전.
+                    sympy.Integer(c - b),
+                    sympy.Integer(c + b),
+                ),
+                conditions=f"x = {b} - {c}",
+                answer_str=str(correct_v),
+                question_text=f"-(x - {b}) 에서 x = {c} 일 때의 값을 구하시오.",
+                answer_explanation=(
+                    f"음의 부호 분배는 -(x - {b}) = -x + {b} 이므로 x = {c} 를 대입하면 "
+                    f"{correct_v} 이다. 뒷항 부호를 반전하지 않고 -{c} - {b}로 계산하면 틀린다."
+                ),
+                difficulty=_difficulty(b + c),
+                answer_format=_answer_format_for(sympy.Integer(correct_v)),
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_square_difference_pool() -> tuple[_EvalItem, ...]:
+    """(a-b)² 값 뼈대 풀 — 정답 (a-b)²·오개념 a²-b²(교차항 누락)·filler (a+b)²·a²+b².
+
+    차의 제곱은 (a-b)²=a²-2ab+b²이다. 교차항 -2ab를 누락해 a²-b²로 계산하면 틀린다. a>b≥2라 네 값
+    {(a-b)², a²-b², (a+b)², a²+b²}은 서로 다르다. 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(3, 28):
+        for b in range(2, a):
+            correct_v = (a - b) ** 2
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer((a - b) ** 2),
+                    sympy.Integer(a * a - b * b),  # 교차항 -2ab 누락.
+                    sympy.Integer((a + b) ** 2),
+                    sympy.Integer(a * a + b * b),
+                ),
+                conditions=f"x = ({a} - {b})**2",
+                answer_str=str(correct_v),
+                question_text=f"({a} - {b})² 의 값을 구하시오.",
+                answer_explanation=(
+                    f"차의 제곱은 ({a} - {b})² = {a}² - 2·{a}·{b} + {b}² = {correct_v} 이다. "
+                    f"교차항을 누락해 {a}² - {b}²로 계산하면 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=_answer_format_for(sympy.Integer(correct_v)),
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "distribution": _build_distribution_pool,
     "chain_rule": _build_chain_rule_pool,
@@ -1067,6 +1308,12 @@ _POOL_FACTORY = {
     "absolute_value": _build_absolute_value_pool,
     "sqrt_sum": _build_sqrt_sum_pool,
     "difference_of_squares": _build_difference_of_squares_pool,
+    "exponent_product": _build_exponent_product_pool,
+    "power_of_power": _build_power_of_power_pool,
+    "negative_square": _build_negative_square_pool,
+    "distribute_partial": _build_distribute_partial_pool,
+    "negative_distribute": _build_negative_distribute_pool,
+    "square_difference": _build_square_difference_pool,
 }
 
 
@@ -1101,7 +1348,8 @@ class MisconceptionEvalMCSkeletonGenerator:
                 "sqrt_pos/log_dist/func_compose/sine_period/translate/product_rule/"
                 "fraction_cancel/polygon_angle_sum/area_perimeter/circle_radius/gambler_streak/"
                 "fraction_addition/negative_product/subtract_negative/absolute_value/sqrt_sum/"
-                "difference_of_squares)"
+                "difference_of_squares/exponent_product/power_of_power/negative_square/"
+                "distribute_partial/negative_distribute/square_difference)"
             )
         if not distractor_codes:
             raise ValueError(

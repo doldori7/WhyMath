@@ -46,7 +46,7 @@ class TestPackageDataLoading:
         assert text.strip()  # 비어있지 않음
         # 각 (주석·빈 줄 아닌) 줄이 JSON 객체다.
         lines = [ln for ln in text.splitlines() if ln.strip() and not ln.strip().startswith("#")]
-        assert len(lines) == 114  # 102 + 843 트랜치1 recall·FP 각 6건
+        assert len(lines) == 126  # 114 + 843 트랜치2 recall·FP 각 6건
         for ln in lines:
             rec = json.loads(ln)
             assert "statement" in rec
@@ -70,8 +70,8 @@ class TestPackageDataLoading:
                 recall += 1
             else:
                 fp += 1
-        assert recall == 71  # recall 프로브 수(843 트랜치1 +6)
-        assert fp == 43  # FP 프로브(843 트랜치1 +6)
+        assert recall == 77  # recall 프로브 수(843 트랜치2 +6)
+        assert fp == 49  # FP 프로브(843 트랜치2 +6)
 
     def test_all_expected_ids_in_catalog(self) -> None:
         # recall 프로브의 expected_id는 모두 카탈로그 id(매처가 잡을 수 있는 라벨).
@@ -92,7 +92,7 @@ class TestComputeDiagnosticRecall:
     def test_returns_hits_and_total_recall_probes(self) -> None:
         hits, total = compute_diagnostic_recall()
         # total = recall 프로브 수(expected_id null=FP 제외) = 65.
-        assert total == 71
+        assert total == 77
         # hits ∈ [0, total](실측 — substring·regex 매처 품질).
         assert 0 <= hits <= total
 
@@ -131,8 +131,8 @@ class TestComputeDiagnosticRecall:
             for ln in read_probes_text().splitlines()
             if ln.strip() and not ln.strip().startswith("#")
         )
-        assert all_probes == 114
-        assert total == 71
+        assert all_probes == 126
+        assert total == 77
         assert total < all_probes
 
 
@@ -184,7 +184,7 @@ class TestIterFpProbes:
     def test_returns_only_fp_statements(self) -> None:
         # 실 프로브셋의 FP(올바른 진술·expected_id null)만 추출 — 수는 split 테스트와 일치(37).
         fp = _iter_fp_probes()
-        assert len(fp) == 43
+        assert len(fp) == 49
         assert all(isinstance(s, str) and s for s in fp)
         # FP statement 집합은 recall statement와 서로소여야(같은 진술이 양쪽일 수 없음).
         recall_statements = {

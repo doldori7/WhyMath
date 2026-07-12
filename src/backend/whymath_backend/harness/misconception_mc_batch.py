@@ -1,10 +1,10 @@
 """오개념 커버리지 확대 수치평가 객관식 배치 — crosswalk machine-decidable 커버 상향(LLM 0).
 
-`root_aggregate_batch`(Vieta 킬러)의 형제다. `MisconceptionEvalMCSkeletonGenerator`로 21 서브밴드
+`root_aggregate_batch`(Vieta 킬러)의 형제다. `MisconceptionEvalMCSkeletonGenerator`로 27 서브밴드
 (오개념 kebab별)를 생성 → 기존 오케스트레이터(`run_batch`)·수용 게이트(S2-a)·`JsonlCorpusSink`를
 **재사용**해 코퍼스를 적재한다. 목적: 기존 코퍼스가 `distractor_map`으로 커버하지 못하던 오개념
-21종을 문항에 *등장*시켜 crosswalk 기계 게이트의 machine-decidable 커버리지를 끌어올린다(수치평가 MC
-8→13→15 + Tier B 값형 4 + Tier C gambler 1 + 843 트랜치1 기초 계산형 6).
+27종을 문항에 *등장*시켜 crosswalk 기계 게이트의 machine-decidable 커버리지를 끌어올린다(수치평가 MC
+8→13→15 + Tier B 값형 4 + Tier C gambler 1 + 843 트랜치1 6 + 트랜치2 6).
 `crosslink_demotion_eval`의 커버리지 회계는 `problem_bank_*/problems.jsonl` glob이라 신규 코퍼스
 자동 포함. 앞 3밴드는 op-code 실재, 나머지는
 op-code 부재(오개념만 태깅·`DistractorEntry.op_code` 옵셔널).
@@ -72,7 +72,7 @@ class _Band:
     standard_codes: tuple[str, ...]
 
 
-# 21 서브밴드 — 각 오개념 1종을 오답 선지로 태깅하는 수치평가 객관식.
+# 27 서브밴드 — 각 오개념 1종을 오답 선지로 태깅하는 수치평가 객관식.
 #   앞 3종(distribution/chain_rule/sine_sum)은 op-code 실재(DISTRACTOR_BY_ID).
 #   나머지(exp_zero 이후·Tier B 값형 포함)는 op-code 부재 — 오개념만 태깅(op_code 옵셔널).
 #   성취기준 튜플은 *각 kebab의 후보 M-id가 전부 agree*하도록 잠갔다 — 어느 후보도 crosswalk 구조
@@ -226,6 +226,49 @@ _BANDS: tuple[_Band, ...] = (
         "difference-of-squares-confused",
         ("[9수01-01]",),
     ),
+    # ── 843 확장 트랜치2(거듭제곱·분배·부호 계산형 6종·후보 단일 M-id·표준 일치 agree) ──
+    # exponent-product-multiplies: 후보 M0006=[9수02-08] agree.
+    _Band(
+        "exponent-product-multiplies",
+        "exponent_product",
+        "exponent-product-multiplies",
+        ("[9수02-08]",),
+    ),
+    # power-of-power-adds: 후보 M0135=[9수02-08] agree.
+    _Band(
+        "power-of-power-adds",
+        "power_of_power",
+        "power-of-power-adds",
+        ("[9수02-08]",),
+    ),
+    # negative-square-precedence: 후보 M0009=[9수02-08] agree.
+    _Band(
+        "negative-square-precedence",
+        "negative_square",
+        "negative-square-precedence",
+        ("[9수02-08]",),
+    ),
+    # distribute-first-term-only: 후보 M0017=[9수02-09] agree.
+    _Band(
+        "distribute-first-term-only",
+        "distribute_partial",
+        "distribute-first-term-only",
+        ("[9수02-09]",),
+    ),
+    # negative-distribute-sign: 후보 M0018=[9수02-09] agree.
+    _Band(
+        "negative-distribute-sign",
+        "negative_distribute",
+        "negative-distribute-sign",
+        ("[9수02-09]",),
+    ),
+    # square-of-difference-no-cross: 후보 M0020=[9수02-19] agree.
+    _Band(
+        "square-of-difference-no-cross",
+        "square_difference",
+        "square-of-difference-no-cross",
+        ("[9수02-19]",),
+    ),
 )
 
 
@@ -270,7 +313,7 @@ def build_kebab_distractor_codes_optional(
 def run_misconception_mc_batch(
     *, n_per_band: int = _DEFAULT_N, out_path: Path | None = None, write: bool = True
 ) -> CorpusBatchReport:
-    """21 서브밴드 배치 실행 — 생성→S2-a 게이트→구조 dedup→적재(순수 결정론).
+    """27 서브밴드 배치 실행 — 생성→S2-a 게이트→구조 dedup→적재(순수 결정론).
 
     각 밴드는 **별도 signature_index**(문제군 분리·calc 밴드 패턴 미러)를 쓴다. sink에는 밴드
     순서대로 append한다. `target_misconception_ids={kebab}`라 게이트 오개념 Jaccard가 1.0(후보가
@@ -327,7 +370,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI — 오개념 수치평가 MC 배치. 수율 미달(총 저장 < 요청)이면 exit 1(조용한 실패 금지)."""
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.misconception_mc_batch",
-        description="오개념 커버리지 확대 수치평가 객관식 배치 적재(21 서브밴드·결정론).",
+        description="오개념 커버리지 확대 수치평가 객관식 배치 적재(27 서브밴드·결정론).",
     )
     parser.add_argument("--n", type=int, default=_DEFAULT_N, help="서브밴드당 요청 수(기본 24).")
     parser.add_argument("--out", default=None, help="출력 코퍼스 경로(기본 misconception_mc_v0).")

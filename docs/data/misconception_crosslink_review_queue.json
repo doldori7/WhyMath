@@ -959,6 +959,72 @@
       "reviewer": null,
       "reviewed_on": null,
       "note": null
+    },
+    {
+      "kebab_id": "exponent-product-multiplies",
+      "mis_id": "M0006",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치2 — 2³×2²=2⁶ 지수 곱셈 오인 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "power-of-power-adds",
+      "mis_id": "M0135",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치2 — (2³)²=2⁵ 지수 덧셈 오인 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "negative-square-precedence",
+      "mis_id": "M0009",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치2 — -2²=4 부호 우선순위 오인 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "distribute-first-term-only",
+      "mis_id": "M0017",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치2 — 2(x+3)=2x+3 뒷항 분배 누락 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "negative-distribute-sign",
+      "mis_id": "M0018",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치2 — -(x-3)=-x-3 부호 반전 누락 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "square-of-difference-no-cross",
+      "mis_id": "M0020",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치2 — (a-b)²=a²-b² 교차항 누락 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
     }
   ]
 }

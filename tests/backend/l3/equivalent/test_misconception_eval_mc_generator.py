@@ -148,6 +148,19 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
         "J0101",
         "DIFF-SQUARES",
     ),
+    # 843 확장 트랜치2 — 거듭제곱·분배·부호 계산형 6종(신규 탐지 kebab).
+    ("exponent_product", "exponent-product-multiplies", "[9수02-08]", "J0208", "EXP-PRODUCT"),
+    ("power_of_power", "power-of-power-adds", "[9수02-08]", "J0208", "POWER-OF-POWER"),
+    ("negative_square", "negative-square-precedence", "[9수02-08]", "J0208", "NEG-SQUARE"),
+    (
+        "distribute_partial",
+        "distribute-first-term-only",
+        "[9수02-09]",
+        "J0209",
+        "DISTRIBUTE-PARTIAL",
+    ),
+    ("negative_distribute", "negative-distribute-sign", "[9수02-09]", "J0209", "NEG-DISTRIBUTE"),
+    ("square_difference", "square-of-difference-no-cross", "[9수02-19]", "J0219", "SQUARE-DIFF"),
 )
 
 

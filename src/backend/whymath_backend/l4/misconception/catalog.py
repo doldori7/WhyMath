@@ -8,6 +8,8 @@ S2-p: 이차방정식 근 선택·인수 부호 반전 2종(doc #31-32)을 doc-f
 객관식 distractor의 오개념 역추적 좌석. 여전히 *미상세 항목을 추정 작성하지 않는다*(doc-first 불변).
 843 확장 트랜치1(2026-07-12): 기초 계산형 6종(doc #35-40·분수덧셈·음수곱·음수빼기·절댓값·제곱근분배
 ·합차공식 혼동)을 doc-first로 추가(34→40종) — 843 콘텐츠↔탐지 커버 확장·수치평가 MC로 기계 검증.
+843 확장 트랜치2(2026-07-12): 거듭제곱·분배·부호 계산형 6종(doc #41-46·거듭제곱 곱셈/거듭제곱·음수
+제곱 우선순위·분배 뒷항 누락·음수 분배 부호·차의 제곱 교차항)을 doc-first로 추가(40→46종).
 
 각 `canonical_statement`·`counterexample`은 *자체 생성 기본 수학 사실*(교과서/EBS 본문 복제
 금지·CLAUDE.md). 반례는 canonical을 실제로 반증한다(수학적 정합 검증 완료).
@@ -29,7 +31,7 @@ from __future__ import annotations
 
 from whymath_backend.l4.misconception.models import Misconception
 
-# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32, #35-40) (17종).
+# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32, #35-46) (23종).
 _ALGEBRA: tuple[Misconception, ...] = (
     Misconception(
         id="distribution-over-power",
@@ -245,6 +247,67 @@ _ALGEBRA: tuple[Misconception, ...] = (
         # 제곱의 차를 차의 제곱으로 보는 합차공식 혼동. "제곱"+"차이" 공출현(doc #40).
         # 수치평가 MC distractor((x-a)² 선지)의 역추적 좌석. ([9수01-01]·M0121)
         signals=("제곱", "차이"),
+    ),
+    # ── 843 확장 트랜치2(doc #41-46·거듭제곱·분배·부호 계산형 6종·수치평가 MC로 기계 검증) ──
+    Misconception(
+        id="exponent-product-multiplies",
+        name_kr="거듭제곱 곱셈 지수",
+        domain="대수",
+        canonical_statement="aᵐ × aⁿ = aᵐⁿ",
+        counterexample="2³×2²=2⁵=32 — 2⁶=64는 지수를 곱한 값",
+        # 밑이 같은 거듭제곱의 곱에서 지수를 더하지 않고 곱함. "지수끼리"+"곱하" 공출현(doc #41).
+        # 수치평가 MC distractor(2⁶ 선지)의 역추적 좌석. ([9수02-08]·M0006)
+        signals=("지수끼리", "곱하"),
+    ),
+    Misconception(
+        id="power-of-power-adds",
+        name_kr="거듭제곱의 거듭제곱 지수",
+        domain="대수",
+        canonical_statement="(aᵐ)ⁿ = aᵐ⁺ⁿ",
+        counterexample="(2³)²=2⁶=64 — 2⁵=32는 지수를 더한 값",
+        # 거듭제곱의 거듭제곱에서 지수를 곱하지 않고 더함. "거듭제곱의"+"지수를" 공출현(doc #42).
+        # 수치평가 MC distractor(2⁵ 선지)의 역추적 좌석. ([9수02-08]·M0135)
+        signals=("거듭제곱의", "지수를"),
+    ),
+    Misconception(
+        id="negative-square-precedence",
+        name_kr="음수 제곱 우선순위",
+        domain="대수",
+        canonical_statement="-a² = a²",
+        counterexample="-2²=-(2²)=-4 — 4는 (-2)²으로 부호를 먼저 처리한 값",
+        # 거듭제곱이 음의 부호보다 우선함을 놓쳐 -a²을 (-a)²로 계산. "음수"+"거듭제곱"(doc #43).
+        # 수치평가 MC distractor(4 선지)의 역추적 좌석. ([9수02-08]·M0009)
+        signals=("음수", "거듭제곱"),
+    ),
+    Misconception(
+        id="distribute-first-term-only",
+        name_kr="분배 뒷항 누락",
+        domain="대수",
+        canonical_statement="a(x+b) = ax + b",
+        counterexample="2(x+3)=2x+6 — 2x+3은 뒷항 분배를 누락한 값",
+        # 분배법칙에서 뒷항 분배를 누락. "분배"+"뒷항" 공출현(doc #44).
+        # 수치평가 MC distractor(뒷항 미분배 선지)의 역추적 좌석. ([9수02-09]·M0017)
+        signals=("분배", "뒷항"),
+    ),
+    Misconception(
+        id="negative-distribute-sign",
+        name_kr="음수 분배 부호",
+        domain="대수",
+        canonical_statement="-(x-b) = -x - b",
+        counterexample="-(x-3)=-x+3 — -x-3은 뒷항 부호를 안 바꾼 값",
+        # 음의 부호 분배에서 뒷항 부호 반전을 누락. "음수"+"분배" 공출현(doc #45).
+        # 수치평가 MC distractor(-x-b 선지)의 역추적 좌석. ([9수02-09]·M0018)
+        signals=("음수", "분배"),
+    ),
+    Misconception(
+        id="square-of-difference-no-cross",
+        name_kr="차의 제곱 교차항 누락",
+        domain="대수",
+        canonical_statement="(a-b)² = a² - b²",
+        counterexample="(5-3)²=4 — 25-9=16은 교차항 -2ab를 누락한 값",
+        # 차의 제곱에서 교차항 -2ab 누락. "차의 제곱"+"교차항" 공출현(doc #46).
+        # 수치평가 MC distractor(a²-b² 선지)의 역추적 좌석. ([9수02-19]·M0020)
+        signals=("차의 제곱", "교차항"),
     ),
 )
 

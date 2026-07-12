@@ -327,22 +327,34 @@ _TRANCHE1_DIRECT: dict[str, set[tuple[str, float]]] = {
     "difference-of-squares-confused": {("M0121", 0.9)},
 }
 
+# 843 확장 트랜치2 — 거듭제곱·분배·부호 계산형 6종(같은 화이트리스트 계약·전행 pending).
+_TRANCHE2_DIRECT: dict[str, set[tuple[str, float]]] = {
+    "exponent-product-multiplies": {("M0006", 0.95)},
+    "power-of-power-adds": {("M0135", 0.95)},
+    "negative-square-precedence": {("M0009", 0.95)},
+    "distribute-first-term-only": {("M0017", 0.95)},
+    "negative-distribute-sign": {("M0018", 0.95)},
+    "square-of-difference-no-cross": {("M0020", 0.95)},
+}
+
 
 def test_real_queue_direct_top_confidences_match_draft(
     real_rows: list[dict[str, Any]],
 ) -> None:
-    # ④ non-null 직접매핑 = 초안 ∪ 검수 대안 ∪ S2-p ∪ 극값 MC ∪ 843 트랜치1 — 그 외 차단.
+    # ④ non-null 직접매핑 = 초안 ∪ 검수 ∪ S2-p ∪ 극값 MC ∪ 843 트랜치1·2 — 그 외 차단.
     expected: dict[str, set[tuple[str, float]]] = {
         k: set(_DRAFT_DIRECT_TOPS.get(k, set()))
         | set(_REVIEWED_DIRECT_ALTS.get(k, set()))
         | set(_S2P_DIRECT.get(k, set()))
         | set(_EXTREMUM_MC_DIRECT.get(k, set()))
         | set(_TRANCHE1_DIRECT.get(k, set()))
+        | set(_TRANCHE2_DIRECT.get(k, set()))
         for k in set(_DRAFT_DIRECT_TOPS)
         | set(_REVIEWED_DIRECT_ALTS)
         | set(_S2P_DIRECT)
         | set(_EXTREMUM_MC_DIRECT)
         | set(_TRANCHE1_DIRECT)
+        | set(_TRANCHE2_DIRECT)
     }
     actual: dict[str, set[tuple[str, float]]] = {}
     for row in real_rows:

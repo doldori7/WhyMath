@@ -112,3 +112,15 @@
 {"statement": "루트 안의 합은 하나로 계산한 뒤 근호를 씌워야 한다", "expected_id": null, "near_id": "sqrt-distributes-over-sum", "kind": "correct-near", "note": "올바른 제곱근 — signals 미공출현"}
 {"statement": "제곱끼리 뺀 식은 괄호 뺄셈을 통째로 제곱한 것과 같다고 봤어", "expected_id": "difference-of-squares-confused", "near_id": null, "kind": "paraphrase", "note": "x²-a²=(x-a)² — signals 제곱·차이 회피(차이 미포함)"}
 {"statement": "제곱끼리 뺀 식은 두 항의 합과 차의 곱이 된다", "expected_id": null, "near_id": "difference-of-squares-confused", "kind": "correct-near", "note": "올바른 합차공식 — 차이 미포함(부분)"}
+{"statement": "밑이 같은 거듭제곱을 곱할 때 지수를 서로 곱한다고 봤어", "expected_id": "exponent-product-multiplies", "near_id": null, "kind": "paraphrase", "note": "aᵐ·aⁿ=aᵐⁿ — signals 지수끼리·곱하 회피(지수끼리 미포함)"}
+{"statement": "밑이 같은 거듭제곱의 곱은 지수를 더해야 한다", "expected_id": null, "near_id": "exponent-product-multiplies", "kind": "correct-near", "note": "올바른 지수법칙 — signals 미공출현"}
+{"statement": "거듭제곱을 다시 거듭제곱하면 지수끼리 더한다고 생각했어", "expected_id": "power-of-power-adds", "near_id": null, "kind": "paraphrase", "note": "(aᵐ)ⁿ=aᵐ⁺ⁿ — signals 거듭제곱의·지수를 회피"}
+{"statement": "거듭제곱을 다시 거듭제곱하면 지수를 서로 곱해야 한다", "expected_id": null, "near_id": "power-of-power-adds", "kind": "correct-near", "note": "올바른 지수법칙 — 거듭제곱의 미포함(부분)"}
+{"statement": "마이너스 이의 제곱은 부호까지 포함해서 계산하니 양수가 된다고 봤어", "expected_id": "negative-square-precedence", "near_id": null, "kind": "paraphrase", "note": "-a²=a² — signals 음수·거듭제곱 회피"}
+{"statement": "마이너스 이의 제곱은 이의 제곱에 음의 부호를 붙여 음수가 된다", "expected_id": null, "near_id": "negative-square-precedence", "kind": "correct-near", "note": "올바른 우선순위 — 거듭제곱 미포함(부분)"}
+{"statement": "괄호 앞 수를 앞 항에만 곱하고 뒤 항은 그대로 뒀어", "expected_id": "distribute-first-term-only", "near_id": null, "kind": "paraphrase", "note": "a(x+b)=ax+b — signals 분배·뒷항 회피"}
+{"statement": "괄호 앞 수는 괄호 안 모든 항에 분배해야 한다", "expected_id": null, "near_id": "distribute-first-term-only", "kind": "correct-near", "note": "올바른 분배 — 뒷항 미포함(부분)"}
+{"statement": "괄호 앞 마이너스를 앞 항에만 붙이고 뒤 항 부호는 그대로 뒀어", "expected_id": "negative-distribute-sign", "near_id": null, "kind": "paraphrase", "note": "-(x-b)=-x-b — signals 음수·분배 회피"}
+{"statement": "괄호 앞 마이너스는 안쪽 모든 항의 부호를 반대로 만든다", "expected_id": null, "near_id": "negative-distribute-sign", "kind": "correct-near", "note": "올바른 부호 분배 — signals 미공출현"}
+{"statement": "차를 제곱하면 각각을 제곱해서 빼면 된다고 적었어", "expected_id": "square-of-difference-no-cross", "near_id": null, "kind": "paraphrase", "note": "(a-b)²=a²-b² — signals 차의 제곱·교차항 회피"}
+{"statement": "두 수의 차를 제곱하면 가운데 -2ab 항이 생긴다", "expected_id": null, "near_id": "square-of-difference-no-cross", "kind": "correct-near", "note": "올바른 완전제곱 — signals 미공출현"}

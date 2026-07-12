@@ -21,10 +21,10 @@ from whymath_backend.l4.misconception.match_gate import _DEFAULT_CONFIDENCE_FLOO
 
 class TestCatalogShape:
     def test_thirty_two_entries_doc_explicit_only(self) -> None:
-        # doc 명시·상세화: 대수 17 + 기하 4 + 확률통계 4 + 함수 3
-        #                 + 미적분 7 + 수열 2 + 삼각함수 2 + 벡터 1 = 40
-        #                 (Phase 1 30 + S2-p 2 + 극값 MC 2 + 843 확장 트랜치1 6)
-        assert len(CATALOG) == 40
+        # doc 명시·상세화: 대수 23 + 기하 4 + 확률통계 4 + 함수 3
+        #                 + 미적분 7 + 수열 2 + 삼각함수 2 + 벡터 1 = 46
+        #                 (Phase 1 30 + S2-p 2 + 극값 MC 2 + 843 트랜치1 6 + 트랜치2 6)
+        assert len(CATALOG) == 46
 
     def test_all_ids_unique(self) -> None:
         ids = [m.id for m in CATALOG]
@@ -41,7 +41,8 @@ class TestCanonicalIdsFromDoc:
 
     def test_algebra_seventeen(self) -> None:
         # 기존 7 + 슬 §5.4 추가 2(discriminant·root-loss) + S2-p 추가 2(반대 근·부호 반전)
-        # + 843 확장 트랜치1 6(분수덧셈·음수곱·음수빼기·절댓값·제곱근분배·합차공식 혼동)
+        # + 843 트랜치1 6(분수덧셈·음수곱·음수빼기·절댓값·제곱근분배·합차공식 혼동)
+        # + 843 트랜치2 6(거듭제곱 곱셈/거듭제곱·음수 제곱·분배 뒷항·음수 분배·차의 제곱) = 23
         algebra_ids = {
             "distribution-over-power",
             "sign-flip-in-inequality",
@@ -60,6 +61,12 @@ class TestCanonicalIdsFromDoc:
             "absolute-value-keeps-sign",
             "sqrt-distributes-over-sum",
             "difference-of-squares-confused",
+            "exponent-product-multiplies",
+            "power-of-power-adds",
+            "negative-square-precedence",
+            "distribute-first-term-only",
+            "negative-distribute-sign",
+            "square-of-difference-no-cross",
         }
         assert algebra_ids.issubset(CATALOG_BY_ID.keys())
         for mid in (

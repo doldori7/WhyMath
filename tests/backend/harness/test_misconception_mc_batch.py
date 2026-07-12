@@ -43,8 +43,14 @@ _BANDS = (
     "absolute-value-keeps-sign",
     "sqrt-distributes-over-sum",
     "difference-of-squares-confused",
+    "exponent-product-multiplies",
+    "power-of-power-adds",
+    "negative-square-precedence",
+    "distribute-first-term-only",
+    "negative-distribute-sign",
+    "square-of-difference-no-cross",
 )
-_TOTAL = 24 * len(_BANDS)  # 21 밴드 × 24 = 504
+_TOTAL = 24 * len(_BANDS)  # 27 밴드 × 24 = 648
 
 
 class TestRunMisconceptionMcBatch:

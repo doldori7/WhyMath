@@ -81,6 +81,14 @@
    "note": "검수:Kiki 2026-07-10"
   },
   {
+   "kebab_id": "distribute-first-term-only",
+   "mis_id": "M0017",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "distribution-over-power",
    "mis_id": "M0019",
    "link_type": "직접매핑",
@@ -99,6 +107,14 @@
   {
    "kebab_id": "dot-product-is-vector",
    "mis_id": "M0735",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "exponent-product-multiplies",
+   "mis_id": "M0006",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",
@@ -209,6 +225,22 @@
    "note": "검수:Kiki 2026-07-12"
   },
   {
+   "kebab_id": "negative-distribute-sign",
+   "mis_id": "M0018",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "negative-square-precedence",
+   "mis_id": "M0009",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "negative-times-negative",
    "mis_id": "M0001",
    "link_type": "직접매핑",
@@ -229,6 +261,14 @@
    "mis_id": "M0152",
    "link_type": "직접매핑",
    "confidence": 0.85,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "power-of-power-adds",
+   "mis_id": "M0135",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
    "method": "manual",
    "note": "검수:Kiki 2026-07-12"
   },
@@ -283,6 +323,14 @@
   {
    "kebab_id": "sqrt-distributes-over-sum",
    "mis_id": "M0008",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "square-of-difference-no-cross",
+   "mis_id": "M0020",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",
