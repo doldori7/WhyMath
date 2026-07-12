@@ -117,6 +117,37 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
         "H:12확통02-01",
         "PROB-INDEPENDENT-TRIAL",
     ),
+    # 843 확장 트랜치1 — 기초 계산형 6종(신규 탐지 kebab).
+    (
+        "fraction_addition",
+        "fraction-addition-naive",
+        "[9수01-04]",
+        "J0104",
+        "FRACTION-ADD",
+    ),
+    (
+        "negative_product",
+        "negative-times-negative",
+        "[9수01-03]",
+        "J0103",
+        "NEG-PRODUCT",
+    ),
+    (
+        "subtract_negative",
+        "subtract-negative-sign",
+        "[9수01-03]",
+        "J0103",
+        "SUBTRACT-NEG",
+    ),
+    ("absolute_value", "absolute-value-keeps-sign", "[9수01-04]", "J0104", "ABS-VALUE"),
+    ("sqrt_sum", "sqrt-distributes-over-sum", "[9수01-07]", "J0107", "SQRT-SUM"),
+    (
+        "difference_of_squares",
+        "difference-of-squares-confused",
+        "[9수01-01]",
+        "J0101",
+        "DIFF-SQUARES",
+    ),
 )
 
 
@@ -129,9 +160,7 @@ def _spec(kebab: str, code: str) -> EquivalenceSpec:
     )
 
 
-def _gen(
-    template: TemplateKind, kebab: str, **kw: object
-) -> MisconceptionEvalMCSkeletonGenerator:
+def _gen(template: TemplateKind, kebab: str, **kw: object) -> MisconceptionEvalMCSkeletonGenerator:
     # op-code 有/無 무관 주입(부재 시 op_code=None) — 신규 5종은 op-code 없음.
     return MisconceptionEvalMCSkeletonGenerator(
         template, build_kebab_distractor_codes_optional(kebab), **kw  # type: ignore[arg-type]
@@ -207,10 +236,7 @@ class TestMathematicalSoundness:
         # ② conditions(dummy x 등식)가 answer_map으로 Tier1 검산 pass — 정답값 자기정합.
         for candidate in _drain(_gen(template, kebab), _spec(kebab, code)):
             assert isinstance(candidate.conditions, str)
-            assert (
-                verify_answer(candidate.conditions, candidate.answer_map).state
-                == "pass"
-            )
+            assert verify_answer(candidate.conditions, candidate.answer_map).state == "pass"
 
 
 class TestChoicesAndTagging:
@@ -232,14 +258,10 @@ class TestChoicesAndTagging:
         self, template: TemplateKind, kebab: str, code: str, _src: str, _unit: str
     ) -> None:
         # ③ 오개념 오답 *1건*만 태깅·정답 선지 제외·op-code 정본 일치(부재 시 None).
-        expected_op = next(iter(build_kebab_distractor_codes_optional(kebab).values()))[
-            1
-        ]
+        expected_op = next(iter(build_kebab_distractor_codes_optional(kebab).values()))[1]
         for candidate in _drain(_gen(template, kebab), _spec(kebab, code)):
             problem = candidate.problem
-            assert (
-                problem.distractor_map is not None and len(problem.distractor_map) == 1
-            )
+            assert problem.distractor_map is not None and len(problem.distractor_map) == 1
             entry = problem.distractor_map[0]
             assert entry.misconception_id == kebab
             assert entry.op_code == expected_op

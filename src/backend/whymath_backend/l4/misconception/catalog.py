@@ -6,6 +6,8 @@ r"""오개념 카탈로그 — `docs/prompts/misconception_diagnosis.md` "오개
 continuity-implies-differentiability 포함·#24-30 신규)한 뒤 인코딩 — Phase 1 30종 목표 달성.
 S2-p: 이차방정식 근 선택·인수 부호 반전 2종(doc #31-32)을 doc-first로 추가(32종) — 동등문제
 객관식 distractor의 오개념 역추적 좌석. 여전히 *미상세 항목을 추정 작성하지 않는다*(doc-first 불변).
+843 확장 트랜치1(2026-07-12): 기초 계산형 6종(doc #35-40·분수덧셈·음수곱·음수빼기·절댓값·제곱근분배
+·합차공식 혼동)을 doc-first로 추가(34→40종) — 843 콘텐츠↔탐지 커버 확장·수치평가 MC로 기계 검증.
 
 각 `canonical_statement`·`counterexample`은 *자체 생성 기본 수학 사실*(교과서/EBS 본문 복제
 금지·CLAUDE.md). 반례는 canonical을 실제로 반증한다(수학적 정합 검증 완료).
@@ -27,7 +29,7 @@ from __future__ import annotations
 
 from whymath_backend.l4.misconception.models import Misconception
 
-# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32) (11종).
+# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32, #35-40) (17종).
 _ALGEBRA: tuple[Misconception, ...] = (
     Misconception(
         id="distribution-over-power",
@@ -182,6 +184,67 @@ _ALGEBRA: tuple[Misconception, ...] = (
         # 시연 방식대로 후속(doc §매칭 알고리즘·추측 작성 금지). 올바른 진술 "x=a"는
         # "x=-a"를 미포함(gate-safe). S2-p(doc #32) distractor(부호 반전 근 선지) 역추적 좌석.
         signals=("(x-a)", "x=-a"),
+    ),
+    # ── 843 확장 트랜치1(doc #35-40·기초 계산형 6종·수치평가 MC로 기계 검증) ──
+    Misconception(
+        id="fraction-addition-naive",
+        name_kr="분수 덧셈 통분 누락",
+        domain="대수",
+        canonical_statement="a/b + c/d = (a+c)/(b+d)",
+        counterexample="1/2 + 1/3 = 5/6 — (1+1)/(2+3)=2/5는 통분을 누락한 값",
+        # 통분 없이 분자·분모를 각각 더한 흔적. "분수"+"통분" 공출현(doc #35). 수치평가 MC
+        # distractor(2/5 선지)의 역추적 좌석. ([9수01-04]·M0004)
+        signals=("분수", "통분"),
+    ),
+    Misconception(
+        id="negative-times-negative",
+        name_kr="음수 곱 부호",
+        domain="대수",
+        canonical_statement="음수끼리 곱하면 음수다",
+        counterexample="(-2)×(-3)=6>0 — 음×음=양",
+        # 부호 규칙(음×음=양) 누락. "음수끼리"+"곱하면" 공출현(doc #36). 수치평가 MC
+        # distractor(-ab 선지)의 역추적 좌석. ([9수01-03]·M0001)
+        signals=("음수끼리", "곱하면"),
+    ),
+    Misconception(
+        id="subtract-negative-sign",
+        name_kr="음수 빼기 부호",
+        domain="대수",
+        canonical_statement="a-(-b)=a-b",
+        counterexample="3-(-5)=8 — 3-5=-2는 부호 반전을 누락한 값",
+        # 음수를 빼는 연산에서 부호 반전(−(−b)=+b) 누락. "음수"+"빼기" 공출현(doc #37).
+        # 수치평가 MC distractor(a-b 선지)의 역추적 좌석. ([9수01-03]·M0002)
+        signals=("음수", "빼기"),
+    ),
+    Misconception(
+        id="absolute-value-keeps-sign",
+        name_kr="절댓값 부호 유지",
+        domain="대수",
+        canonical_statement="|-a|=-a",
+        counterexample="|-3|=3 — 절댓값(거리)은 음이 아니다",
+        # 절댓값이 음수의 부호를 유지한다는 오개념. "절댓값"+"음수" 공출현(doc #38).
+        # 수치평가 MC distractor(-a 선지)의 역추적 좌석. ([9수01-04]·M0010)
+        signals=("절댓값", "음수"),
+    ),
+    Misconception(
+        id="sqrt-distributes-over-sum",
+        name_kr="제곱근 합 분배",
+        domain="대수",
+        canonical_statement="√(a+b)=√a+√b",
+        counterexample="√(9+16)=√25=5 — √9+√16=7은 분배 오개념 값",
+        # 제곱근이 합에 분배된다는 오개념. "제곱근"+"분배" 공출현(doc #39). 수치평가 MC
+        # distractor(√a+√b 선지)의 역추적 좌석. ([9수01-07]·M0008)
+        signals=("제곱근", "분배"),
+    ),
+    Misconception(
+        id="difference-of-squares-confused",
+        name_kr="제곱 차 혼동",
+        domain="대수",
+        canonical_statement="x²-a² = (x-a)²",
+        counterexample="x=5,a=3에서 x²-9=16 — (x-3)²=4 (올바른 인수분해는 (x-a)(x+a))",
+        # 제곱의 차를 차의 제곱으로 보는 합차공식 혼동. "제곱"+"차이" 공출현(doc #40).
+        # 수치평가 MC distractor((x-a)² 선지)의 역추적 좌석. ([9수01-01]·M0121)
+        signals=("제곱", "차이"),
     ),
 )
 

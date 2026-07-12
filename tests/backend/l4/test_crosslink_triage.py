@@ -54,13 +54,9 @@ class TestTriageCandidates:
     def test_four_buckets_classified(self) -> None:
         q = _queue(
             [
-                _row(
-                    "opposite-root-selected", "M0900"
-                ),  # disagree·증거 130 → auto_reject
+                _row("opposite-root-selected", "M0900"),  # disagree·증거 130 → auto_reject
                 _row("opposite-root-selected", "M0862"),  # agree → corroborated
-                _row(
-                    "extremum-max-min-confused", "M0901"
-                ),  # disagree·증거 3 → thin_disagree
+                _row("extremum-max-min-confused", "M0901"),  # disagree·증거 3 → thin_disagree
                 _row("opposite-root-selected", "M0902"),  # M표준 없음 → no_signal
             ]
         )
@@ -114,13 +110,8 @@ class TestTriageCandidates:
 class TestCommittedQueueEndToEnd:
     def _run(self) -> object:
         return triage_run(
-            queue_path=_REPO_ROOT
-            / "docs"
-            / "data"
-            / "misconception_crosslink_review_queue.json",
-            corpora=sorted(
-                (_REPO_ROOT / "data" / "corpus").glob("problem_bank_*/problems.jsonl")
-            ),
+            queue_path=_REPO_ROOT / "docs" / "data" / "misconception_crosslink_review_queue.json",
+            corpora=sorted((_REPO_ROOT / "data" / "corpus").glob("problem_bank_*/problems.jsonl")),
             misconceptions=_REPO_ROOT
             / "data"
             / "corpus"
@@ -130,11 +121,11 @@ class TestCommittedQueueEndToEnd:
         )
 
     def test_committed_bucket_counts(self) -> None:
-        # 커밋 큐 e2e — root-loss 증거 보강(thin→corroborated)으로 thin_disagree 1→0·corroborated
-        # 76→77. no_signal 0(34/34 등장).
+        # 커밋 큐 e2e — 843 확장 트랜치1 6종 corroborated 추가(77→83)·no_signal 0·thin_disagree 0
+        # (탐지 카탈로그 40 전수 등장·agree).
         report = self._run()
         assert report.counts == {  # type: ignore[attr-defined]
-            "corroborated": 77,
+            "corroborated": 83,
             "no_signal": 0,
             "auto_reject": 4,
             "thin_disagree": 0,
@@ -155,9 +146,7 @@ class TestCommittedQueueEndToEnd:
                 / "data"
                 / "misconception_crosslink_review_queue.json",
                 corpora=sorted(
-                    (_REPO_ROOT / "data" / "corpus").glob(
-                        "problem_bank_*/problems.jsonl"
-                    )
+                    (_REPO_ROOT / "data" / "corpus").glob("problem_bank_*/problems.jsonl")
                 ),
                 misconceptions=_REPO_ROOT
                 / "data"
@@ -180,12 +169,9 @@ class TestCommittedQueueEndToEnd:
     def test_queue_unchanged_all_pending(self) -> None:
         # 봉인 준수 — 트리아지는 큐를 읽기만 한다(전행 pending 유지).
         q = json.loads(
-            (
-                _REPO_ROOT
-                / "docs"
-                / "data"
-                / "misconception_crosslink_review_queue.json"
-            ).read_text(encoding="utf-8")
+            (_REPO_ROOT / "docs" / "data" / "misconception_crosslink_review_queue.json").read_text(
+                encoding="utf-8"
+            )
         )
         assert all(row["status"] == "pending" for row in q["review_queue"])
 
@@ -203,9 +189,7 @@ class TestWorksheet:
         )
         text = format_worksheet(
             report,
-            kebab_statements={
-                "opposite-root-selected": ("반대근 선택", "작은 근을 답한다")
-            },
+            kebab_statements={"opposite-root-selected": ("반대근 선택", "작은 근을 답한다")},
             mid_texts={"M0862": ("부호 반대 근", "큰 근 대신 작은 근")},
             bucket="corroborated",
         )

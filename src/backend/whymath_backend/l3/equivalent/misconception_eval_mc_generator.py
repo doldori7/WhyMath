@@ -40,7 +40,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
-from math import gcd
+from math import gcd, isqrt
 from typing import Literal
 
 import sympy
@@ -88,6 +88,12 @@ TemplateKind = Literal[
     "area_perimeter",
     "circle_radius",
     "gambler_streak",
+    "fraction_addition",
+    "negative_product",
+    "subtract_negative",
+    "absolute_value",
+    "sqrt_sum",
+    "difference_of_squares",
 ]
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
@@ -108,6 +114,13 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "area_perimeter": ("J0312", "AREA-PERIMETER"),
     "circle_radius": ("10공수2-01-04", "CIRCLE-RADIUS"),
     "gambler_streak": ("H:12확통02-01", "PROB-INDEPENDENT-TRIAL"),
+    # 843 확장 트랜치1(기초 계산형 6종) — 성취기준은 spec이 공급([9수01-*]).
+    "fraction_addition": ("J0104", "FRACTION-ADD"),
+    "negative_product": ("J0103", "NEG-PRODUCT"),
+    "subtract_negative": ("J0103", "SUBTRACT-NEG"),
+    "absolute_value": ("J0104", "ABS-VALUE"),
+    "sqrt_sum": ("J0107", "SQRT-SUM"),
+    "difference_of_squares": ("J0101", "DIFF-SQUARES"),
 }
 
 
@@ -799,6 +812,239 @@ def _build_gambler_streak_pool() -> tuple[_EvalItem, ...]:
     return tuple(pool)
 
 
+def _build_fraction_addition_pool() -> tuple[_EvalItem, ...]:
+    """1/p + 1/q 값 뼈대 풀 — 정답 (p+q)/(pq)·오개념 2/(p+q)(분자·분모 각각 더함·통분 누락).
+
+    1/p + 1/q = (p+q)/(pq) 인데, 통분 없이 분자끼리(1+1)·분모끼리(p+q) 더해 2/(p+q)로 오인한다.
+    filler: 1/p·1/q. (p,q) 기약쌍(p<q)만 순회해 값 유일. 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[float] = set()
+    for p in range(2, 9):
+        for q in range(p + 1, 12):
+            if gcd(p, q) != 1:
+                continue
+            correct = sympy.Rational(p + q, p * q)
+            key = round(_numeric(correct), 9)
+            if key in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    correct,
+                    sympy.Rational(2, p + q),  # (1+1)/(p+q)·통분 누락.
+                    sympy.Rational(1, p),
+                    sympy.Rational(1, q),
+                ),
+                conditions=f"x = ({p}+{q})/({p}*{q})",
+                answer_str=_display(correct),
+                question_text=(f"1/{p} + 1/{q} 의 값을 구하시오."),
+                answer_explanation=(
+                    f"1/{p} + 1/{q} 는 통분하면 ({p}+{q})/({p}·{q}) = {_display(correct)} 이다. "
+                    "통분 없이 분자·분모를 각각 더해 2/(p+q)로 답하면 틀린다."
+                ),
+                difficulty=_difficulty(p + q),
+                answer_format=_answer_format_for(correct),
+            )
+            if item is not None:
+                seen.add(key)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_negative_product_pool() -> tuple[_EvalItem, ...]:
+    """(-a)(-b) 값 뼈대 풀 — 정답 ab(음×음=양)·오개념 -ab(음×음=음 오인)·filler a+b·-(a+b).
+
+    (-a)×(-b) = ab 인데, 부호 규칙을 놓쳐 -ab로 오인한다. a<b(a,b≥2)라 네 값 {ab, -ab, a+b,
+    -(a+b)}는 서로 다르다. 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 9):
+        for b in range(a + 1, 14):
+            correct_v = a * b
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(a * b),
+                    sympy.Integer(-a * b),  # 음×음=음 오인.
+                    sympy.Integer(a + b),
+                    sympy.Integer(-(a + b)),
+                ),
+                conditions=f"x = ({a})*({b})",
+                answer_str=str(correct_v),
+                question_text=(f"(-{a}) × (-{b}) 의 값을 구하시오."),
+                answer_explanation=(
+                    f"음수끼리의 곱은 양수이므로 (-{a})×(-{b}) = {correct_v} 이다. "
+                    "음수끼리 곱해도 음수라고 여기면 부호를 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=_answer_format_for(sympy.Integer(correct_v)),
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_subtract_negative_pool() -> tuple[_EvalItem, ...]:
+    """a - (-b) 값 뼈대 풀 — 정답 a+b(부호 반전)·오개념 a-b(반전 누락)·filler b-a·-(a+b).
+
+    a - (-b) = a + b 인데, 음수를 빼는 부호 반전을 놓쳐 a - b로 오인한다. a≠b(a,b≥2)라 네 값
+    {a+b, a-b, b-a, -(a+b)}는 서로 다르다(a-b≠0). 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 13):
+        for b in range(2, 22):
+            if a == b:
+                continue
+            correct_v = a + b
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(a + b),
+                    sympy.Integer(a - b),  # 부호 반전 누락.
+                    sympy.Integer(b - a),
+                    sympy.Integer(-(a + b)),
+                ),
+                conditions=f"x = {a}+{b}",
+                answer_str=str(correct_v),
+                question_text=(f"{a} - (-{b}) 의 값을 구하시오."),
+                answer_explanation=(
+                    f"음수를 빼면 그만큼 더해지므로 {a} - (-{b}) = {a} + {b} = {correct_v} 이다. "
+                    "부호 반전을 놓쳐 a - b로 계산하면 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=_answer_format_for(sympy.Integer(correct_v)),
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_absolute_value_pool() -> tuple[_EvalItem, ...]:
+    """|-a| + b 값 뼈대 풀 — 정답 a+b(|-a|=a)·오개념 -a+b(부호 유지 오인)·filler a-b·-(a+b).
+
+    |-a| + b = a + b 인데, 절댓값이 음수 부호를 유지한다고 여겨 -a + b로 오인한다. a≠b(a,b≥2)라
+    네 값 {a+b, -a+b, a-b, -(a+b)}는 서로 다르다. 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 13):
+        for b in range(2, 22):
+            if a == b:
+                continue
+            correct_v = a + b
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(a + b),
+                    sympy.Integer(-a + b),  # |-a|=-a 부호 유지 오인.
+                    sympy.Integer(a - b),
+                    sympy.Integer(-(a + b)),
+                ),
+                conditions=f"x = {a}+{b}",
+                answer_str=str(correct_v),
+                question_text=(f"|-{a}| + {b} 의 값을 구하시오."),
+                answer_explanation=(
+                    f"절댓값은 음이 아니므로 |-{a}| = {a} 이고 |-{a}| + {b} = {correct_v} 이다. "
+                    "절댓값이 음수 부호를 유지한다고 여기면 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=_answer_format_for(sympy.Integer(correct_v)),
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_sqrt_sum_pool() -> tuple[_EvalItem, ...]:
+    """√(m²+n²) 값 뼈대 풀 — 정답 k(피타고라스 m²+n²=k²)·오개념 m+n(√ 합 분배)·filler n-m·n.
+
+    √(m²+n²) = k 인데, 제곱근이 합에 분배된다고 여겨 √(m²)+√(n²)=m+n으로 오인한다. 피타고라스
+    쌍(m<n·m²+n²=k²)만 써서 정답이 정수·오개념(m+n)과 다르다. 네 값 {k, m+n, n-m, n}은 서로 다르다.
+    정답값(k)으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for m in range(3, 85):
+        for n in range(m + 1, 85):
+            s = m * m + n * n
+            k = isqrt(s)
+            if k * k != s:
+                continue  # 피타고라스 쌍만(정답 정수).
+            if k in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(k),
+                    sympy.Integer(m + n),  # √(m²)+√(n²)=m+n·합 분배 오인.
+                    sympy.Integer(n - m),
+                    sympy.Integer(n),
+                ),
+                conditions=f"x = {k}",
+                answer_str=str(k),
+                question_text=(f"√({m*m} + {n*n}) 의 값을 구하시오."),
+                answer_explanation=(
+                    f"근호 안의 합 {s} 는 {k} 의 제곱이므로 그 제곱근은 {k} 이다. "
+                    f"제곱근을 각 항에 분배하면 {m} + {n} 이 되어 틀린다."
+                ),
+                difficulty=_difficulty(m + n),
+                answer_format=_answer_format_for(sympy.Integer(k)),
+            )
+            if item is not None:
+                seen.add(k)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_difference_of_squares_pool() -> tuple[_EvalItem, ...]:
+    """x²-a² 값 뼈대 풀 — 정답 x²-a²·오개념 (x-a)²(제곱의 차를 차의 제곱으로)·filler (x+a)²·x²+a².
+
+    x² - a² = (x-a)(x+a) 인데, 차의 제곱 (x-a)²로 오인한다(합차공식 혼동). x>a≥1이라 네 값
+    {x²-a², (x-a)², (x+a)², x²+a²}는 서로 다르다. 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(1, 8):
+        for x in range(a + 1, a + 14):
+            correct_v = x * x - a * a
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(x * x - a * a),
+                    sympy.Integer((x - a) ** 2),  # 차의 제곱으로 오인.
+                    sympy.Integer((x + a) ** 2),
+                    sympy.Integer(x * x + a * a),
+                ),
+                conditions=f"x = {correct_v}",
+                answer_str=str(correct_v),
+                question_text=(f"x = {x}, a = {a} 일 때 x² - a² 의 값을 구하시오."),
+                answer_explanation=(
+                    f"x² - a² = (x-a)(x+a) 이므로 x={x}, a={a} 를 대입하면 {correct_v} 이다. "
+                    "제곱의 차를 차의 제곱 (x-a)²로 여기면 틀린다."
+                ),
+                difficulty=_difficulty(x + a),
+                answer_format=_answer_format_for(sympy.Integer(correct_v)),
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "distribution": _build_distribution_pool,
     "chain_rule": _build_chain_rule_pool,
@@ -815,6 +1061,12 @@ _POOL_FACTORY = {
     "area_perimeter": _build_area_perimeter_pool,
     "circle_radius": _build_circle_radius_pool,
     "gambler_streak": _build_gambler_streak_pool,
+    "fraction_addition": _build_fraction_addition_pool,
+    "negative_product": _build_negative_product_pool,
+    "subtract_negative": _build_subtract_negative_pool,
+    "absolute_value": _build_absolute_value_pool,
+    "sqrt_sum": _build_sqrt_sum_pool,
+    "difference_of_squares": _build_difference_of_squares_pool,
 }
 
 
@@ -847,7 +1099,9 @@ class MisconceptionEvalMCSkeletonGenerator:
             raise ValueError(
                 f"미지원 template: {template!r} (distribution/chain_rule/sine_sum/exp_zero/"
                 "sqrt_pos/log_dist/func_compose/sine_period/translate/product_rule/"
-                "fraction_cancel/polygon_angle_sum/area_perimeter/circle_radius/gambler_streak)"
+                "fraction_cancel/polygon_angle_sum/area_perimeter/circle_radius/gambler_streak/"
+                "fraction_addition/negative_product/subtract_negative/absolute_value/sqrt_sum/"
+                "difference_of_squares)"
             )
         if not distractor_codes:
             raise ValueError(

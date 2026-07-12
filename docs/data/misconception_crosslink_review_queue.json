@@ -893,6 +893,72 @@
       "reviewer": null,
       "reviewed_on": null,
       "note": null
+    },
+    {
+      "kebab_id": "fraction-addition-naive",
+      "mis_id": "M0004",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치1 — 1/2+1/3=2/5 통분 누락 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "negative-times-negative",
+      "mis_id": "M0001",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치1 — (−)×(−)=(−) 부호 규칙 누락 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "subtract-negative-sign",
+      "mis_id": "M0002",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치1 — 3−(−5)=−2 부호 반전 누락 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "absolute-value-keeps-sign",
+      "mis_id": "M0010",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치1 — |−3|=−3 절댓값 부호 유지 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "sqrt-distributes-over-sum",
+      "mis_id": "M0008",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치1 — √(a+b)=√a+√b 분배 오개념 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "difference-of-squares-confused",
+      "mis_id": "M0121",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
+      "rationale": "843 트랜치1 — x²−9=(x−3)² 합차공식 혼동 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
     }
   ]
 }

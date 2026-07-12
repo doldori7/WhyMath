@@ -27,26 +27,20 @@ class TestSummarize:
     def test_tier_counts_and_false_reject(self) -> None:
         trials = [
             CrosslinkTrial("opposite-root-selected", "M0862", "correct", "positive"),
-            CrosslinkTrial(
-                "opposite-root-selected", "M0500", "wrong", "cross_standard_neg"
-            ),
-            CrosslinkTrial(
-                "opposite-root-selected", "M0864", "wrong", "same_standard_neg"
-            ),
+            CrosslinkTrial("opposite-root-selected", "M0500", "wrong", "cross_standard_neg"),
+            CrosslinkTrial("opposite-root-selected", "M0864", "wrong", "same_standard_neg"),
         ]
         # M0864 standard [12미적Ⅰ-02-07] not in opposite-root([10공수1-02-02]) → 실제로 cross지만
         # 여기선 tier를 명시 지정해 집계 경로만 검증. gate는 성취기준으로 판정한다.
         report = ev.summarize(trials, _KEBAB_STANDARDS, _MID_STANDARDS)
         assert report.positive_total == 1 and report.positive_false_reject == 0
-        assert (
-            report.cross_total == 1 and report.cross_detected == 1
-        )  # M0500 cross → reject
+        assert report.cross_total == 1 and report.cross_detected == 1  # M0500 cross → reject
         # M0864는 opposite-root 성취기준과 다르므로 게이트가 reject → same_detected=1
         assert report.same_total == 1
 
     def test_coverage_accounting_uses_real_catalog(self) -> None:
         report = ev.summarize([], _KEBAB_STANDARDS, _MID_STANDARDS)
-        assert report.kebabs_total == 34  # 실 카탈로그 34종
+        assert report.kebabs_total == 40  # 실 카탈로그 40종(843 확장 트랜치1 포함)
         assert report.kebabs_decidable == 2  # 신호 부여한 2 kebab
 
 
@@ -81,9 +75,9 @@ class TestCliEndToEnd:
         # cross-standard 전건 거부(구조 신호 정확)·정답 오거부 0.
         assert report.cross_detected == report.cross_total and report.cross_total > 0
         assert report.positive_false_reject == 0
-        # same-standard는 못 잡음(false accept·인간 존치)·커버 34/34
-        # (Tier C 통계·확률·기하·벡터 + gambler·sign-flip 완주 → human-only 0).
+        # same-standard는 못 잡음(false accept·인간 존치)·커버 40/40
+        # (843 확장 트랜치1 6종 신규 탐지 kebab 포함·전수 machine-decidable → human-only 0).
         assert report.same_detected == 0
-        assert report.kebabs_decidable == 34 and report.kebabs_total == 34
+        assert report.kebabs_decidable == 40 and report.kebabs_total == 40
         text = ev.format_report(report, confidence=0.95, human_reject_rate=None)
         assert "인간 존치" in text and "machine-decidable" in text

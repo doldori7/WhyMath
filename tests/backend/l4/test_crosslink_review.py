@@ -316,20 +316,33 @@ _EXTREMUM_MC_DIRECT: dict[str, set[tuple[str, float]]] = {
     "extremum-value-vs-point-confused": {("M0865", 0.9)},
 }
 
+# 843 확장 트랜치1 — 신규 탐지 kebab 6종(기초 계산형)의 직접 대응 M-id를 pending 후보로 추가.
+# 같은 화이트리스트 계약(전행 pending·미서명·test_real_queue_all_pending). 그 밖의 새 직접매핑 차단.
+_TRANCHE1_DIRECT: dict[str, set[tuple[str, float]]] = {
+    "fraction-addition-naive": {("M0004", 0.95)},
+    "negative-times-negative": {("M0001", 0.95)},
+    "subtract-negative-sign": {("M0002", 0.95)},
+    "absolute-value-keeps-sign": {("M0010", 0.95)},
+    "sqrt-distributes-over-sum": {("M0008", 0.95)},
+    "difference-of-squares-confused": {("M0121", 0.9)},
+}
+
 
 def test_real_queue_direct_top_confidences_match_draft(
     real_rows: list[dict[str, Any]],
 ) -> None:
-    # ④ non-null 직접매핑 = 초안 최상위 ∪ 검수 대안(#392) ∪ S2-p ∪ 극값 MC 저작 — 그 외 차단.
+    # ④ non-null 직접매핑 = 초안 ∪ 검수 대안 ∪ S2-p ∪ 극값 MC ∪ 843 트랜치1 — 그 외 차단.
     expected: dict[str, set[tuple[str, float]]] = {
         k: set(_DRAFT_DIRECT_TOPS.get(k, set()))
         | set(_REVIEWED_DIRECT_ALTS.get(k, set()))
         | set(_S2P_DIRECT.get(k, set()))
         | set(_EXTREMUM_MC_DIRECT.get(k, set()))
+        | set(_TRANCHE1_DIRECT.get(k, set()))
         for k in set(_DRAFT_DIRECT_TOPS)
         | set(_REVIEWED_DIRECT_ALTS)
         | set(_S2P_DIRECT)
         | set(_EXTREMUM_MC_DIRECT)
+        | set(_TRANCHE1_DIRECT)
     }
     actual: dict[str, set[tuple[str, float]]] = {}
     for row in real_rows:

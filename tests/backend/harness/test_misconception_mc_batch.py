@@ -37,8 +37,14 @@ _BANDS = (
     "area-perimeter-confusion",
     "circle-radius-squared",
     "gambler-fallacy",
+    "fraction-addition-naive",
+    "negative-times-negative",
+    "subtract-negative-sign",
+    "absolute-value-keeps-sign",
+    "sqrt-distributes-over-sum",
+    "difference-of-squares-confused",
 )
-_TOTAL = 24 * len(_BANDS)  # 15 밴드 × 24 = 360
+_TOTAL = 24 * len(_BANDS)  # 21 밴드 × 24 = 504
 
 
 class TestRunMisconceptionMcBatch:
@@ -69,9 +75,7 @@ class TestRunMisconceptionMcBatch:
             problem = record.problem
             assert problem.choices is not None and len(problem.choices) == 4
             assert problem.answer in problem.choices
-            assert (
-                problem.distractor_map is not None and len(problem.distractor_map) == 1
-            )
+            assert problem.distractor_map is not None and len(problem.distractor_map) == 1
             entry = problem.distractor_map[0]
             kebabs_seen.add(entry.misconception_id)
             assert record.verify.answer_selection is None

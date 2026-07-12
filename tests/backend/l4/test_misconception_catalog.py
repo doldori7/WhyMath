@@ -21,10 +21,10 @@ from whymath_backend.l4.misconception.match_gate import _DEFAULT_CONFIDENCE_FLOO
 
 class TestCatalogShape:
     def test_thirty_two_entries_doc_explicit_only(self) -> None:
-        # doc 명시·상세화: 대수 11 + 기하 4 + 확률통계 4 + 함수 3
-        #                 + 미적분 7 + 수열 2 + 삼각함수 2 + 벡터 1 = 34
-        #                 (Phase 1 30 + S2-p 2 + 극값 MC 2)
-        assert len(CATALOG) == 34
+        # doc 명시·상세화: 대수 17 + 기하 4 + 확률통계 4 + 함수 3
+        #                 + 미적분 7 + 수열 2 + 삼각함수 2 + 벡터 1 = 40
+        #                 (Phase 1 30 + S2-p 2 + 극값 MC 2 + 843 확장 트랜치1 6)
+        assert len(CATALOG) == 40
 
     def test_all_ids_unique(self) -> None:
         ids = [m.id for m in CATALOG]
@@ -39,8 +39,9 @@ class TestCatalogShape:
 class TestCanonicalIdsFromDoc:
     """doc L24-50에 *명시*된 ID가 모두 존재 — 정본 정합."""
 
-    def test_algebra_eleven(self) -> None:
+    def test_algebra_seventeen(self) -> None:
         # 기존 7 + 슬 §5.4 추가 2(discriminant·root-loss) + S2-p 추가 2(반대 근·부호 반전)
+        # + 843 확장 트랜치1 6(분수덧셈·음수곱·음수빼기·절댓값·제곱근분배·합차공식 혼동)
         algebra_ids = {
             "distribution-over-power",
             "sign-flip-in-inequality",
@@ -53,6 +54,12 @@ class TestCanonicalIdsFromDoc:
             "root-loss-by-dividing",
             "opposite-root-selected",
             "factor-sign-flip",
+            "fraction-addition-naive",
+            "negative-times-negative",
+            "subtract-negative-sign",
+            "absolute-value-keeps-sign",
+            "sqrt-distributes-over-sum",
+            "difference-of-squares-confused",
         }
         assert algebra_ids.issubset(CATALOG_BY_ID.keys())
         for mid in (

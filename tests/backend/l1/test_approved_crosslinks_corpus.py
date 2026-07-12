@@ -3,8 +3,8 @@
 `data/corpus/misconception_crosslinks_v1/crosslinks.json`은 검수 큐(전행 pending) 중 **Kiki가
 직접 승인한 매핑**을 promote 산출(로더 형식)해 커밋한 것이다(사람 사인오프·AI 자기승인 아님).
 2026-07-08 극값 2(M0864·M0865)·2026-07-10 트리아지 A 11 + B 8 + frac 1·2026-07-12 미매핑 Tier C
-clean 직접매핑 10 + period→M0152 1(distractor_rule 재탐색) + root-loss→M0573 1(증거 보강)을 승인해
-**총 34건(34/34 kebab 완주)**이다. 이 테스트는 hermetic(DB 0)으로 봉인한다:
+Tier C 10 + period→M0152 + root-loss→M0573 + 843 확장 트랜치1 6(신규 탐지 kebab·기초 계산형)을
+승인해 **총 40건(탐지 카탈로그 40 전수 매핑)**이다. 이 테스트는 hermetic(DB 0)으로 봉인한다:
 ① 로더 형식·게이트 통과(method=manual·검수 서명) ② kebab∈34 카탈로그·M-id∈843 코퍼스(참조 무결성)
 ③ `select_canonical`이 각 kebab에 canonical M-id를 실제로 돌려줌(단절 해소·843→34 도달).
 """
@@ -27,12 +27,8 @@ from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.schema.misconception_crosslink import MisconceptionCrosslink
 
 _REPO_ROOT = Path(__file__).resolve().parents[3]
-_CROSSLINKS = (
-    _REPO_ROOT / "data" / "corpus" / "misconception_crosslinks_v1" / "crosslinks.json"
-)
-_MISCONCEPTIONS = (
-    _REPO_ROOT / "data" / "corpus" / "misconceptions_v1" / "misconceptions.json"
-)
+_CROSSLINKS = _REPO_ROOT / "data" / "corpus" / "misconception_crosslinks_v1" / "crosslinks.json"
+_MISCONCEPTIONS = _REPO_ROOT / "data" / "corpus" / "misconceptions_v1" / "misconceptions.json"
 
 # Kiki 승인분(MEMORY 정본·07-08 극값 2·07-10 A/B/frac 20·07-12 Tier C 10+period+root-loss 12)
 # — 34/34 kebab 완주·기대 매핑 동결.
@@ -71,6 +67,12 @@ _EXPECTED: dict[str, str] = {
     "translation-sign-flip": "M0411",
     "period-of-scaled-sine": "M0152",
     "root-loss-by-dividing": "M0573",
+    "fraction-addition-naive": "M0004",
+    "negative-times-negative": "M0001",
+    "subtract-negative-sign": "M0002",
+    "absolute-value-keeps-sign": "M0010",
+    "sqrt-distributes-over-sum": "M0008",
+    "difference-of-squares-confused": "M0121",
 }
 
 
@@ -86,7 +88,7 @@ def _corpus_mis_ids() -> set[str]:
 
 
 def test_exact_approved_pairs() -> None:
-    # 정확히 Kiki 승인 34건 — 기대 kebab→M-id 매핑 동결(드리프트 시 즉시 실패).
+    # 정확히 Kiki 승인 40건 — 기대 kebab→M-id 매핑 동결(드리프트 시 즉시 실패).
     rows = _load_rows()
     assert {r.kebab_id: r.mis_id for r in rows} == _EXPECTED
 
@@ -119,9 +121,7 @@ def test_canonical_resolution_realized() -> None:
     rows = _load_rows()
     for kebab, expected_mis in _EXPECTED.items():
         links = [
-            ResolvedLink(
-                mis_id=r.mis_id, link_type=r.link_type, confidence=r.confidence
-            )
+            ResolvedLink(mis_id=r.mis_id, link_type=r.link_type, confidence=r.confidence)
             for r in rows
             if r.kebab_id == kebab
         ]

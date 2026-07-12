@@ -100,3 +100,15 @@
 {"statement": "함수가 가장 커지는 점에서의 값을 구해야 하는데, 그 점의 가로 좌표를 답으로 적었다", "expected_id": "extremum-value-vs-point-confused", "near_id": null, "kind": "paraphrase", "note": "값·좌표 혼동 — signals 극댓값·x좌표 회피(substring 풀매칭 방지)"}
 {"statement": "삼차항의 계수가 양수이므로 작은 임계점에서 극대, 큰 임계점에서 극소가 된다", "expected_id": null, "near_id": "extremum-max-min-confused", "kind": "correct-near", "note": "극대·극소 순서를 계수 부호로 올바로 판정 — 혼동 아님"}
 {"statement": "극대가 되는 점의 가로좌표를 함수에 대입한 함숫값이 그 점의 극값이다", "expected_id": null, "near_id": "extremum-value-vs-point-confused", "kind": "correct-near", "note": "극값은 함숫값 f(x*) — 좌표와 올바로 구분"}
+{"statement": "분수를 더할 때 위끼리 아래끼리 각각 더하면 된다고 생각했어", "expected_id": "fraction-addition-naive", "near_id": null, "kind": "paraphrase", "note": "통분 없이 분자·분모 각각 — signals 분수·통분 회피(통분 미포함)"}
+{"statement": "분수의 덧셈은 분모를 같게 맞춘 뒤 분자만 더해야 옳다", "expected_id": null, "near_id": "fraction-addition-naive", "kind": "correct-near", "note": "올바른 분수 덧셈 — 통분 미포함(부분매칭)"}
+{"statement": "마이너스끼리 곱한 결과도 여전히 마이너스라고 적었어", "expected_id": "negative-times-negative", "near_id": null, "kind": "paraphrase", "note": "음×음=양 누락 — signals 음수끼리·곱하면 회피"}
+{"statement": "마이너스 둘을 곱하면 부호가 플러스로 바뀐다", "expected_id": null, "near_id": "negative-times-negative", "kind": "correct-near", "note": "올바른 부호 규칙 — signals 미공출현"}
+{"statement": "어떤 수에서 마이너스 값을 덜어내면 그냥 그 값을 덜어낸 것과 같다고 처리했어", "expected_id": "subtract-negative-sign", "near_id": null, "kind": "paraphrase", "note": "-(-b)=+b 반전 누락 — signals 음수·빼기 회피"}
+{"statement": "어떤 수에서 음수를 빼면 그만큼 값이 더해진다", "expected_id": null, "near_id": "subtract-negative-sign", "kind": "correct-near", "note": "올바른 부호 반전 — 빼기 미포함(부분)"}
+{"statement": "막대 두 개로 감싼 마이너스 수는 부호를 그대로 지닌다고 봤어", "expected_id": "absolute-value-keeps-sign", "near_id": null, "kind": "paraphrase", "note": "|-a|=-a 오개념 — signals 절댓값·음수 회피"}
+{"statement": "절댓값 기호를 벗기면 마이너스 수도 양수가 된다", "expected_id": null, "near_id": "absolute-value-keeps-sign", "kind": "correct-near", "note": "올바른 절댓값 — 음수 미포함(부분)"}
+{"statement": "루트 안의 합은 각각 루트를 씌워서 더해도 된다고 생각했어", "expected_id": "sqrt-distributes-over-sum", "near_id": null, "kind": "paraphrase", "note": "√(a+b)=√a+√b — signals 제곱근·분배 회피"}
+{"statement": "루트 안의 합은 하나로 계산한 뒤 근호를 씌워야 한다", "expected_id": null, "near_id": "sqrt-distributes-over-sum", "kind": "correct-near", "note": "올바른 제곱근 — signals 미공출현"}
+{"statement": "제곱끼리 뺀 식은 괄호 뺄셈을 통째로 제곱한 것과 같다고 봤어", "expected_id": "difference-of-squares-confused", "near_id": null, "kind": "paraphrase", "note": "x²-a²=(x-a)² — signals 제곱·차이 회피(차이 미포함)"}
+{"statement": "제곱끼리 뺀 식은 두 항의 합과 차의 곱이 된다", "expected_id": null, "near_id": "difference-of-squares-confused", "kind": "correct-near", "note": "올바른 합차공식 — 차이 미포함(부분)"}

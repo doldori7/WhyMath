@@ -1,6 +1,14 @@
 {
  "crosslinks": [
   {
+   "kebab_id": "absolute-value-keeps-sign",
+   "mis_id": "M0010",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "angle-sum-non-triangle",
    "mis_id": "M0493",
    "link_type": "직접매핑",
@@ -55,6 +63,14 @@
    "confidence": 0.95,
    "method": "manual",
    "note": "검수:Kiki 2026-07-10"
+  },
+  {
+   "kebab_id": "difference-of-squares-confused",
+   "mis_id": "M0121",
+   "link_type": "직접매핑",
+   "confidence": 0.9,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
   },
   {
    "kebab_id": "discriminant-negative-no-real-root",
@@ -121,6 +137,14 @@
    "note": "검수:Kiki 2026-07-10"
   },
   {
+   "kebab_id": "fraction-addition-naive",
+   "mis_id": "M0004",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "fraction-cancellation",
    "mis_id": "M0118",
    "link_type": "직접매핑",
@@ -179,6 +203,14 @@
   {
    "kebab_id": "mutually-exclusive-implies-independent",
    "mis_id": "M0692",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "negative-times-negative",
+   "mis_id": "M0001",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",
@@ -249,12 +281,28 @@
    "note": "검수:Kiki 2026-07-10"
   },
   {
+   "kebab_id": "sqrt-distributes-over-sum",
+   "mis_id": "M0008",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "square-root-positivity",
    "mis_id": "M0550",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",
    "note": "검수:Kiki 2026-07-10"
+  },
+  {
+   "kebab_id": "subtract-negative-sign",
+   "mis_id": "M0002",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
   },
   {
    "kebab_id": "term-to-zero-implies-convergence",
