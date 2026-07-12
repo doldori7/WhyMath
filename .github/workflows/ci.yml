@@ -142,7 +142,10 @@ jobs:
   backend:
     name: backend — lint·type·test
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 스위트 성장(초인간 검증 하니스·843 트랜치·원자 축 누적)으로 유닛+커버리지가 10분 초과.
+    # timeout은 상한일 뿐이라 정상 완료 시 낭비 없음(hang 방지 상한만 유지). 후속 최적화 과제:
+    # pytest-xdist 병렬 실행·무거운 생성기/게이트 테스트 slow 마크 분리.
+    timeout-minutes: 25
     needs: changes
     # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
     if: (github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true') && github.event_name != 'schedule'
