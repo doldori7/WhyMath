@@ -293,14 +293,14 @@ class TestFormatReport:
 class TestProbeSetStructure:
     def test_loads_98_probes(self) -> None:
         probes = _load_real_probes()
-        assert len(probes) == 102  # 98 + 극값 MC 4(recall 2·FP 2)
+        assert len(probes) == 162  # 150 + 843 트랜치5 12(recall 6·FP 6)
 
     def test_recall_and_fp_split(self) -> None:
         probes = _load_real_probes()
         recall = [p for p in probes if p.is_recall_probe]
         fp = [p for p in probes if p.is_fp_probe]
-        assert len(recall) == 65  # 63 + 극값 MC recall 2
-        assert len(fp) == 37  # 35 + 극값 MC FP 2
+        assert len(recall) == 95  # 89 + 843 트랜치5 recall 6
+        assert len(fp) == 67  # 61 + 843 트랜치5 FP 6
         # 상호배타·완전분할(recall ⊕ fp = 전체).
         assert len(recall) + len(fp) == len(probes)
 
@@ -356,7 +356,7 @@ class TestRunProbesWiring:
         assert len(outcomes) == len(probes)
         report = evaluate(outcomes)
         # 구조 단언만(품질 hard-fail 아님): 비율은 [0,1] 또는 None.
-        assert report.total == 102
+        assert report.total == 162
         for value in (report.recall, report.false_positive_rate):
             assert value is None or 0.0 <= value <= 1.0
         # outcome의 semantic_ids/substring_ids는 카탈로그 id이거나 빈 튜플.
@@ -629,7 +629,7 @@ class TestRunProbesWithJudgeWiring:
         )
         assert len(outcomes) == len(probes)
         report = evaluate(outcomes)
-        assert report.total == 102
+        assert report.total == 162
         # 전부 유지(불확실)이므로 judge 후 지표 = 의미 지표(거른 게 없음).
         assert report.judge_false_positives == report.semantic_false_positives
         assert report.judge_caught_recall == report.caught_recall
@@ -731,9 +731,9 @@ class TestRunJsonOutput:
             )
         assert code == 0
         payload = json.loads(capsys.readouterr().out)
-        assert payload["summary"]["total"] == 102
+        assert payload["summary"]["total"] == 162
         assert payload["summary"]["judge_applied"] is False
-        assert len(payload["probes"]) == 102
+        assert len(payload["probes"]) == 162
 
     def test_run_json_with_judge_includes_decisions(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -797,8 +797,8 @@ class TestRunJsonOutput:
         assert code == 0
         assert "summary" not in capsys.readouterr().out  # 본문은 파일로, stdout엔 없음
         payload = json.loads(out_file.read_text(encoding="utf-8"))
-        assert payload["summary"]["total"] == 102
-        assert len(payload["probes"]) == 102
+        assert payload["summary"]["total"] == 162
+        assert len(payload["probes"]) == 162
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -840,7 +840,9 @@ class TestJudgeFlipGate:
         # judge가 recall n건 전부 유지 + FP n건 전부 제거(fp_kept=True면 FP를 *못* 거른 약한 judge).
         recall = [
             _judge_outcome(
-                _recall_probe(self._TGT), semantic_ids=(self._TGT,), judge_kept_ids=(self._TGT,)
+                _recall_probe(self._TGT),
+                semantic_ids=(self._TGT,),
+                judge_kept_ids=(self._TGT,),
             )
             for _ in range(n)
         ]
@@ -880,7 +882,9 @@ class TestJudgeFlipGate:
         only_recall = evaluate(
             [
                 _judge_outcome(
-                    _recall_probe(self._TGT), semantic_ids=(self._TGT,), judge_kept_ids=(self._TGT,)
+                    _recall_probe(self._TGT),
+                    semantic_ids=(self._TGT,),
+                    judge_kept_ids=(self._TGT,),
                 )
             ]
         )

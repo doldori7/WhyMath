@@ -44,6 +44,15 @@ DIRECT_LINK_TYPE: Final[str] = "직접매핑"
 # 적재 가능 method — 사람 채택 산출물만(candidate 도구의 embedding/standard_code는 미적재).
 LOADABLE_METHOD: Final[str] = "manual"
 
+# ── 기계 자동 거부(structural_reject·초인간 검증 §3.3) — 측정된 안전 자율 행동 ──────────────────
+# 강등전(240/240·Wilson 하한 0.989)으로 *성취기준 가로지르는 오매핑 거부*가 측정된 구간에서만,
+# 기계가 후보를 **자율 거부**한다(절대 승인 아님 — 승인은 인간 존치). 거부의 실패 모드는 보수적
+# (correct 매핑을 놓쳐도 *누락*이지 오매핑 적재가 아님). 신뢰 조건: kebab이 문항에 충분히 등장해
+# 역유도 성취기준이 신뢰할 만한 것(증거 하한). 미달·no_signal·agree는 전부 인간 폴백.
+MACHINE_REJECT_METHOD: Final[str] = "structural_reject"
+MACHINE_REJECT_REVIEWER: Final[str] = "machine"
+MACHINE_REJECT_EVIDENCE_FLOOR: Final[int] = 20
+
 # 서명 stamp 정본 — promote가 note에 찍고 load 게이트가 검증(단일 형식·드리프트 방지).
 _SIGNATURE_PREFIX: Final[str] = "검수:"
 # "검수:{reviewer} {YYYY-MM-DD}" 패턴 — reviewer(공백 아닌 시작)·ISO 날짜.
@@ -127,6 +136,9 @@ __all__ = [
     "DIRECT_LINK_TYPE",
     "DIRECT_MIN_CONFIDENCE",
     "LOADABLE_METHOD",
+    "MACHINE_REJECT_EVIDENCE_FLOOR",
+    "MACHINE_REJECT_METHOD",
+    "MACHINE_REJECT_REVIEWER",
     "REQUIRED_SIGNATURE_FIELDS",
     "REVIEW_STATUSES",
     "SIGNATURE_RE",

@@ -270,3 +270,34 @@ python -m whymath_backend.ops.live_preflight            # 스모크 on(기본) �
 1회 유발 → Langfuse에서 그 `l3_routing` 레코드의 `cost_tier=CLOUD_*`·`cost_krw>0`·토큰 실측 확인.
 로컬 호출은 같은 레코드가 `cost_tier=LOCAL`·`cost_krw=0.0`. 두 분포 비율이 **S1 게이트② "루프당 비용
 실측·로컬 80%"** 판정의 근거다.
+
+### 11.1 판독 자동화 — `cost_report` 집계기 (개별 레코드 대신 분포로)
+
+Langfuse UI에서 레코드를 눈으로 세는 대신, **누적 `l3_routing`을 한 번에 집계**해 p50/p90·
+로컬비율·튜닝 제안을 뽑는다. 프리플라이트(§10)가 1콜(비대표)만 낸다면, 이 판독기는 라이브
+트래픽 몇 분치를 대표 분포로 요약한다(코드: `src/backend/whymath_backend/ops/cost_report.py`).
+
+```powershell
+# 라이브 세션 직후 — 오늘치(--days 1) 집계. Langfuse 키(§10)가 설정돼 있어야 실조회한다.
+python -m whymath_backend.ops.cost_report --days 1
+python -m whymath_backend.ops.cost_report --days 1 --json report.json   # 기계 판독도 저장
+```
+
+출력 판독:
+- **분포**: `input_tokens`/`output_tokens`/`cost_krw`/`latency_ms`의 p50·p90·평균·합(실측 None은
+  표본 제외 — 캐시 히트·비동기는 미상이지 0이 아님).
+- **로컬:클라우드 비율**: 목표 80% 로컬 대비 실측 비중.
+- **튜닝 제안**: `_EST_ASSUMED_INPUT_TOKENS`/`_EST_ASSUMED_OUTPUT_TOKENS` ← 실측 토큰 p50.
+
+### 11.2 S1 게이트② 판정 체크리스트 (이 순서로)
+
+1. `python -m whymath_backend.ops.live_preflight --via-pipeline` — Langfuse 기록 흐름 1콜 확인(§10).
+2. 대표 트래픽 유발 — 킬러 문항 등으로 클라우드 승급 호출 + 로컬 호출을 섞어 수십 건 흘린다.
+3. `python -m whymath_backend.ops.cost_report --days 1` — 분포·비율·튜닝 제안 확인.
+4. 제안 p50를 `src/backend/whymath_backend/l3/router.py`의 `_EST_ASSUMED_INPUT_TOKENS`/
+   `_EST_ASSUMED_OUTPUT_TOKENS`(현재 보수적 기본 1000)에 대입 → `CLOUD_MIN_COST_KRW`·`est_cost_krw`·
+   `guard_cloud` 임계값이 단일 공식으로 자동 재계산(router.py §H 후속 4). est/actual 분리는 유지.
+5. `cost_krw` p50/합 + 로컬비율로 **"루프당 비용 실측·로컬 80%"** 를 판정 → S1 게이트② 종료.
+
+> 이 두 단계(11.1·11.2)는 AI가 라이브 키 *전*에 선제 준비한 측정 하네스다(`status_roadmap_2026-07`
+> §4 병목 #2). Kiki 수동 시간은 "키 투입 → 트래픽 → 스크립트 1회 실행"으로 최소화된다.

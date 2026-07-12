@@ -100,3 +100,63 @@
 {"statement": "함수가 가장 커지는 점에서의 값을 구해야 하는데, 그 점의 가로 좌표를 답으로 적었다", "expected_id": "extremum-value-vs-point-confused", "near_id": null, "kind": "paraphrase", "note": "값·좌표 혼동 — signals 극댓값·x좌표 회피(substring 풀매칭 방지)"}
 {"statement": "삼차항의 계수가 양수이므로 작은 임계점에서 극대, 큰 임계점에서 극소가 된다", "expected_id": null, "near_id": "extremum-max-min-confused", "kind": "correct-near", "note": "극대·극소 순서를 계수 부호로 올바로 판정 — 혼동 아님"}
 {"statement": "극대가 되는 점의 가로좌표를 함수에 대입한 함숫값이 그 점의 극값이다", "expected_id": null, "near_id": "extremum-value-vs-point-confused", "kind": "correct-near", "note": "극값은 함숫값 f(x*) — 좌표와 올바로 구분"}
+{"statement": "분수를 더할 때 위끼리 아래끼리 각각 더하면 된다고 생각했어", "expected_id": "fraction-addition-naive", "near_id": null, "kind": "paraphrase", "note": "통분 없이 분자·분모 각각 — signals 분수·통분 회피(통분 미포함)"}
+{"statement": "분수의 덧셈은 분모를 같게 맞춘 뒤 분자만 더해야 옳다", "expected_id": null, "near_id": "fraction-addition-naive", "kind": "correct-near", "note": "올바른 분수 덧셈 — 통분 미포함(부분매칭)"}
+{"statement": "마이너스끼리 곱한 결과도 여전히 마이너스라고 적었어", "expected_id": "negative-times-negative", "near_id": null, "kind": "paraphrase", "note": "음×음=양 누락 — signals 음수끼리·곱하면 회피"}
+{"statement": "마이너스 둘을 곱하면 부호가 플러스로 바뀐다", "expected_id": null, "near_id": "negative-times-negative", "kind": "correct-near", "note": "올바른 부호 규칙 — signals 미공출현"}
+{"statement": "어떤 수에서 마이너스 값을 덜어내면 그냥 그 값을 덜어낸 것과 같다고 처리했어", "expected_id": "subtract-negative-sign", "near_id": null, "kind": "paraphrase", "note": "-(-b)=+b 반전 누락 — signals 음수·빼기 회피"}
+{"statement": "어떤 수에서 음수를 빼면 그만큼 값이 더해진다", "expected_id": null, "near_id": "subtract-negative-sign", "kind": "correct-near", "note": "올바른 부호 반전 — 빼기 미포함(부분)"}
+{"statement": "막대 두 개로 감싼 마이너스 수는 부호를 그대로 지닌다고 봤어", "expected_id": "absolute-value-keeps-sign", "near_id": null, "kind": "paraphrase", "note": "|-a|=-a 오개념 — signals 절댓값·음수 회피"}
+{"statement": "절댓값 기호를 벗기면 마이너스 수도 양수가 된다", "expected_id": null, "near_id": "absolute-value-keeps-sign", "kind": "correct-near", "note": "올바른 절댓값 — 음수 미포함(부분)"}
+{"statement": "루트 안의 합은 각각 루트를 씌워서 더해도 된다고 생각했어", "expected_id": "sqrt-distributes-over-sum", "near_id": null, "kind": "paraphrase", "note": "√(a+b)=√a+√b — signals 제곱근·분배 회피"}
+{"statement": "루트 안의 합은 하나로 계산한 뒤 근호를 씌워야 한다", "expected_id": null, "near_id": "sqrt-distributes-over-sum", "kind": "correct-near", "note": "올바른 제곱근 — signals 미공출현"}
+{"statement": "제곱끼리 뺀 식은 괄호 뺄셈을 통째로 제곱한 것과 같다고 봤어", "expected_id": "difference-of-squares-confused", "near_id": null, "kind": "paraphrase", "note": "x²-a²=(x-a)² — signals 제곱·차이 회피(차이 미포함)"}
+{"statement": "제곱끼리 뺀 식은 두 항의 합과 차의 곱이 된다", "expected_id": null, "near_id": "difference-of-squares-confused", "kind": "correct-near", "note": "올바른 합차공식 — 차이 미포함(부분)"}
+{"statement": "밑이 같은 거듭제곱을 곱할 때 지수를 서로 곱한다고 봤어", "expected_id": "exponent-product-multiplies", "near_id": null, "kind": "paraphrase", "note": "aᵐ·aⁿ=aᵐⁿ — signals 지수끼리·곱하 회피(지수끼리 미포함)"}
+{"statement": "밑이 같은 거듭제곱의 곱은 지수를 더해야 한다", "expected_id": null, "near_id": "exponent-product-multiplies", "kind": "correct-near", "note": "올바른 지수법칙 — signals 미공출현"}
+{"statement": "거듭제곱을 다시 거듭제곱하면 지수끼리 더한다고 생각했어", "expected_id": "power-of-power-adds", "near_id": null, "kind": "paraphrase", "note": "(aᵐ)ⁿ=aᵐ⁺ⁿ — signals 거듭제곱의·지수를 회피"}
+{"statement": "거듭제곱을 다시 거듭제곱하면 지수를 서로 곱해야 한다", "expected_id": null, "near_id": "power-of-power-adds", "kind": "correct-near", "note": "올바른 지수법칙 — 거듭제곱의 미포함(부분)"}
+{"statement": "마이너스 이의 제곱은 부호까지 포함해서 계산하니 양수가 된다고 봤어", "expected_id": "negative-square-precedence", "near_id": null, "kind": "paraphrase", "note": "-a²=a² — signals 음수·거듭제곱 회피"}
+{"statement": "마이너스 이의 제곱은 이의 제곱에 음의 부호를 붙여 음수가 된다", "expected_id": null, "near_id": "negative-square-precedence", "kind": "correct-near", "note": "올바른 우선순위 — 거듭제곱 미포함(부분)"}
+{"statement": "괄호 앞 수를 앞 항에만 곱하고 뒤 항은 그대로 뒀어", "expected_id": "distribute-first-term-only", "near_id": null, "kind": "paraphrase", "note": "a(x+b)=ax+b — signals 분배·뒷항 회피"}
+{"statement": "괄호 앞 수는 괄호 안 모든 항에 분배해야 한다", "expected_id": null, "near_id": "distribute-first-term-only", "kind": "correct-near", "note": "올바른 분배 — 뒷항 미포함(부분)"}
+{"statement": "괄호 앞 마이너스를 앞 항에만 붙이고 뒤 항 부호는 그대로 뒀어", "expected_id": "negative-distribute-sign", "near_id": null, "kind": "paraphrase", "note": "-(x-b)=-x-b — signals 음수·분배 회피"}
+{"statement": "괄호 앞 마이너스는 안쪽 모든 항의 부호를 반대로 만든다", "expected_id": null, "near_id": "negative-distribute-sign", "kind": "correct-near", "note": "올바른 부호 분배 — signals 미공출현"}
+{"statement": "차를 제곱하면 각각을 제곱해서 빼면 된다고 적었어", "expected_id": "square-of-difference-no-cross", "near_id": null, "kind": "paraphrase", "note": "(a-b)²=a²-b² — signals 차의 제곱·교차항 회피"}
+{"statement": "두 수의 차를 제곱하면 가운데 -2ab 항이 생긴다", "expected_id": null, "near_id": "square-of-difference-no-cross", "kind": "correct-near", "note": "올바른 완전제곱 — signals 미공출현"}
+{"statement": "두 점의 좌표를 합쳐서 그대로 가운데 값으로 삼았어", "expected_id": "midpoint-sum-only", "near_id": null, "kind": "paraphrase", "note": "중점 = a+b — signals 중점·더해 회피"}
+{"statement": "두 점의 좌표를 더한 뒤 2로 나눠야 중점이 된다", "expected_id": null, "near_id": "midpoint-sum-only", "kind": "correct-near", "note": "올바른 중점 — 더해 미포함(부분)"}
+{"statement": "닮은 도형은 길이가 두 배면 넓이도 두 배라고 봤어", "expected_id": "scale-area-linear", "near_id": null, "kind": "paraphrase", "note": "넓이비=k 오인 — signals 닮음비·넓이 회피(닮음비 미포함)"}
+{"statement": "길이가 k배 늘면 넓이는 k제곱배 늘어난다", "expected_id": null, "near_id": "scale-area-linear", "kind": "correct-near", "note": "올바른 넓이비 — 닮음비 미포함(부분)"}
+{"statement": "마이너스 이를 네 번 곱하면 음수가 나온다고 적었어", "expected_id": "negative-even-power-sign", "near_id": null, "kind": "paraphrase", "note": "(-a)^짝수=음수 — signals 짝수·거듭제곱 회피"}
+{"statement": "마이너스를 짝수 번 곱하면 결과는 양수다", "expected_id": null, "near_id": "negative-even-power-sign", "kind": "correct-near", "note": "올바른 부호 — 거듭제곱 미포함(부분)"}
+{"statement": "일차항과 이차항을 그냥 계수끼리 합쳐서 한 항으로 만들었어", "expected_id": "combine-unlike-terms", "near_id": null, "kind": "paraphrase", "note": "ax+bx²=(a+b)x³ — signals 차수·동류항 회피"}
+{"statement": "일차항과 이차항은 서로 다른 항이라 하나로 합칠 수 없다", "expected_id": null, "near_id": "combine-unlike-terms", "kind": "correct-near", "note": "올바른 동류항 — signals 미공출현"}
+{"statement": "이차식을 통째로 하나의 제곱 꼴로 묶으면 상수 조정이 필요 없다고 봤어", "expected_id": "complete-square-naive", "near_id": null, "kind": "paraphrase", "note": "x²+bx=(x+b)² — signals 완전제곱·괄호 회피"}
+{"statement": "이차식을 제곱 꼴로 만들 땐 일차항 계수의 절반을 써야 한다", "expected_id": null, "near_id": "complete-square-naive", "kind": "correct-near", "note": "올바른 완전제곱 — signals 미공출현"}
+{"statement": "루트를 포함한 두 식의 곱에서 부호를 무시하고 더했어", "expected_id": "conjugate-product-sum", "near_id": null, "kind": "paraphrase", "note": "(√a+1)(√a-1)=a+1 — signals 켤레·무리수 회피"}
+{"statement": "루트를 포함한 켤레의 곱은 제곱의 차로 유리수가 된다", "expected_id": null, "near_id": "conjugate-product-sum", "kind": "correct-near", "note": "올바른 켤레 곱 — 무리수 미포함(부분)"}
+{"statement": "항을 반대편으로 옮길 때 기호를 그대로 두고 계산했어", "expected_id": "transpose-no-sign-change", "near_id": null, "kind": "paraphrase", "note": "x+b=c→x=c+b — signals 이항·부호 회피"}
+{"statement": "항을 반대편으로 옮길 때는 부호를 반대로 바꿔야 한다", "expected_id": null, "near_id": "transpose-no-sign-change", "kind": "correct-near", "note": "올바른 이항 — 이항 미포함(부분)"}
+{"statement": "두 수의 공약수 중 가장 큰 값과 공배수 중 가장 작은 값을 서로 바꿔 적었어", "expected_id": "gcd-lcm-confused", "near_id": null, "kind": "paraphrase", "note": "GCD↔LCM 혼동 — signals 최대공약수·최소공배수 회피"}
+{"statement": "최대공약수와 최소공배수는 서로 다른 개념이다", "expected_id": null, "near_id": "gcd-lcm-confused", "kind": "correct-near", "note": "올바른 구분 — 두 토큰 공출현이나 개념 정확(측정용)"}
+{"statement": "0.3과 0.2를 곱하면서 소수점 위치를 하나만 세어 0.6으로 적었어", "expected_id": "decimal-mult-place", "near_id": null, "kind": "paraphrase", "note": "0.3×0.2=0.6 — signals 소수·자릿수 회피"}
+{"statement": "소수끼리 곱할 때는 소수점 아래 자릿수를 더해서 찍어야 한다", "expected_id": null, "near_id": "decimal-mult-place", "kind": "correct-near", "note": "올바른 소수 곱 — 소수 미포함(부분)"}
+{"statement": "1과 2분의 1에 2를 곱할 때 앞의 정수 부분만 곱해서 계산했어", "expected_id": "mixed-number-mult-whole", "near_id": null, "kind": "paraphrase", "note": "1½×2=2½ — signals 대분수·정수 회피"}
+{"statement": "대분수에 정수를 곱할 땐 정수 부분과 분수 부분 모두에 곱해야 한다", "expected_id": null, "near_id": "mixed-number-mult-whole", "kind": "correct-near", "note": "올바른 대분수 곱 — 두 토큰 공출현이나 정확(측정용)"}
+{"statement": "일차식으로 나눈 나머지를 구할 때 부호를 반대로 넣어 대입했어", "expected_id": "remainder-theorem-sign", "near_id": null, "kind": "paraphrase", "note": "f(-a) 오인 — signals 나머지정리·대입 회피"}
+{"statement": "나머지정리에서는 나누는 식이 (x-a)이면 f(a)를 대입해야 한다", "expected_id": null, "near_id": "remainder-theorem-sign", "kind": "correct-near", "note": "올바른 나머지정리 — 두 토큰 공출현이나 정확(측정용)"}
+{"statement": "두 근의 합을 구할 때 일차항 계수를 그대로 써서 부호를 놓쳤어", "expected_id": "vieta-sign-error", "near_id": null, "kind": "paraphrase", "note": "합=b 오인 — signals 근과 계수·부호 회피"}
+{"statement": "두 근의 합은 일차항 계수의 부호를 바꾼 값이다", "expected_id": null, "near_id": "vieta-sign-error", "kind": "correct-near", "note": "올바른 근과 계수 — signals 미공출현"}
+{"statement": "사다리꼴 넓이를 구할 때 윗변과 아랫변을 더해 높이만 곱하고 2로 나누는 걸 잊었어", "expected_id": "trapezoid-area-no-half", "near_id": null, "kind": "paraphrase", "note": "÷2 누락 — signals 사다리꼴만(높이를 곱 회피)"}
+{"statement": "닮음비가 2배면 부피도 2배로 늘어난다고 계산했어", "expected_id": "scale-volume-linear", "near_id": null, "kind": "paraphrase", "note": "부피비=닮음비 오인 — signals 닮음비만(부피비 회피)"}
+{"statement": "원뿔의 부피를 밑넓이에 높이를 곱하기만 하고 3으로 안 나눴어", "expected_id": "cone-volume-no-third", "near_id": null, "kind": "paraphrase", "note": "⅓ 누락 — signals 원뿔만(원기둥 회피)"}
+{"statement": "원의 넓이를 반지름에 2와 원주율을 곱하는 둘레 방식으로 구했어", "expected_id": "circle-area-circumference", "near_id": null, "kind": "paraphrase", "note": "넓이를 둘레로 — signals 원의 넓이만(2πr 회피)"}
+{"statement": "조합 문제인데 순서를 따지는 순열 방식으로 세어버렸어", "expected_id": "combination-no-denominator", "near_id": null, "kind": "paraphrase", "note": "분모 r! 누락 — signals 조합만(nPr 회피)"}
+{"statement": "같은 글자가 섞여 있는데 전부 다른 것처럼 계승 전체로 배열 수를 셌어", "expected_id": "same-item-permutation-no-divide", "near_id": null, "kind": "paraphrase", "note": "중복 나눗셈 누락 — signals 미공출현(같은 것·서로 다른 회피)"}
+{"statement": "사다리꼴의 넓이는 두 밑변의 합에 높이의 곱을 반으로 나눈 값이다", "expected_id": null, "near_id": "trapezoid-area-no-half", "kind": "correct-near", "note": "올바른 사다리꼴 공식 — 높이의 곱(높이를 곱 회피)·풀매칭 아님"}
+{"statement": "닮음비가 2인 두 도형의 부피의 비는 2의 세제곱인 8이다", "expected_id": null, "near_id": "scale-volume-linear", "kind": "correct-near", "note": "올바른 부피비(세제곱) — 부피의 비(부피비 회피)"}
+{"statement": "원뿔의 부피는 같은 밑면과 높이를 가진 기둥 부피의 3분의 1이다", "expected_id": null, "near_id": "cone-volume-no-third", "kind": "correct-near", "note": "올바른 ⅓ 관계 — 기둥(원기둥 회피)"}
+{"statement": "반지름이 r인 원의 넓이는 원주율에 반지름의 제곱을 곱한 값이다", "expected_id": null, "near_id": "circle-area-circumference", "kind": "correct-near", "note": "올바른 원 넓이 πr² — 2πr 미포함"}
+{"statement": "조합은 뽑는 순서를 고려하지 않고 개수만 세는 경우의 수이다", "expected_id": null, "near_id": "combination-no-denominator", "kind": "correct-near", "note": "올바른 조합 정의 — nPr 미포함"}
+{"statement": "같은 것이 있는 순열은 전체 계승을 같은 것의 개수의 계승으로 나눈다", "expected_id": null, "near_id": "same-item-permutation-no-divide", "kind": "correct-near", "note": "올바른 같은 것 순열 — 서로 다른 미포함"}

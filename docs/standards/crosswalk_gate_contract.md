@@ -53,6 +53,21 @@ crosswalk 매핑(런타임 탐지 kebab-id → 리포트에 뜨는 canonical M-i
 > 한계: 서명 검증은 note 문자열 매칭이라 *고의 위조*(가짜 서명 삽입·DB 직접 편집)를 막지 못한다 —
 > 목적은 우발적·관례적 우회(candidate 출력 직접 적재 등) 차단이며, 위조는 도구 밖 행위다.
 
+## 기계 자율 거부 규칙 (`machine_reject` — 측정된 안전 자율 행동·초인간 검증 §3.3)
+
+승인(approve)은 여전히 **사람 전용**이다(AI 자기승인 금지 불변). 그러나 강등전으로 *성취기준
+가로지르는 오매핑 거부*가 측정된 구간(cross-standard 거부 240/240·Wilson 하한 0.989)에서는, 기계가
+pending 후보를 **자율 거부**할 수 있다(`crosslink_standard_signal.machine_rejectable` +
+`crosslink_machine_reject`). 거부는 아래를 **모두** 만족할 때만 허용된다:
+
+1. `standard_agreement == disagree` — kebab 역유도 성취기준과 M-id `standard_code`가 겹치지 않음
+2. kebab 증거량 ≥ `MACHINE_REJECT_EVIDENCE_FLOOR`(= **20문항**) — 얇은 역유도는 신뢰 안 함
+
+> **비대칭(핵심)**: 기계는 *거부만* 하고 *승인은 절대 안 한다*. 거부 실패 모드는 보수적(correct
+> 매핑을 놓쳐도 오매핑 적재가 아니라 *누락* — resolver는 no_links로 graceful). `agree`·`no_signal`·
+> 증거 미달은 전부 인간 폴백. 이 도구는 커밋 큐 템플릿을 **변경하지 않는다**(전행 pending 봉인 유지·
+> `test_real_queue_all_pending_unsigned` 무손상) — 거부 대상 *산출*만 하고 반영은 ops가 검토 적용.
+
 ## 상수 요약 (코드 = 이 문서)
 
 | 상수 | 값 |
@@ -63,6 +78,9 @@ crosswalk 매핑(런타임 탐지 kebab-id → 리포트에 뜨는 canonical M-i
 | `DIRECT_MIN_CONFIDENCE` | `0.6` |
 | `DIRECT_LINK_TYPE` | `직접매핑` |
 | `LOADABLE_METHOD` | `manual` |
+| `MACHINE_REJECT_METHOD` | `structural_reject` |
+| `MACHINE_REJECT_REVIEWER` | `machine` |
+| `MACHINE_REJECT_EVIDENCE_FLOOR` | `20` |
 
 ## 흐름 (4b-2 사람 게이트)
 

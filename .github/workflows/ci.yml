@@ -11,6 +11,11 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # 야간(KST 03시 = UTC 18시) E2E 안전망 — push/PR 없이도 관통 슬라이스가 도는지 확인.
+  # GitHub schedule은 default branch(main)에서만 발화한다. 이 이벤트에선 e2e-nightly만
+  # 돌고, 무거운 push/PR 잡들은 `&& github.event_name != 'schedule'` 가드로 스킵된다.
+  schedule:
+    - cron: "0 18 * * *"
 
 # 동일 PR/브랜치에서 새 푸시가 오면 이전 실행 취소 (비용 절감)
 concurrency:
@@ -85,7 +90,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
-    if: github.event_name != 'pull_request' || needs.changes.outputs.data_pipeline == 'true'
+    if: (github.event_name != 'pull_request' || needs.changes.outputs.data_pipeline == 'true') && github.event_name != 'schedule'
     defaults:
       run:
         working-directory: src/data-pipeline
@@ -137,10 +142,13 @@ jobs:
   backend:
     name: backend — lint·type·test
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # 스위트 성장(초인간 검증 하니스·843 트랜치·원자 축 누적)으로 유닛+커버리지가 10분 초과.
+    # timeout은 상한일 뿐이라 정상 완료 시 낭비 없음(hang 방지 상한만 유지). 후속 최적화 과제:
+    # pytest-xdist 병렬 실행·무거운 생성기/게이트 테스트 slow 마크 분리.
+    timeout-minutes: 25
     needs: changes
     # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
-    if: github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true'
+    if: (github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true') && github.event_name != 'schedule'
     defaults:
       run:
         working-directory: src/backend
@@ -214,7 +222,7 @@ jobs:
     timeout-minutes: 12
     needs: changes
     # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
-    if: github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true'
+    if: (github.event_name != 'pull_request' || needs.changes.outputs.backend == 'true') && github.event_name != 'schedule'
     defaults:
       run:
         working-directory: src/backend
@@ -296,7 +304,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
-    if: github.event_name != 'pull_request' || needs.changes.outputs.data_pipeline == 'true'
+    if: (github.event_name != 'pull_request' || needs.changes.outputs.data_pipeline == 'true') && github.event_name != 'schedule'
     defaults:
       run:
         working-directory: src/data-pipeline
@@ -359,7 +367,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     # doc-only PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
-    if: github.event_name != 'pull_request' || needs.changes.outputs.data_pipeline == 'true'
+    if: (github.event_name != 'pull_request' || needs.changes.outputs.data_pipeline == 'true') && github.event_name != 'schedule'
     defaults:
       run:
         working-directory: src/data-pipeline
@@ -424,7 +432,7 @@ jobs:
     timeout-minutes: 15
     needs: changes
     # doc-only/타 영역 PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
-    if: github.event_name != 'pull_request' || needs.changes.outputs.mobile == 'true'
+    if: (github.event_name != 'pull_request' || needs.changes.outputs.mobile == 'true') && github.event_name != 'schedule'
     defaults:
       run:
         working-directory: src/mobile
@@ -465,7 +473,7 @@ jobs:
     timeout-minutes: 10
     needs: changes
     # doc-only/타 영역 PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
-    if: github.event_name != 'pull_request' || needs.changes.outputs.web == 'true'
+    if: (github.event_name != 'pull_request' || needs.changes.outputs.web == 'true') && github.event_name != 'schedule'
     defaults:
       run:
         working-directory: src/web/graphing-calculator
@@ -570,3 +578,75 @@ jobs:
               exit 1
           fi
           echo "OK — 하드코딩된 시크릿 패턴 없음"
+
+  # ─────────────────────────────────────────────────────────────────
+  # 야간 E2E 관통 슬라이스 (schedule 전용) — S1 게이트 안전망
+  # 온보딩→진단→문제→코치(영속)→verify 관통 테스트(test_e2e_vertical_slice_integration)를
+  # push/PR 없이도 매일 실 PG로 돌린다. 본체는 이미 backend-migrations 잡에서 push/PR마다
+  # 실행되지만(mock LLM·hermetic), 이 잡은 *스케줄 발화*로 코드 드리프트·의존성 표류를
+  # 주기적으로 잡는 별도 안전망이다. schedule 이벤트에서만 돌고(위 무거운 잡들은 schedule
+  # 가드로 스킵), push/PR 경로는 완전 무변경이다. backend-migrations 잡과 동형(실 PG·trust).
+  # ─────────────────────────────────────────────────────────────────
+  e2e-nightly:
+    name: e2e-nightly — 관통 슬라이스 (실 PG·야간)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    if: github.event_name == 'schedule'
+    defaults:
+      run:
+        working-directory: src/backend
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: whymath
+          POSTGRES_DB: whymath
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U whymath"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # Settings 기본값과 동일(asyncpg·자격증명 없음·trust) — backend-migrations 잡과 일치.
+      WHYMATH_DATABASE_URL: postgresql+asyncpg://whymath@127.0.0.1:5432/whymath
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies (editable + dev extras)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          # 교차계층 거버넌스 테스트가 data_pipeline(L1)을 import → 백엔드 잡에도 설치.
+          pip install -e ../data-pipeline
+
+      - name: Alembic upgrade head (fresh DB — 전 마이그레이션 적용)
+        run: alembic upgrade head
+
+      - name: Pytest (E2E 관통 슬라이스만 — 실 PG·mock LLM)
+        env:
+          WHYMATH_RUN_INTEGRATION: "1"
+          WHYMATH_DB_DISABLE_POOL: "1"
+        run: pytest -m integration ../../tests/backend/api/test_e2e_vertical_slice_integration.py
+
+      # 초인간 검증 S6(상시성) — 전 코퍼스 verify 재료로 정답을 매일 밤 전수 재검산.
+      # 정본 변경·데이터 오염을 야간에 즉시 잡는다(fail 1건이라도 있으면 exit 1). 순수 계산·
+      # DB/LLM 0이라 PG 없이도 돌지만 이 잡(야간)에 얹어 상시 재검증을 보장한다.
+      - name: 전 코퍼스 재검증 (초인간 검증 S6 상시성)
+        run: |
+          python -m whymath_backend.harness.corpus_reverify \
+            ../../data/corpus/problem_bank_generated_v0/problems.jsonl \
+            ../../data/corpus/problem_bank_rephrased_v0/problems.jsonl \
+            ../../data/corpus/problem_bank_killer_v0/problems.jsonl

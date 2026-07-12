@@ -61,9 +61,25 @@ from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "AnswerVerdict",
+    "SolvabilityVerdict",
+    "classify_solvability",
     "derive_selected_root",
     "verify_answer",
+    "verify_conditional_equal",
+    "verify_congruent_by_ratio",
+    "verify_dot_product_scalar",
+    "verify_events_independent",
+    "verify_extremum_count",
+    "verify_geometric_convergence",
+    "verify_inequality_direction",
+    "verify_is_differentiable",
+    "verify_is_one_to_one",
+    "verify_limit_equals_value",
+    "verify_mean_equals_median",
+    "verify_real_root_count",
+    "verify_root_aggregate",
     "verify_root_selection",
+    "verify_series_converges",
 ]
 
 
@@ -668,3 +684,857 @@ def derive_selected_root(
         if _approx_equal(value, target, tol):
             return str(sympy.sstr(root))
     return None  # pragma: no cover — target은 reals에서 왔으므로 도달 불가(방어)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 근의 합/곱(Vieta) 검증 — S2 킬러 확장(f'=0 근이 아니라 *근들의 집계값*이 답).
+# ──────────────────────────────────────────────────────────────────────────
+RootAggregate = Literal["sum", "product"]
+
+
+def verify_root_aggregate(
+    conditions: str | Sequence[str],
+    claimed: str,
+    kind: RootAggregate,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """답이 조건 방정식의 *모든 근의 합/곱*(Vieta)과 일치하는지 검증(S2 킬러 확장).
+
+    "삼차방정식 …의 세 근의 합/곱을 구하시오"류 킬러 문항의 답은 f(x)=0의 *근이 아니라*
+    근들의 집계값이라 `verify_answer`(답이 근인가)·`verify_root_selection`(어느 근인가)로는
+    검증할 수 없다. 이 함수가 그 빈 검증면을 채운다 — 다항식의 근을 중복도까지 정확히 구해
+    (`sympy.roots`) 합/곱을 **기호적 정확값**으로 계산하고, 주장값과 `simplify` 차 0을 본다
+    (복소근 포함 Vieta 정확값이라 근이 무리·복소여도 정확). 판정:
+      - **pass**: 근들의 합/곱이 주장값과 정확히 일치(simplify 차 0).
+      - **fail**: 불일치(주장값이 틀림).
+      - **unverifiable**: 적용 밖 — 단일 변수 다항 등식이 아님·근을 중복도까지 다 못 구함·
+        파싱/치환 불가(보수적·pass 위장 금지, verify_answer 정직성 상속).
+    """
+    # 단일 등식만(연립/빈 조건은 집계 의미 불명확 — 보수적 회피).
+    if isinstance(conditions, str):
+        condition: str | None = conditions
+    else:
+        condition_list = list(conditions)
+        condition = condition_list[0] if len(condition_list) == 1 else None
+    if condition is None:
+        return _unverifiable("근 집계 — 단일 등식이 아님(연립/빈 조건)·안전 회피")
+
+    try:
+        residual, op = _parse_condition(condition)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("근 집계 — 조건 파싱 불가·안전 회피")
+    if op != "==":
+        return _unverifiable("근 집계 — 등식이 아님(부등식/≠)·안전 회피")
+
+    free = sorted(residual.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("근 집계 — 단일 변수 방정식이 아님·안전 회피")
+    var = free[0]
+
+    try:
+        poly = sympy.Poly(residual, var)
+    except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
+        return _unverifiable("근 집계 — 다항식이 아님·안전 회피")
+
+    try:
+        root_mult = sympy.roots(poly)  # {근: 중복도} — 복소근 포함 정확값.
+        claimed_expr = sympy.sympify(claimed, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 풀이/치환 불가는 보수적 unverifiable
+        return _unverifiable("근 집계 — 근 계산/주장값 치환 불가·안전 회피")
+
+    total_mult = sum(root_mult.values())
+    if total_mult != poly.degree():
+        # 근을 중복도까지 전부 구하지 못함(라디칼 표현 불가 등) → 집계 정확값 보장 못 함.
+        return _unverifiable("근 집계 — 근을 중복도까지 전부 구하지 못함·안전 회피")
+
+    if kind == "sum":
+        actual: sympy.Expr = sum(
+            (root * mult for root, mult in root_mult.items()), sympy.Integer(0)
+        )
+    else:
+        actual = sympy.Integer(1)
+        for root, mult in root_mult.items():
+            actual = actual * root**mult
+
+    try:
+        diff = sympy.simplify(actual - claimed_expr)
+    except Exception:  # noqa: BLE001 — 단순화 실패는 보수적 unverifiable
+        return _unverifiable("근 집계 — 차 단순화 불가·안전 회피")
+
+    if diff == 0:
+        return _pass(samples_checked=total_mult)
+    return _fail(
+        f"근 {kind} — 근들의 {kind}는 {sympy.sstr(sympy.simplify(actual))}이나 "
+        f"주장값은 {claimed}(불일치)",
+        samples_checked=total_mult,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 해 존재성·유일성 분류(문항 품질 15축 ②③) — *답과 무관하게* 방정식 자체가 성립 문제인가.
+# ──────────────────────────────────────────────────────────────────────────
+# 정본: `docs/standards/superhuman_verification_standard.md`(측정된 게이트) + 문항 품질 15축 진단
+# ②(답이 존재하지 않음)·③(답이 여러 개). verify_answer가 "주어진 답이 조건을 만족하는가"만 보는
+# 반면, 이 분류기는 "방정식 자체가 *풀 수 있는 문제*인가"를 답 이전에 판정한다:
+#   - 항등식(무한해·예 `2*(x+1)=2*x+2`)은 residual이 항등적 0이라 *어떤 답도* Tier1 pass →
+#     단일 정답 문항으로 malformed(현 게이트의 구멍: unique 프로브가 실근 0으로 unverifiable을
+#     돌려 강등 안 됨 → verified로 통과). 이 축이 그 구멍을 닫는다.
+#   - 해 없음(예 `x+1=x+2`의 상수 잔차·실근 없는 다항)은 malformed이며, 기존엔 Tier1 fail로만
+#     *우연히* 걸려 사유가 모호했다 — 여기서 명시 사유로 승격.
+SolvabilityClass = Literal["no_solution", "identity", "unique", "multiple", "undecidable"]
+
+
+class SolvabilityVerdict(BaseModel):
+    """`classify_solvability`의 결과 — 방정식의 해 존재/유일 5분류 + 사유·서로 다른 실근 수.
+
+    `state`는 방정식 *자체*의 성질이다(주장 답과 무관): no_solution(해 없음)·identity(무한해·
+    항등식)·unique(서로 다른 실근 1개)·multiple(≥2)·undecidable(단일변수 다항 등식 밖·판정 회피).
+    정직성(verify_answer 상속): 비다항·다변수·파싱 불가는 `undecidable`로 보수 처리한다 —
+    sympy.solve의 빈 결과를 "해 없음"으로 *오판하지 않는다*(다항에서만 존재성을 단정).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    state: SolvabilityClass = Field(description="해 존재/유일 5분류(방정식 자체 성질·답 무관).")
+    reason: str | None = Field(
+        default=None, description="분류 사유(한국어·undecidable/특이 케이스)."
+    )
+    n_distinct_real_roots: int = Field(
+        default=0, description="서로 다른 실근 수(unique=1·multiple≥2·그 외 0)."
+    )
+
+
+def classify_solvability(
+    conditions: str | Sequence[str],
+    *,
+    tol: float = 1e-9,
+) -> SolvabilityVerdict:
+    """단일변수 (실계수) 방정식의 해 존재/유일을 5분류 — 답 이전에 방정식이 성립 문제인지 판정.
+
+    실수해 스코프(K-12·수능 실답 전제): 실근을 기준으로 unique/multiple/no_solution을 가른다.
+    보수성(핵심): **다항식일 때만** sympy 근을 신뢰해 존재성을 단정하고, 비다항·다변수·파싱 불가는
+    `undecidable`로 회피한다 — sympy.solve가 "못 푼" 빈 결과를 "해 없음"으로 오판해 정상 문항을
+    거짓 거부하지 않기 위함. 판정:
+      - **identity**(무한해): lhs-rhs가 항등적 0(예 `2*(x+1)=2*x+2`) — 모든 값이 해.
+      - **no_solution**: lhs-rhs가 0 아닌 상수(예 `x+1=x+2`) 또는 다항인데 실근이 하나도 없음.
+      - **unique**: 서로 다른 실근 1개(중근은 1개로 접음).
+      - **multiple**: 서로 다른 실근 ≥2개.
+      - **undecidable**: 단일변수 다항 등식이 아님(연립·부등식·다변수·비다항·파싱 불가)·안전 회피.
+    """
+    # 단일 등식만 — 연립/빈 조건은 존재성 의미가 불명확(보수적 회피).
+    if isinstance(conditions, str):
+        condition: str | None = conditions
+    else:
+        condition_list = list(conditions)
+        condition = condition_list[0] if len(condition_list) == 1 else None
+    if condition is None:
+        return SolvabilityVerdict(state="undecidable", reason="단일 등식이 아님(연립/빈 조건)")
+
+    try:
+        residual, op = _parse_condition(condition)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 undecidable
+        return SolvabilityVerdict(state="undecidable", reason="조건 파싱 불가")
+    if op != "==":
+        return SolvabilityVerdict(state="undecidable", reason="등식이 아님(부등식/≠)")
+
+    # 항등식·상수 잔차 판정 — simplify가 자유변수를 다 지우면 상수(답 무관 결론).
+    try:
+        simplified = sympy.simplify(residual)
+    except Exception:  # noqa: BLE001 — 단순화 실패는 보수적 undecidable
+        return SolvabilityVerdict(state="undecidable", reason="잔차 단순화 불가")
+    if not simplified.free_symbols:
+        if simplified == 0:
+            return SolvabilityVerdict(
+                state="identity", reason="lhs-rhs가 항등적 0 — 모든 값이 해(무한해)"
+            )
+        return SolvabilityVerdict(
+            state="no_solution", reason=f"lhs-rhs가 0 아닌 상수 {simplified} — 해 없음"
+        )
+
+    free = sorted(residual.free_symbols, key=str)
+    if len(free) != 1:
+        return SolvabilityVerdict(
+            state="undecidable", reason="단일 변수 방정식이 아님(다변수/파라미터)"
+        )
+    var = free[0]
+
+    # 다항일 때만 근 존재성을 신뢰(sympy 완전). 비다항은 solve 빈결과 오판 회피 → undecidable.
+    try:
+        sympy.Poly(residual, var)
+    except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
+        return SolvabilityVerdict(state="undecidable", reason="다항식이 아님 — 존재성 단정 회피")
+
+    try:
+        raw_roots = sympy.solve(sympy.Eq(residual, 0), var)
+    except Exception:  # noqa: BLE001 — 풀이 불가는 보수적 undecidable
+        return SolvabilityVerdict(state="undecidable", reason="방정식 풀이 불가")
+
+    real_roots = [rv for r in raw_roots if (rv := _real_value(r, tol)) is not None]
+    distinct = _distinct_values(real_roots, tol)
+    n = len(distinct)
+    if n == 0:
+        return SolvabilityVerdict(
+            state="no_solution", reason="다항이나 실근이 하나도 없음(복소근만)"
+        )
+    if n == 1:
+        return SolvabilityVerdict(state="unique", reason=None, n_distinct_real_roots=1)
+    return SolvabilityVerdict(
+        state="multiple",
+        reason=f"서로 다른 실근 {n}개 — 답이 유일하게 확정되려면 근 선택 필요",
+        n_distinct_real_roots=n,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 개념형(개수/존재) 검증 — 답이 값이 아니라 *개수*(실근 개수·극값 개수)인 문항.
+# ──────────────────────────────────────────────────────────────────────────
+# 정본: 문항 품질 15축 개념형 확장. 수치평가(x=<닫힌형>)의 약한 잔차와 달리, 개수는 SymPy로
+# *독립 계산*해 주장값과 대조하므로 오개념의 틀린 개수는 fail한다(진짜 개념 검증). 판별식을 무시해
+# "이차방정식은 늘 두 실근"으로 오인(discriminant-negative-no-real-root)·임계점(f'=0)을 곧 극값으로
+# 오인(critical-point-implies-extremum)하는 오개념을 정확히 겨눈다.
+
+
+def _single_condition(conditions: str | Sequence[str]) -> str | None:
+    """단일 등식/식만 허용 — 연립·빈 조건은 None(개념형 개수 검증의 공통 전제)."""
+    if isinstance(conditions, str):
+        return conditions
+    condition_list = list(conditions)
+    return condition_list[0] if len(condition_list) == 1 else None
+
+
+def _claimed_int(claimed: str, tol: float) -> int | None:
+    """주장 개수를 정수로 — 실수로 평가해 정수 근방이면 그 정수, 아니면 None(개수 아님)."""
+    value = _real_value(sympy.sympify(claimed, convert_xor=True), tol) if claimed else None
+    if value is None:
+        return None
+    rounded = round(value)
+    return rounded if abs(value - rounded) < 1e-6 and rounded >= 0 else None
+
+
+def verify_real_root_count(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """답이 단일변수 다항식 방정식의 *서로 다른 실근 개수*와 일치하는지 검증(개념형).
+
+    "이차방정식 …의 서로 다른 실근의 개수"류 문항의 답은 근이 아니라 *개수*라 verify_answer로는
+    검증 못 한다. 이 함수가 다항식의 실근을 중복도까지 구해(`sympy.roots`) 서로 다른 실근 수를
+    세고 주장 개수와 대조한다. 판별식 무시("늘 2근") 오개념은 실근 0/1을 2로 답해 fail한다.
+      - pass: 실제 서로 다른 실근 수 == 주장 개수.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 다항 등식 아님·근을 다 못 구함·주장이 개수 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("실근 개수 — 단일 등식이 아님·안전 회피")
+    try:
+        residual, op = _parse_condition(condition)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("실근 개수 — 조건 파싱 불가·안전 회피")
+    if op != "==":
+        return _unverifiable("실근 개수 — 등식이 아님·안전 회피")
+    free = sorted(residual.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("실근 개수 — 단일 변수 방정식이 아님·안전 회피")
+    var = free[0]
+    try:
+        poly = sympy.Poly(residual, var)
+        root_mult = sympy.roots(poly)
+    except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
+        return _unverifiable("실근 개수 — 다항식이 아님·안전 회피")
+    except Exception:  # noqa: BLE001 — 근 계산 불가는 보수적 unverifiable
+        return _unverifiable("실근 개수 — 근 계산 불가·안전 회피")
+    if sum(root_mult.values()) != poly.degree():
+        return _unverifiable("실근 개수 — 근을 중복도까지 다 못 구함·안전 회피")
+
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n is None:
+        return _unverifiable("실근 개수 — 주장값이 개수(비음 정수)가 아님·안전 회피")
+    real = [rv for r in root_mult if (rv := _real_value(r, tol)) is not None]
+    actual = len(_distinct_values(real, tol))
+    if actual == claimed_n:
+        return _pass(samples_checked=actual)
+    return _fail(
+        f"실근 개수 — 실제 {actual}개이나 주장은 {claimed_n}개(불일치)",
+        samples_checked=actual,
+    )
+
+
+def verify_extremum_count(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """답이 다항함수 f(x)의 *극값 개수*와 일치하는지 검증(개념형).
+
+    극값 개수 = f'의 실근 중 *부호가 바뀌는*(중복도 홀수) 근 수다. f'=0이나 부호 불변(예 x³의
+    f'=3x²)이면 임계점은 있으나 극값은 없다 — "임계점=극값" 오개념은 임계점 수를 극값 수로 답해
+    fail한다. `conditions`는 f(x) *식*(등식 아님·예 "x**3 - 3*x").
+      - pass: 실제 극값 수 == 주장 개수.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 다항식 아님·f' 근을 다 못 구함·주장이 개수 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("극값 개수 — 단일 식이 아님·안전 회피")
+    try:
+        expr = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("극값 개수 — 식 파싱 불가·안전 회피")
+    if isinstance(expr, sympy.core.relational.Relational):
+        return _unverifiable("극값 개수 — 함수 식이어야 함(등식/부등식 아님)·안전 회피")
+    free = sorted(expr.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("극값 개수 — 단일 변수 함수가 아님·안전 회피")
+    var = free[0]
+    try:
+        fprime = sympy.diff(expr, var)
+        poly = sympy.Poly(fprime, var)
+        root_mult = sympy.roots(poly)
+    except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
+        return _unverifiable("극값 개수 — 도함수가 다항식이 아님·안전 회피")
+    except Exception:  # noqa: BLE001 — 근 계산 불가는 보수적 unverifiable
+        return _unverifiable("극값 개수 — 도함수 근 계산 불가·안전 회피")
+    if sum(root_mult.values()) != poly.degree():
+        return _unverifiable("극값 개수 — 도함수 근을 중복도까지 다 못 구함·안전 회피")
+
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n is None:
+        return _unverifiable("극값 개수 — 주장값이 개수(비음 정수)가 아님·안전 회피")
+    # 극값 = 실근 중 중복도 홀수(부호 변화). 짝수 중복도(예 x³의 f'=3x²)는 극값 아님.
+    actual = sum(
+        1
+        for root, mult in root_mult.items()
+        if _real_value(root, tol) is not None and mult % 2 == 1
+    )
+    if actual == claimed_n:
+        return _pass(samples_checked=actual)
+    return _fail(
+        f"극값 개수 — 실제 {actual}개이나 주장은 {claimed_n}개(불일치)",
+        samples_checked=actual,
+    )
+
+
+def verify_is_one_to_one(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """다항함수 f(x)가 ℝ에서 *일대일대응*(역함수 존재 가능)인지 0/1로 검증(개념형).
+
+    다항함수는 f'이 부호를 바꾸지 않을 때만(단조) 일대일이다 — f'의 부호 변화(도함수 실근 중
+    중복도 홀수) 개수가 0이면 1(일대일)·아니면 0. "일대일 아니어도 역함수가 있다"는 오개념
+    (invertibility-without-1-1)은 x²류(부호 변화 有)를 1로 답해 fail한다. `conditions`는 f(x) 식.
+      - pass: 실제 일대일 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 다항식 아님·주장이 0/1 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("일대일 — 단일 식이 아님·안전 회피")
+    try:
+        expr = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("일대일 — 식 파싱 불가·안전 회피")
+    if isinstance(expr, sympy.core.relational.Relational):
+        return _unverifiable("일대일 — 함수 식이어야 함(등식/부등식 아님)·안전 회피")
+    free = sorted(expr.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("일대일 — 단일 변수 함수가 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("일대일 — 주장값이 0/1이 아님·안전 회피")
+    var = free[0]
+    fprime = sympy.diff(expr, var)
+    if fprime == 0:
+        actual = 0  # 상수함수 → 일대일 아님.
+    else:
+        try:
+            poly = sympy.Poly(fprime, var)
+            root_mult = sympy.roots(poly)
+        except (sympy.PolynomialError, sympy.GeneratorsError, ValueError):
+            return _unverifiable("일대일 — 도함수가 다항식이 아님·안전 회피")
+        if sum(root_mult.values()) != poly.degree():
+            return _unverifiable("일대일 — 도함수 근을 중복도까지 다 못 구함·안전 회피")
+        sign_changes = sum(
+            1
+            for root, mult in root_mult.items()
+            if _real_value(root, tol) is not None and mult % 2 == 1
+        )
+        actual = 1 if sign_changes == 0 else 0  # 부호 변화 없음(단조) → 일대일.
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    return _fail(f"일대일 — 실제 {actual}이나 주장은 {claimed_n}(불일치)", samples_checked=1)
+
+
+def verify_geometric_convergence(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """공비 r인 등비급수의 *수렴 여부*를 0/1로 검증(개념형). `conditions`는 공비 r(값/식).
+
+    등비급수는 |r|<1일 때만 수렴한다(1)·그 외 발산(0). "등비급수는 늘 수렴한다"는 오개념
+    (geometric-series-always-converges)은 |r|≥1인데 1로 답해 fail한다.
+      - pass: 실제 수렴 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: r이 실수가 아님·주장이 0/1 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("등비급수 수렴 — 단일 값이 아님·안전 회피")
+    try:
+        ratio = _real_value(sympy.sympify(condition, convert_xor=True), tol)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("등비급수 수렴 — 공비 파싱 불가·안전 회피")
+    if ratio is None:
+        return _unverifiable("등비급수 수렴 — 공비가 실수가 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("등비급수 수렴 — 주장값이 0/1이 아님·안전 회피")
+    actual = 1 if abs(ratio) < 1 - tol else 0  # |r|<1 수렴(경계 |r|=1은 발산).
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "수렴" if actual else "발산"
+    return _fail(
+        f"등비급수 수렴 — 공비 {ratio}는 {verdict}이나 주장 {claimed_n}(불일치)",
+        samples_checked=1,
+    )
+
+
+def verify_limit_equals_value(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """유리식 f(x)가 특이점에서 lim = f(a)를 만족하는지 0/1로 검증(개념형). `conditions`는 f(x).
+
+    분모가 0이 되는 실수 특이점 a에서 극한값(유한)과 함수값을 비교한다 — 제거가능 특이점(0/0 꼴)은
+    극한은 존재하나 함수값이 미정의라 lim ≠ f(a)(0). "극한값은 늘 함수값과 같다"는 오개념
+    (limit-equals-function-value)은 1로 답해 fail한다. 자동 약분을 막으려 분자는 전개형으로 받는다.
+      - pass: 실제 일치 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 유리식 아님·특이점 없음·주장 0/1 아님·극한 계산 불가(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("극한=함숫값 — 단일 식이 아님·안전 회피")
+    try:
+        expr = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("극한=함숫값 — 식 파싱 불가·안전 회피")
+    if isinstance(expr, sympy.core.relational.Relational):
+        return _unverifiable("극한=함숫값 — 함수 식이어야 함(등식/부등식 아님)·안전 회피")
+    free = sorted(expr.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("극한=함숫값 — 단일 변수 함수가 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("극한=함숫값 — 주장값이 0/1이 아님·안전 회피")
+    var = free[0]
+    _, den = expr.as_numer_denom()
+    try:
+        singular = sympy.solve(sympy.Eq(den, 0), var)
+    except (NotImplementedError, sympy.PolynomialError, ValueError):
+        return _unverifiable("극한=함숫값 — 특이점 계산 불가·안전 회피")
+    real_singular = [s for s in singular if s.is_real]
+    if not real_singular:
+        return _unverifiable("극한=함숫값 — 실수 특이점 없음(오개념 표적 아님)·안전 회피")
+    actual = 1
+    for point in real_singular:
+        try:
+            lim = sympy.limit(expr, var, point)
+        except Exception:  # noqa: BLE001 — 극한 계산 불가는 보수적 회피
+            return _unverifiable("극한=함숫값 — 극한 계산 불가·안전 회피")
+        if lim in (sympy.zoo, sympy.oo, -sympy.oo, sympy.nan) or lim.is_finite is not True:
+            return _unverifiable("극한=함숫값 — 극한이 유한하지 않음·안전 회피")
+        value = expr.subs(var, point)
+        # 함수값 미정의(0/0 → nan 등) 또는 극한과 불일치 → lim ≠ f(a).
+        if value.is_finite is not True or sympy.simplify(lim - value) != 0:
+            actual = 0
+            break
+    if actual == claimed_n:
+        return _pass(samples_checked=len(real_singular))
+    verdict = "일치" if actual else "불일치(함숫값 미정의)"
+    return _fail(
+        f"극한=함숫값 — 특이점에서 {verdict}이나 주장 {claimed_n}(불일치)",
+        samples_checked=len(real_singular),
+    )
+
+
+def verify_is_differentiable(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """함수 f(x)가 ℝ 전체에서 *미분가능*한지 0/1로 검증(개념형). `conditions`는 f(x) 식.
+
+    절댓값 꺾인점(좌·우 미분계수 상이)에서 미분가능하지 않다 — |x-a| 꼴은 연속이나 x=a에서 미분
+    불가(0). "연속이면 미분가능"이라는 오개념(continuity-implies-differentiability)은 1로 답해
+    fail한다. 꺾인점 후보는 식 안 Abs 인자의 실근이며, 각 점에서 좌·우 차분몫 극한을 비교한다.
+      - pass: 실제 미분가능 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 아님·주장 0/1 아님·유리식 등 도메인 복잡·극한 불가(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("미분가능 — 단일 식이 아님·안전 회피")
+    try:
+        expr = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("미분가능 — 식 파싱 불가·안전 회피")
+    if isinstance(expr, sympy.core.relational.Relational):
+        return _unverifiable("미분가능 — 함수 식이어야 함(등식/부등식 아님)·안전 회피")
+    free = sorted(expr.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("미분가능 — 단일 변수 함수가 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("미분가능 — 주장값이 0/1이 아님·안전 회피")
+    var = free[0]
+    abs_terms = expr.atoms(sympy.Abs)
+    if not abs_terms:
+        # Abs 없는 다항식은 ℝ 전체에서 매끄러워 미분가능(1). 그 외(유리식 등)는 도메인 복잡 → 회피.
+        if expr.is_polynomial(var):
+            actual = 1
+        else:
+            return _unverifiable("미분가능 — 다항식·절댓값 꼴이 아님·안전 회피")
+    else:
+        corners: set[sympy.Expr] = set()
+        for term in abs_terms:
+            try:
+                roots = sympy.solve(sympy.Eq(term.args[0], 0), var)
+            except (NotImplementedError, sympy.PolynomialError, ValueError):
+                return _unverifiable("미분가능 — 꺾인점 계산 불가·안전 회피")
+            corners.update(r for r in roots if r.is_real)
+        actual = 1
+        for corner in corners:
+            f_corner = expr.subs(var, corner)
+            if f_corner.is_finite is not True:
+                return _unverifiable("미분가능 — 꺾인점에서 함수값 미정의·안전 회피")
+            quotient = (expr - f_corner) / (var - corner)
+            try:
+                left = sympy.limit(quotient, var, corner, "-")
+                right = sympy.limit(quotient, var, corner, "+")
+            except Exception:  # noqa: BLE001 — 극한 불가는 보수적 회피
+                return _unverifiable("미분가능 — 좌우 미분계수 계산 불가·안전 회피")
+            if left.is_finite is not True or right.is_finite is not True or left != right:
+                actual = 0  # 좌·우 미분계수 상이(또는 발산) → 그 점에서 미분 불가.
+                break
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "미분가능" if actual else "미분 불가(꺾인점)"
+    return _fail(
+        f"미분가능 — 실제 {verdict}이나 주장 {claimed_n}(불일치)",
+        samples_checked=1,
+    )
+
+
+def verify_series_converges(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """일반항 a_n의 급수 Σa_n 수렴 여부를 0/1로 검증(개념형). `conditions`는 일반항 a_n(n 식).
+
+    일반항이 0에 수렴해도 급수는 발산할 수 있다 — 조화급수 Σ1/n은 항→0이나 발산(0). "일반항이
+    0이면 급수도 수렴"이라는 오개념(term-to-zero-implies-convergence)은 1로 답해 fail한다. SymPy
+    `Sum.is_convergent`로 독립 판정한다.
+      - pass: 실제 수렴 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 단일변수 아님·주장 0/1 아님·수렴성 판정 불가(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("급수 수렴 — 단일 식이 아님·안전 회피")
+    try:
+        term = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("급수 수렴 — 식 파싱 불가·안전 회피")
+    if isinstance(term, sympy.core.relational.Relational):
+        return _unverifiable("급수 수렴 — 일반항 식이어야 함(등식/부등식 아님)·안전 회피")
+    free = sorted(term.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("급수 수렴 — 단일 변수 일반항이 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("급수 수렴 — 주장값이 0/1이 아님·안전 회피")
+    var = free[0]
+    try:
+        converges = sympy.Sum(term, (var, 1, sympy.oo)).is_convergent()
+    except Exception:  # noqa: BLE001 — 수렴성 판정 불가는 보수적 회피
+        return _unverifiable("급수 수렴 — 수렴성 판정 불가·안전 회피")
+    # is_convergent는 SymPy Boolean(true/false)을 돌려준다(파이썬 bool 아님·is 비교 금지).
+    if converges not in (sympy.true, sympy.false):
+        return _unverifiable("급수 수렴 — 수렴성 미결정·안전 회피")
+    actual = 1 if bool(converges) else 0
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "수렴" if actual else "발산"
+    return _fail(
+        f"급수 수렴 — Σa_n은 {verdict}이나 주장 {claimed_n}(불일치)",
+        samples_checked=1,
+    )
+
+
+def _parse_number_list(condition: str) -> list[sympy.Expr] | None:
+    """쉼표 구분 수치 목록을 SymPy 정확값 리스트로 — 하나라도 파싱 불가·비수치면 None(보수적)."""
+    parts = [p.strip() for p in condition.split(",") if p.strip()]
+    if not parts:
+        return None
+    values: list[sympy.Expr] = []
+    for part in parts:
+        try:
+            expr = sympy.sympify(part, convert_xor=True)
+        except Exception:  # noqa: BLE001 — 파싱 불가는 목록 전체 무효
+            return None
+        if not expr.is_number or expr.is_real is not True:
+            return None
+        values.append(expr)
+    return values
+
+
+def verify_mean_equals_median(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """자료의 평균과 중앙값이 같은지 0/1로 검증(개념형·통계). `conditions`는 쉼표 구분 자료값 목록.
+
+    평균=Σx/n, 중앙값=정렬 후 가운데(짝수개는 두 값 평균). SymPy 정확 산술로 대조 — 왜곡(비대칭)
+    자료는 평균≠중앙값(0)이다. "평균과 중앙값은 늘 같다"는 오개념(mean-vs-median)은 1로 답해 fail.
+      - pass: 실제 일치 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 자료 파싱 불가·비수치·주장 0/1 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("평균=중앙값 — 단일 자료 목록이 아님·안전 회피")
+    values = _parse_number_list(condition)
+    if values is None or len(values) < 1:
+        return _unverifiable("평균=중앙값 — 자료 파싱 불가·비수치·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("평균=중앙값 — 주장값이 0/1이 아님·안전 회피")
+    n = len(values)
+    mean = sympy.Add(*values) / n
+    ordered = sorted(values, key=lambda v: float(v))
+    if n % 2 == 1:
+        median = ordered[n // 2]
+    else:
+        median = (ordered[n // 2 - 1] + ordered[n // 2]) / 2
+    actual = 1 if sympy.simplify(mean - median) == 0 else 0
+    if actual == claimed_n:
+        return _pass(samples_checked=n)
+    verdict = "일치" if actual else "불일치"
+    return _fail(
+        f"평균=중앙값 — 평균 {mean}·중앙값 {median}로 {verdict}이나 주장 {claimed_n}",
+        samples_checked=n,
+    )
+
+
+def verify_events_independent(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """두 사건의 독립 여부를 0/1로 검증(개념형·확률). `conditions`는 "P(A),P(B),P(A∩B)".
+
+    독립 ⇔ P(A∩B)=P(A)P(B). 배반사건(P(A∩B)=0)이라도 P(A),P(B)>0이면 0≠P(A)P(B)라 독립이 아니다.
+    "배반이면 독립"이라는 오개념(mutually-exclusive-implies-independent)은 1로 답해 fail.
+      - pass: 실제 독립 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 세 확률 파싱 불가·범위 밖([0,1])·주장 0/1 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("사건 독립 — 단일 확률 목록이 아님·안전 회피")
+    values = _parse_number_list(condition)
+    if values is None or len(values) != 3:
+        return _unverifiable("사건 독립 — P(A),P(B),P(A∩B) 3값이 아님·안전 회피")
+    p_a, p_b, p_ab = values
+    if any(v < 0 or v > 1 for v in (p_a, p_b, p_ab)):
+        return _unverifiable("사건 독립 — 확률이 [0,1] 밖·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("사건 독립 — 주장값이 0/1이 아님·안전 회피")
+    actual = 1 if sympy.simplify(p_ab - p_a * p_b) == 0 else 0
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "독립" if actual else "비독립"
+    return _fail(
+        f"사건 독립 — P(A∩B)={p_ab}·P(A)P(B)={p_a * p_b}로 {verdict}이나 주장 {claimed_n}",
+        samples_checked=1,
+    )
+
+
+def verify_conditional_equal(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """P(A|B)=P(B|A) 여부를 0/1로 검증(개념형·확률). `conditions`는 "P(A),P(B),P(A|B)".
+
+    베이즈로 P(B|A)=P(A|B)·P(B)/P(A)를 구해 P(A|B)와 대조 — P(A)≠P(B)면 둘은 다르다. "P(A|B)=P(B|A)"
+    라는 오개념(prosecutor-fallacy·검사의 오류)은 1로 답해 fail한다.
+      - pass: 실제 일치 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: 세 확률 파싱 불가·범위 밖·P(A)=0·주장 0/1 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("조건부확률 대칭 — 단일 확률 목록이 아님·안전 회피")
+    values = _parse_number_list(condition)
+    if values is None or len(values) != 3:
+        return _unverifiable("조건부확률 대칭 — P(A),P(B),P(A|B) 3값이 아님·안전 회피")
+    p_a, p_b, p_ab = values
+    if any(v < 0 or v > 1 for v in (p_a, p_b, p_ab)) or p_a == 0:
+        return _unverifiable("조건부확률 대칭 — 확률 범위 밖 또는 P(A)=0·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("조건부확률 대칭 — 주장값이 0/1이 아님·안전 회피")
+    p_ba = p_ab * p_b / p_a  # 베이즈.
+    actual = 1 if sympy.simplify(p_ab - p_ba) == 0 else 0
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "일치" if actual else "불일치"
+    return _fail(
+        f"조건부확률 대칭 — P(A|B)={p_ab}·P(B|A)={p_ba}로 {verdict}이나 주장 {claimed_n}",
+        samples_checked=1,
+    )
+
+
+def verify_congruent_by_ratio(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """닮음비 k인 두 도형의 합동 여부를 0/1로 검증(개념형·기하). `conditions`는 닮음비 k(값/식).
+
+    두 도형이 합동 ⇔ 닮음비 k=1. k≠1이면 닮았으나 합동이 아니다. "닮으면 합동"이라는 오개념
+    (similarity-vs-congruence)은 k≠1인데 1로 답해 fail한다.
+      - pass: 실제 합동 여부(1/0) == 주장.
+      - fail: 불일치(오개념).
+      - unverifiable: k가 실수(양수)가 아님·주장 0/1 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("합동(닮음비) — 단일 값이 아님·안전 회피")
+    try:
+        ratio = _real_value(sympy.sympify(condition, convert_xor=True), tol)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("합동(닮음비) — 닮음비 파싱 불가·안전 회피")
+    if ratio is None or ratio <= 0:
+        return _unverifiable("합동(닮음비) — 닮음비가 양의 실수가 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("합동(닮음비) — 주장값이 0/1이 아님·안전 회피")
+    actual = 1 if abs(ratio - 1) < tol else 0  # 합동 ⇔ 닮음비 1.
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "합동" if actual else "합동 아님(닮음만)"
+    return _fail(
+        f"합동(닮음비) — 닮음비 {ratio}는 {verdict}이나 주장 {claimed_n}",
+        samples_checked=1,
+    )
+
+
+def verify_dot_product_scalar(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """두 벡터의 내적이 *벡터*인지 0/1로 검증(개념형·벡터). `conditions`는 "a1,a2,b1,b2"(2차원).
+
+    내적 a·b = a1·b1 + a2·b2는 하나의 수(스칼라)라 벡터가 아니다. "내적은 벡터"라는 오개념
+    (dot-product-is-vector)은 1로 답해 fail한다. SymPy로 내적을 계산해 스칼라(수)임을 확인한다.
+      - pass: 내적이 벡터인지(1/0) == 주장 — 유효 입력이면 항상 스칼라라 0.
+      - fail: 불일치(오개념·내적을 벡터로 봄).
+      - unverifiable: 네 성분 파싱 불가·주장 0/1 아님(보수적 회피).
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("내적 스칼라 — 단일 성분 목록이 아님·안전 회피")
+    values = _parse_number_list(condition)
+    if values is None or len(values) != 4:
+        return _unverifiable("내적 스칼라 — 2차원 두 벡터 4성분이 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("내적 스칼라 — 주장값이 0/1이 아님·안전 회피")
+    a1, a2, b1, b2 = values
+    dot = sympy.simplify(a1 * b1 + a2 * b2)
+    actual = 0 if dot.is_number else 1  # 내적은 수(스칼라) → 벡터 아님(0).
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "벡터" if actual else "스칼라(수)"
+    return _fail(
+        f"내적 스칼라 — 내적 {dot}은 {verdict}이나 주장 {claimed_n}(내적은 스칼라)",
+        samples_checked=1,
+    )
+
+
+def verify_inequality_direction(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """일차부등식 해의 방향(x>c 꼴이면 1·x<c 꼴이면 0)을 검증(개념형·부등식). `conditions`는 부등식.
+
+    SymPy `solveset`으로 해집합을 구해 방향을 판정한다 — 음수 계수로 나누면 부호가 뒤집혀 x>c가
+    된다(예 -2x<6 → x>-3). "음수를 곱해도 부호 그대로"라는 오개념(sign-flip-in-inequality)은 x<c로
+    오인해 틀린 판정을 준다.
+      - pass: 실제 해 방향(1=x>c·0=x<c) == 주장.
+      - fail: 불일치(오개념·부호 안 뒤집음).
+      - unverifiable: 부등식 아님·단일변수 아님·해가 반직선(x>c/x<c) 꼴이 아님·주장 0/1 아님.
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("부등식 방향 — 단일 부등식이 아님·안전 회피")
+    try:
+        expr = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("부등식 방향 — 부등식 파싱 불가·안전 회피")
+    if not isinstance(expr, sympy.core.relational.Relational) or isinstance(expr, sympy.Equality):
+        return _unverifiable("부등식 방향 — 부등식이어야 함(등식/식 아님)·안전 회피")
+    free = sorted(expr.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("부등식 방향 — 단일 변수 부등식이 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("부등식 방향 — 주장값이 0/1이 아님·안전 회피")
+    try:
+        solution = sympy.solveset(expr, free[0], domain=sympy.S.Reals)
+    except Exception:  # noqa: BLE001 — 해집합 계산 불가는 보수적 회피
+        return _unverifiable("부등식 방향 — 해집합 계산 불가·안전 회피")
+    if not isinstance(solution, sympy.Interval):
+        return _unverifiable("부등식 방향 — 해가 반직선 꼴이 아님·안전 회피")
+    inf_infinite = solution.inf in (-sympy.oo, sympy.oo)
+    sup_infinite = solution.sup in (-sympy.oo, sympy.oo)
+    if solution.sup == sympy.oo and not inf_infinite:
+        actual = 1  # x > c(하한 유한·상한 ∞).
+    elif solution.inf == -sympy.oo and not sup_infinite:
+        actual = 0  # x < c(하한 -∞·상한 유한).
+    else:
+        return _unverifiable("부등식 방향 — 유계/전체/공집합 해·안전 회피")
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "x>c(부호 뒤집힘)" if actual else "x<c"
+    return _fail(
+        f"부등식 방향 — 해는 {verdict}이나 주장 {claimed_n}(음수 나눗셈 시 부호 뒤집힘)",
+        samples_checked=1,
+    )

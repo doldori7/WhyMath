@@ -6,6 +6,17 @@ r"""오개념 카탈로그 — `docs/prompts/misconception_diagnosis.md` "오개
 continuity-implies-differentiability 포함·#24-30 신규)한 뒤 인코딩 — Phase 1 30종 목표 달성.
 S2-p: 이차방정식 근 선택·인수 부호 반전 2종(doc #31-32)을 doc-first로 추가(32종) — 동등문제
 객관식 distractor의 오개념 역추적 좌석. 여전히 *미상세 항목을 추정 작성하지 않는다*(doc-first 불변).
+843 확장 트랜치1(2026-07-12): 기초 계산형 6종(doc #35-40·분수덧셈·음수곱·음수빼기·절댓값·제곱근분배
+·합차공식 혼동)을 doc-first로 추가(34→40종) — 843 콘텐츠↔탐지 커버 확장·수치평가 MC로 기계 검증.
+843 확장 트랜치2(2026-07-12): 거듭제곱·분배·부호 계산형 6종(doc #41-46·거듭제곱 곱셈/거듭제곱·음수
+제곱 우선순위·분배 뒷항 누락·음수 분배 부호·차의 제곱 교차항)을 doc-first로 추가(40→46종).
+843 확장 트랜치3(2026-07-12): 중점·비례·부호·동류항·완전제곱·켤레 계산형 6종(doc #47-52)을
+doc-first로 추가(46→52종).
+843 확장 트랜치4(2026-07-12): 이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종(doc
+#53-58)을 doc-first로 추가(52→58종).
+843 확장 트랜치5(2026-07-12): 비대수 도메인 첫 확장 — 기하 4종(사다리꼴 넓이 ½ 누락·부피비=닮음비·
+원뿔 부피 ⅓ 누락·원 넓이↔둘레 혼동)·확률통계 2종(조합 분모 누락·같은 것 순열 중복 나눗셈 누락)을
+doc-first(doc #59-64)로 추가(58→64종) — π 계수·개수 값형 수치평가 MC로 기계 검증.
 
 각 `canonical_statement`·`counterexample`은 *자체 생성 기본 수학 사실*(교과서/EBS 본문 복제
 금지·CLAUDE.md). 반례는 canonical을 실제로 반증한다(수학적 정합 검증 완료).
@@ -27,7 +38,7 @@ from __future__ import annotations
 
 from whymath_backend.l4.misconception.models import Misconception
 
-# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32) (11종).
+# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32, #35-58) (35종).
 _ALGEBRA: tuple[Misconception, ...] = (
     Misconception(
         id="distribution-over-power",
@@ -183,9 +194,253 @@ _ALGEBRA: tuple[Misconception, ...] = (
         # "x=-a"를 미포함(gate-safe). S2-p(doc #32) distractor(부호 반전 근 선지) 역추적 좌석.
         signals=("(x-a)", "x=-a"),
     ),
+    # ── 843 확장 트랜치1(doc #35-40·기초 계산형 6종·수치평가 MC로 기계 검증) ──
+    Misconception(
+        id="fraction-addition-naive",
+        name_kr="분수 덧셈 통분 누락",
+        domain="대수",
+        canonical_statement="a/b + c/d = (a+c)/(b+d)",
+        counterexample="1/2 + 1/3 = 5/6 — (1+1)/(2+3)=2/5는 통분을 누락한 값",
+        # 통분 없이 분자·분모를 각각 더한 흔적. "분수"+"통분" 공출현(doc #35). 수치평가 MC
+        # distractor(2/5 선지)의 역추적 좌석. ([9수01-04]·M0004)
+        signals=("분수", "통분"),
+    ),
+    Misconception(
+        id="negative-times-negative",
+        name_kr="음수 곱 부호",
+        domain="대수",
+        canonical_statement="음수끼리 곱하면 음수다",
+        counterexample="(-2)×(-3)=6>0 — 음×음=양",
+        # 부호 규칙(음×음=양) 누락. "음수끼리"+"곱하면" 공출현(doc #36). 수치평가 MC
+        # distractor(-ab 선지)의 역추적 좌석. ([9수01-03]·M0001)
+        signals=("음수끼리", "곱하면"),
+    ),
+    Misconception(
+        id="subtract-negative-sign",
+        name_kr="음수 빼기 부호",
+        domain="대수",
+        canonical_statement="a-(-b)=a-b",
+        counterexample="3-(-5)=8 — 3-5=-2는 부호 반전을 누락한 값",
+        # 음수를 빼는 연산에서 부호 반전(−(−b)=+b) 누락. "음수"+"빼기" 공출현(doc #37).
+        # 수치평가 MC distractor(a-b 선지)의 역추적 좌석. ([9수01-03]·M0002)
+        signals=("음수", "빼기"),
+    ),
+    Misconception(
+        id="absolute-value-keeps-sign",
+        name_kr="절댓값 부호 유지",
+        domain="대수",
+        canonical_statement="|-a|=-a",
+        counterexample="|-3|=3 — 절댓값(거리)은 음이 아니다",
+        # 절댓값이 음수의 부호를 유지한다는 오개념. "절댓값"+"음수" 공출현(doc #38).
+        # 수치평가 MC distractor(-a 선지)의 역추적 좌석. ([9수01-04]·M0010)
+        signals=("절댓값", "음수"),
+    ),
+    Misconception(
+        id="sqrt-distributes-over-sum",
+        name_kr="제곱근 합 분배",
+        domain="대수",
+        canonical_statement="√(a+b)=√a+√b",
+        counterexample="√(9+16)=√25=5 — √9+√16=7은 분배 오개념 값",
+        # 제곱근이 합에 분배된다는 오개념. "제곱근"+"분배" 공출현(doc #39). 수치평가 MC
+        # distractor(√a+√b 선지)의 역추적 좌석. ([9수01-07]·M0008)
+        signals=("제곱근", "분배"),
+    ),
+    Misconception(
+        id="difference-of-squares-confused",
+        name_kr="제곱 차 혼동",
+        domain="대수",
+        canonical_statement="x²-a² = (x-a)²",
+        counterexample="x=5,a=3에서 x²-9=16 — (x-3)²=4 (올바른 인수분해는 (x-a)(x+a))",
+        # 제곱의 차를 차의 제곱으로 보는 합차공식 혼동. "제곱"+"차이" 공출현(doc #40).
+        # 수치평가 MC distractor((x-a)² 선지)의 역추적 좌석. ([9수01-01]·M0121)
+        signals=("제곱", "차이"),
+    ),
+    # ── 843 확장 트랜치2(doc #41-46·거듭제곱·분배·부호 계산형 6종·수치평가 MC로 기계 검증) ──
+    Misconception(
+        id="exponent-product-multiplies",
+        name_kr="거듭제곱 곱셈 지수",
+        domain="대수",
+        canonical_statement="aᵐ × aⁿ = aᵐⁿ",
+        counterexample="2³×2²=2⁵=32 — 2⁶=64는 지수를 곱한 값",
+        # 밑이 같은 거듭제곱의 곱에서 지수를 더하지 않고 곱함. "지수끼리"+"곱하" 공출현(doc #41).
+        # 수치평가 MC distractor(2⁶ 선지)의 역추적 좌석. ([9수02-08]·M0006)
+        signals=("지수끼리", "곱하"),
+    ),
+    Misconception(
+        id="power-of-power-adds",
+        name_kr="거듭제곱의 거듭제곱 지수",
+        domain="대수",
+        canonical_statement="(aᵐ)ⁿ = aᵐ⁺ⁿ",
+        counterexample="(2³)²=2⁶=64 — 2⁵=32는 지수를 더한 값",
+        # 거듭제곱의 거듭제곱에서 지수를 곱하지 않고 더함. "거듭제곱의"+"지수를" 공출현(doc #42).
+        # 수치평가 MC distractor(2⁵ 선지)의 역추적 좌석. ([9수02-08]·M0135)
+        signals=("거듭제곱의", "지수를"),
+    ),
+    Misconception(
+        id="negative-square-precedence",
+        name_kr="음수 제곱 우선순위",
+        domain="대수",
+        canonical_statement="-a² = a²",
+        counterexample="-2²=-(2²)=-4 — 4는 (-2)²으로 부호를 먼저 처리한 값",
+        # 거듭제곱이 음의 부호보다 우선함을 놓쳐 -a²을 (-a)²로 계산. "음수"+"거듭제곱"(doc #43).
+        # 수치평가 MC distractor(4 선지)의 역추적 좌석. ([9수02-08]·M0009)
+        signals=("음수", "거듭제곱"),
+    ),
+    Misconception(
+        id="distribute-first-term-only",
+        name_kr="분배 뒷항 누락",
+        domain="대수",
+        canonical_statement="a(x+b) = ax + b",
+        counterexample="2(x+3)=2x+6 — 2x+3은 뒷항 분배를 누락한 값",
+        # 분배법칙에서 뒷항 분배를 누락. "분배"+"뒷항" 공출현(doc #44).
+        # 수치평가 MC distractor(뒷항 미분배 선지)의 역추적 좌석. ([9수02-09]·M0017)
+        signals=("분배", "뒷항"),
+    ),
+    Misconception(
+        id="negative-distribute-sign",
+        name_kr="음수 분배 부호",
+        domain="대수",
+        canonical_statement="-(x-b) = -x - b",
+        counterexample="-(x-3)=-x+3 — -x-3은 뒷항 부호를 안 바꾼 값",
+        # 음의 부호 분배에서 뒷항 부호 반전을 누락. "음수"+"분배" 공출현(doc #45).
+        # 수치평가 MC distractor(-x-b 선지)의 역추적 좌석. ([9수02-09]·M0018)
+        signals=("음수", "분배"),
+    ),
+    Misconception(
+        id="square-of-difference-no-cross",
+        name_kr="차의 제곱 교차항 누락",
+        domain="대수",
+        canonical_statement="(a-b)² = a² - b²",
+        counterexample="(5-3)²=4 — 25-9=16은 교차항 -2ab를 누락한 값",
+        # 차의 제곱에서 교차항 -2ab 누락. "차의 제곱"+"교차항" 공출현(doc #46).
+        # 수치평가 MC distractor(a²-b² 선지)의 역추적 좌석. ([9수02-19]·M0020)
+        signals=("차의 제곱", "교차항"),
+    ),
+    # ── 843 확장 트랜치3(doc #47-52·중점·비례·부호·동류항·완전제곱·켤레 계산형 6종) ──
+    Misconception(
+        id="midpoint-sum-only",
+        name_kr="중점 2로 안 나눔",
+        domain="대수",
+        canonical_statement="두 점 a, b의 중점 = a + b",
+        counterexample="a=2, b=6의 중점은 (2+6)/2=4 — 8은 2로 나누기를 누락한 값",
+        # 중점 좌표에서 2로 나누기 누락. "중점"+"더해" 공출현(doc #47).
+        # 수치평가 MC distractor(a+b 선지)의 역추적 좌석. ([9수02-05]·M0066)
+        signals=("중점", "더해"),
+    ),
+    Misconception(
+        id="scale-area-linear",
+        name_kr="닮음 넓이 선형 오인",
+        domain="대수",
+        canonical_statement="닮음비 k이면 넓이의 비도 k",
+        counterexample="닮음비 2이면 넓이의 비는 2²=4 — 2는 선형으로 오인한 값",
+        # 넓이는 길이의 제곱에 비례함을 놓침. "닮음비"+"넓이" 공출현(doc #48).
+        # 수치평가 MC distractor(k 선지)의 역추적 좌석. ([9수02-07]·M0013)
+        signals=("닮음비", "넓이"),
+    ),
+    Misconception(
+        id="negative-even-power-sign",
+        name_kr="음수 짝수 거듭제곱 부호",
+        domain="대수",
+        canonical_statement="(-a)^짝수 = 음수",
+        counterexample="(-2)⁴=16>0 — -16은 짝수 거듭제곱을 음수로 본 값",
+        # 음수의 짝수 거듭제곱이 양수임을 놓침. "짝수"+"거듭제곱" 공출현(doc #49).
+        # 수치평가 MC distractor(-a^n 선지)의 역추적 좌석. ([9수02-08]·M0201)
+        signals=("짝수", "거듭제곱"),
+    ),
+    Misconception(
+        id="combine-unlike-terms",
+        name_kr="동류항 차수 무시",
+        domain="대수",
+        canonical_statement="ax + bx² = (a+b)x³",
+        counterexample="2x+3x²은 차수가 달라 결합 불가 — x=2에서 16 ≠ 5·8=40",
+        # 차수가 다른 항을 동류항처럼 결합. "차수"+"동류항" 공출현(doc #50).
+        # 수치평가 MC distractor((a+b)x³ 값 선지)의 역추적 좌석. ([9수02-09]·M0016)
+        signals=("차수", "동류항"),
+    ),
+    Misconception(
+        id="complete-square-naive",
+        name_kr="완전제곱식 오인",
+        domain="대수",
+        canonical_statement="x² + bx = (x+b)²",
+        counterexample="x²+6x ≠ (x+6)² — x=2에서 16 ≠ 64 (올바른 완전제곱은 (x+3)²-9)",
+        # 완전제곱식에서 일차항 계수를 반으로 나누지 않음. "완전제곱"+"괄호" 공출현(doc #51).
+        # 수치평가 MC distractor((x+b)² 값 선지)의 역추적 좌석. ([9수02-19]·M0119)
+        signals=("완전제곱", "괄호"),
+    ),
+    Misconception(
+        id="conjugate-product-sum",
+        name_kr="켤레 무리수 곱 부호",
+        domain="대수",
+        canonical_statement="(√a+1)(√a-1) = a + 1",
+        counterexample="(√3+1)(√3-1)=3-1=2 — 4는 합차공식 부호를 오용한 값",
+        # 켤레 무리수의 곱에서 합차공식 부호 오용. "켤레"+"무리수" 공출현(doc #52).
+        # 수치평가 MC distractor(a+1 선지)의 역추적 좌석. ([9수01-07]·M0206)
+        signals=("켤레", "무리수"),
+    ),
+    # ── 843 확장 트랜치4(doc #53-58·이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종) ──
+    Misconception(
+        id="transpose-no-sign-change",
+        name_kr="이항 부호 미변경",
+        domain="대수",
+        canonical_statement="x + b = c 이면 x = c + b",
+        counterexample="x+3=7이면 x=7-3=4 — 10은 이항 시 부호를 안 바꾼 값",
+        # 이항할 때 부호 반전 누락. "이항"+"부호" 공출현(doc #53).
+        # 수치평가 MC distractor(c+b 선지)의 역추적 좌석. ([9수02-13]·M0021)
+        signals=("이항", "부호"),
+    ),
+    Misconception(
+        id="gcd-lcm-confused",
+        name_kr="최대공약수 최소공배수 혼동",
+        domain="대수",
+        canonical_statement="두 수의 최대공약수 = 최소공배수",
+        counterexample="12와 18: 최대공약수 6, 최소공배수 36으로 다름",
+        # 최대공약수와 최소공배수를 혼동. "최대공약수"+"최소공배수" 공출현(doc #54).
+        # 수치평가 MC distractor(반대 값 선지)의 역추적 좌석. ([9수01-02]·M0014)
+        signals=("최대공약수", "최소공배수"),
+    ),
+    Misconception(
+        id="decimal-mult-place",
+        name_kr="소수 곱 자릿수 무시",
+        domain="대수",
+        canonical_statement="0.a × 0.b = 0.(ab)",
+        counterexample="0.3×0.2=0.06 — 0.6은 소수점 자릿수를 무시한 값",
+        # 소수의 곱에서 소수점 자릿수 무시. "소수"+"자릿수" 공출현(doc #55).
+        # 수치평가 MC distractor(0.(ab) 선지)의 역추적 좌석. ([9수01-06]·M0103)
+        signals=("소수", "자릿수"),
+    ),
+    Misconception(
+        id="mixed-number-mult-whole",
+        name_kr="대분수 곱 정수만",
+        domain="대수",
+        canonical_statement="(a + p/q) × n = an + p/q",
+        counterexample="1½×2=3 — 2½은 정수부만 곱한 값(분수부도 곱해야 함)",
+        # 대분수의 곱에서 정수부만 곱함. "대분수"+"정수" 공출현(doc #56).
+        # 수치평가 MC distractor(an+p/q 선지)의 역추적 좌석. ([9수01-04]·M0102)
+        signals=("대분수", "정수"),
+    ),
+    Misconception(
+        id="remainder-theorem-sign",
+        name_kr="나머지정리 부호",
+        domain="대수",
+        canonical_statement="f(x)를 (x-a)로 나눈 나머지 = f(-a)",
+        counterexample="f(x)=x²+2x+1을 (x-1)로 나눈 나머지는 f(1)=4 — f(-1)=0이 아님",
+        # 나머지정리에서 부호를 반대로 대입. "나머지정리"+"대입" 공출현(doc #57).
+        # 수치평가 MC distractor(f(-a) 선지)의 역추적 좌석. ([10공수1-01-01]·M0133)
+        signals=("나머지정리", "대입"),
+    ),
+    Misconception(
+        id="vieta-sign-error",
+        name_kr="근과 계수 부호",
+        domain="대수",
+        canonical_statement="x²+bx+c=0 의 두 근의 합 = b",
+        counterexample="x²+5x+6=0의 두 근 -2, -3의 합은 -5 — b=5가 아님",
+        # 근과 계수 관계에서 부호를 놓침(합은 -b). "근과 계수"+"부호" 공출현(doc #58).
+        # 수치평가 MC distractor(b 선지)의 역추적 좌석. ([10공수1-02-08]·M0123)
+        signals=("근과 계수", "부호"),
+    ),
 )
 
-# 기하 영역 — doc "기하 영역"(#8-10, #26) (4종).
+# 기하 영역 — doc "기하 영역"(#8-10, #26, #59-62) (8종·843 트랜치5 비대수 확장 4).
 _GEOMETRY: tuple[Misconception, ...] = (
     Misconception(
         id="angle-sum-non-triangle",
@@ -223,9 +478,50 @@ _GEOMETRY: tuple[Misconception, ...] = (
         # 정본 해법(등치 판별)은 임베딩/LLM-judged 후속 — 개입은 비난 없는 소크라테스형.
         signals=("반지름", "r²"),
     ),
+    # ── 843 트랜치5(비대수 도메인 확장) 기하 4종 ──
+    Misconception(
+        id="trapezoid-area-no-half",
+        name_kr="사다리꼴 넓이 ½ 누락",
+        domain="기하",
+        canonical_statement="사다리꼴의 넓이는 (윗변+아랫변)에 높이를 곱한 값이다",
+        counterexample="윗변2·아랫변4·높이3이면 넓이는 (2+4)×3÷2 = 9 (÷2 필요), 18 아님",
+        # "사다리꼴"+"높이를 곱" 공출현 — ÷2 누락 양성 단편(M0161). 정본("높이를 곱한 뒤 2로
+        # 나눈다")도 두 토큰 공출현 가능(FP 한계·§5.3) — substring은 후행 ÷2를 못 가림. 임베딩 후속.
+        signals=("사다리꼴", "높이를 곱"),
+    ),
+    Misconception(
+        id="scale-volume-linear",
+        name_kr="부피비=닮음비 오인",
+        domain="기하",
+        canonical_statement="닮음비가 k이면 부피비도 k이다",
+        counterexample="닮음비가 2이면 부피비는 2³ = 8 (닮음비의 세제곱), 2 아님",
+        # "닮음비"+"부피비" 공출현 — 둘을 동일시한 양성 단편(M0056·차원혼동). 정본("부피비는
+        # 닮음비의 세제곱")도 두 토큰 공출현 가능(FP 한계·§5.3) — 등치 판별은 임베딩/LLM 후속.
+        signals=("닮음비", "부피비"),
+    ),
+    Misconception(
+        id="cone-volume-no-third",
+        name_kr="원뿔 부피 ⅓ 누락",
+        domain="기하",
+        canonical_statement="원뿔의 부피는 밑넓이×높이이다(원기둥과 같다)",
+        counterexample="원뿔의 부피는 ⅓×밑넓이×높이 (원기둥의 1/3), 원기둥과 같지 않음",
+        # "원뿔"+"원기둥" 공출현 — 둘을 동일시한 양성 단편(M0063). 정본("원뿔은 원기둥의 ⅓")도
+        # 두 토큰 공출현 가능(FP 한계·§5.3) — ⅓ 관계 판별은 임베딩/LLM 후속.
+        signals=("원뿔", "원기둥"),
+    ),
+    Misconception(
+        id="circle-area-circumference",
+        name_kr="원 넓이·둘레 공식 혼동",
+        domain="기하",
+        canonical_statement="원의 넓이는 2πr이다",
+        counterexample="원의 넓이는 πr² (2πr은 둘레 공식)",
+        # "원의 넓이"+"2πr" 공출현 — 넓이를 둘레 공식으로 오인한 양성 단편(M0053). 넓이·둘레를
+        # 함께 서술한 정본도 두 토큰 공출현 가능(FP 한계·§5.3) — 임베딩/LLM 후속.
+        signals=("원의 넓이", "2πr"),
+    ),
 )
 
-# 확률·통계 — doc "확률·통계"(#11-13, #27) (4종).
+# 확률·통계 — doc "확률·통계"(#11-13, #27, #63-64) (6종·843 트랜치5 비대수 확장 2).
 _PROBSTAT: tuple[Misconception, ...] = (
     Misconception(
         id="gambler-fallacy",
@@ -260,6 +556,27 @@ _PROBSTAT: tuple[Misconception, ...] = (
         # "배반"+"독립" 공출현 — 둘을 동일시한 양성 단편. 올바른 진술("배반이면 종속")은
         # "독립"을 포함하지 않아 구분된다.
         signals=("배반", "독립"),
+    ),
+    # ── 843 트랜치5(비대수 도메인 확장) 확률·통계 2종 ──
+    Misconception(
+        id="combination-no-denominator",
+        name_kr="조합 분모 누락(순열화)",
+        domain="확률통계",
+        canonical_statement="조합의 수 nCr을 순열의 수 nPr로 계산한다(분모 r! 누락)",
+        counterexample="5C2 = 10인데 5P2 = 20으로 답하면 분모 2!을 빠뜨린 것",
+        # "조합"+"nPr" 공출현 — 조합을 순열값으로 오인한 양성 단편(M0087). 정본(nCr=nPr/r!)도
+        # 두 토큰 공출현 가능(FP 한계·§5.3) — r! 분모 유무 판별은 임베딩/LLM 후속.
+        signals=("조합", "nPr"),
+    ),
+    Misconception(
+        id="same-item-permutation-no-divide",
+        name_kr="같은 것 순열 중복 나눗셈 누락",
+        domain="확률통계",
+        canonical_statement="같은 것이 있는 순열에서 같은 것을 서로 다른 것으로 보고 n!로 센다",
+        counterexample="AAB의 배열은 3!/2! = 3 (같은 A 중복 나눔), 3! = 6 아님",
+        # "같은 것"+"서로 다른" 공출현 — 중복을 나누지 않은 양성 단편(M0190·분배누락). 정본은
+        # "같은 것은 그 개수의 계승으로 나눈다"라 "서로 다른"을 포함하지 않아 구분된다.
+        signals=("같은 것", "서로 다른"),
     ),
 )
 
