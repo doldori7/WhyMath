@@ -136,3 +136,15 @@
 {"statement": "이차식을 제곱 꼴로 만들 땐 일차항 계수의 절반을 써야 한다", "expected_id": null, "near_id": "complete-square-naive", "kind": "correct-near", "note": "올바른 완전제곱 — signals 미공출현"}
 {"statement": "루트를 포함한 두 식의 곱에서 부호를 무시하고 더했어", "expected_id": "conjugate-product-sum", "near_id": null, "kind": "paraphrase", "note": "(√a+1)(√a-1)=a+1 — signals 켤레·무리수 회피"}
 {"statement": "루트를 포함한 켤레의 곱은 제곱의 차로 유리수가 된다", "expected_id": null, "near_id": "conjugate-product-sum", "kind": "correct-near", "note": "올바른 켤레 곱 — 무리수 미포함(부분)"}
+{"statement": "항을 반대편으로 옮길 때 기호를 그대로 두고 계산했어", "expected_id": "transpose-no-sign-change", "near_id": null, "kind": "paraphrase", "note": "x+b=c→x=c+b — signals 이항·부호 회피"}
+{"statement": "항을 반대편으로 옮길 때는 부호를 반대로 바꿔야 한다", "expected_id": null, "near_id": "transpose-no-sign-change", "kind": "correct-near", "note": "올바른 이항 — 이항 미포함(부분)"}
+{"statement": "두 수의 공약수 중 가장 큰 값과 공배수 중 가장 작은 값을 서로 바꿔 적었어", "expected_id": "gcd-lcm-confused", "near_id": null, "kind": "paraphrase", "note": "GCD↔LCM 혼동 — signals 최대공약수·최소공배수 회피"}
+{"statement": "최대공약수와 최소공배수는 서로 다른 개념이다", "expected_id": null, "near_id": "gcd-lcm-confused", "kind": "correct-near", "note": "올바른 구분 — 두 토큰 공출현이나 개념 정확(측정용)"}
+{"statement": "0.3과 0.2를 곱하면서 소수점 위치를 하나만 세어 0.6으로 적었어", "expected_id": "decimal-mult-place", "near_id": null, "kind": "paraphrase", "note": "0.3×0.2=0.6 — signals 소수·자릿수 회피"}
+{"statement": "소수끼리 곱할 때는 소수점 아래 자릿수를 더해서 찍어야 한다", "expected_id": null, "near_id": "decimal-mult-place", "kind": "correct-near", "note": "올바른 소수 곱 — 소수 미포함(부분)"}
+{"statement": "1과 2분의 1에 2를 곱할 때 앞의 정수 부분만 곱해서 계산했어", "expected_id": "mixed-number-mult-whole", "near_id": null, "kind": "paraphrase", "note": "1½×2=2½ — signals 대분수·정수 회피"}
+{"statement": "대분수에 정수를 곱할 땐 정수 부분과 분수 부분 모두에 곱해야 한다", "expected_id": null, "near_id": "mixed-number-mult-whole", "kind": "correct-near", "note": "올바른 대분수 곱 — 두 토큰 공출현이나 정확(측정용)"}
+{"statement": "일차식으로 나눈 나머지를 구할 때 부호를 반대로 넣어 대입했어", "expected_id": "remainder-theorem-sign", "near_id": null, "kind": "paraphrase", "note": "f(-a) 오인 — signals 나머지정리·대입 회피"}
+{"statement": "나머지정리에서는 나누는 식이 (x-a)이면 f(a)를 대입해야 한다", "expected_id": null, "near_id": "remainder-theorem-sign", "kind": "correct-near", "note": "올바른 나머지정리 — 두 토큰 공출현이나 정확(측정용)"}
+{"statement": "두 근의 합을 구할 때 일차항 계수를 그대로 써서 부호를 놓쳤어", "expected_id": "vieta-sign-error", "near_id": null, "kind": "paraphrase", "note": "합=b 오인 — signals 근과 계수·부호 회피"}
+{"statement": "두 근의 합은 일차항 계수의 부호를 바꾼 값이다", "expected_id": null, "near_id": "vieta-sign-error", "kind": "correct-near", "note": "올바른 근과 계수 — signals 미공출현"}

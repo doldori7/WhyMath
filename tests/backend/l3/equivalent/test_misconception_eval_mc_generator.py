@@ -168,6 +168,13 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
     ("combine_unlike", "combine-unlike-terms", "[9수02-09]", "J0209", "COMBINE-UNLIKE"),
     ("complete_square", "complete-square-naive", "[9수02-19]", "J0219", "COMPLETE-SQUARE"),
     ("conjugate_product", "conjugate-product-sum", "[9수01-07]", "J0107", "CONJUGATE-PRODUCT"),
+    # 843 확장 트랜치4 — 이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종(신규 탐지 kebab).
+    ("transpose", "transpose-no-sign-change", "[9수02-13]", "J0213", "TRANSPOSE-SIGN"),
+    ("gcd_lcm", "gcd-lcm-confused", "[9수01-02]", "J0102", "GCD-LCM"),
+    ("decimal_mult", "decimal-mult-place", "[9수01-06]", "J0106", "DECIMAL-MULT"),
+    ("mixed_mult", "mixed-number-mult-whole", "[9수01-04]", "J0104", "MIXED-MULT"),
+    ("remainder_sign", "remainder-theorem-sign", "[10공수1-01-01]", "HK01", "REMAINDER-THEOREM"),
+    ("vieta_sum", "vieta-sign-error", "[10공수1-02-08]", "HK08", "VIETA-SUM"),
 )
 
 

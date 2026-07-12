@@ -4,9 +4,9 @@
  "origin": "docs/data/misconception_crosslink_review_queue.json (검수 큐·전행 pending) 의 승인분",
  "review_method": "human sign-off (AI 자기승인 금지·Gate Contract crosswalk_gate_contract.md)",
  "counts": {
-  "crosslinks": 52,
+  "crosslinks": 58,
   "link_types": {
-   "직접매핑": 52
+   "직접매핑": 58
   }
  },
  "signatures": [
@@ -421,6 +421,54 @@
   {
    "kebab_id": "scale-area-linear",
    "mis_id": "M0013",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "decimal-mult-place",
+   "mis_id": "M0103",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "gcd-lcm-confused",
+   "mis_id": "M0014",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "mixed-number-mult-whole",
+   "mis_id": "M0102",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "remainder-theorem-sign",
+   "mis_id": "M0133",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "transpose-no-sign-change",
+   "mis_id": "M0021",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "vieta-sign-error",
+   "mis_id": "M0123",
    "reviewer": "Kiki",
    "reviewed_on": "2026-07-12",
    "confidence": 0.95,

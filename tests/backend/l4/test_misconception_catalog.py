@@ -21,10 +21,10 @@ from whymath_backend.l4.misconception.match_gate import _DEFAULT_CONFIDENCE_FLOO
 
 class TestCatalogShape:
     def test_thirty_two_entries_doc_explicit_only(self) -> None:
-        # doc 명시·상세화: 대수 29 + 기하 4 + 확률통계 4 + 함수 3
-        #                 + 미적분 7 + 수열 2 + 삼각함수 2 + 벡터 1 = 52
-        #                 (Phase 1 30 + S2-p 2 + 극값 MC 2 + 843 트랜치1·2·3 각 6)
-        assert len(CATALOG) == 52
+        # doc 명시·상세화: 대수 35 + 기하 4 + 확률통계 4 + 함수 3
+        #                 + 미적분 7 + 수열 2 + 삼각함수 2 + 벡터 1 = 58
+        #                 (Phase 1 30 + S2-p 2 + 극값 MC 2 + 843 트랜치1~4 각 6)
+        assert len(CATALOG) == 58
 
     def test_all_ids_unique(self) -> None:
         ids = [m.id for m in CATALOG]
@@ -73,6 +73,12 @@ class TestCanonicalIdsFromDoc:
             "combine-unlike-terms",
             "complete-square-naive",
             "conjugate-product-sum",
+            "transpose-no-sign-change",
+            "gcd-lcm-confused",
+            "decimal-mult-place",
+            "mixed-number-mult-whole",
+            "remainder-theorem-sign",
+            "vieta-sign-error",
         }
         assert algebra_ids.issubset(CATALOG_BY_ID.keys())
         for mid in (

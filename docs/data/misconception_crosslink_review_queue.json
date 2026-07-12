@@ -1091,6 +1091,72 @@
       "reviewer": null,
       "reviewed_on": null,
       "note": null
+    },
+    {
+      "kebab_id": "transpose-no-sign-change",
+      "mis_id": "M0021",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치4 — x+b=c→x=c+b 이항 부호 미변경 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "gcd-lcm-confused",
+      "mis_id": "M0014",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치4 — 최대공약수↔최소공배수 혼동 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "decimal-mult-place",
+      "mis_id": "M0103",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치4 — 0.3×0.2=0.6 소수 자릿수 무시 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "mixed-number-mult-whole",
+      "mis_id": "M0102",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치4 — 1½×2=2½ 정수부만 곱 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "remainder-theorem-sign",
+      "mis_id": "M0133",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치4 — 나머지정리 f(a) 대신 f(-a) 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "vieta-sign-error",
+      "mis_id": "M0123",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치4 — 근과 계수 관계 부호 실수 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
     }
   ]
 }

@@ -89,6 +89,14 @@
    "note": "검수:Kiki 2026-07-10"
   },
   {
+   "kebab_id": "decimal-mult-place",
+   "mis_id": "M0103",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "difference-of-squares-confused",
    "mis_id": "M0121",
    "link_type": "직접매핑",
@@ -201,6 +209,14 @@
    "note": "검수:Kiki 2026-07-12"
   },
   {
+   "kebab_id": "gcd-lcm-confused",
+   "mis_id": "M0014",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "geometric-series-always-converges",
    "mis_id": "M0209",
    "link_type": "직접매핑",
@@ -243,6 +259,14 @@
   {
    "kebab_id": "midpoint-sum-only",
    "mis_id": "M0066",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "mixed-number-mult-whole",
+   "mis_id": "M0102",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",
@@ -323,6 +347,14 @@
   {
    "kebab_id": "prosecutor-fallacy",
    "mis_id": "M0691",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "remainder-theorem-sign",
+   "mis_id": "M0133",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",
@@ -413,6 +445,22 @@
    "mis_id": "M0411",
    "link_type": "직접매핑",
    "confidence": 0.9,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "transpose-no-sign-change",
+   "mis_id": "M0021",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "vieta-sign-error",
+   "mis_id": "M0123",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
    "method": "manual",
    "note": "검수:Kiki 2026-07-12"
   }

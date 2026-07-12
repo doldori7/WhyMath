@@ -106,6 +106,12 @@ TemplateKind = Literal[
     "combine_unlike",
     "complete_square",
     "conjugate_product",
+    "transpose",
+    "gcd_lcm",
+    "decimal_mult",
+    "mixed_mult",
+    "remainder_sign",
+    "vieta_sum",
 ]
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
@@ -147,6 +153,13 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "combine_unlike": ("J0209", "COMBINE-UNLIKE"),
     "complete_square": ("J0219", "COMPLETE-SQUARE"),
     "conjugate_product": ("J0107", "CONJUGATE-PRODUCT"),
+    # 843 확장 트랜치4(이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종).
+    "transpose": ("J0213", "TRANSPOSE-SIGN"),
+    "gcd_lcm": ("J0102", "GCD-LCM"),
+    "decimal_mult": ("J0106", "DECIMAL-MULT"),
+    "mixed_mult": ("J0104", "MIXED-MULT"),
+    "remainder_sign": ("HK01", "REMAINDER-THEOREM"),
+    "vieta_sum": ("HK08", "VIETA-SUM"),
 }
 
 
@@ -1522,6 +1535,236 @@ def _build_conjugate_product_pool() -> tuple[_EvalItem, ...]:
     return tuple(pool)
 
 
+def _build_transpose_pool() -> tuple[_EvalItem, ...]:
+    """x+b=c 의 해 뼈대 풀 — 정답 c-b(이항 시 부호 반전)·오개념 c+b(부호 미변경)·filler b·c.
+
+    x+b=c에서 b를 이항하면 x=c-b이다. 이항할 때 부호를 바꾸지 않으면 c+b로 틀린다. b≠c라 네 값
+    {c-b, c+b, b, c}은 서로 다르다(c-b 비영). 정답값 c-b로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for b in range(2, 14):
+        for c in range(2, 22):
+            if b == c:
+                continue
+            correct_v = c - b
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(c - b),
+                    sympy.Integer(c + b),  # 이항 부호 미변경.
+                    sympy.Integer(b),
+                    sympy.Integer(c),
+                ),
+                conditions=f"x = {c} - {b}",
+                answer_str=str(correct_v),
+                question_text=f"일차방정식 x + {b} = {c} 의 해를 구하시오.",
+                answer_explanation=(
+                    f"{b}를 이항하면 부호가 바뀌어 x = {c} - {b} = {correct_v} 이다. "
+                    f"이항할 때 부호를 바꾸지 않으면 {c} + {b}로 틀린다."
+                ),
+                difficulty=_difficulty(b + c),
+                answer_format=_answer_format_for(sympy.Integer(correct_v)),
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_gcd_lcm_pool() -> tuple[_EvalItem, ...]:
+    """두 수의 최소공배수 뼈대 풀 — 정답 lcm(a,b)·오개념 gcd(a,b)(혼동)·filler a·b.
+
+    최소공배수와 최대공약수는 다르다. 최소공배수를 물으면 정답은 lcm(a,b), 최대공약수와 혼동하면
+    gcd(a,b)로 틀린다. a<b·lcm≠a≠b라 네 값 {lcm, gcd, a, b}은 서로 다르다. 정답값 lcm으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 13):
+        for b in range(a + 1, 21):
+            g = gcd(a, b)
+            lcm = a * b // g
+            if lcm in (a, b) or lcm in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(lcm),
+                    sympy.Integer(g),  # 최대공약수와 혼동.
+                    sympy.Integer(a),
+                    sympy.Integer(b),
+                ),
+                conditions=f"x = {lcm}",
+                answer_str=str(lcm),
+                question_text=f"{a} 와 {b} 의 최소공배수를 구하시오.",
+                answer_explanation=(
+                    f"{a}와 {b}의 최소공배수는 {lcm} 이다(최대공약수는 {g}). "
+                    "최소공배수와 최대공약수를 혼동하면 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=_answer_format_for(sympy.Integer(lcm)),
+            )
+            if item is not None:
+                seen.add(lcm)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_decimal_mult_pool() -> tuple[_EvalItem, ...]:
+    """0.a × 0.b 값 뼈대 풀 — 정답 ab/100·오개념 ab/10(자릿수 무시)·filler a/10·b/10.
+
+    0.a × 0.b = (ab)/100이다. 소수점 자릿수를 무시하면 (ab)/10로 틀린다. a<b·기약 곱이 네 값
+    {ab/100, ab/10, a/10, b/10}을 서로 다르게 한다. 정답값 ab/100으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[float] = set()
+    for a in range(1, 10):
+        for b in range(a + 1, 10):
+            correct = sympy.Rational(a * b, 100)
+            key = round(_numeric(correct), 9)
+            if key in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    correct,
+                    sympy.Rational(a * b, 10),  # 자릿수 무시.
+                    sympy.Rational(a, 10),
+                    sympy.Rational(b, 10),
+                ),
+                conditions=f"x = {a}*{b}/100",
+                answer_str=_display(correct),
+                question_text=f"0.{a} × 0.{b} 의 값을 구하시오.",
+                answer_explanation=(
+                    f"0.{a} × 0.{b} 는 소수점 아래 자릿수를 더해 {a * b}/100 = {_display(correct)} "
+                    f"이다. 자릿수를 무시하면 {a * b}/10로 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=AnswerFormat.실수,
+            )
+            if item is not None:
+                seen.add(key)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_mixed_mult_pool() -> tuple[_EvalItem, ...]:
+    """(a + 1/2) × n 값 뼈대 풀 — 정답 n(2a+1)/2·오개념 an+1/2(정수부만 곱)·filler an·(2a+1)/2.
+
+    대분수 (a + 1/2)에 n을 곱하면 정수부와 분수부 모두에 곱해 n(2a+1)/2이다. 정수부만 곱하면
+    an + 1/2로 틀린다. a≥1·n≥2·조합이 네 값을 서로 다르게 한다. 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[float] = set()
+    for a in range(1, 9):
+        for n in range(2, 10):
+            correct = sympy.Rational((2 * a + 1) * n, 2)
+            key = round(_numeric(correct), 9)
+            if key in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    correct,
+                    sympy.Rational(2 * a * n + 1, 2),  # 정수부만 곱(an + 1/2).
+                    sympy.Integer(a * n),
+                    sympy.Rational(2 * a + 1, 2),
+                ),
+                conditions=f"x = ({2 * a + 1}*{n})/2",
+                answer_str=_display(correct),
+                question_text=f"{a}과 1/2 (대분수)에 {n} 을 곱한 값을 구하시오.",
+                answer_explanation=(
+                    f"대분수 {a}½ = {2 * a + 1}/2 에 {n}을 곱하면 {(2 * a + 1) * n}/2 "
+                    f"= {_display(correct)} 이다. 정수부만 곱해 {a * n}½로 답하면 틀린다."
+                ),
+                difficulty=_difficulty(a + n),
+                answer_format=_answer_format_for(correct),
+            )
+            if item is not None:
+                seen.add(key)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_remainder_sign_pool() -> tuple[_EvalItem, ...]:
+    """x²+bx+c 를 (x-a)로 나눈 나머지 뼈대 풀 — 정답 f(a)·오개념 f(-a)(부호 반대)·filler c·a²+c.
+
+    나머지정리로 f(x)=x²+bx+c를 (x-a)로 나눈 나머지는 f(a)=a²+ab+c이다. 부호를 반대로
+    f(-a)=a²-ab+c로 대입하면 틀린다. b≠0이라 f(a)≠f(-a). 조합이 네 값을 상이하게 한다. 정답값 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for a in range(2, 8):
+        for b in range(1, 8):
+            for c in range(1, 8):
+                correct_v = a * a + a * b + c
+                if correct_v in seen:
+                    continue
+                item = _assemble_item(
+                    values=(
+                        sympy.Integer(a * a + a * b + c),
+                        sympy.Integer(a * a - a * b + c),  # f(-a) 부호 반대.
+                        sympy.Integer(c),
+                        sympy.Integer(a * a + c),
+                    ),
+                    conditions=f"x = {a}**2 + {a}*{b} + {c}",
+                    answer_str=str(correct_v),
+                    question_text=(
+                        f"다항식 x² + {b}x + {c} 를 (x - {a})로 나눈 나머지를 구하시오."
+                    ),
+                    answer_explanation=(
+                        f"나머지정리로 f({a}) = {a}² + {b}·{a} + {c} = {correct_v} 이다. "
+                        f"부호를 반대로 f(-{a})로 대입하면 틀린다."
+                    ),
+                    difficulty=_difficulty(a + b + c),
+                    answer_format=_answer_format_for(sympy.Integer(correct_v)),
+                )
+                if item is not None:
+                    seen.add(correct_v)
+                    pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_vieta_sum_pool() -> tuple[_EvalItem, ...]:
+    """x²+bx+c=0 의 두 근의 합 뼈대 풀 — 정답 -b·오개념 b(부호 놓침)·filler c·-c.
+
+    근과 계수 관계로 x²+bx+c=0의 두 근의 합은 -b이다. 부호를 놓치면 b로 틀린다. b≠0·c≠0이라 네 값
+    {-b, b, c, -c}은 서로 다르다(c≠±b 되도록 c 순회). 정답값 -b로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for b in range(2, 26):
+        c = b + 1  # c≠±b 보장(c=b+1)·filler ±c와 ±b 분리.
+        correct_v = -b
+        if correct_v in seen:
+            continue
+        item = _assemble_item(
+            values=(
+                sympy.Integer(-b),
+                sympy.Integer(b),  # 부호 놓침.
+                sympy.Integer(c),
+                sympy.Integer(-c),
+            ),
+            conditions=f"x = -{b}",
+            answer_str=str(correct_v),
+            question_text=f"x² + {b}x + {c} = 0 의 두 근의 합을 구하시오.",
+            answer_explanation=(
+                f"근과 계수 관계로 두 근의 합은 -(일차항 계수) = -{b} = {correct_v} 이다. "
+                f"부호를 놓쳐 {b}로 답하면 틀린다."
+            ),
+            difficulty=_difficulty(b),
+            answer_format=_answer_format_for(sympy.Integer(correct_v)),
+        )
+        if item is not None:
+            seen.add(correct_v)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "distribution": _build_distribution_pool,
     "chain_rule": _build_chain_rule_pool,
@@ -1556,6 +1799,12 @@ _POOL_FACTORY = {
     "combine_unlike": _build_combine_unlike_pool,
     "complete_square": _build_complete_square_pool,
     "conjugate_product": _build_conjugate_product_pool,
+    "transpose": _build_transpose_pool,
+    "gcd_lcm": _build_gcd_lcm_pool,
+    "decimal_mult": _build_decimal_mult_pool,
+    "mixed_mult": _build_mixed_mult_pool,
+    "remainder_sign": _build_remainder_sign_pool,
+    "vieta_sum": _build_vieta_sum_pool,
 }
 
 
@@ -1592,7 +1841,8 @@ class MisconceptionEvalMCSkeletonGenerator:
                 "fraction_addition/negative_product/subtract_negative/absolute_value/sqrt_sum/"
                 "difference_of_squares/exponent_product/power_of_power/negative_square/"
                 "distribute_partial/negative_distribute/square_difference/midpoint_no_half/"
-                "scale_area/negative_even_power/combine_unlike/complete_square/conjugate_product)"
+                "scale_area/negative_even_power/combine_unlike/complete_square/conjugate_product/"
+                "transpose/gcd_lcm/decimal_mult/mixed_mult/remainder_sign/vieta_sum)"
             )
         if not distractor_codes:
             raise ValueError(

@@ -12,6 +12,8 @@ S2-p: 이차방정식 근 선택·인수 부호 반전 2종(doc #31-32)을 doc-f
 제곱 우선순위·분배 뒷항 누락·음수 분배 부호·차의 제곱 교차항)을 doc-first로 추가(40→46종).
 843 확장 트랜치3(2026-07-12): 중점·비례·부호·동류항·완전제곱·켤레 계산형 6종(doc #47-52)을
 doc-first로 추가(46→52종).
+843 확장 트랜치4(2026-07-12): 이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종(doc
+#53-58)을 doc-first로 추가(52→58종).
 
 각 `canonical_statement`·`counterexample`은 *자체 생성 기본 수학 사실*(교과서/EBS 본문 복제
 금지·CLAUDE.md). 반례는 canonical을 실제로 반증한다(수학적 정합 검증 완료).
@@ -33,7 +35,7 @@ from __future__ import annotations
 
 from whymath_backend.l4.misconception.models import Misconception
 
-# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32, #35-52) (29종).
+# 대수 영역 — doc "대수 영역"(#1-7, #24-25, #31-32, #35-58) (35종).
 _ALGEBRA: tuple[Misconception, ...] = (
     Misconception(
         id="distribution-over-power",
@@ -371,6 +373,67 @@ _ALGEBRA: tuple[Misconception, ...] = (
         # 켤레 무리수의 곱에서 합차공식 부호 오용. "켤레"+"무리수" 공출현(doc #52).
         # 수치평가 MC distractor(a+1 선지)의 역추적 좌석. ([9수01-07]·M0206)
         signals=("켤레", "무리수"),
+    ),
+    # ── 843 확장 트랜치4(doc #53-58·이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종) ──
+    Misconception(
+        id="transpose-no-sign-change",
+        name_kr="이항 부호 미변경",
+        domain="대수",
+        canonical_statement="x + b = c 이면 x = c + b",
+        counterexample="x+3=7이면 x=7-3=4 — 10은 이항 시 부호를 안 바꾼 값",
+        # 이항할 때 부호 반전 누락. "이항"+"부호" 공출현(doc #53).
+        # 수치평가 MC distractor(c+b 선지)의 역추적 좌석. ([9수02-13]·M0021)
+        signals=("이항", "부호"),
+    ),
+    Misconception(
+        id="gcd-lcm-confused",
+        name_kr="최대공약수 최소공배수 혼동",
+        domain="대수",
+        canonical_statement="두 수의 최대공약수 = 최소공배수",
+        counterexample="12와 18: 최대공약수 6, 최소공배수 36으로 다름",
+        # 최대공약수와 최소공배수를 혼동. "최대공약수"+"최소공배수" 공출현(doc #54).
+        # 수치평가 MC distractor(반대 값 선지)의 역추적 좌석. ([9수01-02]·M0014)
+        signals=("최대공약수", "최소공배수"),
+    ),
+    Misconception(
+        id="decimal-mult-place",
+        name_kr="소수 곱 자릿수 무시",
+        domain="대수",
+        canonical_statement="0.a × 0.b = 0.(ab)",
+        counterexample="0.3×0.2=0.06 — 0.6은 소수점 자릿수를 무시한 값",
+        # 소수의 곱에서 소수점 자릿수 무시. "소수"+"자릿수" 공출현(doc #55).
+        # 수치평가 MC distractor(0.(ab) 선지)의 역추적 좌석. ([9수01-06]·M0103)
+        signals=("소수", "자릿수"),
+    ),
+    Misconception(
+        id="mixed-number-mult-whole",
+        name_kr="대분수 곱 정수만",
+        domain="대수",
+        canonical_statement="(a + p/q) × n = an + p/q",
+        counterexample="1½×2=3 — 2½은 정수부만 곱한 값(분수부도 곱해야 함)",
+        # 대분수의 곱에서 정수부만 곱함. "대분수"+"정수" 공출현(doc #56).
+        # 수치평가 MC distractor(an+p/q 선지)의 역추적 좌석. ([9수01-04]·M0102)
+        signals=("대분수", "정수"),
+    ),
+    Misconception(
+        id="remainder-theorem-sign",
+        name_kr="나머지정리 부호",
+        domain="대수",
+        canonical_statement="f(x)를 (x-a)로 나눈 나머지 = f(-a)",
+        counterexample="f(x)=x²+2x+1을 (x-1)로 나눈 나머지는 f(1)=4 — f(-1)=0이 아님",
+        # 나머지정리에서 부호를 반대로 대입. "나머지정리"+"대입" 공출현(doc #57).
+        # 수치평가 MC distractor(f(-a) 선지)의 역추적 좌석. ([10공수1-01-01]·M0133)
+        signals=("나머지정리", "대입"),
+    ),
+    Misconception(
+        id="vieta-sign-error",
+        name_kr="근과 계수 부호",
+        domain="대수",
+        canonical_statement="x²+bx+c=0 의 두 근의 합 = b",
+        counterexample="x²+5x+6=0의 두 근 -2, -3의 합은 -5 — b=5가 아님",
+        # 근과 계수 관계에서 부호를 놓침(합은 -b). "근과 계수"+"부호" 공출현(doc #58).
+        # 수치평가 MC distractor(b 선지)의 역추적 좌석. ([10공수1-02-08]·M0123)
+        signals=("근과 계수", "부호"),
     ),
 )
 

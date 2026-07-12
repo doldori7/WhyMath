@@ -55,8 +55,14 @@ _BANDS = (
     "combine-unlike-terms",
     "complete-square-naive",
     "conjugate-product-sum",
+    "transpose-no-sign-change",
+    "gcd-lcm-confused",
+    "decimal-mult-place",
+    "mixed-number-mult-whole",
+    "remainder-theorem-sign",
+    "vieta-sign-error",
 )
-_TOTAL = 24 * len(_BANDS)  # 33 밴드 × 24 = 792
+_TOTAL = 24 * len(_BANDS)  # 39 밴드 × 24 = 936
 
 
 class TestRunMisconceptionMcBatch:

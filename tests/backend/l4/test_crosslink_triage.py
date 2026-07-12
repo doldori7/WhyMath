@@ -121,11 +121,11 @@ class TestCommittedQueueEndToEnd:
         )
 
     def test_committed_bucket_counts(self) -> None:
-        # 커밋 큐 e2e — 843 트랜치3 6종 corroborated 추가(89→95)·no_signal 0·thin_disagree 0
+        # 커밋 큐 e2e — 843 트랜치4 6종 corroborated 추가(95→101)·no_signal 0·thin_disagree 0
         # (탐지 카탈로그 40 전수 등장·agree).
         report = self._run()
         assert report.counts == {  # type: ignore[attr-defined]
-            "corroborated": 95,
+            "corroborated": 101,
             "no_signal": 0,
             "auto_reject": 4,
             "thin_disagree": 0,
