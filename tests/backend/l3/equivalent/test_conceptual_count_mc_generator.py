@@ -28,6 +28,12 @@ _CASES: tuple[tuple[CountTemplateKind, str, tuple[str, ...]], ...] = (
     ("is_differentiable", "continuity-implies-differentiability", ("[12미적Ⅰ-02-02]",)),
     ("series_converges", "term-to-zero-implies-convergence", ("[12미적Ⅱ-01-04]",)),
     ("excluded_point_count", "division-by-zero", ("[9수01-03]",)),
+    ("mean_equals_median", "mean-vs-median", ("[6수04-01]",)),
+    (
+        "events_independent",
+        "mutually-exclusive-implies-independent",
+        ("[12확통02-05]",),
+    ),
 )
 
 

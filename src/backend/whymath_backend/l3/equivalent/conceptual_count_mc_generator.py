@@ -28,6 +28,8 @@ from dataclasses import dataclass
 from math import gcd
 from typing import Literal
 
+import sympy
+
 from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
@@ -58,6 +60,8 @@ CountTemplateKind = Literal[
     "is_differentiable",
     "series_converges",
     "excluded_point_count",
+    "mean_equals_median",
+    "events_independent",
 ]
 
 # 개수/판정 선지 — 4지선다는 항상 {0,1,2,3}. 판정형(일대일·수렴·극한=함숫값·미분가능)은 0/1을 쓴다.
@@ -73,6 +77,8 @@ _TEMPLATE_META: dict[CountTemplateKind, tuple[str, str]] = {
     "is_differentiable": ("H:12미적Ⅰ02-02", "DIFFERENTIABILITY"),
     "series_converges": ("H:12미적Ⅱ01-04", "SERIES-CONV"),
     "excluded_point_count": ("J0103", "DOMAIN-EXCLUDE"),
+    "mean_equals_median": ("J0401", "STAT-MEAN-MEDIAN"),
+    "events_independent": ("H:12확통02-05", "PROB-INDEPENDENCE"),
 }
 
 
@@ -125,11 +131,7 @@ def _build_real_root_count_pool() -> tuple[_CountItem, ...]:
                     ),
                     answer_explanation=(
                         f"판별식 D = {b}^2 - 4·{c} = {disc} 이므로 "
-                        + (
-                            "중근을 가져 서로 다른 실근은 1개"
-                            if disc == 0
-                            else "실근이 없다(0개)"
-                        )
+                        + ("중근을 가져 서로 다른 실근은 1개" if disc == 0 else "실근이 없다(0개)")
                         + ". 판별식을 무시하고 늘 2근이라 답하면 틀린다."
                     ),
                     difficulty=_difficulty(b + c),
@@ -407,6 +409,80 @@ def _build_excluded_point_count_pool() -> tuple[_CountItem, ...]:
     return tuple(pool)
 
 
+def _build_mean_equals_median_pool() -> tuple[_CountItem, ...]:
+    """자료 {a..a+3, a+c}(c≥8·이상치)의 평균=중앙값 여부 뼈대 풀 — 왜곡 자료만(오개념 표적).
+
+    중앙값 a+2·평균 a+(6+c)/5인데 c≥8이면 평균>중앙값이라 같지 않다 — 정답 0. "평균과 중앙값은 늘
+    같다"는 오개념(mean-vs-median)은 1로 답해 fail. (a,c) 순회. 이상치 하나로 평균이 끌려가는 유형.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for a in range(1, 7):
+        for c in range(8, 13):
+            data = [a, a + 1, a + 2, a + 3, a + c]
+            conditions = ",".join(str(x) for x in data)
+            if conditions in seen:
+                continue
+            seen.add(conditions)
+            pool.append(
+                _CountItem(
+                    conditions=conditions,
+                    answer_kind="mean_equals_median",
+                    answer_str="0",
+                    misc_str="1",
+                    question_text=(
+                        f"자료 {', '.join(str(x) for x in data)} 의 평균과 중앙값이 같으면 1, "
+                        "다르면 0을 쓰시오."
+                    ),
+                    answer_explanation=(
+                        f"중앙값은 {a + 2}이나 평균은 이상치 {a + c} 때문에 그보다 커서 둘이 같지 "
+                        "않다 — 0이다. 평균과 중앙값이 늘 같다고 오인하면 1로 잘못 답한다."
+                    ),
+                    difficulty=_difficulty(a + c),
+                )
+            )
+    return tuple(pool)
+
+
+def _build_events_independent_pool() -> tuple[_CountItem, ...]:
+    """배반사건 A,B(P(A),P(B)>0·P(A∩B)=0)의 독립 여부 뼈대 풀 — 배반이나 비독립(오개념 정확 표적).
+
+    독립 ⇔ P(A∩B)=P(A)P(B)인데 배반이면 P(A∩B)=0·P(A)P(B)>0이라 독립이 아니다 — 정답 0. "배반이면
+    독립"이라는 오개념(mutually-exclusive-implies-independent)은 1로 답해 fail. conditions는
+    "P(A),P(B),0". (i,j) 순회·P(A)+P(B)≤1(유효 배반). 답은 판정(0/1)이라 SymPy 독립 계산으로 검증.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for i in range(1, 8):
+        for j in range(1, 8):
+            if i + j > 11:  # P(A)+P(B) ≤ 11/12 < 1(유효 배반).
+                continue
+            conditions = f"{i}/12,{j}/12,0"
+            if conditions in seen:
+                continue
+            seen.add(conditions)
+            pa, pb = sympy.Rational(i, 12), sympy.Rational(j, 12)
+            pool.append(
+                _CountItem(
+                    conditions=conditions,
+                    answer_kind="events_independent",
+                    answer_str="0",
+                    misc_str="1",
+                    question_text=(
+                        f"두 배반사건 A, B에 대하여 P(A) = {pa}, P(B) = {pb} 일 때, "
+                        "A와 B가 서로 독립이면 1, 아니면 0을 쓰시오."
+                    ),
+                    answer_explanation=(
+                        f"배반사건이라 P(A∩B) = 0이지만 P(A)P(B) = {pa * pb} > 0이므로 "
+                        "P(A∩B) ≠ P(A)P(B)라 독립이 아니다 — 0이다. 배반이면 곧 독립이라 "
+                        "오인하면 1로 잘못 답한다."
+                    ),
+                    difficulty=_difficulty(i + j),
+                )
+            )
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "real_root_count": _build_real_root_count_pool,
     "extremum_count": _build_extremum_count_pool,
@@ -416,6 +492,8 @@ _POOL_FACTORY = {
     "is_differentiable": _build_is_differentiable_pool,
     "series_converges": _build_series_converges_pool,
     "excluded_point_count": _build_excluded_point_count_pool,
+    "mean_equals_median": _build_mean_equals_median_pool,
+    "events_independent": _build_events_independent_pool,
 }
 
 
@@ -446,9 +524,7 @@ class ConceptualCountMCSkeletonGenerator:
                 "is_one_to_one/geometric_convergence)"
             )
         if not distractor_codes:
-            raise ValueError(
-                "distractor_codes 주입 누락 — 오개념 오답 태깅용 id가 필요하다."
-            )
+            raise ValueError("distractor_codes 주입 누락 — 오개념 오답 태깅용 id가 필요하다.")
         self._misconception_id, self._op_code = next(iter(distractor_codes.values()))
         self._template: CountTemplateKind = template
         self._pool = _POOL_FACTORY[template]()
@@ -474,9 +550,7 @@ class ConceptualCountMCSkeletonGenerator:
             item = self._pool[self._index]
             self._index += 1
             if self._skip is not None:
-                signature = canonical_signature(
-                    item.conditions, f"kind:{item.answer_kind}"
-                )
+                signature = canonical_signature(item.conditions, f"kind:{item.answer_kind}")
                 if signature is not None and signature in self._skip:
                     continue
             return self._assemble(spec, item)
@@ -536,9 +610,7 @@ class ConceptualCountMCSkeletonGenerator:
             concept_tags=list(self._concept_tags),
         )
 
-    def _stable_slug(
-        self, question_text: str, answer: str, codes: Sequence[str]
-    ) -> str:
+    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
         """결정론 안정 slug — 내용 해시(멱등 upsert 키)."""
         payload = "|".join([question_text, answer, ",".join(sorted(codes))])
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]

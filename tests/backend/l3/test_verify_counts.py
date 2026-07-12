@@ -1,17 +1,19 @@
-"""개념형 검증 프리미티브 테스트 — 개수·일대일·수렴·극한=함숫값·미분가능(순수·SymPy·라이브 0).
+"""개념형 검증 프리미티브 테스트 — 개수·판정·극한·미분·통계·확률(순수·SymPy·라이브 0).
 
-정답 개수/판정 pass·오개념(판별식 무시·임계점=극값·역함수 오인·늘 수렴·극한=함숫값·연속→미분가능·
-일반항→0⇒수렴)의 틀린 답 fail·범위 밖 unverifiable을 동결한다.
+정답 개수/판정 pass·오개념(판별식·임계점=극값·역함수·늘 수렴·극한=함숫값·연속→미분가능·일반항→0⇒
+수렴·평균=중앙값·배반→독립)의 틀린 답 fail·범위 밖 unverifiable을 동결한다.
 """
 
 from __future__ import annotations
 
 from whymath_backend.l3.verify_answer import (
+    verify_events_independent,
     verify_extremum_count,
     verify_geometric_convergence,
     verify_is_differentiable,
     verify_is_one_to_one,
     verify_limit_equals_value,
+    verify_mean_equals_median,
     verify_real_root_count,
     verify_series_converges,
 )
@@ -180,3 +182,51 @@ class TestSeriesConverges:
 
     def test_non_count_claim_unverifiable(self) -> None:
         assert verify_series_converges("1/n", "2").state == "unverifiable"
+
+
+class TestMeanEqualsMedian:
+    def test_skewed_not_equal_pass(self) -> None:
+        # 이상치로 평균≠중앙값 → 0.
+        assert verify_mean_equals_median("1,2,3,4,100", "0").state == "pass"
+
+    def test_misconception_always_equal_fails(self) -> None:
+        # "평균=중앙값 항상" 오개념 — 0인데 1로 답 → fail.
+        assert verify_mean_equals_median("1,2,3,4,100", "1").state == "fail"
+
+    def test_symmetric_equal(self) -> None:
+        # 대칭 자료 평균=중앙값 → 1.
+        assert verify_mean_equals_median("1,2,3", "1").state == "pass"
+        assert verify_mean_equals_median("1,2,3", "0").state == "fail"
+
+    def test_even_count_median(self) -> None:
+        assert verify_mean_equals_median("1,2,3,10", "0").state == "pass"
+
+    def test_non_numeric_unverifiable(self) -> None:
+        assert verify_mean_equals_median("a,b,c", "1").state == "unverifiable"
+
+    def test_non_count_claim_unverifiable(self) -> None:
+        assert verify_mean_equals_median("1,2,3,4,100", "2").state == "unverifiable"
+
+
+class TestEventsIndependent:
+    def test_exclusive_not_independent_pass(self) -> None:
+        # 배반(P>0)이라 P(A∩B)=0≠P(A)P(B) → 비독립(0).
+        assert verify_events_independent("1/3,1/4,0", "0").state == "pass"
+
+    def test_misconception_exclusive_implies_independent_fails(self) -> None:
+        # "배반이면 독립" 오개념 — 0인데 1로 답 → fail.
+        assert verify_events_independent("1/3,1/4,0", "1").state == "fail"
+
+    def test_actually_independent(self) -> None:
+        # P(A∩B)=P(A)P(B) → 독립(1).
+        assert verify_events_independent("1/2,1/2,1/4", "1").state == "pass"
+        assert verify_events_independent("1/2,1/2,1/4", "0").state == "fail"
+
+    def test_out_of_range_unverifiable(self) -> None:
+        assert verify_events_independent("2,1/4,0", "0").state == "unverifiable"
+
+    def test_wrong_arity_unverifiable(self) -> None:
+        assert verify_events_independent("1/3,1/4", "0").state == "unverifiable"
+
+    def test_non_count_claim_unverifiable(self) -> None:
+        assert verify_events_independent("1/3,1/4,0", "3").state == "unverifiable"

@@ -127,6 +127,8 @@ class TestCommittedQueueEndToEnd:
             "area-perimeter-confusion",
             "circle-radius-squared",
             "division-by-zero",
+            "mean-vs-median",
+            "mutually-exclusive-implies-independent",
         ):
             assert all(r.kebab_id != kebab for r in rejections)
         # thin-evidence(root-loss-by-dividing, 1문항)은 제외.
