@@ -217,6 +217,14 @@
    "note": "검수:Kiki 2026-07-12"
   },
   {
+   "kebab_id": "root-loss-by-dividing",
+   "mis_id": "M0573",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "sign-flip-in-inequality",
    "mis_id": "M0564",
    "link_type": "직접매핑",
