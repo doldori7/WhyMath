@@ -9,6 +9,14 @@
       "note": "검수:Kiki 2026-07-10"
     },
     {
+      "kebab_id": "chain-rule-inner-derivative-omitted",
+      "mis_id": "M0370",
+      "link_type": "직접매핑",
+      "confidence": 0.9,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-10"
+    },
+    {
       "kebab_id": "circle-radius-squared",
       "mis_id": "M0848",
       "link_type": "직접매핑",
@@ -141,6 +149,14 @@
       "mis_id": "M0707",
       "link_type": "직접매핑",
       "confidence": 0.97,
+      "method": "manual",
+      "note": "검수:Kiki 2026-07-10"
+    },
+    {
+      "kebab_id": "square-root-positivity",
+      "mis_id": "M0550",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
       "method": "manual",
       "note": "검수:Kiki 2026-07-10"
     },
