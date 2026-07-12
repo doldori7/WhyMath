@@ -289,6 +289,7 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
             "conditional_equal",
             "congruent_by_ratio",
             "dot_product_scalar",
+            "inequality_direction",
         )
         else None
     )

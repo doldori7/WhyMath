@@ -71,6 +71,7 @@ __all__ = [
     "verify_events_independent",
     "verify_extremum_count",
     "verify_geometric_convergence",
+    "verify_inequality_direction",
     "verify_is_differentiable",
     "verify_is_one_to_one",
     "verify_limit_equals_value",
@@ -1527,5 +1528,60 @@ def verify_dot_product_scalar(
     verdict = "벡터" if actual else "스칼라(수)"
     return _fail(
         f"내적 스칼라 — 내적 {dot}은 {verdict}이나 주장 {claimed_n}(내적은 스칼라)",
+        samples_checked=1,
+    )
+
+
+def verify_inequality_direction(
+    conditions: str | Sequence[str],
+    claimed: str,
+    *,
+    tol: float = 1e-9,
+) -> AnswerVerdict:
+    """일차부등식 해의 방향(x>c 꼴이면 1·x<c 꼴이면 0)을 검증(개념형·부등식). `conditions`는 부등식.
+
+    SymPy `solveset`으로 해집합을 구해 방향을 판정한다 — 음수 계수로 나누면 부호가 뒤집혀 x>c가
+    된다(예 -2x<6 → x>-3). "음수를 곱해도 부호 그대로"라는 오개념(sign-flip-in-inequality)은 x<c로
+    오인해 틀린 판정을 준다.
+      - pass: 실제 해 방향(1=x>c·0=x<c) == 주장.
+      - fail: 불일치(오개념·부호 안 뒤집음).
+      - unverifiable: 부등식 아님·단일변수 아님·해가 반직선(x>c/x<c) 꼴이 아님·주장 0/1 아님.
+    """
+    condition = _single_condition(conditions)
+    if condition is None:
+        return _unverifiable("부등식 방향 — 단일 부등식이 아님·안전 회피")
+    try:
+        expr = sympy.sympify(condition, convert_xor=True)
+    except Exception:  # noqa: BLE001 — 파싱 불가는 보수적 unverifiable
+        return _unverifiable("부등식 방향 — 부등식 파싱 불가·안전 회피")
+    if not isinstance(expr, sympy.core.relational.Relational) or isinstance(
+        expr, sympy.Equality
+    ):
+        return _unverifiable("부등식 방향 — 부등식이어야 함(등식/식 아님)·안전 회피")
+    free = sorted(expr.free_symbols, key=str)
+    if len(free) != 1:
+        return _unverifiable("부등식 방향 — 단일 변수 부등식이 아님·안전 회피")
+    claimed_n = _claimed_int(claimed, tol)
+    if claimed_n not in (0, 1):
+        return _unverifiable("부등식 방향 — 주장값이 0/1이 아님·안전 회피")
+    try:
+        solution = sympy.solveset(expr, free[0], domain=sympy.S.Reals)
+    except Exception:  # noqa: BLE001 — 해집합 계산 불가는 보수적 회피
+        return _unverifiable("부등식 방향 — 해집합 계산 불가·안전 회피")
+    if not isinstance(solution, sympy.Interval):
+        return _unverifiable("부등식 방향 — 해가 반직선 꼴이 아님·안전 회피")
+    inf_infinite = solution.inf in (-sympy.oo, sympy.oo)
+    sup_infinite = solution.sup in (-sympy.oo, sympy.oo)
+    if solution.sup == sympy.oo and not inf_infinite:
+        actual = 1  # x > c(하한 유한·상한 ∞).
+    elif solution.inf == -sympy.oo and not sup_infinite:
+        actual = 0  # x < c(하한 -∞·상한 유한).
+    else:
+        return _unverifiable("부등식 방향 — 유계/전체/공집합 해·안전 회피")
+    if actual == claimed_n:
+        return _pass(samples_checked=1)
+    verdict = "x>c(부호 뒤집힘)" if actual else "x<c"
+    return _fail(
+        f"부등식 방향 — 해는 {verdict}이나 주장 {claimed_n}(음수 나눗셈 시 부호 뒤집힘)",
         samples_checked=1,
     )

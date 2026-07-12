@@ -36,8 +36,9 @@ _BANDS = (
     "angle-sum-non-triangle",
     "area-perimeter-confusion",
     "circle-radius-squared",
+    "gambler-fallacy",
 )
-_TOTAL = 24 * len(_BANDS)  # 14 밴드 × 24 = 336
+_TOTAL = 24 * len(_BANDS)  # 15 밴드 × 24 = 360
 
 
 class TestRunMisconceptionMcBatch:

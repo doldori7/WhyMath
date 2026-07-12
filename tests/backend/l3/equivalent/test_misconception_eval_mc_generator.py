@@ -109,6 +109,14 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
         "10공수2-01-04",
         "CIRCLE-RADIUS",
     ),
+    # Tier C 계산가능(값형·확률) 1종 — 도박사 오류.
+    (
+        "gambler_streak",
+        "gambler-fallacy",
+        "[12확통02-01]",
+        "H:12확통02-01",
+        "PROB-INDEPENDENT-TRIAL",
+    ),
 )
 
 

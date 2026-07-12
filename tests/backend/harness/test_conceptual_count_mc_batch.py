@@ -36,6 +36,7 @@ _KEBABS = {
     "prosecutor-fallacy",
     "similarity-vs-congruence",
     "dot-product-is-vector",
+    "sign-flip-in-inequality",
 }
 _KINDS = {
     "real_root_count",
@@ -51,6 +52,7 @@ _KINDS = {
     "conditional_equal",
     "congruent_by_ratio",
     "dot_product_scalar",
+    "inequality_direction",
 }
 
 
@@ -73,13 +75,14 @@ def test_dry_run_full_yield() -> None:
         ("prosecutor-fallacy", 24),
         ("similarity-vs-congruence", 24),
         ("dot-product-is-vector", 24),
+        ("sign-flip-in-inequality", 24),
     ]
 
 
 def test_roundtrip_preserves_answer_kind(tmp_path: Path) -> None:
     out = tmp_path / "problems.jsonl"
     report = run_conceptual_count_mc_batch(n_per_band=24, out_path=out, write=True)
-    assert report.fulfilled and report.written == 312
+    assert report.fulfilled and report.written == 336
     records = load_problem_bank_records(out)
     kinds = {r.verify.answer_kind for r in records}
     assert kinds == _KINDS
@@ -103,7 +106,7 @@ def test_s6_reverify_zero_fail(tmp_path: Path) -> None:
     run_conceptual_count_mc_batch(n_per_band=24, out_path=out, write=True)
     records = cr._iter_records(out.read_text(encoding="utf-8"))
     report = cr.reverify_corpus(records, use_fuzz=False)
-    assert report.failed == 0 and report.passed == 312
+    assert report.failed == 0 and report.passed == 336
 
 
 def test_committed_corpus_covers_thirteen_kebabs() -> None:

@@ -1,6 +1,6 @@
 """개념형(개수/판정) 객관식 배치 — crosswalk machine-decidable 커버 상향(개수/판정 검증·LLM 0).
 
-`misconception_mc_batch`(수치평가)의 개념형 형제다. `ConceptualCountMCSkeletonGenerator`로 13 밴드
+`misconception_mc_batch`(수치평가)의 개념형 형제다. `ConceptualCountMCSkeletonGenerator`로 14 밴드
 (미적·해석 8 + Tier C 통계·확률·기하·벡터 5)을 생성 → 기존 오케스트레이터(`run_batch`)·수용 게이트
 (S2-a·판정 SymPy 독립 검증)·`JsonlCorpusSink`를 **재사용**해 코퍼스를 적재한다. 목적: 수치평가로 안
 되는 개념형 오개념 13종을 문항에 등장시켜 crosswalk 커버를 올린다. **Tier C 5종**(mean-vs-median·
@@ -53,7 +53,7 @@ class _Band:
     standard_codes: tuple[str, ...]
 
 
-# 13 서브밴드 — 개념형 개수/판정 MC. 표준 튜플은 각 kebab 후보가 전부 agree하도록 잠금(거짓거부 0).
+# 14 서브밴드 — 개념형 개수/판정 MC. 표준 튜플은 각 kebab 후보가 전부 agree하도록 잠금(거짓거부 0).
 _BANDS: tuple[_Band, ...] = (
     # discriminant: 후보 M0610=[10공수1-02-02]·M0832=[10기수1-02-02]·M0124=[9수02-20] 모두 agree.
     _Band(
@@ -148,6 +148,13 @@ _BANDS: tuple[_Band, ...] = (
         "dot-product-is-vector",
         ("[12기하03-03]",),
     ),
+    # sign-flip: 후보 M0564=[9수02-11]·M0028=[9수02-12]·M0778=[12직수02-05] 모두 agree.
+    _Band(
+        "sign-flip-in-inequality",
+        "inequality_direction",
+        "sign-flip-in-inequality",
+        ("[9수02-11]", "[9수02-12]", "[12직수02-05]"),
+    ),
 )
 
 
@@ -159,7 +166,7 @@ def _default_out_path() -> Path:
 def run_conceptual_count_mc_batch(
     *, n_per_band: int = _DEFAULT_N, out_path: Path | None = None, write: bool = True
 ) -> CorpusBatchReport:
-    """13 서브밴드 배치 실행 — 생성→S2-a 게이트(개수/판정 검증)→구조 dedup→적재(순수 결정론)."""
+    """14 서브밴드 배치 실행 — 생성→S2-a 게이트(개수/판정 검증)→구조 dedup→적재(순수 결정론)."""
     resolved_out = out_path if out_path is not None else _default_out_path()
     sink = JsonlCorpusSink()
     bands: list[BandResult] = []
@@ -211,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     """CLI — 개념형 개수/판정 MC 배치. 수율 미달(총 저장 < 요청)이면 exit 1(조용한 실패 금지)."""
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.conceptual_count_mc_batch",
-        description="개념형(개수·판정·극한·미분·통계·확률) MC 배치 적재(13 서브밴드·결정론).",
+        description="개념형(개수·판정·극한·미분·통계·확률) MC 배치 적재(14 서브밴드·결정론).",
     )
     parser.add_argument(
         "--n", type=int, default=_DEFAULT_N, help="서브밴드당 요청 수(기본 24)."

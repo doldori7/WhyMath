@@ -37,6 +37,7 @@ _CASES: tuple[tuple[CountTemplateKind, str, tuple[str, ...]], ...] = (
     ("conditional_equal", "prosecutor-fallacy", ("[12확통02-04]",)),
     ("congruent_by_ratio", "similarity-vs-congruence", ("[6수03-01]",)),
     ("dot_product_scalar", "dot-product-is-vector", ("[12기하03-03]",)),
+    ("inequality_direction", "sign-flip-in-inequality", ("[9수02-11]",)),
 )
 
 

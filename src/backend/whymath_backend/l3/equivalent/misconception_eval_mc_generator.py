@@ -40,6 +40,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
+from math import gcd
 from typing import Literal
 
 import sympy
@@ -86,6 +87,7 @@ TemplateKind = Literal[
     "polygon_angle_sum",
     "area_perimeter",
     "circle_radius",
+    "gambler_streak",
 ]
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
@@ -105,6 +107,7 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "polygon_angle_sum": ("J0305", "POLYGON-ANGLE-SUM"),
     "area_perimeter": ("J0312", "AREA-PERIMETER"),
     "circle_radius": ("10공수2-01-04", "CIRCLE-RADIUS"),
+    "gambler_streak": ("H:12확통02-01", "PROB-INDEPENDENT-TRIAL"),
 }
 
 
@@ -216,9 +219,7 @@ def _build_distribution_pool() -> tuple[_EvalItem, ...]:
             correct = sympy.Integer(correct_v)
             misc = sympy.Integer(a * a + b * b)  # 교차항 2ab 누락.
             filler1 = sympy.Integer(2 * a * b)  # 교차항만.
-            filler2 = sympy.Integer(
-                a * a + b * b + a * b
-            )  # 교차항을 1배만(2배를 1배로).
+            filler2 = sympy.Integer(a * a + b * b + a * b)  # 교차항을 1배만(2배를 1배로).
             item = _assemble_item(
                 values=(correct, misc, filler1, filler2),
                 conditions=f"x = ({a}+{b})**2",
@@ -459,9 +460,7 @@ def _build_func_compose_pool() -> tuple[_EvalItem, ...]:
                 if correct_v in seen:
                     continue
                 correct = sympy.Integer(correct_v)
-                misc = sympy.Integer(
-                    b * c + a * b
-                )  # (g∘f)(c)=g(c+a)=bc+ab(합성 순서 뒤집음).
+                misc = sympy.Integer(b * c + a * b)  # (g∘f)(c)=g(c+a)=bc+ab(합성 순서 뒤집음).
                 filler1 = sympy.Integer(b * c)  # +a 누락.
                 filler2 = sympy.Integer(b * c + a + b)  # 계수 오합.
                 item = _assemble_item(
@@ -538,9 +537,7 @@ def _build_translate_pool() -> tuple[_EvalItem, ...]:
             if correct_v in seen:
                 continue
             correct = sympy.Integer(correct_v)
-            misc = sympy.Integer(
-                (d + 2) ** 2 + b * (d + 2)
-            )  # f(c+1)=f(d+2)(부호 뒤집음).
+            misc = sympy.Integer((d + 2) ** 2 + b * (d + 2))  # f(c+1)=f(d+2)(부호 뒤집음).
             filler1 = sympy.Integer(c * c + b * c)  # f(c)(이동 미적용).
             filler2 = sympy.Integer(d * d)  # 선형항 bx 누락.
             item = _assemble_item(
@@ -582,9 +579,7 @@ def _build_product_rule_pool() -> tuple[_EvalItem, ...]:
                 if correct_v in seen:
                     continue
                 correct = sympy.Integer(correct_v)
-                misc = sympy.Integer(
-                    m * n * c ** (m + n - 2)
-                )  # f'(c)g'(c)(곱미분 오인).
+                misc = sympy.Integer(m * n * c ** (m + n - 2))  # f'(c)g'(c)(곱미분 오인).
                 filler1 = sympy.Integer((m + n) * c ** (m + n))  # 지수 미하강.
                 filler2 = sympy.Integer(m * n * c ** (m + n - 1))  # 계수 오합.
                 item = _assemble_item(
@@ -709,9 +704,7 @@ def _build_area_perimeter_pool() -> tuple[_EvalItem, ...]:
                 ),
                 conditions=f"x = {a}*{b}",
                 answer_str=str(correct_v),
-                question_text=(
-                    f"가로가 {a}, 세로가 {b} 인 직사각형의 넓이를 구하시오."
-                ),
+                question_text=(f"가로가 {a}, 세로가 {b} 인 직사각형의 넓이를 구하시오."),
                 answer_explanation=(
                     f"직사각형의 넓이는 가로×세로 = {a}×{b} = {correct_v} 이다. "
                     f"둘레 2×({a}+{b}) = {2 * (a + b)} 와 혼동하면 틀린다."
@@ -762,6 +755,50 @@ def _build_circle_radius_pool() -> tuple[_EvalItem, ...]:
     return tuple(pool)
 
 
+def _build_gambler_streak_pool() -> tuple[_EvalItem, ...]:
+    """독립시행 연속 후 다음 확률 뼈대 풀 — 정답 p(독립)·오개념 p²(연속이면 덜 나온다 오인).
+
+    앞면 확률 p=a/b인 동전을 여러 번 던져 연속으로 앞면이 나와도, 각 시행은 독립이라 다음 앞면
+    확률은 여전히 p다. "연속으로 나왔으니 이제 덜 나온다"는 도박사 오류(gambler-fallacy)는 작은 값
+    (예 p²)으로 답한다. filler: 1-p(앞뒤 혼동)·p/2. a<b·기약이라 네 값이 서로 다르다(값 dedup).
+    """
+    pool: list[_EvalItem] = []
+    seen: set[float] = set()
+    for b in range(3, 12):
+        for a in range(1, b):
+            if gcd(a, b) != 1:
+                continue
+            correct = sympy.Rational(a, b)
+            key = round(_numeric(correct), 9)
+            if key in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    correct,
+                    correct * correct,  # p²(연속이면 덜 나온다 오인·gambler).
+                    sympy.Integer(1) - correct,  # 1-p(앞뒤 혼동).
+                    correct / 2,  # p/2(근접 오답).
+                ),
+                conditions=f"x = {a}/{b}",
+                answer_str=_display(correct),
+                question_text=(
+                    f"앞면이 나올 확률이 {correct} 인 동전을 던져 앞면이 3번 연속 나왔다. "
+                    "다음 시행에서 앞면이 나올 확률을 구하시오."
+                ),
+                answer_explanation=(
+                    f"각 시행은 독립이라 이전 결과와 무관하게 다음 앞면 확률은 {correct} 그대로다. "
+                    "연속으로 나왔으니 이제 덜 나온다고 여기는 도박사 오류에 빠지면 틀린다."
+                ),
+                difficulty=_difficulty(a + b),
+                answer_format=_answer_format_for(correct),
+            )
+            if item is not None:
+                seen.add(key)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "distribution": _build_distribution_pool,
     "chain_rule": _build_chain_rule_pool,
@@ -777,6 +814,7 @@ _POOL_FACTORY = {
     "polygon_angle_sum": _build_polygon_angle_sum_pool,
     "area_perimeter": _build_area_perimeter_pool,
     "circle_radius": _build_circle_radius_pool,
+    "gambler_streak": _build_gambler_streak_pool,
 }
 
 
@@ -809,7 +847,7 @@ class MisconceptionEvalMCSkeletonGenerator:
             raise ValueError(
                 f"미지원 template: {template!r} (distribution/chain_rule/sine_sum/exp_zero/"
                 "sqrt_pos/log_dist/func_compose/sine_period/translate/product_rule/"
-                "fraction_cancel/polygon_angle_sum/area_perimeter/circle_radius)"
+                "fraction_cancel/polygon_angle_sum/area_perimeter/circle_radius/gambler_streak)"
             )
         if not distractor_codes:
             raise ValueError(
@@ -905,9 +943,7 @@ class MisconceptionEvalMCSkeletonGenerator:
             concept_tags=list(self._concept_tags),
         )
 
-    def _stable_slug(
-        self, question_text: str, answer: str, codes: Sequence[str]
-    ) -> str:
+    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
         """결정론 안정 slug — 내용 해시(멱등 upsert 키·극값 MC 규약 미러)."""
         payload = "|".join([question_text, answer, ",".join(sorted(codes))])
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]

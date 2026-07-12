@@ -65,6 +65,7 @@ CountTemplateKind = Literal[
     "conditional_equal",
     "congruent_by_ratio",
     "dot_product_scalar",
+    "inequality_direction",
 ]
 
 # 개수/판정 선지 — 4지선다는 항상 {0,1,2,3}. 판정형(일대일·수렴·극한=함숫값·미분가능)은 0/1을 쓴다.
@@ -85,6 +86,7 @@ _TEMPLATE_META: dict[CountTemplateKind, tuple[str, str]] = {
     "conditional_equal": ("H:12확통02-04", "PROB-CONDITIONAL"),
     "congruent_by_ratio": ("J0301", "GEOM-SIMILAR-CONGRUENT"),
     "dot_product_scalar": ("H:12기하03-03", "VEC-DOT-PRODUCT"),
+    "inequality_direction": ("J0211", "INEQ-SIGN-FLIP"),
 }
 
 
@@ -606,6 +608,49 @@ def _build_dot_product_scalar_pool() -> tuple[_CountItem, ...]:
     return tuple(pool)
 
 
+def _build_inequality_direction_pool() -> tuple[_CountItem, ...]:
+    """음수 계수 일차부등식 해의 방향 뼈대 풀 — 부호 뒤집힘(오개념 정확 표적).
+
+    -a·x < b(a>0)는 음수 -a로 나누면 부호가 뒤집혀 x > -b/a(방향 1)이고, -a·x > b는 x < -b/a
+    (방향 0)다. "음수 곱해도 부호 그대로"라는 오개념(sign-flip-in-inequality)은 방향을 반대로 답해
+    fail. (a,b,연산자) 순회. 답은 방향 판정(0/1)이라 SymPy solveset으로 독립 검증.
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for op, correct in (("<", "1"), (">", "0")):
+        for a in range(2, 7):
+            for b in range(1, 9):
+                conditions = f"-{a}*x {op} {b}"
+                if conditions in seen:
+                    continue
+                seen.add(conditions)
+                misc = "0" if correct == "1" else "1"
+                pool.append(
+                    _CountItem(
+                        conditions=conditions,
+                        answer_kind="inequality_direction",
+                        answer_str=correct,
+                        misc_str=misc,
+                        question_text=(
+                            f"부등식 -{a}x {op} {b} 의 해가 x > (어떤 수) 꼴이면 1, "
+                            "x < (어떤 수) 꼴이면 0을 쓰시오."
+                        ),
+                        answer_explanation=(
+                            f"음수 -{a}로 양변을 나누면 부등호 방향이 뒤집힌다 — "
+                            + (
+                                "해는 x > (어떤 수) 꼴이라 1이다"
+                                if correct == "1"
+                                else "해는 x < (어떤 수) 꼴이라 0이다"
+                            )
+                            + ". 음수를 곱·나눗셈해도 부호가 그대로라고 여기면 방향을 반대로 "
+                            "답해 틀린다."
+                        ),
+                        difficulty=_difficulty(a + b),
+                    )
+                )
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "real_root_count": _build_real_root_count_pool,
     "extremum_count": _build_extremum_count_pool,
@@ -620,6 +665,7 @@ _POOL_FACTORY = {
     "conditional_equal": _build_conditional_equal_pool,
     "congruent_by_ratio": _build_congruent_by_ratio_pool,
     "dot_product_scalar": _build_dot_product_scalar_pool,
+    "inequality_direction": _build_inequality_direction_pool,
 }
 
 

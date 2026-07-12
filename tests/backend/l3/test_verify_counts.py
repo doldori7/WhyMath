@@ -1,7 +1,8 @@
 """개념형 검증 프리미티브 테스트 — 개수·판정·극한·미분·통계·확률(순수·SymPy·라이브 0).
 
 정답 개수/판정 pass·오개념(판별식·임계점=극값·역함수·늘 수렴·극한=함숫값·연속→미분가능·일반항→0⇒
-수렴·평균=중앙값·배반→독립)의 틀린 답 fail·범위 밖 unverifiable을 동결한다.
+수렴·평균=중앙값·배반→독립·검사오류·유사=합동·내적=벡터·부등호 방향)의 틀린 답 fail·범위 밖
+unverifiable을 동결한다.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from whymath_backend.l3.verify_answer import (
     verify_events_independent,
     verify_extremum_count,
     verify_geometric_convergence,
+    verify_inequality_direction,
     verify_is_differentiable,
     verify_is_one_to_one,
     verify_limit_equals_value,
@@ -289,3 +291,30 @@ class TestDotProductScalar:
 
     def test_non_count_claim_unverifiable(self) -> None:
         assert verify_dot_product_scalar("1,2,3,4", "2").state == "unverifiable"
+
+
+class TestInequalityDirection:
+    def test_negative_coeff_flips_to_greater_pass(self) -> None:
+        # 음수 계수로 나누면 방향 뒤집힘 → 해 x>c 꼴(1).
+        assert verify_inequality_direction("-2*x < 6", "1").state == "pass"
+
+    def test_misconception_no_flip_fails(self) -> None:
+        # "부호 안 뒤집힌다" 오개념 — 해는 x>c(1)인데 0으로 답 → fail.
+        assert verify_inequality_direction("-2*x < 6", "0").state == "fail"
+
+    def test_positive_coeff_stays_less_pass(self) -> None:
+        # 양수 계수 → 방향 그대로 x<c 꼴(0).
+        assert verify_inequality_direction("2*x < 6", "0").state == "pass"
+
+    def test_negative_coeff_geq_flips_to_less_pass(self) -> None:
+        # -3x >= 9 → x <= -3 꼴(0).
+        assert verify_inequality_direction("-3*x >= 9", "0").state == "pass"
+
+    def test_equality_unverifiable(self) -> None:
+        assert verify_inequality_direction("2*x = 6", "0").state == "unverifiable"
+
+    def test_multivar_unverifiable(self) -> None:
+        assert verify_inequality_direction("x + y < 3", "1").state == "unverifiable"
+
+    def test_non_binary_claim_unverifiable(self) -> None:
+        assert verify_inequality_direction("-2*x < 6", "2").state == "unverifiable"

@@ -52,6 +52,7 @@ from whymath_backend.l3.verify_answer import (
     verify_events_independent,
     verify_extremum_count,
     verify_geometric_convergence,
+    verify_inequality_direction,
     verify_is_differentiable,
     verify_is_one_to_one,
     verify_limit_equals_value,
@@ -130,6 +131,7 @@ _CONCEPTUAL_VERIFIERS: dict[
     "conditional_equal": verify_conditional_equal,
     "congruent_by_ratio": verify_congruent_by_ratio,
     "dot_product_scalar": verify_dot_product_scalar,
+    "inequality_direction": verify_inequality_direction,
 }
 
 
