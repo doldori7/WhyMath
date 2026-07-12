@@ -175,6 +175,19 @@ _CASES: tuple[tuple[TemplateKind, str, str, str, str], ...] = (
     ("mixed_mult", "mixed-number-mult-whole", "[9수01-04]", "J0104", "MIXED-MULT"),
     ("remainder_sign", "remainder-theorem-sign", "[10공수1-01-01]", "HK01", "REMAINDER-THEOREM"),
     ("vieta_sum", "vieta-sign-error", "[10공수1-02-08]", "HK08", "VIETA-SUM"),
+    # 843 확장 트랜치5 — 비대수 도메인(기하4·확통2·신규 탐지 kebab).
+    ("trapezoid_area", "trapezoid-area-no-half", "[9수03-12]", "J0312", "TRAPEZOID-AREA"),
+    ("scale_volume", "scale-volume-linear", "[9수03-12]", "J0312", "SCALE-VOLUME"),
+    ("cone_volume", "cone-volume-no-third", "[9수03-08]", "J0308", "CONE-VOLUME"),
+    ("circle_area", "circle-area-circumference", "[9수03-19]", "J0319", "CIRCLE-AREA"),
+    ("combination", "combination-no-denominator", "[12직수04-01]", "HK41", "COMBINATION-COUNT"),
+    (
+        "same_item_permutation",
+        "same-item-permutation-no-divide",
+        "[12직수04-01]",
+        "HK41",
+        "SAME-ITEM-PERM",
+    ),
 )
 
 

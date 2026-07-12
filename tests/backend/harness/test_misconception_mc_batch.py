@@ -61,8 +61,14 @@ _BANDS = (
     "mixed-number-mult-whole",
     "remainder-theorem-sign",
     "vieta-sign-error",
+    "trapezoid-area-no-half",
+    "scale-volume-linear",
+    "cone-volume-no-third",
+    "circle-area-circumference",
+    "combination-no-denominator",
+    "same-item-permutation-no-divide",
 )
-_TOTAL = 24 * len(_BANDS)  # 39 밴드 × 24 = 936
+_TOTAL = 24 * len(_BANDS)  # 45 밴드 × 24 = 1080
 
 
 class TestRunMisconceptionMcBatch:

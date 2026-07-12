@@ -21,10 +21,10 @@ from whymath_backend.l4.misconception.match_gate import _DEFAULT_CONFIDENCE_FLOO
 
 class TestCatalogShape:
     def test_thirty_two_entries_doc_explicit_only(self) -> None:
-        # doc 명시·상세화: 대수 35 + 기하 4 + 확률통계 4 + 함수 3
-        #                 + 미적분 7 + 수열 2 + 삼각함수 2 + 벡터 1 = 58
-        #                 (Phase 1 30 + S2-p 2 + 극값 MC 2 + 843 트랜치1~4 각 6)
-        assert len(CATALOG) == 58
+        # doc 명시·상세화: 대수 35 + 기하 8 + 확률통계 6 + 함수 3
+        #                 + 미적분 7 + 수열 2 + 삼각함수 2 + 벡터 1 = 64
+        #                 (Phase 1 30 + S2-p 2 + 극값 MC 2 + 843 트랜치1~4 각 6 + 트랜치5 6)
+        assert len(CATALOG) == 64
 
     def test_all_ids_unique(self) -> None:
         ids = [m.id for m in CATALOG]
@@ -90,26 +90,41 @@ class TestCanonicalIdsFromDoc:
             assert CATALOG_BY_ID[mid].domain == "대수"
 
     def test_geometry_four(self) -> None:
-        # 기존 3 + 슬 §5.4 추가 1(circle-radius-squared)
+        # 기존 3 + 슬 §5.4 추가 1(circle-radius-squared) + 843 트랜치5 4(비대수 확장)
         for mid in (
             "angle-sum-non-triangle",
             "similarity-vs-congruence",
             "area-perimeter-confusion",
             "circle-radius-squared",
+            "trapezoid-area-no-half",
+            "scale-volume-linear",
+            "cone-volume-no-third",
+            "circle-area-circumference",
         ):
             assert mid in CATALOG_BY_ID
         assert CATALOG_BY_ID["circle-radius-squared"].domain == "기하"
+        for mid in (
+            "trapezoid-area-no-half",
+            "scale-volume-linear",
+            "cone-volume-no-third",
+            "circle-area-circumference",
+        ):
+            assert CATALOG_BY_ID[mid].domain == "기하"
 
     def test_probstat_four(self) -> None:
-        # 기존 3 + 슬 §5.4 추가 1(mutually-exclusive-implies-independent)
+        # 기존 3 + 슬 §5.4 추가 1(mutually-exclusive-implies-independent) + 843 트랜치5 2
         for mid in (
             "gambler-fallacy",
             "prosecutor-fallacy",
             "mean-vs-median",
             "mutually-exclusive-implies-independent",
+            "combination-no-denominator",
+            "same-item-permutation-no-divide",
         ):
             assert mid in CATALOG_BY_ID
         assert CATALOG_BY_ID["mutually-exclusive-implies-independent"].domain == "확률통계"
+        for mid in ("combination-no-denominator", "same-item-permutation-no-divide"):
+            assert CATALOG_BY_ID[mid].domain == "확률통계"
 
     def test_function_three(self) -> None:
         # 기존 1 + 슬 §5.4 추가 2(composite·translation)

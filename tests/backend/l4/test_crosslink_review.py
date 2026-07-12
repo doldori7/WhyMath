@@ -356,12 +356,20 @@ _TRANCHE4_DIRECT: dict[str, set[tuple[str, float]]] = {
     "remainder-theorem-sign": {("M0133", 0.95)},
     "vieta-sign-error": {("M0123", 0.95)},
 }
+_TRANCHE5_DIRECT: dict[str, set[tuple[str, float]]] = {
+    "trapezoid-area-no-half": {("M0161", 0.95)},
+    "scale-volume-linear": {("M0056", 0.95)},
+    "cone-volume-no-third": {("M0063", 0.95)},
+    "circle-area-circumference": {("M0053", 0.95)},
+    "combination-no-denominator": {("M0087", 0.95)},
+    "same-item-permutation-no-divide": {("M0190", 0.95)},
+}
 
 
 def test_real_queue_direct_top_confidences_match_draft(
     real_rows: list[dict[str, Any]],
 ) -> None:
-    # ④ non-null 직접매핑 = 초안 ∪ 검수 ∪ S2-p ∪ 극값 MC ∪ 843 트랜치1~4 — 그 외 차단.
+    # ④ non-null 직접매핑 = 초안 ∪ 검수 ∪ S2-p ∪ 극값 MC ∪ 843 트랜치1~5 — 그 외 차단.
     expected: dict[str, set[tuple[str, float]]] = {
         k: set(_DRAFT_DIRECT_TOPS.get(k, set()))
         | set(_REVIEWED_DIRECT_ALTS.get(k, set()))
@@ -371,6 +379,7 @@ def test_real_queue_direct_top_confidences_match_draft(
         | set(_TRANCHE2_DIRECT.get(k, set()))
         | set(_TRANCHE3_DIRECT.get(k, set()))
         | set(_TRANCHE4_DIRECT.get(k, set()))
+        | set(_TRANCHE5_DIRECT.get(k, set()))
         for k in set(_DRAFT_DIRECT_TOPS)
         | set(_REVIEWED_DIRECT_ALTS)
         | set(_S2P_DIRECT)
@@ -379,6 +388,7 @@ def test_real_queue_direct_top_confidences_match_draft(
         | set(_TRANCHE2_DIRECT)
         | set(_TRANCHE3_DIRECT)
         | set(_TRANCHE4_DIRECT)
+        | set(_TRANCHE5_DIRECT)
     }
     actual: dict[str, set[tuple[str, float]]] = {}
     for row in real_rows:

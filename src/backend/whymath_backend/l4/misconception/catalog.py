@@ -14,6 +14,9 @@ S2-p: 이차방정식 근 선택·인수 부호 반전 2종(doc #31-32)을 doc-f
 doc-first로 추가(46→52종).
 843 확장 트랜치4(2026-07-12): 이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종(doc
 #53-58)을 doc-first로 추가(52→58종).
+843 확장 트랜치5(2026-07-12): 비대수 도메인 첫 확장 — 기하 4종(사다리꼴 넓이 ½ 누락·부피비=닮음비·
+원뿔 부피 ⅓ 누락·원 넓이↔둘레 혼동)·확률통계 2종(조합 분모 누락·같은 것 순열 중복 나눗셈 누락)을
+doc-first(doc #59-64)로 추가(58→64종) — π 계수·개수 값형 수치평가 MC로 기계 검증.
 
 각 `canonical_statement`·`counterexample`은 *자체 생성 기본 수학 사실*(교과서/EBS 본문 복제
 금지·CLAUDE.md). 반례는 canonical을 실제로 반증한다(수학적 정합 검증 완료).
@@ -437,7 +440,7 @@ _ALGEBRA: tuple[Misconception, ...] = (
     ),
 )
 
-# 기하 영역 — doc "기하 영역"(#8-10, #26) (4종).
+# 기하 영역 — doc "기하 영역"(#8-10, #26, #59-62) (8종·843 트랜치5 비대수 확장 4).
 _GEOMETRY: tuple[Misconception, ...] = (
     Misconception(
         id="angle-sum-non-triangle",
@@ -475,9 +478,50 @@ _GEOMETRY: tuple[Misconception, ...] = (
         # 정본 해법(등치 판별)은 임베딩/LLM-judged 후속 — 개입은 비난 없는 소크라테스형.
         signals=("반지름", "r²"),
     ),
+    # ── 843 트랜치5(비대수 도메인 확장) 기하 4종 ──
+    Misconception(
+        id="trapezoid-area-no-half",
+        name_kr="사다리꼴 넓이 ½ 누락",
+        domain="기하",
+        canonical_statement="사다리꼴의 넓이는 (윗변+아랫변)에 높이를 곱한 값이다",
+        counterexample="윗변2·아랫변4·높이3이면 넓이는 (2+4)×3÷2 = 9 (÷2 필요), 18 아님",
+        # "사다리꼴"+"높이를 곱" 공출현 — ÷2 누락 양성 단편(M0161). 정본("높이를 곱한 뒤 2로
+        # 나눈다")도 두 토큰 공출현 가능(FP 한계·§5.3) — substring은 후행 ÷2를 못 가림. 임베딩 후속.
+        signals=("사다리꼴", "높이를 곱"),
+    ),
+    Misconception(
+        id="scale-volume-linear",
+        name_kr="부피비=닮음비 오인",
+        domain="기하",
+        canonical_statement="닮음비가 k이면 부피비도 k이다",
+        counterexample="닮음비가 2이면 부피비는 2³ = 8 (닮음비의 세제곱), 2 아님",
+        # "닮음비"+"부피비" 공출현 — 둘을 동일시한 양성 단편(M0056·차원혼동). 정본("부피비는
+        # 닮음비의 세제곱")도 두 토큰 공출현 가능(FP 한계·§5.3) — 등치 판별은 임베딩/LLM 후속.
+        signals=("닮음비", "부피비"),
+    ),
+    Misconception(
+        id="cone-volume-no-third",
+        name_kr="원뿔 부피 ⅓ 누락",
+        domain="기하",
+        canonical_statement="원뿔의 부피는 밑넓이×높이이다(원기둥과 같다)",
+        counterexample="원뿔의 부피는 ⅓×밑넓이×높이 (원기둥의 1/3), 원기둥과 같지 않음",
+        # "원뿔"+"원기둥" 공출현 — 둘을 동일시한 양성 단편(M0063). 정본("원뿔은 원기둥의 ⅓")도
+        # 두 토큰 공출현 가능(FP 한계·§5.3) — ⅓ 관계 판별은 임베딩/LLM 후속.
+        signals=("원뿔", "원기둥"),
+    ),
+    Misconception(
+        id="circle-area-circumference",
+        name_kr="원 넓이·둘레 공식 혼동",
+        domain="기하",
+        canonical_statement="원의 넓이는 2πr이다",
+        counterexample="원의 넓이는 πr² (2πr은 둘레 공식)",
+        # "원의 넓이"+"2πr" 공출현 — 넓이를 둘레 공식으로 오인한 양성 단편(M0053). 넓이·둘레를
+        # 함께 서술한 정본도 두 토큰 공출현 가능(FP 한계·§5.3) — 임베딩/LLM 후속.
+        signals=("원의 넓이", "2πr"),
+    ),
 )
 
-# 확률·통계 — doc "확률·통계"(#11-13, #27) (4종).
+# 확률·통계 — doc "확률·통계"(#11-13, #27, #63-64) (6종·843 트랜치5 비대수 확장 2).
 _PROBSTAT: tuple[Misconception, ...] = (
     Misconception(
         id="gambler-fallacy",
@@ -512,6 +556,27 @@ _PROBSTAT: tuple[Misconception, ...] = (
         # "배반"+"독립" 공출현 — 둘을 동일시한 양성 단편. 올바른 진술("배반이면 종속")은
         # "독립"을 포함하지 않아 구분된다.
         signals=("배반", "독립"),
+    ),
+    # ── 843 트랜치5(비대수 도메인 확장) 확률·통계 2종 ──
+    Misconception(
+        id="combination-no-denominator",
+        name_kr="조합 분모 누락(순열화)",
+        domain="확률통계",
+        canonical_statement="조합의 수 nCr을 순열의 수 nPr로 계산한다(분모 r! 누락)",
+        counterexample="5C2 = 10인데 5P2 = 20으로 답하면 분모 2!을 빠뜨린 것",
+        # "조합"+"nPr" 공출현 — 조합을 순열값으로 오인한 양성 단편(M0087). 정본(nCr=nPr/r!)도
+        # 두 토큰 공출현 가능(FP 한계·§5.3) — r! 분모 유무 판별은 임베딩/LLM 후속.
+        signals=("조합", "nPr"),
+    ),
+    Misconception(
+        id="same-item-permutation-no-divide",
+        name_kr="같은 것 순열 중복 나눗셈 누락",
+        domain="확률통계",
+        canonical_statement="같은 것이 있는 순열에서 같은 것을 서로 다른 것으로 보고 n!로 센다",
+        counterexample="AAB의 배열은 3!/2! = 3 (같은 A 중복 나눔), 3! = 6 아님",
+        # "같은 것"+"서로 다른" 공출현 — 중복을 나누지 않은 양성 단편(M0190·분배누락). 정본은
+        # "같은 것은 그 개수의 계승으로 나눈다"라 "서로 다른"을 포함하지 않아 구분된다.
+        signals=("같은 것", "서로 다른"),
     ),
 )
 

@@ -52,11 +52,11 @@ class TestDeriveKebabStandards:
 
     def test_uncovered_kebab_absent(self) -> None:
         # 문항에 오답 귀인으로 안 쓰이는 kebab은 유도 집합에 없음(→ no_signal·인간 전용).
-        # 탐지 카탈로그 58종은 모두 커버됐으므로, 밴드 미구축 슬러그로 유도 범위 한정을 검증.
+        # 탐지 카탈로그 64종은 모두 커버됐으므로, 밴드 미구축 슬러그로 유도 범위 한정을 검증.
         derived = derive_kebab_standards(_all_problem_records())  # type: ignore[arg-type]
         assert "not-a-built-kebab-sentinel" not in derived
         # 탐지 카탈로그 58 완주 — 유도 집합은 태깅된 kebab만(정직한 경계).
-        assert len(derived) <= 58
+        assert len(derived) <= 64
 
     def test_problem_counts_evidence(self) -> None:
         # 증거량(문항 수) — well-evidenced kebab은 하한 20 이상. root-loss는 증거 보강(24문항

@@ -91,6 +91,13 @@ _EXPECTED: dict[str, str] = {
     "mixed-number-mult-whole": "M0102",
     "remainder-theorem-sign": "M0133",
     "vieta-sign-error": "M0123",
+    # 843 트랜치5(비대수 도메인·기하4·확통2)
+    "trapezoid-area-no-half": "M0161",
+    "scale-volume-linear": "M0056",
+    "cone-volume-no-third": "M0063",
+    "circle-area-circumference": "M0053",
+    "combination-no-denominator": "M0087",
+    "same-item-permutation-no-divide": "M0190",
 }
 
 
@@ -106,7 +113,7 @@ def _corpus_mis_ids() -> set[str]:
 
 
 def test_exact_approved_pairs() -> None:
-    # 정확히 Kiki 승인 58건 — 기대 kebab→M-id 매핑 동결(드리프트 시 즉시 실패).
+    # 정확히 Kiki 승인 64건 — 기대 kebab→M-id 매핑 동결(드리프트 시 즉시 실패).
     rows = _load_rows()
     assert {r.kebab_id: r.mis_id for r in rows} == _EXPECTED
 

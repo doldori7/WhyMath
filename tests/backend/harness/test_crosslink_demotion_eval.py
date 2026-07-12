@@ -40,7 +40,7 @@ class TestSummarize:
 
     def test_coverage_accounting_uses_real_catalog(self) -> None:
         report = ev.summarize([], _KEBAB_STANDARDS, _MID_STANDARDS)
-        assert report.kebabs_total == 58  # 실 카탈로그 58종(843 트랜치1~4 포함)
+        assert report.kebabs_total == 64  # 실 카탈로그 64종(843 트랜치1~5 포함)
         assert report.kebabs_decidable == 2  # 신호 부여한 2 kebab
 
 
@@ -78,6 +78,6 @@ class TestCliEndToEnd:
         # same-standard는 못 잡음(false accept·인간 존치)·커버 58/58
         # (843 트랜치1~4 24종 신규 탐지 kebab 포함·전수 machine-decidable → human-only 0).
         assert report.same_detected == 0
-        assert report.kebabs_decidable == 58 and report.kebabs_total == 58
+        assert report.kebabs_decidable == 64 and report.kebabs_total == 64
         text = ev.format_report(report, confidence=0.95, human_reject_rate=None)
         assert "인간 존치" in text and "machine-decidable" in text

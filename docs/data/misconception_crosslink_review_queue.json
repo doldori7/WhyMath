@@ -1157,6 +1157,72 @@
       "reviewer": null,
       "reviewed_on": null,
       "note": null
+    },
+    {
+      "kebab_id": "trapezoid-area-no-half",
+      "mis_id": "M0161",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치5 — 사다리꼴 넓이 ½(÷2) 누락 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "scale-volume-linear",
+      "mis_id": "M0056",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치5 — 부피비를 닮음비와 동일시(차원혼동) 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "cone-volume-no-third",
+      "mis_id": "M0063",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치5 — 원뿔 부피 ⅓ 누락(원기둥으로) 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "circle-area-circumference",
+      "mis_id": "M0053",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치5 — 원 넓이(πr²)를 둘레(2πr)와 혼동 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "combination-no-denominator",
+      "mis_id": "M0087",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치5 — 조합 분모 r! 누락(순열 nPr화) 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
+    },
+    {
+      "kebab_id": "same-item-permutation-no-divide",
+      "mis_id": "M0190",
+      "link_type": "직접매핑",
+      "confidence": 0.95,
+      "rationale": "843 트랜치5 — 같은 것 순열 중복 나눗셈 누락 일치",
+      "status": "pending",
+      "reviewer": null,
+      "reviewed_on": null,
+      "note": null
     }
   ]
 }

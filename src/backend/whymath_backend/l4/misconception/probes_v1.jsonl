@@ -148,3 +148,15 @@
 {"statement": "나머지정리에서는 나누는 식이 (x-a)이면 f(a)를 대입해야 한다", "expected_id": null, "near_id": "remainder-theorem-sign", "kind": "correct-near", "note": "올바른 나머지정리 — 두 토큰 공출현이나 정확(측정용)"}
 {"statement": "두 근의 합을 구할 때 일차항 계수를 그대로 써서 부호를 놓쳤어", "expected_id": "vieta-sign-error", "near_id": null, "kind": "paraphrase", "note": "합=b 오인 — signals 근과 계수·부호 회피"}
 {"statement": "두 근의 합은 일차항 계수의 부호를 바꾼 값이다", "expected_id": null, "near_id": "vieta-sign-error", "kind": "correct-near", "note": "올바른 근과 계수 — signals 미공출현"}
+{"statement": "사다리꼴 넓이를 구할 때 윗변과 아랫변을 더해 높이만 곱하고 2로 나누는 걸 잊었어", "expected_id": "trapezoid-area-no-half", "near_id": null, "kind": "paraphrase", "note": "÷2 누락 — signals 사다리꼴만(높이를 곱 회피)"}
+{"statement": "닮음비가 2배면 부피도 2배로 늘어난다고 계산했어", "expected_id": "scale-volume-linear", "near_id": null, "kind": "paraphrase", "note": "부피비=닮음비 오인 — signals 닮음비만(부피비 회피)"}
+{"statement": "원뿔의 부피를 밑넓이에 높이를 곱하기만 하고 3으로 안 나눴어", "expected_id": "cone-volume-no-third", "near_id": null, "kind": "paraphrase", "note": "⅓ 누락 — signals 원뿔만(원기둥 회피)"}
+{"statement": "원의 넓이를 반지름에 2와 원주율을 곱하는 둘레 방식으로 구했어", "expected_id": "circle-area-circumference", "near_id": null, "kind": "paraphrase", "note": "넓이를 둘레로 — signals 원의 넓이만(2πr 회피)"}
+{"statement": "조합 문제인데 순서를 따지는 순열 방식으로 세어버렸어", "expected_id": "combination-no-denominator", "near_id": null, "kind": "paraphrase", "note": "분모 r! 누락 — signals 조합만(nPr 회피)"}
+{"statement": "같은 글자가 섞여 있는데 전부 다른 것처럼 계승 전체로 배열 수를 셌어", "expected_id": "same-item-permutation-no-divide", "near_id": null, "kind": "paraphrase", "note": "중복 나눗셈 누락 — signals 미공출현(같은 것·서로 다른 회피)"}
+{"statement": "사다리꼴의 넓이는 두 밑변의 합에 높이의 곱을 반으로 나눈 값이다", "expected_id": null, "near_id": "trapezoid-area-no-half", "kind": "correct-near", "note": "올바른 사다리꼴 공식 — 높이의 곱(높이를 곱 회피)·풀매칭 아님"}
+{"statement": "닮음비가 2인 두 도형의 부피의 비는 2의 세제곱인 8이다", "expected_id": null, "near_id": "scale-volume-linear", "kind": "correct-near", "note": "올바른 부피비(세제곱) — 부피의 비(부피비 회피)"}
+{"statement": "원뿔의 부피는 같은 밑면과 높이를 가진 기둥 부피의 3분의 1이다", "expected_id": null, "near_id": "cone-volume-no-third", "kind": "correct-near", "note": "올바른 ⅓ 관계 — 기둥(원기둥 회피)"}
+{"statement": "반지름이 r인 원의 넓이는 원주율에 반지름의 제곱을 곱한 값이다", "expected_id": null, "near_id": "circle-area-circumference", "kind": "correct-near", "note": "올바른 원 넓이 πr² — 2πr 미포함"}
+{"statement": "조합은 뽑는 순서를 고려하지 않고 개수만 세는 경우의 수이다", "expected_id": null, "near_id": "combination-no-denominator", "kind": "correct-near", "note": "올바른 조합 정의 — nPr 미포함"}
+{"statement": "같은 것이 있는 순열은 전체 계승을 같은 것의 개수의 계승으로 나눈다", "expected_id": null, "near_id": "same-item-permutation-no-divide", "kind": "correct-near", "note": "올바른 같은 것 순열 — 서로 다른 미포함"}

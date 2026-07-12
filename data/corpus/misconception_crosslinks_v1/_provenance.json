@@ -4,9 +4,9 @@
  "origin": "docs/data/misconception_crosslink_review_queue.json (검수 큐·전행 pending) 의 승인분",
  "review_method": "human sign-off (AI 자기승인 금지·Gate Contract crosswalk_gate_contract.md)",
  "counts": {
-  "crosslinks": 58,
+  "crosslinks": 64,
   "link_types": {
-   "직접매핑": 58
+   "직접매핑": 64
   }
  },
  "signatures": [
@@ -469,6 +469,54 @@
   {
    "kebab_id": "vieta-sign-error",
    "mis_id": "M0123",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "trapezoid-area-no-half",
+   "mis_id": "M0161",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "scale-volume-linear",
+   "mis_id": "M0056",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "cone-volume-no-third",
+   "mis_id": "M0063",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "circle-area-circumference",
+   "mis_id": "M0053",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "combination-no-denominator",
+   "mis_id": "M0087",
+   "reviewer": "Kiki",
+   "reviewed_on": "2026-07-12",
+   "confidence": 0.95,
+   "note_stamp": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "same-item-permutation-no-divide",
+   "mis_id": "M0190",
    "reviewer": "Kiki",
    "reviewed_on": "2026-07-12",
    "confidence": 0.95,

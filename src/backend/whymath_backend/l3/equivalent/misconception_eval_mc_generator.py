@@ -40,7 +40,7 @@ import uuid
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
-from math import gcd, isqrt
+from math import comb, factorial, gcd, isqrt, perm
 from typing import Literal
 
 import sympy
@@ -112,6 +112,12 @@ TemplateKind = Literal[
     "mixed_mult",
     "remainder_sign",
     "vieta_sum",
+    "trapezoid_area",
+    "scale_volume",
+    "cone_volume",
+    "circle_area",
+    "combination",
+    "same_item_permutation",
 ]
 
 # 템플릿별 L1 데이터 메타(개념 원천 src_id·단원 코드) — L4 오개념 주입 원칙 밖(L1 데이터).
@@ -160,6 +166,13 @@ _TEMPLATE_META: dict[TemplateKind, tuple[str, str]] = {
     "mixed_mult": ("J0104", "MIXED-MULT"),
     "remainder_sign": ("HK01", "REMAINDER-THEOREM"),
     "vieta_sum": ("HK08", "VIETA-SUM"),
+    # 843 확장 트랜치5(비대수 도메인·기하4·확통2) — 성취기준은 spec이 공급.
+    "trapezoid_area": ("J0312", "TRAPEZOID-AREA"),
+    "scale_volume": ("J0312", "SCALE-VOLUME"),
+    "cone_volume": ("J0308", "CONE-VOLUME"),
+    "circle_area": ("J0319", "CIRCLE-AREA"),
+    "combination": ("HK41", "COMBINATION-COUNT"),
+    "same_item_permutation": ("HK41", "SAME-ITEM-PERM"),
 }
 
 
@@ -1765,6 +1778,248 @@ def _build_vieta_sum_pool() -> tuple[_EvalItem, ...]:
     return tuple(pool)
 
 
+def _build_trapezoid_area_pool() -> tuple[_EvalItem, ...]:
+    """사다리꼴 넓이 뼈대 풀 — 정답 (a+b)h/2·오개념 (a+b)h(÷2 누락)·filler a·h·b·h.
+
+    사다리꼴 넓이 = (윗변+아랫변)×높이÷2 인데, ÷2 를 빠뜨려 (a+b)h 로 오인(M0161). a<b라
+    네 값 {(a+b)h/2, (a+b)h, ah, bh}는 서로 다르다(a≠b·양수·÷2). 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[float] = set()
+    for a in range(2, 9):
+        for b in range(a + 1, 15):
+            for h in range(2, 11):
+                correct = sympy.Rational((a + b) * h, 2)
+                key = round(_numeric(correct), 9)
+                if key in seen:
+                    continue
+                item = _assemble_item(
+                    values=(
+                        correct,
+                        sympy.Integer((a + b) * h),  # ÷2 누락.
+                        sympy.Integer(a * h),  # 한 변만.
+                        sympy.Integer(b * h),  # 다른 한 변만.
+                    ),
+                    conditions=f"x = ({a}+{b})*{h}/2",
+                    answer_str=_display(correct),
+                    question_text=(
+                        f"윗변이 {a}, 아랫변이 {b}, 높이가 {h} 인 사다리꼴의 넓이를 구하시오."
+                    ),
+                    answer_explanation=(
+                        f"사다리꼴의 넓이 = (윗변+아랫변)×높이÷2 = ({a}+{b})×{h}÷2 = "
+                        f"{_display(correct)} 이다. ÷2 를 빠뜨리면 {(a + b) * h} 가 되어 틀린다."
+                    ),
+                    difficulty=_difficulty(a + b + h),
+                    answer_format=_answer_format_for(correct),
+                )
+                if item is not None:
+                    seen.add(key)
+                    pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_scale_volume_pool() -> tuple[_EvalItem, ...]:
+    """닮음비→부피비 뼈대 풀 — 정답 k³·오개념 k(부피비=닮음비 오인)·filler k²·3k.
+
+    닮음비가 1:k 이면 부피비는 1:k³ 인데, 부피비를 닮음비 k 와 같게 오인한다(M0056·차원혼동).
+    filler 는 넓이비 k²·선형 3배 3k. k≥2·k≠3(k²=3k 충돌 회피)라 네 값이 서로 다르다. 값 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for k in range(2, 31):
+        correct_v = k**3
+        if correct_v in seen:
+            continue
+        item = _assemble_item(
+            values=(
+                sympy.Integer(correct_v),
+                sympy.Integer(k),  # 부피비=닮음비 오인.
+                sympy.Integer(k * k),  # 넓이비와 혼동.
+                sympy.Integer(3 * k),  # 선형 3배 오인.
+            ),
+            conditions=f"x = {k}**3",
+            answer_str=str(correct_v),
+            question_text=(
+                f"닮음비가 1:{k} 인 두 입체도형의 부피비는 1:? 이다. ? 의 값을 구하시오."
+            ),
+            answer_explanation=(
+                f"닮음비가 1:{k} 이면 부피비는 1:{k}³ = 1:{correct_v} 이다. "
+                f"부피비를 닮음비와 같은 {k} 로 두면 틀린다."
+            ),
+            difficulty=_difficulty(k),
+            answer_format=AnswerFormat.자연수,
+        )
+        if item is not None:
+            seen.add(correct_v)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_cone_volume_pool() -> tuple[_EvalItem, ...]:
+    """원뿔 부피 π계수 뼈대 풀 — 정답 r²h/3·오개념 r²h(⅓ 누락=원기둥)·filler r²h/2·2r²h/3.
+
+    원뿔 부피 = ⅓·π·r²·h 이므로 부피÷π = r²h/3 인데, ⅓ 을 빠뜨려 원기둥 부피 πr²h 로 오인
+    (M0063). filler 는 ½ 오인·⅔ 오인. r²h 를 6의 배수로 골라 네 값이 모두 자연수·서로 다르다
+    (비율 1/3·1·1/2·2/3 상이). 정답값 r²h/3 으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for r in range(1, 8):
+        for h in range(1, 31):
+            v = r * r * h
+            if v % 6 != 0:
+                continue  # r²h 를 6의 배수로 한정 → V/2·V/3·2V/3 전부 자연수.
+            correct_v = v // 3
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(correct_v),
+                    sympy.Integer(v),  # ⅓ 누락(원기둥 부피).
+                    sympy.Integer(v // 2),  # ⅓ 을 ½ 로 오인.
+                    sympy.Integer(2 * v // 3),  # ⅔ 로 오인.
+                ),
+                conditions=f"x = {r}**2*{h}/3",
+                answer_str=str(correct_v),
+                question_text=(
+                    f"밑면의 반지름이 {r}, 높이가 {h} 인 원뿔의 부피를 원주율 π로 나눈 "
+                    "값을 구하시오."
+                ),
+                answer_explanation=(
+                    f"원뿔의 부피는 ⅓×π×(반지름)²×높이 이므로 π로 나눈 값은 "
+                    f"{r}²×{h}÷3 곧 {correct_v} 이다. "
+                    f"⅓ 을 빠뜨려 원기둥 부피로 계산하면 {v} 가 되어 틀린다."
+                ),
+                difficulty=_difficulty(r + h),
+                answer_format=AnswerFormat.자연수,
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_circle_area_pool() -> tuple[_EvalItem, ...]:
+    """원 넓이 π계수 뼈대 풀 — 정답 r²·오개념 2r(넓이를 둘레 2πr 로 오인)·filler r·2r².
+
+    원의 넓이 = π·r² 이므로 넓이÷π = r² 인데, 둘레 공식 2πr 와 혼동해 2r 로 오인한다
+    (M0053). filler 는 반지름만 r·계수 2배 2r². r≥3(r²=2r 충돌 회피)라 네 값이 서로 다르다.
+    정답값 r² 으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for r in range(3, 31):
+        correct_v = r * r
+        if correct_v in seen:
+            continue
+        item = _assemble_item(
+            values=(
+                sympy.Integer(correct_v),
+                sympy.Integer(2 * r),  # 둘레 공식 2πr 와 혼동.
+                sympy.Integer(r),  # 반지름만.
+                sympy.Integer(2 * correct_v),  # 계수 2배.
+            ),
+            conditions=f"x = {r}**2",
+            answer_str=str(correct_v),
+            question_text=(f"반지름이 {r} 인 원의 넓이를 원주율 π로 나눈 값을 구하시오."),
+            answer_explanation=(
+                f"원의 넓이는 π×(반지름)² 이므로 π로 나눈 값은 {r}² 곧 {correct_v} 이다. "
+                f"원의 둘레 공식 2πr 와 혼동하면 2×{r} 곧 {2 * r} 로 잘못 답한다."
+            ),
+            difficulty=_difficulty(r),
+            answer_format=AnswerFormat.자연수,
+        )
+        if item is not None:
+            seen.add(correct_v)
+            pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_combination_pool() -> tuple[_EvalItem, ...]:
+    """조합 nCr 뼈대 풀 — 정답 C(n,r)·오개념 P(n,r)(분모 r! 누락=순열)·filler n·r·n+r.
+
+    nCr = n!/(r!(n-r)!) 인데, 분모의 r! 을 빠뜨리면 순열의 수 nPr = n!/(n-r)! 이 된다(M0087).
+    filler 는 곱셈 오인 n·r·덧셈 오인 n+r. 4-상이 검사로 충돌(예 r=2·특정 n)은 배제. 값 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for r in range(2, 5):
+        for n in range(r + 2, 24):
+            correct_v = comb(n, r)
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(correct_v),
+                    sympy.Integer(perm(n, r)),  # 분모 r! 누락(순열).
+                    sympy.Integer(n * r),  # 곱셈 오인.
+                    sympy.Integer(n + r),  # 덧셈 오인.
+                ),
+                conditions=f"x = {correct_v}",
+                answer_str=str(correct_v),
+                question_text=(
+                    f"서로 다른 {n} 개에서 {r} 개를 뽑는 조합의 수 {n}C{r} 를 구하시오."
+                ),
+                answer_explanation=(
+                    f"{n}C{r} = {n}!/({r}!×{n - r}!) = {correct_v} 이다. "
+                    f"분모의 {r}! 을 빠뜨리면 순열의 수 {n}P{r} = {perm(n, r)} 이 되어 틀린다."
+                ),
+                difficulty=_difficulty(n + r),
+                answer_format=AnswerFormat.자연수,
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
+def _build_same_item_permutation_pool() -> tuple[_EvalItem, ...]:
+    """같은 것이 있는 순열 뼈대 풀 — 정답 n!/(p!q!)·오개념 n!(중복 나눗셈 누락)·filler n!/p!·n!/q!.
+
+    p 개의 A·q 개의 B(n=p+q)를 일렬 배열하는 경우의 수는 n!/(p!q!) 인데, 같은 것의 중복을 나누지
+    않고 n! 로 오인한다(M0190·분배누락). filler 는 한쪽만 나눔 n!/p!·n!/q!. p<q라 네 값이 서로
+    다르다(정답<n!/p!<n!/q!<n!). 정답값으로 dedup.
+    """
+    pool: list[_EvalItem] = []
+    seen: set[int] = set()
+    for p in range(2, 11):
+        for q in range(p + 1, 11):
+            n = p + q
+            correct_v = factorial(n) // (factorial(p) * factorial(q))
+            if correct_v in seen:
+                continue
+            item = _assemble_item(
+                values=(
+                    sympy.Integer(correct_v),
+                    sympy.Integer(factorial(n)),  # 중복 나눗셈 누락.
+                    sympy.Integer(factorial(n) // factorial(p)),  # 한쪽만 나눔.
+                    sympy.Integer(factorial(n) // factorial(q)),  # 다른 한쪽만.
+                ),
+                conditions=f"x = {correct_v}",
+                answer_str=str(correct_v),
+                question_text=(
+                    f"{p} 개의 A 와 {q} 개의 B, 모두 {n} 개의 문자를 일렬로 "
+                    "배열하는 경우의 수를 구하시오."
+                ),
+                answer_explanation=(
+                    f"같은 것이 있는 순열이므로 {n}! 을 각 문자 개수의 계승 {p}!·{q}! 로 나눈다: "
+                    f"{n}!/({p}!×{q}!) = {correct_v} 이다. 중복을 나누지 않고 {n}! 로 두면 틀린다."
+                ),
+                difficulty=_difficulty(p + q),
+                answer_format=AnswerFormat.자연수,
+            )
+            if item is not None:
+                seen.add(correct_v)
+                pool.append(item)
+    random.Random(_POOL_SEED).shuffle(pool)
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "distribution": _build_distribution_pool,
     "chain_rule": _build_chain_rule_pool,
@@ -1805,6 +2060,12 @@ _POOL_FACTORY = {
     "mixed_mult": _build_mixed_mult_pool,
     "remainder_sign": _build_remainder_sign_pool,
     "vieta_sum": _build_vieta_sum_pool,
+    "trapezoid_area": _build_trapezoid_area_pool,
+    "scale_volume": _build_scale_volume_pool,
+    "cone_volume": _build_cone_volume_pool,
+    "circle_area": _build_circle_area_pool,
+    "combination": _build_combination_pool,
+    "same_item_permutation": _build_same_item_permutation_pool,
 }
 
 
@@ -1842,7 +2103,9 @@ class MisconceptionEvalMCSkeletonGenerator:
                 "difference_of_squares/exponent_product/power_of_power/negative_square/"
                 "distribute_partial/negative_distribute/square_difference/midpoint_no_half/"
                 "scale_area/negative_even_power/combine_unlike/complete_square/conjugate_product/"
-                "transpose/gcd_lcm/decimal_mult/mixed_mult/remainder_sign/vieta_sum)"
+                "transpose/gcd_lcm/decimal_mult/mixed_mult/remainder_sign/vieta_sum/"
+                "trapezoid_area/scale_volume/cone_volume/circle_area/combination/"
+                "same_item_permutation)"
             )
         if not distractor_codes:
             raise ValueError(

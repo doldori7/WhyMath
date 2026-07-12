@@ -1,10 +1,10 @@
 """오개념 커버리지 확대 수치평가 객관식 배치 — crosswalk machine-decidable 커버 상향(LLM 0).
 
-`root_aggregate_batch`(Vieta 킬러)의 형제다. `MisconceptionEvalMCSkeletonGenerator`로 39 서브밴드
+`root_aggregate_batch`(Vieta 킬러)의 형제다. `MisconceptionEvalMCSkeletonGenerator`로 45 서브밴드
 (오개념 kebab별)를 생성 → 기존 오케스트레이터(`run_batch`)·수용 게이트(S2-a)·`JsonlCorpusSink`를
 **재사용**해 코퍼스를 적재한다. 목적: 기존 코퍼스가 `distractor_map`으로 커버하지 못하던 오개념
-39종을 문항에 *등장*시켜 crosswalk 기계 게이트의 machine-decidable 커버리지를 끌어올린다(수치평가 MC
-8→13→15 + Tier B 값형 4 + Tier C gambler 1 + 843 트랜치1~4 각 6).
+45종을 문항에 *등장*시켜 crosswalk 기계 게이트의 machine-decidable 커버리지를 끌어올린다(수치평가 MC
+8→13→15 + Tier B 값형 4 + Tier C gambler 1 + 843 트랜치1~4 각 6 + 트랜치5 비대수 6).
 `crosslink_demotion_eval`의 커버리지 회계는 `problem_bank_*/problems.jsonl` glob이라 신규 코퍼스
 자동 포함. 앞 3밴드는 op-code 실재, 나머지는
 op-code 부재(오개념만 태깅·`DistractorEntry.op_code` 옵셔널).
@@ -72,7 +72,7 @@ class _Band:
     standard_codes: tuple[str, ...]
 
 
-# 39 서브밴드 — 각 오개념 1종을 오답 선지로 태깅하는 수치평가 객관식.
+# 45 서브밴드 — 각 오개념 1종을 오답 선지로 태깅하는 수치평가 객관식.
 #   앞 3종(distribution/chain_rule/sine_sum)은 op-code 실재(DISTRACTOR_BY_ID).
 #   나머지(exp_zero 이후·Tier B 값형 포함)는 op-code 부재 — 오개념만 태깅(op_code 옵셔널).
 #   성취기준 튜플은 *각 kebab의 후보 M-id가 전부 agree*하도록 잠갔다 — 어느 후보도 crosswalk 구조
@@ -320,6 +320,34 @@ _BANDS: tuple[_Band, ...] = (
     ),
     # vieta-sign-error: 후보 M0123=[10공수1-02-08] agree.
     _Band("vieta-sign-error", "vieta_sum", "vieta-sign-error", ("[10공수1-02-08]",)),
+    # ── 843 확장 트랜치5(비대수 도메인·기하4·확통2·후보 단일 M-id·표준 일치 agree) ──
+    # trapezoid-area-no-half: 후보 M0161=[9수03-12] agree.
+    _Band("trapezoid-area-no-half", "trapezoid_area", "trapezoid-area-no-half", ("[9수03-12]",)),
+    # scale-volume-linear: 후보 M0056=[9수03-12] agree.
+    _Band("scale-volume-linear", "scale_volume", "scale-volume-linear", ("[9수03-12]",)),
+    # cone-volume-no-third: 후보 M0063=[9수03-08] agree.
+    _Band("cone-volume-no-third", "cone_volume", "cone-volume-no-third", ("[9수03-08]",)),
+    # circle-area-circumference: 후보 M0053=[9수03-19] agree.
+    _Band(
+        "circle-area-circumference",
+        "circle_area",
+        "circle-area-circumference",
+        ("[9수03-19]",),
+    ),
+    # combination-no-denominator: 후보 M0087=[12직수04-01] agree.
+    _Band(
+        "combination-no-denominator",
+        "combination",
+        "combination-no-denominator",
+        ("[12직수04-01]",),
+    ),
+    # same-item-permutation-no-divide: 후보 M0190=[12직수04-01] agree.
+    _Band(
+        "same-item-permutation-no-divide",
+        "same_item_permutation",
+        "same-item-permutation-no-divide",
+        ("[12직수04-01]",),
+    ),
 )
 
 

@@ -33,12 +33,28 @@
    "note": "검수:Kiki 2026-07-10"
   },
   {
+   "kebab_id": "circle-area-circumference",
+   "mis_id": "M0053",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "circle-radius-squared",
    "mis_id": "M0848",
    "link_type": "직접매핑",
    "confidence": 0.93,
    "method": "manual",
    "note": "검수:Kiki 2026-07-10"
+  },
+  {
+   "kebab_id": "combination-no-denominator",
+   "mis_id": "M0087",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
   },
   {
    "kebab_id": "combine-unlike-terms",
@@ -63,6 +79,14 @@
    "confidence": 0.95,
    "method": "manual",
    "note": "검수:Kiki 2026-07-10"
+  },
+  {
+   "kebab_id": "cone-volume-no-third",
+   "mis_id": "M0063",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
   },
   {
    "kebab_id": "conjugate-product-sum",
@@ -369,8 +393,24 @@
    "note": "검수:Kiki 2026-07-12"
   },
   {
+   "kebab_id": "same-item-permutation-no-divide",
+   "mis_id": "M0190",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
    "kebab_id": "scale-area-linear",
    "mis_id": "M0013",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "scale-volume-linear",
+   "mis_id": "M0056",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",
@@ -451,6 +491,14 @@
   {
    "kebab_id": "transpose-no-sign-change",
    "mis_id": "M0021",
+   "link_type": "직접매핑",
+   "confidence": 0.95,
+   "method": "manual",
+   "note": "검수:Kiki 2026-07-12"
+  },
+  {
+   "kebab_id": "trapezoid-area-no-half",
+   "mis_id": "M0161",
    "link_type": "직접매핑",
    "confidence": 0.95,
    "method": "manual",
