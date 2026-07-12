@@ -5,7 +5,7 @@ track: infra-debt
 stage: S2
 subject: cross
 layer: docs
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,7 +14,9 @@ acceptance:
   - "arch_audit 보고서 신설 + build_checkpoint 스냅샷 갱신"
   - "4회차 초점(arch_audit_2026-07-12_r4.md §5) 이행 상태 판정"
   - 위반 발견 시 상환 태스크 backlog add
-artifacts: []
-session: claude/recommended-tasks-kopmf0
+artifacts:
+  - 096834f
+  - docs/standards/arch_audit_2026-07-12_r5.md
+session: null
 notes: "반복 태스크 — done 시 ARCH-06 재생성. 대부분 라이브 실측(S1-12)·Kiki 게이트 이행 후 실익. AI 검수 전체 코퍼스 확장·기계 게이트 4종 선행 재점검 포함"
 updated: 2026-07-12
