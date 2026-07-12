@@ -134,7 +134,7 @@ class TestCommittedQueueEndToEnd:
             "dot-product-is-vector",
         ):
             assert all(r.kebab_id != kebab for r in rejections)
-        # thin-evidence(root-loss-by-dividing, 1문항)은 제외.
+        # root-loss-by-dividing은 증거 보강 후 M0573과 agree(성취기준 겹침)이라 자동 거부 대상 아님.
         assert all(r.kebab_id != "root-loss-by-dividing" for r in rejections)
         # 전부 well-evidenced(≥20).
         assert all(r.kebab_problem_count >= 20 for r in rejections)

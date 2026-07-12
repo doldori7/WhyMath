@@ -1,13 +1,13 @@
 """개념형(개수/판정) 객관식 배치 — crosswalk machine-decidable 커버 상향(개수/판정 검증·LLM 0).
 
-`misconception_mc_batch`(수치평가)의 개념형 형제다. `ConceptualCountMCSkeletonGenerator`로 14 밴드
-(미적·해석 8 + Tier C 통계·확률·기하·벡터 5)을 생성 → 기존 오케스트레이터(`run_batch`)·수용 게이트
-(S2-a·판정 SymPy 독립 검증)·`JsonlCorpusSink`를 **재사용**해 코퍼스를 적재한다. 목적: 수치평가로 안
-되는 개념형 오개념 13종을 문항에 등장시켜 crosswalk 커버를 올린다. **Tier C 5종**(mean-vs-median·
-mutually-exclusive-implies-independent·prosecutor-fallacy·similarity-vs-congruence·
-dot-product-is-vector)은 "계산불가"로 오분류됐으나 실은 도메인 프리미티브(통계·확률·기하·벡터)로
-결정론 검증 가능(LLM 0)임을 실현. division-by-zero는 제외점=분모 실근이라 `verify_real_root_count`
-재사용.
+`misconception_mc_batch`(수치평가)의 개념형 형제다. `ConceptualCountMCSkeletonGenerator`로 15 밴드
+(미적·해석 8 + Tier C 통계·확률·기하·벡터 5 + 부등호 방향 1 + 근 손실 1)을 생성 → 기존
+오케스트레이터(`run_batch`)·수용 게이트(S2-a·판정 SymPy 독립 검증)·`JsonlCorpusSink`를 **재사용**해
+코퍼스를 적재한다. 목적: 수치평가로 안 되는 개념형 오개념을 문항에 등장시켜 crosswalk 커버를 올린다.
+**Tier C 5종**(mean-vs-median·mutually-exclusive-implies-independent·prosecutor-fallacy·
+similarity-vs-congruence·dot-product-is-vector)은 "계산불가"로 오분류됐으나 실은 도메인
+프리미티브(통계·확률·기하·벡터)로 결정론 검증 가능(LLM 0)임을 실현. division-by-zero는 제외점=분모
+실근, root-loss-by-dividing은 ax²=bx 근 개수(정답 2·손실 1)라 `verify_real_root_count` 재사용.
 
 성취기준 튜플은 *각 kebab 후보 M-id가 전부 agree*하도록 잠갔다(거짓 자율거부 0). 이 kebab들은
 op-code 부재라 오개념만 태깅(`build_kebab_distractor_codes_optional`). 결정론·산출 v0(사람 검수 전).
@@ -53,7 +53,7 @@ class _Band:
     standard_codes: tuple[str, ...]
 
 
-# 14 서브밴드 — 개념형 개수/판정 MC. 표준 튜플은 각 kebab 후보가 전부 agree하도록 잠금(거짓거부 0).
+# 15 서브밴드 — 개념형 개수/판정 MC. 표준 튜플은 각 kebab 후보가 전부 agree하도록 잠금(거짓거부 0).
 _BANDS: tuple[_Band, ...] = (
     # discriminant: 후보 M0610=[10공수1-02-02]·M0832=[10기수1-02-02]·M0124=[9수02-20] 모두 agree.
     _Band(
@@ -155,6 +155,14 @@ _BANDS: tuple[_Band, ...] = (
         "sign-flip-in-inequality",
         ("[9수02-11]", "[9수02-12]", "[12직수02-05]"),
     ),
+    # root-loss: 후보 M0573=[9수02-20] agree(단일 후보·직접매핑). 기존 wedge 문항([10공수1-02-02])과
+    #   합집합 역유도라 M0573 표준이 kebab_set에 포함돼 agree — 증거 보강으로 thin→corroborated.
+    _Band(
+        "root-loss-by-dividing",
+        "root_loss_count",
+        "root-loss-by-dividing",
+        ("[9수02-20]",),
+    ),
 )
 
 
@@ -166,7 +174,7 @@ def _default_out_path() -> Path:
 def run_conceptual_count_mc_batch(
     *, n_per_band: int = _DEFAULT_N, out_path: Path | None = None, write: bool = True
 ) -> CorpusBatchReport:
-    """14 서브밴드 배치 실행 — 생성→S2-a 게이트(개수/판정 검증)→구조 dedup→적재(순수 결정론)."""
+    """15 서브밴드 배치 실행 — 생성→S2-a 게이트(개수/판정 검증)→구조 dedup→적재(순수 결정론)."""
     resolved_out = out_path if out_path is not None else _default_out_path()
     sink = JsonlCorpusSink()
     bands: list[BandResult] = []
@@ -180,12 +188,8 @@ def run_conceptual_count_mc_batch(
             answer_format=None,
         )
         index: set[str] = set()
-        generator = ConceptualCountMCSkeletonGenerator(
-            band.template, codes, skip_signatures=index
-        )
-        outcomes = run_batch(
-            spec, generator, n_per_band, signature_index=index, store=sink
-        )
+        generator = ConceptualCountMCSkeletonGenerator(band.template, codes, skip_signatures=index)
+        outcomes = run_batch(spec, generator, n_per_band, signature_index=index, store=sink)
         stored = sum(1 for o in outcomes if o.status == "accepted_stored")
         failures = [
             reason
@@ -218,17 +222,11 @@ def main(argv: list[str] | None = None) -> int:
     """CLI — 개념형 개수/판정 MC 배치. 수율 미달(총 저장 < 요청)이면 exit 1(조용한 실패 금지)."""
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.harness.conceptual_count_mc_batch",
-        description="개념형(개수·판정·극한·미분·통계·확률) MC 배치 적재(14 서브밴드·결정론).",
+        description="개념형(개수·판정·극한·미분·통계·확률) MC 배치 적재(15 서브밴드·결정론).",
     )
-    parser.add_argument(
-        "--n", type=int, default=_DEFAULT_N, help="서브밴드당 요청 수(기본 24)."
-    )
-    parser.add_argument(
-        "--out", default=None, help="출력 코퍼스 경로(기본 conceptual_v0)."
-    )
-    parser.add_argument(
-        "--dry-run", action="store_true", help="파일 기록 없이 밴드별 수율만 출력."
-    )
+    parser.add_argument("--n", type=int, default=_DEFAULT_N, help="서브밴드당 요청 수(기본 24).")
+    parser.add_argument("--out", default=None, help="출력 코퍼스 경로(기본 conceptual_v0).")
+    parser.add_argument("--dry-run", action="store_true", help="파일 기록 없이 밴드별 수율만 출력.")
     args = parser.parse_args(argv)
 
     report = run_conceptual_count_mc_batch(

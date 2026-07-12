@@ -1,7 +1,7 @@
 """개념형 개수 MC 배치 테스트 — 수율·라운드트립(answer_kind 보존)·결정론·S6·커버리지(hermetic).
 
 배치가 게이트(개수/판정 SymPy 검증) 통과분만 적재하고, answer_kind가 로더·재검증에 보존되며,
-13 kebab이 machine-decidable로 승격됨을 동결한다.
+15 kebab이 machine-decidable로 승격됨을 동결한다.
 """
 
 from __future__ import annotations
@@ -37,6 +37,7 @@ _KEBABS = {
     "similarity-vs-congruence",
     "dot-product-is-vector",
     "sign-flip-in-inequality",
+    "root-loss-by-dividing",
 }
 _KINDS = {
     "real_root_count",
@@ -53,6 +54,7 @@ _KINDS = {
     "congruent_by_ratio",
     "dot_product_scalar",
     "inequality_direction",
+    "root_loss_count",
 }
 
 
@@ -76,13 +78,14 @@ def test_dry_run_full_yield() -> None:
         ("similarity-vs-congruence", 24),
         ("dot-product-is-vector", 24),
         ("sign-flip-in-inequality", 24),
+        ("root-loss-by-dividing", 24),
     ]
 
 
 def test_roundtrip_preserves_answer_kind(tmp_path: Path) -> None:
     out = tmp_path / "problems.jsonl"
     report = run_conceptual_count_mc_batch(n_per_band=24, out_path=out, write=True)
-    assert report.fulfilled and report.written == 336
+    assert report.fulfilled and report.written == 360
     records = load_problem_bank_records(out)
     kinds = {r.verify.answer_kind for r in records}
     assert kinds == _KINDS
@@ -106,11 +109,11 @@ def test_s6_reverify_zero_fail(tmp_path: Path) -> None:
     run_conceptual_count_mc_batch(n_per_band=24, out_path=out, write=True)
     records = cr._iter_records(out.read_text(encoding="utf-8"))
     report = cr.reverify_corpus(records, use_fuzz=False)
-    assert report.failed == 0 and report.passed == 336
+    assert report.failed == 0 and report.passed == 360
 
 
 def test_committed_corpus_covers_thirteen_kebabs() -> None:
-    # 커밋 코퍼스 전체 — 13 개념형 kebab이 machine-decidable(구조 신호 有)·정답 오거부 0.
+    # 커밋 코퍼스 전체 — 15 개념형 kebab이 machine-decidable(구조 신호 有)·정답 오거부 0.
     records = []
     for path in _default_problem_corpora():
         records.extend(load_problem_bank_records(path))

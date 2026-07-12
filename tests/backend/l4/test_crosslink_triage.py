@@ -130,13 +130,14 @@ class TestCommittedQueueEndToEnd:
         )
 
     def test_committed_bucket_counts(self) -> None:
-        # 커밋 큐 e2e — 34/34 완주 상태의 버킷 분포 동결(gambler·sign-flip 등장 → no_signal 0).
+        # 커밋 큐 e2e — root-loss 증거 보강(thin→corroborated)으로 thin_disagree 1→0·corroborated
+        # 76→77. no_signal 0(34/34 등장).
         report = self._run()
         assert report.counts == {  # type: ignore[attr-defined]
-            "corroborated": 76,
+            "corroborated": 77,
             "no_signal": 0,
             "auto_reject": 4,
-            "thin_disagree": 1,
+            "thin_disagree": 0,
         }
 
     def test_auto_reject_matches_machine_reject_tool(self) -> None:

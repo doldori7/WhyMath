@@ -38,6 +38,7 @@ _CASES: tuple[tuple[CountTemplateKind, str, tuple[str, ...]], ...] = (
     ("congruent_by_ratio", "similarity-vs-congruence", ("[6수03-01]",)),
     ("dot_product_scalar", "dot-product-is-vector", ("[12기하03-03]",)),
     ("inequality_direction", "sign-flip-in-inequality", ("[9수02-11]",)),
+    ("root_loss_count", "root-loss-by-dividing", ("[9수02-20]",)),
 )
 
 

@@ -66,6 +66,7 @@ CountTemplateKind = Literal[
     "congruent_by_ratio",
     "dot_product_scalar",
     "inequality_direction",
+    "root_loss_count",
 ]
 
 # 개수/판정 선지 — 4지선다는 항상 {0,1,2,3}. 판정형(일대일·수렴·극한=함숫값·미분가능)은 0/1을 쓴다.
@@ -87,6 +88,7 @@ _TEMPLATE_META: dict[CountTemplateKind, tuple[str, str]] = {
     "congruent_by_ratio": ("J0301", "GEOM-SIMILAR-CONGRUENT"),
     "dot_product_scalar": ("H:12기하03-03", "VEC-DOT-PRODUCT"),
     "inequality_direction": ("J0211", "INEQ-SIGN-FLIP"),
+    "root_loss_count": ("J0220", "ROOT-LOSS-DIVIDE"),
 }
 
 
@@ -139,11 +141,7 @@ def _build_real_root_count_pool() -> tuple[_CountItem, ...]:
                     ),
                     answer_explanation=(
                         f"판별식 D = {b}^2 - 4·{c} = {disc} 이므로 "
-                        + (
-                            "중근을 가져 서로 다른 실근은 1개"
-                            if disc == 0
-                            else "실근이 없다(0개)"
-                        )
+                        + ("중근을 가져 서로 다른 실근은 1개" if disc == 0 else "실근이 없다(0개)")
                         + ". 판별식을 무시하고 늘 2근이라 답하면 틀린다."
                     ),
                     difficulty=_difficulty(b + c),
@@ -651,6 +649,44 @@ def _build_inequality_direction_pool() -> tuple[_CountItem, ...]:
     return tuple(pool)
 
 
+def _build_root_loss_count_pool() -> tuple[_CountItem, ...]:
+    """ax²=bx 형태 방정식의 서로 다른 실근 개수 뼈대 풀 — 양변 x 나눗셈 근 손실(오개념 정확 표적).
+
+    ax²=bx는 이항해 x(ax-b)=0으로 인수분해하면 x=0·x=b/a 두 실근을 가진다(b≥1이라 서로 다름). 정답
+    2·오개념 오답 1. "양변을 x로 나눠 x=b/a만"이라는 오개념(root-loss-by-dividing)은 x=0을 잃어 1로
+    답해 fail. conditions는 ax²-bx=0 방정식이라 `verify_real_root_count`(kind=root_loss_count)가 근
+    개수로 검증한다. (a,b) 기약쌍만 순회해 monic 정규형 signature 충돌을 원천 차단(b/a 유일).
+    """
+    pool: list[_CountItem] = []
+    seen: set[str] = set()
+    for a in range(1, 6):
+        for b in range(1, 10):
+            if gcd(a, b) != 1:
+                continue  # 기약쌍만 — 정규형 x²-(b/a)x signature 유일(dedup 충돌 0).
+            conditions = f"{a}*x**2 - {b}*x = 0"
+            if conditions in seen:
+                continue
+            seen.add(conditions)
+            lhs = f"{a}x^2" if a > 1 else "x^2"
+            rhs = f"{b}x" if b > 1 else "x"
+            pool.append(
+                _CountItem(
+                    conditions=conditions,
+                    answer_kind="root_loss_count",
+                    answer_str="2",
+                    misc_str="1",
+                    question_text=(f"방정식 {lhs} = {rhs} 의 서로 다른 실근의 개수를 구하시오."),
+                    answer_explanation=(
+                        f"{lhs} = {rhs} 를 이항하면 x({a}x - {b}) = 0 이라 x = 0 과 "
+                        f"x = {b}/{a} 두 실근을 가지므로 2개다. 양변을 x로 나눠 "
+                        "x = b/a 하나만 남기면 x = 0 근을 잃어 틀린다."
+                    ),
+                    difficulty=_difficulty(a + b),
+                )
+            )
+    return tuple(pool)
+
+
 _POOL_FACTORY = {
     "real_root_count": _build_real_root_count_pool,
     "extremum_count": _build_extremum_count_pool,
@@ -666,6 +702,7 @@ _POOL_FACTORY = {
     "congruent_by_ratio": _build_congruent_by_ratio_pool,
     "dot_product_scalar": _build_dot_product_scalar_pool,
     "inequality_direction": _build_inequality_direction_pool,
+    "root_loss_count": _build_root_loss_count_pool,
 }
 
 
@@ -696,9 +733,7 @@ class ConceptualCountMCSkeletonGenerator:
                 "is_one_to_one/geometric_convergence)"
             )
         if not distractor_codes:
-            raise ValueError(
-                "distractor_codes 주입 누락 — 오개념 오답 태깅용 id가 필요하다."
-            )
+            raise ValueError("distractor_codes 주입 누락 — 오개념 오답 태깅용 id가 필요하다.")
         self._misconception_id, self._op_code = next(iter(distractor_codes.values()))
         self._template: CountTemplateKind = template
         self._pool = _POOL_FACTORY[template]()
@@ -724,9 +759,7 @@ class ConceptualCountMCSkeletonGenerator:
             item = self._pool[self._index]
             self._index += 1
             if self._skip is not None:
-                signature = canonical_signature(
-                    item.conditions, f"kind:{item.answer_kind}"
-                )
+                signature = canonical_signature(item.conditions, f"kind:{item.answer_kind}")
                 if signature is not None and signature in self._skip:
                     continue
             return self._assemble(spec, item)
@@ -786,9 +819,7 @@ class ConceptualCountMCSkeletonGenerator:
             concept_tags=list(self._concept_tags),
         )
 
-    def _stable_slug(
-        self, question_text: str, answer: str, codes: Sequence[str]
-    ) -> str:
+    def _stable_slug(self, question_text: str, answer: str, codes: Sequence[str]) -> str:
         """결정론 안정 slug — 내용 해시(멱등 upsert 키)."""
         payload = "|".join([question_text, answer, ",".join(sorted(codes))])
         digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:12]

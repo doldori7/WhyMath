@@ -63,11 +63,13 @@ class TestDeriveKebabStandards:
         assert len(derived) <= 34
 
     def test_problem_counts_evidence(self) -> None:
-        # 증거량(문항 수) — well-evidenced kebab은 하한 20 이상·thin(root-loss)은 1.
+        # 증거량(문항 수) — well-evidenced kebab은 하한 20 이상. root-loss는 증거 보강(24문항
+        # 밴드)으로 thin(1) → well-evidenced(≥20) 승격됨(2026-07-12).
         counts = derive_kebab_problem_counts(_all_problem_records())  # type: ignore[arg-type]
         assert counts["factor-sign-flip"] >= 20
         assert counts["opposite-root-selected"] >= 20
-        assert counts["root-loss-by-dividing"] == 1  # thin — 자동 거부 제외 대상
+        assert counts["root-loss-by-dividing"] >= 20  # 증거 보강 후(과거 thin 1)
+        assert counts.get("not-a-built-kebab-sentinel", 0) == 0  # 미등장 kebab은 증거 없음
 
 
 class TestMachineRejectable:
