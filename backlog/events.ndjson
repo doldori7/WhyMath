@@ -40,3 +40,5 @@
 {"ts": "2026-07-12T13:36:59", "actor": "claude/recommended-tasks-kopmf0", "action": "start", "id": "S2-08-genpipeline-defect-fix", "session": "claude/recommended-tasks-kopmf0"}
 {"ts": "2026-07-12T23:49:41", "actor": "claude/recommended-tasks-kopmf0", "action": "done", "id": "S2-08-genpipeline-defect-fix", "artifacts": ["11026ac"]}
 {"ts": "2026-07-13T04:22:24", "actor": "claude/recommended-tasks-kopmf0", "action": "start", "id": "ARCH-06-playbook-audit", "session": "claude/recommended-tasks-kopmf0"}
+{"ts": "2026-07-13T04:29:57", "actor": "claude/recommended-tasks-kopmf0", "action": "add", "id": "S2-10-crosswalk-ledger-hygiene"}
+{"ts": "2026-07-13T04:29:58", "actor": "claude/recommended-tasks-kopmf0", "action": "add", "id": "ARCH-07-playbook-audit"}

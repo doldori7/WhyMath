@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S2-10-crosswalk-ledger-hygiene
+title: "crosswalk 대장 동기화 위생 — 게이트 evidence 요건 명문화·적재가능 corpus 커밋 시 대장 동기 이동 규약·stale 주석(58→64) 정리"
+track: infra-debt
+stage: S2
+subject: math
+layer: docs
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "crosswalk_gate_contract.md에 대장 동기 이동 규약 + clear evidence 요건(_provenance signatures·진위 확인) 추가"
+  - test_approved_crosslinks_corpus.py stale 주석 64 기준 정리
+artifacts: []
+session: null
+notes: "ARCH-06 감사 발견(§3 대장 비정합·minor drift) — 게이트 clear 자체는 kiki(G-crosswalk-approval 기존 추적). arch_audit_2026-07-13_r6.md"
+updated: 2026-07-13
