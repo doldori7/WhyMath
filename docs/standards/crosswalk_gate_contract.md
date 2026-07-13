@@ -94,6 +94,23 @@ pending 후보를 **자율 거부**할 수 있다(`crosslink_standard_signal.mac
 shadow 측정 → canary/full 노출 플립(사람) → canonical M-id 리포트 노출
 ```
 
+## 대장 동기화 (backlog 게이트 `G-crosswalk-approval`)
+
+> 배경: 6회차 아키텍처 감사(`arch_audit_2026-07-13_r6.md` §3)가 발견한 대장 비정합 —
+> 사람 서명된 적재 가능 corpus가 커밋됐는데 backlog 게이트는 pending·evidence:null로 남았다.
+> 코드 게이트(load_gate)와 backlog 대장이 따로 놀면 "대기 중"의 의미가 흐려진다.
+
+- **동기 이동 규약**: 적재 가능 crosswalk corpus(`data/corpus/misconception_crosslinks_v1/`)에
+  행을 추가·승격하는 커밋은 **같은 PR에서** backlog 게이트 대장을 동기 이동해야 한다 —
+  ⑴ 전량 승인 완료면 `backlog.py gates clear G-crosswalk-approval --evidence ...`(kiki 행동),
+  ⑵ 부분 진행이면 게이트 `notes`에 현재 라이브 건수·서명 근거 위치를 갱신.
+  대장이 실태를 뒤따라가지 못하는 커밋은 감사 대상이다.
+- **clear evidence 요건**: `G-crosswalk-approval` clear 시 evidence는 다음을 포함해야 한다 —
+  ⑴ `data/corpus/misconception_crosslinks_v1/_provenance.json`의 `signatures[]` 블록 참조
+  ⑵ 서명 당사자(Kiki)의 **진위 확인**(서명 stamp가 본인 승인임을 확인하는 명시 문구).
+  본 계약이 스스로 인정하듯(§적재 규칙 한계) 서명 위조는 도구가 탐지할 수 없으므로,
+  진위 확인은 게이트 clear의 사람 몫이다.
+
 ---
 
-**버전**: v1 (Phase 4b-1·2026-07-08) · 코드 정본 `crosslink_gate.py` · 동결 `test_crosslink_gate_contract.py`
+**버전**: v1.1 (대장 동기화 § 추가 — S2-10·2026-07-13) · v1 (Phase 4b-1·2026-07-08) · 코드 정본 `crosslink_gate.py` · 동결 `test_crosslink_gate_contract.py`
