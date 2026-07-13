@@ -167,6 +167,10 @@ class ProblemVerifyMeta:
     answer_map: dict[str, str]
     solution_steps: list[str] | None = None
     answer_selection: str | None = None
+    answer_aggregate: str | None = None
+    """S2 킬러 — 근 집계 검증 종류(sum/product). 답이 근이 아니라 근들의 합/곱인 킬러 문항."""
+    answer_kind: str | None = None
+    """개념형 — 개수/판정 검증 종류(개수·일대일·수렴·극한=함숫값·미분가능). 답이 값이 아닌 문항."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -297,11 +301,38 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
     steps = [str(s) for s in steps_raw] if isinstance(steps_raw, list) else None
     sel_raw = verify_raw.get("answer_selection")
     selection = sel_raw if sel_raw in ("largest", "smallest", "unique") else None
+    agg_raw = verify_raw.get("answer_aggregate")
+    aggregate = agg_raw if agg_raw in ("sum", "product") else None
+    kind_raw = verify_raw.get("answer_kind")
+    kind = (
+        kind_raw
+        if kind_raw
+        in (
+            "real_root_count",
+            "extremum_count",
+            "is_one_to_one",
+            "geometric_convergence",
+            "limit_equals_value",
+            "is_differentiable",
+            "series_converges",
+            "excluded_point_count",
+            "mean_equals_median",
+            "events_independent",
+            "conditional_equal",
+            "congruent_by_ratio",
+            "dot_product_scalar",
+            "inequality_direction",
+            "root_loss_count",
+        )
+        else None
+    )
     return ProblemVerifyMeta(
         conditions=conditions,
         answer_map=answer_map,
         solution_steps=steps,
         answer_selection=selection,
+        answer_aggregate=aggregate,
+        answer_kind=kind,
     )
 
 
@@ -453,7 +484,9 @@ class ProblemBankStore:
         import sqlalchemy as sa
         from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-        from whymath_backend.db.models.concept import ProblemConcept as ProblemConceptORM
+        from whymath_backend.db.models.concept import (
+            ProblemConcept as ProblemConceptORM,
+        )
         from whymath_backend.db.models.problem import Problem as ProblemORM
 
         # ① slug 기준 dedup(마지막 우선) — 단일 배치 ON CONFLICT 중복행 오류 방지.

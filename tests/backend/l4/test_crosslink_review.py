@@ -316,20 +316,79 @@ _EXTREMUM_MC_DIRECT: dict[str, set[tuple[str, float]]] = {
     "extremum-value-vs-point-confused": {("M0865", 0.9)},
 }
 
+# 843 확장 트랜치1 — 신규 탐지 kebab 6종(기초 계산형)의 직접 대응 M-id를 pending 후보로 추가.
+# 같은 화이트리스트 계약(전행 pending·미서명·test_real_queue_all_pending). 그 밖의 새 직접매핑 차단.
+_TRANCHE1_DIRECT: dict[str, set[tuple[str, float]]] = {
+    "fraction-addition-naive": {("M0004", 0.95)},
+    "negative-times-negative": {("M0001", 0.95)},
+    "subtract-negative-sign": {("M0002", 0.95)},
+    "absolute-value-keeps-sign": {("M0010", 0.95)},
+    "sqrt-distributes-over-sum": {("M0008", 0.95)},
+    "difference-of-squares-confused": {("M0121", 0.9)},
+}
+
+# 843 확장 트랜치2 — 거듭제곱·분배·부호 계산형 6종(같은 화이트리스트 계약·전행 pending).
+_TRANCHE2_DIRECT: dict[str, set[tuple[str, float]]] = {
+    "exponent-product-multiplies": {("M0006", 0.95)},
+    "power-of-power-adds": {("M0135", 0.95)},
+    "negative-square-precedence": {("M0009", 0.95)},
+    "distribute-first-term-only": {("M0017", 0.95)},
+    "negative-distribute-sign": {("M0018", 0.95)},
+    "square-of-difference-no-cross": {("M0020", 0.95)},
+}
+
+# 843 확장 트랜치3 — 중점·비례·부호·동류항·완전제곱·켤레 계산형 6종(같은 화이트리스트 계약).
+_TRANCHE3_DIRECT: dict[str, set[tuple[str, float]]] = {
+    "midpoint-sum-only": {("M0066", 0.95)},
+    "scale-area-linear": {("M0013", 0.95)},
+    "negative-even-power-sign": {("M0201", 0.95)},
+    "combine-unlike-terms": {("M0016", 0.95)},
+    "complete-square-naive": {("M0119", 0.95)},
+    "conjugate-product-sum": {("M0206", 0.95)},
+}
+
+# 843 확장 트랜치4 — 이항·GCD/LCM·소수·대분수·나머지정리·근과계수 계산형 6종(같은 화이트리스트).
+_TRANCHE4_DIRECT: dict[str, set[tuple[str, float]]] = {
+    "transpose-no-sign-change": {("M0021", 0.95)},
+    "gcd-lcm-confused": {("M0014", 0.95)},
+    "decimal-mult-place": {("M0103", 0.95)},
+    "mixed-number-mult-whole": {("M0102", 0.95)},
+    "remainder-theorem-sign": {("M0133", 0.95)},
+    "vieta-sign-error": {("M0123", 0.95)},
+}
+_TRANCHE5_DIRECT: dict[str, set[tuple[str, float]]] = {
+    "trapezoid-area-no-half": {("M0161", 0.95)},
+    "scale-volume-linear": {("M0056", 0.95)},
+    "cone-volume-no-third": {("M0063", 0.95)},
+    "circle-area-circumference": {("M0053", 0.95)},
+    "combination-no-denominator": {("M0087", 0.95)},
+    "same-item-permutation-no-divide": {("M0190", 0.95)},
+}
+
 
 def test_real_queue_direct_top_confidences_match_draft(
     real_rows: list[dict[str, Any]],
 ) -> None:
-    # ④ non-null 직접매핑 = 초안 최상위 ∪ 검수 대안(#392) ∪ S2-p ∪ 극값 MC 저작 — 그 외 차단.
+    # ④ non-null 직접매핑 = 초안 ∪ 검수 ∪ S2-p ∪ 극값 MC ∪ 843 트랜치1~5 — 그 외 차단.
     expected: dict[str, set[tuple[str, float]]] = {
         k: set(_DRAFT_DIRECT_TOPS.get(k, set()))
         | set(_REVIEWED_DIRECT_ALTS.get(k, set()))
         | set(_S2P_DIRECT.get(k, set()))
         | set(_EXTREMUM_MC_DIRECT.get(k, set()))
+        | set(_TRANCHE1_DIRECT.get(k, set()))
+        | set(_TRANCHE2_DIRECT.get(k, set()))
+        | set(_TRANCHE3_DIRECT.get(k, set()))
+        | set(_TRANCHE4_DIRECT.get(k, set()))
+        | set(_TRANCHE5_DIRECT.get(k, set()))
         for k in set(_DRAFT_DIRECT_TOPS)
         | set(_REVIEWED_DIRECT_ALTS)
         | set(_S2P_DIRECT)
         | set(_EXTREMUM_MC_DIRECT)
+        | set(_TRANCHE1_DIRECT)
+        | set(_TRANCHE2_DIRECT)
+        | set(_TRANCHE3_DIRECT)
+        | set(_TRANCHE4_DIRECT)
+        | set(_TRANCHE5_DIRECT)
     }
     actual: dict[str, set[tuple[str, float]]] = {}
     for row in real_rows:

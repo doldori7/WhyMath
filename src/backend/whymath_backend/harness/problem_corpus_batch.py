@@ -276,6 +276,10 @@ def _record_to_json(record: ProblemBankRecord) -> dict[str, Any]:
         verify["solution_steps"] = list(record.verify.solution_steps)
     if record.verify.answer_selection is not None:
         verify["answer_selection"] = record.verify.answer_selection
+    if record.verify.answer_aggregate is not None:
+        verify["answer_aggregate"] = record.verify.answer_aggregate
+    if record.verify.answer_kind is not None:
+        verify["answer_kind"] = record.verify.answer_kind
     data["verify"] = verify
     return data
 

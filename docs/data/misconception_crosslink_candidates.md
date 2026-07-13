@@ -1,13 +1,14 @@
 # 오개념 Crosswalk 후보 매핑 — 검수용 초안 (DRAFT)
 
-> ⚠️ **상태: 사람 검수 전 초안 · 라이브 테이블 미적재.** 이 문서는 kebab-id 30종 → M-id 후보 매핑
-> *제안*이다. **승인 전까지 `misconception_crosslink` 테이블에 적재하지 않는다**(틀린 매핑 = 오도된
-> 학부모/학생 리포트·의사결정 우선순위 #1·#3). 마크다운이라 로더(`crosslink_loader.py`·JSON 입력)가
-> *직접 읽을 수 없는* 형태로 둔 것은 의도된 안전장치다. 검수 후 승인분만 별도 JSON으로 옮겨 적재한다.
+> ⚠️ **상태: 사람 검수 전 초안 · 라이브 테이블 미적재.** 이 문서는 kebab-id 전종(v0.1=30종, 현
+> 카탈로그 34종·수는 `CATALOG_BY_ID` 정본) → M-id 후보 매핑 *제안*이다. **승인 전까지
+> `misconception_crosslink` 테이블에 적재하지 않는다**(틀린 매핑 = 오도된 학부모/학생 리포트·
+> 의사결정 우선순위 #1·#3). 마크다운이라 로더(`crosslink_loader.py`·JSON 입력)가 *직접 읽을 수
+> 없는* 형태로 둔 것은 의도된 안전장치다. 검수 후 승인분만 별도 JSON으로 옮겨 적재한다.
 >
 > **작성**: 2026-06-30 · **계층**: L1 · **상위**: `math_dsl_remediation_design.md` §1·`misconception_crosslink_v1`(설계 문서)
-> **산출 근거**: kebab 카탈로그(`l4/misconception/catalog.py` 30종) × M-id 코퍼스
-> (`data/corpus/misconceptions_v1/misconceptions.json` 839종) 내용 일치 분석.
+> **산출 근거**: kebab 카탈로그(`l4/misconception/catalog.py`·현 34종) × M-id 코퍼스
+> (`data/corpus/misconceptions_v1/misconceptions.json`·현 843종) 내용 일치 분석.
 
 ---
 
@@ -18,7 +19,7 @@
 2. **자동 채택 금지** — 아래 confidence·근거는 *검수 보조*다. 직접매핑 승격은 사람 판단으로만.
    confidence < 0.6(부분/개념겹침)은 "인접 오개념"이라 **직접매핑으로 승격 금지**.
 3. **코퍼스 범위(정직)** — school_level 분포: 고등 66.4%(557) · 중등 19.0%(159) · 초등 14.7%(123).
-   kebab(고등 대수·미적분·삼각·벡터 중심)과 **실질 겹침 양호** → 30종 전부 후보 매칭(후보 없음 0).
+   kebab(고등 대수·미적분·삼각·벡터 중심)과 **실질 겹침 양호** → 전종 후보 매칭(후보 없음 0).
 
 ## 1. 매핑에 쓴 신호
 
@@ -103,10 +104,14 @@ D=직접매핑 · P=부분매핑 · O=개념겹침. conf=보수적 신뢰도. �
   조인·81행 결정 체크리스트 통합(게이트 `G-crosswalk-approval` 검수용·read-only 준비물).
 - 골격: `schema/misconception_crosslink.py`·`db/models/misconception_crosslink.py`·
   `l1/misconception/crosslink_loader.py`·`crosslink_resolve.py`·alembic `e2f3a4b5c6d7`(PR #347).
-- 원천: `l4/misconception/catalog.py`(kebab 30)·`data/corpus/misconceptions_v1/misconceptions.json`(M-id 839).
+- 원천: `l4/misconception/catalog.py`(kebab·현 34)·`data/corpus/misconceptions_v1/misconceptions.json`(M-id·현 843).
 - 원칙: `CLAUDE.md`(우선순위 #1 학생 안전·#3 교수학 정확성)·`math_dsl_remediation_design.md` §1.
 - 변경 이력: v0.1 초안 (2026-06-30 — 후보 제안·검수 전·미적재) · v0.2 (2026-07-06 — S2-p kebab 2종
   `opposite-root-selected`·`factor-sign-flip` 후보 행 추가: 둘 다 직접 후보 부재·최근접 개념겹침만·
   신규 M-id 저작 후보, period-of-scaled-sine 선례 패턴) · v0.3 (2026-07-06 — S2-p 후속: 두 kebab의
   직접 대응 M-id를 신규 저작(M0862·M0863)해 `misconceptions_v1`에 추가(839→841). 검수 큐에
   직접매핑 행(conf 0.90) 추가·기존 개념겹침 행은 최근접 대안으로 유지·전행 pending(미승인)).
+  · **v0.4 (2026-07-09 — 첫 승인분 적재)**: Kiki가 2026-07-08 직접 승인한 극값 오개념 2건
+  (`extremum-max-min-confused`→M0864·`extremum-value-vs-point-confused`→M0865·직접매핑·conf 0.9)을
+  promote 산출해 `data/corpus/misconception_crosslinks_v1/crosslinks.json`으로 커밋(첫 라이브 매핑).
+  검수 큐 템플릿은 전행 pending 무변경(봉인 유지·AI 자기승인 아님). 나머지 79행 여전히 검수 대기.

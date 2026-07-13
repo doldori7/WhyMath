@@ -30,18 +30,38 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from enum import Enum
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.l3.equivalent.retag import TagAuditor
 from whymath_backend.l3.pregenerate.validator import (
     SeedValidator,
     default_seed_validator,
     validate_response,
 )
-from whymath_backend.l3.verify_answer import verify_answer, verify_root_selection
+from whymath_backend.l3.verify_answer import (
+    AnswerVerdict,
+    classify_solvability,
+    verify_answer,
+    verify_conditional_equal,
+    verify_congruent_by_ratio,
+    verify_dot_product_scalar,
+    verify_events_independent,
+    verify_extremum_count,
+    verify_geometric_convergence,
+    verify_inequality_direction,
+    verify_is_differentiable,
+    verify_is_one_to_one,
+    verify_limit_equals_value,
+    verify_mean_equals_median,
+    verify_real_root_count,
+    verify_root_aggregate,
+    verify_root_selection,
+    verify_series_converges,
+)
 from whymath_backend.l3.verify_solution import verify_solution
 from whymath_backend.schema.enums import (
     AnswerFormat,
@@ -90,6 +110,29 @@ _ACCEPTED_GENERATION_TYPES: frozenset[GenerationType] = frozenset(
 _ACCEPTED_GENERATION_VALUES: frozenset[str] = frozenset(
     str(g.value) for g in _ACCEPTED_GENERATION_TYPES
 )
+
+# 개념형 검증기 디스패치 — answer_kind → SymPy 독립 검증 프리미티브. 답이 값이 아니라 개수/판정인
+# 문항(실근·극값 개수·일대일·등비급수 수렴)을 게이트가 이 표로 분기해 검증한다(축 확장은 여기 등록).
+_CONCEPTUAL_VERIFIERS: dict[str, Callable[[str | Sequence[str], str], AnswerVerdict]] = {
+    "real_root_count": verify_real_root_count,
+    "extremum_count": verify_extremum_count,
+    "is_one_to_one": verify_is_one_to_one,
+    "geometric_convergence": verify_geometric_convergence,
+    "limit_equals_value": verify_limit_equals_value,
+    "is_differentiable": verify_is_differentiable,
+    "series_converges": verify_series_converges,
+    # division-by-zero: 정의역 제외점(분모=0 실근) 개수 — 근 개수 검증기를 그대로 재사용.
+    "excluded_point_count": verify_real_root_count,
+    # Tier C 계산가능(통계·확률·기하·벡터 판정) — 도메인 프리미티브로 결정론 검증.
+    "mean_equals_median": verify_mean_equals_median,
+    "events_independent": verify_events_independent,
+    "conditional_equal": verify_conditional_equal,
+    "congruent_by_ratio": verify_congruent_by_ratio,
+    "dot_product_scalar": verify_dot_product_scalar,
+    "inequality_direction": verify_inequality_direction,
+    # root-loss-by-dividing: ax²=bx 양변 x 나눗셈 근 손실 — 근 개수(정답 2·손실 1) 검증기 재사용.
+    "root_loss_count": verify_real_root_count,
+}
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -143,7 +186,7 @@ class AcceptanceVerdict(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    accepted: bool = Field(description="4종 게이트 모두 통과 시에만 True(코퍼스 저장 허용).")
+    accepted: bool = Field(description="게이트 모두 통과 시에만 True(코퍼스 저장 허용).")
     equivalence: EquivalenceVerdict = Field(description="동등성 분류(3등급).")
     equivalence_score: float = Field(ge=0.0, le=1.0, description="동등성 가중 점수 0~1.")
     copyright_ok: bool = Field(description="저작권 게이트 — 값 확인 통과 여부.")
@@ -151,6 +194,13 @@ class AcceptanceVerdict(BaseModel):
         description="정확성 게이트 — Tier1+Tier2 결합 판정.",
     )
     hygiene_ok: bool = Field(description="위생 게이트 — 본문 슬립 검출 없음 여부.")
+    consistency_ok: bool = Field(
+        default=True,
+        description=(
+            "발문-수식 정합 감사(초인간 검증 S3·독립 주체) — 감사기 미주입 시 True(기존 동작 "
+            "비트동일). 발문의 수식/선택 문구가 검산 조건과 확정적으로 어긋나면만 False."
+        ),
+    )
     reasons: list[str] = Field(
         default_factory=list,
         description="거부/검수 사유(사람 가독·학생 비노출·조용한 실패 금지).",
@@ -207,8 +257,15 @@ def _evaluate_verification(
     solution_steps: Sequence[str] | None,
     solution_step_types: Sequence[StepType | None] | None,
     answer_selection: str | None,
+    answer_aggregate: str | None = None,
+    claimed_answer: str | None = None,
+    answer_kind: str | None = None,
 ) -> tuple[Literal["verified", "failed", "unverified"], list[str]]:
-    """정확성 게이트 — Tier1(답 검산) + (있으면) Tier2(단계 동치) + 근 선택(S2-i) 결합.
+    """정확성 게이트 — 존재성/유일성 + Tier1(답 검산) + (있으면) Tier2(단계 동치) + 근 선택(S2-i).
+
+    존재성/유일성 축(문항 품질 ②③·`classify_solvability`): 답 검산 이전에 방정식 *자체*가 성립
+    문제인지 본다 — 항등식(무한해)·해 없음이면 어떤 답을 줘도 malformed이라 **failed**(명시 사유).
+    이 축이 없으면 항등식이 Tier1 pass + unique 프로브 unverifiable로 verified 통과하는 구멍이 있다.
 
     Tier1/Tier2 결합 규칙(whs/verdict §4 미러·l3→whs 역참조 회피):
       - **failed**: Tier1 fail *또는* 단계 has_incorrect=True(틀린 과정은 답 무관 차단).
@@ -227,6 +284,50 @@ def _evaluate_verification(
         통과시키는 구멍 차단. 단근·파라미터·연립 등 유일성 판정 밖은 그대로 둔다(회귀 0).
     """
     reasons: list[str] = []
+
+    # ★ S2 킬러 — 근 집계(합/곱) 문항: 답이 f=0의 근이 아니라 근들의 집계값이라 Tier1
+    #    (답이 근인가) 경로가 부적합하다. verify_root_aggregate로 분기해 판정하고 즉시 반환.
+    if answer_aggregate in ("sum", "product"):
+        if claimed_answer is None:
+            reasons.append("정확성 미검증 — 근 집계 문항인데 주장값(answer) 없음.")
+            return "unverified", reasons
+        agg = verify_root_aggregate(conditions, claimed_answer, answer_aggregate)  # type: ignore[arg-type]
+        if agg.state == "pass":
+            return "verified", reasons
+        if agg.state == "fail":
+            reasons.append(f"정확성 실패 — 근 {answer_aggregate} 불일치: {agg.reason}")
+            return "failed", reasons
+        reasons.append(f"정확성 미검증 — 근 {answer_aggregate} 확인 불가: {agg.reason}")
+        return "unverified", reasons
+
+    # ★ 개념형 문항 — 답이 값이 아니라 개수/판정(실근·극값 개수·일대일·등비급수 수렴)이라 SymPy로
+    #    독립 계산해 검증한다. 오개념의 틀린 답(판별식 무시·임계점=극값·역함수 오인·늘 수렴)은
+    #    여기서 failed로 걸린다.
+    if answer_kind in _CONCEPTUAL_VERIFIERS:
+        if claimed_answer is None:
+            reasons.append("정확성 미검증 — 개념형 문항인데 주장값(answer) 없음.")
+            return "unverified", reasons
+        cnt = _CONCEPTUAL_VERIFIERS[answer_kind](conditions, claimed_answer)
+        if cnt.state == "pass":
+            return "verified", reasons
+        if cnt.state == "fail":
+            reasons.append(f"정확성 실패 — {answer_kind} 불일치: {cnt.reason}")
+            return "failed", reasons
+        reasons.append(f"정확성 미검증 — {answer_kind} 확인 불가: {cnt.reason}")
+        return "unverified", reasons
+
+    # ★ 존재성·유일성 축(문항 품질 ②③·Kiki #1) — 답과 무관하게 방정식 *자체*가 성립 문제인가.
+    #    항등식(무한해)·해 없음은 어떤 답을 줘도 단일 정답 문항으로 malformed → 즉시 failed(명시
+    #    사유). 다근(선택 미declared)은 아래 근 선택 강등이 이어받고, unique/undecidable은 통과해
+    #    기존 Tier1/Tier2 경로가 판정한다(회귀 0 — 정상 문항은 unique/multiple/undecidable뿐).
+    solv = classify_solvability(conditions)
+    if solv.state == "identity":
+        reasons.append(f"정확성 실패 — 무한해(항등식): {solv.reason}")
+        return "failed", reasons
+    if solv.state == "no_solution":
+        reasons.append(f"정확성 실패 — 해 없음: {solv.reason}")
+        return "failed", reasons
+
     answer_verdict = verify_answer(conditions, answer_map)
     tier1 = answer_verdict.state
 
@@ -372,7 +473,10 @@ def evaluate_equivalent_candidate(
     solution_steps: Sequence[str] | None = None,
     solution_step_types: Sequence[StepType | None] | None = None,
     answer_selection: str | None = None,
+    answer_aggregate: str | None = None,
+    answer_kind: str | None = None,
     validator: SeedValidator | None = None,
+    tag_auditor: TagAuditor | None = None,
     difficulty_tol: float = 0.5,
 ) -> AcceptanceVerdict:
     """자체생성 동등문제 후보를 4종 게이트로 평가 — 순수·결정론·DB 0·LLM 0.
@@ -407,7 +511,14 @@ def evaluate_equivalent_candidate(
 
     # ② 정확성 게이트 (Tier1 + Tier2 + 근 선택 S2-i 결합).
     verification, verification_reasons = _evaluate_verification(
-        conditions, answer_map, solution_steps, solution_step_types, answer_selection
+        conditions,
+        answer_map,
+        solution_steps,
+        solution_step_types,
+        answer_selection,
+        answer_aggregate,
+        candidate.answer,
+        answer_kind,
     )
     reasons.extend(verification_reasons)
 
@@ -441,8 +552,21 @@ def evaluate_equivalent_candidate(
             f"난이도 {s_difficulty:.2f}·답형태 {s_answer_format:.2f})."
         )
 
+    # ⑤ 발문-수식 정합 감사 (초인간 검증 S3·독립 주체). 감사기 미주입이면 True(기존 동작
+    #    비트동일 — 자기신고 태그의 자기 채점을 독립 검증기로 교차한다).
+    consistency_ok = True
+    if tag_auditor is not None:
+        audit = tag_auditor.audit(candidate, answer_selection=answer_selection)
+        consistency_ok = audit.consistency_ok
+        if not consistency_ok and audit.reason is not None:
+            reasons.append(f"발문-수식 정합 감사 실패 — {audit.reason}")
+
     accepted = (
-        copyright_ok and verification == "verified" and hygiene_ok and equivalence == "동치후보"
+        copyright_ok
+        and verification == "verified"
+        and hygiene_ok
+        and equivalence == "동치후보"
+        and consistency_ok
     )
     return AcceptanceVerdict(
         accepted=accepted,
@@ -451,5 +575,6 @@ def evaluate_equivalent_candidate(
         copyright_ok=copyright_ok,
         verification=verification,
         hygiene_ok=hygiene_ok,
+        consistency_ok=consistency_ok,
         reasons=reasons,
     )

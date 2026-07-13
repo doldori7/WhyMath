@@ -342,3 +342,49 @@ class TestAcceptedTruthTable:
         """거부 시 사유가 조용히 사라지지 않고 reasons에 기록된다."""
         verdict = _evaluate(answer_map={"x": "4"})
         assert len(verdict.reasons) >= 1
+
+
+# ──────────────────────────────────────────────────────────────────────
+# 존재성·유일성 축(문항 품질 ②③·Kiki #1) — 방정식 자체가 성립 문제인가.
+# ──────────────────────────────────────────────────────────────────────
+class TestSolvabilityAxis:
+    def test_identity_equation_is_failed_not_accepted(self) -> None:
+        """무한해(항등식)는 어떤 답을 줘도 malformed → failed(과거엔 verified로 통과하던 구멍).
+
+        2*(x+1)=2*x+2 는 residual이 항등적 0이라 Tier1이 pass하고 unique 프로브는 실근 0으로
+        unverifiable을 돌려 강등되지 않았다 — 존재성 축이 그 구멍을 닫는다.
+        """
+        verdict = _evaluate(
+            conditions="2*(x+1) = 2*x + 2", answer_map={"x": "3"}, answer_selection=None
+        )
+        assert verdict.verification == "failed"
+        assert verdict.accepted is False
+        assert any("무한해" in r for r in verdict.reasons)
+
+    def test_no_solution_equation_is_failed_with_explicit_reason(self) -> None:
+        """해 없음(0 아닌 상수 잔차)은 명시 사유로 failed(과거엔 모호한 Tier1 fail로만 걸림)."""
+        verdict = _evaluate(
+            conditions="x + 1 = x + 2", answer_map={"x": "3"}, answer_selection=None
+        )
+        assert verdict.verification == "failed"
+        assert verdict.accepted is False
+        assert any("해 없음" in r for r in verdict.reasons)
+
+    def test_no_real_root_equation_is_failed(self) -> None:
+        """실근 없는 다항(x^2+1=0)은 실답 스코프에서 해 없음 → failed."""
+        verdict = _evaluate(conditions="x**2 + 1 = 0", answer_map={"x": "0"}, answer_selection=None)
+        assert verdict.verification == "failed"
+        assert verdict.accepted is False
+
+    def test_unique_root_without_selection_still_verified(self) -> None:
+        """유일 실근 문항은 근 선택 없이도 verified(존재성 축이 과잉거부 안 함·회귀 0)."""
+        verdict = _evaluate(conditions="2*x - 6 = 0", answer_map={"x": "3"}, answer_selection=None)
+        assert verdict.verification == "verified"
+        assert verdict.accepted is True
+
+    def test_non_polynomial_is_not_rejected_by_solvability(self) -> None:
+        """비다항(2^x=8)은 존재성 undecidable — 존재성 축이 거짓거부하지 않고 Tier1이 판정한다."""
+        verdict = _evaluate(conditions="2**x = 8", answer_map={"x": "3"}, answer_selection=None)
+        # 존재성 축은 undecidable로 통과시키고 Tier1이 x=3을 검산해 verified.
+        assert verdict.verification == "verified"
+        assert verdict.accepted is True
