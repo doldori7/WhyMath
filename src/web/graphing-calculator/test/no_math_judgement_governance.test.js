@@ -9,8 +9,11 @@
 // (상환 완료) 화이트리스트를 줄이는 방향으로만 이 테스트를 수정한다.
 //
 // 화이트리스트 2건은 QuizMode의 기존 위반(클라 채점 sameGraph·오개념 진단 diagnose·
-// localStorage 점수 저장)이다 — 존치(데모 예외 공식화) vs 리팩터(백엔드 verify 호출)는
-// backlog `ARCH-12-quizmode-grading-decision` (owner: kiki) 결정 대기.
+// localStorage 점수 저장)이다 — **(a) 데모 전용 예외로 공식 존치** (ARCH-12 Kiki 결정
+// 2026-07-13·MEMORY 결정 로그). 근거: QuizMode는 학생 미노출(Flutter 앱 도달 경로 0·
+// 임베드는 spec 주입 렌더만). 강제 트리거: 화이트리스트 파일의 판정 로직이 학생 노출
+// 경로에 진입하는 순간 (b) 백엔드 verify(/v1/verify-answer) 리팩터가 강제된다.
+// 그 전까지 화이트리스트는 2건 동결 — 늘리는 방향의 수정은 금지(신규 유입 red 유지).
 
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
