@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 1
 owner: claude
 depends_on:
@@ -16,5 +16,5 @@ acceptance:
   - 3-tier 검증 통과율 기록
 artifacts: []
 session: null
-notes: ""
-updated: 2026-07-08
+notes: "코퍼스 solution_steps 0/620 — WH-S 핵심(단계별 검증 풀이+PRM 라벨)은 STEPS 생성 필요. 경로 (a)LLM 솔버=Ollama/Phaiakes9 클라우드 도달 불가 (b)결정론 SymPy 단계 솔버 신설=대형 스코프 결정. 사용자 갈림길 대기(A 솔버신설/B ARCH-07 전환). 빈 단계 baseline은 자기답 되먹임 100%라 공허·미산출."
+updated: 2026-07-13
