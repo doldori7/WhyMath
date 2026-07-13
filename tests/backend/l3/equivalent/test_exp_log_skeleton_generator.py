@@ -129,3 +129,21 @@ class TestCrossFamily:
         exp_slugs = {c.problem.slug for c in _drain(ExponentialEquationSkeletonGenerator(), 100)}
         log_slugs = {c.problem.slug for c in _drain(LogarithmicEquationSkeletonGenerator(), 100)}
         assert exp_slugs.isdisjoint(log_slugs)
+
+
+def test_difficulty_one_step_below_quad_factoring() -> None:
+    # 계통 관찰 2 회귀 차단(S2-08): 밑 통일·로그 정의 1스텝은 QUAD-EQ 기초 인수분해(2.0)보다
+    # 쉬워야 한다. 대표 1스텝의 최소값 < 2.0·전건 상한 < 2.5.
+    from whymath_backend.l3.equivalent.difficulty import estimate_difficulty
+
+    quad = estimate_difficulty(root_kind="integer", lead_coefficient=1, max_abs_coefficient=10)
+    assert quad == 2.0
+    exp = [
+        c.problem.difficulty_overall for c in _drain(ExponentialEquationSkeletonGenerator(), 100)
+    ]
+    log = [
+        c.problem.difficulty_overall for c in _drain(LogarithmicEquationSkeletonGenerator(), 100)
+    ]
+    assert exp and log
+    assert min(exp) < quad and min(log) < quad  # type: ignore[type-var]
+    assert max(exp) < 2.5 and max(log) < 2.5  # type: ignore[type-var]

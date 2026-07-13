@@ -143,3 +143,22 @@ class TestCrossFamily:
             c.problem.slug for c in _drain(GeometricSequenceSkeletonGenerator(), _GEO_STANDARD, 500)
         }
         assert arith.isdisjoint(geo)
+
+
+def test_difficulty_one_step_below_quad_factoring() -> None:
+    # 계통 관찰 2 회귀 차단(S2-08): 일반항 직대입 1스텝은 QUAD-EQ 인수분해(2.0)보다 쉬워야 한다.
+    from whymath_backend.l3.equivalent.difficulty import estimate_difficulty
+
+    quad = estimate_difficulty(root_kind="integer", lead_coefficient=1, max_abs_coefficient=10)
+    assert quad == 2.0
+    arith = [
+        c.problem.difficulty_overall
+        for c in _drain(ArithmeticSequenceSkeletonGenerator(), _ARITH_STANDARD, 500)
+    ]
+    geo = [
+        c.problem.difficulty_overall
+        for c in _drain(GeometricSequenceSkeletonGenerator(), _GEO_STANDARD, 500)
+    ]
+    assert arith and geo
+    assert min(arith) < quad and min(geo) < quad  # type: ignore[type-var]
+    assert max(arith) <= 2.1 and max(geo) <= 2.2  # type: ignore[type-var]

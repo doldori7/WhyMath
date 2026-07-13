@@ -117,7 +117,7 @@ _MC_INJECTION: dict[str, tuple[str, str]] = {
 # 극값 MC distractor 주입쌍(삼차 극값 객관식) — 정답 아닌 극값=극대극소 혼동·극점 x좌표=값↔좌표.
 # 키는 CalculusExtremumMCSkeletonGenerator가 기대하는 주입 키(max_min·value_vs_point)와 정합.
 _CALC_MC_INJECTION: dict[str, tuple[str, str]] = {
-    "max_min": ("extremum-max-min-confused", "select-min-for-max"),
+    "max_min": ("extremum-max-min-confused", "select-opposite-extremum"),
     "value_vs_point": ("extremum-value-vs-point-confused", "report-x-coordinate-for-value"),
 }
 

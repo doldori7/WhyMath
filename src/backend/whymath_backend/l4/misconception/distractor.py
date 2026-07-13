@@ -134,8 +134,11 @@ DISTRACTOR_CATALOG: tuple[DistractorOpCode, ...] = (
     ),
     # ── 극값 MC: 삼차 극값 동등문제 객관식 distractor 2종(극댓값/극솟값 값 문제) ──
     DistractorOpCode(
-        id="select-min-for-max",
-        name_kr="극댓값 자리에 극솟값",
+        # 방향 중립(S2-08·계통 관찰 4·표본 25): 이전 id·명칭은 극댓값→극솟값 한 방향만 지칭해,
+        # 극솟값을 묻는데 극댓값을 고른 오류(표본 25)에 붙으면 방향이 반대였다. operation은 이미
+        # 양방향이므로 id·명칭만 중립화한다(반대 극값 선택 = 극대↔극소 양방향 겸용).
+        id="select-opposite-extremum",
+        name_kr="반대 극값 선택(극대↔극소 혼동)",
         domain="미적분",
         operation=(
             "극댓값(극솟값)을 묻는 문항에서 반대 극값인 극솟값(극댓값)을 오답 선지로 만든다 "

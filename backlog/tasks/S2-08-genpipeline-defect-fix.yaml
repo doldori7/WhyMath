@@ -5,14 +5,15 @@ track: math-completion
 stage: S2
 subject: math
 layer: data-pipeline
-status: todo
+status: done
 priority: 1
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "조사 받침 판별 로직 추가·난이도 도메인 앵커 재보정·op-code 방향 중립화 후 첫 배치 deferred 2건(표본 29·30) 재판정 해소"
-artifacts: []
+artifacts:
+  - 11026ac
 session: null
 notes: "ARCH-05 감사 발견 — docs/data/ai_review_first_batch_2026-07.md 계통관찰 1·2·4 + line 159 선행 수정 권고. S2-01 전체 코퍼스(513문) 확장 전 수정해야 동일 지적 대량 반복·L2 IRT 입력 품질 오염 차단"
 updated: 2026-07-12

@@ -34,6 +34,7 @@ from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.equivalent.josa import eul_reul
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,
@@ -81,7 +82,7 @@ def _sum_answer_format(answer: int) -> AnswerFormat:
 # ── 등차수열의 합 Sₙ = n(2a+(n−1)d)/2 ────────────────────────────────────────
 _ARITH_SUM_TEMPLATES: tuple[str, ...] = (
     "첫째항이 {a}, 공차가 {d}인 등차수열의 첫째항부터 제{n}항까지의 합을 구하시오.",
-    "등차수열 {{aₙ}}의 첫째항이 {a}이고 공차가 {d}일 때, 제{n}항까지의 합 S_{n}을 구하시오.",
+    "등차수열 {{aₙ}}의 첫째항이 {a}이고 공차가 {d}일 때, 제{n}항까지의 합 S_{n}{josa} 구하시오.",
     "첫째항 {a}, 공차 {d}인 등차수열에서 처음 {n}개 항의 합을 구하시오.",
 )
 
@@ -107,7 +108,10 @@ class _ArithSumSkeleton:
 
     @property
     def difficulty(self) -> float:
-        difficulty = 3.0
+        # 재보정(S2-08·계통 관찰 2): 합 Sₙ은 공식 대입에 산술 1단(끝항·곱셈)이 더 붙어 순수
+        # 일반항 조회보단 약간 무겁지만 QUAD-EQ(base 2.0) 언저리를 넘지 않는다. base 3.0→1.9로
+        # 내려 QUAD-EQ 이하/근처에 두고 항수·공차·값 크기 가산은 유지한다.
+        difficulty = 1.9
         if self.term >= 10:
             difficulty += 0.2
         if self.diff >= 4:
@@ -188,7 +192,7 @@ class ArithmeticSumSkeletonGenerator:
     ) -> CandidateProblem:
         answer_text = str(skeleton.answer)
         question_text = _ARITH_SUM_TEMPLATES[self._index % len(_ARITH_SUM_TEMPLATES)].format(
-            a=skeleton.first, d=skeleton.diff, n=skeleton.term
+            a=skeleton.first, d=skeleton.diff, n=skeleton.term, josa=eul_reul(str(skeleton.term))
         )
         standard_codes = sorted(spec.achievement_standard_codes)
         slug = _stable_slug(self._slug_prefix, question_text, answer_text, standard_codes)
@@ -237,7 +241,7 @@ class ArithmeticSumSkeletonGenerator:
 # ── 등비수열의 합 Sₙ = a(rⁿ−1)/(r−1) ─────────────────────────────────────────
 _GEO_SUM_TEMPLATES: tuple[str, ...] = (
     "첫째항이 {a}, 공비가 {r}인 등비수열의 첫째항부터 제{n}항까지의 합을 구하시오.",
-    "등비수열 {{aₙ}}의 첫째항이 {a}이고 공비가 {r}일 때, 제{n}항까지의 합 S_{n}을 구하시오.",
+    "등비수열 {{aₙ}}의 첫째항이 {a}이고 공비가 {r}일 때, 제{n}항까지의 합 S_{n}{josa} 구하시오.",
     "첫째항 {a}, 공비 {r}인 등비수열에서 처음 {n}개 항의 합을 구하시오.",
 )
 
@@ -267,7 +271,9 @@ class _GeoSumSkeleton:
 
     @property
     def difficulty(self) -> float:
-        difficulty = 3.2
+        # 재보정(S2-08·계통 관찰 2): 등비합 Sₙ=a(rⁿ−1)/(r−1)은 거듭제곱·나눗셈이 얹혀 등차합보다
+        # 살짝 무겁지만 QUAD-EQ(base 2.0) 언저리다. base 3.2→2.0으로 내리고 크기 가산은 유지한다.
+        difficulty = 2.0
         if self.ratio >= 5:
             difficulty += 0.2
         if self.term >= 6:
@@ -350,7 +356,7 @@ class GeometricSumSkeletonGenerator:
     ) -> CandidateProblem:
         answer_text = str(skeleton.answer)
         question_text = _GEO_SUM_TEMPLATES[self._index % len(_GEO_SUM_TEMPLATES)].format(
-            a=skeleton.first, r=skeleton.ratio, n=skeleton.term
+            a=skeleton.first, r=skeleton.ratio, n=skeleton.term, josa=eul_reul(str(skeleton.term))
         )
         standard_codes = sorted(spec.achievement_standard_codes)
         slug = _stable_slug(self._slug_prefix, question_text, answer_text, standard_codes)

@@ -102,3 +102,19 @@ class TestTrigGenerator:
         a = _drain(TrigonometricValueSkeletonGenerator(), 6)
         b = _drain(TrigonometricValueSkeletonGenerator(), 6)
         assert [c.problem.slug for c in a] == [c.problem.slug for c in b]
+
+
+def test_difficulty_special_angle_low_below_quad() -> None:
+    # 계통 관찰 2·표본 30 회귀 차단(S2-08): 특수각 값 1스텝은 QUAD-EQ(2.0) 미만·기본 특수각은
+    # 저난도(1.3), cos 180°는 재보정 1.5.
+    from whymath_backend.l3.equivalent.difficulty import estimate_difficulty
+
+    quad = estimate_difficulty(root_kind="integer", lead_coefficient=1, max_abs_coefficient=10)
+    assert quad == 2.0
+    cands = _drain(TrigonometricValueSkeletonGenerator(), 100)
+    diffs = [c.problem.difficulty_overall for c in cands]
+    assert diffs
+    assert max(diffs) < quad  # type: ignore[type-var]
+    assert 1.3 in diffs  # 예각 특수각(예 sin 30°) 저난도 기본
+    cos180 = next(c for c in cands if "cos 180°" in (c.problem.question_text or ""))
+    assert cos180.problem.difficulty_overall == 1.5

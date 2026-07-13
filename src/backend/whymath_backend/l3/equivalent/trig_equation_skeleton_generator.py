@@ -72,6 +72,18 @@ _VALUES: tuple[tuple[str, str], ...] = (
 _SELECTIONS: tuple[str, ...] = ("smallest", "largest")
 _DOMAIN = "0° ≤ x < 360°"
 
+# 값 라벨별 을/를 — 분수·무리수는 한국어로 "분모분의 분자"·"루트 n"으로 읽어 *분자(마지막 음절)*가
+# 받침을 지배한다(josa 헬퍼의 문자기반 판별이 닿지 않는 고정 6값이라 명시 매핑·정직). 부호 불변.
+#   1/2=이분의 일(일ㄹ有→을)·√3/2=이분의 루트삼(삼ㅁ有→을)·√2/2=이분의 루트이(이無→를).
+_VALUE_JOSA: dict[str, str] = {
+    "1/2": "을",
+    "√3/2": "을",
+    "√2/2": "를",
+    "-1/2": "을",
+    "-√3/2": "을",
+    "-√2/2": "를",
+}
+
 
 def _stable_slug(prefix: str, question_text: str, answer: str, codes: Sequence[str]) -> str:
     """결정론 안정 slug — 내용 해시(멱등 upsert 키·형제 스켈레톤 생성기 규약 미러)."""
@@ -108,7 +120,10 @@ class _TrigEqSkeleton:
 
     @property
     def difficulty(self) -> float:
-        difficulty = 3.2
+        # 재보정(S2-08·계통 관찰 2): 삼각방정식은 특수각 값 조회(TRIG-VAL 1.3)보다는 무겁다 —
+        # 구간 내 2근을 찾아 작은/큰 해를 고르는 선택 단계가 있다. 다만 QUAD-EQ 인수분해(base 2.0)
+        # 언저리를 넘지 않게 base 3.2→1.8로 내리고, 무리수 값·큰 해 가산은 유지한다.
+        difficulty = 1.8
         if "sqrt" in self.value_expr:  # 무리수 값.
             difficulty += 0.2
         if self.selection == "largest":  # 2사분면 이상 큰 해.
@@ -146,7 +161,7 @@ def _build_trig_eq_pool() -> tuple[_TrigEqSkeleton, ...]:
 
 
 _TEMPLATES: tuple[str, ...] = (
-    "{domain}일 때, {func} x = {v} 를 만족하는 {sel} 해를 구하시오.",
+    "{domain}일 때, {func} x = {v}{josa} 만족하는 {sel} 해를 구하시오.",
     "{domain} 범위에서 방정식 {func} x = {v} 의 {sel} 해를 구하시오.",
 )
 _SEL_KO = {"smallest": "가장 작은", "largest": "가장 큰"}
@@ -210,6 +225,7 @@ class TrigonometricEquationSkeletonGenerator:
             domain=_DOMAIN,
             func=skeleton.func,
             v=skeleton.value_label,
+            josa=_VALUE_JOSA[skeleton.value_label],
             sel=_SEL_KO[skeleton.selection],
         )
         standard_codes = sorted(spec.achievement_standard_codes)

@@ -37,3 +37,5 @@
 {"ts": "2026-07-12T13:24:44", "actor": "claude/recommended-tasks-kopmf0", "action": "add", "id": "S2-08-genpipeline-defect-fix"}
 {"ts": "2026-07-12T13:24:53", "actor": "claude/recommended-tasks-kopmf0", "action": "add", "id": "ARCH-06-playbook-audit"}
 {"ts": "2026-07-12T13:25:38", "actor": "claude/recommended-tasks-kopmf0", "action": "done", "id": "ARCH-05-playbook-audit", "artifacts": ["096834f", "docs/standards/arch_audit_2026-07-12_r5.md"]}
+{"ts": "2026-07-12T13:36:59", "actor": "claude/recommended-tasks-kopmf0", "action": "start", "id": "S2-08-genpipeline-defect-fix", "session": "claude/recommended-tasks-kopmf0"}
+{"ts": "2026-07-12T23:49:41", "actor": "claude/recommended-tasks-kopmf0", "action": "done", "id": "S2-08-genpipeline-defect-fix", "artifacts": ["11026ac"]}
