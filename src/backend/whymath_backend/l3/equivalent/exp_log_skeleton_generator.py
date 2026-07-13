@@ -102,7 +102,8 @@ def _estimate_difficulty(*, base: int, exponent: int, magnitude: int) -> float:
     그대로 읽는 **정의 1스텝** 문제라, 두 인수를 찾아 인수분해하는 QUAD-EQ(estimate_difficulty
     base 2.0)보다 **쉽다**. 이전 base 2.6은 인수분해보다 높아 명백한 인플레였다(표본 28·29).
     그래서 base를 1.5로 내려 평범한 1스텝이 2.0 미만(예 log_6 x=1 → 1.8)에 앉게 하고, 크기 가산은
-    유지한다. 공유 difficulty.py는 건드리지 않고 지역 함수로 둔다(도메인 분담·병렬 세션 공유 최소화).
+    유지한다. 공유 difficulty.py는 건드리지 않고 지역 함수로 둔다(도메인 분담·병렬
+    세션 공유 최소화).
     """
     difficulty = 1.5
     if base >= 5:
