@@ -37,6 +37,7 @@ from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import canonical_signature
 from whymath_backend.l3.equivalent.generator import CandidateProblem
+from whymath_backend.l3.equivalent.josa import i_ga
 from whymath_backend.schema.enums import (
     AnswerFormat,
     Curriculum,
@@ -173,8 +174,11 @@ def _trig_explanation(skeleton: _TrigSkeleton) -> str:
     최종 값(그 값은 answer)만 자연어로 남긴다(형제 해설 규약 미러).
     """
     coord = _UNIT_CIRCLE_COORD[skeleton.func]
+    # 주격 조사는 받침에 따라 이/가로 갈린다 — sin/cos 정의는 "…좌표"(받침 無 '가')지만
+    # tan 정의는 "…나눈 값"(받침 有 '이')이라 하드코딩 '가'는 "값가" 오류를 낳는다(S2-08 josa
+    # 계통 결함 잔여·표본 검수 2건). josa 헬퍼로 받침 판별해 교정(형제 생성기 josa 규약 미러).
     return (
-        f"단위원 위에서 {skeleton.degree}°에 대응하는 점의 {coord}가 "
+        f"단위원 위에서 {skeleton.degree}°에 대응하는 점의 {coord}{i_ga(coord)} "
         f"{skeleton.func} {skeleton.degree}°의 값이므로, 그 값은 {skeleton.answer} 이다."
     )
 
