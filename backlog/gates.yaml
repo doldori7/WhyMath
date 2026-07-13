@@ -4,10 +4,10 @@ gates:
     title: "crosswalk 사람 승인 (docs/standards/crosswalk_gate_contract.md)"
     kind: human
     assignee: kiki
-    status: pending
+    status: cleared
     requested: 2026-07-08
     remind_after_days: 14
-    evidence: null
+    evidence: "라이브 오개념 crosswalk 64행 전건 검수:Kiki 서명(2026-07-08·07-10, data/corpus/misconception_crosslinks_v1/_provenance.json·crosslinks.json 64 스탬프)·validation success·기계 reject-only·프로덕션 적재 0. arch_audit_2026-07-13_r6 §3 '대장 비정합' 지적의 대장 동기화(crosswalk_gate_contract §대장 동기화·S2-10). 사람 서명 완료분 반영이며 새 서명 아님."
     notes: ""
   - id: G-domain-partner
     title: "수학 도메인 파트너 영입 (병목 ④ — 검수 큐 가동 조건)"

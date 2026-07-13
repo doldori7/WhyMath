@@ -103,6 +103,19 @@ class TestTrigGenerator:
         b = _drain(TrigonometricValueSkeletonGenerator(), 6)
         assert [c.problem.slug for c in a] == [c.problem.slug for c in b]
 
+    def test_explanation_josa_batchim_correct(self) -> None:
+        # 주격 조사 받침 정합 — tan은 "…나눈 값"(받침 有 '이'), sin/cos는 "…좌표"(받침 無 '가').
+        # S2-08 josa 잔여 "값가"(240 표본 AI 검수 2건 검출) 회귀 차단. 두 분기 실측 커버.
+        tan_seen = sin_cos_seen = False
+        for c in _drain(TrigonometricValueSkeletonGenerator(), 100):
+            expl = c.problem.answer_explanation or ""
+            assert "값가" not in expl, f"{c.problem.slug}: josa 결함 '값가' 잔존"
+            if "나눈 값이" in expl:
+                tan_seen = True
+            if "좌표가" in expl:
+                sin_cos_seen = True
+        assert tan_seen and sin_cos_seen
+
 
 def test_difficulty_special_angle_low_below_quad() -> None:
     # 계통 관찰 2·표본 30 회귀 차단(S2-08): 특수각 값 1스텝은 QUAD-EQ(2.0) 미만·기본 특수각은
