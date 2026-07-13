@@ -39,3 +39,9 @@
 {"ts": "2026-07-12T13:25:38", "actor": "claude/recommended-tasks-kopmf0", "action": "done", "id": "ARCH-05-playbook-audit", "artifacts": ["096834f", "docs/standards/arch_audit_2026-07-12_r5.md"]}
 {"ts": "2026-07-12T13:36:59", "actor": "claude/recommended-tasks-kopmf0", "action": "start", "id": "S2-08-genpipeline-defect-fix", "session": "claude/recommended-tasks-kopmf0"}
 {"ts": "2026-07-12T23:49:41", "actor": "claude/recommended-tasks-kopmf0", "action": "done", "id": "S2-08-genpipeline-defect-fix", "artifacts": ["11026ac"]}
+{"ts": "2026-07-13T04:22:24", "actor": "claude/recommended-tasks-kopmf0", "action": "start", "id": "ARCH-06-playbook-audit", "session": "claude/recommended-tasks-kopmf0"}
+{"ts": "2026-07-13T04:29:57", "actor": "claude/recommended-tasks-kopmf0", "action": "add", "id": "S2-10-crosswalk-ledger-hygiene"}
+{"ts": "2026-07-13T04:29:58", "actor": "claude/recommended-tasks-kopmf0", "action": "add", "id": "ARCH-07-playbook-audit"}
+{"ts": "2026-07-13T04:30:35", "actor": "claude/recommended-tasks-kopmf0", "action": "done", "id": "ARCH-06-playbook-audit", "artifacts": ["17b4ddd", "docs/standards/arch_audit_2026-07-13_r6.md"]}
+{"ts": "2026-07-13T04:33:52", "actor": "claude/recommended-tasks-kopmf0", "action": "start", "id": "S2-10-crosswalk-ledger-hygiene", "session": "claude/recommended-tasks-kopmf0"}
+{"ts": "2026-07-13T04:37:24", "actor": "claude/recommended-tasks-kopmf0", "action": "done", "id": "S2-10-crosswalk-ledger-hygiene", "artifacts": ["b14597b"]}

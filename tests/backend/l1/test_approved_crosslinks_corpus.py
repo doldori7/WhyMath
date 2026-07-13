@@ -3,9 +3,9 @@
 `data/corpus/misconception_crosslinks_v1/crosslinks.json`은 검수 큐(전행 pending) 중 **Kiki가
 직접 승인한 매핑**을 promote 산출(로더 형식)해 커밋한 것이다(사람 사인오프·AI 자기승인 아님).
 2026-07-08 극값 2(M0864·M0865)·2026-07-10 트리아지 A 11 + B 8 + frac 1·2026-07-12 미매핑 Tier C
-Tier C 10 + period + root-loss + 843 트랜치1~4 각 6(신규 탐지 kebab·계산형)을 승인해
-**총 58건(탐지 카탈로그 58 전수 매핑)**이다. 이 테스트는 hermetic(DB 0)으로 봉인한다:
-① 로더 형식·게이트 통과(method=manual·검수 서명) ② kebab∈34 카탈로그·M-id∈843 코퍼스(참조 무결성)
+Tier C 10 + period + root-loss + 843 트랜치1~5 각 6(신규 탐지 kebab·계산형)을 승인해
+**총 64건(탐지 카탈로그 64 전수 매핑)**이다. 이 테스트는 hermetic(DB 0)으로 봉인한다:
+① 로더 형식·게이트 통과(method=manual·검수 서명) ② kebab∈탐지 카탈로그·M-id∈843 코퍼스(참조 무결성)
 ③ `select_canonical`이 각 kebab에 canonical M-id를 실제로 돌려줌(단절 해소·843→34 도달).
 """
 
@@ -30,8 +30,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[3]
 _CROSSLINKS = _REPO_ROOT / "data" / "corpus" / "misconception_crosslinks_v1" / "crosslinks.json"
 _MISCONCEPTIONS = _REPO_ROOT / "data" / "corpus" / "misconceptions_v1" / "misconceptions.json"
 
-# Kiki 승인분(MEMORY 정본·극값 2·A/B/frac 20·Tier C 10·period·root-loss·843 트랜치1~4 각 6)
-# — 탐지 카탈로그 58 전수 매핑·기대 매핑 동결.
+# Kiki 승인분(MEMORY 정본·극값 2·A/B/frac 20·Tier C 10·period·root-loss·843 트랜치1~5 각 6)
+# — 탐지 카탈로그 64 전수 매핑·기대 매핑 동결.
 _EXPECTED: dict[str, str] = {
     "extremum-max-min-confused": "M0864",
     "extremum-value-vs-point-confused": "M0865",
@@ -132,7 +132,7 @@ def test_load_gate_passes() -> None:
 
 
 def test_referential_integrity() -> None:
-    # kebab는 34 탐지 카탈로그·M-id는 843 콘텐츠 코퍼스에 실재(양측 dangling 0).
+    # kebab는 탐지 카탈로그(현 64종)·M-id는 843 콘텐츠 코퍼스에 실재(양측 dangling 0).
     rows = _load_rows()
     corpus_ids = _corpus_mis_ids()
     for r in rows:
