@@ -533,6 +533,9 @@ function QuizMode() {
   useEffect(() => { draw(); }, [draw]);
 
   // ====== [Phase 13] 학생 답 진단 (정답과 비교해 무엇이 맞고 틀렸는지) ======
+  // [ARCH-12 데모 예외·2026-07-13] 아래 diagnose·checkAnswer(sameGraph)·saveRecord는 *데모 전용*
+  // 클라 판정으로 공식 예외 처리됨(MEMORY 결정 로그·no_math_judgement_governance.test.js 헤더).
+  // 학생 노출 경로 진입 시 백엔드 verify(/v1/verify-answer·SymPy) 리팩터가 강제된다.
   const diagnose = (correctExpr, studentExpr) => {
     let c, s;
     try { c = math.compile(correctExpr); s = math.compile(studentExpr); } catch { return [{ ok: false, msg: "입력한 식을 이해할 수 없어요. 형식을 확인해 주세요." }]; }

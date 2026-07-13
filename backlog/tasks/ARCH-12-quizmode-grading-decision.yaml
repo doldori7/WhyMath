@@ -5,14 +5,16 @@ track: infra-debt
 stage: S1
 subject: math
 layer: web
-status: todo
+status: done
 priority: 3
-owner: kiki
+owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "결정 기록 (MEMORY.md 결정로그) + 게이트 화이트리스트 갱신 방향 확정"
-artifacts: []
+artifacts:
+  - fb48e11
+  - MEMORY.md
 session: null
-notes: "감사 갭 A 후속 — 위반 좌표: GraphingCalculator.jsx:535-600 (sameGraph 채점·diagnose 오개념 진단·quiz_history 점수 저장). 앱 임베드 경로(spec 주입 렌더)는 무관. 게이트: test/no_math_judgement_governance.test.js 화이트리스트 2건 동결"
-updated: 2026-07-09
+notes: "결정 완료: Kiki 2026-07-13 (a) 데모 예외 공식화 선택 — 기록·공식화는 claude 이관(S2-05 선례). 감사 갭 A 후속 — 위반 좌표: GraphingCalculator.jsx:535-600 (sameGraph 채점·diagnose 오개념 진단·quiz_history 점수 저장). 앱 임베드 경로(spec 주입 렌더)는 무관. 게이트: test/no_math_judgement_governance.test.js 화이트리스트 2건 동결"
+updated: 2026-07-13
