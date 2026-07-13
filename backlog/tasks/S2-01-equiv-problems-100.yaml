@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: data-pipeline
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
@@ -13,7 +13,10 @@ requires_gates:
   - G-crosswalk-approval
 acceptance:
   - "동등문제 100문 이상 materialize + 인간 검수 큐 적재"
-artifacts: []
-session: claude/dazzling-ramanujan-4aalh8
+artifacts:
+  - 7d38971
+  - docs/data/ai_review_batch_240_2026-07.md
+  - docs/data/corpus_audit_240.jsonl
+session: null
 notes: "2026-07-13 S1-12 의존 완화(Kiki '완전 해금' 결정): S1-12=Phaiakes9 라이브 *비용 실측*(클라우드 티어·owner kiki)으로, S2-01의 결정론 생성(SymPy 게이트·LLM-0 스켈레톤)을 실질 차단하지 않는 과보수 의존이었음. 라이브 개통 자체는 G-phaiakes9-key(cleared)로 완료. 검수=AI 검수(2026-07-10 결정)라 라이브 비용 실측 선행 불요. G-crosswalk-approval은 오개념 crosswalk 계층(별도)·서명 완료분 대장 동기화로 cleared."
 updated: 2026-07-13
