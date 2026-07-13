@@ -328,7 +328,8 @@ def _raw_by_slug(path: Path) -> dict[str, dict[str, object]]:
 # S2-08 재조정 후 rephrase↔생성 조인은 slug가 아니라 **수정 불변 수학키**로 한다: 발문 조사
 # 수정으로 content-hash slug이 바뀐 레코드(72건)가 있어 slug 부분집합 관계가 깨졌고, rephrase는
 # 발문/slug/problem_id를 LLM 원본으로 보존하기 때문이다. 이 키(단원·조건·근선택·정답)는 조사·
-# 난이도·op-code 수정에 전부 불변이고 생성 코퍼스에서 유일하다(scripts/reconcile_rephrased_corpus_s2_08).
+# 난이도·op-code 수정에 전부 불변이고 생성 코퍼스에서 유일하다
+# (scripts/reconcile_rephrased_corpus_s2_08).
 def _math_key(rec: dict[str, object]) -> tuple[object, ...]:
     verify = rec["verify"]
     assert isinstance(verify, dict)
