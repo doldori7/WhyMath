@@ -1377,6 +1377,35 @@ async def append_turns(
     # 결정 *앞에서* 적용한다 — 누적 가설 세트를 _build_response_payload로 넘겨 소크라테스 카테고리
     # (ASSUMPTION 가정 표면화)까지 구동(개입 채널과 동일한 post-apply 세트·단일 진실원천).
     active_hypotheses = await _apply_hypotheses(session, user.user_id, outcome.matches)
+    # S1-11(flip-없는 수렴 잔여): 멀티턴에도 WH-1 shadow 관측 배선 — create_session(위 :1191)과
+    # 동형. verdict가 실제 발생하는 곳은 멀티턴(풀이 단계 제출)이라, 여기 배선이 없으면 shadow
+    # verdict 분포(S1-11 primary 승격 판정의 근거·live_cost 문서 §verdict 분포)가 구조적으로
+    # 빈약하다. 플래그 OFF(기본)면 spawn 0·기존과 비트동일 — 학생 응답은 결정론 경로 그대로
+    # (노출 불변·비블로킹 _spawn·무영속·04a '측정 없는 도입 없음' 준수). problem_id만 출처가
+    # 다르다(create=body·append=dialogue — expected_answer 조회와 동일한 출처 규약).
+    if get_settings().wh1_harness_shadow_enabled:
+        warmstart_mids_turn: list[str] = []
+        try:
+            warmstart_mids_turn = await assemble_warmstart_probe_hints(
+                session,
+                problem_id=dialogue.problem_id,
+                provider=build_provider(get_settings()),
+            )
+        except Exception:  # noqa: BLE001 — 웜스타트 실패는 학생 응답을 안 깬다(never-break).
+            logger.warning("웜스타트 probe 힌트 조립 실패(멀티턴) — 빈 힌트로 진행", exc_info=True)
+        _spawn(
+            observe_wh1_harness_shadow(
+                student_solution=body.student_solution or body.student_input,
+                solution_steps=body.solution_steps or [],
+                active_hypotheses=active_hypotheses,
+                # 멀티턴 관측 메타 — dialogue_id로 세션 내 verdict 추이를, turn_index로 턴별
+                # 분포를 묶을 수 있게 한다(레코드 스키마 기존 필드·PII 아님·UUID·정수).
+                dialogue_id=str(dialogue_id),
+                turn_index=(dialogue.total_turns or 0) // 2 + 1,
+                problem_id=str(dialogue.problem_id) if dialogue.problem_id is not None else None,
+                warmstart_outside_mids=warmstart_mids_turn,
+            )
+        )
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,

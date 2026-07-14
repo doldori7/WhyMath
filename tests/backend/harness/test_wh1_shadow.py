@@ -185,6 +185,7 @@ class TestNoRawLeak:
             "hypothesis_count",
             "dialogue_id",
             "problem_id",
+            "turn_index",
             "observed_at",
         }
 
