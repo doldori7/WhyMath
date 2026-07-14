@@ -829,12 +829,15 @@ class TestEstCostDerivedFromPriceTable:
         )
         assert CLOUD_MIN_COST_KRW[tier] == pytest.approx(expected)
 
-    def test_default_1k_1k_values(self) -> None:
-        """1K+1K 가정(보수적 기본) → MID≈27.72·HIGH≈46.2 (현행 수치 유지)."""
-        assert _EST_ASSUMED_INPUT_TOKENS == 1000
-        assert _EST_ASSUMED_OUTPUT_TOKENS == 1000
-        assert CLOUD_MIN_COST_KRW[CostTier.CLOUD_MID] == pytest.approx(27.72)
-        assert CLOUD_MIN_COST_KRW[CostTier.CLOUD_HIGH] == pytest.approx(46.2)
+    def test_calibrated_values(self) -> None:
+        """실측 보정 가정(74+358·S1-13 2026-07-14 라이브 p50) → MID≈8.61·HIGH≈14.35.
+
+        상수 변경은 재보정 절차(라이브 p50 재대입)로만 — 이 핀이 무단 드리프트를 막는다.
+        """
+        assert _EST_ASSUMED_INPUT_TOKENS == 74
+        assert _EST_ASSUMED_OUTPUT_TOKENS == 358
+        assert CLOUD_MIN_COST_KRW[CostTier.CLOUD_MID] == pytest.approx(8.61168)
+        assert CLOUD_MIN_COST_KRW[CostTier.CLOUD_HIGH] == pytest.approx(14.3528)
 
     def test_high_gt_mid_invariant(self) -> None:
         """순서 불변식 — CLOUD_HIGH > CLOUD_MID (Opus가 Sonnet보다 비쌈)."""
@@ -843,10 +846,14 @@ class TestEstCostDerivedFromPriceTable:
     def test_est_and_actual_share_price_table(self) -> None:
         """est(CLOUD_MIN_COST_KRW)와 actual(actual_cost_*)이 *같은 단가표*를 근거로 삼음(#465).
 
-        가정 토큰(1K+1K)을 실측 토큰(1K+1K)으로 준 actual과 est가 일치 —
-        같은 단가·같은 토큰이면 같은 값(둘의 차이는 토큰 출처뿐임을 봉인).
+        가정 토큰 상수를 그대로 실측 토큰으로 준 actual과 est가 일치 —
+        같은 단가·같은 토큰이면 같은 값(둘의 차이는 토큰 출처뿐임을 봉인·재보정에 강건).
         """
-        usage = Usage(input_tokens=1000, output_tokens=1000, latency_ms=None)
+        usage = Usage(
+            input_tokens=_EST_ASSUMED_INPUT_TOKENS,
+            output_tokens=_EST_ASSUMED_OUTPUT_TOKENS,
+            latency_ms=None,
+        )
         for tier in (CostTier.CLOUD_MID, CostTier.CLOUD_HIGH):
             actual = actual_cost_krw(_decision(tier), usage)
             assert CLOUD_MIN_COST_KRW[tier] == pytest.approx(actual)
