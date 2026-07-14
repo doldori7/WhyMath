@@ -332,3 +332,63 @@ def test_warmstart_called_only_when_flag_on(monkeypatch: pytest.MonkeyPatch) -> 
         captured.close()  # spawn된 코루틴 정리(구동 불요)
     finally:
         asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ④ 멀티턴(append_turns) shadow 배선 — S1-11 flip-없는 수렴 잔여
+#    verdict가 실제 발생하는 멀티턴에도 create_session과 동형 관측(OFF 기본 비트동일).
+# ──────────────────────────────────────────────────────────────────────────
+def test_append_turns_flag_on_spawns_with_dialogue_meta(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        captured = _CapturedSpawn()
+        monkeypatch.setattr(coach, "_spawn", captured)
+        _patch_shadow_provider(monkeypatch)
+
+        # 세션은 OFF에서 생성(spawn 0 기준선) — append의 spawn만 고립 관측.
+        get_settings.cache_clear()
+        with _client() as client:
+            created = client.post(
+                "/v1/coach/sessions", headers=_auth(uid), json={"student_input": _STUDENT_INPUT}
+            )
+            assert created.status_code == 201, created.text
+            did = uuid.UUID(created.json()["dialogue_id"])
+            dialogue_ids.append(did)
+
+            # OFF: append도 spawn 0 + 응답 정상(기준 응답 확보).
+            off = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=_auth(uid),
+                json={"student_input": _STUDENT_INPUT},
+            )
+            assert off.status_code == 201, off.text
+        assert captured.calls == 0
+
+        # ON: append가 spawn 1 — 학생-대면 필드는 OFF와 동일(노출 불변).
+        _enable_wh1_shadow(monkeypatch)
+        with _client() as client:
+            on = client.post(
+                f"/v1/coach/sessions/{did}/turns",
+                headers=_auth(uid),
+                json={"student_input": _STUDENT_INPUT},
+            )
+            assert on.status_code == 201, on.text
+        assert captured.calls == 1
+        assert _decision_fields(off.json()) == _decision_fields(on.json())
+
+        # 레코드에 멀티턴 메타(dialogue_id·turn_index)가 실린다 — 세션 내 verdict 추이 근거.
+        with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+            captured.drive()
+        records = [r.getMessage() for r in caplog.records if r.name == _RECORD_LOGGER]
+        assert len(records) == 1
+        obs = Wh1HarnessShadowObservation.model_validate_json(records[0])
+        assert obs.dialogue_id == str(did)
+        assert obs.turn_index >= 2  # OFF 2턴 적재 후의 ON 턴 — 멀티턴 인덱스 실림
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))

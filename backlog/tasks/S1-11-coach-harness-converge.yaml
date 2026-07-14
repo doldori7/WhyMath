@@ -5,7 +5,7 @@ track: math-completion
 stage: S1
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 1
 owner: claude
 depends_on:
@@ -16,5 +16,5 @@ acceptance:
   - 회귀 테스트 green
 artifacts: []
 session: null
-notes: "학생-대면 primary 승격 flip은 라이브 shadow 실측(S1-12) 선행 필수 — '측정 없는 도입 없음'(04a 원칙). 하네스 부품·안전장치는 완성(S1-a~e). S1-12 데이터 확보 후 착수"
-updated: 2026-07-09
+notes: "flip-없는 수렴 잔여 상환 완료(2026-07-14: shadow 멀티턴 확장 배선·turn_index 관측 메타·도구 단일 진실원천 거버넌스 봉인 4종·run_persisted_turn 활성화 보류 명문). 잔여=완전 수렴(primary flip)은 ①shadow verdict 분포 확보(Kiki: WHYMATH_WH1_HARNESS_SHADOW_ENABLED=true로 트래픽+harness-metrics) ②verify 게이트 승격 재판정(현 부결) ③Kiki 사인오프(gate3 allowlist 확장 동반) 선행 — '측정 없는 도입 없음'"
+updated: 2026-07-14

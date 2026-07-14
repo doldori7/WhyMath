@@ -65,3 +65,5 @@
 {"ts": "2026-07-14T02:19:40", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "done", "id": "S1-12-phaiakes9-live-verify", "artifacts": ["7d68cf7", "docs/strategy/live_cost_measurement_2026-07.md"]}
 {"ts": "2026-07-14T02:37:16", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "start", "id": "S1-13-cost-calibration", "session": "claude/dazzling-ramanujan-4aalh8"}
 {"ts": "2026-07-14T02:45:06", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "done", "id": "S1-13-cost-calibration", "artifacts": ["b0418d4"]}
+{"ts": "2026-07-14T03:43:07", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "start", "id": "S1-11-coach-harness-converge", "session": "claude/dazzling-ramanujan-4aalh8"}
+{"ts": "2026-07-14T04:04:10", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "block", "id": "S1-11-coach-harness-converge", "reason": "flip-없는 수렴 잔여 상환 완료(2026-07-14: shadow 멀티턴 확장 배선·turn_index 관측 메타·도구 단일 진실원천 거버넌스 봉인 4종·run_persisted_turn 활성화 보류 명문). 잔여=완전 수렴(primary flip)은 ①shadow verdict 분포 확보(Kiki: WHYMATH_WH1_HARNESS_SHADOW_ENABLED=true로 트래픽+harness-metrics) ②verify 게이트 승격 재판정(현 부결) ③Kiki 사인오프(gate3 allowlist 확장 동반) 선행 — '측정 없는 도입 없음'"}

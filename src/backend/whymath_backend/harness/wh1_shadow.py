@@ -77,6 +77,9 @@ class Wh1HarnessShadowObservation(BaseModel):
     dialogue_id: str | None = None
     """세션 식별자(있으면 id만·문자열화). 학생 원문과 무관한 조인 키(비식별)."""
 
+    turn_index: int = 1
+    """세션 내 학생 턴 번호(1-기준) — 턴별 verify verdict 분포·추이 관측 키(S1-11·정수·비식별)."""
+
     problem_id: str | None = None
     """문항 식별자(있으면 id만·문자열화). 문항 본문 아님(코드/UUID·비식별)."""
 
@@ -168,6 +171,7 @@ async def observe_wh1_harness_shadow(
                 tool_calls=outcome.tool_calls,
                 hypothesis_count=len(outcome.hypotheses),
                 dialogue_id=dialogue_id,
+                turn_index=turn_index,
                 problem_id=problem_id,
             ).model_dump_json()
         )
