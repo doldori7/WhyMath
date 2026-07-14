@@ -265,3 +265,25 @@ class TestCli:
         assert main(["--n", "30", "--corpus", str(corpus), "--out", str(out1)]) == 0
         assert main(["--n", "30", "--corpus", str(corpus), "--out", str(out2)]) == 0
         assert out1.read_bytes() == out2.read_bytes()
+
+
+# ── 표본 회전(S2-11) — 교정 후 재판정용 신규 독립 표본 재추출 ──
+
+
+def test_rotation_zero_is_identity(tmp_path: Path) -> None:
+    # rotation=0은 항등 — 기존 산출물(reviewer_sample_240_v0 등) 바이트 불변 보장.
+    problems = _load(tmp_path)
+    base = select_sample(problems, 30)
+    rot0 = select_sample(problems, 30, rotation=0)
+    assert [p.problem_id for p in base] == [p.problem_id for p in rot0]
+
+
+def test_rotation_deterministic_and_distinct(tmp_path: Path) -> None:
+    # 같은 rotation이면 바이트 재현, 다른 rotation이면 선택이 실질 재배열(verdict-blind 재추출).
+    problems = _load(tmp_path)
+    r1a = select_sample(problems, 30, rotation=1)
+    r1b = select_sample(problems, 30, rotation=1)
+    assert [p.problem_id for p in r1a] == [p.problem_id for p in r1b]
+    r0 = {p.problem_id for p in select_sample(problems, 30)}
+    r1 = {p.problem_id for p in r1a}
+    assert r0 != r1  # 선택키 재배열 실효

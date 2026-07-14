@@ -59,3 +59,4 @@
 {"ts": "2026-07-14T01:37:12", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "add", "id": "S2-11-acceptance-sampling-rigor"}
 {"ts": "2026-07-14T01:37:12", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "add", "id": "ARCH-08-playbook-audit"}
 {"ts": "2026-07-14T01:39:45", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "done", "id": "ARCH-07-playbook-audit", "artifacts": ["dd02543", "docs/standards/arch_audit_2026-07-14_r7.md"]}
+{"ts": "2026-07-14T01:40:19", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "start", "id": "S2-11-acceptance-sampling-rigor", "session": "claude/dazzling-ramanujan-4aalh8"}
