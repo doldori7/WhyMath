@@ -165,6 +165,18 @@ def _build_exp_pool() -> tuple[_ExpSkeleton, ...]:
     return tuple(pool)
 
 
+def _exp_steps(skeleton: _ExpSkeleton) -> list[str]:
+    """지수 풀이의 검증 단계 체인(S2-02) — 닫힌형 평가 log(v, b) → k(표현식 동치·Tier2 correct).
+
+    방정식 *변형* 체인(예 `["2**x - 32", "x - 5"]`)은 verify_step이 표현식 동치만 증명하므로
+    unverifiable이다(실측) — 게이트 verified는 unverifiable 0을 요구해 수율이 붕괴한다. 대신
+    해의 *닫힌형*을 체인으로 쓴다: bˣ = v의 해 x = log_b v 이고, v = bᵏ이라 log(v, b) ↔ k는
+    SymPy가 정확 단순화로 증명하는 표현식 동치다(실측 correct·전 밑 공통). 근 '선택'은
+    `answer_selection`(unique)이, 서술은 `answer_explanation`이 담당한다(표현≠의미·형제 미러).
+    """
+    return [f"log({skeleton.value}, {skeleton.base})", str(skeleton.answer)]
+
+
 def _exp_explanation(skeleton: _ExpSkeleton) -> str:
     """지수 해설 — 우변을 밑의 거듭제곱으로 정리해 지수 비교(결정론·위생 청정).
 
@@ -268,7 +280,9 @@ class ExponentialEquationSkeletonGenerator:
             conditions=condition,  # b**x - v = 0(검산용·호출자 제공)
             answer_map={"x": answer_text},
             answer_selection="unique",  # bˣ=bᵏ의 유일근
-            solution_steps=None,  # 검증된 단계 체인은 WH-S 솔버 몫(S2-k 규약 동일)
+            # S2-02: 닫힌형 평가 체인(log(v, b) → k)을 구조 단계로 방출 — 수용 게이트 Tier2·
+            # 상시 재검증(corpus_reverify)·WH-S replay가 소비한다(형제 skeleton_generator 미러).
+            solution_steps=_exp_steps(skeleton),
             concept_tags=list(self._concept_tags),
         )
 
@@ -316,6 +330,16 @@ def _build_log_pool() -> tuple[_LogSkeleton, ...]:
     ]
     random.Random(_POOL_SEED).shuffle(pool)
     return tuple(pool)
+
+
+def _log_steps(skeleton: _LogSkeleton) -> list[str]:
+    """로그 풀이의 검증 단계 체인(S2-02) — 닫힌형 평가 bᵏ → 값(표현식 동치·Tier2 correct).
+
+    지수 형제와 같은 이유로 방정식 변형 체인은 금지(unverifiable 실측·게이트 수율 붕괴) —
+    로그의 정의 log_b x = k ⟺ x = bᵏ의 닫힌형만 체인화한다: b**k ↔ answer(정수 평가)는 SymPy가
+    항상 증명하는 표현식 동치다(실측 correct). 스켈레톤 수치에서만 유도(결정론·slug 불변).
+    """
+    return [f"{skeleton.base}**{skeleton.exponent}", str(skeleton.answer)]
 
 
 def _log_explanation(skeleton: _LogSkeleton) -> str:
@@ -420,6 +444,7 @@ class LogarithmicEquationSkeletonGenerator:
             conditions=condition,  # log(x, b) - k = 0(검산용·호출자 제공)
             answer_map={"x": answer_text},
             answer_selection="unique",  # log_b x=k의 유일근
-            solution_steps=None,
+            # S2-02: 닫힌형 평가 체인(bᵏ → 값)을 구조 단계로 방출 — 지수 형제와 동일 규약.
+            solution_steps=_log_steps(skeleton),
             concept_tags=list(self._concept_tags),
         )

@@ -145,6 +145,20 @@ def _build_arith_pool() -> tuple[_ArithSkeleton, ...]:
     return tuple(pool)
 
 
+def _arith_steps(skeleton: _ArithSkeleton) -> list[str]:
+    """등차 일반항 풀이의 검증 단계 체인(S2-02) — 공식 대입식 → 값(표현식 동치·Tier2 correct).
+
+    QUAD-EQ `_factoring_steps` 패턴 미러: 풀이의 *검증 가능한 대수 골자*(공식 대입 산술)만
+    구조화한다 — 서술은 `answer_explanation`이 담당한다(표현≠의미). 수용 게이트는 unverifiable
+    단계 0을 요구하므로(acceptance §verified) 전이가 SymPy로 증명 가능해야 한다 — 대입식
+    `a + (n−1)*d`와 그 값은 닫힌 산술 동치라 항상 correct(verify_step 실측 확인).
+    """
+    return [
+        f"{skeleton.first} + ({skeleton.term} - 1)*{skeleton.diff}",
+        str(skeleton.answer),
+    ]
+
+
 def _arith_explanation(skeleton: _ArithSkeleton) -> str:
     """등차 해설 — 일반항 공식을 자연어로 서술(결정론·위생 청정·수치 등식 회피)."""
     return (
@@ -240,7 +254,9 @@ class ArithmeticSequenceSkeletonGenerator:
             conditions=condition,  # x - (a + (n-1)*d) = 0(검산용·독립 재계산)
             answer_map={"x": answer_text},
             answer_selection="unique",  # 일반항은 유일값
-            solution_steps=None,
+            # S2-02: 공식 대입 산술 체인(대입식→값)을 구조 단계로 방출 — 수용 게이트 Tier2·
+            # 상시 재검증(corpus_reverify)·WH-S replay가 소비한다(QUAD-EQ steps= 배선 미러).
+            solution_steps=_arith_steps(skeleton),
             concept_tags=list(self._concept_tags),
         )
 
@@ -303,6 +319,18 @@ def _build_geo_pool() -> tuple[_GeoSkeleton, ...]:
                 pool.append(skeleton)
     random.Random(_POOL_SEED).shuffle(pool)
     return tuple(pool)
+
+
+def _geo_steps(skeleton: _GeoSkeleton) -> list[str]:
+    """등비 일반항 풀이의 검증 단계 체인(S2-02) — 공식 대입식 → 값(표현식 동치·Tier2 correct).
+
+    등차 `_arith_steps`의 등비 형제. 대입식 `a·r**(n−1)`과 그 값은 닫힌 산술 동치라 전이가
+    항상 correct(verify_step 프로브 실측: '2*3**(5 - 1)' → '162' correct·풀 최대 지수 포함).
+    """
+    return [
+        f"{skeleton.first} * {skeleton.ratio}**({skeleton.term} - 1)",
+        str(skeleton.answer),
+    ]
 
 
 def _geo_explanation(skeleton: _GeoSkeleton) -> str:
@@ -400,6 +428,7 @@ class GeometricSequenceSkeletonGenerator:
             conditions=condition,  # x - (a * r**(n-1)) = 0(검산용·독립 재계산)
             answer_map={"x": answer_text},
             answer_selection="unique",  # 일반항은 유일값
-            solution_steps=None,
+            # S2-02: 공식 대입 산술 체인(대입식→값)을 구조 단계로 방출 — 등차 형제 배선 미러.
+            solution_steps=_geo_steps(skeleton),
             concept_tags=list(self._concept_tags),
         )

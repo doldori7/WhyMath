@@ -3,7 +3,8 @@
 sin/cos x = v (0°≤x<360°) 방정식 생성기가 ① 전건 S2-a 4종 게이트 통과 ② answer가
 derive_selected_root(selection)와 정확 일치(교차 검증) ③ 결정론·slug 유일 ④ **초월함수라
 signature=None**(exp/log형·구조 dedup 우회) ⑤ **빌드 필터가 정수 2근 [0,360)만 채택**(sin 음수값·
-tan 배제) ⑥ 개념 태깅·근 선택(smallest/largest)을 못 박는다. LLM·DB·PG 0(순수 결정론).
+tan 배제) ⑥ 개념 태깅·근 선택(smallest/largest) ⑦ **solution_steps 대입 검산 체인**(S2-02 —
+전 전이 correct·unverifiable 0·게이트 Tier2 green)을 못 박는다. LLM·DB·PG 0(순수 결정론).
 """
 
 from __future__ import annotations
@@ -65,8 +66,25 @@ class TestTrigEquationGenerator:
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
                 answer_selection=candidate.answer_selection,
+                solution_steps=candidate.solution_steps,  # S2-02: Tier2 단계 검증 포함 green
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
+
+    def test_solution_steps_substitution_chain_verified(self) -> None:
+        # S2-02: 대입 검산 체인 — [func(answer*pi/180), value_expr] 2원소·전 전이 correct·
+        # unverifiable 0(게이트 verified 요건). 방정식 변형 체인은 unverifiable(실측)이라 금지.
+        from whymath_backend.l3.verify_solution import verify_solution
+
+        candidates = _drain(TrigonometricEquationSkeletonGenerator(), 100)
+        assert candidates
+        for candidate in candidates:
+            steps = candidate.solution_steps
+            assert steps is not None and len(steps) == 2, candidate.problem.slug
+            assert steps[0].endswith("*pi/180)")  # 해 대입 좌변(도→라디안)
+            result = verify_solution(steps)
+            assert result.has_incorrect is False, candidate.problem.slug
+            assert result.n_unverifiable == 0, candidate.problem.slug
+            assert result.n_correct >= 1, candidate.problem.slug
 
     def test_answer_matches_selected_root(self) -> None:
         # 교차 검증 — answer가 조건의 derive_selected_root(선택)와 정수 일치.

@@ -131,10 +131,32 @@ def _derivative_condition(deriv_b: int, deriv_c: int) -> str:
 
 
 def _linear_factor(root: int) -> str:
-    """(x − root)의 사람이 읽는 표기 — 'x - 2'·'x + 3'·'x'(root 부호 반영)."""
+    """(x − root)의 사람이 읽는 표기 — 'x - 2'·'x + 3'·'x'(root 부호 반영·SymPy 파싱도 동일)."""
     if root == 0:
         return "x"
     return f"x - {root}" if root > 0 else f"x + {-root}"
+
+
+def _sympy_quadratic_text(a2: int, a1: int, a0: int) -> str:
+    """전개 이차식의 검산용 SymPy 표기('3*x**2 + 30*x + 27') — 0 항 생략·명시 `*`(닫힌 DSL)."""
+    parts = [f"{a2}*x**2"]
+    if a1:
+        parts.append(f"{'-' if a1 < 0 else '+'} {abs(a1)}*x")
+    if a0:
+        parts.append(f"{'-' if a0 < 0 else '+'} {abs(a0)}")
+    return " ".join(parts)
+
+
+def _extremum_steps(m: int, n: int) -> list[str]:
+    """극값류 풀이의 검증 단계 체인(S2-02) — 도함수 전개형 → 3(x−m)(x−n) 인수분해형.
+
+    quad `_factoring_steps` 미러. 미분 전이(f→f')는 `verify_step`에서 unverifiable(실측)이라
+    체인에 넣지 않는다 — 체인은 *도함수 다항식*에서 시작하는 단일 동치 스레드다(수용 게이트는
+    unverifiable 0을 요구·acceptance §verified). 극값-값·MC 문항도 이 체인만 낸다: 극값 대입
+    (f(m)=v)은 비동치 전이라 체인에 못 섞고, 값 자체는 Tier1 conditions가 검증한다."""
+    expanded = _sympy_quadratic_text(3, -3 * (m + n), 3 * m * n)
+    factored = f"3*({_linear_factor(m)})*({_linear_factor(n)})"
+    return [expanded, factored]
 
 
 @dataclass(frozen=True, slots=True)
@@ -295,7 +317,8 @@ class CalculusExtremumSkeletonGenerator:
             conditions=condition,  # 도함수 방정식(검산용·호출자 제공·L5 파싱 밖)
             answer_map={"x": answer_text},
             answer_selection=skeleton.selection,
-            solution_steps=None,  # 검증된 단계 체인은 WH-S 솔버 몫(S2-k 규약 동일)
+            # S2-02: 도함수 인수분해 체인 방출 — 게이트 Tier2·상시 재검증·WH-S replay가 소비.
+            solution_steps=_extremum_steps(skeleton.m, skeleton.n),
             concept_tags=list(self._concept_tags),
         )
 
@@ -421,6 +444,18 @@ def _build_irrational_pool() -> tuple[_IrrationalExtremumSkeleton, ...]:
     return tuple(pool)
 
 
+def _irrational_extremum_steps(skeleton: _IrrationalExtremumSkeleton) -> list[str]:
+    """무리 임계점 풀이의 검증 단계 체인(S2-02) — 도함수 전개형 → 3(x−p)²−3q 완전제곱형.
+
+    q가 비제곱이라 유리계수 인수분해가 불가 — sqrt quad `_sqrt_steps`의 완전제곱꼴 규약을
+    미러한다(전이는 다항 동치라 항상 correct — `verify_step` 실측 확인). p=0이면 두 표기가
+    동일 문자열로 접히나(전이 trivially correct) 균일성을 위해 체인 형태를 유지한다."""
+    p, q = skeleton.p, skeleton.q
+    expanded = _sympy_quadratic_text(3, -6 * p, 3 * (p * p - q))
+    completed = f"3*x**2 - {3 * q}" if p == 0 else f"3*({_linear_factor(p)})**2 - {3 * q}"
+    return [expanded, completed]
+
+
 def _irrational_explanation(skeleton: _IrrationalExtremumSkeleton) -> str:
     """무리 임계점 극값 해설 — 도함수 방정식을 풀어 x=p±√q 도출·부호 판정으로 극대/극소 확정."""
     small_text = sympy.sstr(skeleton.smaller_root)
@@ -524,7 +559,8 @@ class CalculusIrrationalExtremumSkeletonGenerator:
             conditions=condition,  # 도함수 방정식(정수계수·검산용·호출자 제공)
             answer_map={"x": answer_text},
             answer_selection=skeleton.selection,
-            solution_steps=None,
+            # S2-02: 완전제곱형 체인 방출(무리근은 인수분해 불가 — sqrt quad 규약 미러).
+            solution_steps=_irrational_extremum_steps(skeleton),
             concept_tags=list(self._concept_tags),
         )
 
@@ -630,6 +666,18 @@ def _build_tangent_pool() -> tuple[_TangentSkeleton, ...]:
     return tuple(pool)
 
 
+def _tangent_steps(skeleton: _TangentSkeleton) -> list[str]:
+    """접선 기울기 풀이의 검증 단계 체인(S2-02) — f' 전개형 → 3(x−p)(x−q)+m 정리형.
+
+    두 표기는 다항 동치라 전이가 항상 correct(`verify_step` 실측 확인). 미분 전이는
+    unverifiable(실측)이라 체인은 도함수 다항식에서 시작한다 — `_extremum_steps` 규약 동일."""
+    p, q, m = skeleton.p, skeleton.q, skeleton.m
+    expanded = _sympy_quadratic_text(3, -3 * (p + q), 3 * p * q + m)
+    sign, mag = ("-", -m) if m < 0 else ("+", m)  # m ≠ 0 불변식(0 아닌 짝수 풀)
+    factored = f"3*({_linear_factor(p)})*({_linear_factor(q)}) {sign} {mag}"
+    return [expanded, factored]
+
+
 def _tangent_explanation(skeleton: _TangentSkeleton) -> str:
     """접선 기울기 기반 해설 — 뼈대 수치에서 결정론 생성(f'=m 정리·근 선택·위생 청정)."""
     f1, f2 = _linear_factor(skeleton.p), _linear_factor(skeleton.q)
@@ -733,7 +781,8 @@ class CalculusTangentSlopeSkeletonGenerator:
             conditions=condition,  # f'(x)=m의 근 방정식(검산용·호출자 제공)
             answer_map={"x": answer_text},
             answer_selection=skeleton.selection,
-            solution_steps=None,
+            # S2-02: f' 정리형 체인 방출 — 게이트 Tier2·상시 재검증·WH-S replay가 소비.
+            solution_steps=_tangent_steps(skeleton),
             concept_tags=list(self._concept_tags),
         )
 
@@ -918,7 +967,8 @@ class CalculusExtremumMCSkeletonGenerator:
             conditions=condition,  # 극값 쌍의 이차방정식(dummy x·정답 검증용)
             answer_map={"x": answer_text},
             answer_selection=skeleton.selection,
-            solution_steps=None,
+            # S2-02: 도함수 인수분해 체인만(극값 대입은 비동치 전이 — 값 검증은 Tier1 몫).
+            solution_steps=_extremum_steps(skeleton.m, skeleton.n),
             concept_tags=list(self._concept_tags),
         )
 
@@ -1141,7 +1191,8 @@ class CalculusExtremumValueSkeletonGenerator:
             conditions=condition,  # 극값 쌍의 이차방정식(dummy x·검산용·호출자 제공)
             answer_map={"x": answer_text},
             answer_selection=skeleton.selection,
-            solution_steps=None,
+            # S2-02: 도함수 인수분해 체인만(극값 대입은 비동치 전이 — 값 검증은 Tier1 몫).
+            solution_steps=_extremum_steps(skeleton.m, skeleton.n),
             concept_tags=list(self._concept_tags),
         )
 

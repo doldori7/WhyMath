@@ -3,7 +3,8 @@
 sin/cos/tan 특수각 값 생성기가 ① 전건 S2-a 4종 게이트 통과(게이트 인프라 무변경 재사용 실증)
 ② answer가 derive_selected_root와 **글자·수치 일치**(교차 검증·sstr 정합) ③ 결정론·값 유일
 ④ **값 유일 → signature 유일**(구조 dedup 오병합 방지) ⑤ 미정의 각(tan 90°) 자동 제외
-⑥ 개념 태깅·유일해 선택을 못 박는다. LLM·DB·PG 0(순수 결정론).
+⑥ 개념 태깅·유일해 선택 ⑦ solution_steps 체인(도→라디안→정확값)이 verify_solution 전이
+전부 correct(S2-02·Tier2)를 못 박는다. LLM·DB·PG 0(순수 결정론).
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from whymath_backend.l3.equivalent.trig_skeleton_generator import (
     _build_trig_pool,
 )
 from whymath_backend.l3.verify_answer import derive_selected_root
+from whymath_backend.l3.verify_solution import verify_solution
 
 _STANDARD = "[12대수02-02]"
 
@@ -64,6 +66,9 @@ class TestTrigGenerator:
                 provenance=candidate.provenance,
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
+                # S2-02: 오케스트레이터 배선 미러 — steps를 게이트에 넣어 Tier2까지 봉인
+                # (incorrect면 failed·unverifiable이면 verified 강등 → accepted False로 검출).
+                solution_steps=candidate.solution_steps,
                 answer_selection=candidate.answer_selection,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
@@ -77,6 +82,22 @@ class TestTrigGenerator:
             assert (
                 diff == 0
             ), f"{candidate.conditions}: derive={derived} ans={candidate.answer_map['x']}"
+
+    def test_solution_steps_all_verified_correct(self) -> None:
+        # S2-02: 방출 체인(도→라디안→정확값)의 전 전이가 verify_solution으로 correct 증명 —
+        # 게이트 verified 요건(모든 전이 correct + unverifiable 0)을 전 풀(음수 값·tan 무리수
+        # 값 포함 13종)에서 봉인. 끝 원소는 answer와 글자까지 일치(교차 정합).
+        candidates = _drain(TrigonometricValueSkeletonGenerator(), 100)
+        assert len(candidates) >= 10
+        for candidate in candidates:
+            steps = candidate.solution_steps
+            assert steps is not None and len(steps) == 3, f"{candidate.problem.slug}: 체인 누락"
+            assert steps[0].endswith("*pi/180)")  # 도(°)식 — 예 sin(30*pi/180)
+            assert steps[-1] == candidate.answer_map["x"]  # 끝 원소 = 정답(sstr 정합)
+            result = verify_solution(steps)
+            states = [step.state for step in result.steps]
+            assert result.has_incorrect is False, f"{steps}: {states}"
+            assert all(state == "correct" for state in states), f"{steps}: {states}"
 
     def test_signatures_unique(self) -> None:
         # 값 유일 → signature 유일(같은 값 다른 각의 구조 dedup 충돌 방지).

@@ -2,7 +2,8 @@
 
 지수(bˣ=bᵏ)·로그(log_b x=k) 두 형제 생성기가 ① 전건 S2-a 4종 게이트 통과(게이트 인프라 무변경
 재사용 실증) ② answer가 derive_selected_root와 일치(교차 검증) ③ 결정론·풀 유일 ④ 개념 태깅·
-유일근 선택을 못 박는다. LLM·DB·PG 0(순수 결정론).
+유일근 선택 ⑤ solution_steps 닫힌형 체인의 Tier2 무결(전 전이 correct·unverifiable 0 — S2-02)을
+못 박는다. LLM·DB·PG 0(순수 결정론).
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ from whymath_backend.l3.equivalent.exp_log_skeleton_generator import (
 )
 from whymath_backend.l3.equivalent.generator import CandidateProblem
 from whymath_backend.l3.verify_answer import derive_selected_root
+from whymath_backend.l3.verify_solution import verify_solution
 
 _STANDARD = "[12대수01-08]"
 
@@ -52,6 +54,7 @@ class TestExponentialGenerator:
 
     def test_all_pass_acceptance_gate(self) -> None:
         # 전건 4종 게이트 통과 — 게이트 인프라(verify evalf·근 선택·위생·동등성)가 지수를 수용.
+        # S2-02: solution_steps를 함께 결선해 Tier2 포함 verified를 못 박는다(수율 회귀 봉인).
         candidates = _drain(ExponentialEquationSkeletonGenerator(), 100)
         assert len(candidates) >= 15
         for candidate in candidates:
@@ -61,9 +64,23 @@ class TestExponentialGenerator:
                 provenance=candidate.provenance,
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
+                solution_steps=candidate.solution_steps,
                 answer_selection=candidate.answer_selection,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
+            assert verdict.verification == "verified"
+
+    def test_solution_steps_closed_form_tier2_clean(self) -> None:
+        # S2-02: 전건 닫힌형 체인(log(v, b) → k) — 전 전이 correct·unverifiable 0(게이트
+        # verified 전제). 마지막 단계 = answer(체인 종착이 답과 자기정합).
+        for candidate in _drain(ExponentialEquationSkeletonGenerator(), 100):
+            steps = candidate.solution_steps
+            assert steps is not None and len(steps) == 2, candidate.problem.slug
+            assert steps[-1] == candidate.answer_map["x"]
+            result = verify_solution(steps)
+            assert result.has_incorrect is False, candidate.problem.slug
+            assert result.n_unverifiable == 0, candidate.problem.slug
+            assert result.n_correct >= 1
 
     def test_answer_matches_independent_derivation(self) -> None:
         # 교차 검증 — answer가 derive_selected_root(conditions, unique)와 수치 일치.
@@ -93,6 +110,7 @@ class TestLogarithmicGenerator:
         assert len(keys) == len(pool)
 
     def test_all_pass_acceptance_gate(self) -> None:
+        # S2-02: solution_steps 결선 포함 — Tier2까지 전건 verified(수율 회귀 봉인).
         candidates = _drain(LogarithmicEquationSkeletonGenerator(), 100)
         assert len(candidates) >= 15
         for candidate in candidates:
@@ -102,9 +120,22 @@ class TestLogarithmicGenerator:
                 provenance=candidate.provenance,
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
+                solution_steps=candidate.solution_steps,
                 answer_selection=candidate.answer_selection,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
+            assert verdict.verification == "verified"
+
+    def test_solution_steps_closed_form_tier2_clean(self) -> None:
+        # S2-02: 전건 닫힌형 체인(bᵏ → 값) — 전 전이 correct·unverifiable 0·종착=answer.
+        for candidate in _drain(LogarithmicEquationSkeletonGenerator(), 100):
+            steps = candidate.solution_steps
+            assert steps is not None and len(steps) == 2, candidate.problem.slug
+            assert steps[-1] == candidate.answer_map["x"]
+            result = verify_solution(steps)
+            assert result.has_incorrect is False, candidate.problem.slug
+            assert result.n_unverifiable == 0, candidate.problem.slug
+            assert result.n_correct >= 1
 
     def test_answer_matches_independent_derivation(self) -> None:
         for candidate in _drain(LogarithmicEquationSkeletonGenerator(), 100):

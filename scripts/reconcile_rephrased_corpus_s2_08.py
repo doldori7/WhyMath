@@ -36,6 +36,10 @@ _REPHRASED = _REPO / "data" / "corpus" / "problem_bank_rephrased_v0" / "problems
 # generated 재생성분에서 rephrased로 전파할 필드(rephrase가 generated에서 복사하던 것과 동일 집합).
 _COPY_FIELDS = ("answer_explanation", "difficulty_overall", "distractor_map")
 
+# verify 블록 내부 전파 필드(S2-02) — rephrase는 발문만 바꾸고 conditions·answer가 동일하므로
+# 생성기의 검증 단계 체인(solution_steps)도 그대로 유효하다(수학키 조인 대상과 같은 근거).
+_COPY_VERIFY_FIELDS = ("solution_steps",)
+
 
 def _math_key(record: dict) -> tuple:
     """수정 불변 수학키 — 조사·난이도·op-code 수정에 불변이고 generated에서 유일."""
@@ -63,7 +67,7 @@ def reconcile(*, check: bool) -> int:
 
     rephrased = _load(_REPHRASED)
     changed = 0
-    field_changes: dict[str, int] = {f: 0 for f in _COPY_FIELDS}
+    field_changes: dict[str, int] = {f: 0 for f in (*_COPY_FIELDS, *_COPY_VERIFY_FIELDS)}
     unmatched: list[str] = []
     out_lines: list[str] = []
 
@@ -82,6 +86,15 @@ def reconcile(*, check: bool) -> int:
                     record.pop(field, None)
                 else:
                     record[field] = new_value
+        for field in _COPY_VERIFY_FIELDS:
+            new_value = (source.get("verify") or {}).get(field)
+            old_value = (record.get("verify") or {}).get(field)
+            if new_value != old_value:
+                field_changes[field] += 1
+                if new_value is None:
+                    record.setdefault("verify", {}).pop(field, None)
+                else:
+                    record.setdefault("verify", {})[field] = new_value
         if record != json.loads(json.dumps(record, ensure_ascii=False)):  # pragma: no cover
             pass  # 방어(직렬화 안정성) — 실질 무연산.
         out_lines.append(json.dumps(record, ensure_ascii=False))

@@ -195,6 +195,26 @@ def _build_inductive_pool() -> tuple[_InductiveSkeleton, ...]:
     return tuple(pool)
 
 
+def _inductive_steps(skeleton: _InductiveSkeleton) -> list[str]:
+    """귀납 전개 풀이의 검증 단계 체인(S2-02) — 반복 전개 → 폐형 → 값(단일 동치 스레드).
+
+    `verify_step`은 *연속 쌍의 표현식 동치*만 증명하므로, 점화식 전개를 상수 표현식의 평가
+    체인으로 편다(실측 프로브 확인 — 전 전이 correct·수용 게이트 unverifiable 0 충족):
+      등차: "2 + 3 + 3 + 3" → "2 + (4 - 1)*3" → "11"  (첫째항에 공차를 k−1번 더함)
+      등비: "2*3*3*3" → "2*3**(4 - 1)" → "54"        (첫째항에 공비를 k−1번 곱함)
+    근 '선택'은 `answer_selection`(unique)이 별도 검증하고, 서술은 `answer_explanation`이
+    담당한다(표현≠의미 — QUAD-EQ `_factoring_steps` 규약 미러).
+    """
+    repeats = skeleton.term - 1  # 점화 적용 횟수 k−1 (풀 전건 term ≥ 3이라 항상 ≥ 2)
+    if skeleton.kind == "arith":
+        expanded = f"{skeleton.first} + " + " + ".join([str(skeleton.step)] * repeats)
+        closed = f"{skeleton.first} + ({skeleton.term} - 1)*{skeleton.step}"
+    else:
+        expanded = f"{skeleton.first}*" + "*".join([str(skeleton.step)] * repeats)
+        closed = f"{skeleton.first}*{skeleton.step}**({skeleton.term} - 1)"
+    return [expanded, closed, str(skeleton.answer)]
+
+
 def _indseq_explanation(skeleton: _InductiveSkeleton) -> str:
     """귀납 해설 — 점화식을 폐형으로 푸는 과정을 자연어로 서술(결정론·위생 청정·수치 등식 회피)."""
     if skeleton.kind == "arith":
@@ -311,6 +331,8 @@ class InductiveSequenceSkeletonGenerator:
             conditions=condition,  # x - (폐형) = 0(검산용·독립 재계산)
             answer_map={"x": answer_text},
             answer_selection="unique",  # 특정 항은 유일값
-            solution_steps=None,
+            # S2-02: 생성기가 아는 풀이 경로(반복 전개→폐형→값)를 구조 단계로 방출 —
+            # 수용 게이트 Tier2·상시 재검증(corpus_reverify)·WH-S replay가 소비한다.
+            solution_steps=_inductive_steps(skeleton),
             concept_tags=list(self._concept_tags),
         )

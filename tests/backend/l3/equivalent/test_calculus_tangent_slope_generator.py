@@ -24,6 +24,7 @@ from whymath_backend.l3.equivalent.generator import (
     EquivalentProblemGenerator,
 )
 from whymath_backend.l3.verify_answer import derive_selected_root
+from whymath_backend.l3.verify_solution import verify_solution
 from whymath_backend.schema.enums import AnswerFormat
 
 _STANDARD = "[12미적Ⅰ-02-01]"
@@ -77,6 +78,7 @@ class TestMathematicalSoundness:
                 provenance=candidate.provenance,
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
+                solution_steps=candidate.solution_steps,  # S2-02: Tier2 단계 동치 포함 게이트
                 answer_selection=candidate.answer_selection,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
@@ -105,6 +107,20 @@ class TestMathematicalSoundness:
         # ⑥ 접선 기울기 m≠0 — m=0이면 수평 접선=극값과 동치라 구조 구분이 사라진다.
         for candidate in _draw(CalculusTangentSlopeSkeletonGenerator(), 120):
             assert "기울기가 0인" not in candidate.problem.question_text
+
+
+class TestSolutionSteps:
+    def test_steps_emitted_and_fully_verified(self) -> None:
+        # S2-02: f' 전개형→3(x−p)(x−q)+m 정리형 체인 — 전 전이 correct·unverifiable 0.
+        for candidate in _draw(CalculusTangentSlopeSkeletonGenerator(), 100):
+            steps = candidate.solution_steps
+            assert steps is not None and len(steps) == 2
+            assert steps[0].startswith("3*x**2")  # 도함수 다항식에서 시작(미분 전이 미포함)
+            assert steps[1].startswith("3*(")  # 3(x−p)(x−q) ± m 정리형
+            result = verify_solution(steps)
+            assert result.has_incorrect is False, steps
+            assert result.n_unverifiable == 0, steps
+            assert result.n_correct >= 1
 
 
 class TestStructuralDiversity:

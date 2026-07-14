@@ -183,6 +183,19 @@ def _trig_explanation(skeleton: _TrigSkeleton) -> str:
     )
 
 
+def _trig_value_steps(skeleton: _TrigSkeleton) -> list[str]:
+    """특수각 평가의 검증 단계 체인(S2-02) — 도(°)식 → 라디안식 → 정확값(전이 전부 correct).
+
+    풀이의 *검증 가능한 골자*(도→라디안 환산·특수각 정확값 평가)만 구조화한다 — 서술은
+    `answer_explanation` 몫(표현≠의미·QUAD-EQ `_factoring_steps` 규약 미러). 수용 게이트는
+    unverifiable 0을 요구하므로(acceptance §verified) 체인 전 전이가 SymPy로 증명 가능해야
+    한다 — 세 표기 모두 SymPy가 특수각 정확값으로 평가해 동치가 증명된다(풀 13종 전수 프로브:
+    음수 값 −1/2·−√2/2, tan 무리수 값 √3/3·−√3 포함 전이 전부 correct 실측).
+    """
+    radian_expr = f"{skeleton.func}({sympy.sstr(skeleton._radians)})"  # 예 sin(pi/6)
+    return [f"{skeleton.func}({skeleton.degree}*pi/180)", radian_expr, skeleton.answer]
+
+
 class TrigonometricValueSkeletonGenerator:
     """삼각함수 특수각 값 결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석 구현(LLM 0).
 
@@ -270,6 +283,8 @@ class TrigonometricValueSkeletonGenerator:
             conditions=condition,  # x - func(deg*pi/180) = 0(검산용·독립 재계산)
             answer_map={"x": answer_text},
             answer_selection="unique",
-            solution_steps=None,
+            # S2-02: 생성기가 아는 평가 경로(도→라디안→정확값)를 구조 단계로 방출 —
+            # 수용 게이트 Tier2·상시 재검증(corpus_reverify)·WH-S replay가 소비한다.
+            solution_steps=_trig_value_steps(skeleton),
             concept_tags=list(self._concept_tags),
         )

@@ -119,3 +119,38 @@ def test_aggregate_pass() -> None:
 def test_aggregate_wrong_fails() -> None:
     report = cr.reverify_corpus([_AGG_BAD], use_fuzz=False)
     assert report.failed == 1
+
+
+# ── Tier2 단계 재검증(S2-02) — solution_steps 보유 레코드의 전이 연쇄 검산 ──
+
+_STEPS_OK = {
+    "slug": "steps-ok",
+    "verify": {
+        "conditions": "x**2 - 3*x - 10 = 0",
+        "answer_map": {"x": "5"},
+        "answer_selection": "largest",
+        "solution_steps": ["x**2 - 3*x - 10", "(x - 5)*(x + 2)"],
+    },
+}
+_STEPS_BAD = {
+    "slug": "steps-bad",
+    "verify": {
+        "conditions": "x**2 - 3*x - 10 = 0",
+        "answer_map": {"x": "5"},
+        "answer_selection": "largest",
+        # 부호 반전 인수분해 — 원식과 비동치(확정 오염) → Tier2 fail
+        "solution_steps": ["x**2 - 3*x - 10", "(x + 5)*(x - 2)"],
+    },
+}
+
+
+def test_steps_correct_chain_passes() -> None:
+    report = cr.reverify_corpus([_STEPS_OK], use_fuzz=False)
+    assert report.passed == 1 and report.failed == 0
+
+
+def test_steps_incorrect_chain_fails() -> None:
+    # Tier1(답=근)이 통과해도 단계 전이가 비동치면 Tier2가 잡는다(단계 오염 검출).
+    report = cr.reverify_corpus([_STEPS_BAD], use_fuzz=False)
+    assert report.failed == 1
+    assert "Tier2" in report.failures[0][1]

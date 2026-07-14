@@ -20,6 +20,7 @@ from whymath_backend.l3.equivalent.sequence_sum_skeleton_generator import (
     _build_geo_sum_pool,
 )
 from whymath_backend.l3.verify_answer import derive_selected_root
+from whymath_backend.l3.verify_solution import verify_solution
 
 _ARITH_STANDARD = "[12대수03-02]"
 _GEO_STANDARD = "[12대수03-03]"
@@ -62,6 +63,7 @@ class TestArithmeticSumGenerator:
                 provenance=candidate.provenance,
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
+                solution_steps=candidate.solution_steps,  # S2-02: Tier2 포함 게이트
                 answer_selection=candidate.answer_selection,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
@@ -111,6 +113,7 @@ class TestGeometricSumGenerator:
                 provenance=candidate.provenance,
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
+                solution_steps=candidate.solution_steps,  # S2-02: Tier2 포함 게이트
                 answer_selection=candidate.answer_selection,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
@@ -131,6 +134,36 @@ class TestGeometricSumGenerator:
         assert candidate is not None
         assert candidate.answer_selection == "unique"
         assert [t.concept_src_id for t in candidate.concept_tags] == ["H:12대수03-03"]
+
+
+class TestSolutionSteps:
+    """S2-02 — 두 합 생성기의 solution_steps 방출: 형태·Tier2 무결(전이 correct·unverifiable 0)."""
+
+    def test_steps_shape_and_answer_tail(self) -> None:
+        # 체인 = [합 공식 대입식, 값] 2단·마지막 원소가 answer와 일치·대입식이 condition에 내장.
+        for gen, code in (
+            (ArithmeticSumSkeletonGenerator(), _ARITH_STANDARD),
+            (GeometricSumSkeletonGenerator(), _GEO_STANDARD),
+        ):
+            for candidate in _drain(gen, code, 500):
+                steps = candidate.solution_steps
+                assert steps is not None and len(steps) == 2, candidate.problem.slug
+                assert steps[1] == candidate.answer_map["x"]
+                assert f"x - ({steps[0]}) = 0" == candidate.conditions  # 단일 진실 원천 정합
+
+    def test_steps_verify_all_correct_no_unverifiable(self) -> None:
+        # 게이트 verified 전제(전 전이 correct·unverifiable 0)를 verify_solution으로 직접 실측.
+        for gen, code in (
+            (ArithmeticSumSkeletonGenerator(), _ARITH_STANDARD),
+            (GeometricSumSkeletonGenerator(), _GEO_STANDARD),
+        ):
+            for candidate in _drain(gen, code, 500):
+                assert candidate.solution_steps is not None
+                result = verify_solution(candidate.solution_steps)
+                assert result.n_transitions == 1, candidate.problem.slug
+                assert result.n_correct == 1
+                assert result.n_incorrect == 0
+                assert result.n_unverifiable == 0
 
 
 class TestCrossFamily:
