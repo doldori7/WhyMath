@@ -24,6 +24,7 @@ from whymath_backend.l3.equivalent.generator import (
     EquivalentProblemGenerator,
 )
 from whymath_backend.l3.verify_answer import derive_selected_root
+from whymath_backend.l3.verify_solution import verify_solution
 
 _STANDARD = "[12미적Ⅰ-02-07]"
 
@@ -76,6 +77,7 @@ class TestMathematicalSoundness:
                 provenance=candidate.provenance,
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
+                solution_steps=candidate.solution_steps,  # S2-02: Tier2 단계 동치 포함 게이트
                 answer_selection=candidate.answer_selection,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
@@ -107,6 +109,21 @@ class TestMathematicalSoundness:
             int(c.problem.answer) for c in _draw(CalculusExtremumValueSkeletonGenerator(), 120)
         }
         assert any(abs(a) > 9 for a in answers), "정답이 전부 임계점 x좌표 대역 — 값 환원 회귀 의심"
+
+
+class TestSolutionSteps:
+    def test_steps_emitted_and_fully_verified(self) -> None:
+        # S2-02: 극값-값 문항도 *도함수 인수분해 체인만* — 극값 대입(f(m)=v)은 비동치 전이라
+        # 체인에 못 섞고(단일 동치 스레드), 값 검증은 Tier1 conditions가 담당한다.
+        for candidate in _draw(CalculusExtremumValueSkeletonGenerator(), 100):
+            steps = candidate.solution_steps
+            assert steps is not None and len(steps) == 2
+            assert steps[0].startswith("3*x**2")  # 도함수 전개형에서 시작(미분 전이 미포함)
+            assert steps[1].startswith("3*(")  # 3(x−m)(x−n) 인수분해형
+            result = verify_solution(steps)
+            assert result.has_incorrect is False, steps
+            assert result.n_unverifiable == 0, steps
+            assert result.n_correct >= 1
 
 
 class TestStructuralDiversity:

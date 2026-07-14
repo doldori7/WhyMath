@@ -26,6 +26,7 @@ from whymath_backend.l3.equivalent.generator import (
     EquivalentProblemGenerator,
 )
 from whymath_backend.l3.verify_answer import derive_selected_root
+from whymath_backend.l3.verify_solution import verify_solution
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 
 _STANDARD = "[12미적Ⅰ-02-07]"
@@ -104,6 +105,7 @@ class TestMathematicalSoundness:
                 provenance=candidate.provenance,
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
+                solution_steps=candidate.solution_steps,  # S2-02: Tier2 단계 동치 포함 게이트
                 answer_selection=candidate.answer_selection,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
@@ -152,6 +154,21 @@ class TestChoicesAndDistractors:
                     assert choice_value in roots and choice_value != answer
                 else:  # value-vs-point — 극점 x좌표는 조건 근이 아님
                     assert choice_value not in roots
+
+
+class TestSolutionSteps:
+    def test_steps_emitted_and_fully_verified(self) -> None:
+        # S2-02: MC도 *도함수 인수분해 체인만* — 극값 대입은 비동치 전이라 체인에 못 섞고
+        # (단일 동치 스레드), 값 검증은 Tier1 conditions(dummy x 이차방정식)가 담당한다.
+        for candidate in _draw(_gen(), 100):
+            steps = candidate.solution_steps
+            assert steps is not None and len(steps) == 2
+            assert steps[0].startswith("3*x**2")  # 도함수 전개형에서 시작(미분 전이 미포함)
+            assert steps[1].startswith("3*(")  # 3(x−m)(x−n) 인수분해형
+            result = verify_solution(steps)
+            assert result.has_incorrect is False, steps
+            assert result.n_unverifiable == 0, steps
+            assert result.n_correct >= 1
 
 
 class TestStructuralDiversity:

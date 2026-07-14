@@ -176,6 +176,19 @@ def _explanation(skeleton: _TrigEqSkeleton) -> str:
     )
 
 
+def _substitution_check_steps(skeleton: _TrigEqSkeleton) -> list[str]:
+    """정답각 대입 *검산 체인*(S2-02) — 좌변 함숫값(도→라디안) → 우변 특수값(표현식 동치).
+
+    `_factoring_steps`(skeleton_generator·S2-02) 패턴의 삼각방정식판. 단 방정식 *변형* 체인
+    ("sin(x·π/180)−v=0" → "x=30")은 `verify_step`이 표현식 동치만 증명해 unverifiable로
+    떨어진다(실측) — 게이트 verified는 unverifiable 0을 요구하므로 금지. 대신 해를 대입한
+    좌변 `func(answer*pi/180)`과 우변 `value_expr`의 동치를 체인으로 낸다. 풀의 모든 뼈대는
+    특수각이라 SymPy simplify가 항상 correct로 증명한다(전 18건 프로브 실측). 근 '선택'은
+    `answer_selection`(verify_root_selection)이 별도 검증한다(표현≠의미·역할 분담).
+    """
+    return [f"{skeleton.func}({skeleton.answer}*pi/180)", skeleton.value_expr]
+
+
 class TrigonometricEquationSkeletonGenerator:
     """삼각방정식 결정론 스켈레톤 생성기 — `EquivalentProblemGenerator` 좌석 구현(LLM 0).
 
@@ -267,6 +280,7 @@ class TrigonometricEquationSkeletonGenerator:
             conditions=condition,  # func(x*pi/180) - v = 0(검산용·derive 재계산)
             answer_map={"x": answer_text},
             answer_selection=skeleton.selection,  # smallest | largest(다근 중 선택)
-            solution_steps=None,
+            # S2-02: 대입 검산 체인 방출 — 수용 게이트 Tier2·상시 재검증·WH-S replay가 소비.
+            solution_steps=_substitution_check_steps(skeleton),
             concept_tags=list(self._concept_tags),
         )

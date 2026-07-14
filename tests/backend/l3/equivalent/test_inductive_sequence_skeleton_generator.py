@@ -21,6 +21,7 @@ from whymath_backend.l3.equivalent.inductive_sequence_skeleton_generator import 
     _build_inductive_pool,
 )
 from whymath_backend.l3.verify_answer import derive_selected_root
+from whymath_backend.l3.verify_solution import verify_solution
 from whymath_backend.schema.enums import SignaturePattern
 
 _STANDARD = "[12대수03-06]"
@@ -72,6 +73,8 @@ class TestGenerator:
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
                 answer_selection=candidate.answer_selection,
+                # S2-02: 단계 체인을 게이트에 공급 — verified는 전 전이 correct·unverifiable 0 요구.
+                solution_steps=candidate.solution_steps,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
 
@@ -126,6 +129,25 @@ class TestGenerator:
         texts = [c.problem.question_text or "" for c in candidates]
         assert any("aₙ + " in t for t in texts)  # 등차 점화
         assert any("·aₙ" in t for t in texts)  # 등비 점화
+
+    def test_solution_steps_fully_verified(self) -> None:
+        # S2-02: 단계 체인(반복 전개→폐형→값)이 방출되고, 전 전이가 SymPy로 correct(unverifiable 0).
+        # 게이트 verified 요건(전 전이 correct·미검증 0·correct≥1)을 전건에 대해 봉인한다.
+        for candidate in _drain(InductiveSequenceSkeletonGenerator(), 500):
+            steps = candidate.solution_steps
+            assert steps is not None and len(steps) == 3, candidate.problem.slug
+            # 체인 끝은 정답 값과 문자열 일치(answer_map과 단일 진실 원천 정합).
+            assert steps[-1] == candidate.answer_map["x"]
+            # 체인 형태 — 등차는 덧셈 전개, 등비는 곱셈 전개(발문 표기로 종류 판별).
+            text = candidate.problem.question_text or ""
+            if "·aₙ" in text:  # 등비 점화
+                assert "*" in steps[0] and "**" in steps[1]
+            else:  # 등차 점화
+                assert " + " in steps[0] and ")*" in steps[1]
+            verdict = verify_solution(steps)
+            assert verdict.has_incorrect is False
+            assert verdict.n_unverifiable == 0
+            assert verdict.n_correct == len(steps) - 1
 
     def test_difficulty_band(self) -> None:
         # rule-based 난이도 — 재보정(S2-08) 1.7~1.9 대역·복수 값(균일 회귀 차단).

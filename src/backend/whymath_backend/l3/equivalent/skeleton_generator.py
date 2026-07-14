@@ -382,6 +382,42 @@ def _factor_text(a: int, b: int) -> str:
     return f"{head} - {b}" if b > 0 else f"{head} + {abs(b)}"
 
 
+def _sympy_factor_text(a: int, b: int) -> str:
+    """(a x − b) 인수의 검산용 SymPy 표기 — 'x - 2'·'3*x + 4'(닫힌 DSL·`_factor_text`의 짝)."""
+    head = "x" if a == 1 else f"{a}*x"
+    if b == 0:
+        return head
+    return f"{head} - {b}" if b > 0 else f"{head} + {abs(b)}"
+
+
+def _factoring_steps(skeleton: _Skeleton) -> list[str]:
+    """유리근 풀이의 검증 단계 체인(S2-02) — 전개형 → 인수분해형(표현식 동치·Tier2 correct).
+
+    풀이의 *검증 가능한 대수 골자*(인수분해)만 구조화한다 — 근 '선택'은 `answer_selection`이
+    별도 검증(verify_root_selection)하고, 서술은 `answer_explanation`이 담당한다(표현≠의미).
+    수용 게이트는 unverifiable 단계 0을 요구하므로(acceptance §verified) 체인 전 전이가
+    SymPy로 증명 가능해야 한다 — 전개↔인수분해는 다항 동치라 항상 correct.
+    """
+    a, b, c = skeleton.coefficients
+    (a1, b1), (a2, b2) = skeleton.factors
+    expanded = _sympy_equation(a, b, c).removesuffix(" = 0")
+    factored = f"({_sympy_factor_text(a1, b1)})*({_sympy_factor_text(a2, b2)})"
+    return [expanded, factored]
+
+
+def _sqrt_steps(skeleton: _SqrtSkeleton) -> list[str]:
+    """무리근 풀이의 검증 단계 체인(S2-02) — 전개형 → 완전제곱꼴(표현식 동치·Tier2 correct).
+
+    (x−p)²−q 는 x²−2px+(p²−q)와 다항 동치라 전이가 항상 correct다. p=0이면 두 표기가
+    동일 문자열로 접히나(전이 trivially correct) 균일성을 위해 체인 형태를 유지한다.
+    """
+    p, q = skeleton.p, skeleton.q
+    a, b, c = skeleton.coefficients
+    expanded = _sympy_equation(a, b, c).removesuffix(" = 0")
+    completed = f"x**2 - {q}" if p == 0 else f"({_sqrt_inner_text(p)})**2 - {q}"
+    return [expanded, completed]
+
+
 def _build_pool() -> tuple[_Skeleton, ...]:
     """결정론 스켈레톤 풀 — 정수근 쌍·기약 유리근·중근을 열거하고 고정 시드로 셔플.
 
@@ -532,6 +568,7 @@ class SkeletonEquivalentProblemGenerator:
             difficulty=skeleton.difficulty,
             condition=_sympy_equation(a, b, c),
             selection=skeleton.selection,
+            steps=_factoring_steps(skeleton),
         )
 
     def _assemble_sqrt(self, spec: EquivalenceSpec, skeleton: _SqrtSkeleton) -> CandidateProblem:
@@ -554,6 +591,7 @@ class SkeletonEquivalentProblemGenerator:
             difficulty=skeleton.difficulty,
             condition=_sqrt_condition(skeleton.p, skeleton.q),
             selection=skeleton.selection,
+            steps=_sqrt_steps(skeleton),
         )
 
     def _assemble_sqrt_mc(self, spec: EquivalenceSpec, skeleton: _SqrtSkeleton) -> CandidateProblem:
@@ -603,6 +641,7 @@ class SkeletonEquivalentProblemGenerator:
             question_format=QuestionFormat.객관식,
             choices=choices,
             distractor_map=distractor_map,
+            steps=_sqrt_steps(skeleton),
         )
 
     def _assemble_mc(self, spec: EquivalenceSpec, skeleton: _Skeleton) -> CandidateProblem:
@@ -654,6 +693,7 @@ class SkeletonEquivalentProblemGenerator:
             question_format=QuestionFormat.객관식,
             choices=choices,
             distractor_map=distractor_map,
+            steps=_factoring_steps(skeleton),
         )
 
     def _build_candidate(
@@ -670,6 +710,7 @@ class SkeletonEquivalentProblemGenerator:
         question_format: QuestionFormat = QuestionFormat.단답형,
         choices: list[str] | None = None,
         distractor_map: list[DistractorEntry] | None = None,
+        steps: list[str] | None = None,
     ) -> CandidateProblem:
         """뼈대 종류 공통 후보 조립 — Problem·Provenance·CandidateProblem(전부 결정론)."""
         standard_codes = sorted(spec.achievement_standard_codes)
@@ -716,7 +757,9 @@ class SkeletonEquivalentProblemGenerator:
             conditions=condition,
             answer_map={"x": answer_text},
             answer_selection=selection,
-            solution_steps=None,  # 검증된 단계 체인은 WH-S 솔버 몫(S2-k 규약 동일)
+            # S2-02: 생성기가 아는 풀이 경로(전개↔인수분해/완전제곱)를 구조 단계로 방출 —
+            # 수용 게이트 Tier2·상시 재검증(corpus_reverify)·WH-S replay가 소비한다.
+            solution_steps=steps,
             concept_tags=list(self._concept_tags),  # S2-p: 결정론 개념 태깅(기본 HK06 PRIMARY)
         )
 

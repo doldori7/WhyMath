@@ -2,8 +2,9 @@
 
 등차(aₙ=a+(n−1)d)·등비(aₙ=a·rⁿ⁻¹) 두 형제 생성기가 ① 전건 S2-a 4종 게이트 통과(게이트 인프라
 무변경 재사용 실증) ② answer가 derive_selected_root와 일치(교차 검증·독립 재계산) ③ 결정론·풀
-유일 ④ **답 유일 → signature 유일**(구조 dedup 오병합 방지) ⑤ 개념 태깅·유일해 선택을 못 박는다.
-LLM·DB·PG 0(순수 결정론).
+유일 ④ **답 유일 → signature 유일**(구조 dedup 오병합 방지) ⑤ 개념 태깅·유일해 선택
+⑥ **solution_steps 방출(S2-02)** — 공식 대입 체인 전 전이 correct·unverifiable 0(Tier2 무결)을
+못 박는다. LLM·DB·PG 0(순수 결정론).
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from whymath_backend.l3.equivalent.sequence_skeleton_generator import (
     _build_geo_pool,
 )
 from whymath_backend.l3.verify_answer import derive_selected_root
+from whymath_backend.l3.verify_solution import verify_solution
 
 _ARITH_STANDARD = "[12대수03-02]"
 _GEO_STANDARD = "[12대수03-03]"
@@ -63,9 +65,23 @@ class TestArithmeticGenerator:
                 provenance=candidate.provenance,
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
+                solution_steps=candidate.solution_steps,  # S2-02: Tier2 단계 검증 포함 게이트
                 answer_selection=candidate.answer_selection,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
+
+    def test_solution_steps_all_verified(self) -> None:
+        # S2-02: 공식 대입 체인(대입식→값)이 방출되고 전 전이 correct·unverifiable 0(Tier2 무결).
+        candidates = _drain(ArithmeticSequenceSkeletonGenerator(), _ARITH_STANDARD, 500)
+        assert candidates
+        for candidate in candidates:
+            steps = candidate.solution_steps
+            assert steps is not None and len(steps) == 2, candidate.problem.slug
+            assert steps[1] == candidate.answer_map["x"]  # 체인 종단 = 정답(단일 진실 원천)
+            result = verify_solution(steps)
+            assert result.n_transitions == 1
+            assert result.n_correct == 1 and result.n_unverifiable == 0
+            assert result.has_incorrect is False
 
     def test_answer_matches_independent_derivation(self) -> None:
         # 교차 검증 — answer가 조건식의 독립 SymPy 재계산(derive_selected_root)과 정수 일치.
@@ -111,9 +127,23 @@ class TestGeometricGenerator:
                 provenance=candidate.provenance,
                 conditions=candidate.conditions,
                 answer_map=candidate.answer_map,
+                solution_steps=candidate.solution_steps,  # S2-02: Tier2 단계 검증 포함 게이트
                 answer_selection=candidate.answer_selection,
             )
             assert verdict.accepted is True, f"{candidate.problem.slug} 미수용: {verdict.reasons}"
+
+    def test_solution_steps_all_verified(self) -> None:
+        # S2-02: 거듭제곱 대입 체인(a·r**(n−1)→값)이 방출되고 전 전이 correct·unverifiable 0.
+        candidates = _drain(GeometricSequenceSkeletonGenerator(), _GEO_STANDARD, 500)
+        assert candidates
+        for candidate in candidates:
+            steps = candidate.solution_steps
+            assert steps is not None and len(steps) == 2, candidate.problem.slug
+            assert steps[1] == candidate.answer_map["x"]  # 체인 종단 = 정답(단일 진실 원천)
+            result = verify_solution(steps)
+            assert result.n_transitions == 1
+            assert result.n_correct == 1 and result.n_unverifiable == 0
+            assert result.has_incorrect is False
 
     def test_answer_matches_independent_derivation(self) -> None:
         for candidate in _drain(GeometricSequenceSkeletonGenerator(), _GEO_STANDARD, 500):

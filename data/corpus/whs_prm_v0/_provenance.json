@@ -1,0 +1,25 @@
+{
+  "corpus_name": "whs_prm_v0",
+  "generated": "2026-07-14",
+  "generation_method": "WH-S corpus replay 배치(whymath_backend.whs.corpus_replay) — 생성 코퍼스의 검증 단계 체인을 실제 WH-S 하네스(run_solver)로 replay해 solution_nodes에 라벨 적재 후 prm_builder_export_cli --stream으로 export",
+  "record_count": 1282,
+  "label_counts": {"good": 663, "bad": 619},
+  "problems_covered": 620,
+  "source": {
+    "corpus": "data/corpus/problem_bank_generated_v0/problems.jsonl (620문·verify.solution_steps)",
+    "good_labels": "체인 전이의 SymPy 동치 증명(verify_step correct → VERIFIED)",
+    "bad_labels": "결정론 결함 주입 — 마지막 단계 부호 반전(sign-flip 오개념 미러)·verify_step이 incorrect(비동치)로 증명한 경우에만 주입(bad_skipped 1건 정직 집계)"
+  },
+  "license_notice": "전 레코드 자체생성(WHYMATH_GENERATED) 코퍼스 유래 — 외부 본문 0·학생 PII 0(시스템 솔버 내부 탐색 상태). 저작권은 WhyMath에 있다.",
+  "honesty_notes": [
+    "본 데이터셋의 good 라벨은 생성기 construction trace의 replay다 — LLM 솔버 탐색 산출물이 아니며, finalize 통과율(620/620)은 파이프라인 무결성 지표이지 솔버 풀이 능력이 아니다.",
+    "bad 라벨은 강등전(결함 주입) 방법론 미러 — ground truth 기지(SymPy 비동치 증명). 실 LLM 오류 분포와는 다를 수 있다(실탐색 bad 라벨은 LLM 정책 후속).",
+    "PENDING(루트)·UNVERIFIED는 prm_builder가 구조 배제(excluded_uncertain 0·학습 누수 0).",
+    "prm_score 전건 null — PRM 모델 미학습 단계라 confidence 추정치를 날조하지 않는다."
+  ],
+  "reproduce": [
+    "WHYMATH_DATABASE_URL=… alembic upgrade head",
+    "WHYMATH_DATABASE_URL=… python -m whymath_backend.whs.corpus_replay data/corpus/problem_bank_generated_v0/problems.jsonl",
+    "WHYMATH_DATABASE_URL=… python -m whymath_backend.whs.prm_builder_export_cli --stream > prm_dataset.jsonl"
+  ]
+}

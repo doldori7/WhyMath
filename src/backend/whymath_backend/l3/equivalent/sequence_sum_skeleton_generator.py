@@ -79,6 +79,18 @@ def _sum_answer_format(answer: int) -> AnswerFormat:
     return AnswerFormat.자연수 if answer > 0 else AnswerFormat.실수
 
 
+def _sum_steps(formula: str, answer: int) -> list[str]:
+    """합 풀이의 검증 단계 체인(S2-02) — 합 공식 대입식 → 값(표현식 동치·Tier2 correct).
+
+    `_factoring_steps`(skeleton_generator) 패턴 미러. `verify_step`은 표현식 동치만 증명하므로
+    체인은 *합 공식 대입 평가*로 구성한다: 대입식(예: '10*(2*3 + (10 - 1)*4)/2')과 그 값('210')은
+    수치 항등식이라 전이가 항상 correct — 수용 게이트(acceptance §verified)의 unverifiable 0·
+    전 전이 correct 요구를 충족한다(실측 프로브 확인). 공식 '유도'·서술은 answer_explanation 담당
+    (표현≠의미) — 여기엔 SymPy로 증명 가능한 대수 골자만 싣는다.
+    """
+    return [formula, str(answer)]
+
+
 # ── 등차수열의 합 Sₙ = n(2a+(n−1)d)/2 ────────────────────────────────────────
 _ARITH_SUM_TEMPLATES: tuple[str, ...] = (
     "첫째항이 {a}, 공차가 {d}인 등차수열의 첫째항부터 제{n}항까지의 합을 구하시오.",
@@ -102,9 +114,14 @@ class _ArithSumSkeleton:
         return total // 2
 
     @property
+    def formula(self) -> str:
+        """합 공식의 SymPy 계산식 — 'n(2a+(n−1)d)/2'. condition·solution_steps의 단일 진실 원천."""
+        return f"{self.term}*(2*{self.first} + ({self.term} - 1)*{self.diff})/2"
+
+    @property
     def condition(self) -> str:
         """검산용 SymPy 등식 — 'x − n(2a+(n−1)d)/2 = 0'. 합 공식 그대로(독립 재계산)."""
-        return f"x - ({self.term}*(2*{self.first} + ({self.term} - 1)*{self.diff})/2) = 0"
+        return f"x - ({self.formula}) = 0"
 
     @property
     def difficulty(self) -> float:
@@ -233,7 +250,8 @@ class ArithmeticSumSkeletonGenerator:
             conditions=condition,  # x - n(2a+(n-1)d)/2 = 0(검산용·독립 재계산)
             answer_map={"x": answer_text},
             answer_selection="unique",  # 합은 유일값
-            solution_steps=None,
+            # S2-02: 합 공식 대입식→값 체인 방출 — Tier2·상시 재검증·WH-S replay가 소비.
+            solution_steps=_sum_steps(skeleton.formula, skeleton.answer),
             concept_tags=list(self._concept_tags),
         )
 
@@ -265,9 +283,14 @@ class _GeoSumSkeleton:
         return bool(self.first * (self.ratio**self.term - 1) % (self.ratio - 1) == 0)
 
     @property
+    def formula(self) -> str:
+        """합 공식의 SymPy 계산식 — 'a(rⁿ−1)/(r−1)'. condition·solution_steps의 단일 진실 원천."""
+        return f"{self.first}*({self.ratio}**{self.term} - 1)/({self.ratio} - 1)"
+
+    @property
     def condition(self) -> str:
         """검산용 SymPy 등식 — 'x − a(rⁿ−1)/(r−1) = 0'. 합 공식 그대로(독립 재계산)."""
-        return f"x - ({self.first}*({self.ratio}**{self.term} - 1)/({self.ratio} - 1)) = 0"
+        return f"x - ({self.formula}) = 0"
 
     @property
     def difficulty(self) -> float:
@@ -397,6 +420,7 @@ class GeometricSumSkeletonGenerator:
             conditions=condition,  # x - a(rⁿ-1)/(r-1) = 0(검산용·독립 재계산)
             answer_map={"x": answer_text},
             answer_selection="unique",  # 합은 유일값
-            solution_steps=None,
+            # S2-02: 합 공식 대입식→값 체인 방출 — Tier2·상시 재검증·WH-S replay가 소비.
+            solution_steps=_sum_steps(skeleton.formula, skeleton.answer),
             concept_tags=list(self._concept_tags),
         )

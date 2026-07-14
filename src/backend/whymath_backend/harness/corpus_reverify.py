@@ -2,8 +2,9 @@
 
 정본: `docs/standards/superhuman_verification_standard.md` §2 S6. 사람은 승인 후 문항을
 다시 보지 않지만(재검수 0회), 기계는 **전 코퍼스를 매일 밤 전수 재검증**할 수 있다.
-코퍼스 JSONL의 `verify{conditions, answer_map, answer_selection}` 재료로 각 문항의
-정답을 Tier1(`verify_answer`) + 수치 반례 fuzz(`counterexample_fuzz`)로 다시 검산해,
+코퍼스 JSONL의 `verify{conditions, answer_map, answer_selection, solution_steps}` 재료로 각
+문항의 정답을 Tier1(`verify_answer`) + Tier2 단계 연쇄(`verify_solution`·steps 보유 시·S2-02)
++ 수치 반례 fuzz(`counterexample_fuzz`)로 다시 검산해,
 **fail이 하나라도 있으면 exit 1**(정본 변경·데이터 오염을 야간 CI가 즉시 잡는다).
 
 정직성: verify 재료가 없거나 파싱 불가한 문항은 skip(집계에 skipped로)하고, *fail만*
@@ -44,6 +45,7 @@ from whymath_backend.l3.verify_answer import (
     verify_root_selection,
     verify_series_converges,
 )
+from whymath_backend.l3.verify_solution import verify_solution
 
 # 개념형 검증기 디스패치 — answer_kind → SymPy 독립 재검증 프리미티브(acceptance와 동일 표·S6).
 _CONCEPTUAL_VERIFIERS: dict[str, Callable[[str | Sequence[str], str], AnswerVerdict]] = {
@@ -149,6 +151,19 @@ def _reverify_one(record: dict[str, object], *, use_fuzz: bool) -> tuple[str, st
         sel = verify_root_selection(conditions, amap, selection)  # type: ignore[arg-type]
         if sel.state == "fail":
             return "fail", f"근 선택({selection}) 위반: {sel.reason}"
+
+    # Tier2 단계 재검증(S2-02) — verify.solution_steps가 있으면 전이 연쇄를 SymPy 동치로
+    # 재검산한다(생성기는 100% 증명 가능 체인만 방출 — 수용 게이트가 적재 시 봉인). 여기서도
+    # 모듈 정직 규약을 따른다: **incorrect(확정 오염)만 fail**, unverifiable은 오염으로
+    # 오판하지 않는다(정본 SymPy 변화 등 — 적재 게이트가 재생성 시 잡는다).
+    steps = verify.get("solution_steps")
+    if isinstance(steps, list) and steps:
+        tier2 = verify_solution([str(s) for s in steps])
+        if tier2.has_incorrect:
+            return "fail", (
+                f"Tier2 단계 incorrect: 전이 {tier2.first_incorrect_index} "
+                f"(correct {tier2.n_correct}·unverifiable {tier2.n_unverifiable})"
+            )
 
     # 수치 반례 fuzz(옵션) — fail만 오염으로 본다.
     if use_fuzz:
