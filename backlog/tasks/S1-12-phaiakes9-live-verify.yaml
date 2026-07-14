@@ -5,15 +5,17 @@ track: math-completion
 stage: S1
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 1
-owner: kiki
+owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - 라이브 호출 비용·지연 실측치를 docs/strategy에 기록
   - "verify 커버리지 게이트 승격 판정 + MEMORY.md 결정로그"
-artifacts: []
+artifacts:
+  - 7d68cf7
+  - docs/strategy/live_cost_measurement_2026-07.md
 session: null
-notes: "ROADMAP 병목 ② 대응. 라이브 실측은 Phaiakes9 실호출 필수(클라우드 환경 도달 불가) → owner kiki. 런북=docs/strategy/live_cost_measurement_2026-07.md. 결과표 채워지면 done"
-updated: 2026-07-09
+notes: "ROADMAP 병목 ② 대응. 사람 몫(라이브 실호출·2026-07-14 Kiki 세션) 완료 → owner claude 이관(기록·판정 서기 몫·S2-05/ARCH-12 선례). 결과표·판정 기입 완료 — 로컬 72.7%(S1-13 후 재판정)·verify 게이트 승격 부결(보류)"
+updated: 2026-07-14

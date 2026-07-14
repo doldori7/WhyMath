@@ -1,6 +1,6 @@
 # 라이브 비용·지연 실측 핸드오프 (S1-12 · ROADMAP 병목 ②)
 
-> **상태**: 🔄 진행 중 — 서버 개통 완료(2026-07-09·Kiki), **측정 도구 검증 완료(2026-07-13·claude)**, 실측 숫자 대기 | **owner**: kiki(라이브 실호출 필수)
+> **상태**: ✅ **실측 완료(2026-07-14·Kiki 라이브 세션)** — 결과표 기입·판정 완료(아래) | **owner**: kiki(실측)·claude(기록·판정 서기)
 > **측정 도구 검증(2026-07-13)**: `live_preflight --no-smoke` exit 0(설정·판정 경로 건전·클라우드/Ollama 미설정 정직 보고)·§3 배치 CLI(`problem_corpus_accumulate`)·§5 판독 CLI(`ops.cost_report`) 인자 확정·런북 자리표시자 해소. **claude-소유 선제 준비분(측정 스크립트·판독기)은 완비** — 잔여는 Kiki의 라이브 실호출뿐(클라우드 환경 도달 불가).
 > **목적**: Phaiakes9 라이브 호출의 비용·지연을 실측해 S1 탈출 게이트 ②("루프당 비용 실측·로컬 80%")와
 > verify 커버리지 게이트 승격 판정의 **추정치를 실측치로 교체**한다. 이 문서의 결과표가 채워지면 S1-12 done.
@@ -15,7 +15,8 @@
 | 모델 6종 pull | ✅ | qwen2-math:1.5b/7b · qwen2.5:3b/7b · qwen3.5:27b · qwen3-vl:8b |
 | 스모크 도달성 | ✅ | `check_status()` → reachable:True · missing:[] · **READY:True** |
 | 파이프라인 ① rephrase | ✅ | 590 attempted → **184 rephrased / 406 unchanged**(전부 안전 사유: 원문 동일 or 수치 불변 봉인) |
-| 클라우드 티어 비용 실측 | ⬜ 대기 | §10 Anthropic+Langfuse 키 투입 후 §11 판독 |
+| 클라우드 티어 비용 실측 | ✅ 2026-07-14 | preflight cloud_mid 1콜 0.4066원(63/5 tok·1187ms)·cost_report 33이벤트 판독 |
+| 파이프라인 ② LLM 생성 라이브 | ✅ 2026-07-14 | accumulate n=5 → **accepted_stored 1**(게이트 통과 실적재)·rejected_duplicate 4(구조 dedup 정상 — 해당 spec 코퍼스 포화) |
 
 ---
 
@@ -64,8 +65,14 @@ p50/p90·로컬비율·캐시적중·튜닝 제안으로 집계):
 # 라이브 세션 직후엔 --days 1 권장. JSON을 아래 결과표에 옮겨 적는다.
 python -m whymath_backend.ops.cost_report --days 1 --json cost_report.json
 ```
-출력 매핑: `by_tier[*].cost_krw/tokens/latency p50·p90` → 비용·지연 표 / `local_ratio` → 로컬:클라우드
-판정선(≥0.8) / `suggested_est_input_tokens`·`_output_tokens` → S1-13 router 튜닝 입력.
+출력 매핑: `tier_stats[local|cloud_mid|cloud_high]`의 cost_krw/tokens/latency 분포(p50·p90·합) →
+비용·지연 표 / `local_ratio` → 로컬:클라우드 판정선(≥0.8) / `suggested_est_*` → S1-13 router 튜닝 입력.
+
+**결과표 자동 기입(전기 오류 0)**: JSON을 아래에 넣으면 표에 붙여넣을 행이 그대로 나온다:
+```powershell
+python ..\..\scripts\fill_live_cost_table.py cost_report.json
+```
+(미측정 셀은 '—' 유지 — 날조 금지. verify verdict 분포 표만 별도 소스 `GET /v1/me/harness-metrics`.)
 
 보조 판독원(교차 확인용):
 - `GET /v1/me/harness-metrics`(api/me.py): 대리 지표 7종 — verify 통과율 등(verdict 분포 표)
@@ -78,28 +85,39 @@ python -m whymath_backend.ops.cost_report --days 1 --json cost_report.json
 ### 비용 (루프당·티어별)
 | cost_tier | 호출 수 | cost_krw (합/평균) | input/output tokens (평균) | 비고 |
 |---|---|---|---|---|
-| LOCAL | | 0.0 (로컬) | | 라우터 목표 80% |
-| CLOUD_MID | | | | Sonnet 경로 |
-| CLOUD_HIGH | | | | Opus 경로 |
-| **로컬:클라우드 비율** | | | | S1 게이트② 판정선(로컬 ≥80%) |
+| LOCAL | 24 | 0.0 (로컬) | —¹ | 라우터 목표 80% |
+| CLOUD_MID | 9 | 63.7098 / 7.0789² | —¹ | Sonnet 경로 |
+| CLOUD_HIGH | 0 | — | — | 호출 0(미발생) |
+| **로컬:클라우드 비율** | 24:9 | | | **72.7% — 판정선(≥80%) 미달³** |
+
+전역 분포(33이벤트·tier 미분해¹): input p50 74·p90 95·mean 77 (n=32) / output p50 358·p90 506·mean 333 (n=32) / cost p50 0·p90 9.6743·mean 1.9306·합 63.7098 (n=33) / 캐시 적중 0/33.
+
+¹ 실측이 판독기 구판(tier_stats 확장 이전)으로 수행돼 티어별 토큰·지연 분해가 JSON에 없음 — 차기 실측은 `cost_report`가 자동 분해(2026-07-14 확장). ² 유도치: LOCAL 24건 전부 cost 0.0 기록 → 클라우드 합=전역 합 63.7098·평균=63.7098/9(산술 유도·측정 아님 명시). ³ **대표성 캐비엇**: 이 33이벤트는 측정 세션 트래픽(클라우드 유발 스모크+배치 포함)이라 프로덕션 루프 믹스가 아님 — 판정선 재판정은 S1-13 라우터 튜닝(아래) 후 대표 트래픽으로.
 
 ### 지연
 | 경로 | p50 latency_ms | p90 latency_ms | 비고 |
 |---|---|---|---|
-| LOCAL (Ollama) | | | |
-| CLOUD_MID | | | |
+| LOCAL (Ollama) | —¹ | —¹ | 티어 미분해(각주 ¹) |
+| CLOUD_MID | —¹ | —¹ | preflight 단일 콜 실측 1187ms(참고) |
+| (전역·33이벤트) | 3250 | 8165 | mean 3858 |
 
 ### verify verdict 분포 (게이트 승격 근거)
 | verdict | 비율 | 비고 |
 |---|---|---|
-| correct | | |
-| incorrect | | |
-| unverifiable | | undecidable 보수 처리 비율 |
+| correct | —(미측정) | |
+| incorrect | —(미측정) | |
+| unverifiable | —(미측정) | undecidable 보수 처리 비율 |
 
-### 판정 (실측 후)
-- [ ] 루프당 비용 실측 완료·로컬 ≥80% 여부:
-- [ ] verify 커버리지 게이트 primary 승격 가부:
-- [ ] MEMORY.md 결정로그 append:
+이번 라이브 세션은 `GET /v1/me/harness-metrics`(shadow verdict 분포)를 실행하지 않음 — 빈칸 유지(날조 금지). S1-11 착수 전 확보 필요.
+
+### 판정 (실측 후 — 2026-07-14)
+- [x] 루프당 비용 실측 완료·로컬 ≥80% 여부: **실측 완료(33이벤트) — 72.7%로 미달(as-measured)**. 단 측정 세션 믹스 대표성 제한(각주 ³)·라우터 est 가정 1000 vs 실측 p50 74/358의 대폭 괴리 → **S1-13(튜닝) 수행 후 대표 트래픽 재판정**이 정당한 절차.
+- [x] verify 커버리지 게이트 primary 승격 가부: **부결(보류)** — shadow verdict 분포 미확보("측정 없는 도입 없음"). 재판정 조건: harness-metrics 분포 확보(S1-11 착수 전제).
+- [x] MEMORY.md 결정로그 append: 2026-07-14 S1-12 실측 항목.
+
+### S1-13 입력(튜닝 제안 — cost_report 산출)
+- `_EST_ASSUMED_INPUT_TOKENS` 1000 → **74** · `_EST_ASSUMED_OUTPUT_TOKENS` 1000 → **358**
+- 대입 시 CLOUD_MIN_COST_KRW·est_cost_krw·guard_cloud 임계값 단일 공식 자동 재계산 — 로컬:클라우드 라우팅 재분포 예상 → 재측정으로 80% 판정선 재판정.
 
 ---
 

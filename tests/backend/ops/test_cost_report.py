@@ -317,3 +317,26 @@ def test_main_smoke_writes_json(monkeypatch: pytest.MonkeyPatch, tmp_path: Any) 
     saved = json.loads(out_path.read_text(encoding="utf-8"))
     assert saved["event_count"] == 5
     assert saved["suggested_est_input_tokens"] == 110
+
+
+# ── 티어별 분포(S1-12 결과표 행 단위) ──
+
+
+def test_tier_stats_per_tier_distributions() -> None:
+    # 결과표는 LOCAL/CLOUD_MID 행별 p50·합이 필요 — 전역 분포로는 채울 수 없다(런북 §5).
+    events = [
+        {"cost_tier": "local", "input_tokens": 100, "cost_krw": 0.0, "latency_ms": 800},
+        {"cost_tier": "local", "input_tokens": 120, "cost_krw": 0.0, "latency_ms": 900},
+        {"cost_tier": "cloud_mid", "input_tokens": 900, "cost_krw": 12.5, "latency_ms": 2500},
+        {"cost_tier": None},  # 미상 → (unknown) 버킷·표본 없음
+    ]
+    report = cr.aggregate_l3_events(events)
+    assert set(report.tier_stats) == {"local", "cloud_mid", "(unknown)"}
+    local = report.tier_stats["local"]
+    assert local.events == 2
+    assert local.latency_ms.p50 == 850.0
+    assert local.cost_krw.total == 0.0
+    cloud = report.tier_stats["cloud_mid"]
+    assert cloud.events == 1 and cloud.cost_krw.total == 12.5
+    unknown = report.tier_stats["(unknown)"]
+    assert unknown.events == 1 and unknown.latency_ms.count == 0  # 실측 없음 정직 집계

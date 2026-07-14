@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import collections
+import hashlib
 from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
 
@@ -166,6 +167,19 @@ def load_sample_corpus(text: str) -> list[SampleProblem]:
 # ──────────────────────────────────────────────────────────────────────────
 # 층화 샘플링 (결정론 — 도메인 비례 + 오개념 강제 + 난이도·형식 분산)
 # ──────────────────────────────────────────────────────────────────────────
+def _rotation_key(problem_id: str, rotation: int) -> str:
+    """표본 회전(S2-11)의 안정 선택 키 — rotation=0이면 항등(기존 산출물 바이트 불변).
+
+    rotation>0이면 problem_id를 salt와 함께 해시해 *선택 순서*만 결정론적으로 재배열한다.
+    verdict-blind(이전 검수 결과와 무관)·같은 rotation이면 바이트 재현. 결함 교정 후 같은
+    표본 재채점 금지 규약(초인간 검증 표준 §S5 재채점 금지)의 재추출 메커니즘이다 —
+    disjoint 보장은 아니나 선택이 이전 판정에 오염되지 않는 독립 추출이다.
+    """
+    if rotation == 0:
+        return problem_id
+    return hashlib.sha256(f"rot{rotation}:{problem_id}".encode()).hexdigest()
+
+
 def allocate_quota(counts: Mapping[str, int], n: int) -> dict[str, int]:
     """도메인별 표본 쿼터 — 모든 도메인 최소 1 + 나머지 D'Hondt 최고평균 비례배분(순수·결정론).
 
@@ -207,35 +221,44 @@ def _even_stride_indices(length: int, k: int) -> list[int]:
 
 
 def _select_within_domain(
-    problems: Sequence[SampleProblem], quota: int, seeds: frozenset[str]
+    problems: Sequence[SampleProblem], quota: int, seeds: frozenset[str], rotation: int = 0
 ) -> list[SampleProblem]:
     """도메인 1개에서 `quota`문 선택 — 오개념 seed 강제 포함 + 나머지 난이도·형식 stride 분산.
 
-    seed(오개념 커버용 problem_id)를 먼저 확정하고, 나머지는 (난이도·발문형식·problem_id) 정렬
-    위에서 균등 stride로 뽑는다. seed가 쿼터보다 많으면 problem_id 순 앞에서 자른다(안전).
+    seed(오개념 커버용 problem_id)를 먼저 확정하고, 나머지는 (난이도·발문형식·선택키) 정렬
+    위에서 균등 stride로 뽑는다. seed가 쿼터보다 많으면 선택키 순 앞에서 자른다(안전).
+    rotation은 선택키만 재배열(S2-11 표본 회전) — 0이면 기존과 바이트 동일.
     """
-    by_id = sorted(problems, key=lambda p: p.problem_id)
+    by_id = sorted(problems, key=lambda p: _rotation_key(p.problem_id, rotation))
     seeded = [p for p in by_id if p.problem_id in seeds]
     if len(seeded) >= quota:
         return seeded[:quota]
     rest = [p for p in by_id if p.problem_id not in seeds]
-    rest.sort(key=lambda p: (p.difficulty_overall, p.question_format, p.problem_id))
+    rest.sort(
+        key=lambda p: (
+            p.difficulty_overall,
+            p.question_format,
+            _rotation_key(p.problem_id, rotation),
+        )
+    )
     picks = _even_stride_indices(len(rest), quota - len(seeded))
     chosen = seeded + [rest[i] for i in picks]
     return sorted(chosen, key=lambda p: p.problem_id)
 
 
-def _misconception_seeds(problems: Iterable[SampleProblem]) -> dict[str, set[str]]:
+def _misconception_seeds(
+    problems: Iterable[SampleProblem], rotation: int = 0
+) -> dict[str, set[str]]:
     """강제 오개념 4종 → 소속 도메인의 seed problem_id 집합(결정론).
 
-    각 오개념에 대해 그것을 실은 첫 문제(problem_id 최소)를 골라 그 도메인의 seed로 등록한다 —
-    한 문제가 2종을 동시에 실으면 seed 1건이 2종을 커버한다(코퍼스 실측 구조).
+    각 오개념에 대해 그것을 실은 첫 문제(선택키 최소·rotation 반영)를 골라 그 도메인의 seed로
+    등록한다 — 한 문제가 2종을 동시에 실으면 seed 1건이 2종을 커버한다(코퍼스 실측 구조).
     """
     seeds: dict[str, set[str]] = collections.defaultdict(set)
     for mis_id in REQUIRED_MISCONCEPTIONS:
         carriers = sorted(
             (p for p in problems if mis_id in p.misconception_ids),
-            key=lambda p: p.problem_id,
+            key=lambda p: _rotation_key(p.problem_id, rotation),
         )
         if carriers:
             first = carriers[0]
@@ -243,11 +266,15 @@ def _misconception_seeds(problems: Iterable[SampleProblem]) -> dict[str, set[str
     return seeds
 
 
-def select_sample(problems: Sequence[SampleProblem], n: int) -> list[SampleProblem]:
+def select_sample(
+    problems: Sequence[SampleProblem], n: int, *, rotation: int = 0
+) -> list[SampleProblem]:
     """코퍼스 → N문 결정론 층화 표본(도메인 비례 + 오개념 강제 + 난이도·형식 분산).
 
-    반환 순서: 도메인 랭크(빈도 내림차순·동빈도는 도메인명) → problem_id. 같은 코퍼스·N이면
-    바이트까지 재현된다(정렬만 사용·난수 0). `n`이 전체 문항 수 이상이면 전건을 problem_id 순 반환.
+    반환 순서: 도메인 랭크(빈도 내림차순·동빈도는 도메인명) → problem_id. 같은 (코퍼스·N·
+    rotation)이면 바이트까지 재현된다(정렬만 사용·난수 0). rotation>0은 S2-11 표본 회전 —
+    결함 교정 후 같은 표본 재채점 대신 신규 독립 표본을 재추출한다(선택키 salt 재배열·
+    verdict-blind·rotation=0은 기존 산출물 바이트 불변). `n`이 전체 이상이면 전건 반환.
     """
     if n >= len(problems):
         return sorted(problems, key=lambda p: p.problem_id)
@@ -256,13 +283,13 @@ def select_sample(problems: Sequence[SampleProblem], n: int) -> list[SampleProbl
         by_domain[p.domain].append(p)
     counts = {d: len(ps) for d, ps in by_domain.items()}
     quota = allocate_quota(counts, n)
-    seeds = _misconception_seeds(problems)
+    seeds = _misconception_seeds(problems, rotation)
 
     selected: list[SampleProblem] = []
     for domain in by_domain:
         selected.extend(
             _select_within_domain(
-                by_domain[domain], quota[domain], frozenset(seeds.get(domain, set()))
+                by_domain[domain], quota[domain], frozenset(seeds.get(domain, set())), rotation
             )
         )
     domain_rank = {d: (-counts[d], d) for d in counts}
@@ -478,13 +505,13 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[4]
 
 
-def _run(corpus_path: Path, out_path: Path, n: int) -> int:
+def _run(corpus_path: Path, out_path: Path, n: int, rotation: int = 0) -> int:
     """코퍼스 읽어 표본 마크다운 기록. 파일 부재는 exit 2(조용한 무동작 금지)."""
     if not corpus_path.exists():
         print(f"코퍼스 없음: {corpus_path}")
         return 2
     problems = load_sample_corpus(corpus_path.read_text(encoding="utf-8"))
-    sample = select_sample(problems, n)
+    sample = select_sample(problems, n, rotation=rotation)
     markdown = render_markdown(sample, corpus_size=len(problems))
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(markdown, encoding="utf-8")
@@ -521,10 +548,16 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help=f"산출 마크다운 경로(기본 {_DEFAULT_OUT_REL}).",
     )
+    parser.add_argument(
+        "--rotation",
+        type=int,
+        default=0,
+        help="표본 회전 인덱스(S2-11 — 교정 후 재판정은 신규 회전으로 독립 재추출. 기본 0=초판).",
+    )
     args = parser.parse_args(argv)
     corpus_path = args.corpus if args.corpus is not None else _repo_root() / _DEFAULT_CORPUS_REL
     out_path = args.out if args.out is not None else _repo_root() / _DEFAULT_OUT_REL
-    return _run(corpus_path, out_path, args.n)
+    return _run(corpus_path, out_path, args.n, rotation=args.rotation)
 
 
 if __name__ == "__main__":  # pragma: no cover — 모듈 실행 진입점

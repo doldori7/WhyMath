@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S2-11-acceptance-sampling-rigor
+title: "합격 로트 샘플링 엄밀화 — 교정 후 신규 독립 표본 재추출 규약"
+track: infra-debt
+stage: S2
+subject: math
+layer: docs
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "superhuman_verification_standard §5(합격 로트)에 '결함 교정 후 같은 표본 재채점 금지·신규 독립 표본 재추출' 규약 명문화"
+  - "S2-01 스타일 검수에 재적용할 표본 회전(seed offset) 메커니즘 설계"
+artifacts:
+  - e38d3a6
+  - "docs/standards/superhuman_verification_standard.md#§4.5"
+session: null
+notes: "ARCH-07 발견(유보 B): S2-01 Wilson PASS가 교정후-재채점 의존 — as-found 2/240=상한 0.0249 FAIL·전코퍼스 as-found 4/620=0.0143 통과라 실체 무결이나, fail→pass 전환 패턴은 엄밀 규약 위반. 문서 병기 완료(ai_review_batch_240 §기계 게이트)"
+updated: 2026-07-14

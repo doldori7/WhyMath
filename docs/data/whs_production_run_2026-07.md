@@ -65,7 +65,7 @@ construction trace(구성상 정답)라 자기 답을 되먹인 측정이며, �
 | `dead_end_log` | 619 |
 | 오분기 미주입(bad_skipped) | 1 (비동치 증명 실패 — 날조 금지·정직 집계) |
 
-- good 663 = 전이 총수 검산: 2단 체인 575문×1 + 3단 체인(TRIG-VAL 13·IND-SEQ 30)×2 + TRIG-EQ 12×1 ✓
+- good 663 = 전이 총수 검산: 2단 체인 577문×1 + 3단 체인 43문(TRIG-VAL 13·IND-SEQ 30)×2 = 663 ✓ (ARCH-07 적대 검증이 초판의 이중 계상 산술 오류를 교정 — 실데이터 분포 1-good 577·2-good 43 실측)
 - **결함 주입 오분기**: 마지막 단계 부호 반전(sign-flip 오개념 미러) — `verify_step`이
   incorrect(비동치)로 **증명한 경우에만** FAILED 노드로 주입(강등전 §3 방법론 미러·ground truth 기지).
 

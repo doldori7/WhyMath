@@ -5,7 +5,7 @@ track: math-completion
 stage: S1
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -14,7 +14,8 @@ requires_gates: []
 acceptance:
   - 라우터 est 단가표를 실측으로 보정
   - 캐싱 적용 여부 결정로그
-artifacts: []
+artifacts:
+  - b0418d4
 session: null
 notes: ""
-updated: 2026-07-08
+updated: 2026-07-14
