@@ -64,8 +64,14 @@ p50/p90·로컬비율·캐시적중·튜닝 제안으로 집계):
 # 라이브 세션 직후엔 --days 1 권장. JSON을 아래 결과표에 옮겨 적는다.
 python -m whymath_backend.ops.cost_report --days 1 --json cost_report.json
 ```
-출력 매핑: `by_tier[*].cost_krw/tokens/latency p50·p90` → 비용·지연 표 / `local_ratio` → 로컬:클라우드
-판정선(≥0.8) / `suggested_est_input_tokens`·`_output_tokens` → S1-13 router 튜닝 입력.
+출력 매핑: `tier_stats[local|cloud_mid|cloud_high]`의 cost_krw/tokens/latency 분포(p50·p90·합) →
+비용·지연 표 / `local_ratio` → 로컬:클라우드 판정선(≥0.8) / `suggested_est_*` → S1-13 router 튜닝 입력.
+
+**결과표 자동 기입(전기 오류 0)**: JSON을 아래에 넣으면 표에 붙여넣을 행이 그대로 나온다:
+```powershell
+python ..\..\scripts\fill_live_cost_table.py cost_report.json
+```
+(미측정 셀은 '—' 유지 — 날조 금지. verify verdict 분포 표만 별도 소스 `GET /v1/me/harness-metrics`.)
 
 보조 판독원(교차 확인용):
 - `GET /v1/me/harness-metrics`(api/me.py): 대리 지표 7종 — verify 통과율 등(verdict 분포 표)

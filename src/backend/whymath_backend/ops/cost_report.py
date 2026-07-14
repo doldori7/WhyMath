@@ -88,6 +88,17 @@ class Distribution:
 
 
 @dataclass(slots=True, frozen=True)
+class TierStats:
+    """cost_tier 1종의 실측 분포 묶음(S1-12 결과표 행 단위) — 표본 없으면 각 count=0."""
+
+    events: int
+    input_tokens: Distribution
+    output_tokens: Distribution
+    cost_krw: Distribution
+    latency_ms: Distribution
+
+
+@dataclass(slots=True, frozen=True)
 class CostReport:
     """`l3_routing` 이벤트 집계 리포트 — 사람용 출력·JSON 직렬화의 단일 진실."""
 
@@ -125,6 +136,10 @@ class CostReport:
 
     suggested_est_output_tokens: int | None
     """실측 output_tokens p50 반올림 — router._EST_ASSUMED_OUTPUT_TOKENS 튜닝 제안(표본 0=None)."""
+
+    tier_stats: dict[str, "TierStats"] = dataclasses.field(default_factory=dict)
+    """cost_tier별 실측 분포(S1-12 결과표 행 단위·티어 미상 '(unknown)' 포함) — 로컬/클라우드
+    행을 각각 채우려면 전역 분포로는 부족하다(런북 결과표가 티어별 p50/p90을 요구)."""
 
     notes: list[str] = field(default_factory=list)
     """집계 한계·주의(표본 부족·미분류 tier 등)를 사람이 읽도록 남긴다."""
@@ -200,24 +215,35 @@ def aggregate_l3_events(events: list[dict[str, object]]) -> CostReport:
     cache_hits = 0
     cache_total = 0
 
+    per_tier_vals: dict[str, dict[str, list[float]]] = {}
+
     for ev in events:
-        # 실측 수치 — None(미상)은 표본에서 빠진다.
+        # cost_tier 분류 — 값별 카운트 + 로컬/클라우드 이분 + 티어별 표본 버킷.
+        tier_raw = ev.get("cost_tier")
+        tier = tier_raw if isinstance(tier_raw, str) else "(unknown)"
+        bucket = per_tier_vals.setdefault(
+            tier, {"input": [], "output": [], "cost": [], "latency": [], "n": []}
+        )
+        bucket["n"].append(1.0)
+
+        # 실측 수치 — None(미상)은 표본에서 빠진다(전역·티어별 동시 적재).
         it = _opt_int(ev.get("input_tokens"))
         if it is not None:
             input_vals.append(float(it))
+            bucket["input"].append(float(it))
         ot = _opt_int(ev.get("output_tokens"))
         if ot is not None:
             output_vals.append(float(ot))
+            bucket["output"].append(float(ot))
         ck = _opt_float(ev.get("cost_krw"))
         if ck is not None:
             cost_vals.append(ck)
+            bucket["cost"].append(ck)
         lat = _opt_float(ev.get("latency_ms"))
         if lat is not None:
             latency_vals.append(lat)
+            bucket["latency"].append(lat)
 
-        # cost_tier 분류 — 값별 카운트 + 로컬/클라우드 이분.
-        tier_raw = ev.get("cost_tier")
-        tier = tier_raw if isinstance(tier_raw, str) else "(unknown)"
         tier_counts[tier] = tier_counts.get(tier, 0) + 1
         if tier == _LOCAL_TIER:
             local_count += 1
@@ -257,6 +283,17 @@ def aggregate_l3_events(events: list[dict[str, object]]) -> CostReport:
             f"실측 토큰 표본 {input_dist.count}건(<20) — p50 제안은 잠정치(트래픽 더 축적 권장)."
         )
 
+    tier_stats = {
+        tier: TierStats(
+            events=len(bucket["n"]),
+            input_tokens=_distribution(bucket["input"]),
+            output_tokens=_distribution(bucket["output"]),
+            cost_krw=_distribution(bucket["cost"]),
+            latency_ms=_distribution(bucket["latency"]),
+        )
+        for tier, bucket in sorted(per_tier_vals.items())
+    }
+
     return CostReport(
         event_count=len(events),
         input_tokens=input_dist,
@@ -273,6 +310,7 @@ def aggregate_l3_events(events: list[dict[str, object]]) -> CostReport:
         suggested_est_input_tokens=sug_in,
         suggested_est_output_tokens=sug_out,
         notes=notes,
+        tier_stats=tier_stats,
     )
 
 
@@ -429,6 +467,15 @@ def _render_stdout(report: CostReport) -> str:
     )
     tier_str = ", ".join(f"{k}={v}" for k, v in sorted(report.cost_tier_counts.items()))
     lines.append(f"  cost_tier 분포: {tier_str or '(없음)'}")
+    if report.tier_stats:
+        lines.append("[티어별 분포 — S1-12 결과표 행 단위(런북 표에 그대로 옮김)]")
+        for tier, ts in report.tier_stats.items():
+            lines.append(
+                f"  {tier}: n={ts.events} · cost_krw 합 "
+                f"{ts.cost_krw.total if ts.cost_krw.total is not None else '—'} · "
+                f"latency p50/p90 {ts.latency_ms.p50 or '—'}/{ts.latency_ms.p90 or '—'} · "
+                f"tokens(in/out p50) {ts.input_tokens.p50 or '—'}/{ts.output_tokens.p50 or '—'}"
+            )
     lines.append("[캐시]")
     lines.append(
         f"  적중 {report.cache_hits} / {report.cache_total} "
