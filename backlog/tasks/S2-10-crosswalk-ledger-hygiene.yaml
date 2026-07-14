@@ -14,7 +14,7 @@ acceptance:
   - "crosswalk_gate_contract.md에 대장 동기 이동 규약 + clear evidence 요건(_provenance signatures·진위 확인) 추가"
   - test_approved_crosslinks_corpus.py stale 주석 64 기준 정리
 artifacts:
-  - b14597b
+  - a86486c
 session: null
 notes: "ARCH-06 감사 발견(§3 대장 비정합·minor drift) — 게이트 clear 자체는 kiki(G-crosswalk-approval 기존 추적). arch_audit_2026-07-13_r6.md"
 updated: 2026-07-13
