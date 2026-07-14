@@ -32,7 +32,7 @@ const FORBIDDEN_PATTERNS = [
   { name: "gradeAnswer", re: /\bgradeAnswer\w*\s*\(/ },
 ];
 
-// 알려진 기존 위반 (ARCH-12 결정 대기) — 이 집합 밖의 등장은 전부 위반
+// 알려진 기존 위반 (ARCH-12 데모 전용 예외 공식 존치·2026-07-13) — 이 집합 밖의 등장은 전부 위반
 const WHITELIST = new Set(["GraphingCalculator.jsx", "lib/mathExpr.js"]);
 
 function walkSources(dir) {

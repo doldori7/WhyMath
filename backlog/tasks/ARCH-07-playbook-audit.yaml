@@ -5,7 +5,7 @@ track: infra-debt
 stage: S2
 subject: cross
 layer: docs
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -15,6 +15,6 @@ acceptance:
   - "6회차 초점(arch_audit_2026-07-13_r6.md §6) 이행 상태 판정"
   - 위반 발견 시 상환 태스크 backlog add
 artifacts: []
-session: null
+session: claude/dazzling-ramanujan-4aalh8
 notes: "반복 태스크 — done 시 ARCH-08 재생성. 대부분 라이브 실측(S1-12)·Kiki 게이트 이행 후 실익. crosswalk 게이트 clear evidence(서명 진위)·S2-10 위생 이행·전체 코퍼스 확장 검수 포함"
-updated: 2026-07-13
+updated: 2026-07-14
