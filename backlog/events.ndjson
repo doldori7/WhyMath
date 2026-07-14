@@ -56,3 +56,5 @@
 {"ts": "2026-07-14T00:29:41", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "start", "id": "S2-02-whs-production-run", "session": "claude/dazzling-ramanujan-4aalh8"}
 {"ts": "2026-07-14T00:54:34", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "done", "id": "S2-02-whs-production-run", "artifacts": ["7fc49d8", "docs/data/whs_production_run_2026-07.md", "data/corpus/whs_prm_v0/prm_dataset.jsonl"]}
 {"ts": "2026-07-14T01:28:49", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "start", "id": "ARCH-07-playbook-audit", "session": "claude/dazzling-ramanujan-4aalh8"}
+{"ts": "2026-07-14T01:37:12", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "add", "id": "S2-11-acceptance-sampling-rigor"}
+{"ts": "2026-07-14T01:37:12", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "add", "id": "ARCH-08-playbook-audit"}

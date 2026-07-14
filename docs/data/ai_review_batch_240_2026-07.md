@@ -43,6 +43,11 @@
 - **S6 상시성 (Tier1 재검산)**: 생성 620 / rephrase 483 / killer 120 — 전건 통과·실패 0 (`corpus_reverify`, CI 정본 게이트와 동일).
 - **S3 강등전 (검출력)**: 결함 100/100 검출(6종 전부·statement_mismatch 포함·`--with-auditor`)·무결 오검출 0/100·Wilson 하한 0.974 (`defect_detection_eval`).
 - **S5 합격 로트 (Wilson 상한)**: 표본 n=240·결함 0·결함율 점추정 0.0000·**95% 상한 0.0111 (≤ 0.02) → PASS** (`corpus_audit_eval --max-defect-upper 0.02 --min-n 200`·exit 0). 전 코퍼스 결함율이 95% 신뢰수준에서 ≤ 1.11%로 계량 보증.
+- **as-found 정직 병기(ARCH-07 사후 주석·2026-07-14)**: 위 PASS는 발견 결함 2건(josa)의 생성기
+  교정·재생성 **후** 재채점 기준이다. 교정 전 as-found로 채점하면 2/240 → 95% 상한 **0.0249 > 0.02
+  (게이트 FAIL)**. 단 전 코퍼스 as-found(4/620) 상한은 **0.0143 ≤ 0.02로 여전히 통과** — 실체적
+  품질 결론은 불변. 엄밀 acceptance sampling 규약(교정 후 *신규 독립 표본* 재추출)은 후속 태스크로
+  분리(같은 표본 재채점의 fail→pass 전환 패턴 회피).
 - **보조 적대 fuzz 한계(정직 고지)**: `corpus_reverify --fuzz` blanket 실행은 극댓값(`calc-extv/extmc`)·유일근 유형에서 오탐(탐색 반경 ±50 초과 근·유일근 수치정밀도) — 코퍼스 결함 아님(직접 확인). 이 때문에 CI 상시 게이트는 Tier1만 돌린다. fuzzer 반경/정밀도/값형 게이팅은 후속(별도 태스크).
 
 ## 문항별 판정 (240/240)

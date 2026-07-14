@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-08-playbook-audit
+title: "아키텍처 감사 8회차 — S1-12 실측 판정(5회차 이월)·S1-11 승격·S2-11 규약 이행·S2-02 LLM 정책 착수 시 replay bank 웜스타트 실측"
+track: infra-debt
+stage: S2
+subject: cross
+layer: docs
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "arch_audit 보고서 신설 + build_checkpoint 스냅샷 갱신"
+  - "7회차 초점(arch_audit_2026-07-14_r7.md §6) 이행 상태 판정"
+  - 위반 발견 시 상환 태스크 backlog add
+artifacts: []
+session: null
+notes: "반복 태스크 — ARCH-07 done 시 재생성 규약. 대부분 라이브 실측(S1-12)·Kiki 게이트 이행 후 실익"
+updated: 2026-07-14
