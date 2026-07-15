@@ -101,18 +101,27 @@ python ..\..\scripts\fill_live_cost_table.py cost_report.json
 | CLOUD_MID | —¹ | —¹ | preflight 단일 콜 실측 1187ms(참고) |
 | (전역·33이벤트) | 3250 | 8165 | mean 3858 |
 
-### verify verdict 분포 (게이트 승격 근거)
+### verify verdict 분포 (게이트 승격 근거) — ✅ 2026-07-15 라이브 실측(Kiki·shadow 로그)
 | verdict | 비율 | 비고 |
 |---|---|---|
-| correct | —(미측정) | |
-| incorrect | —(미측정) | |
-| unverifiable | —(미측정) | undecidable 보수 처리 비율 |
+| correct | 0% (0/6) | |
+| incorrect | 0% (0/6) | |
+| unverifiable | **100% (6/6)** | undecidable 보수 처리 비율 |
 
-이번 라이브 세션은 `GET /v1/me/harness-metrics`(shadow verdict 분포)를 실행하지 않음 — 빈칸 유지(날조 금지). S1-11 착수 전 확보 필요.
+측정 경로 정정: verdict 분포의 실소스는 `GET /v1/me/harness-metrics`(대리지표 7종·별건)가 아니라
+**shadow 관측 로그**(`whymath.harness.wh1_shadow.record` — 무영속·로거 emit)다. 실측 절차:
+`WHYMATH_WH1_HARNESS_SHADOW_ENABLED=true` + demo 스택(PG 55432·`?ssl=disable`) + root INFO 로깅
+런처로 코치 세션 1 + 멀티턴 5(전 턴 `solution_steps` 동봉) → 로그 grep. **PR #519 멀티턴 배선
+라이브 검증**: turn_index 1~6 증가·dialogue_id 연결·전 관측 status=ended 정상.
+
+**대표성 캐비엇(정직)**: n=6·합성 트래픽·전 턴이 *방정식 변형 체인*(`A=0 → 인수분해형=0 → 근`) —
+S2-02 실측에서 확인된 `verify_step`의 알려진 한계 구간(표현식 동치만 증명·방정식 변형은
+unverifiable)이라 100% unverifiable은 **예상과 정합**. 표현식 동치 체인(전개↔인수분해 등)
+트래픽이 섞여야 correct/incorrect 축이 분리 관측된다 — 후속 배치로 보강 필요.
 
 ### 판정 (실측 후 — 2026-07-14)
 - [x] 루프당 비용 실측 완료·로컬 ≥80% 여부: **실측 완료(33이벤트) — 72.7%로 미달(as-measured)**. 단 측정 세션 믹스 대표성 제한(각주 ³)·라우터 est 가정 1000 vs 실측 p50 74/358의 대폭 괴리 → **S1-13(튜닝) 수행 후 대표 트래픽 재판정**이 정당한 절차.
-- [x] verify 커버리지 게이트 primary 승격 가부: **부결(보류)** — shadow verdict 분포 미확보("측정 없는 도입 없음"). 재판정 조건: harness-metrics 분포 확보(S1-11 착수 전제).
+- [x] verify 커버리지 게이트 primary 승격 가부: **부결 유지(2026-07-15 재판정)** — shadow verdict 분포 *확보됨*(위 표)이나 6/6 unverifiable = 방정식 변형 트래픽에서 하네스 verify가 증명력을 더하지 못함(as-measured)·표본 n=6 과소. 재판정 조건: 표현식 동치 체인 포함 트래픽으로 n 확대 후 correct/incorrect 축 분리 관측.
 - [x] MEMORY.md 결정로그 append: 2026-07-14 S1-12 실측 항목.
 
 ### S1-13 입력(튜닝 제안 — cost_report 산출)
