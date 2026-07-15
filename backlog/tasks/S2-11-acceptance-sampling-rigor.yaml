@@ -11,7 +11,7 @@ owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
-  - "superhuman_verification_standard §5(합격 로트)에 '결함 교정 후 같은 표본 재채점 금지·신규 독립 표본 재추출' 규약 명문화"
+  - "superhuman_verification_standard §4.5(S5 합격 로트 무결성·신설)에 '결함 교정 후 같은 표본 재채점 금지·신규 독립 표본 재추출' 규약 명문화 (착지 섹션 정정: 초안 §5→실제 §4.5·ARCH-08 추적성 교정)"
   - "S2-01 스타일 검수에 재적용할 표본 회전(seed offset) 메커니즘 설계"
 artifacts:
   - e38d3a6

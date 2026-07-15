@@ -90,7 +90,7 @@ python ..\..\scripts\fill_live_cost_table.py cost_report.json
 | CLOUD_HIGH | 0 | — | — | 호출 0(미발생) |
 | **로컬:클라우드 비율** | 24:9 | | | **72.7% — 판정선(≥80%) 미달³** |
 
-전역 분포(33이벤트·tier 미분해¹): input p50 74·p90 95·mean 77 (n=32) / output p50 358·p90 506·mean 333 (n=32) / cost p50 0·p90 9.6743·mean 1.9306·합 63.7098 (n=33) / 캐시 적중 0/33.
+전역 분포(33이벤트·tier 미분해¹): input p50 74·p90 95·mean 77 (n=32) / output p50 358·p90 506·mean 333 (n=32) / cost p50 0·p90 9.6743·mean 1.9306·합 63.7098 (n=33) / 캐시 적중 0/33. **토큰 n=32 vs cost/지연 n=33 차이**: 한 LOCAL 이벤트가 토큰을 기록하지 않고 cost만 0.0으로 강제 기록(`router.py` LOCAL 경로) → 토큰 분포는 None 제외로 32, cost·지연·비율 분모는 33(`cost_report.py` None 제외 규약·ARCH-08 적대 검증 재확인).
 
 ¹ 실측이 판독기 구판(tier_stats 확장 이전)으로 수행돼 티어별 토큰·지연 분해가 JSON에 없음 — 차기 실측은 `cost_report`가 자동 분해(2026-07-14 확장). ² 유도치: LOCAL 24건 전부 cost 0.0 기록 → 클라우드 합=전역 합 63.7098·평균=63.7098/9(산술 유도·측정 아님 명시). ³ **대표성 캐비엇**: 이 33이벤트는 측정 세션 트래픽(클라우드 유발 스모크+배치 포함)이라 프로덕션 루프 믹스가 아님 — 판정선 재판정은 S1-13 라우터 튜닝(아래) 후 대표 트래픽으로.
 
@@ -111,7 +111,12 @@ python ..\..\scripts\fill_live_cost_table.py cost_report.json
 **검출력 라이브 증명(배치 ②)**: 표현식 동치 체인(인수분해형→전개형·등호 없음) 4턴 중 1턴에
 *의도적 오전개*(`(x+1)(x+2) → x²+3x+1`, 정답 `x²+3x+2`)를 주입 → 하네스가 정확히
 `incorrect`로 검출, 나머지 3건(올바른 전개)은 전건 `correct`. **결정 가능 구간 판정 정확도
-4/4(100%)** — verify 경로가 라이브에서 증명력·검출력 모두 실증.
+4/4(100%)** — verify 경로가 라이브에서 증명력·검출력 모두 실증. *메커니즘 정합(ARCH-08 적대 검증)*:
+`verify_step`이 SymPy `expand(diff)==0`으로 correct·`simplify(diff).is_zero is False`로 incorrect를
+결정하므로 `(x+1)(x+2)−(x²+3x+1)=1≠0`은 결정적으로 incorrect가 정답. *증적 한계(정직)*: shadow
+레코드는 문항·풀이 텍스트를 제거(설계)하고 원시 로그·스크립트는 미커밋(로컬)이라, **오전개 주입
+항목↔incorrect verdict의 1:1 귀속은 Kiki 실측 증언에 기댄다**(수동 라이브 측정의 내재 한계·재현하려면
+동일 배치 재실행 필요).
 
 측정 경로 정정: verdict 분포의 실소스는 `GET /v1/me/harness-metrics`(대리지표 7종·별건)가 아니라
 **shadow 관측 로그**(`whymath.harness.wh1_shadow.record` — 무영속·로거 emit)다. 실측 절차:
