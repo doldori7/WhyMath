@@ -12,7 +12,7 @@
 - `/review`·`/status` 세션 시작 시 이 문서를 로드해 훑고, ❌ 뜨는 항목은 **`MEMORY.md` 결정 로그**로 남긴다.
 - 이 문서는 *질문지*다. 답(현재 상태)은 코드·`MEMORY.md`가 진실 원천이며, 여기 적힌 현재 상태 태그(`[완료]`/`[구현]`/`[진행]`/`[프로토타입]`)는 점검 시작점일 뿐 — **점검할 때마다 실제 코드로 재확인**한다.
 
-### 현재 상태 스냅샷 (2026-07-14 7회차 갱신 · Phase 1 MVP · 감사: `arch_audit_2026-07-14_r7.md`)
+### 현재 상태 스냅샷 (2026-07-15 8회차 갱신 · Phase 1 MVP · 감사: `arch_audit_2026-07-15_r8.md`)
 
 | 단계 | 영역 | 상태 |
 |---|---|---|
@@ -20,9 +20,9 @@
 | 3 개념구조화 | 개념 437노드 (legacy_snapshot·audit_only) / **원자 2,697(세부 1,837) = runtime truth source 단일**. problem_concept·curriculum·성취기준 조인 전부 원자 축 정착(S2-03·S2-07) | 🟢 구현 |
 | 4 오개념 DB | 839개 카탈로그 + 판정 엔진 (reactive만·preload 0 실측). 탐지 카탈로그 64종·kebab↔M-id crosswalk 라이브 64건(전건 사람 서명·기계 reject-only·`G-crosswalk-approval` **cleared**[7회차 적대 검증: 스탬프가 clear 14h 선존·evidence 결함 3건 상환]·적재/노출 플립 전 단계) | 🟢 구현 |
 | 9 평가·개인화 | BKT·IRT·mastery·학습경로 (문제 태깅 원자 축 재연결로 mastery→enrich hit) | 🟢 구현 |
-| 5 시각화 · 6 Math UI DSL · 8 AI튜터 · 10 자동화 | Graph2dSpec·L3 라우터·WH-1·파이프라인 (8: max_nodes≤20·tokens≤3000 CI 동결·depth≤2 유예). **L3 라이브 개통**(Phaiakes9·READY:True·6모델·rephrase 184/590)·비용 실측(S1-12)은 Kiki 라이브 대기 | 🟡 진행 |
+| 5 시각화 · 6 Math UI DSL · 8 AI튜터 · 10 자동화 | Graph2dSpec·L3 라우터·WH-1·파이프라인 (8: max_nodes≤20·tokens≤3000 CI 동결·depth≤2 유예). **L3 라이브 개통**(Phaiakes9·READY:True·6모델·rephrase 184/590). **S1-12 비용 실측 완료**(로컬 72.7%<80% as-measured·S1-13 보정 74/358·8회차 §3-A). **S1-11 shadow verdict 라이브 실측**(n=10·검출력 4/4·verify 게이트 승격 부결 유지·실트래픽 재판정 대기·8회차 §3-B) | 🟡 진행 |
 | 7 렌더링 | Flutter/web 계산기·three.js·MathLive | 🟡 프로토타입 |
-| 보류/리스크 | DSL 자기진화(Lean4)·Manim 동영상·WH-1 전략단계(Lv2~3)·**개념↔원자 입도 통합**(런타임 축은 S0-4로 해소 완료, 잔여=437↔2,697 세분도 병합). ~~전문가 검수 대기~~ → **AI 검수 전환**(2026-07-10·`G-domain-partner` clear·검수 큐 가동·MEMORY 결정 로그). ~~클라이언트 무-수학로직 CI 게이트 부재~~ → **ARCH-10으로 해소**(게이트 2종 가동·2026-07-12 감사 4회차 재검증, QuizMode 예외는 **ARCH-12 (a) 데모 전용 예외 공식 존치**(2026-07-13 Kiki 결정·화이트리스트 2건 동결·강제 트리거=학생 노출)). S1 탈출 게이트 ① 실기기 시연 `G-kiki-device-demo` clear·라이브 실측 S1-12(kiki)·저작권 `G-crosswalk-approval` **cleared**(7회차 §3-A). ~~생성 파이프라인 계통 결함 3종~~ → **S2-08 상환 완료**(PR #512·6회차 감사 이행 실측·deferred 표본 29·30 해소). ~~crosswalk 대장 비정합~~ → **S2-10 이행 완료 + 게이트 clear**(7회차 §3-A). 신규: **콘텐츠 공장 가동 완료**(S2-01 620문·Wilson 상한 1.11% PASS[as-found 병기]·S2-02 WH-S replay·PRM 1,282쌍·상시 게이트 Tier1+Tier2 승격). acceptance sampling 엄밀화는 `S2-11` | 🔴/⏸ |
+| 보류/리스크 | DSL 자기진화(Lean4)·Manim 동영상·WH-1 전략단계(Lv2~3)·**개념↔원자 입도 통합**(런타임 축은 S0-4로 해소 완료, 잔여=437↔2,697 세분도 병합). ~~전문가 검수 대기~~ → **AI 검수 전환**(2026-07-10·`G-domain-partner` clear·검수 큐 가동·MEMORY 결정 로그). ~~클라이언트 무-수학로직 CI 게이트 부재~~ → **ARCH-10으로 해소**(게이트 2종 가동·2026-07-12 감사 4회차 재검증, QuizMode 예외는 **ARCH-12 (a) 데모 전용 예외 공식 존치**(2026-07-13 Kiki 결정·화이트리스트 2건 동결·강제 트리거=학생 노출)). S1 탈출 게이트 ① 실기기 시연 `G-kiki-device-demo` clear·라이브 실측 S1-12(kiki)·저작권 `G-crosswalk-approval` **cleared**(7회차 §3-A). ~~생성 파이프라인 계통 결함 3종~~ → **S2-08 상환 완료**(PR #512·6회차 감사 이행 실측·deferred 표본 29·30 해소). ~~crosswalk 대장 비정합~~ → **S2-10 이행 완료 + 게이트 clear**(7회차 §3-A). 신규: **콘텐츠 공장 가동 완료**(S2-01 620문·Wilson 상한 1.11% PASS[as-found 병기]·S2-02 WH-S replay·PRM 1,282쌍·상시 게이트 Tier1+Tier2 승격). acceptance sampling 엄밀화 **S2-11 done**(§4.5 재채점 금지 규약·`--rotation` 독립 재표본·8회차 §3-C 적대 검증 적정). as-found 병기 기계 게이트화는 `S2-12`(신설·저우선) | 🔴/⏸ |
 
 ---
 
