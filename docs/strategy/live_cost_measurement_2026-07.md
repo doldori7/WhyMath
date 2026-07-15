@@ -101,18 +101,32 @@ python ..\..\scripts\fill_live_cost_table.py cost_report.json
 | CLOUD_MID | —¹ | —¹ | preflight 단일 콜 실측 1187ms(참고) |
 | (전역·33이벤트) | 3250 | 8165 | mean 3858 |
 
-### verify verdict 분포 (게이트 승격 근거)
-| verdict | 비율 | 비고 |
-|---|---|---|
-| correct | —(미측정) | |
-| incorrect | —(미측정) | |
-| unverifiable | —(미측정) | undecidable 보수 처리 비율 |
+### verify verdict 분포 (게이트 승격 근거) — ✅ 2026-07-15 라이브 실측(Kiki·shadow 로그·2배치 n=10)
+| verdict | 전체(n=10) | 배치① 방정식 변형(n=6) | 배치② 표현식 동치(n=4) |
+|---|---|---|---|
+| correct | 30% (3) | 0 | **3** |
+| incorrect | 10% (1) | 0 | **1** |
+| unverifiable | 60% (6) | **6** | 0 |
 
-이번 라이브 세션은 `GET /v1/me/harness-metrics`(shadow verdict 분포)를 실행하지 않음 — 빈칸 유지(날조 금지). S1-11 착수 전 확보 필요.
+**검출력 라이브 증명(배치 ②)**: 표현식 동치 체인(인수분해형→전개형·등호 없음) 4턴 중 1턴에
+*의도적 오전개*(`(x+1)(x+2) → x²+3x+1`, 정답 `x²+3x+2`)를 주입 → 하네스가 정확히
+`incorrect`로 검출, 나머지 3건(올바른 전개)은 전건 `correct`. **결정 가능 구간 판정 정확도
+4/4(100%)** — verify 경로가 라이브에서 증명력·검출력 모두 실증.
+
+측정 경로 정정: verdict 분포의 실소스는 `GET /v1/me/harness-metrics`(대리지표 7종·별건)가 아니라
+**shadow 관측 로그**(`whymath.harness.wh1_shadow.record` — 무영속·로거 emit)다. 실측 절차:
+`WHYMATH_WH1_HARNESS_SHADOW_ENABLED=true` + demo 스택(PG 55432·`?ssl=disable`) + root INFO 로깅
+런처로 코치 세션+멀티턴(전 턴 `solution_steps` 동봉) → 로그 grep. **PR #519 멀티턴 배선
+라이브 검증**: 두 배치 모두 turn_index 증가·dialogue_id 연결·전 관측 status=ended 정상.
+
+**대표성 캐비엇(정직)**: n=10·합성 트래픽·트래픽 모양이 verdict를 결정한다 — 배치①(방정식 변형
+체인 `A=0 → 인수분해형=0 → 근`)은 S2-02에서 확인된 `verify_step` 한계 구간이라 100% unverifiable
+(예상 정합), 배치②(표현식 동치)는 100% 결정. 실학생 트래픽의 두 모양 혼합비가 곧 실효 커버리지
+— 프로덕션 분포는 실트래픽에서 재측정.
 
 ### 판정 (실측 후 — 2026-07-14)
 - [x] 루프당 비용 실측 완료·로컬 ≥80% 여부: **실측 완료(33이벤트) — 72.7%로 미달(as-measured)**. 단 측정 세션 믹스 대표성 제한(각주 ³)·라우터 est 가정 1000 vs 실측 p50 74/358의 대폭 괴리 → **S1-13(튜닝) 수행 후 대표 트래픽 재판정**이 정당한 절차.
-- [x] verify 커버리지 게이트 primary 승격 가부: **부결(보류)** — shadow verdict 분포 미확보("측정 없는 도입 없음"). 재판정 조건: harness-metrics 분포 확보(S1-11 착수 전제).
+- [x] verify 커버리지 게이트 primary 승격 가부: **부결 유지·단 근거 갱신(2026-07-15 재판정)** — shadow verdict 분포 확보(n=10·2배치) + **결정 가능 구간 검출력 4/4 라이브 실증**(오전개 주입 → incorrect 정확 검출). 잔여 미충족: 표본 과소(n=10·합성)·실학생 트래픽 혼합비 미지·flip 전제 ③(Kiki 사인오프+gate3 allowlist 확장) 미착수. 재판정 조건: 실기기 시연(G-kiki-device-demo) 등 실트래픽에서 shadow 분포 누적 후 Kiki 판정.
 - [x] MEMORY.md 결정로그 append: 2026-07-14 S1-12 실측 항목.
 
 ### S1-13 입력(튜닝 제안 — cost_report 산출)
