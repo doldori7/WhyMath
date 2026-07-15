@@ -5,14 +5,16 @@ track: infra-debt
 stage: S2
 subject: math
 layer: docs
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "corpus_audit_eval(또는 감사 lint)에 감사 기록의 as-found 결함율·Wilson 상한 라인 부재 시 exit 1 게이트 추가 — §4.5 as-found 병기 의무를 산문에서 CLI exit-0/1로 승격(검증 권위 서열 정합)"
-artifacts: []
-session: claude/recommended-tasks-xhg9e5
+artifacts:
+  - "6415400"
+  - "docs/standards/superhuman_verification_standard.md#§4.5"
+session: null
 notes: "ARCH-08 적대 검증 발견(S2-11 Minor-1): §4.5 as-found 병기 의무가 산문뿐·향후 감사 강제 기계 게이트 부재. 프로젝트 '측정 없는 게이트' 안티패턴 관점 플래그. 저우선(현재 S2-01 실측은 병기 준수 실재)"
 updated: 2026-07-15
