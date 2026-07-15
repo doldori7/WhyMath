@@ -47,9 +47,7 @@ class AuditLabel(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     problem_id: str = Field(..., description="감사한 문항 식별자.")
-    verdict: AuditVerdictLabel = Field(
-        ..., description="감사 판정: ok(정상)/defect(결함)."
-    )
+    verdict: AuditVerdictLabel = Field(..., description="감사 판정: ok(정상)/defect(결함).")
     defect_class: str = Field(default="", description="결함 유형(선택·집계용).")
 
 
@@ -64,9 +62,7 @@ class AsFoundRecord(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     as_found_n: int = Field(..., ge=1, description="교정 전 감사 표본 수(≥1).")
-    as_found_defects: int = Field(
-        ..., ge=0, description="교정 전 결함 수(≥0·≤ as_found_n)."
-    )
+    as_found_defects: int = Field(..., ge=0, description="교정 전 결함 수(≥0·≤ as_found_n).")
 
     @field_validator("as_found_defects")
     @classmethod
@@ -157,9 +153,7 @@ def summarize(labels: list[AuditLabel]) -> AuditReport:
     """감사 라벨 → 결함율 집계(순수)."""
     defects = sum(1 for lab in labels if lab.verdict == "defect")
     classes = Counter(
-        lab.defect_class
-        for lab in labels
-        if lab.verdict == "defect" and lab.defect_class
+        lab.defect_class for lab in labels if lab.verdict == "defect" and lab.defect_class
     )
     return AuditReport(n=len(labels), defects=defects, defect_classes=dict(classes))
 
@@ -215,9 +209,7 @@ def _run(
     # 값(as-found 상한)은 게이트하지 않는다 — 의무의 본질은 정직한 공개이지 통과가 아니다
     # (§4.5: as-found FAIL이어도 더 큰 코퍼스로 실체 결론 유지 가능).
     if require_as_found and audit.as_found is None:
-        print(
-            "게이트 미달 — as-found 병기 선언 부재(§4.5 as-found 병기 의무 위반·역사 위조 금지)."
-        )
+        print("게이트 미달 — as-found 병기 선언 부재(§4.5 as-found 병기 의무 위반·역사 위조 금지).")
         return _EXIT_GATE_FAIL
     # 게이트 — 표본 부족(min_n 미달)이거나 결함율 상한이 임계 초과면 exit 1.
     if report.n < min_n:
@@ -225,9 +217,7 @@ def _run(
         return _EXIT_GATE_FAIL
     upper = report.defect_rate_upper_bound(confidence)
     if max_defect_upper < 1.0 and (upper is None or upper > max_defect_upper):
-        print(
-            f"게이트 미달 — 결함율 상한 {_fmt(upper)} > 임계 {max_defect_upper}(전수 검수 복귀)."
-        )
+        print(f"게이트 미달 — 결함율 상한 {_fmt(upper)} > 임계 {max_defect_upper}(전수 검수 복귀).")
         return _EXIT_GATE_FAIL
     return _EXIT_OK
 
@@ -238,9 +228,7 @@ def main(argv: list[str] | None = None) -> int:
         prog="python -m whymath_backend.harness.corpus_audit_eval",
         description="코퍼스 감사 표본 → 결함율 Wilson 상한 게이트(전수→표본 감사 해금·S5).",
     )
-    parser.add_argument(
-        "labels_path", type=str, help="감사 라벨 JSONL(한 줄당 AuditLabel)."
-    )
+    parser.add_argument("labels_path", type=str, help="감사 라벨 JSONL(한 줄당 AuditLabel).")
     parser.add_argument(
         "--max-defect-upper",
         type=float,
@@ -253,9 +241,7 @@ def main(argv: list[str] | None = None) -> int:
         default=0,
         help="최소 표본 수 — 미달이면 exit 1(증거 부족·기본 0=off, S5 권장 200).",
     )
-    parser.add_argument(
-        "--confidence", type=float, default=0.95, help="Wilson 신뢰수준(단측)."
-    )
+    parser.add_argument("--confidence", type=float, default=0.95, help="Wilson 신뢰수준(단측).")
     parser.add_argument(
         "--require-as-found",
         action="store_true",

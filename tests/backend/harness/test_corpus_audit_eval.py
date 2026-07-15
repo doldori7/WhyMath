@@ -12,9 +12,7 @@ import pytest
 from whymath_backend.harness import corpus_audit_eval as ca
 
 
-def _write(
-    path: Path, n_ok: int, n_defect: int, defect_class: str = "answer_error"
-) -> Path:
+def _write(path: Path, n_ok: int, n_defect: int, defect_class: str = "answer_error") -> Path:
     lines = []
     for i in range(n_ok):
         lines.append(f'{{"problem_id": "ok-{i}", "verdict": "ok"}}')
@@ -41,9 +39,7 @@ def test_summarize_counts_and_upper_bound() -> None:
 def test_zero_defect_upper_bound_nonzero() -> None:
     # 결함 0/200이어도 상한>0 — 과신 금지.
     report = ca.summarize(
-        ca.load_labels(
-            "\n".join(f'{{"problem_id":"p{i}","verdict":"ok"}}' for i in range(200))
-        )
+        ca.load_labels("\n".join(f'{{"problem_id":"p{i}","verdict":"ok"}}' for i in range(200)))
     )
     ub = report.defect_rate_upper_bound(0.95)
     assert ub is not None and 0.0 < ub < 0.02
@@ -126,21 +122,15 @@ def test_duplicate_as_found_declaration_rejected() -> None:
 
 
 def test_require_as_found_pass_when_present(tmp_path: Path, capsys) -> None:
-    p = _write_with_as_found(
-        tmp_path / "af.jsonl", n_ok=200, n_defect=0, af_n=240, af_defects=2
-    )
-    rc = ca.main(
-        [str(p), "--max-defect-upper", "0.02", "--min-n", "200", "--require-as-found"]
-    )
+    p = _write_with_as_found(tmp_path / "af.jsonl", n_ok=200, n_defect=0, af_n=240, af_defects=2)
+    rc = ca.main([str(p), "--max-defect-upper", "0.02", "--min-n", "200", "--require-as-found"])
     assert rc == 0
     assert "as-found 병기" in capsys.readouterr().out  # 리포트에 병기 라인 노출
 
 
 def test_require_as_found_fail_when_absent(tmp_path: Path) -> None:
     p = _write(tmp_path / "no_af.jsonl", n_ok=200, n_defect=0)
-    rc = ca.main(
-        [str(p), "--max-defect-upper", "0.02", "--min-n", "200", "--require-as-found"]
-    )
+    rc = ca.main([str(p), "--max-defect-upper", "0.02", "--min-n", "200", "--require-as-found"])
     assert rc == 1  # as-found 병기 선언 부재 → 게이트 미달
 
 
