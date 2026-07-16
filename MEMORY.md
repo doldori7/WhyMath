@@ -337,6 +337,10 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-15 (구현·L4/api·S1-14 de-risk): **S1 탈출 게이트 ③ 기계 봉인 + 판정 스캐폴드 — 게이트 ①③ 확정·잔여=게이트 ② 재측정(Kiki)**
+
+**무엇/왜**: S1 잔여 3건 중 S1-11 flip·ARCH-11은 순수 Kiki 대기(flip 3전제), **claude-독립 전진 유일 항목이 S1-14(탈출 판정)**. S1-12 런북 de-risk(#516) 선례로 판정 가능한 2게이트를 확정하고 게이트 ② Kiki 패키지를 완비 → Kiki 잔여를 "재측정→사인오프" 한 세션으로 축소. **게이트 ①**=`G-kiki-device-demo` cleared(녹화)=PASS. **게이트 ③ 정직 프레이밍 확정**(Explore 서빙 경로 매핑): "학생 응답 전부 PRM 통과"는 오버클레임 — 실체는 "서빙이 (i) 결정론 템플릿(`PolyaCoach.decide`→`STAGE_PROMPTS`·LLM 0→PRM N/A) 또는 (ii) 도구-검증 게이팅 신호(`solution_coaching`=SymPy verdict 노출 게이팅·coach.py:496)만 방출". 캐비엇: 서빙 유일 LLM 콜(오개념 judge)·WH-1 shadow는 둘 다 기본 OFF·산문 미방출. **기계 봉인 신설** `test_coach_gate3_serving_invariant.py`(3종 green): decide 발화 전수 스윕 정적 템플릿·`POST /v1/coach` end-to-end·LLM 플래그 기본 OFF 동결 — 게이트 ③을 "구조상 성립"→CI 동결(초인간 검증: 기계 게이트>산문). **게이트 ②**=PENDING(S1-12 72.7%<80% as-measured·보정 라우터 74/358 대표 트래픽 재측정 필요·Kiki 명령 패키지 동봉). 스캐폴드 `docs/strategy/s1_exit_gate_judgement_2026-07.md`. **S1-14 owner kiki 유지·done 마킹 보류**(판정 사인오프=사람 몫·서기 규약). 코드 변경 0(신규 테스트만).
+
 ### 2026-07-15 (감사·cross·ARCH-08): **아키텍처 감사 8회차 — 자기-감사 완화(적대 검증 3건)·초점①②③ 전건 적정·상환 3(도큐)·S2-12 신설**
 
 **무엇/왜**: r7 이후 델타(#518·#519·#520)가 전부 감사 주체 자기 작업 → 실익 초점 3개(①S1-12 실측 ②S1-11 shadow 승격 ③S2-11 규약)를 반증 프레임 독립 적대 검증 서브에이전트 3개에 위임(산술·통계 독립 재계산·코드 직접 실행). **전건 적정**: ①반증 5/5 실패(72.7%·CLOUD_MIN 8.61168/14.3528·유도 7.0789 재계산 일치·회귀 핀) ②6서브클레임+A~G 성립(append_turns↔create_session shadow 동형·플래그 OFF spawn 0·`is` 봉인 4종 비공허·verify_step SymPy 결정성·정직 blocked) ③4점 성립(§4.5 구속적 규약·Wilson 0.0249/0.0143 재계산 일치·`--rotation` 실코퍼스 144/240 상이 실증). **초점 ④⑤ N/A**(S2-02 LLM 정책·S2-04 orphan 미착수). **상환(도큐 3·본 회차)**: S1-12 토큰 n=32/33 분할 근거 각주·S1-11 4/4 귀속 증적 한계 정직 고지(원시 로그 미커밋·Kiki 증언 의존)·S2-11 yaml §5→§4.5 추적성 정정. **backlog add(실체 갭 1)**: as-found 병기 의무가 산문뿐·기계 게이트 부재 → **S2-12-asfound-gate**(저우선). **상시 불변식**: alembic 단일 head·import-linter 1 kept 0 broken·거버넌스/shadow 테스트 green. 보고서 `arch_audit_2026-07-15_r8.md`·체크포인트 스냅샷 r8 갱신.

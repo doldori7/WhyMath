@@ -16,5 +16,5 @@ acceptance:
   - 탈출 게이트 3종 판정 기록 → ROADMAP·MEMORY 갱신
 artifacts: []
 session: null
-notes: ""
-updated: 2026-07-08
+notes: "de-risk 완료(2026-07-15·claude): 게이트 ① PASS(G-kiki-device-demo cleared)·게이트 ③ PASS(정직 프레이밍 증명 + 기계 봉인 3종 test_coach_gate3_serving_invariant.py)·판정 스캐폴드 docs/strategy/s1_exit_gate_judgement_2026-07.md 신설. 잔여=게이트 ②(보정 라우터 74/358 대표 트래픽 재측정·로컬 ≥80%) + Kiki 3종 사인오프. owner kiki 유지(판정 사인오프는 사람 몫·done 마킹 보류)."
+updated: 2026-07-15
