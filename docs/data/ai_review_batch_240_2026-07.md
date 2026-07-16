@@ -48,6 +48,11 @@
   (게이트 FAIL)**. 단 전 코퍼스 as-found(4/620) 상한은 **0.0143 ≤ 0.02로 여전히 통과** — 실체적
   품질 결론은 불변. 엄밀 acceptance sampling 규약(교정 후 *신규 독립 표본* 재추출)은 후속 태스크로
   분리(같은 표본 재채점의 fail→pass 전환 패턴 회피).
+  - **기계 강제(S2-12·2026-07-15)**: as-found 병기는 이제 산문이 아니라 게이트다. 감사 기록
+    `docs/data/corpus_audit_240.jsonl` 선두에 병기 선언 라인
+    `{"as_found_n": 240, "as_found_defects": 2}`를 병기했고, `corpus_audit_eval
+    --max-defect-upper 0.02 --min-n 200 --require-as-found`(exit 0)로 병기 의무를 CLI로 강제한다
+    — 선언 부재 시 exit 1(§4.5·검증 권위 서열 ②).
 - **보조 적대 fuzz 한계(정직 고지)**: `corpus_reverify --fuzz` blanket 실행은 극댓값(`calc-extv/extmc`)·유일근 유형에서 오탐(탐색 반경 ±50 초과 근·유일근 수치정밀도) — 코퍼스 결함 아님(직접 확인). 이 때문에 CI 상시 게이트는 Tier1만 돌린다. fuzzer 반경/정밀도/값형 게이팅은 후속(별도 태스크).
 
 ## 문항별 판정 (240/240)
