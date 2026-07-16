@@ -1,6 +1,6 @@
 # S1 탈출 게이트 판정 (S1-14) — 스캐폴드 + 게이트 ③ 증명
 
-> **상태**: 🟡 **de-risk 완료·최종 판정 대기** (claude 스캐폴드·게이트 ③ 증명·봉인 완비 / 잔여 = Kiki 게이트 ② 재측정 + 3종 사인오프) | **owner**: kiki(판정)·claude(서기·게이트 ③ 증명)
+> **상태**: ✅ **판정 완료 — 3종 전부 PASS·S1 탈출 선언** (2026-07-16, Kiki 조건부 사인오프 "정상 작업 보장될 때 통과"의 실증 충족) | **owner**: kiki(판정)·claude(서기·게이트 ③ 증명)
 > **정본 게이트 정의**: `docs/strategy/status_roadmap_2026-07.md` S1 섹션(:104) — "① 실기기 1루프 시연 녹화 ② 루프당 LLM 비용 실측·로컬 80% ③ 학생 응답 = PRM/도구 검증 통과 후 코드 경로 증명"
 > **de-risk 취지**(S1-12 런북 #516 선례): claude가 판정 가능한 2개 게이트(①③)를 확정하고 게이트 ②의 Kiki 실행 패키지를 완비해, Kiki 잔여를 **"② 재측정 → 3종 사인오프" 한 세션**으로 축소한다.
 
@@ -11,10 +11,12 @@
 | 게이트 | 정의 | 판정 | 근거 |
 |---|---|---|---|
 | ① 실기기 시연 | 패드에서 1루프 15분 내 완주 녹화 | ✅ **PASS** | `G-kiki-device-demo` **cleared**·녹화 증거 실재(gates.yaml evidence 링크) |
-| ② 루프당 비용·로컬 80% | 루프당 LLM 비용 실측·로컬 ≥80% | ⏳ **PENDING(Kiki 재측정)** | S1-12 실측 72.7% as-measured(<80%)·측정 세션 믹스 비대표·**보정 라우터(74/358)로 대표 트래픽 재측정 필요**(아래 §게이트 ② 명령) |
+| ② 루프당 비용·로컬 80% | 루프당 LLM 비용 실측·로컬 ≥80% | ✅ **PASS** | 2026-07-16 probe_g4(30/30·기록 실패 0): 라우터 결정 **로컬 90.0%**·Langfuse 재확인 **92.0%**(25이벤트). 비용 실측: LOCAL 23건 0원·CLOUD_MID 2건 합 10.01원(콜당 5.00원)·지연 p50 LOCAL 1015ms/CLOUD 4571ms. 측정 인프라 정상 작동 실증(SDK 버전 적응 수정 `6a882b0` 후) — Kiki 통과 조건 충족 |
 | ③ PRM/도구 검증 코드 경로 | 학생 응답 = 검증 통과 후가 코드 경로로 증명 | ✅ **PASS(정직 프레이밍)** | 아래 §게이트 ③ 증명 + 기계 봉인 3종(`test_coach_gate3_serving_invariant.py`) |
 
-**최종 판정(Kiki 기입란)**: `[ ]` 게이트 ② 재측정 로컬 ≥80% 확인 → `[ ]` 3종 전부 PASS 사인오프 → **S1 탈출 선언** → ROADMAP·MEMORY 갱신·`backlog.py done S1-14`. (② 미달 시: 라우팅 재분포·프롬프트 캐싱 등 후속 튜닝 후 재측정.)
+**최종 판정(Kiki 기입란)**: `[x]` 게이트 ② 재측정 로컬 ≥80% 확인(probe_g4 90.0%·Langfuse 92.0%) → `[x]` 3종 전부 PASS 사인오프(2026-07-16 Kiki 조건 "키를 정확하게 올리고, 앞으로 정상적으로 작업하는 것이 보장될 때 통과" — 키 실제 등록·기록 실패 0건·분포 실측으로 충족) → **S1 탈출 선언(2026-07-16)** → ROADMAP·MEMORY 갱신·`backlog.py done S1-14` 완료.
+
+**후속(선택·비차단)**: cost_report 튜닝 제안 `_EST_ASSUMED_INPUT/OUTPUT_TOKENS ← 62/124`(현행 74/358) — 대표 믹스 실측 기반 라우터 재보정은 별도 슬라이스로.
 
 ---
 
@@ -48,28 +50,32 @@
 
 ## 게이트 ② 재측정 — Kiki 실행 패키지 (Phaiakes9)
 
-보정 라우터(`_EST_ASSUMED_*` 74/358)는 이미 main. **대표 트래픽**(측정용 스모크가 아닌 실제 코치 루프 믹스)으로 재측정해야 판정선(로컬 ≥80%)이 정당하다.
+보정 라우터(`_EST_ASSUMED_*` 74/358)는 이미 main. **대표 트래픽**으로 재측정해야 판정선(로컬 ≥80%)이 정당하다.
+
+> **2026-07-16 정정(실측 교훈)**: 종전 안내(accumulate 소량 배치)는 무효 — `problem_corpus_accumulate`는 provider를 직접 호출해 파이프라인·라우터·sink를 **우회**하므로 `l3_routing` 이벤트가 0건이다(2회 실측 확인). 이벤트를 내는 유일한 경로는 `l3.pipeline.generate`이고, 이를 대표 요청 믹스로 태우는 전용 도구 **`ops/cost_probe`** 를 신설했다(free-우세 페르소나 A 트래픽 모델·티어는 라우터가 결정·로컬 비율은 인프로세스 집계라 Langfuse 상태와 무관하게 판정선을 냄). 추가 교훈: Langfuse 키가 자리표시자(`pk-lf-…`)면 측정이 조용히 0건이 된다 — 프로브의 인프로세스 판정이 이 취약점을 방어한다.
+>
+> **2026-07-16 실측 2차(probe_g3) + 통과 조건 상향(Kiki)**: 실제 키 등록 후 프로브 30/30 성공 — **local 27 : cloud_mid 3 = 로컬 90.0% (판정선 ≥80% 충족)**, 클라우드 실측 배선 증명(preflight 0.4066원/63·5tok). 단 Langfuse 기록이 전멸(30/30 실패)해 비용·지연 분포 미확보 — 원인 실측 확정: **Kiki venv langfuse 2.60.10에는 `create_event`가 없다**(v2 쓰기 표면은 `event()`·AttributeError를 sink가 무타입 경고로 삼켜 침묵 실패). Kiki 판정: *"키를 정확하게 올리고, 앞으로 정상적으로 작업하는 것이 보장될 때 통과"* — 게이트 ②는 ①sink SDK 버전 적응 수정 ②재실행에서 기록 실패 0건·cost_report 실제 분포 집계, 두 실증 후 PASS 기입한다(수치만으로 선-기입하지 않음).
 
 ```powershell
-# 1. 최신 main(보정 라우터 반영) 반영 — Phaiakes9 WhyMath 루트에서
+# [실행 시스템: Windows PowerShell — 이 PC가 곧 Phaiakes9]
+# 1. 최신 main(보정 라우터·cost_probe 반영)
 cd C:\Users\kiki\Desktop\__AI\WhyMath
 git checkout main
 git pull origin main
-cd src\backend
-# (venv 활성 상태 가정 — 아니면 .\.venv\Scripts\Activate.ps1)
 
-# 2. 클라우드·관측성 키 확인(S1-12 세션과 동일 — 이미 설정돼 있으면 생략)
-#    $env:WHYMATH_ANTHROPIC_API_KEY / WHYMATH_LANGFUSE_* 가 있어야 실측이 기록됨
+# 2. 전제: Ollama 가동(ollama list로 확인) · WHYMATH_LANGFUSE_*/WHYMATH_ANTHROPIC_API_KEY는
+#    실제 값(자리표시자 금지 — cost_report가 ASCII 인코딩 오류 후 0건으로 폴백한다)
 
-# 3. 대표 트래픽 유발 — 실제 코치 루프 믹스(로컬 우선 라우팅이 실작동하는 문항 분포).
-#    측정 세션 전용 클라우드 스모크는 로컬 비율을 왜곡하므로 지양.
-#    (프로덕션 유사 믹스가 없으면 problem_corpus_accumulate 소량 배치로 대체하되 대표성 캐비엇 병기)
+# 3. 대표 트래픽 프로브 — 라운드당 10콜(로컬 9:클라우드 1)·rounds 배수. 로컬 비율을
+#    즉석 판정(exit 0=PASS)하고 l3_routing 이벤트를 Langfuse에 기록·flush 한다.
+.\src\backend\.venv\Scripts\python.exe -m whymath_backend.ops.cost_probe --rounds 3 --json probe_g2.json
 
-# 4. 판독 — 라이브 세션 직후엔 --days 1
-python -m whymath_backend.ops.cost_report --days 1 --json cost_report.json
+# 4. 판독 — 비용·지연 분포(p50/p90)는 Langfuse 집계로(수 초 후 실행)
+.\src\backend\.venv\Scripts\python.exe -m whymath_backend.ops.cost_report --days 1 --json cost_report_g2.json
+.\src\backend\.venv\Scripts\python.exe scripts\fill_live_cost_table.py cost_report_g2.json
 ```
 
-**판정선**: 출력 `local_ratio ≥ 0.80` → 게이트 ② **PASS**. 미달 시 as-measured 기록 + 후속 튜닝(라우팅 재분포·프롬프트 캐싱) 후 재측정. 결과(`cost_report.json`의 `local_ratio`·`tier_stats`)를 회신하면 서기가 이 문서·`live_cost_measurement_2026-07.md`에 기입하고 최종 판정을 진행한다.
+**판정선**: 프로브 출력 `로컬 비율 ≥ 80%`(exit 0) → 게이트 ② **PASS**. 미달 시 as-measured 기록 + 후속 튜닝(라우팅 재분포·프롬프트 캐싱) 후 재측정. 프로브·cost_report 출력을 회신하면 서기가 이 문서·`live_cost_measurement_2026-07.md`에 기입하고 최종 판정을 진행한다.
 
 ---
 

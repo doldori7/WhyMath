@@ -390,11 +390,27 @@ def fetch_l3_events(
     reference = now if now is not None else datetime.now(timezone.utc)
     from_start = reference - timedelta(days=days)
 
+    # SDK 버전 적응 읽기(2026-07-16 실측): fetch_observations는 **v2에만** 존재한다.
+    # v3/v4는 `client.api.observations.get_many(...)`(동일 kwargs·동일 응답 형태)가
+    # 대체 표면이다 — 종전 고정 호출은 v3/v4에서 AttributeError → "조회 실패" 폴백
+    # → 이벤트가 있어도 0건으로 보였다(침묵 실패). 있는 표면을 골라 쓴다.
+    fetch = getattr(read_client, "fetch_observations", None)
+    if not callable(fetch):
+        api = getattr(read_client, "api", None)
+        observations = getattr(api, "observations", None)
+        fetch = getattr(observations, "get_many", None)
+    if not callable(fetch):
+        logger.warning(
+            "Langfuse 클라이언트에 관측 조회 표면이 없습니다(fetch_observations/"
+            "api.observations.get_many 모두 부재) — 빈 리포트로 계속(비차단)."
+        )
+        return []
+
     collected: list[dict[str, object]] = []
     page = 1
     try:
         while True:
-            response = read_client.fetch_observations(
+            response = fetch(
                 name=_L3_EVENT_NAME,
                 type="EVENT",
                 from_start_time=from_start,
@@ -413,8 +429,16 @@ def fetch_l3_events(
             if len(data) < limit:
                 break  # 마지막 페이지(요청 한도 미만) — 종료.
             page += 1
-    except Exception:  # noqa: BLE001 — 조회 장애가 판독을 깨면 안 됨(never-break). 모은 것만 반환.
-        logger.warning("Langfuse 조회 실패 — 지금까지 모은 이벤트로 집계(비차단).", exc_info=False)
+    except (
+        Exception
+    ) as exc:  # noqa: BLE001 — 조회 장애가 판독을 깨면 안 됨(never-break). 모은 것만 반환.
+        # 예외 타입명을 노출(시크릿 0) — 종전 무타입 경고는 자리표시자 키·SDK 표면
+        # 불일치 같은 원인을 전부 "0건"으로 위장시켰다(2026-07-16 침묵 실패 교훈).
+        logger.warning(
+            "Langfuse 조회 실패(%s) — 지금까지 모은 이벤트로 집계(비차단).",
+            type(exc).__name__,
+            exc_info=False,
+        )
 
     return collected
 

@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-06-human-owner-cli-path
+title: "하네스 CLI 사람-소유 태스크 기입 경로 신설 — owner!=claude는 start/done 불가(설계 공백)"
+track: infra-debt
+stage: S1
+subject: math
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "backlog.py에 owner=kiki 태스크의 사람 기입 경로(--as kiki 확인 플래그 등) 추가 + selector owner 제외는 next 후보에서만 적용"
+  - "S1-14 사례 회귀 테스트(사람 태스크 done 전이 가능)"
+artifacts: []
+paths: []
+session: null
+notes: "2026-07-16 S1-14 done 기입 시 발견 — Kiki 본인 실행도 CLI가 거부(selector.classify_todo가 owner!=claude를 start에서 원천 제외). 임시 처리 = owner 본인의 YAML 직접 기입"
+updated: 2026-07-16

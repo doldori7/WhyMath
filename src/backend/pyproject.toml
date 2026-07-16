@@ -35,8 +35,10 @@ dependencies = [
     # 인증·보안
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
-    # 관측성
-    "langfuse>=2.50.0",
+    # 관측성 — 상한 <5: 쓰기/읽기 표면을 v2.60·v3.15·v4.14에서 실측 검증(2026-07-16,
+    # sink record는 create_event/event 적응·cost_report는 fetch_observations/api 적응).
+    # 미검증 차기 메이저의 무단 유입을 차단한다(무상한 pin이 v2/v4 혼재를 낳았던 교훈).
+    "langfuse>=2.50.0,<5",
     "opentelemetry-api>=1.27.0",
     "opentelemetry-sdk>=1.27.0",
     "structlog>=24.4.0",

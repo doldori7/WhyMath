@@ -5,7 +5,7 @@ track: math-completion
 stage: S2
 subject: math
 layer: data-pipeline
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -13,7 +13,8 @@ requires_gates:
   - G-orphan-prod-run
 acceptance:
   - "prod 진단 결과 기반 orphan 정리 + cleanup_atom_orphans.py 실행 기록"
-artifacts: []
+artifacts:
+  - "2026-07-16 whymath-pg 실측 진단: 전 테이블 진짜 orphan 0건 — 정리 대상 부재로 cleanup 실행 불요(공집합 충족). MEMORY.md 결정 로그·diagnose 스크립트 오탐 필터 수정 커밋 참조"
 paths:
   - "src/data-pipeline/**"
   - "data/**"
@@ -21,4 +22,4 @@ paths:
   - scripts/diagnose_atom_orphans.py
 session: null
 notes: ""
-updated: 2026-07-08
+updated: 2026-07-16
