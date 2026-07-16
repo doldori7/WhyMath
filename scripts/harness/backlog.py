@@ -31,6 +31,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import pathscope
+import remote_claims
 import report
 import selector
 import store
@@ -111,14 +113,73 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
     exclusion = selector.classify_todo(backlog, task)
     if exclusion is not None:
         return _fail(f"{task.id} 착수 거부 — {exclusion.reason}: {exclusion.detail}")
+    session = args.session or store.current_branch(root)
+    policy, _ = store.load_policy(root)
+
+    # [프리플라이트 1] 파일 범위 겹침 — 타 in-flight 태스크의 paths와 교차 검사
+    overlap_error = _check_path_overlap(root, backlog, task, policy)
+    if overlap_error:
+        return _fail(overlap_error)
+
+    # [프리플라이트 2] 원격 claim — 로컬 검사 전부 통과 후 마지막 (dangling ref 방지).
+    # conflict만 차단, offline/error는 fail-open(경고 후 로컬 claim으로 진행).
+    remote_status = "disabled"
+    if policy.remote_claims and not getattr(args, "no_remote", False):
+        result = remote_claims.claim(root, task.id, session)
+        remote_status = result.status
+        if result.status == "conflict":
+            other = result.claim
+            detail = (f" (세션: {other.branch or '?'}, {other.ts or '시각 불명'})"
+                      if other else "")
+            return _fail(f"{task.id} 착수 거부 — 다른 세션이 이미 원격 claim{detail}\n"
+                         f"  본인 claim이 확실하면: claims release {task.id} --force 후 재시도")
+        if result.status in ("offline", "error"):
+            print(f"⚠ 원격 claim 불가({result.status}) — 로컬 claim만으로 진행: "
+                  f"{result.message}", file=sys.stderr)
+            store.append_event(root, "claim_remote_unavailable", task.id,
+                               status=result.status)
+
     task.status = "in_progress"
-    task.session = args.session or store.current_branch(root)
+    task.session = session
     task.updated = _today()
     store.save_task(root, task)
-    store.append_event(root, "start", task.id, session=task.session)
-    print(f"▶ {task.id} 착수 (세션: {task.session})")
+    store.append_event(root, "start", task.id, session=task.session, remote=remote_status)
+    print(f"▶ {task.id} 착수 (세션: {task.session}, 원격 claim: {remote_status})")
     print(f"  완료 조건: {task.acceptance or '(acceptance 미정의 — 정의 권장)'}")
+    if not task.paths:
+        print("  ⚠ paths 미선언 — 겹침 검사에서 제외됩니다. "
+              "태스크 YAML에 paths(작업 파일 glob) 선언을 권장", file=sys.stderr)
+    for warning in task.layer_drift_warnings():
+        print(f"  ⚠ {warning}", file=sys.stderr)
     return 0
+
+
+def _check_path_overlap(root: Path, backlog, task: Task, policy) -> str | None:
+    """start 프리플라이트 — 타 in-flight 태스크와 paths 교차 검사.
+
+    warn: stderr 경고 + policy_warn 이벤트 후 진행(None 반환).
+    block: 오류 메시지 반환(호출측이 exit 1).
+    """
+    if policy.path_overlap == "off" or not task.paths:
+        return None
+    inflight = [t for t in backlog.tasks.values()
+                if t.status in ("in_progress", "review") and t.id != task.id and t.paths]
+    if not inflight:
+        return None
+    files = pathscope.repo_files(root)
+    for other in inflight:
+        hit = pathscope.overlap(task.id, task.paths, other.id, other.paths, files)
+        if hit is None:
+            continue
+        desc = (f"{task.id} ↔ {other.id}(세션: {other.session or '?'}) "
+                f"파일 범위 겹침 — {hit.describe()}")
+        store.append_event(root, "policy_warn", task.id, rule="path_overlap",
+                           other=other.id, detail=hit.describe(),
+                           mode=policy.path_overlap)
+        if policy.path_overlap == "block":
+            return f"착수 거부 — {desc}\n  겹침 해소(paths 조정·상대 태스크 완료 대기) 후 재시도"
+        print(f"⚠ {desc}", file=sys.stderr)
+    return None
 
 
 def cmd_done(root: Path, args: argparse.Namespace) -> int:
@@ -131,12 +192,14 @@ def cmd_done(root: Path, args: argparse.Namespace) -> int:
     error = _transition(task, "done")
     if error:
         return _fail(error)
+    prev_session = task.session
     task.status = "done"
     task.artifacts = list(dict.fromkeys(task.artifacts + args.artifact))
     task.session = None
     task.updated = _today()
     store.save_task(root, task)
     store.append_event(root, "done", task.id, artifacts=args.artifact)
+    _release_remote_claim(root, task.id, prev_session)
     print(f"✔ {task.id} 완료 — 증적: {', '.join(args.artifact)}")
     # 이 완료로 해금된 후속 태스크 안내 (순차 조율의 연결 고리)
     unlocked = [
@@ -161,14 +224,29 @@ def cmd_block(root: Path, args: argparse.Namespace) -> int:
     error = _transition(task, "blocked")
     if error:
         return _fail(error)
+    prev_session = task.session
     task.status = "blocked"
     task.session = None
     task.notes = args.reason
     task.updated = _today()
     store.save_task(root, task)
     store.append_event(root, "block", task.id, reason=args.reason)
+    _release_remote_claim(root, task.id, prev_session)
     print(f"✖ {task.id} 차단 — {args.reason}")
     return 0
+
+
+def _release_remote_claim(root: Path, task_id: str, prev_session: str | None) -> None:
+    """done/block 후 원격 claim 해제 — best-effort (실패해도 진행, reap이 나중에 청소)."""
+    policy, _ = store.load_policy(root)
+    if not policy.remote_claims:
+        return
+    result = remote_claims.release(root, task_id,
+                                   prev_session or store.current_branch(root))
+    if result.status not in ("ok", "offline"):
+        print(f"⚠ 원격 claim 해제 실패({result.status}): {result.message} — "
+              f"`claims reap`이 이후 청소합니다", file=sys.stderr)
+        store.append_event(root, "claim_release_failed", task_id, status=result.status)
 
 
 def cmd_unblock(root: Path, args: argparse.Namespace) -> int:
@@ -237,6 +315,7 @@ def cmd_add(root: Path, args: argparse.Namespace) -> int:
         depends_on=args.depends or [],
         requires_gates=args.gates or [],
         acceptance=args.acceptance or [],
+        paths=args.paths or [],
         notes=args.notes or "",
         updated=_today(),
     )
@@ -353,6 +432,91 @@ def cmd_check_edit(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_claims(root: Path, args: argparse.Namespace) -> int:
+    """원격 claim 관리 — list(기본)·release·reap."""
+    backlog, _ = _load(root)
+    policy, _ = store.load_policy(root)
+
+    if args.claims_action == "release":
+        if not args.claims_id:
+            return _fail("claims release <task-id> — 태스크 ID 필수")
+        result = remote_claims.release(root, args.claims_id,
+                                       store.current_branch(root), force=args.force)
+        if result.status != "ok":
+            return _fail(f"해제 실패({result.status}): {result.message}")
+        store.append_event(root, "claim_release", args.claims_id, forced=args.force)
+        print(f"✔ {args.claims_id} 원격 claim 해제")
+        return 0
+
+    if args.claims_action == "reap":
+        ttl = args.ttl_hours or policy.claim_ttl_hours
+        reaped = remote_claims.reap(root, backlog, ttl, dry_run=not args.apply)
+        if not reaped:
+            print("stale claim 없음")
+            return 0
+        label = "삭제됨" if args.apply else "삭제 대상 (dry-run — 실제 삭제는 --apply)"
+        print(f"stale claim {len(reaped)}건 {label}:")
+        for item in reaped:
+            print(f"  · {item}")
+        if args.apply:
+            store.append_event(root, "claim_reap", "-", reaped=reaped)
+        return 0
+
+    # list (기본)
+    claims, status = remote_claims.list_claims(root, with_meta=args.verbose or args.json)
+    if status != "ok":
+        print(f"원격 claim 조회 불가 ({status})")
+        return 0 if status == "offline" else 1
+    if args.json:
+        print(json.dumps(
+            [{"task": c.task_id, "branch": c.branch, "ts": c.ts, "sha": c.sha}
+             for c in claims],
+            ensure_ascii=False, indent=2,
+        ))
+        return 0
+    if not claims:
+        print("원격 claim 없음")
+        return 0
+    print(f"원격 claim {len(claims)}건:")
+    for c in sorted(claims, key=lambda x: x.task_id):
+        meta = f" — {c.branch} ({c.ts})" if c.branch else ""
+        local = backlog.tasks.get(c.task_id)
+        state = f" [로컬: {local.status}]" if local else " [로컬: 미존재]"
+        print(f"  · {c.task_id}{meta}{state}")
+    return 0
+
+
+def cmd_overlap(root: Path, args: argparse.Namespace) -> int:
+    """태스크 간 파일 범위 겹침 진단 — 착수 전 수동 확인용."""
+    backlog, _ = _load(root)
+    task = backlog.tasks.get(args.id)
+    if task is None:
+        return _fail(f"태스크 '{args.id}' 없음")
+    if not task.paths:
+        print(f"{task.id}: paths 미선언 — 겹침 판정 불가 (paths 선언 권장)")
+        return 0
+    if args.against:
+        others = [backlog.tasks[args.against]] if args.against in backlog.tasks else []
+        if not others:
+            return _fail(f"태스크 '{args.against}' 없음")
+    else:
+        others = [t for t in backlog.tasks.values()
+                  if t.id != task.id and t.status in ("in_progress", "review") and t.paths]
+    if not others:
+        print("비교 대상 in-flight 태스크 없음")
+        return 0
+    files = pathscope.repo_files(root)
+    found = False
+    for other in others:
+        hit = pathscope.overlap(task.id, task.paths, other.id, other.paths, files)
+        if hit:
+            found = True
+            print(f"⚠ {task.id} ↔ {other.id} (세션: {other.session or '?'}): {hit.describe()}")
+    if not found:
+        print(f"✔ {task.id}: 겹침 없음 ({len(others)}건 비교)")
+    return 0
+
+
 def cmd_seed(root: Path, args: argparse.Namespace) -> int:
     bdir = store.backlog_dir(root)
     if (bdir / "tracks.yaml").exists() and not args.force:
@@ -397,6 +561,8 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("start", help="태스크 착수 (claim)")
     p.add_argument("id")
     p.add_argument("--session")
+    p.add_argument("--no-remote", action="store_true", dest="no_remote",
+                   help="원격 claim 생략 (오프라인·긴급용)")
     p.set_defaults(func=cmd_start)
 
     p = sub.add_parser("done", help="태스크 완료 (증적 필수)")
@@ -432,6 +598,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--depends", action="append", default=[])
     p.add_argument("--gates", action="append", default=[])
     p.add_argument("--acceptance", action="append", default=[])
+    p.add_argument("--path", action="append", default=[], dest="paths",
+                   help="작업 파일 범위 glob (겹침 검사용 — 반복 지정 가능)")
     p.add_argument("--notes")
     p.set_defaults(func=cmd_add)
 
@@ -448,6 +616,23 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("check-edit", help="PostToolUse 훅 — backlog 직접 편집 검증")
     p.set_defaults(func=cmd_check_edit)
+
+    p = sub.add_parser("claims", help="원격 claim(refs/claims/*) 조회·해제·청소")
+    p.add_argument("claims_action", nargs="?", default="list",
+                   choices=["list", "release", "reap"])
+    p.add_argument("claims_id", nargs="?")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--verbose", action="store_true", help="claim 메타(브랜치·시각) 포함")
+    p.add_argument("--force", action="store_true", help="남의 claim 강제 해제")
+    p.add_argument("--ttl-hours", type=int, dest="ttl_hours",
+                   help="reap TTL (기본: policy.claim_ttl_hours)")
+    p.add_argument("--apply", action="store_true", help="reap 실제 삭제 (기본 dry-run)")
+    p.set_defaults(func=cmd_claims)
+
+    p = sub.add_parser("overlap", help="태스크 간 파일 범위 겹침 진단")
+    p.add_argument("id")
+    p.add_argument("--against", help="특정 태스크와만 비교 (기본: 전체 in-flight)")
+    p.set_defaults(func=cmd_overlap)
 
     p = sub.add_parser("seed", help="초기 백로그 시딩 (최초 1회)")
     p.add_argument("--force", action="store_true")

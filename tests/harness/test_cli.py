@@ -228,3 +228,117 @@ class TestReporting:
         payload = json.loads(capsys.readouterr().out)
         assert payload["current_stage"] == "S1"
         assert payload["validate_errors"] == []
+
+
+class TestRemoteClaimCli:
+    """start/done/block의 원격 claim(refs/claims/*) 통합 — 병렬 세션 레이스 종단 재현."""
+
+    def _seeded_clone(self, clone, monkeypatch, name: str) -> Path:
+        repo = clone(name)
+        monkeypatch.chdir(repo)
+        assert cli.main(["seed"]) == 0
+        return repo
+
+    def _next_ids(self, capsys, n: int = 1) -> list[str]:
+        """게이트 없는 즉시 착수 가능 태스크 id를 n개 고른다 (기존 컨벤션)."""
+        capsys.readouterr()  # 시딩 출력 등 이전 버퍼 비우기
+        assert cli.main(["next", "--n", str(n), "--json"]) == 0
+        return [row["id"] for row in json.loads(capsys.readouterr().out)]
+
+    def test_start가_원격_claim을_생성한다(self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        repo = self._seeded_clone(clone, monkeypatch, "session-a")
+        [task_id] = self._next_ids(capsys)
+        assert cli.main(["start", task_id]) == 0
+        assert "원격 claim: ok" in capsys.readouterr().out
+        import remote_claims
+        claims, status = remote_claims.list_claims(repo)
+        assert status == "ok"
+        assert [c.task_id for c in claims] == [task_id]
+
+    def test_레이스_두_세션_같은_태스크는_후발이_거부된다(self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        self._seeded_clone(clone, monkeypatch, "session-a")
+        [task_id] = self._next_ids(capsys)
+        assert cli.main(["start", task_id]) == 0
+        capsys.readouterr()
+        # 세션 B — 독립 클론(백로그 사본에는 A의 claim이 안 보임 = 기존 TOCTOU 구멍)
+        repo_b = self._seeded_clone(clone, monkeypatch, "session-b")
+        assert cli.main(["start", task_id]) == 1
+        err = capsys.readouterr().err
+        assert "이미 원격 claim" in err
+        assert "claude/session-a" in err
+        # B의 로컬 백로그는 오염되지 않음 (claim 실패 시 저장 안 함)
+        backlog, _ = store.load_backlog(repo_b)
+        assert backlog.tasks[task_id].status == "todo"
+
+    def test_done이_원격_claim을_해제한다(self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        repo = self._seeded_clone(clone, monkeypatch, "session-a")
+        [task_id] = self._next_ids(capsys)
+        assert cli.main(["start", task_id]) == 0
+        assert cli.main(["done", task_id, "--artifact", "PR#1"]) == 0
+        import remote_claims
+        claims, _ = remote_claims.list_claims(repo)
+        assert claims == []
+
+    def test_block이_원격_claim을_해제한다(self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        repo = self._seeded_clone(clone, monkeypatch, "session-a")
+        [task_id] = self._next_ids(capsys)
+        assert cli.main(["start", task_id]) == 0
+        assert cli.main(["block", task_id, "--reason", "테스트"]) == 0
+        import remote_claims
+        claims, _ = remote_claims.list_claims(repo)
+        assert claims == []
+
+    def test_no_remote_플래그는_원격을_생략한다(self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        repo = self._seeded_clone(clone, monkeypatch, "session-a")
+        [task_id] = self._next_ids(capsys)
+        assert cli.main(["start", task_id, "--no-remote"]) == 0
+        assert "원격 claim: disabled" in capsys.readouterr().out
+        import remote_claims
+        claims, _ = remote_claims.list_claims(repo)
+        assert claims == []
+
+    def test_원격_없어도_start는_진행된다_fail_open(self, seeded_repo: Path, capsys):
+        # origin이 아예 없는 저장소 — offline 경고 후 로컬 claim으로 진행
+        [task_id] = self._next_ids(capsys)
+        assert cli.main(["start", task_id]) == 0
+        captured = capsys.readouterr()
+        assert "원격 claim: offline" in captured.out
+        assert "로컬 claim만" in captured.err
+
+    def test_claims_list_release(self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        self._seeded_clone(clone, monkeypatch, "session-a")
+        [task_id] = self._next_ids(capsys)
+        assert cli.main(["start", task_id]) == 0
+        capsys.readouterr()
+        assert cli.main(["claims", "list", "--verbose"]) == 0
+        out = capsys.readouterr().out
+        assert task_id in out
+        assert "claude/session-a" in out
+        # 내 claim이므로 force 불필요
+        assert cli.main(["claims", "release", task_id]) == 0
+
+    def test_claims_reap_고아_ref_청소(self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        repo = self._seeded_clone(clone, monkeypatch, "session-a")
+        task_a, task_b = self._next_ids(capsys, n=2)
+        # 고아 ref 인위 생성: claim만 남기고 로컬은 done 처리 (세션 사망 모사)
+        import remote_claims
+        assert remote_claims.claim(repo, task_b, "claude/ghost").status == "ok"
+        backlog, _ = store.load_backlog(repo)
+        backlog.tasks[task_b].status = "done"
+        backlog.tasks[task_b].artifacts = ["x"]
+        store.save_task(repo, backlog.tasks[task_b])
+        capsys.readouterr()
+        assert cli.main(["claims", "reap"]) == 0
+        assert "dry-run" in capsys.readouterr().out
+        claims, _ = remote_claims.list_claims(repo)
+        assert len(claims) == 1  # dry-run — 남아 있음
+        assert cli.main(["claims", "reap", "--apply"]) == 0
+        claims, _ = remote_claims.list_claims(repo)
+        assert claims == []
