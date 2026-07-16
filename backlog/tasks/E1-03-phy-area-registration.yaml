@@ -12,6 +12,7 @@ depends_on: []
 requires_gates: []
 acceptance:
   - "_TOPIC_AREA_MAP 레지스트리 규약으로 5종 등록 + 성취기준 크롤 연결"
+  - "선행 과목과의 교차 과목 prerequisite 엣지 실증 (수치 목표는 E1 실측 후 확정 — knowledge_fabric_vision_v1.md §3)"
 artifacts: []
 paths:
   - "src/data-pipeline/**"
