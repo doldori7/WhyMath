@@ -73,3 +73,11 @@
 {"ts": "2026-07-15T13:44:27", "actor": "claude/recommended-tasks-xhg9e5", "action": "start", "id": "S2-12-asfound-gate", "session": "claude/recommended-tasks-xhg9e5"}
 {"ts": "2026-07-15T14:02:21", "actor": "claude/recommended-tasks-xhg9e5", "action": "done", "id": "S2-12-asfound-gate", "artifacts": ["6415400", "docs/standards/superhuman_verification_standard.md#§4.5"]}
 {"ts": "2026-07-16T03:58:24", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "paths_seed", "id": "-", "count": 17, "note": "harness v1.1 — 개방 태스크 paths 일괄 시딩 (도메인 지도 기준)"}
+{"ts": "2026-07-16T06:09:19", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "add", "id": "FAB-01-fabric-vision"}
+{"ts": "2026-07-16T06:09:20", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "claim_remote_unavailable", "id": "FAB-01-fabric-vision", "status": "error"}
+{"ts": "2026-07-16T06:09:20", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "start", "id": "FAB-01-fabric-vision", "session": "claude/coding-duplication-conflicts-p41iau", "remote": "error"}
+{"ts": "2026-07-16T06:10:48", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "CLAUDE.md", "mode": "warn", "detail": "'CLAUDE.md' 은 claim 태스크 FAB-01-fabric-vision의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-07-16T06:11:16", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 FAB-01-fabric-vision의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-07-16T06:12:16", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "add", "id": "FAB-02-fabric-audit"}
+{"ts": "2026-07-16T06:12:16", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "fabric_acceptance_seed", "id": "-", "tasks": ["E1-03-phy-area-registration", "E2-01-chemistry-pack", "E3-01-biology-pack", "E4-01-history-social-pack", "E5-01-korean-pack", "E6-01-english-pack"], "note": "EKF 비전 정본화 — 교차 과목 엣지 실증 의무 부여"}
+{"ts": "2026-07-16T06:13:29", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "done", "id": "FAB-01-fabric-vision", "artifacts": ["462d794", "docs/strategy/knowledge_fabric_vision_v1.md"]}
