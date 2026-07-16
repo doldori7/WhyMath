@@ -72,3 +72,4 @@
 {"ts": "2026-07-15T12:52:47", "actor": "claude/dazzling-ramanujan-4aalh8", "action": "done", "id": "ARCH-08-playbook-audit", "artifacts": ["docs/standards/arch_audit_2026-07-15_r8.md", "적대검증 3건 전건 적정·상환 3(도큐)·backlog add S2-12"]}
 {"ts": "2026-07-15T13:44:27", "actor": "claude/recommended-tasks-xhg9e5", "action": "start", "id": "S2-12-asfound-gate", "session": "claude/recommended-tasks-xhg9e5"}
 {"ts": "2026-07-15T14:02:21", "actor": "claude/recommended-tasks-xhg9e5", "action": "done", "id": "S2-12-asfound-gate", "artifacts": ["6415400", "docs/standards/superhuman_verification_standard.md#§4.5"]}
+{"ts": "2026-07-16T03:58:24", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "paths_seed", "id": "-", "count": 17, "note": "harness v1.1 — 개방 태스크 paths 일괄 시딩 (도메인 지도 기준)"}

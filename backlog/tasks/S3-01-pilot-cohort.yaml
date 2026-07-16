@@ -15,6 +15,8 @@ requires_gates: []
 acceptance:
   - 파일럿 코호트 모집·측정 하네스 KPI 베이스라인 기록
 artifacts: []
+paths:
+  - "docs/**"
 session: null
 notes: ""
 updated: 2026-07-08

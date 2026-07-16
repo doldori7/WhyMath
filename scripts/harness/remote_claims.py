@@ -98,6 +98,33 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# ── claim 캐시 — check-edit 훅용 (편집마다 네트워크 조회 금지) ────────────────
+# brief/next/start가 원격 조회에 성공할 때마다 스냅샷을 남기고, 훅은 이것만 읽는다.
+# .git/ 아래라 커밋 대상이 아니며 세션(클론)별 독립이다.
+
+def _cache_path(root: Path) -> Path:
+    return root / ".git" / "whymath-claims-cache.json"
+
+
+def save_cache(root: Path, claims: list[RemoteClaim]) -> None:
+    """원격 claim 스냅샷 저장 (best-effort — 실패 무시)."""
+    try:
+        payload = [{"task": c.task_id, "branch": c.branch, "ts": c.ts} for c in claims]
+        _cache_path(root).write_text(
+            json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def load_cache(root: Path) -> dict[str, str]:
+    """캐시된 claim 스냅샷 로드 — task_id → branch (실패 시 빈 dict)."""
+    try:
+        raw = json.loads(_cache_path(root).read_text(encoding="utf-8"))
+        return {str(e["task"]): str(e.get("branch", "?")) for e in raw}
+    except Exception:
+        return {}
+
+
 def claim(root: Path, task_id: str, branch: str) -> ClaimResult:
     """태스크를 원자적으로 원격 claim. 이미 claim되어 있으면 conflict."""
     if not has_remote(root):

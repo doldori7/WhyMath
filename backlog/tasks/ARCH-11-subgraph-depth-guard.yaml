@@ -14,6 +14,9 @@ requires_gates: []
 acceptance:
   - "l2/reasoning_subgraph.py seam에 depth≤2·visited set·timeout·token budget guard 도입 + 테스트 동결"
 artifacts: []
+paths:
+  - "src/backend/**"
+  - "tests/backend/**"
 session: null
 notes: "arch_audit_2026-07-09.md [유예 B] — part8 review rev.2 해제 트리거 계약의 백로그 이관 (사람 기억 의존 제거)"
 updated: 2026-07-09

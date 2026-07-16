@@ -13,6 +13,11 @@ requires_gates: []
 acceptance:
   - "_TOPIC_AREA_MAP 레지스트리 규약으로 5종 등록 + 성취기준 크롤 연결"
 artifacts: []
+paths:
+  - "src/data-pipeline/**"
+  - "data/**"
+  - "docs/data/**"
+  - "tests/data_pipeline/**"
 session: null
 notes: ""
 updated: 2026-07-08

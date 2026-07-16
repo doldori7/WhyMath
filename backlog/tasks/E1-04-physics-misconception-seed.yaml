@@ -13,6 +13,11 @@ requires_gates: []
 acceptance:
   - "misconceptions_phys_v1 시드 + reactive retrieval 연결"
 artifacts: []
+paths:
+  - "src/data-pipeline/**"
+  - "data/**"
+  - "docs/data/**"
+  - "tests/data_pipeline/**"
 session: null
 notes: ""
 updated: 2026-07-08

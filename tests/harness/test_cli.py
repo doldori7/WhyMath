@@ -474,3 +474,60 @@ class TestPolicyCli:
         out = capsys.readouterr().out
         assert "adhoc_edit: 1건" in out
         assert "승격 기준" in out
+
+
+class TestCrossSessionOverlap:
+    """교차 세션 겹침 — 상태(in_progress)는 브랜치 로컬이므로 원격 claim이 유일한 신호."""
+
+    def _seeded_clone(self, clone, monkeypatch, name: str) -> Path:
+        repo = clone(name)
+        monkeypatch.chdir(repo)
+        assert cli.main(["seed"]) == 0
+        return repo
+
+    def _add_overlapping_pair(self) -> tuple[str, str]:
+        # 두 클론 모두에 같은 태스크 정의가 있어야 한다(실환경에선 git으로 공유됨)
+        assert cli.main(["add", "--id", "T8-05-cross-a", "--title", "교차 A",
+                         "--track", "math-completion", "--stage", "S1",
+                         "--path", "src/backend/**"]) == 0
+        assert cli.main(["add", "--id", "T8-06-cross-b", "--title", "교차 B",
+                         "--track", "math-completion", "--stage", "S1",
+                         "--path", "src/backend/api/**"]) == 0
+        return "T8-05-cross-a", "T8-06-cross-b"
+
+    def test_start_프리플라이트가_원격_claim_태스크와의_겹침을_잡는다(
+            self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        self._seeded_clone(clone, monkeypatch, "session-a")
+        a, b = self._add_overlapping_pair()
+        assert cli.main(["start", a]) == 0
+        capsys.readouterr()
+        # 세션 B의 독립 클론 — 로컬 backlog에서 a는 여전히 todo (claim 불가시)
+        repo_b = self._seeded_clone(clone, monkeypatch, "session-b")
+        self._add_overlapping_pair()
+        backlog, _ = store.load_backlog(repo_b)
+        assert backlog.tasks[a].status == "todo"  # 전제 확인: 로컬은 모름
+        capsys.readouterr()
+        assert cli.main(["start", b]) == 0  # warn 모드 — 진행은 되지만
+        err = capsys.readouterr().err
+        assert "파일 범위 겹침" in err
+        assert a in err  # 원격 claim 기반으로 A와의 겹침을 식별
+
+    def test_check_edit이_캐시로_교차_세션_겹침을_잡는다(
+            self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        self._seeded_clone(clone, monkeypatch, "session-a")
+        a, _ = self._add_overlapping_pair()
+        assert cli.main(["start", a]) == 0
+        # 세션 B: brief가 원격 claim 조회 + 캐시 갱신 (SessionStart 모사)
+        repo_b = self._seeded_clone(clone, monkeypatch, "session-b")
+        self._add_overlapping_pair()
+        assert cli.main(["brief"]) == 0
+        capsys.readouterr()
+        # B가 A의 선언 범위(src/backend/**) 안 파일 편집 → path_overlap 경고
+        payload = {"tool_input": {"file_path": str(repo_b / "src/backend/api/x.py")}}
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+        assert cli.main(["check-edit"]) == 0  # warn 모드
+        err = capsys.readouterr().err
+        assert "path_overlap" in err
+        assert a in err

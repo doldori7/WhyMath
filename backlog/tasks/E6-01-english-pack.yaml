@@ -14,6 +14,11 @@ requires_gates: []
 acceptance:
   - "루브릭 평가 인간 일치율(κ) 목표 도달 + 학교 영어 파일럿"
 artifacts: []
+paths:
+  - "src/data-pipeline/**"
+  - "data/**"
+  - "docs/data/**"
+  - "tests/data_pipeline/**"
 session: null
 notes: ""
 updated: 2026-07-08

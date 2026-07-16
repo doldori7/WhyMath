@@ -15,6 +15,8 @@ requires_gates:
 acceptance:
   - 탈출 게이트 3종 판정 기록 → ROADMAP·MEMORY 갱신
 artifacts: []
+paths:
+  - "docs/**"
 session: null
 notes: ""
 updated: 2026-07-08

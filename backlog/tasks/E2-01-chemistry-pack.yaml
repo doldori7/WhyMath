@@ -17,6 +17,11 @@ requires_gates: []
 acceptance:
   - "6단계 소요 실측이 E1 대비 50~60% + 통합과학 cross-subject 진단 작동"
 artifacts: []
+paths:
+  - "src/data-pipeline/**"
+  - "data/**"
+  - "docs/data/**"
+  - "tests/data_pipeline/**"
 session: null
 notes: ""
 updated: 2026-07-08

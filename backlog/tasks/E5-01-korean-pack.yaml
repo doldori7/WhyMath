@@ -14,6 +14,11 @@ requires_gates: []
 acceptance:
   - "지문 4트랙 법무 승인 + 오독 진단 검수자 일치율 + 파일럿 D7"
 artifacts: []
+paths:
+  - "src/data-pipeline/**"
+  - "data/**"
+  - "docs/data/**"
+  - "tests/data_pipeline/**"
 session: null
 notes: ""
 updated: 2026-07-08

@@ -77,12 +77,17 @@ def cmd_status(root: Path, args: argparse.Namespace) -> int:
 
 
 def _remote_claim_map(root: Path, policy, skip: bool = False) -> tuple[dict[str, str], str]:
-    """원격 claim 조회 best-effort — (task_id→branch, 상태). 실패는 빈 dict (fail-open)."""
+    """원격 claim 조회 best-effort — (task_id→branch, 상태). 실패는 빈 dict (fail-open).
+
+    성공 시 스냅샷을 .git/ 캐시에 남긴다 — check-edit 훅이 편집마다
+    네트워크를 타지 않고 이 캐시로 교차 세션 겹침을 판정한다.
+    """
     if skip or not policy.remote_claims:
         return {}, "disabled"
     claims, status = remote_claims.list_claims(root, with_meta=True)
     if status != "ok":
         return {}, status
+    remote_claims.save_cache(root, claims)
     return {c.task_id: (c.branch or "?") for c in claims}, "ok"
 
 
@@ -155,8 +160,14 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
     session = args.session or store.current_branch(root)
     policy, _ = store.load_policy(root)
 
-    # [프리플라이트 1] 파일 범위 겹침 — 타 in-flight 태스크의 paths와 교차 검사
-    overlap_error = _check_path_overlap(root, backlog, task, policy)
+    # 원격 claim 스냅샷 — 다른 세션의 in-flight는 로컬 backlog 사본에 안 보이므로
+    # (claim은 각 브랜치의 worktree에만 기록) 원격 ref로만 교차 세션 겹침을 알 수 있다
+    remote_claimed, _ = _remote_claim_map(
+        root, policy, skip=getattr(args, "no_remote", False))
+
+    # [프리플라이트 1] 파일 범위 겹침 — 타 in-flight(로컬 ∪ 원격 claim) paths와 교차
+    overlap_error = _check_path_overlap(root, backlog, task, policy,
+                                        remote_claimed=remote_claimed, session=session)
     if overlap_error:
         return _fail(overlap_error)
 
@@ -193,7 +204,33 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
-def _check_path_overlap(root: Path, backlog, task: Task, policy) -> str | None:
+def _inflight_tasks(backlog, remote_claimed: dict[str, str] | None,
+                    session: str | None) -> list[Task]:
+    """in-flight 태스크 = 로컬(in_progress·review) ∪ 원격 claim (내 세션 제외).
+
+    태스크 정의(YAML·paths)는 git으로 전 세션에 공유되지만, 상태(in_progress)는
+    claim한 브랜치의 사본에만 있다 — 원격 claim ref가 교차 세션의 유일한 신호다.
+    """
+    result: dict[str, Task] = {
+        t.id: t for t in backlog.tasks.values()
+        if t.status in ("in_progress", "review")
+    }
+    for tid, branch in (remote_claimed or {}).items():
+        if session and branch == session:
+            continue  # 내 claim은 겹침 대상 아님
+        t = backlog.tasks.get(tid)
+        if t is not None and t.id not in result:
+            # 로컬 사본에선 todo로 보여도 원격 claim이 있으면 in-flight로 취급
+            t_session = t.session or branch
+            result[t.id] = t
+            if not t.session:
+                t.session = t_session  # 경고 메시지용 (저장하지 않음 — 메모리만)
+    return list(result.values())
+
+
+def _check_path_overlap(root: Path, backlog, task: Task, policy,
+                        remote_claimed: dict[str, str] | None = None,
+                        session: str | None = None) -> str | None:
     """start 프리플라이트 — 타 in-flight 태스크와 paths 교차 검사.
 
     warn: stderr 경고 + policy_warn 이벤트 후 진행(None 반환).
@@ -201,8 +238,8 @@ def _check_path_overlap(root: Path, backlog, task: Task, policy) -> str | None:
     """
     if policy.path_overlap == "off" or not task.paths:
         return None
-    inflight = [t for t in backlog.tasks.values()
-                if t.status in ("in_progress", "review") and t.id != task.id and t.paths]
+    inflight = [t for t in _inflight_tasks(backlog, remote_claimed, session)
+                if t.id != task.id and t.paths]
     if not inflight:
         return None
     files = pathscope.repo_files(root)
@@ -528,12 +565,13 @@ def _check_edit_policy(root: Path, file_path: str) -> int:
             f"`backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)",
         ))
 
-    # ② path_overlap — 다른 세션 in-flight 태스크의 선언 범위 안을 편집
+    # ② path_overlap — 다른 세션 in-flight 태스크의 선언 범위 안을 편집.
+    # 교차 세션 claim은 로컬 backlog에 안 보이므로 원격 claim 캐시(.git/)를 병합
+    # (캐시는 brief/next/start가 원격 조회 성공 시 갱신 — 훅은 네트워크 미사용)
     if policy.path_overlap != "off":
-        for other in backlog.tasks.values():
-            if other.status not in ("in_progress", "review") or not other.paths:
-                continue
-            if other.session == branch:
+        cached = remote_claims.load_cache(root)
+        for other in _inflight_tasks(backlog, cached, branch):
+            if not other.paths or other.session == branch:
                 continue
             if pathscope.path_in_scope(rel, other.paths):
                 violations.append((
