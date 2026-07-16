@@ -580,6 +580,45 @@ jobs:
           echo "OK — 하드코딩된 시크릿 패턴 없음"
 
   # ─────────────────────────────────────────────────────────────────
+  # 빌드 하네스 무결성 + 원격 claim 교차 검증 (항상 실행 — 초 단위)
+  # 병렬 세션 중복작업 방지: backlog 무결성·stale claim을 PR마다 감시
+  # ─────────────────────────────────────────────────────────────────
+  harness-integrity:
+    name: harness-integrity — backlog 무결성·claim 교차 검증
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps (stdlib + PyYAML만 — 하네스 설계 불변식)
+        run: pip install pyyaml pytest
+
+      - name: backlog 무결성 검증
+        run: python3 scripts/harness/backlog.py validate
+
+      - name: 원격 claim ↔ backlog 교차 검증 (stale claim은 warning)
+        run: |
+          set -e
+          # reap dry-run은 항상 exit 0 — stale 발견은 실패가 아니라 청소 안내
+          out=$(python3 scripts/harness/backlog.py claims reap || true)
+          echo "$out"
+          if echo "$out" | grep -q "stale claim"; then
+            if ! echo "$out" | grep -q "stale claim 없음"; then
+              echo "::warning::stale 원격 claim 발견 — 'backlog.py claims reap --apply'로 청소 권장"
+            fi
+          fi
+
+      - name: 하네스 테스트
+        run: python3 -m pytest tests/harness -q
+
+  # ─────────────────────────────────────────────────────────────────
   # 야간 E2E 관통 슬라이스 (schedule 전용) — S1 게이트 안전망
   # 온보딩→진단→문제→코치(영속)→verify 관통 테스트(test_e2e_vertical_slice_integration)를
   # push/PR 없이도 매일 실 PG로 돌린다. 본체는 이미 backend-migrations 잡에서 push/PR마다

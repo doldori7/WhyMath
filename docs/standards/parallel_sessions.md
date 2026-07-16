@@ -61,6 +61,11 @@ claude/<domain>-<task-slug>-<짧은난수>
 
 - `main` 직접 push 금지 (`.github/branch-protection-setup.md` 참조). 항상 PR 경유.
 - Linear history(squash/rebase)만. merge commit 금지.
+- **현실 반영 (2026-07-16)**: Claude Code 웹 세션은 자동 생성 브랜치명
+  (`claude/dazzling-ramanujan-4aalh8` 등)을 쓰므로 도메인 프리픽스를 강제할 수 없다.
+  **도메인 소속의 정본은 브랜치명이 아니라 claim한 태스크의 `layer` 필드다** —
+  하네스가 태스크 단위로 소유권을 추적하므로 브랜치명 규약은 로컬 worktree
+  (`new-session-worktree.sh`) 사용 시의 권장 관례로 유지된다.
 
 ---
 
@@ -111,6 +116,28 @@ git branch -D claude/backend-prm-verify   # 원격 머지 완료 후
 - **`MEMORY.md`**: union-merge라 대개 자동 병합됨. 중복 라인이 보이면 수동 정리.
 - **의존성 파일**: 충돌 시 한쪽 기준으로 재생성(`uv lock` / `flutter pub get` / `npm install`) 후 커밋.
 - **스키마**: 절대 임의 병합하지 말 것 — 스키마 소유 세션이 조정.
+
+---
+
+## 7. 하네스 강제 장치 (v1.1 — 관례가 코드로 집행되는 지점)
+
+이 문서의 규칙 중 상당수는 빌드 하네스가 기계적으로 집행한다
+(`docs/standards/build_harness.md` §3b·§3c 상세):
+
+| 관례 (이 문서) | 집행 코드 | 강제 수준 |
+|---|---|---|
+| 같은 태스크 동시 착수 금지 | `start`의 **원격 claim** (`refs/claims/<id>` CAS push — 한쪽만 성공) | 즉시 차단 |
+| 다른 세션 작업 확인 | SessionStart 브리핑·`next`가 원격 claim 노출·후보 제외 | 자동 |
+| 도메인/파일 범위 밖 수정 금지 | 태스크 `paths` 선언 + `start` 프리플라이트·check-edit 훅 (`scope_drift`) | warn→block |
+| 타 세션 작업 범위 침범 금지 | check-edit 훅 (`path_overlap`) — 편집 파일 vs in-flight paths | warn→block |
+| 작업은 태스크로 등록 후 착수 | check-edit 훅 (`adhoc_edit`) — claim 없이 `src/*` 편집 감지 | warn |
+| 죽은 세션의 claim 잔존 | `claims reap` (TTL·done·미존재 3중 기준) + CI harness-integrity | 자동 청소 |
+| backlog 무결성 | PostToolUse 훅 + CI `harness-integrity` job | 차단 |
+
+- 정책 수준은 `backlog/policy.yaml`이 정본 — 전 rule warn으로 시작, 측정
+  (`policy report`) 후 rule별 block 승격.
+- 훅은 판정이 불확실하면 무조건 통과한다(fail-open) — 조율 장치가 개발을
+  볼모로 잡지 않는다. 유일한 예외는 원격 claim **conflict**(확정 신호)의 즉시 차단.
 
 ---
 
