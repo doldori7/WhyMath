@@ -24,7 +24,7 @@ class Exclusion:
     """todo 태스크가 후보에서 제외된 사유 (정지 사유 판별·설명에 사용)."""
 
     task_id: str
-    reason: str                              # deps|gates|owner|track_gate|claimed
+    reason: str            # deps|gates|owner|track_gate|claimed|claimed_remote|path_overlap
     detail: list[str] = field(default_factory=list)
 
 
@@ -50,8 +50,18 @@ def unmet_gates(backlog: Backlog, task: Task) -> list[str]:
     ]
 
 
-def classify_todo(backlog: Backlog, task: Task) -> Exclusion | None:
-    """todo 태스크의 제외 사유 (None = 착수 가능 후보)."""
+def classify_todo(
+    backlog: Backlog,
+    task: Task,
+    *,
+    remote_claimed: dict[str, str] | None = None,
+    overlap_block: dict[str, list[str]] | None = None,
+) -> Exclusion | None:
+    """todo 태스크의 제외 사유 (None = 착수 가능 후보).
+
+    remote_claimed: task_id → 원격 claim 브랜치 (refs/claims/* — 병렬 세션 가시성).
+    overlap_block: task_id → 겹침 근거 (policy.path_overlap=block일 때만 채워짐).
+    """
     if task.owner != "claude":
         return Exclusion(task.id, "owner", [task.owner])
     if not track_gate_passed(backlog, task):
@@ -65,6 +75,10 @@ def classify_todo(backlog: Backlog, task: Task) -> Exclusion | None:
         return Exclusion(task.id, "gates", gates)
     if task.session:
         return Exclusion(task.id, "claimed", [task.session])
+    if remote_claimed and task.id in remote_claimed:
+        return Exclusion(task.id, "claimed_remote", [remote_claimed[task.id]])
+    if overlap_block and task.id in overlap_block:
+        return Exclusion(task.id, "path_overlap", overlap_block[task.id])
     return None
 
 
@@ -87,6 +101,9 @@ def candidates(
     layer: str | None = None,
     subject: str | None = None,
     track: str | None = None,
+    *,
+    remote_claimed: dict[str, str] | None = None,
+    overlap_block: dict[str, list[str]] | None = None,
 ) -> tuple[list[Task], list[Exclusion]]:
     """(정렬된 착수 가능 후보, 제외 사유 목록) 반환."""
     ready: list[Task] = []
@@ -100,7 +117,9 @@ def candidates(
             continue
         if track and task.track != track:
             continue
-        exclusion = classify_todo(backlog, task)
+        exclusion = classify_todo(backlog, task,
+                                  remote_claimed=remote_claimed,
+                                  overlap_block=overlap_block)
         if exclusion is None:
             ready.append(task)
         else:
@@ -138,20 +157,25 @@ def stall_reason(backlog: Backlog, excluded: list[Exclusion]) -> tuple[str, list
 
     # 사람 게이트만 걷어내면 풀리는가 — 게이트 제외 + owner 제외만 남은 경우
     gate_ids: list[str] = []
+    remote_held: list[str] = []
     other_reasons = False
     for exc in excluded:
         if exc.reason in ("gates", "track_gate"):
             gate_ids.extend(exc.detail)
         elif exc.reason == "owner":
             continue  # 사람 소유 태스크도 사람 대기의 일종
+        elif exc.reason == "claimed_remote":
+            # 다른 세션이 원격 claim 중 — in_progress 대기의 일종
+            remote_held.append(f"{exc.task_id} (원격: {exc.detail[0] if exc.detail else '?'})")
         else:
             other_reasons = True
     pending_gates = sorted({g for g in gate_ids if g in backlog.gates and not backlog.gates[g].passed})
     if pending_gates and not other_reasons:
         return "human_gate", pending_gates
 
-    if active:
-        return "in_progress", sorted(f"{t.id} ({t.session or '?'})" for t in active)
+    if active or remote_held:
+        local = [f"{t.id} ({t.session or '?'})" for t in active]
+        return "in_progress", sorted(local + remote_held)
     if pending_gates:
         return "human_gate", pending_gates
     return "blocked", sorted(t.id for t in open_todo)

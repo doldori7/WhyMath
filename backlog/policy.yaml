@@ -1,0 +1,8 @@
+# 조율 정책 — 중복·겹침 감지 강제 수준. 승격(warn→block)은 측정 근거 +
+# MEMORY.md 결정로그 필수 (docs/standards/build_harness.md §정책)
+version: 1
+path_overlap: warn
+scope_drift: warn
+adhoc_edit: warn
+claim_ttl_hours: 72
+remote_claims: true

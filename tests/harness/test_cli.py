@@ -342,3 +342,135 @@ class TestRemoteClaimCli:
         assert cli.main(["claims", "reap", "--apply"]) == 0
         claims, _ = remote_claims.list_claims(repo)
         assert claims == []
+
+
+class TestStartOverlapPreflight:
+    """start 프리플라이트 — in-flight 태스크와 paths 겹침 검사 (warn→block 단계적)."""
+
+    def _add_two_overlapping(self, capsys) -> tuple[str, str]:
+        assert cli.main(["add", "--id", "T9-01-overlap-a", "--title", "겹침 A",
+                         "--track", "math-completion", "--stage", "S1",
+                         "--path", "src/backend/api/**"]) == 0
+        assert cli.main(["add", "--id", "T9-02-overlap-b", "--title", "겹침 B",
+                         "--track", "math-completion", "--stage", "S1",
+                         "--path", "src/backend/**"]) == 0
+        capsys.readouterr()
+        return "T9-01-overlap-a", "T9-02-overlap-b"
+
+    def test_warn_모드_경고_후_진행(self, seeded_repo: Path, capsys):
+        a, b = self._add_two_overlapping(capsys)
+        assert cli.main(["start", a, "--session", "claude/other", "--no-remote"]) == 0
+        capsys.readouterr()
+        assert cli.main(["start", b, "--session", "claude/me", "--no-remote"]) == 0
+        err = capsys.readouterr().err
+        assert "파일 범위 겹침" in err
+        # policy_warn 이벤트가 측정용으로 적재된다
+        events = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        assert '"action": "policy_warn"' in events
+        assert '"rule": "path_overlap"' in events
+
+    def test_block_모드_착수_거부(self, seeded_repo: Path, capsys):
+        import store as store_mod
+        from models import Policy
+        store_mod.save_policy(seeded_repo, Policy(path_overlap="block"))
+        a, b = self._add_two_overlapping(capsys)
+        assert cli.main(["start", a, "--session", "claude/other", "--no-remote"]) == 0
+        capsys.readouterr()
+        assert cli.main(["start", b, "--session", "claude/me", "--no-remote"]) == 1
+        assert "겹침" in capsys.readouterr().err
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert backlog.tasks[b].status == "todo"  # 거부 시 상태 불변
+
+    def test_paths_미선언_태스크는_겹침_검사_제외(self, seeded_repo: Path, capsys):
+        capsys.readouterr()
+        assert cli.main(["next", "--n", "1", "--json", "--no-remote"]) == 0
+        task_id = json.loads(capsys.readouterr().out)[0]["id"]
+        assert cli.main(["start", task_id, "--session", "claude/me", "--no-remote"]) == 0
+        assert "paths 미선언" in capsys.readouterr().err  # 선언 권장 안내
+
+
+class TestCheckEditPolicy:
+    """check-edit 훅의 조율 정책 3분기 — scope_drift·path_overlap·adhoc_edit."""
+
+    def _invoke(self, monkeypatch, file_path: str) -> int:
+        payload = {"tool_input": {"file_path": file_path}}
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(payload)))
+        return cli.main(["check-edit"])
+
+    def _on_branch(self, repo: Path, name: str) -> None:
+        subprocess.run(["git", "checkout", "-q", "-b", name], cwd=repo, check=True)
+
+    def test_main_브랜치는_전부_통과(self, seeded_repo: Path, monkeypatch):
+        assert self._invoke(monkeypatch, str(seeded_repo / "src" / "x.py")) == 0
+
+    def test_adhoc_edit_claim_없이_코드_편집_경고(self, seeded_repo: Path, monkeypatch, capsys):
+        self._on_branch(seeded_repo, "claude/adhoc-session")
+        code = self._invoke(monkeypatch, str(seeded_repo / "src" / "backend" / "app.py"))
+        assert code == 0  # warn 모드 — 차단하지 않음
+        assert "adhoc_edit" in capsys.readouterr().err
+
+    def test_adhoc_edit_비코드_파일은_해당_없음(self, seeded_repo: Path, monkeypatch, capsys):
+        self._on_branch(seeded_repo, "claude/adhoc-session")
+        assert self._invoke(monkeypatch, str(seeded_repo / "MEMORY.md")) == 0
+        assert "adhoc_edit" not in capsys.readouterr().err
+
+    def test_scope_drift_선언_범위_밖_편집_경고(self, seeded_repo: Path, monkeypatch, capsys):
+        self._on_branch(seeded_repo, "claude/drift-session")
+        assert cli.main(["add", "--id", "T9-03-scoped-task", "--title", "범위 태스크",
+                         "--track", "math-completion", "--stage", "S1",
+                         "--path", "src/backend/api/**"]) == 0
+        assert cli.main(["start", "T9-03-scoped-task", "--no-remote"]) == 0
+        capsys.readouterr()
+        # 선언 범위 안 — 조용히 통과
+        assert self._invoke(monkeypatch, str(seeded_repo / "src/backend/api/routes.py")) == 0
+        assert "scope_drift" not in capsys.readouterr().err
+        # 선언 범위 밖 — 경고
+        assert self._invoke(monkeypatch, str(seeded_repo / "src/mobile/lib/main.dart")) == 0
+        assert "scope_drift" in capsys.readouterr().err
+
+    def test_path_overlap_타_세션_범위_편집_경고(self, seeded_repo: Path, monkeypatch, capsys):
+        self._on_branch(seeded_repo, "claude/my-session")
+        assert cli.main(["add", "--id", "T9-04-other-task", "--title", "남의 태스크",
+                         "--track", "math-completion", "--stage", "S1",
+                         "--path", "src/data-pipeline/**"]) == 0
+        assert cli.main(["start", "T9-04-other-task",
+                         "--session", "claude/other-session", "--no-remote"]) == 0
+        capsys.readouterr()
+        code = self._invoke(monkeypatch, str(seeded_repo / "src/data-pipeline/crawler.py"))
+        assert code == 0  # warn 모드
+        err = capsys.readouterr().err
+        assert "path_overlap" in err
+        assert "T9-04-other-task" in err
+
+    def test_block_모드는_편집을_차단한다(self, seeded_repo: Path, monkeypatch, capsys):
+        import store as store_mod
+        from models import Policy
+        store_mod.save_policy(seeded_repo, Policy(adhoc_edit="block"))
+        self._on_branch(seeded_repo, "claude/adhoc-session")
+        code = self._invoke(monkeypatch, str(seeded_repo / "src" / "backend" / "app.py"))
+        assert code == 2
+
+    def test_예외_시_무조건_통과_fail_open(self, seeded_repo: Path, monkeypatch):
+        self._on_branch(seeded_repo, "claude/failopen-session")
+        # 정책 로드가 터져도 훅은 개발을 볼모로 잡지 않는다
+        monkeypatch.setattr(store, "load_policy",
+                            lambda root: (_ for _ in ()).throw(RuntimeError("boom")))
+        assert self._invoke(monkeypatch, str(seeded_repo / "src" / "backend" / "app.py")) == 0
+
+
+class TestPolicyCli:
+    def test_policy_show_기본값(self, seeded_repo: Path, capsys):
+        capsys.readouterr()
+        assert cli.main(["policy", "show"]) == 0
+        out = capsys.readouterr().out
+        assert "path_overlap: warn" in out
+
+    def test_policy_report_경고_집계(self, seeded_repo: Path, capsys):
+        # 인위적으로 policy_warn 이벤트 적재 후 리포트 확인
+        store.append_event(seeded_repo, "policy_warn", "-",
+                           rule="adhoc_edit", file="src/x.py", mode="warn")
+        capsys.readouterr()
+        assert cli.main(["policy", "report"]) == 0
+        out = capsys.readouterr().out
+        assert "adhoc_edit: 1건" in out
+        assert "승격 기준" in out

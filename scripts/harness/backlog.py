@@ -76,11 +76,50 @@ def cmd_status(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def _remote_claim_map(root: Path, policy, skip: bool = False) -> tuple[dict[str, str], str]:
+    """원격 claim 조회 best-effort — (task_id→branch, 상태). 실패는 빈 dict (fail-open)."""
+    if skip or not policy.remote_claims:
+        return {}, "disabled"
+    claims, status = remote_claims.list_claims(root, with_meta=True)
+    if status != "ok":
+        return {}, status
+    return {c.task_id: (c.branch or "?") for c in claims}, "ok"
+
+
+def _overlap_block_map(root: Path, backlog, policy) -> dict[str, list[str]] | None:
+    """block 모드일 때만 — todo 태스크별 in-flight 겹침 근거 (selector 제외용)."""
+    if policy.path_overlap != "block":
+        return None
+    inflight = [t for t in backlog.tasks.values()
+                if t.status in ("in_progress", "review") and t.paths]
+    if not inflight:
+        return None
+    files = pathscope.repo_files(root)
+    result: dict[str, list[str]] = {}
+    for task in backlog.tasks.values():
+        if task.status != "todo" or not task.paths:
+            continue
+        for other in inflight:
+            hit = pathscope.overlap(task.id, task.paths, other.id, other.paths, files)
+            if hit:
+                result[task.id] = [other.id, hit.describe()]
+                break
+    return result or None
+
+
 def cmd_next(root: Path, args: argparse.Namespace) -> int:
     backlog, _ = _load(root)
+    policy, _ = store.load_policy(root)
+    remote_claimed, remote_status = _remote_claim_map(
+        root, policy, skip=getattr(args, "no_remote", False))
     ready, excluded = selector.candidates(
-        backlog, layer=args.layer, subject=args.subject, track=args.track
+        backlog, layer=args.layer, subject=args.subject, track=args.track,
+        remote_claimed=remote_claimed,
+        overlap_block=_overlap_block_map(root, backlog, policy),
     )
+    if remote_status not in ("ok", "disabled"):
+        print(f"⚠ 원격 claim 조회 불가({remote_status}) — 로컬 claim 정보만 반영",
+              file=sys.stderr)
     if args.json:
         print(json.dumps(
             [{"id": t.id, "layer": t.layer, "subject": t.subject, "title": t.title,
@@ -350,7 +389,13 @@ def cmd_validate(root: Path, args: argparse.Namespace) -> int:
 def cmd_brief(root: Path, args: argparse.Namespace) -> int:
     backlog, schema_errors = _load(root)
     errors = store.validate_backlog(backlog, schema_errors)
-    print(report.render_brief(backlog, errors, store.current_branch(root), date.today()))
+    policy, _ = store.load_policy(root)
+    try:
+        remote_claimed, remote_status = _remote_claim_map(root, policy)
+    except Exception:  # 훅 진입점 — 어떤 실패도 브리핑을 막지 않는다 (fail-open)
+        remote_claimed, remote_status = {}, "error"
+    print(report.render_brief(backlog, errors, store.current_branch(root), date.today(),
+                              remote_claimed=remote_claimed, remote_status=remote_status))
     return 0
 
 
@@ -414,22 +459,100 @@ def cmd_check_stop(root: Path, args: argparse.Namespace) -> int:
 
 
 def cmd_check_edit(root: Path, args: argparse.Namespace) -> int:
-    """PostToolUse(Edit|Write) 훅 — backlog/ 파일을 직접 편집한 경우에만 validate."""
+    """PostToolUse(Edit|Write) 훅 — 편집 파일에 따라 두 갈래 검사.
+
+    1) backlog/ 파일 직접 편집 → 무결성 validate (기존 동작, 위반 시 exit 2).
+    2) 그 외 파일 → 조율 정책 검사 (harness v1.1):
+        ① scope_drift  — 내 claim 태스크의 paths 밖 편집
+        ② path_overlap — 다른 in-flight 태스크의 paths 안 편집
+        ③ adhoc_edit   — claim 없이 코드 도메인(src/ 등) 편집
+       warn = stderr 1줄 + policy_warn 이벤트 + exit 0 / block = exit 2.
+    판정 불확실·예외는 전부 통과(exit 0) — 훅이 개발을 볼모로 잡으면 안 된다.
+    """
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
         return 0
     file_path = str((payload.get("tool_input") or {}).get("file_path", ""))
-    if "backlog/" not in file_path.replace("\\", "/"):
+    if "backlog/" in file_path.replace("\\", "/"):
+        backlog, schema_errors = _load(root)
+        errors = store.validate_backlog(backlog, schema_errors)
+        if errors:
+            print(f"[빌드하네스] backlog 직접 편집 후 무결성 위반 {len(errors)}건:", file=sys.stderr)
+            for error in errors[:10]:
+                print(f"  · {error}", file=sys.stderr)
+            return 2
         return 0
-    backlog, schema_errors = _load(root)
-    errors = store.validate_backlog(backlog, schema_errors)
-    if errors:
-        print(f"[빌드하네스] backlog 직접 편집 후 무결성 위반 {len(errors)}건:", file=sys.stderr)
-        for error in errors[:10]:
-            print(f"  · {error}", file=sys.stderr)
-        return 2
-    return 0
+    try:
+        return _check_edit_policy(root, file_path)
+    except Exception:  # 정책 검사 실패는 무조건 통과 (fail-open)
+        return 0
+
+
+def _check_edit_policy(root: Path, file_path: str) -> int:
+    """비-backlog 파일 편집의 조율 정책 검사 — check-edit ①②③."""
+    from models import CODE_DOMAIN_PREFIXES
+
+    if not file_path:
+        return 0
+    try:
+        rel = str(Path(file_path).resolve().relative_to(root.resolve()))
+    except ValueError:
+        return 0  # 레포 밖 파일 — 관할 아님
+    rel = rel.replace("\\", "/")
+
+    policy, _ = store.load_policy(root)
+    branch = store.current_branch(root)
+    if branch in ("unknown", "main", ""):
+        return 0
+    backlog, _ = _load(root)
+    mine = [t for t in backlog.tasks.values()
+            if t.status == "in_progress" and t.session == branch]
+    violations: list[tuple[str, str, str]] = []  # (rule, mode, 메시지)
+
+    if mine:
+        # ① scope_drift — 내 claim 태스크가 paths를 선언했는데 그 밖을 편집
+        me = mine[0]
+        if me.paths and policy.scope_drift != "off" \
+                and not pathscope.path_in_scope(rel, me.paths):
+            violations.append((
+                "scope_drift", policy.scope_drift,
+                f"'{rel}' 은 claim 태스크 {me.id}의 선언 범위(paths) 밖 — "
+                f"범위 확장이 맞으면 태스크 YAML의 paths에 추가",
+            ))
+    elif policy.adhoc_edit != "off" and rel.startswith(CODE_DOMAIN_PREFIXES):
+        # ③ adhoc_edit — claim 없이 코드 도메인 편집 (하네스에 불가시한 ad-hoc 작업)
+        violations.append((
+            "adhoc_edit", policy.adhoc_edit,
+            f"claim한 태스크 없이 코드 파일 '{rel}' 편집 — "
+            f"`backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)",
+        ))
+
+    # ② path_overlap — 다른 세션 in-flight 태스크의 선언 범위 안을 편집
+    if policy.path_overlap != "off":
+        for other in backlog.tasks.values():
+            if other.status not in ("in_progress", "review") or not other.paths:
+                continue
+            if other.session == branch:
+                continue
+            if pathscope.path_in_scope(rel, other.paths):
+                violations.append((
+                    "path_overlap", policy.path_overlap,
+                    f"'{rel}' 은 다른 세션 태스크 {other.id}"
+                    f"(세션: {other.session or '?'})의 작업 범위 — 동시 편집 충돌 위험",
+                ))
+                break
+
+    if not violations:
+        return 0
+    blocked = False
+    for rule, mode, message in violations:
+        store.append_event(root, "policy_warn", "-", rule=rule, file=rel, mode=mode,
+                           detail=message)
+        print(f"[빌드하네스/{rule}:{mode}] {message}", file=sys.stderr)
+        if mode == "block":
+            blocked = True
+    return 2 if blocked else 0
 
 
 def cmd_claims(root: Path, args: argparse.Namespace) -> int:
@@ -517,6 +640,56 @@ def cmd_overlap(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_policy(root: Path, args: argparse.Namespace) -> int:
+    """조율 정책 — show(현재 값)·report(warn 측정 요약: warn→block 승격 근거)."""
+    policy, policy_errors = store.load_policy(root)
+    if policy_errors:
+        for e in policy_errors:
+            print(f"  · {e}", file=sys.stderr)
+        return _fail("policy.yaml 오류")
+
+    if args.policy_action == "show" or args.policy_action is None:
+        print(store.dump_policy(policy), end="")
+        return 0
+
+    # report — events.ndjson의 policy_warn을 rule별 집계 (승격 판단 근거)
+    from datetime import datetime, timedelta
+    cutoff = datetime.now() - timedelta(days=args.days)
+    path = store.backlog_dir(root) / "events.ndjson"
+    by_rule: dict[str, list[dict]] = {}
+    total = 0
+    if path.exists():
+        for line in path.read_text(encoding="utf-8").splitlines():
+            try:
+                event = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if event.get("action") != "policy_warn":
+                continue
+            try:
+                ts = datetime.strptime(event.get("ts", ""), "%Y-%m-%dT%H:%M:%S")
+            except ValueError:
+                continue
+            if ts < cutoff:
+                continue
+            total += 1
+            by_rule.setdefault(str(event.get("rule", "?")), []).append(event)
+    print(f"조율 정책 warn 리포트 — 최근 {args.days}일, 총 {total}건")
+    if not by_rule:
+        print("  (경고 없음 — 오탐 0. 승격 기준 충족 여부는 정탐 사례와 함께 판단)")
+        return 0
+    for rule in sorted(by_rule):
+        events = by_rule[rule]
+        actors = sorted({str(e.get("actor", "?")) for e in events})
+        print(f"  {rule}: {len(events)}건 (세션 {len(actors)}개)")
+        for event in events[-3:]:
+            detail = event.get("detail") or event.get("file") or event.get("other") or ""
+            print(f"    · {event.get('ts')} {detail}")
+    print("승격 기준: 2주/30세션 관찰 후 (a)충돌 예방 사례 ≥1 또는 정탐률 ≥50% "
+          "(b)오탐 개발중단 0건 → 해당 rule만 block (MEMORY.md 결정로그 필수)")
+    return 0
+
+
 def cmd_seed(root: Path, args: argparse.Namespace) -> int:
     bdir = store.backlog_dir(root)
     if (bdir / "tracks.yaml").exists() and not args.force:
@@ -556,6 +729,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--subject")
     p.add_argument("--track")
     p.add_argument("--json", action="store_true")
+    p.add_argument("--no-remote", action="store_true", dest="no_remote",
+                   help="원격 claim 조회 생략")
     p.set_defaults(func=cmd_next)
 
     p = sub.add_parser("start", help="태스크 착수 (claim)")
@@ -633,6 +808,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id")
     p.add_argument("--against", help="특정 태스크와만 비교 (기본: 전체 in-flight)")
     p.set_defaults(func=cmd_overlap)
+
+    p = sub.add_parser("policy", help="조율 정책 표시·warn 측정 리포트")
+    p.add_argument("policy_action", nargs="?", choices=["show", "report"])
+    p.add_argument("--days", type=int, default=14)
+    p.set_defaults(func=cmd_policy)
 
     p = sub.add_parser("seed", help="초기 백로그 시딩 (최초 1회)")
     p.add_argument("--force", action="store_true")
