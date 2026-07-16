@@ -22,6 +22,7 @@ from pathlib import Path
 from models import (
     Backlog,
     Gate,
+    Policy,
     Task,
     Track,
 )
@@ -226,6 +227,42 @@ def save_tracks(root: Path, stage_order: list[str], tracks: list[Track]) -> Path
     path = backlog_dir(root) / "tracks.yaml"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(dump_tracks(stage_order, tracks), encoding="utf-8")
+    return path
+
+
+# ── 정책 (backlog/policy.yaml — 부재 시 전부 기본값 = 하위호환) ──────────────
+
+_POLICY_KEY_ORDER = [f.name for f in dc_fields(Policy)]
+
+
+def dump_policy(policy: Policy) -> str:
+    header = (
+        "# 조율 정책 — 중복·겹침 감지 강제 수준. 승격(warn→block)은 측정 근거 +\n"
+        "# MEMORY.md 결정로그 필수 (docs/standards/build_harness.md §정책)\n"
+    )
+    data = {k: getattr(policy, k) for k in _POLICY_KEY_ORDER}
+    return header + _dump_mapping(data, _POLICY_KEY_ORDER)
+
+
+def load_policy(root: Path) -> tuple[Policy, list[str]]:
+    """policy.yaml 로드. (정책, 오류 목록) 반환 — 파일 부재는 기본값(오류 아님)."""
+    errors: list[str] = []
+    path = backlog_dir(root) / "policy.yaml"
+    if not path.exists():
+        return Policy(), errors
+    raw = _load_yaml(path)
+    policy = _coerce(Policy, raw, "policy.yaml", errors)
+    if policy is None:
+        return Policy(), errors
+    assert isinstance(policy, Policy)
+    errors.extend(policy.validate())
+    return policy, errors
+
+
+def save_policy(root: Path, policy: Policy) -> Path:
+    path = backlog_dir(root) / "policy.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dump_policy(policy), encoding="utf-8")
     return path
 
 

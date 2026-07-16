@@ -27,6 +27,25 @@ LAYERS: tuple[str, ...] = (
     "infra",
 )
 
+# 도메인 소유 지도 — docs/standards/parallel_sessions.md §1의 코드화.
+# 태스크 paths가 이 프리픽스를 벗어나면 '경고'만 한다(횡단 태스크가 실재하므로 error 금지).
+LAYER_PATH_HINTS: dict[str, tuple[str, ...]] = {
+    "backend": ("src/backend/",),
+    "data-pipeline": ("src/data-pipeline/", "data/", "docs/data/"),
+    "ml-models": ("src/ml-models/",),
+    "mobile": ("src/mobile/",),
+    "web": ("src/web/",),
+    "docs": ("docs/",),
+    "infra": ("infra/", ".github/"),
+}
+
+# ad-hoc 편집 감지 대상 — claim 없이 이 폴더를 편집하면 adhoc_edit 정책 적용.
+# (MEMORY.md·docs·backlog 등 메타 파일은 제외 — 코드 도메인만)
+CODE_DOMAIN_PREFIXES: tuple[str, ...] = (
+    "src/",
+    "infra/",
+)
+
 # 과목 축 — 개방 확장: 새 과목은 이 튜플에 1줄 추가로 끝난다.
 # (문명 전체를 교육적으로 다루는 E축 로드맵 수용 — subject_expansion_e_axis_v1.md)
 SUBJECTS: tuple[str, ...] = (
@@ -68,6 +87,9 @@ OWNERS: tuple[str, ...] = ("claude", "kiki", "partner")
 GATE_KINDS: tuple[str, ...] = ("human", "external", "decision")
 GATE_STATUSES: tuple[str, ...] = ("pending", "cleared", "waived")
 
+# 정책 강제 수준 — 단계적 도입(warn 관측 → 측정 → block 승격)의 폐쇄 집합
+POLICY_MODES: tuple[str, ...] = ("off", "warn", "block")
+
 # 태스크 ID 규칙: <스테이지 또는 접두>-<번호>-<슬러그> (파일명 stem과 동일해야 함)
 TASK_ID_RE = re.compile(r"^[A-Z][A-Z0-9]{0,7}-\d{2}(-[a-z0-9]+(-[a-z0-9]+)*)?$")
 GATE_ID_RE = re.compile(r"^G-[a-z0-9]+(-[a-z0-9]+)*$")
@@ -92,6 +114,7 @@ class Task:
     requires_gates: list[str] = field(default_factory=list)
     acceptance: list[str] = field(default_factory=list)
     artifacts: list[str] = field(default_factory=list)   # done 시 PR/커밋 필수
+    paths: list[str] = field(default_factory=list)       # 이 태스크가 만질 파일 glob (레포 상대 — 겹침 검사용)
     session: str | None = None              # claim한 브랜치 (병렬 세션 소유권)
     notes: str = ""
     updated: str = ""                       # YYYY-MM-DD, 상태 변경 시 CLI가 갱신
@@ -124,7 +147,30 @@ class Task:
         for gid in self.requires_gates:
             if not GATE_ID_RE.match(gid):
                 errors.append(f"{self.id}: 게이트 ID 형식 위반 '{gid}' (G-... 소문자 kebab)")
+        # paths는 레포 상대 POSIX 경로만 — 비어있음은 위반 아님(기존 태스크 소급 오염 방지)
+        for pattern in self.paths:
+            if pattern.startswith("/"):
+                errors.append(f"{self.id}: paths '{pattern}' 절대경로 금지 (레포 상대만)")
+            elif ".." in pattern.split("/"):
+                errors.append(f"{self.id}: paths '{pattern}' 상위 참조(..) 금지")
+            elif "\\" in pattern:
+                errors.append(f"{self.id}: paths '{pattern}' 백슬래시 금지 (POSIX 구분자만)")
+            elif not pattern.strip():
+                errors.append(f"{self.id}: paths에 빈 패턴 포함")
         return errors
+
+    def layer_drift_warnings(self) -> list[str]:
+        """paths가 layer 도메인 지도 밖을 가리키면 경고 목록 반환 (error 아님 — 횡단 태스크 허용)."""
+        hints = LAYER_PATH_HINTS.get(self.layer)
+        if not hints or not self.paths:
+            return []
+        warnings: list[str] = []
+        for pattern in self.paths:
+            if not any(pattern.startswith(h) for h in hints):
+                warnings.append(
+                    f"{self.id}: paths '{pattern}' 이 layer '{self.layer}' 도메인({', '.join(hints)}) 밖"
+                )
+        return warnings
 
 
 @dataclass
@@ -178,6 +224,35 @@ class Track:
             errors.append(f"{self.id}: 트랙 title 누락")
         if self.entry_gate and not GATE_ID_RE.match(self.entry_gate):
             errors.append(f"{self.id}: entry_gate ID 형식 위반 '{self.entry_gate}'")
+        return errors
+
+
+@dataclass
+class Policy:
+    """조율 정책 — 중복·겹침 감지의 강제 수준 (backlog/policy.yaml).
+
+    단계적 도입: 전 rule warn으로 시작 → events.ndjson의 policy_warn 측정 →
+    승격 기준 충족 시 rule별 block 승격 (측정 없는 도입 없음).
+    파일 부재 시 전부 기본값 = 하위호환 (기존 저장소 동작 불변).
+    """
+
+    version: int = 1
+    path_overlap: str = "warn"      # 태스크 paths 교차 (start 프리플라이트·check-edit ②)
+    scope_drift: str = "warn"       # 내 claim 태스크의 paths 밖 편집 (check-edit ①)
+    adhoc_edit: str = "warn"        # claim 없이 코드 도메인 편집 (check-edit ③)
+    claim_ttl_hours: int = 72       # 원격 claim stale 판정 TTL
+    remote_claims: bool = True      # 원격 claim(refs/claims/*) 사용 여부
+
+    def validate(self) -> list[str]:
+        errors: list[str] = []
+        for rule in ("path_overlap", "scope_drift", "adhoc_edit"):
+            mode = getattr(self, rule)
+            if mode not in POLICY_MODES:
+                errors.append(f"policy.{rule}: '{mode}' 미등록 (허용: {list(POLICY_MODES)})")
+        if not isinstance(self.claim_ttl_hours, int) or self.claim_ttl_hours < 1:
+            errors.append(f"policy.claim_ttl_hours: 1 이상 정수여야 함 (현재 {self.claim_ttl_hours!r})")
+        if not isinstance(self.remote_claims, bool):
+            errors.append(f"policy.remote_claims: bool이어야 함 (현재 {self.remote_claims!r})")
         return errors
 
 
