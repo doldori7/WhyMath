@@ -56,13 +56,18 @@ def classify_todo(
     *,
     remote_claimed: dict[str, str] | None = None,
     overlap_block: dict[str, list[str]] | None = None,
+    allow_human_owner: bool = False,
 ) -> Exclusion | None:
     """todo 태스크의 제외 사유 (None = 착수 가능 후보).
 
     remote_claimed: task_id → 원격 claim 브랜치 (refs/claims/* — 병렬 세션 가시성).
     overlap_block: task_id → 겹침 근거 (policy.path_overlap=block일 때만 채워짐).
+    allow_human_owner: True면 owner!=claude 제외를 건너뛴다 — **소유자 본인이 `--as
+        <owner>`로 기입하는 start 경로 전용**(HARN-06). candidates()는 기본값(False)만
+        쓰므로 next/status/brief의 자동 착수 후보에서 사람 태스크는 계속 제외된다.
+        deps·게이트·claim 등 나머지 검사는 사람 기입에도 동일 적용(우회 아님).
     """
-    if task.owner != "claude":
+    if not allow_human_owner and task.owner != "claude":
         return Exclusion(task.id, "owner", [task.owner])
     if not track_gate_passed(backlog, task):
         track = backlog.tracks[task.track]

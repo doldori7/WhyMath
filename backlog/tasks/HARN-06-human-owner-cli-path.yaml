@@ -5,7 +5,7 @@ track: infra-debt
 stage: S1
 subject: math
 layer: infra
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -15,6 +15,6 @@ acceptance:
   - "S1-14 사례 회귀 테스트(사람 태스크 done 전이 가능)"
 artifacts: []
 paths: []
-session: null
+session: claude/coding-duplication-conflicts-p41iau
 notes: "2026-07-16 S1-14 done 기입 시 발견 — Kiki 본인 실행도 CLI가 거부(selector.classify_todo가 owner!=claude를 start에서 원천 제외). 임시 처리 = owner 본인의 YAML 직접 기입"
 updated: 2026-07-16
