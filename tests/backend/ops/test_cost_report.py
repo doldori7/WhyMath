@@ -340,3 +340,50 @@ def test_tier_stats_per_tier_distributions() -> None:
     assert cloud.events == 1 and cloud.cost_krw.total == 12.5
     unknown = report.tier_stats["(unknown)"]
     assert unknown.events == 1 and unknown.latency_ms.count == 0  # 실측 없음 정직 집계
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# SDK 버전 적응 읽기 — v3/v4(fetch_observations 부재)는 api.observations.get_many
+# (2026-07-16 실측: fetch_observations는 v2 전용 표면)
+# ──────────────────────────────────────────────────────────────────────────
+class _FakeV4ReadClient:
+    """v4형 가짜 — fetch_observations가 *없고* api.observations.get_many만 있다."""
+
+    class _Observations:
+        def __init__(self, outer: _FakeV4ReadClient) -> None:
+            self._outer = outer
+
+        def get_many(self, **kwargs: Any) -> _FakeResponse:
+            self._outer.calls.append(kwargs)
+            page = int(kwargs["page"])
+            pages = self._outer._pages
+            data = pages[page - 1] if 0 <= page - 1 < len(pages) else []
+            return _FakeResponse(data)
+
+    class _Api:
+        def __init__(self, outer: _FakeV4ReadClient) -> None:
+            self.observations = _FakeV4ReadClient._Observations(outer)
+
+    def __init__(self, pages: list[list[Any]]) -> None:
+        self._pages = pages
+        self.calls: list[dict[str, Any]] = []
+        self.api = _FakeV4ReadClient._Api(self)
+
+
+def test_fetch_v4_client_uses_api_get_many() -> None:
+    """fetch_observations 부재(v3/v4) → api.observations.get_many로 동일 조회."""
+    meta = {"cost_tier": "local", "cost_krw": 0.0}
+    client = _FakeV4ReadClient(pages=[[_FakeObs(meta)]])
+    events = cr.fetch_l3_events(days=1, limit=10, client=client)  # type: ignore[arg-type]
+    assert events == [meta]
+    assert client.calls and client.calls[0]["name"] == "l3_routing"
+
+
+def test_fetch_no_read_surface_returns_empty() -> None:
+    """조회 표면이 아예 없는 클라이언트 → 예외 없이 빈 리포트(never-break·경고만)."""
+
+    class _NoSurface:
+        pass
+
+    events = cr.fetch_l3_events(days=1, limit=10, client=_NoSurface())  # type: ignore[arg-type]
+    assert events == []

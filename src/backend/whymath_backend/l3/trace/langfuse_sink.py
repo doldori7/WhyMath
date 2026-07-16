@@ -59,6 +59,12 @@ class _LangfuseClient(Protocol):
     `langfuse.Langfuse`의 부분집합 — 우리는 단발 이벤트 기록만 한다. 반환값(이벤트
     핸들)은 라이브러리 버전별로 형태가 달라 `Any`로 두고 사용하지 않는다(기록 후
     버림 — 전송은 langfuse의 백그라운드 배치 익스포터가 best-effort로 처리).
+
+    ⚠️ SDK 버전별 표면 차이(2026-07-16 실측): `create_event`는 **v3/v4에만** 존재하고
+    v2(예: 2.60.10)는 `event(name=, metadata=, ...)`가 쓰기 API다 — v2에서 create_event
+    호출은 매번 AttributeError였고 sink가 삼켜 *기록이 조용히 전멸*했다(Phaiakes9 실측).
+    따라서 record()는 이 Protocol 표면을 직접 부르지 않고 getattr로 버전 적응한다.
+    Protocol 자체는 v3식 create_event를 유지한다(테스트 가짜 클라이언트의 기준 표면).
     """
 
     def create_event(
@@ -195,14 +201,27 @@ class LangfuseSink:
         if client is None:
             return  # 미설정 → no-op (네트워크·클라이언트 없음)
         try:
-            client.create_event(
-                name=_EVENT_NAME,
-                metadata=_to_metadata(fields),
-                level="DEFAULT",
+            # SDK 버전 적응 쓰기(2026-07-16 실측): v3/v4=create_event, v2=event.
+            # v2(2.60.10)에는 create_event가 없어 종전 고정 호출은 매 record가
+            # AttributeError로 전멸했다 — getattr로 있는 표면을 쓴다.
+            create_event = getattr(client, "create_event", None)
+            if callable(create_event):
+                create_event(
+                    name=_EVENT_NAME,
+                    metadata=_to_metadata(fields),
+                    level="DEFAULT",
+                )
+            else:
+                # langfuse v2 폴백 — event(name=, metadata=). level은 v2 기본값 사용.
+                cast(Any, client).event(name=_EVENT_NAME, metadata=_to_metadata(fields))
+        except Exception as exc:  # noqa: BLE001 — 관측성 장애가 학생 생성을 깨면 안 됨
+            # 시크릿·PII 없이 *예외 타입명만* 경고 로그(필드·키 값은 남기지 않는다).
+            # 타입명이 없던 종전엔 v2 AttributeError 전멸이 무증상이었다(침묵 실패 방지).
+            logger.warning(
+                "Langfuse 기록 실패(%s) — 무시하고 계속(생성 비차단)",
+                type(exc).__name__,
+                exc_info=False,
             )
-        except Exception:  # noqa: BLE001 — 관측성 장애가 학생 생성을 깨면 안 됨
-            # 시크릿·PII 없이 *사실*만 경고 로그(필드값은 남기지 않는다). 삼키고 계속.
-            logger.warning("Langfuse 기록 실패 — 무시하고 계속(생성 비차단)", exc_info=False)
 
     def flush(self) -> None:
         """버퍼된 Langfuse 이벤트를 *즉시* 강제 전송한다 (짧게 끝나는 프로세스용).
@@ -230,5 +249,11 @@ class LangfuseSink:
             return  # flush 미노출(가짜·구버전) → no-op
         try:
             flush()
-        except Exception:  # noqa: BLE001 — flush 실패도 흐름을 깨면 안 됨(record와 동일 방침)
-            logger.warning("Langfuse flush 실패 — 무시하고 계속(비차단)", exc_info=False)
+        except (
+            Exception
+        ) as exc:  # noqa: BLE001 — flush 실패도 흐름을 깨면 안 됨(record와 동일 방침)
+            logger.warning(
+                "Langfuse flush 실패(%s) — 무시하고 계속(비차단)",
+                type(exc).__name__,
+                exc_info=False,
+            )

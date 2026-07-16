@@ -51,6 +51,8 @@
 보정 라우터(`_EST_ASSUMED_*` 74/358)는 이미 main. **대표 트래픽**으로 재측정해야 판정선(로컬 ≥80%)이 정당하다.
 
 > **2026-07-16 정정(실측 교훈)**: 종전 안내(accumulate 소량 배치)는 무효 — `problem_corpus_accumulate`는 provider를 직접 호출해 파이프라인·라우터·sink를 **우회**하므로 `l3_routing` 이벤트가 0건이다(2회 실측 확인). 이벤트를 내는 유일한 경로는 `l3.pipeline.generate`이고, 이를 대표 요청 믹스로 태우는 전용 도구 **`ops/cost_probe`** 를 신설했다(free-우세 페르소나 A 트래픽 모델·티어는 라우터가 결정·로컬 비율은 인프로세스 집계라 Langfuse 상태와 무관하게 판정선을 냄). 추가 교훈: Langfuse 키가 자리표시자(`pk-lf-…`)면 측정이 조용히 0건이 된다 — 프로브의 인프로세스 판정이 이 취약점을 방어한다.
+>
+> **2026-07-16 실측 2차(probe_g3) + 통과 조건 상향(Kiki)**: 실제 키 등록 후 프로브 30/30 성공 — **local 27 : cloud_mid 3 = 로컬 90.0% (판정선 ≥80% 충족)**, 클라우드 실측 배선 증명(preflight 0.4066원/63·5tok). 단 Langfuse 기록이 전멸(30/30 실패)해 비용·지연 분포 미확보 — 원인 실측 확정: **Kiki venv langfuse 2.60.10에는 `create_event`가 없다**(v2 쓰기 표면은 `event()`·AttributeError를 sink가 무타입 경고로 삼켜 침묵 실패). Kiki 판정: *"키를 정확하게 올리고, 앞으로 정상적으로 작업하는 것이 보장될 때 통과"* — 게이트 ②는 ①sink SDK 버전 적응 수정 ②재실행에서 기록 실패 0건·cost_report 실제 분포 집계, 두 실증 후 PASS 기입한다(수치만으로 선-기입하지 않음).
 
 ```powershell
 # [실행 시스템: Windows PowerShell — 이 PC가 곧 Phaiakes9]
