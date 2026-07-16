@@ -337,6 +337,10 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-16 (문서·infra·런북): **재부팅-후 서버+shadow 기동 런북 신설 — 세션 실측 함정 6종 영속화**
+
+**무엇/왜**: Kiki "재부팅 후 환경설정" 문의(서버+shadow 모드) → 매번 채팅 재문의 방지·컨텍스트 위생("대화 휘발 의존 금지·결정 문서화")로 `infra/phaiakes9/POST_REBOOT_SERVER_SHADOW.md` 신설. 2026-07-16 shadow 수집 세션에서 규명한 함정 6종 정본화: ⑴ `localhost`=::1(IPv6) vs uvicorn `0.0.0.0`(IPv4)→클라 URL `127.0.0.1` ⑵ Windows asyncpg SSL 협상 붕괴→DB URL `?ssl=disable`(데모 55432) ⑶ shadow 로그가 root WARNING 유실→`logging.basicConfig(INFO)` 런처 필수 ⑷ JWT 시크릿 세션 env 휘발→런타임 생성 ⑸ 데모 DB 컨테이너 휘발→`docker compose up -d demo-db` ⑹ verify 트리거엔 `solution_steps` 동봉 필수. 재부팅 휘발(컨테이너·세션 env·프로세스) vs 영속(venv·리포·User-스코프 키) 구분표 + `start_server_shadow.ps1` 생성 스크립트 + shadow 배치. 데모 README 함정표에 참조 링크 1줄. 코드 변경 0(문서 only).
+
 ### 2026-07-15 (구현·L4/api·S1-14 de-risk): **S1 탈출 게이트 ③ 기계 봉인 + 판정 스캐폴드 — 게이트 ①③ 확정·잔여=게이트 ② 재측정(Kiki)**
 
 **무엇/왜**: S1 잔여 3건 중 S1-11 flip·ARCH-11은 순수 Kiki 대기(flip 3전제), **claude-독립 전진 유일 항목이 S1-14(탈출 판정)**. S1-12 런북 de-risk(#516) 선례로 판정 가능한 2게이트를 확정하고 게이트 ② Kiki 패키지를 완비 → Kiki 잔여를 "재측정→사인오프" 한 세션으로 축소. **게이트 ①**=`G-kiki-device-demo` cleared(녹화)=PASS. **게이트 ③ 정직 프레이밍 확정**(Explore 서빙 경로 매핑): "학생 응답 전부 PRM 통과"는 오버클레임 — 실체는 "서빙이 (i) 결정론 템플릿(`PolyaCoach.decide`→`STAGE_PROMPTS`·LLM 0→PRM N/A) 또는 (ii) 도구-검증 게이팅 신호(`solution_coaching`=SymPy verdict 노출 게이팅·coach.py:496)만 방출". 캐비엇: 서빙 유일 LLM 콜(오개념 judge)·WH-1 shadow는 둘 다 기본 OFF·산문 미방출. **기계 봉인 신설** `test_coach_gate3_serving_invariant.py`(3종 green): decide 발화 전수 스윕 정적 템플릿·`POST /v1/coach` end-to-end·LLM 플래그 기본 OFF 동결 — 게이트 ③을 "구조상 성립"→CI 동결(초인간 검증: 기계 게이트>산문). **게이트 ②**=PENDING(S1-12 72.7%<80% as-measured·보정 라우터 74/358 대표 트래픽 재측정 필요·Kiki 명령 패키지 동봉). 스캐폴드 `docs/strategy/s1_exit_gate_judgement_2026-07.md`. **S1-14 owner kiki 유지·done 마킹 보류**(판정 사인오프=사람 몫·서기 규약). 코드 변경 0(신규 테스트만).
