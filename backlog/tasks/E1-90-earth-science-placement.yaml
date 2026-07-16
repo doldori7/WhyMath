@@ -13,6 +13,8 @@ requires_gates: []
 acceptance:
   - subject_expansion_e_axis_v1.md 개정으로 지구과학 스테이지 확정
 artifacts: []
+paths:
+  - "docs/**"
 session: null
 notes: "통합과학 완전 커버는 물리·화학·생물 3부작 기준 — 지구과학 위치는 Kiki 결정"
 updated: 2026-07-08

@@ -14,6 +14,8 @@ requires_gates: []
 acceptance:
   - "e_axis_v1 §5 체크리스트 전수 판정 + 게이트 clear (evidence 필수)"
 artifacts: []
+paths:
+  - "docs/**"
 session: null
 notes: ""
 updated: 2026-07-08

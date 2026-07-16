@@ -14,6 +14,11 @@ requires_gates: []
 acceptance:
   - "초·중·고+대학 4축 활성 + traversal 성능 예산 실부하 통과"
 artifacts: []
+paths:
+  - "src/data-pipeline/**"
+  - "data/**"
+  - "docs/data/**"
+  - "tests/data_pipeline/**"
 session: null
 notes: "대학과정 포함 — 개념 그래프는 학년 무관(Curriculum-as-Overlay)"
 updated: 2026-07-08
