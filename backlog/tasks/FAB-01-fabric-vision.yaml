@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: FAB-01-fabric-vision
+title: "EKF 북극성 문서 정본화 + fabric 게이트 backlog 계류 (하네스 평가 격차 ①② 상환)"
+track: infra-debt
+stage: S1
+subject: math
+layer: docs
+status: in_progress
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "knowledge_fabric_vision_v1.md 신설 (기존 판정 무모순)"
+  - "FAB-02 fabric 감사 반복 태스크 등록 (E축 하드락 뒤)"
+  - "E1-03·E2~E6 acceptance에 교차 과목 엣지 실증 추가"
+artifacts: []
+paths:
+  - "docs/**"
+  - "backlog/tasks/**"
+session: claude/coding-duplication-conflicts-p41iau
+notes: "하네스 평가(2026-07-16) 격차 ①비전 정본 부재 ②fabric 스케줄링 원시 부재 상환"
+updated: 2026-07-16

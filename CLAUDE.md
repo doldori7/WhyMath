@@ -304,6 +304,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - `docs/standards/playbook_part_review_questions.md` — 구축 플레이북 Part 0~12 순차 설계-준수 점검 질문 세트
 
 ### 상세 (필요 시 읽기)
+- `docs/strategy/knowledge_fabric_vision_v1.md` — 장기 비전 북극성 (Education Knowledge Fabric / Metadata OS — 서사 정본, 실행 정본은 backlog)
 - `docs/architecture/01-07_*.md` — 각 계층 상세 명세
 - `docs/architecture/03b_wh_s_solver_harness.md`·`04a_wh1_tutoring_harness.md` — 하네스 설계안(WH-S 솔버·WH-1 튜터링·횡단 인프라)
 - `docs/standards/system_superiority_maintenance.md` — 시스템 우월성 유지(SSM): 분기별 기술 트렌드 능동 스캔·도입 게이트(상시 붕괴 방어와 상보)
