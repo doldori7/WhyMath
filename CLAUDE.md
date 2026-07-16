@@ -362,8 +362,8 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 - **Kiki 머신의 WhyMath 작업 장소(고정)**: `C:\Users\kiki\Desktop\__AI\WhyMath` — Kiki에게 안내하는 모든 명령 블록의 `cd`는 이 경로를 사용한다. 자리표시자("실제 경로에 맞게 조정") 금지 (2026-07-16 Kiki 지정).
 - **실행 시스템 진입 경로 완전 명시 (2026-07-16 Kiki 지정)**: Kiki에게 안내하는 모든 명령 블록은 첫 줄부터 ①실행 시스템 라벨(주석) ②그 시스템으로 들어가는 진입 명령 ③작업 디렉토리까지의 `cd`를 빠짐없이 포함한다. 시스템별 고정 진입 경로:
   - **Windows PowerShell**: `cd C:\Users\kiki\Desktop\__AI\WhyMath` (진입 명령 불요 — 기본 환경)
-  - **Phaiakes9 (NucBox EVO-X2·2단계 진입)**: ① `ssh kiki@192.168.0.3`(사설 LAN IP·시크릿 아님 — 단축 설정 시 `ssh phaiakes9`) → **Windows CMD로 접속됨** ② `wsl` 입력으로 리눅스 진입 → `cd ~/whymath`. Phaiakes9는 Windows 위 WSL2 구조라 ssh만으로는 리눅스가 아니다 (2026-07-16 실측)
-  - 두 클론은 **별개 복사본** — Phaiakes9 작업 블록에는 `git pull origin main`(또는 해당 브랜치 fetch/checkout)을 반드시 선행 포함한다. 위 "미머지 브랜치 fetch 선행"·"자리표시자 금지" 규칙과 결합 적용 (2026-07-16 orphan 진단 안내 중 "리눅스 디렉토리로 어떻게 들어가나요?" 혼선 재발 방지 합의).
+  - **Phaiakes9 (NucBox EVO-X2) = Kiki의 작업 PC 그 자체** — 별도 접속 불요. 평소 쓰는 Windows PowerShell이 곧 Phaiakes9이며, SSH를 안내하지 않는다(자기 자신 접속이 됨 — 2026-07-16 실측: `ssh kiki@192.168.0.3`의 host key가 known_hosts에 `localhost`로 기등록, `run_demo.ps1`도 "이 PC(Phaiakes9)" 명기). 리눅스가 꼭 필요한 작업만 `wsl` 한 줄로 진입하며, WSL에서 리포는 `/mnt/c/Users/kiki/Desktop/__AI/WhyMath`(Windows 클론 공유 마운트 — 별도 pull 불요)를 사용한다.
+  - **로컬 DB 접속 정본 = Docker Desktop `whymath-demo-db` 컨테이너** (pgvector/pg16 · 호스트 포트 55432 · trust auth): `postgresql://whymath@127.0.0.1:55432/whymath`. 기동은 `docker start whymath-demo-db`, 컨테이너가 없으면 리포 루트에서 `docker compose -f docker-compose.demo.yml up -d`. systemd/네이티브 postgres는 없다 — 5432 접속·sudo systemctl 안내 금지 (2026-07-16 orphan 진단 타임아웃 원인 실측).
 
 ---
 
