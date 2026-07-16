@@ -1,0 +1,285 @@
+"""cost_probe 대표 트래픽 프로브 hermetic 테스트 — 라이브 호출 0.
+
+순수 코어(build_probe_plan·summarize_decisions)는 픽스처로 전수 단언하고, run_probe는
+가짜 provider·스파이 sink를 ProbeDeps로 주입해 실 파이프라인(pipeline.generate 실물)을
+라이브 없이 태운다(test_live_preflight의 주입 패턴 미러). 실 네트워크·실 키 없음.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+
+import pytest
+
+from whymath_backend.l3 import pipeline
+from whymath_backend.l3.interfaces import InMemoryCache
+from whymath_backend.l3.models import CostTier, GenerationResult, RoutingDecision, Usage
+from whymath_backend.ops import cost_probe as cp
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 가짜 Settings·provider·스파이 sink — 라이브 없이 실 pipeline.generate를 태운다.
+# ──────────────────────────────────────────────────────────────────────────
+class _FakeSettings:
+    """Settings의 최소 표면 — run_probe가 읽는 anthropic_configured만."""
+
+    def __init__(self, *, anthropic: bool) -> None:
+        self.anthropic_configured = anthropic
+
+
+class _FakeProvider:
+    """가짜 LLM provider — 결정과 무관하게 고정 결과를 반환(호출 결정을 기록).
+
+    images/temperature/json_schema는 pipeline이 텍스트 호출 시 넘기지 않으므로 선택 인자.
+    """
+
+    def __init__(self, *, raise_on: str | None = None) -> None:
+        self.calls: list[RoutingDecision] = []
+        self._raise_on = raise_on  # 이 cost_tier로 결정된 호출만 실패시킨다(오류 회계 검증)
+
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
+        temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
+    ) -> GenerationResult:
+        self.calls.append(decision)
+        if self._raise_on is not None and decision.cost_tier == self._raise_on:
+            raise RuntimeError("가짜 provider 실패(주입)")
+        return GenerationResult(
+            text="답", usage=Usage(input_tokens=10, output_tokens=5, latency_ms=42.0)
+        )
+
+
+class _SpySink:
+    """record/flush 호출을 세는 스파이 — LangfuseSink 자리(_FlushSink 표면 충족)."""
+
+    def __init__(self) -> None:
+        self.records: list[dict[str, object]] = []
+        self.flush_count = 0
+
+    def record(self, fields: dict[str, object]) -> None:
+        self.records.append(fields)
+
+    def flush(self) -> None:
+        self.flush_count += 1
+
+
+def _deps(provider: _FakeProvider, spy: _SpySink) -> cp.ProbeDeps:
+    """가짜 provider·스파이 sink로 ProbeDeps 조립 — pipeline.generate는 실물(순수)."""
+    return cp.ProbeDeps(
+        provider=provider,  # type: ignore[arg-type]
+        cache=InMemoryCache(),
+        trace=spy,
+        generate=pipeline.generate,
+    )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 순수 코어 — build_probe_plan
+# ──────────────────────────────────────────────────────────────────────────
+def test_plan_expands_weights_and_rounds() -> None:
+    """라운드당 가중치 합만큼 펼쳐지고, rounds가 전체를 배수한다."""
+    per_round = sum(a.weight for a in cp.REPRESENTATIVE_MIX)
+    plan = cp.build_probe_plan(cp.REPRESENTATIVE_MIX, 3, include_cloud=True)
+    assert len(plan) == per_round * 3
+
+
+def test_plan_excludes_cloud_when_disabled() -> None:
+    """include_cloud=False면 클라우드 archetype이 계획에서 빠진다(로컬만)."""
+    plan = cp.build_probe_plan(cp.REPRESENTATIVE_MIX, 1, include_cloud=False)
+    cloud_labels = {a.label for a in cp.REPRESENTATIVE_MIX if a.routes_cloud}
+    assert cloud_labels  # 믹스에 클라우드 archetype이 실제로 존재(전제 검증)
+    assert all(item.label not in cloud_labels for item in plan)
+
+
+def test_plan_prompts_are_unique() -> None:
+    """프롬프트가 인스턴스마다 고유 — 캐시 미스 강제(실측 표본 유실 방지)."""
+    plan = cp.build_probe_plan(cp.REPRESENTATIVE_MIX, 2, include_cloud=True)
+    prompts = [item.prompt for item in plan]
+    assert len(prompts) == len(set(prompts))
+
+
+def test_plan_rejects_zero_rounds() -> None:
+    """rounds<1은 명시적 거부(빈 측정을 조용히 만들지 않음)."""
+    with pytest.raises(ValueError):
+        cp.build_probe_plan(cp.REPRESENTATIVE_MIX, 0, include_cloud=True)
+
+
+def test_mix_is_local_dominant() -> None:
+    """대표 믹스 자체가 free-우세(로컬 가중 ≥80%) — 트래픽 모델 전제의 동결."""
+    local_w = sum(a.weight for a in cp.REPRESENTATIVE_MIX if not a.routes_cloud)
+    total_w = sum(a.weight for a in cp.REPRESENTATIVE_MIX)
+    assert local_w / total_w >= 0.80
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 순수 코어 — summarize_decisions
+# ──────────────────────────────────────────────────────────────────────────
+def test_summary_local_ratio_and_pass() -> None:
+    """로컬 9 : 클라우드 1 → 0.9 → 판정선 PASS."""
+    tiers = [CostTier.LOCAL.value] * 9 + [CostTier.CLOUD_MID.value]
+    report = cp.summarize_decisions(
+        tiers, errors=0, error_samples=[], cloud_included=True, rounds=1
+    )
+    assert report.local_ratio == pytest.approx(0.9)
+    assert report.gate2_local_pass is True
+    assert report.tier_counts == {CostTier.LOCAL.value: 9, CostTier.CLOUD_MID.value: 1}
+
+
+def test_summary_below_threshold_fails() -> None:
+    """로컬 7 : 클라우드 3 → 0.7 → 판정선 미달(False)."""
+    tiers = [CostTier.LOCAL.value] * 7 + [CostTier.CLOUD_MID.value] * 3
+    report = cp.summarize_decisions(
+        tiers, errors=0, error_samples=[], cloud_included=True, rounds=1
+    )
+    assert report.gate2_local_pass is False
+
+
+def test_summary_empty_is_unknown_not_zero() -> None:
+    """성공 표본 0 → local_ratio=None·판정 불가(None) — '미상'과 0을 구분(날조 금지)."""
+    report = cp.summarize_decisions(
+        [], errors=3, error_samples=["[x] E: e"], cloud_included=False, rounds=1
+    )
+    assert report.local_ratio is None
+    assert report.gate2_local_pass is None
+    assert report.total == 3  # 오류도 총 요청 수에는 회계된다
+
+
+def test_summary_errors_excluded_from_denominator() -> None:
+    """오류는 분모(성공분)에서 제외 — 실패를 로컬로도 클라우드로도 세지 않는다."""
+    tiers = [CostTier.LOCAL.value] * 4
+    report = cp.summarize_decisions(
+        tiers, errors=6, error_samples=[], cloud_included=True, rounds=1
+    )
+    assert report.local_ratio == pytest.approx(1.0)  # 성공분 4/4 전부 로컬
+    assert report.total == 10
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# run_probe — 실 pipeline.generate(순수) + 가짜 provider·스파이 sink.
+# ──────────────────────────────────────────────────────────────────────────
+def test_run_probe_local_only_when_anthropic_unset() -> None:
+    """anthropic 미설정 → 클라우드 archetype 제외·전 요청 LOCAL·판정선 PASS·flush 1회."""
+    provider = _FakeProvider()
+    spy = _SpySink()
+    report = asyncio.run(
+        cp.run_probe(
+            _FakeSettings(anthropic=False),  # type: ignore[arg-type]
+            rounds=1,
+            deps_factory=lambda _s: _deps(provider, spy),
+        )
+    )
+    assert report.cloud_included is False
+    assert report.errors == 0
+    assert report.tier_counts == {CostTier.LOCAL.value: report.total}
+    assert report.gate2_local_pass is True
+    # 파이프라인이 요청마다 l3_routing 필드를 record했고, CLI가 flush를 확정했다.
+    assert len(spy.records) == report.total
+    assert spy.flush_count == 1
+    # record된 필드에 실측 usage가 흘렀다(캐시 미스 생성 — 프롬프트 유일화 검증).
+    assert all(r["cache_hit"] is False for r in spy.records)
+    assert all(r["input_tokens"] == 10 for r in spy.records)
+
+
+def test_run_probe_cloud_mix_ratio_measured() -> None:
+    """anthropic 설정 → 클라우드 archetype 포함, 라우터 결정 그대로 비율 산출(9:1=0.9)."""
+    provider = _FakeProvider()
+    spy = _SpySink()
+    report = asyncio.run(
+        cp.run_probe(
+            _FakeSettings(anthropic=True),  # type: ignore[arg-type]
+            rounds=2,
+            deps_factory=lambda _s: _deps(provider, spy),
+        )
+    )
+    assert report.cloud_included is True
+    # 라우터가 premium archetype을 실제 CLOUD_MID로 결정했는가(라운드당 1건×2).
+    assert report.tier_counts.get(CostTier.CLOUD_MID.value) == 2
+    assert report.local_ratio == pytest.approx(18 / 20)
+    assert report.gate2_local_pass is True
+
+
+def test_run_probe_errors_accounted_never_break() -> None:
+    """클라우드 호출만 실패 주입 → 오류 회계·표본 기록, 로컬 측정은 보존(never-break)."""
+    provider = _FakeProvider(raise_on=CostTier.CLOUD_MID.value)
+    spy = _SpySink()
+    report = asyncio.run(
+        cp.run_probe(
+            _FakeSettings(anthropic=True),  # type: ignore[arg-type]
+            rounds=1,
+            deps_factory=lambda _s: _deps(provider, spy),
+        )
+    )
+    assert report.errors == 1
+    assert report.error_samples and "diagnose-hard-premium" in report.error_samples[0]
+    # 성공분(로컬)만으로 비율 산출 — 실패는 분모 제외.
+    assert report.local_ratio == pytest.approx(1.0)
+    assert spy.flush_count == 1  # 오류가 나도 flush는 확정된다
+
+
+def test_run_probe_include_cloud_override() -> None:
+    """--no-cloud 대응: anthropic 설정돼 있어도 include_cloud=False면 로컬만 태운다."""
+    provider = _FakeProvider()
+    spy = _SpySink()
+    report = asyncio.run(
+        cp.run_probe(
+            _FakeSettings(anthropic=True),  # type: ignore[arg-type]
+            rounds=1,
+            include_cloud=False,
+            deps_factory=lambda _s: _deps(provider, spy),
+        )
+    )
+    assert report.cloud_included is False
+    assert CostTier.CLOUD_MID.value not in report.tier_counts
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 렌더링·JSON — 시크릿 0·미상 표기·직렬화 왕복.
+# ──────────────────────────────────────────────────────────────────────────
+def test_render_has_verdict_and_no_secrets() -> None:
+    """사람용 출력에 판정선·비율이 있고 키 문자열 패턴이 없다."""
+    report = cp.summarize_decisions(
+        [CostTier.LOCAL.value] * 8 + [CostTier.CLOUD_MID.value] * 2,
+        errors=0,
+        error_samples=[],
+        cloud_included=True,
+        rounds=1,
+    )
+    text = cp.render_report(report)
+    assert "80.0%" in text
+    assert "PASS" in text
+    assert "sk-" not in text and "pk-" not in text
+
+
+def test_render_unknown_ratio() -> None:
+    """표본 0이면 '미상'·'판정 불가'로 렌더 — 0%로 위장하지 않는다."""
+    report = cp.summarize_decisions([], errors=0, error_samples=[], cloud_included=False, rounds=1)
+    text = cp.render_report(report)
+    assert "미상" in text
+    assert "판정 불가" in text
+
+
+def test_json_roundtrip(tmp_path: Path) -> None:
+    """to_json이 판정선 포함 직렬화 — cost_report JSON 관례와 동형(파일 왕복)."""
+    report = cp.summarize_decisions(
+        [CostTier.LOCAL.value] * 9 + [CostTier.CLOUD_MID.value],
+        errors=1,
+        error_samples=["[coach-medium-free] RuntimeError: x"],
+        cloud_included=True,
+        rounds=3,
+    )
+    out = tmp_path / "probe.json"
+    out.write_text(json.dumps(report.to_json(), ensure_ascii=False), encoding="utf-8")
+    loaded = json.loads(out.read_text(encoding="utf-8"))
+    assert loaded["local_ratio"] == pytest.approx(0.9)
+    assert loaded["gate2_local_pass"] is True
+    assert loaded["errors"] == 1
+    assert loaded["rounds"] == 3
