@@ -138,8 +138,13 @@ def render_status_json(backlog: Backlog, errors: list[str], today: date) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
-def render_brief(backlog: Backlog, errors: list[str], branch: str, today: date) -> str:
-    """SessionStart 훅용 — 컨텍스트에 주입되는 최소 브리핑."""
+def render_brief(backlog: Backlog, errors: list[str], branch: str, today: date,
+                 remote_claimed: dict[str, str] | None = None,
+                 remote_status: str = "ok") -> str:
+    """SessionStart 훅용 — 컨텍스트에 주입되는 최소 브리핑.
+
+    remote_claimed: task_id → 원격 claim 브랜치 (refs/claims/* 조회 결과, best-effort).
+    """
     lines = ["[빌드하네스 브리핑]"]
 
     progress = stage_progress(backlog)
@@ -156,7 +161,16 @@ def render_brief(backlog: Backlog, errors: list[str], branch: str, today: date) 
             lines.append(f"이 브랜치의 진행 중 태스크: {task.id} — {task.title}"
                          f" (완료 시 `backlog.py done {task.id} --artifact <PR/커밋>`)")
 
-    ready, excluded = selector.candidates(backlog)
+    # 병렬 세션 가시성 — 다른 세션의 원격 claim을 브리핑에 노출 (중복 착수 예방)
+    others = {tid: br for tid, br in (remote_claimed or {}).items() if br != branch}
+    if others:
+        lines.append("다른 세션 원격 claim (착수 금지):")
+        for tid, br in sorted(others.items()):
+            lines.append(f"  · {tid} — {br}")
+    elif remote_status not in ("ok", "disabled"):
+        lines.append(f"(원격 claim 조회 불가: {remote_status} — 로컬 claim 정보만 표시)")
+
+    ready, excluded = selector.candidates(backlog, remote_claimed=remote_claimed)
     if ready:
         lines.append("다음 착수 후보:")
         for i, task in enumerate(ready[:3], start=1):

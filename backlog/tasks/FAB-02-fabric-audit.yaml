@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: FAB-02-fabric-audit
+title: "fabric 수렴 감사 1회차 — 교차 과목 엣지 실증 현황·지표 수치 확정 (E1 실측 기반)"
+track: subject-expansion
+stage: E1
+subject: math
+layer: docs
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "교차 과목 prerequisite 엣지 실증 현황 점검 (knowledge_fabric_vision_v1.md §3 지표 3종)"
+  - "E1 실측 기반 지표 수치 목표 확정 → 비전 문서 갱신 + E2~E6 acceptance 수치 반영"
+  - "다음 회차(FAB-03...)를 backlog add로 재생성 (감시 공백 금지)"
+artifacts: []
+paths:
+  - "docs/**"
+session: null
+notes: "반복 태스크 — ARCH 감사 패턴 이식. subject-expansion 트랙 = G-s5-subject-expansion 하드락 뒤 (수학 완성 전 미노출이 의도된 동작)"
+updated: 2026-07-16

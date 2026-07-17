@@ -176,3 +176,43 @@ class TestStallReason:
         code, detail = selector.stall_reason(backlog, excluded)
         assert code == "in_progress"
         assert "S1-01-alpha (other-branch)" in detail
+
+
+class TestHumanOwnerPath:
+    """HARN-06 — 사람-소유 태스크: 자동 후보 제외는 불변, 명시 기입 경로만 owner를 통과."""
+
+    def test_owner_제외_기본_불변(self):
+        """candidates(자동 후보)는 owner!=claude를 계속 제외한다 — 자동 착수 방지."""
+        backlog = _backlog([_task(owner="kiki")])
+        ready, excluded = selector.candidates(backlog)
+        assert ready == []
+        assert excluded[0].reason == "owner"
+
+    def test_allow_human_owner는_owner만_통과(self):
+        """allow_human_owner=True면 owner 제외를 건너뛰어 착수 가능(None)."""
+        backlog = _backlog([_task(owner="kiki")])
+        task = backlog.tasks["S1-01-alpha"]
+        assert selector.classify_todo(backlog, task) is not None  # 기본은 제외
+        assert selector.classify_todo(backlog, task, allow_human_owner=True) is None
+
+    def test_allow_human_owner도_deps는_검사(self):
+        """사람 기입 경로도 의존성 미해소면 거부 — owner 외 검사는 우회 아님."""
+        backlog = _backlog([
+            _task(owner="kiki", depends_on=["S1-02-beta"]),
+            _task(id="S1-02-beta", title="베타"),
+        ])
+        task = backlog.tasks["S1-01-alpha"]
+        exclusion = selector.classify_todo(backlog, task, allow_human_owner=True)
+        assert exclusion is not None and exclusion.reason == "deps"
+
+    def test_allow_human_owner도_게이트는_검사(self):
+        """사람 기입 경로도 pending 게이트면 거부."""
+        from models import Gate
+
+        backlog = _backlog(
+            [_task(owner="kiki", requires_gates=["G-key"])],
+            gates=[Gate(id="G-key", title="키")],
+        )
+        task = backlog.tasks["S1-01-alpha"]
+        exclusion = selector.classify_todo(backlog, task, allow_human_owner=True)
+        assert exclusion is not None and exclusion.reason == "gates"

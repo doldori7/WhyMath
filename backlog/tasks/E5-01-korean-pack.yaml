@@ -13,7 +13,13 @@ depends_on:
 requires_gates: []
 acceptance:
   - "지문 4트랙 법무 승인 + 오독 진단 검수자 일치율 + 파일럿 D7"
+  - "선행 과목과의 교차 과목 prerequisite 엣지 실증 (수치 목표는 E1 실측 후 확정 — knowledge_fabric_vision_v1.md §3)"
 artifacts: []
+paths:
+  - "src/data-pipeline/**"
+  - "data/**"
+  - "docs/data/**"
+  - "tests/data_pipeline/**"
 session: null
 notes: ""
 updated: 2026-07-08

@@ -13,6 +13,9 @@ requires_gates: []
 acceptance:
   - "마이그레이션 + 임베딩 namespace 거버넌스 테스트 통과"
 artifacts: []
+paths:
+  - "src/backend/**"
+  - "tests/backend/**"
 session: null
 notes: ""
 updated: 2026-07-08

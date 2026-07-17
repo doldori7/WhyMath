@@ -13,7 +13,13 @@ depends_on:
 requires_gates: []
 acceptance:
   - "서술형 근거-주장 평가 검수자 일치율 실측 + 사료 라이선스 법무 확인"
+  - "선행 과목과의 교차 과목 prerequisite 엣지 실증 (수치 목표는 E1 실측 후 확정 — knowledge_fabric_vision_v1.md §3)"
 artifacts: []
+paths:
+  - "src/data-pipeline/**"
+  - "data/**"
+  - "docs/data/**"
+  - "tests/data_pipeline/**"
 session: null
 notes: "경제학·역사·세계사는 이 팩의 하위 코퍼스 (subject 세분: economics/history/world-history)"
 updated: 2026-07-08

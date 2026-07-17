@@ -13,6 +13,9 @@ requires_gates: []
 acceptance:
   - "{consistent/inconsistent/undecidable/parse_error} 4상태 계약 + 테스트"
 artifacts: []
+paths:
+  - "src/backend/**"
+  - "tests/backend/**"
 session: null
 notes: "subject_expansion_readiness.md §8 보류 대장 항목"
 updated: 2026-07-08

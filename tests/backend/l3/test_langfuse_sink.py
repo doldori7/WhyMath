@@ -366,3 +366,65 @@ def test_satisfies_trace_sink_protocol() -> None:
 def test_fake_client_satisfies_seam_protocol() -> None:
     """가짜 클라이언트가 _LangfuseClient 시임을 구조적으로 충족하는지 확인(테스트 위생)."""
     assert isinstance(FakeLangfuseClient(), _LangfuseClient)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# SDK 버전 적응 쓰기 — langfuse v2(create_event 부재)는 event()로 기록 (2026-07-16 실측)
+# ──────────────────────────────────────────────────────────────────────────
+class FakeLangfuseV2Client:
+    """v2형 가짜 — create_event가 *없다*(실측 2.60.10 표면). 쓰기는 event(name=, metadata=).
+
+    종전 sink는 create_event 고정 호출이라 v2에서 매 record가 AttributeError로 전멸했다
+    (Phaiakes9 실측·침묵 실패). 이 가짜가 v2 폴백 경로를 동결한다.
+    """
+
+    def __init__(self, *, raises: Exception | None = None) -> None:
+        self._raises = raises
+        self.events: list[dict[str, Any]] = []
+
+    def event(self, *, name: str, metadata: dict[str, object] | None = None) -> Any:
+        self.events.append({"name": name, "metadata": metadata})
+        if self._raises is not None:
+            raise self._raises
+        return object()
+
+
+class TestV2CompatWrite:
+    def test_v2_client_records_via_event(self) -> None:
+        """create_event 부재(v2) → event()로 기록된다(이름·메타데이터 동일)."""
+        client = FakeLangfuseV2Client()
+        sink = LangfuseSink(client=client)  # type: ignore[arg-type] — v2 표면 의도적 주입
+        fields = _sample_fields()
+        sink.record(fields)
+        assert len(client.events) == 1
+        assert client.events[0]["name"] == _EVENT_NAME
+        assert client.events[0]["metadata"] == _to_metadata(fields)
+
+    def test_v2_event_exception_still_swallowed(self) -> None:
+        """v2 폴백 경로의 예외도 동일하게 삼킨다(생성 비차단 방침 불변)."""
+        client = FakeLangfuseV2Client(raises=ConnectionError("network"))
+        sink = LangfuseSink(client=client)  # type: ignore[arg-type]
+        sink.record(_sample_fields())  # 전파되면 실패
+        assert len(client.events) == 1
+
+    def test_v3_client_still_uses_create_event(self) -> None:
+        """create_event가 있으면(v3/v4·기존 가짜) 그 경로를 유지한다(회귀 방지)."""
+        client = FakeLangfuseClient()
+        sink = LangfuseSink(client=client)
+        sink.record(_sample_fields())
+        assert len(client.events) == 1
+        assert client.events[0]["level"] == "DEFAULT"  # create_event 전용 인자 통과 확인
+
+    def test_warning_includes_exception_type_name(self, caplog: pytest.LogCaptureFixture) -> None:
+        """실패 경고에 예외 타입명이 실린다 — v2 전멸 같은 침묵 실패의 재발 방지.
+
+        종전 무타입 경고("기록 실패")는 AttributeError 전멸을 무증상으로 만들었다.
+        타입명은 시크릿·필드값이 아니므로 로그 안전(시크릿 0 방침 유지).
+        """
+        import logging
+
+        client = FakeLangfuseClient(raises=RuntimeError("boom"))
+        sink = LangfuseSink(client=client)
+        with caplog.at_level(logging.WARNING, logger="whymath.l3.trace"):
+            sink.record(_sample_fields())
+        assert any("RuntimeError" in r.getMessage() for r in caplog.records)

@@ -28,7 +28,11 @@ raw의 정확한 형태는 기록에 없으므로, **집합 차이 방식**으�
 2. atom_node.code          — 원자 메타 프로젝션
 3. atom_embedding.code     — 원자 임베딩 (PK=code)
 4. concept_content.code    — 콘텐츠 4종 (K-12=437 개념코드·대학=소단원코드)
-5. misconception_catalog.concept_src_id — ATOM: 네임스페이스 승격분의 느슨참조
+5. misconception_catalog.concept_src_id — ATOM: 네임스페이스 승격분의 느슨참조.
+   **mis_id LIKE 'ATOM:%' 행만 검사한다** — 구 M-series(misconceptions_v1) 행의
+   concept_src_id는 `H:12미적Ⅰ01-01` 같은 개념그래프 원천 키(H: 네임스페이스)로,
+   graph.json 어휘와 원래 다른 것이 정상이다. 2026-07-16 whymath-pg 실측에서 이
+   필터 없이 140건이 오탐된 것을 수정 (현행 코퍼스에도 동일 H: 코드 142건 존재).
 """
 
 from __future__ import annotations
@@ -63,9 +67,10 @@ def _scan(engine: Any, canonical: set[str]) -> dict[str, Any]:
         "atom_node": "SELECT code FROM atom_node WHERE code LIKE :marker",
         "atom_embedding": "SELECT code FROM atom_embedding WHERE code LIKE :marker",
         "concept_content": "SELECT code FROM concept_content WHERE code LIKE :marker",
+        # ATOM: 승격분만 — 구 M-series의 H: 네임스페이스 concept_src_id는 정상 어휘(오탐 방지)
         "misconception_catalog": (
             "SELECT concept_src_id AS code FROM misconception_catalog "
-            "WHERE concept_src_id LIKE :marker"
+            "WHERE concept_src_id LIKE :marker AND mis_id LIKE 'ATOM:%'"
         ),
     }
     marker = f"%{_MIJEOK_MARKER}%"

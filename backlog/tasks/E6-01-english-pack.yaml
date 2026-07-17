@@ -13,7 +13,13 @@ depends_on:
 requires_gates: []
 acceptance:
   - "루브릭 평가 인간 일치율(κ) 목표 도달 + 학교 영어 파일럿"
+  - "선행 과목과의 교차 과목 prerequisite 엣지 실증 (수치 목표는 E1 실측 후 확정 — knowledge_fabric_vision_v1.md §3)"
 artifacts: []
+paths:
+  - "src/data-pipeline/**"
+  - "data/**"
+  - "docs/data/**"
+  - "tests/data_pipeline/**"
 session: null
 notes: ""
 updated: 2026-07-08

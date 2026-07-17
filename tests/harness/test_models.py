@@ -82,3 +82,38 @@ class TestTrackValidation:
     def test_entry_gate_형식_위반_거부(self):
         track = Track(id="t", title="제목", entry_gate="not-a-gate")
         assert any("entry_gate" in e for e in track.validate())
+
+
+class TestTaskPaths:
+    """paths 필드 — 파일 범위 선언 검증 (harness v1.1)."""
+
+    def test_paths_기본값은_빈_리스트_기존_태스크_하위호환(self):
+        task = _valid_task()
+        assert task.paths == []
+        assert task.validate() == []
+
+    def test_정상_paths_통과(self):
+        task = _valid_task(paths=["src/backend/**", "docs/data/*.md"])
+        assert task.validate() == []
+
+    def test_절대경로_거부(self):
+        errors = _valid_task(paths=["/etc/passwd"]).validate()
+        assert any("절대경로" in e for e in errors)
+
+    def test_상위참조_거부(self):
+        errors = _valid_task(paths=["../outside/**"]).validate()
+        assert any("상위 참조" in e for e in errors)
+
+    def test_백슬래시_거부(self):
+        errors = _valid_task(paths=["src\\backend\\**"]).validate()
+        assert any("백슬래시" in e for e in errors)
+
+    def test_layer_도메인_밖_paths는_경고만(self):
+        # backend 태스크가 mobile 폴더를 선언 — error가 아닌 warning (횡단 태스크 허용)
+        task = _valid_task(layer="backend", paths=["src/mobile/**"])
+        assert task.validate() == []
+        assert any("도메인" in w for w in task.layer_drift_warnings())
+
+    def test_layer_도메인_안_paths는_경고_없음(self):
+        task = _valid_task(layer="backend", paths=["src/backend/api/**"])
+        assert task.layer_drift_warnings() == []
