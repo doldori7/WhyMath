@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-01-android-toolchain-upgrade
+title: "모바일 빌드 재현성 — Kotlin/AGP 업그레이드(2.1+/8.6+)·pubspec.lock 커밋·image_picker 고정 해제"
+track: infra-debt
+stage: S1
+subject: math
+layer: mobile
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "Kotlin 2.1+·AGP 8.6+ 업그레이드 후 실기기 assembleDebug 성공"
+  - "CI mobile 잡의 Flutter 버전을 Kiki 머신(Dart 3.11)과 정합 — 환경 드리프트 근원 제거"
+  - "pubspec.lock 커밋(해석 드리프트 차단) + dependency_overrides(image_picker_android·retrofit) 고정 제거"
+artifacts: []
+paths:
+  - "src/mobile/**"
+  - ".github/workflows/ci.yml"
+session: null
+notes: "2026-07-17 실기기 빌드 실패 실측: lock 미커밋이라 매 해석마다 최신 플러그인 유입 — image_picker_android 0.8.13+17(Kotlin DSL)이 Kotlin 1.8.22와 비호환(→Kotlin 2.1.0 상향). 나아가 CI Flutter 3.24.5(Dart 3.5)와 Kiki 머신(Dart 3.11) 큰 간극이 retrofit 해석을 갈라 CI 실패 3연쇄(4.8→4.6→4.5 순차 좁힘) — 임시 조치=retrofit 4.5.0·image_picker_android 0.8.12+23 고정. 근원 봉인=CI Flutter 상향 + lock 커밋(환경 통일)."
+updated: 2026-07-17
