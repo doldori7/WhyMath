@@ -184,15 +184,23 @@ uvicorn이 상속해야 한다):
 ```powershell
 # 실행 시스템: Windows PowerShell (Phaiakes9 — 이 PC 자체, SSH 불요) — 창 ①
 cd C:\Users\kiki\Desktop\__AI\WhyMath
-# 미머지 브랜치의 신규 파일(wh1_shadow_probe/harvest·logconfig) 필요 — 브랜치 선행 체크아웃
+# 미머지 브랜치의 신규 파일(wh1_shadow_probe/harvest·logconfig) 필요.
+# ★checkout -B 형태 필수 — 이 브랜치는 재시작(force-push)될 수 있어 pull은 add/add 충돌을 낸다
+#   (2026-07-17 실측: HARN-06 yaml 충돌). 로컬 잔여 커밋은 전부 main에 기머지분이라 버려도 안전.
 git fetch origin claude/coding-duplication-conflicts-p41iau
-git checkout claude/coding-duplication-conflicts-p41iau
-git pull origin claude/coding-duplication-conflicts-p41iau
+git checkout -B claude/coding-duplication-conflicts-p41iau origin/claude/coding-duplication-conflicts-p41iau
 
 .\scripts\demo\run_demo.ps1   # DB·시드·데모 인증 준비(uvicorn도 뜨지만 record 캡처 불가)
 
-# 데모 uvicorn만 교체 종료(DB는 유지) → shadow ON + record 캡처 uvicorn 재기동
-Stop-Process -Id (Get-Content .demo_uvicorn.pid) -Force
+# 데모 uvicorn 종료(DB는 유지) — ★pid 파일만 믿지 말 것: 이전 세션의 좀비 uvicorn이 8000을
+# 점유하면 run_demo의 새 서버는 바인드 실패로 즉사하고 /health는 좀비가 응답해 성공처럼 보인다
+# (2026-07-17 실측 — pid 5792 부재·프로브는 shadow OFF 좀비에 제출돼 기록 0). 포트 기준으로 정리:
+Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty OwningProcess -Unique |
+  ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+
+# shadow ON + record 캡처 uvicorn 재기동 (logconfig는 ASCII 전용 — uvicorn이 로케일 인코딩
+# (한국어 Windows=cp949)으로 읽으므로 비ASCII가 있으면 기동 실패, 2026-07-17 실측·수정)
 $env:WHYMATH_WH1_HARNESS_SHADOW_ENABLED = "true"
 cd src\backend
 .\.venv\Scripts\uvicorn.exe whymath_backend.app:create_app --factory --host 0.0.0.0 --port 8000 --log-config ..\..\scripts\demo\wh1_shadow_logconfig.json
@@ -204,6 +212,13 @@ cd src\backend
 ```powershell
 # 실행 시스템: Windows PowerShell (Phaiakes9 — 이 PC 자체, SSH 불요) — 창 ②
 cd C:\Users\kiki\Desktop\__AI\WhyMath\src\backend
+
+# ★캡처 사전 검증 — 창 ①의 서버가 진짜 캡처 uvicorn인지(좀비 아님) 파일 존재로 확인.
+#   False면 진행 중단하고 창 ① 절차(포트 정리 포함)를 다시 밟는다.
+Test-Path wh1_shadow_records.log
+
+# 페이싱 기본 2.5초/쓰기(coach 쓰기 rate limit 30/분 대응 — 무간격 제출은 429, 2026-07-17 실측).
+# 라운드 3 = 45쓰기 ≈ 2분 소요가 정상이다.
 .\.venv\Scripts\python.exe -m whymath_backend.ops.wh1_shadow_probe --base-url http://127.0.0.1:8000 --rounds 3
 
 # 하네스 shadow는 비차단(fire-and-forget) — 마지막 제출 후 잠시 대기 뒤 수확

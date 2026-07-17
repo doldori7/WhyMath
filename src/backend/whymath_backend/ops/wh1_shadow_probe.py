@@ -43,6 +43,8 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 import httpx
@@ -288,9 +290,20 @@ def _record_error(report: ProbeReport, key: str, sample: str) -> None:
 
 
 def _drive_session(
-    client: httpx.Client, headers: dict[str, str], shape: SessionShape, report: ProbeReport
+    client: httpx.Client,
+    headers: dict[str, str],
+    shape: SessionShape,
+    report: ProbeReport,
+    *,
+    pace: Callable[[], None] = lambda: None,
 ) -> None:
-    """모양 1건 구동 — 세션 생성 1 + 턴 append 2. 실패는 회계 후 진행(never-break)."""
+    """모양 1건 구동 — 세션 생성 1 + 턴 append 2. 실패는 회계 후 진행(never-break).
+
+    pace: 쓰기 요청 *직전마다* 호출되는 페이싱 훅 — coach 쓰기 rate limit(기본 30/분,
+    `coach_rate_limit_write_per_minute`)에 걸리지 않도록 run_probe가 sleep을 주입한다.
+    2026-07-17 라이브 실측에서 무간격 제출 45쓰기 중 5건이 HTTP 429로 거절된 교훈.
+    """
+    pace()
     try:
         resp = client.post(_SESSIONS_PATH, json=shape.payloads[0], headers=headers)
     except httpx.HTTPError as exc:
@@ -310,6 +323,7 @@ def _drive_session(
         _record_error(report, "no_dialogue_id", f"[{shape.label}] 201 응답에 dialogue_id 없음")
         return
     for payload in shape.payloads[1:]:
+        pace()
         try:
             turn = client.post(
                 f"{_SESSIONS_PATH}/{dialogue_id}/turns", json=payload, headers=headers
@@ -336,17 +350,26 @@ def run_probe(
     token: str | None = None,
     client: httpx.Client | None = None,
     timeout: float = 30.0,
+    delay_s: float = 2.5,
+    sleeper: Callable[[float], None] | None = None,
 ) -> ProbeReport:
     """대표 3모양 합성 트래픽을 coach API로 제출하고 제출 회계를 반환한다.
 
     `client` 주입 시(테스트 — `httpx.MockTransport`) 그 클라이언트를 그대로 쓰고 닫지 않는다
     (소유권은 호출자). 미주입이면 `base_url`로 동기 클라이언트를 만들어 finally에서 닫는다.
     `token` 미지정이면 데모 콜백으로 자동 발급한다(실패 시 `ProbeAuthError` — 안내 동봉).
+
+    delay_s: 쓰기 요청 간 간격(초). coach 쓰기 rate limit 기본 30/분에 맞춰 기본 2.5초
+    (→ 24쓰기/분 < 30). 2026-07-17 라이브 실측에서 무간격 제출이 429 5건을 맞은 교훈 —
+    0이면 페이싱 없음(테스트·rate limit 비활성 환경 전용). sleeper는 테스트 주입용
+    (기본 time.sleep).
     """
     resolved_mix = dict(mix) if mix is not None else parse_mix(DEFAULT_MIX)
     plan = build_probe_plan(resolved_mix, rounds)
     owns_client = client is None
     http = client if client is not None else httpx.Client(base_url=base_url, timeout=timeout)
+    do_sleep = sleeper if sleeper is not None else time.sleep
+    pace: Callable[[], None] = (lambda: do_sleep(delay_s)) if delay_s > 0 else (lambda: None)
     try:
         auto_issued = token is None
         bearer = token if token is not None else issue_demo_token(http)
@@ -355,7 +378,7 @@ def run_probe(
             base_url=base_url, rounds=rounds, mix=resolved_mix, token_auto_issued=auto_issued
         )
         for shape in plan:
-            _drive_session(http, headers, shape, report)
+            _drive_session(http, headers, shape, report, pace=pace)
         return report
     finally:
         if owns_client:
@@ -416,15 +439,25 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_MIX,
         help=f"모양 믹스(라운드당 세션 수) — 기본 {DEFAULT_MIX!r}.",
     )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=2.5,
+        help=(
+            "쓰기 요청 간 간격(초) — coach 쓰기 rate limit 30/분 대응(기본 2.5 → 24쓰기/분). "
+            "0=페이싱 없음(rate limit 비활성 환경 전용·429 유발 주의)."
+        ),
+    )
     args = parser.parse_args(argv)
     base_url: str = args.base_url
     rounds: int = args.rounds
     token: str | None = args.token
     mix_spec: str = args.mix
+    delay_s: float = args.delay
 
     try:
         mix = parse_mix(mix_spec)
-        report = run_probe(base_url=base_url, rounds=rounds, mix=mix, token=token)
+        report = run_probe(base_url=base_url, rounds=rounds, mix=mix, token=token, delay_s=delay_s)
     except (ValueError, ProbeAuthError) as exc:
         print(f"프로브 실패({type(exc).__name__}): {exc}", file=sys.stderr)
         return _EXIT_ERROR

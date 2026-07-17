@@ -1,5 +1,5 @@
 {
-  "_설명": "WH-1 shadow record 캡처용 uvicorn --log-config (dictConfig JSON). uvicorn 기본 로깅은 자기 로거(uvicorn/uvicorn.error/uvicorn.access)만 구성하고 root를 안 건드려, 앱 INFO 로그(record 라인)는 logging.lastResort(WARNING 이상)에서 탈락한다(2026-07-17 실측 — uvicorn 0.51 LOGGING_CONFIG 확인). 이 설정은 uvicorn 기본을 유지하면서 whymath.harness.wh1_shadow.record 로거만 FileHandler로 분리 캡처한다. filename이 상대경로라 uvicorn 기동 cwd(src\\backend) 기준으로 wh1_shadow_records.log가 생긴다 — 포맷은 %(message)s뿐이라 파일은 순수 JSONL(wh1_shadow_harvest 직접 입력 가능).",
+  "_note": "WH-1 shadow record capture log-config for uvicorn. MUST stay ASCII-only: uvicorn opens this file with the OS locale encoding (cp949 on Korean Windows), so any non-ASCII byte crashes startup with UnicodeDecodeError (live-verified 2026-07-17). Full rationale lives in docs/architecture/shadow_measurement_runbook.md (WH-1 section).",
   "version": 1,
   "disable_existing_loggers": false,
   "formatters": {

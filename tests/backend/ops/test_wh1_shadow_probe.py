@@ -144,7 +144,9 @@ def test_default_mix_submission_counts_and_payloads() -> None:
     """기본 믹스 1라운드: 세션 5·턴 10, 전 코치 요청에 solution_steps·Bearer 헤더."""
     server = _Server()
     with server.client() as client:
-        report = probe.run_probe(base_url="http://test", rounds=1, token="tkn", client=client)
+        report = probe.run_probe(
+            base_url="http://test", rounds=1, token="tkn", client=client, delay_s=0
+        )
     assert report.sessions_submitted == {"eq": 2, "expr": 2, "bad": 1}
     assert report.turns_submitted == {"eq": 4, "expr": 4, "bad": 2}
     assert report.total_errors == 0
@@ -163,7 +165,7 @@ def test_captured_bodies_valid_against_real_schema() -> None:
     """와이어에 실린 바디 그대로 실 스키마 검증 — 직렬화 경로까지 유효성 동결."""
     server = _Server()
     with server.client() as client:
-        probe.run_probe(base_url="http://test", rounds=1, token="tkn", client=client)
+        probe.run_probe(base_url="http://test", rounds=1, token="tkn", client=client, delay_s=0)
     for request in server.coach_requests():
         body = _body(request)
         if request.url.path == "/v1/coach/sessions":
@@ -176,7 +178,7 @@ def test_token_auto_issued_via_demo_callback() -> None:
     """--token 미지정 → 데모 콜백 1회 호출·발급 토큰으로 코치 요청 인증."""
     server = _Server()
     with server.client() as client:
-        report = probe.run_probe(base_url="http://test", rounds=1, client=client)
+        report = probe.run_probe(base_url="http://test", rounds=1, client=client, delay_s=0)
     assert report.token_auto_issued is True
     assert len(server.auth_requests()) == 1
     assert all(r.headers["Authorization"] == "Bearer demo-token" for r in server.coach_requests())
@@ -187,14 +189,16 @@ def test_auth_failure_raises_clear_guidance() -> None:
     server = _Server(auth_status=404)
     with server.client() as client:
         with pytest.raises(probe.ProbeAuthError, match="WHYMATH_DEMO_AUTH_ENABLED"):
-            probe.run_probe(base_url="http://test", rounds=1, client=client)
+            probe.run_probe(base_url="http://test", rounds=1, client=client, delay_s=0)
 
 
 def test_turn_http_errors_accounted_never_break() -> None:
     """턴 500 → 상태코드별 회계·세션 회계는 보존·나머지 세션도 계속(never-break)."""
     server = _Server(turn_status=500)
     with server.client() as client:
-        report = probe.run_probe(base_url="http://test", rounds=1, token="tkn", client=client)
+        report = probe.run_probe(
+            base_url="http://test", rounds=1, token="tkn", client=client, delay_s=0
+        )
     assert report.sessions_submitted == {"eq": 2, "expr": 2, "bad": 1}
     assert report.turns_submitted == {}
     assert report.http_errors == {"500": 10}
@@ -205,7 +209,9 @@ def test_session_create_failure_skips_turns() -> None:
     """세션 생성 실패(비201) → 그 세션의 턴은 시도하지 않고 오류만 회계."""
     server = _Server(session_status=503)
     with server.client() as client:
-        report = probe.run_probe(base_url="http://test", rounds=1, token="tkn", client=client)
+        report = probe.run_probe(
+            base_url="http://test", rounds=1, token="tkn", client=client, delay_s=0
+        )
     assert report.sessions_submitted == {}
     assert report.http_errors == {"503": 5}
     # 코치 요청은 세션 생성 5건뿐(턴 0건).
@@ -218,7 +224,7 @@ def test_mix_override_changes_plan() -> None:
     server = _Server()
     with server.client() as client:
         report = probe.run_probe(
-            base_url="http://test", rounds=2, mix={"bad": 3}, token="tkn", client=client
+            base_url="http://test", rounds=2, mix={"bad": 3}, token="tkn", client=client, delay_s=0
         )
     assert report.sessions_submitted == {"bad": 6}
     assert report.turns_submitted == {"bad": 12}
@@ -231,10 +237,47 @@ def test_render_mentions_harvest_and_synthetic_caveat() -> None:
     """출력에 '서버 로그가 진실'(harvest 안내)과 합성 트래픽 캐비엇이 명시된다."""
     server = _Server()
     with server.client() as client:
-        report = probe.run_probe(base_url="http://test", rounds=1, token="tkn", client=client)
+        report = probe.run_probe(
+            base_url="http://test", rounds=1, token="tkn", client=client, delay_s=0
+        )
     text = probe.render_report(report)
     assert "wh1_shadow_harvest" in text
     assert "합성 트래픽" in text
     # verdict 분포를 자체 집계·표기하지 않는다 — 제목에 'verdict 없음' 명시·집계 라벨 없음.
     assert "verdict 없음" in text
     assert "correct=" not in text and "incorrect=" not in text
+
+
+def test_pacing_called_before_every_write() -> None:
+    """쓰기 요청마다 페이싱 훅 호출 — rate limit 30/분 대응(2026-07-17 라이브 429 교훈).
+
+    기본 믹스 1라운드 = 세션 5 + 턴 10 = 쓰기 15회 → sleeper가 delay_s로 15회 불린다.
+    """
+    server = _Server()
+    sleeps: list[float] = []
+    with server.client() as client:
+        probe.run_probe(
+            base_url="http://test",
+            rounds=1,
+            token="tkn",
+            client=client,
+            delay_s=2.5,
+            sleeper=sleeps.append,
+        )
+    assert sleeps == [2.5] * 15
+
+
+def test_zero_delay_never_sleeps() -> None:
+    """delay_s=0이면 sleeper가 한 번도 불리지 않는다(테스트·rate limit 비활성 환경)."""
+    server = _Server()
+    sleeps: list[float] = []
+    with server.client() as client:
+        probe.run_probe(
+            base_url="http://test",
+            rounds=1,
+            token="tkn",
+            client=client,
+            delay_s=0,
+            sleeper=sleeps.append,
+        )
+    assert sleeps == []
