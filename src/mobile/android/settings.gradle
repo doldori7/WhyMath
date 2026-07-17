@@ -20,7 +20,10 @@ plugins {
     id "dev.flutter.flutter-plugin-loader" version "1.0.0"
     // AGP 8.3.2 - Gradle 8.7/Java 21 조합 지원(템플릿 기본 8.1.0은 Java 21에서 실패).
     id "com.android.application" version "8.3.2" apply false
-    id "org.jetbrains.kotlin.android" version "1.8.22" apply false
+    // Kotlin 2.1.0 - 최신 플러그인들(image_picker/video_player 등)의 빌드 파일이 Kotlin DSL
+    // compilerOptions를 요구해 1.8.22에서 assembleDebug 연쇄 실패(2026-07-17 실기기 실측).
+    // KGP 2.1.0은 Gradle 8.7·AGP 8.3.2 조합과 호환(KGP 지원 범위 내) - MOB-01의 1단계.
+    id "org.jetbrains.kotlin.android" version "2.1.0" apply false
 }
 
 include ":app"

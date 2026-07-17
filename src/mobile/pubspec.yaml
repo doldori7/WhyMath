@@ -58,12 +58,14 @@ dev_dependencies:
   mocktail: ^1.0.3
   golden_toolkit: ^0.15.0
 
-# ── 버전 고정 (빌드 재현성) ──
+# ── 버전 고정 (빌드 재현성 — pubspec.lock 미커밋 상태의 해석 드리프트 방어, MOB-01) ──
 dependency_overrides:
-  # Kotlin 1.8.22(android/settings.gradle) 호환 상한 — 0.8.13+15부터 플러그인 빌드 파일이
-  # Kotlin DSL(compilerOptions)로 전환돼 구 Kotlin에서 assembleDebug가 깨진다
-  # (2026-07-17 실기기 빌드 실패 실측: image_picker_android 0.8.13+17 build.gradle.kts:32).
-  # 근본 해소는 MOB 태스크(Kotlin/AGP 업그레이드 + pubspec.lock 커밋) — 그때 이 고정 제거.
+  # retrofit 4.9.x가 추가한 Parser.DartMappable을 retrofit_generator 9.x가 처리하지 못해
+  # build_runner 빌드 스크립트 컴파일이 깨진다(2026-07-17 실측: generator.dart switch 비전수).
+  # generator ^9 상한과 맞는 4.8.0으로 고정 — 쌍 업그레이드(generator 10+)는 MOB-01에서.
+  retrofit: 4.8.0
+  # 0.8.13+18부터 "Built-in Kotlin(AGP 9 지원)" 이행 — 현 AGP 8.3.2와의 호환 미검증이라
+  # Kotlin DSL 도입 직전 버전으로 고정(변수 최소화). 해제는 MOB-01(AGP 업그레이드)에서.
   image_picker_android: 0.8.12+23
 
 flutter:
