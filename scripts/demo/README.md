@@ -147,6 +147,9 @@ python scripts\harness\backlog.py gates clear G-kiki-device-demo --evidence "htt
 | 패드에서 서버 못 붙음 | 첫 실행 방화벽 팝업에서 **개인 네트워크 허용**·API_URL이 이 PC Wi-Fi LAN IP인지 확인(`ipconfig`). |
 | 코치 발문이 밋밋 | Ollama for Windows 미가동. Ollama 앱 실행/`ollama serve` 후 재시도(`/status`가 라이브로 바뀜). |
 
+> **재부팅 후 서버 기동 + shadow verdict 수집**(시연 아닌 개발·측정 목적)은 별도 런북
+> `infra/phaiakes9/POST_REBOOT_SERVER_SHADOW.md` 참조 — 데모 DB + INFO 로깅 런처 + shadow 배치.
+
 ---
 
 # §B. 리눅스/WSL 경로 (bash)
