@@ -98,3 +98,6 @@
 {"ts": "2026-07-16T21:30:18", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "claim_remote_unavailable", "id": "HARN-06-human-owner-cli-path", "status": "error"}
 {"ts": "2026-07-16T21:30:18", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "start", "id": "HARN-06-human-owner-cli-path", "session": "claude/coding-duplication-conflicts-p41iau", "remote": "error"}
 {"ts": "2026-07-16T21:35:04", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "done", "id": "HARN-06-human-owner-cli-path", "artifacts": ["커밋 831e56a — start/done --as <owner> 경로·selector allow_human_owner·문서 §3/§7·회귀 테스트 10(tests/harness 153/153 green)"]}
+{"ts": "2026-07-17T04:26:59", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "add", "id": "S1-15-shadow-accumulation"}
+{"ts": "2026-07-17T04:27:00", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "claim_remote_unavailable", "id": "S1-15-shadow-accumulation", "status": "error"}
+{"ts": "2026-07-17T04:27:00", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "start", "id": "S1-15-shadow-accumulation", "session": "claude/coding-duplication-conflicts-p41iau", "remote": "error"}
