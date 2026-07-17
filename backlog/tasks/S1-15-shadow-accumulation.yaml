@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S1-15-shadow-accumulation
+title: "shadow verdict 분포 축적 도구 — 수확기·트래픽 드라이버·런북 (S1-11 전제① 준비)"
+track: math-completion
+stage: S1
+subject: math
+layer: backend
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "wh1_shadow.record 로그 수확·누적 원장·분포 리포트 CLI + 대표 믹스 트래픽 드라이버 + hermetic 테스트 + 런북 WH-1 절"
+artifacts:
+  - "커밋 235c6c9 — 수확기·드라이버·logconfig·런북 WH-1 절·테스트 27(565 green)"
+paths:
+  - src/backend/whymath_backend/harness/wh1_shadow_harvest.py
+  - src/backend/whymath_backend/ops/wh1_shadow_probe.py
+  - "tests/backend/**"
+  - docs/architecture/shadow_measurement_runbook.md
+  - scripts/demo/wh1_shadow_logconfig.json
+session: null
+notes: "S1-11 flip 전제① 'shadow verdict 분포 확보'의 도구 공백(7/15 측정이 애드혹 grep) 해소. 드라이버는 합성 명시 — 대표성 판정은 Kiki 몫"
+updated: 2026-07-17

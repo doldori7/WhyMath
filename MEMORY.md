@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-17 (실측·이정표·S1-11 전제①): **shadow verdict 축적 개시 — 전 체인 라이브 검증·원장 첫 기입(n=5)** (Kiki 3차 실행)
+
+**실측**: 수정본(4cffbda)으로 3차 라이브 — 캡처 uvicorn 생존·사전검증 2종 통과(Test-Path True·/health ok)·프로브 45제출(세션 15+턴 30) **오류 0**(페이싱 적중·429 재발 없음)·수확기 파싱 5/5·원장 `wh1_shadow_ledger.ndjson` 신규 5. **3-state 전부 실측 유도**: correct 1·incorrect 2·unverifiable 2·none 0 — 도구 체인(logconfig 캡처→probe→harvest→원장)이 end-to-end 검증됨. 재발방지 장치 전부 실작동 확인: run_demo 좀비 가드가 실제 좀비(pid 23476) 정리·cp949 수정으로 기동 성공·사전검증이 True/ok 판정. **관측 5/제출 45 캐비엇(정직)**: shadow는 제출마다 백그라운드 실 LLM 튜터 루프(Ollama 라이브)를 돌리므로 GPU 직렬화로 수확 시점까지 5건만 완주 — 서버 유지 중 잔여 완료분은 재수확으로 원장에 멱등 누적(신규 0 될 때까지 반복). 2차 실행의 조작 사고(창① 오입력→Ctrl+C 서버 종료)와 사전검증 무효 결함(delay:true)은 런북 경고·logconfig 수정으로 등재 완료(4cffbda). **다음**: 배치 완주분 재수확 → 분포 기록 → 실기기 시연 트래픽 병행 축적 → 표본 충분 시 승격 재판정(agreement 게이트+Kiki).
+
+**배치 완주 실측(같은 날 재수확)**: 45/45 전 관측 수확(유실 0·중복 걸러냄 5=멱등 검증)·원장 n=45·고유 dialogue 15·전건 status=ended(예산 건강). **분포가 합성 정답과 100% 일치** — eq 18→unverifiable 18·expr 18→correct 18·bad 9→incorrect 9·none 0(전 턴 verify 발동). ground truth 기지 상태의 **검출 일치 45/45** — 7/15의 검출력 4/4를 대폭 확장(단 여전히 합성·결정 가능/불가 구간이 설계상 분리된 트래픽이라 실학생 혼합비 요건은 미충족 — 승격 재판정은 실기기 시연 트래픽 축적 후 Kiki 몫, 과대 해석 금지).
+
+### 2026-07-17 (실측·수정·S1-15 후속): **shadow 축적 1차 라이브에서 결함 3건 실측 — 일괄 수정** (실수 관리 의무 이행)
+
+**경위**: S1-15 도구의 첫 라이브 실행(Kiki)이 3결함에 부딪혀 기록 0건: ① **logconfig 비ASCII 크래시** — uvicorn이 `--log-config` JSON을 로케일 인코딩(한국어 Windows=cp949)으로 읽는데 파일에 한국어 설명 키가 있어 `UnicodeDecodeError`로 기동 실패(시스템 실수 — 코드 결함) ② **좀비 서버 함정** — 이전 세션의 uvicorn이 8000 점유 → run_demo의 새 서버는 바인드 실패로 즉사(pid 파일은 죽은 pid)·/health는 좀비가 응답해 성공처럼 보임 → 프로브가 shadow OFF 좀비에 제출 ③ **rate limit 429** — coach 쓰기 상한 30/분인데 프로브가 무간격 45쓰기 제출 → 5건 거절. 부가: 안내한 `git pull`이 재시작(force-push) 브랜치의 add/add 충돌 유발(안내 실수). **수정**: ⑴ logconfig **ASCII 전용**화(_note에 ASCII 불변 명문·cp949 디코드+dictConfig+캡처 e2e 검증) ⑵ 런북 — 포트 기준 강제 정리(`Get-NetTCPConnection` → Stop-Process)·캡처 사전 검증 스텝(`Test-Path wh1_shadow_records.log`)·좀비 함정 명문 ⑶ 프로브 **페이싱** — `--delay` 기본 2.5초/쓰기(24/분<30·주입 가능 sleeper·테스트 2 신규) ⑷ CLAUDE.md 명령 규칙 보강 — 재시작 가능 브랜치는 `checkout -B origin/…` 형태로만 안내. **검증**: probe 테스트 16/16(페이싱 훅 15회 호출 동결)·cp949 e2e OK·게이트 green.
+
 ### 2026-07-16 (문서·infra·런북): **재부팅-후 서버+shadow 기동 런북 신설 — 세션 실측 함정 6종 영속화**
 
 **무엇/왜**: Kiki "재부팅 후 환경설정" 문의(서버+shadow 모드) → 매번 채팅 재문의 방지·컨텍스트 위생("대화 휘발 의존 금지·결정 문서화")로 `infra/phaiakes9/POST_REBOOT_SERVER_SHADOW.md` 신설. 2026-07-16 shadow 수집 세션에서 규명한 함정 6종 정본화: ⑴ `localhost`=::1(IPv6) vs uvicorn `0.0.0.0`(IPv4)→클라 URL `127.0.0.1` ⑵ Windows asyncpg SSL 협상 붕괴→DB URL `?ssl=disable`(데모 55432) ⑶ shadow 로그가 root WARNING 유실→`logging.basicConfig(INFO)` 런처 필수 ⑷ JWT 시크릿 세션 env 휘발→런타임 생성 ⑸ 데모 DB 컨테이너 휘발→`docker compose up -d demo-db` ⑹ verify 트리거엔 `solution_steps` 동봉 필수. 재부팅 휘발(컨테이너·세션 env·프로세스) vs 영속(venv·리포·User-스코프 키) 구분표 + `start_server_shadow.ps1` 생성 스크립트 + shadow 배치. 데모 README 함정표에 참조 링크 1줄. 코드 변경 0(문서 only).

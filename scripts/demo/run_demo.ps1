@@ -76,6 +76,16 @@ python (Join-Path $RepoRoot "scripts\demo\seed_demo.py")
 if ($LASTEXITCODE -ne 0) { throw "문제 시드 실패." }
 
 Write-Host "▶ [4/6] backend(uvicorn) 기동 — 0.0.0.0:$Port (실기기 LAN 도달)…"
+# ★좀비 서버 가드(2026-07-17 실측 사고 재발 방지): 이전 세션의 uvicorn이 포트를 점유하면
+#   새 서버는 바인드 실패로 즉사하고 /health는 좀비가 응답해 "성공처럼" 보인다(pid 파일은
+#   죽은 pid·shadow env 등 새 설정 미적용). 기동 전 포트 리스너를 강제 정리한다.
+$stale = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue |
+  Select-Object -ExpandProperty OwningProcess -Unique
+if ($stale) {
+  Write-Host "  · 포트 $Port 점유 프로세스(이전 세션 잔재) 정리: $($stale -join ', ')"
+  $stale | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+  Start-Sleep -Seconds 1
+}
 $Uvicorn = Join-Path $VenvScripts "uvicorn.exe"
 # -NoNewWindow + 리다이렉트 조합(백그라운드·출력은 로그파일로). -WindowStyle Hidden은
 # 리다이렉트와 충돌할 수 있어 -NoNewWindow를 쓴다(현 콘솔 공유·팝업 없음·서버 창 유지).
@@ -87,6 +97,11 @@ $proc.Id | Out-File -FilePath $PidFile -Encoding ascii
 Write-Host "  · /health 대기…"
 $ok = $false
 for ($i = 0; $i -lt 60; $i++) {
+  # ★생존 확인: 방금 띄운 프로세스가 죽었으면(바인드 실패 등) /health 성공을 믿지 않는다 —
+  #   좀비가 대신 응답하는 거짓 성공 차단(위 가드와 이중 방어).
+  if ($proc.HasExited) {
+    throw "backend 프로세스(pid $($proc.Id))가 기동 직후 종료됐습니다(포트 충돌 의심). 로그 확인: $ErrFile"
+  }
   try {
     Invoke-RestMethod -Uri "http://127.0.0.1:$Port/health" -TimeoutSec 2 | Out-Null
     $ok = $true; break
