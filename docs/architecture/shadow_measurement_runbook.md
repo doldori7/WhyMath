@@ -1,4 +1,4 @@
-# Shadow → Canary 측정 런북 (오개념 게이트)
+# Shadow → Canary 측정 런북 (오개념 게이트 · WH-1 verify verdict)
 
 > **목적**: 오개념 진단의 네 게이트를 *노출 없이* shadow 모드로 켜고, 구조화 관측 로그를 모아
 > harvest 도구로 집계해 **canary/노출(on) 승격 여부**를 정량 데이터로 결정하는 운영 절차.
@@ -106,3 +106,121 @@ python -m whymath_backend.l4.misconception.judge_shadow_harvest       obs.jsonl
 `step_shadow_harvest`(관측→`human_label:null` draft) → 사람이 A/B 채움 → `step_shadow_eval`(precision
 측정). 오개념 네 게이트의 harvest는 이 *관측→오프라인 집계* 정본 패턴을 공유하되 산출이 *coverage/
 분포 요약*이라는 점만 다르다(라벨 불요 — 카탈로그 id 자체가 관측에 실림).
+
+---
+
+## WH-1 verify verdict 수확 (S1-11 flip 전제 ①)
+
+> **목적**: WH-1 튜터링 하네스 shadow(`harness/wh1_shadow.py`)의 **verify verdict 분포**
+> (correct/incorrect/unverifiable/None)를 실측·축적해 S1-11(verify 게이트 primary 승격) flip의
+> 전제 ①을 채운다. 오개념 게이트들과 같은 *관측→오프라인 집계* 패턴이되, **누적 원장**(여러
+> 측정 세션에 걸친 축적)이 추가된다.
+
+| 항목 | 값 |
+|---|---|
+| 켜기(env) | `WHYMATH_WH1_HARNESS_SHADOW_ENABLED=true` (**서버 기동 전** 설정 — 프로세스 캐시) |
+| record 로거 | `whymath.harness.wh1_shadow.record` |
+| harvest 모듈 | `harness/wh1_shadow_harvest` (`--store` 누적 원장·중복 제거·재수확 멱등) |
+| 드라이버 | `ops/wh1_shadow_probe` (합성 트래픽 — coach 세션/턴 제출) |
+| 핵심 결정 변수 | `verdict_counts`/`verdict_ratios`·`turn_verdicts`(턴별 추이) — **판정선 없음**(분포 제시) |
+
+### 발동 조건 (둘 다 필요)
+
+1. **env**: 서버가 `WHYMATH_WH1_HARNESS_SHADOW_ENABLED=true`로 기동돼야 coach 세션/턴이
+   하네스를 비차단 spawn한다(OFF 기본 — 학생 응답 비트동일·04a "측정 없는 도입 없음").
+2. **solution_steps**: 요청에 `CoachRequest.solution_steps`(이미 분해된 표현식 리스트)가
+   동봉돼야 하네스 verify 의무(§3.1)가 걸려 **verdict가 생성**된다. 미동봉 턴은
+   `verify_verdict: null`(verify 미호출)로 관측된다 — 이것도 분포의 일부다(none 라벨).
+
+### 수확 경로: 서버 로그 → harvest CLI → 누적 원장
+
+record 로거의 관측 JSON은 **무영속**(서버 로그로만 흐름)이다. 그리고 **uvicorn 기본 로깅으로는
+캡처되지 않는다** — uvicorn 기본 dictConfig는 자기 로거(uvicorn/uvicorn.error/uvicorn.access)만
+구성하고 root를 안 건드려, 앱 INFO 라인은 `logging.lastResort`(WARNING 이상)에서 탈락한다
+(2026-07-17 실측 — uvicorn 0.51 `LOGGING_CONFIG`·`run_demo.ps1`의 `.demo_uvicorn.err.log`에는
+record 라인이 **안 남는다**). 따라서 uvicorn을 `--log-config scripts/demo/wh1_shadow_logconfig.json`
+으로 기동한다 — uvicorn 기본 콘솔 로깅을 유지하면서 record 로거만 `FileHandler`로 분리 캡처해,
+기동 cwd(`src\backend`) 기준 `wh1_shadow_records.log`에 **순수 JSONL**(포맷 `%(message)s`)이
+쌓인다(dictConfig 로드·캡처는 2026-07-17 실측 검증).
+
+```
+coach 세션/턴(shadow ON·solution_steps 동봉)
+  → record 로거 JSON → (--log-config) src\backend\wh1_shadow_records.log
+  → python -m whymath_backend.harness.wh1_shadow_harvest wh1_shadow_records.log --store <원장.ndjson>
+  → verdict 분포 리포트(원장 전체 기준·중복 제거 키 = dialogue_id·turn_index·observed_at)
+```
+
+harvest는 record 라인 파싱 성공(parsed)·비해당 라인(skipped)·깨진 JSON(broken)을 분리 회계하고,
+`--store` 원장에 신규 관측만 append한다(같은 로그 재수확은 멱등 — appended 0). `--json`으로
+리포트를 직렬화할 수 있다.
+
+### 트래픽 만들기: 합성 드라이버 (`ops/wh1_shadow_probe`)
+
+실기기 트래픽이 없을 때 대표 3모양을 재현 가능하게 제출한다 — 라운드당(기본 믹스 `eq:expr:bad=2:2:1`)
+세션 5개, 세션마다 생성 1 + 멀티턴 2(전 턴 `solution_steps` 동봉·총 15제출/라운드):
+
+- `eq` 방정식 변형 체인(`2x+3=7 → 2x=4 → x=2`) — 등호 포함이라 `verify_step` 보수 처리로
+  **unverifiable**-heavy 구간(실측 확인).
+- `expr` 표현식 동치(`(x+1)(x+2) → x^2+3x+2`) — SymPy 결정 구간(**correct**).
+- `bad` 오전개 주입(`(x+1)(x+2) → x^2+4x+2`) — **incorrect** 검출용(스텝이 실제 틀린 수식임을
+  테스트가 `verify_step` 실물로 동결).
+
+`--token` 미지정 시 `POST /v1/auth/demo/callback`으로 JWT를 자동 발급한다(서버
+`WHYMATH_DEMO_AUTH_ENABLED=true` 전제 — `run_demo.ps1`이 설정). 드라이버 출력은 **제출 회계뿐**
+— verdict는 서버 로그가 진실이라 자체 집계하지 않는다.
+
+★**합성 캐비엇(정직)**: 이 분포는 *합성 트래픽*의 분포다. 실 학생 트래픽 대표성 판정과 S1-11
+flip go/no-go는 **Kiki(사람) 몫**이다 — 도구는 3-state가 각각 유도되는 모양만 보장한다.
+하네스 정책(`LLMTutorPolicy`)은 Ollama 라이브면 LLM 거동을, 미가동이면 안전 강등 거동을
+보이므로 `action_type`/`tool_calls` 분포는 LLM 모드에 따라 달라진다(verdict 유도 자체는
+verify 의무가 하네스 강제라 성립).
+
+### Kiki 실행 절차 (Phaiakes9)
+
+창 ① — 데모 스택 기동 후, uvicorn만 record-캡처 구성으로 교체(**같은 창에서** — `run_demo.ps1`이
+남긴 env(`WHYMATH_DATABASE_URL`·`WHYMATH_JWT_SECRET_KEY`·`WHYMATH_DEMO_AUTH_ENABLED`)를 수동
+uvicorn이 상속해야 한다):
+
+```powershell
+# 실행 시스템: Windows PowerShell (Phaiakes9 — 이 PC 자체, SSH 불요) — 창 ①
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+# 미머지 브랜치의 신규 파일(wh1_shadow_probe/harvest·logconfig) 필요 — 브랜치 선행 체크아웃
+git fetch origin claude/coding-duplication-conflicts-p41iau
+git checkout claude/coding-duplication-conflicts-p41iau
+git pull origin claude/coding-duplication-conflicts-p41iau
+
+.\scripts\demo\run_demo.ps1   # DB·시드·데모 인증 준비(uvicorn도 뜨지만 record 캡처 불가)
+
+# 데모 uvicorn만 교체 종료(DB는 유지) → shadow ON + record 캡처 uvicorn 재기동
+Stop-Process -Id (Get-Content .demo_uvicorn.pid) -Force
+$env:WHYMATH_WH1_HARNESS_SHADOW_ENABLED = "true"
+cd src\backend
+.\.venv\Scripts\uvicorn.exe whymath_backend.app:create_app --factory --host 0.0.0.0 --port 8000 --log-config ..\..\scripts\demo\wh1_shadow_logconfig.json
+# (이 창은 서버가 점유 — record는 src\backend\wh1_shadow_records.log에 쌓인다)
+```
+
+창 ② — 합성 트래픽 제출 + 수확·축적:
+
+```powershell
+# 실행 시스템: Windows PowerShell (Phaiakes9 — 이 PC 자체, SSH 불요) — 창 ②
+cd C:\Users\kiki\Desktop\__AI\WhyMath\src\backend
+.\.venv\Scripts\python.exe -m whymath_backend.ops.wh1_shadow_probe --base-url http://127.0.0.1:8000 --rounds 3
+
+# 하네스 shadow는 비차단(fire-and-forget) — 마지막 제출 후 잠시 대기 뒤 수확
+Start-Sleep -Seconds 15
+.\.venv\Scripts\python.exe -m whymath_backend.harness.wh1_shadow_harvest wh1_shadow_records.log --store ..\..\wh1_shadow_ledger.ndjson --json ..\..\wh1_shadow_report.json
+```
+
+측정 세션을 거듭할수록 `wh1_shadow_ledger.ndjson`(리포 루트)에 관측이 축적되고, harvest
+리포트는 항상 **원장 전체** 기준 분포를 낸다(재수확 멱등 — 같은 로그를 두 번 넣어도 안 불어남).
+정리: 창 ①에서 `Ctrl+C`로 uvicorn 종료 후 `cd C:\Users\kiki\Desktop\__AI\WhyMath` →
+`.\scripts\demo\stop_demo.ps1`(throwaway DB까지 볼륨째 제거 — 시연 DB 데이터는 소멸하지만
+**원장은 파일이라 남는다**).
+
+### 판정 (분포 → go/no-go)
+
+- **결정 변수**: `verdict_counts`/`verdict_ratios`(4-라벨·none=verify 미호출)·
+  `turn_verdicts`(턴별 추이)·`status_counts`(budget_exhausted 비율 = 루프 예산 건강도).
+- **판정선 없음**: harvest는 cutoff를 내지 않는다 — S1-11 flip은 이 분포를 근거로 사람/별도
+  게이트가 결정한다(임의 숫자 단정 금지 — CLAUDE.md "모르면 모른다고"). 합성 분포만으로
+  flip하지 말 것(위 합성 캐비엇).

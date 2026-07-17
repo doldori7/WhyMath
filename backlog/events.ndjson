@@ -101,3 +101,4 @@
 {"ts": "2026-07-17T04:26:59", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "add", "id": "S1-15-shadow-accumulation"}
 {"ts": "2026-07-17T04:27:00", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "claim_remote_unavailable", "id": "S1-15-shadow-accumulation", "status": "error"}
 {"ts": "2026-07-17T04:27:00", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "start", "id": "S1-15-shadow-accumulation", "session": "claude/coding-duplication-conflicts-p41iau", "remote": "error"}
+{"ts": "2026-07-17T04:44:38", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "scripts/demo/wh1_shadow_logconfig.json", "mode": "warn", "detail": "'scripts/demo/wh1_shadow_logconfig.json' 은 claim 태스크 S1-15-shadow-accumulation의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}

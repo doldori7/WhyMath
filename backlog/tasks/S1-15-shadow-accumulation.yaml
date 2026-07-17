@@ -18,6 +18,9 @@ paths:
   - src/backend/whymath_backend/ops/wh1_shadow_probe.py
   - "tests/backend/**"
   - docs/architecture/shadow_measurement_runbook.md
+  # 런북의 record 캡처 방법을 실물로 만들기 위한 uvicorn --log-config(실측: 기본 로깅으론
+  # record 라인이 lastResort(WARNING)에서 탈락) — 범위 확장 선언(policy_warn scope_drift 해소).
+  - scripts/demo/wh1_shadow_logconfig.json
 session: claude/coding-duplication-conflicts-p41iau
 notes: "S1-11 flip 전제① 'shadow verdict 분포 확보'의 도구 공백(7/15 측정이 애드혹 grep) 해소. 드라이버는 합성 명시 — 대표성 판정은 Kiki 몫"
 updated: 2026-07-17
