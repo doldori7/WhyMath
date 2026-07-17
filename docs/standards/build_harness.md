@@ -47,6 +47,14 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
 ∧ owner=claude ∧ 트랙 entry_gate 통과 ∧ 미claim.
 정렬 = (stage 순서, priority, −해금 후속 수, id) — **결정적**.
 
+- **owner=claude는 *자동 착수 후보*의 조건**이다(next/status/brief). 사람-소유
+  태스크(owner=kiki/partner)는 자동 후보에 절대 오르지 않지만, **소유자 본인이
+  `start <id> --as <owner>` / `done <id> --as <owner> --artifact ...`로 직접
+  기입할 수 있다**(HARN-06 — 2026-07-16 S1-14 사례에서 사람 태스크의 CLI 완료
+  경로 부재가 실측된 설계 공백의 해소). `--as`가 태스크 owner와 불일치하면 거부,
+  deps·게이트·claim·증적 검사는 사람 기입에도 동일 적용(우회 아님), 이벤트에
+  `as_owner`가 남아 claude 기입과 구분된다.
+
 - **E축 하드락**: subject-expansion 트랙은 `G-s5-subject-expansion` 통과 전
   알고리즘 수준에서 후보 제외 — "수학 완성 전 어떤 과목도 착수하지 않는다"
   (subject_expansion_e_axis_v1.md 불변 전제)가 코드로 강제된다.
@@ -126,6 +134,7 @@ python3 scripts/harness/backlog.py status          # 진행률·게이트·다�
 python3 scripts/harness/backlog.py next --n 3      # 착수 가능 후보 + 선정 사유
 python3 scripts/harness/backlog.py start <id>      # claim (규칙 위반 시 거부)
 python3 scripts/harness/backlog.py done <id> --artifact "<PR/커밋>"   # 증적 필수
+python3 scripts/harness/backlog.py start|done <id> --as kiki ...  # 사람-소유 태스크의 소유자 본인 기입(HARN-06)
 python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
 python3 scripts/harness/backlog.py gates list|clear|waive
 python3 scripts/harness/backlog.py add --id ... --title ... --path "src/backend/**"  # /plan 산출물

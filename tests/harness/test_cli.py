@@ -531,3 +531,70 @@ class TestCrossSessionOverlap:
         err = capsys.readouterr().err
         assert "path_overlap" in err
         assert a in err
+
+
+class TestHumanOwnerLifecycle:
+    """HARN-06 — 사람-소유 태스크의 소유자 본인 기입(--as) 왕복.
+
+    S1-14 사례 회귀: owner=kiki 태스크가 CLI로 done 전이 불가능해 YAML 손편집이
+    유일한 경로였던 설계 공백(2026-07-16 실측)의 재발 방지.
+    """
+
+    def _add_human_task(self, capsys) -> str:
+        task_id = "T9-10-human-judgement"
+        assert cli.main(["add", "--id", task_id, "--title", "사람 판정",
+                         "--track", "math-completion", "--stage", "S1",
+                         "--owner", "kiki"]) == 0
+        capsys.readouterr()
+        return task_id
+
+    def test_as_없이_start_거부_및_안내(self, seeded_repo: Path, capsys):
+        task_id = self._add_human_task(capsys)
+        assert cli.main(["start", task_id, "--session", "b", "--no-remote"]) == 1
+        err = capsys.readouterr().err
+        assert "owner" in err
+        assert f"--as kiki" in err  # 거부→소유자 이관 안내(명령 동봉)
+
+    def test_as_불일치_거부(self, seeded_repo: Path, capsys):
+        task_id = self._add_human_task(capsys)
+        assert cli.main(["start", task_id, "--as", "partner",
+                         "--session", "b", "--no-remote"]) == 1
+        err = capsys.readouterr().err
+        assert "불일치" in err
+
+    def test_소유자_본인_start_done_왕복(self, seeded_repo: Path, capsys):
+        task_id = self._add_human_task(capsys)
+        # 소유자 본인 기입 — start
+        assert cli.main(["start", task_id, "--as", "kiki",
+                         "--session", "kiki-branch", "--no-remote"]) == 0
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert backlog.tasks[task_id].status == "in_progress"
+        # done도 --as 필수 (없으면 안내와 함께 거부)
+        assert cli.main(["done", task_id, "--artifact", "판정 문서"]) == 1
+        assert f"--as kiki" in capsys.readouterr().err
+        # 소유자 본인 기입 — done
+        assert cli.main(["done", task_id, "--as", "kiki",
+                         "--artifact", "판정 문서"]) == 0
+        backlog, _ = store.load_backlog(seeded_repo)
+        assert backlog.tasks[task_id].status == "done"
+        assert "판정 문서" in backlog.tasks[task_id].artifacts
+        # 이벤트 대장에 as_owner가 남아 claude 기입과 구분된다
+        events = (seeded_repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        records = [json.loads(line) for line in events.splitlines() if line.strip()]
+        human_events = [r for r in records
+                        if r.get("id") == task_id and r.get("as_owner") == "kiki"]
+        assert {r["action"] for r in human_events} == {"start", "done"}
+
+    def test_사람_태스크는_next_후보_불변_미노출(self, seeded_repo: Path, capsys):
+        task_id = self._add_human_task(capsys)
+        assert cli.main(["next", "--n", "50", "--json", "--no-remote"]) == 0
+        ids = [t["id"] for t in json.loads(capsys.readouterr().out)]
+        assert task_id not in ids
+
+    def test_claude_태스크에_as는_불일치_거부(self, seeded_repo: Path, capsys):
+        """owner=claude 태스크에 --as kiki를 주면 불일치로 거부(오용 방지)."""
+        assert cli.main(["next", "--n", "1", "--json"]) == 0
+        task_id = json.loads(capsys.readouterr().out)[0]["id"]
+        assert cli.main(["start", task_id, "--as", "kiki",
+                         "--session", "b", "--no-remote"]) == 1
+        assert "불일치" in capsys.readouterr().err

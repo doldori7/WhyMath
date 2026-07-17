@@ -36,7 +36,7 @@ import remote_claims
 import report
 import selector
 import store
-from models import STATUS_TRANSITIONS, Task
+from models import OWNERS, STATUS_TRANSITIONS, Task
 from seed_data import build_seed
 
 
@@ -154,9 +154,24 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
     error = _transition(task, "in_progress")
     if error:
         return _fail(error)
-    exclusion = selector.classify_todo(backlog, task)
+    # 사람-소유 태스크 기입 경로(HARN-06): 소유자 본인이 `--as <owner>`를 명시하면
+    # owner 제외만 건너뛴다(deps·게이트·claim 검사는 동일). next 후보 계산은 불변.
+    as_owner = getattr(args, "as_owner", None)
+    if as_owner is not None and as_owner != task.owner:
+        return _fail(
+            f"{task.id}: --as {as_owner} 불일치 — 이 태스크의 owner는 '{task.owner}'"
+        )
+    human = as_owner is not None and as_owner == task.owner
+    exclusion = selector.classify_todo(backlog, task, allow_human_owner=human)
     if exclusion is not None:
-        return _fail(f"{task.id} 착수 거부 — {exclusion.reason}: {exclusion.detail}")
+        message = f"{task.id} 착수 거부 — {exclusion.reason}: {exclusion.detail}"
+        if exclusion.reason == "owner":
+            # 거부→소유자 이관 규칙(CLAUDE.md 프로세스·안내)의 CLI 구현 — 우회 대신 안내.
+            message += (
+                f"\n  사람 소유 태스크 — 소유자 본인이 직접 기입하세요: "
+                f"python3 scripts/harness/backlog.py start {task.id} --as {task.owner}"
+            )
+        return _fail(message)
     session = args.session or store.current_branch(root)
     policy, _ = store.load_policy(root)
 
@@ -193,7 +208,11 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
     task.session = session
     task.updated = _today()
     store.save_task(root, task)
-    store.append_event(root, "start", task.id, session=task.session, remote=remote_status)
+    # 사람 기입(--as)은 이벤트에 as_owner를 남겨 claude 기입과 대장에서 구분한다(HARN-06).
+    start_extra: dict[str, object] = {"session": task.session, "remote": remote_status}
+    if human:
+        start_extra["as_owner"] = as_owner
+    store.append_event(root, "start", task.id, **start_extra)
     print(f"▶ {task.id} 착수 (세션: {task.session}, 원격 claim: {remote_status})")
     print(f"  완료 조건: {task.acceptance or '(acceptance 미정의 — 정의 권장)'}")
     if not task.paths:
@@ -265,6 +284,18 @@ def cmd_done(root: Path, args: argparse.Namespace) -> int:
         return _fail(f"태스크 '{args.id}' 없음")
     if not args.artifact:
         return _fail(f"{task.id}: --artifact <PR/커밋> 필수 (증적 없는 done 금지)")
+    # 사람-소유 태스크의 done도 소유자 본인의 `--as <owner>` 명시 필수(HARN-06) —
+    # start와 동일한 소유자 확인. claude 태스크에는 --as가 불필요하다(있으면 불일치 검사).
+    as_owner = getattr(args, "as_owner", None)
+    if as_owner is not None and as_owner != task.owner:
+        return _fail(
+            f"{task.id}: --as {as_owner} 불일치 — 이 태스크의 owner는 '{task.owner}'"
+        )
+    if task.owner != "claude" and as_owner != task.owner:
+        return _fail(
+            f"{task.id}: 사람 소유 태스크({task.owner}) — 소유자 본인이 직접 기입하세요: "
+            f"python3 scripts/harness/backlog.py done {task.id} --as {task.owner} --artifact <증적>"
+        )
     error = _transition(task, "done")
     if error:
         return _fail(error)
@@ -274,7 +305,10 @@ def cmd_done(root: Path, args: argparse.Namespace) -> int:
     task.session = None
     task.updated = _today()
     store.save_task(root, task)
-    store.append_event(root, "done", task.id, artifacts=args.artifact)
+    done_extra: dict[str, object] = {"artifacts": args.artifact}
+    if as_owner is not None:
+        done_extra["as_owner"] = as_owner
+    store.append_event(root, "done", task.id, **done_extra)
     _release_remote_claim(root, task.id, prev_session)
     print(f"✔ {task.id} 완료 — 증적: {', '.join(args.artifact)}")
     # 이 완료로 해금된 후속 태스크 안내 (순차 조율의 연결 고리)
@@ -776,11 +810,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--session")
     p.add_argument("--no-remote", action="store_true", dest="no_remote",
                    help="원격 claim 생략 (오프라인·긴급용)")
+    p.add_argument("--as", dest="as_owner", default=None,
+                   choices=[o for o in OWNERS if o != "claude"],
+                   help="사람-소유 태스크를 소유자 본인이 기입할 때 명시 (HARN-06)")
     p.set_defaults(func=cmd_start)
 
     p = sub.add_parser("done", help="태스크 완료 (증적 필수)")
     p.add_argument("id")
     p.add_argument("--artifact", action="append", default=[])
+    p.add_argument("--as", dest="as_owner", default=None,
+                   choices=[o for o in OWNERS if o != "claude"],
+                   help="사람-소유 태스크를 소유자 본인이 기입할 때 명시 (HARN-06)")
     p.set_defaults(func=cmd_done)
 
     p = sub.add_parser("block", help="태스크 차단")

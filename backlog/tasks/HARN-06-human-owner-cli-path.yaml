@@ -5,7 +5,7 @@ track: infra-debt
 stage: S1
 subject: math
 layer: infra
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -13,7 +13,8 @@ requires_gates: []
 acceptance:
   - "backlog.py에 owner=kiki 태스크의 사람 기입 경로(--as kiki 확인 플래그 등) 추가 + selector owner 제외는 next 후보에서만 적용"
   - "S1-14 사례 회귀 테스트(사람 태스크 done 전이 가능)"
-artifacts: []
+artifacts:
+  - "커밋 831e56a — start/done --as <owner> 경로·selector allow_human_owner·문서 §3/§7·회귀 테스트 10(tests/harness 153/153 green)"
 paths: []
 session: null
 notes: "2026-07-16 S1-14 done 기입 시 발견 — Kiki 본인 실행도 CLI가 거부(selector.classify_todo가 owner!=claude를 start에서 원천 제외). 임시 처리 = owner 본인의 YAML 직접 기입"
