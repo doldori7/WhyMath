@@ -1,5 +1,5 @@
 {
-  "_note": "WH-1 shadow record capture log-config for uvicorn. MUST stay ASCII-only: uvicorn opens this file with the OS locale encoding (cp949 on Korean Windows), so any non-ASCII byte crashes startup with UnicodeDecodeError (live-verified 2026-07-17). Full rationale lives in docs/architecture/shadow_measurement_runbook.md (WH-1 section).",
+  "_note": "WH-1 shadow record capture log-config for uvicorn. MUST stay ASCII-only: uvicorn opens this file with the OS locale encoding (cp949 on Korean Windows), so any non-ASCII byte crashes startup with UnicodeDecodeError (live-verified 2026-07-17). Full rationale lives in docs/architecture/shadow_measurement_runbook.md (WH-1 section). | no handler delay: the record file is created at server startup so Test-Path is a valid pre-traffic capture check (delay:true made it always False - 2026-07-17).",
   "version": 1,
   "disable_existing_loggers": false,
   "formatters": {
@@ -31,16 +31,31 @@
       "class": "logging.FileHandler",
       "filename": "wh1_shadow_records.log",
       "encoding": "utf-8",
-      "delay": true,
       "formatter": "record_json"
     }
   },
   "loggers": {
-    "uvicorn": { "handlers": ["default"], "level": "INFO", "propagate": false },
-    "uvicorn.error": { "level": "INFO" },
-    "uvicorn.access": { "handlers": ["access"], "level": "INFO", "propagate": false },
+    "uvicorn": {
+      "handlers": [
+        "default"
+      ],
+      "level": "INFO",
+      "propagate": false
+    },
+    "uvicorn.error": {
+      "level": "INFO"
+    },
+    "uvicorn.access": {
+      "handlers": [
+        "access"
+      ],
+      "level": "INFO",
+      "propagate": false
+    },
     "whymath.harness.wh1_shadow.record": {
-      "handlers": ["wh1_record_file"],
+      "handlers": [
+        "wh1_record_file"
+      ],
       "level": "INFO",
       "propagate": false
     }

@@ -207,15 +207,24 @@ cd src\backend
 # (이 창은 서버가 점유 — record는 src\backend\wh1_shadow_records.log에 쌓인다)
 ```
 
+> ★**서버 창(창 ①) 조작 금지** — 측정이 끝날 때까지 이 창에 아무것도 입력하지 않는다.
+> 특히 **Ctrl+C는 복사가 아니라 서버 중단 신호**다(2026-07-17 실측: 창 ②용 명령을 창 ①에
+> 잘못 붙여넣고 Ctrl+C로 프롬프트를 되찾는 순간 서버가 우아하게 종료 → 프로브 전부
+> ConnectError). 출력 복사가 필요하면 마우스 드래그 선택 후 **우클릭**(또는 Enter)으로
+> 복사한다. 서버 종료는 측정이 끝난 뒤 의도적으로만(Ctrl+C).
+
 창 ② — 합성 트래픽 제출 + 수확·축적:
 
 ```powershell
 # 실행 시스템: Windows PowerShell (Phaiakes9 — 이 PC 자체, SSH 불요) — 창 ②
 cd C:\Users\kiki\Desktop\__AI\WhyMath\src\backend
 
-# ★캡처 사전 검증 — 창 ①의 서버가 진짜 캡처 uvicorn인지(좀비 아님) 파일 존재로 확인.
+# ★캡처 사전 검증 — 창 ①의 서버가 진짜 캡처 uvicorn인지(좀비 아님) 확인.
+#   logconfig가 delay 없이 파일을 *기동 즉시* 생성하므로 True여야 정상(2026-07-17 수정 —
+#   구판 delay:true는 첫 기록 전까지 False라 사전 검증으로 무효였음).
 #   False면 진행 중단하고 창 ① 절차(포트 정리 포함)를 다시 밟는다.
 Test-Path wh1_shadow_records.log
+Invoke-RestMethod -Uri http://127.0.0.1:8000/health -TimeoutSec 3   # 서버 생존 확인
 
 # 페이싱 기본 2.5초/쓰기(coach 쓰기 rate limit 30/분 대응 — 무간격 제출은 429, 2026-07-17 실측).
 # 라운드 3 = 45쓰기 ≈ 2분 소요가 정상이다.
