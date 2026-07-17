@@ -58,6 +58,14 @@ dev_dependencies:
   mocktail: ^1.0.3
   golden_toolkit: ^0.15.0
 
+# ── 버전 고정 (빌드 재현성) ──
+dependency_overrides:
+  # Kotlin 1.8.22(android/settings.gradle) 호환 상한 — 0.8.13+15부터 플러그인 빌드 파일이
+  # Kotlin DSL(compilerOptions)로 전환돼 구 Kotlin에서 assembleDebug가 깨진다
+  # (2026-07-17 실기기 빌드 실패 실측: image_picker_android 0.8.13+17 build.gradle.kts:32).
+  # 근본 해소는 MOB 태스크(Kotlin/AGP 업그레이드 + pubspec.lock 커밋) — 그때 이 고정 제거.
+  image_picker_android: 0.8.12+23
+
 flutter:
   uses-material-design: true
   generate: true

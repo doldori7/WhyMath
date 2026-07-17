@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-01-android-toolchain-upgrade
+title: "모바일 빌드 재현성 — Kotlin/AGP 업그레이드(2.1+/8.6+)·pubspec.lock 커밋·image_picker 고정 해제"
+track: infra-debt
+stage: S1
+subject: math
+layer: mobile
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "Kotlin 2.1+·AGP 8.6+ 업그레이드 후 실기기 assembleDebug 성공"
+  - "pubspec.lock 커밋(해석 드리프트 차단) + dependency_overrides의 image_picker_android 고정 제거"
+artifacts: []
+paths:
+  - "src/mobile/**"
+session: null
+notes: "2026-07-17 실기기 빌드 실패 실측: lock 미커밋이라 매 해석마다 최신 플러그인 유입 — image_picker_android 0.8.13+17(Kotlin DSL)이 Kotlin 1.8.22와 비호환. 임시 조치=0.8.12+23 고정(pubspec dependency_overrides)"
+updated: 2026-07-17
