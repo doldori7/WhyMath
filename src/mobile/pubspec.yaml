@@ -60,13 +60,15 @@ dev_dependencies:
 
 # ── 버전 고정 (빌드 재현성 — pubspec.lock 미커밋 상태의 해석 드리프트 방어, MOB-01) ──
 dependency_overrides:
-  # retrofit 4.9.x가 추가한 Parser.DartMappable을 retrofit_generator 9.x가 처리하지 못해
-  # build_runner 빌드 스크립트 컴파일이 깨진다(2026-07-17 실측: generator.dart switch 비전수).
-  # 4.6.0으로 고정: ① generator 9.x와 호환(DartMappable 이전) ② meta ^1.15.0 의존이라
-  # CI의 Flutter 3.24.5(flutter_test가 meta 1.15.0 pin)와 호환(4.7.0부터 meta ^1.16.0 요구 →
-  # CI pub get 실패, 2026-07-17 실측). Kiki 머신 최신 Flutter는 meta 1.17로 4.9.2까지 풀려
-  # generator와 어긋났다 — 상·하한 없는 ^4.1.0이 환경별 드리프트를 낳은 것. 봉인은 MOB-01.
-  retrofit: 4.6.0
+  # retrofit 4.5.0 고정 — 3중 제약의 최고 버전(2026-07-17 CI 실측으로 확정):
+  #   ① generator 9.x 호환: Parser.DartMappable(4.7.0+)을 generator 9.7.0이 비전수 switch로
+  #      처리 못 해 build_runner 깨짐 → DartMappable 이전 버전 필요.
+  #   ② CI Flutter 3.24.5의 meta 1.15.0 pin: retrofit 4.7.0+는 meta ^1.16.0 요구 → pub get 실패.
+  #   ③ CI Dart 3.5: retrofit 4.6.0은 sdk >=3.6 요구(language version too high) → build 실패.
+  #      4.5.0은 sdk >=2.19.0·meta ^1.8.0이라 셋 다 통과.
+  # 근본 원인: pubspec.lock 미커밋 + CI Flutter(3.24.5)가 Kiki 머신(Dart 3.11)보다 낡음 →
+  # 환경별 해석 드리프트. 근원 봉인(CI Flutter 상향·lock 커밋·pin 해제)은 MOB-01.
+  retrofit: 4.5.0
   # 0.8.13+18부터 "Built-in Kotlin(AGP 9 지원)" 이행 — 현 AGP 8.3.2와의 호환 미검증이라
   # Kotlin DSL 도입 직전 버전으로 고정(변수 최소화). 해제는 MOB-01(AGP 업그레이드)에서.
   image_picker_android: 0.8.12+23
