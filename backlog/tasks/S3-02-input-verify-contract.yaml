@@ -5,16 +5,18 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "등호 방정식 단계(해집합 보존 변형)를 verify가 correct/incorrect로 판정 — 거짓 incorrect 0 회귀 + shadow 재측정에서 실사용 unverifiable 비율 하락 실측"
-artifacts: []
+artifacts:
+  - "PR #533"
+  - 6d6ab09
 paths:
   - "src/backend/whymath_backend/l3/**"
-session: claude/shadow-data-s3-pilot-nh5kbz
-notes: "실사용 shadow unverifiable 89%(2026-07-17 n=9) 근본원인=verify_step이 표현식 동치만 판정·등호 방정식은 unverifiable. 방향 B(검증 확장·Kiki 2026-07-18): classify_step_break 해집합 로직을 verify 경로로 승격. 파일럿 선행조건 겸 S1-11 flip 재판정 선행조건(이중 용도). UI 강제(A) 지양=교수학 우선순위."
+session: null
+notes: "실사용 shadow unverifiable 89%(2026-07-17 n=9) 근본원인=verify_step이 표현식 동치만 판정·등호 방정식은 unverifiable. 방향 B(검증 확장·Kiki 2026-07-18): classify_step_break 해집합 로직을 verify 경로로 승격. 파일럿 선행조건 겸 S1-11 flip 재판정 선행조건(이중 용도). UI 강제(A) 지양=교수학 우선순위. [2026-07-18 done: 코드·테스트·CI green(PR#533)·거짓 incorrect 0. 잔여 acceptance '라이브 shadow 재측정 실사용 unverifiable 하락'=Kiki 실기기 후속(코드 done+라이브 후속 결정)·S1-11 flip 재판정과 연동]"
 updated: 2026-07-18
