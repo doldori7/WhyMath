@@ -312,6 +312,7 @@ L1. 데이터 기반            [성취기준 · 검정교과서 · 평가원 ·
 ## 📚 핵심 문서 인덱스
 
 ### 즉시 참조 (자주 읽기)
+- `docs/standards/dev_constitution.md` — 개발 헌법 v2 (초기 단계용 경량 요약 — 초보자 온보딩·일상 작업 규칙). **본 CLAUDE.md가 심화·법령·아키텍처·검증 정본이며 충돌 시 CLAUDE.md 우선**
 - `MEMORY.md` — 결정 로그·현재 상태
 - `ROADMAP.md` — Phase별 일정
 - `docs/architecture/00_overview.md` — 7계층 요약
