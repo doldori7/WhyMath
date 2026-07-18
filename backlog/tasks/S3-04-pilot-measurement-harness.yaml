@@ -15,6 +15,7 @@ acceptance:
   - "파일럿 KPI 계측 하네스 — 학습성과(숙달 델타)·재사용/리텐션·정서안전(톤 필터 위반 0)·세션비용(P&L)·입력 verify 커버리지 베이스라인 산출"
 artifacts: []
 paths:
+  - "src/backend/whymath_backend/harness/**"
   - "src/backend/whymath_backend/ops/**"
 session: claude/shadow-data-s3-pilot-nh5kbz
 notes: "S3-01 번들에서 측정 하네스(AI 빌드분) 분리. 입력 verify 커버리지 지표가 S3-02 효과를 폐루프 측정(두 주제 연결). 파일럿 노출 전 완료."
