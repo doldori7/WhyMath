@@ -107,7 +107,7 @@ class SessionShape:
 # ── 대표 3모양 — verify_step 실측 근거는 모듈 docstring·테스트가 실물로 동결 ──
 EQUATION_CHAIN_SHAPE = SessionShape(
     label="eq",
-    description="방정식 변형 체인(등호 포함) — verify_step 보수 처리로 unverifiable-heavy 구간",
+    description="방정식 변형 체인(등호 포함) — 해집합 보존 동치로 correct 구간(S3-02 이후)",
     payloads=(
         _payload(
             "이 방정식 풀이가 맞는지 확인해줘",
@@ -176,7 +176,7 @@ SHAPES: dict[str, SessionShape] = {
     for shape in (EQUATION_CHAIN_SHAPE, EXPRESSION_EQUIVALENCE_SHAPE, MISEXPANSION_SHAPE)
 }
 
-# 기본 믹스 — unverifiable/correct 구간을 넉넉히, incorrect 검출용은 소수(2:2:1).
+# 기본 믹스 — correct 구간(방정식·표현식)을 넉넉히, incorrect 검출용은 소수(2:2:1).
 DEFAULT_MIX = "eq:expr:bad=2:2:1"
 
 

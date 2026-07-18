@@ -85,6 +85,88 @@ class TestIncorrect:
         assert result.evidence_weight == 0.5
 
 
+class TestEquationSolutionSet:
+    """등호 방정식 단계 — 해집합 보존 동치 판정(S3-02·방향 B).
+
+    before·after가 *둘 다* 단일 등식이면 표현식 동치가 아니라 *해집합 보존*으로 판정한다 —
+    보존이면 correct·변화면 incorrect·풀이 불가면 unverifiable(정직). 과거엔 등식이 파싱 실패해
+    전부 unverifiable로 떨어졌다(shadow 89% unverifiable 근본원인).
+    """
+
+    def test_equation_transform_is_correct(self) -> None:
+        # 2x+3=7 → 2x=4 : 둘 다 해집합 {2} → 올바른 변형.
+        result = verify_step("2x+3=7", "2x=4")
+        assert result.state == VerifyStepState.correct
+        assert result.evidence_weight == 1.0
+        assert result.reason is None
+
+    def test_equation_final_step_is_correct(self) -> None:
+        # 2x=4 → x=2 : 둘 다 {2} → correct.
+        result = verify_step("2x=4", "x=2")
+        assert result.state == VerifyStepState.correct
+
+    def test_equation_changed_solution_is_incorrect(self) -> None:
+        # 2x=6 → 2x=8 : {3} vs {4}(해가 바뀜) → incorrect.
+        result = verify_step("2x=6", "2x=8")
+        assert result.state == VerifyStepState.incorrect
+        assert result.evidence_weight == 1.0
+        assert result.reason is not None
+        assert "해집합 비보존" in result.reason
+
+    def test_equation_root_added_is_incorrect(self) -> None:
+        # x=2 → x^2=2x : {2} vs {0,2}(양변에 x 곱해 근 추가) → incorrect.
+        result = verify_step("x=2", "x^2=2*x")
+        assert result.state == VerifyStepState.incorrect
+
+    def test_equation_multivariable_is_unverifiable(self) -> None:
+        # 다변수(x+y=2 → y=2-x)는 해집합 보존이어도 정직하게 unverifiable(거짓 판정 회피).
+        result = verify_step("x+y=2", "y=2-x")
+        assert result.state == VerifyStepState.unverifiable
+        assert result.evidence_weight == 0.5
+
+    def test_equation_complex_root_is_unverifiable(self) -> None:
+        # x^2=-1 → x=1 : 좌변이 실근 없음(복소) → 판정 불가·unverifiable(거짓 incorrect 아님).
+        result = verify_step("x^2=-1", "x=1")
+        assert result.state == VerifyStepState.unverifiable
+
+    def test_mixed_equation_and_expression_is_unverifiable(self) -> None:
+        # 한쪽만 등식(방정식↔표현식 혼합) → 비교 대상 불일치 → 보수적 unverifiable.
+        result = verify_step("2x+3=7", "x")
+        assert result.state == VerifyStepState.unverifiable
+        assert result.evidence_weight == 0.5
+
+    def test_equation_identity_all_reals_is_correct(self) -> None:
+        # (x+1)^2=x^2+2x+1 → x^2+2x+1=(x+1)^2 : 둘 다 항등(모든 실수) → correct.
+        # 항등 방정식의 ∅/ℝ 모호성이 *거짓 incorrect*로 새지 않음을 확인(계약 핵심).
+        result = verify_step("(x+1)^2=x^2+2*x+1", "x^2+2*x+1=(x+1)^2")
+        assert result.state == VerifyStepState.correct
+
+    def test_equation_with_unicode_superscript_correct(self) -> None:
+        # 위첨자 등식도 정규화되어 판정 — x²=4 → x^2=4 : 둘 다 {-2,2} → correct.
+        result = verify_step("x²=4", "x^2=4")
+        assert result.state == VerifyStepState.correct
+
+    def test_equation_step_type_propagated(self) -> None:
+        # 등호 방정식 단계도 step_type을 그대로 전파한다.
+        result = verify_step("2x+3=7", "2x=4", StepType.계산)
+        assert result.state == VerifyStepState.correct
+        assert result.step_type == StepType.계산
+
+
+class TestExpressionRegressionWithEquationPath:
+    """등호 방정식 경로 추가 후에도 *표현식* 동치 동작이 회귀하지 않음(등호 없는 식은 기존 경로)."""
+
+    def test_expression_expand_still_correct(self) -> None:
+        # (x+1)(x+2) → x^2+3x+2 : 등호 없는 표현식 → 기존 심볼릭 동치 → correct.
+        result = verify_step("(x+1)*(x+2)", "x^2+3*x+2")
+        assert result.state == VerifyStepState.correct
+
+    def test_expression_wrong_expansion_still_incorrect(self) -> None:
+        # (x+1)(x+2) → x^2+2 (오전개) : 등호 없는 표현식 비동치 → incorrect(유지).
+        result = verify_step("(x+1)*(x+2)", "x^2+2")
+        assert result.state == VerifyStepState.incorrect
+
+
 class TestUnverifiableNonAlgebraic:
     """비대수 step_type → SymPy 시도 없이 unverifiable(0.5)."""
 
