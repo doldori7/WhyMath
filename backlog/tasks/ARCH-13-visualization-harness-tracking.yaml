@@ -5,14 +5,15 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "기존 시각화 서브시스템(l3/visualization.py·l4/{scene_generation,learning_scene,visualization_policy}.py·web/graphing-calculator·mobile scene_renderer)을 백로그 소유로 등재 + spec 유형 커버리지 공백(기하·벡터·행렬변환·미적분애니·Manim 렌더 경로 부재) 문서화"
-artifacts: []
+artifacts:
+  - docs/architecture/visualization_inventory_2026-07.md
 paths:
   - src/backend/whymath_backend/l3/visualization.py
   - "src/web/graphing-calculator/**"
