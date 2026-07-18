@@ -11,6 +11,9 @@ owner: kiki
 depends_on:
   - S2-01-equiv-problems-100
   - S2-06-l6-suneung-mode
+  - S3-02-input-verify-contract
+  - S3-03-l6-suneung-mvp
+  - S3-04-pilot-measurement-harness
 requires_gates: []
 acceptance:
   - 파일럿 코호트 모집·측정 하네스 KPI 베이스라인 기록
@@ -18,5 +21,5 @@ artifacts: []
 paths:
   - "docs/**"
 session: null
-notes: ""
-updated: 2026-07-08
+notes: "S3 분해(2026-07-18): 이 태스크=파일럿 모집(K1)+운영(P1). 측정 하네스는 S3-04(AI)로 분리. 순서=실질(앱 질) 먼저·형식(모집·동의) 뒤로(Kiki 교정) — 앱이 실작동·측정 가능(S3-02/03/04 done)해진 출시 직전에 착수, 동의 서류 리드타임만큼만 앞당김. 조기 착수 금지(희소 자원 소진·조기출시 압력 방지)."
+updated: 2026-07-18
