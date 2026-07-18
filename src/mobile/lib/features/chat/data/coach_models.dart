@@ -308,7 +308,7 @@ class SolutionCoaching with _$SolutionCoaching {
     @JsonKey(name: 'error_kind') String? errorKind,
 
     /// 틀린 관계의 학생 풀이 원문 내 위치 [start, end)·없으면 null.
-    /// 백엔드는 JSON 배열 2-튜플로 직렬화 → List<int>로 수신.
+    /// 백엔드는 JSON 배열 2-튜플로 직렬화 → `List<int>`로 수신.
     @JsonKey(name: 'error_span') List<int>? errorSpan,
 
     /// L5가 분해한 단계 시퀀스의 연쇄 검증 결과·단계 미제공 시 null.
