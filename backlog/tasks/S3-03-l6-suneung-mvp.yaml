@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on:
@@ -13,13 +13,14 @@ depends_on:
 requires_gates: []
 acceptance:
   - "수능 모드 완주 경험(다음문항→풀이입력→WH-1 코칭→3-tier 검증)이 gating.py를 넘어 측정 가능하게 동작 — API 루프 종단 + 결정론 테스트 green"
-artifacts: []
+artifacts:
+  - "PR #534"
 paths:
   - "src/backend/whymath_backend/l6/**"
-  - "src/backend/whymath_backend/api/coach.py"
-  - "src/backend/whymath_backend/api/me.py"
+  - src/backend/whymath_backend/api/coach.py
+  - src/backend/whymath_backend/api/me.py
   - "src/backend/whymath_backend/harness/**"
-  - "src/backend/whymath_backend/schema/event_data_contract.py"
-session: claude/shadow-data-s3-pilot-nh5kbz
+  - src/backend/whymath_backend/schema/event_data_contract.py
+session: null
 notes: "병목⑤(L6 수능 모드 얇음·게이팅 껍데기) 해소의 파일럿 판. 범위=파일럿용 MVP(Kiki 2026-07-18)·풀엔진(시그니처 학습경로·킬러 LTHC·모의채점)은 파일럿 방향 검증 후. 실질 우선 순서상 S3-02 다음."
 updated: 2026-07-18
