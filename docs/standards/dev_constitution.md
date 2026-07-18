@@ -169,26 +169,25 @@
 
 ---
 
-## 12. 다음 단계 반영 로드맵 (v2.x 예정 — 지금은 유예)
+## 12. 로드맵 정합 — 이 항목들은 이미 repo에 구현/동결됨 (실측 매핑 2026-07-18)
 
-초기 단계엔 **넣지 않는 것이 옳은** 심화 규칙. 해당 단계가 오면 반영한다.
+> **중요 (중복 구현 금지 = §3)**: 아래는 *초기 단계 헌법*에선 "다음 단계 예정"으로 보였으나, **실제 WhyMath 저장소에는 이미 구현·테스트 동결돼 있다.** 새로 만들지 말고 아래 경로를 재사용·확장한다.
 
-| 예정 | 항목 | 도입 시점 |
+| 항목 | 실제 상태 | 경로(정본) |
 |---|---|---|
-| v2.1 | LLM 라우터·응답 캐싱·비용 게이트(로컬 우선) | 호출량·비용이 보일 때 |
-| v2.2 | 초인간 검증 6축·결함주입 강등전·커버리지 수치 목표 | 출시 직전/후 |
-| v2.3 | 서버 창-운영 런북·좀비 프로세스 정리·병렬 세션 조율 | 실제 운영·다중 세션 |
-| v2.4 | Concept Purity·임베딩 청킹·Minimal Reasoning Subgraph 등 심화 그래프 규칙 | 그래프 규모 확대 |
+| v2.1 LLM 라우터·캐싱·비용 게이트 | **구현됨** (3-tier 심화 설계 트랙 별도) | `src/backend/whymath_backend/l3/router.py` · `l3/cache/redis_cache.py` · `ops/cost_probe.py`(로컬 비율 이중회계)·`ops/cost_report.py` |
+| v2.2 초인간 검증 6축·강등전 | **구현됨** | `docs/standards/superhuman_verification_standard.md` · `harness/corpus_audit_eval.py`(S5 Wilson)·`corpus_reverify.py`(S6) · `l3/equivalent/counterexample_fuzz.py`(S2)·`defect_seeder.py`(강등전) |
+| v2.3 서버 런북·좀비 정리·병렬 세션 | **문서화됨** | `infra/phaiakes9/POST_REBOOT_SERVER_SHADOW.md` · `docs/standards/parallel_sessions.md` |
+| v2.4 Concept Purity·그래프 규칙 | **test-frozen** | `tests/data_pipeline/concept_graph/test_concept_node_purity.py` · `test_relation_vocabulary_governance.py`(관계 5~8) · `test_id_registry_governance.py`(ID 불변) · `tests/backend/l1/test_embedding_namespace_governance.py` |
+| v2.x EKL/EKF/EOS 용어 통일 | **완료(2026-07-18)** | §0 정본화 — EKF/Metadata OS로 통일. 정본 `../strategy/knowledge_fabric_vision_v1.md` |
 
-> **완료**: v2.x 'EKL/EKF/EOS 용어 통일'은 §0에서 처리됨(2026-07-18) — 정본 어휘 EKF / Metadata OS로 통일, EKL/EOS 폐기. 정본: `../strategy/knowledge_fabric_vision_v1.md`.
+> 즉 이 헌법은 *초기 단계 경량 요약*이지만 repo는 이미 그보다 앞서 있다. 심화 규칙의 정본은 언제나 위 경로와 `CLAUDE.md`이며, 충돌 시 그쪽이 우선한다(상단 '정본 관계').
 
 ---
 
-## 부록. 가장 싸게 "산문 → 자동 검사"로 못박을 후보 (권고, 강제 아님)
+## 부록. "산문 → 자동 검사" 상태 (repo 실측 2026-07-18)
 
-초보 1인 환경에서 규칙은 잊힌다. 아래 중 **하나만이라도** 작은 테스트/검사로 만들어 두면 시스템이 대신 잡아준다.
-- 설정파일 ASCII 전용(§8) — 파일을 ASCII로 읽어 실패하면 테스트 실패.
-- ID 불변(§6) — 커밋 시 기존 ID 변경 감지.
-- 시크릿 형식 검사(§8) — 등록 스크립트에 자가검증 스텝 내장.
-
-> 3개를 한꺼번에 하지 말고 **가장 싼 1개부터.**
+초보 1인 환경에서 규칙은 잊힌다 — 그래서 위험 규칙은 작은 테스트로 못박는 게 좋다. 아래 후보는 **대부분 이미 이 repo에 동결돼 있다**(새로 만들기 전에 확인 = §3):
+- 설정파일 ASCII 전용(§8) — **이미 동결**: `tests/backend/harness/test_wh1_shadow_logconfig.py`
+- ID 불변(§6) — **이미 동결**: `tests/data_pipeline/concept_graph/test_id_registry_governance.py`
+- 시크릿 형식 자가검증(§8) — CLAUDE.md 런북 규칙으로 존재. 코드 테스트화는 남은 선택지.
