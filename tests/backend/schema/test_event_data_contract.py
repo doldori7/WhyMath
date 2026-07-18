@@ -70,18 +70,43 @@ def test_harness_consumed_keys_are_in_contract() -> None:
 
 
 def test_verify_normalizes_missing_error_kind() -> None:
-    """`검산결과`를 passed만 주면 error_kind=None으로 정규화 — 관측된 픽스처 드리프트 무해화."""
+    """`검산결과`를 passed만 주면 error_kind·mode·persona=None으로 정규화 — 드리프트 무해화.
+
+    S3-03: 계약에 mode/persona(선택 태그)가 추가돼 미지정 시 None으로 채워진다(mode-agnostic·
+    기존 생산 경로 의미 불변).
+    """
     data = build_event_data(EventType.검산결과, passed=True)
-    assert data == {"passed": True, "error_kind": None}
+    assert data == {"passed": True, "error_kind": None, "mode": None, "persona": None}
 
 
 def test_verify_full_shape() -> None:
     data = build_event_data(EventType.검산결과, passed=False, error_kind="arithmetic")
-    assert data == {"passed": False, "error_kind": "arithmetic"}
+    assert data == {"passed": False, "error_kind": "arithmetic", "mode": None, "persona": None}
+
+
+def test_verify_mode_persona_tag() -> None:
+    """S3-03: 검산결과에 mode/persona 태그를 실으면 event_data에 그대로 보존(수능 세션 식별)."""
+    data = build_event_data(EventType.검산결과, passed=True, mode="suneung", persona="A_일반고고3")
+    assert data == {
+        "passed": True,
+        "error_kind": None,
+        "mode": "suneung",
+        "persona": "A_일반고고3",
+    }
 
 
 def test_hint_shape() -> None:
-    assert build_event_data(EventType.힌트제공, hint_level=3) == {"hint_level": 3}
+    assert build_event_data(EventType.힌트제공, hint_level=3) == {
+        "hint_level": 3,
+        "mode": None,
+        "persona": None,
+    }
+
+
+def test_hint_mode_persona_tag() -> None:
+    """S3-03: 힌트제공에 mode/persona 태그를 실으면 event_data에 그대로 보존(⑤⑧ mode-scoped)."""
+    data = build_event_data(EventType.힌트제공, hint_level=2, mode="suneung")
+    assert data == {"hint_level": 2, "mode": "suneung", "persona": None}
 
 
 def test_interaction_envelope_shape() -> None:

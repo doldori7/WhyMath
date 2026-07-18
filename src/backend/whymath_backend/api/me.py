@@ -1512,6 +1512,18 @@ SuneungPersona = Annotated[
     Persona,
     Query(description="수능 모드 대상 페르소나(mode=suneung에서만 사용). 기본 A_일반고고3."),
 ]
+# S3-03: GET /me/harness-metrics?mode=suneung — 응용 모드 스코프. 설정 시 attempt_event 기반
+# 지표(①⑤⑧)를 그 mode 태그가 실린 이벤트만으로 집계(수능 세션 측정). 미지정이면 전 mode 포함
+# (기존 동작 불변). 값 공간은 next-problem과 동일 Literal로 닫는다(오타 → 422).
+HarnessMetricsMode = Annotated[
+    Literal["suneung"] | None,
+    Query(
+        description=(
+            "응용 모드 스코프. 'suneung'이면 attempt_event 기반 지표(verify·도움 감소·도달 깊이)를 "
+            "수능 세션 이벤트만으로 필터. 미지정=전 mode(기존 동작). 완전한 mode별 집계는 후속."
+        )
+    ),
+]
 
 
 def _weak_concept_weights(
@@ -2106,6 +2118,7 @@ async def get_my_harness_metrics(
     session: SessionDep,
     since: SinceParam = None,
     until: UntilParam = None,
+    mode: HarnessMetricsMode = None,
 ) -> SurrogateMetrics:
     """WH-1 튜터링 하네스 0단계 대리 지표 7종 + S3 세션 4종 — *본인* 집계의 커버리지 맵.
 
@@ -2128,6 +2141,8 @@ async def get_my_harness_metrics(
     since = _validate_tz_aware(since, "since")
     until = _validate_tz_aware(until, "until")
     _validate_time_window(since, until, "since", "until")
+    # S3-03: mode 스코프(예: suneung) — 설정 시 attempt_event 기반 지표(①⑤⑧)를 그 mode 태그가
+    # 실린 이벤트만으로 집계한다(수능 세션 측정). 미지정이면 전 mode 포함(기존 동작 불변).
     return await compute_wh1_surrogate_metrics(
-        session, user_id=user.user_id, since=since, until=until
+        session, user_id=user.user_id, since=since, until=until, mode=mode
     )

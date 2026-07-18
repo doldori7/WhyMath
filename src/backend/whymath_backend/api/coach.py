@@ -25,7 +25,7 @@ import asyncio
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Annotated, NamedTuple
+from typing import Annotated, Literal, NamedTuple
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -121,7 +121,7 @@ from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coac
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
-from whymath_backend.schema.enums import ContentType, EventType, StepType, TurnRole
+from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
 from whymath_backend.schema.event_data_contract import build_event_data
 
 router = APIRouter(prefix="/v1", tags=["coach"])
@@ -232,6 +232,25 @@ class CoachRequest(BaseModel):
             "오류가 아니며, 매칭을 비우지 않는다(플래그만)."
         ),
     )
+    mode: Literal["suneung"] | None = Field(
+        default=None,
+        description=(
+            "S3-03 응용 모드 태그 — 'suneung'이면 이 코칭 턴이 *수능 세션*의 일부임을 표식한다"
+            "(`GET /me/next-problem?mode=suneung` 값 공간과 정합). 스테이트풀 세션(세션 생성·턴 "
+            "추가)에서 검산/힌트 `attempt_event.event_data`에 실려 mode-scoped 측정을 가능하게 "
+            "한다(수능 세션 식별). **None(기본)이면 기존 동작 완전 불변(회귀 0)** — 이벤트 mode "
+            "태그가 None이라 mode-agnostic 집계 그대로. stateless `/v1/coach`는 이벤트를 적재하지 "
+            "않아 이 값이 소비되지 않는다(무해). 멀티턴은 클라가 매 턴 같은 mode를 실어 보낸다."
+        ),
+    )
+    persona: Persona | None = Field(
+        default=None,
+        description=(
+            "S3-03 대상 페르소나 태그(선택) — 수능 모드 세션의 응시 페르소나(A/B/C 등). 제공 시 "
+            "검산/힌트 이벤트에 `persona` 값 문자열로 실려 후속 per-persona 측정을 돕는다. None"
+            "(기본)이면 미태깅(기존 동작 불변). `mode`와 독립적으로 실린다."
+        ),
+    )
 
 
 class CoachResponse(BaseModel):
@@ -308,7 +327,12 @@ class CoachResponse(BaseModel):
 
 
 class SessionCreateRequest(CoachRequest):
-    """`/v1/coach/sessions` 요청 — `CoachRequest` + 선택적 problem_id(FK)."""
+    """`/v1/coach/sessions` 요청 — `CoachRequest` + 선택적 problem_id(FK).
+
+    S3-03: `mode`·`persona`(응용 모드/페르소나 태그)는 `CoachRequest`에서 상속한다 — 세션 생성
+    턴의 검산/힌트 이벤트에 실려 수능 세션을 측정 계층에서 식별 가능하게 한다(멀티턴은 turns
+    요청에도 같은 값을 실어 보낸다).
+    """
 
     problem_id: uuid.UUID | None = Field(
         default=None,
@@ -824,6 +848,8 @@ async def _log_verify_event(
     problem_id: uuid.UUID | None,
     attempt_id: uuid.UUID | None,
     student_solution: str | None,
+    mode: str | None = None,
+    persona: str | None = None,
 ) -> bool | None:
     """학생 풀이 검산(verify) 결과를 `attempt_event`(검산결과)로 1행 적재 + 통과여부 반환.
 
@@ -846,6 +872,11 @@ async def _log_verify_event(
     거짓 수치관계 적발이면 `False`. 핸들러가 이 값으로 `_log_refutation_evidence`(clean→약한 −1)를
     구동한다 — 적재(부수효과)는 불변이고 *통과여부 신호만* 추가 노출한다(기존 호출자는 반환 무시·
     하위호환).
+
+    **S3-03 mode 태깅**: `mode`·`persona`(선택)를 event_data에 실어 이 검산결과가 어느 응용 모드/
+    페르소나 세션에서 나왔는지 표식한다(수능 세션 식별·측정 계층 도달). 둘 다 None(기본)이면
+    mode-agnostic으로 기존 event_data 모양과 *비트동일*은 아니지만(계약이 mode/persona=None 키를
+    항상 채움) 의미상 완전 불변이다 — 측정 필터가 None을 mode 미지정으로 취급(회귀 0).
     """
     solution_text = student_solution or ""
     if not solution_text.strip():
@@ -864,6 +895,8 @@ async def _log_verify_event(
             EventType.검산결과,
             passed=passed,
             error_kind=(signal.kind if signal else None),
+            mode=mode,
+            persona=persona,
         ),
     )
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
@@ -877,6 +910,8 @@ async def _log_hint_event(
     problem_id: uuid.UUID | None,
     attempt_id: uuid.UUID | None,
     hint_level: int | None,
+    mode: str | None = None,
+    persona: str | None = None,
 ) -> None:
     """AI가 제공한 힌트 노출량(hint_level)을 `attempt_event`(event_type=힌트제공)로 1행 적재.
 
@@ -898,6 +933,9 @@ async def _log_hint_event(
     트랜잭션: `_log_verify_event`와 동일하게 ORM 1행을 `session.add`만 하고 *commit은 하지
     않는다* — 호출 핸들러가 자기 트랜잭션을 commit하므로 그 트랜잭션에 합류한다(별도 commit 금지).
     `event_at`은 핸들러와 동일하게 now(복합 PK 구성요소·시계열 순서축).
+
+    **S3-03 mode 태깅**: `_log_verify_event`와 동형으로 `mode`·`persona`(선택)를 event_data에
+    실어 ⑤(도움 감소)·⑧(도달 깊이)의 mode-scoped 집계를 가능하게 한다. None(기본)이면 미태깅.
     """
     if hint_level is None:
         return  # 힌트 레벨 없음(이론적 경계) → 적재 안 함(날조 회피).
@@ -908,7 +946,9 @@ async def _log_hint_event(
         user_id=user_id,
         problem_id=problem_id,
         event_type=EventType.힌트제공,
-        event_data=build_event_data(EventType.힌트제공, hint_level=hint_level),
+        event_data=build_event_data(
+            EventType.힌트제공, hint_level=hint_level, mode=mode, persona=persona
+        ),
     )
     session.add(event)  # commit은 핸들러가 — 같은 트랜잭션에 합류(별도 commit 금지).
 
@@ -1268,23 +1308,32 @@ async def create_session(
         content_cipher,
     )
     session.add_all([student_turn, assistant_turn])
+    # S3-03 mode 태깅 — 요청의 응용 모드/페르소나를 event_data에 실을 문자열로 정규화한다.
+    # persona는 Persona enum이라 .value(문자열)로 싣는다(둘 다 None이면 미태깅·기존 동작 불변).
+    event_persona = body.persona.value if body.persona is not None else None
     # WH-1 지표 ① 적재 — 풀이 제출(student_solution 비어있지 않음)이면 검산 결과를 attempt_event로
     # 기록(같은 트랜잭션 합류·별도 commit 없음). stateless /v1/coach는 미적재(DB 무접근 계약).
+    # S3-03: body.mode·persona를 실어 수능 세션 검산결과를 측정 계층에서 식별 가능하게 한다.
     verify_passed = await _log_verify_event(
         session,
         user_id=user.user_id,
         problem_id=body.problem_id,
         attempt_id=dialogue.attempt_id,
         student_solution=body.student_solution,
+        mode=body.mode,
+        persona=event_persona,
     )
     # WH-1 지표 ⑤ 적재 — 이미 계산된 decision.hint_level(supply·1~4)을 그대로 기록(재계산 0·
     # _build_response_payload 불변). verify 적재 바로 옆·같은 트랜잭션 합류(별도 commit 없음).
+    # S3-03: verify와 동일 mode·persona 태그를 실어 ⑤⑧ mode-scoped 집계를 가능하게 한다.
     await _log_hint_event(
         session,
         user_id=user.user_id,
         problem_id=body.problem_id,
         attempt_id=dialogue.attempt_id,
         hint_level=decision.hint_level,
+        mode=body.mode,
+        persona=event_persona,
     )
     # WH-1 §2.3 — 이번 턴 확정 매치를 +1 지지 증거로 적재(#268 소비측의 짝·생산측 좌석). curate
     # *뒤*에 둬 이번 턴 지지가 같은 턴 반박을 순환 차단 안 함(미래 net_support 반영). 같은 트랜잭션.
@@ -1455,24 +1504,33 @@ async def append_turns(
     dialogue.student_turns = (dialogue.student_turns or 0) + 1
     dialogue.assistant_turns = (dialogue.assistant_turns or 0) + 1
 
+    # S3-03 mode 태깅 — 멀티턴은 클라가 매 턴 같은 mode/persona를 실어 보낸다(dialogue 컬럼 대신
+    # 요청 재사용·least-invasive·zero-migration). body가 CoachRequest라 두 값을 그대로 가진다.
+    event_persona = body.persona.value if body.persona is not None else None
     # WH-1 지표 ① 적재 — create_session과 동형(풀이 제출 턴만·같은 트랜잭션 합류). problem_id·
     # attempt_id는 dialogue에서 출처(append는 dialogue 컨텍스트).
+    # S3-03: body.mode·persona를 실어 수능 세션 후속 턴의 검산결과도 측정 계층에서 식별 가능.
     verify_passed = await _log_verify_event(
         session,
         user_id=user.user_id,
         problem_id=dialogue.problem_id,
         attempt_id=dialogue.attempt_id,
         student_solution=body.student_solution,
+        mode=body.mode,
+        persona=event_persona,
     )
     # WH-1 지표 ⑤ 적재 — create_session과 동형(이미 계산된 decision.hint_level·supply 1~4을 그대로
     # 기록·재계산 0·_build_response_payload 불변). verify 적재 바로 옆·같은 트랜잭션 합류(별도
     # commit 없음). problem_id·attempt_id는 dialogue 출처(append는 dialogue 컨텍스트).
+    # S3-03: verify와 동일 mode·persona 태그를 실어 후속 턴의 ⑤⑧ 집계도 mode-scoped 가능.
     await _log_hint_event(
         session,
         user_id=user.user_id,
         problem_id=dialogue.problem_id,
         attempt_id=dialogue.attempt_id,
         hint_level=decision.hint_level,
+        mode=body.mode,
+        persona=event_persona,
     )
     # WH-1 §2.3 — create_session과 동형. 이번 턴 확정 매치를 +1 지지 증거로 적재(생산측·curate 뒤).
     await _log_match_evidence(
