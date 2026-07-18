@@ -4,8 +4,8 @@
   ① 페이로드가 *실 스키마*(`SessionCreateRequest`/`CoachRequest`·extra="forbid")에 유효한지 —
      프로브가 dict로 보내는 바디를 실제 pydantic 모델로 검증(시임 페이로드 금지).
   ② 대표 3모양이 실제로 의도한 verdict 구간인지 — `verify_step` *실물*(SymPy)로 오전개
-     스텝이 진짜 틀렸는지(incorrect), 동치 스텝이 진짜 맞는지(correct), 방정식 체인이
-     unverifiable인지 동결한다(가짜 모양이 분포를 오염시키지 않게).
+     스텝이 진짜 틀렸는지(incorrect), 동치 스텝이 진짜 맞는지(correct), 해집합 보존 방정식
+     체인이 진짜 맞는지(correct·S3-02 이후) 동결한다(가짜 모양이 분포를 오염시키지 않게).
 """
 
 from __future__ import annotations
@@ -86,10 +86,15 @@ def test_expression_steps_actually_correct() -> None:
         assert all(s == VerifyStepState.correct for s in _step_states(payload))
 
 
-def test_equation_chain_is_unverifiable_heavy() -> None:
-    """eq 모양(등호 포함)은 verify_step이 보수적으로 unverifiable 처리한다(문서 전제 동결)."""
+def test_equation_chain_is_correct() -> None:
+    """eq 모양(해집합 보존 방정식 체인)은 verify_step이 correct로 판정한다(S3-02 이후 동결).
+
+    S3-02(방향 B) 전에는 등호 방정식 단계가 파싱 실패로 전부 unverifiable였다(shadow 89%
+    unverifiable의 근본원인). 이제 해집합 보존 동치로 판정하므로, 이 대표 모양(모두 해집합이
+    보존되는 정당한 풀이 체인)은 전 전이 correct다 — 방정식 verify가 실제로 동작함을 동결한다.
+    """
     for payload in probe.EQUATION_CHAIN_SHAPE.payloads:
-        assert all(s == VerifyStepState.unverifiable for s in _step_states(payload))
+        assert all(s == VerifyStepState.correct for s in _step_states(payload))
 
 
 def test_all_shape_payloads_valid_against_real_schema() -> None:

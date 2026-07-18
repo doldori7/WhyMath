@@ -42,6 +42,27 @@ class TestAllCorrectChain:
         assert result.has_incorrect is False
 
 
+class TestEquationChain:
+    """등호 방정식 변형 체인 — 해집합 보존 동치로 각 전이 판정(S3-02·방향 B)."""
+
+    def test_linear_solve_chain_all_correct(self) -> None:
+        # 2x+3=7 → 2x=4 → x=2 : 세 단계 모두 해집합 {2} → 두 전이 다 correct.
+        result = verify_solution(["2x+3=7", "2x=4", "x=2"])
+        assert result.n_transitions == 2
+        assert result.n_correct == 2
+        assert result.n_incorrect == 0
+        assert result.n_unverifiable == 0
+        assert result.has_incorrect is False
+
+    def test_error_in_equation_chain_flagged(self) -> None:
+        # 2x=6 → 2x=8(오류) → x=4 : 전이0 비보존(incorrect)·전이1 보존(correct).
+        result = verify_solution(["2x=6", "2x=8", "x=4"])
+        assert result.n_transitions == 2
+        assert result.n_incorrect == 1
+        assert result.first_incorrect_index == 0
+        assert result.n_correct == 1
+
+
 class TestIncorrectInMiddle:
     """중간에 incorrect가 낀 연쇄 — `first_incorrect_index`가 정확해야 한다."""
 

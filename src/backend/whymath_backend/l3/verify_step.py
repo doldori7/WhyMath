@@ -17,6 +17,12 @@
     된다("2(x+1)" ≡ "2x+2"). 기존 `_equality_is_false`는 *numeric-only*(free_symbols 있으면
     skip)라 verify_step에 *재사용하지 않는다* — 같은 `sympify(convert_xor=True)` +
     `simplify().is_zero` *관용구만* 차용해 fresh로 구현한다(심볼릭 동치를 *원하므로*).
+  - **등호 방정식 변형(S3-02·방향 B)**: before·after가 *둘 다* 단일 등식(`2x+3=7 → 2x=4`)이면
+    표현식 동치가 아니라 **해집합 보존 동치(solution-set-preserving equivalence)** 로 판정한다 —
+    두 방정식의 *실수 해집합*이 같으면 `correct`·다르면 `incorrect`·풀이 불가면 `unverifiable`.
+    해집합 계산은 `l3/solution_set.py`(→ `l3/pregenerate/validator.py`의 검증된 solset 자산
+    재사용·재구현 금지)에 위임한다. 과거엔 등식이 `identity_status`에서 파싱 실패해 전부
+    `unverifiable`로 떨어졌다(실사용 shadow 89% unverifiable의 근본원인).
   - **서술형·증명·보조선 기하·경우 나누기 등 비대수 단계**: `unverifiable`. SymPy 검증 자체가
     부적절하므로 시도하지 않고, step_type을 기록해 *검증 불가 단원에서 교착하지 않게*(정직).
   - **정직성(CLAUDE.md "확실하지 않으면 모른다")**: 판정 불가(SymPy `is_zero is None`)·파싱
@@ -39,6 +45,10 @@ from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from whymath_backend.l3.solution_set import (
+    as_single_equation,
+    solution_set_status,
+)
 from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
 from whymath_backend.schema.enums import StepType
 
@@ -115,6 +125,42 @@ def _unverifiable(reason: str, step_type: StepType | None) -> VerifyStepResult:
     )
 
 
+def _equation_step_result(
+    expr_before: str,
+    expr_after: str,
+    before_eq: tuple[str, str],
+    after_eq: tuple[str, str],
+    step_type: StepType | None,
+) -> VerifyStepResult:
+    """등호 방정식 단계를 *해집합 보존 동치*로 판정 → 3상태(S3-02·재사용 집계 매핑).
+
+    `solution_set_status`(해집합 보존 4상태·`l3/solution_set.py`)를 verify_step 3상태로 매핑한다:
+      - identity(해집합 보존) → correct(가중치 1.0·사유 None).
+      - not_identity(해집합 변화) → incorrect(가중치 1.0·사유 채움).
+      - undecidable(다변수·비다항·복소·미정·파싱 불가) → unverifiable(가중치 0.5·정직 할인).
+
+    표현식 경로(`identity_status`)와 *같은 매핑 형태*를 유지해 하류(verify_solution 집계)가 두
+    경로를 구분 없이 흡수하게 한다. `reason`은 학생 제출 등식 원문만 반향한다(정답 미조회·미누출).
+    """
+    verdict = solution_set_status(before_eq, after_eq)
+    if verdict is IdentityVerdict.identity:
+        return VerifyStepResult(
+            state=VerifyStepState.correct,
+            step_type=step_type,
+            reason=None,
+            evidence_weight=_WEIGHT_DECISIVE,
+        )
+    if verdict is IdentityVerdict.not_identity:
+        return VerifyStepResult(
+            state=VerifyStepState.incorrect,
+            step_type=step_type,
+            reason=f"해집합 비보존 — SymPy: {expr_before} ↛ {expr_after}",
+            evidence_weight=_WEIGHT_DECISIVE,
+        )
+    # undecidable/parse_error → 위장 없이 unverifiable(다변수·비다항·복소·미정·파싱 불가).
+    return _unverifiable("해집합 판정 불가 — 검증 안전 회피", step_type)
+
+
 def verify_step(
     expr_before: str,
     expr_after: str,
@@ -127,7 +173,11 @@ def verify_step(
     판정 로직:
       1. **비대수 step_type**(조건해석·케이스분류·그래프스케치) → 즉시 `unverifiable`. SymPy를
          *시도하지 않는다*(식 변형이 아니라 동치로 가릴 수 없음·검증 불가 단원 교착 방지·정직).
-      2. **그 외**(계산·검산·step_type 미지정) → SymPy 심볼릭 동치 검증(자유변수 OK — "2(x+1)" ≡
+      1.5. **등호 방정식 단계**(before·after가 *둘 다* 단일 등식) → 해집합 보존 동치로 판정
+         (S3-02·`solution_set_status`). 해집합 같으면 correct·다르면 incorrect·풀이 불가면
+         unverifiable. 한쪽만 등식이면(방정식↔표현식 혼합) 비교 대상이 어긋나 보수적 unverifiable
+         (거짓 incorrect 회피).
+      2. **그 외**(계산·검산·미지정·등호 없는 식) → SymPy 심볼릭 동치 검증(자유변수 OK — "2(x+1)" ≡
          "2x+2"·`convert_xor=True`라 `^`=거듭제곱). 차이 `diff = before - after`에서:
          - **correct**: `expand(diff) == 0`(다항식 항등식이 0으로 환원) *또는*
            `simplify(diff).is_zero is True`(삼각 등 비다항 항등식)이면 올바른 변형(가중치 1.0).
@@ -155,7 +205,17 @@ def verify_step(
     if not expr_before.strip() or not expr_after.strip():
         return _unverifiable("빈 입력 — 검증 안전 회피", step_type)
 
-    # ② 대수 단계(계산·검산·None) — 동치 권위 단일 primitive(`identity_status`·SymPy)에 위임한다.
+    # ①.5 등호 방정식 단계 감지 — before·after가 *둘 다* 단일 등식(lhs=rhs)이면 해집합 보존 동치로
+    # 판정한다(표현식 동치가 아니라 방정식 변형·S3-02). 한쪽만 등식이면(방정식↔표현식 혼합) 비교
+    # 대상이 어긋나므로 보수적 unverifiable(거짓 incorrect 회피·정확성 #1).
+    before_eq = as_single_equation(expr_before)
+    after_eq = as_single_equation(expr_after)
+    if before_eq is not None and after_eq is not None:
+        return _equation_step_result(expr_before, expr_after, before_eq, after_eq, step_type)
+    if before_eq is not None or after_eq is not None:
+        return _unverifiable("등호 방정식↔표현식 혼합 단계 — 검증 대상 불일치·안전 회피", step_type)
+
+    # ② 대수 단계(계산·검산·None·등호 없는 식) — 동치 권위 primitive(`identity_status`·SymPy) 위임.
     # 자유변수 OK·convert_xor로 ^=거듭제곱·같은 변수 다항 비항등식은 not_identity로 *증명*된다
     # ((a+b)²−(a²+b²)=2ab는 a=b=1에서 거짓·freshman's dream). 변수 집합이 다른 치환 등은 primitive
     # 가 undecidable로 보수 처리해 거짓 incorrect를 회피한다(정확성 #1).
