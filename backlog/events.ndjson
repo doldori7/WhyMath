@@ -180,3 +180,7 @@
 {"ts": "2026-07-18T13:15:34", "actor": "claude/education-app-core-features-mh3avq", "action": "add", "id": "ARCH-13-visualization-harness-tracking"}
 {"ts": "2026-07-18T13:15:48", "actor": "claude/education-app-core-features-mh3avq", "action": "add", "id": "S4-02-proof-learning-support"}
 {"ts": "2026-07-18T13:15:48", "actor": "claude/education-app-core-features-mh3avq", "action": "add", "id": "S4-03-visualization-type-expansion"}
+{"ts": "2026-07-18T21:52:43", "actor": "claude/education-app-core-features-mh3avq", "action": "claim_remote_unavailable", "id": "ARCH-13-visualization-harness-tracking", "status": "error"}
+{"ts": "2026-07-18T21:52:43", "actor": "claude/education-app-core-features-mh3avq", "action": "start", "id": "ARCH-13-visualization-harness-tracking", "session": "claude/education-app-core-features-mh3avq", "remote": "error"}
+{"ts": "2026-07-18T21:54:10", "actor": "claude/education-app-core-features-mh3avq", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "docs/architecture/visualization_inventory_2026-07.md", "mode": "warn", "detail": "'docs/architecture/visualization_inventory_2026-07.md' 은 claim 태스크 ARCH-13-visualization-harness-tracking의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-07-18T21:54:19", "actor": "claude/education-app-core-features-mh3avq", "action": "done", "id": "ARCH-13-visualization-harness-tracking", "artifacts": ["docs/architecture/visualization_inventory_2026-07.md"]}
