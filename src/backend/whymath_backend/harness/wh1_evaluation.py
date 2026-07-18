@@ -447,6 +447,15 @@ class SurrogateMetrics(BaseModel):
     user_scoped: bool = Field(
         default=False, description="True면 특정 user 본인 집계, False면 코호트 전체."
     )
+    mode_filter: str | None = Field(
+        default=None,
+        description=(
+            "S3-03 응용 모드 스코프 — 설정 시(예: 'suneung') 이 집계가 그 mode 태그가 실린 "
+            "*attempt_event 기반 지표*(① verify 통과율·⑤ 도움 감소·⑧ 도달 깊이)만 mode-scoped로 "
+            "필터한 값이다. **다른 지표(③④⑥⑦⑨⑩⑪·R15)는 아직 mode를 싣지 않아 mode 무관 집계 "
+            "그대로**다(완전한 mode별 집계는 후속 S3-04). None이면 모든 mode 포함(기존 동작 불변)."
+        ),
+    )
 
 
 # ── 미계측 고정 Metric(value None·상태 enum·한국어 note) ──────────────────────────
@@ -977,6 +986,7 @@ async def compute_wh1_surrogate_metrics(
     user_id: uuid.UUID | None = None,
     since: datetime | None = None,
     until: datetime | None = None,
+    mode: str | None = None,
 ) -> SurrogateMetrics:
     """WH-1 0단계 대리 지표 7종을 계산 — 7종 모두 계측 좌석 가동(⑦은 *근사*·정직 표기).
 
@@ -1000,6 +1010,11 @@ async def compute_wh1_surrogate_metrics(
         user_id: 지정 시 그 user 본인 집계, None이면 코호트 전체(ops/스크립트).
         since/until: 집계 시간창(started_at 기준·inclusive·생략 시 무한). TZ 검증은 노출
             계층(api/me·time_window_conditions)이 수행 — 여기선 받은 경계를 그대로 비교.
+        mode: S3-03 응용 모드 스코프(예: "suneung"). 설정 시 *attempt_event 기반 지표*
+            (① verify·⑤ 도움 감소·⑧ 도달 깊이)를 `event_data->>'mode' == mode`로 필터한다
+            (수능 세션만 집계). **다른 지표(③④⑥⑦⑨⑩⑪·R15)는 아직 mode를 싣지 않아 mode 무관
+            집계 그대로**다 — 완전한 mode별 집계는 후속 S3-04(여기선 데이터가 mode를 실어나르는
+            것을 보장하고 그 데이터를 scope할 수 있음을 증명). None(기본)이면 전 mode 포함(회귀 0).
 
     Returns:
         SurrogateMetrics — 7 지표(각 Metric) + 표본 수·시간창·user 스코핑 메타.
@@ -1128,6 +1143,10 @@ async def compute_wh1_surrogate_metrics(
         verify_conds.append(AttemptEvent.event_at >= since)
     if until is not None:
         verify_conds.append(AttemptEvent.event_at <= until)
+    # S3-03: mode 스코프 — event_data->>'mode'가 요청 mode와 일치하는 검산결과만(수능 세션).
+    # 태그 없는(구) 이벤트나 mode=null은 as_string()이 NULL이라 == 비교에서 제외된다(정확).
+    if mode is not None:
+        verify_conds.append(AttemptEvent.event_data["mode"].as_string() == mode)
 
     verify_row = (
         await session.execute(
@@ -1171,6 +1190,9 @@ async def compute_wh1_surrogate_metrics(
         hint_conds.append(AttemptEvent.event_at >= since)
     if until is not None:
         hint_conds.append(AttemptEvent.event_at <= until)
+    # S3-03: mode 스코프 — verify와 동형(⑤ 도움 감소·⑧ 도달 깊이의 mode-scoped 집계 데이터).
+    if mode is not None:
+        hint_conds.append(AttemptEvent.event_data["mode"].as_string() == mode)
 
     hint_rows = (
         await session.execute(
@@ -1435,4 +1457,5 @@ async def compute_wh1_surrogate_metrics(
         window_start=since,
         window_end=until,
         user_scoped=user_id is not None,
+        mode_filter=mode,
     )

@@ -39,11 +39,25 @@ class VerifyEventData(_EventPayload):
     거짓 수치관계의 종류(현재 write-only·향후 오개념 분석 입력)로 통과 시 None이다 →
     Optional. 픽스처가 `{passed}`만 써도 이 계약으로 정규화하면 `error_kind=None`이 되어
     관측된 드리프트가 무해화된다.
+
+    S3-03(수능 MVP): `mode`·`persona`는 이 검산결과가 *어느 응용 모드/대상 페르소나* 세션에서
+    나왔는지 표식하는 *선택* 태그다(예: mode="suneung"). 둘 다 미지정(None)이면 mode-agnostic
+    (기존 동작 완전 불변)이라 기존 픽스처·라이브 이벤트가 무손상이다. 측정 계층
+    (`wh1_evaluation`)이 `event_data->>'mode'`로 mode-scoped 집계를 낼 수 있게 하는 *데이터
+    운반* 필드다(완전한 mode별 집계는 후속 S3-04). 값은 문자열(Literal/enum의 *값*)로 싣는다.
     """
 
     passed: bool = Field(..., description="거짓 수치관계 미적발(통과)=True·적발=False")
     error_kind: str | None = Field(
         default=None, description="적발된 오류 종류(통과 시 None·현재 write-only)"
+    )
+    mode: str | None = Field(
+        default=None,
+        description="응용 모드 태그(예: 'suneung'). None=미지정(mode-agnostic·기존 동작 불변).",
+    )
+    persona: str | None = Field(
+        default=None,
+        description="대상 페르소나 태그(예: 'A_일반고고3'). None=미지정(선택·후속 집계).",
     )
 
 
@@ -53,9 +67,21 @@ class HintEventData(_EventPayload):
     `hint_level`은 하네스가 읽는 유일 키다. 값 범위(1~4)는 계약이 아니라 *생산 로직*
     (`decision.hint_level`)의 책임 — 여기선 키·타입만 고정한다(범위 구속은 기존 동작 변경
     위험이라 도입하지 않음).
+
+    S3-03(수능 MVP): `mode`·`persona`는 `VerifyEventData`와 *동형* 선택 태그다 — 이 힌트제공이
+    어느 응용 모드/페르소나 세션에서 나왔는지 표식한다. 둘 다 None이면 mode-agnostic(기존 동작
+    완전 불변). ⑤(도움 감소 곡선)·⑧(도달 깊이)의 mode-scoped 집계 데이터 운반용.
     """
 
     hint_level: int = Field(..., description="AI 제공 힌트 노출량(1~4·supply 신호)")
+    mode: str | None = Field(
+        default=None,
+        description="응용 모드 태그(예: 'suneung'). None=미지정(mode-agnostic·기존 동작 불변).",
+    )
+    persona: str | None = Field(
+        default=None,
+        description="대상 페르소나 태그(예: 'A_일반고고3'). None=미지정(선택·후속 집계).",
+    )
 
 
 class InteractionEventData(_EventPayload):

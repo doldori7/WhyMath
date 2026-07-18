@@ -3839,7 +3839,8 @@ class TestLogHintEvent:
         assert len(sess.added) == 1
         event = sess.added[0]
         assert event.event_type is EventType.힌트제공
-        assert event.event_data == {"hint_level": 3}
+        # S3-03: mode/persona 미지정 → 계약이 None으로 정규화(mode-agnostic·기존 동작 불변).
+        assert event.event_data == {"hint_level": 3, "mode": None, "persona": None}
         assert event.user_id == self._UID
         assert event.problem_id == self._PID
 
@@ -3859,7 +3860,136 @@ class TestLogHintEvent:
         assert len(sess.added) == 1
         assert sess.added[0].attempt_id == aid
         assert sess.added[0].problem_id is None
-        assert sess.added[0].event_data == {"hint_level": 1}
+        # S3-03: mode/persona 미지정 → None 정규화(기존 동작 불변).
+        assert sess.added[0].event_data == {"hint_level": 1, "mode": None, "persona": None}
+
+
+# ── S3-03 수능 MVP: mode 태깅(요청 → 검산/힌트 event_data) 단위·결선 테스트 ─────────
+class TestSuneungModeTagging:
+    """S3-03 — 코치 세션의 `mode`/`persona`가 검산/힌트 attempt_event.event_data에 실린다.
+
+    수능 세션을 측정 계층에서 식별 가능하게 하는 결선(수능 세션 → mode-scoped 측정). 두 층에서
+    검증한다: ① `_log_*_event` 단위(mode/persona 인자 → event_data 보존)·② 엔드포인트 결선
+    (SessionCreateRequest.mode/persona → 실제 적재 이벤트 태깅). mode=None이면 event_data.mode가
+    None으로 정규화(mode-agnostic·기존 동작 완전 불변·회귀 0)임을 함께 핀한다.
+    """
+
+    _UID2 = uuid.uuid4()
+    _PID2 = uuid.uuid4()
+
+    async def test_verify_event_carries_mode_persona(self) -> None:
+        """`_log_verify_event` mode/persona 주입 → event_data 보존(수능 검산결과 식별)."""
+        from whymath_backend.api.coach import _log_verify_event
+        from whymath_backend.schema.enums import EventType
+
+        sess = _CaptureSession()
+        await _log_verify_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID2,
+            problem_id=self._PID2,
+            attempt_id=None,
+            student_solution="계산하면 2+3=6 이다",
+            mode="suneung",
+            persona="A_일반고고3",
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.검산결과
+        assert event.event_data["mode"] == "suneung"
+        assert event.event_data["persona"] == "A_일반고고3"
+
+    async def test_hint_event_carries_mode(self) -> None:
+        """`_log_hint_event`에 mode 주입 → event_data에 실림(⑤⑧ mode-scoped 집계 데이터)."""
+        from whymath_backend.api.coach import _log_hint_event
+        from whymath_backend.schema.enums import EventType
+
+        sess = _CaptureSession()
+        await _log_hint_event(
+            cast(AsyncSession, sess),
+            user_id=self._UID2,
+            problem_id=self._PID2,
+            attempt_id=None,
+            hint_level=2,
+            mode="suneung",
+        )
+        assert len(sess.added) == 1
+        event = sess.added[0]
+        assert event.event_type is EventType.힌트제공
+        assert event.event_data["mode"] == "suneung"
+        assert event.event_data["persona"] is None
+
+    def _tagged_events(self, captured: Any) -> list[Any]:
+        """캡처 세션의 attempt_event(검산결과·힌트제공) ORM 인스턴스만 골라낸다."""
+        from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
+
+        return [o for o in captured.added if isinstance(o, AttemptEventORM)]
+
+    def test_session_create_tags_events_with_suneung_mode(self) -> None:
+        """세션 생성(mode=suneung) → 검산·힌트 이벤트 둘 다 event_data.mode=suneung 태깅."""
+        from whymath_backend.schema.enums import EventType
+
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "이렇게 풀었어 확인해줘",
+                "student_solution": "계산하면 2+3=6 이다",  # 검산결과 이벤트 유발
+                "mode": "suneung",
+                "persona": Persona.A_일반고고3.value,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        events = self._tagged_events(captured)
+        verify = next(e for e in events if e.event_type is EventType.검산결과)
+        hint = next(e for e in events if e.event_type is EventType.힌트제공)
+        assert verify.event_data["mode"] == "suneung"
+        assert verify.event_data["persona"] == "A_일반고고3"
+        assert hint.event_data["mode"] == "suneung"
+        assert hint.event_data["persona"] == "A_일반고고3"
+
+    def test_session_create_no_mode_is_regression_free(self) -> None:
+        """mode 미지정 → event_data.mode=None(mode-agnostic·기존 동작 완전 불변·회귀 0)."""
+        from whymath_backend.schema.enums import EventType
+
+        client, captured = _session_client()
+        resp = client.post(
+            "/v1/coach/sessions",
+            json={
+                "student_input": "확인해줘",
+                "student_solution": "계산하면 2+3=6 이다",
+            },
+        )
+        assert resp.status_code == 201, resp.text
+        events = self._tagged_events(captured)
+        verify = next(e for e in events if e.event_type is EventType.검산결과)
+        hint = next(e for e in events if e.event_type is EventType.힌트제공)
+        assert verify.event_data["mode"] is None
+        assert verify.event_data["persona"] is None
+        assert hint.event_data["mode"] is None
+
+    def test_append_turn_tags_events_with_mode(self) -> None:
+        """멀티턴(mode=suneung) → 후속 턴의 힌트 이벤트도 event_data.mode=suneung 태깅."""
+        from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
+        from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
+        from whymath_backend.schema.enums import EventType
+
+        did = uuid.uuid4()
+        key = (DialogueORM, did)
+        dialogue = DialogueORM.from_schema(
+            DialogueSchema(
+                dialogue_id=did, user_id=_UID, total_turns=2, student_turns=1, assistant_turns=1
+            )
+        )
+        client, captured = _session_client(preload={key: dialogue})
+        resp = client.post(
+            f"/v1/coach/sessions/{did}/turns",
+            json={"student_input": "여기서부터 모르겠어", "mode": "suneung"},
+        )
+        assert resp.status_code == 201, resp.text
+        events = self._tagged_events(captured)
+        # 풀이 미제출 턴이라 검산결과는 없고 힌트제공만 — 그 힌트 이벤트가 mode 태깅됐는지 확인.
+        hint = next(e for e in events if e.event_type is EventType.힌트제공)
+        assert hint.event_data["mode"] == "suneung"
 
 
 # ── WH-1 2단계 슬라이스 3: _apply_hypotheses 가드·결선 단위테스트 ──────────────────
