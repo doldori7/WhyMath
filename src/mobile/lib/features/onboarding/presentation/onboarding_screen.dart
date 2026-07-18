@@ -249,6 +249,10 @@ class _OnboardingFormPage extends ConsumerWidget {
           // ── 목표 등급(1~9) — 드롭다운(자유 입력 없음). 학년이 아니라 목표 '등급'이다.
           const _FieldLabel(label: '목표 등급'),
           DropdownButtonFormField<int>(
+            // Flutter 3.33+에서 value→initialValue deprecated. pubspec flutter floor(^3.24)에는
+            // initialValue가 없어 value 유지(3.24~3.35 양쪽 컴파일). floor를 3.35+로 올릴 때
+            // initialValue로 전환한다 — MOB-01 후속.
+            // ignore: deprecated_member_use
             value: state.targetGrade,
             isExpanded: true,
             decoration: const InputDecoration(
