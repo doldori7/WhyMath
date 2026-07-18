@@ -11,7 +11,8 @@
 
 ## 0. 프로젝트 배경
 
-- 이 프로젝트는 수학 교육 앱에서 출발해 장기적으로 Education Knowledge Fabric(EKF)로 확장한다. (로드맵 명칭 EKL/EOS는 §12 참고 — 정본 용어는 EKF)
+- 이 프로젝트는 수학 교육 앱에서 출발해 장기적으로 **Education Knowledge Fabric(EKF)** — 과목별 지식 팩이 교차 과목 개념 연결로 짜인 단일 직물 — 로 확장한다. 그 운영 기층은 **Metadata OS**라 부른다(*내부 지향 표현*이며, 대외 'OS' 정체성 선언은 시기 조건 충족 후). 장기 비전·단계 지도(S0~S5 → E1~E6 → 수렴)의 **정본은 `../strategy/knowledge_fabric_vision_v1.md`**다.
+  - *용어 정본화(2026-07-18)*: 초기 표기 'EKL(Lake) → EKF → EOS'는 폐기하고 정본 어휘 **EKF / Metadata OS**로 통일한다. 'EOS(Education Operating System)'를 목표 단계로 선언하지 않는다 — repo 결정 **"OS 조기 정체성화 금물"**(대외 OS 선언 = fabric 수렴 + 제3자 확장 경계 명세 고정 이후)과 충돌하기 때문.
 - **지식(개념·문항·오개념·교육과정)이 곧 제품이다.** 코드보다 데이터의 일관성이 우선이다.
 - 개발자는 1인이며 초보자다. 설명은 쉬운 용어로, 전문용어는 풀어서 쓴다.
 
@@ -178,7 +179,8 @@
 | v2.2 | 초인간 검증 6축·결함주입 강등전·커버리지 수치 목표 | 출시 직전/후 |
 | v2.3 | 서버 창-운영 런북·좀비 프로세스 정리·병렬 세션 조율 | 실제 운영·다중 세션 |
 | v2.4 | Concept Purity·임베딩 청킹·Minimal Reasoning Subgraph 등 심화 그래프 규칙 | 그래프 규모 확대 |
-| v2.x | EKL/EKF/EOS 로드맵 용어 통일 | 장기 로드맵 문서화 |
+
+> **완료**: v2.x 'EKL/EKF/EOS 용어 통일'은 §0에서 처리됨(2026-07-18) — 정본 어휘 EKF / Metadata OS로 통일, EKL/EOS 폐기. 정본: `../strategy/knowledge_fabric_vision_v1.md`.
 
 ---
 
