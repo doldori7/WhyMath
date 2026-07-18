@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on:
@@ -16,6 +16,6 @@ acceptance:
 artifacts: []
 paths:
   - "src/backend/whymath_backend/ops/**"
-session: null
+session: claude/shadow-data-s3-pilot-nh5kbz
 notes: "S3-01 번들에서 측정 하네스(AI 빌드분) 분리. 입력 verify 커버리지 지표가 S3-02 효과를 폐루프 측정(두 주제 연결). 파일럿 노출 전 완료."
 updated: 2026-07-18
