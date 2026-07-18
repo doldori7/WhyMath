@@ -4,11 +4,13 @@ publish_to: 'none'
 version: 0.1.0+1
 
 environment:
-  # Dart 3.9(Flutter 3.35) — retrofit_generator 10.2.7(sdk >=3.9)에 맞춰 상향. CI Flutter를
-  # Kiki 머신(Dart 3.11)과 정합시켜 환경별 해석 드리프트를 제거(MOB-01·2026-07-17). 구 3.5는
-  # retrofit/generator 쌍을 못 풀어 임시 pin 3연쇄를 낳았다.
-  sdk: ^3.9.0
-  flutter: ^3.35.0
+  # CI Flutter를 3.24.5→3.35로 상향해 Kiki 머신(Dart 3.11)과 정합 — 환경별 해석 드리프트
+  # 제거(MOB-01·2026-07-17). 이 상향으로 구 pin 사유 ②(meta 1.15)·③(Dart 3.5)가 해소된다.
+  # pubspec 하한은 ^3.5.0로 유지: 하한을 3.9로 올리면 build 4.x 전이 의존이 딸려와 freezed
+  # 2.5.x(build ^2.3.1)와 build 충돌이 재발한다(코어 해석을 build 2.x/freezed 2.5.x 트랙에 고정).
+  # 완전 pin 제거(generator 10.x·build 4.x)는 freezed 2→3 파괴적 마이그레이션 선행 — MOB-01 후속.
+  sdk: ^3.5.0
+  flutter: ^3.24.0
 
 dependencies:
   flutter:
@@ -57,19 +59,24 @@ dev_dependencies:
   freezed: ^2.5.0
   json_serializable: ^6.7.0
   riverpod_generator: ^2.4.0
-  retrofit_generator: ^10.2.7  # retrofit 4.9.2와 짝(9.x는 4.9의 Parser.DartMappable 미처리)
+  # ^9.1.0(→9.7.0) 유지 — freezed 2.5.x와 같은 build ^2.3.1 트랙 짝이라 함께 해소된다.
+  # generator 10.x는 build ^4.0.0을 요구 → freezed 3.x(build 4.x) 파괴적 마이그레이션이 선행돼야
+  # 함(모델 전수 abstract/sealed 수정·코드젠·실기기 검증). 그 이행은 MOB-01 후속 세션으로 이월.
+  retrofit_generator: ^9.1.0
   mocktail: ^1.0.3
   golden_toolkit: ^0.15.0
 
 # ── 버전 고정 (빌드 재현성 — pubspec.lock 미커밋 상태의 해석 드리프트 방어, MOB-01) ──
 dependency_overrides:
-  # retrofit 임시 pin은 제거했다 — CI Flutter 상향(3.35·Dart 3.9)으로 retrofit 4.9.2 +
-  # retrofit_generator 10.2.7 정합 쌍이 CI에서 풀려 pin이 불필요해졌다(2026-07-17 MOB-01).
-  # generator ^10.2.7 상향이 근본 해소. (구 pin 3연쇄 4.8→4.6→4.5는 CI Flutter가 낡아서였음.)
-  #
-  # image_picker_android만 유지: 0.8.13+18의 "Built-in Kotlin(AGP 9)" 이행이 현 AGP 8.3.2와
-  # 미검증이라 Kotlin DSL 도입 직전 버전으로 고정. Android 빌드는 CI 범위 밖(mobile 잡=analyze·
-  # test)이라 실기기 재빌드로만 검증 가능 — 해제는 MOB-01 AGP 업그레이드 단계에서.
+  # retrofit 4.5.0 유지. CI Flutter 상향으로 구 pin 사유 ②(meta 1.15)·③(Dart 3.5)는 해소됐으나,
+  # ①(generator 9.7.0이 retrofit 4.7.0+의 Parser.DartMappable를 비전수 switch로 처리 못 함)은
+  # 여전히 유효 → retrofit<4.7.0가 필요하다. mobile CI 잡이 build_runner 코드젠을 실제 실행하므로
+  # (analyze·test 앞) pin이 없으면 최신 retrofit(4.9.2)가 딸려와 코드젠이 깨진다. 완전 제거는
+  # generator 10.x + freezed 3.x 이행 시(MOB-01 후속).
+  retrofit: 4.5.0
+  # image_picker_android: 0.8.13+18의 "Built-in Kotlin(AGP 9)" 이행이 현 AGP 8.3.2와 미검증이라
+  # Kotlin DSL 도입 직전 버전으로 고정. Android 실기기 빌드는 CI 범위 밖이라 실기기 재빌드로만
+  # 검증 가능 — 해제는 MOB-01 AGP 업그레이드 단계에서.
   image_picker_android: 0.8.12+23
 
 flutter:
