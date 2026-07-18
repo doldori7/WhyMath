@@ -4,8 +4,11 @@ publish_to: 'none'
 version: 0.1.0+1
 
 environment:
-  sdk: ^3.5.0
-  flutter: ^3.24.0
+  # Dart 3.9(Flutter 3.35) — retrofit_generator 10.2.7(sdk >=3.9)에 맞춰 상향. CI Flutter를
+  # Kiki 머신(Dart 3.11)과 정합시켜 환경별 해석 드리프트를 제거(MOB-01·2026-07-17). 구 3.5는
+  # retrofit/generator 쌍을 못 풀어 임시 pin 3연쇄를 낳았다.
+  sdk: ^3.9.0
+  flutter: ^3.35.0
 
 dependencies:
   flutter:
@@ -54,23 +57,19 @@ dev_dependencies:
   freezed: ^2.5.0
   json_serializable: ^6.7.0
   riverpod_generator: ^2.4.0
-  retrofit_generator: ^9.1.0
+  retrofit_generator: ^10.2.7  # retrofit 4.9.2와 짝(9.x는 4.9의 Parser.DartMappable 미처리)
   mocktail: ^1.0.3
   golden_toolkit: ^0.15.0
 
 # ── 버전 고정 (빌드 재현성 — pubspec.lock 미커밋 상태의 해석 드리프트 방어, MOB-01) ──
 dependency_overrides:
-  # retrofit 4.5.0 고정 — 3중 제약의 최고 버전(2026-07-17 CI 실측으로 확정):
-  #   ① generator 9.x 호환: Parser.DartMappable(4.7.0+)을 generator 9.7.0이 비전수 switch로
-  #      처리 못 해 build_runner 깨짐 → DartMappable 이전 버전 필요.
-  #   ② CI Flutter 3.24.5의 meta 1.15.0 pin: retrofit 4.7.0+는 meta ^1.16.0 요구 → pub get 실패.
-  #   ③ CI Dart 3.5: retrofit 4.6.0은 sdk >=3.6 요구(language version too high) → build 실패.
-  #      4.5.0은 sdk >=2.19.0·meta ^1.8.0이라 셋 다 통과.
-  # 근본 원인: pubspec.lock 미커밋 + CI Flutter(3.24.5)가 Kiki 머신(Dart 3.11)보다 낡음 →
-  # 환경별 해석 드리프트. 근원 봉인(CI Flutter 상향·lock 커밋·pin 해제)은 MOB-01.
-  retrofit: 4.5.0
-  # 0.8.13+18부터 "Built-in Kotlin(AGP 9 지원)" 이행 — 현 AGP 8.3.2와의 호환 미검증이라
-  # Kotlin DSL 도입 직전 버전으로 고정(변수 최소화). 해제는 MOB-01(AGP 업그레이드)에서.
+  # retrofit 임시 pin은 제거했다 — CI Flutter 상향(3.35·Dart 3.9)으로 retrofit 4.9.2 +
+  # retrofit_generator 10.2.7 정합 쌍이 CI에서 풀려 pin이 불필요해졌다(2026-07-17 MOB-01).
+  # generator ^10.2.7 상향이 근본 해소. (구 pin 3연쇄 4.8→4.6→4.5는 CI Flutter가 낡아서였음.)
+  #
+  # image_picker_android만 유지: 0.8.13+18의 "Built-in Kotlin(AGP 9)" 이행이 현 AGP 8.3.2와
+  # 미검증이라 Kotlin DSL 도입 직전 버전으로 고정. Android 빌드는 CI 범위 밖(mobile 잡=analyze·
+  # test)이라 실기기 재빌드로만 검증 가능 — 해제는 MOB-01 AGP 업그레이드 단계에서.
   image_picker_android: 0.8.12+23
 
 flutter:
