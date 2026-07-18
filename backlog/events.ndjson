@@ -177,3 +177,6 @@
 {"ts": "2026-07-18T12:28:39", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "src/backend/whymath_backend/harness/pilot_kpi_baseline.py", "mode": "warn", "detail": "'src/backend/whymath_backend/harness/pilot_kpi_baseline.py' 은 claim 태스크 S3-04-pilot-measurement-harness의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-07-18T12:28:44", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "src/backend/whymath_backend/harness/pilot_kpi_baseline.py", "mode": "warn", "detail": "'src/backend/whymath_backend/harness/pilot_kpi_baseline.py' 은 claim 태스크 S3-04-pilot-measurement-harness의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-07-18T13:11:58", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "done", "id": "S3-04-pilot-measurement-harness", "artifacts": ["PR #539"]}
+{"ts": "2026-07-18T13:15:34", "actor": "claude/education-app-core-features-mh3avq", "action": "add", "id": "ARCH-13-visualization-harness-tracking"}
+{"ts": "2026-07-18T13:15:48", "actor": "claude/education-app-core-features-mh3avq", "action": "add", "id": "S4-02-proof-learning-support"}
+{"ts": "2026-07-18T13:15:48", "actor": "claude/education-app-core-features-mh3avq", "action": "add", "id": "S4-03-visualization-type-expansion"}

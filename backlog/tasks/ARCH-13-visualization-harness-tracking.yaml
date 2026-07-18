@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-13-visualization-harness-tracking
+title: "시각화 엔진 하네스 추적 등재 — built but untracked 부채 해소"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "기존 시각화 서브시스템(l3/visualization.py·l4/{scene_generation,learning_scene,visualization_policy}.py·web/graphing-calculator·mobile scene_renderer)을 백로그 소유로 등재 + spec 유형 커버리지 공백(기하·벡터·행렬변환·미적분애니·Manim 렌더 경로 부재) 문서화"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/visualization.py
+  - "src/web/graphing-calculator/**"
+session: null
+notes: "core_feature_review_2026-07.md §3.2 — built but untracked 부채 해소. 코드 신규 없음(추적화·문서화). 유형 확장 실작업은 S4-03."
+updated: 2026-07-18

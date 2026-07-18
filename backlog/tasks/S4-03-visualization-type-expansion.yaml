@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-03-visualization-type-expansion
+title: "시각화 유형 확장 — 기하·벡터·행렬변환·미적분 애니메이션 spec+렌더러"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - S3-01-pilot-cohort
+requires_gates: []
+acceptance:
+  - "기하(작도)·벡터·행렬 변환·미적분 과정 애니메이션 spec 타입 + 렌더러 추가. animation_prerendered(Manim) 렌더 경로 포함. 선언적 spec+렌더러 플러그인 구조 준수(새 추상 금지·구현체 이름 노드 미포함)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l3/visualization.py
+  - "src/web/graphing-calculator/**"
+session: null
+notes: "core_feature_review_2026-07.md §3.2 — 파일럿(S3-01) 후 착수. ARCH-13(추적화) 선행 권장."
+updated: 2026-07-18
