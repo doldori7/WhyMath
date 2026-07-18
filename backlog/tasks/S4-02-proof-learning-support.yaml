@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-02-proof-learning-support
+title: "증명 학습 지원 — 학생 대면 증명 교수(unverifiable 정직 경계 내)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - S3-01-pilot-cohort
+requires_gates: []
+acceptance:
+  - "학생 대면 증명 학습(증명 구조 시각화·단계 피드백·다중 증명 방식 비교)을 verify_step unverifiable 경계 안에서 설계·구현 — '네 증명이 맞다'류 허위 확언 금지. 형식증명(Lean/Tier3)은 WH-S 솔버·S5 유지"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l4/**"
+  - "src/backend/whymath_backend/l3/**"
+session: null
+notes: "core_feature_review_2026-07.md §3.1 — 진짜 공백(학생측 0건). 파일럿(S3-01) 검증 후 착수. 04a R5 unverifiable 경계·CLAUDE.md AI 금기 준수."
+updated: 2026-07-18
