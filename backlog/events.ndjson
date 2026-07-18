@@ -116,6 +116,8 @@
 {"ts": "2026-07-17T22:35:31", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/mobile/pubspec.yaml", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/mobile/pubspec.yaml' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-07-17T23:18:47", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/mobile/pubspec.yaml", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/mobile/pubspec.yaml' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
 {"ts": "2026-07-17T23:25:11", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "policy_warn", "id": "-", "rule": "adhoc_edit", "file": "src/mobile/pubspec.yaml", "mode": "warn", "detail": "claim한 태스크 없이 코드 파일 'src/mobile/pubspec.yaml' 편집 — `backlog.py next` 후 `start <id>`로 착수 등록 권장 (중복작업 방지)"}
+{"ts": "2026-07-18T03:36:47", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "claim_remote_unavailable", "id": "MOB-01-android-toolchain-upgrade", "status": "error"}
+{"ts": "2026-07-18T03:36:47", "actor": "claude/coding-duplication-conflicts-p41iau", "action": "start", "id": "MOB-01-android-toolchain-upgrade", "session": "claude/coding-duplication-conflicts-p41iau", "remote": "error"}
 {"ts": "2026-07-18T07:40:59", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "S3-02-input-verify-contract"}
 {"ts": "2026-07-18T07:41:11", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "S3-03-l6-suneung-mvp"}
 {"ts": "2026-07-18T07:41:15", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "S3-04-pilot-measurement-harness"}
