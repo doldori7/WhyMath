@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 1
 owner: claude
 depends_on: []
@@ -15,6 +15,6 @@ acceptance:
 artifacts: []
 paths:
   - "src/backend/whymath_backend/l3/**"
-session: null
+session: claude/shadow-data-s3-pilot-nh5kbz
 notes: "실사용 shadow unverifiable 89%(2026-07-17 n=9) 근본원인=verify_step이 표현식 동치만 판정·등호 방정식은 unverifiable. 방향 B(검증 확장·Kiki 2026-07-18): classify_step_break 해집합 로직을 verify 경로로 승격. 파일럿 선행조건 겸 S1-11 flip 재판정 선행조건(이중 용도). UI 강제(A) 지양=교수학 우선순위."
 updated: 2026-07-18

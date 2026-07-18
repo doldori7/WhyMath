@@ -119,3 +119,5 @@
 {"ts": "2026-07-18T07:40:59", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "S3-02-input-verify-contract"}
 {"ts": "2026-07-18T07:41:11", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "S3-03-l6-suneung-mvp"}
 {"ts": "2026-07-18T07:41:15", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "S3-04-pilot-measurement-harness"}
+{"ts": "2026-07-18T08:12:22", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "claim_remote_unavailable", "id": "S3-02-input-verify-contract", "status": "error"}
+{"ts": "2026-07-18T08:12:22", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "start", "id": "S3-02-input-verify-contract", "session": "claude/shadow-data-s3-pilot-nh5kbz", "remote": "error"}
