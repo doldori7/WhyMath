@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-03-l6-suneung-mvp
+title: "L6 수능 MVP 엔진 — gating 넘어 측정 가능한 완주 경험"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on:
+  - S3-02-input-verify-contract
+requires_gates: []
+acceptance:
+  - "수능 모드 완주 경험(다음문항→풀이입력→WH-1 코칭→3-tier 검증)이 gating.py를 넘어 측정 가능하게 동작 — API 루프 종단 + 결정론 테스트 green"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l6/**"
+session: null
+notes: "병목⑤(L6 수능 모드 얇음·게이팅 껍데기) 해소의 파일럿 판. 범위=파일럿용 MVP(Kiki 2026-07-18)·풀엔진(시그니처 학습경로·킬러 LTHC·모의채점)은 파일럿 방향 검증 후. 실질 우선 순서상 S3-02 다음."
+updated: 2026-07-18
