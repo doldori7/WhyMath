@@ -296,3 +296,24 @@ git checkout -B main origin/main
 /창② + 실기기 단계입력 ④성공=eq가 correct·unverifiable 비율 하락 / 실패=eq 여전히 unverifiable
 (→브랜치가 S3-02 이전인지·단계 분해 여부 확인) ⑤환경=Phaiakes9 PowerShell·서버+DB ⑥창=창①서버
 (조작 금지·Ctrl+C=중단) / 창②명령(별도).
+
+### 실측 결과 (2026-07-19 — 완료) + 절차 함정 3종
+
+**결과(MEMORY 2026-07-19 이정표 정본)**: 합성 60제출 — eq 24/24 **correct**(S3-02 전엔 전량
+unverifiable)·expr 24/24 correct·bad 12/12 incorrect·오검출 0. 실기기(M2007J20CG·원장
+`wh1_shadow_ledger_realdevice.ndjson`) — 묶음 3줄 정답 체인 **correct**(실기기 최초 결정 판정)·
+묶음 오답 체인 **incorrect**·한줄씩 채팅 입력 unverifiable(89% 현상 재현)·외톨이 한 줄
+unverifiable(전이 0·정직 정상). **3-state 실기기 종단 실증 — 잔여 변수는 백엔드가 아니라 입력
+UX(묶음 제출 유도·S3-05).**
+
+**절차 함정(실측 등재 — 재발 방지)**:
+1. **한줄씩 제출 ≠ 검증 가능** — 검증은 *인접 두 단계의 전이*를 본다. 채팅 습관대로 한 메시지에
+   한 줄씩 보내면 매 턴이 외톨이 단계(전이 0)라 전부 unverifiable이 *정상*이다. 실기기 측정은
+   반드시 **여러 단계를 한 메시지에 줄바꿈으로 묶어**(풀이 모드·Enter=줄바꿈·전송은 버튼) 제출한다.
+2. **`Rename-Item` 새 이름은 이름만** — 경로를 포함하면 "지정된 대상이 경로…" 오류(2026-07-19
+   실측·지시문 실수). 옛 캡처 로그 보관은 `Rename-Item src\backend\wh1_shadow_records.log
+   wh1_shadow_records_archive_<날짜>.log` 형태로. 보관 실패 시 Test-Path 사전검증이 무변별이 되고
+   신규 원장이 옛 라인으로 오염된다(오염 시 원장 삭제 후 재수확).
+3. **다중행 블록 붙여넣기의 마지막 줄은 Enter 미실행일 수 있다** — 창①의 uvicorn 명령이 프롬프트에
+   입력만 된 채 대기하면 서버가 안 떠 있다(2026-07-19 실측 — 창② /health 연결 거부가 검출).
+   블록 실행 후 `INFO: Uvicorn running`이 *보이는지* 눈으로 확인한다.
