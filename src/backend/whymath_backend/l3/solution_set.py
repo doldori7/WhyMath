@@ -24,11 +24,28 @@
 전개가 0인지 *먼저* 판별해 ℝ(모든 실수)로 명시한다 — 이 구분이 없으면 정당한 항등 단계가 ∅↔ℝ로
 오판돼 *거짓 incorrect*가 난다(계약 위반 방지의 핵심). 침묵 실패 금지: SymPy 내부 예외는 예외
 타입명을 로그에 남기고(필드값 제외) 보수적으로 판정 불가 처리한다.
+
+**S3-06 자연 표기 확장(2026-07-19 자연 사용 재측정 n=6·100% unverifiable 대응)**: 학생이 실제로
+쓰는 표기 3종을 *안전하게*(거짓 판정 0 최상위) 등식 형태로 읽는다 — `read_equation_step`:
+  - **연쇄 등식 `a=b=c`**(`x=(1+3)/2=2`): 인접쌍 내부 동치를 `identity_status`로 검사. 어느 쌍이
+    거짓으로 *증명*되면 단계 자체의 오류(violation → verify_step에서 incorrect 승격 안전). 전부
+    참(바인딩 쌍 최대 1개 허용)이면 최초=최종 단일 등식으로 정규화 후 해집합 경로에 위임.
+  - **근 나열/선언**(`x=2, x=3`·`x=2 또는 x=3`): 같은 변수의 등식 나열을 해집합 union으로 파싱 —
+    `(x-2)(x-3)=0 → x=2, x=3` 전이가 해집합 보존으로 correct 결정(이차방정식 자연 풀이 마지막 전이).
+  - **이질 형태 전이 가드**(`solset_transition_status`): 해집합 비교(correct/incorrect)는 양쪽 모두
+    "해집합을 보존해야 할 변형"일 때만 — 한쪽이 항등식(ℝ)이면(항등 재작성 ↔ 값 선언) 전이는
+    undecidable 유지. 없으면 `x²−4x+3=(x−1)(x−3)`(항등·ℝ) → `x=2`(축 공식 파생·{2}) 같은 옳은
+    풀이가 거짓 incorrect가 난다(2026-07-19 실측·본 태스크의 핵심 함정).
+
+**보류(구현 금지 — 주석으로만 기록)**: 캐럿 없는 지수 `x2`→`x²` *재작성 휴리스틱*은 수열 표기
+(`a1`,`a2`)와 충돌 위험이라 범위 밖(S3-06 ④). 해당 표기는 unverifiable 유지가 정직 — 아래
+`_AMBIGUOUS_TRAILING_DIGIT_SYMBOL` 가드가 해집합 경로에서 이를 강제한다(재작성이 아니라 보수 회피).
 """
 
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -41,6 +58,7 @@ from whymath_backend.l3.pregenerate.validator import (
 )
 from whymath_backend.l3.symbolic_equivalence import (
     IdentityVerdict,
+    identity_status,
     split_relation_chain,
     to_sympy_source,
 )
@@ -48,11 +66,26 @@ from whymath_backend.l3.symbolic_equivalence import (
 logger = logging.getLogger("whymath.l3.solution_set")
 
 __all__ = [
+    "EquationReading",
     "EquationSolset",
     "as_single_equation",
     "equation_solution_set",
+    "read_equation_step",
+    "roots_enumeration_solset",
+    "solset_transition_status",
     "solution_set_status",
 ]
+
+# 캐럿 없는 지수/수열 의심 심볼 — 영문자+숫자 꼬리(`x2`·`a1`). 학생이 `x²`를 `x2`로 치는 표기와
+# 수열 항(`a1`,`a2`) 표기가 구분 불가하다(S3-06 ④ 보류 — `x2`→`x²` 재작성 휴리스틱 구현 금지).
+# 이런 심볼을 방정식의 *미지수로 풀어* 해집합을 내면(Symbol('x2')=4 → {4}) 학생 의도(x²=4 →
+# {−2,2})와 어긋난 *거짓 incorrect*가 난다(2026-07-19 실측: `x2=4 → x=2`가 incorrect로 오판).
+# 표현식 동치 경로는 치환 논증으로 건전하지만(비항등 다항식은 치환 후에도 비항등) solve는
+# 아니므로, **해집합 경로에서만** 판정 불가(None)로 보수 처리한다("unverifiable 유지가 정직").
+_AMBIGUOUS_TRAILING_DIGIT_SYMBOL = re.compile(r"^[A-Za-z]+[0-9]+$")
+
+# 근 나열 구분자 — 콤마·"또는"(한국어 OR). `x=2, x=3`·`x=2 또는 x=3`을 항으로 쪼갠다.
+_ROOTS_ENUM_SEPARATOR = re.compile(r",|또는")
 
 
 def as_single_equation(text: str) -> tuple[str, str] | None:
@@ -112,6 +145,12 @@ def equation_solution_set(lhs_raw: str, rhs_raw: str) -> EquationSolset | None:
         logger.debug("해집합 계산 실패(diff): %s: %s", type(exc).__name__, exc)
         return None
 
+    # ⓪ 캐럿 없는 지수/수열 의심 심볼(`x2`·`a1`) — 이 심볼을 미지수로 *풀면* 학생 의도(x²=4 →
+    # {−2,2})와 다른 해집합({4})이 나와 거짓 incorrect가 난다(2026-07-19 실측). 재작성 휴리스틱은
+    # 보류(S3-06 ④·수열 표기 충돌)이므로 해집합 경로는 판정 불가로 보수 회피한다(정직).
+    if any(_AMBIGUOUS_TRAILING_DIGIT_SYMBOL.fullmatch(str(sym)) for sym in symbols):
+        return None
+
     # ① 무변수 — 순수 수치 등식. 참이면 모든 실수(ℝ)·거짓이면 해 없음(∅)·미정이면 판정 불가.
     if len(symbols) == 0:
         try:
@@ -160,24 +199,161 @@ def _solsets_equal(a: EquationSolset, b: EquationSolset) -> bool:
     return all(any(_num_equal(x, y) for y in b.values) for x in a.values)
 
 
+def solset_transition_status(
+    before: EquationSolset | None,
+    after: EquationSolset | None,
+) -> IdentityVerdict:
+    """두 해집합 간 전이를 4상태로 판정 — 비교는 *동질 형태*(둘 다 풀이 대상 등식)일 때만.
+
+    **S3-06 거짓 incorrect 함정 방어(태스크 설계 핵심)**: 해집합 비교(identity/not_identity)는
+    양쪽 모두 "같은 해집합을 보존해야 할 변형"일 때만 유효하다. 한쪽이 항등식(ℝ)이고 다른 쪽이
+    유한 해집합(∅ 포함)이면 형태가 이질적이다 — 항등 *재작성*(예: `x²−4x+3=(x−1)(x−3)`)과 값
+    *선언*(예: 축 공식 파생 `x=2`)의 전이는 해집합 보존 의무가 없으므로, 비교하면 옳은 풀이가
+    거짓 incorrect가 난다(2026-07-19 실측). 따라서:
+      - **identity**: ℝ↔ℝ(둘 다 항등 재작성) 또는 유한↔유한(∅ 포함)이 같음 → 보존.
+      - **not_identity**: 유한↔유한이 다름 → 비보존(해가 바뀜/유실/추가 = 잘못된 변형).
+      - **undecidable**: 한쪽이라도 판정 불가(None) *또는* ℝ↔유한 이질 형태 → 위장 없이 보수.
+    """
+    if before is None or after is None:
+        # 한쪽이라도 판정 불가 → correct/incorrect로 위장하지 않는다(정직).
+        return IdentityVerdict.undecidable
+    if before.all_reals != after.all_reals:
+        # 이질 형태(항등식 ℝ ↔ 값 선언/유한) — 해집합 보존 전제가 성립하지 않음 → 보수(정직).
+        return IdentityVerdict.undecidable
+    if _solsets_equal(before, after):
+        return IdentityVerdict.identity
+    return IdentityVerdict.not_identity
+
+
 def solution_set_status(before: tuple[str, str], after: tuple[str, str]) -> IdentityVerdict:
     """두 등식(before → after)이 *해집합 보존 동치*인지 4상태로 판정 — 재사용 집계(SymPy 단일 권위).
 
     `before`·`after`는 `as_single_equation`이 낸 (lhs, rhs) 조각이다. 각각의 실수 해집합을
-    `equation_solution_set`으로 구해 비교한다:
-      - **identity**: 두 해집합이 같음(ℝ↔ℝ 포함) → 해집합 보존(올바른 변형).
-      - **not_identity**: 두 해집합이 다름 → 해집합 비보존(해가 바뀜/유실/추가 = 잘못된 변형).
-      - **undecidable**: 한쪽이라도 판정 불가(다변수·비다항·복소·미정·파싱 불가) → 위장 없이 보수.
+    `equation_solution_set`으로 구해 `solset_transition_status`로 비교한다(4상태 의미는 그쪽 참조 —
+    S3-06부터 ℝ↔유한 이질 형태는 not_identity가 아니라 undecidable·거짓 incorrect 함정 방어).
 
     parse_error를 따로 두지 않고 undecidable로 통합한다 — `as_single_equation`이 등식 구조를 앞단
     에서 이미 검증했고, 남은 파싱 실패(식 내용)와 풀이 불가는 verify_step에서 똑같이 unverifiable로
     귀결하므로 구분 실익이 없다(정직 동일).
     """
-    solset_before = equation_solution_set(*before)
-    solset_after = equation_solution_set(*after)
-    if solset_before is None or solset_after is None:
-        # 한쪽이라도 판정 불가 → correct/incorrect로 위장하지 않는다(정직).
-        return IdentityVerdict.undecidable
-    if _solsets_equal(solset_before, solset_after):
-        return IdentityVerdict.identity
-    return IdentityVerdict.not_identity
+    return solset_transition_status(
+        equation_solution_set(*before),
+        equation_solution_set(*after),
+    )
+
+
+def roots_enumeration_solset(text: str) -> EquationSolset | None:
+    """근 나열/선언(`x=2, x=3`·`x=2 또는 x=3`)을 *같은 변수*의 해집합 union으로 파싱 — S3-06 ②.
+
+    이차방정식 자연 풀이의 마지막 전이(`(x-2)(x-3)=0 → x=2, x=3`)를 해집합 보존으로 결정하기 위한
+    파서다(수능 wedge 핵심). 콤마·"또는"으로 항을 나눠 각 항이 `미지수 = 실수 상수` 꼴일 때만
+    값들의 union(`EquationSolset(values={2,3})`)을 낸다. 다음은 전부 **None**(근 나열 아님·보수):
+      - 항이 2개 미만·빈 항·단일 등식이 아닌 항(연쇄·표현식·비교 혼입).
+      - **다른 변수 혼입**(`x=2, y=3`) — 이는 연립(AND·동시 성립)이지 근 나열(OR)이 아니므로
+        union으로 읽으면 의미가 뒤집힌다(거짓 판정 위험·명시 거부).
+      - **수열 의심 좌변**(`a1=2, a2=4`) — 수열 항 개별 선언(AND)을 근 나열로 오해석 금지
+        (S3-06 ④ 보류와 같은 근거·`_AMBIGUOUS_TRAILING_DIGIT_SYMBOL`).
+      - 좌변이 순수 미지수(Symbol)가 아니거나 우변이 실수 상수가 아닌 항(파라미터·복소·파싱 불가).
+
+    반환 None은 "근 나열로 읽지 않는다"는 뜻일 뿐 오류가 아니다 — 호출자(`read_equation_step`)가
+    기존 단일 등식/연쇄 등식 경로로 폴백한다(비파괴 감지).
+    """
+    # 전각 콤마(，) 등을 NFKC로 접은 뒤 구분자를 찾는다(정규화는 멱등·표기 계층).
+    normalized = to_sympy_source(text)
+    if ("," not in normalized) and ("또는" not in normalized):
+        return None
+    parts = [p.strip() for p in _ROOTS_ENUM_SEPARATOR.split(normalized)]
+    if len(parts) < 2 or any(not p for p in parts):
+        return None
+
+    variable: Any | None = None
+    values: set[Any] = set()
+    for part in parts:
+        eq = as_single_equation(part)
+        if eq is None:
+            return None  # 항이 단일 등식이 아님(연쇄·표현식·비교 혼입) → 근 나열 아님(보수)
+        lhs = _parse_expr(to_sympy_source(eq[0]))
+        rhs = _parse_expr(to_sympy_source(eq[1]))
+        if lhs is None or rhs is None:
+            return None  # 파싱 불가 → 보수 회피
+        if not isinstance(lhs, sympy.Symbol):
+            return None  # 좌변이 순수 미지수가 아니면 근 나열이 아님(x^2=4, ... 등)
+        if _AMBIGUOUS_TRAILING_DIGIT_SYMBOL.fullmatch(str(lhs)):
+            return None  # 수열 항(a1=2, a2=4)은 개별 선언(AND) — union(OR) 오해석 금지
+        if variable is None:
+            variable = lhs
+        elif lhs != variable:
+            return None  # 다른 변수 혼입(x=2, y=3)은 연립(AND) — union(OR) 오해석 금지
+        if not (getattr(rhs, "is_number", False) and getattr(rhs, "is_real", False)):
+            return None  # 우변이 실수 상수가 아니면 보수 회피(_common_solution 관례 동일)
+        values.add(rhs)
+    return EquationSolset(all_reals=False, values=frozenset(values))
+
+
+@dataclass(slots=True, frozen=True)
+class EquationReading:
+    """단계 텍스트를 *등식 형태*로 읽은 결과(S3-06) — 단일 등식·연쇄 등식·근 나열 통합.
+
+    `violation`이 채워지면 연쇄 등식의 인접쌍 하나가 거짓으로 *증명*된 것(원문 조각 쌍) — 단계
+    자체의 오류이므로 verify_step이 전이 비교와 무관하게 incorrect로 승격해도 안전하다. 위반이
+    없으면 `solset`이 이 단계의 해집합(판정 불가면 None → unverifiable 귀결)이다.
+    """
+
+    solset: EquationSolset | None
+    violation: tuple[str, str] | None = None
+
+
+def read_equation_step(text: str) -> EquationReading | None:
+    """단계 텍스트를 등식 형태(단일 등식·연쇄 등식·근 나열)로 읽는다 — 아니면 None(표현식 경로).
+
+    S3-06 자연 표기 확장의 단일 진입점. 분기(순서 중요 — 근 나열의 콤마가 연쇄 분해를 오염시키지
+    않도록 근 나열을 먼저 시도한다):
+      1. **근 나열**(`x=2, x=3`·`또는`): `roots_enumeration_solset` — 성공 시 union 해집합.
+      2. **등식 구조 분해**(`split_relation_chain`): 비교/부등 혼입·빈 항(ValueError)·등호 없음은
+         등식 형태가 아니므로 None(호출자가 표현식 경로로 — 기존 `as_single_equation` 관례 동일).
+      3. **단일 등식**(쌍 1개): `equation_solution_set` 해집합.
+      4. **연쇄 등식 `a=b=c`**(쌍 2+·S3-06 ①): 인접쌍 내부 동치를 `identity_status`(동치 권위
+         단일)로 검사한다:
+         - 어느 쌍이 **not_identity**(거짓 증명·예 `x=(1+3)/2=3`의 `(1+3)/2≠3`) → violation
+           (단계 자체의 오류 — verify_step에서 incorrect 승격 안전).
+         - 비항등 판정 쌍(undecidable/parse_error)이 **최대 1개**(변수=값 바인딩 쌍·내부 검증
+           불가가 정상)이고 나머지 전부 identity → 체인은 항등 재작성으로 접혀 *최초=최종* 단일
+           등식과 동치 → `(첫 항, 끝 항)`으로 정규화해 해집합 경로에 위임(예: `x=(1+3)/2=2` →
+           `x=2` → {2}).
+         - 비항등 판정 쌍 2+ → 체인 결속이 증명되지 않음 → solset None(unverifiable·정직).
+
+    `verify_relation_chain`(symbolic_equivalence)을 쓰지 않는 이유: 그쪽은 *전 쌍 항등*만 identity
+    로 집계하는 표현식 체인 검증이라, 바인딩 쌍(변수=값·내부 undecidable이 정상) 1개를 허용해야
+    하는 방정식 풀이 체인과 집계 규칙이 다르다. 쌍 단위 판정은 동일하게 `identity_status` 단일
+    권위를 쓰므로 동치 권위 이원화가 아니다.
+    """
+    # ① 근 나열/선언 — 콤마·"또는" 구분의 같은 변수 등식 나열 → 해집합 union.
+    enum_solset = roots_enumeration_solset(text)
+    if enum_solset is not None:
+        return EquationReading(solset=enum_solset)
+
+    # ② 등식 구조 분해 — 비교/부등 혼입·빈 항은 등식 형태 아님(None → 표현식 경로·기존 관례).
+    try:
+        pairs = split_relation_chain(text)
+    except ValueError:
+        return None
+    if not pairs:
+        return None  # 등호 없음 — 표현식(호출자가 identity_status 경로로).
+
+    # ③ 단일 등식 — 기존 S3-02 경로 그대로.
+    if len(pairs) == 1:
+        return EquationReading(solset=equation_solution_set(*pairs[0]))
+
+    # ④ 연쇄 등식 a=b=c — 인접쌍 내부 동치검사(identity_status·동치 권위 단일).
+    verdicts = [identity_status(lhs, rhs) for lhs, rhs in pairs]
+    for pair, verdict in zip(pairs, verdicts, strict=True):
+        if verdict is IdentityVerdict.not_identity:
+            # 인접쌍 거짓 *증명* — 단계 자체의 오류(전이 무관 incorrect 승격 안전·S3-06 ①).
+            return EquationReading(solset=None, violation=pair)
+    non_identity_count = sum(1 for v in verdicts if v is not IdentityVerdict.identity)
+    if non_identity_count <= 1:
+        # 바인딩 쌍(변수=값 선언·내부 검증 불가가 정상) 최대 1개 — 나머지가 전부 항등이므로
+        # 체인은 최초=최종 단일 등식으로 접힌다(항등 재작성 제거) → 해집합 경로 위임.
+        return EquationReading(solset=equation_solution_set(pairs[0][0], pairs[-1][1]))
+    # 비항등 판정 쌍 2+ — 체인 결속 미증명 → 판정 불가(unverifiable 귀결·정직).
+    return EquationReading(solset=None)

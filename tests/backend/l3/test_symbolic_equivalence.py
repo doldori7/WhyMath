@@ -95,3 +95,24 @@ class TestSuperscriptNormalization:
         # 이미 ASCII면 무변화(멱등) — caret(^)은 건드리지 않는다(convert_xor 담당).
         assert to_sympy_source("x**2 + 3") == "x**2 + 3"
         assert to_sympy_source("x^2") == "x^2"
+
+
+class TestUnicodeOperatorNormalization:
+    """비ASCII 수학 연산자(−·×·÷) 정규화 — S3-06 실측 동결(이미 `_OPERATOR_MAP`이 처리).
+
+    2026-07-19 자연 사용 재측정에서 학생 제출이 U+2212 마이너스를 담았다 — `to_sympy_source`가
+    이를 ASCII로 접음을 실측 확인했고(추가 구현 불요), 회귀 방지를 위해 여기 동결한다.
+    """
+
+    def test_unicode_minus_folded(self) -> None:
+        # U+2212 MINUS SIGN → ASCII 하이픈(실측: Kiki 제출 원문 표기).
+        assert to_sympy_source("x−2") == "x-2"
+
+    def test_unicode_multiplication_division_folded(self) -> None:
+        # U+00D7(×) → * · U+00F7(÷) → /.
+        assert to_sympy_source("2×x") == "2*x"
+        assert to_sympy_source("6÷2") == "6/2"
+
+    def test_unicode_minus_identity_judged(self) -> None:
+        # 정규화 경유로 동치 판정까지 도달 — x−2 ≡ x-2.
+        assert identity_status("x−2", "x-2") is IdentityVerdict.identity

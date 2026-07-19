@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-07-shadow-transition-aggregate
+title: "shadow 턴 라벨 전이별 집계 — 마지막-판정 추출의 측정 왜곡 해소"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "shadow 관측이 턴당 전이별 집계(n_correct/n_incorrect/n_unverifiable·비식별 정수)를 기록 — 마지막 전이가 미결정이어도 앞 전이의 correct가 분포에 보임·수확기 하위호환"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+session: null
+notes: "2026-07-19 실측: wh1_shadow._extract_verify_verdict가 마지막 verify_step 판정만 추출 — 이차방정식 자연 풀이(마지막 단계=근 나열)는 앞 전이가 correct여도 턴 전체가 unverifiable로 기록되는 구조적 왜곡. S1-11 flip 분포의 충실도 개선."
+updated: 2026-07-19
