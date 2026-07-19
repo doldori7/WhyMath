@@ -3,6 +3,8 @@
 // 경계(CLAUDE.md): 화면은 서버(L4)가 내린 결정을 *그대로 표시*만 한다(표현≠의미).
 // 답을 강조하지 않는 톤 — 코치 발화(`decision.prompt`)는 메타인지 유도 발문이라
 // 그 문장 자체를 버블로 보여줄 뿐, 정답·정오 강조 UI를 두지 않는다(절대 금기 준수).
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,6 +20,25 @@ import 'scene_renderer.dart';
 
 /// 슬로건 — 앱바 부제로 노출(브랜드 정체성·답이 아닌 이유).
 const String _slogan = '답이 아닌, 이유를 묻는 수학';
+
+// ── MOB-02 오버플로 방지 상한 ─────────────────────────────────────────────
+// 근본 원인(실기기 실측 2026-07-19 M2007J20CG·125px 오버플로): body Column의
+// 비신축 자식(문제 배너·입력 영역)의 고정 높이 합이, 키보드(IME)로
+// resizeToAvoidBottomInset이 줄인 body 가용 높이를 넘으면 Expanded(메시지 리스트)가
+// 0까지 줄어도 RenderFlex가 넘친다. 특히 배너는 발문·선택지 길이에 비례해 *상한 없이*
+// 커지는 유일한 자식이라 대화 모드에서도 넘쳤다. 고정 px 상한 대신 *가용 높이 대비
+// 비율* 상한을 걸어 어떤 화면·키보드 높이에서도 비신축 합이 body를 다 먹지 않게 한다.
+// (resizeToAvoidBottomInset을 끄는 우회는 금지 — 입력이 키보드에 가려지면 안 된다.)
+
+/// 문제 배너 최대 높이 — body 가용 높이 대비 비율. 초과분은 배너 내부 스크롤.
+const double _bannerMaxHeightFraction = 0.3;
+
+/// 풀이 단계 영역이 차지할 수 있는 body 가용 높이 비율 상한.
+const double _stepAreaMaxHeightFraction = 0.25;
+
+/// 단계 영역 절대 상한(px) — S3-05 값 유지(행 ~54px 3개 분량). 공간이 넉넉하면 이
+/// 값이 걸리고, 키보드로 좁아지면 위 비율 상한이 먼저 걸린다(둘 중 작은 쪽).
+const double _stepAreaMaxHeight = 162;
 
 /// 입력 모드 — 대화(단일 라인) 또는 풀이 단계(단계 리스트 편집기·묶음 제출).
 enum _InputMode {
@@ -161,33 +182,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         ),
       ),
-      body: Column(
-        children: [
-          // 풀이 중인 문제를 채팅 위에 상시 노출(접기 가능) — 실기기 시연 피드백:
-          // "문제가 한 화면에 같이 안 나옴". 학생이 문제를 다시 보러 화면을 떠나지 않게 한다.
-          const _ActiveProblemBanner(),
-          Expanded(
-            child: state.messages.isEmpty
-                ? const _EmptyHint()
-                : ListView.builder(
-                    padding: const EdgeInsets.all(12),
-                    itemCount: state.messages.length,
-                    itemBuilder: (context, index) =>
-                        _MessageBubble(message: state.messages[index]),
-                  ),
-          ),
-          // 코치 응답 대기 중 선형 인디케이터(은근한 로딩·도파민 카운트다운 아님).
-          if (state.isSending) const LinearProgressIndicator(minHeight: 2),
-          _InputBar(
-            controller: _inputController,
-            enabled: !state.isSending,
-            mode: _mode,
-            onSend: _onSend,
-            onSendSolution: _onSendSolutionSteps,
-            onToggleMode: _toggleMode,
-            onMathInput: _onMathInput,
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // 키보드(IME)가 올라오면 Scaffold(resizeToAvoidBottomInset 기본 true)가
+          // body를 그만큼 줄인다. 그 *줄어든 실제 가용 높이*를 기준으로 비신축 자식
+          // (배너·단계 영역)의 상한을 계산한다 — 입력은 키보드 위에 남고(리사이즈 유지)
+          // Column은 넘치지 않는 근본 수정(MOB-02).
+          final double bodyHeight = constraints.maxHeight;
+          final double bannerMaxHeight = bodyHeight * _bannerMaxHeightFraction;
+          final double stepAreaMaxHeight = math.min(
+            _stepAreaMaxHeight,
+            bodyHeight * _stepAreaMaxHeightFraction,
+          );
+          return Column(
+            children: [
+              // 풀이 중인 문제를 채팅 위에 상시 노출(접기 가능) — 실기기 시연 피드백:
+              // "문제가 한 화면에 같이 안 나옴". 학생이 문제를 다시 보러 화면을 떠나지 않게 한다.
+              _ActiveProblemBanner(maxHeight: bannerMaxHeight),
+              Expanded(
+                child: state.messages.isEmpty
+                    ? const _EmptyHint()
+                    : ListView.builder(
+                        padding: const EdgeInsets.all(12),
+                        itemCount: state.messages.length,
+                        itemBuilder: (context, index) =>
+                            _MessageBubble(message: state.messages[index]),
+                      ),
+              ),
+              // 코치 응답 대기 중 선형 인디케이터(은근한 로딩·도파민 카운트다운 아님).
+              if (state.isSending) const LinearProgressIndicator(minHeight: 2),
+              _InputBar(
+                controller: _inputController,
+                enabled: !state.isSending,
+                mode: _mode,
+                stepAreaMaxHeight: stepAreaMaxHeight,
+                onSend: _onSend,
+                onSendSolution: _onSendSolutionSteps,
+                onToggleMode: _toggleMode,
+                onMathInput: _onMathInput,
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -199,7 +235,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 /// 공간을 확보한다(기본 펼침 — 시연·풀이 맥락 우선). 정답·힌트는 어떤 형태로도 싣지
 /// 않는다(서버가 답을 안 주는 계약과 동일·표현≠의미).
 class _ActiveProblemBanner extends ConsumerStatefulWidget {
-  const _ActiveProblemBanner();
+  const _ActiveProblemBanner({required this.maxHeight});
+
+  /// 배너 최대 높이 — 화면(LayoutBuilder)이 body 가용 높이의 비율로 계산해 내려준다.
+  /// 발문·선택지가 아무리 길어도 이 상한을 넘지 않고 초과분은 내부 스크롤로 가둔다
+  /// (MOB-02 — 배너는 키보드 표시 시 Column을 넘치게 하던 유일한 *비유계* 자식이었다).
+  final double maxHeight;
 
   @override
   ConsumerState<_ActiveProblemBanner> createState() =>
@@ -223,51 +264,59 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
       color: theme.colorScheme.surfaceContainerHighest,
       child: InkWell(
         onTap: () => setState(() => _expanded = !_expanded),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+        // 상한 초과분은 내부 스크롤 — 키보드가 올라와도 발문 전체를 볼 수 있는 경로는
+        // 유지하면서(스크롤) 배너가 채팅·입력 영역을 밀어내지 않게 한다(MOB-02).
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: widget.maxHeight),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.menu_book_outlined,
-                    size: 18,
-                    color: theme.colorScheme.primary,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      '풀이 중인 문제 · ${problem.subject}'
-                      '${problem.subunit != null ? ' · ${problem.subunit}' : ''}',
-                      style: theme.textTheme.labelMedium?.copyWith(
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.menu_book_outlined,
+                        size: 18,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '풀이 중인 문제 · ${problem.subject}'
+                          '${problem.subunit != null ? ' · ${problem.subunit}' : ''}',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Icon(
+                        _expanded ? Icons.expand_less : Icons.expand_more,
+                        size: 20,
                         color: theme.colorScheme.onSurfaceVariant,
                       ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    ],
                   ),
-                  Icon(
-                    _expanded ? Icons.expand_less : Icons.expand_more,
-                    size: 20,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
+                  if (_expanded && question != null) ...[
+                    const SizedBox(height: 6),
+                    Text(question, style: theme.textTheme.bodyMedium),
+                    if (problem.choices != null &&
+                        problem.choices!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      for (var i = 0; i < problem.choices!.length; i++)
+                        Text(
+                          '${i + 1}. ${problem.choices![i]}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurfaceVariant,
+                          ),
+                        ),
+                    ],
+                  ],
                 ],
               ),
-              if (_expanded && question != null) ...[
-                const SizedBox(height: 6),
-                Text(question, style: theme.textTheme.bodyMedium),
-                if (problem.choices != null && problem.choices!.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  for (var i = 0; i < problem.choices!.length; i++)
-                    Text(
-                      '${i + 1}. ${problem.choices![i]}',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ],
-            ],
+            ),
           ),
         ),
       ),
@@ -397,6 +446,7 @@ class _InputBar extends StatelessWidget {
     required this.controller,
     required this.enabled,
     required this.mode,
+    required this.stepAreaMaxHeight,
     required this.onSend,
     required this.onSendSolution,
     required this.onToggleMode,
@@ -407,6 +457,10 @@ class _InputBar extends StatelessWidget {
   final TextEditingController controller;
   final bool enabled;
   final _InputMode mode;
+
+  /// 풀이 단계 영역 최대 높이 — 화면(LayoutBuilder)이 키보드로 줄어든 body 가용
+  /// 높이에 맞춰 계산해 내려준다(MOB-02 — 좁은 화면에서 입력 영역이 넘치지 않게).
+  final double stepAreaMaxHeight;
 
   /// 대화 모드 전송(학생 발화 `send`).
   final Future<void> Function() onSend;
@@ -459,7 +513,11 @@ class _InputBar extends StatelessWidget {
             if (isSolution)
               // 풀이 단계 모드 — 단계 리스트 편집기. 토글로 모드를 나가면 편집기가
               // 트리에서 제거돼 상태가 초기화된다(기존 "토글 시 입력 비움"과 동형).
-              _SolutionStepsEditor(enabled: enabled, onSubmit: onSendSolution)
+              _SolutionStepsEditor(
+                enabled: enabled,
+                stepAreaMaxHeight: stepAreaMaxHeight,
+                onSubmit: onSendSolution,
+              )
             else
               Row(
                 children: [
@@ -504,10 +562,18 @@ class _InputBar extends StatelessWidget {
 /// 경계: 편집기는 비어있지 않은 단계를 `'\n'`로 합쳐 [onSubmit]에 넘길 뿐이다 — 줄 분해는
 /// 컨트롤러(`sendSolution`), 검증은 백엔드가 한다(표현≠의미·수학 로직 클라 미구현).
 class _SolutionStepsEditor extends StatefulWidget {
-  const _SolutionStepsEditor({required this.enabled, required this.onSubmit});
+  const _SolutionStepsEditor({
+    required this.enabled,
+    required this.stepAreaMaxHeight,
+    required this.onSubmit,
+  });
 
   /// 입력·버튼 활성 여부(전송 중엔 비활성 — 기존 입력 행과 동일 규칙).
   final bool enabled;
+
+  /// 단계 필드 리스트 영역 최대 높이 — 넉넉하면 절대 상한(162px·행 3개 분량), 키보드로
+  /// 좁아지면 body 가용 높이 비율로 줄어든 값이 내려온다(MOB-02). 초과분은 내부 스크롤.
+  final double stepAreaMaxHeight;
 
   /// 제출 콜백 — 비어있지 않은 단계들을 `'\n'`로 합친 원문을 받는다.
   final Future<void> Function(String joined) onSubmit;
@@ -522,10 +588,6 @@ class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
   /// 생기는 최소 단위라 "묶음이 기본" 유도는 유지된다 ②3개 대비 행 1개(~54px)만큼 풀이
   /// 모드 초기 높이를 줄여 기존 키보드 오버플로(MOB-02) 악화를 완화한다.
   static const int _initialStepCount = 2;
-
-  /// 단계 영역 최대 높이 — 단계가 늘어도 입력 영역이 화면을 밀어내지 않도록 내부
-  /// 스크롤로 가둔다(스크롤-안전 설계·MOB-02 오버플로 악화 방지). 행 높이(~54px) 3개 분량.
-  static const double _stepAreaMaxHeight = 162;
 
   final List<TextEditingController> _controllers = <TextEditingController>[];
   final List<FocusNode> _focusNodes = <FocusNode>[];
@@ -661,8 +723,9 @@ class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // 단계 필드 리스트 — 높이를 가둬 내부 스크롤(단계가 늘어도 화면을 안 밀어낸다).
+        // 상한은 화면이 body 가용 높이에 맞춰 내려준 값(키보드 표시 시 축소·MOB-02).
         ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: _stepAreaMaxHeight),
+          constraints: BoxConstraints(maxHeight: widget.stepAreaMaxHeight),
           child: SingleChildScrollView(
             controller: _scrollController,
             child: Column(

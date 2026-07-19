@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
@@ -15,6 +15,6 @@ acceptance:
 artifacts: []
 paths:
   - "src/mobile/lib/features/chat/**"
-session: null
+session: claude/shadow-data-s3-pilot-nh5kbz
 notes: "2026-07-19 실기기(M2007J20CG) flutter 콘솔 실측: 'A RenderFlex overflowed by 125 pixels on the bottom' — chat_screen.dart:155 Column(키보드 IME 표시 시). 파일럿 학생이 그대로 볼 결함. MOB-01(타 세션) 완료 후 착수."
 updated: 2026-07-19
