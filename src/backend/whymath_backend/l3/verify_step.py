@@ -17,12 +17,20 @@
     된다("2(x+1)" ≡ "2x+2"). 기존 `_equality_is_false`는 *numeric-only*(free_symbols 있으면
     skip)라 verify_step에 *재사용하지 않는다* — 같은 `sympify(convert_xor=True)` +
     `simplify().is_zero` *관용구만* 차용해 fresh로 구현한다(심볼릭 동치를 *원하므로*).
-  - **등호 방정식 변형(S3-02·방향 B)**: before·after가 *둘 다* 단일 등식(`2x+3=7 → 2x=4`)이면
+  - **등호 방정식 변형(S3-02·방향 B)**: before·after가 *둘 다* 등식 형태(`2x+3=7 → 2x=4`)이면
     표현식 동치가 아니라 **해집합 보존 동치(solution-set-preserving equivalence)** 로 판정한다 —
     두 방정식의 *실수 해집합*이 같으면 `correct`·다르면 `incorrect`·풀이 불가면 `unverifiable`.
     해집합 계산은 `l3/solution_set.py`(→ `l3/pregenerate/validator.py`의 검증된 solset 자산
     재사용·재구현 금지)에 위임한다. 과거엔 등식이 `identity_status`에서 파싱 실패해 전부
     `unverifiable`로 떨어졌다(실사용 shadow 89% unverifiable의 근본원인).
+  - **자연 표기 확장(S3-06·2026-07-19 자연 사용 재측정 대응)**: 등식 형태 감지가
+    `read_equation_step`으로 확장됐다 — ① 연쇄 등식 `a=b=c`(`x=(1+3)/2=2`)는 인접쌍 내부 동치를
+    검사해 거짓 *증명* 시 그 자체로 `incorrect`(단계의 오류·전이 무관 안전), 전부 참이면 최초=
+    최종 단일 등식으로 정규화. ② 근 나열(`x=2, x=3`·`또는`)은 같은 변수 해집합 union —
+    `(x-2)(x-3)=0 → x=2, x=3`이 correct로 결정된다. ③ **이질 형태 전이 가드**: 한쪽이 항등식(ℝ)
+    이면 해집합 비교를 하지 않고 unverifiable(항등 재작성 ↔ 값 선언 전이는 해집합 보존 의무가
+    없음 — 거짓 incorrect 함정·`solset_transition_status` 참조). ④ 캐럿 없는 지수(`x2`)는 수열
+    표기(`a1`)와 충돌해 재작성 보류 — 해집합 경로에서 판정 불가로 보수(unverifiable 유지가 정직).
   - **서술형·증명·보조선 기하·경우 나누기 등 비대수 단계**: `unverifiable`. SymPy 검증 자체가
     부적절하므로 시도하지 않고, step_type을 기록해 *검증 불가 단원에서 교착하지 않게*(정직).
   - **정직성(CLAUDE.md "확실하지 않으면 모른다")**: 판정 불가(SymPy `is_zero is None`)·파싱
@@ -46,8 +54,9 @@ from enum import Enum
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.l3.solution_set import (
-    as_single_equation,
-    solution_set_status,
+    EquationReading,
+    read_equation_step,
+    solset_transition_status,
 )
 from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
 from whymath_backend.schema.enums import StepType
@@ -128,21 +137,24 @@ def _unverifiable(reason: str, step_type: StepType | None) -> VerifyStepResult:
 def _equation_step_result(
     expr_before: str,
     expr_after: str,
-    before_eq: tuple[str, str],
-    after_eq: tuple[str, str],
+    before_reading: EquationReading,
+    after_reading: EquationReading,
     step_type: StepType | None,
 ) -> VerifyStepResult:
-    """등호 방정식 단계를 *해집합 보존 동치*로 판정 → 3상태(S3-02·재사용 집계 매핑).
+    """등식 형태 단계를 *해집합 보존 동치*로 판정 → 3상태(S3-02·S3-06·재사용 집계 매핑).
 
-    `solution_set_status`(해집합 보존 4상태·`l3/solution_set.py`)를 verify_step 3상태로 매핑한다:
+    `solset_transition_status`(해집합 전이 4상태·`l3/solution_set.py`)를 verify_step 3상태로
+    매핑한다:
       - identity(해집합 보존) → correct(가중치 1.0·사유 None).
       - not_identity(해집합 변화) → incorrect(가중치 1.0·사유 채움).
-      - undecidable(다변수·비다항·복소·미정·파싱 불가) → unverifiable(가중치 0.5·정직 할인).
+      - undecidable(다변수·비다항·복소·미정·파싱 불가·**ℝ↔유한 이질 형태**) → unverifiable
+        (가중치 0.5·정직 할인). 이질 형태 가드는 S3-06 거짓 incorrect 함정 방어 —
+        항등식(ℝ) ↔ 값 선언 전이는 해집합 보존 의무가 없다(`solset_transition_status` 참조).
 
     표현식 경로(`identity_status`)와 *같은 매핑 형태*를 유지해 하류(verify_solution 집계)가 두
     경로를 구분 없이 흡수하게 한다. `reason`은 학생 제출 등식 원문만 반향한다(정답 미조회·미누출).
     """
-    verdict = solution_set_status(before_eq, after_eq)
+    verdict = solset_transition_status(before_reading.solset, after_reading.solset)
     if verdict is IdentityVerdict.identity:
         return VerifyStepResult(
             state=VerifyStepState.correct,
@@ -173,10 +185,14 @@ def verify_step(
     판정 로직:
       1. **비대수 step_type**(조건해석·케이스분류·그래프스케치) → 즉시 `unverifiable`. SymPy를
          *시도하지 않는다*(식 변형이 아니라 동치로 가릴 수 없음·검증 불가 단원 교착 방지·정직).
-      1.5. **등호 방정식 단계**(before·after가 *둘 다* 단일 등식) → 해집합 보존 동치로 판정
-         (S3-02·`solution_set_status`). 해집합 같으면 correct·다르면 incorrect·풀이 불가면
-         unverifiable. 한쪽만 등식이면(방정식↔표현식 혼합) 비교 대상이 어긋나 보수적 unverifiable
-         (거짓 incorrect 회피).
+      1.4. **연쇄 등식 내부 위반**(S3-06): 어느 쪽이든 `a=b=c` 체인의 인접쌍이 거짓으로 *증명*
+         되면(예 `x=(1+3)/2=3`의 `(1+3)/2≠3`) 전이 비교와 무관하게 `incorrect` — 단계 자체의
+         거짓이라 승격이 안전하다(해집합 비교의 이질 형태 함정과 무관).
+      1.5. **등식 형태 단계**(before·after가 *둘 다* 등식 형태 — 단일 등식·연쇄 정규화·근 나열)
+         → 해집합 보존 동치로 판정(S3-02·S3-06·`solset_transition_status`). 해집합 같으면
+         correct·다르면 incorrect·풀이 불가/**이질 형태(ℝ↔유한)** 면 unverifiable. 한쪽만
+         등식이면(방정식↔표현식 혼합) 비교 대상이 어긋나 보수적 unverifiable(거짓 incorrect
+         회피).
       2. **그 외**(계산·검산·미지정·등호 없는 식) → SymPy 심볼릭 동치 검증(자유변수 OK — "2(x+1)" ≡
          "2x+2"·`convert_xor=True`라 `^`=거듭제곱). 차이 `diff = before - after`에서:
          - **correct**: `expand(diff) == 0`(다항식 항등식이 0으로 환원) *또는*
@@ -205,14 +221,32 @@ def verify_step(
     if not expr_before.strip() or not expr_after.strip():
         return _unverifiable("빈 입력 — 검증 안전 회피", step_type)
 
-    # ①.5 등호 방정식 단계 감지 — before·after가 *둘 다* 단일 등식(lhs=rhs)이면 해집합 보존 동치로
-    # 판정한다(표현식 동치가 아니라 방정식 변형·S3-02). 한쪽만 등식이면(방정식↔표현식 혼합) 비교
+    # ①.4 등식 형태 해석(S3-06) — 단일 등식·연쇄 등식(a=b=c)·근 나열(x=2, x=3)을 통합해 읽는다.
+    before_reading = read_equation_step(expr_before)
+    after_reading = read_equation_step(expr_after)
+
+    # ①.45 연쇄 등식 내부 위반 — 인접쌍 거짓이 *증명*되면 단계 자체가 거짓이므로 전이 비교와
+    # 무관하게 incorrect 승격이 안전하다(예: x=(1+3)/2=3 의 (1+3)/2≠3·S3-06 ①). 반면 전이의
+    # 해집합 비교는 동질 형태일 때만 한다(이질 형태 함정·solset_transition_status 참조). reason은
+    # 학생 제출 원문 조각만 반향한다(정답 미조회·미누출).
+    for reading in (after_reading, before_reading):
+        if reading is not None and reading.violation is not None:
+            violated_lhs, violated_rhs = reading.violation
+            return VerifyStepResult(
+                state=VerifyStepState.incorrect,
+                step_type=step_type,
+                reason=f"연쇄 등식 내부 동치 위반 — SymPy: {violated_lhs} ≠ {violated_rhs}",
+                evidence_weight=_WEIGHT_DECISIVE,
+            )
+
+    # ①.5 등식 형태 단계 — before·after가 *둘 다* 등식 형태면 해집합 보존 동치로 판정한다
+    # (표현식 동치가 아니라 방정식 변형·S3-02·S3-06). 한쪽만 등식이면(방정식↔표현식 혼합) 비교
     # 대상이 어긋나므로 보수적 unverifiable(거짓 incorrect 회피·정확성 #1).
-    before_eq = as_single_equation(expr_before)
-    after_eq = as_single_equation(expr_after)
-    if before_eq is not None and after_eq is not None:
-        return _equation_step_result(expr_before, expr_after, before_eq, after_eq, step_type)
-    if before_eq is not None or after_eq is not None:
+    if before_reading is not None and after_reading is not None:
+        return _equation_step_result(
+            expr_before, expr_after, before_reading, after_reading, step_type
+        )
+    if before_reading is not None or after_reading is not None:
         return _unverifiable("등호 방정식↔표현식 혼합 단계 — 검증 대상 불일치·안전 회피", step_type)
 
     # ② 대수 단계(계산·검산·None·등호 없는 식) — 동치 권위 primitive(`identity_status`·SymPy) 위임.
