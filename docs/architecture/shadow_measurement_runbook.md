@@ -159,8 +159,10 @@ harvest는 record 라인 파싱 성공(parsed)·비해당 라인(skipped)·깨�
 실기기 트래픽이 없을 때 대표 3모양을 재현 가능하게 제출한다 — 라운드당(기본 믹스 `eq:expr:bad=2:2:1`)
 세션 5개, 세션마다 생성 1 + 멀티턴 2(전 턴 `solution_steps` 동봉·총 15제출/라운드):
 
-- `eq` 방정식 변형 체인(`2x+3=7 → 2x=4 → x=2`) — 등호 포함이라 `verify_step` 보수 처리로
-  **unverifiable**-heavy 구간(실측 확인).
+- `eq` 방정식 변형 체인(`2x+3=7 → 2x=4 → x=2`) — **S3-02(2026-07-18·main 머지) 이후 해집합 보존
+  동치로 판정돼 `correct` 결정 구간**이다(각 단계의 실수 해집합이 보존되므로). ★S3-02 *이전*엔
+  등호 파싱 실패로 **unverifiable**-heavy였다(실사용 89% unverifiable의 근본원인) — 이 flip이 아래
+  "## S3-02 라이브 재측정"의 핵심 관측 신호다(구판 로그·원장 라인은 옛 판정이라 재수확해도 불변).
 - `expr` 표현식 동치(`(x+1)(x+2) → x^2+3x+2`) — SymPy 결정 구간(**correct**).
 - `bad` 오전개 주입(`(x+1)(x+2) → x^2+4x+2`) — **incorrect** 검출용(스텝이 실제 틀린 수식임을
   테스트가 `verify_step` 실물로 동결).
@@ -248,3 +250,49 @@ Start-Sleep -Seconds 15
 - **판정선 없음**: harvest는 cutoff를 내지 않는다 — S1-11 flip은 이 분포를 근거로 사람/별도
   게이트가 결정한다(임의 숫자 단정 금지 — CLAUDE.md "모르면 모른다고"). 합성 분포만으로
   flip하지 말 것(위 합성 캐비엇).
+
+## S3-02 라이브 재측정 (트리거 ③ = S1-11 전제①)
+
+> **목적**: S3-02(입력-검증 계약 확장 — 등호 방정식 *해집합 보존* 판정, main 머지)가 실제로
+> unverifiable을 줄이는지 라이브로 확인한다. **2026-07-17 실사용 shadow(n=9)의 unverifiable
+> 89% 베이스라인** 대비 하락을 관측 → 그대로 **S1-11 flip 전제①(verdict 분포)**을 채우고 전제ⓑ
+> (verify 게이트 승격 재판정)의 before/after 근거가 된다. **모집·동의(S3-01)와 무관 — 지금 실행
+> 가능한 Kiki 행동**이다.
+
+**⚠️ 브랜치는 main**: 위 창① 절차의 `claude/coding-duplication-conflicts-p41iau` checkout은 **머지
+전 잔재**다. shadow 도구(probe·harvest·logconfig)와 **S3-02 verify가 전부 main에 머지**됐으니
+재측정은 **main**에서 한다 — 옛 피처 브랜치는 S3-02 이전일 수 있어 eq가 여전히 unverifiable로
+나오는 *거짓 음성* 위험. 창①의 브랜치 checkout을 아래로 대체하고, 이후(run_demo·포트정리·shadow
+ON uvicorn 재기동·창②)는 위 절차 그대로:
+```powershell
+# 실행 시스템: Windows PowerShell (Phaiakes9 — 이 PC 자체) — 창① 첫 부분 (main 사용)
+cd C:\Users\kiki\Desktop\__AI\WhyMath
+git fetch origin main
+git checkout -B main origin/main
+```
+
+**핵심 관측 신호 (S3-02 delta)**: harvest `verdict_ratios`에서
+- `eq`(등호 방정식 체인) verdict가 **unverifiable → correct**로 뒤집히면 S3-02가 shadow 경로에서
+  작동함이 실증된다.
+- 종합: **unverifiable 비율이 2026-07-17 실사용 89% 대비 하락**.
+
+**두 트래픽 모드**:
+1. **합성 sanity(빠름·수분)** — 창②의 `wh1_shadow_probe`를 그대로. 기대: `eq` 세션이 이제
+   correct로 수확(예전 unverifiable 아님). S3-02가 shadow에 반영됨을 즉시 확인.
+2. **실사용 재측정(정본·실기기)** — 89%는 *실사용* 수치였으니 정본 확인은 실기기에서 **등호 방정식
+   풀이를 한 줄 한 단계로 입력**. ★단계 분해 전제: 입력이 줄 단위로 분해돼 인접 등식쌍이 돼야
+   S3-02가 판정한다(한 덩어리 자유텍스트면 여전히 미결) — 실기기 입력이 단계로 분해되는지 함께
+   관찰(안 되면 입력 UX가 다음 과제).
+
+**비교·판정**:
+- 재수확 후 `wh1_shadow_report.json`의 `verdict_ratios`(특히 unverifiable)를 2026-07-17
+  n=9(unverifiable 8/9=89%)와 비교.
+- **판정선은 사람** — harvest는 cutoff를 안 낸다. 하락 폭·실트래픽 대표성으로 Kiki가 S1-11 flip
+  ⓑ 재판정(임의 숫자 단정 금지).
+- 원장은 축적되므로 S3-02 전/후 라인이 섞이면 `observed_at`으로 구간 분리해 before/after 비교
+  (구판 라인은 옛 판정).
+
+**6항목 요약**: ①과제=S3-02 라이브 재측정 ②목적=89% 하락 실증 → S1-11 전제①/ⓑ ③절차=위 창①(main)
+/창② + 실기기 단계입력 ④성공=eq가 correct·unverifiable 비율 하락 / 실패=eq 여전히 unverifiable
+(→브랜치가 S3-02 이전인지·단계 분해 여부 확인) ⑤환경=Phaiakes9 PowerShell·서버+DB ⑥창=창①서버
+(조작 금지·Ctrl+C=중단) / 창②명령(별도).
