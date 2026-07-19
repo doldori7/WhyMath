@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 5
 owner: claude
 depends_on: []
@@ -15,6 +15,6 @@ acceptance:
 artifacts: []
 paths:
   - "src/mobile/lib/features/chat/**"
-session: null
+session: claude/shadow-data-s3-pilot-nh5kbz
 notes: "2026-07-19 실기기 스샷: 결정론 Polya 템플릿('좋아, 이제 *어떻게 풀지* 계획을 세워보자')의 별표가 평문 그대로 표시. 수정 선택지 ①클라 버블 경량 마크다운 렌더 ②L4 템플릿에서 강조 마크 제거(backend) — 채택 시 계층 판단."
 updated: 2026-07-19

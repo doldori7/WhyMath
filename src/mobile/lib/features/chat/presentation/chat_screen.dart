@@ -15,6 +15,7 @@ import '../../problems/application/active_problem.dart';
 import '../../problems/data/problem_models.dart';
 import '../application/chat_controller.dart';
 import '../domain/chat_message.dart';
+import 'coach_emphasis_text.dart';
 import 'coach_signal_card.dart';
 import 'scene_renderer.dart';
 
@@ -385,7 +386,13 @@ class _MessageBubble extends StatelessWidget {
             // 소크라테스 카테고리 배지(있을 때만) — 어떤 발문 전략인지 메타 표시.
             if (showBadge) _SocraticBadge(category: category),
             if (showBadge) const SizedBox(height: 6),
-            Text(message.text),
+            // 코치 발화만 템플릿 `*...*` 강조를 굵게 렌더한다(MOB-04·표현≠의미).
+            // 학생 버블은 원문 그대로 — 학생 입력의 별표는 곱셈 기호(`3*4`)일 수
+            // 있어 어떤 해석도 하지 않는다.
+            if (isCoach)
+              CoachEmphasisText(message.text)
+            else
+              Text(message.text),
           ],
         ),
       ),
