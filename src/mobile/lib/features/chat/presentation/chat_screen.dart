@@ -19,12 +19,13 @@ import 'scene_renderer.dart';
 /// 슬로건 — 앱바 부제로 노출(브랜드 정체성·답이 아닌 이유).
 const String _slogan = '답이 아닌, 이유를 묻는 수학';
 
-/// 입력 모드 — 대화(단일 라인) 또는 풀이 단계(멀티라인·줄 분해 전송).
+/// 입력 모드 — 대화(단일 라인) 또는 풀이 단계(단계 리스트 편집기·묶음 제출).
 enum _InputMode {
   /// 자유 대화(기존 동작) — `send`로 학생 발화만 전송.
   conversation,
 
-  /// 풀이 단계 입력 — 멀티라인을 줄 분해해 `sendSolution`으로 단계 전송.
+  /// 풀이 단계 입력 — 단계 리스트 편집기로 여러 단계를 *한 메시지로 묶어*
+  /// `sendSolution`으로 전송(`'\n'` 조인 → 컨트롤러가 다시 줄 분해).
   solution,
 }
 
@@ -61,22 +62,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
-  /// 입력 텍스트를 *현재 모드에 맞는* 컨트롤러 메서드로 보내고 입력 필드를 비운다.
+  /// 대화 입력을 `send`(학생 발화)로 보내고 입력 필드를 비운다.
   ///
-  /// 대화 모드는 `send`(학생 발화), 풀이 단계 모드는 `sendSolution`(줄 분해→단계 전송).
-  /// 줄 분해 자체는 컨트롤러(L5 책임·수동 세그먼트)에서 하고, 화면은 원문만 넘긴다.
+  /// 이 메서드는 *대화 모드 전용* — 풀이 단계 제출은 [_onSendSolutionSteps]가 담당한다
+  /// (단계 리스트 편집기가 합친 원문을 받는다).
   Future<void> _onSend() async {
     final text = _inputController.text;
     if (text.trim().isEmpty) {
       return;
     }
     _inputController.clear();
-    final notifier = ref.read(chatControllerProvider.notifier);
-    if (_mode == _InputMode.solution) {
-      await notifier.sendSolution(text);
-    } else {
-      await notifier.send(text);
+    await ref.read(chatControllerProvider.notifier).send(text);
+  }
+
+  /// 단계 리스트 편집기가 합친 풀이 원문(`'\n'` 조인)을 `sendSolution`으로 보낸다.
+  ///
+  /// 조인은 편집기(UI)가, 줄 분해는 컨트롤러(`_splitSteps`)가 한다 — 기존 L5 계약
+  /// (`sendSolution(String)` 시그니처·줄 분해 로직)은 완전 무변경이다. 실기기 실측
+  /// (2026-07-19): verify는 *인접 두 단계의 전이*를 판정하므로 여러 단계를 한 메시지로
+  /// 묶어야만 correct/incorrect가 결정된다 — 이 묶음 제출이 편집기의 존재 이유다.
+  Future<void> _onSendSolutionSteps(String joined) async {
+    if (joined.trim().isEmpty) {
+      return;
     }
+    await ref.read(chatControllerProvider.notifier).sendSolution(joined);
   }
 
   /// 약점개념 학습 장면을 요청한다(서버 L2 진단→L4 장면·S5a 엔드포인트). 결과는 장면
@@ -174,6 +183,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             enabled: !state.isSending,
             mode: _mode,
             onSend: _onSend,
+            onSendSolution: _onSendSolutionSteps,
             onToggleMode: _toggleMode,
             onMathInput: _onMathInput,
           ),
@@ -376,31 +386,40 @@ class _SocraticBadge extends StatelessWidget {
   }
 }
 
-/// 하단 입력 행 — 모드별 입력(대화=단일/짧은 멀티라인, 풀이=멀티라인) + 전송 버튼.
+/// 하단 입력 행 — 대화 모드는 단일 입력+전송, 풀이 모드는 단계 리스트 편집기.
 ///
-/// 풀이 단계 모드는 줄바꿈으로 단계를 구분하므로 Enter를 전송에 묶지 않고(줄바꿈 허용)
-/// 별도 "풀이 확인" 버튼으로만 보낸다. 대화 모드는 기존 동작(Enter 전송)을 유지한다.
+/// 풀이 단계 모드는 [_SolutionStepsEditor]가 담당한다: 채팅 습관(한 메시지 한 줄)대로
+/// 보내면 매 턴이 외톨이 단계(전이 0)라 verify가 전부 unverifiable이 되므로(실기기 실측),
+/// 여러 단계를 한 메시지로 *묶는* 제출을 UI 구조로 유도한다(단계 구조의 시각화 =
+/// 사고 구조화·메타인지 정합). 대화 모드는 기존 동작(Enter 전송)을 그대로 유지한다.
 class _InputBar extends StatelessWidget {
   const _InputBar({
     required this.controller,
     required this.enabled,
     required this.mode,
     required this.onSend,
+    required this.onSendSolution,
     required this.onToggleMode,
     required this.onMathInput,
   });
 
+  /// 대화 모드 입력 컨트롤러(풀이 모드는 편집기가 자체 컨트롤러를 쓴다).
   final TextEditingController controller;
   final bool enabled;
   final _InputMode mode;
+
+  /// 대화 모드 전송(학생 발화 `send`).
   final Future<void> Function() onSend;
+
+  /// 풀이 모드 제출 — 편집기가 합친 원문(`'\n'` 조인)을 받아 `sendSolution`으로 보낸다.
+  final Future<void> Function(String joined) onSendSolution;
+
   final VoidCallback onToggleMode;
   final Future<void> Function() onMathInput;
 
   @override
   Widget build(BuildContext context) {
     final isSolution = mode == _InputMode.solution;
-    // 풀이 모드는 줄바꿈으로 단계를 구분하므로 Enter를 전송에 묶지 않는다(멀티라인 입력).
     return SafeArea(
       top: false,
       child: Padding(
@@ -437,44 +456,299 @@ class _InputBar extends StatelessWidget {
                 ],
               ],
             ),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: controller,
-                    enabled: enabled,
-                    minLines: isSolution ? 3 : 1,
-                    maxLines: isSolution ? 8 : 4,
-                    textInputAction: isSolution
-                        ? TextInputAction.newline
-                        : TextInputAction.send,
-                    onSubmitted:
-                        (!isSolution && enabled) ? (_) => onSend() : null,
-                    decoration: InputDecoration(
-                      hintText: isSolution
-                          ? '한 줄에 한 단계씩 적어 주세요'
-                          : '생각을 적어 보세요',
-                      border: const OutlineInputBorder(),
-                      isDense: true,
+            if (isSolution)
+              // 풀이 단계 모드 — 단계 리스트 편집기. 토글로 모드를 나가면 편집기가
+              // 트리에서 제거돼 상태가 초기화된다(기존 "토글 시 입력 비움"과 동형).
+              _SolutionStepsEditor(enabled: enabled, onSubmit: onSendSolution)
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: controller,
+                      enabled: enabled,
+                      minLines: 1,
+                      maxLines: 4,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: enabled ? (_) => onSend() : null,
+                      decoration: const InputDecoration(
+                        hintText: '생각을 적어 보세요',
+                        border: OutlineInputBorder(),
+                        isDense: true,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                if (isSolution)
-                  FilledButton(
-                    onPressed: enabled ? onSend : null,
-                    child: const Text('풀이 확인'),
-                  )
-                else
+                  const SizedBox(width: 8),
                   IconButton(
                     icon: const Icon(Icons.send),
                     tooltip: '보내기',
                     onPressed: enabled ? onSend : null,
                   ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 풀이 단계 리스트 편집기 — 번호 매겨진 단계 필드·추가/삭제·"N단계 제출" 버튼.
+///
+/// 실기기 실측(2026-07-19·MEMORY): verify는 *인접 두 단계의 전이*를 판정하므로 단계를
+/// 한 메시지로 묶어 보내야만 correct/incorrect가 결정된다(외톨이 단계=전부 unverifiable).
+/// 이 편집기는 "여러 단계를 한 번에"가 기본 모양임을 UI 구조로 유도한다 — 초기 2개 필드·
+/// 단계 번호·"N단계 제출" 미리보기. 1단계 제출도 막지 않는다(부드러운 안내만 — 백엔드가
+/// 전이 0을 안전 처리·질책 표현 금지).
+///
+/// 경계: 편집기는 비어있지 않은 단계를 `'\n'`로 합쳐 [onSubmit]에 넘길 뿐이다 — 줄 분해는
+/// 컨트롤러(`sendSolution`), 검증은 백엔드가 한다(표현≠의미·수학 로직 클라 미구현).
+class _SolutionStepsEditor extends StatefulWidget {
+  const _SolutionStepsEditor({required this.enabled, required this.onSubmit});
+
+  /// 입력·버튼 활성 여부(전송 중엔 비활성 — 기존 입력 행과 동일 규칙).
+  final bool enabled;
+
+  /// 제출 콜백 — 비어있지 않은 단계들을 `'\n'`로 합친 원문을 받는다.
+  final Future<void> Function(String joined) onSubmit;
+
+  @override
+  State<_SolutionStepsEditor> createState() => _SolutionStepsEditorState();
+}
+
+class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
+  /// 초기 단계 필드 수 — 묶음 제출이 기본 모양임을 시각적으로 유도한다(1개가 아님).
+  /// 2개인 이유: ①2단계 = 검증 가능한 최소 모양(인접 전이 1개) — verify가 판정할 전이가
+  /// 생기는 최소 단위라 "묶음이 기본" 유도는 유지된다 ②3개 대비 행 1개(~54px)만큼 풀이
+  /// 모드 초기 높이를 줄여 기존 키보드 오버플로(MOB-02) 악화를 완화한다.
+  static const int _initialStepCount = 2;
+
+  /// 단계 영역 최대 높이 — 단계가 늘어도 입력 영역이 화면을 밀어내지 않도록 내부
+  /// 스크롤로 가둔다(스크롤-안전 설계·MOB-02 오버플로 악화 방지). 행 높이(~54px) 3개 분량.
+  static const double _stepAreaMaxHeight = 162;
+
+  final List<TextEditingController> _controllers = <TextEditingController>[];
+  final List<FocusNode> _focusNodes = <FocusNode>[];
+  final ScrollController _scrollController = ScrollController();
+
+  /// 비어있지 않은 단계 수 — "N단계 제출" 라벨·묶음 안내 텍스트에 실시간 반영한다.
+  int _filledCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    for (var i = 0; i < _initialStepCount; i++) {
+      _appendField();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers) {
+      controller.dispose();
+    }
+    for (final node in _focusNodes) {
+      node.dispose();
+    }
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  /// 새 단계 필드(컨트롤러+포커스 노드)를 리스트 끝에 만든다(카운터 리스너 부착).
+  void _appendField() {
+    final controller = TextEditingController();
+    controller.addListener(_recount);
+    _controllers.add(controller);
+    _focusNodes.add(FocusNode());
+  }
+
+  /// 비어있지 않은 단계 수를 다시 세어 달라졌으면 라벨을 갱신한다(실시간 반영).
+  void _recount() {
+    final n = _controllers.where((c) => c.text.trim().isNotEmpty).length;
+    if (n != _filledCount) {
+      setState(() => _filledCount = n);
+    }
+  }
+
+  /// "+ 단계 추가" — 필드를 하나 늘리고(요청 시) 새 필드로 포커스·스크롤을 옮긴다.
+  void _addStep({bool focus = false}) {
+    setState(_appendField);
+    // 새 필드는 다음 프레임에야 트리에 붙으므로 포커스·스크롤을 프레임 뒤로 미룬다.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      if (focus && _focusNodes.isNotEmpty) {
+        _focusNodes.last.requestFocus();
+      }
+      if (_scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+  }
+
+  /// 단계 삭제 — 마지막 1개는 남긴다(빈 편집기 방지). dispose는 프레임 뒤로 미룬다
+  /// (제거되는 TextField가 이번 프레임까지 이전 컨트롤러·노드를 참조하기 때문).
+  void _removeStep(int index) {
+    if (_controllers.length <= 1) {
+      return;
+    }
+    final controller = _controllers[index];
+    final node = _focusNodes[index];
+    setState(() {
+      _controllers.removeAt(index);
+      _focusNodes.removeAt(index);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      controller.dispose();
+      node.dispose();
+    });
+    _recount();
+  }
+
+  /// 단계 필드 Enter(next) — 다음 단계로 이동, 마지막 필드면 새 단계를 추가한다.
+  void _handleStepSubmitted(int index) {
+    if (index + 1 < _focusNodes.length) {
+      _focusNodes[index + 1].requestFocus();
+    } else {
+      _addStep(focus: true);
+    }
+  }
+
+  /// 비어있지 않은 단계들을 `'\n'`로 합쳐 제출하고 편집기를 초기 상태로 되돌린다.
+  ///
+  /// 합치기만 UI가 한다 — 컨트롤러 `sendSolution`이 다시 줄 분해하므로 왕복 무손실이다
+  /// (컨트롤러/L5 계약 완전 무변경). 빈 단계(공백뿐)는 제출에서 제외한다.
+  Future<void> _submit() async {
+    final joined = _controllers
+        .map((c) => c.text.trim())
+        .where((t) => t.isNotEmpty)
+        .join('\n');
+    if (joined.isEmpty) {
+      return;
+    }
+    _resetFields(); // 기존 입력 행과 동형 — 전송 전에 입력을 비운다.
+    await widget.onSubmit(joined);
+  }
+
+  /// 필드들을 초기 개수의 빈 필드로 되돌린다(이전 컨트롤러·노드는 프레임 뒤 dispose).
+  void _resetFields() {
+    final oldControllers = List<TextEditingController>.of(_controllers);
+    final oldNodes = List<FocusNode>.of(_focusNodes);
+    setState(() {
+      _controllers.clear();
+      _focusNodes.clear();
+      for (var i = 0; i < _initialStepCount; i++) {
+        _appendField();
+      }
+      _filledCount = 0;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      for (final controller in oldControllers) {
+        controller.dispose();
+      }
+      for (final node in oldNodes) {
+        node.dispose();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 단계 필드 리스트 — 높이를 가둬 내부 스크롤(단계가 늘어도 화면을 안 밀어낸다).
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: _stepAreaMaxHeight),
+          child: SingleChildScrollView(
+            controller: _scrollController,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < _controllers.length; i++) _buildStepRow(i),
               ],
+            ),
+          ),
+        ),
+        // 한 단계뿐일 때 — 묶음 제출을 부드럽게 안내한다(질책 아님·제출은 막지 않음).
+        if (_filledCount == 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 2, bottom: 4),
+            child: Text(
+              '단계를 나눠 적으면 풀이를 확인해 드릴 수 있어요',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+        Row(
+          children: [
+            TextButton.icon(
+              icon: const Icon(Icons.add, size: 18),
+              label: const Text('단계 추가'),
+              onPressed: widget.enabled ? () => _addStep(focus: true) : null,
+            ),
+            const Spacer(),
+            // "N단계 제출" — 제출 미리보기(몇 단계가 실제 전송되는지 상시 표시).
+            // 비어있으면 보낼 게 없으므로 비활성(1단계 제출은 허용 — 백엔드 안전 처리).
+            FilledButton(
+              onPressed: (widget.enabled && _filledCount > 0) ? _submit : null,
+              child: Text(
+                _filledCount > 0 ? '$_filledCount단계 제출' : '풀이 제출',
+              ),
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  /// 단계 한 행 — 번호 라벨 + 단일라인 필드(Enter=다음 단계) + 삭제 버튼.
+  Widget _buildStepRow(int index) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          // 번호 라벨 — 필드가 채워져도 단계 구조가 계속 보인다(사고 구조의 시각화).
+          SizedBox(
+            width: 24,
+            child: Text(
+              '${index + 1}',
+              textAlign: TextAlign.center,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: theme.colorScheme.primary,
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Expanded(
+            child: TextField(
+              controller: _controllers[index],
+              focusNode: _focusNodes[index],
+              enabled: widget.enabled,
+              maxLines: 1,
+              // Enter=다음 단계(마지막이면 추가) — 줄바꿈이 아니라 단계 이동이 자연 흐름.
+              textInputAction: TextInputAction.next,
+              onSubmitted: (_) => _handleStepSubmitted(index),
+              decoration: InputDecoration(
+                hintText: '단계 ${index + 1}',
+                border: const OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.remove_circle_outline, size: 20),
+            tooltip: '단계 삭제',
+            onPressed: (widget.enabled && _controllers.length > 1)
+                ? () => _removeStep(index)
+                : null,
+          ),
+        ],
       ),
     );
   }
