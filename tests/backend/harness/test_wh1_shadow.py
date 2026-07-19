@@ -22,6 +22,7 @@ from collections.abc import Sequence
 import pytest
 
 from whymath_backend.harness import wh1_shadow
+from whymath_backend.harness.wh1_loop import ToolResult, TurnOutcome
 from whymath_backend.harness.wh1_shadow import (
     Wh1HarnessShadowObservation,
     observe_wh1_harness_shadow,
@@ -176,11 +177,15 @@ class TestNoRawLeak:
         assert "전개했어" not in raw
         assert "ZZANSWERZZ" not in raw  # 정답 미포함
         # 파싱된 레코드에도 원문/정답 성격의 자유 텍스트 필드가 없다(고정 스키마·extra="forbid").
+        # n_correct/n_incorrect/n_unverifiable(S3-07)은 비식별 *정수* 카운트라 허용 목록에 든다.
         parsed = json.loads(raw)
         assert set(parsed.keys()) <= {
             "status",
             "action_type",
             "verify_verdict",
+            "n_correct",
+            "n_incorrect",
+            "n_unverifiable",
             "tool_calls",
             "hypothesis_count",
             "dialogue_id",
@@ -326,3 +331,122 @@ class TestWarmstartWiring:
             )
         )
         assert captured.get("outside_mids") == []
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑥ 전이별 집계(S3-07) — 마지막 판정 왜곡의 가시화 동결
+# ──────────────────────────────────────────────────────────────────────────
+class TestTransitionCounts:
+    """턴당 전이별 verify 판정 카운트(n_correct/n_incorrect/n_unverifiable) 동결(S3-07).
+
+    2026-07-19 실측 왜곡: 이차방정식 자연 풀이(마지막 단계=근 나열·미결정)는 앞 전이가 correct
+    여도 마지막 verify_step 판정만 턴 라벨(verify_verdict)로 남아 턴 전체가 unverifiable로
+    기록됐다(S1-11 flip 분포 충실도 문제). 카운트 축은 그 왜곡을 *보이게* 하는 추가 축이고,
+    기존 verify_verdict(마지막 판정)는 불변 유지한다(원장 연속성·하위호환).
+    """
+
+    # 왜곡 재현 트레이스 — verify_step 3개(correct·correct·unverifiable). detail 문자열은
+    # wh1_loop `_run_verify`의 실물 형식(`검증 {verdict}(내부).`)을 그대로 쓴다(regex 계약).
+    _DISTORTED_TRACE = [
+        ToolResult(kind="verify_step", ok=True, detail="검증 correct(내부)."),
+        ToolResult(kind="verify_step", ok=True, detail="검증 correct(내부)."),
+        ToolResult(kind="verify_step", ok=True, detail="검증 unverifiable(내부)."),
+        ToolResult(kind="end_turn", ok=True, detail="학생 발화 산출(질문)."),
+    ]
+
+    def test_counts_visible_last_verdict_unchanged(self) -> None:
+        # acceptance 동결: verify_step 3개(correct·correct·unverifiable) → 카운트 (2,0,1),
+        # verify_verdict는 여전히 마지막(unverifiable) — 앞 전이의 correct가 턴 라벨에선
+        # 가려지지만 카운트에선 보인다(왜곡의 가시화).
+        assert wh1_shadow._count_verify_verdicts(self._DISTORTED_TRACE) == (2, 0, 1)
+        assert wh1_shadow._extract_verify_verdict(self._DISTORTED_TRACE) == "unverifiable"
+
+    def test_rejected_verify_step_not_counted(self) -> None:
+        # ok=False(거부·게이트 위반) verify_step은 판정이 아니다 — 카운트 제외(턴 라벨 규칙 동형).
+        trace = [
+            ToolResult(kind="verify_step", ok=False, detail="verify 거부 — 게이트 위반."),
+            ToolResult(kind="verify_step", ok=True, detail="검증 incorrect(내부)."),
+        ]
+        assert wh1_shadow._count_verify_verdicts(trace) == (0, 1, 0)
+        assert wh1_shadow._extract_verify_verdict(trace) == "incorrect"
+
+    def test_record_carries_counts_end_to_end(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # 하네스 결과를 결정론 TurnOutcome으로 강제해 record까지의 배선을 동결 — 왜곡 트레이스가
+        # 레코드에 (2,0,1) + verify_verdict=unverifiable로 그대로 실린다.
+        crafted = TurnOutcome(
+            status="ended",
+            action_type="질문",
+            utterance=None,
+            hypotheses=[],
+            evidence=[],
+            tool_calls=len(self._DISTORTED_TRACE),
+            trace=list(self._DISTORTED_TRACE),
+        )
+
+        async def _fake_run(**_kwargs: object) -> TurnOutcome:
+            return crafted
+
+        monkeypatch.setattr(wh1_shadow, "run_tutoring_turn", _fake_run)
+        with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+            asyncio.run(
+                observe_wh1_harness_shadow(
+                    student_solution=_STUDENT_SOLUTION,
+                    solution_steps=["x^2 - 3x + 2 = 0", "(x-1)(x-2) = 0", "x = 1, x = 2"],
+                    active_hypotheses=[],
+                    provider=_FakeProvider([]),
+                )
+            )
+        obs = Wh1HarnessShadowObservation.model_validate_json(_records(caplog)[0])
+        assert (obs.n_correct, obs.n_incorrect, obs.n_unverifiable) == (2, 0, 1)
+        assert obs.verify_verdict == "unverifiable"  # 턴 라벨 규칙 불변(원장 연속성)
+
+    def test_real_harness_emits_counts_consistent(self, caplog: pytest.LogCaptureFixture) -> None:
+        # 실제 하네스 경로(verify 의무 턴)에서도 카운트가 기록된다 — None(구판) 아님·라벨 정합.
+        provider = _FakeProvider(
+            [
+                '{"kind": "end_turn", "action_type": "격려"}',  # 정책이 verify_step으로 재지정
+                '{"kind": "end_turn", "action_type": "질문"}',  # 검증 후 종료 허용
+            ]
+        )
+        with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+            asyncio.run(
+                observe_wh1_harness_shadow(
+                    student_solution=_STUDENT_SOLUTION,
+                    solution_steps=["x = 2", "x + 1 = 3"],
+                    active_hypotheses=[],
+                    provider=provider,
+                )
+            )
+        obs = Wh1HarnessShadowObservation.model_validate_json(_records(caplog)[0])
+        assert obs.n_correct is not None
+        assert obs.n_incorrect is not None
+        assert obs.n_unverifiable is not None
+        total = obs.n_correct + obs.n_incorrect + obs.n_unverifiable
+        assert total >= 1  # verify 의무 턴 — 최소 1회 판정
+        # 마지막 판정(턴 라벨)은 카운트 축에도 최소 1건 반영돼 있다(두 축의 정합).
+        assert obs.verify_verdict is not None
+        by_label = {
+            "correct": obs.n_correct,
+            "incorrect": obs.n_incorrect,
+            "unverifiable": obs.n_unverifiable,
+        }
+        assert by_label[obs.verify_verdict] >= 1
+
+    def test_no_verify_counts_zero_not_none(self, caplog: pytest.LogCaptureFixture) -> None:
+        # verify 미호출 턴 — 신판 emit은 카운트를 (0,0,0)으로 *기록*한다. None은 구판(미기록)
+        # 전용 의미라, '전이 0회'와 '카운트 없음'이 원장에서 구분된다.
+        provider = _FakeProvider(['{"kind": "end_turn", "action_type": "격려"}'])
+        with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+            asyncio.run(
+                observe_wh1_harness_shadow(
+                    student_solution=_STUDENT_SOLUTION,
+                    solution_steps=[],
+                    active_hypotheses=[],
+                    provider=provider,
+                )
+            )
+        obs = Wh1HarnessShadowObservation.model_validate_json(_records(caplog)[0])
+        assert obs.verify_verdict is None
+        assert (obs.n_correct, obs.n_incorrect, obs.n_unverifiable) == (0, 0, 0)

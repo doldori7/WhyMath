@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -15,6 +15,7 @@ acceptance:
 artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
-session: null
+  - "tests/backend/harness/**"
+session: claude/shadow-data-s3-pilot-nh5kbz
 notes: "2026-07-19 실측: wh1_shadow._extract_verify_verdict가 마지막 verify_step 판정만 추출 — 이차방정식 자연 풀이(마지막 단계=근 나열)는 앞 전이가 correct여도 턴 전체가 unverifiable로 기록되는 구조적 왜곡. S1-11 flip 분포의 충실도 개선."
 updated: 2026-07-19

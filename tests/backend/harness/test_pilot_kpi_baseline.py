@@ -199,6 +199,11 @@ def _summary(
         verdict_ratios=ratios,
         status_counts={},
         turn_verdicts={},
+        # 전이별 집계 축(S3-07)은 KPI5(턴 라벨 3-state 커버리지)와 무관 — 이 픽스처는 전부
+        # 구판(카운트 미보유)으로 둔다(필수 필드라 명시적으로 채움·정직 회계 계약 유지).
+        transition_counts={"correct": 0, "incorrect": 0, "unverifiable": 0},
+        transition_records=0,
+        legacy_records=total,
         distinct_dialogues=0,
         observed_at_min=None,
         observed_at_max=None,

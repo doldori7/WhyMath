@@ -32,6 +32,9 @@ S1-11(verify 게이트 primary 승격) flip의 전제 ①은 "실 트래픽에�
 - **중복 제거 키 = (dialogue_id, turn_index, observed_at)** — 같은 로그를 두 번 수확해도
   원장이 불어나지 않는다(재실행 멱등). 입력 내 중복도 별도 카운트로 보고한다.
 - 원장 내 깨진 라인도 세어 보고한다(원장 부식은 조사 대상이지 조용한 누락 대상이 아니다).
+- **전이별 집계는 신판/구판 분리 회계(S3-07)** — 전이 카운트(n_correct 등)를 보유한 레코드만
+  Σ에 합산하고, 구판(카운트 필드 없음·파싱은 하위호환으로 성공)은 별도 건수로 표기한다.
+  구판을 '전이 0'으로 합산하면 분포가 위조된다(0 위장 금지).
 
 프라이버시: 관측 레코드 자체가 비식별(status·action_type·verdict·카운트·id뿐 — 학생 원문·풀이
 단계·발화 원문·정답 없음·`wh1_shadow.py` 규약)이므로 원장·리포트도 비식별이다.
@@ -252,6 +255,18 @@ class Wh1ShadowDistributionSummary(BaseModel):
     turn_verdicts: dict[int, dict[str, int]]
     """turn_index별 verdict 분포 — 세션 내 verdict 추이 관측(S1-11 근거·키 오름차순)."""
 
+    transition_counts: dict[str, int]
+    """턴당 *전이별* verify 판정 합산(Σn_correct/Σn_incorrect/Σn_unverifiable·S3-07) — 카운트
+    보유(신판) 레코드만 합산한다. 마지막 판정 축(verdict_counts)이 가리는 앞 전이의 correct를
+    분포에 보이게 하는 추가 축(2026-07-19 실측 왜곡)·기존 verdict 축 의미는 불변."""
+
+    transition_records: int
+    """전이 카운트를 보유한 레코드 수(신판·S3-07+) — transition_counts 합산의 표본 회계."""
+
+    legacy_records: int
+    """전이 카운트 미보유 레코드 수(구판·S3-07 이전) — 합산에서 제외하고 분리 표기한다
+    (구판을 '전이 0'으로 위장 금지 — 정직 회계)."""
+
     distinct_dialogues: int
     """dialogue_id가 있는 관측의 고유 dialogue 수(None 제외 — create 관측은 id 미탑재)."""
 
@@ -270,6 +285,9 @@ def summarize(
     verdict_counts: dict[str, int] = {label: 0 for label in _VERDICT_LABELS}
     status_counts: dict[str, int] = {}
     turn_verdicts: dict[int, dict[str, int]] = {}
+    transition_counts: dict[str, int] = {"correct": 0, "incorrect": 0, "unverifiable": 0}
+    transition_records = 0
+    legacy_records = 0
     dialogues: set[str] = set()
     observed_min: datetime | None = None
     observed_max: datetime | None = None
@@ -279,6 +297,19 @@ def summarize(
         status_counts[obs.status] = status_counts.get(obs.status, 0) + 1
         per_turn = turn_verdicts.setdefault(obs.turn_index, {})
         per_turn[label] = per_turn.get(label, 0) + 1
+        # 전이별 집계(S3-07) — 카운트 3종을 모두 보유한 신판만 합산한다. 하나라도 None이면
+        # 구판(카운트 미기록)으로 분리 회계 — 구판을 '전이 0'으로 위장하지 않는다(정직 회계).
+        if (
+            obs.n_correct is not None
+            and obs.n_incorrect is not None
+            and obs.n_unverifiable is not None
+        ):
+            transition_records += 1
+            transition_counts["correct"] += obs.n_correct
+            transition_counts["incorrect"] += obs.n_incorrect
+            transition_counts["unverifiable"] += obs.n_unverifiable
+        else:
+            legacy_records += 1
         if obs.dialogue_id is not None:
             dialogues.add(obs.dialogue_id)
         if observed_min is None or obs.observed_at < observed_min:
@@ -295,6 +326,9 @@ def summarize(
         verdict_ratios=verdict_ratios,
         status_counts=dict(sorted(status_counts.items())),
         turn_verdicts={k: turn_verdicts[k] for k in sorted(turn_verdicts)},
+        transition_counts=transition_counts,
+        transition_records=transition_records,
+        legacy_records=legacy_records,
         distinct_dialogues=len(dialogues),
         observed_at_min=observed_min,
         observed_at_max=observed_max,
@@ -431,6 +465,18 @@ def render_report(report: Wh1ShadowHarvestReport) -> str:
             lines.append(f"  turn {turn_index}: {detail}")
     else:
         lines.append("  (관측 없음)")
+    # 전이별 집계(S3-07) — 턴당 verify_step *전* 판정 합산. 마지막 판정 축이 가리는 앞 전이
+    # correct를 보이게 하는 추가 축이며, 구판(카운트 미보유)은 분리 표기한다(0으로 위장 금지).
+    lines.append("[전이별 집계 — 턴당 verify_step 전 판정 합산(S3-07)]")
+    lines.append(
+        f"  카운트 보유(신판) {s.transition_records}건 · 구판(카운트 미보유) "
+        f"{s.legacy_records}건 — 구판은 합산 제외(정직 회계)"
+    )
+    if s.transition_records > 0:
+        for label in ("correct", "incorrect", "unverifiable"):
+            lines.append(f"  {'Σn_' + label:<16}: {s.transition_counts.get(label, 0)}건")
+    else:
+        lines.append("  (합산 불가 — 전이 카운트 보유 레코드 0건)")
     lines.append("=" * 64)
     lines.append("판정선 없음 — 이 분포는 S1-11 flip 전제 ①의 *근거 자료*다. 승격 판정은")
     lines.append("사람/별도 게이트가 내린다(임의 cutoff 단정 금지 — CLAUDE.md '모르면 모른다').")

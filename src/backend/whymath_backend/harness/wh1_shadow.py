@@ -17,9 +17,10 @@ primary로 승격할 근거를 모은다(후속).
 - **무영속**: DB 영속 없이 *순수 한 턴* `run_tutoring_turn`(작업 메모리 in-memory)만 돌린다 —
   shadow는 관측만이고 상태를 영속하지 않는다(`run_persisted_turn` 아님·커밋 좌석 미접근).
 - **프라이버시(미성년 PII)**: 학생 풀이 원문·풀이 단계·발화 원문·정답을 레코드에 *담지 않는다*
-  (`shadow.py`:14 규약 계승). 담는 건 추상화된 status·end action_type·verify verdict·도구 호출 수·
-  활성 가설 수·(있으면) 문항/세션 식별자 id뿐(비식별). 학생 원문·단계는 `LLMTutorPolicy`의
-  *사적 필드*로만 주입돼(S1-a 계약) LLM 프롬프트에도 레코드에도 실리지 않는다.
+  (`shadow.py`:14 규약 계승). 담는 건 추상화된 status·end action_type·verify verdict·전이별
+  verify 판정 카운트(정수 3개·S3-07)·도구 호출 수·활성 가설 수·(있으면) 문항/세션 식별자 id뿐
+  (비식별). 학생 원문·단계는 `LLMTutorPolicy`의 *사적 필드*로만 주입돼(S1-a 계약) LLM 프롬프트에도
+  레코드에도 실리지 않는다.
 """
 
 from __future__ import annotations
@@ -68,6 +69,18 @@ class Wh1HarnessShadowObservation(BaseModel):
     verify_verdict: str | None
     """이 턴 verify_step 3-state 판정(correct|incorrect|unverifiable). verify 미호출이면 None."""
 
+    n_correct: int | None = None
+    """이 턴 verify_step *전이별* correct 판정 수(S3-07·비식별 정수). **None=구판 레코드**(카운트
+    미기록)로 "전이 0회"(=0)와 구분한다 — 신판 emit은 항상 기록(verify 미호출 턴도 0). 마지막
+    판정(verify_verdict)이 가리던 앞 전이의 correct를 분포에 보이게 하는 축(2026-07-19 실측:
+    이차방정식 자연 풀이의 마지막 단계=근 나열이 미결정이라 턴 전체가 unverifiable로 왜곡)."""
+
+    n_incorrect: int | None = None
+    """이 턴 verify_step 전이별 incorrect 판정 수(S3-07). None=구판 레코드(카운트 미기록)."""
+
+    n_unverifiable: int | None = None
+    """이 턴 verify_step 전이별 unverifiable 판정 수(S3-07). None=구판 레코드(카운트 미기록)."""
+
     tool_calls: int
     """총 도구 호출 횟수(하네스 트레이스 길이·거동 프로파일)."""
 
@@ -101,6 +114,25 @@ def _extract_verify_verdict(trace: Sequence[ToolResult]) -> str | None:
     return None
 
 
+def _count_verify_verdicts(trace: Sequence[ToolResult]) -> tuple[int, int, int]:
+    """트레이스의 **모든** verify_step 판정을 집계 — (n_correct, n_incorrect, n_unverifiable).
+
+    `_extract_verify_verdict`(마지막 판정=턴 라벨)의 자매 함수다(S3-07). 마지막 판정만 보면
+    이차방정식 자연 풀이처럼 마지막 전이(근 나열·S3-06 전엔 미결정)가 unverifiable일 때 앞
+    전이의 correct가 턴 라벨에서 전부 가려진다(2026-07-19 실측 왜곡·S1-11 flip 분포 충실도).
+    전이별 카운트를 병기해 그 왜곡이 분포에서 *보이게* 한다. `ok=True` verify_step만 센다
+    (거부·게이트 위반은 판정이 아님 — 턴 라벨 규칙과 동형). 산출은 비식별 정수 3개뿐 —
+    학생 원문·단계 원문·정답을 담지 않는다(프라이버시 계약 유지).
+    """
+    counts = {"correct": 0, "incorrect": 0, "unverifiable": 0}
+    for result in trace:
+        if result.kind == "verify_step" and result.ok:
+            match = _VERIFY_VERDICT_RE.search(result.detail)
+            if match is not None:
+                counts[match.group(1)] += 1
+    return counts["correct"], counts["incorrect"], counts["unverifiable"]
+
+
 async def observe_wh1_harness_shadow(
     *,
     student_solution: str,
@@ -118,8 +150,9 @@ async def observe_wh1_harness_shadow(
     `LLMTutorPolicy`를 구성하되 학생 원문(`student_solution`)·풀이 단계(`solution_steps`)를 정책의
     *사적 필드*로 주입한다(S1-a 계약 — LLM 프롬프트엔 요약만 나가고 원문은 match/verify 인자로만
     사적 사용). `run_tutoring_turn`(순수 한 턴·DB 무접근)으로 도구 루프를 완주시킨 뒤 결과에서
-    status·end action_type·verify verdict(트레이스에서 추출)·총 도구 호출 수·활성 가설 수만 뽑아
-    레코드로 emit한다. **학생 원문·풀이 단계·발화 원문·정답은 절대 레코드에 안 담는다**(미성년 PII).
+    status·end action_type·verify verdict(트레이스에서 추출)·전이별 verify 판정 카운트(S3-07·
+    정수 3개)·총 도구 호출 수·활성 가설 수만 뽑아 레코드로 emit한다. **학생 원문·풀이 단계·발화
+    원문·정답은 절대 레코드에 안 담는다**(미성년 PII).
 
     `has_solution_steps`는 `solution_steps` 유무로 정한다 — 풀이 단계가 있으면 verify 의무(§3.1)가
     걸려 하네스가 verify_step을 강제하므로, 실 트래픽에서 verify 판정 분포를 관측할 수 있다.
@@ -154,12 +187,17 @@ async def observe_wh1_harness_shadow(
             max_tool_calls=max_tool_calls,
         )
         verify_verdict = _extract_verify_verdict(outcome.trace)
+        # 전이별 카운트(S3-07) — 마지막 판정(턴 라벨)이 가리는 앞 전이 correct를 분포에 노출.
+        n_correct, n_incorrect, n_unverifiable = _count_verify_verdicts(outcome.trace)
         logger.info(
             "WH-1 하네스 shadow(비노출) — status=%s action_type=%s verify=%s "
-            "(tool_calls=%d hypotheses=%d)",
+            "transitions(c/i/u)=%d/%d/%d (tool_calls=%d hypotheses=%d)",
             outcome.status,
             outcome.action_type,
             verify_verdict,
+            n_correct,
+            n_incorrect,
+            n_unverifiable,
             outcome.tool_calls,
             len(outcome.hypotheses),
         )
@@ -168,6 +206,9 @@ async def observe_wh1_harness_shadow(
                 status=outcome.status,
                 action_type=outcome.action_type,
                 verify_verdict=verify_verdict,
+                n_correct=n_correct,
+                n_incorrect=n_incorrect,
+                n_unverifiable=n_unverifiable,
                 tool_calls=outcome.tool_calls,
                 hypothesis_count=len(outcome.hypotheses),
                 dialogue_id=dialogue_id,
