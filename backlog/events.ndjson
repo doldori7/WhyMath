@@ -222,3 +222,7 @@
 {"ts": "2026-07-19T11:25:12", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "src/mobile/test/chat_screen_overflow_test.dart", "mode": "warn", "detail": "'src/mobile/test/chat_screen_overflow_test.dart' 은 claim 태스크 MOB-02-chat-overflow-fix의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-07-19T11:25:12", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "policy_warn", "id": "-", "rule": "path_overlap", "file": "src/mobile/test/chat_screen_overflow_test.dart", "mode": "warn", "detail": "'src/mobile/test/chat_screen_overflow_test.dart' 은 다른 세션 태스크 MOB-01-android-toolchain-upgrade(세션: claude/coding-duplication-conflicts-p41iau)의 작업 범위 — 동시 편집 충돌 위험"}
 {"ts": "2026-07-19T11:32:32", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "done", "id": "MOB-02-chat-overflow-fix", "artifacts": ["PR #549"]}
+{"ts": "2026-07-19T12:25:10", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "S3-06-natural-notation-verify"}
+{"ts": "2026-07-19T12:25:10", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "S3-07-shadow-transition-aggregate"}
+{"ts": "2026-07-19T12:25:11", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "claim_remote_unavailable", "id": "S3-06-natural-notation-verify", "status": "error"}
+{"ts": "2026-07-19T12:25:11", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "start", "id": "S3-06-natural-notation-verify", "session": "claude/shadow-data-s3-pilot-nh5kbz", "remote": "error"}
