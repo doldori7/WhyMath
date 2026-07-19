@@ -29,6 +29,12 @@
       #fallback {
         resize: vertical;
       }
+      /* 햄버거(컨텍스트 메뉴 토글) 정적 숨김 — JS의 menuItems=[]가 인라인으로도 숨기지만
+         (아래 주석 참조), JS 순서가 바뀌어도 노출되지 않게 CSS 가드를 이중으로 둔다.
+         part=menu-toggle는 번들 v0.110.0 실측(shadow DOM part 속성) — 고3 UX 소음 제거. */
+      math-field::part(menu-toggle) {
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -87,10 +93,40 @@
         const mf = new MathfieldElement();
         mf.id = "mf";
         mf.setAttribute("aria-label", "풀이 수식 입력");
-        // 가상 키보드는 인라인 매니저에 맡긴다(플랫폼 키보드와 충돌 회피).
+        // 가상 키보드는 수동 정책 — 필드 우측 키보드 토글(part=virtual-keyboard-toggle)이
+        // 유일한 진입점이므로 토글은 유지한다. 플랫폼(시스템) 키보드는 MathLive 입력 싱크가
+        // inputmode=none이라 뜨지 않는다(번들 실측).
+        //
+        // 키보드 도킹 메커니즘(번들 v0.110.0 실측): container 기본값 = document.body →
+        // `body > .ML__keyboard { position: fixed }` + `.ML__keyboard { top:0; height:100% }`가
+        // WebView *뷰포트 전체*를 덮고, `.MLK__backdrop`이 그 하단으로 슬라이드해 도킹한다.
+        // 즉 키보드는 항상 "WebView 뷰포트의 하단"에 붙는다 — WebView가 화면을 충분히
+        // 채워야(키보드 자연 높이 약 300 CSS px 이상) 잘림이 없다. Flutter 쪽에서 이 화면의
+        // WebView를 Expanded(전체 높이)로 배치하는 이유(mathlive_input_screen.dart 참조).
+        // container를 커스텀 요소로 바꾸면 position:relative 모드로 전환돼 배치를 직접
+        // 관리해야 하므로 기본(body)을 유지한다.
         mf.mathVirtualKeyboardPolicy = "manual";
         mf.addEventListener("input", () => emit(mf.getValue("latex")));
+        // MathLive 자체 컨텍스트 메뉴가 못 열려도 브라우저 기본 메뉴가 새지 않게 억제(폴백).
+        // contextmenu는 composed 이벤트라 shadow DOM 경계를 넘어 여기서 잡힌다.
+        mf.addEventListener("contextmenu", (e) => e.preventDefault());
         host.appendChild(mf);
+        // 컨텍스트 메뉴 비활성(행렬 삽입·Insert·모드·글꼴 등 — 고3 UX 소음 제거).
+        // 번들 v0.110.0 실측: menuItems setter는 ①빈 배열이면 햄버거 토글에 display:none
+        // 인라인 적용 ②메뉴가 비면 Menu.visible=false → show()가 즉시 no-op(롱프레스·
+        // 우클릭·토글 전부 차단). 주의: 마운트 전 호출은 "Mathfield not mounted" throw →
+        // 반드시 appendChild *이후*에 설정한다(순서 변경 금지 — 정적 테스트가 순서를 동결).
+        // 국소 try: 메뉴 비활성은 코스메틱이라 실패해도 필드를 유지한다 — 바깥 catch로
+        // 새면 이미 붙은 math-field 위에 textarea까지 이중 부착되는 강등 사고가 된다.
+        try {
+          mf.menuItems = [];
+        } catch (menuErr) {
+          // 침묵 실패 금지(CLAUDE.md): 예외 타입명을 로그에 남긴다(값·시크릿 없음).
+          console.warn(
+            "[whymath] menuItems 비활성 실패 — 메뉴 노출 열화로 계속: " +
+              (menuErr && menuErr.name)
+          );
+        }
         window.whymathSetLatex = (v) => mf.setValue(v == null ? "" : v);
         window.whymathClear = () => {
           mf.setValue("");
