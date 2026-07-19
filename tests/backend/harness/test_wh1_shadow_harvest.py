@@ -27,12 +27,20 @@ def _obs(
     dialogue: str | None = "d-1",
     turn: int = 1,
     observed: str = "2026-07-17T09:00:00+00:00",
+    counts: tuple[int, int, int] | None = None,
 ) -> Wh1HarnessShadowObservation:
-    """관측 픽스처 — emit 측 실물 모델로 구성(스키마 드리프트 시 여기서 즉시 깨진다)."""
+    """관측 픽스처 — emit 측 실물 모델로 구성(스키마 드리프트 시 여기서 즉시 깨진다).
+
+    `counts`=(n_correct, n_incorrect, n_unverifiable)는 전이별 카운트(S3-07·신판). 기본 None은
+    카운트 미기록(구판 의미) — 전이별 집계에서 legacy로 분리 회계되는 쪽이다.
+    """
     return Wh1HarnessShadowObservation(
         status=status,
         action_type=action,
         verify_verdict=verdict,
+        n_correct=counts[0] if counts is not None else None,
+        n_incorrect=counts[1] if counts is not None else None,
+        n_unverifiable=counts[2] if counts is not None else None,
         tool_calls=3,
         hypothesis_count=1,
         dialogue_id=dialogue,
@@ -282,3 +290,119 @@ def test_main_renders_and_writes_json(tmp_path: Path, capsys: pytest.CaptureFixt
 def test_main_missing_file_exits_error(tmp_path: Path) -> None:
     """입력 파일 부재 — 부분 수확 리포트로 위장하지 않고 종료 코드 2."""
     assert hv.main([str(tmp_path / "없는파일.log")]) == 2
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 전이별 집계(S3-07) — 구판 하위호환·신/구 분리 정직 회계·왜곡 가시화
+# ──────────────────────────────────────────────────────────────────────────
+def _legacy_line(obs: Wh1HarnessShadowObservation) -> str:
+    """진짜 구판 레코드 라인 — 카운트 *키 자체가 없는* JSON(S3-07 이전 원장·로그 재현).
+
+    신판 모델에서 카운트 키를 지워 만든다(값 null이 아니라 키 부재 — 구판 emit과 동형).
+    """
+    payload = json.loads(obs.model_dump_json())
+    for key in ("n_correct", "n_incorrect", "n_unverifiable"):
+        del payload[key]
+    return json.dumps(payload, ensure_ascii=False)
+
+
+def test_parse_legacy_line_without_count_fields() -> None:
+    """구판 라인(카운트 필드 부재)도 깨지지 않고 파싱 — 카운트 None(미기록·'전이 0'과 구분)."""
+    legacy = _obs("unverifiable")
+    # bare JSON(순수 JSONL 캡처)과 서버-로그 스타일(record 마커 + prefix) 양쪽 다 하위호환.
+    record = record_logger.makeRecord(
+        record_logger.name, logging.INFO, __file__, 0, _legacy_line(legacy), (), None
+    )
+    server_style = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s").format(
+        record
+    )
+    observations, acct = hv.parse_log_text(_legacy_line(legacy) + "\n" + server_style)
+    assert acct.parsed == 2
+    assert acct.broken == 0
+    for obs in observations:
+        assert obs.verify_verdict == "unverifiable"  # 기존 턴 라벨 축은 그대로 읽힌다
+        assert obs.n_correct is None  # 구판 = 카운트 미기록(None) — 0으로 위장하지 않는다
+        assert obs.n_incorrect is None
+        assert obs.n_unverifiable is None
+
+
+def test_ledger_legacy_lines_load_and_rerun_idempotent(tmp_path: Path) -> None:
+    """기존 원장의 구판 라인 — load_ledger 하위호환·재수확 멱등(원장 연속성·dedup 키 불변)."""
+    ledger = tmp_path / "ledger.ndjson"
+    legacy = _obs("correct", observed="2026-07-17T09:00:00+00:00")
+    ledger.write_text(_legacy_line(legacy) + "\n", encoding="utf-8")
+    loaded, broken = hv.load_ledger(ledger)
+    assert broken == 0 and len(loaded) == 1
+    assert loaded[0].n_correct is None
+    # 같은 관측(신판 직렬화라도 dedup 키 동일)을 재수확해도 append 0 — 멱등 유지.
+    log = tmp_path / "log.log"
+    _write_log(log, [legacy])
+    report = hv.harvest_files([log], store=ledger)
+    assert report.appended == 0
+    assert report.input_duplicates == 1
+    assert report.summary.total == 1
+
+
+def test_summarize_transition_split_and_sums() -> None:
+    """신판만 Σ 합산 + 신/구 분리 회계 — 마지막 판정이 가린 앞 전이 correct가 분포에 보인다."""
+    # 2026-07-19 실측 왜곡꼴: 이차방정식 자연 풀이 — 전이 (correct·correct·unverifiable)인데
+    # 턴 라벨은 마지막 판정(unverifiable) 하나만 남는다.
+    distorted = _obs("unverifiable", counts=(2, 0, 1), turn=1, observed="2026-07-17T09:00:00+00:00")
+    plain = _obs("correct", counts=(1, 0, 0), turn=2, observed="2026-07-17T09:00:10+00:00")
+    legacy = _obs("correct", turn=3, observed="2026-07-17T09:00:20+00:00")  # 구판(카운트 없음)
+    summary = hv.summarize([distorted, plain, legacy])
+    # 기존 턴 라벨 축(verdict_counts)은 의미 불변 — 왜곡이 *그대로* 남는다(원장 비교 연속성).
+    assert summary.verdict_counts["unverifiable"] == 1
+    assert summary.verdict_counts["correct"] == 2
+    # 새 전이 축 — distorted의 앞 전이 correct 2가 합산에 보인다(왜곡 가시화·acceptance).
+    assert summary.transition_counts == {"correct": 3, "incorrect": 0, "unverifiable": 1}
+    # 정직 회계 — 합산 표본(신판 2)과 구판 1을 분리한다(구판을 '전이 0'으로 위장 금지).
+    assert summary.transition_records == 2
+    assert summary.legacy_records == 1
+
+
+def test_summarize_empty_transition_axis() -> None:
+    """관측 0건 — 전이 축도 정직하게 0/0/0 + 표본 0(비율·합산 위장 없음)."""
+    summary = hv.summarize([])
+    assert summary.transition_counts == {"correct": 0, "incorrect": 0, "unverifiable": 0}
+    assert summary.transition_records == 0
+    assert summary.legacy_records == 0
+
+
+def test_render_transition_section_honest_split(tmp_path: Path) -> None:
+    """render에 전이별 집계 섹션 — Σ 표기 + 신/구 분리 회계. 기존 섹션은 불변 유지."""
+    log = tmp_path / "log.log"
+    log.write_text(
+        _server_log_line(_obs("unverifiable", counts=(2, 0, 1)))
+        + "\n"
+        + _legacy_line(_obs("correct", turn=2, observed="2026-07-17T09:00:10+00:00"))
+        + "\n",
+        encoding="utf-8",
+    )
+    report = hv.harvest_files([log])
+    out = hv.render_report(report)
+    # 새 섹션 — Σ와 신/구 분리 표기(구판을 0으로 합산하지 않음).
+    assert "전이별 집계" in out
+    assert "카운트 보유(신판) 1건" in out
+    assert "구판(카운트 미보유) 1건" in out
+    assert "Σn_correct" in out and ": 2건" in out
+    assert "Σn_unverifiable" in out
+    # 기존 verdict 분포 섹션 불변 — 턴 라벨 축은 여전히 마지막 판정 기준.
+    assert "verify verdict 분포" in out
+    assert report.summary.verdict_counts == {
+        "correct": 1,
+        "incorrect": 0,
+        "unverifiable": 1,
+        "none": 0,
+    }
+
+
+def test_render_transition_section_no_new_records(tmp_path: Path) -> None:
+    """카운트 보유 레코드 0건(전부 구판) — Σ를 0으로 위장하지 않고 '합산 불가'를 명시한다."""
+    log = tmp_path / "log.log"
+    log.write_text(_legacy_line(_obs("correct")) + "\n", encoding="utf-8")
+    report = hv.harvest_files([log])
+    out = hv.render_report(report)
+    assert "구판(카운트 미보유) 1건" in out
+    assert "합산 불가" in out
+    assert "Σn_correct" not in out  # 표본 없는 Σ 행은 아예 내지 않는다
