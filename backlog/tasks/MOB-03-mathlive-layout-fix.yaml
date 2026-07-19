@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -15,6 +15,6 @@ acceptance:
 artifacts: []
 paths:
   - "src/mobile/lib/features/chat/**"
-session: null
+session: claude/shadow-data-s3-pilot-nh5kbz
 notes: "2026-07-19 실기기 스크린샷 실측(M2007J20CG·debug): '수식으로 풀이 입력' 화면에서 MathLive 가상 키보드가 화면 상단에 붙고 최상단 행 일부 잘림·입력 수식 필드 비가시(키보드 아래 빈 공간·완료 버튼 비활성). 시스템 IME 아님 — 앱 내 WebView(mathlive_input_webview·assets/mathlive_input) 레이아웃 결함. '수식으로 입력' 경로 사실상 사용 불가 상태. 자연 사용 재측정 중 '키보드 잘림' 증언의 정체. [정밀 진단·스샷 3장: 수식 필드 자체는 렌더됨(키보드 접힘 상태 정상). 결함은 가상 키보드 전개 시 — 하단 도킹 대신 화면 상단에 겹쳐 뜨며 상단 행 잘림·필드 가림(WebView visual viewport 높이 계산 어긋남 추정). 부가: MathLive 기본 컨텍스트 메뉴(행렬 삽입·Insert·모드·글꼴) 학생 노출 — 비활성화 검토·필드 기본 크롬(키보드 토글·메뉴 아이콘) UX 정리 검토.]"
 updated: 2026-07-19

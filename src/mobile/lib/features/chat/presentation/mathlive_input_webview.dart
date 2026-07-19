@@ -23,15 +23,19 @@ String normalizeLatexInput(String raw) => raw.trim();
 class MathliveInputWebView extends StatefulWidget {
   const MathliveInputWebView({
     required this.onChanged,
-    this.height = 120,
+    this.height,
     super.key,
   });
 
   /// 입력된 LaTeX(정규화 후)를 흘리는 콜백. 빈 문자열도 전달한다(호출자가 전송 여부 판정).
   final ValueChanged<String> onChanged;
 
-  /// 인라인 표시 높이(px).
-  final double height;
+  /// 인라인 표시 높이(px). null이면 부모 제약을 그대로 채운다(전체 높이 배치용).
+  ///
+  /// MathLive 가상 키보드는 *WebView 자체 뷰포트*의 하단에 도킹한다(웹 번들 실측 —
+  /// index.html 주석 참조). 키보드 자연 높이(약 300 CSS px)보다 낮은 고정 높이를 주면
+  /// 키보드 상단이 잘리고 필드를 덮으므로, 키보드를 쓰는 화면은 null(Expanded 배치)로 쓴다.
+  final double? height;
 
   @override
   State<MathliveInputWebView> createState() => MathliveInputWebViewState();
@@ -63,6 +67,8 @@ class MathliveInputWebViewState extends State<MathliveInputWebView> {
 
   @override
   Widget build(BuildContext context) {
+    // height가 null이면 SizedBox는 높이 제약을 추가하지 않는다 — 부모(Expanded 등)가
+    // 준 제약을 WebView가 그대로 채운다(가상 키보드 하단 도킹 공간 확보).
     return ClipRRect(
       borderRadius: BorderRadius.circular(10),
       child: SizedBox(
