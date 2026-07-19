@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "학생이 자연스럽게 여러 단계를 한 제출로 묶게 하는 입력 UX(단계 리스트·단계 추가 버튼·제출 미리보기 중 채택안 구현) + 실기기 자연 사용에서 결정 구간(correct/incorrect) 비율 상승 실측"
 artifacts: []
 paths:
-  - "src/mobile/**"
-session: null
+  - "src/mobile/lib/features/chat/**"
+  - "src/mobile/test/**"
+session: claude/shadow-data-s3-pilot-nh5kbz
 notes: "2026-07-19 실기기 실측: 한줄씩 채팅 습관은 단계가 외톨이(전이 0)라 구조적 unverifiable·묶음 3줄 제출만 correct/incorrect 결정(3-state 실증). UI는 풀이 모드 멀티라인(Enter=줄바꿈)을 이미 지원하나 유도 부재. S3-01 파일럿 품질·S1-11 flip 대표성 재측정의 선행 후보. MOB-01(타 세션·paths 겹침) 완료 후 착수."
 updated: 2026-07-19

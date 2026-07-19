@@ -186,3 +186,6 @@
 {"ts": "2026-07-18T21:54:19", "actor": "claude/education-app-core-features-mh3avq", "action": "done", "id": "ARCH-13-visualization-harness-tracking", "artifacts": ["docs/architecture/visualization_inventory_2026-07.md"]}
 {"ts": "2026-07-19T10:27:34", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "S3-05-input-ux-batching"}
 {"ts": "2026-07-19T10:27:38", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "add", "id": "MOB-02-chat-overflow-fix"}
+{"ts": "2026-07-19T10:38:54", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "policy_warn", "id": "S3-05-input-ux-batching", "rule": "path_overlap", "other": "MOB-01-android-toolchain-upgrade", "detail": "실파일 교집합 5건 예: src/mobile/lib/features/chat/application/chat_controller.dart, src/mobile/lib/features/chat/application/chat_state.dart, src/mobile/lib/features/chat/data/coach_api.dart · 프리픽스 포함: src/mobile/** ⊇ src/mobile/lib/features/chat/**", "mode": "warn"}
+{"ts": "2026-07-19T10:38:55", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "claim_remote_unavailable", "id": "S3-05-input-ux-batching", "status": "error"}
+{"ts": "2026-07-19T10:38:55", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "start", "id": "S3-05-input-ux-batching", "session": "claude/shadow-data-s3-pilot-nh5kbz", "remote": "error"}
