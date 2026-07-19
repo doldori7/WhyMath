@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-04-coach-emphasis-render
+title: "코치 발화 마크다운 강조(*...*) 원문 노출 — 렌더 또는 템플릿 정리"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 5
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "코치 버블에서 *...* 가 강조로 렌더되거나 템플릿에서 마크 제거 — 실기기 확인"
+artifacts: []
+paths:
+  - "src/mobile/lib/features/chat/**"
+session: null
+notes: "2026-07-19 실기기 스샷: 결정론 Polya 템플릿('좋아, 이제 *어떻게 풀지* 계획을 세워보자')의 별표가 평문 그대로 표시. 수정 선택지 ①클라 버블 경량 마크다운 렌더 ②L4 템플릿에서 강조 마크 제거(backend) — 채택 시 계층 판단."
+updated: 2026-07-19
