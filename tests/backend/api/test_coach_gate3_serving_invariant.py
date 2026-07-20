@@ -127,17 +127,22 @@ def test_served_utterance_is_static_template_end_to_end() -> None:
         ), f"서빙 응답 발화가 정적 템플릿 이탈 — input={text!r}: {prompt!r}"
 
 
-def test_serving_path_llm_flags_default_off() -> None:
-    """게이트 ③ 봉인 ③ — 서빙 경로 LLM 소비 플래그는 기본 OFF(정직 프레이밍 캐비엇 전제 동결).
+def test_serving_path_llm_flag_governance() -> None:
+    """게이트 ③ 봉인 ③ — 서빙 경로 LLM 소비 플래그 기본값 거버넌스(기본값 조용한 변경 방지).
 
     게이트 ③의 "LLM 산문 미방출" 논거는 다음 전제에 기댄다: 오개념 judge(서빙 유일 LLM 콜·산문
-    미방출·라벨 필터만)·WH-1 하네스 shadow(무영속·`None` 반환·비노출)·**WH-1 primary flip**
-    (S1-11 사인오프 — LLM 발화를 학생에 노출하되 하네스 verify 의무·정답 억제·톤필터·결정론
-    폴백 게이트 경유·`harness/wh1_primary.py`)이 **전부 기본 OFF**. flip의 기본 on 전환은 Kiki
-    실기기 확인 후 별도 커밋(MEMORY 2026-07-20)이며, 그때 이 봉인을 정직 프레이밍 재검토와
-    함께 개정해야 한다 — 기본값이 조용히 뒤집히면 이 테스트가 red로 플래그한다.
+    미방출·라벨 필터만)·WH-1 하네스 shadow(무영속·`None` 반환·비노출)는 **기본 OFF**.
+
+    **WH-1 primary flip(S1-11)은 2026-07-20 GA로 기본 ON**으로 전환됐다 — 실기기 확인(코치 발화
+    라이브)+in-process 측정(`scripts/demo/wh1_primary_probe.py` 3케이스 LLM 개입 실패 0·verdict
+    정상)으로 canary 졸업(MEMORY 2026-07-20). 정직 프레이밍상 primary on은 LLM *산문 자유 방출*이
+    아니라 **하네스 오케스트레이션 + 게이트된 발화**다: 발화는 verify 의무(§3.1)·정답 억제
+    백스톱(§3.4·오답/미결정 턴은 결정론 소크라테스 템플릿으로만)·L4 톤필터를 통과한 것만 노출되고,
+    LLM 실패·타임아웃 시 결정론 폴백. 즉 학생-대면 자유 산문은 여전히 억제된다(측정 실증: 발화가
+    하네스 소크라테스 템플릿). 이 봉인은 이제 판정치를 *동결*한다 — 기본값이 다시 조용히 뒤집히면
+    (judge/shadow가 켜지거나 primary가 꺼지면) red로 플래그한다.
     """
     settings = Settings(jwt_secret_key=SecretStr("test-secret-0123456789abcdef"))
     assert settings.misconception_judge_enabled is False
     assert settings.wh1_harness_shadow_enabled is False
-    assert settings.wh1_primary_enabled is False
+    assert settings.wh1_primary_enabled is True  # 2026-07-20 GA (측정 통과·MEMORY 로그)
