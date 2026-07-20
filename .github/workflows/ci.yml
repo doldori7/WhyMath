@@ -441,13 +441,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Flutter 3.35.x (stable)
+      - name: Set up Flutter 3.41.x (stable)
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # Dart 3.9 — Kiki 머신(Dart 3.11)과 정합해 환경 해석 드리프트 제거(MOB-01·2026-07-17).
-          # 구 3.24.5(Dart 3.5)는 retrofit/generator 최신 쌍을 못 풀어 임시 pin 3연쇄를 낳았다.
-          flutter-version: "3.35.0"
+          # Dart 3.11 — Kiki 머신(Dart 3.11)과 완전 정합(MOB-01·2026-07-20). 구 3.35(Dart 3.9)는
+          # test_api 0.7.6 SDK 고정→analyzer<8 강제로 freezed3/retrofit_generator10 격자가 불충족
+          # (실측) — pin 완전 제거(freezed3·riverpod3·retrofit 해제)는 이 버전이 바닥선이다.
+          # 해석 정본은 커밋된 pubspec.lock — pub get이 lock을 그대로 존중한다.
+          flutter-version: "3.41.9"
           cache: true
 
       - name: Flutter pub get

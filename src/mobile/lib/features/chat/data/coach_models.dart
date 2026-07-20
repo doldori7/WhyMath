@@ -26,7 +26,7 @@ part 'coach_models.g.dart';
 /// 백엔드는 `extra="forbid"`라 정의되지 않은 필드를 거부한다 — JSON 키를 정확히 맞춘다.
 /// 대부분 옵셔널(첫 진입·스테이트리스 호출 지원). 수학 결정은 서버가 내린다.
 @freezed
-class CoachRequest with _$CoachRequest {
+abstract class CoachRequest with _$CoachRequest {
   const factory CoachRequest({
     /// 학생 발화(자연어). 빈 문자열 허용(첫 진입).
     @JsonKey(name: 'student_input') required String studentInput,
@@ -64,7 +64,7 @@ class CoachRequest with _$CoachRequest {
 ///
 /// current_stage 값은 백엔드 enum("understand"·"plan"·"execute"·"review") 문자열.
 @freezed
-class PolyaState with _$PolyaState {
+abstract class PolyaState with _$PolyaState {
   const factory PolyaState({
     /// 현재 단계("understand"·"plan"·"execute"·"review").
     @JsonKey(name: 'current_stage') @Default('understand') String currentStage,
@@ -93,7 +93,7 @@ class PolyaState with _$PolyaState {
 /// 전부 표현 가능: solution_coaching(verification·ocr_gated)·match_low_quality·
 /// no_confident_match·misconceptions.
 @freezed
-class CoachResponse with _$CoachResponse {
+abstract class CoachResponse with _$CoachResponse {
   const factory CoachResponse({
     /// Polya 단계 전이·프롬프트·hint_level·socratic_category 등 핵심 결정(항상 존재).
     @JsonKey(name: 'decision') required PedagogyDecision decision,
@@ -130,7 +130,7 @@ class CoachResponse with _$CoachResponse {
 
 /// L4 핵심 결정(l4/models.py `PedagogyDecision`).
 @freezed
-class PedagogyDecision with _$PedagogyDecision {
+abstract class PedagogyDecision with _$PedagogyDecision {
   const factory PedagogyDecision({
     /// 다음 단계 전이("stay"·"next"·"previous").
     @JsonKey(name: 'polya_stage_to_advance') required String polyaStageToAdvance,
@@ -165,7 +165,7 @@ class PedagogyDecision with _$PedagogyDecision {
 
 /// 오개념 진단 1건(l4/misconception/models.py `MisconceptionMatch`).
 @freezed
-class MisconceptionMatch with _$MisconceptionMatch {
+abstract class MisconceptionMatch with _$MisconceptionMatch {
   const factory MisconceptionMatch({
     /// 진단된 오개념 카탈로그 항목.
     @JsonKey(name: 'misconception') required Misconception misconception,
@@ -194,7 +194,7 @@ class MisconceptionMatch with _$MisconceptionMatch {
 /// 누출 안전: canonical_statement·counterexample은 *오개념 가정/반례 입력*이지 문제 정답이
 /// 아니다(카탈로그는 공개 교수학 자산).
 @freezed
-class Misconception with _$Misconception {
+abstract class Misconception with _$Misconception {
   const factory Misconception({
     /// 정본 ID — kebab-case(예: 'distribution-over-power').
     @JsonKey(name: 'id') required String id,
@@ -225,7 +225,7 @@ class Misconception with _$Misconception {
 
 /// 오개념 개입 결정(l4/misconception/models.py `InterventionDecision`).
 @freezed
-class InterventionDecision with _$InterventionDecision {
+abstract class InterventionDecision with _$InterventionDecision {
   const factory InterventionDecision({
     /// 개입 패턴("counterexample"·"concrete_case"·"visualization"·"reverse_reasoning").
     @JsonKey(name: 'pattern') required String pattern,
@@ -243,7 +243,7 @@ class InterventionDecision with _$InterventionDecision {
 
 /// LTHC 조정안(l4/lthc/models.py `LthcAdaptation`).
 @freezed
-class LthcAdaptation with _$LthcAdaptation {
+abstract class LthcAdaptation with _$LthcAdaptation {
   const factory LthcAdaptation({
     /// 이 조정안이 겨냥한 숙달도 라벨("초보"·"발전 중"·"숙달").
     @JsonKey(name: 'mastery_level') required String masteryLevel,
@@ -267,7 +267,7 @@ class LthcAdaptation with _$LthcAdaptation {
 ///
 /// SolutionCoaching.trigger·CoachResponse.prerequisite_coaching 양쪽에서 쓰인다.
 @freezed
-class CoachingTrigger with _$CoachingTrigger {
+abstract class CoachingTrigger with _$CoachingTrigger {
   const factory CoachingTrigger({
     /// 코칭 포커스("verify"·"consolidate"·"retrieval"·"foundation"·"advance" 등).
     @JsonKey(name: 'focus') required String focus,
@@ -293,7 +293,7 @@ class CoachingTrigger with _$CoachingTrigger {
 ///
 /// WH-1 1단계 신호 일체를 담는다: solution_verification(단계별 검증)·verification_ocr_gated.
 @freezed
-class SolutionCoaching with _$SolutionCoaching {
+abstract class SolutionCoaching with _$SolutionCoaching {
   const factory SolutionCoaching({
     /// L4 메타인지 코칭 결정(focus·근거·발화)·항상 존재.
     @JsonKey(name: 'trigger') required CoachingTrigger trigger,
@@ -330,7 +330,7 @@ class SolutionCoaching with _$SolutionCoaching {
 /// 단계별 verify_step 결과(`steps`)는 이번 슬라이스 범위 밖이라 카운트·비율·위치만 옮긴다
 /// (백엔드 `steps`는 verdict/reason을 담은 리스트지만 L5 단계 렌더는 후속 — 카운트로 충분).
 @freezed
-class SolutionVerificationResult with _$SolutionVerificationResult {
+abstract class SolutionVerificationResult with _$SolutionVerificationResult {
   const factory SolutionVerificationResult({
     /// correct 전이 개수.
     @JsonKey(name: 'n_correct') required int nCorrect,
@@ -400,7 +400,7 @@ class CoachTurnResult {
 
 /// 대화 턴 1건(백엔드 `DialogueTurn` 최소 미러 — 세션 조회 검증용).
 @freezed
-class CoachTurn with _$CoachTurn {
+abstract class CoachTurn with _$CoachTurn {
   const factory CoachTurn({
     /// 턴 순서(1부터·UNIQUE(dialogue_id, turn_order)).
     @JsonKey(name: 'turn_order') required int turnOrder,
@@ -421,7 +421,7 @@ class CoachTurn with _$CoachTurn {
 /// 백엔드 `SessionGetResponse`는 `{dialogue: {...}, turns: [...]}` 중첩 구조라 flat json_serializable
 /// fromJson과 맞지 않는다 — [ProblemsApi]가 아니라 `CoachApi.getSession`이 중첩을 풀어 생성한다.
 @freezed
-class CoachSessionSnapshot with _$CoachSessionSnapshot {
+abstract class CoachSessionSnapshot with _$CoachSessionSnapshot {
   const factory CoachSessionSnapshot({
     /// 세션 PK(UUID 문자열).
     required String dialogueId,

@@ -29,7 +29,7 @@ part 'problem_models.g.dart';
 /// [problemId]가 null이면 추천 후보가 없다(측정 충분·또는 미시딩). [measurementSufficient]가
 /// true면 표준오차가 임계(SE ≤ 0.3) 이하라 CAT 중단을 권고한다. 판정은 서버가 하고 클라는 렌더만.
 @freezed
-class NextProblemResponse with _$NextProblemResponse {
+abstract class NextProblemResponse with _$NextProblemResponse {
   const factory NextProblemResponse({
     /// 추천 문항 PK(UUID 문자열). 후보 없으면 null.
     @JsonKey(name: 'problem_id') String? problemId,
@@ -60,7 +60,7 @@ class NextProblemResponse with _$NextProblemResponse {
 ///
 /// [coaching].focus가 코치 세션 진입 시 `coaching_focus` 후보로 쓰인다(진단→코치 다리).
 @freezed
-class ConceptDiagnosisItem with _$ConceptDiagnosisItem {
+abstract class ConceptDiagnosisItem with _$ConceptDiagnosisItem {
   const factory ConceptDiagnosisItem({
     /// 개념 PK(UUID 문자열).
     @JsonKey(name: 'concept_id') required String conceptId,
@@ -98,7 +98,7 @@ class ConceptDiagnosisItem with _$ConceptDiagnosisItem {
 ///
 /// 누출 안전: [prompt]는 답을 제공하지 않는 메타인지 유도 발화다(교수학 자산·정답 아님).
 @freezed
-class DiagnosisCoaching with _$DiagnosisCoaching {
+abstract class DiagnosisCoaching with _$DiagnosisCoaching {
   const factory DiagnosisCoaching({
     /// 코칭 포커스('verify'·'consolidate'·'retrieval'·'foundation'·'advance' 등).
     @JsonKey(name: 'focus') required String focus,
@@ -131,7 +131,7 @@ class DiagnosisCoaching with _$DiagnosisCoaching {
 /// 이 모델에 역직렬화되지 않는다(json_serializable 미선언 키 무시 → 정답이 UI에 진입 불가).
 /// `choices`(객관식 보기)는 학생 대면 자산이므로 유지한다(정답 표시가 아니라 선택지).
 @freezed
-class Problem with _$Problem {
+abstract class Problem with _$Problem {
   const factory Problem({
     /// 문제 PK(UUID 문자열).
     @JsonKey(name: 'problem_id') required String problemId,

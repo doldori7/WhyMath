@@ -9,7 +9,7 @@ part 'diagnosis_state.freezed.dart';
 
 /// 진단(CAT)→문제제시 구간의 단일 상태 트리.
 @freezed
-class DiagnosisState with _$DiagnosisState {
+abstract class DiagnosisState with _$DiagnosisState {
   const factory DiagnosisState({
     /// 마지막 next-problem(CAT) 응답·미조회면 null.
     NextProblemResponse? nextProblem,
