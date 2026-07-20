@@ -81,7 +81,10 @@ async def run_probe(base_provider):
         else:
             kind = "(빈 발화)"
         engaged = "예" if (pp.calls > 0 and pp.fails == 0) else ("일부실패" if pp.fails else "없음")
-        print(f"\n[{label}]  status={outcome.status}  tool_calls={outcome.tool_calls}  verdict={verdict}")
+        print(
+            f"\n[{label}] status={outcome.status} "
+            f"tool_calls={outcome.tool_calls} verdict={verdict}"
+        )
         print(f"    LLM 호출 {pp.calls}회 (실패 {pp.fails})  → LLM 개입: {engaged}")
         print(f"    학생 발화: {utter!r}  [{kind}]")
         if pp.first_raw is not None:

@@ -188,7 +188,8 @@ def test_flag_off_runner_not_called_static_prompt(monkeypatch: pytest.MonkeyPatc
     try:
         asyncio.run(_add_user(uid))
         calls = _patch_primary_provider(monkeypatch)
-        get_settings.cache_clear()  # 플래그 미설정(기본 OFF)
+        monkeypatch.setenv("WHYMATH_WH1_PRIMARY_ENABLED", "false")  # OFF 명시(기본 ON·GA)
+        get_settings.cache_clear()
         with _client() as client:
             resp = client.post(
                 "/v1/coach/sessions", headers=_auth(uid), json={"student_input": _STUDENT_INPUT}
@@ -332,7 +333,8 @@ def test_append_turns_flip_serves_utterance_with_meta(
         asyncio.run(_add_user(uid))
         _patch_primary_provider(monkeypatch)
 
-        # 세션은 OFF에서 생성(결정론) — append의 flip만 고립 관측.
+        # 세션은 OFF에서 생성(결정론) — append의 flip만 고립 관측. (기본 ON·GA라 OFF 명시)
+        monkeypatch.setenv("WHYMATH_WH1_PRIMARY_ENABLED", "false")
         get_settings.cache_clear()
         with _client() as client:
             created = client.post(
