@@ -54,12 +54,17 @@ async def run_persisted_turn(
 ) -> TurnOutcome:
     """WH-1 한 턴을 *실가동*한다 — 웜 스타트(로드) → 순수 루프 실행 → 영속(증거+가설 커밋).
 
-    ★ 활성화 보류(S1-11 판정·2026-07-14): 본 좌석은 **의도적으로 HTTP 미배선**이다 — 학생-대면
-    primary flip(coach→하네스 오케스트레이션 수렴)의 영속 좌석으로, flip은 ① shadow verdict
-    분포 확보 ② verify 게이트 승격 판정(현재 부결·보류) ③ Kiki 사인오프(gate3 governance
-    allowlist 확장 동반)를 전제한다("측정 없는 도입 없음"·04a). 그 전까지 shadow 경로
-    (`wh1_shadow.observe_wh1_harness_shadow`·무영속)만 라이브다. 삭제하지 않는 이유: flip 시
-    이 좌석이 그대로 배선 대상이며 테스트가 계약을 봉인 중(dead-but-tested 의도 상태).
+    ★ 활성화 보류 유지(S1-11 flip 이후·2026-07-20 갱신): flip 3전제(①shadow verdict 분포
+    ②verify 게이트 승격 재판정 ③Kiki 사인오프)는 충족됐고 **발화 승격은 구현됐다** —
+    `harness/wh1_primary.py`(`run_wh1_primary_turn`)가 primary 플래그(config·기본 off) 뒤에서
+    coach 세션/턴의 학생-대면 발화를 하네스 경유로 산출한다(순수 `run_tutoring_turn` 재사용·
+    무영속). 그러나 본 좌석(*영속* 턴)은 **여전히 의도적으로 HTTP 미배선**이다 — 라이브 coach가
+    이미 턴당 가설 큐레이션(`_apply_hypotheses`=`curate_hypothesis`)·증거 생산(`_log_match_
+    evidence`·`_log_refutation_evidence`)을 같은 트랜잭션에서 영속하므로, 본 좌석까지 배선하면
+    같은 턴에 가설·증거가 이중 영속(이중 curate·decay 중복 적용)돼 단일 진실원천이 깨진다.
+    상태 오케스트레이션의 하네스 수렴(라이브 결정론 파이프라인 → 본 좌석으로 이관)은 발화
+    승격과 분리된 후속 판정이다. 삭제하지 않는 이유: 그 수렴 시 이 좌석이 그대로 배선 대상이며
+    테스트가 계약을 봉인 중(dead-but-tested 의도 상태).
 
     `run_tutoring_turn`(순수 골격)을 재사용만 하고(재구현 0), 그 in-memory 작업 메모리를 스토어에
     결선한다. 트랜잭션 commit은 호출자 관리(저장소 패턴) — 본 함수는 `log_evidence`/

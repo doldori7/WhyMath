@@ -150,6 +150,36 @@ class Settings(BaseSettings):
         ),
     )
 
+    wh1_primary_enabled: bool = Field(
+        default=False,
+        description=(
+            "WH-1 튜터링 하네스를 학생-대면 *primary*로 승격(flip·S1-11·2026-07-20 사인오프)할지. "
+            "**False(기본·opt-in)** — off면 기존 결정론 Polya 템플릿 경로와 비트동일(회귀 0·"
+            "'측정 전 노출 금지'의 canary 단계). True면 coach *세션/턴*(`/v1/coach/sessions`(+"
+            "`/turns`))의 학생-대면 발화(`decision.prompt`·AI 턴 content)가 WH-1 하네스"
+            "(`LLMTutorPolicy`→`run_tutoring_turn`) 발화로 대체된다 — 발화는 하네스 verify 의무"
+            "(§3.1)·정답 억제 백스톱(§3.4)을 통과하고 L4 톤필터(`filter_tone`)를 거친 것만 "
+            "노출된다(검증 게이트 유지). LLM 실패·타임아웃·예산 소진 시 결정론 템플릿으로 안전 "
+            "폴백(가용성 — 앱은 죽지 않는다·폴백은 예외 타입명 로그·침묵 실패 금지). shadow 관측 "
+            "레코드는 primary 경로에서도 계속 emit(원장 축적 연속·`primary=True` 표식)되며, "
+            "primary on이면 별도 shadow spawn은 하지 않는다(이중 LLM 호출 회피). stateless "
+            "`/v1/coach`는 불변(결정론 유지·DB 무접근이라 가설·웜스타트 없음). 기본 on 전환은 "
+            "Kiki 실기기 확인 후 별도 커밋(MEMORY 2026-07-20). "
+            "WHYMATH_WH1_PRIMARY_ENABLED=true로 켠다."
+        ),
+    )
+
+    wh1_primary_timeout_seconds: float = Field(
+        default=15.0,
+        gt=0.0,
+        description=(
+            "WH-1 primary(flip) 하네스 한 턴의 총 시간 예산(초). 초과 시 `asyncio.wait_for`가 "
+            "끊고 결정론 템플릿으로 폴백한다(TimeoutError 타입명 로그·앱은 죽지 않는다). 04a "
+            "§8.3 '풀 루프 턴 2~5초+' 추정 위에 안전 여유를 둔 기본값 — 실측 후 튜닝(fast path "
+            "§5.3 결선은 후속). WHYMATH_WH1_PRIMARY_TIMEOUT_SECONDS로 조정."
+        ),
+    )
+
     l4_server_mastery_enabled: bool = Field(
         default=True,
         description=(

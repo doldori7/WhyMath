@@ -8,6 +8,8 @@
 정직성 계약(거짓 incorrect 0): 다변수·비다항·복소·미정·파싱 불가는 항상 undecidable(None)로
 떨어져야 하며, 항등 방정식(∅/ℝ 모호)이 오판되지 않아야 한다. S3-06 추가: 이질 형태(ℝ↔유한)
 전이는 undecidable·캐럿 없는 지수/수열 의심 심볼(`x2`·`a1`)은 해집합 경로에서 판정 불가.
+S3-08 추가: 유한↔유한 *비어있지 않은 진부분집합* 전이(답 선택↔근 유실 구별 불가)는 undecidable·
+비부분집합 변화({2,3}→{2,4}·{2}→{2,5}·{2}→∅)는 not_identity 유지(검출력 보존).
 """
 
 from __future__ import annotations
@@ -192,11 +194,53 @@ class TestSolsetTransitionStatus:
         assert solset_transition_status(all_reals, all_reals) is IdentityVerdict.identity
 
     def test_finite_comparison_unchanged(self) -> None:
-        # 동질(유한↔유한) 비교는 S3-02 그대로 — 같으면 identity·다르면 not_identity.
+        # 동질(유한↔유한) 비교는 S3-02 그대로 — 같으면 identity·(비부분집합) 다르면 not_identity.
         a = EquationSolset(all_reals=False, values=frozenset({2}))
         b = EquationSolset(all_reals=False, values=frozenset({3}))
         assert solset_transition_status(a, a) is IdentityVerdict.identity
         assert solset_transition_status(a, b) is IdentityVerdict.not_identity
+
+
+class TestProperSubsetTransitionGuard:
+    """유한↔유한 진부분집합 전이 가드(S3-08) — 답 선택↔근 유실 구별 불가 → undecidable(보수)."""
+
+    def test_proper_subset_is_undecidable(self) -> None:
+        # {2,3}→{3}(큰 근 선택 또는 근 유실 — 구조 동일·기대정답 없이 구별 불가) → undecidable.
+        # 2026-07-20 대본 측정 턴4: 정당한 답 고르기가 incorrect로 오판된 거짓 판정의 근본 원인.
+        before = EquationSolset(all_reals=False, values=frozenset({2, 3}))
+        after = EquationSolset(all_reals=False, values=frozenset({3}))
+        assert solset_transition_status(before, after) is IdentityVerdict.undecidable
+
+    def test_proper_subset_smaller_root_is_undecidable(self) -> None:
+        # {2,3}→{2}(작은 근 선택)도 동일 — 진부분집합이면 방향 무관 undecidable.
+        before = EquationSolset(all_reals=False, values=frozenset({2, 3}))
+        after = EquationSolset(all_reals=False, values=frozenset({2}))
+        assert solset_transition_status(before, after) is IdentityVerdict.undecidable
+
+    def test_element_swap_still_not_identity(self) -> None:
+        # {2,3}→{2,4}(원소 교체 — 4 ∉ {2,3}·진부분집합 아님) → 여전히 not_identity(검출 유지).
+        before = EquationSolset(all_reals=False, values=frozenset({2, 3}))
+        after = EquationSolset(all_reals=False, values=frozenset({2, 4}))
+        assert solset_transition_status(before, after) is IdentityVerdict.not_identity
+
+    def test_element_added_still_not_identity(self) -> None:
+        # {2}→{2,5}(원소 추가 — 진부분집합의 역방향·superset) → 여전히 not_identity(근 추가 검출).
+        before = EquationSolset(all_reals=False, values=frozenset({2}))
+        after = EquationSolset(all_reals=False, values=frozenset({2, 5}))
+        assert solset_transition_status(before, after) is IdentityVerdict.not_identity
+
+    def test_empty_after_still_not_identity(self) -> None:
+        # {2}→∅ : ∅ ⊊ {2}이지만 "답 선택"은 항상 1개 이상을 고르므로 ∅ 전이는 선택으로 성립
+        # 불가 — incorrect 검출을 유지해도 거짓 incorrect 위험이 없다(가드 제외·검출력 보존).
+        before = EquationSolset(all_reals=False, values=frozenset({2}))
+        empty = EquationSolset(all_reals=False, values=frozenset())
+        assert solset_transition_status(before, empty) is IdentityVerdict.not_identity
+
+    def test_root_loss_equation_now_undecidable(self) -> None:
+        # 【S3-08 의도적 갱신】 x^2=4 → x=2 ({−2,2}→{2}·근 유실) : incorrect → undecidable.
+        # 사유: 답 선택(`x=2, x=3 → x=3`)과 구조 동일 — 거짓 incorrect 0 계약 우선. 검출 회복은
+        # 기대정답 앵커 후속(solset_transition_status docstring 설계 노트).
+        assert solution_set_status(("x^2", "4"), ("x", "2")) is IdentityVerdict.undecidable
 
 
 class TestRootsEnumerationSolset:

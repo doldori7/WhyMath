@@ -340,6 +340,19 @@
 ### 2026-07-20 (사고·재발방지·실기기 안내): **실기기 앱 실행 안내에서 백엔드 기동·dart-define 누락 → "문제를 불러오지 못했어요" — CLAUDE.md 규칙 등재** (Kiki 실기기·claude 안내 결함)
 
 **사고**: MOB-06 실기기 확인을 안내하며 앱 구동을 bare `flutter run`으로만 안내 → 앱이 기본값 `http://localhost:8000`(실기기에선 *기기 자신*)에 토큰 없이 접속 → 보호 엔드포인트 401 → `diagnosis_controller`가 "문제를 불러오지 못했어요. 잠시 후 다시 시도해 주세요"로 graceful 실패(Kiki 실기기 보고). **원인**: ①백엔드 미기동(`run_demo.ps1` 누락) ②`--dart-define=API_URL=<PC LAN IP>:8000`·`--dart-define=DEMO_TOKEN` 누락 — 실기기가 PC 백엔드에 닿는 주소·인증이 없음. **분류**: 반복 유형(검증 없는 실행 안내·가정 기반 런북)이라 실수 관리 규정상 등재 의무. **대책(규칙)**: `CLAUDE.md` 📐Kiki 개인 선호에 "실기기 앱 실행 안내=백엔드 도달성·인증 선결 필수" 규칙 등재 — run_demo.ps1 선기동 + 값 채워진 dart-define 줄 통째 복사 + `/demo-doctor` 카탈로그 선조회 강제. **정정 안내**: `run_demo.ps1`(Postgres·시드·uvicorn·토큰·LAN IP) → 출력된 `flutter run --dart-define=API_URL=...:8000 --dart-define=DEMO_TOKEN=...` 복사 실행. **MOB-06 코드(변환) 자체는 무결** — 백엔드 실측(변환 산출 `['2x+3=7','x=2']` → `verify_solution` n_transitions=1·correct=1·unverifiable=0)로 별도 검증 완료했고, 실기기 확인은 이 데모 스택 복구 후 재개한다.
+### 2026-07-20 (구현·머지·S1-11 done): **flip 랜딩 — WH-1 하네스 primary 경로 main 병합(기본 off·canary)·S1-11 완료** (claude 구현·CI 실증)
+
+**구현**: `WHYMATH_WH1_PRIMARY_ENABLED`(기본 False·opt-in) 뒤 스테이징. on 시 coach 세션/턴의 학생-대면 발화만 `model_copy`로 하네스 발화 교체(verify 의무·정답 억제 백스톱·L4 `filter_tone` 통과분만 노출)·LLM 실패/타임아웃(15s)/예산소진 시 결정론 템플릿 안전 폴백(예외 타입명 로그)·primary on이면 별도 shadow spawn 회피(이중 LLM 방지)·shadow 관측은 primary 경로에서도 emit(`primary=True`)·stateless `/v1/coach` 불변. gate3 거버넌스 신규 LLM 발화 표면 봉인(섹션 E frozenset). 정서안전 필드(tone_rewritten/tone_violations) 배선.
+
+**검증·머지**: 로컬 api+harness **1547 passed·0 failed**(asyncio auto·3.12). CI `backend — lint·type·test` **success**·`backend — 마이그레이션·통합(실 PG)` **success**·policy-guard/harness-integrity green. **off=비트동일**(회귀 0) 확인. **PR #561 SQUASH 머지**(2746cce). auto-merge가 required 집합(migration+fast checks) 완료 시 발화 — lint·type·test는 required 미포함이나 사후 green 확인(거버넌스 관찰 재확인·required 추가는 Kiki GitHub 설정). **S1-11-coach-harness-converge done**(증적 #561) → ARCH-11 해금.
+
+**다음(별건)**: 기본 on 전환은 **Kiki 실기기 확인 게이트**(플래그 on → LLM 튜터가 문장에 실제 응답 확인) 후 별도 커밋 — 이 라이브 확인이 곧 S3-01 파일럿 트리거①("flip 라이브")·S1-11 전제① 최종 충족. 현재는 코드 완료·라이브 대기.
+
+### 2026-07-20 (결정·게이트·S1-11): **flip 사인오프 — verify 게이트 승격 재판정(ⓑ) 통과·Kiki 사인오프(ⓒ) — WH-1 하네스 primary 승격 구현 착수** (Kiki 결정)
+
+**판정 근거(재판정 근거표 정본 — 이 로그 하단 대본 측정 항목)**: 합성 검출력 60/60·실기기 대본 12/12 기대 일치·발견된 거짓 incorrect 2류(파생 전이·답 고르기) 전부 수정+픽스처 동결·남은 미결정은 전부 정직한 미결정·전이별 집계 측정기 가동. 7/15 부결 사유(표본 과소·실트래픽 혼합비 미지)는 실기기 대본+자연 측정으로 해소. **ⓑ 승격 재판정 통과·ⓒ 사인오프 — S1-11 blocked 해제·착수**(전제 ①②③ 전부 충족).
+
+**구현 방침**: ⑴ "측정 전 노출 금지" 원칙 유지 — flip은 **플래그 뒤 스테이징**(기본 off→Kiki 실기기 확인 후 기본 전환) ⑵ gate3 allowlist(`PolyaCoach.coach` frozenset) 확장 동반(사인오프 조건) ⑶ **톤 필터 라이브 배선 포함**(LLM 발화가 학생에게 가는 순간 정서안전 KPI3 측정 대상 — 근거표 권고 채택) ⑷ LLM 불가/실패 시 결정론 템플릿 폴백(가용성) ⑸ 04a 설계문서의 flip 3단계 정본 준수.
 
 ### 2026-07-20 (실측·이정표·대본 측정): **검증기 성적표 12/12 일치 — S3-06/07 라이브 완전 실증·S3-08 거짓 incorrect 실측 확정·MOB-03/04 실기기 PASS** (Kiki 실기기 대본 측정·claude 판독)
 

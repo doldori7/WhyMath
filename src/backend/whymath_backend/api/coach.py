@@ -60,6 +60,7 @@ from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
 from whymath_backend.db.session import get_session
+from whymath_backend.harness.wh1_primary import run_wh1_primary_turn
 from whymath_backend.harness.wh1_shadow import observe_wh1_harness_shadow
 from whymath_backend.l1.embedding_provider import build_provider
 from whymath_backend.l2 import (
@@ -1121,6 +1122,74 @@ def _intervention_from_hypotheses_or(
     return select_intervention_from_hypotheses(active_hypotheses) or fallback
 
 
+async def _warmstart_hints_or_empty(
+    session: AsyncSession, *, problem_id: uuid.UUID | None
+) -> list[str]:
+    """웜스타트 probe 힌트(outside_mids) 조립 — WH-1 shadow·primary 공용(never-break).
+
+    S1-c: 진단 시작 시 하네스 탐색 probe가 겨냥할 외부 오개념 후보를 단원 고빈도+atom 확장으로
+    미리 공급한다(감사 Q5). **진단 probe 타깃팅 전용** — 코칭 context·개입엔 오개념을 preload하지
+    않는다(reactive 유지·CLAUDE.md). 조회만이라 실패해도 학생 응답을 깨면 안 되므로 never-break로
+    감싸 빈 리스트로 폴백한다(가용성 #1≫진단 관측 #6·예외 타입명 로그 — 침묵 실패 금지). 직전엔
+    create/append 두 핸들러에 인라인 중복이던 블록을 primary flip(S1-11)이 세 번째 소비처가 되며
+    단일 헬퍼로 모았다(동작 불변).
+    """
+    try:
+        return await assemble_warmstart_probe_hints(
+            session,
+            problem_id=problem_id,
+            provider=build_provider(get_settings()),
+        )
+    except Exception as exc:  # noqa: BLE001 — 웜스타트 실패는 학생 응답을 안 깬다(never-break).
+        logger.warning(
+            "웜스타트 probe 힌트 조립 실패(%s) — 빈 힌트로 진행", type(exc).__name__, exc_info=True
+        )
+        return []
+
+
+async def _wh1_primary_decision_or(
+    decision: PedagogyDecision,
+    *,
+    body: CoachRequest,
+    active_hypotheses: list[MisconceptionHypothesis],
+    warmstart_mids: list[str],
+    provider: LLMProvider | None,
+    turn_index: int,
+    dialogue_id: str | None,
+    problem_id: uuid.UUID | None,
+) -> PedagogyDecision:
+    """flip(S1-11): 학생-대면 발화를 WH-1 하네스 LLM 발화로 교체 — 실패 시 결정론 폴백.
+
+    `wh1_primary_enabled`일 때만 핸들러가 호출한다. `run_wh1_primary_turn`이 하네스 verify
+    의무(§3.1)·정답 억제(§3.4)·L4 톤필터를 통과한 발화만 돌려주며, 실패·타임아웃·예산 소진이면
+    `None`(사유는 그쪽이 예외 타입명 포함 로그) → 기존 결정론 `decision`을 그대로 반환한다
+    (가용성 — 앱은 죽지 않는다·발화 외 결정 필드는 항상 결정론 유지). 교체는 `model_copy`로
+    `prompt`(학생-대면 발화 본문)만 — hint_level·전이·socratic_category 등 구조화 결정과
+    solution_coaching·가설·증거 파이프라인은 기존 결정론 경로 그대로다(상태 오케스트레이션
+    수렴은 후속·`run_persisted_turn` docstring 참조). 여기서도 방어적으로 try/except를 한 겹 더
+    둔다 — 테스트 대체물·미래 리팩터가 예외를 전파해도 학생 응답이 500이 되지 않게(이중 방어).
+    """
+    try:
+        utterance = await run_wh1_primary_turn(
+            student_solution=body.student_solution or body.student_input,
+            solution_steps=body.solution_steps or [],
+            active_hypotheses=active_hypotheses,
+            provider=provider,
+            turn_index=turn_index,
+            dialogue_id=dialogue_id,
+            problem_id=str(problem_id) if problem_id is not None else None,
+            warmstart_outside_mids=warmstart_mids,
+        )
+    except Exception as exc:  # noqa: BLE001 — flip은 앱을 죽이지 않는다(이중 방어·타입명 로그).
+        logger.warning(
+            "WH-1 primary 경로 예외(%s) — 결정론 템플릿 폴백", type(exc).__name__, exc_info=True
+        )
+        return decision
+    if utterance is None:
+        return decision  # 결정론 폴백(사유는 run_wh1_primary_turn이 이미 로그).
+    return decision.model_copy(update={"prompt": utterance})
+
+
 def _build_dialogue_turn(
     schema: DialogueTurnSchema, cipher: SupportsEnvelope | None
 ) -> DialogueTurnORM:
@@ -1228,21 +1297,16 @@ async def create_session(
     # 아래 결정론 경로(`_build_response_payload`) 그대로다(노출 불변). judge shadow의 `_spawn`
     # (fire-and-forget) 패턴 미러 — 응답 경로는 하네스 도구 루프(수 초)를 await하지 않는다. 플래그
     # OFF(기본)면 spawn 0·기존과 비트동일(완전 되돌리기 가능·04a '측정 없는 도입 없음').
-    if get_settings().wh1_harness_shadow_enabled:
-        # S1-c: 웜스타트 probe 힌트(outside_mids) 조립 — 진단 시작 시 하네스 탐색 probe가 겨냥할
-        # 외부 오개념 후보를 단원 고빈도+atom 확장으로 미리 공급한다(감사 Q5). **진단 probe 타깃팅
-        # 전용** — 코칭 context·개입엔 오개념을 preload하지 않는다(reactive 유지·CLAUDE.md). 플래그
-        # ON일 때만 호출(OFF면 warmstart 비용 0). warmstart는 조회만이라 실패해도 학생 응답을 깨면
-        # 안 되므로 never-break로 감싸 빈 리스트로 폴백한다(가용성 #1≫진단 관측 #6).
-        warmstart_mids: list[str] = []
-        try:
-            warmstart_mids = await assemble_warmstart_probe_hints(
-                session,
-                problem_id=body.problem_id,
-                provider=build_provider(get_settings()),
-            )
-        except Exception:  # noqa: BLE001 — 웜스타트 실패는 학생 응답을 안 깬다(never-break).
-            logger.warning("웜스타트 probe 힌트 조립 실패 — 빈 힌트로 진행", exc_info=True)
+    # S1-11 flip: primary(발화 승격)·shadow(비노출 관측) 플래그를 함께 읽는다 — primary on이면
+    # 하네스가 *본류*에서 동기 실행·관측 emit까지 하므로 별도 shadow spawn은 하지 않는다(같은 턴
+    # 이중 LLM 호출·중복 레코드 회피). 둘 다 off(기본)면 웜스타트·spawn 0 — 기존과 비트동일.
+    wh1_primary_on = get_settings().wh1_primary_enabled
+    wh1_shadow_on = get_settings().wh1_harness_shadow_enabled
+    warmstart_mids: list[str] = []
+    if wh1_primary_on or wh1_shadow_on:
+        # S1-c: 웜스타트 probe 힌트 조립(진단 probe 타깃팅 전용·never-break·헬퍼 docstring 참조).
+        warmstart_mids = await _warmstart_hints_or_empty(session, problem_id=body.problem_id)
+    if wh1_shadow_on and not wh1_primary_on:
         _spawn(
             observe_wh1_harness_shadow(
                 # 학생 원문·풀이 단계는 정책의 *사적 필드*로만 주입(S1-a·프롬프트·레코드 미노출).
@@ -1266,6 +1330,20 @@ async def create_session(
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
+    # S1-11 flip(사인오프 2026-07-20): primary on이면 학생-대면 발화(decision.prompt·AI 턴
+    # content)를 하네스 LLM 발화로 교체한다 — verify 의무·정답 억제·톤필터 통과분만, 실패 시
+    # 결정론 폴백(헬퍼 docstring). 구조화 결정·가설·증거 파이프라인은 위 결정론 경로 그대로.
+    if wh1_primary_on:
+        decision = await _wh1_primary_decision_or(
+            decision,
+            body=body,
+            active_hypotheses=active_hypotheses,
+            warmstart_mids=warmstart_mids,
+            provider=judge_deps.provider,
+            turn_index=1,  # 새 dialogue — 첫 교환(§2.2 ε 카운터·아래 _wh1_turn_state와 정합).
+            dialogue_id=None,  # dialogue는 아래에서 생성되므로 아직 id 없음(shadow 동형).
+            problem_id=body.problem_id,
+        )
 
     now = datetime.now(timezone.utc)
     dialogue = DialogueORM.from_schema(
@@ -1432,16 +1510,16 @@ async def append_turns(
     # 빈약하다. 플래그 OFF(기본)면 spawn 0·기존과 비트동일 — 학생 응답은 결정론 경로 그대로
     # (노출 불변·비블로킹 _spawn·무영속·04a '측정 없는 도입 없음' 준수). problem_id만 출처가
     # 다르다(create=body·append=dialogue — expected_answer 조회와 동일한 출처 규약).
-    if get_settings().wh1_harness_shadow_enabled:
-        warmstart_mids_turn: list[str] = []
-        try:
-            warmstart_mids_turn = await assemble_warmstart_probe_hints(
-                session,
-                problem_id=dialogue.problem_id,
-                provider=build_provider(get_settings()),
-            )
-        except Exception:  # noqa: BLE001 — 웜스타트 실패는 학생 응답을 안 깬다(never-break).
-            logger.warning("웜스타트 probe 힌트 조립 실패(멀티턴) — 빈 힌트로 진행", exc_info=True)
+    # S1-11 flip: create_session과 동형 — primary on이면 shadow spawn 생략(이중 호출 회피)·
+    # 둘 다 off(기본)면 웜스타트·spawn 0(기존과 비트동일). problem_id 출처만 dialogue(멀티턴 규약).
+    wh1_primary_on = get_settings().wh1_primary_enabled
+    wh1_shadow_on = get_settings().wh1_harness_shadow_enabled
+    warmstart_mids_turn: list[str] = []
+    if wh1_primary_on or wh1_shadow_on:
+        warmstart_mids_turn = await _warmstart_hints_or_empty(
+            session, problem_id=dialogue.problem_id
+        )
+    if wh1_shadow_on and not wh1_primary_on:
         _spawn(
             observe_wh1_harness_shadow(
                 student_solution=body.student_solution or body.student_input,
@@ -1467,6 +1545,19 @@ async def append_turns(
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
+    # S1-11 flip: create_session과 동형 — 학생-대면 발화만 하네스 LLM 발화로 교체(검증 게이트·
+    # 톤필터 통과분·실패 시 결정론 폴백). 멀티턴 메타(dialogue_id·turn_index)는 shadow와 동일 규약.
+    if wh1_primary_on:
+        decision = await _wh1_primary_decision_or(
+            decision,
+            body=body,
+            active_hypotheses=active_hypotheses,
+            warmstart_mids=warmstart_mids_turn,
+            provider=judge_deps.provider,
+            turn_index=(dialogue.total_turns or 0) // 2 + 1,
+            dialogue_id=str(dialogue_id),
+            problem_id=dialogue.problem_id,
+        )
 
     current_total = dialogue.total_turns or 0
     student_order = current_total + 1
