@@ -12,6 +12,7 @@ import '../data/coach_api.dart';
 import '../data/coach_models.dart';
 import '../data/scene_api.dart';
 import '../domain/chat_message.dart';
+import '../domain/latex_to_plain.dart';
 import 'chat_state.dart';
 
 part 'chat_controller.g.dart';
@@ -108,6 +109,17 @@ class ChatController extends _$ChatController {
       ),
     );
   }
+
+  /// MathLive 수식 입력(LaTeX)을 평문 수식 줄로 변환해 풀이로 전송한다(MOB-06).
+  ///
+  /// MathLive는 여러 줄 수식을 `\displaylines{... \\ ...}` LaTeX로 직렬화한다 — 그 원문을 그대로
+  /// [sendSolution]에 넘기면 (1) 학생 버블에 LaTeX가 노출되고 (2) 행 구분자 `\\`는 `_splitSteps`의
+  /// `'\n'` 분해에 걸리지 않아 단일 0-전이 스텝이 되어 verify가 미결정한다(2026-07-20 실기기 실측).
+  /// 여기서 [latexToPlainSolution](순수·표기 매핑)으로 백엔드 verify 계약이 받는 평문 수식 줄
+  /// (`'\n'` 구분)로 되돌린 뒤 기존 [sendSolution]에 위임한다 — 버블엔 평문, steps는 인접 전이로
+  /// 분해된다. 수학 판정은 서버가 한다(표현≠의미·클라는 표기 변환만·검증 미구현).
+  Future<void> sendMathLiveSolution(String latex) =>
+      sendSolution(latexToPlainSolution(latex));
 
   /// OCR로 인식한 풀이를 코치에게 넘긴다(사진 풀이 핸드오프·S1-d).
   ///

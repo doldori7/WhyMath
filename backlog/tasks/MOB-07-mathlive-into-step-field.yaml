@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-07-mathlive-into-step-field
+title: "MathLive 입력을 풀이 단계 필드로 연동 — 숨은 줄바꿈(⊕) 제거"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "수식으로 입력 완료 시 입력 수식이 풀이 단계 필드에 평문으로 채워짐(여러 줄이면 여러 필드 분배) + 학생이 숨은 ⊕ 제스처 없이 다단계 제출 도달 — 위젯/단위 테스트 + 실기기 확인"
+artifacts:
+  - "commit 7aa0b45 + 실기기 확인 2026-07-20(Kiki 스샷: 수식 완료→단계 필드 순차 채워짐·숨은 ⊕ 불요)"
+paths:
+  - "src/mobile/lib/features/chat/**"
+session: null
+notes: "2026-07-20 MOB-06 실기기 확인 중 발견: MathLive 0.110.0 여러 줄 줄바꿈은 Enter키 Shift변형 ⊕(addRowAfter)에만 숨어있어(기본 Enter=commit·menuItems=[] 메뉴 비활성·라벨 없음) 학생 발견 불가에 가까움. Kiki 결정: 수식으로 입력 완료가 수식을 _SolutionStepsEditor 필드에 채우게 연동(입력 모델 단계 편집기로 통일). MOB-06 후속."
+updated: 2026-07-20

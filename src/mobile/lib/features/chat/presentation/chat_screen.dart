@@ -15,6 +15,8 @@ import '../../problems/application/active_problem.dart';
 import '../../problems/data/problem_models.dart';
 import '../application/chat_controller.dart';
 import '../domain/chat_message.dart';
+import '../domain/latex_to_plain.dart';
+import '../domain/solution_steps.dart';
 import 'coach_emphasis_text.dart';
 import 'coach_signal_card.dart';
 import 'scene_renderer.dart';
@@ -41,6 +43,16 @@ const double _stepAreaMaxHeightFraction = 0.25;
 /// 값이 걸리고, 키보드로 좁아지면 위 비율 상한이 먼저 걸린다(둘 중 작은 쪽).
 const double _stepAreaMaxHeight = 162;
 
+/// 빈 단계 필드 예시 힌트 (MOB-05) — 학생에게 *앱이 알아듣는 입력 형태*를 스스로 안내한다.
+/// 등식 한 줄·근 나열 등 백엔드 verify가 결정하는 자연 표기(MOB-06·S3-06)라, 그대로 따라 쓰면
+/// 검증 결정 구간에 들어간다. 왼쪽 번호 라벨과 중복되던 "단계 N"을 대체. 정오 강조·부정 표현 없음.
+/// 필드가 늘어도 `index % length`로 순환한다.
+const List<String> _stepHintExamples = <String>[
+  '예: 2x+3=7',
+  '예: x=2',
+  '예: (x-2)(x-3)=0',
+];
+
 /// 입력 모드 — 대화(단일 라인) 또는 풀이 단계(단계 리스트 편집기·묶음 제출).
 enum _InputMode {
   /// 자유 대화(기존 동작) — `send`로 학생 발화만 전송.
@@ -64,6 +76,12 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _inputController = TextEditingController();
+
+  /// 풀이 단계 편집기 상태 핸들 — MathLive "완료"가 입력 수식을 이 편집기의 단계 필드에
+  /// 채우기 위해 쓴다(MOB-07). 편집기는 풀이 단계 모드에서만 트리에 있으므로 currentState는
+  /// 그때만 유효하다(아니면 폴백).
+  final GlobalKey<_SolutionStepsEditorState> _stepsEditorKey =
+      GlobalKey<_SolutionStepsEditorState>();
 
   /// 현재 입력 모드(기본=대화). 토글로 풀이 단계 모드와 전환한다.
   _InputMode _mode = _InputMode.conversation;
@@ -131,12 +149,24 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// 수식(MathLive) 입력 화면(`/math-input`)으로 진입하고, 돌아온 LaTeX를 풀이로 넘긴다(S1).
   ///
   /// 입력 화면은 채팅을 알지 못한 채 `context.pop(latex)`로 LaTeX만 돌려준다(OCR과 동형·단방향
-  /// chat→math-input 의존). 받은 LaTeX를 `sendSolution`으로 전송한다 — 취소(null)·빈 입력이면
-  /// 아무 일도 하지 않는다(줄 분해·검증은 컨트롤러·백엔드가 한다).
+  /// chat→math-input 의존). 받은 LaTeX를 평문 수식(표기 매핑·MOB-06)으로 바꿔 **풀이 단계 편집기
+  /// 필드에 채운다**(MOB-07) — 학생이 숨은 줄바꿈(⊕) 제스처 없이 눈에 보이는 단계 필드로 다단계를
+  /// 쌓고 "풀이 제출"하게 한다. 여러 줄(⊕로 만든 `\displaylines`)이면 여러 필드에 분배된다. 편집기가
+  /// 없거나(모드 전환 등) 채울 게 없으면 기존 즉시 제출 경로로 폴백한다(방어). 취소(null)·빈 입력이면
+  /// 아무 일도 하지 않는다(변환·줄 분해·검증은 컨트롤러·백엔드가 한다).
   Future<void> _onMathInput() async {
     final latex = await context.push<String>(AppRoutes.mathInputPath);
-    if (latex != null && latex.trim().isNotEmpty && mounted) {
-      await ref.read(chatControllerProvider.notifier).sendSolution(latex);
+    if (latex == null || latex.trim().isEmpty || !mounted) {
+      return; // 취소·빈 입력.
+    }
+    final plain = latexToPlainSolution(latex);
+    final filled =
+        _stepsEditorKey.currentState?.fillFromMathInput(plain) ?? false;
+    if (!filled) {
+      // 편집기 미마운트(모드 전환 등)·빈 변환 → 기존 즉시 제출 경로 폴백(계약 유지).
+      await ref
+          .read(chatControllerProvider.notifier)
+          .sendMathLiveSolution(latex);
     }
   }
 
@@ -214,6 +244,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               if (state.isSending) const LinearProgressIndicator(minHeight: 2),
               _InputBar(
                 controller: _inputController,
+                stepsEditorKey: _stepsEditorKey,
                 enabled: !state.isSending,
                 mode: _mode,
                 stepAreaMaxHeight: stepAreaMaxHeight,
@@ -451,6 +482,7 @@ class _SocraticBadge extends StatelessWidget {
 class _InputBar extends StatelessWidget {
   const _InputBar({
     required this.controller,
+    required this.stepsEditorKey,
     required this.enabled,
     required this.mode,
     required this.stepAreaMaxHeight,
@@ -462,6 +494,10 @@ class _InputBar extends StatelessWidget {
 
   /// 대화 모드 입력 컨트롤러(풀이 모드는 편집기가 자체 컨트롤러를 쓴다).
   final TextEditingController controller;
+
+  /// 풀이 단계 편집기 상태 핸들 — MathLive 입력을 단계 필드에 채우는 데 쓴다(MOB-07).
+  final GlobalKey<_SolutionStepsEditorState> stepsEditorKey;
+
   final bool enabled;
   final _InputMode mode;
 
@@ -520,7 +556,9 @@ class _InputBar extends StatelessWidget {
             if (isSolution)
               // 풀이 단계 모드 — 단계 리스트 편집기. 토글로 모드를 나가면 편집기가
               // 트리에서 제거돼 상태가 초기화된다(기존 "토글 시 입력 비움"과 동형).
+              // GlobalKey로 MathLive 입력을 이 편집기 필드에 채운다(MOB-07).
               _SolutionStepsEditor(
+                key: stepsEditorKey,
                 enabled: enabled,
                 stepAreaMaxHeight: stepAreaMaxHeight,
                 onSubmit: onSendSolution,
@@ -570,6 +608,7 @@ class _InputBar extends StatelessWidget {
 /// 컨트롤러(`sendSolution`), 검증은 백엔드가 한다(표현≠의미·수학 로직 클라 미구현).
 class _SolutionStepsEditor extends StatefulWidget {
   const _SolutionStepsEditor({
+    super.key,
     required this.enabled,
     required this.stepAreaMaxHeight,
     required this.onSubmit,
@@ -654,6 +693,49 @@ class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
         _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
       }
     });
+  }
+
+  /// MathLive "완료"로 받은 평문 수식(`'\n'` 여러 줄 가능)을 단계 필드에 채운다(MOB-07).
+  ///
+  /// [mergeStepTexts] 규칙으로 **빈 필드부터 채우고 남으면 필드를 추가**한다 — 학생이 숨은
+  /// 줄바꿈(⊕) 제스처 없이도 눈에 보이는 단계 필드로 다단계를 쌓게 한다. 채운 줄이 하나라도
+  /// 있으면 true를 돌려준다(호출부가 폴백 여부 판정). 구조 변경(필드 추가)만 setState로 감싸고,
+  /// 텍스트는 컨트롤러 세팅으로 반영한다(TextField가 컨트롤러로 갱신·리스너가 카운트 라벨 갱신).
+  /// 표기 배치만 한다 — 수학 판정·검증은 백엔드 몫(표현≠의미).
+  bool fillFromMathInput(String plainText) {
+    final lines = plainText
+        .split('\n')
+        .map((line) => line.trim())
+        .where((line) => line.isNotEmpty)
+        .toList();
+    if (lines.isEmpty) {
+      return false; // 채울 게 없다(빈/공백 입력) — 호출부가 폴백한다.
+    }
+    final merged =
+        mergeStepTexts(_controllers.map((c) => c.text).toList(), lines);
+    // 늘어난 만큼 새 필드 추가(구조 변경이라 setState).
+    final extra = merged.length - _controllers.length;
+    if (extra > 0) {
+      setState(() {
+        for (var i = 0; i < extra; i++) {
+          _appendField();
+        }
+      });
+    }
+    // 각 필드 텍스트 반영(달라진 것만 — 불필요한 커서 리셋·알림 방지).
+    for (var i = 0; i < merged.length; i++) {
+      if (_controllers[i].text != merged[i]) {
+        _controllers[i].text = merged[i];
+      }
+    }
+    _recount();
+    // 채운 마지막 필드가 보이도록 스크롤한다(다음 프레임).
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) {
+        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+      }
+    });
+    return true;
   }
 
   /// 단계 삭제 — 마지막 1개는 남긴다(빈 편집기 방지). dispose는 프레임 뒤로 미룬다
@@ -805,7 +887,8 @@ class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
               textInputAction: TextInputAction.next,
               onSubmitted: (_) => _handleStepSubmitted(index),
               decoration: InputDecoration(
-                hintText: '단계 ${index + 1}',
+                // 번호는 왼쪽 라벨에 있으므로 힌트는 *입력 형태 예시*로 안내한다(MOB-05).
+                hintText: _stepHintExamples[index % _stepHintExamples.length],
                 border: const OutlineInputBorder(),
                 isDense: true,
               ),

@@ -212,7 +212,7 @@ void main() {
 
     // 초기 2개 단계 필드 — 묶음 제출(최소 전이 1개)이 기본 모양임을 시각적으로 유도한다.
     expect(find.byType(TextField), findsNWidgets(2));
-    expect(find.text('단계 1'), findsOneWidget); // 번호 매겨진 힌트.
+    expect(find.text('예: 2x+3=7'), findsOneWidget); // 입력 형태 예시 힌트(MOB-05).
 
     // "단계 추가" → 3개.
     await tester.tap(find.text('단계 추가'));
@@ -351,6 +351,23 @@ void main() {
     await tester.tap(find.byIcon(Icons.format_list_numbered));
     await tester.pump();
     expect(find.text('수식으로 입력'), findsOneWidget);
+  });
+
+  testWidgets('풀이 단계 빈 필드에 입력 형태 예시 힌트가 보인다(MOB-05)', (tester) async {
+    await tester.pumpWidget(_wrap(_FakeCoachApi(response: _response())));
+
+    // 풀이 단계 모드로 토글하면 단계 편집기(초기 2필드)가 나타난다.
+    await tester.tap(find.byIcon(Icons.format_list_numbered));
+    await tester.pump();
+
+    // 빈 필드 힌트가 "단계 N"이 아니라 입력 형태 예시로 안내된다(왼쪽 번호 라벨과 중복 제거).
+    // 힌트는 빈 필드에 Text로 렌더되므로 find.text로 잡힌다(필드별 예시가 달라 각 1개).
+    expect(find.text('예: 2x+3=7'), findsOneWidget);
+    expect(find.text('예: x=2'), findsOneWidget);
+    expect(find.textContaining('단계 1'), findsNothing);
+
+    // 정서 안전(절대 금기): "틀렸다"류 부정 표현이 없다.
+    expect(find.textContaining('틀'), findsNothing);
   });
 
   testWidgets('API 실패 시 SnackBar로 에러를 알린다(앱은 유지)', (tester) async {

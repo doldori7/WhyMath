@@ -5,14 +5,15 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "수식 입력(완료) 제출 시 학생 버블에 LaTeX 원문 미노출(렌더 또는 평문 변환) + 검증 가능한 형태로 verify 도달(다단계 수식이 결정 구간 진입) — 실기기 확인"
-artifacts: []
+artifacts:
+  - "commit 558c9b4 + 실기기 확인 2026-07-20(Kiki 스샷: displaylines→두 줄 평문 버블·백엔드 correct)"
 paths:
   - "src/mobile/lib/features/chat/**"
 session: null

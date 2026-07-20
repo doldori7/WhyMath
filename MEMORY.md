@@ -337,6 +337,9 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-20 (사고·재발방지·실기기 안내): **실기기 앱 실행 안내에서 백엔드 기동·dart-define 누락 → "문제를 불러오지 못했어요" — CLAUDE.md 규칙 등재** (Kiki 실기기·claude 안내 결함)
+
+**사고**: MOB-06 실기기 확인을 안내하며 앱 구동을 bare `flutter run`으로만 안내 → 앱이 기본값 `http://localhost:8000`(실기기에선 *기기 자신*)에 토큰 없이 접속 → 보호 엔드포인트 401 → `diagnosis_controller`가 "문제를 불러오지 못했어요. 잠시 후 다시 시도해 주세요"로 graceful 실패(Kiki 실기기 보고). **원인**: ①백엔드 미기동(`run_demo.ps1` 누락) ②`--dart-define=API_URL=<PC LAN IP>:8000`·`--dart-define=DEMO_TOKEN` 누락 — 실기기가 PC 백엔드에 닿는 주소·인증이 없음. **분류**: 반복 유형(검증 없는 실행 안내·가정 기반 런북)이라 실수 관리 규정상 등재 의무. **대책(규칙)**: `CLAUDE.md` 📐Kiki 개인 선호에 "실기기 앱 실행 안내=백엔드 도달성·인증 선결 필수" 규칙 등재 — run_demo.ps1 선기동 + 값 채워진 dart-define 줄 통째 복사 + `/demo-doctor` 카탈로그 선조회 강제. **정정 안내**: `run_demo.ps1`(Postgres·시드·uvicorn·토큰·LAN IP) → 출력된 `flutter run --dart-define=API_URL=...:8000 --dart-define=DEMO_TOKEN=...` 복사 실행. **MOB-06 코드(변환) 자체는 무결** — 백엔드 실측(변환 산출 `['2x+3=7','x=2']` → `verify_solution` n_transitions=1·correct=1·unverifiable=0)로 별도 검증 완료했고, 실기기 확인은 이 데모 스택 복구 후 재개한다.
 ### 2026-07-20 (구현·머지·S1-11 done): **flip 랜딩 — WH-1 하네스 primary 경로 main 병합(기본 off·canary)·S1-11 완료** (claude 구현·CI 실증)
 
 **구현**: `WHYMATH_WH1_PRIMARY_ENABLED`(기본 False·opt-in) 뒤 스테이징. on 시 coach 세션/턴의 학생-대면 발화만 `model_copy`로 하네스 발화 교체(verify 의무·정답 억제 백스톱·L4 `filter_tone` 통과분만 노출)·LLM 실패/타임아웃(15s)/예산소진 시 결정론 템플릿 안전 폴백(예외 타입명 로그)·primary on이면 별도 shadow spawn 회피(이중 LLM 방지)·shadow 관측은 primary 경로에서도 emit(`primary=True`)·stateless `/v1/coach` 불변. gate3 거버넌스 신규 LLM 발화 표면 봉인(섹션 E frozenset). 정서안전 필드(tone_rewritten/tone_violations) 배선.

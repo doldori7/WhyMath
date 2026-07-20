@@ -5,14 +5,15 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "빈 단계 필드에 흐린 예시(예: 2x+3=7) 표시 + 위젯 테스트 — 실기기 확인"
-artifacts: []
+artifacts:
+  - "commit 24a30e1 + 실기기 확인 2026-07-20(Kiki 스샷: 예:2x+3=7/예:x=2 흐린 예시·입력 시 사라짐)"
 paths:
   - "src/mobile/lib/features/chat/**"
 session: null
