@@ -31,6 +31,11 @@
     이면 해집합 비교를 하지 않고 unverifiable(항등 재작성 ↔ 값 선언 전이는 해집합 보존 의무가
     없음 — 거짓 incorrect 함정·`solset_transition_status` 참조). ④ 캐럿 없는 지수(`x2`)는 수열
     표기(`a1`)와 충돌해 재작성 보류 — 해집합 경로에서 판정 불가로 보수(unverifiable 유지가 정직).
+  - **진부분집합 전이 가드(S3-08·2026-07-20 대본 측정 턴4)**: 유한↔유한에서 after가 before의
+    비어있지 않은 진부분집합(`x=2, x=3 → x=3`)이면 unverifiable — "답 선택"(정당·문항이 큰 근
+    요구)과 "근 유실"(오류·`x^2=4 → x=2`)이 구조 동일해 기대정답 없이 구별 불가하므로 거짓
+    incorrect 0 계약 우선(`solset_transition_status` 참조·검출 복원은 기대정답 앵커 후속).
+    비부분집합 변화({2,3}→{2,4} 등)는 incorrect 유지(검출력 보존).
   - **서술형·증명·보조선 기하·경우 나누기 등 비대수 단계**: `unverifiable`. SymPy 검증 자체가
     부적절하므로 시도하지 않고, step_type을 기록해 *검증 불가 단원에서 교착하지 않게*(정직).
   - **정직성(CLAUDE.md "확실하지 않으면 모른다")**: 판정 불가(SymPy `is_zero is None`)·파싱
@@ -146,10 +151,12 @@ def _equation_step_result(
     `solset_transition_status`(해집합 전이 4상태·`l3/solution_set.py`)를 verify_step 3상태로
     매핑한다:
       - identity(해집합 보존) → correct(가중치 1.0·사유 None).
-      - not_identity(해집합 변화) → incorrect(가중치 1.0·사유 채움).
-      - undecidable(다변수·비다항·복소·미정·파싱 불가·**ℝ↔유한 이질 형태**) → unverifiable
-        (가중치 0.5·정직 할인). 이질 형태 가드는 S3-06 거짓 incorrect 함정 방어 —
-        항등식(ℝ) ↔ 값 선언 전이는 해집합 보존 의무가 없다(`solset_transition_status` 참조).
+      - not_identity(해집합 변화·진부분집합 아닌 다름) → incorrect(가중치 1.0·사유 채움).
+      - undecidable(다변수·비다항·복소·미정·파싱 불가·**ℝ↔유한 이질 형태**·**유한↔유한
+        진부분집합**) → unverifiable(가중치 0.5·정직 할인). 이질 형태 가드는 S3-06 거짓
+        incorrect 함정 방어 — 항등식(ℝ) ↔ 값 선언 전이는 해집합 보존 의무가 없다. 진부분집합
+        가드는 S3-08 — 답 선택(정당)과 근 유실(오류)이 구조 동일해 기대정답 없이 구별 불가
+        (`solset_transition_status` 참조).
 
     표현식 경로(`identity_status`)와 *같은 매핑 형태*를 유지해 하류(verify_solution 집계)가 두
     경로를 구분 없이 흡수하게 한다. `reason`은 학생 제출 등식 원문만 반향한다(정답 미조회·미누출).
@@ -189,10 +196,10 @@ def verify_step(
          되면(예 `x=(1+3)/2=3`의 `(1+3)/2≠3`) 전이 비교와 무관하게 `incorrect` — 단계 자체의
          거짓이라 승격이 안전하다(해집합 비교의 이질 형태 함정과 무관).
       1.5. **등식 형태 단계**(before·after가 *둘 다* 등식 형태 — 단일 등식·연쇄 정규화·근 나열)
-         → 해집합 보존 동치로 판정(S3-02·S3-06·`solset_transition_status`). 해집합 같으면
-         correct·다르면 incorrect·풀이 불가/**이질 형태(ℝ↔유한)** 면 unverifiable. 한쪽만
-         등식이면(방정식↔표현식 혼합) 비교 대상이 어긋나 보수적 unverifiable(거짓 incorrect
-         회피).
+         → 해집합 보존 동치로 판정(S3-02·S3-06·S3-08·`solset_transition_status`). 해집합 같으면
+         correct·다르면 incorrect·풀이 불가/**이질 형태(ℝ↔유한)**/**유한↔유한 진부분집합
+         (답 선택↔근 유실 구별 불가·S3-08)** 면 unverifiable. 한쪽만 등식이면(방정식↔표현식
+         혼합) 비교 대상이 어긋나 보수적 unverifiable(거짓 incorrect 회피).
       2. **그 외**(계산·검산·미지정·등호 없는 식) → SymPy 심볼릭 동치 검증(자유변수 OK — "2(x+1)" ≡
          "2x+2"·`convert_xor=True`라 `^`=거듭제곱). 차이 `diff = before - after`에서:
          - **correct**: `expand(diff) == 0`(다항식 항등식이 0으로 환원) *또는*

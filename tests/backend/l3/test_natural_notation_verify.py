@@ -161,7 +161,7 @@ class TestUnicodeOperatorNormalization:
 
 
 class TestRegressionSingleEquationPath:
-    """기존 단일 등식 경로(S3-02) 회귀 방지 — 동질 형태(유한↔유한) 비교는 그대로 유지."""
+    """기존 단일 등식 경로(S3-02) 회귀 방지 — 동질 형태(유한↔유한) 비진부분집합 비교는 유지."""
 
     def test_equation_transform_still_correct(self) -> None:
         result = verify_step("2x+3=7", "2x=4")
@@ -171,11 +171,15 @@ class TestRegressionSingleEquationPath:
         result = verify_step("2x=6", "2x=8")
         assert result.state == VerifyStepState.incorrect
 
-    def test_root_loss_still_incorrect(self) -> None:
-        # 유한↔유한 근 유실({−2,2}→{2})은 여전히 incorrect — S3-02 해집합 보존 검출 유지.
-        # (이질 형태 가드는 ℝ↔유한 만 보수 처리한다 — 동질 비교의 검출력은 후퇴하지 않음.)
+    def test_root_loss_now_unverifiable(self) -> None:
+        # 【S3-08 의도적 갱신】 근 유실({−2,2}→{2})은 incorrect → **unverifiable**로 변경.
+        # 사유: 진부분집합 전이는 "답 선택"(정당·`x=2, x=3 → x=3`·2026-07-20 대본 측정 턴4)과
+        # 구조적으로 동일해 기대정답 없이 구별 불가 — 거짓 incorrect 0 계약(교수학 > 학습효과)이
+        # 근 유실 검출 이득보다 우선한다. 검출 회복은 기대정답 앵커 후속(`solset_transition_status`
+        # docstring 설계 노트 참조). 비부분집합 오류 검출은 후퇴하지 않음(위/아래 테스트 유지).
         result = verify_step("x²=4", "x=2")
-        assert result.state == VerifyStepState.incorrect
+        assert result.state == VerifyStepState.unverifiable
+        assert result.state != VerifyStepState.incorrect
 
     def test_identity_rewriting_both_sides_still_correct(self) -> None:
         # ℝ↔ℝ(둘 다 항등 재작성)은 여전히 correct — 이질 형태 가드가 동질 ℝ 비교를 막지 않음.

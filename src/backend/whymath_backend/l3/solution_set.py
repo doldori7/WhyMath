@@ -37,6 +37,17 @@
     undecidable 유지. 없으면 `x²−4x+3=(x−1)(x−3)`(항등·ℝ) → `x=2`(축 공식 파생·{2}) 같은 옳은
     풀이가 거짓 incorrect가 난다(2026-07-19 실측·본 태스크의 핵심 함정).
 
+**S3-08 진부분집합 전이 가드(2026-07-20 대본 측정 턴4 대응)**: finite↔finite 전이에서 after가
+before의 **비어있지 않은 진부분집합**(after ⊊ before·after ≠ ∅)이면 undecidable로 보수 처리한다.
+근거: 이 전이는 구조적으로 두 의미가 동일해 문맥(기대정답) 없이 구별 불가 —
+  - **답 선택(정당)**: `x=2, x=3 → x=3`({2,3}→{3}·문항이 큰 근을 요구) — 실측에서 이를
+    incorrect로 오판해 정당한 풀이에 "다시 살펴볼 지점이 있어요"가 노출됐다(거짓 incorrect·
+    2026-07-20 대본 측정 턴4 실해악).
+  - **근 유실(오류)**: `x^2=4 → x=2`({−2,2}→{2}) — 검출하고 싶지만 위와 구조 동일.
+"거짓 incorrect 0" 계약(의사결정 우선순위 3 교수학 > 4 학습효과)이 근 유실 검출 이득보다
+우선이므로 보수적 undecidable을 택한다. **비부분집합 변화**({2,3}→{2,4} 원소 교체·{2}→{2,5}
+원소 추가·{2}→{3} 전혀 다름·{2}→∅ 전멸)는 incorrect를 유지해 검출력 대부분을 보존한다.
+
 **보류(구현 금지 — 주석으로만 기록)**: 캐럿 없는 지수 `x2`→`x²` *재작성 휴리스틱*은 수열 표기
 (`a1`,`a2`)와 충돌 위험이라 범위 밖(S3-06 ④). 해당 표기는 unverifiable 유지가 정직 — 아래
 `_AMBIGUOUS_TRAILING_DIGIT_SYMBOL` 가드가 해집합 경로에서 이를 강제한다(재작성이 아니라 보수 회피).
@@ -199,6 +210,23 @@ def _solsets_equal(a: EquationSolset, b: EquationSolset) -> bool:
     return all(any(_num_equal(x, y) for y in b.values) for x in a.values)
 
 
+def _finite_nonempty_proper_subset(after: EquationSolset, before: EquationSolset) -> bool:
+    """after가 before의 *비어있지 않은 진부분집합*(after ⊊ before·after ≠ ∅)인가 — S3-08 가드용.
+
+    유한↔유한 전용(ℝ이 끼면 False — 이질 형태는 별도 가드가 먼저 처리). 원소 매칭은
+    `_solsets_equal`과 동일하게 `_num_equal`(정수/유리/실수 타입차 흡수)을 쓴다. **∅는 제외**한다
+    (∅ ⊊ 유한집합이지만 "답 선택"은 항상 1개 이상을 고르므로 ∅ 전이는 선택으로 성립 불가 —
+    incorrect 검출을 유지해도 거짓 incorrect 위험이 없다·검출력 보존).
+    """
+    if after.all_reals or before.all_reals:
+        return False
+    if not after.values:
+        return False  # ∅는 답 선택으로 성립 불가 — 검출(not_identity) 유지
+    if len(after.values) >= len(before.values):
+        return False  # 같은 크기(=동일 여부는 앞선 _solsets_equal이 판정)·초과는 진부분집합 아님
+    return all(any(_num_equal(x, y) for y in before.values) for x in after.values)
+
+
 def solset_transition_status(
     before: EquationSolset | None,
     after: EquationSolset | None,
@@ -211,8 +239,21 @@ def solset_transition_status(
     *선언*(예: 축 공식 파생 `x=2`)의 전이는 해집합 보존 의무가 없으므로, 비교하면 옳은 풀이가
     거짓 incorrect가 난다(2026-07-19 실측). 따라서:
       - **identity**: ℝ↔ℝ(둘 다 항등 재작성) 또는 유한↔유한(∅ 포함)이 같음 → 보존.
-      - **not_identity**: 유한↔유한이 다름 → 비보존(해가 바뀜/유실/추가 = 잘못된 변형).
-      - **undecidable**: 한쪽이라도 판정 불가(None) *또는* ℝ↔유한 이질 형태 → 위장 없이 보수.
+      - **not_identity**: 유한↔유한이 *진부분집합 아닌* 다름 → 비보존(해가 바뀜/추가/전멸 =
+        잘못된 변형·예: {2,3}→{2,4}·{2}→{2,5}·{2}→{3}·{2}→∅).
+      - **undecidable**: 한쪽이라도 판정 불가(None) *또는* ℝ↔유한 이질 형태 *또는* 유한↔유한
+        **비어있지 않은 진부분집합**(after ⊊ before·S3-08) → 위장 없이 보수.
+
+    **S3-08 진부분집합 가드(2026-07-20 대본 측정 턴4)**: 유한↔유한에서 after가 before의
+    비어있지 않은 진부분집합이면 undecidable — "답 선택"(정당·`x=2, x=3 → x=3`·문항이 큰 근
+    요구)과 "근 유실"(오류·`x^2=4 → x=2`)이 구조적으로 동일해 문맥(기대정답) 없이 구별 불가
+    하므로, 거짓 incorrect 0 계약이 근 유실 검출 이득보다 우선한다(모듈 docstring 참조).
+
+    **후속 강화(설계 노트 — 이번 범위 밖)**: 기대정답 앵커로 검출 복원이 가능하다 — 코치 경로의
+    `expected_answer`(`l3/pregenerate/validator.py`의 `classify_step_break`·`_extract_answer_solset`
+    선례)를 이 판정에 문맥으로 주입하면 "선택 = 기대정답과 일치하는 부분집합 → correct / 그 외
+    부분집합(기대정답 불일치·근 유실) → incorrect"로 진부분집합 전이의 판정을 복원할 수 있다.
+    verify_step은 문맥 없는 순수 primitive이므로 앵커는 선택 인자·상위 배선으로 후속 슬라이스에서.
     """
     if before is None or after is None:
         # 한쪽이라도 판정 불가 → correct/incorrect로 위장하지 않는다(정직).
@@ -222,6 +263,9 @@ def solset_transition_status(
         return IdentityVerdict.undecidable
     if _solsets_equal(before, after):
         return IdentityVerdict.identity
+    if _finite_nonempty_proper_subset(after, before):
+        # S3-08: 답 선택(정당)과 근 유실(오류)이 구조 동일 — 기대정답 없이는 구별 불가 → 보수.
+        return IdentityVerdict.undecidable
     return IdentityVerdict.not_identity
 
 
