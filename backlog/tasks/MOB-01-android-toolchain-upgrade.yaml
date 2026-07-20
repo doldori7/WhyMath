@@ -5,7 +5,7 @@ track: infra-debt
 stage: S1
 subject: math
 layer: mobile
-status: blocked
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,7 +14,9 @@ acceptance:
   - "Kotlin 2.1+·AGP 8.6+ 업그레이드 후 실기기 assembleDebug 성공"
   - "CI mobile 잡의 Flutter 버전을 Kiki 머신(Dart 3.11)과 정합 — 환경 드리프트 근원 제거"
   - "pubspec.lock 커밋(해석 드리프트 차단) + dependency_overrides(image_picker_android·retrofit) 고정 제거"
-artifacts: []
+artifacts:
+  - "PR #568 (d27e5e9)"
+  - "실기기 assembleDebug 2026-07-21 (M2007J20CG·AGP 8.11.1·77.7s·AGP경고 소멸·Flutter 3.41.5/Dart 3.11.3)"
 paths:
   - "src/mobile/**"
   - ".github/workflows/ci.yml"
