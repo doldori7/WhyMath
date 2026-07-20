@@ -5,7 +5,7 @@ track: infra-debt
 stage: S1
 subject: cross
 layer: backend
-status: todo
+status: blocked
 priority: 2
 owner: claude
 depends_on:
@@ -18,5 +18,5 @@ paths:
   - "src/backend/**"
   - "tests/backend/**"
 session: null
-notes: "arch_audit_2026-07-09.md [유예 B] — part8 review rev.2 해제 트리거 계약의 백로그 이관 (사람 기억 의존 제거)"
-updated: 2026-07-09
+notes: "트리거 미발동(2026-07-20 실측): S1-11 머지는 WH-1 발화 flip만 착륙·그래프 traversal 미도입 — query_curriculum/read_student_state는 wh1_loop._exec에서 기록만 하는 stub, wh1_llm_policy._build_prompt는 flat(TurnState 요약), 유일 엣지순회 prerequisite_recommendation은 LLM 미주입(제외 축). 지금 l2/reasoning_subgraph.py 생성=소비처 0 추상(CLAUDE.md 금기)·test_llm_subgraph_budget_invariant가 graph→LLM 빌더 없음 동결. 실제 트리거=query_curriculum이 L1+L2 실제 순회·프롬프트 주입하는 슬라이스 착륙. depends_on(S1-11)은 프록시라 조기 발동 — 해당 슬라이스 착륙 시 unblock."
+updated: 2026-07-20
