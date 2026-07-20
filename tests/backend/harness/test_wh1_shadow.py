@@ -178,6 +178,7 @@ class TestNoRawLeak:
         assert "ZZANSWERZZ" not in raw  # 정답 미포함
         # 파싱된 레코드에도 원문/정답 성격의 자유 텍스트 필드가 없다(고정 스키마·extra="forbid").
         # n_correct/n_incorrect/n_unverifiable(S3-07)은 비식별 *정수* 카운트라 허용 목록에 든다.
+        # primary/tone_rewritten/tone_violations(S1-11 flip)도 비식별 bool·정수뿐(발화 원문 없음).
         parsed = json.loads(raw)
         assert set(parsed.keys()) <= {
             "status",
@@ -191,6 +192,9 @@ class TestNoRawLeak:
             "dialogue_id",
             "problem_id",
             "turn_index",
+            "primary",
+            "tone_rewritten",
+            "tone_violations",
             "observed_at",
         }
 

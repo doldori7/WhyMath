@@ -322,3 +322,72 @@ class TestGate3GenerateNonStudentContract:
                 f"app.py /v1/generate에서 게이트 ③ 계약 문구('{marker}')가 사라졌다 — 원시 출력의 "
                 "비학생 경계가 약화됐다."
             )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# (E) WH-1 primary flip 표면 봉인 — 학생-대면 LLM 발화의 *유일한* 허용 표면 (S1-11 사인오프)
+# ──────────────────────────────────────────────────────────────────────────
+# 2026-07-20 flip 사인오프(MEMORY): "학생-대면 자유 텍스트로 검증 안 된 LLM 출력이 방출되지
+# 않는다" 불변식은 유지하되, **검증 게이트를 통과한** LLM 발화 표면 *하나*를 명시적으로 개방한다 —
+# `harness/wh1_primary.py`(`run_wh1_primary_turn`): 발화는 `run_tutoring_turn`의 verify 의무(§3.1)·
+# 정답 억제 백스톱(§3.4)을 통과하고 L4 톤필터를 거친 것만 반환되며, 실패 시 None(호출자 결정론
+# 폴백)이다. 아래 allowlist 3종은 그 표면을 *정확 일치*로 동결한다(무제한 개방 금지) — 새 모듈이
+# 플래그·러너를 소비하면 red가 되고, 그 리뷰 시점이 곧 "검증 게이트 경유 여부" 심사다.
+_WH1_PRIMARY_FLAG_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "config.py",  # 플래그 정의(기본 OFF — 봉인 ③ test_coach_gate3_serving_invariant 동결).
+        "api/coach.py",  # 소비: 세션/턴 핸들러 게이트 + 결정론 폴백(_wh1_primary_decision_or).
+    }
+)
+_WH1_PRIMARY_RUNNER_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "harness/wh1_primary.py",  # 정의 site: 하네스 실행 + 톤필터 + 관측(발화 산출 유일 좌석).
+        "api/coach.py",  # 소비: 플래그 게이트 뒤 발화 교체(폴백 동반).
+        "harness/wh1_session.py",  # docstring 참조만(활성화 보류 명문·비호출).
+    }
+)
+# 검증 게이트·톤필터 경유 마커 — wh1_primary.py가 이 둘을 잃으면 발화가 게이트를 우회한 것이다.
+_WH1_PRIMARY_GATE_MARKERS: tuple[str, ...] = ("run_tutoring_turn", "filter_tone")
+
+
+class TestGate3Wh1PrimarySurfaceSeal:
+    """(E) flip 표면 봉인 — 허용 표면을 명시적 frozenset으로 동결(무제한 개방 금지)."""
+
+    def test_wh1_primary_flag_consumer_set_frozen(self) -> None:
+        """`wh1_primary_enabled` 사용 모듈 집합이 allowlist와 정확 일치(추가·누락 모두 red).
+
+        게이트 ③ (E): 새 모듈이 flip 플래그를 소비하면 red — 그 리뷰가 곧 "그 경로도 검증
+        게이트(verify 의무·정답 억제·톤필터·폴백)를 경유하는가" 심사다.
+        """
+        users = _module_users_of("wh1_primary_enabled")
+        assert users == set(_WH1_PRIMARY_FLAG_ALLOWLIST), (
+            "WH-1 primary 플래그 사용 모듈이 allowlist와 다릅니다 — 게이트 ③ (E). 발견: "
+            f"{sorted(users)} / 허용: {sorted(_WH1_PRIMARY_FLAG_ALLOWLIST)}. 새 표면이라면 검증 "
+            "게이트 경유를 확인하고 이 봉인을 함께 개정하라."
+        )
+
+    def test_wh1_primary_runner_caller_set_frozen(self) -> None:
+        """`run_wh1_primary_turn` 사용 모듈 집합이 allowlist와 정확 일치.
+
+        게이트 ③ (E): 발화 산출 러너를 다른 경로가 직접 소비하면 red — 플래그 게이트·폴백 없이
+        LLM 발화가 학생 표면으로 새는 배선을 리뷰 시점에 잡는다.
+        """
+        users = _module_users_of("run_wh1_primary_turn")
+        assert users == set(_WH1_PRIMARY_RUNNER_ALLOWLIST), (
+            "WH-1 primary 러너 사용 모듈이 allowlist와 다릅니다 — 게이트 ③ (E). 발견: "
+            f"{sorted(users)} / 허용: {sorted(_WH1_PRIMARY_RUNNER_ALLOWLIST)}."
+        )
+
+    def test_wh1_primary_module_keeps_verification_gate_markers(self) -> None:
+        """`wh1_primary.py`가 하네스 루프·톤필터 마커를 유지 — 게이트 우회 재작성 차단.
+
+        게이트 ③ (E): primary 발화는 `run_tutoring_turn`(verify 의무·정답 억제 소유)과
+        `filter_tone`(정서 안전)을 반드시 경유한다. 두 마커가 소스에서 사라지면 발화 산출이
+        게이트를 우회하도록 재작성된 것이므로 red.
+        """
+        source = (_PACKAGE_ROOT / "harness" / "wh1_primary.py").read_text(encoding="utf-8")
+        for marker in _WH1_PRIMARY_GATE_MARKERS:
+            assert marker in source, (
+                f"harness/wh1_primary.py에서 검증 게이트 마커('{marker}')가 사라졌다 — primary "
+                "발화가 하네스 검증/톤필터를 우회하면 게이트 ③ 위반이다."
+            )

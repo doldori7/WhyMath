@@ -37,7 +37,7 @@ from whymath_backend.harness.wh1_loop import ToolResult, TurnOutcome, run_tutori
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 
-__all__ = ["Wh1HarnessShadowObservation", "observe_wh1_harness_shadow"]
+__all__ = ["Wh1HarnessShadowObservation", "emit_wh1_observation", "observe_wh1_harness_shadow"]
 
 logger = logging.getLogger("whymath.harness.wh1_shadow")  # judge shadow 네이밍 동형
 # 구조화 레코드 JSON 한 줄(harvest 입력) — 평문 로그와 분리된 자식 로거(shadow.record 미러).
@@ -96,6 +96,22 @@ class Wh1HarnessShadowObservation(BaseModel):
     problem_id: str | None = None
     """문항 식별자(있으면 id만·문자열화). 문항 본문 아님(코드/UUID·비식별)."""
 
+    primary: bool = False
+    """이 관측이 primary(flip·S1-11) 경로에서 나왔는지 — shadow(False·비노출)와 회계 분리.
+
+    구판·shadow 레코드는 False(기본). True면 이 턴의 하네스 발화가 실제 학생에게 노출된 턴이다
+    (`harness/wh1_primary.py` emit). 발화 원문은 여전히 레코드에 없다(비식별 불변) — 신/구·
+    shadow/primary 혼합 분포를 분리 집계할 수 있게 하는 회계 축(S3-07 신/구판 분리 선례)."""
+
+    tone_rewritten: bool = False
+    """primary 발화가 L4 톤필터(`filter_tone`)로 재작성됐는지 — KPI3(정서 안전) 측정 좌석.
+
+    shadow 관측(비노출)은 톤필터를 안 거치므로 항상 False. True면 LLM 발화에서 금지 패턴이
+    검출·치환된 뒤 노출됐다는 뜻(위반 사실의 관측 가능 기록·발화 원문 미저장)."""
+
+    tone_violations: int = 0
+    """톤필터가 검출한 금지 패턴 수(중복 포함·비식별 정수). 패턴 원문·발화 원문은 미저장."""
+
     observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -131,6 +147,62 @@ def _count_verify_verdicts(trace: Sequence[ToolResult]) -> tuple[int, int, int]:
             if match is not None:
                 counts[match.group(1)] += 1
     return counts["correct"], counts["incorrect"], counts["unverifiable"]
+
+
+def emit_wh1_observation(
+    outcome: TurnOutcome,
+    *,
+    dialogue_id: str | None = None,
+    turn_index: int = 1,
+    problem_id: str | None = None,
+    primary: bool = False,
+    tone_rewritten: bool = False,
+    tone_violations: int = 0,
+) -> None:
+    """하네스 한 턴 결과를 관측 레코드로 emit — shadow·primary *공통* 단일 좌석(S1-11).
+
+    직전까지 이 로직은 `observe_wh1_harness_shadow` 내부에만 있었다. primary flip에서도
+    verdict 관측(원장 축적)이 끊기면 안 되므로(사인오프 방침 ⑤ — 측정 인프라 연속성) emit을
+    이 함수로 추출해 primary 경로(`harness/wh1_primary.py`)가 동일 레코드 계약·동일
+    record 로거로 재사용한다(재구현 0·수확기 `wh1_shadow_harvest` 하위호환). 프라이버시
+    계약은 모델(`extra="forbid"`)이 그대로 강제한다 — 학생 원문·발화 원문·정답은 여기로
+    *들어올 수조차* 없다(비식별 status·카운트·bool·id만).
+    """
+    verify_verdict = _extract_verify_verdict(outcome.trace)
+    # 전이별 카운트(S3-07) — 마지막 판정(턴 라벨)이 가리는 앞 전이 correct를 분포에 노출.
+    n_correct, n_incorrect, n_unverifiable = _count_verify_verdicts(outcome.trace)
+    logger.info(
+        "WH-1 하네스 %s — status=%s action_type=%s verify=%s "
+        "transitions(c/i/u)=%d/%d/%d (tool_calls=%d hypotheses=%d tone_rewritten=%s)",
+        "primary" if primary else "shadow(비노출)",
+        outcome.status,
+        outcome.action_type,
+        verify_verdict,
+        n_correct,
+        n_incorrect,
+        n_unverifiable,
+        outcome.tool_calls,
+        len(outcome.hypotheses),
+        tone_rewritten,
+    )
+    record_logger.info(
+        Wh1HarnessShadowObservation(
+            status=outcome.status,
+            action_type=outcome.action_type,
+            verify_verdict=verify_verdict,
+            n_correct=n_correct,
+            n_incorrect=n_incorrect,
+            n_unverifiable=n_unverifiable,
+            tool_calls=outcome.tool_calls,
+            hypothesis_count=len(outcome.hypotheses),
+            dialogue_id=dialogue_id,
+            turn_index=turn_index,
+            problem_id=problem_id,
+            primary=primary,
+            tone_rewritten=tone_rewritten,
+            tone_violations=tone_violations,
+        ).model_dump_json()
+    )
 
 
 async def observe_wh1_harness_shadow(
@@ -186,35 +258,12 @@ async def observe_wh1_harness_shadow(
             initial_hypotheses=list(active_hypotheses),
             max_tool_calls=max_tool_calls,
         )
-        verify_verdict = _extract_verify_verdict(outcome.trace)
-        # 전이별 카운트(S3-07) — 마지막 판정(턴 라벨)이 가리는 앞 전이 correct를 분포에 노출.
-        n_correct, n_incorrect, n_unverifiable = _count_verify_verdicts(outcome.trace)
-        logger.info(
-            "WH-1 하네스 shadow(비노출) — status=%s action_type=%s verify=%s "
-            "transitions(c/i/u)=%d/%d/%d (tool_calls=%d hypotheses=%d)",
-            outcome.status,
-            outcome.action_type,
-            verify_verdict,
-            n_correct,
-            n_incorrect,
-            n_unverifiable,
-            outcome.tool_calls,
-            len(outcome.hypotheses),
-        )
-        record_logger.info(
-            Wh1HarnessShadowObservation(
-                status=outcome.status,
-                action_type=outcome.action_type,
-                verify_verdict=verify_verdict,
-                n_correct=n_correct,
-                n_incorrect=n_incorrect,
-                n_unverifiable=n_unverifiable,
-                tool_calls=outcome.tool_calls,
-                hypothesis_count=len(outcome.hypotheses),
-                dialogue_id=dialogue_id,
-                turn_index=turn_index,
-                problem_id=problem_id,
-            ).model_dump_json()
+        # emit은 shadow·primary 공통 좌석(`emit_wh1_observation`)으로 — 레코드 계약 단일 진실원천.
+        emit_wh1_observation(
+            outcome,
+            dialogue_id=dialogue_id,
+            turn_index=turn_index,
+            problem_id=problem_id,
         )
     except Exception:  # noqa: BLE001 — 관측은 본류를 안 깬다(비차단 방어선·shadow.py:244 미러)
         return
