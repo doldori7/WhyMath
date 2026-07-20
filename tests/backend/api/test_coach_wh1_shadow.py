@@ -114,8 +114,13 @@ def _enable_wh1_shadow(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _restore_settings_cache() -> Iterator[None]:
-    """env 토글 누수 차단 — 테스트 후 전역 Settings 캐시를 무조건 클리어."""
+def _restore_settings_cache(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """이 모듈은 shadow 경로 고립 검증 전용 — primary(기본 ON·2026-07-20 GA)를 꺼 shadow를
+    관측 가능하게 한다(shadow spawn은 `wh1_shadow_on and not wh1_primary_on` 조건). 또한
+    테스트 후 전역 Settings 캐시를 무조건 클리어한다(env 토글 누수 차단).
+    """
+    monkeypatch.setenv("WHYMATH_WH1_PRIMARY_ENABLED", "false")
+    get_settings.cache_clear()
     yield
     get_settings.cache_clear()
 

@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-20 (실측·GA·S1-11 default-on): **flip 기본 ON 전환 — 실기기 확인 + in-process 측정(LLM 개입 실패 0)으로 canary 졸업** (Kiki 실기기·claude 측정)
+
+**GA 근거(이중)**: ⑴ **실기기 확인** — flip on 데모에서 코치가 결정론 "계획 반복" 대신 하네스 소크라테스 발화(`"방금 단계에서 무엇을 근거로…"`)를 냄 + MathLive UX 3종(MOB-05/06/07·수식→단계 필드) 동작. ⑵ **in-process 측정**(`scripts/demo/wh1_primary_probe.py` — 서버·DB 없이 `run_tutoring_turn`+`LLMTutorPolicy`+실 Ollama 직접) 3케이스 전부 **LLM 호출 3~7회·실패 0·verdict 정상**(correct/incorrect/자연표기 correct). 컨테이너 가짜 provider 자기검증으로 **358=LLM 성공·361=LLM 실패 폴백** 시그니처 실증 → 실기기서 본 361이 실패가 아니라 성공-격려였음 확인.
+
+**정직 프레이밍(중요)**: primary on = LLM *산문 자유 방출*이 아니라 **하네스 오케스트레이션(턴당 3~7 도구호출: read→verify→match→curate→end) + 게이트된 발화**다. 학생-대면 발화는 정답 억제 백스톱(오답/미결정 턴=결정론 소크라테스 템플릿)·verify 의무·L4 톤필터를 통과한 것만 노출 → 측정상 발화는 `wh1_loop.py:358/361` 하네스 템플릿. **자유 산문 코칭은 여전히 억제**(안전). "코치가 실제 문장을 생성"까지 원하면 정답-안전 rephrase 계층이 별도 과제(미등재·향후).
+
+**변경**: `config.wh1_primary_enabled` 기본 `False→True`(설명·킬스위치 `WHYMATH_WH1_PRIMARY_ENABLED=false` 명문). 거버넌스 봉인 개정 — `test_serving_path_llm_flags_default_off`→`test_serving_path_llm_flag_governance`(primary=True 동결·judge/shadow는 여전히 off). **파급 실측**: default=True로 api+harness **1546 passed·1 failed**(그 1건=봉인 테스트 자체·개정으로 green) — Ollama 없는 CI는 결정론 폴백으로 무해(15s 행 없음). `run_demo`는 이제 플래그 수동설정 없이 자동 primary on(기본값 상속).
+
 ### 2026-07-20 (사고·재발방지·실기기 안내): **실기기 앱 실행 안내에서 백엔드 기동·dart-define 누락 → "문제를 불러오지 못했어요" — CLAUDE.md 규칙 등재** (Kiki 실기기·claude 안내 결함)
 
 **사고**: MOB-06 실기기 확인을 안내하며 앱 구동을 bare `flutter run`으로만 안내 → 앱이 기본값 `http://localhost:8000`(실기기에선 *기기 자신*)에 토큰 없이 접속 → 보호 엔드포인트 401 → `diagnosis_controller`가 "문제를 불러오지 못했어요. 잠시 후 다시 시도해 주세요"로 graceful 실패(Kiki 실기기 보고). **원인**: ①백엔드 미기동(`run_demo.ps1` 누락) ②`--dart-define=API_URL=<PC LAN IP>:8000`·`--dart-define=DEMO_TOKEN` 누락 — 실기기가 PC 백엔드에 닿는 주소·인증이 없음. **분류**: 반복 유형(검증 없는 실행 안내·가정 기반 런북)이라 실수 관리 규정상 등재 의무. **대책(규칙)**: `CLAUDE.md` 📐Kiki 개인 선호에 "실기기 앱 실행 안내=백엔드 도달성·인증 선결 필수" 규칙 등재 — run_demo.ps1 선기동 + 값 채워진 dart-define 줄 통째 복사 + `/demo-doctor` 카탈로그 선조회 강제. **정정 안내**: `run_demo.ps1`(Postgres·시드·uvicorn·토큰·LAN IP) → 출력된 `flutter run --dart-define=API_URL=...:8000 --dart-define=DEMO_TOKEN=...` 복사 실행. **MOB-06 코드(변환) 자체는 무결** — 백엔드 실측(변환 산출 `['2x+3=7','x=2']` → `verify_solution` n_transitions=1·correct=1·unverifiable=0)로 별도 검증 완료했고, 실기기 확인은 이 데모 스택 복구 후 재개한다.
