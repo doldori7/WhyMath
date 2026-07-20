@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
@@ -15,6 +15,6 @@ acceptance:
 artifacts: []
 paths:
   - "src/mobile/lib/features/chat/**"
-session: null
+session: claude/next-recommended-task-k9ljcz
 notes: "2026-07-20 Kiki 증언('무슨 말을 해야 알아먹는지 모르겠다') — 파일럿 학생 동일 예상. 검증 가능한 입력 모양(수식 단계)을 앱이 스스로 예시로 안내. S3-05 편집기 후속 UX."
 updated: 2026-07-20

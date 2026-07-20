@@ -43,6 +43,16 @@ const double _stepAreaMaxHeightFraction = 0.25;
 /// 값이 걸리고, 키보드로 좁아지면 위 비율 상한이 먼저 걸린다(둘 중 작은 쪽).
 const double _stepAreaMaxHeight = 162;
 
+/// 빈 단계 필드 예시 힌트 (MOB-05) — 학생에게 *앱이 알아듣는 입력 형태*를 스스로 안내한다.
+/// 등식 한 줄·근 나열 등 백엔드 verify가 결정하는 자연 표기(MOB-06·S3-06)라, 그대로 따라 쓰면
+/// 검증 결정 구간에 들어간다. 왼쪽 번호 라벨과 중복되던 "단계 N"을 대체. 정오 강조·부정 표현 없음.
+/// 필드가 늘어도 `index % length`로 순환한다.
+const List<String> _stepHintExamples = <String>[
+  '예: 2x+3=7',
+  '예: x=2',
+  '예: (x-2)(x-3)=0',
+];
+
 /// 입력 모드 — 대화(단일 라인) 또는 풀이 단계(단계 리스트 편집기·묶음 제출).
 enum _InputMode {
   /// 자유 대화(기존 동작) — `send`로 학생 발화만 전송.
@@ -877,7 +887,8 @@ class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
               textInputAction: TextInputAction.next,
               onSubmitted: (_) => _handleStepSubmitted(index),
               decoration: InputDecoration(
-                hintText: '단계 ${index + 1}',
+                // 번호는 왼쪽 라벨에 있으므로 힌트는 *입력 형태 예시*로 안내한다(MOB-05).
+                hintText: _stepHintExamples[index % _stepHintExamples.length],
                 border: const OutlineInputBorder(),
                 isDense: true,
               ),
