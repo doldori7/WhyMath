@@ -5,16 +5,18 @@ track: math-completion
 stage: S3
 subject: math
 layer: mobile
-status: blocked
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "실기기에서 수식 필드가 상단에 가시·가상 키보드 하단 도킹·전체 행 표시(잘림 0) + WebView 레이아웃 검증 경로(테스트 또는 재현 절차) 동결"
-artifacts: []
+artifacts:
+  - "PR #555"
+  - "실기기 확인 2026-07-20 스샷(키보드 하단 도킹·전 행 표시·메뉴 제거)"
 paths:
   - "src/mobile/lib/features/chat/**"
 session: null
 notes: "코드 머지 완료(PR #555) — acceptance는 실기기 확인(Kiki): 키보드 하단 도킹·전 행 표시·필드 가시·메뉴 제거·수식 전송 회귀 0 (절차·판별 기준=PR #555 본문). 확인 통과 시 unblock→done"
-updated: 2026-07-19
+updated: 2026-07-20

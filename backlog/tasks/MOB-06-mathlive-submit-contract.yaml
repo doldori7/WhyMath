@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MOB-06-mathlive-submit-contract
+title: "MathLive 제출 경로 정합 — LaTeX 버블 렌더·검증 변환 공백"
+track: math-completion
+stage: S3
+subject: math
+layer: mobile
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "수식 입력(완료) 제출 시 학생 버블에 LaTeX 원문 미노출(렌더 또는 평문 변환) + 검증 가능한 형태로 verify 도달(다단계 수식이 결정 구간 진입) — 실기기 확인"
+artifacts: []
+paths:
+  - "src/mobile/lib/features/chat/**"
+session: null
+notes: "2026-07-20 실기기 스샷 실측: MathLive 제출 시 학생 버블에 \\displaylines{...} LaTeX 원문 그대로 노출 + 그 원문이 verify로 전송돼 미결정 처리(변환 계약 공백). 설계 선택지: ①L5에서 LaTeX→평문 수식 줄 변환 후 기존 sendSolution(최소·계약 유지) ②버블 LaTeX 렌더+백엔드 LaTeX 수용(대형). MOB-03(도킹 수정)으로 수식 입력 경로가 살아나면서 드러난 다음 공백."
+updated: 2026-07-20

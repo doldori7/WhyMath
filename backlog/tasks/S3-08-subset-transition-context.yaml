@@ -1,0 +1,20 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-08-subset-transition-context
+title: "부분집합 전이 문맥 처리 — 근 선택 vs 근 유실 구별"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: in_progress
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "선택형 답 고르기 단계(x=2, x=3 → x=3)가 거짓 incorrect로 떨어지지 않음(보수 unverifiable 또는 기대정답 앵커) + 비부분집합 오류 검출({2,3}→{2,4} incorrect) 유지 — 실측 픽스처 동결"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/**"
+session: claude/shadow-data-s3-pilot-nh5kbz
+notes: "2026-07-20 대본 측정 실측 확정(턴4): (x-2)(x-3)=0 → x=2,x=3 → x=3 제출이 incorrect 판정 + 학생 UI에 '다시 살펴볼 지점' 노출(거짓 incorrect 실해악). finite↔finite 진부분집합 전이는 '답 선택'(정당)과 '근 유실'(x^2=4→x=2 오류)이 구조 동일 — 문맥 없이 구별 불가. 방향: 진부분집합→보수 unverifiable(거짓 incorrect 0 계약 우선·근유실 검출 후퇴는 정직 기록), 기대정답 앵커(classify_step_break 선례)는 후속 강화."
+updated: 2026-07-20
