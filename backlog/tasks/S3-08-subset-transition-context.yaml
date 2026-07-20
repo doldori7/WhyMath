@@ -15,6 +15,7 @@ acceptance:
 artifacts: []
 paths:
   - "src/backend/whymath_backend/l3/**"
+  - "tests/backend/l3/**"
 session: claude/shadow-data-s3-pilot-nh5kbz
 notes: "2026-07-20 대본 측정 실측 확정(턴4): (x-2)(x-3)=0 → x=2,x=3 → x=3 제출이 incorrect 판정 + 학생 UI에 '다시 살펴볼 지점' 노출(거짓 incorrect 실해악). finite↔finite 진부분집합 전이는 '답 선택'(정당)과 '근 유실'(x^2=4→x=2 오류)이 구조 동일 — 문맥 없이 구별 불가. 방향: 진부분집합→보수 unverifiable(거짓 incorrect 0 계약 우선·근유실 검출 후퇴는 정직 기록), 기대정답 앵커(classify_step_break 선례)는 후속 강화."
 updated: 2026-07-20
