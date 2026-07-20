@@ -10,7 +10,7 @@ part 'chat_state.freezed.dart';
 
 /// 채팅 화면의 단일 상태 트리.
 @freezed
-class ChatState with _$ChatState {
+abstract class ChatState with _$ChatState {
   const factory ChatState({
     /// 화면에 그릴 대화 누적(오래된 → 최신 순).
     @Default(<ChatMessage>[]) List<ChatMessage> messages,

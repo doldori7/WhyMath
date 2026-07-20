@@ -4,13 +4,11 @@ publish_to: 'none'
 version: 0.1.0+1
 
 environment:
-  # CI Flutter를 3.24.5→3.35로 상향해 Kiki 머신(Dart 3.11)과 정합 — 환경별 해석 드리프트
-  # 제거(MOB-01·2026-07-17). 이 상향으로 구 pin 사유 ②(meta 1.15)·③(Dart 3.5)가 해소된다.
-  # pubspec 하한은 ^3.5.0로 유지: 하한을 3.9로 올리면 build 4.x 전이 의존이 딸려와 freezed
-  # 2.5.x(build ^2.3.1)와 build 충돌이 재발한다(코어 해석을 build 2.x/freezed 2.5.x 트랙에 고정).
-  # 완전 pin 제거(generator 10.x·build 4.x)는 freezed 2→3 파괴적 마이그레이션 선행 — MOB-01 후속.
-  sdk: ^3.5.0
-  flutter: ^3.24.0
+  # 하한 = 검증 바닥선: CI(3.41.9)=Kiki 머신(Dart 3.11) 정합(MOB-01·2026-07-20). 3.9(구 CI
+  # 3.35)에선 test_api 0.7.6 고정→analyzer<8 강제로 freezed3/retrofit_generator10 격자가 불충족
+  # (실측) — 하한이 곧 해석 가능 바닥선이다. 빌드 재현성 정본은 커밋된 pubspec.lock.
+  sdk: ^3.11.0
+  flutter: ^3.41.0
 
 dependencies:
   flutter:
@@ -18,12 +16,12 @@ dependencies:
   flutter_localizations:
     sdk: flutter
   # 상태관리
-  flutter_riverpod: ^2.5.0
-  riverpod_annotation: ^2.4.0
+  flutter_riverpod: ^3.0.0
+  riverpod_annotation: ^3.0.0
   # 라우팅
   go_router: ^14.0.0
   # 모델·직렬화
-  freezed_annotation: ^2.4.1
+  freezed_annotation: ^3.0.0
   json_annotation: ^4.9.0
   # 네트워크
   dio: ^5.4.0
@@ -56,28 +54,16 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
   build_runner: ^2.4.0
-  freezed: ^2.5.0
+  freezed: ^3.0.0
   json_serializable: ^6.7.0
-  riverpod_generator: ^2.4.0
-  # ^9.1.0(→9.7.0) 유지 — freezed 2.5.x와 같은 build ^2.3.1 트랙 짝이라 함께 해소된다.
-  # generator 10.x는 build ^4.0.0을 요구 → freezed 3.x(build 4.x) 파괴적 마이그레이션이 선행돼야
-  # 함(모델 전수 abstract/sealed 수정·코드젠·실기기 검증). 그 이행은 MOB-01 후속 세션으로 이월.
-  retrofit_generator: ^9.1.0
+  # riverpod 3 = build 4.x 트랙 — freezed 3·retrofit_generator 10과 동일 트랙(2026-07-20 MOB-01).
+  riverpod_generator: ^3.0.0
+  # generator 10.x = build 4.x 트랙 — freezed 3.x 이행(2026-07-20)과 짝. retrofit 4.7+의
+  # Parser.DartMappable도 전수 처리(구 9.x pin 사유 소멸).
+  retrofit_generator: ">=10.0.4 <11.0.0"
   mocktail: ^1.0.3
   golden_toolkit: ^0.15.0
 
-# ── 버전 고정 (빌드 재현성 — pubspec.lock 미커밋 상태의 해석 드리프트 방어, MOB-01) ──
-dependency_overrides:
-  # retrofit 4.5.0 유지. CI Flutter 상향으로 구 pin 사유 ②(meta 1.15)·③(Dart 3.5)는 해소됐으나,
-  # ①(generator 9.7.0이 retrofit 4.7.0+의 Parser.DartMappable를 비전수 switch로 처리 못 함)은
-  # 여전히 유효 → retrofit<4.7.0가 필요하다. mobile CI 잡이 build_runner 코드젠을 실제 실행하므로
-  # (analyze·test 앞) pin이 없으면 최신 retrofit(4.9.2)가 딸려와 코드젠이 깨진다. 완전 제거는
-  # generator 10.x + freezed 3.x 이행 시(MOB-01 후속).
-  retrofit: 4.5.0
-  # image_picker_android: 0.8.13+18의 "Built-in Kotlin(AGP 9)" 이행이 현 AGP 8.3.2와 미검증이라
-  # Kotlin DSL 도입 직전 버전으로 고정. Android 실기기 빌드는 CI 범위 밖이라 실기기 재빌드로만
-  # 검증 가능 — 해제는 MOB-01 AGP 업그레이드 단계에서.
-  image_picker_android: 0.8.12+23
 
 flutter:
   uses-material-design: true

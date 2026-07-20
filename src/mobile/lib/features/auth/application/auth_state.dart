@@ -11,7 +11,7 @@ part 'auth_state.freezed.dart';
 /// - [isAuthenticated] : 토큰을 받아 저장했는가(라우트 가드·UI 분기는 후속 c2/c3).
 /// - [error] : 로그인 실패 메시지(있으면 표시·null이면 없음).
 @freezed
-class AuthState with _$AuthState {
+abstract class AuthState with _$AuthState {
   const factory AuthState({
     @Default(false) bool isSubmitting,
     @Default(false) bool isAuthenticated,

@@ -24,7 +24,7 @@ part 'scene_models.g.dart';
 /// 클라는 `type`/`caption`만으로 seed를 그린다(실 렌더는 후속 WebView·05a §6). `spec`은
 /// 구조 그대로 보관만 한다(수학 로직 클라 미구현).
 @freezed
-class Visualization with _$Visualization {
+abstract class Visualization with _$Visualization {
   const factory Visualization({
     /// 렌더 기술("interactive_graph_2d"·"interactive_surface_3d"·
     /// "simulation_probabilistic"·"animation_prerendered").
@@ -50,7 +50,7 @@ class Visualization with _$Visualization {
 
 /// 생성 시점 학습자 스냅샷 — *판정이 아니라* 장면 적응의 입력(읽기전용·낙인 근거 아님).
 @freezed
-class SceneLearnerContext with _$SceneLearnerContext {
+abstract class SceneLearnerContext with _$SceneLearnerContext {
   const factory SceneLearnerContext({
     /// L2 BKT 숙달레벨(0~1)·없으면 null.
     @JsonKey(name: 'mastery_level') double? masteryLevel,
@@ -80,7 +80,7 @@ class SceneLearnerContext with _$SceneLearnerContext {
 /// **누출 안전(misconception_probe)**: `misconceptionId`·`intervention`만 담고 *정답·수정
 /// 필드는 백엔드 스키마에 애초에 없다*(낙인/즉답 금지). 렌더러도 정답을 그리지 않는다.
 @freezed
-class SceneElement with _$SceneElement {
+abstract class SceneElement with _$SceneElement {
   const factory SceneElement({
     /// 요소 종류 판별자(위 7종 중 하나).
     @JsonKey(name: 'kind') required String kind,
@@ -150,7 +150,7 @@ class SceneElement with _$SceneElement {
 ///
 /// `layout`은 배치 *힌트*(픽셀 아님)·`answerDeferralMaxLevel`은 힌트 상한(서버 불변식).
 @freezed
-class LearningScene with _$LearningScene {
+abstract class LearningScene with _$LearningScene {
   const factory LearningScene({
     /// 장면 PK(UUID 문자열).
     @JsonKey(name: 'scene_id') required String sceneId,

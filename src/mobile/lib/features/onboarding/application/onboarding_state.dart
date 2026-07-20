@@ -20,7 +20,7 @@ part 'onboarding_state.freezed.dart';
 /// - [isSubmitted] : 전송이 끝났는가(성공·graceful 실패 모두 true — 온보딩은 계속 진행).
 /// - [error] : 저장 실패 메시지(있으면 표시·null이면 없음). 실패해도 온보딩을 막지 않는다.
 @freezed
-class OnboardingState with _$OnboardingState {
+abstract class OnboardingState with _$OnboardingState {
   const factory OnboardingState({
     int? targetGrade,
     int? targetScore,

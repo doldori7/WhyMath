@@ -31,7 +31,7 @@ enum OcrStatus {
 
 /// OCR 화면의 단일 상태 트리.
 @freezed
-class OcrState with _$OcrState {
+abstract class OcrState with _$OcrState {
   const factory OcrState({
     /// 현재 진행 단계(기본=유휴).
     @Default(OcrStatus.idle) OcrStatus status,

@@ -30,7 +30,7 @@ enum ChatRole {
 /// JSON 직렬화는 두지 않는다 — 서버 계약은 [CoachRequest]/[CoachResponse]가 전담하고
 /// 이 클래스는 *화면 상태*라 영속·전송 대상이 아니다(런타임 모델).
 @freezed
-class ChatMessage with _$ChatMessage {
+sealed class ChatMessage with _$ChatMessage {
   const factory ChatMessage({
     /// 화자(학생/코치).
     required ChatRole role,

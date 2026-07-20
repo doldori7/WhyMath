@@ -4,6 +4,8 @@
 // 교환하고 (2) 받은 JWT를 보안 저장소(OAuth-b `tokenStore`)에 저장하며 (3) 실패를 graceful 처리할
 // 뿐이다. provider 리다이렉트(code 획득·webview/딥링크)는 *호출자*(로그인 화면·c2)가 담당하고
 // 여기엔 code만 들어온다. `ChatController`(@riverpod) 패턴을 따른다.
+// riverpod 3: riverpod_annotation이 수동 Provider를 재수출하지 않는다 — 명시 import.
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../core/env.dart';
