@@ -345,3 +345,4 @@
 {"ts": "2026-07-20T22:02:40", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "unblock", "id": "MOB-01-android-toolchain-upgrade"}
 {"ts": "2026-07-20T22:02:41", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "claim_remote_unavailable", "id": "MOB-01-android-toolchain-upgrade", "status": "error"}
 {"ts": "2026-07-20T22:02:41", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "start", "id": "MOB-01-android-toolchain-upgrade", "session": "claude/shadow-data-s3-pilot-nh5kbz", "remote": "error"}
+{"ts": "2026-07-20T22:39:59", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "block", "id": "MOB-01-android-toolchain-upgrade", "reason": "코드 머지(#568 — freezed3·riverpod3·pin 전제거·lock 커밋·AGP 8.11.1·CI 3.41.9)·CI mobile 잡 3.41.9 green. 잔여=acceptance ① 실기기 assembleDebug(Kiki 게이트) — 확인 후 done(#556 MOB-03 선례)"}
