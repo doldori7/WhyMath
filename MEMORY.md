@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-20 (구현·머지·MOB-01): **모바일 빌드 재현성 본체 랜딩 — freezed3·riverpod3 이행·pin 전제거·pubspec.lock 커밋·Flutter 3.41/AGP 8.11 정합** (claude 구현·컨테이너 실측)
+
+**경위**: 타 세션 claim이 stale(브랜치 원격 삭제 실측·Kiki 확인 "다른 곳에서 작업하지 않아") → 정규 block→unblock(#560 선례)로 이 세션 이관. 컨테이너에 Flutter 설치해 **전 단계 실측**(가정 기반 편집 0·베이스라인 216/216 green 확인 후 착수).
+
+**핵심 발견(의존성 격자 실측)**: Flutter 3.35(Dart 3.9)에선 pin 해제 조합이 **수학적으로 불충족** — riverpod 3 런타임의 `test` 의존 + SDK `test_api 0.7.6` 고정 → analyzer<8 강제, DartMappable 수정판 retrofit_generator(≥10.0.4)는 analyzer≥7.7.1 필요, custom_lint_visitor에 7.7.1~7.9 구간 부재. **Flutter 3.41(Dart 3.11=Kiki 머신) 상향이 유일한 탈출구** — acceptance ②(버전 정합)가 곧 pin 해소의 전제였음이 실측으로 판명.
+
+**변경(#568·d27e5e9)**: freezed 2.5→3.2.3(30클래스 29 abstract·ChatMessage sealed — union `.when/.map` 사용 0건 실측이라 API 제거 무영향)·riverpod 2.5→3.0.3(수동 수정 2건뿐)·**pin 전제거**(retrofit 4.9.2·generator 10.2.1·image_picker_android 0.8.13+17·overrides 블록 삭제)·**pubspec.lock 커밋**(.gitignore 해제·드리프트 원천 차단)·env 하한 3.11/3.41(해석 가능 바닥선 명문)·Android AGP 8.11.1·Kotlin 2.2.20·Gradle 8.14·Java 17(Flutter 3.41 템플릿 정합·compileSdk 36)·CI mobile 3.41.9. **검증**: 로컬 3.41.9 analyze 0·216/216 + CI mobile 잡 3.41.9 green. **잔여**: acceptance ① 실기기 assembleDebug(Kiki 게이트) — blocked 기록·확인 후 done. 이 확인이 S3-01 파일럿 트리거② 충족 경로.
+
 ### 2026-07-20 (실측·GA·S1-11 default-on): **flip 기본 ON 전환 — 실기기 확인 + in-process 측정(LLM 개입 실패 0)으로 canary 졸업** (Kiki 실기기·claude 측정)
 
 **GA 근거(이중)**: ⑴ **실기기 확인** — flip on 데모에서 코치가 결정론 "계획 반복" 대신 하네스 소크라테스 발화(`"방금 단계에서 무엇을 근거로…"`)를 냄 + MathLive UX 3종(MOB-05/06/07·수식→단계 필드) 동작. ⑵ **in-process 측정**(`scripts/demo/wh1_primary_probe.py` — 서버·DB 없이 `run_tutoring_turn`+`LLMTutorPolicy`+실 Ollama 직접) 3케이스 전부 **LLM 호출 3~7회·실패 0·verdict 정상**(correct/incorrect/자연표기 correct). 컨테이너 가짜 provider 자기검증으로 **358=LLM 성공·361=LLM 실패 폴백** 시그니처 실증 → 실기기서 본 361이 실패가 아니라 성공-격려였음 확인.
