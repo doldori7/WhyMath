@@ -315,6 +315,43 @@ void main() {
     });
   });
 
+  group('ChatController.sendMathLiveSolution', () {
+    test('MathLive \\displaylines LaTeX를 평문 스텝으로 변환해 전송한다(MOB-06)', () async {
+      final fake = _FakeCoachApi(
+        response: CoachResponse(decision: _decision()),
+      );
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      // MathLive 여러 줄 직렬화 원문(2026-07-20 실기기 실측 형태).
+      await notifier.sendMathLiveSolution(r'\displaylines{2x+3=7 \\ x=2}');
+
+      // acceptance ⓑ: 여러 스텝으로 분해돼 인접 전이가 생긴다(단일 0-전이 blob 아님 → verify 결정 도달).
+      expect(fake.lastRequest, isNotNull);
+      expect(fake.lastRequest!.solutionSteps, <String>['2x+3=7', 'x=2']);
+
+      // acceptance ⓐ: 학생 버블에 LaTeX 원문 미노출(평문 수식) — \displaylines·백슬래시 없음.
+      final state = container.read(chatControllerProvider);
+      expect(state.messages.first.role, ChatRole.student);
+      expect(state.messages.first.text, '2x+3=7\nx=2');
+      expect(state.messages.first.text.contains(r'\displaylines'), isFalse);
+      expect(state.messages.first.isSolution, isTrue);
+    });
+
+    test('변환 결과가 비면(유효 스텝 0) 전송하지 않는다', () async {
+      final fake = _FakeCoachApi(
+        response: CoachResponse(decision: _decision()),
+      );
+      final container = _containerWith(fake);
+      final notifier = container.read(chatControllerProvider.notifier);
+
+      await notifier.sendMathLiveSolution(r'\displaylines{  \\  }');
+
+      expect(fake.lastRequest, isNull);
+      expect(container.read(chatControllerProvider).messages, isEmpty);
+    });
+  });
+
   group('ChatController.sendOcrSolution', () {
     // 영역이 있는 인식 결과(정상 손글씨 풀이) — 착지점이 모두 채워진다.
     OcrResult filledResult({double overall = 0.6}) => OcrResult(

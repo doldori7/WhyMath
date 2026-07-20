@@ -131,12 +131,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   /// 수식(MathLive) 입력 화면(`/math-input`)으로 진입하고, 돌아온 LaTeX를 풀이로 넘긴다(S1).
   ///
   /// 입력 화면은 채팅을 알지 못한 채 `context.pop(latex)`로 LaTeX만 돌려준다(OCR과 동형·단방향
-  /// chat→math-input 의존). 받은 LaTeX를 `sendSolution`으로 전송한다 — 취소(null)·빈 입력이면
-  /// 아무 일도 하지 않는다(줄 분해·검증은 컨트롤러·백엔드가 한다).
+  /// chat→math-input 의존). 받은 LaTeX를 `sendMathLiveSolution`으로 전송한다 — 컨트롤러가 평문
+  /// 수식 줄로 변환(표기 매핑)해 버블 노출·verify 전이를 정합한다(MOB-06). 취소(null)·빈 입력이면
+  /// 아무 일도 하지 않는다(변환·줄 분해·검증은 컨트롤러·백엔드가 한다).
   Future<void> _onMathInput() async {
     final latex = await context.push<String>(AppRoutes.mathInputPath);
     if (latex != null && latex.trim().isNotEmpty && mounted) {
-      await ref.read(chatControllerProvider.notifier).sendSolution(latex);
+      await ref
+          .read(chatControllerProvider.notifier)
+          .sendMathLiveSolution(latex);
     }
   }
 
