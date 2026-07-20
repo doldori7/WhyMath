@@ -337,6 +337,10 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-20 (사고·재발방지·실기기 안내): **실기기 앱 실행 안내에서 백엔드 기동·dart-define 누락 → "문제를 불러오지 못했어요" — CLAUDE.md 규칙 등재** (Kiki 실기기·claude 안내 결함)
+
+**사고**: MOB-06 실기기 확인을 안내하며 앱 구동을 bare `flutter run`으로만 안내 → 앱이 기본값 `http://localhost:8000`(실기기에선 *기기 자신*)에 토큰 없이 접속 → 보호 엔드포인트 401 → `diagnosis_controller`가 "문제를 불러오지 못했어요. 잠시 후 다시 시도해 주세요"로 graceful 실패(Kiki 실기기 보고). **원인**: ①백엔드 미기동(`run_demo.ps1` 누락) ②`--dart-define=API_URL=<PC LAN IP>:8000`·`--dart-define=DEMO_TOKEN` 누락 — 실기기가 PC 백엔드에 닿는 주소·인증이 없음. **분류**: 반복 유형(검증 없는 실행 안내·가정 기반 런북)이라 실수 관리 규정상 등재 의무. **대책(규칙)**: `CLAUDE.md` 📐Kiki 개인 선호에 "실기기 앱 실행 안내=백엔드 도달성·인증 선결 필수" 규칙 등재 — run_demo.ps1 선기동 + 값 채워진 dart-define 줄 통째 복사 + `/demo-doctor` 카탈로그 선조회 강제. **정정 안내**: `run_demo.ps1`(Postgres·시드·uvicorn·토큰·LAN IP) → 출력된 `flutter run --dart-define=API_URL=...:8000 --dart-define=DEMO_TOKEN=...` 복사 실행. **MOB-06 코드(변환) 자체는 무결** — 백엔드 실측(변환 산출 `['2x+3=7','x=2']` → `verify_solution` n_transitions=1·correct=1·unverifiable=0)로 별도 검증 완료했고, 실기기 확인은 이 데모 스택 복구 후 재개한다.
+
 ### 2026-07-20 (실측·이정표·대본 측정): **검증기 성적표 12/12 일치 — S3-06/07 라이브 완전 실증·S3-08 거짓 incorrect 실측 확정·MOB-03/04 실기기 PASS** (Kiki 실기기 대본 측정·claude 판독)
 
 **대본 측정(9개 지정 입력·순서 고정 → 턴↔입력 1:1 맵·원장 `wh1_shadow_ledger_script.ndjson`)**: 12턴 전부 기대 판정과 일치 — 정답 체인 correct·연쇄 등식 정답 correct(`2x=4→x=4/2=2` 정규화+전이 보존)·연쇄 내부 위반 incorrect(`(1+3)/2=3` 검출)·파생 정답은 가드로 unverifiable(거짓 incorrect 0)·근 유실 incorrect·`x2` 표기/한국어 문장 보수 unverifiable·표현식 회귀 correct. **자연 표기 verify(S3-06)와 전이별 집계(S3-07)가 실기기 종단에서 설계대로 작동함이 전수 실증됨.**
