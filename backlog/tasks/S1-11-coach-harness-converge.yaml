@@ -5,7 +5,7 @@ track: math-completion
 stage: S1
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 1
 owner: claude
 depends_on:
@@ -14,10 +14,11 @@ requires_gates: []
 acceptance:
   - "coach 경로가 WH-1 하네스로 단일 수렴 (이중 경로 제거)"
   - 회귀 테스트 green
-artifacts: []
+artifacts:
+  - "PR #561 (2746cce)"
 paths:
   - "src/backend/**"
   - "tests/backend/**"
-session: claude/shadow-data-s3-pilot-nh5kbz
+session: null
 notes: "flip-없는 수렴 잔여 상환 완료(2026-07-14: shadow 멀티턴 확장 배선·turn_index 관측 메타·도구 단일 진실원천 거버넌스 봉인 4종·run_persisted_turn 활성화 보류 명문). 잔여=완전 수렴(primary flip)은 ①shadow verdict 분포 확보(Kiki: WHYMATH_WH1_HARNESS_SHADOW_ENABLED=true로 트래픽+harness-metrics) ②verify 게이트 승격 재판정(현 부결) ③Kiki 사인오프(gate3 allowlist 확장 동반) 선행 — '측정 없는 도입 없음'"
 updated: 2026-07-20

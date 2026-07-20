@@ -290,3 +290,4 @@
 {"ts": "2026-07-20T08:53:42", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "claim_remote_unavailable", "id": "S1-11-coach-harness-converge", "status": "error"}
 {"ts": "2026-07-20T08:53:42", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "start", "id": "S1-11-coach-harness-converge", "session": "claude/shadow-data-s3-pilot-nh5kbz", "remote": "error"}
 {"ts": "2026-07-20T08:54:06", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 S1-11-coach-harness-converge의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-07-20T11:45:10", "actor": "claude/shadow-data-s3-pilot-nh5kbz", "action": "done", "id": "S1-11-coach-harness-converge", "artifacts": ["PR #561 (2746cce)"]}
