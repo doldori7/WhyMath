@@ -130,10 +130,14 @@ def test_served_utterance_is_static_template_end_to_end() -> None:
 def test_serving_path_llm_flags_default_off() -> None:
     """게이트 ③ 봉인 ③ — 서빙 경로 LLM 소비 플래그는 기본 OFF(정직 프레이밍 캐비엇 전제 동결).
 
-    게이트 ③의 "LLM 산문 미방출" 논거는 두 전제에 기댄다: 오개념 judge(서빙 유일 LLM 콜·산문
-    미방출·라벨 필터만)와 WH-1 하네스 shadow(무영속·`None` 반환·비노출)가 **둘 다 기본 OFF**.
-    기본값이 뒤집히면 정직 프레이밍을 재검토해야 하므로 이 테스트가 플래그한다.
+    게이트 ③의 "LLM 산문 미방출" 논거는 다음 전제에 기댄다: 오개념 judge(서빙 유일 LLM 콜·산문
+    미방출·라벨 필터만)·WH-1 하네스 shadow(무영속·`None` 반환·비노출)·**WH-1 primary flip**
+    (S1-11 사인오프 — LLM 발화를 학생에 노출하되 하네스 verify 의무·정답 억제·톤필터·결정론
+    폴백 게이트 경유·`harness/wh1_primary.py`)이 **전부 기본 OFF**. flip의 기본 on 전환은 Kiki
+    실기기 확인 후 별도 커밋(MEMORY 2026-07-20)이며, 그때 이 봉인을 정직 프레이밍 재검토와
+    함께 개정해야 한다 — 기본값이 조용히 뒤집히면 이 테스트가 red로 플래그한다.
     """
     settings = Settings(jwt_secret_key=SecretStr("test-secret-0123456789abcdef"))
     assert settings.misconception_judge_enabled is False
     assert settings.wh1_harness_shadow_enabled is False
+    assert settings.wh1_primary_enabled is False
