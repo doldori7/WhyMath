@@ -371,3 +371,7 @@
 {"ts": "2026-07-21T01:44:41", "actor": "claude/smartphone-work-feasibility-q9hypg", "action": "add", "id": "ARCH-13-concept-atom-granularity-merge"}
 {"ts": "2026-07-21T01:44:54", "actor": "claude/smartphone-work-feasibility-q9hypg", "action": "add", "id": "SEC-01-dialogue-image-encryption"}
 {"ts": "2026-07-21T01:44:59", "actor": "claude/smartphone-work-feasibility-q9hypg", "action": "add", "id": "ARCH-14-review-residual-hardening"}
+{"ts": "2026-07-21T03:09:00", "actor": "claude/smartphone-work-feasibility-q9hypg", "action": "claim_remote_unavailable", "id": "S4-04-coach-prose-rephrase", "status": "error"}
+{"ts": "2026-07-21T03:09:00", "actor": "claude/smartphone-work-feasibility-q9hypg", "action": "start", "id": "S4-04-coach-prose-rephrase", "session": "claude/smartphone-work-feasibility-q9hypg", "remote": "error"}
+{"ts": "2026-07-21T03:10:56", "actor": "claude/smartphone-work-feasibility-q9hypg", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "scripts/demo/wh1_primary_probe.py", "mode": "warn", "detail": "'scripts/demo/wh1_primary_probe.py' 은 claim 태스크 S4-04-coach-prose-rephrase의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-07-21T03:11:04", "actor": "claude/smartphone-work-feasibility-q9hypg", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "tests/backend/harness/test_wh1_loop.py", "mode": "warn", "detail": "'tests/backend/harness/test_wh1_loop.py' 은 claim 태스크 S4-04-coach-prose-rephrase의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}

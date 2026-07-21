@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on:
@@ -17,6 +17,6 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "src/backend/whymath_backend/l4/**"
-session: null
+session: claude/smartphone-work-feasibility-q9hypg
 notes: "배경(2026-07-20 flip GA 정직 프레이밍): S1-11 flip으로 LLM이 오케스트레이션(도구 선택·가설 큐레이션)은 하나, 학생-대면 발화는 설계상 정답 억제 백스톱으로 결정론 소크라테스/폴백 템플릿(wh1_loop.py:358/361)만 노출 — '같은 답 반복'의 잔여. 이 태스크=발화 자체를 LLM 문맥 프로즈로 승격하되 안전 게이트 유지. 설계 후보: ⑴correct 턴에 한해 LLM utterance 노출 허용 폭 확대 ⑵정답-안전 rephrase 계층(발문 다양화 rephrase의 fail-closed·추가 등식 차단 계약 재사용 — LIVE_LLM_ACTIVATION §5 선례)로 템플릿을 문맥화하되 정답/다음 줄 미유입 봉인 ⑶거짓 정답 노출 0을 결함주입으로 측정. 정본 근거: MEMORY 2026-07-20 default-on GA 로그·docs/architecture/04a_wh1_tutoring_harness.md §3.4. 파일럿 재사용 의향(KPI)과 상보이나 하드 의존 아님(flip으로 반복은 이미 완화)."
-updated: 2026-07-20
+updated: 2026-07-21
