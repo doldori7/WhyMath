@@ -181,6 +181,33 @@ class Settings(BaseSettings):
         ),
     )
 
+    wh1_prose_rephrase_enabled: bool = Field(
+        default=False,
+        description=(
+            "WH-1 파생 템플릿 발화를 정답-안전 rephrase로 LLM 문맥 프로즈화할지(S4-04). "
+            "**False(기본·canary)** — OFF면 프로즈 계층 미호출로 기존 경로와 비트동일(회귀 0). "
+            "True면 primary 러너가 파생 템플릿(중립 유도·격려 폴백 — 정확 일치 화이트리스트)"
+            "만 LLM으로 문맥화하되 결정론 게이트(등호·숫자·학생 풀이 유입·'정답' 키워드·길이) "
+            "통과분만 노출하고(실패=원 템플릿 fail-closed), correct 턴 정책 자유발화에는 외래 "
+            "등식·위생 게이트를 건다(실패=결정론 폴백). verify 의무·정답 억제 백스톱·톤필터는 "
+            "무변경 — 프로즈는 그 *뒤*에 얹힌 계층(harness/wh1_prose.py). GA flip(기본 True)은 "
+            "결함주입 측정(coach_prose_leak_eval exit 0)+실기기 확인 후 별도 커밋(S1-11 선례). "
+            "WHYMATH_WH1_PROSE_REPHRASE_ENABLED=false 킬스위치."
+        ),
+    )
+
+    wh1_prose_timeout_seconds: float = Field(
+        default=3.0,
+        gt=0.0,
+        description=(
+            "코치 프로즈 rephrase LLM 호출 1건의 시간 예산(초). 초과 시 원 템플릿으로 즉시 "
+            "폴백한다(TimeoutError 타입명 로그·fail-closed — 발화는 이미 안전한 템플릿이라 "
+            "품질만 잃고 안전은 불변). primary 15s 예산 *바깥*의 추가 예산이므로 워스트 케이스 "
+            "턴 지연은 합산 ~18s(파생 템플릿 턴만·correct 턴은 rephrase 호출 0). "
+            "WHYMATH_WH1_PROSE_TIMEOUT_SECONDS로 조정."
+        ),
+    )
+
     l4_server_mastery_enabled: bool = Field(
         default=True,
         description=(
