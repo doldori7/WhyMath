@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-21 (구현·측정·S4-04 done): **정답-안전 코치 프로즈 rephrase — 358/361 템플릿의 LLM 문맥화 + 결함주입 측정 노출 0 PASS (기본 OFF canary)** (claude 구현·측정, Kiki 계획 승인)
+
+**구현(C1~C4·4커밋)**: ⑴ wh1_loop 템플릿 공개 상수화(`NEUTRAL_GUIDE_UTTERANCE`/`ENCOURAGE_FALLBACK_UTTERANCE`·값 불변)+`TurnOutcome.utterance_source(policy|derived)` — 판정은 `_uses_explicit_utterance` 단일 술어(드리프트 0)·probe `_FALLBACKS` 단일원천화. ⑵ **`harness/wh1_prose.py` 신설** — 프로필 S(파생 템플릿 rephrase 산출물: 등호·숫자 전면 금지(NFKC 전각 붕괴)·GT echo·'정답' 키워드·길이120, 실패=원 템플릿 fail-closed)+프로필 C(correct/무verdict 정책 자유발화: **외래 등식 차단·학생 등식 echo 허용**(`_RELATION_RE` 스팬 vs 학생 재료 정규형·§ 경계 구분자)+위생 체인, 실패=None→coach 기존 결정론 폴백)+정확 일치 화이트리스트(개입·출제 발화는 LLM 호출 0 무변형)+라우터 경유(GENERAL·easy·temp 0.7 — l3 rephrase 미러·v3 경량 프롬프트 교훈 계승)+async wait_for 3s(`wh1_prose_timeout_seconds`). ⑶ primary seam 배선(발화 확정 후·**톤필터 직전** — 톤필터 최종 게이트 불변)+관측 `prose_rephrased`/`prose_reason_code`(비식별·기본값 하위호환)+거버넌스 (E-2) 봉인(플래그·진입 함수 소비 표면 frozenset 정확일치+프로즈 마커). 플래그 `wh1_prose_rephrase_enabled` **기본 False(canary)**·킬스위치 env — OFF=비트동일(프로즈 LLM 호출 0을 통합 테스트가 봉인).
+
+**측정(acceptance 충족·hermetic 라이브 0)**: `harness/coach_prose_leak_eval.py`(defect_detection_eval 미러) — verdict4×주입4(날조 정답 x=9·외래 등식 3\*4=12·날조 다음줄 2x=8·clean)×표면2(정책 발화 주입·rephrase 응답 주입)×n12 = 결함 288·clean 96을 실제 primary 경로 완주. **노출 0/288(Wilson 상한 0.0093 ≤0.05)·오차단 0/96(상한 0.0274 ≤0.2) → exit 0 PASS**. **변별력 대조군**(`--control-flag-off`): 플래그 OFF면 correct/none 정책 셀 결함 12/48 실제 노출 → exit 1 *실측* — 측정기가 실패 상태에서 실패 신호를 냄과 동시에, 억제 백스톱 밖 유일한 열린 경로(correct/무verdict 정책 발화)를 프로즈 게이트가 막는 계층임을 증명(pytest 상시 회귀로 봉인·test_coach_prose_leak_eval).
+
+**갱신 봉인**: shadow 레코드 키 allowlist(+prose 2필드)·serving invariant(canary False 동결+정직 프레이밍 갱신)·(E-2) frozenset 2종+마커. 기존 핀 전부 무수정 green(361 정확 문자열·TestAnswerSuppression·verify 의무·ZZPIIZZ — off 비트동일 증명).
+
+**잔여(별도 게이트)**: GA flip(기본 True)은 S1-11 선례대로 **실기기 스모크(wh1_primary_probe — rephrase 프로즈가 '비템플릿'으로 분류됨 확인)+Kiki 확인 후 별도 커밋**. CI 게이트 스텝 배선은 ARCH-14 이관(축소 표본 pytest 회귀는 이미 상시).
+
 ### 2026-07-21 (검토·수정·등재): **전면 코딩 정합성 검토(시스템 전문가 관점) — Critical 0·즉시 수정 7건·backlog 3건 등재** (claude 검토·Kiki 승인)
 
 **경위**: Kiki 스마트폰 질의 2건 — ⑴"스마트폰 작업 가능 작업?" ⑵"전체 정합성 검토". ⑴ 답: 원격 세션 완결 가능한 미완 태스크는 **S4-04 단 1건**(결함주입 acceptance라 라이브 불요·하네스 next 일치), 크리티컬 패스의 유일한 Kiki 대기는 S3-02 라이브 재측정→S3-01 파일럿. ⑵ 검토 3축(7계층·플레이북 / 절대 금기·표준 / 테스트·검증 체계) 병렬 실측 — **Critical 0**. 구조 방어(import-linter 7계층·거버넌스 동결 테스트·langfuse 사고 봉인·이중 회계·저작권 삼중 방어)는 모범 확인.
