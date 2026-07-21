@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-21 (검토·수정·등재): **전면 코딩 정합성 검토(시스템 전문가 관점) — Critical 0·즉시 수정 7건·backlog 3건 등재** (claude 검토·Kiki 승인)
+
+**경위**: Kiki 스마트폰 질의 2건 — ⑴"스마트폰 작업 가능 작업?" ⑵"전체 정합성 검토". ⑴ 답: 원격 세션 완결 가능한 미완 태스크는 **S4-04 단 1건**(결함주입 acceptance라 라이브 불요·하네스 next 일치), 크리티컬 패스의 유일한 Kiki 대기는 S3-02 라이브 재측정→S3-01 파일럿. ⑵ 검토 3축(7계층·플레이북 / 절대 금기·표준 / 테스트·검증 체계) 병렬 실측 — **Critical 0**. 구조 방어(import-linter 7계층·거버넌스 동결 테스트·langfuse 사고 봉인·이중 회계·저작권 삼중 방어)는 모범 확인.
+
+**발견→즉시 수정(7건·이 커밋들)**: ① LLM SDK 3종 무상한 pin → 실물 설치 실측(anthropic 0.117·openai 2.46·ollama 0.6에서 호출 표면 확인) 후 상한 `<1`/`<3`/`<1`(langfuse 선례 규칙 — openai는 검토 추정 `<2`를 실측으로 `<3` 보정). ② **cost_probe 점추정 PASS**(주석은 Wilson 표방·소표본 4/5=0.80 통과) → `harness/wilson.py` 하한(95%)으로 판정 전환+exit 0/1 정합+소표본 변별력 테스트(4/5·9/9 전량로컬이 FAIL임을 동결). ③ SymPy 계열 `except Exception` 35곳(verify_answer 28·pregenerate/validator 7) 타입명 미로그 → `type(exc).__name__` debug 통일(validator는 '보수 통과'라 계통 장애 무증상 전부-통과 위험이던 지점). ④ 런타임 Concept ORM 순수성 게이트 부재(저작만 동결·비대칭) → `tests/backend/db/test_concept_orm_purity_governance.py` 신설(컬럼 스냅샷+금칙+부채 2건 추적). ⑤ llm_generator가 pipeline 우회로 **Langfuse 추적 0** → TraceSink 주입(기본 LangfuseSink·usage/비용 회계 pipeline 동형·never-break)+accumulate CLI flush 배선+hermetic 테스트 6종. ⑥ CI: mobile/web 경로 필터에 `schemas/` 추가(교차영역 계약 드리프트 사각)+mobile `flutter test --coverage` 수집 배선(임계는 첫 실측 후 — "선언만 있고 측정 없음" 해소 1단계). ⑦ v1.1 스키마(concept·edge)에 런타임 드리프트 노트(실제=PG·UUID·EdgeType 6종 — 스펙의 Neo4j·문자열PK·Cypher는 stale).
+
+**발견→backlog 등재(3건·infra-debt/S4/prio5)**: **ARCH-13** 개념 그래프(437)↔원자 백본(2,697) 입도 통합 — 검토 유일 High·이중 진실 원천(code 문자열 조인·붕괴연쇄 4)·checkpoint 자기 지목의 공식화. **SEC-01** dialogue image_uri/image_analysis 봉투 암호화 + 프로덕션 content 키 설정 체크리스트(키 미설정=명시 평문 폴백 — 실측 요검증). **ARCH-14** 잔여 하드닝(Wilson 게이트 CI 상시 배선·계층별 커버리지 정합·Concept ORM 부채 2건 이관·mobile 임계·rephrase 계열 trace 감사).
+
+**의도적 비수정(기록)**: AST-중심 부분 실현(문항 본문=렌더러-중립 LaTeX — CLAUDE.md 문구만 정밀화), langfuse의 l3/trace 거주(L3가 LLM 관측을 소유 — 방어 가능), EdgeType 2-스위트 수기 미러(이중 동결로 충분).
+
 ### 2026-07-21 (실측·이정표·MOB-01 done): **실기기 assembleDebug 게이트 통과 — MOB-01 완료·파일럿 트리거 ②까지 충족(잔여 ③ 하나)** (Kiki 실기기·claude 판독)
 
 **실기기 판독(M2007J20CG·Flutter 3.41.5/Dart 3.11.3)**: ⑴ **AGP 8.3.2 경고 소멸**(신 툴체인 빌드의 변별 신호) ⑵ 해석 `(overridden)` 표기 소멸 — freezed 3.2.3·retrofit_generator 10.2.1·riverpod 3.0.3·analyzer 8.4.0·image_picker_android 0.8.13+17(커밋된 lock 그대로) ⑶ build_runner wrote 28 outputs ⑷ `✓ Built` 77.7s ⑸ 앱 구동·문제 로드·풀이 제출·코치 응답 정상. **acceptance 3종 전부 충족 → MOB-01 done**(증적 #568+실기기). 검증 중 함정 2회 실측: pull이 로컬 변경(probe 파일·build.gradle)에 막혀 Aborting→구 코드 빌드가 '성공처럼' 보임 — **AGP 경고 잔존+빌드 32.5s(다운로드 없음)** 변별 신호가 검출, stash→pull 정규 복구. 자가검증 스텝(경고 유무·소요 시간·overridden 유무)이 실패 상태에서 실제로 실패 신호를 냄(변별력 규칙 실증).
