@@ -13,12 +13,17 @@ provider 대역은 test_rephrase.py `_FakeProvider` 미러(스크립트 응답·
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Mapping, Sequence
 
+import pytest
+
+from whymath_backend.config import get_settings
 from whymath_backend.harness.wh1_loop import (
     ENCOURAGE_FALLBACK_UTTERANCE,
     NEUTRAL_GUIDE_UTTERANCE,
 )
+from whymath_backend.harness.wh1_primary import run_wh1_primary_turn
 from whymath_backend.harness.wh1_prose import (
     REASON_NO_PROVIDER,
     REASON_NOT_REPHRASABLE,
@@ -34,6 +39,7 @@ from whymath_backend.harness.wh1_prose import (
     gate_policy_prose,
     rephrase_coach_utterance,
 )
+from whymath_backend.harness.wh1_shadow import Wh1HarnessShadowObservation
 from whymath_backend.l3.equivalent.rephrase import (
     REASON_EMPTY,
     REASON_HYGIENE_REJECT,
@@ -278,3 +284,137 @@ class TestPromptPrivacy:
         assert "correct" in prompt
         assert "지수법칙 혼동" in prompt
         assert ENCOURAGE_FALLBACK_UTTERANCE in prompt  # 원 발화 앵커
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ⑤ seam 통합 — run_wh1_primary_turn 경유(플래그 ON/OFF·관측 레코드·백스톱 공존)
+# ──────────────────────────────────────────────────────────────────────
+_RECORD_LOGGER = "whymath.harness.wh1_shadow.record"
+_ANSWER_LEAK = "정답은 x=3이야"
+
+
+def _flag_on(monkeypatch: pytest.MonkeyPatch) -> None:
+    """프로즈 플래그 ON — env 킬스위치 관례 + settings 캐시 무효화(test_wh1_loop 선례)."""
+    monkeypatch.setenv("WHYMATH_WH1_PROSE_REPHRASE_ENABLED", "true")
+    get_settings.cache_clear()
+
+
+def _run_primary(provider: object, **kwargs: object) -> str | None:
+    kwargs.setdefault("student_solution", "학생 개인 풀이 ZZPIIZZ")
+    kwargs.setdefault("solution_steps", [])
+    kwargs.setdefault("active_hypotheses", [])
+    kwargs.setdefault("timeout_seconds", 5.0)
+    return asyncio.run(run_wh1_primary_turn(provider=provider, **kwargs))  # type: ignore[arg-type]
+
+
+def _prose_records(caplog: pytest.LogCaptureFixture) -> list[Wh1HarnessShadowObservation]:
+    return [
+        Wh1HarnessShadowObservation.model_validate_json(r.getMessage())
+        for r in caplog.records
+        if r.name == _RECORD_LOGGER
+    ]
+
+
+class TestPrimarySeamIntegration:
+    """seam 통합 — 프로즈 계층이 발화 확정 후·톤필터 직전에만 개입한다(OFF=비트동일)."""
+
+    def test_flag_off_serves_template_without_prose_call(self) -> None:
+        """기본 OFF — 파생 템플릿 그대로 노출·프로즈 LLM 호출 0(정책 호출 1회뿐)."""
+        provider = _FakeProvider(['{"kind": "end_turn", "action_type": "격려"}'])
+        served = _run_primary(provider)
+        assert served == ENCOURAGE_FALLBACK_UTTERANCE
+        assert len(provider.prompts) == 1  # 정책 루프 1회 — 프로즈 호출 없음(비트동일 증명)
+
+    def test_derived_template_rephrased_when_on(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """ON + 파생 격려 템플릿 → 게이트 통과 프로즈로 문맥화 노출·관측 prose_rephrased=True."""
+        _flag_on(monkeypatch)
+        prose = "여기까지 잘 따라왔어, 다음 고비도 스스로 넘어가 보자!"
+        provider = _FakeProvider(['{"kind": "end_turn", "action_type": "격려"}', prose])
+        try:
+            with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+                served = _run_primary(provider)
+        finally:
+            get_settings.cache_clear()
+        assert served == prose
+        records = _prose_records(caplog)
+        assert len(records) == 1
+        assert records[0].prose_rephrased is True
+        assert records[0].prose_reason_code is None
+
+    def test_leaky_rephrase_gated_back_to_template(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """ON + rephrase 출력에 정답 유출 주입 → 게이트가 차단·원 템플릿 노출(fail-closed)."""
+        _flag_on(monkeypatch)
+        provider = _FakeProvider(['{"kind": "end_turn", "action_type": "격려"}', _ANSWER_LEAK])
+        try:
+            with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+                served = _run_primary(provider)
+        finally:
+            get_settings.cache_clear()
+        assert served == ENCOURAGE_FALLBACK_UTTERANCE  # 유출 프로즈는 학생에게 닿지 않는다
+        records = _prose_records(caplog)
+        assert records[0].prose_rephrased is False
+        assert records[0].prose_reason_code == REASON_PROSE_EQUATION
+
+    def test_policy_foreign_equation_falls_back_deterministic(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """ON + correct/무verdict 턴 정책 발화가 외래 등식(날조 정답) → None(결정론 폴백 신호)."""
+        _flag_on(monkeypatch)
+        provider = _FakeProvider(
+            ['{"kind": "end_turn", "action_type": "질문", "utterance": "그러니까 x=9가 되는 거야"}']
+        )
+        try:
+            with caplog.at_level(logging.INFO, logger=_RECORD_LOGGER):
+                served = _run_primary(provider)
+        finally:
+            get_settings.cache_clear()
+        assert served is None  # coach가 기존 결정론 템플릿으로 폴백
+        records = _prose_records(caplog)
+        assert records[0].prose_reason_code == REASON_PROSE_FOREIGN_EQUATION
+
+    def test_policy_clean_prose_passes_gate(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ON + 등식 없는 정책 자유발화 → 게이트 통과·그대로 노출(rephrase 아님)."""
+        _flag_on(monkeypatch)
+        msg = "방금 왜 그렇게 전개했는지 이유를 말해줄래?"
+        provider = _FakeProvider(
+            ['{"kind": "end_turn", "action_type": "질문", "utterance": "' + msg + '"}']
+        )
+        try:
+            served = _run_primary(provider)
+        finally:
+            get_settings.cache_clear()
+        assert served == msg
+
+    def test_policy_student_echo_allowed_end_to_end(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """ON + 학생이 쓴 등식 echo 발화(correct 턴) → 외래 아님·허용(오차단 없음)."""
+        _flag_on(monkeypatch)
+        msg = "네가 쓴 2x=4 다음이 뭘까?"
+        action = '{"kind": "end_turn", "action_type": "질문", "utterance": "' + msg + '"}'
+        # 첫 end_turn은 verify 의무로 재지정되므로 같은 스크립트 2회(선례 패턴).
+        provider = _FakeProvider([action, action])
+        try:
+            served = _run_primary(provider, solution_steps=["2x+3=7", "2x=4"])
+        finally:
+            get_settings.cache_clear()
+        assert served == msg
+
+    def test_suppressed_leak_blocked_and_template_rephrased(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """ON + 오답 턴 정책 유출 시도 → 백스톱(파생)과 프로즈 문맥화가 공존·유출 0."""
+        _flag_on(monkeypatch)
+        leak_action = (
+            '{"kind": "end_turn", "action_type": "힌트", "utterance": "' + _ANSWER_LEAK + '"}'
+        )
+        prose = "방금 그 단계는 어떤 근거로 그렇게 적었는지 들려줄래?"
+        provider = _FakeProvider([leak_action, leak_action, prose])
+        try:
+            served = _run_primary(provider, solution_steps=["x+x", "3*x"])  # incorrect 전이
+        finally:
+            get_settings.cache_clear()
+        assert served == prose  # 파생 358 템플릿이 프로즈로 문맥화
+        assert _ANSWER_LEAK not in (served or "")  # 정답 억제 불변

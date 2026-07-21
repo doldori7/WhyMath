@@ -46,7 +46,8 @@ from collections.abc import Sequence
 from whymath_backend.config import get_settings
 from whymath_backend.harness.wh1_llm_policy import LLMTutorPolicy
 from whymath_backend.harness.wh1_loop import TurnOutcome, run_tutoring_turn
-from whymath_backend.harness.wh1_shadow import emit_wh1_observation
+from whymath_backend.harness.wh1_prose import gate_policy_prose, rephrase_coach_utterance
+from whymath_backend.harness.wh1_shadow import _extract_verify_verdict, emit_wh1_observation
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
 from whymath_backend.l4.tone_filter import filter_tone
@@ -64,6 +65,8 @@ def _safe_emit(
     problem_id: str | None,
     tone_rewritten: bool = False,
     tone_violations: int = 0,
+    prose_rephrased: bool = False,
+    prose_reason_code: str | None = None,
 ) -> None:
     """관측 emit — 실패해도 발화 서빙(본류)을 깨지 않는다(예외 타입명 로그·침묵 실패 금지)."""
     try:
@@ -75,6 +78,8 @@ def _safe_emit(
             primary=True,
             tone_rewritten=tone_rewritten,
             tone_violations=tone_violations,
+            prose_rephrased=prose_rephrased,
+            prose_reason_code=prose_reason_code,
         )
     except Exception as exc:  # noqa: BLE001 — 관측 실패는 서빙을 안 깬다(우선순위 #1≫#6).
         logger.warning(
@@ -149,8 +154,52 @@ async def run_wh1_primary_turn(
         )
         return None
 
+    # ── 프로즈 계층(S4-04·기본 OFF canary) — 톤필터 *직전*에 얹힌다(톤필터=최종 게이트 불변).
+    # OFF면 이 블록 전체 미실행으로 기존 경로와 비트동일. ON이면: 파생 템플릿(utterance_source
+    # =derived)은 정답-안전 rephrase(fail-closed=원 템플릿), 정책 자유발화(policy)는 외래
+    # 등식·위생 게이트(실패=None 반환 → coach의 기존 결정론 폴백 재사용 — 파생 재조립 신설 0).
+    utterance = outcome.utterance
+    prose_rephrased = False
+    prose_reason: str | None = None
+    settings = get_settings()
+    if settings.wh1_prose_rephrase_enabled:
+        # 학생 재료(GT) — 러너가 이미 수령한 값(정책 사적 주입과 동일 원천·프롬프트 미유입).
+        student_material = [student_solution, *solution_steps]
+        if outcome.utterance_source == "policy":
+            prose_reason = gate_policy_prose(utterance, student_material=student_material)
+            if prose_reason is not None:
+                # 거부 사유 코드만 로그·관측(발화 원문 미출력) — 결정론 폴백 신호.
+                _safe_emit(
+                    outcome,
+                    dialogue_id=dialogue_id,
+                    turn_index=turn_index,
+                    problem_id=problem_id,
+                    prose_reason_code=prose_reason,
+                )
+                logger.warning(
+                    "WH-1 primary 정책 프로즈 게이트 거부(%s) — 결정론 템플릿 폴백", prose_reason
+                )
+                return None
+        else:
+            prose_outcome = await rephrase_coach_utterance(
+                utterance,
+                action_type=outcome.action_type,
+                verdict=_extract_verify_verdict(outcome.trace),
+                turn_index=turn_index,
+                # 비민감 라벨 1건 — 활성 최상위 가설의 카탈로그 id(kebab·비PII). preload 아님.
+                hypothesis_label=(
+                    outcome.hypotheses[0].misconception_id if outcome.hypotheses else None
+                ),
+                forbidden_fragments=student_material,
+                provider=provider,
+                timeout_seconds=settings.wh1_prose_timeout_seconds,
+            )
+            utterance = prose_outcome.text  # fail-closed — 실패면 원 템플릿 그대로.
+            prose_rephrased = prose_outcome.rephrased
+            prose_reason = prose_outcome.reason_code
+
     # 톤필터 라이브 배선(방침 ③·KPI3) — 위반 시 rewritten 텍스트만 노출·위반 사실은 관측 기록.
-    filtered, report = filter_tone(outcome.utterance)
+    filtered, report = filter_tone(utterance)
     if report.rewritten:
         # 패턴 라벨·건수만 로그(고정 6패턴 카탈로그 상수) — 발화 원문은 로그에 싣지 않는다.
         logger.warning(
@@ -165,5 +214,7 @@ async def run_wh1_primary_turn(
         problem_id=problem_id,
         tone_rewritten=report.rewritten,
         tone_violations=len(report.violations),
+        prose_rephrased=prose_rephrased,
+        prose_reason_code=prose_reason,
     )
     return filtered

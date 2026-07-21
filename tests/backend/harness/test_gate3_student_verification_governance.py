@@ -391,3 +391,57 @@ class TestGate3Wh1PrimarySurfaceSeal:
                 f"harness/wh1_primary.py에서 검증 게이트 마커('{marker}')가 사라졌다 — primary "
                 "발화가 하네스 검증/톤필터를 우회하면 게이트 ③ 위반이다."
             )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# (E-2) 코치 프로즈 계층 표면 봉인 — S4-04 (파생 템플릿 rephrase·정책 프로즈 게이트)
+# ──────────────────────────────────────────────────────────────────────────
+# S4-04는 (E)가 개방한 유일 표면(`harness/wh1_primary.py`) *안쪽*에 프로즈 계층을 얹는다 —
+# 파생 템플릿은 정답-안전 게이트(등호·숫자·GT 유입 전면 차단·fail-closed) 통과분만 문맥화
+# 노출되고, 정책 자유발화는 외래 등식·위생 게이트(실패=결정론 폴백)를 거친다. 아래 봉인은
+# 이 계층의 소비 표면을 정확 일치로 동결한다 — 새 모듈이 프로즈 플래그·진입 함수를 소비하면
+# red가 되고, 그 리뷰 시점이 곧 "게이트 사슬(프로즈→톤필터) 경유 여부" 심사다.
+_WH1_PROSE_FLAG_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "config.py",  # 플래그 정의(기본 OFF canary — 봉인 ③ serving invariant가 False 동결).
+        "harness/wh1_primary.py",  # 소비: 유일 표면 안쪽의 프로즈 계층 게이트.
+    }
+)
+_WH1_PROSE_ENTRY_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "harness/wh1_prose.py",  # 정의 site: 게이트·rephrase(fail-closed) 소유.
+        "harness/wh1_primary.py",  # 소비: seam(발화 확정 후·톤필터 직전) 유일 호출자.
+    }
+)
+# 프로즈 계층 마커 — wh1_primary.py가 이 둘을 잃으면 프로즈 배선이 조용히 제거·우회된 것.
+_WH1_PROSE_GATE_MARKERS: tuple[str, ...] = ("gate_policy_prose", "rephrase_coach_utterance")
+
+
+class TestGate3Wh1ProseSurfaceSeal:
+    """(E-2) 프로즈 계층 표면 봉인 — 소비 표면을 명시적 frozenset으로 동결(S4-04)."""
+
+    def test_wh1_prose_flag_consumer_set_frozen(self) -> None:
+        """`wh1_prose_rephrase_enabled` 사용 모듈 집합이 allowlist와 정확 일치."""
+        users = _module_users_of("wh1_prose_rephrase_enabled")
+        assert users == set(_WH1_PROSE_FLAG_ALLOWLIST), (
+            "프로즈 rephrase 플래그 사용 모듈이 allowlist와 다릅니다 — 게이트 ③ (E-2). 발견: "
+            f"{sorted(users)} / 허용: {sorted(_WH1_PROSE_FLAG_ALLOWLIST)}. 새 표면이라면 게이트 "
+            "사슬(정답-안전 게이트→톤필터) 경유를 확인하고 이 봉인을 함께 개정하라."
+        )
+
+    def test_wh1_prose_entry_caller_set_frozen(self) -> None:
+        """프로즈 진입 함수(`rephrase_coach_utterance`) 사용 모듈 집합이 allowlist와 정확 일치."""
+        users = _module_users_of("rephrase_coach_utterance")
+        assert users == set(_WH1_PROSE_ENTRY_ALLOWLIST), (
+            "프로즈 rephrase 진입 함수 사용 모듈이 allowlist와 다릅니다 — 게이트 ③ (E-2). 발견: "
+            f"{sorted(users)} / 허용: {sorted(_WH1_PROSE_ENTRY_ALLOWLIST)}."
+        )
+
+    def test_wh1_primary_module_keeps_prose_markers(self) -> None:
+        """`wh1_primary.py`가 프로즈 계층 마커(정책 게이트·rephrase)를 유지 — 조용한 제거 차단."""
+        source = (_PACKAGE_ROOT / "harness" / "wh1_primary.py").read_text(encoding="utf-8")
+        for marker in _WH1_PROSE_GATE_MARKERS:
+            assert marker in source, (
+                f"harness/wh1_primary.py에서 프로즈 계층 마커('{marker}')가 사라졌다 — S4-04 "
+                "정답-안전 게이트가 조용히 제거·우회되면 안 된다(개정은 이 봉인과 함께)."
+            )
