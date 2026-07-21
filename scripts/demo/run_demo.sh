@@ -49,8 +49,12 @@ echo "▶ [3/6] 진단 문제 시드(멱등)…"
 python3 "$REPO_ROOT/scripts/demo/seed_demo.py"
 
 echo "▶ [4/6] backend(uvicorn) 기동 — 0.0.0.0:$PORT (실기기 LAN 도달)…"
+# --log-config: WH-1 verdict 레코드를 wh1_shadow_records.log(CWD=BACKEND_DIR)로 캡처(flip GA —
+# 트리거③·KPI 수확용). 없으면 INFO 레코드가 root WARNING에 삼켜져 원장 0건(ps1 미러). ASCII 전용.
+rm -f "$BACKEND_DIR/wh1_shadow_records.log"
 ( cd "$BACKEND_DIR" && exec uvicorn "whymath_backend.app:create_app" --factory \
-    --host 0.0.0.0 --port "$PORT" ) &
+    --host 0.0.0.0 --port "$PORT" \
+    --log-config "$REPO_ROOT/scripts/demo/wh1_shadow_logconfig.json" ) &
 echo $! > "$PID_FILE"
 echo "  · /health 대기…"
 for _ in $(seq 1 60); do
