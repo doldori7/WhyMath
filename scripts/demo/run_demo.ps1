@@ -22,6 +22,12 @@ $Port = if ($env:WHYMATH_DEMO_PORT) { $env:WHYMATH_DEMO_PORT } else { "8000" }
 $PidFile = Join-Path $RepoRoot ".demo_uvicorn.pid"
 $LogFile = Join-Path $RepoRoot ".demo_uvicorn.log"
 $ErrFile = Join-Path $RepoRoot ".demo_uvicorn.err.log"
+# WH-1 관측 캡처(flip GA·2026-07-21) — primary/shadow verdict 레코드(whymath.harness.wh1_shadow
+# .record·INFO)를 파일로 남겨 트리거③(verify 커버리지)·KPI3(톤) 수확을 가능케 한다. run_demo가
+# --log-config 없이 띄우면 이 INFO 레코드가 root WARNING에 삼켜져 원장이 0건이었다(2026-07-21 실측).
+# logconfig는 ASCII 전용(cp949 로케일 안전·test_wh1_shadow_logconfig.py 동결). 파일은 CWD(BackendDir)에 생성.
+$WhLogConfig = Join-Path $RepoRoot "scripts\demo\wh1_shadow_logconfig.json"
+$WhRecords   = Join-Path $BackendDir "wh1_shadow_records.log"
 
 # ── venv 자동 결선(활성 안 했어도 동작 — Scripts를 PATH 선두에) ──────────────────
 $VenvScripts = Join-Path $BackendDir ".venv\Scripts"
@@ -87,10 +93,13 @@ if ($stale) {
   Start-Sleep -Seconds 1
 }
 $Uvicorn = Join-Path $VenvScripts "uvicorn.exe"
+# WH-1 관측 레코드는 매 세션 새로 캡처(구 파일 혼입 방지 — 수확 회계 오염 차단).
+Remove-Item $WhRecords -ErrorAction SilentlyContinue
 # -NoNewWindow + 리다이렉트 조합(백그라운드·출력은 로그파일로). -WindowStyle Hidden은
 # 리다이렉트와 충돌할 수 있어 -NoNewWindow를 쓴다(현 콘솔 공유·팝업 없음·서버 창 유지).
+# --log-config: verdict 레코드를 wh1_shadow_records.log로 캡처(위 변수 주석 참조).
 $proc = Start-Process -FilePath $Uvicorn `
-  -ArgumentList @("whymath_backend.app:create_app", "--factory", "--host", "0.0.0.0", "--port", $Port) `
+  -ArgumentList @("whymath_backend.app:create_app", "--factory", "--host", "0.0.0.0", "--port", $Port, "--log-config", $WhLogConfig) `
   -WorkingDirectory $BackendDir -PassThru -NoNewWindow `
   -RedirectStandardOutput $LogFile -RedirectStandardError $ErrFile
 $proc.Id | Out-File -FilePath $PidFile -Encoding ascii
@@ -160,6 +169,8 @@ Write-Host ""
 Write-Host " 앱이 이미 인증된 상태로 부팅됩니다(router가 /problem로 이동) →"
 Write-Host " 온보딩→진단→문제→코치(영속 세션)→CoachSignalCard 검증 신호 = 1루프 완주."
 Write-Host " 서버는 백그라운드(pid $($proc.Id))에서 돕니다. 로그: $LogFile / $ErrFile"
+Write-Host " WH-1 verdict 캡처: $WhRecords"
+Write-Host "   수확: cd src\backend; python -m whymath_backend.harness.wh1_shadow_harvest wh1_shadow_records.log"
 Write-Host ""
 Write-Host " ⚠ 게이트 G-kiki-device-demo는 Kiki가 실기기 15분 루프를 *녹화*할 때까지 PENDING입니다."
 Write-Host " 정리: .\scripts\demo\stop_demo.ps1"
