@@ -223,13 +223,20 @@ def main(argv: list[str] | None = None) -> int:
         difficulty_overall=args.difficulty,
         answer_format=None,
     )
+    generator = _build_live_generator(args.topic_hint)
     report = run_corpus_accumulate(
         out_path=args.out,
         seed_paths=list(args.seeds),
-        generator=_build_live_generator(args.topic_hint),
+        generator=generator,
         spec=spec,
         n=args.n,
     )
+    # 배치 종료 — 관측 전송 확정(2026-07-21 정합성 검토: 생성기 trace 배선). LangfuseSink는
+    # 배치 버퍼 전송이라 짧은 CLI는 flush 없이 종료하면 이벤트가 유실된다(cost_probe 동형).
+    # 좌석 계약(EquivalentProblemGenerator)엔 flush가 없으므로 duck-typing으로 있는 경우만.
+    flush_trace = getattr(generator, "flush_trace", None)
+    if callable(flush_trace):
+        flush_trace()
     json.dump(report.to_json(), sys.stdout, ensure_ascii=False, indent=2)
     sys.stdout.write("\n")
     return 0 if report.appended > 0 else 1
