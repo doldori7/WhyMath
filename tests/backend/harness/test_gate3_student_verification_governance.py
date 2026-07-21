@@ -344,6 +344,10 @@ _WH1_PRIMARY_RUNNER_ALLOWLIST: frozenset[str] = frozenset(
         "harness/wh1_primary.py",  # 정의 site: 하네스 실행 + 톤필터 + 관측(발화 산출 유일 좌석).
         "api/coach.py",  # 소비: 플래그 게이트 뒤 발화 교체(폴백 동반).
         "harness/wh1_session.py",  # docstring 참조만(활성화 보류 명문·비호출).
+        # S4-04 측정 CLI — 결함주입 시험지를 *실제 서빙 경로 그대로* 태워 노출 0을 게이트한다.
+        # 학생 노출 표면이 아니라 측정 하네스(hermetic·FakeProvider)이며, 우회 경로가 아니라
+        # 봉인 대상 경로 자체를 측정하는 소비자라 의식적으로 등재한다(2026-07-21 리뷰).
+        "harness/coach_prose_leak_eval.py",
     }
 )
 # 검증 게이트·톤필터 경유 마커 — wh1_primary.py가 이 둘을 잃으면 발화가 게이트를 우회한 것이다.
