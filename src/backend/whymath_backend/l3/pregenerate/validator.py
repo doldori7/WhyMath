@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import unicodedata
 from collections.abc import Sequence
@@ -27,6 +28,11 @@ from sympy.parsing.sympy_parser import (
 )
 
 from whymath_backend.l3.pregenerate.models import PregenItem, ValidationSignal
+
+# 침묵실패 금지(CLAUDE.md) — 이 모듈의 보수 회피는 "통과(None)"로 귀결되므로 sympy 계통
+# 장애 시 산술 게이트가 무증상 전부-통과가 될 수 있다(langfuse 사고와 동형 위험). 예외
+# *타입명*을 debug로 남겨 계통 장애를 관측 가능하게 한다(메시지 본문은 생성물 식이 섞여 제외).
+logger = logging.getLogger("whymath.l3.pregenerate.validator")
 
 
 @runtime_checkable
@@ -209,7 +215,8 @@ def _equality_is_false(lhs_s: str, rhs_s: str) -> str | None:
         if lhs.free_symbols or rhs.free_symbols:
             return None
         is_zero = sympy.simplify(lhs - rhs).is_zero
-    except Exception:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 건너뜀(통과)
+    except Exception as exc:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 건너뜀(통과)
+        logger.debug("pregenerate.validator 보수 회피(통과): %s", type(exc).__name__)
         return None
     if is_zero is False:  # 차이가 0이 *아님*이 확정 → 등식 거짓
         return f"arithmetic error: '{lhs_s} = {rhs_s}' (sympy: {lhs} != {rhs})"
@@ -274,7 +281,8 @@ def _inequality_is_false(lhs_s: str, rhs_s: str, op: str) -> str | None:
         if lhs.free_symbols or rhs.free_symbols:
             return None  # 심볼릭 → 판정 불가(통과)
         rel = _INEQ_FUNC[op](lhs, rhs)
-    except Exception:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 건너뜀(통과)
+    except Exception as exc:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 건너뜀(통과)
+        logger.debug("pregenerate.validator 보수 회피(통과): %s", type(exc).__name__)
         return None
     if rel is sympy.false:  # 거짓 확정
         return f"inequality error: '{lhs_s} {op} {rhs_s}' (sympy: false)"
@@ -339,7 +347,8 @@ def _not_equal_is_false(lhs_s: str, rhs_s: str) -> str | None:
         if lhs.free_symbols or rhs.free_symbols:
             return None  # 심볼릭 → 판정 불가(통과)
         is_zero = sympy.simplify(lhs - rhs).is_zero
-    except Exception:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 건너뜀(통과)
+    except Exception as exc:  # noqa: BLE001 — 파싱·계산 실패는 보수적으로 건너뜀(통과)
+        logger.debug("pregenerate.validator 보수 회피(통과): %s", type(exc).__name__)
         return None
     if is_zero is True:  # 두 값이 같음이 확정 → "a != b" 거짓
         return f"not-equal error: '{lhs_s} != {rhs_s}' (sympy: {lhs} == {rhs})"
@@ -398,7 +407,8 @@ def _parse_expr(text: str) -> Any:
     """
     try:
         return parse_expr(text, transformations=_PARSE_TRANSFORMS)
-    except Exception:  # noqa: BLE001 — 파싱 실패는 보수적으로 건너뜀(통과)
+    except Exception as exc:  # noqa: BLE001 — 파싱 실패는 보수적으로 건너뜀(통과)
+        logger.debug("pregenerate.validator 보수 회피(통과): %s", type(exc).__name__)
         return None
 
 
@@ -406,7 +416,8 @@ def _num_equal(a: Any, b: Any) -> bool:
     """두 수치가 같은가 — 타입(정수/유리/실수) 차이를 simplify로 흡수."""
     try:
         return bool(sympy.simplify(a - b).is_zero is True)
-    except Exception:  # noqa: BLE001  # pragma: no cover — 수치 비교는 사실상 실패 없음
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover — 수치 비교는 사실상 실패 없음
+        logger.debug("pregenerate.validator 보수 회피(통과): %s", type(exc).__name__)
         return False
 
 
@@ -430,7 +441,8 @@ def _common_solution(var: Any, eqs: list[tuple[Any, Any, str]]) -> set[Any] | No
             if not (lhs - rhs).is_polynomial(var):
                 return None  # 비다항(초월·유리)은 보수적 skip
             sols = sympy.solve(sympy.Eq(lhs, rhs), var)
-        except Exception:  # noqa: BLE001  # pragma: no cover
+        except Exception as exc:  # noqa: BLE001  # pragma: no cover
+            logger.debug("pregenerate.validator 보수 회피(통과): %s", type(exc).__name__)
             return None
         numeric: set[Any] = set()
         for sol in sols:
@@ -657,7 +669,8 @@ def _linear_solution(lhs: Any, rhs: Any, var: Any) -> Any | None:
         if not diff.is_polynomial(var) or sympy.degree(diff, var) != 1:
             return None
         sols = sympy.solve(diff, var)
-    except Exception:  # noqa: BLE001  # pragma: no cover — 보수적 skip(방어선)
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover — 보수적 skip(방어선)
+        logger.debug("pregenerate.validator 보수 회피(통과): %s", type(exc).__name__)
         return None
     if len(sols) != 1:  # 선형은 단일근 — 방어
         return None  # pragma: no cover
