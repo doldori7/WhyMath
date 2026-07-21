@@ -15,14 +15,17 @@ except Exception:  # noqa: BLE001
     pass
 
 from whymath_backend.harness.wh1_llm_policy import LLMTutorPolicy
-from whymath_backend.harness.wh1_loop import run_tutoring_turn
+from whymath_backend.harness.wh1_loop import (
+    ENCOURAGE_FALLBACK_UTTERANCE,
+    NEUTRAL_GUIDE_UTTERANCE,
+    run_tutoring_turn,
+)
 from whymath_backend.harness.wh1_shadow import _extract_verify_verdict
 
-# 하네스 결정론 발화(wh1_loop.py:358,361) — 발화가 이 중 하나면 '템플릿/폴백'으로 분류.
-_FALLBACKS = {
-    "방금 단계에서 무엇을 근거로 그렇게 했는지 말해줄래?",
-    "좋아, 지금까지 잘 하고 있어. 다음으로 가보자.",
-}
+# 하네스 결정론 발화(wh1_loop 공개 상수 — 단일 원천·S4-04 C1에서 문자열 중복 제거).
+# 발화가 이 중 하나면 '템플릿/폴백'으로 분류. 프로즈 rephrase 플래그 ON이면 이 템플릿이
+# LLM 문맥 프로즈로 바뀌어 '비템플릿'으로 분류될 수 있음(정상 — 게이트 통과분만 노출).
+_FALLBACKS = {NEUTRAL_GUIDE_UTTERANCE, ENCOURAGE_FALLBACK_UTTERANCE}
 
 _CASES = [
     ("정답 체인", "x=2", ["2x+3=7", "2x=4", "x=2"]),
