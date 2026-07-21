@@ -201,6 +201,19 @@ class TestAnswerSuppression:
             has_solution_steps=True,
         )
         assert out.utterance == msg  # type: ignore[attr-defined]
+        # 발화 출처 기록(S4-04 C1) — 명시 발화 존중 턴은 policy로 표기.
+        assert out.utterance_source == "policy"  # type: ignore[attr-defined]
+
+    def test_suppressed_turn_marks_derived_source(self) -> None:
+        """억제 턴(오답)은 명시 발화를 버리고 파생 — 출처가 derived로 기록된다(S4-04 C1)."""
+        out = _run(
+            [
+                VerifyStepAction(steps=["x+x", "3*x"]),  # incorrect
+                EndTurnAction(action_type="힌트", utterance=self._LEAK),
+            ],
+            has_solution_steps=True,
+        )
+        assert out.utterance_source == "derived"  # type: ignore[attr-defined]
 
     def test_no_verdict_honors_free_text_utterance(self) -> None:
         """검증 없는 순수 대화 턴(verdict None) → 명시 발화 존중(억제 대상 아님)."""

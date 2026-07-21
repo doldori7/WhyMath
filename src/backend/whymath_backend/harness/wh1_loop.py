@@ -80,11 +80,13 @@ from whymath_backend.l4.misconception.probe_selection import (
 __all__ = [
     "Action",
     "CurateHypothesisAction",
+    "ENCOURAGE_FALLBACK_UTTERANCE",
     "EndTurnAction",
     "EndTurnType",
     "EvidenceEdge",
     "LogEvidenceAction",
     "MatchMisconceptionAction",
+    "NEUTRAL_GUIDE_UTTERANCE",
     "QueryCurriculumAction",
     "ReadStateAction",
     "ScriptedTutorPolicy",
@@ -93,6 +95,7 @@ __all__ = [
     "TurnOutcome",
     "TurnState",
     "TutorPolicy",
+    "UtteranceSource",
     "VerifyStepAction",
     "run_tutoring_turn",
 ]
@@ -105,6 +108,19 @@ _ANSWER_SUPPRESSED_VERDICTS: tuple[str, ...] = ("incorrect", "unverifiable")
 
 EndTurnType = Literal["질문", "힌트", "출제", "격려"]
 """end_turn 행위 4종(§3 도구8) — 학생에게 전달되는 발화 유형."""
+
+# 파생 발화 고정 템플릿(공개 상수·값 불변) — "같은 답 반복"의 잔여이자 S4-04 프로즈
+# rephrase의 정확-일치 화이트리스트 원천. probe(_FALLBACKS)·프로즈 계층이 import해
+# 단일 원천으로 쓴다. 값 변경은 회귀 핀(test_wh1_loop.py 정확 문자열 단언)과 함께만.
+NEUTRAL_GUIDE_UTTERANCE = "방금 단계에서 무엇을 근거로 그렇게 했는지 말해줄래?"
+ENCOURAGE_FALLBACK_UTTERANCE = "좋아, 지금까지 잘 하고 있어. 다음으로 가보자."
+
+UtteranceSource = Literal["policy", "derived"]
+"""발화 출처 — policy(정책 명시 발화 존중 턴)·derived(하네스 파생: 개입·중립·출제·격려).
+
+프로즈 계층(S4-04)이 rephrase 대상(derived 템플릿)과 게이트 대상(policy 자유발화)을
+구조적으로 구분하는 신호. 판정은 `_uses_explicit_utterance` 단일 술어가 소유한다.
+"""
 
 
 # ──────────────────────────────────────────────────────────────────────
@@ -244,6 +260,7 @@ class TurnState:
     tool_calls: int = 0
     ended: bool = False
     utterance: str | None = None
+    utterance_source: UtteranceSource | None = None
     end_action_type: EndTurnType | None = None
     history: list[ToolResult] = field(default_factory=list)
 
@@ -272,6 +289,13 @@ class TurnOutcome(BaseModel):
     )
     utterance: str | None = Field(
         default=None, description="학생에게 전달되는 *유일한* 발화(end_turn 산출·ended일 때)."
+    )
+    utterance_source: UtteranceSource | None = Field(
+        default=None,
+        description=(
+            "발화 출처 — policy(정책 명시 발화 존중)·derived(하네스 파생 템플릿). "
+            "프로즈 계층(S4-04)의 라우팅 신호(ended일 때만·기본 None=하위호환)."
+        ),
     )
     hypotheses: list[MisconceptionHypothesis] = Field(
         description="턴 종료 시점 활성 가설 세트(호출자가 영속)."
@@ -337,6 +361,17 @@ def _refuted_mids(state: TurnState) -> frozenset[str]:
     return frozenset(mid for mid in candidate_mids if _net_support(state.evidence, mid) < 0.0)
 
 
+def _uses_explicit_utterance(state: TurnState, action: EndTurnAction) -> bool:
+    """정책 명시 발화를 존중하는 턴인가 — `_end_turn_utterance` 분기의 단일 원천 술어.
+
+    True = correct·검증 없는 순수 대화 턴에서 정책 자유 발화 노출(정답 노출 위험 0),
+    False = 억제 턴(오답·막힘) 또는 발화 미지정 → 하네스 파생. 발화 출처(`UtteranceSource`)
+    기록과 프로즈 계층(S4-04) 라우팅이 이 술어를 공유해 드리프트를 없앤다.
+    """
+    answer_suppressed = state.last_verdict in _ANSWER_SUPPRESSED_VERDICTS
+    return action.utterance is not None and not answer_suppressed
+
+
 def _end_turn_utterance(state: TurnState, action: EndTurnAction) -> str:
     """end_turn 발화 산출 — *유일한* 학생 노출(§3.4-3). 질문/힌트는 가설 세트 개입 발화로 결선.
 
@@ -345,20 +380,19 @@ def _end_turn_utterance(state: TurnState, action: EndTurnAction) -> str:
     말한다 — 정책이 정답을 발화에 실어도 학생에게 닿지 못하게 하는 *하네스* 강제(정책 무관). 파생
     발화는 가설·직전 probe·중립 유도뿐이라 구조적으로 정답을 담지 않는다.
     """
-    # correct·검증 없는 순수 대화 턴에서만 정책 명시 발화 존중(정답 노출 위험 0). 그 외(오답·막힘)는
-    # 명시 발화를 버리고 파생한다.
-    answer_suppressed = state.last_verdict in _ANSWER_SUPPRESSED_VERDICTS
-    if action.utterance is not None and not answer_suppressed:
+    # correct·검증 없는 순수 대화 턴에서만 정책 명시 발화 존중 — 판정은 술어가 소유.
+    if _uses_explicit_utterance(state, action) and action.utterance is not None:
+        # 두 번째 조건은 술어가 이미 보장하는 값의 타입 내로잉용 재확인(중복 판정 아님).
         return action.utterance
     if action.action_type in ("질문", "힌트"):
         # 개입 발화 결선(#237) — 누적 가설 세트가 소크라테스 발화를 구동.
         decision = select_intervention_from_hypotheses(state.hypotheses)
         if decision is not None:
             return decision.prompt
-        return "방금 단계에서 무엇을 근거로 그렇게 했는지 말해줄래?"  # 보류 시 중립 유도
+        return NEUTRAL_GUIDE_UTTERANCE  # 보류 시 중립 유도
     if action.action_type == "출제" and state.last_probe is not None:
         return f"이 문항을 한번 풀어보자(진단 #{state.last_probe.problem_id})."
-    return "좋아, 지금까지 잘 하고 있어. 다음으로 가보자."  # 격려·출제 폴백
+    return ENCOURAGE_FALLBACK_UTTERANCE  # 격려·출제 폴백
 
 
 def _exec_end_turn(state: TurnState, action: EndTurnAction, *, explore_period: int) -> ToolResult:
@@ -371,6 +405,8 @@ def _exec_end_turn(state: TurnState, action: EndTurnAction, *, explore_period: i
             detail="end_turn 거부 — 풀이 단계 제출 턴인데 verify_step 미호출(§3.1).",
         )
     state.utterance = _end_turn_utterance(state, action)
+    # 발화 출처 기록 — 산출 분기와 같은 술어를 공유(policy=명시 발화 존중·derived=하네스 파생).
+    state.utterance_source = "policy" if _uses_explicit_utterance(state, action) else "derived"
     state.end_action_type = action.action_type
     state.ended = True
     return ToolResult(kind=action.kind, ok=True, detail=f"학생 발화 산출({action.action_type}).")
@@ -517,6 +553,7 @@ async def run_tutoring_turn(
             status="ended",
             action_type=state.end_action_type,
             utterance=state.utterance,
+            utterance_source=state.utterance_source,
             hypotheses=state.hypotheses,
             evidence=list(state.evidence),
             tool_calls=state.tool_calls,

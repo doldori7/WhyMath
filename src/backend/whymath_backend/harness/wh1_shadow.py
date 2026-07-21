@@ -112,6 +112,18 @@ class Wh1HarnessShadowObservation(BaseModel):
     tone_violations: int = 0
     """톤필터가 검출한 금지 패턴 수(중복 포함·비식별 정수). 패턴 원문·발화 원문은 미저장."""
 
+    prose_rephrased: bool = False
+    """primary 파생 템플릿 발화가 프로즈 계층(S4-04)에서 LLM 문맥 프로즈로 승격됐는지.
+
+    shadow·구판 레코드는 False(기본값 — 하위호환·구판 파싱 무영향). True면 정답-안전 게이트
+    (등호·숫자·GT 유입 전면 차단)를 통과한 프로즈가 노출됐다는 뜻. 발화 원문은 불저장 불변."""
+
+    prose_reason_code: str | None = None
+    """프로즈 계층 판정 코드(taxonomy 라벨·비식별) — rephrase 미승격/게이트 거부 사유.
+
+    None=프로즈 계층 미경유(플래그 OFF·shadow) 또는 승격 성공. 문자열이면 wh1_prose의
+    REASON_* 코드(NOT_REPHRASABLE·PROSE_EQUATION 등 — 코드만·발화 원문 미포함)."""
+
     observed_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -158,6 +170,8 @@ def emit_wh1_observation(
     primary: bool = False,
     tone_rewritten: bool = False,
     tone_violations: int = 0,
+    prose_rephrased: bool = False,
+    prose_reason_code: str | None = None,
 ) -> None:
     """하네스 한 턴 결과를 관측 레코드로 emit — shadow·primary *공통* 단일 좌석(S1-11).
 
@@ -201,6 +215,8 @@ def emit_wh1_observation(
             primary=primary,
             tone_rewritten=tone_rewritten,
             tone_violations=tone_violations,
+            prose_rephrased=prose_rephrased,
+            prose_reason_code=prose_reason_code,
         ).model_dump_json()
     )
 

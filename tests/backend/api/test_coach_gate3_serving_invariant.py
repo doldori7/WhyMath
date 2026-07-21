@@ -141,8 +141,14 @@ def test_serving_path_llm_flag_governance() -> None:
     LLM 실패·타임아웃 시 결정론 폴백. 즉 학생-대면 자유 산문은 여전히 억제된다(측정 실증: 발화가
     하네스 소크라테스 템플릿). 이 봉인은 이제 판정치를 *동결*한다 — 기본값이 다시 조용히 뒤집히면
     (judge/shadow가 켜지거나 primary가 꺼지면) red로 플래그한다.
+
+    **프로즈 rephrase(S4-04)는 기본 OFF(canary)** — ON이어도 파생 템플릿의 정답-안전 게이트
+    (등호·숫자·GT 유입 전면 차단·fail-closed=원 템플릿) 통과분만 문맥화 노출되는 계층이나,
+    GA flip(기본 True)은 결함주입 측정(coach_prose_leak_eval exit 0)+실기기 확인 후 별도
+    커밋으로만 한다(S1-11 canary→GA 선례). 그 전까지 이 봉인이 False를 동결한다.
     """
     settings = Settings(jwt_secret_key=SecretStr("test-secret-0123456789abcdef"))
     assert settings.misconception_judge_enabled is False
     assert settings.wh1_harness_shadow_enabled is False
     assert settings.wh1_primary_enabled is True  # 2026-07-20 GA (측정 통과·MEMORY 로그)
+    assert settings.wh1_prose_rephrase_enabled is False  # S4-04 canary — GA는 측정+실기기 후
