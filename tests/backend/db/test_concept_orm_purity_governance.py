@@ -24,9 +24,7 @@ from whymath_backend.db.models.concept import Concept
 # ──────────────────────────────────────────────────────────────────────────
 # 스냅샷 — 현재 런타임 concept 테이블 컬럼 전체(추가/삭제 시 의식적 리뷰 강제).
 # ──────────────────────────────────────────────────────────────────────────
-_IDENTITY_COLUMNS = frozenset(
-    {"concept_id", "code", "name_ko", "name_en", "source_id", "aliases"}
-)
+_IDENTITY_COLUMNS = frozenset({"concept_id", "code", "name_ko", "name_en", "source_id", "aliases"})
 _HIERARCHY_COLUMNS = frozenset({"level", "parent_concept_id"})
 _SEMANTIC_COLUMNS = frozenset(
     {
@@ -46,11 +44,7 @@ _OPS_COLUMNS = frozenset({"created_at"})
 _KNOWN_PURITY_DEBT = frozenset({"embedding_id", "recommended_visual_styles"})
 
 _EXPECTED_COLUMNS = (
-    _IDENTITY_COLUMNS
-    | _HIERARCHY_COLUMNS
-    | _SEMANTIC_COLUMNS
-    | _OPS_COLUMNS
-    | _KNOWN_PURITY_DEBT
+    _IDENTITY_COLUMNS | _HIERARCHY_COLUMNS | _SEMANTIC_COLUMNS | _OPS_COLUMNS | _KNOWN_PURITY_DEBT
 )
 
 # 절대 금칙 — 재유입 시 즉시 red(저작 게이트 `_FORBIDDEN_NODE_FIELDS`와 동일 축 + 런타임

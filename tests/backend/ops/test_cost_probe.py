@@ -39,9 +39,7 @@ class _FakeProvider:
 
     def __init__(self, *, raise_on: str | None = None) -> None:
         self.calls: list[RoutingDecision] = []
-        self._raise_on = (
-            raise_on  # 이 cost_tier로 결정된 호출만 실패시킨다(오류 회계 검증)
-        )
+        self._raise_on = raise_on  # 이 cost_tier로 결정된 호출만 실패시킨다(오류 회계 검증)
 
     async def generate(
         self,
@@ -317,9 +315,7 @@ def test_render_small_sample_guides_to_more_rounds() -> None:
 
 def test_render_unknown_ratio() -> None:
     """표본 0이면 '미상'·'판정 불가'로 렌더 — 0%로 위장하지 않는다."""
-    report = cp.summarize_decisions(
-        [], errors=0, error_samples=[], cloud_included=False, rounds=1
-    )
+    report = cp.summarize_decisions([], errors=0, error_samples=[], cloud_included=False, rounds=1)
     text = cp.render_report(report)
     assert "미상" in text
     assert "판정 불가" in text

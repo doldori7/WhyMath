@@ -64,9 +64,7 @@ _HAPPY = json.dumps(
         "answer_format": "자연수",
         "achievement_standard_codes": [_STANDARD],
         "distractor_map": [{"choice_index": 1, "misconception_id": _MISCONCEPTION}],
-        "concept_tags": [
-            {"concept_src_id": "HK06", "role": "PRIMARY", "relevance": 0.9}
-        ],
+        "concept_tags": [{"concept_src_id": "HK06", "role": "PRIMARY", "relevance": 0.9}],
     },
     ensure_ascii=False,
 )
@@ -166,9 +164,7 @@ class TestAssembly:
         c1 = _gen(FakeProvider([_HAPPY])).generate(_spec())
         c2 = _gen(FakeProvider([_HAPPY])).generate(_spec())
         assert c1 is not None and c2 is not None
-        assert (
-            c1.problem.slug == c2.problem.slug
-        )  # 같은 내용 → 같은 slug(멱등 upsert 키)
+        assert c1.problem.slug == c2.problem.slug  # 같은 내용 → 같은 slug(멱등 upsert 키)
         assert c1.problem.slug is not None and c1.problem.slug.startswith("wm-gen-")
 
     def test_latex_backslash_in_response_still_parses(self) -> None:
@@ -495,9 +491,7 @@ class TestAuthoringFamily:
         _gen(provider).generate(_spec())
         decision = provider.decisions[0]
         assert decision.cost_tier == "local"  # free·예산0 → 로컬 확정
-        assert (
-            decision.local_family == ModelFamily.GENERAL.value
-        )  # MATH가 아니라 GENERAL
+        assert decision.local_family == ModelFamily.GENERAL.value  # MATH가 아니라 GENERAL
         assert decision.local_model in (
             LocalModelTier.FAST.value,
             LocalModelTier.MID.value,
@@ -588,9 +582,7 @@ class TestSafeFallback:
     def test_missing_unit_codes_with_fallback_assembles(self) -> None:
         payload = json.loads(_HAPPY)
         del payload["unit_codes"]
-        gen = _gen(
-            FakeProvider([json.dumps(payload)]), fallback_unit_codes=["CAL-INT-DEF"]
-        )
+        gen = _gen(FakeProvider([json.dumps(payload)]), fallback_unit_codes=["CAL-INT-DEF"])
         candidate = gen.generate(_spec())
         assert candidate is not None
         assert candidate.problem.unit_codes == ["CAL-INT-DEF"]
@@ -758,9 +750,7 @@ class TestTraceSinkInjection:
     def test_parse_failure_still_records_call(self) -> None:
         """JSON 파싱 실패로 None 폴백이어도 LLM 호출은 성공·비용 발생 — record는 남는다."""
         spy = _SpyTraceSink()
-        candidate = _gen(FakeProvider(["JSON이 아닌 산문 응답"]), trace=spy).generate(
-            _spec()
-        )
+        candidate = _gen(FakeProvider(["JSON이 아닌 산문 응답"]), trace=spy).generate(_spec())
         assert candidate is None  # 생성은 정직한 실패
         assert len(spy.records) == 1  # 그래도 호출 비용 관측은 기록
 
@@ -773,9 +763,7 @@ class TestTraceSinkInjection:
 
     def test_crashing_sink_never_breaks_generation(self) -> None:
         """관측 sink가 죽어도 저작은 계속된다(never-break — langfuse_sink 방침 동형)."""
-        candidate = _gen(FakeProvider([_HAPPY]), trace=_CrashingTraceSink()).generate(
-            _spec()
-        )
+        candidate = _gen(FakeProvider([_HAPPY]), trace=_CrashingTraceSink()).generate(_spec())
         assert candidate is not None  # 생성 결과는 무영향
 
     def test_flush_trace_confirms_transport(self) -> None:
