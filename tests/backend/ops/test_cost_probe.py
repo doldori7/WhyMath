@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 
+from whymath_backend.harness.wilson import wilson_lower_bound
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.interfaces import InMemoryCache
 from whymath_backend.l3.models import CostTier, GenerationResult, RoutingDecision, Usage
@@ -38,7 +39,9 @@ class _FakeProvider:
 
     def __init__(self, *, raise_on: str | None = None) -> None:
         self.calls: list[RoutingDecision] = []
-        self._raise_on = raise_on  # 이 cost_tier로 결정된 호출만 실패시킨다(오류 회계 검증)
+        self._raise_on = (
+            raise_on  # 이 cost_tier로 결정된 호출만 실패시킨다(오류 회계 검증)
+        )
 
     async def generate(
         self,
@@ -121,21 +124,51 @@ def test_mix_is_local_dominant() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# 순수 코어 — summarize_decisions
+# 순수 코어 — summarize_decisions (판정 = Wilson 단측 하한·점추정 금지)
 # ──────────────────────────────────────────────────────────────────────────
 def test_summary_local_ratio_and_pass() -> None:
-    """로컬 9 : 클라우드 1 → 0.9 → 판정선 PASS."""
-    tiers = [CostTier.LOCAL.value] * 9 + [CostTier.CLOUD_MID.value]
+    """로컬 54 : 클라우드 6(n=60) → 점추정 0.9·Wilson 하한 ≈0.82 → 판정선 PASS."""
+    tiers = [CostTier.LOCAL.value] * 54 + [CostTier.CLOUD_MID.value] * 6
+    report = cp.summarize_decisions(
+        tiers, errors=0, error_samples=[], cloud_included=True, rounds=6
+    )
+    assert report.local_ratio == pytest.approx(0.9)
+    assert report.local_ratio_lower == pytest.approx(wilson_lower_bound(54, 60))
+    assert report.local_ratio_lower is not None and report.local_ratio_lower >= 0.80
+    assert report.gate2_local_pass is True
+    assert report.tier_counts == {CostTier.LOCAL.value: 54, CostTier.CLOUD_MID.value: 6}
+
+
+def test_summary_small_sample_point_at_threshold_fails() -> None:
+    """변별력: 로컬 4/5 — 점추정은 정확히 0.80이나 Wilson 하한 ≈0.44 → FAIL.
+
+    점추정 판정이던 시절 '작은 표본 거짓 해금'이 통과하던 바로 그 시나리오
+    (2026-07-21 정합성 검토 발견)를 실패 상태로 고정한다.
+    """
+    tiers = [CostTier.LOCAL.value] * 4 + [CostTier.CLOUD_MID.value]
     report = cp.summarize_decisions(
         tiers, errors=0, error_samples=[], cloud_included=True, rounds=1
     )
-    assert report.local_ratio == pytest.approx(0.9)
-    assert report.gate2_local_pass is True
-    assert report.tier_counts == {CostTier.LOCAL.value: 9, CostTier.CLOUD_MID.value: 1}
+    assert report.local_ratio == pytest.approx(0.80)  # 점추정은 임계 도달
+    assert report.local_ratio_lower is not None and report.local_ratio_lower < 0.80
+    assert report.gate2_local_pass is False  # 그래도 판정은 FAIL — 하한이 판정 기준
+
+
+def test_summary_all_local_small_sample_fails() -> None:
+    """변별력: 전량 로컬이어도 n=9(rounds=1 로컬 믹스)면 하한 ≈0.77 → FAIL.
+
+    소표본은 구조적으로 통과 불가 — 하한 n/(n+z²)이 0.80을 넘으려면 n≥11.
+    """
+    tiers = [CostTier.LOCAL.value] * 9
+    report = cp.summarize_decisions(
+        tiers, errors=0, error_samples=[], cloud_included=False, rounds=1
+    )
+    assert report.local_ratio == pytest.approx(1.0)
+    assert report.gate2_local_pass is False
 
 
 def test_summary_below_threshold_fails() -> None:
-    """로컬 7 : 클라우드 3 → 0.7 → 판정선 미달(False)."""
+    """로컬 7 : 클라우드 3 → 점추정 0.7부터 미달 — 하한은 더 낮아 당연 FAIL."""
     tiers = [CostTier.LOCAL.value] * 7 + [CostTier.CLOUD_MID.value] * 3
     report = cp.summarize_decisions(
         tiers, errors=0, error_samples=[], cloud_included=True, rounds=1
@@ -144,11 +177,12 @@ def test_summary_below_threshold_fails() -> None:
 
 
 def test_summary_empty_is_unknown_not_zero() -> None:
-    """성공 표본 0 → local_ratio=None·판정 불가(None) — '미상'과 0을 구분(날조 금지)."""
+    """성공 표본 0 → local_ratio·하한=None·판정 불가(None) — '미상'과 0을 구분(날조 금지)."""
     report = cp.summarize_decisions(
         [], errors=3, error_samples=["[x] E: e"], cloud_included=False, rounds=1
     )
     assert report.local_ratio is None
+    assert report.local_ratio_lower is None
     assert report.gate2_local_pass is None
     assert report.total == 3  # 오류도 총 요청 수에는 회계된다
 
@@ -167,13 +201,17 @@ def test_summary_errors_excluded_from_denominator() -> None:
 # run_probe — 실 pipeline.generate(순수) + 가짜 provider·스파이 sink.
 # ──────────────────────────────────────────────────────────────────────────
 def test_run_probe_local_only_when_anthropic_unset() -> None:
-    """anthropic 미설정 → 클라우드 archetype 제외·전 요청 LOCAL·판정선 PASS·flush 1회."""
+    """anthropic 미설정 → 클라우드 archetype 제외·전 요청 LOCAL·판정선 PASS·flush 1회.
+
+    rounds=2(로컬 18건) — Wilson 하한 판정이라 rounds=1(n=9)은 전량 로컬이어도 표본
+    부족으로 통과 불가(위 소표본 변별력 테스트가 고정).
+    """
     provider = _FakeProvider()
     spy = _SpySink()
     report = asyncio.run(
         cp.run_probe(
             _FakeSettings(anthropic=False),  # type: ignore[arg-type]
-            rounds=1,
+            rounds=2,
             deps_factory=lambda _s: _deps(provider, spy),
         )
     )
@@ -190,20 +228,23 @@ def test_run_probe_local_only_when_anthropic_unset() -> None:
 
 
 def test_run_probe_cloud_mix_ratio_measured() -> None:
-    """anthropic 설정 → 클라우드 archetype 포함, 라우터 결정 그대로 비율 산출(9:1=0.9)."""
+    """anthropic 설정 → 클라우드 archetype 포함, 라우터 결정 그대로 비율 산출(9:1=0.9).
+
+    rounds=6(n=60) — 점추정 0.9의 Wilson 하한이 0.80을 넘는 최소권 표본으로 PASS까지 검증.
+    """
     provider = _FakeProvider()
     spy = _SpySink()
     report = asyncio.run(
         cp.run_probe(
             _FakeSettings(anthropic=True),  # type: ignore[arg-type]
-            rounds=2,
+            rounds=6,
             deps_factory=lambda _s: _deps(provider, spy),
         )
     )
     assert report.cloud_included is True
-    # 라우터가 premium archetype을 실제 CLOUD_MID로 결정했는가(라운드당 1건×2).
-    assert report.tier_counts.get(CostTier.CLOUD_MID.value) == 2
-    assert report.local_ratio == pytest.approx(18 / 20)
+    # 라우터가 premium archetype을 실제 CLOUD_MID로 결정했는가(라운드당 1건×6).
+    assert report.tier_counts.get(CostTier.CLOUD_MID.value) == 6
+    assert report.local_ratio == pytest.approx(54 / 60)
     assert report.gate2_local_pass is True
 
 
@@ -245,41 +286,59 @@ def test_run_probe_include_cloud_override() -> None:
 # 렌더링·JSON — 시크릿 0·미상 표기·직렬화 왕복.
 # ──────────────────────────────────────────────────────────────────────────
 def test_render_has_verdict_and_no_secrets() -> None:
-    """사람용 출력에 판정선·비율이 있고 키 문자열 패턴이 없다."""
+    """사람용 출력에 점추정·Wilson 하한·판정선이 있고 키 문자열 패턴이 없다."""
     report = cp.summarize_decisions(
-        [CostTier.LOCAL.value] * 8 + [CostTier.CLOUD_MID.value] * 2,
+        [CostTier.LOCAL.value] * 54 + [CostTier.CLOUD_MID.value] * 6,
+        errors=0,
+        error_samples=[],
+        cloud_included=True,
+        rounds=6,
+    )
+    text = cp.render_report(report)
+    assert "90.0%" in text  # 점추정
+    assert "Wilson 하한" in text
+    assert "PASS" in text
+    assert "sk-" not in text and "pk-" not in text
+
+
+def test_render_small_sample_guides_to_more_rounds() -> None:
+    """변별력 안내: 점추정 ≥80%인데 표본 부족으로 미달이면 --rounds 증량을 안내한다."""
+    report = cp.summarize_decisions(
+        [CostTier.LOCAL.value] * 4 + [CostTier.CLOUD_MID.value],
         errors=0,
         error_samples=[],
         cloud_included=True,
         rounds=1,
     )
     text = cp.render_report(report)
-    assert "80.0%" in text
-    assert "PASS" in text
-    assert "sk-" not in text and "pk-" not in text
+    assert "미달" in text
+    assert "--rounds" in text  # 소표본 안내 줄
 
 
 def test_render_unknown_ratio() -> None:
     """표본 0이면 '미상'·'판정 불가'로 렌더 — 0%로 위장하지 않는다."""
-    report = cp.summarize_decisions([], errors=0, error_samples=[], cloud_included=False, rounds=1)
+    report = cp.summarize_decisions(
+        [], errors=0, error_samples=[], cloud_included=False, rounds=1
+    )
     text = cp.render_report(report)
     assert "미상" in text
     assert "판정 불가" in text
 
 
 def test_json_roundtrip(tmp_path: Path) -> None:
-    """to_json이 판정선 포함 직렬화 — cost_report JSON 관례와 동형(파일 왕복)."""
+    """to_json이 판정선·Wilson 하한 포함 직렬화 — cost_report JSON 관례와 동형(파일 왕복)."""
     report = cp.summarize_decisions(
-        [CostTier.LOCAL.value] * 9 + [CostTier.CLOUD_MID.value],
+        [CostTier.LOCAL.value] * 54 + [CostTier.CLOUD_MID.value] * 6,
         errors=1,
         error_samples=["[coach-medium-free] RuntimeError: x"],
         cloud_included=True,
-        rounds=3,
+        rounds=6,
     )
     out = tmp_path / "probe.json"
     out.write_text(json.dumps(report.to_json(), ensure_ascii=False), encoding="utf-8")
     loaded = json.loads(out.read_text(encoding="utf-8"))
     assert loaded["local_ratio"] == pytest.approx(0.9)
+    assert loaded["local_ratio_lower"] == pytest.approx(wilson_lower_bound(54, 60))
     assert loaded["gate2_local_pass"] is True
     assert loaded["errors"] == 1
-    assert loaded["rounds"] == 3
+    assert loaded["rounds"] == 6
