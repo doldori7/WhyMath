@@ -39,6 +39,7 @@ from whymath_backend.l3.models import (
     LocalModelTier,
     ModelFamily,
     RoutingDecision,
+    Usage,
 )
 from whymath_backend.l4.misconception.catalog import CATALOG_BY_ID
 from whymath_backend.schema.enums import AnswerFormat, LicenseType, SourceType
@@ -196,7 +197,11 @@ class TestAssembly:
         # S2-k: 모델이 산문 solution_steps를 내도 후보엔 싣지 않는다(Tier2 심볼릭 체인이 아님).
         # 답 정확성은 Tier1+근 선택이 확정하고, 설명은 answer_explanation 소관.
         payload = json.loads(_HAPPY)
-        payload["solution_steps"] = ["인수분해하면 (x-2)(x-3)=0", "두 근은 2와 3", "큰 근은 3"]
+        payload["solution_steps"] = [
+            "인수분해하면 (x-2)(x-3)=0",
+            "두 근은 2와 3",
+            "큰 근은 3",
+        ]
         candidate = _gen(FakeProvider([json.dumps(payload)])).generate(_spec())
         assert candidate is not None
         assert candidate.solution_steps is None
@@ -236,7 +241,9 @@ class TestAssembly:
         prompt, _ = provider.calls[0]
         assert "이차방정식 — 두 근 중 큰 근" in prompt
 
-    def test_system_prompt_requires_single_answer_and_forbids_placeholders(self) -> None:
+    def test_system_prompt_requires_single_answer_and_forbids_placeholders(
+        self,
+    ) -> None:
         # S2-f: 답 하나로 정해지게(이차 검증 가능) + 플레이스홀더 베끼기 금지 지시가 시스템에 있다.
         provider = FakeProvider([_HAPPY])
         _gen(provider).generate(_spec())
@@ -485,7 +492,10 @@ class TestAuthoringFamily:
         decision = provider.decisions[0]
         assert decision.cost_tier == "local"  # free·예산0 → 로컬 확정
         assert decision.local_family == ModelFamily.GENERAL.value  # MATH가 아니라 GENERAL
-        assert decision.local_model in (LocalModelTier.FAST.value, LocalModelTier.MID.value)
+        assert decision.local_model in (
+            LocalModelTier.FAST.value,
+            LocalModelTier.MID.value,
+        )
 
     def test_medium_difficulty_uses_general_mid_qwen25_7b(self) -> None:
         # medium 난이도(기본 스펙 3.0) → 라우터가 MID를 고르고, 패밀리는 GENERAL로 갈아탄다
@@ -663,3 +673,104 @@ def test_no_live_provider_used() -> None:
                 RoutingDecision(cost_tier="cloud_mid", est_latency_ms=0),  # type: ignore[arg-type]
             )
         )
+
+
+# ──────────────────────────────────────────────────────────────────────
+# ⑨ 관측(TraceSink) 주입 — 코퍼스 저작 호출의 Langfuse 추적(2026-07-21 정합성 검토 보정).
+# ──────────────────────────────────────────────────────────────────────
+class _SpyTraceSink:
+    """record/flush를 세는 스파이 — LangfuseSink 자리(cost_probe _SpySink 동형)."""
+
+    def __init__(self) -> None:
+        self.records: list[dict[str, object]] = []
+        self.flush_count = 0
+
+    def record(self, fields: dict[str, object]) -> None:
+        self.records.append(fields)
+
+    def flush(self) -> None:
+        self.flush_count += 1
+
+
+class _CrashingTraceSink:
+    """record가 항상 던지는 sink — 관측 장애 never-break 검증용."""
+
+    def record(self, fields: dict[str, object]) -> None:
+        raise RuntimeError("sink 다운(테스트)")
+
+
+class _UsageProvider:
+    """usage(실측 토큰·지연)를 채워 돌려주는 provider 대역 — 비용 회계 배선 검증용."""
+
+    def __init__(self, response: str) -> None:
+        self._response = response
+
+    async def generate(
+        self,
+        prompt: str,
+        system: str,
+        decision: RoutingDecision,
+        *,
+        images: Sequence[str] | None = None,
+        temperature: float | None = None,
+        json_schema: Mapping[str, object] | None = None,
+    ) -> GenerationResult:
+        return GenerationResult(
+            self._response,
+            usage=Usage(input_tokens=120, output_tokens=45, latency_ms=88.0),
+        )
+
+
+class TestTraceSinkInjection:
+    def test_success_records_one_langfuse_fields(self) -> None:
+        """정상 생성 1건 → record 1건 — 라우팅 태그·cache_hit=False가 실린다."""
+        spy = _SpyTraceSink()
+        candidate = _gen(FakeProvider([_HAPPY]), trace=spy).generate(_spec())
+        assert candidate is not None
+        assert len(spy.records) == 1
+        fields = spy.records[0]
+        assert fields["cache_hit"] is False
+        assert fields["cost_tier"] is not None  # 라우터 결정이 그대로 실린다
+        # FakeProvider는 usage 미계측 — 실측 키는 None으로 정직하게 남는다(지어내지 않음).
+        assert fields["input_tokens"] is None
+        assert fields["cost_krw"] is None
+        assert fields["student_id_hash"] is None  # 오프라인 저작 — 학생 무관
+
+    def test_usage_flows_to_trace_with_local_zero_cost(self) -> None:
+        """usage가 있으면 실측 토큰·지연이 흐르고, 로컬 결정은 실측 비용 0원 확정."""
+        spy = _SpyTraceSink()
+        candidate = _gen(_UsageProvider(_HAPPY), trace=spy).generate(_spec())
+        assert candidate is not None
+        fields = spy.records[0]
+        assert fields["input_tokens"] == 120
+        assert fields["output_tokens"] == 45
+        assert fields["latency_ms"] == 88.0
+        assert fields["cost_krw"] == 0.0  # free 구독 → LOCAL 라우팅 → 실측 0원 확정
+
+    def test_parse_failure_still_records_call(self) -> None:
+        """JSON 파싱 실패로 None 폴백이어도 LLM 호출은 성공·비용 발생 — record는 남는다."""
+        spy = _SpyTraceSink()
+        candidate = _gen(FakeProvider(["JSON이 아닌 산문 응답"]), trace=spy).generate(_spec())
+        assert candidate is None  # 생성은 정직한 실패
+        assert len(spy.records) == 1  # 그래도 호출 비용 관측은 기록
+
+    def test_provider_failure_records_nothing(self) -> None:
+        """provider 장애(호출 자체 실패)면 비용도 없다 — record 0건(지어내지 않음)."""
+        spy = _SpyTraceSink()
+        candidate = _gen(RaisingProvider(), trace=spy).generate(_spec())
+        assert candidate is None
+        assert spy.records == []
+
+    def test_crashing_sink_never_breaks_generation(self) -> None:
+        """관측 sink가 죽어도 저작은 계속된다(never-break — langfuse_sink 방침 동형)."""
+        candidate = _gen(FakeProvider([_HAPPY]), trace=_CrashingTraceSink()).generate(_spec())
+        assert candidate is not None  # 생성 결과는 무영향
+
+    def test_flush_trace_confirms_transport(self) -> None:
+        """flush_trace는 sink.flush를 확정 호출 — flush 없는 sink는 조용히 통과."""
+        spy = _SpyTraceSink()
+        gen = _gen(FakeProvider([_HAPPY]), trace=spy)
+        gen.flush_trace()
+        assert spy.flush_count == 1
+        # flush 표면이 없는 sink(계약 최소 구현)에도 안전하다.
+        _gen(FakeProvider([_HAPPY]), trace=_CrashingTraceSink()).flush_trace()

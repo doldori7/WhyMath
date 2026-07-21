@@ -24,6 +24,13 @@
 #
 # 상태: 명세 단계. Phase 1 구현 대상 (고1 미적분 영역 ~100개념).
 #       실제 코드 구현(Neo4j 적재·Pydantic 모델)은 본 명세의 범위 밖.
+#
+# ⚠ 런타임 드리프트 노트 (2026-07-21 전면 정합성 검토):
+#   아래 storage(Neo4j 5.x)·문자열 PK(concept_id) 가정은 *현 런타임과 다르다*.
+#   런타임 정본 = src/backend/whymath_backend/db/models/concept.py — PostgreSQL 단일
+#   평면(Neo4j 런타임 미도입), PK=concept_id(UUID·gen_random_uuid) + canonical 문자열
+#   'math.<area>.<slug>'는 code(Text·unique) 컬럼으로 병행 보유. 신규 작업은 런타임
+#   정본 기준으로 설계하고, 본 파일은 필드 의미 명세로만 읽을 것.
 # =============================================================================
 
 entity: Concept

@@ -20,8 +20,8 @@ S1 탈출 게이트 ②("루프당 LLM 비용 실측·로컬 ≥80%")는 `l3_rou
 -----------
 1. **로컬 비율(게이트 ② 핵심)** — 라우터가 각 요청에 내린 `cost_tier` 결정을
    *인프로세스*로 집계한다(`result.decision.cost_tier`). Langfuse·DB에 의존하지 않으므로
-   관측 인프라가 죽어도 판정선(≥0.8)을 낸다. 이번 세션에서 드러난 취약점(Langfuse 키가
-   자리표시자면 cost_report가 조용히 0건) 방어.
+   관측 인프라가 죽어도 판정선(Wilson 단측 하한 ≥0.8 — 점추정 판정 금지)을 낸다. 이번
+   세션에서 드러난 취약점(Langfuse 키가 자리표시자면 cost_report가 조용히 0건) 방어.
 2. **비용·지연 분포** — 파이프라인이 `l3_routing` 이벤트를 Langfuse에 실제 기록·flush
    하므로, 이 프로브를 돌린 뒤 `ops/cost_report --days 1`이 p50/p90·실측 cost_krw를
    집계한다(인그레션 지연 수 초 후).
@@ -62,6 +62,7 @@ from pathlib import Path
 from typing import Protocol
 
 from whymath_backend.config import Settings
+from whymath_backend.harness.wilson import wilson_lower_bound
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.interfaces import CacheBackend, InMemoryCache, LLMProvider
 from whymath_backend.l3.models import CostTier, RoutingRequest
@@ -74,9 +75,15 @@ from whymath_backend.l3.trace.langfuse_sink import LangfuseSink
 # 프로브 시스템 프롬프트 — 짧고 결정적(토큰·비용 실측이 목적이지 정답 채점이 아님).
 _PROBE_SYSTEM = "너는 간결한 수학 조수다. 요청받은 것만 최소로 답한다."
 
-# 종료 코드 — 게이트 CLI 관례(Wilson 게이트 CLI PASS/FAIL과 동형·인상 판정 금지).
+# 종료 코드 — 게이트 CLI 관례(exit 0/1 — defect_detection_eval·corpus_audit_eval 동형).
 _EXIT_OK = 0
-_EXIT_ERROR = 2
+_EXIT_GATE_FAIL = 1
+
+# 게이트 ② 로컬 판정 임계 — 판정은 점추정이 아니라 **Wilson 단측 하한(95%)**으로 한다
+# (초인간 검증 표준 "점추정·인상 판정 금지"). 하한은 표본 수를 보정하므로 소표본은
+# 구조적으로 통과 불가 — 예: 4/5=80%(점추정)도 하한 ≈44%라 FAIL, 전량 로컬이어도
+# n≥11이어야 하한이 0.80을 넘는다(2026-07-21 정합성 검토: 점추정 PASS이던 공백 보정).
+_GATE2_LOCAL_THRESHOLD = 0.80
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -224,15 +231,30 @@ class ProbeReport:
 
     def to_json(self) -> dict[str, object]:
         data = dataclasses.asdict(self)
+        data["local_ratio_lower"] = self.local_ratio_lower
         data["gate2_local_pass"] = self.gate2_local_pass
         return data
 
     @property
-    def gate2_local_pass(self) -> bool | None:
-        """게이트 ② 로컬 판정선(≥0.80). local_ratio 미상이면 None(판정 불가)."""
-        if self.local_ratio is None:
+    def local_ratio_lower(self) -> float | None:
+        """로컬 비율의 Wilson 단측 하한(95%) — 게이트 판정용(소표본 과신 방지).
+
+        성공 표본 0이면 None('미상'과 0 구분 — 날조 금지). 점추정(local_ratio)은
+        리포트용으로 병기하고, 판정은 항상 이 하한으로 한다.
+        """
+        succeeded = self.total - self.errors
+        if succeeded <= 0:
             return None
-        return self.local_ratio >= 0.80
+        local = self.tier_counts.get(CostTier.LOCAL.value, 0)
+        return wilson_lower_bound(local, succeeded)
+
+    @property
+    def gate2_local_pass(self) -> bool | None:
+        """게이트 ② 로컬 판정선 — Wilson 하한(95%) ≥ 0.80. 표본 0이면 None(판정 불가)."""
+        lower = self.local_ratio_lower
+        if lower is None:
+            return None
+        return lower >= _GATE2_LOCAL_THRESHOLD
 
 
 def summarize_decisions(
@@ -397,10 +419,13 @@ def render_report(report: ProbeReport) -> str:
     else:
         lines.append("  (성공 표본 없음)")
     lines.append("[로컬:클라우드 — 게이트② 목표 ≥80% 로컬]")
-    lines.append(f"  로컬 비율: {_fmt_ratio(report.local_ratio)}")
+    lines.append(f"  로컬 비율(점추정): {_fmt_ratio(report.local_ratio)}")
+    lines.append(f"  로컬 비율 Wilson 하한(95%): {_fmt_ratio(report.local_ratio_lower)}")
     verdict = report.gate2_local_pass
     verdict_str = "판정 불가(표본 0)" if verdict is None else ("PASS" if verdict else "미달")
-    lines.append(f"  게이트② 로컬 판정선(≥80%): {verdict_str}")
+    lines.append(f"  게이트② 로컬 판정선(Wilson 하한 ≥80%): {verdict_str}")
+    if verdict is False and report.local_ratio is not None and report.local_ratio >= 0.80:
+        lines.append("  ※ 점추정은 80% 이상이나 표본이 작아 하한 미달 — --rounds를 키워 재측정.")
     lines.append("=" * 64)
     lines.append("다음: 수 초 후 `python -m whymath_backend.ops.cost_report --days 1`로")
     lines.append("비용·지연 분포(p50/p90)를 집계한다 — 로컬 비율은 위 인프로세스 실측이")
@@ -416,7 +441,15 @@ def main(argv: list[str] | None = None) -> int:
             "실측(게이트② 판정)하고 Langfuse에 l3_routing 이벤트를 기록한다."
         ),
     )
-    parser.add_argument("--rounds", type=int, default=3, help="대표 믹스 반복 배수(표본 크기).")
+    parser.add_argument(
+        "--rounds",
+        type=int,
+        default=3,
+        help=(
+            "대표 믹스 반복 배수(표본 크기). 판정은 Wilson 하한이라 소표본은 구조적으로 "
+            "통과 불가 — 전량 로컬 기준 n≥11(rounds≥2) 필요, 기본 3 권장."
+        ),
+    )
     parser.add_argument(
         "--no-cloud",
         action="store_true",
@@ -436,8 +469,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"JSON 리포트 저장: {args.json}")
 
-    # 종료 코드 = 판정선 그대로(게이트 CLI 관례 — 인상 판정 금지). PASS=0, 미달/불가=2.
-    return _EXIT_OK if report.gate2_local_pass else _EXIT_ERROR
+    # 종료 코드 = 판정선 그대로(게이트 CLI 관례 exit 0/1 — 인상 판정 금지). PASS=0,
+    # 미달·판정불가=1(argparse 사용 오류의 2와 구분 — 형제 게이트 동형).
+    return _EXIT_OK if report.gate2_local_pass else _EXIT_GATE_FAIL
 
 
 if __name__ == "__main__":

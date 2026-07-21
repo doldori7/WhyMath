@@ -21,6 +21,14 @@
 #       (:Concept)-[:PREREQUISITE {strength, evidence, evidence_source}]->(:Concept)
 #
 # 상태: 명세 단계. Phase 1 구현 대상 (목표 규모 2,000엣지 — Phase 3 도달).
+#
+# ⚠ 런타임 드리프트 노트 (2026-07-21 전면 정합성 검토):
+#   아래 storage(Neo4j·"enum 값=Cypher 관계 타입") 가정은 *현 런타임과 다르다*.
+#   런타임 정본 = PostgreSQL 단일 평면의 concept_edge(src/backend/whymath_backend/
+#   db/models/concept.py)이며, 백엔드 관계 어휘는 schema/enums.py EdgeType *6종*
+#   (저작 7관계는 data_pipeline relation_crosswalk로 매핑·traversal 실적재는
+#   prerequisite 단일). 저작 어휘 7종 자체는 models.py Relation과 1:1 정합 유지.
+#   신규 작업은 런타임 정본 기준으로 설계할 것.
 # =============================================================================
 
 entity: ConceptEdge

@@ -70,10 +70,13 @@ jobs:
           if printf '%s\n' "$files" | grep -qE '^(src/data-pipeline/|tests/data_pipeline/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
             dp=true
           fi
-          if printf '%s\n' "$files" | grep -qE '^(src/mobile/|\.github/workflows/ci\.yml$)'; then
+          # schemas/(공유 엔티티·계약 명세) 변경은 클라이언트(mobile/web) 잡도 트리거 —
+          # 교차영역 계약 드리프트 방어(2026-07-21 정합성 검토: backend-only PR에서 클라
+          # 잡이 skip돼 계약 변경이 클라 기대를 깨도 통과 가능했던 사각 보완).
+          if printf '%s\n' "$files" | grep -qE '^(src/mobile/|schemas/|\.github/workflows/ci\.yml$)'; then
             mo=true
           fi
-          if printf '%s\n' "$files" | grep -qE '^(src/web/|\.github/workflows/ci\.yml$)'; then
+          if printf '%s\n' "$files" | grep -qE '^(src/web/|schemas/|\.github/workflows/ci\.yml$)'; then
             web=true
           fi
           echo "backend=$be" >> "$GITHUB_OUTPUT"
@@ -461,8 +464,23 @@ jobs:
       - name: Flutter analyze
         run: flutter analyze
 
-      - name: Flutter test
-        run: flutter test
+      - name: Flutter test (커버리지 수집)
+        run: flutter test --coverage
+
+      # 커버리지 *측정*만 우선 도입(2026-07-21 정합성 검토 — "Flutter UI 60%" 선언이 측정
+      # 없던 공백 보완). 임계 게이트는 첫 실측치 확인 후 별도 커밋으로 부여한다. 이 스텝은
+      # 변별력 자가검증 포함 — lcov 미생성·측정 라인 0이면 성공 위장 대신 명시 실패한다.
+      - name: 커버리지 요약 (게이트 아님)
+        run: |
+          set -euo pipefail
+          if [ ! -f coverage/lcov.info ]; then
+            echo "coverage/lcov.info 미생성 — flutter test --coverage 산출물 확인 필요"
+            exit 1
+          fi
+          awk -F: '/^LF:/{lf+=$2} /^LH:/{lh+=$2} END{
+            if (lf==0) { print "측정 라인 0 — lcov.info 비어있음(수집 실패)"; exit 1 }
+            printf "mobile line coverage: %.1f%% (%d/%d lines)\n", 100*lh/lf, lh, lf
+          }' coverage/lcov.info
 
   # ─────────────────────────────────────────────────────────────────
   # L5 웹 (그래프 계산기 — 격리 Vite + React SPA·국소 비상구)

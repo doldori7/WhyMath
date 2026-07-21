@@ -109,15 +109,17 @@ from whymath_backend.l1.problem_bank.populate import ConceptTag
 from whymath_backend.l3.equivalent.acceptance import EquivalenceSpec
 from whymath_backend.l3.equivalent.canonicalize import condition_dsl_violation
 from whymath_backend.l3.equivalent.generator import CandidateProblem
-from whymath_backend.l3.interfaces import LLMProvider
+from whymath_backend.l3.interfaces import LLMProvider, TraceSink
 from whymath_backend.l3.models import (
     CostTier,
+    GenerationResult,
     LocalModelTier,
     ModelFamily,
     RoutingDecision,
     RoutingRequest,
+    Usage,
 )
-from whymath_backend.l3.router import Router
+from whymath_backend.l3.router import Router, _as_cost_tier, actual_cost_krw, langfuse_fields
 from whymath_backend.l3.verify_answer import derive_selected_root
 from whymath_backend.schema.enums import (
     AnswerFormat,
@@ -285,6 +287,7 @@ class LLMEquivalentProblemGenerator:
         provider: LLMProvider | None = None,
         *,
         settings: Settings | None = None,
+        trace: TraceSink | None = None,
         misconception_catalog: Mapping[str, str] | None = None,
         topic_hint: str | None = None,
         subscription: str = "free",
@@ -302,6 +305,11 @@ class LLMEquivalentProblemGenerator:
         Args:
             provider: L3 LLM provider(라우터 경유 필수). None이면 표준 CompositeProvider 구성.
             settings: 앱 설정(선택·후속 튜닝 좌석). 지금은 보관만.
+            trace: 관측성 싱크(TraceSink). None이면 LangfuseSink를 기본 구성한다 — 코퍼스
+                저작 LLM 호출도 Langfuse에 남긴다("모든 LLM 호출 → Langfuse 추적"·2026-07-21
+                정합성 검토: 이 생성기가 pipeline.generate를 우회해 추적 0이던 공백 보정).
+                키 미설정이면 sink가 no-op이라 hermetic·오프라인에서도 안전하다(네트워크 0).
+                배치 CLI는 종료 시 `flush_trace()`로 전송을 확정할 것.
             misconception_catalog: 오개념 id→한국어 라벨 맵(주입). **L4 카탈로그를 직접 import하지
                 않기 위한 주입 지점**(레이어 순수성) — 키는 distractor 오개념 allowlist, 값은
                 프롬프트 라벨. None이면 `spec.target_misconception_ids`를 안전 allowlist로 폴백.
@@ -335,7 +343,13 @@ class LLMEquivalentProblemGenerator:
             from whymath_backend.l3.providers.ollama import OllamaProvider
 
             provider = CompositeProvider(local=OllamaProvider(), cloud=AnthropicProvider())
+        if trace is None:
+            # 관측 기본 배선 — providers와 동형의 지연 구성(키 미설정=no-op·네트워크 0).
+            from whymath_backend.l3.trace.langfuse_sink import LangfuseSink
+
+            trace = LangfuseSink(settings=settings)
         self._provider = provider
+        self._trace = trace
         self._settings = settings
         self._catalog = dict(misconception_catalog) if misconception_catalog is not None else None
         self._topic_hint = topic_hint
@@ -363,10 +377,14 @@ class LLMEquivalentProblemGenerator:
         prompt = self._build_user_prompt(spec)
         decision = self._decide_routing(spec)
         try:
-            raw = self._invoke(prompt, decision)
+            generated = self._invoke(prompt, decision)
         except Exception as exc:  # noqa: BLE001 — provider 장애 시 배치 크래시 금지·안전 폴백.
             _LOGGER.warning("동등문제 생성 provider 호출 실패 — None 폴백: %s", exc)
             return None
+        # LLM 호출 성공 = 비용 발생 — 하류 JSON 파싱·조립 성패와 무관하게 관측을 먼저 남긴다
+        # ("모든 LLM 호출 → Langfuse 추적" — 추적 0이던 공백 보정·2026-07-21 정합성 검토).
+        self._record_trace(decision, generated.usage)
+        raw = generated.text
 
         data = self._extract_json(raw)
         if data is None:
@@ -383,7 +401,7 @@ class LLMEquivalentProblemGenerator:
         return candidate
 
     # ── 동기 경계(async provider.generate를 배치 sync 문맥에서 호출) ─────
-    def _invoke(self, prompt: str, decision: RoutingDecision) -> str:
+    def _invoke(self, prompt: str, decision: RoutingDecision) -> GenerationResult:
         """provider.generate(async)를 sync 경계에서 실행 — 오프라인 배치 문맥 전용.
 
         오케스트레이터(`run_batch`)는 sync라 여기서 코루틴을 완주시킨다. **인스턴스 전용 지속
@@ -404,8 +422,9 @@ class LLMEquivalentProblemGenerator:
         """
         is_local = decision.cost_tier == CostTier.LOCAL.value
         schema = _OUTPUT_JSON_SCHEMA if is_local else None
-        # provider 반환은 GenerationResult(text, usage) — 저작 배치는 텍스트만 소비.
-        generated = self._ensure_loop().run_until_complete(
+        # provider 반환은 GenerationResult(text, usage) — 텍스트는 조립이, usage는 관측
+        # (_record_trace: 실측 토큰·지연·비용)이 소비한다.
+        return self._ensure_loop().run_until_complete(
             self._provider.generate(
                 prompt,
                 _SYSTEM_PROMPT,
@@ -414,7 +433,6 @@ class LLMEquivalentProblemGenerator:
                 json_schema=schema,
             )
         )
-        return generated.text
 
     def _ensure_loop(self) -> asyncio.AbstractEventLoop:
         """인스턴스 전용 이벤트 루프 지연 생성 — 배치 전 회차가 *같은 살아있는 루프*를 공유한다.
@@ -426,6 +444,45 @@ class LLMEquivalentProblemGenerator:
         if self._loop is None or self._loop.is_closed():
             self._loop = asyncio.new_event_loop()
         return self._loop
+
+    # ── 관측(코퍼스 저작 호출도 Langfuse에 남긴다 — 게이트② 관측 공백 보정) ──
+    def _record_trace(self, decision: RoutingDecision, usage: Usage | None) -> None:
+        """생성 1건의 라우팅·실측(usage·비용)을 sink에 기록 — never-break(배치 비차단).
+
+        비용 회계는 `pipeline.generate`와 동형: usage 없음(미계측)·클라우드인데 토큰
+        미상이면 None('미상'과 0원 구분 — 지어내지 않음), 그 외 토큰 산정(로컬 0원 확정).
+        student_id_hash는 없다(오프라인 저작 — 학생 무관).
+        """
+        actual_krw: float | None
+        is_cloud = _as_cost_tier(decision.cost_tier) is not CostTier.LOCAL
+        if usage is None:
+            actual_krw = None
+        elif is_cloud and (usage.input_tokens is None or usage.output_tokens is None):
+            actual_krw = None
+        else:
+            actual_krw = actual_cost_krw(decision, usage)
+        try:
+            self._trace.record(
+                langfuse_fields(decision, cache_hit=False, usage=usage, cost_krw=actual_krw)
+            )
+        except Exception as exc:  # noqa: BLE001 — 관측 장애가 저작 배치를 깨면 안 됨
+            # 침묵실패 금지 — 예외 *타입명*만 경고(필드·키 값 미출력, langfuse_sink 방침 동형).
+            _LOGGER.warning("동등문제 생성 관측 기록 실패(%s) — 무시하고 계속", type(exc).__name__)
+
+    def flush_trace(self) -> None:
+        """배치 종료 시 관측 전송 확정 — LangfuseSink는 배치 전송이라 CLI가 flush로 확정한다.
+
+        TraceSink 계약은 record만 요구하므로 flush 없는 sink(테스트 대역)는 조용히 통과
+        (계약 밖 표면의 duck-typing — cost_probe `_FlushSink` 동형). flush 오류도 삼키되
+        타입명은 남긴다(never-break·침묵실패 금지).
+        """
+        flush = getattr(self._trace, "flush", None)
+        if not callable(flush):
+            return
+        try:
+            flush()
+        except Exception as exc:  # noqa: BLE001 — 전송 확정 실패가 배치 결과를 깨면 안 됨
+            _LOGGER.warning("동등문제 생성 관측 flush 실패(%s) — 무시하고 계속", type(exc).__name__)
 
     # ── 라우팅 결정(라우터 경유 + 저작 패밀리 선호) ─────────────────────
     def _decide_routing(self, spec: EquivalenceSpec) -> RoutingDecision:
