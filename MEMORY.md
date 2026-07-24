@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (구현·UI·MOB-08): **학생 앱 하단 탭 네비게이션 셸(홈/학습/탐구/나) 착지 — UI 설계 첫 구현 슬라이스** (claude 구현, Kiki 지시)
+
+**컨텍스트**: UI 설계 문서(위 항목·Round 1·2) 확정 후 Kiki가 "구현은?"이라 물음. AskUserQuestion으로 첫 구현 트랙 = **하단 탭 셸(Flutter·UI 자기완결·백엔드 무관)**로 확정. 설계 문서 `docs/design/ui/01 §4`·`02 §3`의 4탭 IA(홈/학습/탐구/나)를 코드로 실현. `router.dart`·`app.dart`가 "하단 탭은 후속 슬라이스"로 예고한 작업.
+
+**구현**: go_router **14.8.1** `StatefulShellRoute.indexedStack`으로 4브랜치 셸 도입. 신규 `lib/core/shell/app_shell.dart`(M3 `NavigationBar`·4 `NavigationDestination`·`goBranch` 전환·배지/스트릭/빨강 없음=정서 안전)·`features/home|explore|profile/presentation/*_screen.dart`(홈=교과서 좌표 "준비 중"+오늘의 문제/코치 진입, 탐구·나=정직 placeholder·나 탭 로그아웃만 실동작). `router.dart` 재구조(home/explore/me 라우트 추가·`[홈,학습,탐구,나]` 셸 브랜치화). 신규 `test/app_shell_test.dart`(탭 전환·셸 밖 온보딩 탭 바 부재).
+
+**설계 판단(위험 축소)**: 이 환경에 flutter/dart 없음 → **로컬 검증 불가·CI `mobile` 잡이 유일 게이트**. 그래서 **기존 착지 동작을 바꾸지 않는 최소 변경**을 택함(계획의 "온보딩→/home 전환 + 기존 테스트 3건 수정"에서 이탈) — 채팅(학습)을 `/`에 그대로 두어 기존 `redirect`·`errorBuilder`·`context.go(chatPath)`가 변경 없이 학습 탭으로 도달하고, 온보딩·로그인·OCR·문제·수식 입력은 셸 *밖* 최상위 라우트로 유지. 결과: **기존 36개 테스트 무수정(**`route_guard`/`onboarding`/`widget_smoke`가 `ChatScreen`@`/`·`ProblemScreen`@`/problem`을 그대로 찾음), 신규 코드·테스트만 추가. 기본 착지 탭은 학습(chat)이고 홈은 한 탭 거리(온보딩→홈 전환은 후속 다듬기). 거버넌스(`no_math_logic_governance_test`)는 셸 순수 네비라 저촉 0. **미검증(정직)**: 로컬 미실행이라 컴파일·테스트·shell+chat 오버플로(MOB-02)는 CI/실기기 확인 필요. 하네스: 이 슬라이스는 backlog "next"(REND-01/ARCH-13/14) 밖 → `MOB-08` 정식 등재는 후속(`backlog.py` 경유·대장 손편집 금지).
+
 ### 2026-07-24 (문서·설계·UI): **UI 설계 도메인 신설(`docs/design/ui/`) + 5단계 파이프라인의 UI 재해석** (claude 설계·문서, Kiki 지시)
 
 **컨텍스트**: Kiki가 ChatGPT 설계 대화 4건을 공유하며 4개 질문을 던짐 — ① "교육목적→교수전략→콘텐츠구성→DSL→자동생성" 5단계 파이프라인을 적용하면 학생 UI 메뉴는 어떻게 구성되나 ② 초등~대학(일반/진로/재수)·영재 전 대상 + 교사·부모·학원 영업까지 고려한 UI 설계 계획 ③ 앱 관리(admin) UI 구성 계획 ④ 그 관리 UI 아키텍처. 저장소에는 UX 지침이 아키텍처 문서(`05`·`05a`·`06`·`07`)와 코드 주석에 흩어져 있을 뿐 전용 UI/IA 설계 문서가 없었고, 관리 UI는 코드·계획 문서 모두 부재.
