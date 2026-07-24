@@ -1,0 +1,17 @@
+{
+  "source_name": "소단원 DSL 파일럿 (이차함수의 최대·최소 — 공통수학1)",
+  "uploaded": "2026-07-24",
+  "counts": {
+    "units": 1,
+    "objectives": 4
+  },
+  "source_citation": "출처: WhyMath 자체 저작 소단원 명세 DSL(성취기준 코드는 NCIC 공공누리 사실정보 인용).",
+  "license_notice": "WHYMATH_ORIGINAL — 와이매스 자체 저작 소단원 명세. 성취기준 *코드*([10공수1-02-06])와 원자 백본 노드 code는 사실정보 인용이며, 검정교과서·평가원·EBS 본문 미포함(학습목표 서술은 성취기준 유래 자체 분해).",
+  "note": "이차함수 최대·최소 파일럿 — 4목표 4유형(CONCEPT·PROCEDURE·REPRESENT·MODELING). 소단원 DSL 컴파일러 v0.1(soraw-dsl/0.1) E2E 확인용 단일 소단원.",
+  "verified_refs": {
+    "concept_nodes": ["10공수1-02-06-1", "10공수1-02-06-2", "10공수1-02-06-3"],
+    "standard_codes": ["[10공수1-02-06]"],
+    "atom_graph": "data/corpus/atom_graph_v1/graph.json",
+    "standards": "data/corpus/standards_v1/standards.json"
+  }
+}
