@@ -1,0 +1,43 @@
+# 소단원 DSL v0.1 — 이차함수의 최대·최소 (공통수학1)
+# 출처: WhyMath 자체 저작 소단원 명세(성취기준 코드는 NCIC 공공누리 사실정보 인용).
+# 4목표 = 4유형(CONCEPT/PROCEDURE/REPRESENT/MODELING) 파일럿.
+# 인용 코드는 모두 코퍼스 실측 확인:
+#   개념 노드 10공수1-02-06-1/2/3 ∈ data/corpus/atom_graph_v1/graph.json
+#   성취기준 [10공수1-02-06] ∈ data/corpus/standards_v1/standards.json
+unit_id: "10공수1-이차함수-최대최소"
+unit_version: 1
+api_version: "unit/0.1"
+title: "이차함수의 최대·최소"
+curriculum_rev: "2022"
+standard_codes: ["[10공수1-02-06]"]
+concept_nodes: ["10공수1-02-06-1", "10공수1-02-06-2", "10공수1-02-06-3"]
+objectives:
+  # OBJ-01 개념형 — 정의역 제한 이차함수 최대·최소의 뜻(atom -1 '정의역 제한' 개념 노드).
+  - suffix: "OBJ-01"
+    statement: "정의역이 제한된 이차함수의 최대·최소의 뜻을 이해한다"
+    standard_code: "[10공수1-02-06]"
+    source_verb: "이해한다"
+    k_type: CONCEPT
+    concept_nodes: ["10공수1-02-06-1"]
+  # OBJ-02 절차형 — 최댓값·최솟값 구하기(atom -2 '구하기' 절차 노드).
+  - suffix: "OBJ-02"
+    statement: "이차함수의 최댓값·최솟값을 구한다"
+    standard_code: "[10공수1-02-06]"
+    source_verb: "구한다"
+    k_type: PROCEDURE
+    concept_nodes: ["10공수1-02-06-2"]
+  # OBJ-03 표상형 — 제한구간 그래프로 최대·최소 해석(atom -3 '그래프' 표상 노드).
+  - suffix: "OBJ-03"
+    statement: "제한된 구간에서 그래프로 최대·최소를 해석한다"
+    standard_code: "[10공수1-02-06]"
+    source_verb: "해석한다"
+    k_type: REPRESENT
+    concept_nodes: ["10공수1-02-06-3"]
+  # OBJ-04 모델링형 — 실생활 최적화(성취기준의 '실생활 연결' 축). 변형문제 슬롯 3개로 상향.
+  - suffix: "OBJ-04"
+    statement: "실생활 최적화 문제를 이차함수로 해결한다"
+    standard_code: "[10공수1-02-06]"
+    source_verb: "해결한다"
+    k_type: MODELING
+    concept_nodes: ["10공수1-02-06-2"]
+    slot_overrides: {problem_variation: 3}
