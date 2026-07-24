@@ -351,6 +351,16 @@
 
 **검증**: 문서 무모순 자기점검(교수법-중립·5대 분리·조합폭발·우선순위)·enum/필드명 실측 정합(`KnowledgeType` 7종·`FORBIDDEN_MODE_VOCAB`·`concept_content`)·백로그 `validate` 통과·교차참조 해소. **잔여**: 실제 구현(어댑터·Selector·supply·policy)은 위 백로그 태스크가 추적. `ConceptDSL` 계약 확정 + 기존 `concept_content` 교수법-중립성 감사가 REND-01 첫 작업.
 
+### 2026-07-24 (구현·PED-01 후속·컴파일러 v0.1): **소단원 DSL 컴파일러 v0.1 — .unit.yaml→unit_spec/learning_objective+슬롯 발주서** (claude 구현, Kiki 지시 적용)
+
+**컨텍스트**: PED-01 후속 ② — 팩 시더(아래) 위에 소단원 명세 컴파일러. 사람이 저작한 `.unit.yaml`을 참조 검증→병합→행+발주서로 '컴파일'한다(YAML=소스·DB=단방향 산출·6.1 원칙).
+
+**적용**: ① `schema/unit_dsl.py`(`UnitDSL`/`ObjectiveDSL` 입력 계약·extra 금지·suffix 유일·부유형 구분) ② `l1/pedagogy/unit_compiler.py`(`compile_unit`: Pydantic→참조 검증[개념 노드·성취기준·k_type 팩 존재를 *전부 모아* 실패]→목표별 병합[팩 `required_slots`⊕`slot_overrides`=`slot_manifest`·`default_evidence`⊕overrides=`exit_evidence`·`achievement_std`는 성취기준 코드→원문 해석]→`unit_spec`[DRAFT·`yaml_sha256`=text_hash]+`learning_objective` 행+발주서; `UnitSpecStore.seed`는 FK 순서[소단원→목표] 멱등 upsert) ③ CLI `python -m whymath_backend.l1.pedagogy.compile <yaml> [--seed]`(dry-run 발주서) ④ 예제 `data/corpus/units_v1/quadratic_maxmin.unit.yaml`(이차함수 최대·최소·공통수학1 `[10공수1-02-06]`·4목표 CONCEPT/PROCEDURE/REPRESENT/MODELING·실코드 `10공수1-02-06-1/2/3` 코퍼스 실측).
+
+**실증**: dry-run 발주서 17줄·총 콘텐츠 수요 40점·OBJ-04 `problem_variation` override ×3(팩 기본 2 교체) 적용 — '한 소단원=여러 유형'의 실물 증거. 검증: ruff·black clean·mypy --strict Success(389)·pytest 21·import-linter 0 broken.
+
+**v0.1 동결 / 잔여**: 오개념 top-3 자동 fetch·팩 페이딩 전개·게이트 승격은 deferred(코드 주석). 이차함수 E2E 완주 시 DSL 스키마 동결. 잔여(PED-01): 4층 프롬프트 조립기+`forbidden_modes` guard(l4)·evidence 봉투 암호화 write·슬롯 생성(발주서 소비).
+
 ### 2026-07-24 (구현·PED-01 후속·packs 시더): **교수법 팩 7종 시더 착지 + pyyaml 백엔드 의존성 추가** (claude 구현, Kiki 지시 적용)
 
 **컨텍스트**: PED-01(교수법 팩+소단원 DSL) 후속 첫 슬라이스 — 스키마(아래 항목) 위에 *교수법 팩 시더*를 놓는다. 7 지식유형 팩 YAML → `pedagogy_pack` 멱등 적재.
