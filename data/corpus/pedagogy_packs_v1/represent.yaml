@@ -1,0 +1,17 @@
+k_type: REPRESENT
+pack_version: 1
+api_version: "1.0"
+is_stub: false
+socratic_prompt: |
+  학생이 {domain_example}의 서로 다른 표현을 양방향으로 오가도록 이끈다.
+  ① 조작이나 변화의 결과를 먼저 예측하게 한 뒤 확인한다.
+  ② 어려운 방향(역방향 번역)을 더 자주 훈련한다.
+  ③ 한 표현만 반복하지 않는다.
+fading_schedule: null
+forbidden_modes: [SINGLE_DIRECTION_DRILL]
+required_slots:
+  - {type: reverse_translation, count: 3}
+  - {type: predict_confirm, count: 2}
+  - {type: dynamic_manipulation, count: 2}
+  - {type: diag_item, count: 2}
+default_evidence: {kind: REVERSE_TRANSLATION, judge: claude, rubric_axes: 2}

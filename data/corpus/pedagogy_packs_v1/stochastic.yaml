@@ -1,0 +1,17 @@
+k_type: STOCHASTIC
+pack_version: 1
+api_version: "1.0"
+is_stub: true
+socratic_prompt: |
+  학생이 {domain_example}의 불확실성을 직관과 대면하며 이해하도록 이끈다.
+  ① 시뮬레이션을 반복해 결과 분포를 관찰하게 한다.
+  ② 직관적 오류(예: 도박사의 오류)를 스스로 마주하게 한다.
+  ③ 결과를 해석하게 한다.
+  공식에 값만 대입하고 끝내지 않는다.
+fading_schedule: null
+forbidden_modes: [FORMULA_PLUGIN_ONLY]
+required_slots:
+  - {type: simulation_repeat, count: 2}
+  - {type: intuition_confrontation, count: 2}
+  - {type: diag_item, count: 2}
+default_evidence: {kind: SIM_INTERPRETATION, judge: claude, rubric_axes: 2}

@@ -1,0 +1,18 @@
+k_type: CONCEPT
+pack_version: 1
+api_version: "1.0"
+is_stub: false
+socratic_prompt: |
+  학생이 {domain_example}의 정의를 스스로 구성하도록 이끈다.
+  ① 예와 비예(예가 아닌 것)를 번갈아 제시한다.
+  ② "왜 이건 아닌가?"를 정의보다 먼저 묻는다.
+  ③ 학생이 세운 경계 조건을 반례로 시험한다.
+  정의를 먼저 제시해 암기시키지 않는다.
+fading_schedule: null
+forbidden_modes: [WORKED_EXAMPLE_FIRST]
+required_slots:
+  - {type: example_pair, count: 4}
+  - {type: contrast_case, count: 2}
+  - {type: boundary_probe, count: 3}
+  - {type: diag_item, count: 2}
+default_evidence: {kind: COUNTEREXAMPLE_GEN, judge: claude, rubric_axes: 3}
