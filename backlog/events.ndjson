@@ -398,3 +398,7 @@
 {"ts": "2026-07-24T07:37:26", "actor": "claude/review-applicable-items-8rrtau", "action": "add", "id": "PED-01-pedagogy-pack-dsl-foundation"}
 {"ts": "2026-07-24T08:32:42", "actor": "claude/review-applicable-items-8rrtau", "action": "claim_remote_unavailable", "id": "PED-01-pedagogy-pack-dsl-foundation", "status": "error"}
 {"ts": "2026-07-24T08:32:42", "actor": "claude/review-applicable-items-8rrtau", "action": "start", "id": "PED-01-pedagogy-pack-dsl-foundation", "session": "claude/review-applicable-items-8rrtau", "remote": "error"}
+{"ts": "2026-07-24T11:52:08", "actor": "claude/education-os-architecture-mr0fbq", "action": "add", "id": "REND-01-pedagogy-renderer-adapters"}
+{"ts": "2026-07-24T11:52:20", "actor": "claude/education-os-architecture-mr0fbq", "action": "add", "id": "PED-02-runtime-pedagogy-selector"}
+{"ts": "2026-07-24T11:52:29", "actor": "claude/education-os-architecture-mr0fbq", "action": "add", "id": "CACHE-01-select-vs-generate-supply"}
+{"ts": "2026-07-24T11:52:38", "actor": "claude/education-os-architecture-mr0fbq", "action": "add", "id": "PED-03-adaptive-pedagogy-policy"}

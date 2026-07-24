@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-02-runtime-pedagogy-selector
+title: "Runtime Pedagogy Selector — 학생모델 기반 교수법 선택 v1"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on:
+  - REND-01-pedagogy-renderer-adapters
+requires_gates: []
+acceptance:
+  - "PedagogyStrategy 폐쇄 enum(schema/enums.py) + l4/pedagogy/runtime_selector.py 규칙기반 v1"
+  - "gate()(forbidden_modes·Polya 단계)로 완전예제 냉담 제공 차단 테스트 + L2 입력 소비 테스트"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l4/pedagogy/runtime_selector.py
+  - src/backend/whymath_backend/schema/enums.py
+session: null
+notes: "04d 정본. L4가 결정·L2 조회만(역방향 의존 금지). 효과≤허용(Selector=효과·gate=허용)."
+updated: 2026-07-24
