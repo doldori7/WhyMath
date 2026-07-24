@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (구현·UI·MOB-10): **디자인 토큰 확장 — `AppSpacing`(간격) + `textTheme` 롤(타이포) 이관** (claude 구현, Kiki "Mob")
+
+**컨텍스트**: MOB-09(색/테마) 머지 후 Kiki "Mob"(=MOB 후속). AskUserQuestion으로 **타이포·간격 토큰 이관** 선택. MOB-09가 남긴 후속(타이포/간격)을 착지.
+
+**구현**: 신규 `src/mobile/lib/theme/spacing.dart`(`AppSpacing` 4pt 스케일: xs=4·sm=8·md=12·lg=16·xl=20·xxl=24·xxxl=32·huge=48). 10개 화면 파일의 하드코딩 `SizedBox` 간격 + `EdgeInsets.all(…)` 온-스케일 값(4/8/12/16/20/24/32/48)을 `AppSpacing.*`로 이관(값 동일·외형 무변·기계적 sed). 타이포: 빈-상태 힌트 3곳의 매직 `TextStyle(fontSize:16)`→`Theme.of(context).textTheme.bodyLarge`(앱 전반 관용과 정합·해당 const 서브트리 de-const, 자식 `EdgeInsets`는 const 유지). 문서 `coding_flutter.md` 토큰 절 확장·`02 §6` 🟡 갱신.
+
+**설계 판단(과공학 방지·무검증 제약)**: 로컬 flutter 없어 **시각 검증 불가 → 값 변경 0**(온-스케일만 이관·스냅 금지). **스코프 밖(후속)**: 비표준 미세값(6·10·14)·비대칭 패딩(`EdgeInsets.symmetric`/`only`/`fromLTRB`)·앱바 슬로건 `fontSize:12`(AppBar 하단 텍스트 색 상속 불확실·persistent chrome라 보류)·커스텀 `TextTheme` 오버라이드(M3 기본 스케일이 정본·전역 회귀 회피). 검증=CI `mobile` 잡(analyze+기존 위젯 테스트가 이관 화면 회귀 감지). MOB-09(PR #582) 스쿼시 머지됨 → MOB-10 커밋을 새 `origin/main` 위로 rebase(pre-squash MOB-09 커밋 제거)·새 PR.
+
 ### 2026-07-24 (구현·UI·MOB-09): **디자인 토큰/테마 시스템(`lib/theme/`) 착지 — error 롤=앰버 재정의로 빨강 금지 강제 + 다크모드** (claude 구현, Kiki "다음 슬라이스")
 
 **컨텍스트**: MOB-08 하단 탭 셸(PR #581) 머지 후 Kiki "다음 슬라이스" 지시(슬라이스 선택 질문 무응답 → 추천안=디자인 토큰 진행). 설계 문서 `02 §6`·`coding_flutter.md`가 요구하나 부재하던 테마/토큰 시스템 신설. 기존 테마는 `app.dart` 인라인 `ThemeData(fromSeed(indigo))` 하나·다크모드 없음.

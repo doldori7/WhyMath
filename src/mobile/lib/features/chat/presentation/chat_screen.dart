@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router.dart';
+import '../../../theme/spacing.dart';
 import '../../ocr/data/ocr_models.dart';
 import '../../problems/application/active_problem.dart';
 import '../../problems/data/problem_models.dart';
@@ -234,7 +235,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 child: state.messages.isEmpty
                     ? const _EmptyHint()
                     : ListView.builder(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(AppSpacing.md),
                         itemCount: state.messages.length,
                         itemBuilder: (context, index) =>
                             _MessageBubble(message: state.messages[index]),
@@ -313,7 +314,7 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
                         size: 18,
                         color: theme.colorScheme.primary,
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(
                           '풀이 중인 문제 · ${problem.subject}'
@@ -336,7 +337,7 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
                     Text(question, style: theme.textTheme.bodyMedium),
                     if (problem.choices != null &&
                         problem.choices!.isNotEmpty) ...[
-                      const SizedBox(height: 4),
+                      const SizedBox(height: AppSpacing.xs),
                       for (var i = 0; i < problem.choices!.length; i++)
                         Text(
                           '${i + 1}. ${problem.choices![i]}',
@@ -362,13 +363,13 @@ class _EmptyHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Text(
           '어떤 문제를 함께 생각해 볼까요?',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16),
+          style: Theme.of(context).textTheme.bodyLarge,
         ),
       ),
     );
@@ -581,7 +582,7 @@ class _InputBar extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.sm),
                   IconButton(
                     icon: const Icon(Icons.send),
                     tooltip: '보내기',
@@ -876,7 +877,7 @@ class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
               ),
             ),
           ),
-          const SizedBox(width: 4),
+          const SizedBox(width: AppSpacing.xs),
           Expanded(
             child: TextField(
               controller: _controllers[index],
