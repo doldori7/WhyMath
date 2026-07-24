@@ -337,6 +337,17 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (구현·PED-01 후속·조립기+guard ③·기본 OFF): **교수법 팩 4층 프롬프트 조립기 + forbidden_modes guard(플래그 OFF 카나리아) + 런타임 k_type 배선 공백 발견** (claude 구현, Kiki 지시 적용)
+
+**컨텍스트**: PED-01 후속 ③ — 팩을 실제 발문에 적용하는 계층. 단, 라이브 발문은 *측정되는* WH-1 정책이 생성하고 런타임에 k_type가 없어(아래 발견) 이 슬라이스는 **컴포넌트 + 플래그 OFF**로 한정(측정 경로 보호·S4-04 카나리아 선례).
+
+**발견(중요·배선 공백)**: 런타임 코칭 시점에 **k_type(지식 유형)가 없다** — 라이브 코치는 문제·Polya 단계(+concept_id·mastery)만 안다. `문제→learning_objective→k_type→팩` 해석 경로가 부재(learning_objective는 컴파일된 소단원만·problem↔objective 링크 없음·concept_nodes는 FK 없는 loose ref·ARCH-13 얽힘). 게다가 라이브 발문은 STAGE_PROMPTS가 아니라 `harness/wh1_llm_policy._SYSTEM_PROMPT`가 생성 → 주입 지점 2곳. **결론: 팩 자동 선택 배선은 별도 설계 결정(ARCH-13 얽힘)이라 이 슬라이스에서 제외**.
+
+**적용(플래그 `pedagogy_pack_prompt_enabled` 기본 OFF·켜기 전 비트동일)**: ① `l4/pedagogy/pack_registry.py`(7팩 인메모리 lru_cache·DB-free) ② `prompt_assembler.py`(4층: base⊕팩 발문⊕오개념⊕학생상태·`pack=None`→base 바이트동일) ③ `mode_guard.py`(reason_code|None·정직 커버리지: `WORKED_EXAMPLE_FIRST`만 규칙 검출·나머지 6모드는 다턴 전략이라 표집 Claude 감사로 deferred·skip은 '판단 유보'로 정직) ④ `PolyaCoach.decide(pack=…)` 옵트인 훅(pack 주입 ∧ 플래그 ON일 때만 조립·그 외 `system=sp.system` 무변경) ⑤ 결함주입 eval `harness/pedagogy_pack_fidelity_eval.py`(Wilson 상한·`--control` 변별력). **라이브 WH-1 경로·tone_filter 미변경**.
+
+**검증**: ruff·black clean·mypy --strict Success(394)·신규 17 pass·l4 회귀 1210 pass·harness/api 회귀 무영향·import-linter 0 broken. eval PASS(미검출 0/72·Wilson 상한 0.0362)·`--control` FAIL exit1(null-guard 72/72 미검출=fails-loud·변별력 증명).
+
+**잔여(후속·GA 전제)**: `문제→k_type 해석 seam`(problem↔objective 링크·ARCH-13 얽힘·설계 선행) · WH-1 라이브 경로 주입 · api/coach 요청 필드 배선 · 오개념/학생 계층 심화 · 6모드 감사 검출기 · GA 플래그 flip 전 결함주입 게이트 CI 상시. **problem→k_type 해석 seam은 별도 태스크 등재 권고**(Kiki 판단).
 ### 2026-07-24 (문서·인벤토리): **AI/LLM 사용처 인벤토리 체크리스트 신설 + CLAUDE.md 스택 표 모델 표기 정합** (claude 구현, Kiki 지시)
 
 **컨텍스트**: 앱의 AI/LLM 사용처와 각 부분의 AI 기법·모델명/LLM명이 `03_content_generation.md`(모델 풀)·`03a_l3_router_design.md`(3축)·`config.py`(실제 기본값)·`live_cost_measurement_2026-07.md`(pull 목록)에 흩어져 "어느 기능이 어떤 AI/LLM을 쓰는가"를 한곳에서 대조·관리하는 인벤토리가 부재. 또한 CLAUDE.md 스택 표(패밀리명 `Qwen3-Math`·`GPT-5`·`Gemini 2.5`)와 코드 실측 핀(`qwen2-math`·`qwen2.5`·`qwen3.5:27b`·`qwen3-vl:8b`·`claude-sonnet-4-6`·`claude-opus-4-7`) 사이에 모델 표기 드리프트 존재.
