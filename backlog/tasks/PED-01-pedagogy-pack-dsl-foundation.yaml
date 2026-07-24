@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 5
 owner: claude
 depends_on: []
@@ -21,6 +21,6 @@ paths:
   - src/backend/whymath_backend/db/models/evidence_event.py
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/l4/**"
-session: null
+session: claude/review-applicable-items-8rrtau
 notes: "업로드 원시 SQL(260724 phase0 v2)+교수법 v2 설계 검토(docs/reviews/260724_v2_migration_pedagogy_dsl_review.md) 반영. 수정 스키마 착지: ORM db/models/pedagogy_dsl.py·evidence_event.py + Alembic 2리비전(d5e6f0a1b2c3 L3·e6f1a2b3c4d5 L2). knowledge_type ENUM 채택(커널 소유 예외). ARCH-13 연성 의존(concept_nodes 축은 atom_node로 잠정 고정·하드 블록하려면 depends 추가)."
 updated: 2026-07-24
