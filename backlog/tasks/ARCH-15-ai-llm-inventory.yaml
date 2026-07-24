@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-15-ai-llm-inventory
+title: "AI/LLM 사용처 인벤토리 체크리스트 — 기능×AI/LLM명 일괄관리 + 스택 표 모델 표기 정합"
+track: infra-debt
+stage: S4
+subject: cross
+layer: docs
+status: done
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "docs/architecture/ai_llm_inventory_2026-07.xlsx 3시트(인벤토리·카탈로그·미확정) 작성"
+  - 시트 모델 ID가 l3/router.py·config.py 실측과 문자 일치
+  - CLAUDE.md 스택 표 로컬/클라우드 LLM 행 실제 핀 ID 정합
+artifacts:
+  - docs/architecture/ai_llm_inventory_2026-07.xlsx
+  - "CLAUDE.md 스택 표 정합 + MEMORY 2026-07-24 결정 로그"
+paths:
+  - docs/architecture/ai_llm_inventory_2026-07.xlsx
+session: null
+notes: "visualization_inventory_2026-07.md 선례(코드 신규 없음·실측 스냅샷·정본 참조). 정본=03·03a·03b·04a+코드."
+updated: 2026-07-24

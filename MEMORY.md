@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (문서·인벤토리): **AI/LLM 사용처 인벤토리 체크리스트 신설 + CLAUDE.md 스택 표 모델 표기 정합** (claude 구현, Kiki 지시)
+
+**컨텍스트**: 앱의 AI/LLM 사용처와 각 부분의 AI 기법·모델명/LLM명이 `03_content_generation.md`(모델 풀)·`03a_l3_router_design.md`(3축)·`config.py`(실제 기본값)·`live_cost_measurement_2026-07.md`(pull 목록)에 흩어져 "어느 기능이 어떤 AI/LLM을 쓰는가"를 한곳에서 대조·관리하는 인벤토리가 부재. 또한 CLAUDE.md 스택 표(패밀리명 `Qwen3-Math`·`GPT-5`·`Gemini 2.5`)와 코드 실측 핀(`qwen2-math`·`qwen2.5`·`qwen3.5:27b`·`qwen3-vl:8b`·`claude-sonnet-4-6`·`claude-opus-4-7`) 사이에 모델 표기 드리프트 존재.
+
+**적용**: ① 신규 `docs/architecture/ai_llm_inventory_2026-07.xlsx`(3 시트 — 인벤토리[기능×AI/LLM 체크리스트 59행·계층 L1~L7+WH-S+WH-1+횡단]·모델·도구 카탈로그[AI명/LLM명 마스터 30행·코드 실측 vs 문서 표기 대조]·미확정/드리프트/공백[의사결정·정합 추적 12행]). `visualization_inventory_2026-07.md` 선례의 성격(코드 신규 없음·실측 스냅샷·정본 참조)을 Excel로 이식. ② CLAUDE.md 스택 표 로컬/클라우드 LLM 행에 실제 핀 모델 ID + 정본 포인터(`03a_l3_router_design.md`·`config.py`·`l3/router.py`) 병기, GPT-5·Gemini 2.5·Wolfram Alpha API는 "계획·라우터/코드 미배선"으로 명시(표 내용 삭제 없이 정확도만 보강). ③ backlog 태스크 등재로 인벤토리↔태스크 연결.
+
+**실증·정합**: 시트2의 로컬 6종·클라우드 2종·임베딩 2종 모델 ID를 `l3/router.py`(`LOCAL_MODEL_MATRIX`·`QUALITY_MODEL_ID`)·`config.py`(`anthropic_model_mid/high`·`embedding_model_local/openai`)와 **문자 그대로** 일치 검증(지어내지 않음). openpyxl 재로드로 3 시트·행수·헤더·빈 셀 0 확인. 드리프트는 시트3에 '정합 진행'으로 추적. **실사용 vs 계획 구분 명시**: SymPy·BKT·IRT·bge-m3·rapid_latex_ocr는 실사용, Wolfram/Lean4/Z3/HDBSCAN-UMAP/DKT/Qwen3-VL 인식기는 계획·보류.
+
 ### 2026-07-24 (구현·PED-01 후속·컴파일러 v0.1): **소단원 DSL 컴파일러 v0.1 — .unit.yaml→unit_spec/learning_objective+슬롯 발주서** (claude 구현, Kiki 지시 적용)
 
 **컨텍스트**: PED-01 후속 ② — 팩 시더(아래) 위에 소단원 명세 컴파일러. 사람이 저작한 `.unit.yaml`을 참조 검증→병합→행+발주서로 '컴파일'한다(YAML=소스·DB=단방향 산출·6.1 원칙).
