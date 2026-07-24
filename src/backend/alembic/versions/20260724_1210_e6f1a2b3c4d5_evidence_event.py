@@ -90,9 +90,9 @@ def upgrade() -> None:
         unique=False,
     )
     # TimescaleDB 하이퍼테이블 변환 — timescaledb 확장이 설치된 환경에서만 적용(미설치 PG·CI는
-    # 일반 테이블로 남아 검증 가능). time이 PK에 포함돼 hypertable UNIQUE 제약 만족. if_not_exists 멱등.
-    op.execute(
-        """
+    # 일반 테이블로 남아 검증 가능). time이 PK에 포함돼 hypertable UNIQUE 제약 만족.
+    # if_not_exists 멱등.
+    op.execute("""
         DO $$
         BEGIN
             IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'timescaledb') THEN
@@ -101,8 +101,7 @@ def upgrade() -> None:
             END IF;
         END
         $$;
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

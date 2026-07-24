@@ -200,17 +200,14 @@ def upgrade() -> None:
     )
 
     # ── 운영 뷰 4종 ──────────────────────────────────────────────────────────
-    op.execute(
-        """
+    op.execute("""
         CREATE VIEW v_unit_pedagogy_profile AS
         SELECT unit_id, unit_version, k_type, count(*) AS objective_cnt
         FROM   learning_objective
         GROUP  BY unit_id, unit_version, k_type;
-        """
-    )
+        """)
     # M2: nullif(required_cnt,0)로 division-by-zero 방어.
-    op.execute(
-        """
+    op.execute("""
         CREATE VIEW v_manifest_fill AS
         SELECT lo.id AS objective_id, lo.unit_id, lo.k_type,
                need.slot_type, need.required_cnt,
@@ -226,33 +223,28 @@ def upgrade() -> None:
         LEFT   JOIN pedagogy_content_slot cm
                ON cm.objective_id = lo.id AND cm.slot_type = need.slot_type
         GROUP  BY lo.id, lo.unit_id, lo.k_type, need.slot_type, need.required_cnt;
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE VIEW v_unit_release_gate AS
         SELECT unit_id,
                min(fill_pct)             AS worst_fill_pct,
                bool_and(fill_pct >= 100) AS releasable
         FROM   v_manifest_fill
         GROUP  BY unit_id;
-        """
-    )
-    op.execute(
-        """
+        """)
+    op.execute("""
         CREATE VIEW v_prescreen_calibration AS
         SELECT date_trunc('week', reviewed_at)::date AS review_week,
-               count(*) FILTER (WHERE prescreen_score >= 2)                         AS prescreen_passed,
+               count(*) FILTER (WHERE prescreen_score >= 2) AS prescreen_passed,
                count(*) FILTER (WHERE prescreen_score >= 2 AND status = 'REJECTED') AS false_accept,
                round(count(*) FILTER (WHERE prescreen_score >= 2 AND status = 'REJECTED')::numeric
                      / nullif(count(*) FILTER (WHERE prescreen_score >= 2), 0) * 100, 1)
-                                                                                    AS false_accept_pct
+                     AS false_accept_pct
         FROM   pedagogy_content_slot
         WHERE  reviewed_at IS NOT NULL
         GROUP  BY 1
         ORDER  BY 1;
-        """
-    )
+        """)
 
 
 def downgrade() -> None:

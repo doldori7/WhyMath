@@ -103,9 +103,7 @@ class UnitSpec(Base):
     )
 
     # ===== 게이트 상태 (M1: fail-closed 'DRAFT') =====
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'DRAFT'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'DRAFT'"))
 
     __table_args__ = (
         # M1: 게이트 통과 전 차단. 컴파일러/게이트가 관리하는 상태 리터럴 화이트리스트.
@@ -257,9 +255,7 @@ class PedagogyContentSlot(Base):
     )
 
     # ===== 검수 상태 흐름 (M1: fail-closed 'DRAFT' → PRESCREENED → APPROVED|REJECTED) =====
-    status: Mapped[str] = mapped_column(
-        sa.Text, nullable=False, server_default=sa.text("'DRAFT'")
-    )
+    status: Mapped[str] = mapped_column(sa.Text, nullable=False, server_default=sa.text("'DRAFT'"))
     prescreen_score: Mapped[int | None] = mapped_column(sa.SmallInteger)
     reviewed_by: Mapped[str | None] = mapped_column(sa.Text)
     reviewed_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True))

@@ -54,7 +54,7 @@ from whymath_backend.schema.enums import KnowledgeType
 class EvidenceEvent(Base):
     """학습 증거 이벤트 영속 ORM — 학습목표별 유형 달성 증거 시계열(하이퍼테이블·B1 암호화).
 
-    복합 PK `(event_id, time)` — attempt_event 선례(surrogate BigInteger + 파티션 키). `objective_id`·
+    복합 PK `(event_id, time)` — attempt_event 선례(surrogate BigInt·파티션 키). `objective_id`·
     `session_id`는 FK가 아니다(하이퍼테이블 느슨참조). `k_type`은 native enum(M4). 원문 발화는
     평문 금지 → `payload_encrypted`/`payload_nonce`/`retention_until`(B1·dialogue_turn 선례), 비민감
     메타만 `meta`(JSONB) 평문.

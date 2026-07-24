@@ -11,6 +11,7 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
+
 def _find_versions_dir() -> Path:
     """저장소 루트를 위로 탐색해 alembic versions 디렉터리를 찾는다(수집 위치 무관·robust)."""
     for parent in Path(__file__).resolve().parents:

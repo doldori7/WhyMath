@@ -1,7 +1,7 @@
 """교수법 DSL(L3) ORM 단위테스트 — DB 연결 *없이* 검증(hermetic·PG 0).
 
 검토서(`docs/reviews/260724_v2_migration_pedagogy_dsl_review.md`)·수정 목표 스키마
-(`260724_v2_migration_pedagogy_dsl.alembic_draft.py`)의 정합 구현을 잠근다. dialogue/parental_consent
+(`260724_v2_migration_pedagogy_dsl.alembic_draft.py`)의 정합 구현을 잠근다.
 ORM 테스트 패턴 답습: 메타데이터 등록 / PG DDL 컴파일(enum·FK·CHECK·인덱스) / 기본값·제약.
 
 검증 대상 지적: B2/H1(provenance FK 위임·license_tier 부재) · H2(concept_nodes atom_node·legacy FK
@@ -140,7 +140,7 @@ def test_learning_objective_secondary_distinct_check() -> None:
 
 
 def test_learning_objective_concept_nodes_no_legacy_fk_h2() -> None:
-    """H2: concept_nodes는 TEXT[](atom_node code). FK는 unit_spec 하나뿐(개념/원자 그래프 FK 없음)."""
+    """H2: concept_nodes는 TEXT[](atom_node code). FK는 unit_spec 하나뿐(그래프 FK 없음)."""
     ddl = _pg_ddl(LearningObjective.__table__)
     assert "concept_nodes TEXT[] NOT NULL" in ddl
     # FK 타깃은 unit_spec 뿐 — concept/atom/legacy 그래프로의 FK 없음.
@@ -162,9 +162,7 @@ def test_learning_objective_idx_lo_unit() -> None:
 def test_content_slot_provenance_fk_delegation_b2_h1() -> None:
     """B2/H1: provenance_id FK → content_provenance(생성/라이선스 위임). objective FK CASCADE."""
     ddl = _pg_ddl(PedagogyContentSlot.__table__)
-    assert (
-        "FOREIGN KEY(provenance_id) REFERENCES content_provenance (provenance_id)" in ddl
-    )
+    assert "FOREIGN KEY(provenance_id) REFERENCES content_provenance (provenance_id)" in ddl
     assert "FOREIGN KEY(objective_id) REFERENCES learning_objective (id)" in ddl
     fk_targets = {fk.column.table.name for fk in PedagogyContentSlot.__table__.foreign_keys}
     assert fk_targets == {"content_provenance", "learning_objective"}
