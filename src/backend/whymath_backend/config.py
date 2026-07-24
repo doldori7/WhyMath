@@ -208,6 +208,24 @@ class Settings(BaseSettings):
         ),
     )
 
+    pedagogy_pack_prompt_enabled: bool = Field(
+        default=False,
+        description=(
+            "교수법 팩(PedagogyPack) 4계층 발문 조립기·forbidden_modes 가드를 stateless "
+            "`/v1/coach`(`PolyaCoach.decide`) 경로에 얹을지(PED-01 슬라이스 ③). "
+            "**False(기본·canary)** — OFF면 팩 조립기/guard 미호출로 기존 발문 경로와 "
+            "비트동일(회귀 0·`decision.system`은 `_BASE_SYSTEM` 그대로). True이고 호출자가 "
+            "`decide(pack=...)`로 팩을 명시 주입한 경우에만 base_system 위에 팩 socratic_prompt"
+            "(`{domain_example}` 치환)·오개념·학습자 상태를 4계층으로 조립해 "
+            "`PedagogyDecision.system`을 대체한다 — 팩 미주입(pack=None) 시에는 플래그와 무관하게 "
+            "base_system 무변경(옵트인·역호환). WH-1 라이브 측정 경로(`wh1_*`)·톤필터는 무변경 — "
+            "이 슬라이스는 재사용 가능한 팩 기계를 결함주입 측정으로 증명하고 stateless coach에만 "
+            "옵트인 훅을 놓는다(problem→k_type 해석 seam·WH-1 라이브 주입은 후속). GA flip(기본 "
+            "True)은 결함주입 측정(pedagogy_pack_fidelity_eval exit 0) 후 별도 커밋. "
+            "WHYMATH_PEDAGOGY_PACK_PROMPT_ENABLED=false 킬스위치."
+        ),
+    )
+
     l4_server_mastery_enabled: bool = Field(
         default=True,
         description=(
