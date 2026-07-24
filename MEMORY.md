@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (문서·설계·UI): **UI 설계 도메인 신설(`docs/design/ui/`) + 5단계 파이프라인의 UI 재해석** (claude 설계·문서, Kiki 지시)
+
+**컨텍스트**: Kiki가 ChatGPT 설계 대화 4건을 공유하며 4개 질문을 던짐 — ① "교육목적→교수전략→콘텐츠구성→DSL→자동생성" 5단계 파이프라인을 적용하면 학생 UI 메뉴는 어떻게 구성되나 ② 초등~대학(일반/진로/재수)·영재 전 대상 + 교사·부모·학원 영업까지 고려한 UI 설계 계획 ③ 앱 관리(admin) UI 구성 계획 ④ 그 관리 UI 아키텍처. 저장소에는 UX 지침이 아키텍처 문서(`05`·`05a`·`06`·`07`)와 코드 주석에 흩어져 있을 뿐 전용 UI/IA 설계 문서가 없었고, 관리 UI는 코드·계획 문서 모두 부재.
+
+**적용**: 신규 `docs/design/ui/` 도메인 5개 문서 신설(코드·목업 없이 종합 설계 문서만 — Kiki 선택) — `00_index`(불변식·구현 범례)·`01_student_pipeline_to_menus`·`02_student_ui_master_plan`·`03_admin_console_plan`·`04_admin_console_architecture`. 기존 `05_interaction.md`·`07_community.md` 상단에 도메인 역링크 1줄씩 추가(본문 무변경).
+
+**핵심 판단(구조 붕괴 감지기 역할)**: ① **순진한 5단계 선형 파이프라인을 학생 메뉴에 투영하지 않는다** — `04d_adaptive_pedagogy_engine.md:14`가 이미 이 순서를 반려(교수전략을 DSL 이전에 고정 → 교수법이 콘텐츠에 각인). UI는 손으로 짠 메뉴 트리가 아니라 선언적 명세(`LearningScene`/`Visualization`)의 렌더러이고, "메뉴"는 3축(모드 스위처·교과서 좌표·행동 진입점)에서 파생. ② 전 대상·영업은 3개 앱 분리(반려·`06:170`)가 아니라 **단일 앱 적응형 셸**(연령대×모드×역할)로 흡수. ③ 관리 UI 선결과제 = **RBAC**(실측: `UserProfile`에 role 필드 없음·`api/{concepts,problems}.py` CRUD 무인증·`require_role`은 `backend-engineer.md:249`에 설계만). ④ 모든 문서에 구현 범례(🟢/🟡/🔴)로 계획/구현 구분(README 청사진 괴리 재발 방지). **실측 검증**: `concept_dsl.py`·`l3/render/` 부재·`scene_renderer.dart` 존재·`/status`@`app.py:374`·L6 6모드·검수 상태 흐름(`pedagogy_dsl.py:257` DRAFT→PRESCREENED→APPROVED) 모두 코드 대조 확인 후 인용. 후속 backlog(ADMIN-RBAC·ADMIN-BFF·ADMIN-REVIEW-UI·ADMIN-WEB)은 문서에 제안만(등재는 `backlog.py` 경유·대장 손편집 금지).
+
 ### 2026-07-24 (문서·인벤토리): **AI/LLM 사용처 인벤토리 체크리스트 신설 + CLAUDE.md 스택 표 모델 표기 정합** (claude 구현, Kiki 지시)
 
 **컨텍스트**: 앱의 AI/LLM 사용처와 각 부분의 AI 기법·모델명/LLM명이 `03_content_generation.md`(모델 풀)·`03a_l3_router_design.md`(3축)·`config.py`(실제 기본값)·`live_cost_measurement_2026-07.md`(pull 목록)에 흩어져 "어느 기능이 어떤 AI/LLM을 쓰는가"를 한곳에서 대조·관리하는 인벤토리가 부재. 또한 CLAUDE.md 스택 표(패밀리명 `Qwen3-Math`·`GPT-5`·`Gemini 2.5`)와 코드 실측 핀(`qwen2-math`·`qwen2.5`·`qwen3.5:27b`·`qwen3-vl:8b`·`claude-sonnet-4-6`·`claude-opus-4-7`) 사이에 모델 표기 드리프트 존재.

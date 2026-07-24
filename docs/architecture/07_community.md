@@ -1,6 +1,8 @@
 # L7. 커뮤니티·소셜 (Community & Social)
 
 > 느리지만 *결정적* 자산. 데이터 누적 → 모델 개선 → 콘텐츠 풍부 의 선순환.
+>
+> **UI/IA 설계**: 교사·학부모 대시보드 UI·역할 설계는 `../design/ui/03_admin_console_plan.md`·`04_admin_console_architecture.md` 참조. 본 문서는 L7 계층 책임의 정본.
 
 ## 책임
 
