@@ -77,6 +77,7 @@ from whymath_backend.db.models.dialogue import (
     Dialogue,
     DialogueTurn,
 )
+from whymath_backend.db.models.evidence_event import EvidenceEvent
 from whymath_backend.db.models.evidence_link import EvidenceLink
 from whymath_backend.db.models.formula_node import (
     FORMULA_REVIEW_STATUS_DEFAULT,
@@ -89,6 +90,14 @@ from whymath_backend.db.models.misconception_hypothesis import (
     MisconceptionHypothesisRecord,
 )
 from whymath_backend.db.models.parental_consent import ParentalConsent
+from whymath_backend.db.models.pedagogy_dsl import (
+    CONTENT_SLOT_STATUS_DEFAULT,
+    UNIT_SPEC_STATUS_DEFAULT,
+    LearningObjective,
+    PedagogyContentSlot,
+    PedagogyPack,
+    UnitSpec,
+)
 from whymath_backend.db.models.problem import (
     Problem,
     ProblemRelation,
@@ -187,6 +196,16 @@ __all__ = [
     "MisconceptionHypothesisRecord",
     # WH-1 2단계 §2.3: EvidenceLink (학습 증거 그래프·삭제권 FK CASCADE·polarity CHECK)
     "EvidenceLink",
+    # 교수법 DSL(L2): EvidenceEvent (학습목표별 유형 달성 증거 하이퍼테이블·B1 봉투 암호화)
+    "EvidenceEvent",
+    # 교수법 DSL(L3): UnitSpec·PedagogyPack·LearningObjective·PedagogyContentSlot
+    #   (7유형→팩→증거·knowledge_type native enum·provenance FK 위임·M1 fail-closed)
+    "UnitSpec",
+    "PedagogyPack",
+    "LearningObjective",
+    "PedagogyContentSlot",
+    "UNIT_SPEC_STATUS_DEFAULT",
+    "CONTENT_SLOT_STATUS_DEFAULT",
     # 슬라이스 3(개념그래프 아크): ConceptEmbedding (L1 개념 의미검색 pgvector 영속·UC 키)
     "ConceptEmbedding",
     # 개념그래프 소비 슬1: ConceptNode (L1 개념 메타 PG 프로젝션·UC 키·검색 enrichment 백킹)

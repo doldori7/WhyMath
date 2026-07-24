@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (검토·적용·PED-01 등재): **교수법 팩+소단원 DSL v2 마이그레이션 검토 → 수정 스키마 적용 (Blocking/High 해소·ORM+Alembic 2리비전·hermetic 31 PASS)** (claude 검토·구현, Kiki 지시 적용)
+
+**컨텍스트**: 업로드된 원시 SQL 마이그레이션(`260724_phase0_v2_migration_pedagogy_dsl.sql`)+교수법 방법론 v2 설계 문서를 코드베이스 실측 대비 검토. 원시 SQL은 현 상태 적용 불가로 판정(검토서 `docs/reviews/260724_v2_migration_pedagogy_dsl_review.md`·수정 초안 동 디렉터리 `.alembic_draft.py`). Kiki 지시로 *수정 재설계를 적용*.
+
+**판정 근거(반려된 원본 결함)**: 🔴 (1) `evidence_event.payload` 미성년 원문 발화 평문 저장(금기 위반·SEC-01 동형) (2) `license_tier TEXT 'T1'..'T4'`가 기존 `LicenseType` enum+`content_provenance` 저작권 validator 우회·T1-T4 미정의 (3) 거버넌스 미승인. 🟠 (4) `content_material`이 기존 `content_provenance`+`generation_log`+`concept_content`와 중복 (5) `concept_nodes` "545 노드"가 봉인 legacy 개념그래프(437) 참조(런타임 진실=atom_node 2,697·ARCH-13 얽힘) (6) 원시 `.sql`(저장소 Alembic 전용)·L2/L3 혼재. 🟡 `unit_spec.status` fail-open·`v_manifest_fill` 0-나눗셈·하드 ENUM.
+
+**적용(코드)**: ORM `db/models/pedagogy_dsl.py`(UnitSpec·PedagogyPack·LearningObjective·PedagogyContentSlot)·`evidence_event.py`(EvidenceEvent) + `schema/enums.py` KnowledgeType(7유형) + Alembic 2리비전 **분리**(`d5e6f0a1b2c3` L3 팩/DSL·`e6f1a2b3c4d5` L2 evidence·head `c4d5e6f0a1b2`에 체이닝·단일 head). 반영: B1 evidence payload 봉투 암호화(`payload_encrypted`/`payload_nonce`+`retention_until`·평문 발화 컬럼 0)·B2/H1 `pedagogy_content_slot.provenance_id`→content_provenance FK(license_tier 폐기)·H2 concept_nodes=atom_node code(FK 0·ARCH-13 대기)·H3 Alembic+L2/L3 분리·M1 status 기본 DRAFT(fail-closed)·M2 nullif·M4 knowledge_type native ENUM(커널 소유 예외). hermetic 31 PASS·`tests/backend/db` 221 pass(2 실패=asyncpg 부재·무관)·py_compile green. **⚠️ CI 위임**: `alembic upgrade/downgrade` 실 PG·timescaledb 하이퍼테이블(샌드박스 PG·py3.12 부재).
+
+**결정(적용된 방향)**: ① knowledge_type 7유형 native ENUM 채택(커널 소유·과목 불변·plain Text house style 예외) ② content_material→`pedagogy_content_slot` 개명+provenance FK 위임(중복 해소) ③ license 축=기존 `LicenseType`/`content_provenance`로 통일(T1-T4 폐기) ④ evidence_event는 별 L2 하이퍼테이블 유지(attempt_event 선례 미러·암호화).
+
+**잔여(PED-01 후속)**: packs YAML 시더→pedagogy_pack·`.unit.yaml` 컴파일러 v0.1·4층 프롬프트 조립기+forbidden_modes guard(l4)·evidence 봉투 암호화 write 경로·이차함수 파일럿 E2E 1회 완주 후 DSL 스키마 동결. 프로젝트 실 스테이지=S3(파일럿).
+
 ### 2026-07-21 (구현·측정·S4-04 done): **정답-안전 코치 프로즈 rephrase — 358/361 템플릿의 LLM 문맥화 + 결함주입 측정 노출 0 PASS (기본 OFF canary)** (claude 구현·측정, Kiki 계획 승인)
 
 **구현(C1~C4·4커밋)**: ⑴ wh1_loop 템플릿 공개 상수화(`NEUTRAL_GUIDE_UTTERANCE`/`ENCOURAGE_FALLBACK_UTTERANCE`·값 불변)+`TurnOutcome.utterance_source(policy|derived)` — 판정은 `_uses_explicit_utterance` 단일 술어(드리프트 0)·probe `_FALLBACKS` 단일원천화. ⑵ **`harness/wh1_prose.py` 신설** — 프로필 S(파생 템플릿 rephrase 산출물: 등호·숫자 전면 금지(NFKC 전각 붕괴)·GT echo·'정답' 키워드·길이120, 실패=원 템플릿 fail-closed)+프로필 C(correct/무verdict 정책 자유발화: **외래 등식 차단·학생 등식 echo 허용**(`_RELATION_RE` 스팬 vs 학생 재료 정규형·§ 경계 구분자)+위생 체인, 실패=None→coach 기존 결정론 폴백)+정확 일치 화이트리스트(개입·출제 발화는 LLM 호출 0 무변형)+라우터 경유(GENERAL·easy·temp 0.7 — l3 rephrase 미러·v3 경량 프롬프트 교훈 계승)+async wait_for 3s(`wh1_prose_timeout_seconds`). ⑶ primary seam 배선(발화 확정 후·**톤필터 직전** — 톤필터 최종 게이트 불변)+관측 `prose_rephrased`/`prose_reason_code`(비식별·기본값 하위호환)+거버넌스 (E-2) 봉인(플래그·진입 함수 소비 표면 frozenset 정확일치+프로즈 마커). 플래그 `wh1_prose_rephrase_enabled` **기본 False(canary)**·킬스위치 env — OFF=비트동일(프로즈 LLM 호출 0을 통합 테스트가 봉인).
