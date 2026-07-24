@@ -401,3 +401,7 @@
 {"ts": "2026-07-24T12:58:27", "actor": "claude/whymath-ai-llm-checklist-0fawmv", "action": "add", "id": "ARCH-15-ai-llm-inventory"}
 {"ts": "2026-07-24T12:58:33", "actor": "claude/whymath-ai-llm-checklist-0fawmv", "action": "start", "id": "ARCH-15-ai-llm-inventory", "session": "claude/whymath-ai-llm-checklist-0fawmv", "remote": "disabled"}
 {"ts": "2026-07-24T12:58:34", "actor": "claude/whymath-ai-llm-checklist-0fawmv", "action": "done", "id": "ARCH-15-ai-llm-inventory", "artifacts": ["docs/architecture/ai_llm_inventory_2026-07.xlsx", "CLAUDE.md 스택 표 정합 + MEMORY 2026-07-24 결정 로그"]}
+{"ts": "2026-07-24T11:52:08", "actor": "claude/education-os-architecture-mr0fbq", "action": "add", "id": "REND-01-pedagogy-renderer-adapters"}
+{"ts": "2026-07-24T11:52:20", "actor": "claude/education-os-architecture-mr0fbq", "action": "add", "id": "PED-02-runtime-pedagogy-selector"}
+{"ts": "2026-07-24T11:52:29", "actor": "claude/education-os-architecture-mr0fbq", "action": "add", "id": "CACHE-01-select-vs-generate-supply"}
+{"ts": "2026-07-24T11:52:38", "actor": "claude/education-os-architecture-mr0fbq", "action": "add", "id": "PED-03-adaptive-pedagogy-policy"}

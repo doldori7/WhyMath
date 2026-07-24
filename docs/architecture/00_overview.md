@@ -185,6 +185,8 @@ WhyMath 아키텍처는 *서로 직교하는 두 축*으로 본다:
 - 용어집: `glossary.md` — 계층·단계(S)·페이즈·하네스 용어 한 줄 정의
 - L3 라우터 설계: `03a_l3_router_design.md`
 - 하네스: `03b_wh_s_solver_harness.md`(솔버·WH-S) · `04a_wh1_tutoring_harness.md`(튜터링·WH-1)
+- 콘텐츠 전략(교수법-중립 DSL·Rendering Engine·2층 캐시): `03c_content_strategy_cache.md`
+- 2단계 교수법·런타임 선택·적응 엔진: `04d_adaptive_pedagogy_engine.md` · 북극성 서사: `../strategy/education_os_positioning_v1.md`
 - 시장 전략: `../strategy/`
 - 코딩 표준: `../standards/`
 - 프롬프트 라이브러리: `../prompts/`
