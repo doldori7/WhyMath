@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (구현·PED-01 후속·packs 시더): **교수법 팩 7종 시더 착지 + pyyaml 백엔드 의존성 추가** (claude 구현, Kiki 지시 적용)
+
+**컨텍스트**: PED-01(교수법 팩+소단원 DSL) 후속 첫 슬라이스 — 스키마(아래 항목) 위에 *교수법 팩 시더*를 놓는다. 7 지식유형 팩 YAML → `pedagogy_pack` 멱등 적재.
+
+**적용**: ① 7팩 `data/corpus/pedagogy_packs_v1/*.yaml` — CONCEPT·PROCEDURE·REPRESENT 3종 완성 + PROOF·MODELING·SPATIAL·STOCHASTIC 4종 스텁(`is_stub=true`). 발문은 `{domain_example}` 변수·과목 명사 금지·유형별 필수 슬롯(콜드스타트 `diag_item` 포함). ② `schema/pedagogy_pack.py` Pydantic 계약(필드명=ORM 컬럼명·lint 4종: `{domain_example}` 필수·주제명사 blocklist·`forbidden_modes` 폐쇄어휘·슬롯 비어있음 금지). ③ `l1/pedagogy/pack_loader.py`+`populate.py` — 기존 standard/misconception 로더 규약 동형(`INSERT ... ON CONFLICT(k_type) DO UPDATE`·sync `_build_sync_engine`·CLI `python -m whymath_backend.l1.pedagogy.populate`).
+
+**스택 추가 결정(MEMORY 필수)**: `pyyaml>=6.0.1`(백엔드 main deps)+`types-PyYAML>=6.0.12`(dev) 추가 — 팩은 사람이 재배포 없이 편집하는 *데이터*라 YAML(구축 플레이북 DSL 6.1 ② "YAML+pydantic·Git diff·파서 유지비 0" 원칙)·`data-pipeline` pin과 일치. 백엔드 첫 YAML 코퍼스(기존 코퍼스는 JSON/JSONL). `yaml.safe_load`만 사용(임의 객체 역직렬화 금지·안전 로더).
+
+**검증(CI 도구 동일 핀)**: ruff·black clean·mypy --strict Success(386 files)·pytest 23 pass(7팩 실적재 검증·upsert SQL ON CONFLICT·멱등·lint 음성 4종)·import-linter 0 broken. 잔여(PED-01 후속): `.unit.yaml` 컴파일러 v0.1·4층 프롬프트 조립기+`forbidden_modes` guard(l4)·evidence 봉투 암호화 write 경로·이차함수 파일럿 E2E.
+
 ### 2026-07-24 (검토·적용·PED-01 등재): **교수법 팩+소단원 DSL v2 마이그레이션 검토 → 수정 스키마 적용 (Blocking/High 해소·ORM+Alembic 2리비전·hermetic 31 PASS)** (claude 검토·구현, Kiki 지시 적용)
 
 **컨텍스트**: 업로드된 원시 SQL 마이그레이션(`260724_phase0_v2_migration_pedagogy_dsl.sql`)+교수법 방법론 v2 설계 문서를 코드베이스 실측 대비 검토. 원시 SQL은 현 상태 적용 불가로 판정(검토서 `docs/reviews/260724_v2_migration_pedagogy_dsl_review.md`·수정 초안 동 디렉터리 `.alembic_draft.py`). Kiki 지시로 *수정 재설계를 적용*.

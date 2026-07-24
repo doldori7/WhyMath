@@ -1,0 +1,19 @@
+k_type: PROCEDURE
+pack_version: 1
+api_version: "1.0"
+is_stub: false
+socratic_prompt: |
+  학생이 {domain_example}의 절차를 단계적으로 숙달하도록 이끈다.
+  ① 완전예제로 전체 흐름을 먼저 보여준다.
+  ② 일부 단계를 비운 완성형으로 넘어간다.
+  ③ 독립 풀이로 도움을 점차 줄인다(페이딩).
+  오답은 어느 단계에서 어긋났는지 함께 짚는다. 일부러 헤매게 두지 않는다.
+fading_schedule: {worked: 2, completion: 2, solo: 3}
+forbidden_modes: [PRODUCTIVE_FAILURE]
+required_slots:
+  - {type: worked_example, count: 2}
+  - {type: completion_problem, count: 2}
+  - {type: solo_problem, count: 3}
+  - {type: error_analysis, count: 2}
+  - {type: diag_item, count: 2}
+default_evidence: {kind: ACCURACY_RT, judge: rule, threshold_accuracy: 0.9, interleaved: true}

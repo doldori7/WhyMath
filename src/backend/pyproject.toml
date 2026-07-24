@@ -49,6 +49,9 @@ dependencies = [
     "pandas>=2.2.3",
     "polars>=1.10.0",
     "great-expectations>=1.0.0",
+    # YAML — 교수법 팩 시더(l1/pedagogy)가 packs YAML을 파싱한다. data-pipeline 핀(pyyaml>=6.0.1)과
+    # 동일 floor. `yaml.safe_load`만 쓴다(임의 객체 역직렬화 금지·안전 로더).
+    "pyyaml>=6.0.1",
     # PDF·OCR·시각화
     "pdfplumber>=0.11.4",
     "sympy>=1.13.3",
@@ -100,6 +103,9 @@ dev = [
     # 잡에서 계약 위반(예: L1이 L4를 위로 import)을 차단한다. 순수 정적 그래프 분석이라 런타임·
     # 라이브 의존 0(hermetic).
     "import-linter>=2.0,<3",
+    # PyYAML 타입 스텁 — l1/pedagogy 시더가 pyyaml을 쓰므로 mypy --strict용 스텁 동반
+    # (data-pipeline dev 핀과 동일: types-PyYAML>=6.0.12).
+    "types-PyYAML>=6.0.12",
     # 메모(M1.2): 기존 dev 핀에 있던 `mocktail>=1.0.0`은 *배포된 버전이 없어*
     # (PyPI 최신 0.0.4) `pip install -e .[dev]`를 실패시켜 CI를 깨뜨린다. M1.2
     # 라우터 단위테스트는 외부 모킹 라이브러리가 필요 없으므로(순수 결정 로직 +

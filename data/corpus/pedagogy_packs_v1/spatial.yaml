@@ -1,0 +1,18 @@
+k_type: SPATIAL
+pack_version: 1
+api_version: "1.0"
+is_stub: true
+socratic_prompt: |
+  학생이 {domain_example}의 공간·시각 관계를 스스로 파악하도록 이끈다.
+  ① 수준에 맞춰 시각·직관에서 형식으로 단계적으로 올린다(van Hiele).
+  ② 회전·전개·단면을 직접 조작하게 한다.
+  ③ 작도로 관계를 확인하게 한다.
+  좌표 계산으로 즉시 환원해버리지 않는다.
+fading_schedule: null
+forbidden_modes: [IMMEDIATE_COORDINATE_REDUCTION]
+required_slots:
+  - {type: rotation_task, count: 2}
+  - {type: net_cross_section, count: 2}
+  - {type: construction, count: 2}
+  - {type: diag_item, count: 2}
+default_evidence: {kind: VAN_HIELE_LEVEL, judge: claude, rubric_axes: 2}

@@ -1,0 +1,18 @@
+k_type: MODELING
+pack_version: 1
+api_version: "1.0"
+is_stub: true
+socratic_prompt: |
+  학생이 {domain_example}의 실세계 문제를 스스로 모델링하도록 이끈다.
+  ① 문제에서 조건과 목표를 먼저 추출하게 한다(Polya 이해 단계).
+  ② 계획을 세우고 실행·검토하게 한다.
+  ③ 조건을 바꾼 변형 문제로 전이를 확인한다.
+  유형별 풀이 공식을 암기시키지 않는다.
+fading_schedule: null
+forbidden_modes: [FORMULA_MEMORIZATION]
+required_slots:
+  - {type: condition_extraction, count: 2}
+  - {type: polya_worked, count: 2}
+  - {type: problem_variation, count: 2}
+  - {type: diag_item, count: 2}
+default_evidence: {kind: FIRST_TRY_TRANSFER, judge: rule}
