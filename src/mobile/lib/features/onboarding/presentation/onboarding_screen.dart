@@ -17,6 +17,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router.dart';
+import '../../../theme/spacing.dart';
 import '../application/onboarding_controller.dart';
 
 /// 온보딩 한 페이지의 콘텐츠 모델(아이콘·제목·설명).
@@ -122,7 +123,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 child: isLast
-                    ? const SizedBox(height: 48)
+                    ? const SizedBox(height: AppSpacing.huge)
                     : TextButton(
                         onPressed: _goToLoop,
                         child: const Text('건너뛰기'),
@@ -141,7 +142,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             ),
             // 페이지 인디케이터 — 현재 위치를 점으로만 표시(보상·진척 게임화 아님).
             _PageIndicator(count: _totalPages, index: _index),
-            const SizedBox(height: 16),
+            const SizedBox(height: AppSpacing.lg),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
               child: SizedBox(
@@ -188,7 +189,7 @@ class _OnboardingPageView extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(page.icon, size: 96, color: theme.colorScheme.primary),
-              const SizedBox(height: 32),
+              const SizedBox(height: AppSpacing.xxxl),
               Text(
                 page.title,
                 textAlign: TextAlign.center,
@@ -196,7 +197,7 @@ class _OnboardingPageView extends StatelessWidget {
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: AppSpacing.lg),
               Text(
                 page.body,
                 textAlign: TextAlign.center,
@@ -237,14 +238,14 @@ class _OnboardingFormPage extends ConsumerWidget {
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
           Text(
             '모두 선택이에요. 지금 비워 두고 나중에 설정에서 채워도 괜찮아요.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: AppSpacing.xxl),
 
           // ── 목표 등급(1~9) — 드롭다운(자유 입력 없음). 학년이 아니라 목표 '등급'이다.
           const _FieldLabel(label: '목표 등급'),
@@ -266,7 +267,7 @@ class _OnboardingFormPage extends ConsumerWidget {
             ],
             onChanged: notifier.setTargetGrade,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: AppSpacing.xl),
 
           // ── 목표 표준점수 — 숫자 입력(빈 값이면 미입력).
           const _FieldLabel(label: '목표 표준점수'),
@@ -280,7 +281,7 @@ class _OnboardingFormPage extends ConsumerWidget {
             onChanged: (value) =>
                 notifier.setTargetScore(int.tryParse(value.trim())),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: AppSpacing.xl),
 
           // ── 목표 시험일 — 날짜 선택(자유 입력 없음). YYYY-MM-DD로 서버에 전달된다.
           const _FieldLabel(label: '목표 시험일'),
@@ -288,7 +289,7 @@ class _OnboardingFormPage extends ConsumerWidget {
             selected: state.targetExamDate,
             onPick: notifier.setTargetExamDate,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: AppSpacing.xl),
 
           // ── 출생 연도 — 숫자 입력(연 단위·월일 미수집·미성년 개인정보 최소화).
           const _FieldLabel(label: '출생 연도'),
@@ -302,7 +303,7 @@ class _OnboardingFormPage extends ConsumerWidget {
             onChanged: (value) =>
                 notifier.setBirthYear(int.tryParse(value.trim())),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
         ],
       ),
     );

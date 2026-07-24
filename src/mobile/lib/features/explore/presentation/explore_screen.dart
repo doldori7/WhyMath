@@ -5,6 +5,8 @@
 // 서술만). 화면이 채워지면 이 placeholder를 실제 콘텐츠 렌더러로 교체한다.
 import 'package:flutter/material.dart';
 
+import '../../../theme/spacing.dart';
+
 /// 탐구 탭 화면 — 준비 중 placeholder(예정 콘텐츠 서술).
 class ExploreScreen extends StatelessWidget {
   const ExploreScreen({super.key});
@@ -17,7 +19,7 @@ class ExploreScreen extends StatelessWidget {
       body: SafeArea(
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.all(AppSpacing.xxl),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -26,13 +28,13 @@ class ExploreScreen extends StatelessWidget {
                   size: 48,
                   color: theme.colorScheme.primary,
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 Text(
                   '탐구 (준비 중)',
                   style: theme.textTheme.titleLarge,
                   textAlign: TextAlign.center,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 Text(
                   '사고력 문제와 움직이는 시각화, 개념 점화 지도,\n'
                   '다른 학생들의 풀이 갤러리가 이곳에 준비됩니다.',

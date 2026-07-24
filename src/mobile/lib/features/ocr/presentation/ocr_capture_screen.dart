@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../theme/spacing.dart';
 import '../application/ocr_controller.dart';
 import '../application/ocr_state.dart';
 import '../data/image_source_service.dart';
@@ -84,13 +85,13 @@ class _EmptyHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Text(
           '풀이를 사진으로 찍으면 함께 살펴볼게요.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16),
+          style: Theme.of(context).textTheme.bodyLarge,
         ),
       ),
     );
@@ -103,13 +104,13 @@ class _BusyHint extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Text(
           '풀이를 읽고 있어요…',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 16),
+          style: Theme.of(context).textTheme.bodyLarge,
         ),
       ),
     );
@@ -125,14 +126,14 @@ class _ResultView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(AppSpacing.md),
       children: [
         _OverallSummary(result: result),
-        const SizedBox(height: 8),
+        const SizedBox(height: AppSpacing.sm),
         // 인식된 영역이 있으면 코치에게 넘기는 진입을 준다(빈 인식이면 넘길 게 없어 숨긴다).
         if (result.regions.isNotEmpty) ...[
           _CoachHandoffButton(result: result),
-          const SizedBox(height: 8),
+          const SizedBox(height: AppSpacing.sm),
         ],
         // 영역이 없으면(빈 인식) 부드러운 안내만.
         if (result.regions.isEmpty)
@@ -242,7 +243,7 @@ class _RegionCard extends StatelessWidget {
             : theme.colorScheme.surfaceContainer,
         margin: const EdgeInsets.symmetric(vertical: 4),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -256,7 +257,7 @@ class _RegionCard extends StatelessWidget {
                     size: 18,
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: AppSpacing.sm),
                   Text(
                     '${index + 1}. $typeLabel',
                     style: theme.textTheme.labelLarge,
@@ -272,7 +273,7 @@ class _RegionCard extends StatelessWidget {
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
-              const SizedBox(height: 8),
+              const SizedBox(height: AppSpacing.sm),
               if (low)
                 const _RecheckCue(label: '이 부분이 잘 안 보여요 — 다시 확인해볼까요?')
               else
@@ -300,7 +301,7 @@ class _RecheckCue extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(Icons.photo_camera_outlined, size: 16, color: color),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Flexible(
           child: Text(
             label,
@@ -327,7 +328,7 @@ class _ClarityCue extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(Icons.check_circle_outline, size: 16, color: color),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Text(
           '또렷하게 읽었어요',
           style: theme.textTheme.bodySmall?.copyWith(color: color),
@@ -361,7 +362,7 @@ class _CaptureBar extends ConsumerWidget {
                 label: const Text('사진 찍기'),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: AppSpacing.md),
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: enabled

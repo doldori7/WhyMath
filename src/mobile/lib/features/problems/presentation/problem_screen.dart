@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router.dart';
+import '../../../theme/spacing.dart';
 import '../application/active_problem.dart';
 import '../application/diagnosis_controller.dart';
 import '../application/diagnosis_state.dart';
@@ -102,7 +103,7 @@ class _MessagePane extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -111,7 +112,7 @@ class _MessagePane extends StatelessWidget {
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyLarge,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.xl),
             FilledButton(onPressed: onAction, child: Text(actionLabel)),
           ],
         ),
@@ -136,7 +137,7 @@ class _ProblemView extends StatelessWidget {
         '(이 문제의 발문은 준비 중이에요)';
 
     return ListView(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(AppSpacing.xl),
       children: [
         // 맥락 칩(과목·소단원) — 정오 강조 없는 중립 표시.
         Wrap(
@@ -149,11 +150,11 @@ class _ProblemView extends StatelessWidget {
               _ContextChip(label: problem.questionFormat!),
           ],
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: AppSpacing.xl),
         // 발문(LaTeX는 후속 렌더 위젯 전까지 plain Text).
         Text(questionBody, style: theme.textTheme.titleMedium),
         if (problem.choices != null && problem.choices!.isNotEmpty) ...[
-          const SizedBox(height: 20),
+          const SizedBox(height: AppSpacing.xl),
           for (var i = 0; i < problem.choices!.length; i++)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -163,7 +164,7 @@ class _ProblemView extends StatelessWidget {
               ),
             ),
         ],
-        const SizedBox(height: 32),
+        const SizedBox(height: AppSpacing.xxxl),
         FilledButton(
           onPressed: onStart,
           child: const Text('풀이 시작'),

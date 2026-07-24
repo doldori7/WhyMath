@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router.dart';
+import '../../../theme/spacing.dart';
 
 /// 홈 탭 화면 — 교과서 좌표(준비 중) + 학습 진입 행동 2개.
 class HomeScreen extends StatelessWidget {
@@ -21,20 +22,20 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(title: const Text('WhyMath')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           children: [
             Text('안녕하세요', style: theme.textTheme.headlineSmall),
-            const SizedBox(height: 4),
+            const SizedBox(height: AppSpacing.xs),
             Text('오늘도 함께 이유를 찾아봐요.', style: theme.textTheme.bodyMedium),
-            const SizedBox(height: 20),
+            const SizedBox(height: AppSpacing.xl),
             const _TextbookCoordinateCard(),
-            const SizedBox(height: 24),
+            const SizedBox(height: AppSpacing.xxl),
             FilledButton.icon(
               onPressed: () => context.push(AppRoutes.problemPath),
               icon: const Icon(Icons.play_arrow_outlined),
               label: const Text('오늘의 문제 풀기'),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpacing.md),
             OutlinedButton.icon(
               onPressed: () => context.go(AppRoutes.chatPath),
               icon: const Icon(Icons.chat_bubble_outline),
@@ -56,18 +57,18 @@ class _TextbookCoordinateCard extends StatelessWidget {
     final theme = Theme.of(context);
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Icon(Icons.menu_book_outlined, color: theme.colorScheme.primary),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Text('내 교과서 좌표', style: theme.textTheme.titleMedium),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpacing.sm),
             Text(
               '내 교과서·진도에 맞춘 학습 위치가 여기에 표시됩니다.\n(준비 중)',
               style: theme.textTheme.bodyMedium,

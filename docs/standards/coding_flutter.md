@@ -76,11 +76,13 @@ class ChatMessage with _$ChatMessage {
 - 접근성 100% (Semantics·대비·탭 영역)
 
 ## 디자인 토큰/테마 (`lib/theme/`)
-- **정본 = `lib/theme/app_theme.dart`**(`WhyMathTheme.light`/`dark`)·`brand_colors.dart`. 화면은 `Theme.of(context).colorScheme.*`·`textTheme.*` 롤만 참조하고 색을 하드코딩하지 않는다.
+- **정본 = `lib/theme/app_theme.dart`**(`WhyMathTheme.light`/`dark`)·`brand_colors.dart`·`spacing.dart`. 화면은 `Theme.of(context).colorScheme.*`·`textTheme.*` 롤만 참조하고 색을 하드코딩하지 않는다.
 - **색 = `ColorScheme.fromSeed(seedColor: Colors.indigo)`** 라이트/다크(`brightness`). `MaterialApp`에 `theme`+`darkTheme`+`themeMode: ThemeMode.system`(시스템 다크 대응).
 - **정서 안전(빨강 금지) 강제**: M3 `error` 롤을 **앰버(주의)로 재정의**(`copyWith(error/onError/errorContainer/onErrorContainer=…)`) — 오답·오류를 질책의 빨강이 아니라 주의의 앰버로. `test/theme_test.dart`가 error 색상(hue)을 앰버 범위로 동결해 회귀를 막는다.
 - **브랜드 예외**: OAuth 사업자 색(카카오·네이버)은 `brand_colors.dart`에 분리 — 정서 팔레트 규칙(빨강 금지 등)의 적용 대상이 아니라 사업자 규정 색이다(정서 신호에 사용 금지).
-- **후속(미구현)**: 타이포 스케일·간격 토큰 전면 이관, 모드별 `primary_color`(`ModeConfig`)·연령대 프로파일 테마 스위칭, 골든 테스트(현재 `golden_toolkit` 선언만·사용 0).
+- **간격 = `lib/theme/spacing.dart`(`AppSpacing`)** — 4pt 리듬 스케일(xs=4·sm=8·md=12·lg=16·xl=20·xxl=24·xxxl=32·huge=48). `SizedBox` 간격·`EdgeInsets` 패딩에 매직 넘버 대신 이 토큰을 쓴다. 값은 기존과 동일(외형 무변). *현행 이관 범위*: `SizedBox` 간격 + `EdgeInsets.all(…)` 온-스케일 값. **후속**: 비표준 미세값(6·10·14)·비대칭 패딩(`symmetric`/`only`/`fromLTRB`) 정리.
+- **타이포 = `textTheme` 롤 채택** — 매직 `fontSize` 대신 `Theme.of(context).textTheme.<role>`(bodyLarge≈16·bodySmall≈12 등). 커스텀 `TextTheme` 오버라이드는 두지 않는다(M3 기본 스케일이 정본·전역 회귀 방지). **후속**: 앱바 슬로건 등 잔여 리터럴 이관.
+- **후속(미구현)**: 모드별 `primary_color`(`ModeConfig`)·연령대 프로파일 테마 스위칭, 골든 테스트(현재 `golden_toolkit` 선언만·사용 0).
 
 ## 성능
 - 60fps 유지 (스크롤·애니메이션)

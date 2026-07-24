@@ -12,6 +12,7 @@
 // misconception 카드는 *후속*이다. 이번 슬라이스는 신호 *유무·종류·요약* cue까지만.
 import 'package:flutter/material.dart';
 
+import '../../../theme/spacing.dart';
 import '../data/coach_models.dart';
 
 /// 코치 발화 아래에 붙는 verify 신호 카드.
@@ -176,7 +177,7 @@ class _SignalRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 16, color: color),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Flexible(
           child: Text(
             label,

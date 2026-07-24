@@ -14,6 +14,7 @@
 // 직접 import는 unnecessary_import 경고라 쓰지 않는다.
 import 'package:flutter/material.dart';
 
+import '../../../theme/spacing.dart';
 import 'mathlive_input_webview.dart';
 
 /// 수식(LaTeX) 입력 화면 — MathLive WebView로 입력받아 "완료"로 반환한다.
@@ -58,7 +59,7 @@ class _MathliveInputScreenState extends State<MathliveInputScreen> {
       ),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(AppSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -66,7 +67,7 @@ class _MathliveInputScreenState extends State<MathliveInputScreen> {
                 '풀이 수식을 입력해 주세요. 정답 여부는 함께 확인해요.',
                 style: theme.textTheme.bodyMedium,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               // WebView는 잔여 높이를 전부 차지한다 — 필드는 웹 문서 상단에 그려지고,
               // 가상 키보드는 WebView 뷰포트 하단(= 이 영역 하단, 버튼 행 바로 위)에
               // 도킹한다. 고정 높이 금지(키보드 잘림 재발 — 파일 상단 주석 참조).
@@ -78,7 +79,7 @@ class _MathliveInputScreenState extends State<MathliveInputScreen> {
                         onChanged: _onLatexChanged,
                       ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               // 입력 미리보기(LaTeX 원문) — 렌더 위젯 전까지 plain Text(기존 관행).
               if (_latex.trim().isNotEmpty) ...[
                 Text(
@@ -86,7 +87,7 @@ class _MathliveInputScreenState extends State<MathliveInputScreen> {
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
               ],
               Row(
                 children: [

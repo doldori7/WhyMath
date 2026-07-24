@@ -14,6 +14,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../core/router.dart';
 import '../../../theme/brand_colors.dart';
+import '../../../theme/spacing.dart';
 import '../application/auth_controller.dart';
 import '../data/oauth_code_requester.dart';
 
@@ -88,29 +89,29 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.functions, size: 72, color: theme.colorScheme.primary),
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 Text(
                   'WhyMath',
                   style: theme.textTheme.headlineMedium
                       ?.copyWith(fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: AppSpacing.sm),
                 const Text(_slogan, textAlign: TextAlign.center),
-                const SizedBox(height: 48),
+                const SizedBox(height: AppSpacing.huge),
                 _ProviderButton(
                   label: '카카오로 시작하기',
                   background: BrandColors.kakao,
                   foreground: BrandColors.onKakao,
                   onPressed: isSubmitting ? null : () => _onLogin('kakao'),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 _ProviderButton(
                   label: '네이버로 시작하기',
                   background: BrandColors.naver,
                   foreground: BrandColors.onNaver,
                   onPressed: isSubmitting ? null : () => _onLogin('naver'),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: AppSpacing.xxl),
                 // 전송 중 은근한 로딩만 표시(카운트다운·보상 연출 없음·절대 금기 준수).
                 if (isSubmitting) const LinearProgressIndicator(minHeight: 2),
               ],

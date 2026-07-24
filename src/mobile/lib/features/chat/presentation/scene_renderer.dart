@@ -10,6 +10,7 @@
 // WebView·postMessage 연동은 후속). layout(two_panel·tabbed) 전용 렌더도 후속 — seed는 세로 스택.
 import 'package:flutter/material.dart';
 
+import '../../../theme/spacing.dart';
 import '../data/scene_models.dart';
 import 'graphing_calculator_webview.dart';
 
@@ -141,7 +142,7 @@ class SceneRenderer extends StatelessWidget {
     final out = <Widget>[];
     for (var i = 0; i < items.length; i++) {
       if (i > 0) {
-        out.add(const SizedBox(height: 8));
+        out.add(const SizedBox(height: AppSpacing.sm));
       }
       out.add(items[i]);
     }
@@ -172,7 +173,7 @@ class _VisualizationSeed extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.insights_outlined, size: 18, color: theme.colorScheme.primary),
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpacing.sm),
           Flexible(child: Text(label, style: theme.textTheme.bodyMedium)),
         ],
       ),
@@ -229,7 +230,7 @@ class _SocraticBubble extends StatelessWidget {
               size: 16,
               color: theme.colorScheme.onPrimaryContainer,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             Flexible(
               child: Text(
                 text,
@@ -264,7 +265,7 @@ class _SceneRow extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 16, color: color),
-        const SizedBox(width: 8),
+        const SizedBox(width: AppSpacing.sm),
         Flexible(
           child: Text(
             label,
