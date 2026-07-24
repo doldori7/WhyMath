@@ -94,7 +94,60 @@ LLM·프롬프트
 
 ---
 
-## §5. 안전선 (운영 백오피스 특유)
+## §5. Control Center — 4계층 프레임 + 모듈 매핑 (원본 [C]·[D])
+
+Kiki의 ChatGPT 설계안([C]·[D])은 관리 UI를 *단순 CMS가 아니라 Education OS Control Center*로 설계할 것을 제안한다. WhyMath는 이를 **§4 좌측 내비를 조직하는 4계층 프레임**으로 채택하되, 모든 모듈을 **실재 자산에 매핑**하고 없는 것은 🔴로 표기한다(환상 방지). EOS 자체는 북극성 서사이며 조직 프레임은 확정된 L1~L7이다([05](05_source_reconciliation.md)).
+
+### 4계층 콘솔 프레임 (원본 [D])
+```
+① 운영(Dashboard)      — KPI 한눈에
+② 설계(Design Studio)  — Curriculum·Objective·Pedagogy·Concept·Misconception
+③ 생성(Generation)     — DSL Builder·Auto Generation·Prompt·QA
+④ 운영·분석(Operation) — Analytics·Deployment·Monitoring·Version
+```
+이 4계층은 WhyMath의 **설계 → 생성 → 운영 → 분석·개선 폐쇄 루프**와 같으며, 그 루프는 곧 `04d` Adaptive Pedagogy Engine 루프(교수법 선택→렌더→데이터 수집→효과 측정→policy 갱신)다.
+
+### 22모듈 + 5 EOS Studio → WhyMath 자산 매핑
+
+원본 [D]의 22개 모듈과 5개 EOS Studio를 실재 코드/데이터에 매핑한다. **대부분 데이터·엔진은 🟢 있고 UI만 🔴 없다** — 콘솔은 이들을 래핑한다.
+
+| 원본 모듈/Studio | WhyMath 자산 | 상태 |
+|---|---|---|
+| Dashboard(KPI) | `GET /status`+`cost_report`+`backlog` 집계 | 자산🟢·UI🔴 |
+| Curriculum | `curriculum_entry`·`units_v1` | 데이터🟢·UI🔴 |
+| Objective | `learning_objective`·`achievement_standard` | 데이터🟢·UI🔴 |
+| **Pedagogy Studio** | `PedagogyPack`(설계-교수법·`schema/pedagogy_pack.py`) | 데이터🟢·UI🔴 |
+| **Knowledge Graph Studio** | `concept_node`·`atom_node`(+Neo4j) | 데이터🟢·UI🔴 |
+| **Misconception Studio** | `misconception_catalog`·`crosslink` | 데이터🟢·UI🔴 |
+| Content Library | `problem`·`solution`·`concept_content`·`visualization` | 데이터🟢·UI🔴 |
+| DSL Builder | UnitDSL(`unit_compiler`🟢) · ConceptDSL(`REND-01`🔴) | 혼합 |
+| **Generation Pipeline** ★ | `l3/pregenerate`+select-vs-generate(`03c`) | 엔진🟡·UI🔴 |
+| AI Evaluation / QA | harness 게이트(SymPy·agreement·corpus_audit·defect_detection·coach_prose_leak) | 🟢·UI🔴 |
+| Assessment | L2 IRT/BKT·`verify-*`·문항은행 | 🟢·UI🔴 |
+| Student Analytics | L2 `MasteryState`+`timeseries` | 🟢·UI🔴 |
+| Teacher/Parent Analytics | L7 대시보드 | 🔴 Phase3(`07`) |
+| **Learning Digital Twin** | L2 실시간 학습 상태·오개념·예측 시뮬 | 🔴 계획 |
+| AI Models | `GET /status` 모델 매트릭스(**실제=Ollama+Claude**) | 🟢·UI🔴 |
+| Prompt Library | Langfuse(버전·A/B) | 🟢 임베드 |
+| Version / Deployment / Monitoring | git+`backlog events` · `infra/phaiakes9` systemd+GitHub Actions · Langfuse+`cost_probe` | 🟢·UI🔴 |
+| System Settings | `config.py` 노브 + **RBAC 권한**(선결🔴) | 혼합 |
+| App Management(다과목) | 현재 math-first·다과목 플러그인은 북극성 EOS | 🔴 지향 |
+
+### ★ Generation Pipeline = Q1 5단계 파이프라인의 운영 콘솔
+
+이 모듈이 [01 문서](01_student_pipeline_to_menus.md)의 **학생은 절대 보지 않는** 5단계 파이프라인을 *운영자가* 보고 실행하는 곳이다:
+
+```
+교육목적 → 교수전략 → 콘텐츠 → DSL → 자동생성 → QA → 배포 → 학생
+                                                          ↓
+                            Pedagogy 개선 ← 오개념 감지 ← Learning Analytics
+```
+- 학생 UI는 이 파이프라인의 *산출물*(학습 여정 카드)만 본다. 관리 콘솔은 파이프라인 *자체*를 시각화·실행·검수한다.
+- 폐쇄 피드백 루프(원본 [C]) = `04d §3.1` Adaptive Pedagogy Engine. 이벤트 기반(Objective Created→…→Content Published→Misconception Detected)·다과목 플러그인은 **북극성 EOS 방향**으로 단계적 도입.
+
+---
+
+## §6. 안전선 (운영 백오피스 특유)
 
 관리 UI는 강한 권한을 쥐므로 별도 안전선이 필요하다. 모두 `CLAUDE.md` 금기에서 유래:
 
@@ -106,7 +159,7 @@ LLM·프롬프트
 
 ---
 
-## §6. 최소비용 경로 (MVP → 확장)
+## §7. 최소비용 경로 (MVP → 확장)
 
 기존 자산을 최대한 래핑한다. **새 수학·판정 로직을 만들지 않는다.**
 
@@ -120,4 +173,4 @@ LLM·프롬프트
 
 ---
 
-**버전**: 1.0 | **작성**: 2026-07-24 | **교차링크**: [00_index](00_index.md) · [04 아키텍처](04_admin_console_architecture.md) · `../architecture/07_community.md` · `../standards/superhuman_verification_standard.md`
+**버전**: 1.1 | **작성**: 2026-07-24 | **교차링크**: [00_index](00_index.md) · [04 아키텍처](04_admin_console_architecture.md) · [05_source_reconciliation](05_source_reconciliation.md) · `../architecture/07_community.md` · `../standards/superhuman_verification_standard.md`

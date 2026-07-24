@@ -3,6 +3,8 @@
 > **성격**: WhyMath의 **UI/정보구조(IA) 설계 정본**. 기존 아키텍처 문서(`../architecture/05_interaction.md` 등)가 *계층 책임*을 정의한다면, 이 도메인은 그 위에서 **화면·메뉴·네비게이션·역할·관리 콘솔을 어떻게 조립하는가**를 설계한다.
 >
 > **작성 배경**: 저장소에는 UX 지침이 아키텍처 문서와 코드 주석에 흩어져 있을 뿐, 전용 UI 설계·IA 문서가 없었다. 관리(admin) UI는 코드도 계획 문서도 없었다. 이 도메인이 그 공백을 메운다. (2026-07-24 신설 — `MEMORY.md` 결정 로그 참조)
+>
+> **Round 2 통합**(2026-07-24): Kiki가 업로드한 ChatGPT UI 설계 대화 원본([A]~[E])의 구체안(학습 여정·6역할 UI·Control Center 22모듈·8 core engines)을 01~04에 반영하고, 채택/충돌을 [05_source_reconciliation](05_source_reconciliation.md)에 정리. 원본 `.docx`는 미커밋(본문만 반영).
 
 ---
 
@@ -12,8 +14,9 @@
 |---|---|---|
 | **[01_student_pipeline_to_menus.md](01_student_pipeline_to_menus.md)** | 5단계 파이프라인 → 학생 메뉴 | "교육목적→교수전략→콘텐츠구성→DSL→자동생성"을 학생 UI로 **선형 투영하지 않는다**. UI는 선언적 명세의 렌더러이고 메뉴는 파생 산출물. |
 | **[02_student_ui_master_plan.md](02_student_ui_master_plan.md)** | 전 대상(초등~대학·진로/재수/영재) + 영업(교사·부모·학원) | 단일 앱 + **적응형 셸(Adaptive Shell)** — 연령대 × 모드 × 역할 3축 분기. 영업 표면(학부모 보고서·교사 웹·학원 B2B). |
-| **[03_admin_console_plan.md](03_admin_console_plan.md)** | 앱 관리 UI 구성 | **내부 운영 백오피스**(신설) vs 교사·학부모 대시보드(L7·Phase3) 구분. 관리 자원 인벤토리·검수 큐·정보구조. |
-| **[04_admin_console_architecture.md](04_admin_console_architecture.md)** | 관리 UI 아키텍처 | Next.js + **Admin BFF** + **RBAC 선결**(현재 부재). 감사 로그·측정치 이중 회계·단계적 구축. |
+| **[03_admin_console_plan.md](03_admin_console_plan.md)** | 앱 관리 UI 구성 | **내부 운영 백오피스**(신설) vs 교사·학부모 대시보드(L7·Phase3) 구분. Control Center 4계층·22모듈 매핑·검수 큐. |
+| **[04_admin_console_architecture.md](04_admin_console_architecture.md)** | 관리 UI 아키텍처 | Next.js + **Admin BFF** + **RBAC 선결**(현재 부재). 8 core engines ↔ L1~L7 매핑·감사 로그·이중 회계. |
+| **[05_source_reconciliation.md](05_source_reconciliation.md)** | 출처·정합 기록 | Kiki ChatGPT 설계안(원본 [A]~[E]) 통합 기록 — 채택 항목·**충돌 원장 5건**·EOS 북극성 처리. |
 
 ### 정본 경계 (기존 아키텍처 문서와의 관계)
 

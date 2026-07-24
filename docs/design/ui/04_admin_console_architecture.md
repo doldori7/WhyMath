@@ -103,7 +103,50 @@ flowchart TD
 
 ---
 
-## §6. 단계적 구축
+## §6. 원본 [E] EOS 기술 아키텍처 ↔ WhyMath 매핑
+
+Kiki의 ChatGPT 설계안([E])은 "AI Native + Knowledge Graph + DSL + Runtime Engine" 계층 스택과 8개 core engine을 제안한다. WhyMath는 **경쟁하는 새 계층 스킴을 채택하지 않고**, 확정된 L1~L7·실제 스택에 매핑한다(북극성 참조·L1~L7 유지).
+
+### [E] 기술 계층 ↔ WhyMath 계층·실제 스택
+
+| 원본 [E] 계층 | WhyMath 대응 | 실제 스택 |
+|---|---|---|
+| Frontend | L5 클라이언트 | Flutter(학생)·React/Next(교사·admin) |
+| Experience | L5/L6 | 학습 여정·대시보드 |
+| Education Runtime(Lesson/Objective/Adaptive/Recommendation/Assessment) | L4+L6+L2 | 교수 결정·모드·자동 정렬·추천·평가 |
+| AI Layer(LLM Router·RAG·Prompt DSL·Verification) | L3 | 라우터·pgvector RAG·PRM/SymPy 검증 |
+| Knowledge Layer(Concept/Misconception/Curriculum/Pedagogy/Objective/Problem Graph) | L1 | concept/atom·misconception·curriculum·pedagogy_pack·problem |
+| DSL Layer(Lesson/Problem/Assessment/Hint/Visualization/Tutor DSL) | `schema/*`·`05a` LearningScene·ConceptDSL(REND-01🔴) | 선언적 명세 |
+| Data Platform(PostgreSQL·Neo4j·Vector·Redis·Object) | 확정 스택 | **PG16+pgvector**·Neo4j(개념/원자)·Redis·S3/MinIO |
+| Infrastructure(k8s·Gateway·Auth·Observability·CI/CD) | 인프라 | FastAPI·Langfuse·GitHub Actions·Phaiakes9 |
+
+### 8 core engines ↔ WhyMath 모듈
+
+| 원본 [E] 엔진 | WhyMath 좌석 | 상태 |
+|---|---|---|
+| 1 Knowledge Engine | L1 concept/atom graph | 🟢 |
+| 2 Objective Engine | L1 `learning_objective` + L6 자동 커리큘럼 정렬 | 🟢/🟡 |
+| 3 Pedagogy Engine | L4 + Runtime Pedagogy Selector | 🟢/🔴(`PED-02`) |
+| 4 DSL Compiler | `l1/pedagogy/unit_compiler`🟢 + ConceptDSL | 🟢/🔴(`REND-01`) |
+| 5 Lesson Runtime Engine | `03c` supply/render | 🔴(`REND-01`/`CACHE-01`) |
+| 6 Assessment Engine | L2 IRT/BKT + `verify-*` | 🟢 |
+| 7 AI Tutor Engine | L4 coach/socratic + L3 | 🟢 |
+| 8 Analytics Engine | `ops/cost_report`🟢 + ClickHouse(행동로그) | 🟢/🔴(계획) |
+
+### 충돌 교정 (원본 대비)
+
+- **멀티 LLM**: 원본은 OpenAI·Gemini·DeepSeek·Kimi·OpenRouter를 나열한다. **실제 배선 = Ollama 로컬(`qwen2-math`·`qwen2.5`·`qwen3.5:27b`·`qwen3-vl`) + Anthropic(`claude-sonnet-4-6`·`claude-opus-4-7`)만**. GPT-5·Gemini는 계획·미배선(`config.py`·`l3/router.py` 실측). **로컬 우선**(비용·미성년 프라이버시·Phaiakes9). AI Models 모듈은 실제 매트릭스(`GET /status`)를 반영해야지 지어낸 벤더 목록을 노출하면 안 된다.
+- **Vector/Graph DB**: 원본은 Neo4j + Vector DB(Milvus/Qdrant/pgvector) 병렬. **실제 = pgvector 확정**(메타 동거·단일 SQL·6번째 store 회피·2026-06-10 슬98). Neo4j는 개념/원자 그래프 적재용. 대규모 시 Qdrant 이관은 지연 트리거.
+- **k8s·마이크로서비스**: 원본은 Kubernetes + 마이크로서비스 분할. **현재 = FastAPI 단일 앱**. 서비스 분할은 규모 도달 시 지향(과공학 방지·구축 플레이북).
+- **"Lesson을 매번 생성"**: [01 §5](01_student_pipeline_to_menus.md)와 동일 교정 — select-vs-generate(캐시 히트 0원). "매번 *선택·렌더*, 필요할 때만 생성".
+
+### EOS/EKF 북극성 연결
+
+원본의 **EOS**(Education Operating System)·**EKF**(Education Knowledge Fabric) 프레이밍은 WhyMath에 이미 **북극성 서사**로 존재한다: `../strategy/knowledge_fabric_vision_v1.md`(Education Knowledge Fabric / Metadata OS)·`../strategy/education_os_positioning_v1.md`. 단 2026-07-24 결정 로그대로 **"북극성 채택·정체성 선언 아님·유예 유지"** — 본 문서의 뼈대는 확정된 L1~L7이고, EOS는 지향점으로 인용한다.
+
+---
+
+## §7. 단계적 구축
 
 | 단계 | 범위 | 선결 |
 |---|---|---|
@@ -113,7 +156,7 @@ flowchart TD
 
 ---
 
-## §7. 선결·후속 backlog 제안 (등재는 `backlog.py` 경유)
+## §8. 선결·후속 backlog 제안 (등재는 `backlog.py` 경유)
 
 > 아래는 **제안**이다. 실제 태스크 등재는 `python3 scripts/harness/backlog.py`를 통해 하며, `backlog/` 대장을 손편집하지 않는다(`CLAUDE.md` 거부 우회 금지).
 
@@ -124,4 +167,4 @@ flowchart TD
 
 ---
 
-**버전**: 1.0 | **작성**: 2026-07-24 | **교차링크**: [00_index](00_index.md) · [03 구성 계획](03_admin_console_plan.md) · `.claude/agents/backend-engineer.md` · `../architecture/07_community.md`
+**버전**: 1.1 | **작성**: 2026-07-24 | **교차링크**: [00_index](00_index.md) · [03 구성 계획](03_admin_console_plan.md) · [05_source_reconciliation](05_source_reconciliation.md) · `.claude/agents/backend-engineer.md` · `../architecture/07_community.md`
