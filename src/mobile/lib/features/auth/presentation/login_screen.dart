@@ -13,17 +13,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/router.dart';
+import '../../../theme/brand_colors.dart';
 import '../application/auth_controller.dart';
 import '../data/oauth_code_requester.dart';
 
 /// 슬로건 — 로그인 화면에서도 브랜드 정체성을 노출한다.
 const String _slogan = '답이 아닌, 이유를 묻는 수학';
-
-/// 카카오 브랜드 색(노란 배경·어두운 글자) — 인지 가능한 표준 버튼 스타일.
-const Color _kakaoColor = Color(0xFFFEE500);
-
-/// 네이버 브랜드 색(초록 배경·흰 글자).
-const Color _naverColor = Color(0xFF03C75A);
 
 /// 소셜 로그인 화면.
 ///
@@ -104,15 +99,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 48),
                 _ProviderButton(
                   label: '카카오로 시작하기',
-                  background: _kakaoColor,
-                  foreground: Colors.black87,
+                  background: BrandColors.kakao,
+                  foreground: BrandColors.onKakao,
                   onPressed: isSubmitting ? null : () => _onLogin('kakao'),
                 ),
                 const SizedBox(height: 12),
                 _ProviderButton(
                   label: '네이버로 시작하기',
-                  background: _naverColor,
-                  foreground: Colors.white,
+                  background: BrandColors.naver,
+                  foreground: BrandColors.onNaver,
                   onPressed: isSubmitting ? null : () => _onLogin('naver'),
                 ),
                 const SizedBox(height: 24),
