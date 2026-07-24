@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from whymath_backend.config import get_settings
 from whymath_backend.l4.hint_deferral import REVEALS, decide_hint_level
 from whymath_backend.l4.lthc.models import MasteryLevel
 from whymath_backend.l4.misconception.hypothesis import MisconceptionHypothesis
@@ -22,10 +23,12 @@ from whymath_backend.l4.models import (
     PolyaState,
     ToneReport,
 )
+from whymath_backend.l4.pedagogy.prompt_assembler import build_system_prompt
 from whymath_backend.l4.polya.prompts import STAGE_PROMPTS
 from whymath_backend.l4.polya.transitions import should_advance
 from whymath_backend.l4.socratic import select_category
 from whymath_backend.l4.tone_filter import filter_tone
+from whymath_backend.schema.pedagogy_pack import PedagogyPack
 
 _STAGE_ORDER: tuple[PolyaStage, ...] = (
     PolyaStage.UNDERSTAND,
@@ -67,6 +70,7 @@ class PolyaCoach:
         *,
         mastery_level: MasteryLevel | None = None,
         misconception_hypotheses: Sequence[MisconceptionHypothesis] | None = None,
+        pack: PedagogyPack | None = None,
     ) -> PedagogyDecision:
         """LLM 없이 *결정*만. 다음 단계·프롬프트·system·권장 티어·보조 행동을 채운다.
 
@@ -77,6 +81,10 @@ class PolyaCoach:
         - `hint_level`: 답 미루기 4단계 — 좌절·답요구·5회+ 막힘 신호로 점진 상승(슬라이스 3).
         - `reveals`: hint_level에서 파생된 노출량 라벨(KPI 입력).
         - `recommended_cost_tier=LOCAL`(기본 — Polya 코칭은 로컬 충분, CLAUDE.md "로컬 LLM 우선").
+        - `pack`(PED-01 슬라이스 ③ 옵트인 훅): 지식 유형별 교수법 팩을 명시 주입하고 *동시에*
+          `pedagogy_pack_prompt_enabled` 플래그가 켜졌을 때만, base_system 위에 팩 4계층 발문을
+          조립해 `system`을 대체한다. **pack None(기본)이거나 플래그 OFF면 조립기 미호출로
+          `system=sp.system` 그대로**(바이트 동일·회귀 0). 기존 호출자는 pack 미전달이라 무영향.
         """
         transition = should_advance(state, student_input, mastery_level=mastery_level)
         target_stage = (
@@ -95,12 +103,22 @@ class PolyaCoach:
             prev_hint_level=state.prev_hint_level,
             mastery_level=mastery_level,
         )
+        # 교수법 팩 4계층 조립(옵트인 + 플래그 게이트) — pack 주입 ∧ 플래그 ON일 때만. 그 외에는
+        # base_system(sp.system) 무변경으로 기존 발문 경로와 비트동일(OFF/무팩 회귀 0 계약).
+        system = sp.system
+        if pack is not None and get_settings().pedagogy_pack_prompt_enabled:
+            system = build_system_prompt(
+                base_system=sp.system,
+                pack=pack,
+                misconceptions=misconception_hypotheses,
+                student_state=mastery_level,
+            )
         return PedagogyDecision(
             polya_stage_to_advance=transition,
             hint_level=hint_level,
             socratic_category=category.value,
             prompt=sp.prompt,
-            system=sp.system,
+            system=system,
             suggested_actions=list(_STAGE_ACTIONS[target_stage]),
             reveals=REVEALS[hint_level],
         )
