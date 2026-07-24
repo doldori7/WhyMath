@@ -3,10 +3,14 @@
 // 단일 화면(MaterialApp.home)에서 go_router 기반 셸로 전환한다. 첫 진입은 온보딩
 // (메타인지 철학 안내·기대 관리)이고, "시작하기"로 채팅 화면에 진입한다.
 //
+// 하단 탭 네비게이션(홈/학습/탐구/나)은 `StatefulShellRoute.indexedStack`으로 추가했다(MOB-08).
+// 채팅(학습)은 `/`에 그대로 두어 기존 흐름을 보존하고, 온보딩·로그인·OCR·문제·수식 입력은 셸 밖
+// 최상위 라우트로 유지한다(탭 바 없이 전체 화면).
+//
 // 정직(범위): 세션 복원(OAuth-c2b)으로 *복원된 인증* 세션은 가드가 채팅으로 보낸다. 단 실 로그인은
 // code 획득 webview(c3) 전엔 작동하지 않으므로 가드는 미인증을 강제하지 않는다 — 미인증은 여전히
 // 온보딩→채팅 흐름을 그대로 탄다(앱 유지). 미인증→로그인 강제·로그아웃 반영·세션 만료·온보딩 1회-
-// 노출 영속(shared_preferences)·딥링크·하단 탭은 *후속 슬라이스*다(이번엔 의존성 추가 없음).
+// 노출 영속(shared_preferences)·딥링크는 *후속 슬라이스*다.
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -14,9 +18,13 @@ import '../features/auth/application/auth_controller.dart';
 import '../features/auth/presentation/login_screen.dart';
 import '../features/chat/presentation/chat_screen.dart';
 import '../features/chat/presentation/mathlive_input_screen.dart';
+import '../features/explore/presentation/explore_screen.dart';
+import '../features/home/presentation/home_screen.dart';
 import '../features/ocr/presentation/ocr_capture_screen.dart';
 import '../features/onboarding/presentation/onboarding_screen.dart';
 import '../features/problems/presentation/problem_screen.dart';
+import '../features/profile/presentation/me_screen.dart';
+import 'shell/app_shell.dart';
 
 /// 앱 라우트 경로·이름 상수.
 ///
@@ -33,6 +41,24 @@ abstract final class AppRoutes {
 
   /// 채팅 라우트 이름.
   static const String chatName = 'chat';
+
+  /// 홈(하단 탭) 경로 — 셸의 첫 탭. 교과서 좌표(준비 중)·학습 진입.
+  static const String homePath = '/home';
+
+  /// 홈 라우트 이름.
+  static const String homeName = 'home';
+
+  /// 탐구(하단 탭) 경로 — 사고력·시각화·갤러리(준비 중).
+  static const String explorePath = '/explore';
+
+  /// 탐구 라우트 이름.
+  static const String exploreName = 'explore';
+
+  /// 나(하단 탭) 경로 — 학습 경로·진단·설정(준비 중)·로그아웃.
+  static const String mePath = '/me';
+
+  /// 나 라우트 이름.
+  static const String meName = 'me';
 
   /// 로그인(소셜) 경로 — OAuth-c2. 등록만 하고 기본 흐름은 강제하지 않는다.
   static const String loginPath = '/login';
@@ -89,10 +115,51 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoutes.onboardingName,
         builder: (context, state) => const OnboardingScreen(),
       ),
-      GoRoute(
-        path: AppRoutes.chatPath,
-        name: AppRoutes.chatName,
-        builder: (context, state) => const ChatScreen(),
+      // 하단 탭 네비게이션 셸(MOB-08) — 홈/학습/탐구/나 4탭을 각 브랜치로 감싸 상태를 보존하며
+      // 전환한다(`StatefulShellRoute.indexedStack`). 채팅(학습)은 `/`에 그대로 두어 기존 redirect·
+      // errorBuilder·`context.go(chatPath)` 호출이 변경 없이 학습 탭으로 도달한다. 온보딩·로그인·
+      // OCR·문제·수식 입력은 셸 *밖* 최상위 라우트라 탭 바 없이 전체 화면으로 뜬다(플로우·모달성).
+      StatefulShellRoute.indexedStack(
+        builder: (context, state, navigationShell) =>
+            AppShell(navigationShell: navigationShell),
+        branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.homePath,
+                name: AppRoutes.homeName,
+                builder: (context, state) => const HomeScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.chatPath,
+                name: AppRoutes.chatName,
+                builder: (context, state) => const ChatScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.explorePath,
+                name: AppRoutes.exploreName,
+                builder: (context, state) => const ExploreScreen(),
+              ),
+            ],
+          ),
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: AppRoutes.mePath,
+                name: AppRoutes.meName,
+                builder: (context, state) => const MeScreen(),
+              ),
+            ],
+          ),
+        ],
       ),
       // 소셜 로그인(OAuth-c2) — 라우트로 등록만 한다. 실 code 획득(c3) 전엔 작동하지 않으므로
       // initialLocation·온보딩 흐름은 건드리지 않는다(흐름 강제·세션 복원은 c2b).

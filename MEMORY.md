@@ -337,6 +337,24 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (구현·UI·MOB-08): **학생 앱 하단 탭 네비게이션 셸(홈/학습/탐구/나) 착지 — UI 설계 첫 구현 슬라이스** (claude 구현, Kiki 지시)
+
+**컨텍스트**: UI 설계 문서(위 항목·Round 1·2) 확정 후 Kiki가 "구현은?"이라 물음. AskUserQuestion으로 첫 구현 트랙 = **하단 탭 셸(Flutter·UI 자기완결·백엔드 무관)**로 확정. 설계 문서 `docs/design/ui/01 §4`·`02 §3`의 4탭 IA(홈/학습/탐구/나)를 코드로 실현. `router.dart`·`app.dart`가 "하단 탭은 후속 슬라이스"로 예고한 작업.
+
+**구현**: go_router **14.8.1** `StatefulShellRoute.indexedStack`으로 4브랜치 셸 도입. 신규 `lib/core/shell/app_shell.dart`(M3 `NavigationBar`·4 `NavigationDestination`·`goBranch` 전환·배지/스트릭/빨강 없음=정서 안전)·`features/home|explore|profile/presentation/*_screen.dart`(홈=교과서 좌표 "준비 중"+오늘의 문제/코치 진입, 탐구·나=정직 placeholder·나 탭 로그아웃만 실동작). `router.dart` 재구조(home/explore/me 라우트 추가·`[홈,학습,탐구,나]` 셸 브랜치화). 신규 `test/app_shell_test.dart`(탭 전환·셸 밖 온보딩 탭 바 부재).
+
+**설계 판단(위험 축소)**: 이 환경에 flutter/dart 없음 → **로컬 검증 불가·CI `mobile` 잡이 유일 게이트**. 그래서 **기존 착지 동작을 바꾸지 않는 최소 변경**을 택함(계획의 "온보딩→/home 전환 + 기존 테스트 3건 수정"에서 이탈) — 채팅(학습)을 `/`에 그대로 두어 기존 `redirect`·`errorBuilder`·`context.go(chatPath)`가 변경 없이 학습 탭으로 도달하고, 온보딩·로그인·OCR·문제·수식 입력은 셸 *밖* 최상위 라우트로 유지. 결과: **기존 36개 테스트 무수정(**`route_guard`/`onboarding`/`widget_smoke`가 `ChatScreen`@`/`·`ProblemScreen`@`/problem`을 그대로 찾음), 신규 코드·테스트만 추가. 기본 착지 탭은 학습(chat)이고 홈은 한 탭 거리(온보딩→홈 전환은 후속 다듬기). 거버넌스(`no_math_logic_governance_test`)는 셸 순수 네비라 저촉 0. **미검증(정직)**: 로컬 미실행이라 컴파일·테스트·shell+chat 오버플로(MOB-02)는 CI/실기기 확인 필요. 하네스: 이 슬라이스는 backlog "next"(REND-01/ARCH-13/14) 밖 → `MOB-08` 정식 등재는 후속(`backlog.py` 경유·대장 손편집 금지).
+
+### 2026-07-24 (문서·설계·UI): **UI 설계 도메인 신설(`docs/design/ui/`) + 5단계 파이프라인의 UI 재해석** (claude 설계·문서, Kiki 지시)
+
+**컨텍스트**: Kiki가 ChatGPT 설계 대화 4건을 공유하며 4개 질문을 던짐 — ① "교육목적→교수전략→콘텐츠구성→DSL→자동생성" 5단계 파이프라인을 적용하면 학생 UI 메뉴는 어떻게 구성되나 ② 초등~대학(일반/진로/재수)·영재 전 대상 + 교사·부모·학원 영업까지 고려한 UI 설계 계획 ③ 앱 관리(admin) UI 구성 계획 ④ 그 관리 UI 아키텍처. 저장소에는 UX 지침이 아키텍처 문서(`05`·`05a`·`06`·`07`)와 코드 주석에 흩어져 있을 뿐 전용 UI/IA 설계 문서가 없었고, 관리 UI는 코드·계획 문서 모두 부재.
+
+**적용**: 신규 `docs/design/ui/` 도메인 5개 문서 신설(코드·목업 없이 종합 설계 문서만 — Kiki 선택) — `00_index`(불변식·구현 범례)·`01_student_pipeline_to_menus`·`02_student_ui_master_plan`·`03_admin_console_plan`·`04_admin_console_architecture`. 기존 `05_interaction.md`·`07_community.md` 상단에 도메인 역링크 1줄씩 추가(본문 무변경).
+
+**핵심 판단(구조 붕괴 감지기 역할)**: ① **순진한 5단계 선형 파이프라인을 학생 메뉴에 투영하지 않는다** — `04d_adaptive_pedagogy_engine.md:14`가 이미 이 순서를 반려(교수전략을 DSL 이전에 고정 → 교수법이 콘텐츠에 각인). UI는 손으로 짠 메뉴 트리가 아니라 선언적 명세(`LearningScene`/`Visualization`)의 렌더러이고, "메뉴"는 3축(모드 스위처·교과서 좌표·행동 진입점)에서 파생. ② 전 대상·영업은 3개 앱 분리(반려·`06:170`)가 아니라 **단일 앱 적응형 셸**(연령대×모드×역할)로 흡수. ③ 관리 UI 선결과제 = **RBAC**(실측: `UserProfile`에 role 필드 없음·`api/{concepts,problems}.py` CRUD 무인증·`require_role`은 `backend-engineer.md:249`에 설계만). ④ 모든 문서에 구현 범례(🟢/🟡/🔴)로 계획/구현 구분(README 청사진 괴리 재발 방지). **실측 검증**: `concept_dsl.py`·`l3/render/` 부재·`scene_renderer.dart` 존재·`/status`@`app.py:374`·L6 6모드·검수 상태 흐름(`pedagogy_dsl.py:257` DRAFT→PRESCREENED→APPROVED) 모두 코드 대조 확인 후 인용. 후속 backlog(ADMIN-RBAC·ADMIN-BFF·ADMIN-REVIEW-UI·ADMIN-WEB)은 문서에 제안만(등재는 `backlog.py` 경유·대장 손편집 금지).
+
+**Round 2(2026-07-24 후속·원본 통합)**: Round 1 커밋(`9f6cf63`) 후 Kiki가 앞서 403으로 접근 못 했던 ChatGPT 대화 원본 6개 `.docx`(2중복·**5고유**)를 업로드("UI관련파일 1/2"). Kiki 결정(AskUserQuestion): 통합=기존 4문서 보강+정합 문서·EOS=북극성 참조·L1~L7 유지·원본 `.docx` 미커밋. 반영: 01에 **학습 여정(10단계 카드)·"메뉴가 사라지는 UI"·3계층**, 02에 **6역할 UI 레이어·연령대 표·공통 네비**, 03에 **Control Center 4계층+22모듈·5 EOS Studio 매핑·Generation Pipeline 콘솔**, 04에 **8 core engines↔L1~L7 매핑**. 신규 **05_source_reconciliation** 신설. **충돌 5건 교정**(구조 붕괴 감지기): ①초등 게임 요소→시각적 재미 허용·중독성 게임화 금지(반게임화 하드 제약) ②멀티 LLM(OpenAI/Gemini/DeepSeek/Kimi)→실제=Ollama+Anthropic만·로컬 우선 ③경쟁 7계층 스킴→L1~L7 매핑만 ④"Lesson 매번 생성"→select-vs-generate ⑤Neo4j+VectorDB/k8s→pgvector 확정·FastAPI 단일. EOS/EKF는 기존 북극성 서사(`knowledge_fabric_vision_v1`·`education_os_positioning_v1`)로 연결(정체성 선언 아님·유예 유지).
+
 ### 2026-07-24 (구현·PED-01 후속·조립기+guard ③·기본 OFF): **교수법 팩 4층 프롬프트 조립기 + forbidden_modes guard(플래그 OFF 카나리아) + 런타임 k_type 배선 공백 발견** (claude 구현, Kiki 지시 적용)
 
 **컨텍스트**: PED-01 후속 ③ — 팩을 실제 발문에 적용하는 계층. 단, 라이브 발문은 *측정되는* WH-1 정책이 생성하고 런타임에 k_type가 없어(아래 발견) 이 슬라이스는 **컴포넌트 + 플래그 OFF**로 한정(측정 경로 보호·S4-04 카나리아 선례).
