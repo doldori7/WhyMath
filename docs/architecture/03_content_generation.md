@@ -45,6 +45,10 @@ WhyMath의 다중 풀이는 6가지 `solution_approaches`(대수적·기하적·
 - TTL 1주
 - 동일 컨텍스트 재호출 방지
 
+> **콘텐츠 전략(2층 캐시·render-vs-generate)의 상세 → `03c_content_strategy_cache.md`**: 위 Redis 캐시는 *프롬프트-해시*
+> 계층(정확 반복)이다. 그 위에 *개념 주소화 중립 DSL 캐시*(영구 자산)와 교수법 어댑터 렌더를 얹어, "AI가 매번 생성"이
+> 아니라 "중립 자산을 선택 + 얇게 렌더"로 비용을 낮춘다(교수법 선택·적응은 L4 `04d_adaptive_pedagogy_engine.md`).
+
 ## 모델 풀
 
 라우팅에는 **세 축**이 있다 — *비용·위치 축*(어디서 생성하나), *로컬 모델 패밀리 축*(LOCAL일 때 수학 vs NLP 어느 패밀리인가), *로컬 모델 크기 축*(어느 크기인가). 아래 표의 `CostTier` 열이 비용·위치 축이고, LOCAL 행은 `ModelFamily`(MATH/GENERAL) × `LocalModelTier`(fast/mid/quality)로 갈린다. 세 축의 통합·분기 결정 로직은 **`docs/architecture/03a_l3_router_design.md`**(라우터 상세 설계서) 참조.

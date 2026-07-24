@@ -337,6 +337,20 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (결정·아키텍처·콘텐츠전략): **교수법-중립 DSL + 2단계 교수법 + Adaptive Pedagogy Engine 정형화 · Education OS 북극성 채택(정체성 선언 아님·유예 유지)** (claude 설계·문서, Kiki 승인)
+
+**컨텍스트**: Kiki가 ChatGPT 설계 대화를 2회 공유 — ① 과도한 AI 비용을 줄이는 *사전생성/캐시* 세팅, ② 그 위 refinement: **DSL(콘텐츠)은 교수법-중립으로 저장하고 교수법은 학생·상황별 런타임에 AI가 선택**(교수법을 DSL 생성 시점에 고정 금지). 비용 절감 ↔ 개인화 딜레마의 구조적 해소가 목표. 코어(L1–L4) 정합 검토 결과 이 refinement은 저장소 기존 불변식(Renderer=Plugin·5대 분리·Curriculum=Overlay)의 *실현*임을 확인.
+
+**결정(설계 문서 3종 신규)**: ① `docs/architecture/03c_content_strategy_cache.md`(L3/L5) — 교수법-중립 `ConceptDSL`(영구 자산) + Rendering Engine(개념-무관 교수법 어댑터 N개) + render-vs-generate 2층 캐시 + 비용 측정(`content_source` 지표·`ops/cost_probe` 이중 회계). ② `docs/architecture/04d_adaptive_pedagogy_engine.md`(L4/L2) — 2단계 교수법(설계용=기존 PED-01 팩/실행용=신규 Runtime Pedagogy Selector) + Adaptive Pedagogy Engine(효과 측정→contextual bandit/RL policy·측정 게이트). ③ `docs/strategy/education_os_positioning_v1.md` — 북극성 서사(비용 해자·개인화 역설 해소·학습하는 해자).
+
+**축 추가 결정(MEMORY 필수)**: `PedagogyStrategy` 폐쇄 enum(DIRECT·SOCRATIC·WORKED_EXAMPLE·PROBLEM_BASED·RETRIEVAL·SPACING·INTERLEAVING·SELF_EXPLANATION·ANALOGY·VISUALIZATION — `GAME` 초기 제외·"무자비한 게임화 금지" 정체성 축·추가는 거버넌스 전제) + **2단계 교수법 분리**. 설계 초안에서 presentation-mode를 *저장 템플릿에 고정*하려던 접근을 **폐기**하고(Kiki 지적: "교수법은 고정되면 안 됨"), 교수법-중립 DSL + 개념-무관 어댑터로 전환 — 저장 자산이 곱(atom×mode×난이도×목표)이 아니라 합(atoms+N)이 되어 조합폭발 방지가 결정적으로 강화됨.
+
+**정합(무모순)**: 비용(#6)은 교수학(#3)을 역전 못 함 — `gate()`(금지 모드·Polya 단계)가 select 상류 + Adaptive policy 행동공간에 교수학 위반 전략 하드 배제(이중 차단). "Education OS/EOS"는 **제품 표면 북극성으로 채택**하되 **대외 정체성 선언은 유예 유지**(조건: fabric 수렴 + 제3자 확장 경계 명세 — `math_dsl_evolution.md`·`knowledge_fabric_vision_v1.md §4`·`dev_constitution §0.1`의 "조기 정체성화 금물"과 무모순·내부 어휘는 Metadata OS 유지).
+
+**백로그 등재**: `REND-01`(교수법 렌더러 어댑터+중립 DSL 계약)·`PED-02`(Runtime Pedagogy Selector v1)·`CACHE-01`(select-vs-generate supply+측정)·`PED-03`(Adaptive policy·장기·측정 게이트) — track=math-completion(PED-03=infra-debt)·stage=S4.
+
+**검증**: 문서 무모순 자기점검(교수법-중립·5대 분리·조합폭발·우선순위)·enum/필드명 실측 정합(`KnowledgeType` 7종·`FORBIDDEN_MODE_VOCAB`·`concept_content`)·백로그 `validate` 통과·교차참조 해소. **잔여**: 실제 구현(어댑터·Selector·supply·policy)은 위 백로그 태스크가 추적. `ConceptDSL` 계약 확정 + 기존 `concept_content` 교수법-중립성 감사가 REND-01 첫 작업.
+
 ### 2026-07-24 (구현·PED-01 후속·컴파일러 v0.1): **소단원 DSL 컴파일러 v0.1 — .unit.yaml→unit_spec/learning_objective+슬롯 발주서** (claude 구현, Kiki 지시 적용)
 
 **컨텍스트**: PED-01 후속 ② — 팩 시더(아래) 위에 소단원 명세 컴파일러. 사람이 저작한 `.unit.yaml`을 참조 검증→병합→행+발주서로 '컴파일'한다(YAML=소스·DB=단방향 산출·6.1 원칙).

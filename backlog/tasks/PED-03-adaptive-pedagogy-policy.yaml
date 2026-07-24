@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-03-adaptive-pedagogy-policy
+title: "Adaptive Pedagogy Engine — 교수법 효과 측정 + bandit policy (장기)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 5
+owner: claude
+depends_on:
+  - PED-02-runtime-pedagogy-selector
+  - CACHE-01-select-vs-generate-supply
+requires_gates: []
+acceptance:
+  - "교수법 효과 측정(학생군×개념×오개념유형: 정답률·체류·재발률·장기파지) 파이프라인"
+  - "contextual bandit policy + 안전제약(교수학#3 위반 전략 행동공간 배제) + 오프폴리시 평가·강등전 통과 후 규칙표 대체"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l4/pedagogy/adaptive/**"
+session: null
+notes: "04d §3 정본. 장기 해자. 측정 게이트('측정 없는 도입 없음')·v1 규칙표는 즉시·policy는 강등전 승격."
+updated: 2026-07-24
