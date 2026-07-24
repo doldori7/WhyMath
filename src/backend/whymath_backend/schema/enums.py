@@ -1129,3 +1129,51 @@ class ConsentScope(str, Enum):
 
     service_core = "service_core"
     """서비스 본 기능 이용을 위한 개인정보 처리 동의(미성년 게이트 해제) — §3.1 가입 단계."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 교수법 팩 지식 유형 (교수법 팩 + 소단원 DSL — 7유형→팩→증거)
+# ──────────────────────────────────────────────────────────────────────────
+# 근거: docs/reviews/260724_v2_migration_pedagogy_dsl_review.md(검토서)·
+#       260724_v2_migration_pedagogy_dsl.alembic_draft.py(수정 목표 스키마).
+#
+# ⚠️ house style 예외(검토서 M4): 이 파일의 다른 상태/유형 축(concept_content.review_status·
+# atom_node.cognitive_type 등)은 plain `sa.Text`로 두는 것이 관행이나, `knowledge_type`은
+# *교수법 커널이 소유하는 과목 불변 축*(7유형이 교수법 팩과 1:1로 바인딩)이라 **PG native
+# ENUM**으로 정합을 강제하는 것이 방어 가능하다(폐쇄 6종 `BehaviorArea`→`behavior_area_enum`
+# native enum 선례와 동형). ORM은 이 enum을 `_pg_enum(KnowledgeType, "knowledge_type")`로
+# PG native enum(타입명 `knowledge_type`)에 매핑한다. 관행 예외의 결정 근거는 MEMORY 결정
+# 로그가 남긴다(검토서 §2 M4·§4 결정 필요 (1)).
+class KnowledgeType(str, Enum):
+    """교수법 팩 지식 유형 — 7유형 폐쇄 택소노미(커널 소유·과목 불변·PG native enum).
+
+    각 학습목표(`learning_objective.k_type`)를 *어떤 종류의 지식*인지로 분류해 교수법 팩
+    (`pedagogy_pack.k_type`)과 1:1 바인딩한다. "정답 도달"이 유형마다 다른 달성 증거를 요구
+    한다는 설계 전제(개념형은 설명·표상형은 표현 전환·증명형은 논증)에서, 이 축이 팩·증거
+    (`evidence_event.k_type`)를 가르는 뿌리다.
+
+    멤버명·값 모두 영어(국제 인지 유형 어휘 — `BehaviorArea`·`CognitiveType`·`ReasoningType`
+    선례). ⚠️ 폐쇄 7종 — 제거는 어렵고 추가는 신중해야 한다(native enum·거버넌스 결정 전제).
+    use_enum_values=True 직렬화 시 영어 값 보존(예: k_type="CONCEPT").
+    """
+
+    CONCEPT = "CONCEPT"
+    """개념·정의형 — 개념의 의미·정의를 이해·설명한다."""
+
+    PROCEDURE = "PROCEDURE"
+    """절차·알고리즘형 — 정해진 절차·계산을 정확히 수행한다."""
+
+    REPRESENT = "REPRESENT"
+    """표상연결형 — 식·그래프·도형 등 다중 표현을 잇고 전환한다."""
+
+    PROOF = "PROOF"
+    """증명·논증형 — 명제를 논리적으로 증명·정당화한다."""
+
+    MODELING = "MODELING"
+    """문제해결·모델링형 — 상황을 수학 구조로 모델링해 해결한다."""
+
+    SPATIAL = "SPATIAL"
+    """공간·시각형 — 도형·공간 관계를 시각적으로 추론한다."""
+
+    STOCHASTIC = "STOCHASTIC"
+    """데이터·불확실성형 — 확률·통계·불확실성을 다룬다."""
