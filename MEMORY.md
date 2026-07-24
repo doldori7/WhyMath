@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (구현·UI·MOB-09): **디자인 토큰/테마 시스템(`lib/theme/`) 착지 — error 롤=앰버 재정의로 빨강 금지 강제 + 다크모드** (claude 구현, Kiki "다음 슬라이스")
+
+**컨텍스트**: MOB-08 하단 탭 셸(PR #581) 머지 후 Kiki "다음 슬라이스" 지시(슬라이스 선택 질문 무응답 → 추천안=디자인 토큰 진행). 설계 문서 `02 §6`·`coding_flutter.md`가 요구하나 부재하던 테마/토큰 시스템 신설. 기존 테마는 `app.dart` 인라인 `ThemeData(fromSeed(indigo))` 하나·다크모드 없음.
+
+**구현**: 신규 `src/mobile/lib/theme/app_theme.dart`(`WhyMathTheme.light`/`dark`·`ColorScheme.fromSeed(indigo, brightness)`·`useMaterial3`)·`brand_colors.dart`(카카오/네이버 OAuth 색 분리). **정서 안전 핵심**: M3 `error` 롤(기본 빨강)을 `copyWith`로 **앰버(주의)로 재정의**(라이트 `0xFF7A5900`/다크 `0xFFF5C64D` 등·hue≈40~44°) — 코드 어디서 `colorScheme.error`를 쓰더라도 빨강이 안 나오게 토큰에서 강제(현재 error 미사용이나 향후 오용 구조 차단). `app.dart`는 `theme`+`darkTheme`+`themeMode: ThemeMode.system`(시스템 다크 자동)·`login_screen.dart` 하드코딩 브랜드색 4곳→`BrandColors` 상수(값 동일). 신규 `test/theme_test.dart`가 라이트/다크 error·errorContainer hue를 앰버 범위[30,75]로 동결(빨강 회귀 차단·테마 검증 테스트 첫 도입). 문서 `coding_flutter.md`에 디자인 토큰 하위절·`02 §6` 🔴→🟡 갱신.
+
+**설계 판단**: 라이트 외형은 seed(indigo) 동일 유지라 기존 화면 무변·기존 테스트 무영향(화면들이 이미 colorScheme 롤만 참조·빨강/`error` 사용 0건 실측). `ThemeExtension` 커스텀 시맨틱은 미도입(소비처 0·error 재정의로 충분·boilerplate 위험 회피). 타이포/간격 토큰 전면 이관·골든 테스트는 후속. **미검증(정직)**: 로컬 flutter 없어 컴파일·analyze·test는 PR CI가 유일 게이트. 브랜치는 #581 머지로 재시작(`git checkout -B … origin/main`)→새 PR.
+
 ### 2026-07-24 (구현·UI·MOB-08): **학생 앱 하단 탭 네비게이션 셸(홈/학습/탐구/나) 착지 — UI 설계 첫 구현 슬라이스** (claude 구현, Kiki 지시)
 
 **컨텍스트**: UI 설계 문서(위 항목·Round 1·2) 확정 후 Kiki가 "구현은?"이라 물음. AskUserQuestion으로 첫 구현 트랙 = **하단 탭 셸(Flutter·UI 자기완결·백엔드 무관)**로 확정. 설계 문서 `docs/design/ui/01 §4`·`02 §3`의 4탭 IA(홈/학습/탐구/나)를 코드로 실현. `router.dart`·`app.dart`가 "하단 탭은 후속 슬라이스"로 예고한 작업.
