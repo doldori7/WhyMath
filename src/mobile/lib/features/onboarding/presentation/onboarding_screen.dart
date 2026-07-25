@@ -121,7 +121,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             Align(
               alignment: Alignment.centerRight,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
                 child: isLast
                     ? const SizedBox(height: AppSpacing.huge)
                     : TextButton(
@@ -144,7 +144,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
             _PageIndicator(count: _totalPages, index: _index),
             const SizedBox(height: AppSpacing.lg),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxl, vertical: AppSpacing.lg),
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
@@ -182,7 +182,7 @@ class _OnboardingPageView extends StatelessWidget {
     // 넘치는 대신 스크롤로 강등한다(RenderFlex overflow 줄무늬가 시연 녹화에 찍히는 사고 방지).
     // 넉넉한 화면에선 Center가 기존과 동일하게 가운데 정렬한다(레이아웃 의미 불변).
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
       child: Center(
         child: SingleChildScrollView(
           child: Column(
@@ -228,7 +228,7 @@ class _OnboardingFormPage extends ConsumerWidget {
     final notifier = ref.read(onboardingControllerProvider.notifier);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl, vertical: AppSpacing.sm),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -319,7 +319,7 @@ class _FieldLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs6),
       child: Text(label, style: Theme.of(context).textTheme.labelLarge),
     );
   }
@@ -382,7 +382,7 @@ class _PageIndicator extends StatelessWidget {
         final isActive = i == index;
         return AnimatedContainer(
           duration: const Duration(milliseconds: 240),
-          margin: const EdgeInsets.symmetric(horizontal: 4),
+          margin: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
           width: isActive ? 24 : 8,
           height: 8,
           decoration: BoxDecoration(

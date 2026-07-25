@@ -157,7 +157,7 @@ class _ProblemView extends StatelessWidget {
           const SizedBox(height: AppSpacing.xl),
           for (var i = 0; i < problem.choices!.length; i++)
             Padding(
-              padding: const EdgeInsets.only(bottom: 8),
+              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
               child: Text(
                 '${_circledNumber(i + 1)} ${problem.choices![i]}',
                 style: theme.textTheme.bodyLarge,

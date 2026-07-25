@@ -138,7 +138,7 @@ class _ResultView extends StatelessWidget {
         // 영역이 없으면(빈 인식) 부드러운 안내만.
         if (result.regions.isEmpty)
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 16),
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: Text(
               '읽을 수 있는 내용을 찾지 못했어요. 더 또렷하게 다시 찍어볼까요?',
               textAlign: TextAlign.center,
@@ -185,7 +185,7 @@ class _OverallSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.md14),
       decoration: BoxDecoration(
         color: theme.colorScheme.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
@@ -195,7 +195,7 @@ class _OverallSummary extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text('인식한 풀이', style: theme.textTheme.titleSmall),
-          const SizedBox(height: 6),
+          const SizedBox(height: AppSpacing.xs6),
           // 인식 결과 본문 — 선택 가능 텍스트(복사·다시 확인 편의). LaTeX 렌더는 후속(현 관례:
           // scene_renderer도 본문을 Text로 표시·flutter_math_fork 렌더는 미도입).
           if (result.plainLatex.isNotEmpty)
@@ -206,7 +206,7 @@ class _OverallSummary extends StatelessWidget {
               style: theme.textTheme.bodyMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
-          const SizedBox(height: 10),
+          const SizedBox(height: AppSpacing.sm10),
           // 전체 신뢰도 — 낮으면 재확인 권유(빨강·"실패" 단정 없음).
           if (result.hasLowConfidenceRegion)
             const _RecheckCue(
@@ -241,7 +241,7 @@ class _RegionCard extends StatelessWidget {
         color: low
             ? theme.colorScheme.surfaceContainerHighest
             : theme.colorScheme.surfaceContainer,
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.md),
           child: Column(
@@ -264,7 +264,7 @@ class _RegionCard extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: AppSpacing.xs6),
               if (region.latex.isNotEmpty)
                 SelectableText(region.latex)
               else
@@ -350,7 +350,7 @@ class _CaptureBar extends ConsumerWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         child: Row(
           children: [
             Expanded(

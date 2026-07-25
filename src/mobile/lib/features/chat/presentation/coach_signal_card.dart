@@ -101,8 +101,8 @@ class CoachSignalCard extends StatelessWidget {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(top: 2, bottom: 6, left: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        margin: const EdgeInsets.only(top: AppSpacing.hairline, bottom: AppSpacing.xs6, left: AppSpacing.xs),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
@@ -150,7 +150,7 @@ class CoachSignalCard extends StatelessWidget {
     final out = <Widget>[];
     for (var i = 0; i < rows.length; i++) {
       if (i > 0) {
-        out.add(const SizedBox(height: 6));
+        out.add(const SizedBox(height: AppSpacing.xs6));
       }
       out.add(rows[i]);
     }
