@@ -17,6 +17,7 @@
 | **[03_admin_console_plan.md](03_admin_console_plan.md)** | 앱 관리 UI 구성 | **내부 운영 백오피스**(신설) vs 교사·학부모 대시보드(L7·Phase3) 구분. Control Center 4계층·22모듈 매핑·검수 큐. |
 | **[04_admin_console_architecture.md](04_admin_console_architecture.md)** | 관리 UI 아키텍처 | Next.js + **Admin BFF** + **RBAC 선결**(현재 부재). 8 core engines ↔ L1~L7 매핑·감사 로그·이중 회계. |
 | **[05_source_reconciliation.md](05_source_reconciliation.md)** | 출처·정합 기록 | Kiki ChatGPT 설계안(원본 [A]~[E]) 통합 기록 — 채택 항목·**충돌 원장 5건**·EOS 북극성 처리. |
+| **[06_design_system.md](06_design_system.md)** | 학생 앱 디자인 토큰·테마 정본 | 색(`fromSeed`·정서 안전 error=앰버)·간격(`AppSpacing` 4pt+오프리듬)·타이포(`textTheme` 롤)·다크모드·접근성 규약. **구현 착지**(MOB-09~11). |
 
 ### 정본 경계 (기존 아키텍처 문서와의 관계)
 
@@ -62,7 +63,9 @@
 | `LearningScene`/`Visualization` 선언적 명세 렌더 | 🟢 | `scene_renderer.dart`·`l4/learning_scene.py` 연결 |
 | L6 6개 모드 게이팅(school_progress·suneung·thinking·metacognition·gifted·retake) | 🟢 | `l6/` 실측 |
 | 자동 커리큘럼 정렬 — 깊이 축(7차원 중 1) | 🟡 | `l6/school_progress/gating.py` 깊이정렬만 |
-| 하단 탭 네비게이션·온보딩 노출 영속 | 🔴 | `router.dart:9` "후속 슬라이스" |
+| 하단 탭 네비게이션 셸(홈/학습/탐구/나) | 🟢 | `core/shell/app_shell.dart`·`StatefulShellRoute`(MOB-08) |
+| 디자인 토큰·테마(색·간격·타이포·다크모드) | 🟢 | `lib/theme/`(MOB-09~11)·[06_design_system.md](06_design_system.md) |
+| 온보딩 노출 영속·딥링크 | 🔴 | 후속 |
 | ConceptDSL·PedagogyAdapter·Runtime Pedagogy Selector | 🔴 | `REND-01`/`PED-02` todo·`concept_dsl.py`·`l3/render/` 부재 실측 |
 | 관리(admin) UI·교사/학부모 대시보드 | 🔴 | 코드 0·문서만(L7 Phase3) |
 | RBAC(role 컬럼·`require_role`) | 🔴 | 설계만(`backend-engineer.md`) |
