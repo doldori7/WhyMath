@@ -45,24 +45,53 @@
 학생 모델을 보고 가장 효과적인 교수법 전략(`PedagogyStrategy`·`03c §2.1`)을 고른다. **L4가 결정하고 L2를
 소비**한다(경계: L4는 L2를 *조회*만·역방향 의존 금지).
 
-```python
-async def select(student: StudentState) -> PedagogyStrategy:
-    """학생 상태 → 교수법 전략. 규칙기반 v1(결정론 규칙표). policy 학습은 §3.
+구현 정본: `l4/pedagogy/runtime_selector.py`(PED-02). `select()`(효과) → `gate()`(허용) → `decide()`(합성).
 
-    입력(L2 소비 — 신규 학생모델 축 최소화):
-      수준·오답 유형·학습 속도·집중도·학습 시간·선호·현재 성취도·직전 문제 결과
-      (기존 MasteryState.preferred_solution_style·BKT 확률·정서 신호를 그대로 읽음)
-    출력: PedagogyStrategy 1개(예: 오답=계산실수→RETRIEVAL·개념부족→ANALOGY·문장제→PROBLEM_BASED)
+```python
+def select(signals: StudentSignals) -> PedagogyStrategy:
+    """학생 신호 → 교수법 전략. 규칙기반 v1(결정론 규칙표). policy 학습은 §3.
+
+    R1 막힘 → WORKED_EXAMPLE(제안·허용은 gate가 판정) · R2 오개념 → ANALOGY ·
+    R3 직전오답+초보 → DIRECT · R4 숙달 → PROBLEM_BASED · R5 기본 → SOCRATIC
     """
-    strat = _rule_table_v1(student)      # 결정론 규칙표(투명·감사 가능)
-    return strat                          # 실제 사용 전 supply()의 gate()를 반드시 통과(03c §3.1)
 ```
 
 - **v1은 규칙표** — 투명하고 감사 가능하다. policy 학습(§3)은 데이터가 쌓인 뒤 승격한다.
-- **게이트 위임** — 선택된 전략은 `03c §3.1`의 `gate()`(금지 모드·Polya 단계)를 *반드시* 통과한다. Selector는
-  "무엇이 효과적인가"를, gate는 "무엇이 교수학적으로 허용되는가"를 담당한다(효과 ≤ 허용).
-- **L2 연계** — 기존 `MasteryState.preferred_solution_style`(02 문서)·BKT/정서 신호를 입력으로 소비한다. 새 학생
-  모델 축을 최소로만 추가한다.
+- **게이트 위임** — 선택된 전략은 `gate()`를 *반드시* 통과한다. Selector는 "무엇이 효과적인가"를, gate는 "무엇이
+  교수학적으로 허용되는가"를 담당한다(**효과 ≤ 허용**).
+- **출력은 렌더 가능 전략으로 제한** — 폐쇄 enum은 10종이나 어댑터는 5종(REND-01)이라, 미등록 전략을 고르면
+  호출자가 `LookupError`를 맞는다. 거버넌스 테스트가 `select()` 출력 ⊆ `registered_strategies()`를 동결한다.
+
+### 2.1 입력 — 실재 신호만 (2026-07 실측 정정)
+
+⚠️ **이 문서 초판이 지정한 8개 입력 중 셋은 코드에 존재하지 않는다**(PED-02 착수 시 실측):
+
+| 초판 지정 입력 | 실측 |
+|---|---|
+| 수준·현재 성취도 | ✅ `l2` BKT `get_current_mastery`·IRT `get_current_theta`·`mastery_to_level` |
+| 직전 문제 결과·학습 속도 | ✅ `ProblemAttempt.is_correct`·`time_vs_expected`·`used_hint` |
+| 오답 유형 | ✅ `l4.misconception.diagnose` 가설 id(단, kebab id ↔ DB `error_type`는 미연결) |
+| **집중도·학습 시간** | ❌ 컬럼(`LearningSession.focus_score` 등)은 있으나 **생산자 없음 → 항상 NULL** |
+| **선호**(`MasteryState.preferred_solution_style`) | ❌ `MasteryState` 자체가 **문서 스케치·코드 부재** |
+
+따라서 `StudentSignals`는 **실재 신호만 필드로 둔다**. 항상 None인 필드는 "읽고 있다"는 착시만 주고 판단에
+기여하지 못하므로 만들지 않는다(가짜 통과 금지). 해당 축이 필요하면 *생산자를 먼저* 만들고 필드를 연다.
+
+### 2.2 게이트 — 완전예제 2축 (교수학 우선순위의 기계적 강제)
+
+`WORKED_EXAMPLE`은 두 얼굴을 가진다. **초기 교수**로서의 완전예제는 Sweller worked example effect가 뒷받침하며
+실제로 PROCEDURE 팩이 이를 *의도*한다(`fading_schedule {worked:2, completion:2, solo:3}`). 반면 **막힌 학생에게
+던지는 완전예제**는 "막혔을 때 바로 정답 제공"으로 절대 금기다. 두 상황을 가르는 것이 게이트의 핵심이다:
+
+- **축① 팩 금지(선행 차단)** — 팩이 `WORKED_EXAMPLE_FIRST`를 금지하면(실 코퍼스에서 **CONCEPT 하나**) 시도 전
+  단계(`UNDERSTAND`/`PLAN`)의 완전예제를 차단한다. 금지 모드명의 "FIRST"(선행)가 정확히 이 축이며, PROCEDURE의
+  페이딩 진입은 보존된다.
+- **축② 막힘 시 에스컬레이션** — 팩과 무관하게, 막힌 학생에겐 `hint_level ≥ 3`(부분 시연) 이후에만 허용한다.
+  기존 `hint_deferral.decide_hint_level`이 좌절·답요구·5회+ 막힘을 이미 종합하므로 새 카운터를 만들지 않는다.
+- **팩 부재여도 축②는 적용**(fail-safe) — 팩 조회 실패가 냉담 제공을 열어주면 안 된다.
+- 차단 시 **`SOCRATIC`으로 강등**(말하기 대신 묻기)하고 `reason_code`를 남긴다(조용한 실패 아님).
+
+> 축①만으로는 CONCEPT 외 6개 k_type이 무방비다. 두 축은 중복이 아니라 상보다.
 
 ---
 
