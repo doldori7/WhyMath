@@ -352,6 +352,13 @@
 **연쇄 해소**: `docs/reviews/260724_v2_migration_pedagogy_dsl_review.md` H2("`concept_nodes` 참조 축을 atom_node로 고정 — ARCH-13 결론 대기")의 대기 조건이 풀렸다 — **런타임 참조 축 = `atom_node` 확정**(울타리로 강제·거버넌스 동결). `build_checkpoint_questions.md` 단계 3의 자기 지목도 "런타임 드리프트 봉인 / 잔여는 콘텐츠 축"으로 갱신.
 
 **범위 밖(정직한 공백·후속)**: ① 860 단원/소단원 원자의 계층 브리지 ② `difficulty_tier`(0~24)↔`intrinsic_difficulty`(1~5) 척도 통일 ③ crosswalk(전량 `ai_estimated`·1:N) 인간 검수 ④ legacy 엣지 581 물리 정리(원자 `relation_subtype='원본'` 580이 이미 재표현하나 "물리 삭제 0" 확정을 뒤집는 별건 결정). **NOT(경계)**: 마이그레이션 0·데이터 변경 0·물리 삭제 0·mastery rekey 0·신규 엣지 타입 0·legacy_snapshot 봉인 불변(`AtomNode`는 sanctioned 축이라 기존 거버넌스 3불변식 무영향).
+### 2026-07-25 (구현·ARCH-14 ④·CI): **mobile 커버리지 측정 → 임계 게이트 전환 (line ≥ 60%·testing.md 선언 집행) + backend 잡 타임아웃 25→35분** (claude, Kiki "머지"→"이어가")
+
+**컨텍스트**: ARCH-14 항목 ④("mobile 커버리지 임계 게이트 부여·첫 실측치 확인 후"). testing.md §커버리지 목표는 "Flutter UI 60%"를 선언했으나 ci.yml mobile 잡은 커버리지를 *측정·요약*만 하고 게이트하지 않는 공백이 있었다("측정 없던 60% 선언"). 첫 실측치를 확인해 이 선언을 강제 게이트로 전환.
+
+**적용**: (1) mobile 잡의 "커버리지 요약(게이트 아님)" 스텝을 "커버리지 게이트(line ≥ 60%)"로 전환 — awk에 `min=60` 임계·미달 시 exit 1. 첫 실측 **86.6%(1818/2100·226 tests)** 확인 → 60% 임계는 26pt 여유(정상 변동 안전·의미있는 회귀만 차단). 변별력 자가검증(합성 lcov 59.9%·55%·빈파일 exit1 / 86.6%·60% exit0 로컬 실측)으로 "변별력 없는 검증 금지" 준수. 목표 상향(60%→80%+)은 testing.md 개정과 함께 = ARCH-14 ②의 몫으로 분리. (2) PR #593 머지 과정에서 CACHE-01(content_supply) 병합으로 backend lint·type·test 잡의 pytest+coverage가 25분 경계를 넘어 boundary 타임아웃(cancelled·pytest 단독 22분+ 미완) 실측 → hang 방지 상한을 25→35분 상향(ci.yml 주석의 기존 정책 "timeout은 상한일 뿐" 준수·근본 최적화는 pytest-xdist·slow 마크 후속 과제 유지).
+
+**검증**: awk 게이트 로컬 discrimination 5케이스 실측(경계·미달·빈 lcov). ci.yml YAML safe_load 정합. `backlog.py validate` green. **ARCH-14 잔여 ②③**(계층별 커버리지 문서/게이트 정합·recommended_visual_styles Overlay 이관) in_progress 유지.
 
 ### 2026-07-25 (구현·ARCH-14 ①·CI): **초인간 검증 게이트 2종 ci.yml 상시 배선 — defect_detection·coach_prose_leak (측정 통과 기계 게이트 = 상시 회귀)** (claude, Kiki "머지"→"이어가")
 
