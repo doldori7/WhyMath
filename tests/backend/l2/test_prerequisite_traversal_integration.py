@@ -167,6 +167,13 @@ def test_fetch_prerequisites_recursive_cte_chain_on_live_pg() -> None:
 
                 # ⑤ origin 제외 — C 자신은 어떤 깊이에서도 결과에 없음.
                 assert all(r.concept_id != c for r in d3)
+
+                # ⑥ 원자 축 조인은 **OUTER**다(ARCH-13) — atom_node 행을 적재하지 않은 이
+                #    시나리오에서도 선수 행 자체는 전부 나오고 `atom_meta`만 None이다. INNER였다면
+                #    ①~⑤가 전부 빈 결과가 됐을 것이다. 축 밖 행을 SQL이 지워버리면 "몇 건이 왜
+                #    빠졌는지" 셀 수 없으므로(표면화 요구) OUTER여야 한다.
+                assert all(r.atom_meta is None for r in d3)
+                assert len(d3) == 3
         finally:
             await engine.dispose()
 

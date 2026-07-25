@@ -337,6 +337,21 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-25 (구현·ARCH-13): **원자 축 울타리 — L2 추천의 이중 진실 조인 해소 + 제외 사유 표면화 (쿼리 수준·데이터 변경 0)** (claude, Kiki "Arch 13" + 범위 선택 (a)·"표면화+집계")
+
+**컨텍스트·전제 교정**: 태스크는 "concept_edge 437 ↔ atom_node 2,697 **입도 통합**"으로 등재됐으나 탐색 실측이 전제를 뒤집었다 — **두 개의 그래프 저장소가 아니다.** 원자 백본은 *같은* `concept`/`concept_edge`에 적재됐고(MEMORY S0-1 "437과 원자는 동일 테이블 code 병존"), 원자 축은 이미 runtime truth·구 437은 `legacy_snapshot`으로 봉인돼 있다(S0-4b/4c/4d). 남아 있던 유일한 런타임 드리프트는 **L2 추천 2좌석의 교차 엔진 code 문자열 조인**이었다: traversal·진단은 async 세션, 메타는 별도 sync 엔진(`asyncio.to_thread(fetch_atom_node_meta, …)`) → 축이 어긋나도 조인이 조용히 성립하고, 미스는 `reviewed_only`에서 **소리 없이 탈락**했다(빈 추천의 이유를 아무도 알 수 없음).
+
+**Kiki 결정**: 범위 **(a) 쿼리 수준 축 울타리** — 데이터 변경·물리 삭제·rekey **0**. 미스 처리 = **표면화 + 집계**(제외는 유지하되 사유를 구분해 세고 관측 가능하게).
+
+**적용**: ① 신규 `l1/atom_graph/axis.py` — 원자 축 **async** 좌석(`atom_axis_outerjoin`·`atom_meta_from_row`·`fetch_atom_axis_meta`). 선례는 `l1/skill_graph/resolve.py::get_behavior_areas`(async 세션에서 AtomNode 직접 read)·`concept_visualization/overlay.py`. 반환 타입은 기존 `AtomNodeMeta` 재사용(신규 값객체 0). ② `l2/prerequisite_recommendation.py` — traversal 최종 SELECT가 `atom_node`를 **LEFT OUTER JOIN**하고 안전 메타 3열을 함께 가져온다(`build_prerequisite_stmt`로 조립 분리 → DB 없이 검증 가능). `atom_meta is None`(=축 밖)이면 `reviewed_only`와 **무관하게 제외**(runtime truth=원자 단일의 직접 표현·이번 변경의 유일한 행동 변화). ③ 신규 `l2/axis_exclusions.py` — `AxisExclusions{off_atom_axis, not_reviewed, not_weak}` + 구조화 로그(카운트·좌석명만·code/user_id 미포함). ④ `l2/weak_concept_recommendation.py` — 같은 async 좌석으로 전환(`to_thread` 제거)하고 제외 사유 분리 계상. 후보가 mastery에서 나오므로 **축 필터는 걸지 않는다**(학생 이력을 감추게 됨 — 선수 좌석과 의도된 차이). ⑤ 반환 계약은 `*_detailed`(gaps+exclusions) 본체 + 기존 시그니처 얇은 래퍼로 유지 → 호출처 5곳(`api/me.py`×3·`api/coach.py`·`l4/prerequisite_coaching.py`·`l2/learning_path.py`) 무수정. `meta_engine` 파라미터는 소비처 0이라 제거.
+
+**INNER가 아니라 OUTER인 이유**(설계 판단): INNER면 축 밖 행이 SQL에서 사라져 "몇 건이 왜 빠졌는지"를 셀 수 없다. **축 판정은 쿼리가**(단일 출처), **제외와 계상은 호출자가**(표면화) — 조용한 소실을 만들지 않기 위한 의도적 분업.
+
+**검증**: 신규 `tests/backend/l2/test_atom_axis_fence_governance.py`(hermetic) — 컴파일 SQL에 `LEFT OUTER JOIN atom_node ON atom_node.code = concept.code` 동결 + **변별력**(조인 없는 statement엔 같은 검사가 실패) · 재귀 CTE 계약 보존(WITH RECURSIVE·UNION ALL·depth bound·정렬) · `l2/**` AST 스캔으로 `fetch_atom_node_meta`/`to_thread` 재유입 0 + **변별력**(위반 코드는 잡고 docstring 산문은 안 잡음). 라이브 PG: `test_me_integration.py`에 축 울타리 e2e(두 선수가 **atom_node 행 유무만 다르게** 시드 → 축 안만 노출) · `test_prerequisite_traversal_integration.py`에 OUTER 의미 동결(atom_node 미적재에도 행 전부 생존·`atom_meta` None — INNER였다면 전량 빈 결과).
+
+**연쇄 해소**: `docs/reviews/260724_v2_migration_pedagogy_dsl_review.md` H2("`concept_nodes` 참조 축을 atom_node로 고정 — ARCH-13 결론 대기")의 대기 조건이 풀렸다 — **런타임 참조 축 = `atom_node` 확정**(울타리로 강제·거버넌스 동결). `build_checkpoint_questions.md` 단계 3의 자기 지목도 "런타임 드리프트 봉인 / 잔여는 콘텐츠 축"으로 갱신.
+
+**범위 밖(정직한 공백·후속)**: ① 860 단원/소단원 원자의 계층 브리지 ② `difficulty_tier`(0~24)↔`intrinsic_difficulty`(1~5) 척도 통일 ③ crosswalk(전량 `ai_estimated`·1:N) 인간 검수 ④ legacy 엣지 581 물리 정리(원자 `relation_subtype='원본'` 580이 이미 재표현하나 "물리 삭제 0" 확정을 뒤집는 별건 결정). **NOT(경계)**: 마이그레이션 0·데이터 변경 0·물리 삭제 0·mastery rekey 0·신규 엣지 타입 0·legacy_snapshot 봉인 불변(`AtomNode`는 sanctioned 축이라 기존 거버넌스 3불변식 무영향).
 ### 2026-07-25 (구현·ARCH-14 ④·CI): **mobile 커버리지 측정 → 임계 게이트 전환 (line ≥ 60%·testing.md 선언 집행) + backend 잡 타임아웃 25→35분** (claude, Kiki "머지"→"이어가")
 
 **컨텍스트**: ARCH-14 항목 ④("mobile 커버리지 임계 게이트 부여·첫 실측치 확인 후"). testing.md §커버리지 목표는 "Flutter UI 60%"를 선언했으나 ci.yml mobile 잡은 커버리지를 *측정·요약*만 하고 게이트하지 않는 공백이 있었다("측정 없던 60% 선언"). 첫 실측치를 확인해 이 선언을 강제 게이트로 전환.
