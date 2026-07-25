@@ -84,7 +84,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xxxl),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -146,7 +146,7 @@ class _ProviderButton extends StatelessWidget {
         style: FilledButton.styleFrom(
           backgroundColor: background,
           foregroundColor: foreground,
-          padding: const EdgeInsets.symmetric(vertical: 14),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.md14),
         ),
         child: Text(label),
       ),

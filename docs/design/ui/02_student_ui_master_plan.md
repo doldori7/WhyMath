@@ -142,7 +142,7 @@ PRD의 "학생·교사·학부모 3개 별도 앱"은 **반려됐다**. 이유(`
 
 **착지(MOB-09)**: `lib/theme/app_theme.dart`(`WhyMathTheme.light`/`dark`·`ColorScheme.fromSeed(indigo)`·다크모드·`ThemeMode.system`)와 `brand_colors.dart`(OAuth 브랜드색 분리)를 신설. **정서 안전 팔레트를 토큰에서 강제** — M3 `error` 롤을 **앰버(주의)로 재정의**해 빨강을 구조적으로 차단(`test/theme_test.dart` 회귀 게이트). 넓은 대상·역할을 지탱하려면 여기에 아래를 더 얹는다.
 
-- **토큰**: 색(🟢 착지)·간격(🟡 `AppSpacing` 4pt 스케일·`SizedBox`+`EdgeInsets.all` 이관·MOB-10)·타이포(🟡 `textTheme` 롤 채택·MOB-10). **정서 안전 팔레트**(빨강 ❌·앰버 ✅ `05:31-34`)를 토큰 레벨에서 강제(🟢). 잔여(비대칭 패딩·미세값·앱바 슬로건)는 후속.
+- **토큰**: 색(🟢)·간격(🟢 `AppSpacing`·`SizedBox`+`EdgeInsets` 전면 이관·MOB-10/11)·타이포(🟢 `textTheme` 롤 전면 채택·잔여 매직 `fontSize` 0·MOB-10/11). **정서 안전 팔레트**(빨강 ❌·앰버 ✅ `05:31-34`)를 토큰 레벨에서 강제(🟢). 후속: 오프리듬 값 리듬 정리·골든 테스트.
 - **테마 = 모드별 `primary_color`(`ModeConfig`) + 연령대 프로파일**. 모드/연령대가 바뀌면 셸이 토큰 세트를 갈아끼운다.
 - **핵심 컴포넌트**: 코치 대화 버블(소크라테스 카테고리 배지·`CoachSignalCard`·`CoachEmphasisText`) · Polya 스텝바(상시 노출) · 힌트 단계 표시("지금 1단계") · `SceneElement` 위젯 세트(01 §2) · 활성 문제 배너(`_ActiveProblemBanner`).
 - **접근성 컴포넌트**: TTS 재생(코어 `SpeechSpec` 소비·클라는 합성만), 대비·탭영역 보장.

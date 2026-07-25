@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../theme/spacing.dart';
 import '../../auth/application/auth_controller.dart';
 
 /// 나 탭 화면 — 준비 중 섹션 3개 + (인증 시) 로그아웃.
@@ -23,7 +24,7 @@ class MeScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('나')),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
           children: [
             const _PlaceholderTile(
               icon: Icons.timeline_outlined,
@@ -43,7 +44,7 @@ class MeScreen extends ConsumerWidget {
             if (isAuthenticated) ...[
               const Divider(height: 24),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 child: OutlinedButton.icon(
                   onPressed: () =>
                       ref.read(authControllerProvider.notifier).logout(),

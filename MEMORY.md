@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (구현·UI·MOB-11): **디자인 토큰 이관 완결 — 비대칭 패딩·미세값·슬로건까지 100% 토큰화** (claude 구현, Kiki "Mob")
+
+**컨텍스트**: MOB-10(간격·타이포 부분 이관) 머지 후 Kiki "Mob"→AskUserQuestion "잔여 간격/타이포 정리" 선택. MOB-10이 남긴 잔여(비대칭 패딩·오프리듬 미세값·앱바 슬로건)를 완결.
+
+**구현**: `AppSpacing`에 **오프리듬 토큰** 추가(hairline=2·xs6=6·sm10=10·md14=14·밀집 UI 보존용). 잔여 전부 이관 — `SizedBox`(6·10)·`EdgeInsets.all(14)`·모든 `EdgeInsets.symmetric`/`only`/`fromLTRB`의 값을 `AppSpacing.*`로(값 동일·외형 무변·`/EdgeInsets/` 주소 sed + fromLTRB 수기). 앱바 슬로건 `TextStyle(fontSize:12)`→`textTheme.bodySmall`(`const PreferredSize` de-const). `me_screen`(MOB-10 미포함) spacing import 추가. 결과: **lib/ 전역 매직 `fontSize` 0·바 numeric 간격 리터럴 0**.
+
+**설계 판단**: MOB-10의 "값 변경 0" 원칙 유지 — 오프리듬 값(2·6·10·14)을 리듬으로 *스냅하지 않고*(무검증 시각 회귀 위험) 전용 토큰으로 값 그대로 보존. 스냅(리듬 정리)은 시각 검증 가능 시점의 후속. 검증=CI `mobile` 잡(analyze+기존 위젯 테스트). MOB-10(PR #583) 스쿼시 머지됨 → rebase onto 새 `origin/main`·새 PR.
+
 ### 2026-07-24 (구현·UI·MOB-10): **디자인 토큰 확장 — `AppSpacing`(간격) + `textTheme` 롤(타이포) 이관** (claude 구현, Kiki "Mob")
 
 **컨텍스트**: MOB-09(색/테마) 머지 후 Kiki "Mob"(=MOB 후속). AskUserQuestion으로 **타이포·간격 토큰 이관** 선택. MOB-09가 남긴 후속(타이포/간격)을 착지.

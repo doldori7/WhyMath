@@ -206,11 +206,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
         ],
         // 슬로건을 부제로 — 답이 아닌 이유를 묻는다는 정체성을 항상 노출.
-        bottom: const PreferredSize(
-          preferredSize: Size.fromHeight(20),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(20),
           child: Padding(
-            padding: EdgeInsets.only(bottom: 6),
-            child: Text(_slogan, style: TextStyle(fontSize: 12)),
+            padding: const EdgeInsets.only(bottom: AppSpacing.xs6),
+            child: Text(_slogan, style: Theme.of(context).textTheme.bodySmall),
           ),
         ),
       ),
@@ -303,7 +303,8 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
           constraints: BoxConstraints(maxHeight: widget.maxHeight),
           child: SingleChildScrollView(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 12, 10),
+              padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.lg, AppSpacing.sm10, AppSpacing.md, AppSpacing.sm10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -333,7 +334,7 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
                     ],
                   ),
                   if (_expanded && question != null) ...[
-                    const SizedBox(height: 6),
+                    const SizedBox(height: AppSpacing.xs6),
                     Text(question, style: theme.textTheme.bodyMedium),
                     if (problem.choices != null &&
                         problem.choices!.isNotEmpty) ...[
@@ -402,8 +403,8 @@ class _MessageBubble extends StatelessWidget {
     final bubble = Align(
       alignment: alignment,
       child: Container(
-        margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        margin: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md14, vertical: AppSpacing.sm10),
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
@@ -417,7 +418,7 @@ class _MessageBubble extends StatelessWidget {
           children: [
             // 소크라테스 카테고리 배지(있을 때만) — 어떤 발문 전략인지 메타 표시.
             if (showBadge) _SocraticBadge(category: category),
-            if (showBadge) const SizedBox(height: 6),
+            if (showBadge) const SizedBox(height: AppSpacing.xs6),
             // 코치 발화만 템플릿 `*...*` 강조를 굵게 렌더한다(MOB-04·표현≠의미).
             // 학생 버블은 원문 그대로 — 학생 입력의 별표는 곱셈 기호(`3*4`)일 수
             // 있어 어떤 해석도 하지 않는다.
@@ -459,7 +460,7 @@ class _SocraticBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.hairline),
       decoration: BoxDecoration(
         color: theme.colorScheme.secondaryContainer,
         borderRadius: BorderRadius.circular(8),
@@ -521,7 +522,7 @@ class _InputBar extends StatelessWidget {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -829,7 +830,7 @@ class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
         // 한 단계뿐일 때 — 묶음 제출을 부드럽게 안내한다(질책 아님·제출은 막지 않음).
         if (_filledCount == 1)
           Padding(
-            padding: const EdgeInsets.only(top: 2, bottom: 4),
+            padding: const EdgeInsets.only(top: AppSpacing.hairline, bottom: AppSpacing.xs),
             child: Text(
               '단계를 나눠 적으면 풀이를 확인해 드릴 수 있어요',
               style: theme.textTheme.bodySmall?.copyWith(
@@ -863,7 +864,7 @@ class _SolutionStepsEditorState extends State<_SolutionStepsEditor> {
   Widget _buildStepRow(int index) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.only(bottom: AppSpacing.xs6),
       child: Row(
         children: [
           // 번호 라벨 — 필드가 채워져도 단계 구조가 계속 보인다(사고 구조의 시각화).
