@@ -5,7 +5,7 @@
 실 벡터는 code 키 별 테이블(`concept_embedding` 등)이 소유하므로 이 참조 컬럼은 불필요.
 Concept Purity(구축 플레이북 8대 원칙 — 노드에 embedding 혼입 금지) 부채 -1.
 
-Revision ID: f7a8b9c0d1e2
+Revision ID: f1a2b3c4d5e7
 Revises: e6f1a2b3c4d5
 Create Date: 2026-07-25 00:00:00.000000
 """
@@ -19,7 +19,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision: str = "f7a8b9c0d1e2"
+revision: str = "f1a2b3c4d5e7"
 down_revision: str | None = "e6f1a2b3c4d5"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
