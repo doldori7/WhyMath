@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -14,10 +14,11 @@ acceptance:
   - "중립 ConceptDSL 계약 정의 + 기존 concept_content 교수법-중립성 감사"
   - "l3/render/adapter.py PedagogyAdapter Protocol + 초기 어댑터 N개(DIRECT·SOCRATIC·WORKED_EXAMPLE·PROBLEM_BASED·ANALOGY)"
   - "어댑터 개념-무관 거버넌스 테스트 green + render→SymPy verify green"
-artifacts: []
+artifacts:
+  - "https://github.com/doldori7/WhyMath/pull/587"
 paths:
   - "src/backend/whymath_backend/l3/render/**"
   - src/backend/whymath_backend/schema/concept_dsl.py
 session: null
 notes: "03c 정본. josa/rephrase/verify_answer/canonicalize 재사용. 저장 자산=중립 DSL+개념무관 어댑터(조합폭발 방지)."
-updated: 2026-07-24
+updated: 2026-07-25
