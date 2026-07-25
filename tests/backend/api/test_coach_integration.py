@@ -367,17 +367,24 @@ def test_append_turns_extends_existing_session_on_live_pg() -> None:
 
 # ── 선수 복습 코칭 결선: POST /v1/coach/sessions가 막힌 선수 신호를 응답에 싣는다 ──
 # 직전 슬(`GET /v1/me/.../coaching`) 통합 헬퍼와 동형 — 문제→개념(PRIMARY)·그 개념의 막힌
-# 선수(concept_edge·약 mastery·concept_node 메타)를 실 PG에 적재하고 coach 세션 응답을 검증.
+# 선수(concept_edge·약 mastery·atom_node 메타)를 실 PG에 적재하고 coach 세션 응답을 검증.
+#
+# ⚠️ 메타 시드 축(ARCH-13에서 교정): 이 헬퍼는 원래 구 437 `concept_node`에 시드했는데, S0-4d로
+# L2 enrich가 `atom_node`로 전환된 뒤에도 갱신되지 않은 잔재였다. 울타리 이전에는 축이 어긋나도
+# 행이 그냥 통과했으므로(enrich만 None) **아무도 읽지 않는 테이블에 시드하고 우연히 통과**하고
+# 있었다. ARCH-13 축 울타리가 이 드리프트를 red로 드러냈고, 여기서 `atom_node`로 정렬한다
+# (`test_me_integration.py::_node_meta`와 동형). 울타리를 약화시키는 대신 시드를 고치는 것이
+# 맞다 — runtime truth source는 원자 단일이기 때문이다.
 
 from datetime import datetime, timezone  # noqa: E402
 
 from whymath_backend.db.models.assessment import ConceptMasteryHistory  # noqa: E402
+from whymath_backend.db.models.atom_node import AtomNode  # noqa: E402
 from whymath_backend.db.models.concept import (  # noqa: E402
     Concept,
     ConceptEdge,
     ProblemConcept,
 )
-from whymath_backend.db.models.concept_node import ConceptNode  # noqa: E402
 from whymath_backend.db.models.problem import Problem  # noqa: E402
 from whymath_backend.schema.assessment import (  # noqa: E402
     ConceptMasteryHistory as ConceptMasteryHistorySchema,
@@ -413,8 +420,20 @@ def _concept_with_code(cid: uuid.UUID, code: str, name: str) -> Concept:
     )
 
 
-def _node_meta(uc: str, name_ko: str, domain: str, review_status: str) -> ConceptNode:
-    return ConceptNode(concept_id=uc, name_ko=name_ko, domain=domain, review_status=review_status)
+def _node_meta(uc: str, name_ko: str, domain: str, review_status: str) -> AtomNode:
+    """원자 축 안전 메타 행(code PK) — S0-4d로 enrich가 `fetch_atom_node_meta`로 전환됐다.
+
+    `test_me_integration.py::_node_meta`와 동형: 응답 DTO의 `domain` 값 소스가 원자
+    `subject_area`이므로 인자 `domain`을 그 컬럼에 시드한다(필드명 유지·값 소스 교체). `level`은
+    NOT NULL이라 시드 필수지만 enrich 대상이 아니라 표시 상수 '세부개념'을 박는다(값 무관).
+    """
+    return AtomNode(
+        code=uc,
+        name_ko=name_ko,
+        level="세부개념",
+        subject_area=domain,
+        review_status=review_status,
+    )
 
 
 def _prereq_edge(from_id: uuid.UUID, to_id: uuid.UUID, strength: float) -> ConceptEdge:
@@ -469,7 +488,7 @@ async def _cleanup_prereq(
     dialogue_ids: list[uuid.UUID],
 ) -> None:
     """FK 순서 정리 — dialogue_turn→dialogue→problem_concept·concept_edge·mastery→
-    concept_node→problem·concept→user_profile."""
+    atom_node→problem·concept→user_profile."""
     engine = create_async_engine(_settings().database_url)
     dids = [str(d) for d in dialogue_ids]
     pids = [str(p) for p in problem_ids]
@@ -496,8 +515,9 @@ async def _cleanup_prereq(
                 text("DELETE FROM concept_mastery_history WHERE user_id = :uid"),
                 {"uid": str(uid)},
             )
+            # atom_node PK는 code(=concept.code=UC 브리지 키)라 code 컬럼으로 정리한다(ARCH-13).
             await conn.execute(
-                text("DELETE FROM concept_node WHERE concept_id = ANY(:ids)"),
+                text("DELETE FROM atom_node WHERE code = ANY(:ids)"),
                 {"ids": uc_ids},
             )
             await conn.execute(
