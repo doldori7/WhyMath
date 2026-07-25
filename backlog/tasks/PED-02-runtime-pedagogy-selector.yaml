@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on:
@@ -18,6 +18,6 @@ artifacts: []
 paths:
   - src/backend/whymath_backend/l4/pedagogy/runtime_selector.py
   - src/backend/whymath_backend/schema/enums.py
-session: null
+session: claude/education-os-architecture-mr0fbq
 notes: "04d 정본. L4가 결정·L2 조회만(역방향 의존 금지). 효과≤허용(Selector=효과·gate=허용)."
-updated: 2026-07-24
+updated: 2026-07-25
