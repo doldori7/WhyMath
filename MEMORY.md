@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-25 (구현·ARCH-14 부분): **Concept ORM 순수성 부채 −1 — 죽은 `embedding_id` 컬럼 청산** (claude, Kiki "이어가줘")
+
+**컨텍스트**: ARCH-14(정합성 검토 잔여 하드닝) 항목 ③의 절반. 병렬 세션이 pedagogy 파이프라인·mobile UI를 빠르게 처리 중이라(원격 claim 403으로 조율 불가·REND-01/#587 중복 발생), **충돌 적은 infra-debt 격리 슬라이스**를 골랐다.
+
+**적용**: `Concept.embedding_id`(구 ChromaDB→pgvector 이관 잔재·슬98) 제거 — 소비처 0·전량 NULL·로더 미설정·코퍼스 부재의 죽은 컬럼(2026-07-03 Phase 1b 4컬럼 청산 선례 동형). 실 벡터는 code 키 별 테이블(`concept_embedding` 등)이 소유. ORM(`db/models/concept.py`)+스키마(`schema/concept.py`)+Alembic drop(`f7a8b9c0d1e2`·head `e6f1a2b3c4d5`)+순수성 게이트 갱신(`test_concept_orm_purity_governance.py`: `_KNOWN_PURITY_DEBT` 2→1·embedding_id→`_FORBIDDEN_COLUMNS` 재유입 차단)+schema↔ORM 정합 테스트·로더 docstring 현행화. Concept Purity(플레이북 8대 원칙 — 노드 embedding 혼입 금지) 부채 축소.
+
+**검증**: ruff·black clean·mypy Success·schema+purity 47 pass·`tests/backend/db` 221 pass(2 실패=asyncpg 부재 기존·무관). **ARCH-14 잔여**(recommended_visual_styles Overlay 이관·CI 게이트 배선①·계층 커버리지②·mobile 게이트④)는 in_progress 유지.
+
 ### 2026-07-25 (구현·UI·MOB-13): **접근성 패스 — guideline 자동 검증 도입 + 실결함 2건 수정** (claude, Kiki "접근성 패스")
 
 **컨텍스트**: 디자인 시스템 마무리(MOB-12) 후 Kiki "접근성 패스". 서브에이전트 감사로 실상 파악 — 앱은 대체로 양호(아이콘 버튼 전부 tooltip·색-단독 정보 전달 위반 0). 실결함은 소수.

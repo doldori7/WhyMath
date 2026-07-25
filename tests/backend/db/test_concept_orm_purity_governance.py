@@ -8,11 +8,11 @@ test_concept_node_purity.py`가 금칙·스냅샷으로 동결했으나, 런타�
 
 정책:
 - **금칙 컬럼**(저작 게이트와 동일 축)은 런타임에도 0이어야 한다.
-- **알려진 부채 2건**(`embedding_id`·`recommended_visual_styles`)은 현 스냅샷에
-  *존재*한다 — 저작 게이트가 금지한 축이지만 런타임에는 역사적으로 남아 있다.
-  Overlay/투영 계층 이관은 별도 backlog 태스크(ARCH-14-review-residual-hardening)가
-  추적하며, 이관 착륙 시 이 파일의 부채 집합·스냅샷을 함께 갱신한다(무단 확대는
-  스냅샷이 차단).
+- **알려진 부채 1건**(`recommended_visual_styles`)은 현 스냅샷에 *존재*한다 — 저작
+  게이트가 금지한 축이지만 런타임에는 역사적으로 남아 있다. Overlay/투영 계층 이관은
+  ARCH-14-review-residual-hardening가 추적한다. (`embedding_id`는 ARCH-14로 *제거·청산
+  완료* — `_FORBIDDEN_COLUMNS`로 재유입 차단.) 이관 착륙 시 이 파일의 부채 집합·스냅샷을
+  함께 갱신한다(무단 확대는 스냅샷이 차단).
 
 hermetic: DB 불요 — `__table__.columns` introspection만(엔진·세션 0).
 """
@@ -39,9 +39,10 @@ _SEMANTIC_COLUMNS = frozenset(
 _OPS_COLUMNS = frozenset({"created_at"})
 
 # 알려진 순수성 부채 — 저작 게이트 기준 금칙 축이나 런타임에 잔존. 이관은 ARCH-14가
-# 추적한다(embedding 참조는 투영 계층으로·visual styles는 concept_visualization Overlay로).
+# 추적한다(visual styles는 concept_visualization Overlay로). `embedding_id`는 ARCH-14로
+# *제거 완료*(죽은 컬럼 청산·소비처 0·전량 NULL) — 아래 _FORBIDDEN_COLUMNS로 재유입 차단.
 # 이 집합에 *새 항목을 추가하는 것*은 부채 확대이므로 금지 — 리뷰에서 반려하라.
-_KNOWN_PURITY_DEBT = frozenset({"embedding_id", "recommended_visual_styles"})
+_KNOWN_PURITY_DEBT = frozenset({"recommended_visual_styles"})
 
 _EXPECTED_COLUMNS = (
     _IDENTITY_COLUMNS | _HIERARCHY_COLUMNS | _SEMANTIC_COLUMNS | _OPS_COLUMNS | _KNOWN_PURITY_DEBT
@@ -63,8 +64,9 @@ _FORBIDDEN_COLUMNS = frozenset(
         "renderer",
         "visualization_spec",
         "prompt",
-        # 벡터 실체(별도 pgvector 테이블 — 참조조차 embedding_id 부채로만 잔존)
+        # 벡터 실체·참조(별도 pgvector 테이블이 code 키로 소유 — 노드는 참조조차 금지)
         "embedding",
+        "embedding_id",  # ARCH-14로 죽은 참조 컬럼 청산 — 재유입 금지
         # 교육과정 Overlay(CurriculumEntry 단일 진실 — rev f3a4b5c6d7e8 제거 이력)
         "curriculum",
         "subject",
@@ -100,9 +102,12 @@ def test_columns_snapshot_frozen() -> None:
 
 
 def test_purity_debt_is_tracked_not_grown() -> None:
-    """부채 2건은 실제 존재(추적 정합)하며, 부채 집합은 딱 그 2건이다(확대 금지)."""
+    """부채 1건은 실제 존재(추적 정합)하며, 부채 집합은 딱 그 1건이다(확대 금지).
+
+    embedding_id는 ARCH-14로 제거·청산됨(_FORBIDDEN_COLUMNS로 재유입 차단).
+    """
     assert _KNOWN_PURITY_DEBT <= _runtime_columns(), (
         "부채로 선언된 컬럼이 이미 제거됐다 — 이관이 착륙했다면 _KNOWN_PURITY_DEBT와 "
         "_EXPECTED_COLUMNS에서 함께 제거해 이 파일을 현행화하라."
     )
-    assert _KNOWN_PURITY_DEBT == {"embedding_id", "recommended_visual_styles"}
+    assert _KNOWN_PURITY_DEBT == {"recommended_visual_styles"}
