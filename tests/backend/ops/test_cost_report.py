@@ -143,7 +143,38 @@ def test_aggregate_empty() -> None:
     assert report.local_ratio is None
     assert report.cache_hit_rate is None
     assert report.suggested_est_input_tokens is None
+    assert report.content_source_counts == {}  # 공급 경로도 미상(0으로 위장하지 않음)
     assert report.notes == []  # 이벤트 0이면 경고도 없다(빈 입력은 정보).
+
+
+# ── content_source(공급 경로·03c §4) ─────────────────────────────────────
+
+
+def test_aggregate_content_source_counts() -> None:
+    """공급 경로 값별 카운트 — cost_tier 버킷과 동형."""
+    events: list[dict[str, object]] = [
+        {"cost_tier": "local", "content_source": "dsl_render"},
+        {"cost_tier": "local", "content_source": "dsl_render"},
+        {"cost_tier": "local", "content_source": "prompt_cache"},
+        {"cost_tier": "cloud_mid", "content_source": "generate"},
+    ]
+    report = cr.aggregate_l3_events(events)
+    assert report.content_source_counts == {
+        "dsl_render": 2,
+        "prompt_cache": 1,
+        "generate": 1,
+    }
+
+
+def test_aggregate_ignores_missing_content_source() -> None:
+    """구 이벤트엔 키가 없다 — 분모에 넣지 않는다(없음을 특정 경로로 몰지 않음)."""
+    events: list[dict[str, object]] = [
+        {"cost_tier": "local"},  # 키 없음
+        {"cost_tier": "local", "content_source": "generate"},
+        {"cost_tier": "local", "content_source": None},  # str 아님 → 미집계
+    ]
+    report = cr.aggregate_l3_events(events)
+    assert report.content_source_counts == {"generate": 1}
 
 
 def test_aggregate_local_only_zero_cost() -> None:

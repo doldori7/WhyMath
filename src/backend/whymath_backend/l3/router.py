@@ -372,6 +372,7 @@ def langfuse_fields(
     validation_signal: str | None = None,
     usage: Usage | None = None,
     cost_krw: float | None = None,
+    content_source: str | None = None,
 ) -> dict[str, object]:
     """Langfuse 기록 필드 dict 생성 (03a §F.2 표).
 
@@ -416,6 +417,9 @@ def langfuse_fields(
         "student_id_hash": student_id_hash,  # 직접 ID 금지(해시만)
         "reason": decision.reason,  # 결정 근거
         "validation_signal": validation_signal,  # 런타임 shadow 검증 환각 신호(비차단)
+        # 공급 경로(03c 2층 캐시) — prompt_cache/generate는 파이프라인이 cache_hit에서 유도하고,
+        # dsl_render는 라우팅을 타지 않아 상위(l4 공급 경로)가 자기 이벤트로 기록한다.
+        "content_source": content_source,
     }
 
 

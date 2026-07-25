@@ -141,6 +141,16 @@ class CostReport:
     """cost_tier별 실측 분포(S1-12 결과표 행 단위·티어 미상 '(unknown)' 포함) — 로컬/클라우드
     행을 각각 채우려면 전역 분포로는 부족하다(런북 결과표가 티어별 p50/p90을 요구)."""
 
+    content_source_counts: dict[str, int] = field(default_factory=dict)
+    """공급 경로 값별 카운트(dsl_render/prompt_cache/generate·03c §4). 키 없는 구 이벤트는 미집계.
+
+    ⚠️ *관측 보조* 축이다 — 판정치는 `l4.content_supply.SupplyTally`가 in-process로 낸다
+    (Langfuse 단독 회계 금지).
+
+    **기본값을 두는 이유**: 이 리포트를 *직접 조립*하는 기존 소비자(`harness/pilot_kpi_baseline`)가
+    있어, 필수 인자로 추가하면 그쪽 생성자 호출이 전부 깨진다(실측: 13건 실패). 새 축은 선택으로
+    들어온다 — 기존 조립자는 손대지 않아도 되고, 값은 빈 dict(=미상)로 정직하게 남는다."""
+
     notes: list[str] = field(default_factory=list)
     """집계 한계·주의(표본 부족·미분류 tier 등)를 사람이 읽도록 남긴다."""
 
@@ -212,6 +222,7 @@ def aggregate_l3_events(events: list[dict[str, object]]) -> CostReport:
     local_count = 0
     cloud_count = 0
     tier_counts: dict[str, int] = {}
+    content_source_counts: dict[str, int] = {}
     cache_hits = 0
     cache_total = 0
 
@@ -256,6 +267,13 @@ def aggregate_l3_events(events: list[dict[str, object]]) -> CostReport:
             cache_total += 1
             if cache_raw:
                 cache_hits += 1
+
+        # content_source — 공급 경로 분포(03c §4). 키가 있는 이벤트만 센다(구 이벤트엔 없다).
+        # ⚠️ 이 집계는 *관측 보조*다. 판정치는 `l4.content_supply.SupplyTally`가 in-process로 낸다
+        # (Langfuse 단독 회계 금지 — 인프라가 죽으면 "0건 통과"로 위장된다).
+        source_raw = ev.get("content_source")
+        if isinstance(source_raw, str):
+            content_source_counts[source_raw] = content_source_counts.get(source_raw, 0) + 1
 
     classified = local_count + cloud_count
     local_ratio = local_count / classified if classified > 0 else None
@@ -307,6 +325,7 @@ def aggregate_l3_events(events: list[dict[str, object]]) -> CostReport:
         cache_hits=cache_hits,
         cache_total=cache_total,
         cache_hit_rate=cache_hit_rate,
+        content_source_counts=content_source_counts,
         suggested_est_input_tokens=sug_in,
         suggested_est_output_tokens=sug_out,
         notes=notes,
@@ -505,6 +524,12 @@ def _render_stdout(report: CostReport) -> str:
         f"  적중 {report.cache_hits} / {report.cache_total} "
         f"→ 적중률 {_fmt_ratio(report.cache_hit_rate)}"
     )
+    lines.append("[공급 경로] — 관측 보조(판정치는 SupplyTally in-process)")
+    if report.content_source_counts:
+        src_str = ", ".join(f"{k}={v}" for k, v in sorted(report.content_source_counts.items()))
+        lines.append(f"  {src_str}")
+    else:
+        lines.append("  (content_source 필드를 가진 이벤트 없음 — 미상)")
     lines.append("[튜닝 제안 — router._EST_ASSUMED_* 에 대입]")
     lines.append(f"  _EST_ASSUMED_INPUT_TOKENS  ← {report.suggested_est_input_tokens} (input p50)")
     lines.append(

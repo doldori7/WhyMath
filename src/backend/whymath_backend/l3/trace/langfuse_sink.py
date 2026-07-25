@@ -41,7 +41,13 @@ logger = logging.getLogger("whymath.l3.trace")
 # 추리기 위함(03a §F.2: cost_tier 80/18/2 분포·패밀리별·캐시 적중률). langfuse 3.x의
 # create_event에는 v2식 `tags` 인자가 없어, 태그를 메타데이터 안에 'tags' 리스트로
 # 함께 실어 보낸다(UI/스코어 필터에서 활용 가능). 값이 None인 필드는 태그에서 제외.
-_TAG_FIELDS: tuple[str, ...] = ("cost_tier", "local_family", "local_model", "cache_hit")
+_TAG_FIELDS: tuple[str, ...] = (
+    "cost_tier",
+    "local_family",
+    "local_model",
+    "cache_hit",
+    "content_source",  # 공급 경로(dsl_render/prompt_cache/generate·03c §4) — 비용 축 필터.
+)
 
 # Langfuse 이벤트 이름 — L3 라우팅 결정 1건 = 이벤트 1건.
 _EVENT_NAME = "l3_routing"

@@ -111,6 +111,8 @@ class TestCacheMissPath:
         # 관측 기록 1건, cache_hit False
         assert len(trace.records) == 1
         assert trace.records[0]["cache_hit"] is False
+        # 공급 경로(03c §4) — 미스는 실제 생성이므로 generate.
+        assert trace.records[0]["content_source"] == "generate"
 
 
 class TestCacheHitPath:
@@ -142,6 +144,8 @@ class TestCacheHitPath:
         assert provider.calls == []  # provider 미호출
         assert len(trace.records) == 1
         assert trace.records[0]["cache_hit"] is True
+        # 공급 경로(03c §4) — 프롬프트-해시 적중은 2층 캐시의 (2).
+        assert trace.records[0]["content_source"] == "prompt_cache"
 
     async def test_second_call_hits_after_first_miss(self) -> None:
         """같은 입력 2회 호출 → 1회는 미스, 2회는 히트(provider 1회만)."""
