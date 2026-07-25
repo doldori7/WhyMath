@@ -202,6 +202,23 @@ jobs:
             --cov-report=xml \
             --cov-fail-under=70
 
+      # 초인간 검증 게이트 (hermetic·라이브 0·고정 시드) — ci.yml 상시 배선(ARCH-14 ①).
+      # pytest 회귀에 더해 CLI exit 0/1 게이트를 독립 스텝으로 심어 "측정 통과 기계 게이트"가
+      # 상시 회귀로 강제되게 한다(초인간 검증 기준 v1 §서열 ②). 임계는 고정 시드 실측 여유값:
+      #   defect: 감사기 배선 시 6종 전부 120/120·검출 하한 0.978 → 0.95 게이트 통과.
+      #   prose : 프로즈 ON·288 결함셀 노출 0 → 노출 상한 0.0093 → 0.05 게이트 통과.
+      # (변별력은 각 harness의 대조군 테스트가 상시 봉인 — control-flag-off exit1 등.)
+      - name: 게이트 — 결함주입 강등전 (defect_detection·검출 하한 0.95·오검출 상한 0.05)
+        run: |
+          python -m whymath_backend.harness.defect_detection_eval \
+            --n-defective 120 --n-clean 120 --seed 20260708 --with-auditor \
+            --min-detection-lower 0.95 --max-false-alarm-upper 0.05
+
+      - name: 게이트 — 코치 프로즈 유출 (coach_prose_leak·노출 상한 0.05·오차단 상한 0.2)
+        run: |
+          python -m whymath_backend.harness.coach_prose_leak_eval \
+            --n-per-cell 12 --max-leak-upper 0.05 --max-false-block-upper 0.2
+
       - name: Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4

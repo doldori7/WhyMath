@@ -337,11 +337,19 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-25 (구현·ARCH-14 ①·CI): **초인간 검증 게이트 2종 ci.yml 상시 배선 — defect_detection·coach_prose_leak (측정 통과 기계 게이트 = 상시 회귀)** (claude, Kiki "머지"→"이어가")
+
+**컨텍스트**: ARCH-14 항목 ①("defect_detection_eval hermetic 고정 시드 게이트를 CI 상시 회귀로 배선"). 두 harness는 pytest 회귀로는 이미 가동 중이었으나(`test_defect_detection_eval.py`·`test_coach_prose_leak_eval.py`), 초인간 검증 기준 v1 §검증 권위 서열 ②("측정 통과 기계 게이트")를 **CLI exit 0/1 독립 스텝**으로도 상시 강제하는 것이 이 태스크 몫이었다(S4-04 이관 명세).
+
+**적용**: `.github/workflows/ci.yml`의 `backend — lint·type·test` 잡(hermetic·py3.12)에 Pytest 뒤 두 게이트 스텝 추가 — (a) `defect_detection_eval --n-defective 120 --n-clean 120 --seed 20260708 --with-auditor --min-detection-lower 0.95 --max-false-alarm-upper 0.05` (b) `coach_prose_leak_eval --n-per-cell 12 --max-leak-upper 0.05 --max-false-block-upper 0.2`. 임계는 **고정 시드 실측 여유값**을 샌드박스에서 직접 확인 후 배선(가정 기반 런북 금지): defect 감사기 배선 시 6종 전부 120/120·검출 하한 0.978(>0.95)·오검출 상한 0.022(<0.05); prose 프로즈 ON·288 결함셀 노출 0·노출 상한 0.0093(<0.05)·오차단 상한 0.0274(<0.2). 변별력은 각 harness 대조군(`--control-flag-off` exit1 등)이 상시 봉인.
+
+**검증**: 두 CLI 로컬 실측 exit 0·대조군 exit 1 확인. YAML safe_load 정합·스텝 순서 확인. **ARCH-14 잔여 ②③④**(계층별 커버리지 문서/게이트 정합·recommended_visual_styles Overlay 이관·mobile 커버리지 임계)는 in_progress 유지.
+
 ### 2026-07-25 (구현·ARCH-14 부분): **Concept ORM 순수성 부채 −1 — 죽은 `embedding_id` 컬럼 청산** (claude, Kiki "이어가줘")
 
 **컨텍스트**: ARCH-14(정합성 검토 잔여 하드닝) 항목 ③의 절반. 병렬 세션이 pedagogy 파이프라인·mobile UI를 빠르게 처리 중이라(원격 claim 403으로 조율 불가·REND-01/#587 중복 발생), **충돌 적은 infra-debt 격리 슬라이스**를 골랐다.
 
-**적용**: `Concept.embedding_id`(구 ChromaDB→pgvector 이관 잔재·슬98) 제거 — 소비처 0·전량 NULL·로더 미설정·코퍼스 부재의 죽은 컬럼(2026-07-03 Phase 1b 4컬럼 청산 선례 동형). 실 벡터는 code 키 별 테이블(`concept_embedding` 등)이 소유. ORM(`db/models/concept.py`)+스키마(`schema/concept.py`)+Alembic drop(`f7a8b9c0d1e2`·head `e6f1a2b3c4d5`)+순수성 게이트 갱신(`test_concept_orm_purity_governance.py`: `_KNOWN_PURITY_DEBT` 2→1·embedding_id→`_FORBIDDEN_COLUMNS` 재유입 차단)+schema↔ORM 정합 테스트·로더 docstring 현행화. Concept Purity(플레이북 8대 원칙 — 노드 embedding 혼입 금지) 부채 축소.
+**적용**: `Concept.embedding_id`(구 ChromaDB→pgvector 이관 잔재·슬98) 제거 — 소비처 0·전량 NULL·로더 미설정·코퍼스 부재의 죽은 컬럼(2026-07-03 Phase 1b 4컬럼 청산 선례 동형). 실 벡터는 code 키 별 테이블(`concept_embedding` 등)이 소유. ORM(`db/models/concept.py`)+스키마(`schema/concept.py`)+Alembic drop(`f1a2b3c4d5e7`·head `e6f1a2b3c4d5`)+순수성 게이트 갱신(`test_concept_orm_purity_governance.py`: `_KNOWN_PURITY_DEBT` 2→1·embedding_id→`_FORBIDDEN_COLUMNS` 재유입 차단)+schema↔ORM 정합 테스트·로더 docstring 현행화. Concept Purity(플레이북 8대 원칙 — 노드 embedding 혼입 금지) 부채 축소.
 
 **검증**: ruff·black clean·mypy Success·schema+purity 47 pass·`tests/backend/db` 221 pass(2 실패=asyncpg 부재 기존·무관). **ARCH-14 잔여**(recommended_visual_styles Overlay 이관·CI 게이트 배선①·계층 커버리지②·mobile 게이트④)는 in_progress 유지.
 
