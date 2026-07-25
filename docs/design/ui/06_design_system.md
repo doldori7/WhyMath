@@ -83,13 +83,13 @@
 
 | 항목 | 목표 | 현황 |
 |---|---|---|
-| 텍스트 대비 | 4.5:1 이상 | 🟡 explore/home/me를 `textContrastGuideline`로 라이트/다크 검증. 조밀 화면(chat·ocr·scene)은 경계선·미검증. **예외**: 네이버 로그인 버튼(브랜드 규정 초록+흰색·≈2.3:1)은 WCAG 미달이나 사업자색이라 대비 테스트 제외 |
-| 탭 영역 | 48dp 이상 | 🟡 M3 기본 컴포넌트 충족 + explore/home/me guideline 검증. chat 문제 배너 탭에 라벨·button 시맨틱 부여(MOB-13)·최소 높이 보강은 후속 |
+| 텍스트 대비 | 4.5:1 이상 | 🟡 explore/home/me + 조밀 위젯(`SceneRenderer`·`CoachSignalCard`)을 `textContrastGuideline`로 라이트/다크 검증(MOB-13/14). chat·ocr *전체 화면 상태*(활성 문제·메시지·인식 후 cue)는 미검증. **예외**: 네이버 로그인 버튼(브랜드 규정 초록+흰색·≈2.3:1)은 사업자색이라 대비 테스트 제외 |
+| 탭 영역 | 48dp 이상 | 🟡 M3 기본 컴포넌트 충족 + explore/home/me guideline 검증. chat 문제 배너 탭에 라벨·button 시맨틱(MOB-13) + 최소 48dp 보장(MOB-14·`maxHeight` clamp로 MOB-02 상한 불침범) |
 | Semantics 라벨 | 아이콘 버튼·탭 목적지 라벨 | 🟡 아이콘 버튼 `tooltip`·셸 탭 label·OCR 영역 카드·chat 배너(MOB-13) 라벨 보유. 전면 감사는 후속 |
 | 색만으로 정보 전달 금지 | 굵기·아이콘·문구 병행 | 🟢 `CoachEmphasisText`(굵기)·신호는 아이콘+문구·정오 채색 전무 |
 | TTS | `SpeechSpec` 소비(클라 합성) | 🔴 후속 |
 
-→ **후속**: chat 배너 등 복잡 화면 탭 타깃 48dp 보강·조밀 화면(onSurfaceVariant 소형 텍스트 on tonal 컨테이너) 대비 보정 후 guideline 확대·Semantics 라벨 전면 감사.
+→ **후속**: chat·ocr *전체 화면 상태*(활성 문제·메시지·인식 후 cue) 대비 검증(컨트롤러 override 하네스)·Semantics 라벨 전면 감사·TTS(`SpeechSpec`).
 
 ---
 

@@ -901,6 +901,13 @@ PRD FR-010/014/020 시즌 플랜·dead table 5종 소생은 실행하지 않고 
 **적용**: `Concept.embedding_id`(구 ChromaDB→pgvector 이관 잔재·슬98) 제거 — 소비처 0·전량 NULL·로더 미설정·코퍼스 부재의 죽은 컬럼(2026-07-03 Phase 1b 4컬럼 청산 선례 동형). 실 벡터는 code 키 별 테이블(`concept_embedding` 등)이 소유. ORM(`db/models/concept.py`)+스키마(`schema/concept.py`)+Alembic drop(`f1a2b3c4d5e7`·head `e6f1a2b3c4d5`)+순수성 게이트 갱신(`test_concept_orm_purity_governance.py`: `_KNOWN_PURITY_DEBT` 2→1·embedding_id→`_FORBIDDEN_COLUMNS` 재유입 차단)+schema↔ORM 정합 테스트·로더 docstring 현행화. Concept Purity(플레이북 8대 원칙 — 노드 embedding 혼입 금지) 부채 축소.
 
 **검증**: ruff·black clean·mypy Success·schema+purity 47 pass·`tests/backend/db` 221 pass(2 실패=asyncpg 부재 기존·무관). **ARCH-14 잔여**(recommended_visual_styles Overlay 이관·CI 게이트 배선①·계층 커버리지②·mobile 게이트④)는 in_progress 유지.
+### 2026-07-25 (구현·UI·MOB-14): **접근성 확대 — 조밀 위젯 대비 검증 + chat 배너 48dp** (claude, Kiki "접근성 확대(조밀 화면)")
+
+**컨텍스트**: MOB-13(접근성 baseline) 후 Kiki "여기서 가능"→"접근성 확대(조밀 화면)". 조밀 화면의 저대비 위험(onSurfaceVariant 소형 텍스트 on tonal 컨테이너)을 검증하고 MOB-13에서 보류한 배너 탭 타깃을 완결.
+
+**구현**: 대비 위험은 재사용 *위젯*에 있으므로(전체 화면 상태 구동 대신) `SceneRenderer`·`CoachSignalCard`를 실 테마(라이트·다크)로 직접 pump해 `textContrastGuideline` 검증(`accessibility_test.dart` 확장·기존 테스트 fixture 재사용). chat `_ActiveProblemBanner` 최소 48dp 탭 타깃: `BoxConstraints(minHeight: math.min(48, maxHeight), maxHeight)`로 **MOB-02 fraction 상한을 절대 넘지 않으면서**(min≤max 보장) 48dp 확보. 문서 `06 §7` 갱신.
+
+**설계 판단**: 조밀 위젯 직접 pump = 전체 화면(chat/ocr) 컨트롤러 override 하네스 없이 저대비 조합을 검증하는 최소 경로. M3 onSurfaceVariant/surfaceContainer 톤차가 커 대비 통과 예상(감사의 "경계선"은 보수적)·실패 시 CI가 지점 지목→타깃 수정. chat·ocr *전체 화면 상태* 대비는 후속(override 하네스). 배너 48dp는 maxHeight를 올리지 않는 clamp라 MOB-02 무침범. 검증=CI mobile 잡. MOB-13(PR #586) 머지됨 → rebase·새 PR.
 
 ### 2026-07-25 (구현·UI·MOB-13): **접근성 패스 — guideline 자동 검증 도입 + 실결함 2건 수정** (claude, Kiki "접근성 패스")
 
