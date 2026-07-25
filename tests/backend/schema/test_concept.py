@@ -96,12 +96,10 @@ class TestConceptCreation:
         assert c.cognitive_type == []
         assert c.recommended_visual_styles == []
         assert c.is_signature_korean is False
-        assert c.embedding_id is None
 
     def test_full_fields_roundtrip(self) -> None:
         """전 필드를 채운 합법 인스턴스 — 값 보존 확인."""
         parent = uuid.uuid4()
-        emb = uuid.uuid4()
         now = datetime.now(timezone.utc)
         c = Concept(
             code="CAL-INT-DEF-FUNDAMENTAL",
@@ -119,7 +117,6 @@ class TestConceptCreation:
             intrinsic_difficulty=4.5,
             exam_frequency=0.82,
             weight_in_curriculum=0.6,
-            embedding_id=emb,
             created_at=now,
         )
         assert c.parent_concept_id == parent
@@ -129,7 +126,6 @@ class TestConceptCreation:
             VisualizationStyle.함수그래프,
         ]
         assert c.intrinsic_difficulty == pytest.approx(4.5)
-        assert c.embedding_id == emb
 
     def test_extra_forbidden(self) -> None:
         """extra='forbid' — 알 수 없는 필드 거부."""
@@ -502,7 +498,6 @@ class TestConceptNodeFieldGovernance:
             "intrinsic_difficulty",
             "exam_frequency",
             "weight_in_curriculum",
-            "embedding_id",
             "created_at",
         }
     )

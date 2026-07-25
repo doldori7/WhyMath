@@ -139,8 +139,10 @@ class Concept(Base):
     # 본문 근접(redaction), 마지막은 자유텍스트 오개념(독립 오개념 DB·CLAUDE.md #6)이라 런타임
     # 노드에 담지 않는다. 네 컬럼 모두 소비처 0·전량 NULL/`[]`이었다(죽은 컬럼 청산·계약 변경).
 
-    # ===== 벡터 임베딩 ID (pgvector·Postgres 동거 참조 — 벡터 저장 아님·슬98) =====
-    embedding_id: Mapped[uuid.UUID | None] = mapped_column(sa.Uuid)
+    # ===== 벡터 임베딩 ID: ARCH-14로 제거(죽은 컬럼 청산·순수성 부채 해소) =====
+    # `embedding_id`(구 ChromaDB→pgvector 이관 잔재·슬98)는 소비처 0·전량 NULL·로더 미설정·
+    # 코퍼스 부재였다(위 Phase 1b 4컬럼 청산 선례 동형). 실 벡터는 code 키 별 테이블
+    # (`concept_embedding` 등)이 소유하므로 이 참조 컬럼은 불필요 — 마이그레이션 동반 제거.
 
     # ===== 운영 메타 =====
     created_at: Mapped[datetime | None] = mapped_column(
