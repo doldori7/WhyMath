@@ -1177,3 +1177,59 @@ class KnowledgeType(str, Enum):
 
     STOCHASTIC = "STOCHASTIC"
     """데이터·불확실성형 — 확률·통계·불확실성을 다룬다."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 교수법 전략 (03c §2.1 — 콘텐츠 렌더 *방식*·커널 소유 폐쇄 enum)
+# ──────────────────────────────────────────────────────────────────────────
+# ⚠️ house style 예외(KnowledgeType 선례): 교수법 *전략*은 렌더 어댑터(`l3/render`)가 소유하는
+# 과목 불변 폐쇄 축이라, 전략별 어댑터(strategy→adapter 레지스트리·Renderer=Plugin)와 1:1
+# 바인딩된다. 03c §2.1이 지정한 대로 *커널 소유 폐쇄 enum*으로 신설한다(폐쇄·거버넌스 전제·PG
+# native 준비). 현재 소비자는 `l3/render` 어댑터 레지스트리이며 PG native enum 컬럼 백킹은 후속
+# (KnowledgeType→`knowledge_type` native enum 선례를 이 축이 필요해질 때 그대로 따른다·
+# `_pg_enum(PedagogyStrategy, "pedagogy_strategy")`). 이 enum은 *방식*이지 콘텐츠에 각인되지
+# 않는다 — `ConceptDSL`(schema/concept_dsl.py)은 방식-중립이고, 방식은 어댑터가 렌더 시점에
+# 얹는다(03c §1·조합폭발 방지: 저장 = 중립 DSL(atom당 1) + 어댑터 N개(개념 무관)).
+class PedagogyStrategy(str, Enum):
+    """교수법 전략 — 중립 콘텐츠(ConceptDSL)를 학생 화면으로 *어떻게* 렌더할지의 폐쇄 축(03c §2.1).
+
+    저장 자산(`ConceptDSL`)에는 들어가지 않는다. *어떤 전략을 고를지*(select)는 L4 Runtime
+    Pedagogy Selector(04d) 권위이고, 이 enum은 *고른 전략을 렌더*하는 어댑터의 키다(관심사 분리).
+
+    ⚠️ `GAME`(게임형) 초기 제외 — CLAUDE.md "무자비한 게임화·중독성 설계 금지"는 정체성 축이다.
+    게임형 전략 추가는 별도 거버넌스 결정(중독성 없는 설계 명세 확정)을 전제한다(03c §2.1·의도적
+    미채택). 폐쇄 enum이라 제거는 어렵고 추가는 거버넌스 결정을 전제한다(무분별 증식 금지).
+
+    멤버명·값 모두 영어(국제 교수법 어휘 — `KnowledgeType`·`BehaviorArea`·`ReasoningType` 선례).
+    use_enum_values=True 직렬화 시 영어 값 보존(예: strategy="SOCRATIC").
+    """
+
+    DIRECT = "DIRECT"
+    """설명 중심(Direct Instruction) — 정의+예시를 조립해 직접 설명한다."""
+
+    SOCRATIC = "SOCRATIC"
+    """질문 중심(문답식) — 정의·예시를 발문으로 재구성해 스스로 도달하게 한다."""
+
+    WORKED_EXAMPLE = "WORKED_EXAMPLE"
+    """완전예제 제시 — assessment 시드로 완전 풀이를 보인다(⚠️ 냉담 제공 불가·03c §3 게이트)."""
+
+    PROBLEM_BASED = "PROBLEM_BASED"
+    """문제부터 제시 — assessment 문제로 시작한다(assessment 시드 필수·정답 미노출)."""
+
+    RETRIEVAL = "RETRIEVAL"
+    """인출 연습 중심 — 기억에서 꺼내는 연습(어댑터 후속)."""
+
+    SPACING = "SPACING"
+    """분산 복습 — 시간 간격을 둔 재노출(어댑터 후속)."""
+
+    INTERLEAVING = "INTERLEAVING"
+    """교차 연습 — 여러 유형을 섞어 제시(어댑터 후속)."""
+
+    SELF_EXPLANATION = "SELF_EXPLANATION"
+    """자기설명 유도 — 학생이 스스로 근거를 설명하게 한다(어댑터 후속)."""
+
+    ANALOGY = "ANALOGY"
+    """비유 설명 — 예시/비유류 중립 콘텐츠로 개념을 익숙한 것에 잇는다."""
+
+    VISUALIZATION = "VISUALIZATION"
+    """시각화 중심 — 렌더 intent를 L5 시각화 명세로 넘긴다(어댑터 후속)."""

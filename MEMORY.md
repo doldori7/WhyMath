@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-24 (구현·REND-01 done): **교수법 렌더러 어댑터 + 교수법-중립 ConceptDSL — 조합폭발의 해(저장=atom+N 합)** (claude 구현, Kiki "다른 작업 진행")
+
+**컨텍스트**: main #579(Education OS 재편)가 등재한 REND-01(priority4·`03c_content_strategy_cache.md` 정본). 콘텐츠를 *교수법-중립 DSL*로 한 번 저장하고 *개념-무관 어댑터*가 런타임에 전략별 렌더 — 저장이 (atom×mode×난이도) 곱이 아니라 (atom + 어댑터 N) 합.
+
+**적용**: ① `schema/enums.py::PedagogyStrategy`(10값·GAME 제외·게임화 금지 거버넌스 주석) ② `schema/concept_dsl.py` 중립 ConceptDSL(name·definition·examples·misconception_ids·relations·assessment·*방식 지시 필드 구조적 금지*·schema 순수) ③ `l3/render/`: `PedagogyAdapter` Protocol + 중립 `RenderContext`(l4 미import·primitives만) + `RenderedUnit`(validation_signal) + **5어댑터**(DIRECT·SOCRATIC·WORKED_EXAMPLE·PROBLEM_BASED·ANALOGY·개념무관·LLM=0·josa 재사용·worked/problem은 `verify_answer`/`derive_selected_root`로 gold 검증) + registry(plugin 경계) ④ concept_content 중립성 감사(무-방식필드 실측·`docs/reviews/rend01_concept_content_neutrality_audit.md`).
+
+**계층 결정**: `condition_dsl_violation`(SymPy 닫힌-DSL 게이트)을 schema에 넣으면 역방향 import(schema=최하층)라 `l3/render/dsl_gate.py`(schema+l3.equivalent 정당 결합점)로 이동 — schema 순수 유지·단일 진실 재사용.
+
+**검증**: ruff·black clean·mypy --strict Success(407)·**lint-imports 0 broken**(l3/render→l4 미import 봉인)·render 35 pass·render→SymPy verify 7 pass(derive-and-verify·오답 validation_signal 차단·pseudo-DSL 거부)·거버넌스(하드코딩 개념명 0·"숫자/이름만 다른 두 DSL=위반" 대칭성) green. **3 acceptance 전부 충족 → REND-01 done.** 후속 해금: `CACHE-01`(supply/측정)·`PED-02`(런타임 셀렉터).
+
 ### 2026-07-25 (구현·UI·MOB-13): **접근성 패스 — guideline 자동 검증 도입 + 실결함 2건 수정** (claude, Kiki "접근성 패스")
 
 **컨텍스트**: 디자인 시스템 마무리(MOB-12) 후 Kiki "접근성 패스". 서브에이전트 감사로 실상 파악 — 앱은 대체로 양호(아이콘 버튼 전부 tooltip·색-단독 정보 전달 위반 0). 실결함은 소수.
