@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-25 (구현·UI·MOB-13): **접근성 패스 — guideline 자동 검증 도입 + 실결함 2건 수정** (claude, Kiki "접근성 패스")
+
+**컨텍스트**: 디자인 시스템 마무리(MOB-12) 후 Kiki "접근성 패스". 서브에이전트 감사로 실상 파악 — 앱은 대체로 양호(아이콘 버튼 전부 tooltip·색-단독 정보 전달 위반 0). 실결함은 소수.
+
+**구현**: 신규 `test/accessibility_test.dart` — explore/home(라이트·다크)·me(라이트)를 `meetsGuideline(androidTapTargetGuideline·labeledTapTargetGuideline·textContrastGuideline)`로 검증(구조적 통과 보장 단순 화면부터). **실결함 수정 2건**: ① `chat` `_ActiveProblemBanner`의 `InkWell`(앱 유일 무라벨 커스텀 탭)에 `Semantics(button·label·onTap)` 부여 + `excludeFromSemantics`(중복 노드 제거) ② 학생 버블 텍스트 `Text(message.text)`→`onPrimaryContainer` 롤(기본 onSurface는 다크 대비 부족). 문서 `06 §7` 🟡 갱신.
+
+**설계 판단(무검증 제약)**: **대비 테스트는 실 테마(`WhyMathTheme.light/.dark`)로 pump** 필수 — 기본 ThemeData pump는 앱 색이 아닌 팔레트를 검증해 거짓 통과(감사 교훈). 첫 실행 실패 위험 최소화 위해 조밀 화면(chat·ocr·scene·onSurfaceVariant 소형 텍스트 on tonal 컨테이너)은 대비 테스트 제외(경계선·색 보정 후 후속). **네이버 로그인 버튼**(초록+흰색·≈2.3:1)은 WCAG 미달이나 사업자 규정색 예외라 대비 테스트 제외·문서화. chat 배너 48dp 최소높이는 `BoxConstraints(min>max)` assert 위험(배너 maxHeight fraction)이라 보류(라벨만 부여). 검증=CI mobile 잡. MOB-12(PR #585) 머지됨 → rebase onto 새 main·새 PR.
+
 ### 2026-07-25 (문서·UI·MOB-12): **디자인 시스템 레퍼런스 정본 신설(`docs/design/ui/06_design_system.md`)** (claude, Kiki "디자인 시스템 마무리")
 
 **컨텍스트**: MOB-09~11로 색·간격·타이포 토큰이 앱 전반에 착지. Kiki "디자인 시스템 마무리" → 흩어진 규약(coding_flutter·02 §6·코드 주석)을 단일 정본으로 통합. 골든·리듬 정리·접근성 자동검증은 로컬 flutter 필요라 이 환경 불가 → 무위험 문서 통합을 선택.

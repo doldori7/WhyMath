@@ -79,17 +79,17 @@
 
 ## 7. 접근성 규약 (Accessibility)
 
-`coding_flutter.md` "접근성 100%"의 구체 목표. 토큰이 일부를 뒷받침하지만 **전면 감사·자동 검증은 후속(🔴)**이다.
+`coding_flutter.md` "접근성 100%"의 구체 목표. **자동 검증 착지(MOB-13)** — 구조적으로 안전한 단순 화면부터 `meetsGuideline` 위젯 테스트(`test/accessibility_test.dart`)로 회귀를 막는다.
 
 | 항목 | 목표 | 현황 |
 |---|---|---|
-| 텍스트 대비 | 4.5:1 이상 | 🟡 `fromSeed`가 M3 대비를 보장하나 앰버 override·조밀 톤은 미측정 |
-| 탭 영역 | 44dp 이상 | 🟡 M3 기본 컴포넌트는 충족·커스텀 위젯 미감사 |
-| Semantics 라벨 | 아이콘 버튼·탭 목적지에 라벨 | 🟡 셸 탭·일부 버튼만 |
-| 색만으로 정보 전달 금지 | 굵기·아이콘·문구 병행 | 🟢 `CoachEmphasisText`(굵기)·신호는 아이콘+문구 |
+| 텍스트 대비 | 4.5:1 이상 | 🟡 explore/home/me를 `textContrastGuideline`로 라이트/다크 검증. 조밀 화면(chat·ocr·scene)은 경계선·미검증. **예외**: 네이버 로그인 버튼(브랜드 규정 초록+흰색·≈2.3:1)은 WCAG 미달이나 사업자색이라 대비 테스트 제외 |
+| 탭 영역 | 48dp 이상 | 🟡 M3 기본 컴포넌트 충족 + explore/home/me guideline 검증. chat 문제 배너 탭에 라벨·button 시맨틱 부여(MOB-13)·최소 높이 보강은 후속 |
+| Semantics 라벨 | 아이콘 버튼·탭 목적지 라벨 | 🟡 아이콘 버튼 `tooltip`·셸 탭 label·OCR 영역 카드·chat 배너(MOB-13) 라벨 보유. 전면 감사는 후속 |
+| 색만으로 정보 전달 금지 | 굵기·아이콘·문구 병행 | 🟢 `CoachEmphasisText`(굵기)·신호는 아이콘+문구·정오 채색 전무 |
 | TTS | `SpeechSpec` 소비(클라 합성) | 🔴 후속 |
 
-→ **후속 슬라이스**: `meetsGuideline(textContrastGuideline)`·`androidTapTargetGuideline` 위젯 테스트로 자동 검증 + Semantics 라벨 전면 부여.
+→ **후속**: chat 배너 등 복잡 화면 탭 타깃 48dp 보강·조밀 화면(onSurfaceVariant 소형 텍스트 on tonal 컨테이너) 대비 보정 후 guideline 확대·Semantics 라벨 전면 감사.
 
 ---
 
