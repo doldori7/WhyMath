@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-25 (구현·ARCH-14 ④·CI): **mobile 커버리지 측정 → 임계 게이트 전환 (line ≥ 60%·testing.md 선언 집행) + backend 잡 타임아웃 25→35분** (claude, Kiki "머지"→"이어가")
+
+**컨텍스트**: ARCH-14 항목 ④("mobile 커버리지 임계 게이트 부여·첫 실측치 확인 후"). testing.md §커버리지 목표는 "Flutter UI 60%"를 선언했으나 ci.yml mobile 잡은 커버리지를 *측정·요약*만 하고 게이트하지 않는 공백이 있었다("측정 없던 60% 선언"). 첫 실측치를 확인해 이 선언을 강제 게이트로 전환.
+
+**적용**: (1) mobile 잡의 "커버리지 요약(게이트 아님)" 스텝을 "커버리지 게이트(line ≥ 60%)"로 전환 — awk에 `min=60` 임계·미달 시 exit 1. 첫 실측 **86.6%(1818/2100·226 tests)** 확인 → 60% 임계는 26pt 여유(정상 변동 안전·의미있는 회귀만 차단). 변별력 자가검증(합성 lcov 59.9%·55%·빈파일 exit1 / 86.6%·60% exit0 로컬 실측)으로 "변별력 없는 검증 금지" 준수. 목표 상향(60%→80%+)은 testing.md 개정과 함께 = ARCH-14 ②의 몫으로 분리. (2) PR #593 머지 과정에서 CACHE-01(content_supply) 병합으로 backend lint·type·test 잡의 pytest+coverage가 25분 경계를 넘어 boundary 타임아웃(cancelled·pytest 단독 22분+ 미완) 실측 → hang 방지 상한을 25→35분 상향(ci.yml 주석의 기존 정책 "timeout은 상한일 뿐" 준수·근본 최적화는 pytest-xdist·slow 마크 후속 과제 유지).
+
+**검증**: awk 게이트 로컬 discrimination 5케이스 실측(경계·미달·빈 lcov). ci.yml YAML safe_load 정합. `backlog.py validate` green. **ARCH-14 잔여 ②③**(계층별 커버리지 문서/게이트 정합·recommended_visual_styles Overlay 이관) in_progress 유지.
+
 ### 2026-07-25 (구현·ARCH-14 ①·CI): **초인간 검증 게이트 2종 ci.yml 상시 배선 — defect_detection·coach_prose_leak (측정 통과 기계 게이트 = 상시 회귀)** (claude, Kiki "머지"→"이어가")
 
 **컨텍스트**: ARCH-14 항목 ①("defect_detection_eval hermetic 고정 시드 게이트를 CI 상시 회귀로 배선"). 두 harness는 pytest 회귀로는 이미 가동 중이었으나(`test_defect_detection_eval.py`·`test_coach_prose_leak_eval.py`), 초인간 검증 기준 v1 §검증 권위 서열 ②("측정 통과 기계 게이트")를 **CLI exit 0/1 독립 스텝**으로도 상시 강제하는 것이 이 태스크 몫이었다(S4-04 이관 명세).
