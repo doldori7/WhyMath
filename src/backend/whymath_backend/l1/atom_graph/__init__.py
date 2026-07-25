@@ -37,6 +37,12 @@ from whymath_backend.l1.atom_graph.atom_node_projection import (
     load_atom_nodes_from_graph_json,
     populate_atom_nodes,
 )
+from whymath_backend.l1.atom_graph.axis import (
+    ATOM_AXIS_META_COLUMNS,
+    atom_axis_outerjoin,
+    atom_meta_from_row,
+    fetch_atom_axis_meta,
+)
 from whymath_backend.l1.atom_graph.embedding import (
     AtomEmbeddingIndex,
     AtomText,
@@ -48,6 +54,7 @@ from whymath_backend.l1.atom_graph.populate import populate_atom_backbone
 from whymath_backend.l1.atom_graph.retrieval import AtomSearchHit, search_atoms
 
 __all__ = [
+    "ATOM_AXIS_META_COLUMNS",
     "AtomBackendConceptRecord",
     "AtomBackendConceptStore",
     "AtomBackendEdgeRecord",
@@ -58,8 +65,11 @@ __all__ = [
     "AtomNodeStore",
     "AtomSearchHit",
     "AtomText",
+    "atom_axis_outerjoin",
     "atom_embedding_text",
+    "atom_meta_from_row",
     "clamp_difficulty",
+    "fetch_atom_axis_meta",
     "fetch_atom_node_meta",
     "load_atom_concepts_from_graph_json",
     "load_atom_edges_from_graph_json",

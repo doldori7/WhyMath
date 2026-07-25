@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 5
 owner: claude
 depends_on: []
@@ -16,6 +16,6 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/l2/**"
   - "src/backend/whymath_backend/l1/atom_graph/**"
-session: null
+session: claude/education-os-architecture-mr0fbq
 notes: "2026-07-21 전면 정합성 검토 High — l2/prerequisite_recommendation.py:74-75가 선수 구조(ConceptEdge)와 개념 메타(atom_node)를 문자열 code로 조인: truth source 이원화(붕괴연쇄 4 '유지보수 지옥'의 씨앗·유일하게 두 진실이 런타임 병존하는 지점). build_checkpoint_questions.md '입도 통합(437↔2,697)' 자기 지목의 공식 태스크화. 최악은 legacy_snapshot 거버넌스로 봉인돼 긴급 아님 — 설계 선행 필요(우선순위는 Kiki 재조정 여지)."
-updated: 2026-07-21
+updated: 2026-07-25

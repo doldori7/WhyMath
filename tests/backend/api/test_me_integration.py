@@ -1704,6 +1704,71 @@ def test_me_prerequisite_gaps_traversal_and_gating_on_live_pg() -> None:
         asyncio.run(_cleanup_concept_nodes([uc_c, uc_pw, uc_ps]))
 
 
+def test_me_prerequisite_gaps_atom_axis_fence_on_live_pg() -> None:
+    """GET /v1/me/weak-concepts/{C}/prerequisites — **원자 축 밖 선수는 노출되지 않는다**(ARCH-13).
+
+    `concept`/`concept_edge`에는 원자 백본과 구 437 개념이 code로 병존한다. 축 밖 선수(=`atom_node`
+    행이 없는 code)는 runtime truth가 아니므로 `reviewed_only=false`(기본·recall 보존 경로)에서도
+    제외된다 — 예전에는 enrich만 None인 채 노출되거나 `reviewed_only`에서 조용히 사라졌다.
+
+    울타리가 *실제 쿼리*에 있음을 증명하는 end-to-end 근거다(컴파일 SQL 거버넌스 테스트는 형태만
+    본다). 두 선수는 mastery·강도가 같고 **atom_node 행 유무만 다르다** — 그래서 결과 차이의 원인이
+    축 하나로 좁혀진다(변별력).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    sfx = uid.hex[:8]
+    uc_c = f"UC.test.{sfx}.fence.post"
+    uc_on = f"UC.test.{sfx}.fence.onaxis"  # atom_node 행 있음 = 원자 축
+    uc_off = f"UC.test.{sfx}.fence.offaxis"  # atom_node 행 없음 = 축 밖(구 437 상황)
+    c_post, c_on, c_off = (uuid.uuid4() for _ in range(3))
+    t1 = datetime(2026, 1, 1, tzinfo=UTC)
+    try:
+        asyncio.run(_add_all(_user(uid)))
+        asyncio.run(
+            _add_all(
+                _concept_with_code(c_post, uc_c, "후행개념"),
+                _concept_with_code(c_on, uc_on, "축안선수"),
+                _concept_with_code(c_off, uc_off, "축밖선수"),
+            )
+        )
+        # atom_node는 축 *안* 선수에만 적재 — 이 한 가지가 두 선수의 유일한 차이다.
+        asyncio.run(_add_all(_node_meta(uc_on, "축안선수", "[중]함수", "reviewed")))
+        asyncio.run(
+            _add_all(
+                _prereq_edge(c_on, c_post, 0.9),
+                _prereq_edge(c_off, c_post, 0.9),
+            )
+        )
+        # 둘 다 동일하게 약점(0.2) — weak_only·정렬로는 구분되지 않는다.
+        asyncio.run(
+            _add_all(
+                _mastery_row(uid, c_on, t1, 0.2),
+                _mastery_row(uid, c_off, t1, 0.2),
+            )
+        )
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _client() as client:
+            base = f"/v1/me/weak-concepts/{c_post}/prerequisites"
+            # ① 기본(reviewed_only=false) — 축 안만 노출(축 밖은 울타리가 제외).
+            rows = client.get(base, headers=auth).json()
+            assert [r["concept_code"] for r in rows] == [uc_on]
+            assert rows[0]["name_ko"] == "축안선수"  # 같은 쿼리 OUTER JOIN enrich
+
+            # ② weak_only=false에서도 축 밖은 여전히 제외(약점 필터와 무관한 축 판정).
+            rows = client.get(base, headers=auth, params={"weak_only": "false"}).json()
+            assert [r["concept_code"] for r in rows] == [uc_on]
+    finally:
+        asyncio.run(_cleanup_concept_edges([c_on, c_off]))
+        asyncio.run(_cleanup_mastery([uid]))
+        asyncio.run(_cleanup_concepts([c_post, c_on, c_off]))
+        asyncio.run(_cleanup_concept_nodes([uc_c, uc_on, uc_off]))
+        asyncio.run(_cleanup([uid]))  # user_profile 정리
+
+
 def test_me_prerequisite_gaps_multi_hop_traversal_on_live_pg() -> None:
     """GET /v1/me/weak-concepts/{C}/prerequisites?max_depth=N — 다단계(재귀 CTE) 선수 traversal.
 
