@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on:
@@ -14,10 +14,11 @@ requires_gates: []
 acceptance:
   - "PedagogyStrategy 폐쇄 enum(schema/enums.py) + l4/pedagogy/runtime_selector.py 규칙기반 v1"
   - "gate()(forbidden_modes·Polya 단계)로 완전예제 냉담 제공 차단 테스트 + L2 입력 소비 테스트"
-artifacts: []
+artifacts:
+  - 1e60cd9
 paths:
   - src/backend/whymath_backend/l4/pedagogy/runtime_selector.py
   - src/backend/whymath_backend/schema/enums.py
-session: claude/education-os-architecture-mr0fbq
+session: null
 notes: "04d 정본. L4가 결정·L2 조회만(역방향 의존 금지). 효과≤허용(Selector=효과·gate=허용)."
 updated: 2026-07-25
