@@ -100,25 +100,26 @@ class PedagogyAdapter(Protocol):
 
 ## 3. select-vs-generate (render-vs-generate) — 비용 계층
 
+구현 정본: **`l4/content_supply.py`**(CACHE-01).
+
 ```python
-async def supply(req: ContentRequest) -> ContentResponse:
-    # ① 전략 선택 — L4 권위(04d). 그리고 반드시 교수학 게이트 통과(비용#6이 교수학#3 역전 금지).
-    strat = await runtime_pedagogy_selector.select(req.student_state)         # 04d §2
-    strat = gate(strat, pack.forbidden_modes, req.polya_stage)               # 완전예제 냉담 제공 불가
-    # ② 개념 주소화 조회(영구 자산·프롬프트-해시 캐시와 별개의 상위 계층)
-    dsl = await concept_dsl_cache.get(req.atom_code)
-    if dsl is not None and adapter[strat].can_render(dsl):
-        rendered = adapter[strat].render(dsl, req.ctx)                        # 0원·결정론(대부분 경로)
-        if rendered.validation_signal is None:                               # 검증 통과분만 노출
-            record(content_source="dsl_render", cost_krw=0.0)
-            return served(rendered)
-        # 검증 실패 → 미검증 노출 금지·폴백
-    # ③ 신규 개념 or 진짜 새 조합만 — 기존 라우터 경유 생성
-    resp = await l3_pipeline.generate(build_prompt(req, strat), system, routing_req)  # 03/03a
-    record(content_source="generate", cost_krw=resp.cost_krw)
-    maybe_promote_to_dsl(req, resp)                                          # 고가치 생성물 → DSL 자산 승격(검수 큐)
-    return served(resp)
+async def supply(*, code, signals, session, cache, k_type=None, ...) -> SupplyResult:
+    # ① 선택 + 교수학 게이트 — decide()를 *내부에서* 호출하므로 우회 불가(아래 3.1).
+    gate_result = decide(signals, k_type=k_type)                  # 04d §2
+    # ② 개념 주소화 조회(캐시 → DB read-through·프롬프트-해시와 별개 상위 계층)
+    dsl = await get_concept_dsl(code, session=session, cache=cache)
+    # ③ 렌더 가능·검증 통과면 0원 반환. 불가·미검증이면 사유를 남기고 폴백.
+    #    (미등록 어댑터 LookupError도 사유로 흡수 — REND-01 레지스트리 계약)
+    # ④ 폴백 — 기존 라우터 경유 생성. cache_hit면 prompt_cache, 아니면 generate.
+    return SupplyResult(content_source=..., strategy=..., fallback_reason=...)
 ```
+
+> **초판 의사코드 교정 2건(2026-07-25 구현 시 실측)**
+> ① **supply는 L3가 아니라 L4다.** L3가 L4 선택기를 호출하면 역방향이라 `lint-imports`가 깨진다. 더 중요하게는,
+>    supply가 `decide()`를 *내부*에서 호출해야 **게이트를 우회할 수 없다** — 전략을 인자로 받는 설계였다면
+>    호출자가 게이트를 빠뜨린 채 완전예제를 렌더할 수 있다.
+> ② **`resp.cost_krw`는 존재하지 않는다.** `pipeline.GenerationResult`에는 cost·usage 필드가 없고 비용은
+>    `trace.record`로만 흐른다. 경로 판정치는 §4의 in-process 축(`SupplyResult.content_source`)으로 낸다.
 
 ### 3.1 게이트 = 교수학 우선순위의 기계적 강제 (§5 준수의 핵심)
 `gate()`는 select 결정 *상류*에 있다. 두 축을 강제한다:
@@ -154,9 +155,25 @@ ChatGPT 설계 대화의 분포 가정(≈ 캐시사용 76% / 캐시생성 15% /
 | 로컬 LLM 비율 | 80%+ | 유지 |
 | 캐시 적중률 | 30% → 50% | **분해**: `dsl_render_rate` + 프롬프트-해시 hit |
 
-**신규 지표** — `langfuse_fields`(`l3/router.py`)에 `content_source: dsl_render|prompt_cache|generate` 추가 +
-**로컬 이중 회계**(`ops/cost_probe` 선례 — 판정치를 SaaS에만 의존 금지, `CLAUDE.md`):
-`dsl_render_rate`·`render_verify_pass_rate`·`generate_rate`·`dsl_promotion_rate`.
+### 4.1 이중 회계 — 판정치는 in-process, Langfuse는 보조 (구현 반영)
+
+`content_source`를 관측 인프라에만 실으면, 인프라가 죽었을 때 "0건 통과"로 **위장**된다. `ops/cost_probe`가
+존재하는 이유가 정확히 그 사고다(placeholder 키 → `cost_report`가 조용히 0건 보고). 그래서 두 축으로 센다:
+
+| 축 | 좌석 | 성격 |
+|---|---|---|
+| **판정치(주)** | `l4/content_supply.py` — `SupplyResult.content_source` **반환** + `SupplyTally` 집계 | in-process·SaaS 무관 |
+| 분포(보조) | `langfuse_fields`의 `content_source` → `ops/cost_report.content_source_counts` | 관측 인프라 의존 |
+
+- 파이프라인은 자기 `cache_hit`에서 `prompt_cache`/`generate`를 **스스로 유도**한다(상위가 주입할 필요 없음).
+  렌더 경로는 라우팅을 타지 않으므로 supply가 자기 이벤트를 기록한다.
+- `SupplyTally.dsl_render_rate_lower`는 **Wilson 단측 하한**이다(점추정 아님 — `cost_probe` 관례). 표본 0이면
+  `None`을 돌려 "미상"을 0%로 위장하지 않는다.
+
+> **범위 밖(정직한 공백)**: 라이브 트래픽 기반 `dsl_render_rate` **게이트 CLI는 만들지 않았다.** 실사용 트래픽이
+> 없는 상태에서 합성 요청으로 비율을 재면 아무것도 측정하지 못하는 숫자가 나온다(`cost_probe`가 표본 확보를 위해
+> *의도적으로* 캐시 미스를 강제하는 것의 거울상 함정). 집계 기구까지 놓고, 게이트 판정은 트래픽 확보 후 별도 태스크.
+> `render_verify_pass_rate`·`dsl_promotion_rate`도 같은 이유로 미구현(승격 경로 자체가 후속).
 
 ---
 
