@@ -22,16 +22,19 @@ def _load() -> Any:
     return mod
 
 
-def _write_xml(path: Path, per_layer: dict[str, tuple[int, int]]) -> None:
-    """per_layer: {계층: (covered, total)} → 최소 coverage.xml 생성."""
+def _write_xml(path: Path, per_layer: dict[str, tuple[int, int]], prefix: str = "") -> None:
+    """per_layer: {계층: (covered, total)} → 최소 coverage.xml 생성.
+
+    filename은 실제 coverage.xml처럼 <source>(=whymath_backend) 기준 *상대경로*(`l4/mod.py`)가
+    기본이다 — CI 실측 포맷 재현(2026-07-25 파서 버그 회귀 방지). prefix로 `whymath_backend/`·
+    절대경로 변형도 검증한다.
+    """
     classes = []
     for layer, (covered, total) in per_layer.items():
         lines = "".join(
             f'<line number="{i + 1}" hits="{1 if i < covered else 0}"/>' for i in range(total)
         )
-        classes.append(
-            f'<class filename="whymath_backend/{layer}/mod.py"><lines>{lines}</lines></class>'
-        )
+        classes.append(f'<class filename="{prefix}{layer}/mod.py"><lines>{lines}</lines></class>')
     path.write_text(
         '<?xml version="1.0" ?><coverage><packages><package><classes>'
         + "".join(classes)
@@ -40,13 +43,23 @@ def _write_xml(path: Path, per_layer: dict[str, tuple[int, int]]) -> None:
     )
 
 
-def test_layer_coverage_parses_subpackages(tmp_path: Path) -> None:
+def test_layer_coverage_parses_relative_filenames(tmp_path: Path) -> None:
+    # 실제 CI coverage.xml 포맷: <source>=whymath_backend 기준 상대경로(`l4/mod.py`).
     mod = _load()
     xml = tmp_path / "coverage.xml"
-    _write_xml(xml, {"l4": (90, 100), "l1": (7, 10)})
+    _write_xml(xml, {"l4": (90, 100), "l1": (7, 10)})  # prefix="" (상대)
     cov = mod.layer_coverage(str(xml))
     assert cov["l4"] == (90, 100)
     assert cov["l1"] == (7, 10)
+
+
+def test_layer_coverage_parses_prefixed_filenames(tmp_path: Path) -> None:
+    # 절대경로/whymath_backend 접두 변형도 동일하게 집계(파서 견고성).
+    mod = _load()
+    xml = tmp_path / "coverage.xml"
+    _write_xml(xml, {"l4": (80, 100)}, prefix="/home/runner/work/whymath_backend/")
+    cov = mod.layer_coverage(str(xml))
+    assert cov["l4"] == (80, 100)
 
 
 def test_gate_passes_when_all_layers_meet_floor(tmp_path: Path) -> None:

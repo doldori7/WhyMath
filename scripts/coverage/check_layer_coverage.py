@@ -41,12 +41,14 @@ def layer_coverage(xml_path: str) -> dict[str, tuple[int, int]]:
     agg: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     for cls in root.iter("class"):
         parts = cls.get("filename", "").replace("\\", "/").split("/")
-        if "whymath_backend" not in parts:
+        # coverage.xml의 filename은 <source>(=whymath_backend 패키지 루트) 기준 *상대경로*다
+        # (예: 'l1/foo.py'·'api/_auth.py'·루트 모듈 'config.py'). 절대경로나 whymath_backend
+        # 접두가 붙는 변형도 흡수하도록, whymath_backend 이후로 잘라낸 뒤 첫 세그먼트를 계층으로.
+        if "whymath_backend" in parts:
+            parts = parts[parts.index("whymath_backend") + 1 :]
+        if not parts:
             continue
-        idx = parts.index("whymath_backend")
-        if idx + 1 >= len(parts):
-            continue
-        top = parts[idx + 1]
+        top = parts[0]
         if top.endswith(".py"):  # 패키지 루트 모듈(계층 아님)
             continue
         lines = cls.find("lines")
