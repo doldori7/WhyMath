@@ -295,8 +295,16 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
 
     return Material(
       color: theme.colorScheme.surfaceContainerHighest,
-      child: InkWell(
+      // 접근성(MOB-13): 탭 노드에 라벨·button 역할·펼침 상태를 부여한다. InkWell은
+      // excludeFromSemantics로 중복 시맨틱 노드를 없애고 시각 리플·탭만 담당하며,
+      // 스크린리더 라벨·활성화 액션은 이 Semantics가 제공한다(펼침 내용은 하위 텍스트로 읽힘).
+      child: Semantics(
+        button: true,
+        label: _expanded ? '풀이 중인 문제, 접기' : '풀이 중인 문제, 펼치기',
         onTap: () => setState(() => _expanded = !_expanded),
+        child: InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          excludeFromSemantics: true,
         // 상한 초과분은 내부 스크롤 — 키보드가 올라와도 발문 전체를 볼 수 있는 경로는
         // 유지하면서(스크롤) 배너가 채팅·입력 영역을 밀어내지 않게 한다(MOB-02).
         child: ConstrainedBox(
@@ -353,6 +361,7 @@ class _ActiveProblemBannerState extends ConsumerState<_ActiveProblemBanner> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
@@ -425,7 +434,12 @@ class _MessageBubble extends StatelessWidget {
             if (isCoach)
               CoachEmphasisText(message.text)
             else
-              Text(message.text),
+              // 접근성(MOB-13): primaryContainer 위 텍스트는 onPrimaryContainer 롤로
+              // (기본 onSurface는 다크에서 대비 부족). 기본 스타일에 색만 병합한다.
+              Text(
+                message.text,
+                style: TextStyle(color: theme.colorScheme.onPrimaryContainer),
+              ),
           ],
         ),
       ),
