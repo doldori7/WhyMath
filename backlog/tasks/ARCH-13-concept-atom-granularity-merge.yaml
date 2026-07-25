@@ -5,17 +5,19 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 5
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "선수 traversal 구조와 개념 의미가 단일 축(원자 승격 또는 concept_edge 원자 축 재적재)으로 수렴 — code 문자열 조인 드리프트 소멸·거버넌스 테스트 동결"
-artifacts: []
+artifacts:
+  - "3215283"
+  - "tests/backend/l2/test_atom_axis_fence_governance.py (컴파일 SQL 울타리 동결 + 변별력 · l2/** AST 교차엔진조인 0)"
 paths:
   - "src/backend/whymath_backend/l2/**"
   - "src/backend/whymath_backend/l1/atom_graph/**"
-session: claude/education-os-architecture-mr0fbq
+session: null
 notes: "2026-07-21 전면 정합성 검토 High — l2/prerequisite_recommendation.py:74-75가 선수 구조(ConceptEdge)와 개념 메타(atom_node)를 문자열 code로 조인: truth source 이원화(붕괴연쇄 4 '유지보수 지옥'의 씨앗·유일하게 두 진실이 런타임 병존하는 지점). build_checkpoint_questions.md '입도 통합(437↔2,697)' 자기 지목의 공식 태스크화. 최악은 legacy_snapshot 거버넌스로 봉인돼 긴급 아님 — 설계 선행 필요(우선순위는 Kiki 재조정 여지)."
 updated: 2026-07-25
