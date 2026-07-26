@@ -117,7 +117,7 @@
 | `/health/ready` **HTTP 503** | `ready=false` ⇔ `components.database.reachable != true`. **DB 미도달만이 503을 만든다** | SEV-2 | §4-1 (DB 복구) |
 | `/health/ready` **HTTP 000/무응답** | 서버 프로세스 미가동 또는 포트 미리슨 | SEV-2 | §4-9 (기동 + 포트 점유자 확인) |
 | `components.database.error` = 예외 타입명 | DB 실패 유형(값·DSN은 절대 로그되지 않음) | — | §4-1 진단 입력 |
-| `components.redis.reachable=false` (`required=false`) | 캐시·rate limit 강등. **주의: 아래 함정 ④** | SEV-3 | §4-2 |
+| `components.redis.reachable=false` (`required=false`) | L3 캐시·디바이스 캐시는 미스 강등, rate limit는 인메모리 폴백(한도 유지·워커별 계수). **디바이스 등록·폐기만 5xx 가능 — 아래 함정 ④** | SEV-3 | §4-2 |
 | `components.llm_router.reachable=false` (`required=false`) | 로컬 Ollama 미도달 — 코치 응답 품질·경로 강등 | SEV-3 | §4-3 |
 | `components.*.configured=false` | **미구성 = 오류 아님**(확인 수단 미노출). `reachable`은 `null`(판정 불가) | 없음 | **트리거 아님** |
 | `alerts[]`에 `metric="error_rate"` | 최근 창 5xx 비율이 임계 **초과**. 임계값은 알림 자신이 싣는 `threshold` 필드를 읽는다(기본값은 §1-5 `ops_error_rate_alert_threshold`, env로 덮였으면 그 값) | SEV-2 또는 3 | §4-4 |
@@ -135,7 +135,14 @@
 
 ③ **지표는 워커(프로세스)별이다.** 다중 워커로 띄우면 `/health/ready` 한 번 조회는 **워커 하나**를 표본한 것이다. 현재 배포는 1프로세스라 문제없지만, 워커를 늘리는 순간 이 표의 해석이 바뀐다.
 
-④ **`redis.required=false`는 "Redis 없어도 학생 경로가 멀쩡하다"는 보증이 아니다.** 레디니스 *판정 정책*일 뿐이다. 실측: `l3/cache/redis_cache.py`의 `get`/`set`은 예외를 흡수하지 않고, `l3/pipeline.py`의 `cache.get(key)` 호출에도 예외 가드가 없다 → **Redis가 죽으면 L3 생성 경로를 타는 요청은 5xx가 될 수 있다.** 즉 `/health/ready`는 **200인데 학생은 실패하는 조합**이 존재한다. 그래서 Redis 다운 의심 시 상태코드가 아니라 `alerts`의 `error_rate`를 함께 본다.(후속 후보 — §6)
+④ **`redis.required=false`는 여전히 "Redis 없어도 학생 경로가 멀쩡하다"는 *보증*이 아니다** — 다만 2026-07-26(OPS-05·OPS-06) 이후로는 대체로 그렇게 *동작*한다. 레디니스 표시는 판정 정책일 뿐이고 실제 동작은 코드가 정하므로, 아래 실측을 경로별로 읽는다.
+
+  - **L3 응답 캐시**(`l3/cache/redis_cache.py`, OPS-05): `get` 실패 → 캐시 미스, `set` 실패 → no-op. 생성 경로는 재생성으로 완주한다(대가는 LLM 재호출 비용). *예전에 이 함정이 지목했던 5xx 경로는 닫혔다.*
+  - **디바이스 서명 캐시**(`api/_device_store.py`, OPS-06): 조회·적재 실패 → DB 검증으로 폴백. 이 캐시는 성공만 담는 positive cache라 강등은 승인을 *줄이는* 방향으로만 움직인다(느슨해지지 않는다). **단 무효화(DEL)만은 강등하지 않는다** — 폐기·등록·정리(`revoke`/`register`/`cleanup_stale`)의 캐시 무효화가 유한 재시도 후에도 실패하면 **예외를 올린다(=그 요청은 5xx)**. 의도된 fail-loud다: 폐기된 디바이스의 서명이 캐시에 남아 계속 통과하는 것보다, 실패를 알리는 편이 안전하다.
+  - **rate limit**(`api/_rate_limit.py`, OPS-06): Redis 실패 → 프로세스-로컬 인메모리 백엔드로 **폴백**. 요청은 살고 한도도 계속 걸리지만 **계수가 워커별로 갈라진다** — 다중 워커면 실효 한도가 최대 워커 수 배까지 느슨해질 수 있다(무제한은 아니다). fail-open(무제한)도 fail-closed(전면 차단)도 아닌 제3의 길이며, 그 대가가 이 분산 정확도 저하다.
+  - 세 경로 모두 흡수든 전파든 **예외 타입명**을 로그에 남긴다 — `operation=` 토큰으로 검색한다(함정 ⑤).
+
+  따라서 지금 남아 있는 "레디니스 200인데 학생은 실패" 조합은 **디바이스 등록·폐기 요청의 캐시 무효화 실패**뿐이다(의도된 설계). 그래도 Redis 다운 의심 시에는 상태코드가 아니라 `alerts`의 `error_rate`를 함께 본다 — 남은 공백은 §6에 정직하게 적어 둔다.
 
 ⑤ **로그 검색은 ASCII 토큰으로 한다.** 로그 메시지는 한국어지만 콘솔·파일 인코딩에 따라 한글이 깨져 보일 수 있다. `metric=`·`threshold=`·`WARNING` 같은 **ASCII 조각으로 검색**하면 인코딩과 무관하게 잡힌다.
 
@@ -218,7 +225,7 @@ curl.exe -s -o $out -w "HTTP=%{http_code}`n" http://127.0.0.1:8000/health/ready
 
 ### 4-2. Redis 다운 — `components.redis.reachable=false` (SEV-3)
 
-먼저 **함정 ④**를 읽었는지 확인한다: `required=false`여도 학생 경로가 5xx일 수 있다.
+먼저 **함정 ④**를 읽었는지 확인한다: `required=false`는 판정 정책일 뿐이다. 2026-07-26(OPS-05·OPS-06) 이후 생성·검증 경로는 강등으로 살아남지만, **디바이스 등록·폐기의 캐시 무효화 실패는 여전히 5xx로 드러난다**(의도된 fail-loud).
 
 ```powershell
 # [실행 시스템] Windows PowerShell (= Phaiakes9 이 PC, 진입 명령 불요)
@@ -230,8 +237,9 @@ curl.exe -s -o $out -w "HTTP=%{http_code}`n" http://127.0.0.1:8000/health/ready
 (Get-Content $out -Raw | ConvertFrom-Json).metrics.window_error_rate
 ```
 
-- **판독**: `reachable=false`이고 `window_error_rate`가 평상(≤0.01)이면 → 캐시 미스 강등뿐, **SEV-3 유지**. 같은 조건에서 `window_error_rate`가 올라가고 있으면 → 생성 경로가 Redis에 물려 실패 중, **SEV-2로 격상**.
-- **`[조치]`**: Redis 컨테이너를 되살린다(`docker start <이름>`). 즉시 되살릴 수 없으면 **캐시 없이 버티는 편이 낫다** — rate limit 백엔드 기본값은 `memory`(프로세스-로컬)라 Redis 부재로 인증·한도가 무너지지는 않는다.
+- **판독**: `reachable=false`이고 `window_error_rate`가 평상(≤0.01)이면 → 강등·폴백만 일어나는 중, **SEV-3 유지**. 같은 조건에서 `window_error_rate`가 올라가고 있으면 → 강등으로 흡수되지 않는 경로가 실패 중이다. 지금 그 후보는 **디바이스 등록·폐기의 캐시 무효화**(함정 ④)이고, 그 외 상승은 Redis가 아닌 다른 원인을 의심한다. **SEV-2로 격상** 후 §4-4로 로그를 확인한다(`operation=delete` + 예외 타입명).
+- **`[조치]`**: Redis 컨테이너를 되살린다(`docker start <이름>`). 즉시 되살릴 수 없으면 **캐시 없이 버티는 편이 낫다** — rate limit 백엔드 기본값은 `memory`(프로세스-로컬)이고, `redis` 백엔드로 운영 중이더라도 실패 시 같은 인메모리 백엔드로 폴백하므로 한도가 통째로 사라지지는 않는다(다만 워커별 계수로 느슨해진다).
+- **폐기가 급한 경우**(분실 기기 등 SEV-1 인접): Redis가 죽어 있으면 폐기 요청이 5xx로 실패할 수 있다. 이때 폐기 자체는 DB에 이미 반영되며 캐시의 잔존 승인은 **TTL(기본 60초) 안에 자연 소멸**한다 — 그래도 확실히 하려면 Redis를 되살린 뒤 폐기를 한 번 더 호출한다(무효화가 재실행된다).
 - **자가검증**: 위 명령 재실행 → `components.redis.reachable` 이 `true`. (변별력: 되살아나지 않으면 이 값이 그대로 `false`이고 `error`에 예외 타입명이 남는다.)
 
 ### 4-3. LLM 라우터 도달 불가 — `components.llm_router.reachable=false` (SEV-3)
@@ -395,10 +403,12 @@ SEV: <1~4>   시작: <로그 근거 시각>   종료: <로그 근거 시각>   �
 | **페이지(호출) 알림 채널 미배선** | breach는 **로그에만** 남는다. 로그를 보고 있지 않으면 알림이 아니다 | breach 시 푸시·메신저 전송(OPS-01 `AlertLogNotifier` 옆에 notifier 추가) |
 | **경로별 지연·에러율 미분해** | 전역 창 지표라 "코치가 느린 건지 전체가 느린 건지" 구분 불가(S5 미측정) | 미들웨어 계측에 라우트 템플릿 차원 추가 |
 | **지표 영속화 없음** | 프로세스 재시작 시 누적치 소멸 → 월간 오류 예산·가용성 집계 불가 | 스크레이퍼 또는 ClickHouse 적재 |
-| **Redis 장애의 학생 경로 전파(함정 ④)** | `/health/ready` 200인데 학생은 5xx일 수 있다 | `l3/pipeline.py`의 `cache.get` 실패를 **미스로 강등**(예외 타입명 로그 동반)하면 `required=false` 정책과 실제 동작이 일치한다 |
+| **디바이스 무효화 실패 시 등록·폐기 5xx** (OPS-06 이후 남은 함정 ④의 잔여) | 캐시 DEL이 유한 재시도 후에도 실패하면 `revoke`/`register`가 오류를 반환한다. DB 변경은 그 전에 커밋돼 있어 **응답(실패)과 상태(반영됨)가 어긋나 보인다** | 의도된 fail-loud라 '해결'이 아니라 *완화* 대상 — 후속 후보는 ①무효화 실패를 큐에 적재해 백그라운드 재시도 ②`register`의 count 캐시 DEL만 분리해 no-op 강등(그쪽은 신선도 문제지 보안 계약이 아니다) |
+| **Redis 폴백 시 rate limit 분산 정확도 저하** | 인메모리 폴백은 워커별 계수라 다중 워커에서 실효 한도가 최대 워커 수 배까지 느슨해진다(무제한은 아니다). 폴백 중임은 로그·인프로세스 카운터로만 보인다 | `rate_limit_degradation_snapshot()`을 `/health/ready` body에 노출(응답 스키마 변경이라 별도 태스크) |
+| **강등 회계가 `/health/ready`에 미노출** | 인프로세스 카운터(`cache_degradation_snapshot`·`device_cache_degradation_snapshot`·`rate_limit_degradation_snapshot`)는 존재하나 HTTP로는 못 읽는다 — 지금은 로그로만 판정한다 | 세 스냅샷을 `metrics`에 합류(OPS-05·OPS-06 공통 잔여) |
 | **다중 워커 시 지표 해석 붕괴** | 워커별 독립 계측이라 `/health/ready` 1회 조회 = 워커 1개 표본 | 프로세스 경계 합산 스크레이퍼 |
 | **프로덕션 배포 토폴로지 미확정** | 이 런북의 명령은 전부 *현재의 단일 머신 + Docker Desktop* 전제다. 컨테이너화 배포로 바뀌면 §4의 조치 명령이 달라진다 | **OPS-03**(배포·CD·IaC) 완료 후 이 문서 §4 갱신 |
 
 ---
 
-*작성: 2026-07-26 (OPS-04-incident-runbook-slo) · 엔드포인트·임계·실패 동작은 `src/backend/whymath_backend/` 2026-07-26 실측 · 드리프트 동결: `tests/backend/ops/test_slo_contract.py`*
+*작성: 2026-07-26 (OPS-04-incident-runbook-slo) · 갱신: 2026-07-26 (OPS-06 — 함정 ④·§2-2 표·§4-2·§6을 Redis 강등 실측에 맞춰 재작성) · 엔드포인트·임계·실패 동작은 `src/backend/whymath_backend/` 2026-07-26 실측 · 드리프트 동결: `tests/backend/ops/test_slo_contract.py`(임계·경로) + `tests/backend/api/test_redis_degradation.py`(강등 동작)*

@@ -337,6 +337,24 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-26 (구현·OPS-06): **Redis 클라이언트 3분기 통일 — 강등을 일괄이 아니라 *연산별 보안 의미론*으로 갈랐다** (claude 구현, Kiki "Ops")
+
+**컨텍스트**: OPS-05가 `l3/cache` 하나만 고쳐 남은 두 생성 지점(`api/_device_store`·`api/_rate_limit`) 상환. 세 지점이 이제 같은 `redis_socket_timeout_s`를 읽는다(새 설정 키 0·거버넌스 테스트 `test_three_client_builders_share_one_timeout_setting`으로 동결).
+
+**핵심 판정 — 일괄 강등은 틀린 답이다**: `DeviceStore.verify`는 positive cache이고 DB가 권위라, 연산마다 강등의 안전성이 다르다. `get`(verify·count) → 미스 강등 → DB 폴백은 **안전**(강등이 fast-path 승인을 *줄일* 뿐 절대 느슨해지지 않음). `setex` → no-op 강등도 안전(느려질 뿐). 그러나 **`delete`(무효화)는 강등 금지가 보안 계약** — 삼키면 폐기된 디바이스 서명이 TTL까지 캐시에 남는다. 기존 `_retry_with_timeout` 재사용해 재시도 2회 후 **예외 전파**(fail-loud 유지·복원력만 추가). **초안 명세 누락분 발견**: `cleanup_stale`(:1067)도 `device_verify:*`를 무효화하므로 동일 계약 대상 — 빠뜨리면 배치 폐기 경로에만 stale 승인이 남았다.
+
+**뉘앙스(문서·주석에 명기)**: Redis가 *완전히* 죽으면 `get`도 실패해 stale을 **읽을 수 없어** 오히려 안전하게 DB로 떨어진다. 진짜 위험 구간은 **일시적 DEL 실패 + Redis 회복** 조합이다.
+
+**전제 정정(실측 — 내가 과장했다)**: 착수 시 "폐기 디바이스가 계속 **인증**됨 = 인증 우회"로 규정했으나 **오늘자 폭발 반경은 더 좁다**. `DeviceCredentialStore.verify`의 유일한 소비처는 `_rate_limit.py:1057`(`_client_device_id`)이고, 거기서 verify 실패는 *device 차원 rate limit 비활성*(fail-safe)을 뜻한다 — 즉 stale 승인 = "보호 엔드포인트 접근 허용"이 아니라 "폐기 디바이스가 유효 디바이스로 계수됨". 그럼에도 이 저장소는 **디바이스 인증 프리미티브로 설계**됐고 후속 소비처가 그 계약을 믿게 되므로 무효화 계약은 지금 고정했다. 또 `register`의 DEL은 `device_count:*`만 지워 보안 계약이 아니라 *신선도* 문제다(엄밀히는 no-op 강등이 맞으나 동작 변경 0으로 fail-loud 유지 — SLO §6 후속 후보).
+
+**rate limit** → fail-open(무제한·비용/남용)도 fail-closed(전 학생 차단·**우선순위 #1 위반**)도 아닌 **`InMemoryBackend` 폴백**. `RedisBackend` *내부*에 둔 이유: 래퍼면 팩토리를 거치지 않는 직접 생성 경로가 무방비로 남는다(보호가 조립 방식에 의존하면 언젠가 빠진다). 대가는 워커별 계수(최대 N배 느슨·무제한 아님)·장애 시작 시 창 1회 리셋·회복 후 두 회계 미합산 — 전부 명기. `NoScriptError` 재적재 경로는 정상 동작이라 보존(재시도 실패 후에야 폴백).
+
+**`api/_degradation.py` 신설** — L3 `CacheDegradationCounter`를 복제하지 않고 일반화. 그쪽은 연산 어휘가 `Literal["get","set"]` 고정이고 로그가 캐시 의미론에 결합돼, 5개 어휘·3종 효과를 욱여넣으면 OPS-05가 동결한 테스트가 흔들린다. L3 미변경.
+
+**검증**: 신규 42 + SLO 동결 11 + OPS-05 동결 56 = 98 passed · api 전체 1077 passed · 백엔드(api 제외) 5683 passed · mypy --strict clean. **돌연변이 8종 전건 검출** — 특히 DEL 삼킴은 "폐기 디바이스가 stale 캐시로 인증된다"를 재현하는 보안 회귀 테스트가 잡는다. 타임아웃은 실물 redis-py `connection_kwargs`로 확인(시임 판정 금지).
+
+**정직한 잔여**(SLO §6): 무효화 실패 시 register/revoke가 5xx(DB는 이미 커밋 — 응답과 상태가 어긋나 보임·완화 후보는 실패 큐 적재) · 폴백 시 rate limit 분산 정확도 저하 · **강등 회계 3종이 `/health/ready`에 미노출**(전부 인프로세스에만 — OPS-05 공통 잔여).
+
 ### 2026-07-26 (구현·OPS-05): **Redis 캐시 장애의 학생 대면 전파 차단 — "레디니스 정책 ≠ 동작 보증"의 실증과 폐색** (claude 구현, Kiki "Redis")
 
 **컨텍스트**: OPS-04 조사에서 발견된 결함. OPS-01의 `/health/ready`는 Redis를 `required=false`로 **보고만** 하고 200을 유지하는데, `RedisCache.get/set`은 예외를 그대로 전파해 Redis 다운 시 `l3/pipeline.py:211`이 5xx를 냈다 — **레디니스가 초록인데 학생은 실패**하는 간극. `ping()`만 흡수하고 있었다.

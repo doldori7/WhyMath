@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import hmac
 import itertools
+import logging
 import secrets
 import uuid
 from collections.abc import Awaitable, Callable
@@ -47,6 +48,7 @@ from whymath_backend.api._crypto import (
     encrypt_secret_for_storage,
     resolve_stored_secret,
 )
+from whymath_backend.api._degradation import DegradationCounter, DegradationSnapshot
 
 
 class DeviceInfo(NamedTuple):
@@ -706,6 +708,96 @@ class _CacheClient(Protocol):
         ...
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# OPS-06 — 캐시 장애 강등: **연산마다 판정이 다르다**
+#
+# OPS-05가 L3 응답 캐시에서 "get 실패 → 미스, set 실패 → no-op"으로 통일한 것과 달리, 이
+# 캐시는 *인증 검증 결과*를 담기 때문에 연산별로 보안 함의가 갈린다. 판정 근거:
+#
+#   | 연산            | 실패 시        | 판정 | 근거                                       |
+#   |-----------------|----------------|------|--------------------------------------------|
+#   | get(verify)     | 미스로 강등    | 안전 | DB(`inner.verify`)가 권위 — 강등은 fast-path |
+#   |                 |                |      | 승인을 *줄일* 뿐 절대 느슨해지지 않는다      |
+#   | setex(성공 캐싱)| no-op 강등     | 안전 | 다음 요청이 DB를 다시 조회 — 느려질 뿐       |
+#   | get(count)      | 미스로 강등    | 안전 | 동일 논리(DB 재조회)                        |
+#   | **delete(무효화)**| **예외 전파** | 보안 | 무효화 실패를 삼키면 폐기된 디바이스의 서명이 |
+#   |                 |                |      | TTL까지 캐시에 남아 계속 통과한다            |
+#
+# 이 캐시가 *positive cache*(성공만 캐싱)라는 점이 앞의 세 줄을 안전하게 만든다 — 캐시가
+# 못 읽히면 그냥 DB로 간다. 반대로 무효화(DEL)는 캐시에 남은 *과거의 승인*을 지우는 유일한
+# 즉시 수단이라 강등 대상이 아니다.
+#
+# **위험 구간의 정확한 모양**(과장·축소 금지): Redis가 *완전히* 죽으면 get도 실패해 stale
+# 항목을 애초에 *읽을 수 없으므로* 오히려 안전하게 DB 검증으로 떨어진다. 진짜 위험한 조합은
+# **일시적 DEL 실패 + Redis 회복**이다 — 그 사이 stale 키가 살아남아 회복 후 다시 읽힌다.
+# 그래서 DEL은 (강등 대신) *유한 재시도*로 일시 장애를 흡수하고, 소진되면 예외를 전파해
+# 호출자·운영자에게 "무효화가 끝나지 않았다"를 알린다. 재시도가 전부 실패해도 TTL 자연
+# 만료가 stale 창을 TTL 이내로 묶는다(이중 안전망).
+#
+# **현재 폭발 반경 메모**(2026-07-26 실측): `DeviceCredentialStore.verify`의 유일한 소비처는
+# `_rate_limit._client_device_id`이고, 거기서 verify 실패는 *device 차원 rate limit 비활성*
+# (fail-safe)을 뜻한다 — 즉 오늘의 stale 승인은 "보호 엔드포인트 접근 허용"이 아니라 "폐기된
+# 디바이스가 유효 디바이스로 계수됨"이다. 그럼에도 이 저장소는 *디바이스 인증 프리미티브*로
+# 설계됐고 후속 소비처(디바이스 게이팅 등)가 그 계약을 믿게 되므로, 무효화 계약은 지금
+# 고정한다. 문서에도 이 뉘앙스 그대로 남긴다(`docs/standards/incident_response_slo.md` 함정 ④).
+# ──────────────────────────────────────────────────────────────────────────
+
+# 강등 회계의 연산 어휘 — 로그·스냅샷·테스트가 공유하는 단일 상수.
+CACHE_OP_GET = "get"
+CACHE_OP_SETEX = "setex"
+CACHE_OP_DELETE = "delete"
+
+# 로그에 실리는 '강등의 효과' 문구 — 운영자가 로그 한 줄로 학생 영향까지 읽게 한다.
+_EFFECT_GET = "DB 검증으로 폴백합니다(캐시 미스 등가 — 승인이 느슨해지지 않습니다)."
+_EFFECT_SETEX = "캐시 적재를 건너뜁니다(다음 요청이 DB를 다시 조회합니다)."
+_EFFECT_DELETE = (
+    "무효화는 강등하지 않습니다 — 예외를 전파합니다"
+    "(폐기된 디바이스가 stale 캐시로 계속 통과하는 것을 막기 위함)."
+)
+
+# 무효화(DEL) 재시도 파라미터 기본값 — 학생 요청 예산 안에 드는 *유한* 재시도.
+# max_retries=2·timeout 2.0s·backoff 0.05s(full jitter) → 최악 약 4초 후 예외 전파.
+# 무한 재시도는 금물이다(요청이 매달리면 캐시 장애가 서비스 마비로 번진다 — OPS-05 근거).
+_INVALIDATE_MAX_RETRIES = 2
+_INVALIDATE_TIMEOUT_SECONDS = 2.0
+_INVALIDATE_BACKOFF_SECONDS = 0.05
+
+# 프로세스 전역 회계 — CachedDeviceStore 인스턴스가 여럿이어도 "이 프로세스가 디바이스 캐시
+# 없이 버틴 횟수"는 하나로 합산돼야 운영 판정이 된다(OPS-05 `_PROCESS_DEGRADATION` 선례).
+_PROCESS_DEGRADATION = DegradationCounter("디바이스 캐시")
+
+
+def device_cache_degradation_snapshot() -> DegradationSnapshot:
+    """프로세스 전역 디바이스 캐시 강등 회계 스냅샷 — 운영 노출·진단의 읽기 표면.
+
+    아직 `/health/ready` body에는 싣지 않는다(응답 스키마 변경은 이 태스크 범위 밖).
+    지금은 관측 SaaS 없이도 읽을 수 있는 인프로세스 판정치가 *존재*함을 보장한다.
+    """
+    return _PROCESS_DEGRADATION.snapshot()
+
+
+def reset_device_cache_degradation() -> None:
+    """프로세스 전역 회계 초기화 — 테스트 격리용."""
+    _PROCESS_DEGRADATION.reset()
+
+
+def _decode_cached(value: Any) -> str | None:
+    """캐시 GET 응답을 str | None으로 방어적 정규화(OPS-05 `_decode` 미러링).
+
+    클라이언트가 `decode_responses=True`면 str, 아니면 bytes를 돌려준다. 미스는 None이다.
+    예기치 못한 타입은 None(=미스)으로 본다 — 캐시에는 우리가 넣은 str만 있어야 하므로,
+    비정상 값은 사용하지 않고 DB로 가는 편이 안전하다(`hmac.compare_digest`에 str이 아닌
+    값을 넘겨 TypeError를 내는 경로도 함께 닫힌다).
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("utf-8")
+    return None
+
+
 class CachedDeviceStore:
     """`DeviceCredentialStore` 데코레이터 — verify 결과를 Redis로 캐시.
 
@@ -726,6 +818,10 @@ class CachedDeviceStore:
     캐시 클라이언트 보안: 캐시엔 *서명*만 저장(secret_plain·user_id·만료 정보 등 *추가 PII 0*).
     Redis dump가 노출돼도 *그 디바이스의 정당 서명*만 알려지나, 그 서명은 어차피 매 요청에 평문
     노출(`X-Device-Sig` 헤더)이라 *새 노출면 0*.
+
+    **장애 강등(OPS-06)**: Redis 장애가 학생 대면 5xx로 번지지 않도록 조회·적재는 흡수하고
+    무효화는 전파한다 — 연산별 판정과 근거는 이 클래스 바로 위의 판정표 참조. 흡수하든
+    전파하든 예외 *타입명*은 항상 로그·회계에 남는다(침묵 실패 금지).
     """
 
     def __init__(
@@ -735,6 +831,11 @@ class CachedDeviceStore:
         ttl_seconds: int = 60,
         count_ttl_seconds: int | None = None,
         count_all_ttl_seconds: int | None = None,
+        *,
+        degradation: DegradationCounter | None = None,
+        invalidate_timeout_seconds: float = _INVALIDATE_TIMEOUT_SECONDS,
+        invalidate_max_retries: int = _INVALIDATE_MAX_RETRIES,
+        invalidate_backoff_seconds: float = _INVALIDATE_BACKOFF_SECONDS,
     ) -> None:
         self._inner = inner
         self._cache = cache
@@ -745,38 +846,135 @@ class CachedDeviceStore:
         self._count_all_ttl = (
             count_all_ttl_seconds if count_all_ttl_seconds is not None else self._count_ttl
         )
+        # OPS-06: 기본은 프로세스 전역 회계(인스턴스가 여럿이어도 합산) — 테스트는 새 카운터 주입.
+        self._degradation = degradation if degradation is not None else _PROCESS_DEGRADATION
+        self._invalidate_timeout = invalidate_timeout_seconds
+        self._invalidate_max_retries = invalidate_max_retries
+        self._invalidate_backoff = invalidate_backoff_seconds
+
+    # ── OPS-06 캐시 접근 가드 ────────────────────────────────────────────
+    def degradation_snapshot(self) -> DegradationSnapshot:
+        """이 store가 쓰는 회계의 불변 스냅샷 — 인프로세스 판정치."""
+        return self._degradation.snapshot()
+
+    async def _cache_get(self, key: str) -> str | None:
+        """캐시 조회 — 실패는 **미스로 강등**(None). 예외를 호출자에게 전파하지 않는다.
+
+        강등이 안전한 이유: 이 캐시는 *성공만* 담는 positive cache이고 권위는 DB다. 못 읽으면
+        `inner.verify`/`inner.count_for_user`로 가므로 **승인이 느슨해지는 방향이 아니라
+        엄격해지는 방향**으로만 움직인다(대가는 DB 라운드트립 1회).
+
+        try 범위에 디코딩까지 넣는 이유: 손상된 값(UnicodeDecodeError)도 결국 "캐시를 못 쓰는
+        상태"라 같은 강등으로 다뤄야 학생 경로가 안 깨진다(OPS-05 `RedisCache.get` 선례).
+        """
+        try:
+            raw = await self._cache.get(key)
+            decoded = _decode_cached(raw)
+        except Exception as exc:  # noqa: BLE001 — 캐시 장애를 학생 대면 실패로 전파 금지
+            self._degradation.record_failure(CACHE_OP_GET, exc, effect=_EFFECT_GET)
+            return None
+        self._degradation.record_success()
+        return decoded
+
+    async def _cache_get_int(self, key: str) -> int | None:
+        """count 캐시 조회 — 비정수 값도 미스로 강등(예외 타입명은 회계에 남는다)."""
+        cached = await self._cache_get(key)
+        if cached is None:
+            return None
+        try:
+            return int(cached)
+        except ValueError as exc:
+            # 캐시에 정수가 아닌 값이 들어있다 = 캐시를 신뢰할 수 없다 → DB 재조회.
+            self._degradation.record_failure(CACHE_OP_GET, exc, effect=_EFFECT_GET)
+            return None
+
+    async def _cache_setex(self, key: str, ttl_seconds: int, value: str) -> None:
+        """캐시 적재 — 실패는 **no-op 강등**(best-effort). 예외를 전파하지 않는다.
+
+        적재 실패의 유일한 대가는 다음 요청의 DB 재조회다. 그것 때문에 이미 검증에 성공한
+        학생 요청을 5xx로 죽이는 것은 우선순위 위반이다(#1 학생 ≫ #6 비용).
+        """
+        try:
+            await self._cache.setex(key, ttl_seconds, value)
+        except Exception as exc:  # noqa: BLE001 — 캐시 장애를 학생 대면 실패로 전파 금지
+            self._degradation.record_failure(CACHE_OP_SETEX, exc, effect=_EFFECT_SETEX)
+            return
+        self._degradation.record_success()
+
+    async def _cache_invalidate(self, *keys: str) -> None:
+        """캐시 무효화(DEL) — **강등 금지**. 유한 재시도 후 소진되면 예외를 전파한다.
+
+        여기서만 규칙이 뒤집히는 이유는 클래스 위 판정표의 마지막 줄이다: 무효화를 조용히
+        건너뛰면 *과거의 승인*이 TTL까지 캐시에 살아남는다. 조회 강등은 승인을 줄이지만
+        무효화 강등은 승인을 **늘린다** — 방향이 반대라 같은 처방을 쓸 수 없다.
+
+        재시도(slice 35 `_retry_with_timeout` 재사용)는 강등이 아니라 *복원력*이다:
+        일시적 깜빡임은 흡수하되, 실패를 성공으로 위장하지 않는다. full jitter로 회복 직후
+        thundering herd도 막는다.
+
+        재시도 소진 시의 상태(정직하게): DB 변경은 이미 커밋됐고 캐시만 남아 있다. 호출자가
+        같은 요청을 재시도하면 무효화도 다시 시도된다(`PgDeviceStore.revoke`는 이미 폐기된
+        행에도 UPDATE가 1행 매치돼 True를 돌려주므로 DEL 경로가 재진입한다). 그동안의 stale
+        창은 TTL 이내로 묶인다.
+        """
+        if not keys:
+            return
+
+        async def _delete() -> None:
+            await self._cache.delete(*keys)
+
+        try:
+            await _retry_with_timeout(
+                _delete,
+                timeout_seconds=self._invalidate_timeout,
+                max_retries=self._invalidate_max_retries,
+                backoff_seconds=self._invalidate_backoff,
+                jitter=True,
+            )
+        except Exception as exc:
+            # 전파하기 *전에* 회계·로그에 남긴다 — 상위에서 500으로 뭉개져도 원인 타입이 남는다.
+            self._degradation.record_failure(
+                CACHE_OP_DELETE, exc, effect=_EFFECT_DELETE, level=logging.ERROR
+            )
+            raise
+        self._degradation.record_success()
 
     async def register(self, user_id: uuid.UUID) -> tuple[str, str]:
         result = await self._inner.register(user_id)
-        # slice 40: count 캐시 invalidate(active·all 두 키) — 새 device가 count에 반영
-        await self._cache.delete(
+        # slice 40: count 캐시 invalidate(active·all 두 키) — 새 device가 count에 반영.
+        # OPS-06 메모: 이 DEL이 지우는 것은 *count 캐시뿐*이라 보안 계약이 아니라 신선도
+        # 문제다(폐기 서명 잔존과 무관). 그럼에도 현행 fail-loud를 유지한다 — 무효화 경로의
+        # 처리를 한 곳으로 통일해 "어떤 DEL은 삼켜도 된다"는 예외를 만들지 않기 위함이고,
+        # 재시도가 붙은 만큼 종전보다 실패 확률은 낮아졌다(동작 변경 없음·복원력만 추가).
+        await self._cache_invalidate(
             f"{_COUNT_CACHE_KEY_PREFIX}{user_id}:active",
             f"{_COUNT_CACHE_KEY_PREFIX}{user_id}:all",
         )
         return result
 
     async def verify(self, device_id: str, signature_hex: str) -> bool:
-        # 1) 캐시 GET — hit + 일치면 DB 라운드트립 0
+        # 1) 캐시 GET — hit + 일치면 DB 라운드트립 0 (실패는 미스로 강등 → 2)로 진행)
         cache_key = _VERIFY_CACHE_KEY_PREFIX + device_id
-        cached = await self._cache.get(cache_key)
+        cached = await self._cache_get(cache_key)
         if cached is not None:
-            cached_str = cached.decode("utf-8") if isinstance(cached, bytes) else cached
             # 상수시간 비교 — 캐시 hit 경로도 타이밍 공격 방어
-            if hmac.compare_digest(cached_str, signature_hex.lower()):
+            if hmac.compare_digest(cached, signature_hex.lower()):
                 return True
         # 2) 캐시 미스/불일치 → inner(DB) 위임
         result = await self._inner.verify(device_id, signature_hex)
         # 3) 성공만 캐시 — 실패는 매번 DB(공격자의 poison 시도 차단)
         if result:
-            await self._cache.setex(cache_key, self._ttl, signature_hex.lower())
+            await self._cache_setex(cache_key, self._ttl, signature_hex.lower())
         return result
 
     async def revoke(self, device_id: str, owner_id: uuid.UUID) -> bool:
         # revoke 성공 시 즉시 캐시 invalidate — stale window 최소화
         result = await self._inner.revoke(device_id, owner_id)
         if result:
-            # slice 26: verify 캐시 DEL + slice 40: count 캐시 두 키 모두 DEL(폐기로 active 감소)
-            await self._cache.delete(
+            # slice 26: verify 캐시 DEL + slice 40: count 캐시 두 키 모두 DEL(폐기로 active 감소).
+            # OPS-06: 여기가 *보안 계약*이다 — 실패를 삼키면 폐기된 디바이스의 서명이 TTL까지
+            # 캐시에 남아 계속 통과한다. 재시도 후에도 실패하면 예외가 전파된다(강등 금지).
+            await self._cache_invalidate(
                 _VERIFY_CACHE_KEY_PREFIX + device_id,
                 f"{_COUNT_CACHE_KEY_PREFIX}{owner_id}:active",
                 f"{_COUNT_CACHE_KEY_PREFIX}{owner_id}:all",
@@ -847,23 +1045,26 @@ class CachedDeviceStore:
             )
         suffix = "all" if include_revoked else "active"
         cache_key = f"{_COUNT_CACHE_KEY_PREFIX}{owner_id}:{suffix}"
-        cached = await self._cache.get(cache_key)
+        # OPS-06: 조회 실패·비정수 값은 미스로 강등 → DB 재조회(정확한 값을 돌려준다).
+        cached = await self._cache_get_int(cache_key)
         if cached is not None:
-            cached_str = cached.decode("utf-8") if isinstance(cached, bytes) else cached
-            return int(cached_str)
+            return cached
         result = await self._inner.count_for_user(owner_id, include_revoked=include_revoked)
         # slice 48/49: 키별 TTL — `:all`(include_revoked)은 더 긴 TTL 옵션
         ttl = self._count_all_ttl if include_revoked else self._count_ttl
-        await self._cache.setex(cache_key, ttl, str(result))
+        await self._cache_setex(cache_key, ttl, str(result))
         return result
 
     async def cleanup_stale(self, max_age_days: int, *, dry_run: bool = False) -> list[str]:
         # slice 34: inner가 폐기 device_id 목록을 반환하므로 *정확히* 그 키들만 캐시 invalidate.
         # slice 33의 "TTL 자연 만료" 트레이드오프 해소 — stale 기간 즉시 0(DEL 성공 가정).
         # dry_run=True면 inner도 상태 변경 0·캐시도 건드리지 않음.
+        # OPS-06: revoke와 *같은 보안 계약*이다(폐기된 디바이스의 verify 캐시 무효화) — 강등
+        # 금지·재시도 후 예외 전파. 태스크 지시에는 revoke/register만 열거됐으나 이 경로도
+        # 동일 부류라 함께 닫는다(빠뜨리면 배치 폐기만 stale 승인을 남긴다).
         affected = await self._inner.cleanup_stale(max_age_days, dry_run=dry_run)
         if not dry_run and affected:
-            await self._cache.delete(*[_VERIFY_CACHE_KEY_PREFIX + d for d in affected])
+            await self._cache_invalidate(*[_VERIFY_CACHE_KEY_PREFIX + d for d in affected])
         return affected
 
 
@@ -931,6 +1132,10 @@ def build_device_store_from_settings(
         ttl_seconds=settings.device_verify_cache_ttl_seconds,
         count_ttl_seconds=settings.device_count_cache_ttl_seconds,
         count_all_ttl_seconds=settings.device_count_all_cache_ttl_seconds,
+        # OPS-06: 무효화 재시도의 시도별 상한도 소켓 타임아웃과 같은 축으로 묶는다(새 설정 키를
+        # 만들지 않고 OPS-05가 세운 `redis_socket_timeout_s`를 재사용 — 운영자가 조절할 손잡이는
+        # 하나면 충분하고, 소켓이 2초에 끊기는데 바깥 상한만 10초인 조합은 의미가 없다).
+        invalidate_timeout_seconds=settings.redis_socket_timeout_s,
     )
 
     async def _close_redis() -> None:
@@ -942,11 +1147,22 @@ def build_device_store_from_settings(
     return cached, _close_redis
 
 
-def _build_redis_for_cache(settings: Any) -> _CacheClient:  # pragma: no cover
+def _build_redis_for_cache(settings: Any) -> _CacheClient:
     """기본 redis.asyncio 클라이언트 — 지연 import(라이브러리 없는 환경 보호).
 
-    Redis 라이브러리·연결 의존성은 라이브 통합 테스트(@integration·실 Redis 데몬)에서
-    검증한다 — hermetic 테스트는 모드를 `pg`/`none`으로 두거나 가짜 클라이언트 주입한다.
+    Redis 연결 자체는 라이브 통합 테스트(@integration·실 Redis 데몬)에서 검증한다 —
+    hermetic 테스트는 모드를 `pg`/`none`으로 두거나 가짜 클라이언트를 주입한다. 다만
+    **소켓 타임아웃 결선은 hermetic으로도 검증한다**(실물 `redis.asyncio.Redis` 객체의
+    `connection_pool.connection_kwargs` 확인 — 네트워크는 타지 않는다). CLAUDE.md: 외부 SDK
+    표면을 시임만으로 정합 선언 금지.
+
+    **소켓 타임아웃을 명시한다** (OPS-06 — OPS-05가 L3 캐시에 건 것과 같은 축):
+    무응답 Redis(패킷 블랙홀·방화벽 drop)는 연결 거부보다 나쁘다 — 매 요청의 디바이스 서명
+    검증이 응답을 기다리며 매달리고, asyncio 워커가 고갈되면 캐시 한 컴포넌트의 장애가
+    서비스 전체 마비로 번진다. 인자를 주지 않으면 값이 **라이브러리 버전 기본값에 종속**된다
+    (설치본 redis-py 8.0.1 실측 5초·pin `redis>=5.1.0`은 상한이 없다). 응답 대기와 연결 수립
+    둘 다 거는 이유: 하나만 걸면 나머지 축에서 무한 대기가 그대로 남는다(연결은 되는데 응답이
+    없는 블랙홀 vs SYN이 drop되는 방화벽 — 서로 다른 인자에 걸리는 두 실패 양상).
     """
     try:
         from redis.asyncio import Redis
@@ -955,7 +1171,16 @@ def _build_redis_for_cache(settings: Any) -> _CacheClient:  # pragma: no cover
             "redis Python 클라이언트가 설치되지 않았습니다. "
             "`pip install redis[hiredis]` 후 다시 시도하세요."
         ) from exc
-    return cast(_CacheClient, Redis.from_url(settings.redis_url, decode_responses=True))
+    timeout_s = settings.redis_socket_timeout_s
+    return cast(
+        _CacheClient,
+        Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+            socket_timeout=timeout_s,
+            socket_connect_timeout=timeout_s,
+        ),
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
