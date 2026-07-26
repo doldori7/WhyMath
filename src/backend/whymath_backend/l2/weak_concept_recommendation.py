@@ -11,16 +11,22 @@ snapshot 격하), 메타 enrich 대상 테이블을 `concept_node`(구 437 UC)�
 ① 진단·약점 정렬 — `l2.concept_diagnosis.compute_concept_diagnoses`를 *그대로* 입력으로 쓴다
    (BKT 최신 숙달 + IRT θ 융합·agreement·*약점 먼저* 정렬 이미 수행). 여기서 IRT/BKT 융합이나
    약점 정렬을 재구현하지 않는다 — 진단 결과에 *필터·enrich·상한*만 얹는다.
-② code enrich — `l1.atom_graph.atom_node_projection.fetch_atom_node_meta`(code 리스트 →
-   `atom_node` 안전 메타 단일 IN 조회)를 재사용한다. 원자 검색 좌석(`search_atoms`)이 enrich에 쓴
-   *같은* 원자 메타 좌석이다(S0-4a 신설·`fetch_node_meta`의 원자 짝·시그니처 동형).
+② code enrich — `l1.atom_graph.axis.fetch_atom_axis_meta`(code 리스트 → `atom_node` 안전 메타
+   단일 IN 조회·**호출 세션의 async 엔진**)를 쓴다. 원자 검색 좌석(`search_atoms`)이 쓰는 sync
+   짝(`fetch_atom_node_meta`)과 같은 컬럼·같은 반환 계약이며 엔진 평면만 다르다.
 
 ────────────────────────────────────────────────────────────────────────────
-sync 엔진 재사용 (검색 좌석과 동일 패턴 — 신규 동시성 0)
+단일 엔진 (ARCH-13 — 교차 엔진 code 문자열 조인 해소)
 ────────────────────────────────────────────────────────────────────────────
-`fetch_atom_node_meta`는 *sync 엔진*(블로킹 psycopg)이고 이 함수는 async다. 검색 좌석(api/concepts·
-coach)이 sync 좌석을 `asyncio.to_thread`로 워커 스레드에 격리하는 *바로 그 패턴*을 따른다 —
-이벤트 루프를 막지 않게(CLAUDE.md p50<2s·동시 요청 보호). 새 동시성 패턴을 발명하지 않는다.
+예전에는 진단(async 세션)과 메타(별도 sync 엔진)를 code 문자열로 이어 붙였다. 원자 축과 구 437이
+같은 테이블에 code로 병존하므로 그 조인은 *축이 어긋나도 조용히 성립*했고, 미스는 enrich None →
+`reviewed_only`에서 소리 없이 탈락했다. 지금은 메타를 **같은 async 세션**에서 읽고
+(`asyncio.to_thread` 제거), `atom_node`에 없는 code는 "메타 누락"이 아니라 **원자 축 밖**으로 읽어
+사유별로 계상한다(`AxisExclusions`·구조화 로그).
+
+이 좌석은 traversal이 아니라 *학습자 자신의 mastery*에서 후보가 나오므로 **축 필터는 걸지 않는다** —
+학생이 실제로 푼 개념을 축이 다르다는 이유로 감추면 이력을 숨기는 셈이다. 축 밖은 `reviewed_only`
+게이팅에서만(기존과 동일하게) 빠지고, 그 사실이 `off_atom_axis`로 드러난다.
 
 ────────────────────────────────────────────────────────────────────────────
 redaction·노출 계약 (CLAUDE.md 우선순위 #2 — 협상 불가)
@@ -35,35 +41,36 @@ formal_definition·core_proposition은 어디에도 유입되지 않는다** —
 "reviewed"`인 개념만 남긴다(메타 없어 확인 불가인 code는 보수적 제외 — 소비 슬 게이팅 규약과
 일관·"확실하지 않으면 노출 안 함"). 기본 False는 recall 보존.
 
-7계층: L2 학습자 모델이 L1 `fetch_atom_node_meta`를 *호출*(L_n→L_{n-1} 허용·경계 준수·원자 축도
+7계층: L2 학습자 모델이 L1 `fetch_atom_axis_meta`를 *호출*(L_n→L_{n-1} 허용·경계 준수·원자 축도
 동일 방향 `l1.atom_graph`). L4 코칭·L5 노출은 부착하지 않는다(역방향 의존 회피 — 코칭은 L4·
 HTTP 표면은 api/me).
 """
 
 from __future__ import annotations
 
-import asyncio
 import uuid
-from typing import TYPE_CHECKING
+from dataclasses import dataclass
 
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from whymath_backend.l1.atom_graph.atom_node_projection import AtomNodeMeta, fetch_atom_node_meta
+from whymath_backend.l1.atom_graph.atom_node_projection import AtomNodeMeta
+from whymath_backend.l1.atom_graph.axis import fetch_atom_axis_meta
+from whymath_backend.l2.axis_exclusions import AxisExclusions, log_axis_exclusions
 from whymath_backend.l2.concept_diagnosis import (
     Agreement,
     ConceptDiagnosis,
     compute_concept_diagnoses,
 )
 
-if TYPE_CHECKING:
-    from sqlalchemy.engine import Engine
-
 # 검수 게이팅 비교 리터럴 — `atom_node.review_status`가 싣는 reviewed 값(원자 검색 좌석과 동일
 # 규약). 단, 원자 메타 적재는 review_status를 상수 'ai_estimated'로 박으므로(원자 메타는 AI 추정·
 # atom_node_projection redaction), 원자 축에서 reviewed_only=True는 사실상 전부 게이팅될 수 있다
 # — 검수 승격은 후속 좌석 몫이고, 기본 False(recall 보존) 경로가 정상 운용이다(S0-4d).
 _REVIEWED: str = "reviewed"
+
+# 구조화 로그·집계 좌석명(`whymath.l2.<seat>` 로거로 나간다).
+_SEAT: str = "weak_concept_recommendation"
 
 
 class WeakConceptRecommendation(BaseModel):
@@ -126,15 +133,25 @@ def _weakness_of(diagnosis: ConceptDiagnosis) -> float | None:
     return min(signals) if signals else None
 
 
-async def recommend_weak_concepts(
+@dataclass(frozen=True, slots=True)
+class WeakConceptResult:
+    """약개념 추천 결과 + **제외 사유 집계** — 빈 결과의 이유를 알 수 있게 하는 반환형.
+
+    `recommendations`만 필요한 호출자는 얇은 래퍼 `recommend_weak_concepts`를 쓴다(기존 계약 불변).
+    """
+
+    recommendations: list[WeakConceptRecommendation]
+    exclusions: AxisExclusions
+
+
+async def recommend_weak_concepts_detailed(
     session: AsyncSession,
     user_id: uuid.UUID,
     *,
     limit: int = 10,
     mastery_threshold: float = 0.7,
     reviewed_only: bool = False,
-    meta_engine: Engine | None = None,
-) -> list[WeakConceptRecommendation]:
+) -> WeakConceptResult:
     """학습자 약점(BKT/IRT) → 약점 필터 → `atom_node`(code) 안전 메타 enrich → 상위 N 추천.
 
     흐름:
@@ -142,50 +159,64 @@ async def recommend_weak_concepts(
          — 진단·정렬은 L2 좌석 재사용(신규 0). 정렬은 이미 약점 우선이라 이 함수가 보존한다.
       ② **약점 필터** — 비교 가능한 신호(bkt_mastery·irt_mastery_proxy 중 존재) 최저값이
          `mastery_threshold` *미만*인 개념만(약점). 신호가 하나도 없으면 추천 근거 없음으로 제외.
-      ③ **code enrich** — 약점 후보들의 `concept_code`(None 아닌 code)를 모아 `fetch_atom_node_meta`
-         를 *단일 호출*(N+1 0)로 `atom_node` 안전 메타를 받아 붙인다(S0-4d·runtime truth=원자).
-         code 없거나(orphan) 메타 미적재(구 437 UC가 흘러도 atom_node 미스)면 enrich 필드 None
-         graceful — 격하 취지 부합. `fetch_atom_node_meta`는 sync(블로킹 psycopg)라
-         `asyncio.to_thread`로 워커 스레드에 격리한다(검색 좌석 패턴 미러·이벤트 루프 보호).
-      ④ **검수 게이팅** — `reviewed_only=True`면 `review_status == "reviewed"`인 개념만(메타
-         없어 확인 불가인 code는 보수적 제외 — 소비 슬 규약). 기본 False는 recall 보존.
+      ③ **code enrich** — 약점 후보들의 `concept_code`(None 아닌 code)를 모아 `fetch_atom_axis_meta`
+         를 *단일 호출*(N+1 0·**호출 세션의 async 엔진**)로 `atom_node` 안전 메타를 받아 붙인다
+         (S0-4d·runtime truth=원자). code 없거나(orphan) 결과에 없으면(=**원자 축 밖**) enrich
+         필드 None graceful — 격하 취지 부합.
+      ④ **검수 게이팅** — `reviewed_only=True`면 `review_status == "reviewed"`인 개념만. 제외 사유는
+         **축 밖**(`off_atom_axis`)과 **검수 전**(`not_reviewed`)으로 분리 계상한다 — 예전처럼
+         "메타 None이면 그냥 continue"로 뭉뚱그리지 않는다(ARCH-13 표면화). 기본 False는 recall
+         보존.
       ⑤ **상한** — 약점 정렬을 보존하며 상위 `limit`개만 반환.
 
-    user_id 스코핑·읽기 전용(마이그레이션 불필요). `meta_engine` 주입 가능(테스트 격리·검색
-    좌석이 같은 엔진을 공유하듯). enrich되는 건 안전 필드(name_ko·subject_area·review_status)뿐 —
-    본문(description·formal_definition·core_proposition)은 `atom_node`에 본문 컬럼이 없어 구조적
-    으로 0(redaction). mastery 파생 로직·`concept_code` 키 축은 건드리지 않는다(메타 *조회 대상
-    테이블*만 concept_node→atom_node로 교체·rekey 0).
+    반환은 `recommendations` + `exclusions`(제외 사유별 건수)다. 제외가 있으면 구조화 로그도 1줄
+    남긴다(카운트만·식별 정보 0).
+
+    user_id 스코핑·읽기 전용(마이그레이션 불필요). enrich되는 건 안전 필드(name_ko·subject_area·
+    review_status)뿐 — 본문(description·formal_definition·core_proposition)은 `atom_node`에 본문
+    컬럼이 없어 구조적으로 0(redaction). mastery 파생 로직·`concept_code` 키 축은 건드리지 않는다
+    (메타 *조회 엔진*만 sync→호출 세션으로 교체·rekey 0·데이터 변경 0).
     """
     # ① 진단(약점 먼저 정렬) — L2 좌석 재사용. 융합·정렬·합집합은 이 좌석이 이미 수행.
     diagnoses = await compute_concept_diagnoses(session, user_id)
 
     # ② 약점 필터 — 최저 신호 < 임계인 개념만(신호 0건은 None → 제외). 정렬은 보존(in-place 순서).
     weak: list[tuple[ConceptDiagnosis, float]] = []
+    not_weak = 0
     for diagnosis in diagnoses:
         weakness = _weakness_of(diagnosis)
         if weakness is not None and weakness < mastery_threshold:
             weak.append((diagnosis, weakness))
+        else:
+            not_weak += 1
 
     if not weak:
-        return []
+        exclusions = AxisExclusions(not_weak=not_weak)
+        log_axis_exclusions(_SEAT, exclusions, kept=0)
+        return WeakConceptResult(recommendations=[], exclusions=exclusions)
 
-    # ③ code enrich — 약점 후보의 code(concept_code) 중복 제거해 단일 IN 조회. orphan(code None)은
-    #    제외. fetch_atom_node_meta는 sync 엔진(블로킹)이라 워커 스레드로 격리(검색 좌석 to_thread
-    #    패턴 미러). uc_list는 변수명만 유지하되 이제 원자 code 목록이다(concept_code 키 축은 불변·
-    #    조회 대상 테이블만 atom_node로 교체). 구 437 UC가 흘러도 atom_node 미스→None(격하 부합).
+    # ③ code enrich — 약점 후보의 code(concept_code) 중복 제거해 단일 IN 조회(호출 세션 엔진·
+    #    교차 엔진 왕복 0). uc_list는 변수명만 유지하되 이제 원자 code 목록이다(concept_code 키
+    #    축은 불변). 결과에 없는 code = 원자 축 밖(구 437 UC 등) — None이 아니라 사유로 읽는다.
     uc_list = sorted({d.concept_code for d, _ in weak if d.concept_code is not None})
     meta: dict[str, AtomNodeMeta] = {}
     if uc_list:
-        meta = await asyncio.to_thread(fetch_atom_node_meta, uc_list, engine=meta_engine)
+        meta = await fetch_atom_axis_meta(session, uc_list)
 
-    # ④/⑤ 게이팅 필터 + 상한 — 약점 정렬 보존하며 reviewed 필터 후 상위 limit.
+    # ④/⑤ 게이팅 필터 + 상한 — 약점 정렬 보존하며 reviewed 필터 후 상위 limit. 제외 사유는
+    #     축 밖(off_atom_axis)과 검수 전(not_reviewed)으로 분리 계상한다(ARCH-13 표면화).
+    off_atom_axis = 0
+    not_reviewed = 0
     out: list[WeakConceptRecommendation] = []
     for diagnosis, weakness in weak:
         node = meta.get(diagnosis.concept_code) if diagnosis.concept_code is not None else None
-        if reviewed_only and (node is None or node.review_status != _REVIEWED):
-            # 게이팅 — reviewed 아니거나 메타 미적재(확인 불가)면 제외(보수적·정직·소비 슬 규약).
-            continue
+        if reviewed_only:
+            if node is None:
+                off_atom_axis += 1  # 원자 축 밖(또는 orphan) — 검수 확인 불가라 보수적 제외.
+                continue
+            if node.review_status != _REVIEWED:
+                not_reviewed += 1  # 축 안이지만 검수 전 → 보수적 제외.
+                continue
         out.append(
             WeakConceptRecommendation(
                 concept_id=diagnosis.concept_id,
@@ -204,10 +235,38 @@ async def recommend_weak_concepts(
         if len(out) >= limit:
             break  # 상한 — 약점 정렬 보존하며 상위 N(게이팅 후 카운트).
 
-    return out
+    exclusions = AxisExclusions(
+        off_atom_axis=off_atom_axis, not_reviewed=not_reviewed, not_weak=not_weak
+    )
+    log_axis_exclusions(_SEAT, exclusions, kept=len(out))
+    return WeakConceptResult(recommendations=out, exclusions=exclusions)
+
+
+async def recommend_weak_concepts(
+    session: AsyncSession,
+    user_id: uuid.UUID,
+    *,
+    limit: int = 10,
+    mastery_threshold: float = 0.7,
+    reviewed_only: bool = False,
+) -> list[WeakConceptRecommendation]:
+    """`recommend_weak_concepts_detailed`의 추천 목록만 돌려주는 얇은 래퍼(기존 계약 보존).
+
+    제외 사유 집계까지 필요한 호출자만 `_detailed`를 쓴다 — 로직 중복 0(본체는 하나).
+    """
+    result = await recommend_weak_concepts_detailed(
+        session,
+        user_id,
+        limit=limit,
+        mastery_threshold=mastery_threshold,
+        reviewed_only=reviewed_only,
+    )
+    return result.recommendations
 
 
 __all__ = [
     "WeakConceptRecommendation",
+    "WeakConceptResult",
     "recommend_weak_concepts",
+    "recommend_weak_concepts_detailed",
 ]
