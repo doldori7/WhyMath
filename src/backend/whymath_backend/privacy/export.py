@@ -221,17 +221,30 @@ async def export_user_data(session: AsyncSession, *, user_id: uuid.UUID) -> User
     # import이라 안전). `_row_to_json`은 ciphertext 컬럼을 제외(to_schema)하므로 export엔 평문만
     # 실린다. 키 유실 시 resolve가 RuntimeError(조용한 평문/빈 export 금지).
     from whymath_backend.api._crypto import (
-        build_dialogue_content_cipher,
+        require_dialogue_content_cipher,
         resolve_dialogue_content,
+        resolve_dialogue_image_analysis,
+        resolve_dialogue_image_uri,
     )
     from whymath_backend.config import get_settings
 
-    content_cipher = build_dialogue_content_cipher(get_settings())
+    content_cipher = require_dialogue_content_cipher(get_settings())
     turn_dicts: list[dict[str, Any]] = []
     for row in turn_result.scalars().all():
         turn_json = _row_to_json(row)
         turn_json["content"] = resolve_dialogue_content(
             content_cipher, row.content, row.content_encrypted, row.content_nonce
+        )
+        # SEC-01: 손글씨 URI·분석도 암호화 대상이 됐으므로 열람권(GDPR Art.15) 경로에서 복호한다.
+        # 복호를 빠뜨리면 export에 빈 값이 실려 *부분 export를 완전 export로 위장*하게 된다.
+        turn_json["image_uri"] = resolve_dialogue_image_uri(
+            content_cipher, row.image_uri, row.image_uri_encrypted, row.image_uri_nonce
+        )
+        turn_json["image_analysis"] = resolve_dialogue_image_analysis(
+            content_cipher,
+            row.image_analysis,
+            row.image_analysis_encrypted,
+            row.image_analysis_nonce,
         )
         turn_dicts.append(turn_json)
     data["dialogue_turns"] = turn_dicts

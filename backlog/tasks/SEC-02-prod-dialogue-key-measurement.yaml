@@ -1,0 +1,19 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-02-prod-dialogue-key-measurement
+title: "프로덕션 대화 암호화 키 설정 실측 — 평문/암호문 행 카운트 확보"
+track: infra-debt
+stage: S4
+subject: math
+layer: infra
+status: todo
+priority: 5
+owner: kiki
+depends_on: []
+requires_gates: []
+acceptance:
+  - "docs/standards/dialogue_encryption_deployment_checklist.md §2 체크리스트 통과 + §3 실측 SQL 출력(암호화 행 > 0·도입 이후 평문 행 미증가)을 문서 §4에 날짜·수치와 함께 기록"
+artifacts: []
+paths: []
+session: null
+notes: "SEC-01(2026-07-26)에서 분리. SEC-01은 기계 게이트(prod 추정 환경 키 부재 시 RuntimeError)로 조용한 평문 저장을 차단했으나, '키가 실제로 설정돼 있고 행이 암호화되고 있다'는 양성 증거는 미확보. 프로덕션 DB·env는 Kiki 머신(Phaiakes9)에만 있어 claude 컨테이너에서 수행 불가 — 사람 소유 액션. 절차·명령·판정 SQL은 체크리스트 문서 §2·§3에 고정됨."
+updated: 2026-07-26

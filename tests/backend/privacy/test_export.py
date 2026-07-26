@@ -66,11 +66,11 @@ class _StubSchema:
 
 
 class _StubRow:
-    """ORM 행 흉내 — to_schema() + 대화 본문 봉투 암호화 컬럼(감사상환 #2 export 복호 표면).
+    """ORM 행 흉내 — to_schema() + 대화 봉투 암호화 컬럼(감사상환 #2 export 복호 표면).
 
-    dialogue_turns 조회 행은 export가 `content`/`content_encrypted`/`content_nonce`를 읽어
-    노출 직전 복호한다(키 미설정 hermetic에선 평문 폴백 passthrough). 다른 카테고리 행은 이
-    속성을 안 읽으므로 기본 None으로 둔다.
+    dialogue_turns 조회 행은 export가 `content`/`image_uri`/`image_analysis`와 각 짝의
+    `*_encrypted`/`*_nonce`를 읽어 노출 직전 복호한다(키 미설정 hermetic에선 평문 폴백
+    passthrough). 다른 카테고리 행은 이 속성을 안 읽으므로 기본 None으로 둔다.
     """
 
     def __init__(
@@ -80,11 +80,23 @@ class _StubRow:
         content: str | None = None,
         content_encrypted: bytes | None = None,
         content_nonce: bytes | None = None,
+        image_uri: str | None = None,
+        image_uri_encrypted: bytes | None = None,
+        image_uri_nonce: bytes | None = None,
+        image_analysis: dict[str, Any] | None = None,
+        image_analysis_encrypted: bytes | None = None,
+        image_analysis_nonce: bytes | None = None,
     ) -> None:
         self._payload = payload
         self.content = content
         self.content_encrypted = content_encrypted
         self.content_nonce = content_nonce
+        self.image_uri = image_uri
+        self.image_uri_encrypted = image_uri_encrypted
+        self.image_uri_nonce = image_uri_nonce
+        self.image_analysis = image_analysis
+        self.image_analysis_encrypted = image_analysis_encrypted
+        self.image_analysis_nonce = image_analysis_nonce
 
     def to_schema(self) -> _StubSchema:
         return _StubSchema(self._payload)
@@ -160,7 +172,13 @@ class TestExportUserData:
                 [_StubRow({"cat": "ubm"})],
                 [_StubRow({"cat": "dlg"})],
                 [_StubRow({"cat": "aev"})],
-                [_StubRow({"cat": "dlt", "content": "평문 본문"}, content="평문 본문")],
+                [
+                    _StubRow(
+                        {"cat": "dlt", "content": "평문 본문", "image_uri": "s3://x/h.png"},
+                        content="평문 본문",
+                        image_uri="s3://x/h.png",
+                    )
+                ],
                 [_StubRow({"cat": "profile"})],
             ]
         )
@@ -177,8 +195,16 @@ class TestExportUserData:
         assert out.data["user_behavior_metrics"] == [{"cat": "ubm"}]  # 증분 4 신규
         assert out.data["dialogues"] == [{"cat": "dlg"}]  # 증분 5 신규(대화 세션 메타)
         assert out.data["attempt_events"] == [{"cat": "aev"}]  # 증분 7 신규(세부 시도 이벤트)
-        # 증분 6(대화 턴 본문·조인) + 감사상환 #2: 키 미설정이라 content 평문 passthrough 복호.
-        assert out.data["dialogue_turns"] == [{"cat": "dlt", "content": "평문 본문"}]
+        # 증분 6(대화 턴 본문·조인) + 감사상환 #2: 키 미설정이라 평문 passthrough 복호.
+        # SEC-01: image_uri·image_analysis도 복호 표면에 올라 export에 실린다(이미지 없으면 None).
+        assert out.data["dialogue_turns"] == [
+            {
+                "cat": "dlt",
+                "content": "평문 본문",
+                "image_uri": "s3://x/h.png",
+                "image_analysis": None,
+            }
+        ]
         assert out.user_profile == {"cat": "profile"}
         assert len(out.not_included) >= 1  # 부분 export 정직 고지
         assert fake.commits == 0 and fake.flushes == 0  # 읽기 전용(저장소 패턴)
