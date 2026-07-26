@@ -24,11 +24,16 @@ from pathlib import Path
 
 import pytest
 
+# 이 conftest 디렉터리(tests/backend)를 sys.path에 명시 삽입 — 형제 모듈 `_db_leak_guard`를
+# conftest 로드 시점에 import 가능하게. pytest의 암묵적 디렉터리 삽입은 실행 방식에 따라 갈린다:
+# 위치 인자로 경로를 주면 삽입되지만, `-m integration`처럼 testpaths만으로 수집하면 conftest
+# 로드 시점에 이 디렉터리가 sys.path에 없어 ModuleNotFoundError가 난다(2026-07-26 CI 통합잡
+# 실측). 암묵 동작에 기대지 않고 명시 삽입으로 고정한다.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 # db.session 전역 누수 가드(OPS-07)의 탐지·격리 로직 — 가드 자체의 변별력을 별도 테스트
-# (test_db_leak_guard.py)에서 오염 주입으로 실측하려고 모듈로 분리했다. whymath_backend import는
-# 이 헬퍼 안에서 지연 수행하므로(호출 시점=teardown), 여기 최상단 import는 tests/backend 경로만
-# 있으면 안전하다(pytest prepend 모드가 conftest 디렉터리를 sys.path에 넣는다).
-from _db_leak_guard import (
+# (test_db_leak_guard.py)에서 오염 주입으로 실측하려고 모듈로 분리했다.
+from _db_leak_guard import (  # noqa: E402  (위 sys.path 삽입 후에 import해야 한다)
     contain_db_session_leak,
     db_session_leak_reason,
     format_leak_failure,
