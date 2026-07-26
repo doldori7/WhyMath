@@ -21,6 +21,7 @@ docstring). 그 결과 DB dump·DBA 접근 시 모든 device secret이 노출되
 from __future__ import annotations
 
 import base64
+import json
 import os
 from typing import Any, Protocol
 
@@ -230,6 +231,103 @@ def resolve_dialogue_content(
     return content_plain
 
 
+def require_dialogue_content_cipher(settings: Any) -> MultiKeyCipher | None:
+    """SEC-01: cipher를 만들되, **프로덕션 추정 환경에서 키가 없으면 거부**한다(fail-closed).
+
+    `build_dialogue_content_cipher`는 키가 없으면 조용히 `None`(평문 폴백)을 돌려준다. 그 폴백은
+    개발·CI에서는 옳지만 프로덕션에서는 **CLAUDE.md 절대 금기("미성년자 채팅 데이터를 평문으로
+    저장 금지")를 조용히 위반**한다 — 그리고 조용하기 때문에 아무도 모른다. 체크리스트는 사람이
+    기억해야 작동하지만, 이 게이트는 잊어도 작동한다.
+
+    **프로덕션 판별**: 새 env 축을 만들지 않고 기존 "prod 추정" 신호를 재사용한다 — 실 OAuth
+    provider(kakao/naver) 구성 여부(`api/demo_auth.py::register_demo_provider` 선례). 프로덕션에는
+    항상 실 provider가 있고, 개발·CI에는 없다. 키를 하나 더 늘리지 않는 것과 같은 이유로 *설정
+    축*도 늘리지 않는다 — 새 축은 "설정하는 걸 잊는" 표면을 하나 더 만든다.
+
+    Raises:
+        RuntimeError: prod 추정 환경인데 `WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY` 미설정.
+    """
+    cipher = build_dialogue_content_cipher(settings)
+    if cipher is not None:
+        return cipher
+    production_like = bool(
+        getattr(settings, "kakao_configured", False) or getattr(settings, "naver_configured", False)
+    )
+    if production_like:
+        raise RuntimeError(
+            "프로덕션 추정 환경(실 OAuth provider 구성)인데 대화 암호화 키가 미설정입니다 — "
+            "`WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY`를 설정하세요. 미성년자 대화·손글씨를 "
+            "평문으로 저장하는 것은 절대 금기라 평문 폴백을 허용하지 않습니다."
+        )
+    return None
+
+
+def encrypt_dialogue_image_uri(
+    cipher: SupportsEnvelope | None, image_uri: str | None
+) -> tuple[str | None, bytes | None, bytes | None]:
+    """손글씨 이미지 URI 저장용 3-튜플 — `encrypt_dialogue_content`와 동일 계약(문자열).
+
+    URI 자체가 미성년 풀이 이미지를 가리키는 포인터라 본문과 같은 등급으로 다룬다.
+    """
+    return encrypt_dialogue_content(cipher, image_uri)
+
+
+def resolve_dialogue_image_uri(
+    cipher: SupportsEnvelope | None,
+    image_uri_plain: str | None,
+    image_uri_encrypted: bytes | None,
+    image_uri_nonce: bytes | None,
+) -> str | None:
+    """저장 표현에서 이미지 URI 복원 — `resolve_dialogue_content`와 동일 계약."""
+    return resolve_dialogue_content(cipher, image_uri_plain, image_uri_encrypted, image_uri_nonce)
+
+
+def encrypt_dialogue_image_analysis(
+    cipher: SupportsEnvelope | None, image_analysis: dict[str, Any] | None
+) -> tuple[dict[str, Any] | None, bytes | None, bytes | None]:
+    """Qwen3-VL 분석(JSONB) 저장용 3-튜플 — **결정론 JSON 직렬화 후** 암호화.
+
+    JSONB는 바이트가 아니라 구조라 그대로 암호화할 수 없다. `sort_keys=True`로 직렬화해
+    같은 dict가 같은 평문이 되게 하고(재현성), `ensure_ascii=False`로 한글을 보존한다.
+    분석 결과가 없으면 `(None, None, None)`(암호화 대상 없음).
+    """
+    if image_analysis is None:
+        return None, None, None
+    if cipher is None:
+        return image_analysis, None, None
+    serialized = json.dumps(image_analysis, sort_keys=True, ensure_ascii=False)
+    ciphertext, nonce = cipher.encrypt(serialized)
+    return None, ciphertext, nonce
+
+
+def resolve_dialogue_image_analysis(
+    cipher: SupportsEnvelope | None,
+    image_analysis_plain: dict[str, Any] | None,
+    image_analysis_encrypted: bytes | None,
+    image_analysis_nonce: bytes | None,
+) -> dict[str, Any] | None:
+    """저장 표현에서 분석 dict 복원 — 복호 후 역직렬화.
+
+    암호화 행인데 cipher 미설정이면 `RuntimeError`(조용한 빈 응답 대신 시끄러운 실패).
+    역직렬화 결과가 dict가 아니면 데이터 무결성 오류로 `RuntimeError` — 조용히 None으로
+    삼키면 분석이 사라진 것을 아무도 모른다.
+    """
+    if image_analysis_encrypted is not None and image_analysis_nonce is not None:
+        if cipher is None:
+            raise RuntimeError(
+                "암호화된 이미지 분석이나 복호 키가 미설정입니다 — "
+                "`WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY`를 확인하세요(키 유실 시 복호 불가)."
+            )
+        decoded = json.loads(cipher.decrypt(image_analysis_encrypted, image_analysis_nonce))
+        if not isinstance(decoded, dict):
+            raise RuntimeError(
+                f"복호된 이미지 분석이 dict가 아닙니다(받음: {type(decoded).__name__}) — "
+                "데이터 무결성 오류."
+            )
+        return decoded
+    return image_analysis_plain
+
+
 __all__ = [
     "MultiKeyCipher",
     "SecretCipher",
@@ -237,7 +335,12 @@ __all__ = [
     "build_dialogue_content_cipher",
     "build_secret_cipher",
     "encrypt_dialogue_content",
+    "encrypt_dialogue_image_analysis",
+    "encrypt_dialogue_image_uri",
     "encrypt_secret_for_storage",
+    "require_dialogue_content_cipher",
     "resolve_dialogue_content",
+    "resolve_dialogue_image_analysis",
+    "resolve_dialogue_image_uri",
     "resolve_stored_secret",
 ]

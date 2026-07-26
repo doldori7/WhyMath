@@ -192,8 +192,21 @@ class DialogueTurn(Base):
     student_understanding_signal: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
 
     # ===== 멀티모달 (*미성년 풀이 데이터*) =====
+    # SEC-01: 손글씨 이미지 URI·Qwen3-VL 분석은 **미성년 풀이 전사가 가능한** 데이터인데
+    # 암호화 경로가 아예 없었다(평문 Text/JSONB). content와 같은 봉투 암호화(AES-256-GCM)를
+    # 붙인다 — 암호화 행에서는 평문 컬럼이 NULL이고 `*_encrypted`+`*_nonce`에 저장된다
+    # (dual-read 폴백: 기존/암호화 비활성 행은 평문 유지). 키는 **content와 동일**
+    # (`dialogue_content_encryption_key`) — 같은 테이블·같은 요청·같은 데이터 주체라 키를
+    # 쪼개도 폭발 반경이 실질적으로 줄지 않는 반면, 키가 하나 늘면 "미설정→평문 폴백" 함정이
+    # 하나 더 생긴다(Kiki 결정).
     image_uri: Mapped[str | None] = mapped_column(sa.Text)
+    image_uri_encrypted: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
+    image_uri_nonce: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
+    # JSONB는 그대로 암호화할 수 없어 **결정론 JSON 직렬화 후** 바이트를 암호화한다
+    # (`sort_keys=True`·`ensure_ascii=False`). 복호는 역직렬화해 dict로 되돌린다.
     image_analysis: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    image_analysis_encrypted: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
+    image_analysis_nonce: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
 
     # ── 제약·인덱스 (§7.1 UNIQUE + CREATE INDEX) ──
     __table_args__ = (
@@ -205,7 +218,17 @@ class DialogueTurn(Base):
     # 이 키가 model_validate에 들어가면 실패). 복호는 handler/헬퍼 층이 담당하고(순수 seam에
     # cipher 미주입), schema.content엔 복호된 평문을 별도 설정한다. ciphertext는 API·export에
     # 절대 노출하지 않는다(schema 밖 유지).
-    _NON_SCHEMA_COLUMNS = frozenset({"content_encrypted", "content_nonce"})
+    # SEC-01: 이미지 봉투 컬럼도 같은 이유로 schema 밖에 둔다(ciphertext는 API·export 미노출).
+    _NON_SCHEMA_COLUMNS = frozenset(
+        {
+            "content_encrypted",
+            "content_nonce",
+            "image_uri_encrypted",
+            "image_uri_nonce",
+            "image_analysis_encrypted",
+            "image_analysis_nonce",
+        }
+    )
 
     @classmethod
     def from_schema(cls, schema: SchemaDialogueTurn) -> DialogueTurn:
