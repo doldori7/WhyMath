@@ -28,7 +28,7 @@
 
 ## 🔴 최우선 점검 2곳 (현재 상태상 붕괴 위험 최고)
 
-- **단계 3** — ~~단일 진실 원천 붕괴~~ → **런타임 축 해소 완료**(2026-07-04 S0-4: 원자 단일 truth source·구 437 legacy_snapshot 격하·`test_legacy_snapshot_governance.py` 동결). 잔여 = **입도 통합**(437↔2,697 세분도 병합·검수 큐는 AI 검수 전환으로 가동·`G-domain-partner` clear 2026-07-10) & 노드 폭발 상시 감시
+- **단계 3** — ~~단일 진실 원천 붕괴~~ → **런타임 축 해소 완료**(2026-07-04 S0-4: 원자 단일 truth source·구 437 legacy_snapshot 격하·`test_legacy_snapshot_governance.py` 동결) → **런타임 드리프트도 봉인**(2026-07-25 ARCH-13: 마지막 남았던 L2 추천의 교차 엔진 code 문자열 조인을 제거하고 선수 traversal에 **쿼리 수준 원자 축 울타리**를 세움·제외 사유 계상·`test_atom_axis_fence_governance.py` 동결). 잔여 = **입도 통합의 콘텐츠 축**(860 단원/소단원 계층 브리지·난이도 척도 통일[tier 0~24↔intrinsic 1~5]·crosswalk 인간 검수 — ARCH-13이 명시적으로 범위 밖으로 둔 4건·`G-domain-partner` clear 2026-07-10) & 노드 폭발 상시 감시
 - **단계 8** — LLM에 **전체 그래프 노출** — 감사(2026-07-09) 재확인: max_nodes≤20·max_tokens≤3000은 첫 소비처(`wh1_llm_policy.py`)에서 **준수·CI 동결**, 전체 그래프 미주입 경계는 `test_llm_subgraph_budget_invariant.py` 동결. **depth≤2만 유예**(traversal 소비처 부재·해제 트리거 = coach→하네스 수렴 시 `ARCH-11`). 상세: `build_roadmap_part10_review.md`·`arch_audit_2026-07-09.md`
 
 ---

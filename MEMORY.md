@@ -344,6 +344,83 @@
 **핵심 발견**: ① 수학 코어(L1–L4)는 과잉 성숙·백로그가 촘촘히 추적하는 반면, **운영 축(배포·모니터링·백업·장애대응)은 태스크 0건 — 미구현이 아니라 미계획** (`deploy|monitor|backup|alert` 검색 무일치). ② Kiki 최우선 지목 E2E/L6은 실은 기추적(S3-01 todo=next 후보·S3-03 done) — 실행 답은 "다음 drive = S3-01". ③ 법정대리인 실 본인확인은 `StubGuardianVerifier` stub로 코드 주석에만 "후속" — 공개 β 차단 요인인데 미추적.
 
 **등재**(CLI `add` 경유·validate green 76건): `OPS-01`(관측성·알림, S3·p2) `OPS-02`(DB 백업·DR, S3·p2) `OPS-03`(CD·IaC, S4·p3, OPS-02 의존) `OPS-04`(장애 런북·SLO, S4·p4, OPS-01 의존) `MGMT-01`(법정대리인 실 본인확인, S3·p1·**owner=kiki** — 법령 유래 절차 기계 대체 금지). 결제·대시보드·커뮤니티·푸시는 로드맵 Phase 2/3 의도된 지연으로 판정 — 미등재(백로그 오염 방지). 정본: `docs/reviews/service_ops_mgmt_gap_review_2026-07.md`(3축 공백표·추적 상태 매트릭스·우선순위 권고).
+### 2026-07-26 (구현·SEC-01): **대화 멀티모달 봉투 암호화(이미지 2축) + 프로덕션 fail-closed 게이트 — "체크리스트는 잊히지만 게이트는 잊어도 작동한다"** (claude, Kiki "EC-01" + 선택: 대화 본문 키 재사용·프로덕션 fail-closed)
+
+**컨텍스트**: 2026-07-21 정합성 검토가 남긴 Low·요검증. `dialogue_turn.image_uri`(손글씨 이미지 URI)·`image_analysis`(Qwen3-VL 분석 JSONB)는 **미성년 풀이 전사가 가능한** 데이터인데 암호화 경로가 아예 없었다(평문 Text/JSONB). 본문 `content`는 감사상환 #2에서 봉투 암호화가 배선됐으나 **키 미설정 시 조용한 평문 폴백**이라 "프로덕션에 키가 실제로 설정돼 있는가"가 미확인이었다.
+
+**Kiki 결정 2건**: ① **대화 본문 키 재사용**(신규 키 축 0) ② **프로덕션 fail-closed**(평문 폴백을 프로덕션에서 거부).
+
+**적용**: ① ORM 4컬럼 + Alembic `a2b3c4d5e6f1`(additive·nullable LargeBinary·기존 행 무영향). ② `api/_crypto.py`에 헬퍼 5종 — `require_dialogue_content_cipher`(fail-closed)·이미지 2축 encrypt/resolve. **JSONB는 구조라 그대로 암호화 못 한다** → `sort_keys=True`·`ensure_ascii=False` 결정론 직렬화 후 바이트 암호화, 복호 시 역직렬화(dict 아니면 무결성 `RuntimeError` — 조용히 None으로 삼키면 분석이 사라진 걸 아무도 모른다). ③ 쓰기 좌석(`_build_dialogue_turn`)·읽기(`get_session_detail`)·**GDPR export** 3경로 전부 배선. ④ **백필 CLI를 세 축으로 확장** — 본문만 돌면 운영자가 `{"reencrypted": N}`을 "평문 전환 완료"로 읽는데 이미지 평문은 남는다(부분 처리를 완전 처리로 위장). ⑤ 배포 체크리스트 문서 신설(키 생성·회전·§3 실측 SQL).
+
+**설계 판단(프로덕션 판별)**: 새 env 축을 만들지 않고 기존 "prod 추정" 신호 — 실 OAuth provider(kakao/naver) 구성 여부 — 를 재사용했다(`api/demo_auth.py::register_demo_provider` 선례). 프로덕션엔 항상 실 provider가 있고 개발·CI엔 없다. **키를 안 늘린 것과 같은 이유로 설정 축도 안 늘린다** — 새 축은 "설정하는 걸 잊는" 표면을 하나 더 만든다. 체크리스트는 사람이 기억해야 작동하지만 이 게이트는 잊어도 작동한다.
+
+**검증**: ruff·black clean · mypy --strict Success(410) · lint-imports 0 broken · 신규 hermetic 13 passed · **실 PG 통합 5 passed**(암호문 저장·평문 컬럼 NULL·GET/export 복호 왕복·백필 세 축 전환). **변별력 실측 2회**(장식 아님 증명): export의 이미지 복호를 무력화하면 `test_image_axis_...`가 FAIL, 백필 WHERE를 본문 전용으로 되돌리면 `test_backfill_covers_image_axis_...`가 FAIL — 둘 다 복원 후 재통과 확인. fail-closed는 개발 환경 폴백 유지 테스트(`test_development_without_key_still_falls_back`)가 "항상 raise"라는 고장이 아님을 봉인.
+
+**⚠️ 정직한 공백 — 프로덕션 실측은 수행되지 않았다**: 태스크 acceptance는 "프로덕션 `dialogue_content_encryption_key` 설정 실측 포함"을 요구하나 **이 컨테이너에는 프로덕션 DB·env가 없다**(Kiki·Phaiakes9 소유 액션). 기계 게이트가 *조용한 평문 저장*은 차단하지만 "키가 실제로 설정돼 있고 행이 암호화되고 있다"는 **양성 증거는 아직 없다** — 문서 §4에 미실측을 명시했다. 실측을 구두 인계로 흘리지 않기 위해 **`SEC-02-prod-dialogue-key-measurement`(owner=kiki)로 등재**했다(`backlog.py add` 경유·판정 SQL은 체크리스트 §3에 고정). 또한 HTTP 경로로는 아직 이미지가 들어오지 않아(OCR 핸드오프 미배선) 실트래픽 이미지 암호화 행은 0이다 — 저장 좌석은 하나뿐이라 배선되는 즉시 암호화가 적용된다.
+### 2026-07-25 (구현·ARCH-14 ②·CI): **계층별 커버리지 서브패키지 게이트 배선(강화 경로) — 집계 70%에 계층별 하한 축 추가** (claude, Kiki "2"→"강화" 재지정)
+
+**컨텍스트**: ARCH-14 항목 ②("계층별 커버리지 목표를 서브패키지 게이트로 강제하거나 문서를 '집계 70% 단일'로 정합"). testing.md는 계층별 최소치(L4 90%·L1/L2/L5 80%·L3 70%·Flutter 60%)를 선언했으나 CI는 **패키지 집계 70%**만 강제 — 계층별 수치가 강제되는 듯 읽히나 미강제인 불일치. 처음 "2"(완화·문서 정합)로 착수했다가 Kiki가 **"강화"** 재지정 → 완화 대신 **계층별 게이트를 실제로 배선**하는 경로로 전환(같은 브랜치·#596 재작업).
+
+**적용**: (1) 신규 `scripts/coverage/check_layer_coverage.py` — coverage.xml을 파싱해 백엔드 서브패키지(l1~l4·api)별 라인 커버리지가 `LAYER_FLOORS` 이상인지 강제(미달 exit 1·무측정=명시 실패로 성공 위장 방지·hermetic). (2) ci.yml backend 잡에 "계층별 커버리지 게이트" 스텝 추가(집계 `--cov-fail-under=70`과 상보 — 한 계층이 낮아도 평균에 묻히던 사각 폐색). (3) hermetic 테스트 `tests/backend/test_layer_coverage_gate.py`(변별력 5케이스: 바닥선 이상 PASS·미달 FAIL·무측정 FAIL·경계 PASS). (4) testing.md §커버리지 목표를 집계 하한 + 계층별 하한 2축으로 강화 재작업(지향치 90/80/80/70/80을 게이트로 승격·floor 정본=`LAYER_FLOORS`·ratchet). **floor 산정**: py3.11 로컬 커버리지 측정이 비현실적으로 느려(21%/30분·data_pipeline py3.12 전용으로 l1 미측정) 중단 → **CI 자가보고 방식** 채택: 초기 안전 floor 50%(전 계층 통과 확실)로 배선, CI 게이트 스텝이 계층별 실측 %를 자가보고 → 그 값(actual−여유)으로 ratchet 상향 후 병합(start-low PASS·up-ratchet-below-actual PASS → 무실패 캘리브레이션).
+
+**실측·floor 확정**: CI 자가보고(초기 안전 floor 50%) 결과 전 계층이 **선언 목표를 상회** — api 98.3%·l1 86.7%·l2 96.9%·l3 95.4%·l4 95.2%·백엔드 집계 92.83%. 따라서 바닥선을 **선언 목표로 직접 설정**(l4 90·l1/l2/api 80·l3 70·≥5pt 여유), 즉 testing.md 목표=CI 강제 floor로 정합(완전 강화). 과정에서 **파서 버그 1건**(coverage.xml filename이 <source>=whymath_backend 기준 상대경로인데 파서가 'whymath_backend' 세그먼트를 찾아 전 계층 '무측정'→게이트 FAIL) 발견·수정 — 게이트의 '무측정=명시 실패' 안전장치가 병합 전 포착, 테스트 사각(합성 xml이 실제 포맷과 달라 통과)도 상대경로 기본+접두 변형으로 동봉 수정.
+
+**검증**: 게이트 테스트 6 pass·ruff/black/mypy clean·실측 per-layer 대입 시뮬 PASS. `backlog.py validate` green. **ARCH-14 잔여 ③**(recommended_visual_styles Overlay 이관)만 남음 — ARCH-13 결론 대기 권고.
+
+### 2026-07-26 (구현·PED-03): **교수법 처치 기록 좌석 신설 + 안전제약 bandit(미승격) — "측정 없는 승격 없음"의 기계화** (claude, Kiki "Ped" + 범위 선택 (a) 기록 좌석 먼저·outcome=evidence_event 재사용)
+
+**컨텍스트·전제 교정**: 04d §3은 교수법을 학습 가능한 policy로 만드는 것을 장기 해자로 못박았고 PED-03이 그 구현 태스크다. 그런데 **학습에 필요한 데이터가 한 톨도 생산되지 않고 있었다**. 실측: 결과(outcome) 축은 살아 있으나(`record_problem_attempt_mastery`가 `api/me.py`에 배선), **처치(treatment) 축은 생산 0**이었다 — `decide()`·`supply()`의 API 소비자 0건, `evidence_event`는 writer 0건. **처치 기록 없이는 "어떤 교수법이 효과적인가"라는 질문 자체가 성립하지 않는다**(결과만 있고 무엇을 보여줬는지 모르면 비교군이 없다). CACHE-01에서 라이브 게이트 CLI를 의도적으로 만들지 않은 것과 같은 함정.
+
+**Kiki 결정**: (a) **기록 좌석 먼저** — 좌석을 만들고 `supply()`를 실제 학생 경로에 배선해 데이터 생산을 시작한다. policy는 스캐폴드만 두고 **규칙표를 대체하지 않는다**. outcome 저장소는 **`evidence_event` 재사용**(신규 테이블 0).
+
+**적용**: ① **`l2/pedagogy_evidence.py`**(신규) — `evidence_event`의 **최초 writer**. `record_pedagogy_treatment`/`record_pedagogy_outcome`(commit 0·`mastery_tracking` 선례). B1: 시그니처에 원문 슬롯 부재(구조적 차단)·`payload_encrypted` 미사용·`meta`는 비민감 메타만(전략·공급경로·개념 code·게이트 사유). ② **`api/study.py`**(신규 라우터) — `supply()`의 **첫 소비자**. `POST /v1/me/objectives/{id}/study`(선택·게이트·렌더 → 처치 기록) + `/outcome`(같은 `session_id`). **objective 스코프**를 택한 이유: `evidence_event`가 요구하는 `objective_id`·`k_type`(NOT NULL)을 `learning_objective`가 *실값*으로 갖고 있다(개념 code 스코프면 1:N 역추적에 임의 선택이 생긴다). ③ **`l4/pedagogy/adaptive/effectiveness.py`** — (전략×k_type×objective) 집계, 처치↔결과는 `session_id` 조인. **표본 0 → `None`**(0%로 위장 금지·`SupplyTally` 선례)·판정치는 **Wilson 하한**. ④ **`policy.py`** — Thompson sampling + **하드 안전제약**. ⑤ **`harness/pedagogy_policy_eval.py`** — 승격 게이트 CLI(안전제약 + SNIPS 오프폴리시).
+
+**설계 판단 2건**: **(가) 안전제약은 보상 페널티가 아니라 행동공간 배제** — soft penalty는 데이터가 쌓이면 policy가 뒤집을 수 있으나 CLAUDE.md 우선순위는 비용(#6)이 교수학(#3)을 역전할 수 없다고 못박았다. `allowed_actions()`가 `gate()` 미통과 전략을 표본 추출 목록에서 **제거**하며, 게이트가 *강등*한 결과도 후보에 되돌리지 않는다(강등 경유 우회로 차단). **(나) "가짜 처치" 금지** — `api/scene.py`에 끼우는 안을 검토했으나 기각했다(`generate_learning_scene`은 `BehaviorArea`·`cognitive_type`이 이미 골격을 지배해 축 충돌). 더 중요하게는 **선택만 기록하고 화면이 안 바뀌면 그것은 가짜 처치**이며 유효해 보이지만 틀린 측정이 되어 아무것도 안 하느니 못하다. 그래서 처치는 `supply()`가 렌더를 끝낸 뒤 그 결과로만 기록하고, 렌더 실패 시에는 처치를 남기지 않는다.
+
+**⚠️ policy는 미승격 — 그리고 그것이 산출물이다**: 런타임 선택 정본은 여전히 `runtime_selector.decide()`(규칙표 v1)이며 어떤 학생 경로도 policy를 호출하지 않는다. 게이트 CLI는 실 트래픽 0 → 표본 미달로 **exit 1 + "측정 미달"** 을 명시 출력한다(0건을 통과로도 성과 미달로도 바꾸지 않는다). **CI에는 배선하지 않는다** — 항상 red 고정이면 신호가 죽기 때문이며, 트래픽이 쌓여 게이트가 뒤집힐 수 있게 된 시점에 등재한다.
+
+**검증**: ruff·black clean · mypy --strict Success(410) · lint-imports 0 broken · 신규 단위 36 passed(변별력 4종: 안전제약 ON/OFF·게이트 허용 조건·처치 유무·표본 미달/충족) · **변별력 실측**: `--control-safety-off` 대조군이 위반 **35건**을 잡았고 전부 `WORKED_EXAMPLE`(PED-02 게이트가 시도 전 막는 전략) — 제약이 장식이 아님이 증명됐다. **실 PG 통합 2건 통과**(PostgreSQL 16 + pgvector 로컬 기동·alembic head) — 이 과정에서 `knowledge_type` enum이 한글 "개념"이 아니라 `CONCEPT`임을 실 PG가 잡아냈다(hermetic만 돌렸으면 CI까지 갔을 결함·ARCH-13 교훈 적용).
+
+**정직한 공백**: Flutter 클라이언트가 새 엔드포인트를 호출하기 전까지 **실트래픽은 0**이고 집계는 전부 표본 0(`None`)이다. 생성 폴백(LLM)은 이 좌석에서 켜지 않았다(첫 배선에서 비용·환각 표면 미개방). 오개념 유형 축은 처치 기록에 담기지 않아 집계 키에 **넣지 않았다**(없는 축을 키에 넣으면 항상 단일 버킷이 되어 "쪼갰다"는 착시만 준다) — 필요해지면 처치 기록에 필드를 먼저 추가한다. **NOT(경계)**: 마이그레이션 0 · 신규 테이블 0 · `decide()` 경로 불변 · CI 게이트 추가 0.
+
+### 2026-07-25 (구현·ARCH-13): **원자 축 울타리 — L2 추천의 이중 진실 조인 해소 + 제외 사유 표면화 (쿼리 수준·데이터 변경 0)** (claude, Kiki "Arch 13" + 범위 선택 (a)·"표면화+집계")
+
+**컨텍스트·전제 교정**: 태스크는 "concept_edge 437 ↔ atom_node 2,697 **입도 통합**"으로 등재됐으나 탐색 실측이 전제를 뒤집었다 — **두 개의 그래프 저장소가 아니다.** 원자 백본은 *같은* `concept`/`concept_edge`에 적재됐고(MEMORY S0-1 "437과 원자는 동일 테이블 code 병존"), 원자 축은 이미 runtime truth·구 437은 `legacy_snapshot`으로 봉인돼 있다(S0-4b/4c/4d). 남아 있던 유일한 런타임 드리프트는 **L2 추천 2좌석의 교차 엔진 code 문자열 조인**이었다: traversal·진단은 async 세션, 메타는 별도 sync 엔진(`asyncio.to_thread(fetch_atom_node_meta, …)`) → 축이 어긋나도 조인이 조용히 성립하고, 미스는 `reviewed_only`에서 **소리 없이 탈락**했다(빈 추천의 이유를 아무도 알 수 없음).
+
+**Kiki 결정**: 범위 **(a) 쿼리 수준 축 울타리** — 데이터 변경·물리 삭제·rekey **0**. 미스 처리 = **표면화 + 집계**(제외는 유지하되 사유를 구분해 세고 관측 가능하게).
+
+**적용**: ① 신규 `l1/atom_graph/axis.py` — 원자 축 **async** 좌석(`atom_axis_outerjoin`·`atom_meta_from_row`·`fetch_atom_axis_meta`). 선례는 `l1/skill_graph/resolve.py::get_behavior_areas`(async 세션에서 AtomNode 직접 read)·`concept_visualization/overlay.py`. 반환 타입은 기존 `AtomNodeMeta` 재사용(신규 값객체 0). ② `l2/prerequisite_recommendation.py` — traversal 최종 SELECT가 `atom_node`를 **LEFT OUTER JOIN**하고 안전 메타 3열을 함께 가져온다(`build_prerequisite_stmt`로 조립 분리 → DB 없이 검증 가능). `atom_meta is None`(=축 밖)이면 `reviewed_only`와 **무관하게 제외**(runtime truth=원자 단일의 직접 표현·이번 변경의 유일한 행동 변화). ③ 신규 `l2/axis_exclusions.py` — `AxisExclusions{off_atom_axis, not_reviewed, not_weak}` + 구조화 로그(카운트·좌석명만·code/user_id 미포함). ④ `l2/weak_concept_recommendation.py` — 같은 async 좌석으로 전환(`to_thread` 제거)하고 제외 사유 분리 계상. 후보가 mastery에서 나오므로 **축 필터는 걸지 않는다**(학생 이력을 감추게 됨 — 선수 좌석과 의도된 차이). ⑤ 반환 계약은 `*_detailed`(gaps+exclusions) 본체 + 기존 시그니처 얇은 래퍼로 유지 → 호출처 5곳(`api/me.py`×3·`api/coach.py`·`l4/prerequisite_coaching.py`·`l2/learning_path.py`) 무수정. `meta_engine` 파라미터는 소비처 0이라 제거.
+
+**INNER가 아니라 OUTER인 이유**(설계 판단): INNER면 축 밖 행이 SQL에서 사라져 "몇 건이 왜 빠졌는지"를 셀 수 없다. **축 판정은 쿼리가**(단일 출처), **제외와 계상은 호출자가**(표면화) — 조용한 소실을 만들지 않기 위한 의도적 분업.
+
+**검증**: 신규 `tests/backend/l2/test_atom_axis_fence_governance.py`(hermetic) — 컴파일 SQL에 `LEFT OUTER JOIN atom_node ON atom_node.code = concept.code` 동결 + **변별력**(조인 없는 statement엔 같은 검사가 실패) · 재귀 CTE 계약 보존(WITH RECURSIVE·UNION ALL·depth bound·정렬) · `l2/**` AST 스캔으로 `fetch_atom_node_meta`/`to_thread` 재유입 0 + **변별력**(위반 코드는 잡고 docstring 산문은 안 잡음). 라이브 PG: `test_me_integration.py`에 축 울타리 e2e(두 선수가 **atom_node 행 유무만 다르게** 시드 → 축 안만 노출) · `test_prerequisite_traversal_integration.py`에 OUTER 의미 동결(atom_node 미적재에도 행 전부 생존·`atom_meta` None — INNER였다면 전량 빈 결과).
+
+**연쇄 해소**: `docs/reviews/260724_v2_migration_pedagogy_dsl_review.md` H2("`concept_nodes` 참조 축을 atom_node로 고정 — ARCH-13 결론 대기")의 대기 조건이 풀렸다 — **런타임 참조 축 = `atom_node` 확정**(울타리로 강제·거버넌스 동결). `build_checkpoint_questions.md` 단계 3의 자기 지목도 "런타임 드리프트 봉인 / 잔여는 콘텐츠 축"으로 갱신.
+
+**범위 밖(정직한 공백·후속)**: ① 860 단원/소단원 원자의 계층 브리지 ② `difficulty_tier`(0~24)↔`intrinsic_difficulty`(1~5) 척도 통일 ③ crosswalk(전량 `ai_estimated`·1:N) 인간 검수 ④ legacy 엣지 581 물리 정리(원자 `relation_subtype='원본'` 580이 이미 재표현하나 "물리 삭제 0" 확정을 뒤집는 별건 결정). **NOT(경계)**: 마이그레이션 0·데이터 변경 0·물리 삭제 0·mastery rekey 0·신규 엣지 타입 0·legacy_snapshot 봉인 불변(`AtomNode`는 sanctioned 축이라 기존 거버넌스 3불변식 무영향).
+### 2026-07-25 (구현·ARCH-14 ④·CI): **mobile 커버리지 측정 → 임계 게이트 전환 (line ≥ 60%·testing.md 선언 집행) + backend 잡 타임아웃 25→35분** (claude, Kiki "머지"→"이어가")
+
+**컨텍스트**: ARCH-14 항목 ④("mobile 커버리지 임계 게이트 부여·첫 실측치 확인 후"). testing.md §커버리지 목표는 "Flutter UI 60%"를 선언했으나 ci.yml mobile 잡은 커버리지를 *측정·요약*만 하고 게이트하지 않는 공백이 있었다("측정 없던 60% 선언"). 첫 실측치를 확인해 이 선언을 강제 게이트로 전환.
+
+**적용**: (1) mobile 잡의 "커버리지 요약(게이트 아님)" 스텝을 "커버리지 게이트(line ≥ 60%)"로 전환 — awk에 `min=60` 임계·미달 시 exit 1. 첫 실측 **86.6%(1818/2100·226 tests)** 확인 → 60% 임계는 26pt 여유(정상 변동 안전·의미있는 회귀만 차단). 변별력 자가검증(합성 lcov 59.9%·55%·빈파일 exit1 / 86.6%·60% exit0 로컬 실측)으로 "변별력 없는 검증 금지" 준수. 목표 상향(60%→80%+)은 testing.md 개정과 함께 = ARCH-14 ②의 몫으로 분리. (2) PR #593 머지 과정에서 CACHE-01(content_supply) 병합으로 backend lint·type·test 잡의 pytest+coverage가 25분 경계를 넘어 boundary 타임아웃(cancelled·pytest 단독 22분+ 미완) 실측 → hang 방지 상한을 25→35분 상향(ci.yml 주석의 기존 정책 "timeout은 상한일 뿐" 준수·근본 최적화는 pytest-xdist·slow 마크 후속 과제 유지).
+
+**검증**: awk 게이트 로컬 discrimination 5케이스 실측(경계·미달·빈 lcov). ci.yml YAML safe_load 정합. `backlog.py validate` green. **ARCH-14 잔여 ②③**(계층별 커버리지 문서/게이트 정합·recommended_visual_styles Overlay 이관) in_progress 유지.
+
+### 2026-07-25 (구현·ARCH-14 ①·CI): **초인간 검증 게이트 2종 ci.yml 상시 배선 — defect_detection·coach_prose_leak (측정 통과 기계 게이트 = 상시 회귀)** (claude, Kiki "머지"→"이어가")
+
+**컨텍스트**: ARCH-14 항목 ①("defect_detection_eval hermetic 고정 시드 게이트를 CI 상시 회귀로 배선"). 두 harness는 pytest 회귀로는 이미 가동 중이었으나(`test_defect_detection_eval.py`·`test_coach_prose_leak_eval.py`), 초인간 검증 기준 v1 §검증 권위 서열 ②("측정 통과 기계 게이트")를 **CLI exit 0/1 독립 스텝**으로도 상시 강제하는 것이 이 태스크 몫이었다(S4-04 이관 명세).
+
+**적용**: `.github/workflows/ci.yml`의 `backend — lint·type·test` 잡(hermetic·py3.12)에 Pytest 뒤 두 게이트 스텝 추가 — (a) `defect_detection_eval --n-defective 120 --n-clean 120 --seed 20260708 --with-auditor --min-detection-lower 0.95 --max-false-alarm-upper 0.05` (b) `coach_prose_leak_eval --n-per-cell 12 --max-leak-upper 0.05 --max-false-block-upper 0.2`. 임계는 **고정 시드 실측 여유값**을 샌드박스에서 직접 확인 후 배선(가정 기반 런북 금지): defect 감사기 배선 시 6종 전부 120/120·검출 하한 0.978(>0.95)·오검출 상한 0.022(<0.05); prose 프로즈 ON·288 결함셀 노출 0·노출 상한 0.0093(<0.05)·오차단 상한 0.0274(<0.2). 변별력은 각 harness 대조군(`--control-flag-off` exit1 등)이 상시 봉인.
+
+**검증**: 두 CLI 로컬 실측 exit 0·대조군 exit 1 확인. YAML safe_load 정합·스텝 순서 확인. **ARCH-14 잔여 ②③④**(계층별 커버리지 문서/게이트 정합·recommended_visual_styles Overlay 이관·mobile 커버리지 임계)는 in_progress 유지.
+
+### 2026-07-25 (구현·ARCH-14 부분): **Concept ORM 순수성 부채 −1 — 죽은 `embedding_id` 컬럼 청산** (claude, Kiki "이어가줘")
+
+**컨텍스트**: ARCH-14(정합성 검토 잔여 하드닝) 항목 ③의 절반. 병렬 세션이 pedagogy 파이프라인·mobile UI를 빠르게 처리 중이라(원격 claim 403으로 조율 불가·REND-01/#587 중복 발생), **충돌 적은 infra-debt 격리 슬라이스**를 골랐다.
+
+**적용**: `Concept.embedding_id`(구 ChromaDB→pgvector 이관 잔재·슬98) 제거 — 소비처 0·전량 NULL·로더 미설정·코퍼스 부재의 죽은 컬럼(2026-07-03 Phase 1b 4컬럼 청산 선례 동형). 실 벡터는 code 키 별 테이블(`concept_embedding` 등)이 소유. ORM(`db/models/concept.py`)+스키마(`schema/concept.py`)+Alembic drop(`f1a2b3c4d5e7`·head `e6f1a2b3c4d5`)+순수성 게이트 갱신(`test_concept_orm_purity_governance.py`: `_KNOWN_PURITY_DEBT` 2→1·embedding_id→`_FORBIDDEN_COLUMNS` 재유입 차단)+schema↔ORM 정합 테스트·로더 docstring 현행화. Concept Purity(플레이북 8대 원칙 — 노드 embedding 혼입 금지) 부채 축소.
+
+**검증**: ruff·black clean·mypy Success·schema+purity 47 pass·`tests/backend/db` 221 pass(2 실패=asyncpg 부재 기존·무관). **ARCH-14 잔여**(recommended_visual_styles Overlay 이관·CI 게이트 배선①·계층 커버리지②·mobile 게이트④)는 in_progress 유지.
 
 ### 2026-07-25 (구현·UI·MOB-13): **접근성 패스 — guideline 자동 검증 도입 + 실결함 2건 수정** (claude, Kiki "접근성 패스")
 

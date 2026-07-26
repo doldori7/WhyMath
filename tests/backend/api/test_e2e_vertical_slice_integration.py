@@ -37,8 +37,8 @@ from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.consent import current_year_kst, derive_is_minor
 from whymath_backend.db.models.assessment import ConceptMasteryHistory
+from whymath_backend.db.models.atom_node import AtomNode
 from whymath_backend.db.models.concept import Concept, ConceptEdge, ProblemConcept
-from whymath_backend.db.models.concept_node import ConceptNode
 from whymath_backend.db.models.problem import Problem
 from whymath_backend.db.models.user import UserProfile
 from whymath_backend.schema.assessment import (
@@ -136,8 +136,22 @@ def _concept_with_code(cid: uuid.UUID, code: str, name: str) -> Concept:
     )
 
 
-def _node_meta(uc: str, name_ko: str, domain: str, review_status: str) -> ConceptNode:
-    return ConceptNode(concept_id=uc, name_ko=name_ko, domain=domain, review_status=review_status)
+def _node_meta(uc: str, name_ko: str, domain: str, review_status: str) -> AtomNode:
+    """원자 축 안전 메타 행(code PK) — S0-4d로 enrich가 `atom_node`로 전환됐다(ARCH-13 정렬).
+
+    이 좌석은 원래 구 437 `concept_node`에 시드했다. 그 테이블은 런타임에서 읽히지 않으므로
+    "막힌 선수(선수 복습 코칭 신호 유발)"라는 이 픽스처의 *선언된 의도*가 실제로는 달성되지
+    않은 채 통과하고 있었다(축 울타리 이전에는 축이 어긋나도 행이 그냥 흘렀다). 원자 축으로
+    시드해 관통 슬라이스가 실제로 선수 경로를 지나가게 한다.
+    `test_me_integration.py`·`test_coach_integration.py`의 같은 이름 헬퍼와 동형.
+    """
+    return AtomNode(
+        code=uc,
+        name_ko=name_ko,
+        level="세부개념",
+        subject_area=domain,
+        review_status=review_status,
+    )
 
 
 def _prereq_edge(from_id: uuid.UUID, to_id: uuid.UUID, strength: float) -> ConceptEdge:
@@ -236,8 +250,9 @@ async def _cleanup(
                 text("DELETE FROM concept_mastery_history WHERE user_id = :uid"),
                 {"uid": str(uid)},
             )
+            # atom_node PK는 code(=concept.code=UC 브리지 키)라 code 컬럼으로 정리한다(ARCH-13).
             await conn.execute(
-                text("DELETE FROM concept_node WHERE concept_id = ANY(:ids)"),
+                text("DELETE FROM atom_node WHERE code = ANY(:ids)"),
                 {"ids": uc_ids},
             )
             await conn.execute(

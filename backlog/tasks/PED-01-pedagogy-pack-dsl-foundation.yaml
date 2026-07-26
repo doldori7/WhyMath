@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 5
 owner: claude
 depends_on: []
@@ -14,13 +14,14 @@ acceptance:
   - "스키마 기반 착지(본 커밋): knowledge_type enum·pedagogy_pack·unit_spec·learning_objective·pedagogy_content_slot·evidence_event ORM+Alembic 2리비전(L3/L2 분리)·hermetic 31 PASS — Blocking(평문 저장·license 우회·미승인)·High(content_provenance 중복·legacy 노드 참조·raw SQL) 해소"
   - "시더·컴파일러·런타임 배선(잔여): packs YAML 시더→pedagogy_pack·.unit.yaml 컴파일러 v0.1→unit_spec/learning_objective/슬롯 발주서·4층 프롬프트 조립기+forbidden_modes guard·evidence 봉투 암호화 write 경로"
   - "이차함수 파일럿 1개가 컴파일→생성→예심→검수→런타임 E2E 1회 완주 후 DSL 스키마 동결(필드 추가는 2번째 소단원 실요구 시)"
-artifacts: []
+artifacts:
+  - "branch:claude/human-bottleneck-work-2qumzl@3d55f26 — 이차함수 파일럿 E2E 1회 완주(로컬 PG 실증)+DSL 스키마 동결+CI fidelity 게이트"
 paths:
   - "src/backend/alembic/versions/**"
   - src/backend/whymath_backend/db/models/pedagogy_dsl.py
   - src/backend/whymath_backend/db/models/evidence_event.py
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/l4/**"
-session: claude/review-applicable-items-8rrtau
-notes: "업로드 원시 SQL(260724 phase0 v2)+교수법 v2 설계 검토(docs/reviews/260724_v2_migration_pedagogy_dsl_review.md) 반영. 수정 스키마 착지: ORM db/models/pedagogy_dsl.py·evidence_event.py + Alembic 2리비전(d5e6f0a1b2c3 L3·e6f1a2b3c4d5 L2). knowledge_type ENUM 채택(커널 소유 예외). ARCH-13 연성 의존(concept_nodes 축은 atom_node로 잠정 고정·하드 블록하려면 depends 추가). [진행 메모 2026-07-24] 3슬라이스 완료: (1)스키마 마이그레이션 merged #575 f32bcd2 (2)교수법 팩 7종 시더 merged #576 c16c3c3 (3)소단원 DSL 컴파일러 v0.1 커밋 4a5df4d(이차함수 최대·최소 4목표 4유형 발주서 실증·미머지). 잔여: 4층 프롬프트 조립기+forbidden_modes guard(l4)·evidence 봉투 암호화 write 경로·슬롯 생성(발주서 소비)·이차함수 E2E 완주 후 DSL 스키마 동결. 세션 경계 정지 — 다음 슬라이스는 사용자 지시 대기. (실제 파일 범위는 선언 paths 밖 l1/pedagogy·schema·data/corpus로 확장됨 — scope_drift warn 어드바이저리)."
-updated: 2026-07-24
+session: null
+notes: "핵심 슬라이스 3건 머지 완료(#575·#576·컴파일러). 잔여 acceptance는 이차함수 파일럿 E2E 완주 슬라이스 — PED-02 런타임 셀렉터 머지(#590 완료)로 선행 의존 해소됐으나 파일럿 실행+다음 슬라이스는 사용자 지시 대기. 이 세션은 ARCH-14 활성 claim으로 전환(1세션=1태스크 정합). 재개 시 unblock."
+updated: 2026-07-26

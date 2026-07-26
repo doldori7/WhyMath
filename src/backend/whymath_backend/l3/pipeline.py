@@ -214,7 +214,15 @@ async def generate(
         # 실측 비용: 적중=신규 LLM 호출 없음=0원 *확정*(cost_krw=0.0). 토큰·지연 usage는
         # 이 요청에서 실측된 게 없어 None(적재 시점 실측은 미스 기록에 이미 남았다).
         trace.record(
-            langfuse_fields(decision, cache_hit=True, student_id_hash=student_id_hash, cost_krw=0.0)
+            langfuse_fields(
+                decision,
+                cache_hit=True,
+                student_id_hash=student_id_hash,
+                cost_krw=0.0,
+                # 2층 캐시의 (2) — 프롬프트-해시 적중. 경로는 자기 cache_hit에서 유도한다
+                # (상위가 주입할 필요 없음·03c §4).
+                content_source="prompt_cache",
+            )
         )
         return GenerationResult(decision=decision, text=cached, cache_hit=True)
 
@@ -258,6 +266,7 @@ async def generate(
             # 실측(S1 게이트 ②) — provider가 포착한 usage + 토큰 산정 비용(est_*와 분리).
             usage=usage,
             cost_krw=actual_krw,
+            content_source="generate",  # 2층 캐시의 (3) — 실제 LLM 생성.
         )
     )
     return GenerationResult(

@@ -195,6 +195,13 @@ class PedagogyPack(BaseModel):
         return self
 
 
+# ──────────────────────────────────────────────────────────────────────────
+# DSL 스키마 동결 (PED-01 — 이차함수 파일럿 E2E 1회 완주로 검증)
+# ──────────────────────────────────────────────────────────────────────────
+# `PedagogyPack`·`SlotSpec`의 필드셋과 폐쇄 어휘(FORBIDDEN_MODE_VOCAB·SUBJECT_NOUN_BLOCKLIST)는
+# PED-01 파일럿 관통으로 동결됐다. 필드/어휘 추가는 *2번째 소단원의 실요구*가 있을 때만(YAGNI).
+# 변경 시 `tests/backend/schema/test_pedagogy_dsl_schema_freeze.py`의 동결 리터럴을 함께 갱신한다.
+
 __all__ = [
     "FORBIDDEN_MODE_VOCAB",
     "SUBJECT_NOUN_BLOCKLIST",

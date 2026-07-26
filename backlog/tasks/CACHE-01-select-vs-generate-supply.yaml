@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on:
@@ -16,11 +16,12 @@ acceptance:
   - "개념 주소화 중립 DSL 캐시(2층 캐시 (1)) + render-vs-generate 결정 supply()"
   - "검증 실패→generate 폴백 테스트 + dsl_render/generate 분기 테스트"
   - "content_source 지표(langfuse_fields) + ops/cost_probe 이중 회계 산출"
-artifacts: []
+artifacts:
+  - "l4/content_supply.py + 개념주소화 DSL 캐시 + content_source 이중회계"
 paths:
   - src/backend/whymath_backend/l3/content_supply.py
   - src/backend/whymath_backend/l3/router.py
   - "src/backend/whymath_backend/ops/cost_probe/**"
 session: null
 notes: "03c §3-4 정본. 프롬프트-해시 Redis(기존)와 별개 상위층. 비용#6이 교수학#3 역전 금지(gate 상류)."
-updated: 2026-07-24
+updated: 2026-07-25

@@ -2,20 +2,25 @@
 
 원자그래프 소비 슬2(S0-4d·runtime truth=원자). `recommend_weak_concepts`는 두 좌석을 *재사용*한다:
   ① `compute_concept_diagnoses`(L2·BKT/IRT 융합·약점 정렬) — 진단 입력
-  ② `fetch_atom_node_meta`(L1·atom_node code 안전 메타) — code enrich(구 concept_node 대체)
+  ② `fetch_atom_axis_meta`(L1·원자 축 async 좌석) — code enrich(ARCH-13으로 sync 왕복 제거)
 
 이 둘을 *패치*해 PG 없이 좌석 *배선*만 못 박는다(진단 로직·실 PG 조인은 각자 테스트 몫):
   - 약점 필터(임계 경계·신호 0건 제외)·정렬 보존·limit 상한
-  - code enrich(name_ko·domain(←원자 subject_area)·review_status 부착)·미적재 code graceful
+  - code enrich(name_ko·domain(←원자 subject_area)·review_status 부착)·축 밖 code graceful
     None·orphan(code 없음)
-  - reviewed_only 게이팅(메타 없으면 보수적 제외·정렬 유지)
-  - sync 좌석 to_thread 격리 — fetch_atom_node_meta가 단일 호출·code 중복 제거(N+1 0)
-  - enrich 대상이 atom_node임을 동결(fetch_atom_node_meta 호출·domain 필드가 subject_area 값)
+  - reviewed_only 게이팅(축 밖·검수 전 모두 제외하되 **사유는 분리 계상**)
+  - 단일 호출·code 중복 제거(N+1 0)
+  - enrich 대상이 원자 축임을 동결(`fetch_atom_axis_meta` 호출·domain 필드가 subject_area 값)
+  - **제외 사유 표면화**(ARCH-13): `off_atom_axis`/`not_reviewed`/`not_weak` 계상 + 구조화 로그
   - redaction(추천 스키마에 본문 필드 부재)
+
+이 좌석은 traversal이 아니라 학습자 mastery에서 후보가 나오므로 **축 필터는 없다**(축 밖도
+reviewed_only가 아니면 노출) — 선수 좌석과 다른 점이며 의도된 차이다.
 """
 
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Sequence
 from typing import Any, cast
@@ -29,12 +34,15 @@ from whymath_backend.l2.concept_diagnosis import Agreement, ConceptDiagnosis
 from whymath_backend.l2.weak_concept_recommendation import (
     WeakConceptRecommendation,
     recommend_weak_concepts,
+    recommend_weak_concepts_detailed,
 )
 
 _UID = uuid.uuid4()
 # 슬2 idmap UC 규약 키 예시(concept.code 공간·이제 atom_node code로 enrich·구 437 UC 유입 가능·격하)
 _UC_A = "UC.alg.afunction.linear"
 _UC_B = "UC.calc.alimit.epsilon-delta"
+# 래퍼↔본체 동치 비교용 고정 concept_id(기본 진단은 매번 새 UUID를 뽑아 비교가 흐려진다).
+_CID_A = uuid.uuid4()
 
 
 def _diagnosis(
@@ -76,23 +84,25 @@ def _patch_diagnoses(monkeypatch: pytest.MonkeyPatch, diagnoses: list[ConceptDia
 def _patch_meta(
     monkeypatch: pytest.MonkeyPatch, meta: dict[str, AtomNodeMeta] | None = None
 ) -> dict[str, Any]:
-    """`fetch_atom_node_meta`를 패치해 enrich 메타를 제어·호출 인자(code 리스트·engine)를 기록.
+    """`fetch_atom_axis_meta`(원자 축 async 좌석)를 패치해 enrich 메타를 제어·호출 인자를 기록.
 
     반환 captured["calls"]에 호출 횟수를, ["concept_ids"]에 마지막 호출 code를 담는다 — 좌석이
-    약점 후보 code를 *단일 호출*(N+1 0)로 넘기는지 관찰. meta 미지정이면 빈 dict(enrich 없음).
+    약점 후보 code를 *단일 호출*(N+1 0)로 넘기는지 관찰. meta 미지정이면 빈 dict(=전량 축 밖).
+    ARCH-13 이후 이 좌석은 **호출 세션의 async 엔진**을 쓴다(sync 왕복 없음) — 그래서 fake도
+    async이며 첫 인자로 세션을 받는다.
     """
     captured: dict[str, Any] = {"calls": 0}
     resolved_meta = meta if meta is not None else {}
 
-    def _fake_fetch(
-        concept_ids: Sequence[str], *, engine: object = None, settings: object = None
+    async def _fake_fetch(
+        session: AsyncSession, concept_ids: Sequence[str]
     ) -> dict[str, AtomNodeMeta]:
         captured["calls"] += 1
         captured["concept_ids"] = list(concept_ids)
-        captured["engine"] = engine
+        captured["session"] = session
         return resolved_meta
 
-    monkeypatch.setattr(wcr_mod, "fetch_atom_node_meta", _fake_fetch)
+    monkeypatch.setattr(wcr_mod, "fetch_atom_axis_meta", _fake_fetch)
     return captured
 
 
@@ -268,8 +278,8 @@ class TestReviewedOnlyGating:
         out = await recommend_weak_concepts(_fake_session(), _UID, reviewed_only=True)
         assert [r.concept_code for r in out] == [_UC_A]  # pending 제외·정렬 유지
 
-    async def test_gates_missing_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 메타 없어 reviewed 확인 불가인 UC는 gated 모드에서 보수적 제외(정직).
+    async def test_gates_off_axis_codes(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 원자 축 밖(또는 orphan)이라 reviewed 확인 불가인 UC는 gated 모드에서 보수적 제외(정직).
         meta = {_UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed")}
         _patch_meta(monkeypatch, meta)
         _patch_diagnoses(
@@ -340,13 +350,103 @@ def test_recommendation_has_only_safe_fields() -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# ⑦ 원자 축 동결 — enrich 대상이 atom_node(fetch_atom_node_meta)이며 domain←subject_area (S0-4d)
+# ⑦ 제외 사유 표면화 (ARCH-13) — 축 밖·검수 전·비약점이 섞이지 않고 계상·로그된다
+# ──────────────────────────────────────────────────────────────────────────
+class TestExclusionAccounting:
+    async def test_separates_off_axis_from_not_reviewed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 같은 "제외"라도 사유가 다르다 — 뭉뚱그리면 무엇이 문제인지(적재 누락인지 검수 지연인지)
+        # 알 수 없다. 예전 코드는 `node is None or review != reviewed`를 한 줄로 삼켰다.
+        _patch_meta(
+            monkeypatch,
+            {
+                _UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed"),
+                _UC_B: AtomNodeMeta(name_ko="B", subject_area="d", review_status="pending"),
+            },
+        )
+        _patch_diagnoses(
+            monkeypatch,
+            [
+                _diagnosis(code=_UC_A, bkt=0.1, proxy=0.2),  # reviewed → 유지
+                _diagnosis(code=_UC_B, bkt=0.15, proxy=0.2),  # pending → not_reviewed
+                _diagnosis(code="UC-LEGACY-437", bkt=0.2, proxy=0.3),  # 축 밖 → off_atom_axis
+                _diagnosis(code="UC.strong", bkt=0.9, proxy=0.95),  # 안 막힘 → not_weak
+            ],
+        )
+        result = await recommend_weak_concepts_detailed(_fake_session(), _UID, reviewed_only=True)
+        assert [r.concept_code for r in result.recommendations] == [_UC_A]
+        assert result.exclusions.off_atom_axis == 1
+        assert result.exclusions.not_reviewed == 1
+        assert result.exclusions.not_weak == 1
+
+    async def test_exclusion_accounting_is_discriminative(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """**변별력** — 메타 유무만 바꾸면 `off_atom_axis` 계상과 노출 여부가 실제로 뒤집힌다."""
+        diagnoses = [_diagnosis(code=_UC_A, bkt=0.1, proxy=0.2)]
+
+        _patch_meta(monkeypatch, {})  # 축 밖
+        _patch_diagnoses(monkeypatch, diagnoses)
+        off = await recommend_weak_concepts_detailed(_fake_session(), _UID, reviewed_only=True)
+
+        _patch_meta(
+            monkeypatch,
+            {_UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed")},
+        )
+        _patch_diagnoses(monkeypatch, diagnoses)
+        on = await recommend_weak_concepts_detailed(_fake_session(), _UID, reviewed_only=True)
+
+        assert off.recommendations == [] and off.exclusions.off_atom_axis == 1
+        assert len(on.recommendations) == 1 and on.exclusions.off_atom_axis == 0
+
+    async def test_logs_counts_without_identifiers(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # 제외가 있으면 구조화 로그 1줄 — 카운트만 싣고 code·user_id는 싣지 않는다(개인정보).
+        _patch_meta(monkeypatch, {})
+        _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, bkt=0.1, proxy=0.2)])
+        with caplog.at_level(logging.INFO, logger="whymath.l2.weak_concept_recommendation"):
+            await recommend_weak_concepts(_fake_session(), _UID, reviewed_only=True)
+        messages = [r.getMessage() for r in caplog.records]
+        assert any("off_atom_axis=1" in m for m in messages)
+        assert not any(_UC_A in m or str(_UID) in m for m in messages)
+
+    async def test_no_log_when_nothing_excluded(
+        self, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        # 정상 경로는 침묵(소음 방지) — 위 테스트의 변별력 짝.
+        _patch_meta(
+            monkeypatch,
+            {_UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed")},
+        )
+        _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, bkt=0.1, proxy=0.2)])
+        with caplog.at_level(logging.INFO, logger="whymath.l2.weak_concept_recommendation"):
+            out = await recommend_weak_concepts(_fake_session(), _UID, reviewed_only=True)
+        assert len(out) == 1
+        assert caplog.records == []
+
+    async def test_thin_wrapper_matches_detailed(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 기존 계약(list 반환)은 `_detailed`의 recommendations와 동치 — 로직 분기 0.
+        meta = {_UC_A: AtomNodeMeta(name_ko="A", subject_area="d", review_status="reviewed")}
+        _patch_meta(monkeypatch, meta)
+        _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, cid=_CID_A, bkt=0.1, proxy=0.2)])
+        thin = await recommend_weak_concepts(_fake_session(), _UID)
+        _patch_meta(monkeypatch, meta)
+        _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, cid=_CID_A, bkt=0.1, proxy=0.2)])
+        detailed = await recommend_weak_concepts_detailed(_fake_session(), _UID)
+        assert thin == detailed.recommendations
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# ⑧ 원자 축 동결 — enrich 대상이 원자 축(fetch_atom_axis_meta)이며 domain←subject_area (S0-4d)
 # ──────────────────────────────────────────────────────────────────────────
 class TestAtomAxisFrozen:
     async def test_enrich_targets_atom_node_meta(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # S0-4d 동결: enrich는 `fetch_atom_node_meta`(atom_node 조회)를 통과하고, 결과 `domain`
-        # 필드는 원자 `subject_area` 값을 담는다(값 소스 교체·필드명 유지). fake는 subject_area
-        # 라벨을 명시적으로 다르게 줘 domain이 그 값을 실는지 못 박는다.
+        # S0-4d 동결: enrich는 원자 축 좌석(`fetch_atom_axis_meta`·atom_node 조회)을 통과하고,
+        # 결과 `domain` 필드는 원자 `subject_area` 값을 담는다(값 소스 교체·필드명 유지). fake는
+        # subject_area 라벨을 명시적으로 다르게 줘 domain이 그 값을 실는지 못 박는다.
+        # ARCH-13은 이 좌석이 *어느 엔진에서 오는가*만 바꿨다(sync 왕복 → 호출 세션).
         captured = _patch_meta(
             monkeypatch,
             {
@@ -364,9 +464,10 @@ class TestAtomAxisFrozen:
         assert out[0].domain == "[고]미적분"
         assert out[0].name_ko == "극한"
 
-    async def test_atom_miss_is_none_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # 구 437 UC가 concept_code로 흘러도 atom_node 미스면 enrich None graceful(격하 취지).
-        _patch_meta(monkeypatch, {})  # atom_node에 아무 code도 없음(전량 미스)
+    async def test_off_axis_is_none_graceful(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        # 구 437 UC가 concept_code로 흘러도(=원자 축 밖) enrich None graceful(격하 취지).
+        # 이 좌석은 학습자 자신의 mastery가 후보라 축으로 걸러내지 않는다 — 선수 좌석과의 차이.
+        _patch_meta(monkeypatch, {})  # atom_node에 아무 code도 없음(전량 축 밖)
         _patch_diagnoses(monkeypatch, [_diagnosis(code=_UC_A, bkt=0.2, proxy=0.3)])
         out = await recommend_weak_concepts(_fake_session(), _UID)
         assert out[0].concept_code == _UC_A  # 추천 자체는 유지(rekey 0)

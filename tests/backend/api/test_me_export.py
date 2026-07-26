@@ -47,12 +47,25 @@ class _StubRow:
         content: str | None = None,
         content_encrypted: bytes | None = None,
         content_nonce: bytes | None = None,
+        image_uri: str | None = None,
+        image_uri_encrypted: bytes | None = None,
+        image_uri_nonce: bytes | None = None,
+        image_analysis: dict[str, Any] | None = None,
+        image_analysis_encrypted: bytes | None = None,
+        image_analysis_nonce: bytes | None = None,
     ) -> None:
         self._payload = payload
         # 감사상환 #2: export가 dialogue_turns 행에서 봉투 암호화 컬럼을 읽어 노출 직전 복호한다.
+        # SEC-01: 이미지 두 축(image_uri·image_analysis)도 같은 시점에 복호되므로 함께 흉내낸다.
         self.content = content
         self.content_encrypted = content_encrypted
         self.content_nonce = content_nonce
+        self.image_uri = image_uri
+        self.image_uri_encrypted = image_uri_encrypted
+        self.image_uri_nonce = image_uri_nonce
+        self.image_analysis = image_analysis
+        self.image_analysis_encrypted = image_analysis_encrypted
+        self.image_analysis_nonce = image_analysis_nonce
 
     def to_schema(self) -> _StubSchema:
         return _StubSchema(self._payload)
@@ -150,7 +163,10 @@ class TestExportMyData:
         assert body["data"]["user_behavior_metrics"] == [{"metric": "churn_risk"}]  # 증분 4 신규
         assert body["data"]["dialogues"] == [{"resolution": "자기풀이"}]  # 증분 5 신규(세션 메타)
         assert body["data"]["attempt_events"] == [{"event": "step_submit"}]  # 증분 7 신규
-        assert body["data"]["dialogue_turns"] == [{"content": "x=2?"}]  # 증분 6 신규(턴 본문)
+        # 증분 6 신규(턴 본문) + SEC-01: 이미지 두 축도 복호 표면에 올라 응답에 실린다.
+        assert body["data"]["dialogue_turns"] == [
+            {"content": "x=2?", "image_uri": None, "image_analysis": None}
+        ]
         assert body["user_profile"] == {"uid": str(_UID)}
         assert len(body["not_included"]) >= 1  # 부분 export 정직 고지
         assert "exported_at" in body

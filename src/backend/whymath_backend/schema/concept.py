@@ -18,7 +18,7 @@ Pydantic 모델이다. SQLAlchemy/alembic 매핑은 후속 Phase(슬라이스 1 
 타입 매핑 판단(DDL → Pydantic, 슬라이스 1·2 선례 그대로):
   - `UUID PK` → `uuid.UUID = Field(default_factory=uuid4)`
   - `UUID ... NOT NULL`(FK) → required `uuid.UUID`(예: concept_edge.from/to_concept_id)
-  - nullable `UUID`(FK) → `uuid.UUID | None`(예: parent_concept_id, embedding_id)
+  - nullable `UUID`(FK) → `uuid.UUID | None`(예: parent_concept_id)
   - `VARCHAR(n)` → `str`(max_length=n); `NOT NULL`이면 required(`...`)
   - `TEXT` → `str | None`
   - `TEXT[]` → `list[str]`(default_factory=list)
@@ -76,8 +76,8 @@ class Concept(BaseModel):
     오개념(`common_misconceptions`)은 Phase 1b(2026-07-03)로 이 런타임 노드에서 제거했다 —
     정본은 identity 노드 semantic 계층·ConceptContent·독립 오개념 DB다(모듈 docstring 법적 메모).
 
-    `embedding_id`는 벡터 저장소(pgvector·Postgres 동거·슬98) 참조일 뿐 *임베딩 벡터 저장이
-    아니다* (§4.3 pgvector 설계는 인프라 설정·이 모델 밖; 통합 시 동일 테이블 벡터 컬럼으로 정리).
+    `embedding_id`(구 pgvector 참조·슬98)는 ARCH-14로 *제거*했다 — 소비처 0·전량 NULL·로더
+    미설정의 죽은 컬럼이었고, 실 벡터는 code 키 별 테이블(`concept_embedding` 등)이 소유한다.
     """
 
     model_config = ConfigDict(
@@ -200,11 +200,9 @@ class Concept(BaseModel):
     # DB(카탈로그 kebab-id·CLAUDE.md #6)가 단일 진실이다. 노드 재내장은 test_concept.py의
     # `_FORBIDDEN_NODE_FIELDS`·schema↔ORM 정합 테스트가 차단한다.
 
-    # ===== 벡터 임베딩 ID (pgvector·Postgres 동거 참조·슬98) =====
-    embedding_id: uuid.UUID | None = Field(
-        default=None,
-        description="벡터 저장소(pgvector·Postgres) 참조 ID(임베딩 벡터 저장 아님)",
-    )
+    # ===== 벡터 임베딩 ID: ARCH-14로 제거(죽은 컬럼·순수성 부채 해소) =====
+    # `embedding_id`(구 pgvector 참조 잔재·슬98)는 소비처 0·전량 NULL·로더 미설정이라
+    # ORM·스키마 양쪽에서 제거했다(마이그레이션 동반). 실 벡터는 code 키 별 테이블이 소유.
 
     # ===== 운영 메타 =====
     created_at: datetime | None = Field(default=None, description="생성 시각")

@@ -1,14 +1,18 @@
-"""미성년 대화 본문 봉투 암호화 *백필* ops CLI — 평문 저장된 `dialogue_turn.content` 전환.
+"""미성년 대화 봉투 암호화 *백필* ops CLI — 평문 저장된 `dialogue_turn` 세 축 전환.
 
 감사상환 #2 — 대화 본문 봉투 암호화(`_crypto`·coach.py 결선)는 *신규* 턴만 암호화하고 기존
 평문 행은 잔존한다. 마스터 키 도입 후 기존 행을 점진 전환하는 *백필* 표면이 여기다
 (device `PgDeviceStore.reencrypt_plaintext_secrets` 선례·retention_purge_cli ops 컨벤션 미러:
 전역 배치는 HTTP 미노출·스크립트가 직접 돈다).
 
-동작: `content_encrypted IS NULL AND content IS NOT NULL`(=평문 본문 행)을 batch_size개까지
-암호화해 `content_encrypted`/`content_nonce`를 채우고 `content=NULL`로 비운다. 이미 암호화된
-행은 자동 제외(idempotent). 키 미설정(cipher None)이면 no-op(0). CLI는 0 반환까지 반복해
-전체 백필(대형 테이블 메모리/락 보호).
+**SEC-01: 세 축을 함께 처리한다** — `content`(본문)·`image_uri`(손글씨 URI)·`image_analysis`
+(Qwen3-VL 분석). 본문만 백필하면 운영자가 `{"reencrypted": N}`을 보고 "평문 전환 완료"로
+읽는데 이미지 평문은 그대로 남는다 — **부분 처리를 완전 처리로 위장**하는 정확히 그 함정이다.
+
+동작: 세 축 중 *하나라도* 평문(`<축>_encrypted IS NULL AND <축> IS NOT NULL`)인 행을
+batch_size개까지 골라, **평문인 축만** 암호화해 `<축>_encrypted`/`<축>_nonce`를 채우고 평문
+컬럼을 NULL로 비운다. 이미 암호화된 축은 건드리지 않는다(idempotent). 키 미설정(cipher None)
+이면 no-op(0). CLI는 0 반환까지 반복해 전체 백필(대형 테이블 메모리/락 보호).
 
 사용법:
     python -m whymath_backend.privacy.dialogue_content_backfill [--batch-size N]
@@ -22,13 +26,23 @@ import argparse
 import asyncio
 import json
 import sys
+from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._crypto import SupportsEnvelope, build_dialogue_content_cipher
 
 __all__ = ["main", "reencrypt_plaintext_dialogue_content"]
+
+
+def _serialize_analysis(value: Any) -> str:
+    """JSONB 축은 구조라 바이트로 못 바꾼다 — 저장 좌석과 **동일한 결정론 직렬화**를 쓴다.
+
+    `api/_crypto.encrypt_dialogue_image_analysis`와 규칙이 어긋나면 백필한 행만 복호 결과가
+    달라지므로(재현성 붕괴) 규칙을 여기서 다시 쓰지 않고 동일 인자로 맞춘다.
+    """
+    return json.dumps(value, sort_keys=True, ensure_ascii=False)
 
 
 async def reencrypt_plaintext_dialogue_content(
@@ -37,35 +51,66 @@ async def reencrypt_plaintext_dialogue_content(
     *,
     batch_size: int = 100,
 ) -> int:
-    """평문 저장된 대화 본문을 봉투 암호화로 전환(백필) — 재암호화한 행 수 반환.
+    """평문 저장된 대화 세 축을 봉투 암호화로 전환(백필) — 재암호화한 *행* 수 반환.
 
-    `content_encrypted IS NULL`(=평문/본문 없는 행) 중 `content IS NOT NULL`인 것을 batch_size개
-    까지 암호화해 `content_encrypted`/`content_nonce`를 채우고 `content=NULL`로 비운다. 이미
-    암호화된 행은 제외(idempotent). 본문 없는 행(content NULL)은 암호화 대상이 아니라 자동 skip.
-    cipher 미설정이면 0(no-op). 호출자가 0 반환까지 반복해 전체 백필. `session.commit`은 여기서
-    (device 배치 선례 — 1 배치 = 1 커밋). PgDeviceStore.reencrypt_plaintext_secrets 미러.
+    세 축(`content`·`image_uri`·`image_analysis`) 중 하나라도 평문(`<축>_encrypted IS NULL AND
+    <축> IS NOT NULL`)인 행을 batch_size개까지 골라, **평문인 축만** 암호화해 ciphertext/nonce를
+    채우고 평문 컬럼을 NULL로 비운다. 이미 암호화된 축·값이 없는 축은 건드리지 않는다
+    (idempotent). cipher 미설정이면 0(no-op). 호출자가 0 반환까지 반복해 전체 백필.
+    `session.commit`은 여기서(device 배치 선례 — 1 배치 = 1 커밋).
+
+    반환값이 *행* 수인 점에 유의 — 한 행에서 세 축을 동시에 전환해도 1이다(진행 종료 조건이
+    "더 이상 평문 행이 없음"이라 행 단위가 맞다).
     """
     if cipher is None:
         return 0
     from whymath_backend.db.models.dialogue import DialogueTurn
 
+    plaintext_content = DialogueTurn.content_encrypted.is_(None) & DialogueTurn.content.is_not(None)
+    plaintext_uri = DialogueTurn.image_uri_encrypted.is_(None) & DialogueTurn.image_uri.is_not(None)
+    plaintext_analysis = DialogueTurn.image_analysis_encrypted.is_(None) & (
+        DialogueTurn.image_analysis.is_not(None)
+    )
     sel = (
-        select(DialogueTurn.turn_id, DialogueTurn.content)
-        .where(DialogueTurn.content_encrypted.is_(None), DialogueTurn.content.is_not(None))
+        select(
+            DialogueTurn.turn_id,
+            DialogueTurn.content,
+            DialogueTurn.content_encrypted,
+            DialogueTurn.image_uri,
+            DialogueTurn.image_uri_encrypted,
+            DialogueTurn.image_analysis,
+            DialogueTurn.image_analysis_encrypted,
+        )
+        .where(or_(plaintext_content, plaintext_uri, plaintext_analysis))
         .limit(batch_size)
     )
     result = await session.execute(sel)
     count = 0
-    for turn_id, content in result.all():
-        if content is None:  # 방어적 — WHERE로 이미 배제되나 명시
+    for row in result.all():
+        turn_id, content, content_enc, uri, uri_enc, analysis, analysis_enc = row
+        values: dict[str, Any] = {}
+        if content is not None and content_enc is None:
+            ciphertext, nonce = cipher.encrypt(content)
+            values |= {"content": None, "content_encrypted": ciphertext, "content_nonce": nonce}
+        if uri is not None and uri_enc is None:
+            ciphertext, nonce = cipher.encrypt(uri)
+            values |= {
+                "image_uri": None,
+                "image_uri_encrypted": ciphertext,
+                "image_uri_nonce": nonce,
+            }
+        if analysis is not None and analysis_enc is None:
+            ciphertext, nonce = cipher.encrypt(_serialize_analysis(analysis))
+            values |= {
+                "image_analysis": None,
+                "image_analysis_encrypted": ciphertext,
+                "image_analysis_nonce": nonce,
+            }
+        if not values:  # 방어적 — WHERE로 이미 배제되나 명시(무한 루프 방지)
             continue
-        ciphertext, nonce = cipher.encrypt(content)
-        upd = (
-            update(DialogueTurn)
-            .where(DialogueTurn.turn_id == turn_id)
-            .values(content=None, content_encrypted=ciphertext, content_nonce=nonce)
+        await session.execute(
+            update(DialogueTurn).where(DialogueTurn.turn_id == turn_id).values(**values)
         )
-        await session.execute(upd)
         count += 1
     await session.commit()
     return count
@@ -99,8 +144,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m whymath_backend.privacy.dialogue_content_backfill",
         description=(
-            "미성년 대화 본문(dialogue_turn.content) 평문 행을 봉투 암호화로 백필 전환 "
-            "(감사상환 #2·CLAUDE.md '미성년 채팅 평문 저장 금지')."
+            "미성년 대화 평문 행(dialogue_turn의 content·image_uri·image_analysis)을 봉투 "
+            "암호화로 백필 전환 (감사상환 #2·SEC-01·CLAUDE.md '미성년 채팅 평문 저장 금지')."
         ),
     )
     parser.add_argument(

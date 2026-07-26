@@ -36,9 +36,13 @@ from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._concurrency import etag_for, matches_if_none_match
 from whymath_backend.api._crypto import (
     SupportsEnvelope,
-    build_dialogue_content_cipher,
     encrypt_dialogue_content,
+    encrypt_dialogue_image_analysis,
+    encrypt_dialogue_image_uri,
+    require_dialogue_content_cipher,
     resolve_dialogue_content,
+    resolve_dialogue_image_analysis,
+    resolve_dialogue_image_uri,
 )
 from whymath_backend.api._l3_state import (
     CACHE_KEY as _CACHE_KEY,
@@ -56,6 +60,7 @@ from whymath_backend.api._rate_limit import (
 )
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
+from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
@@ -118,12 +123,15 @@ from whymath_backend.l4.misconception.shadow import (
     observe_misconception_shadow,
 )
 from whymath_backend.l4.misconception.warmstart import assemble_warmstart_probe_hints
+from whymath_backend.l4.pedagogy.k_type_resolver import k_type_query
+from whymath_backend.l4.pedagogy.pack_registry import get_pack
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
 from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
 from whymath_backend.schema.event_data_contract import build_event_data
+from whymath_backend.schema.pedagogy_pack import PedagogyPack
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -433,6 +441,7 @@ def _build_response_payload(
     server_theta: float | None = None,
     matches: list[MisconceptionMatch] | None = None,
     misconception_hypotheses: list[MisconceptionHypothesis] | None = None,
+    pack: PedagogyPack | None = None,
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -476,6 +485,7 @@ def _build_response_payload(
         body.polya_state,
         mastery_level=level,
         misconception_hypotheses=misconception_hypotheses,
+        pack=pack,
     )
     # slice 106: 주입된 결합 matches 우선·미주입(sync 직접호출·게이트 off 경로)이면 substring
     # diagnose 폴백(현행 비트동일). combine_diagnoses가 substr 우선이라 resolved[0]은 substr가
@@ -754,6 +764,29 @@ async def _server_mastery_for(
     if concept_id is None:
         return None
     return await get_current_mastery(session, user_id, concept_id)
+
+
+async def _pack_for(session: AsyncSession, problem_id: uuid.UUID | None) -> PedagogyPack | None:
+    """문항 PRIMARY 개념 → k_type → 교수법 팩 해석 — coach 세션/턴 GA 배선(PED-01 후속).
+
+    게이트(`pedagogy_pack_prompt_enabled`)가 off면 **조기 None**(팩 조회 자체 skip → 완전
+    no-op·회귀 0). `problem_id` None(stateless)이면 None. 문항 PRIMARY 개념(없으면 TESTED
+    폴백·`get_primary_concept_id`)의 `code`를 해석하고, 그 code로 학습목표 k_type을 찾아 팩을
+    가져온다(`_server_mastery_for`와 동형 해석 seam·요청 AsyncSession 직접 실행). 어느 단계든
+    미매핑·미존재면 graceful None → `decide`가 base_system 무변경(pack None이면 회귀 0).
+    """
+    if problem_id is None or not get_settings().pedagogy_pack_prompt_enabled:
+        return None
+    concept_id = await get_primary_concept_id(session, problem_id)
+    if concept_id is None:
+        return None
+    code = await session.scalar(select(Concept.code).where(Concept.concept_id == concept_id))
+    if code is None:
+        return None
+    k_type = await session.scalar(k_type_query(str(code)))
+    if k_type is None:
+        return None
+    return get_pack(str(getattr(k_type, "value", k_type)))
 
 
 def _theta_reading_reliable(reading: AbilityReading) -> bool:
@@ -1201,6 +1234,10 @@ def _build_dialogue_turn(
     content_encrypted/content_nonce 세팅(평문 원문 DB 부재), cipher None이면 평문 폴백
     (content=평문·encrypted=None — 조용한 무동작 아닌 *명시* 폴백·CI/기존 배포 무영향).
     create_session·append_turns의 학생/AI 턴 4곳이 모두 이 헬퍼를 거쳐 중복·누락을 없앤다.
+
+    SEC-01: 멀티모달 두 축(`image_uri`·`image_analysis`)도 **같은 좌석에서 같은 키로** 암호화한다
+    — 손글씨 URI·Qwen3-VL 분석은 미성년 풀이 전사가 가능한 데이터라 본문과 같은 등급이다.
+    분기 로직은 본문과 동일(cipher 없으면 명시 평문 폴백·값 None이면 3-튜플 전부 None).
     """
     turn = DialogueTurnORM.from_schema(schema)
     content_plain, content_encrypted, content_nonce = encrypt_dialogue_content(
@@ -1209,6 +1246,18 @@ def _build_dialogue_turn(
     turn.content = content_plain
     turn.content_encrypted = content_encrypted
     turn.content_nonce = content_nonce
+
+    uri_plain, uri_encrypted, uri_nonce = encrypt_dialogue_image_uri(cipher, schema.image_uri)
+    turn.image_uri = uri_plain
+    turn.image_uri_encrypted = uri_encrypted
+    turn.image_uri_nonce = uri_nonce
+
+    analysis_plain, analysis_encrypted, analysis_nonce = encrypt_dialogue_image_analysis(
+        cipher, schema.image_analysis
+    )
+    turn.image_analysis = analysis_plain
+    turn.image_analysis_encrypted = analysis_encrypted
+    turn.image_analysis_nonce = analysis_nonce
     return turn
 
 
@@ -1318,6 +1367,7 @@ async def create_session(
                 warmstart_outside_mids=warmstart_mids,
             )
         )
+    pack = await _pack_for(session, body.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -1327,6 +1377,7 @@ async def create_session(
             server_theta=server_theta,
             matches=outcome.matches,
             misconception_hypotheses=active_hypotheses,
+            pack=pack,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -1362,7 +1413,7 @@ async def create_session(
 
     # 감사상환 #2: 대화 본문 봉투 암호화기(키 미설정 시 None=평문 폴백). 학생/AI 턴 2곳이 동일
     # 헬퍼(`_build_dialogue_turn`)로 content를 암호화 저장(중복 회피).
-    content_cipher = build_dialogue_content_cipher(get_settings())
+    content_cipher = require_dialogue_content_cipher(get_settings())
     student_turn = _build_dialogue_turn(
         DialogueTurnSchema(
             dialogue_id=dialogue.dialogue_id,
@@ -1533,6 +1584,7 @@ async def append_turns(
                 warmstart_outside_mids=warmstart_mids_turn,
             )
         )
+    pack = await _pack_for(session, dialogue.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -1542,6 +1594,7 @@ async def append_turns(
             server_theta=server_theta,
             matches=outcome.matches,
             misconception_hypotheses=active_hypotheses,
+            pack=pack,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -1565,7 +1618,7 @@ async def append_turns(
 
     now = datetime.now(timezone.utc)
     # 감사상환 #2: create_session과 동형 — 본문 봉투 암호화기·동일 헬퍼로 학생/AI 턴 저장.
-    content_cipher = build_dialogue_content_cipher(get_settings())
+    content_cipher = require_dialogue_content_cipher(get_settings())
     student_turn = _build_dialogue_turn(
         DialogueTurnSchema(
             dialogue_id=dialogue_id,
@@ -1703,12 +1756,23 @@ async def get_session_detail(
     # 감사상환 #2: 암호화 행은 content=NULL·content_encrypted에 저장 — 노출 직전 복호한다.
     # to_schema는 ciphertext 컬럼을 제외하므로 복호값을 schema.content에 덮어쓴다(키 유실 시
     # resolve_dialogue_content가 RuntimeError·조용한 평문 유출/빈 응답 금지).
-    content_cipher = build_dialogue_content_cipher(get_settings())
+    content_cipher = require_dialogue_content_cipher(get_settings())
     turns = []
     for row in result.scalars().all():
         turn_schema = row.to_schema()
         turn_schema.content = resolve_dialogue_content(
             content_cipher, row.content, row.content_encrypted, row.content_nonce
+        )
+        # SEC-01: 멀티모달 두 축도 같은 시점에 복호한다 — 암호화해 놓고 읽는 쪽을 빠뜨리면
+        # 학생에게 빈 값이 보이고(조용한 손실) 그것이 암호화 때문인지 알 수 없다.
+        turn_schema.image_uri = resolve_dialogue_image_uri(
+            content_cipher, row.image_uri, row.image_uri_encrypted, row.image_uri_nonce
+        )
+        turn_schema.image_analysis = resolve_dialogue_image_analysis(
+            content_cipher,
+            row.image_analysis,
+            row.image_analysis_encrypted,
+            row.image_analysis_nonce,
         )
         turns.append(turn_schema)
     payload = SessionGetResponse(dialogue=dialogue.to_schema(), turns=turns)
