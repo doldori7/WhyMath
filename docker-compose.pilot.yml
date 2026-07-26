@@ -1,0 +1,43 @@
+# S3-01 파일럿 코호트 전용 — *영속* Postgres 16 (데모 throwaway와 달리 named volume로 데이터 보존).
+#
+# 왜 별도 compose인가:
+#   - 데모 DB(docker-compose.demo.yml·55432)는 볼륨 없는 throwaway라 `stop_demo`가 볼륨째 버린다
+#     → 다세션 KPI(리텐션·숙달 델타) 측정 불가.
+#   - prod DB(whymath-pg·5433)에 데모 시드를 섞으면 진단·스캔 DB가 오염된다.
+#   → 파일럿 데이터는 *격리된 영속* DB에 둔다(호스트 5434·named volume·prod/데모와 포트 분리).
+#
+# ★로컬 파일럿 전용: 127.0.0.1에만 바인딩(외부 노출 0). trust auth로 시크릿 하드코딩 0 —
+#   Kiki 머신(Phaiakes9) 로컬 전용이며 네트워크 미노출이라 데모 스택과 동일한 로컬 보안 자세.
+#   학생 대화 본문은 앱 계층 봉투 암호화(AES-256-GCM·dialogue_turn)로 행 단위 보호된다.
+#   prod/스테이징 절대 금지 — 실 서비스 DB는 별도 관리형 인스턴스(비밀번호·TLS·백업 별도).
+#
+# 사용:
+#   docker compose -f docker-compose.pilot.yml up -d          # 기동(볼륨 보존)
+#   docker compose -f docker-compose.pilot.yml down           # 정지(볼륨 유지 — 데이터 보존)
+#   docker compose -f docker-compose.pilot.yml down -v        # 완전 폐기(볼륨째 — 데이터 소멸)
+services:
+  pilot-db:
+    # pgvector 포함 이미지 필수 — alembic이 `CREATE EXTENSION vector`를 실행한다(데모와 동일 근거).
+    image: pgvector/pgvector:pg16
+    container_name: whymath-pilot-db
+    environment:
+      POSTGRES_USER: whymath
+      POSTGRES_DB: whymath
+      # trust: 로컬 127.0.0.1 전용·비밀번호 미설정(시크릿 하드코딩 0). prod 금지.
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      # 5434 — 5432(타 프로젝트)·5433(prod whymath-pg)·55432(데모)와 모두 분리해 충돌 회피.
+      # 컨테이너 내부는 표준 5432(run_demo가 오버라이드 URL로 호스트 5434에 접속).
+      - "127.0.0.1:5434:5432"
+    volumes:
+      # named volume — 데모와 결정적 차이. `down`(볼륨 유지)로 세션 간 데이터 보존,
+      # 다세션 KPI(리텐션·숙달 델타) 측정을 가능하게 한다.
+      - whymath_pilot_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whymath -d whymath"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  whymath_pilot_pgdata:
