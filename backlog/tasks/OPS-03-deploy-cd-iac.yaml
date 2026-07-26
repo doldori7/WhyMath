@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on:
@@ -20,6 +20,6 @@ paths:
   - ".github/**"
   - "infra/**"
   - "docs/architecture/**"
-session: null
+session: claude/whymath-service-review-9r21im
 notes: "GCP/AWS 프로덕션 계획 대비 IaC 공백. 배포 자동화 전 복구(OPS-02) 선행. 운영 축 상환 #3."
 updated: 2026-07-26

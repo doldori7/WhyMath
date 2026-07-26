@@ -20,5 +20,5 @@ paths:
   - "docs/architecture/**"
   - "docs/standards/**"
 session: null
-notes: "shadow_measurement_runbook 외 운영 런북 부재. 운영 축 상환 #4."
+notes: "1세션=1태스크 규약 — 동일 세션이 OPS-03을 선행 claim 중이라 claim 반납(구현은 병렬 진행, OPS-03 done 후 재claim하여 등재)"
 updated: 2026-07-26
