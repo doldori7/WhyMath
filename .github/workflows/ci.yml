@@ -203,6 +203,13 @@ jobs:
             --cov-report=xml \
             --cov-fail-under=70
 
+      # 계층별 커버리지 게이트 (ARCH-14 ② '강화') — 집계 70%(위)에 더해 서브패키지(l1~l4·api)별
+      # 라인 커버리지 바닥선을 강제한다(한 계층이 낮아도 집계 평균에 묻히던 사각 폐색). 바닥선은
+      # 실측 ratchet(회귀 방지)·지향치(testing.md L4 90% 등)로 점진 상향. coverage.xml만 읽는
+      # hermetic 스텝(위 Pytest 산출물 소비). 무측정 계층은 성공 위장 대신 명시 실패.
+      - name: 계층별 커버리지 게이트 (서브패키지 floor — l1~l4·api)
+        run: python ../../scripts/coverage/check_layer_coverage.py coverage.xml
+
       # 초인간 검증 게이트 (hermetic·라이브 0·고정 시드) — ci.yml 상시 배선(ARCH-14 ①).
       # pytest 회귀에 더해 CLI exit 0/1 게이트를 독립 스텝으로 심어 "측정 통과 기계 게이트"가
       # 상시 회귀로 강제되게 한다(초인간 검증 기준 v1 §서열 ②). 임계는 고정 시드 실측 여유값:
