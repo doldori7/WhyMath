@@ -5,17 +5,19 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 5
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "image 계열 컬럼 봉투 암호화(마이그레이션 동반) + content 암호화 키 미설정 평문 폴백에 대한 배포 체크리스트 동결(프로덕션 dialogue_content_encryption_key 설정 실측 포함)"
-artifacts: []
+artifacts:
+  - "커밋 f3517dd — 이미지 2축 봉투 암호화(ORM 4컬럼+alembic a2b3c4d5e6f1)·프로덕션 fail-closed 게이트·백필 세 축 확장·배포 체크리스트 문서. 검증: ruff·black clean·mypy --strict Success(410)·lint-imports 0 broken·전체 스위트 7341 passed/258 skipped exit 0(커버리지 92.70%>=70)·실 PG 통합 5 passed·변별력 실측 2회(export 이미지 복호 무력화 FAIL·백필 본문전용 회귀 FAIL, 복원 후 재통과)"
+  - "프로덕션 키 설정 실측은 미수행 — 컨테이너에 프로덕션 DB·env 부재. SEC-02-prod-dialogue-key-measurement(owner=kiki)로 분리 등재, 체크리스트 §4에 미실측 명시. scope_drift 예상(paths가 dialogue.py·coach.py만 선언, 실제는 _crypto·privacy·alembic·docs·tests 포함)"
 paths:
   - src/backend/whymath_backend/db/models/dialogue.py
   - src/backend/whymath_backend/api/coach.py
-session: claude/education-os-architecture-mr0fbq
+session: null
 notes: "2026-07-21 전면 정합성 검토 Low·요검증 — db/models/dialogue.py:195-196 image_uri(손글씨 URI)·image_analysis(Qwen3-VL 분석 JSONB)는 미성년 풀이 전사 가능 데이터인데 암호화 경로 자체가 없음(평문 Text/JSONB). 채팅 content는 봉투 암호화 배선 완료이나 키 미설정 시 명시 평문 폴백(dialogue.py:167-169) — 프로덕션 키 설정 여부 실측(Kiki·Phaiakes9)이 선행 요검증."
 updated: 2026-07-26
