@@ -87,6 +87,11 @@ main
 > `policy-guard`) 나열했고 **`backend — lint·type·test`가 빠져 있었다**. CI 잡이 3개에서
 > 14개로 늘어나는 동안 목록이 따라가지 못한 것이다.
 >
+> **더 나아가 — 실측 결과 그 3종조차 등록돼 있지 않았다**(`enforcement_level=off`·
+> `checks=[]`, 자가검증 C). `protected: true`(PR 필수·force-push 차단)는 켜져 있었으나
+> **status check 강제 자체가 통째로 꺼져 있었다**. 즉 "backend만 빠진 것"이 아니라
+> **어떤 CI 잡도 머지를 막지 못하는 상태**였다.
+>
 > 결과: 전체 테스트·mypy·커버리지를 보는 **가장 중요한 잡이 머지를 막지 못했다.**
 > PR #603·#604·#605·#606·#607 **다섯 번 연속** 이 잡의 완주 전에 auto-merge가 발동했고,
 > #606에서 실제로 `1 failed`가 나 **main이 red**가 됐다(테스트 전역 오염). 그 red를 고치는
@@ -126,6 +131,30 @@ main
 
 1. 페이지 하단 **Create** 또는 **Save changes** 클릭
 2. Branches 탭에 *Branch protection rule applied to* `main` 확인
+
+### 자가검증 C — API로 직접 읽는다 (**가장 확실·이것부터**)
+
+브랜치 보호 *설정* 엔드포인트(`/protection`)는 admin 권한이 필요해 읽기 토큰으로 403이지만,
+**`/branches/main`은 `metadata=read`로도 읽히고 그 안에 required check 요약이 들어 있다**
+(2026-07-26 실측). 눈으로 세는 A보다 정확하고, 머지 타이밍을 지켜보는 B보다 즉시 나온다.
+
+```bash
+# 어디서든(claude 세션 포함) 실행 가능 — 토큰만 있으면 된다
+curl -sS -H "Authorization: Bearer $GITHUB_TOKEN" \
+  "https://api.github.com/repos/doldori7/WhyMath/branches/main" |
+  python3 -c "import sys,json;p=json.load(sys.stdin)['protection']['required_status_checks'];print(p['enforcement_level'], len(p['checks']), sorted(c['context'] for c in p['checks']))"
+```
+
+| 출력 | 판정 |
+|---|---|
+| `off 0 []` | ❌ **required check가 하나도 없다** — 미설정 상태 |
+| `non_admins 13 [...]` 또는 `everyone 13 [...]` | ✅ 13종 등록 완료 |
+| 개수가 13 미만 | ⚠️ 일부 누락 — 목록 출력과 문서 블록을 1:1 대조 |
+
+> **설정 전 실측값(2026-07-26)**: `enforcement_level=off · contexts=[] · checks=[]`.
+> 즉 문서가 나열하던 3종조차 **실제로는 등록돼 있지 않았다** — `protected: true`(PR 필수·
+> force-push 차단 등)는 켜져 있으나 **status check 강제만 통째로 꺼져 있던** 상태다.
+> 이 검사는 미설정 상태에서 확실히 `off 0 []`를 내므로 변별력이 있다.
 
 ### 자가검증 A — 등록된 체크 *개수*를 눈으로 센다
 
