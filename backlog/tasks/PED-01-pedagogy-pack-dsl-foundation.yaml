@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: blocked
+status: done
 priority: 5
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "스키마 기반 착지(본 커밋): knowledge_type enum·pedagogy_pack·unit_spec·learning_objective·pedagogy_content_slot·evidence_event ORM+Alembic 2리비전(L3/L2 분리)·hermetic 31 PASS — Blocking(평문 저장·license 우회·미승인)·High(content_provenance 중복·legacy 노드 참조·raw SQL) 해소"
   - "시더·컴파일러·런타임 배선(잔여): packs YAML 시더→pedagogy_pack·.unit.yaml 컴파일러 v0.1→unit_spec/learning_objective/슬롯 발주서·4층 프롬프트 조립기+forbidden_modes guard·evidence 봉투 암호화 write 경로"
   - "이차함수 파일럿 1개가 컴파일→생성→예심→검수→런타임 E2E 1회 완주 후 DSL 스키마 동결(필드 추가는 2번째 소단원 실요구 시)"
-artifacts: []
+artifacts:
+  - "branch:claude/human-bottleneck-work-2qumzl@3d55f26 — 이차함수 파일럿 E2E 1회 완주(로컬 PG 실증)+DSL 스키마 동결+CI fidelity 게이트"
 paths:
   - "src/backend/alembic/versions/**"
   - src/backend/whymath_backend/db/models/pedagogy_dsl.py
@@ -23,4 +24,4 @@ paths:
   - "src/backend/whymath_backend/l4/**"
 session: null
 notes: "핵심 슬라이스 3건 머지 완료(#575·#576·컴파일러). 잔여 acceptance는 이차함수 파일럿 E2E 완주 슬라이스 — PED-02 런타임 셀렉터 머지(#590 완료)로 선행 의존 해소됐으나 파일럿 실행+다음 슬라이스는 사용자 지시 대기. 이 세션은 ARCH-14 활성 claim으로 전환(1세션=1태스크 정합). 재개 시 unblock."
-updated: 2026-07-25
+updated: 2026-07-26
