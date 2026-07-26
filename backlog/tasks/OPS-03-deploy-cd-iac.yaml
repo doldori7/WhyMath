@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-03-deploy-cd-iac
+title: "프로덕션 배포 자동화(CD)·IaC — 현 docker-compose.demo만·CI에 deploy 잡 없음"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - OPS-02-db-backup-dr
+requires_gates: []
+acceptance:
+  - "staging/prod 분리 배포 경로(compose.prod 또는 IaC) — demo 일회용 볼륨과 구분"
+  - "CI→CD deploy 잡(.github/workflows) + 롤백 경로"
+  - "시크릿 관리 규칙 준수 — 하드코딩 금지·등록 후 자가검증 선례"
+artifacts: []
+paths:
+  - ".github/**"
+  - "infra/**"
+  - "docs/architecture/**"
+session: null
+notes: "GCP/AWS 프로덕션 계획 대비 IaC 공백. 배포 자동화 전 복구(OPS-02) 선행. 운영 축 상환 #3."
+updated: 2026-07-26
