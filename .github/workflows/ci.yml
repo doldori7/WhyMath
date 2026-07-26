@@ -220,6 +220,14 @@ jobs:
           python -m whymath_backend.harness.coach_prose_leak_eval \
             --n-per-cell 12 --max-leak-upper 0.05 --max-false-block-upper 0.2
 
+      # PED-01 ③: 교수법 팩 금지모드 가드 결함주입 강등전. 고정 그리드 실측 여유값 —
+      # violating/clean 각 72셀 미검출·오검출 0 → Wilson 상한 0.0362 → 게이트 통과.
+      # 팩-프롬프트 GA flip(pedagogy_pack_prompt_enabled 기본 ON)의 선결 게이트다.
+      - name: 게이트 — 교수법 팩 금지모드 가드 (pedagogy_pack_fidelity·미검출 상한 0.05·오검출 상한 0.2)
+        run: |
+          python -m whymath_backend.harness.pedagogy_pack_fidelity_eval \
+            --n-per-cell 12 --max-miss-upper 0.05 --max-false-alarm-upper 0.2
+
       - name: Upload coverage artifact
         if: always()
         uses: actions/upload-artifact@v4
