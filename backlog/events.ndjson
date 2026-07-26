@@ -761,3 +761,7 @@
 {"ts": "2026-07-26T21:47:38", "actor": "claude/review-applicable-items-8rrtau", "action": "claim_remote_unavailable", "id": "OPS-07-test-pollution-guard", "status": "error"}
 {"ts": "2026-07-26T21:47:38", "actor": "claude/review-applicable-items-8rrtau", "action": "start", "id": "OPS-07-test-pollution-guard", "session": "claude/review-applicable-items-8rrtau", "remote": "error"}
 {"ts": "2026-07-26T22:15:13", "actor": "claude/review-applicable-items-8rrtau", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 OPS-07-test-pollution-guard의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-07-26T21:26:49", "actor": "claude/whymath-service-review-9r21im", "action": "add", "id": "OPS-08-required-checks-drift"}
+{"ts": "2026-07-26T21:26:50", "actor": "claude/whymath-service-review-9r21im", "action": "claim_remote_unavailable", "id": "OPS-08-required-checks-drift", "status": "error"}
+{"ts": "2026-07-26T21:26:50", "actor": "claude/whymath-service-review-9r21im", "action": "start", "id": "OPS-08-required-checks-drift", "session": "claude/whymath-service-review-9r21im", "remote": "error"}
+{"ts": "2026-07-26T21:30:46", "actor": "claude/whymath-service-review-9r21im", "action": "done", "id": "OPS-08-required-checks-drift", "artifacts": ["e81696a"]}
