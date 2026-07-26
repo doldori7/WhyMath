@@ -26,6 +26,7 @@ from whymath_backend.api._l3_state import get_cache, get_provider, get_trace
 from whymath_backend.api._rate_limit import RateLimitedVisualization
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.session import get_session
+from whymath_backend.l1.concept_visual_style import get_recommended_visual_styles
 from whymath_backend.l1.concept_visualization import get_visualizability
 from whymath_backend.l1.skill_graph.resolve import get_behavior_areas
 from whymath_backend.l2.concept_diagnosis import (
@@ -89,6 +90,9 @@ async def scene_for_concept_diagnosis(
         return None
     # 시각화 가능성 4분류(Part 5)를 시각화 계층 Overlay에서 조회(노드 비내장·ADR 계층분리).
     visualizability = await get_visualizability(session, concept_orm.code)
+    # 권장 시각화 양식(슬88)도 노드 비내장 — 전용 Overlay(`concept_visual_style`)에서 조회해 스키마
+    # 필드에 주입한다(ARCH-14 ③·행 부재→[]·기존 동작). L4 결정론 골격이 이 필드를 읽는다.
+    styles = await get_recommended_visual_styles(session, concept_orm.code)
     # 행동영역(BehaviorArea)을 concept→skill 조인으로 해소(S5k·미매핑=중립). 진입 순서·focus에 반영.
     # concept_node.behavior_skills → skill_node.behavior_area(L1 `get_behavior_areas`).
     behavior_areas = await get_behavior_areas(session, concept_orm.code)
@@ -125,7 +129,7 @@ async def scene_for_concept_diagnosis(
         sync=True,
     )
     return await generate_learning_scene(
-        concept_orm.to_schema(),
+        concept_orm.to_schema().model_copy(update={"recommended_visual_styles": styles}),
         level,
         req,
         provider=provider,

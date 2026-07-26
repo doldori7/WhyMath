@@ -73,12 +73,15 @@ def test_concept_orm_tablenames() -> None:
 # 2) PG DDL 컴파일
 # ──────────────────────────────────────────────────────────────────────────
 def test_concept_ddl_compiles_to_postgres() -> None:
-    """Concept DDL에 concept_level_enum·cognitive_type_enum·visualization_style_enum·
-    gen_random_uuid()·UUID 포함(본문·오개념 컬럼은 Phase 1b로 제거 — JSONB 없음)."""
+    """Concept DDL에 concept_level_enum·cognitive_type_enum·gen_random_uuid()·UUID 포함.
+
+    본문·오개념 컬럼은 Phase 1b로 제거(JSONB 없음). recommended_visual_styles(슬88)는 ARCH-14 ③으로
+    전용 Overlay `concept_visual_style`로 이관돼 노드 DDL에 visualization_style_enum이 없다.
+    """
     ddl = _pg_ddl(OrmConcept.__table__)
     assert "concept_level_enum" in ddl  # level
     assert "cognitive_type_enum" in ddl  # cognitive_type[] (enum 배열)
-    assert "visualization_style_enum" in ddl  # recommended_visual_styles[] (슬라이스 88)
+    assert "visualization_style_enum" not in ddl  # ARCH-14 ③: Overlay 이관·노드 비내장
     assert "gen_random_uuid()" in ddl
     assert "UUID" in ddl
 
@@ -158,13 +161,14 @@ def test_cognitive_type_array_enum_values() -> None:
     assert "VISUAL_REASONING" in item_type.enums
 
 
-def test_recommended_visual_styles_array_enum_values() -> None:
-    """recommended_visual_styles[] 원소 enum이 값('단위원'·'수형도' 등)을 갖는다(슬라이스 88)."""
-    col = OrmConcept.__table__.c.recommended_visual_styles
-    item_type = col.type.item_type  # type: ignore[attr-defined]
-    assert item_type.name == "visualization_style_enum"
-    assert "단위원" in item_type.enums
-    assert "수형도" in item_type.enums
+def test_recommended_visual_styles_column_removed() -> None:
+    """recommended_visual_styles 컬럼은 ARCH-14 ③으로 노드에서 제거·Overlay 이관(재유입 회귀 가드).
+
+    권장 양식은 이제 전용 Overlay `concept_visual_style`(code 키)가 소유한다(원소 enum 값 검증은
+    Overlay ORM 테스트로 이동). 순수성 게이트(test_concept_orm_purity_governance.py)가
+    _FORBIDDEN_COLUMNS로도 재유입을 봉인한다.
+    """
+    assert "recommended_visual_styles" not in OrmConcept.__table__.c
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -202,19 +206,34 @@ def test_concept_roundtrip_preserves_core_fields() -> None:
 
 
 def test_schema_orm_field_parity_frozen() -> None:
-    """schema.Concept 필드 집합 == ORM 매퍼 컬럼 집합(정합 동결·Phase 1b redaction 계약).
+    """schema.Concept 필드 == ORM 컬럼 (단, Overlay-backed schema-only 필드만 의도적 드리프트 허용).
 
     `from_schema`/`to_schema`는 두 집합의 *교집합*만 흐르므로, 한쪽에만 있는 필드는 조용히
     유실되거나(from_schema) 검증 실패(to_schema)한다. 이 동결은 그 드리프트를 코드리뷰로 끌어낸다
     — 특히 Phase 1b로 제거한 본문 3종·오개념 컬럼이 어느 한쪽에만 되살아나는 회귀를 막는다.
+
+    예외(ARCH-14 ③): `recommended_visual_styles`는 ORM 컬럼은 제거하고 전용 Overlay
+    `concept_visual_style`로 이관했으나 *스키마 필드로는 존치*한다(API 계약·Overlay 값을 API seam이
+    `model_copy`로 주입하는 창구). 따라서 이 한 필드만 schema-only 드리프트를 허용한다 —
+    to_schema()는 컬럼 부재 시 스키마 기본값 `[]`로 복원하고 from_schema()는 교집합 필터로 흘린다.
     """
     import sqlalchemy as sa
 
+    # ARCH-14 ③: ORM 컬럼은 없으나 스키마 필드로는 존치되는 Overlay-backed 필드(의도적 드리프트).
+    overlay_backed_schema_only = frozenset({"recommended_visual_styles"})
+
     schema_fields = set(SchemaConcept.model_fields)
     orm_columns = {col.key for col in sa.inspect(OrmConcept).mapper.column_attrs}
-    assert schema_fields == orm_columns, (
-        f"schema↔ORM 필드 드리프트 — schema만: {sorted(schema_fields - orm_columns)}, "
-        f"ORM만: {sorted(orm_columns - schema_fields)}. 한쪽 추가 시 반드시 양쪽을 함께 갱신."
+    schema_only = schema_fields - orm_columns
+    orm_only = orm_columns - schema_fields
+    assert schema_only == overlay_backed_schema_only, (
+        f"schema↔ORM 필드 드리프트(schema만): {sorted(schema_only)} != "
+        f"허용된 Overlay-backed 필드 {sorted(overlay_backed_schema_only)}. "
+        "새 필드는 양쪽을 함께 갱신하거나 Overlay-backed 예외로 명시하라."
+    )
+    assert orm_only == set(), (
+        f"schema↔ORM 필드 드리프트(ORM만): {sorted(orm_only)}. ORM에만 있는 컬럼은 "
+        "스키마에도 추가하거나 제거하라(from_schema 교집합 필터에 조용히 유실됨)."
     )
     # Phase 1b 청산 컬럼은 양쪽 모두에 부재(redaction 계약).
     for redacted in (

@@ -8,11 +8,10 @@ test_concept_node_purity.py`가 금칙·스냅샷으로 동결했으나, 런타�
 
 정책:
 - **금칙 컬럼**(저작 게이트와 동일 축)은 런타임에도 0이어야 한다.
-- **알려진 부채 1건**(`recommended_visual_styles`)은 현 스냅샷에 *존재*한다 — 저작
-  게이트가 금지한 축이지만 런타임에는 역사적으로 남아 있다. Overlay/투영 계층 이관은
-  ARCH-14-review-residual-hardening가 추적한다. (`embedding_id`는 ARCH-14로 *제거·청산
-  완료* — `_FORBIDDEN_COLUMNS`로 재유입 차단.) 이관 착륙 시 이 파일의 부채 집합·스냅샷을
-  함께 갱신한다(무단 확대는 스냅샷이 차단).
+- **순수성 부채 0건** — 과거 부채 2건은 ARCH-14로 모두 청산됐다: `embedding_id`는 *제거*(죽은
+  참조 컬럼), `recommended_visual_styles`는 전용 Overlay `concept_visual_style`로 *이관*(슬88 컬럼·
+  rev a9b8c7d6e5f4). 둘 다 `_FORBIDDEN_COLUMNS`로 재유입을 봉인한다. 새 부채가 생기면
+  `_KNOWN_PURITY_DEBT`에 등재하되 확대는 리뷰에서 반려한다(무단 확대는 스냅샷이 차단).
 
 hermetic: DB 불요 — `__table__.columns` introspection만(엔진·세션 0).
 """
@@ -38,11 +37,11 @@ _SEMANTIC_COLUMNS = frozenset(
 )
 _OPS_COLUMNS = frozenset({"created_at"})
 
-# 알려진 순수성 부채 — 저작 게이트 기준 금칙 축이나 런타임에 잔존. 이관은 ARCH-14가
-# 추적한다(visual styles는 concept_visualization Overlay로). `embedding_id`는 ARCH-14로
-# *제거 완료*(죽은 컬럼 청산·소비처 0·전량 NULL) — 아래 _FORBIDDEN_COLUMNS로 재유입 차단.
-# 이 집합에 *새 항목을 추가하는 것*은 부채 확대이므로 금지 — 리뷰에서 반려하라.
-_KNOWN_PURITY_DEBT = frozenset({"recommended_visual_styles"})
+# 알려진 순수성 부채 — 저작 게이트 기준 금칙 축이나 런타임에 잔존하는 컬럼. **현재 0건**:
+# 과거 2건(embedding_id·recommended_visual_styles)은 ARCH-14로 모두 청산됐다(전자=죽은 컬럼 제거·
+# 후자=전용 Overlay `concept_visual_style` 이관·rev a9b8c7d6e5f4). 둘 다 아래 _FORBIDDEN_COLUMNS로
+# 재유입 차단. 이 집합에 *새 항목을 추가하는 것*은 부채 확대이므로 금지 — 리뷰에서 반려하라.
+_KNOWN_PURITY_DEBT: frozenset[str] = frozenset()
 
 _EXPECTED_COLUMNS = (
     _IDENTITY_COLUMNS | _HIERARCHY_COLUMNS | _SEMANTIC_COLUMNS | _OPS_COLUMNS | _KNOWN_PURITY_DEBT
@@ -67,6 +66,8 @@ _FORBIDDEN_COLUMNS = frozenset(
         # 벡터 실체·참조(별도 pgvector 테이블이 code 키로 소유 — 노드는 참조조차 금지)
         "embedding",
         "embedding_id",  # ARCH-14로 죽은 참조 컬럼 청산 — 재유입 금지
+        # 권장 시각화 양식(노드 비내장·전용 Overlay `concept_visual_style` 이관 — rev a9b8c7d6e5f4)
+        "recommended_visual_styles",  # ARCH-14 ③으로 Overlay 이관 — 재유입 금지
         # 교육과정 Overlay(CurriculumEntry 단일 진실 — rev f3a4b5c6d7e8 제거 이력)
         "curriculum",
         "subject",
@@ -102,12 +103,16 @@ def test_columns_snapshot_frozen() -> None:
 
 
 def test_purity_debt_is_tracked_not_grown() -> None:
-    """부채 1건은 실제 존재(추적 정합)하며, 부채 집합은 딱 그 1건이다(확대 금지).
+    """순수성 부채 0건 — embedding_id·recommended_visual_styles 모두 ARCH-14로 청산·이관 완료.
 
-    embedding_id는 ARCH-14로 제거·청산됨(_FORBIDDEN_COLUMNS로 재유입 차단).
+    embedding_id=죽은 컬럼 제거, recommended_visual_styles=전용 Overlay `concept_visual_style`
+    이관(rev a9b8c7d6e5f4). 둘 다 _FORBIDDEN_COLUMNS로 재유입 차단한다. 부채가 남아 있다면
+    _KNOWN_PURITY_DEBT에 등재해야 하며(선언 컬럼은 실제 런타임에 존재해야 정합), 확대는 금지다.
     """
-    assert _KNOWN_PURITY_DEBT <= _runtime_columns(), (
-        "부채로 선언된 컬럼이 이미 제거됐다 — 이관이 착륙했다면 _KNOWN_PURITY_DEBT와 "
-        "_EXPECTED_COLUMNS에서 함께 제거해 이 파일을 현행화하라."
-    )
-    assert _KNOWN_PURITY_DEBT == {"recommended_visual_styles"}
+    # 선언된 부채는 실제 런타임에 존재해야 한다(빈 집합이면 공집합 부분집합으로 자명히 성립).
+    assert _KNOWN_PURITY_DEBT <= _runtime_columns()
+    # 부채는 0건 — 이관·청산 착륙(무단 확대 금지).
+    assert _KNOWN_PURITY_DEBT == frozenset()
+    # 이관·청산된 컬럼은 런타임 노드에서 완전히 사라졌다.
+    assert "recommended_visual_styles" not in _runtime_columns()
+    assert "embedding_id" not in _runtime_columns()

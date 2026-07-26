@@ -56,19 +56,36 @@ class _FakeVizRow:
         self.visualizability = visualizability
 
 
+class _FakeStyleRow:
+    """가짜 ConceptVisualStyle Overlay 행 — recommended_styles만 보유(ARCH-14 ③ 양식 이관)."""
+
+    def __init__(self, styles: list[VisualizationStyle]) -> None:
+        self.recommended_styles = styles
+
+
 class _FakeSession:
     """가짜 AsyncSession — get()을 모델별로 디스패치.
 
     `Concept` 조회는 concept ORM(또는 None), `ConceptVisualization` 조회는 code→4분류 맵에서
-    행(또는 None·미태깅)을 돌려준다(시각화 계층 Overlay 조회·노드 비내장).
+    행(또는 None·미태깅)을 돌려준다(시각화 계층 Overlay 조회·노드 비내장). `ConceptVisualStyle`
+    (권장 양식 Overlay·ARCH-14 ③)은 concept 스키마의 declared 양식을 미러한다 — API seam이
+    Overlay 값을 스키마 필드에 재주입하므로 원 값이 복원된다(미태깅이면 빈 행→[]).
     """
 
     def __init__(self, orm: object, *, viz: dict[str, Visualizability] | None = None) -> None:
         self._orm = orm
         self._viz = viz or {}
+        self._styles: list[VisualizationStyle] = (
+            list(orm.to_schema().recommended_visual_styles)  # type: ignore[attr-defined]
+            if orm is not None
+            else []
+        )
 
     async def get(self, model: object, key: object) -> object:
-        if getattr(model, "__name__", "") == "ConceptVisualization":
+        name = getattr(model, "__name__", "")
+        if name == "ConceptVisualStyle":
+            return _FakeStyleRow(self._styles) if self._styles else None
+        if name == "ConceptVisualization":
             value = self._viz.get(str(key))
             return _FakeVizRow(value) if value is not None else None
         return self._orm
