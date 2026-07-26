@@ -48,8 +48,9 @@ kebab-id)·활성 가설이 단일 진실이다(CLAUDE.md #6). 이 적재기는 
     'unspecified' enum 값 추가·nullable화 같은 스키마 변경을 피한다(마이그레이션 0).
 미매핑(NULL/기본 유지·교수학 내용 날조 금지):
   - `name_en`·`parent_concept_id`·`is_signature_korean`(기본 False)·`cognitive_type`·
-    `recommended_visual_styles`·`exam_frequency`·`weight_in_curriculum` — 소스에
-    합당한 대응 없음 → 검수 대기. (본문 3종·오개념 컬럼은 Phase 1b로 아예 제거됨 — 위 redaction.)
+    `exam_frequency`·`weight_in_curriculum` — 소스에 합당한 대응 없음 → 검수 대기. (본문 3종·오개념
+    컬럼은 Phase 1b로 아예 제거됨 — 위 redaction. `recommended_visual_styles`는 ARCH-14 ③으로
+    전용 Overlay `concept_visual_style`로 이관돼 노드 컬럼 자체가 없다 — 구조적 미매핑 해소.)
   (`aliases`·`source_id`는 더는 미매핑이 아니다 — 재ID(2026-06-16)로 graph.json이 둘을 산출하므로
   직결 적재한다. 옛 graph.json(둘 다 부재)도 None/빈 배열로 graceful.)
 

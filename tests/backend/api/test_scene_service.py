@@ -69,19 +69,36 @@ class _FakeConceptOrm:
         return self._schema
 
 
+class _FakeStyleRow:
+    """가짜 ConceptVisualStyle Overlay 행 — recommended_styles만 보유(ARCH-14 ③ 양식 이관)."""
+
+    def __init__(self, styles: list[VisualizationStyle]) -> None:
+        self.recommended_styles = styles
+
+
 class _FakeSession:
     """가짜 AsyncSession — get()을 모델별로 디스패치.
 
     `Concept` 조회는 concept ORM(또는 None). `ConceptVisualization`(시각화 Overlay)·`AtomNode`
     (행동영역 조인 백킹·S0-2가 원자 축으로 이전) 조회는 None — 이 테스트들은 시각화 4분류·행동영역을
-    다루지 않으므로 기존 동작(중립 폴백)을 유지한다.
+    다루지 않으므로 기존 동작(중립 폴백)을 유지한다. `ConceptVisualStyle`(권장 양식 Overlay·
+    ARCH-14 ③)은 concept 스키마의 declared 양식을 미러한다 — API seam이 Overlay 값을 스키마 필드에
+    재주입하므로 원 값이 복원돼 결정론 골격(시각화 요소 등)이 기존과 동일하게 생성된다.
     """
 
     def __init__(self, orm: object) -> None:
         self._orm = orm
+        self._styles: list[VisualizationStyle] = (
+            list(orm.to_schema().recommended_visual_styles)  # type: ignore[attr-defined]
+            if orm is not None
+            else []
+        )
 
     async def get(self, model: object, key: object) -> object:
-        if getattr(model, "__name__", "") in {"ConceptVisualization", "AtomNode"}:
+        name = getattr(model, "__name__", "")
+        if name == "ConceptVisualStyle":
+            return _FakeStyleRow(self._styles) if self._styles else None
+        if name in {"ConceptVisualization", "AtomNode"}:
             return None
         return self._orm
 
@@ -371,9 +388,16 @@ class _BehaviorSession:
         self._orm = orm
         self._node = node
         self._areas = areas
+        self._styles: list[VisualizationStyle] = (
+            list(orm.to_schema().recommended_visual_styles)  # type: ignore[attr-defined]
+            if orm is not None
+            else []
+        )
 
     async def get(self, model: object, key: object) -> object:
         name = getattr(model, "__name__", "")
+        if name == "ConceptVisualStyle":
+            return _FakeStyleRow(self._styles) if self._styles else None
         if name == "ConceptVisualization":
             return None
         if name == "AtomNode":

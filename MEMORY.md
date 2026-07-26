@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-26 (구현·ARCH-14 ③·완결): **recommended_visual_styles → 전용 Overlay `concept_visual_style` 이관 — Concept Purity 부채 0건·ARCH-14 완전 종료** (claude, Kiki "ARCH-13 먼저"→"검토해줘"→"네")
+
+**컨텍스트**: ARCH-14 마지막 항목 ③. Kiki가 "ARCH-13 먼저" 지정했으나 ARCH-13은 이미 병렬 세션 #595(원자 축 울타리)로 done → ③ 해금 확인. "검토해줘"로 설계 검토(Explore 2병렬: ADR/Overlay 선례 + 소비처 표면) 후 **② 전용 Overlay 신설** 판정("검토 결론"): 기존 `concept_visualization`은 자기 docstring이 "양식은 다른 축"이라 명시·"행 존재=분류됨" 불변식 파괴 위험 → 축별 전용 테이블이 정합.
+
+**설계 판정 근거**: recommended_visual_styles(양식='무엇을' — 단위원·수형도 등 16종)는 개념 정체성이 아니라 시각화 계층 투영(ADR concept_node_layering §1·CurriculumEntry subject drop·concept_visualization Overlay 선례). `concept_visualization`(가능성 4분류)과 **다른 축**이라 얹지 않고 전용 `concept_visual_style` 신설.
+
+**구현**(backend-engineer 위임·claude 검토·재검증): (1) 신규 모델 `db/models/concept_visual_style.py`(code PK·loose ref·ARRAY(visualization_style_enum) NOT NULL·행부재=미태깅) (2) 리졸버 `l1/concept_visual_style/overlay.py`(async `get_recommended_visual_styles`·행부재→[] + sync 시드 로더) (3) Alembic rev **a9b8c7d6e5f4**(head f1a2b3c4d5e7): create_table + `drop_column(concept, recommended_visual_styles)` — enum `create_type=False` 재사용(b5c6d7e8f9a0 소유·중복 CREATE TYPE 금지)·enum drop 안 함(컬럼만 drop 규약)·**데이터 이관 0**(전량 NULL) (4) 소비처 repoint = API seam 2곳(`api/visualization.py`·`api/scene.py`)에서 `to_schema().model_copy(update={"recommended_visual_styles": styles})` 주입 — **l3/l4 무변경**(스키마 필드 소비·값 출처만 노드→Overlay) (5) 순수성 게이트 부채 **2→0건**(_KNOWN_PURITY_DEBT 공집합·_FORBIDDEN_COLUMNS 봉인)·parity 테스트는 Overlay-backed schema-only 1필드 예외로 정밀 완화(타 드리프트·ORM-only는 여전히 red).
+
+**검증**(claude 독립 재실행): ruff·black·mypy(413 files Success)·import-linter(7계층 0 broken)·hermetic 71 + API seam 15 pass·alembic 단일 head·enum 16값 세트·순서 정확 일치. 마이그레이션 실 PG up/down은 CI 몫. **ARCH-14 acceptance ①②③④ 전부 착륙 → 병합 후 task done.** 잔여 하드닝 태스크 종료.
+
 ### 2026-07-26 (검토·등재): **서비스·운영·관리 3축 공백 검토 — 운영 축 백로그 0건 발견 → OPS-01~04·MGMT-01 등재** (claude 검토, Kiki 지시·산출물 선택)
 
 **컨텍스트**: Kiki "서비스와 운영, 관리의 입장에서 비어있는 부분 검토". 저장소 전수 실측(백엔드 466 py·테스트 480·API 14 라우터·backlog 71건) 후 산출물 형태(문서+백로그)·우선 영역(E2E/L6)은 Kiki AskUserQuestion 선택.

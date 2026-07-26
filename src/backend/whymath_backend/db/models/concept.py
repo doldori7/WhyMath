@@ -11,8 +11,9 @@
   - `UUID REFERENCES`(NOT NULL 명시) → required `uuid.UUID` + FK; nullable FK → `uuid.UUID|None`.
   - self-FK(`parent_concept_id REFERENCES concept`) → `sa.ForeignKey("concept.concept_id")`.
   - `concept_role_enum`/`edge_type_enum`/`concept_level_enum` → `_pg_enum(...)`(values_callable).
-  - `cognitive_type_enum[]`·`visualization_style_enum[]`(슬라이스 88) → `ARRAY(_pg_enum(...))`
-    (DDL NOT NULL 아님 → nullable list).
+  - `cognitive_type_enum[]` → `ARRAY(_pg_enum(...))`(DDL NOT NULL 아님 → nullable list).
+    (`visualization_style_enum[]` 구 `recommended_visual_styles`·슬88은 ARCH-14 ③으로 전용 Overlay
+    `concept_visual_style`로 이관됨 — 노드 비내장·Concept Purity, rev a9b8c7d6e5f4.)
   - `UUID[] NOT NULL`(concept_fusion.concept_ids) → `ARRAY(sa.Uuid)`(*배열이라 FK 아님* —
     schema docstring 명시) + `nullable=False, server_default "'{}'::uuid[]"`.
   - nullable `UUID[]`(exemplar_problem_ids) → `ARRAY(sa.Uuid)`(배열, FK 아님, nullable).
@@ -43,7 +44,6 @@ from whymath_backend.schema.enums import (
     ConceptLevel,
     ConceptRole,
     EdgeType,
-    VisualizationStyle,
 )
 
 
@@ -110,12 +110,15 @@ class Concept(Base):
     cognitive_type: Mapped[list[CognitiveType] | None] = mapped_column(
         ARRAY(_pg_enum(CognitiveType, "cognitive_type_enum"))
     )
-    # 슬라이스 88: 개념↔시각화 양식 매핑 — cognitive_type 동형(enum[] nullable·schema는
-    # default_factory=list). visualization_style_enum은 본 슬라이스 마이그레이션이 새로 만든다.
-    recommended_visual_styles: Mapped[list[VisualizationStyle] | None] = mapped_column(
-        ARRAY(_pg_enum(VisualizationStyle, "visualization_style_enum"))
-    )
-    # 시각화 가능성 4분류는 *노드 비내장* — 시각화 계층 Overlay `concept_visualization`
+    # ===== 권장 시각화 양식: ARCH-14 ③으로 제거(Concept Purity 마지막 부채 청산·Overlay 이관) =====
+    # 구 `recommended_visual_styles`(슬88·visualization_style_enum[])는 개념 정체성이 아니라 시각화
+    # 계층의 투영 정보라 전용 Overlay `concept_visual_style`(code 키)로 외부화했다
+    # (rev a9b8c7d6e5f4·`concept_visualization`·CurriculumEntry Overlay 선례).
+    # 스키마 필드로는 존치(API 계약·Overlay 값을 API seam이 model_copy로 주입)하되 런타임
+    # 노드 컬럼은 제거했다. 컬럼 데이터는 전량 NULL이었고 *ORM 컬럼 직접* 소비처는 0이다 —
+    # 소비(L3 visualization·L4 scene)는 모두 스키마 필드 경로라 API seam Overlay 주입으로 무손실
+    # 재배선된다(embedding_id/Phase 1b 청산과 달리 죽은 컬럼이 아니라 소비처 살아있는 이관).
+    # 시각화 가능성 4분류도 *노드 비내장* — 시각화 계층 Overlay `concept_visualization`
     # (`db/models/concept_visualization.py`·code 키)가 단일 진실(ADR 계층분리·CurriculumEntry 선례).
 
     # ===== cognition 참조(Part 2 Phase 2b-2) — concept→skill 브리지 =====
