@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - "infra/**"
   - "scripts/**"
   - "docs/architecture/**"
-session: null
+session: claude/whymath-service-review-9r21im
 notes: "CLAUDE.md 로컬 DB 지도(prod=whymath-pg:5433) 근거·단일 머신 SPOF. 운영 축 상환 #2 (service_ops_mgmt_gap_review_2026-07)."
 updated: 2026-07-26

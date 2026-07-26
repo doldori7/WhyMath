@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -19,6 +19,6 @@ paths:
   - "src/backend/whymath_backend/ops/**"
   - src/backend/whymath_backend/app.py
   - "infra/**"
-session: null
+session: claude/whymath-service-review-9r21im
 notes: "CLAUDE.md '측정 도구 SaaS 단독 의존 금지'·'silent failure 금지'의 서비스 관측 확장. 운영 축 백로그 0건 상환 #1 (docs/reviews/service_ops_mgmt_gap_review_2026-07.md)."
 updated: 2026-07-26
