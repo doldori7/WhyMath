@@ -4,7 +4,8 @@
 - `"memory"` (기본): 단일 프로세스 인메모리 deque. 사이드카·로컬·테스트.
 - `"redis"`: Redis 정렬 집합(ZSET) + Lua 원자성. **분산/HA 환경 정합** — 다중 워커·
   다중 인스턴스에서 사용자당 카운트가 *전역* 공유. `l3/cache/redis_cache.py`의 lazy
-  + 주입 가능(`_RedisClient` Protocol) 패턴 답습.
+  + 주입 가능(`_RedisClient` Protocol) 패턴 답습. **Redis 장애 시 인메모리로 폴백**
+  (OPS-06 — fail-open도 fail-closed도 아닌 제3의 길, `RedisBackend` 위 블록 주석 참조).
 
 **경계**:
 - 키 = `user_id`(인증된 사용자 단위). IP·세션 단위는 후속(미인증 표면 노출 시).
@@ -23,12 +24,14 @@ import math
 import time
 import uuid
 from collections import deque
+from collections.abc import Awaitable, Callable
 from typing import (
     Annotated,
     Any,
     Literal,
     NamedTuple,
     Protocol,
+    TypeVar,
     cast,
     runtime_checkable,
 )
@@ -36,6 +39,7 @@ from typing import (
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from whymath_backend.api._auth import ConsentedUser
+from whymath_backend.api._degradation import DegradationCounter, DegradationSnapshot
 from whymath_backend.api._device_metrics import record_device_sig_failure
 from whymath_backend.api._device_store import get_device_store
 from whymath_backend.config import Settings, get_settings
@@ -52,6 +56,10 @@ except ImportError:  # pragma: no cover — 라이브러리 미설치 환경
 
 
 _WINDOW_SECONDS = 60.0
+
+# 폴백 반환 타입 — `_degrade_to_fallback`가 hit/hit_both/hit_many의 서로 다른 반환형을
+# 그대로 통과시키기 위한 제네릭(코드베이스 관행: PEP 695 대신 명시 TypeVar — api/me.py 선례).
+_FallbackT = TypeVar("_FallbackT")
 
 RateCategory = Literal["read", "write", "device_register", "visualization"]
 """POST/GET 차등 한도 — 읽기/쓰기 분리 버킷(상호 영향 차단).
@@ -491,11 +499,19 @@ return response
 _LUA_HIT_MANY_SHA1 = hashlib.sha1(_LUA_HIT_MANY.encode("utf-8")).hexdigest()
 
 
-def _build_default_redis_client(settings: Settings) -> _RedisClient:  # pragma: no cover
+def _build_default_redis_client(settings: Settings) -> _RedisClient:
     """기본 redis.asyncio 클라이언트 — 지연 import(라이브러리 없는 환경 보호).
 
-    Redis 라이브러리·연결 의존성은 라이브 통합 테스트(@integration·실 Redis 데몬)에서
-    검증한다 — hermetic 테스트는 `client=`로 가짜 주입(테스트 패턴 정합).
+    Redis 연결 자체는 라이브 통합 테스트(@integration·실 Redis 데몬)에서 검증한다 —
+    hermetic 테스트는 `client=`로 가짜 주입(테스트 패턴 정합). 다만 **소켓 타임아웃 결선은
+    hermetic으로도 검증한다**(실물 `redis.asyncio.Redis`의 `connection_pool.connection_kwargs`
+    확인 — 네트워크는 타지 않는다). CLAUDE.md: 외부 SDK 표면을 시임만으로 정합 선언 금지.
+
+    **소켓 타임아웃을 명시한다** (OPS-06 — OPS-05가 L3 캐시에 건 것과 같은 축): rate limit는
+    *모든* 코치 요청의 앞단이라 여기서 매달리면 서비스 전체가 매달린다. 인자를 주지 않으면
+    값이 라이브러리 버전 기본값에 종속된다(설치본 redis-py 8.0.1 실측 5초). 응답 대기
+    (`socket_timeout`)와 연결 수립(`socket_connect_timeout`) 둘 다 건다 — 하나만 걸면 나머지
+    축에서 무한 대기가 그대로 남는다.
     """
     try:
         from redis.asyncio import Redis
@@ -504,8 +520,66 @@ def _build_default_redis_client(settings: Settings) -> _RedisClient:  # pragma: 
             "redis Python 클라이언트가 설치되지 않았습니다. "
             "`pip install redis[hiredis]` 후 다시 시도하세요."
         ) from exc
-    client = Redis.from_url(settings.redis_url, decode_responses=True)
+    timeout_s = settings.redis_socket_timeout_s
+    client = Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        socket_timeout=timeout_s,
+        socket_connect_timeout=timeout_s,
+    )
     return cast(_RedisClient, client)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# OPS-06 — Redis 장애 시 rate limit 강등: **제3의 길(인메모리 폴백)**
+#
+# 두 흔한 선택지는 둘 다 우리 우선순위를 어긴다:
+#   - **fail-open**(무제한 통과): 한도가 사라져 남용·LLM 비용 폭주에 무방비. 게다가 rate limit는
+#     `_client_device_id`를 거쳐 디바이스 서명 검증과 같은 경로에 있다 — 방어선을 통째로 여는 셈.
+#   - **fail-closed**(전 요청 429/5xx): Redis 하나 죽었다고 *모든 학생*이 학습을 못 한다.
+#     CLAUDE.md 우선순위 #1(학생 안전·웰빙)의 정면 위반이고, 캐시 장애를 학생 대면 실패로
+#     번지게 하지 말라는 OPS-05의 결론과도 반대다.
+#
+# 그래서 같은 모듈의 `InMemoryBackend`로 **폴백**한다. 한도는 계속 걸리되(무제한 아님) 계수가
+# 워커별로 갈라져 *분산 정확도*가 떨어진다 — N워커면 실효 한도가 최대 N배까지 느슨해질 수
+# 있다. 이것이 이 설계가 지불하는 정확한 대가다(유계 완화 ≠ 무제한).
+#
+# 그 밖의 트레이드오프(정직하게):
+#   - 폴백 버킷은 장애 *시작 시점에 비어 있다* — 진행 중이던 창의 이력이 승계되지 않아 그
+#     순간 한도가 한 번 리셋된 것처럼 보인다.
+#   - Redis 회복 후에는 다시 Redis 계수로 돌아가며, 장애 중 인메모리에 쌓인 히트는 Redis
+#     카운트에 반영되지 않는다(반대 방향도 마찬가지). 두 회계는 합쳐지지 않는다.
+#   - 폴백 발동은 반드시 *관측 가능*해야 한다 — 예외 타입명 로그 + 인프로세스 카운터.
+#     그래야 "조용히 느슨해진 채로 몇 주"가 생기지 않는다(침묵 실패 금지).
+# ──────────────────────────────────────────────────────────────────────────
+
+# 강등 회계의 연산 어휘 — 로그·스냅샷·테스트가 공유하는 단일 상수.
+RATE_LIMIT_OP_HIT = "hit"
+RATE_LIMIT_OP_HIT_BOTH = "hit_both"
+RATE_LIMIT_OP_HIT_MANY = "hit_many"
+
+_RATE_LIMIT_EFFECT = (
+    "인메모리 백엔드로 폴백합니다 — 한도는 계속 적용되나(무제한 아님) "
+    "계수가 워커별로 갈라져 분산 정확도가 떨어집니다."
+)
+
+# 프로세스 전역 회계 — 백엔드 인스턴스가 교체돼도 "이 프로세스가 Redis 없이 버틴 횟수"는
+# 하나로 합산돼야 운영 판정이 된다(OPS-05 `_PROCESS_DEGRADATION` 선례).
+_PROCESS_DEGRADATION = DegradationCounter("rate limit")
+
+
+def rate_limit_degradation_snapshot() -> DegradationSnapshot:
+    """프로세스 전역 rate limit 강등 회계 스냅샷 — 운영 노출·진단의 읽기 표면.
+
+    관측 SaaS가 죽어도 남는 인프로세스 판정치(이중 회계). `total_failures > 0`이면 그동안의
+    한도는 *분산 정확도가 보장되지 않는다*고 읽어야 한다.
+    """
+    return _PROCESS_DEGRADATION.snapshot()
+
+
+def reset_rate_limit_degradation() -> None:
+    """프로세스 전역 회계 초기화 — 테스트 격리용."""
+    _PROCESS_DEGRADATION.reset()
 
 
 class RedisBackend:
@@ -520,6 +594,16 @@ class RedisBackend:
     시 결정론적으로 계산되며, Redis SCRIPT LOAD 결과와 *반드시 일치*한다(같은 SHA1 알고리즘).
     `NoScriptError`(SCRIPT FLUSH·Redis 재시작 등으로 캐시에서 사라진 경우) 시 한 번
     `script_load` + 재시도. 정상 경로는 EVALSHA 1회.
+
+    **장애 폴백(OPS-06)**: Redis 접근이 실패하면 예외를 올려 보내지 않고 내장
+    `InMemoryBackend`로 폴백한다 — 근거·트레이드오프는 이 클래스 바로 위의 블록 주석 참조.
+    `NoScriptError` 처리는 폴백이 아니라 *정상 동작의 일부*라 종전 그대로다(스크립트 재적재
+    후 재시도). 폴백은 그 재시도까지 실패했을 때만 발동한다.
+
+    가드를 데코레이터가 아니라 **이 클래스 안**에 두는 이유: OPS-05가 세운 "네트워크 실패의
+    *발원지*에서 한 번에 막는다" 원칙이다. 래퍼로 두면 `configure_backend_from_settings`를
+    거치지 않고 `RedisBackend(...)`를 직접 만든 경로(테스트·스크립트·후속 코드)가 무방비로
+    남는다 — 보호가 조립 방식에 의존하면 언젠가 빠진다.
     """
 
     _KEY_PREFIX = "rate:coach:"
@@ -529,9 +613,15 @@ class RedisBackend:
         *,
         client: _RedisClient | None = None,
         settings: Settings | None = None,
+        fallback: InMemoryBackend | None = None,
+        degradation: DegradationCounter | None = None,
     ) -> None:
         self._client = client
         self._settings = settings
+        # 폴백은 *즉시* 만들어 둔다(비용 = 빈 dict 하나). 장애 순간에 생성 실패할 여지를 없앤다.
+        self._fallback = fallback if fallback is not None else InMemoryBackend()
+        # 기본은 프로세스 전역 회계(인스턴스 교체와 무관) — 테스트는 새 카운터 주입.
+        self._degradation = degradation if degradation is not None else _PROCESS_DEGRADATION
 
     @property
     def _resolved_settings(self) -> Settings:
@@ -549,21 +639,55 @@ class RedisBackend:
         # `rate:coach:write:ip:{addr}`. 사용자·IP 네임스페이스 충돌 없음.
         return f"{self._KEY_PREFIX}{category}:{subject_key}"
 
+    @property
+    def degradation_count(self) -> int:
+        """이 백엔드가 쓰는 회계의 누적 폴백 횟수 — 인프로세스 판정치."""
+        return self._degradation.snapshot().total_failures
+
+    def degradation_snapshot(self) -> DegradationSnapshot:
+        """이 백엔드가 쓰는 회계의 불변 스냅샷(연산별 폴백·연속 실패·마지막 예외 타입)."""
+        return self._degradation.snapshot()
+
+    async def _evalsha_with_reload(self, sha: str, script: str, numkeys: int, *args: Any) -> Any:
+        """EVALSHA + NOSCRIPT 자동 복구 — *정상 동작*의 일부(폴백 아님).
+
+        SCRIPT FLUSH·Redis 재시작으로 스크립트 캐시가 비면 `NoScriptError`가 나는데, 이는
+        장애가 아니라 예상된 상태 전이다. 한 번 `script_load` 후 재시도한다. 이 재시도까지
+        실패하면 그때는 진짜 장애이므로 호출자의 폴백 가드가 받는다.
+        """
+        client = self._get_client()
+        try:
+            return await client.evalsha(sha, numkeys, *args)
+        except NoScriptError:
+            await client.script_load(script)
+            return await client.evalsha(sha, numkeys, *args)
+
     async def _hit_by_key(
         self, subject_key: str, *, category: RateCategory, limit: int, now: float
     ) -> RateLimitResult:
-        client = self._get_client()
         key = self._key(subject_key, category)
         unique_member = f"{now}:{uuid.uuid4().hex}"
         try:
-            raw = await client.evalsha(_LUA_HIT_SHA1, 1, key, now, limit, unique_member)
-        except NoScriptError:
-            # 스크립트가 Redis 캐시에 없음(SCRIPT FLUSH·재시작 후 첫 호출). 적재 후 재시도.
-            await client.script_load(_LUA_HIT)
-            raw = await client.evalsha(_LUA_HIT_SHA1, 1, key, now, limit, unique_member)
-        allowed = int(raw[0]) == 1
-        count_after = int(raw[1])
-        oldest_micros = int(raw[2])
+            raw = await self._evalsha_with_reload(
+                _LUA_HIT_SHA1, _LUA_HIT, 1, key, now, limit, unique_member
+            )
+            allowed = int(raw[0]) == 1
+            count_after = int(raw[1])
+            oldest_micros = int(raw[2])
+        except Exception as exc:  # noqa: BLE001 — Redis 장애를 학생 대면 실패로 전파 금지
+            # 응답 파싱까지 try 안에 두는 이유: 형태가 깨진 응답도 결국 "Redis를 못 쓰는
+            # 상태"라 같은 폴백으로 다뤄야 학생 경로가 안 깨진다(OPS-05 `_decode` 선례).
+            # `_hit_by_key`는 InMemoryBackend의 내부 표면이지만 *같은 모듈의 자매 구현*이라
+            # 접근이 정당하다 — subject_key 접두(user:/ip:/device:) 규약을 두 백엔드가 공유하므로
+            # 공개 메서드로 우회하면 접두를 두 번 붙이게 된다.
+            return await self._degrade_to_fallback(
+                RATE_LIMIT_OP_HIT,
+                exc,
+                lambda: self._fallback._hit_by_key(
+                    subject_key, category=category, limit=limit, now=now
+                ),
+            )
+        self._degradation.record_success()
         oldest_ts = None if oldest_micros < 0 else oldest_micros / 1_000_000
         return _result_from_window(
             allowed=allowed,
@@ -572,6 +696,20 @@ class RedisBackend:
             oldest_ts=oldest_ts,
             now=now,
         )
+
+    async def _degrade_to_fallback(
+        self,
+        operation: str,
+        exc: BaseException,
+        fallback_call: Callable[[], Awaitable[_FallbackT]],
+    ) -> _FallbackT:
+        """폴백 1건 — 회계·로그(예외 타입명)를 남기고 인메모리 백엔드로 넘긴다.
+
+        키·사용자 ID·IP는 로그에 싣지 않는다(미성년자 PII 인접 표면). 남는 것은 *연산명·예외
+        타입명·횟수*뿐이며, 그것만으로 "지금 한도가 워커별로 갈라져 있다"는 판정이 선다.
+        """
+        self._degradation.record_failure(operation, exc, effect=_RATE_LIMIT_EFFECT)
+        return await fallback_call()
 
     async def hit(
         self,
@@ -601,17 +739,17 @@ class RedisBackend:
         """원자적 user+IP 검사 — 단일 Lua 스크립트로 둘 다 *함께* 결정.
 
         Redis MULTI 없이도 Lua가 원자성 보장. IP=None이면 ip_limit=0으로 강제(키 미터치).
-        NoScriptError 폴백은 hit()과 동일 패턴.
+        NoScriptError 재적재는 hit()과 동일 패턴이고, 그마저 실패하면 OPS-06 인메모리 폴백.
         """
-        client = self._get_client()
         # IP 미상이면 IP 키도 의미 없음 — limit=0 강제로 Lua가 검사 스킵
         effective_ip_limit = ip_limit if ip is not None else 0
         user_key = self._key(f"user:{user_id}", category)
         ip_key = self._key(f"ip:{ip}", category) if ip is not None else "__unused__"
         member = f"{now}:{uuid.uuid4().hex}"
         try:
-            raw = await client.evalsha(
+            raw = await self._evalsha_with_reload(
                 _LUA_HIT_BOTH_SHA1,
+                _LUA_HIT_BOTH,
                 2,
                 user_key,
                 ip_key,
@@ -620,23 +758,25 @@ class RedisBackend:
                 effective_ip_limit,
                 member,
             )
-        except NoScriptError:
-            await client.script_load(_LUA_HIT_BOTH)
-            raw = await client.evalsha(
-                _LUA_HIT_BOTH_SHA1,
-                2,
-                user_key,
-                ip_key,
-                now,
-                user_limit,
-                effective_ip_limit,
-                member,
+            allowed = int(raw[0]) == 1
+            user_count = int(raw[1])
+            user_oldest_micros = int(raw[2])
+            ip_count = int(raw[3])
+            ip_oldest_micros = int(raw[4])
+        except Exception as exc:  # noqa: BLE001 — Redis 장애를 학생 대면 실패로 전파 금지
+            return await self._degrade_to_fallback(
+                RATE_LIMIT_OP_HIT_BOTH,
+                exc,
+                lambda: self._fallback.hit_both(
+                    user_id,
+                    ip,
+                    category=category,
+                    user_limit=user_limit,
+                    ip_limit=ip_limit,
+                    now=now,
+                ),
             )
-        allowed = int(raw[0]) == 1
-        user_count = int(raw[1])
-        user_oldest_micros = int(raw[2])
-        ip_count = int(raw[3])
-        ip_oldest_micros = int(raw[4])
+        self._degradation.record_success()
         user_result = (
             _result_from_window(
                 allowed=allowed,
@@ -670,36 +810,52 @@ class RedisBackend:
         category: RateCategory,
         now: float,
     ) -> dict[SubjectKind, RateLimitResult]:
-        """N-차원 원자 검사 — 단일 Lua `_LUA_HIT_MANY`로 모든 차원 함께 결정."""
+        """N-차원 원자 검사 — 단일 Lua `_LUA_HIT_MANY`로 모든 차원 함께 결정.
+
+        학생 대면 코치 엔드포인트가 실제로 타는 경로(user+IP+device 3차원)라, OPS-06 폴백이
+        가장 자주 발동할 지점이기도 하다.
+        """
         if not subjects:
             return {}
-        client = self._get_client()
         keys = [self._key(f"{s.kind}:{s.id}", category) for s in subjects]
         member = f"{now}:{uuid.uuid4().hex}"
         argv: list[float | int | str] = [now, member]
         argv.extend(s.limit for s in subjects)
-        try:
-            raw = await client.evalsha(_LUA_HIT_MANY_SHA1, len(keys), *keys, *argv)
-        except NoScriptError:
-            await client.script_load(_LUA_HIT_MANY)
-            raw = await client.evalsha(_LUA_HIT_MANY_SHA1, len(keys), *keys, *argv)
-        allowed = int(raw[0]) == 1
         results: dict[SubjectKind, RateLimitResult] = {}
-        for i, s in enumerate(subjects):
-            count_after = int(raw[1 + i * 2])
-            oldest_micros = int(raw[2 + i * 2])
-            oldest_ts = None if oldest_micros < 0 else oldest_micros / 1_000_000
-            results[s.kind] = _result_from_window(
-                allowed=allowed,
-                count_after=count_after,
-                limit=s.limit,
-                oldest_ts=oldest_ts,
-                now=now,
+        try:
+            raw = await self._evalsha_with_reload(
+                _LUA_HIT_MANY_SHA1, _LUA_HIT_MANY, len(keys), *keys, *argv
             )
+            allowed = int(raw[0]) == 1
+            for i, s in enumerate(subjects):
+                count_after = int(raw[1 + i * 2])
+                oldest_micros = int(raw[2 + i * 2])
+                oldest_ts = None if oldest_micros < 0 else oldest_micros / 1_000_000
+                results[s.kind] = _result_from_window(
+                    allowed=allowed,
+                    count_after=count_after,
+                    limit=s.limit,
+                    oldest_ts=oldest_ts,
+                    now=now,
+                )
+        except Exception as exc:  # noqa: BLE001 — Redis 장애를 학생 대면 실패로 전파 금지
+            return await self._degrade_to_fallback(
+                RATE_LIMIT_OP_HIT_MANY,
+                exc,
+                lambda: self._fallback.hit_many(subjects, category=category, now=now),
+            )
+        self._degradation.record_success()
         return results
 
     async def reset(self) -> None:
-        """패턴 매칭 키 일괄 삭제 — 테스트 격리용. production 미호출."""
+        """패턴 매칭 키 일괄 삭제 — 테스트 격리용. production 미호출.
+
+        OPS-06: 폴백 버킷도 함께 비운다(둘 중 하나만 비면 테스트 격리가 새는데, 인메모리 쪽은
+        장애 중에만 채워져 눈에 잘 안 띈다). Redis 쪽 실패는 **강등하지 않고 전파**한다 —
+        이 메서드는 학생 경로가 아니라 테스트 도구이고, 여기서의 침묵은 "격리에 성공했다"는
+        거짓 신호가 되어 다음 테스트를 오염시킨다.
+        """
+        await self._fallback.reset()
         client = self._get_client()
         keys = await client.keys(f"{self._KEY_PREFIX}*")
         if keys:
