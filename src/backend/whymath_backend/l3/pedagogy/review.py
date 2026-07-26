@@ -30,7 +30,7 @@ from whymath_backend.db.models.pedagogy_dsl import (
     LearningObjective,
     PedagogyContentSlot,
 )
-from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
+from whymath_backend.l1.embedding_primitives import build_sync_engine
 from whymath_backend.l3.pedagogy.slot_generator import verify_slot_payload
 
 if TYPE_CHECKING:
@@ -108,7 +108,7 @@ class ReviewStore:
 
     슬롯 UPDATE는 `id` + `status='PRESCREENED'` 가드(예심 통과분만 검수).
     `reviewed_by`(기계 각인)·`reviewed_at`(server now)·`reject_reason`을 기록한다.
-    sync 엔진은 슬3 `_build_sync_engine` 재사용.
+    sync 엔진은 슬3 `build_sync_engine` 재사용.
     """
 
     def __init__(
@@ -128,7 +128,7 @@ class ReviewStore:
 
     def _get_engine(self) -> Engine:
         if self._engine is None:
-            self._engine = _build_sync_engine(self._resolved_settings)
+            self._engine = build_sync_engine(self._resolved_settings)
         return self._engine
 
     def apply(self, verdicts: Sequence[tuple[str, ReviewVerdict]]) -> int:

@@ -178,9 +178,7 @@ def test_pilot_pipeline_e2e() -> None:
             ).scalar_one()
             assert releasable is True
             conn.execute(
-                text(
-                    "UPDATE unit_spec SET status='ACTIVE' " "WHERE unit_id = :u AND :ok"
-                ),
+                text("UPDATE unit_spec SET status='ACTIVE' " "WHERE unit_id = :u AND :ok"),
                 {"u": _UNIT_ID, "ok": True},
             )
             status = conn.execute(
@@ -192,9 +190,7 @@ def test_pilot_pipeline_e2e() -> None:
         # ── ⑦ evidence 봉투 암호화 라운드트립(B1·평문 유출 0) ─────────
         obj0 = compiled.objective_rows[0]["id"]
         cipher = build_evidence_payload_cipher(settings)
-        original = json.dumps(
-            {"utterance": "학생 원문 발화", "step": 1}, ensure_ascii=False
-        )
+        original = json.dumps({"utterance": "학생 원문 발화", "step": 1}, ensure_ascii=False)
         ct, nonce = encrypt_evidence_payload(cipher, original)
         assert ct is not None and nonce is not None
         ev_store = EvidenceEventStore(engine=engine)
@@ -211,9 +207,7 @@ def test_pilot_pipeline_e2e() -> None:
         assert len(fetched) == 1
         f_ct, f_nonce, f_meta = fetched[0]
         assert resolve_evidence_payload(cipher, f_ct, f_nonce) == original  # 복호 왕복
-        assert "학생 원문 발화" not in json.dumps(
-            f_meta, ensure_ascii=False
-        )  # 평문 유출 0
+        assert "학생 원문 발화" not in json.dumps(f_meta, ensure_ascii=False)  # 평문 유출 0
 
         # ── ⑧ 런타임 — resolve→get_pack→4계층 주입(OFF 바이트동일) ────
         k = KTypeResolver(engine=engine).resolve("10공수1-02-06-1")

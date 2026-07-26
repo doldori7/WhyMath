@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Any
 
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.pedagogy_dsl import PedagogyContentSlot
-from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
+from whymath_backend.l1.embedding_primitives import build_sync_engine
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -81,7 +81,7 @@ class PrescreenStore:
     """예심 점수 → `pedagogy_content_slot` 갱신(`DRAFT`만 `PRESCREENED`로 승격).
 
     각 슬롯을 `id` 일치 + `status='DRAFT'` 조건에서만 UPDATE한다 — 이미 검수·반려된 행을 되돌리지
-    않는다(fail-closed·멱등적 전이). sync 엔진은 슬3 `_build_sync_engine` 재사용.
+    않는다(fail-closed·멱등적 전이). sync 엔진은 슬3 `build_sync_engine` 재사용.
     """
 
     def __init__(
@@ -101,7 +101,7 @@ class PrescreenStore:
 
     def _get_engine(self) -> Engine:
         if self._engine is None:
-            self._engine = _build_sync_engine(self._resolved_settings)
+            self._engine = build_sync_engine(self._resolved_settings)
         return self._engine
 
     def apply(self, scored: Sequence[tuple[str, int]]) -> int:

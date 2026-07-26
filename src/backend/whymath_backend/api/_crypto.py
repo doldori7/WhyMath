@@ -81,9 +81,7 @@ class MultiKeyCipher:
     새 키로 재암호화해 fallback 제거. encrypt는 *항상 primary*만 사용한다.
     """
 
-    def __init__(
-        self, primary: SecretCipher, fallbacks: list[SecretCipher] | None = None
-    ) -> None:
+    def __init__(self, primary: SecretCipher, fallbacks: list[SecretCipher] | None = None) -> None:
         self._primary = primary
         self._fallbacks: list[SecretCipher] = list(fallbacks or [])
 
@@ -98,9 +96,7 @@ class MultiKeyCipher:
                 return cipher.decrypt(ciphertext, nonce)
             except InvalidTag:
                 continue
-        raise InvalidTag(
-            "어떤 복호 키로도 복호 실패 — 변조이거나 키 회전 fallback 누락."
-        )
+        raise InvalidTag("어떤 복호 키로도 복호 실패 — 변조이거나 키 회전 fallback 누락.")
 
 
 def _multikey_from_raw(primary_raw: str, fallbacks_raw: str) -> MultiKeyCipher | None:

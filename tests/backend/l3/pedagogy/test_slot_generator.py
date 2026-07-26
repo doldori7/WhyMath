@@ -105,16 +105,12 @@ class TestBuildSlotRows:
 # ──────────────────────────────────────────────────────────────────────────
 class TestVerifyDiscrimination:
     def test_correct_answer_verified(self) -> None:
-        payload = {
-            "verification": {"claim_lhs": "(2)**2 - 4*(2) + 3", "claim_rhs": "-1"}
-        }
+        payload = {"verification": {"claim_lhs": "(2)**2 - 4*(2) + 3", "claim_rhs": "-1"}}
         assert verify_slot_payload(payload) is True
 
     def test_wrong_answer_rejected(self) -> None:
         # 답을 일부러 틀리게(-1이 맞는데 0 주장) → not_identity → False.
-        payload = {
-            "verification": {"claim_lhs": "(2)**2 - 4*(2) + 3", "claim_rhs": "0"}
-        }
+        payload = {"verification": {"claim_lhs": "(2)**2 - 4*(2) + 3", "claim_rhs": "0"}}
         assert verify_slot_payload(payload) is False
 
     def test_no_verification_returns_none(self) -> None:

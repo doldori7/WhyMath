@@ -11,7 +11,7 @@ payload도 보지 않는다(암호화-at-write는 api 헬퍼 층 `encrypt_eviden
 선례). 그래서 L2가 api(L6) 층을 import하지 않는다(역방향 의존 금지). 두 암호 컬럼이 None이면
 메타 전용 행이다(미성년 원문 payload 평문 저장 없음).
 
-7계층: L2 학습자 모델의 영속 증거 좌석. sync 엔진은 슬3 `_build_sync_engine` 재사용.
+7계층: L2 학습자 모델의 영속 증거 좌석. sync 엔진은 슬3 `build_sync_engine` 재사용.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from uuid import UUID
 
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.evidence_event import EvidenceEvent
-from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
+from whymath_backend.l1.embedding_primitives import build_sync_engine
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Engine
@@ -33,7 +33,7 @@ class EvidenceEventStore:
 
     `log`는 이벤트 1건을 INSERT한다(`event_id`는 DB autoincrement·`time`은 미지정 시 server now).
     암호 컬럼은 *이미 암호화된 바이트*를 그대로 싣는다(라이터는 cipher/평문 미접촉). sync 엔진은
-    슬3 `_build_sync_engine` 재사용.
+    슬3 `build_sync_engine` 재사용.
     """
 
     def __init__(
@@ -53,7 +53,7 @@ class EvidenceEventStore:
 
     def _get_engine(self) -> Engine:
         if self._engine is None:
-            self._engine = _build_sync_engine(self._resolved_settings)
+            self._engine = build_sync_engine(self._resolved_settings)
         return self._engine
 
     def log(

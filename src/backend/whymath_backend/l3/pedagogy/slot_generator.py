@@ -16,7 +16,7 @@ CI에서 self-skip(라이브 provider·Langfuse 필요)이라 E2E가 생성 단�
 콘텐츠 파이프라인이 소비처가 될 때 도입한다(소비처 0 추상 금기 회피) — deferred.
 
 7계층: L3 콘텐츠 생성. 컴파일러(L1) 산출물 소비·SymPy 동치(L3 `symbolic_equivalence`)·sync 엔진
-빌더(L1 `_build_sync_engine`)를 재사용한다(신규 seam 최소·`UnitSpecStore` 미러).
+빌더(L1 `build_sync_engine`)를 재사용한다(신규 seam 최소·`UnitSpecStore` 미러).
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.pedagogy_dsl import PedagogyContentSlot
-from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
+from whymath_backend.l1.embedding_primitives import build_sync_engine
 from whymath_backend.l3.symbolic_equivalence import IdentityVerdict, identity_status
 
 if TYPE_CHECKING:
@@ -87,9 +87,7 @@ def _is_tts_safe(payload: dict[str, Any]) -> bool:
 # ──────────────────────────────────────────────────────────────────────────
 # payload 빌더 — 슬롯 유형별 결정론적 콘텐츠(index로 변주)
 # ──────────────────────────────────────────────────────────────────────────
-def _build_numeric_payload(
-    slot_type: str, objective_id: str, index: int
-) -> dict[str, Any]:
+def _build_numeric_payload(slot_type: str, objective_id: str, index: int) -> dict[str, Any]:
     """숫자형 슬롯 payload — 이차함수 최솟값 문제(index로 상수항 변주·답 SymPy 검증 가능).
 
     f(x) = x^2 - 4x + c (c = 3 + index) → 꼭짓점 x=2 · 최솟값 = c - 4 = index - 1.
@@ -111,9 +109,7 @@ def _build_numeric_payload(
     }
 
 
-def _build_conceptual_payload(
-    slot_type: str, objective_id: str, index: int
-) -> dict[str, Any]:
+def _build_conceptual_payload(slot_type: str, objective_id: str, index: int) -> dict[str, Any]:
     """개념형 슬롯 payload — 수치 답이 없는 사고 유도 본문(SymPy 검증 미대상).
 
     슬롯 유형을 reasoning_type로 명시하고, 렌더러-중립 LaTeX 본문을 담는다. `verification` 키가
@@ -174,7 +170,7 @@ class ContentSlotStore:
     """생성 산출물(슬롯 행) → `pedagogy_content_slot` 멱등 적재기(`UnitSpecStore` 미러).
 
     한 `engine.begin()` 안에서 각 행을 `id` 충돌 upsert한다(PK `id`는 SET에서 제외해 보존·멱등).
-    sync 엔진은 슬3 `_build_sync_engine`을 재사용한다(신규 seam 0).
+    sync 엔진은 슬3 `build_sync_engine`을 재사용한다(신규 seam 0).
     """
 
     def __init__(
@@ -194,7 +190,7 @@ class ContentSlotStore:
 
     def _get_engine(self) -> Engine:
         if self._engine is None:
-            self._engine = _build_sync_engine(self._resolved_settings)
+            self._engine = build_sync_engine(self._resolved_settings)
         return self._engine
 
     def seed(self, rows: Sequence[dict[str, Any]]) -> int:

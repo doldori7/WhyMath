@@ -90,9 +90,7 @@ class TestPilotCorpusStillValidates:
 
     def test_pilot_unit_validates(self) -> None:
         unit = yaml.safe_load(
-            (_CORPUS / "units_v1" / "quadratic_maxmin.unit.yaml").read_text(
-                encoding="utf-8"
-            )
+            (_CORPUS / "units_v1" / "quadratic_maxmin.unit.yaml").read_text(encoding="utf-8")
         )
         u = UnitDSL.model_validate(unit)
         assert u.api_version == "unit/0.1"  # api_version 핀
@@ -100,7 +98,5 @@ class TestPilotCorpusStillValidates:
 
     def test_all_packs_validate(self) -> None:
         for path in sorted((_CORPUS / "pedagogy_packs_v1").glob("*.yaml")):
-            pack = PedagogyPack.model_validate(
-                yaml.safe_load(path.read_text(encoding="utf-8"))
-            )
+            pack = PedagogyPack.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
             assert pack.api_version == "1.0"  # 팩 api_version 핀

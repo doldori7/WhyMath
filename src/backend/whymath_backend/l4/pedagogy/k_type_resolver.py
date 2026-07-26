@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.pedagogy_dsl import LearningObjective
-from whymath_backend.l1.concept_graph.embedding import _build_sync_engine
+from whymath_backend.l1.embedding_primitives import build_sync_engine
 from whymath_backend.schema.enums import KnowledgeType
 
 if TYPE_CHECKING:
@@ -69,7 +69,7 @@ class KTypeResolver:
 
     def _get_engine(self) -> Engine:
         if self._engine is None:
-            self._engine = _build_sync_engine(self._resolved_settings)
+            self._engine = build_sync_engine(self._resolved_settings)
         return self._engine
 
     def resolve(self, concept_code: str) -> str | None:

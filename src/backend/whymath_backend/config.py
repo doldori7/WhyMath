@@ -1084,9 +1084,7 @@ class Settings(BaseSettings):
         하나라도 비어 있으면 미설정으로 보고 LangfuseSink는 no-op이 된다. SecretStr는
         `get_secret_value()`로만 평문을 꺼내며, 여기서는 *비어 있는지*만 본다(값 로그 X).
         """
-        return bool(self.langfuse_public_key) and bool(
-            self.langfuse_secret_key.get_secret_value()
-        )
+        return bool(self.langfuse_public_key) and bool(self.langfuse_secret_key.get_secret_value())
 
     @property
     def anthropic_configured(self) -> bool:
