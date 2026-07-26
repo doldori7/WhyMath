@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-26 (구현·OPS-05): **Redis 캐시 장애의 학생 대면 전파 차단 — "레디니스 정책 ≠ 동작 보증"의 실증과 폐색** (claude 구현, Kiki "Redis")
+
+**컨텍스트**: OPS-04 조사에서 발견된 결함. OPS-01의 `/health/ready`는 Redis를 `required=false`로 **보고만** 하고 200을 유지하는데, `RedisCache.get/set`은 예외를 그대로 전파해 Redis 다운 시 `l3/pipeline.py:211`이 5xx를 냈다 — **레디니스가 초록인데 학생은 실패**하는 간극. `ping()`만 흡수하고 있었다.
+
+**수정**(`3b2f083`): 가드를 `RedisCache` 내부(네트워크 실패의 발원지)에 배치 — 소비처가 생성 파이프라인·DSL 캐시(`l4/content_supply`)·scene·visualization·coach judge seam·OCR 등 다수라 한 군데만 막으면 나머지가 노출된다. `get` 실패 → None(미스 강등 → 재생성 → **학생은 서비스받음**) / `set` 실패 → no-op. try 범위에 클라이언트 지연 생성·`_decode`까지 포함(잘못된 URL·라이브러리 부재·손상 값도 "캐시를 못 쓰는 상태"라 동일 강등). **CLAUDE.md 우선순위 #1 학생 ≫ #6 비용의 직접 구현** — Redis가 죽으면 LLM 비용이 오르지만 학습은 계속된다. 침묵 실패 금지 준수: 강등 warning에 **예외 타입명** 포함(키·값은 로그 금지 — 캐시 키가 프롬프트 해시), 스팸 방지는 전이+100회마다·복구 시 info 1회. `CacheDegradationCounter`+`cache_degradation_snapshot()` 인프로세스 회계.
+
+**전제 정정(실측 — 추론 등재 금지)**: 착수 시 "소켓 타임아웃 부재 → **무한 대기** → 워커 고갈"로 판단했으나 **틀렸다**. 설치본 redis-py 8.0.1은 미지정 시 `AbstractConnection` 기본 **5초**가 적용된다(`conn.socket_timeout == 5` 실측). 실제 문제는 "무한"이 아니라 **값이 라이브러리 버전 기본값에 종속**인데 pin(`redis[hiredis]>=5.1.0`)에 **상한이 없다**는 것 — `redis_socket_timeout_s`(2.0) 신설로 `socket_timeout`·`socket_connect_timeout` 양쪽 명시해 버전 비의존화. 구버전(5.x) 기본값이 `None`인지는 **미실측이라 단정하지 않는다**.
+
+**변별력**: 구현을 6가지로 돌연변이(타임아웃 인자 제거·무타입 로그·get 가드 제거·키 로그·억제 제거·except 협소화) → 전부 FAIL 확인 후 복원. 특히 **get 가드 제거 시 파이프라인 통합 테스트가 깨지는 것**으로 결함 재현성을 동결했다. 타임아웃은 시임이 아니라 **실물 redis-py 객체**의 `connection_kwargs`로 확인(외부 SDK 표면을 가짜만으로 정합 선언 금지). 검증: 45 passed(신규 22)·l3+l4+api 회귀 4335 passed·mypy --strict clean.
+
+**정직한 잔여 → `OPS-06` 등재**: Redis 클라이언트 생성 지점이 **3곳**(`l3/cache`·`api/_device_store.py:958`·`api/_rate_limit.py`)인데 이번에 고친 건 하나다. 나머지 둘은 여전히 무가드·무타임아웃 → Redis 다운 시 디바이스 서명 검증·코치 rate limit가 5xx 가능. **device store는 *인증 검증 캐시*라 미스 강등이 인증 우회 함의를 가져** 단순 강등을 적용하지 않았다(별도 판정 필요). `incident_response_slo.md` 함정 ④도 "L3 경로만 닫힘"으로 갱신 필요 — 무심코 "해결됨"으로 고치면 문서가 과잉 안전을 주장하게 되므로 OPS-06으로 넘겼다.
+
 ### 2026-07-26 (구현·OPS-03·OPS-04): **운영 축 상환 #3·#4 — 배포 CD·IaC + 장애 런북·SLO. 부수 발견: `tests/infra` 192건이 CI 미실행이었음** (claude 구현, Kiki "다음 진행")
 
 **컨텍스트**: 3축 공백 검토(#600) 등재 운영 태스크 나머지 2건. OPS-01·OPS-02 머지(#603) 후 병렬 서브에이전트 구현.
