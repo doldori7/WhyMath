@@ -337,6 +337,20 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-26 (구현·OPS-07): **테스트 전역 누수 가드 — 순서-의존·전체-스위트-한정 오염을 *그 테스트 자체*의 결정론적 실패로** (claude 구현, Kiki "OPS-07 착수")
+
+**컨텍스트**: #606(OPS-06) 머지 후 main CI red — 한 테스트가 `pg_cached` store 생성으로 `db.session._engine`(모듈 전역·지연 캐시)을 채우고 정리하지 않아, 후속 `test_session_module_imports_without_connection`(전역 None 단언)이 *실행 순서 때문에* 깨졌다. 파일 단위로는 안 보이고 전체 스위트에서만 터져 로컬 검증을 통과했다(#607이 즉시 상환·재발방지로 OPS-07 등재). 근본 원인은 개별 부주의가 아니라 **'전역 캐시를 채우는 테스트'를 잡는 장치의 부재**.
+
+**가드 설계 — 귀책과 격리를 분리**: `tests/backend/conftest.py`의 autouse 픽스처가 매 테스트 종료 시 `db.session._engine`·`_sessionmaker`가 남았는지 검사해 ① 그 테스트를 실패시키고(귀책·`pytest.fail`에 nodeid+정리법 명시) ② `dispose_engine()`으로 전역을 되돌려 다음 테스트로의 전파를 막는다(격리). 순서-의존 오염을 결정론적·귀책 가능한 실패로 바꾼다. 탐지·격리 로직은 `_db_leak_guard.py` 모듈로 분리 — **가드 자체의 변별력**을 별도 테스트로 실측하려고(위장 게이트 배제).
+
+**변별력 실측(acceptance ②·"가드가 있다"가 아니라 "실패를 실패로 만든다")**: `test_db_leak_guard.py` 9건 — 직접(깨끗=None·`_engine`/`_sessionmaker` 주입=사유·contain 후 복원+dispose 호출), **오염 테스트 end-to-end 주입**(하위 pytest에 누수 테스트 → returncode≠0+마커·귀책 지목=양성 / 같은 가드 아래 깨끗 테스트=통과=음성 오검출 없음), 실 세션 가드 활성(`request.fixturenames`)·실 conftest 배선 봉인.
+
+**부수 발견 — 잠재 누수 3건 청산**: 가드를 켜자 `test_devices.py::TestBuildDeviceStoreFromSettings`의 pg·pg_cached 직접 호출 3건이 즉시 검출됐다(라이프스팬 미경유라 아무도 엔진 정리 안 함 — #607이 고친 것과 동일 유형이나 실행 순서 운으로 red가 안 났을 뿐). 클래스 autouse `dispose_engine()` 정리로 청산. 전체 hermetic db.session 소비면(api·db·l1/atom_probe·l2/calibrate) 실측 클린 확인 — 나머지 매치는 `get_session` override 대상(실 엔진 미진입)이거나 integration(CI skip).
+
+**검증**: api 1303 passed(누수 0·3건 수정 후)·db 226·변별력 9 all pass·ruff/black clean(mypy는 CI가 `whymath_backend`만 검사·테스트 무대상). CI backend 잡이 전체 스위트 최종 판정.
+
+**정직한 잔여**: 감시 대상은 `db.session` 전역 2종에 한정(가장 잦은 오염원). 다른 전역 캐치(설정 캐시·싱글턴)는 각 파일이 개별 autouse로 관리 중 — 필요시 같은 패턴으로 `_db_leak_guard`에 심볼 추가 가능.
+
 ### 2026-07-26 (구현·OPS-06): **Redis 클라이언트 3분기 통일 — 강등을 일괄이 아니라 *연산별 보안 의미론*으로 갈랐다** (claude 구현, Kiki "Ops")
 
 **컨텍스트**: OPS-05가 `l3/cache` 하나만 고쳐 남은 두 생성 지점(`api/_device_store`·`api/_rate_limit`) 상환. 세 지점이 이제 같은 `redis_socket_timeout_s`를 읽는다(새 설정 키 0·거버넌스 테스트 `test_three_client_builders_share_one_timeout_setting`으로 동결).

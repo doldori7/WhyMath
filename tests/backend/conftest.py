@@ -19,10 +19,20 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import pytest
+
+# db.session 전역 누수 가드(OPS-07)의 탐지·격리 로직 — 가드 자체의 변별력을 별도 테스트
+# (test_db_leak_guard.py)에서 오염 주입으로 실측하려고 모듈로 분리했다. whymath_backend import는
+# 이 헬퍼 안에서 지연 수행하므로(호출 시점=teardown), 여기 최상단 import는 tests/backend 경로만
+# 있으면 안전하다(pytest prepend 모드가 conftest 디렉터리를 sys.path에 넣는다).
+from _db_leak_guard import (
+    contain_db_session_leak,
+    db_session_leak_reason,
+    format_leak_failure,
+)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SRC_BACKEND = _PROJECT_ROOT / "src" / "backend"
@@ -56,3 +66,35 @@ def pytest_collection_modifyitems(config: pytest.Config, items: Iterable[pytest.
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_integration)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# db.session 전역 누수 가드 (OPS-07)
+# ──────────────────────────────────────────────────────────────────────
+# 2026-07-26 사고: OPS-06의 한 테스트가 pg_cached store 생성으로 `db.session._engine`
+# (모듈 전역·지연 캐시)을 채우고 정리하지 않아, 같은 프로세스의 후속 테스트
+# `db/test_problem_orm.py::test_session_module_imports_without_connection`(전역이 None임을
+# 단언)가 *실행 순서 때문에* 깨졌다 → main CI red(#606 머지 후). 이 오염은 파일 단위 실행에서는
+# 재현되지 않고 전체 스위트에서만 터져 로컬 검증을 통과했다.
+#
+# 근본 원인은 개별 부주의가 아니라 '전역 캐시를 채우는 테스트'를 잡는 장치의 부재. 이 가드는
+# 매 테스트 종료 시 db.session 모듈 전역이 남았는지 검사해 ① 그 테스트를 실패시키고(귀책)
+# ② 전역을 되돌려 다음 테스트로의 전파를 막는다(격리). 순서-의존·전체-스위트-한정 오염을
+# *그 테스트 자체*의 결정론적 실패로 바꾼다. 탐지·격리 로직은 `_db_leak_guard` 모듈에 있다
+# (최상단 import — 변별력을 test_db_leak_guard.py에서 별도로 실측하려고 분리).
+
+
+@pytest.fixture(autouse=True)
+def _guard_db_session_global_leak(request: pytest.FixtureRequest) -> Iterator[None]:
+    """모든 백엔드 테스트 종료 후 db.session 전역 누수를 탐지·격리·귀책한다(OPS-07).
+
+    테스트 *시작* 시점은 (앞 테스트가 이 가드로 정리됐으므로) 깨끗하다고 본다. *종료* 시
+    전역이 남아 있으면 이 테스트가 남긴 것이므로 실패시킨다 — 실패 신호를 내기 전에 전역을
+    되돌려 다음 테스트가 연쇄로 깨지지 않게 한다(귀책과 격리를 분리).
+    """
+    yield
+    reason = db_session_leak_reason()
+    if reason is None:
+        return
+    contain_db_session_leak()
+    pytest.fail(format_leak_failure(request.node.nodeid, reason), pytrace=False)
