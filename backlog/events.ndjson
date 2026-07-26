@@ -761,3 +761,4 @@
 {"ts": "2026-07-26T21:26:49", "actor": "claude/whymath-service-review-9r21im", "action": "add", "id": "OPS-08-required-checks-drift"}
 {"ts": "2026-07-26T21:26:50", "actor": "claude/whymath-service-review-9r21im", "action": "claim_remote_unavailable", "id": "OPS-08-required-checks-drift", "status": "error"}
 {"ts": "2026-07-26T21:26:50", "actor": "claude/whymath-service-review-9r21im", "action": "start", "id": "OPS-08-required-checks-drift", "session": "claude/whymath-service-review-9r21im", "remote": "error"}
+{"ts": "2026-07-26T21:30:46", "actor": "claude/whymath-service-review-9r21im", "action": "done", "id": "OPS-08-required-checks-drift", "artifacts": ["e81696a"]}
