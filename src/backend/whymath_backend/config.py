@@ -755,6 +755,28 @@ class Settings(BaseSettings):
         ),
     )
 
+    evidence_payload_encryption_key: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "PED-01: 미성년 학습 증거 payload(`evidence_event.payload_encrypted`) at-rest 봉투 "
+            "암호화 마스터 키(base64 32바이트=AES-256). 빈 값=암호화 비활성 → 증거는 *메타 전용*"
+            "으로만 적재(evidence_event엔 평문 컬럼이 없어 원문 payload는 저장하지 않음·B1). "
+            "**dialogue·device secret 키와 분리**(폭발 반경 축소). DB 밖(env/Settings)에 두어 DB "
+            "dump 단독 복호 불가. `WHYMATH_EVIDENCE_PAYLOAD_ENCRYPTION_KEY` env로만 주입(SecretStr "
+            '— repr/로그 평문 차단·하드코딩 금지). 키 생성: `python -c "import base64,os; '
+            'print(base64.b64encode(os.urandom(32)).decode())"`.'
+        ),
+    )
+    evidence_payload_decryption_fallback_keys: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "증거 payload 키 회전용 *복호 전용* fallback 키 목록(쉼표 구분 base64 32바이트). "
+            "primary 회전 시 구 키를 여기 두면 구 키 암호화 행이 lockout 없이 복호된다(encrypt는 "
+            "항상 primary). 빈 값=fallback 없음. "
+            "`WHYMATH_EVIDENCE_PAYLOAD_DECRYPTION_FALLBACK_KEYS` env(SecretStr·하드코딩 금지)."
+        ),
+    )
+
     coach_device_hmac_secret: SecretStr = Field(
         default=SecretStr(""),
         description=(
@@ -1062,7 +1084,9 @@ class Settings(BaseSettings):
         하나라도 비어 있으면 미설정으로 보고 LangfuseSink는 no-op이 된다. SecretStr는
         `get_secret_value()`로만 평문을 꺼내며, 여기서는 *비어 있는지*만 본다(값 로그 X).
         """
-        return bool(self.langfuse_public_key) and bool(self.langfuse_secret_key.get_secret_value())
+        return bool(self.langfuse_public_key) and bool(
+            self.langfuse_secret_key.get_secret_value()
+        )
 
     @property
     def anthropic_configured(self) -> bool:
