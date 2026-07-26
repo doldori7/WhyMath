@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-26 (구현·OPS-01·OPS-02): **운영 축 상환 #1·#2 — 서비스 관측성·알림 + DB 백업·DR** (claude 구현, Kiki "OPS-01·OPS-02")
+
+**컨텍스트**: 3축 공백 검토(#600)가 등재한 운영 태스크 첫 2건. 병렬 서브에이전트 구현(파일 범위 분리 — backend vs scripts/docs).
+
+**OPS-01** (`7be5026`): `ops/service_health.py` — DB(SELECT 1)·Redis(PING)·LLM 라우터 딥체크 + `ServiceMetrics`(총요청·5xx·최근창 에러율·지연 p95·uptime) + `evaluate_alerts`/`AlertLogNotifier`(상태 전이 시에만 로그). `GET /health/live`·`GET /health/ready` 신설(기존 `/health`·`/status` 불변). **결정 ①**: ready 판정은 DB 도달성만 필수(학생 대면 경로 전제) — Redis·LLM은 보고만(required=false), not ready는 503(업타임 프로브가 HTTP로 판정 — 보고형 200 `/status`와 역할 분리). **결정 ②**: 판정치는 인프로세스 산출·HTTP 노출(SaaS 단독 의존 금지 — cost_probe 선례)·오류 문자열에 예외 타입명(침묵 실패 금지, 미들웨어 계측 실패도 요청을 깨지 않되 타입명 warning + 회귀 동결). Settings 3키(`ops_error_rate_alert_threshold` 0.05·`ops_latency_p95_alert_ms` 5000·`ops_metrics_window_size` 500). 신규 31건·api+ops 회귀 1140 passed·mypy --strict 417파일 무이슈. 한계(정직): 다중 워커 시 워커별 독립 계측(합산 후속)·임계는 재기동 반영.
+
+**OPS-02** (`e05e93f`): `scripts/backup/backup_whymath_pg.ps1`(**ASCII 전용** — cp949 logconfig 사고 선례를 `tests/infra/test_backup_script.py` 회귀로 동결) — 컨테이너 내 pg_dump -Fc → **`pg_restore --list` 정합 검증(회수 전·손상 덤프면 exit 1)** → docker cp 회수 → 크기>0 검증 → `-RetentionDays`(14) 보존·최신 1개 만료 면제(전멸 방지). `docs/architecture/db_backup_dr_runbook.md` — 6항목 브리핑·작업 스케줄러 등록+자가검증·scratch 컨테이너(55433) 복구 리허설·행수 대조(실측 테이블 8종)·미성년 PII 취급(봉투 암호화 실태 표 + **비암호화 컬럼 정직 기술**·외부 반출 금지·RetentionDays=PIPA 파기 연결). 한계(정직): .ps1 실행 검증은 Kiki 머신 첫 실행이 최종(리눅스 환경 — 런북 자가검증이 실패를 드러내도록 설계)·오프사이트 사본·백업 파일 자체 암호화·WAL/PITR은 후속 후보(런북 §6).
+
+**해금**: OPS-03(배포 CD·IaC ← OPS-02)·OPS-04(장애 런북·SLO ← OPS-01).
+
 ### 2026-07-26 (검토·등재): **서비스·운영·관리 3축 공백 검토 — 운영 축 백로그 0건 발견 → OPS-01~04·MGMT-01 등재** (claude 검토, Kiki 지시·산출물 선택)
 
 **컨텍스트**: Kiki "서비스와 운영, 관리의 입장에서 비어있는 부분 검토". 저장소 전수 실측(백엔드 466 py·테스트 480·API 14 라우터·backlog 71건) 후 산출물 형태(문서+백로그)·우선 영역(E2E/L6)은 Kiki AskUserQuestion 선택.
