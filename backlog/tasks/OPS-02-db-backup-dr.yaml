@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,11 +14,12 @@ acceptance:
   - "pg_dump 정기 백업 스크립트 + 보존 정책 (prod = docker whymath-pg:5433)"
   - "복구 리허설 런북 + 복구 후 무결성 검증 절차"
   - "백업 산출물의 미성년 PII·암호화 취급 규칙 준수 (민감정보 분류)"
-artifacts: []
+artifacts:
+  - e05e93f
 paths:
   - "infra/**"
   - "scripts/**"
   - "docs/architecture/**"
-session: claude/whymath-service-review-9r21im
+session: null
 notes: "CLAUDE.md 로컬 DB 지도(prod=whymath-pg:5433) 근거·단일 머신 SPOF. 운영 축 상환 #2 (service_ops_mgmt_gap_review_2026-07)."
 updated: 2026-07-26
