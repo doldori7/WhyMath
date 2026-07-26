@@ -26,6 +26,7 @@ from whymath_backend.api._l3_state import get_cache, get_provider, get_trace
 from whymath_backend.api._rate_limit import RateLimitedVisualization
 from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.session import get_session
+from whymath_backend.l1.concept_visual_style import get_recommended_visual_styles
 from whymath_backend.l1.concept_visualization import get_visualizability
 from whymath_backend.l2.concept_diagnosis import (
     ConceptDiagnosis,
@@ -78,7 +79,14 @@ async def visualize_for_concept_diagnosis(
     concept_orm = await session.get(Concept, diagnosis.concept_id)
     if concept_orm is None:
         return None
-    concept_schema = concept_orm.to_schema()
+    # 권장 시각화 양식(슬88)은 ARCH-14 ③으로 *노드 비내장* — 전용 Overlay(`concept_visual_style`)
+    # 에서 code 키로 조회해 스키마 필드에 주입한다(행 부재→[]·기존 동작). L3
+    # (`visualization_spec_for_concept`)가 이 필드를 프롬프트 힌트로 읽는다(계약·소비 경로 불변,
+    # 값의 출처만 노드→Overlay로 이동).
+    styles = await get_recommended_visual_styles(session, concept_orm.code)
+    concept_schema = concept_orm.to_schema().model_copy(
+        update={"recommended_visual_styles": styles}
+    )
     # 시각화 가능성 게이트(Part 5·05b) — 시각화 계층 Overlay에서 4분류 조회(노드 비내장).
     # 추상·불가 개념은 억지 시각화를 하지 않는다(행 부재=미태깅→기존 동작).
     visualizability = await get_visualizability(session, concept_orm.code)

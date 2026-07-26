@@ -346,6 +346,15 @@
 **OPS-02** (`e05e93f`): `scripts/backup/backup_whymath_pg.ps1`(**ASCII 전용** — cp949 logconfig 사고 선례를 `tests/infra/test_backup_script.py` 회귀로 동결) — 컨테이너 내 pg_dump -Fc → **`pg_restore --list` 정합 검증(회수 전·손상 덤프면 exit 1)** → docker cp 회수 → 크기>0 검증 → `-RetentionDays`(14) 보존·최신 1개 만료 면제(전멸 방지). `docs/architecture/db_backup_dr_runbook.md` — 6항목 브리핑·작업 스케줄러 등록+자가검증·scratch 컨테이너(55433) 복구 리허설·행수 대조(실측 테이블 8종)·미성년 PII 취급(봉투 암호화 실태 표 + **비암호화 컬럼 정직 기술**·외부 반출 금지·RetentionDays=PIPA 파기 연결). 한계(정직): .ps1 실행 검증은 Kiki 머신 첫 실행이 최종(리눅스 환경 — 런북 자가검증이 실패를 드러내도록 설계)·오프사이트 사본·백업 파일 자체 암호화·WAL/PITR은 후속 후보(런북 §6).
 
 **해금**: OPS-03(배포 CD·IaC ← OPS-02)·OPS-04(장애 런북·SLO ← OPS-01).
+### 2026-07-26 (구현·ARCH-14 ③·완결): **recommended_visual_styles → 전용 Overlay `concept_visual_style` 이관 — Concept Purity 부채 0건·ARCH-14 완전 종료** (claude, Kiki "ARCH-13 먼저"→"검토해줘"→"네")
+
+**컨텍스트**: ARCH-14 마지막 항목 ③. Kiki가 "ARCH-13 먼저" 지정했으나 ARCH-13은 이미 병렬 세션 #595(원자 축 울타리)로 done → ③ 해금 확인. "검토해줘"로 설계 검토(Explore 2병렬: ADR/Overlay 선례 + 소비처 표면) 후 **② 전용 Overlay 신설** 판정("검토 결론"): 기존 `concept_visualization`은 자기 docstring이 "양식은 다른 축"이라 명시·"행 존재=분류됨" 불변식 파괴 위험 → 축별 전용 테이블이 정합.
+
+**설계 판정 근거**: recommended_visual_styles(양식='무엇을' — 단위원·수형도 등 16종)는 개념 정체성이 아니라 시각화 계층 투영(ADR concept_node_layering §1·CurriculumEntry subject drop·concept_visualization Overlay 선례). `concept_visualization`(가능성 4분류)과 **다른 축**이라 얹지 않고 전용 `concept_visual_style` 신설.
+
+**구현**(backend-engineer 위임·claude 검토·재검증): (1) 신규 모델 `db/models/concept_visual_style.py`(code PK·loose ref·ARRAY(visualization_style_enum) NOT NULL·행부재=미태깅) (2) 리졸버 `l1/concept_visual_style/overlay.py`(async `get_recommended_visual_styles`·행부재→[] + sync 시드 로더) (3) Alembic rev **a9b8c7d6e5f4**(head f1a2b3c4d5e7): create_table + `drop_column(concept, recommended_visual_styles)` — enum `create_type=False` 재사용(b5c6d7e8f9a0 소유·중복 CREATE TYPE 금지)·enum drop 안 함(컬럼만 drop 규약)·**데이터 이관 0**(전량 NULL) (4) 소비처 repoint = API seam 2곳(`api/visualization.py`·`api/scene.py`)에서 `to_schema().model_copy(update={"recommended_visual_styles": styles})` 주입 — **l3/l4 무변경**(스키마 필드 소비·값 출처만 노드→Overlay) (5) 순수성 게이트 부채 **2→0건**(_KNOWN_PURITY_DEBT 공집합·_FORBIDDEN_COLUMNS 봉인)·parity 테스트는 Overlay-backed schema-only 1필드 예외로 정밀 완화(타 드리프트·ORM-only는 여전히 red).
+
+**검증**(claude 독립 재실행): ruff·black·mypy(413 files Success)·import-linter(7계층 0 broken)·hermetic 71 + API seam 15 pass·alembic 단일 head·enum 16값 세트·순서 정확 일치. 마이그레이션 실 PG up/down은 CI 몫. **ARCH-14 acceptance ①②③④ 전부 착륙 → 병합 후 task done.** 잔여 하드닝 태스크 종료.
 
 ### 2026-07-26 (검토·등재): **서비스·운영·관리 3축 공백 검토 — 운영 축 백로그 0건 발견 → OPS-01~04·MGMT-01 등재** (claude 검토, Kiki 지시·산출물 선택)
 
