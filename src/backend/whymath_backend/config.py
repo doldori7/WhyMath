@@ -90,6 +90,21 @@ class Settings(BaseSettings):
             "인증이 필요하면 URL에 환경변수로 자격증명을 담는다(코드 하드코딩 금지)"
         ),
     )
+    redis_socket_timeout_s: float = Field(
+        default=2.0,
+        gt=0,
+        description=(
+            "Redis 소켓 타임아웃(초) — 응답 대기(socket_timeout)·연결 수립"
+            "(socket_connect_timeout)에 같은 값을 건다(OPS-05). 무응답 Redis(패킷 블랙홀·"
+            "방화벽 drop)에서 캐시 호출이 장시간 매달려 asyncio 워커가 고갈되는 것을 막는다 "
+            "— 연결 거부(즉시 예외)보다 나쁜 실패 양상이다. 기본 2.0초 근거: ①정상 Redis"
+            "(동일 호스트·LAN) 응답은 보통 <5ms라 400배 여유 — 건강한 Redis를 오탐 차단하지 "
+            "않는다 ②학생 대면 경로 p50 목표가 2초라 캐시 한 번의 정체가 요청 예산 전체를 "
+            "먹지 않는다 ③타임아웃은 예외로 드러나 RedisCache가 캐시 미스로 강등하므로 "
+            "요청은 재생성으로 완주한다(장애 전파 아님). 명시 지정 이유: redis-py는 값을 "
+            "주지 않으면 라이브러리 버전 기본값에 종속된다(설치본 8.0.1 실측 5초)"
+        ),
+    )
     cache_ttl_s: int = Field(
         default=3600,
         ge=0,
