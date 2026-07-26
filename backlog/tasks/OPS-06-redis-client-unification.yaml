@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,13 +14,14 @@ acceptance:
   - api/_device_store.py _build_redis_for_cache·api/_rate_limit.py RedisBackend에 소켓 타임아웃 적용
   - "강등 의미론 결정 — device store는 *인증 검증 캐시*라 미스 강등의 보안 함의를 먼저 판정(무조건 강등 금지)"
   - "incident_response_slo.md 함정 ④ 갱신 — L3 경로만 닫혔고 이 경로는 여전히 열려 있다는 뉘앙스 반영"
-artifacts: []
+artifacts:
+  - b85a30b
 paths:
   - src/backend/whymath_backend/api/_device_store.py
   - src/backend/whymath_backend/api/_rate_limit.py
   - src/backend/whymath_backend/api/_degradation.py
   - "tests/backend/api/**"
   - docs/standards/incident_response_slo.md
-session: claude/whymath-service-review-9r21im
+session: null
 notes: "OPS-05 실측: Redis 클라이언트 생성 지점이 3곳(l3/cache·_device_store:958·_rate_limit)인데 OPS-05는 l3/cache 하나만 고쳤다. 나머지 둘은 여전히 무가드·무타임아웃 → Redis 다운 시 디바이스 서명 검증·코치 rate limit가 5xx 가능. device store 강등은 인증 우회 위험이 있어 단순 미스 강등 금지 — 별도 판정 필요."
 updated: 2026-07-26
