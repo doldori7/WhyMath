@@ -1039,6 +1039,42 @@ class Settings(BaseSettings):
         ),
     )
 
+    # ── OPS-01: 프로덕션 관측·알림 (인프로세스 이중 회계 축) ──
+    # 에러율·지연 판정치는 SaaS(Langfuse)가 아니라 *프로세스 안*에서도 산출한다
+    # (ops/cost_probe 선례 — 관측 인프라가 죽으면 '측정 실패'가 보여야지 0/정상으로
+    # 위장되면 안 된다). 아래 임계는 /health/ready body.alerts + 상태 전이 warning
+    # 로그(ops/service_health.py)가 공유한다.
+    ops_error_rate_alert_threshold: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "최근 창(고정 크기 deque) 5xx 에러율 알림 임계. *초과 시* breach — "
+            "/health/ready body.alerts 상시 노출 + 상태 전이 시 warning 로그"
+            "(ops/service_health.py). 기본 0.05(5%). 경계 동률(==)은 비위반. "
+            "WHYMATH_OPS_ERROR_RATE_ALERT_THRESHOLD로 조정."
+        ),
+    )
+    ops_latency_p95_alert_ms: float = Field(
+        default=5000.0,
+        gt=0.0,
+        description=(
+            "최근 창 p95 지연(ms) 알림 임계. *초과 시* breach(경로는 에러율과 동일). "
+            "기본 5000ms — 학생 대면 p50<2s 목표의 보수적 상위 가드(p95는 QUALITY 큐잉·"
+            "클라우드 동기 경로가 섞여 p50보다 느슨하게 둔다). "
+            "WHYMATH_OPS_LATENCY_P95_ALERT_MS로 조정."
+        ),
+    )
+    ops_metrics_window_size: int = Field(
+        default=500,
+        ge=1,
+        description=(
+            "인프로세스 요청 계측의 최근 창 크기(요청 수·고정 deque maxlen). 에러율·p95는 "
+            "이 창에서 계산한다 — 전 기간 평균은 최근 악화를 희석하므로 최근 창이 알림 "
+            "판정선이다. 기본 500. WHYMATH_OPS_METRICS_WINDOW_SIZE로 조정."
+        ),
+    )
+
     @property
     def sync_database_url(self) -> str:
         """`database_url`(async asyncpg)에서 *sync psycopg* 드라이버 URL을 파생(슬105).
