@@ -80,6 +80,7 @@ from whymath_backend.api.ocr import router as ocr_router
 from whymath_backend.api.problems import router as problems_router
 from whymath_backend.api.scene import router as scene_router
 from whymath_backend.api.speech import router as speech_router
+from whymath_backend.api.study import router as study_router
 from whymath_backend.api.users import router as users_router
 from whymath_backend.api.verify import router as verify_router
 from whymath_backend.api.visualization import router as visualization_router
@@ -539,6 +540,7 @@ def create_app(
     app.include_router(visualization_router)
     app.include_router(interactions_router)
     app.include_router(scene_router)
+    app.include_router(study_router)
     app.include_router(ocr_router)
     app.include_router(speech_router)
 
