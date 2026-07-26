@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -17,6 +17,6 @@ artifacts: []
 paths:
   - tests/backend/conftest.py
   - "tests/backend/**"
-session: null
+session: claude/whymath-service-review-9r21im
 notes: "2026-07-26 사고: OPS-06의 test_lifespan_binds_invalidate_timeout_to_the_same_setting이 pg_cached store 생성으로 db.session._engine을 남겨 후속 db/test_problem_orm.py::test_session_module_imports_without_connection가 실행 순서 때문에 실패 → main CI red(#606 머지 후). 파일 단위 실행에서는 재현되지 않아 로컬 검증을 통과했다. 근본 원인은 '전역 캐시를 채우는 테스트'를 잡는 장치 부재."
 updated: 2026-07-26

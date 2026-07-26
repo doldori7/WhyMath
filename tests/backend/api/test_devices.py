@@ -49,7 +49,7 @@ from whymath_backend.api._rate_limit import (
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.user import UserProfile
-from whymath_backend.db.session import get_session
+from whymath_backend.db.session import dispose_engine, get_session
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
@@ -1952,7 +1952,16 @@ def _lifespan_settings(
 
 
 class TestBuildDeviceStoreFromSettings:
-    """모드 3종 × cleanup 책임 — `_DEVICE_STORE` 모듈 전역은 *호출자 책임*(본 함수 순수)."""
+    """모드 3종 × cleanup 책임 — `_DEVICE_STORE` 모듈 전역은 *호출자 책임*(본 함수 순수).
+
+    **엔진 전역 정리 필수**(`none` 모드 제외): `pg`·`pg_cached`는 내부에서 `get_sessionmaker()`
+    → `get_engine()`을 타 `db.session._engine`·`_sessionmaker`(모듈 전역·지연 캐시)를 채운다.
+    프로덕션에서는 lifespan 종료가 `dispose_engine()`으로 치우지만, 빌더를 직접 부르는
+    테스트는 스스로 치워야 한다 — 안 치우면 그 전역이 None임을 단언하는 후속 테스트
+    (`db/test_problem_orm.py::test_session_module_imports_without_connection`)가 *실행 순서
+    때문에* 깨진다(2026-07-26 main CI red와 동형). OPS-07 가드가 이 잔존을 teardown에서
+    잡는다. 정리 관행은 `db/test_session.py::_reset`과 동일하게 try/finally + dispose_engine.
+    """
 
     async def test_none_mode_returns_none_and_noop(self) -> None:
         store, cleanup = build_device_store_from_settings(_lifespan_settings("none"))
@@ -1962,9 +1971,12 @@ class TestBuildDeviceStoreFromSettings:
 
     async def test_pg_mode_returns_pg_store_and_noop(self) -> None:
         # PgDeviceStore는 sessionmaker만 받고 *connect 안 함* — 라이브 PG 없어도 안전
-        store, cleanup = build_device_store_from_settings(_lifespan_settings("pg"))
-        assert isinstance(store, PgDeviceStore)
-        await cleanup()  # noop
+        try:
+            store, cleanup = build_device_store_from_settings(_lifespan_settings("pg"))
+            assert isinstance(store, PgDeviceStore)
+            await cleanup()  # noop
+        finally:
+            await dispose_engine()  # 모듈 전역(_engine·_sessionmaker) 정리
 
     async def test_pg_cached_mode_returns_cached_store_and_closes_redis(
         self, monkeypatch: pytest.MonkeyPatch
@@ -1990,12 +2002,15 @@ class TestBuildDeviceStoreFromSettings:
 
         monkeypatch.setattr(ds_mod, "_build_redis_for_cache", lambda settings: _FakeAcloseable())
 
-        store, cleanup = build_device_store_from_settings(_lifespan_settings("pg_cached"))
-        assert isinstance(store, CachedDeviceStore)
-        # slice 48: lifespan이 count_ttl도 별도 전달 — Settings 기본값 300s
-        assert store._count_ttl == 300
-        await cleanup()
-        assert aclose_called["called"] is True
+        try:
+            store, cleanup = build_device_store_from_settings(_lifespan_settings("pg_cached"))
+            assert isinstance(store, CachedDeviceStore)
+            # slice 48: lifespan이 count_ttl도 별도 전달 — Settings 기본값 300s
+            assert store._count_ttl == 300
+            await cleanup()
+            assert aclose_called["called"] is True
+        finally:
+            await dispose_engine()  # 모듈 전역(_engine·_sessionmaker) 정리
 
     async def test_pg_cached_cleanup_safe_when_aclose_missing(
         self, monkeypatch: pytest.MonkeyPatch
@@ -2015,8 +2030,11 @@ class TestBuildDeviceStoreFromSettings:
 
         monkeypatch.setattr(ds_mod, "_build_redis_for_cache", lambda settings: _NoAcloseClient())
 
-        _store, cleanup = build_device_store_from_settings(_lifespan_settings("pg_cached"))
-        await cleanup()  # 예외 없이 종료
+        try:
+            _store, cleanup = build_device_store_from_settings(_lifespan_settings("pg_cached"))
+            await cleanup()  # 예외 없이 종료
+        finally:
+            await dispose_engine()  # 모듈 전역(_engine·_sessionmaker) 정리
 
 
 class TestLifespanWiring:
