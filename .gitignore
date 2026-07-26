@@ -99,6 +99,10 @@ docs/internal/
 # 환경변수, 시크릿 추가 패턴
 .env.*
 *.env
+# 예외(OPS-03): .env.prod.example은 *값이 전부 빈* 키 목록 템플릿이다 — 시크릿 0.
+# 실제 배포 env(deploy/staging.env·deploy/prod.env)는 위 `*.env` 규칙이 계속 무시한다
+# (git check-ignore로 확인 — 실 시크릿은 절대 커밋되지 않는다).
+!.env.prod.example
 config/secrets.yaml
 config/secrets.yml
 credentials.json
