@@ -81,7 +81,19 @@ class TestToSchemaExcludesCiphertext:
         assert schema.turn_order == 1
 
     def test_non_schema_columns_constant(self) -> None:
-        """제외 컬럼 상수가 두 암호화 컬럼을 정확히 포함."""
+        """제외 컬럼 상수가 암호화 세 축(content·image_uri·image_analysis)의 짝을 정확히 포함.
+
+        SEC-01에서 이미지 두 축이 추가됐다. 새 ciphertext 컬럼을 여기 빠뜨리면 `to_schema()`가
+        schema `extra='forbid'`에 걸려 터지거나(즉시 발각) 더 나쁘게는 ciphertext가 응답·export에
+        새므로, 상수를 목록으로 동결한다.
+        """
         assert DialogueTurnORM._NON_SCHEMA_COLUMNS == frozenset(
-            {"content_encrypted", "content_nonce"}
+            {
+                "content_encrypted",
+                "content_nonce",
+                "image_uri_encrypted",
+                "image_uri_nonce",
+                "image_analysis_encrypted",
+                "image_analysis_nonce",
+            }
         )
