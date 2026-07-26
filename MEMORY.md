@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-26 (설정·해소): **main 브랜치 보호 required check 13종 등록 — "status check 강제가 통째로 꺼져 있던" 상태 해소** (Kiki 실행, claude 준비·검증)
+
+**해소 전 실측**: `enforcement_level=off · contexts=[] · checks=[]`. `protected: true`(PR 필수·force-push 차단·linear history)는 켜져 있었으나 **status check 강제만 통째로 꺼져 있어 어떤 CI 잡도 머지를 막지 못했다.** 애초 진단은 "문서가 3종만 나열해 `backend`가 빠졌다"였으나 실측 결과 **그 3종조차 미등록**이었다 — 원인을 문서 결함으로 좁힌 것은 부정확했다(문서 결함도 사실이나 설정 자체가 적용된 적 없음).
+
+**귀결**: PR #603·#604·#605·#606·#607 **다섯 번 연속** `backend — lint·type·test` 완주 전 auto-merge 발동 → #606에서 실제 `1 failed`가 main 유입(테스트 전역 오염) → 그 red를 고치는 #607조차 같은 경로로 머지(수정 적부를 머지 이후에야 확인).
+
+**해소 후 실측**: `enforcement_level=everyone · checks=13`, 문서 목록과 **완전 일치**(누락 0·초과 0·`e2e-nightly` 오등록 0). 승인 요구(`Require approvals`·`Require review from Code Owners`)는 **의도적으로 해제** — `CODEOWNERS`가 `* @doldori7` 단독이라 자기 PR 자기 승인이 불가해 켜면 전 PR이 영구 머지 불가가 된다(저장 직전 발견·경고). 팀 합류 시 재검토.
+
+**남긴 장치**: ① `.github/branch-protection-setup.md` 목록 13종 현행화 + **자가검증 C**(`/branches/main`은 admin 없이 `metadata=read`로 읽혀 required check 요약을 준다 — UI 개수 세기·머지 타이밍 관측보다 정확·즉시) ② `tests/infra/test_required_checks_doc.py` 5건으로 문서↔`ci.yml` 드리프트 동결(오타 시 UI 검색이 조용히 비어 미설정으로 새는 경로 차단). **자가검증 B(머지 타이밍 관측)는 실제 수행했으나 불발** — 시험대 PR이 backend 경로 미변경이라 잡이 `skipped`였고 skipped는 required 충족으로 세므로 판정 불가. 측정이 대상 PR의 변경 경로에 의존한다는 한계를 확인하고 C로 대체했다.
+
+**관련 태스크**: OPS-08(목록 현행화·드리프트 동결) · OPS-07(테스트 전역 오염 가드 — 미착수).
+
 ### 2026-07-26 (구현·OPS-06): **Redis 클라이언트 3분기 통일 — 강등을 일괄이 아니라 *연산별 보안 의미론*으로 갈랐다** (claude 구현, Kiki "Ops")
 
 **컨텍스트**: OPS-05가 `l3/cache` 하나만 고쳐 남은 두 생성 지점(`api/_device_store`·`api/_rate_limit`) 상환. 세 지점이 이제 같은 `redis_socket_timeout_s`를 읽는다(새 설정 키 0·거버넌스 테스트 `test_three_client_builders_share_one_timeout_setting`으로 동결).
