@@ -536,16 +536,28 @@ class TestDeviceCacheSocketTimeout:
     async def test_lifespan_binds_invalidate_timeout_to_the_same_setting(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """무효화 재시도의 시도별 상한도 같은 설정 축에 묶인다(손잡이 1개)."""
+        """무효화 재시도의 시도별 상한도 같은 설정 축에 묶인다(손잡이 1개).
+
+        **엔진 전역 정리 필수**: `device_store_mode="pg_cached"`는 내부에서 `get_engine()`을
+        타 `db.session._engine`(모듈 전역·지연 캐시)을 채운다. 정리하지 않으면 같은 프로세스의
+        후속 테스트인 `db/test_problem_orm.py::test_session_module_imports_without_connection`
+        (전역이 None임을 단언)이 **실행 순서 때문에** 깨진다 — 파일 단위로 돌리면 안 보이고
+        전체 스위트에서만 터지는 오염이다(2026-07-26 main CI 실측). 정리 관행은
+        `db/test_session.py::_reset`과 동일하게 `dispose_engine()`을 try/finally로.
+        """
         import whymath_backend.api._device_store as ds_mod
+        from whymath_backend.db.session import dispose_engine
 
         monkeypatch.setattr(ds_mod, "_build_redis_for_cache", lambda settings: _WorkingCache())
         settings = _settings(device_store_mode="pg_cached", redis_socket_timeout_s=0.75)
 
-        store, _cleanup = build_device_store_from_settings(settings)
+        try:
+            store, _cleanup = build_device_store_from_settings(settings)
 
-        assert isinstance(store, CachedDeviceStore)
-        assert store._invalidate_timeout == 0.75
+            assert isinstance(store, CachedDeviceStore)
+            assert store._invalidate_timeout == 0.75
+        finally:
+            await dispose_engine()
 
 
 # ══════════════════════════════════════════════════════════════════════════
