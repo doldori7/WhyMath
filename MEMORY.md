@@ -350,6 +350,15 @@
 **검증**: ruff·black clean · mypy --strict Success(410) · lint-imports 0 broken · 신규 hermetic 13 passed · **실 PG 통합 5 passed**(암호문 저장·평문 컬럼 NULL·GET/export 복호 왕복·백필 세 축 전환). **변별력 실측 2회**(장식 아님 증명): export의 이미지 복호를 무력화하면 `test_image_axis_...`가 FAIL, 백필 WHERE를 본문 전용으로 되돌리면 `test_backfill_covers_image_axis_...`가 FAIL — 둘 다 복원 후 재통과 확인. fail-closed는 개발 환경 폴백 유지 테스트(`test_development_without_key_still_falls_back`)가 "항상 raise"라는 고장이 아님을 봉인.
 
 **⚠️ 정직한 공백 — 프로덕션 실측은 수행되지 않았다**: 태스크 acceptance는 "프로덕션 `dialogue_content_encryption_key` 설정 실측 포함"을 요구하나 **이 컨테이너에는 프로덕션 DB·env가 없다**(Kiki·Phaiakes9 소유 액션). 기계 게이트가 *조용한 평문 저장*은 차단하지만 "키가 실제로 설정돼 있고 행이 암호화되고 있다"는 **양성 증거는 아직 없다** — 문서 §4에 미실측을 명시했다. 실측을 구두 인계로 흘리지 않기 위해 **`SEC-02-prod-dialogue-key-measurement`(owner=kiki)로 등재**했다(`backlog.py add` 경유·판정 SQL은 체크리스트 §3에 고정). 또한 HTTP 경로로는 아직 이미지가 들어오지 않아(OCR 핸드오프 미배선) 실트래픽 이미지 암호화 행은 0이다 — 저장 좌석은 하나뿐이라 배선되는 즉시 암호화가 적용된다.
+### 2026-07-25 (구현·ARCH-14 ②·CI): **계층별 커버리지 서브패키지 게이트 배선(강화 경로) — 집계 70%에 계층별 하한 축 추가** (claude, Kiki "2"→"강화" 재지정)
+
+**컨텍스트**: ARCH-14 항목 ②("계층별 커버리지 목표를 서브패키지 게이트로 강제하거나 문서를 '집계 70% 단일'로 정합"). testing.md는 계층별 최소치(L4 90%·L1/L2/L5 80%·L3 70%·Flutter 60%)를 선언했으나 CI는 **패키지 집계 70%**만 강제 — 계층별 수치가 강제되는 듯 읽히나 미강제인 불일치. 처음 "2"(완화·문서 정합)로 착수했다가 Kiki가 **"강화"** 재지정 → 완화 대신 **계층별 게이트를 실제로 배선**하는 경로로 전환(같은 브랜치·#596 재작업).
+
+**적용**: (1) 신규 `scripts/coverage/check_layer_coverage.py` — coverage.xml을 파싱해 백엔드 서브패키지(l1~l4·api)별 라인 커버리지가 `LAYER_FLOORS` 이상인지 강제(미달 exit 1·무측정=명시 실패로 성공 위장 방지·hermetic). (2) ci.yml backend 잡에 "계층별 커버리지 게이트" 스텝 추가(집계 `--cov-fail-under=70`과 상보 — 한 계층이 낮아도 평균에 묻히던 사각 폐색). (3) hermetic 테스트 `tests/backend/test_layer_coverage_gate.py`(변별력 5케이스: 바닥선 이상 PASS·미달 FAIL·무측정 FAIL·경계 PASS). (4) testing.md §커버리지 목표를 집계 하한 + 계층별 하한 2축으로 강화 재작업(지향치 90/80/80/70/80을 게이트로 승격·floor 정본=`LAYER_FLOORS`·ratchet). **floor 산정**: py3.11 로컬 커버리지 측정이 비현실적으로 느려(21%/30분·data_pipeline py3.12 전용으로 l1 미측정) 중단 → **CI 자가보고 방식** 채택: 초기 안전 floor 50%(전 계층 통과 확실)로 배선, CI 게이트 스텝이 계층별 실측 %를 자가보고 → 그 값(actual−여유)으로 ratchet 상향 후 병합(start-low PASS·up-ratchet-below-actual PASS → 무실패 캘리브레이션).
+
+**실측·floor 확정**: CI 자가보고(초기 안전 floor 50%) 결과 전 계층이 **선언 목표를 상회** — api 98.3%·l1 86.7%·l2 96.9%·l3 95.4%·l4 95.2%·백엔드 집계 92.83%. 따라서 바닥선을 **선언 목표로 직접 설정**(l4 90·l1/l2/api 80·l3 70·≥5pt 여유), 즉 testing.md 목표=CI 강제 floor로 정합(완전 강화). 과정에서 **파서 버그 1건**(coverage.xml filename이 <source>=whymath_backend 기준 상대경로인데 파서가 'whymath_backend' 세그먼트를 찾아 전 계층 '무측정'→게이트 FAIL) 발견·수정 — 게이트의 '무측정=명시 실패' 안전장치가 병합 전 포착, 테스트 사각(합성 xml이 실제 포맷과 달라 통과)도 상대경로 기본+접두 변형으로 동봉 수정.
+
+**검증**: 게이트 테스트 6 pass·ruff/black/mypy clean·실측 per-layer 대입 시뮬 PASS. `backlog.py validate` green. **ARCH-14 잔여 ③**(recommended_visual_styles Overlay 이관)만 남음 — ARCH-13 결론 대기 권고.
 
 ### 2026-07-26 (구현·PED-03): **교수법 처치 기록 좌석 신설 + 안전제약 bandit(미승격) — "측정 없는 승격 없음"의 기계화** (claude, Kiki "Ped" + 범위 선택 (a) 기록 좌석 먼저·outcome=evidence_event 재사용)
 
