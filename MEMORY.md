@@ -337,6 +337,19 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-26 (구현·SEC-01): **대화 멀티모달 봉투 암호화(이미지 2축) + 프로덕션 fail-closed 게이트 — "체크리스트는 잊히지만 게이트는 잊어도 작동한다"** (claude, Kiki "EC-01" + 선택: 대화 본문 키 재사용·프로덕션 fail-closed)
+
+**컨텍스트**: 2026-07-21 정합성 검토가 남긴 Low·요검증. `dialogue_turn.image_uri`(손글씨 이미지 URI)·`image_analysis`(Qwen3-VL 분석 JSONB)는 **미성년 풀이 전사가 가능한** 데이터인데 암호화 경로가 아예 없었다(평문 Text/JSONB). 본문 `content`는 감사상환 #2에서 봉투 암호화가 배선됐으나 **키 미설정 시 조용한 평문 폴백**이라 "프로덕션에 키가 실제로 설정돼 있는가"가 미확인이었다.
+
+**Kiki 결정 2건**: ① **대화 본문 키 재사용**(신규 키 축 0) ② **프로덕션 fail-closed**(평문 폴백을 프로덕션에서 거부).
+
+**적용**: ① ORM 4컬럼 + Alembic `a2b3c4d5e6f1`(additive·nullable LargeBinary·기존 행 무영향). ② `api/_crypto.py`에 헬퍼 5종 — `require_dialogue_content_cipher`(fail-closed)·이미지 2축 encrypt/resolve. **JSONB는 구조라 그대로 암호화 못 한다** → `sort_keys=True`·`ensure_ascii=False` 결정론 직렬화 후 바이트 암호화, 복호 시 역직렬화(dict 아니면 무결성 `RuntimeError` — 조용히 None으로 삼키면 분석이 사라진 걸 아무도 모른다). ③ 쓰기 좌석(`_build_dialogue_turn`)·읽기(`get_session_detail`)·**GDPR export** 3경로 전부 배선. ④ **백필 CLI를 세 축으로 확장** — 본문만 돌면 운영자가 `{"reencrypted": N}`을 "평문 전환 완료"로 읽는데 이미지 평문은 남는다(부분 처리를 완전 처리로 위장). ⑤ 배포 체크리스트 문서 신설(키 생성·회전·§3 실측 SQL).
+
+**설계 판단(프로덕션 판별)**: 새 env 축을 만들지 않고 기존 "prod 추정" 신호 — 실 OAuth provider(kakao/naver) 구성 여부 — 를 재사용했다(`api/demo_auth.py::register_demo_provider` 선례). 프로덕션엔 항상 실 provider가 있고 개발·CI엔 없다. **키를 안 늘린 것과 같은 이유로 설정 축도 안 늘린다** — 새 축은 "설정하는 걸 잊는" 표면을 하나 더 만든다. 체크리스트는 사람이 기억해야 작동하지만 이 게이트는 잊어도 작동한다.
+
+**검증**: ruff·black clean · mypy --strict Success(410) · lint-imports 0 broken · 신규 hermetic 13 passed · **실 PG 통합 5 passed**(암호문 저장·평문 컬럼 NULL·GET/export 복호 왕복·백필 세 축 전환). **변별력 실측 2회**(장식 아님 증명): export의 이미지 복호를 무력화하면 `test_image_axis_...`가 FAIL, 백필 WHERE를 본문 전용으로 되돌리면 `test_backfill_covers_image_axis_...`가 FAIL — 둘 다 복원 후 재통과 확인. fail-closed는 개발 환경 폴백 유지 테스트(`test_development_without_key_still_falls_back`)가 "항상 raise"라는 고장이 아님을 봉인.
+
+**⚠️ 정직한 공백 — 프로덕션 실측은 수행되지 않았다**: 태스크 acceptance는 "프로덕션 `dialogue_content_encryption_key` 설정 실측 포함"을 요구하나 **이 컨테이너에는 프로덕션 DB·env가 없다**(Kiki·Phaiakes9 소유 액션). 기계 게이트가 *조용한 평문 저장*은 차단하지만 "키가 실제로 설정돼 있고 행이 암호화되고 있다"는 **양성 증거는 아직 없다** — 문서 §4에 미실측을 명시했다. 실측을 구두 인계로 흘리지 않기 위해 **`SEC-02-prod-dialogue-key-measurement`(owner=kiki)로 등재**했다(`backlog.py add` 경유·판정 SQL은 체크리스트 §3에 고정). 또한 HTTP 경로로는 아직 이미지가 들어오지 않아(OCR 핸드오프 미배선) 실트래픽 이미지 암호화 행은 0이다 — 저장 좌석은 하나뿐이라 배선되는 즉시 암호화가 적용된다.
 ### 2026-07-25 (구현·ARCH-14 ②·CI): **계층별 커버리지 서브패키지 게이트 배선(강화 경로) — 집계 70%에 계층별 하한 축 추가** (claude, Kiki "2"→"강화" 재지정)
 
 **컨텍스트**: ARCH-14 항목 ②("계층별 커버리지 목표를 서브패키지 게이트로 강제하거나 문서를 '집계 70% 단일'로 정합"). testing.md는 계층별 최소치(L4 90%·L1/L2/L5 80%·L3 70%·Flutter 60%)를 선언했으나 CI는 **패키지 집계 70%**만 강제 — 계층별 수치가 강제되는 듯 읽히나 미강제인 불일치. 처음 "2"(완화·문서 정합)로 착수했다가 Kiki가 **"강화"** 재지정 → 완화 대신 **계층별 게이트를 실제로 배선**하는 경로로 전환(같은 브랜치·#596 재작업).

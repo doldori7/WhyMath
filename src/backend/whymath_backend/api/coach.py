@@ -36,9 +36,13 @@ from whymath_backend.api._auth import ConsentedUser
 from whymath_backend.api._concurrency import etag_for, matches_if_none_match
 from whymath_backend.api._crypto import (
     SupportsEnvelope,
-    build_dialogue_content_cipher,
     encrypt_dialogue_content,
+    encrypt_dialogue_image_analysis,
+    encrypt_dialogue_image_uri,
+    require_dialogue_content_cipher,
     resolve_dialogue_content,
+    resolve_dialogue_image_analysis,
+    resolve_dialogue_image_uri,
 )
 from whymath_backend.api._l3_state import (
     CACHE_KEY as _CACHE_KEY,
@@ -1230,6 +1234,10 @@ def _build_dialogue_turn(
     content_encrypted/content_nonce 세팅(평문 원문 DB 부재), cipher None이면 평문 폴백
     (content=평문·encrypted=None — 조용한 무동작 아닌 *명시* 폴백·CI/기존 배포 무영향).
     create_session·append_turns의 학생/AI 턴 4곳이 모두 이 헬퍼를 거쳐 중복·누락을 없앤다.
+
+    SEC-01: 멀티모달 두 축(`image_uri`·`image_analysis`)도 **같은 좌석에서 같은 키로** 암호화한다
+    — 손글씨 URI·Qwen3-VL 분석은 미성년 풀이 전사가 가능한 데이터라 본문과 같은 등급이다.
+    분기 로직은 본문과 동일(cipher 없으면 명시 평문 폴백·값 None이면 3-튜플 전부 None).
     """
     turn = DialogueTurnORM.from_schema(schema)
     content_plain, content_encrypted, content_nonce = encrypt_dialogue_content(
@@ -1238,6 +1246,18 @@ def _build_dialogue_turn(
     turn.content = content_plain
     turn.content_encrypted = content_encrypted
     turn.content_nonce = content_nonce
+
+    uri_plain, uri_encrypted, uri_nonce = encrypt_dialogue_image_uri(cipher, schema.image_uri)
+    turn.image_uri = uri_plain
+    turn.image_uri_encrypted = uri_encrypted
+    turn.image_uri_nonce = uri_nonce
+
+    analysis_plain, analysis_encrypted, analysis_nonce = encrypt_dialogue_image_analysis(
+        cipher, schema.image_analysis
+    )
+    turn.image_analysis = analysis_plain
+    turn.image_analysis_encrypted = analysis_encrypted
+    turn.image_analysis_nonce = analysis_nonce
     return turn
 
 
@@ -1393,7 +1413,7 @@ async def create_session(
 
     # 감사상환 #2: 대화 본문 봉투 암호화기(키 미설정 시 None=평문 폴백). 학생/AI 턴 2곳이 동일
     # 헬퍼(`_build_dialogue_turn`)로 content를 암호화 저장(중복 회피).
-    content_cipher = build_dialogue_content_cipher(get_settings())
+    content_cipher = require_dialogue_content_cipher(get_settings())
     student_turn = _build_dialogue_turn(
         DialogueTurnSchema(
             dialogue_id=dialogue.dialogue_id,
@@ -1598,7 +1618,7 @@ async def append_turns(
 
     now = datetime.now(timezone.utc)
     # 감사상환 #2: create_session과 동형 — 본문 봉투 암호화기·동일 헬퍼로 학생/AI 턴 저장.
-    content_cipher = build_dialogue_content_cipher(get_settings())
+    content_cipher = require_dialogue_content_cipher(get_settings())
     student_turn = _build_dialogue_turn(
         DialogueTurnSchema(
             dialogue_id=dialogue_id,
@@ -1736,12 +1756,23 @@ async def get_session_detail(
     # 감사상환 #2: 암호화 행은 content=NULL·content_encrypted에 저장 — 노출 직전 복호한다.
     # to_schema는 ciphertext 컬럼을 제외하므로 복호값을 schema.content에 덮어쓴다(키 유실 시
     # resolve_dialogue_content가 RuntimeError·조용한 평문 유출/빈 응답 금지).
-    content_cipher = build_dialogue_content_cipher(get_settings())
+    content_cipher = require_dialogue_content_cipher(get_settings())
     turns = []
     for row in result.scalars().all():
         turn_schema = row.to_schema()
         turn_schema.content = resolve_dialogue_content(
             content_cipher, row.content, row.content_encrypted, row.content_nonce
+        )
+        # SEC-01: 멀티모달 두 축도 같은 시점에 복호한다 — 암호화해 놓고 읽는 쪽을 빠뜨리면
+        # 학생에게 빈 값이 보이고(조용한 손실) 그것이 암호화 때문인지 알 수 없다.
+        turn_schema.image_uri = resolve_dialogue_image_uri(
+            content_cipher, row.image_uri, row.image_uri_encrypted, row.image_uri_nonce
+        )
+        turn_schema.image_analysis = resolve_dialogue_image_analysis(
+            content_cipher,
+            row.image_analysis,
+            row.image_analysis_encrypted,
+            row.image_analysis_nonce,
         )
         turns.append(turn_schema)
     payload = SessionGetResponse(dialogue=dialogue.to_schema(), turns=turns)
