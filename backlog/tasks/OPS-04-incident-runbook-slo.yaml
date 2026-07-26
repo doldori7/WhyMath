@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: docs
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on:
@@ -15,10 +15,12 @@ acceptance:
   - "핵심 사용자 경로 최소 SLO(가용성·지연) 정의"
   - "인시던트 대응 런북(탐지→완화→회고) — 검증 없는 안내 금지 원칙 적용"
   - OPS-01 알림과 연동된 대응 트리거 명시
-artifacts: []
+artifacts:
+  - 426cc42
 paths:
   - "docs/architecture/**"
   - "docs/standards/**"
+  - "tests/backend/ops/**"
 session: null
 notes: "1세션=1태스크 규약 — 동일 세션이 OPS-03을 선행 claim 중이라 claim 반납(구현은 병렬 진행, OPS-03 done 후 재claim하여 등재)"
 updated: 2026-07-26
