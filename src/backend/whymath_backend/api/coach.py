@@ -60,6 +60,7 @@ from whymath_backend.api._rate_limit import (
 )
 from whymath_backend.config import get_settings
 from whymath_backend.db.models.activity import AttemptEvent as AttemptEventORM
+from whymath_backend.db.models.concept import Concept
 from whymath_backend.db.models.dialogue import Dialogue as DialogueORM
 from whymath_backend.db.models.dialogue import DialogueTurn as DialogueTurnORM
 from whymath_backend.db.models.problem import Problem as ProblemORM
@@ -122,12 +123,15 @@ from whymath_backend.l4.misconception.shadow import (
     observe_misconception_shadow,
 )
 from whymath_backend.l4.misconception.warmstart import assemble_warmstart_probe_hints
+from whymath_backend.l4.pedagogy.k_type_resolver import k_type_query
+from whymath_backend.l4.pedagogy.pack_registry import get_pack
 from whymath_backend.l4.prerequisite_coaching import recommend_prerequisite_coaching
 from whymath_backend.l4.socratic.categories import SocraticCategory
 from whymath_backend.schema.dialogue import Dialogue as DialogueSchema
 from whymath_backend.schema.dialogue import DialogueTurn as DialogueTurnSchema
 from whymath_backend.schema.enums import ContentType, EventType, Persona, StepType, TurnRole
 from whymath_backend.schema.event_data_contract import build_event_data
+from whymath_backend.schema.pedagogy_pack import PedagogyPack
 
 router = APIRouter(prefix="/v1", tags=["coach"])
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
@@ -437,6 +441,7 @@ def _build_response_payload(
     server_theta: float | None = None,
     matches: list[MisconceptionMatch] | None = None,
     misconception_hypotheses: list[MisconceptionHypothesis] | None = None,
+    pack: PedagogyPack | None = None,
 ) -> tuple[
     PedagogyDecision,
     list[MisconceptionMatch],
@@ -480,6 +485,7 @@ def _build_response_payload(
         body.polya_state,
         mastery_level=level,
         misconception_hypotheses=misconception_hypotheses,
+        pack=pack,
     )
     # slice 106: 주입된 결합 matches 우선·미주입(sync 직접호출·게이트 off 경로)이면 substring
     # diagnose 폴백(현행 비트동일). combine_diagnoses가 substr 우선이라 resolved[0]은 substr가
@@ -758,6 +764,29 @@ async def _server_mastery_for(
     if concept_id is None:
         return None
     return await get_current_mastery(session, user_id, concept_id)
+
+
+async def _pack_for(session: AsyncSession, problem_id: uuid.UUID | None) -> PedagogyPack | None:
+    """문항 PRIMARY 개념 → k_type → 교수법 팩 해석 — coach 세션/턴 GA 배선(PED-01 후속).
+
+    게이트(`pedagogy_pack_prompt_enabled`)가 off면 **조기 None**(팩 조회 자체 skip → 완전
+    no-op·회귀 0). `problem_id` None(stateless)이면 None. 문항 PRIMARY 개념(없으면 TESTED
+    폴백·`get_primary_concept_id`)의 `code`를 해석하고, 그 code로 학습목표 k_type을 찾아 팩을
+    가져온다(`_server_mastery_for`와 동형 해석 seam·요청 AsyncSession 직접 실행). 어느 단계든
+    미매핑·미존재면 graceful None → `decide`가 base_system 무변경(pack None이면 회귀 0).
+    """
+    if problem_id is None or not get_settings().pedagogy_pack_prompt_enabled:
+        return None
+    concept_id = await get_primary_concept_id(session, problem_id)
+    if concept_id is None:
+        return None
+    code = await session.scalar(select(Concept.code).where(Concept.concept_id == concept_id))
+    if code is None:
+        return None
+    k_type = await session.scalar(k_type_query(str(code)))
+    if k_type is None:
+        return None
+    return get_pack(str(getattr(k_type, "value", k_type)))
 
 
 def _theta_reading_reliable(reading: AbilityReading) -> bool:
@@ -1338,6 +1367,7 @@ async def create_session(
                 warmstart_outside_mids=warmstart_mids,
             )
         )
+    pack = await _pack_for(session, body.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -1347,6 +1377,7 @@ async def create_session(
             server_theta=server_theta,
             matches=outcome.matches,
             misconception_hypotheses=active_hypotheses,
+            pack=pack,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)
@@ -1553,6 +1584,7 @@ async def append_turns(
                 warmstart_outside_mids=warmstart_mids_turn,
             )
         )
+    pack = await _pack_for(session, dialogue.problem_id)
     decision, matches, intervention, lthc, entry_category, solution_coaching = (
         _build_response_payload(
             body,
@@ -1562,6 +1594,7 @@ async def append_turns(
             server_theta=server_theta,
             matches=outcome.matches,
             misconception_hypotheses=active_hypotheses,
+            pack=pack,
         )
     )
     intervention = _intervention_from_hypotheses_or(active_hypotheses, intervention)

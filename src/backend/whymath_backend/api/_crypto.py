@@ -231,6 +231,57 @@ def resolve_dialogue_content(
     return content_plain
 
 
+def build_evidence_payload_cipher(settings: Any) -> MultiKeyCipher | None:
+    """`Settings`에서 미성년 학습 증거 payload(`evidence_event.payload_encrypted`)용 cipher 생성.
+
+    `build_dialogue_content_cipher`와 *동일 조립 로직*(`_multikey_from_raw`)이나 **키 소스가 분리**
+    된다(`evidence_payload_encryption_key`·`evidence_payload_decryption_fallback_keys`) — dialogue·
+    device secret 키와 별개라 한 키 유출의 폭발 반경을 자산 간 격리한다. primary 키 미설정이면
+    None(암호화 비활성 → 증거는 메타 전용으로만 적재·B1).
+
+    `settings: Any` — `whymath_backend.config.Settings` 순환 import 회피(typing-only 명시).
+    """
+    return _multikey_from_raw(
+        settings.evidence_payload_encryption_key.get_secret_value(),
+        settings.evidence_payload_decryption_fallback_keys.get_secret_value(),
+    )
+
+
+def encrypt_evidence_payload(
+    cipher: SupportsEnvelope | None, payload: str | None
+) -> tuple[bytes | None, bytes | None]:
+    """증거 payload 저장용 — `(payload_encrypted, payload_nonce)` 2-튜플 결정.
+
+    **dialogue와 다른 점**: `evidence_event`에는 *평문 컬럼이 없다*. 따라서 cipher 미설정이거나
+    payload가 None이면 `(None, None)`(메타 전용 — 미성년 원문 payload를 평문으로 저장하지 *않는다*·
+    B1). cipher 있으면 `(ciphertext, nonce)`. 3-튜플(평문 폴백)인 대화 본문과 의도적으로 다르다.
+    """
+    if cipher is None or payload is None:
+        return None, None
+    ciphertext, nonce = cipher.encrypt(payload)
+    return ciphertext, nonce
+
+
+def resolve_evidence_payload(
+    cipher: SupportsEnvelope | None,
+    payload_encrypted: bytes | None,
+    payload_nonce: bytes | None,
+) -> str | None:
+    """저장된 증거 payload 복호 — 노출(감사·분석) 직전. 없으면 None.
+
+    암호화 행(payload_encrypted+nonce)인데 *cipher 미설정*이면 `RuntimeError`(조용한 유실/빈 응답
+    대신 *시끄러운* 실패 — 운영자가 키 유실/미설정을 즉시 인지). 그 외(메타 전용 행)는 None.
+    """
+    if payload_encrypted is not None and payload_nonce is not None:
+        if cipher is None:
+            raise RuntimeError(
+                "암호화된 증거 payload이나 복호 키가 미설정입니다 — "
+                "`WHYMATH_EVIDENCE_PAYLOAD_ENCRYPTION_KEY`를 확인하세요(키 유실 시 복호 불가)."
+            )
+        return cipher.decrypt(payload_encrypted, payload_nonce)
+    return None
+
+
 def require_dialogue_content_cipher(settings: Any) -> MultiKeyCipher | None:
     """SEC-01: cipher를 만들되, **프로덕션 추정 환경에서 키가 없으면 거부**한다(fail-closed).
 
@@ -333,14 +384,17 @@ __all__ = [
     "SecretCipher",
     "SupportsEnvelope",
     "build_dialogue_content_cipher",
+    "build_evidence_payload_cipher",
     "build_secret_cipher",
     "encrypt_dialogue_content",
     "encrypt_dialogue_image_analysis",
     "encrypt_dialogue_image_uri",
+    "encrypt_evidence_payload",
     "encrypt_secret_for_storage",
     "require_dialogue_content_cipher",
     "resolve_dialogue_content",
     "resolve_dialogue_image_analysis",
     "resolve_dialogue_image_uri",
+    "resolve_evidence_payload",
     "resolve_stored_secret",
 ]
