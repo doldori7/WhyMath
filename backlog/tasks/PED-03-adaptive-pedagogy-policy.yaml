@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 5
 owner: claude
 depends_on:
@@ -15,9 +15,10 @@ requires_gates: []
 acceptance:
   - "교수법 효과 측정(학생군×개념×오개념유형: 정답률·체류·재발률·장기파지) 파이프라인"
   - "contextual bandit policy + 안전제약(교수학#3 위반 전략 행동공간 배제) + 오프폴리시 평가·강등전 통과 후 규칙표 대체"
-artifacts: []
+artifacts:
+  - "l2/pedagogy_evidence.py + api/study.py + l4/pedagogy/adaptive/{effectiveness,policy}.py + harness/pedagogy_policy_eval.py — 처치 기록 좌석 신설·supply 첫 배선·안전제약 bandit(미승격·게이트 exit 1 정직 표기). 실 PG 통합 227 passed. scope_drift warn: 태스크 paths가 l4/pedagogy/adaptive/**만 선언해 l2·api·harness·tests가 밖 — paths 수정 CLI 부재라 우회 없이 경고 유지."
 paths:
   - "src/backend/whymath_backend/l4/pedagogy/adaptive/**"
 session: null
 notes: "04d §3 정본. 장기 해자. 측정 게이트('측정 없는 도입 없음')·v1 규칙표는 즉시·policy는 강등전 승격."
-updated: 2026-07-24
+updated: 2026-07-26
