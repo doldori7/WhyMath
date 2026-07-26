@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-05-cache-degradation-guard
+title: "Redis 캐시 장애의 학생 대면 전파 차단 — get/set 예외 가드 + 소켓 타임아웃 (OPS-04 발견)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "RedisCache get/set 실패가 학생 요청을 깨지 않고 캐시 미스로 강등 — 예외 타입명 로그 필수(침묵 실패 금지)"
+  - "소켓 타임아웃 설정 — 무응답 Redis에서 요청 무한 대기(워커 고갈) 차단"
+  - "강등이 관측 가능해야 함 — 강등 계수 노출(OPS-01 이중 회계 원칙)·변별력 테스트 동반"
+artifacts:
+  - 3b2f083
+paths:
+  - "src/backend/whymath_backend/l3/cache/**"
+  - src/backend/whymath_backend/config.py
+  - "tests/backend/l3/**"
+session: null
+notes: "OPS-04 조사 발견: /health/ready 200인데 Redis 다운 시 l3/pipeline.py cache.get() 무가드로 생성 경로 5xx. redis.required=false는 레디니스 *정책*일 뿐 동작 보증이 아니었음. 소켓 타임아웃 부재는 별개 축(무응답 시 무한 대기). 정본: docs/standards/incident_response_slo.md 함정 ④."
+updated: 2026-07-26

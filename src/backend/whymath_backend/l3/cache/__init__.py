@@ -5,8 +5,18 @@
 캐시(L1 로컬 + L2 Redis)·캐시 무효화 정책 등은 후속 슬라이스 범위다.
 """
 
-from whymath_backend.l3.cache.redis_cache import RedisCache
+from whymath_backend.l3.cache.redis_cache import (
+    CacheDegradationCounter,
+    CacheDegradationSnapshot,
+    RedisCache,
+    cache_degradation_snapshot,
+    reset_cache_degradation,
+)
 
 __all__ = [
+    "CacheDegradationCounter",
+    "CacheDegradationSnapshot",
     "RedisCache",
+    "cache_degradation_snapshot",
+    "reset_cache_degradation",
 ]
