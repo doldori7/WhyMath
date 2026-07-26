@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: MGMT-01-guardian-real-verification
+title: "법정대리인 실 본인확인 설계·도입 — StubGuardianVerifier 대체 (변호사 자문 선행)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: backend
+status: todo
+priority: 1
+owner: kiki
+depends_on: []
+requires_gates: []
+acceptance:
+  - "실 본인확인 방식(휴대폰 본인인증 등) 법적 적정성 변호사 자문 — 법령 유래 사람 의사표시"
+  - "자문 결과 기반 verification_method 실구현으로 StubGuardianVerifier 대체 (consent_grant.py)"
+  - "PII 최소수집·해시 저장 원칙 유지 (guardian_email_hash 평문 금지)"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/consent_grant.py
+  - src/backend/whymath_backend/schema/parental_consent.py
+  - "docs/legal/**"
+session: null
+notes: "CLAUDE.md '법령 유래 절차의 기계 대체 금지' → owner=kiki(사람 소유·HARN-06 경로). 미성년 서비스 런칭 차단 요인. 관리 축 상환 #1."
+updated: 2026-07-26
