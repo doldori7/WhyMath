@@ -337,6 +337,27 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-26 (구현·OPS-03·OPS-04): **운영 축 상환 #3·#4 — 배포 CD·IaC + 장애 런북·SLO. 부수 발견: `tests/infra` 192건이 CI 미실행이었음** (claude 구현, Kiki "다음 진행")
+
+**컨텍스트**: 3축 공백 검토(#600) 등재 운영 태스크 나머지 2건. OPS-01·OPS-02 머지(#603) 후 병렬 서브에이전트 구현.
+
+**🔴 부수 발견 (이번 작업의 최대 소득)**: `src/backend/pyproject.toml`의 `testpaths=["../../tests/backend"]` 때문에 **`tests/infra/`를 어떤 CI 잡도 실행하지 않고 있었다** — harness-integrity는 `tests/harness`만, infra-shell은 bash 문법만. 즉 OPS-02가 방금 landed한 백업 스크립트 계약 동결을 포함해 192건이 *아무것도 게이트하지 못하는 위장* 상태였다(CLAUDE.md "측정 없는 기계 게이트" 금기 해당). OPS-03에서 `infra-contracts` 잡으로 배선하고 **배선 자체를 테스트로 동결**(`test_ci_actually_runs_infra_contract_tests`). 의존성은 가정하지 않고 격리 venv 실측으로 확정(pytest+pyyaml만→30 fail, +pytest-asyncio→4 fail, +sqlalchemy→196 pass).
+
+**OPS-03** (`923c0c9`): `Dockerfile`(멀티스테이지·비루트 uid 10001·시크릿 ARG/ENV 0·HEALTHCHECK=`/health/live`) + `docker-compose.prod.yml`(demo와 분리 — 영속 named volume·trust 부재·`${VAR:?사유}` fail-closed로 미성년 대화 암호화 키 미설정 시 **기동 거부**) + CI `docker-build` 잡(빌드→`/health/live` 200 스모크→비루트 확인→시크릿 미포함→compose fail-closed 양방향) + `deploy.yml`(workflow_dispatch 전용·environment 승인·대상 시크릿 미설정 시 이름 나열 후 exit 1) + 런북. **결정 ①**: 프로덕션 인프라 미프로비저닝이므로 "존재하지 않는 대상으로 배포하는 가짜 잡"을 만들지 않고, CI에서 진짜 검증 가능한 것(빌드·기동 스모크)만 게이트로 걸고 배포 실행은 수동 승인+런북으로 분리·그 경계를 문서화. **결정 ②**: deploy를 ci.yml이 아닌 별도 워크플로로 분리 — ci.yml에 workflow_dispatch를 얹으면 backend(35분)·mobile·web 잡이 전부 발화(기존 `if` 가드가 pull_request/schedule만 거름). **비자명 계약**: 런타임이 `parents[5]`로 레포 루트를 계산해 `data/corpus`를 읽으므로(`pack_registry.py:34`) 빌드 컨텍스트=레포 루트 + **editable 설치** 필수 — 테스트로 동결. 변이 주입 21종 전건 검출. 한계(정직): **docker 데몬 부재로 실제 빌드 미검증 — CI 첫 실행이 최초 판정**("빌드된다"고 단정하지 않음)·레지스트리/TLS/무중단 배포 미도입·기존 `whymath-pg`(5433) 이관 미실시.
+
+**OPS-04** (`426cc42`): `docs/standards/incident_response_slo.md` — SLO 5종 중 에러율(≤1%/조치선 5%)·p95 지연(≤3s/조치선 5s)·레디니스는 측정, **가용성·경로별 지연은 "미측정"으로 정직 표기**(외부 프로브 부재·`ServiceMetrics`에 경로 차원 없음 → 근거 없는 99.9% 선언 회피). 탐지→SEV분류→완화→복구→회고, SEV-1=잘못된 수학·미성년 PII 노출(가용성보다 상위 — 의사결정 우선순위 #1). 간접 신호 금지 적용(pid/프로세스 존재 대신 리스너 소유 프로세스+`uptime_seconds` 좀비 판별). `tests/backend/ops/test_slo_contract.py` — **문서↔코드 드리프트 동결**(문서 임계≠Settings 기본값이면 실패, 문서가 없는 라우트를 안내하면 실패), 변별력 4방향 실측. **발견**: `/health/ready` 200인데 학생은 실패하는 조합 존재 — Redis 다운 시 `l3/pipeline.py`의 `cache.get()` 무가드로 생성 경로가 5xx(레디니스의 `required=false`는 *정책*일 뿐 동작 보증 아님). 문서에 함정으로 기술·코드 수정은 범위 밖(후속 후보).
+
+**규약 처리**: OPS-03·OPS-04 동시 claim이 `validate`에서 "1세션=1태스크" 위반으로 **거부** → 우회(YAML 손편집) 없이 OPS-04 claim을 CLI로 반납(사유 이벤트 기록), 구현은 병렬·등재는 순차. 미해결 경고: `ci.yml`이 ARCH-14(타 세션 `claude/review-applicable-items-8rrtau`) 범위와 `path_overlap` — 머지 순서 확인 필요.
+
+### 2026-07-26 (구현·OPS-01·OPS-02): **운영 축 상환 #1·#2 — 서비스 관측성·알림 + DB 백업·DR** (claude 구현, Kiki "OPS-01·OPS-02")
+
+**컨텍스트**: 3축 공백 검토(#600)가 등재한 운영 태스크 첫 2건. 병렬 서브에이전트 구현(파일 범위 분리 — backend vs scripts/docs).
+
+**OPS-01** (`7be5026`): `ops/service_health.py` — DB(SELECT 1)·Redis(PING)·LLM 라우터 딥체크 + `ServiceMetrics`(총요청·5xx·최근창 에러율·지연 p95·uptime) + `evaluate_alerts`/`AlertLogNotifier`(상태 전이 시에만 로그). `GET /health/live`·`GET /health/ready` 신설(기존 `/health`·`/status` 불변). **결정 ①**: ready 판정은 DB 도달성만 필수(학생 대면 경로 전제) — Redis·LLM은 보고만(required=false), not ready는 503(업타임 프로브가 HTTP로 판정 — 보고형 200 `/status`와 역할 분리). **결정 ②**: 판정치는 인프로세스 산출·HTTP 노출(SaaS 단독 의존 금지 — cost_probe 선례)·오류 문자열에 예외 타입명(침묵 실패 금지, 미들웨어 계측 실패도 요청을 깨지 않되 타입명 warning + 회귀 동결). Settings 3키(`ops_error_rate_alert_threshold` 0.05·`ops_latency_p95_alert_ms` 5000·`ops_metrics_window_size` 500). 신규 31건·api+ops 회귀 1140 passed·mypy --strict 417파일 무이슈. 한계(정직): 다중 워커 시 워커별 독립 계측(합산 후속)·임계는 재기동 반영.
+
+**OPS-02** (`e05e93f`): `scripts/backup/backup_whymath_pg.ps1`(**ASCII 전용** — cp949 logconfig 사고 선례를 `tests/infra/test_backup_script.py` 회귀로 동결) — 컨테이너 내 pg_dump -Fc → **`pg_restore --list` 정합 검증(회수 전·손상 덤프면 exit 1)** → docker cp 회수 → 크기>0 검증 → `-RetentionDays`(14) 보존·최신 1개 만료 면제(전멸 방지). `docs/architecture/db_backup_dr_runbook.md` — 6항목 브리핑·작업 스케줄러 등록+자가검증·scratch 컨테이너(55433) 복구 리허설·행수 대조(실측 테이블 8종)·미성년 PII 취급(봉투 암호화 실태 표 + **비암호화 컬럼 정직 기술**·외부 반출 금지·RetentionDays=PIPA 파기 연결). 한계(정직): .ps1 실행 검증은 Kiki 머신 첫 실행이 최종(리눅스 환경 — 런북 자가검증이 실패를 드러내도록 설계)·오프사이트 사본·백업 파일 자체 암호화·WAL/PITR은 후속 후보(런북 §6).
+
+**해금**: OPS-03(배포 CD·IaC ← OPS-02)·OPS-04(장애 런북·SLO ← OPS-01).
 ### 2026-07-26 (구현·ARCH-14 ③·완결): **recommended_visual_styles → 전용 Overlay `concept_visual_style` 이관 — Concept Purity 부채 0건·ARCH-14 완전 종료** (claude, Kiki "ARCH-13 먼저"→"검토해줘"→"네")
 
 **컨텍스트**: ARCH-14 마지막 항목 ③. Kiki가 "ARCH-13 먼저" 지정했으나 ARCH-13은 이미 병렬 세션 #595(원자 축 울타리)로 done → ③ 해금 확인. "검토해줘"로 설계 검토(Explore 2병렬: ADR/Overlay 선례 + 소비처 표면) 후 **② 전용 Overlay 신설** 판정("검토 결론"): 기존 `concept_visualization`은 자기 docstring이 "양식은 다른 축"이라 명시·"행 존재=분류됨" 불변식 파괴 위험 → 축별 전용 테이블이 정합.

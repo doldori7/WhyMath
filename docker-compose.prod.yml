@@ -1,0 +1,149 @@
+# WhyMath 운영 배포 스택 (OPS-03) — app(uvicorn) + PostgreSQL 16(pgvector) + Redis 7.
+#
+# ★ docker-compose.demo.yml과 혼동 금지 (역할이 정반대다):
+#     demo = 일회용 시연(trust 인증·볼륨 없음·55432·stop_demo가 데이터째 폐기)
+#     prod = 영속 운영(비밀번호 인증·named volume·포트 미공개·restart 정책)
+#   이 파일에는 `POSTGRES_HOST_AUTH_METHOD: trust`가 없다 — 있으면 계약 위반이며
+#   tests/infra/test_deploy_artifacts.py가 그 부재를 동결한다.
+#
+# ★ staging/prod 분리 방식 = **단일 compose 파일 + 환경별 env 파일 + 이름 격리**.
+#   왜 override 파일(-f base -f prod)이 아니라 env 파일인가: 두 환경의 *토폴로지가 동일*하고
+#   다른 것은 자격증명·이미지 태그·바인딩 포트뿐이다. override로 나누면 토폴로지가 두 벌이 되어
+#   한쪽만 고친 헬스체크·볼륨 같은 드리프트가 생긴다(단일 진실 원천 — CLAUDE.md "유지보수 지옥"
+#   방어). 토폴로지가 실제로 갈라지는 날(예: prod만 리버스 프록시·레플리카)에는 그때 override를
+#   도입한다. 실행:
+#     docker compose --env-file deploy/staging.env -f docker-compose.prod.yml up -d
+#     docker compose --env-file deploy/prod.env    -f docker-compose.prod.yml up -d
+#   `${DEPLOY_ENV}`가 컨테이너·볼륨 이름을 갈라 한 호스트에 두 환경이 공존해도 서로의 데이터를
+#   덮지 않는다(env 파일에 COMPOSE_PROJECT_NAME도 함께 둔다 — .env.prod.example 참조).
+#
+# ★ 시크릿 0 (fail-closed): 자격증명은 전부 `${VAR:?사유}` 형식이다 — 미설정이면 compose가
+#   *기동 자체를 거부*하고 어느 변수가 비었는지 출력한다. 기본값으로 조용히 뜨는 경로가 없다.
+#   이 성질은 CI(docker-build 잡)가 "빈 env → config 실패"를 실제로 검사해 변별력을 증명한다.
+#
+# ★ 미프로비저닝 경계(정직 기술): TLS 종단·리버스 프록시·클라우드(GCP/AWS) 대상은 아직 없다.
+#   이 파일은 도커가 도는 단일 호스트(현재 Phaiakes9)를 전제로 하며, 공개 인터넷 노출 전에
+#   프록시·TLS·방화벽이 선행돼야 한다. 상세는 docs/architecture/deployment_cd_runbook.md §8.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # 태그는 **불변 태그**(git short SHA 등)만 쓴다 — `latest`는 롤백 시 "어느 코드로
+    # 되돌아가는지"를 잃어버려 되돌림 자체가 불가능해진다(런북 §6).
+    image: whymath-backend:${WHYMATH_IMAGE_TAG:?WHYMATH_IMAGE_TAG 미설정 - 불변 이미지 태그(git short SHA 등)를 env 파일에 지정하라. latest 금지(롤백 불가)}
+    container_name: whymath-${DEPLOY_ENV:?DEPLOY_ENV 미설정 - staging 또는 prod}-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # DB·Redis 주소는 compose 네트워크 내부 이름(db·redis)이다 — 호스트 포트 공개 불요.
+      # 비밀번호는 URL에 그대로 들어가므로 **URL-safe 문자만**(hex/base64url) 써야 한다
+      # (런북 §1의 생성 명령이 hex를 준다). 값 자체는 env 파일에만 존재한다.
+      WHYMATH_DATABASE_URL: postgresql+asyncpg://whymath:${WHYMATH_DB_PASSWORD:?WHYMATH_DB_PASSWORD 미설정 - prod DB는 trust 인증 금지}@db:5432/whymath
+      WHYMATH_REDIS_URL: redis://:${WHYMATH_REDIS_PASSWORD:?WHYMATH_REDIS_PASSWORD 미설정 - Redis 무인증 금지}@redis:6379/0
+      # 인증 서명 키 — 비면 토큰 발급·검증이 불가(config.py jwt_secret_key).
+      WHYMATH_JWT_SECRET_KEY: ${WHYMATH_JWT_SECRET_KEY:?WHYMATH_JWT_SECRET_KEY 미설정 - 인증 불가}
+      # ★ 미성년 대화 본문 at-rest 봉투 암호화 키. 운영에서 *필수*로 건다 — 비면 평문 저장
+      #   폴백이라 CLAUDE.md 절대 금기("미성년자 채팅 데이터를 평문으로 저장 금지")를 위반한다.
+      #   fail-closed가 그 금기의 기계적 시행 장치다.
+      WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY: ${WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY:?WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY 미설정 - 미성년 대화 평문 저장 금지(CLAUDE.md 절대 금기)}
+      # 디바이스 secret at-rest 키(대화 키와 **분리** — 한 키 유출이 다른 자산으로 안 번지게).
+      WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY: ${WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY:?WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY 미설정 - 디바이스 secret 평문 저장 금지}
+      # 선택(빈 값 허용): 비면 증거는 *메타 전용*으로만 적재된다(원문 payload 미저장) —
+      # 평문 노출 경로가 아니므로 fail-closed 대상이 아니다.
+      WHYMATH_EVIDENCE_PAYLOAD_ENCRYPTION_KEY: ${WHYMATH_EVIDENCE_PAYLOAD_ENCRYPTION_KEY:-}
+      # 선택(빈 값 허용): 비면 해당 기능이 스스로 비활성/폴백된다(클라우드 LLM 미배선·
+      # Langfuse no-op). 관측 장애가 학생 경로를 깨뜨리지 않는다는 기존 설계 그대로.
+      WHYMATH_ANTHROPIC_API_KEY: ${WHYMATH_ANTHROPIC_API_KEY:-}
+      WHYMATH_LANGFUSE_PUBLIC_KEY: ${WHYMATH_LANGFUSE_PUBLIC_KEY:-}
+      WHYMATH_LANGFUSE_SECRET_KEY: ${WHYMATH_LANGFUSE_SECRET_KEY:-}
+      WHYMATH_LANGFUSE_HOST: ${WHYMATH_LANGFUSE_HOST:-https://cloud.langfuse.com}
+      # 로컬 LLM(Ollama)은 컨테이너 밖 호스트에서 돈다 — host.docker.internal 경유
+      # (아래 extra_hosts가 리눅스에서도 이 이름을 게이트웨이로 해석하게 한다).
+      WHYMATH_OLLAMA_HOST: ${WHYMATH_OLLAMA_HOST:-http://host.docker.internal:11434}
+    extra_hosts:
+      # Docker Desktop(Windows/mac)은 기본 제공하지만 리눅스 데몬은 아니다 — 명시해 동작을
+      # 두 플랫폼에서 동일하게 만든다(환경 추론 금지).
+      - "host.docker.internal:host-gateway"
+    ports:
+      # 기본 바인딩은 127.0.0.1 — 앞단 프록시/TLS 없이 LAN·인터넷에 학생 API를 그대로 열지
+      # 않는다. 실기기 시연처럼 LAN 노출이 필요하면 env에서 APP_BIND_ADDR=0.0.0.0으로
+      # *의식적으로* 바꾼다(그 트레이드오프는 런북 §8에 기술).
+      - "${APP_BIND_ADDR:-127.0.0.1}:${APP_PORT:?APP_PORT 미설정 - staging/prod가 서로 다른 포트를 써야 한 호스트 공존이 가능하다}:8000"
+    logging:
+      # 로그 무한 증가로 디스크가 차서 DB까지 멈추는 사고 방지(단일 호스트라 파급이 크다).
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    # pgvector 포함 이미지 필수 — alembic 마이그레이션이 `CREATE EXTENSION vector`를 실행한다
+    # (임베딩·의미검색). 순정 postgres:16은 vector.control이 없어 upgrade가 실패한다
+    # (demo compose·CI backend-migrations 잡과 동일 이미지 — 환경 표류 방지).
+    image: pgvector/pgvector:pg16
+    container_name: whymath-${DEPLOY_ENV:?DEPLOY_ENV 미설정 - staging 또는 prod}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: whymath
+      POSTGRES_DB: whymath
+      POSTGRES_PASSWORD: ${WHYMATH_DB_PASSWORD:?WHYMATH_DB_PASSWORD 미설정 - prod DB는 trust 인증 금지}
+      # demo와의 결정적 차이: trust 금지. 신규 initdb에 scram-sha-256을 강제한다.
+      # (기존 볼륨이 이미 있으면 initdb가 돌지 않으므로 이 인자는 무효 — 그 경우 pg_hba는
+      #  볼륨 생성 당시 설정을 따른다. 런북 §8 "기존 볼륨 이관" 항목 참조.)
+      POSTGRES_INITDB_ARGS: "--auth-host=scram-sha-256 --auth-local=scram-sha-256"
+    volumes:
+      # ★ named volume = 영속. demo(볼륨 없음·컨테이너 삭제 시 데이터 소멸)와의 핵심 차이.
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U whymath -d whymath"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    # 호스트 포트를 **공개하지 않는다**(의도적): 앱은 compose 네트워크로 붙고, 관리 접속은
+    # `docker exec whymath-<env>-db psql -U whymath`로 한다. 포트를 열지 않으면 5432(타
+    # 프로젝트)·5433(기존 whymath-pg)·55432(demo)와의 충돌도 원천적으로 없다.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  redis:
+    image: redis:7-alpine
+    container_name: whymath-${DEPLOY_ENV:?DEPLOY_ENV 미설정 - staging 또는 prod}-redis
+    restart: unless-stopped
+    # appendonly: 세션·캐시가 재시작으로 통째로 날아가는 것 방지(캐시라도 콜드 스타트 비용이
+    # LLM 호출비로 직결된다). requirepass: 포트를 안 열어도 인증을 건다(다층 방어).
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${WHYMATH_REDIS_PASSWORD:?WHYMATH_REDIS_PASSWORD 미설정 - Redis 무인증 금지}"]
+    environment:
+      # 헬스체크 셸이 읽는 값(컨테이너 내부 전용). compose의 `$$`는 리터럴 `$` 이스케이프다.
+      REDIS_PASSWORD: ${WHYMATH_REDIS_PASSWORD:?WHYMATH_REDIS_PASSWORD 미설정 - Redis 무인증 금지}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      # 인증이 걸려 있으므로 -a 없이는 PONG이 오지 않는다 → 이 검사는 "인증까지 성립"을 본다.
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  db-data:
+    # 볼륨 이름에 환경을 박아 staging이 prod 데이터를 절대 건드리지 못하게 한다.
+    # (프로젝트명 격리에 더한 이중 안전장치 — 이름이 다르면 오조작해도 다른 볼륨이다.)
+    name: whymath-${DEPLOY_ENV:?DEPLOY_ENV 미설정 - staging 또는 prod}-db-data
+  redis-data:
+    name: whymath-${DEPLOY_ENV:?DEPLOY_ENV 미설정 - staging 또는 prod}-redis-data

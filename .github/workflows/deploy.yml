@@ -1,0 +1,235 @@
+# WhyMath 배포(CD) — **수동 트리거 + environment 승인** 전용 워크플로 (OPS-03)
+#
+# ★ 현재 상태(정직 기술): **대상 인프라(GCP/AWS·배포 호스트)는 미프로비저닝**이다.
+#   지금 이 워크플로를 돌리면 preflight가 "어떤 시크릿이 없어서 못 한다"를 이름으로 출력하고
+#   **실패**한다. 존재하지 않는 대상에 배포한 척하는 조용한 성공은 만들지 않는다
+#   (CLAUDE.md "변별력 없는 검증 스텝 금지"·"측정 없는 기계 게이트 금지").
+#   아래 배포 스텝은 **한 번도 실 호스트에 실행된 적 없는 골격**이다 — 첫 성공 실행 기록이
+#   남기 전까지 "검증된 경로"로 취급하지 않는다. 그때까지 배포의 정본은 사람이 실행하는 런북:
+#   docs/architecture/deployment_cd_runbook.md
+#
+# ★ 왜 ci.yml이 아니라 별도 파일인가: ci.yml에 workflow_dispatch를 얹으면 그 이벤트에서
+#   무거운 잡(backend 35분·mobile·web·PG/Neo4j 통합)이 전부 발화한다 — 그 잡들의 if 가드는
+#   pull_request/schedule만 걸러내기 때문이다. 배포 1회에 1시간 넘는 러너를 태우거나 7개 잡의
+#   if를 모두 손대야 한다. 배포는 트리거·권한·승인 규칙이 CI와 다른 별개 관심사라 파일을
+#   분리했다. *진짜 게이트*(이미지 빌드·기동 스모크)는 ci.yml의 `docker-build` 잡에 남아
+#   PR마다 실행된다.
+#
+# ★ 롤백 = 이 워크플로를 **이전 image_tag로 다시 실행**하는 것이다(+ 필요 시
+#   skip_migration=true). 판단 기준·DB 되돌림·백업 복구 연계는 런북 §6.
+
+name: Deploy (수동 승인)
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "배포 대상 환경"
+        type: choice
+        options: [staging, prod]
+        required: true
+      image_tag:
+        description: "불변 태그(git short SHA 7~40자 또는 vX.Y.Z). latest 금지 — 롤백은 이전 태그 재실행이다"
+        type: string
+        required: true
+      skip_migration:
+        description: "alembic upgrade head 건너뛰기 (롤백 시 보통 true — 런북 §6 판단 기준 참조)"
+        type: boolean
+        default: false
+      reason:
+        description: "배포/롤백 사유 (실행 기록에 남는다)"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # 같은 환경에 두 배포가 겹치지 않게. cancel-in-progress는 **false** — 진행 중인 배포를
+  # 중간에 끊으면 마이그레이션만 돌고 컨테이너는 옛 이미지인 상태로 남을 수 있다.
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # ① preflight — 입력 형식 + 대상 시크릿 존재 검사 (승인 게이트 *앞*)
+  # 사람이 승인 버튼을 누르기 전에 "어차피 못 한다"를 먼저 알린다.
+  # ─────────────────────────────────────────────────────────────────
+  preflight:
+    name: preflight — 입력·시크릿 사전 검사
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: 입력 형식 검사 (불변 태그 강제)
+        env:
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          if [ "$IMAGE_TAG" = "latest" ]; then
+            echo "::error::image_tag=latest 금지 — 롤백이 '어느 코드로 되돌리는지'를 잃는다"
+            exit 1
+          fi
+          if ! printf '%s' "$IMAGE_TAG" | grep -qE '^([0-9a-f]{7,40}|v[0-9]+\.[0-9]+\.[0-9]+)$'; then
+            echo "::error::image_tag 형식 위반 — git short SHA(7~40 hex) 또는 vX.Y.Z만 허용 (받은 값: $IMAGE_TAG)"
+            exit 1
+          fi
+          echo "PASS — image_tag 형식 OK"
+
+      # 시크릿은 *이름만* 검사하고 값은 절대 출력하지 않는다(마스킹에 의존하지 않는다).
+      # 미설정이면 여기서 사유와 함께 실패한다 — 지금 상태(인프라 미프로비저닝)의 정상 결과다.
+      - name: 대상 시크릿 존재 검사 (미설정이면 명시 실패)
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -uo pipefail
+          missing=""
+          for name in DEPLOY_SSH_HOST DEPLOY_SSH_USER DEPLOY_SSH_KEY DEPLOY_SSH_KNOWN_HOSTS DEPLOY_PATH; do
+            value=$(printenv "$name" || true)
+            if [ -z "$value" ]; then
+              missing="$missing $name"
+            else
+              echo "OK  $name (길이 ${#value})"   # 값이 아니라 길이만
+            fi
+          done
+          if [ -n "$missing" ]; then
+            {
+              echo "## 배포 불가 — 대상 인프라 미구성"
+              echo ""
+              echo "다음 리포지토리 시크릿이 비어 있다:**$missing**"
+              echo ""
+              echo "현재 GCP/AWS 배포 호스트는 프로비저닝돼 있지 않다."
+              echo "등록 절차는 \`docs/architecture/deployment_cd_runbook.md\` §7,"
+              echo "수동 배포 절차는 같은 문서 §2~§5를 따른다."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::배포 대상 시크릿 미설정:$missing — 런북 §7 참조. 조용한 성공 대신 명시 실패한다."
+            exit 1
+          fi
+          echo "PASS — 대상 시크릿 전부 설정됨"
+
+  # ─────────────────────────────────────────────────────────────────
+  # ② deploy — GitHub environment 승인 게이트를 통과해야 실행된다
+  #
+  # ⚠ 승인 게이트의 실효성은 **리포 설정에 달려 있다**(정직 기술): environment에
+  #   required reviewers를 등록하지 않으면 GitHub는 환경을 자동 생성하고 *승인 없이* 통과시킨다.
+  #   등록 절차는 런북 §7-3, 미완이면 §8 공백 목록에 남는다.
+  # ─────────────────────────────────────────────────────────────────
+  deploy:
+    name: deploy — ${{ inputs.environment }} (${{ inputs.image_tag }})
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: 배포 파라미터 기록
+        run: |
+          {
+            echo "## 배포 실행"
+            echo "- 환경: \`${{ inputs.environment }}\`"
+            echo "- 이미지 태그: \`${{ inputs.image_tag }}\`"
+            echo "- 마이그레이션 건너뜀: \`${{ inputs.skip_migration }}\`"
+            echo "- 사유: ${{ inputs.reason }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 호스트 키를 known_hosts로 고정한다(StrictHostKeyChecking=yes 유지) — accept-new는
+      # 첫 접속 MITM을 그대로 수용하므로 배포 경로에 쓰지 않는다.
+      - name: SSH 자격 구성 (값 출력 없음)
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+          # 자가검증: 키 파일이 개인키 형식인지(내용은 출력하지 않는다)
+          if ! head -1 ~/.ssh/id_deploy | grep -q 'BEGIN .*PRIVATE KEY'; then
+            echo "::error::DEPLOY_SSH_KEY가 개인키 형식이 아니다(붙여넣기 절단 의심)"
+            exit 1
+          fi
+          echo "PASS — ssh 자격 구성 완료"
+
+      # ⚠ 미검증 골격: 아래 원격 절차는 실 호스트에서 한 번도 실행된 적이 없다.
+      # 순서는 런북 §5(갱신 배포)와 동일하게 유지한다 — 두 경로가 갈라지면 안 된다.
+      - name: 원격 배포 (빌드 → 마이그레이션 → 기동)
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+          SKIP_MIGRATION: ${{ inputs.skip_migration }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' IMAGE_TAG='$IMAGE_TAG' DEPLOY_ENV='$DEPLOY_ENV' SKIP_MIGRATION='$SKIP_MIGRATION' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          ENV_FILE="deploy/${DEPLOY_ENV}.env"
+          test -f "$ENV_FILE" || { echo "환경 파일 없음: $ENV_FILE (런북 §1)"; exit 1; }
+
+          git fetch --prune --tags origin
+          git checkout --detach "$IMAGE_TAG"
+
+          # 이미지 태그는 명령줄 env로 덮어쓴다 — 셸 env가 --env-file 값보다 우선한다.
+          export WHYMATH_IMAGE_TAG="$IMAGE_TAG"
+          docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml build
+
+          if [ "$SKIP_MIGRATION" = "true" ]; then
+            echo "마이그레이션 건너뜀(요청) — 스키마는 현 상태 유지"
+          else
+            docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml \
+              run --rm app alembic upgrade head
+          fi
+
+          docker compose --env-file "$ENV_FILE" -f docker-compose.prod.yml up -d
+          REMOTE
+
+      - name: 배포 후 검증 (컨테이너 healthy + /health/ready 200)
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+          DEPLOY_ENV: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          ssh -i ~/.ssh/id_deploy -o StrictHostKeyChecking=yes -o BatchMode=yes \
+            "$DEPLOY_SSH_USER@$DEPLOY_SSH_HOST" \
+            "DEPLOY_PATH='$DEPLOY_PATH' DEPLOY_ENV='$DEPLOY_ENV' bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd "$DEPLOY_PATH"
+          NAME="whymath-${DEPLOY_ENV}-app"
+          # ① 도커 헬스체크(=이미지의 /health/live)가 healthy가 될 때까지 대기
+          for _ in $(seq 1 30); do
+            status=$(docker inspect -f '{{.State.Health.Status}}' "$NAME" 2>/dev/null || echo "missing")
+            [ "$status" = "healthy" ] && break
+            [ "$status" = "missing" ] && { echo "컨테이너 없음: $NAME"; exit 1; }
+            sleep 2
+          done
+          [ "$(docker inspect -f '{{.State.Health.Status}}' "$NAME")" = "healthy" ] || {
+            echo "라이브니스 미달 — 로그:"; docker logs --tail 100 "$NAME"; exit 1; }
+
+          # ② 레디니스(DB 도달성 포함)는 200이어야 트래픽을 받을 수 있다. 컨테이너 안에서
+          #    호출해 프록시·포트 공개 여부와 무관하게 앱 자체를 판정한다.
+          docker exec "$NAME" python -c "import sys,urllib.request;r=urllib.request.urlopen('http://127.0.0.1:8000/health/ready',timeout=10);sys.exit(0 if r.status==200 else 1)"
+          echo "PASS — healthy + /health/ready 200"
+          REMOTE
+
+      - name: 실패 시 롤백 안내
+        if: failure()
+        run: |
+          {
+            echo "## 배포 실패 — 롤백 안내"
+            echo ""
+            echo "1. 이 워크플로를 **직전 성공 image_tag**로 다시 실행한다"
+            echo "   (\`skip_migration=true\` 여부는 런북 §6 판단 기준으로 결정)."
+            echo "2. 스키마가 이미 앞선 리비전으로 올라갔고 되돌림이 파괴적이면"
+            echo "   OPS-02 백업 복구 경로를 쓴다: \`docs/architecture/db_backup_dr_runbook.md\` §3-5."
+            echo "3. 원격 호스트에서 직접 되돌리는 수동 절차는 런북 §6-1."
+          } >> "$GITHUB_STEP_SUMMARY"

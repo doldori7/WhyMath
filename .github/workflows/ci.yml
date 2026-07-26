@@ -42,6 +42,7 @@ jobs:
       data_pipeline: ${{ steps.filter.outputs.data_pipeline }}
       mobile: ${{ steps.filter.outputs.mobile }}
       web: ${{ steps.filter.outputs.web }}
+      docker: ${{ steps.filter.outputs.docker }}
     steps:
       - name: Checkout (merge commit + 부모 — PR diff용)
         uses: actions/checkout@v4
@@ -58,12 +59,13 @@ jobs:
             echo "data_pipeline=true" >> "$GITHUB_OUTPUT"
             echo "mobile=true" >> "$GITHUB_OUTPUT"
             echo "web=true" >> "$GITHUB_OUTPUT"
+            echo "docker=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           # pull_request의 HEAD는 merge commit — ^1(=base tip) 대비 diff가 곧 PR 변경 전량.
           files=$(git diff --name-only HEAD^1 HEAD)
           printf '변경 파일:\n%s\n' "$files"
-          be=false; dp=false; mo=false; web=false
+          be=false; dp=false; mo=false; web=false; dk=false
           if printf '%s\n' "$files" | grep -qE '^(src/backend/|tests/backend/|conftest\.py$|\.github/workflows/ci\.yml$)'; then
             be=true
           fi
@@ -79,10 +81,18 @@ jobs:
           if printf '%s\n' "$files" | grep -qE '^(src/web/|schemas/|\.github/workflows/ci\.yml$)'; then
             web=true
           fi
+          # OPS-03: 배포 산출물(이미지·compose) 변경 또는 백엔드 소스 변경 시 이미지 빌드·
+          # 기동 스모크를 돌린다. 백엔드 소스를 포함하는 이유 — 이미지는 그 소스를 굽기 때문에
+          # import 오류·기동 실패가 여기서만 잡히는 회귀가 있다(hermetic 유닛은 uvicorn 기동을
+          # 하지 않는다). data/는 제외(코퍼스 변경은 매우 잦고 스모크가 그 내용을 판정하지 않음).
+          if printf '%s\n' "$files" | grep -qE '^(Dockerfile$|\.dockerignore$|docker-compose\.prod\.yml$|\.env\.prod\.example$|src/backend/|tests/infra/test_deploy_artifacts\.py$|\.github/workflows/(ci|deploy)\.yml$)'; then
+            dk=true
+          fi
           echo "backend=$be" >> "$GITHUB_OUTPUT"
           echo "data_pipeline=$dp" >> "$GITHUB_OUTPUT"
           echo "mobile=$mo" >> "$GITHUB_OUTPUT"
           echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "docker=$dk" >> "$GITHUB_OUTPUT"
 
   # ─────────────────────────────────────────────────────────────────
   # L1 데이터 파이프라인 (현재 유일하게 패키지화된 영역)
@@ -558,6 +568,186 @@ jobs:
 
       - name: Vite build (정적 번들 회귀)
         run: npm run build
+
+  # ─────────────────────────────────────────────────────────────────
+  # 인프라 계약 테스트 (tests/infra) — hermetic·docker 불요·항상 실행
+  #
+  # 배선 근거(2026-07-26 실측): 이 잡이 생기기 전까지 `tests/infra/`는 **어느 CI 잡도
+  # 실행하지 않았다** — backend 잡의 testpaths는 `tests/backend`, harness-integrity는
+  # `tests/harness`, infra-shell은 bash 문법 검사뿐이었다(`grep 'tests/infra' ci.yml` 0건).
+  # 운영 자산(백업 스크립트·배포 산출물·정리 스크립트·벤치마크)의 계약 동결이 *실행되지 않는
+  # 주장*으로 남아 있었다 — CLAUDE.md "측정 없는 기계 게이트를 검수 대체로 선언 금지"에 정확히
+  # 해당한다. 이 잡이 그 공백을 닫는다(OPS-02 test_backup_script.py도 함께 살아난다).
+  #
+  # 의존성은 **실측으로 최소화**했다: pytest·pytest-asyncio(async 테스트)·PyYAML(배포 산출물
+  # 파싱)·SQLAlchemy(cleanup_atom_orphans의 text() import). 이 4종으로 196건 전부 통과
+  # (2026-07-26 로컬 격리 venv 실측 29초). 백엔드 전체 의존성은 불요 — 무거운 설치를 피한다.
+  #
+  # 항상 실행한다(doc-only PR에서도): 계약 테스트의 검사 대상에는 런북 문서도 포함돼(예:
+  # 배포 런북의 '정직한 공백' 절) 문서 변경이 계약을 깰 수 있다 — policy-guard와 같은 이유.
+  # ─────────────────────────────────────────────────────────────────
+  infra-contracts:
+    name: infra-contracts — 운영 자산 계약 테스트 (tests/infra)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps (실측 최소 4종 — 백엔드 전체 설치 불요)
+        run: pip install pytest pytest-asyncio pyyaml "sqlalchemy>=2.0"
+
+      - name: Pytest (tests/infra — 계약 동결·결함주입)
+        run: python3 -m pytest tests/infra -q
+
+  # ─────────────────────────────────────────────────────────────────
+  # 배포 이미지 빌드 + 컨테이너 기동 스모크 (OPS-03) — **진짜 게이트**
+  #
+  # 여기서 검증하는 것(전부 실제 실행·실패 시 잡 실패):
+  #   ① Dockerfile이 빌드된다 (의존성 해석·설치 포함)
+  #   ② 그 이미지가 *실제로 기동*해 /health/live가 200 + {"status":"ok"}를 준다
+  #      — hermetic 유닛테스트는 uvicorn을 띄우지 않으므로 기동 실패(import·엔트리포인트·
+  #        레이아웃 파손)는 이 잡에서만 잡힌다.
+  #   ③ 컨테이너가 비루트로 돈다 (USER appuser 계약)
+  #   ④ 이미지에 시크릿이 구워지지 않았다 (Config.Env 검사)
+  #   ⑤ docker-compose.prod.yml이 **빈 env에서 기동을 거부**한다(fail-closed 변별력) 그리고
+  #      값이 채워지면 렌더에 성공하며 trust 인증 흔적이 없다
+  #
+  # 여기서 검증하지 *않는* 것(정직 기술): 실제 배포·마이그레이션·실 DB 연결·성능.
+  # 배포 실행 경로는 .github/workflows/deploy.yml(수동 승인) + 런북
+  # docs/architecture/deployment_cd_runbook.md 이며, 대상 인프라는 아직 미프로비저닝이다.
+  # ─────────────────────────────────────────────────────────────────
+  docker-build:
+    name: docker-build — 이미지 빌드·기동 스모크(/health/live)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # infra-contracts(30초 hermetic)를 선행시켜 계약 위반이면 5분짜리 빌드를 아예 시작하지
+    # 않는다(조기 실패). 선행 잡이 실패하면 이 잡은 skip된다.
+    needs: [changes, infra-contracts]
+    # doc-only/타 영역 PR이면 skip(비용 절감·required check는 skipped=충족). push는 항상 실행.
+    if: (github.event_name != 'pull_request' || needs.changes.outputs.docker == 'true') && github.event_name != 'schedule'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 빌드 컨텍스트는 레포 루트다 — 런타임이 레포 상대 경로(parents[5])로 data/corpus를
+      # 읽기 때문(Dockerfile 헤더). src/backend만 컨텍스트로 주면 교수법 팩 로드가 깨진다.
+      - name: 이미지 빌드 (컨텍스트 = 레포 루트)
+        run: docker build -f Dockerfile -t whymath-backend:ci-${{ github.sha }} .
+
+      # 의존성(DB·Redis) 없이 띄운다 — 판정치가 *의존성 0인 라이브니스*라서 그래야 변별력이
+      # 생긴다(DB를 붙이면 "DB가 떠서 통과"와 "앱이 떠서 통과"가 구분되지 않는다).
+      - name: 컨테이너 기동 (의존성 없이)
+        run: |
+          set -euo pipefail
+          docker run -d --name whymath-ci-smoke -p 127.0.0.1:18000:8000 \
+            whymath-backend:ci-${{ github.sha }}
+
+      - name: 스모크 — /health/live 200 + status=ok (재시도 30회·2초 간격)
+        run: |
+          set -uo pipefail
+          ok=false
+          for _ in $(seq 1 30); do
+            code=$(curl -s -o live.json -w '%{http_code}' http://127.0.0.1:18000/health/live || true)
+            if [ "$code" = "200" ]; then ok=true; break; fi
+            # 컨테이너가 이미 죽었으면 더 기다릴 이유가 없다 — 즉시 실패 경로로.
+            running=$(docker inspect -f '{{.State.Running}}' whymath-ci-smoke 2>/dev/null || echo "false")
+            if [ "$running" != "true" ]; then
+              echo "::error::컨테이너가 기동 중 종료됨(재시도 중단)"
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ok" != "true" ]; then
+            echo "----- docker logs (실패 진단) -----"
+            docker logs whymath-ci-smoke || true
+            echo "::error::/health/live가 200을 주지 못했다 — 이미지가 기동하지 않는다"
+            exit 1
+          fi
+          if ! grep -q '"status":"ok"' live.json; then
+            echo "::error::본문 계약 위반 — 받은 본문: $(cat live.json)"
+            exit 1
+          fi
+          echo "PASS — /health/live 200 + status=ok"
+
+      - name: 계약 — 비루트 실행(USER appuser)
+        run: |
+          set -euo pipefail
+          uid=$(docker exec whymath-ci-smoke id -u)
+          echo "컨테이너 uid=$uid"
+          if [ "$uid" = "0" ]; then
+            echo "::error::컨테이너가 root로 실행 중 — Dockerfile USER 계약 파손"
+            exit 1
+          fi
+
+      - name: 계약 — 이미지에 시크릿 미포함 (Config.Env 검사)
+        run: |
+          set -euo pipefail
+          # 값이 아니라 *키 이름*만 본다(값 출력 금지). WHYMATH_* 또는 시크릿류 키가 이미지에
+          # 구워져 있으면 `docker history`로 누구나 읽을 수 있다 → 즉시 실패.
+          names=$(docker image inspect whymath-backend:ci-${{ github.sha }} \
+                    --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1)
+          echo "이미지 env 키: $(echo "$names" | tr '\n' ' ')"
+          if echo "$names" | grep -qiE '^(WHYMATH_|.*(SECRET|PASSWORD|TOKEN|API_KEY).*)$'; then
+            echo "::error::이미지에 시크릿성 env가 구워져 있다 — 런타임 주입만 허용"
+            exit 1
+          fi
+
+      - name: 컨테이너 정리
+        if: always()
+        run: docker rm -f whymath-ci-smoke || true
+
+      # ⑤-a 변별력 검사: 값이 비면 compose가 *실제로* 거부해야 한다. 이 스텝이 없으면
+      # `${VAR:?}` 계약은 "그렇게 써 뒀다"는 주장일 뿐이다(측정 없는 게이트 금지).
+      - name: 계약 — compose.prod fail-closed (빈 env면 기동 거부)
+        run: |
+          set -uo pipefail
+          : > /tmp/empty.env
+          if docker compose --env-file /tmp/empty.env -f docker-compose.prod.yml config \
+               > /dev/null 2> /tmp/compose_err.txt; then
+            echo "::error::빈 env로도 compose가 통과했다 — fail-closed 계약 파손"
+            exit 1
+          fi
+          echo "PASS — 거부 사유: $(head -1 /tmp/compose_err.txt)"
+
+      # ⑤-b 양성 대조: 값이 채워지면 렌더에 성공하고, demo의 trust 인증이 섞여 있지 않다.
+      # 값은 매 실행 무작위 생성 — 리포·워크플로에 상수 시크릿이 존재하지 않는다.
+      - name: 계약 — compose.prod 정상 렌더 + trust 인증 부재
+        run: |
+          set -euo pipefail
+          {
+            echo "DEPLOY_ENV=citest"
+            echo "COMPOSE_PROJECT_NAME=whymath-citest"
+            echo "WHYMATH_IMAGE_TAG=citest"
+            echo "APP_PORT=18001"
+            echo "WHYMATH_DB_PASSWORD=$(openssl rand -hex 24)"
+            echo "WHYMATH_REDIS_PASSWORD=$(openssl rand -hex 24)"
+            echo "WHYMATH_JWT_SECRET_KEY=$(openssl rand -hex 32)"
+            echo "WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY=$(openssl rand -base64 32)"
+            echo "WHYMATH_DEVICE_SECRET_ENCRYPTION_KEY=$(openssl rand -base64 32)"
+          } > /tmp/deploy.env
+          # 렌더 결과는 *출력하지 않는다*(생성 값이 로그에 남지 않게) — 검사만 한다.
+          docker compose --env-file /tmp/deploy.env -f docker-compose.prod.yml config \
+            > /tmp/rendered.yml
+          if grep -qi 'trust' /tmp/rendered.yml; then
+            echo "::error::compose.prod에 trust 인증 흔적 — demo 전용 설정이 운영에 유입"
+            exit 1
+          fi
+          for token in whymath-citest-db-data whymath-citest-redis-data pgvector/pgvector:pg16; do
+            if ! grep -q "$token" /tmp/rendered.yml; then
+              echo "::error::렌더 계약 누락: $token"
+              exit 1
+            fi
+          done
+          rm -f /tmp/deploy.env /tmp/rendered.yml
+          echo "PASS — 렌더 성공·trust 0건·영속 볼륨/pgvector 확인"
 
   # ─────────────────────────────────────────────────────────────────
   # infra 쉘 스크립트 syntax 검사 (Phaiakes9 운영 자산 회귀 방지)

@@ -1,8 +1,11 @@
 """FastAPI 앱 — L3 라우터 ↔ Ollama·Celery 결선의 HTTP 표면 (M1.2-live S1·S4).
 
 엔드포인트:
-  - GET  /health         — 라이브니스(의존성 없음, 항상 200)
-  - GET  /status         — 레디니스(Ollama 도달성·모델 매트릭스 설치 여부 보고)
+  - GET  /health         — 라이브니스(의존성 없음, 항상 200 — 하위호환 유지)
+  - GET  /health/live    — 라이브니스 전용 경로(OPS-01·/health와 동일 의미)
+  - GET  /health/ready   — 레디니스 딥체크(OPS-01·DB SELECT 1/Redis PING/LLM 라우터 +
+                           인프로세스 metrics·alerts. DB 미도달 시 503 — 업타임 프로브용)
+  - GET  /status         — Ollama 도달성·모델 매트릭스 설치 여부 *보고형*(항상 200)
   - POST /v1/generate    — 라우팅 → (동기) 캐시·생성 텍스트 / (비동기 QUALITY) 202 + job_id
   - GET  /v1/jobs/{id}   — QUALITY 비동기 작업 폴링(상태 + 완료 시 텍스트, S4)
 
@@ -22,12 +25,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
+from starlette.middleware.base import RequestResponseEndpoint
 
 from whymath_backend.api._device_store import (
     build_device_store_from_settings,
@@ -107,11 +112,29 @@ from whymath_backend.l3.providers.ollama import OllamaProvider, OllamaStatus
 from whymath_backend.l3.queue import CeleryJobQueue
 from whymath_backend.l3.trace import LangfuseSink
 from whymath_backend.l5.ocr.factory import build_ocr_components
+from whymath_backend.ops.service_health import (
+    AlertLogNotifier,
+    ComponentCheck,
+    MetricsSnapshot,
+    ReadinessProbes,
+    ServiceMetrics,
+    default_readiness_probes,
+    evaluate_alerts,
+)
 
 # 앱 state 의존 키 — provider/cache/trace/queue는 `api/_l3_state.py`로 추출(라우터 공유,
 # slice 96)해 위에서 별칭 import. validator/skip-cache는 /v1/generate 전용이라 여기 둔다.
 _VALIDATOR_KEY = "shadow_validator"
 _SKIP_CACHE_KEY = "skip_cache_on_signal"
+# OPS-01 인프로세스 관측성 키 — 계측·알림·레디니스 probes(테스트가 state로 접근 가능).
+_METRICS_KEY = "service_metrics"
+_ALERT_NOTIFIER_KEY = "service_alert_notifier"
+_READY_PROBES_KEY = "readiness_probes"
+
+# 계측 제외 경로(OPS-01) — 업타임 프로브·운영 폴링 경로는 요청 계측에서 뺀다. 넣으면
+# 프로브 폴링이 표본을 지배하고, 특히 DB 다운 시 /health/ready 503 폭주가 5xx 에러율을
+# *자기증폭*시킨다(관측이 관측을 오염). 학생·API 트래픽만 계측한다.
+_OPS_PROBE_PATHS = frozenset({"/health", "/health/live", "/health/ready", "/status"})
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +244,86 @@ class StatusBody(BaseModel):
     )
 
 
+class ComponentCheckBody(BaseModel):
+    """/health/ready 컴포넌트 항목 — 딥체크 1건 결과(ops/service_health.ComponentCheck)."""
+
+    configured: bool = Field(..., description="구성/확인 수단 노출 여부(False=미구성·오류 아님)")
+    reachable: bool | None = Field(
+        ..., description="도달성. None='판정 불가'(미구성 등 — False '도달 실패'와 구분)"
+    )
+    required: bool = Field(
+        ..., description="ready 판정 필수 여부(DB만 True — 엔드포인트 docstring)"
+    )
+    error: str | None = Field(
+        default=None,
+        description=(
+            "도달 실패 사유 — 예외 *타입명*(시크릿·환경값 미포함) 또는 provider 보고 문자열"
+        ),
+    )
+
+
+class MetricsSummaryBody(BaseModel):
+    """/health/ready 인프로세스 계측 요약 — None 필드는 '미측정'(0과 구분·날조 금지)."""
+
+    uptime_seconds: float = Field(..., description="프로세스(계측 시작) 이후 경과 초 — 가동 보고")
+    total_requests: int = Field(..., description="누적 계측 요청 수(ops 프로브 경로 제외)")
+    total_5xx: int = Field(..., description="누적 5xx 응답 수")
+    window_count: int = Field(..., description="최근 창(고정 deque) 표본 수")
+    window_error_rate: float | None = Field(
+        ..., description="최근 창 5xx 비율. None=표본 없음(미측정)"
+    )
+    window_p95_latency_ms: float | None = Field(
+        ..., description="최근 창 p95 지연(ms). None=표본 없음(미측정)"
+    )
+    latency_sum_ms: float = Field(..., description="누적 지연 합계(ms)")
+    latency_max_ms: float | None = Field(..., description="누적 최대 지연(ms). None=요청 0건")
+
+
+class AlertBody(BaseModel):
+    """/health/ready 알림 항목 — 임계 위반(breach) 1건(임계·실측치 병기)."""
+
+    metric: str = Field(..., description="위반 지표 이름(error_rate·latency_p95_ms)")
+    observed: float = Field(..., description="실측치")
+    threshold: float = Field(..., description="Settings 임계(초과 시 breach)")
+
+
+class ReadyBody(BaseModel):
+    """GET /health/ready 응답 — 딥체크·인프로세스 계측·알림(이중 회계의 HTTP 노출면)."""
+
+    ready: bool = Field(..., description="트래픽 수용 가능 여부(= DB 도달성·필수 컴포넌트만)")
+    components: dict[str, ComponentCheckBody] = Field(
+        ..., description="컴포넌트별 딥체크(database·redis·llm_router)"
+    )
+    metrics: MetricsSummaryBody = Field(..., description="인프로세스 요청 계측 요약")
+    alerts: list[AlertBody] = Field(
+        ..., description="현재 임계 위반 목록 — 외부 프로브가 SaaS 없이 읽는 인프로세스 축"
+    )
+
+
+def _component_body(check: ComponentCheck) -> ComponentCheckBody:
+    """ComponentCheck(도메인) → ComponentCheckBody(HTTP 스키마) 변환."""
+    return ComponentCheckBody(
+        configured=check.configured,
+        reachable=check.reachable,
+        required=check.required,
+        error=check.error,
+    )
+
+
+def _metrics_body(snapshot: MetricsSnapshot) -> MetricsSummaryBody:
+    """MetricsSnapshot(도메인) → MetricsSummaryBody(HTTP 스키마) 변환."""
+    return MetricsSummaryBody(
+        uptime_seconds=snapshot.uptime_seconds,
+        total_requests=snapshot.total_requests,
+        total_5xx=snapshot.total_5xx,
+        window_count=snapshot.window_count,
+        window_error_rate=snapshot.window_error_rate,
+        window_p95_latency_ms=snapshot.window_p95_latency_ms,
+        latency_sum_ms=snapshot.latency_sum_ms,
+        latency_max_ms=snapshot.latency_max_ms,
+    )
+
+
 # ──────────────────────────────────────────────────────────────────────────
 # 의존성 접근자 — provider/cache/trace/queue는 `api/_l3_state.py`로 추출해 라우터와 공유
 # (slice 96·위에서 _get_* 별칭 import). validator/skip-cache는 /v1/generate 전용이라 여기 둔다.
@@ -319,6 +422,8 @@ def create_app(
     trace: TraceSink | None = None,
     queue: AsyncJobQueue | None = None,
     oauth_providers: dict[str, OAuthProvider] | None = None,
+    metrics: ServiceMetrics | None = None,
+    readiness_probes: ReadinessProbes | None = None,
 ) -> FastAPI:
     """FastAPI 앱 팩토리 — 의존성 주입 가능.
 
@@ -327,6 +432,11 @@ def create_app(
     때 연결). LangfuseSink는 키(WHYMATH_LANGFUSE_*) 미설정 시 영구 no-op이므로 CI(키
     없음)에서도 네트워크를 타지 않는다. 테스트는 가짜 provider/cache(InMemoryCache)/
     trace/queue를 주입해 hermetic을 유지한다.
+
+    OPS-01 추가 주입 좌석: `metrics`(인프로세스 요청 계측 — 계측 실패 회귀 테스트가
+    폭발하는 가짜를 주입)·`readiness_probes`(/health/ready 딥체크 묶음 — 테스트가 가짜
+    CheckFn을 주입해 라이브 DB·Redis·Ollama 없이 200/503 변별을 검증). 기본 probes도
+    전부 *지연*이라 앱 구성만으로는 어떤 인프라에도 연결하지 않는다.
     """
     app = FastAPI(
         title="WhyMath Backend — L3 생성 표면",
@@ -336,14 +446,14 @@ def create_app(
     )
     # 기본 provider는 CompositeProvider — cost_tier로 로컬(Ollama)↔클라우드(Anthropic)
     # 디스패치(S5). 둘 다 지연이라 구성 시 라이브 Ollama·Anthropic 키가 필요 없다.
-    app.state.__setattr__(
-        _PROVIDER_KEY,
-        (
-            provider
-            if provider is not None
-            else CompositeProvider(local=OllamaProvider(), cloud=AnthropicProvider())
-        ),
+    # (OPS-01) 변수로 잡아 두는 이유: 기본 readiness probes가 같은 provider의
+    # check_status를 재사용한다(/status와 동일 표면 — 재발명 금지).
+    resolved_provider: LLMProvider = (
+        provider
+        if provider is not None
+        else CompositeProvider(local=OllamaProvider(), cloud=AnthropicProvider())
     )
+    app.state.__setattr__(_PROVIDER_KEY, resolved_provider)
     # 기본 캐시는 RedisCache(지연 연결) — 구성 시 라이브 Redis 불필요(첫 접근 때 연결).
     app.state.__setattr__(_CACHE_KEY, cache if cache is not None else RedisCache())
     # 기본 트레이스는 LangfuseSink(지연·자기비활성) — 키 미설정 시 영구 no-op(S3).
@@ -367,10 +477,133 @@ def create_app(
     # 캐시 위생 정책(Settings 게이트·slice 49) — 신호 난 미스 생성물 캐시 적재 회피 여부.
     app.state.__setattr__(_SKIP_CACHE_KEY, _settings.l3_skip_cache_on_signal)
 
+    # ── OPS-01: 인프로세스 요청 계측·알림·레디니스 probes (이중 회계의 프로세스 안쪽 축) ──
+    # 계측·알림은 SaaS(Langfuse)와 독립이다 — Langfuse가 죽어도 여기 판정치는 계속 나온다
+    # (cost_probe 선례). notifier는 미들웨어와 /health/ready가 *공유*해 상태 전이 시에만
+    # warning을 남긴다(스팸 방지·이중 로그 방지).
+    resolved_metrics = (
+        metrics
+        if metrics is not None
+        else ServiceMetrics(window_size=_settings.ops_metrics_window_size)
+    )
+    alert_notifier = AlertLogNotifier()
+    resolved_probes = (
+        readiness_probes
+        if readiness_probes is not None
+        else default_readiness_probes(provider=resolved_provider)
+    )
+    app.state.__setattr__(_METRICS_KEY, resolved_metrics)
+    app.state.__setattr__(_ALERT_NOTIFIER_KEY, alert_notifier)
+    app.state.__setattr__(_READY_PROBES_KEY, resolved_probes)
+
+    def _observe_request(elapsed_ms: float, status_code: int) -> None:
+        """요청 1건 계측 + 알림 평가 — 계측 실패가 요청을 절대 깨지 않는다.
+
+        침묵 실패 금지(CLAUDE.md): 계측은 best-effort라 예외를 삼키되 **무타입 경고
+        금지** — 예외 *타입명*을 warning에 남긴다(langfuse v2 쓰기 8일 무증상 전멸의
+        교훈). 시크릿·필드값은 로그에 싣지 않는다.
+        """
+        try:
+            resolved_metrics.record(elapsed_ms, status_code)
+            observed_settings = get_settings()
+            alert_notifier.notify(
+                evaluate_alerts(
+                    resolved_metrics.snapshot(),
+                    error_rate_threshold=observed_settings.ops_error_rate_alert_threshold,
+                    latency_p95_threshold_ms=observed_settings.ops_latency_p95_alert_ms,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 — 계측 실패 흡수(요청 보호)·타입명 로그 필수
+            logger.warning("요청 계측 실패(요청은 정상 반환) — 예외 타입: %s", type(exc).__name__)
+
+    @app.middleware("http")
+    async def _service_metrics_middleware(
+        request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        """요청별 (지연 ms·상태코드) 인프로세스 계측 미들웨어 (OPS-01).
+
+        - ops 프로브 경로(`_OPS_PROBE_PATHS`)는 계측에서 제외한다 — 업타임 프로브 폴링이
+          표본을 지배·오염하는 것을 막는다(상수 주석의 자기증폭 근거).
+        - 핸들러의 미처리 예외는 5xx(500)로 회계한 뒤 **그대로 재던진다** — 계측은
+          예외를 삼키지 않는다(바깥 ServerErrorMiddleware가 500 응답으로 변환).
+        - 계측 자체의 실패는 `_observe_request`가 흡수한다(요청 무영향·예외 타입명 로그).
+        """
+        if request.url.path in _OPS_PROBE_PATHS:
+            return await call_next(request)
+        started = time.monotonic()
+        try:
+            response = await call_next(request)
+        except Exception:
+            _observe_request((time.monotonic() - started) * 1000.0, 500)
+            raise
+        _observe_request((time.monotonic() - started) * 1000.0, response.status_code)
+        return response
+
     @app.get("/health", tags=["ops"])
     async def health() -> dict[str, str]:
         """라이브니스 — 의존성 없이 프로세스 생존만 확인."""
         return {"status": "ok"}
+
+    @app.get("/health/live", tags=["ops"])
+    async def health_live() -> dict[str, str]:
+        """라이브니스 전용 경로(OPS-01) — 기존 /health와 동일 의미(프로세스 생존·의존성 0).
+
+        liveness/readiness를 경로로 분리해 업타임 프로브가 목적별로 고르게 한다(쿠버네티스
+        livenessProbe 관례 경로). 기존 /health는 하위호환으로 유지한다(기존 프로브·런북
+        무변경).
+        """
+        return {"status": "ok"}
+
+    @app.get("/health/ready", tags=["ops"])
+    async def health_ready(request: Request) -> JSONResponse:
+        """레디니스 딥체크(OPS-01) — DB·Redis·LLM 도달성 + 인프로세스 metrics·alerts.
+
+        **ready 판정 = DB 도달성만 필수.** 학생 대면 경로(문항 조회·코치 세션·학습 기록
+        영속)는 전부 PostgreSQL을 전제하므로 DB 미도달이면 트래픽을 받을 수 없다. Redis
+        (응답 캐시·rate limit 백엔드)와 LLM 라우터(로컬 Ollama)는 *보고만* 한다
+        (`required: false` 명시) — Redis 미도달은 캐시 미스·성능 강등일 뿐 경로가 살아
+        있고, LLM은 경로별 폴백(클라우드 디스패치·QUALITY 큐·WH-1 결정론 템플릿)이 있어
+        도달 실패가 곧 서비스 불능이 아니다.
+
+        not ready면 **503**을 반환한다 — 기존 /status(항상 200)는 운영자·드라이버가 body를
+        읽는 *보고형*이지만, 이 엔드포인트는 외부 업타임 프로브(쿠버네티스 readinessProbe·
+        모니터)가 *HTTP 상태코드만으로* 판정하는 기계용이라 200/503으로 가른다. body의
+        `metrics`·`alerts`는 SaaS 관측 인프라(Langfuse)가 죽어도 판정치를 읽을 수 있는
+        인프로세스 축이다(이중 회계 — `ops/cost_probe.py` 선례).
+        """
+        probes: ReadinessProbes = getattr(request.app.state, _READY_PROBES_KEY)
+        svc_metrics: ServiceMetrics = getattr(request.app.state, _METRICS_KEY)
+        notifier: AlertLogNotifier = getattr(request.app.state, _ALERT_NOTIFIER_KEY)
+        # 세 딥체크는 서로 독립이라 동시 실행한다. 각 체크는 예외를 던지지 않는 계약
+        # (ops/service_health — 비크래시 보고)이라 gather에 예외 누수가 없다.
+        db_check, redis_check, llm_check = await asyncio.gather(
+            probes.database(), probes.redis(), probes.llm()
+        )
+        snapshot = svc_metrics.snapshot()
+        ready_settings = get_settings()
+        alerts = evaluate_alerts(
+            snapshot,
+            error_rate_threshold=ready_settings.ops_error_rate_alert_threshold,
+            latency_p95_threshold_ms=ready_settings.ops_latency_p95_alert_ms,
+        )
+        # 미들웨어와 같은 notifier 공유 — 전이 시에만 로그(폴링 반복이 스팸이 안 됨).
+        notifier.notify(alerts)
+        ready = db_check.reachable is True
+        body = ReadyBody(
+            ready=ready,
+            components={
+                check.name: _component_body(check) for check in (db_check, redis_check, llm_check)
+            },
+            metrics=_metrics_body(snapshot),
+            alerts=[
+                AlertBody(metric=a.metric, observed=a.observed, threshold=a.threshold)
+                for a in alerts
+            ],
+        )
+        return JSONResponse(
+            status_code=(status.HTTP_200_OK if ready else status.HTTP_503_SERVICE_UNAVAILABLE),
+            content=body.model_dump(mode="json"),
+        )
 
     @app.get("/status", tags=["ops"], response_model=StatusBody)
     async def get_status(request: Request) -> StatusBody:

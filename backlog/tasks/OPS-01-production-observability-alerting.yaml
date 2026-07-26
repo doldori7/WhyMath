@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,10 +14,14 @@ acceptance:
   - "/health 딥체크(DB·Redis·LLM 라우터 도달성) + readiness/liveness 분리 엔드포인트"
   - "에러율·지연·가동 알림 경로 배선 — 인프로세스 이중 회계로 인프라 죽어도 '측정 실패'가 보이게(ops/cost_probe 선례)"
   - "silent failure 금지 준수 — 예외 타입명 로그 포함 회귀 테스트"
-artifacts: []
+artifacts:
+  - 7be5026
 paths:
   - "src/backend/whymath_backend/ops/**"
   - src/backend/whymath_backend/app.py
+  - src/backend/whymath_backend/config.py
+  - "tests/backend/ops/**"
+  - "tests/backend/api/**"
   - "infra/**"
 session: null
 notes: "CLAUDE.md '측정 도구 SaaS 단독 의존 금지'·'silent failure 금지'의 서비스 관측 확장. 운영 축 백로그 0건 상환 #1 (docs/reviews/service_ops_mgmt_gap_review_2026-07.md)."
