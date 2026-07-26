@@ -53,7 +53,7 @@
 | 콘텐츠 안전 검증 | ✅ 초인간 검증 기준·Wilson 게이트·PRM·결함주입 강등전 | `docs/standards/superhuman_verification_standard.md` | 성숙 |
 | 개인정보 권리 행사 | ✅ 삭제(erasure)·열람/이관(export)·보존(retention)·퍼지 CLI 실코드 | `src/backend/whymath_backend/privacy/` | 성숙 (PIPA 대응 양호) |
 | **법정대리인 실 본인확인** | ⚠️ 동의 게이트(403)+감사 스키마(append-only)+GRANT 경로는 실존. 그러나 본인확인은 `StubGuardianVerifier`(method="stub") — 실 방식의 법적 적정성은 **변호사 자문 전제로 의도적 미구현** | `schema/parental_consent.py`, `consent_grant.py`, `api/auth.py:131` | 🔴 **런칭 차단 요인 → MGMT-01 (owner=kiki)** |
-| 암호화 at-rest | ⚠️ AES-256-GCM 봉투 프리미티브 존재·device secret 결선은 후속·dialogue 이미지 암호화는 SEC-01(todo)로 기추적 | `api/_crypto.py`, `SEC-01` | 부분 — **기추적** (신규 등재 불요) |
+| 암호화 at-rest | ⚠️ AES-256-GCM 봉투 프리미티브 존재·device secret 결선은 후속·dialogue 이미지 암호화는 SEC-01(todo)로 기추적 — *검토 직후 #599로 done, 프로덕션 키 실측은 `SEC-02`(owner=kiki) 분리 등재됨* | `api/_crypto.py`, `SEC-01` | 부분 — **기추적** (신규 등재 불요) |
 | 관리자·운영자 도구 (admin 콘솔·CS·모더레이션 UI·운영 BI) | ❌ 전무 | — | 의도된 지연 (β 소규모는 DB 직접 조회로 감내 — 결제 도입(Phase 2) 시 재검토) |
 | 도메인 파트너 검수 | ⚠️ AI 검수 전환으로 대체(S2-05 done·2026-07-10 결정). 인간 수학자 검수 라운드는 사람 트랙 수동 대기 | ROADMAP Day 46~60, 병목 #4 | 기추적 (사람 게이트) |
 
@@ -72,7 +72,7 @@
 | 배포 자동화·IaC | 운영 | 🔴 | **미추적 (0건)** | ✅ `OPS-03` 등재 (S4·prio 3, OPS-02 의존) |
 | 장애 런북·SLO | 운영 | ⚠️ | **미추적 (0건)** | ✅ `OPS-04` 등재 (S4·prio 4, OPS-01 의존) |
 | 법정대리인 실 본인확인 | 관리 | 🔴 | **미추적** (코드 주석의 "후속"으로만 존재) | ✅ `MGMT-01` 등재 (S3·prio 1·**owner=kiki**) |
-| dialogue 이미지 암호화 | 관리 | ⚠️ | 기추적 — `SEC-01` | 변동 없음 |
+| dialogue 이미지 암호화 | 관리 | ⚠️ | 기추적 — `SEC-01` | 검토 직후 #599로 done (잔여: `SEC-02` 프로덕션 키 실측·owner=kiki) |
 | 결제·대시보드·커뮤니티·푸시 | 서비스 | — | 로드맵 Phase 2/3 명시 | 태스크 미등재 (의도된 지연 — 백로그 오염 방지) |
 
 ## 5. 우선순위 권고
