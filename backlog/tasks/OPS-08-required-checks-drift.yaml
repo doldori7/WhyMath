@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-08-required-checks-drift
+title: "브랜치 보호 required check 목록 현행화 + 드리프트 동결 (main red 사고 구조적 원인)"
+track: infra-debt
+stage: S3
+subject: cross
+layer: infra
+status: in_progress
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "branch-protection-setup.md의 required check 목록을 현행 CI 잡(14종)에 맞춰 현행화 — backend 잡 누락이 사고의 구조적 원인"
+  - "문서↔ci.yml 드리프트 동결 테스트 — 문서가 존재하지 않는 잡 이름을 안내하면 실패(오타 시 UI 검색 실패→미설정으로 조용히 새는 경로 차단)"
+  - "Kiki 실행용 6항목 브리핑 — 설정 후 자가검증 스텝 포함(변별력 있는 것만)"
+artifacts: []
+paths:
+  - ".github/branch-protection-setup.md"
+  - "tests/infra/**"
+session: claude/whymath-service-review-9r21im
+notes: "2026-07-26 사고 구조적 원인: 문서가 required check를 3종만 나열(CI는 14잡)하고 backend가 빠져 있었다. 그 결과 #603~#607 다섯 번 연속 backend 잡 완주 전 머지, 그중 #606이 실제 red. API로 브랜치 보호 설정 불가 실측(Resource not accessible by integration) — 설정 자체는 Kiki UI 작업이나 목록의 정확성은 코드로 지킬 수 있다."
+updated: 2026-07-26
