@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,7 +14,8 @@ acceptance:
   - "pg_dump 정기 백업 스크립트 + 보존 정책 (prod = docker whymath-pg:5433)"
   - "복구 리허설 런북 + 복구 후 무결성 검증 절차"
   - "백업 산출물의 미성년 PII·암호화 취급 규칙 준수 (민감정보 분류)"
-artifacts: []
+artifacts:
+  - e05e93f
 paths:
   - "infra/**"
   - "scripts/**"
