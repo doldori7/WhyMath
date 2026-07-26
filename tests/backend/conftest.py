@@ -96,8 +96,17 @@ def _guard_db_session_global_leak(request: pytest.FixtureRequest) -> Iterator[No
     테스트 *시작* 시점은 (앞 테스트가 이 가드로 정리됐으므로) 깨끗하다고 본다. *종료* 시
     전역이 남아 있으면 이 테스트가 남긴 것이므로 실패시킨다 — 실패 신호를 내기 전에 전역을
     되돌려 다음 테스트가 연쇄로 깨지지 않게 한다(귀책과 격리를 분리).
+
+    **범위 = hermetic 전용**: `integration` 마크 테스트는 제외한다. ① 사고는 hermetic 스위트
+    (`backend — lint·type·test` 잡)에서 났고, 피해 테스트(전역 None 단언)도 hermetic이다.
+    ② 통합 테스트는 별도 잡(`-m integration`·실 PG)에서 각자의 엔진 수명주기(대개 TestClient
+    lifespan의 dispose)로 돌며, 두 집합은 서로 다른 프로세스라 교차 오염이 불가능하다.
+    ③ 함수 단위 '엔진=None' 불변식은 실 PG 통합 테스트에 대해 로컬 검증이 불가하므로, 검증된
+    범위(hermetic·7514건 실측 클린)로 가드를 한정한다.
     """
     yield
+    if request.node.get_closest_marker("integration") is not None:
+        return
     reason = db_session_leak_reason()
     if reason is None:
         return

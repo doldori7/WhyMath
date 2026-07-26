@@ -127,6 +127,8 @@ _TMP_CONFTEST = textwrap.dedent(f"""
     @pytest.fixture(autouse=True)
     def _guard(request):
         yield
+        if request.node.get_closest_marker("integration") is not None:
+            return
         reason = db_session_leak_reason()
         if reason is None:
             return
@@ -145,6 +147,23 @@ _POLLUTER_TEST = textwrap.dedent("""
         # 오염 주입: 전역 엔진 캐시를 채우고 정리하지 않는다(실 누수 테스트의 최종 상태 재현).
         db_session._engine = _FakeEngine()
         assert True  # 테스트 본문 자체는 통과 — 실패는 오직 가드의 teardown에서 나와야 한다.
+    """)
+
+# integration 마크 오염 테스트 — 가드가 hermetic 전용이므로 이건 *제외*돼 통과해야 한다.
+_INTEGRATION_POLLUTER_TEST = textwrap.dedent("""
+    import pytest
+
+    from whymath_backend.db import session as db_session
+
+    class _FakeEngine:
+        async def dispose(self):
+            pass
+
+    @pytest.mark.integration
+    def test_integration_leak_is_not_flagged():
+        # 통합 테스트가 엔진 전역을 남겨도 가드는 건드리지 않는다(범위=hermetic).
+        db_session._engine = _FakeEngine()
+        assert True
     """)
 
 _CLEAN_TEST = textwrap.dedent("""
@@ -205,3 +224,22 @@ def test_guard_passes_clean_test_end_to_end(tmp_path: Path) -> None:
     assert result.returncode == 0, f"깨끗한 테스트가 가드에 걸렸다 — 오검출(false positive)\n{out}"
     assert guard.LEAK_MARKER not in out, f"깨끗한 실행에 누수 마커가 떴다 — 오검출\n{out}"
     assert "1 passed" in out, f"깨끗한 테스트가 통과로 집계되지 않았다\n{out}"
+
+
+def test_guard_skips_integration_marked_leak_end_to_end(tmp_path: Path) -> None:
+    """범위 대조 — integration 마크 테스트는 엔진을 남겨도 가드가 제외한다(hermetic 전용).
+
+    통합 테스트는 별도 잡(-m integration·실 PG)에서 각자의 엔진 수명주기로 돌므로, 함수 단위
+    '엔진=None' 불변식을 적용하지 않는다(로컬 검증 불가 구간을 가드가 침범하지 않음을 봉인).
+    """
+    result = _run_subpytest(tmp_path, "test_integration_leak.py", _INTEGRATION_POLLUTER_TEST)
+    out = result.stdout + result.stderr
+
+    assert result.returncode == 0, f"integration 마크 누수를 가드가 잡았다 — 범위 초과\n{out}"
+    assert guard.LEAK_MARKER not in out, f"integration 실행에 누수 마커가 떴다 — 범위 초과\n{out}"
+
+
+def test_real_conftest_scopes_guard_to_hermetic() -> None:
+    """실 conftest 가드가 integration 마크를 제외하도록 배선됐는지 봉인(범위=hermetic)."""
+    conftest_src = (_TESTS_BACKEND / "conftest.py").read_text(encoding="utf-8")
+    assert 'get_closest_marker("integration")' in conftest_src
