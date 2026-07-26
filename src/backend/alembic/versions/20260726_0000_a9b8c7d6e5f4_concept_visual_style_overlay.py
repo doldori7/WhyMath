@@ -18,7 +18,7 @@ native ENUM `visualization_style_enum`은 슬88 마이그레이션 `b5c6d7e8f9a0
 설계 정본: `docs/architecture/05b_visualization_classification.md`·ARCH-14 잔여 하드닝.
 
 Revision ID: a9b8c7d6e5f4
-Revises: f1a2b3c4d5e7
+Revises: a2b3c4d5e6f1
 Create Date: 2026-07-26 00:00:00.000000
 """
 
@@ -33,7 +33,7 @@ from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "a9b8c7d6e5f4"
-down_revision: str | None = "f1a2b3c4d5e7"
+down_revision: str | None = "a2b3c4d5e6f1"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
