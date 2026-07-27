@@ -88,6 +88,15 @@ class FormulaNode(BaseModel):
         default_factory=list,
         description="연결 NCIC 성취기준 코드(선택·truth source 코드만·본문 미복제).",
     )
+    constraints: list[str] = Field(
+        default_factory=list,
+        description="성립 조건·사용범위(자체작성 텍스트·예 'a≠0'). 무조건 항등식은 []. "
+        "유도·증명 슬롯이 아니다 — 유도는 Theorem/Proof 축(P6·D2) 위임(S4-06).",
+    )
+    mnemonic: str | None = Field(
+        default=None,
+        description="암기팁(선택·자체작성·자연스러운 것만 — 날조 저작 금지). 대부분 None(S4-06).",
+    )
     notes: str | None = Field(default=None, description="검수 메모(선택).")
 
     @field_validator("formula_id")

@@ -43,6 +43,8 @@ def transform_formulas(records: list[dict[str, object]]) -> TransformResult:
     skipped: list[str] = []
     families: set[str] = set()
     with_signature = 0
+    with_constraints = 0
+    with_mnemonic = 0
     for i, record in enumerate(records):
         try:
             node = FormulaNode(**record)  # type: ignore[arg-type]
@@ -54,10 +56,16 @@ def transform_formulas(records: list[dict[str, object]]) -> TransformResult:
         families.add(node.family)
         if node.canonical_signature is not None:
             with_signature += 1
+        if node.constraints:
+            with_constraints += 1
+        if node.mnemonic is not None:
+            with_mnemonic += 1
     provenance = {
         "formulas": len(formulas),
         "families": len(families),
         "with_signature": with_signature,
+        "with_constraints": with_constraints,
+        "with_mnemonic": with_mnemonic,
     }
     return TransformResult(formulas=formulas, skipped=skipped, provenance=provenance)
 

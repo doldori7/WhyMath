@@ -69,6 +69,13 @@ class FormulaNode(Base):
     standard_codes: Mapped[list[str]] = mapped_column(
         ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
     )
+    # 성립 조건·사용범위(graph.json `constraints`·자체작성 텍스트·무조건 항등식은 빈 배열·S4-06).
+    # 유도/증명 슬롯이 아니다 — 유도는 Theorem/Proof 축(P6·D2) 위임(증명 축 이중화 금지).
+    constraints: Mapped[list[str]] = mapped_column(
+        ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
+    )
+    # 암기팁(graph.json `mnemonic`·nullable·자체작성·표준 정착 구절만 — 대부분 NULL·S4-06).
+    mnemonic: Mapped[str | None] = mapped_column(sa.Text)
     # 검수 게이팅 — v1 자체작성이나 검수 전이라 기본 'ai_estimated'(ptype 동형·NOT NULL).
     review_status: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 마지막 upsert 시각 — 운영·신선도. server_default now()(problem_type_node·skill_node 동형).

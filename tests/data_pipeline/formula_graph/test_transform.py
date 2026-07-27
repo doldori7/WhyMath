@@ -49,3 +49,15 @@ def test_with_signature_counted() -> None:
     """canonical_signature가 있는 수식은 provenance with_signature에 집계."""
     result = transform_formulas([_rec(canonical_signature="abc123"), _rec(formula_id="formula.x")])
     assert result.provenance["with_signature"] == 1
+
+
+def test_with_constraints_and_mnemonic_counted() -> None:
+    """S4-06 — constraints/mnemonic 보유 수식이 provenance에 집계(빈 배열·None은 미집계)."""
+    result = transform_formulas(
+        [
+            _rec(constraints=["a ≠ 0"], mnemonic="팁"),
+            _rec(formula_id="formula.x", constraints=[]),
+        ]
+    )
+    assert result.provenance["with_constraints"] == 1
+    assert result.provenance["with_mnemonic"] == 1

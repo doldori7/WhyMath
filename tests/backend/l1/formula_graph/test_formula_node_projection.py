@@ -167,3 +167,51 @@ class TestPopulate:
         count = populate_formula_nodes([_record("formula.a"), _record("formula.b")], store=store)
         assert count == 2
         assert len(engine.executed) == 2
+
+
+class TestConstraintsMeta:
+    """S4-06 — constraints·mnemonic 안전 메타의 로드·upsert 배선."""
+
+    def test_loader_reads_constraints_and_mnemonic(self, tmp_path: Path) -> None:
+        path = _write_graph(
+            tmp_path,
+            [
+                {
+                    "formula_id": "formula.log.product",
+                    "name_ko": "로그 곱 법칙",
+                    "family": "지수로그",
+                    "latex": "\\log(xy) = \\log x + \\log y",
+                    "dsl": "log(x*y) == log(x) + log(y)",
+                    "constraints": ["x > 0, y > 0 (진수 조건)", "밑 a > 0, a ≠ 1"],
+                    "mnemonic": "곱은 합으로",
+                }
+            ],
+        )
+        rec = load_formulas_from_graph_json(path)[0]
+        assert rec.constraints == ("x > 0, y > 0 (진수 조건)", "밑 a > 0, a ≠ 1")
+        assert rec.mnemonic == "곱은 합으로"
+
+    def test_loader_defaults_when_absent(self, tmp_path: Path) -> None:
+        """구 형식 graph.json(필드 부재) 하위호환 — 빈 튜플·None."""
+        path = _write_graph(
+            tmp_path,
+            [
+                {
+                    "formula_id": "formula.geometry.pythagorean",
+                    "name_ko": "피타고라스 정리",
+                    "family": "기하공식",
+                    "latex": "a^2 + b^2 = c^2",
+                    "dsl": "a**2 + b**2 == c**2",
+                }
+            ],
+        )
+        rec = load_formulas_from_graph_json(path)[0]
+        assert rec.constraints == ()
+        assert rec.mnemonic is None
+
+    def test_upsert_includes_new_columns(self) -> None:
+        store, engine = _fake_store()
+        store.upsert(_record())
+        compiled = _compile(engine.executed[0])
+        for col in ("constraints", "mnemonic"):
+            assert col in compiled

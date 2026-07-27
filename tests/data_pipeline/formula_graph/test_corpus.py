@@ -52,3 +52,14 @@ def test_graph_json_has_no_variant_or_edge_keys() -> None:
         assert node["latex"] and node["dsl"]  # 필수 표현 존재
         for forbidden in ("equivalence_class", "sympy_repr", "variants", "prompt"):
             assert forbidden not in node
+
+
+def test_constraints_backfill_measured() -> None:
+    """S4-06 backfill 실측 동결 — constraints 15·mnemonic 14(코퍼스 변경 시 의도 확인 후 갱신)."""
+    result = transform_formulas(_read_jsonl(_CORPUS / "formulas.jsonl"))
+    assert result.provenance["with_constraints"] == 15
+    assert result.provenance["with_mnemonic"] == 14
+    # 조건 있는 대표 수식의 조건이 실려 있다(무조건 항등식[곱셈공식 등]은 빈 배열).
+    by_id = {f.formula_id: f for f in result.formulas}
+    assert by_id["formula.quadratic.roots"].constraints
+    assert by_id["formula.multiplication.square-of-sum"].constraints == []

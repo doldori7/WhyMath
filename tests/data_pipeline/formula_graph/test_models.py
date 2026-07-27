@@ -52,3 +52,16 @@ def test_extra_forbidden() -> None:
     """extra='forbid' — 미정의 키(변형 열거 등) 유입 차단."""
     with pytest.raises(ValidationError):
         _valid(equivalence_class="e1")  # canonical-only 위반 필드
+
+
+def test_constraints_and_mnemonic_defaults_and_values() -> None:
+    """S4-06 메타 — 기본값(constraints=[]·mnemonic=None)과 값 보존. 유도/변형 슬롯 아님."""
+    node = _valid()
+    assert node.constraints == []
+    assert node.mnemonic is None
+    enriched = _valid(
+        constraints=["a ≠ 0 (이차항 계수)"],
+        mnemonic="합은 −b/a (마이너스 주의)",
+    )
+    assert enriched.constraints == ["a ≠ 0 (이차항 계수)"]
+    assert enriched.mnemonic == "합은 −b/a (마이너스 주의)"

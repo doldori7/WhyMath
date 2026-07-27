@@ -337,6 +337,26 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-27 (구현·3건 순차): **갭 설계 실행 — ARCH-16 중복 검수 게이트·ARCH-17 그래프 분석 리포트·S4-06 Formula 메타** (claude 구현, Kiki "3건 순차 전부" 선택)
+
+**컨텍스트**: 같은 날 등재한 갭 설계(D3~D5) 태스크 3건을 하네스 순서대로 구현·done. 브랜치 `claude/whymath-concept-management-spnep8`(커밋 `e3939dd`·`75112ab`·`71caeb3`).
+
+**ARCH-16 (D4·`e3939dd`) — 좌석 정정 포함**: ① **layer 정정 data-pipeline→backend** — 실측상 임베딩·provider·pgvector 스택이 전부 backend 소관(DP 임베딩 코드 0건·pyproject 의존 0), `crosslink_candidates.py` 선례 동형 좌석(`l1/atom_graph/dedup_candidates.py`)·§D4 취지(빌드타임·사람 검수) 불변. ② **in-memory 코사인**(DB `<=>` 미사용) 채택 — pgvector allowlist(`test_embedding_namespace_governance` 정확 집합 비교) 무접촉·PG 불요. ③ top key `dedup_candidates`(crosswalk 3형식 비호환·자동 적재 구조적 차단)+notice·분포 통계(밴드 히스토그램·근사 백분위) 동봉. ④ **실 코퍼스 완주 실측**: 1,837원자(세부개념)·1,686,366쌍 — fake(어휘 해시) provider로도 의심쌍 3건 부상(중2↔고 대수 동명 원자 "지수법칙 적용"[9수02-08-2↔12대수01-03-2]·공통수학↔기하 유사쌍 2건). **의미 임계 캘리브레이션은 bge-m3 실행 대기**(fake 분포는 근거 아님 — 기본 0.90은 잠정·보수 명기). numpy 있으면 블록 행렬 가속·없으면 순수 파이썬(동일 결과 계약).
+
+**ARCH-17 (D5·`75112ab`)**: `data_pipeline/graph_analytics`(신규 패키지·의존 추가 0) — 차수·하류 도달(BFS·다이아몬드 1회)·허브 랭킹 + blocking 오개념 전파(concept_src_id→concept_id→crosswalk 전체 atom_codes→하류 합집합). 해석 실패 skip+보고·사이클 미러 검사·typer `report` CLI(`--json`)·경계 명문(오프라인 전용·LLM/preload 배선 금지). **실측**: 원자 1,837·엣지 2,213·blocking 344 **전량 조인(skip 0)** — 최대 허브=초등 수 세기·자릿값 축(2수01-01-1 하류 676), 최대 전파=M0427 자릿수 크기 오개념(하류 663)·M0429 뺄셈 의미(655). 초등 수·연산 기초가 전체 그래프의 지배 병목임을 정량 확인 — S4-01 초·중 확장·진단 우선순위의 실측 근거. 스냅샷 동결 테스트(1,837·344·skip 0).
+
+**S4-06 (D3·`71caeb3`)**: FormulaNode에 `constraints`(성립 조건·ARRAY NOT NULL `'{}'`)·`mnemonic`(nullable) additive 추가 — P4a enrichment 체인 동형(DP 모델→transform provenance 카운트→코퍼스 backfill→ORM+alembic `b4c5d6e7f0a2` 대칭→프로젝션 3곳→테스트). backfill: constraints 15/25(수학적 사실 자체작성 — 로그 진수·a≠0·n≠−1 등·무조건 항등식은 [])·mnemonic 14/25(표준 정착 구절만 — 신코코신·코코마신신·합차공식 등·날조 저작 금지). **canonical-only 불변**: 유도/변형 슬롯 미도입(유도는 D2 Theorem/Proof 축 위임·증명 축 이중화 금지) — formula 거버넌스 무수정 green. `test_graph_json_matches_source` 잠금 대응(transform-v1 재생성·PASS·skip 0).
+
+**검증 공통**: 신규·갱신 테스트 43건 green(dedup 9·analytics 10·formula 24)·기존 거버넌스(임베딩 네임스페이스 15·formula 거버넌스) 무수정 green·ruff/black(L100)/mypy --strict 전 대상 통과·alembic 단일 head(`b4c5d6e7f0a2`)·backlog validate green. 환경 특기: 컨테이너 python 3.11이라 uv로 py3.12 venv 구성 후 실행(프로젝트 requires-python >=3.12).
+
+**컨텍스트**: Kiki가 일반적 EOS 틀 문서(『0단계 개념 관리 모듈』 6~10: Concept DB·Definition·Theorem·Formula·Knowledge Graph — WhyMath 전용 아님 명시)를 제공하며 "빠진 부분 점검 + WhyMath 방향 정합 설계"를 요청. 실측 대조 결과 모듈 6·9·10은 대부분 충족(일부는 더 엄격 — canonical ID·locale 분리·canonical-only Formula), **모듈 7(정의 레지스터)이 최대 갭**, 모듈 8(Theorem)은 의도적 연기이나 설계 백지.
+
+**판정 — 의도적 미채택 6건**(협상 불가 근거와 1:1): ①학년·교육과정 노드 내장(→Curriculum-as-Overlay) ②per-row 버전 필드(→git+코퍼스 버전+provenance 정본) ③교과서 정의 인용·무검증 자동 정의(→redaction·self-authored·ai_estimated 검수 게이팅) ④학생 대면 AI 증명 생성(→unverifiable 정직 경계·검증 권위) ⑤관계 11종 확장·MisconceptionOf 엣지(→5~8 상한·오개념 독립 DB·Analogy=similar_to류 traversal 금지) ⑥공식 변형 노드화(→canonical-only·SymPy 동치 위임). 문서 11관계는 기존 7관계+참조 키로 **전량 crosswalk·신규 엣지 타입 0**.
+
+**설계 D1~D5** (정본: `docs/architecture/knowledge_module_gap_review.md`): **D1** 정의 레지스터 — `concept_definition` 자매 프로젝션(복합 PK code+kind·kind 폐쇄 4종·examples/counterexamples[반례=오개념 교정 축]·rigorous_internal 학생 비노출·소비처=L4 눈높이 선택 슬라이스 동반) · **D2** Theorem/Proof 페이퍼 설계(P6 마지막 잔여 — TheoremNode≠ProofNode·`theorem.<slug>` 사람 관리 ID·Formula 경계 규칙[등식=Formula/명제=Theorem/겹침=상호 참조 키]·검증 tier[SymPy/unverifiable/Lean]·**신규 태스크 없음** — 구현 트리거는 기존 S4-02·notes에 설계 참조 연결) · **D3** Formula `constraints`(성립 조건) 메타 — 유도는 D2 위임(증명 축 이중화 금지) · **D4** 중복 개념 검수 게이트(빌드타임 pairwise 유사도 리포트·AI 자기승인 금지·사람 검수 큐) · **D5** 그래프 분석 리포트(허브·영향도 + blocking 오개념 전파 — 빌드타임 오프라인·preload 금지 불변).
+
+**등재**: `S4-05-concept-definition-registers` · `S4-06-formula-constraints-meta` · `ARCH-16-concept-dedup-gate` · `ARCH-17-graph-analytics-report` (전부 CLI add·validate green 85건). 중복 등재 회피: ARCH-11(subgraph guard)·Phase 5b(formula_refs)·S4-02는 기존 추적 승계. **chunk 임베딩**(CLAUDE.md `limit.definition` 축·현재 미구현 실측)은 D1의 `(code,kind)`가 자연 chunk 키 공간 — S4-05 acceptance에 연동 트리거 명시.
+
 ### 2026-07-27 (구현·OPS-12): **하네스 lint 배선 — `tests/harness`·`scripts/harness`를 검사하는 잡이 하나도 없었다** (claude 구현, Kiki "추천작업진행")
 
 **컨텍스트**: HARN-08 구현 중 발견·등재된 OPS-11의 harness 판박이. backend 잡은 `../../tests/backend`만, data-pipeline 잡은 working-directory `src/data-pipeline`의 `.`만 lint — 대장(backlog)을 판정하는 하네스 코드 자체는 품질 무배선("검사하는 자를 아무도 검사하지 않는" 구멍, CLAUDE.md '검증 장치를 만들고 배선 확인 없이 완료 선언 금지' 부류의 6번째 사례).
