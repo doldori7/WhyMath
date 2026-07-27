@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,10 +14,11 @@ acceptance:
   - "tests/ 하위 모든 디렉터리가 어떤 CI 잡에 배선돼 있는지 테스트로 동결 — 신규 테스트 디렉터리가 조용히 미실행으로 남는 경로 차단(tests/infra 199건 사고의 일반형)"
   - "PR 템플릿 신설 — 변별력 증빙(무엇을 깨뜨려 확인했는가)·정직한 공백 칸 포함. 현재 템플릿 부재 실측"
   - 각 장치가 실패 상태에서 실제로 실패 신호를 내는지 변별력 실측
-artifacts: []
+artifacts:
+  - "8620830"
 paths:
   - ".github/**"
   - "tests/infra/**"
-session: claude/whymath-service-review-9r21im
+session: null
 notes: "이번 세션 사고 7건의 공통 구조 = '검증 장치의 존재'와 '작동'이 분리돼 있고 후자를 확인하는 장치가 없음. CLAUDE.md에 원칙(측정 없는 게이트 금지·변별력 없는 검증 금지)은 이미 있으나 적용이 사람 기억에 걸려 있어 반복 관통됐다. 새 규칙 추가가 아니라 기존 규칙의 장치화가 핵심."
 updated: 2026-07-27
