@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-27 (사고·재발방지·HARN-07): **OPS-07 병렬 중복 구현 — 원격 claim이 "가끔"이 아니라 "한 번도" 작동한 적 없었다** (claude 규명, Kiki "재발방지")
+
+**사고**: 두 세션(`claude/review-applicable-items-8rrtau` ↔ `claude/whymath-service-review-9r21im`)이 **같은 태스크 OPS-07을 병렬 구현**. 전자가 #611로 먼저 머지, 후자 구현(conftest 인라인 가드 + 변별력 테스트 735줄)은 전량 폐기 — 순수 낭비. 하네스에 중복 방지 장치(`remote_claims.py` CAS claim)가 있는데도 막지 못했다.
+
+**근본 원인(실측 — 추론 아님)**: ① `refs/claims/<task>` CAS push가 **CCR git 프록시 403으로 상시 거부**된다(`RPC failed; HTTP 403` 재현). ② `backlog.py` start는 의도적 fail-open — `conflict`만 차단, `offline/error`는 경고+이벤트 후 진행(주석 명시). 네트워크 장애가 *예외적*이라는 전제의 합리적 설계지만, 이 환경에선 **error가 상수**라 보호가 한 번도 성립한 적 없다. ③ 경고("⚠ 원격 claim 불가")가 매 start마다 나와 **습관화 → 소음화** — events.ndjson에 `claim_remote_unavailable`이 축적돼 있었으나 아무도 판정으로 읽지 않았다.
+
+**대안 실측**: 쓰기(`refs/claims/*`·브랜치 push probe)는 403이나 **읽기는 된다** — `ls-remote` 44브랜치 OK·전 브랜치 fetch ~5초·`git show <remote>:backlog/tasks/<id>.yaml`로 타 세션 `in_progress`+`session` 확인 가능(이번 사례 재현 탐지 성공: `origin/main → in_progress·8rrtau`).
+
+**대책 3축(실수 관리 의무)**: ①**규칙** — CLAUDE.md "상시 실패하는 fail-open 보호를 '보호 있음'으로 신뢰 금지"(반복 경고 2회+ = 무력 신호·규명/등재 의무·폴백 전 수동 확인 절차 포함) ②**코드** — HARN-07: CAS 유지(타 환경에선 작동·원자성 우월) + CAS `offline/error` 시 **읽기측 폴백**(원격 브랜치 backlog에서 타 세션 in_progress 탐지 → conflict 취급 거부). 한계 명시: 상대가 push한 뒤에만 보임 — 원자성 대체가 아닌 부분 방어 ③**본 로그**.
+
+**교훈**: fail-open의 전제("실패는 예외적")는 환경마다 검증해야 할 *가설*이지 불변식이 아니다 — "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"의 다섯 번째 사례(장치는 있으나 이 환경에서 작동 0회).
+
 ### 2026-07-27 (재발방지·OPS-07·09·10): **순서 의존 방어 2종 + 검증 장치 실효성 강제 — "장치의 존재 ≠ 장치의 작동"** (claude 구현, Kiki "Ops"·"네"·"재발방지대책 등재")
 
 **사고(직접 원인)**: OPS-06(#606) 머지 후 main CI red(`1 failed, 7513 passed`). 신규 테스트가 `device_store_mode="pg_cached"` store 생성으로 모듈 전역 `db.session._engine`을 채우고 정리하지 않아, 후속 테스트가 **실행 순서 때문에** 깨졌다.
