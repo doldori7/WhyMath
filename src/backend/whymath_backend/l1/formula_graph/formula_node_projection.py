@@ -65,6 +65,8 @@ class FormulaNodeRecord:
     canonical_signature: str | None
     aliases: tuple[str, ...]
     standard_codes: tuple[str, ...]
+    constraints: tuple[str, ...] = ()
+    mnemonic: str | None = None
 
 
 def load_formulas_from_graph_json(path: Path) -> list[FormulaNodeRecord]:
@@ -98,6 +100,12 @@ def load_formulas_from_graph_json(path: Path) -> list[FormulaNodeRecord]:
         codes: tuple[str, ...] = (
             tuple(str(c) for c in raw_codes) if isinstance(raw_codes, (list, tuple)) else ()
         )
+        raw_constraints = record.get("constraints")
+        constraints: tuple[str, ...] = (
+            tuple(str(c) for c in raw_constraints)
+            if isinstance(raw_constraints, (list, tuple))
+            else ()
+        )
         out.append(
             FormulaNodeRecord(
                 formula_id=formula_id,
@@ -108,6 +116,8 @@ def load_formulas_from_graph_json(path: Path) -> list[FormulaNodeRecord]:
                 canonical_signature=_opt_str(record.get("canonical_signature")),
                 aliases=aliases,
                 standard_codes=codes,
+                constraints=constraints,
+                mnemonic=_opt_str(record.get("mnemonic")),
             )
         )
     return out
@@ -165,6 +175,8 @@ class FormulaNodeStore:
             canonical_signature=record.canonical_signature,
             aliases=list(record.aliases),
             standard_codes=list(record.standard_codes),
+            constraints=list(record.constraints),
+            mnemonic=record.mnemonic,
             review_status=FORMULA_REVIEW_STATUS_DEFAULT,
         )
         # PK 충돌 시 갱신 — updated_at은 now()로 새로 찍는다(server_default는 INSERT 전용).
@@ -178,6 +190,8 @@ class FormulaNodeStore:
                 "canonical_signature": stmt.excluded.canonical_signature,
                 "aliases": stmt.excluded.aliases,
                 "standard_codes": stmt.excluded.standard_codes,
+                "constraints": stmt.excluded.constraints,
+                "mnemonic": stmt.excluded.mnemonic,
                 "review_status": stmt.excluded.review_status,
                 "updated_at": func.now(),
             },

@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: data-pipeline
-status: todo
+status: in_progress
 priority: 5
 owner: claude
 depends_on: []
@@ -17,6 +17,6 @@ paths:
   - "src/data-pipeline/data_pipeline/formula_graph/**"
   - "data/corpus/formula_graph_v1/**"
   - "src/backend/whymath_backend/db/models/**"
-session: null
+session: claude/whymath-concept-management-spnep8
 notes: "docs/architecture/knowledge_module_gap_review.md §3 D3 — 외부 EOS 틀(모듈 9) 대조 부분 갭. 5b(formula_refs 충전·검색/추천)는 기존 계획 승계·본 태스크 범위 밖"
 updated: 2026-07-27

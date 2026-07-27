@@ -25,6 +25,8 @@
 | `canonical_signature` | `str \| None` | 검색·dedup **보조** 메타(optional·정체성 아님·계산 backfill=5b) |
 | `aliases` | `list[str]` | 같은 canonical 수식의 display 별칭(선택·**변형 열거 아님**) |
 | `standard_codes` | `list[str]` | 연결 NCIC 성취기준 코드(선택·본문 미복제) |
+| `constraints` | `list[str]` | **성립 조건·사용범위**(자체작성·예 `a ≠ 0`·`진수 > 0`). 무조건 항등식은 `[]`. 유도/증명 슬롯 아님 — 유도는 Theorem/Proof 축(P6·D2) 위임 (S4-06·실측 15/25건) |
+| `mnemonic` | `str \| None` | 암기팁(자체작성·표준 정착 구절만 — 신코코신 등·대부분 None·날조 저작 금지) (S4-06·실측 14/25건) |
 | `notes` | `str \| None` | 검수 메모(선택) |
 
 **미도입(anti-explosion·SymPy 재구현 금지)**: `equivalence_class`(변형 열거 저장 금지·동치는 SymPy

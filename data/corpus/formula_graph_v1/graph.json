@@ -12,6 +12,8 @@
       "standard_codes": [
         "9수02-08"
       ],
+      "constraints": [],
+      "mnemonic": null,
       "notes": null
     },
     {
@@ -25,6 +27,8 @@
       "standard_codes": [
         "9수02-08"
       ],
+      "constraints": [],
+      "mnemonic": null,
       "notes": null
     },
     {
@@ -38,6 +42,8 @@
       "standard_codes": [
         "9수02-08"
       ],
+      "constraints": [],
+      "mnemonic": "합차공식 — 합 곱하기 차는 제곱의 차",
       "notes": null
     },
     {
@@ -51,6 +57,8 @@
       "standard_codes": [
         "10공수1-01-02"
       ],
+      "constraints": [],
+      "mnemonic": null,
       "notes": null
     },
     {
@@ -64,6 +72,8 @@
       "standard_codes": [
         "9수02-09"
       ],
+      "constraints": [],
+      "mnemonic": null,
       "notes": null
     },
     {
@@ -77,6 +87,8 @@
       "standard_codes": [
         "9수02-09"
       ],
+      "constraints": [],
+      "mnemonic": "제곱의 차는 합 곱하기 차 (합차공식 역방향)",
       "notes": null
     },
     {
@@ -90,6 +102,8 @@
       "standard_codes": [
         "10공수1-01-02"
       ],
+      "constraints": [],
+      "mnemonic": null,
       "notes": null
     },
     {
@@ -105,6 +119,11 @@
       "standard_codes": [
         "9수02-15"
       ],
+      "constraints": [
+        "a ≠ 0 (이차항 계수)",
+        "실근은 b² − 4ac ≥ 0일 때 (실수 범위)"
+      ],
+      "mnemonic": null,
       "notes": "canonical은 한 근·다른 부호 근은 SymPy 동치로 판정(변형 노드화 아님)."
     },
     {
@@ -118,6 +137,10 @@
       "standard_codes": [
         "9수02-15"
       ],
+      "constraints": [
+        "a ≠ 0인 이차방정식 ax² + bx + c = 0에 대해 정의"
+      ],
+      "mnemonic": null,
       "notes": null
     },
     {
@@ -131,6 +154,11 @@
       "standard_codes": [
         "10공수1-01-05"
       ],
+      "constraints": [
+        "a ≠ 0",
+        "α, β는 ax² + bx + c = 0의 두 근"
+      ],
+      "mnemonic": "합은 −b/a (마이너스 주의)",
       "notes": "dsl은 근 심볼 r_1·r_2 사용(α·β는 display; β는 SymPy Beta 함수와 충돌 회피)."
     },
     {
@@ -144,6 +172,11 @@
       "standard_codes": [
         "10공수1-01-05"
       ],
+      "constraints": [
+        "a ≠ 0",
+        "α, β는 ax² + bx + c = 0의 두 근"
+      ],
+      "mnemonic": "곱은 c/a",
       "notes": "dsl은 근 심볼 r_1·r_2 사용(α·β는 display)."
     },
     {
@@ -157,6 +190,10 @@
       "standard_codes": [
         "9수01-05"
       ],
+      "constraints": [
+        "지수가 실수 범위면 a > 0 (정수 지수면 a ≠ 0)"
+      ],
+      "mnemonic": "밑이 같으면 지수는 더한다",
       "notes": null
     },
     {
@@ -170,6 +207,10 @@
       "standard_codes": [
         "9수01-05"
       ],
+      "constraints": [
+        "지수가 실수 범위면 a > 0 (정수 지수면 a ≠ 0)"
+      ],
+      "mnemonic": "거듭제곱의 거듭제곱은 지수끼리 곱한다",
       "notes": null
     },
     {
@@ -183,6 +224,11 @@
       "standard_codes": [
         "12미적I-01-01"
       ],
+      "constraints": [
+        "x > 0, y > 0 (진수 조건)",
+        "밑 a > 0, a ≠ 1"
+      ],
+      "mnemonic": "곱은 합으로 — 로그는 곱셈을 덧셈으로 바꾼다",
       "notes": null
     },
     {
@@ -196,6 +242,11 @@
       "standard_codes": [
         "12미적I-01-01"
       ],
+      "constraints": [
+        "x > 0 (진수 조건)",
+        "밑 a > 0, a ≠ 1"
+      ],
+      "mnemonic": "지수는 앞으로 — 거듭제곱 지수가 로그 앞 계수로 내려온다",
       "notes": null
     },
     {
@@ -209,6 +260,8 @@
       "standard_codes": [
         "10공수2-02-03"
       ],
+      "constraints": [],
+      "mnemonic": null,
       "notes": null
     },
     {
@@ -222,6 +275,8 @@
       "standard_codes": [
         "12미적I-02-01"
       ],
+      "constraints": [],
+      "mnemonic": "신코코신 — sin·cos + cos·sin (부호 그대로)",
       "notes": null
     },
     {
@@ -235,6 +290,8 @@
       "standard_codes": [
         "12미적I-02-01"
       ],
+      "constraints": [],
+      "mnemonic": "코코마신신 — cos·cos − sin·sin (부호 반대)",
       "notes": null
     },
     {
@@ -248,6 +305,10 @@
       "standard_codes": [
         "12미적I-03-02"
       ],
+      "constraints": [
+        "n이 실수일 때는 x > 0에서 성립 (자연수 지수는 모든 실수 x)"
+      ],
+      "mnemonic": "지수를 앞으로 내리고 하나 줄인다",
       "notes": null
     },
     {
@@ -261,6 +322,10 @@
       "standard_codes": [
         "12미적I-03-05"
       ],
+      "constraints": [
+        "n ≠ −1 (n = −1이면 ∫x⁻¹dx = ln|x| + C)"
+      ],
+      "mnemonic": "지수를 하나 올리고 그 수로 나눈다 (+C 잊지 않기)",
       "notes": null
     },
     {
@@ -274,6 +339,10 @@
       "standard_codes": [
         "9수04-09"
       ],
+      "constraints": [
+        "직각삼각형에서 성립 (c는 빗변)"
+      ],
+      "mnemonic": null,
       "notes": null
     },
     {
@@ -287,6 +356,10 @@
       "standard_codes": [
         "6수03-08"
       ],
+      "constraints": [
+        "r은 반지름 (r ≥ 0)"
+      ],
+      "mnemonic": null,
       "notes": null
     },
     {
@@ -300,6 +373,10 @@
       "standard_codes": [
         "5수03-05"
       ],
+      "constraints": [
+        "h는 밑변 b에 대한 높이 (수직 거리)"
+      ],
+      "mnemonic": null,
       "notes": null
     },
     {
@@ -313,6 +390,10 @@
       "standard_codes": [
         "12미적I-01-08"
       ],
+      "constraints": [
+        "n은 자연수 (n ≥ 1)"
+      ],
+      "mnemonic": "첫째항에 공차를 (n−1)번 더한다",
       "notes": null
     },
     {
@@ -326,6 +407,10 @@
       "standard_codes": [
         "12미적I-01-08"
       ],
+      "constraints": [
+        "n은 자연수 (n ≥ 1)"
+      ],
+      "mnemonic": "첫째항에 공비를 (n−1)번 곱한다",
       "notes": null
     }
   ]
