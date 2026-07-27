@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-27 (구현·GA·PED-01 슬라이스 ③): **교수법 팩 prompt GA flip — `pedagogy_pack_prompt_enabled` 기본 `False→True`(canary 졸업)** (claude 구현, Kiki "GA flip (Kiki 게이트)"→사인오프·범위 선택 "간이·바로 머지")
+
+**컨텍스트**: PED-01 본체(이차함수 파일럿 E2E 완주 + DSL 동결 + no-op 배선)는 PR #598로 머지 완료(main `6130036`). 남은 것은 배선의 **플래그 기본값만** 뒤집는 후속 GA flip. Kiki 사인오프로 착지.
+
+**GA 근거(선례 `wh1_primary` 규율)**: ① **결함주입 측정** — `pedagogy_pack_fidelity_eval` exit 0(violating 72셀 미검출 0·clean 72셀 오검출 0·Wilson 상한 0.0362·CI 상시 게이트, 로컬 재실측). ② **Kiki 사인오프**(2026-07-27). ③ **실기기 확인은 간이 갈음** — 근거: 팩 주입은 stateless coach의 *옵트인 훅*이라 `decide(pack=...)`로 팩이 명시 주입될 때만 발문을 대체하고(`pack=None`이면 플래그 무관 base 무변경), `_pack_for`가 **파일럿 목표 개념 매핑 문항**(현재 이차함수 최대·최소 `10공수1-02-06-1` 1건)에서만 팩을 해석 → flip 영향이 **파일럿 1단원 매핑 문항에 한정**(WH-1 전 튜터링 경로를 켠 `wh1_primary`보다 훨씬 좁음). Kiki가 blast radius를 근거로 "간이·바로 머지" 선택.
+
+**변경(3파일·PR #614·main `a9b9a2b`)**: `config.py` `pedagogy_pack_prompt_enabled` `default=False→True`(도크스트링 GA 근거 갱신·킬스위치 `WHYMATH_PEDAGOGY_PACK_PROMPT_ENABLED=false` 유지) · `test_coach_gate3_serving_invariant.py` governance 봉인에 `assert ... is True` 동결(기본값 재-침묵-변경 방지·`wh1_primary`와 동형) · `l4/pedagogy/k_type_resolver.py` `deferred GA`→`GA 착지` 도크스트링 정정.
+
+**검증**: 실 PG 통합 3건(OFF 단락·ON 해석 파일럿→CONCEPT·미매핑 fail-soft None·E2E 관통) · api·l4 hermetic 2353 passed 회귀 0(OPS-07 누수 가드 아래 재실측 포함) · fidelity exit 0 · ruff/black(L100)/mypy --strict(421)/import-linter green · STATIC 프롬프트 불변(팩은 `decision.system`만 대체·`prompt`는 STATIC 유지). 브랜치 보호 up-to-date 강제로 main(`24e0dcd`) 재병합·CI 재실행(8 success+6 skip) 후 SQUASH 머지.
+
+**롤백**: `WHYMATH_PEDAGOGY_PACK_PROMPT_ENABLED=false` 한 줄(코드 롤백 불요).
+
 ### 2026-07-26 (구현·OPS-07): **테스트 전역 누수 가드 — 순서-의존·전체-스위트-한정 오염을 *그 테스트 자체*의 결정론적 실패로** (claude 구현, Kiki "OPS-07 착수")
 
 **컨텍스트**: #606(OPS-06) 머지 후 main CI red — 한 테스트가 `pg_cached` store 생성으로 `db.session._engine`(모듈 전역·지연 캐시)을 채우고 정리하지 않아, 후속 `test_session_module_imports_without_connection`(전역 None 단언)이 *실행 순서 때문에* 깨졌다. 파일 단위로는 안 보이고 전체 스위트에서만 터져 로컬 검증을 통과했다(#607이 즉시 상환·재발방지로 OPS-07 등재). 근본 원인은 개별 부주의가 아니라 **'전역 캐시를 채우는 테스트'를 잡는 장치의 부재**.
