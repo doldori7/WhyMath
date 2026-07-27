@@ -5,12 +5,14 @@ PED-01 파일럿 E2E의 런타임 단계 진입점이다. 튜터링 턴에서 �
 팩을 뽑아 `PolyaCoach.decide(pack=...)`에 주입한다(그 훅·플래그 게이트는 PED-02에서 이미 착지).
 
 ────────────────────────────────────────────────────────────────────────────
-경계 (deferred GA)
+경계 (GA 착지 — 2026-07-27)
 ────────────────────────────────────────────────────────────────────────────
-이 슬라이스는 *해석기*만 낸다. `api/coach.py` 세션 핸들러가 매 턴 이 해석을 호출해 팩을 주입하고
-`pedagogy_pack_prompt_enabled`를 기본 ON으로 뒤집는 건 **별도 GA 커밋**이다(카나리 규율·config
-docstring). 그 flip 전까지 런타임 발문은 무변경이며, E2E가 `resolve→get_pack→decide(pack=)`
-사슬을 플래그 강제 ON으로 증명한다.
+이 슬라이스는 *해석기*만 낸다. `api/coach.py` 세션 핸들러(`_pack_for`)가 매 턴 이 해석을 호출해
+팩을 주입한다. `pedagogy_pack_prompt_enabled`는 **2026-07-27 GA로 기본 ON**(결함주입 측정
+`pedagogy_pack_fidelity_eval` exit 0 + Kiki 사인오프·config docstring). 팩 주입은 옵트인이라
+`decide(pack=None)`이면 플래그와 무관하게 발문 무변경이고, `_pack_for`가 파일럿 목표 개념에
+매핑된 문항에서만 팩을 해석하므로 blast radius가 파일럿 단원으로 한정된다. OFF(킬스위치)면
+런타임 발문 무변경. E2E가 `resolve→get_pack→decide(pack=)` 사슬을 증명한다.
 
 7계층: L4 교수학. `learning_objective`(기존 컬럼·무마이그) 조회·sync 엔진 재사용.
 """
