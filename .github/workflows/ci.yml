@@ -600,8 +600,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install deps (실측 최소 4종 — 백엔드 전체 설치 불요)
-        run: pip install pytest pytest-asyncio pyyaml "sqlalchemy>=2.0"
+      # pytest-randomly(OPS-09) — 순서 의존 조기 노출. tests/infra 204건이 무작위 순서
+      # 전건 통과함을 실측하고 배선했다(2026-07-27).
+      - name: Install deps (실측 최소 5종 — 백엔드 전체 설치 불요)
+        run: pip install pytest pytest-asyncio pytest-randomly pyyaml "sqlalchemy>=2.0"
 
       - name: Pytest (tests/infra — 계약 동결·결함주입)
         run: python3 -m pytest tests/infra -q
@@ -848,8 +850,10 @@ jobs:
         with:
           python-version: "3.12"
 
+      # pytest-randomly(OPS-09) — tests/harness 153건이 무작위 순서 전건 통과함을 실측하고
+      # 배선했다(2026-07-27). 하네스는 backlog 대장을 읽는 코드라 순서 의존이 특히 위험하다.
       - name: Install deps (stdlib + PyYAML만 — 하네스 설계 불변식)
-        run: pip install pyyaml pytest
+        run: pip install pyyaml pytest pytest-randomly
 
       - name: backlog 무결성 검증
         run: python3 scripts/harness/backlog.py validate
