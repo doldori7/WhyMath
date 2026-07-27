@@ -41,9 +41,7 @@ class TestPolicyValidation:
 
     def test_미지_필드는_오류(self, tmp_path: Path):
         (tmp_path / "backlog").mkdir()
-        (tmp_path / "backlog" / "policy.yaml").write_text(
-            "unknown_rule: warn\n", encoding="utf-8"
-        )
+        (tmp_path / "backlog" / "policy.yaml").write_text("unknown_rule: warn\n", encoding="utf-8")
         _, errors = store.load_policy(tmp_path)
         assert any("미지 필드" in e for e in errors)
 

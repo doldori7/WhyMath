@@ -112,3 +112,31 @@ def _guard_db_session_global_leak(request: pytest.FixtureRequest) -> Iterator[No
         return
     contain_db_session_leak()
     pytest.fail(format_leak_failure(request.node.nodeid, reason), pytrace=False)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# 무작위 순서 seed 노출 (OPS-09) — 레포 루트 conftest와 **의도적 중복**
+#
+# 왜 여기에도 있어야 하는가: backend 스위트는 CI에서 `cd src/backend && pytest
+# -c pyproject.toml ../../tests/backend`로 돈다. 이때 rootdir이 `src/backend`가 되어
+# **레포 루트 `conftest.py`가 수집 범위(confcutdir) 밖으로 밀려난다** — 즉 루트에만 두면
+# 이 스위트에서는 seed가 찍히지 않는다(2026-07-27 실측: `--collect-only`로 seed 줄 0건).
+# 하필 사고가 실제로 난 것이 이 스위트라, 여기서 재현 경로가 없으면 OPS-09 도입 전제가
+# 무너진다(재현할 수 없는 빨강은 고칠 수 없는 빨강).
+#
+# 중복을 감수한 이유: 공유 모듈 import는 rootdir이 다른 두 실행 맥락에서 경로 조작을
+# 요구해 오히려 깨지기 쉽다. 대신 두 사본이 어긋나지 않도록
+# `tests/infra/test_seed_report_wiring.py`가 동결한다.
+# ──────────────────────────────────────────────────────────────────────────
+@pytest.hookimpl(trylast=True)
+def pytest_configure(config: pytest.Config) -> None:
+    """무작위 순서 seed를 stdout에 항상 찍는다.
+
+    `trylast=True` 필수 — pytest-randomly가 자기 `pytest_configure`에서 `"default"`를
+    실제 정수로 확정하므로, 먼저 돌면 재현 불가능한 문자열이 로그에 남는다.
+    """
+    seed = getattr(getattr(config, "option", None), "randomly_seed", None)
+    if seed is not None:
+        print(
+            f"[order] randomly-seed={seed}  (재현: pytest ... -p randomly --randomly-seed={seed})"
+        )

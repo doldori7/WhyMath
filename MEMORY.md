@@ -357,6 +357,49 @@
 
 **등재**: `S4-05-concept-definition-registers` · `S4-06-formula-constraints-meta` · `ARCH-16-concept-dedup-gate` · `ARCH-17-graph-analytics-report` (전부 CLI add·validate green 85건). 중복 등재 회피: ARCH-11(subgraph guard)·Phase 5b(formula_refs)·S4-02는 기존 추적 승계. **chunk 임베딩**(CLAUDE.md `limit.definition` 축·현재 미구현 실측)은 D1의 `(code,kind)`가 자연 chunk 키 공간 — S4-05 acceptance에 연동 트리거 명시.
 
+### 2026-07-27 (구현·OPS-12): **하네스 lint 배선 — `tests/harness`·`scripts/harness`를 검사하는 잡이 하나도 없었다** (claude 구현, Kiki "추천작업진행")
+
+**컨텍스트**: HARN-08 구현 중 발견·등재된 OPS-11의 harness 판박이. backend 잡은 `../../tests/backend`만, data-pipeline 잡은 working-directory `src/data-pipeline`의 `.`만 lint — 대장(backlog)을 판정하는 하네스 코드 자체는 품질 무배선("검사하는 자를 아무도 검사하지 않는" 구멍, CLAUDE.md '검증 장치를 만들고 배선 확인 없이 완료 선언 금지' 부류의 6번째 사례).
+
+**착수 실측이 태스크 명세보다 컸다**: 등재된 선재 위반은 ruff F541 2건(test_cli.py — 등재 시점 704·722행이 #613·#617의 +336줄로 892·910행으로 밀림·동일 2건)이었으나, 실측하니 **black --check 드리프트가 17파일**(tests/harness 9/9 전부 + scripts/harness 8/9 — 레포 루트에 pyproject가 없어 저자들이 기본 88자로 포맷·저장소 표준은 100자) 추가로 선재. `scripts/harness`도 어느 잡에도 무배선임을 확인하고 **범위를 tests/harness→scripts/harness 포함으로 확장**(태스크 paths 등재 병기) — 같은 구멍을 반쪽만 막는 것을 회피.
+
+**변경**: ① harness-integrity 잡에 Ruff·Black --check(`--line-length 100`) 스텝 추가(대상 `scripts/harness tests/harness`·핀은 OPS-11과 동일 정책 `ruff>=0.7.0,<0.16`·`black>=24.10.0,<27`) ② F541 2건 수정 + 17파일 black 정리(기계적 포맷·동작 무변경) ③ 동결 — OPS-11의 `test_infra_lint_wiring.py`를 **`_WIRINGS` 파라미터화로 일반화**(신규 파일 대신 재사용·(잡, 대상들) 한 줄 추가로 후속 배선도 같은 계약 동결): 계약 ①스텝 존재 ②`--check`+`--line-length 100` ③선언 대상 **전부** 커버(부분 커버 위장 차단·신설) ④파서 위장 금지, 5→9 테스트.
+
+**변별력 실측(결함 주입 5종 전부 검출 → 복원 후 전건 PASS)**: harness ruff 스텝 삭제=2 failed · black `--check` 제거=1 failed · `--line-length 100` 제거=1 failed · ruff 대상에서 scripts/harness 제외(부분 커버 위장)=1 failed · infra ruff 대상 변조(OPS-11 축 회귀 확인)=1 failed. 배선 자체의 변별력은 선재 위반이 증명 — 배선 직전 상태에서 ruff 2건·black 17파일이 실제 FAIL이었다.
+
+**검증**: tests/harness **189 passed**(무작위 순서·포맷 후) · tests/infra **242 passed**(CI 동일 의존성 — 처음 30 failed는 로컬에 pytest-asyncio·sqlalchemy 부재가 원인·설치 후 전건 green) · ruff/black clean(scripts/harness·tests/harness·tests/infra) · `backlog validate` green(87건). 부분 스위트 한계 명시: backend 등 타 스위트는 이 변경이 건드리지 않아 미실행 — CI가 최종 판정.
+
+### 2026-07-27 (결정·Kiki): **외부 작업(변호사 회신·외부인 리뷰) 전체를 제품 출시 전으로 일괄 연기 — "미완성 제품의 병목이 되는 것 반대"** (Kiki 지시, claude 집행)
+
+**결정**: 변호사 회신·외부인 리뷰 등 **외부 의존 작업은 제품 출시(공개 β) 준비 단계에서 일괄 처리**한다. 제품이 미완성인 현 시점에 외부 작업이 개발 병목이 되는 것을 반대 — claude의 "리드타임이 길어 조기 착수" 반복 권고를 기각하고 시점을 재배치한 것(취소 아님).
+
+**집행**: ① `MGMT-01`(변호사 자문) — 하네스 `block` 처리(사유에 unblock 트리거 = 공개 β 준비 착수 명시). 자문 준비물 `docs/legal/guardian_verification_counsel_brief.md`는 완비 상태로 보존 — 출시 준비 시점에 그대로 사용 ② 정본 정합 — counsel brief §0(착수 시점 결정 병기·"먼저 착수" 권고 대체)·gap review §5(동일 갱신) ③ 전수 스캔 결과 그 외 외부 의존 항목은 이미 구조적으로 연기돼 있음 — E4/E5 법무 선행은 G-s5 게이트 뒤, 도메인 파트너 검수는 AI 검수 전환(S2-05)으로 해소, 대기 게이트는 G-s5(내부 판정) 1건뿐.
+
+**전제(기록)**: 파일럿(지인 5~10명·비공개)은 현 동의 게이트(알려진 14세 미만 이용 불가·동의 경로 기본 OFF)로 진행한다는 내부 관측 위에서의 결정이다. 그 관측의 법적 확인(counsel brief Q5)도 함께 연기됨 — 공개 β 전 자문에서 일괄 확인. 리스크로는 자문 리드타임(수주)이 출시 준비 기간 안에 소화돼야 한다는 점이 남는다(출시 준비 착수 시 최우선 unblock 권장).
+
+### 2026-07-27 (사고·재발방지·HARN-07): **OPS-07 병렬 중복 구현 — 원격 claim이 "가끔"이 아니라 "한 번도" 작동한 적 없었다** (claude 규명, Kiki "재발방지")
+
+**사고**: 두 세션(`claude/review-applicable-items-8rrtau` ↔ `claude/whymath-service-review-9r21im`)이 **같은 태스크 OPS-07을 병렬 구현**. 전자가 #611로 먼저 머지, 후자 구현(conftest 인라인 가드 + 변별력 테스트 735줄)은 전량 폐기 — 순수 낭비. 하네스에 중복 방지 장치(`remote_claims.py` CAS claim)가 있는데도 막지 못했다.
+
+**근본 원인(실측 — 추론 아님)**: ① `refs/claims/<task>` CAS push가 **CCR git 프록시 403으로 상시 거부**된다(`RPC failed; HTTP 403` 재현). ② `backlog.py` start는 의도적 fail-open — `conflict`만 차단, `offline/error`는 경고+이벤트 후 진행(주석 명시). 네트워크 장애가 *예외적*이라는 전제의 합리적 설계지만, 이 환경에선 **error가 상수**라 보호가 한 번도 성립한 적 없다. ③ 경고("⚠ 원격 claim 불가")가 매 start마다 나와 **습관화 → 소음화** — events.ndjson에 `claim_remote_unavailable`이 축적돼 있었으나 아무도 판정으로 읽지 않았다.
+
+**대안 실측**: 쓰기(`refs/claims/*`·브랜치 push probe)는 403이나 **읽기는 된다** — `ls-remote` 44브랜치 OK·전 브랜치 fetch ~5초·`git show <remote>:backlog/tasks/<id>.yaml`로 타 세션 `in_progress`+`session` 확인 가능(이번 사례 재현 탐지 성공: `origin/main → in_progress·8rrtau`).
+
+**대책 3축(실수 관리 의무)**: ①**규칙** — CLAUDE.md "상시 실패하는 fail-open 보호를 '보호 있음'으로 신뢰 금지"(반복 경고 2회+ = 무력 신호·규명/등재 의무·폴백 전 수동 확인 절차 포함) ②**코드** — HARN-07: CAS 유지(타 환경에선 작동·원자성 우월) + CAS `offline/error` 시 **읽기측 폴백**(원격 브랜치 backlog에서 타 세션 in_progress 탐지 → conflict 취급 거부). 한계 명시: 상대가 push한 뒤에만 보임 — 원자성 대체가 아닌 부분 방어 ③**본 로그**.
+
+**교훈**: fail-open의 전제("실패는 예외적")는 환경마다 검증해야 할 *가설*이지 불변식이 아니다 — "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"의 다섯 번째 사례(장치는 있으나 이 환경에서 작동 0회).
+
+### 2026-07-27 (재발방지·OPS-07·09·10): **순서 의존 방어 2종 + 검증 장치 실효성 강제 — "장치의 존재 ≠ 장치의 작동"** (claude 구현, Kiki "Ops"·"네"·"재발방지대책 등재")
+
+**사고(직접 원인)**: OPS-06(#606) 머지 후 main CI red(`1 failed, 7513 passed`). 신규 테스트가 `device_store_mode="pg_cached"` store 생성으로 모듈 전역 `db.session._engine`을 채우고 정리하지 않아, 후속 테스트가 **실행 순서 때문에** 깨졌다.
+
+**사고(내 검증 결함)**: `tests/backend/api/` 1077건 통과를 "회귀 없음"으로 보고했다. **이 오염은 파일·디렉터리 단위 실행에서 재현되지 않고 전체 스위트에서만 터진다** — 부분 통과를 전체 통과의 근거로 삼은 것이 관통 경로였다. → **CLAUDE.md 규칙 등재**(부분 스위트 통과를 전체 통과 근거로 보고 금지).
+
+**반복 유형 식별 — 이번 세션에서만 4회**: ①`tests/infra` 199건이 어떤 CI 잡도 실행하지 않음(OPS-03 발견) ②브랜치 보호 required check가 `enforcement_level=off·checks=[]`로 통째 미강제(OPS-08) ③`test_devices.py` 3건이 이미 오염 중인데 뒤 테스트가 *우연히* 치워줘 green(OPS-07 발견 — **기준선의 green은 운이었다**) ④`tests/infra` lint/format 잡 부재(OPS-11 등재). 공통 구조 = **"검증 장치가 있다고 믿었으나 작동하지 않았고, 작동하는지 확인하는 장치가 없었다."** → **CLAUDE.md 규칙 등재**(검증 장치를 만들고 배선 확인 없이 완료 선언 금지).
+
+**대책(코드)**: **OPS-07**(`7be5026` 계열) 전역 오염 가드 — teardown에서 `db.session` 전역 검사 → 즉시 정리(연쇄 차단) + **오염을 만든 테스트 자신을 실패**(원인 지목). **OPS-09** 순서 무작위화 상시화 — 가드가 `db.session` 축의 *원인을 지목*한다면 이쪽은 종류를 가리지 않고 *존재를 발견*(상보). 도입 근거는 실측: 무작위 순서 backend 6768·infra 204·harness 153 전건 통과. **재현 경로가 도입의 전제** — pytest-randomly 기본 seed 헤더가 `-q`에서 안 나오는데 CI는 전 스위트를 `-q`로 돌려, 그대로 켰다면 무작위 실패를 재현할 수 없었다(루트 conftest에 `trylast=True` 훅으로 seed+재현 명령 상시 출력. 첫 구현은 확정 전 값 `"default"`를 찍는 위장이었고 실측으로 발견·수정). **OPS-10** 배선 실재성 동결 — 설계 교정이 핵심: `testpaths`에 적혀 있음은 *실행의 증거가 아니다*(그 디렉터리에서 pytest를 돌리는 잡이 없으면 여전히 아무도 안 돈다 = 사고의 정확한 형태). 배선 단위를 **워크플로의 실제 pytest 실행 1건**으로 잡아 해소. 실측: 실행 8건이 `tests/` 51개 디렉터리 전부 커버. + PR 템플릿 신설(부재 상태였음 — 변별력 증빙·정직한 공백 칸).
+
+**한계 명시**: PR 템플릿은 **게이트가 아니라 프롬프트**다 — CI는 PR 본문을 읽지 않으므로 "변별력 칸이 채워졌는가"는 기계가 판정하지 않는다. 그 이상 주장하면 "측정 없는 기계 게이트를 검수 대체로 선언"이 된다. 배선 동결은 잡의 `if:` 조건·`-k/-m` 필터를 모델링하지 않으며 `tests/` 밖(Flutter·web)은 범위 밖이다. `tests/data_pipeline`은 이 환경에 패키지가 없어 무작위 통과를 실측하지 못해 **배선하지 않았다**(측정 없는 도입 금지).
 ### 2026-07-27 (구현·GA·PED-01 슬라이스 ③): **교수법 팩 prompt GA flip — `pedagogy_pack_prompt_enabled` 기본 `False→True`(canary 졸업)** (claude 구현, Kiki "GA flip (Kiki 게이트)"→사인오프·범위 선택 "간이·바로 머지")
 
 **컨텍스트**: PED-01 본체(이차함수 파일럿 E2E 완주 + DSL 동결 + no-op 배선)는 PR #598로 머지 완료(main `6130036`). 남은 것은 배선의 **플래그 기본값만** 뒤집는 후속 GA flip. Kiki 사인오프로 착지.

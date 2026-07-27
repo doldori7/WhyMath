@@ -41,7 +41,7 @@ YAML_MISSING_MSG = (
 
 def find_repo_root(start: Path | None = None) -> Path:
     """`.git`을 기준으로 저장소 루트 탐색 (스크립트 위치 → 상위)."""
-    here = (start or Path(__file__).resolve().parent)
+    here = start or Path(__file__).resolve().parent
     for candidate in (here, *here.parents):
         if (candidate / ".git").exists():
             return candidate
@@ -105,7 +105,10 @@ def dump_task(task: Task) -> str:
 
 
 def dump_gates(gates: list[Gate]) -> str:
-    lines = ["# 사람 게이트 대장 — clear는 evidence 필수 (backlog.py gates clear <id> --evidence ...)", "gates:"]
+    lines = [
+        "# 사람 게이트 대장 — clear는 evidence 필수 (backlog.py gates clear <id> --evidence ...)",
+        "gates:",
+    ]
     for gate in gates:
         data = {k: getattr(gate, k) for k in _GATE_KEY_ORDER}
         first = True
@@ -271,7 +274,10 @@ def current_branch(root: Path) -> str:
     try:
         out = subprocess.run(
             ["git", "branch", "--show-current"],
-            cwd=root, capture_output=True, text=True, timeout=10,
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=10,
         )
         return out.stdout.strip() or "unknown"
     except Exception:  # pragma: no cover - 환경 의존
@@ -353,7 +359,9 @@ def validate_backlog(backlog: Backlog, schema_errors: list[str] | None = None) -
 
     for session, ids in sessions_in_progress.items():
         if len(ids) > 1:
-            errors.append(f"세션 '{session}' 이 {len(ids)}개 태스크를 동시 claim: {ids} (1세션=1태스크)")
+            errors.append(
+                f"세션 '{session}' 이 {len(ids)}개 태스크를 동시 claim: {ids} (1세션=1태스크)"
+            )
 
     cycle = detect_cycle(backlog)
     if cycle:

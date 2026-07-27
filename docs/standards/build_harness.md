@@ -78,6 +78,74 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
 - `next`/`brief`(SessionStart)가 원격 claim을 조회해 다른 세션의 작업을
   후보 제외·브리핑 노출한다.
 
+### 3b-1. 읽기측 교차 세션 탐지 — CAS가 막힌 환경의 폴백 (HARN-07)
+
+**사고(2026-07-27)**: 이 실행 환경의 git 프록시는 `refs/claims/*` push를 **HTTP 403**으로
+거부한다. 즉 CAS claim은 "가끔 실패"가 아니라 *한 번도 성공한 적이 없었고*, fail-open이
+모든 `start`를 통과시켜 중복 방지가 상시 무력이었다 — 두 세션이 OPS-07을 병렬 구현해
+한쪽(테스트 735줄 포함)을 폐기했다. `events.ndjson`에 `claim_remote_unavailable`
+(status=error) 45건이 그 흔적이다.
+
+**대응**: 쓰기(CAS)는 못 고치지만 **읽기는 된다**(`git fetch` 전체 브랜치 ~5초 실측).
+`start`는 CAS가 `offline`/`error`를 반환한 경우에만 읽기측 탐지로 폴백한다:
+
+1. `git fetch origin '+refs/heads/*:refs/remotes/origin/*'` (타임아웃 90초)
+2. 원격 브랜치들의 `backlog/tasks/<id>.yaml`을 읽어 `status: in_progress` +
+   `session:`이 **내 세션과 다른** 것을 찾는다 (최근 커밋순 최대 300개 브랜치)
+3. 발견 시 **착수 거부** — 어느 브랜치·어느 세션인지 명시하고, 우회 경로
+   (`--no-remote` 또는 상대 태스크 done/block)를 함께 안내한다
+
+**이것은 CAS의 대체가 아니라 *부분* 방어다** (과장 금지 — 코드·CLI 메시지에도 매번 명시):
+
+- 상대 세션이 **브랜치를 push한 뒤에만** 보인다. push 전 로컬에서 작업 중인 세션은
+  이 방법으로 **절대** 잡히지 않는다.
+- **원자성이 없다** — 두 세션이 동시에 스캔하면 둘 다 "충돌 없음"을 볼 수 있다.
+
+그러므로 **CAS 경로는 제거하지 않는다** — 프록시 정책이 다른 환경(로컬 개발·다른 러너)
+에서는 CAS가 작동하며 원자성은 그쪽이 우월하다. 읽기측은 CAS 실패 시에만 돈다
+(CAS 성공 시 fetch 비용 0 — `test_CAS_성공이면_읽기측_탐지를_호출하지_않는다`가 동결).
+
+**폴백 자체가 실패하면**(fetch 불가 등) fail-open하되 **"중복 착수 보호가 전혀 없습니다"**를
+명시적으로 경고하고 `claim_readside_unavailable` 이벤트를 남긴다 — 침묵 실패 금지.
+탐지 성립 시에는 `claim_readside_conflict` 이벤트가 남아 측정 가능하다.
+
+### 3b-2. stale 홀더 처리 — 과탐이 만들던 영구 차단의 해소 (HARN-08)
+
+**문제**: 머지·폐기된 브랜치에 남은 `in_progress`를 읽기측이 활성 claim으로 오인해
+그 태스크를 **영구 차단**했다. 우회는 보호를 통째로 끄는 `--no-remote`뿐이었다.
+2026-07-27 실측에서 과탐 5건이 관측됐다(ARCH-13·MOB-01·OPS-07·PED-01·S2-02).
+
+> **조상 검사는 쓸 수 없다** — 이 저장소는 SQUASH 머지라 머지된 브랜치도 트렁크의
+> 조상이 아니다. 5건 전부 `git merge-base --is-ancestor`가 False로 실측됐다.
+
+판별은 다음 2규칙 + 태스크 단위 우회 1개다:
+
+| 규칙 | 내용 | 근거 |
+|---|---|---|
+| **A. 트렁크 권위** | 트렁크(`origin/HEAD`)의 사본이 `done`/`cancelled`면 **홀더 전부 무시** | 작업이 이미 착륙했다 — 다른 브랜치의 `in_progress`는 역사적 잔재. `done`/`cancelled`는 종결 상태라 CLI로 되돌릴 수 없다 |
+| **B. 트렁크는 세션이 아니다** | 트렁크 ref 자신은 홀더 후보에서 제외 | claim의 의미는 "어떤 *세션*이 그 브랜치에서 작업 중"이다. 트렁크의 `in_progress`는 활성 claim이 아니라 **대장 위생 실패**(done 미기입 머지 — OPS-07이 그 사례) |
+| **C. 세분 우회** | `start <id> --ignore-remote-claim` — **그 태스크의 읽기측 판정만** 무시 | `--no-remote`(보호 전체 포기)와 구분. 무엇을 포기하는지 경고 출력 + `claim_readside_ignored` 이벤트. **CAS conflict는 무시되지 않는다**(확정 신호) |
+
+- **기본 브랜치명은 하드코딩하지 않고, 원격 권위를 먼저 묻는다** —
+  `git ls-remote --symref origin HEAD`(실측 0.3초) → 실패 시 로컬 캐시
+  `git symbolic-ref refs/remotes/origin/HEAD` → 그래도 실패면 `main` 폴백.
+  **순서가 안전장치다**: 로컬 `origin/HEAD`는 clone 시점 스냅샷이라 stale일 수 있고,
+  2026-07-27 종단 실측에서 실제로 **세션 브랜치를 가리키는 클론**이 나왔다 — 그 값을
+  1순위로 믿었다면 규칙 A가 남의 세션 브랜치를 '트렁크 권위'로 삼아 보호를 조용히
+  껐을 것이다(미탐). 폴백까지 틀리면 규칙 A 신호가 '없음'이 되어 과탐 상태로 되돌아갈
+  뿐이며, 해소 경로는 `ScanResult.trunk_source`·`start` stderr에 매번 표기된다.
+- **나이(최종 커밋 경과일) 휴리스틱은 의도적으로 넣지 않았다** — 실측 5건이 A+B로 전부
+  해소되며, 나이 컷오프는 느리게 진행하는 실 세션을 오탐 해제할 위험(거짓 음성)만 더한다.
+- **걸러낸 홀더는 버리지 않는다** — `ScanResult.skipped`(사유별)에 남고 `start`가 stderr로
+  요약하며 `claim_readside_stale_skipped` 이벤트로 적재된다. "보호가 안 걸렸다"와
+  "보호를 스스로 껐다"가 구분돼야 하기 때문이다.
+- 실환경 검증(2026-07-27): 진짜 origin 대상으로 과탐 5건 → 0건(규칙 A 4건·규칙 B 1건).
+  같은 실행에서 살아 있는 claim(HARN-08 본인 브랜치)은 **여전히 홀더로 탐지**되고
+  `start`가 exit 1로 거부한다 — 보호가 과잉 무력화되지 않았음을 같은 회계로 확인했다.
+- 변별력 실측: 규칙 A 제거·규칙 A 과잉적용·규칙 B 제거·트렁크 해소 순서 되돌림·규칙 C 경고
+  삭제 5종 돌연변이가 각각 5·5·3·2·1건의 테스트 FAIL로 검출됨
+  (`tests/harness/test_remote_claims.py`·`test_cli.py`).
+
 ## 3c. 조율 정책 — 단계적 강제 (warn → block)
 
 `backlog/policy.yaml`의 rule 3종 (전부 warn으로 시작 — "측정 없는 도입 없음"):
@@ -133,6 +201,8 @@ E축 정본 문서가 결정하며, 하네스는 그 순서를 게이트로 집�
 python3 scripts/harness/backlog.py status          # 진행률·게이트·다음 후보 한 화면
 python3 scripts/harness/backlog.py next --n 3      # 착수 가능 후보 + 선정 사유
 python3 scripts/harness/backlog.py start <id>      # claim (규칙 위반 시 거부)
+python3 scripts/harness/backlog.py start <id> --ignore-remote-claim  # 이 태스크의 읽기측 판정만 무시(stale 확인 후·HARN-08)
+python3 scripts/harness/backlog.py start <id> --no-remote            # 원격 보호 전체 생략(오프라인·긴급)
 python3 scripts/harness/backlog.py done <id> --artifact "<PR/커밋>"   # 증적 필수
 python3 scripts/harness/backlog.py start|done <id> --as kiki ...  # 사람-소유 태스크의 소유자 본인 기입(HARN-06)
 python3 scripts/harness/backlog.py block <id> --reason "..." / unblock <id>
@@ -146,7 +216,8 @@ python3 scripts/harness/backlog.py overlap <id>    # 착수 전 겹침 진단
 python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn 측정 리포트
 ```
 
-테스트: `uv run --with pytest --with pyyaml pytest tests/harness` (142건).
+테스트: `uv run --with pytest --with pyyaml pytest tests/harness` (188건 — CI
+`harness-integrity` 잡이 `pytest tests/harness -q`로 무작위 순서 포함 실행).
 
 ## 8. 금기
 
@@ -156,4 +227,6 @@ python3 scripts/harness/backlog.py policy show|report      # 정책 값·warn �
 - ❌ E축 게이트 우회 착수 (waive는 Kiki 전용 결정)
 - ❌ ROADMAP "현재 위치"를 backlog와 어긋나게 단독 편집
 - ❌ 원격 claim conflict를 무시하고 착수 (남의 claim 강제 해제는 `claims release --force` — 상대 세션 확인 후)
+- ❌ 홀더 브랜치 생존 확인 없이 `--ignore-remote-claim` 사용 — 확인 명령(`git log -1 --format='%cr %h %s' origin/<branch>`)은 거부 메시지에 동봉된다. 살아 있는 세션이면 그 순간부터 중복 구현이다
+- ❌ 과탐 1건 때문에 `--no-remote`로 보호 전체 끄기 — 태스크 단위 우회(`--ignore-remote-claim`)가 있다
 - ❌ 측정(policy report) 없이 warn→block 승격, 또는 결정로그 없는 승격
