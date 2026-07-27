@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: math
 layer: data-pipeline
-status: todo
+status: in_progress
 priority: 5
 owner: claude
 depends_on: []
@@ -15,7 +15,6 @@ acceptance:
 artifacts: []
 paths:
   - "src/data-pipeline/**"
-  - "tests/data_pipeline/**"
-session: null
+session: claude/whymath-concept-management-spnep8
 notes: "docs/architecture/knowledge_module_gap_review.md §3 D5 — 외부 EOS 틀(모듈 10 그래프 기능) 대조 갭. 전체 그래프 열람 금지 대상은 LLM 투입이지 오프라인 집계가 아님을 명시"
 updated: 2026-07-27
