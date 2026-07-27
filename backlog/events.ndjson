@@ -780,3 +780,5 @@
 {"ts": "2026-07-27T01:29:07", "actor": "claude/whymath-service-review-9r21im", "action": "start", "id": "OPS-10-verification-device-hardening", "session": "claude/whymath-service-review-9r21im", "remote": "error"}
 {"ts": "2026-07-27T01:47:48", "actor": "claude/whymath-service-review-9r21im", "action": "done", "id": "OPS-10-verification-device-hardening", "artifacts": ["8620830"]}
 {"ts": "2026-07-27T01:47:49", "actor": "claude/whymath-service-review-9r21im", "action": "add", "id": "OPS-11-infra-tests-lint"}
+{"ts": "2026-07-27T01:56:32", "actor": "claude/whymath-service-review-9r21im", "action": "done", "id": "OPS-07-test-pollution-guard", "artifacts": ["24e0dcd"]}
+{"ts": "2026-07-27T01:56:49", "actor": "claude/whymath-service-review-9r21im", "action": "add", "id": "HARN-07-remote-claim-failure"}
