@@ -492,6 +492,194 @@ class TestReadSideFallback:
         assert unavailable and unavailable[-1]["id"] == self.TASK_ID
 
 
+class TestReadSideStaleHandling:
+    """HARN-08 — 읽기측 폴백의 stale 과탐 처리 (규칙 A·B) + 태스크 단위 우회(규칙 C).
+
+    HARN-07 종단 실측에서 머지·폐기된 브랜치에 남은 `in_progress`가 그 태스크를
+    영구 차단했다(우회는 보호 전체를 끄는 `--no-remote`뿐). 여기서는 CAS 실패
+    환경만 시임으로 재현하고 트렁크·브랜치 상태는 진짜 로컬 원격에 심는다.
+    """
+
+    TASK_ID = "T8-01-stale-holder"
+
+    def _add_task(self, repo: Path) -> None:
+        assert cli.main(["add", "--id", self.TASK_ID, "--title", "stale 홀더 대상",
+                         "--track", "math-completion", "--stage", "S1"]) == 0
+
+    def _seeded_clone(self, clone, monkeypatch, name: str) -> Path:
+        repo = clone(name)
+        monkeypatch.chdir(repo)
+        assert cli.main(["seed"]) == 0
+        self._add_task(repo)
+        return repo
+
+    def _seed_trunk(self, clone, monkeypatch, status: str,
+                    session: str | None = None) -> Path:
+        """origin/main에 이 태스크 사본을 특정 status로 심는다 (규칙 A·B 신호원)."""
+        repo = clone("trunk-writer")
+        monkeypatch.chdir(repo)
+        assert cli.main(["seed"]) == 0
+        self._add_task(repo)
+        backlog, _ = store.load_backlog(repo)
+        task = backlog.tasks[self.TASK_ID]
+        task.status = status
+        task.session = session
+        task.artifacts = ["PR#trunk"] if status == "done" else []
+        store.save_task(repo, task)
+        for argv in (["checkout", "-q", "main"], ["add", "."],
+                     ["commit", "-q", "-m", f"trunk {status}"],
+                     ["push", "--quiet", "origin", "main"]):
+            subprocess.run(["git", *argv], cwd=repo, check=True, capture_output=True)
+        return repo
+
+    def _push_holder_branch(self, clone, monkeypatch, name: str) -> Path:
+        """타 세션이 in_progress를 push한 상태를 만든다."""
+        repo = self._seeded_clone(clone, monkeypatch, name)
+        assert cli.main(["start", self.TASK_ID, "--no-remote"]) == 0
+        for argv in (["checkout", "-q", "-B", f"claude/{name}"], ["add", "."],
+                     ["commit", "-q", "-m", "claim"],
+                     ["push", "--quiet", "-u", "origin", f"claude/{name}"]):
+            subprocess.run(["git", *argv], cwd=repo, check=True, capture_output=True)
+        return repo
+
+    def _force_cas_failure(self, monkeypatch) -> None:
+        import remote_claims
+
+        monkeypatch.setattr(remote_claims, "claim", lambda *a, **k: remote_claims.ClaimResult(
+            "error", message="RPC failed; HTTP 403"))
+
+    def _events(self, repo: Path) -> list[dict]:
+        raw = (repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        return [json.loads(line) for line in raw.splitlines() if line.strip()]
+
+    def _setup(self, clone, monkeypatch, trunk_status: str | None,
+               trunk_session: str | None = None, holder: bool = True) -> Path:
+        """내 세션(B) → 홀더 브랜치(A) → 트렁크 착륙 순으로 재현하고 B로 복귀.
+
+        B를 **먼저** 클론하는 것이 핵심이다 — 트렁크에 done이 착륙하기 *전에* 분기한
+        장수 브랜치가 실제 과탐 피해자이며(로컬 사본은 여전히 todo), 착륙 후 분기한
+        세션은 로컬 status만으로 전이 거부되어 읽기측까지 오지도 않는다.
+        """
+        repo_b = self._seeded_clone(clone, monkeypatch, "session-b")
+        if holder:
+            self._push_holder_branch(clone, monkeypatch, "session-a")
+        if trunk_status is not None:
+            self._seed_trunk(clone, monkeypatch, trunk_status, session=trunk_session)
+        monkeypatch.chdir(repo_b)
+        self._force_cas_failure(monkeypatch)
+        return repo_b
+
+    def test_규칙A_트렁크가_done이면_착수를_허용하고_제외사유를_보고한다(
+            self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        repo_b = self._setup(clone, monkeypatch, "done")
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID]) == 0     # 영구 차단 해소
+        err = capsys.readouterr().err
+        assert "stale 홀더" in err                         # 조용히 버리지 않는다
+        assert "trunk_done" in err
+        assert "claude/session-a" in err                  # 무엇을 제외했는지 명시
+        backlog, _ = store.load_backlog(repo_b)
+        assert backlog.tasks[self.TASK_ID].status == "in_progress"
+        skipped = [e for e in self._events(repo_b)
+                   if e.get("action") == "claim_readside_stale_skipped"]
+        assert skipped and "claude/session-a:trunk_done" in skipped[-1]["skipped"]
+
+    def test_규칙A_역_트렁크가_todo면_여전히_차단한다(
+            self, bare_remote, monkeypatch, capsys):
+        # 규칙 A가 보호를 과잉 무력화하면 안 된다 (착륙하지 않은 태스크)
+        _, clone = bare_remote
+        repo_b = self._setup(clone, monkeypatch, "todo")
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID]) == 1
+        err = capsys.readouterr().err
+        assert "착수 거부" in err
+        assert "claude/session-a" in err
+        assert "--ignore-remote-claim" in err              # 세분 우회 경로 안내
+        backlog, _ = store.load_backlog(repo_b)
+        assert backlog.tasks[self.TASK_ID].status == "todo"
+
+    def test_규칙B_트렁크의_잔존_in_progress는_홀더가_아니다(
+            self, bare_remote, monkeypatch, capsys):
+        # done 미기입 머지로 main에 in_progress가 남은 상태 (실측 OPS-07 사례)
+        _, clone = bare_remote
+        self._setup(clone, monkeypatch, "in_progress",
+                    trunk_session="claude/merged-session", holder=False)
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID]) == 0
+        err = capsys.readouterr().err
+        assert "trunk_not_session" in err
+        assert "main" in err
+
+    def test_규칙C_플래그는_이_태스크만_무시하고_포기항목을_경고한다(
+            self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        repo_b = self._setup(clone, monkeypatch, "todo")   # 규칙 A 미적용 = 실 홀더
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID, "--ignore-remote-claim"]) == 0
+        captured = capsys.readouterr()
+        assert "--ignore-remote-claim" in captured.err
+        assert "포기하는 것" in captured.err                 # 침묵 실패 금지
+        assert "claude/session-a" in captured.err          # 무엇을 무시했는지
+        # 무시했으면서 '중복 없음'이라고 말하면 거짓말이다
+        assert "중복 in_progress 없음" not in captured.err
+        assert "+ignored" in captured.out
+        ignored = [e for e in self._events(repo_b)
+                   if e.get("action") == "claim_readside_ignored"]
+        assert ignored and ignored[-1]["id"] == self.TASK_ID
+        assert "claude/session-a:claude/session-a" in ignored[-1]["holders"]
+
+    def test_규칙C는_다른_태스크의_보호를_끄지_않는다(
+            self, bare_remote, monkeypatch, capsys):
+        # 세분 우회 — 플래그를 쓴 태스크 외에는 그대로 차단돼야 한다
+        _, clone = bare_remote
+        other = "T8-02-other-stale"
+        repo_a = self._push_holder_branch(clone, monkeypatch, "session-a")
+        monkeypatch.chdir(repo_a)
+        assert cli.main(["add", "--id", other, "--title", "다른 태스크",
+                         "--track", "math-completion", "--stage", "S1"]) == 0
+        assert cli.main(["start", other, "--no-remote"]) == 0
+        for argv in (["add", "."], ["commit", "-q", "-m", "claim2"],
+                     ["push", "--quiet", "origin", "claude/session-a"]):
+            subprocess.run(["git", *argv], cwd=repo_a, check=True, capture_output=True)
+
+        repo_b = self._seeded_clone(clone, monkeypatch, "session-b")
+        assert cli.main(["add", "--id", other, "--title", "다른 태스크",
+                         "--track", "math-completion", "--stage", "S1"]) == 0
+        self._force_cas_failure(monkeypatch)
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID, "--ignore-remote-claim"]) == 0
+        capsys.readouterr()
+        assert cli.main(["start", other]) == 1             # 다른 태스크는 여전히 차단
+        assert "착수 거부" in capsys.readouterr().err
+        backlog, _ = store.load_backlog(repo_b)
+        assert backlog.tasks[other].status == "todo"
+
+    def test_규칙C는_CAS_conflict를_무시하지_않는다(self, bare_remote, monkeypatch, capsys):
+        # 확정 신호(CAS)는 우회 대상이 아니다 — 플래그의 사정거리를 명시한다
+        _, clone = bare_remote
+        self._seeded_clone(clone, monkeypatch, "session-a")
+        assert cli.main(["start", self.TASK_ID]) == 0
+        self._seeded_clone(clone, monkeypatch, "session-b")
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID, "--ignore-remote-claim"]) == 1
+        err = capsys.readouterr().err
+        assert "이미 원격 claim" in err
+        assert "읽기측" in err
+
+    def test_규칙C_무시할_판정이_없으면_효과없음을_말한다(
+            self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        repo = self._seeded_clone(clone, monkeypatch, "session-a")
+        self._force_cas_failure(monkeypatch)
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID, "--ignore-remote-claim"]) == 0
+        err = capsys.readouterr().err
+        assert "효과 없음" in err
+        assert not [e for e in self._events(repo)
+                    if e.get("action") == "claim_readside_ignored"]
+
+
 class TestStartOverlapPreflight:
     """start 프리플라이트 — in-flight 태스크와 paths 겹침 검사 (warn→block 단계적)."""
 
