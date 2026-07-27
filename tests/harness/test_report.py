@@ -12,18 +12,35 @@ def _backlog() -> Backlog:
     backlog = Backlog(stage_order=["S1", "S2"])
     backlog.tracks["main"] = Track(id="main", title="기본")
     backlog.gates["G-key"] = Gate(
-        id="G-key", title="키 투입", requested="2026-07-05", remind_after_days=7,
+        id="G-key",
+        title="키 투입",
+        requested="2026-07-05",
+        remind_after_days=7,
     )
     backlog.tasks["S1-01-a"] = Task(
-        id="S1-01-a", title="완료건", track="main", stage="S1",
-        status="done", artifacts=["PR#1"], updated="2026-07-08",
+        id="S1-01-a",
+        title="완료건",
+        track="main",
+        stage="S1",
+        status="done",
+        artifacts=["PR#1"],
+        updated="2026-07-08",
     )
     backlog.tasks["S1-02-b"] = Task(
-        id="S1-02-b", title="진행건", track="main", stage="S1",
-        status="in_progress", session="branch-x", updated="2026-07-08",
+        id="S1-02-b",
+        title="진행건",
+        track="main",
+        stage="S1",
+        status="in_progress",
+        session="branch-x",
+        updated="2026-07-08",
     )
     backlog.tasks["S2-01-c"] = Task(
-        id="S2-01-c", title="대기건", track="main", stage="S2", updated="2026-07-08",
+        id="S2-01-c",
+        title="대기건",
+        track="main",
+        stage="S2",
+        updated="2026-07-08",
     )
     return backlog
 
@@ -63,9 +80,9 @@ class TestBrief:
         backlog = _backlog()
         text = report.render_brief(backlog, [], "branch-x", date(2026, 7, 20))
         assert "현재 스테이지: S1" in text
-        assert "S1-02-b" in text          # 이 브랜치가 claim한 태스크
-        assert "done S1-02-b" in text     # 완료 커맨드 안내
-        assert "G-key" in text            # 15일 경과 리마인드
+        assert "S1-02-b" in text  # 이 브랜치가 claim한 태스크
+        assert "done S1-02-b" in text  # 완료 커맨드 안내
+        assert "G-key" in text  # 15일 경과 리마인드
         assert "15일 경과" in text
 
     def test_무결성_경고_표기(self):

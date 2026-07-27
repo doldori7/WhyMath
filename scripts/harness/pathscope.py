@@ -44,11 +44,11 @@ def glob_to_regex(pattern: str) -> re.Pattern[str]:
     while i < len(pattern):
         ch = pattern[i]
         if ch == "*":
-            if pattern[i:i + 3] == "**/":
+            if pattern[i : i + 3] == "**/":
                 out.append("(.*/)?")
                 i += 3
                 continue
-            if pattern[i:i + 2] == "**":
+            if pattern[i : i + 2] == "**":
                 out.append(".*")
                 i += 2
                 continue
@@ -78,8 +78,11 @@ def repo_files(root: Path) -> list[str]:
     """git ls-files 결과 (호출당 1회 — 인자 주입으로 캐시·테스트 용이)."""
     try:
         out = subprocess.run(
-            ["git", "ls-files"], cwd=root,
-            capture_output=True, text=True, timeout=15,
+            ["git", "ls-files"],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
         return out.stdout.splitlines()
     except Exception:  # pragma: no cover - 환경 의존
@@ -108,8 +111,8 @@ class Overlap:
 
     task_a: str
     task_b: str
-    files: list[str] = field(default_factory=list)   # 실파일 교집합 샘플 (최대 5)
-    prefix_hit: str | None = None                     # 프리픽스 포함 판정 사유 (신규 파일 대비)
+    files: list[str] = field(default_factory=list)  # 실파일 교집합 샘플 (최대 5)
+    prefix_hit: str | None = None  # 프리픽스 포함 판정 사유 (신규 파일 대비)
 
     def describe(self) -> str:
         parts: list[str] = []
@@ -125,8 +128,9 @@ def _prefix_contains(a: str, b: str) -> bool:
     return b.startswith(a)
 
 
-def overlap(task_a: str, globs_a: list[str], task_b: str, globs_b: list[str],
-            files: list[str]) -> Overlap | None:
+def overlap(
+    task_a: str, globs_a: list[str], task_b: str, globs_b: list[str], files: list[str]
+) -> Overlap | None:
     """겹침 가능성 판정 — None이면 안전, Overlap이면 겹칠 수 있음."""
     if not globs_a or not globs_b:
         return None  # 한쪽이라도 paths 미선언이면 판정 불가 (강제는 정책이 결정)

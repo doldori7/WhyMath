@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-27 (구현·OPS-12): **하네스 lint 배선 — `tests/harness`·`scripts/harness`를 검사하는 잡이 하나도 없었다** (claude 구현, Kiki "추천작업진행")
+
+**컨텍스트**: HARN-08 구현 중 발견·등재된 OPS-11의 harness 판박이. backend 잡은 `../../tests/backend`만, data-pipeline 잡은 working-directory `src/data-pipeline`의 `.`만 lint — 대장(backlog)을 판정하는 하네스 코드 자체는 품질 무배선("검사하는 자를 아무도 검사하지 않는" 구멍, CLAUDE.md '검증 장치를 만들고 배선 확인 없이 완료 선언 금지' 부류의 6번째 사례).
+
+**착수 실측이 태스크 명세보다 컸다**: 등재된 선재 위반은 ruff F541 2건(test_cli.py — 등재 시점 704·722행이 #613·#617의 +336줄로 892·910행으로 밀림·동일 2건)이었으나, 실측하니 **black --check 드리프트가 17파일**(tests/harness 9/9 전부 + scripts/harness 8/9 — 레포 루트에 pyproject가 없어 저자들이 기본 88자로 포맷·저장소 표준은 100자) 추가로 선재. `scripts/harness`도 어느 잡에도 무배선임을 확인하고 **범위를 tests/harness→scripts/harness 포함으로 확장**(태스크 paths 등재 병기) — 같은 구멍을 반쪽만 막는 것을 회피.
+
+**변경**: ① harness-integrity 잡에 Ruff·Black --check(`--line-length 100`) 스텝 추가(대상 `scripts/harness tests/harness`·핀은 OPS-11과 동일 정책 `ruff>=0.7.0,<0.16`·`black>=24.10.0,<27`) ② F541 2건 수정 + 17파일 black 정리(기계적 포맷·동작 무변경) ③ 동결 — OPS-11의 `test_infra_lint_wiring.py`를 **`_WIRINGS` 파라미터화로 일반화**(신규 파일 대신 재사용·(잡, 대상들) 한 줄 추가로 후속 배선도 같은 계약 동결): 계약 ①스텝 존재 ②`--check`+`--line-length 100` ③선언 대상 **전부** 커버(부분 커버 위장 차단·신설) ④파서 위장 금지, 5→9 테스트.
+
+**변별력 실측(결함 주입 5종 전부 검출 → 복원 후 전건 PASS)**: harness ruff 스텝 삭제=2 failed · black `--check` 제거=1 failed · `--line-length 100` 제거=1 failed · ruff 대상에서 scripts/harness 제외(부분 커버 위장)=1 failed · infra ruff 대상 변조(OPS-11 축 회귀 확인)=1 failed. 배선 자체의 변별력은 선재 위반이 증명 — 배선 직전 상태에서 ruff 2건·black 17파일이 실제 FAIL이었다.
+
+**검증**: tests/harness **189 passed**(무작위 순서·포맷 후) · tests/infra **242 passed**(CI 동일 의존성 — 처음 30 failed는 로컬에 pytest-asyncio·sqlalchemy 부재가 원인·설치 후 전건 green) · ruff/black clean(scripts/harness·tests/harness·tests/infra) · `backlog validate` green(87건). 부분 스위트 한계 명시: backend 등 타 스위트는 이 변경이 건드리지 않아 미실행 — CI가 최종 판정.
+
 ### 2026-07-27 (결정·Kiki): **외부 작업(변호사 회신·외부인 리뷰) 전체를 제품 출시 전으로 일괄 연기 — "미완성 제품의 병목이 되는 것 반대"** (Kiki 지시, claude 집행)
 
 **결정**: 변호사 회신·외부인 리뷰 등 **외부 의존 작업은 제품 출시(공개 β) 준비 단계에서 일괄 처리**한다. 제품이 미완성인 현 시점에 외부 작업이 개발 병목이 되는 것을 반대 — claude의 "리드타임이 길어 조기 착수" 반복 권고를 기각하고 시점을 재배치한 것(취소 아님).

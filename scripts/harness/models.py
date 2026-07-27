@@ -49,18 +49,18 @@ CODE_DOMAIN_PREFIXES: tuple[str, ...] = (
 # 과목 축 — 개방 확장: 새 과목은 이 튜플에 1줄 추가로 끝난다.
 # (문명 전체를 교육적으로 다루는 E축 로드맵 수용 — subject_expansion_e_axis_v1.md)
 SUBJECTS: tuple[str, ...] = (
-    "math",           # 수학 (중·고·대학)
-    "physics",        # E1 물리
-    "chemistry",      # E2 화학
-    "biology",        # E3 생물
+    "math",  # 수학 (중·고·대학)
+    "physics",  # E1 물리
+    "chemistry",  # E2 화학
+    "biology",  # E3 생물
     "earth-science",  # 지구과학 (E축 배치 미정 — 결정 태스크로 추적)
-    "social",         # E4 역사·사회 (경제·역사·세계사 포함)
-    "economics",      # 경제학 (E4 세분)
-    "history",        # 역사 (E4 세분)
+    "social",  # E4 역사·사회 (경제·역사·세계사 포함)
+    "economics",  # 경제학 (E4 세분)
+    "history",  # 역사 (E4 세분)
     "world-history",  # 세계사 (E4 세분)
-    "korean",         # E5 국어
-    "english",        # E6 영어
-    "cross",          # 과목 횡단 (인프라·아키텍처 등)
+    "korean",  # E5 국어
+    "english",  # E6 영어
+    "cross",  # 과목 횡단 (인프라·아키텍처 등)
 )
 
 STATUSES: tuple[str, ...] = (
@@ -78,8 +78,8 @@ STATUS_TRANSITIONS: dict[str, tuple[str, ...]] = {
     "in_progress": ("review", "done", "blocked", "todo"),
     "blocked": ("todo", "cancelled"),
     "review": ("done", "in_progress"),
-    "done": (),        # 종결 상태
-    "cancelled": (),   # 종결 상태
+    "done": (),  # 종결 상태
+    "cancelled": (),  # 종결 상태
 }
 
 OWNERS: tuple[str, ...] = ("claude", "kiki", "partner")
@@ -108,16 +108,18 @@ class Task:
     subject: str = "math"
     layer: str = "backend"
     status: str = "todo"
-    priority: int = 3                       # 1(최고)~5
+    priority: int = 3  # 1(최고)~5
     owner: str = "claude"
     depends_on: list[str] = field(default_factory=list)
     requires_gates: list[str] = field(default_factory=list)
     acceptance: list[str] = field(default_factory=list)
-    artifacts: list[str] = field(default_factory=list)   # done 시 PR/커밋 필수
-    paths: list[str] = field(default_factory=list)       # 이 태스크가 만질 파일 glob (레포 상대 — 겹침 검사용)
-    session: str | None = None              # claim한 브랜치 (병렬 세션 소유권)
+    artifacts: list[str] = field(default_factory=list)  # done 시 PR/커밋 필수
+    paths: list[str] = field(
+        default_factory=list
+    )  # 이 태스크가 만질 파일 glob (레포 상대 — 겹침 검사용)
+    session: str | None = None  # claim한 브랜치 (병렬 세션 소유권)
     notes: str = ""
-    updated: str = ""                       # YYYY-MM-DD, 상태 변경 시 CLI가 갱신
+    updated: str = ""  # YYYY-MM-DD, 상태 변경 시 CLI가 갱신
 
     def validate(self) -> list[str]:
         """스키마 위반 목록 반환 (빈 리스트 = 정상)."""
@@ -179,12 +181,12 @@ class Gate:
 
     id: str
     title: str
-    kind: str = "human"                     # human|external|decision
+    kind: str = "human"  # human|external|decision
     assignee: str = "kiki"
-    status: str = "pending"                 # pending|cleared|waived
-    requested: str = ""                     # YYYY-MM-DD
-    remind_after_days: int | None = None    # 경과 시 SessionStart 브리핑에 리마인드
-    evidence: str | None = None             # cleared 시 근거(커밋/문서) 필수
+    status: str = "pending"  # pending|cleared|waived
+    requested: str = ""  # YYYY-MM-DD
+    remind_after_days: int | None = None  # 경과 시 SessionStart 브리핑에 리마인드
+    evidence: str | None = None  # cleared 시 근거(커밋/문서) 필수
     notes: str = ""
 
     def validate(self) -> list[str]:
@@ -216,7 +218,7 @@ class Track:
     id: str
     title: str
     roadmap_ref: str = ""
-    entry_gate: str | None = None           # 미통과 시 트랙 전체가 next 후보 제외
+    entry_gate: str | None = None  # 미통과 시 트랙 전체가 next 후보 제외
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -237,11 +239,11 @@ class Policy:
     """
 
     version: int = 1
-    path_overlap: str = "warn"      # 태스크 paths 교차 (start 프리플라이트·check-edit ②)
-    scope_drift: str = "warn"       # 내 claim 태스크의 paths 밖 편집 (check-edit ①)
-    adhoc_edit: str = "warn"        # claim 없이 코드 도메인 편집 (check-edit ③)
-    claim_ttl_hours: int = 72       # 원격 claim stale 판정 TTL
-    remote_claims: bool = True      # 원격 claim(refs/claims/*) 사용 여부
+    path_overlap: str = "warn"  # 태스크 paths 교차 (start 프리플라이트·check-edit ②)
+    scope_drift: str = "warn"  # 내 claim 태스크의 paths 밖 편집 (check-edit ①)
+    adhoc_edit: str = "warn"  # claim 없이 코드 도메인 편집 (check-edit ③)
+    claim_ttl_hours: int = 72  # 원격 claim stale 판정 TTL
+    remote_claims: bool = True  # 원격 claim(refs/claims/*) 사용 여부
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -250,7 +252,9 @@ class Policy:
             if mode not in POLICY_MODES:
                 errors.append(f"policy.{rule}: '{mode}' 미등록 (허용: {list(POLICY_MODES)})")
         if not isinstance(self.claim_ttl_hours, int) or self.claim_ttl_hours < 1:
-            errors.append(f"policy.claim_ttl_hours: 1 이상 정수여야 함 (현재 {self.claim_ttl_hours!r})")
+            errors.append(
+                f"policy.claim_ttl_hours: 1 이상 정수여야 함 (현재 {self.claim_ttl_hours!r})"
+            )
         if not isinstance(self.remote_claims, bool):
             errors.append(f"policy.remote_claims: bool이어야 함 (현재 {self.remote_claims!r})")
         return errors

@@ -18,8 +18,12 @@ TASK = "S1-01-sample-task"
 def _mk_backlog(status: str = "in_progress", session: str | None = "claude/a") -> Backlog:
     backlog = Backlog(stage_order=["S1"])
     backlog.tasks[TASK] = Task(
-        id=TASK, title="샘플", track="math-completion", stage="S1",
-        status=status, session=session,
+        id=TASK,
+        title="샘플",
+        track="math-completion",
+        stage="S1",
+        status=status,
+        session=session,
     )
     return backlog
 
@@ -89,9 +93,12 @@ class TestFailOpen:
 
     def test_죽은_원격은_offline_또는_error_절대_예외_아님(self, git_repo: Path, tmp_path):
         import subprocess
+
         subprocess.run(
             ["git", "remote", "add", "origin", str(tmp_path / "no-such-repo.git")],
-            cwd=git_repo, check=True, capture_output=True,
+            cwd=git_repo,
+            check=True,
+            capture_output=True,
         )
         result = remote_claims.claim(git_repo, TASK, "claude/x")
         assert result.status in ("offline", "error")
@@ -108,11 +115,17 @@ class TestTopLevelFieldParser:
     def test_실제_dump_task_형식을_읽는다(self):
         import store
 
-        body = store.dump_task(Task(
-            id=TASK, title="샘플: 콜론 포함", track="math-completion", stage="S1",
-            status="in_progress", session="claude/session-a",
-            paths=["scripts/harness/**"],
-        ))
+        body = store.dump_task(
+            Task(
+                id=TASK,
+                title="샘플: 콜론 포함",
+                track="math-completion",
+                stage="S1",
+                status="in_progress",
+                session="claude/session-a",
+                paths=["scripts/harness/**"],
+            )
+        )
         assert remote_claims._top_level_field(body, "status") == "in_progress"
         assert remote_claims._top_level_field(body, "session") == "claude/session-a"
 
@@ -126,9 +139,11 @@ class TestTopLevelFieldParser:
 
     def test_들여쓰기된_줄과_값_속_콜론에_속지_않는다(self):
         # notes 값 안의 'status: in_progress'와 리스트 항목이 최상위로 오인되면 안 된다
-        body = ('status: todo\n'
-                'notes: "이전 세션에서 status: in_progress 였음"\n'
-                'acceptance:\n  - "status: in_progress 금지"\n')
+        body = (
+            "status: todo\n"
+            'notes: "이전 세션에서 status: in_progress 였음"\n'
+            'acceptance:\n  - "status: in_progress 금지"\n'
+        )
         assert remote_claims._top_level_field(body, "status") == "todo"
 
     def test_없는_키는_빈_문자열(self):
@@ -142,8 +157,9 @@ class TestReadSideScan:
     실제 git fetch/show로 검증한다(시임 아님).
     """
 
-    def _push_task_copy(self, repo: Path, branch: str, status: str,
-                        session: str | None, task_id: str = TASK) -> None:
+    def _push_task_copy(
+        self, repo: Path, branch: str, status: str, session: str | None, task_id: str = TASK
+    ) -> None:
         """원격 브랜치에 태스크 YAML 사본을 심는다 — 타 세션이 push한 상태 재현."""
         import subprocess
 
@@ -152,10 +168,17 @@ class TestReadSideScan:
         def run(*argv: str) -> None:
             subprocess.run(["git", *argv], cwd=repo, check=True, capture_output=True)
 
-        store.save_task(repo, Task(
-            id=task_id, title="샘플", track="math-completion", stage="S1",
-            status=status, session=session,
-        ))
+        store.save_task(
+            repo,
+            Task(
+                id=task_id,
+                title="샘플",
+                track="math-completion",
+                stage="S1",
+                status=status,
+                session=session,
+            ),
+        )
         run("checkout", "-B", branch)
         run("add", ".")
         run("commit", "-m", f"claim {task_id}")
@@ -200,8 +223,9 @@ class TestReadSideScan:
     def test_다른_태스크의_claim에는_반응하지_않는다(self, bare_remote):
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
-        self._push_task_copy(a, "claude/session-a", "in_progress", "claude/session-a",
-                             task_id="S1-99-other-task")
+        self._push_task_copy(
+            a, "claude/session-a", "in_progress", "claude/session-a", task_id="S1-99-other-task"
+        )
         result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
         assert result.status == "ok"
         assert result.holders == []
@@ -219,7 +243,9 @@ class TestReadSideScan:
         def fake_git(root, *argv, **kwargs):
             if argv and argv[0] == "fetch" and any("refs/heads" in a for a in argv):
                 return subprocess.CompletedProcess(
-                    ["git", *argv], 128, stdout="",
+                    ["git", *argv],
+                    128,
+                    stdout="",
                     stderr="fatal: unable to access 'origin': The requested URL returned error: 403",
                 )
             return original(root, *argv, **kwargs)
@@ -234,8 +260,7 @@ class TestReadSideScan:
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
         self._push_task_copy(a, "claude/session-a", "in_progress", "claude/session-a")
-        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b",
-                                                       max_refs=1)
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b", max_refs=1)
         assert result.status == "ok"
         assert result.scanned_refs == 1
         assert result.truncated is True  # 조용한 축소 금지
@@ -249,21 +274,30 @@ class TestReadSideStaleHandling:
     트렁크 사본의 status(규칙 A)와 "트렁크는 세션이 아니다"(규칙 B)로 판별한다.
     """
 
-    def _write_task(self, repo: Path, status: str, session: str | None,
-                    task_id: str = TASK) -> None:
+    def _write_task(
+        self, repo: Path, status: str, session: str | None, task_id: str = TASK
+    ) -> None:
         import store
 
-        store.save_task(repo, Task(
-            id=task_id, title="샘플", track="math-completion", stage="S1",
-            status=status, session=session,
-            artifacts=["PR#0"] if status == "done" else [],
-        ))
+        store.save_task(
+            repo,
+            Task(
+                id=task_id,
+                title="샘플",
+                track="math-completion",
+                stage="S1",
+                status=status,
+                session=session,
+                artifacts=["PR#0"] if status == "done" else [],
+            ),
+        )
 
     def _run(self, repo: Path, *argv: str) -> None:
         subprocess.run(["git", *argv], cwd=repo, check=True, capture_output=True)
 
-    def _push_trunk(self, repo: Path, status: str, session: str | None = None,
-                    task_id: str = TASK) -> None:
+    def _push_trunk(
+        self, repo: Path, status: str, session: str | None = None, task_id: str = TASK
+    ) -> None:
         """트렁크(origin/main)에 태스크 사본을 심는다 — 규칙 A·B의 신호원."""
         self._run(repo, "checkout", "-q", "main")
         self._write_task(repo, status, session, task_id)
@@ -271,8 +305,9 @@ class TestReadSideStaleHandling:
         self._run(repo, "commit", "-q", "-m", f"trunk {status}")
         self._run(repo, "push", "--quiet", "origin", "main")
 
-    def _push_session_branch(self, repo: Path, branch: str, status: str,
-                             session: str | None, task_id: str = TASK) -> None:
+    def _push_session_branch(
+        self, repo: Path, branch: str, status: str, session: str | None, task_id: str = TASK
+    ) -> None:
         """세션 브랜치에 태스크 사본을 심는다 (홀더 후보)."""
         self._run(repo, "checkout", "-q", "-B", branch)
         self._write_task(repo, status, session, task_id)
@@ -287,7 +322,7 @@ class TestReadSideStaleHandling:
         self._push_session_branch(a, "claude/session-a", "in_progress", "claude/session-a")
         result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
         assert result.status == "ok"
-        assert result.holders == []                       # 과탐 해소 — 착수 허용
+        assert result.holders == []  # 과탐 해소 — 착수 허용
         assert result.trunk_status == "done"
         # 조용히 버리지 않는다 — 무엇을 왜 무시했는지 남는다
         assert [(s.branch, s.reason) for s in result.skipped] == [
@@ -324,9 +359,7 @@ class TestReadSideStaleHandling:
         result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
         assert result.status == "ok"
         assert result.holders == []
-        assert [(s.branch, s.reason) for s in result.skipped] == [
-            ("main", "trunk_not_session")
-        ]
+        assert [(s.branch, s.reason) for s in result.skipped] == [("main", "trunk_not_session")]
 
     def test_규칙B는_실_세션_claim까지_지우지는_않는다(self, bare_remote):
         _, clone = bare_remote
@@ -353,8 +386,11 @@ class TestReadSideStaleHandling:
         def fake_git(root, *argv, **kwargs):
             if argv and argv[0] == "ls-remote":
                 return subprocess.CompletedProcess(
-                    ["git", *argv], 128, stdout="",
-                    stderr="fatal: unable to access origin: HTTP 403")
+                    ["git", *argv],
+                    128,
+                    stdout="",
+                    stderr="fatal: unable to access origin: HTTP 403",
+                )
             return original(root, *argv, **kwargs)
 
         monkeypatch.setattr(remote_claims, "_git", fake_git)
@@ -363,7 +399,7 @@ class TestReadSideStaleHandling:
         _, clone = bare_remote
         b = clone("session-b")
         result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
-        assert result.trunk_source == "ls-remote"        # 하드코딩 아님·원격 권위 우선
+        assert result.trunk_source == "ls-remote"  # 하드코딩 아님·원격 권위 우선
         assert result.trunk_ref == "refs/remotes/origin/main"
 
     def test_로컬_origin_HEAD가_stale이어도_원격_권위를_따른다(self, bare_remote):
@@ -374,12 +410,11 @@ class TestReadSideStaleHandling:
         """
         _, clone = bare_remote
         a, b = clone("session-a"), clone("session-b")
-        self._push_trunk(a, "todo")                      # 진짜 트렁크: 미착륙
+        self._push_trunk(a, "todo")  # 진짜 트렁크: 미착륙
         self._push_session_branch(a, "claude/session-a", "in_progress", "claude/session-a")
-        self._push_session_branch(a, "claude/liar", "done", None)   # 착륙했다고 주장하는 사본
+        self._push_session_branch(a, "claude/liar", "done", None)  # 착륙했다고 주장하는 사본
         self._run(b, "fetch", "--quiet", "origin", "+refs/heads/*:refs/remotes/origin/*")
-        self._run(b, "symbolic-ref", "refs/remotes/origin/HEAD",
-                  "refs/remotes/origin/claude/liar")
+        self._run(b, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/claude/liar")
         result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
         assert result.trunk_ref == "refs/remotes/origin/main"
         assert result.trunk_status == "todo"
@@ -393,7 +428,7 @@ class TestReadSideStaleHandling:
         self._break_ls_remote(monkeypatch)
         result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
         assert result.trunk_source == "symbolic-ref"
-        assert result.holders == []                      # 규칙 A는 그대로 작동
+        assert result.holders == []  # 규칙 A는 그대로 작동
 
     def test_해소_전부_실패하면_main으로_폴백한다(self, bare_remote, monkeypatch):
         _, clone = bare_remote
@@ -411,8 +446,8 @@ class TestReadSideStaleHandling:
 class TestStaleAndReap:
     def test_stale_3중_기준(self):
         now = datetime(2026, 7, 16, 12, 0, tzinfo=timezone.utc)
-        fresh_ts = "2026-07-16T10:00:00Z"    # 2시간 전 — TTL(72h) 이내
-        old_ts = "2026-07-10T10:00:00Z"      # 6일 전 — TTL 초과
+        fresh_ts = "2026-07-16T10:00:00Z"  # 2시간 전 — TTL(72h) 이내
+        old_ts = "2026-07-10T10:00:00Z"  # 6일 전 — TTL 초과
         claims = [
             remote_claims.RemoteClaim(TASK, "sha1", "claude/a", fresh_ts),
             remote_claims.RemoteClaim("S1-02-done-task", "sha2", "claude/b", fresh_ts),
@@ -421,19 +456,27 @@ class TestStaleAndReap:
         ]
         backlog = _mk_backlog()
         backlog.tasks["S1-02-done-task"] = Task(
-            id="S1-02-done-task", title="완료됨", track="math-completion", stage="S1",
-            status="done", artifacts=["PR#1"],
+            id="S1-02-done-task",
+            title="완료됨",
+            track="math-completion",
+            stage="S1",
+            status="done",
+            artifacts=["PR#1"],
         )
         backlog.tasks["S1-04-old-task"] = Task(
-            id="S1-04-old-task", title="오래됨", track="math-completion", stage="S1",
-            status="in_progress", session="claude/d",
+            id="S1-04-old-task",
+            title="오래됨",
+            track="math-completion",
+            stage="S1",
+            status="in_progress",
+            session="claude/d",
         )
         stale = remote_claims.stale_claims(claims, backlog, ttl_hours=72, now=now)
         reasons = {c.task_id: reason for c, reason in stale}
-        assert TASK not in reasons                            # 신선 + in_progress → 유지
-        assert reasons["S1-02-done-task"] == "task_done"      # 로컬 이미 done
+        assert TASK not in reasons  # 신선 + in_progress → 유지
+        assert reasons["S1-02-done-task"] == "task_done"  # 로컬 이미 done
         assert reasons["S1-03-ghost-task"] == "task_missing"  # 태스크 미존재
-        assert reasons["S1-04-old-task"] == "ttl"             # TTL 초과
+        assert reasons["S1-04-old-task"] == "ttl"  # TTL 초과
 
     def test_reap_dry_run은_삭제하지_않는다(self, bare_remote):
         _, clone = bare_remote

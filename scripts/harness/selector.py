@@ -24,7 +24,7 @@ class Exclusion:
     """todo 태스크가 후보에서 제외된 사유 (정지 사유 판별·설명에 사용)."""
 
     task_id: str
-    reason: str            # deps|gates|owner|track_gate|claimed|claimed_remote|path_overlap
+    reason: str  # deps|gates|owner|track_gate|claimed|claimed_remote|path_overlap
     detail: list[str] = field(default_factory=list)
 
 
@@ -38,14 +38,16 @@ def track_gate_passed(backlog: Backlog, task: Task) -> bool:
 
 def unmet_dependencies(backlog: Backlog, task: Task) -> list[str]:
     return [
-        dep for dep in task.depends_on
+        dep
+        for dep in task.depends_on
         if dep not in backlog.tasks or backlog.tasks[dep].status != "done"
     ]
 
 
 def unmet_gates(backlog: Backlog, task: Task) -> list[str]:
     return [
-        gid for gid in task.requires_gates
+        gid
+        for gid in task.requires_gates
         if gid not in backlog.gates or not backlog.gates[gid].passed
     ]
 
@@ -122,9 +124,9 @@ def candidates(
             continue
         if track and task.track != track:
             continue
-        exclusion = classify_todo(backlog, task,
-                                  remote_claimed=remote_claimed,
-                                  overlap_block=overlap_block)
+        exclusion = classify_todo(
+            backlog, task, remote_claimed=remote_claimed, overlap_block=overlap_block
+        )
         if exclusion is None:
             ready.append(task)
         else:
@@ -174,7 +176,9 @@ def stall_reason(backlog: Backlog, excluded: list[Exclusion]) -> tuple[str, list
             remote_held.append(f"{exc.task_id} (원격: {exc.detail[0] if exc.detail else '?'})")
         else:
             other_reasons = True
-    pending_gates = sorted({g for g in gate_ids if g in backlog.gates and not backlog.gates[g].passed})
+    pending_gates = sorted(
+        {g for g in gate_ids if g in backlog.gates and not backlog.gates[g].passed}
+    )
     if pending_gates and not other_reasons:
         return "human_gate", pending_gates
 

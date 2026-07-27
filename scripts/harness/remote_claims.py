@@ -65,8 +65,12 @@ LOCAL_MIRROR_NS = "refs/whymath-claims"
 _CONFLICT_MARKERS = ("[rejected]", "stale info", "already exists", "non-fast-forward")
 # 네트워크·환경 문제 판별 패턴
 _OFFLINE_MARKERS = (
-    "could not resolve", "unable to access", "connection", "timed out",
-    "no such remote", "does not appear to be a git repository",
+    "could not resolve",
+    "unable to access",
+    "connection",
+    "timed out",
+    "no such remote",
+    "does not appear to be a git repository",
     "could not read from remote",
 )
 
@@ -77,8 +81,8 @@ class RemoteClaim:
 
     task_id: str
     sha: str
-    branch: str = ""        # 메타 fetch 후 채워짐
-    ts: str = ""            # UTC ISO8601
+    branch: str = ""  # 메타 fetch 후 채워짐
+    ts: str = ""  # UTC ISO8601
     meta: dict | None = None
 
 
@@ -86,19 +90,26 @@ class RemoteClaim:
 class ClaimResult:
     """claim/release 시도 결과."""
 
-    status: str                          # ok | conflict | offline | error
-    claim: RemoteClaim | None = None     # conflict 시 상대 claim 정보 (메타 조회 성공 시)
+    status: str  # ok | conflict | offline | error
+    claim: RemoteClaim | None = None  # conflict 시 상대 claim 정보 (메타 조회 성공 시)
     message: str = ""
 
 
-def _git(root: Path, *argv: str, timeout: int = 15,
-         input_text: str | None = None) -> subprocess.CompletedProcess:
+def _git(
+    root: Path, *argv: str, timeout: int = 15, input_text: str | None = None
+) -> subprocess.CompletedProcess:
     """git 실행 — 테스트 monkeypatch 지점. 인증 프롬프트 행 방지."""
     import os
+
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
     return subprocess.run(
-        ["git", *argv], cwd=root, capture_output=True, text=True,
-        timeout=timeout, input=input_text, env=env,
+        ["git", *argv],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        input=input_text,
+        env=env,
     )
 
 
@@ -128,6 +139,7 @@ def _utcnow() -> datetime:
 # brief/next/start가 원격 조회에 성공할 때마다 스냅샷을 남기고, 훅은 이것만 읽는다.
 # .git/ 아래라 커밋 대상이 아니며 세션(클론)별 독립이다.
 
+
 def _cache_path(root: Path) -> Path:
     return root / ".git" / "whymath-claims-cache.json"
 
@@ -136,8 +148,7 @@ def save_cache(root: Path, claims: list[RemoteClaim]) -> None:
     """원격 claim 스냅샷 저장 (best-effort — 실패 무시)."""
     try:
         payload = [{"task": c.task_id, "branch": c.branch, "ts": c.ts} for c in claims]
-        _cache_path(root).write_text(
-            json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+        _cache_path(root).write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
     except Exception:
         pass
 
@@ -162,22 +173,25 @@ def claim(root: Path, task_id: str, branch: str) -> ClaimResult:
         "harness": "1.1",
     }
     try:
-        blob = _git(root, "hash-object", "-w", "--stdin",
-                    input_text=json.dumps(meta, ensure_ascii=False))
+        blob = _git(
+            root, "hash-object", "-w", "--stdin", input_text=json.dumps(meta, ensure_ascii=False)
+        )
         if blob.returncode != 0:
             return ClaimResult("error", message=f"blob 생성 실패: {blob.stderr.strip()}")
         sha = blob.stdout.strip()
         ref = f"{CLAIMS_NS}/{task_id}"
         # CAS: expect 빈 값 = "원격에 ref가 없어야만 성공"
-        push = _git(root, "push", "--quiet", f"--force-with-lease={ref}:",
-                    "origin", f"{sha}:{ref}")
+        push = _git(root, "push", "--quiet", f"--force-with-lease={ref}:", "origin", f"{sha}:{ref}")
         if push.returncode == 0:
             return ClaimResult("ok", claim=RemoteClaim(task_id, sha, branch, meta["ts"], meta))
         status = _classify_failure(push.stderr)
         if status == "conflict":
             other = _describe_existing(root, task_id)
-            return ClaimResult("conflict", claim=other,
-                               message=push.stderr.strip().splitlines()[-1] if push.stderr else "")
+            return ClaimResult(
+                "conflict",
+                claim=other,
+                message=push.stderr.strip().splitlines()[-1] if push.stderr else "",
+            )
         return ClaimResult(status, message=push.stderr.strip())
     except subprocess.TimeoutExpired:
         return ClaimResult("offline", message="git push 타임아웃")
@@ -209,7 +223,8 @@ def release(root: Path, task_id: str, branch: str, force: bool = False) -> Claim
                     return ClaimResult("ok", message="원격 claim 없음 (해제 불필요)")
                 if mine.branch and mine.branch != branch:
                     return ClaimResult(
-                        "error", claim=mine,
+                        "error",
+                        claim=mine,
                         message=f"'{mine.branch}'의 claim — 강제 해제는 --force 필수",
                     )
             # status != ok(offline 등)면 메타 확인 불가 — 해제 시도는 계속 (fail-open)
@@ -241,7 +256,7 @@ def list_claims(root: Path, with_meta: bool = False) -> tuple[list[RemoteClaim],
             if len(parts) != 2:
                 continue
             sha, ref = parts
-            claims.append(RemoteClaim(task_id=ref[len(CLAIMS_NS) + 1:], sha=sha))
+            claims.append(RemoteClaim(task_id=ref[len(CLAIMS_NS) + 1 :], sha=sha))
         if with_meta and claims:
             fetch_claim_meta(root, claims)
         return claims, "ok"
@@ -254,8 +269,9 @@ def list_claims(root: Path, with_meta: bool = False) -> tuple[list[RemoteClaim],
 def fetch_claim_meta(root: Path, claims: list[RemoteClaim]) -> None:
     """claim blob들의 메타 JSON을 fetch해 in-place 보강 (best-effort)."""
     try:
-        fetch = _git(root, "fetch", "--quiet", "origin",
-                     f"+{CLAIMS_NS}/*:{LOCAL_MIRROR_NS}/*", timeout=20)
+        fetch = _git(
+            root, "fetch", "--quiet", "origin", f"+{CLAIMS_NS}/*:{LOCAL_MIRROR_NS}/*", timeout=20
+        )
         if fetch.returncode != 0:
             return
         for c in claims:
@@ -294,9 +310,9 @@ class InProgressHolder:
     """원격 브랜치의 backlog 사본에서 발견한 타 세션 in_progress claim 1건."""
 
     task_id: str
-    ref: str        # refs/remotes/origin/<branch>
-    branch: str     # <branch>
-    session: str    # 태스크 YAML의 session 값 (claim한 세션 브랜치)
+    ref: str  # refs/remotes/origin/<branch>
+    branch: str  # <branch>
+    session: str  # 태스크 YAML의 session 값 (claim한 세션 브랜치)
 
 
 @dataclass
@@ -311,7 +327,7 @@ class SkippedHolder:
     ref: str
     branch: str
     session: str
-    reason: str     # trunk_done | trunk_cancelled | trunk_not_session
+    reason: str  # trunk_done | trunk_cancelled | trunk_not_session
 
 
 @dataclass
@@ -324,10 +340,10 @@ class ScanResult:
     scanned_refs: int = 0
     truncated: bool = False
     message: str = ""
-    trunk_ref: str = ""       # 규칙 A·B의 기준 ref (refs/remotes/origin/<기본브랜치>)
-    trunk_branch: str = ""    # 기준 ref의 브랜치명 (메시지용)
-    trunk_status: str = ""    # 트렁크 사본의 태스크 status ("" = 파일 없음 → 규칙 A 신호 없음)
-    trunk_source: str = ""    # symbolic-ref | ls-remote | fallback (해소 경로 — 관측용)
+    trunk_ref: str = ""  # 규칙 A·B의 기준 ref (refs/remotes/origin/<기본브랜치>)
+    trunk_branch: str = ""  # 기준 ref의 브랜치명 (메시지용)
+    trunk_status: str = ""  # 트렁크 사본의 태스크 status ("" = 파일 없음 → 규칙 A 신호 없음)
+    trunk_source: str = ""  # symbolic-ref | ls-remote | fallback (해소 경로 — 관측용)
 
 
 def _top_level_field(text: str, key: str) -> str:
@@ -342,7 +358,7 @@ def _top_level_field(text: str, key: str) -> str:
     for line in text.splitlines():
         if not line.startswith(prefix):
             continue
-        value = line[len(prefix):].strip()
+        value = line[len(prefix) :].strip()
         if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
             try:
                 value = json.loads(value)
@@ -379,9 +395,9 @@ def _resolve_trunk_ref(root: Path) -> tuple[str, str]:
             for line in ls.stdout.splitlines():
                 # 형식: "ref: refs/heads/main\tHEAD"
                 if line.startswith("ref:") and "HEAD" in line:
-                    head = line[len("ref:"):].split("\t")[0].strip()
+                    head = line[len("ref:") :].split("\t")[0].strip()
                     if head.startswith("refs/heads/"):
-                        return REMOTE_REF_PREFIX + head[len("refs/heads/"):], "ls-remote"
+                        return REMOTE_REF_PREFIX + head[len("refs/heads/") :], "ls-remote"
     except Exception:  # pragma: no cover - 환경 의존
         pass
     try:
@@ -405,8 +421,9 @@ def _trunk_task_status(root: Path, trunk_ref: str, task_id: str) -> str:
     return _top_level_field(show.stdout, "status")
 
 
-def scan_remote_in_progress(root: Path, task_id: str, session: str,
-                            max_refs: int = SCAN_MAX_REFS) -> ScanResult:
+def scan_remote_in_progress(
+    root: Path, task_id: str, session: str, max_refs: int = SCAN_MAX_REFS
+) -> ScanResult:
     """원격 브랜치들의 backlog 사본에서 이 태스크의 타 세션 in_progress를 찾는다.
 
     CAS claim(refs/claims/*)이 offline/error일 때만 호출하는 폴백이다
@@ -426,18 +443,36 @@ def scan_remote_in_progress(root: Path, task_id: str, session: str,
     if not has_remote(root):
         return ScanResult("offline", message="origin 원격 없음 — 교차 세션 탐지 불가")
     try:
-        fetch = _git(root, "fetch", "--quiet", "origin",
-                     "+refs/heads/*:refs/remotes/origin/*", timeout=SCAN_FETCH_TIMEOUT)
+        fetch = _git(
+            root,
+            "fetch",
+            "--quiet",
+            "origin",
+            "+refs/heads/*:refs/remotes/origin/*",
+            timeout=SCAN_FETCH_TIMEOUT,
+        )
         if fetch.returncode != 0:
-            return ScanResult(_classify_failure(fetch.stderr),
-                              message=f"원격 브랜치 fetch 실패: {fetch.stderr.strip()}")
-        listing = _git(root, "for-each-ref", "--sort=-committerdate",
-                       "--format=%(refname)", "refs/remotes/origin")
+            return ScanResult(
+                _classify_failure(fetch.stderr),
+                message=f"원격 브랜치 fetch 실패: {fetch.stderr.strip()}",
+            )
+        listing = _git(
+            root,
+            "for-each-ref",
+            "--sort=-committerdate",
+            "--format=%(refname)",
+            "refs/remotes/origin",
+        )
         if listing.returncode != 0:
-            return ScanResult(_classify_failure(listing.stderr),
-                              message=f"원격 ref 열거 실패: {listing.stderr.strip()}")
-        refs = [r.strip() for r in listing.stdout.splitlines()
-                if r.strip() and not r.strip().endswith("/HEAD")]
+            return ScanResult(
+                _classify_failure(listing.stderr),
+                message=f"원격 ref 열거 실패: {listing.stderr.strip()}",
+            )
+        refs = [
+            r.strip()
+            for r in listing.stdout.splitlines()
+            if r.strip() and not r.strip().endswith("/HEAD")
+        ]
         truncated = len(refs) > max_refs
         refs = refs[:max_refs]
 
@@ -457,29 +492,39 @@ def scan_remote_in_progress(root: Path, task_id: str, session: str,
             holder = _top_level_field(show.stdout, "session")
             if not holder or holder == session:
                 continue  # 내 세션의 claim은 나를 막지 않는다
-            branch = (ref[len(REMOTE_REF_PREFIX):]
-                      if ref.startswith(REMOTE_REF_PREFIX) else ref)
+            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
             # [규칙 B] 트렁크는 머지된 결과지 작업 세션이 아니다 — 홀더가 될 수 없다.
             # 트렁크의 in_progress는 활성 claim이 아니라 done 미기입 머지(대장 위생 실패)다.
             if ref == trunk_ref:
-                skipped.append(SkippedHolder(task_id, ref, branch, holder,
-                                             "trunk_not_session"))
+                skipped.append(SkippedHolder(task_id, ref, branch, holder, "trunk_not_session"))
                 continue
             # [규칙 A] 트렁크가 done/cancelled면 작업은 이미 착륙 — 사본의 in_progress는 잔재.
             if trunk_settled:
-                skipped.append(SkippedHolder(task_id, ref, branch, holder,
-                                             f"trunk_{trunk_status}"))
+                skipped.append(SkippedHolder(task_id, ref, branch, holder, f"trunk_{trunk_status}"))
                 continue
-            holders.append(InProgressHolder(
-                task_id=task_id, ref=ref, branch=branch, session=holder,
-            ))
-        return ScanResult("ok", holders=holders, skipped=skipped,
-                          scanned_refs=len(refs), truncated=truncated,
-                          trunk_ref=trunk_ref,
-                          trunk_branch=(trunk_ref[len(REMOTE_REF_PREFIX):]
-                                        if trunk_ref.startswith(REMOTE_REF_PREFIX)
-                                        else trunk_ref),
-                          trunk_status=trunk_status, trunk_source=trunk_source)
+            holders.append(
+                InProgressHolder(
+                    task_id=task_id,
+                    ref=ref,
+                    branch=branch,
+                    session=holder,
+                )
+            )
+        return ScanResult(
+            "ok",
+            holders=holders,
+            skipped=skipped,
+            scanned_refs=len(refs),
+            truncated=truncated,
+            trunk_ref=trunk_ref,
+            trunk_branch=(
+                trunk_ref[len(REMOTE_REF_PREFIX) :]
+                if trunk_ref.startswith(REMOTE_REF_PREFIX)
+                else trunk_ref
+            ),
+            trunk_status=trunk_status,
+            trunk_source=trunk_source,
+        )
     except subprocess.TimeoutExpired:
         return ScanResult("offline", message="원격 브랜치 조회 타임아웃")
     except Exception as exc:  # pragma: no cover - 환경 의존
@@ -487,8 +532,9 @@ def scan_remote_in_progress(root: Path, task_id: str, session: str,
         return ScanResult("error", message=f"{type(exc).__name__}: {exc}")
 
 
-def stale_claims(claims: list[RemoteClaim], backlog: Backlog, ttl_hours: int,
-                 now: datetime | None = None) -> list[tuple[RemoteClaim, str]]:
+def stale_claims(
+    claims: list[RemoteClaim], backlog: Backlog, ttl_hours: int, now: datetime | None = None
+) -> list[tuple[RemoteClaim, str]]:
     """stale claim 판정 — (claim, 사유) 목록. 사유: ttl | task_done | task_missing."""
     now = now or _utcnow()
     result: list[tuple[RemoteClaim, str]] = []
@@ -510,8 +556,7 @@ def stale_claims(claims: list[RemoteClaim], backlog: Backlog, ttl_hours: int,
     return result
 
 
-def reap(root: Path, backlog: Backlog, ttl_hours: int,
-         dry_run: bool = True) -> list[str]:
+def reap(root: Path, backlog: Backlog, ttl_hours: int, dry_run: bool = True) -> list[str]:
     """stale claim 청소. dry_run이면 목록만 반환, 아니면 실제 삭제.
 
     반환: "task_id (사유)" 문자열 목록.
