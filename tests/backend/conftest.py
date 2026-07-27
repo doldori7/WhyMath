@@ -19,10 +19,25 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 
 import pytest
+
+# 이 conftest 디렉터리(tests/backend)를 sys.path에 명시 삽입 — 형제 모듈 `_db_leak_guard`를
+# conftest 로드 시점에 import 가능하게. pytest의 암묵적 디렉터리 삽입은 실행 방식에 따라 갈린다:
+# 위치 인자로 경로를 주면 삽입되지만, `-m integration`처럼 testpaths만으로 수집하면 conftest
+# 로드 시점에 이 디렉터리가 sys.path에 없어 ModuleNotFoundError가 난다(2026-07-26 CI 통합잡
+# 실측). 암묵 동작에 기대지 않고 명시 삽입으로 고정한다.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+# db.session 전역 누수 가드(OPS-07)의 탐지·격리 로직 — 가드 자체의 변별력을 별도 테스트
+# (test_db_leak_guard.py)에서 오염 주입으로 실측하려고 모듈로 분리했다.
+from _db_leak_guard import (  # noqa: E402  (위 sys.path 삽입 후에 import해야 한다)
+    contain_db_session_leak,
+    db_session_leak_reason,
+    format_leak_failure,
+)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SRC_BACKEND = _PROJECT_ROOT / "src" / "backend"
@@ -56,3 +71,44 @@ def pytest_collection_modifyitems(config: pytest.Config, items: Iterable[pytest.
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_integration)
+
+
+# ──────────────────────────────────────────────────────────────────────
+# db.session 전역 누수 가드 (OPS-07)
+# ──────────────────────────────────────────────────────────────────────
+# 2026-07-26 사고: OPS-06의 한 테스트가 pg_cached store 생성으로 `db.session._engine`
+# (모듈 전역·지연 캐시)을 채우고 정리하지 않아, 같은 프로세스의 후속 테스트
+# `db/test_problem_orm.py::test_session_module_imports_without_connection`(전역이 None임을
+# 단언)가 *실행 순서 때문에* 깨졌다 → main CI red(#606 머지 후). 이 오염은 파일 단위 실행에서는
+# 재현되지 않고 전체 스위트에서만 터져 로컬 검증을 통과했다.
+#
+# 근본 원인은 개별 부주의가 아니라 '전역 캐시를 채우는 테스트'를 잡는 장치의 부재. 이 가드는
+# 매 테스트 종료 시 db.session 모듈 전역이 남았는지 검사해 ① 그 테스트를 실패시키고(귀책)
+# ② 전역을 되돌려 다음 테스트로의 전파를 막는다(격리). 순서-의존·전체-스위트-한정 오염을
+# *그 테스트 자체*의 결정론적 실패로 바꾼다. 탐지·격리 로직은 `_db_leak_guard` 모듈에 있다
+# (최상단 import — 변별력을 test_db_leak_guard.py에서 별도로 실측하려고 분리).
+
+
+@pytest.fixture(autouse=True)
+def _guard_db_session_global_leak(request: pytest.FixtureRequest) -> Iterator[None]:
+    """모든 백엔드 테스트 종료 후 db.session 전역 누수를 탐지·격리·귀책한다(OPS-07).
+
+    테스트 *시작* 시점은 (앞 테스트가 이 가드로 정리됐으므로) 깨끗하다고 본다. *종료* 시
+    전역이 남아 있으면 이 테스트가 남긴 것이므로 실패시킨다 — 실패 신호를 내기 전에 전역을
+    되돌려 다음 테스트가 연쇄로 깨지지 않게 한다(귀책과 격리를 분리).
+
+    **범위 = hermetic 전용**: `integration` 마크 테스트는 제외한다. ① 사고는 hermetic 스위트
+    (`backend — lint·type·test` 잡)에서 났고, 피해 테스트(전역 None 단언)도 hermetic이다.
+    ② 통합 테스트는 별도 잡(`-m integration`·실 PG)에서 각자의 엔진 수명주기(대개 TestClient
+    lifespan의 dispose)로 돌며, 두 집합은 서로 다른 프로세스라 교차 오염이 불가능하다.
+    ③ 함수 단위 '엔진=None' 불변식은 실 PG 통합 테스트에 대해 로컬 검증이 불가하므로, 검증된
+    범위(hermetic·7514건 실측 클린)로 가드를 한정한다.
+    """
+    yield
+    if request.node.get_closest_marker("integration") is not None:
+        return
+    reason = db_session_leak_reason()
+    if reason is None:
+        return
+    contain_db_session_leak()
+    pytest.fail(format_leak_failure(request.node.nodeid, reason), pytrace=False)
