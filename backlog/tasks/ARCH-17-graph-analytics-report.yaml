@@ -5,16 +5,18 @@ track: infra-debt
 stage: S4
 subject: math
 layer: data-pipeline
-status: in_progress
+status: done
 priority: 5
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "prerequisite DAG 위 in/out-degree·하류 도달 집합 크기·허브 랭킹 리포트 + severity=blocking 오개념의 하류 도달 개념 수 집계(concept_src_id→crosswalk 경유). 빌드타임 오프라인 산출만 — LLM 컨텍스트 투입·튜터링 preload 금지 불변. 소비처=저작·검수 우선순위(ops)"
-artifacts: []
+artifacts:
+  - 75112ab
+  - tests/data_pipeline/graph_analytics/
 paths:
   - "src/data-pipeline/**"
-session: claude/whymath-concept-management-spnep8
+session: null
 notes: "docs/architecture/knowledge_module_gap_review.md §3 D5 — 외부 EOS 틀(모듈 10 그래프 기능) 대조 갭. 전체 그래프 열람 금지 대상은 LLM 투입이지 오프라인 집계가 아님을 명시"
 updated: 2026-07-27

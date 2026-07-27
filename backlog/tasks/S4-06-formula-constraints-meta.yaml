@@ -5,18 +5,20 @@ track: math-completion
 stage: S4
 subject: math
 layer: data-pipeline
-status: in_progress
+status: done
 priority: 5
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "FormulaNode에 constraints(list·자체작성)·mnemonic(선택) 추가 + formula_graph_v1 25건 backfill(ai_estimated) + backend formula_node 프로젝션 컬럼 동반 + canonical-only 불변 유지(유도/변형 슬롯 미도입 — 유도는 D2 ProofNode 축 위임)"
-artifacts: []
+artifacts:
+  - 71caeb3
+  - data/corpus/formula_graph_v1/formulas.jsonl
 paths:
   - "src/data-pipeline/data_pipeline/formula_graph/**"
   - "data/corpus/formula_graph_v1/**"
   - "src/backend/whymath_backend/db/models/**"
-session: claude/whymath-concept-management-spnep8
+session: null
 notes: "docs/architecture/knowledge_module_gap_review.md §3 D3 — 외부 EOS 틀(모듈 9) 대조 부분 갭. 5b(formula_refs 충전·검색/추천)는 기존 계획 승계·본 태스크 범위 밖"
 updated: 2026-07-27

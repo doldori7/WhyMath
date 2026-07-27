@@ -5,16 +5,18 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "동일 코퍼스 스코프 내 cosine 임계 초과쌍 리포트 CLI(빌드타임 report 축·cross-table 코사인 금지 준수) + 사람 검수 큐 산출(AI 자기승인 금지·crosswalk promote 선례 동형) + 임계값 실측 근거 기록"
-artifacts: []
+artifacts:
+  - e3939dd
+  - tests/backend/l1/atom_graph/test_dedup_candidates.py
 paths:
   - "src/backend/whymath_backend/l1/**"
-session: claude/whymath-concept-management-spnep8
+session: null
 notes: "docs/architecture/knowledge_module_gap_review.md §3 D4 — 외부 EOS 틀(모듈 6 '중복 개념 검사') 대조 갭. S4-01 초·중 확장(신규 개념 대량 유입) 전 가동 가치. layer 정정(2026-07-27): data-pipeline→backend — 실측상 임베딩·provider 스택이 전부 backend 소관(DP 임베딩 코드 0건)·l4/misconception/crosslink_candidates.py 선례 동형, §D4 취지(빌드타임·사람 검수) 불변"
 updated: 2026-07-27
