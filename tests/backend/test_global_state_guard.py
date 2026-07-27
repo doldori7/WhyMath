@@ -125,7 +125,23 @@ def _run_isolated_suite(
         os.pathsep
     )
     return subprocess.run(
-        [sys.executable, "-m", "pytest", str(suite), "-q", "-p", "no:cacheprovider"],
+        # `no:randomly` — 이 스위트의 단언은 *선언 순서*(오염 테스트 → 무고한 후속)에
+        # 의존한다. 그 순서가 곧 재현하려는 사고 자체이기 때문이다. 순서 무작위화 플러그인
+        # (pytest-randomly 등)이 부모 환경에 깔리면 서브프로세스가 그것을 상속해 순서를
+        # 섞고, 무고한 테스트가 먼저 돌면 오염이 그것을 깨뜨리지 못해 *가드와 무관하게*
+        # 단언이 실패한다(2026-07-27 실측: 무작위 순서 전체 스위트에서 이 테스트만 1건 실패).
+        # 여기서 순서를 고정하는 것은 회피가 아니라 **실험 조건의 통제**다.
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            str(suite),
+            "-q",
+            "-p",
+            "no:cacheprovider",
+            "-p",
+            "no:randomly",
+        ],
         capture_output=True,
         text=True,
         cwd=str(tmp_path),
