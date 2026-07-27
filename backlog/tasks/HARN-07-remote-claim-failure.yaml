@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -17,6 +17,8 @@ acceptance:
 artifacts: []
 paths:
   - "scripts/harness/**"
-session: null
+  - "tests/harness/**"
+  - docs/standards/build_harness.md
+session: claude/whymath-service-review-9r21im
 notes: "2026-07-27 실측: OPS-07을 claude/review-applicable-items-8rrtau(#611)와 본 세션이 각각 구현. events.ndjson에 양쪽 모두 claim_remote_unavailable(status=error) 후 start가 그대로 성립. #611이 먼저 머지돼 본 세션 구현(735줄 테스트 포함)을 철회했다 — 순수 낭비. CLAUDE.md 신규 규칙 '검증 장치를 만들고 배선 확인 없이 완료 선언 금지'와 같은 부류(장치는 있으나 작동하지 않음)."
 updated: 2026-07-27

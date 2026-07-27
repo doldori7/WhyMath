@@ -12,10 +12,24 @@ merge 전까지 병렬 세션끼리 서로 보이지 않는다(TOCTOU 레이스)
     2차 방어: blob→blob 갱신은 ancestry가 없어 non-fast-forward로 항상 거부.
 
 폴백 (fail-open — 훅·CLI가 개발을 볼모로 잡지 않는다):
-    - offline/error(네트워크·권한): 경고 + 이벤트 로그 후 로컬 claim만으로 진행.
+    - offline/error(네트워크·권한): 경고 + 이벤트 로그 후 아래 *읽기측 탐지*로 폴백.
     - conflict(다른 세션이 이미 claim): 정보가 확정적이므로 이것만 차단.
-    원격이 refs/claims/* push 자체를 거부하는 환경(프록시 정책 등)에서도
-    offline으로 분류되어 기능 저하는 로컬 claim 수준에 그친다.
+
+읽기측 교차 세션 탐지 (HARN-07 — CAS가 막힌 환경의 부분 방어):
+    2026-07-27 실측: 이 실행 환경의 git 프록시는 refs/claims/* push를 HTTP 403으로
+    거부한다. 즉 CAS claim은 "가끔 실패"가 아니라 **한 번도 성공한 적이 없고**,
+    fail-open이 모든 start를 통과시켜 중복 방지가 상시 무력이었다(OPS-07을 두 세션이
+    병렬 구현해 한쪽을 폐기한 사고). 쓰기는 막혔지만 **읽기는 된다** —
+    `scan_remote_in_progress()`가 원격 브랜치들의 backlog 사본을 읽어 같은 태스크가
+    이미 in_progress인지 탐지한다.
+
+    이것은 CAS의 대체가 아니라 *부분* 방어다 (과장 금지):
+      · 상대 세션이 **브랜치를 push한 뒤에만** 보인다 — push 전 로컬에서 작업 중인
+        세션은 이 방법으로 절대 잡히지 않는다.
+      · **원자성이 없다** — 두 세션이 동시에 스캔하면 둘 다 "충돌 없음"을 볼 수 있다.
+      · 병합된 브랜치에 남은 stale in_progress도 탐지된다(과탐) — 우회는 `--no-remote`.
+    그러므로 CAS 경로는 제거하지 않는다. 프록시 정책이 다른 환경(로컬 개발·다른 러너)
+    에서는 CAS가 작동하며 원자성은 그쪽이 우월하다. 읽기측은 CAS 실패 시에만 돈다.
 
 stale claim 청소: 세션이 release 없이 죽으면 ref가 남는다 → `claims reap`이
 3중 기준(TTL 초과·태스크 이미 done/cancelled·태스크 미존재)으로 감지·삭제.
@@ -245,6 +259,116 @@ def fetch_claim_meta(root: Path, claims: list[RemoteClaim]) -> None:
             c.ts = str(meta.get("ts", ""))
     except Exception:  # pragma: no cover - 환경 의존
         return
+
+
+# ── 읽기측 교차 세션 탐지 (HARN-07) ─────────────────────────────────────────
+# CAS push가 막힌 환경의 폴백. 쓰기는 403이어도 읽기(fetch/ls-remote)는 통과한다는
+# 실측(2026-07-27)에 근거한다. 한계는 모듈 docstring 참조 — CAS 대체 아님.
+
+# 원격 브랜치 스캔 상한 — 브랜치가 폭증한 저장소에서 start가 볼모가 되지 않게 자른다.
+# 최근 커밋순으로 자르며, 잘렸으면 결과에 명시한다(조용한 축소 금지).
+SCAN_MAX_REFS = 300
+# 전체 브랜치 fetch 타임아웃 — 44브랜치 기준 실측 ~5초. 콜드 클론 여유 포함.
+SCAN_FETCH_TIMEOUT = 90
+REMOTE_REF_PREFIX = "refs/remotes/origin/"
+
+
+@dataclass
+class InProgressHolder:
+    """원격 브랜치의 backlog 사본에서 발견한 타 세션 in_progress claim 1건."""
+
+    task_id: str
+    ref: str        # refs/remotes/origin/<branch>
+    branch: str     # <branch>
+    session: str    # 태스크 YAML의 session 값 (claim한 세션 브랜치)
+
+
+@dataclass
+class ScanResult:
+    """읽기측 탐지 결과. status: ok | offline | error (ok가 아니면 판정 불가)."""
+
+    status: str
+    holders: list[InProgressHolder] = field(default_factory=list)
+    scanned_refs: int = 0
+    truncated: bool = False
+    message: str = ""
+
+
+def _top_level_field(text: str, key: str) -> str:
+    """태스크 YAML 본문에서 최상위 스칼라 키 1개를 뽑는다 (PyYAML 비의존).
+
+    store.dump_task는 1단 매핑만 쓰고 리스트는 '  - ' 들여쓰기로 내므로,
+    들여쓰기 없는 '<key>: ' 줄만 보면 값 안의 콜론과 충돌하지 않는다.
+    손편집으로 형식이 어긋난 파일은 못 읽고 넘어간다 — 탐지 실패는 미탐이며,
+    미탐은 호출측이 '부분 방어'로 이미 선언한 한계 안에 있다.
+    """
+    prefix = f"{key}:"
+    for line in text.splitlines():
+        if not line.startswith(prefix):
+            continue
+        value = line[len(prefix):].strip()
+        if len(value) >= 2 and value.startswith('"') and value.endswith('"'):
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                value = value[1:-1]
+        return "" if value in ("null", "~", "") else value
+    return ""
+
+
+def scan_remote_in_progress(root: Path, task_id: str, session: str,
+                            max_refs: int = SCAN_MAX_REFS) -> ScanResult:
+    """원격 브랜치들의 backlog 사본에서 이 태스크의 타 세션 in_progress를 찾는다.
+
+    CAS claim(refs/claims/*)이 offline/error일 때만 호출하는 폴백이다
+    (CAS 성공 시에는 불필요 — 전체 fetch 비용을 물지 않는다).
+
+    한계 — 이것은 CAS의 원자성을 대체하지 못하는 *부분* 방어다:
+        · 상대 세션이 **브랜치를 push한 뒤에만** 보인다.
+        · 두 세션이 동시에 스캔하면 둘 다 '충돌 없음'을 볼 수 있다(원자성 없음).
+        · 병합된 브랜치에 남은 stale in_progress도 탐지된다(과탐).
+
+    반환 status가 'ok'가 아니면 **판정 자체가 불가**했다는 뜻이며, 빈 holders를
+    '충돌 없음'으로 읽어서는 안 된다(측정 실패와 통과는 같은 색이면 안 된다).
+    """
+    if not has_remote(root):
+        return ScanResult("offline", message="origin 원격 없음 — 교차 세션 탐지 불가")
+    try:
+        fetch = _git(root, "fetch", "--quiet", "origin",
+                     "+refs/heads/*:refs/remotes/origin/*", timeout=SCAN_FETCH_TIMEOUT)
+        if fetch.returncode != 0:
+            return ScanResult(_classify_failure(fetch.stderr),
+                              message=f"원격 브랜치 fetch 실패: {fetch.stderr.strip()}")
+        listing = _git(root, "for-each-ref", "--sort=-committerdate",
+                       "--format=%(refname)", "refs/remotes/origin")
+        if listing.returncode != 0:
+            return ScanResult(_classify_failure(listing.stderr),
+                              message=f"원격 ref 열거 실패: {listing.stderr.strip()}")
+        refs = [r.strip() for r in listing.stdout.splitlines()
+                if r.strip() and not r.strip().endswith("/HEAD")]
+        truncated = len(refs) > max_refs
+        refs = refs[:max_refs]
+        holders: list[InProgressHolder] = []
+        for ref in refs:
+            show = _git(root, "show", f"{ref}:backlog/tasks/{task_id}.yaml", timeout=10)
+            if show.returncode != 0:
+                continue  # 그 브랜치엔 이 태스크 파일이 없다 (태스크 신설 이전 시점 등)
+            if _top_level_field(show.stdout, "status") != "in_progress":
+                continue
+            holder = _top_level_field(show.stdout, "session")
+            if not holder or holder == session:
+                continue  # 내 세션의 claim은 나를 막지 않는다
+            holders.append(InProgressHolder(
+                task_id=task_id, ref=ref,
+                branch=ref[len(REMOTE_REF_PREFIX):] if ref.startswith(REMOTE_REF_PREFIX) else ref,
+                session=holder,
+            ))
+        return ScanResult("ok", holders=holders, scanned_refs=len(refs), truncated=truncated)
+    except subprocess.TimeoutExpired:
+        return ScanResult("offline", message="원격 브랜치 조회 타임아웃")
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 반드시 남긴다 (CLAUDE.md AI·신뢰)
+        return ScanResult("error", message=f"{type(exc).__name__}: {exc}")
 
 
 def stale_claims(claims: list[RemoteClaim], backlog: Backlog, ttl_hours: int,

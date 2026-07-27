@@ -344,6 +344,154 @@ class TestRemoteClaimCli:
         assert claims == []
 
 
+class TestReadSideFallback:
+    """HARN-07 — CAS claim이 막힌 환경의 읽기측 교차 세션 탐지 폴백.
+
+    사고(2026-07-27): 이 실행 환경의 git 프록시가 `refs/claims/*` push를 403 거부해
+    CAS claim이 *한 번도* 성공하지 못했고, fail-open이 모든 start를 통과시켜 두 세션이
+    OPS-07을 병렬 구현했다. 아래 테스트는 그 환경(CAS 실패)만 시임으로 재현하고,
+    **읽기 경로는 진짜 로컬 원격에서 실제 git fetch/show로** 검증한다.
+    """
+
+    TASK_ID = "T7-01-readside-fallback"
+
+    def _seeded_clone(self, clone, monkeypatch, name: str) -> Path:
+        repo = clone(name)
+        monkeypatch.chdir(repo)
+        assert cli.main(["seed"]) == 0
+        # 태스크 정의는 실환경에서 git으로 전 세션에 공유된다 — 각 클론에 동일 정의를 둔다
+        assert cli.main(["add", "--id", self.TASK_ID, "--title", "읽기측 폴백 대상",
+                         "--track", "math-completion", "--stage", "S1"]) == 0
+        return repo
+
+    def _push_branch(self, repo: Path, branch: str) -> None:
+        """현재 backlog 상태를 원격 브랜치로 push — 타 세션이 push한 상태 재현."""
+        for argv in (["checkout", "-q", "-B", branch], ["add", "."],
+                     ["commit", "-q", "-m", "claim"],
+                     ["push", "--quiet", "-u", "origin", branch]):
+            subprocess.run(["git", *argv], cwd=repo, check=True, capture_output=True)
+
+    def _force_cas_failure(self, monkeypatch, status: str = "error") -> None:
+        """CAS claim만 실패시킨다 — 프록시 403 환경 재현(읽기 경로는 진짜)."""
+        import remote_claims
+
+        monkeypatch.setattr(remote_claims, "claim", lambda *a, **k: remote_claims.ClaimResult(
+            status, message="RPC failed; HTTP 403 curl 22 The requested URL returned error: 403"))
+
+    def _spy_scan(self, monkeypatch) -> list[tuple]:
+        """읽기측 탐지 호출 기록기 — '호출하지 않음' 계약 검증용."""
+        import remote_claims
+
+        calls: list[tuple] = []
+
+        def spy(root, task_id, session, **kwargs):
+            calls.append((task_id, session))
+            return remote_claims.ScanResult("ok")
+
+        monkeypatch.setattr(remote_claims, "scan_remote_in_progress", spy)
+        return calls
+
+    def _events(self, repo: Path) -> list[dict]:
+        raw = (repo / "backlog" / "events.ndjson").read_text(encoding="utf-8")
+        return [json.loads(line) for line in raw.splitlines() if line.strip()]
+
+    def test_CAS_성공이면_읽기측_탐지를_호출하지_않는다(self, bare_remote, monkeypatch, capsys):
+        # 폴백은 CAS 실패 시에만 — 성공 경로에서 전체 브랜치 fetch(~5초)를 물면 안 된다
+        _, clone = bare_remote
+        self._seeded_clone(clone, monkeypatch, "session-a")
+        calls = self._spy_scan(monkeypatch)
+        assert cli.main(["start", self.TASK_ID]) == 0
+        assert "원격 claim: ok" in capsys.readouterr().out
+        assert calls == []
+
+    def test_no_remote는_폴백도_건너뛴다(self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        self._seeded_clone(clone, monkeypatch, "session-a")
+        self._force_cas_failure(monkeypatch)
+        calls = self._spy_scan(monkeypatch)
+        assert cli.main(["start", self.TASK_ID, "--no-remote"]) == 0
+        assert "원격 claim: disabled" in capsys.readouterr().out
+        assert calls == []
+
+    def test_CAS_실패_타세션이_in_progress면_착수_거부(self, bare_remote, monkeypatch, capsys):
+        # 사고 그대로의 재현: 두 세션이 같은 태스크를 잡되 CAS는 상시 실패한다
+        _, clone = bare_remote
+        repo_a = self._seeded_clone(clone, monkeypatch, "session-a")
+        assert cli.main(["start", self.TASK_ID]) == 0
+        self._push_branch(repo_a, "claude/session-a")
+
+        repo_b = self._seeded_clone(clone, monkeypatch, "session-b")
+        self._force_cas_failure(monkeypatch)
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID]) == 1
+        err = capsys.readouterr().err
+        assert "착수 거부" in err
+        assert "claude/session-a" in err          # 어느 브랜치·어느 세션인지 명시
+        assert "--no-remote" in err               # 본인 것이 확실할 때의 우회 경로 안내
+        assert "부분" in err                       # 한계(CAS 대체 아님) 고지
+        # 거부 시 로컬 상태는 불변 — 대장 오염 없음
+        backlog, _ = store.load_backlog(repo_b)
+        assert backlog.tasks[self.TASK_ID].status == "todo"
+        # 탐지는 이벤트로 남는다 (측정 가능)
+        conflicts = [e for e in self._events(repo_b)
+                     if e.get("action") == "claim_readside_conflict"]
+        assert conflicts and conflicts[-1]["id"] == self.TASK_ID
+        assert "claude/session-a:claude/session-a" in conflicts[-1]["holders"]
+
+    def test_CAS_실패_충돌_없으면_진행하고_부분방어임을_고지한다(
+            self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        repo = self._seeded_clone(clone, monkeypatch, "session-a")
+        self._force_cas_failure(monkeypatch)
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID]) == 0
+        captured = capsys.readouterr()
+        assert "중복 in_progress 없음" in captured.err
+        assert "부분" in captured.err              # 과장 금지 — 한계를 매번 말한다
+        backlog, _ = store.load_backlog(repo)
+        assert backlog.tasks[self.TASK_ID].status == "in_progress"
+
+    def test_CAS_실패_내_세션의_in_progress는_진행_허용(self, bare_remote, monkeypatch, capsys):
+        # 자기 claim을 자기가 막으면 안 된다 (브랜치를 이미 push한 세션의 재진입)
+        _, clone = bare_remote
+        repo_a = self._seeded_clone(clone, monkeypatch, "session-a")
+        assert cli.main(["start", self.TASK_ID, "--session", "claude/session-b"]) == 0
+        self._push_branch(repo_a, "claude/session-b")   # session 필드 = claude/session-b
+
+        self._seeded_clone(clone, monkeypatch, "session-b")
+        self._force_cas_failure(monkeypatch)
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID]) == 0
+        assert "중복 in_progress 없음" in capsys.readouterr().err
+
+    def test_폴백까지_실패하면_보호없음을_명시하고_fail_open(
+            self, bare_remote, monkeypatch, capsys):
+        import remote_claims
+
+        _, clone = bare_remote
+        repo = self._seeded_clone(clone, monkeypatch, "session-a")
+        self._force_cas_failure(monkeypatch)
+        original = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv and argv[0] == "fetch" and any("refs/heads" in a for a in argv):
+                return subprocess.CompletedProcess(
+                    ["git", *argv], 128, stdout="",
+                    stderr="fatal: unable to access origin: HTTP 403")
+            return original(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        capsys.readouterr()
+        assert cli.main(["start", self.TASK_ID]) == 0        # fail-open — 볼모 금지
+        captured = capsys.readouterr()
+        # 침묵 실패 금지 — '보호가 전혀 없다'를 사용자가 읽을 수 있어야 한다
+        assert "중복 착수 보호가 전혀 없습니다" in captured.err
+        assert "403" in captured.err                          # 원인도 함께
+        unavailable = [e for e in self._events(repo)
+                       if e.get("action") == "claim_readside_unavailable"]
+        assert unavailable and unavailable[-1]["id"] == self.TASK_ID
+
+
 class TestStartOverlapPreflight:
     """start 프리플라이트 — in-flight 태스크와 paths 겹침 검사 (warn→block 단계적)."""
 
