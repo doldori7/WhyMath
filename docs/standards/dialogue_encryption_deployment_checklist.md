@@ -111,6 +111,19 @@ SEC-01의 acceptance는 "프로덕션 `dialogue_content_encryption_key` 설정 �
 > 추정 환경에서 키 부재를 막고 있으므로 *조용한 평문 저장*은 차단되나, "키가 실제로 설정돼 있고
 > 행이 암호화되고 있다"는 **양성 증거는 아직 없다**. 없음을 없다고 적는다.
 
+> **실측 시도(2026-07-27 · Kiki Phaiakes9 `whymath-pg`)**: **프로덕션 환경 부재 확인 → 실측 불가**.
+> `docker exec whymath-pg psql` 로 §2·§3 절차를 실행한 결과:
+> - **키 미설정** — `WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY` User env 길이 0.
+> - **암호화 마이그레이션 미적용** — `whymath-pg` alembic head=`f3a4b5c6d7e8`(2026-06-30)로, repo
+>   head `a9b8c7d6e5f4`(2026-07-26)보다 뒤. 본문 암호화(`c3d4e5f0a1b2`·2026-07-05)·이미지 봉투
+>   (`a2b3c4d5e6f1`·2026-07-26)가 모두 그 이후라, `dialogue_turn`에 `content_encrypted` 컬럼이
+>   없고 평문 `content`만 존재.
+> - **`dialogue_turn` 0행** — 저장된 대화 없음 = **평문 미성년 데이터 노출 0**(측정 대상 자체 부재).
+>
+> 결론: 이 머신은 실 프로덕션이 아니라 *암호화 도입 전 개발 DB*다. SEC-02(양성 증거=암호화 행>0)는
+> **실 프로덕션(마이그레이션 적용 + 키 설정 + 실 트래픽) 성립 시점까지 pending 유지**(done 아님).
+> 현 시점 조용한 평문 저장 위험은 없다(0행). done 조건은 여전히 이 절에 *암호화 수치*가 기록될 때다.
+
 ---
 
 ## 5. 관련
