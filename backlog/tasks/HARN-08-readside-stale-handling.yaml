@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -18,6 +18,6 @@ artifacts: []
 paths:
   - "scripts/harness/**"
   - "tests/harness/**"
-session: null
+session: claude/whymath-service-review-9r21im
 notes: "HARN-07 종단 실측에서 그대로 관찰: 병합돼 끝난 브랜치에 in_progress가 남으면 그 태스크는 읽기측 폴백이 영구 거부한다. 현 우회는 --no-remote(보호 전체 포기)뿐. claims reap의 읽기측 대응물 부재."
 updated: 2026-07-27
