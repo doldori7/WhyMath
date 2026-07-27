@@ -72,12 +72,12 @@ def test_retention_parameter_with_default_14() -> None:
 def test_targets_prod_container_not_demo() -> None:
     """④ 기본 대상 = whymath-pg(prod), whymath-demo-db는 명시 거부 가드로만 등장."""
     text = _text()
-    assert re.search(r'\$ContainerName\s*=\s*"whymath-pg"', text), (
-        "기본 컨테이너가 prod whymath-pg가 아님 — 시연용 demo-db(55432·일회용)와 혼동 금지"
-    )
-    assert re.search(r'-eq\s+"whymath-demo-db"', text), (
-        "whymath-demo-db 명시 거부 가드가 사라짐 — 일회용 DB를 prod 백업 대상으로 오인 가능"
-    )
+    assert re.search(
+        r'\$ContainerName\s*=\s*"whymath-pg"', text
+    ), "기본 컨테이너가 prod whymath-pg가 아님 — 시연용 demo-db(55432·일회용)와 혼동 금지"
+    assert re.search(
+        r'-eq\s+"whymath-demo-db"', text
+    ), "whymath-demo-db 명시 거부 가드가 사라짐 — 일회용 DB를 prod 백업 대상으로 오인 가능"
 
 
 def test_min_one_backup_always_kept() -> None:
