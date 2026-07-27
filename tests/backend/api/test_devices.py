@@ -49,7 +49,7 @@ from whymath_backend.api._rate_limit import (
 from whymath_backend.app import create_app
 from whymath_backend.config import Settings, get_settings
 from whymath_backend.db.models.user import UserProfile
-from whymath_backend.db.session import get_session
+from whymath_backend.db.session import dispose_engine, get_session
 from whymath_backend.schema.enums import Persona
 from whymath_backend.schema.user import UserProfile as UserProfileSchema
 
@@ -1953,6 +1953,16 @@ def _lifespan_settings(
 
 class TestBuildDeviceStoreFromSettings:
     """모드 3종 × cleanup 책임 — `_DEVICE_STORE` 모듈 전역은 *호출자 책임*(본 함수 순수)."""
+
+    @pytest.fixture(autouse=True)
+    async def _dispose_db_engine_after(self) -> AsyncIterator[None]:
+        # pg·pg_cached 모드는 build_device_store_from_settings 안에서 sessionmaker를 만들며
+        # get_engine()을 타 `db.session._engine`(모듈 전역·지연 캐시)을 채운다. 이 테스트들은
+        # 라이프스팬을 거치지 않는 *직접 호출*이라 아무도 그 전역을 정리하지 않는다 —
+        # 여기서 dispose_engine()으로 되돌려 후속 테스트로의 전파를 막는다(전역 누수 가드·OPS-07·
+        # conftest `_guard_db_session_global_leak`이 잡는 바로 그 오염 유형).
+        yield
+        await dispose_engine()
 
     async def test_none_mode_returns_none_and_noop(self) -> None:
         store, cleanup = build_device_store_from_settings(_lifespan_settings("none"))
