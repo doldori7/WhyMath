@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: done
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -13,11 +13,10 @@ requires_gates: []
 acceptance:
   - "전역 상태(db.session._engine 등)를 남기는 테스트를 자동 탐지하는 가드 — 파일 단위로는 안 보이고 전체 스위트에서만 터지는 오염을 조기 검출"
   - "가드가 실패 상태에서 실제로 실패 신호를 내는지 변별력 실측(오염 테스트 주입)"
-artifacts:
-  - 68b8fee
+artifacts: []
 paths:
   - tests/backend/conftest.py
   - "tests/backend/**"
-session: null
+session: claude/review-applicable-items-8rrtau
 notes: "2026-07-26 사고: OPS-06의 test_lifespan_binds_invalidate_timeout_to_the_same_setting이 pg_cached store 생성으로 db.session._engine을 남겨 후속 db/test_problem_orm.py::test_session_module_imports_without_connection가 실행 순서 때문에 실패 → main CI red(#606 머지 후). 파일 단위 실행에서는 재현되지 않아 로컬 검증을 통과했다. 근본 원인은 '전역 캐시를 채우는 테스트'를 잡는 장치 부재."
 updated: 2026-07-26
