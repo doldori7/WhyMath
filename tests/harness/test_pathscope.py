@@ -98,8 +98,11 @@ class TestOverlap:
 
     def test_리터럴_동일_파일은_1단이_잡는다(self):
         result = overlap(
-            "A", ["docs/standards/build_harness.md"],
-            "B", ["docs/standards/build_harness.md"], FILES,
+            "A",
+            ["docs/standards/build_harness.md"],
+            "B",
+            ["docs/standards/build_harness.md"],
+            FILES,
         )
         assert result is not None
         assert result.files == ["docs/standards/build_harness.md"]

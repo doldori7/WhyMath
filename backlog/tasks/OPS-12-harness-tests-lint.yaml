@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -14,10 +14,13 @@ acceptance:
   - "harness-integrity 잡에 ruff·black 스텝 추가 — 현재 tests/harness를 lint하는 CI 잡이 없다"
   - "선재 위반 정리 — ruff F541 2건(test_cli.py:704·722 f-string 자리표시자 없음) 실측"
   - "배선 동결 — 스텝 제거 시 실패하는지 변별력 실측 (OPS-11의 test_infra_lint_wiring 패턴 재사용)"
-artifacts: []
+artifacts:
+  - 62ff187
 paths:
   - ".github/workflows/ci.yml"
   - "tests/harness/**"
+  - "scripts/harness/**"
+  - tests/infra/test_infra_lint_wiring.py
 session: null
-notes: "HARN-08 구현 중 발견. OPS-11이 tests/infra에 대해 고친 것과 동일 구조가 tests/harness에 남아 있다 — backend 잡은 tests/backend만 보고 harness-integrity 잡엔 lint 스텝이 없다. CLAUDE.md '검증 장치를 만들고 배선 확인 없이 완료 선언 금지'의 여섯 번째 사례."
+notes: "HARN-08 구현 중 발견. OPS-11이 tests/infra에 대해 고친 것과 동일 구조가 tests/harness에 남아 있다 — backend 잡은 tests/backend만 보고 harness-integrity 잡엔 lint 스텝이 없다. CLAUDE.md '검증 장치를 만들고 배선 확인 없이 완료 선언 금지'의 여섯 번째 사례. [범위 확장 2026-07-27: 착수 실측에서 scripts/harness도 어느 잡에도 무배선(black 8/9파일 드리프트)임을 확인 — 같은 잡에 함께 배선. 동결은 OPS-11의 test_infra_lint_wiring를 파라미터화해 재사용]"
 updated: 2026-07-27

@@ -6,9 +6,12 @@ import selector
 from models import Backlog, Gate, Task, Track
 
 
-def _backlog(tasks: list[Task], gates: list[Gate] | None = None,
-             tracks: list[Track] | None = None,
-             stage_order: list[str] | None = None) -> Backlog:
+def _backlog(
+    tasks: list[Task],
+    gates: list[Gate] | None = None,
+    tracks: list[Track] | None = None,
+    stage_order: list[str] | None = None,
+) -> Backlog:
     backlog = Backlog(stage_order=stage_order or ["S1", "S2", "E1"])
     for track in tracks or [Track(id="main", title="기본 트랙")]:
         backlog.tracks[track.id] = track
@@ -20,27 +23,30 @@ def _backlog(tasks: list[Task], gates: list[Gate] | None = None,
 
 
 def _task(**overrides) -> Task:
-    base = dict(id="S1-01-alpha", title="알파", track="main", stage="S1",
-                updated="2026-07-08")
+    base = dict(id="S1-01-alpha", title="알파", track="main", stage="S1", updated="2026-07-08")
     base.update(overrides)
     return Task(**base)
 
 
 class TestCandidateFilters:
     def test_의존성_미해소_제외(self):
-        backlog = _backlog([
-            _task(id="S1-01-alpha", depends_on=["S1-02-beta"]),
-            _task(id="S1-02-beta", title="베타"),
-        ])
+        backlog = _backlog(
+            [
+                _task(id="S1-01-alpha", depends_on=["S1-02-beta"]),
+                _task(id="S1-02-beta", title="베타"),
+            ]
+        )
         ready, excluded = selector.candidates(backlog)
         assert [t.id for t in ready] == ["S1-02-beta"]
         assert excluded[0].reason == "deps"
 
     def test_의존성_done이면_후보_포함(self):
-        backlog = _backlog([
-            _task(id="S1-01-alpha", depends_on=["S1-02-beta"]),
-            _task(id="S1-02-beta", title="베타", status="done", artifacts=["PR#1"]),
-        ])
+        backlog = _backlog(
+            [
+                _task(id="S1-01-alpha", depends_on=["S1-02-beta"]),
+                _task(id="S1-02-beta", title="베타", status="done", artifacts=["PR#1"]),
+            ]
+        )
         ready, _ = selector.candidates(backlog)
         assert [t.id for t in ready] == ["S1-01-alpha"]
 
@@ -94,10 +100,12 @@ class TestCandidateFilters:
         assert excluded[0].reason == "claimed"
 
     def test_layer_subject_필터(self):
-        backlog = _backlog([
-            _task(id="S1-01-alpha", layer="backend"),
-            _task(id="S1-02-beta", title="베타", layer="mobile", subject="physics"),
-        ])
+        backlog = _backlog(
+            [
+                _task(id="S1-01-alpha", layer="backend"),
+                _task(id="S1-02-beta", title="베타", layer="mobile", subject="physics"),
+            ]
+        )
         ready, _ = selector.candidates(backlog, layer="mobile")
         assert [t.id for t in ready] == ["S1-02-beta"]
         ready, _ = selector.candidates(backlog, subject="physics")
@@ -107,28 +115,34 @@ class TestCandidateFilters:
 class TestOrdering:
     def test_스테이지가_우선순위보다_우선(self):
         # S1 잔여(priority 5)가 S2(priority 1)보다 먼저
-        backlog = _backlog([
-            _task(id="S2-01-later", stage="S2", priority=1),
-            _task(id="S1-01-alpha", priority=5),
-        ])
+        backlog = _backlog(
+            [
+                _task(id="S2-01-later", stage="S2", priority=1),
+                _task(id="S1-01-alpha", priority=5),
+            ]
+        )
         ready, _ = selector.candidates(backlog)
         assert [t.id for t in ready] == ["S1-01-alpha", "S2-01-later"]
 
     def test_같은_스테이지는_priority_우선(self):
-        backlog = _backlog([
-            _task(id="S1-02-beta", title="베타", priority=1),
-            _task(id="S1-01-alpha", priority=3),
-        ])
+        backlog = _backlog(
+            [
+                _task(id="S1-02-beta", title="베타", priority=1),
+                _task(id="S1-01-alpha", priority=3),
+            ]
+        )
         ready, _ = selector.candidates(backlog)
         assert [t.id for t in ready] == ["S1-02-beta", "S1-01-alpha"]
 
     def test_해금_후속_수가_많은_병목_우선(self):
-        backlog = _backlog([
-            _task(id="S1-01-alpha", priority=2),
-            _task(id="S1-02-bottleneck", title="병목", priority=2),
-            _task(id="S1-03-child-a", title="a", depends_on=["S1-02-bottleneck"]),
-            _task(id="S1-04-child-b", title="b", depends_on=["S1-02-bottleneck"]),
-        ])
+        backlog = _backlog(
+            [
+                _task(id="S1-01-alpha", priority=2),
+                _task(id="S1-02-bottleneck", title="병목", priority=2),
+                _task(id="S1-03-child-a", title="a", depends_on=["S1-02-bottleneck"]),
+                _task(id="S1-04-child-b", title="b", depends_on=["S1-02-bottleneck"]),
+            ]
+        )
         ready, _ = selector.candidates(backlog)
         assert ready[0].id == "S1-02-bottleneck"
 
@@ -169,9 +183,11 @@ class TestStallReason:
         assert detail == ["G-s5"]
 
     def test_다른_세션_진행_중(self):
-        backlog = _backlog([
-            _task(status="in_progress", session="other-branch"),
-        ])
+        backlog = _backlog(
+            [
+                _task(status="in_progress", session="other-branch"),
+            ]
+        )
         _, excluded = selector.candidates(backlog)
         code, detail = selector.stall_reason(backlog, excluded)
         assert code == "in_progress"
@@ -197,10 +213,12 @@ class TestHumanOwnerPath:
 
     def test_allow_human_owner도_deps는_검사(self):
         """사람 기입 경로도 의존성 미해소면 거부 — owner 외 검사는 우회 아님."""
-        backlog = _backlog([
-            _task(owner="kiki", depends_on=["S1-02-beta"]),
-            _task(id="S1-02-beta", title="베타"),
-        ])
+        backlog = _backlog(
+            [
+                _task(owner="kiki", depends_on=["S1-02-beta"]),
+                _task(id="S1-02-beta", title="베타"),
+            ]
+        )
         task = backlog.tasks["S1-01-alpha"]
         exclusion = selector.classify_todo(backlog, task, allow_human_owner=True)
         assert exclusion is not None and exclusion.reason == "deps"

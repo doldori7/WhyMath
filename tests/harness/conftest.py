@@ -20,10 +20,9 @@ if str(_HARNESS_DIR) not in sys.path:
 @pytest.fixture
 def git_repo(tmp_path: Path) -> Path:
     """빈 git 저장소 (main 브랜치 + 최초 커밋) — check-stop·CLI 테스트용."""
+
     def run(*argv: str, cwd: Path = tmp_path) -> str:
-        result = subprocess.run(
-            ["git", *argv], cwd=cwd, capture_output=True, text=True, check=True
-        )
+        result = subprocess.run(["git", *argv], cwd=cwd, capture_output=True, text=True, check=True)
         return result.stdout.strip()
 
     run("init", "-b", "main")
@@ -36,9 +35,7 @@ def git_repo(tmp_path: Path) -> Path:
 
 
 def _run_git(*argv: str, cwd: Path) -> str:
-    result = subprocess.run(
-        ["git", *argv], cwd=cwd, capture_output=True, text=True, check=True
-    )
+    result = subprocess.run(["git", *argv], cwd=cwd, capture_output=True, text=True, check=True)
     return result.stdout.strip()
 
 

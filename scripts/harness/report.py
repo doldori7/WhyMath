@@ -81,14 +81,18 @@ def render_status(backlog: Backlog, errors: list[str], today: date) -> str:
         lines.append("")
         lines.append("── 진행 중 ──")
         for task in sorted(active, key=lambda t: t.id):
-            lines.append(f"{_STATUS_MARK[task.status]}{task.id} [{task.session or '?'}] {task.title}")
+            lines.append(
+                f"{_STATUS_MARK[task.status]}{task.id} [{task.session or '?'}] {task.title}"
+            )
 
     blocked = [t for t in backlog.tasks.values() if t.status == "blocked"]
     if blocked:
         lines.append("")
         lines.append("── 차단됨 ──")
         for task in sorted(blocked, key=lambda t: t.id):
-            lines.append(f"{_STATUS_MARK['blocked']}{task.id} {task.title} — {task.notes or '사유 미기록'}")
+            lines.append(
+                f"{_STATUS_MARK['blocked']}{task.id} {task.title} — {task.notes or '사유 미기록'}"
+            )
 
     pending = [g for g in backlog.gates.values() if g.status == "pending"]
     if pending:
@@ -120,17 +124,17 @@ def render_status_json(backlog: Backlog, errors: list[str], today: date) -> str:
     ready, excluded = selector.candidates(backlog)
     payload = {
         "current_stage": current_stage(backlog),
-        "stages": [
-            {"stage": s, "done": d, "total": t} for s, d, t in stage_progress(backlog)
-        ],
+        "stages": [{"stage": s, "done": d, "total": t} for s, d, t in stage_progress(backlog)],
         "in_progress": [
             {"id": t.id, "session": t.session, "title": t.title}
-            for t in backlog.tasks.values() if t.status == "in_progress"
+            for t in backlog.tasks.values()
+            if t.status == "in_progress"
         ],
         "blocked": [t.id for t in backlog.tasks.values() if t.status == "blocked"],
         "pending_gates": [
             {"id": g.id, "assignee": g.assignee, "days": _days_pending(g.requested, today)}
-            for g in backlog.gates.values() if g.status == "pending"
+            for g in backlog.gates.values()
+            if g.status == "pending"
         ],
         "next": [t.id for t in ready[:5]],
         "validate_errors": errors,
@@ -138,9 +142,14 @@ def render_status_json(backlog: Backlog, errors: list[str], today: date) -> str:
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
-def render_brief(backlog: Backlog, errors: list[str], branch: str, today: date,
-                 remote_claimed: dict[str, str] | None = None,
-                 remote_status: str = "ok") -> str:
+def render_brief(
+    backlog: Backlog,
+    errors: list[str],
+    branch: str,
+    today: date,
+    remote_claimed: dict[str, str] | None = None,
+    remote_status: str = "ok",
+) -> str:
     """SessionStart 훅용 — 컨텍스트에 주입되는 최소 브리핑.
 
     remote_claimed: task_id → 원격 claim 브랜치 (refs/claims/* 조회 결과, best-effort).
@@ -150,16 +159,19 @@ def render_brief(backlog: Backlog, errors: list[str], branch: str, today: date,
     progress = stage_progress(backlog)
     stage = current_stage(backlog)
     stage_line = " · ".join(
-        f"{s} {d}/{t}" for s, d, t in progress if backlog.stage_index(s) <= backlog.stage_index(stage)
+        f"{s} {d}/{t}"
+        for s, d, t in progress
+        if backlog.stage_index(s) <= backlog.stage_index(stage)
     )
     lines.append(f"현재 스테이지: {stage} ({stage_line})")
 
-    mine = [t for t in backlog.tasks.values()
-            if t.status == "in_progress" and t.session == branch]
+    mine = [t for t in backlog.tasks.values() if t.status == "in_progress" and t.session == branch]
     if mine:
         for task in mine:
-            lines.append(f"이 브랜치의 진행 중 태스크: {task.id} — {task.title}"
-                         f" (완료 시 `backlog.py done {task.id} --artifact <PR/커밋>`)")
+            lines.append(
+                f"이 브랜치의 진행 중 태스크: {task.id} — {task.title}"
+                f" (완료 시 `backlog.py done {task.id} --artifact <PR/커밋>`)"
+            )
 
     # 병렬 세션 가시성 — 다른 세션의 원격 claim을 브리핑에 노출 (중복 착수 예방)
     others = {tid: br for tid, br in (remote_claimed or {}).items() if br != branch}
@@ -174,8 +186,10 @@ def render_brief(backlog: Backlog, errors: list[str], branch: str, today: date,
     if ready:
         lines.append("다음 착수 후보:")
         for i, task in enumerate(ready[:3], start=1):
-            lines.append(f"  {i}. {task.id} [{task.layer}/{task.subject}] {task.title}"
-                         f" — {selector.selection_rationale(backlog, task)}")
+            lines.append(
+                f"  {i}. {task.id} [{task.layer}/{task.subject}] {task.title}"
+                f" — {selector.selection_rationale(backlog, task)}"
+            )
         lines.append("착수: `python3 scripts/harness/backlog.py start <id>` 또는 /drive")
     else:
         code, detail = selector.stall_reason(backlog, excluded)
@@ -189,7 +203,9 @@ def render_brief(backlog: Backlog, errors: list[str], branch: str, today: date,
 
     for gate_id, days in overdue_gates(backlog, today):
         gate = backlog.gates[gate_id]
-        lines.append(f"⚠️ 게이트 리마인드: {gate_id} [{gate.assignee}] {gate.title} — {days}일 경과")
+        lines.append(
+            f"⚠️ 게이트 리마인드: {gate_id} [{gate.assignee}] {gate.title} — {days}일 경과"
+        )
 
     if errors:
         lines.append(f"⚠️ 백로그 무결성 경고 {len(errors)}건 — `backlog.py validate` 확인 필요")

@@ -867,8 +867,13 @@ jobs:
 
       # pytest-randomly(OPS-09) — tests/harness 153건이 무작위 순서 전건 통과함을 실측하고
       # 배선했다(2026-07-27). 하네스는 backlog 대장을 읽는 코드라 순서 의존이 특히 위험하다.
-      - name: Install deps (stdlib + PyYAML만 — 하네스 설계 불변식)
-        run: pip install pyyaml pytest pytest-randomly
+      # ruff·black(OPS-12) — 아래 lint 스텝용 검증 도구. 버전 핀은 backend `dev` extra와
+      # 같은 정책(상한을 걸어 메이저 변경 시 재검증 강제). 하네스 *런타임*은 여전히
+      # stdlib+PyYAML만이다(설계 불변식) — 나머지는 전부 검증 도구.
+      - name: Install deps (하네스 런타임은 stdlib+PyYAML — 나머지는 검증 도구)
+        run: |
+          pip install pyyaml pytest pytest-randomly \
+                      "ruff>=0.7.0,<0.16" "black>=24.10.0,<27"
 
       - name: backlog 무결성 검증
         run: python3 scripts/harness/backlog.py validate
@@ -884,6 +889,18 @@ jobs:
               echo "::warning::stale 원격 claim 발견 — 'backlog.py claims reap --apply'로 청소 권장"
             fi
           fi
+
+      # OPS-12 — `tests/harness`·`scripts/harness`를 lint/format하는 잡이 **하나도 없었다**
+      # (OPS-11의 harness 판박이). backend 잡은 `../../tests/backend`만, data-pipeline 잡은
+      # working-directory `src/data-pipeline`의 `.`만 본다 — 하네스는 대장(backlog)을 판정하는
+      # 코드인데 그 자신의 품질은 아무도 검사하지 않았다.
+      # 실측(2026-07-27): 배선 직전 ruff F541 2건(test_cli.py) + black --check 17파일
+      # (tests/harness 9 전부·scripts/harness 8/9)이 실패 상태였고 아무도 알지 못했다.
+      - name: Ruff (scripts/harness + tests/harness)
+        run: python3 -m ruff check scripts/harness tests/harness
+
+      - name: Black --check (scripts/harness + tests/harness)
+        run: python3 -m black --check --line-length 100 scripts/harness tests/harness
 
       - name: 하네스 테스트
         run: python3 -m pytest tests/harness -q

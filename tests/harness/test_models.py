@@ -33,8 +33,17 @@ class TestTaskValidation:
 
     def test_등록된_전과목은_통과(self):
         # 다과목 확장: 물리~세계사까지 전부 스키마가 수용해야 한다
-        for subject in ("physics", "chemistry", "biology", "earth-science",
-                        "economics", "history", "world-history", "korean", "english"):
+        for subject in (
+            "physics",
+            "chemistry",
+            "biology",
+            "earth-science",
+            "economics",
+            "history",
+            "world-history",
+            "korean",
+            "english",
+        ):
             assert _valid_task(subject=subject).validate() == []
 
     def test_priority_범위_밖_거부(self):
