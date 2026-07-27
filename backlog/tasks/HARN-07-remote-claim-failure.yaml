@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,11 +14,12 @@ acceptance:
   - "원격 claim(refs/claims/*) 실패 시 동작 규약 확정 — 현재는 error를 경고만 하고 착수를 허용해 중복 방지가 무력화된다"
   - "claim 실패를 사용자에게 *판정*으로 노출 — 침묵 실패 금지 원칙 적용(현재는 'remote claim: error' 한 줄로 흘러간다)"
   - "중복 착수 검출 경로 — 같은 태스크를 다른 세션이 이미 in_progress로 잡고 있으면 start가 거부하거나 최소한 크게 경고"
-artifacts: []
+artifacts:
+  - ca122a8
 paths:
   - "scripts/harness/**"
   - "tests/harness/**"
   - docs/standards/build_harness.md
-session: claude/whymath-service-review-9r21im
+session: null
 notes: "2026-07-27 실측: OPS-07을 claude/review-applicable-items-8rrtau(#611)와 본 세션이 각각 구현. events.ndjson에 양쪽 모두 claim_remote_unavailable(status=error) 후 start가 그대로 성립. #611이 먼저 머지돼 본 세션 구현(735줄 테스트 포함)을 철회했다 — 순수 낭비. CLAUDE.md 신규 규칙 '검증 장치를 만들고 배선 확인 없이 완료 선언 금지'와 같은 부류(장치는 있으나 작동하지 않음)."
 updated: 2026-07-27
