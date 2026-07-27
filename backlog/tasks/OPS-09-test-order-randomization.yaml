@@ -5,7 +5,7 @@ track: infra-debt
 stage: S3
 subject: cross
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
@@ -14,11 +14,12 @@ acceptance:
   - "pytest-randomly 상시 배선 — 매 실행 순서를 섞어 순서 의존을 조기·반복 노출(OPS-07 가드는 db.session 축만 지목·이쪽은 전 종류 발견)"
   - "전 스위트(backend·data-pipeline·infra·harness) 도입 비용 실측 후 배선 — 무작위 통과 확인된 것만"
   - "실패 재현 경로 확보 — CI 로그에 seed 노출·재현 명령 문서화"
-artifacts: []
+artifacts:
+  - b72a409
 paths:
   - src/backend/pyproject.toml
   - src/data-pipeline/pyproject.toml
   - ".github/workflows/ci.yml"
-session: claude/whymath-service-review-9r21im
+session: null
 notes: "2026-07-27 실측: backend 스위트 무작위 순서 6768 passed / 1 failed이며 그 1건도 OPS-07 신규 테스트의 실험조건 미통제(수정 완료). 즉 저장소 순서 의존이 사실상 0이라 도입 비용이 거의 없다 — 이런 도구 도입이 보통 막히는 이유(숨은 순서 의존 일괄 폭발)가 여기엔 없다."
 updated: 2026-07-27
