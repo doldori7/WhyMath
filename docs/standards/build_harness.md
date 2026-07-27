@@ -78,6 +78,38 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
 - `next`/`brief`(SessionStart)가 원격 claim을 조회해 다른 세션의 작업을
   후보 제외·브리핑 노출한다.
 
+### 3b-1. 읽기측 교차 세션 탐지 — CAS가 막힌 환경의 폴백 (HARN-07)
+
+**사고(2026-07-27)**: 이 실행 환경의 git 프록시는 `refs/claims/*` push를 **HTTP 403**으로
+거부한다. 즉 CAS claim은 "가끔 실패"가 아니라 *한 번도 성공한 적이 없었고*, fail-open이
+모든 `start`를 통과시켜 중복 방지가 상시 무력이었다 — 두 세션이 OPS-07을 병렬 구현해
+한쪽(테스트 735줄 포함)을 폐기했다. `events.ndjson`에 `claim_remote_unavailable`
+(status=error) 45건이 그 흔적이다.
+
+**대응**: 쓰기(CAS)는 못 고치지만 **읽기는 된다**(`git fetch` 전체 브랜치 ~5초 실측).
+`start`는 CAS가 `offline`/`error`를 반환한 경우에만 읽기측 탐지로 폴백한다:
+
+1. `git fetch origin '+refs/heads/*:refs/remotes/origin/*'` (타임아웃 90초)
+2. 원격 브랜치들의 `backlog/tasks/<id>.yaml`을 읽어 `status: in_progress` +
+   `session:`이 **내 세션과 다른** 것을 찾는다 (최근 커밋순 최대 300개 브랜치)
+3. 발견 시 **착수 거부** — 어느 브랜치·어느 세션인지 명시하고, 우회 경로
+   (`--no-remote` 또는 상대 태스크 done/block)를 함께 안내한다
+
+**이것은 CAS의 대체가 아니라 *부분* 방어다** (과장 금지 — 코드·CLI 메시지에도 매번 명시):
+
+- 상대 세션이 **브랜치를 push한 뒤에만** 보인다. push 전 로컬에서 작업 중인 세션은
+  이 방법으로 **절대** 잡히지 않는다.
+- **원자성이 없다** — 두 세션이 동시에 스캔하면 둘 다 "충돌 없음"을 볼 수 있다.
+- 병합된 브랜치에 남은 stale `in_progress`도 탐지된다(과탐) → `--no-remote`로 우회.
+
+그러므로 **CAS 경로는 제거하지 않는다** — 프록시 정책이 다른 환경(로컬 개발·다른 러너)
+에서는 CAS가 작동하며 원자성은 그쪽이 우월하다. 읽기측은 CAS 실패 시에만 돈다
+(CAS 성공 시 fetch 비용 0 — `test_CAS_성공이면_읽기측_탐지를_호출하지_않는다`가 동결).
+
+**폴백 자체가 실패하면**(fetch 불가 등) fail-open하되 **"중복 착수 보호가 전혀 없습니다"**를
+명시적으로 경고하고 `claim_readside_unavailable` 이벤트를 남긴다 — 침묵 실패 금지.
+탐지 성립 시에는 `claim_readside_conflict` 이벤트가 남아 측정 가능하다.
+
 ## 3c. 조율 정책 — 단계적 강제 (warn → block)
 
 `backlog/policy.yaml`의 rule 3종 (전부 warn으로 시작 — "측정 없는 도입 없음"):

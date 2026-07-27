@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -99,6 +100,145 @@ class TestFailOpen:
         claims, status = remote_claims.list_claims(git_repo)
         assert claims == []
         assert status == "offline"
+
+
+class TestTopLevelFieldParser:
+    """태스크 YAML 최상위 스칼라 파서 — PyYAML 비의존 (하네스 의존성 0 설계)."""
+
+    def test_실제_dump_task_형식을_읽는다(self):
+        import store
+
+        body = store.dump_task(Task(
+            id=TASK, title="샘플: 콜론 포함", track="math-completion", stage="S1",
+            status="in_progress", session="claude/session-a",
+            paths=["scripts/harness/**"],
+        ))
+        assert remote_claims._top_level_field(body, "status") == "in_progress"
+        assert remote_claims._top_level_field(body, "session") == "claude/session-a"
+
+    def test_null_세션은_빈_문자열(self):
+        body = "id: X\nstatus: todo\nsession: null\n"
+        assert remote_claims._top_level_field(body, "session") == ""
+
+    def test_인용된_값의_따옴표를_벗긴다(self):
+        body = 'status: "in_progress"\nsession: "claude/a-b"\n'
+        assert remote_claims._top_level_field(body, "session") == "claude/a-b"
+
+    def test_들여쓰기된_줄과_값_속_콜론에_속지_않는다(self):
+        # notes 값 안의 'status: in_progress'와 리스트 항목이 최상위로 오인되면 안 된다
+        body = ('status: todo\n'
+                'notes: "이전 세션에서 status: in_progress 였음"\n'
+                'acceptance:\n  - "status: in_progress 금지"\n')
+        assert remote_claims._top_level_field(body, "status") == "todo"
+
+    def test_없는_키는_빈_문자열(self):
+        assert remote_claims._top_level_field("id: X\n", "session") == ""
+
+
+class TestReadSideScan:
+    """읽기측 교차 세션 탐지 (HARN-07) — CAS가 막힌 환경의 폴백.
+
+    쓰기(refs/claims push)가 403인 환경을 가정하되, 읽기 경로는 진짜 로컬 원격에서
+    실제 git fetch/show로 검증한다(시임 아님).
+    """
+
+    def _push_task_copy(self, repo: Path, branch: str, status: str,
+                        session: str | None, task_id: str = TASK) -> None:
+        """원격 브랜치에 태스크 YAML 사본을 심는다 — 타 세션이 push한 상태 재현."""
+        import subprocess
+
+        import store
+
+        def run(*argv: str) -> None:
+            subprocess.run(["git", *argv], cwd=repo, check=True, capture_output=True)
+
+        store.save_task(repo, Task(
+            id=task_id, title="샘플", track="math-completion", stage="S1",
+            status=status, session=session,
+        ))
+        run("checkout", "-B", branch)
+        run("add", ".")
+        run("commit", "-m", f"claim {task_id}")
+        run("push", "--quiet", "-u", "origin", branch)
+
+    def test_타_세션_in_progress를_탐지한다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_task_copy(a, "claude/session-a", "in_progress", "claude/session-a")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.status == "ok"
+        assert [(h.branch, h.session) for h in result.holders] == [
+            ("claude/session-a", "claude/session-a")
+        ]
+
+    def test_내_세션의_in_progress는_나를_막지_않는다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        # 원격에 남은 claim의 session이 '나'인 경우 (내 브랜치를 이미 push한 상태)
+        self._push_task_copy(a, "claude/session-b", "in_progress", "claude/session-b")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.status == "ok"
+        assert result.holders == []
+
+    def test_todo_상태는_탐지하지_않는다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_task_copy(a, "claude/session-a", "todo", None)
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.status == "ok"
+        assert result.holders == []
+
+    def test_태스크_파일이_없는_브랜치는_건너뛴다(self, bare_remote):
+        _, clone = bare_remote
+        _, b = clone("session-a"), clone("session-b")
+        # main에는 backlog/ 자체가 없다 — 예외 없이 조용히 넘어가야 한다
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.status == "ok"
+        assert result.holders == []
+        assert result.scanned_refs >= 1
+
+    def test_다른_태스크의_claim에는_반응하지_않는다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_task_copy(a, "claude/session-a", "in_progress", "claude/session-a",
+                             task_id="S1-99-other-task")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.status == "ok"
+        assert result.holders == []
+
+    def test_원격_없으면_offline_판정불가(self, git_repo: Path):
+        result = remote_claims.scan_remote_in_progress(git_repo, TASK, "claude/x")
+        assert result.status == "offline"
+        assert result.holders == []  # 빈 holders를 '충돌 없음'으로 읽으면 안 된다
+
+    def test_fetch_실패는_상태로_보고되고_예외가_아니다(self, bare_remote, monkeypatch):
+        _, clone = bare_remote
+        b = clone("session-b")
+        original = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv and argv[0] == "fetch" and any("refs/heads" in a for a in argv):
+                return subprocess.CompletedProcess(
+                    ["git", *argv], 128, stdout="",
+                    stderr="fatal: unable to access 'origin': The requested URL returned error: 403",
+                )
+            return original(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.status in ("offline", "error")
+        assert result.holders == []
+        assert "403" in result.message  # 침묵 실패 금지 — 원인이 메시지에 남는다
+
+    def test_브랜치_상한_초과는_truncated로_보고된다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_task_copy(a, "claude/session-a", "in_progress", "claude/session-a")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b",
+                                                       max_refs=1)
+        assert result.status == "ok"
+        assert result.scanned_refs == 1
+        assert result.truncated is True  # 조용한 축소 금지
 
 
 class TestStaleAndReap:

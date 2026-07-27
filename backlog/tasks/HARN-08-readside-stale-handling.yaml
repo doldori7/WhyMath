@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-08-readside-stale-handling
+title: "읽기측 claim 폴백의 stale in_progress 과탐 처리 — 머지된 브랜치 잔존 상태가 영구 차단 (HARN-07 잔여)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: in_progress
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "머지된 브랜치의 잔존 in_progress를 스캔에서 제외하거나 로컬 done 상태 우선 규칙 — 실측 사례: origin/main의 OPS-07·ui-design 브랜치의 PED-01"
+  - "과탐 우회가 --no-remote 전체 생략뿐인 현 상태 개선 — 특정 태스크만 무시하는 세분 경로"
+  - "변별력 실측 — stale 상태 주입 시 과탐이 실제로 해소되는지"
+artifacts: []
+paths:
+  - "scripts/harness/**"
+  - "tests/harness/**"
+session: claude/whymath-service-review-9r21im
+notes: "HARN-07 종단 실측에서 그대로 관찰: 병합돼 끝난 브랜치에 in_progress가 남으면 그 태스크는 읽기측 폴백이 영구 거부한다. 현 우회는 --no-remote(보호 전체 포기)뿐. claims reap의 읽기측 대응물 부재."
+updated: 2026-07-27

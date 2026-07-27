@@ -187,7 +187,7 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
         return _fail(overlap_error)
 
     # [프리플라이트 2] 원격 claim — 로컬 검사 전부 통과 후 마지막 (dangling ref 방지).
-    # conflict만 차단, offline/error는 fail-open(경고 후 로컬 claim으로 진행).
+    # conflict만 차단, offline/error는 읽기측 교차 세션 탐지(프리플라이트 3)로 폴백.
     remote_status = "disabled"
     if policy.remote_claims and not getattr(args, "no_remote", False):
         result = remote_claims.claim(root, task.id, session)
@@ -199,10 +199,39 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
             return _fail(f"{task.id} 착수 거부 — 다른 세션이 이미 원격 claim{detail}\n"
                          f"  본인 claim이 확실하면: claims release {task.id} --force 후 재시도")
         if result.status in ("offline", "error"):
-            print(f"⚠ 원격 claim 불가({result.status}) — 로컬 claim만으로 진행: "
-                  f"{result.message}", file=sys.stderr)
+            print(f"⚠ 원격 CAS claim 불가({result.status}): {result.message}", file=sys.stderr)
             store.append_event(root, "claim_remote_unavailable", task.id,
                                status=result.status)
+            # [프리플라이트 3] 읽기측 교차 세션 탐지 (HARN-07) — CAS(쓰기)가 막힌
+            # 환경에서 유일하게 남은 방어. 이 환경의 git 프록시는 refs/claims/* push를
+            # 403 거부해 CAS가 상시 실패하므로, fail-open을 그대로 두면 중복 방지가
+            # 영구 무력이다(2026-07-27 OPS-07 병렬 구현 사고). CAS 성공 시에는 돌지
+            # 않는다 — 전체 브랜치 fetch(~5초) 비용을 불필요하게 물지 않기 위해.
+            scan = remote_claims.scan_remote_in_progress(root, task.id, session)
+            remote_status = f"{result.status}+readscan_{scan.status}"
+            conflict = _readside_conflict_message(task, scan, result.status)
+            if conflict:
+                store.append_event(
+                    root, "claim_readside_conflict", task.id,
+                    cas_status=result.status,
+                    holders=[f"{h.branch}:{h.session}" for h in scan.holders],
+                )
+                return _fail(conflict)
+            if scan.status == "ok":
+                extra = " (브랜치 수 상한 도달 — 일부만 확인)" if scan.truncated else ""
+                print(f"  ↳ 읽기측 교차 세션 탐지로 폴백: 원격 브랜치 {scan.scanned_refs}개에서 "
+                      f"중복 in_progress 없음{extra}.\n"
+                      f"    ※ *부분* 방어입니다 — 상대가 브랜치를 push한 뒤에만 보이며 "
+                      f"CAS의 원자성은 대체하지 못합니다.", file=sys.stderr)
+            else:
+                # 침묵 실패 금지 — 폴백까지 실패했으면 '보호 없음'을 명시적으로 말한다.
+                print(f"  ↳ 읽기측 교차 세션 탐지도 불가({scan.status}) — "
+                      f"로컬 claim만으로 진행합니다.\n"
+                      f"    ⚠ 이 착수에는 중복 착수 보호가 전혀 없습니다 "
+                      f"(다른 세션이 같은 태스크를 잡고 있어도 알 수 없음): {scan.message}",
+                      file=sys.stderr)
+                store.append_event(root, "claim_readside_unavailable", task.id,
+                                   cas_status=result.status, scan_status=scan.status)
 
     task.status = "in_progress"
     task.session = session
@@ -221,6 +250,33 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
     for warning in task.layer_drift_warnings():
         print(f"  ⚠ {warning}", file=sys.stderr)
     return 0
+
+
+def _readside_conflict_message(task: Task, scan, cas_status: str) -> str | None:
+    """읽기측 탐지 결과 → 착수 거부 메시지 (충돌 없으면 None).
+
+    status가 ok가 아니면 *판정 불가*이므로 거부하지 않는다(호출측이 '보호 없음'을
+    별도로 경고한다) — 측정 실패를 '충돌 없음'으로 위장하지 않기 위한 분기다.
+    """
+    if scan.status != "ok" or not scan.holders:
+        return None
+    lines = [f"{task.id} 착수 거부 — 다른 세션이 이미 in_progress "
+             f"(원격 브랜치 읽기 탐지 · CAS claim은 {cas_status})"]
+    for holder in scan.holders[:3]:
+        lines.append(f"  · origin/{holder.branch} 의 backlog 사본: "
+                     f"status=in_progress, session={holder.session}")
+    if len(scan.holders) > 3:
+        lines.append(f"  · … 외 {len(scan.holders) - 3}건")
+    lines.append(
+        "  ※ 이 탐지는 CAS claim(refs/claims/*)이 불가할 때 도는 *부분* 방어입니다 — "
+        "상대가 브랜치를 push한 뒤에만 보이며, 원자성은 대체하지 못합니다."
+    )
+    lines.append(
+        f"  본인 작업이 확실하거나 상대 브랜치가 이미 죽었으면(stale in_progress): "
+        f"상대 태스크를 done/block 처리하거나, 원격 검사를 생략하세요 — "
+        f"python3 scripts/harness/backlog.py start {task.id} --no-remote"
+    )
+    return "\n".join(lines)
 
 
 def _inflight_tasks(backlog, remote_claimed: dict[str, str] | None,
