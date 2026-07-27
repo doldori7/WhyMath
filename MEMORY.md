@@ -348,6 +348,17 @@
 **대책(코드)**: **OPS-07**(`7be5026` 계열) 전역 오염 가드 — teardown에서 `db.session` 전역 검사 → 즉시 정리(연쇄 차단) + **오염을 만든 테스트 자신을 실패**(원인 지목). **OPS-09** 순서 무작위화 상시화 — 가드가 `db.session` 축의 *원인을 지목*한다면 이쪽은 종류를 가리지 않고 *존재를 발견*(상보). 도입 근거는 실측: 무작위 순서 backend 6768·infra 204·harness 153 전건 통과. **재현 경로가 도입의 전제** — pytest-randomly 기본 seed 헤더가 `-q`에서 안 나오는데 CI는 전 스위트를 `-q`로 돌려, 그대로 켰다면 무작위 실패를 재현할 수 없었다(루트 conftest에 `trylast=True` 훅으로 seed+재현 명령 상시 출력. 첫 구현은 확정 전 값 `"default"`를 찍는 위장이었고 실측으로 발견·수정). **OPS-10** 배선 실재성 동결 — 설계 교정이 핵심: `testpaths`에 적혀 있음은 *실행의 증거가 아니다*(그 디렉터리에서 pytest를 돌리는 잡이 없으면 여전히 아무도 안 돈다 = 사고의 정확한 형태). 배선 단위를 **워크플로의 실제 pytest 실행 1건**으로 잡아 해소. 실측: 실행 8건이 `tests/` 51개 디렉터리 전부 커버. + PR 템플릿 신설(부재 상태였음 — 변별력 증빙·정직한 공백 칸).
 
 **한계 명시**: PR 템플릿은 **게이트가 아니라 프롬프트**다 — CI는 PR 본문을 읽지 않으므로 "변별력 칸이 채워졌는가"는 기계가 판정하지 않는다. 그 이상 주장하면 "측정 없는 기계 게이트를 검수 대체로 선언"이 된다. 배선 동결은 잡의 `if:` 조건·`-k/-m` 필터를 모델링하지 않으며 `tests/` 밖(Flutter·web)은 범위 밖이다. `tests/data_pipeline`은 이 환경에 패키지가 없어 무작위 통과를 실측하지 못해 **배선하지 않았다**(측정 없는 도입 금지).
+### 2026-07-27 (구현·GA·PED-01 슬라이스 ③): **교수법 팩 prompt GA flip — `pedagogy_pack_prompt_enabled` 기본 `False→True`(canary 졸업)** (claude 구현, Kiki "GA flip (Kiki 게이트)"→사인오프·범위 선택 "간이·바로 머지")
+
+**컨텍스트**: PED-01 본체(이차함수 파일럿 E2E 완주 + DSL 동결 + no-op 배선)는 PR #598로 머지 완료(main `6130036`). 남은 것은 배선의 **플래그 기본값만** 뒤집는 후속 GA flip. Kiki 사인오프로 착지.
+
+**GA 근거(선례 `wh1_primary` 규율)**: ① **결함주입 측정** — `pedagogy_pack_fidelity_eval` exit 0(violating 72셀 미검출 0·clean 72셀 오검출 0·Wilson 상한 0.0362·CI 상시 게이트, 로컬 재실측). ② **Kiki 사인오프**(2026-07-27). ③ **실기기 확인은 간이 갈음** — 근거: 팩 주입은 stateless coach의 *옵트인 훅*이라 `decide(pack=...)`로 팩이 명시 주입될 때만 발문을 대체하고(`pack=None`이면 플래그 무관 base 무변경), `_pack_for`가 **파일럿 목표 개념 매핑 문항**(현재 이차함수 최대·최소 `10공수1-02-06-1` 1건)에서만 팩을 해석 → flip 영향이 **파일럿 1단원 매핑 문항에 한정**(WH-1 전 튜터링 경로를 켠 `wh1_primary`보다 훨씬 좁음). Kiki가 blast radius를 근거로 "간이·바로 머지" 선택.
+
+**변경(3파일·PR #614·main `a9b9a2b`)**: `config.py` `pedagogy_pack_prompt_enabled` `default=False→True`(도크스트링 GA 근거 갱신·킬스위치 `WHYMATH_PEDAGOGY_PACK_PROMPT_ENABLED=false` 유지) · `test_coach_gate3_serving_invariant.py` governance 봉인에 `assert ... is True` 동결(기본값 재-침묵-변경 방지·`wh1_primary`와 동형) · `l4/pedagogy/k_type_resolver.py` `deferred GA`→`GA 착지` 도크스트링 정정.
+
+**검증**: 실 PG 통합 3건(OFF 단락·ON 해석 파일럿→CONCEPT·미매핑 fail-soft None·E2E 관통) · api·l4 hermetic 2353 passed 회귀 0(OPS-07 누수 가드 아래 재실측 포함) · fidelity exit 0 · ruff/black(L100)/mypy --strict(421)/import-linter green · STATIC 프롬프트 불변(팩은 `decision.system`만 대체·`prompt`는 STATIC 유지). 브랜치 보호 up-to-date 강제로 main(`24e0dcd`) 재병합·CI 재실행(8 success+6 skip) 후 SQUASH 머지.
+
+**롤백**: `WHYMATH_PEDAGOGY_PACK_PROMPT_ENABLED=false` 한 줄(코드 롤백 불요).
 
 ### 2026-07-26 (구현·OPS-07): **테스트 전역 누수 가드 — 순서-의존·전체-스위트-한정 오염을 *그 테스트 자체*의 결정론적 실패로** (claude 구현, Kiki "OPS-07 착수")
 

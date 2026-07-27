@@ -146,9 +146,19 @@ def test_serving_path_llm_flag_governance() -> None:
     (등호·숫자·GT 유입 전면 차단·fail-closed=원 템플릿) 통과분만 문맥화 노출되는 계층이나,
     GA flip(기본 True)은 결함주입 측정(coach_prose_leak_eval exit 0)+실기기 확인 후 별도
     커밋으로만 한다(S1-11 canary→GA 선례). 그 전까지 이 봉인이 False를 동결한다.
+
+    **교수법 팩 prompt(PED-01 슬라이스 ③)는 2026-07-27 GA로 기본 ON** — 팩 주입은 stateless
+    coach의 옵트인 훅이라 `decide(pack=...)`로 팩이 명시 주입될 때만 발문을 대체하고(pack=None이면
+    플래그 무관 base 무변경), `_pack_for`가 파일럿 목표 개념 매핑 문항에서만 팩을 해석해 blast
+    radius가 파일럿 1단원으로 한정된다. GA 근거: 결함주입 측정(pedagogy_pack_fidelity_eval exit 0·
+    CI 상시) 통과 + Kiki 사인오프(blast radius 좁아 실기기 확인 간이 갈음). 이 봉인이 이제 True를
+    동결한다 — 조용히 False로 뒤집히면 red.
     """
     settings = Settings(jwt_secret_key=SecretStr("test-secret-0123456789abcdef"))
     assert settings.misconception_judge_enabled is False
     assert settings.wh1_harness_shadow_enabled is False
     assert settings.wh1_primary_enabled is True  # 2026-07-20 GA (측정 통과·MEMORY 로그)
     assert settings.wh1_prose_rephrase_enabled is False  # S4-04 canary — GA는 측정+실기기 후
+    assert (
+        settings.pedagogy_pack_prompt_enabled is True
+    )  # 2026-07-27 GA (fidelity 게이트 green·Kiki 사인오프)
