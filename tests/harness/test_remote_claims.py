@@ -241,6 +241,173 @@ class TestReadSideScan:
         assert result.truncated is True  # 조용한 축소 금지
 
 
+class TestReadSideStaleHandling:
+    """HARN-08 — 머지·폐기 브랜치에 남은 in_progress 과탐 해소 (규칙 A·B).
+
+    SQUASH 머지 저장소라 조상 검사(`merge-base --is-ancestor`)는 쓸 수 없다 —
+    머지된 브랜치도 트렁크의 조상이 아니다(2026-07-27 5건 전수 실측). 대신
+    트렁크 사본의 status(규칙 A)와 "트렁크는 세션이 아니다"(규칙 B)로 판별한다.
+    """
+
+    def _write_task(self, repo: Path, status: str, session: str | None,
+                    task_id: str = TASK) -> None:
+        import store
+
+        store.save_task(repo, Task(
+            id=task_id, title="샘플", track="math-completion", stage="S1",
+            status=status, session=session,
+            artifacts=["PR#0"] if status == "done" else [],
+        ))
+
+    def _run(self, repo: Path, *argv: str) -> None:
+        subprocess.run(["git", *argv], cwd=repo, check=True, capture_output=True)
+
+    def _push_trunk(self, repo: Path, status: str, session: str | None = None,
+                    task_id: str = TASK) -> None:
+        """트렁크(origin/main)에 태스크 사본을 심는다 — 규칙 A·B의 신호원."""
+        self._run(repo, "checkout", "-q", "main")
+        self._write_task(repo, status, session, task_id)
+        self._run(repo, "add", ".")
+        self._run(repo, "commit", "-q", "-m", f"trunk {status}")
+        self._run(repo, "push", "--quiet", "origin", "main")
+
+    def _push_session_branch(self, repo: Path, branch: str, status: str,
+                             session: str | None, task_id: str = TASK) -> None:
+        """세션 브랜치에 태스크 사본을 심는다 (홀더 후보)."""
+        self._run(repo, "checkout", "-q", "-B", branch)
+        self._write_task(repo, status, session, task_id)
+        self._run(repo, "add", ".")
+        self._run(repo, "commit", "-q", "-m", f"claim {task_id}")
+        self._run(repo, "push", "--quiet", "-u", "origin", branch)
+
+    def test_규칙A_트렁크가_done이면_홀더는_stale로_제외된다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_trunk(a, "done")
+        self._push_session_branch(a, "claude/session-a", "in_progress", "claude/session-a")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.status == "ok"
+        assert result.holders == []                       # 과탐 해소 — 착수 허용
+        assert result.trunk_status == "done"
+        # 조용히 버리지 않는다 — 무엇을 왜 무시했는지 남는다
+        assert [(s.branch, s.reason) for s in result.skipped] == [
+            ("claude/session-a", "trunk_done")
+        ]
+
+    def test_규칙A_역_트렁크가_todo면_여전히_차단한다(self, bare_remote):
+        # 규칙 A가 보호를 과잉 무력화하면 안 된다 — 착륙하지 않은 태스크는 그대로 막힌다
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_trunk(a, "todo")
+        self._push_session_branch(a, "claude/session-a", "in_progress", "claude/session-a")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.status == "ok"
+        assert [(h.branch, h.session) for h in result.holders] == [
+            ("claude/session-a", "claude/session-a")
+        ]
+        assert result.skipped == []
+
+    def test_규칙A_cancelled도_착륙으로_본다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_trunk(a, "cancelled")
+        self._push_session_branch(a, "claude/session-a", "in_progress", "claude/session-a")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.holders == []
+        assert [s.reason for s in result.skipped] == ["trunk_cancelled"]
+
+    def test_규칙B_트렁크_자신은_홀더가_될_수_없다(self, bare_remote):
+        # main의 in_progress는 활성 claim이 아니라 대장 위생 실패(done 미기입 머지)다
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_trunk(a, "in_progress", "claude/dead-session")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.status == "ok"
+        assert result.holders == []
+        assert [(s.branch, s.reason) for s in result.skipped] == [
+            ("main", "trunk_not_session")
+        ]
+
+    def test_규칙B는_실_세션_claim까지_지우지는_않는다(self, bare_remote):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_trunk(a, "in_progress", "claude/dead-session")
+        self._push_session_branch(a, "claude/session-a", "in_progress", "claude/session-a")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert [h.branch for h in result.holders] == ["claude/session-a"]  # 살아있는 claim은 남는다
+        assert [s.branch for s in result.skipped] == ["main"]
+
+    def test_트렁크에_태스크_파일이_없으면_규칙A_신호없이_홀더검사(self, bare_remote):
+        # 브랜치에서 신설된 태스크 — 트렁크 사본이 없다고 stale로 오해하면 안 된다
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_session_branch(a, "claude/session-a", "in_progress", "claude/session-a")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.trunk_status == ""
+        assert [h.branch for h in result.holders] == ["claude/session-a"]
+
+    def _break_ls_remote(self, monkeypatch):
+        """원격 HEAD 조회만 실패시킨다 (fetch·show는 진짜)."""
+        original = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv and argv[0] == "ls-remote":
+                return subprocess.CompletedProcess(
+                    ["git", *argv], 128, stdout="",
+                    stderr="fatal: unable to access origin: HTTP 403")
+            return original(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+
+    def test_트렁크_ref는_원격_HEAD를_먼저_묻는다(self, bare_remote):
+        _, clone = bare_remote
+        b = clone("session-b")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.trunk_source == "ls-remote"        # 하드코딩 아님·원격 권위 우선
+        assert result.trunk_ref == "refs/remotes/origin/main"
+
+    def test_로컬_origin_HEAD가_stale이어도_원격_권위를_따른다(self, bare_remote):
+        """실측 사고 재현(2026-07-27): 로컬 origin/HEAD가 *세션 브랜치*를 가리킨 클론.
+
+        그 값을 트렁크로 믿으면 규칙 A가 남의 세션 브랜치 status를 권위로 삼아
+        보호를 조용히 꺼버린다(미탐). 원격 HEAD가 이겨야 한다.
+        """
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_trunk(a, "todo")                      # 진짜 트렁크: 미착륙
+        self._push_session_branch(a, "claude/session-a", "in_progress", "claude/session-a")
+        self._push_session_branch(a, "claude/liar", "done", None)   # 착륙했다고 주장하는 사본
+        self._run(b, "fetch", "--quiet", "origin", "+refs/heads/*:refs/remotes/origin/*")
+        self._run(b, "symbolic-ref", "refs/remotes/origin/HEAD",
+                  "refs/remotes/origin/claude/liar")
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.trunk_ref == "refs/remotes/origin/main"
+        assert result.trunk_status == "todo"
+        assert [h.branch for h in result.holders] == ["claude/session-a"]  # 보호 유지
+
+    def test_원격_HEAD_조회가_막히면_로컬_symbolic_ref로_폴백(self, bare_remote, monkeypatch):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_trunk(a, "done")
+        self._push_session_branch(a, "claude/session-a", "in_progress", "claude/session-a")
+        self._break_ls_remote(monkeypatch)
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.trunk_source == "symbolic-ref"
+        assert result.holders == []                      # 규칙 A는 그대로 작동
+
+    def test_해소_전부_실패하면_main으로_폴백한다(self, bare_remote, monkeypatch):
+        _, clone = bare_remote
+        a, b = clone("session-a"), clone("session-b")
+        self._push_trunk(a, "done")
+        self._push_session_branch(a, "claude/session-a", "in_progress", "claude/session-a")
+        self._run(b, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD")
+        self._break_ls_remote(monkeypatch)
+        result = remote_claims.scan_remote_in_progress(b, TASK, "claude/session-b")
+        assert result.trunk_source == "fallback"
+        assert result.trunk_ref == "refs/remotes/origin/main"
+        assert result.holders == []
+
+
 class TestStaleAndReap:
     def test_stale_3중_기준(self):
         now = datetime(2026, 7, 16, 12, 0, tzinfo=timezone.utc)

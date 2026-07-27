@@ -5,6 +5,7 @@
     python3 scripts/harness/backlog.py status [--json]
     python3 scripts/harness/backlog.py next [--n 3] [--layer L] [--subject S] [--track T]
     python3 scripts/harness/backlog.py start <id> [--session <branch>]
+                                                 [--no-remote | --ignore-remote-claim]
     python3 scripts/harness/backlog.py done <id> --artifact <PR/커밋> [--artifact ...]
     python3 scripts/harness/backlog.py block <id> --reason <사유>
     python3 scripts/harness/backlog.py unblock <id>
@@ -196,8 +197,13 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
             other = result.claim
             detail = (f" (세션: {other.branch or '?'}, {other.ts or '시각 불명'})"
                       if other else "")
-            return _fail(f"{task.id} 착수 거부 — 다른 세션이 이미 원격 claim{detail}\n"
-                         f"  본인 claim이 확실하면: claims release {task.id} --force 후 재시도")
+            message = (f"{task.id} 착수 거부 — 다른 세션이 이미 원격 claim{detail}\n"
+                       f"  본인 claim이 확실하면: claims release {task.id} --force 후 재시도")
+            if getattr(args, "ignore_remote_claim", False):
+                # 플래그의 사정거리를 명시 — 무엇을 껐는지 착각하게 두지 않는다.
+                message += ("\n  ※ --ignore-remote-claim은 *읽기측* 판정만 무시합니다 — "
+                            "CAS claim conflict는 확정 신호라 우회 대상이 아닙니다")
+            return _fail(message)
         if result.status in ("offline", "error"):
             print(f"⚠ 원격 CAS claim 불가({result.status}): {result.message}", file=sys.stderr)
             store.append_event(root, "claim_remote_unavailable", task.id,
@@ -209,7 +215,27 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
             # 않는다 — 전체 브랜치 fetch(~5초) 비용을 불필요하게 물지 않기 위해.
             scan = remote_claims.scan_remote_in_progress(root, task.id, session)
             remote_status = f"{result.status}+readscan_{scan.status}"
+            # 규칙 A·B로 걸러낸 stale 홀더를 조용히 버리지 않는다 (HARN-08 관측성)
+            skipped_summary = _readside_skipped_summary(scan)
+            if skipped_summary:
+                print(skipped_summary, file=sys.stderr)
+                store.append_event(
+                    root, "claim_readside_stale_skipped", task.id,
+                    trunk=f"{scan.trunk_branch}:{scan.trunk_status or '없음'}"
+                          f"({scan.trunk_source})",
+                    skipped=[f"{s.branch}:{s.reason}" for s in scan.skipped],
+                )
             conflict = _readside_conflict_message(task, scan, result.status)
+            if conflict and getattr(args, "ignore_remote_claim", False):
+                # [규칙 C] 태스크 단위 세분 우회 — 무엇을 포기하는지 명시하고 이벤트로 남긴다.
+                print(_readside_ignore_warning(task, scan), file=sys.stderr)
+                store.append_event(
+                    root, "claim_readside_ignored", task.id,
+                    cas_status=result.status,
+                    holders=[f"{h.branch}:{h.session}" for h in scan.holders],
+                )
+                remote_status += "+ignored"
+                conflict = None
             if conflict:
                 store.append_event(
                     root, "claim_readside_conflict", task.id,
@@ -217,13 +243,17 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
                     holders=[f"{h.branch}:{h.session}" for h in scan.holders],
                 )
                 return _fail(conflict)
-            if scan.status == "ok":
+            # 홀더가 남아 있는데 여기 도달했다면 규칙 C로 무시하고 온 경로다 —
+            # 그 경우 '중복 없음'이라고 말하면 거짓말이므로 아래 안내를 내지 않는다.
+            if scan.status == "ok" and not scan.holders:
                 extra = " (브랜치 수 상한 도달 — 일부만 확인)" if scan.truncated else ""
+                unused = (" · --ignore-remote-claim은 무시할 판정이 없어 효과 없음"
+                          if getattr(args, "ignore_remote_claim", False) else "")
                 print(f"  ↳ 읽기측 교차 세션 탐지로 폴백: 원격 브랜치 {scan.scanned_refs}개에서 "
-                      f"중복 in_progress 없음{extra}.\n"
+                      f"중복 in_progress 없음{extra}.{unused}\n"
                       f"    ※ *부분* 방어입니다 — 상대가 브랜치를 push한 뒤에만 보이며 "
                       f"CAS의 원자성은 대체하지 못합니다.", file=sys.stderr)
-            else:
+            elif scan.status != "ok":
                 # 침묵 실패 금지 — 폴백까지 실패했으면 '보호 없음'을 명시적으로 말한다.
                 print(f"  ↳ 읽기측 교차 세션 탐지도 불가({scan.status}) — "
                       f"로컬 claim만으로 진행합니다.\n"
@@ -252,6 +282,51 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+_SKIP_REASON_HINT = {
+    "trunk_not_session": "트렁크는 세션이 아님 — 대장 위생 실패(done 미기입 머지)",
+}
+
+
+def _readside_skipped_summary(scan) -> str | None:
+    """규칙 A·B로 홀더에서 제외한 내역 요약 (없으면 None).
+
+    stale을 조용히 버리면 '보호가 안 걸린 것'과 '보호를 껐던 것'이 구분되지 않는다.
+    """
+    if not scan.skipped:
+        return None
+    parts = []
+    for s in scan.skipped[:5]:
+        hint = _SKIP_REASON_HINT.get(
+            s.reason, f"{scan.trunk_branch}가 {scan.trunk_status} — 작업이 이미 착륙")
+        parts.append(f"origin/{s.branch}(session={s.session}, {s.reason}: {hint})")
+    more = f" 외 {len(scan.skipped) - 5}건" if len(scan.skipped) > 5 else ""
+    return (f"  ↳ stale 홀더 {len(scan.skipped)}건 제외: " + " · ".join(parts) + more
+            + f"\n    (기준 트렁크: {scan.trunk_ref or '?'} "
+              f"= {scan.trunk_source}, 태스크 status={scan.trunk_status or '없음'})")
+
+
+def _readside_ignore_warning(task: Task, scan) -> str:
+    """규칙 C(--ignore-remote-claim) 사용 시 경고 — 무엇을 포기하는지 명시."""
+    lines = [f"⚠ --ignore-remote-claim: {task.id}의 읽기측 교차 세션 판정을 "
+             f"무시하고 착수합니다."]
+    for holder in scan.holders[:3]:
+        lines.append(f"  · 무시된 홀더: origin/{holder.branch} "
+                     f"(status=in_progress, session={holder.session})")
+    if len(scan.holders) > 3:
+        lines.append(f"  · … 외 {len(scan.holders) - 3}건")
+    lines.append(
+        "  포기하는 것: 이 태스크의 중복 착수 보호. 상대 세션이 실제로 살아 있어도 "
+        "이 착수는 막히지 않습니다 — 지금부터 중복 구현일 수 있습니다.")
+    lines.append(
+        "  (CAS claim conflict는 이 플래그로 무시되지 않습니다. 보호를 통째로 끄는 "
+        "것은 여전히 --no-remote입니다.)")
+    if scan.holders:
+        lines.append(
+            "  상대 브랜치가 정말 죽었는지 확인: "
+            f"git log -1 --format='%cr %h %s' origin/{scan.holders[0].branch}")
+    return "\n".join(lines)
+
+
 def _readside_conflict_message(task: Task, scan, cas_status: str) -> str | None:
     """읽기측 탐지 결과 → 착수 거부 메시지 (충돌 없으면 None).
 
@@ -272,9 +347,15 @@ def _readside_conflict_message(task: Task, scan, cas_status: str) -> str | None:
         "상대가 브랜치를 push한 뒤에만 보이며, 원자성은 대체하지 못합니다."
     )
     lines.append(
-        f"  본인 작업이 확실하거나 상대 브랜치가 이미 죽었으면(stale in_progress): "
-        f"상대 태스크를 done/block 처리하거나, 원격 검사를 생략하세요 — "
-        f"python3 scripts/harness/backlog.py start {task.id} --no-remote"
+        f"  트렁크({scan.trunk_branch or '?'})의 이 태스크 status="
+        f"{scan.trunk_status or '없음'} — done/cancelled였다면 자동으로 stale 처리됩니다"
+        f" (규칙 A)."
+    )
+    lines.append(
+        f"  상대 브랜치가 이미 죽었으면(stale in_progress) 확인 후 이 태스크만 무시: "
+        f"git log -1 --format='%cr %h %s' origin/{scan.holders[0].branch} → "
+        f"python3 scripts/harness/backlog.py start {task.id} --ignore-remote-claim\n"
+        f"  (원격 검사 전체를 끄는 것은 여전히 --no-remote — 보호 범위가 다릅니다)"
     )
     return "\n".join(lines)
 
@@ -865,7 +946,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("id")
     p.add_argument("--session")
     p.add_argument("--no-remote", action="store_true", dest="no_remote",
-                   help="원격 claim 생략 (오프라인·긴급용)")
+                   help="원격 claim 생략 (오프라인·긴급용) — CAS·읽기측 보호 전체 포기")
+    p.add_argument("--ignore-remote-claim", action="store_true",
+                   dest="ignore_remote_claim",
+                   help="이 태스크의 읽기측 교차 세션 판정만 무시 (stale 홀더 확인 후 — "
+                        "HARN-08). CAS conflict는 무시되지 않는다")
     p.add_argument("--as", dest="as_owner", default=None,
                    choices=[o for o in OWNERS if o != "claude"],
                    help="사람-소유 태스크를 소유자 본인이 기입할 때 명시 (HARN-06)")

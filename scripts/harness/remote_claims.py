@@ -27,9 +27,21 @@ merge 전까지 병렬 세션끼리 서로 보이지 않는다(TOCTOU 레이스)
       · 상대 세션이 **브랜치를 push한 뒤에만** 보인다 — push 전 로컬에서 작업 중인
         세션은 이 방법으로 절대 잡히지 않는다.
       · **원자성이 없다** — 두 세션이 동시에 스캔하면 둘 다 "충돌 없음"을 볼 수 있다.
-      · 병합된 브랜치에 남은 stale in_progress도 탐지된다(과탐) — 우회는 `--no-remote`.
     그러므로 CAS 경로는 제거하지 않는다. 프록시 정책이 다른 환경(로컬 개발·다른 러너)
     에서는 CAS가 작동하며 원자성은 그쪽이 우월하다. 읽기측은 CAS 실패 시에만 돈다.
+
+stale 홀더 처리 (HARN-08 — 읽기측의 과탐 해소):
+    머지·폐기된 브랜치에 남은 in_progress가 그 태스크를 **영구 차단**하던 문제를
+    2개 규칙으로 해소한다(SQUASH 머지 저장소라 조상 검사는 쓸 수 없다 — 머지된
+    브랜치도 trunk의 조상이 아니다. 2026-07-27 5건 전수 실측):
+      · 규칙 A(트렁크 권위) — 트렁크(origin/HEAD)의 사본이 done/cancelled면 그 작업은
+        이미 착륙했다. 다른 브랜치 사본의 in_progress는 역사적 잔재 → 홀더 전부 무시.
+      · 규칙 B(트렁크는 세션이 아니다) — claim의 의미는 "어떤 *세션*이 그 브랜치에서
+        작업 중"이다. 트렁크는 머지된 결과지 작업 세션이 아니므로 홀더 후보에서 제외.
+        트렁크에 남은 in_progress는 활성 claim이 아니라 대장 위생 실패(done 미기입 머지)다.
+    나이(최종 커밋 경과일) 휴리스틱은 **의도적으로 넣지 않았다** — 실측 5건이 A+B로
+    전부 해소되며, 나이 컷오프는 느리게 진행하는 실 세션을 오탐 해제할 위험만 더한다.
+    걸러낸 홀더는 버리지 않고 ScanResult.skipped에 사유와 함께 남긴다(관측 가능성).
 
 stale claim 청소: 세션이 release 없이 죽으면 ref가 남는다 → `claims reap`이
 3중 기준(TTL 초과·태스크 이미 done/cancelled·태스크 미존재)으로 감지·삭제.
@@ -271,6 +283,10 @@ SCAN_MAX_REFS = 300
 # 전체 브랜치 fetch 타임아웃 — 44브랜치 기준 실측 ~5초. 콜드 클론 여유 포함.
 SCAN_FETCH_TIMEOUT = 90
 REMOTE_REF_PREFIX = "refs/remotes/origin/"
+# 트렁크 ref 해소 실패 시의 최종 폴백 브랜치명 (_resolve_trunk_ref 주석 참조)
+FALLBACK_TRUNK_BRANCH = "main"
+# 규칙 A — 트렁크에서 이 상태면 작업이 착륙한 것으로 본다 (둘 다 models.py 종결 상태)
+TRUNK_SETTLED_STATUSES = ("done", "cancelled")
 
 
 @dataclass
@@ -284,14 +300,34 @@ class InProgressHolder:
 
 
 @dataclass
+class SkippedHolder:
+    """stale 판정으로 홀더에서 제외한 1건 (HARN-08).
+
+    조용히 버리지 않는다 — 무엇을 왜 무시했는지 호출자가 보고할 수 있어야
+    "보호가 걸렸다"와 "보호를 스스로 껐다"가 구분된다.
+    """
+
+    task_id: str
+    ref: str
+    branch: str
+    session: str
+    reason: str     # trunk_done | trunk_cancelled | trunk_not_session
+
+
+@dataclass
 class ScanResult:
     """읽기측 탐지 결과. status: ok | offline | error (ok가 아니면 판정 불가)."""
 
     status: str
     holders: list[InProgressHolder] = field(default_factory=list)
+    skipped: list[SkippedHolder] = field(default_factory=list)
     scanned_refs: int = 0
     truncated: bool = False
     message: str = ""
+    trunk_ref: str = ""       # 규칙 A·B의 기준 ref (refs/remotes/origin/<기본브랜치>)
+    trunk_branch: str = ""    # 기준 ref의 브랜치명 (메시지용)
+    trunk_status: str = ""    # 트렁크 사본의 태스크 status ("" = 파일 없음 → 규칙 A 신호 없음)
+    trunk_source: str = ""    # symbolic-ref | ls-remote | fallback (해소 경로 — 관측용)
 
 
 def _top_level_field(text: str, key: str) -> str:
@@ -316,6 +352,59 @@ def _top_level_field(text: str, key: str) -> str:
     return ""
 
 
+def _resolve_trunk_ref(root: Path) -> tuple[str, str]:
+    """기본(트렁크) 브랜치의 원격 ref를 해소한다 — (ref, 해소 경로).
+
+    기본 브랜치명을 하드코딩하지 않는다 (main/master/trunk 어느 쪽이든 따라간다).
+    **원격 권위를 먼저 묻는다** — 순서가 핵심이다:
+      1) `git ls-remote --symref origin HEAD` — 원격이 지금 무엇을 HEAD로 두는지
+         직접 묻는다(실측 0.3초). 읽기측 스캔은 어차피 전체 fetch(~5초)를 하므로
+         왕복 1회는 예산 안이다.
+      2) `git symbolic-ref refs/remotes/origin/HEAD` — 로컬 캐시(네트워크 0).
+         **stale일 수 있어 2순위다**: 이 값은 clone 시점(또는 마지막
+         `git remote set-head`) 스냅샷이라 origin을 갈아끼우면 그대로 남는다.
+         2026-07-27 실측에서 **세션 브랜치를 가리키는 클론**이 관측됐다 — 그 상태로
+         1순위였다면 규칙 A가 남의 세션 브랜치를 '트렁크 권위'로 삼아 **미탐(보호
+         무력화)** 을 냈다. 원격이 대답하지 못할 때만 쓰는 폴백으로 강등한 이유다.
+      3) 둘 다 실패(오프라인·권한) → 폴백 'main'.
+
+    폴백이 틀린 경우(기본 브랜치가 master 등)의 방향: 그 ref가 존재하지 않아 규칙 A의
+    신호가 '없음'이 되고 규칙 B는 아무것도 거르지 않는다 — HARN-07의 과탐(차단 과다)
+    상태로 되돌아갈 뿐 미탐은 만들지 않는다. 해소 경로는 ScanResult.trunk_source로
+    노출되어 '어느 근거로 판정했는가'가 매번 보인다.
+    """
+    try:
+        ls = _git(root, "ls-remote", "--symref", "origin", "HEAD", timeout=15)
+        if ls.returncode == 0:
+            for line in ls.stdout.splitlines():
+                # 형식: "ref: refs/heads/main\tHEAD"
+                if line.startswith("ref:") and "HEAD" in line:
+                    head = line[len("ref:"):].split("\t")[0].strip()
+                    if head.startswith("refs/heads/"):
+                        return REMOTE_REF_PREFIX + head[len("refs/heads/"):], "ls-remote"
+    except Exception:  # pragma: no cover - 환경 의존
+        pass
+    try:
+        sym = _git(root, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD", timeout=10)
+        ref = sym.stdout.strip()
+        if sym.returncode == 0 and ref.startswith(REMOTE_REF_PREFIX):
+            return ref, "symbolic-ref"
+    except Exception:  # pragma: no cover - 환경 의존 (git 부재 등)
+        pass
+    return REMOTE_REF_PREFIX + FALLBACK_TRUNK_BRANCH, "fallback"
+
+
+def _trunk_task_status(root: Path, trunk_ref: str, task_id: str) -> str:
+    """트렁크 사본의 태스크 status. 파일이 없거나 못 읽으면 "" (= 규칙 A 신호 없음)."""
+    try:
+        show = _git(root, "show", f"{trunk_ref}:backlog/tasks/{task_id}.yaml", timeout=10)
+    except Exception:  # pragma: no cover - 환경 의존
+        return ""
+    if show.returncode != 0:
+        return ""  # 브랜치에서 신설된 태스크 — 트렁크에 아직 없다
+    return _top_level_field(show.stdout, "status")
+
+
 def scan_remote_in_progress(root: Path, task_id: str, session: str,
                             max_refs: int = SCAN_MAX_REFS) -> ScanResult:
     """원격 브랜치들의 backlog 사본에서 이 태스크의 타 세션 in_progress를 찾는다.
@@ -326,7 +415,10 @@ def scan_remote_in_progress(root: Path, task_id: str, session: str,
     한계 — 이것은 CAS의 원자성을 대체하지 못하는 *부분* 방어다:
         · 상대 세션이 **브랜치를 push한 뒤에만** 보인다.
         · 두 세션이 동시에 스캔하면 둘 다 '충돌 없음'을 볼 수 있다(원자성 없음).
-        · 병합된 브랜치에 남은 stale in_progress도 탐지된다(과탐).
+
+    stale 처리 (HARN-08): 트렁크가 done/cancelled면 홀더 전부 무시(규칙 A),
+    트렁크 ref 자신은 홀더가 될 수 없다(규칙 B). 걸러낸 건은 버리지 않고
+    result.skipped에 사유와 함께 남긴다.
 
     반환 status가 'ok'가 아니면 **판정 자체가 불가**했다는 뜻이며, 빈 holders를
     '충돌 없음'으로 읽어서는 안 된다(측정 실패와 통과는 같은 색이면 안 된다).
@@ -348,7 +440,14 @@ def scan_remote_in_progress(root: Path, task_id: str, session: str,
                 if r.strip() and not r.strip().endswith("/HEAD")]
         truncated = len(refs) > max_refs
         refs = refs[:max_refs]
+
+        # 규칙 A·B의 기준점 — 기본 브랜치는 해소하고 하드코딩하지 않는다.
+        trunk_ref, trunk_source = _resolve_trunk_ref(root)
+        trunk_status = _trunk_task_status(root, trunk_ref, task_id)
+        trunk_settled = trunk_status in TRUNK_SETTLED_STATUSES
+
         holders: list[InProgressHolder] = []
+        skipped: list[SkippedHolder] = []
         for ref in refs:
             show = _git(root, "show", f"{ref}:backlog/tasks/{task_id}.yaml", timeout=10)
             if show.returncode != 0:
@@ -358,12 +457,29 @@ def scan_remote_in_progress(root: Path, task_id: str, session: str,
             holder = _top_level_field(show.stdout, "session")
             if not holder or holder == session:
                 continue  # 내 세션의 claim은 나를 막지 않는다
+            branch = (ref[len(REMOTE_REF_PREFIX):]
+                      if ref.startswith(REMOTE_REF_PREFIX) else ref)
+            # [규칙 B] 트렁크는 머지된 결과지 작업 세션이 아니다 — 홀더가 될 수 없다.
+            # 트렁크의 in_progress는 활성 claim이 아니라 done 미기입 머지(대장 위생 실패)다.
+            if ref == trunk_ref:
+                skipped.append(SkippedHolder(task_id, ref, branch, holder,
+                                             "trunk_not_session"))
+                continue
+            # [규칙 A] 트렁크가 done/cancelled면 작업은 이미 착륙 — 사본의 in_progress는 잔재.
+            if trunk_settled:
+                skipped.append(SkippedHolder(task_id, ref, branch, holder,
+                                             f"trunk_{trunk_status}"))
+                continue
             holders.append(InProgressHolder(
-                task_id=task_id, ref=ref,
-                branch=ref[len(REMOTE_REF_PREFIX):] if ref.startswith(REMOTE_REF_PREFIX) else ref,
-                session=holder,
+                task_id=task_id, ref=ref, branch=branch, session=holder,
             ))
-        return ScanResult("ok", holders=holders, scanned_refs=len(refs), truncated=truncated)
+        return ScanResult("ok", holders=holders, skipped=skipped,
+                          scanned_refs=len(refs), truncated=truncated,
+                          trunk_ref=trunk_ref,
+                          trunk_branch=(trunk_ref[len(REMOTE_REF_PREFIX):]
+                                        if trunk_ref.startswith(REMOTE_REF_PREFIX)
+                                        else trunk_ref),
+                          trunk_status=trunk_status, trunk_source=trunk_source)
     except subprocess.TimeoutExpired:
         return ScanResult("offline", message="원격 브랜치 조회 타임아웃")
     except Exception as exc:  # pragma: no cover - 환경 의존
