@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: ARCH-17-graph-analytics-report
+title: "그래프 분석 리포트 — 허브·영향도·핵심 개념 + blocking 오개념 전파 분석(빌드타임 오프라인)"
+track: infra-debt
+stage: S4
+subject: math
+layer: data-pipeline
+status: todo
+priority: 5
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "prerequisite DAG 위 in/out-degree·하류 도달 집합 크기·허브 랭킹 리포트 + severity=blocking 오개념의 하류 도달 개념 수 집계(concept_src_id→crosswalk 경유). 빌드타임 오프라인 산출만 — LLM 컨텍스트 투입·튜터링 preload 금지 불변. 소비처=저작·검수 우선순위(ops)"
+artifacts: []
+paths:
+  - "src/data-pipeline/**"
+  - "tests/data_pipeline/**"
+session: null
+notes: "docs/architecture/knowledge_module_gap_review.md §3 D5 — 외부 EOS 틀(모듈 10 그래프 기능) 대조 갭. 전체 그래프 열람 금지 대상은 LLM 투입이지 오프라인 집계가 아님을 명시"
+updated: 2026-07-27

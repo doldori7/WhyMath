@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-05-concept-definition-registers
+title: "정의 레지스터 — concept_definition Overlay(kind 폐쇄 4종·예시·반례) + L4 눈높이 선택 소비 슬라이스"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 5
+owner: claude
+depends_on:
+  - S3-01-pilot-cohort
+requires_gates: []
+acceptance:
+  - "concept_definition 프로젝션(복합 PK code+kind·kind 폐쇄 enum 4종·body self-authored·examples/counterexamples·rigorous_internal 학생 비노출 게이팅·review_status=ai_estimated) + L4 코치 레지스터 선택 소비 슬라이스 동반 구현 + kind 폐쇄·본문 슬롯 부재 거버넌스 동결. 정의 레지스터별 chunk 임베딩 도입 여부를 소비 슬라이스에서 판정(CLAUDE.md chunk 축 착륙 트리거)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l1/**"
+  - "src/backend/whymath_backend/l4/**"
+  - "src/backend/whymath_backend/db/models/**"
+session: null
+notes: "docs/architecture/knowledge_module_gap_review.md §3 D1 — 외부 EOS 틀(모듈 7) 대조 최대 갭. 소비처 없는 저작 선행 금지: 적재·소비 동반 슬라이스로만 착수. 초등·영재 레지스터는 페르소나 v1.5/v2.0 도달 시 enum 추가"
+updated: 2026-07-27
