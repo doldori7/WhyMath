@@ -123,11 +123,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Ruff (lint)
-        run: ruff check .
+      # OPS-14 — `tests/data_pipeline`을 lint하는 잡이 **하나도 없었다**. 이 잡의 `.`는
+      # working-directory(`src/data-pipeline`)만 덮고, backend 잡은 `../../tests/backend`만
+      # 본다("일부만 배선됨"의 10번째 사례).
+      #
+      # ⚠️ `--line-length 100`을 **반드시 명시**한다. 레포 루트에 pyproject.toml이 없어서,
+      # 경로를 하나라도 추가하면 black의 프로젝트 루트 탐지가 레포 루트로 올라가 설정을 못 찾고
+      # **기본값 88자로 조용히 강등**된다. 실측(2026-07-28): 명시 없이 경로만 추가하면
+      # `src/data-pipeline` 자신까지 88자로 재검사돼 89파일이 FAIL한다(현재 77파일 clean).
+      # 이 함정은 `test_infra_lint_wiring.py`의 계약 ②(`--line-length 100` 강제)가 동결한다.
+      - name: Ruff (lint — src + tests/data_pipeline)
+        run: ruff check . ../../tests/data_pipeline
 
-      - name: Black (format check)
-        run: black --check .
+      - name: Black (format check — src + tests/data_pipeline)
+        run: black --check --line-length 100 . ../../tests/data_pipeline
 
       - name: Mypy (strict type check)
         run: mypy --strict data_pipeline

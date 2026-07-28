@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-15-repo-root-lint-config
+title: "레포 루트 lint 설정 정본화 — src/* 밖은 ruff 저장소 표준이 적용된 적이 없다 (측정: 표준 적용 시 248건)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "레포 루트에 pyproject.toml [tool.ruff]/[tool.black] 정본 신설 검토 — 현재 루트에 없어서 src/* 밖(tests/infra·tests/harness·scripts·infra·conftest.py·tests/data_pipeline)은 전부 ruff 기본값(line-length 88 · select E4,E7,E9,F)으로 검사된다. 저장소 표준은 line-length 100 + select E,F,I,N,B,W"
+  - "선결 정책 판단: N802 192건은 **한국어 테스트 함수명**(test_레이스_두_세션_중_한쪽만_성공 등)이며 의도된 명명이다. 표준을 그대로 적용하면 192건 개명이 강제되므로, tests에 N802 per-file-ignore를 두는 안과 대조 필요. src pyproject 선례는 tests/** = [E501]"
+  - "나머지 실측 위반 상환: I001 35건(자동 수정 가능) · E501 18건 · B007 2건 · B905 1건"
+  - "변별력 — 루트 설정 신설 후 각 대상의 실효 line_length·룰셋이 실제로 100/표준으로 바뀌는지 ruff --show-settings 로 확인"
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - pyproject.toml
+  - "tests/infra/**"
+session: null
+notes: "OPS-14 착수 실측에서 발견(2026-07-28). OPS-11·12·13·14가 lint를 '배선'했지만 전부 저장소 표준이 아니라 ruff 기본값으로 돌고 있었다 — '장치는 있는데 *잘못된 설정으로* 배선됨' 형태로, 배선 유무만 보는 기존 검사(test_lint_coverage·test_infra_lint_wiring)가 못 잡는 축이다. black은 각 잡이 --line-length 100을 명시해 무관하나, 명시가 없으면 88로 조용히 강등된다는 것도 같은 실측에서 확인(OPS-14가 계약 ②로 동결). 실측 명령: ruff check --line-length 100 --select E,F,I,N,B,W --statistics <대상>"
+updated: 2026-07-28

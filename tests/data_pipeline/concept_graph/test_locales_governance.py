@@ -29,9 +29,7 @@ class TestLocaleParity:
         edge_records: list[dict[str, object]],
     ) -> None:
         """locale(ko) 키 집합 == graph concept_id 집합(437 1:1·고아 0)."""
-        result = transform_dataset(
-            concept_records=concept_records, edge_records=edge_records
-        )
+        result = transform_dataset(concept_records=concept_records, edge_records=edge_records)
         report = validate_locales(result.locales, result.concepts)
         assert report.success is True, report.report_text()
         assert report.errors == []
@@ -39,9 +37,7 @@ class TestLocaleParity:
         assert set(result.locales["ko"]) == node_ids
         assert len(result.locales["ko"]) == 437
 
-    def test_every_ko_name_nonblank(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_every_ko_name_nonblank(self, concept_records: list[dict[str, object]]) -> None:
         """모든 ko 표시이름이 비공백(빈 표기 금지)."""
         result = transform_dataset(concept_records=concept_records, edge_records=[])
         assert all(v.strip() for v in result.locales["ko"].values())
@@ -69,9 +65,7 @@ class TestLocaleParity:
 
 
 class TestValidateLocalesErrors:
-    def test_missing_node_locale_is_error(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_missing_node_locale_is_error(self, concept_records: list[dict[str, object]]) -> None:
         """노드에 있으나 locale(ko)에 표기가 없으면 locale_node_parity error."""
         result = transform_dataset(concept_records=concept_records, edge_records=[])
         broken = {"ko": dict(result.locales["ko"])}

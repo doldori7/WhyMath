@@ -112,9 +112,7 @@ class TestLoadGuards:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """드라이버 설치 가정(find_spec 패치) + graph.json 부재 → 종료코드 2."""
-        monkeypatch.setattr(
-            "data_pipeline.atom_graph.__main__.find_spec", lambda name: object()
-        )
+        monkeypatch.setattr("data_pipeline.atom_graph.__main__.find_spec", lambda name: object())
         result = runner.invoke(app, ["load", "--graph", str(tmp_path / "nope.json")])
         assert result.exit_code == 2
 
@@ -122,9 +120,7 @@ class TestLoadGuards:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """드라이버 설치 가정 + 접속 env 누락 → connect_driver ValueError → 종료코드 2."""
-        monkeypatch.setattr(
-            "data_pipeline.atom_graph.__main__.find_spec", lambda name: object()
-        )
+        monkeypatch.setattr("data_pipeline.atom_graph.__main__.find_spec", lambda name: object())
         for key in ("NEO4J_URI", "NEO4J_USER", "NEO4J_PASSWORD"):
             monkeypatch.delenv(key, raising=False)
         graph = _graph_json(tmp_path / "graph.json")

@@ -221,9 +221,7 @@ class TestTransformV1:
         assert p["validation"]["success"] is True
 
     def test_missing_source_exits_2(self, tmp_path: Path) -> None:
-        result = runner.invoke(
-            app, ["transform-v1", "--source", str(tmp_path / "nope.xlsx")]
-        )
+        result = runner.invoke(app, ["transform-v1", "--source", str(tmp_path / "nope.xlsx")])
         assert result.exit_code == 2
 
     def test_source_required(self) -> None:
@@ -237,7 +235,7 @@ class TestTransformV1:
         ws_a.title = "원자_통합마스터"
         ws_a.append(_ATOM_HEADER)
         aidx = {h: i for i, h in enumerate(_ATOM_HEADER)}
-        for num, code in (("1", "X-1"), ("2", "X-2")):
+        for _num, code in (("1", "X-1"), ("2", "X-2")):
             row = [""] * len(_ATOM_HEADER)
             row[aidx["학교급"]] = "초등학교"
             row[aidx["원자ID"]] = code
@@ -257,18 +255,17 @@ class TestTransformV1:
             ws_e.append(row)
         xlsx = tmp_path / "cycle.xlsx"
         wb.save(str(xlsx))
-        result = runner.invoke(
-            app, ["transform-v1", "--source", str(xlsx), "--standards", "none"]
-        )
+        result = runner.invoke(app, ["transform-v1", "--source", str(xlsx), "--standards", "none"])
         assert result.exit_code == 1
         assert "prerequisite_cycle" in result.stdout
 
 
 @pytest.fixture(autouse=True)
 def _no_real_xlsx_committed() -> None:
-    """안전 가드: 실 업로드 xlsx가 코퍼스 디렉토리에 커밋되지 않았는지 단언(테스트 부수효과 아님)."""
+    """안전 가드: 실 업로드 xlsx가 코퍼스 디렉토리에 커밋되지 않았는지 단언.
+
+    테스트 부수효과가 아니다.
+    """
     corpus = Path(__file__).resolve().parents[3] / "data" / "corpus" / "atom_graph_v1"
     if corpus.exists():
-        assert not list(
-            corpus.glob("*.xlsx")
-        ), "xlsx는 커밋 금지(graph.json·_provenance만)"
+        assert not list(corpus.glob("*.xlsx")), "xlsx는 커밋 금지(graph.json·_provenance만)"

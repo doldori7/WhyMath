@@ -47,7 +47,8 @@ _REFERENCE_KEY_FIELDS = frozenset(
     {
         "misconception_codes",  # → MisconceptionCatalog(독립 DB)
         "visualization_card_keys",  # → L5 시각화 자산
-        "formal_definition_ref",  # → ConceptContent.formal_definition_internal(본문 미내장·redaction)
+        # → ConceptContent.formal_definition_internal (본문 미내장·redaction)
+        "formal_definition_ref",
         "behavior_skills",  # → SkillNode(Phase 2·초기 dangling)
         "assessment_ids",  # → AssessmentNode(초기 dangling)
         "formula_refs",  # → FormulaNode(Phase 5·AST 참조만·초기 dangling)
@@ -127,7 +128,8 @@ def test_semantic_layer_restored() -> None:
 def test_model_fields_snapshot_frozen() -> None:
     """`Concept.model_fields` 전체 스냅샷 동결 — 필드 추가/삭제 시 의식적 리뷰 강제."""
     assert set(Concept.model_fields) == set(_EXPECTED_MODEL_FIELDS), (
-        "Concept 노드 필드 구성이 바뀌었다. 리치 9계층 분류(identity/semantic/pedagogy/visualization/"
-        "assessment/misconception/cognition/graph_links/ast_binding)에 맞춰 이 테스트의 계층 집합을 "
+        "Concept 노드 필드 구성이 바뀌었다. 리치 9계층 분류(identity/semantic/pedagogy/"
+        "visualization/assessment/misconception/cognition/graph_links/ast_binding)에 맞춰 "
+        "이 테스트의 계층 집합을 "
         "갱신하고, 새 필드가 순수성(self-authored·참조만)을 깨지 않는지 검토하라."
     )

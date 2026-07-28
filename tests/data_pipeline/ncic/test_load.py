@@ -179,9 +179,7 @@ class TestPostgresLoad:
 
     def test_to_async_dsn_forces_asyncpg_driver(self) -> None:
         """동기 `postgresql://`는 asyncpg 드라이버로 정규화."""
-        assert (
-            _to_async_dsn("postgresql://h:5432/db") == "postgresql+asyncpg://h:5432/db"
-        )
+        assert _to_async_dsn("postgresql://h:5432/db") == "postgresql+asyncpg://h:5432/db"
 
     def test_to_async_dsn_preserves_explicit_driver(self) -> None:
         """드라이버가 이미 명시된 DSN은 그대로 둔다."""

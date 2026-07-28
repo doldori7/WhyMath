@@ -48,9 +48,7 @@ def _calc_samples() -> list[AchievementStandard]:
             domain="함수의 극한",
             parents=["[12미적Ⅰ01-01]"],
         ),
-        _std(
-            "[10공수1-01-01]", subject="공통수학1", domain="다항식"
-        ),  # 미적분 아님(필터 대상)
+        _std("[10공수1-01-01]", subject="공통수학1", domain="다항식"),  # 미적분 아님(필터 대상)
     ]
 
 

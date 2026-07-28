@@ -20,6 +20,12 @@ black --check 17파일이 실패 상태였다. 하네스는 backlog 대장을 �
 빠뜨리면 못 잡는다. 누락 축은 `test_lint_coverage.py`가 소스에서 출발해 전수로 검사한다.
 두 파일은 역할이 갈리므로 계약을 중복시키지 않는다(품질 ↔ 누락).
 
+계약 ②는 OPS-14에서 **가정이 아니라 실측된 함정**임이 드러났다. 레포 루트에 pyproject.toml이
+없어서, black에 경로를 하나라도 더 주면 프로젝트 루트 탐지가 레포 루트로 올라가 설정을 못 찾고
+**기본값 88자로 조용히 강등**된다. 실측(2026-07-28): data-pipeline 잡의 `black --check .`에
+`--line-length 100` 없이 `../../tests/data_pipeline`만 추가하면 `src/data-pipeline` 자신까지
+88자로 재검사돼 **89파일이 FAIL**한다(그 전엔 77파일 clean). 이 계약이 그 회귀를 막는다.
+
 검증 계약
 --------
 ① 각 잡에 ruff·black 스텝이 **둘 다** 있다
@@ -43,6 +49,7 @@ _CI_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 _WIRINGS: list[tuple[str, tuple[str, ...]]] = [
     ("infra-contracts", ("tests/infra", "infra", "conftest.py")),  # OPS-11 · OPS-13
     ("harness-integrity", ("scripts", "tests/harness")),  # OPS-12 · OPS-13(harness→scripts 확대)
+    ("data-pipeline", ("../../tests/data_pipeline",)),  # OPS-14
 ]
 _WIRING_IDS = [job for job, _ in _WIRINGS]
 

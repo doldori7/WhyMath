@@ -24,9 +24,7 @@ def _graph(*nodes: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _atom(
-    code: str, subunit: str, *, level: str = "세부개념", std: list[str] | None = None
-):
+def _atom(code: str, subunit: str, *, level: str = "세부개념", std: list[str] | None = None):
     return {
         "code": code,
         "level": level,
@@ -75,9 +73,7 @@ class TestFill:
         g = _graph(_atom("CALC1-C01", "CALC1-U1-S1"), _atom("CALC1-C02", "CALC1-U1-S1"))
         fill_university_standard_codes(g, {"CALC1-U1-S1": "[CALC1-01-01]"})
         for n in g["concepts"]:
-            assert n["standard_codes"] == [
-                "[CALC1-01-01]"
-            ]  # 같은 소단원 → 같은 코드·길이 1
+            assert n["standard_codes"] == ["[CALC1-01-01]"]  # 같은 소단원 → 같은 코드·길이 1
 
     def test_idempotent(self) -> None:
         g = _graph(_atom("CALC1-C01", "CALC1-U1-S1"))
@@ -98,22 +94,12 @@ class TestFill:
 class TestBuildMap:
     def test_joins_links_and_standards(self, tmp_path: Path) -> None:
         (tmp_path / "standards.json").write_text(
-            json.dumps(
-                {
-                    "standards": [
-                        {"norm_id": "대학_CALC1_01_01", "code": "[CALC1-01-01]"}
-                    ]
-                }
-            ),
+            json.dumps({"standards": [{"norm_id": "대학_CALC1_01_01", "code": "[CALC1-01-01]"}]}),
             encoding="utf-8",
         )
         (tmp_path / "concept_standard_links.json").write_text(
             json.dumps(
-                {
-                    "links": [
-                        {"concept_src_id": "CALC1-U1-S1", "norm_id": "대학_CALC1_01_01"}
-                    ]
-                }
+                {"links": [{"concept_src_id": "CALC1-U1-S1", "norm_id": "대학_CALC1_01_01"}]}
             ),
             encoding="utf-8",
         )

@@ -63,9 +63,7 @@ class TestCorpusRedaction:
         text = json.dumps(corpus_graph, ensure_ascii=False)
         std = json.loads(_STANDARDS.read_text(encoding="utf-8"))
         # 가장 긴 200개 statement 표본(부분 문자열 누수 탐지 — 전수보다 빠르고 충분히 보수적).
-        stmts = sorted(
-            {s["statement"] for s in std["standards"]}, key=len, reverse=True
-        )
+        stmts = sorted({s["statement"] for s in std["standards"]}, key=len, reverse=True)
         leaks = [s for s in stmts[:200] if s in text]
         assert leaks == []
 
@@ -91,7 +89,8 @@ class TestCorpusNotation:
         """코퍼스 전체(concepts+edges+narrative)에 비표준 사이시옷 0건.
 
         회색지대(고유값·진리값·실고유값 등)는 `자리값`/`경계값`/`초기값` 토큰을 포함하지 않아
-        무영향. 엣지 from_name/to_name 등 *모든 carried 문자열*을 포괄한다(엣지 이름 정규화 누락 회귀 방지).
+        무영향. 엣지 from_name/to_name 등 *모든 carried 문자열*을 포괄한다
+        (엣지 이름 정규화 누락 회귀 방지).
         """
         text = json.dumps(corpus_graph, ensure_ascii=False)
         for token in ("초기값", "자리값", "경계값"):
@@ -105,9 +104,6 @@ class TestCorpusStandardJoin:
         """원자 standard_codes(정규화 후)가 전부 standards.json에 존재(미적 정규화 후 미매칭 0)."""
         atoms = [c for c in corpus_graph["concepts"] if c["level"] == "세부개념"]  # type: ignore[index]
         unmatched = {
-            code
-            for c in atoms
-            for code in c["standard_codes"]
-            if code not in standards_codes
+            code for c in atoms for code in c["standard_codes"] if code not in standards_codes
         }
         assert unmatched == set()

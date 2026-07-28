@@ -60,9 +60,7 @@ def corpus_standards() -> dict[str, object]:
     """실 대학 성취기준 코퍼스 standards.json(코퍼스 생성 후 존재). 없으면 skip."""
     path = CORPUS_DIR / "standards.json"
     if not path.exists():
-        pytest.skip(
-            f"코퍼스 미생성: {path} — `python -m data_pipeline.standards_university` 실행"
-        )
+        pytest.skip(f"코퍼스 미생성: {path} — `python -m data_pipeline.standards_university` 실행")
     return json.loads(path.read_text(encoding="utf-8"))  # type: ignore[no-any-return]
 
 

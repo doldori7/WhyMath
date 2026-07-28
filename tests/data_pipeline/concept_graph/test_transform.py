@@ -89,7 +89,10 @@ class TestTransformConcepts:
         assert c.representations == "동류항끼리 정리"  # raw accepted_expressions
 
     def test_maps_behavior_skills(self) -> None:
-        """concept→skill 매핑(Phase 2b-1): raw behavior_skills → 노드 참조 키(standard_codes 미러)."""
+        """concept→skill 매핑(Phase 2b-1).
+
+        raw behavior_skills → 노드 참조 키(standard_codes 미러).
+        """
         record = dict(_CONCEPT_A)
         record["behavior_skills"] = ["skill.polynomial-arithmetic", "skill.factorization"]
         c = transform_concepts([record], _id_map())[0][0]
@@ -105,7 +108,8 @@ class TestTransformConcepts:
     def test_input_misconception_freetext_not_mapped(self) -> None:
         """자유텍스트 오개념(raw misconception)은 노드로 흘리지 않는다(독립 DB·CLAUDE.md #6)."""
         c = transform_concepts([_CONCEPT_A], _id_map())[0][0]
-        # _CONCEPT_A는 misconception 키를 갖지만 노드엔 슬롯 자체가 없다(intuition/representations는 매핑됨).
+        # _CONCEPT_A는 misconception 키를 갖지만 노드엔 슬롯 자체가 없다
+        # (intuition/representations는 매핑됨).
         assert not hasattr(c, "misconception_text")
         assert not hasattr(c, "metaphor")  # 옛 필드명(intuition으로 대체)
         assert not hasattr(c, "accepted_expressions")  # 옛 필드명(representations로 대체)

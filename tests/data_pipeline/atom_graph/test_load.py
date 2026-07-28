@@ -3,7 +3,8 @@
 정본: docs/data/atom_graph_v1.md(§6 Phase 2 파생 스토어) + load.py 설계 핵심. 실 Neo4j 왕복은
 test_load_neo4j_integration.py(통합·기본 SKIP)에서 한다. 여기서는 발행 Cypher가 ① CONSTRAINT
 ② 노드 MERGE ③ 엣지 MERGE(:ATOM_PREREQUISITE)를 포함하고, 멱등(2회=동일)이며, 끝점·relation을
-엣지 속성에서 빼고, atomicity dict를 JSON 문자열로 직렬화하며, 어디에도 시크릿이 없음을 *주입 FAKE*로
+엣지 속성에서 빼고, atomicity dict를 JSON 문자열로 직렬화하며, 어디에도 시크릿이 없음을
+*주입 FAKE*로
 검증한다. concept_graph/test_load.py의 분담을 원자 스키마로 미러링한다.
 """
 
@@ -101,7 +102,8 @@ def _edge(frm: str, to: str, **over: object) -> AtomEdge:
         "from_code": frm,
         "to_code": to,
         # 명시 전달(검증 경로) → use_enum_values로 dump 시 "prerequisite" 문자열(코퍼스와 동형).
-        # 미전달 시 필드 기본값은 검증을 안 거쳐 enum 객체로 dump됨(Pydantic v2 validate_default=False).
+        # 미전달 시 필드 기본값은 검증을 안 거쳐 enum 객체로 dump됨
+        # (Pydantic v2 validate_default=False).
         "relation": "prerequisite",
         "relation_subtype": "원본",
         "school_link": False,
@@ -225,7 +227,10 @@ class TestEmittedCypher:
             assert call.params["code"]  # 별도 파라미터로 전달
 
     def test_edge_props_carry_meta(self, small_result: TransformResult) -> None:
-        """엣지 props에 relation_subtype·school_link·strength·evidence가 실린다(끝점·relation 제외)."""
+        """엣지 props에 relation_subtype·school_link·strength·evidence가 실린다.
+
+        끝점·relation은 props에서 제외된다.
+        """
         driver = _FakeDriver()
         load_graph(small_result, driver=driver)
         props = _edge_calls(driver.calls)[0].params["props"]

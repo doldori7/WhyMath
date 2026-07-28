@@ -186,25 +186,19 @@ class TestTrackDerivation:
 class TestBuildIdMap:
     """canonical build_id_map — `math.<area>.<slug>` 결정론·충돌 접미·규약·override."""
 
-    def test_real_data_437_unique(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_real_data_437_unique(self, concept_records: list[dict[str, object]]) -> None:
         """실데이터 437 개념 → 437 유일 canonical ID(충돌 0)."""
         id_map = build_id_map(concept_records)
         assert len(id_map) == 437
         assert len(set(id_map.values())) == 437  # 충돌 0
 
-    def test_real_data_all_pass_pattern(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_real_data_all_pass_pattern(self, concept_records: list[dict[str, object]]) -> None:
         """모든 생성 ID가 CONCEPT_ID_PATTERN(`math.<area>.<slug>`) 통과."""
         id_map = build_id_map(concept_records)
         bad = [cid for cid in id_map.values() if not CONCEPT_ID_PATTERN.match(cid)]
         assert bad == []
 
-    def test_deterministic_across_runs(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_deterministic_across_runs(self, concept_records: list[dict[str, object]]) -> None:
         """두 번 빌드해도 동일 매핑(멱등)."""
         assert build_id_map(concept_records) == build_id_map(concept_records)
 
@@ -217,12 +211,8 @@ class TestBuildIdMap:
     def test_collision_suffix_deterministic(self) -> None:
         """같은 (area, slug) 충돌 → 첫 항목 무접미·이후 -2(그룹 내 (tier, src_id) 정렬)."""
         records = [
-            _rec(
-                "B", "분수", "분수", difficulty_tier="5", standard_codes=["[6수01-02]"]
-            ),
-            _rec(
-                "A", "분수", "분수", difficulty_tier="3", standard_codes=["[6수01-01]"]
-            ),
+            _rec("B", "분수", "분수", difficulty_tier="5", standard_codes=["[6수01-02]"]),
+            _rec("A", "분수", "분수", difficulty_tier="3", standard_codes=["[6수01-01]"]),
         ]
         id_map = build_id_map(records)
         # tier 3(A) 먼저 → 무접미, tier 5(B) → -2
@@ -266,9 +256,7 @@ class TestBuildIdMap:
 
     def test_override_applied(self) -> None:
         """override 주입 시 그 src_id는 자동 발급 대신 override canonical_id."""
-        records = [
-            _rec("N1", "수 개념", "자연수·자릿값", standard_codes=["[2수01-01]"])
-        ]
+        records = [_rec("N1", "수 개념", "자연수·자릿값", standard_codes=["[2수01-01]"])]
         id_map = build_id_map(records, overrides={"N1": "math.place-value.custom"})
         assert id_map["N1"] == "math.place-value.custom"
 
@@ -278,9 +266,7 @@ class TestBuildIdMap:
         with pytest.raises(ValueError):
             build_id_map(records, overrides={"N1": "UC.calc.limit.def"})
         with pytest.raises(ValueError):
-            build_id_map(
-                records, overrides={"N1": "ELEM-FRAC-001"}
-            )  # 축코드는 canonical 아님
+            build_id_map(records, overrides={"N1": "ELEM-FRAC-001"})  # 축코드는 canonical 아님
 
     def test_override_collision_rejected(self) -> None:
         """서로 다른 src_id를 같은 override ID로 매핑하면 ValueError."""
@@ -340,9 +326,7 @@ class TestBuildCurriculumAxisMap:
     def test_separate_groups_restart_numbering(self) -> None:
         """(TRACK, AREA)가 다르면 NNN이 각자 001부터."""
         records = [
-            _rec(
-                "F1", "분수", "분수", difficulty_tier="2", standard_codes=["[6수01-01]"]
-            ),
+            _rec("F1", "분수", "분수", difficulty_tier="2", standard_codes=["[6수01-01]"]),
             _rec(
                 "G1",
                 "기하",
@@ -379,9 +363,7 @@ class TestBuildCurriculumAxisMap:
 
     def test_tier_fallback_for_codeless_record(self) -> None:
         """standard_codes 없으면 tier 밴드로 TRACK 결정(폴백 경로)."""
-        records = [
-            _rec("X1", "무코드", "분수", difficulty_tier="20", standard_codes=[])
-        ]
+        records = [_rec("X1", "무코드", "분수", difficulty_tier="20", standard_codes=[])]
         axis = build_curriculum_axis_map(records)
         assert axis["X1"] == "HIGH-FRAC-001"
 

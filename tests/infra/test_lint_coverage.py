@@ -18,10 +18,10 @@ OPS-10(`test_test_suite_wiring.py`)이 *실행* 배선에 대해 한 일의 lint
 헬퍼를 그 파일에서 그대로 **재사용**한다(파서를 복제하면 두 사본이 서로 어긋난다).
 
 착수 실측이 이미 4건을 더 찾아냈다 — 아무도 모르고 있었다 (2026-07-28):
-  - `scripts/` 비-harness 7파일 (`diagnose_atom_orphans.py` black 위반) — 이 PR에서 배선
+  - `scripts/` 비-harness 7파일 (`diagnose_atom_orphans.py` black 위반) — 배선
   - `infra/phaiakes9/benchmark` 2파일 (`tests/infra`가 *테스트하는* 소스인데 무배선) — 배선
   - 레포 루트 `conftest.py` (OPS-09의 seed 훅이 사는 파일) — 배선
-  - `tests/data_pipeline` 75파일 (black 28파일 위반) — 규모가 커 OPS-14로 분리
+  - `tests/data_pipeline` 75파일 (black 28 + ruff 12) — **OPS-14가 상환 완료**
 
 두 파일의 역할 분담 (중복 계약 금지)
 -----------------------------------
@@ -69,12 +69,8 @@ _WORKFLOW_DIR = _REPO_ROOT / ".github" / "workflows"
 # 여기 등재하는 순간 **그 경로의 lint 보호는 꺼진 상태**다. 검사는 공백을 *드러낼 뿐*
 # 고치지 않는다. 부채(언젠가 켜야 함)면 사유에 **상환 태스크 ID를 박아** 영구화를 막는다.
 _INTENTIONALLY_UNLINTED: dict[str, str] = {
-    "tests/data_pipeline": (
-        "부채 — black 28파일 위반 누적(2026-07-28 실측, 레포 루트 `--line-length 100` 기준). "
-        "재포맷 규모가 커 **OPS-14**로 분리 상환한다. ruff는 이미 clean. "
-        "OPS-14는 정본 컨텍스트를 먼저 정해야 한다: 같은 디렉터리가 레포 루트 기준 28파일, "
-        "src/data-pipeline pyproject 기준 32파일로 결과가 다르다."
-    ),
+    # `tests/data_pipeline`은 OPS-14가 상환해 목록에서 빠졌다(2026-07-28). 아래 stale 검출
+    # 테스트가 그 제거를 **강제**했다 — 배선 후에도 남겨두면 "여긴 무보호"라는 거짓 신호가 된다.
     "docs": (
         "영구 — docs/ 하위 .py는 문서에 첨부된 **초안 스냅샷**이다"
         "(`260724_v2_migration_pedagogy_dsl.alembic_draft.py` — 실행되지 않는 설계 기록). "

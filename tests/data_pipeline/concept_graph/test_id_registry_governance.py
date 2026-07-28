@@ -52,9 +52,7 @@ class TestRegistryGraphParity:
         edge_records: list[dict[str, object]],
     ) -> None:
         """registry canonical_id 집합 == graph concept_id 집합(437 1:1·고아 0)."""
-        result = transform_dataset(
-            concept_records=concept_records, edge_records=edge_records
-        )
+        result = transform_dataset(concept_records=concept_records, edge_records=edge_records)
         registry = build_registry(concept_records)
         report = validate_registry(registry, result.concepts)
         assert report.success is True, report.report_text()
@@ -64,9 +62,7 @@ class TestRegistryGraphParity:
         assert reg_ids == graph_ids
         assert len(reg_ids) == 437
 
-    def test_every_canonical_matches_regex(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_every_canonical_matches_regex(self, concept_records: list[dict[str, object]]) -> None:
         """모든 canonical_id가 신 규약(math.<area>.<slug>) 통과."""
         registry = build_registry(concept_records)
         bad = [
@@ -76,9 +72,7 @@ class TestRegistryGraphParity:
         ]
         assert bad == []
 
-    def test_registry_detects_orphan(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_registry_detects_orphan(self, concept_records: list[dict[str, object]]) -> None:
         """graph 노드에서 1건 빠지면 registry_graph_parity error(고아 탐지)."""
         result = transform_dataset(concept_records=concept_records, edge_records=[])
         registry = build_registry(concept_records)
@@ -89,9 +83,7 @@ class TestRegistryGraphParity:
 
 
 class TestCurriculumIndependence:
-    def test_curriculum_independence_guard(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_curriculum_independence_guard(self, concept_records: list[dict[str, object]]) -> None:
         """canonical 437개에 학년/트랙 토큰·NCIC 코드조각이 없다(교육과정 독립·Part 9 ①)."""
         registry = build_registry(concept_records)
         for entry in registry["concepts"]:
@@ -113,9 +105,7 @@ class TestCurriculumIndependence:
 
 
 class TestAliasAndMigrationRoundtrip:
-    def test_alias_has_axis_uc_srcid(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_alias_has_axis_uc_srcid(self, concept_records: list[dict[str, object]]) -> None:
         """registry 별칭에 교육과정축 코드·옛 UC·src_id가 모두 보존된다."""
         registry = build_registry(concept_records)
         for entry in registry["concepts"]:
@@ -124,9 +114,7 @@ class TestAliasAndMigrationRoundtrip:
             assert any(LEGACY_UC_PATTERN.match(a) for a in aliases)
             assert entry["src_id"] in aliases
 
-    def test_migrations_have_p2a_and_p2d(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_migrations_have_p2a_and_p2d(self, concept_records: list[dict[str, object]]) -> None:
         """모든 개념 migrations에 P2a·P2d 이벤트, P2d.to==canonical·P2d.from=축코드."""
         registry = build_registry(concept_records)
         for entry in registry["concepts"]:
@@ -152,9 +140,7 @@ class TestIdempotence:
         roundtrip = load_registry_yaml(dump_registry_yaml(r1))
         assert roundtrip == r1
 
-    def test_dump_has_header_and_version(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_dump_has_header_and_version(self, concept_records: list[dict[str, object]]) -> None:
         """ids.yaml 본문에 수기편집 금지 헤더·version·generated_by가 실린다."""
         text = dump_registry_yaml(build_registry(concept_records))
         assert text.startswith("# 자동 생성물 — 수기 편집 금지")
@@ -227,8 +213,6 @@ class TestCollisionSuffix:
 )
 def test_area_segment_from_map(name_ko: str, expected_area: str) -> None:
     """canonical의 area 세그먼트가 _AREA_SLUG_MAP 영역어와 일치."""
-    records = [
-        _rec("X", name_ko, "[고]기하" if expected_area == "geometry" else "[고]미적분")
-    ]
+    records = [_rec("X", name_ko, "[고]기하" if expected_area == "geometry" else "[고]미적분")]
     cid = build_id_map(records)["X"]
     assert cid.split(".")[1] == expected_area
