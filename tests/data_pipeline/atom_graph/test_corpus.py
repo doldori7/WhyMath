@@ -16,18 +16,18 @@ _STANDARDS = _PROJECT_ROOT / "data" / "corpus" / "standards_v1" / "standards.jso
 class TestCorpusCounts:
     def test_node_counts(self, corpus_provenance: dict[str, object]) -> None:
         nc = corpus_provenance["node_counts"]  # type: ignore[index]
-        assert nc["atoms"] == 1837
+        assert nc["atoms"] == 1823
         assert nc["units"] == 217
         assert nc["subunits"] == 643
-        assert nc["total"] == 2697
+        assert nc["total"] == 2683
 
     def test_edge_counts(self, corpus_provenance: dict[str, object]) -> None:
         ec = corpus_provenance["edge_counts"]  # type: ignore[index]
-        assert ec["atom_id_edges"] == 2213
+        assert ec["atom_id_edges"] == 2210
         assert ec["narrative_edges_raw"] == 1007
 
     def test_university_atoms(self, corpus_provenance: dict[str, object]) -> None:
-        assert corpus_provenance["school_level_university_atoms"] == 513
+        assert corpus_provenance["school_level_university_atoms"] == 512
 
     def test_normalization_counts(self, corpus_provenance: dict[str, object]) -> None:
         nc = corpus_provenance["normalization_counts"]  # type: ignore[index]
@@ -63,9 +63,7 @@ class TestCorpusRedaction:
         text = json.dumps(corpus_graph, ensure_ascii=False)
         std = json.loads(_STANDARDS.read_text(encoding="utf-8"))
         # 가장 긴 200개 statement 표본(부분 문자열 누수 탐지 — 전수보다 빠르고 충분히 보수적).
-        stmts = sorted(
-            {s["statement"] for s in std["standards"]}, key=len, reverse=True
-        )
+        stmts = sorted({s["statement"] for s in std["standards"]}, key=len, reverse=True)
         leaks = [s for s in stmts[:200] if s in text]
         assert leaks == []
 
@@ -81,7 +79,7 @@ class TestCorpusRedaction:
     ) -> None:
         atoms = [c for c in corpus_graph["concepts"] if c["level"] == "세부개념"]  # type: ignore[index]
         univ = [c for c in atoms if c["school_level"] == "대학"]
-        assert len(univ) == 513
+        assert len(univ) == 512
         assert all(c["core_proposition"] for c in univ)
         assert all(c["redacted_fields"] == [] for c in univ)
 
@@ -105,9 +103,6 @@ class TestCorpusStandardJoin:
         """원자 standard_codes(정규화 후)가 전부 standards.json에 존재(미적 정규화 후 미매칭 0)."""
         atoms = [c for c in corpus_graph["concepts"] if c["level"] == "세부개념"]  # type: ignore[index]
         unmatched = {
-            code
-            for c in atoms
-            for code in c["standard_codes"]
-            if code not in standards_codes
+            code for c in atoms for code in c["standard_codes"] if code not in standards_codes
         }
         assert unmatched == set()

@@ -1,7 +1,7 @@
 """그래프 분석 CLI + 실 코퍼스 스모크 — ARCH-17 (hermetic·커밋된 코퍼스만·DB 불요).
 
 CLI는 typer CliRunner로 exit code·JSON 산출 계약을, 실 코퍼스 스모크는 커밋된 4파일 위에서
-집계가 완주하고 실측 수치(원자 2,697·blocking 344)와 일치하는지 못 박는다(코퍼스 회귀 감지).
+집계가 완주하고 실측 수치(원자 2,683·blocking 344)와 일치하는지 못 박는다(코퍼스 회귀 감지).
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ class TestCli:
 
 class TestRealCorpusSmoke:
     def test_measured_invariants(self) -> None:
-        """실측 고정치 — 원자 1,837(세부개념만·전체 노드 2,697)·blocking 344·해석 skip 0·DAG 유지.
+        """실측 고정치 — 원자 1,823(세부개념만·전체 노드 2,683)·blocking 344·해석 skip 0·DAG 유지.
 
         이 수치는 2026-07-27 실측(갭 설계 세션)의 동결이다 — 코퍼스가 바뀌면 의도된 변경인지
         확인하고 함께 갱신한다(스냅샷 회귀 감지·`test_node_granularity_governance` 선례).
@@ -66,8 +66,8 @@ class TestRealCorpusSmoke:
             misconceptions=_CORPUS / "misconceptions_v1" / "misconceptions.json",
             crosswalk=_CORPUS / "concept_atom_crosswalk_v1" / "crosswalk.jsonl",
         )
-        assert report.atom_count == 1837  # 세부개념만(단원·소단원 제외 — 엣지 우주)
-        assert report.edge_count == 2213
+        assert report.atom_count == 1823  # 세부개념만(단원·소단원 제외 — 엣지 우주)
+        assert report.edge_count == 2210
         assert report.blocking_total == 344
         assert report.success and report.cycle is None
         # concept_src_id 843/843 해석 가능 실측의 blocking 부분집합 — 조인 실패 0.

@@ -7,7 +7,7 @@ end-to-end 적재한다. CI `backend — 마이그레이션·통합 (실 PG)` �
 또는 코퍼스 미존재 시 graceful skip(misconception 로더 통합테스트 동형).
 
 검증:
-  ① 실 코퍼스 적재 — atom ①오개념 1,837행(mis_id 'ATOM:' 접두)·전건 적재
+  ① 실 코퍼스 적재 — atom ①오개념 1,823행(mis_id 'ATOM:' 접두)·전건 적재
   ② 멱등 — 재적재 시 행수·접두 행수 불변
   ③ 표본 행 — canonical_statement·error_type·concept_src_id(원자 code)·provenance 라운드트립
   ④ 네임스페이스 분리 — 'ATOM:' 접두 행은 모두 provenance 'atom_graph_v1'(구 839과 무충돌)
@@ -33,8 +33,8 @@ pytestmark = pytest.mark.integration
 # 레포 루트 앵커(tests/backend/l1/ → parents[3]) — CWD 상대 경로는 CI·로컬 관례(cwd=src/backend)
 # 에서 항상 "코퍼스 미존재" skip이 되어 적재 검증이 한 번도 실행되지 않았다(침묵 skip 결함 수정).
 _CORPUS = Path(__file__).resolve().parents[3] / "data" / "corpus" / "atom_graph_v1" / "graph.json"
-# atom ①오개념 전건(원자 1,837 전량이 misconception 보유 — Phase 1 산출 정합).
-_EXPECTED_ROWS = 1837
+# atom ①오개념 전건(원자 1,823 전량이 misconception 보유 — Phase 1 산출 정합).
+_EXPECTED_ROWS = 1823
 
 
 def _sync_engine() -> object:
@@ -89,14 +89,14 @@ def _skip_guard() -> None:
 
 
 class TestRealCorpusLoad:
-    """① 실 코퍼스 적재 1,837행 ②멱등 ③표본 라운드트립 ④네임스페이스 분리."""
+    """① 실 코퍼스 적재 1,823행 ②멱등 ③표본 라운드트립 ④네임스페이스 분리."""
 
     def test_load_real_corpus_idempotent(self) -> None:
         _skip_guard()
         from sqlalchemy import text
 
         try:
-            # ① 적재 — atom ①오개념 전건(1,837).
+            # ① 적재 — atom ①오개념 전건(1,823).
             count = load_atom_misconceptions(_CORPUS, settings=Settings())
             assert count == _EXPECTED_ROWS
 

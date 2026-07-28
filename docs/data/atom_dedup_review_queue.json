@@ -339,5 +339,15 @@
       "reviewed_on": "2026-07-28",
       "note": "우리손 보조정리와 우리손 거리화 정리는 서로 다른 정리이며 선수관계."
     }
-  ]
+  ],
+  "execution": {
+    "executed_on": "2026-07-28",
+    "applied": 14,
+    "deferred": [
+      "D13",
+      "D18"
+    ],
+    "deferred_reason": "prerequisite 사이클 충돌(D13+D18 조합 시에만·단독은 각각 안전 — 실측). 검수자 확정: 보류(Kiki 2026-07-28 — \"14건만 실행\" 선택). 재개 조건: 해석학 내부 엣지 재설계 동반.",
+    "ledger": "data/corpus/atom_graph_v1/dedup_merges_v1.json"
+  }
 }

@@ -221,9 +221,7 @@ class TestTransformV1:
         assert p["validation"]["success"] is True
 
     def test_missing_source_exits_2(self, tmp_path: Path) -> None:
-        result = runner.invoke(
-            app, ["transform-v1", "--source", str(tmp_path / "nope.xlsx")]
-        )
+        result = runner.invoke(app, ["transform-v1", "--source", str(tmp_path / "nope.xlsx")])
         assert result.exit_code == 2
 
     def test_source_required(self) -> None:
@@ -257,9 +255,7 @@ class TestTransformV1:
             ws_e.append(row)
         xlsx = tmp_path / "cycle.xlsx"
         wb.save(str(xlsx))
-        result = runner.invoke(
-            app, ["transform-v1", "--source", str(xlsx), "--standards", "none"]
-        )
+        result = runner.invoke(app, ["transform-v1", "--source", str(xlsx), "--standards", "none"])
         assert result.exit_code == 1
         assert "prerequisite_cycle" in result.stdout
 
@@ -269,6 +265,4 @@ def _no_real_xlsx_committed() -> None:
     """안전 가드: 실 업로드 xlsx가 코퍼스 디렉토리에 커밋되지 않았는지 단언(테스트 부수효과 아님)."""
     corpus = Path(__file__).resolve().parents[3] / "data" / "corpus" / "atom_graph_v1"
     if corpus.exists():
-        assert not list(
-            corpus.glob("*.xlsx")
-        ), "xlsx는 커밋 금지(graph.json·_provenance만)"
+        assert not list(corpus.glob("*.xlsx")), "xlsx는 커밋 금지(graph.json·_provenance만)"

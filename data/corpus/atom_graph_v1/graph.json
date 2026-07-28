@@ -22324,7 +22324,8 @@
       "misconception_type": "절차오류",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[10공수1-02-06]"
+        "[10공수1-02-06]",
+        "[10기수1-02-05]"
       ],
       "core_proposition": null,
       "misconception": "완전제곱 변형 실수",
@@ -22340,7 +22341,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": null,
+      "notes": "병합흡수: 10기수1-02-05-1(이차함수 최대·최소) — 검수:Kiki 2026-07-28(D03·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -23084,7 +23085,8 @@
       "misconception_type": "개념혼동",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[10공수1-03-02]"
+        "[10공수1-03-02]",
+        "[10기수1-03-02]"
       ],
       "core_proposition": null,
       "misconception": "순서를 무시",
@@ -23100,7 +23102,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": null,
+      "notes": "병합흡수: 10기수1-03-02-1(순열(순서 있음)) — 검수:Kiki 2026-07-28(D04·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -23198,7 +23200,8 @@
       "misconception_type": "개념혼동",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[10공수1-03-03]"
+        "[10공수1-03-03]",
+        "[10기수1-03-03]"
       ],
       "core_proposition": null,
       "misconception": "순열과 조합(순서 유무)을 혼동",
@@ -23214,7 +23217,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": null,
+      "notes": "병합흡수: 10기수1-03-03-1(조합(순열 vs 조합)) — 검수:Kiki 2026-07-28(D08·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -23312,7 +23315,8 @@
       "misconception_type": "개념혼동",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[10공수1-04-01]"
+        "[10공수1-04-01]",
+        "[10기수1-04-01]"
       ],
       "core_proposition": null,
       "misconception": "행과 열을 혼동(m×n에서 m을 열로); 단순 표로만 여김",
@@ -23328,7 +23332,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": null,
+      "notes": "병합흡수: 10기수1-04-01-1(행렬의 뜻(행×열)) — 검수:Kiki 2026-07-28(D12·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -23464,7 +23468,8 @@
       "misconception_type": "절차오류",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[10공수1-04-02]"
+        "[10공수1-04-02]",
+        "[10기수1-04-02]"
       ],
       "core_proposition": null,
       "misconception": "곱셈에서 행×열 대응 실수",
@@ -23480,7 +23485,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": null,
+      "notes": "병합흡수: 10기수1-04-02-1(행렬의 연산) — 검수:Kiki 2026-07-28(D02·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -23882,7 +23887,8 @@
       "misconception_type": "개념혼동",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[10공수2-01-04]"
+        "[10공수2-01-04]",
+        "[10기수2-01-04]"
       ],
       "core_proposition": null,
       "misconception": "반지름과 반지름²(우변)을 혼동",
@@ -23898,7 +23904,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": null,
+      "notes": "병합흡수: 10기수2-01-04-1(원의 방정식(반지름²)) — 검수:Kiki 2026-07-28(D09·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -24034,7 +24040,8 @@
       "misconception_type": "절차오류",
       "intrinsic_difficulty": 5,
       "standard_codes": [
-        "[10공수2-01-05]"
+        "[10공수2-01-05]",
+        "[10기수2-01-05]"
       ],
       "core_proposition": null,
       "misconception": "거리와 반지름 비교/판별식을 못 씀",
@@ -24050,7 +24057,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": null,
+      "notes": "병합흡수: 10기수2-01-05-1(원과 직선의 위치 관계) — 검수:Kiki 2026-07-28(D10·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -24148,7 +24155,8 @@
       "misconception_type": "역방향오류",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[10공수2-01-06]"
+        "[10공수2-01-06]",
+        "[10기수2-01-06]"
       ],
       "core_proposition": null,
       "misconception": "x→x-a, y→y-b 대입 부호를 반대로 함; x축·y축 이동을 따로 처리 못 함",
@@ -24164,7 +24172,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": "신규생성(중고3축확장)",
+      "notes": "신규생성(중고3축확장) · 병합흡수: 10기수2-01-06-2(평행이동 식 바꾸기) — 검수:Kiki 2026-07-28(D23·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -24376,7 +24384,8 @@
       "misconception_type": "절차오류",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[10공수2-02-01]"
+        "[10공수2-02-01]",
+        "[10기수2-02-01]"
       ],
       "core_proposition": null,
       "misconception": "조건제시법을 원소나열로 바꿀 때 범위(자연수/정수)를 무시함; 끝값 포함 여부 실수",
@@ -24392,7 +24401,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": "신규생성(중고3축확장)",
+      "notes": "신규생성(중고3축확장) · 병합흡수: 10기수2-02-01-2(조건제시→원소나열) — 검수:Kiki 2026-07-28(D17·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -25288,7 +25297,8 @@
       "misconception_type": "정의·표기오류",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[10공수2-03-01]"
+        "[10공수2-03-01]",
+        "[10기수2-03-01]"
       ],
       "core_proposition": null,
       "misconception": "정의역의 한 원소에 공역 둘이 대응해도 함수로 봄; 공역 원소가 남으면 함수가 아니라 오판",
@@ -25304,7 +25314,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": "신규생성(중고3축확장)",
+      "notes": "신규생성(중고3축확장) · 병합흡수: 10기수2-03-01-2(대응표로 함수 판정) — 검수:Kiki 2026-07-28(D22·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -25668,7 +25678,8 @@
       "misconception_type": "절차오류",
       "intrinsic_difficulty": 5,
       "standard_codes": [
-        "[10공수2-03-04]"
+        "[10공수2-03-04]",
+        "[10기수2-03-04]"
       ],
       "core_proposition": null,
       "misconception": "점근선을 못 찾음(평행이동 형태 파악 실패)",
@@ -25684,7 +25695,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": null,
+      "notes": "병합흡수: 10기수2-03-04-1(유리함수 그래프(점근선)) — 검수:Kiki 2026-07-28(D07·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -26640,44 +26651,6 @@
       ]
     },
     {
-      "code": "10기수1-02-05-1",
-      "name": "이차함수 최대·최소",
-      "name_display": "이차함수 최대·최소",
-      "level": "세부개념",
-      "parent_code": "기수1-U2-S2",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학1",
-      "unit": "방정식과 부등식",
-      "subunit": "이차함수",
-      "subunit_code": "기수1-U2-S2",
-      "cognitive_type": "절차",
-      "node_type": "구성",
-      "misconception_type": "절차오류",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수1-02-05]"
-      ],
-      "core_proposition": null,
-      "misconception": "완전제곱 변형 실수",
-      "diagnostic_item": "y=x²−2x+3의 최솟값은?",
-      "diagnostic_answer": "정답: 2 (x=1) / 통과기준: 완전제곱(꼭짓점)으로 산출",
-      "diagnostic_signal": "변형 오류",
-      "socratic": "x²−2x를 (x−1)²−1로 바꾸면 최솟값이 보일까?",
-      "transfer": "최대·최소 산출",
-      "transfer_example": "넓이 최대",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": null,
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
       "code": "10기수1-02-05-3",
       "name": "표에서 최솟값 찾기",
       "name_display": "표에서 최솟값 찾기",
@@ -27286,44 +27259,6 @@
       ]
     },
     {
-      "code": "10기수1-03-02-1",
-      "name": "순열(순서 있음)",
-      "name_display": "순열(순서 있음)(기본수학1)",
-      "level": "세부개념",
-      "parent_code": "기수1-U3-S1",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학1",
-      "unit": "경우의 수",
-      "subunit": "경우의 수",
-      "subunit_code": "기수1-U3-S1",
-      "cognitive_type": "개념",
-      "node_type": "구성",
-      "misconception_type": "개념혼동",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수1-03-02]"
-      ],
-      "core_proposition": null,
-      "misconception": "순서를 무시",
-      "diagnostic_item": "3명을 일렬로 세우는 방법의 수는?",
-      "diagnostic_answer": "정답: 6 (3!) / 통과기준: 순열=순서 있는 배열",
-      "diagnostic_signal": "순서 무시",
-      "socratic": "'A-B-C'와 'C-B-A'는 다른 줄일까?",
-      "transfer": "순열=순서 있는 선택",
-      "transfer_example": "자리 배치",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": null,
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
       "code": "10기수1-03-02-2",
       "name": "순열 곱셈으로 세기",
       "name_display": "순열 곱셈으로 세기",
@@ -27400,44 +27335,6 @@
       ]
     },
     {
-      "code": "10기수1-03-03-1",
-      "name": "조합(순열 vs 조합)",
-      "name_display": "조합(순열 vs 조합)(기본수학1)",
-      "level": "세부개념",
-      "parent_code": "기수1-U3-S1",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학1",
-      "unit": "경우의 수",
-      "subunit": "경우의 수",
-      "subunit_code": "기수1-U3-S1",
-      "cognitive_type": "개념",
-      "node_type": "구성",
-      "misconception_type": "개념혼동",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수1-03-03]"
-      ],
-      "core_proposition": null,
-      "misconception": "순열과 조합(순서 유무)을 혼동",
-      "diagnostic_item": "5명 중 2명을 '뽑기만' 할 때는 순열·조합 중 무엇일까요?",
-      "diagnostic_answer": "정답: 조합(순서 없음) / 통과기준: 순서 없으면 조합",
-      "diagnostic_signal": "순열로",
-      "socratic": "'A,B'와 'B,A'는 같은 선택일까?",
-      "transfer": "조합=순서 없는 선택",
-      "transfer_example": "대표 뽑기",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": null,
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
       "code": "10기수1-03-03-2",
       "name": "순서 겹침 나누기",
       "name_display": "순서 겹침 나누기",
@@ -27509,44 +27406,6 @@
         "d": "예"
       },
       "notes": "신규생성(중고3축확장)",
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
-      "code": "10기수1-04-01-1",
-      "name": "행렬의 뜻(행×열)",
-      "name_display": "행렬의 뜻(행×열)(기본수학1)",
-      "level": "세부개념",
-      "parent_code": "기수1-U4-S1",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학1",
-      "unit": "행렬",
-      "subunit": "행렬",
-      "subunit_code": "기수1-U4-S1",
-      "cognitive_type": "개념",
-      "node_type": "선행",
-      "misconception_type": "개념혼동",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수1-04-01]"
-      ],
-      "core_proposition": null,
-      "misconception": "행과 열을 혼동",
-      "diagnostic_item": "2×3 행렬은 행과 열이 각각 몇 개일까요?",
-      "diagnostic_answer": "정답: 행 2, 열 3 / 통과기준: m×n=행 m·열 n",
-      "diagnostic_signal": "행·열 뒤바꿈",
-      "socratic": "행렬 크기에서 앞 숫자는 가로줄(행)일까?",
-      "transfer": "행렬=행·열 배열",
-      "transfer_example": "자료 표현",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": null,
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -27661,44 +27520,6 @@
         "d": "예"
       },
       "notes": "신규생성(중고3축확장)",
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
-      "code": "10기수1-04-02-1",
-      "name": "행렬의 연산",
-      "name_display": "행렬의 연산",
-      "level": "세부개념",
-      "parent_code": "기수1-U4-S1",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학1",
-      "unit": "행렬",
-      "subunit": "행렬",
-      "subunit_code": "기수1-U4-S1",
-      "cognitive_type": "절차",
-      "node_type": "구성",
-      "misconception_type": "절차오류",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수1-04-02]"
-      ],
-      "core_proposition": null,
-      "misconception": "성분 대응 실수",
-      "diagnostic_item": "[[1,2],[3,4]] + [[1,0],[0,1]] = ?",
-      "diagnostic_answer": "정답: [[2,2],[3,5]] / 통과기준: 성분별 규칙 적용",
-      "diagnostic_signal": "성분 대응 오류",
-      "socratic": "행렬 덧셈은 같은 자리 성분끼리 더할까?",
-      "transfer": "행렬 연산 실행",
-      "transfer_example": "변환",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": null,
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -28084,44 +27905,6 @@
       ]
     },
     {
-      "code": "10기수2-01-04-1",
-      "name": "원의 방정식(반지름²)",
-      "name_display": "원의 방정식(반지름²)(기본수학2)",
-      "level": "세부개념",
-      "parent_code": "기수2-U1-S1",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학2",
-      "unit": "도형의 방정식",
-      "subunit": "도형의 방정식",
-      "subunit_code": "기수2-U1-S1",
-      "cognitive_type": "개념",
-      "node_type": "구성",
-      "misconception_type": "개념혼동",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수2-01-04]"
-      ],
-      "core_proposition": null,
-      "misconception": "반지름과 반지름² 혼동",
-      "diagnostic_item": "(x−1)²+(y−2)²=9의 반지름은?",
-      "diagnostic_answer": "정답: 3 / 통과기준: 우변=반지름²",
-      "diagnostic_signal": "9",
-      "socratic": "우변 9는 반지름일까 그 제곱일까?",
-      "transfer": "원의 표준형",
-      "transfer_example": "원과 직선",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": null,
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
       "code": "10기수2-01-04-2",
       "name": "중심·반지름으로 원식",
       "name_display": "중심·반지름으로 원식",
@@ -28236,44 +28019,6 @@
       ]
     },
     {
-      "code": "10기수2-01-05-1",
-      "name": "원과 직선의 위치 관계",
-      "name_display": "원과 직선의 위치 관계(기본수학2)",
-      "level": "세부개념",
-      "parent_code": "기수2-U1-S1",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학2",
-      "unit": "도형의 방정식",
-      "subunit": "도형의 방정식",
-      "subunit_code": "기수2-U1-S1",
-      "cognitive_type": "절차",
-      "node_type": "구성",
-      "misconception_type": "절차오류",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수2-01-05]"
-      ],
-      "core_proposition": null,
-      "misconception": "거리-반지름 비교 못함",
-      "diagnostic_item": "중심에서 직선까지 거리 d, 반지름 r일 때 d<r이면 몇 점에서 만날까요?",
-      "diagnostic_answer": "정답: 두 점 / 통과기준: d와 r 비교",
-      "diagnostic_signal": "방법 모름",
-      "socratic": "거리가 반지름보다 작으면 몇 점에서 만날까?",
-      "transfer": "원과 직선",
-      "transfer_example": "접선",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": null,
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
       "code": "10기수2-01-05-3",
       "name": "위치 관계 그림↔판정",
       "name_display": "위치 관계 그림↔판정",
@@ -28345,44 +28090,6 @@
         "d": "예"
       },
       "notes": null,
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
-      "code": "10기수2-01-06-2",
-      "name": "평행이동 식 바꾸기",
-      "name_display": "평행이동 식 바꾸기",
-      "level": "세부개념",
-      "parent_code": "기수2-U1-S1",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학2",
-      "unit": "도형의 방정식",
-      "subunit": "도형의 방정식",
-      "subunit_code": "기수2-U1-S1",
-      "cognitive_type": "절차",
-      "node_type": "구성",
-      "misconception_type": "역방향오류",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수2-01-06]"
-      ],
-      "core_proposition": null,
-      "misconception": "x축 +a 이동 시 식에서 x+a로 씀(부호 반대); x와 y 이동을 섞음",
-      "diagnostic_item": "점이 아니라 직선 y=x+1을 x축으로 +2, y축으로 +3 평행이동한 식을 단계대로 구하세요.",
-      "diagnostic_answer": "정답: x→x-2, y→y-3 대입: (y-3)=(x-2)+1 → y=x+2 / 통과기준: x축 +a는 x 자리에 x-a, y축 +b는 y 자리에 y-b를 대입해 정리",
-      "diagnostic_signal": "x+2,y+3을 그대로 더해 y=x+6 등 부호 반대로 처리",
-      "socratic": "도형을 오른쪽으로 2칸 옮기면 식 안의 x는 왜 x-2로 바뀔까? (옮긴 점이 원래 식을 만족하려면?)",
-      "transfer": "x축 +a→x를 x-a로, y축 +b→y를 y-b로 대입 = 평행이동 절차",
-      "transfer_example": "원·포물선의 평행이동",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": "신규생성(중고3축확장)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -28573,44 +28280,6 @@
         "d": "예"
       },
       "notes": null,
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
-      "code": "10기수2-02-01-2",
-      "name": "조건제시→원소나열",
-      "name_display": "조건제시→원소나열(기본수학2)",
-      "level": "세부개념",
-      "parent_code": "기수2-U2-S1",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학2",
-      "unit": "집합과 명제",
-      "subunit": "집합과 명제",
-      "subunit_code": "기수2-U2-S1",
-      "cognitive_type": "절차",
-      "node_type": "구성",
-      "misconception_type": "절차오류",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수2-02-01]"
-      ],
-      "core_proposition": null,
-      "misconception": "조건제시법을 원소나열법으로 바꿀 때 조건을 만족하는 수를 빠뜨리거나 범위를 넘김",
-      "diagnostic_item": "A={x | x는 10보다 작은 자연수 중 짝수}를 원소나열법으로 바꾸세요.",
-      "diagnostic_answer": "정답: A={2,4,6,8} / 통과기준: 조건(10 미만·자연수·짝수)을 모두 만족하는 원소를 하나씩 골라 나열",
-      "diagnostic_signal": "{2,4,6,8,10}처럼 10 포함; 0이나 홀수를 섞음",
-      "socratic": "10은 '10보다 작은'에 들어갈까? 짝수를 2부터 차례로 세어 어디까지 넣어야 할까?",
-      "transfer": "조건제시법의 규칙을 하나씩 점검해 만족하는 원소만 나열 = 표현 변환 절차",
-      "transfer_example": "원소나열법→조건제시법 거꾸로 바꾸기",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": "신규생성(중고3축확장)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -29148,44 +28817,6 @@
       ]
     },
     {
-      "code": "10기수2-03-01-2",
-      "name": "대응표로 함수 판정",
-      "name_display": "대응표로 함수 판정",
-      "level": "세부개념",
-      "parent_code": "기수2-U3-S1",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학2",
-      "unit": "함수와 그래프",
-      "subunit": "함수",
-      "subunit_code": "기수2-U3-S1",
-      "cognitive_type": "절차",
-      "node_type": "구성",
-      "misconception_type": "정의·표기오류",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수2-03-01]"
-      ],
-      "core_proposition": null,
-      "misconception": "한 x에 y가 둘 이상 대응해도 함수로 봄; 정의역 원소가 빠져도 함수로 판단",
-      "diagnostic_item": "x={1,2}에서 y로의 대응이 1→3, 2→5, 2→7일 때 함수인지 판정하세요.",
-      "diagnostic_answer": "정답: 2가 5와 7 둘에 대응하므로 함수가 아니다. (한 x에는 y가 단 하나여야 함) / 통과기준: 각 x가 단 하나의 y에 대응하는지 확인해 판정",
-      "diagnostic_signal": "여러 대응이 있어도 함수라 함; 정의역을 무시",
-      "socratic": "x=2를 넣었을 때 답이 5도 되고 7도 된다면, 하나로 정해졌다고 할 수 있을까?",
-      "transfer": "정의역의 각 원소가 단 하나의 y에 대응하면 함수 — 판정 절차",
-      "transfer_example": "그래프로 함수 판정(세로선 검사)",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": "신규생성(중고3축확장)",
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
       "code": "10기수2-03-01-3",
       "name": "함수 대응↔그래프",
       "name_display": "함수 대응↔그래프",
@@ -29523,44 +29154,6 @@
         "d": "예"
       },
       "notes": "신규생성(중고3축확장)",
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
-      "code": "10기수2-03-04-1",
-      "name": "유리함수 그래프(점근선)",
-      "name_display": "유리함수 그래프(점근선)(기본수학2)",
-      "level": "세부개념",
-      "parent_code": "기수2-U3-S1",
-      "school_level": "고등",
-      "grade_band": "고1",
-      "subject_area": "기본수학2",
-      "unit": "함수와 그래프",
-      "subunit": "함수",
-      "subunit_code": "기수2-U3-S1",
-      "cognitive_type": "표상",
-      "node_type": "구성",
-      "misconception_type": "절차오류",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[10기수2-03-04]"
-      ],
-      "core_proposition": null,
-      "misconception": "점근선을 못 찾음",
-      "diagnostic_item": "y=1/x의 점근선은?",
-      "diagnostic_answer": "정답: x=0, y=0 / 통과기준: 수직·수평 점근선 파악",
-      "diagnostic_signal": "점근선 오류",
-      "socratic": "x가 0에 가까우면 y는 어떻게 될까?",
-      "transfer": "유리함수 그래프",
-      "transfer_example": "반비례",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": null,
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -33344,7 +32937,8 @@
       "misconception_type": "절차오류",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[12미적Ⅰ-03-01]"
+        "[12미적Ⅰ-03-01]",
+        "[12미적Ⅱ-03-01]"
       ],
       "core_proposition": null,
       "misconception": "적분상수 +C를 빠뜨림",
@@ -33360,7 +32954,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": null,
+      "notes": "병합흡수: 12미적Ⅱ-03-01-2(부정적분과 +C 의미) — 검수:Kiki 2026-07-28(D20·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -33914,7 +33508,8 @@
       "misconception_type": "개념혼동",
       "intrinsic_difficulty": 4,
       "standard_codes": [
-        "[12미적Ⅰ-03-06]"
+        "[12미적Ⅰ-03-06]",
+        "[12미적Ⅱ-03-07]"
       ],
       "core_proposition": null,
       "misconception": "위치 변화와 이동 거리를 혼동(∫v vs ∫|v|)",
@@ -33930,7 +33525,7 @@
         "c": "예",
         "d": "예"
       },
-      "notes": null,
+      "notes": "병합흡수: 12미적Ⅱ-03-07-1(속도와 거리(적분)) — 검수:Kiki 2026-07-28(D11·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -37660,44 +37255,6 @@
       ]
     },
     {
-      "code": "12미적Ⅱ-03-01-2",
-      "name": "부정적분과 +C 의미",
-      "name_display": "부정적분과 +C 의미",
-      "level": "세부개념",
-      "parent_code": "미적2-U3-S1",
-      "school_level": "고등",
-      "grade_band": "고3",
-      "subject_area": "미적분Ⅱ",
-      "unit": "적분법",
-      "subunit": "여러 함수의 적분",
-      "subunit_code": "미적2-U3-S1",
-      "cognitive_type": "개념",
-      "node_type": "구성",
-      "misconception_type": "개념혼동",
-      "intrinsic_difficulty": 5,
-      "standard_codes": [
-        "[12미적Ⅱ-03-01]"
-      ],
-      "core_proposition": null,
-      "misconception": "적분상수 C를 빼먹음; 부정적분이 함수족임을 모름",
-      "diagnostic_item": "∫2x dx에 +C가 붙는 이유와, 부정적분이 무엇을 뜻하는지 설명하세요.",
-      "diagnostic_answer": "정답: 미분하면 2x가 되는 함수는 x²+C로 무수히 많음, 부정적분은 그 함수족 전체 / 통과기준: 미분의 역연산이라 상수항이 자유로움 → 함수족임을 설명",
-      "diagnostic_signal": "+C를 불필요하다 함; 부정적분을 하나의 함수로만 봄",
-      "socratic": "미분하면 2x가 되는 함수가 x²말고 또 있을까? 상수를 더해도 미분은 같지 않을까?",
-      "transfer": "부정적분=미분의 역(함수족), +C는 잃은 상수의 흔적 — 적분의 본질",
-      "transfer_example": "지수·삼각함수 부정적분, 초기조건으로 C결정",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": "신규생성(중고3축확장)",
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
       "code": "12미적Ⅱ-03-01-1",
       "name": "여러 함수의 부정·정적분",
       "name_display": "여러 함수의 부정·정적분",
@@ -38339,44 +37896,6 @@
         "d": "예"
       },
       "notes": "신규생성(중고3축확장)",
-      "redacted_fields": [
-        "핵심명제/성취기준내용"
-      ]
-    },
-    {
-      "code": "12미적Ⅱ-03-07-1",
-      "name": "속도와 거리(적분)",
-      "name_display": "속도와 거리(적분)(미적분Ⅱ)",
-      "level": "세부개념",
-      "parent_code": "미적2-U3-S4",
-      "school_level": "고등",
-      "grade_band": "고3",
-      "subject_area": "미적분Ⅱ",
-      "unit": "적분법",
-      "subunit": "정적분의 활용",
-      "subunit_code": "미적2-U3-S4",
-      "cognitive_type": "개념",
-      "node_type": "결과",
-      "misconception_type": "개념혼동",
-      "intrinsic_difficulty": 5,
-      "standard_codes": [
-        "[12미적Ⅱ-03-07]"
-      ],
-      "core_proposition": null,
-      "misconception": "위치 변화와 이동 거리 혼동(∫v vs ∫|v|)",
-      "diagnostic_item": "직선 운동에서 속도 v(t) 적분은 위치 변화이고, 이동 거리는 무엇을 적분할까요?",
-      "diagnostic_answer": "정답: ∫|v(t)|dt / 통과기준: ∫v=위치변화, ∫|v|=거리 구분",
-      "diagnostic_signal": "둘 혼동",
-      "socratic": "방향이 바뀌어도 거리는 계속 쌓이니 절댓값이 필요하지 않을까?",
-      "transfer": "적분의 물리 — 운동 분석",
-      "transfer_example": "운동, 누적량",
-      "atomicity": {
-        "a": "예",
-        "b": "예",
-        "c": "예",
-        "d": "예"
-      },
-      "notes": null,
       "redacted_fields": [
         "핵심명제/성취기준내용"
       ]
@@ -50795,7 +50314,8 @@
       "misconception_type": "과잉일반화",
       "intrinsic_difficulty": 2,
       "standard_codes": [
-        "[CALC1-03-04]"
+        "[CALC1-03-04]",
+        "[NUMER-02-02]"
       ],
       "core_proposition": "뉴턴법은 초깃값·함수에 따라 발산·진동할 수 있다(f'≈0 등).",
       "misconception": "뉴턴법은 어떤 초깃값에서도 항상 해로 수렴한다",
@@ -50806,7 +50326,7 @@
       "transfer": "수치해석 수렴조건 → 고정점 반복 → 최적화 경사법",
       "transfer_example": null,
       "atomicity": {},
-      "notes": null,
+      "notes": "병합흡수: NUMER-C05(뉴턴법은 항상 수렴하진 않는다) — 검수:Kiki 2026-07-28(D14·트랙 구분은 Curriculum Overlay)",
       "redacted_fields": []
     },
     {
@@ -59887,37 +59407,6 @@
       "diagnostic_signal": "'이분법이 항상 우월'",
       "socratic": "확실하지만 느린 방법과 빠르지만 위험한 방법, 늘 한쪽이 이길까요?",
       "transfer": "뉴턴법 → 할선법 → 하이브리드",
-      "transfer_example": null,
-      "atomicity": {},
-      "notes": null,
-      "redacted_fields": []
-    },
-    {
-      "code": "NUMER-C05",
-      "name": "뉴턴법은 항상 수렴하진 않는다",
-      "name_display": "뉴턴법은 항상 수렴하진 않는다(수치해석)",
-      "level": "세부개념",
-      "parent_code": "NUMER-U2-S2",
-      "school_level": "대학",
-      "grade_band": "3학년",
-      "subject_area": "수치해석",
-      "unit": "방정식의 해",
-      "subunit": "뉴턴법",
-      "subunit_code": "NUMER-U2-S2",
-      "cognitive_type": "개념",
-      "node_type": "구성",
-      "misconception_type": "과잉일반화",
-      "intrinsic_difficulty": 4,
-      "standard_codes": [
-        "[NUMER-02-02]"
-      ],
-      "core_proposition": "뉴턴법은 근 근처서 2차수렴하나 초깃값·f'≈0이면 발산·진동할 수 있다.",
-      "misconception": "뉴턴법은 어떤 초깃값에서도 수렴한다",
-      "diagnostic_item": "f(x)=arctan x에 먼 초깃값을 쓰면?",
-      "diagnostic_answer": "발산(진동) — 수렴 조건 필요 시 통과",
-      "diagnostic_signal": "'항상 수렴'",
-      "socratic": "접선이 x축을 더 멀리서 만나면, 다음 추정이 더 나빠지지 않을까요?",
-      "transfer": "고정점 반복 → 수렴차수 → 최적화",
       "transfer_example": null,
       "atomicity": {},
       "notes": null,
@@ -101732,7 +101221,7 @@
     {
       "from_code": "10기수1-02-03-1",
       "from_name": "이차함수의 뜻·그래프 성질",
-      "to_code": "10기수1-02-05-1",
+      "to_code": "10공수1-02-06-2",
       "to_name": "이차함수 최대·최소",
       "relation": "prerequisite",
       "relation_subtype": "원본",
@@ -101798,7 +101287,7 @@
     {
       "from_code": "10기수1-02-04-2",
       "from_name": "x절편 구하는 절차",
-      "to_code": "10기수1-02-05-1",
+      "to_code": "10공수1-02-06-2",
       "to_name": "이차함수 최대·최소",
       "relation": "prerequisite",
       "relation_subtype": "소단원내",
@@ -101818,7 +101307,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수1-02-05-1",
+      "from_code": "10공수1-02-06-2",
       "from_name": "이차함수 최대·최소",
       "to_code": "10기수1-02-03-3",
       "to_name": "표로 그래프 그리기",
@@ -102007,7 +101496,7 @@
     {
       "from_code": "10기수1-03-01-1",
       "from_name": "합의 법칙·곱의 법칙",
-      "to_code": "10기수1-03-02-1",
+      "to_code": "10공수1-03-02-1",
       "to_name": "순열(순서 있음)",
       "relation": "prerequisite",
       "relation_subtype": "원본",
@@ -102038,17 +101527,6 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수1-03-02-1",
-      "from_name": "순열(순서 있음)",
-      "to_code": "10기수1-03-03-1",
-      "to_name": "조합(순열 vs 조합)",
-      "relation": "prerequisite",
-      "relation_subtype": "원본",
-      "school_link": false,
-      "strength": 0.8,
-      "evidence": "원자 백본 v1"
-    },
-    {
       "from_code": "10기수1-03-02-2",
       "from_name": "순열 곱셈으로 세기",
       "to_code": "10기수1-03-03-2",
@@ -102071,7 +101549,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수1-03-03-1",
+      "from_code": "10공수1-03-03-1",
       "from_name": "조합(순열 vs 조합)",
       "to_code": "10기수1-03-01-2",
       "to_name": "더할까 곱할까",
@@ -102095,7 +101573,7 @@
     {
       "from_code": "10기수1-03-03-3",
       "from_name": "뽑기는 순서 무시",
-      "to_code": "10기수1-04-01-1",
+      "to_code": "10공수1-04-01-1",
       "to_name": "행렬의 뜻(행×열)",
       "relation": "prerequisite",
       "relation_subtype": "소단원간",
@@ -102104,9 +101582,9 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수1-04-01-1",
+      "from_code": "10공수1-04-01-1",
       "from_name": "행렬의 뜻(행×열)",
-      "to_code": "10기수1-04-02-1",
+      "to_code": "10공수1-04-02-2",
       "to_name": "행렬의 연산",
       "relation": "prerequisite",
       "relation_subtype": "원본",
@@ -102115,7 +101593,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수1-04-01-1",
+      "from_code": "10공수1-04-01-1",
       "from_name": "행렬의 뜻(행×열)",
       "to_code": "10기수1-04-02-2",
       "to_name": "같은 자리끼리 더함",
@@ -102128,7 +101606,7 @@
     {
       "from_code": "10기수1-04-01-2",
       "from_name": "행과 열로 위치찾기",
-      "to_code": "10기수1-04-02-1",
+      "to_code": "10공수1-04-02-2",
       "to_name": "행렬의 연산",
       "relation": "prerequisite",
       "relation_subtype": "소단원내",
@@ -102148,7 +101626,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수1-04-02-1",
+      "from_code": "10공수1-04-02-2",
       "from_name": "행렬의 연산",
       "to_code": "10기수1-04-01-3",
       "to_name": "표를 행렬로 옮기기",
@@ -102183,7 +101661,7 @@
     {
       "from_code": "10기수2-01-01-1",
       "from_name": "두 점 사이의 거리",
-      "to_code": "10기수2-01-04-1",
+      "to_code": "10공수2-01-04-1",
       "to_name": "원의 방정식(반지름²)",
       "relation": "prerequisite",
       "relation_subtype": "원본",
@@ -102260,7 +101738,7 @@
     {
       "from_code": "10기수2-01-03-1",
       "from_name": "평행·수직 조건",
-      "to_code": "10기수2-01-04-1",
+      "to_code": "10공수2-01-04-1",
       "to_name": "원의 방정식(반지름²)",
       "relation": "prerequisite",
       "relation_subtype": "소단원내",
@@ -102291,18 +101769,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수2-01-04-1",
-      "from_name": "원의 방정식(반지름²)",
-      "to_code": "10기수2-01-05-1",
-      "to_name": "원과 직선의 위치 관계",
-      "relation": "prerequisite",
-      "relation_subtype": "원본",
-      "school_link": false,
-      "strength": 0.8,
-      "evidence": "원자 백본 v1"
-    },
-    {
-      "from_code": "10기수2-01-04-1",
+      "from_code": "10공수2-01-04-1",
       "from_name": "원의 방정식(반지름²)",
       "to_code": "10기수2-01-05-2",
       "to_name": "왜 거리로 판단하나",
@@ -102315,7 +101782,7 @@
     {
       "from_code": "10기수2-01-04-2",
       "from_name": "중심·반지름으로 원식",
-      "to_code": "10기수2-01-05-1",
+      "to_code": "10공수2-01-05-1",
       "to_name": "원과 직선의 위치 관계",
       "relation": "prerequisite",
       "relation_subtype": "소단원내",
@@ -102328,17 +101795,6 @@
       "from_name": "원 그림과 식 잇기",
       "to_code": "10기수2-01-05-3",
       "to_name": "위치 관계 그림↔판정",
-      "relation": "prerequisite",
-      "relation_subtype": "소단원내",
-      "school_link": false,
-      "strength": 0.8,
-      "evidence": "원자 백본 v1"
-    },
-    {
-      "from_code": "10기수2-01-05-1",
-      "from_name": "원과 직선의 위치 관계",
-      "to_code": "10기수2-01-06-2",
-      "to_name": "평행이동 식 바꾸기",
       "relation": "prerequisite",
       "relation_subtype": "소단원내",
       "school_link": false,
@@ -102390,7 +101846,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수2-01-06-2",
+      "from_code": "10공수2-01-06-2",
       "from_name": "평행이동 식 바꾸기",
       "to_code": "10기수2-01-07-1",
       "to_name": "대칭이동",
@@ -102467,7 +101923,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수2-02-01-2",
+      "from_code": "10공수2-02-01-2",
       "from_name": "조건제시→원소나열",
       "to_code": "10기수2-02-02-2",
       "to_name": "부분집합 판정 절차",
@@ -102612,7 +102068,7 @@
     {
       "from_code": "10기수2-02-05-1",
       "from_name": "명제의 역·대우",
-      "to_code": "10기수2-02-01-2",
+      "to_code": "10공수2-02-01-2",
       "to_name": "조건제시→원소나열",
       "relation": "prerequisite",
       "relation_subtype": "소단원내",
@@ -102667,7 +102123,7 @@
     {
       "from_code": "10기수2-03-01-1",
       "from_name": "함수의 개념(세로선)",
-      "to_code": "10기수2-03-04-1",
+      "to_code": "10공수2-03-04-1",
       "to_name": "유리함수 그래프(점근선)",
       "relation": "prerequisite",
       "relation_subtype": "원본",
@@ -102687,7 +102143,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수2-03-01-2",
+      "from_code": "10공수2-03-01-2",
       "from_name": "대응표로 함수 판정",
       "to_code": "10기수2-03-02-2",
       "to_name": "합성함수 값 구하기",
@@ -102764,7 +102220,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수2-03-04-1",
+      "from_code": "10공수2-03-04-1",
       "from_name": "유리함수 그래프(점근선)",
       "to_code": "10기수2-03-05-1",
       "to_name": "무리함수(정의역)",
@@ -102775,7 +102231,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "10기수2-03-04-1",
+      "from_code": "10공수2-03-04-1",
       "from_name": "유리함수 그래프(점근선)",
       "to_code": "10기수2-03-05-3",
       "to_name": "무리함수 표↔그래프",
@@ -102810,7 +102266,7 @@
     {
       "from_code": "10기수2-03-05-1",
       "from_name": "무리함수(정의역)",
-      "to_code": "10기수2-03-01-2",
+      "to_code": "10공수2-03-01-2",
       "to_name": "대응표로 함수 판정",
       "relation": "prerequisite",
       "relation_subtype": "소단원내",
@@ -106473,7 +105929,7 @@
     {
       "from_code": "12미적Ⅱ-02-11-2",
       "from_name": "평면운동 속도 절차",
-      "to_code": "12미적Ⅱ-03-01-2",
+      "to_code": "12미적Ⅰ-03-01-1",
       "to_name": "부정적분과 +C 의미",
       "relation": "prerequisite",
       "relation_subtype": "소단원간",
@@ -106528,7 +105984,7 @@
     {
       "from_code": "12미적Ⅱ-03-01-1",
       "from_name": "여러 함수의 부정·정적분",
-      "to_code": "12미적Ⅱ-03-07-1",
+      "to_code": "12미적Ⅰ-03-06-1",
       "to_name": "속도와 거리(적분)",
       "relation": "prerequisite",
       "relation_subtype": "원본",
@@ -106548,7 +106004,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "12미적Ⅱ-03-01-2",
+      "from_code": "12미적Ⅰ-03-01-1",
       "from_name": "부정적분과 +C 의미",
       "to_code": "12미적Ⅱ-03-01-1",
       "to_name": "여러 함수의 부정·정적분",
@@ -106757,7 +106213,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "12미적Ⅱ-03-07-1",
+      "from_code": "12미적Ⅰ-03-06-1",
       "from_name": "속도와 거리(적분)",
       "to_code": "12미적Ⅱ-03-07-2",
       "to_name": "속도→거리·위치 절차",
@@ -106770,7 +106226,7 @@
     {
       "from_code": "12미적Ⅱ-03-07-3",
       "from_name": "속도그래프 넓이=거리",
-      "to_code": "12미적Ⅱ-03-07-1",
+      "to_code": "12미적Ⅰ-03-06-1",
       "to_name": "속도와 거리(적분)",
       "relation": "prerequisite",
       "relation_subtype": "소단원내",
@@ -113962,7 +113418,7 @@
       "evidence": "원자 백본 v1"
     },
     {
-      "from_code": "NUMER-C05",
+      "from_code": "CALC1-C16",
       "from_name": "뉴턴법은 항상 수렴하진 않는다",
       "to_code": "NUMER-C06",
       "to_name": "고정점 반복은 |g'|<1서 수렴",
@@ -114063,7 +113519,7 @@
     {
       "from_code": "NUMER-P01",
       "from_name": "이분법 절차",
-      "to_code": "NUMER-C05",
+      "to_code": "CALC1-C16",
       "to_name": "뉴턴법은 항상 수렴하진 않는다",
       "relation": "prerequisite",
       "relation_subtype": "소단원간",
@@ -125040,7 +124496,7 @@
       "from_학교급": null,
       "from_유형": "서술형",
       "관계": "선수",
-      "to(후행)": "NUMER-C05",
+      "to(후행)": "CALC1-C16",
       "to_원자명": "뉴턴법은 항상 수렴하진 않는다",
       "to_학교급": "대학교",
       "학교급연계": null
@@ -125053,7 +124509,7 @@
       "from_학교급": null,
       "from_유형": "서술형",
       "관계": "선수",
-      "to(후행)": "NUMER-C05",
+      "to(후행)": "CALC1-C16",
       "to_원자명": "뉴턴법은 항상 수렴하진 않는다",
       "to_학교급": "대학교",
       "학교급연계": null

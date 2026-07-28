@@ -568,7 +568,9 @@ class TestDeriveAtomEntries:
         assert (
             len(canonical) >= 437
         ), f"canonical {len(canonical)} < 하한 437(코퍼스 축소 드리프트?)"
-        assert len(atoms) >= 1324, f"원자 행 {len(atoms)} < 하한 1324(코퍼스 축소 드리프트?)"
+        assert (
+            len(atoms) >= 1311
+        ), f"원자 행 {len(atoms)} < 하한 1311(코퍼스 축소 드리프트? — 병합 13건 반영 2026-07-28)"
         # entry_id 유일(원자당 1셀·충돌 승자 단일) + 무접미 `{원자}:KR` 규약.
         entry_ids = [a.entry_id for a in atoms]
         assert len(set(entry_ids)) == len(entry_ids)
