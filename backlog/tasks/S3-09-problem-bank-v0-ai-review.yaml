@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-09-problem-bank-v0-ai-review
+title: "문제은행 v0 잔여 4종 AI 표본 검수 — 노출 자격 균일화(Wilson 게이트)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "잔여 v0 4종(misconception_mc 1,080·rephrased 483·conceptual 360·killer 120 — 합 2,043문) 결정론 층화 표본 AI 검수: reviewer_sample_package→AI 검수→corpus_audit_eval 240 배치 선례 동형. 코퍼스별 독립 판정(Wilson 95% 단측 상한 ≤2%·min-n 200·as-found 병기·합격 로트 재채점 금지 §4.5), 감사 jsonl + docs/data 검수 기록, 불합격 코퍼스는 노출 부적격 유지·결함 유형 생성기 환류"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "docs/data/**"
+  - "data/corpus/**"
+session: null
+notes: "docs/architecture/problem_bank_gap_review.md §3 D2 — 게이트 통과 ≠ 학생 노출: 표본 검수 미경유 2,043문의 노출 자격 균일화. 검수=측정 게이트 경유(검증 권위 서열·PRD §6.4 대체)"
+updated: 2026-07-28

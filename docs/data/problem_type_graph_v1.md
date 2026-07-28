@@ -89,3 +89,5 @@ backend 거버넌스가 authoritative(형식은 `ptype.<slug>` vs UPPER_SNAKE로
 - **additive**: 기존 concept_node·atom_node·skill_node·검색과 무충돌(신규 테이블·신규 enum 0).
 - **Phase 3b(미룸)**: Problem↔ProblemType 연결(`Problem.problem_type_codes` 참조 배열·`signature_patterns`
   동형)은 생산자/소비처가 생길 때 추가한다 — 지금 넣으면 채울 좌석이 없어 dead code(소비처 없는 추상 미도입).
+  발화 조건 구체화(2026-07-28): `../architecture/problem_bank_gap_review.md` §5-③ — 커버리지
+  리포트(ARCH-18) 유형 축 수요 또는 L6 유형별 추천 소비처 실재 시.

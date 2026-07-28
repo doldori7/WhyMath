@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-09-multi-solution-pipeline-minimal
+title: "다중 풀이 생성 최소 가동 — 표본 단원 1개·문제당 ≥2 접근(정체성 갭)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "표본 단원 1개(예: 이차방정식 — 인수분해·근의 공식·완전제곱)에서 문제당 ≥2 접근의 검증된 풀이 생성: 각 풀이 수용 게이트(Tier1/2) 통과, 접근 간 동치성은 canonicalize·symbolic_equivalence 휴리스틱+검수 큐(확정 아님·분류만 — acceptance.py 스탠스 승계). 소비 슬라이스 동반: 학생 자기 풀이 제출 후 '다른 접근' 노출(L4 연계·바로 정답 제공 금지 정합). WH-S PRM 학습쌍 접근 다양화 부수 산출"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/**"
+  - "src/backend/whymath_backend/harness/**"
+session: null
+notes: "docs/architecture/problem_bank_gap_review.md §3 D6 — '다중 풀이 본질적 동치성 체험'은 제품 정체성인데 공급 0(status_roadmap S2 미체크 잔여 승계). SolutionPath 정본 설계는 03_content_generation.md"
+updated: 2026-07-28

@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-10-persona-fit-backfill
+title: "persona_fit 규칙 기반 백필 — 전 2,667건 {} 죽은 적격 경로 소생"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "코퍼스 6종 persona_fit 규칙 기반 결정론 백필(unit_codes·난이도 밴드·signature_patterns·질문 형식 유도·근거 동반·재실행 동일 출력 바이트 결정론) + populate 재적재 + l6 suneung/school_progress persona_fit 적격 후보 수 전0→후N>0 실측 리포트"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "src/backend/whymath_backend/l1/problem_bank/**"
+  - "data/corpus/**"
+session: null
+notes: "docs/architecture/problem_bank_gap_review.md §3 D3 — api/me.py '현 코퍼스 persona_fit 전부 {}라 실손실 0' 상태 해소(S3-03 수능 MVP 실질 선결). LLM 추정 아님. 페르소나별 세밀 조정은 D9(파일럿 실데이터) 후속"
+updated: 2026-07-28

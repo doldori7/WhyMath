@@ -899,3 +899,12 @@
 {"ts": "2026-07-28T12:31:01", "actor": "claude/whymath-concept-management-spnep8", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "src/data-pipeline/pyproject.toml", "mode": "warn", "detail": "'src/data-pipeline/pyproject.toml' 은 claim 태스크 OPS-14-data-pipeline-tests-lint의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-07-28T12:34:16", "actor": "claude/whymath-concept-management-spnep8", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 OPS-14-data-pipeline-tests-lint의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-07-28T12:35:01", "actor": "claude/whymath-concept-management-spnep8", "action": "done", "id": "OPS-14-data-pipeline-tests-lint", "artifacts": ["PR#632", "ci.yml data-pipeline 잡 src+tests lint·재포맷 23파일·_WIRINGS 등재·허용목록 제거"]}
+{"ts": "2026-07-28T23:53:29", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S3-09-problem-bank-v0-ai-review"}
+{"ts": "2026-07-28T23:53:30", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S3-10-persona-fit-backfill"}
+{"ts": "2026-07-28T23:53:30", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S3-11-problem-bank-data-card"}
+{"ts": "2026-07-28T23:53:45", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "ARCH-18-problem-bank-coverage-report"}
+{"ts": "2026-07-28T23:53:45", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "ARCH-19-answer-distribution-latex-gates"}
+{"ts": "2026-07-28T23:54:15", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S4-09-multi-solution-pipeline-minimal"}
+{"ts": "2026-07-28T23:54:15", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S4-10-unverifiable-domain-path"}
+{"ts": "2026-07-28T23:54:16", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S4-11-variant-lineage-persist"}
+{"ts": "2026-07-28T23:54:16", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S4-12-response-driven-difficulty-loop"}
