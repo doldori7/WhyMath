@@ -5,17 +5,19 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 5
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "체크리스트 §2 '대화 1건 왕복' 항목이 실행 명령을 갖는다(CLI 1개) + 왕복 성공만으로 암호화를 단정하지 않고 저장 표현(암호문/평문 델타)까지 판정해 exit 0/1 + 변별력 테스트(키 미설정 시 판정 뒤집힘) + 로컬 실 PG에서 실제 실행 통과"
-artifacts: []
+artifacts:
+  - "PR #630 — ops/dialogue_encryption_preflight.py(direct·--via-api 2모드·exit 0/1)·체크리스트 §2.1 신설. 검증: ruff·black clean·mypy --strict Success(424)·lint-imports 0 broken·전체 스위트 7561 passed/262 skipped exit 0(커버리지 92.24%)·계층 게이트 전 계층 PASS·신규 hermetic 7 passed"
+  - "CLI 실제 실행 4회: ①키 없음 FAIL(왕복은 성공하나 평문 +1) ②키 설정 PASS(암호문 +1) ③--via-api PASS(암호문 +2) ④절반만 성립(서버 키 없음·CLI 키 있음) FAIL — 범인을 '서버 프로세스'로 지목. 변별력 쌍(평문↑ FAIL / 암호문↑ PASS)으로 '항상 FAIL' 고장 배제"
 paths:
   - src/backend/whymath_backend/ops/dialogue_encryption_preflight.py
   - docs/standards/dialogue_encryption_deployment_checklist.md
-session: claude/education-os-architecture-mr0fbq
+session: null
 notes: "2026-07-28 Kiki 지시(선택지 ①). #616이 막힌 지점 — §2가 '왕복이 성공한다'만 적고 방법이 없다. PowerShell 명령을 문서에 적는 방식은 claude가 실행 검증할 수 없어 '가정 기반 런북 금지'에 걸리므로, 검증 가능한 CLI로 만들고 런북이 호출한다(ops/live_preflight 선례 — 키 주입 직후 1회 실행 도구). 왕복 성공은 평문 폴백에서도 성립하므로 저장 표현 판정을 반드시 함께 한다."
 updated: 2026-07-28
