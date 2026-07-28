@@ -855,3 +855,4 @@
 {"ts": "2026-07-28T01:58:53", "actor": "claude/whymath-service-review-9r21im", "action": "start", "id": "OPS-13-lint-coverage-generalization", "session": "claude/whymath-service-review-9r21im", "remote": "error+readscan_ok"}
 {"ts": "2026-07-28T02:11:36", "actor": "claude/whymath-service-review-9r21im", "action": "add", "id": "HARN-09-claim-namespace-refs-heads"}
 {"ts": "2026-07-28T02:12:16", "actor": "claude/whymath-service-review-9r21im", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 OPS-13-lint-coverage-generalization의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-07-28T02:12:38", "actor": "claude/whymath-service-review-9r21im", "action": "done", "id": "OPS-13-lint-coverage-generalization", "artifacts": ["fb5cb83"]}
