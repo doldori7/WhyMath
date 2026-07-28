@@ -885,3 +885,4 @@
 {"ts": "2026-07-28T11:23:55", "actor": "claude/whymath-concept-management-spnep8", "action": "add", "id": "S4-08-prod-retired-atom-cleanup"}
 {"ts": "2026-07-28T11:24:33", "actor": "claude/whymath-concept-management-spnep8", "action": "start", "id": "S4-08-prod-retired-atom-cleanup", "session": "claude/whymath-concept-management-spnep8", "remote": "ok"}
 {"ts": "2026-07-28T11:29:34", "actor": "claude/whymath-concept-management-spnep8", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 S4-08-prod-retired-atom-cleanup의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
+{"ts": "2026-07-28T11:31:53", "actor": "claude/whymath-concept-management-spnep8", "action": "done", "id": "S4-08-prod-retired-atom-cleanup", "artifacts": ["PR#628", "scripts/cleanup_atom_orphans.py --retired-from-ledger 모드 + tests/infra 10건"]}
