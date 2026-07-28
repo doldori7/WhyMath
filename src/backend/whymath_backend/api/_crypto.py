@@ -290,21 +290,19 @@ def require_dialogue_content_cipher(settings: Any) -> MultiKeyCipher | None:
     저장 금지")를 조용히 위반**한다 — 그리고 조용하기 때문에 아무도 모른다. 체크리스트는 사람이
     기억해야 작동하지만, 이 게이트는 잊어도 작동한다.
 
-    **프로덕션 판별**: 새 env 축을 만들지 않고 기존 "prod 추정" 신호를 재사용한다 — 실 OAuth
-    provider(kakao/naver) 구성 여부(`api/demo_auth.py::register_demo_provider` 선례). 프로덕션에는
-    항상 실 provider가 있고, 개발·CI에는 없다. 키를 하나 더 늘리지 않는 것과 같은 이유로 *설정
-    축*도 늘리지 않는다 — 새 축은 "설정하는 걸 잊는" 표면을 하나 더 만든다.
+    **프로덕션 판별**: `config.is_production_like`(단일 좌석)에 위임한다 — 판정 로직을 여기에
+    복사하면 스키마 버전 가드(SEC-03) 등 다른 소비처와 서로 표류한다. 판별 근거·새 env 축을
+    두지 않은 이유는 그 함수 docstring 참조.
 
     Raises:
         RuntimeError: prod 추정 환경인데 `WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY` 미설정.
     """
+    from whymath_backend.config import is_production_like
+
     cipher = build_dialogue_content_cipher(settings)
     if cipher is not None:
         return cipher
-    production_like = bool(
-        getattr(settings, "kakao_configured", False) or getattr(settings, "naver_configured", False)
-    )
-    if production_like:
+    if is_production_like(settings):
         raise RuntimeError(
             "프로덕션 추정 환경(실 OAuth provider 구성)인데 대화 암호화 키가 미설정입니다 — "
             "`WHYMATH_DIALOGUE_CONTENT_ENCRYPTION_KEY`를 설정하세요. 미성년자 대화·손글씨를 "

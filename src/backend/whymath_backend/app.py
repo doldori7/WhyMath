@@ -90,6 +90,7 @@ from whymath_backend.api.users import router as users_router
 from whymath_backend.api.verify import router as verify_router
 from whymath_backend.api.visualization import router as visualization_router
 from whymath_backend.config import get_settings
+from whymath_backend.db.schema_version import verify_schema_version
 from whymath_backend.db.session import dispose_engine
 from whymath_backend.l3 import pipeline
 from whymath_backend.l3.cache import RedisCache
@@ -359,6 +360,11 @@ async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
     기본) — 기존 L3 단위테스트(가짜 의존성)는 영향받지 않는다.
     """
     settings = get_settings()
+    # SEC-03: 스키마 버전(alembic head) 가드 — DB가 코드보다 *뒤처졌으면* 프로덕션에서 기동 거부.
+    # SEC-01의 fail-closed는 암호화 *키 부재*만 막고 마이그레이션 미적용은 막지 못했다(SEC-02
+    # 실측이 그 조합을 실물로 확인). store ping보다 먼저 둔다 — 스키마가 없으면 어차피 정상
+    # 동작이 불가하고, 진단 메시지도 "컬럼이 없다"가 "쿼리가 실패했다"보다 정확하다.
+    await verify_schema_version(settings)
     # 슬라이스 30: store 의존성(PG/Redis) 부팅 시 ping → 미도달이면 fail-fast.
     await ping_device_store_health(settings)
     store, cleanup_fn = build_device_store_from_settings(settings)

@@ -20,7 +20,7 @@ S2가 Redis 캐시 설정(redis_url)을 추가했으며, S3가 Langfuse 관측�
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -1167,6 +1167,11 @@ class Settings(BaseSettings):
         return bool(self.naver_client_id)
 
     @property
+    def production_like(self) -> bool:
+        """프로덕션 추정 — `is_production_like`의 Settings 표면(판정 로직은 그 함수가 단일 좌석)."""
+        return is_production_like(self)
+
+    @property
     def effective_celery_broker_url(self) -> str:
         """실제 Celery broker URL — celery_broker_url이 비어 있으면 redis_url로 폴백.
 
@@ -1183,6 +1188,32 @@ class Settings(BaseSettings):
         기본은 broker와 같은 redis_url을 재사용한다.
         """
         return self.celery_result_backend or self.redis_url
+
+
+def is_production_like(settings: Any) -> bool:
+    """프로덕션 추정 — **실 OAuth provider(kakao/naver) 구성 여부** 단일 판정 좌석.
+
+    프로덕션 전용 안전장치(대화 암호화 키 fail-closed·스키마 버전 가드)가 "지금이 프로덕션인가"를
+    각자 판단하면 서로 표류한다. 판정은 여기 하나뿐이고 소비처는 전부 이 함수를 부른다.
+
+    **새 env 축을 만들지 않은 이유**: 프로덕션엔 항상 실 provider가 있고 개발·CI엔 없다. 전용
+    `environment` 축을 새로 두면 그 축 자체가 *설정하는 걸 잊는* 표면을 하나 더 만든다 —
+    잊으면 안전장치가 조용히 꺼진다(SEC-01 결정·`api/demo_auth.py::register_demo_provider` 선례).
+
+    `Any`를 받는 이유: 실 `Settings` 구성 없이 분기를 시험하는 테스트 대역을 허용한다. 다만
+    속성 부재를 조용히 False로 흘리지 않도록 **두 속성이 모두 없으면 예외**를 낸다 — 조용한
+    False는 "프로덕션이 아니다"라는 *잘못된 판정*이 되어 안전장치를 통째로 무력화한다.
+    """
+    has_kakao = hasattr(settings, "kakao_configured")
+    has_naver = hasattr(settings, "naver_configured")
+    if not has_kakao and not has_naver:
+        raise TypeError(
+            "프로덕션 추정 판별에 필요한 속성(kakao_configured·naver_configured)이 "
+            f"모두 없습니다(받음: {type(settings).__name__}) — 조용히 '개발'로 판정하지 않습니다."
+        )
+    return bool(getattr(settings, "kakao_configured", False)) or bool(
+        getattr(settings, "naver_configured", False)
+    )
 
 
 @lru_cache(maxsize=1)
