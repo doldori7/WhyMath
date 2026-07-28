@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-04-jsonb-null-measurement-fix
+title: "JSONB null이 '평문'으로 계수되는 결함 — 백필 굶주림 + §3 실측 거짓경보"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: in_progress
+priority: 5
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "image_analysis의 Python None이 JSONB null이 아닌 SQL NULL로 저장 + 백필 WHERE가 JSONB null 행을 대상에서 제외(굶주림 해소·실 PG 재현 테스트 동결) + §3 판정 쿼리가 JSONB null을 평문으로 계수하지 않음"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/db/models/dialogue.py
+  - src/backend/whymath_backend/privacy/dialogue_content_backfill.py
+  - docs/standards/dialogue_encryption_deployment_checklist.md
+  - tests/backend/privacy/test_dialogue_content_backfill.py
+session: claude/education-os-architecture-mr0fbq
+notes: "2026-07-28 SEC-02 런북 검증 중 실측 발견. dialogue_turn.image_analysis가 JSONB(none_as_null 미설정)라 Python None이 JSON 스칼라 null로 저장된다 → ①§3 판정 쿼리의 'image_analysis IS NOT NULL'이 참이 되어 평문 행으로 오계수(프로덕션 실측에서 '암호화 안 됨' 거짓경보) ②SEC-01 백필 WHERE가 그 행들을 대상으로 잡아 LIMIT 창을 채우면 진짜 평문 행이 굶어죽는다 — 실 PG 재현: JSONB null 5행+평문 1행·batch_size=3에서 CLI가 '0행 처리'(완료)를 보고하고 평문 1행이 미암호화로 잔존."
+updated: 2026-07-28

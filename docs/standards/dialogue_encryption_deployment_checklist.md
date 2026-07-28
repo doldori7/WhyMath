@@ -110,9 +110,15 @@ SELECT
   count(*) FILTER (WHERE image_uri_encrypted IS NOT NULL)        AS image_uri_encrypted_rows,
   count(*) FILTER (WHERE image_uri IS NOT NULL)                  AS image_uri_plaintext_rows,
   count(*) FILTER (WHERE image_analysis_encrypted IS NOT NULL)   AS analysis_encrypted_rows,
-  count(*) FILTER (WHERE image_analysis IS NOT NULL)             AS analysis_plaintext_rows
+  -- SEC-04: `IS NOT NULL`만 쓰면 **JSONB 스칼라 null**("분석 없음" 행)이 평문으로 계수돼
+  -- "암호화 안 됨" 거짓경보가 난다. 실제 값이 있는 행만 센다.
+  count(*) FILTER (WHERE jsonb_typeof(image_analysis) NOT IN ('null'))
+                                                                 AS analysis_plaintext_rows
 FROM dialogue_turn;
 ```
+
+> `jsonb_typeof(NULL)`은 SQL NULL을 돌려주고 `NOT IN`은 NULL에서 참이 되지 않으므로, SQL NULL
+> 행과 JSONB `null` 행이 함께 제외된다 — 둘 다 "분석 없음"이라 평문 데이터가 아니다.
 
 **판정**: 암호화 도입 *이후* 생성된 행은 평문 카운트가 늘지 않아야 한다. 평문 카운트가 계속 는다면
 키가 실제로는 안 붙은 것이다(설정값 오타·프로세스 미재시작·다른 env 파일 로드 등).

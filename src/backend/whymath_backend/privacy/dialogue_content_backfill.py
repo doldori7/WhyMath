@@ -28,7 +28,7 @@ import json
 import sys
 from typing import Any
 
-from sqlalchemy import or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from whymath_backend.api._crypto import SupportsEnvelope, build_dialogue_content_cipher
@@ -68,8 +68,15 @@ async def reencrypt_plaintext_dialogue_content(
 
     plaintext_content = DialogueTurn.content_encrypted.is_(None) & DialogueTurn.content.is_not(None)
     plaintext_uri = DialogueTurn.image_uri_encrypted.is_(None) & DialogueTurn.image_uri.is_not(None)
-    plaintext_analysis = DialogueTurn.image_analysis_encrypted.is_(None) & (
-        DialogueTurn.image_analysis.is_not(None)
+    # SEC-04: `IS NOT NULL`만으로는 부족하다 — 이미 저장된 **JSONB 스칼라 `null`** 행이 여기
+    # 걸린다(모델 `none_as_null=True` 이전에 쓰인 행). 그 행은 암호화할 값이 없어 `values`가
+    # 비고 count가 안 오르는데, LIMIT 창은 차지한다 → 진짜 평문 행이 뒤로 밀려 **영영 처리되지
+    # 않고** CLI는 "0행 처리"를 완료로 보고한다(2026-07-28 실 PG 재현). `jsonb_typeof`로 실제
+    # 값이 있는 행만 대상에 넣어 굶주림을 없앤다.
+    plaintext_analysis = (
+        DialogueTurn.image_analysis_encrypted.is_(None)
+        & DialogueTurn.image_analysis.is_not(None)
+        & (func.jsonb_typeof(DialogueTurn.image_analysis) != "null")
     )
     sel = (
         select(
