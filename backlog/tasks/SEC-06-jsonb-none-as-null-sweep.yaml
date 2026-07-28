@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-06-jsonb-none-as-null-sweep
+title: "JSONB none_as_null 전수 점검 — Python None이 JSON null로 저장되는 47컬럼"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: in_progress
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "전 JSONB 컬럼이 none_as_null=True를 선언(의도적 예외는 허용목록+사유) + 거버넌스 테스트가 신규 컬럼 누락을 기계로 차단 + 변별력(선언 제거 시 테스트 실패) + 전체 스위트 회귀 0"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/db/models/*.py"
+  - tests/backend/db/test_jsonb_none_as_null_governance.py
+session: claude/education-os-architecture-mr0fbq
+notes: "2026-07-28 SEC-04 후속 전수 점검. 실측: JSONB 48컬럼 중 none_as_null=True는 SEC-04에서 고친 1개뿐. 위험 2종 — ①nullable=True 27개: Python None이 SQL NULL이 아니라 JSON 스칼라 null로 저장돼 IS NOT NULL 술어가 '값 있음'으로 오판(SEC-04 백필 굶주림·실측 거짓경보의 근원) ②nullable=False+기본값無 9개: 실 PG에서 NOT NULL 제약이 JSON null을 막지 못함을 실증 — '필수' 필드가 조용히 비어 있을 수 있다."
+updated: 2026-07-28

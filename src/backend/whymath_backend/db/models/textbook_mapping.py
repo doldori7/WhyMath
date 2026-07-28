@@ -75,7 +75,9 @@ class TextbookMapping(Base):
     curriculum_revision: Mapped[str | None] = mapped_column(sa.String)
 
     # ===== 톤 프로필 (별도 테이블 아님 — JSONB 컬럼; required) =====
-    tone_profile: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    tone_profile: Mapped[dict[str, object]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
 
     # ===== 출처·격리 메타 =====
     # source_urls: schema min_length=1(NOT NULL 의미) → server_default

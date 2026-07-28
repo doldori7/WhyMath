@@ -92,7 +92,7 @@ class EvidenceEvent(Base):
 
     # ===== B1: 비민감 메타만 평문·원문 발화는 봉투 암호화 =====
     # 비민감 메타(문항 ID·유형 등)만 평문 JSONB. 원문 발화 금지.
-    meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    meta: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     # 원문 발화 등 미성년 데이터 — AES-256-GCM 암호화 본문(dialogue_turn 선례 미러).
     payload_encrypted: Mapped[bytes | None] = mapped_column(sa.LargeBinary)
     # 96-bit nonce. 둘 다 NULL이면 원문 없음(메타만). 키가 DB 밖이라 dump 단독 복호 불가.

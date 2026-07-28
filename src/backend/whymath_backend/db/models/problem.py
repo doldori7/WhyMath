@@ -92,7 +92,7 @@ class Problem(Base):
         _pg_enum(SourceType, "source_type_enum"),
         nullable=False,
     )
-    source_detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    source_detail: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== 시험 컨텍스트 =====
     exam_type: Mapped[ExamType | None] = mapped_column(_pg_enum(ExamType, "exam_type_enum"))
@@ -132,23 +132,23 @@ class Problem(Base):
     scoring_type: Mapped[ScoringType | None] = mapped_column(
         _pg_enum(ScoringType, "scoring_type_enum")
     )
-    answer_constraint: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    answer_transform: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    answer_constraint: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    answer_transform: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== 본문·풀이·정답 (본문 미보유 불변식은 schema.Problem 책임) =====
     question_text: Mapped[str | None] = mapped_column(sa.Text)
     question_text_md: Mapped[str | None] = mapped_column(sa.Text)
     question_image_uri: Mapped[str | None] = mapped_column(sa.Text)
     # DDL은 choices가 JSONB(보기 5개) — schema는 list[str]이라 변환 헬퍼에서 list↔JSONB.
-    choices: Mapped[list[str] | None] = mapped_column(JSONB)
+    choices: Mapped[list[str] | None] = mapped_column(JSONB(none_as_null=True))
     answer: Mapped[str | None] = mapped_column(sa.Text)
     answer_explanation: Mapped[str | None] = mapped_column(sa.Text)
-    multiple_answers: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    multiple_answers: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     # P3b 신규: 객관식 오답 선지→오개념 매핑(rich list). schema는 list[DistractorEntry] —
     # model_dump()로 list[dict]가 되어 JSONB. nullable(server_default 없음 — source_detail·
     # multiple_answers와 동형, visualizations의 NOT NULL '[]' 패턴과 달리 *없음*을 NULL로 표현해
     # schema의 `distractor_map: ... | None = None`과 정합). 참조 무결성은 L4 검증자 소관.
-    distractor_map: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    distractor_map: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== 한국 시그니처 패턴 (enum 배열) =====
     signature_patterns: Mapped[list[SignaturePattern]] = mapped_column(
@@ -164,7 +164,7 @@ class Problem(Base):
     condition_count: Mapped[int | None] = mapped_column(sa.Integer)
     # conditions_parsed: schema는 list[Condition] — model_dump()로 list[dict]가 되어 JSONB.
     conditions_parsed: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
 
     # ===== 시각자료 =====
@@ -177,7 +177,7 @@ class Problem(Base):
     visual_complexity: Mapped[int | None] = mapped_column(sa.Integer)
     # visualizations: schema는 list[Visualization] — model_dump()로 list[dict]가 되어 JSONB.
     visualizations: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
 
     # ===== 다차원 난이도 (5축) =====
@@ -212,18 +212,18 @@ class Problem(Base):
     feedback_id: Mapped[str | None] = mapped_column(sa.String(64))
 
     # ===== 페르소나 적합도 (JSONB — schema는 dict[Persona, float]) =====
-    persona_fit: Mapped[dict[str, float] | None] = mapped_column(JSONB)
+    persona_fit: Mapped[dict[str, float] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== EBS 연계 =====
     ebs_linked: Mapped[bool] = mapped_column(sa.Boolean, nullable=False, server_default=sa.false())
-    ebs_source: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    ebs_source: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== 단원 융합 (JSONB — schema는 list[list[str]]) =====
     is_cross_unit: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, server_default=sa.false()
     )
     cross_unit_pairs: Mapped[list[list[str]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
 
     # ===== 그래프 개형 추론 =====
@@ -333,7 +333,7 @@ class ProblemStep(Base):
     socratic_prompt: Mapped[str | None] = mapped_column(sa.Text)
     expected_answer: Mapped[str | None] = mapped_column(sa.Text)
     common_mistakes: Mapped[list[dict[str, Any]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
 
     __table_args__ = (sa.UniqueConstraint("problem_id", "step_order"),)
