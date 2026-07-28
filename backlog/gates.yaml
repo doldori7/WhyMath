@@ -36,15 +36,6 @@ gates:
     remind_after_days: 14
     evidence: "2026-07-16 Kiki가 Phaiakes9 whymath-pg(docker·pgvector/pg16·호스트 5433)에서 diagnose_atom_orphans.py 실행. concept/atom_node/atom_embedding/concept_content 미적 계열 0행(R1 raw 잔존 없음). misconception_catalog 140건은 H: 네임스페이스 정상 어휘 오탐(현행 misconceptions_v1 코퍼스에 동일 H: 코드 142건) — 진짜 orphan 0건. 스크립트 오탐 필터(mis_id LIKE 'ATOM:%') 수정 커밋 동반."
     notes: ""
-  - id: G-retired-atom-prod-cleanup
-    title: "prod(whymath-pg) 은퇴 원자 14행 정리 실행 (scripts/cleanup_atom_orphans.py --retired-from-ledger)"
-    kind: human
-    assignee: kiki
-    status: pending
-    requested: 2026-07-28
-    remind_after_days: 14
-    evidence: null
-    notes: "S4-07 병합 후속 — 재적재는 upsert-only라 은퇴 원자(기수 11·미적Ⅱ 2·NUMER 1)가 prod에 잔존. dry-run 리포트 확인 후 --confirm 실행(런북 동봉·G-orphan-prod-run 동형 패턴)"
   - id: G-phaiakes9-key
     title: "Phaiakes9 라이브 키 투입 + 실측 비용 검증"
     kind: human
@@ -54,6 +45,15 @@ gates:
     remind_after_days: 7
     evidence: "READY:True (check_status 6모델 전부·2026-07-09) + 라이브 rephrase 184/590 성공. '키 투입'(서버 라이브·도달·첫 파이프라인 동작) 충족. '실측 비용 검증'은 S1-12(클라우드 티어)로 이관"
     notes: "ROADMAP 병목 ② — S1 라이브 선행분 전체의 선결 조건"
+  - id: G-retired-atom-prod-cleanup
+    title: "prod(whymath-pg) 은퇴 원자 14행 정리 실행 (scripts/cleanup_atom_orphans.py --retired-from-ledger)"
+    kind: human
+    assignee: kiki
+    status: cleared
+    requested: 2026-07-28
+    remind_after_days: 14
+    evidence: "2026-07-28 Kiki가 Phaiakes9 whymath-pg(docker·5433)에서 실행. ①재적재: populate 2,683 concepts·2,210 edges(parent_skip 0·edge_skip 0 — 병합 코퍼스·재배선 엣지 prod 반영) ②cleanup --retired-from-ledger dry-run·--confirm·재확인 dry-run 3회 모두 전 5테이블 0건(스캔 실패 0 — 스키마 실재 확인). 은퇴 원자 14행 '잔존' 가정은 실측 반증 — prod 이전 적재가 기수/NUMER 트랙 코퍼스 편입 이전이라 애초 미적재(S2-04 공집합 충족 동형). 정리 대상 부재로 삭제 0이 정답."
+    notes: "S4-07 병합 후속. 당초 '재적재는 upsert-only라 은퇴 원자 14행 잔존' 가정으로 요청 — 실측 결과 가정 반증(evidence 참조·잔존 0). 재적재+공집합 확인으로 목적 달성"
   - id: G-s5-subject-expansion
     title: "S5 타과목 확장 게이트 — E축 착수 판정 체크리스트 전부 충족 (e_axis_v1 §5)"
     kind: decision

@@ -337,6 +337,10 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-28 (실측·게이트 clear): **prod 은퇴 원자 정리 실행 — "14행 잔존" 가정 실측 반증(잔존 0)·재적재로 병합 코퍼스 prod 반영 완료** (Kiki 실행·claude 판정)
+
+**실측(2026-07-28·Phaiakes9 whymath-pg)**: ①재적재 `populate` 2,683 concepts·2,210 edges(skip 0 — 병합 대표·재배선 엣지 prod 반영) ②`cleanup --retired-from-ledger` dry-run·--confirm·재확인 3회 모두 **전 5테이블 0건**(스캔 실패 0 — 5테이블 스키마 실재로 대상 DB 정합 확인). **교훈(추론→실측 정정)**: S4-07 보고의 "은퇴 원자 14행 잔존"은 upsert-only에서 유도한 *추론*이었고 실측으로 반증 — prod의 이전 원자 적재가 기수/NUMER 트랙의 코퍼스 편입 *이전*이라 은퇴 행이 애초에 적재된 적 없음(S2-04 "공집합 충족" 동형·환경 사실은 실측이 정본 재확인). 스크립트·가드·런북은 다음 실 정리 수요 시 그대로 재사용. 게이트 G-retired-atom-prod-cleanup cleared(evidence 상세). 부수: `python -m ...populate`의 runpy RuntimeWarning은 무해(패키지 import 후 서브모듈 -m 실행 관용 — 산출 정상).
+
 ### 2026-07-28 (구현·S4-08): **prod 은퇴 원자 정리 스크립트 일반화 — ledger 정확 일치 모드 + M-series 오삭제 잠재 결함 정합** (claude 구현, Kiki "1"[후속 1번] 선택)
 
 **배경**: S4-07 병합으로 원자 14건이 코퍼스에서 은퇴했지만 prod(whymath-pg) 재적재는 upsert-only라 은퇴 행이 잔존. 기존 `cleanup_atom_orphans.py`는 '미적' LIKE 마커 한정이라 기수 11·NUMER 1건을 구조적으로 못 본다(2026-07-28 S4-07 보고에서 공백 등재).
