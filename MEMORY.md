@@ -347,6 +347,8 @@
 
 **검증**: ruff·black clean · mypy --strict Success(423) · lint-imports 0 broken · 신규 hermetic **15 passed** · 실 PG 통합 **231 passed**. **변별력 실측 3회**: ①head 상수 1개 누락 → 동결 테스트 2건 FAIL ②`AHEAD` 구분 제거(엄격 동일성 회귀) → `test_unknown_revision_is_ahead`·`test_ahead_does_not_block_production` FAIL(막고 싶던 롤백 장애 그 자체) ③**실 PG에서 SEC-02가 만난 상태 재현** — `alembic_version`을 `f3a4b5c6d7e8`로 실제 UPDATE 후 프로덕션 거부·개발 경고를 확인하고 원복. 대역이 아니라 진짜 `alembic_version` 쿼리가 도는 것을 실증했다.
 
+**자체 결함 1건 — 실측으로 잡아 고쳤다(무한 부팅 대기)**: 최초 구현에 **타임아웃이 없었다.** 연결 *거부*는 0.04s로 끝나 정상처럼 보였으나, 패킷이 *드롭*되는 호스트(방화벽·오타난 주소)로 실측하니 **30s 관찰 상한을 넘겨도 안 끝났다** — 잘못된 DB 주소 하나로 부팅이 영원히 멈추는 상태였다. CI docker-build 스모크가 green이라 "괜찮다"고 넘어갈 뻔했다(그 잡의 DB는 *연결 거부* 케이스였다 — **통과가 안전을 뜻하지 않는 전형**). `ping_device_store_health`가 같은 함정으로 이미 슬라이스 31에서 타임아웃을 도입했었다. 대책: `device_store_health_check_timeout_seconds` **재사용**(새 축 0)으로 상한 5.01s 실측 확인 + 회귀 동결(`TestBootIsNotHeldIndefinitely` — 타임아웃 제거 시 테스트가 매달려 25s 강제 종료되는 것으로 변별력 확인).
+
 **경계**: 마이그레이션 0 · 신규 설정 축 0(escape hatch를 두지 않았다 — 가드를 끄는 축은 그 자체가 "켜는 걸 잊는" 표면이다) · 개발·CI 동작 불변(경고만) · `AHEAD`는 프로덕션에서도 미차단.
 
 ### 2026-07-27 (재발방지·규칙 등재): **Kiki 머신 안내 명령의 실행기 단독 호출 금지 — `python -m pip`/`python -m pytest` 강제** (claude 등재, 실수 관리 의무)

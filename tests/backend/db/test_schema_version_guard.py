@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from pathlib import Path
 from typing import Any
 
@@ -184,3 +186,47 @@ class TestVerifyFailClosed:
         with caplog.at_level(logging.WARNING):
             await verify_schema_version(_FakeSettings())
         assert "확인하지 못했습니다" in caplog.text
+
+
+class TestBootIsNotHeldIndefinitely:
+    """블랙홀 DB(패킷 드롭)에서 부팅이 무한 대기하지 않는다 — 2026-07-28 실측 결함의 동결.
+
+    연결 *거부*는 즉시 끝나지만 패킷이 드롭되는 호스트는 안 끝난다. 타임아웃 없이 배포했다면
+    잘못된 DB 주소 하나로 부팅이 영원히 멈췄을 것이다(`ping_device_store_health` 슬라이스 31과
+    같은 함정).
+    """
+
+    async def test_hanging_connection_is_bounded(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """세션 획득이 끝나지 않아도 타임아웃이 끊고 판정(프로덕션=거부)으로 넘어간다."""
+
+        class _HangingCM:
+            async def __aenter__(self) -> Any:
+                await asyncio.sleep(3600)  # 영원히 안 끝나는 연결
+                raise AssertionError("unreachable")
+
+            async def __aexit__(self, *_exc: object) -> None:
+                return None
+
+        monkeypatch.setattr(
+            "whymath_backend.db.session.get_sessionmaker",
+            lambda _s: (lambda: _HangingCM()),
+            raising=True,
+        )
+        settings = _FakeSettings(kakao=True)
+        settings.device_store_health_check_timeout_seconds = 0.05  # type: ignore[attr-defined]
+
+        started = time.monotonic()
+        with pytest.raises(RuntimeError, match="확인하지 못했습니다"):
+            await verify_schema_version(settings)
+        # 타임아웃이 없으면 여기까지 오지 못한다(테스트가 매달린다) — 상한도 함께 확인.
+        assert time.monotonic() - started < 2.0
+
+    async def test_timeout_knob_is_reused_not_reinvented(self) -> None:
+        """새 설정 축을 만들지 않고 기존 startup health check 노브를 쓴다(설정 표면 최소화)."""
+        from whymath_backend.config import Settings
+
+        assert hasattr(Settings, "model_fields")
+        assert "device_store_health_check_timeout_seconds" in Settings.model_fields
+        assert not any(
+            name.startswith("schema_version") for name in Settings.model_fields
+        ), "스키마 가드 전용 설정 축이 생겼다 — 재사용 원칙 위반"

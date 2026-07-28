@@ -24,6 +24,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from enum import Enum
 from typing import Any
@@ -164,10 +165,17 @@ async def verify_schema_version(settings: Any) -> None:
 
     production_like = is_production_like(settings)
 
+    # 타임아웃 필수 — 없으면 *패킷이 드롭되는* DB 호스트(방화벽·잘못된 주소)에서 부팅이 무한
+    # 대기한다(연결 거부는 즉시 끝나지만 블랙홀은 안 끝난다 — 2026-07-28 실측: 30s 관찰 상한
+    # 초과). `ping_device_store_health`가 같은 이유로 이미 이 노브를 쓴다(슬라이스 31) — 새 축을
+    # 만들지 않고 재사용한다. 타임아웃 초과는 아래 except가 "확인 불가"로 받아 프로덕션에선 거부.
+    timeout_seconds = float(getattr(settings, "device_store_health_check_timeout_seconds", 5.0))
+
     try:
-        sessionmaker = get_sessionmaker(settings)
-        async with sessionmaker() as session:
-            applied_heads = await read_applied_heads(session)
+        async with asyncio.timeout(timeout_seconds):
+            sessionmaker = get_sessionmaker(settings)
+            async with sessionmaker() as session:
+                applied_heads = await read_applied_heads(session)
     except Exception as exc:
         message = (
             f"스키마 버전을 확인하지 못했습니다({type(exc).__name__}) — "
