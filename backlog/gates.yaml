@@ -36,6 +36,15 @@ gates:
     remind_after_days: 14
     evidence: "2026-07-16 Kiki가 Phaiakes9 whymath-pg(docker·pgvector/pg16·호스트 5433)에서 diagnose_atom_orphans.py 실행. concept/atom_node/atom_embedding/concept_content 미적 계열 0행(R1 raw 잔존 없음). misconception_catalog 140건은 H: 네임스페이스 정상 어휘 오탐(현행 misconceptions_v1 코퍼스에 동일 H: 코드 142건) — 진짜 orphan 0건. 스크립트 오탐 필터(mis_id LIKE 'ATOM:%') 수정 커밋 동반."
     notes: ""
+  - id: G-retired-atom-prod-cleanup
+    title: "prod(whymath-pg) 은퇴 원자 14행 정리 실행 (scripts/cleanup_atom_orphans.py --retired-from-ledger)"
+    kind: human
+    assignee: kiki
+    status: pending
+    requested: 2026-07-28
+    remind_after_days: 14
+    evidence: null
+    notes: "S4-07 병합 후속 — 재적재는 upsert-only라 은퇴 원자(기수 11·미적Ⅱ 2·NUMER 1)가 prod에 잔존. dry-run 리포트 확인 후 --confirm 실행(런북 동봉·G-orphan-prod-run 동형 패턴)"
   - id: G-phaiakes9-key
     title: "Phaiakes9 라이브 키 투입 + 실측 비용 검증"
     kind: human
