@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-08-prod-retired-atom-cleanup
+title: "prod DB 은퇴 원자 14행 정리 — cleanup 스크립트 ledger 모드 일반화 + Kiki 게이트 실행"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: done
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "cleanup_atom_orphans.py에 --retired-from-ledger 모드(dedup_merges_v1.json applied.retired 14코드 정확 삭제·canonical 충돌 가드·dry-run 기본·--confirm) + misconception_catalog H: 오탐 필터(mis_id LIKE 'ATOM:%') 정합 + hermetic 테스트 + Kiki prod 실행 런북"
+artifacts:
+  - "PR#628"
+  - "scripts/cleanup_atom_orphans.py --retired-from-ledger 모드 + tests/infra 10건"
+paths:
+  - scripts/cleanup_atom_orphans.py
+  - tests/infra/test_cleanup_atom_orphans.py
+session: null
+notes: "S4-07 후속 — prod 재적재가 upsert-only라 은퇴 원자 14행 잔존. 기존 스크립트는 '미적' LIKE 한정이라 기수/NUMER 미커버(2026-07-28 실측 보고). 이 태스크 = 스크립트 일반화+런북(claude). prod 실제 실행은 *후행* 게이트 G-retired-atom-prod-cleanup(Kiki)이 별도 추적 — requires_gates가 아닌 이유: 게이트는 이 산출물(스크립트·런북)을 소비하는 다음 단계다."
+updated: 2026-07-28

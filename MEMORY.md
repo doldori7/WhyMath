@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-28 (구현·S4-08): **prod 은퇴 원자 정리 스크립트 일반화 — ledger 정확 일치 모드 + M-series 오삭제 잠재 결함 정합** (claude 구현, Kiki "1"[후속 1번] 선택)
+
+**배경**: S4-07 병합으로 원자 14건이 코퍼스에서 은퇴했지만 prod(whymath-pg) 재적재는 upsert-only라 은퇴 행이 잔존. 기존 `cleanup_atom_orphans.py`는 '미적' LIKE 마커 한정이라 기수 11·NUMER 1건을 구조적으로 못 본다(2026-07-28 S4-07 보고에서 공백 등재).
+
+**구현**: `--retired-from-ledger` 모드 추가 — `dedup_merges_v1.json` applied[].retired 14코드를 **정확 일치**로 5테이블(concept+FK 파급·atom_node·atom_embedding·concept_content·misconception_catalog)에서 정리. 가드 5중: dry-run 기본·--confirm 필수·**ledger∩canonical 비공집합이면 전체 거부**(병합 미반영 코퍼스 위 실행 방지)·M-series 보호·단일 트랜잭션+FK 순서. hermetic 테스트 10건(기존 5 + 은퇴 모드 3 + ATOM: 한정 1 + 실 ledger ground truth 1).
+
+**잠재 결함 정합(사고 예방)**: diagnose는 2026-07-16에 `mis_id LIKE 'ATOM:%'` 오탐 필터를 갖췄지만 **cleanup의 misconception_catalog 스캔·삭제엔 그 필터가 누락** — H: 네임스페이스 M-series 행 140+건이 '미적' LIKE에 걸려 `--confirm` 시 삭제될 수 있었다(S2-04 당시 orphan 0건이라 미발화). `_EXTRA_WHERE` 공용 술어로 스캔·삭제 양쪽 정합 + 회귀 테스트 동결. prod 실제 실행은 게이트 **G-retired-atom-prod-cleanup**(Kiki·런북 동봉·G-orphan-prod-run 동형).
+
 ### 2026-07-28 (S4-07 실행): **중복 원자 병합 14건 실행 — D13·D18은 사이클 충돌로 보류(Kiki 확정)** (claude 실행·Kiki "14건만 실행" 선택)
 
 **실행(원자 백본 마이그레이션)**: 검수 승인 16쌍 중 14쌍을 코퍼스에서 통합 — **원자 1,837→1,823·전체 노드 2,697→2,683·선수엣지 2,213→2,210**(재배선 32·중복 제거 3·자기루프 0)·narrative 재배선 2·crosswalk 재배선 13행. 대표 규칙: **학습 경로상 선행/주 트랙 우선**(공수>기수·미적Ⅰ>Ⅱ·CALC1>ANAL2/NUMER). 대표 원자에 은퇴 성취기준 병기 + notes 병합 provenance 1줄. 정본 맵 `data/corpus/atom_graph_v1/dedup_merges_v1.json`(applied 14·deferred 2 — 은퇴 code 잔존 참조 해석·재부상 방지 겸용).
