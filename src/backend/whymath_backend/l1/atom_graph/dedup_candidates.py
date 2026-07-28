@@ -18,8 +18,10 @@
   - stdout에 **유사도 분포 통계**(밴드 히스토그램·근사 백분위)를 함께 낸다 — 임계값 캘리브레이션의
     실측 근거 재료(점추정·인상 판정 금지의 보조).
 
-기본 임계 0.90은 **잠정(보수)** — 실모델(bge-m3) 분포 실측 후 조정한다(fake provider 분포는
-캘리브레이션 근거가 아니다).
+기본 임계 0.90은 **실측 확정**(2026-07-28 bge-m3·Phaiakes9 — `DEFAULT_THRESHOLD` 주석의 분포
+근거 참조). fake provider 분포는 캘리브레이션 근거가 아니다. 실측 후보의 지배 패턴은
+공통수학↔기하 병렬 트랙 중복·학년 간 동명 원자였다 — 병합/유지 판정은 교육과정 트랙 설계
+관점이 필요한 전문가 검수 소관이다(MEMORY 2026-07-28 결정 로그).
 """
 
 from __future__ import annotations
@@ -32,8 +34,9 @@ from pathlib import Path
 from whymath_backend.l1.atom_graph.embedding import AtomText, load_atoms_from_graph_json
 from whymath_backend.l1.embedding_provider import EmbeddingProvider, cosine_similarity
 
-# 잠정(보수) 기본 임계 — 실모델 분포 실측 전. 근거: 동일 표현(name+transfer 사실상 일치) 수준만
-# 후보로 올려 검수 부담을 낮춘다. 캘리브레이션은 stdout 분포 통계(실모델 실행)로.
+# 기본 임계 — **실측 확정**(2026-07-28 bge-m3·Phaiakes9·전수 1,686,366쌍). 근거: p99=0.64로
+# 0.80 이상이 극단 꼬리(249쌍·0.015%)이고 밴드가 [0.85,0.90) 65건 → [0.90,0.95) 19건으로 급감 —
+# 0.90이 자연 분리점이며 후보 24건은 사람 검수 가능 규모(상위 후보 전건이 유의미한 의심쌍).
 DEFAULT_THRESHOLD: float = 0.90
 # 후보 폭주 안전 상한(검수 큐가 사람 처리 가능 규모를 넘지 않게) — 초과분은 잘라내고 보고한다.
 DEFAULT_MAX_CANDIDATES: int = 200
