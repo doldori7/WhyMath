@@ -16,6 +16,10 @@ black --check 17파일이 실패 상태였다. 하네스는 backlog 대장을 �
 "검증 장치를 만들고 배선 확인 없이 완료 선언 금지"가 겨냥하는 형태). 새 lint 배선을
 추가하면 `_WIRINGS`에 (잡, 대상 경로들) 한 줄을 추가해 같은 계약으로 동결하라.
 
+**이 파일만으로는 부족하다** (OPS-13): 여기 표는 *등재된 것*의 품질만 본다 — 등재 자체를
+빠뜨리면 못 잡는다. 누락 축은 `test_lint_coverage.py`가 소스에서 출발해 전수로 검사한다.
+두 파일은 역할이 갈리므로 계약을 중복시키지 않는다(품질 ↔ 누락).
+
 검증 계약
 --------
 ① 각 잡에 ruff·black 스텝이 **둘 다** 있다
@@ -37,8 +41,8 @@ _CI_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 
 # (잡 이름, 그 잡이 lint해야 하는 대상 경로들) — 배선 추가 시 여기에 등재해 동결한다.
 _WIRINGS: list[tuple[str, tuple[str, ...]]] = [
-    ("infra-contracts", ("tests/infra",)),  # OPS-11
-    ("harness-integrity", ("scripts/harness", "tests/harness")),  # OPS-12
+    ("infra-contracts", ("tests/infra", "infra", "conftest.py")),  # OPS-11 · OPS-13
+    ("harness-integrity", ("scripts", "tests/harness")),  # OPS-12 · OPS-13(harness→scripts 확대)
 ]
 _WIRING_IDS = [job for job, _ in _WIRINGS]
 

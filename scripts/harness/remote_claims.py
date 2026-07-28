@@ -1,27 +1,53 @@
-"""원격 claim — refs/claims/* 네임스페이스, git ref push의 CAS 원자성 이용.
+"""원격 claim — 단일 `harness-claims` 브랜치, git ref push의 CAS 원자성 이용.
 
 배경: 태스크 claim(Task.session)은 각 세션 worktree의 backlog/ 사본에만 기록되어
-merge 전까지 병렬 세션끼리 서로 보이지 않는다(TOCTOU 레이스). 이 모듈은 origin에
-`refs/claims/<task-id>` ref를 push해 claim을 실시간 공유한다.
+merge 전까지 병렬 세션끼리 서로 보이지 않는다(TOCTOU 레이스). 이 모듈은 origin의
+`refs/heads/harness-claims` 브랜치에 `claims/<task-id>.json`을 두어 claim을 실시간
+공유한다.
+
+왜 브랜치인가 (HARN-09 — 네임스페이스 이전):
+    원래 설계는 `refs/claims/<id>`였으나 **이 실행 환경의 git 프록시가 그 네임스페이스
+    push를 거부**한다(HTTP 403 → hung up). 2026-07-28 실측이 원인을 좁혔다:
+
+        refs/claims/<id>  blob push  → 거부
+        refs/heads/<id>   커밋 push  → **성공**
+
+    권한이 아니라 네임스페이스 문제였다. 그래서 브랜치 네임스페이스로 옮긴다.
+    **태스크당 브랜치가 아니라 단일 브랜치**인 이유는 같은 프록시가 ref *삭제*도
+    거부하기 때문이다 — 태스크당 브랜치면 해제가 불가능해 93개+가 영구 누적된다.
+    단일 브랜치면 해제가 그냥 "파일을 지우는 커밋"이라 삭제 push가 아예 불필요하다.
 
 원자성 (CAS — compare-and-swap):
-    git push --force-with-lease=refs/claims/<id>: origin <blob>:refs/claims/<id>
-    expect가 빈 값인 force-with-lease = "원격에 그 ref가 아직 없어야만 성공".
-    서버가 ref 갱신을 트랜잭션 처리하므로 두 세션이 동시에 push해도 정확히
-    한쪽만 성공한다 — lock 파일 없는 진짜 원자적 claim.
-    2차 방어: blob→blob 갱신은 ancestry가 없어 non-fast-forward로 항상 거부.
+    git push --force-with-lease=refs/heads/harness-claims:<base-sha> \
+             origin <commit>:refs/heads/harness-claims
+    lease가 base sha와 다르면(= 그 사이 남이 push했으면) 서버가 거부한다. 서버는 ref
+    갱신을 트랜잭션 처리하므로 두 세션이 동시에 push해도 정확히 한쪽만 성공한다 —
+    lock 파일 없는 진짜 원자적 claim. 브랜치 최초 생성은 lease를 빈 값으로 준다
+    (= "그 ref가 아직 없어야만 성공").
+
+    **경합 재시도**: lease 거부는 "이 태스크가 남에게 잡혔다"가 아니라 "그 사이 *누군가*
+    브랜치를 갱신했다"는 뜻이다(대개 다른 태스크의 claim). 그래서 재fetch 후 재시도하며,
+    재시도 중 내 태스크가 실제로 잡혔음을 트리에서 확인했을 때만 conflict로 판정한다.
+    **태스크 점유 판정은 push stderr가 아니라 트리 내용이 결정한다** — 이 분리가
+    "남의 claim"과 "동시 갱신"을 혼동하지 않게 한다.
+
+    트리는 `git mktree`로 직접 만든다(인덱스 미사용) — 사용자의 인덱스·작업 트리를
+    건드릴 수 없는 구조라 GIT_INDEX_FILE 오염 위험이 원천 차단된다.
 
 폴백 (fail-open — 훅·CLI가 개발을 볼모로 잡지 않는다):
     - offline/error(네트워크·권한): 경고 + 이벤트 로그 후 아래 *읽기측 탐지*로 폴백.
     - conflict(다른 세션이 이미 claim): 정보가 확정적이므로 이것만 차단.
 
 읽기측 교차 세션 탐지 (HARN-07 — CAS가 막힌 환경의 부분 방어):
-    2026-07-27 실측: 이 실행 환경의 git 프록시는 refs/claims/* push를 HTTP 403으로
-    거부한다. 즉 CAS claim은 "가끔 실패"가 아니라 **한 번도 성공한 적이 없고**,
-    fail-open이 모든 start를 통과시켜 중복 방지가 상시 무력이었다(OPS-07을 두 세션이
-    병렬 구현해 한쪽을 폐기한 사고). 쓰기는 막혔지만 **읽기는 된다** —
+    HARN-09 이전에는 CAS가 **한 번도 성공한 적이 없어**(위 403) fail-open이 모든
+    start를 통과시켰고, 중복 방지가 상시 무력이었다 — 그 결과가 병렬 중복 구현 2회
+    (OPS-07 → #611, OPS-12 → #618)다. 쓰기가 막혀도 **읽기는 됐으므로**
     `scan_remote_in_progress()`가 원격 브랜치들의 backlog 사본을 읽어 같은 태스크가
     이미 in_progress인지 탐지한다.
+
+    HARN-09로 CAS가 복구된 뒤에도 이 경로는 **제거하지 않는다** — 진짜 오프라인·권한
+    문제로 CAS가 실패하는 환경에서 여전히 2선 방어다. 다만 CAS가 성공하면 읽기측
+    스캔은 돌지 않는다(중복이며 느리다).
 
     이것은 CAS의 대체가 아니라 *부분* 방어다 (과장 금지):
       · 상대 세션이 **브랜치를 push한 뒤에만** 보인다 — push 전 로컬에서 작업 중인
@@ -43,8 +69,13 @@ stale 홀더 처리 (HARN-08 — 읽기측의 과탐 해소):
     전부 해소되며, 나이 컷오프는 느리게 진행하는 실 세션을 오탐 해제할 위험만 더한다.
     걸러낸 홀더는 버리지 않고 ScanResult.skipped에 사유와 함께 남긴다(관측 가능성).
 
-stale claim 청소: 세션이 release 없이 죽으면 ref가 남는다 → `claims reap`이
+stale claim 청소: 세션이 release 없이 죽으면 claim 파일이 남는다 → `claims reap`이
 3중 기준(TTL 초과·태스크 이미 done/cancelled·태스크 미존재)으로 감지·삭제.
+
+    ⚠️ `list_claims`의 **상태값을 반드시 확인하라**. "claim 0건"과 "조회 실패"를
+    구분하지 않으면 인프라가 죽었을 때 "0건 통과"로 위장된다 — HARN-09 착수 실측에서
+    CI의 교차검증 스텝이 정확히 그 상태였다(refs/claims/*가 0건이라 `reap`이 늘
+    "stale claim 없음"을 보고). 빈 목록은 상태가 ok일 때만 "없음"을 의미한다.
 """
 
 from __future__ import annotations
@@ -57,12 +88,19 @@ from pathlib import Path
 
 from models import Backlog
 
-CLAIMS_NS = "refs/claims"
-# 메타 fetch용 로컬 미러 네임스페이스 (로컬 refs와 충돌 없는 전용 공간)
-LOCAL_MIRROR_NS = "refs/whymath-claims"
+# claim 저장소 = origin의 단일 브랜치. 태스크당 파일 1개.
+CLAIMS_BRANCH = "harness-claims"
+CLAIMS_REF = f"refs/heads/{CLAIMS_BRANCH}"
+CLAIMS_DIR = "claims"
+# 로컬 미러 ref (로컬 브랜치와 충돌 없는 전용 공간 — 체크아웃 대상이 아니다)
+LOCAL_MIRROR_REF = "refs/whymath-claims/head"
+# lease 거부 후 재시도 횟수. 경합은 "남이 *다른* 태스크를 claim했다"가 대부분이라
+# 몇 번이면 수렴한다. 무한 재시도는 start를 볼모로 잡으므로 유한하게 자른다.
+CAS_RETRIES = 3
 
-# push 거부(=이미 claim됨) 판별 패턴 — git 버전별 문구 차이 흡수
-_CONFLICT_MARKERS = ("[rejected]", "stale info", "already exists", "non-fast-forward")
+# push 거부 = **lease 경합**(그 사이 남이 브랜치를 갱신) 판별 패턴.
+# 주의: 이것은 "내 태스크가 잡혔다"가 아니다 — 태스크 점유는 트리에서만 판정한다.
+_LEASE_MARKERS = ("[rejected]", "stale info", "already exists", "non-fast-forward", "fetch first")
 # 네트워크·환경 문제 판별 패턴
 _OFFLINE_MARKERS = (
     "could not resolve",
@@ -96,12 +134,21 @@ class ClaimResult:
 
 
 def _git(
-    root: Path, *argv: str, timeout: int = 15, input_text: str | None = None
+    root: Path,
+    *argv: str,
+    timeout: int = 15,
+    input_text: str | None = None,
+    env_extra: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess:
-    """git 실행 — 테스트 monkeypatch 지점. 인증 프롬프트 행 방지."""
+    """git 실행 — 테스트 monkeypatch 지점. 인증 프롬프트 행 방지.
+
+    `env_extra`는 `commit-tree`의 신원(author/committer)용이다. CI 러너나 갓 만든
+    클론에는 `user.email`이 없어 commit-tree가 실패할 수 있는데, claim 커밋은 사람의
+    저작물이 아니라 하네스의 기록이므로 전역 git 설정에 의존하지 않는다.
+    """
     import os
 
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", **(env_extra or {})}
     return subprocess.run(
         ["git", *argv],
         cwd=root,
@@ -113,6 +160,15 @@ def _git(
     )
 
 
+# claim 커밋의 고정 신원 — 전역 git 설정 부재 환경에서도 commit-tree가 성립하게 한다.
+_COMMIT_IDENTITY = {
+    "GIT_AUTHOR_NAME": "whymath-harness",
+    "GIT_AUTHOR_EMAIL": "harness@whymath.invalid",
+    "GIT_COMMITTER_NAME": "whymath-harness",
+    "GIT_COMMITTER_EMAIL": "harness@whymath.invalid",
+}
+
+
 def has_remote(root: Path) -> bool:
     """origin 원격이 설정되어 있는가."""
     try:
@@ -122,10 +178,14 @@ def has_remote(root: Path) -> bool:
 
 
 def _classify_failure(stderr: str) -> str:
-    """push 실패 stderr → conflict | offline | error."""
+    """git 실패 stderr → lease | offline | error.
+
+    `lease`는 **경합 재시도** 신호이지 태스크 점유가 아니다(모듈 docstring 참조).
+    태스크 점유는 오직 claim 브랜치의 트리를 읽어 판정한다.
+    """
     low = stderr.lower()
-    if any(m in low for m in _CONFLICT_MARKERS):
-        return "conflict"
+    if any(m in low for m in _LEASE_MARKERS):
+        return "lease"
     if any(m in low for m in _OFFLINE_MARKERS):
         return "offline"
     return "error"
@@ -162,104 +222,254 @@ def load_cache(root: Path) -> dict[str, str]:
         return {}
 
 
+def _claim_path(task_id: str) -> str:
+    return f"{CLAIMS_DIR}/{task_id}.json"
+
+
+def _fetch_claims_branch(root: Path) -> tuple[str, str]:
+    """claim 브랜치를 로컬 미러로 가져온다 → (base_sha, 상태).
+
+    base_sha가 빈 문자열이면 **브랜치가 아직 없다**(= claim 0건). 이것은 정상 상태이며
+    상태 ok로 보고한다 — 조회 실패(offline/error)와 구분되어야 한다. 그 구분이 없으면
+    인프라 장애가 "0건 통과"로 위장된다.
+    """
+    ls = _git(root, "ls-remote", "origin", CLAIMS_REF, timeout=20)
+    if ls.returncode != 0:
+        return "", _classify_failure(ls.stderr)
+    if not ls.stdout.strip():
+        return "", "ok"  # 브랜치 미존재 = claim 0건
+    fetch = _git(
+        root,
+        "fetch",
+        "--quiet",
+        "--force",
+        "origin",
+        f"+{CLAIMS_REF}:{LOCAL_MIRROR_REF}",
+        timeout=30,
+    )
+    if fetch.returncode != 0:
+        return "", _classify_failure(fetch.stderr)
+    rev = _git(root, "rev-parse", LOCAL_MIRROR_REF, timeout=10)
+    if rev.returncode != 0:
+        return "", "error"
+    return rev.stdout.strip(), "ok"
+
+
+def _read_claims(root: Path, base_sha: str) -> list[RemoteClaim]:
+    """base 커밋의 트리에서 claim 전건을 읽는다 — 왕복 없이 로컬 객체만 본다."""
+    if not base_sha:
+        return []
+    ls = _git(root, "ls-tree", "-r", "-z", base_sha, "--", f"{CLAIMS_DIR}/", timeout=15)
+    if ls.returncode != 0:
+        return []
+    claims: list[RemoteClaim] = []
+    for entry in ls.stdout.split("\0"):
+        if not entry.strip():
+            continue
+        info, _, path = entry.partition("\t")
+        fields = info.split()
+        if len(fields) < 3 or fields[1] != "blob":
+            continue
+        blob_sha = fields[2]
+        if not path.startswith(f"{CLAIMS_DIR}/") or not path.endswith(".json"):
+            continue
+        task_id = path[len(CLAIMS_DIR) + 1 : -len(".json")]
+        cat = _git(root, "cat-file", "blob", blob_sha, timeout=10)
+        meta: dict | None = None
+        if cat.returncode == 0:
+            try:
+                meta = json.loads(cat.stdout)
+            except json.JSONDecodeError:
+                meta = None
+        claims.append(
+            RemoteClaim(
+                task_id=task_id,
+                sha=blob_sha,
+                branch=str((meta or {}).get("branch", "")),
+                ts=str((meta or {}).get("ts", "")),
+                meta=meta,
+            )
+        )
+    return claims
+
+
+def _write_claims(root: Path, base_sha: str, claims: list[RemoteClaim], message: str) -> str:
+    """claim 목록을 담은 커밋을 만들어 sha를 돌려준다 (push는 하지 않는다).
+
+    트리는 `git mktree`로 직접 만든다 — **인덱스를 쓰지 않으므로** 사용자의 스테이징
+    영역·작업 트리를 건드릴 수 없다(구조적 차단).
+    """
+    entries: list[str] = []
+    for c in sorted(claims, key=lambda x: x.task_id):
+        payload = json.dumps(c.meta or {}, ensure_ascii=False, sort_keys=True)
+        blob = _git(root, "hash-object", "-w", "--stdin", input_text=payload)
+        if blob.returncode != 0:
+            raise RuntimeError(f"blob 생성 실패: {blob.stderr.strip()}")
+        entries.append(f"100644 blob {blob.stdout.strip()}\t{c.task_id}.json")
+
+    if entries:
+        sub = _git(root, "mktree", input_text="\n".join(entries) + "\n")
+        if sub.returncode != 0:
+            raise RuntimeError(f"claims 트리 생성 실패: {sub.stderr.strip()}")
+        root_entries = f"040000 tree {sub.stdout.strip()}\t{CLAIMS_DIR}\n"
+    else:
+        root_entries = ""  # claim 0건 = 빈 트리 (해제로 마지막 claim이 사라진 경우)
+
+    tree = _git(root, "mktree", input_text=root_entries)
+    if tree.returncode != 0:
+        raise RuntimeError(f"루트 트리 생성 실패: {tree.stderr.strip()}")
+
+    argv = ["commit-tree", tree.stdout.strip()]
+    if base_sha:
+        argv += ["-p", base_sha]
+    argv += ["-m", message]
+    commit = _git(root, *argv, env_extra=_COMMIT_IDENTITY)
+    if commit.returncode != 0:
+        raise RuntimeError(f"커밋 생성 실패: {commit.stderr.strip()}")
+    return commit.stdout.strip()
+
+
+def _push_claims(root: Path, base_sha: str, commit_sha: str) -> subprocess.CompletedProcess:
+    """CAS push — lease가 base_sha와 다르면 서버가 거부한다."""
+    return _git(
+        root,
+        "push",
+        "--quiet",
+        f"--force-with-lease={CLAIMS_REF}:{base_sha}",
+        "origin",
+        f"{commit_sha}:{CLAIMS_REF}",
+        timeout=30,
+    )
+
+
+def _mutate_claims(
+    root: Path,
+    task_id: str,
+    message: str,
+    apply: "callable",
+) -> ClaimResult:
+    """fetch → 검사 → 커밋 → CAS push를 lease 경합에 대해 재시도하는 공통 루프.
+
+    `apply(existing, current_claims)`는 (새 목록, 조기반환 ClaimResult|None)을 돌려준다.
+    조기반환이 있으면 push 없이 그대로 반환한다(예: 남의 claim이라 conflict).
+    """
+    last = ""
+    for attempt in range(CAS_RETRIES):
+        base_sha, status = _fetch_claims_branch(root)
+        if status != "ok":
+            return ClaimResult(status, message=f"claim 브랜치 조회 실패: {status}")
+        current = _read_claims(root, base_sha)
+        existing = next((c for c in current if c.task_id == task_id), None)
+        new_claims, early = apply(existing, current)
+        if early is not None:
+            return early
+        try:
+            commit_sha = _write_claims(root, base_sha, new_claims, message)
+        except RuntimeError as exc:
+            return ClaimResult("error", message=str(exc))
+        push = _push_claims(root, base_sha, commit_sha)
+        if push.returncode == 0:
+            return ClaimResult("ok")
+        last = push.stderr.strip()
+        kind = _classify_failure(push.stderr)
+        if kind != "lease":
+            return ClaimResult(kind, message=last)
+        # lease 경합 — 그 사이 남이 브랜치를 갱신했다. 재fetch 후 다시 시도한다.
+        # (내 태스크가 실제로 잡혔는지는 다음 회차의 트리 검사가 판정한다.)
+    return ClaimResult(
+        "error",
+        message=f"CAS 재시도 {CAS_RETRIES}회 초과 (lease 경합 지속): {last}",
+    )
+
+
 def claim(root: Path, task_id: str, branch: str) -> ClaimResult:
-    """태스크를 원자적으로 원격 claim. 이미 claim되어 있으면 conflict."""
+    """태스크를 원자적으로 원격 claim. 이미 다른 세션이 잡고 있으면 conflict."""
     if not has_remote(root):
         return ClaimResult("offline", message="origin 원격 없음 — 로컬 claim만 사용")
     meta = {
         "task": task_id,
         "branch": branch,
         "ts": _utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "harness": "1.1",
+        "harness": "2.0",
     }
-    try:
-        blob = _git(
-            root, "hash-object", "-w", "--stdin", input_text=json.dumps(meta, ensure_ascii=False)
-        )
-        if blob.returncode != 0:
-            return ClaimResult("error", message=f"blob 생성 실패: {blob.stderr.strip()}")
-        sha = blob.stdout.strip()
-        ref = f"{CLAIMS_NS}/{task_id}"
-        # CAS: expect 빈 값 = "원격에 ref가 없어야만 성공"
-        push = _git(root, "push", "--quiet", f"--force-with-lease={ref}:", "origin", f"{sha}:{ref}")
-        if push.returncode == 0:
-            return ClaimResult("ok", claim=RemoteClaim(task_id, sha, branch, meta["ts"], meta))
-        status = _classify_failure(push.stderr)
-        if status == "conflict":
-            other = _describe_existing(root, task_id)
-            return ClaimResult(
+    mine = RemoteClaim(task_id, "", branch, str(meta["ts"]), meta)
+
+    def apply(
+        existing: RemoteClaim | None, current: list[RemoteClaim]
+    ) -> tuple[list[RemoteClaim], ClaimResult | None]:
+        if existing is not None and existing.branch != branch:
+            # 태스크 점유 판정은 **트리 내용**이 한다 — push stderr가 아니라.
+            #
+            # `existing.branch`가 비어 있어도(메타 파손·구버전 기록) **conflict로 친다**.
+            # "홀더를 특정할 수 없으니 통과"는 조용한 탈취이고, 그건 이 모듈이 막으려는
+            # 바로 그 사고다. 막힌 경우의 복구 경로는 `claims release --force`로 명시한다.
+            holder = existing.branch or "홀더 불명(메타 파손)"
+            return [], ClaimResult(
                 "conflict",
-                claim=other,
-                message=push.stderr.strip().splitlines()[-1] if push.stderr else "",
+                claim=existing,
+                message=f"'{holder}'가 이미 claim (ts={existing.ts or '?'})"
+                + ("" if existing.branch else f" — 복구: claims release {task_id} --force"),
             )
-        return ClaimResult(status, message=push.stderr.strip())
+        others = [c for c in current if c.task_id != task_id]
+        return [*others, mine], None
+
+    try:
+        result = _mutate_claims(root, task_id, f"claim {task_id} ({branch})", apply)
+        if result.status == "ok" and result.claim is None:
+            result.claim = mine
+        return result
     except subprocess.TimeoutExpired:
-        return ClaimResult("offline", message="git push 타임아웃")
+        return ClaimResult("offline", message="git 타임아웃")
     except Exception as exc:  # pragma: no cover - 환경 의존
-        return ClaimResult("error", message=str(exc))
-
-
-def _describe_existing(root: Path, task_id: str) -> RemoteClaim | None:
-    """conflict 시 상대 claim의 메타를 best-effort 조회."""
-    claims, status = list_claims(root, with_meta=True)
-    if status != "ok":
-        return None
-    for c in claims:
-        if c.task_id == task_id:
-            return c
-    return None
+        return ClaimResult("error", message=f"{type(exc).__name__}: {exc}")
 
 
 def release(root: Path, task_id: str, branch: str, force: bool = False) -> ClaimResult:
-    """원격 claim 해제. 기본은 내 branch의 claim만 — 남의 claim은 force 필수."""
+    """원격 claim 해제 = claim 파일을 지우는 커밋. 남의 claim은 force 필수.
+
+    ref 삭제 push를 쓰지 않는다 — 이 환경의 프록시가 삭제를 거부하기 때문이며,
+    그 제약이 단일 브랜치 설계를 고른 이유다(모듈 docstring 참조).
+    """
     if not has_remote(root):
         return ClaimResult("offline", message="origin 원격 없음")
+
+    def apply(
+        existing: RemoteClaim | None, current: list[RemoteClaim]
+    ) -> tuple[list[RemoteClaim], ClaimResult | None]:
+        if existing is None:
+            return [], ClaimResult("ok", message="원격 claim 없음 (해제 불필요)")
+        if not force and existing.branch and existing.branch != branch:
+            return [], ClaimResult(
+                "error",
+                claim=existing,
+                message=f"'{existing.branch}'의 claim — 강제 해제는 --force 필수",
+            )
+        return [c for c in current if c.task_id != task_id], None
+
     try:
-        if not force:
-            claims, status = list_claims(root, with_meta=True)
-            if status == "ok":
-                mine = next((c for c in claims if c.task_id == task_id), None)
-                if mine is None:
-                    return ClaimResult("ok", message="원격 claim 없음 (해제 불필요)")
-                if mine.branch and mine.branch != branch:
-                    return ClaimResult(
-                        "error",
-                        claim=mine,
-                        message=f"'{mine.branch}'의 claim — 강제 해제는 --force 필수",
-                    )
-            # status != ok(offline 등)면 메타 확인 불가 — 해제 시도는 계속 (fail-open)
-        push = _git(root, "push", "--quiet", "origin", f":{CLAIMS_NS}/{task_id}")
-        if push.returncode == 0:
-            return ClaimResult("ok")
-        low = push.stderr.lower()
-        # 이미 없는 ref 삭제 시도는 성공으로 간주 (멱등성)
-        if "unable to delete" in low and "remote ref does not exist" in low:
-            return ClaimResult("ok", message="원격 claim 이미 없음")
-        return ClaimResult(_classify_failure(push.stderr), message=push.stderr.strip())
+        return _mutate_claims(root, task_id, f"release {task_id}", apply)
     except subprocess.TimeoutExpired:
-        return ClaimResult("offline", message="git push 타임아웃")
+        return ClaimResult("offline", message="git 타임아웃")
     except Exception as exc:  # pragma: no cover - 환경 의존
-        return ClaimResult("error", message=str(exc))
+        return ClaimResult("error", message=f"{type(exc).__name__}: {exc}")
 
 
 def list_claims(root: Path, with_meta: bool = False) -> tuple[list[RemoteClaim], str]:
-    """원격 claim 목록. (목록, 상태) — 상태 ok|offline|error."""
+    """원격 claim 목록. (목록, 상태) — 상태 ok|offline|error.
+
+    ⚠️ 호출자는 **상태를 반드시 확인**하라. 빈 목록은 상태가 ok일 때만 "claim 없음"을
+    뜻한다. 상태를 무시하면 조회 실패가 "0건"으로 위장된다(모듈 docstring 참조).
+
+    `with_meta`는 이제 무의미하다 — 브랜치 트리를 읽는 순간 메타가 함께 온다
+    (구 구현은 ref마다 왕복했다). 호출부 호환을 위해 인자만 남긴다.
+    """
     if not has_remote(root):
         return [], "offline"
     try:
-        ls = _git(root, "ls-remote", "origin", f"{CLAIMS_NS}/*")
-        if ls.returncode != 0:
-            return [], _classify_failure(ls.stderr)
-        claims: list[RemoteClaim] = []
-        for line in ls.stdout.splitlines():
-            parts = line.split("\t")
-            if len(parts) != 2:
-                continue
-            sha, ref = parts
-            claims.append(RemoteClaim(task_id=ref[len(CLAIMS_NS) + 1 :], sha=sha))
-        if with_meta and claims:
-            fetch_claim_meta(root, claims)
-        return claims, "ok"
+        base_sha, status = _fetch_claims_branch(root)
+        if status != "ok":
+            return [], status
+        return _read_claims(root, base_sha), "ok"
     except subprocess.TimeoutExpired:
         return [], "offline"
     except Exception:  # pragma: no cover - 환경 의존
@@ -267,26 +477,8 @@ def list_claims(root: Path, with_meta: bool = False) -> tuple[list[RemoteClaim],
 
 
 def fetch_claim_meta(root: Path, claims: list[RemoteClaim]) -> None:
-    """claim blob들의 메타 JSON을 fetch해 in-place 보강 (best-effort)."""
-    try:
-        fetch = _git(
-            root, "fetch", "--quiet", "origin", f"+{CLAIMS_NS}/*:{LOCAL_MIRROR_NS}/*", timeout=20
-        )
-        if fetch.returncode != 0:
-            return
-        for c in claims:
-            cat = _git(root, "cat-file", "blob", c.sha, timeout=10)
-            if cat.returncode != 0:
-                continue
-            try:
-                meta = json.loads(cat.stdout)
-            except json.JSONDecodeError:
-                continue
-            c.meta = meta
-            c.branch = str(meta.get("branch", ""))
-            c.ts = str(meta.get("ts", ""))
-    except Exception:  # pragma: no cover - 환경 의존
-        return
+    """구 API 호환 — 메타는 `list_claims`가 이미 채운다(별도 왕복 불요)."""
+    return
 
 
 # ── 읽기측 교차 세션 탐지 (HARN-07) ─────────────────────────────────────────
@@ -556,14 +748,21 @@ def stale_claims(
     return result
 
 
-def reap(root: Path, backlog: Backlog, ttl_hours: int, dry_run: bool = True) -> list[str]:
+def reap(
+    root: Path, backlog: Backlog, ttl_hours: int, dry_run: bool = True
+) -> tuple[list[str], str]:
     """stale claim 청소. dry_run이면 목록만 반환, 아니면 실제 삭제.
 
-    반환: "task_id (사유)" 문자열 목록.
+    반환: (["task_id (사유)", ...], 조회 상태 ok|offline|error).
+
+    **상태를 함께 돌려주는 이유**(HARN-09): 구 구현은 조회 실패 시 빈 목록만 돌려줘서
+    호출자가 "stale 없음"과 "판정 불가"를 구분할 수 없었다. CI의 교차검증 스텝이 정확히
+    그 상태로 공전했다 — 인프라가 죽어도 "0건 통과"로 보였다. 측정·게이트 도구가 실패를
+    통과로 위장하면 안 된다(CLAUDE.md AI·신뢰).
     """
-    claims, status = list_claims(root, with_meta=True)
+    claims, status = list_claims(root)
     if status != "ok":
-        return []
+        return [], status
     stale = stale_claims(claims, backlog, ttl_hours)
     reaped: list[str] = []
     for c, reason in stale:
@@ -573,4 +772,4 @@ def reap(root: Path, backlog: Backlog, ttl_hours: int, dry_run: bool = True) -> 
             if result.status != "ok":
                 continue
         reaped.append(label)
-    return reaped
+    return reaped, "ok"

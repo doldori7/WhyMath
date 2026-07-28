@@ -614,11 +614,16 @@ jobs:
       # 코드 품질 축은 여전히 무배선이었다("장치는 있는데 일부만 배선됨" — CLAUDE.md
       # '검증 장치를 만들고 배선 확인 없이 완료 선언 금지'가 겨냥하는 부류).
       # 실측(2026-07-27): 배선 직전 `black --check`가 test_backup_script.py 1건에서 실패했다.
-      - name: Ruff (tests/infra)
-        run: python3 -m ruff check tests/infra
+      # OPS-13 — 커버리지 전수 검사가 두 곳을 더 찾아냈다(2026-07-28, 둘 다 이 잡이 인접):
+      #   · `infra/phaiakes9/benchmark/*.py` — 이 잡의 tests/infra가 *테스트하는* 소스인데
+      #     정작 그 소스는 무배선이었다
+      #   · 레포 루트 `conftest.py` — OPS-09의 seed 리포트 훅이 사는 파일
+      # 둘 다 실측 결과 이미 clean이라 배선 비용은 0이다(막을 것은 앞으로의 드리프트).
+      - name: Ruff (tests/infra + infra + conftest.py)
+        run: python3 -m ruff check tests/infra infra conftest.py
 
-      - name: Black --check (tests/infra)
-        run: python3 -m black --check --line-length 100 tests/infra
+      - name: Black --check (tests/infra + infra + conftest.py)
+        run: python3 -m black --check --line-length 100 tests/infra infra conftest.py
 
       - name: Pytest (tests/infra — 계약 동결·결함주입)
         run: python3 -m pytest tests/infra -q
@@ -878,16 +883,26 @@ jobs:
       - name: backlog 무결성 검증
         run: python3 scripts/harness/backlog.py validate
 
+      # HARN-09 — 이 스텝은 **공전하고 있었다**. claim이 `refs/claims/*`에 있었고 그
+      # 네임스페이스 push가 프록시에서 403이라 원격 claim이 단 1건도 존재한 적이 없어,
+      # reap이 늘 "stale claim 없음"을 보고했다. 즉 "통과"가 "검사했다"를 뜻하지 않았다.
+      # 이제 조회 실패("조회 불가")를 stale 없음과 **구분**한다 — 인프라가 죽으면
+      # "측정 실패"가 보여야지 "0건 통과"로 위장되면 안 된다(CLAUDE.md AI·신뢰).
       - name: 원격 claim ↔ backlog 교차 검증 (stale claim은 warning)
         run: |
           set -e
-          # reap dry-run은 항상 exit 0 — stale 발견은 실패가 아니라 청소 안내
-          out=$(python3 scripts/harness/backlog.py claims reap || true)
+          # reap dry-run은 stale 발견 시에도 exit 0 — 청소 안내이지 실패가 아니다.
+          # 다만 *조회 실패*는 exit 1이므로 그 경우만 별도로 드러낸다.
+          if ! out=$(python3 scripts/harness/backlog.py claims reap); then
+            echo "$out"
+            echo "::warning::원격 claim 조회 실패 — 중복 착수 방지가 이 실행에서 검증되지 않았다"
+            exit 0   # 게이트가 아니라 관측 — CI를 볼모로 잡지 않되 침묵하지도 않는다
+          fi
           echo "$out"
-          if echo "$out" | grep -q "stale claim"; then
-            if ! echo "$out" | grep -q "stale claim 없음"; then
-              echo "::warning::stale 원격 claim 발견 — 'backlog.py claims reap --apply'로 청소 권장"
-            fi
+          if echo "$out" | grep -q "조회 불가"; then
+            echo "::warning::원격 claim 조회 불가 — stale 판정이 수행되지 않았다"
+          elif ! echo "$out" | grep -q "stale claim 없음"; then
+            echo "::warning::stale 원격 claim 발견 — 'backlog.py claims reap --apply'로 청소 권장"
           fi
 
       # OPS-12 — `tests/harness`·`scripts/harness`를 lint/format하는 잡이 **하나도 없었다**
@@ -896,11 +911,16 @@ jobs:
       # 코드인데 그 자신의 품질은 아무도 검사하지 않았다.
       # 실측(2026-07-27): 배선 직전 ruff F541 2건(test_cli.py) + black --check 17파일
       # (tests/harness 9 전부·scripts/harness 8/9)이 실패 상태였고 아무도 알지 못했다.
-      - name: Ruff (scripts/harness + tests/harness)
-        run: python3 -m ruff check scripts/harness tests/harness
+      # OPS-13 — 대상을 `scripts/harness`에서 **`scripts` 전체**로 넓힌다. OPS-12가 harness만
+      # 배선한 뒤에도 `scripts/` 직속 4파일·`scripts/coverage`·`scripts/demo` 7파일은 여전히
+      # 무배선이었다 — "일부만 배선됨"이 같은 디렉터리 안에서 한 번 더 재현된 형태다.
+      # lint는 재귀라 `scripts` 하나로 harness까지 덮는다. 잔여 위반은 1파일뿐이었다
+      # (`diagnose_atom_orphans.py` black — 이 PR에서 정리. OPS-12가 8파일을 이미 상환한 결과).
+      - name: Ruff (scripts + tests/harness)
+        run: python3 -m ruff check scripts tests/harness
 
-      - name: Black --check (scripts/harness + tests/harness)
-        run: python3 -m black --check --line-length 100 scripts/harness tests/harness
+      - name: Black --check (scripts + tests/harness)
+        run: python3 -m black --check --line-length 100 scripts tests/harness
 
       - name: 하네스 테스트
         run: python3 -m pytest tests/harness -q
