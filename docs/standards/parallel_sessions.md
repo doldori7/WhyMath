@@ -126,7 +126,7 @@ git branch -D claude/backend-prm-verify   # 원격 머지 완료 후
 
 | 관례 (이 문서) | 집행 코드 | 강제 수준 |
 |---|---|---|
-| 같은 태스크 동시 착수 금지 | `start`의 **원격 claim** (`refs/claims/<id>` CAS push — 한쪽만 성공) | 즉시 차단 |
+| 같은 태스크 동시 착수 금지 | `start`의 **원격 claim** (`harness-claims` 브랜치 CAS push — 한쪽만 성공) | 즉시 차단 |
 | 다른 세션 작업 확인 | SessionStart 브리핑·`next`가 원격 claim 노출·후보 제외 | 자동 |
 | 도메인/파일 범위 밖 수정 금지 | 태스크 `paths` 선언 + `start` 프리플라이트·check-edit 훅 (`scope_drift`) | warn→block |
 | 타 세션 작업 범위 침범 금지 | check-edit 훅 (`path_overlap`) — 편집 파일 vs in-flight paths | warn→block |

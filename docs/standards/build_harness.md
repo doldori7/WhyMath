@@ -65,26 +65,47 @@ backlog/policy.yaml      조율 정책 — 겹침·ad-hoc 감지 강제 수준 (
 로컬 `session` claim은 각 세션 worktree의 backlog 사본에만 기록되어 merge 전까지
 서로 보이지 않는다(TOCTOU 레이스). **원격 claim**이 이 구멍을 막는다:
 
-- `start`가 origin에 `refs/claims/<task-id>` ref를 push한다. push는
-  `--force-with-lease=<ref>:`(빈 expect)의 **CAS 원자성** — 원격에 ref가 없어야만
-  성공하므로, 두 세션이 동시에 같은 태스크를 start해도 정확히 한쪽만 성공한다.
-- ref가 가리키는 blob에 claim 메타(JSON: branch·UTC ts)가 담긴다 — conflict 시
-  상대 세션이 즉시 식별된다.
+- `start`가 origin의 **`harness-claims` 브랜치**에 `claims/<task-id>.json`을 추가하는
+  커밋을 push한다. push는 `--force-with-lease=refs/heads/harness-claims:<base>`의
+  **CAS 원자성** — 그 사이 남이 브랜치를 갱신했으면 서버가 거부하므로, 두 세션이 동시에
+  같은 태스크를 start해도 정확히 한쪽만 성공한다.
+- **네임스페이스가 `refs/claims/*`에서 바뀐 이유(HARN-09)**: 이 실행 환경의 git 프록시가
+  그 네임스페이스 push를 403 거부해 CAS가 *한 번도 성공한 적이 없었다*. 2026-07-28 실측으로
+  `refs/heads/*` 커밋 push는 성공함을 확인하고 이전했다. **태스크당 브랜치가 아니라 단일
+  브랜치**인 것은 같은 프록시가 ref *삭제*도 거부하기 때문이다 — 태스크당 브랜치면 해제가
+  불가능해 브랜치가 영구 누적된다. 단일 브랜치면 해제가 "파일을 지우는 커밋"이라 삭제가 불요다.
+- **lease 거부 ≠ 태스크 점유**: lease 거부는 "그 사이 누군가 브랜치를 갱신했다"(대개 다른
+  태스크의 claim)는 뜻이라 재fetch 후 재시도한다. 태스크 점유는 오직 브랜치 트리를 읽어
+  판정한다 — 이 분리가 "남의 claim"과 "동시 갱신"을 혼동하지 않게 한다.
+- claim 파일에 메타(JSON: branch·UTC ts)가 담긴다 — conflict 시 상대 세션이 즉시 식별된다.
+  메타가 파손돼 홀더를 특정할 수 없어도 **conflict로 친다**(조용한 탈취 금지, 복구는 `--force`).
+- 트리는 `git mktree`로 만든다 — 인덱스를 쓰지 않으므로 개발자의 스테이징·작업 트리를
+  건드릴 수 없다(구조적 차단).
 - **conflict만 차단**(신호가 확정적) — offline/권한 오류는 경고 + 이벤트 로그 후
   로컬 claim으로 진행한다(fail-open — 훅·CLI가 개발을 볼모로 잡지 않는다).
-- `done`/`block`이 ref를 해제한다. 세션이 죽어 ref가 남으면 `claims reap`이
+- `done`/`block`이 claim을 해제한다. 세션이 죽어 claim이 남으면 `claims reap`이
   3중 기준(TTL 초과 · 태스크 이미 done/cancelled · 태스크 미존재)으로 청소한다
-  (기본 dry-run, 실삭제는 `--apply`).
+  (기본 dry-run, 실삭제는 `--apply`). `reap`은 **(목록, 조회상태)** 를 돌려준다 —
+  조회 실패를 "stale 없음"으로 위장하면 CI 교차검증이 공전한다(HARN-09 실측 사례).
 - `next`/`brief`(SessionStart)가 원격 claim을 조회해 다른 세션의 작업을
   후보 제외·브리핑 노출한다.
 
 ### 3b-1. 읽기측 교차 세션 탐지 — CAS가 막힌 환경의 폴백 (HARN-07)
 
 **사고(2026-07-27)**: 이 실행 환경의 git 프록시는 `refs/claims/*` push를 **HTTP 403**으로
-거부한다. 즉 CAS claim은 "가끔 실패"가 아니라 *한 번도 성공한 적이 없었고*, fail-open이
+거부했다. 즉 CAS claim은 "가끔 실패"가 아니라 *한 번도 성공한 적이 없었고*, fail-open이
 모든 `start`를 통과시켜 중복 방지가 상시 무력이었다 — 두 세션이 OPS-07을 병렬 구현해
 한쪽(테스트 735줄 포함)을 폐기했다. `events.ndjson`에 `claim_remote_unavailable`
 (status=error) 45건이 그 흔적이다.
+
+**2회차(2026-07-27, OPS-12)**: 같은 원인으로 또 났다. 읽기측 폴백이 이미 있었지만 그 폴백은
+*push된* 브랜치만 보므로, 내 `start`(07:03:21)와 상대 `start`(07:06:21) 사이 3분 창을 막지
+못했다 — **양쪽 다 `error+readscan_ok`** 를 받고 진행했다. 설계된 한계대로 동작했으나 한계
+자체가 사고를 허용한 것이다. **규칙만으로 2회차를 못 막았다**는 것이 HARN-09(네임스페이스
+이전으로 CAS 복구)의 등재 근거다 — 반복 실수는 규칙이 아니라 코드로 상환한다.
+
+**HARN-09 이후**: CAS가 1선이고 이 읽기측 경로는 CAS가 offline/error일 때만 도는 **2선**이다.
+아래 설명은 그 2선 동작이다.
 
 **대응**: 쓰기(CAS)는 못 고치지만 **읽기는 된다**(`git fetch` 전체 브랜치 ~5초 실측).
 `start`는 CAS가 `offline`/`error`를 반환한 경우에만 읽기측 탐지로 폴백한다:
