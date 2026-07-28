@@ -337,6 +337,12 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-27 (재발방지·규칙 등재): **Kiki 머신 안내 명령의 실행기 단독 호출 금지 — `python -m pip`/`python -m pytest` 강제** (claude 등재, 실수 관리 의무)
+
+**사고 경위**: ARCH-16 bge-m3 캘리브레이션 런북 실행(Kiki·Phaiakes9)에서 `pip install -e ".[dev,embedding]"`이 성공으로 보였으나 자가검증 1(`python -c "import sentence_transformers"`)이 ModuleNotFoundError로 실패. 실측 출력 진단: 프롬프트 `(base) (.venv)` — **conda base + .venv 동시 활성** 환경에서 `pip`는 miniconda 계열로 실행돼 유저 site(`AppData\Roaming\Python\Python313`)의 sentence-transformers 5.5.1을 already-satisfied로 판정했고, `python`은 `.venv` 인터프리터라 유저 site가 차단돼 import 불가. **"쓰기·읽기가 서로 다른 venv에서 절반씩 성립"(2026-07-16 등재 유형)의 재발**이며, 런북에 동봉한 설치 직후 자가검증 스텝이 실행 전에 차단해 피해 0(자가검증 규칙의 변별력 실증 사례).
+
+**대책(규칙 등재)**: CLAUDE.md Kiki 개인 선호에 "실행기 단독 호출 금지 — 항상 `python -m <tool>` 형태로 python과 동일 인터프리터 강제" 1줄 등재(사고 경위 병기). 정정 런북은 `python -m pip install` + `python -m pip show` 자가검증으로 재안내.
+
 ### 2026-07-27 (구현·3건 순차): **갭 설계 실행 — ARCH-16 중복 검수 게이트·ARCH-17 그래프 분석 리포트·S4-06 Formula 메타** (claude 구현, Kiki "3건 순차 전부" 선택)
 
 **컨텍스트**: 같은 날 등재한 갭 설계(D3~D5) 태스크 3건을 하네스 순서대로 구현·done. 브랜치 `claude/whymath-concept-management-spnep8`(커밋 `e3939dd`·`75112ab`·`71caeb3`).
