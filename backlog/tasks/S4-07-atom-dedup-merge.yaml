@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: data-pipeline
-status: todo
+status: in_progress
 priority: 3
 owner: claude
 depends_on: []
@@ -16,6 +16,6 @@ artifacts: []
 paths:
   - "data/corpus/**"
   - "src/data-pipeline/**"
-session: null
+session: claude/whymath-concept-management-spnep8
 notes: "원천: ARCH-16 bge-m3 실측(임계 0.90) → 전문가 검수(병합 16·유지 8·검수:Kiki 2026-07-28). 유지 8건은 rejected로 동결 — 재부상 방지(검수 큐가 기왕 판정 기록). 주의: 원자 code가 문제·오개념·crosswalk의 참조 키이므로 통합은 참조 무결성 스윕 동반(침묵 dangling 금지). test_node_granularity_governance 카운트 스냅샷은 의도 변경으로 갱신"
 updated: 2026-07-28

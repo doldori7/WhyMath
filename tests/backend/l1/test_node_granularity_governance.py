@@ -7,7 +7,7 @@
 docs/architecture/concept_node_layering_decision.md §입도). build_checkpoint_questions.md 단계3이
 최우선 리스크로 지목한 **이중 truth source**(개념그래프 vs 원자그래프)를 코드로 가시화한다:
 
-  ① **이중 truth source 카운트 동결**: concept_graph_v1(437)·atom_graph_v1(2,697) 노드 수를
+  ① **이중 truth source 카운트 동결**: concept_graph_v1(437)·atom_graph_v1(2,683) 노드 수를
      스냅샷으로 고정 — 무단 재분할·중복 증식으로 수가 예기치 않게 변하면 red(의식적 리뷰 강제).
   ② **입도 순서 sanity**: 원자그래프가 개념그래프보다 *세분*이다(atom > concept).
   ③ **오개념 발생 단위 불변식(핵심)**: 원자그래프 '세부개념' 레벨 노드는 *전부* 독립 오개념
@@ -29,11 +29,11 @@ _ATOM_GRAPH = _REPO_ROOT / "data" / "corpus" / "atom_graph_v1" / "graph.json"
 
 # 동결 스냅샷(2026-07-02 기준·Part 2 검토). 값이 바뀌면 *의식적으로* 갱신하라 —
 # 무단 재분할/중복 증식/누락을 잡는 회귀 가드다(단일 진실 원천 붕괴 감지).
-# 관점(2026-07-04·S0-4b): 구 437 개념그래프는 `legacy_snapshot`으로 격하됐고 원자 2,697이
+# 관점(2026-07-04·S0-4b): 구 437 개념그래프는 `legacy_snapshot`으로 격하됐고 원자 2,683이
 # runtime truth source다. 여기서는 *카운트 스냅샷만* 동결한다(값·로직 불변). 격하 자체의 회귀
 # 가드는 `test_legacy_snapshot_governance.py` 소관.
 _EXPECTED_CONCEPT_NODES = 437
-_EXPECTED_ATOM_NODES = 2697
+_EXPECTED_ATOM_NODES = 2683
 _ATOM_DETAIL_LEVEL = "세부개념"
 
 

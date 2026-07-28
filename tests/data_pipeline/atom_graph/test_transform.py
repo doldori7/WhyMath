@@ -46,10 +46,7 @@ class TestNormalizeStandardCode:
     def test_gongsu_unchanged(self) -> None:
         """공수·기수는 이미 하이픈 → 무변경."""
         assert normalize_standard_code("[10공수1-01-01]") == "[10공수1-01-01]"
-        assert (
-            normalize_standard_code("[12기하01-01]".replace("기하", "기하"))
-            == "[12기하01-01]"
-        )
+        assert normalize_standard_code("[12기하01-01]".replace("기하", "기하")) == "[12기하01-01]"
 
     def test_counts_mijeok(self) -> None:
         cnt: dict[str, int] = {}
@@ -202,18 +199,14 @@ class TestTransformEdges:
         assert narrative[0]["from(선수)"] == "좌표평면"
 
     def test_skips_unknown_from_kind(self) -> None:
-        edges, narrative, skipped = transform_edges(
-            [self._edge_row(**{"from_유형": "기타"})]
-        )
+        edges, narrative, skipped = transform_edges([self._edge_row(**{"from_유형": "기타"})])
         assert edges == []
         assert narrative == []
         assert len(skipped) == 1
 
 
 class TestTransformDataset:
-    def test_provenance_counts(
-        self, make_atom_row
-    ) -> None:  # type: ignore[no-untyped-def]
+    def test_provenance_counts(self, make_atom_row) -> None:  # type: ignore[no-untyped-def]
         atom = make_atom_row(학교급="고등학교", 연결성취기준="[12미적Ⅰ01-01]")
         atom["④전이"] = "자리값"
         result = transform_dataset(atom_rows=[atom], edge_rows=[])

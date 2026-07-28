@@ -82,7 +82,7 @@ class _FakeDriver:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 픽스처 — 작은 합성 그래프 + 실 코퍼스(2697/2213)
+# 픽스처 — 작은 합성 그래프 + 실 코퍼스(2683/2210)
 # ──────────────────────────────────────────────────────────────────────
 def _atom(code: str, **over: object) -> AtomConcept:
     data: dict[str, object] = {
@@ -292,27 +292,27 @@ class TestNoSecretsNoRedactedFields:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# 실 코퍼스(2697/2213) — graph.json 라운드트립 후 적재
+# 실 코퍼스(2683/2210) — graph.json 라운드트립 후 적재
 # ──────────────────────────────────────────────────────────────────────
 class TestRealCorpus:
-    def test_loads_2697_nodes_2213_edges(self, corpus_graph: dict[str, object]) -> None:
-        """실 코퍼스 적재: 노드 2697·엣지 2213 MERGE·skip 0(전 엣지 ATOM_PREREQUISITE)."""
+    def test_loads_2683_nodes_2210_edges(self, corpus_graph: dict[str, object]) -> None:
+        """실 코퍼스 적재: 노드 2683·엣지 2210 MERGE·skip 0(전 엣지 ATOM_PREREQUISITE)."""
         result = _result_from_corpus(corpus_graph)
         driver = _FakeDriver()
         report = load_graph(result, driver=driver)
-        assert report.nodes_merged == 2697
-        assert report.edges_merged == 2213
+        assert report.nodes_merged == 2683
+        assert report.edges_merged == 2210
         assert report.edges_skipped == 0
         for call in _edge_calls(driver.calls):
             assert "MERGE (src)-[r:ATOM_PREREQUISITE]->(dst)" in call.query
 
     def test_real_corpus_node_codes_unique_in_merge(self, corpus_graph: dict[str, object]) -> None:
-        """2697 노드 MERGE의 code가 모두 유일(코드 충돌 0)."""
+        """2683 노드 MERGE의 code가 모두 유일(코드 충돌 0)."""
         result = _result_from_corpus(corpus_graph)
         driver = _FakeDriver()
         load_graph(result, driver=driver)
         codes = [c.params["code"] for c in _node_calls(driver.calls)]
-        assert len(codes) == len(set(codes)) == 2697
+        assert len(codes) == len(set(codes)) == 2683
 
     def test_real_corpus_no_map_props(self, corpus_graph: dict[str, object]) -> None:
         """실 코퍼스 적재 시 어떤 노드 props도 dict(map)를 담지 않는다(Neo4j 속성 규칙)."""
@@ -397,7 +397,7 @@ class TestHelpers:
 
 class TestLoadReport:
     def test_summary_mentions_counts(self) -> None:
-        report = LoadReport(constraints=1, indexes=2, nodes_merged=2697, edges_merged=2213)
+        report = LoadReport(constraints=1, indexes=2, nodes_merged=2683, edges_merged=2210)
         text = report.summary()
-        assert "2697" in text
-        assert "2213" in text
+        assert "2683" in text
+        assert "2210" in text

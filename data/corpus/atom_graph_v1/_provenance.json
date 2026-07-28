@@ -10,16 +10,16 @@
     "자리값": 13
   },
   "node_counts": {
-    "atoms": 1837,
+    "atoms": 1823,
     "units": 217,
     "subunits": 643,
-    "total": 2697
+    "total": 2683
   },
   "edge_counts": {
-    "atom_id_edges": 2213,
+    "atom_id_edges": 2210,
     "narrative_edges_raw": 1007
   },
-  "school_level_university_atoms": 513,
+  "school_level_university_atoms": 512,
   "validation": {
     "success": true,
     "errors": 0,
@@ -30,5 +30,11 @@
   "determinism": "결정론 — 동일 sha256 입력 2회 transform 시 byte 동일 산출",
   "post_extraction": [
     "[U2 2026-06-22] 대학 원자 standard_codes 채움 513건(소단원→성취기준 1:1·standards_university_v1). K-12 원자·단원/소단원 무변경."
+  ],
+  "post_transform_migrations": [
+    {
+      "id": "dedup_merge_2026-07-28",
+      "summary": "중복 원자 병합 14건(검수:Kiki 2026-07-28 승인 16 중 D13·D18은 사이클 충돌로 실행 보류) — 원자 1837→1823·전체 2697→2683·엣지 2213→2210(재배선 32·중복 제거 3)·crosswalk 13건 재배선. 정본 맵: dedup_merges_v1.json. 이후 graph.json은 원본 xlsx transform 산출과 이 이관분만큼 다르다."
+    }
   ]
 }

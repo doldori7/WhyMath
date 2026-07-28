@@ -1,7 +1,7 @@
 """대학 원자 standard_codes 채움(U2) 단위테스트 + 실 코퍼스 검증.
 
 합성 graph/맵으로 채움 규율(세부개념 대학만·K-12 무변경·1:1·멱등)을 못 박고, 실 커밋 코퍼스로
-ground truth(513 채움·K-12 보존)를 확인한다(handoff 규율: 실 코퍼스 재검증).
+ground truth(512 채움·K-12 보존)를 확인한다(handoff 규율: 실 코퍼스 재검증).
 """
 
 from __future__ import annotations
@@ -24,9 +24,7 @@ def _graph(*nodes: dict[str, object]) -> dict[str, object]:
     }
 
 
-def _atom(
-    code: str, subunit: str, *, level: str = "세부개념", std: list[str] | None = None
-):
+def _atom(code: str, subunit: str, *, level: str = "세부개념", std: list[str] | None = None):
     return {
         "code": code,
         "level": level,
@@ -75,9 +73,7 @@ class TestFill:
         g = _graph(_atom("CALC1-C01", "CALC1-U1-S1"), _atom("CALC1-C02", "CALC1-U1-S1"))
         fill_university_standard_codes(g, {"CALC1-U1-S1": "[CALC1-01-01]"})
         for n in g["concepts"]:
-            assert n["standard_codes"] == [
-                "[CALC1-01-01]"
-            ]  # 같은 소단원 → 같은 코드·길이 1
+            assert n["standard_codes"] == ["[CALC1-01-01]"]  # 같은 소단원 → 같은 코드·길이 1
 
     def test_idempotent(self) -> None:
         g = _graph(_atom("CALC1-C01", "CALC1-U1-S1"))
@@ -98,22 +94,12 @@ class TestFill:
 class TestBuildMap:
     def test_joins_links_and_standards(self, tmp_path: Path) -> None:
         (tmp_path / "standards.json").write_text(
-            json.dumps(
-                {
-                    "standards": [
-                        {"norm_id": "대학_CALC1_01_01", "code": "[CALC1-01-01]"}
-                    ]
-                }
-            ),
+            json.dumps({"standards": [{"norm_id": "대학_CALC1_01_01", "code": "[CALC1-01-01]"}]}),
             encoding="utf-8",
         )
         (tmp_path / "concept_standard_links.json").write_text(
             json.dumps(
-                {
-                    "links": [
-                        {"concept_src_id": "CALC1-U1-S1", "norm_id": "대학_CALC1_01_01"}
-                    ]
-                }
+                {"links": [{"concept_src_id": "CALC1-U1-S1", "norm_id": "대학_CALC1_01_01"}]}
             ),
             encoding="utf-8",
         )
@@ -136,11 +122,19 @@ def test_committed_corpus_university_atoms_filled() -> None:
     sub_to_code = build_subunit_standard_map(_STD_DIR)
     atoms = [n for n in graph["concepts"] if n["level"] == "세부개념"]
     uni = [n for n in atoms if n.get("subunit_code") in sub_to_code]
-    # 513 대학 원자 전부 1:1 성취기준 채움.
-    assert len(uni) == 513
+    # 512 대학 원자 전부 자기 소단원 성취기준을 첫 코드로 채움. 병합 대표 원자(dedup_merges_v1
+    # applied의 canonical)만 은퇴 원자 성취기준의 *병기*가 허용된다(검수:Kiki 2026-07-28 —
+    # 그 외 원자의 다중 코드는 여전히 회귀).
+    ledger = json.loads((_GRAPH.parent / "dedup_merges_v1.json").read_text(encoding="utf-8"))
+    merge_canonicals = {m["canonical"] for m in ledger["applied"]}
+    assert len(uni) == 512
     for n in uni:
-        assert n["standard_codes"] == [sub_to_code[n["subunit_code"]]]
-    # K-12 원자(1324)는 비대학 — standard_codes 비어있지 않음(기존 채움 보존).
+        own = sub_to_code[n["subunit_code"]]
+        if n["code"] in merge_canonicals:
+            assert n["standard_codes"][0] == own  # 대표 자신 코드 우선·병기 허용
+        else:
+            assert n["standard_codes"] == [own]
+    # K-12 원자(1311·병합 13건 반영)는 비대학 — standard_codes 비어있지 않음(기존 채움 보존).
     k12 = [n for n in atoms if n.get("subunit_code") not in sub_to_code]
-    assert len(k12) == 1324
+    assert len(k12) == 1311
     assert all(n["standard_codes"] for n in k12)

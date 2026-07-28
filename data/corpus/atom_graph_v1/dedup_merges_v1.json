@@ -1,0 +1,92 @@
+{
+  "format": "atom_dedup_merges.v1",
+  "review_source": "docs/data/atom_dedup_review_queue.json (검수:Kiki 2026-07-28)",
+  "canonical_rule": "학습 경로상 선행/주 트랙 우선 — 공통수학 > 기수 · 미적Ⅰ > 미적Ⅱ · CALC1 > ANAL2/NUMER",
+  "applied": [
+    {
+      "pair_id": "D02",
+      "retired": "10기수1-04-02-1",
+      "canonical": "10공수1-04-02-2"
+    },
+    {
+      "pair_id": "D03",
+      "retired": "10기수1-02-05-1",
+      "canonical": "10공수1-02-06-2"
+    },
+    {
+      "pair_id": "D04",
+      "retired": "10기수1-03-02-1",
+      "canonical": "10공수1-03-02-1"
+    },
+    {
+      "pair_id": "D07",
+      "retired": "10기수2-03-04-1",
+      "canonical": "10공수2-03-04-1"
+    },
+    {
+      "pair_id": "D08",
+      "retired": "10기수1-03-03-1",
+      "canonical": "10공수1-03-03-1"
+    },
+    {
+      "pair_id": "D09",
+      "retired": "10기수2-01-04-1",
+      "canonical": "10공수2-01-04-1"
+    },
+    {
+      "pair_id": "D10",
+      "retired": "10기수2-01-05-1",
+      "canonical": "10공수2-01-05-1"
+    },
+    {
+      "pair_id": "D11",
+      "retired": "12미적Ⅱ-03-07-1",
+      "canonical": "12미적Ⅰ-03-06-1"
+    },
+    {
+      "pair_id": "D12",
+      "retired": "10기수1-04-01-1",
+      "canonical": "10공수1-04-01-1"
+    },
+    {
+      "pair_id": "D14",
+      "retired": "NUMER-C05",
+      "canonical": "CALC1-C16"
+    },
+    {
+      "pair_id": "D17",
+      "retired": "10기수2-02-01-2",
+      "canonical": "10공수2-02-01-2"
+    },
+    {
+      "pair_id": "D20",
+      "retired": "12미적Ⅱ-03-01-2",
+      "canonical": "12미적Ⅰ-03-01-1"
+    },
+    {
+      "pair_id": "D22",
+      "retired": "10기수2-03-01-2",
+      "canonical": "10공수2-03-01-2"
+    },
+    {
+      "pair_id": "D23",
+      "retired": "10기수2-01-06-2",
+      "canonical": "10공수2-01-06-2"
+    }
+  ],
+  "deferred": [
+    {
+      "pair_id": "D13",
+      "retired": "ANAL2-C03",
+      "canonical": "CALC1-P11",
+      "reason": "실행 보류(기술 충돌): D18과 동시 적용 시 prerequisite 사이클 — 해석학 내부(로피탈→리만적분성→FTC)와 미적분학 경로(FTC⇒로피탈 하류)의 순서 상충. 단독 적용은 각각 안전(실측). 검수자 확정: 보류(Kiki 2026-07-28 — 선택지 1 \"14건만 실행\"). 재개는 엣지 재설계 동반 시."
+    },
+    {
+      "pair_id": "D18",
+      "retired": "ANAL2-C05",
+      "canonical": "CALC1-C19",
+      "reason": "실행 보류(기술 충돌): D13 사유와 동일 — 두 병합의 조합이 ANAL2-C04를 다리로 사이클 형성(대표 반전 시 거울상 사이클·실측). 검수자 확정: 보류(Kiki 2026-07-28 — 선택지 1 \"14건만 실행\")."
+    }
+  ],
+  "note": "은퇴 code의 잔존 참조 해석용 정본 맵. 향후 dedup 재실행 시 applied/deferred 기왕 판정 참조."
+}
