@@ -164,17 +164,13 @@ class TestTransformV1:
         assert len(ko) == 437  # 표시이름은 locale(ko)로 분리
 
     def test_missing_corpus_exits_2(self, tmp_path: Path) -> None:
-        result = runner.invoke(
-            app, ["transform-v1", "--corpus-dir", str(tmp_path / "nope")]
-        )
+        result = runner.invoke(app, ["transform-v1", "--corpus-dir", str(tmp_path / "nope")])
         assert result.exit_code == 2
 
     def test_missing_concepts_file_exits_2(self, tmp_path: Path) -> None:
         """디렉토리는 있으나 concepts.jsonl 없음 → 종료코드 2."""
         (tmp_path / "empty").mkdir()
-        result = runner.invoke(
-            app, ["transform-v1", "--corpus-dir", str(tmp_path / "empty")]
-        )
+        result = runner.invoke(app, ["transform-v1", "--corpus-dir", str(tmp_path / "empty")])
         assert result.exit_code == 2
 
 
@@ -202,9 +198,7 @@ class TestGenIds:
         )
         return dst
 
-    def test_gen_ids_regenerates_and_validates(
-        self, corpus_dir: Path, tmp_path: Path
-    ) -> None:
+    def test_gen_ids_regenerates_and_validates(self, corpus_dir: Path, tmp_path: Path) -> None:
         """gen-ids가 ids.yaml·locale을 재생성하고 graph.json에 대해 검증 통과(종료코드 0)."""
         dst = self._corpus_copy(corpus_dir, tmp_path)
         (dst / "ids.yaml").unlink()  # 재생성 대상 삭제 후 gen-ids로 복원
@@ -217,9 +211,7 @@ class TestGenIds:
         ko = json.loads((dst / "locales" / "ko.json").read_text(encoding="utf-8"))
         assert len(ko) == 437
 
-    def test_gen_ids_missing_graph_exits_2(
-        self, corpus_dir: Path, tmp_path: Path
-    ) -> None:
+    def test_gen_ids_missing_graph_exits_2(self, corpus_dir: Path, tmp_path: Path) -> None:
         """graph.json 없으면 종료코드 2(검증 대상 부재)."""
         dst = tmp_path / "nograph"
         dst.mkdir()
@@ -265,9 +257,7 @@ class TestValidate:
         cpath, epath = tmp_path / "c.csv", tmp_path / "e.csv"
         _write_filled_concepts(cpath, [a, b])
         _write_filled_edges(epath, [(a, b)])
-        result = runner.invoke(
-            app, ["validate", "--concepts", str(cpath), "--edges", str(epath)]
-        )
+        result = runner.invoke(app, ["validate", "--concepts", str(cpath), "--edges", str(epath)])
         assert result.exit_code == 0, result.output
         assert "그래프 검증" in result.stdout
 
@@ -305,9 +295,7 @@ class TestValidate:
         cpath, epath = tmp_path / "c.csv", tmp_path / "e.csv"
         _write_filled_concepts(cpath, [a, b])
         _write_filled_edges(epath, [(a, b), (b, a)])  # 순환
-        result = runner.invoke(
-            app, ["validate", "--concepts", str(cpath), "--edges", str(epath)]
-        )
+        result = runner.invoke(app, ["validate", "--concepts", str(cpath), "--edges", str(epath)])
         assert result.exit_code == 1
         assert "prerequisite_cycle" in result.stdout
 

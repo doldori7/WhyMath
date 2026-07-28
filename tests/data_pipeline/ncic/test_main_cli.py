@@ -52,9 +52,7 @@ class TestExtractCommand:
         xlsx = tmp_path / "file_a.xlsx"
         _write_min_file_a(xlsx)
         out = tmp_path / "corpus"
-        result = runner.invoke(
-            app, ["extract", "--xlsx", str(xlsx), "--output-dir", str(out)]
-        )
+        result = runner.invoke(app, ["extract", "--xlsx", str(xlsx), "--output-dir", str(out)])
         assert result.exit_code == 0, result.output
 
         std = json.loads((out / "standards.json").read_text(encoding="utf-8"))
@@ -98,9 +96,7 @@ class TestExtractCommand:
         workbook.remove(default_sheet)
         workbook.save(str(xlsx))
         out = tmp_path / "corpus"
-        result = runner.invoke(
-            app, ["extract", "--xlsx", str(xlsx), "--output-dir", str(out)]
-        )
+        result = runner.invoke(app, ["extract", "--xlsx", str(xlsx), "--output-dir", str(out)])
         assert result.exit_code == 2
         assert not (out / "standards.json").exists()  # 검증 실패 시 미저장
 
@@ -152,9 +148,7 @@ def test_load_help_works() -> None:
     assert "--dsn" in result.stdout
 
 
-def test_load_without_dsn_exits_1(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_without_dsn_exits_1(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """--dsn 도 WHYMATH_DATABASE_URL 도 없으면 종료코드 1."""
     monkeypatch.delenv("WHYMATH_DATABASE_URL", raising=False)
     out = tmp_path / "standards.json"
@@ -182,9 +176,7 @@ def test_load_empty_collection_exits_2(tmp_path: Path) -> None:
     """성취기준이 0개면 종료코드 2."""
     out = tmp_path / "empty.json"
     write_json([], out)
-    result = runner.invoke(
-        app, ["load", "--json", str(out), "--dsn", "postgresql://fake/db"]
-    )
+    result = runner.invoke(app, ["load", "--json", str(out), "--dsn", "postgresql://fake/db"])
     assert result.exit_code == 2
 
 
@@ -208,9 +200,7 @@ def test_load_success_passes_parsed_standards(
         return len(standards)
 
     monkeypatch.setattr("data_pipeline.ncic.__main__.load_to_postgres", _fake_load)
-    result = runner.invoke(
-        app, ["load", "--json", str(out), "--dsn", "postgresql://fake/db"]
-    )
+    result = runner.invoke(app, ["load", "--json", str(out), "--dsn", "postgresql://fake/db"])
     assert result.exit_code == 0, result.output
     assert calls == [(2, "postgresql://fake/db", "achievement_standards", True)]
     assert "2행 영향" in result.stdout
@@ -259,15 +249,11 @@ def test_load_missing_postgres_extra_exits_4(
         raise RuntimeError("load_to_postgres에는 [postgres] extra가 필요합니다")
 
     monkeypatch.setattr("data_pipeline.ncic.__main__.load_to_postgres", _fake_load)
-    result = runner.invoke(
-        app, ["load", "--json", str(out), "--dsn", "postgresql://fake/db"]
-    )
+    result = runner.invoke(app, ["load", "--json", str(out), "--dsn", "postgresql://fake/db"])
     assert result.exit_code == 4
 
 
-def test_load_no_upsert_flag_propagates(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_load_no_upsert_flag_propagates(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """--no-upsert가 load_to_postgres(upsert=False)로 전달."""
     out = tmp_path / "standards.json"
     write_json(_samples(), out)

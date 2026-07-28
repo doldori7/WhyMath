@@ -94,6 +94,4 @@ def test_subject_count_warning_only() -> None:
     links = [_link("CALC1-U1-S1", "대학_CALC1_01_01")]
     report = validate_standards(standards, links)
     assert report.is_valid  # warning만
-    assert any(
-        i.rule == "subject_count" and i.severity == "warning" for i in report.warnings
-    )
+    assert any(i.rule == "subject_count" and i.severity == "warning" for i in report.warnings)

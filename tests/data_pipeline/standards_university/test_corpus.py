@@ -40,29 +40,21 @@ def test_corpus_norm_id_and_code_unique(corpus_standards: dict) -> None:
 
 
 def test_corpus_subject_count(corpus_standards: dict) -> None:
-    assert (
-        len({s["subject"] for s in corpus_standards["standards"]}) == _EXPECTED_SUBJECTS
-    )
+    assert len({s["subject"] for s in corpus_standards["standards"]}) == _EXPECTED_SUBJECTS
 
 
-def test_corpus_links_reference_standards(
-    corpus_standards: dict, corpus_links: dict
-) -> None:
+def test_corpus_links_reference_standards(corpus_standards: dict, corpus_links: dict) -> None:
     norm_ids = {s["norm_id"] for s in corpus_standards["standards"]}
     subunits = set()
     for link in corpus_links["links"]:
-        assert UNIV_SUBUNIT_PATTERN.match(link["concept_src_id"]), link[
-            "concept_src_id"
-        ]
+        assert UNIV_SUBUNIT_PATTERN.match(link["concept_src_id"]), link["concept_src_id"]
         assert link["norm_id"] in norm_ids  # referential
         assert link["link_type"] == "직접"
         subunits.add(link["concept_src_id"])
     assert len(subunits) == _EXPECTED_STANDARDS  # 소단원 유일·1:1
 
 
-def test_corpus_is_self_authored(
-    corpus_standards: dict, corpus_provenance: dict
-) -> None:
+def test_corpus_is_self_authored(corpus_standards: dict, corpus_provenance: dict) -> None:
     # 자체작성 표지(공공누리 아님·redaction 불요)·소단원 코드는 원자DB 재사용 명시.
     assert "자체" in corpus_standards["source_citation"]
     assert "공공누리" in corpus_standards["license_notice"]

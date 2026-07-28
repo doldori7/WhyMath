@@ -31,9 +31,7 @@ def _concept(
     return Concept(**data)  # type: ignore[arg-type]
 
 
-def _edge(
-    src: str, dst: str, relation: str = "prerequisite", **over: object
-) -> ConceptEdge:
+def _edge(src: str, dst: str, relation: str = "prerequisite", **over: object) -> ConceptEdge:
     data: dict[str, object] = {
         "src_concept_id": src,
         "dst_concept_id": dst,
@@ -212,9 +210,7 @@ class TestReport:
         assert "PASS" in report.summary()
 
     def test_summary_fail_verdict_on_cycle(self) -> None:
-        report = validate_graph(
-            [_concept(_A), _concept(_B)], [_edge(_A, _B), _edge(_B, _A)]
-        )
+        report = validate_graph([_concept(_A), _concept(_B)], [_edge(_A, _B), _edge(_B, _A)])
         assert "FAIL" in report.summary()
 
     def test_counts_by_rule(self) -> None:
@@ -263,9 +259,7 @@ class TestIdInvariants:
 
     def test_migrated_source_id_must_be_in_aliases(self) -> None:
         """재ID된 개념의 source_id가 aliases에 없으면 error(원천 키 조회 불가)."""
-        c = _concept(
-            _A, source_id="HK01", aliases=["UC.common1.a01.hk01"]
-        )  # src_id 누락
+        c = _concept(_A, source_id="HK01", aliases=["UC.common1.a01.hk01"])  # src_id 누락
         report = validate_graph([c], [])
         assert "alias_roundtrip" in _rules(report)
         assert report.success is False
@@ -300,16 +294,12 @@ class TestValidateIdmap:
 
     def test_unmapped_category_is_area_map_error(self) -> None:
         """미수록 category → area_map_total error(KeyError를 error로 환원)."""
-        bad = [
-            {"src_id": "X1", "category": "외계수학", "standard_codes": ["[6수01-01]"]}
-        ]
+        bad = [{"src_id": "X1", "category": "외계수학", "standard_codes": ["[6수01-01]"]}]
         report = validate_idmap(bad)
         assert "area_map_total" in {i.rule for i in report.issues}
         assert report.success is False
 
-    def test_real_corpus_idmap_passes(
-        self, concept_records: list[dict[str, object]]
-    ) -> None:
+    def test_real_corpus_idmap_passes(self, concept_records: list[dict[str, object]]) -> None:
         """실데이터 437건 재ID 불변식 전부 통과(area_map_total·id_unique·alias_roundtrip)."""
         report = validate_idmap(concept_records)
         assert report.node_count == 437
@@ -350,9 +340,7 @@ class TestRealDataValidation:
         concept_records: list[dict[str, object]],
         edge_records: list[dict[str, object]],
     ) -> None:
-        result = transform_dataset(
-            concept_records=concept_records, edge_records=edge_records
-        )
+        result = transform_dataset(concept_records=concept_records, edge_records=edge_records)
         report = validate_dataset(result)
         assert report.node_count == 437
         assert report.edge_count == 581
@@ -365,9 +353,7 @@ class TestRealDataValidation:
         edge_records: list[dict[str, object]],
     ) -> None:
         """리포트 텍스트가 PASS 판정과 카운트를 담는다."""
-        result = transform_dataset(
-            concept_records=concept_records, edge_records=edge_records
-        )
+        result = transform_dataset(concept_records=concept_records, edge_records=edge_records)
         report = validate_dataset(result)
         text = report.report_text()
         assert "PASS" in text

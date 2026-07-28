@@ -137,12 +137,8 @@ class TestRealWorldShapes:
             ("[12미적Ⅰ01-01]", "고등학교", "고등학교"),
         ],
     )
-    def test_diverse_curriculum_codes_pass(
-        self, code: str, school: str, band: str
-    ) -> None:
-        std = _make_std(
-            code=code, school_type=school, grade_band=band, subject="x", domain="x"
-        )
+    def test_diverse_curriculum_codes_pass(self, code: str, school: str, band: str) -> None:
+        std = _make_std(code=code, school_type=school, grade_band=band, subject="x", domain="x")
         report = validate_standards([std])
         assert report.success is True
 
@@ -153,27 +149,21 @@ class TestRealWorldShapes:
 class TestValidateLinks:
     def test_all_resolve_passes(self) -> None:
         std = _make_std("[9수01-01]")
-        link = ConceptStandardLink(
-            concept_src_id="N1", norm_id=std.norm_id, link_type="직접"
-        )
+        link = ConceptStandardLink(concept_src_id="N1", norm_id=std.norm_id, link_type="직접")
         report = validate_links([link], [std], {"N1"})
         assert report.success is True
         assert report.errors == []
 
     def test_unresolved_norm_id_flagged(self) -> None:
         std = _make_std("[9수01-01]")
-        link = ConceptStandardLink(
-            concept_src_id="N1", norm_id="2015_9수_99_99", link_type="직접"
-        )
+        link = ConceptStandardLink(concept_src_id="N1", norm_id="2015_9수_99_99", link_type="직접")
         report = validate_links([link], [std], {"N1"})
         assert any(i.rule == "link_norm_id_resolves" for i in report.errors)
         assert report.success is False
 
     def test_unresolved_concept_flagged(self) -> None:
         std = _make_std("[9수01-01]")
-        link = ConceptStandardLink(
-            concept_src_id="GHOST", norm_id=std.norm_id, link_type="직접"
-        )
+        link = ConceptStandardLink(concept_src_id="GHOST", norm_id=std.norm_id, link_type="직접")
         report = validate_links([link], [std], {"N1"})
         assert any(i.rule == "link_concept_resolves" for i in report.errors)
         assert report.success is False

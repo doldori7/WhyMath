@@ -29,9 +29,7 @@ class TestUniversityStandard:
         assert s.parent_codes == []
         assert "자체작성" in s.source_document
 
-    @pytest.mark.parametrize(
-        "bad", ["CALC1-01-01", "[CALC1-1-1]", "[calc1-01-01]", "[CALC1-01]"]
-    )
+    @pytest.mark.parametrize("bad", ["CALC1-01-01", "[CALC1-1-1]", "[calc1-01-01]", "[CALC1-01]"])
     def test_rejects_bad_code(self, bad: str) -> None:
         with pytest.raises(ValidationError, match="코드 형식"):
             UniversityStandard(
@@ -42,9 +40,7 @@ class TestUniversityStandard:
                 statement="z",
             )
 
-    @pytest.mark.parametrize(
-        "bad", ["CALC1_01_01", "대학-CALC1-01-01", "고등_CALC1_01_01x"]
-    )
+    @pytest.mark.parametrize("bad", ["CALC1_01_01", "대학-CALC1-01-01", "고등_CALC1_01_01x"])
     def test_rejects_bad_norm_id(self, bad: str) -> None:
         with pytest.raises(ValidationError, match="norm_id 형식"):
             UniversityStandard(
@@ -105,14 +101,10 @@ class TestUniversityLink:
         )
         assert link.link_type == "직접"
 
-    @pytest.mark.parametrize(
-        "bad", ["CALC1-S1", "CALC1_U1_S1", "calc1-u1-s1", "[CALC1-01-01]"]
-    )
+    @pytest.mark.parametrize("bad", ["CALC1-S1", "CALC1_U1_S1", "calc1-u1-s1", "[CALC1-01-01]"])
     def test_rejects_bad_subunit(self, bad: str) -> None:
         with pytest.raises(ValidationError, match="소단원 코드 형식"):
-            UniversityConceptStandardLink(
-                concept_src_id=bad, norm_id="대학_CALC1_01_01"
-            )
+            UniversityConceptStandardLink(concept_src_id=bad, norm_id="대학_CALC1_01_01")
 
 
 def test_license_is_self_authored() -> None:
