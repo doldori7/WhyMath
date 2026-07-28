@@ -204,7 +204,14 @@ class DialogueTurn(Base):
     image_uri_nonce: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
     # JSONB는 그대로 암호화할 수 없어 **결정론 JSON 직렬화 후** 바이트를 암호화한다
     # (`sort_keys=True`·`ensure_ascii=False`). 복호는 역직렬화해 dict로 되돌린다.
-    image_analysis: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    #
+    # SEC-04: `none_as_null=True` 필수 — 기본값(False)이면 Python `None`이 **SQL NULL이 아니라
+    # JSONB 스칼라 `null`** 로 저장된다. 그러면 "분석 없음"인 행이 `image_analysis IS NOT NULL`을
+    # 만족해 *평문 데이터가 있는 행*으로 오계수된다: ①배포 실측 쿼리가 "암호화 안 됨" 거짓경보를
+    # 내고 ②백필 WHERE가 그 행들을 대상으로 잡아 LIMIT 창을 채우면 **진짜 평문 행이 굶어죽는다**
+    # (2026-07-28 실 PG 재현: JSONB null 5행+평문 1행·batch_size=3에서 CLI가 "0행 처리"를
+    # 완료로 보고하고 평문 1행이 미암호화 잔존). 값 없음은 SQL NULL이어야 한다.
+    image_analysis: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     image_analysis_encrypted: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
     image_analysis_nonce: Mapped[bytes | None] = mapped_column(sa.LargeBinary, nullable=True)
 
