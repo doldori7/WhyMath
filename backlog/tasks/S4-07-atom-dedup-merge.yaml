@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-07-atom-dedup-merge
+title: "중복 원자 병합 실행 — 검수 승인 16쌍 통합(트랙 병렬 13·대학 3) + 엣지·참조 이관"
+track: math-completion
+stage: S4
+subject: math
+layer: data-pipeline
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "검수 승인 16쌍(docs/data/atom_dedup_review_queue.json approved·검수:Kiki 2026-07-28)을 코퍼스에서 통합: 대표 원자 선정 기준 명문화 → 피병합 원자의 선수엣지(상류·하류)·crosswalk(atom_codes)·problem_concept·오개념 참조를 대표 원자로 이관 → 트랙 병렬쌍(B 14건 중 13)은 양 트랙 성취기준 코드를 대표 원자에 병기+Curriculum Overlay 보존(Kiki 설계 결정: 단일 원자+오버레이) → transform-v1 재생성·DAG 사이클 0·dangling 0·거버넌스(입도 스냅샷 갱신 포함) green + backend 재적재 경로 확인"
+artifacts: []
+paths:
+  - "data/corpus/**"
+  - "src/data-pipeline/**"
+session: null
+notes: "원천: ARCH-16 bge-m3 실측(임계 0.90) → 전문가 검수(병합 16·유지 8·검수:Kiki 2026-07-28). 유지 8건은 rejected로 동결 — 재부상 방지(검수 큐가 기왕 판정 기록). 주의: 원자 code가 문제·오개념·crosswalk의 참조 키이므로 통합은 참조 무결성 스윕 동반(침묵 dangling 금지). test_node_granularity_governance 카운트 스냅샷은 의도 변경으로 갱신"
+updated: 2026-07-28
