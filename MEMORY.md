@@ -348,6 +348,11 @@
 **근본원인 실측 → HARN-09 등재**: 403이 권한이 아니라 **네임스페이스** 문제임을 확인했다 — `refs/claims/<id>` blob push는 거부, `refs/heads/<id>` 커밋 push는 **성공**. 즉 claim ref를 브랜치 네임스페이스로 옮기면 **CAS 원자성이 복구된다**. 단 **삭제 push는 여전히 거부**되므로(브랜치 생성은 되나 삭제는 hung up) claim *해제* 설계가 선결 — HARN-09의 수용 기준에 포함. 이는 CLAUDE.md "상시 실패하는 fail-open 보호를 '보호 있음'으로 신뢰 금지"(1회차 등재 규칙)의 **코드 상환**이다 — 규칙만으로는 2회차를 못 막았다는 것이 이번 사고의 교훈.
 
 **잔여물(정직한 공백)**: 위 진단 중 생성한 원격 브랜치 `__probe_ops13` 이 프록시의 삭제 거부로 남아 있다 — Kiki 수동 정리 필요(GitHub MCP에 브랜치 삭제 도구 부재).
+### 2026-07-27 (재발방지·규칙 등재): **Kiki 머신 안내 명령의 실행기 단독 호출 금지 — `python -m pip`/`python -m pytest` 강제** (claude 등재, 실수 관리 의무)
+
+**사고 경위**: ARCH-16 bge-m3 캘리브레이션 런북 실행(Kiki·Phaiakes9)에서 `pip install -e ".[dev,embedding]"`이 성공으로 보였으나 자가검증 1(`python -c "import sentence_transformers"`)이 ModuleNotFoundError로 실패. 실측 출력 진단: 프롬프트 `(base) (.venv)` — **conda base + .venv 동시 활성** 환경에서 `pip`는 miniconda 계열로 실행돼 유저 site(`AppData\Roaming\Python\Python313`)의 sentence-transformers 5.5.1을 already-satisfied로 판정했고, `python`은 `.venv` 인터프리터라 유저 site가 차단돼 import 불가. **"쓰기·읽기가 서로 다른 venv에서 절반씩 성립"(2026-07-16 등재 유형)의 재발**이며, 런북에 동봉한 설치 직후 자가검증 스텝이 실행 전에 차단해 피해 0(자가검증 규칙의 변별력 실증 사례).
+
+**대책(규칙 등재)**: CLAUDE.md Kiki 개인 선호에 "실행기 단독 호출 금지 — 항상 `python -m <tool>` 형태로 python과 동일 인터프리터 강제" 1줄 등재(사고 경위 병기). 정정 런북은 `python -m pip install` + `python -m pip show` 자가검증으로 재안내.
 
 ### 2026-07-27 (구현·3건 순차): **갭 설계 실행 — ARCH-16 중복 검수 게이트·ARCH-17 그래프 분석 리포트·S4-06 Formula 메타** (claude 구현, Kiki "3건 순차 전부" 선택)
 
