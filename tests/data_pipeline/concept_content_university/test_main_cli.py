@@ -83,9 +83,7 @@ def _make_xlsx(path: Path) -> None:
     ws.append(_concept_row("N4", school="초등(1~2학년군)"))  # 초중고 — 비추출
     cards = wb.create_sheet("암기카드(목록화)")
     cards.append(_CARD_HDR)
-    cards.append(
-        ["B", "함수", "25", "GALOIS-U1-S1", "분해체", "앞", "뒤", "암기", "마스터 후"]
-    )
+    cards.append(["B", "함수", "25", "GALOIS-U1-S1", "분해체", "앞", "뒤", "암기", "마스터 후"])
     cards.append(
         ["A", "수", "1", "N4", "수감각", "앞", "뒤", None, "마스터 후"]
     )  # 초중고 카드 — 무시
@@ -113,9 +111,4 @@ def test_cli_builds_content_corpus(tmp_path: Path) -> None:
 
 
 def test_cli_missing_input(tmp_path: Path) -> None:
-    assert (
-        main(
-            ["--input", str(tmp_path / "no.xlsx"), "--output-dir", str(tmp_path / "o")]
-        )
-        == 2
-    )
+    assert main(["--input", str(tmp_path / "no.xlsx"), "--output-dir", str(tmp_path / "o")]) == 2

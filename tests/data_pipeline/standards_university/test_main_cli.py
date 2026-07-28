@@ -108,9 +108,7 @@ def test_cli_builds_corpus(tmp_path: Path) -> None:
     assert rc == 0
 
     std = json.loads((out / "standards.json").read_text(encoding="utf-8"))
-    links = json.loads(
-        (out / "concept_standard_links.json").read_text(encoding="utf-8")
-    )
+    links = json.loads((out / "concept_standard_links.json").read_text(encoding="utf-8"))
     prov = json.loads((out / "_provenance.json").read_text(encoding="utf-8"))
 
     # 대학 2행만(초중고 필터링)·1:1 링크.
@@ -126,7 +124,5 @@ def test_cli_builds_corpus(tmp_path: Path) -> None:
 
 
 def test_cli_missing_input_returns_2(tmp_path: Path) -> None:
-    rc = main(
-        ["--input", str(tmp_path / "nope.xlsx"), "--output-dir", str(tmp_path / "o")]
-    )
+    rc = main(["--input", str(tmp_path / "nope.xlsx"), "--output-dir", str(tmp_path / "o")])
     assert rc == 2

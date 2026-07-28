@@ -249,9 +249,7 @@ class TestExtraFieldsForbidden:
 # ──────────────────────────────────────────────────────────────────────
 class TestConceptStandardLink:
     def test_valid_link(self) -> None:
-        link = ConceptStandardLink(
-            concept_src_id="N1", norm_id="2022_9수_01_01", link_type="직접"
-        )
+        link = ConceptStandardLink(concept_src_id="N1", norm_id="2022_9수_01_01", link_type="직접")
         assert link.concept_src_id == "N1"
         assert link.link_type == "직접"
         assert link.note is None
@@ -279,9 +277,7 @@ class TestConceptStandardLink:
 
     def test_blank_concept_src_id_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            ConceptStandardLink(
-                concept_src_id="", norm_id="2022_9수_01_01", link_type="직접"
-            )
+            ConceptStandardLink(concept_src_id="", norm_id="2022_9수_01_01", link_type="직접")
 
     def test_extra_field_forbidden(self) -> None:
         with pytest.raises(ValidationError):
@@ -309,12 +305,8 @@ class TestCollections:
         assert coll.count == 2
 
     def test_link_collection_count_and_metadata(self) -> None:
-        link = ConceptStandardLink(
-            concept_src_id="N1", norm_id="2022_9수_01_01", link_type="직접"
-        )
-        coll = ConceptStandardLinkCollection(
-            collected_at="2026-06-16T00:00:00Z", links=[link]
-        )
+        link = ConceptStandardLink(concept_src_id="N1", norm_id="2022_9수_01_01", link_type="직접")
+        coll = ConceptStandardLinkCollection(collected_at="2026-06-16T00:00:00Z", links=[link])
         assert coll.count == 1
         assert coll.source_citation == SOURCE_CITATION
         assert coll.license_notice == LICENSE_NOTICE

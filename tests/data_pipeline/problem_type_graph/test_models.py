@@ -60,9 +60,7 @@ class TestProblemTypeNodeConstruction:
         with pytest.raises(ValidationError):
             _ptype(problem_type_id=bad_id)
 
-    @pytest.mark.parametrize(
-        "ok_id", ["ptype.x", "ptype.optimize-derivative", "ptype.a1-b2-c3"]
-    )
+    @pytest.mark.parametrize("ok_id", ["ptype.x", "ptype.optimize-derivative", "ptype.a1-b2-c3"])
     def test_problem_type_id_pattern_accepted(self, ok_id: str) -> None:
         """유효 problem_type_id 통과."""
         assert _ptype(problem_type_id=ok_id).problem_type_id == ok_id

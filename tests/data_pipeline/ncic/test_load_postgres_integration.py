@@ -17,9 +17,7 @@ import uuid
 
 import pytest
 
-pytest.importorskip(
-    "sqlalchemy"
-)  # [postgres] 미설치(CI data-pipeline)면 모듈 전체 skip
+pytest.importorskip("sqlalchemy")  # [postgres] 미설치(CI data-pipeline)면 모듈 전체 skip
 
 from sqlalchemy import text  # noqa: E402  (importorskip 뒤에 와야 함)
 from sqlalchemy.ext.asyncio import create_async_engine  # noqa: E402
@@ -29,9 +27,7 @@ from data_pipeline.ncic.models import AchievementStandard  # noqa: E402
 
 pytestmark = pytest.mark.integration
 
-_DSN = os.environ.get(
-    "WHYMATH_DATABASE_URL", "postgresql://postgres@127.0.0.1:55432/whymath"
-)
+_DSN = os.environ.get("WHYMATH_DATABASE_URL", "postgresql://postgres@127.0.0.1:55432/whymath")
 
 
 def _sample(statement: str) -> AchievementStandard:
@@ -88,30 +84,22 @@ async def _drop(table: str) -> None:
 def test_load_insert_upsert_and_do_nothing_on_live_pg() -> None:
     """신규 INSERT → upsert UPDATE → upsert=False DO NOTHING 왕복이 실 PG에서 동작."""
     if not asyncio.run(_reachable()):
-        pytest.skip(
-            "PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)"
-        )
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
 
     table = f"ach_std_itest_{uuid.uuid4().hex[:8]}"
     try:
         # ① 신규 INSERT (create_all로 테이블 자동 생성)
-        n1 = asyncio.run(
-            load_to_postgres([_sample("원래 문장")], dsn=_DSN, table_name=table)
-        )
+        n1 = asyncio.run(load_to_postgres([_sample("원래 문장")], dsn=_DSN, table_name=table))
         assert n1 == 1
         assert asyncio.run(_fetch_statement(table, "[9수01-01]")) == "원래 문장"
 
         # ② 같은 code 재적재 — upsert=True면 UPDATE
-        asyncio.run(
-            load_to_postgres([_sample("수정된 문장")], dsn=_DSN, table_name=table)
-        )
+        asyncio.run(load_to_postgres([_sample("수정된 문장")], dsn=_DSN, table_name=table))
         assert asyncio.run(_fetch_statement(table, "[9수01-01]")) == "수정된 문장"
 
         # ③ upsert=False — DO NOTHING(기존 보존)
         asyncio.run(
-            load_to_postgres(
-                [_sample("무시될 문장")], dsn=_DSN, table_name=table, upsert=False
-            )
+            load_to_postgres([_sample("무시될 문장")], dsn=_DSN, table_name=table, upsert=False)
         )
         assert asyncio.run(_fetch_statement(table, "[9수01-01]")) == "수정된 문장"
     finally:

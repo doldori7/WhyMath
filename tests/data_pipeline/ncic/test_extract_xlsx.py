@@ -136,9 +136,7 @@ class TestParseLinkRow:
 
     def test_direct_norm_id_single(self) -> None:
         """norm_id 직접값(하위호환)이 있으면 단일 링크로 우선."""
-        links = parse_link_row(
-            {"개념ID": "N1", "norm_id": "2022_9수_01_01", "연결구분": "직접"}
-        )
+        links = parse_link_row({"개념ID": "N1", "norm_id": "2022_9수_01_01", "연결구분": "직접"})
         assert len(links) == 1
         assert links[0].norm_id == "2022_9수_01_01"
 
