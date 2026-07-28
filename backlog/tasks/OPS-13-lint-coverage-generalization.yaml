@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: OPS-13-lint-coverage-generalization
+title: "lint 배선 커버리지 일반화 — 모든 파이썬 소스 단위가 lint 대상인지 기계 강제 (OPS-10 실행축의 lint판)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: in_progress
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "레포의 모든 파이썬 소스 단위(tests/*·src/*·scripts·루트)가 어떤 CI lint 실행의 커버 범위인지 검사 — 미배선이면 실패"
+  - "의도적 제외는 사유 필수 허용목록 — 빈 사유는 무효 · stale 등재(이미 커버됨) 검출"
+  - "파서 위장 차단 + 변별력 실측(신규 미배선 디렉터리 주입 시 검출되는지)"
+artifacts: []
+paths:
+  - ".github/workflows/ci.yml"
+  - "tests/infra/**"
+  - "scripts/**"
+session: claude/whymath-service-review-9r21im
+notes: "OPS-11(infra)·OPS-12(harness)는 개별 상환이라 일곱 번째가 또 나온다. OPS-10이 *실행* 배선에 대해 한 것(전수 도달성 검사)을 *lint* 배선에 대해 하면 그 부류가 구조적으로 끝난다. 현 test_infra_lint_wiring.py(#618)는 표 주도이나 여전히 '등재된 것만' 검사한다 — 등재 자체를 빠뜨리면 못 잡는 것이 남은 구멍. [2026-07-28 재측정: #618이 scripts/harness를 배선·재포맷해 scripts 잔여 위반이 9→1파일(diagnose_atom_orphans.py)로 축소 — 당초 분리 예정이던 OPS-15의 사유가 소멸해 본 태스크에 흡수]"
+updated: 2026-07-28

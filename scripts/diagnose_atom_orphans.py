@@ -90,8 +90,7 @@ def _scan(engine: Any, canonical: set[str]) -> dict[str, Any]:
             }
             # concept 행은 FK 파급도 함께 센다 (UUID FK 경유)
             if table == "concept" and orphans:
-                fanout_sql = text(
-                    """
+                fanout_sql = text("""
                     SELECT c.code,
                            (SELECT count(*) FROM concept_edge e
                              WHERE e.from_concept_id = c.concept_id
@@ -99,8 +98,7 @@ def _scan(engine: Any, canonical: set[str]) -> dict[str, Any]:
                            (SELECT count(*) FROM problem_concept pc
                              WHERE pc.concept_id = c.concept_id) AS problem_refs
                       FROM concept c WHERE c.code = ANY(:codes)
-                    """
-                )
+                    """)
                 entry["fk_fanout"] = [
                     {"code": r[0], "edge_refs": r[1], "problem_refs": r[2]}
                     for r in conn.execute(fanout_sql, {"codes": orphans})
@@ -145,9 +143,7 @@ def main() -> int:
             if entry["orphans"] > 5:
                 print(f"      … 외 {entry['orphans'] - 5}건 (JSON 리포트 참조)")
 
-    Path(args.out).write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    Path(args.out).write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"\n총 orphan {report['total_orphans']}건 — 리포트: {args.out}")
     print("다음 단계: 리포트를 확정하면 정리 마이그레이션을 별도 슬라이스로 진행 (쓰기 없음 보장).")
     return 0

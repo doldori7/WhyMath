@@ -849,3 +849,7 @@
 {"ts": "2026-07-27T07:11:17", "actor": "claude/recommended-work-progress-b7mjk5", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "tests/infra/test_infra_lint_wiring.py", "mode": "warn", "detail": "'tests/infra/test_infra_lint_wiring.py' 은 claim 태스크 OPS-12-harness-tests-lint의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-07-27T07:14:19", "actor": "claude/recommended-work-progress-b7mjk5", "action": "policy_warn", "id": "-", "rule": "scope_drift", "file": "MEMORY.md", "mode": "warn", "detail": "'MEMORY.md' 은 claim 태스크 OPS-12-harness-tests-lint의 선언 범위(paths) 밖 — 범위 확장이 맞으면 태스크 YAML의 paths에 추가"}
 {"ts": "2026-07-27T07:14:49", "actor": "claude/recommended-work-progress-b7mjk5", "action": "done", "id": "OPS-12-harness-tests-lint", "artifacts": ["62ff187"]}
+{"ts": "2026-07-28T01:58:33", "actor": "claude/whymath-service-review-9r21im", "action": "add", "id": "OPS-13-lint-coverage-generalization"}
+{"ts": "2026-07-28T01:58:49", "actor": "claude/whymath-service-review-9r21im", "action": "add", "id": "OPS-14-data-pipeline-tests-lint"}
+{"ts": "2026-07-28T01:58:50", "actor": "claude/whymath-service-review-9r21im", "action": "claim_remote_unavailable", "id": "OPS-13-lint-coverage-generalization", "status": "error"}
+{"ts": "2026-07-28T01:58:53", "actor": "claude/whymath-service-review-9r21im", "action": "start", "id": "OPS-13-lint-coverage-generalization", "session": "claude/whymath-service-review-9r21im", "remote": "error+readscan_ok"}
