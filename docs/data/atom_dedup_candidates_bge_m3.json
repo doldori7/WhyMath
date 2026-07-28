@@ -1,0 +1,241 @@
+{
+  "notice": "AI 자기승인 금지 — 중복 판정·병합은 사람 검수(전문가) 소관. 이 파일은 후보 리포트이며 어떤 적재 경로도 직접 읽지 않는다.",
+  "provider": "local",
+  "model": "BAAI/bge-m3",
+  "threshold": 0.9,
+  "atom_count": 1837,
+  "stats": {
+    "pair_count": 1686366,
+    "max_similarity": 1.0,
+    "threshold_hits": 24,
+    "percentiles": {
+      "p50": 0.49,
+      "p90": 0.56,
+      "p99": 0.64
+    },
+    "band_counts": {
+      "[0.80,0.85)": 160,
+      "[0.85,0.90)": 65,
+      "[0.90,0.95)": 19,
+      "[0.95,1.00)": 5
+    }
+  },
+  "dedup_candidates": [
+    {
+      "code_a": "12대수01-03-2",
+      "code_b": "9수02-08-2",
+      "name_a": "지수법칙 적용",
+      "name_b": "지수법칙 적용",
+      "similarity": 1.0,
+      "method": "embedding",
+      "rationale": "cosine=1.000 · 이름 동일"
+    },
+    {
+      "code_a": "10공수1-04-02-2",
+      "code_b": "10기수1-04-02-1",
+      "name_a": "행렬의 연산 계산",
+      "name_b": "행렬의 연산",
+      "similarity": 0.9843,
+      "method": "embedding",
+      "rationale": "cosine=0.984 · 이름 상이"
+    },
+    {
+      "code_a": "10공수1-02-06-2",
+      "code_b": "10기수1-02-05-1",
+      "name_a": "이차함수 최대·최소 구하기",
+      "name_b": "이차함수 최대·최소",
+      "similarity": 0.9584,
+      "method": "embedding",
+      "rationale": "cosine=0.958 · 이름 상이"
+    },
+    {
+      "code_a": "10공수1-03-02-1",
+      "code_b": "10기수1-03-02-1",
+      "name_a": "순열(순서 있음)",
+      "name_b": "순열(순서 있음)",
+      "similarity": 0.9559,
+      "method": "embedding",
+      "rationale": "cosine=0.956 · 이름 동일"
+    },
+    {
+      "code_a": "4수03-19-2",
+      "code_b": "4수03-23-2",
+      "name_a": "같은 단위끼리만 더하기",
+      "name_b": "무게도 같은 단위끼리",
+      "similarity": 0.9537,
+      "method": "embedding",
+      "rationale": "cosine=0.954 · 이름 상이"
+    },
+    {
+      "code_a": "4수04-03-3",
+      "code_b": "6수04-03-3",
+      "name_a": "자료 성격 보고 그래프 고르기",
+      "name_b": "자료 성격 보고 그래프 고르기",
+      "similarity": 0.9402,
+      "method": "embedding",
+      "rationale": "cosine=0.940 · 이름 동일"
+    },
+    {
+      "code_a": "10공수2-03-04-1",
+      "code_b": "10기수2-03-04-1",
+      "name_a": "유리함수 그래프(점근선)",
+      "name_b": "유리함수 그래프(점근선)",
+      "similarity": 0.9392,
+      "method": "embedding",
+      "rationale": "cosine=0.939 · 이름 동일"
+    },
+    {
+      "code_a": "10공수1-03-03-1",
+      "code_b": "10기수1-03-03-1",
+      "name_a": "조합(순열 vs 조합)",
+      "name_b": "조합(순열 vs 조합)",
+      "similarity": 0.933,
+      "method": "embedding",
+      "rationale": "cosine=0.933 · 이름 동일"
+    },
+    {
+      "code_a": "10공수2-01-04-1",
+      "code_b": "10기수2-01-04-1",
+      "name_a": "원의 방정식(반지름²)",
+      "name_b": "원의 방정식(반지름²)",
+      "similarity": 0.9286,
+      "method": "embedding",
+      "rationale": "cosine=0.929 · 이름 동일"
+    },
+    {
+      "code_a": "10공수2-01-05-1",
+      "code_b": "10기수2-01-05-1",
+      "name_a": "원과 직선의 위치 관계",
+      "name_b": "원과 직선의 위치 관계",
+      "similarity": 0.9272,
+      "method": "embedding",
+      "rationale": "cosine=0.927 · 이름 동일"
+    },
+    {
+      "code_a": "12미적Ⅰ-03-06-1",
+      "code_b": "12미적Ⅱ-03-07-1",
+      "name_a": "속도와 거리(적분)",
+      "name_b": "속도와 거리(적분)",
+      "similarity": 0.9255,
+      "method": "embedding",
+      "rationale": "cosine=0.926 · 이름 동일"
+    },
+    {
+      "code_a": "10공수1-04-01-1",
+      "code_b": "10기수1-04-01-1",
+      "name_a": "행렬의 뜻(행×열)",
+      "name_b": "행렬의 뜻(행×열)",
+      "similarity": 0.9248,
+      "method": "embedding",
+      "rationale": "cosine=0.925 · 이름 동일"
+    },
+    {
+      "code_a": "ANAL2-C03",
+      "code_b": "CALC1-P11",
+      "name_a": "로피탈은 부정형에서만",
+      "name_b": "로피탈은 부정형에만 쓴다",
+      "similarity": 0.9221,
+      "method": "embedding",
+      "rationale": "cosine=0.922 · 이름 상이"
+    },
+    {
+      "code_a": "CALC1-C16",
+      "code_b": "NUMER-C05",
+      "name_a": "뉴턴법은 항상 수렴하진 않는다",
+      "name_b": "뉴턴법은 항상 수렴하진 않는다",
+      "similarity": 0.9196,
+      "method": "embedding",
+      "rationale": "cosine=0.920 · 이름 동일"
+    },
+    {
+      "code_a": "4수03-25-2",
+      "code_b": "9수03-05-2",
+      "name_a": "각 나눠 내각의 합 구하기",
+      "name_b": "다각형 내각의 합 구하기",
+      "similarity": 0.9194,
+      "method": "embedding",
+      "rationale": "cosine=0.919 · 이름 상이"
+    },
+    {
+      "code_a": "12대수03-02-2",
+      "code_b": "12대수03-03-2",
+      "name_a": "등차수열의 합",
+      "name_b": "등비수열의 합",
+      "similarity": 0.9163,
+      "method": "embedding",
+      "rationale": "cosine=0.916 · 이름 상이"
+    },
+    {
+      "code_a": "10공수2-02-01-2",
+      "code_b": "10기수2-02-01-2",
+      "name_a": "조건제시→원소나열",
+      "name_b": "조건제시→원소나열",
+      "similarity": 0.9157,
+      "method": "embedding",
+      "rationale": "cosine=0.916 · 이름 동일"
+    },
+    {
+      "code_a": "ANAL2-C05",
+      "code_b": "CALC1-C19",
+      "name_a": "FTC는 연속을 전제",
+      "name_b": "FTC는 연속을 전제한다",
+      "similarity": 0.9133,
+      "method": "embedding",
+      "rationale": "cosine=0.913 · 이름 상이"
+    },
+    {
+      "code_a": "2수03-11-1",
+      "code_b": "4수03-16-1",
+      "name_a": "길이 단위 관계·표현(1m=100cm)",
+      "name_b": "길이 단위 관계·표현(cm-mm, km-m)",
+      "similarity": 0.9114,
+      "method": "embedding",
+      "rationale": "cosine=0.911 · 이름 상이"
+    },
+    {
+      "code_a": "12미적Ⅰ-03-01-1",
+      "code_b": "12미적Ⅱ-03-01-2",
+      "name_a": "부정적분의 뜻(+C)",
+      "name_b": "부정적분과 +C 의미",
+      "similarity": 0.9084,
+      "method": "embedding",
+      "rationale": "cosine=0.908 · 이름 상이"
+    },
+    {
+      "code_a": "12미적Ⅰ-02-08-1",
+      "code_b": "12미적Ⅱ-02-09-1",
+      "name_a": "함수의 그래프 개형",
+      "name_b": "함수의 그래프 개형(2차 도함수)",
+      "similarity": 0.904,
+      "method": "embedding",
+      "rationale": "cosine=0.904 · 이름 상이"
+    },
+    {
+      "code_a": "10공수2-03-01-2",
+      "code_b": "10기수2-03-01-2",
+      "name_a": "대응이 함수인지 판정",
+      "name_b": "대응표로 함수 판정",
+      "similarity": 0.9037,
+      "method": "embedding",
+      "rationale": "cosine=0.904 · 이름 상이"
+    },
+    {
+      "code_a": "10공수2-01-06-2",
+      "code_b": "10기수2-01-06-2",
+      "name_a": "평행이동한 식 구하기",
+      "name_b": "평행이동 식 바꾸기",
+      "similarity": 0.9023,
+      "method": "embedding",
+      "rationale": "cosine=0.902 · 이름 상이"
+    },
+    {
+      "code_a": "TOPO2-C03",
+      "code_b": "TOPO2-C04",
+      "name_a": "우리손 보조정리",
+      "name_b": "우리손 거리화 정리",
+      "similarity": 0.9008,
+      "method": "embedding",
+      "rationale": "cosine=0.901 · 이름 상이"
+    }
+  ]
+}
