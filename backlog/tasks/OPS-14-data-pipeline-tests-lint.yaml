@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 4
 owner: claude
 depends_on: []
@@ -14,11 +14,13 @@ acceptance:
   - "data-pipeline 잡에 tests/data_pipeline lint 대상 추가 — 현재 ruff check . 는 working-directory=src/data-pipeline만 덮는다"
   - "선재 위반 재포맷 — 단 정본 컨텍스트를 먼저 결정할 것: 레포 루트 --line-length 100 기준 28파일 vs src/data-pipeline pyproject 기준 32파일로 결과가 다르다(2026-07-27 실측)"
   - "OPS-13 허용목록에서 이 항목 제거 — stale 검출 테스트가 제거를 강제한다"
-artifacts: []
+artifacts:
+  - "PR#632"
+  - "ci.yml data-pipeline 잡 src+tests lint·재포맷 23파일·_WIRINGS 등재·허용목록 제거"
 paths:
   - ".github/workflows/ci.yml"
   - "tests/data_pipeline/**"
   - "tests/infra/**"
-session: claude/whymath-concept-management-spnep8
+session: null
 notes: "OPS-13이 검사를 일반화하며 사유와 함께 허용목록에 등재한 공백. 검사는 공백을 드러낼 뿐 고치지 않으므로 이 태스크가 실제 보호를 켠다. 컨텍스트별 결과 차이(28 vs 32)는 다른 pyproject 설정 영향 — 어느 쪽을 정본으로 할지가 선결. ruff는 현재 clean(위반은 black 포맷만)."
 updated: 2026-07-28
