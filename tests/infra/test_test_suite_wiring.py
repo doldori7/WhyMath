@@ -173,17 +173,20 @@ def _logical_lines(script: str) -> list[str]:
     return lines
 
 
-def _simple_commands(line: str, origin: str) -> list[list[str]]:
+def _simple_commands(line: str, origin: str, subject: str = "pytest") -> list[list[str]]:
     """한 논리 줄을 `&&`·`|`·`;` 기준으로 나눠 단순 명령 토큰 목록으로 만든다.
 
     토큰화 실패는 **예외로 올린다** — 조용히 빈 목록을 돌려주면 그 줄의 배선이 통째로
     사라지고, 그래도 이 파일의 다른 테스트가 "통과"할 수 있다(계약 ③).
+
+    `subject`는 실패 메시지에만 쓴다 — OPS-13의 lint 커버리지 검사가 이 함수를 그대로
+    재사용하므로(중복 파서 금지), 그쪽 실패가 "pytest 줄"로 잘못 보고되지 않게 한다.
     """
     try:
         tokens = shlex.split(line, comments=True)
     except ValueError as exc:  # 따옴표 불균형 등
         raise AssertionError(
-            f"{origin}: pytest가 등장하는 셸 줄을 토큰화하지 못했다 ({exc}). "
+            f"{origin}: {subject}가 등장하는 셸 줄을 토큰화하지 못했다 ({exc}). "
             f"파서가 조용히 배선을 흘리지 않도록 실패시킨다.\n  줄: {line}"
         ) from exc
     commands: list[list[str]] = []

@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: HARN-09-claim-namespace-refs-heads
+title: "원격 claim CAS 복구 — refs/claims/* 403을 refs/heads/claims/* 로 우회 (실측: 브랜치 네임스페이스는 push 성공)"
+track: infra-debt
+stage: S4
+subject: cross
+layer: infra
+status: done
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "claim ref 네임스페이스를 refs/claims/<id> → refs/heads/claims/<id>(커밋 객체)로 이전 — 2026-07-28 실측: 전자는 프록시 403, 후자는 push 성공"
+  - "--force-with-lease CAS 원자성이 실제로 성립하는지 종단 실측 — 두 세션이 동시에 같은 태스크를 start할 때 한쪽만 성공해야 한다"
+  - "claim 해제(done/cancel) 경로 확보 — 실측: 이 프록시는 ref *삭제* push도 거부한다(브랜치 생성은 되나 삭제는 hung up). 삭제 불가면 tombstone 커밋 등 대체 설계 필요"
+  - "reap(stale claim 회수) 재검토 — 브랜치 네임스페이스는 목록이 ls-remote로 보이므로 읽기측 폴백(HARN-07/08)과 이중 회계 가능"
+artifacts:
+  - bcfb704
+paths:
+  - "scripts/harness/**"
+  - "tests/harness/**"
+  - docs/standards/build_harness.md
+session: null
+notes: "병렬 중복 작업 2회째의 근본 원인 상환. OPS-07(1회차)·OPS-12(2회차) 모두 CAS가 403으로 상시 실패해 fail-open 진행 → 두 세션이 같은 태스크를 구현. HARN-07/08의 읽기측 폴백은 *push된* 브랜치만 보므로 OPS-12에서 3분 창(내 start 07:03:21 로컬 미push ↔ 상대 start 07:06:21)을 막지 못했다 — 설계된 한계대로 동작했으나 한계 자체가 사고를 허용. 2026-07-28 실측으로 403이 네임스페이스 문제임이 확인됨: refs/claims/* 는 거부, refs/heads/* 는 커밋 객체 push 성공. ※ 삭제 push는 여전히 거부되므로 해제 설계가 선결. ※ 진단 중 생성된 원격 브랜치 __probe_ops13 은 프록시가 삭제를 거부해 남아 있다 — Kiki 수동 정리 필요."
+updated: 2026-07-28
