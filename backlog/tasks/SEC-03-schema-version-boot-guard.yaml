@@ -1,0 +1,26 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: SEC-03-schema-version-boot-guard
+title: "기동 시 alembic head 일치 가드 — 스키마 표류 fail-closed(프로덕션)"
+track: infra-debt
+stage: S4
+subject: math
+layer: backend
+status: done
+priority: 5
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "기동 시 DB alembic_version과 코드 기대 head를 대조해 불일치면 프로덕션 추정 환경에서 RuntimeError(개발·CI는 경고) + 기대 head 상수가 실제 alembic head와 어긋나면 실패하는 동결 테스트 + 변별력 테스트(불일치 시 판정이 뒤집힘)"
+artifacts:
+  - "커밋 b7b6068 — db/schema_version.py(MATCH/BEHIND/AHEAD 3분기)·app.py lifespan 배선·config.is_production_like 단일 좌석화·체크리스트 §1-2. 검증: ruff·black clean·mypy --strict Success(423)·lint-imports 0 broken·전체 스위트 7552 passed/260 skipped exit 0(커버리지 92.58%)·계층 게이트 전 계층 PASS·실 PG 통합 231 passed·신규 hermetic 15 passed"
+  - "변별력 실측 3회: ①head 상수 누락→동결 테스트 2건 FAIL ②AHEAD 구분 제거(엄격 동일성 회귀)→롤백 보호 테스트 FAIL ③실 PG에서 alembic_version을 f3a4b5c6d7e8(SEC-02가 만난 실제 상태)로 UPDATE→프로덕션 거부·개발 경고 확인 후 원복"
+paths:
+  - src/backend/whymath_backend/db/schema_version.py
+  - src/backend/whymath_backend/app.py
+  - src/backend/whymath_backend/config.py
+  - src/backend/whymath_backend/api/_crypto.py
+  - tests/backend/db/test_schema_version_guard.py
+session: null
+notes: "2026-07-27 Kiki 지시. SEC-02 실측(#616)이 드러낸 구멍 — prod fail-closed 게이트는 *키 부재*만 막고 *마이그레이션 미적용*은 막지 않는다. #616 실측에서 whymath-pg가 head f3a4b5c6d7e8(2026-06-30)로 암호화 마이그레이션 이전 상태였고 content_encrypted 컬럼 자체가 부재했다. 키만 설정되고 스키마가 뒤처지면 암호화 write가 런타임에 터지거나 배포 순서에 따라 어긋난다. wheel은 whymath_backend만 포함(alembic/versions 미포함)이라 런타임은 마이그레이션 파일을 못 읽는다 → 기대 head는 패키지 내 상수로 두고 테스트가 실제 head와 대조 동결."
+updated: 2026-07-28
