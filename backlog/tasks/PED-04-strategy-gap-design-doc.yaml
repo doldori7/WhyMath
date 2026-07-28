@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: docs
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
@@ -14,9 +14,10 @@ acceptance:
   - "docs/architecture/04e_pedagogy_strategy_catalog.md 신설 — §2 외부 4기능 대조 판정표 전수(전 항목 수용/거부/변형 판정 1개씩) + §1 용어 3축 구분표 + §8 비수용 목록 9항목"
   - "00_overview.md 문서 인덱스에 04e 1줄 추가 + MEMORY.md 결정 로그 1건(ExplanationMode 비신설 근거·카탈로그 금지 필드 3종·용어 3축 구분 필수 기록)"
   - "후속 구현 태스크 PED-05~11 CLI 등재 + backlog validate green"
-artifacts: []
+artifacts:
+  - "commit 68b0448 (branch claude/whymath-teaching-strategy-enfkqt)"
 paths:
   - "docs/architecture/**"
-session: claude/whymath-teaching-strategy-enfkqt
+session: null
 notes: "정본: docs/architecture/04e_pedagogy_strategy_catalog.md. Kiki 제공 외부 일반 교수전략 프레임워크(docx: 14 라이브러리·15 설명방식·16 비유예시·17 질문생성) 대조 격차 점검·설계. 04d는 참조만(개정 금지)."
 updated: 2026-07-28
