@@ -883,16 +883,26 @@ jobs:
       - name: backlog 무결성 검증
         run: python3 scripts/harness/backlog.py validate
 
+      # HARN-09 — 이 스텝은 **공전하고 있었다**. claim이 `refs/claims/*`에 있었고 그
+      # 네임스페이스 push가 프록시에서 403이라 원격 claim이 단 1건도 존재한 적이 없어,
+      # reap이 늘 "stale claim 없음"을 보고했다. 즉 "통과"가 "검사했다"를 뜻하지 않았다.
+      # 이제 조회 실패("조회 불가")를 stale 없음과 **구분**한다 — 인프라가 죽으면
+      # "측정 실패"가 보여야지 "0건 통과"로 위장되면 안 된다(CLAUDE.md AI·신뢰).
       - name: 원격 claim ↔ backlog 교차 검증 (stale claim은 warning)
         run: |
           set -e
-          # reap dry-run은 항상 exit 0 — stale 발견은 실패가 아니라 청소 안내
-          out=$(python3 scripts/harness/backlog.py claims reap || true)
+          # reap dry-run은 stale 발견 시에도 exit 0 — 청소 안내이지 실패가 아니다.
+          # 다만 *조회 실패*는 exit 1이므로 그 경우만 별도로 드러낸다.
+          if ! out=$(python3 scripts/harness/backlog.py claims reap); then
+            echo "$out"
+            echo "::warning::원격 claim 조회 실패 — 중복 착수 방지가 이 실행에서 검증되지 않았다"
+            exit 0   # 게이트가 아니라 관측 — CI를 볼모로 잡지 않되 침묵하지도 않는다
+          fi
           echo "$out"
-          if echo "$out" | grep -q "stale claim"; then
-            if ! echo "$out" | grep -q "stale claim 없음"; then
-              echo "::warning::stale 원격 claim 발견 — 'backlog.py claims reap --apply'로 청소 권장"
-            fi
+          if echo "$out" | grep -q "조회 불가"; then
+            echo "::warning::원격 claim 조회 불가 — stale 판정이 수행되지 않았다"
+          elif ! echo "$out" | grep -q "stale claim 없음"; then
+            echo "::warning::stale 원격 claim 발견 — 'backlog.py claims reap --apply'로 청소 권장"
           fi
 
       # OPS-12 — `tests/harness`·`scripts/harness`를 lint/format하는 잡이 **하나도 없었다**

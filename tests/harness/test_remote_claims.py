@@ -1,6 +1,7 @@
-"""remote_claims.py — 원격 claim(refs/claims/*) CAS 원자성·폴백·청소 테스트.
+"""remote_claims.py — 원격 claim(harness-claims 브랜치) CAS 원자성·폴백·청소 테스트.
 
-가짜 git이 아니라 진짜 로컬 bare 원격으로 병렬 세션 레이스를 재현한다.
+가짜 git이 아니라 진짜 로컬 bare 원격으로 병렬 세션 레이스를 재현한다 — 시임이면
+`--force-with-lease`의 서버측 트랜잭션을 검증할 수 없고, 그게 이 모듈의 존재 이유다.
 """
 
 from __future__ import annotations
@@ -66,6 +67,139 @@ class TestClaimCAS:
         b = clone("session-b")
         assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
         assert remote_claims.claim(b, "S1-02-other-task", "claude/session-b").status == "ok"
+
+    # ── HARN-09 — 단일 브랜치 레이아웃이 새로 만든 계약 ────────────────────────
+
+    def test_경합해도_서로_다른_태스크는_둘_다_살아남는다(self, bare_remote):
+        """lease 경합 재시도가 **기능을 죽이지 않는다**.
+
+        단일 브랜치라 서로 다른 태스크를 claim해도 같은 ref를 갱신한다. 재시도가 없으면
+        경합한 쪽이 실패하고 "한 번에 한 세션만 claim 가능"이라는 치명적 퇴행이 된다.
+
+        ⚠️ **진짜 경합을 만들어야 한다**: 순차 호출은 매번 최신 base를 fetch하므로
+        lease가 절대 깨지지 않는다(초안이 그랬고, `CAS_RETRIES=1` 돌연변이를 못 잡아
+        무효 검사임이 드러났다). 그래서 B가 base를 읽은 *뒤* push하기 *직전*에 A를
+        끼워넣어 B의 lease를 강제로 낡게 만든다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        b = clone("session-b")
+
+        original_push = remote_claims._push_claims
+        attempts: list[str] = []
+
+        def racing_push(root, base_sha, commit_sha):
+            attempts.append(base_sha)
+            if len(attempts) == 1:
+                # B가 base를 읽은 뒤 push하기 직전에 A가 먼저 착륙 → B의 lease는 낡는다
+                remote_claims._push_claims = original_push
+                assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+                remote_claims._push_claims = racing_push
+            return original_push(root, base_sha, commit_sha)
+
+        remote_claims._push_claims = racing_push
+        try:
+            result = remote_claims.claim(b, "S1-02-other-task", "claude/session-b")
+        finally:
+            remote_claims._push_claims = original_push
+
+        assert result.status == "ok", f"lease 경합에서 재시도가 실패했다: {result.message}"
+        assert len(attempts) >= 2, "경합이 재현되지 않았다 — 이 테스트는 재시도를 검증하지 못한다"
+        claims, status = remote_claims.list_claims(a)
+        assert status == "ok"
+        assert {c.task_id for c in claims} == {TASK, "S1-02-other-task"}, "경합이 claim을 삼켰다"
+
+    def test_claim은_작업트리와_인덱스를_건드리지_않는다(self, bare_remote):
+        """트리를 `mktree`로 만드는 이유 — 인덱스를 쓰면 사용자 스테이징이 오염된다.
+
+        하네스는 개발자가 편집 중인 클론에서 그대로 돈다. claim 하나가 스테이징을
+        흔들면 그건 도구가 아니라 사고다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        # 스테이징된 것 *과* 스테이징되지 않은 것을 **둘 다** 만든다.
+        # 스테이징만 있으면 `git add -A` 류의 오염이 무변화로 보여 검사가 무효가 된다
+        # (초안이 그랬고 돌연변이를 못 잡았다). 미스테이징 파일이 있어야 변별력이 산다.
+        (a / "스테이징됨.txt").write_text("staged", encoding="utf-8")
+        subprocess.run(["git", "add", "스테이징됨.txt"], cwd=a, check=True, capture_output=True)
+        (a / "미스테이징.txt").write_text("untracked", encoding="utf-8")
+        before = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=a, capture_output=True, text=True
+        ).stdout
+        assert "??" in before, "미스테이징 상태가 만들어지지 않으면 이 검사는 변별력이 없다"
+
+        assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+        assert remote_claims.release(a, TASK, "claude/session-a").status == "ok"
+
+        after = subprocess.run(
+            ["git", "status", "--porcelain"], cwd=a, capture_output=True, text=True
+        ).stdout
+        assert after == before, f"claim/release가 작업트리를 오염시켰다:\n{before!r} → {after!r}"
+
+    def test_해제는_ref_삭제를_쓰지_않는다(self, bare_remote):
+        """이 환경의 프록시가 ref 삭제를 거부하므로 삭제 push는 설계상 금지다.
+
+        구현이 삭제 push로 회귀하면 실 환경에서만 조용히 깨진다(로컬 bare 원격은
+        삭제를 허용하므로 이 테스트 없이는 안 잡힌다) — 그래서 명령을 직접 감시한다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+
+        original = remote_claims._git
+        seen: list[tuple[str, ...]] = []
+
+        def spy_git(root, *argv, **kwargs):
+            seen.append(argv)
+            return original(root, *argv, **kwargs)
+
+        remote_claims._git = spy_git
+        try:
+            assert remote_claims.release(a, TASK, "claude/session-a").status == "ok"
+        finally:
+            remote_claims._git = original
+
+        deletions = [
+            argv
+            for argv in seen
+            if argv and argv[0] == "push" and any(a_.startswith(":") for a_ in argv)
+        ]
+        assert not deletions, f"삭제 push가 쓰였다 — 실 프록시에서 거부된다: {deletions}"
+        claims, status = remote_claims.list_claims(a)
+        assert status == "ok" and claims == []
+
+    def test_claim_브랜치_부재가_조회_실패로_오인되지_않는다(self, bare_remote):
+        """claim 0건은 정상 상태다 — ok로 보고돼야 후속 로직이 진행된다."""
+        _, clone = bare_remote
+        a = clone("session-a")
+        claims, status = remote_claims.list_claims(a)
+        assert claims == [] and status == "ok"
+
+    def test_메타가_파손된_claim은_조용히_탈취되지_않는다(self, bare_remote, monkeypatch):
+        """홀더를 특정 못 해도 **통과가 아니라 conflict**다.
+
+        "누가 잡았는지 모르니 일단 진행"은 조용한 탈취이고, 그게 이 모듈이 막으려는
+        바로 그 사고(OPS-07·OPS-12 병렬 중복 구현)다. 복구는 --force로 명시한다.
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        b = clone("session-b")
+        assert remote_claims.claim(a, TASK, "claude/session-a").status == "ok"
+
+        # 메타 파손 재현 — 브랜치 필드를 읽을 수 없는 상태
+        original_read = remote_claims._read_claims
+
+        def corrupt_read(root, base_sha):
+            claims = original_read(root, base_sha)
+            for c in claims:
+                c.branch = ""
+                c.meta = None
+            return claims
+
+        monkeypatch.setattr(remote_claims, "_read_claims", corrupt_read)
+        result = remote_claims.claim(b, TASK, "claude/session-b")
+        assert result.status == "conflict", "홀더 불명이 통과로 이어지면 조용한 탈취다"
+        assert "--force" in result.message, "복구 경로를 안내해야 막힌 채로 남지 않는다"
 
 
 class TestReleaseSafety:
@@ -483,7 +617,8 @@ class TestStaleAndReap:
         a = clone("session-a")
         assert remote_claims.claim(a, "S1-03-ghost-task", "claude/session-a").status == "ok"
         backlog = _mk_backlog()  # ghost-task 미포함 → task_missing
-        reaped = remote_claims.reap(a, backlog, ttl_hours=72, dry_run=True)
+        reaped, status = remote_claims.reap(a, backlog, ttl_hours=72, dry_run=True)
+        assert status == "ok"
         assert len(reaped) == 1 and "task_missing" in reaped[0]
         claims, _ = remote_claims.list_claims(a)
         assert len(claims) == 1  # dry-run — 아직 남아 있음
@@ -493,7 +628,31 @@ class TestStaleAndReap:
         a = clone("session-a")
         assert remote_claims.claim(a, "S1-03-ghost-task", "claude/session-a").status == "ok"
         backlog = _mk_backlog()
-        reaped = remote_claims.reap(a, backlog, ttl_hours=72, dry_run=False)
-        assert len(reaped) == 1
+        reaped, status = remote_claims.reap(a, backlog, ttl_hours=72, dry_run=False)
+        assert status == "ok" and len(reaped) == 1
         claims, _ = remote_claims.list_claims(a)
         assert claims == []
+
+    def test_조회_실패는_stale_없음으로_위장되지_않는다(self, bare_remote, monkeypatch):
+        """HARN-09 — 이 구분이 없어서 CI 교차검증이 공전했다.
+
+        구 구현은 조회 실패 시 빈 목록만 돌려줬고, 호출자는 그것을 "stale 없음"과
+        구별할 수 없었다. 인프라가 죽으면 "측정 실패"가 보여야지 "0건 통과"로
+        위장되면 안 된다(CLAUDE.md AI·신뢰).
+        """
+        _, clone = bare_remote
+        a = clone("session-a")
+        assert remote_claims.claim(a, "S1-03-ghost-task", "claude/session-a").status == "ok"
+        original = remote_claims._git
+
+        def fake_git(root, *argv, **kwargs):
+            if argv and argv[0] == "ls-remote":
+                return subprocess.CompletedProcess(
+                    argv, 128, stdout="", stderr="fatal: unable to access 'origin'"
+                )
+            return original(root, *argv, **kwargs)
+
+        monkeypatch.setattr(remote_claims, "_git", fake_git)
+        reaped, status = remote_claims.reap(a, _mk_backlog(), ttl_hours=72, dry_run=True)
+        assert reaped == []
+        assert status != "ok", "조회 실패가 ok로 보고되면 '0건 통과' 위장이 된다"

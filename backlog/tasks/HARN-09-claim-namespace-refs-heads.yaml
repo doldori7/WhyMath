@@ -5,7 +5,7 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -20,6 +20,6 @@ paths:
   - "scripts/harness/**"
   - "tests/harness/**"
   - docs/standards/build_harness.md
-session: null
+session: claude/whymath-service-review-9r21im
 notes: "병렬 중복 작업 2회째의 근본 원인 상환. OPS-07(1회차)·OPS-12(2회차) 모두 CAS가 403으로 상시 실패해 fail-open 진행 → 두 세션이 같은 태스크를 구현. HARN-07/08의 읽기측 폴백은 *push된* 브랜치만 보므로 OPS-12에서 3분 창(내 start 07:03:21 로컬 미push ↔ 상대 start 07:06:21)을 막지 못했다 — 설계된 한계대로 동작했으나 한계 자체가 사고를 허용. 2026-07-28 실측으로 403이 네임스페이스 문제임이 확인됨: refs/claims/* 는 거부, refs/heads/* 는 커밋 객체 push 성공. ※ 삭제 push는 여전히 거부되므로 해제 설계가 선결. ※ 진단 중 생성된 원격 브랜치 __probe_ops13 은 프록시가 삭제를 거부해 남아 있다 — Kiki 수동 정리 필요."
 updated: 2026-07-28

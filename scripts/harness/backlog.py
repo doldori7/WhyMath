@@ -225,10 +225,12 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
             print(f"⚠ 원격 CAS claim 불가({result.status}): {result.message}", file=sys.stderr)
             store.append_event(root, "claim_remote_unavailable", task.id, status=result.status)
             # [프리플라이트 3] 읽기측 교차 세션 탐지 (HARN-07) — CAS(쓰기)가 막힌
-            # 환경에서 유일하게 남은 방어. 이 환경의 git 프록시는 refs/claims/* push를
-            # 403 거부해 CAS가 상시 실패하므로, fail-open을 그대로 두면 중복 방지가
-            # 영구 무력이다(2026-07-27 OPS-07 병렬 구현 사고). CAS 성공 시에는 돌지
-            # 않는다 — 전체 브랜치 fetch(~5초) 비용을 불필요하게 물지 않기 위해.
+            # 환경의 2선 방어. HARN-09가 claim을 `harness-claims` 브랜치로 옮겨 CAS를
+            # 복구하기 전까지, 이 환경의 프록시는 refs/claims/* push를 403 거부해
+            # CAS가 **한 번도 성공하지 못했고** fail-open이 중복 방지를 영구 무력화했다
+            # (OPS-07·OPS-12 병렬 구현 사고 2회). 이제 CAS가 1선이지만, 진짜 오프라인·
+            # 권한 문제로 실패하는 환경이 남아 있으므로 이 경로는 유지한다.
+            # CAS 성공 시에는 돌지 않는다 — 전체 브랜치 fetch(~5초)를 불필요하게 물지 않는다.
             scan = remote_claims.scan_remote_in_progress(root, task.id, session)
             remote_status = f"{result.status}+readscan_{scan.status}"
             # 규칙 A·B로 걸러낸 stale 홀더를 조용히 버리지 않는다 (HARN-08 관측성)
@@ -396,7 +398,7 @@ def _readside_conflict_message(task: Task, scan, cas_status: str) -> str | None:
     if len(scan.holders) > 3:
         lines.append(f"  · … 외 {len(scan.holders) - 3}건")
     lines.append(
-        "  ※ 이 탐지는 CAS claim(refs/claims/*)이 불가할 때 도는 *부분* 방어입니다 — "
+        "  ※ 이 탐지는 CAS claim(harness-claims 브랜치)이 불가할 때 도는 *부분* 방어입니다 — "
         "상대가 브랜치를 push한 뒤에만 보이며, 원자성은 대체하지 못합니다."
     )
     lines.append(
@@ -872,7 +874,12 @@ def cmd_claims(root: Path, args: argparse.Namespace) -> int:
 
     if args.claims_action == "reap":
         ttl = args.ttl_hours or policy.claim_ttl_hours
-        reaped = remote_claims.reap(root, backlog, ttl, dry_run=not args.apply)
+        reaped, scan_status = remote_claims.reap(root, backlog, ttl, dry_run=not args.apply)
+        if scan_status != "ok":
+            # 조회 실패를 "stale 없음"으로 위장하지 않는다 — 이 구분이 없어서 CI
+            # 교차검증이 공전했다(HARN-09). 판정 불가는 판정 불가라고 말한다.
+            print(f"원격 claim 조회 불가 ({scan_status}) — stale 판정 불가")
+            return 0 if scan_status == "offline" else 1
         if not reaped:
             print("stale claim 없음")
             return 0
@@ -1133,7 +1140,7 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("check-edit", help="PostToolUse 훅 — backlog 직접 편집 검증")
     p.set_defaults(func=cmd_check_edit)
 
-    p = sub.add_parser("claims", help="원격 claim(refs/claims/*) 조회·해제·청소")
+    p = sub.add_parser("claims", help="원격 claim(harness-claims 브랜치) 조회·해제·청소")
     p.add_argument("claims_action", nargs="?", default="list", choices=["list", "release", "reap"])
     p.add_argument("claims_id", nargs="?")
     p.add_argument("--json", action="store_true")
