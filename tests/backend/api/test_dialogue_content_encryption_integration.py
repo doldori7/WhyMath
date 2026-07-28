@@ -496,3 +496,138 @@ def test_backfill_covers_image_axis_on_live_pg() -> None:
             assert restored[0]["image_analysis"] == analysis
     finally:
         asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+async def _insert_jsonb_null_analysis_turns(dialogue_id: uuid.UUID, *, count: int) -> None:
+    """`image_analysis`가 **JSONB 스칼라 null**인 행을 심는다(SEC-04 이전 세계의 저장 표현).
+
+    SQL NULL이 아니라 JSON `null`이라 순진한 `IS NOT NULL` 술어에 걸린다 — 굶주림의 재료.
+    """
+    engine = create_async_engine(_settings().database_url)
+    try:
+        async with engine.begin() as conn:
+            for order in range(10, 10 + count):  # 기존 대화 턴(1~2)과 순번 충돌 회피
+                await conn.execute(
+                    text(
+                        "INSERT INTO dialogue_turn (turn_id, dialogue_id, turn_order, "
+                        "image_analysis) VALUES (:tid, :did, :ord, 'null'::jsonb)"
+                    ),
+                    {"tid": str(uuid.uuid4()), "did": str(dialogue_id), "ord": order},
+                )
+    finally:
+        await engine.dispose()
+
+
+def test_backfill_is_not_starved_by_jsonb_null_rows_on_live_pg() -> None:
+    """SEC-04: JSONB null 행이 LIMIT 창을 채워도 진짜 평문 행이 반드시 암호화된다.
+
+    **변별력**: 술어에서 `jsonb_typeof(...) != 'null'`을 빼면 백필이 "0행 처리"(=완료)를
+    보고하면서 미성년 평문 본문이 그대로 남는다 — *부분 처리를 완전 처리로 위장*하는 실패다
+    (2026-07-28 실 PG 재현으로 발견). batch_size를 JSONB null 행 수보다 작게 잡아 굶주림
+    조건을 강제한다.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    plaintext = "굶주림 재현용 미성년 평문 본문"
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _dialogue_key_env(None), _client() as client:
+            resp = client.post(
+                "/v1/coach/sessions", headers=auth, json={"student_input": plaintext}
+            )
+            assert resp.status_code == 201, resp.text
+            did = uuid.UUID(resp.json()["dialogue_id"])
+            dialogue_ids.append(did)
+        # 평문 본문 행(위 2턴)보다 앞 순번에 JSONB null 행을 다수 심어 LIMIT 창을 채운다.
+        asyncio.run(_insert_jsonb_null_analysis_turns(did, count=5))
+
+        with _dialogue_key_env(_ENC_KEY_B64):
+            cipher = build_dialogue_content_cipher(get_settings())
+            assert cipher is not None
+            engine = create_async_engine(_settings().database_url)
+
+            async def _run_backfill() -> int:
+                total = 0
+                for _ in range(20):  # 상한 — 무한 루프면 테스트가 매달리지 않고 끝난다
+                    async with async_sessionmaker(engine, expire_on_commit=False)() as s:
+                        n = await reencrypt_plaintext_dialogue_content(s, cipher, batch_size=3)
+                    total += n
+                    if n == 0:
+                        break
+                return total
+
+            try:
+                asyncio.run(_run_backfill())
+
+            finally:
+                asyncio.run(engine.dispose())
+
+            # 별도 엔진 — 풀을 다른 이벤트 루프에서 재사용하면 asyncpg가 거부한다(파일 관용).
+            async def _remaining_plaintext() -> int:
+                probe = create_async_engine(_settings().database_url)
+                try:
+                    async with probe.connect() as conn:
+                        row = await conn.execute(
+                            text(
+                                "SELECT count(*) FROM dialogue_turn WHERE dialogue_id = :did "
+                                "AND content IS NOT NULL AND content_encrypted IS NULL"
+                            ),
+                            {"did": str(did)},
+                        )
+                        return int(row.scalar_one())
+                finally:
+                    await probe.dispose()
+
+            remaining = asyncio.run(_remaining_plaintext())
+
+            # 굶주림이 있으면 여기서 > 0 — CLI는 완료를 보고했는데 평문이 남은 상태.
+            assert remaining == 0, f"평문 본문 {remaining}행이 백필되지 않고 남았다(굶주림)"
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
+
+
+def test_no_analysis_turn_stores_sql_null_not_jsonb_null_on_live_pg() -> None:
+    """SEC-04 근원 수정 — 분석 없는 턴은 JSONB `null`이 아니라 **SQL NULL**로 저장된다.
+
+    JSONB null이면 배포 실측 쿼리(§3)가 그 행을 *평문 데이터 보유*로 오계수해 "암호화 안 됨"
+    거짓경보를 낸다.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀 (WHYMATH_DATABASE_URL 확인)")
+
+    uid = uuid.uuid4()
+    dialogue_ids: list[uuid.UUID] = []
+    try:
+        asyncio.run(_add_user(uid))
+        token = create_access_token(uid, settings=_settings())
+        auth = {"Authorization": f"Bearer {token}"}
+        with _dialogue_key_env(_ENC_KEY_B64), _client() as client:
+            resp = client.post(
+                "/v1/coach/sessions", headers=auth, json={"student_input": _STUDENT_TEXT}
+            )
+            did = uuid.UUID(resp.json()["dialogue_id"])
+            dialogue_ids.append(did)
+
+        async def _jsonb_null_count() -> int:
+            engine = create_async_engine(_settings().database_url)
+            try:
+                async with engine.connect() as conn:
+                    row = await conn.execute(
+                        text(
+                            "SELECT count(*) FROM dialogue_turn WHERE dialogue_id = :did "
+                            "AND jsonb_typeof(image_analysis) = 'null'"
+                        ),
+                        {"did": str(did)},
+                    )
+                    return int(row.scalar_one())
+            finally:
+                await engine.dispose()
+
+        assert asyncio.run(_jsonb_null_count()) == 0
+    finally:
+        asyncio.run(_cleanup(uid, dialogue_ids))
