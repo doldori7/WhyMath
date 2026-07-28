@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-11-doc-debt-ghost-fields
+title: "문서 부채 정정 — preferred_solution_style 유령 필드 실측 부기 + 정본 관계 명시"
+track: math-completion
+stage: S4
+subject: math
+layer: docs
+status: todo
+priority: 5
+owner: claude
+depends_on:
+  - PED-04-strategy-gap-design-doc
+requires_gates: []
+acceptance:
+  - "02_learner_model.md·03_content_generation.md의 preferred_solution_style 서술에 04d §2.1 패턴 실측 부기(코드 부재·생산자 먼저)"
+  - "pedagogy-designer.md와 04 정본의 관계 1줄 명시(정본 이중화 방어)"
+  - 문자열 검색으로 무부기 유령 참조 0건
+artifacts: []
+paths:
+  - "docs/architecture/**"
+  - ".claude/agents/**"
+session: null
+notes: "정본: 04e §9. 04d §2.1 \"항상 None인 필드는 착시\" 실측 정정 패턴의 02/03 확산."
+updated: 2026-07-28

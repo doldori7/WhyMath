@@ -1,0 +1,25 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-09-analogy-example-generator
+title: "비유·예시 생성기(L3)+analogy_fidelity_eval 강등전 — metaphor 공백·저품질 채움"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - PED-04-strategy-gap-design-doc
+requires_gates: []
+acceptance:
+  - "l3/pedagogy/analogy_generator.py·example_generator.py — 라우터 경유·산출은 DRAFT(prescreen→review 상태기계 재사용)"
+  - "소비처 명시 — concept_content.metaphor 공백/ai_estimated 저품질 채움 건수 보고 + 발주서 잔여 슬롯. 정본 좌석: 개념 비유=concept_content.metaphor·슬롯=목표별 예시"
+  - "analogy_fidelity_eval 결함주입 강등전(오개념 유발 비유 주입 검출) CLI exit 0 + 게임형 산출 0 검사"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/**"
+  - "src/backend/whymath_backend/harness/**"
+  - "tests/backend/**"
+session: null
+notes: "정본: 04e §6. 상한 불변식: 개념당 비유 1(+레지스터 소수)·사전 대량 생성 금지. 오개념 교정 비유 신설 금지(반례가 기담당·reactive-only)."
+updated: 2026-07-28

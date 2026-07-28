@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-06-catalog-consumption
+title: "카탈로그 소비 배선 — select 후보 필터(학년·난이도)+프롬프트 전략 카드"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - PED-05-strategy-catalog-data
+requires_gates: []
+acceptance:
+  - "select() 학년·난이도 후보 필터 — 좁힘만·공집합이면 규칙표 원판정 폴백(테스트)·select() 출력 ⊆ registered_strategies() 거버넌스 유지"
+  - "prompt_assembler 전략 카드 계층 — 플래그 OFF/카탈로그 부재 시 기존 프롬프트 바이트 동일 계약 유지"
+  - "카탈로그가 gate() 입력에 부재함을 테스트로 동결(효과≤허용 우회 차단)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l4/pedagogy/**"
+  - "tests/backend/**"
+session: null
+notes: "정본: 04e §4. grade 신호 생산자 = UserProfile.grade(실재 확인). 카탈로그는 select 전용 — gate 입력 금지."
+updated: 2026-07-28

@@ -1,0 +1,24 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-07-mode-guard-wiring
+title: "mode_guard 런타임 fail-closed 배선 — coach 응답 경로(filter_tone 앞)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "check_forbidden_modes를 coach 응답 경로에 배선(filter_tone 앞) — 위반 시 폴백+reason_code 로그(무타입 침묵 금지)"
+  - "플래그 옵트인 — OFF 시 기존 동작 무변경 테스트"
+  - pedagogy_pack_fidelity_eval CI 게이트 통과 유지
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l4/**"
+  - "src/backend/whymath_backend/api/**"
+  - "tests/backend/**"
+session: null
+notes: "정본: 04e §9. \"검증 장치를 만들고 배선 확인 없이 완료 선언 금지\" 반복 사고 유형의 해소 — check_forbidden_modes 프로덕션 호출 현재 0."
+updated: 2026-07-28

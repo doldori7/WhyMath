@@ -337,6 +337,20 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-28 (설계·문서·PED-04): **교수전략 격차 완결 설계(04e) — 외부 프레임워크 전수 대조·ExplanationMode 비신설·카탈로그 신설** (claude 설계, Kiki "교수전략 분야의 빠진 부분을 점검하고 WhyMath의 방향과 같이 하는 내용으로 설계")
+
+**컨텍스트**: Kiki가 외부 일반 교수전략 프레임워크(docx — 4기능: ⑭전략 라이브러리 14관리항목 ⑮설명방식 10종 ⑯비유/예시 5유형 ⑰질문 7유형)를 제공하며 격차 점검·설계를 지시. 3축 탐색(문서·코드·백로그) 실측: 선택·게이트·측정 골격은 PED-01~03/REND-01/CACHE-01로 완성, 공백은 ①전략 서술 자산(오개념 839×12필드 대비 전략은 enum+docstring뿐) ②비유·예시 *생성* 파이프라인(자산 `metaphor` 846행은 실재·전량 검수 전·AnalogyAdapter가 기렌더) ③형성평가 슬롯 내용물 ④배선 3건(mode_guard 프로덕션 호출 0·coach 실행용 축 미수렴·adaptive 표본 대기).
+
+**결정**: `docs/architecture/04e_pedagogy_strategy_catalog.md` 신설(04d 참조만·개정 없음). 핵심 판정 3건 — ① **ExplanationMode 독립 enum 비신설**: 외부 10종은 기존 3축(전략/슬롯·자산/L5 시각화)의 사영. 중첩 축=단일 진실 원천 붕괴+렌더 조합폭발(5×8=40)+처치 생산자 부재(`pedagogy_evidence` 축=전략 단위). 학생 옵트인은 `requested_strategy` 힌트로 흡수(gate 통과 의무). ② **카탈로그 제거 필드 3종**: AI 추천점수(bandit Beta(1,1) 무정보 사전 오염)·기계 금지조건(팩 forbidden_modes+gate 정본 이중화)·선행/후속 페이딩(팩 fading_schedule 정본 이중화) — 부재를 테스트로 동결. ③ **용어 3축 구분 정본화**: 교수전략(`PedagogyStrategy`·ANALOGY=비유) ≠ 문제 공략 전략(`strategy_graph_v1`·`strategy.analogy`=유추) ≠ 전략 레퍼토리(04a §11 학생 휴리스틱). 비수용 9항목 §8 영구 기록(게임형 전 축·전략×오개념 개별 매핑 10×839 관계 폭발·14필드 전량 미러링 등). 오개념 연결은 실재 폐쇄 축 `error_type` 6종 기반(초안의 "개입 패턴 어휘 재사용"은 유령 참조로 판명·폐기).
+
+**적용**: ① 04e 신설(§1 용어 3축·§2 전수 대조 판정표·§3 카탈로그(소비처 지정표)·§4 후보 필터 불변식(좁힘만·공집합 폴백·gate 입력 금지)·§5 분해표·§6 생성 파이프라인(정본 좌석: 개념 비유=`concept_content.metaphor`·analogy_fidelity_eval 강등전)·§7 형성평가(atom_probe 1,823 투영·crosswalk grain 다리)·§8 비수용·§9 배선·§10 구현 매핑 부기) ② backlog 등재 8건: PED-04(본 설계·claim)·PED-05/06(카탈로그·소비)·PED-07(mode_guard fail-closed 배선·p2)·PED-08(coach 실행용 축 수렴·최고 위험 101KB)·PED-09(비유·예시 생성기)·PED-10(diag_item 채움)·PED-11(유령 필드 02/03 부기) ③ 00_overview 인덱스 1줄. CLAUDE.md는 무변경 — 개별 문서 미등재 구조(04d도 미등재)라 불요.
+
+**검증**: `backlog.py validate` green(108건)·next 후보에 PED-07/10/08 진입 확인·04/04a/04d 본문 무변경(참조만).
+
+**롤백**: 04e 삭제+인덱스 1줄 제거+PED-04~11 YAML 제거(테스트·코드 변경 0 — 문서·대장만).
+
+**정직한 공백**: 카탈로그 YAML 10건의 *내용*(연구근거·적합성 값)은 PED-05에서 작성 — 본 세션은 스키마·필드 계약까지만. 예측 질문(04a 도구#10)·비교·확장·역사배경·발견학습·CRA 구체물은 보류로 명시(§2 ⏸ — 각 조건 병기). adaptive 승격은 신규 작업 없음(표본 게이트가 정직 미달 표기 중).
+
 ### 2026-07-28 (구현·OPS-14): **tests/data_pipeline lint 배선 — 정본 컨텍스트 확정 + ruff per-file-ignores가 죽은 설정이었음 실측** (claude 구현, Kiki "다음 진행")
 
 **정본 결정(OPS-13이 선결로 지정)**: black = **저장소 표준 root `--line-length 100`**(tests/* 배선 공통 정본 — backend·infra·harness 동일), ruff = **DP pyproject 규칙 그대로**(src와 tests 동일 규칙·E501 포함). 2026-07-27의 "28 vs 32" 컨텍스트 차이는 현시점 실측에서 소멸(양쪽 23파일 동일)이라 결정 부담 없음. src도 root-100 컨텍스트로 clean이라 backend 잡 동형의 단일 명령(`black --check --line-length 100 . ../../tests/data_pipeline`)으로 통합.

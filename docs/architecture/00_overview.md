@@ -187,6 +187,7 @@ WhyMath 아키텍처는 *서로 직교하는 두 축*으로 본다:
 - 하네스: `03b_wh_s_solver_harness.md`(솔버·WH-S) · `04a_wh1_tutoring_harness.md`(튜터링·WH-1)
 - 콘텐츠 전략(교수법-중립 DSL·Rendering Engine·2층 캐시): `03c_content_strategy_cache.md`
 - 2단계 교수법·런타임 선택·적응 엔진: `04d_adaptive_pedagogy_engine.md` · 북극성 서사: `../strategy/education_os_positioning_v1.md`
+- 교수전략 카탈로그·격차 완결(외부 프레임워크 대조 판정·비유/예시 생성·용어 3축): `04e_pedagogy_strategy_catalog.md`
 - 시장 전략: `../strategy/`
 - 코딩 표준: `../standards/`
 - 프롬프트 라이브러리: `../prompts/`
