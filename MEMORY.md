@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-27 (구현·SEC-03): **기동 시 스키마 버전(alembic head) 가드 — 키 게이트가 못 막던 "마이그레이션 미적용" 구멍 봉인** (claude, Kiki "기동 시 alembic head 일치 가드를 추가")
+
+**컨텍스트**: SEC-01의 프로덕션 fail-closed는 *암호화 키 부재*만 막았다. SEC-02 실측(#616)이 그 사각을 실물로 드러냈다 — 대상 DB가 `f3a4b5c6d7e8`(2026-06-30)에 머물러 `dialogue_turn.content_encrypted` **컬럼 자체가 없었다**. 키만 설정되고 스키마가 뒤처지면 암호화 write가 런타임에 터지거나 배포 순서에 따라 조용히 어긋난다. Kiki 지시로 그 판정을 기동 시점으로 끌어올렸다(첫 학생 요청이 아니라 부팅에서 드러나게).
+
+**설계 판단 3건**: **(가) 뒤처짐과 앞섬을 구분한다** — 엄격 동일성 가드는 *정상 롤백*(코드만 되돌리고 DB는 앞선 상태)에서 부팅을 거부해 **가드 자체가 장애 원인**이 된다. 판정을 셋으로 나눴다: `MATCH` 통과 / `BEHIND`(코드가 아는 이전 리비전·미적용 — 컬럼 부재 위험) 프로덕션 거부 / `AHEAD`(코드가 모르는 리비전 = 롤백 중) 경고만. **(나) 기대 head를 패키지 내 상수로 둔다** — wheel은 `packages = ["whymath_backend"]`라 `alembic/versions/`가 배포 이미지에 **없다**(실측 확인). 런타임이 마이그레이션 파일을 읽는 설계는 성립하지 않는다. 대신 `KNOWN_REVISIONS` 상수를 두고 **동결 테스트**가 실제 `ScriptDirectory.walk_revisions()`와 대조한다(인프로세스 이중 회계 — 상수가 실물과 어긋나면 즉시 실패). **(다) "프로덕션 추정" 판별을 단일 좌석으로 모았다** — `config.is_production_like`. SEC-01이 `_crypto.py`에 인라인해 둔 것을 그대로 복사하면 두 안전장치의 판정이 서로 표류한다. 속성이 모두 없으면 `TypeError` — 조용한 `False`는 "프로덕션이 아니다"라는 *잘못된 판정*이 되어 안전장치를 통째로 무력화한다.
+
+**확인 실패 처리**: DB 미도달 등으로 판정 자체가 불가하면 프로덕션에서는 **거부**한다 — "측정 실패"를 "정상"으로 바꾸지 않는다(`ops/cost_probe` 이중 회계와 같은 규칙). 로그에는 예외 **타입명**을 포함한다(침묵 실패 금지·시크릿 제외).
+
+**검증**: ruff·black clean · mypy --strict Success(423) · lint-imports 0 broken · 신규 hermetic **15 passed** · 실 PG 통합 **231 passed**. **변별력 실측 3회**: ①head 상수 1개 누락 → 동결 테스트 2건 FAIL ②`AHEAD` 구분 제거(엄격 동일성 회귀) → `test_unknown_revision_is_ahead`·`test_ahead_does_not_block_production` FAIL(막고 싶던 롤백 장애 그 자체) ③**실 PG에서 SEC-02가 만난 상태 재현** — `alembic_version`을 `f3a4b5c6d7e8`로 실제 UPDATE 후 프로덕션 거부·개발 경고를 확인하고 원복. 대역이 아니라 진짜 `alembic_version` 쿼리가 도는 것을 실증했다.
+
+**경계**: 마이그레이션 0 · 신규 설정 축 0(escape hatch를 두지 않았다 — 가드를 끄는 축은 그 자체가 "켜는 걸 잊는" 표면이다) · 개발·CI 동작 불변(경고만) · `AHEAD`는 프로덕션에서도 미차단.
+
 ### 2026-07-27 (재발방지·규칙 등재): **Kiki 머신 안내 명령의 실행기 단독 호출 금지 — `python -m pip`/`python -m pytest` 강제** (claude 등재, 실수 관리 의무)
 
 **사고 경위**: ARCH-16 bge-m3 캘리브레이션 런북 실행(Kiki·Phaiakes9)에서 `pip install -e ".[dev,embedding]"`이 성공으로 보였으나 자가검증 1(`python -c "import sentence_transformers"`)이 ModuleNotFoundError로 실패. 실측 출력 진단: 프롬프트 `(base) (.venv)` — **conda base + .venv 동시 활성** 환경에서 `pip`는 miniconda 계열로 실행돼 유저 site(`AppData\Roaming\Python\Python313`)의 sentence-transformers 5.5.1을 already-satisfied로 판정했고, `python`은 `.venv` 인터프리터라 유저 site가 차단돼 import 불가. **"쓰기·읽기가 서로 다른 venv에서 절반씩 성립"(2026-07-16 등재 유형)의 재발**이며, 런북에 동봉한 설치 직후 자가검증 스텝이 실행 전에 차단해 피해 0(자가검증 규칙의 변별력 실증 사례).
