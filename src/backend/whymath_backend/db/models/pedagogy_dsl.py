@@ -140,15 +140,17 @@ class PedagogyPack(Base):
     # 소크라테스 발문 템플릿(과목 명사 금지 — lint 대상·유형 불변 발문). NOT NULL.
     socratic_prompt: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 페이딩(도움 감소) 스케줄(JSONB·nullable — 팩이 정의).
-    fading_schedule: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    fading_schedule: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     # 금지 모드(런타임 가드·기본 빈 배열). Kapur/Sweller 제약을 데이터로 못박는다.
     forbidden_modes: Mapped[list[str]] = mapped_column(
         ARRAY(sa.Text), nullable=False, server_default=sa.text("'{}'::text[]")
     )
     # 필요 슬롯 매니페스트(JSONB·NOT NULL — 유형별 필요한 콘텐츠 슬롯 정의).
-    required_slots: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    required_slots: Mapped[dict[str, Any]] = mapped_column(JSONB(none_as_null=True), nullable=False)
     # 유형별 기본 달성 증거 규격(JSONB·NOT NULL — "정답≠달성"의 유형별 기준).
-    default_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    default_evidence: Mapped[dict[str, Any]] = mapped_column(
+        JSONB(none_as_null=True), nullable=False
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -199,11 +201,11 @@ class LearningObjective(Base):
 
     # ===== 매니페스트·증거 규격 (JSONB) =====
     # 콘텐츠 슬롯 매니페스트(필요 슬롯 type/count — v_manifest_fill이 소비).
-    slot_manifest: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    slot_manifest: Mapped[dict[str, Any]] = mapped_column(JSONB(none_as_null=True), nullable=False)
     # 출구 증거 규격(이 목표를 언제 달성으로 볼지 — 유형별 기준).
-    exit_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    exit_evidence: Mapped[dict[str, Any]] = mapped_column(JSONB(none_as_null=True), nullable=False)
     # Polya 단계별 오버라이드(nullable — 팩 기본을 목표 단위로 덮어씀).
-    phase_overrides: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    phase_overrides: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     __table_args__ = (
         # 복합 FK → unit_spec(소단원 삭제 시 목표 CASCADE).
@@ -244,7 +246,7 @@ class PedagogyContentSlot(Base):
     # 팩이 정의하는 슬롯 유형(diag_item 등) — TEXT 유지(enum 아님·팩 소유).
     slot_type: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 본문 — 렌더러-중립 LaTeX + 구조 태그(CLAUDE.md L55·완전 AST 아님).
-    payload: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB(none_as_null=True), nullable=False)
     # 검증 신호(nullable — 미검증 시 NULL).
     tts_safe: Mapped[bool | None] = mapped_column(sa.Boolean)
     sympy_verified: Mapped[bool | None] = mapped_column(sa.Boolean)

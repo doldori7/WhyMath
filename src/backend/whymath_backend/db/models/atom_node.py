@@ -116,7 +116,7 @@ class AtomNode(Base):
     # 전이 예시(graph.json `transfer_example`·nullable·자체 작성·표시 가능).
     transfer_example: Mapped[str | None] = mapped_column(sa.Text)
     # 원자성 판정(graph.json `atomicity`·a/b/c/d dict·nullable·구조 메타·본문 아님). JSONB.
-    atomicity: Mapped[dict[str, object] | None] = mapped_column(JSONB)
+    atomicity: Mapped[dict[str, object] | None] = mapped_column(JSONB(none_as_null=True))
     # 원자→skill 참조 키 목록(S0-2·437↔원자 크로스워크 경유 이전·`concept_node.behavior_skills`
     # 동형 미러). skill_id(`skill.<slug>`) 목록이며 본문 아님(안전 배열·junction 아님·신규 엣지
     # 타입 0 — anti-explosion). 채움 좌석은 `l1/concept_atom_crosswalk/transfer.py`(크로스워크

@@ -96,7 +96,9 @@ class UserProfile(Base):
     track_type: Mapped[list[TrackType] | None] = mapped_column(
         ARRAY(_pg_enum(TrackType, "track_type_enum"))
     )
-    target_universities: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    target_universities: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB(none_as_null=True)
+    )
     target_major_category: Mapped[MajorCategory | None] = mapped_column(
         _pg_enum(MajorCategory, "major_category_enum")
     )
@@ -208,8 +210,8 @@ class UserTrackHistory(Base):
     changed_at: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now()
     )
-    track_before: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    track_after: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    track_before: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
+    track_after: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     reason: Mapped[str | None] = mapped_column(sa.Text)
 
     @classmethod
@@ -247,7 +249,7 @@ class UserPersonaHistory(Base):
     detected_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), primary_key=True)
     persona: Mapped[Persona | None] = mapped_column(_pg_enum(Persona, "persona_enum"))
     confidence: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
-    signals: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    signals: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
 
     @classmethod
     def from_schema(cls, schema: SchemaUserPersonaHistory) -> UserPersonaHistory:
@@ -299,11 +301,13 @@ class UserStateSnapshot(Base):
     estimated_percentile: Mapped[float | None] = mapped_column(sa.Numeric(5, 2))
 
     # ===== 단원별/패턴별 숙련도 (키→스칼라 맵 JSONB) =====
-    concept_mastery: Mapped[dict[str, float] | None] = mapped_column(JSONB)
-    pattern_mastery: Mapped[dict[str, float] | None] = mapped_column(JSONB)
+    concept_mastery: Mapped[dict[str, float] | None] = mapped_column(JSONB(none_as_null=True))
+    pattern_mastery: Mapped[dict[str, float] | None] = mapped_column(JSONB(none_as_null=True))
 
     # ===== 시간 관리 능력 =====
-    avg_solve_time_by_difficulty: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    avg_solve_time_by_difficulty: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True)
+    )
     time_management_score: Mapped[float | None] = mapped_column(sa.Numeric(3, 2))
 
     # ===== 멘탈·컨디션 신호 =====

@@ -76,7 +76,7 @@ class VerifiedLemma(Base):
     # 재사용 매칭용 정규화 키(보조 목표 해시·키 스킴은 솔버 루프가 계약 정의·자유형 텍스트).
     lemma_key: Mapped[str] = mapped_column(sa.Text, nullable=False)
     # 검증된 부분 결과의 구조화 표현(자유형 JSONB·솔버 루프가 계약 정의).
-    lemma_repr: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    lemma_repr: Mapped[dict[str, Any]] = mapped_column(JSONB(none_as_null=True), nullable=False)
     # 사람이 읽는 보조정리 진술(예 "x>0에서 단조증가"·디버그·WH-1 콘텐츠). 미작성이면 None.
     statement: Mapped[str | None] = mapped_column(sa.Text)
     # 이 보조정리를 만든 풀이 트리 노드(solution_nodes.id) — FK 아님(재사용 자산·트리 GC 비강결합).

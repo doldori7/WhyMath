@@ -107,7 +107,7 @@ class SolutionNode(Base):
 
     # ===== 풀이 상태·행동 (§2.1 노드=상태·엣지=행동) =====
     # 현재까지의 풀이 상태(변형·중간 결과)의 구조화 표현 — 자유형 JSONB(솔버 루프가 계약 정의).
-    state_repr: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    state_repr: Mapped[dict[str, Any]] = mapped_column(JSONB(none_as_null=True), nullable=False)
     # 이 노드에 도달하려고 부모에서 적용한 전략 1스텝(치환·케이스 분할 등). 루트는 None.
     action: Mapped[str | None] = mapped_column(sa.Text)
 

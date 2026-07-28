@@ -96,7 +96,7 @@ class ConceptContent(Base):
     # 암기카드 목록(corpus `flashcards`·front/back/mnemonic/exposure_condition/grade/difficulty_tier
     # dict 배열·0개 이상). JSONB로 보관(중첩 구조·atom_node.atomicity JSONB 선례). 기본 빈 배열.
     flashcards: Mapped[list[dict[str, object]]] = mapped_column(
-        JSONB, nullable=False, server_default=sa.text("'[]'::jsonb")
+        JSONB(none_as_null=True), nullable=False, server_default=sa.text("'[]'::jsonb")
     )
     # 검수 게이팅 플래그 — 콘텐츠는 *AI 추정·검수필요*라 기본 'ai_estimated'(정직 표기). PG native
     # enum 미생성(atom_node.review_status 동형·plain text). 게이팅이 이 값과 리터럴 비교. NOT NULL.
