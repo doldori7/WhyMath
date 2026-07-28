@@ -337,6 +337,12 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-28 (구현·OPS-14): **tests/data_pipeline lint 배선 — 정본 컨텍스트 확정 + ruff per-file-ignores가 죽은 설정이었음 실측** (claude 구현, Kiki "다음 진행")
+
+**정본 결정(OPS-13이 선결로 지정)**: black = **저장소 표준 root `--line-length 100`**(tests/* 배선 공통 정본 — backend·infra·harness 동일), ruff = **DP pyproject 규칙 그대로**(src와 tests 동일 규칙·E501 포함). 2026-07-27의 "28 vs 32" 컨텍스트 차이는 현시점 실측에서 소멸(양쪽 23파일 동일)이라 결정 부담 없음. src도 root-100 컨텍스트로 clean이라 backend 잡 동형의 단일 명령(`black --check --line-length 100 . ../../tests/data_pipeline`)으로 통합.
+
+**죽은 설정 발견(실측)**: DP pyproject의 `per-file-ignores "tests/**" = ["E501"]`은 **아무것도 매치한 적 없다** — 이 패키지 테스트는 레포 루트 `tests/data_pipeline`에 살고, ruff의 config-상대 패턴은 config 디렉터리 *밖* 파일에 매치 불가(`--show-settings`로 absolute_matcher가 `src/data-pipeline/**` 앵커임을 실측). `**/tests/**`로 바꿔도 동일. 패턴 우회 대신 제거하고 tests의 E501 11건(전부 주석·docstring 1~9자 초과)을 실수정 + B007 1건. 상환: 재포맷 23파일·`_WIRINGS` 등재(data-pipeline)·OPS-13 허용목록 제거(stale 검출 계약이 강제). 검증: DP 845 passed·tests/infra 258 passed·ruff/black clean.
+
 ### 2026-07-28 (실측·게이트 clear): **prod 은퇴 원자 정리 실행 — "14행 잔존" 가정 실측 반증(잔존 0)·재적재로 병합 코퍼스 prod 반영 완료** (Kiki 실행·claude 판정)
 
 **실측(2026-07-28·Phaiakes9 whymath-pg)**: ①재적재 `populate` 2,683 concepts·2,210 edges(skip 0 — 병합 대표·재배선 엣지 prod 반영) ②`cleanup --retired-from-ledger` dry-run·--confirm·재확인 3회 모두 **전 5테이블 0건**(스캔 실패 0 — 5테이블 스키마 실재로 대상 DB 정합 확인). **교훈(추론→실측 정정)**: S4-07 보고의 "은퇴 원자 14행 잔존"은 upsert-only에서 유도한 *추론*이었고 실측으로 반증 — prod의 이전 원자 적재가 기수/NUMER 트랙의 코퍼스 편입 *이전*이라 은퇴 행이 애초에 적재된 적 없음(S2-04 "공집합 충족" 동형·환경 사실은 실측이 정본 재확인). 스크립트·가드·런북은 다음 실 정리 수요 시 그대로 재사용. 게이트 G-retired-atom-prod-cleanup cleared(evidence 상세). 부수: `python -m ...populate`의 runpy RuntimeWarning은 무해(패키지 import 후 서브모듈 -m 실행 관용 — 산출 정상).

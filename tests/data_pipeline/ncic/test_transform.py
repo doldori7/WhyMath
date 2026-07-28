@@ -134,9 +134,7 @@ class TestTransformRawToStandard:
 
     def test_missing_statement_raises(self) -> None:
         with pytest.raises(TransformError):
-            transform_raw_to_standard(
-                {"code": "[9수01-01]", "source_url": "https://x.com"}
-            )
+            transform_raw_to_standard({"code": "[9수01-01]", "source_url": "https://x.com"})
 
     def test_missing_source_url_raises(self) -> None:
         """공공누리 1유형 의무 — source_url 누락 시 변환 거부."""
@@ -206,16 +204,12 @@ class TestBuildNormId:
             ("2015 개정", "[6수04-05]", "2015_6수_04_05"),
         ],
     )
-    def test_deterministic_norm_id(
-        self, revision: str, code: str, expected: str
-    ) -> None:
+    def test_deterministic_norm_id(self, revision: str, code: str, expected: str) -> None:
         assert build_norm_id(revision, code) == expected
 
     def test_idempotent(self) -> None:
         """같은 입력 → 항상 같은 출력."""
-        assert build_norm_id("2022 개정", "[9수01-01]") == build_norm_id(
-            "2022 개정", "[9수01-01]"
-        )
+        assert build_norm_id("2022 개정", "[9수01-01]") == build_norm_id("2022 개정", "[9수01-01]")
 
     def test_unsupported_revision_raises(self) -> None:
         with pytest.raises(TransformError):

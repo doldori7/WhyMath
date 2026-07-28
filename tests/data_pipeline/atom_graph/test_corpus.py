@@ -89,7 +89,8 @@ class TestCorpusNotation:
         """코퍼스 전체(concepts+edges+narrative)에 비표준 사이시옷 0건.
 
         회색지대(고유값·진리값·실고유값 등)는 `자리값`/`경계값`/`초기값` 토큰을 포함하지 않아
-        무영향. 엣지 from_name/to_name 등 *모든 carried 문자열*을 포괄한다(엣지 이름 정규화 누락 회귀 방지).
+        무영향. 엣지 from_name/to_name 등 *모든 carried 문자열*을 포괄한다(엣지 이름 정규화
+        누락 회귀 방지).
         """
         text = json.dumps(corpus_graph, ensure_ascii=False)
         for token in ("초기값", "자리값", "경계값"):

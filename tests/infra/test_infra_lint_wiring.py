@@ -43,6 +43,7 @@ _CI_PATH = _REPO_ROOT / ".github" / "workflows" / "ci.yml"
 _WIRINGS: list[tuple[str, tuple[str, ...]]] = [
     ("infra-contracts", ("tests/infra", "infra", "conftest.py")),  # OPS-11 · OPS-13
     ("harness-integrity", ("scripts", "tests/harness")),  # OPS-12 · OPS-13(harness→scripts 확대)
+    ("data-pipeline", ("tests/data_pipeline",)),  # OPS-14(OPS-13 허용목록 상환)
 ]
 _WIRING_IDS = [job for job, _ in _WIRINGS]
 

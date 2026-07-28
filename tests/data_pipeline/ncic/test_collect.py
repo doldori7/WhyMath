@@ -27,9 +27,7 @@ from data_pipeline.ncic.collect import (
 # HTML 추출 e2e
 # ──────────────────────────────────────────────────────────────────────
 class TestHtmlExtractionE2E:
-    async def test_extracts_middle_school_standards(
-        self, html_middle_school_unit: str
-    ) -> None:
+    async def test_extracts_middle_school_standards(self, html_middle_school_unit: str) -> None:
         """합성 중학교 HTML → 3개 성취기준 추출."""
         url = "https://www.ncic.go.kr/middle/math/01"
         with respx.mock(base_url="https://www.ncic.go.kr") as mock:
@@ -54,9 +52,7 @@ class TestHtmlExtractionE2E:
         std1 = next(r for r in results if r.code == "[9수01-01]")
         assert "소인수분해" in std1.statement
 
-    async def test_extracts_high_school_standards(
-        self, html_high_school_unit: str
-    ) -> None:
+    async def test_extracts_high_school_standards(self, html_high_school_unit: str) -> None:
         """합성 고1 HTML → 공통수학1 성취기준 추출."""
         url = "https://www.ncic.go.kr/high/math/공통수학1"
         with respx.mock(base_url="https://www.ncic.go.kr") as mock:
@@ -115,12 +111,8 @@ class TestPoliteCrawling:
         url_good = "https://www.ncic.go.kr/works"
         with respx.mock(base_url="https://www.ncic.go.kr") as mock:
             mock.get("/always-fails").respond(500)
-            mock.get("/works").respond(
-                200, text="<html><body>[9수01-05] 본문</body></html>"
-            )
-            config = NcicSourceConfig(
-                rate_limit_seconds=0.0, max_retries=2, backoff_base=1.0
-            )
+            mock.get("/works").respond(200, text="<html><body>[9수01-05] 본문</body></html>")
+            config = NcicSourceConfig(rate_limit_seconds=0.0, max_retries=2, backoff_base=1.0)
             async with NcicCrawler(config) as crawler:
                 results = [s async for s in crawler.crawl_html([url_bad, url_good])]
 

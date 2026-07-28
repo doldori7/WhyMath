@@ -100,9 +100,7 @@ class TestConcept:
         """CONCEPT_ID_PATTERN이 canonical만·LEGACY_UC_PATTERN이 옛 UC만 매칭(분리 확인)."""
         assert CONCEPT_ID_PATTERN.match("math.geometry.samgakhyeong")
         assert not CONCEPT_ID_PATTERN.match("UC.calc.limit.def")
-        assert not CONCEPT_ID_PATTERN.match(
-            "ELEM-GEO-001"
-        )  # 옛 축코드는 canonical 아님
+        assert not CONCEPT_ID_PATTERN.match("ELEM-GEO-001")  # 옛 축코드는 canonical 아님
         assert LEGACY_UC_PATTERN.match("UC.calc.limit.def")
         assert not LEGACY_UC_PATTERN.match("math.geometry.samgakhyeong")
 
@@ -233,7 +231,8 @@ class TestConceptPurity:
             "difficulty_tier",
             "review_status",
             "notes",
-            # 리치 9계층(2026-07-03 전면 채택 Phase 1) — semantic(self-authored)·cognition 스칼라·참조 키
+            # 리치 9계층(2026-07-03 전면 채택 Phase 1)
+            # — semantic(self-authored)·cognition 스칼라·참조 키
             "intuition",  # semantic(=metaphor 복원·self-authored)
             "representations",  # semantic(=accepted_expressions 복원·self-authored)
             "core_meaning",  # semantic(자체 1줄)

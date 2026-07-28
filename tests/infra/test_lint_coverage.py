@@ -69,12 +69,6 @@ _WORKFLOW_DIR = _REPO_ROOT / ".github" / "workflows"
 # 여기 등재하는 순간 **그 경로의 lint 보호는 꺼진 상태**다. 검사는 공백을 *드러낼 뿐*
 # 고치지 않는다. 부채(언젠가 켜야 함)면 사유에 **상환 태스크 ID를 박아** 영구화를 막는다.
 _INTENTIONALLY_UNLINTED: dict[str, str] = {
-    "tests/data_pipeline": (
-        "부채 — black 28파일 위반 누적(2026-07-28 실측, 레포 루트 `--line-length 100` 기준). "
-        "재포맷 규모가 커 **OPS-14**로 분리 상환한다. ruff는 이미 clean. "
-        "OPS-14는 정본 컨텍스트를 먼저 정해야 한다: 같은 디렉터리가 레포 루트 기준 28파일, "
-        "src/data-pipeline pyproject 기준 32파일로 결과가 다르다."
-    ),
     "docs": (
         "영구 — docs/ 하위 .py는 문서에 첨부된 **초안 스냅샷**이다"
         "(`260724_v2_migration_pedagogy_dsl.alembic_draft.py` — 실행되지 않는 설계 기록). "

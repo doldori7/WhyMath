@@ -82,8 +82,10 @@ select = ["E", "F", "I", "N", "B", "W"]
 # 한국어 식별자 사용 금지 (N) 비활성: 한국어 docstring·문자열만 쓰고 식별자는 영어
 ignore = []
 
-[tool.ruff.lint.per-file-ignores]
-"tests/**" = ["E501"]   # 테스트 픽스처에 긴 한국어 문자열 허용
+# per-file-ignores `"tests/**" = ["E501"]`은 OPS-14에서 제거 — 이 패키지의 테스트는
+# 레포 루트 `tests/data_pipeline`에 살고, config-상대 패턴은 config 디렉터리 *밖* 파일에
+# 매치되지 않는다(ruff absolute_matcher가 여기 하위로 앵커됨 — 2026-07-28 --show-settings
+# 실측). 즉 죽은 설정이었다. 긴 한국어 픽스처가 정말 필요하면 해당 줄 `# noqa: E501`.
 
 [tool.black]
 line-length = 100
