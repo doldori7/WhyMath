@@ -1,7 +1,7 @@
 {
   "format": "dedup_review_queue.v1",
   "source": "docs/data/atom_dedup_candidates_bge_m3.json (bge-m3·Phaiakes9·2026-07-28·임계 0.90)",
-  "notice": "AI 자기승인 금지 — decision은 사람 검수(전문가)만 기입한다. status: pending→approved(병합)/rejected(유지)/deferred(보류). 병합 승인분의 코퍼스 반영은 별도 태스크(하류 엣지 이관 동반).",
+  "notice": "검수 완료(검수:Kiki 2026-07-28·채팅 전달분 claude 이관). approved=병합 승인(코퍼스 반영은 별도 태스크·하류 엣지 이관 동반), rejected=유지 확정. AI 자기승인 금지 원칙 준수 — 전 판정·사유는 Kiki 원문.",
   "review_queue": [
     {
       "pair_id": "D01",
@@ -11,11 +11,11 @@
       "name_b": "지수법칙 적용",
       "similarity": 1.0,
       "pattern": "A",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "rejected",
+      "decision": "유지",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "지수법칙은 중학교와 고등학교에서 깊이와 적용 범위가 다르다. Spiral Curriculum의 대표 사례."
     },
     {
       "pair_id": "D02",
@@ -25,11 +25,11 @@
       "name_b": "행렬의 연산",
       "similarity": 0.9843,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "행렬 연산이라는 동일 개념. 공통수학/기본수학의 트랙 차이만 존재. Curriculum Overlay로 충분."
     },
     {
       "pair_id": "D03",
@@ -39,11 +39,11 @@
       "name_b": "이차함수 최대·최소",
       "similarity": 0.9584,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "이차함수 최대·최소 계산이라는 동일 원자. 성취기준 코드만 다름."
     },
     {
       "pair_id": "D04",
@@ -53,11 +53,11 @@
       "name_b": "순열(순서 있음)",
       "similarity": 0.9559,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "순열 정의 및 계산. 완전 동일."
     },
     {
       "pair_id": "D05",
@@ -67,11 +67,11 @@
       "name_b": "무게도 같은 단위끼리",
       "similarity": 0.9537,
       "pattern": "C",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "rejected",
+      "decision": "유지",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "들이와 무게는 서로 다른 측정량. 전이 가능하지만 동일 원자가 아니다."
     },
     {
       "pair_id": "D06",
@@ -81,11 +81,11 @@
       "name_b": "자료 성격 보고 그래프 고르기",
       "similarity": 0.9402,
       "pattern": "C",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "rejected",
+      "decision": "유지",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "같은 표현이라도 4학년과 6학년의 자료 종류와 판단 수준이 다르다. 나선형 교육과정."
     },
     {
       "pair_id": "D07",
@@ -95,11 +95,11 @@
       "name_b": "유리함수 그래프(점근선)",
       "similarity": 0.9392,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "유리함수 그래프와 점근선 개념 동일."
     },
     {
       "pair_id": "D08",
@@ -109,11 +109,11 @@
       "name_b": "조합(순열 vs 조합)",
       "similarity": 0.933,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "조합과 순열 구분이라는 동일 인지 행동."
     },
     {
       "pair_id": "D09",
@@ -123,11 +123,11 @@
       "name_b": "원의 방정식(반지름²)",
       "similarity": 0.9286,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "원의 방정식에서 반지름² 해석은 동일."
     },
     {
       "pair_id": "D10",
@@ -137,11 +137,11 @@
       "name_b": "원과 직선의 위치 관계",
       "similarity": 0.9272,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "원과 직선 위치관계 동일."
     },
     {
       "pair_id": "D11",
@@ -151,11 +151,11 @@
       "name_b": "속도와 거리(적분)",
       "similarity": 0.9255,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "적분을 이용한 속도-거리 관계는 동일 수학 원리."
     },
     {
       "pair_id": "D12",
@@ -165,11 +165,11 @@
       "name_b": "행렬의 뜻(행×열)",
       "similarity": 0.9248,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "행렬의 정의(행×열)가 동일."
     },
     {
       "pair_id": "D13",
@@ -179,11 +179,11 @@
       "name_b": "로피탈은 부정형에만 쓴다",
       "similarity": 0.9221,
       "pattern": "E",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "\"로피탈은 부정형에서만 사용\"은 과목과 무관한 동일 명제."
     },
     {
       "pair_id": "D14",
@@ -193,11 +193,11 @@
       "name_b": "뉴턴법은 항상 수렴하진 않는다",
       "similarity": 0.9196,
       "pattern": "E",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "\"뉴턴법은 항상 수렴하지 않는다\"는 동일 사실."
     },
     {
       "pair_id": "D15",
@@ -207,11 +207,11 @@
       "name_b": "다각형 내각의 합 구하기",
       "similarity": 0.9194,
       "pattern": "A",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "rejected",
+      "decision": "유지",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "초등은 내각의 합을 활동적으로 구함, 중학교는 일반식 (n−2)×180°를 다룸. 깊이가 다르다."
     },
     {
       "pair_id": "D16",
@@ -221,11 +221,11 @@
       "name_b": "등비수열의 합",
       "similarity": 0.9163,
       "pattern": "C",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "rejected",
+      "decision": "유지",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "등차수열의 합 ≠ 등비수열의 합. 완전히 다른 공식."
     },
     {
       "pair_id": "D17",
@@ -235,11 +235,11 @@
       "name_b": "조건제시→원소나열",
       "similarity": 0.9157,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "조건제시→원소나열은 동일 기능."
     },
     {
       "pair_id": "D18",
@@ -249,11 +249,11 @@
       "name_b": "FTC는 연속을 전제한다",
       "similarity": 0.9133,
       "pattern": "E",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "FTC 적용 조건(연속성)은 동일 명제."
     },
     {
       "pair_id": "D19",
@@ -263,11 +263,11 @@
       "name_b": "길이 단위 관계·표현(cm-mm, km-m)",
       "similarity": 0.9114,
       "pattern": "C",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "rejected",
+      "decision": "유지",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "직접 선수엣지가 존재. 2학년→4학년 확장 관계. 중복 아님."
     },
     {
       "pair_id": "D20",
@@ -277,11 +277,11 @@
       "name_b": "부정적분과 +C 의미",
       "similarity": 0.9084,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "부정적분에서 적분상수 +C의 의미는 동일."
     },
     {
       "pair_id": "D21",
@@ -291,11 +291,11 @@
       "name_b": "함수의 그래프 개형(2차 도함수)",
       "similarity": 0.904,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "rejected",
+      "decision": "유지",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "미적Ⅰ은 그래프 개형 일반, 미적Ⅱ는 2차 도함수 활용까지 포함. 인지 수준이 다름."
     },
     {
       "pair_id": "D22",
@@ -305,11 +305,11 @@
       "name_b": "대응표로 함수 판정",
       "similarity": 0.9037,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "대응이 함수인지 판정하는 동일 원자."
     },
     {
       "pair_id": "D23",
@@ -319,11 +319,11 @@
       "name_b": "평행이동 식 바꾸기",
       "similarity": 0.9023,
       "pattern": "B",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "approved",
+      "decision": "병합",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "평행이동 후 식 변환 동일."
     },
     {
       "pair_id": "D24",
@@ -333,11 +333,11 @@
       "name_b": "우리손 거리화 정리",
       "similarity": 0.9008,
       "pattern": "E",
-      "status": "pending",
-      "decision": null,
-      "reviewer": null,
-      "reviewed_on": null,
-      "note": null
+      "status": "rejected",
+      "decision": "유지",
+      "reviewer": "Kiki",
+      "reviewed_on": "2026-07-28",
+      "note": "우리손 보조정리와 우리손 거리화 정리는 서로 다른 정리이며 선수관계."
     }
   ]
 }
