@@ -82,8 +82,8 @@ python -m whymath_backend.privacy.dialogue_content_backfill
 - [ ] 키가 **코드·저장소에 없다** — env/시크릿 매니저로만 주입(CLAUDE.md 하드코딩 금지).
 - [ ] 키 백업이 있다 — **키를 잃으면 기존 암호화 행은 영구 복호 불가**다(마이그레이션 다운그레이드로도
       복구되지 않는다).
-- [ ] 앱 기동 후 대화 1건 왕복(생성 → 조회)이 성공한다 = 암·복호 경로가 실제로 붙어 있다.
-- [ ] DB에서 신규 행의 평문 컬럼이 NULL이고 `*_encrypted`가 채워졌다(§3 쿼리).
+- [ ] **프리플라이트 CLI가 PASS(exit 0)** — 아래 §2.1. 위 두 줄(왕복·저장 표현)을 한 명령이
+      함께 판정한다.
 - [ ] (키 회전 시) 구 키를 `WHYMATH_DIALOGUE_CONTENT_DECRYPTION_FALLBACK_KEYS`에 남겼다 —
       빠뜨리면 기존 행이 복호 불가(lockout)가 된다.
 
@@ -98,7 +98,63 @@ python -c "import base64,os;print(base64.b64encode(os.urandom(32)).decode())"
 
 ---
 
-## 3. 실측 쿼리 — "설정했다"가 아니라 "암호화됐다"를 본다
+## 2.1 프리플라이트 — "왕복 성공"을 암호화의 증거로 착각하지 않는 단일 명령
+
+**왜 왕복만으로는 안 되는가**: 키가 없으면 코드는 *평문 폴백*으로 동작하고 왕복은 **그대로
+성공한다**. 왕복만 확인하면 "성공"을 보면서 미성년 평문을 흘린다. 그래서 이 CLI는 왕복과
+**저장 표현**(암호문/평문 증가분)을 함께 보고, 평문이 늘면 exit 1을 낸다.
+
+### 모드 — 무엇이 증명되는지가 다르다
+
+| 모드 | 증명하는 것 | 증명하지 *못하는* 것 |
+|---|---|---|
+| `direct`(기본) | 키 구성·스키마·암복호 경로 | **서버 프로세스가 같은 키를 보는지** |
+| `--via-api` | *기동 중인 서버*가 실제로 암호화하는지 | — |
+
+배포 검증은 **반드시 `--via-api`** 로 한다. CLI에만 키가 있고 서버엔 없는 "절반만 성립"이
+실제로 일어나며(2026-07-16 교훈), `direct`는 그 경우 PASS를 낸다.
+
+### 실행 (창 ① — 서버가 이미 떠 있는 상태에서 *별도* 창)
+
+```powershell
+# 실행 시스템: Windows PowerShell (Phaiakes9 = Kiki의 작업 PC 그 자체)
+# 선행 조건: 마이그레이션 적용 완료 + 키 설정 + 서버 기동 중(서버 창은 건드리지 않는다)
+cd C:\Users\kiki\Desktop\__AI\WhyMath\src\backend
+python -m whymath_backend.ops.dialogue_encryption_preflight --via-api `
+  --api-url http://127.0.0.1:8000 --token 여기에_실제_로그인_토큰_전체
+```
+
+**토큰은 실제 로그인으로 얻는다.** 프로덕션에서는 데모 인증이 **거부**된다 — 실 OAuth
+provider가 구성돼 있으면 `api/demo_auth.py::register_demo_provider`가 가짜 provider 등록을
+막는다(이중 방어). 따라서 카카오/네이버로 실제 로그인한 세션의 access token을 쓴다.
+
+서버가 아직 없는 환경에서 키·스키마만 먼저 보려면 인자 없이 실행한다(`direct` 모드):
+
+```powershell
+# 실행 시스템: Windows PowerShell
+cd C:\Users\kiki\Desktop\__AI\WhyMath\src\backend
+python -m whymath_backend.ops.dialogue_encryption_preflight
+```
+
+### 판정
+
+```
+  판정          : PASS     → exit 0. 다음 단계로.
+  판정          : FAIL     → exit 1. 출력의 ✗ 줄이 고칠 대상을 지목한다.
+```
+
+`--via-api`에서 "평문 저장이 늘었습니다 — 키가 **서버 프로세스**에 붙지 않았습니다"가 나오면
+CLI 창의 키가 아니라 **서버를 띄운 창/서비스의 env**를 고치고 서버를 재시작해야 한다.
+
+프로브가 만든 대화 행은 검사 후 자동 삭제된다. 삭제가 실패하면 그 사실과 `dialogue_id`를
+출력에 남긴다(조용히 넘어가지 않는다).
+
+---
+
+## 3. 실측 쿼리 — 누적 상태 확인·기록용
+
+§2.1 프리플라이트가 *증가분*으로 판정한다면, 이 쿼리는 **테이블의 누적 상태**를 본다 —
+SEC-02 실측 기록(§4)에 남길 수치가 이것이다. 프리플라이트가 내부에서 쓰는 술어와 동일하다.
 
 설정 여부만 보면 오타·미반영을 놓친다. **실제 행**을 본다:
 
@@ -131,8 +187,8 @@ SEC-01의 acceptance는 "프로덕션 `dialogue_content_encryption_key` 설정 �
 **그 실측은 Kiki 머신(Phaiakes9)에서만 가능하다** — 이 세션의 컨테이너에는 프로덕션 DB·env가 없다.
 따라서 이 문서는 절차를 고정할 뿐이며, **실측이 끝났다고 주장하지 않는다.**
 
-수행 절차는 `docs/runbooks/` 대신 이 문서 §2·§3을 그대로 쓴다. 실측 결과(위 쿼리 출력)를
-확보하면 이 절 아래에 날짜·수치와 함께 기록한다.
+수행 절차는 `docs/runbooks/` 대신 이 문서 §2 → **§2.1(프리플라이트 `--via-api` PASS)** → §3
+순서로 쓴다. 실측 결과(§3 쿼리 출력)를 확보하면 이 절 아래에 날짜·수치와 함께 기록한다.
 
 추적: **`SEC-02-prod-dialogue-key-measurement`**(owner=kiki) — 구두 인계로 흘리지 않도록
 백로그에 등재했다. 이 절에 수치가 기록되는 시점이 그 태스크의 done 조건이다.
