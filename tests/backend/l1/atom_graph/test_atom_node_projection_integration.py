@@ -6,7 +6,7 @@
 수집·실행한다. PG 미도달 또는 코퍼스 미존재 시 graceful skip(원자 백본 통합테스트 동형).
 
 검증:
-  ① 적재 — atom_node 2,697행·level 분포(세부개념1837·소단원643·단원217)
+  ① 적재 — atom_node 2,683행·level 분포(세부개념1823·소단원643·단원217)
   ② cognitive_type 표본(원자는 개념/절차/표상·단원/소단원은 NULL)
   ③ review_status 전건 'ai_estimated'(원자 메타는 AI 추정·정직 표기)
   ④ redaction — 본문 컬럼(core_proposition·description·formal_definition) 부재(조회 시 오류)
@@ -91,8 +91,8 @@ class TestAtomNodeProjectionLoad:
         try:
             records = load_atom_nodes_from_graph_json(_CORPUS)
             count = populate_atom_nodes(records, settings=Settings())
-            # ① 적재 — 2,697 전량(name 빈 노드 0).
-            assert count == 2697
+            # ① 적재 — 2,683 전량(name 빈 노드 0).
+            assert count == 2683
 
             engine = _sync_engine()
             try:
@@ -101,9 +101,9 @@ class TestAtomNodeProjectionLoad:
                         text("SELECT count(*) FROM atom_node WHERE code = ANY(:k)"),
                         {"k": codes},
                     ).scalar_one()
-                    assert total == 2697
+                    assert total == 2683
 
-                    # ① level 분포(세부개념1837·소단원643·단원217).
+                    # ① level 분포(세부개념1823·소단원643·단원217).
                     level_rows = conn.execute(
                         text(
                             "SELECT level, count(*) AS n FROM atom_node "
@@ -112,7 +112,7 @@ class TestAtomNodeProjectionLoad:
                         {"k": codes},
                     ).all()
                     by_level = {r.level: r.n for r in level_rows}
-                    assert by_level.get("세부개념") == 1837
+                    assert by_level.get("세부개념") == 1823
                     assert by_level.get("소단원") == 643
                     assert by_level.get("단원") == 217
 
@@ -160,7 +160,7 @@ class TestAtomNodeProjectionLoad:
 
             # ⑤ 멱등 — 재적재 후 행수 불변.
             count2 = populate_atom_nodes(records, settings=Settings())
-            assert count2 == 2697
+            assert count2 == 2683
             engine = _sync_engine()
             try:
                 with engine.connect() as conn:  # type: ignore[attr-defined]
@@ -168,7 +168,7 @@ class TestAtomNodeProjectionLoad:
                         text("SELECT count(*) FROM atom_node WHERE code = ANY(:k)"),
                         {"k": codes},
                     ).scalar_one()
-                    assert total2 == 2697  # 중복 0(멱등)
+                    assert total2 == 2683  # 중복 0(멱등)
             finally:
                 engine.dispose()  # type: ignore[attr-defined]
         finally:

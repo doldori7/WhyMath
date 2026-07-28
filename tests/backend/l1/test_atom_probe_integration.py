@@ -7,7 +7,7 @@ atom 백본 코퍼스(`data/corpus/atom_graph_v1/graph.json`)의 원자 ②진�
 skip(misconception/concept_content 로더 통합테스트 동형).
 
 검증:
-  ① 실 코퍼스 적재 — 원자 1,837행(②③ 전건)·전건 적재
+  ① 실 코퍼스 적재 — 원자 1,823행(②③ 전건)·전건 적재
   ② 멱등 — 재적재 시 행수 불변
   ③ 표본 행 — diagnostic_item/answer/signal·socratic_question·난이도·review_status 라운드트립
   ④ review_status — 전 행 'ai_estimated'(정직 표기)
@@ -32,8 +32,8 @@ pytestmark = pytest.mark.integration
 # 레포 루트 앵커(tests/backend/l1/ → parents[3]) — CWD 상대 경로는 CI(cwd=src/backend)에서 항상
 # "코퍼스 미존재" skip(침묵 skip 결함 수정).
 _CORPUS = Path(__file__).resolve().parents[3] / "data" / "corpus" / "atom_graph_v1" / "graph.json"
-# 원자 ②③ 전건(원자 1,837 전량이 진단문항·소크라테스 보유 — Phase 1 산출 정합).
-_EXPECTED_ROWS = 1837
+# 원자 ②③ 전건(원자 1,823 전량이 진단문항·소크라테스 보유 — Phase 1 산출 정합).
+_EXPECTED_ROWS = 1823
 
 
 def _sync_engine() -> object:
@@ -91,14 +91,14 @@ def _load() -> int:
 
 
 class TestRealCorpusLoad:
-    """① 실 코퍼스 적재 1,837행 ②멱등 ③표본 라운드트립 ④review_status 상수."""
+    """① 실 코퍼스 적재 1,823행 ②멱등 ③표본 라운드트립 ④review_status 상수."""
 
     def test_load_real_corpus_idempotent(self) -> None:
         _skip_guard()
         from sqlalchemy import text
 
         try:
-            # ① 적재 — 원자 ②③ 전건(1,837).
+            # ① 적재 — 원자 ②③ 전건(1,823).
             count = _load()
             assert count == _EXPECTED_ROWS
 
