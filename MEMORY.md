@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-28 (구현): **OPS-14 tests/data_pipeline lint 배선 — "정본 컨텍스트 선택"이 사실은 88자 강등 함정이었다** (claude 구현)
+
+**왜**: OPS-13이 허용목록에 사유와 함께 남긴 마지막 공백 상환. `tests/data_pipeline`(75파일)을 lint하는 CI 잡이 **하나도 없었다** — data-pipeline 잡의 `.`는 working-directory(`src/data-pipeline`)만, backend 잡은 `../../tests/backend`만 덮는다.
+
+**선결 과제가 선택지가 아니라 함정이었다**: 태스크에 "레포 루트 28파일 vs src/data-pipeline 32파일 중 정본을 정하라"고 남겼으나, 실측 결과 **후자는 다른 정본이 아니라 표준 위반**이었다. 레포 루트에 `pyproject.toml`이 없어서 black에 경로를 하나라도 더 주면 프로젝트 루트 탐지가 레포 루트로 올라가 설정을 못 찾고 **기본값 88자로 조용히 강등**된다. 실측: `black --check .` → 77파일 clean / `black --check . ../../tests/data_pipeline` → **89파일 FAIL**(src 자신까지 88자 재검사) / `--line-length 100` 명시 → 28파일(실제). backend 잡 선례와 동형으로 명시 배선했고, `test_infra_lint_wiring`의 `_WIRINGS`에 data-pipeline 잡을 등재해 계약 ②(`--line-length 100` 강제)가 이 회귀를 동결한다.
+
+**상환 40건**: black 28파일 재포맷 + ruff 12건(E501 11 · B007 1). **E501을 설정 완화로 넘기지 않은 근거**: per-file-ignores를 끈 상태에서도 `tests/backend`는 E501 **0건**이다 — 즉 backend는 무시 규칙 덕이 아니라 실제로 기준을 만족하고 있고 `tests/data_pipeline`만 미달이었다. 같은 바를 맞추는 것이 맞다(한국어 주석 재래핑으로 처리).
+
+**동작 중립 실측**: CI와 동일 방식 전후 비교 — 내 변경 포함 `4 failed, 841 passed, 12 skipped` / 선재 상태 **동일**. 4건은 이 환경의 bs4 파서 부재로 나는 선재 실패(`ncic/test_collect.py` 한정, stash 전후로 무관함 확인). 변별력 3종 전건 검출(허용목록 되살림 → stale / `--line-length 100` 제거 → 계약 ② / ruff 대상 제거 → 계약 ③).
+
+**부수 발견 → OPS-15 등재**: **`src/*` 밖은 ruff 저장소 표준이 적용된 적이 없다.** 레포 루트에 pyproject가 없어 `tests/infra`·`tests/harness`·`scripts`·`infra`·`conftest.py`·`tests/data_pipeline`이 전부 ruff **기본값**(88자 · `select E4,E7,E9,F`)으로 검사된다(저장소 표준은 100자 · `E,F,I,N,B,W`). 표준 적용 시 **248건**이며 그중 **192건이 N802 — 한국어 테스트 함수명**이라 정책 판단이 선결이다. 이는 "장치는 있는데 *잘못된 설정으로* 배선됨" 형태로, **배선 유무만 보는 기존 검사(OPS-13·OPS-11/12)가 구조적으로 못 잡는 축**이다.
+
 ### 2026-07-28 (실측·임계 확정): **ARCH-16 중복 후보 임계 0.90 실측 확정 — bge-m3 전수 분포(Phaiakes9)** (Kiki 실행·claude 판정 문서화)
 
 **실측(2026-07-28·Phaiakes9·bge-m3·전수 1,686,366쌍)**: p50 0.49 / p90 0.56 / p99 0.64 · 밴드 [0.80,0.85) 160 / [0.85,0.90) 65 / **[0.90,0.95) 19 / [0.95,1.00) 5** · 임계 0.90 → **후보 24건**. 0.80 이상이 극단 꼬리(249쌍·0.015%)이고 0.85→0.90에서 후보 수가 급감(65→24) — **0.90이 자연 분리점·검수 가능 규모**로 실측 확인. 잠정(보수) 딱지를 떼고 `DEFAULT_THRESHOLD` 주석·모듈 docstring에 근거 명문화(값 0.90 불변·동작 변경 0). [0.85,0.90) 65건 확장 검수는 `--threshold 0.85` 재실행으로 언제든 산출 가능(코드 변경 불요).
