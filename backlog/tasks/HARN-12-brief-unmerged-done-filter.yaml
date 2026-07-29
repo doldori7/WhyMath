@@ -5,17 +5,18 @@ track: infra-debt
 stage: S4
 subject: cross
 layer: infra
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "backlog.py brief(SessionStart 훅 진입점)가 next와 동일하게 미머지 done을 후보에서 제외 — scan_remote_done 재사용·fetch 없이 캐시 ref(훅은 빠르고 fail-open이어야 함). 변별력 실측: done-but-unmerged 주입 시 브리핑 후보에서 실제로 빠지는지 + 원격 조회 실패 시 브리핑이 막히지 않는지(fail-open 유지)"
-artifacts: []
+artifacts:
+  - 5dfec0b6
 paths:
   - "scripts/harness/**"
   - "tests/harness/**"
-session: claude/whymath-problem-bank-design-65tsm4
+session: null
 notes: "HARN-11(#638)이 next·start에만 배선한 잔여. 2026-07-29 실측: HARN-11 머지 후에도 brief는 S3-09(타 세션 완료·미머지)를 1순위로 계속 추천 — 브리핑은 매 세션 시작이 읽는 최고 레버리지 표면이라 여기가 안 막히면 다음 세션이 같은 근접사고를 반복한다. 이 저장소가 여섯 번 반복한 '장치는 있는데 일부만 배선됨' 패턴(OPS-03·08·11·12·13 선례)."
 updated: 2026-07-29
