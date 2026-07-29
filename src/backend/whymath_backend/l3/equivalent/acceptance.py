@@ -37,6 +37,10 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from whymath_backend.l3.equivalent.retag import TagAuditor
+from whymath_backend.l3.finite_probability import (
+    verify_finite_count,
+    verify_finite_probability,
+)
 from whymath_backend.l3.pregenerate.validator import (
     SeedValidator,
     default_seed_validator,
@@ -132,6 +136,11 @@ _CONCEPTUAL_VERIFIERS: dict[str, Callable[[str | Sequence[str], str], AnswerVerd
     "inequality_direction": verify_inequality_direction,
     # root-loss-by-dividing: ax²=bx 양변 x 나눗셈 근 손실 — 근 개수(정답 2·손실 1) 검증기 재사용.
     "root_loss_count": verify_real_root_count,
+    # S4-13 ① SymPy 불가 영역의 *기계 가능 부분* — 유한 표본공간을 **전수 열거**해 정확
+    # 유리수로 검산한다(난수 표본이 아니라 전수라 그 형식 모델 위에서는 증명). 기계 불가
+    # 잔여(발문↔형식모델 정합)는 `cross_verify` + Wilson 표본 검수 게이트가 로트로 본다.
+    "finite_probability": verify_finite_probability,
+    "finite_count": verify_finite_count,
 }
 
 

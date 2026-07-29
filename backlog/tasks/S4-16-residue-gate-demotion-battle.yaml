@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-16-residue-gate-demotion-battle
+title: "잔여 축 교차검증 게이트 강등전 — 실 LLM 결함 주입 검출률 측정 (S4-13 게이트 승격 조건)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "S4-13이 배선한 K=3 교차검증 게이트를 실 provider(Phaiakes9 Ollama 또는 클라우드)로 강등전 통과: 결함 주입 셋(발문 조건 결측·중의성·등확률 미명시·복수 정답 각 N건) + 무결함 대조군으로 검출률·오검출률 실측 → Wilson 게이트 CLI PASS. 측정 결과로 --max-defect-upper 기본값(현 0.05는 근거 없는 초기값) 보정. 통과 전까지 이 경로를 인간 검수 대체로 선언 금지(CLAUDE.md 검증 권위)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "docs/standards/**"
+session: null
+notes: "S4-13(#PR)의 정직한 미충족 축. 현 환경에 LLM provider가 없어 전 테스트가 결정론 시임 — 게이트 *배선*은 완료·게이트 *승격*은 미완이다. 실 LLM 호출이 필요하므로 Kiki 머신(Phaiakes9) 실행 동반. 파일럿 코퍼스 problem_bank_probability_finite_v0(34문)는 그때까지 노출 부적격 유지(is_published=False)."
+updated: 2026-07-29

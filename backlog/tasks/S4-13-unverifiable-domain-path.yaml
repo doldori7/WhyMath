@@ -5,14 +5,17 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "검증 권위 서열 내 대체 스택 v1: ①기계 가능 부분 분리(확률 유한 표본공간 전수 열거·조합 계산은 Tier1 유지 — 추론 서술과 수치 검산 분리) ②기계 불가 잔여는 독립 다관점 LLM 교차검증(생성자≠검증자·K≥3·원리 다른 프롬프트) + Wilson 표본 검수 게이트 ③검증 등급을 verify 계약 확장으로 코퍼스 메타 명시(신규 필드 최소). 파일럿 1영역(확률 유한 전수형) 실증. 학생 증명 피드백은 S4-02 경계(중복 금지)"
-artifacts: []
+artifacts:
+  - "l3/finite_probability.py(전수 열거 검산)·l3/cross_verify.py(K=3 독립 관점)·l3/verification_tier.py"
+  - "harness/{finite_probability_batch,residue_cross_verify_eval}.py + 파일럿 코퍼스 34문"
+  - "테스트 58건 · 게이트 승격은 S4-16 강등전 경유(실 LLM 미측정 — 인간 검수 대체 아님)"
 paths:
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/harness/**"
