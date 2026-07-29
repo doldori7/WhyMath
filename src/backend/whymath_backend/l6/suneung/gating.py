@@ -86,12 +86,20 @@ PRD 5종 페르소나(`enums.Persona`) 중 *정시(수능)* 트랙에 있는 셋
 # 같은 집합을 참조한다(중복 재정의 방지 — 정본은 이 모듈 하나).
 SUNEUNG_EXAM_TYPES: frozenset[ExamType] = frozenset({ExamType.수능, ExamType.모평, ExamType.학평})
 
+# persona_fit 임계값의 단일 권위(S3-13) — `SUNEUNG_EXAM_TYPES`와 같은 이유로 공개 승격한다.
+# api의 SQL 사전필터(`api/me.py` recommend_next_problem mode=suneung)가 `is_suneung_eligible`
+# ③(c)의 임계와 **반드시 같은 값**을 써야 한다 — SQL이 이 값보다 *엄격*하면 진짜 적격 문항이
+# θ 근방 풀에서 원천 배제되고(진실 게이트는 "새는 부적격"만 잡지 "새는 적격 후보"는 못 잡는다 —
+# S3-10 실측이 드러낸 바로 그 함정), *느슨*해도 안전하지만(진실 게이트가 재검증) 불일치 자체가
+# 유지보수 지옥이다. 정본은 이 상수 하나 — `is_suneung_eligible`도 이 값을 기본값으로 쓴다.
+SUNEUNG_DEFAULT_MIN_FIT: float = 0.5
+
 
 def is_suneung_eligible(
     problem: Problem,
     persona: Persona = Persona.A_일반고고3,
     *,
-    min_fit: float = 0.5,
+    min_fit: float = SUNEUNG_DEFAULT_MIN_FIT,
 ) -> bool:
     """이 문항을 이 페르소나에게 수능(정시) 모드로 노출해도 되는가(불리언 게이트).
 

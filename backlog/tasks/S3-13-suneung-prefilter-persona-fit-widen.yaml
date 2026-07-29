@@ -5,14 +5,15 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "recommend_next_problem(mode=suneung)의 SQL 사전필터가 exam_type/signature_patterns 부재이면서 persona_fit[persona]>=min_fit인 문항도 θ 근방 풀에 포함 + 실측(후보풀 크기 전후 비교)+회귀 0"
-artifacts: []
+artifacts:
+  - "커밋 예정(미푸시) — SQL prefilter persona_fit 조건 추가(api/me.py·l6/suneung/gating.py·__init__.py) + 실 PG 통합 신규 2건(변별력 확인: mutation 시 1건 실패 재현) + 정적게이트 clean + CI동일 실PG통합 235 passed + 전체스위트 7622 passed/264 skipped exit0 cov92% + MEMORY.md 결정로그"
 paths:
   - src/backend/whymath_backend/api/me.py
   - tests/backend/api/test_me.py

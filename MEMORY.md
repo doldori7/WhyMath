@@ -353,6 +353,16 @@
 
 **검증**: ruff·black(950파일) clean · mypy --strict Success(426) · lint-imports 0 broken · 신규 hermetic 24 passed(규칙 14 + CLI 10, 변별력 포함) · 실 PG 통합 233 passed · 전체 스위트는 하단 done 증적에 기록.
 
+### 2026-07-29 (구현·실측·S3-13): **수능 SQL 사전필터에 persona_fit 조건 추가 — S3-10 백필이 새로 연 후보풀 손실 해소** (claude 구현·실측, `/drive` 자동 착수)
+
+**컨텍스트**: S3-10이 `api/me.py::recommend_next_problem`(mode=suneung)의 docstring에 남긴 부수 발견을 그대로 이어받음 — SQL 사전필터가 `exam_type∪signature_patterns` 2축만으로 θ 근방 50개 후보풀을 추리는데, persona_fit이 실값이 된 지금은 그 두 신호가 없어도 `is_suneung_eligible`상 적격인 문항(2,667건 중 다수)이 후보풀 자체에서 원천 배제된다 — 진실 게이트(`is_suneung_eligible`)는 "새는 부적격"만 잡고 "새는 적격 후보"는 못 잡는 구조적 한계.
+
+**구현**: `l6/suneung/gating.py`에 `SUNEUNG_DEFAULT_MIN_FIT`(=0.5) 신설 — `SUNEUNG_EXAM_TYPES`와 동일 이유로 공개 승격(정본은 이 상수 하나, `is_suneung_eligible`도 이 값을 기본값으로 사용). `api/me.py`의 SQL prefilter `or_()`에 `Problem.persona_fit[persona.value].as_float() >= SUNEUNG_DEFAULT_MIN_FIT` 세 번째 조건 추가(JSONB 키 추출 비교라 GIN 인덱스는 못 타 순차 스캔이지만 θ 근방 50개 풀 산출용이라 감내 가능). 임계값을 상수 하나로 단일화해 SQL과 진실 게이트가 어긋날 위험(SQL이 더 엄격하면 적격 후보가 원천 배제·더 느슨하면 진실 게이트가 재검증하므로 안전) 자체를 제거.
+
+**검증**: 신규 실 PG 통합 테스트 2건 — ①기출유형·시그니처 둘 다 없고 persona_fit만 임계 통과(0.6≥0.5)하는 문항이 θ 근방 풀에 잡혀 실제 추천됨 ②persona_fit이 임계 미달(0.3<0.5)이면 여전히 배제됨(변별력 — 조건 존재만으로 항상 True가 되는 결함을 잡는다). **변별/mutation 확인**: SQL의 persona_fit 절을 임시로 제거하고 재실행 → ①번 테스트만 실패(예상대로) — 테스트가 실제로 이 SQL 조건에 의존함을 실측 확인 후 원복. 정적 게이트(ruff·black·mypy --strict·lint-imports) clean · CI 동일 선택 실 PG 통합 235 passed/13 skipped(외부서비스 skip만) · 전체 스위트 7,622 passed/264 skipped·exit 0(커버리지 92%, 게이트 70% 통과).
+
+**부수 사고 예방**: 검증 도중 로컬 PG 사용을 CI 잡별로 다시 확인 — 통합테스트 잡만 `WHYMATH_DB_DISABLE_POOL=1`을 쓰고 메인 커버리지 잡은 이 값을 쓰지 않는다(`ci.yml` 확인). 이 env를 전체 스위트 실행에 실수로 이어 쓰면 `test_default_settings_use_connection_pool`이 "기본값"을 검증할 수 없어 거짓 실패한다 — 실제 회귀가 아니라 로컬 호출 오류임을 CI yml 대조로 확인 후 env 없이 재실행해 정정.
+
 ### 2026-07-29 (근접사고·재발방지·HARN-11): **미머지 done 비가시성 — `next`가 이미 끝난 태스크를 1순위로 추천** (claude 규명·구현, Kiki "/drive")
 
 **근접사고**: `/drive`가 S3-09(문제은행 v0 4종 검수)를 최우선 후보로 계산해 **claim까지 진행**했으나, 타 세션(problem-bank)이 이미 720문 검수를 마치고 done 처리한 상태였다(브랜치 미머지). 착수 직전 후속 태스크 S3-12의 notes가 인용한 감사 결과("4종 전부 FAIL·mc 63.6%")를 보고 발견 — **중복 구현 0으로 회피**, claim 즉시 해제.

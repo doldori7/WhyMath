@@ -836,6 +836,132 @@ def test_me_next_problem_recommends_unattempted_on_live_pg() -> None:
         asyncio.run(_cleanup_all())
 
 
+def test_me_next_problem_suneung_persona_fit_only_candidate_on_live_pg() -> None:
+    """S3-13: 기출유형·시그니처가 없어도 persona_fit만으로 θ 근방 SQL 풀에 잡히는지 실 PG로 증명.
+
+    SQL 사전필터는 hermetic 테스트(FakeSession)로는 검증되지 않는다(WHERE 절이 실행되지 않고
+    통째로 무시되므로) — 실 PG에서 실제로 WHERE가 평가돼야 이 조건의 존재 여부가 드러난다.
+    S3-10 이전엔 persona_fit이 전부 {}라 이 문항은 사전필터에서 원천 배제됐다(무손실이었던
+    이유 — 어차피 아무것도 적격이 아니었으므로). 지금은 persona_fit[A]=0.6(>=0.5 임계)만으로
+    사전필터를 통과해야 하고, 통과한 뒤 `is_suneung_eligible`(진실 게이트)도 persona_fit 경로로
+    적격 판정해 실제로 추천돼야 한다.
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid = uuid.uuid4()
+    suffix = pid.hex[:8]
+
+    def _persona_fit_only_problem() -> Problem:
+        return Problem.from_schema(
+            ProblemSchema(
+                problem_id=pid,
+                source_type=SourceType.자체생성,
+                curriculum_version=Curriculum.REVISION_2022,
+                valid_from_year=2022,
+                subject=Subject.공통,
+                unit_codes=[f"U-{suffix}"],
+                difficulty_overall=3.0,
+                # 기출유형·시그니처 둘 다 없음 — persona_fit 경로만으로 적격이어야 한다.
+                exam_type=None,
+                signature_patterns=[],
+                persona_fit={Persona.A_일반고고3: 0.6},
+            )
+        )
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(_persona_fit_only_problem())
+
+    async def _cleanup() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DELETE FROM problem WHERE problem_id=:p"), {"p": str(pid)})
+                await conn.execute(
+                    text("DELETE FROM user_profile WHERE user_id=:u"), {"u": str(uid)}
+                )
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        with _client() as client:
+            resp = client.get(
+                "/v1/me/next-problem?mode=suneung",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            # 사전필터가 여전히 좁으면 SQL이 이 행 자체를 안 뽑아 problem_id=null이 된다.
+            assert body["problem_id"] == str(pid), (
+                "persona_fit-only 문항이 θ 근방 SQL 풀에서 빠졌다 — "
+                "SUNEUNG_DEFAULT_MIN_FIT 조건이 사전필터에서 누락됐을 수 있다."
+            )
+    finally:
+        asyncio.run(_cleanup())
+
+
+def test_me_next_problem_suneung_persona_fit_below_threshold_excluded_on_live_pg() -> None:
+    """**변별력** — persona_fit이 임계 미달(0.3<0.5)이면 여전히 사전필터에서 빠져야 한다.
+
+    위 테스트가 "무조건 통과"라는 고장이 아님을 증명한다 — 임계값 비교가 실제로 SQL에서
+    작동해야 한다(그냥 컬럼 존재만 보고 항상 True가 되는 결함을 잡는다).
+    """
+    if not asyncio.run(_pg_reachable()):
+        pytest.skip("PostgreSQL 미도달 — 통합 테스트 건너뜀")
+
+    uid = uuid.uuid4()
+    pid = uuid.uuid4()
+    suffix = pid.hex[:8]
+
+    def _low_fit_problem() -> Problem:
+        return Problem.from_schema(
+            ProblemSchema(
+                problem_id=pid,
+                source_type=SourceType.자체생성,
+                curriculum_version=Curriculum.REVISION_2022,
+                valid_from_year=2022,
+                subject=Subject.공통,
+                unit_codes=[f"U-{suffix}"],
+                difficulty_overall=3.0,
+                exam_type=None,
+                signature_patterns=[],
+                persona_fit={Persona.A_일반고고3: 0.3},
+            )
+        )
+
+    async def _setup() -> None:
+        await _add_all(_user(uid))
+        await _add_all(_low_fit_problem())
+
+    async def _cleanup() -> None:
+        engine = create_async_engine(_settings().database_url)
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(text("DELETE FROM problem WHERE problem_id=:p"), {"p": str(pid)})
+                await conn.execute(
+                    text("DELETE FROM user_profile WHERE user_id=:u"), {"u": str(uid)}
+                )
+        finally:
+            await engine.dispose()
+
+    try:
+        asyncio.run(_setup())
+        token = create_access_token(uid, settings=_settings())
+        with _client() as client:
+            resp = client.get(
+                "/v1/me/next-problem?mode=suneung",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["problem_id"] is None
+    finally:
+        asyncio.run(_cleanup())
+
+
 def test_me_next_problem_weak_concept_priority_on_live_pg() -> None:
     """GET /v1/me/next-problem?prioritize_weak_concepts=true — 동일 난이도 두 문항 중
     약점 개념(저숙달) 문항을 BKT 숙달 스냅샷 조인으로 우선 추천(BKT+IRT 융합·end-to-end)."""
