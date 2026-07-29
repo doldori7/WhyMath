@@ -337,6 +337,20 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (구현·PED-07·PED-05 + 사고·재발방지): **mode_guard 런타임 배선 + 교수전략 카탈로그 착지 — 검증 함정 2건 규명·등재** (claude /drive)
+
+**컨텍스트**: 04e(PED-04) 후속 /drive 2건. ①PED-07 — `check_forbidden_modes` 프로덕션 호출 0("배선 없는 검증 장치" 반복 사고 유형) 해소 ②PED-05 — 전략은 enum+docstring뿐인 서술 자산 비대칭 해소.
+
+**적용**: ①PED-07(2874e7b): `mode_guard_runtime_enabled`(기본 False·킬스위치) 신설, WH-1 primary 발화 확정 후·톤필터 직전 가드 — 위반 발화 미서빙(fail-closed)·`fallback_reply_for`(기존 자산 EXAMPLE_QUESTION 재사용·신규 프로즈 0) 폴백·reason_code 구조화 로그·가드 자체 예외는 타입명 로그 후 판정 유보. coach는 decide에 넣은 같은 팩 객체를 러너로 thread(재해석 0). GA flip은 측정+사인오프 후 별도. ②PED-05(d8e3864): `schema/pedagogy_strategy.py`(9필드·`extra="forbid"`·폐쇄 어휘 3종 frozenset)+`pedagogy_strategies_v1` YAML 10건(enum 1:1·실존 연구 보수 인용·페이지/수치 미기재)+`strategy_registry.py`(lru_cache·LookupError·reset seam·pack_registry 미러). 제거 필드 3계열(추천점수·기계 금지조건·페이딩)은 **부재를 정적(model_fields)+런타임(extra=forbid) 이중 동결**. STOCHASTIC k_type 커버 0 사각을 발견해 방어 범위로 커버+7유형 전종 테스트 동결. 소비 배선은 PED-06 범위로 무접촉.
+
+**검증**: PED-07 — 전체 스위트 단일 프로세스 7,578 passed·exit 0(구현 env)·fidelity eval CI 인자 PASS·mypy strict 424 clean·import-linter KEPT. PED-05 — 신규 43건+schema/l4 1,922 passed·전체 스위트 7,608 passed/13 failed(아래 플레이크·변경 무관 3중 실측: 단독 33 green·신규 선행 강제 76 green·additive-only)·mypy 426 clean·ruff/black/lint-imports PASS.
+
+**사고·재발방지 2건(실측 규명·등재 완료)**: (a) **pytest 경로 인자 → rootdir 어긋남**: `../../tests/...` 인자 실행 시 rootdir이 리포 루트로 잡혀 `asyncio_mode=auto` 미적용 → 마크 없는 async 테스트 60~529건 "async not supported" **가짜 실패**로 PED-07/05 검증을 연속 오도(stash 대조·플러그인 의심 등 우회 진단 소모). `-c pyproject.toml` 동봉 시 전건 통과 실측 → **CLAUDE.md 코드 원칙에 규칙 등재**(인자 없이 testpaths 실행·판정 전 rootdir/asyncio mode 확인). (b) **WH-1 caplog 순서 플레이크**: 전체 스위트 랜덤 순서에서만 harness 3파일(test_wh1_{primary,shadow,primary_mode_guard})이 caplog 레코드 0건으로 5~13건 변동 실패(2회+ 관측·단독/강제순서 green — OPS-07 db 누수와 별개의 로거 상태 오염 계열 추정) → **OPS-15-wh1-caplog-order-flake 등재**(오염원 규명·격리 fixture·시드 10회 green).
+
+**롤백**: 플래그 OFF가 기본이라 PED-07은 무영향 상태로 이미 안전. PED-05는 additive(신규 모듈·YAML)라 파일 제거로 원복.
+
+**정직한 공백**: mode_guard 검출기 1/7 모드 그대로(deferred 6종 판정 유보)·PolyaCoach.coach() 데모 표면 미배선·관측 레코드 필드 미확장. 카탈로그 서술·매핑은 후속 사람 검토 전제(_provenance 명시). caplog 오염원 근본 규명은 OPS-15로 이연. CI(별도 env)가 최종 판정.
+
 ### 2026-07-28 (설계·문서·PED-04): **교수전략 격차 완결 설계(04e) — 외부 프레임워크 전수 대조·ExplanationMode 비신설·카탈로그 신설** (claude 설계, Kiki "교수전략 분야의 빠진 부분을 점검하고 WhyMath의 방향과 같이 하는 내용으로 설계")
 
 **컨텍스트**: Kiki가 외부 일반 교수전략 프레임워크(docx — 4기능: ⑭전략 라이브러리 14관리항목 ⑮설명방식 10종 ⑯비유/예시 5유형 ⑰질문 7유형)를 제공하며 격차 점검·설계를 지시. 3축 탐색(문서·코드·백로그) 실측: 선택·게이트·측정 골격은 PED-01~03/REND-01/CACHE-01로 완성, 공백은 ①전략 서술 자산(오개념 839×12필드 대비 전략은 enum+docstring뿐) ②비유·예시 *생성* 파이프라인(자산 `metaphor` 846행은 실재·전량 검수 전·AnalogyAdapter가 기렌더) ③형성평가 슬롯 내용물 ④배선 3건(mode_guard 프로덕션 호출 0·coach 실행용 축 미수렴·adaptive 표본 대기).
