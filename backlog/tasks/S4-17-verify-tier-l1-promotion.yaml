@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-17-verify-tier-l1-promotion
+title: "verification_tier L1 계약 승격 — 후처리 각인·로더 탈락 해소 (S4-13 잔여)"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "l1/problem_bank의 ProblemVerifyMeta에 verification_tier를 정식 필드로 승격 → 배치 후처리 각인(stamp_corpus_file) 제거·load_problem_bank_records가 등급을 보존해 감사 도구가 원시 JSONL을 우회하지 않도록. 기존 코퍼스 machine_sampled 백필은 S3-12 재생성 완료 후"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l1/problem_bank/**"
+  - "src/backend/whymath_backend/harness/**"
+session: null
+notes: "S4-13 작업 경로 제약(l3/harness/data/corpus/tests)으로 l1을 못 건드려 등급이 후처리 각인 + 로더 탈락 상태. 정본은 L1 계약 승격."
+updated: 2026-07-29
