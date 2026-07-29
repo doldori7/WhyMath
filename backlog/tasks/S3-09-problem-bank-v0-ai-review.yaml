@@ -5,7 +5,7 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 2
 owner: claude
 depends_on: []
@@ -17,6 +17,6 @@ paths:
   - "src/backend/whymath_backend/harness/**"
   - "docs/data/**"
   - "data/corpus/**"
-session: null
+session: claude/whymath-problem-bank-design-65tsm4
 notes: "docs/architecture/problem_bank_gap_review.md §3 D2 — 게이트 통과 ≠ 학생 노출: 표본 검수 미경유 2,043문의 노출 자격 균일화. 검수=측정 게이트 경유(검증 권위 서열·PRD §6.4 대체)"
-updated: 2026-07-28
+updated: 2026-07-29

@@ -74,6 +74,34 @@ class TestLoad:
         assert all(p.license == "WHYMATH_GENERATED" for p in problems)
         assert all(p.generation_type == "FULLY_GENERATED" for p in problems)
 
+    def test_distractor_op_code_optional(self) -> None:
+        """op_code 없는 distractor_map(misconception_mc·conceptual_v0 실형태)도 적재·렌더된다.
+
+        정본 `schema.problem.DistractorEntry`의 op_code는 선택(None=미상)인데 로컬 사본이
+        필수로 더 엄격해 mc/conceptual 코퍼스 표본 생성이 통째로 죽던 2026-07-29 S3-09 실측
+        결함의 회귀 봉인. 렌더는 None이면 `(op: ...)` 접미를 생략해야 한다.
+        """
+        row = {
+            "problem_id": "y",
+            "slug": "s-op-none",
+            "unit_codes": ["QUAD-EQ"],
+            "question_format": "객관식",
+            "answer_format": "정수",
+            "question_text": "q",
+            "answer": "1",
+            "difficulty_overall": 2.0,
+            "license": "WHYMATH_GENERATED",
+            "source_type": "자체생성",
+            "generation_type": "FULLY_GENERATED",
+            "choices": ["1", "2"],
+            "distractor_map": [{"choice_index": 1, "misconception_id": "exponent-zero"}],
+        }
+        problems = load_sample_corpus(json.dumps(row, ensure_ascii=False))
+        assert problems[0].distractor_map[0].op_code is None
+        md = render_markdown(problems, corpus_size=1)
+        assert "오개념 `exponent-zero`" in md
+        assert "(op:" not in md
+
     def test_rejects_non_generated_source(self) -> None:
         row = {
             "problem_id": "x",
