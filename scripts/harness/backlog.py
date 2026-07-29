@@ -132,6 +132,24 @@ def cmd_next(root: Path, args: argparse.Namespace) -> int:
     )
     if remote_status not in ("ok", "disabled"):
         print(f"⚠ 원격 claim 조회 불가({remote_status}) — 로컬 claim 정보만 반영", file=sys.stderr)
+
+    # 미머지 done 제외 (HARN-11) — 타 세션이 끝냈으나 머지 전인 태스크는 후보가 아니다.
+    # fetch 없이 캐시된 remote-tracking ref만 본다(네트워크 0·실측 12ms): `next`는 자주
+    # 도는 조회이고, 확정 지점인 `start`가 fetch=True로 다시 본다(2선).
+    if policy.remote_claims and not getattr(args, "no_remote", False) and ready:
+        done_map, done_status = remote_claims.scan_remote_done(root, [t.id for t in ready])
+        if done_map:
+            for task_id, finishers in sorted(done_map.items()):
+                print(
+                    f"⚠ 후보 제외 {task_id} — 이미 완료(미머지): "
+                    f"{', '.join(f.branch for f in finishers)}",
+                    file=sys.stderr,
+                )
+            ready = [t for t in ready if t.id not in done_map]
+        elif done_status != "ok":
+            print(
+                f"⚠ 미머지 done 탐지 불가({done_status}) — 완료분이 섞였을 수 있음", file=sys.stderr
+            )
     if args.json:
         print(
             json.dumps(
@@ -193,6 +211,35 @@ def cmd_start(root: Path, args: argparse.Namespace) -> int:
     # 원격 claim 스냅샷 — 다른 세션의 in-flight는 로컬 backlog 사본에 안 보이므로
     # (claim은 각 브랜치의 worktree에만 기록) 원격 ref로만 교차 세션 겹침을 알 수 있다
     remote_claimed, _ = _remote_claim_map(root, policy, skip=getattr(args, "no_remote", False))
+
+    # [프리플라이트 0] 미머지 done — 타 세션이 이미 끝냈으나 머지 전인 태스크 (HARN-11).
+    # claim 대장은 done 시 release돼 비어 있고 트렁크 사본은 아직 todo라, 다른 어떤
+    # 검사도 이걸 못 본다. 되돌리기 비싼 지점이므로 fetch=True로 최신 상태를 본다.
+    if policy.remote_claims and not getattr(args, "no_remote", False):
+        done_map, done_status = remote_claims.scan_remote_done(root, [task.id], fetch=True)
+        finishers = done_map.get(task.id, [])
+        if finishers:
+            branches = ", ".join(f.branch for f in finishers)
+            message = (
+                f"{task.id} 착수 거부 — 이미 **완료된** 태스크다(미머지): {branches}\n"
+                f"  그 브랜치의 백로그 사본이 status: done — 착수하면 중복 구현이 된다.\n"
+                f"  확인: git show origin/<branch>:backlog/tasks/{task.id}.yaml\n"
+                f"  그래도 착수해야 하면(예: 그 브랜치가 폐기됨): --ignore-remote-claim"
+            )
+            if getattr(args, "ignore_remote_claim", False):
+                print(
+                    f"⚠ 미머지 done 무시하고 진행({branches}) — 중복 구현 위험을 감수합니다",
+                    file=sys.stderr,
+                )
+                store.append_event(root, "start_ignored_unmerged_done", task.id, branches=branches)
+            else:
+                return _fail(message)
+        elif done_status != "ok":
+            # 판정 불가를 '완료분 없음'으로 위장하지 않는다 (측정 실패 ≠ 통과)
+            print(
+                f"⚠ 미머지 done 탐지 불가({done_status}) — 타 세션 완료분을 못 봤을 수 있음",
+                file=sys.stderr,
+            )
 
     # [프리플라이트 1] 파일 범위 겹침 — 타 in-flight(로컬 ∪ 원격 claim) paths와 교차
     overlap_error = _check_path_overlap(
