@@ -122,12 +122,14 @@ _BANDS: tuple[_Band, ...] = (
         "composite-function-commutes",
         ("[10공수2-03-02]", "[10기수2-03-02]"),
     ),
-    # period-of-scaled-sine: 후보 M0152=[12미적Ⅱ-02-02] agree.
+    # period-of-scaled-sine(S3-12 재태깅): sin(bx) 주기는 삼각함수 그래프·성질
+    #   [12대수02-02] 정위치 — 종전 [12미적Ⅱ-02-02](덧셈정리)는 감사 확정 오귀속.
+    #   843 정본 M0152 standard_code도 같은 정위치로 동시 교정(agree 유지).
     _Band(
         "period-of-scaled-sine",
         "sine_period",
         "period-of-scaled-sine",
-        ("[12미적Ⅱ-02-02]",),
+        ("[12대수02-02]",),
     ),
     # translation-sign-flip: 후보 M0411·M0850=[10기수2-01-06], M0632=[10공수2-01-06] — 둘 다 agree.
     _Band(
@@ -152,19 +154,26 @@ _BANDS: tuple[_Band, ...] = (
         "fraction-cancellation",
         ("[9수01-04]", "[6수01-06]"),
     ),
-    # angle-sum-non-triangle: 후보 M0493=[4수03-25]·M0580=[9수03-05]·M0051=[9수03-03] 모두 agree.
+    # angle-sum-non-triangle(S3-12 rotation-1 재태깅): 내각의 합 문항에 [9수03-03](삼각형
+    #   작도)은 무관 오귀속 — 정위치는 [4수03-25](삼각형·사각형 내각합 추론)·[9수03-05]
+    #   (다각형의 성질). M0051("삼각형 내각합")도 동일 오귀속이라 [4수03-25]로 동시 교정.
     _Band(
         "angle-sum-non-triangle",
         "polygon_angle_sum",
         "angle-sum-non-triangle",
-        ("[4수03-25]", "[9수03-05]", "[9수03-03]"),
+        ("[4수03-25]", "[9수03-05]"),
     ),
-    # area-perimeter-confusion: 후보 M0529=[6수03-11]·M0782=[12직수03-04]·M0052=[9수03-12] agree.
+    # area-perimeter-confusion(S3-12 재태깅): 문항은 직사각형 넓이·둘레 혼동 —
+    #   [6수03-13](직사각형 넓이)·[6수03-11](평면도형 둘레)·[12직수03-04](직무 둘레·넓이) 정위치.
+    #   종전 [9수03-12](닮음)는 감사 확정 무관 오귀속이라 제거(M0529=[6수03-11] agree 유지).
+    #   M0052("넓이 vs 둘레")도 동일 오귀속([9수03-12])이라 [6수03-13]로 동시 교정(agree 복원 —
+    #   크로스링크 e2e 회귀 발견·수정: 밴드만 고치고 카탈로그를 놓치면 machine_reject가 M0052를
+    #   cross-standard로 오탈락시킨다).
     _Band(
         "area-perimeter-confusion",
         "area_perimeter",
         "area-perimeter-confusion",
-        ("[6수03-11]", "[12직수03-04]", "[9수03-12]"),
+        ("[6수03-11]", "[6수03-13]", "[12직수03-04]"),
     ),
     # circle-radius-squared: 후보 M0630=[10공수2-01-04]·M0848=[10기수2-01-04]·M0732=[12기하02-05]
     #   모두 태깅해 agree — 특히 M0848(원의 방정식 [10기수2-01-04])이 factor-sign-flip에서 이미
@@ -184,12 +193,14 @@ _BANDS: tuple[_Band, ...] = (
         ("[12확통02-01]", "[12인수04-01]", "[12수문02-02]"),
     ),
     # ── 843 확장 트랜치1(기초 계산형 6종·후보 단일 M-id·표준 일치 agree) ──
-    # fraction-addition-naive: 후보 M0004=[9수01-04] agree.
+    # fraction-addition-naive(S3-12 재태깅): 1/p+1/q 통분 덧셈은 유리수 사칙계산 [9수01-05]
+    #   정위치 — 종전 [9수01-04](대소 관계)는 덧셈과 무관(감사 확정 MIXED-MULT 동형 오귀속).
+    #   843 정본 M0004 standard_code도 같은 정위치로 동시 교정(agree 유지).
     _Band(
         "fraction-addition-naive",
         "fraction_addition",
         "fraction-addition-naive",
-        ("[9수01-04]",),
+        ("[9수01-05]",),
     ),
     # negative-times-negative: 후보 M0001=[9수01-03] agree.
     _Band(
@@ -219,12 +230,14 @@ _BANDS: tuple[_Band, ...] = (
         "sqrt-distributes-over-sum",
         ("[9수01-07]",),
     ),
-    # difference-of-squares-confused: 후보 M0121=[9수01-01] agree.
+    # difference-of-squares-confused(S3-12 재태깅): x²−a²=(x−a)(x+a) 합차는 다항식 곱셈·
+    #   인수분해 [9수02-19] 정위치 — 종전 [9수01-01](소인수분해)은 감사 확정 오귀속.
+    #   843 정본 M0121 standard_code도 같은 정위치로 동시 교정(agree 유지).
     _Band(
         "difference-of-squares-confused",
         "difference_of_squares",
         "difference-of-squares-confused",
-        ("[9수01-01]",),
+        ("[9수02-19]",),
     ),
     # ── 843 확장 트랜치2(거듭제곱·분배·부호 계산형 6종·후보 단일 M-id·표준 일치 agree) ──
     # exponent-product-multiplies: 후보 M0006=[9수02-08] agree.
@@ -248,19 +261,22 @@ _BANDS: tuple[_Band, ...] = (
         "negative-square-precedence",
         ("[9수02-08]",),
     ),
-    # distribute-first-term-only: 후보 M0017=[9수02-09] agree.
+    # distribute-first-term-only(S3-12 rotation-1 재검수 재태깅): a(b+c) 분배는 단항식×다항식
+    #   곱셈 [9수02-10] 정위치 — 종전 [9수02-09](다항식 덧셈·뺄셈)는 무관 오귀속.
+    #   M0017("분배법칙")도 동일 오귀속이라 동시 교정(agree 유지).
     _Band(
         "distribute-first-term-only",
         "distribute_partial",
         "distribute-first-term-only",
-        ("[9수02-09]",),
+        ("[9수02-10]",),
     ),
-    # negative-distribute-sign: 후보 M0018=[9수02-09] agree.
+    # negative-distribute-sign(S3-12 rotation-1 재검수 재태깅): -(x-a) 분배도 동일하게
+    #   단항식×다항식 곱셈 [9수02-10] 정위치 — M0018("음수 분배")도 동시 교정(agree 유지).
     _Band(
         "negative-distribute-sign",
         "negative_distribute",
         "negative-distribute-sign",
-        ("[9수02-09]",),
+        ("[9수02-10]",),
     ),
     # square-of-difference-no-cross: 후보 M0020=[9수02-19] agree.
     _Band(
@@ -272,8 +288,11 @@ _BANDS: tuple[_Band, ...] = (
     # ── 843 확장 트랜치3(중점·비례·부호·동류항·완전제곱·켤레 계산형 6종·후보 단일 M-id·agree) ──
     # midpoint-sum-only: 후보 M0066=[9수02-05] agree.
     _Band("midpoint-sum-only", "midpoint_no_half", "midpoint-sum-only", ("[9수02-05]",)),
-    # scale-area-linear: 후보 M0013=[9수02-07] agree.
-    _Band("scale-area-linear", "scale_area", "scale-area-linear", ("[9수02-07]",)),
+    # scale-area-linear(S3-12 재태깅): 닮음비→넓이비는 도형의 닮음 [9수03-12] 정위치(감사 확정).
+    #   [9수02-07](정비례·반비례)은 이 오개념의 개념 뿌리(넓이를 닮음비에 선형 비례로 오적용)라
+    #   보조 병기로 유지 — 843 정본 M0013("비례")의 standard_code가 [9수02-07]로 그 자체는
+    #   정합이므로 crosswalk agree도 이 병기가 지킨다(정위치 우선·뿌리 병기).
+    _Band("scale-area-linear", "scale_area", "scale-area-linear", ("[9수03-12]", "[9수02-07]")),
     # negative-even-power-sign: 후보 M0201=[9수02-08] agree.
     _Band(
         "negative-even-power-sign",
@@ -298,55 +317,67 @@ _BANDS: tuple[_Band, ...] = (
         ("[9수01-07]",),
     ),
     # ── 843 확장 트랜치4(이항·GCD/LCM·소수·대분수·나머지정리·근과계수 6종·후보 단일 M-id·agree) ──
-    # transpose-no-sign-change: 후보 M0021=[9수02-13] agree.
-    _Band("transpose-no-sign-change", "transpose", "transpose-no-sign-change", ("[9수02-13]",)),
+    # transpose-no-sign-change(S3-12 재태깅): x+b=c 이항은 일차방정식 [9수02-04] 정위치 —
+    #   종전 [9수02-13](미지수 2개 연립)은 감사 확정 오귀속. M0021("이항")도 동시 교정(agree).
+    _Band("transpose-no-sign-change", "transpose", "transpose-no-sign-change", ("[9수02-04]",)),
     # gcd-lcm-confused: 후보 M0014=[9수01-02] agree.
     _Band("gcd-lcm-confused", "gcd_lcm", "gcd-lcm-confused", ("[9수01-02]",)),
-    # decimal-mult-place: 후보 M0103=[9수01-06] agree.
-    _Band("decimal-mult-place", "decimal_mult", "decimal-mult-place", ("[9수01-06]",)),
-    # mixed-number-mult-whole: 후보 M0102=[9수01-04] agree.
+    # decimal-mult-place(S3-12 재태깅): 소수 곱셈은 초등 [6수01-13] 정위치(감사 확정) —
+    #   종전 [9수01-06](순환소수)은 무관 오귀속. M0103("소수점 곱셈")도 동시 교정(agree).
+    _Band("decimal-mult-place", "decimal_mult", "decimal-mult-place", ("[6수01-13]",)),
+    # mixed-number-mult-whole(S3-12 재태깅): 대분수 곱셈은 유리수 사칙계산 [9수01-05] 정본
+    #   (감사 확정) — 종전 [9수01-04](대소 관계) 오귀속. M0102("대분수 곱셈")도 동시 교정(agree).
     _Band(
         "mixed-number-mult-whole",
         "mixed_mult",
         "mixed-number-mult-whole",
-        ("[9수01-04]",),
+        ("[9수01-05]",),
     ),
-    # remainder-theorem-sign: 후보 M0133=[10공수1-01-01] agree.
+    # remainder-theorem-sign(S3-12 재태깅): 나머지정리는 [10공수1-01-02](항등식·나머지정리)
+    #   정위치 — statement가 나머지정리를 명시. 종전 [10공수1-01-01](다항식 사칙연산)은
+    #   나눗셈 계산이지 나머지정리 간파가 아니다. M0133("나머지정리")도 동시 교정(agree).
     _Band(
         "remainder-theorem-sign",
         "remainder_sign",
         "remainder-theorem-sign",
-        ("[10공수1-01-01]",),
+        ("[10공수1-01-02]",),
     ),
-    # vieta-sign-error: 후보 M0123=[10공수1-02-08] agree.
-    _Band("vieta-sign-error", "vieta_sum", "vieta-sign-error", ("[10공수1-02-08]",)),
+    # vieta-sign-error(S3-12 재태깅): 근과 계수의 관계는 [10공수1-02-03] 정위치(감사 확정) —
+    #   종전 [10공수1-02-08](연립이차)은 무관 오귀속. M0123("근과 계수 관계")도 동시 교정(agree).
+    _Band("vieta-sign-error", "vieta_sum", "vieta-sign-error", ("[10공수1-02-03]",)),
     # ── 843 확장 트랜치5(비대수 도메인·기하4·확통2·후보 단일 M-id·표준 일치 agree) ──
-    # trapezoid-area-no-half: 후보 M0161=[9수03-12] agree.
-    _Band("trapezoid-area-no-half", "trapezoid_area", "trapezoid-area-no-half", ("[9수03-12]",)),
-    # scale-volume-linear: 후보 M0056=[9수03-12] agree.
+    # trapezoid-area-no-half(S3-12 재태깅): 사다리꼴 넓이는 초등 [6수03-14] 정위치(감사 확정) —
+    #   종전 [9수03-12](닮음)는 무관 오귀속. M0161("사다리꼴 넓이")도 동시 교정(agree).
+    _Band("trapezoid-area-no-half", "trapezoid_area", "trapezoid-area-no-half", ("[6수03-14]",)),
+    # scale-volume-linear: 후보 M0056=[9수03-12] agree(닮음비→부피비는 닮음 정위치 — 유지).
     _Band("scale-volume-linear", "scale_volume", "scale-volume-linear", ("[9수03-12]",)),
     # cone-volume-no-third: 후보 M0063=[9수03-08] agree.
     _Band("cone-volume-no-third", "cone_volume", "cone-volume-no-third", ("[9수03-08]",)),
-    # circle-area-circumference: 후보 M0053=[9수03-19] agree.
+    # circle-area-circumference(S3-12 재태깅): 원의 넓이는 초등 [6수03-16] 정위치(감사 확정
+    #   "원 넓이는 [6수03-16]/[9수03-06]") — 발문의 원주율 문자 π 표기는 중1 원과 부채꼴
+    #   [9수03-06] 도입이라 병기. 종전 [9수03-19](원주각)는 무관 오귀속.
+    #   M0053("원 넓이/둘레")도 [6수03-16]로 동시 교정(agree).
     _Band(
         "circle-area-circumference",
         "circle_area",
         "circle-area-circumference",
-        ("[9수03-19]",),
+        ("[6수03-16]", "[9수03-06]"),
     ),
-    # combination-no-denominator: 후보 M0087=[12직수04-01] agree.
+    # combination-no-denominator(S3-12 보강): 조합의 수 nCr은 [10공수1-03-03](조합) 정위치를
+    #   병기(감사 "미태깅 관찰") — [12직수04-01](직무 경우의 수)은 M0087 agree 유지용 병기.
     _Band(
         "combination-no-denominator",
         "combination",
         "combination-no-denominator",
-        ("[12직수04-01]",),
+        ("[10공수1-03-03]", "[12직수04-01]"),
     ),
-    # same-item-permutation-no-divide: 후보 M0190=[12직수04-01] agree.
+    # same-item-permutation-no-divide(S3-12 보강): 같은 것이 있는 순열은 [12확통01-01] 정위치를
+    #   병기 — [12직수04-01]은 M0190 agree 유지용 병기(감사 "맥락 한정 귀속 관찰").
     _Band(
         "same-item-permutation-no-divide",
         "same_item_permutation",
         "same-item-permutation-no-divide",
-        ("[12직수04-01]",),
+        ("[12확통01-01]", "[12직수04-01]"),
     ),
 )
 

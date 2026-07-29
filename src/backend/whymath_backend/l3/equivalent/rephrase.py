@@ -37,6 +37,7 @@ import logging
 import re
 from dataclasses import dataclass
 
+from whymath_backend.l3.equivalent.rephrase_hygiene import question_hygiene_violations
 from whymath_backend.l3.interfaces import LLMProvider
 from whymath_backend.l3.models import ModelFamily, RoutingDecision, RoutingRequest
 from whymath_backend.l3.pregenerate.validator import (
@@ -65,6 +66,8 @@ _logger = logging.getLogger(__name__)
 #   EQUATION_ALTERED  방정식 문자열 미보존 — 표기·공백·지수·부호 변형(가장 흔한 훼손)
 #   EXTRA_EQUATION    방정식 외 추가 '=' — 거짓 등식 주입 벡터
 #   HYGIENE_REJECT    위생 validator 거부(격리된 거짓 수치 등식·틀린 해 등)
+#   QUESTION_HYGIENE  발문 텍스트 위생 위반(S3-12 — 비한글 스크립트·메타 라벨 누출·비표준
+#                     용어·요구-정답 부정합·조사 오류: rephrase_hygiene 결정론 게이트)
 #   NO_CHANGE         출력이 원문과 동일 — 다양화 실패(오염 아님·안전)
 REASON_NO_EQUATION = "NO_EQUATION"
 REASON_PROVIDER_ERROR = "PROVIDER_ERROR"
@@ -72,6 +75,7 @@ REASON_EMPTY = "EMPTY"
 REASON_EQUATION_ALTERED = "EQUATION_ALTERED"
 REASON_EXTRA_EQUATION = "EXTRA_EQUATION"
 REASON_HYGIENE_REJECT = "HYGIENE_REJECT"
+REASON_QUESTION_HYGIENE = "QUESTION_HYGIENE"
 REASON_NO_CHANGE = "NO_CHANGE"
 
 # 시스템 프롬프트 v3 — **경량 회귀 + 정책 앵커**(2026-07-07 라이브 A/B 실측 근거).
@@ -142,7 +146,9 @@ def classify_invariance_failure(
 
     검사 순서(먼저 걸린 사유 반환): ① 비어있음(`EMPTY`) ② 방정식 substring 미보존
     (`EQUATION_ALTERED` — 표기·공백·지수·부호 변형) ③ 방정식 외 추가 `=`(`EXTRA_EQUATION` —
-    거짓 등식 주입) ④ 위생 validator 거부(`HYGIENE_REJECT`). 모두 통과면 None(수치 불변).
+    거짓 등식 주입) ④ 위생 validator 거부(`HYGIENE_REJECT`) ⑤ 발문 텍스트 위생 위반
+    (`QUESTION_HYGIENE` — S3-12 결정론 게이트: 비한글 스크립트·메타 라벨·비표준 용어·
+    요구-정답 부정합·조사 오류). 모두 통과면 None(수치 불변).
 
     이것이 검증의 단일 진실 원천이다 — `verify_numeric_invariance`가 이 위에 얇게 얹힌다(중복
     로직 금지). reason-code는 진단 harness가 실패를 taxonomy로 집계하고 raw 출력을 dump해 "왜
@@ -163,6 +169,10 @@ def classify_invariance_failure(
     active = validator if validator is not None else default_seed_validator()
     if validate_response(active, text) is not None:
         return REASON_HYGIENE_REJECT  # 위생 게이트 — 격리된 거짓 수치 등식/부등식/틀린 해.
+    if question_hygiene_violations(text):
+        # 발문 텍스트 위생(S3-12) — 한자·가나 주입/메타 라벨/비표준 용어/방법-값 부정합/조사
+        # 오류는 결정론 교정이 불가하므로 fail-closed(원문 유지)로 차단한다(감사 결함 5류 ⑤).
+        return REASON_QUESTION_HYGIENE
     return None
 
 

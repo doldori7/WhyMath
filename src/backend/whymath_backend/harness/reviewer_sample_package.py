@@ -68,13 +68,18 @@ _DEFAULT_OUT_REL = "docs/data/reviewer_sample_30_v0.md"
 
 
 class DistractorEntry(BaseModel):
-    """객관식 오답 선지 1개의 오개념 태깅 — `choice_index`(0-기준·choices 인덱스)·오개념·op-code."""
+    """객관식 오답 선지 1개의 오개념 태깅 — `choice_index`(0-기준·choices 인덱스)·오개념·op-code.
+
+    `op_code`는 정본 `schema.problem.DistractorEntry`와 동일하게 *선택*이다(None=op-code 미상·
+    오개념만 매핑). 필수로 두면 op_code 없는 코퍼스(misconception_mc·conceptual_v0)에서 표본
+    생성이 통째로 죽는다 — 2026-07-29 S3-09 실측 결함의 교정.
+    """
 
     model_config = ConfigDict(extra="ignore")
 
     choice_index: int
     misconception_id: str
-    op_code: str
+    op_code: str | None = None
 
 
 class SampleProblem(BaseModel):
@@ -358,9 +363,9 @@ def _format_choices(problem: SampleProblem) -> list[str]:
         if entry is None:
             lines.append(f"- {marker} `{choice}` ← 정답")
         else:
+            op_suffix = f" (op: `{entry.op_code}`)" if entry.op_code else ""
             lines.append(
-                f"- {marker} `{choice}` ← 오답 · 오개념 `{entry.misconception_id}` "
-                f"(op: `{entry.op_code}`)"
+                f"- {marker} `{choice}` ← 오답 · 오개념 `{entry.misconception_id}`{op_suffix}"
             )
     return lines
 

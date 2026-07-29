@@ -88,6 +88,69 @@ def test_gate_accepts_correct_count(
     assert v.verification == "verified"  # 정답 개수는 SymPy 독립 검증 통과
 
 
+class TestS312DefectRemediation:
+    """S3-12 계통 결함 회귀 봉인 — 극한 부호·확률 공리·조사(결함 상태면 실패하는 변별 테스트)."""
+
+    def test_limit_explanation_sign_is_a_minus_b(self) -> None:
+        # 감사 확정 explanation_slip 13건 — (x−a)(x−b)/(x−a)의 x→a 극한은 a−b인데 구버전은
+        # b−a로 부호를 뒤집어 적었다. 해설의 극한값 문구를 SymPy 독립 계산과 대조해 봉인한다.
+        import re
+
+        import sympy
+
+        from whymath_backend.l3.equivalent.conceptual_count_mc_generator import (
+            _build_limit_equals_value_pool,
+        )
+
+        x = sympy.Symbol("x")
+        pool = _build_limit_equals_value_pool()
+        assert len(pool) >= 24
+        for item in pool:
+            expr = sympy.sympify(item.conditions.replace("f(x) = ", ""))
+            pole = sympy.solve(sympy.denom(sympy.together(expr)), x)[0]
+            true_limit = sympy.limit(expr, x, pole)
+            match = re.search(r"극한값은 (-?\d+)", item.answer_explanation)
+            assert match is not None, item.answer_explanation
+            assert int(match.group(1)) == int(true_limit), (item.conditions, true_limit)
+
+    def test_conditional_probability_axiom_guard(self) -> None:
+        # 감사 확정 condition_mismatch 7건 — P(A∩B)=P(A|B)·P(B) ≤ min(P(A),P(B)) 위반 시드는
+        # 거부된다(예 P(A)=1/12·P(B)=1/2·P(A|B)=1/2 → P(A∩B)=1/4>P(A)). 전 시드 공리 준수 봉인.
+        import sympy
+
+        from whymath_backend.l3.equivalent.conceptual_count_mc_generator import (
+            _build_conditional_equal_pool,
+        )
+
+        pool = _build_conditional_equal_pool()
+        assert len(pool) >= 24  # 가드 후에도 밴드 요청 수(24)를 채운다
+        for item in pool:
+            pa, pb, pab = (sympy.Rational(x) for x in item.conditions.split(","))
+            assert pab * pb <= min(pa, pb), item.conditions
+            assert pab * pb / pa <= 1  # P(B|A) ≤ 1(확률 공리)
+        # 감사 원문 대조 확정 모순 조합(P(A)=1/12·P(B)=1/2)이 실제로 배제됐는지 표적 확인.
+        assert all(item.conditions != "1/12,6/12,6/12" for item in pool)
+
+    @pytest.mark.parametrize("template,kebab,codes", _CASES)
+    def test_question_and_explanation_pass_hygiene_gate(
+        self, template: CountTemplateKind, kebab: str, codes: tuple[str, ...]
+    ) -> None:
+        # 발문·해설 전건이 결정론 위생 게이트(조사 받침 정합 포함) 통과 — 구버전의
+        # '1 가'·'-3로'·'1/2 와'·'= 5 은' 류 조사 하드코딩이면 JOSA_ERROR로 즉시 실패한다.
+        from whymath_backend.l3.equivalent.rephrase_hygiene import question_hygiene_violations
+
+        gen = _gen(template, kebab)
+        spec = _spec(kebab, codes)
+        for _ in range(24):
+            cand = gen.generate(spec)
+            assert cand is not None
+            assert question_hygiene_violations(cand.problem.question_text) == (), cand.problem.slug
+            assert question_hygiene_violations(cand.problem.answer_explanation or "") == (), (
+                cand.problem.slug,
+                cand.problem.answer_explanation,
+            )
+
+
 @pytest.mark.parametrize("template,kebab,codes", _CASES)
 def test_gate_fails_misconception_count(
     template: CountTemplateKind, kebab: str, codes: tuple[str, ...]
