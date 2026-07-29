@@ -597,3 +597,70 @@ class TestSkillFocusBlock:
         assert _skill_focus(scene)  # 매핑 있으므로 존재
         reparsed = parse_learning_scene(scene.model_dump(mode="json"))
         assert isinstance(reparsed, LearningScene)
+
+
+# ── S4-09(D1) reader ②: StepPanelElement.solution_path_id 결선 ──────────────
+class _StepPanelFakeScalars:
+    def __init__(self, value: str | None) -> None:
+        self._value = value
+
+    def first(self) -> str | None:
+        return self._value
+
+
+class _StepPanelFakeResult:
+    def __init__(self, value: str | None) -> None:
+        self._value = value
+
+    def scalars(self) -> _StepPanelFakeScalars:
+        return _StepPanelFakeScalars(self._value)
+
+
+class _StepPanelFakeSession:
+    """l3 `find_solution_path_id`가 부르는 표면(execute→scalars→first)만 모사."""
+
+    def __init__(self, value: str | None) -> None:
+        self._value = value
+
+    async def execute(self, _stmt: object) -> _StepPanelFakeResult:
+        return _StepPanelFakeResult(self._value)
+
+
+class TestStepPanelWiring:
+    """S4-09(D1): 승격된 SolutionPath id 조회 헬퍼(댕글링 해소) + 학생 대면 신규 노출 0."""
+
+    @pytest.mark.asyncio
+    async def test_helper_returns_promoted_path_id(self) -> None:
+        """승격 경로가 있으면 그 id — 실재 id로 만든 StepPanelElement는 댕글링이 아니다."""
+        import uuid as _uuid
+
+        from whymath_backend.l4.learning_scene import StepPanelElement
+        from whymath_backend.l4.scene_generation import find_step_panel_solution_path_id
+
+        session = _StepPanelFakeSession("sp-promoted-1")
+        found = await find_step_panel_solution_path_id(session, _uuid.uuid4())  # type: ignore[arg-type]
+        assert found == "sp-promoted-1"
+        panel = StepPanelElement(solution_path_id=found)
+        # 답 미루기 스키마 강제 불변 — reveal_policy는 "deferred" 한 값만(S4-09 경계 유지).
+        assert panel.reveal_policy == "deferred"
+
+    @pytest.mark.asyncio
+    async def test_helper_returns_none_when_no_promoted_path(self) -> None:
+        """승격 경로가 없으면 None — step_panel을 만들 근거 없음(날조 금지)."""
+        import uuid as _uuid
+
+        from whymath_backend.l4.scene_generation import find_step_panel_solution_path_id
+
+        session = _StepPanelFakeSession(None)
+        assert await find_step_panel_solution_path_id(session, _uuid.uuid4()) is None  # type: ignore[arg-type]
+
+    @pytest.mark.asyncio
+    async def test_scene_skeleton_has_no_step_panel(self) -> None:
+        """학생 대면 신규 노출 0 — 장면 골격에 step_panel을 자동 삽입하지 않는다(S4-09 경계)."""
+        from whymath_backend.l4.learning_scene import StepPanelElement
+
+        scene, _ = await _generate(
+            _concept(styles=[VisualizationStyle.함수그래프]),
+            behavior_areas=[BehaviorArea.COMPUTE],
+        )
+        assert not any(isinstance(el, StepPanelElement) for el in scene.elements)

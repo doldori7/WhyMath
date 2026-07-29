@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (구현·S4-09): **SolutionPath/SolutionStep 실체화 — Pydantic·ORM·WH-S 승격 writer + 기존 표면 소생** (claude /drive 반복 1, backend-engineer 위임)
+
+**무엇**: `solution_module_gap_review.md` §3 D1 실행 — `l3/solution_path.py`(yaml 1:1 Pydantic + invariant 검증기)·`l3/solution_path_store.py`·`db/models/solution_path.py`(`solution_paths` 테이블)·`problem_step` additive 6컬럼(전부 nullable·JSONB `none_as_null`)·alembic `c6d7e8f1a2b4`(단일 head·up/down 대칭)·`whs/path_promotion.py`(멱등 CLI·검수 큐 JSONL stdout·승격 카운트 리포트 stderr)·steps API 실데이터 서빙(additive 필드·기존 계약 불변)·`scene_generation` 댕글링 해소(조회 헬퍼·장면 골격 자동 삽입 0). 학생 대면 신규 노출 0 동결 테스트. `ApproachType`은 Literal(Enum 신설 0 — S4-10 좌석 승격 예정).
+
+**재량 결정 5건(설계 이탈·정밀화)**: ① `SolutionStep.concept_node_id`를 `str|None`으로 — yaml required의 유일 이탈. 근거: "매칭 실패 전건 검수 큐" 지시와 required는 양립 불가(전건 승격 불가→reader 소생 불성립). None="검수 대기" docstring 명시 ② 스텝 본문 영속 좌석 = 기존 `problem_step.expected_answer` 재사용(컬럼 신설 회피·WH-S 스텝="이 단계의 기대 답" 의미 부합·AST화 0) ③ **verified만 승격**(unverified는 R-S2 격리 등급 — 학생 인접 표면에 미노출·`excluded_unverified` 정직 집계) ④ `sympy_verified` 승계 정밀화 — verified 보증은 인접 전이(n−1)뿐이라 첫 스텝 False·2번째부터 True ⑤ `strategy_tag` 매핑은 영문 6종 정확 일치+한글 1:1만 — 실데이터 620문의 `"corpus-replay"`는 결정론 매핑 불가→**전건 검수 큐**(자동 승격 차단·AI 자기승인 금지). 즉 620문 적재는 사람 approach 판정 또는 S4-10 승격 후. 부수: 문제당 1경로만 단계 실체화(`UNIQUE(problem_id, step_order)` 불변 유지 — 다중 경로 제약 재론은 S4-10), SEC-03 `KNOWN_REVISIONS` 등재(전체 스위트가 기계로 강제).
+
+**검증**: backend 전체 스위트 **7637 passed·0 failed·262 skipped**(integration 게이트) + tests/infra 258·tests/harness 195 + ruff/black/mypy --strict(428 files)/import-linter(KEPT 1512) green + 오케스트레이터 독립 재실행 신규·수정 스코프 153 passed. **정직 공백**: 실 PG 통합(마이그레이션 실적용·620문 실승격 리포트)은 컨테이너에 PG 없어 미실행 — `--dry-run` CLI가 실측 진입점, CI(실 PG 잡)가 최종 판정.
+
 ### 2026-07-29 (설계·갭 점검+등재): **풀이 엔진 갭 점검·설계 D1~D5 — 외부 EOS 틀(기능 23~27) 대조** (claude 설계·등재, Kiki 제공 문서)
 
 **컨텍스트**: Kiki가 일반적 EOS 틀 문서(『풀이(Solution) 엔진』 기능 23~27: 단계별 풀이 생성·다양한 풀이법·힌트 생성·AI 채점·풀이 비교 — WhyMath 전용 아님 명시)를 제공하며 "빠진 부분 점검 + WhyMath 방향 정합 설계"를 요청. 실측 대조 결과 23(생성·검증)·26(채점)은 상당 충족(다수 항목이 문서보다 엄격 — 검산 강제 finalize·3상태 판정·클라 채점 CI 게이트), **25의 힌트 *내용* 생성이 최대 실행 갭**(레벨 결정은 GA·내용은 정적 템플릿 4개 — core_feature_review #1 🟢 판정과 층위 구분), 24는 설계만(프롬프트·스키마 완비·소비 코드 0·프롬프트-스키마 enum 불일치 실측), 27은 전무. SolutionPath 실체화의 명시적 유보 조건(03 L151 "다중 풀이 소비처가 설 때")이 이번 설계로 성립.

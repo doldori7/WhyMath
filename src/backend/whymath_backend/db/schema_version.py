@@ -114,6 +114,7 @@ KNOWN_REVISIONS: tuple[str, ...] = (
     "a2b3c4d5e6f1",
     "a9b8c7d6e5f4",
     "b4c5d6e7f0a2",
+    "c6d7e8f1a2b4",  # S4-09 solution_paths 신설 + problem_step additive 6컬럼
 )
 
 EXPECTED_ALEMBIC_HEAD: str = KNOWN_REVISIONS[-1]

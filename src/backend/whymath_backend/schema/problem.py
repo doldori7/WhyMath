@@ -38,6 +38,7 @@ from whymath_backend.schema.enums import (
     ExamType,
     Persona,
     QuestionFormat,
+    ReasoningType,
     RelationType,
     RequiredDepth,
     ReviewStatus,
@@ -631,6 +632,10 @@ class ProblemStep(BaseModel):
 
     `UNIQUE(problem_id, step_order)` — 한 문제 안에서 step_order는 유일(런타임/DB
     제약; 단일 모델 레벨에서는 표현하지 않음).
+
+    S4-09(D1) additive 필드 6종: SolutionPath 실체화(`l3/solution_path.py`)의 단계가
+    `problem_step`에 영속되면서 이 스키마로 서빙된다(`GET /v1/problems/{id}/steps`).
+    전부 기본 None(선택)이라 기존 필드 제거·의미 변경 0 — 기존 소비자 호환 유지.
     """
 
     model_config = ConfigDict(
@@ -662,6 +667,46 @@ class ProblemStep(BaseModel):
     common_mistakes: list[dict[str, Any]] = Field(
         default_factory=list,
         description='흔한 실수 목록 [{"error":"...","hint":"..."}](자유형 JSONB)',
+    )
+
+    # ===== S4-09(D1) additive — SolutionPath 단계 실체화(전부 선택·기본 None·비파괴) =====
+    solution_path_id: str | None = Field(
+        default=None,
+        description="소속 풀이 경로 ID(`solution_paths` FK). None=경로 미소속(레거시 단계).",
+    )
+    concept_node_id: str | None = Field(
+        default=None,
+        description="이 단계가 통과하는 L1 개념 노드 ID. None=매칭 검수 대기(사람 검수 큐).",
+    )
+    reasoning_type: ReasoningType | None = Field(
+        default=None,
+        description=(
+            "스텝 추론 유형 — 기존 단일 좌석 ReasoningType(폐쇄 7종) 소비. "
+            "폐쇄집합 밖은 검증 거부. None=미태깅(하위호환)."
+        ),
+    )
+    justification: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "정당화 근거 참조 JSONB — 구조 정본은 `l3.solution_path.Justification`"
+            "(theorem_concept_ids·concept_node_ids·prior_step_orders 얇은 3종 묶음). "
+            "schema 계층은 L 계층을 import하지 않으므로(역방향 의존 금지) 여기서는 자유형 "
+            "dict로 통과시킨다."
+        ),
+    )
+    common_errors: list[str] | None = Field(
+        default=None,
+        description=(
+            "이 단계의 흔한 오류(오개념 카탈로그 코드/패턴 서술) — yaml SolutionStep."
+            "common_errors 1:1 좌석. 기존 common_mistakes(자유형 dict 리스트)와 별개 축."
+        ),
+    )
+    sympy_verified: bool | None = Field(
+        default=None,
+        description=(
+            "SymPy 자동 검증 통과 여부(WH-S 승계 시 직전 스텝→이 스텝 전이 Tier2 correct). "
+            "None=미판정(레거시 단계)."
+        ),
     )
 
 
