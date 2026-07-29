@@ -337,6 +337,14 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (사고·재발방지·HARN-10): **태스크 ID 번호 충돌 — 병렬 세션이 같은 번호를 각각 등재(2회차·validate가 못 잡던 구멍)** (claude 규명·구현, Kiki "진행")
+
+**사고(반복 2회 실측)**: ARCH-13이 두 태스크(`visualization-harness-tracking` 2026-07-18 · `concept-atom-granularity-merge` 07-25)에 중복 배정돼 **둘 다 머지 완료**됐고, 2026-07-29 OPS-15가 또 두 세션(`repo-root-lint-config`·`wh1-caplog-order-flake`)에서 인플라이트로 중복 등재됐다. **validate는 full-ID 문자열만 비교해 exit 0**(두 파일 동시 배치 후 green 실측) — 기계는 멀쩡한데 사람·문서·커밋의 "OPS-15" 참조만 결정 불가가 되므로 조용히 자란다. 두 사고 모두 **병렬 세션이 서로의 브랜치를 못 봐서** 났다 → 로컬 검사는 원리적으로 무효.
+
+**대책(2선)**: ①**`add` 하드 거부** — 새 ID의 `<PREFIX>-<번호>`가 로컬 백로그 **또는 원격 claim 대장**(HARN-09 CAS 브랜치)에 점유돼 있으면 거부하고 다음 빈 번호(최대+1) 제안. 원격 조회가 핵심이며, 실패 시 fail-open하되 **예외 타입명과 축소 사실을 경고**(침묵 금지). ②**validate 2선** — 머지 후 잔존·손편집 우회분을 실패 처리, 이미 머지된 과거 충돌은 `_GRANDFATHERED_ID_NUMBERS`에 사유와 함께 등재(ARCH-13·OPS-15 — 개명 시 기존 참조 파손·타 세션 볼모). 테스트 7건 동결.
+
+**구현 중 자체 실측 2건(변별력 확보)**: ⓐ 정규식을 `[A-Za-z]+-\d+`로 쓰면 이 저장소 ID의 **다수파인 스테이지형(`S2-04`·`S4-07`)을 통째로 못 본다** — 영숫자 접두 허용으로 정정. ⓑ 첫 구현이 *같은 full-ID 재등재*(다른 클론의 시딩)까지 막아 기존 교차세션 테스트 5건이 깨졌다 — 충돌은 **슬러그가 다를 때만** 성립하므로 동일 ID는 통과. 두 케이스 모두 회귀 테스트로 동결.
+
 ### 2026-07-28 (구현·OPS-14): **tests/data_pipeline lint 배선 — 정본 컨텍스트 확정 + ruff per-file-ignores가 죽은 설정이었음 실측** (claude 구현, Kiki "다음 진행")
 
 **정본 결정(OPS-13이 선결로 지정)**: black = **저장소 표준 root `--line-length 100`**(tests/* 배선 공통 정본 — backend·infra·harness 동일), ruff = **DP pyproject 규칙 그대로**(src와 tests 동일 규칙·E501 포함). 2026-07-27의 "28 vs 32" 컨텍스트 차이는 현시점 실측에서 소멸(양쪽 23파일 동일)이라 결정 부담 없음. src도 root-100 컨텍스트로 clean이라 backend 잡 동형의 단일 명령(`black --check --line-length 100 . ../../tests/data_pipeline`)으로 통합.

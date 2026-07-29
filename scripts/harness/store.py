@@ -367,4 +367,60 @@ def validate_backlog(backlog: Backlog, schema_errors: list[str] | None = None) -
     if cycle:
         errors.append(f"depends_on 순환 참조 검출: {cycle}")
 
+    errors.extend(_id_number_collisions(backlog.tasks.keys()))
+
+    return errors
+
+
+# ── 태스크 ID 번호 충돌 (HARN-10) ────────────────────────────────────────────
+#
+# ID는 `<PREFIX>-<번호>-<슬러그>` 규약이다. full-ID는 슬러그 덕에 유일해도 **번호가
+# 겹치면** 사람·문서·커밋의 "OPS-15" 참조가 어느 태스크인지 결정 불가가 된다(CLI는
+# full-ID를 받으므로 기계는 멀쩡 — 그래서 조용히 자란다).
+#
+# 실측 2회(2026-07-29): ARCH-13(둘 다 done·머지 완료), OPS-15(병렬 인플라이트). 두 사고
+# 모두 **병렬 세션이 서로의 브랜치를 못 봐서** 났다 — 로컬 백로그만 보는 검사로는 애초에
+# 예방할 수 없다. 그래서 예방의 본체는 `add` 시점의 *원격 claim 대장* 조회이고(backlog.py),
+# 이 함수는 머지 후 잔존을 막는 2선 방어다.
+_GRANDFATHERED_ID_NUMBERS: dict[str, str] = {
+    # 이미 main에 머지된 과거 충돌 — 개명하면 MEMORY·커밋·PR의 기존 참조가 끊긴다.
+    "ARCH-13": (
+        "기존 충돌(2026-07-18 visualization-harness-tracking · 07-25 "
+        "concept-atom-granularity-merge) — 둘 다 done·머지 완료. 개명 시 기존 참조 파손."
+    ),
+    # HARN-10 착수 시점에 두 브랜치에서 인플라이트 — 이 가드가 먼저 머지돼도
+    # 그 브랜치들의 머지를 깨지 않게 미리 등재한다(타 세션 볼모 금지).
+    "OPS-15": (
+        "기존 충돌(2026-07-29 repo-root-lint-config · wh1-caplog-order-flake) — "
+        "HARN-10 착수 시점에 타 세션 2곳에서 인플라이트였다. 사후 개명은 타 세션 볼모."
+    ),
+}
+
+# 접두는 영숫자 혼합을 허용한다 — 이 저장소 ID의 다수파가 스테이지형(`S2-04`·`S4-07`)이라
+# `[A-Za-z]+`로 잡으면 정작 가장 많은 축을 통째로 못 본다(HARN-10 구현 중 실측).
+_ID_NUMBER_RE = re.compile(r"^([A-Za-z][A-Za-z0-9]*-\d+)-")
+
+
+def id_number_of(task_id: str) -> str | None:
+    """`<PREFIX>-<번호>` 부분. 규약을 벗어난 ID면 None(검사 대상 아님)."""
+    match = _ID_NUMBER_RE.match(task_id)
+    return match.group(1) if match else None
+
+
+def _id_number_collisions(task_ids: object) -> list[str]:
+    """같은 `<PREFIX>-<번호>`를 쓰는 태스크가 2건 이상이면 위반(grandfather 제외)."""
+    groups: dict[str, list[str]] = {}
+    for task_id in task_ids:  # type: ignore[union-attr]
+        number = id_number_of(str(task_id))
+        if number:
+            groups.setdefault(number, []).append(str(task_id))
+    errors: list[str] = []
+    for number, ids in sorted(groups.items()):
+        if len(ids) < 2 or number in _GRANDFATHERED_ID_NUMBERS:
+            continue
+        errors.append(
+            f"태스크 ID 번호 충돌 '{number}': {sorted(ids)} — 사람·문서·커밋의 "
+            f"'{number}' 참조가 결정 불가가 된다. 하나를 다음 빈 번호로 개명하거나, "
+            "이미 머지돼 개명이 불가능하면 store._GRANDFATHERED_ID_NUMBERS에 사유와 함께 등재하라."
+        )
     return errors

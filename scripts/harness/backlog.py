@@ -618,10 +618,82 @@ def cmd_gates(root: Path, args: argparse.Namespace) -> int:
     return 0
 
 
+def _taken_id_numbers(root: Path, backlog: object, policy: object) -> dict[str, tuple[str, str]]:
+    """이미 쓰인 `<PREFIX>-<번호>` → (점유 태스크의 full ID, 출처 라벨).
+
+    **로컬 백로그 + 원격 claim 대장** 양쪽을 본다. 원격을 보는 것이 핵심이다 —
+    ARCH-13·OPS-15 두 사고 모두 병렬 세션이 *서로의 브랜치를 못 봐서* 같은 번호를
+    각각 등재한 것이라, 로컬만 검사하면 재발을 하나도 막지 못한다(HARN-10).
+
+    full ID를 함께 돌려주는 이유: 충돌은 **슬러그가 다를 때만** 성립한다. 같은 태스크를
+    다른 클론에서 재등재하는 것(시딩·복제 세션)은 정상이므로 막으면 안 된다.
+
+    원격 조회 실패는 등재를 막지 않는다(fail-open) — 다만 호출부가 그 사실을
+    **경고로 표시**한다. 조용한 축소는 "검사했는데 안 걸림"으로 위장되기 때문이다.
+    """
+    taken: dict[str, tuple[str, str]] = {}
+    for task_id in getattr(backlog, "tasks", {}):
+        number = store.id_number_of(str(task_id))
+        if number:
+            taken.setdefault(number, (str(task_id), "로컬 백로그"))
+    if getattr(policy, "remote_claims", False):
+        claims, _status = remote_claims.list_claims(root)
+        for claim in claims:
+            number = store.id_number_of(claim.task_id)
+            if number:
+                taken.setdefault(number, (claim.task_id, "원격 claim"))
+    return taken
+
+
+def _next_free_number(prefix: str, taken: dict[str, str]) -> str:
+    """`<PREFIX>-<n>` 다음 빈 번호 — **최대 사용 번호 +1**부터 찾는다.
+
+    가장 작은 빈 번호를 주면 과거에 비워진 낮은 번호(예 HARN-01)를 제안하게 되는데,
+    그건 "이 트랙의 다음 작업"이라는 사람의 기대와 어긋나 제안이 오히려 혼선을 준다.
+    """
+    used = [
+        int(number.rsplit("-", 1)[1])
+        for number in taken
+        if number.rsplit("-", 1)[0] == prefix and number.rsplit("-", 1)[1].isdigit()
+    ]
+    index = max(used) + 1 if used else 1
+    while f"{prefix}-{index}" in taken or f"{prefix}-{index:02d}" in taken:
+        index += 1
+    return f"{prefix}-{index:02d}"
+
+
 def cmd_add(root: Path, args: argparse.Namespace) -> int:
     backlog, _ = _load(root)
     if args.id in backlog.tasks:
         return _fail(f"태스크 ID 중복: {args.id}")
+
+    # ID 번호 충돌 차단 (HARN-10 — ARCH-13·OPS-15 2회 실측 후 등재)
+    number = store.id_number_of(args.id)
+    if number:
+        policy, _ = store.load_policy(root)
+        try:
+            taken = _taken_id_numbers(root, backlog, policy)
+            remote_ok = True
+        except Exception as exc:  # 원격 조회 실패는 등재를 막지 않는다 — 단 침묵 금지
+            taken = _taken_id_numbers(root, backlog, None)
+            remote_ok = False
+            print(
+                f"  ⚠ 원격 claim 대장 조회 실패({type(exc).__name__}) — 번호 충돌 검사가 "
+                "로컬 백로그로 축소됨(병렬 세션의 인플라이트 번호는 못 본다)",
+                file=sys.stderr,
+            )
+        owner, source = taken.get(number, ("", ""))
+        # 같은 full ID의 재등재(다른 클론에서의 시딩 등)는 충돌이 아니다 — 슬러그가
+        # 다를 때만 번호 참조가 모호해진다.
+        if owner and owner != args.id:
+            prefix = number.rsplit("-", 1)[0]
+            return _fail(
+                f"태스크 ID 번호 충돌: '{number}' 는 이미 {owner}({source}) 가 쓰고 있다. "
+                f"다음 빈 번호 제안: {_next_free_number(prefix, taken)}. "
+                "(같은 번호를 나눠 쓰면 문서·커밋의 번호 참조가 결정 불가가 된다 — HARN-10)"
+            )
+        if not remote_ok:
+            print("  · 번호 충돌 검사: 로컬만 통과 — 머지 시 validate가 2선 방어한다")
     task = Task(
         id=args.id,
         title=args.title,
