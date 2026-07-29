@@ -407,7 +407,9 @@ def test_rephrased_corpus_changed_questions_preserve_equation() -> None:
         assert equation is not None, f"{slug} 소스 방정식 추출 불가인데 발문 변경됨"
         failure = classify_invariance_failure(out_q, equation=equation)
         assert failure is None, f"{slug} 산출 발문이 수치 불변 게이트 위반: {failure}"
-    assert changed >= 150, f"다양화 반영이 비정상적으로 적음: {changed}건"
+    # S3-12 rotation-1 위생 게이트 확장(443→429, 14건 추가 탈락)으로 161→147 정직 축소 —
+    # 탈락 레코드는 전부 발문이 변경된(=changed) 결함 항목이라 하한도 같이 내려간다.
+    assert changed >= 147, f"다양화 반영이 비정상적으로 적음: {changed}건"
 
 
 def test_rephrased_corpus_every_record_is_accepted() -> None:
