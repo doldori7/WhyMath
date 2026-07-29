@@ -82,6 +82,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -773,3 +774,137 @@ def reap(
                 continue
         reaped.append(label)
     return reaped, "ok"
+
+
+# ── 미머지 done 탐지 (HARN-11) ────────────────────────────────────────────────
+#
+# HARN-07/08이 다룬 축의 **반대 방향**이다.
+#   · HARN-08(과탐): 머지된 브랜치에 남은 in_progress가 착수를 영구 차단 → 규칙 A·B로 무시
+#   · HARN-11(미탐): 타 세션이 **done 처리했으나 아직 머지 안 된** 태스크가 어디에도 안 보임
+#
+# 왜 안 보이는가: done 처리 시 원격 claim은 release되어 대장에서 사라지고, 트렁크의 백로그
+# 사본은 그 브랜치가 머지되기 전까지 여전히 todo다. 즉 **claim 대장·로컬 백로그 양쪽 모두
+# '가용'** 으로 보인다 — `next`가 이미 끝난 일을 최우선으로 추천한다.
+#
+# 사고 경위(2026-07-29 근접사고): /drive가 S3-09를 1순위로 계산해 claim까지 진행했으나, 타
+# 세션이 이미 720문 검수를 마치고 done 처리한 상태였다(브랜치 미머지). 후속 태스크 notes의
+# 감사 결과 인용을 우연히 보고 발견 — 중복 구현 직전 회피.
+#
+# 비용: ref 53개 × 태스크 N건을 `git cat-file --batch` **단일 프로세스**로 조회한다
+# (실측 12ms). `next`처럼 자주 도는 경로에도 붙일 수 있는 이유다.
+
+
+@dataclass
+class DoneElsewhere:
+    """어떤 브랜치가 이 태스크를 done으로 들고 있는가 (미머지 완료분)."""
+
+    task_id: str
+    ref: str
+    branch: str
+
+
+def scan_remote_done(
+    root: Path,
+    task_ids: Sequence[str],
+    *,
+    fetch: bool = False,
+    max_refs: int = SCAN_MAX_REFS,
+) -> tuple[dict[str, list[DoneElsewhere]], str]:
+    """원격 브랜치 사본에서 `status: done`인 태스크를 찾는다 → {task_id: [DoneElsewhere]}.
+
+    `fetch=False`(기본)는 **이미 있는 remote-tracking ref만** 본다 — 네트워크 0.
+    `next`처럼 자주 도는 경로용이며, 그만큼 stale할 수 있다(마지막 fetch 시점 기준).
+    `start`처럼 되돌리기 비싼 확정 지점은 `fetch=True`로 최신 상태를 본다.
+
+    제외 규칙(기존 스캔과 동형):
+        · 트렁크 ref는 제외 — 트렁크가 done이면 로컬 백로그도 done이라 애초에 후보가 아니다.
+        · 파일이 없는 브랜치(태스크 신설 이전 시점)는 조용히 건너뛴다.
+
+    두 번째 반환값은 status(`ok`/`offline`/`error`)다. `ok`가 아니면 **판정 불가**이며,
+    빈 결과를 '완료분 없음'으로 읽어서는 안 된다(측정 실패와 통과는 같은 색이면 안 된다).
+    """
+    if not task_ids:
+        return {}, "ok"
+    if not has_remote(root):
+        return {}, "offline"
+    try:
+        if fetch:
+            fetched = _git(
+                root,
+                "fetch",
+                "--quiet",
+                "origin",
+                "+refs/heads/*:refs/remotes/origin/*",
+                timeout=SCAN_FETCH_TIMEOUT,
+            )
+            if fetched.returncode != 0:
+                return {}, _classify_failure(fetched.stderr)
+        listing = _git(
+            root,
+            "for-each-ref",
+            "--format=%(refname)",
+            "refs/remotes/origin",
+        )
+        if listing.returncode != 0:
+            return {}, _classify_failure(listing.stderr)
+        refs = [
+            r.strip()
+            for r in listing.stdout.splitlines()
+            if r.strip() and not r.strip().endswith("/HEAD")
+        ][:max_refs]
+        trunk_ref, _ = _resolve_trunk_ref(root)
+        refs = [r for r in refs if r != trunk_ref]
+        if not refs:
+            return {}, "ok"
+
+        # (ref, task) 전 조합을 한 프로세스로 — 개별 `git show` N×M회를 피한다.
+        pairs = [(ref, tid) for ref in refs for tid in task_ids]
+        request = "".join(f"{ref}:backlog/tasks/{tid}.yaml\n" for ref, tid in pairs)
+        batch = _git(root, "cat-file", "--batch", input_text=request, timeout=SCAN_FETCH_TIMEOUT)
+        if batch.returncode != 0:
+            return {}, _classify_failure(batch.stderr)
+
+        found: dict[str, list[DoneElsewhere]] = {}
+        for (ref, task_id), blob in zip(pairs, _iter_batch_blobs(batch.stdout), strict=False):
+            if blob is None or _top_level_field(blob, "status") != "done":
+                continue
+            branch = ref[len(REMOTE_REF_PREFIX) :] if ref.startswith(REMOTE_REF_PREFIX) else ref
+            found.setdefault(task_id, []).append(DoneElsewhere(task_id, ref, branch))
+        return found, "ok"
+    except subprocess.TimeoutExpired:
+        return {}, "offline"
+    except Exception as exc:  # pragma: no cover - 환경 의존
+        # 침묵 실패 금지 — 예외 타입명을 남긴다 (CLAUDE.md AI·신뢰)
+        return {}, f"error:{type(exc).__name__}"
+
+
+def _iter_batch_blobs(stdout: str):
+    """`git cat-file --batch` 출력을 요청 순서대로 blob 본문(또는 None)으로 흘린다.
+
+    형식: 존재하면 `<sha> blob <size>\\n<본문>\\n`, 없으면 `<요청> missing\\n`.
+    **요청 1건당 정확히 1개**를 내보내야 zip 정렬이 어긋나지 않는다.
+
+    ⚠ `<size>`는 **문자 수가 아니라 바이트 수**다. 이 저장소의 태스크 YAML은 한국어라
+    문자 길이로 세면 헤더 위치가 밀려 결과가 **엉뚱한 브랜치에 붙는다**(2026-07-29 실측:
+    S3-09의 done 보유 브랜치를 problem-bank 대신 teaching-strategy로 오보고). 그래서
+    바이트로 디코드해 오프셋을 잡고, 본문만 다시 문자열로 되돌린다.
+    """
+    data = stdout.encode("utf-8", errors="surrogateescape")
+    pos = 0
+    total = len(data)
+    while pos < total:
+        newline = data.find(b"\n", pos)
+        if newline == -1:
+            break
+        header = data[pos:newline]
+        pos = newline + 1
+        if not header:
+            continue
+        parts = header.rsplit(b" ", 2)
+        if len(parts) == 3 and parts[1] == b"blob" and parts[2].isdigit():
+            size = int(parts[2])
+            body = data[pos : pos + size]
+            pos += size + 1  # 본문 뒤 개행
+            yield body.decode("utf-8", errors="surrogateescape")
+        else:
+            yield None  # missing / ambiguous

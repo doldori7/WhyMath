@@ -920,3 +920,8 @@
 {"ts": "2026-07-29T01:28:49", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S4-13-unverifiable-domain-path"}
 {"ts": "2026-07-29T01:28:49", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S4-14-variant-lineage-persist"}
 {"ts": "2026-07-29T01:28:50", "actor": "claude/whymath-problem-bank-design-65tsm4", "action": "add", "id": "S4-15-response-driven-difficulty-loop"}
+{"ts": "2026-07-29T06:05:56", "actor": "claude/whymath-concept-management-spnep8", "action": "start", "id": "S3-09-problem-bank-v0-ai-review", "session": "claude/whymath-concept-management-spnep8", "remote": "ok"}
+{"ts": "2026-07-29T06:10:04", "actor": "claude/whymath-concept-management-spnep8", "action": "claim_release", "id": "S3-09-problem-bank-v0-ai-review", "forced": false}
+{"ts": "2026-07-29T06:10:37", "actor": "claude/whymath-concept-management-spnep8", "action": "add", "id": "HARN-11-unmerged-done-invisibility"}
+{"ts": "2026-07-29T06:11:38", "actor": "claude/whymath-concept-management-spnep8", "action": "start", "id": "HARN-11-unmerged-done-invisibility", "session": "claude/whymath-concept-management-spnep8", "remote": "ok"}
+{"ts": "2026-07-29T06:18:38", "actor": "claude/whymath-concept-management-spnep8", "action": "done", "id": "HARN-11-unmerged-done-invisibility", "artifacts": ["scripts/harness/remote_claims.py scan_remote_done (bulk cat-file)", "backlog.py start 하드 차단 + next 후보 제외", "tests/harness/test_cli.py 6건"]}

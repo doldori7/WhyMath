@@ -1273,3 +1273,140 @@ class TestHumanOwnerLifecycle:
         task_id = json.loads(capsys.readouterr().out)[0]["id"]
         assert cli.main(["start", task_id, "--as", "kiki", "--session", "b", "--no-remote"]) == 1
         assert "불일치" in capsys.readouterr().err
+
+
+class TestUnmergedDoneDetection:
+    """HARN-11 — 타 세션이 done 처리했으나 **미머지**인 태스크의 비가시성.
+
+    HARN-08(과탐: 머지된 브랜치의 잔존 in_progress가 착수를 영구 차단)의 **반대 방향**이다.
+    done 처리 시 원격 claim은 release돼 대장에서 사라지고, 트렁크 사본은 머지 전까지 todo다
+    → claim 대장·로컬 백로그 **양쪽 모두 '가용'** 으로 보인다.
+
+    사고 경위(2026-07-29 근접사고): /drive가 S3-09를 1순위로 계산해 claim까지 진행했으나,
+    타 세션이 이미 720문 검수를 마치고 done 처리한 상태였다. 중복 구현 직전 회피.
+
+    읽기 경로는 시임이 아니라 **진짜 로컬 원격에서 실제 git으로** 검증한다.
+    """
+
+    TASK_ID = "T11-01-unmerged-done"
+
+    def _seeded_clone(self, clone, monkeypatch, name: str) -> Path:
+        repo = clone(name)
+        monkeypatch.chdir(repo)
+        assert cli.main(["seed"]) == 0
+        assert (
+            cli.main(
+                [
+                    "add",
+                    "--id",
+                    self.TASK_ID,
+                    "--title",
+                    "미머지 done 대상 — 한국어 제목으로 바이트 정렬까지 검증한다",
+                    "--track",
+                    "math-completion",
+                    "--stage",
+                    "S1",
+                ]
+            )
+            == 0
+        )
+        return repo
+
+    def _push_branch(self, repo: Path, branch: str) -> None:
+        for argv in (
+            ["checkout", "-q", "-B", branch],
+            ["add", "."],
+            ["commit", "-q", "-m", "state"],
+            ["push", "--quiet", "-u", "origin", branch],
+        ):
+            subprocess.run(["git", *argv], cwd=repo, check=True, capture_output=True)
+
+    def _finished_elsewhere(self, clone, monkeypatch) -> Path:
+        """타 세션이 태스크를 done 처리하고 브랜치를 push한 상태를 만든다."""
+        other = self._seeded_clone(clone, monkeypatch, "finisher")
+        assert cli.main(["start", self.TASK_ID]) == 0
+        assert cli.main(["done", self.TASK_ID, "--artifact", "abc123"]) == 0
+        self._push_branch(other, "claude/finisher")
+        return other
+
+    def test_start가_미머지_done을_차단한다(self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        self._finished_elsewhere(clone, monkeypatch)
+
+        mine = self._seeded_clone(clone, monkeypatch, "newcomer")
+        assert mine.exists()
+        assert cli.main(["start", self.TASK_ID]) == 1
+        captured = capsys.readouterr()
+        assert "이미" in captured.err and "claude/finisher" in captured.err
+
+    def test_next가_미머지_done을_후보에서_제외한다(self, bare_remote, monkeypatch, capsys):
+        _, clone = bare_remote
+        self._finished_elsewhere(clone, monkeypatch)
+
+        self._seeded_clone(clone, monkeypatch, "newcomer")
+        subprocess.run(["git", "fetch", "--quiet", "origin"], cwd=Path.cwd(), check=True)
+        capsys.readouterr()  # 셋업(seed·add) 출력을 버리고 next 출력만 본다
+        assert cli.main(["next", "--n", "20"]) == 0
+        captured = capsys.readouterr()
+        assert self.TASK_ID not in captured.out, "완료된 태스크가 후보로 노출되면 안 된다"
+        assert "후보 제외" in captured.err and self.TASK_ID in captured.err
+
+    def test_미완료_태스크는_통과한다(self, bare_remote, monkeypatch, capsys):
+        """변별력 — 진행 중이 아닌 평범한 태스크까지 막으면 게이트가 아니라 고장이다."""
+        _, clone = bare_remote
+        other = self._seeded_clone(clone, monkeypatch, "finisher")
+        self._push_branch(other, "claude/finisher")  # todo 상태 그대로 push
+
+        self._seeded_clone(clone, monkeypatch, "newcomer")
+        assert cli.main(["start", self.TASK_ID]) == 0
+
+    def test_ignore_remote_claim으로_우회_가능하다(self, bare_remote, monkeypatch, capsys):
+        """그 브랜치가 폐기된 경우의 탈출구 — 단 무엇을 감수하는지 경고한다."""
+        _, clone = bare_remote
+        self._finished_elsewhere(clone, monkeypatch)
+
+        self._seeded_clone(clone, monkeypatch, "newcomer")
+        assert cli.main(["start", self.TASK_ID, "--ignore-remote-claim"]) == 0
+        assert "중복 구현 위험" in capsys.readouterr().err
+
+
+class TestBatchBlobParsing:
+    """HARN-11 — `git cat-file --batch` 출력 파싱의 바이트 정렬.
+
+    `<size>`는 문자 수가 아니라 **바이트 수**다. 이 저장소의 태스크 YAML은 한국어라
+    문자 길이로 세면 헤더 위치가 밀려 결과가 **엉뚱한 브랜치에 붙는다** — 2026-07-29
+    실측으로 잡았다(S3-09의 done 보유 브랜치를 problem-bank 대신 teaching-strategy로 오보고).
+    """
+
+    def _batch_output(self, bodies: list[str | None]) -> str:
+        out = []
+        for body in bodies:
+            if body is None:
+                out.append("deadbeef:some/path missing\n")
+            else:
+                size = len(body.encode("utf-8"))
+                out.append(f"{'a' * 40} blob {size}\n{body}\n")
+        return "".join(out)
+
+    def test_한국어_본문이_섞여도_요청_순서대로_정렬된다(self):
+        import remote_claims
+
+        bodies = [
+            "status: todo\ntitle: 한국어 제목 — 멀티바이트\n",
+            None,
+            "status: done\ntitle: 두 번째 한국어 본문\n",
+            "status: in_progress\n",
+        ]
+        parsed = list(remote_claims._iter_batch_blobs(self._batch_output(bodies)))
+        assert len(parsed) == len(bodies), "요청 1건당 정확히 1개를 내야 zip 정렬이 유지된다"
+        assert parsed[1] is None
+        assert remote_claims._top_level_field(parsed[0], "status") == "todo"
+        assert remote_claims._top_level_field(parsed[2], "status") == "done"
+        assert remote_claims._top_level_field(parsed[3], "status") == "in_progress"
+
+    def test_ascii_전용에서도_동일하다(self):
+        import remote_claims
+
+        bodies = ["status: done\n", "status: todo\n"]
+        parsed = list(remote_claims._iter_batch_blobs(self._batch_output(bodies)))
+        assert [remote_claims._top_level_field(p, "status") for p in parsed] == ["done", "todo"]
