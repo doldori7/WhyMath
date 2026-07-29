@@ -18,6 +18,9 @@ acceptance:
 artifacts: []
 paths:
   - "src/backend/whymath_backend/l4/pedagogy/**"
+  - "src/backend/whymath_backend/l4/content_supply.py"
+  - "src/backend/whymath_backend/api/study.py"
+  - "src/backend/whymath_backend/config.py"
   - "tests/backend/**"
 session: claude/whymath-teaching-strategy-enfkqt
 notes: "정본: 04e §4. grade 신호 생산자 = UserProfile.grade(실재 확인). 카탈로그는 select 전용 — gate 입력 금지."

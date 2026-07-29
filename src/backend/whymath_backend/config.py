@@ -259,6 +259,39 @@ class Settings(BaseSettings):
         ),
     )
 
+    pedagogy_catalog_filter_enabled: bool = Field(
+        default=False,
+        description=(
+            "교수전략 카탈로그(PED-05)의 적합성 필드(target_grade_bands·difficulty_range·"
+            "target_k_types)를 `runtime_selector.select()`의 **후보 필터**로 소비할지(PED-06 — "
+            "정본 docs/architecture/04e_pedagogy_strategy_catalog.md §4). **False(기본·옵트인)** "
+            "— OFF면 카탈로그 미조회·규칙표 v1(R1~R5) 원판정 그대로(기존 선택 경로와 비트동일·"
+            "킬스위치). ON이면 규칙표 적용 전에 후보 집합을 카탈로그 적합성으로 **좁히기만** "
+            "한다: 좁힌 결과가 공집합이거나 규칙표가 후보를 소진하면 필터를 무시하고 원판정으로 "
+            "폴백하며 reason_code(CATALOG_FILTER_EMPTY/EXHAUSTED)를 구조화 로그로 남긴다"
+            "(조용한 실패 금지). 카탈로그는 select 전용 — `gate()`는 플래그와 무관하게 "
+            "카탈로그를 읽지 않는다(효과≤허용 우회 차단·04e §4 불변식 ②·테스트 동결). "
+            "GA flip(기본 True)은 측정+사인오프 후 별도 커밋(mode_guard 캔어리 선례). "
+            "WHYMATH_PEDAGOGY_CATALOG_FILTER_ENABLED=false 킬스위치."
+        ),
+    )
+
+    pedagogy_strategy_card_enabled: bool = Field(
+        default=False,
+        description=(
+            "`supply()` 생성 폴백의 system 프롬프트에 선택된 교수전략의 카탈로그 카드"
+            "(name_ko·description·research_basis 요약 1줄 — attention 절약)를 얹을지(PED-06 — "
+            "정본 04e §3.2 소비처 지정표). **False(기본·옵트인)** — OFF면 카탈로그 미조회·"
+            "system 무변경으로 기존 생성 경로와 비트동일(프롬프트-해시 캐시 키도 불변·킬스위치). "
+            "ON이면 `decide()`가 고른(게이트 통과 후) 전략의 카드를 조회해 "
+            "`attach_strategy_card`로 system 뒤에 1블록을 덧붙인다 — 카드 조회 실패는 예외 "
+            "타입명을 WARNING 로그로 남기고 무카드로 진행한다(best-effort 계층·생성 자체를 "
+            "막지 않음·침묵 실패 금지). 렌더 경로(dsl_render)는 프롬프트가 없어 무관. "
+            "GA flip(기본 True)은 측정+사인오프 후 별도 커밋(팩 GA 선례). "
+            "WHYMATH_PEDAGOGY_STRATEGY_CARD_ENABLED=false 킬스위치."
+        ),
+    )
+
     l4_server_mastery_enabled: bool = Field(
         default=True,
         description=(

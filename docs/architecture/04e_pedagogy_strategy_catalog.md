@@ -328,8 +328,8 @@ L4 supply()/발주서 ──"이 개념·이 슬롯이 필요"──▶ l3/pedag
 | 선택·게이트 | `l4/pedagogy/runtime_selector.py` | ✅ R1~R5+2축 게이트(PED-02 done) |
 | 공급 오케스트레이션 | `l4/content_supply.py::supply()` | ✅ decide 내부 호출 — 게이트 우회 불가 |
 | 렌더 어댑터 | `l3/render/adapters.py` 5종 | ⚠️ 10종 중 5종(RETRIEVAL·SPACING·INTERLEAVING·SELF_EXPLANATION·VISUALIZATION 미구현 — `LookupError` 정직 실패). 어댑터 추가는 REND-01 후속 실수요 시 |
-| 전략 카탈로그 | — | 🆕 PED-05(§3) |
-| 후보 필터·전략 카드 | — | 🆕 PED-06(§4) |
+| 전략 카탈로그 | `schema/pedagogy_strategy.py`·`pedagogy_strategies_v1/` 10건·`strategy_registry.py` | ✅ 착지(PED-05 — 제거 필드 3계열 부재 이중 동결·enum 1:1 거버넌스) |
+| 후보 필터·전략 카드 | `runtime_selector.narrow_candidates`·`prompt_assembler.attach_strategy_card`·`supply()` 생성 폴백 | ✅ 착지(PED-06 — 플래그 2종 기본 OFF 캔어리·공집합 3중 폴백 reason_code·gate 카탈로그 부재 동결. grade_band 생산자 배선·난이도는 kwargs 축만(생산자 부재)·R2 정밀화는 error_type 순수 경로 생산자 부재로 보류) |
 | 비유 자산 | `concept_content.metaphor` 846행 | ⚠️ 전량 검수 전 — PED-09가 채움·검수 파이프라인(§6) |
 | 비유·예시 생성기 | — | 🆕 PED-09(`l3/pedagogy/` — slot_generator 형제) |
 | 형성평가 | `pedagogy_content_slot.slot_type='diag_item'` 좌석만 | 🆕 PED-10 채움(§7.2) |

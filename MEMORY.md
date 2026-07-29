@@ -337,6 +337,20 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (구현·PED-06 + 결함 발견): **카탈로그 소비 배선(필터·전략 카드) + k_type 맹글링 프로덕션 결함 발견·수정** (claude /drive)
+
+**컨텍스트**: PED-05 카탈로그를 소비처 2곳(04e §4)에 배선. backend-engineer 위임.
+
+**적용**: ①후보 필터 — `narrow_candidates()`(순수)+`_rule_table()`(R1~R5 후보 제약판·전체 후보면 v1 판정 동일)+3중 폴백(공집합 `CATALOG_FILTER_EMPTY`·소진 `CATALOG_FILTER_EXHAUSTED`·적재 실패 `CATALOG_UNAVAILABLE` — 전부 구조화 로그). 플래그 `pedagogy_catalog_filter_enabled`(기본 OFF 캔어리) ②전략 카드 — `attach_strategy_card()` 합성 계층(`build_system_prompt` 무수정 — 바이트 동일 최강 보존)·소비 지점은 `supply()` 생성 폴백의 generate 직전(실측 유일 지점). 플래그 `pedagogy_strategy_card_enabled`(기본 OFF) ③신호 생산자 — `grade_to_band`(UserProfile.grade 10~14=고교·N수 계약 실측)+`_build_signals` 배선. 난이도는 생산자 부재 실측 → 필드 비신설·kwargs 축만(항상-None 금지 준수). R2 정밀화(error_type 대조)는 **보류** — kebab 인코드 카탈로그에 error_type 필드 자체가 없고 DB 좌석은 AsyncSession 필요(순수함수 위반) → 순수 경로 생산자 실재 시 재개.
+
+**결함 발견·수정(중요)**: `api/study.py`의 `str(objective.k_type)`이 str-mixin Enum이라 `"KnowledgeType.CONCEPT"`을 생성 — sqlite 재현 실측: ①`get_pack` 상시 미스(팩 축① 무력) ②`evidence_event.k_type` native enum 플러시 `LookupError`(**실 DB /study 500**) ③필터 k_type 축 상시 공집합. 3개소 `.value` 수정+소스 스캔 동결 테스트. 엔드포인트 라이브 PG 테스트 부재로 잠복해 있었음. 동일 패턴 `adaptive/effectiveness.py:173`(라벨 맹글링·플러시 없음)은 PED-03 도메인이라 **PED-12 등재**로 분리.
+
+**검증**: 신규 41건·전체 스위트 2회 완주 7,678 passed(=7,637+41 정합·시드 병기)·메인 독립 검증(신규 41+l4/api/schema/l3 5,064·ruff·mypy strict 426 clean)·gate 카탈로그 부재는 정적(co_names ∩ 심볼=∅)+런타임(봄베 하 판정 동일) 이중 동결.
+
+**롤백**: 플래그 2종 기본 OFF라 배선은 무영향 상태로 안전. k_type 수정은 결함 수정이라 롤백 대상 아님.
+
+**정직한 공백**: R2 정밀화·난이도 축·"대학" 밴드 생산자 부재(각 docstring 부기). GA flip은 측정+사인오프 후 별도.
+
 ### 2026-07-29 (구현·실측·OPS-15 + PED-11): **WH-1 caplog 순서 플레이크 근본 규명 — dictConfig propagate 오염·러너 버전 위장 발견·이중 봉쇄** (claude /drive, Kiki "진행")
 
 **컨텍스트**: 전체 스위트 랜덤 순서에서만 WH-1 harness 3파일이 "caplog 레코드 0건"으로 5~13건 변동 실패(2026-07-29 등재분). backend-engineer 위임 조사.
