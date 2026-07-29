@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-15-rephrase-pipeline-redesign
+title: "rephrased_v0 발문 재작성 파이프라인 근본 재검토 — 3라운드 연속 Wilson 게이트 FAIL(패턴 패치 수렴 실패)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S3-14-problem-bank-rotation2-confirmation
+requires_gates: []
+acceptance:
+  - "rotation-0/1/2 3라운드 전부 corpus_audit_eval FAIL(결함 12%→5.5%→1%로 개선되나 매 라운드 신규 결함 유형 재발 — 표본16 이질문자+어형붕괴+개념오치환 복합·표본190 목적어 불명확 비문, 둘 다 기존 rephrase_hygiene.py 패턴 미포착)이 왜 발생하는지 근본원인 분석: LLM 자유 재작성 방식 자체가 매 생성마다 예측불가 신규 결함을 내는지, 결정론 템플릿 치환 등 대안 아키텍처로 전환 가능한지 평가 → 설계 결정 문서화 → 채택 시 구현. 패턴 패치 축적(rephrase_hygiene.py 신규 축 추가) 단독으로는 재시도 금지(§4.5 무한 루프 방지 — S3-14 acceptance 3회차 조항)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/equivalent/**"
+  - "docs/architecture/**"
+  - "docs/data/**"
+session: null
+notes: "S3-14(rotation-2) 결과 — mc는 3라운드 만에 PASS 확정(0 defect·Wilson 1.33%), rephrased만 3연속 FAIL(점추정 개선 추세는 뚜렷하나 Wilson 상한이 min-n 200에서 결함 2건도 2.98%로 임계 2% 초과 — 표본 크기 대비 결함 1건 차이가 pass/fail을 가르는 경계 상황). 정본: docs/data/ai_review_batch_v0_4corpora_2026-07.md §Rotation-2 확인 감사 결과."
+updated: 2026-07-29

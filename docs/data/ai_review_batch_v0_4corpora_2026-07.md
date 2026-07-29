@@ -4,7 +4,7 @@
 > **판정 항목**: 사람층 ①~⑥ (①발문 자연성 ②풀이 타당성 ③난이도 정합 ④성취기준 귀속 ⑤오답↔오개념 귀속[객관식] ⑥우연 유사). 기계 게이트(S2-a 4종)는 적재 시 이미 통과·**Tier1 전수 재검산(4종 2,043문) 검수 직전 전건 통과·실패 0** — 본 검수는 그 위의 교수학·표면 층이다.
 > **표본**: 결정론 층화(rotation 0·`reviewer_sample_package`) — mc 200/1,080 · rephrased 200/483 · conceptual 200/360 · **killer 120/120(전수 — 코퍼스가 min-n 200 미만인 유일 케이스)**. 합 720문.
 > **결론(rotation-0)**: **4개 코퍼스 전부 게이트 FAIL — 노출 부적격 유지**(게이트 통과 ≠ 학생 노출). 계통 결함 5류가 원인이며 전량 생성기·파이프라인 결함(환류 대상·`S3-12` 등재). 수학 정답 자체의 오류는 0건 — 결함은 전부 해설 수치·전제 실현성·조사·성취기준 태그·발문 위생 축(기계 Tier1 게이트의 검산 범위 밖)이다.
-> **현재 상태(rotation-1 · §"Rotation-1 환류 검증 결과" 참조)**: 5류 전건 생성기 교정 후 신규 독립 표본 재검수 — **conceptual PASS**·mc/rephrased는 잔여 결함(각 9·11건) 조치 완료했으나 rotation-1 as-found 자체는 여전히 FAIL로 정직 기록(§4.5 — rotation-2 확인 필요)·killer는 min-n 구조적 미달 지속. 부수로 concept_src_id 계통 결함(6번째 축) 14건 발견·전건 조치.
+> **현재 상태(rotation-2 · §"Rotation-2 확인 감사 결과" 참조·S3-14)**: mc·rephrased의 rotation-1 조치 효과를 신규 독립 표본(mc 200/1,080·rephrased 200/429)으로 최종 확인. **mc는 PASS**(결함 0·Wilson 상한 1.33% ≤ 2% — rotation-0→1→2 3라운드 만에 게이트 통과 달성, `distribute-first-term-only`/`negative-distribute-sign`/`angle-sum-non-triangle` 계통 결함 재발 0건 확정). **rephrased는 3라운드 연속 FAIL**(결함 2·Wilson 상한 2.98% > 2% — 점추정은 12%→5.5%→1%로 개선됐으나 매 라운드 새로운 결함 유형이 계속 나타나 임계 통과 실패. §4.5 규약대로 4라운드째 패치-재표본 반복 대신 **근본 설계 재검토**를 신규 태스크로 등재, `S3-15-rephrase-pipeline-redesign` 참조). killer는 min-n 구조적 미달 지속(별건 코퍼스 확장 결정 필요).
 
 ## 종합 — 코퍼스별 판정 (as-found · `corpus_audit_eval --max-defect-upper 0.02 --min-n 200 --require-as-found`)
 
@@ -110,6 +110,54 @@ concept_graph_v1 역탐색으로 재고정하고, 크로스워크 실제 해석 
 corpus_audit_eval의 min-n 200 요구를 코퍼스 크기(120) 자체가 구조적으로 충족 못 한다 —
 표본 게이트 통과에는 코퍼스 확장(≥200건 추가 생성)이 선결 조건이며, 이는 결함 조치가 아니라
 별도의 저작 스코프 결정이라 이 세션 범위 밖으로 정직하게 남긴다.
+
+## Rotation-2 확인 감사 결과 (S3-14 · 2026-07-29)
+
+**절차(§4.5 준수)**: rotation-1이 발견·조치한 잔여 결함(mc 9건 성취기준 태그 오귀속·
+rephrased 11건 발문 위생)이 실제로 결함율을 임계 이하로 낮췄는지, rotation-0·1과 무관한
+**신규 독립 표본**(`--rotation 2` — mc 200/1,080·rephrased 200/429)으로 최종 확인했다.
+검수 주체 = pedagogy 서브에이전트 **4인**(코퍼스별 전·후반 100문씩 분할, 각자 전건 SymPy/
+직접 계산 재검산 + 성취기준 정본 대조 + 조사 규칙 판별 병행). rotation-0·1 표본을 재채점하는
+시도는 없다.
+
+**rotation-2 as-found 판정**(`corpus_audit_eval --max-defect-upper 0.02 --min-n 200 --require-as-found`):
+
+| 코퍼스 | n | 결함 | 점추정 | Wilson 95% 상한 | 판정 | 결함류 분포 |
+|---|---|---|---|---|---|---|
+| `problem_bank_misconception_mc_v0` | 200/1,080 | 0 | 0.00% | **1.33%** | **PASS** (exit 0) | — |
+| `problem_bank_rephrased_v0` | 200/429 | 2 | 1.00% | **2.98%** | **FAIL** (exit 1) | grammar_break 2 |
+
+감사 라벨(as-found 신규 생성): `corpus_audit_mc_v0_r2.jsonl` · `corpus_audit_rephrased_v0_r2.jsonl`
+(rotation-1 라벨과 별개 보존 — rotation별 독립 기록이 §4.5 감사 추적성의 근거).
+
+**mc — 3라운드 만에 PASS 확정**: rotation-0(FAIL 58%)→rotation-1(FAIL 4.5%)→rotation-2
+(**PASS 0%**)로 수렴했다. rotation-1이 발견한 두 계통 결함(`distribute-first-term-only`/
+`negative-distribute-sign`이 `[9수02-09]`→정위치 `[9수02-10]`, `angle-sum-non-triangle`이
+무관한 `[9수03-03]`→정위치 `[4수03-25]`/`[9수03-05]`)이 이번 독립 표본의 해당 도메인
+전건(DISTRIBUTE-PARTIAL 5문·NEG-DISTRIBUTE 4문·POLYGON-ANGLE-SUM 4문)에서 성취기준 정본
+대조로 재발 0건 확정됐다. rotation-0의 조사(josa)·해설 수치·태그 계통 결함 5류 전부 재발
+없음 — **`problem_bank_misconception_mc_v0`는 노출 적격 재평가 대상**(법적 게이트
+`is_exposable()`은 자체생성이라 항상 통과 — 이번 PASS로 운영 정책상의 표본 감사 블로커가
+해소됨. 실 노출 전환은 별도 운영 결정).
+
+**rephrased — 3라운드 연속 FAIL, 근본 설계 재검토로 이관**: rotation-0(FAIL 12%)→rotation-1
+(FAIL 5.5%)→rotation-2(FAIL 1%·Wilson 상한 2.98%)로 점추정은 꾸준히 개선됐으나, **매
+라운드 임계(2%)를 상한이 넘는다** — n=200에서는 결함 2건만으로도 Wilson 상한이 2%를
+초과한다(표본 크기 대비 소수 결함이 곧바로 게이트 미달로 직결되는 구간). 두 결함 모두
+**기존 `rephrase_hygiene.py` 3~6축 어디에도 안 걸리는 신규 유형**이다:
+- 표본16(`wm-skel-1cc6d23230b8`): "다차원 문제지만"(차원 오기술)·"크 greater한"(영단어
+  주입+어형 붕괴)·"귀를"(개념 오치환 — "값을"이어야 함) 3종이 **한 문항에 동시 재발**.
+  정답·verify 수치는 정확(2x²+5x+2=0 → 근 -1/2·-2 검산 일치) — 결함은 표면 어휘 층뿐.
+- 표본190(`wm-log-495ada0f7043`): "log_6 x = 2의 값을 찾아보세요" — '값'의 지시 대상이
+  x인지 방정식 자체인지 불명확(같은 도메인 표본191·193과 대조하면 이 표본만 목적어
+  붕괴). 정답(x=36)은 정확.
+
+**정직한 결론**: S3-14 acceptance의 "3회차부터는 근본 설계 재검토" 조항에 따라, 4번째
+패턴 패치+rotation-3 반복을 이 태스크 안에서 시도하지 않는다. 매 라운드 **이전에 못 본
+새로운 결함 유형**이 나타나는 패턴(휘의 두더지 잡기)은 LLM 자유 재작성 방식 자체의 예측불가
+변동성이 원인일 가능성을 시사하며, 패턴 매칭 축 추가만으로는 수렴하지 않을 수 있다 — 근본
+설계(결정론 템플릿 치환 등 대안) 재검토를 `S3-15-rephrase-pipeline-redesign`으로 등재했다.
+`problem_bank_rephrased_v0`는 노출 부적격 유지.
 
 ## 문항별 판정 — misconception_mc (200)
 
