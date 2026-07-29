@@ -44,11 +44,16 @@ class TestStandardAgreement:
 class TestDeriveKebabStandards:
     def test_covered_kebabs_map_to_expected_standards(self) -> None:
         # 커밋 문항 코퍼스에서 역유도 — 극값 2·이차근 선택 3 kebab의 성취기준 실측 동결.
+        # S3-15 재태깅(감사 확정): quad 밴드(short/mc/sqrt/sqrt_mc — opposite-root-selected·
+        # factor-sign-flip의 유일한 근원)의 [10공수1-02-02](판별식으로 근을 "판별")는 오귀속 —
+        # 이 밴드는 판별식 없이 인수분해·완전제곱꼴로 근을 직접 "계산"한다. 정본 statement
+        # 대조로 [9수02-20]("이차방정식을 풀 수 있고, 이를 활용하여...")이 정위치
+        # (`problem_corpus_batch.py::_STANDARD_CODE` 동시 교정 — 재발 방지).
         derived = derive_kebab_standards(_all_problem_records())  # type: ignore[arg-type]
         assert derived["extremum-max-min-confused"] == frozenset({"[12미적Ⅰ-02-07]"})
         assert derived["extremum-value-vs-point-confused"] == frozenset({"[12미적Ⅰ-02-07]"})
-        assert derived["opposite-root-selected"] == frozenset({"[10공수1-02-02]"})
-        assert derived["factor-sign-flip"] == frozenset({"[10공수1-02-02]"})
+        assert derived["opposite-root-selected"] == frozenset({"[9수02-20]"})
+        assert derived["factor-sign-flip"] == frozenset({"[9수02-20]"})
 
     def test_uncovered_kebab_absent(self) -> None:
         # 문항에 오답 귀인으로 안 쓰이는 kebab은 유도 집합에 없음(→ no_signal·인간 전용).
