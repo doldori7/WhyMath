@@ -5,19 +5,21 @@ track: math-completion
 stage: S3
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 2
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "S3-09 감사 확정 계통 결함 5류의 생성기 교정: ①josa 헬퍼 전면 적용(misconception_eval_mc·conceptual_count_mc 계열 — S2-08 trig 선례의 잔여 확장·와/과·을/를·로/으로·은/는·이/가) ②성취기준 태그 정합 맵(killer 이차 [10공수1-02-03]·삼차 [02-07], mc 밴드별 정위치 — 성취기준 정본 statement 대조 근거 동반) ③conceptual 극한 해설 b−a 부호·mc 완전제곱 미치환 변수 교정 ④조건부확률 파라미터 확률 공리 가드(P(A∩B)≤min(P(A),P(B)) 위반 시드 거부·기존 코퍼스 모순 전제 7건 폐기) ⑤rephrase 발문 위생 게이트(비한글 스크립트·메타 라벨 누출·요구-정답 정합·수용 게이트 축 추가). 교정 후 재생성 → Tier1 전수 재검산 green → rotation 1 신규 독립 표본 재검수(같은 표본 재채점 금지 §4.5) → corpus_audit_eval 상한 ≤2% PASS. killer는 min-n 200 구조적 미달 지속 시 부적격 유지(코퍼스 ≥200 확장은 별도 판단·D4 커버리지 관측 연동)"
-artifacts: []
+artifacts:
+  - 651b9b6
+  - 40f8c5a
 paths:
   - "src/backend/whymath_backend/l3/equivalent/**"
   - "src/backend/whymath_backend/harness/**"
   - "data/corpus/**"
   - "docs/data/**"
-session: claude/whymath-problem-bank-design-65tsm4
+session: null
 notes: "docs/data/ai_review_batch_v0_4corpora_2026-07.md 환류 — 720문 검수 결함 310·4종 전부 FAIL(mc 63.6%·conceptual 30.4%·rephrased 16.3%·killer 100% 태그 계통). 수학 정답 오류 0 — 전부 Tier1 밖 축. 킬러 난이도 표기 4.0 vs 실체 1스텝 관찰도 이 태스크에서 판단"
 updated: 2026-07-29
