@@ -5,25 +5,24 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 5
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "schemas/v1.1/solution_path.schema.yaml 1:1 Pydantic(l3·기존 enum 좌석 ReasoningType 소비·신설 금지) + invariant 테스트(order 1부터 연속·justification 전방/자기참조 금지·enum 폐쇄 밖 거부·참조 실재) + solution_path 테이블 신설·problem_step additive 컬럼(alembic) + WH-S bank_solution 구조 승격 writer(개념 ID 매칭 실패분 사람 검수 큐) + reader 2종 소생(GET /v1/problems/{id}/steps 실데이터·learning_scene solution_path_id 댕글링 해소) — 신규 학생 대면 노출 0(기존 표면 소생만). embedding 컬럼은 S4-12에서 판정"
-artifacts: []
+artifacts:
+  - 86212c4
 paths:
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/whs/**"
   - "src/backend/whymath_backend/db/models/**"
   - "src/backend/whymath_backend/api/**"
-  # 범위 확장(acceptance 명시 산출물 — scope_drift warn의 지시대로 등재):
-  # alembic 마이그레이션·schema additive 필드(ORM to_schema 라운드트립)·L4 scene 결선(reader ②)·테스트
   - "src/backend/alembic/versions/**"
-  - "src/backend/whymath_backend/schema/problem.py"
-  - "src/backend/whymath_backend/l4/scene_generation.py"
+  - src/backend/whymath_backend/schema/problem.py
+  - src/backend/whymath_backend/l4/scene_generation.py
   - "tests/backend/**"
-session: claude/whymath-solution-review-40xspg
+session: null
 notes: "docs/architecture/solution_module_gap_review.md §3 D1 — 외부 EOS 틀(기능 23) 대조. 03_content_generation.md L151 'Phase 2(다중 풀이 소비처가 설 때)' 유보의 해제 조건 성립(S4-10이 소비처·620문 실데이터의 스키마 승격 — dead code 아님). 파일럿 루프 비간섭(코치 경로 무변경)이라 S3-01 비의존(S4-06/ARCH-16 오프라인 선례)"
 updated: 2026-07-29
