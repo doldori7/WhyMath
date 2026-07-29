@@ -1,0 +1,201 @@
+{"as_found_n": 200, "as_found_defects": 24}
+{"problem_id": "03169d05-fd51-5ae3-ac4e-18380ce11f43", "verdict": "defect", "defect_class": "other"}
+{"problem_id": "0561495d-dc4b-5e77-9ef5-01515c9719d7", "verdict": "ok"}
+{"problem_id": "0a40a1bb-974a-55ea-af13-c62a4c2d10ed", "verdict": "ok"}
+{"problem_id": "0b1665e9-67fa-530f-a0ca-6c323416249c", "verdict": "ok"}
+{"problem_id": "0bf6b218-5952-5860-9cf8-ecdd2554ded1", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "1034c291-998c-50db-b158-fb48aab0a184", "verdict": "ok"}
+{"problem_id": "1736c32f-ee26-5ab7-9de6-65a01e55cfa6", "verdict": "ok"}
+{"problem_id": "1a87b468-8044-52fa-a445-1d8243105bd5", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "1b1d5bd6-43b8-5a67-a27a-8b489cc8012b", "verdict": "ok"}
+{"problem_id": "1cf21658-97bc-5458-83f7-0ab6c0bcb71d", "verdict": "ok"}
+{"problem_id": "1df4710c-7b0e-568a-8607-602fdeb88b56", "verdict": "ok"}
+{"problem_id": "1ea89698-cf4d-5826-9c4f-d39d7ca898f3", "verdict": "defect", "defect_class": "other"}
+{"problem_id": "205dc06c-ca13-52d6-91ba-0b3a22a1cb16", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "22697e4f-50e7-5929-83ff-ba2d7aa346af", "verdict": "ok"}
+{"problem_id": "2550b165-3c9a-5f78-b77d-c7e170ff4c51", "verdict": "ok"}
+{"problem_id": "2a6aa6cd-947e-52e1-84b7-7012cc1ea125", "verdict": "ok"}
+{"problem_id": "2bdc7536-e9d8-5b17-a3fd-27ea54b2ccc4", "verdict": "ok"}
+{"problem_id": "2c19fa7d-2af3-5e9a-970f-bbc2af86b2b4", "verdict": "ok"}
+{"problem_id": "3b4ce1ae-89f3-5fb0-a3fa-d768f0712472", "verdict": "ok"}
+{"problem_id": "3cb8aa03-13ec-51f7-93c3-84c85bc87119", "verdict": "defect", "defect_class": "other"}
+{"problem_id": "3d1e3476-8084-5838-b171-36086674b5c9", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "4250790a-1766-57d5-be17-a1ad2ffefb7b", "verdict": "ok"}
+{"problem_id": "4ad7816d-34bd-5fbf-a1bd-f789230993ac", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "4cd89b40-d82e-521d-8c8c-571ee65c4874", "verdict": "ok"}
+{"problem_id": "5029d5a2-7bd5-58ab-b4e9-9bddb4909ffc", "verdict": "ok"}
+{"problem_id": "55f4acd6-56e1-5fe9-9611-f11b767439e2", "verdict": "ok"}
+{"problem_id": "56f2148d-f856-5e30-9fe3-9eaaf178a119", "verdict": "ok"}
+{"problem_id": "58b87f8e-48b9-5cfb-b935-7e231a1b9fc6", "verdict": "ok"}
+{"problem_id": "6080405a-1b4b-501e-8b1e-7f963850c2d4", "verdict": "ok"}
+{"problem_id": "60cab7da-c97f-585d-a0ee-0aa01bb8a76e", "verdict": "defect", "defect_class": "other"}
+{"problem_id": "65fa8dae-d161-50f8-809a-f077ca3c41f4", "verdict": "ok"}
+{"problem_id": "68b51ad0-f8bb-5c17-9f77-307b6dea3e3c", "verdict": "ok"}
+{"problem_id": "6940a001-b48c-504f-be7c-de4b697ebf2f", "verdict": "ok"}
+{"problem_id": "6e9a6d60-a603-5739-b873-9b9d3ed6a88a", "verdict": "ok"}
+{"problem_id": "72b4778e-2217-527f-b428-5a841a45473c", "verdict": "ok"}
+{"problem_id": "741c32a5-9331-5c40-8beb-5f339b560d65", "verdict": "ok"}
+{"problem_id": "783e0bea-6661-555b-ae2b-6c4933449763", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "7b9cd58f-f6a4-501c-9c57-2561c39f11ac", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "7c0b66b9-70da-58fc-a08c-1b29f037695c", "verdict": "ok"}
+{"problem_id": "7e65a707-d53f-530b-9b25-1b9aab634f9e", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "877f0391-39df-5a43-a0e7-53a14b275116", "verdict": "ok"}
+{"problem_id": "87fd5178-ce88-5628-ba94-bae53c03734a", "verdict": "ok"}
+{"problem_id": "92316b40-1128-5811-bb6f-c81d65477fa7", "verdict": "ok"}
+{"problem_id": "94c652b2-f0f7-555f-9ed2-9b8e0f77a528", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "9522480c-ddfb-5a85-9f5c-214409a4a5f9", "verdict": "ok"}
+{"problem_id": "98873172-d6a4-5e04-843c-588fce088d13", "verdict": "ok"}
+{"problem_id": "99357d4b-8ef9-59a4-a9a2-1aaeaa952453", "verdict": "ok"}
+{"problem_id": "9ef70688-537c-5eb8-a579-2b815d10b98e", "verdict": "ok"}
+{"problem_id": "a4b6c027-1a31-5f86-a308-74d7475d0f15", "verdict": "ok"}
+{"problem_id": "a68fd9f4-26e2-59e1-ab5e-78824a9a0225", "verdict": "ok"}
+{"problem_id": "aae9f6ae-716b-5f3b-864a-733feb6269f9", "verdict": "ok"}
+{"problem_id": "aafc6d4f-e9e5-54d3-8a7e-376b073899a7", "verdict": "ok"}
+{"problem_id": "ab739209-4e16-5d62-8051-621eda01068e", "verdict": "ok"}
+{"problem_id": "b4aa6803-b7da-5c3e-ba61-7071f27cd2ed", "verdict": "ok"}
+{"problem_id": "b808c42a-b926-5f39-a264-0316d0ecdeb8", "verdict": "defect", "defect_class": "statement_mismatch"}
+{"problem_id": "c099caf7-c968-5630-8d7b-cc9069bef790", "verdict": "ok"}
+{"problem_id": "c2283881-031d-5f2c-89a4-a81594fb9bb3", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "c26f0c9f-7270-5aa2-b7ae-b7f0565c2f34", "verdict": "ok"}
+{"problem_id": "c2a1ff68-985c-5541-89b7-dba631d66bcb", "verdict": "ok"}
+{"problem_id": "cf653d44-0a54-5f29-b99a-04960b8f1083", "verdict": "ok"}
+{"problem_id": "d343c7d7-4bcb-5676-a918-244f6c8fbe98", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "d404a3f8-884b-5793-8b9d-422faa690c7d", "verdict": "ok"}
+{"problem_id": "d68c0096-ad34-52ea-ae96-3293ca47c24c", "verdict": "ok"}
+{"problem_id": "d69e39e4-7acc-59a3-9269-734e04487baa", "verdict": "ok"}
+{"problem_id": "def506ae-1f27-5e24-ae37-dc2e230e6f21", "verdict": "ok"}
+{"problem_id": "e27676cc-cb31-5f92-bbad-e1894794b848", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "e439c38c-f3d9-5add-ac01-347282b417ce", "verdict": "ok"}
+{"problem_id": "e6fa4590-67f4-53b8-88ae-8c2c78051886", "verdict": "ok"}
+{"problem_id": "e80ffe7d-27fe-5d59-98df-8ae043e9d178", "verdict": "ok"}
+{"problem_id": "ebe3b820-c720-5798-acf7-10eca5a25649", "verdict": "ok"}
+{"problem_id": "ec3106cd-b331-518a-b2de-b6891da7272a", "verdict": "ok"}
+{"problem_id": "edd6b68f-6999-56b0-a72d-e9e746f85ef3", "verdict": "defect", "defect_class": "statement_mismatch"}
+{"problem_id": "f0434558-8bf8-593b-9f68-670d11f58f1b", "verdict": "ok"}
+{"problem_id": "f201fa5d-ae73-55c1-b347-372c6595c456", "verdict": "ok"}
+{"problem_id": "f5d83f89-6991-5ab6-9bf2-d81b7f12d612", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "f744ea2d-df33-590c-9e48-0de6ab99087a", "verdict": "ok"}
+{"problem_id": "fc9ff1d6-935e-5205-8abf-f1786d6bc92a", "verdict": "ok"}
+{"problem_id": "ff27b3f2-9d32-51e7-9539-f1b73bc62e87", "verdict": "ok"}
+{"problem_id": "00538844-0ec3-5089-bc82-830f59c79eed", "verdict": "ok"}
+{"problem_id": "1bf1fbff-76a7-54e9-9f6d-9fb78008c5fd", "verdict": "ok"}
+{"problem_id": "22d5a449-f6b4-52ef-b4b6-878f65faeebd", "verdict": "ok"}
+{"problem_id": "24c2d081-77f7-50e1-b1da-ee74e530e0fe", "verdict": "ok"}
+{"problem_id": "2ce25340-5d9c-5f06-ab1a-8ee2d74d6579", "verdict": "ok"}
+{"problem_id": "3d606d07-a2eb-5c23-a28f-2e9ee63f9e62", "verdict": "ok"}
+{"problem_id": "416cd50f-ad1d-5081-9e06-2bc9848027d2", "verdict": "ok"}
+{"problem_id": "4b9c802f-c8aa-509b-a059-eefc385967f2", "verdict": "ok"}
+{"problem_id": "4cff1fb1-1e05-50f6-8c15-a6262d68308b", "verdict": "ok"}
+{"problem_id": "514a7ccf-a784-58fe-b90d-4ccf12e6ee04", "verdict": "ok"}
+{"problem_id": "5bd0e015-f5b6-5d06-b688-d436d8d651f5", "verdict": "ok"}
+{"problem_id": "646305d0-13f7-5a5a-8fee-e73e068a18c1", "verdict": "ok"}
+{"problem_id": "6b894e2a-7c3f-5e70-b919-a68113d1021f", "verdict": "ok"}
+{"problem_id": "80c9ba5e-628e-5356-a146-64c4d804d8cc", "verdict": "ok"}
+{"problem_id": "8c7215ed-7d61-5374-8548-caaaf2bb6e7a", "verdict": "ok"}
+{"problem_id": "8ec873fd-3aef-5a7a-80c1-f4192eb1c57a", "verdict": "ok"}
+{"problem_id": "908a23d4-9744-5c69-bd0d-e66389f48691", "verdict": "ok"}
+{"problem_id": "9d7c5bad-bcc2-5457-89e0-de6ba4aab394", "verdict": "ok"}
+{"problem_id": "a0d578f9-dbd6-53e5-ac9e-4f9318ed8e53", "verdict": "ok"}
+{"problem_id": "abfd62f6-ea1e-553a-870c-a0bfd462665a", "verdict": "ok"}
+{"problem_id": "bc27675c-4e25-5f41-acad-7e703beb6fb1", "verdict": "ok"}
+{"problem_id": "c331bedd-4a45-55b5-b5bc-4b3a47687ec2", "verdict": "ok"}
+{"problem_id": "d68c91f2-bbd7-5880-bf32-6b57bc0f5eff", "verdict": "ok"}
+{"problem_id": "e2677eee-5023-56d8-b20a-3d9578738ce4", "verdict": "ok"}
+{"problem_id": "fb0312d0-ccd5-5a74-95d0-99196df67aa5", "verdict": "ok"}
+{"problem_id": "0010ad2c-4dd4-5a45-accb-0e17749c6694", "verdict": "ok"}
+{"problem_id": "18c04394-b2e3-5dee-9b02-9ef4b050dff6", "verdict": "ok"}
+{"problem_id": "23a25c3a-8ba6-5c74-a2bb-ba87fc6a91f2", "verdict": "ok"}
+{"problem_id": "2b04bf4c-09eb-5501-b7a6-226ac449cca3", "verdict": "ok"}
+{"problem_id": "375c2b2e-2b31-503a-b48e-552d2caa9f00", "verdict": "ok"}
+{"problem_id": "455d21d5-e5af-50a2-be5c-74c3ca42e36f", "verdict": "ok"}
+{"problem_id": "77f6b64d-a939-59d8-8702-5c2683c49b58", "verdict": "ok"}
+{"problem_id": "7cb003c5-48c9-5e36-b0d3-3f0947ca3753", "verdict": "ok"}
+{"problem_id": "8de7df5a-cf40-5ddc-bf5b-648372a7ca65", "verdict": "ok"}
+{"problem_id": "9293743e-4dc2-5405-821c-abdfe4c598e3", "verdict": "ok"}
+{"problem_id": "99408295-3ff6-5ec2-b199-143827f89f7f", "verdict": "ok"}
+{"problem_id": "9ecf6ed4-113b-5871-b556-e2bbbd8c6d0b", "verdict": "ok"}
+{"problem_id": "ab728843-80da-5288-8c2e-6064d8f94692", "verdict": "ok"}
+{"problem_id": "b644c6da-f3c3-5998-9d8f-fa343ddffe11", "verdict": "ok"}
+{"problem_id": "bf17196a-f97c-514e-8478-688e6941eab7", "verdict": "ok"}
+{"problem_id": "ddff270d-28ed-5c7b-a5be-96547defd3de", "verdict": "ok"}
+{"problem_id": "fc05a159-b033-54a1-9e61-c7fc642114ce", "verdict": "ok"}
+{"problem_id": "0429698c-49f8-5c5e-be30-484e7b4866e9", "verdict": "ok"}
+{"problem_id": "14f5f858-ff28-5204-aa35-e1eb4d799cc1", "verdict": "ok"}
+{"problem_id": "1bba8213-78a9-5b90-aa28-3bfb2bc8166e", "verdict": "ok"}
+{"problem_id": "2dfa0d97-c028-517c-8e73-91128d9b9667", "verdict": "ok"}
+{"problem_id": "34f7aedd-c121-58e9-acd3-df865d93c274", "verdict": "ok"}
+{"problem_id": "461d0216-8719-5760-b8cb-a79cb8cd84e7", "verdict": "ok"}
+{"problem_id": "48e69c10-05fb-5bc2-9402-d259522b7ff7", "verdict": "ok"}
+{"problem_id": "5c6289d1-59f0-51e6-a96e-e4bb80402c49", "verdict": "ok"}
+{"problem_id": "63b9b31c-063e-55af-abf0-d55a381b3df4", "verdict": "ok"}
+{"problem_id": "6db00222-8c8d-5147-9652-50a5933ea8da", "verdict": "ok"}
+{"problem_id": "731872d3-341d-5084-9e26-95dd54b084d4", "verdict": "ok"}
+{"problem_id": "8595ec42-e912-5165-952a-c55c6a14f79e", "verdict": "ok"}
+{"problem_id": "85a28c20-05c6-53ab-a436-05dadb0d34d1", "verdict": "ok"}
+{"problem_id": "cabceefa-3a9a-58f2-a185-1adcb67047db", "verdict": "ok"}
+{"problem_id": "ccf00ae5-e2cb-5283-844d-75ff6846a353", "verdict": "ok"}
+{"problem_id": "d5764f00-820e-5e34-938c-8954d80f1ee2", "verdict": "ok"}
+{"problem_id": "fdfbadd9-0b23-5f81-8e78-d5d1857be615", "verdict": "ok"}
+{"problem_id": "0764b797-2773-5afe-b383-a8db7114b887", "verdict": "ok"}
+{"problem_id": "08a34adc-acc8-5390-a9da-0db4926f2891", "verdict": "ok"}
+{"problem_id": "11e87725-e834-5113-9183-cd0974aad001", "verdict": "ok"}
+{"problem_id": "15cdd984-f89f-54cf-8f59-819f908c0358", "verdict": "ok"}
+{"problem_id": "52776ec4-93ee-565f-b043-c67c3e94a7e8", "verdict": "ok"}
+{"problem_id": "6aa5962e-4cfd-58fc-a39d-f6c875b01828", "verdict": "ok"}
+{"problem_id": "6c2eaa2c-dd68-5ebc-9330-7d525834ee3f", "verdict": "ok"}
+{"problem_id": "7359a007-c359-5b27-a5f4-0e5ac1eea6c4", "verdict": "ok"}
+{"problem_id": "977bcae3-cbcf-5389-bc54-ccf33d6aac7f", "verdict": "ok"}
+{"problem_id": "b16ee4f9-72ae-54af-bbe4-8056eaf7613b", "verdict": "ok"}
+{"problem_id": "c09f0e66-ba5e-5bd4-a97c-216d1bbf094e", "verdict": "ok"}
+{"problem_id": "c1438838-fcb5-59c4-905b-971b1a26f1b1", "verdict": "ok"}
+{"problem_id": "c504ca6a-b908-5e93-8c1c-66d510058bf4", "verdict": "ok"}
+{"problem_id": "ca2c7b10-2420-54f7-a798-c07ded507efe", "verdict": "ok"}
+{"problem_id": "d4a44413-ceb9-5252-b469-a0cbdb426db6", "verdict": "ok"}
+{"problem_id": "ef6034bf-2b0e-570b-b336-4defb3648229", "verdict": "ok"}
+{"problem_id": "001229e0-62eb-5b5d-9d94-de2c567c74ee", "verdict": "ok"}
+{"problem_id": "183d3c11-2c7b-5141-a95f-1a5057253fbe", "verdict": "ok"}
+{"problem_id": "3ae209b6-7eb8-50e1-a957-0b2553684fca", "verdict": "ok"}
+{"problem_id": "638034d7-6362-5eb2-a86a-34f7efe3a5c1", "verdict": "ok"}
+{"problem_id": "6ba7443a-b6c3-5c3f-8695-3adafef10c23", "verdict": "ok"}
+{"problem_id": "734da5da-6772-52be-a70f-ba5cde54be96", "verdict": "ok"}
+{"problem_id": "7a9c7fbc-63f7-5dfe-ba41-546f390caac5", "verdict": "ok"}
+{"problem_id": "a509811c-ac4f-5de8-ae42-208ca095d320", "verdict": "ok"}
+{"problem_id": "b0207171-5886-5044-8b61-795cfc18dbef", "verdict": "ok"}
+{"problem_id": "b5efd003-186e-55b3-987f-337d985d27c0", "verdict": "ok"}
+{"problem_id": "bd000f96-53d1-5f96-b0a2-aeded5a8e163", "verdict": "ok"}
+{"problem_id": "c7d7e616-baad-5442-9404-dfaa838a8e74", "verdict": "ok"}
+{"problem_id": "1a85d4de-ebc2-54e9-9e47-7c23f058228c", "verdict": "ok"}
+{"problem_id": "31296177-b8e0-55f9-b62a-32d08ce2d011", "verdict": "ok"}
+{"problem_id": "3bc35307-ddbe-5240-8cca-0740f7f80153", "verdict": "ok"}
+{"problem_id": "4aaf3b40-d361-55a2-81b8-ab9e30fddb80", "verdict": "ok"}
+{"problem_id": "660add5e-8c26-5232-8715-6cc926a57078", "verdict": "ok"}
+{"problem_id": "791a1d8a-b972-5cdc-8d55-553f803a3fad", "verdict": "ok"}
+{"problem_id": "7bec1c28-d0d6-5a62-9b80-ef144c0c25d8", "verdict": "ok"}
+{"problem_id": "910b2330-5cd6-5c8c-8ce6-c46d36cc9fa1", "verdict": "ok"}
+{"problem_id": "a4be70a3-73de-56f2-a4d1-9741cba0bbaf", "verdict": "ok"}
+{"problem_id": "c49ae515-5365-5b7a-b314-0dd5a06bc6e7", "verdict": "ok"}
+{"problem_id": "c7255477-25be-51b1-b639-b1f120f3e615", "verdict": "ok"}
+{"problem_id": "ef8d44fe-ed79-5ea7-81c8-dcd5a4de79a3", "verdict": "ok"}
+{"problem_id": "2f8d9ad2-8b4d-5d17-8eeb-24c156ddc437", "verdict": "ok"}
+{"problem_id": "51af957a-1d56-51b0-801b-fa8ad51e0b61", "verdict": "ok"}
+{"problem_id": "80548b09-1451-5041-ae14-9f4696a2ab3b", "verdict": "ok"}
+{"problem_id": "8268e817-29c6-5c61-94b7-d822d1efc9c2", "verdict": "ok"}
+{"problem_id": "85ba5253-3a5a-5ad5-b6a1-63c0795f5b55", "verdict": "ok"}
+{"problem_id": "b9b8048c-34ed-5988-86f6-9fa07c8ed5ba", "verdict": "ok"}
+{"problem_id": "be72d39e-e836-58d8-9585-53cd3a4cafba", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "c37e3e6d-8d2c-5ff0-8cc4-03f3ce3b3dc4", "verdict": "ok"}
+{"problem_id": "cb8a57e8-d200-5e52-b9e1-672043ba8bbc", "verdict": "ok"}
+{"problem_id": "fe4aee83-c1c8-56fc-9e93-f9e7b868ea0c", "verdict": "ok"}
+{"problem_id": "45c656ad-2fa1-567f-a411-f1caa783b6f6", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "5f38d9e9-9dde-5e71-b0c6-53ebb7447ccb", "verdict": "ok"}
+{"problem_id": "72ec5831-9850-57f7-8a8c-459c671f9ef6", "verdict": "defect", "defect_class": "statement_mismatch"}
+{"problem_id": "9298aeee-34b9-5ae6-b831-d318f7288b6b", "verdict": "ok"}
+{"problem_id": "9b379ecc-7f5d-55ed-963c-825f5388e3de", "verdict": "defect", "defect_class": "grammar_break"}
+{"problem_id": "bfe96758-6886-53ac-a5b7-cc23a7bc9102", "verdict": "defect", "defect_class": "statement_mismatch"}
+{"problem_id": "f7e2e005-d194-523e-8f38-972c75e045d3", "verdict": "ok"}
+{"problem_id": "fc254adb-67c4-5dc1-8d50-c404fcc017e9", "verdict": "ok"}
+{"problem_id": "bf40e6a2-180e-5532-83c3-66d22639cb0f", "verdict": "ok"}
+{"problem_id": "bfcf47f4-ab34-57b7-9dca-d7b150f73688", "verdict": "ok"}
+{"problem_id": "c3ef56d4-0ee5-57fd-9b15-bcd04b8d13ba", "verdict": "ok"}
+{"problem_id": "fab4d345-b195-5765-abc8-ec719f24dda2", "verdict": "ok"}
+{"problem_id": "fea5739a-9f46-5a63-af0f-7ec05373cd8a", "verdict": "ok"}
