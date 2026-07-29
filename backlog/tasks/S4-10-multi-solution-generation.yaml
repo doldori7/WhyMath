@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 5
 owner: claude
 depends_on:
@@ -18,6 +18,6 @@ paths:
   - "src/backend/whymath_backend/l3/**"
   - "src/backend/whymath_backend/whs/**"
   - "docs/prompts/**"
-session: null
+session: claude/whymath-solution-review-40xspg
 notes: "docs/architecture/solution_module_gap_review.md §3 D2 — 외부 EOS 틀(기능 24) 대조(설계만 갭·프롬프트 소비처 0). ROADMAP:67 'SolutionPath 다중 풀이' 체크박스의 백로그 실행화. 오프라인 콘텐츠 공장 축 — S3-01 비의존(S4-06 선례)"
 updated: 2026-07-29
