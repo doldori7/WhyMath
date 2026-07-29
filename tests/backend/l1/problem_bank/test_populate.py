@@ -381,6 +381,60 @@ def test_load_rejects_invalid_concept_role(tmp_path: Path) -> None:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# verification_tier (S4-17 — L1 정식 필드 승격)
+# ──────────────────────────────────────────────────────────────────────────
+def test_load_accepts_known_verification_tier(tmp_path: Path) -> None:
+    record = _base_record(
+        verify={
+            "conditions": "x**2 - 5*x + 6 = 0",
+            "answer_map": {"x": "3"},
+            "verification_tier": "machine_exhaustive",
+        }
+    )
+    path = _write(tmp_path, [record])
+    records = load_problem_bank_records(path)
+    assert records[0].verify.verification_tier == "machine_exhaustive"
+
+
+def test_load_defaults_verification_tier_to_none_when_absent(tmp_path: Path) -> None:
+    # 구코퍼스 호환 — verify에 verification_tier가 없으면 None(미각인)으로 남는다.
+    record = _base_record()
+    path = _write(tmp_path, [record])
+    records = load_problem_bank_records(path)
+    assert records[0].verify.verification_tier is None
+
+
+def test_load_rejects_unknown_verification_tier(tmp_path: Path) -> None:
+    # 안전 신호라 sibling authoring 필드(예 answer_kind)와 달리 조용히 None으로 떨구지 않는다.
+    record = _base_record(
+        verify={
+            "conditions": "x**2 - 5*x + 6 = 0",
+            "answer_map": {"x": "3"},
+            "verification_tier": "eyeballed",
+        }
+    )
+    path = _write(tmp_path, [record])
+    with pytest.raises(ProblemCorpusError, match="verification_tier"):
+        load_problem_bank_records(path)
+
+
+def test_load_accepts_finite_probability_and_finite_count_answer_kind(tmp_path: Path) -> None:
+    # S4-13 유한확률 코퍼스가 쓰는 answer_kind 2종 — 승격 전엔 화이트리스트 밖이라 조용히
+    # None으로 떨어지던 결함(S4-17 부수 발견·본 필드와 같은 함수·같은 결함류).
+    prob_record = _base_record(
+        slug="wm-test-finite-prob",
+        verify={"conditions": "space=...", "answer_map": {}, "answer_kind": "finite_probability"},
+    )
+    count_record = _base_record(
+        slug="wm-test-finite-count",
+        verify={"conditions": "space=...", "answer_map": {}, "answer_kind": "finite_count"},
+    )
+    path = _write(tmp_path, [prob_record, count_record])
+    records = load_problem_bank_records(path)
+    assert {r.verify.answer_kind for r in records} == {"finite_probability", "finite_count"}
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # 실 코퍼스 스키마 정합
 # ──────────────────────────────────────────────────────────────────────────
 def test_real_corpus_parses() -> None:

@@ -133,6 +133,11 @@ _ACCEPTED_LICENSE_VALUE: str = LicenseType.WHYMATH_GENERATED.value
 # 유효 개념 역할 값 집합(ConceptRole) — 태깅 role 검증용.
 _CONCEPT_ROLE_VALUES: frozenset[str] = frozenset(r.value for r in ConceptRole)
 
+# 유효 verification_tier 값(l3/verification_tier.VerificationTier와 값 동기 — L1은 L3를 임포트할
+# 수 없어 문자열 상수로 이중 관리한다. 미지값은 조용히 버리지 않고 ProblemCorpusError로 거부한다
+# (검증 등급은 안전 신호라 sibling authoring 필드보다 엄격하게 다룬다).
+_VERIFICATION_TIER_VALUES: frozenset[str] = frozenset({"machine_exhaustive", "machine_sampled"})
+
 
 class ProblemCorpusError(ValueError):
     """문제 코퍼스가 저작권 위생·안정 키 규약을 어겨 적재를 거부할 때(조용한 통과 금지).
@@ -171,6 +176,9 @@ class ProblemVerifyMeta:
     """S2 킬러 — 근 집계 검증 종류(sum/product). 답이 근이 아니라 근들의 합/곱인 킬러 문항."""
     answer_kind: str | None = None
     """개념형 — 개수/판정 검증 종류(개수·일대일·수렴·극한=함숫값·미분가능). 답이 값이 아닌 문항."""
+    verification_tier: str | None = None
+    """S4-13 유한표본 배치 — 기계 검증 강도(machine_exhaustive/machine_sampled). 부재=미각인
+    구코퍼스."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -323,9 +331,17 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
             "dot_product_scalar",
             "inequality_direction",
             "root_loss_count",
+            "finite_probability",
+            "finite_count",
         )
         else None
     )
+    tier_raw = verify_raw.get("verification_tier")
+    if tier_raw is not None and tier_raw not in _VERIFICATION_TIER_VALUES:
+        raise ProblemCorpusError(
+            f"verify.verification_tier가 알려진 값 밖: slug={slug} value={tier_raw!r} "
+            f"(허용 {sorted(_VERIFICATION_TIER_VALUES)} 또는 None)"
+        )
     return ProblemVerifyMeta(
         conditions=conditions,
         answer_map=answer_map,
@@ -333,6 +349,7 @@ def _verify_meta_from_raw(verify_raw: Any, *, slug: str) -> ProblemVerifyMeta:
         answer_selection=selection,
         answer_aggregate=aggregate,
         answer_kind=kind,
+        verification_tier=tier_raw,
     )
 
 

@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: in_progress
 priority: 4
 owner: claude
 depends_on: []
@@ -16,6 +16,10 @@ artifacts: []
 paths:
   - "src/backend/whymath_backend/l1/problem_bank/**"
   - "src/backend/whymath_backend/harness/**"
-session: null
-notes: "S4-13 작업 경로 제약(l3/harness/data/corpus/tests)으로 l1을 못 건드려 등급이 후처리 각인 + 로더 탈락 상태. 정본은 L1 계약 승격."
+  - "src/backend/whymath_backend/l3/equivalent/orchestrator.py"
+  - "tests/backend/harness/**"
+  - "tests/backend/l1/problem_bank/**"
+  - "tests/backend/l3/equivalent/test_orchestrator.py"
+session: claude/whymath-problem-bank-design-65tsm4
+notes: "S4-13 작업 경로 제약(l3/harness/data/corpus/tests)으로 l1을 못 건드려 등급이 후처리 각인 + 로더 탈락 상태. 정본은 L1 계약 승격. 실 구현 시 범위가 orchestrator.py(verification_tier 주입 인자 관통)·해당 테스트 4파일로 확장(scope_drift 경고 반영·사후 실측 반영)."
 updated: 2026-07-29
