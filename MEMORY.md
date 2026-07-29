@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (설계·갭 점검+등재): **풀이 엔진 갭 점검·설계 D1~D5 — 외부 EOS 틀(기능 23~27) 대조** (claude 설계·등재, Kiki 제공 문서)
+
+**컨텍스트**: Kiki가 일반적 EOS 틀 문서(『풀이(Solution) 엔진』 기능 23~27: 단계별 풀이 생성·다양한 풀이법·힌트 생성·AI 채점·풀이 비교 — WhyMath 전용 아님 명시)를 제공하며 "빠진 부분 점검 + WhyMath 방향 정합 설계"를 요청. 실측 대조 결과 23(생성·검증)·26(채점)은 상당 충족(다수 항목이 문서보다 엄격 — 검산 강제 finalize·3상태 판정·클라 채점 CI 게이트), **25의 힌트 *내용* 생성이 최대 실행 갭**(레벨 결정은 GA·내용은 정적 템플릿 4개 — core_feature_review #1 🟢 판정과 층위 구분), 24는 설계만(프롬프트·스키마 완비·소비 코드 0·프롬프트-스키마 enum 불일치 실측), 27은 전무. SolutionPath 실체화의 명시적 유보 조건(03 L151 "다중 풀이 소비처가 설 때")이 이번 설계로 성립.
+
+**판정 — 의도적 미채택 6건**(협상 불가 1:1): ①학생 대면 점수·등급 채점(→3상태 판정+BKT/IRT 숙달도) ②초등→대학 4단 수준 축(→페르소나 밖·S4-05 enum 지연 동형) ③무검증 AI 풀이·힌트 노출(→SymPy 통과분만·verified 게이팅) ④동치 자동 확정·최적 풀이 선정(→미해결 난제 정직 경계·후보+사람 검수) ⑤힌트 유형 6종 신규 enum(→socratic 6종·HintReveals·오개념 개입 3축 crosswalk 전량 커버) ⑥표현·서술 감점(→정서 안전·질문형 피드백만).
+
+**설계 D1~D5** (정본: `docs/architecture/solution_module_gap_review.md`): **D1** SolutionPath/SolutionStep 실체화 — 유보 해제 논증(D2가 소비처+620문 실데이터 스키마 승격 = dead code 아님)·writer(WH-S 승격 어댑터·매칭 실패 검수 큐)+reader 2종(steps API 소생·learning_scene 댕글링 해소) 동반·신규 학생 노출 0·enum은 기존 좌석 소비(`schema/enums.py` ReasoningType) · **D2** 다중 풀이 생성 — multi_solution_gen 첫 소비처·ApproachType 단일 좌석 신설(거버넌스 리터럴→좌석 승격·3축 disjoint 유지)·SymPy 검증 통과분만 뱅크·주관 메타 ai_estimated · **D3** 힌트 내용 생성기+hints 영속 — HintNode 연기(2026-07-08 Phase 6b) 해제 전제 3종 한 슬라이스 충족(생성 writer·게이트 3종 level-reveals/answer-leakage/톤·coach 서빙 reader)·reveal_score로 KPI "도달 깊이 2.5+" 측정 기반·Level 4는 엔티티 밖 안전망 유지 · **D4** 풀이 비교·동치 군집 — 기계 지표만 자동(ARCH-17 오프라인 동형)·휴리스틱 1차+사람 검수 큐(자동 확정 금지)·SolutionPath embedding 도입 판정 동반 · **D5** 채점 심화 페이퍼(태스크 0·knowledge D2 선례 동형) — 누락 단계 '후보' 정렬(동치 다양성 때문에 확언 금지)·학생 대면 질문형·PRM 스코어러는 §4 경계.
+
+**등재**: `S4-09-solution-path-materialization` · `S4-10-multi-solution-generation`(dep 09) · `S4-11-hint-content-generation`(dep 09+**S3-01** — 학생 대면 서빙 포함이라 루프 검증 전 확장 금지·S4-05 선례. D1·D2·D4는 오프라인 축이라 비의존 — S4-06/ARCH-16/17 선례) · `S4-12-solution-comparison-clustering`(dep 10·pri 4) — 전부 CLI add·validate green 104건·selector가 S4-09를 차기 후보로 정상 노출. 중복 등재 회피: 증명·서술 채점=`S4-02` 승계(notes에 D5 참조 추가)·단계 시각화=`S4-03`·클라 채점 게이트=`ARCH-10`/`ARCH-12`·PRM 후보 평가(ROADMAP:68)=§4 트리거 관리(dead task 방지)·갤러리·비교 UI=Phase 3.
+
 ### 2026-07-28 (구현·OPS-14): **tests/data_pipeline lint 배선 — 정본 컨텍스트 확정 + ruff per-file-ignores가 죽은 설정이었음 실측** (claude 구현, Kiki "다음 진행")
 
 **정본 결정(OPS-13이 선결로 지정)**: black = **저장소 표준 root `--line-length 100`**(tests/* 배선 공통 정본 — backend·infra·harness 동일), ruff = **DP pyproject 규칙 그대로**(src와 tests 동일 규칙·E501 포함). 2026-07-27의 "28 vs 32" 컨텍스트 차이는 현시점 실측에서 소멸(양쪽 23파일 동일)이라 결정 부담 없음. src도 root-100 컨텍스트로 clean이라 backend 잡 동형의 단일 명령(`black --check --line-length 100 . ../../tests/data_pipeline`)으로 통합.

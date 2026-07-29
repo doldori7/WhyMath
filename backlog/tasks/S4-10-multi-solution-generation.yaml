@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-10-multi-solution-generation
+title: "다중 풀이 생성 파이프라인 — multi_solution_gen 첫 소비처·ApproachType 6종 실체화·SymPy 전건 검증 뱅크"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 5
+owner: claude
+depends_on:
+  - S4-09-solution-path-materialization
+requires_gates: []
+acceptance:
+  - "라우터 경유 생성→최종답 SymPy 동치+단계 검증 통과분만 solution_path 뱅크(검증 실패 뱅크 유입 0 테스트 동결) + ApproachType 6종 enum 단일 좌석 신설(schema/enums.py·ReasoningType 미러) + test_strategy_governance 리터럴 상수→좌석 참조 승격(3축 disjoint 동결 유지) + multi_solution_gen.md 접근 카테고리를 스키마 6종으로 정합(비유적 제거·visual 포함) + strategy_tag→approach_type 승격 + 시드 스코프 실측 리포트(생성률·검증 통과율·approach 다양성) + 주관 메타(elegance·educational_value)는 ai_estimated 게이팅 — 학생 대면 노출 없음(§4-⑥ 유보)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l3/**"
+  - "src/backend/whymath_backend/whs/**"
+  - "docs/prompts/**"
+session: null
+notes: "docs/architecture/solution_module_gap_review.md §3 D2 — 외부 EOS 틀(기능 24) 대조(설계만 갭·프롬프트 소비처 0). ROADMAP:67 'SolutionPath 다중 풀이' 체크박스의 백로그 실행화. 오프라인 콘텐츠 공장 축 — S3-01 비의존(S4-06 선례)"
+updated: 2026-07-29

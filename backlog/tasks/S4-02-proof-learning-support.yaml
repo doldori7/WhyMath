@@ -18,5 +18,5 @@ paths:
   - "src/backend/whymath_backend/l4/**"
   - "src/backend/whymath_backend/l3/**"
 session: null
-notes: "core_feature_review_2026-07.md §3.1 — 진짜 공백(학생측 0건). 파일럿(S3-01) 검증 후 착수. 04a R5 unverifiable 경계·CLAUDE.md AI 금기 준수. 선행 설계 확정(2026-07-27): docs/architecture/knowledge_module_gap_review.md §3 D2 — TheoremNode≠ProofNode 분리·theorem.<slug> 사람 관리 ID·Formula 경계 규칙(등식=Formula/명제=Theorem·겹침은 상호 참조 키)·신규 엣지 타입 0(참조 키만)·검증 tier(SymPy 항등식/unverifiable 학생 피드백/Lean S5)·canonical-only 시드."
+notes: "core_feature_review_2026-07.md §3.1 — 진짜 공백(학생측 0건). 파일럿(S3-01) 검증 후 착수. 04a R5 unverifiable 경계·CLAUDE.md AI 금기 준수. 선행 설계 확정(2026-07-27): docs/architecture/knowledge_module_gap_review.md §3 D2 — TheoremNode≠ProofNode 분리·theorem.<slug> 사람 관리 ID·Formula 경계 규칙(등식=Formula/명제=Theorem·겹침은 상호 참조 키)·신규 엣지 타입 0(참조 키만)·검증 tier(SymPy 항등식/unverifiable 학생 피드백/Lean S5)·canonical-only 시드. 채점 심화 선행 설계(2026-07-29): docs/architecture/solution_module_gap_review.md §3 D5 — 누락 단계는 모범 SolutionPath 정렬 기반 '후보'만(동치 다양성 때문에 확언 금지)·학생 대면은 소크라테스 질문형·justification 1차 invariant는 S4-09 흡수."
 updated: 2026-07-27
