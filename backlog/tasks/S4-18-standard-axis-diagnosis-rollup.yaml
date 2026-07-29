@@ -1,0 +1,22 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-18-standard-axis-diagnosis-rollup
+title: "성취기준 축 약점 진단 롤업 — 개념 진단을 원자 축 standard_codes로"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S3-16-learning-session-write-path
+requires_gates: []
+acceptance:
+  - "①GET /v1/me/diagnosis/standards — compute_concept_diagnoses 결과를 성취기준 코드로 그룹핑·가중평균(새 추정기 0·순수 롤업) ②조인은 원자 축(ProblemConcept→Concept→AtomNode.standard_codes)만 — concept_standard_link→achievement_standard 구 축 사용 금지(S2-03 재연결 후 0행·gating.py:127-131 자인)·_fetch_achievement_codes 패턴 재사용(재구현 0) ③코드 미부착 개념은 조용한 누락이 아니라 명시적 미분류로 표기·표본 미달은 NO_DATA ④단일 IN 일괄 쿼리(N+1 0) ⑤2차로 problem_type_node 축 동일 골격 롤업(커버리지 낮으면 응답에 병기)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/l2/**"
+  - "src/backend/whymath_backend/api/**"
+session: null
+notes: "docs/architecture/learning_analytics_gap_review.md §3 D3 — 외부 EOS 틀 기능 33. '모든 콘텐츠는 성취기준 코드 1개 이상 태그' ALWAYS 원칙이 문항 측(gating)에는 있으나 진단 측(l2)에는 0인 불일치를 닫는다"
+updated: 2026-07-29

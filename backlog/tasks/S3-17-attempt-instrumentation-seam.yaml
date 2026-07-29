@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-17-attempt-instrumentation-seam
+title: "시도 계측 봉합 — 힌트·모드·시작시각 서버 파생(두 축 침묵 불일치 해소)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "①used_hint·used_socratic·attempt_mode·started_at을 서버 파생으로 충전(클라 자기보고 금지·used_hint는 같은 attempt_id의 EventType.힌트제공 존재로 판정) ②정합 테스트: 힌트 사용 비율이 AttemptEvent 집계와 ProblemAttempt 요약 두 축에서 일치(어긋나면 실패) ③휴면 EventType 8종 중 소비처가 서는 2종만 생산(힌트요청·막힘)·EVENT_DATA_CONTRACT 등재로 계약 면제 해제·나머지 6종 휴면 유지(일괄 부활 금지) ④time_vs_expected·stuck_at_step은 유보(각각 S4-20 문항 p50·단계채점 선행) ⑤used_solution_view는 신호 부재 시 미충전(없는 신호 날조 금지)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/api/**"
+  - "src/backend/whymath_backend/schema/**"
+session: null
+notes: "docs/architecture/learning_analytics_gap_review.md §3 D2 — 외부 EOS 틀 기능 32. 같은 시도에 대해 AttemptEvent(힌트제공 기록)와 ProblemAttempt(used_hint NULL)가 서로 다른 이야기를 하는 데이터 무결성 문제. 신규 테이블·컬럼 0(있는 컬럼 충전). S3-01 파일럿 전 착륙 필수"
+updated: 2026-07-29

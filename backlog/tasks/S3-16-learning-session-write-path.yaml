@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-16-learning-session-write-path
+title: "학습 세션 write-path 착륙 — 리텐션 KPI 소생(파일럿 전 필수)"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 2
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "①POST /v1/me/sessions 생성 좌석(기존 PATCH end·DELETE와 생명주기 3종 완성·신규 컬럼 0) ②종료 시 duration_seconds·problems_attempted/completed/correct를 ProblemAttempt 집계로 서버 산출(클라 보고 불신) ③focus_score·engagement_score는 의도적 미충전 동결(센서 수집 금기·runtime_selector.py:101 선례·테스트로 고정) ④ProblemAttempt.session_id 소유 검증 게이트(타인 세션 주입 차단) ⑤reader 증거: pilot_kpi_baseline KPI2 리텐션·wh1_evaluation 지표③ 세션완주율이 NO_DATA→MEASURED로 전환됨을 테스트로 고정(writer만 착륙 금지)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/api/**"
+  - "src/backend/whymath_backend/harness/**"
+session: null
+notes: "docs/architecture/learning_analytics_gap_review.md §3 D1 — 외부 EOS 틀 기능 32의 최대 실행 갭. LearningSession writer가 저장소 전체에 0건이라 S3-04(done)가 만든 측정 하네스 2종이 구조적 무측정(측정 위장 금기 계열). S3-01 파일럿 착수 전 착륙 필수 — 놓친 세션은 소급 수집 불가. S3-01 depends_on 추가는 Kiki 소유 태스크라 미실시(문서에 선행 권고로 기재)"
+updated: 2026-07-29

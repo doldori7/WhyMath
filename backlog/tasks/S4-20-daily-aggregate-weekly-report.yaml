@@ -1,0 +1,23 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S4-20-daily-aggregate-weekly-report
+title: "일별 학습 집계 CLI + 학생 본인 주간 요약 리포트"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 3
+owner: claude
+depends_on:
+  - S3-16-learning-session-write-path
+  - S3-17-attempt-instrumentation-seam
+requires_gates: []
+acceptance:
+  - "①일별 집계 CLI(ARCH-18 동형 결정론 배치·외부 cron 호출·Celery beat 신설 금지·config.py:632 정책) → daily_learning_metrics·user_behavior_metrics·problem_solve_time_distribution 충전·재실행 멱등(복합 PK upsert) ②avg_focus_score·churn_risk는 의도적 미충전 동결(각각 센서 수집 금기·개입 설계 선행)·표본 0 문항은 분위수 행 미생성(0 표본 분위수=날조) ③GET /v1/me/report/weekly — 학습시간·시도/정답·연습 개념·전주 대비 델타·강점3·약점3·다음 추천을 일별 행에서 읽음(원자료 재집계 아님) ④서술 문구는 l4/tone_filter.filter_tone 경유 필수·순위/비교/연속기록 압박 금지(게임화 금기) ⑤데이터 없는 주는 0이 아니라 NO_DATA ⑥writer·reader 동반 착륙(둘 중 하나만 금지)"
+artifacts: []
+paths:
+  - "src/backend/whymath_backend/harness/**"
+  - "src/backend/whymath_backend/api/**"
+session: null
+notes: "docs/architecture/learning_analytics_gap_review.md §3 D5 — 외부 EOS 틀 기능 35. 3개 hypertable은 GDPR export/erasure/retention까지 배선됐는데 writer가 0이라 '지우고 내보낼 수는 있으나 채워지지 않는' 상태. 집계와 리포트를 한 태스크로 묶은 이유는 분리 시 각각 새 부채가 되기 때문. 교사·학부모 대시보드는 role 계층 부재로 §5 유보(중복 등재 금지)"
+updated: 2026-07-29
