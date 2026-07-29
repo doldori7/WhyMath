@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (구현·S4-17): **verification_tier L1 계약 승격 — 후처리 각인·감사 도구 로더 우회 해소 (S4-13 잔여)** (claude 구현, Kiki `/drive`)
+
+**배경**: S4-13(확률 유한 전수형 파일럿)이 작업 경로 제약(l3/harness/data/corpus/tests)으로 l1을 못 건드려, `verification_tier`(어떤 검증 강도로 증명됐는지)를 `ProblemVerifyMeta`의 정식 필드가 아니라 배치 기록 *후* `stamp_corpus_file`이 JSONL을 다시 읽어 후처리로 찍는 임시 경로로 남겼다. 부작용: L1 정본 로더(`load_problem_bank_records`)가 이 필드를 모르니 그대로 흘려버려, 잔여 축 감사 도구(`residue_cross_verify_eval.load_pilot_records`)가 등급을 읽으려면 L1을 우회해 원시 JSONL을 직접 파싱해야 했다 — 코드 자체가 "감사 도구가 로더를 우회하는" 상태를 문서화하고 있었다.
+
+**구현**: `ProblemVerifyMeta`에 `verification_tier: str | None` 필드 추가(`populate.py`). L1은 L3(`l3/verification_tier.VerificationTier`)를 임포트할 수 없어(7계층 단방향) 허용값을 문자열 상수(`_VERIFICATION_TIER_VALUES`)로 이중 관리하고, 미지값은 `ProblemCorpusError`로 즉시 거부(검증 등급은 안전 신호라 sibling authoring 필드처럼 조용히 None으로 떨구지 않는다). `orchestrator.py`의 `_to_record`/`run_equivalent_generation`/`run_batch`에 `verification_tier` 주입 인자를 관통시켜(기본 `None`·기존 호출부 전부 무영향) 저장 *시점*에 `conditions`/`answer_map`과 함께 조립되게 했다 — 후처리로 등급만 따로 찍는 경로가 구조적으로 존재할 수 없게 됐다. `finite_probability_batch.py`는 `stamp_corpus_file`/`stamp_verification_tier` 후처리 호출을 제거하고 `run_batch(verification_tier=machine_exhaustive)`를 네이티브로 준다. `residue_cross_verify_eval.load_pilot_records`는 `load_problem_bank_records`(L1 정본) 경유로 재작성 — 감사 전용 불변식(발문·정답·검산 조건 비어있지 않음)만 위에서 추가 검증한다.
+
+**부수 발견**: `_verify_meta_from_raw`의 `answer_kind` 화이트리스트가 S4-13 코퍼스 실사용값 `finite_probability`/`finite_count`를 애초에 포함하지 않아 조용히 `None`으로 떨구고 있었다(같은 함수·같은 결함류 — 발견 즉시 같이 교정).
+
+**검증**: 전체 백엔드 스위트를 stash-diff로 대조(변경 전/후 실패 테스트명 목록이 diff exit 0 — 완전 일치, 575 failed 전부 이 샌드박스의 Redis/Postgres/실LLM/OCR 모델 부재에서 기인하는 기존 실패)·순증 6건(populate.py 4·orchestrator.py 3·finite_probability_batch.py 구 테스트 1건 제거) 신규 통과. `ruff check`/`ruff format --check`/`black --check --line-length 100`/`mypy --strict`(433파일)/`lint-imports`(7계층 계약) 전부 green.
+
+**scope_drift**: 실 구현이 `orchestrator.py`(L3, verification_tier 관통에 필수)와 테스트 4파일로 확장돼 태스크 원 선언 `paths`(l1/problem_bank·harness만) 밖이었다 — 하네스 scope_drift 경고를 그대로 따라 완료 전 `paths`를 실측 반영(사후 확장 기록, 은폐 아님). `path_overlap`(ARCH-19, 다른 세션) 경고도 발생했으나 그 브랜치의 실제 diff를 확인해 겹치는 파일에 실질 충돌이 없음을 확인 후 진행.
+
 ### 2026-07-29 (구현·HARN-12): **브리핑에도 미머지 done 필터 배선 — next만 걸러 SessionStart는 여전히 완료분 추천했던 HARN-11 잔여 해소** (claude 구현, Kiki `/drive`)
 
 **배경**: HARN-11(#638)이 `next`·`start`에는 미머지 done 필터(`scan_remote_done`)를 배선했지만 `brief`(SessionStart 훅 진입점 — 매 세션이 자동으로 읽는 최고 레버리지 표면)는 빠져 있었다. 실측: S3-12 세션 종료 직후 새 세션이 열리자 브리핑이 이미 타 세션에서 done 처리된 S3-10·S3-11을 1순위 후보로 계속 추천 — `next`·`start`는 정상 차단했지만 브리핑 자체가 안 막히면 다음 세션이 같은 근접사고를 반복한다("장치는 있는데 일부만 배선됨" 패턴, OPS-03·08·11·12·13과 동형).
