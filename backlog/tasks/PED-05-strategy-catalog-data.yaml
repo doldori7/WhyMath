@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: in_progress
+status: done
 priority: 3
 owner: claude
 depends_on:
@@ -15,12 +15,13 @@ acceptance:
   - "schema/pedagogy_strategy.py Pydantic 계약 — 소비처 지정 필드만. 금지 필드 3종(정적 추천점수·기계 판정용 금지조건·페이딩)의 부재를 테스트로 동결"
   - "data/corpus/pedagogy_strategies_v1/*.yaml 10건 — PedagogyStrategy enum 1:1 거버넌스 동결 테스트 PASS"
   - "l4/pedagogy/strategy_registry.py — lru_cache+reset seam·DB-free (pack_registry 하우스 스타일 미러)"
-artifacts: []
+artifacts:
+  - "commit d8e3864 (branch claude/whymath-teaching-strategy-enfkqt)"
 paths:
   - "src/backend/whymath_backend/schema/**"
   - "src/backend/whymath_backend/l4/pedagogy/**"
   - "data/corpus/pedagogy_strategies_v1/**"
   - "tests/backend/**"
-session: claude/whymath-teaching-strategy-enfkqt
+session: null
 notes: "정본: 04e §3. 오개념 연결은 error_type 6종 기반 신설 어휘(개별 M-id 매핑 금지 — 관계 폭발). 정적 AI 추천점수 금지(bandit 무정보 사전 오염)."
 updated: 2026-07-29
