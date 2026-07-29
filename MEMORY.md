@@ -337,6 +337,18 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (구현·실측·ARCH-19): **품질 15축 ⑧답 분포·⑩LaTeX 게이트 승격 — 강등전+Wilson 동반** (claude 구현·실측, `/drive` 자동 착수)
+
+**컨텍스트**: `docs/architecture/problem_bank_gap_review.md` §3 D5 — 문항 품질 15축 중 기계 판정 가능한 잔여 2축(⑧정답 위치 분포 편향·⑩LaTeX/문법 검증)이 게이트 없이 공백이었다. "측정 없는 게이트는 게이트가 아니다"(CLAUDE.md 검증 권위) 원칙에 따라 결함 주입 강등전 + Wilson 경계를 동반해 승격했다.
+
+**⑩ LaTeX/문법 게이트**: `l3/equivalent/latex_gate.py`(신설, 순수) — `$`/중괄호/`\left\right` 구조 균형·미완성 이스케이프를 결정론으로 검사(수식 *의미*가 아니라 *구조*만). `\frac{...}` 같은 명령 뒤 그룹 중괄호를 리터럴 이스케이프로 오인하지 않도록(`\{`·`\}`·`\$`만 이스케이프 인정) 직접 구현 — sympy `parse_latex`는 antlr4-python3-runtime 의존(미보유)이라 채택하지 않음(과공학 방지). `acceptance.py::evaluate_equivalent_candidate`에 6번째 게이트(`latex_ok`)로 상시 배선(감사기와 달리 주입 불요 — 순수 텍스트 검사). `defect_seeder.py`에 7번째 결함류 `broken_latex` 추가(결정론 100% 검출 — ⑥ statement_mismatch와 달리 감사기 무관하게 항상 걸림). **정직한 공백**: 실 코퍼스(2,701문)는 현재 `$`/역슬래시 마크업 0건(수식은 `^` 평문 표기) — 이 게이트가 지금 당장 걸러낼 실제 결함은 없다. 대상 부재이지 게이트 결함이 아니며, LLM 생성·rephrase가 LaTeX를 도입하는 순간부터 작동하는 선제 인프라다.
+
+**⑧ 정답 위치 분포 게이트**: `l1/problem_bank/answer_distribution.py`(신설, 순수 카이제곱 적합도 검정) + `harness/answer_distribution_battle.py`(신설 CLI) — defect_seeder의 문항별 결함 모델과 달리 *배치* 수준 통계 검정이라 별도 메커니즘(합성 균형/쏠림 배치 생성 → 카이제곱 게이트 검출력 실측)으로 설계했다. **실측(실 코퍼스 스캔, 2026-07-29)**: 객관식 1,631문(선택지 전량 4지) 중 정답 위치 분포가 `{0: 511, 1: 410, 2: 349, 3: 361}`(기대 407.75/위치) — 카이제곱 p=1.07e-8로 **실제로 유의한 쏠림 검출**(위치 0 과다, 기대 대비 +25%). 갭 리뷰 작성 당시 "1,440 MC문항"으로 추정했던 것과 달리 실측은 1,631문(코퍼스 성장분 반영) — 추정치 대신 실측치로 갱신 기록. 강등전(배치크기 200·300회 시행·skew_weight 0.40): 쏠림 배치 검출률 Wilson 하한 0.966·균형 배치 오검출 Wilson 상한 0.079(α=0.05 근방 — 검정이 진짜 H0에서 보정됐음을 확인).
+
+**부수 발견·후속 필요**: ⑧ 실측이 코퍼스에 **실제 정답 위치 쏠림**이 있음을 처음으로 드러냈다 — 이 태스크는 게이트를 *놓는* 것이 범위이고 원인 규명·생성기 셔플 수정은 별도 작업이다. 후속 태스크 미등재(다음 세션 판단 또는 Kiki 지시 대기) — 정직한 공백으로 남김.
+
+**검증**: ruff·black(968파일)·mypy --strict(436)·lint-imports 0 broken. 신규 hermetic — latex_gate 17·answer_distribution 11·answer_distribution_battle 14·acceptance TestLatexGate 3. 기존 `test_defect_detection_eval.py` 6종→7종 확장에 맞춰 n_defective 60→70(70/7=10 균등) 재계산 + Wilson 경계 재검증(60/70 하한 0.775·140/140 하한 0.963, 실측 재현). **변별력**: latex_ok를 `accepted` 산식에서 제거하는 뮤테이션 시 `test_broken_latex_in_question_text_rejected`가 실제로 실패함을 확인 후 원복(진짜 배선 확인) — `run_battle`의 `test_battle_no_skew_weight_yields_low_detection`이 "항상 쏠림 검출" 위장을 잡는다. CI 동일 선택 실 PG 통합 235 passed·전체 스위트 7,725 passed/264 skipped·exit 0(커버리지 92%, 게이트 70% 통과).
+
 ### 2026-07-29 (구현·실측·S3-10): **persona_fit 규칙 기반 백필 — 문제은행 전 2,667건 죽은 적격 경로 소생** (claude 구현·실측, `/drive` 자동 착수)
 
 **컨텍스트**: `docs/architecture/problem_bank_gap_review.md` §3 D3 — 문제은행 코퍼스 6종(2,667건)의 `persona_fit`이 전부 `{}`(실측 2026-07-28). L6 6개 모드(수능·학교진도·RT·메타인지·사고력·영재)가 페르소나 적합도 *폴백* 경로로 `persona_fit[persona] >= min_fit`을 쓰는데, 값이 항상 빈 dict라 그 경로가 항상 공집합으로 죽어 있었다.

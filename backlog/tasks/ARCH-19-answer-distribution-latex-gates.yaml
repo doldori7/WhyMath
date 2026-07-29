@@ -5,17 +5,18 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 4
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "⑧정답 위치 분포 편향(객관식 1,440문 — 코퍼스 수준 분포 검정·결정론)·⑩LaTeX/문법 검증(문항 단위 파스 게이트)을 수용 게이트 축으로 승격. 신규 게이트 규약 의무: defect_seeder 결함 유형 확장(⑧쏠림 주입·⑩깨진 수식 주입) 강등전 검출률 + 무결함 오검출 Wilson 상한 병기 + CLI exit 0/1"
-artifacts: []
+artifacts:
+  - "커밋 예정(미푸시) — l3/equivalent/latex_gate.py(신설)+acceptance.py 6번째 게이트 배선+defect_seeder.py 7종 확장 · l1/problem_bank/answer_distribution.py(신설)+harness/answer_distribution_battle.py(신설 CLI) · 실 코퍼스 실측(1,631 MC문·p=1.07e-8 실제 쏠림 검출) · 신규 hermetic 45건(latex_gate 17·answer_distribution 11·battle CLI 14·acceptance 3) + 변별력 확인(뮤테이션 2건) · 정적게이트 clean · CI동일 실PG통합 235 passed · 전체스위트 7725 passed/264 skipped exit0 cov92% · MEMORY.md 결정로그"
 paths:
   - "src/backend/whymath_backend/l3/equivalent/**"
   - "src/backend/whymath_backend/harness/**"
 session: null
 notes: "docs/architecture/problem_bank_gap_review.md §3 D5 — 측정 없는 게이트는 게이트가 아니다(CLAUDE.md 검증 권위). 15축 ⑦조건완전성은 §4 정직한 공백(교차단원 밴드 착수 시)"
-updated: 2026-07-28
+updated: 2026-07-29

@@ -5,7 +5,7 @@ track: math-completion
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: blocked
 priority: 3
 owner: claude
 depends_on: []
@@ -17,5 +17,5 @@ paths:
   - "src/backend/whymath_backend/harness/**"
   - "docs/standards/**"
 session: null
-notes: "S4-13(#PR)의 정직한 미충족 축. 현 환경에 LLM provider가 없어 전 테스트가 결정론 시임 — 게이트 *배선*은 완료·게이트 *승격*은 미완이다. 실 LLM 호출이 필요하므로 Kiki 머신(Phaiakes9) 실행 동반. 파일럿 코퍼스 problem_bank_probability_finite_v0(34문)는 그때까지 노출 부적격 유지(is_published=False)."
+notes: "실 LLM provider(Phaiakes9 Ollama 또는 클라우드 API 키) 필요 — 이 원격 세션 환경엔 WHYMATH_ANTHROPIC_API_KEY 미설정·Ollama 미도달(env 실측 확인). 태스크 notes가 명시하는 Kiki 머신 실행 전제. 결정론 시임으로 대체 시 이 태스크가 막으려는 바로 그 '시임 테스트로 정합 선언' 금기 위반이라 스킵 — Kiki가 Phaiakes9에서 직접 실행하거나 이 세션에 클라우드 키를 주입해야 진행 가능"
 updated: 2026-07-29
