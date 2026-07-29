@@ -1639,7 +1639,12 @@ async def recommend_next_problem(
         내부의 `is_suneung_eligible`(L6 진실 게이트)이 재수행**한다(저작권·페르소나 재검증 —
         사전필터가 느슨해도 부적격이 새지 않는다).
       - persona_fit-only 적격(기출·시그니처 없이 적합도만 충족) 문항은 사전필터에 안 잡히는
-        *의도적 축소*다 — 현 코퍼스 persona_fit은 전부 {}라 실손실 0(적합도 적재 시 재검토).
+        *의도적 축소*다. **S3-10(2026-07-29) 백필 이후 이 축소는 더 이상 무손실이 아니다** —
+        `persona_fit`이 실값으로 채워져 코퍼스 2,667건 중 시그니처·기출유형이 없는 대다수가
+        `is_suneung_eligible`상으로는 적격인데도 이 SQL 사전필터가 θ 근방 50개 풀에서 원천
+        배제한다(진실 게이트가 재검증하는 건 "새는 부적격"뿐 — "새는 적격 후보"는 잡지 못한다).
+        SQL 사전필터를 persona_fit 조건까지 넓히는 것은 별도 태스크(`S3-13`)로 분리했다 — 이
+        엔드포인트의 실 트래픽·성능 영향을 함께 봐야 하는 변경이라 백필 태스크에 얹지 않는다.
       - 선택은 L6×L2 결합: 수능 우선순위 가중(`suneung_item_weight`) × 약점 가중
         (`prioritize_weak_concepts` — 기본 CAT과 공유하는 `_load_weak_concept_weights`)을
         곱해 가중 정보량 최대 문항(`l2.select_weighted_item`)을 고른다.

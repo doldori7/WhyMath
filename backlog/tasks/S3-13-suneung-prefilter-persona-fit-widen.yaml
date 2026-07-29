@@ -1,0 +1,21 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: S3-13-suneung-prefilter-persona-fit-widen
+title: "수능 적응 추천 SQL 사전필터에 persona_fit 조건 추가 — S3-10 백필로 드러난 후보풀 손실 해소"
+track: math-completion
+stage: S3
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "recommend_next_problem(mode=suneung)의 SQL 사전필터가 exam_type/signature_patterns 부재이면서 persona_fit[persona]>=min_fit인 문항도 θ 근방 풀에 포함 + 실측(후보풀 크기 전후 비교)+회귀 0"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/api/me.py
+  - tests/backend/api/test_me.py
+session: null
+notes: "2026-07-29 S3-10 실측 중 발견. S3-10 이전엔 persona_fit이 전부 {}라 이 SQL 사전필터의 '기출유형∪시그니처' 축소가 실손실 0이었다(어차피 persona_fit 경로로도 아무것도 적격이 아니었으므로). S3-10 백필로 persona_fit이 실값이 되면서, 시그니처·기출유형이 없는 대다수 문항(2,667건 중 다수)이 is_suneung_eligible상으로는 적격인데도 이 사전필터에 원천 배제되는 실손실이 새로 생겼다 — 진실 게이트(is_suneung_eligible)는 '새는 부적격'만 잡고 '새는 적격 후보'는 못 잡는다. api/me.py:1642 docstring이 그 사실을 정정 기록함."
+updated: 2026-07-29

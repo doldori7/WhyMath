@@ -337,6 +337,22 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (구현·실측·S3-10): **persona_fit 규칙 기반 백필 — 문제은행 전 2,667건 죽은 적격 경로 소생** (claude 구현·실측, `/drive` 자동 착수)
+
+**컨텍스트**: `docs/architecture/problem_bank_gap_review.md` §3 D3 — 문제은행 코퍼스 6종(2,667건)의 `persona_fit`이 전부 `{}`(실측 2026-07-28). L6 6개 모드(수능·학교진도·RT·메타인지·사고력·영재)가 페르소나 적합도 *폴백* 경로로 `persona_fit[persona] >= min_fit`을 쓰는데, 값이 항상 빈 dict라 그 경로가 항상 공집합으로 죽어 있었다.
+
+**설계**: `l1/problem_bank/persona_fit_rules.py`(순수 결정론 규칙, L1 신설) — 난이도 5밴드(UNKNOWN/BASIC/CORE/MID_HIGH/HIGH/KILLER) 기본 적합도 표 + 시그니처 보유(A·B·C 가산)·복합사고 시그니처 3종(D·E 가산, L6과 독립 재정의 — 역방향 의존 금지)·질문형식(객관식→A·C, 단답형→B·E, 서술형→D·E, 합답형→D)·distractor_map 보유(전원 +0.05, B·C 추가 +0.05) 가산. **`unit_codes`는 스코어링에 미반영**(의도적 단순화, 정직한 공백) — 현 코퍼스가 전부 `subject=공통`·문항당 unit_code 1개뿐이고 저장소에 unit_code→난이도등급/과목계열 권위 매핑이 없어, 근거 없는 unit_code 가중은 "LLM 추정"과 같은 종류의 날조가 된다. 갭 리뷰 문서의 실사례("킬러 Vieta → A 고3·B 자사고 고적합")를 테스트로 그대로 재현.
+
+**백필 CLI**: `harness/problem_corpus_persona_fit_backfill.py`(`problem_corpus_tag.py`와 동형 바이트 계약) — `persona_fit`이 이미 비어있지 않은 레코드는 바이트 무변경(수동 큐레이션 존중), 빈 레코드만 그 키를 교체. 채운 레코드마다 계산 근거를 감사 JSONL(`docs/data/persona_fit_backfill_audit/*.jsonl`)에 남긴다("근거 동반").
+
+**실측(2026-07-29)**: 전 2,667건 백필(`--all`) → 재실행 시 6개 파일 MD5 해시 전부 동일(바이트 결정론) · persona_fit 외 필드 변경 0건(2,663 v0 레코드 전수 비교) · populate 재적재로 DB `problem.persona_fit` 2,238행(슬러그 중복 병합 후) 전부 비어있지 않음 확인. **L6 실측 게이팅 함수로 전/후 적격 후보 수**: 수능(A/B/C) persona_fit 임계 통과 0→2,667(전 밴드 기본 적합도가 A/B/C 모두 0.5 이상으로 설계) · 학교진도(D) 0→2,449(BASIC 밴드 218건만 임계 미달 — 세특 페르소나가 순수 기초 문항보다 변별 구간 이상을 더 필요로 한다는 설계 의도가 그대로 실측에 나타남) · 메타인지는 distractor_map 결합으로 A~D 1,631·E 958(모드 간 실질 차등이 여기서 드러남 — 수능/RT는 전 밴드 임계 초과 설계라 차등이 안 보임).
+
+**정직한 공백**: 영재·사고력 모드는 여전히 0건 — `bloom_level`/`is_cross_unit`이 코퍼스 전체에서 항상 부재라 persona_fit을 아무리 채워도 그 두 모드의 AND 조건을 못 넘는다(병목은 persona_fit이 아니라 그 축의 태깅 부재). 복합사고 시그니처 3종도 현 코퍼스 0건이라 D/E 가산은 이론상으로만 존재하고 이번 백필에서 실제 적용 0건(감사 로그로 확인).
+
+**부수 발견·후속 등재**: `api/me.py::recommend_next_problem`(mode=suneung)의 SQL 사전필터 docstring이 "persona_fit 전부 {}라 실손실 0"이라 적어 뒀는데, 이번 백필로 그 전제가 깨졌다 — exam_type·signature_patterns가 없는 대다수 문항이 `is_suneung_eligible`상 적격인데도 이 SQL 사전필터가 θ 근방 50개 풀에서 원천 배제하는 **실질적 후보풀 손실**이 새로 생겼다(진실 게이트는 "새는 부적격"만 잡지 "새는 적격 후보"는 못 잡는다). docstring을 정정하고 `S3-13-suneung-prefilter-persona-fit-widen`으로 분리 등재(실 트래픽·성능 영향을 함께 봐야 하는 변경이라 백필 태스크에 얹지 않음).
+
+**검증**: ruff·black(950파일) clean · mypy --strict Success(426) · lint-imports 0 broken · 신규 hermetic 24 passed(규칙 14 + CLI 10, 변별력 포함) · 실 PG 통합 233 passed · 전체 스위트는 하단 done 증적에 기록.
+
 ### 2026-07-29 (근접사고·재발방지·HARN-11): **미머지 done 비가시성 — `next`가 이미 끝난 태스크를 1순위로 추천** (claude 규명·구현, Kiki "/drive")
 
 **근접사고**: `/drive`가 S3-09(문제은행 v0 4종 검수)를 최우선 후보로 계산해 **claim까지 진행**했으나, 타 세션(problem-bank)이 이미 720문 검수를 마치고 done 처리한 상태였다(브랜치 미머지). 착수 직전 후속 태스크 S3-12의 notes가 인용한 감사 결과("4종 전부 FAIL·mc 63.6%")를 보고 발견 — **중복 구현 0으로 회피**, claim 즉시 해제.
