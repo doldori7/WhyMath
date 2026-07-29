@@ -1,9 +1,10 @@
-"""WH-S 구조 승격 어댑터(`whs/path_promotion.py`) 테스트 — S4-09 (hermetic).
+"""WH-S 구조 승격 어댑터(`whs/path_promotion.py`) 테스트 — S4-09 + S4-10 재론 (hermetic).
 
 평문 `verified_solutions.solution_path` JSONB → `l3.SolutionPath` 승격의 정상/이상 경로를
 검증한다: 정상 승격(sympy_verified 정직 승계·결정론 sp-id·concept 날조 0), 이상(빈 steps·
-형식 위반·problem 부재·approach 미매핑 큐·추가 경로/기존 단계 스킵·멱등), 검수 큐 분기
-(자동 적재 불가 형식), CLI 배선(stdout=큐 JSONL·stderr=리포트·exit 0).
+형식 위반·problem 부재·approach 미매핑 큐·멱등), 다중 경로 재론 규약(S4-10 — 헤더는 문제당
+N경로 허용·단계는 대표 1경로만: 추가 경로/레거시 선점은 *헤더만* 적재·단계 스킵 카운트),
+검수 큐 분기(자동 적재 불가 형식), CLI 배선(stdout=큐 JSONL·stderr=리포트·exit 0).
 
 분해 전략: 판정 전부가 순수 `plan_promotion`에 있어 DB 없이 검증하고(ORM 인스턴스는 평범한
 파이썬 객체), DB 래퍼(`promote_verified_solutions`)는 FakeSession으로 조회 4종·add/flush
@@ -70,7 +71,6 @@ def _plan(rows: list[VerifiedSolution], **overrides: Any) -> PromotionPlan:
     context: dict[str, Any] = {
         "existing_problem_ids": {row.problem_id for row in rows},
         "already_promoted_path_ids": set(),
-        "problem_ids_with_path": set(),
         "problem_ids_with_steps": set(),
         "now": _NOW,
     }
@@ -160,10 +160,11 @@ class TestBuildSolutionPath:
 # ==========================================================================
 class TestPlanPromotion:
     def test_normal_promotion(self) -> None:
-        """정상: verified+매핑 가능 태그 → 계획 1건·스텝 스키마 additive 필드 충전."""
+        """정상: verified+매핑 가능 태그 → 계획 1건(대표 — 헤더+단계)·additive 필드 충전."""
         row = _vs()
         plan = _plan([row])
         assert plan.report.promoted == 1
+        assert plan.report.promoted_with_steps == 1
         assert plan.report.promoted_steps == 2
         assert len(plan.planned) == 1
         planned = plan.planned[0]
@@ -235,28 +236,43 @@ class TestPlanPromotion:
         assert plan.report.promoted == 0
         assert plan.queue_entries == []  # 재실행이 큐를 다시 쌓지 않는다
 
-    def test_second_path_for_same_problem_skipped(self) -> None:
-        """문제당 1경로: UNIQUE(problem_id, step_order) 불변 — 추가 경로는 스킵(S4-10 재론)."""
+    def test_second_path_same_problem_header_only(self) -> None:
+        """다중 경로 재론(S4-10): 추가 경로도 *헤더는* 승격 — 단계만 스킵(UNIQUE 불변).
+
+        `solution_paths`는 문제당 N경로 허용(yaml N:1 관계·다양성 자산), `problem_step`은
+        대표(첫) 경로만 실체화한다. 구 S4-09의 경로 전체 스킵(`skipped_additional_path`)이
+        단계 스킵 카운트(`steps_skipped_additional_path`)로 바뀐 것을 동결한다.
+        """
         problem_id = uuid.uuid4()
         first = _vs(problem_id=problem_id)
         second = _vs(problem_id=problem_id, steps=("x**2 = 9", "x = 3"))
         plan = _plan([first, second])
-        assert plan.report.promoted == 1
-        assert plan.report.skipped_additional_path == 1
+        assert plan.report.promoted == 2  # 헤더는 둘 다
+        assert plan.report.promoted_with_steps == 1  # 단계는 대표(첫 경로)만
+        assert plan.report.steps_skipped_additional_path == 1
+        assert plan.report.promoted_steps == 2  # 대표 경로 스텝 수만
+        # 계획 형상: 첫 경로만 step_schemas 보유·둘째는 헤더만(빈 튜플).
+        assert len(plan.planned) == 2
+        assert len(plan.planned[0].step_schemas) == 2
+        assert plan.planned[1].step_schemas == ()
 
-    def test_cross_run_existing_path_blocks_new_path(self) -> None:
-        """이전 런에서 이 문제에 다른 경로가 적재됐으면 새 경로도 스킵(제약 가드)."""
-        row = _vs()
-        plan = _plan([row], problem_ids_with_path={row.problem_id})
-        assert plan.report.skipped_additional_path == 1
-        assert plan.report.promoted == 0
-
-    def test_legacy_steps_conflict_skipped(self) -> None:
-        """기존 problem_step 행 선점 문제는 스킵 — 레거시 단계 클로버 금지."""
+    def test_cross_run_existing_steps_block_new_steps(self) -> None:
+        """이전 런의 대표 경로가 단계를 선점했으면(problem_step 실재) 새 경로는 헤더만."""
         row = _vs()
         plan = _plan([row], problem_ids_with_steps={row.problem_id})
-        assert plan.report.skipped_step_conflict == 1
-        assert plan.report.promoted == 0
+        assert plan.report.promoted == 1
+        assert plan.report.promoted_with_steps == 0
+        assert plan.report.steps_skipped_step_conflict == 1
+
+    def test_legacy_steps_conflict_header_only(self) -> None:
+        """기존 problem_step 행(레거시 Socratic) 선점 문제 — 단계 스킵(클로버 금지)·헤더 적재."""
+        row = _vs()
+        plan = _plan([row], problem_ids_with_steps={row.problem_id})
+        assert plan.report.steps_skipped_step_conflict == 1
+        assert plan.report.promoted == 1
+        assert plan.planned[0].step_schemas == ()
+        # 개념 검수 큐는 헤더만 적재해도 흐른다(concept_sequence 검수 축).
+        assert any(e["reason"] == "concept_unmatched" for e in plan.queue_entries)
 
     def test_summary_rates_are_honest(self) -> None:
         """리포트 비율 — 개념 매칭률 0.0(매칭 유틸 부재 정직)·0/0은 None(위장 금지)."""
@@ -265,6 +281,7 @@ class TestPlanPromotion:
         assert summary["pydantic_pass_rate"] == 1.0
         assert summary["approach_mapped_rate"] == 1.0
         assert summary["concept_match_rate"] == 0.0
+        assert summary["promoted_with_steps"] == 1
         empty = _plan([]).report.summary()
         assert empty["pydantic_pass_rate"] is None
         assert empty["approach_mapped_rate"] is None
@@ -283,16 +300,13 @@ class _FakeScalars:
 
 
 class _FakeResult:
-    """execute 반환 겸용 — scalars().all()(단일 컬럼)·all()(튜플 행) 둘 다 제공."""
+    """execute 반환 — scalars().all()(단일 컬럼) 제공(promote가 쓰는 표면 전부)."""
 
     def __init__(self, items: list[Any]) -> None:
         self._items = items
 
     def scalars(self) -> _FakeScalars:
         return _FakeScalars(self._items)
-
-    def all(self) -> list[Any]:
-        return self._items
 
 
 class _FakeSession:
@@ -322,7 +336,7 @@ class TestPromoteVerifiedSolutions:
             [
                 _FakeResult([row]),  # ① 전 행
                 _FakeResult([row.problem_id]),  # ② problem 실재
-                _FakeResult([]),  # ③ 기존 경로(pair)
+                _FakeResult([]),  # ③ 기존 경로 id(멱등)
                 _FakeResult([]),  # ④ 기존 단계 선점
             ]
         )
@@ -340,6 +354,28 @@ class TestPromoteVerifiedSolutions:
         assert session.flushed == 1
 
     @pytest.mark.asyncio
+    async def test_additional_path_writes_header_without_steps(self) -> None:
+        """재론(S4-10) 배선: 같은 문제 두 경로 — 헤더 ORM 2·단계 ORM은 대표 것 2뿐."""
+        problem_id = uuid.uuid4()
+        first = _vs(problem_id=problem_id)
+        second = _vs(problem_id=problem_id, steps=("x**2 = 9", "x = 3"))
+        session = _FakeSession(
+            [
+                _FakeResult([first, second]),
+                _FakeResult([problem_id]),
+                _FakeResult([]),
+                _FakeResult([]),
+            ]
+        )
+        plan = await promote_verified_solutions(cast(AsyncSession, session))
+        assert plan.report.promoted == 2
+        headers = [o for o in session.added if isinstance(o, SolutionPathOrm)]
+        steps = [o for o in session.added if isinstance(o, ProblemStep)]
+        assert len(headers) == 2
+        assert len(steps) == 2  # 대표(첫 경로) 스텝만
+        assert {s.solution_path_id for s in steps} == {solution_path_id_for(first.id)}
+
+    @pytest.mark.asyncio
     async def test_no_rows_short_circuits_prefetch(self) -> None:
         """행 0건 — 프리페치 3종을 건너뛰고(빈 IN 회피) 빈 계획 반환·add 0."""
         session = _FakeSession([_FakeResult([])])
@@ -349,14 +385,14 @@ class TestPromoteVerifiedSolutions:
         assert session.flushed == 0
 
     @pytest.mark.asyncio
-    async def test_existing_path_pairs_block_rerun_writes(self) -> None:
-        """기존 경로 페어 프리페치가 멱등 스킵으로 이어진다 — add 0(재적재 금지)."""
+    async def test_existing_path_ids_block_rerun_writes(self) -> None:
+        """기존 경로 id 프리페치가 멱등 스킵으로 이어진다 — add 0(재적재 금지)."""
         row = _vs()
         session = _FakeSession(
             [
                 _FakeResult([row]),
                 _FakeResult([row.problem_id]),
-                _FakeResult([(solution_path_id_for(row.id), row.problem_id)]),
+                _FakeResult([solution_path_id_for(row.id)]),
                 _FakeResult([]),
             ]
         )
