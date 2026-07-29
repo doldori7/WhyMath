@@ -337,6 +337,16 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (측정·S3-14): **rotation-2 확인 감사 — misconception_mc PASS 확정(3라운드 만에 게이트 통과)·rephrased 3연속 FAIL로 근본 설계 재검토 이관** (claude 측정, Kiki `/drive`)
+
+**절차**: S3-12(rotation-1) 조치가 실제로 결함율을 임계 이하로 낮췄는지, rotation-0·1과 무관한 신규 독립 표본(`--rotation 2` — mc 200/1,080·rephrased 200/429)으로 확인(§4.5 준수 — 4 pedagogy 서브에이전트 병렬, 코퍼스별 전·후반 100문 분할·전건 직접 계산 재검산 + 성취기준 정본 대조).
+
+**mc — 3라운드 만에 PASS**: rotation-0(FAIL 58%)→1(FAIL 4.5%)→2(**PASS 0%·Wilson 상한 1.33%**). rotation-1이 발견한 두 계통 결함(태그 오귀속 2종)이 해당 도메인 전건에서 정본 대조로 재발 0건 확정. `problem_bank_misconception_mc_v0`는 표본 감사 관점에서 노출 적격 재평가 대상(법적 게이트 `is_exposable()`은 원래 통과 상태 — 이번 PASS는 운영 정책상의 표본 감사 블로커 해소, 실 노출 전환은 별도 결정).
+
+**rephrased — 3라운드 연속 FAIL**: rotation-0(FAIL 12%)→1(FAIL 5.5%)→2(**FAIL 1%·Wilson 상한 2.98%**). 점추정은 꾸준히 개선되나 n=200에서 결함 2건만으로도 Wilson 상한이 2% 임계를 넘는 경계 구간이고, 두 결함 모두 기존 `rephrase_hygiene.py` 패턴에 안 걸리는 **매 라운드 새로운 유형**(이질문자+어형붕괴+개념오치환 복합·목적어 불명확 비문)이었다. S3-14 acceptance의 "3회차부터는 근본 설계 재검토" 조항에 따라 4번째 패턴 패치+rotation-3을 이 태스크에서 시도하지 않고, LLM 자유 재작성 방식 자체의 예측불가 변동성이 원인일 가능성을 근거로 **S3-15**(결정론 템플릿 치환 등 대안 아키텍처 평가)를 신규 등재 — 무한 패치-재표본 루프 대신 정직하게 손을 뗐다. `problem_bank_rephrased_v0`는 노출 부적격 유지.
+
+정본: `docs/data/ai_review_batch_v0_4corpora_2026-07.md` §Rotation-2 확인 감사 결과.
+
 ### 2026-07-29 (구현·환류·S3-12): **v0 계통 결함 5류 생성기 교정 + rotation-1 재검수 — mc/rephrased 잔여 결함 조치완료·정직 FAIL 유지, concept_src_id 6번째 결함류 발견·전건 교정** (claude 구현, Kiki `/drive` + "진행")
 
 **실행**: S3-09 감사 확정 5류(조사 하드코딩·성취기준 태그 오귀속·해설 수치·모순 전제·rephrase 위생 부재)를 생성기 축에서 교정 — `josa.py`에 `tail_reading`(거듭제곱·분수·소수·괄호/절댓값 묵음·라틴/그리스 문자 읽기) 확장해 mc·conceptual 생성기 전 조사 하드코딩 제거, `root_aggregate_batch`(killer) 차수별 성취기준 정위치, `conceptual_count_mc_generator` 극한 부호(b−a→a−b)·확률 공리 가드, `misconception_eval_mc_generator` 완전제곱 미치환 변수, `rephrase_hygiene.py` 신설(비한글 스크립트·메타 라벨·비표준 용어·요구-정답 부정합·조사 오류 5축) + `rephrased_corpus_hygiene` 일괄 적용(483→446, 37건 탈락). 전건 재생성 후 Tier1 전수 재검산 green(2,006문)·전체 백엔드 스위트 3회 실행(초회 파이프 tail이 종료코드 삼켜 재실행, HEAD 대조로 신규 회귀 0 확인)하여 1차 커밋(`8ae200b`).
