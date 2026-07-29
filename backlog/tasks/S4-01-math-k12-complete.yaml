@@ -20,5 +20,5 @@ paths:
   - "docs/data/**"
   - "tests/data_pipeline/**"
 session: null
-notes: "대학과정 포함 — 개념 그래프는 학년 무관(Curriculum-as-Overlay)"
-updated: 2026-07-08
+notes: "대학과정 포함 — 개념 그래프는 학년 무관(Curriculum-as-Overlay). 문제은행 축 연계(2026-07-29, problem_bank_gap_review.md §3): ARCH-18 커버리지 리포트가 저작 우선순위 입력(D4), S4-13 SymPy 불가 영역 경로가 확률·기하 확장 선결(D7)"
+updated: 2026-07-28

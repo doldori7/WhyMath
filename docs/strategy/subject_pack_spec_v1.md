@@ -168,7 +168,7 @@
 | 원자·AREA | `data_pipeline/atom_graph/models.py` · `concept_graph/idmap.py` · `schemas/v1.1/{concept,edge}.schema.yaml` |
 | 오개념 | `data_pipeline/misconception/extract.py` · `l4/misconception/catalog.py` · `docs/prompts/misconception_diagnosis.md` |
 | 검증축 | `l3/symbolic_equivalence.py` · `verify_answer.py` · `verify_step.py` · `equivalent/acceptance.py` |
-| 문제·enum | `schemas/v1.1/problem.schema.yaml` · `schema/enums.py` · `l1/problem_bank/populate.py` |
+| 문제·enum | 구현 정본 `src/backend/whymath_backend/schema/problem.py` · `schema/enums.py` · `l1/problem_bank/populate.py` (구본 명세 `schemas/v1.1/problem.schema.yaml`은 미구현·비정본 — 판정: `docs/architecture/problem_bank_gap_review.md` §3 D1) |
 
 ---
 
