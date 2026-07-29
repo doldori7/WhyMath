@@ -5,17 +5,19 @@ track: infra-debt
 stage: S4
 subject: math
 layer: backend
-status: todo
+status: done
 priority: 3
 owner: claude
 depends_on: []
 requires_gates: []
 acceptance:
   - "빌드타임 결정론 커버리지 CLI: 코퍼스 전량 스캔 → ①성취기준 895 대비 커버율·0커버 목록 ②unit_code×난이도 밴드 분포 매트릭스 ③코퍼스별·질문형식별 분해. 관측 리포트(저작 우선순위 입력)이며 exit 게이트 아님. 유형(17종) 축은 Phase 3b 발화 후 확장으로 스코프 명시(전 문항 유형 미태깅 상태라 지금은 무의미 축)"
-artifacts: []
+artifacts:
+  - "harness/problem_bank_coverage.py + docs/data/problem_bank_coverage_2026-07.{md,json}"
+  - tests/backend/harness/test_problem_bank_coverage.py 33건
 paths:
   - "src/backend/whymath_backend/harness/**"
   - "docs/data/**"
 session: null
 notes: "docs/architecture/problem_bank_gap_review.md §3 D4 — 품질 15축 ⑫ 커버리지 잔여 공백. S4-01 초·중 확장의 저작 우선순위 입력(관측 없는 확장 금지)"
-updated: 2026-07-28
+updated: 2026-07-29
