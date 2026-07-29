@@ -102,11 +102,12 @@ class MasteryState(BaseModel):
     decayed_mastery: float        # 시간 감쇠 반영 후 숙달도
 
     # 선호 풀이 스타일
-    preferred_solution_style: str | None  # L3 SolutionPath 유형 중 학생이 잘 푸는 접근
+    preferred_solution_style: str | None  # L3 SolutionPath 유형 중 학생이 잘 푸는 접근 (⚠️ 코드 부재 — 아래 실측 부기)
 ```
 
 - **`bkt_mastery`는 Phase 1부터 항상 채워진다.** `irt_*` 필드는 Phase 2 데이터 누적 후 채워지며, 그 전에는 `None`.
 - **선호 풀이 스타일**: 학생이 같은 문제를 *어떤 접근(대수적·기하적 등)으로 풀 때 정답률·체류시간이 좋은지* 누적 추적. 값은 L3 `SolutionPath.approach_type`(WhyMath 6가지 `solution_approaches` 중 하나, 03 문서 참조)을 그대로 취한다. L4 교수학 엔진이 힌트·다중 풀이 제시 순서를 정할 때 입력으로 사용 — L2가 추적한 선호 유형의 `SolutionPath`를 L4가 우선 노출한다.
+- ⚠️ **실측 부기(2026-07-29·PED-11)**: `MasteryState`·`preferred_solution_style`은 현재 **코드 부재**(이 절은 문서 스케치)다 — 04d §2.1 실측 원칙: *항상 None인 필드는 착시*이므로 생산자(선호 추적 로직)를 먼저 만들기 전까지 `StudentSignals`(PED-02)에 이 필드를 열지 않는다. 추정 선호의 현행 대체는 학생 **명시 선택**(`requested_strategy` 힌트 — 04e §5.3)이다.
 
 ### StudentProfile — 학생 프로필 (⚠️ L1 보유, L2는 *읽기*)
 
