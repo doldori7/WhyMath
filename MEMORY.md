@@ -337,6 +337,51 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (설계·AI 튜터): **AI 튜터 모듈 갭 점검·설계(D1~D6) + 태스크 4건 등재 — 외부 EOS 틀 기능 37~41 대조** (claude 설계, Kiki 요청)
+
+**컨텍스트**: Kiki가 제공한 외부 참고 문서 『AI Tutor』(기능 37~41: 대화형 AI 튜터·Socratic
+질문·학습 코칭·실시간 피드백·개인화 설명 — WhyMath 전용이 아닌 일반적 EOS 틀)를 코드베이스와
+대조. `knowledge_module_gap_review.md`(모듈 6~10, 07-27)·`problem_bank_gap_review.md`(기능
+18~22, 07-28)·`solution_module_gap_review.md`(기능 23~27, 07-29)에 이은 4번째 자매편.
+
+**판정**: 기능 38(Socratic)·40(오류탐지 핵심)은 문서보다 *엄격*(6카테고리 결정론 선택·3상태
+verify·OCR<0.8 게이팅). 37·41은 **턴 내 충족, 턴 간·세션 간 공백** — 튜터가 매 턴 옳은 결정을
+계산하지만 기록하지 않는다(`DialogueTurn.socratic_strategy`·`targeted_step`·`student_intent`·
+`student_understanding_signal` 4컬럼 스키마 실재·**writer 0 실측 확인**). **39(학습 코칭)가
+최대 갭**이나 "전무"는 아님 — 강도축(`weak-concepts`)·순서축(`learning_path` 위상정렬)은 이미
+답하고, 없는 건 **시간축·목표축**(`target_exam_date` 등 컬럼 실재·reader 0). 기존 판정
+`core_feature_review_2026-07.md:30`("AI 튜터 🟢 완전 구현")과 모순 아님 — 그 판정은 "지금 이
+턴에 무엇을 할지" 층위, 이 문서는 "지난번에 무엇을 했고 언제 다시 볼지" 층위.
+
+**정본 결정 4건**:
+1. **대화 원문 회상 → 메타 한정 회상으로 강등**(`04a_wh1_tutoring_harness.md` §5.1 개정) —
+   `recall_dialogue` 원문 재조회 도구는 미성년자 봉투 암호화(SEC-01)·`LLMTutorPolicy` 원문 사적
+   필드 격리(WH-1 primary GA, 2026-07-20)와 정면 충돌해 만들지 않는다. 회상은 턴 인덱스·전략·
+   이해도 신호 등 구조화 메타로 한정(원문 0·복호 0).
+2. **`LearnerState` v0 필드 축소**(`02_learner_model.md` 개정) — 11필드 명세 중 생산자 실재
+   9개만 v0에 포함, `affect`·`mastery_states`·`active_textbook_id`·`shadow_curriculum_progress`
+   4개는 제외(사유·발화조건 명시). `l4/pedagogy/runtime_selector.py:96-112`의 "생산자 없는 신호는
+   필드로 만들지 않는다" 결정의 이행.
+3. **정서·몰입은 "생산자 먼저·분류기 나중"** — `AffectState` 5분류 분류기는 만들지 않고, 서버가
+   이미 아는 행동 신호(`힌트요청`·`막힘`·`답입력` 휴면 EventType 3종)만 소생. `focus_score`/
+   `engagement_score`·`learning_session` writer는 **영구 미신설을 결정으로 명시**(단일 스칼라가
+   정본 5분류와 축 불일치).
+4. **복습 시간축 = BKT `p_forget` 파생 노출** — `next_review_at` 컬럼·SM-2/FSRS 카드형 알고리즘
+   불채택(이중 진실원천 회피). `MAX(measured_at)`+`apply_forgetting`의 조회 시점 순수 계산으로만.
+
+**산출**: `docs/architecture/ai_tutor_module_gap_review.md` 신설(§0 스냅샷·§1 crosswalk·§2
+의도적 미채택 8건·§3 설계 D1~D6·§4 정직한 공백 9종·§5 유보 발화조건 9건) + backlog 4건 CLI
+등재(`PED-04-tutoring-decision-log`·`PED-05-learner-state-assembly`·
+`S3-16-behavior-telemetry-writers`·`S4-18-review-time-axis`, validate green 124건·harness
+테스트 208 passed) + 정본 2곳 개정(`04a` §5.1·`02_learner_model.md` LearnerState).
+
+**NOT**: 코드 변경 0(설계+등재+정본 개정만 — 구현은 `/drive`가 태스크로 이어받음). 멀티에이전트
+튜터·학습 스타일(VARK)·학생 대면 정서 라벨링·게임화 넛지·카드형 간격반복·점수/등급 예측·초등~대학
+4단 개인화 축은 협상 불가 불변식 근거로 의도적 미채택(§2). WH-1 전략 계층 §11·힌트 경제·페이딩·
+PRD FR-010/014/020 시즌 플랜·dead table 5종 소생은 실행하지 않고 발화조건만 기록(§4·§5).
+
+정본: `docs/architecture/ai_tutor_module_gap_review.md`.
+
 ### 2026-07-29 (설계 결정·S3-15): **반복 표본 감사 → 전수 감사 전환 — rephrased_v0 3연속 FAIL 근본원인 규명·PASS 확정 + 두 코퍼스 걸친 계통 오귀속 발견·근원 교정** (claude 설계·구현, Kiki `/drive`)
 
 **근본원인**: ①통계적 한계 — n=200에서 결함 2건만으로 Wilson 상한이 2%를 넘는 경계 구간(200-표본 반복은 "운"에 좌우). ②구조적 한계 — `rephrase_hygiene.py`(S3-12) 자신의 docstring이 이미 "어형 붕괴 비문은 이 결정론 게이트가 못 잡는다 … 사람/AI 감사 표본 폴백으로 남는다"고 정직 기록. 그런데 그 감사가 매번 **코퍼스의 일부(349/429=81.4%)만** 봤다 — rotation-0·1·2 교집합 실측으로 확인. 80문(18.6%)이 3라운드 내내 단 한 번도 검토된 적 없었다.

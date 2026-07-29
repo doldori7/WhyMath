@@ -1,0 +1,29 @@
+# 빌드 하네스 태스크 — 상태 변경은 scripts/harness/backlog.py CLI 사용 권장
+id: PED-05-learner-state-assembly
+title: "LearnerState v0 실체화(생산자 실재 필드만) + 개인화 슬롯 학년·성취기준 착지"
+track: math-completion
+stage: S4
+subject: math
+layer: backend
+status: todo
+priority: 4
+owner: claude
+depends_on: []
+requires_gates: []
+acceptance:
+  - "①l2/learner_state.py에 LearnerState v0(mastery·general_ability·domain_abilities·active_misconceptions·recent_struggles/successes·grade·curriculum·goals) + get_state() 조립기(기존 좌석 재사용, 신규 계산 0) — api/coach.py·api/study.py의 조각 직접 조회를 조립기 경유로 전환(직접 조회 잔존 0 테스트)"
+  - "②제외 필드(affect·mastery_states·active_textbook_id·shadow_curriculum_progress)와 사유를 클래스 docstring에 명시 + 02_learner_model.md LearnerState 계약을 v0로 축소 개정"
+  - "③prompt_assembler 학습자 상태 계층에 grade·standard_code 착지 — 프롬프트에 학교·지역·이름·목표점수 0을 테스트로 가드, 예산 불변식(_MAX_PROMPT_TOKENS=3000) 회귀, socratic_template.md 슬롯 실측 정합"
+artifacts: []
+paths:
+  - src/backend/whymath_backend/l2/learner_state.py
+  - src/backend/whymath_backend/api/coach.py
+  - src/backend/whymath_backend/api/study.py
+  - src/backend/whymath_backend/l4/pedagogy/prompt_assembler.py
+  - docs/prompts/socratic_template.md
+  - docs/architecture/02_learner_model.md
+  - "tests/backend/l2/**"
+  - "tests/backend/l4/**"
+session: null
+notes: "docs/architecture/ai_tutor_module_gap_review.md §3 D3. D1(PED-04) 후행 권장(41 '이전 설명 성공 여부'는 D1 소관, D3는 개인화 주입 seam으로 분리 유지). 제외 필드 명시는 runtime_selector.py:96-112 결정('생산자 없는 신호는 필드로 만들지 않는다')의 이행."
+updated: 2026-07-29
