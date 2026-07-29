@@ -337,6 +337,58 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-29 (설계·근접중복회피·운영 모듈): **운영(EOS) 모듈 갭 점검·설계 D1~D2 — 외부 EOS 틀 기능 42~50 대조 + S3-11 근접 중복 착수 회피(HARN-11 재실측)** (claude 설계·등재, Kiki 제공 문서)
+
+**컨텍스트**: Kiki가 일반적 EOS 틀 문서(『0단계 운영(EOS)』 42~45: 콘텐츠 저작권·출처·관리자
+CMS·버전 관리·QA 엔진 + 확장 제안 46~50: 배포·감사로그·RBAC·백업·모니터링 — WhyMath 전용
+아님 명시)를 제공하며 "빠진 부분 점검 + WhyMath 방향 정합 설계"를 요청 — `knowledge_module_
+gap_review.md`(6~10)·`problem_bank_gap_review.md`(18~22)·`solution_module_gap_review.md`
+(23~27)의 같은 시리즈 자매편. 실측 대조 결과 46(배포)·49(백업)·50(모니터링)은 2026-07-26
+서비스·운영·관리 3축 검토에서 `OPS-01~04`로 이미 상환 완료, 43(CMS)·48(RBAC)은 1인 capacity
+가드상 의도적 지연, 44(버전관리)는 `knowledge_module_gap_review.md` §2-②의 기존 판정("git+
+코퍼스 버전+provenance가 정본")을 그대로 승계. 42(저작권·출처)는 스키마·불변식은 이미 있으나
+`copyright_gradient.md` §4.2가 명령한 `pool` 필드 기반 CI 차단 게이트가 전수 grep 무일치로
+미이행, 45(QA)는 harness 38모듈이 성숙했으나 이를 조립해 단일 판정을 내는 오케스트레이션이 0.
+
+**근접 중복 착수 회피(HARN-11 재실측)**: 42 갭 점검 중 코퍼스 사이드카 결손 7종을 직접
+소급 작성하려다, 그중 문제은행 v0 6종은 이미 `problem_bank_gap_review.md` D1이 설계해
+`S3-11-problem-bank-data-card`로 등재돼 있었고 **다른 미머지 브랜치(`claude/education-
+os-architecture-mr0fbq`)에서 이미 완료(done)** 상태임을 `backlog.py start S3-11-...`
+실제 시도로 확인(원격 done 감지 → 착수 거부, HARN-11 미머지 done 필터가 정상 작동).
+로컬 백로그 사본은 그 브랜치가 미머지라 여전히 `todo`로 보였다 — CLI로 착수를 시도하지
+않고 눈으로만 판단했다면 중복 구현으로 이어질 뻔했다. 그 브랜치 diff를 실측해 문제은행
+v0 6종의 사이드카·데이터 카드(`docs/data/problem_bank_corpus_v1.md`)·licensing_safety.md
+갱신이 이미 포함됨을 확인하고, 이미 만들었던 해당 5개 사이드카 파일을 제거했다. 그
+diff에 없는 진짜 미커버 2종(`problem_bank_probability_finite_v0`·`concept_visualization_v1`)
+만 실 레코드 집계 기반으로 소급 작성해 유지했다.
+
+**판정 — 의도적 미채택 7건**(협상 불가 근거 1:1, 정본 `docs/architecture/operations_module_
+gap_review.md` §2): ①저작권 기간 필드 신설(→소비처 없음, 외부 라이선스 실적재 시 재도입)
+②원본 링크 구조화 저장(→본문 미보유 정책 우회 위험, 서술형으로 충분) ③검수="사람이 봤는가"
+(→`problem_bank_gap_review.md` §2-③ 승계) ④관리자 CMS·RBAC 즉시 신설(→1인 capacity 가드)
+⑤교육과정 Branch 버전 트리(→"Curriculum은 Overlay" 불변식이 이미 흡수) ⑥UI 골든 비교
+신규(→소비처 없음) ⑦통계 이상치 검사 신규(→`problem_bank_gap_review.md` D9와 동일 사유,
+실학생 응답 0).
+
+**설계 D1~D2**(정본: `docs/architecture/operations_module_gap_review.md`): **D1** 콘텐츠
+출처·라이선스 집행 게이트 — `pool` 필드 계약(`schema/corpus_provenance.py`) + 감사 CLI
+(`ops/provenance_audit.py`, 사이드카·레코드 결손 검사 exit 0/1) + CI `policy-guard` 배선 +
+배선 실재성 테스트. S3-11이 다루지 않는 **전 코퍼스 대상 CI 집행**에 스코프를 명시적으로
+한정해 중복 회피(`ARCH-20-content-provenance-enforcement-gate`) · **D2** QA 파이프라인
+오케스트레이터 — 새 검사기 신설 없이 기존 자산(`corpus_audit_eval`·`canonicalize`·
+`crosslink_demotion_eval`·`coach_prose_leak_eval`·ARCH-20의 `provenance_audit`·`wilson`·
+`defect_detection_eval`) 조립 → 단일 JSON 리포트 + Wilson 게이트. 미측정 축(UI 골든·통계
+이상치·금칙어/PII·성능 연동)은 "검사 안 함"으로 명시(침묵 통과 금지)
+(`ARCH-21-qa-pipeline-orchestrator`, ARCH-20 의존).
+
+**등재·검증**: 태스크 2건 CLI add(`ARCH-20`·`ARCH-21`)·validate green(122건)·`ARCH-20`이
+next 최상위 후보로 정상 노출. 중복 등재 회피: `S3-11-problem-bank-data-card`(문제은행
+사이드카·데이터 카드 — 다른 브랜치 완료, 미착수) · `knowledge_module_gap_review.md` §2-②
+(버전 관리) · `problem_bank_gap_review.md` D9/`S4-15`(실응답 통계) · `OPS-01~04`(배포·백업·
+모니터링, 46·49·50). 용어 정리: 첨부 문서의 "EOS"는 `dev_constitution.md` §0이 폐기한
+대외 정체성 어휘와 동명이의 — 앞선 자매 문서들의 선례대로 "외부 EOS 틀"(참고 프레임워크
+명칭)로만 사용, 저장소 자체 정체성 선언과 무관함을 문서 §0에 명시.
+
 ### 2026-07-29 (설계 결정·S3-15): **반복 표본 감사 → 전수 감사 전환 — rephrased_v0 3연속 FAIL 근본원인 규명·PASS 확정 + 두 코퍼스 걸친 계통 오귀속 발견·근원 교정** (claude 설계·구현, Kiki `/drive`)
 
 **근본원인**: ①통계적 한계 — n=200에서 결함 2건만으로 Wilson 상한이 2%를 넘는 경계 구간(200-표본 반복은 "운"에 좌우). ②구조적 한계 — `rephrase_hygiene.py`(S3-12) 자신의 docstring이 이미 "어형 붕괴 비문은 이 결정론 게이트가 못 잡는다 … 사람/AI 감사 표본 폴백으로 남는다"고 정직 기록. 그런데 그 감사가 매번 **코퍼스의 일부(349/429=81.4%)만** 봤다 — rotation-0·1·2 교집합 실측으로 확인. 80문(18.6%)이 3라운드 내내 단 한 번도 검토된 적 없었다.
