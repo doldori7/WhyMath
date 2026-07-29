@@ -337,6 +337,20 @@
 
 ## 🧭 핵심 결정 로그 (시간 역순)
 
+### 2026-07-28 (구현·정책): **OPS-15 레포 루트 lint 정본 신설 — `src/*` 밖은 표준이 적용된 적이 없었다 + 한국어 테스트 함수명 192개 개명(Kiki B안)** (claude 구현)
+
+**발견**: 레포 루트에 `pyproject.toml`이 없어 ruff가 파일마다 조상에서 설정을 찾다 실패하고 **기본값**(88자 · `select E4,E7,E9,F`)으로 검사해 왔다. 즉 OPS-11·12·13·14가 lint를 "배선"했지만 **기준이 저장소 표준(100자 · `E,F,I,N,B,W`)이 아니었다**. *"장치는 있는데 **잘못된 설정으로** 배선됨"* — 배선 유무·대상·`--check`만 보는 기존 계약 ①~④로는 **구조적으로** 잡히지 않는 축이다.
+
+**N802 192건은 "의도된 관행"이 아니었다(내 최초 보고 정정)**: 등재 시 "한국어 테스트명은 저장소 관행"이라 적었으나 실측하니 **`tests/harness` 한 곳만** 이탈이었다 — `tests/backend`·`tests/data_pipeline`·`tests/infra`는 전부 영어이고, 두 pyproject에 **명문 정책**이 이미 있다("한국어 식별자 사용 금지: docstring·문자열만 한국어, 식별자는 영어"). ruff가 그 디렉터리에 N 룰을 돌린 적이 없어 아무도 몰랐던 것이다. **Kiki 판단(B안)** 으로 192개를 영어 개명하되, **한국어 설명은 docstring으로 전량 보존**했다(180개는 docstring이 없어 이름이 유일한 설명이었다).
+
+**은폐 해제 2건 — 루트 설정이 켜지자 드러났다**: ① `tests/backend` I001 **325건**(자동 수정) ② `src/backend/.../defect_detection_eval.py` black 1건 — 이 파일은 `src/backend`가 선언한 `target-version=py312` 기준으로 **원래 비적합**이었으나, CI 명령(`black --check --line-length 100 . ../../tests/backend`)이 공통 루트를 레포 루트로 올려 **설정을 우회**했기에 통과해 왔다(AST 동등 확인 후 재포맷).
+
+**동결 — 계약 ⑤ 신설**: 루트 정본 존재 + 세 pyproject(루트·backend·data-pipeline)의 `line-length`·`select` **동일성**. 셋이 갈리면 같은 코드가 위치에 따라 다르게 판정돼 "표준"이 무의미해진다. stdlib `tomllib`만 사용(새 의존성 0).
+
+**검증**: **전체 백엔드 스위트 7554 passed · 260 skipped · 0 failed**(11분) — `tests/backend` 310파일 변경이라 전체가 필수였다. 이 환경의 `data_pipeline` 미설치로 governance 6파일이 수집 오류를 냈는데, **그 6파일의 diff가 빈 줄 1개 삭제뿐이고 import가 원래 모듈 레벨임을 확인해 무관함을 규명**한 뒤 `PYTHONPATH`로 해소해 완주시켰다(가정하지 않고 측정). `tests/harness`+`tests/infra` 451 passed · lint 전 대상 clean · validate green(97태스크). 변별력 5종 전건 검출(루트 삭제 / line-length 변조 / select에서 N 제거 / 한국어 함수명 재주입 시 N802 발화 / 양성 대조).
+
+**알려진 비용**: 개명은 되돌리기 어렵다 — 192개 함수명이 바뀌어 `git blame`·과거 로그 검색이 그만큼 끊긴다. B안 선택의 명시적 비용이며 설명은 전량 보존했다.
+
 ### 2026-07-28 (구현): **OPS-14 tests/data_pipeline lint 배선 — "정본 컨텍스트 선택"이 사실은 88자 강등 함정이었다** (claude 구현)
 
 **왜**: OPS-13이 허용목록에 사유와 함께 남긴 마지막 공백 상환. `tests/data_pipeline`(75파일)을 lint하는 CI 잡이 **하나도 없었다** — data-pipeline 잡의 `.`는 working-directory(`src/data-pipeline`)만, backend 잡은 `../../tests/backend`만 덮는다.
